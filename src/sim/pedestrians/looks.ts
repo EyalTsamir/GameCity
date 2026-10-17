@@ -37,6 +37,8 @@ export interface Style {
   hair: HairStyle;
   /** hang length below the cap edge (m; 0 = short) */
   hairLen: number;
+  /** extra hair volume 0…1 (curly / afro ≈ 1) */
+  hairVol: number;
   fringe: boolean;
   /** 0 none, 1 full beard, 2 moustache */
   beard: 0 | 1 | 2;
@@ -455,6 +457,7 @@ function baseStyle(): Style {
   return {
     hair: 'crop',
     hairLen: 0,
+    hairVol: 0,
     fringe: false,
     beard: 0,
     hat: 0,
@@ -508,6 +511,7 @@ function dressUp(L: Look, r: Rng, persona: Persona, ageClass: string, warm: bool
     }
   }
   if (fl & F.BEARD) s.beard = r.chance(0.62) ? 1 : 2;
+  s.hairVol = s.hair === 'curly' ? r.range(0.6, 1) : s.hair === 'bald' ? 0 : r.chance(0.12) ? r.range(0.5, 0.9) : r.range(0, 0.25);
   // ── hats
   if (fl & F.HARDHAT) s.hat = HAT.HARDHAT;
   else if (fl & F.CAP) s.hat = old && !female && r.chance(0.6) ? HAT.FLATCAP : HAT.CAP;

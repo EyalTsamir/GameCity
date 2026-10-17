@@ -70,31 +70,38 @@ const IDLE = { RELAXED: 0, POCKETS: 1, CROSSED: 2, HIP: 3, BEHIND: 4, PHONE: 5, 
 /** debug / tools: force an idle variant (0–6) or bench variant (0–4); −1 = by seed */
 export const poseDebug = { idle: -1, bench: -1 };
 
-function idleVariant(m: Member, r: Rig, t: number): { v: number; k: number } {
-  if (poseDebug.idle >= 0) return { v: poseDebug.idle, k: 1 };
+const IDLE_W_OLD = [0.38, 0.1, 0.12, 0.05, 0.33, 0, 0.02];
+const IDLE_W_KID = [0.6, 0.12, 0.1, 0.1, 0.08, 0, 0];
+const IDLE_W_ADULT = [0.3, 0.15, 0.12, 0.08, 0.04, 0.23, 0.08];
+const IDLE_W_MID = [0.3, 0.15, 0.12, 0.08, 0.04, 0.07, 0.08];
+const iv = { v: 0, k: 0 };
+
+/** idle variant of a standing figure: chosen per person and time window, held 6–18 s */
+function idleVariant(m: Member, r: Rig, t: number): typeof iv {
+  if (poseDebug.idle >= 0) {
+    iv.v = poseDebug.idle;
+    iv.k = 1;
+    return iv;
+  }
   const period = 6 + 12 * hash(m.seed, 3.1);
   const tt = t + m.seed * 97;
   const epoch = Math.floor(tt / period);
   const tin = tt - epoch * period;
-  const k = sstep(0, 0.8, tin) * sstep(0, 0.8, period - tin);
+  iv.k = sstep(0, 0.8, tin) * sstep(0, 0.8, period - tin);
   const h = hash(m.seed, epoch + 0.5);
-  const kid = r.c > 0.45;
-  const age = m.look.age;
-  let w: number[];
-  if (r.old > 0.25) w = [0.38, 0.1, 0.12, 0.05, 0.33, 0, 0.02];
-  else if (kid) w = [0.6, 0.12, 0.1, 0.1, 0.08, 0, 0];
-  else w = [0.3, 0.15, 0.12, 0.08, 0.04, age < 50 ? 0.23 : 0.07, 0.08];
+  const w = r.old > 0.25 ? IDLE_W_OLD : r.c > 0.45 ? IDLE_W_KID : m.look.age < 50 ? IDLE_W_ADULT : IDLE_W_MID;
+  let tot = 0;
+  for (let i = 0; i < w.length; i++) tot += w[i];
   let acc = 0;
-  const tot = w.reduce((a, b) => a + b, 0);
-  let v = 0;
+  iv.v = 0;
   for (let i = 0; i < w.length; i++) {
     acc += w[i] / tot;
     if (h < acc) {
-      v = i;
+      iv.v = i;
       break;
     }
   }
-  return { v, k };
+  return iv;
 }
 
 export function computePose(m: Member, t: number, umbrella: boolean, r: Rig, o: Pose, gs: GaitState | null = null, frame = 0): Pose {
@@ -376,7 +383,8 @@ export function computePose(m: Member, t: number, umbrella: boolean, r: Rig, o: 
       reach(r, armL, true, 0.215 * hk, cy + 0.05 * hk, 0.345 * hk, 1, -1, -0.3, k, 0.9);
       reach(r, armR, false, -0.215 * hk, cy + 0.05 * hk, 0.345 * hk, -1, -1, -0.3, k, 0.9);
     } else {
-      for (const left of [true, false]) {
+      for (let li = 0; li < 2; li++) {
+        const left = li === 0;
         const arm = left ? armL : armR;
         const free = left ? handL || (fl & F.BRIEFCASE) !== 0 : handR || (fl & (F.SHOPBAG | F.CANE)) !== 0;
         if (!free || (!left && m.wave > 0)) continue;
@@ -410,7 +418,8 @@ export function computePose(m: Member, t: number, umbrella: boolean, r: Rig, o: 
   // towel: hands planted behind on the ground (or around the knees)
   if (m.ground > 0.05 && m.lie < 0.5) {
     const k = kGround;
-    for (const left of [true, false]) {
+    for (let li = 0; li < 2; li++) {
+      const left = li === 0;
       const arm = left ? armL : armR;
       const s = left ? 1 : -1;
       if (hug) {
@@ -432,7 +441,8 @@ export function computePose(m: Member, t: number, umbrella: boolean, r: Rig, o: 
       reach(r, armL, true, 0.12 * hk, r.head.y + 0.05 * hk, r.head.z + 0.16 * hk, 1, 0, -0.3, k, 0.3);
       reach(r, armR, false, -0.12 * hk, r.head.y + 0.02 * hk, r.head.z + 0.14 * hk, -1, 0, -0.3, k, 0.3);
     } else {
-      for (const arm of [armL, armR]) {
+      for (let ai = 0; ai < 2; ai++) {
+        const arm = ai === 0 ? armL : armR;
         arm.flex = mix(arm.flex, -0.04, k);
         arm.elbow = mix(arm.elbow, 0.1, k);
         arm.abd = mix(arm.abd, 0.16, k);

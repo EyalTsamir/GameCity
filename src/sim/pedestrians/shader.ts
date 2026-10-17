@@ -230,14 +230,20 @@ void pedPose(inout vec3 p, inout vec3 n) {
   n = normalize(n + pedW.x * (vec3(float(nd & 1023u), float((nd >> 10u) & 1023u), float((nd >> 20u) & 1023u)) * (2.0 / 1023.0) - 1.0));
 
   // ── parametric garments
-  if (region == ${R.HAIR} && aux.x > 0.0) {
+  if (region == ${R.HAIR}) {
     // long hair: vertices deeper than the hair length are lifted to the hem
-    p.y += max(0.0, aux.x - pedP8(iC1.x) * 0.5);
+    if (aux.x > 0.0) p.y += max(0.0, aux.x - pedP8(iC1.x) * 0.5);
+    // volume (curly / full hair): scale about the head centre
+    float vol = float((iC1.y >> 27u) & 31u) * (1.0 / 31.0);
+    if (vol > 0.0 && bone == ${B.HEAD}) {
+      vec3 hc = pedPiv(${PIV.HEAD}) + vec3(0.0, 0.1, 0.012);
+      p = hc + (p - hc) * (1.0 + 0.11 * vol);
+    }
   }
   if (region == ${R.HAT}) {
     uint st = (iC1.y >> 24u) & 7u;
-    vec4 ha = uPedHatA[st];
-    vec4 hb = uPedHatB[st];
+    vec4 ha = uPedHatA[int(st)];
+    vec4 hb = uPedHatB[int(st)];
     float s = aux.x;
     float phi = aux.y;
     vec3 hc = vec3(0.0, p.y, pedPiv(${PIV.HEAD}).z + 0.005);

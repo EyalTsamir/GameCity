@@ -241,6 +241,9 @@ vec3 thLampLight(vec3 wp, vec3 wn) {
         // visor: no light steeper than the beam axis (roofs right below a mast stay dark; the near
         // half of a pitch is lit by the opposite masts, as on real stadium rigs)
         cone *= 1.0 - smoothstep(0.04, 0.16, L.y + Dd.y);
+        // roofs high up near the heads (stand roofs, container tops) only catch a soft spill
+        float rel = (P.y - wp.y) / max(P.y, 1.0);
+        cone *= 1.0 - 0.65 * smoothstep(0.6, 0.9, wn.y) * (1.0 - smoothstep(0.5, 0.72, rel));
         float win = 1.0 - smoothstep(0.55, 1.0, d2 * id / P.w);
         // softened inverse square (no blow-out on surfaces right below the heads)
         sp += C.rgb * (cone * win * max(dot(wn, L), 0.0) / (d2 + 0.0625 * P.w * P.w));

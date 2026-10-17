@@ -10,7 +10,7 @@ T1 cliffs & rock · T2 lawns & ground · T3 stadium shell · T4 lamp light in th
 * **T4 lamp light — DONE (integrated, waits for the night agent's bake).** `ground.ts` and `masonry.ts`
   (quay walls, portals, rocks, cliffs) add `diffuseColor * thLampLight(worldPos, worldNormal)` after
   `lights_fragment_end` (uniforms via `lampUniforms()`).
-* **T1 cliffs — first implementation, iterating.** New `terrain/cliffs.ts`: stratified faceted rock skin on
+* **T1 cliffs — DONE (it3), final verification pending.** New `terrain/cliffs.ts`: stratified faceted rock skin on
   the ridge escarpment (x −180…111 minus the road-portal wings), both spur noses and the harbour cliff.
   Columns every ~1.5 m march the heightfield along the face's outward normal (terrain heights untouched;
   every vertex = ground point at its height pushed out by D, D < 0 buried). Global strata (0.8–2.1 m,
@@ -18,12 +18,12 @@ T1 cliffs & rock · T2 lawns & ground · T3 stadium shell · T4 lamp light in th
   Merged into the masonry mesh (no extra draw call), new masonry kind `KIND.cliff = 6` with its own
   shader branch (sub-bedding lines fwidth-faded, streaks, lichen, cracks, moss/grass on ledges).
   Scree stones at the feet (masonry boulders), `cliffFeet` → gravel aprons in the ground mask.
-* **T2 ground — first implementation, iterating.** Mask is now an RGBA DataTexture: B wear (+ desire
+* **T2 ground — DONE (it3), final verification pending.** Mask is now an RGBA DataTexture: B wear (+ desire
   lines at path corners, gate fans at path ends, doorsteps, scree aprons), A lawn tone (mowing stripes in
   park / lawns / courtyards / gardens, minus edge darkening along kerbs, walls, garden borders, hard areas,
   features). Shader: macro lush/sunny patches (~40 m), clumps, clover drifts, stripes, edge tint;
   meadows with heather/gorse drifts, south-slope warmth, steep-bank bleaching; ground rock matches cliffs.
-* **T3 stadium — first implementation (untested).** New `landmarks/stadiumShell.ts`: brick facades
+* **T3 stadium — DONE (it3), final verification pending.** New `landmarks/stadiumShell.ts`: brick facades
   between four corner stair towers (plinth, pilasters, sill/string courses, stepped cornice, parapet,
   coping), arched gates with stone surrounds/keystones/iron gates/"GATE A–D" signs + lanterns, exit gates
   and the club crest roundel on the river side, arched windows + louvres per bay, towers with quoins,
@@ -65,7 +65,11 @@ Views: cliff `-30,5,-160,55,-15,18`, harbour cliff `136,4,-162,75,75,22`, west s
 lawn `-40,0,20,45,10,38`, stadium `-27,0,72,60,0,35`, hills/station `0,2,-142,120,-95,42`.
 
 ## Next steps
-1. Review it1 captures of cliffs/lawns, refine. 2. Stadium shell (T3). 3. Full-city before/after sheets, perf A/B.
+1. Final job queued (`scratchpad/final.mjs`, log `shots/terrain/final.log`): perf A/B new vs `?legacyterrain`
+   (subset page, round-robin medians) + full-city captures 5173 vs 5174 → `shots/terrain/final/` → sheets.
+2. Night check of T4 with the lamps module loaded (full city) after the lead's uLights fix.
+3. Final report. Tools: `scratchpad/tcap.mjs` (multi-variant capture, 4 h lock wait), `scratchpad/tperf.mjs`,
+   `scratchpad/geo/*.ts` (offline geometry stats via rolldown + node).
 
 ## Requests to other areas
 (none yet)

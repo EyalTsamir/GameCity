@@ -105,7 +105,7 @@ export const FB = {
   NOHAT: 27,
 } as const;
 
-export type Lod = 0 | 1 | 2;
+export type Lod = 0 | 1 | 2 | 3;
 
 // ─────────────────────────────────────────────────────────── builder ──
 
@@ -255,7 +255,7 @@ interface LodCfg {
   tailSides: number;
   tailRings: number;
   details: boolean;
-  props: 'all' | 'mid' | 'far';
+  props: 'all' | 'mid' | 'far' | 'pin';
 }
 
 const LODS: Record<Lod, LodCfg> = {
@@ -296,7 +296,7 @@ const LODS: Record<Lod, LodCfg> = {
     shin: [0, 3, 6],
     footSides: 6,
     foot: [1, 2, 6],
-    hairCap: [0, 0.55, 1],
+    hairCap: [0, 0.45, 0.82, 1],
     hairLong: [0.42],
     tailSides: 8,
     tailRings: 3,
@@ -318,12 +318,35 @@ const LODS: Record<Lod, LodCfg> = {
     shin: [0, 3, 6],
     footSides: 4,
     foot: [1, 6],
-    hairCap: [0, 1],
+    hairCap: [0, 0.7, 1],
     hairLong: [0.42],
     tailSides: 6,
     tailRings: 3,
     details: false,
     props: 'far',
+  },
+  // pin: hero-overview figures (< 9 px): a coloured stick figure with head, hair / hat, tail
+  3: {
+    torsoSides: 4,
+    torsoRings: [1, 5, 9, 11],
+    headSides: 4,
+    headRings: [0, 6],
+    neck: [0, 2],
+    neckSides: 4,
+    limbSides: 3,
+    upper: [1],
+    fore: [4],
+    hand: 'none',
+    thigh: [1],
+    shin: [6],
+    footSides: 0,
+    foot: [],
+    hairCap: [0, 1],
+    hairLong: [],
+    tailSides: 4,
+    tailRings: 2,
+    details: false,
+    props: 'pin',
   },
 };
 
@@ -624,6 +647,13 @@ function buildLeg(b: MeshBuilder, d: Dims, cfg: LodCfg, side: 1 | -1): void {
     const r = d.shin[i];
     specs.push({ a: kn, b: an, ring: r, bone: i === 6 ? FT : SH, w: SHIN_W[i], h: 0.5 - 0.42 * r.t, reg: REG.LEG });
   }
+  if (cfg.footSides === 0) {
+    // pin: a shoe-coloured stub down to the ground
+    const g: P3 = [an[0], 0.0, an[2] + 0.05 * (d.H / 1.76)];
+    specs.push({ a: an, b: g, ring: { t: 1, rx: 0.04 * (d.H / 1.76), rz: 0.06 * (d.H / 1.76), cx: 0, cz: 0 }, bone: FT, w: 0, h: 0.5, reg: REG.FOOT });
+    buildLimb(b, specs, cfg.limbSides, side, false);
+    return;
+  }
   buildLimb(b, specs, cfg.limbSides, side, true);
   // shoe last (foot frame: ankle at the origin, toes out 6°)
   const yaw = 0.105 * side;
@@ -685,7 +715,7 @@ function buildHair(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
   const chin = d.headRings[0].y - 0.006;
   const crown = d.crown;
   const hk = d.H / 1.76;
-  const vol = 0.011 * Math.max(0.8, hk);
+  const vol = 0.011 * Math.max(0.8, hk) * (cfg.details ? 1 : 1.35);
   // cap: rings from the hairline (s = 0) to the crown (s = 1); thickness tapers to the edge
   const rings: Ring[] = [];
   for (const s of cfg.hairCap) {
@@ -706,6 +736,7 @@ function buildHair(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
   const apex = b.v([0, crown + vol * 0.75, d.headRings[d.headRings.length - 1].cz - 0.006], 2, 0, 0);
   capFan(b, rings[rings.length - 1], apex, [0, crown - 0.06 * hk, 0]);
 
+  if (cfg.hairLong.length === 0) return;
   // long hair sheet: hangs from the back / sides of the head behind the shoulders (aux1 = hang
   // depth below the cap edge; the shader lifts vertices deeper than the figure's hair length)
   b.use(BONE.HEAD, REG.HAIR, FB.HAIRLONG, 0.96);
@@ -892,13 +923,15 @@ function blob(b: MeshBuilder, c: P3, r: P3, seg: number, rings: number): void {
 // dome / brim; style table in shader.ts): cap, flat cap, sun hat, fedora, hard hat, beanie.
 
 function buildHat(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
-  const n = cfg === LODS[0] ? 10 : 6;
+  const pin = cfg.props === 'pin';
+  const n = cfg === LODS[0] ? 10 : pin ? 4 : 6;
   const hk = d.H / 1.76;
   const rimU = 0.64; // hat band height (fraction chin→crown)
   const chin = d.headRings[0].y - 0.006;
   const crown = d.crown;
   const rimY = chin + (crown - chin) * rimU;
-  const ss = cfg === LODS[0] ? [0, 0.35, 0.7, 1] : [0, 0.6, 1];
+  const ss = cfg === LODS[0] ? [0, 0.35, 0.7, 1] : pin ? [0, 1] : [0, 0.55, 0.85, 1];
+  const hatK = cfg.details ? 1 : 1.45;
   const rings: Ring[] = [];
   b.use(BONE.HEAD, REG.HAT, FB.HAT, 1);
   for (const s of ss) {
@@ -907,13 +940,14 @@ function buildHat(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
     for (let k = 0; k < n; k++) {
       const phi = (k / n) * Math.PI * 2;
       const y = rimY + (crown - rimY) * Math.pow(s, 0.8);
-      ids.push(b.v(headSurface(d, phi, Math.min(y, crown - 0.003), 0.013 * hk), 2, 0, s, phi));
+      ids.push(b.v(headSurface(d, phi, Math.min(y, crown - 0.003), 0.013 * hk * hatK), 2, 0, s, phi));
     }
     rings.push({ ids, c: [0, rimY, -0.01 * hk] });
   }
   bridge(b, rings);
-  const apex = b.v([0, crown + 0.013 * hk, d.headRings[d.headRings.length - 1].cz - 0.004], 2, 0, 1, 0);
+  const apex = b.v([0, crown + 0.013 * hk * hatK, d.headRings[d.headRings.length - 1].cz - 0.004], 2, 0, 1, 0);
   capFan(b, rings[rings.length - 1], apex, [0, rimY, 0]);
+  if (pin) return;
   // brim (both faces): inner ring on the hat band, outer ring pushed out by the shader
   b.use(BONE.HEAD, REG.HAT, FB.BRIM, 0.95);
   const bi: number[] = [],
@@ -974,7 +1008,7 @@ function buildTail(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
     hipR = d.torso[2],
     crotch = d.torso[1];
   const rings: Ring[] = [];
-  const us = cfg.tailRings === 4 ? [-1, -0.5, 0.45, 1] : [-1, -0.5, 1];
+  const us = cfg.tailRings === 4 ? [-1, -0.5, 0.45, 1] : cfg.tailRings === 2 ? [-1, 1] : [-1, -0.5, 1];
   b.use(BONE.TAIL, REG.TAIL, FB.TAIL, 1);
   for (const u of us) {
     const ids: number[] = [];
@@ -994,7 +1028,7 @@ function buildTail(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
     rings.push({ ids, c: [0, belt.y - 0.2, -0.01] });
   }
   bridge(b, rings);
-  if (cfg.props === 'far') return;
+  if (cfg.props === 'far' || cfg.props === 'pin') return;
   // inside of the hem (darker), so the skirt never reads as an open tube from below / when seated
   b.setTint(0.45);
   const inner: number[] = [];
@@ -1142,7 +1176,7 @@ function shoulderTop(d: Dims, x: number): P3 {
 function buildProps(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
   const hk = d.H / 1.76;
   const all = cfg.props === 'all';
-  const far = cfg.props === 'far';
+  const far = cfg.props === 'far' || cfg.props === 'pin';
   // backpack (on the chest bone, follows lean and twist) + straps over the shoulders
   b.use(BONE.CHEST, REG.BAG, FB.BACKPACK, 1);
   {
@@ -1206,8 +1240,8 @@ function buildProps(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
   }
   // hand-held bags hang plumb from the grip point (BAG_L / BAG_R bones): positions are offsets from
   // the grip (palm centre), resolved in the shader
-  b.use(BONE.BAG_R, REG.BAG, FB.SHOPBAG, 1);
-  {
+  if (cfg.props !== 'pin') b.use(BONE.BAG_R, REG.BAG, FB.SHOPBAG, 1);
+  if (cfg.props !== 'pin') {
     const g = grip(-1);
     softBox(b, add(g, [-0.012, -0.16 * hk, 0.005]), [0.1 * hk, 0.26 * hk, 0.22 * hk]);
     if (all) {
@@ -1277,7 +1311,7 @@ function buildProps(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
     stick(b, add(g, [0, -0.06, 0]), add(g, [0, 0.82, 0]), 0.008);
   }
   b.use(BONE.UMB, REG.EXTRA, FB.UMBRELLA, 1);
-  umbrella(b, d, all ? 8 : far ? 5 : 6, !far);
+  umbrella(b, d, all ? 8 : cfg.props === 'pin' ? 4 : far ? 5 : 6, !far);
   b.use(BONE.GROUND, REG.TOWEL, FB.TOWEL, 1);
   towel(b);
 }

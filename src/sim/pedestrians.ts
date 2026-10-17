@@ -28,7 +28,7 @@ export default function create(ctx: CityContext): CityModule {
   const renderer = legacy ? new LegacyRenderer(ctx.scene, 720, ctx.quality.shadows) : new CrowdRenderer(ctx.scene, 720, ctx.quality.shadows);
   // ?hide=pedestrians: simulate but draw nothing (isolates the rendering cost in perf runs)
   if ((ctx.debug.params.get('hide') ?? '').split(',').includes('pedestrians')) renderer.group.visible = false;
-  if (ctx.debug.params.has('pedlod')) renderer.forceLod = Math.max(0, Math.min(2, Number(ctx.debug.params.get('pedlod')) || 0));
+  if (ctx.debug.params.has('pedlod')) renderer.forceLod = Math.max(0, Math.min(legacy ? 2 : 3, Number(ctx.debug.params.get('pedlod')) || 0));
   crowd.warmStart();
 
   const offs: (() => void)[] = [];
@@ -59,7 +59,8 @@ export default function create(ctx: CityContext): CityModule {
       renderer.write(crowd, ctx.camera, ctx.uniforms.uTime.value, ctx.uniforms.uRain.value, ctx.uniforms.uNight.value, ctx.size.height * ctx.renderer.getPixelRatio());
     },
     stats() {
-      return { ...crowd.statsSummary(), drawn: renderer.visible, nearLod: renderer.near.n, tinyLod: renderer.tiny.n, figureTris: renderer.triangles, simMs: Math.round(ms * 100) / 100 };
+      const extra: Record<string, number> = renderer instanceof CrowdRenderer ? { pinLod: renderer.pin.n, figureVerts: renderer.vertices, shadowVerts: renderer.shadowVertices } : {};
+      return { ...crowd.statsSummary(), drawn: renderer.visible, nearLod: renderer.near.n, tinyLod: renderer.tiny.n, ...extra, figureTris: renderer.triangles, simMs: Math.round(ms * 100) / 100 };
     },
     invariants() {
       return crowd.invariants();

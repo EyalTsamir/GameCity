@@ -25,7 +25,9 @@ function registerPools(points: GlowPoint[]): GlowPoint[] {
   const heads = points.filter((p) => p.kind === 'halo' && p.mode !== GLOW_MODE.BLINK && p.mode !== GLOW_MODE.CRANE);
   for (const p of points) {
     if (p.kind !== 'pool') {
-      keep.push(p);
+      // floodlight lamp-bank halos: a tight bright glare, not a puff of smoke (the bank itself is emissive)
+      if (p.mode === GLOW_MODE.FLOOD && p.kind === 'halo') keep.push({ ...p, size: p.size * 0.55, intensity: p.intensity * 0.8 });
+      else keep.push(p);
       continue;
     }
     c.set(p.color);
@@ -51,7 +53,7 @@ function registerPools(points: GlowPoint[]): GlowPoint[] {
       // cross-aimed past the pitch centre (each mast lights the far half, as real stadium rigs do)
       const ax = best.x + (p.x - best.x) * 1.7,
         az = best.z + (p.z - best.z) * 1.7;
-      out.push({ x: best.x, y: best.y - 0.4, z: best.z, pole: best.y, radius: p.size * 1.9, color, intensity: 0.95, kind: 'flood', aim: [ax, p.y, az], cone: 0.5, channel: 'stadium' });
+      out.push({ x: best.x, y: best.y - 0.4, z: best.z, pole: best.y, radius: p.size * 1.9, color, intensity: 0.9, kind: 'flood', aim: [ax, p.y, az], cone: 0.46, channel: 'stadium' });
       continue;
     }
     const intensity = (p.intensity / 0.22) * 0.95;

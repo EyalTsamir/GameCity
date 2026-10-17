@@ -54,8 +54,11 @@ interface Op {
 
 /** House plan statistics (for module stats / tuning). */
 export const houseStats: Record<string, number> = {};
+/** Per-house record (diagnostics: find a house of a given plan for close-up captures). */
+export const houseLog: { id: number; x: number; z: number; front: string; plan: string; roof: string; floors: number }[] = [];
 export function resetHomes(): void {
   for (const k of Object.keys(houseStats)) delete houseStats[k];
+  houseLog.length = 0;
 }
 
 export function genHouse(g: Gen): void {
@@ -119,6 +122,10 @@ export function genHouse(g: Gen): void {
   if (lot.roof === 'hip') roofKind = rng.chance(0.35) ? 'halfhip' : 'hip';
   else roofKind = rng.weighted<RoofKind>(['gableX', 'gableZ', 'halfhip', 'gambrel'], [0.5, 0.26, 0.1, floors === 1 ? 0.14 : 0]);
   if (plan === 'lplan' && (roofKind === 'gableZ' || roofKind === 'gambrel')) roofKind = 'gableX';
+  {
+    const fp = lot.footprint;
+    houseLog.push({ id: lot.id, x: Math.round((fp.x0 + fp.x1) / 2), z: Math.round((fp.z0 + fp.z1) / 2), front: lot.front, plan, roof: roofKind, floors });
+  }
 
   // main body rect M (+ wing / garage / bay / veranda zones)
   const M: LRect = { ...F };

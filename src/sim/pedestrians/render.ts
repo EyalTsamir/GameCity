@@ -82,7 +82,7 @@ function writeColours(col: Uint32Array, L: Look, s: Style, top: number, bottom: 
   col[2] = w(bottom, q8(s.trouserEnd));
   col[3] = w(L.shoes, (Math.round(clamp(s.bootTop, 0, 0.63) * 100) & 63) | (s.sole << 6));
   col[4] = w(L.hair, Math.round(clamp(s.hairLen / 0.5, 0, 1) * 255));
-  col[5] = w(L.hat, s.hat & 7);
+  col[5] = w(L.hat, (s.hat & 7) | ((s.hat > 0 ? 0 : Math.round(clamp(s.hairVol ?? 0, 0, 1) * 31)) << 3));
   col[6] = w(L.bag, Math.round(clamp(s.tailHem, 0, 1) * 255));
   col[7] = w(s.outer, tailSrc << 5);
   col[8] = w(L.accent, s.legwear & 3);
@@ -175,6 +175,7 @@ const states = new WeakMap<Member, RenderState>();
  */
 const LOD_NEAR = 40;
 const LOD_TINY = 110;
+const LOD_PIN = 300;
 const HYST = 3;
 const SHADOW_FAR = 150;
 const REF_HEIGHT = 930;
@@ -184,9 +185,11 @@ export class CrowdRenderer {
   readonly near: Layer;
   readonly far: Layer;
   readonly tiny: Layer;
+  /** pin figures for the hero overview (beyond LOD_PIN) */
+  readonly pin: Layer;
   /** shadow-only proxy: every figure near the camera, drawn with the tiny mesh into the shadow map */
   readonly shadow: Layer;
-  /** debug: force every figure to one level (0 near, 1 far, 2 tiny), -1 = by distance */
+  /** debug: force every figure to one level (0 near, 1 far, 2 tiny, 3 pin), -1 = by distance */
   forceLod = -1;
   readonly pram: THREE.InstancedMesh;
   readonly dog: THREE.InstancedMesh;
@@ -215,7 +218,12 @@ export class CrowdRenderer {
   visible = 0;
   triangles = 0;
   vertices = 0;
+  shadowVertices = 0;
   private frame = 0;
+  private layers: Layer[] = [];
+  private levels: Layer[] = [];
+  private edges = [0, 0, 0];
+  private camRef: THREE.PerspectiveCamera | null = null;
 
   constructor(scene: THREE.Scene, capacity: number, castShadow: boolean) {
     this.capacity = capacity;
@@ -224,9 +232,29 @@ export class CrowdRenderer {
     this.near = new Layer(0, pm.material, null, Math.min(capacity, 96));
     this.far = new Layer(1, pm.material, null, capacity);
     this.tiny = new Layer(2, pm.material, null, capacity);
+    this.pin = new Layer(3, pm.material, null, capacity);
     this.shadow = new Layer(2, makeInvisibleMaterial(), pm.depth, capacity);
     this.shadow.mesh.castShadow = true;
     this.shadow.mesh.receiveShadow = false;
+    this.levels = [this.near, this.far, this.tiny, this.pin];
+    this.layers = [this.near, this.far, this.tiny, this.pin, this.shadow];
+    // the proxy only draws into shadow maps: decline the main camera's frustum (same planes as the
+    // culling frustum computed in write()), accept every other (shadow cameras)
+    const mainFr = new THREE.Frustum(),
+      mainM = new THREE.Matrix4();
+    const mainPlanes = mainFr.planes;
+    this.shadow.mesh.intersectsFrustum = (f: THREE.Frustum) => {
+      const cam = this.camRef;
+      if (!cam) return true;
+      mainM.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse);
+      mainFr.setFromProjectionMatrix(mainM);
+      for (let i = 0; i < 6; i += 2) {
+        const a = f.planes[i],
+          b = mainPlanes[i];
+        if (Math.abs(a.constant - b.constant) > 1e-3 || a.normal.distanceToSquared(b.normal) > 1e-6) return true;
+      }
+      return false;
+    };
 
     const prg = buildPramGeometry();
     const prm = makePramMaterials();
@@ -255,14 +283,14 @@ export class CrowdRenderer {
     this.blobA = makeAttr(bg, 'iBlobA', new Float32Array(bcap), 1);
     this.blob.renderOrder = 2;
 
-    for (const mesh of [this.near.mesh, this.far.mesh, this.tiny.mesh, this.shadow.mesh, this.pram, this.dog, this.blob]) {
-      mesh.frustumCulled = false;
+    for (const mesh of [this.near.mesh, this.far.mesh, this.tiny.mesh, this.pin.mesh, this.shadow.mesh, this.pram, this.dog, this.blob]) {
+      mesh.frustumCulled = mesh === this.shadow.mesh;
       if ((mesh as THREE.InstancedMesh).isInstancedMesh) (mesh as THREE.InstancedMesh).count = 0;
       mesh.matrixAutoUpdate = false;
       mesh.updateMatrix();
       this.group.add(mesh);
     }
-    for (const l of [this.near, this.far, this.tiny]) {
+    for (const l of [this.near, this.far, this.tiny, this.pin]) {
       l.mesh.castShadow = false;
       l.mesh.receiveShadow = true;
     }
@@ -287,6 +315,7 @@ export class CrowdRenderer {
   /** @param pxHeight drawing-buffer height (px): level distances scale with it */
   write(crowd: Crowd, camera: THREE.PerspectiveCamera, t: number, rain: number, night: number, pxHeight = REF_HEIGHT): void {
     this.frame++;
+    this.camRef = camera;
     this.pv.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
     this.frustum.setFromProjectionMatrix(this.pv);
     camera.getWorldPosition(this.cam);
@@ -296,7 +325,8 @@ export class CrowdRenderer {
     this.shadow.mesh.castShadow = shadows;
     this.pram.castShadow = this.dog.castShadow = shadows;
     const raining = rain > 0.15;
-    for (const l of [this.near, this.far, this.tiny, this.shadow]) l.n = 0;
+    const all = this.layers;
+    for (let i = 0; i < all.length; i++) all[i].n = 0;
     let np = 0,
       nd = 0,
       nb = 0;
@@ -310,8 +340,13 @@ export class CrowdRenderer {
     const ls = (Math.max(200, pxHeight) / REF_HEIGHT) * (REF_TAN / Math.tan((camera.fov * Math.PI) / 360));
     const nearD = LOD_NEAR * ls,
       tinyD = LOD_TINY * ls,
+      pinD = LOD_PIN * ls,
       shadowD2 = (SHADOW_FAR * ls) ** 2;
-    const levels = [this.near, this.far, this.tiny];
+    const levels = this.levels;
+    const edges = this.edges;
+    edges[0] = nearD;
+    edges[1] = tinyD;
+    edges[2] = pinD;
     const bcap = this.blob.instanceMatrix.count;
     const R = this.sRoot,
       PP = this.sPose,
@@ -333,10 +368,10 @@ export class CrowdRenderer {
           states.set(m, st);
         }
         // level with hysteresis around each switch distance
-        let lv = d < nearD ? 0 : d < tinyD ? 1 : 2;
-        if (st.lod >= 0 && lv !== st.lod) {
-          const edge = lv > st.lod ? (st.lod === 0 ? nearD : tinyD) : lv === 0 ? nearD : tinyD;
-          if (Math.abs(d - edge) < HYST) lv = st.lod;
+        let lv = d < nearD ? 0 : d < tinyD ? 1 : d < pinD ? 2 : 3;
+        if (st.lod >= 0 && Math.abs(lv - st.lod) === 1) {
+          const edge = edges[Math.min(lv, st.lod)];
+          if (Math.abs(d - edge) < HYST * (1 + Math.min(lv, st.lod))) lv = st.lod;
         }
         st.lod = lv;
         let layer = this.forceLod >= 0 ? levels[this.forceLod] : levels[lv];
@@ -344,7 +379,7 @@ export class CrowdRenderer {
         if (layer.n >= layer.capacity) continue;
         const r = rigOf(L);
         const umbrella = raining && L.umbrellaOwner && m.sit < 0.3 && m.lie < 0.1 && m.ground < 0.1 && !L.pram;
-        computePose(m, t + m.seed * 10, umbrella, r, pose, lv < 2 || this.forceLod >= 0 ? st.gait : null, this.frame);
+        computePose(m, t + m.seed * 10, umbrella, r, pose, layer === this.near || layer === this.far ? st.gait : null, this.frame);
         pose.scale = r.s;
         pose.fade = m.fade;
         pose.w = r.w;
@@ -446,10 +481,11 @@ export class CrowdRenderer {
         }
       }
     }
-    for (const l of [this.near, this.far, this.tiny, this.shadow]) l.finish();
-    this.visible = this.near.n + this.far.n + this.tiny.n;
-    this.triangles = this.near.n * this.near.tris + this.far.n * this.far.tris + this.tiny.n * this.tiny.tris;
-    this.vertices = this.near.n * this.near.verts + this.far.n * this.far.verts + this.tiny.n * this.tiny.verts;
+    for (let i = 0; i < all.length; i++) all[i].finish();
+    this.visible = this.near.n + this.far.n + this.tiny.n + this.pin.n;
+    this.triangles = this.near.n * this.near.tris + this.far.n * this.far.tris + this.tiny.n * this.tiny.tris + this.pin.n * this.pin.tris;
+    this.vertices = this.near.n * this.near.verts + this.far.n * this.far.verts + this.tiny.n * this.tiny.verts + this.pin.n * this.pin.verts;
+    this.shadowVertices = this.shadow.n * this.shadow.verts;
     this.pram.count = np;
     this.dog.count = nd;
     this.blob.count = nb;
@@ -468,7 +504,7 @@ export class CrowdRenderer {
 
   dispose(): void {
     const mats = new Set<THREE.Material>();
-    for (const l of [this.near, this.far, this.tiny, this.shadow]) {
+    for (const l of [this.near, this.far, this.tiny, this.pin, this.shadow]) {
       l.geo.dispose();
       mats.add(l.mesh.material as THREE.Material);
       if (l.mesh.customDepthMaterial) mats.add(l.mesh.customDepthMaterial);

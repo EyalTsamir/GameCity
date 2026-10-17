@@ -157,7 +157,7 @@ export function stadiumShell(env: Env, sp: ShellSpec): void {
     };
     course(stoneD, 0, 0.9, 0.07, true); // plinth
     course(stone, main ? 4.85 : 2.62, 0.2, 0.11, true); // string / sill course
-    if (main) course(stone, 5.18, 0.14, 0.08, false);
+    if (main) course(stone, 5.18, 0.14, 0.08, true);
     course(stone, H - 0.62, 0.22, 0.2, false); // cornice
     course(stone, H - 0.4, 0.22, 0.36, false);
     course(brickD, H - 0.18, 0.5, 0.0, false); // parapet

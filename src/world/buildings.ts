@@ -25,7 +25,7 @@ import { genTownhouse, resetOldtown } from './buildings/oldtown';
 import { genFallback } from './buildings/fallback';
 import { genTower, resetTowers } from './buildings/towers';
 import { genApartment } from './buildings/houses';
-import { genHouse, setLegacyHouses, resetHomes, houseStats } from './buildings/homes';
+import { genHouse, setLegacyHouses, resetHomes, houseStats, houseLog } from './buildings/homes';
 import { genIndustrial } from './buildings/industry';
 import { genHotel, genSchool, genHarbormaster, genKiosk, genBoathouse } from './buildings/special';
 import { samplePalette, SkyState } from '../render/sky/palette';
@@ -227,6 +227,7 @@ export default function create(ctx: CityContext): CityModule {
     setDebug(n: number) {
       mats.uniforms.uBhDebug.value = n;
     },
+    houses: () => houseLog,
   };
 
   // ── picking (ray vs building boxes)

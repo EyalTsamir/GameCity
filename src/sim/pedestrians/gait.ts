@@ -605,7 +605,8 @@ export function gaitPose(m: Member, r: Rig, st: GaitState | null, frame: number,
   const hRun = p.hStand * 0.955 - p.bob * Math.cos(2 * TAU * (uL - p.beta / 2));
   let h = mix(p.hStand - idle.drop, mix(hWalk, hRun, run), gw);
   const reach = (r.thighL + r.shinL) * mix(0.995, 0.985, run);
-  for (const leg of [legA, legB]) {
+  for (let li = 0; li < 2; li++) {
+    const leg = li === 0 ? legA : legB;
     const side = leg === legA ? 1 : -1;
     const hx = side * r.hip.x;
     const hz = -Math.sin(pelvisYaw) * hx;
@@ -625,7 +626,8 @@ export function gaitPose(m: Member, r: Rig, st: GaitState | null, frame: number,
     cr = Math.cos(-pelvisRoll),
     sr = Math.sin(-pelvisRoll);
   const hcY = r.hip.y;
-  for (const leg of [legA, legB]) {
+  for (let li = 0; li < 2; li++) {
+    const leg = li === 0 ? legA : legB;
     const left = leg === legA;
     let tx = leg.x - sway,
       ty = leg.y - rootY - hcY,
