@@ -25,6 +25,7 @@ import { Glows } from './rail/glows';
 import { RailSim, type Train } from './rail/trains';
 import { TrainRenderer } from './rail/trainRender';
 import { ROAD_HALF } from '../core/constants';
+import { addLampLights } from '../core/lampLight';
 
 export interface RailService {
   trains(): number;
@@ -86,17 +87,22 @@ export default function create(ctx: CityContext): CityModule {
   const nStatic = st.lamps.length * 2 + st.strips.length + gear.reduce((n, g) => n + g.lamps.length + g.boomLamps.length, 0) + track.signals.length * 2;
   const glows = new Glows(ctx, nStatic + TrainRenderer.glowSlots(), 'rail-glows', { uXing: su.uXing, uSig: su.uSig });
   let gi = 0;
+  // platform lamps + canopy strips light the platform through the shared lamp light map (night
+  // agent); the old flat additive pools only come back with ?legacylamps
+  const legacyLamps = ctx.debug.params.has('legacylamps');
   for (const l of st.lamps) {
     glows.setup(gi, '#ffd08c', 0.95, 1.0);
     glows.move(gi++, l.x, l.y, l.z);
-    glows.setup(gi, '#ffbe72', 3.2, 0.28, true);
+    glows.setup(gi, '#ffbe72', 3.2, legacyLamps ? 0.28 : 0, true);
     glows.move(gi++, l.x, station.platformY + 0.03, l.z + 0.3);
   }
   // canopy strip lights → soft pools on the platform
   for (const sl of st.strips) {
-    glows.setup(gi, '#fff0d2', 3.4, 0.26, true);
+    glows.setup(gi, '#fff0d2', 3.4, legacyLamps ? 0.26 : 0, true);
     glows.move(gi++, sl.x, station.platformY + 0.03, sl.z);
   }
+  addLampLights(st.lamps.map((l) => ({ x: l.x, y: l.y, z: l.z, pole: l.y - station.platformY, radius: 3.8, color: '#ffc979', intensity: 1.15, kind: 'path' as const })));
+  addLampLights(st.strips.map((sl) => ({ x: sl.x, y: sl.y, z: sl.z, pole: Math.max(1, sl.y - station.platformY), radius: 3.6, color: '#fff0d2', intensity: 0.8, kind: 'plaza' as const })));
   for (const g of gear) {
     for (const l of g.lamps) {
       glows.setup(gi, '#ff3018', 0.42, 1.6, false, 0.6, 1 + l.id * 2 + l.phase);

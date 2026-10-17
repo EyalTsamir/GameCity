@@ -232,6 +232,47 @@ const dt3 = (a: T3, b: T3) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
  * twist and elbow flexion in the shader's conventions (rest arm directions of the rig included).
  */
 export function armIK(r: Rig, left: boolean, tx: number, ty: number, tz: number, px: number, py: number, pz: number, o: ArmSolve): ArmSolve {
+  // solve, then correct the target by the residual of the exact arm FK (rest carrying angle etc.)
+  let ax = tx,
+    ay = ty,
+    az = tz;
+  for (let it = 0; it < 3; it++) {
+    armIK1(r, left, ax, ay, az, px, py, pz, o);
+    armGrip(r, left, o, gTmp);
+    const ex = tx - gTmp.x,
+      ey = ty - gTmp.y,
+      ez = tz - gTmp.z;
+    if (ex * ex + ey * ey + ez * ez < 1e-6) break;
+    ax += ex;
+    ay += ey;
+    az += ez;
+  }
+  return o;
+}
+const gTmp = { x: 0, y: 0, z: 0 };
+const PT = newPose();
+/** grip point of an arm solution in the chest rest frame */
+function armGrip(r: Rig, left: boolean, o: ArmSolve, out: V3): V3 {
+  const s = left ? 1 : -1;
+  out.x = (r.wrist.x + (r.tip.x - r.wrist.x) * 0.42) * s;
+  out.y = r.wrist.y + (r.tip.y - r.wrist.y) * 0.42;
+  out.z = r.wrist.z + (r.tip.z - r.wrist.z) * 0.42;
+  if (left) {
+    PT.shFlexL = o.flex;
+    PT.shAbdL = o.abd;
+    PT.shTwistL = o.twist;
+    PT.elbowL = o.elbow;
+  } else {
+    PT.shFlexR = o.flex;
+    PT.shAbdR = o.abd;
+    PT.shTwistR = o.twist;
+    PT.elbowR = o.elbow;
+  }
+  rotAbout(out, rX(-(left ? PT.elbowL : PT.elbowR), M), mir(r.elbow, left, pvTmp));
+  rotAbout(out, shoulderMatrix(PT, left, M), mir(r.shoulder, left, pvTmp));
+  return out;
+}
+function armIK1(r: Rig, left: boolean, tx: number, ty: number, tz: number, px: number, py: number, pz: number, o: ArmSolve): ArmSolve {
   // work in the left-arm frame (mirror x for the right arm)
   const sx = left ? 1 : -1;
   const S: T3 = [r.shoulder.x, r.shoulder.y, r.shoulder.z];
@@ -260,7 +301,7 @@ export function armIK(r: Rig, left: boolean, tx: number, ty: number, tz: number,
   const Tp: T3 = [S[0] + dv[0] * d, S[1] + dv[1] * d, S[2] + dv[2] * d];
   const df = nz3([Tp[0] - Ep[0], Tp[1] - Ep[1], Tp[2] - Ep[2]]);
   // hinge axes: rest −x (flexion rotates the forearm forward); target from du × df (or the pole)
-  const x0 = nz3(cr3(cr3(u0, [-1, 0, 0]), u0).map((v) => -v) as T3);
+  const x0 = nz3(cr3(cr3(u0, [-1, 0, 0]), u0));
   let xh = cr3(du, df);
   if (Math.hypot(xh[0], xh[1], xh[2]) < 1e-4) xh = cr3(du, pp);
   xh = nz3(xh);

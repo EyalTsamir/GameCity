@@ -117,6 +117,8 @@ export interface BuildingMaterials {
     uCloudCol: { value: THREE.Color };
     /** stylised horizon lift of reflections (follows the camera tilt) */
     uReflLift: { value: number };
+    /** 0 off, 1 weathering mask, 2 wall-quad info (diagnostics via ctx.services.buildings.setDebug) */
+    uBhDebug: { value: number };
   };
 }
 
@@ -251,7 +253,7 @@ float bhOccupancy(float h, float prof) {
   float he = h < 12.0 ? h + 24.0 : h;
   float p = 0.0;
   if (prof < 0.5) p = 0.05 + 0.26 * bhBump(h, 5.4, 6.4, 7.6, 8.6) + 0.08 * bhBump(h, 8.5, 9.5, 16.0, 17.0) + 0.56 * bhBump(he, 16.6, 19.4, 22.4, 25.2);
-  else if (prof < 1.5) p = 0.04 + 0.86 * bhBump(h, 6.6, 8.2, 17.4, 21.2) + 0.10 * bhBump(he, 18.0, 19.0, 22.6, 23.8);
+  else if (prof < 1.5) p = 0.05 + 0.86 * bhBump(h, 6.6, 8.2, 17.4, 21.2) + 0.2 * bhBump(he, 18.0, 19.0, 22.8, 24.2);
   else if (prof < 2.5) p = 0.05 + 0.92 * bhBump(h, 7.0, 8.0, 21.6, 22.3) + 0.22 * bhBump(he, 21.6, 22.0, 23.8, 25.8);
   else if (prof < 3.5) p = 0.14 + 0.18 * bhBump(h, 6.0, 7.0, 9.0, 10.0) + 0.58 * bhBump(he, 17.4, 19.6, 23.4, 25.8);
   else if (prof < 4.5) p = 0.28 + 0.6 * bhBump(h, 5.5, 6.5, 18.0, 20.0);
@@ -277,6 +279,7 @@ uniform vec3 uCityCol;
 uniform vec3 uCloudCol;
 uniform vec3 uSunDir;
 uniform float uReflLift;
+uniform float uBhDebug;
 ${LAMP_GLSL}
 
 // box-filtered square wave: fraction of [x - w/2, x + w/2] where fract(x) > 0.5
@@ -420,12 +423,12 @@ vec3 bhEnv(vec3 R, float yW, float seed, float fR, float lodC, float nightF) {
   float bF = floor(az * 8.0 + seed * 0.37);
   float hb = bhHash12(vec2(bF, 3.7));
   float hF = 0.012 + 0.1 * hb * hb + 0.05 * step(0.88, hb);
-  vec3 farC = mix(uCityCol * (0.82 + 0.36 * fract(hb * 13.1)), uSkyHor, 0.5);
+  vec3 farC = mix(uCityCol * (0.85 + 0.35 * fract(hb * 13.1)), uSkyHor, 0.6);
   // near neighbours: roofline of a building of height Hn at distance Dn, seen from height yW
   float bN = floor(az * 2.4 + seed * 0.71 + 0.5);
   float hn1 = bhHash12(vec2(bN, 9.1)), hn2 = bhHash12(vec2(bN, 4.3));
-  float hN = (12.0 + 62.0 * hn1 * hn1 - yW) / (28.0 + 72.0 * hn2);
-  vec3 nearC = uCityCol * (0.78 + 0.5 * hn2);
+  float hN = (12.0 + 48.0 * hn1 * hn1 - yW) / (30.0 + 70.0 * hn2);
+  vec3 nearC = mix(uCityCol * (0.85 + 0.45 * hn2), uSkyHor, 0.3);
   // their floors: soft darker window bands (filtered when tiny); a warm hint of lit floors at night
   float band = 0.5 + 0.5 * sin(e * 150.0 + hn1 * 6.0);
   float baa = clamp(1.0 - fR * 150.0 * 0.6, 0.0, 1.0);
@@ -490,6 +493,23 @@ void bhWall(inout vec3 albedo, inout float rough, inout float metal, inout vec3 
   float dirt = (0.3 * underTop + 0.3 * topWash + 0.36 * base + 0.1 * baseWide + 0.2 * corner) * wStr;
   vec3 dirtTint = pat > 1.5 && pat < 2.5 ? vec3(0.62, 0.4, 0.27) : vec3(0.53, 0.49, 0.43);
   albedo *= (1.0 + (nm.r - 0.5) * 0.28 * wStr) * mix(vec3(1.0), dirtTint, clamp(dirt, 0.0, 0.75));
+  if (uBhDebug > 0.5) {
+    // debug 1: weathering mask on white; debug 2: wall-quad info (red = corner, green = under top)
+    albedo = uBhDebug < 1.5 ? vec3(1.0 + (nm.r - 0.5) * 0.28 * wStr) * mix(vec3(1.0), dirtTint, clamp(dirt, 0.0, 0.75))
+                            : vec3(1.0 - corner, 1.0 - underTop, info);
+    if (vB.x > 0.5 && vB.y > 0.5 && uBhDebug < 1.5) {
+      vec2 dcell = floor(vFac);
+      vec2 dpm = (vFac - dcell) * csz;
+      vec4 dwr = vA;
+      float ddS = dpm.y < dwr.z ? dwr.z - dpm.y : (dcell.y + 1.0 < vB.y && dpm.y > dwr.w ? csz.y + dwr.z - dpm.y : 1e3);
+      float dinX = smoothstep(dwr.x - 0.1, dwr.x + 0.06, dpm.x) * (1.0 - smoothstep(dwr.y - 0.06, dwr.y + 0.1, dpm.x));
+      float drs = dinX * (1.0 - smoothstep(0.0, 0.45 + 1.9 * sn, ddS)) * (0.25 + 0.75 * sn);
+      bool inWin = abs(dpm.x - (dwr.x + dwr.y) * 0.5) < (dwr.y - dwr.x) * 0.5 && abs(dpm.y - (dwr.z + dwr.w) * 0.5) < (dwr.w - dwr.z) * 0.5;
+      albedo *= mix(vec3(1.0), dirtTint, clamp(drs, 0.0, 1.0) * 0.5 * wStr);
+      if (inWin && !curtain) albedo = vec3(0.2, 0.3, 0.5);
+    }
+    return;
+  }
 
   if (vB.x < 0.5 || vB.y < 0.5) return;
   vec2 cell = floor(vFac);
@@ -956,6 +976,7 @@ export function createMaterials(g: GlobalUniforms, opts: { legacy?: boolean } = 
     uCityCol: { value: new THREE.Color('#6d6a66') },
     uCloudCol: { value: new THREE.Color('#ffffff') },
     uReflLift: { value: 0.3 },
+    uBhDebug: { value: 0 },
   };
   const frameCols = { value: FRAME_COLS.map((c) => new THREE.Color(c)) };
   const glassCols = { value: GLASS_COLS.map((c) => new THREE.Color(c)) };
@@ -987,6 +1008,7 @@ export function createMaterials(g: GlobalUniforms, opts: { legacy?: boolean } = 
         uCityCol: uniforms.uCityCol,
         uCloudCol: uniforms.uCloudCol,
         uReflLift: uniforms.uReflLift,
+        uBhDebug: uniforms.uBhDebug,
         uSunDir: g.uSunDir,
         ...lampUniforms(),
       });

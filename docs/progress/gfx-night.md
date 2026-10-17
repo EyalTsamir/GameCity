@@ -74,5 +74,7 @@ material not integrated yet (`lamps/integrate.ts`, never double-applies) · `?la
 ## Changes outside my area
 * src/sim/traffic/vehicleMaterial.ts, src/sim/rail/trainMaterial.ts: import + `patchLampMaterial(material)`
   (lead-approved) so cars and trains catch the street lights.
+* src/sim/rail.ts (lead-approved): platform-lamp + canopy-strip pools set to intensity 0 unless
+  ?legacylamps; the lights are registered with addLampLights (rail loads before the bake).
 * src/world/harbor.ts: floodlight masts call (buildHarborFloodlights), carousel light, followCraneLamps
   in frame(), floodMasts stat (harbour glow/floodlight parts = my area).

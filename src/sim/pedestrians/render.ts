@@ -361,6 +361,7 @@ export class CrowdRenderer {
           CC[9] = ((L.umbrella & 0xffffff) | (CC[9] & 0xff000000)) >>> 0;
         }
         if (m.reading && m.sit > 0.75) flags |= bit(FB.NEWSPAPER);
+        if (pose.spare1 > 0.5) flags |= bit(pose.spare1 < 1.5 ? FB.PHONE : FB.CUP);
         if (m.sit > 0.5 || m.lie > 0.3 || m.ground > 0.3) flags &= ~(bit(FB.ROD) | bit(FB.CANE) | bit(FB.SHOPBAG) | bit(FB.BRIEFCASE));
         if (m.lie > 0.3) flags &= ~(bit(FB.HAT) | bit(FB.BRIM) | bit(FB.VISOR) | bit(FB.BACKPACK));
         if (m.sunbathing && (m.lie > 0.3 || m.ground > 0.3)) {

@@ -607,10 +607,10 @@ export function vegBeds(k: Kit, rng: Rng, n: number, d: number): void {
     const crop = rng.int(0, 3);
     if (crop === 0) {
       // lettuce / cabbage heads
-      for (let i = 0; i < 7; i++)
+      for (let i = 0; i < 5; i++)
         for (const zz of [-0.25, 0.25]) {
           k.m(rng.pick(['#7fb04a', '#5f9a3a', '#9cc45a', '#6f8f4a']), 'wood');
-          sh.ellipsoid(-0.95 + i * 0.32, 0.34, z + zz, 0.13, 0.1, 0.13, 0);
+          sh.ellipsoid(-0.9 + i * 0.45, 0.34, z + zz, 0.17, 0.11, 0.17, 0);
         }
     } else if (crop === 1) {
       // bean poles (teepees)

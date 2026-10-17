@@ -220,6 +220,14 @@ export default function create(ctx: CityContext): CityModule {
     if (bdbg.includes('nocast')) m.castShadow = false;
   }
   if (bdbg.includes('nodetail')) mats.uniforms.uDetail.value = 0;
+  if (bdbg.includes('weather')) mats.uniforms.uBhDebug.value = 1;
+  if (bdbg.includes('wallinfo')) mats.uniforms.uBhDebug.value = 2;
+  // diagnostics for the harness: __city.ctx.services.buildings.setDebug(0 | 1 | 2)
+  ctx.services.buildings = {
+    setDebug(n: number) {
+      mats.uniforms.uBhDebug.value = n;
+    },
+  };
 
   // ── picking (ray vs building boxes)
   const tmpV = new THREE.Vector3();

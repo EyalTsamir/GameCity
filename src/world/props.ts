@@ -218,7 +218,7 @@ export default function create(ctx: CityContext): CityModule {
         case 'bikeRack': {
           at(kf);
           const inStation = plan.blocks[stationBlock] && it.x > plan.blocks[stationBlock].rect.x0 && it.x < plan.blocks[stationBlock].rect.x1 && it.z > plan.blocks[stationBlock].rect.z0 && it.z < plan.blocks[stationBlock].rect.z1;
-          SK.bikeRow(kf, srng, inStation ? 0.68 : 0.42);
+          SK.bikeRow(kf, srng, inStation ? 0.58 : 0.4);
           break;
         }
         case 'infoBoard':

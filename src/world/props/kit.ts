@@ -91,19 +91,17 @@ export function planter(k: Kit, rng: Rng, round: boolean): void {
   // shrub ball or low bush in the middle
   k.m(rng.pick(['#3f7a3a', '#4f8a3a', '#2f6a35']), 'wood');
   sh.ellipsoid(0, round ? 0.95 : 1.0, 0, 0.42, 0.42, 0.42, 1);
-  // flowers around it
+  // flower clumps around it (one blob each: blooms on a leafy base, coloured per vertex height)
   const fc = rng.pick(FLOWERS);
   const fc2 = rng.pick(FLOWERS);
-  const m = round ? 8 : 10;
+  const m = round ? 5 : 6;
   for (let i = 0; i < m; i++) {
     const a = (i / m) * TAU + rng.range(-0.2, 0.2);
-    const rr = round ? 0.44 : 0.48;
+    const rr = round ? 0.42 : 0.47;
     const x = Math.cos(a) * rr * (round ? 1 : 1.12),
       z = Math.sin(a) * rr * (round ? 1 : 1.12);
-    k.m('#4f8a3a', 'wood');
-    sh.ellipsoid(x, round ? 0.64 : 0.68, z, 0.13, 0.09, 0.13, 0);
     k.m(i % 3 ? fc : fc2, 'plastic');
-    sh.ellipsoid(x, round ? 0.72 : 0.76, z, 0.08, 0.05, 0.08, 0);
+    sh.ellipsoid(x, round ? 0.66 : 0.7, z, 0.17, 0.1, 0.17, 0);
   }
 }
 
@@ -111,8 +109,9 @@ export function planter(k: Kit, rng: Rng, round: boolean): void {
 export function bikeLite(k: Kit, color: string): void {
   const sh = k.sh;
   const r = 0.33;
+  // tyres as open rings (spokes read as see-through)
   k.m('#1e1f21', 'rubber');
-  for (const x of [-0.52, 0.52]) sh.push().local(x, r, 0, Math.PI / 2, 0, 0).cyl(0, -0.02, 0, r, r, 0.04, 8, 3, false).pop();
+  for (const x of [-0.52, 0.52]) sh.push().local(x, r, 0, Math.PI / 2, 0, 0).cyl(0, -0.025, 0, r, r, 0.05, 8, 0, false).pop();
   const R = [-0.52, r],
     C = [-0.02, 0.3],
     S = [-0.17, 0.82],

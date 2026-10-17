@@ -107,6 +107,7 @@ varying float vPedS;
 varying float vPedH;
 flat varying float vPedFade;
 flat varying float vPedPat;
+flat varying vec2 vPedMat; // (wrap, sheen)
 vec2 pedU2(uint v) { return vec2(float(v & 0xFFFFu), float(v >> 16u)) * (1.0 / 4096.0) - 8.0; }
 float pedM16(uint v) { return float(v) * (1.0 / 32768.0) - 1.0; }
 vec3 pedRGB(uint v) {
@@ -213,7 +214,7 @@ bool pedVisible(uint d0) {
 void pedPose(inout vec3 p, inout vec3 n) {
   vPedFade = P_fade;
   uint d0 = aData.x;
-  if (!pedVisible(d0)) { p = vec3(0.0, -50.0, 0.0); n = vec3(0.0, 1.0, 0.0); vPedA = vPedB = vec3(0.0); vPedS = 0.0; vPedH = 0.0; vPedPat = 0.0; return; }
+  if (!pedVisible(d0)) { p = vec3(0.0, -50.0, 0.0); n = vec3(0.0, 1.0, 0.0); vPedA = vPedB = vec3(0.0); vPedS = 0.0; vPedH = 0.0; vPedPat = 0.0; vPedMat = vec2(0.0); return; }
   int bone = int(d0 & 31u);
   int region = int((d0 >> 5u) & 31u);
   float tint = float(d0 >> 24u) * (1.0 / 200.0);
@@ -413,11 +414,25 @@ void pedPose(inout vec3 p, inout vec3 n) {
   } else if (region == ${R.LIPS}) {
     A = Bc = skin * vec3(0.86, 0.72, 0.7);
   }
-  vPedA = A * tint;
-  vPedB = Bc * tint;
+  // painted miniature: per-figure garment jitter (±4 %), lighter up-facing / darker undersides and
+  // lower legs (drybrush value ramp), faces and hands a touch warmer and lighter than the arms
+  float jit = fract(sin(dot(iRoot.xz, vec2(12.9898, 78.233))) * 43758.5453);
+  bool fabric = region == ${R.TORSO} || region == ${R.ARM} || region == ${R.LEG} || region == ${R.TAIL} || region == ${R.OUTER};
+  float ramp = 1.0 + 0.07 * max(n.y, 0.0) - 0.11 * max(-n.y, 0.0);
+  if (region == ${R.LEG}) ramp *= mix(0.88, 1.0, smoothstep(0.08, 0.55, h));
+  if (fabric) ramp *= 0.96 + 0.08 * jit;
+  if (region == ${R.SKIN} || region == ${R.LIPS}) { A *= vec3(1.05, 1.02, 1.0); Bc *= vec3(1.05, 1.02, 1.0); }
+  vPedA = A * tint * ramp;
+  vPedB = Bc * tint * ramp;
   vPedS = s;
   vPedH = h;
   vPedPat = pat;
+  // material response: skin & hair soften the terminator (wrap), hair and shoes get a faint sheen
+  vPedMat = region == ${R.SKIN} || region == ${R.NECK} || region == ${R.LIPS} ? vec2(0.35, 0.0)
+          : region == ${R.HAIR} || region == ${R.BEARD} ? vec2(0.4, 0.07)
+          : region == ${R.FOOT} ? vec2(0.0, 0.09)
+          : region == ${R.BAG} || region == ${R.HAT} ? vec2(0.1, 0.04)
+          : vec2(0.12, 0.0);
 
   // ── to world
   float sc = P_scale;
@@ -435,6 +450,7 @@ varying float vPedS;
 varying float vPedH;
 flat varying float vPedFade;
 flat varying float vPedPat;
+flat varying vec2 vPedMat;
 float pedBayer2(vec2 a) { a = floor(a); return fract(dot(a, vec2(0.5, a.y * 0.75))); }
 float pedBayer4(vec2 a) { return pedBayer2(0.5 * a) * 0.25 + pedBayer2(a); }
 `;
@@ -454,6 +470,30 @@ const FRAG_COLOR = /* glsl */ `
     }
     diffuseColor.rgb *= pc;
   }
+`;
+
+/** Lambert direct light with per-region wrap (skin, hair) and a faint Blinn sheen (hair, shoes). */
+const LAMBERT_PEOPLE = /* glsl */ `
+varying vec3 vViewPosition;
+struct LambertMaterial {
+  vec3 diffuseColor;
+  float specularStrength;
+};
+void RE_Direct_Lambert( const in IncidentLight directLight, const in vec3 geometryPosition, const in vec3 geometryNormal, const in vec3 geometryViewDir, const in vec3 geometryClearcoatNormal, const in LambertMaterial material, inout ReflectedLight reflectedLight ) {
+  float wrap = vPedMat.x;
+  float dotNL = saturate( ( dot( geometryNormal, directLight.direction ) + wrap ) / ( 1.0 + wrap ) );
+  vec3 irradiance = dotNL * directLight.color;
+  reflectedLight.directDiffuse += irradiance * BRDF_Lambert( material.diffuseColor );
+  if ( vPedMat.y > 0.0 ) {
+    float nh = saturate( dot( geometryNormal, normalize( directLight.direction + geometryViewDir ) ) );
+    reflectedLight.directDiffuse += directLight.color * vPedMat.y * pow( nh, 18.0 ) * saturate( dot( geometryNormal, directLight.direction ) * 4.0 );
+  }
+}
+void RE_IndirectDiffuse_Lambert( const in vec3 irradiance, const in vec3 geometryPosition, const in vec3 geometryNormal, const in vec3 geometryViewDir, const in vec3 geometryClearcoatNormal, const in LambertMaterial material, inout ReflectedLight reflectedLight ) {
+  reflectedLight.indirectDiffuse += irradiance * BRDF_Lambert( material.diffuseColor );
+}
+#define RE_Direct RE_Direct_Lambert
+#define RE_IndirectDiffuse RE_IndirectDiffuse_Lambert
 `;
 
 /** hat style table: A = (push out, crown lift, rim drop, front slope), B = (brim radius, brim droop, visor length, flatten) */
@@ -521,6 +561,7 @@ export function makePeopleMaterials(): PersonMaterials {
       .replace('#include <common>', `#include <common>\n${FRAG_PARS}\nuniform float uPedNight;`)
       .replace(/void main\(\)\s*\{/, (m) => `${m}\n${FRAG_FADE}`)
       .replace('#include <color_fragment>', `#include <color_fragment>\n${FRAG_COLOR}`)
+      .replace('#include <lights_lambert_pars_fragment>', LAMBERT_PEOPLE)
       .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n  totalEmissiveRadiance += diffuseColor.rgb * 0.07 * uPedNight;');
   };
   material.customProgramCacheKey = () => 'tinyhaven-people-2';
