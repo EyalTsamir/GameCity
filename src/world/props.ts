@@ -18,6 +18,7 @@ import { getLayout, occAny, PLANTER, hrand, MASK_WALK, DistanceLod, ChunkCuller,
 import { furnitureMaterial, glassMaterial } from './props/material';
 import { createGlowMesh, type Glow } from './props/glow';
 import { Kit, lamp, bench, bin, hydrant, mailbox, phonebox, newsstand, planterBox, bollard, bikeRack, busShelter, picketFence, lowWall, shed, waterButt, FENCE_PAINT } from './props/furniture';
+import * as GK from './props/garden';
 
 interface TerrainSvc {
   height(x: number, z: number): number;
@@ -44,6 +45,8 @@ export default function create(ctx: CityContext): CityModule {
     k = KC[chunkOf(x)];
     kf = KF[chunkOf(x)];
   };
+  // big silhouettes of the hardscape / garden kits (sheds, parasols, trampolines, kiosks, skips…): cast shadows
+  const KS = new Kit(new GeoSink(extras));
   const gsink = new GeoSink(extras);
   const g = new Kit(gsink);
   const glows: Glow[] = [];
@@ -236,6 +239,111 @@ export default function create(ctx: CityContext): CityModule {
     }
   }
 
+  // ───────────────────────────────────────────────────────── gardens ──
+  for (const gp of layout.gardens) {
+    for (const it of gp.items) {
+      const grng = new Rng(it.seed || 1);
+      const y = H(it.x, it.z);
+      const at = (kit: Kit) => kit.sh.frame(it.x, y, it.z, it.yaw);
+      switch (it.kind) {
+        case 'shed':
+          at(KS);
+          GK.gardenShed(KS, grng, it.w, it.d);
+          break;
+        case 'parasol':
+          at(KS);
+          GK.parasol(KS, grng, 1.25, 2.3);
+          break;
+        case 'trampoline':
+          at(KS);
+          GK.trampoline(KS, grng);
+          break;
+        case 'swing':
+          at(KS);
+          GK.swingSet(KS, grng, it.w);
+          break;
+        case 'playhouse':
+          at(KS);
+          GK.playhouse(KS, grng, it.w, it.d);
+          break;
+        case 'greenhouse':
+          at(KS);
+          g.sh.frame(it.x, y, it.z, it.yaw);
+          GK.greenhouse(KS, g, grng, it.w, it.d);
+          break;
+        case 'roundPool':
+          at(KS);
+          GK.roundPool(KS, grng, it.w);
+          break;
+        case 'pool':
+          at(k);
+          GK.pool(k, grng, it.w, it.d);
+          break;
+        case 'tableSet':
+          at(kf);
+          GK.tableSet(kf, grng);
+          break;
+        case 'loungeSet':
+          at(kf);
+          GK.loungeSet(kf, grng);
+          break;
+        case 'bbq':
+          at(kf);
+          GK.bbq(kf, grng);
+          break;
+        case 'paddling':
+          at(kf);
+          GK.paddling(kf, grng, it.w);
+          break;
+        case 'washing':
+          at(kf);
+          GK.washing(kf, grng);
+          break;
+        case 'vegBeds':
+          at(kf);
+          GK.vegBeds(kf, grng, 2 + (it.seed & 3), it.d);
+          break;
+        case 'compost':
+          at(kf);
+          GK.compost(kf, grng);
+          break;
+        case 'bins':
+          at(kf);
+          GK.wheelieBins(kf, grng, 2 + (it.seed % 2));
+          break;
+        case 'sandpit':
+          at(kf);
+          GK.sandpit(kf, grng, it.w);
+          break;
+        case 'loungers':
+          at(kf);
+          GK.loungers(kf, grng);
+          break;
+        case 'birdbath':
+          at(kf);
+          GK.birdbath(kf, grng);
+          break;
+        case 'toys':
+          at(kf);
+          GK.toys(kf, grng);
+          break;
+        case 'firepit':
+          at(kf);
+          GK.firepit(kf, grng);
+          break;
+        case 'kennel':
+          at(kf);
+          GK.kennel(kf, grng);
+          break;
+      }
+      inc(`g_${it.kind}`);
+    }
+    for (const st of gp.stones) {
+      kf.sh.frame(st.x, H(st.x, st.z), st.z, 0);
+      GK.stone(kf, st.r, hash01(st.x, st.z, 3));
+    }
+  }
+
   // ─────────────────────────────────────────────────────────── meshes ──
   const root = new THREE.Group();
   root.name = 'props';
@@ -257,6 +365,17 @@ export default function create(ctx: CityContext): CityModule {
     culler.add(m, fine ? () => near : () => true, 8);
   };
   KC.forEach((kit, i) => addFurniture(kit, `props-furniture-${i ? 'e' : 'w'}`, false));
+  {
+    // shadow-casting silhouettes (one extra draw call + its shadow pass); ?propscast=0 disables the shadows
+    const geo = KS.s.build();
+    geos.push(geo);
+    const m = staticMesh(geo, mat, 'props-casters');
+    m.castShadow = ctx.debug.params.get('propscast') !== '0';
+    m.receiveShadow = true;
+    m.renderOrder = -1;
+    if (parts.includes('furniture') && KS.s.vcount > 0) root.add(m);
+    culler.add(m, () => true, 8);
+  }
   KF.forEach((kit, i) => addFurniture(kit, `props-furniture-fine-${i ? 'e' : 'w'}`, true));
   let glassGeo: THREE.BufferGeometry | null = null;
   let glassMat: THREE.Material | null = null;
@@ -284,9 +403,10 @@ export default function create(ctx: CityContext): CityModule {
         ...count,
         fenceM: Math.round(fenceM),
         glows: glows.length,
-        tris: [...KC, ...KF].reduce((a, c) => a + c.s.tcount, 0) + gsink.tcount,
+        tris: [...KC, ...KF, KS].reduce((a, c) => a + c.s.tcount, 0) + gsink.tcount,
+        casterTris: KS.s.tcount,
         fineTris: KF.reduce((a, c) => a + c.s.tcount, 0),
-        verts: [...KC, ...KF].reduce((a, c) => a + c.s.vcount, 0) + gsink.vcount,
+        verts: [...KC, ...KF, KS].reduce((a, c) => a + c.s.vcount, 0) + gsink.vcount,
         buildMs: Math.round(buildMs),
       };
     },

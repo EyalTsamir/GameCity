@@ -24,9 +24,11 @@ import { Gen, Interval, LocalDoor, Side, col, jit } from './buildings/gen';
 import { genTownhouse, resetOldtown } from './buildings/oldtown';
 import { genFallback } from './buildings/fallback';
 import { genTower, resetTowers } from './buildings/towers';
-import { genHouse, genApartment } from './buildings/houses';
+import { genApartment } from './buildings/houses';
+import { genHouse, setLegacyHouses, resetHomes, houseStats } from './buildings/homes';
 import { genIndustrial } from './buildings/industry';
 import { genHotel, genSchool, genHarbormaster, genKiosk, genBoathouse } from './buildings/special';
+import { samplePalette, SkyState } from '../render/sky/palette';
 
 /** edge (m) of the square trim chunks (≈ two city blocks), grid origin at the slab's NW corner */
 const TRIM_CHUNK = 110;
@@ -78,7 +80,8 @@ interface BuiltLot {
 export default function create(ctx: CityContext): CityModule {
   const t0 = performance.now();
   const plan = ctx.plan;
-  const mats = createMaterials(ctx.uniforms);
+  // A/B switches: ?legacyfacade = original shell shader
+  const mats = createMaterials(ctx.uniforms, { legacy: ctx.debug.params.has('legacyfacade') });
   const shell = new Builder({ normal: true, color: true, uv: true, facade: true });
   const trimChunks = new Map<number, Builder>();
   const trimOf = (x: number, z: number): Builder => {
@@ -97,6 +100,9 @@ export default function create(ctx: CityContext): CityModule {
   const atlas = new SignAtlas();
   resetOldtown();
   resetTowers();
+  resetHomes();
+  // ?legacyhouses = original single house massing (A/B)
+  setLegacyHouses(ctx.debug.params.has('legacyhouses'));
 
   const lots = plan.lots.filter((l) => MY_KINDS.has(l.kind));
   const colors = assignColors(lots, plan.lots);
@@ -256,7 +262,8 @@ export default function create(ctx: CityContext): CityModule {
   const buildMs = performance.now() - t0;
   if (ctx.debug.enabled) console.info(`[buildings] ${built.length} buildings in ${buildMs.toFixed(0)} ms`, triCounts);
 
-  // sky reflection colours (follow the fog / background when the sky module provides them)
+  // sky reflection colours: the sky module's own time-of-day palette (zenith / horizon / sun glow /
+  // clouds) + the live sun and hemisphere lights for the reflected city and the sun glints
   const zen = new THREE.Color();
   const hor = new THREE.Color();
   const dayZen = new THREE.Color('#4f86c6');
@@ -264,6 +271,10 @@ export default function create(ctx: CityContext): CityModule {
   const duskHor = new THREE.Color('#f2a272');
   const nightZen = new THREE.Color('#0b1426');
   const nightHor = new THREE.Color('#1c2740');
+  const sky = new SkyState();
+  const camDir = new THREE.Vector3();
+  const tmpC = new THREE.Color();
+  const cityAlb = new THREE.Color(0.4, 0.39, 0.38);
 
   return {
     name: 'buildings',
@@ -274,13 +285,43 @@ export default function create(ctx: CityContext): CityModule {
       const u = c.uniforms;
       const day = u.uDaylight.value;
       const dusk = u.uDusk.value;
-      zen.copy(nightZen).lerp(dayZen, day);
-      hor.copy(nightHor).lerp(dayHor, day).lerp(duskHor, dusk * 0.55);
       const fog = c.scene.fog as THREE.Fog | THREE.FogExp2 | null;
-      if (fog && (fog as THREE.Fog).color) hor.lerp((fog as THREE.Fog).color, 0.6);
-      mats.uniforms.uSkyZen.value.copy(zen);
-      mats.uniforms.uSkyHor.value.copy(hor);
-      mats.uniforms.uGround.value.setRGB(0.18 * day + 0.015, 0.17 * day + 0.015, 0.15 * day + 0.02);
+      const mu = mats.uniforms;
+      if (mats.legacy) {
+        zen.copy(nightZen).lerp(dayZen, day);
+        hor.copy(nightHor).lerp(dayHor, day).lerp(duskHor, dusk * 0.55);
+        if (fog && (fog as THREE.Fog).color) hor.lerp((fog as THREE.Fog).color, 0.6);
+        mu.uSkyZen.value.copy(zen);
+        mu.uSkyHor.value.copy(hor);
+        mu.uGround.value.setRGB(0.18 * day + 0.015, 0.17 * day + 0.015, 0.15 * day + 0.02);
+      } else {
+        samplePalette(c.clock.hours, sky);
+        mu.uSkyZen.value.copy(sky.zenith);
+        hor.copy(sky.horizon);
+        if (fog && (fog as THREE.Fog).color) hor.lerp((fog as THREE.Fog).color, 0.25);
+        mu.uSkyHor.value.copy(hor);
+        mu.uSkyGlow.value.copy(sky.glow).multiplyScalar(sky.glowI * 0.55);
+        mu.uCloudCol.value.copy(sky.cloudLit).lerp(hor, 0.25);
+        // live lights (sun / moon + hemisphere) → glints, reflected city, reflected ground
+        const sunDirY = u.uSunDir.value.y;
+        const sunUp = THREE.MathUtils.smoothstep(sunDirY, -0.03, 0.06);
+        const L = c.services.sky;
+        const sunI = L ? L.sun.intensity : 2;
+        const hemiI = L ? L.hemi.intensity : 1;
+        if (L) mu.uSunCol.value.copy(L.sun.color).multiplyScalar(sunI * sunUp * 0.9);
+        else mu.uSunCol.value.setRGB(0, 0, 0);
+        const city = mu.uCityCol.value;
+        if (L) city.copy(L.hemi.color).multiplyScalar(hemiI * 0.85).add(tmpC.copy(L.sun.color).multiplyScalar(sunI * 0.42 * sunUp));
+        else city.setRGB(1, 1, 1);
+        city.multiply(cityAlb).multiplyScalar(1 / Math.PI);
+        const gnd = mu.uGround.value;
+        if (L) gnd.copy(L.hemi.groundColor).multiplyScalar(hemiI * 0.5).add(tmpC.copy(L.sun.color).multiplyScalar(sunI * 0.3 * sunUp));
+        else gnd.setRGB(0.5, 0.5, 0.5);
+        gnd.multiplyScalar(0.3 / Math.PI);
+        // stylised horizon lift: the reflected horizon crosses the facades in view at any camera tilt
+        c.camera.getWorldDirection(camDir);
+        mu.uReflLift.value = THREE.MathUtils.clamp(-camDir.y * 0.8 + 0.06, 0.08, 0.72);
+      }
       const night = THREE.MathUtils.clamp(u.uLights.value * (0.45 + 0.55 * u.uNight.value), 0, 1);
       mats.signs.emissiveIntensity = night * 2.2;
     },
@@ -294,6 +335,7 @@ export default function create(ctx: CityContext): CityModule {
         meshes: meshes.length,
         buildMs: Math.round(buildMs),
         ...Object.fromEntries(Object.entries(kindCounts).map(([k, v]) => [`n_${k}`, v])),
+        ...Object.fromEntries(Object.entries(houseStats).map(([k, v]) => [`house_${k}`, v])),
       };
     },
     invariants() {

@@ -18,7 +18,8 @@ const DOORS = ['#b23a32', '#263a5c', '#2f5d50', '#e0b33c', '#2a6f74', '#5b3b5e',
 const SHUTTERS = ['#2f5d50', '#263a5c', '#5f6b73', '#7a2e2a', '#2a6f74', '#3b2a20'];
 const FLOWERS = ['#e63946', '#ff7aa2', '#f1faee', '#f4a261', '#b05bd6', '#ffd23f'];
 
-export function genHouse(g: Gen): void {
+/** The original single-massing house (kept for ?legacyhouses A/B). */
+export function genHouseLegacy(g: Gen): void {
   const { lot, rng, W, D } = g;
   const INS = 0.12;
   const body: LRect = { x0: -W / 2 + INS, x1: W / 2 - INS, z0: -D / 2 + INS, z1: D / 2 - INS };

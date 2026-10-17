@@ -29,7 +29,7 @@ export interface BuilderOptions {
   normal?: boolean;
   color?: boolean;
   uv?: boolean;
-  /** three vec4 facade attributes aA, aB, aC */
+  /** four vec4 facade attributes aA, aB, aC, aD (aD = wall-quad info, written by wall()) */
   facade?: boolean;
   /** one vec4 light attribute aL */
   light?: boolean;
@@ -47,6 +47,7 @@ export class Builder {
   private fa: FBuf | null;
   private fb: FBuf | null;
   private fc: FBuf | null;
+  private fd: FBuf | null;
   private fl: FBuf | null;
   private idx = new Uint32Array(6 * 4096);
   ni = 0;
@@ -67,6 +68,13 @@ export class Builder {
   readonly A = [0, 0, 0, 0];
   readonly B = [0, 0, 0, 0];
   readonly C = [0, 0, 0, 0];
+  /** current aD for non-wall primitives (normally zero = "no wall info") */
+  readonly D = [0, 0, 0, 0];
+  /**
+   * Which ends of the next wall() quads are exposed building corners (bit 0 left, bit 1 right, as
+   * seen from outside). The facade shader darkens the wall softly towards them. Default: both.
+   */
+  cornerMask = 3;
   /** current light attribute */
   readonly L = [0, 0, 0, 0];
 
@@ -80,6 +88,7 @@ export class Builder {
     this.fa = opts.facade ? new FBuf(4 * 4096) : null;
     this.fb = opts.facade ? new FBuf(4 * 4096) : null;
     this.fc = opts.facade ? new FBuf(4 * 4096) : null;
+    this.fd = opts.facade ? new FBuf(4 * 4096) : null;
     this.fl = opts.light ? new FBuf(4 * 4096) : null;
   }
 
@@ -155,10 +164,11 @@ export class Builder {
       q.a[q.n++] = u;
       q.a[q.n++] = v;
     }
-    if (this.fa && this.fb && this.fc) {
+    if (this.fa && this.fb && this.fc && this.fd) {
       push4(this.fa, this.A);
       push4(this.fb, this.B);
       push4(this.fc, this.C);
+      push4(this.fd, this.D);
     }
     if (this.fl) push4(this.fl, this.L);
     return this.nv++;
@@ -318,6 +328,20 @@ export class Builder {
     const va = (y0 - gv) / gh,
       vb = (y1 - gv) / gh;
     this.quad(x0, y0, z0, x1, y0, z1, x1, y1, z1, x0, y1, z0, ua, va, ub, va, ub, vb, ua, vb);
+    const fd = this.fd;
+    if (fd) {
+      // aD of the 4 vertices just emitted: metres from the left end, length, world top, flags
+      const flags = 1 + (this.cornerMask & 1 ? 2 : 0) + (this.cornerMask & 2 ? 4 : 0);
+      const top = y1 + this.ty;
+      const s = [0, L, L, 0];
+      for (let k = 0; k < 4; k++) {
+        const o = fd.n - 16 + k * 4;
+        fd.a[o] = s[k];
+        fd.a[o + 1] = L;
+        fd.a[o + 2] = top;
+        fd.a[o + 3] = flags;
+      }
+    }
   }
 
   /** Horizontal rectangle at height y facing up (or down). uv = local x/z in metres (+offset). */
@@ -435,10 +459,11 @@ export class Builder {
     if (this.nrm) g.setAttribute('normal', new THREE.BufferAttribute(this.nrm.a.slice(0, this.nrm.n), 3));
     if (this.col) g.setAttribute('color', new THREE.BufferAttribute(this.col.a.slice(0, this.col.n), 3));
     if (this.uv) g.setAttribute('uv', new THREE.BufferAttribute(this.uv.a.slice(0, this.uv.n), 2));
-    if (this.fa && this.fb && this.fc) {
+    if (this.fa && this.fb && this.fc && this.fd) {
       g.setAttribute('aA', new THREE.BufferAttribute(this.fa.a.slice(0, this.fa.n), 4));
       g.setAttribute('aB', new THREE.BufferAttribute(this.fb.a.slice(0, this.fb.n), 4));
       g.setAttribute('aC', new THREE.BufferAttribute(this.fc.a.slice(0, this.fc.n), 4));
+      g.setAttribute('aD', new THREE.BufferAttribute(this.fd.a.slice(0, this.fd.n), 4));
     }
     if (this.fl) g.setAttribute('aL', new THREE.BufferAttribute(this.fl.a.slice(0, this.fl.n), 4));
     const index = this.nv > 65535 ? this.idx.slice(0, this.ni) : Uint16Array.from(this.idx.subarray(0, this.ni));
@@ -458,6 +483,7 @@ export class Builder {
     this.fa = this.fa ? new FBuf(4) : null;
     this.fb = this.fb ? new FBuf(4) : null;
     this.fc = this.fc ? new FBuf(4) : null;
+    this.fd = this.fd ? new FBuf(4) : null;
     this.fl = this.fl ? new FBuf(4) : null;
     this.nv = 0;
     this.ni = 0;
