@@ -20,26 +20,32 @@
 import * as THREE from 'three';
 import type { CityContext } from '../../core/context';
 import { LAYERS } from '../../core/layers';
-import { WATER_LEVEL } from '../../core/constants';
+import { WATER_LEVEL, SLAB, RIVER } from '../../core/constants';
 
 export type ReflectionLevel = 0 | 1 | 2;
 
+/** the river channel (+ bank trees' reach) */
+const RIVER_BOX = new THREE.Box3(new THREE.Vector3(SLAB.x0, WATER_LEVEL, RIVER.z0 - 2), new THREE.Vector3(121, WATER_LEVEL + 0.5, RIVER.z1 + 2));
+
 /** reflected at every level (cheap, or essential for contact: hulls, quays, emitters) */
+// Budget ≲ 0.2 M triangles in harbour / overview views: facade trim chunks (~90k), railings, signs,
+// aircraft and waterfowl were tried and dropped — invisible in a blurred 1/3-res reflection.
 const BASE: RegExp[] = [
   /^buildings-shell$/,
   /^buildings-lights$/,
-  /^buildings-signs$/,
   /^harbor-(north|beach|river|animated|rides|glows)$/,
   /^landmarks-(lights|glows)$/,
   /^terrain-glows$/,
   /^props-glows$/,
   /^boats-(big|small|lights)$/,
-  /^ambient-(vehicles|waterfowl)$/,
   /^terrain-masonry$/,
 ];
 /** level 2 only, and only if the mesh can actually appear in the water (bbox near the water) */
-const FULL_NEAR: RegExp[] = [/^buildings-trim$/, /^terrain-railings$/];
-/** level 2 only: the far-LOD tree mesh is forced on for the pass (near tree chunks forced off) */
+const FULL_NEAR: RegExp[] = [];
+/**
+ * level 2 only, and only while the river is in view (the bank trees are what makes it read as
+ * water): the far-LOD tree mesh is forced on for the pass (near tree chunks forced off)
+ */
 const TREES_FAR = 'veg-trees-far';
 /** emitter meshes skipped by day (their modules may keep them visible with zero intensity) */
 const NIGHT_ONLY = /-(glows|lights)$/;
@@ -79,6 +85,8 @@ export class PlanarReflection {
   private clearCol = new THREE.Color();
   private visSave: boolean[] = [];
   private lights: THREE.DirectionalLight[] = [];
+  private frustum = new THREE.Frustum();
+  private pm = new THREE.Matrix4();
   private dbg: boolean;
   private dbgList: THREE.Object3D[] = [];
   // stats
@@ -265,13 +273,16 @@ export class PlanarReflection {
     const vs = this.visSave;
     let n = 0;
     const full = this.level === 2;
+    this.pm.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+    this.frustum.setFromProjectionMatrix(this.pm);
+    const trees = full && this.frustum.intersectsBox(RIVER_BOX);
     for (const o of this.full) {
       vs[n++] = o.visible;
       o.visible = full && o.visible;
     }
     if (this.treesFar) {
       vs[n++] = this.treesFar.visible;
-      this.treesFar.visible = full;
+      this.treesFar.visible = trees;
     }
     for (const o of this.treesNear) {
       vs[n++] = o.visible;

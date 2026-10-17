@@ -1128,6 +1128,17 @@ function stick(b: MeshBuilder, p0: P3, p1: P3, wdt: number, sides = 4, a1 = 0, a
   ]);
 }
 
+/** a point just above the trapezius at lateral offset x (straps run over it) */
+function shoulderTop(d: Dims, x: number): P3 {
+  const r10 = d.torso[10],
+    r11 = d.torso[11];
+  const ax = Math.abs(x);
+  const t = clamp((ax - r11.hw) / (r10.hw - r11.hw), 0, 1);
+  const y = r11.y + (r10.y - r11.y) * t;
+  const cz = r11.cz + (r10.cz - r11.cz) * t;
+  return [x, y + 0.016 * (d.H / 1.76), cz];
+}
+
 function buildProps(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
   const hk = d.H / 1.76;
   const all = cfg.props === 'all';
@@ -1160,12 +1171,13 @@ function buildProps(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
       capFan(b, t, b.v(add(t.c, [0, 0.012 * hk, 0]), 0, 0), bo.c);
       capFan(b, bo, b.v(add(bo.c, [0, -0.012 * hk, 0]), 0, 0), t.c);
       if (all) {
-        // straps
+        // straps: pack top → over the shoulder (trapezius) → down the front of the chest
         b.use(BONE.CHEST, REG.STRAP, FB.BACKPACK, 0.7);
-        const r9 = d.torso[9];
+        const r8 = d.torso[8];
         for (const s of [1, -1]) {
-          const x = 0.085 * s * hk;
-          stick(b, [x, r9.y + 0.04 * hk, r9.cz - 0.01], [x * 1.1, r7.y - 0.02 * hk, r7.cz + r7.f + 0.006 + d.bust[7]], 0.011 * hk);
+          const top = shoulderTop(d, 0.092 * hk * s);
+          stick(b, [0.1 * s * hk, r8.y, r8.cz - r8.b - 0.012], top, 0.01 * hk);
+          stick(b, top, [0.105 * s * hk, r7.y - 0.03 * hk, r7.cz + r7.f + 0.008 + d.bust[7] * 0.7], 0.01 * hk);
         }
       }
     }
@@ -1183,9 +1195,13 @@ function buildProps(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
       b.use(BONE.CHEST, REG.STRAP, FB.SHOULDERBAG, 0.75);
       const r9 = d.torso[9],
         r6 = d.torso[6];
-      // strap: bag corner → across the chest → over the right shoulder → down the back
-      stick(b, [x + 0.07 * hk, y + 0.07 * hk, z - 0.01], [-0.115 * hk, r9.y + 0.04 * hk, r9.cz + r9.f * 0.3 + d.bust[7] * 0.5], 0.011 * hk);
-      stick(b, [-0.115 * hk, r9.y + 0.04 * hk, r9.cz - r9.b * 0.4], [0.12 * hk, r6.y - 0.04 * hk, r6.cz - r6.b - 0.008], 0.011 * hk);
+      // strap: bag corner → across the chest → over the right shoulder → down the back to the bag
+      const top = shoulderTop(d, -0.095 * hk);
+      const r7 = d.torso[7];
+      stick(b, [x + 0.07 * hk, y + 0.07 * hk, z - 0.01], [-0.02 * hk, r7.y, r7.cz + r7.f + 0.008 + d.bust[7]], 0.011 * hk);
+      stick(b, [-0.02 * hk, r7.y, r7.cz + r7.f + 0.008 + d.bust[7]], top, 0.011 * hk);
+      stick(b, top, [0.14 * hk, r6.y - 0.06 * hk, r6.cz - r6.b - 0.01], 0.011 * hk);
+      void r9;
     }
   }
   // hand-held bags hang plumb from the grip point (BAG_L / BAG_R bones): positions are offsets from

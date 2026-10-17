@@ -31,7 +31,7 @@ export interface WaterService {
   shoreDistance(x: number, z: number): number;
   /**
    * planar reflection quality (the adaptive quality ladder calls this):
-   * 0 = off (analytic sky only), 1 = low (base set, ~1/4.5 res), 2 = full (+ trees / facade trim, 1/3 res).
+   * 0 = off (analytic sky only), 1 = low (base set, ~1/4.5 res), 2 = full (1/3 res, + bank trees while the river is in view).
    * Ignored while a URL switch (?nowaterrefl / ?waterrefl=n) forces the level.
    */
   setReflectionQuality(level: 0 | 1 | 2): void;
