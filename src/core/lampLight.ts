@@ -191,7 +191,7 @@ vec3 thLampLight(vec3 wp, vec3 wn) {
       vec4 a = textureLod(uLampMap, uvA, 0.0);
       vec3 E0 = a.rgb * a.rgb;
       if (E0.r + E0.g + E0.b > 3e-5) {
-        vec4 b = textureLod(uLampMap, uvA + vec2(${f((LAMP_MAP.pw + LAMP_MAP.gap) / LAMP_MAP.width)}, 0.0));
+        vec4 b = textureLod(uLampMap, uvA + vec2(${f((LAMP_MAP.pw + LAMP_MAP.gap) / LAMP_MAP.width)}, 0.0), 0.0);
         float headY = a.a * 50.0 - 10.0;
         float pole = max(b.a * 32.0, 0.8);
         vec2 D = b.rg * 2.0 - 1.0;

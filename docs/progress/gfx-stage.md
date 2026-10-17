@@ -31,15 +31,20 @@ S4 before/after sheets, perf A/B.
 * runtime: `__city.ctx.services.sky.setLegacy(bool)`, `.tune = {sun,hemi,env,exposure,pcf,bias}` multipliers.
 
 ## Status
-* S1: code in, first look pending (full city was broken by others' WIP; using a private frozen copy on :5175 —
-  `/home/user/GameCity-stage`, `sync.sh` overlays my files).
-* S2: table + dome code in, untested.
-* S3, S4: not started.
+* S1 DONE (announced 20:25): studio key live. First A/B on the private frozen copy :5175 →
+  shots/stage/s1b/<view>_<h>_{new,old}.png (overview/park/oldtown/cu × 11/16.5/18.2). Findings + fixes:
+  - shadows measured navy (cu 11 shadow asphalt sRGB 25,42,67) → hemi sky greyer, env sky desaturated 55/35 %,
+    AO tint #25262c, grade shadow tint (−.004,0,.007);
+  - golden-hour tree crowns near-black → hemi 0.58–0.64, warmer brighter hemiGround, exposure 1.15–1.22.
+* S2: table + dome studio floor working (overview: model grounded on planks, analytic slab shadow visible
+  east of the plinth at 16.5). First oak texture too orange/busy → paler limed oak, fade 60→640 m.
+* S3: aircraft routes moved (balloon/blimp loops NW, plane crossing N and left↔right in the hero view; blimp
+  leaves north). Adaptive ladder: full → refl-low → no-ao → scale-0.85 → dof-lite → scale-0.72 → refl-off → scale-0.6.
+* S4: not started.
 
-## Next steps
-1. Capture S1 A/B on :5175 (overview/park/oldtown/close junction × 11/16.5/18.2/21.5), tune, send "S1 done".
-2. Tune table fade/colour, check low orbit / top-down / edge-on / follow cams.
-3. Aircraft routes, adaptive ladder, sheets, perf.
+## Test setup notes
+* :5175 = /home/user/GameCity-stage (git archive f5ff0a5 + my files via sync.sh, own Vite cacheDir).
+* scratchpad stage-cap.mjs: views × hours × runtime variants in one page load (`S.setLegacy(true)`).
 
 ## Requests to other areas
 (none yet)

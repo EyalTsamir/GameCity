@@ -56,4 +56,8 @@ export class LookEffect extends Effect {
     const u = this.uniforms.get(name);
     if (u) u.value = value;
   }
+  setVec(name: string, x: number, y: number, z: number): void {
+    const u = this.uniforms.get(name);
+    if (u && (u.value as THREE.Vector3).isVector3) (u.value as THREE.Vector3).set(x, y, z);
+  }
 }

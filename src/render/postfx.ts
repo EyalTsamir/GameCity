@@ -314,6 +314,7 @@ export default function create(ctx: CityContext): CityModule {
       look.set('uWarm', 0.012 * (1 - night) + 0.018 * dusk - 0.025 * night);
       look.set('uSat', 1.2 - 0.08 * night);
       look.set('uVignette', 0.28);
+      look.setVec('uShadowTint', -0.01, 0.0, 0.018);
     } else {
       // studio key: sunlit whites sit higher (stronger sun), so the day threshold rises to keep
       // daylight crisp; at night only real emitters (lamps, windows, neon) cross it — the dark
@@ -327,6 +328,7 @@ export default function create(ctx: CityContext): CityModule {
       look.set('uSat', 1.2 - 0.1 * night);
       // a deeper vignette at night: the lit town sits in a soft pool, the backdrop sinks to indigo
       look.set('uVignette', 0.28 + 0.14 * night);
+      look.setVec('uShadowTint', -0.004, 0.0, 0.007);
     }
 
     // ── cloud shadows (data published by the sky module)
@@ -335,6 +337,9 @@ export default function create(ctx: CityContext): CityModule {
     // ── AO radius follows the zoom (contact shadows in close-ups, broad grounding from afar)
     if (ao && ao.enabled) {
       const c = ao.configuration;
+      // studio key: a neutral, barely cool occlusion tint (the legacy navy tint turned every
+      // contact shadow blue on top of the blue sky fill)
+      c.color.copy(legacy ? aoTintLegacy : aoTintStudio);
       const r = THREE.MathUtils.clamp(camDist * 0.02, 1.6, 9);
       if (Math.abs(c.aoRadius - r) > 0.05) c.aoRadius = r;
       const f = 1.0;
@@ -388,3 +393,5 @@ export default function create(ctx: CityContext): CityModule {
 }
 
 const _tmp = new THREE.Vector3();
+const aoTintLegacy = new THREE.Color('#1c2433');
+const aoTintStudio = new THREE.Color('#25262c');

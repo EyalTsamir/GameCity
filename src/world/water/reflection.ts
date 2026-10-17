@@ -41,6 +41,8 @@ const BASE: RegExp[] = [
 const FULL_NEAR: RegExp[] = [/^buildings-trim$/, /^terrain-railings$/];
 /** level 2 only: the far-LOD tree mesh is forced on for the pass (near tree chunks forced off) */
 const TREES_FAR = 'veg-trees-far';
+/** emitter meshes skipped by day (their modules may keep them visible with zero intensity) */
+const NIGHT_ONLY = /-(glows|lights)$/;
 const TREES_NEAR = /^veg-trees-(w|e)$/;
 
 export interface ReflectionUniforms {
@@ -59,6 +61,7 @@ export class PlanarReflection {
   private busy = false;
   private base: THREE.Object3D[] = [];
   private full: THREE.Object3D[] = [];
+  private night: THREE.Object3D[] = [];
   private treesFar: THREE.Object3D | null = null;
   private treesNear: THREE.Object3D[] = [];
   private attached = false;
@@ -126,6 +129,7 @@ export class PlanarReflection {
       if (BASE.some((r) => r.test(o.name))) {
         o.layers.enable(LAYERS.REFLECT);
         this.base.push(o);
+        if (NIGHT_ONLY.test(o.name)) this.night.push(o);
         return;
       }
       if (o.name === TREES_FAR) {
@@ -256,9 +260,12 @@ export class PlanarReflection {
     for (const o of this.full) force(o, full && o.visible);
     if (this.treesFar) force(this.treesFar, full);
     for (const o of this.treesNear) force(o, false);
+    const day = this.ctx.uniforms.uLights.value < 0.02;
+    for (const o of this.night) force(o, !day && o.visible);
 
-    const c0 = renderer.info.render.calls,
-      t0 = renderer.info.render.triangles;
+    const auto = renderer.info.autoReset;
+    const c0 = auto ? 0 : renderer.info.render.calls,
+      t0 = auto ? 0 : renderer.info.render.triangles;
     try {
       scene.background = null;
       scene.matrixWorldAutoUpdate = false;
@@ -275,6 +282,7 @@ export class PlanarReflection {
       for (const o of this.full) o.visible = vs[n++];
       if (this.treesFar) this.treesFar.visible = vs[n++];
       for (const o of this.treesNear) o.visible = vs[n++];
+      for (const o of this.night) o.visible = vs[n++];
       scene.background = prevBg;
       scene.matrixWorldAutoUpdate = prevMWAU;
       renderer.shadowMap.autoUpdate = prevShadow;

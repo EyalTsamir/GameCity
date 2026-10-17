@@ -309,14 +309,28 @@ Let v = speed (m/s), Lh = hip height of the kind × scale, Fr = v² / (9.81·Lh)
   costs 241. Also skip shadow casting beyond ~150 m.
 * Transitions: hysteresis band ±3 m on each switch distance; optional 0.3 s dithered cross-fade using the existing
   Bayer fade (draw the figure in both levels while switching).
-* Expected vertex workload (per frame, typical orbit view with ~60 LOD0 / ~150 lo / ~150 tiny, main + shadow):
-  today ≈ 0.53 M VS invocations (main 263 k + shadow 263 k); target ≈ 0.26 M (main 66 k + 68 k + 36 k, shadow proxy
-  87 k) — the realism upgrade can come out **cheaper** than today. Verify with `perf.mjs` (`?hide=pedestrians`
-  variant isolates the render cost; `?pedlod=0|1|2` forces a level).
+* Measured census (renderer `write()` called synchronously per camera pose at 1920×1025, noon population ≈ 405;
+  `shots/people-review/census.json`, first block): figures per level and vertices per pass today —
+
+  | view | LOD0 | lo | tiny | VS vertices / pass | + shadow pass |
+  |---|---|---|---|---|---|
+  | square 20 m | 16 | 24 | 7 | 49 k | yes |
+  | old-town street 40 m | 5 | 48 | 1 | 48 k | yes |
+  | downtown plaza 16 m (busy, long sightline) | 7 | 77 | 100 | 98 k | yes |
+  | beach 45 m | 17 | 45 | 0 | 66 k | yes |
+  | old-town / park POI (120–130 m) | 0 | 63–88 | 62–108 | 65–97 k | yes |
+  | overview 560 m | 0 | 0 | 405 (cap 720, overflow → lo) | 98 k | no (camera > 150 m) |
+
+  Only ~3–9 figures are within 40 m even in close views; **`lo` dominates** (24–150 figures). So: LOD0 can be rich
+  (it is rarely more than 10–30 instances), `lo` must get cheaper (≤ 450 vertices), and the overview wants a pin level.
+  Target for the same views (LOD0 < 44 m at 1025 px, lo to 121 m, shadow proxy): square 20 m ≈ 25 k main + 11 k
+  shadow (today 49 k + 49 k); plaza ≈ 68 k + 44 k (today 98 k + 98 k); overview with a 70-vertex pin ≈ 28 k (today
+  98 k). The realism upgrade can come out **cheaper than today**. Verify with `perf.mjs` (`;hide=pedestrians`
+  variant isolates the render cost; `pedlod=0|1|2` forces a level). LOD0 capacity 260 can drop to ~64.
 * **Per-instance data model**: today 15/16 attribute slots. Free slots before adding data: (1) drop the per-vertex
   `color` attribute (its only use is a scalar tint → `aInfo.w`); (2) replace `InstancedMesh.instanceMatrix`
   (4 slots) by a plain `Mesh` + `InstancedBufferGeometry` with `iRoot = (x, y, z, yaw)` and scale packed elsewhere
-  (frustum culling and picking are already custom) → 4 + 1 + 1 spare = **6 free slots (24 floats)**. Needed:
+  (frustum culling and picking are already custom) → 15 → 11 used = **5 free slots (20 floats)**. Needed:
   ankle L/R, pelvis yaw/roll, chest twist, chest bend (stoop), head pitch, lateral sway, rootZ (sit), wrist/grip,
   body kind/build, hair params, hem/sleeve/tail params, outer-garment colour ≈ 18–22 floats. If more is needed, pack
   pairs as half floats in integer attributes (`gpuType = THREE.UnsignedIntType`, `unpackHalf2x16` in GLSL 3).

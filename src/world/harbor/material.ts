@@ -428,6 +428,8 @@ function registerHarborPools(points: GlowPoint[]): { keep: GlowPoint[]; cranes: 
   for (const p of points) {
     if (!p.pool) {
       keep.push(p);
+      // the lit ferris wheel washes the pier deck and the beach around it in its warm-pink glow
+      if (p.mode === GLOW.FERRIS) out.push({ x: p.x, y: p.y, z: p.z, pole: p.y - 0.3, radius: 15, color: '#ffc9c0', intensity: 0.34, kind: 'plaza' });
       continue;
     }
     if (p.crane !== undefined) {

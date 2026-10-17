@@ -28,6 +28,7 @@ import { buildCrane, buildCraneRails, CraneSim, type MobileBox } from './harbor/
 import { buildMooring, buildQuayEdge, buildShip, mobileShipPos, SHIP, type MobileSlot } from './harbor/ship';
 import { addContainer, CH, CW, fillYard, L20, pickLook, yardRows } from './harbor/containers';
 import { buildHarborFloodlights } from './lamps/harborLights';
+import { addLampLights } from '../core/lampLight';
 
 export interface HarborService {
   /** current crane states (world): gantry z, trolley x, spreader bottom y, busy phase */
@@ -193,6 +194,8 @@ export default function create(ctx: CityContext): CityModule {
       carousel = { x: cf.x, z: cf.z };
       buildCarouselStatic(beach, cf.x, cf.z, r, deckY);
       horses = buildCarouselRotating(rides, cf.x, cf.z, r, deckY, ctx.rng('harbor-carousel'));
+      // night agent: the carousel's marquee bulbs light the deck around it (lamp light map)
+      addLampLights([{ x: cf.x, y: deckY + 3.3, z: cf.z, pole: 3.3, radius: r + 2.2, color: '#ffd08a', intensity: 0.6, kind: 'plaza' }]);
     }
   }
 

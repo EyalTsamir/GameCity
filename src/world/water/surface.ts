@@ -343,6 +343,8 @@ vec4 waterBase() {
   float ndv = clamp(dot(wN, V), 0.0, 1.0);
   float F0 = mix(mix(0.3, 0.34, mRiv), 0.32, mPond);
   float F = mix(F0, 0.92, pow(1.0 - ndv, 4.0));
+  // glassy slicks mirror more than ruffled streaks (macro tonal variation that survives distance)
+  F *= mix(1.18, 0.86, ruff);
 
   // ── reflection: analytic sky under the planar reflection
   vec3 R = reflect(-V, wN);

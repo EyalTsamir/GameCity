@@ -114,9 +114,9 @@ export class EnvironmentBaker {
     (u.uZenith.value as THREE.Color).copy(state.zenith);
     (u.uHorizon.value as THREE.Color).copy(state.horizon);
     if (this.studio) {
-      // cool, but not saturated-blue shadows: pull the sky part of the fill 30 % toward grey
-      desaturate(u.uZenith.value as THREE.Color, 0.3);
-      desaturate(u.uHorizon.value as THREE.Color, 0.2);
+      // cool, but not saturated-blue shadows: pull the sky part of the fill toward grey
+      desaturate(u.uZenith.value as THREE.Color, 0.55);
+      desaturate(u.uHorizon.value as THREE.Color, 0.35);
     }
     // what the city "sees" below the horizon: lit ground in the day, dark streets at night
     (u.uGround.value as THREE.Color).copy(state.hemiGround).multiplyScalar(0.45 * state.hemiI).lerp(state.fog, 0.25);

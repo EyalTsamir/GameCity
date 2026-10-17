@@ -704,7 +704,8 @@ function addRock(b: GeoBuilder, rng: Rng, model: TerrainModel, x: number, z: num
   const m = size * 1.25 + 0.3;
   x = Math.min(SLAB.x1 - m, Math.max(SLAB.x0 + m, x));
   z = Math.min(SLAB.z1 - m, Math.max(SLAB.z0 + m, z));
-  const g = rockGeometry(rng, size > 1.6 && !style.facet ? 2 : 1);
+  // (new look: small stones are 20-facet chunks — scree is numerous, keep it cheap)
+  const g = rockGeometry(rng, size > 1.6 && !style.facet ? 2 : flatMasonry && size < 0.75 ? 0 : 1);
   const sy = size * (0.55 + rng.next() * 0.3) * (style.squash ?? 1);
   _s.set(size * (0.85 + rng.next() * 0.35), sy, size * (0.85 + rng.next() * 0.35));
   _e.set((rng.next() - 0.5) * 0.35, rng.next() * Math.PI * 2, (rng.next() - 0.5) * 0.35);

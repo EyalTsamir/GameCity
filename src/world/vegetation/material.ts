@@ -71,6 +71,10 @@ vThLeaf = aLeaf;
 vThRest = position;
 `;
 
+// TEMP shim (remove once core/lampLight.ts is fixed): a missing textureLod lod argument broke every
+// LAMP_GLSL shader at 19:45 — patch it locally so the trees keep compiling. No-op once fixed.
+const LAMP_GLSL_SAFE = LAMP_GLSL.replace(/textureLod\(uLampMap, uvA \+ vec2\(([0-9.]+), 0\.0\)\);/, 'textureLod(uLampMap, uvA + vec2($1, 0.0), 0.0);');
+
 const LEAF_FRAG_PARS = /* glsl */ `
 varying vec4 vThLeaf;
 varying vec3 vThRest;
@@ -80,7 +84,7 @@ uniform float uThWrap;
 uniform float uThTone;
 uniform float uThModel;
 float thWrap;
-${LAMP_GLSL}
+${LAMP_GLSL_SAFE}
 vec3 thHash( vec3 p ) {
   uvec3 q = uvec3( ivec3( p ) ) * uvec3( 1597334673u, 3812015801u, 2798796415u );
   q = ( q.x ^ q.y ^ q.z ) * uvec3( 1597334673u, 3812015801u, 2798796415u );
