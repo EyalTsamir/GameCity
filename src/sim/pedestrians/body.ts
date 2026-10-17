@@ -69,6 +69,7 @@ export const REG = {
   HATBAND: 17,
   STRAP: 18,
   LIPS: 19,
+  TOWEL: 20,
 } as const;
 
 /** Render feature bits (per-instance mask; a vertex with a feature shows only when its bit is set). */
@@ -1129,19 +1130,19 @@ function stick(b: MeshBuilder, p0: P3, p1: P3, wdt: number, sides = 4, a1 = 0, a
 
 function buildProps(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
   const hk = d.H / 1.76;
-  const lo = cfg !== LODS[0];
-  const tiny = cfg === LODS[2];
+  const all = cfg.props === 'all';
+  const far = cfg.props === 'far';
   // backpack (on the chest bone, follows lean and twist) + straps over the shoulders
   b.use(BONE.CHEST, REG.BAG, FB.BACKPACK, 1);
   {
     const r7 = d.torso[7];
     const back = r7.cz - r7.b;
-    if (tiny) softBox(b, [0, r7.y, back - 0.055 * hk], [0.27 * hk, 0.34 * hk, 0.11 * hk]);
+    if (far) softBox(b, [0, r7.y, back - 0.055 * hk], [0.27 * hk, 0.34 * hk, 0.11 * hk]);
     else {
       // rounded pack: a short loft (front face flat against the back)
-      const n = lo ? 6 : 8;
+      const n = all ? 8 : 6;
       const rings: Ring[] = [];
-      const ys = lo ? [-0.17, 0.15] : [-0.18, -0.02, 0.17];
+      const ys = all ? [-0.18, -0.02, 0.17] : [-0.17, 0.15];
       ys.forEach((dy, i) => {
         const shrink = i === 0 || i === ys.length - 1 ? 0.85 : 1;
         const ids: number[] = [];
@@ -1158,7 +1159,7 @@ function buildProps(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
         bo = rings[0];
       capFan(b, t, b.v(add(t.c, [0, 0.012 * hk, 0]), 0, 0), bo.c);
       capFan(b, bo, b.v(add(bo.c, [0, -0.012 * hk, 0]), 0, 0), t.c);
-      if (!lo) {
+      if (all) {
         // straps
         b.use(BONE.CHEST, REG.STRAP, FB.BACKPACK, 0.7);
         const r9 = d.torso[9];
@@ -1169,16 +1170,16 @@ function buildProps(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
       }
     }
   }
-  // shoulder bag: hangs at the left hip, outside the arm's swing path, strap across the chest
-  b.use(BONE.PELVIS, REG.BAG, FB.SHOULDERBAG, 1);
-  {
+  const grip = (side: 1 | -1): P3 => lerp3(pv(d.wrist, side), pv(d.tip, side), 0.42);
+  if (!far) {
     // cross-body bag on the front of the left hip (inside the hand's swing path at x ≈ 0.22)
+    b.use(BONE.PELVIS, REG.BAG, FB.SHOULDERBAG, 1);
     const r2 = d.torso[2];
     const x = 0.125 * hk,
       z = r2.cz + r2.f + 0.03 * hk,
       y = r2.y + 0.025 * hk;
     softBox(b, [x, y, z], [0.19 * hk, 0.15 * hk, 0.05 * hk]);
-    if (!lo) {
+    if (all) {
       b.use(BONE.CHEST, REG.STRAP, FB.SHOULDERBAG, 0.75);
       const r9 = d.torso[9],
         r6 = d.torso[6];
@@ -1189,88 +1190,80 @@ function buildProps(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
   }
   // hand-held bags hang plumb from the grip point (BAG_L / BAG_R bones): positions are offsets from
   // the grip (palm centre), resolved in the shader
-  const grip = (side: 1 | -1): P3 => lerp3(pv(d.wrist, side), pv(d.tip, side), 0.42);
   b.use(BONE.BAG_R, REG.BAG, FB.SHOPBAG, 1);
   {
     const g = grip(-1);
     softBox(b, add(g, [-0.012, -0.16 * hk, 0.005]), [0.1 * hk, 0.26 * hk, 0.22 * hk]);
-    if (!lo) {
+    if (all) {
       b.setTint(0.7);
       stick(b, add(g, [-0.012, -0.03 * hk, 0.0]), add(g, [-0.012, 0.004, 0.0]), 0.006);
     }
   }
-  b.use(BONE.BAG_L, REG.BAG, FB.BRIEFCASE, 1);
-  {
+  if (!far) {
+    b.use(BONE.BAG_L, REG.BAG, FB.BRIEFCASE, 1);
     const g = grip(1);
     softBox(b, add(g, [0.008, -0.15 * hk, 0.01]), [0.075 * hk, 0.26 * hk, 0.36 * hk]);
-    if (!lo) {
+    if (all) {
       b.use(BONE.BAG_L, REG.DARK, FB.BRIEFCASE, 1);
       stick(b, add(g, [0.008, -0.02 * hk, -0.04 * hk]), add(g, [0.008, -0.02 * hk, 0.05 * hk]), 0.008);
     }
   }
-  if (tiny) {
-    b.use(BONE.UMB, REG.EXTRA, FB.UMBRELLA, 1);
-    umbrella(b, d, 5, false);
-    b.use(BONE.GROUND, REG.EXTRA, FB.TOWEL, 1);
-    towel(b, false);
-    return;
-  }
-  // cane: from the right hand's grip down to a tip target (aux1 0 = grip … 1 = tip)
-  b.use(BONE.CANE, REG.DARK, FB.CANE, 1);
-  {
-    const g = grip(-1);
-    stick(b, add(g, [0, 0.03, 0]), add(g, [0, -0.8, 0]), 0.0095, 4, 0);
-    if (!lo) stick(b, add(g, [0, 0.03, -0.05]), add(g, [0, 0.03, 0.05]), 0.01, 4, -2);
-  }
-  // fishing rod (right hand, pointing forward and up once posed)
-  b.use(BONE.HAND_R, REG.DARK, FB.ROD, 1);
-  {
-    const g = grip(-1);
-    stick(b, add(g, [0, 0.0, 0]), add(g, [-0.02, -1.14, 1.76]), 0.008, 4, -2);
-  }
-  // newspaper held in front of the chest (bench readers)
-  b.use(BONE.CHEST, REG.WHITE, FB.NEWSPAPER, 0.96);
-  {
-    const y = d.chest.y + 0.08 * hk,
-      z = 0.36 * hk;
-    softBox(b, [0, y, z], [0.46 * hk, 0.3 * hk, 0.008]);
-  }
-  // phone and coffee cup in the right hand
-  b.use(BONE.HAND_R, REG.DARK, FB.PHONE, 1);
-  {
-    const g = grip(-1);
-    softBox(b, add(g, [0.012, -0.005, 0.018]), [0.012, 0.13 * hk, 0.065 * hk]);
-  }
-  b.use(BONE.HAND_R, REG.WHITE, FB.CUP, 0.95);
-  {
-    const g = grip(-1);
-    const c = add(g, [0.03, 0.015, 0.012]);
-    const rings: Ring[] = [];
-    for (const [dy, r] of [
-      [-0.05, 0.03],
-      [0.06, 0.036],
-    ] as [number, number][]) {
-      const ids: number[] = [];
-      for (let k = 0; k < 6; k++) {
-        const a = (k / 6) * Math.PI * 2;
-        ids.push(b.v([c[0] + r * Math.sin(a), c[1] + dy, c[2] + r * Math.cos(a)], 0, 0));
-      }
-      rings.push({ ids, c: [c[0], c[1] + dy, c[2]] });
+  if (all) {
+    // cane: from the right hand's grip down to a tip target (aux1 0 = grip … 1 = tip; −2…−1 = crook, rigid)
+    b.use(BONE.CANE, REG.DARK, FB.CANE, 1);
+    {
+      const g = grip(-1);
+      stick(b, add(g, [0, 0.03, 0]), add(g, [0, -0.8, 0]), 0.0095, 4, 0);
+      stick(b, add(g, [0, 0.03, -0.05]), add(g, [0, 0.03, 0.05]), 0.01, 4, -2);
     }
-    bridge(b, rings);
-    b.use(BONE.HAND_R, REG.DARK, FB.CUP, 1);
-    capFan(b, rings[1], b.v([c[0], c[1] + 0.062, c[2]], 0, 0), [c[0], c[1], c[2]]);
+    // fishing rod (right hand, pointing forward and up once posed)
+    b.use(BONE.HAND_R, REG.DARK, FB.ROD, 1);
+    {
+      const g = grip(-1);
+      stick(b, add(g, [0, 0.0, 0]), add(g, [-0.02, -1.14, 1.76]), 0.008, 4, -2);
+    }
+    // phone and coffee cup in the right hand
+    b.use(BONE.HAND_R, REG.DARK, FB.PHONE, 1);
+    {
+      const g = grip(-1);
+      softBox(b, add(g, [0.012, -0.005, 0.018]), [0.012, 0.13 * hk, 0.065 * hk]);
+    }
+    b.use(BONE.HAND_R, REG.WHITE, FB.CUP, 0.95);
+    {
+      const g = grip(-1);
+      const c = add(g, [0.03, 0.015, 0.012]);
+      const rings: Ring[] = [];
+      for (const [dy, r] of [
+        [-0.05, 0.03],
+        [0.06, 0.036],
+      ] as [number, number][]) {
+        const ids: number[] = [];
+        for (let k = 0; k < 6; k++) {
+          const a = (k / 6) * Math.PI * 2;
+          ids.push(b.v([c[0] + r * Math.sin(a), c[1] + dy, c[2] + r * Math.cos(a)], 0, 0));
+        }
+        rings.push({ ids, c: [c[0], c[1] + dy, c[2]] });
+      }
+      bridge(b, rings);
+      b.use(BONE.HAND_R, REG.DARK, FB.CUP, 1);
+      capFan(b, rings[1], b.v([c[0], c[1] + 0.062, c[2]], 0, 0), [c[0], c[1], c[2]]);
+    }
+  }
+  if (!far) {
+    // newspaper held in front of the chest (bench readers)
+    b.use(BONE.CHEST, REG.WHITE, FB.NEWSPAPER, 0.96);
+    softBox(b, [0, d.chest.y + 0.08 * hk, 0.36 * hk], [0.46 * hk, 0.3 * hk, 0.008]);
   }
   // umbrella (right hand grip, kept upright) and beach towel
-  b.use(BONE.UMB, REG.DARK, FB.UMBRELLA, 1);
-  {
+  if (!far) {
+    b.use(BONE.UMB, REG.DARK, FB.UMBRELLA, 1);
     const g = grip(-1);
     stick(b, add(g, [0, -0.06, 0]), add(g, [0, 0.82, 0]), 0.008);
   }
   b.use(BONE.UMB, REG.EXTRA, FB.UMBRELLA, 1);
-  umbrella(b, d, lo ? 6 : 8, !lo);
-  b.use(BONE.GROUND, REG.EXTRA, FB.TOWEL, 1);
-  towel(b, !lo);
+  umbrella(b, d, all ? 8 : far ? 5 : 6, !far);
+  b.use(BONE.GROUND, REG.TOWEL, FB.TOWEL, 1);
+  towel(b);
 }
 
 function umbrella(b: MeshBuilder, d: Dims, n: number, under: boolean): void {
@@ -1280,39 +1273,24 @@ function umbrella(b: MeshBuilder, d: Dims, n: number, under: boolean): void {
     R = 0.56;
   const apex = b.v([g[0], apexY, g[2]], 0, 0);
   const rim: number[] = [];
-  const mid: number[] = [];
   for (let k = 0; k < n; k++) {
     const a = (k / n) * Math.PI * 2;
     rim.push(b.v([g[0] + Math.sin(a) * R, rimY, g[2] + Math.cos(a) * R], 0, 0));
   }
+  for (let k = 0; k < n; k++) b.triDir(apex, rim[k], rim[(k + 1) % n], [0, 1, 0]);
   if (under) {
-    // scalloped: a ring between the ribs slightly lower
-    for (let k = 0; k < n; k++) {
-      const a = ((k + 0.5) / n) * Math.PI * 2;
-      mid.push(b.v([g[0] + Math.sin(a) * R * 0.92, rimY + 0.03, g[2] + Math.cos(a) * R * 0.92], 0, 0));
-    }
-    for (let k = 0; k < n; k++) {
-      b.triDir(apex, rim[k], mid[k], [0, 1, 0]);
-      b.triDir(apex, mid[k], rim[(k + 1) % n], [0, 1, 0]);
-    }
     b.setTint(0.55);
     const ua = b.v([g[0], apexY - 0.04, g[2]], 0, 0);
     const rim2 = rim.map((i) => b.v([b.pos[i * 3], b.pos[i * 3 + 1] - 0.004, b.pos[i * 3 + 2]], 0, 0));
     for (let k = 0; k < n; k++) b.triDir(ua, rim2[k], rim2[(k + 1) % n], [0, -1, 0]);
-  } else for (let k = 0; k < n; k++) b.triDir(apex, rim[k], rim[(k + 1) % n], [0, 1, 0]);
+  }
 }
 
-function towel(b: MeshBuilder, stripes: boolean): void {
+/** beach towel (flat on the ground; stripes are painted by the shader from h = z) */
+function towel(b: MeshBuilder): void {
   const y = 0.008;
-  const q = [b.v([-0.4, y, -0.925], 0, 0), b.v([0.4, y, -0.925], 0, 0), b.v([0.4, y, 1.025], 0, 0), b.v([-0.4, y, 1.025], 0, 0)];
+  const q = [b.v([-0.4, y, -0.925], -0.925, 0), b.v([0.4, y, -0.925], -0.925, 0), b.v([0.4, y, 1.025], 1.025, 0), b.v([-0.4, y, 1.025], 1.025, 0)];
   b.quadDir(q[0], q[1], q[2], q[3], [0, 1, 0]);
-  if (stripes) {
-    b.use(BONE.GROUND, REG.WHITE, FB.TOWEL, 1);
-    for (const z0 of [-0.82, 0.86]) {
-      const s = [b.v([-0.4, y + 0.002, z0], 0, 0), b.v([0.4, y + 0.002, z0], 0, 0), b.v([0.4, y + 0.002, z0 + 0.08], 0, 0), b.v([-0.4, y + 0.002, z0 + 0.08], 0, 0)];
-      b.quadDir(s[0], s[1], s[2], s[3], [0, 1, 0]);
-    }
-  }
 }
 
 // ──────────────────────────────────────────────────────── assembly ──

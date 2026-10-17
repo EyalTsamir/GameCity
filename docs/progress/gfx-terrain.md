@@ -42,6 +42,14 @@ T1 cliffs & rock · T2 lawns & ground · T3 stadium shell · T4 lamp light in th
   derivatives) so the skin + every boulder are indexed with shared vertices: FEWER vertices than before
   despite the new rock. Cliff build 0.17 s at boot.
 * Stage S1 lighting is live (stronger warmer sun, weaker fill): re-tune under it.
+* it2 (S1 lighting, same build A/B `?legacyterrain`): sheet `shots/terrain/sheet_it2_day.png` — cliffs and
+  stadium clearly better; lawn only subtly better → it3: stronger park stripes (±13 %), clump hue/value
+  ±15 %, cooler lusher palette. Stadium tower tops were big cream slabs → parapet ring + dark roof + hut.
+  Stats (subset page): masonry 26.9k → 38.5k tris (cliffs 15.5k incl. scree), landmarks 102k → 110k
+  (stadium 5.6k → 11.5k, floodlights 0.9k → 2.8k), draw calls unchanged, atlas 0.66 → 0.74, invariants
+  and validate clean, no console errors (a GL_INVALID_OPERATION sampler warning appears in BOTH variants —
+  not from my materials). terrain buildMs 3.7 s → 20.7 s (SwiftShader page): per-shape canvas blur on
+  hundreds of mask shapes → now drawn sharp and blurred once (verify in it3).
 
 ## Toggles
 `?legacyterrain` (everything old), `?nocliffs` (no rock skin / tors), `?legacyground`, `?legacystadium`.
