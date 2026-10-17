@@ -1,0 +1,95 @@
+/* Base page + loading screen. UI module styles live in src/ui/. */
+:root {
+  --ui-font: 'Segoe UI', system-ui, -apple-system, 'Helvetica Neue', Arial, sans-serif;
+  --ui-ink: #23303a;
+  --ui-paper: #f7f2e8;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: #cfdde6;
+  font-family: var(--ui-font);
+  -webkit-font-smoothing: antialiased;
+}
+
+#city {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  display: block;
+  outline: none;
+  touch-action: none;
+}
+
+#ui {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 10;
+}
+
+#ui > * {
+  pointer-events: auto;
+}
+
+#loading {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  z-index: 100;
+  background: radial-gradient(ellipse at 50% 40%, #f3efe6 0%, #dfe7ea 55%, #c5d4dc 100%);
+  transition: opacity 1s ease, visibility 1s;
+}
+
+#loading.done {
+  opacity: 0;
+  visibility: hidden;
+  /* let the very first drag reach the city while the card fades out */
+  pointer-events: none;
+}
+
+.loading-card {
+  text-align: center;
+  color: var(--ui-ink);
+}
+
+.loading-title {
+  font-size: 46px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+
+.loading-sub {
+  margin-top: 2px;
+  font-size: 15px;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  opacity: 0.6;
+}
+
+.loading-bar {
+  width: 260px;
+  height: 4px;
+  margin: 26px auto 12px;
+  background: #23303a22;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+#loading-bar-fill {
+  width: 0%;
+  height: 100%;
+  background: #e0884f;
+  border-radius: 4px;
+  transition: width 0.25s ease;
+}
+
+#loading-status {
+  font-size: 13px;
+  opacity: 0.65;
+}

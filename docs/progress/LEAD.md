@@ -1,0 +1,116 @@
+# Lead progress log (resume point for the whole project)
+
+Read this first when resuming after an interruption (usage limits have cut runs before).
+Per-module logs live next to this file: `docs/progress/<module>.md`.
+
+## History
+* 2026-10-16 ~19:20 — Round 1: 12 builders launched via a Workflow; the account hit its 5-hour usage
+  limit at 20:48–20:51. Six builders had worked ~1.5 h (traffic, pedestrians, buildings, render =
+  sky+postfx, terrain(+water), camera/ui/audio); the other six died on start (stubs only).
+* 2026-10-16 23:24 — Resumed after the limit reset (Ultracode off → individual background Agents,
+  not a Workflow). Verified: tsc clean, all 18 modules load, 0 console errors, invariants clean.
+  Round 2 launched 23:40: roads, vegetation+props, landmarks, harbor, rail+boats, ambient builders
+  + a perf agent (traffic/pedestrian rendering, then buildings). Each keeps docs/progress/<x>.md.
+
+* 2026-10-17 00:55 — Usage at ~90% of the 5-hour window (user warning). All 7 round-2 agents told to
+  pause cleanly (loadable code + updated progress logs). Automatic resume scheduled in this session
+  for 05:07 (backup check 05:47); agent ids for SendMessage-resume are in the session scratchpad
+  (agents-round2.json). If the session was closed, resume manually: respawn each module from its
+  docs/progress/<module>.md with its original brief.
+
+* 2026-10-17 09:32 — The 05:07 auto-resume never fired (session-only timers). Resumed manually:
+  dev server restarted; tsc clean. Round-2 state at pause: roads ✔ (verification left), harbor ✔
+  (verification left), ambient ✔ (perf/night pass left), perf ✔ (traffic+peds 6.7→~0.6 ms; buildings
+  trimmed), vegetation+props mostly done, landmarks partial, rail ✔ / boats not started.
+  To save budget only 3 agents were resumed (SendMessage, context kept): landmarks, rail-boats (boats),
+  vegetation-props. Roads/harbor/ambient/perf stay paused; the lead verifies them in the integration
+  pass and resumes them only for specific fixes.
+* 09:40 lead integration check: 0 errors/warnings, no failed modules, invariants clean, ~150 draw calls;
+  beach "black half" no longer reproduces; station POI was occluded by downtown towers → now
+  yaw -95 / pitch 42 / d 120 (verified). Real perf at the user's screen (1920x1200 @125% → ~1920x1025
+  canvas): overview ~18.3 ms, downtown night ~21 ms (noisy: agents running); postfx ≈ 3.4 ms of it
+  (HalfFloat targets; perf agent found u8 ≈ free). Plan: postfx optimisation pass (perf agent, with
+  before/after visual comparison) once builders finish; keep pixelRatio 1.25 + adaptive scaling.
+
+* ~10:30 — vegetation+props COMPLETE (1.2–1.6 ms), rail+boats COMPLETE (~0.6 ms). Lead removed the
+  ridge-foot conifer strip (vegetation.ts RIDGE_FOOT_STRIP=false) — it clashed with catenary masts.
+  Resumed: ambient (finish list + waterfowl avoid boats via ctx.services.boats.fleet.boats) and perf
+  (new scope: postfx at 1920x1025 with before/after proof, then its final report). Landmarks still running.
+
+* ~11:40 — landmarks COMPLETE (<1 ms), ambient COMPLETE (~0.3 ms). ALL BUILDERS DONE.
+  Lead soak (4 min @4x = 1 game day): 0 errors, heap stable 214–242 MB, traffic flowing (watchdog 8/day),
+  peds 26–429 by hour; only issue: long pedestrian overlaps (dog walkers). Review capture
+  shots/review1 (11 POIs × 11h/18.2h/21.5h): high quality everywhere; issue: low clouds cover the
+  city in the hero view and look like grey blobs at night. ui-test: 28/30 (chase toggle, dbl-click —
+  probably artifacts of the built city). Production build: single dist/index.html 2.17 MB, runs from
+  file:// with all 18 modules, 0 errors/warnings.
+  Running: perf (postfx at 1920x1025), sky-polish (clouds), peds-polish (overlaps), camera-polish
+  (ui-test failures, aircraft follow, first-run UX). Each keeps docs/progress/<name>.md.
+  After they finish: final regression (tsc, capture-set, short soak, ui-test, perf 1920x1025),
+  README controls sync, final build, file:// + serve.mjs test, clean shots/, launch for the user.
+
+* 12:40–12:45 — usage limit hit again (no warning): all 4 polish agents cut off mid-task.
+* 14:47 — resumed after the 14:30 reset. Verified before resuming: tsc clean; full city loads with
+  0 errors and clean invariants; perf agent's files are byte-identical to its scratchpad mine2/ snapshot
+  (its 12:42 bulk timestamps = completed swap-back, no stale originals); peds-polish never touched
+  pedestrians.ts (no clobber). Rollback snapshot of src/ saved: scratchpad/snapshots/src-1446.
+  State at cutoff: sky-polish ≈ done (final captures left); peds-polish mid-M2 (6 root causes found:
+  follower speed cap, single-obstacle pick, dog-walker lateral span, squeeze mode, no avoidance in
+  free-motion states, corner overflow); camera-polish mid-work (roof-lift floor); perf: postfx done
+  (GPU 6.0/6.7 → 4.7/5.3 ms at 1920x1025, A/B-proven), wrapping up. All 4 resumed via SendMessage.
+
+* ~16:00 — sky-polish COMPLETE (clouds frame the model on planned paths, 128–168 m, subtle at night;
+  lead verified overview day/night). perf COMPLETE (adaptive controller was BROKEN — readPixels sync
+  made it always drop to 0.6 scale; rewritten with async GPU timers; postfx 6.0→4.7 ms GPU at
+  1920x1025; traffic+peds 6.7→0.6 ms). peds-polish COMPLETE (overlap pair-seconds −85..95 %, all
+  invariants clean, stats unchanged). Lead fixes: cargo-ship funnel smoke → thin wisp (harbor.ts);
+  pier benches moved onto the deck side of the walk (plan.ts); README controls synced to the in-app help.
+  Declined: SMAA threshold 0.06→0.1 (−0.3 ms, visible AA loss). Waiting: camera-polish.
+
+* ~17:50 — camera-polish COMPLETE (ui-test 40/40; train-into-tunnel follow, building framing from
+  outside, aircraft follow, tour jump-cut fix, smooth low orbits). Lead fixes: #loading.done
+  pointer-events none (style.css); boarding bus no longer lists its current stop as "next" (traffic/sim.ts).
+  FINAL REGRESSION: tsc clean; soak 3 min @4x: 0 errors, heap 215–251 MB, 0 overlap hits (1 rare
+  "party stuck 57 s", self-resolving), watchdog 3; ui-test 40/40, 0 console errors; perf @1920x1025
+  (clean machine, noisy GPU clocks): overview ~18.4–22.9 ms, downtown night ~22 ms, beach golden hour
+  ~25 ms — cost spread across modules (buildings ~2, terrain+water ~2.4); adaptive (fixed) drops AO
+  first. Final build dist/index.html 2.2 MB runs from file:// (18 modules, 0 errors/warnings).
+  DONE — launched for the user via scripts/serve.mjs.
+
+## Module status (round 1 work, verified by the lead 23:30)
+| module | state | open items |
+|---|---|---|
+| sky | done (dome, sun/moon, clouds + screen-space cloud shadows, env, rain) | — |
+| postfx | done (custom depth tilt-shift, bloom, N8AO, AgX/ACES, adaptive) | costs ~4.4 ms → optimise in integration |
+| terrain / water | done (slab+plinth+nameplate, ground, portals, walls, promenade railing+lamps, water+cut-away) | verify river lamp reflections |
+| buildings | done (89 buildings, night windows, signs) | ~2.7 ms → perf agent (2nd priority) |
+| traffic | done (IDM, signals, stop signs, buses, tunnels, parked cars, lights) | debug ground behind ?tground only; render cost → perf agent |
+| pedestrians | done (243 people, crossings, benches, beach, bus/train hooks) | render cost → perf agent |
+| camera / ui / audio | done (orbit/follow/chase/tour, HUD, minimap, labels, synth audio; 36 self-checks) | final polish |
+| roads, vegetation, props, landmarks, harbor, rail, boats, ambient | round 2 in progress | see their logs |
+
+## Key measurements (scripts/perf.mjs, downtown, noon, 1300x930, uncapped)
+* before round 2: 15.78 ms all; skip buildings 13.04; skip postfx 11.43; skip traffic+peds 9.51 (−1.0 M tris).
+* Budgets given to round 2: roads 0.8, vegetation+props 2.0, landmarks 1.0, harbor 1.0, rail+boats 1.0,
+  ambient 0.5 ms. Overall target: 60 fps at ~1300x930 with adaptive render-scale as the safety net.
+
+## Tools
+* `scripts/shot.mjs` (screenshots + console/invariants), `scripts/capture-set.mjs` (view x time matrix),
+  `scripts/perf.mjs` (real frame cost per variant, e.g. `;skip=buildings`), `scripts/soak.mjs` (long run).
+  All share `scripts/.shotlock` and block Vite HMR inside the test page.
+* Dev server: `npx vite --port 5173 --strictPort --host 127.0.0.1` (restart if down).
+
+## Integration issues reported by agents (check at resume)
+* Beach view renders its left ~55% black even with roads skipped (roads agent) — suspect postfx or another module.
+* Traffic sometimes stops inside the level-crossing keep-clear box (traffic sim) — must never stop within [s0,s1].
+* src/sim/rail/trainModels.ts had tsc errors at some point (rail agent claims clean at pause) — re-run tsc.
+* Possible duplicate school sportscourt paint (roads paints court lines; landmarks may add hoops only).
+
+## Next steps (lead)
+1. As each round-2 agent reports: run it in the full city, look at its best views, check console/perf.
+2. Integration pass: full capture-set (all POIs × 11h/18.2h/21.5h), soak test (4 min at 4x:
+   invariants, heap, flow), perf across views; fix cross-module issues (z-fighting, overlaps,
+   lighting consistency, duplicated items).
+3. Review & polish round (visual critique per district, UX of camera/UI, night showcase).
+4. Final: `npm run build` → verify dist/index.html from file:// and via scripts/serve.mjs,
+   clean console, README controls, then launch it for the user (Launch Tinyhaven.cmd).

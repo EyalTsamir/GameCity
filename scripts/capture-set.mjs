@@ -1,0 +1,114 @@
+#!/usr/bin/env node
+// Capture a matrix of views x times of day in ONE browser session (fast review sets).
+//
+//   node scripts/capture-set.mjs [--out shots/review] [--q "extra=query"] [--views a,b,c] [--hours 11,18,21.5]
+//                                [--width 1600 --height 900] [--settle 2500] [--warmup 6000]
+//
+// Views: POI ids from plan.pois, or "name=x,y,z,distance,yaw,pitch" entries separated by ';'.
+// Writes <out>/<view>_<hours>.png and <out>/report.json (stats per capture + console errors).
+
+import { chromium } from 'playwright-core';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const here = path.dirname(fileURLToPath(import.meta.url));
+const root = path.resolve(here, '..');
+const args = {};
+for (let i = 2; i < process.argv.length; i++) {
+  const a = process.argv[i];
+  if (a.startsWith('--')) args[a.slice(2)] = process.argv[++i];
+}
+const outDir = path.resolve(root, args.out ?? 'shots/review');
+fs.mkdirSync(outDir, { recursive: true });
+const width = parseInt(args.width ?? '1600', 10);
+const height = parseInt(args.height ?? '900', 10);
+const settle = parseInt(args.settle ?? '2500', 10);
+const warmup = parseInt(args.warmup ?? '6000', 10);
+let url = args.url ?? 'http://127.0.0.1:5173/';
+if (args.q) url += (url.includes('?') ? '&' : '?') + args.q;
+const hoursList = (args.hours ?? '11,18.2,21.5').split(',').map(Number);
+const viewSpecs = (args.views ?? 'overview,downtown,oldtown,harbor,beach,park,station,riverside,stadium,westbrook,industry')
+  .split(/[;,](?=[a-z])/i)
+  .map((s) => s.trim())
+  .filter(Boolean)
+  .map((s) => {
+    const eq = s.indexOf('=');
+    if (eq < 0) return { name: s, spec: s };
+    return { name: s.slice(0, eq), spec: s.slice(eq + 1) };
+  });
+
+const lockDir = path.join(here, '.shotlock');
+async function acquire() {
+  const t0 = Date.now();
+  for (;;) {
+    try {
+      fs.mkdirSync(lockDir);
+      return;
+    } catch {
+      try {
+        if (Date.now() - fs.statSync(lockDir).mtimeMs > 600_000) fs.rmSync(lockDir, { recursive: true, force: true });
+      } catch {
+        /* */
+      }
+      if (Date.now() - t0 > 900_000) throw new Error('lock timeout');
+      await new Promise((r) => setTimeout(r, 500));
+    }
+  }
+}
+const release = () => {
+  try {
+    fs.rmSync(lockDir, { recursive: true, force: true });
+  } catch {
+    /* */
+  }
+};
+process.on('exit', release);
+
+const report = { url, consoleErrors: [], consoleWarnings: [], pageErrors: [], captures: [] };
+await acquire();
+const browser = await chromium.launch({ channel: 'chrome', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist', '--disable-background-timer-throttling', '--disable-renderer-backgrounding'] });
+try {
+  const page = await browser.newPage({ viewport: { width, height }, deviceScaleFactor: 1 });
+  // Freeze the page against other agents' file edits: swallow Vite's HMR websocket so no mid-run reloads happen.
+  await page.routeWebSocket(/.*/, () => {});
+  page.on('console', (m) => {
+    if (m.type() === 'error') report.consoleErrors.push(m.text());
+    else if (m.type() === 'warning') report.consoleWarnings.push(m.text());
+  });
+  page.on('pageerror', (e) => report.pageErrors.push(String(e?.stack ?? e)));
+  await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 120000 });
+  await page.waitForFunction(() => window.__city && window.__city.ready && window.__city.frames() > 3, null, { timeout: 120000, polling: 250 });
+  report.failedModules = await page.evaluate(() => window.__city.failed);
+  await page.waitForTimeout(warmup);
+  for (const h of hoursList) {
+    for (const v of viewSpecs) {
+      await page.evaluate(
+        ([spec, hours]) => {
+          window.__city.setHours(hours);
+          if (/^[a-z]/i.test(spec)) window.__city.view(spec);
+          else {
+            const [x, y, z, distance, yaw, pitch] = spec.split(',').map(Number);
+            window.__city.view({ target: { x, y, z }, distance, yaw, pitch });
+          }
+        },
+        [v.spec, h],
+      );
+      await page.waitForTimeout(settle);
+      const file = path.join(outDir, `${v.name}_${String(h).replace('.', 'h')}.png`);
+      await page.screenshot({ path: file });
+      const stats = await page.evaluate(() => window.__city.stats());
+      report.captures.push({ view: v.name, hours: h, file: path.relative(root, file), fps: stats.fps, drawCalls: stats.drawCalls, triangles: stats.triangles });
+    }
+  }
+  report.invariants = await page.evaluate(() => window.__city.invariants());
+  report.frameErrors = await page.evaluate(() => window.__city.frameErrors);
+  report.finalStats = await page.evaluate(() => window.__city.stats());
+} catch (e) {
+  report.harnessError = String(e?.stack ?? e);
+} finally {
+  await browser.close().catch(() => {});
+  release();
+}
+fs.writeFileSync(path.join(outDir, 'report.json'), JSON.stringify(report, null, 2));
+console.log(JSON.stringify({ ...report, captures: report.captures.map((c) => `${c.view}@${c.hours}: ${c.fps}fps ${c.drawCalls}dc ${Math.round(c.triangles / 1000)}k`) }, null, 2));
