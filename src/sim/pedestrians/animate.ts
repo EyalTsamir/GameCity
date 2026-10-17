@@ -474,5 +474,7 @@ export function computePose(m: Member, t: number, umbrella: boolean, r: Rig, o: 
   o.caneX = caneX;
   o.caneZ = caneZ;
   o.spare1 = prop;
+  // ponytail (pose spare2): swings sideways with the pelvis sway, lagging it; a slow sway when standing
+  o.spare2 = upright * (gw * (0.16 + 0.12 * G.run) * Math.min(1.3, a) * Math.sin(m.phase - 1.3) + (1 - gw) * 0.05 * Math.sin(t * 0.9 + m.seed * 17));
   return o;
 }

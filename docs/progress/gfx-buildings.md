@@ -53,7 +53,18 @@ daytime windows), house massing half of 9, far-field night windows of 2, lamp-li
   interiors + curtains moved to ALBEDO (follow sun / shade / shadow; emission = lamps + reflection only);
   reflected-neighbour window specks (glitter at night) removed → soft floor bands; panel wobble halved;
   weathering strengthened (dirt tint darker, top wash longer, rain streaks 0.5).
-* [ ] M2 iteration 2 (shots/buildings/it2: + otclose facade view + overview)
+* [x] M2 iteration 2 (shots/buildings/it2): glass identity restored (blue Haven Tower, teal octagon), reflected
+  skyline / neighbour silhouettes read as reflections, night overview glows by district with lit crowns.
+  Then: reflected neighbours lighter (mixed 30 % toward the horizon colour) and lower; office late-evening
+  occupancy 0.10→0.20; lit-room intensity 2.0→2.7 (bloom threshold at night ≈ 0.9 lum); wall noise fetches merged
+  (5→3 per wall pixel, 4→3 per roof pixel); far-field block glow computed only when detail < 1.
+  NOTE: at the overview (560 m) window cells are still ≥ 5 px, so the far-field path matters only beyond ~2 km /
+  on low resolutions; the overview night glow comes from window brightness + bloom + crown washes.
+* [x] Debug: `?bdbg=weather` (weathering mask on white), `?bdbg=wallinfo` (aD info), and
+  `__city.ctx.services.buildings.setDebug(n)` / `.houses()` (per-house plan log for close-up views).
+  The mask showed weathering far too weak (mix toward the dirt tint halves every weight; squared streak channel
+  has a low mean) → weights roughly doubled, streak channels linearised (sqrt).
+* [ ] M3 iteration 3 (shots/buildings/it3): per-plan house close-ups (hA–hD), facade weathering re-check.
 * [ ] tuning passes (glass, weathering strength, roofs, night far field), house validation (`?validate`, invariants)
 * [ ] re-tune under stage's new lighting
 * [ ] B6 full before/after sheets + perf A/B

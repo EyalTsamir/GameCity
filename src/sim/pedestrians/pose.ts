@@ -15,20 +15,74 @@ import { BONE } from './body';
 
 export type Pose = Record<PoseKey, number>;
 
+/**
+ * A pose object in V8's fast mode with unboxed double fields: built from one literal (a `{}` filled key by
+ * key turns into a dictionary after ~16 keyed stores, and then every double write allocates a heap number —
+ * that was ≈ 8 KB of garbage per figure per frame).
+ */
 export function newPose(): Pose {
-  const p = {} as Pose;
-  for (const k of POSE_KEYS) p[k] = 0;
-  p.scale = 1;
-  p.fade = 1;
+  const p: Pose = {
+    scale: 0.5,
+    fade: 0.5,
+    w: 0.5,
+    c: 0.5,
+    b: 0.5,
+    bodyPitch: 0.5,
+    rootX: 0.5,
+    rootY: 0.5,
+    rootZ: 0.5,
+    pelvisYaw: 0.5,
+    pelvisRoll: 0.5,
+    waistBend: 0.5,
+    waistTwist: 0.5,
+    chestBend: 0.5,
+    chestTwist: 0.5,
+    headYaw: 0.5,
+    headPitch: 0.5,
+    hipFlexL: 0.5,
+    hipAbdL: 0.5,
+    kneeL: 0.5,
+    ankleL: 0.5,
+    hipFlexR: 0.5,
+    hipAbdR: 0.5,
+    kneeR: 0.5,
+    ankleR: 0.5,
+    shFlexL: 0.5,
+    shAbdL: 0.5,
+    shTwistL: 0.5,
+    elbowL: 0.5,
+    wristL: 0.5,
+    shFlexR: 0.5,
+    shAbdR: 0.5,
+    shTwistR: 0.5,
+    elbowR: 0.5,
+    wristR: 0.5,
+    gripL: 0.5,
+    gripR: 0.5,
+    caneX: 0.5,
+    caneZ: 0.5,
+    bagSwingL: 0.5,
+    bagSwingR: 0.5,
+    tailFloor: 0.5,
+    headRoll: 0.5,
+    chestRoll: 0.5,
+    footYawL: 0.5,
+    footYawR: 0.5,
+    spare1: 0.5,
+    spare2: 0.5,
+  };
+  resetPose(p);
   return p;
 }
 
 export function resetPose(p: Pose): void {
-  for (const k of POSE_KEYS) p[k] = 0;
+  for (let i = 0; i < POSE_KEYS.length; i++) p[POSE_KEYS[i]] = 0;
   p.scale = 1;
   p.fade = 1;
 }
 
+const hyp2 = (a: number, b: number) => Math.sqrt(a * a + b * b);
+const hyp3 = (a: number, b: number, c: number) => Math.sqrt(a * a + b * b + c * c);
 // ───────────────────────────────────────────────────── JS forward kinematics ──
 
 type M3 = Float64Array; // row-major 3×3
@@ -207,14 +261,14 @@ export interface LegSolve {
  * gives a sole pitch of `pitch` (radians, + = toes up). Uses the rig's rest angles.
  */
 export function legIK(r: Rig, hy: number, hz: number, ay: number, az: number, pitch: number, o: LegSolve): LegSolve {
-  const L1 = Math.hypot(r.knee.y - r.hip.y, r.knee.z - r.hip.z);
-  const L2 = Math.hypot(r.ankle.y - r.knee.y, r.ankle.z - r.knee.z);
+  const L1 = hyp2(r.knee.y - r.hip.y, r.knee.z - r.hip.z);
+  const L2 = hyp2(r.ankle.y - r.knee.y, r.ankle.z - r.knee.z);
   const t0 = Math.atan2(r.knee.z - r.hip.z, r.hip.y - r.knee.y); // rest thigh angle (forward of down)
   const s0 = Math.atan2(r.ankle.z - r.knee.z, r.knee.y - r.ankle.y); // rest shin angle
   const k0 = t0 - s0;
   const dy = hy - ay,
     dz = az - hz;
-  let d = Math.hypot(dy, dz);
+  let d = Math.sqrt(dy * dy + dz * dz);
   const dMax = (L1 + L2) * 0.9995;
   o.reached = d <= dMax;
   d = Math.min(Math.max(d, Math.abs(L1 - L2) + 1e-4), dMax);
@@ -252,25 +306,18 @@ const set3 = (o: T3, x: number, y: number, z: number): T3 => {
 };
 const cr3 = (a: T3, b: T3, o: T3): T3 => set3(o, a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]);
 const nz3 = (a: T3): T3 => {
-  const l = Math.hypot(a[0], a[1], a[2]) || 1;
+  const l = Math.sqrt(a[0] * a[0] + a[1] * a[1] + a[2] * a[2]) || 1;
   return set3(a, a[0] / l, a[1] / l, a[2] / l);
 };
 const dt3 = (a: T3, b: T3) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
-const kS = v3(),
-  kE0 = v3(),
+const kE0 = v3(),
   kG0 = v3(),
-  kU0 = v3(),
   kF0 = v3(),
   kDv = v3(),
-  kPole = v3(),
   kPp = v3(),
   kDu = v3(),
-  kEp = v3(),
-  kTp = v3(),
   kDf = v3(),
-  kX0 = v3(),
   kXh = v3(),
-  kZ0 = v3(),
   kZh = v3(),
   kT1 = v3(),
   kT2 = v3();
@@ -321,42 +368,90 @@ function armGrip(r: Rig, left: boolean, o: ArmSolve, out: V3): V3 {
   rotAbout(out, shoulderMatrix(PT, left, M), mir(r.shoulder, left, pvTmp));
   return out;
 }
+/** rest-pose arm constants of a rig (left-arm frame), computed once */
+interface ArmRest {
+  S: T3;
+  u0: T3;
+  x0: T3;
+  z0: T3;
+  L1: number;
+  L2: number;
+  rest: number;
+}
+const armRests = new WeakMap<Rig, ArmRest>();
+function armRestOf(r: Rig): ArmRest {
+  let a = armRests.get(r);
+  if (a) return a;
+  const S = set3(v3(), r.shoulder.x, r.shoulder.y, r.shoulder.z);
+  const E0 = set3(kE0, r.elbow.x, r.elbow.y, r.elbow.z);
+  const G0 = set3(kG0, r.wrist.x + (r.tip.x - r.wrist.x) * 0.42, r.wrist.y + (r.tip.y - r.wrist.y) * 0.42, r.wrist.z + (r.tip.z - r.wrist.z) * 0.42);
+  const u0 = nz3(set3(v3(), E0[0] - S[0], E0[1] - S[1], E0[2] - S[2]));
+  const f0 = nz3(set3(kF0, G0[0] - E0[0], G0[1] - E0[1], G0[2] - E0[2]));
+  // rest hinge axis −x (flexion rotates the forearm forward)
+  const x0 = nz3(cr3(cr3(u0, set3(kT2, -1, 0, 0), kT1), u0, v3()));
+  a = {
+    S,
+    u0,
+    x0,
+    z0: cr3(u0, x0, v3()),
+    L1: hyp3(E0[0] - S[0], E0[1] - S[1], E0[2] - S[2]),
+    L2: hyp3(G0[0] - E0[0], G0[1] - E0[1], G0[2] - E0[2]),
+    rest: Math.acos(Math.max(-1, Math.min(1, dt3(u0, f0)))),
+  };
+  armRests.set(r, a);
+  return a;
+}
 function armIK1(r: Rig, left: boolean, tx: number, ty: number, tz: number, px: number, py: number, pz: number, o: ArmSolve): ArmSolve {
   // work in the left-arm frame (mirror x for the right arm)
   const sx = left ? 1 : -1;
-  const S = set3(kS, r.shoulder.x, r.shoulder.y, r.shoulder.z);
-  const E0 = set3(kE0, r.elbow.x, r.elbow.y, r.elbow.z);
-  const G0 = set3(kG0, r.wrist.x + (r.tip.x - r.wrist.x) * 0.42, r.wrist.y + (r.tip.y - r.wrist.y) * 0.42, r.wrist.z + (r.tip.z - r.wrist.z) * 0.42);
-  const L1 = Math.hypot(E0[0] - S[0], E0[1] - S[1], E0[2] - S[2]);
-  const L2 = Math.hypot(G0[0] - E0[0], G0[1] - E0[1], G0[2] - E0[2]);
-  const u0 = nz3(set3(kU0, E0[0] - S[0], E0[1] - S[1], E0[2] - S[2]));
-  const f0 = nz3(set3(kF0, G0[0] - E0[0], G0[1] - E0[1], G0[2] - E0[2]));
-  const dv = set3(kDv, tx * sx - S[0], ty - S[1], tz - S[2]);
-  let d = Math.hypot(dv[0], dv[1], dv[2]);
+  const AR = armRestOf(r);
+  const S = AR.S,
+    u0 = AR.u0,
+    x0 = AR.x0,
+    z0 = AR.z0,
+    L1 = AR.L1,
+    L2 = AR.L2;
+  const dv = kDv;
+  dv[0] = tx * sx - S[0];
+  dv[1] = ty - S[1];
+  dv[2] = tz - S[2];
+  let d = Math.sqrt(dv[0] * dv[0] + dv[1] * dv[1] + dv[2] * dv[2]);
   o.reached = d <= (L1 + L2) * 0.999;
   d = Math.min(Math.max(d, Math.abs(L1 - L2) + 1e-3), (L1 + L2) * 0.999);
   nz3(dv);
   // elbow on the circle, towards the pole
-  const pole = set3(kPole, px * sx, py, pz);
-  const pd = dt3(pole, dv);
-  const pp = set3(kPp, pole[0] - dv[0] * pd, pole[1] - dv[1] * pd, pole[2] - dv[2] * pd);
-  if (Math.hypot(pp[0], pp[1], pp[2]) < 1e-5) set3(pp, 0, 0, -1);
+  const pxs = px * sx;
+  const pd = pxs * dv[0] + py * dv[1] + pz * dv[2];
+  const pp = kPp;
+  pp[0] = pxs - dv[0] * pd;
+  pp[1] = py - dv[1] * pd;
+  pp[2] = pz - dv[2] * pd;
+  if (pp[0] * pp[0] + pp[1] * pp[1] + pp[2] * pp[2] < 1e-10) {
+    pp[0] = 0;
+    pp[1] = 0;
+    pp[2] = -1;
+  }
   nz3(pp);
   const ca = (L1 * L1 + d * d - L2 * L2) / (2 * L1 * d);
   const a = Math.acos(Math.max(-1, Math.min(1, ca)));
   const c = Math.cos(a),
     sn = Math.sin(a);
-  const du = nz3(set3(kDu, dv[0] * c + pp[0] * sn, dv[1] * c + pp[1] * sn, dv[2] * c + pp[2] * sn));
-  const Ep = set3(kEp, S[0] + du[0] * L1, S[1] + du[1] * L1, S[2] + du[2] * L1);
-  const Tp = set3(kTp, S[0] + dv[0] * d, S[1] + dv[1] * d, S[2] + dv[2] * d);
-  const df = nz3(set3(kDf, Tp[0] - Ep[0], Tp[1] - Ep[1], Tp[2] - Ep[2]));
-  // hinge axes: rest −x (flexion rotates the forearm forward); target from du × df (or the pole)
-  const x0 = nz3(cr3(cr3(u0, set3(kT2, -1, 0, 0), kT1), u0, kX0));
+  const du = kDu;
+  du[0] = dv[0] * c + pp[0] * sn;
+  du[1] = dv[1] * c + pp[1] * sn;
+  du[2] = dv[2] * c + pp[2] * sn;
+  nz3(du);
+  // forearm direction: from the elbow (S + du·L1) to the target (S + dv·d)
+  const df = kDf;
+  df[0] = dv[0] * d - du[0] * L1;
+  df[1] = dv[1] * d - du[1] * L1;
+  df[2] = dv[2] * d - du[2] * L1;
+  nz3(df);
+  // target hinge axis from du × df (or the pole)
   let xh = cr3(du, df, kXh);
-  if (Math.hypot(xh[0], xh[1], xh[2]) < 1e-4) xh = cr3(du, pp, kXh);
+  if (xh[0] * xh[0] + xh[1] * xh[1] + xh[2] * xh[2] < 1e-8) xh = cr3(du, pp, kXh);
   nz3(xh);
-  const z0 = cr3(u0, x0, kZ0),
-    zh = cr3(du, xh, kZh);
+  const zh = cr3(du, xh, kZh);
   // R = [du xh zh] · [u0 x0 z0]ᵀ
   // R = RZ(A) · RX(B) · RY(C):  R21 = sin B, R01 = −sin A cos B, R11 = cos A cos B, R20 = −cos B sin C, R22 = cos B cos C
   const R21 = du[2] * u0[1] + xh[2] * x0[1] + zh[2] * z0[1],
@@ -365,15 +460,11 @@ function armIK1(r: Rig, left: boolean, tx: number, ty: number, tz: number, px: n
     R20 = du[2] * u0[0] + xh[2] * x0[0] + zh[2] * z0[0],
     R22 = du[2] * u0[2] + xh[2] * x0[2] + zh[2] * z0[2];
   const B = Math.asin(Math.max(-1, Math.min(1, R21)));
-  const A = Math.atan2(-R01, R11);
-  const C = Math.atan2(-R20, R22);
-  o.abd = A;
+  o.abd = Math.atan2(-R01, R11);
   o.flex = -B;
-  o.twist = -C;
+  o.twist = -Math.atan2(-R20, R22);
   // elbow: bend between the bones minus the rest bend
-  const bend = Math.acos(Math.max(-1, Math.min(1, dt3(du, df))));
-  const rest = Math.acos(Math.max(-1, Math.min(1, dt3(u0, f0))));
-  o.elbow = bend - rest;
+  o.elbow = Math.acos(Math.max(-1, Math.min(1, du[0] * df[0] + du[1] * df[1] + du[2] * df[2]))) - AR.rest;
   return o;
 }
 

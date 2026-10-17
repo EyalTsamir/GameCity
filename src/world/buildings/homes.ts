@@ -111,7 +111,7 @@ export function genHouse(g: Gen): void {
   const garOk =
     drive !== undefined && F.x1 - F.x0 - garW >= 4.5 && (drive === RIGHT ? doorX + 0.8 <= F.x1 - garW : doorX - 0.8 >= F.x0 + garW);
   const plans: Plan[] = ['classic', 'veranda', 'lplan', 'garage', 'bay'];
-  const weights = floors === 2 ? [0.17, 0.22, 0.25, 0.16, 0.2] : [0.18, 0.26, 0.2, 0.24, 0.12];
+  const weights = floors === 2 ? [0.15, 0.2, 0.24, 0.22, 0.19] : [0.14, 0.24, 0.2, 0.3, 0.12];
   if (wingW < 3.2) weights[2] = 0;
   if (!garOk) weights[3] = 0;
   const plan = rng.weighted(plans, weights);
@@ -120,7 +120,7 @@ export function genHouse(g: Gen): void {
   // roof kind (the plan's "hip" lots stay hipped or half-hipped)
   let roofKind: RoofKind;
   if (lot.roof === 'hip') roofKind = rng.chance(0.35) ? 'halfhip' : 'hip';
-  else roofKind = rng.weighted<RoofKind>(['gableX', 'gableZ', 'halfhip', 'gambrel'], [0.5, 0.26, 0.1, floors === 1 ? 0.14 : 0]);
+  else roofKind = rng.weighted<RoofKind>(['gableX', 'gableZ', 'halfhip', 'gambrel'], [0.48, 0.24, 0.1, floors === 1 ? 0.3 : 0]);
   if (plan === 'lplan' && (roofKind === 'gableZ' || roofKind === 'gambrel')) roofKind = 'gableX';
   {
     const fp = lot.footprint;

@@ -14,8 +14,9 @@
 //   * mipmapped: the water shader picks a blur level from roughness / distance / pixel footprint
 //   * shadow maps are not re-rendered for the mirrored view; the renderer state is restored
 //
-// Meshes of other modules opt in by name at 'modules:ready' (see SETS below); level 1 skips the
-// 'full' set and renders at a lower resolution, level 0 disables the pass (analytic sky only).
+// Meshes of other modules opt in by name at 'modules:ready' (BASE below); level 2 adds the bank trees
+// while the river is in view, level 1 renders the base set at a lower resolution, level 0 disables
+// the pass (analytic sky only). Budget: ≲ 0.2 M triangles, ≲ 20 draw calls (night, emitters included).
 
 import * as THREE from 'three';
 import type { CityContext } from '../../core/context';
@@ -40,8 +41,6 @@ const BASE: RegExp[] = [
   /^boats-(big|small|lights)$/,
   /^terrain-masonry$/,
 ];
-/** level 2 only, and only if the mesh can actually appear in the water (bbox near the water) */
-const FULL_NEAR: RegExp[] = [];
 /**
  * level 2 only, and only while the river is in view (the bank trees are what makes it read as
  * water): the far-LOD tree mesh is forced on for the pass (near tree chunks forced off)
@@ -66,7 +65,6 @@ export class PlanarReflection {
   private pending = false;
   private busy = false;
   private base: THREE.Object3D[] = [];
-  private full: THREE.Object3D[] = [];
   private night: THREE.Object3D[] = [];
   private treesFar: THREE.Object3D | null = null;
   private treesNear: THREE.Object3D[] = [];
@@ -100,7 +98,6 @@ export class PlanarReflection {
   constructor(
     private ctx: CityContext,
     initial: ReflectionLevel,
-    private nearWater: (box: THREE.Box3) => boolean,
   ) {
     this.level = initial;
     this.dbg = ctx.debug.params.has('refldbg');
@@ -130,7 +127,6 @@ export class PlanarReflection {
     if (this.attached) return;
     this.attached = true;
     const scene = this.ctx.scene;
-    const box = new THREE.Box3();
     scene.traverse((o) => {
       // lights must be in the pass, or the materials compile a second (unlit) program variant
       if ((o as THREE.Light).isLight) {
@@ -150,22 +146,10 @@ export class PlanarReflection {
         this.treesFar = o;
         return;
       }
-      if (TREES_NEAR.test(o.name)) {
-        this.treesNear.push(o);
-        return;
-      }
-      if (FULL_NEAR.some((r) => r.test(o.name))) {
-        const g = (o as THREE.Mesh).geometry;
-        if (!g.boundingBox) g.computeBoundingBox();
-        o.updateWorldMatrix(true, false);
-        box.copy(g.boundingBox!).applyMatrix4(o.matrixWorld);
-        if (!this.nearWater(box)) return;
-        o.layers.enable(LAYERS.REFLECT);
-        this.full.push(o);
-      }
+      if (TREES_NEAR.test(o.name)) this.treesNear.push(o);
     });
-    this.meshes = this.base.length + this.full.length + (this.treesFar ? 1 : 0);
-    this.dbgList = [...this.base, ...this.full, ...(this.treesFar ? [this.treesFar] : [])];
+    this.meshes = this.base.length + (this.treesFar ? 1 : 0);
+    this.dbgList = [...this.base, ...(this.treesFar ? [this.treesFar] : [])];
     // render from inside the main scene pass (see the header)
     this.prevBefore = scene.onBeforeRender as unknown as (...args: unknown[]) => void;
     const self = this;
@@ -276,10 +260,6 @@ export class PlanarReflection {
     this.pm.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
     this.frustum.setFromProjectionMatrix(this.pm);
     const trees = full && this.frustum.intersectsBox(RIVER_BOX);
-    for (const o of this.full) {
-      vs[n++] = o.visible;
-      o.visible = full && o.visible;
-    }
     if (this.treesFar) {
       vs[n++] = this.treesFar.visible;
       this.treesFar.visible = trees;
@@ -324,7 +304,6 @@ export class PlanarReflection {
       this.tris = renderer.info.render.triangles - t0;
       // ── state restore
       n = 0;
-      for (const o of this.full) o.visible = vs[n++];
       if (this.treesFar) this.treesFar.visible = vs[n++];
       for (const o of this.treesNear) o.visible = vs[n++];
       for (const o of this.night) o.visible = vs[n++];

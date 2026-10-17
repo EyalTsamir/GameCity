@@ -469,9 +469,9 @@ void bhWall(inout vec3 albedo, inout float rough, inout float metal, inout vec3 
   vec2 so = vec2(fract(seed * 0.1373), fract(seed * 0.3119)) * 17.0;
   // one fetch serves three scales: r ~8 m blotches, g ~2 m tone patches, b 0.5 m × 16 m streaks
   vec4 nm = texture2D(uBhNoise, q * 0.031 + so);
-  float stv = nm.b;
+  float stv = sqrt(nm.b); // the streak channel is stored squared (contrast); linearise for weights
   float grain = texture2D(uBhNoise, q * 0.3 + so.yx).a;                         // a: ~5 cm stucco grain
-  float sn = texture2D(uBhNoise, vec2(q.x * 0.16, q.y * 0.09) + so.yx).b;       // b: 10 cm wide, ~5 m long streaks
+  float sn = sqrt(texture2D(uBhNoise, vec2(q.x * 0.16, q.y * 0.09) + so.yx).b); // b: 10 cm wide, ~5 m long streaks
 
   // ── 1. surface pattern
   albedo *= bhWallPattern(pat, q, seed, fq, nm, grain);
@@ -483,19 +483,20 @@ void bhWall(inout vec3 albedo, inout float rough, inout float metal, inout vec3 
   float info = step(0.5, vD.w);
   float dTop = mix(1e3, vD.z - y, info);
   float underTop = 1.0 - smoothstep(0.0, 0.9, dTop);
-  float topWash = (1.0 - smoothstep(0.0, 1.0 + 6.5 * stv, dTop)) * (0.3 + 0.7 * stv);
-  float base = 1.0 - smoothstep(0.02, 0.6 + 0.7 * nm.g, y);
+  float topWash = (1.0 - smoothstep(0.0, 1.2 + 6.0 * stv * stv, dTop)) * smoothstep(0.15, 0.85, stv);
+  float base = 1.0 - smoothstep(0.02, 0.6 + 0.8 * nm.g, y);
   float baseWide = 1.0 - smoothstep(0.0, 4.0, y);
   float flg = floor(vD.w + 0.01);
   float dl = mod(floor(flg * 0.5), 2.0) > 0.5 ? vD.x : 1e3;
   float dr = mod(floor(flg * 0.25), 2.0) > 0.5 ? vD.y - vD.x : 1e3;
   float corner = info * (1.0 - smoothstep(0.0, 0.6, min(dl, dr)));
-  float dirt = (0.3 * underTop + 0.3 * topWash + 0.36 * base + 0.1 * baseWide + 0.2 * corner) * wStr;
-  vec3 dirtTint = pat > 1.5 && pat < 2.5 ? vec3(0.62, 0.4, 0.27) : vec3(0.53, 0.49, 0.43);
-  albedo *= (1.0 + (nm.r - 0.5) * 0.28 * wStr) * mix(vec3(1.0), dirtTint, clamp(dirt, 0.0, 0.75));
+  float dirt = (0.6 * underTop + 0.5 * topWash + 0.55 * base + 0.16 * baseWide + 0.3 * corner) * wStr;
+  vec3 dirtTint = pat > 1.5 && pat < 2.5 ? vec3(0.6, 0.38, 0.25) : vec3(0.5, 0.46, 0.4);
+  float macro = 1.0 + (nm.r - 0.5) * 0.45 * wStr;
+  albedo *= macro * mix(vec3(1.0), dirtTint, clamp(dirt, 0.0, 0.9));
   if (uBhDebug > 0.5) {
     // debug 1: weathering mask on white; debug 2: wall-quad info (red = corner, green = under top)
-    albedo = uBhDebug < 1.5 ? vec3(1.0 + (nm.r - 0.5) * 0.28 * wStr) * mix(vec3(1.0), dirtTint, clamp(dirt, 0.0, 0.75))
+    albedo = uBhDebug < 1.5 ? vec3(macro) * mix(vec3(1.0), dirtTint, clamp(dirt, 0.0, 0.9))
                             : vec3(1.0 - corner, 1.0 - underTop, info);
     if (vB.x > 0.5 && vB.y > 0.5 && uBhDebug < 1.5) {
       vec2 dcell = floor(vFac);
@@ -503,9 +504,9 @@ void bhWall(inout vec3 albedo, inout float rough, inout float metal, inout vec3 
       vec4 dwr = vA;
       float ddS = dpm.y < dwr.z ? dwr.z - dpm.y : (dcell.y + 1.0 < vB.y && dpm.y > dwr.w ? csz.y + dwr.z - dpm.y : 1e3);
       float dinX = smoothstep(dwr.x - 0.1, dwr.x + 0.06, dpm.x) * (1.0 - smoothstep(dwr.y - 0.06, dwr.y + 0.1, dpm.x));
-      float drs = dinX * (1.0 - smoothstep(0.0, 0.45 + 1.9 * sn, ddS)) * (0.25 + 0.75 * sn);
+      float drs = dinX * (1.0 - smoothstep(0.0, 0.5 + 2.2 * sn * sn, ddS)) * smoothstep(0.1, 0.8, sn);
       bool inWin = abs(dpm.x - (dwr.x + dwr.y) * 0.5) < (dwr.y - dwr.x) * 0.5 && abs(dpm.y - (dwr.z + dwr.w) * 0.5) < (dwr.w - dwr.z) * 0.5;
-      albedo *= mix(vec3(1.0), dirtTint, clamp(drs, 0.0, 1.0) * 0.5 * wStr);
+      albedo *= mix(vec3(1.0), dirtTint, clamp(drs, 0.0, 1.0) * 0.8 * wStr);
       if (inWin && !curtain) albedo = vec3(0.2, 0.3, 0.5);
     }
     return;
@@ -541,12 +542,12 @@ void bhWall(inout vec3 albedo, inout float rough, inout float metal, inout vec3 
     if (!curtain) {
       float dS = pm.y < wr.z ? wr.z - pm.y : (cell.y + 1.0 < vB.y && pm.y > wr.w ? csz.y + wr.z - pm.y : 1e3);
       float inX = smoothstep(wr.x - 0.1, wr.x + 0.06, pm.x) * (1.0 - smoothstep(wr.y - 0.06, wr.y + 0.1, pm.x));
-      float run = 1.0 - smoothstep(0.0, 0.45 + 1.9 * sn, dS);
+      float run = 1.0 - smoothstep(0.0, 0.5 + 2.2 * sn * sn, dS);
       float ew = max(0.09, fq.x * 1.25);
       float ends = (1.0 - smoothstep(0.0, ew, abs(pm.x - wr.x - 0.05))) + (1.0 - smoothstep(0.0, ew, abs(pm.x - wr.y + 0.05)));
       ends *= 0.09 / ew;
-      float rs = inX * run * (0.25 + 0.75 * sn) + ends * (1.0 - smoothstep(0.0, 1.2 + 1.6 * sn, dS));
-      albedo *= mix(vec3(1.0), dirtTint, clamp(rs, 0.0, 1.0) * 0.5 * wStr);
+      float rs = inX * run * smoothstep(0.1, 0.8, sn) + ends * (1.0 - smoothstep(0.0, 1.3 + 1.8 * sn, dS));
+      albedo *= mix(vec3(1.0), dirtTint, clamp(rs, 0.0, 1.0) * 0.8 * wStr);
     }
     emit += albedo * crown * vec3(0.55, 0.62, 0.75);
     if (detail >= 0.999) return;

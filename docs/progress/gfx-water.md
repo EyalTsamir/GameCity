@@ -70,7 +70,17 @@ opted-in mesh at a time, console markers — for attributing driver warnings).
   stronger colour patches, fine ripple octave fades with pixel footprint (no distant dash noise), softer moon
   glint, wall-reflection band for the analytic (no-pass) mode, ribbon spacing adapts to speed (track covers
   the whole wake life), lace foam with ragged edges.
-* Queued: it4 (8 views × 3 hours), baseline 5174 set at the same views/size (`shots/water/base`), perf A/B.
+* ~22:40 — it4 (`shots/water/it4`, 8 views × 11/18.2/21.5, subset of modules): 0 console errors/warnings,
+  invariants clean. Harbour/ship: cranes, superstructure, hull band and tug mirrored; golden hour warm sky
+  streaks + lit cranes; beach night: wheel colours, pier lamps, hotel windows streak on the water; river mirrors
+  bank trees + quay walls. Lead budget steer (≲0.2 M tris): mesh set trimmed (facade trim chunks, railings,
+  signs, aircraft, waterfowl dropped; far trees only while the river is in view) → e.g. bay night 14 calls /
+  139k tris. Tweaks after it4: ripples −20 %, river F0 0.3 + greener body, daytime sky reflection deepened 22 %
+  toward the zenith (studio horizon is near-white → milky grazing water), shallows more turquoise, wake foam
+  dimmed at night. river2 view moved to x=20 (scoreboard of the stadium blocked x=-30).
+* Lock etiquette (lead): runs ≲15 min → chain of short runs (`scratchpad/chain1.sh`): it5a/b/c (mine),
+  base11/18/21 (5174, same views), full-city stats (`shots/water/stats_full.json`, scratchpad/wstats.mjs),
+  perf harbour/overview A/B, medium-quality + wakes.
 
 ## Open issues / notes
 * Depends (read-only) on the sky dome's uniform names: uZenith, uHorizon, uGlow, uGlowI, uSunCol, uSunVis,

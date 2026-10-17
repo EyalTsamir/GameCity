@@ -654,8 +654,9 @@ export default function create(ctx: CityContext): CityModule {
       const sky = ctx.services.sky;
       if (sky) {
         sunDir.copy(sky.sun.position).sub(sky.sun.target.position).normalize();
-        const kS = sky.sun.intensity * Math.max(0, sunDir.y),
-          kH = sky.hemi.intensity;
+        const dim = 1 - 0.5 * ctx.uniforms.uNight.value;
+        const kS = sky.sun.intensity * Math.max(0, sunDir.y) * dim,
+          kH = sky.hemi.intensity * dim;
         ribbons.foamLight.setRGB(
           (sky.sun.color.r * kS + sky.hemi.color.r * kH * 1.35) * 0.3,
           (sky.sun.color.g * kS + sky.hemi.color.g * kH * 1.35) * 0.3,

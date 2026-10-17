@@ -67,6 +67,17 @@ S4 before/after sheets, perf A/B.
   projecting the loop points), so the blimp stays just above the hero frame (crisp in edge-on / low views);
   the balloon (94–137 m) appears crisply at the top edge. Old routes sat ~180 m in front of the focus plane.
 
+* S4 sets (1280×720, nointro&noidle&adaptive=0&quality=high): shots/stage/before/ (5174) and shots/stage/after/
+  (5173, everyone's work) — 9 views (7 POIs + low + edge) × 6.5/11/16.5/18.2/20/21.5/2. After-set report clean:
+  no failed modules, 0 console errors/warnings, invariants {}, frameErrors [].
+  Luminance (sRGB median, before → after): 11 h ≈ equal (−0…−8); 16.5 −6…−14; 18.2 −10…−20; 6.5 −20…−30 →
+  dawn fill raised (hemi 0.86/0.78 at 6.0/6.7, exp 1.24/1.22), exp 16→1.12, 17.6→1.21, 18.6/19.3→1.27;
+  re-captured in shots/stage/after2/ (6.5/16.5/18.2). Night 21.5/2: p25 darker, p75 equal/brighter (lamps
+  carry the scene), medians similar.
+
+* Ladder test (?debug, harbor 11, shots/stage/ladder/report.json): set(0) full refl 2 · set(1) refl-low refl 1 ·
+  set(2) no-ao refl 1 · set(6) refl-off refl 0 @0.72 · set(7) scale-0.6 refl 0 · back to 0 → refl 2. Console clean.
+
 ## Test setup notes
 * :5175 = /home/user/GameCity-stage (git archive f5ff0a5 + my files via sync.sh, own Vite cacheDir).
 * scratchpad stage-cap.mjs: views × hours × runtime variants in one page load (`S.setLegacy(true)`).

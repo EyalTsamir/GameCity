@@ -8,7 +8,6 @@
 
 import * as THREE from 'three';
 import type { CityContext, CityModule, QualityState } from '../core/context';
-import { WATER_LEVEL, SLAB } from '../core/constants';
 import { getTerrainModel } from './terrain/height';
 import { groundBands, slabEdges } from './terrain/layout';
 import { getWaterField, ampFrom } from './water/field';
@@ -64,17 +63,7 @@ export default function create(ctx: CityContext): CityModule {
   const presetLevel = (q: QualityState): ReflectionLevel => (q.level === 'high' ? 2 : 0);
   let wanted: ReflectionLevel = forced ?? presetLevel(ctx.quality);
 
-  /** can a mesh with this world box show up in the water? (near open water, given its height) */
-  const nearWater = (box: THREE.Box3): boolean => {
-    const reach = Math.min(140, Math.max(6, (box.max.y - WATER_LEVEL) * 2.4));
-    const x0 = Math.max(SLAB.x0, box.min.x - reach),
-      x1 = Math.min(SLAB.x1, box.max.x + reach);
-    const z0 = Math.max(SLAB.z0, box.min.z - reach),
-      z1 = Math.min(SLAB.z1, box.max.z + reach);
-    for (let z = z0; z <= z1; z += 3) for (let x = x0; x <= x1; x += 3) if (field.sample(field.depth, x, z) > 0.4) return true;
-    return false;
-  };
-  const reflection = new PlanarReflection(ctx, wanted, nearWater);
+  const reflection = new PlanarReflection(ctx, wanted);
   const hulls = new HullContacts(ctx);
   const sky = createSkyUniforms();
   const surface = createSurface(ctx, model, field, reflection.uniforms, hulls, sky);

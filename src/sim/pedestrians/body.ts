@@ -833,17 +833,18 @@ function buildHair(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
       [add(root, [0, -0.22 * hk, -0.03 * hk]), 0.016 * hk, 0.8],
     ];
     const rings2: Ring[] = [];
+    // aux: swing share (0 at the root … 1 at the tip) and the drop below the root (the swing pivot)
     for (const [c, r, w] of pts) {
       const ids: number[] = [];
       for (let k = 0; k < 6; k++) {
         const phi = (k / 6) * Math.PI * 2;
-        ids.push(b.v(add(c, [r * Math.sin(phi), 0, r * 0.8 * Math.cos(phi)]), 2, w * 0.7));
+        ids.push(b.v(add(c, [r * Math.sin(phi), 0, r * 0.8 * Math.cos(phi)]), 2, w * 0.7, w * 1.2, root[1] - c[1]));
       }
       rings2.push({ ids, c });
     }
     bridge(b, rings2);
     const last = pts[pts.length - 1][0];
-    capFan(b, rings2[rings2.length - 1], b.v(add(last, [0, -0.02 * hk, 0]), 2, 0.6), add(last, [0, 0.02, 0]));
+    capFan(b, rings2[rings2.length - 1], b.v(add(last, [0, -0.02 * hk, 0]), 2, 0.6, 1.1, root[1] - last[1] + 0.02 * hk), add(last, [0, 0.02, 0]));
   }
   // bun (back of the head, slightly high)
   b.use(BONE.HEAD, REG.HAIR, FB.BUN, 0.95);

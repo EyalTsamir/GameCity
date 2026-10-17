@@ -80,7 +80,23 @@ export interface GaitState {
   last: [LegPlan, LegPlan];
 }
 
-const newPlan = (): LegPlan => ({ x: 0, y: 0, z: 0, pitch: 0, twist: 0, stance: true, s: -1 });
+const hyp2 = (a: number, b: number) => Math.sqrt(a * a + b * b);
+const newPlan = (): LegPlan => {
+  // double-valued literal → unboxed double fields (see pose.ts newPose), then the real start values
+  const o: LegPlan = { x: 0.5, y: 0.5, z: 0.5, pitch: 0.5, twist: 0.5, stance: true, s: -0.5 };
+  o.x = o.y = o.z = o.pitch = o.twist = 0;
+  o.s = -1;
+  return o;
+};
+function copyPlan(o: LegPlan, a: LegPlan): void {
+  o.x = a.x;
+  o.y = a.y;
+  o.z = a.z;
+  o.pitch = a.pitch;
+  o.twist = a.twist;
+  o.stance = a.stance;
+  o.s = a.s;
+}
 
 export function newGaitState(): GaitState {
   const f = (): FootPlant => ({ wx: 0, wz: 0, wyaw: 0, sx: 0, sz: 0, sy: 0, stw: 0, stance: false, valid: false });
@@ -126,7 +142,8 @@ export interface GaitOut {
 const GAIT_KEYS = ['hipFlexL', 'hipAbdL', 'footYawL', 'kneeL', 'ankleL', 'hipFlexR', 'hipAbdR', 'footYawR', 'kneeR', 'ankleR', 'rootX', 'rootY', 'pelvisYaw', 'pelvisRoll', 'waistBend', 'waistTwist', 'chestTwist', 'headPitch', 'headYawCorr', 'shFlexL', 'shFlexR', 'elbowL', 'elbowR', 'shAbdL', 'shAbdR', 'caneX', 'caneZ', 'run'] as const;
 
 export function newGaitOut(): GaitOut {
-  const o = {} as GaitOut;
+  // one literal (fast-mode object with double fields, see pose.ts newPose)
+  const o: GaitOut = { hipFlexL: 0.5, hipAbdL: 0.5, footYawL: 0.5, kneeL: 0.5, ankleL: 0.5, hipFlexR: 0.5, hipAbdR: 0.5, footYawR: 0.5, kneeR: 0.5, ankleR: 0.5, rootX: 0.5, rootY: 0.5, pelvisYaw: 0.5, pelvisRoll: 0.5, waistBend: 0.5, waistTwist: 0.5, chestTwist: 0.5, headPitch: 0.5, headYawCorr: 0.5, shFlexL: 0.5, shFlexR: 0.5, elbowL: 0.5, elbowR: 0.5, shAbdL: 0.5, shAbdR: 0.5, caneX: 0.5, caneZ: 0.5, run: 0.5 };
   for (const k of GAIT_KEYS) o[k] = 0;
   return o;
 }
@@ -457,7 +474,7 @@ function planStand(r: Rig, st: GaitState, dt: number, pelvisYaw: number): void {
       toBody(st.sp[i].wx, st.sp[i].wz, tmpB);
       const dx = tmpB.x - homeX(r, left),
         dz = tmpB.z - (left ? 0.02 : -0.02) * hk;
-      const d = Math.hypot(dx * 1.4, dz) / hk;
+      const d = hyp2(dx * 1.4, dz) / hk;
       const yawErr = Math.abs(wrapA(st.sp[i].wyaw - YAW));
       const e = Math.max(d / 0.22, yawErr / 0.55);
       if (e > 1 && e > err) {
@@ -603,7 +620,7 @@ export function gaitPose(m: Member, r: Rig, st: GaitState | null, frame: number,
     const W = i === 0 ? walkA : walkB;
     const S = i === 0 ? standA : standB;
     if (!state || gw >= 0.999) {
-      if (gw > 0.001) Object.assign(o2, W);
+      if (gw > 0.001) copyPlan(o2, W);
       else {
         o2.x = homeX(r, i === 0);
         o2.z = 0;
@@ -613,7 +630,7 @@ export function gaitPose(m: Member, r: Rig, st: GaitState | null, frame: number,
         o2.stance = true;
         o2.s = -1;
       }
-    } else if (gw <= 0.001) Object.assign(o2, S);
+    } else if (gw <= 0.001) copyPlan(o2, S);
     else {
       o2.x = mix(S.x, W.x, gw);
       o2.y = mix(S.y, W.y, gw);
@@ -656,7 +673,7 @@ export function gaitPose(m: Member, r: Rig, st: GaitState | null, frame: number,
     const dy = h - (leg.y - Math.sin(pelvisRoll) * hx);
     const dx = leg.x - cxh,
       dz = leg.z - hz;
-    const dh = Math.hypot(dx, dz);
+    const dh = Math.sqrt(dx * dx + dz * dz);
     const maxD = Math.sqrt(Math.max(0, reach * reach - dy * dy));
     if (dh > maxD && dh > 1e-6) {
       const k = maxD / dh;
@@ -691,7 +708,7 @@ export function gaitPose(m: Member, r: Rig, st: GaitState | null, frame: number,
     const dy = r.hip.y - ty;
     const lat = (tx - hx) * sg;
     const abd = Math.atan2(lat, dy) - Math.atan2(restLat, r.hip.y - r.ankle.y);
-    const dyEff = Math.hypot(dy, lat - restLat);
+    const dyEff = hyp2(dy, lat - restLat);
     legIK(r, r.hip.y, r.hip.z, r.hip.y - dyEff, tz, leg.pitch, solve);
     // planted feet: the foot yaw turns about the vertical through the ankle (shader / fkPoint), so the
     // heading is exact in one step: wanted heading minus the heading of the un-yawed chain
@@ -756,7 +773,7 @@ export function gaitPose(m: Member, r: Rig, st: GaitState | null, frame: number,
         f.stance = false;
         f.valid = true;
       }
-      Object.assign(state.last[i], L);
+      copyPlan(state.last[i], L);
     }
     state.lastPhase = m.phase;
     state.frame = frame;

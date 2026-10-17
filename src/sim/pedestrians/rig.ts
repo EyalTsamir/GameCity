@@ -451,13 +451,14 @@ const rigCache = new WeakMap<object, Rig>();
 
 /** Morphed rig of a look (cached per look object). */
 export function rigOf(look: Look): Rig {
-  let r = rigCache.get(look);
-  if (r && (r as Rig & { _key: string })._key === rigKey(look)) return r;
+  const hit = rigCache.get(look) as RigSrc | undefined;
+  // the look's body fields are compared directly (no key string: rigOf runs per figure per frame)
+  if (hit && hit._kind === look.kind && hit._age === look.age && hit._scale === look.scale && hit._girth === look.girth) return hit;
   const p = { w: 0, c: 0, b: 0, s: 1, old: 0 };
   bodyParams(look, p);
   const { w, c, b } = p;
   const V = () => ({ x: 0, y: 0, z: 0 });
-  r = {
+  const r: Rig = {
     ...p,
     hip: mixV(V(), (d) => d.hip, w, c, b),
     knee: mixV(V(), (d) => d.knee, w, c, b),
@@ -488,14 +489,16 @@ export function rigOf(look: Look): Rig {
   r.foreL = dist(r.elbow, r.wrist);
   r.ankleH = r.ankle.y;
   r.legLen = r.hip.y * p.s;
-  (r as Rig & { _key: string })._key = rigKey(look);
+  const src = r as RigSrc;
+  src._kind = look.kind;
+  src._age = look.age;
+  src._scale = look.scale;
+  src._girth = look.girth;
   rigCache.set(look, r);
   return r;
 }
+type RigSrc = Rig & { _kind: string; _age: number; _scale: number; _girth: number };
 
-function rigKey(l: Pick<Look, 'kind' | 'age' | 'scale' | 'girth'>): string {
-  return `${l.kind}|${l.age}|${l.scale}|${l.girth}`;
-}
 
 // ───────────────────────────────────────────────────────── gait ──
 

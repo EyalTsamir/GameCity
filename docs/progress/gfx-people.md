@@ -22,7 +22,7 @@ routes, speeds, avoidance and `invariants()` are untouched.
   + iC0–iC2 (12 colour words: rgb24 + garment parameter bytes, feature mask). Mesh = plain `Mesh` with
   `InstancedBufferGeometry` (no instanceMatrix), custom culling in `write()`.
 * **Shader** (shader.ts): morph → parametric garments (skirt/dress/coat tail length + flare carried by the
-  thighs/shins, long-hair length, hair volume for curls, hat style dome/brim/visor) → FK chain leaf→pelvis
+  thighs/shins, long-hair length, hair volume for curls, ponytail swing (pose `spare2`), hat style dome/brim/visor) → FK chain leaf→pelvis
   with 2-bone LBS per joint, finger grip curl → pelvis / body pitch / root offsets → scale, yaw, world.
   Colours per region + nearest hem boundary, picked per pixel in the FS (crisp sleeves, trousers, tops,
   jacket V-front, boots, soles, vest & towel stripes). Paint (P6): per-figure garment jitter ±4 %, value
@@ -72,8 +72,10 @@ routes, speeds, avoidance and `invariants()` are untouched.
   Key fixes: the foot yaw turns about the vertical through the ankle (shader + fkPoint), not the tilted
   shin (that tipped the sole by up to 5 cm); plants far off the gait law are dragged, never dropped; the
   pelvis never drops more than 4.5 cm below its gait curve (an out-of-reach foot is pulled in instead).
-* CPU: `computePose` ≈ 5 µs per figure with gait state on this (loaded) container (`bench.ts`, 150 figures
-  0.77 ms); IK and FK helpers are allocation-free.
+* CPU: `computePose` ≈ 3.1 µs per figure with gait state on this (loaded) container (`bench.ts`, 150 figures
+  0.46 ms/frame). Garbage ≈ 2 KB per figure-frame (boxed doubles in the big pose functions; was 7.8 KB: the
+  pose objects were dictionary-mode — now built from literals — plus Object.assign / Math.hypot / per-call
+  vectors in the arm IK, whose rest-pose constants are now cached per rig).
 
 ## Tools (shots/people/tools/)
 * `node build.mjs <file.ts>` bundles + runs node checks: `measure.ts` (verts/tris per LOD and feature),
@@ -93,8 +95,8 @@ routes, speeds, avoidance and `invariants()` are untouched.
       ears, hands with thumb, shoe last; LBS per joint; CPU previews checked (gaps when seated/waving fixed).
 - [x] P4 clothing & hair — wardrobes + parametric hems/tails/hair/hats (CPU previews `cpu_sheet*.png`).
 - [x] P5 poses — idle variants, bench variants, pram IK, cane, wave, reading, sand, lying.
-- [~] P6 shading + polish — lamp light, value ramp, wrap/sheen, blob, LOD hysteresis, dog upgrade done;
-      LOD cross-fade not done (hysteresis only).
+- [x] P6 shading + polish — lamp light, value ramp, wrap/sheen, blob, LOD hysteresis + 0.4 s dithered
+      cross-fade (complementary Bayer cells; skipped on camera jumps, `renderer.xfade` off for tools), dog upgrade.
 - [ ] GPU verification (lab + city, day/night), city invariants, SwiftShader perf A/B — queued behind the
       shared browser lock (2026-10-17 22:20, run files in the scratchpad `people_run{1,2}.json`).
 
@@ -102,7 +104,7 @@ routes, speeds, avoidance and `invariants()` are untouched.
 * Visual verification in the browser (shader compile never yet run on a GPU / SwiftShader).
 * Sharp crowd corners still drag the planted foot a few cm (rail corners) and more at bevelled 90° snaps.
 * lo is 474 vertices (spec ≤ ~450; only ~330 posed per typical figure); pin 109 (spec ≈ 70).
-* No LOD cross-fade; no heels / headscarves / braids yet.
+* No heels / headscarves / braids yet.
 
 ## Requests to other areas
 * none.

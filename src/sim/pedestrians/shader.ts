@@ -237,8 +237,16 @@ void pedPose(inout vec3 p, inout vec3 n) {
 
   // ── parametric garments
   if (region == ${R.HAIR}) {
-    // long hair: vertices deeper than the hair length are lifted to the hem
-    if (aux.x > 0.0) p.y += max(0.0, aux.x - pedP8(iC1.x) * 0.5);
+    if (((d0 >> 10u) & 63u) == ${FB.PONY + 1}u) {
+      // ponytail: swings sideways about its root (aux = swing share, drop below the root)
+      vec3 root = p + vec3(0.0, aux.y, 0.0);
+      mat3 sw = pedRZ(P_spare2 * aux.x);
+      p = root + sw * (p - root);
+      n = sw * n;
+    } else if (aux.x > 0.0) {
+      // long hair: vertices deeper than the hair length are lifted to the hem
+      p.y += max(0.0, aux.x - pedP8(iC1.x) * 0.5);
+    }
     // volume (curly / full hair): scale about the head centre
     float vol = float((iC1.y >> 27u) & 31u) * (1.0 / 31.0);
     if (vol > 0.0 && bone == ${B.HEAD}) {
@@ -466,8 +474,13 @@ flat varying vec2 vPedMat;
 float pedBayer2(vec2 a) { a = floor(a); return fract(dot(a, vec2(0.5, a.y * 0.75))); }
 float pedBayer4(vec2 a) { return pedBayer2(0.5 * a) * 0.25 + pedBayer2(a); }
 `;
+// fade ≥ 0: keep the dither cells below fade (spawn / despawn, incoming level of a cross-fade);
+// fade < 0: keep the complementary cells (outgoing level of a cross-fade)
 const FRAG_FADE = /* glsl */ `
-  if (vPedFade < 0.995 && vPedFade <= pedBayer4(gl_FragCoord.xy) + 0.001) discard;
+  if (vPedFade < 0.995) {
+    float pedD = pedBayer4(gl_FragCoord.xy);
+    if (vPedFade < 0.0 ? pedD < -vPedFade - 0.003 : vPedFade <= pedD + 0.001) discard;
+  }
 `;
 const FRAG_COLOR = /* glsl */ `
   {

@@ -165,6 +165,9 @@ class Layer {
 interface RenderState {
   lod: number;
   gait: GaitState;
+  /** level being faded out (−1 none) and the cross-fade progress 0…1 */
+  prev: number;
+  xf: number;
 }
 const states = new WeakMap<Member, RenderState>();
 
@@ -177,6 +180,8 @@ const LOD_NEAR = 40;
 const LOD_TINY = 110;
 const LOD_PIN = 300;
 const HYST = 3;
+/** level switch cross-fade time (s, real time) */
+const XFADE = 0.4;
 const SHADOW_FAR = 150;
 const REF_HEIGHT = 930;
 const REF_TAN = Math.tan((32 * Math.PI) / 360);
@@ -191,6 +196,8 @@ export class CrowdRenderer {
   readonly shadow: Layer;
   /** debug: force every figure to one level (0 near, 1 far, 2 tiny, 3 pin), -1 = by distance */
   forceLod = -1;
+  /** cross-fade level switches (tools turn it off for synchronous censuses) */
+  xfade = true;
   readonly pram: THREE.InstancedMesh;
   readonly dog: THREE.InstancedMesh;
   readonly blob: THREE.InstancedMesh;
@@ -220,6 +227,8 @@ export class CrowdRenderer {
   vertices = 0;
   shadowVertices = 0;
   private frame = 0;
+  private lastNow = 0;
+  private lastCam = new THREE.Vector3(1e9, 0, 0);
   private layers: Layer[] = [];
   private levels: Layer[] = [];
   private edges = [0, 0, 0];
@@ -348,6 +357,12 @@ export class CrowdRenderer {
     edges[1] = tinyD;
     edges[2] = pinD;
     const bcap = this.blob.instanceMatrix.count;
+    const now = performance.now() * 0.001;
+    const xfStep = clamp((now - this.lastNow) / XFADE, 0, 1);
+    this.lastNow = now;
+    // no cross-fades on camera jumps (view snaps, tools placing the camera): the whole view changes
+    const xfOn = this.xfade && this.forceLod < 0 && this.cam.distanceToSquared(this.lastCam) < 16;
+    this.lastCam.copy(this.cam);
     const R = this.sRoot,
       PP = this.sPose,
       CC = this.sCol;
@@ -364,7 +379,7 @@ export class CrowdRenderer {
         const d = Math.sqrt(d2);
         let st = states.get(m);
         if (!st) {
-          st = { lod: -1, gait: newGaitState() };
+          st = { lod: -1, gait: newGaitState(), prev: -1, xf: 1 };
           states.set(m, st);
         }
         // level with hysteresis around each switch distance
@@ -373,13 +388,24 @@ export class CrowdRenderer {
           const edge = edges[Math.min(lv, st.lod)];
           if (Math.abs(d - edge) < HYST * (1 + Math.min(lv, st.lod))) lv = st.lod;
         }
+        // level switches cross-fade (complementary dither, XFADE s) unless the figure is fading anyway
+        if (st.lod >= 0 && lv !== st.lod && xfOn && m.fade > 0.99) {
+          st.prev = st.lod;
+          st.xf = 0;
+        }
         st.lod = lv;
+        if (st.prev >= 0) {
+          st.xf += xfStep;
+          if (st.xf >= 1 || !xfOn || m.fade <= 0.99) st.prev = -1;
+        }
         let layer = this.forceLod >= 0 ? levels[this.forceLod] : levels[lv];
         if (layer.n >= layer.capacity) layer = this.far;
         if (layer.n >= layer.capacity) continue;
+        const out = st.prev >= 0 ? levels[st.prev] : null;
         const r = rigOf(L);
         const umbrella = raining && L.umbrellaOwner && m.sit < 0.3 && m.lie < 0.1 && m.ground < 0.1 && !L.pram;
-        computePose(m, t + m.seed * 10, umbrella, r, pose, layer === this.near || layer === this.far ? st.gait : null, this.frame);
+        const gaitOn = layer === this.near || layer === this.far || out === this.near || out === this.far;
+        computePose(m, t + m.seed * 10, umbrella, r, pose, gaitOn ? st.gait : null, this.frame);
         pose.scale = r.s;
         pose.fade = m.fade;
         pose.w = r.w;
@@ -409,8 +435,15 @@ export class CrowdRenderer {
         R[3] = m.yaw;
         for (let k = 0; k < POSE_UINTS; k++) PP[k] = (fx16(pose[POSE_KEYS[2 * k]]) | (fx16(pose[POSE_KEYS[2 * k + 1]]) << 16)) >>> 0;
         CC[10] = flags >>> 0;
-        layer.put(R, PP, CC);
         if (shadows && d2 < shadowD2 && this.shadow.n < this.shadow.capacity) this.shadow.put(R, PP, CC);
+        if (out && out !== layer && out.n < out.capacity) {
+          // incoming level keeps the dither cells below xf, the outgoing one (negative fade) the rest
+          const s0 = fx16(pose.scale);
+          PP[0] = (s0 | (fx16(-Math.max(0.002, st.xf)) << 16)) >>> 0;
+          out.put(R, PP, CC);
+          PP[0] = (s0 | (fx16(Math.min(0.994, st.xf)) << 16)) >>> 0;
+        }
+        layer.put(R, PP, CC);
         // blob shadow
         this.q.setFromAxisAngle(this.up, m.yaw);
         const fx = Math.sin(m.yaw),
