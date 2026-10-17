@@ -340,8 +340,12 @@ export default function create(ctx: CityContext): CityModule {
       // studio key: a neutral, barely cool occlusion tint (the legacy navy tint turned every
       // contact shadow blue on top of the blue sky fill)
       c.color.copy(legacy ? aoTintLegacy : aoTintStudio);
-      const r = THREE.MathUtils.clamp(camDist * 0.02, 1.6, 9);
+      const r = legacy ? THREE.MathUtils.clamp(camDist * 0.02, 1.6, 9) : THREE.MathUtils.clamp(camDist * 0.022, 1.6, 10);
       if (Math.abs(c.aoRadius - r) > 0.05) c.aoRadius = r;
+      // studio: contact shading a little stronger from POI distance outwards, where the sun-dominated
+      // key leaves less fill for AO to darken (it multiplies the final colour)
+      const ai = legacy ? 2.4 : 2.4 + 0.7 * smooth(80, 420, camDist);
+      if (Math.abs(c.intensity - ai) > 0.02) c.intensity = ai;
       const f = 1.0;
       if (c.distanceFalloff !== f) c.distanceFalloff = f;
     }

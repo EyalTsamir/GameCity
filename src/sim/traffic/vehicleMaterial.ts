@@ -11,6 +11,7 @@
 
 import * as THREE from 'three';
 import type { GlobalUniforms } from '../../core/uniforms';
+import { patchLampMaterial } from '../../world/lamps/integrate';
 
 const VERT_PARS = /* glsl */ `
 attribute vec4 aMeta;
@@ -103,6 +104,7 @@ export function createVehicleMaterial(uniforms: GlobalUniforms, atlas: THREE.Tex
       .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += vEmit.rgb * mix( vec3( 1.0 ), diffuseColor.rgb, vEmit.a );');
   };
   material.customProgramCacheKey = () => 'traffic-vehicle-v1';
+  patchLampMaterial(material); // night street-light map (night agent)
 
   const depth = new THREE.MeshDepthMaterial();
   depth.name = 'traffic-vehicle-depth';

@@ -10,6 +10,7 @@
 
 import * as THREE from 'three';
 import type { GlobalUniforms } from '../../core/uniforms';
+import { patchLampMaterial } from '../../world/lamps/integrate';
 
 export const T = {
   PLAIN: 0,
@@ -176,6 +177,7 @@ export function createTrainMaterials(globals: GlobalUniforms, clipX0: number, cl
       .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += vEmit;');
   };
   material.customProgramCacheKey = () => 'rail-train-v2';
+  patchLampMaterial(material); // night street-light map (night agent)
 
   const depth = new THREE.MeshDepthMaterial();
   depth.name = 'rail-train-depth';

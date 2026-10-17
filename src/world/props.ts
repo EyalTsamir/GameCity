@@ -19,6 +19,8 @@ import { furnitureMaterial, glassMaterial } from './props/material';
 import { createGlowMesh, type Glow } from './props/glow';
 import { Kit, lamp, bench, bin, hydrant, mailbox, phonebox, newsstand, planterBox, bollard, bikeRack, busShelter, picketFence, lowWall, shed, waterButt, FENCE_PAINT } from './props/furniture';
 import * as GK from './props/garden';
+import * as SK from './props/kit';
+import { planScatter, scatterDisc, type ScatterItem } from './props/scatter';
 
 interface TerrainSvc {
   height(x: number, z: number): number;
@@ -184,6 +186,157 @@ export default function create(ctx: CityContext): CityModule {
     else lowWall(kf, L, hrand(`wall:${b.lot}`) < 0.55, b.gateA, b.gateB);
     fenceM += L;
     inc(b.style);
+  }
+
+  // ────────────────────────────────────────────── hardscape scatter ──
+  // (after vegetation planted its trees; before the bollards, which keep clear of it)
+  let scatter: ScatterItem[] = [];
+  if (!ctx.debug.params.has('noscatter')) {
+    const vegTrees = (ctx.services.vegetation as { trees?: { x: number; z: number; r: number; h: number }[] } | undefined)?.trees ?? [];
+    scatter = planScatter({ plan, occ, walkAt: (x, z) => (layout.walk.get(x, z) & MASK_WALK) !== 0, trees: vegTrees, discs: layout.furniture });
+    const stationBlock = plan.lots.find((l) => l.kind === 'station')?.blockId ?? -1;
+    for (const it of scatter) {
+      const srng = new Rng(it.seed || 1);
+      const y = H(it.x, it.z) + 0.02;
+      const at = (kit: Kit) => kit.sh.frame(it.x, y, it.z, it.yaw);
+      switch (it.kind) {
+        case 'cafe':
+          at(kf);
+          at(KS);
+          SK.cafe(kf, KS, srng);
+          break;
+        case 'kiosk':
+          at(KS);
+          at(kf);
+          SK.kiosk(KS, kf, srng);
+          break;
+        case 'planter':
+        case 'planterRound':
+          at(kf);
+          SK.planter(kf, srng, it.kind === 'planterRound');
+          break;
+        case 'bikeRack': {
+          at(kf);
+          const inStation = plan.blocks[stationBlock] && it.x > plan.blocks[stationBlock].rect.x0 && it.x < plan.blocks[stationBlock].rect.x1 && it.z > plan.blocks[stationBlock].rect.z0 && it.z < plan.blocks[stationBlock].rect.z1;
+          SK.bikeRow(kf, srng, inStation ? 0.68 : 0.42);
+          break;
+        }
+        case 'infoBoard':
+          at(kf);
+          SK.infoBoard(kf, srng);
+          break;
+        case 'sculpture':
+          at(KS);
+          SK.sculpture(KS, srng);
+          break;
+        case 'clock':
+          at(KS);
+          SK.clockPost(KS);
+          break;
+        case 'vending':
+          at(kf);
+          SK.vending(kf, srng);
+          break;
+        case 'trolleys':
+          at(kf);
+          SK.trolleys(kf, srng);
+          break;
+        case 'pallets':
+          at(kf);
+          SK.pallets(kf, srng);
+          break;
+        case 'palletGoods':
+          at(kf);
+          SK.palletGoods(kf, srng);
+          break;
+        case 'drums':
+          at(kf);
+          SK.drums(kf, srng);
+          break;
+        case 'skip':
+          at(KS);
+          SK.skip(KS, srng);
+          break;
+        case 'forklift':
+          at(KS);
+          SK.forklift(KS, srng);
+          break;
+        case 'crates':
+          at(kf);
+          SK.crates(kf, srng);
+          break;
+        case 'cableReel':
+          at(kf);
+          SK.cableReel(kf, srng);
+          break;
+        case 'gasCage':
+          at(kf);
+          SK.gasCage(kf, srng);
+          break;
+        case 'ibc':
+          at(kf);
+          SK.ibc(kf, srng);
+          break;
+        case 'dumpster':
+          at(KS);
+          SK.dumpster(KS, srng);
+          break;
+        case 'fishBoxes':
+          at(kf);
+          SK.fishBoxes(kf, srng);
+          break;
+        case 'nets':
+          at(kf);
+          SK.nets(kf, srng);
+          break;
+        case 'pots':
+          at(kf);
+          SK.pots(kf, srng);
+          break;
+        case 'rope':
+          at(kf);
+          SK.rope(kf, srng);
+          break;
+        case 'ticketMachine':
+          at(kf);
+          SK.ticketMachine(kf);
+          break;
+        case 'evCharger':
+          at(kf);
+          SK.evCharger(kf);
+          break;
+        case 'bottleBank':
+          at(KS);
+          SK.bottleBank(KS, srng);
+          break;
+        case 'pingpong':
+          at(kf);
+          SK.pingpong(kf);
+          break;
+        case 'bins':
+          at(kf);
+          SK.binRow(kf, srng);
+          break;
+        case 'sleepers':
+          at(k);
+          SK.sleepers(k, srng);
+          break;
+        case 'heap':
+          at(k);
+          SK.heap(k, srng);
+          break;
+        case 'courtTable':
+          at(kf);
+          SK.courtTable(kf, srng);
+          break;
+        case 'bikes':
+          at(kf);
+          SK.leaningBikes(kf, srng);
+          break;
+      }
+      inc(`s_${it.kind}`);
+      layout.furniture.push(scatterDisc(it));
+    }
   }
 
   // ───────────────────────────────────────────────────────── bollards ──

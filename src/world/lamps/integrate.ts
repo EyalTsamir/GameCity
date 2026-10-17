@@ -5,6 +5,13 @@
 //
 // Used for materials whose owners do not integrate the light themselves (vehicles, people, trains,
 // boats…) and, with ?lampall, as a whole-city preview of the final night look.
+//
+// Usage (one line, after the material's own onBeforeCompile / customProgramCacheKey are set):
+//     import { patchLampMaterial } from '../../world/lamps/integrate';
+//     patchLampMaterial(material);
+// Works for MeshLambert / MeshPhong / MeshStandard / MeshPhysical (needs vViewPosition + normal +
+// `#include <lights_fragment_end>`); other material types are ignored. Current users:
+// src/sim/traffic/vehicleMaterial.ts, src/sim/rail/trainMaterial.ts.
 
 import * as THREE from 'three';
 import { LAMP_APPLY_VIEW, LAMP_GLSL, lampUniforms } from '../../core/lampLight';
