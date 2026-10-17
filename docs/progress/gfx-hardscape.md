@@ -45,6 +45,18 @@ Audit items: 7 (empty / faint hardscape), garden half of 9 (bare back gardens), 
 - [~] H2 scatter: planner + models written, capture pending
 - [ ] H5 verification
 
+## Iteration notes
+- it3 (shots/hardscape/it3, subset modules, 11 h + 21.5 h): gardens read great (pools, trampolines, parasols,
+  sheds, veg beds, stepping stones; caster shadows); plaza band grids + station herringbone read clearly; court
+  is a strong accent; lamp light shows on roads/props at night. Weak: asphalt macro too subtle from afar,
+  yards too sparse (wall-offset bug), concourse surface flat, sculpture next to the statue.
+- round 2: bimodal asphalt ages + stronger cracks, concourse band grid, court desaturated 14 %, pool glow 0.32,
+  yards denser (+ containers, pipes, timber, forklifts alongside walls), kiosk seating, café on more towers,
+  public art ≥ 10 m from statues/fountains, patio pot plants, wheelie-bin rows fixed, props invariants check
+  scatter/garden items against walk lines / roads / buildings.
+- Note: the lead's view "0,0,-65,60,30,45" is blocked by a tower at this angle; plaza 40 is best seen from
+  "-28,0,-24,40,15,45".
+
 ## Toggles
 `?nogardens` · `?noscatter` · `?legacyground` (old asphalt/hardscape shaders + no painted extras) · `?propscast=0`
 

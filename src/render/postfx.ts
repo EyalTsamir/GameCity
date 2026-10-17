@@ -224,6 +224,7 @@ export default function create(ctx: CityContext): CityModule {
     params.get('adaptive') !== '0',
   );
   step = ladder[0];
+  if (ctx.debug.enabled) ctx.services.postfxInternals = { composer, ao, aoFx, clouds, tilt, bloom, look, smaa, fxPass, renderPass, setAOPath, adaptive, ladder };
   // per-frame GPU time for the adaptive controller (only while it is enabled: no queries otherwise)
   const gpuTimer = new GpuTimer(renderer.getContext() as WebGL2RenderingContext);
   const gpuSample = (ms: number) => adaptive.gpuSample(ms);
@@ -237,7 +238,7 @@ export default function create(ctx: CityContext): CityModule {
     composer.setSize(w, h, false);
   };
 
-  if (ctx.debug.enabled) ctx.services.postfxInternals = { composer, ao, aoFx, clouds, tilt, bloom, look, smaa, fxPass, renderPass, setAOPath };
+
 
   ctx.services.postfx = {
     setEnabled(effect, on) {

@@ -46,7 +46,18 @@ material not integrated yet (`lamps/integrate.ts`, never double-applies) · `?la
 
 ## State
 * 2026-10-17 ~19:30: lampLight.ts internals + bake + lamps module + props/terrain/landmarks glow
-  registration + landmarks material integration written; typechecks. NOT yet captured/tuned.
+  registration + landmarks material integration written; typechecks.
+* ~20:40: harbour done in code: harbor/material.ts integrates thLampLight (solid + rigged), pools →
+  lights, crane work lights = 3×2 moving spots (channel 'lights', `followCraneLamps` in harbor.ts frame),
+  4 floodlight masts (2 quay apron ends, 2 north-strip yard ends; `lamps/harborLights.ts`, geometry in
+  harbor-north, 8 aimed cool luminaires), ferris wheel + carousel light. Shop-window spill
+  (`lamps/spill.ts`, plan lots with shopfront, ~4.5 m spacing, 15 % "closed"). Spots: 12 max, two
+  spatial groups with their own early-out boxes; softened 1/(d²+(reach/4)²) + luminance knee.
+  Offline replica test of bake+shader math: scratchpad baketest.mjs (rolldown bundle of bake.ts).
+* Bugs found: my sed dropped textureLod's lod arg (lead fixed); pools looked missing because uLights
+  went negative / ramped slowly in harness runs (main.ts realDt; lead fixed). Map verified:
+  shots/night/dbg_wb.png (westbrook, warm pools on all streets).
+* vehicles + trains: `patchLampMaterial()` one-liners (approved by lead).
 
 ## Next
 1. Harbour: integrate thLampLight in harbor/material.ts; register harbour pools; crane work lights as
@@ -57,8 +68,11 @@ material not integrated yet (`lamps/integrate.ts`, never double-applies) · `?la
 4. Re-tune after stage's night ambient lands; verify other owners' integrations; report gaps.
 
 ## Requests to other areas
-* (pending) vehicles / pedestrians / trains / boats are lead-owned: they could get lamp light via
-  `patchLampMaterial()` from `src/world/lamps/integrate.ts` (one line per material) — to propose.
+* boats (water agent) / pedestrians (people workstream): can get lamp light with one
+  `patchLampMaterial(material)` call (src/world/lamps/integrate.ts) — lead relayed.
 
 ## Changes outside my area
-none.
+* src/sim/traffic/vehicleMaterial.ts, src/sim/rail/trainMaterial.ts: import + `patchLampMaterial(material)`
+  (lead-approved) so cars and trains catch the street lights.
+* src/world/harbor.ts: floodlight masts call (buildHarborFloodlights), carousel light, followCraneLamps
+  in frame(), floodMasts stat (harbour glow/floodlight parts = my area).
