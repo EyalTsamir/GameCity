@@ -22,15 +22,31 @@ Audit items: 7 (empty / faint hardscape), garden half of 9 (bare back gardens), 
   existing fine furniture mesh (LOD-hidden > 300 m), pools in the coarse mesh.
 - Lamp light (H4): done in roads materials (all three, via `inject()`) and props furniture material.
 
+- Surfaces v2: `src/world/roads/glsl.ts` (ASPHALT2 / HARD2 / COMMON2), wired in `materials.ts`; the original
+  shaders stay in materials.ts for `?legacyground` (also skips the new painted extras). New Voronoi texture
+  `roadCracks()` (crack network, oil spots). Hardscape gets two more attributes: `aR` (cover rectangle) and
+  `aB` (band period, band width, border width, macro tint) set by `band()` / `coverRect()` in surfaces.ts.
+  District-specific plazas in covers.ts: downtown granite + basalt band grid (7.5 m), station clay herringbone
+  + bands, midtown buff pavers, civic sandstone + border; block paving with a 10.5 m band grid; yards / quay
+  specials (oil blobs, tyre streaks, rust halos at the quay bollards); herringbone driveways.
+  Asphalt: resurfacing sections per street segment (cut point, one-lane resurfacing, junction boxes) with
+  seams, sealed cracks on worn sections, trench cuts, patches, wheel polish, lane-centre oil + queue zones,
+  gutter band; car-park oil spots; schoolyard court fill (blue court, green run-off, terracotta keys).
+- Markings v2 (markings.ts, block "painted extras"): four-square + target + futsal outline in the schoolyard,
+  yellow hatched keep-clear boxes at industrial/harbour loading doors, dashed quay lane line, blue/green bays.
+- Scatter: `src/world/props/scatter.ts` (planner; per-zone 0.25 m free grid) + `src/world/props/kit.ts`
+  (models). Built in props.ts after vegetation (uses its real trees), before the bollards; each item is
+  pushed into `layout.furniture`. `?noscatter` disables it.
+
 ## Milestones
 - [x] H4 lamp light integrated (black until the night agent bakes the map)
-- [ ] H3 gardens (layout + models wired; patio surfaces in roads pending; not yet screenshotted)
-- [ ] H1 surfaces
-- [ ] H2 scatter
+- [x] H3 gardens: layout + models + patios (first capture it1 looked good; roof pitch sign fixed)
+- [~] H1 surfaces: v2 shaders written, first full capture pending (shots/hardscape/it3)
+- [~] H2 scatter: planner + models written, capture pending
 - [ ] H5 verification
 
 ## Toggles
-`?nogardens` · `?propscast=0` (planned: `?noscatter`, `?legacyground`)
+`?nogardens` · `?noscatter` · `?legacyground` (old asphalt/hardscape shaders + no painted extras) · `?propscast=0`
 
 ## Requests to other areas
 - vegetation: none required (garden spots are in `layout.furniture`, already honoured).

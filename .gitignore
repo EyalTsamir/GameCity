@@ -3,3 +3,4 @@ dist/
 shots/
 .playwright-mcp/
 scripts/.shotlock*/
+scripts/.shotqueue/

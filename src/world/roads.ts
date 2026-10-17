@@ -12,7 +12,7 @@ import { MeshBuilder } from './roads/builder';
 import { buildStreets, junctionChains } from './roads/streets';
 import { buildCovers } from './roads/covers';
 import { buildAtlas, buildMarkings } from './roads/markings';
-import { createMaterials } from './roads/materials';
+import { createMaterials, legacyGround } from './roads/materials';
 import { HARD_ATTRS } from './roads/surfaces';
 import { pointInPoly, type P2 } from '../core/geom';
 import { ROAD_HALF } from '../core/constants';
@@ -25,7 +25,7 @@ export default function create(ctx: CityContext): CityModule {
   const covers = buildCovers(ctx, A, H);
   const atlas = buildAtlas();
   const mats = createMaterials(ctx, { radial: covers.info.radial, court: covers.info.court }, atlas.tex);
-  const marks = buildMarkings(ctx, atlas.g, mats.asphaltColor, covers.info);
+  const marks = buildMarkings(ctx, atlas.g, mats.asphaltColor, covers.info, legacyGround(ctx));
 
   const root = new THREE.Group();
   root.name = 'roads';

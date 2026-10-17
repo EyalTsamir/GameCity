@@ -669,14 +669,14 @@ export function compost(k: Kit, rng: Rng): void {
   sh.ellipsoid(0.1, 0.62, 0.05, 0.25, 0.08, 0.2, 0);
 }
 
-/** Two or three wheelie bins (local x = the row). */
+/** Two or three wheelie bins side by side along local x, lids / handles at the back (-Z). */
 export function wheelieBins(k: Kit, rng: Rng, n = 2): void {
   const sh = k.sh;
   const cols = ['#3f4549', '#3f6e4a', '#2f5f9e', '#7a5232', '#b8443a'];
   for (let i = 0; i < n; i++) {
-    const z = (i - (n - 1) / 2) * 0.68;
+    const x = (i - (n - 1) / 2) * 0.68;
     const c = cols[(rng.int(0, cols.length - 1) + i) % cols.length];
-    sh.push().local(0, 0, z, 0, rng.range(-0.08, 0.08));
+    sh.push().local(x, 0, rng.range(-0.04, 0.04), 0, rng.range(-0.08, 0.08));
     k.m(c, 'plastic');
     sh.box(0, 0.5, 0, 0.58, 1.0, 0.6, 1);
     sh.box(0, 1.02, 0.02, 0.62, 0.05, 0.66, 0);

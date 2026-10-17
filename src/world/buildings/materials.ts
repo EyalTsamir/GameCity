@@ -123,9 +123,10 @@ export interface BuildingMaterials {
 // ─────────────────────────────────────────────────────── noise texture ──
 //
 // 256² RGBA8, tileable, mip-mapped (so every use is box-filtered for free at distance):
-//   r  macro value-noise fbm (4 cells across)      g  mid fbm (16 cells across)
-//   b  streak field: high frequency in x, very low in y — sampled stretched it gives vertical streaks
+//   r  macro value-noise fbm (4 lattice cells across)      g  mid fbm (16 cells across)
+//   b  streak field: 64 cells across in u, 2 in v — sampled stretched it gives vertical streaks
 //   a  fine grain (64 cells across)
+// Scale rule: for a feature size of S metres on a channel with n cells across, uv = metres / (n·S).
 
 function hash3(x: number, y: number, s: number): number {
   let n = Math.imul(x | 0, 374761393) ^ Math.imul(y | 0, 668265263) ^ Math.imul(s | 0, 1274126177);
@@ -465,11 +466,11 @@ void bhWall(inout vec3 albedo, inout float rough, inout float metal, inout vec3 
   float fR = fwidth(R0.y);
   float lodC = clamp(log2(max(fwidth(R0.x) + fwidth(R0.z), 1e-5) * 256.0 * 0.4) , 0.0, 8.0);
   vec2 so = vec2(fract(seed * 0.1373), fract(seed * 0.3119)) * 17.0;
-  vec4 nm = texture2D(uBhNoise, q * 0.11 + so);                                // ~9 m / 2 m tone
-  float grain = texture2D(uBhNoise, q * 0.9 + so.yx).a;                         // stucco grain
-  vec4 nMac = texture2D(uBhNoise, q * 0.041 + so.yx);                            // ~25 m blotches
-  float stv = texture2D(uBhNoise, vec2(q.x * 0.19, q.y * 0.011) + so).b;        // coarse streaks
-  float sn = texture2D(uBhNoise, vec2(q.x * 1.7, q.y * 0.06) + so.yx).b;        // fine streaks
+  vec4 nm = texture2D(uBhNoise, q * 0.031 + so);                               // g: ~2 m tone patches
+  float grain = texture2D(uBhNoise, q * 0.3 + so.yx).a;                         // a: ~5 cm stucco grain
+  vec4 nMac = texture2D(uBhNoise, q * 0.03 + so.yx);                            // r: ~8 m blotches
+  float stv = texture2D(uBhNoise, vec2(q.x * 0.026, q.y * 0.03) + so).b;        // b: 0.6 m wide, ~15 m long streaks
+  float sn = texture2D(uBhNoise, vec2(q.x * 0.16, q.y * 0.09) + so.yx).b;       // b: 10 cm wide, ~5 m long streaks
 
   // ── 1. surface pattern
   albedo *= bhWallPattern(pat, q, seed, fq, nm, grain);
@@ -731,10 +732,10 @@ void bhRoof(inout vec3 albedo, inout float rough, inout vec3 emit, vec3 N, vec3 
   vec2 p = vFac;
   vec2 fp = fwidth(p);
   vec2 so = vec2(fract(seed * 0.1373), fract(seed * 0.3119)) * 17.0;
-  vec4 nM = texture2D(uBhNoise, p * 0.05 + so);                           // ~20 m
-  vec4 nF = texture2D(uBhNoise, p * 0.3 + so.yx);                         // ~3 m
-  float grain = texture2D(uBhNoise, p * 1.9 + so).a;                      // gravel / grit
-  float stv = texture2D(uBhNoise, vec2(p.x * 0.45, p.y * 0.022) + so.yx).b; // down-slope streaks
+  vec4 nM = texture2D(uBhNoise, p * 0.035 + so);                          // r ~7 m, g ~1.8 m
+  vec4 nF = texture2D(uBhNoise, p * 0.12 + so.yx);                        // r ~2 m, g ~0.5 m
+  float grain = texture2D(uBhNoise, p * 0.5 + so).a;                      // a ~3 cm gravel / grit
+  float stv = texture2D(uBhNoise, vec2(p.x * 0.05, p.y * 0.033) + so.yx).b; // b: 0.3 m wide down-slope streaks
   if (pat < 0.5) { // flat roof: membrane sheets with seams, repairs, gravel ballast, stains, drains, moss
     float kindR = fract(seed * 0.618 + 0.13);
     float sv = p.y / 1.05;
@@ -766,7 +767,7 @@ void bhRoof(inout vec3 albedo, inout float rough, inout vec3 emit, vec3 N, vec3 
     c *= (1.0 - 0.7 * mouth) * (1.0 - 0.16 * wet);
     albedo *= c * (0.94 + 0.12 * nF.g);
     // moss / sedum on some roofs (green roof patches)
-    float green = step(0.7, fract(seed * 0.377 + 0.21)) * smoothstep(0.52, 0.66, nM.b * 0.4 + nF.g * 0.6);
+    float green = step(0.7, fract(seed * 0.377 + 0.21)) * smoothstep(0.52, 0.66, nM.g * 0.4 + nF.g * 0.6);
     albedo = mix(albedo, vec3(0.2, 0.3, 0.11) * (0.75 + 0.5 * grain), green * 0.9);
     rough = 0.95;
     return;
@@ -788,14 +789,14 @@ void bhRoof(inout vec3 albedo, inout float rough, inout vec3 emit, vec3 N, vec3 
     float v = shade * lip * curve * ((slate ? 0.82 : 0.84) + (slate ? 0.32 : 0.28) * tn);
     float tileAvg = slate ? 0.88 : 0.86;
     // patches of re-laid / sun-faded tiles and down-slope streaks survive distance
-    float patchT = 0.86 + 0.26 * nF.g;
+    float patchT = 0.87 + 0.24 * nM.g;
     float streak = 1.0 - 0.2 * stv;
     float eaveD = 1.0 - 0.16 * (1.0 - smoothstep(0.0, 0.9, p.y));
     vec3 cT = albedo * mix(v, tileAvg, aa) * patchT * streak * eaveD * (0.92 + 0.16 * nM.r);
     // lichen / moss (yellow-green on clay, pale on slate)
-    float lich = smoothstep(0.6, 0.82, nM.b * 0.55 + nF.r * 0.45) * (slate ? 0.4 : 0.55);
-    vec3 lichC = slate ? vec3(0.62, 0.66, 0.58) : vec3(0.52, 0.55, 0.3);
-    albedo = mix(cT, lichC * (0.8 + 0.3 * grain), lich);
+    float lich = smoothstep(0.62, 0.84, nM.g * 0.5 + nF.r * 0.5) * (slate ? 0.3 : 0.38);
+    vec3 lichC = slate ? cT * vec3(1.12, 1.16, 1.06) : mix(cT, vec3(0.36, 0.38, 0.2), 0.55);
+    albedo = mix(cT, lichC * (0.85 + 0.25 * grain), lich);
     rough = slate ? 0.7 : 0.88;
     return;
   }
@@ -803,7 +804,7 @@ void bhRoof(inout vec3 albedo, inout float rough, inout vec3 emit, vec3 N, vec3 
     float s = fract(p.x / 0.6);
     float aa = clamp(fp.x / 0.6 * 2.0, 0.0, 1.0);
     float seam = 1.0 - smoothstep(0.0, 0.07, min(s, 1.0 - s));
-    albedo *= mix(0.95 + 0.25 * seam, 1.0, aa) * (0.9 + 0.14 * nF.g) * (1.0 - 0.14 * stv);
+    albedo *= mix(0.95 + 0.25 * seam, 1.0, aa) * (0.9 + 0.14 * nM.g) * (1.0 - 0.14 * stv);
     rough = 0.5;
     return;
   }
@@ -818,7 +819,7 @@ void bhRoof(inout vec3 albedo, inout float rough, inout vec3 emit, vec3 N, vec3 
     float s = fract(p.x / 0.55);
     float aa = clamp(fp.x / 0.55 * 2.0, 0.0, 1.0);
     float seam = 1.0 - smoothstep(0.0, 0.08, min(s, 1.0 - s));
-    albedo *= (0.84 + 0.32 * nF.g) * mix(1.0 + 0.2 * seam, 1.0, aa) * (1.0 - 0.18 * stv);
+    albedo *= (0.84 + 0.32 * nM.g) * mix(1.0 + 0.2 * seam, 1.0, aa) * (1.0 - 0.18 * stv);
     rough = 0.65;
     return;
   }

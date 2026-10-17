@@ -302,7 +302,7 @@ function planOne(lot: Lot, inp: GardenInputs, drives: Rect[], occ: OccupancyGrid
   // ── theme feature
   const roomy = depth > 8.5 && width > 9.5;
   const t = rnd();
-  const theme = roomy ? (t < 0.42 ? 'pool' : t < 0.62 ? 'family' : t < 0.82 ? 'gardener' : 'relax') : t < 0.42 ? 'family' : t < 0.7 ? 'gardener' : t < 0.85 ? 'splash' : 'relax';
+  const theme = roomy ? (t < 0.42 ? 'pool' : t < 0.64 ? 'family' : t < 0.84 ? 'gardener' : 'relax') : t < 0.52 ? 'family' : t < 0.76 ? 'gardener' : t < 0.9 ? 'splash' : 'relax';
   // candidate centres over the free back zone, nearest to the zone centre first (deterministic scan)
   const cands = (sw: number, sd: number, clear: number): [number, number][] => {
     const out: [number, number][] = [];
@@ -332,7 +332,7 @@ function planOne(lot: Lot, inp: GardenInputs, drives: Rect[], occ: OccupancyGrid
     }
     case 'family': {
       const k = rnd();
-      const first = k < 0.55 ? feature('trampoline', 3.4, 3.4, 0.35) : feature('swing', 3.6, 2.6, 0.3, false);
+      const first = k < 0.6 ? feature('trampoline', 3.35, 3.35, 0.25) : feature('swing', 3.6, 2.6, 0.3, false);
       if (!first) feature('swing', 3.6, 2.6, 0.3, false) ?? feature('sandpit', 1.8, 1.8, 0.3);
       if (rnd() < 0.6) feature('sandpit', 1.8, 1.8, 0.3) ?? feature('playhouse', 1.5, 1.5, 0.3);
       else feature('playhouse', 1.6, 1.4, 0.3);
@@ -374,7 +374,13 @@ function planOne(lot: Lot, inp: GardenInputs, drives: Rect[], occ: OccupancyGrid
     const side = drives.length ? (centreU(F, drives[0]) < (F.hu0 + F.hu1) / 2 ? -1 : 1) : 1;
     const bu = side < 0 ? F.hu0 - 0.75 : F.hu1 + 0.75;
     for (const dv of [0.4, 1.4, 2.4, -0.6]) {
-      if (place('bins', bu, F.vBack - dv, 0.75, 1.5, 0.0, side < 0 ? false : true, side < 0 ? -Math.PI / 2 : Math.PI / 2)) break;
+      // row runs along the side wall (local x ↔ depth), lids face away from the house
+      const b = place('bins', bu, F.vBack - dv, 0.75, 1.5, 0.0, false, side < 0 ? -Math.PI / 2 : Math.PI / 2);
+      if (b) {
+        b.w = 1.5;
+        b.d = 0.75;
+        break;
+      }
     }
   }
 

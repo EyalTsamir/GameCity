@@ -233,7 +233,7 @@ export interface MarkingStats {
 
 const RIGHT = (d: P2): P2 => ({ x: -d.z, z: d.x });
 
-export function buildMarkings(ctx: CityContext, atlasGlyphs: Record<string, Glyph>, asphalt: THREE.Color, info: CoverInfo): { geo: THREE.BufferGeometry; stats: MarkingStats } {
+export function buildMarkings(ctx: CityContext, atlasGlyphs: Record<string, Glyph>, asphalt: THREE.Color, info: CoverInfo, legacy = false): { geo: THREE.BufferGeometry; stats: MarkingStats } {
   const plan = ctx.plan;
   const net = ctx.roads;
   const rng = new Rng('roads-markings');
@@ -576,6 +576,97 @@ export function buildMarkings(ctx: CityContext, atlasGlyphs: Record<string, Glyp
       setPaint(YELLOW, 0.16, 0.35);
       const x = QUAY_X - 1.35;
       line({ x, z: q.rect.z0 + 0.3 }, { x, z: q.rect.z1 - 0.3 }, 0.16, yCover);
+    }
+  }
+
+  // ── painted extras (v2): schoolyard games, yard loading boxes, quay lane line, coloured bays
+  if (!legacy) {
+    // filled rectangle (rotation-free), painted
+    const fill = (r: Rect, col: THREE.Color, y: number) => {
+      setPaint(col, 1, 0.45);
+      quad({ x: (r.x0 + r.x1) / 2, z: (r.z0 + r.z1) / 2 }, { x: 0, z: -1 }, r.x1 - r.x0, r.z1 - r.z0, y, solid);
+    };
+    // schoolyard: four-square in the south run-off, a target circle in the north one
+    if (info.court) {
+      const c = info.court;
+      const cx = (c.x0 + c.x1) / 2;
+      curBase = C('#4b8c5e');
+      const fsz = c.z1 - 2.3,
+        fsx = cx + 5.5;
+      const cols = [C('#d9473f'), C('#2f7fb8'), C('#f2c84b'), C('#3f8f5a')];
+      cols.forEach((col, i) => {
+        const ox = (i % 2) - 1,
+          oz = Math.floor(i / 2) - 1;
+        fill({ x0: fsx + ox * 1.2 + 0.05, z0: fsz + oz * 1.2 + 0.05, x1: fsx + (ox + 1) * 1.2 - 0.05, z1: fsz + (oz + 1) * 1.2 - 0.05 }, col, yCover);
+      });
+      setPaint(WHITE, 0.08, 0.4);
+      rectOutline({ x0: fsx - 1.2, z0: fsz - 1.2, x1: fsx + 1.2, z1: fsz + 1.2 }, 0.08, yCover);
+      line({ x: fsx, z: fsz - 1.2 }, { x: fsx, z: fsz + 1.2 }, 0.08, yCover);
+      line({ x: fsx - 1.2, z: fsz }, { x: fsx + 1.2, z: fsz }, 0.08, yCover);
+      const tc = { x: cx - 6, z: c.z0 + 2.2 };
+      for (const [r, col] of [
+        [1.5, C('#f2c84b')],
+        [1.0, C('#d9473f')],
+        [0.5, C('#f2efe6')],
+      ] as [number, THREE.Color][]) {
+        setPaint(col, 0.14, 0.4);
+        arc(tc, r, 0, Math.PI * 2, 0.14, yCover);
+      }
+      // yellow futsal lines around the run-off
+      setPaint(YELLOW, 0.1, 0.45);
+      rectOutline({ x0: c.x0 + 0.35, z0: c.z0 + 0.35, x1: c.x1 - 0.35, z1: c.z1 - 0.35 }, 0.1, yCover);
+    }
+    // industrial / harbour yards: yellow hatched keep-clear boxes in front of the loading doors
+    for (const lot of plan.lots) {
+      if (lot.kind !== 'factory' && lot.kind !== 'warehouse' && lot.kind !== 'depot') continue;
+      const blk = plan.blocks[lot.blockId];
+      if (!blk || (blk.kind !== 'industrial' && blk.kind !== 'harbor')) continue;
+      curBase = C('#6b6a65');
+      for (const d of lot.doors) {
+        const n = DIR_VEC[d.dir];
+        const t = RIGHT(n);
+        const W = 4.2,
+          D = 5.0;
+        const P = (a: number, b: number): P2 => ({ x: d.x + t.x * a + n.x * b, z: d.z + t.z * a + n.z * b });
+        // stay on the yard (skip boxes that would reach the sidewalk / road)
+        const far = P(0, D + 0.6);
+        if (ctx.occupancy.has(far.x, far.z, 1 | 2)) continue;
+        setPaint(YELLOW, 0.14, 0.5);
+        line(P(-W / 2, 0.4), P(W / 2, 0.4), 0.14, yCover);
+        line(P(W / 2, 0.4), P(W / 2, D), 0.14, yCover);
+        line(P(W / 2, D), P(-W / 2, D), 0.14, yCover);
+        line(P(-W / 2, D), P(-W / 2, 0.4), 0.14, yCover);
+        // diagonal hatch, clipped to the box
+        for (let k = -6; k <= 6; k++) {
+          const a0 = k * 0.9;
+          const pts: P2[] = [];
+          // segment along (1,1) in (a, b) space through (a0, 0.4)
+          const lo = Math.max(-W / 2 - a0, 0.4 - 0.4),
+            hi = Math.min(W / 2 - a0, D - 0.4);
+          if (hi - lo < 0.3) continue;
+          pts.push(P(a0 + lo, 0.4 + lo), P(a0 + hi, 0.4 + hi));
+          line(pts[0], pts[1], 0.12, yCover);
+        }
+        stats.decals++;
+      }
+    }
+    // quay: white dashed lane line along the crane track
+    const q = plan.areas.find((a) => a.kind === 'quay');
+    if (q) {
+      curBase = C('#7d7a73');
+      setPaint(WHITE, 0.14, 0.45);
+      for (let z = q.rect.z0 + 1; z < q.rect.z1 - 3; z += 4.5) line({ x: 126.75, z }, { x: 126.75, z: z + 2.5 }, 0.14, yCover);
+    }
+    // car parks: two blue (accessible) and two green (EV) bays painted solid
+    for (const a of plan.areas) {
+      if (a.kind !== 'parking' || !a.stalls || a.stalls.length < 6) continue;
+      curBase = PARK;
+      const pickS = [a.stalls[0], a.stalls[1], a.stalls[a.stalls.length - 1], a.stalls[a.stalls.length - 2]];
+      pickS.forEach((st, i) => {
+        const ax = { x: Math.sin(st.yaw), z: Math.cos(st.yaw) };
+        setPaint(i < 2 ? C('#3f6fb0') : C('#3fae5a'), 1, 0.4);
+        quad({ x: st.x, z: st.z }, ax, 2.25, 4.6, yCover, solid);
+      });
     }
   }
 

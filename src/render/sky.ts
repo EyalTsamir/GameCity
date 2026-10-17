@@ -305,6 +305,9 @@ export default async function create(ctx: CityContext): Promise<CityModule> {
     stage.uniforms.uStageL.value.copy(_L);
     stage.uniforms.uStageShadow.value = (usingMoon ? 0.6 * moonW : sunW) * (1 - overcast * 0.85);
     stage.uniforms.uCityGlow.value = lights;
+    // at night the table gives way to the indigo backdrop sooner (the lit town sits in a pool)
+    const nightK = clock.night;
+    stage.uniforms.uFade.value.set(60 - 28 * nightK, 640 - 270 * nightK);
     if (stage.table && stage.table.visible !== (!legacy && !noTable)) applyStageVisibility();
     // clouds go dim + translucent only after the afterglow / blue hour (dusk keeps its pink glow)
     const cloudNight = smooth(-0.07, -0.3, sh);

@@ -313,7 +313,7 @@ const LEGACY_KEYS: KeyDef[] = [
 
 const NIGHT: Omit<KeyDef, 'h'> = {
   sun: '#a7b4d6',
-  sunI: 0.4,
+  sunI: 0.5,
   hemiSky: '#3b4766',
   hemiGround: '#24232a',
   hemiI: 0.5,
@@ -329,7 +329,7 @@ const NIGHT: Omit<KeyDef, 'h'> = {
   stars: 1,
   env: 0.42,
   bloom: 1.0,
-  cyc: '#0f1429',
+  cyc: '#131a37',
 };
 
 const KEYS: KeyDef[] = [

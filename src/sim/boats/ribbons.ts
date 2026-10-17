@@ -63,24 +63,27 @@ void main() {
   float n2 = texture2D(tWM, q * (1.0 / 2.1) - vec2(uTime * 0.011, vSeed * 0.53)).b;
   float n3 = texture2D(tWM, q * (1.0 / 0.83) + vec2(vSeed, uTime * 0.02)).b;
   float n = n1 * 0.5 + n2 * 0.33 + n3 * 0.17;
-  float aa = max(fwidth(n) * 1.6, 0.06);
+  n = smoothstep(0.28, 0.72, n);
+  float aa = max(fwidth(n) * 1.5, 0.05);
+  // ragged edges: the foam band's outline wanders with the noise
+  float ac = across + (n2 - 0.5) * 0.55;
   float a;
   if (wash > 0.5) {
-    // stern wash: solid churn at the stern, lace that opens up and dissolves
-    float prof = 1.0 - smoothstep(0.25, 1.0, across);
-    float th = mix(0.3, 0.74, pow(age, 0.6));
-    float lace = smoothstep(th - aa, th + aa, n * (0.75 + 0.45 * prof));
-    float core = (1.0 - smoothstep(0.0, 0.1, age)) * (1.0 - smoothstep(0.1, 0.8, across));
+    // stern wash: solid churn right at the stern, then lace that opens up and dissolves
+    float prof = 1.0 - smoothstep(0.2, 1.0, ac);
+    float cover = mix(0.9, 0.12, pow(age, 0.55));
+    float lace = smoothstep(1.0 - cover - aa, 1.0 - cover + aa, n * mix(0.65, 1.1, prof));
+    float core = (1.0 - smoothstep(0.0, 0.06, age)) * (1.0 - smoothstep(0.15, 0.7, across));
     a = max(lace * prof, core * 0.95) * str;
     // aerated, smoothed water around the foam (reads from far away)
-    a = max(a, 0.12 * prof * str * (1.0 - age));
+    a = max(a, 0.1 * (1.0 - smoothstep(0.3, 1.0, across)) * str * (1.0 - age));
   } else {
     // Kelvin arm: a thin breaking crest that frays and fades outward
-    float prof = 1.0 - smoothstep(0.1, 1.0, across);
-    float th = mix(0.36, 0.7, age);
-    float lace = smoothstep(th - aa, th + aa, n * (0.65 + 0.55 * prof));
+    float prof = 1.0 - smoothstep(0.05, 0.75, ac);
+    float cover = mix(0.75, 0.1, age);
+    float lace = smoothstep(1.0 - cover - aa, 1.0 - cover + aa, n * mix(0.6, 1.1, prof));
     a = lace * prof * str;
-    a = max(a, 0.07 * prof * str * (1.0 - age));
+    a = max(a, 0.06 * (1.0 - smoothstep(0.1, 1.0, across)) * str * (1.0 - age));
   }
   if (a < 0.004) discard;
   gl_FragColor = vec4(uFoamLight, clamp(a, 0.0, 0.95));
@@ -190,7 +193,9 @@ export class WakeRibbons {
       return;
     }
     tr.acc += moved;
-    const spacing = Math.min(2.6, Math.max(0.7, b.dims.L * 0.14));
+    // the ring must span the whole life of the wake at this speed (curves stay smooth enough)
+    const look = LOOK[b.type] ?? LOOK.motor;
+    const spacing = Math.min(4, Math.max(0.7, b.dims.L * 0.12, (b.v * look[2]) / (S - 3)));
     if (tr.acc < spacing && tr.n > 0) return;
     tr.acc = 0;
     const k = tr.head * 8;

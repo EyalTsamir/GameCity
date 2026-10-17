@@ -8,7 +8,7 @@
 // `k` = the kit the small parts go to, `ks` = the shadow-casting kit for the big silhouettes.
 
 import type { Rng } from '../../core/rng';
-import { Kit, bike } from './furniture';
+import { Kit } from './furniture';
 import { parasol, wheelieBins, CANVAS } from './garden';
 
 const TAU = Math.PI * 2;
@@ -107,24 +107,45 @@ export function planter(k: Kit, rng: Rng, round: boolean): void {
   }
 }
 
+/** Low-poly bicycle along local x (front wheel at +x), for dense racks (~110 tris). */
+export function bikeLite(k: Kit, color: string): void {
+  const sh = k.sh;
+  const r = 0.33;
+  k.m('#1e1f21', 'rubber');
+  for (const x of [-0.52, 0.52]) sh.push().local(x, r, 0, Math.PI / 2, 0, 0).cyl(0, -0.02, 0, r, r, 0.04, 8, 3, false).pop();
+  const R = [-0.52, r],
+    C = [-0.02, 0.3],
+    S = [-0.17, 0.82],
+    Hd = [0.36, 0.84],
+    F = [0.52, r];
+  k.m(color, 'paint');
+  const bar = (a: number[], b: number[], w = 0.04) => sh.beam(a[0], a[1], 0, b[0], b[1], 0, w, w, false);
+  bar(R, C);
+  bar(C, S);
+  bar(R, S);
+  bar(C, Hd);
+  bar(Hd, F, 0.03);
+  k.m('#2a2a2a', 'plastic');
+  sh.box(S[0] - 0.02, S[1] + 0.06, 0, 0.2, 0.04, 0.08, 1);
+  sh.beam(Hd[0], Hd[1] + 0.08, -0.22, Hd[0], Hd[1] + 0.08, 0.22, 0.03, 0.03, false);
+}
+
 /** Steel hoop rack along local x with bikes; `fill` = probability per slot. */
 export function bikeRow(k: Kit, rng: Rng, fill: number): void {
   const sh = k.sh;
   const hoops = [-1.05, -0.35, 0.35, 1.05];
   k.m('#9aa3a8', 'steel');
   for (const x of hoops) {
-    sh.tube(x, 0, -0.32, x, 0.62, -0.32, 0.022, 0.022, 4);
-    sh.tube(x, 0, 0.32, x, 0.62, 0.32, 0.022, 0.022, 4);
-    sh.tube(x, 0.62, -0.32, x, 0.74, -0.2, 0.022, 0.022, 4);
-    sh.tube(x, 0.74, -0.2, x, 0.74, 0.2, 0.022, 0.022, 4);
-    sh.tube(x, 0.74, 0.2, x, 0.62, 0.32, 0.022, 0.022, 4);
+    sh.beam(x, 0, -0.32, x, 0.66, -0.32, 0.035, 0.035, false);
+    sh.beam(x, 0, 0.32, x, 0.66, 0.32, 0.035, 0.035, false);
+    sh.beam(x, 0.68, -0.34, x, 0.68, 0.34, 0.035, 0.035, false);
   }
   for (const x of hoops) {
     for (const side of [-1, 1]) {
       if (!rng.chance(fill)) continue;
       // bike along local z (perpendicular to the row), leaning on the hoop
       sh.push().local(x + side * 0.12, 0, rng.range(-0.08, 0.08), 0.06 * side, Math.PI / 2 + (rng.chance(0.5) ? 0 : Math.PI), 0.07 * side);
-      bike(k, rng.pick(BIKE_COLS));
+      bikeLite(k, rng.pick(BIKE_COLS));
       sh.pop();
     }
   }
@@ -310,10 +331,10 @@ export function drums(k: Kit, rng: Rng): void {
   for (let i = 0; i < n; i++) {
     const [x, z] = spots[i];
     k.m(rng.chance(0.8) ? col : rng.pick(['#2f5f9e', '#c9302c', '#e8b23c']), 'paint');
-    sh.cyl(x, y0, z, 0.29, 0.29, 0.88, 10, 2);
+    sh.cyl(x, y0, z, 0.29, 0.29, 0.88, 8, 2);
     k.m('#2a2c2e', 'steel');
-    sh.cyl(x, y0 + 0.3, z, 0.295, 0.295, 0.03, 10, 0);
-    sh.cyl(x, y0 + 0.6, z, 0.295, 0.295, 0.03, 10, 0);
+    sh.cyl(x, y0 + 0.3, z, 0.295, 0.295, 0.03, 8, 0);
+    sh.cyl(x, y0 + 0.6, z, 0.295, 0.295, 0.03, 8, 0);
   }
   if (!onPallet && rng.chance(0.5)) {
     // one lying on its side
@@ -655,16 +676,14 @@ export function leaningBikes(k: Kit, rng: Rng): void {
   for (const x of [-0.45, 0.45]) {
     if (x > 0 && rng.chance(0.3)) continue;
     sh.push().local(x, 0, -0.1, 0, rng.range(-0.1, 0.1), 0.12);
-    bike(k, rng.pick(BIKE_COLS));
+    bikeLite(k, rng.pick(BIKE_COLS));
     sh.pop();
   }
 }
 
 /** Wheelie bin row (courtyards). */
 export function binRow(k: Kit, rng: Rng): void {
-  k.sh.push().local(0, 0, 0, 0, Math.PI / 2);
   wheelieBins(k, rng, 3);
-  k.sh.pop();
 }
 
 // ───────────────────────────────────────────────────────── freight yard ──

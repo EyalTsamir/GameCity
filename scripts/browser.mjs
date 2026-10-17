@@ -78,34 +78,82 @@ function holderAlive(dir) {
 }
 
 let heartbeat = null;
+let ticket = null;
 
-/** Take the shared lock (waits up to `waitMs`). Released automatically on exit. */
-export async function acquireLock({ waitMs = 1_800_000, staleMs = 120_000 } = {}) {
+// FIFO queue: every waiter drops a ticket (scripts/.shotqueue/<ms>-<pid>); only the oldest live
+// tickets may grab a free slot, so a job waiting longest always goes next (random polling starved
+// some jobs for half an hour with many agents queueing). Tickets of dead processes are removed.
+const queueDir = path.join(here, '.shotqueue');
+const pidAlive = (pid) => {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (e) {
+    return e?.code === 'EPERM';
+  }
+};
+function liveTickets() {
+  let names = [];
+  try {
+    names = fs.readdirSync(queueDir);
+  } catch {
+    return [];
+  }
+  const live = [];
+  for (const n of names) {
+    const pid = parseInt(n.split('-')[1], 10);
+    if (pid && pidAlive(pid)) live.push(n);
+    else fs.rmSync(path.join(queueDir, n), { force: true });
+  }
+  return live.sort();
+}
+function dropTicket() {
+  if (!ticket) return;
+  fs.rmSync(path.join(queueDir, ticket), { force: true });
+  ticket = null;
+}
+
+/** Take the shared lock (FIFO, waits up to `waitMs`). Released automatically on exit. */
+export async function acquireLock({ waitMs = 10_800_000, staleMs = 120_000 } = {}) {
   const t0 = Date.now();
+  fs.mkdirSync(queueDir, { recursive: true });
+  ticket = `${String(Date.now()).padStart(14, '0')}-${process.pid}`;
+  fs.writeFileSync(path.join(queueDir, ticket), '');
   let got = false;
   while (!got) {
+    const queue = liveTickets();
+    const pos = queue.indexOf(ticket);
+    if (pos < 0) fs.writeFileSync(path.join(queueDir, ticket), ''); // removed by someone: re-enter
     for (let k = 0; k < SLOTS && !got; k++) {
       const dir = slotDir(k);
-      try {
-        fs.mkdirSync(dir);
-        fs.writeFileSync(pidFileOf(dir), String(process.pid));
-        lockDir = dir;
-        got = true;
-      } catch {
+      if (pos >= 0 && pos < SLOTS) {
         try {
-          const st = fs.statSync(dir);
-          // a fresh lock may not have its pid file yet: only judge it after a grace period
-          const age = Date.now() - st.mtimeMs;
-          if ((age > 5_000 && !holderAlive(dir)) || age > staleMs) fs.rmSync(dir, { recursive: true, force: true });
+          fs.mkdirSync(dir);
+          fs.writeFileSync(pidFileOf(dir), String(process.pid));
+          lockDir = dir;
+          got = true;
+          continue;
         } catch {
-          /* vanished between calls */
+          /* taken */
         }
+      }
+      try {
+        const st = fs.statSync(dir);
+        // a fresh lock may not have its pid file yet: only judge it after a grace period
+        const age = Date.now() - st.mtimeMs;
+        if ((age > 5_000 && !holderAlive(dir)) || age > staleMs) fs.rmSync(dir, { recursive: true, force: true });
+      } catch {
+        /* vanished between calls */
       }
     }
     if (got) break;
-    if (Date.now() - t0 > waitMs) throw new Error('timed out waiting for the screenshot lock (scripts/.shotlock)');
-    await new Promise((r) => setTimeout(r, 400 + Math.random() * 400));
+    if (Date.now() - t0 > waitMs) {
+      dropTicket();
+      throw new Error('timed out waiting for the screenshot lock (scripts/.shotlock)');
+    }
+    await new Promise((r) => setTimeout(r, 300 + Math.random() * 300));
   }
+  dropTicket();
   heartbeat = setInterval(() => {
     try {
       const now = new Date();
@@ -118,6 +166,7 @@ export async function acquireLock({ waitMs = 1_800_000, staleMs = 120_000 } = {}
 }
 
 export function releaseLock() {
+  dropTicket();
   if (heartbeat) clearInterval(heartbeat);
   heartbeat = null;
   try {
