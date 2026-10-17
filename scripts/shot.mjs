@@ -15,6 +15,7 @@
 //   --eval "<js>"        extra JS evaluated in the page after load (can be repeated)
 //   --shots <n>          number of captures (default 1)  --interval <ms> between captures (default 1000)
 //   --stats              print window.__city.stats()      --invariants  print invariants()
+//   --hideui             hide the HTML overlay (judge the rendering only)
 //   --validate           print window.__city.validate()
 //   --timeout <ms>       max wait for readiness (default 300000; software GL loads slowly)
 //
@@ -36,7 +37,7 @@ function parseArgs(argv) {
     const a = argv[i];
     if (!a.startsWith('--')) continue;
     const key = a.slice(2);
-    const flag = ['stats', 'invariants', 'validate', 'headed'].includes(key);
+    const flag = ['stats', 'invariants', 'validate', 'headed', 'hideui'].includes(key);
     const val = flag ? true : argv[++i];
     if (key === 'eval') o.evals.push(val);
     else o[key] = val;
@@ -89,6 +90,7 @@ try {
       window.__city.view({ target: { x, y, z }, distance, yaw, pitch });
     }, v);
   }
+  if (args.hideui) await page.addStyleTag({ content: '#ui{display:none!important}' });
   for (const code of args.evals) {
     const r = await page.evaluate((c) => {
       try {

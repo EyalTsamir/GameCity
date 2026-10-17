@@ -2,7 +2,7 @@
 // Capture a matrix of views x times of day in ONE browser session (fast review sets).
 //
 //   node scripts/capture-set.mjs [--out shots/review] [--q "extra=query"] [--views a,b,c] [--hours 11,18,21.5]
-//                                [--width 1600 --height 900] [--settle 2500] [--warmup 6000]
+//                                [--width 1600 --height 900] [--settle 2500] [--warmup 6000] [--hideui 1]
 //
 // Views: POI ids from plan.pois, or "name=x,y,z,distance,yaw,pitch" entries separated by ';'.
 // Writes <out>/<view>_<hours>.png and <out>/report.json (stats per capture + console errors).
@@ -54,6 +54,7 @@ try {
   await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 300000 });
   await page.waitForFunction(() => window.__city && window.__city.ready && window.__city.frames() > 3, null, { timeout: 300000, polling: 250 });
   report.failedModules = await page.evaluate(() => window.__city.failed);
+  if (args.hideui !== undefined) await page.addStyleTag({ content: '#ui{display:none!important}' });
   await page.waitForTimeout(warmup);
   for (const h of hoursList) {
     for (const v of viewSpecs) {
