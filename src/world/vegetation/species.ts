@@ -83,7 +83,7 @@ export const BARK = {
   birchMark: '#3d3a36',
   palm: ['#a2825c', '#8f7150'],
   conifer: ['#5a4232', '#4e3a2d'],
-  pine: ['#8a5a3a', '#94603c'],
+  pine: ['#7a4f34', '#835639'],
 };
 
 // ───────────────────────────────────────────────────────────── leaf attribute ──
@@ -616,7 +616,7 @@ function broadleaf(s: GeoSink, w: Wind, t: TreeSpec, rng: Rng): number {
     tone: autumn ? 1 : blossom ? 0.65 : 0.5,
   };
   // blossoms: fresh green leaves showing through the flowers (so they never read as cotton / snow)
-  if (blossom) opts.speckle = { color: col(white ? '#8fb85a' : '#86ad55'), p: white ? 0.34 : 0.26, mix: 0.62 };
+  if (blossom) opts.speckle = { color: col(white ? '#8fb85a' : '#86ad55'), p: white ? 0.2 : 0.14, mix: 0.5 };
   if (autumn && rng.chance(0.6)) opts.speckle = { color: col(rng.pick(['#e8c24a', '#c9472f', '#a3b04a'])), p: 0.22, mix: 0.5 };
   const cseed = rng.int(0, 1e9);
   lobedCanopy(s, cx, cy, cz, lobes, t.far ? 1 : t.detail, cseed, opts);
@@ -1176,7 +1176,7 @@ export function bush(s: GeoSink, w: Wind, x: number, y: number, z: number, r: nu
     warm: 0.25,
     clump: Math.min(0.42, 0.18 + r * 0.14),
     tone: 0.55,
-    speckle: o.flower ? { color: o.flower, p: 0.22, mix: 0.7 } : undefined,
+    speckle: o.flower ? { color: o.flower, p: 0.12, mix: 0.6 } : undefined,
   });
   // flowering shrubs: a few real blossoms on the sunny top
   if (o.flower) {

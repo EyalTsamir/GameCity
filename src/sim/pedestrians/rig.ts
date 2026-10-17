@@ -308,11 +308,12 @@ export const PIV = {
   ELBOW: 7,
   WRIST: 8,
   NECK: 9,
+  TIP: 10,
 } as const;
-export const PIV_COUNT = 10;
+export const PIV_COUNT = 11;
 
 function pivotList(d: Dims): V3[] {
-  return [d.waist, d.chest, d.head, d.hip, d.knee, d.ankle, d.shoulder, d.elbow, d.wrist, d.neck];
+  return [d.waist, d.chest, d.head, d.hip, d.knee, d.ankle, d.shoulder, d.elbow, d.wrist, d.neck, d.tip];
 }
 
 /** 4 × PIV_COUNT vec3: base, then woman / child / heavy deltas (as the shader expects). */

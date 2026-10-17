@@ -95,7 +95,7 @@ const SIZE: Record<ScatterKind, [number, number, boolean]> = {
   palletGoods: [1.25, 1.05, false],
   drums: [1.5, 1.5, false],
   skip: [3.8, 1.9, false],
-  forklift: [2.7, 1.3, true],
+  forklift: [1.3, 3.1, true],
   crates: [1.7, 1.3, false],
   cableReel: [1.5, 1.1, false],
   gasCage: [1.5, 0.95, false],
@@ -273,7 +273,7 @@ export function planScatter(inp: ScatterInputs): ScatterItem[] {
     const area = (r.x1 - r.x0) * (r.z1 - r.z0);
     // café terraces outside ground-floor shops / towers facing the plaza
     for (const lot of lotsIn(a.blockId)) {
-      const cafeLot = lot.shopfront || lot.kind === 'hotel' || (lot.kind === 'tower' && rnd() < 0.6) || (lot.kind === 'office' && rnd() < 0.4) || lot.kind === 'townhall';
+      const cafeLot = lot.shopfront || lot.kind === 'hotel' || (lot.kind === 'tower' && rnd() < 0.85) || (lot.kind === 'office' && rnd() < 0.5) || lot.kind === 'townhall';
       if (!cafeLot) continue;
       for (const [ax, az, bx, bz, nx, nz] of facades(lot, r, 3.2)) {
         const L = Math.hypot(bx - ax, bz - az);
@@ -316,16 +316,30 @@ export function planScatter(inp: ScatterInputs): ScatterItem[] {
       if (k) {
         const fx = Math.sin(k.yaw),
           fz = Math.cos(k.yaw);
+        let seats = 0;
         for (const [lat, fwd] of [
           [-2.4, 3.0],
           [0.3, 3.4],
           [2.9, 2.8],
           [-3.6, 0.4],
-        ])
-          put(Z, 'cafe', k.x + fx * fwd + fz * lat, k.z + fz * fwd - fx * lat, k.yaw + (rnd() - 0.5) * 0.6, 0.3);
+          [3.7, 0.2],
+          [-1.2, 5.6],
+          [1.6, 5.8],
+          [-4.2, 2.6],
+          [4.4, 2.8],
+          [0.0, -3.4],
+        ]) {
+          if (seats >= 5) break;
+          if (put(Z, 'cafe', k.x + fx * fwd + fz * lat, k.z + fz * fwd - fx * lat, k.yaw + (rnd() - 0.5) * 0.6, 0.25)) seats++;
+        }
       }
     }
-    if (area > 300 && (blk?.kind === 'downtown' || blk?.kind === 'midtown')) putAny(Z, 'sculpture', raster(Z, 1.0, (x, z) => centreKey(x, z) + rnd() * 30), 0.8);
+    if (area > 300 && (blk?.kind === 'downtown' || blk?.kind === 'midtown')) {
+      // public art, well away from any existing statue / fountain
+      const art = plan.features.filter((f) => f.kind === 'statue' || f.kind === 'fountain');
+      const farFromArt = (x: number, z: number) => art.every((f) => Math.hypot(f.x - x, f.z - z) > 10);
+      putAny(Z, 'sculpture', raster(Z, 1.0, (x, z) => (farFromArt(x, z) ? 0 : 1e6) + centreKey(x, z) + rnd() * 30).filter(([x, z]) => farFromArt(x, z)), 0.8);
+    }
     // info board next to a walk line, bike racks near the doors
     if (area > 200) putAny(Z, 'infoBoard', raster(Z, 0.5, (x, z) => (inp.walkAt(x, z + 1.0) || inp.walkAt(x, z - 1.0) ? 0 : 100) + centreKey(x, z) * 0.01), 0.3);
     for (const lot of lotsIn(a.blockId)) {
@@ -456,7 +470,7 @@ export function planScatter(inp: ScatterInputs): ScatterItem[] {
       let nC = 0;
       for (const [wx, wz, nx, nz] of pts) {
         if (nC >= 2) break;
-        if (put(Z, 'container', ...atWall('container', wx, wz, nx, nz, 0.3), 0.5)) nC++;
+        if (put(Z, 'container', ...atWall('container', wx, wz, nx, nz, 0.5), 0.5)) nC++;
       }
       const edge: [number, number, number][] = [];
       for (let x = r.x0 + 4; x < r.x1 - 4; x += 1) edge.push([x, r.z0 + 2.6, 0], [x, r.z1 - 2.6, Math.PI]);
@@ -470,16 +484,12 @@ export function planScatter(inp: ScatterInputs): ScatterItem[] {
         if (put(Z, 'container', x, z, y, 0.5)) nC++;
       }
     }
-    if (rnd() < 0.85) {
-      // forklift parked near a loading door, at right angles to the wall
-      const doors = lots.flatMap((l) => l.doors);
-      const c: [number, number, number][] = [];
-      for (const d of doors) {
-        const nx = d.dir === 'E' ? 1 : d.dir === 'W' ? -1 : 0,
-          nz = d.dir === 'S' ? 1 : d.dir === 'N' ? -1 : 0;
-        for (const lat of [4.8, -4.8, 6.2, -6.2, 8.0, -8.0]) c.push([d.x + nx * 2.0 - nz * lat, d.z + nz * 2.0 + nx * lat, Math.atan2(nx, nz) + Math.PI / 2]);
+    if (rnd() < 0.9) {
+      // forklift parked alongside a wall
+      for (const [wx, wz, nx, nz] of pts) {
+        const off = 0.5 + SIZE.forklift[0] / 2 + 0.3;
+        if (put(Z, 'forklift', wx + nx * off, wz + nz * off, yawOf(nx, nz) + (rnd() < 0.5 ? Math.PI / 2 : -Math.PI / 2), 0.3)) break;
       }
-      putAny(Z, 'forklift', c, 0.3);
     }
     // clusters along the walls
     let placed = 0;

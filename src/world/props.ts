@@ -503,6 +503,10 @@ export default function create(ctx: CityContext): CityModule {
           at(kf);
           GK.kennel(kf, grng);
           break;
+        case 'pots':
+          at(kf);
+          GK.potPlants(kf, grng);
+          break;
       }
       inc(`g_${it.kind}`);
     }

@@ -36,7 +36,8 @@ export type GardenItemKind =
   | 'birdbath'
   | 'toys'
   | 'firepit'
-  | 'kennel';
+  | 'kennel'
+  | 'pots';
 
 export interface GardenItem {
   kind: GardenItemKind;
@@ -275,6 +276,11 @@ function planOne(lot: Lot, inp: GardenInputs, drives: Rect[], occ: OccupancyGrid
     const set: GardenItem = { kind: lounge ? 'loungeSet' : 'tableSet', ...xz(W(su, pcv)), yaw: F.yawFront + Math.PI, w: setW, d: setD, seed: Math.floor(rnd() * 1e9) };
     items.push(set);
     if (!lounge && rnd() < 0.72) items.push({ kind: 'parasol', ...xz(W(su, pcv)), yaw: 0, w: 2.6, d: 2.6, seed: Math.floor(rnd() * 1e9) });
+    // potted plants on the outer patio corners
+    for (const cu of [pu0 + 0.3, pu0 + pw - 0.3]) {
+      if (Math.abs(cu - su) < setW / 2 + 0.5) continue;
+      if (rnd() < 0.75) items.push({ kind: 'pots', ...xz(W(cu, bv0 + pd - 0.3)), yaw: rnd() * 6.28, w: 0.6, d: 0.6, seed: Math.floor(rnd() * 1e9) });
+    }
     // BBQ at the far end of the patio
     if (rnd() < 0.62) {
       const bu = su < pcu ? pu0 + pw - 0.45 : pu0 + 0.45;

@@ -745,3 +745,21 @@ export function stone(k: Kit, r: number, tint: number): void {
   k.s.rgb(c * 0.62, c * 0.6, c * 0.56);
   k.sh.cyl(0, 0, 0, r, r * 0.96, 0.045, 7, 2, true, tint * 3);
 }
+
+/** Two or three terracotta pots with flowering plants. */
+export function potPlants(k: Kit, rng: Rng): void {
+  const sh = k.sh;
+  const n = rng.int(2, 3);
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * TAU + rng.range(0, 1);
+    const x = Math.cos(a) * 0.17,
+      z = Math.sin(a) * 0.17;
+    const s = rng.range(0.75, 1.15);
+    k.m(rng.pick(['#b8643f', '#a2553a', '#c9c3b7', '#3f4549']), 'ceramic');
+    sh.cyl(x, 0, z, 0.1 * s, 0.14 * s, 0.24 * s, 7, 2);
+    k.m(rng.pick(['#3f7a3a', '#4f8a3a', '#2f6a35']), 'wood');
+    sh.ellipsoid(x, 0.3 * s, z, 0.15 * s, 0.13 * s, 0.15 * s, 0);
+    k.m(rng.pick(['#e8649a', '#f2c84b', '#e8574f', '#b46ad6', '#f5f0e6']), 'plastic');
+    sh.ellipsoid(x + 0.04, 0.39 * s, z, 0.07 * s, 0.05 * s, 0.07 * s, 0);
+  }
+}

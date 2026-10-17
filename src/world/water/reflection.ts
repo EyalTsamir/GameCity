@@ -78,6 +78,8 @@ export class PlanarReflection {
   private sz = new THREE.Vector2();
   private clearCol = new THREE.Color();
   private visSave: boolean[] = [];
+  private dbg: boolean;
+  private dbgList: THREE.Object3D[] = [];
   // stats
   calls = 0;
   tris = 0;
@@ -92,6 +94,7 @@ export class PlanarReflection {
     private nearWater: (box: THREE.Box3) => boolean,
   ) {
     this.level = initial;
+    this.dbg = ctx.debug.params.has('refldbg');
     this.rt = new THREE.WebGLRenderTarget(4, 4, {
       type: THREE.HalfFloatType,
       format: THREE.RGBAFormat,
@@ -152,6 +155,7 @@ export class PlanarReflection {
       }
     });
     this.meshes = this.base.length + this.full.length + (this.treesFar ? 1 : 0);
+    this.dbgList = [...this.base, ...this.full, ...(this.treesFar ? [this.treesFar] : [])];
     // render from inside the main scene pass (see the header)
     this.prevBefore = scene.onBeforeRender as unknown as (...args: unknown[]) => void;
     const self = this;
@@ -271,6 +275,20 @@ export class PlanarReflection {
       o.visible = !day && o.visible;
     }
 
+    // ?refldbg: draw one opted-in mesh at a time (cycling every 6 passes) with console markers,
+    // to attribute driver warnings to a mesh
+    let dbgHidden = 0;
+    if (this.dbg) {
+      const list = this.dbgList;
+      const k = Math.floor(this.renders / 6) % (list.length + 1);
+      if (this.renders % 6 === 0) console.warn(`[refldbg] ${k < list.length ? list[k].name : 'all'} (${k})`);
+      if (k < list.length) {
+        for (const o of list) {
+          vs[n + dbgHidden++] = o.visible;
+          if (o !== list[k]) o.visible = false;
+        }
+      }
+    }
     const auto = renderer.info.autoReset;
     const c0 = auto ? 0 : renderer.info.render.calls,
       t0 = auto ? 0 : renderer.info.render.triangles;
@@ -291,6 +309,7 @@ export class PlanarReflection {
       if (this.treesFar) this.treesFar.visible = vs[n++];
       for (const o of this.treesNear) o.visible = vs[n++];
       for (const o of this.night) o.visible = vs[n++];
+      if (dbgHidden) for (const o of this.dbgList) o.visible = vs[n++];
       scene.background = prevBg;
       scene.matrixWorldAutoUpdate = prevMWAU;
       renderer.shadowMap.autoUpdate = prevShadow;
