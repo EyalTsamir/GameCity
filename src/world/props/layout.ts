@@ -11,6 +11,9 @@ import { OCC, type OccupancyGrid } from '../../core/occupancy';
 import { SIDEWALK_Y, WALK_OFFSET, FURN_OFFSET } from '../../core/constants';
 import { hashString } from '../../core/rng';
 import type { Rect } from '../../core/geom';
+import { planGardens, itemDiscs, type GardenPlan } from './gardenPlan';
+
+export type { GardenPlan, GardenItem, GardenItemKind } from './gardenPlan';
 
 // ─────────────────────────────────────────────────────────────── raster ──
 
@@ -167,6 +170,11 @@ export interface Layout {
   plots: Plot[];
   /** keep-clear discs for anything standing at ground level (props + vegetation) */
   furniture: { x: number; z: number; r: number }[];
+  /**
+   * Back-garden kits per house lot (patio, shed, pool, trampoline…). Roads draws the patios and
+   * stepping stones, props the furniture; every item is also in `furniture` (trees/bushes keep off).
+   */
+  gardens: GardenPlan[];
 }
 
 export const MASK_WALK = 1;
@@ -246,7 +254,29 @@ function buildLayout(ctx: CityContext): Layout {
   }
   const borders = buildBorders(ctx, walk);
   const plots = buildPlots(ctx);
-  return { walk, lamps, benches, borders, plots, furniture };
+  const gardens = ctx.debug.params.has('nogardens')
+    ? []
+    : planGardens({
+        plan,
+        occ,
+        walkAt: (x, z) => (walk.get(x, z) & MASK_WALK) !== 0,
+        borders: borders.map((b) => ({ ax: b.ax, az: b.az, bx: b.bx, bz: b.bz, half: b.style === 'hedge' ? (b.street ? 0.3 : 0.33) : b.style === 'wall' ? 0.21 : 0.07 })),
+      });
+  for (const g of gardens) {
+    for (const it of g.items) for (const d of itemDiscs(it)) furniture.push(d);
+    if (g.patio) {
+      const p = g.patio;
+      const w = p.x1 - p.x0,
+        d = p.z1 - p.z0;
+      const n = Math.max(1, Math.round(Math.max(w, d) / Math.min(w, d)));
+      for (let k = 0; k < n; k++) {
+        const t = (k + 0.5) / n;
+        furniture.push({ x: w >= d ? p.x0 + w * t : (p.x0 + p.x1) / 2, z: w >= d ? (p.z0 + p.z1) / 2 : p.z0 + d * t, r: Math.min(2.8, Math.min(w, d) / 2 + 0.3) });
+      }
+    }
+    for (const s of g.stones) furniture.push({ x: s.x, z: s.z, r: 0.3 });
+  }
+  return { walk, lamps, benches, borders, plots, furniture, gardens };
 }
 
 function districtAt(ctx: CityContext, x: number, z: number): DistrictKind {

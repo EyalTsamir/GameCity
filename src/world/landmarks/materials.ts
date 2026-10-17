@@ -10,6 +10,7 @@
 import * as THREE from 'three';
 import type { GlobalUniforms } from '../../core/uniforms';
 import { LM_COMMON, LM_CUT, LM_KIN_PARS, LM_SURFACE, LIGHTS_VERT, LIGHTS_FRAG, GLOW_VERT, GLOW_FRAG } from './shaders';
+import { LAMP_APPLY_VIEW, LAMP_GLSL, bindLampChannel, lampUniforms } from '../../core/lampLight';
 
 export interface LmUniforms {
   uHours: { value: number };
@@ -126,6 +127,8 @@ function surfaceMaterial(g: GlobalUniforms, u: LmUniforms, kinetic: boolean, noO
     sh.uniforms.uSunDir = g.uSunDir;
     sh.uniforms.uSunUp = g.uDaylight;
     if (detail) sh.uniforms.uDetailDist = u.uDetailDist;
+    // night street lights + stadium floodlights (shared lamp light map)
+    Object.assign(sh.uniforms, lampUniforms());
     if (kinetic) {
       sh.uniforms.uTime = g.uTime;
       sh.uniforms.uCrane = u.uCrane;
@@ -157,8 +160,10 @@ ${kinetic ? 'lmKin(lmP, objectNormal);' : ''}`,
     sh.fragmentShader = sh.fragmentShader
       .replace('#include <common>', `#include <common>
 ${FRAG_PARS}
+${LAMP_GLSL}
 ${kinetic ? LM_CUT : ''}
 ${LM_SURFACE}`)
+      .replace('#include <lights_fragment_end>', `#include <lights_fragment_end>\n${LAMP_APPLY_VIEW}`)
       .replace(
         '#include <color_fragment>',
         `#include <color_fragment>
@@ -188,7 +193,7 @@ ${LM_SURFACE}`)
       .replace('#include <emissivemap_fragment>', REFLECT);
   };
   m.defines = { ...(noOrnament ? { LM_NO_ORNAMENT: '' } : {}), ...(STANDARD ? { LM_STANDARD: '' } : {}) };
-  m.customProgramCacheKey = () => (STANDARD ? 'S-' : 'L-') + (kinetic ? 'lm-kinetic-v3' : detail ? 'lm-detail-v3' : noOrnament ? 'lm-solid-v3' : 'lm-ornament-v3');
+  m.customProgramCacheKey = () => (STANDARD ? 'S-' : 'L-') + (kinetic ? 'lm-kinetic-v4' : detail ? 'lm-detail-v4' : noOrnament ? 'lm-solid-v4' : 'lm-ornament-v4');
   return m;
 }
 
@@ -238,6 +243,8 @@ export function createMaterials(g: GlobalUniforms): LmMaterials {
     uEnvK: { value: 1 },
     uDetailDist: { value: 100 },
   };
+  // the stadium floodlights' analytic spot lights follow uFlood
+  bindLampChannel('stadium', u.uFlood);
   const lights = new THREE.ShaderMaterial({
     vertexShader: LIGHTS_VERT,
     fragmentShader: LIGHTS_FRAG,

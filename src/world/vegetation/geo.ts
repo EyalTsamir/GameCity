@@ -48,6 +48,17 @@ class UBuf {
 export interface ExtraDef {
   name: string;
   size: number;
+  /** store as normalized Uint8 (values clamped to 0..1) — 4 bytes per vec4 instead of 16 */
+  u8?: boolean;
+}
+
+function toU8(a: Float32Array): Uint8Array {
+  const o = new Uint8Array(a.length);
+  for (let i = 0; i < a.length; i++) {
+    const v = a[i];
+    o[i] = v <= 0 ? 0 : v >= 1 ? 255 : Math.round(v * 255);
+  }
+  return o;
 }
 
 const _col = new THREE.Color();
@@ -183,7 +194,7 @@ export class GeoSink {
     g.setAttribute('position', new THREE.BufferAttribute(this.P.done(), 3));
     g.setAttribute('normal', new THREE.BufferAttribute(this.N.done(), 3));
     g.setAttribute('color', new THREE.BufferAttribute(this.C.done(), 3));
-    this.defs.forEach((d, i) => g.setAttribute(d.name, new THREE.BufferAttribute(this.X[i].done(), d.size)));
+    this.defs.forEach((d, i) => g.setAttribute(d.name, d.u8 ? new THREE.BufferAttribute(toU8(this.X[i].done()), d.size, true) : new THREE.BufferAttribute(this.X[i].done(), d.size)));
     const idx = this.I.a.slice(0, this.I.n);
     g.setIndex(new THREE.BufferAttribute(this.vcount > 65535 ? idx : new Uint16Array(idx), 1));
     g.computeBoundingSphere();

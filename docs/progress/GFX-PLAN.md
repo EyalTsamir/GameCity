@@ -18,6 +18,7 @@ all ten areas below — not token tweaks — while keeping the Adreno X1-45 perf
 | 8 | Facades/roofs flat at normal distance; daytime windows = dark stickers | **buildings** |
 | 9 | Bare back gardens; repeated house massing | **hardscape** (garden props) + **buildings** (house massing) |
 | 10 | Cliffs = smooth tan walls; flat lawns; stadium shell a plain box | **terrain** |
+| + | (user request) Human figures: more realistic anatomy, clothing, gait | **people-review** → **people** |
 
 ## File ownership (edit ONLY your files; the tree is shared and served live)
 
@@ -31,6 +32,7 @@ all ten areas below — not token tweaks — while keeping the Adreno X1-45 perf
 | vegetation | `src/world/vegetation.ts`, `src/world/vegetation/*` |
 | hardscape | `src/world/roads.ts`, `src/world/roads/*`, `src/world/props.ts`, `src/world/props/*` except `glow.ts` |
 | terrain | `src/world/terrain.ts`, `src/world/terrain/*` except `slab.ts`/`glow.ts`, `src/world/landmarks.ts`, `src/world/landmarks/*` except `glows.ts`/`shaders.ts`/`materials.ts` (stadium shell etc.) |
+| people (added later: realistic human figures) | `src/sim/pedestrians/figure.ts`, `render.ts`, `looks.ts`; render/pose plumbing only in `src/sim/pedestrians.ts` and `crowd.ts` (never movement logic). A read-only reviewer writes `docs/progress/people-review.md` first. |
 
 Need something in a file you don't own? Write it under "Requests to other areas" in your log; the
 lead relays it. A minimal additive change to a lead-owned file is allowed if you are blocked — list it

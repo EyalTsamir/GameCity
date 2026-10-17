@@ -12,8 +12,10 @@ import type { Rng } from '../../core/rng';
 import { GeoBuilder, type V3 } from './builder';
 import { type TerrainModel, type PortalDef, RIVER_WALL_END_X, SEA_WALL_Z0, SEA_WALL_Z1, RIVER_WALL_T, SEA_WALL_T } from './height';
 import { noiseTexture, GLSL_HASH, vnoise } from './noise';
+import { LAMP_GLSL, lampUniforms } from '../../core/lampLight';
 import { KIND, type LadderSpot } from './kinds';
 import { createRailings, type RailingResult } from './railings';
+import { buildCliffs, type CliffResult } from './cliffs';
 import type { GlowPoint } from './glow';
 
 export { KIND };
@@ -46,6 +48,8 @@ export interface MasonryResult {
   triangles: number;
   /** tunnel bore roof checks for invariants: sample points (x, z, roofY) */
   boreSamples: { x: number; z: number; roof: number }[];
+  /** stratified rock skin on the steep faces (null with ?legacyterrain / ?nocliffs) */
+  cliffs: CliffResult | null;
 }
 
 const C = (h: string) => new THREE.Color(h);
@@ -73,6 +77,7 @@ uniform float uLights;
 uniform vec3 mMortar;
 uniform vec3 mAlgae;
 uniform vec3 mMoss;
+uniform vec3 mGrass;
 varying vec4 vMas;
 varying vec3 vMW;
 varying vec3 vMN;
@@ -102,6 +107,11 @@ vec3 masonryColor(vec3 base) {
   float kind = vMas.x;
   vec3 p = vMW;
   vec3 n = normalize(vMN);
+  // cliff face coordinates (u along the face, y up) + derivatives taken outside the kind branches
+  vec2 cuv = vec2(dot(p.xz, vMas.zw), p.y);
+  vec2 cdx = dFdx(cuv), cdy = dFdy(cuv);
+  vec2 pdx = dFdx(p.xz), pdy = dFdy(p.xz);
+  float fwY = fwidth(p.y);
   vec2 uv;
   if (abs(n.y) < 0.7) uv = vec2(dot(p.xz, normalize(vec2(-n.z, n.x))), p.y);
   else uv = vec2(dot(p.xz, vMas.zw), dot(p.xz, vec2(-vMas.w, vMas.z)));
@@ -134,11 +144,45 @@ vec3 masonryColor(vec3 base) {
     mRough = 0.93;
   } else if (kind < 4.5) {
     mRough = 1.0;
-  } else {
+  } else if (kind < 5.5) {
     mRough = 0.5;
+  } else {
+    // stratified cliff rock (cliffs.ts): vMas.y = stratum tone seed
+    vec2 su = cuv * vec2(0.045, 0.11);
+    vec4 nu = textureGrad(tNoise, su, cdx * vec2(0.045, 0.11), cdy * vec2(0.045, 0.11));
+    vec2 sv = cuv * vec2(0.31, 0.62) + vMas.y * 3.1;
+    vec4 nv = textureGrad(tNoise, sv, cdx * vec2(0.31, 0.62), cdy * vec2(0.31, 0.62));
+    vec2 ss = cuv * vec2(0.21, 0.016);
+    float streak = textureGrad(tNoise, ss, cdx * vec2(0.21, 0.016), cdy * vec2(0.21, 0.016)).b;
+    float side = 1.0 - smoothstep(0.55, 0.9, n.y);
+    // sub-bedding: thin dark lines every ~0.4 m that fade out (instead of shimmering) with distance
+    float bed = p.y * 2.6 + nu.r * 1.3 + vMas.y * 5.0;
+    float fw = fwY * 2.6 + 1e-4;
+    float fb = fract(bed);
+    float line = (1.0 - smoothstep(0.0, 0.1 + fw, min(fb, 1.0 - fb))) * (1.0 - smoothstep(0.25, 0.7, fw));
+    col *= 1.0 - 0.17 * line * side;
+    // vertical weathering streaks (water stains) + grain + ochre lichen blotches
+    col *= mix(1.0, 0.82 + 0.26 * streak, side);
+    col *= 0.9 + 0.18 * nv.g;
+    col = mix(col, col * vec3(1.1, 1.04, 0.86) + vec3(0.035, 0.028, 0.0), smoothstep(0.6, 0.8, nu.a) * 0.55 * side);
+    // hairline cracks across the strata
+    float ck = 1.0 - smoothstep(0.0, 0.03 + fw * 0.2, abs(nv.r - 0.5));
+    col *= 1.0 - 0.22 * ck * side * (1.0 - smoothstep(0.15, 0.5, fw));
+    // ledges: moss and grass tufts on everything facing up, the edge broken by noise
+    float up = smoothstep(0.45, 0.85, n.y);
+    vec2 mp = p.xz * 0.55;
+    float mossN = textureGrad(tNoise, mp, pdx * 0.55, pdy * 0.55).g * 0.6 + nv.b * 0.4;
+    float moss = up * smoothstep(0.3, 0.52, mossN);
+    vec3 mossC = mix(mMoss, mGrass, smoothstep(0.35, 0.7, nu.g)) * (0.85 + 0.3 * nv.r);
+    col = mix(col, mossC, moss * 0.94);
+    // a little green creeping over the lip of each ledge
+    col = mix(col, mMoss * 0.8, smoothstep(0.15, 0.45, n.y) * (1.0 - up) * 0.35 * smoothstep(0.4, 0.6, mossN));
+    // undersides / creases in shade
+    col *= 0.68 + 0.32 * smoothstep(-0.7, 0.1, n.y);
+    mRough = 0.94;
   }
   // waterline: wet band + algae, darker below
-  if (kind > 0.5 && kind < 3.5) {
+  if ((kind > 0.5 && kind < 3.5) || kind > 5.5) {
     float wetb = 1.0 - smoothstep(-1.62, -1.15, p.y);
     col *= 1.0 - 0.3 * wetb;
     float alg = (1.0 - smoothstep(-1.75, -1.5, p.y)) * (0.6 + 0.4 * nz.r);
@@ -156,6 +200,8 @@ function masonryMaterial(ctx: CityContext): THREE.MeshStandardMaterial {
     mMortar: { value: C('#8a8276') },
     mAlgae: { value: C('#4e5a3a') },
     mMoss: { value: C('#6f8a45') },
+    mGrass: { value: C('#86a54e') },
+    ...lampUniforms(),
   };
   const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9, metalness: 0 });
   mat.onBeforeCompile = (shader) => {
@@ -164,15 +210,16 @@ function masonryMaterial(ctx: CityContext): THREE.MeshStandardMaterial {
       .replace('#include <common>', '#include <common>\nattribute vec4 aMas;\nvarying vec4 vMas;\nvarying vec3 vMW;\nvarying vec3 vMN;')
       .replace('#include <begin_vertex>', '#include <begin_vertex>\nvMas = aMas;\nvMW = (modelMatrix * vec4(transformed, 1.0)).xyz;\nvMN = normalize(mat3(modelMatrix) * objectNormal);');
     shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', '#include <common>\n' + MASONRY_PARS)
+      .replace('#include <common>', '#include <common>\n' + LAMP_GLSL + MASONRY_PARS)
+      .replace('#include <lights_fragment_end>', '#include <lights_fragment_end>\nreflectedLight.indirectDiffuse += diffuseColor.rgb * thLampLight(vMW, normalize(vMN));')
       .replace('#include <color_fragment>', '#include <color_fragment>\ndiffuseColor.rgb = masonryColor(diffuseColor.rgb);')
       .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = mRough;')
       .replace(
         '#include <emissivemap_fragment>',
-        '#include <emissivemap_fragment>\nif (vMas.x > 4.5) totalEmissiveRadiance += diffuseColor.rgb * (1.1 + 2.6 * uLights);',
+        '#include <emissivemap_fragment>\nif (vMas.x > 4.5 && vMas.x < 5.5) totalEmissiveRadiance += diffuseColor.rgb * (1.1 + 2.6 * uLights);',
       );
   };
-  mat.customProgramCacheKey = () => 'th-masonry-v1';
+  mat.customProgramCacheKey = () => 'th-masonry-v2';
   return mat;
 }
 
@@ -825,6 +872,20 @@ export function createMasonry(ctx: CityContext, model: TerrainModel): MasonryRes
   // rocks
   const rocks = placeRocks(b, ctx, model, ctx.rng('terrain-rocks'));
 
+  // stratified rock skin on the cliffs + scree stones at their feet
+  const prm = ctx.debug.params;
+  let cliffs: CliffResult | null = null;
+  if (!prm.has('legacyterrain') && !prm.has('nocliffs')) {
+    const srng = ctx.rng('terrain-scree');
+    const sink: { x: number; z: number; r: number }[] = [];
+    cliffs = buildCliffs(ctx, model, b, ctx.rng('terrain-cliffs'), (x, z, size, embed, y) => {
+      if (rocks.some((q) => Math.hypot(q.x - x, q.z - z) < q.r + size * 0.6)) return false;
+      addRock(b, srng, model, x, z, size, embed, sink, y, 0.92);
+      return true;
+    });
+    rocks.push(...cliffs.stones);
+  }
+
   // iron railings / ladders (their lamp globes are emissive masonry)
   const railings = createRailings(ladders, gaps, b);
 
@@ -850,5 +911,5 @@ export function createMasonry(ctx: CityContext, model: TerrainModel): MasonryRes
   vmesh.matrixAutoUpdate = false;
   vmesh.updateMatrix();
 
-  return { mesh, veils: vmesh, rocks, ladders, walls, gaps, railings, lights, triangles: b.triangles + veils.triangles, boreSamples };
+  return { mesh, veils: vmesh, rocks, ladders, walls, gaps, railings, lights, triangles: b.triangles + veils.triangles, boreSamples, cliffs };
 }

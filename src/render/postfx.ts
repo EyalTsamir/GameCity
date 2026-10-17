@@ -289,12 +289,27 @@ export default function create(ctx: CityContext): CityModule {
     // ── bloom & grade by time of day
     const night = ctx.clock.night;
     const dusk = ctx.clock.dusk;
-    if (bloomOn) {
-      bloom.intensity = 0.32 + 0.85 * night;
-      bloom.luminanceMaterial.threshold = 1.15 - 0.45 * night;
+    const skySvc = ctx.services.sky as { isLegacy?: () => boolean } | undefined;
+    const legacy = skySvc?.isLegacy ? skySvc.isLegacy() : params.has('legacylight');
+    if (legacy) {
+      if (bloomOn) {
+        bloom.intensity = 0.32 + 0.85 * night;
+        bloom.luminanceMaterial.threshold = 1.15 - 0.45 * night;
+      }
+      look.set('uWarm', 0.012 * (1 - night) + 0.018 * dusk - 0.025 * night);
+      look.set('uSat', 1.2 - 0.08 * night);
+    } else {
+      // studio key: sunlit whites sit higher (stronger sun), so the day threshold rises to keep
+      // daylight crisp; at night only real emitters (lamps, windows, neon) cross it — the dark
+      // moonlit city never feeds the bloom, so there is no veil
+      if (bloomOn) {
+        bloom.intensity = 0.26 + 0.74 * night;
+        bloom.luminanceMaterial.threshold = 1.45 - 0.57 * night;
+        bloom.luminanceMaterial.smoothing = 0.32 - 0.08 * night;
+      }
+      look.set('uWarm', 0.014 * (1 - night) + 0.02 * dusk - 0.012 * night);
+      look.set('uSat', 1.2 - 0.1 * night);
     }
-    look.set('uWarm', 0.012 * (1 - night) + 0.018 * dusk - 0.025 * night);
-    look.set('uSat', 1.2 - 0.08 * night);
 
     // ── cloud shadows (data published by the sky module)
     clouds.source = ctx.services.cloudShadows as CloudShadowData | undefined;

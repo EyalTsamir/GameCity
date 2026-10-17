@@ -1,10 +1,68 @@
-// Night light for street furniture: soft additive light pools on the ground under every lamp
-// and camera-facing halos around the lamp heads — all in ONE draw call. Intensity follows
-// uniforms.uLights; invisible glows collapse to nothing in the vertex shader (no fill cost by day).
-// Halos gently fade when the camera is very close (no giant sprite in the face).
+// Night light for street furniture.
+//  • Light pools are NOT drawn any more: every pool is registered as a real light source in the
+//    shared lamp light map (core/lampLight.ts), which lights the ground, walls, crowns and people
+//    multiplied by their own colour. The head height comes from the halo of the same lamp.
+//  • What stays here: camera-facing halos around the lamp heads — ONE draw call. Intensity follows
+//    uniforms.uLights; invisible glows collapse to nothing in the vertex shader (no fill cost by day).
+//    Halos gently fade when the camera is very close (no giant sprite in the face).
+//  • ?legacylamps restores the old flat additive pools (A/B).
 
 import * as THREE from 'three';
 import type { GlobalUniforms } from '../../core/uniforms';
+import { addLampLights, type LampLight } from '../../core/lampLight';
+
+const LEGACY = typeof location !== 'undefined' && new URLSearchParams(location.search).has('legacylamps');
+
+function hash2(x: number, z: number): number {
+  const s = Math.sin(x * 12.9898 + z * 78.233) * 43758.5453;
+  return s - Math.floor(s);
+}
+
+/** Turn the pools of a glow list into lamp lights (pool + halo of the same lamp = one light). */
+function registerPools(glows: Glow[]): void {
+  const lights: LampLight[] = [];
+  for (let i = 0; i < glows.length; i++) {
+    const p = glows[i];
+    if (p.halo) continue;
+    const c = '#' + new THREE.Color(p.color).getHexString();
+    const jitter = 0.9 + 0.2 * hash2(p.x, p.z);
+    // the lamp's halo is pushed right before its pool, at the same xz
+    let head: Glow | null = null;
+    for (const j of [i - 1, i + 1]) {
+      const h = glows[j];
+      if (h && h.halo && Math.abs(h.x - p.x) < 0.05 && Math.abs(h.z - p.z) < 0.05) head = h;
+    }
+    if (head) {
+      const pole = Math.max(1, head.y - p.y);
+      const white = c === '#fff1d6';
+      lights.push({
+        x: head.x,
+        y: head.y - 0.12,
+        z: head.z,
+        pole,
+        radius: p.size * 1.05,
+        color: c,
+        intensity: (p.intensity / 0.22) * jitter,
+        kind: pole >= 4.5 ? 'street' : white ? 'plaza' : 'path',
+      });
+    } else {
+      // kiosk / phone box / bus shelter spill: low, soft, slightly elongated
+      lights.push({
+        x: p.x,
+        y: p.y + 2.3,
+        z: p.z,
+        pole: 2.3,
+        radius: p.size * 1.15,
+        color: c,
+        intensity: (p.intensity / 0.22) * 0.55 * jitter,
+        kind: 'spill',
+        stretch: p.stretch,
+        yaw: p.yaw,
+      });
+    }
+  }
+  addLampLights(lights);
+}
 
 export interface Glow {
   x: number;
@@ -85,7 +143,12 @@ void main() {
 }
 `;
 
-export function createGlowMesh(u: GlobalUniforms, glows: Glow[]): THREE.Mesh {
+export function createGlowMesh(u: GlobalUniforms, allGlows: Glow[]): THREE.Mesh {
+  let glows = allGlows;
+  if (!LEGACY) {
+    registerPools(allGlows);
+    glows = allGlows.filter((g) => g.halo);
+  }
   const n = glows.length;
   const center = new Float32Array(n * 12);
   const corner = new Float32Array(n * 8);

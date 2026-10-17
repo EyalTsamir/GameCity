@@ -12,6 +12,7 @@ import { createClouds, type HeroView, type Obstacle } from './sky/clouds';
 import { ShadowFitter } from './sky/shadowFit';
 import { EnvironmentBaker } from './sky/env';
 import { patchShadowChunk } from './sky/shadowPatch';
+import { patchIBLChunk } from './sky/iblPatch';
 import { createRain } from './sky/rain';
 import { cameraFocus } from './focus';
 import { TONE_MAPPING } from './look';
@@ -46,7 +47,11 @@ function liftElevation(src: THREE.Vector3, minSin: number, out: THREE.Vector3): 
 
 export default async function create(ctx: CityContext): Promise<CityModule> {
   const { renderer, scene, clock, plan } = ctx;
+  // ?legacylight = the original light rig (palette, shadow filtering, IBL) for A/B runs
+  const legacyParam = ctx.debug.params.has('legacylight');
+  let legacy = legacyParam;
   patchShadowChunk();
+  if (!legacyParam) patchIBLChunk();
   renderer.toneMapping = TONE_MAPPING;
   renderer.shadowMap.enabled = ctx.quality.shadows;
   renderer.shadowMap.type = THREE.PCFShadowMap;
@@ -108,6 +113,7 @@ export default async function create(ctx: CityContext): Promise<CityModule> {
   scene.fog = fog;
   scene.background = new THREE.Color('#d8e8f2');
   const env = new EnvironmentBaker(renderer, 128);
+  env.studio = !legacy;
   scene.environmentIntensity = 0.7;
 
   const fitter = new ShadowFitter({ slab: plan.slab, minY: -8, maxY: Math.max(maxStructure + 10, 175), sampleHeights: [0, 28] });
@@ -134,13 +140,24 @@ export default async function create(ctx: CityContext): Promise<CityModule> {
   ctx.services.cloudShadows = cloudShadows;
   const _shTint = new THREE.Color();
 
-  ctx.services.sky = {
+  /** live multipliers on top of the palette (debug / tuning sessions only) */
+  const tune = { sun: 1, hemi: 1, env: 1, exposure: 1, pcf: 1, bias: 1 };
+  const skyService = {
     sun,
     hemi,
     setWeather(r: number) {
       forced = Number.isFinite(r) ? Math.min(1, Math.max(0, r)) : null;
     },
+    /** A/B: switch palette + shadow filtering to the original rig at runtime (IBL patch stays as loaded) */
+    setLegacy(on: boolean) {
+      legacy = !!on;
+      env.studio = !legacy;
+      lastJump = true;
+    },
+    isLegacy: () => legacy,
+    tune,
   };
+  ctx.services.sky = skyService;
 
   let test: RenderTest | null = null;
   if (ctx.debug.params.has('rendertest')) {
@@ -161,7 +178,7 @@ export default async function create(ctx: CityContext): Promise<CityModule> {
 
   const frameUpdate = (realDt: number) => {
     realTime += realDt;
-    samplePalette(clock.hours, state);
+    samplePalette(clock.hours, state, legacy);
     const sh = clock.sunHeight;
 
     // ── weather envelope
@@ -187,15 +204,15 @@ export default async function create(ctx: CityContext): Promise<CityModule> {
     usingMoon = moonW > sunW;
     if (usingMoon) liftElevation(clock.moonDir, Math.sin(THREE.MathUtils.degToRad(14)), _L);
     else liftElevation(clock.sunDir, Math.sin(THREE.MathUtils.degToRad(6.5)), _L);
-    lightI = state.sunI * Math.max(sunW, moonW) * (1 - overcast * 0.72);
+    lightI = state.sunI * Math.max(sunW, moonW) * (1 - overcast * 0.72) * tune.sun;
     sun.color.copy(state.sun);
     if (overcast > 0) sun.color.lerp(_grey.setRGB(0.85, 0.88, 0.95), overcast * 0.6);
     sun.intensity = lightI;
-    sun.shadow.radius = usingMoon ? 3.5 : 2.2 + 1.2 * state.glowI * 0.5 + overcast * 2;
+    if (legacy) sun.shadow.radius = usingMoon ? 3.5 : 2.2 + 1.2 * state.glowI * 0.5 + overcast * 2;
 
     hemi.color.copy(state.hemiSky);
     hemi.groundColor.copy(state.hemiGround);
-    hemi.intensity = state.hemiI * (1 + overcast * 0.12);
+    hemi.intensity = state.hemiI * (1 + overcast * (legacy ? 0.12 : 0.5)) * tune.hemi;
     if (overcast > 0) {
       const g = lum(hemi.color);
       hemi.color.lerp(_grey.setRGB(g, g * 1.02, g * 1.08), overcast * 0.55);
@@ -221,17 +238,30 @@ export default async function create(ctx: CityContext): Promise<CityModule> {
     fog.near = (dist * 1.1 + 160) * (1 - overcast * 0.45);
     fog.far = (dist * 3.2 + 1700 + camH * 1.5) * (1 - overcast * 0.5);
 
-    renderer.toneMappingExposure = state.exposure * (1 + overcast * 0.12);
-    scene.environmentIntensity = state.env * (1 - overcast * 0.2);
+    renderer.toneMappingExposure = state.exposure * (1 + overcast * 0.12) * tune.exposure;
+    scene.environmentIntensity = state.env * (1 - overcast * 0.2) * tune.env;
 
     if (sun.castShadow) {
-      const maxR = THREE.MathUtils.clamp(dist * 1.55 + 30, 70, 420);
-      const minR = THREE.MathUtils.clamp(dist * 0.55, 28, 200);
+      const maxR = legacy ? THREE.MathUtils.clamp(dist * 1.55 + 30, 70, 420) : THREE.MathUtils.clamp(dist * 1.2 + 24, 60, 420);
+      const minR = legacy ? THREE.MathUtils.clamp(dist * 0.55, 28, 200) : THREE.MathUtils.clamp(dist * 0.45, 22, 200);
       fitter.fit(ctx.camera, sun, _L, _focus, maxR, minR);
       const cam = sun.shadow.camera;
       const range = Math.max(10, cam.far - cam.near);
-      sun.shadow.normalBias = fitter.texel * 1.1;
-      sun.shadow.bias = -(fitter.texel * 0.35 + 0.02) / range;
+      const texel = fitter.texel;
+      if (legacy) {
+        sun.shadow.normalBias = texel * 1.1;
+        sun.shadow.bias = -(texel * 0.35 + 0.02) / range;
+      } else {
+        // penumbra in WORLD units (a small sun-disc softness that grows a little at low sun and
+        // for the moon), converted to texels of the fitted map: close views get soft-but-crisp
+        // edges, far views stay at ~1 texel instead of smearing over several texels
+        const world = usingMoon ? 0.42 : 0.15 + 0.12 * state.glowI + overcast * 0.9;
+        sun.shadow.radius = THREE.MathUtils.clamp((world / texel) * tune.pcf, 1.0, 3.2);
+        // normal offset scaled with the texel (acne) but smaller than before: it shortens small
+        // casters' shadows by bias·cot(elevation) at low sun
+        sun.shadow.normalBias = texel * 0.8 * tune.bias;
+        sun.shadow.bias = -(texel * 0.3 + 0.02) / range;
+      }
       lastShadowHs = fitter.halfSize;
     } else {
       sun.position.copy(_focus).addScaledVector(_L, 400);
@@ -276,6 +306,10 @@ export default async function create(ctx: CityContext): Promise<CityModule> {
         exposure: Math.round(renderer.toneMappingExposure * 100) / 100,
         shadowHalf: Math.round(lastShadowHs),
         shadowTexelCm: Math.round(fitter.texel * 1000) / 10,
+        shadowRadius: Math.round(sun.shadow.radius * 100) / 100,
+        hemiI: Math.round(hemi.intensity * 100) / 100,
+        envI: Math.round(scene.environmentIntensity * 100) / 100,
+        key: legacy ? 'legacy' : 'studio',
         clouds: clouds.count,
         cloudsActive: clouds.stats().active,
         cloudsOverCity: clouds.stats().overCity,

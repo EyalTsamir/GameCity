@@ -44,6 +44,13 @@ void main() {
 }
 `;
 
+function desaturate(c: THREE.Color, k: number): void {
+  const l = 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b;
+  c.r += (l - c.r) * k;
+  c.g += (l - c.g) * k;
+  c.b += (l - c.b) * k;
+}
+
 export class EnvironmentBaker {
   private pmrem: THREE.PMREMGenerator;
   private scene = new THREE.Scene();
@@ -53,6 +60,8 @@ export class EnvironmentBaker {
   private cur = new Float32Array(12);
   private lastBake = -1e9;
   bakes = 0;
+  /** studio key: smaller sun lobe and a slightly desaturated sky in the fill (false = original) */
+  studio = true;
 
   constructor(private renderer: THREE.WebGLRenderer, private size = 128) {
     this.pmrem = new THREE.PMREMGenerator(renderer);
@@ -104,13 +113,19 @@ export class EnvironmentBaker {
     const u = this.material.uniforms;
     (u.uZenith.value as THREE.Color).copy(state.zenith);
     (u.uHorizon.value as THREE.Color).copy(state.horizon);
+    if (this.studio) {
+      // cool, but not saturated-blue shadows: pull the sky part of the fill 30 % toward grey
+      desaturate(u.uZenith.value as THREE.Color, 0.3);
+      desaturate(u.uHorizon.value as THREE.Color, 0.2);
+    }
     // what the city "sees" below the horizon: lit ground in the day, dark streets at night
     (u.uGround.value as THREE.Color).copy(state.hemiGround).multiplyScalar(0.45 * state.hemiI).lerp(state.fog, 0.25);
     (u.uGlow.value as THREE.Color).copy(state.glow);
     u.uGlowI.value = state.glowI;
     (u.uSunDir.value as THREE.Vector3).copy(sunDir);
     (u.uSunCol.value as THREE.Color).copy(state.sun);
-    u.uSunI.value = sunVis * Math.min(1.5, state.sunI * 0.35);
+    // broad sun lobe: the direct light already models the sun side, so the studio key keeps it small
+    u.uSunI.value = sunVis * (this.studio ? Math.min(1.1, state.sunI * 0.25) : Math.min(1.5, state.sunI * 0.35));
     (u.uCity.value as THREE.Color).setRGB(1.0, 0.6, 0.32).multiplyScalar(0.08 * cityGlow);
 
     // three's GGX prefilter shader trips a benign HLSL constant-folding warning

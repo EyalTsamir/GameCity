@@ -15,9 +15,12 @@ import { OCC } from '../core/occupancy';
 import { Rng, hash01 } from '../core/rng';
 import { SIDEWALK_Y, RIVER, QUAY_X } from '../core/constants';
 import type { Area, DistrictKind } from '../core/plan';
-import { GeoSink, Shaper, staticMesh } from './vegetation/geo';
-import { windMaterials } from './vegetation/material';
-import { buildTree, bush, hedge, Wind, col, LEAF, type Species, type TreeSpec } from './vegetation/species';
+import { GeoSink, Shaper, staticMesh, type ExtraDef } from './vegetation/geo';
+import { windMaterials, foliageKnobs } from './vegetation/material';
+import { windMaterials as legacyWindMaterials } from './vegetation/legacy/material';
+import * as NEW from './vegetation/species';
+import * as OLD from './vegetation/legacy/species';
+import { Wind, col, LEAF, type Species, type TreeSpec } from './vegetation/species';
 import { flowerBed, flowerClump, crop, soilRow, reeds, lily, surround, FLOWERS, type Surround } from './vegetation/plants';
 import { getLayout, occAny, PLANTER, hrand, MASK_WALK, DistanceLod, ChunkCuller, chunkOf, type Layout } from './props/layout';
 
@@ -94,6 +97,26 @@ export default function create(ctx: CityContext): CityModule {
   const layout: Layout = getLayout(ctx);
   const slab = plan.slab;
   const density = ctx.quality.density;
+  // A/B: ?legacyveg = the pre-overhaul generators + material (same placement)
+  const legacy = ctx.debug.params.has('legacyveg') && ctx.debug.params.get('legacyveg') !== '0';
+  const buildTree: (s: GeoSink, w: Wind, t: TreeSpec) => unknown = legacy ? OLD.buildTree : NEW.buildTree;
+  const bush = legacy ? OLD.bush : NEW.bush;
+  const hedge = legacy ? OLD.hedge : NEW.hedge;
+  const EXTRAS: ExtraDef[] = [
+    { name: 'aWind', size: 4 },
+    { name: 'aLeaf', size: 4, u8: true },
+  ];
+  // shading knobs for tuning / A/B: ?vegbump=0.9&vegtrans=0.9&vegwrap=0.45&vegtone=1 (vegfx=0 → plain shading)
+  for (const [k, u] of [
+    ['vegbump', foliageKnobs.bump],
+    ['vegtrans', foliageKnobs.trans],
+    ['vegwrap', foliageKnobs.wrap],
+    ['vegtone', foliageKnobs.tone],
+  ] as const) {
+    const v = parseFloat(ctx.debug.params.get(k) ?? '');
+    if (Number.isFinite(v)) u.value = v;
+  }
+  const fx = ctx.debug.params.get('vegfx') !== '0';
 
   // ── obstacles for anything planted
   const furn = new DiscHash(6);
@@ -145,7 +168,13 @@ export default function create(ctx: CityContext): CityModule {
 
   function plant(t: Omit<Planted, 'seed' | 'detail'> & { seed?: number; detail?: number }): Planted {
     const broad = t.sp !== 'conifer' && t.sp !== 'palm';
-    const p = { ...t, seed: t.seed ?? Math.floor(hash01(t.x * 7.31, t.z * 3.17, 11) * 1e9), detail: t.detail ?? (broad && t.r >= 3.4 ? 3 : 2) } as Planted;
+    const p = {
+      ...t,
+      seed: t.seed ?? Math.floor(hash01(t.x * 7.31, t.z * 3.17, 11) * 1e9),
+      detail: t.detail ?? (broad && t.r >= 3.4 ? 3 : 2),
+      // per-tree macro tone (lighter/yellower ↔ darker/bluer) so groves never read as one colour
+      tone: t.tone ?? 0.5 + (hash01(t.x * 1.7, t.z * 2.3, 23) - 0.5) * 0.55,
+    } as Planted;
     planted.push(p);
     trees.add(p.x, p.z, p.r);
     return p;
@@ -496,11 +525,17 @@ export default function create(ctx: CityContext): CityModule {
       if (bad) continue;
       if (turbines.some((t) => Math.hypot(t.x - x, t.z - z) < 4.5)) continue;
       const crest = smooth(4, 15, h0);
+      // lower rim of the forest (the edge the city looks at): more broadleaf, birch and young trees
+      const edge = legacy ? 0 : 1 - smooth(1.2, 4.5, h0);
       // patches: conifer-dominated stands vs. broadleaf stands (low-frequency noise), more conifers up high
       const stand = Math.sin(x * 0.043 + 0.7) * Math.sin(z * 0.11 + 2.1) + 0.5 * Math.sin(x * 0.11 - z * 0.07);
-      const conP = Math.min(0.9, Math.max(0.12, 0.38 + 0.3 * crest + 0.32 * stand));
-      const sp: Species = rng.chance(conP) ? 'conifer' : rng.weighted<Species>(['round', 'birch', 'autumn', 'column'], [12, 1.4, 1.2, 0.5]);
-      const sz = sp === 'conifer' ? size('conifer', rng, rng.chance(0.25 + crest * 0.4) ? 2 : 1) : size(sp, rng, rng.chance(0.5) ? 2 : 1);
+      const conP = Math.min(0.9, Math.max(0.12, 0.38 + 0.3 * crest + 0.32 * stand - 0.3 * edge));
+      const sp: Species = rng.chance(conP) ? 'conifer' : rng.weighted<Species>(['round', 'birch', 'autumn', 'column'], [12, 1.4 + 4 * edge, 1.2, 0.5]);
+      const young = !legacy && hash01(x * 3.1, z * 1.9, 41) < 0.12 + 0.3 * edge;
+      const sz = sp === 'conifer' ? size('conifer', rng, rng.chance(0.25 + crest * 0.4) ? 2 : young ? 0 : 1) : size(sp, rng, rng.chance(0.5) ? 2 : young ? 0 : 1);
+      // stand tone: dark spruce stands vs lighter mixed groves, plus per-tree jitter
+      const toneN = 0.5 + 0.3 * Math.sin(x * 0.067 + 2.3) * Math.sin(z * 0.091 + 0.6) + 0.16 * Math.sin(x * 0.19 - z * 0.13) - 0.12 * crest;
+      const tone = Math.min(1, Math.max(0, toneN + (hash01(x * 5.3, z * 4.7, 43) - 0.5) * 0.4));
       if (sp === 'conifer') sz.r *= rng.range(0.82, 1.12);
       if (x > slab.x1 - sz.r || x > QUAY_X - 4) continue;
       if (z < slab.z0 + sz.r * 0.85) continue;
@@ -509,21 +544,21 @@ export default function create(ctx: CityContext): CityModule {
       if (occAny(occ, x, z, sz.r + 0.6, blockers)) continue;
       if (rocks.any(x, z, 6, (id, d) => d < rocks.r[id] + 1.2)) continue;
       if (trees.any(x, z, sz.r + 4.5, (id, d) => d < Math.max(1.6, (sz.r + trees.r[id]) * 0.58))) continue;
-      plant({ sp, x, z, y: h0 - 0.1 - slope * 0.25, h: sz.h, r: sz.r, surround: 'none', syaw: 0, tag: 'forest', detail: 1 });
+      plant({ sp, x, z, y: h0 - 0.1 - slope * 0.25, h: sz.h, r: sz.r, surround: 'none', syaw: 0, tag: 'forest', detail: 1, tone });
       forestCount++;
     }
   }
 
   // ─────────────────────────────────────────────────────────── build trees ──
   const mkTree = () => {
-    const sk = new GeoSink([{ name: 'aWind', size: 4 }]);
+    const sk = new GeoSink(EXTRAS);
     return { s: sk, w: new Wind(sk), sh: new Shaper(sk) };
   };
   // near meshes come in west/east chunks (culled per frame); far trees + forest are single meshes
   const TC = [mkTree(), mkTree()];
-  const forestSink = new GeoSink([{ name: 'aWind', size: 4 }]);
+  const forestSink = new GeoSink(EXTRAS);
   const fw = new Wind(forestSink);
-  const farSink = new GeoSink([{ name: 'aWind', size: 4 }]);
+  const farSink = new GeoSink(EXTRAS);
   const tfw = new Wind(farSink);
   // plants: coarse (bushes, hedges, soil rows: visible from afar) + fine (flowers, crops, reeds, grates)
   const PC = [mkTree(), mkTree()];
@@ -909,8 +944,8 @@ export default function create(ctx: CityContext): CityModule {
   const parts = (ctx.debug.params.get('vegparts') ?? 'trees,forest,plants').split(',');
   const shadows = ctx.debug.params.get('vegshadow') !== '0';
   const vmat = ctx.debug.params.get('vegmat') ?? 'standard';
-  const tm = windMaterials(ctx.uniforms, 'veg-trees', 0.9, vmat);
-  const pm = windMaterials(ctx.uniforms, 'veg-plants', 0.92, vmat);
+  const tm = legacy ? legacyWindMaterials(ctx.uniforms, 'veg-trees', 0.9, vmat) : windMaterials(ctx.uniforms, 'veg-trees', 0.9, vmat, fx);
+  const pm = legacy ? legacyWindMaterials(ctx.uniforms, 'veg-plants', 0.92, vmat) : windMaterials(ctx.uniforms, 'veg-plants', 0.92, vmat, fx);
   const geos: THREE.BufferGeometry[] = [];
   const mk = (sink: GeoSink, name: string, mat: THREE.Material, shadow: boolean, part: string): THREE.Mesh => {
     const geo = sink.build();

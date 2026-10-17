@@ -27,11 +27,11 @@ export default function create(ctx: CityContext): CityModule {
   const model = getTerrainModel(ctx.plan);
   const root = new THREE.Group();
   root.name = 'terrain';
-  const ground = createGround(ctx, model);
+  const masonry = createMasonry(ctx, model);
+  const ground = createGround(ctx, model, masonry.cliffs?.feet ?? []);
   root.add(ground.mesh);
   const slab = createSlab(ctx, model, ground.edges);
   root.add(slab.faces, slab.plinth, slab.nameplate, slab.shadow);
-  const masonry = createMasonry(ctx, model);
   root.add(masonry.mesh, masonry.veils, masonry.railings.mesh);
   // night glows: promenade lamp halos + light pools, portal lanterns, tunnel lamps
   const glowPts: GlowPoint[] = [...masonry.lights];
@@ -63,6 +63,8 @@ export default function create(ctx: CityContext): CityModule {
         masonryTris: masonry.triangles,
         railingTris: masonry.railings.triangles,
         rocks: masonry.rocks.length,
+        cliffTris: masonry.cliffs?.triangles ?? 0,
+        cliffBlocks: masonry.cliffs?.blocks ?? 0,
         buildMs: Math.round(buildMs),
       };
     },

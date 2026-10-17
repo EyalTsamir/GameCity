@@ -8,6 +8,7 @@
 import * as THREE from 'three';
 import type { CityContext } from '../../core/context';
 import { XS, ZS } from '../../core/constants';
+import { LAMP_GLSL, lampUniforms } from '../../core/lampLight';
 
 // ─────────────────────────────────────────────────────────────── noise ──
 
@@ -129,11 +130,13 @@ vec2 rdStreet(vec2 p) {
 
 function inject(mat: THREE.MeshStandardMaterial, opts: { attrs: string; varyings: string; assign: string; pars: string; color: string; key: string; uniforms: Record<string, THREE.IUniform>; after?: string }): void {
   mat.onBeforeCompile = (shader) => {
-    Object.assign(shader.uniforms, opts.uniforms);
+    Object.assign(shader.uniforms, opts.uniforms, lampUniforms());
     shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', `#include <common>\n${opts.attrs}\n${opts.varyings}\nvarying vec3 vWP;`)
-      .replace('#include <begin_vertex>', `#include <begin_vertex>\n${opts.assign}\nvWP = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
-    let fs = shader.fragmentShader.replace('#include <common>', `#include <common>\n${opts.varyings}\n${COMMON}\n${opts.pars}`);
+      .replace('#include <common>', `#include <common>\n${opts.attrs}\n${opts.varyings}\nvarying vec3 vWP;\nvarying vec3 vWN;`)
+      .replace('#include <begin_vertex>', `#include <begin_vertex>\n${opts.assign}\nvWP = (modelMatrix * vec4(transformed, 1.0)).xyz;\nvWN = mat3(modelMatrix) * objectNormal;`);
+    let fs = shader.fragmentShader.replace('#include <common>', `#include <common>\n${opts.varyings}\nvarying vec3 vWN;\n${LAMP_GLSL}\n${COMMON}\n${opts.pars}`);
+    // night street-light map (black until the lamps module bakes it): light multiplies the albedo
+    fs = fs.replace('#include <lights_fragment_end>', '#include <lights_fragment_end>\nreflectedLight.indirectDiffuse += diffuseColor.rgb * thLampLight(vWP, normalize(vWN));');
     if (opts.color) {
       fs = fs
         .replace('vec4 diffuseColor = vec4( diffuse, opacity );', `float rdRough = 0.9;\nvec4 diffuseColor = vec4( ${opts.color}, opacity );`)
@@ -324,7 +327,7 @@ export function createMaterials(ctx: CityContext, radial: { x: number; z: number
     assign: 'vA = aA;',
     pars: ASPHALT,
     color: flatA ? 'uAsph' : 'rdAsphalt(rdRough)',
-    key: 'roads-asphalt-v1' + (flatA ? 'f' : ''),
+    key: 'roads-asphalt-v2' + (flatA ? 'f' : ''),
     uniforms: { ...shared, uAsph: { value: asphaltColor } },
   });
 
@@ -339,7 +342,7 @@ export function createMaterials(ctx: CityContext, radial: { x: number; z: number
     assign: 'vS = aS; vP = aP; vV = aV; vC = aC; vX = aX;',
     pars: HARD,
     color: flat ? 'vec3(0.5)' : 'rdHard(rdRough)',
-    key: 'roads-hard-v2' + (flat ? 'f' : ''),
+    key: 'roads-hard-v3' + (flat ? 'f' : ''),
     uniforms: { ...shared, uRad: { value: rad }, uTactile: { value: new THREE.Color('#c09c4e') } },
   });
 
@@ -361,7 +364,7 @@ export function createMaterials(ctx: CityContext, radial: { x: number; z: number
     pars: '',
     color: '',
     after: PAINT_AFTER,
-    key: 'roads-paint-v1',
+    key: 'roads-paint-v2',
     uniforms: shared,
   });
   return { asphalt, hard, paint, asphaltColor };

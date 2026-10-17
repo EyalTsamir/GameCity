@@ -1,16 +1,22 @@
-// Module "water": sea, river and park-pond surfaces (one stylised animated shader, one draw
-// call) plus the translucent cut-away water sections on the slab faces (second draw call).
+// Module "water": sea, river and park-pond surfaces (one shader, one draw call), the translucent
+// cut-away water sections on the slab faces (second draw call) and the planar reflection pass
+// (high quality: one extra low-resolution scene pass drawing only LAYERS.REFLECT meshes).
 //
 // Service: ctx.services.water = WaterService (see below) — consistent with the rendered swell.
+// URL switches: ?nowaterrefl (analytic sky only), ?waterrefl=0|1|2 (force a reflection level),
+// ?nohullfoam (no hull contact shadow / foam line).
 
 import * as THREE from 'three';
-import type { CityContext, CityModule } from '../core/context';
+import type { CityContext, CityModule, QualityState } from '../core/context';
+import { WATER_LEVEL, SLAB } from '../core/constants';
 import { getTerrainModel } from './terrain/height';
 import { groundBands, slabEdges } from './terrain/layout';
 import { getWaterField, ampFrom } from './water/field';
-import { createSurface } from './water/surface';
+import { createSurface, createSkyUniforms } from './water/surface';
 import { createCutaway } from './water/cutaway';
 import { swell } from './water/waves';
+import { PlanarReflection, type ReflectionLevel } from './water/reflection';
+import { HullContacts } from './water/hulls';
 
 export interface WaterService {
   /** vertical displacement of the water surface at (x, z) at sim time t (seconds, = uniforms.uTime) */
@@ -23,20 +29,76 @@ export interface WaterService {
   depth(x: number, z: number): number;
   /** distance to the nearest shore (m) */
   shoreDistance(x: number, z: number): number;
+  /**
+   * planar reflection quality (the adaptive quality ladder calls this):
+   * 0 = off (analytic sky only), 1 = low (base set, ~1/4.5 res), 2 = full (+ trees / facade trim, 1/3 res).
+   * Ignored while a URL switch (?nowaterrefl / ?waterrefl=n) forces the level.
+   */
+  setReflectionQuality(level: 0 | 1 | 2): void;
+  /** current reflection level (0 | 1 | 2) */
+  reflectionQuality(): number;
+}
+
+interface DomeUniforms {
+  uZenith?: { value: THREE.Color };
+  uHorizon?: { value: THREE.Color };
+  uGlow?: { value: THREE.Color };
+  uGlowI?: { value: number };
+  uSunCol?: { value: THREE.Color };
+  uSunVis?: { value: number };
+  uMoonDir?: { value: THREE.Vector3 };
+  uMoonVis?: { value: number };
+  uOvercast?: { value: number };
 }
 
 export default function create(ctx: CityContext): CityModule {
   const t0 = performance.now();
+  const params = ctx.debug.params;
   const model = getTerrainModel(ctx.plan);
   const field = getWaterField(model);
   const edges = slabEdges(model, groundBands(model));
-  const lamps = (ctx.services.terrain as { promenadeLamps?: { x: number; y: number; z: number }[] } | undefined)?.promenadeLamps ?? [];
-  const surface = createSurface(ctx, model, field, lamps);
+
+  // ── reflection level: URL override > quality preset (high → full; medium/low → analytic only)
+  const forcedParam = params.has('nowaterrefl') ? 0 : params.has('waterrefl') ? Number(params.get('waterrefl')) : NaN;
+  const forced: ReflectionLevel | null = forcedParam === 0 || forcedParam === 1 || forcedParam === 2 ? (forcedParam as ReflectionLevel) : null;
+  const presetLevel = (q: QualityState): ReflectionLevel => (q.level === 'high' ? 2 : 0);
+  let wanted: ReflectionLevel = forced ?? presetLevel(ctx.quality);
+
+  /** can a mesh with this world box show up in the water? (near open water, given its height) */
+  const nearWater = (box: THREE.Box3): boolean => {
+    const reach = Math.min(140, Math.max(6, (box.max.y - WATER_LEVEL) * 2.4));
+    const x0 = Math.max(SLAB.x0, box.min.x - reach),
+      x1 = Math.min(SLAB.x1, box.max.x + reach);
+    const z0 = Math.max(SLAB.z0, box.min.z - reach),
+      z1 = Math.min(SLAB.z1, box.max.z + reach);
+    for (let z = z0; z <= z1; z += 3) for (let x = x0; x <= x1; x += 3) if (field.sample(field.depth, x, z) > 0.4) return true;
+    return false;
+  };
+  const reflection = new PlanarReflection(ctx, wanted, nearWater);
+  const hulls = new HullContacts(ctx);
+  const sky = createSkyUniforms();
+  const surface = createSurface(ctx, model, field, reflection.uniforms, hulls, sky);
   const cut = createCutaway(ctx, model, field, edges);
   const root = new THREE.Group();
   root.name = 'water';
   root.add(surface.mesh, cut.mesh);
   ctx.scene.add(root);
+  const hullsOn = !params.has('nohullfoam');
+
+  // the sky the water mirrors comes from the dome (render/sky/dome.ts), looked up once ready
+  let dome: DomeUniforms | null = null;
+  ctx.events.on('modules:ready', () => {
+    const m = ctx.scene.getObjectByName('sky-dome') as THREE.Mesh | undefined;
+    const u = (m?.material as THREE.ShaderMaterial | undefined)?.uniforms as DomeUniforms | undefined;
+    if (u && u.uZenith && u.uHorizon) dome = u;
+    reflection.attach();
+  });
+  ctx.events.on('quality', (q: QualityState) => {
+    if (forced === null && q && q.level) {
+      wanted = presetLevel(q);
+      reflection.setLevel(wanted);
+    }
+  });
 
   const waveHeight = (x: number, z: number, t: number): number => {
     const d = field.sample(field.depth, x, z);
@@ -49,21 +111,55 @@ export default function create(ctx: CityContext): CityModule {
     surfaceY: (x, z) => model.waterLevel(x, z) + waveHeight(x, z, ctx.uniforms.uTime.value),
     depth: (x, z) => field.sample(field.depth, x, z),
     shoreDistance: (x, z) => field.sample(field.shore, x, z),
+    setReflectionQuality(level) {
+      if (forced !== null) return;
+      const l = (level === 1 || level === 2 ? level : 0) as ReflectionLevel;
+      wanted = l;
+      reflection.setLevel(l);
+    },
+    reflectionQuality: () => reflection.getLevel(),
   };
   ctx.services.water = service;
-  const moonU = surface.uniforms.uMoonDir.value as THREE.Vector3;
   const buildMs = performance.now() - t0;
+
+  const copyDome = () => {
+    const d = dome;
+    if (!d) return;
+    (sky.uSkyZen.value as THREE.Color).copy(d.uZenith!.value);
+    (sky.uSkyHor.value as THREE.Color).copy(d.uHorizon!.value);
+    if (d.uGlow) (sky.uSkyGlow.value as THREE.Color).copy(d.uGlow.value);
+    if (d.uGlowI) sky.uSkyGlowI.value = d.uGlowI.value;
+    if (d.uSunCol) (sky.uSkySunCol.value as THREE.Color).copy(d.uSunCol.value);
+    if (d.uSunVis) sky.uSkySunVis.value = d.uSunVis.value;
+    if (d.uMoonDir) (sky.uSkyMoonDir.value as THREE.Vector3).copy(d.uMoonDir.value);
+    if (d.uMoonVis) sky.uSkyMoonVis.value = d.uMoonVis.value;
+    if (d.uOvercast) sky.uSkyOvercast.value = d.uOvercast.value;
+  };
+  if (!ctx.services.sky) {
+    // no sky module (?only=…): moon from the clock, fixed day colours
+    sky.uSkyMoonVis.value = 0;
+  }
 
   return {
     name: 'water',
     frame() {
-      moonU.copy(ctx.clock.moonDir);
+      copyDome();
+      if (!dome) (sky.uSkyMoonDir.value as THREE.Vector3).copy(ctx.clock.moonDir);
+      if (hullsOn) hulls.update();
+      reflection.request();
     },
     stats() {
       return {
         surfaceTris: surface.triangles,
         cutawayTris: cut.triangles,
         cutawaySpans: cut.spans.length,
+        reflLevel: reflection.getLevel(),
+        reflRes: reflection.getLevel() > 0 ? `${reflection.width}x${reflection.height}` : 'off',
+        reflCalls: reflection.getLevel() > 0 ? reflection.calls : 0,
+        reflTris: reflection.getLevel() > 0 ? reflection.tris : 0,
+        reflMeshes: reflection.meshes,
+        reflRenders: reflection.renders,
+        hulls: hulls.count,
         fieldBakeMs: Math.round(field.bakeMs),
         buildMs: Math.round(buildMs),
       };
@@ -94,7 +190,11 @@ export default function create(ctx: CityContext): CityModule {
       }
       if (waveHeight(0, 0, 5) !== 0) out.push('waveHeight on dry land is not 0');
       if (cut.spans.length === 0) out.push('no cut-away water sections built');
+      if (reflection.getLevel() > 0 && reflection.meshes === 0) out.push('reflection pass has no meshes');
       return out;
+    },
+    dispose() {
+      reflection.dispose();
     },
   };
 }

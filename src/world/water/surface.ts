@@ -1,16 +1,36 @@
-// Water surfaces (sea, river, pond) as one mesh / one draw call. Stylised shader:
-// depth-tinted turquoise -> deep blue, transparent shallows over the sandy bed, shoreline
-// foam + swash, breaking wave lines on the beach, wall lapping, fresnel sky reflection
-// driven by the time of day, sun glints & sparkles, moon glint and warm city shimmer at night.
+// Water surfaces (sea, river, pond) as one mesh / one draw call.
+//
+// Shading (per pixel, world space):
+//   * normals: analytic swell + two scrolling ripple-map samples (water/noise.ts, mip-filtered;
+//     the lost normal variance widens glitter and blurs reflections instead of shimmering) +
+//     fine analytic ripples faded by the pixel footprint; strength follows a macro "wind" field
+//     (glassy slicks vs ruffled streaks, 60–250 m features) so the sea reads from the overview
+//   * body colour: sea depth bands (sand-lit turquoise → teal → deep blue) with broad colour
+//     patches, clear green-teal river with flow streaks, mossy pond; deep indigo at night;
+//     lit by three's lights (shadows, hemisphere, environment) + the night lamp map
+//   * reflection (Fresnel weighted, independent of transparency): analytic sky that mirrors the
+//     sky dome (gradient + warm sun-side glow, read from the dome's uniforms each frame) under the
+//     planar reflection texture (water/reflection.ts, premultiplied, distorted by the normals,
+//     smeared toward the viewer, mip-blurred by roughness and footprint)
+//   * sun glitter path (GGX lobe widened by roughness/variance) + sparkles, moon glint; with the
+//     reflection pass off, lamp streaks come from the lamp light map
+//   * contact: oblique hull footprints (water/hulls.ts) → contact shadow + lacy foam line
+//   * foam: shoreline + swash, breaking lines on the beach, wall lapping
+// Specular from three's lighting is dropped; the final colour is composited so that
+// out = body·α·(1−F) + reflection·F + glints, alpha = α(1−F) + F.
 
 import * as THREE from 'three';
 import type { CityContext } from '../../core/context';
 import { SLAB, WATER_LEVEL, RIVER } from '../../core/constants';
+import { LAMP_GLSL, lampUniforms } from '../../core/lampLight';
 import type { TerrainModel } from '../terrain/height';
-import { noiseTexture } from '../terrain/noise';
 import type { WaterField } from './field';
 import { ampFrom } from './field';
 import { WAVES_GLSL } from './waves';
+import { rippleTexture, macroTexture } from './noise';
+import type { ReflectionUniforms } from './reflection';
+import type { HullContacts } from './hulls';
+import { MAX_HULLS } from './hulls';
 
 export interface SurfaceResult {
   mesh: THREE.Mesh;
@@ -30,7 +50,29 @@ interface Domain {
   level: number;
 }
 
-export function createSurface(ctx: CityContext, model: TerrainModel, field: WaterField, lamps: { x: number; y: number; z: number }[] = []): SurfaceResult {
+/** sky uniforms the water mirrors (values copied from the sky dome every frame by water.ts) */
+export function createSkyUniforms(): Record<string, THREE.IUniform> {
+  return {
+    uSkyZen: { value: new THREE.Color('#5896d8') },
+    uSkyHor: { value: new THREE.Color('#d8e8f2') },
+    uSkyGlow: { value: new THREE.Color('#fff2dc') },
+    uSkyGlowI: { value: 0.3 },
+    uSkySunCol: { value: new THREE.Color('#fff4e0') },
+    uSkySunVis: { value: 1 },
+    uSkyMoonDir: { value: new THREE.Vector3(0, 1, 0) },
+    uSkyMoonVis: { value: 0 },
+    uSkyOvercast: { value: 0 },
+  };
+}
+
+export function createSurface(
+  ctx: CityContext,
+  model: TerrainModel,
+  field: WaterField,
+  refl: ReflectionUniforms,
+  hulls: HullContacts,
+  sky: Record<string, THREE.IUniform>,
+): SurfaceResult {
   const pond = model.pond;
   const domains: Domain[] = [
     { name: 'sea', x0: 112, z0: SLAB.z0, x1: SLAB.x1, z1: SLAB.z1, step: 2, level: WATER_LEVEL },
@@ -94,32 +136,33 @@ export function createSurface(ctx: CityContext, model: TerrainModel, field: Wate
 
   const C = (h: string) => ({ value: new THREE.Color(h) });
   const uniforms: Record<string, THREE.IUniform> = {
-    tNoise: { value: noiseTexture() },
+    tWN: { value: rippleTexture() },
+    tWM: { value: macroTexture() },
     tField: { value: field.tex },
     uSlabXf: { value: new THREE.Vector4(SLAB.x0, SLAB.z0, 1 / (SLAB.x1 - SLAB.x0), 1 / (SLAB.z1 - SLAB.z0)) },
+    uSlabBox: { value: new THREE.Vector4(SLAB.x0, SLAB.z0, SLAB.x1, SLAB.z1) },
     uTime: ctx.uniforms.uTime,
     uNight: ctx.uniforms.uNight,
     uDaylight: ctx.uniforms.uDaylight,
     uDusk: ctx.uniforms.uDusk,
     uLights: ctx.uniforms.uLights,
     uSunDir: ctx.uniforms.uSunDir,
-    uMoonDir: { value: new THREE.Vector3(0, 1, 0) },
-    uLamps: { value: Array.from({ length: 16 }, (_, i) => (lamps[i] ? new THREE.Vector4(lamps[i].x, lamps[i].y, lamps[i].z, 1) : new THREE.Vector4(0, -100, 0, 0))) },
-    uLampCount: { value: Math.min(16, lamps.length) },
-    wShallow: C('#62d0c6'),
-    wMid: C('#2b9bc2'),
-    wDeep: C('#1b5d8d'),
-    wRivS: C('#4a9a8f'),
-    wRivD: C('#1f5762'),
-    wPondS: C('#5f9476'),
-    wPondD: C('#2f5642'),
+    uWind: ctx.uniforms.uWind,
+    ...sky,
+    ...refl,
+    ...hulls.uniforms,
+    ...lampUniforms(),
+    wShallow: C('#71d3c3'),
+    wMid: C('#2a9bbb'),
+    wDeep: C('#17527d'),
+    wRivS: C('#62ad97'),
+    wRivD: C('#215b5c'),
+    wPondS: C('#6d9a72'),
+    wPondD: C('#2c5640'),
     wFoam: C('#f4fbff'),
-    skyDayH: C('#d5e7f2'),
-    skyDayZ: C('#7fb0dc'),
-    skyDuskH: C('#f6b98a'),
-    skyDuskZ: C('#8e8fc4'),
-    skyNightH: C('#22304b'),
-    skyNightZ: C('#0b1426'),
+    wNightTint: C('#5a68b0'),
+    /** debug: x = reflection gain, y = body gain, z = glint gain, w = foam gain */
+    wDebug: { value: new THREE.Vector4(1, 1, 1, 1) },
   };
 
   const VERT_PARS = /* glsl */ `
@@ -132,18 +175,34 @@ float th_disp;
 ${WAVES_GLSL}
 `;
   const FRAG_PARS = /* glsl */ `
-uniform sampler2D tNoise;
+uniform sampler2D tWN;
+uniform sampler2D tWM;
 uniform sampler2D tField;
+uniform sampler2D tRefl;
+uniform mat4 uReflMat;
+uniform vec4 uReflInfo;
 uniform vec4 uSlabXf;
+uniform vec4 uSlabBox;
 uniform float uTime;
 uniform float uNight;
 uniform float uDaylight;
 uniform float uDusk;
 uniform float uLights;
 uniform vec3 uSunDir;
-uniform vec3 uMoonDir;
-uniform vec4 uLamps[16];
-uniform int uLampCount;
+uniform vec2 uWind;
+uniform vec3 uSkyZen;
+uniform vec3 uSkyHor;
+uniform vec3 uSkyGlow;
+uniform float uSkyGlowI;
+uniform vec3 uSkySunCol;
+uniform float uSkySunVis;
+uniform vec3 uSkyMoonDir;
+uniform float uSkyMoonVis;
+uniform float uSkyOvercast;
+uniform vec4 uHullA[${MAX_HULLS}];
+uniform vec4 uHullB[${MAX_HULLS}];
+uniform vec4 uHullC[${MAX_HULLS}];
+uniform int uHullN;
 uniform vec3 wShallow;
 uniform vec3 wMid;
 uniform vec3 wDeep;
@@ -152,128 +211,265 @@ uniform vec3 wRivD;
 uniform vec3 wPondS;
 uniform vec3 wPondD;
 uniform vec3 wFoam;
-uniform vec3 skyDayH;
-uniform vec3 skyDayZ;
-uniform vec3 skyDuskH;
-uniform vec3 skyDuskZ;
-uniform vec3 skyNightH;
-uniform vec3 skyNightZ;
+uniform vec3 wNightTint;
+uniform vec4 wDebug;
 varying vec3 vWW;
 varying vec2 vWave;
 varying float vDisp;
-vec3 wN = vec3(0.0, 1.0, 0.0);
-vec3 wEmit = vec3(0.0);
-float wRough = 0.3;
+${LAMP_GLSL}
 ${WAVES_GLSL}
+
+vec3 wN = vec3(0.0, 1.0, 0.0);
+vec3 wRefl = vec3(0.0);
+vec3 wGlint = vec3(0.0);
+float wAlphaB = 1.0;
+float wF = 0.0;
+float wFoamA = 0.0;
+float wShadow = 1.0;
+float wGlintK = 0.0;
+vec3 wSunL = vec3(0.0, 1.0, 0.0);
+float wGlintA2 = 0.01;
+float wSparkle = 0.0;
+
+// the sky dome's painted gradient + sun-side glow (render/sky/dome.ts), without disc/stars
+vec3 wSky(vec3 d) {
+  float y = clamp(d.y, 0.0, 1.0);
+  vec3 col = mix(uSkyHor, uSkyZen, smoothstep(0.0, 1.0, pow(y, 0.55)));
+  vec3 sd = normalize(vec3(uSunDir.x, max(uSunDir.y, -0.25), uSunDir.z));
+  vec2 dh = normalize(d.xz + vec2(1e-5));
+  vec2 sh = normalize(sd.xz + vec2(1e-5));
+  float az = dot(dh, sh) * 0.5 + 0.5;
+  float band = exp(-abs(d.y - max(sd.y, 0.0) * 0.35) * 5.0);
+  float glow = (pow(az, 3.0) * 0.85 + pow(max(dot(d, sd), 0.0), 24.0) * 0.6) * band;
+  col += uSkyGlow * uSkyGlowI * glow;
+  float grey = dot(col, vec3(0.3, 0.55, 0.15));
+  return mix(col, vec3(grey) * vec3(0.92, 0.96, 1.02), uSkyOvercast * 0.75);
+}
+
+// waterline half-width of hull i at u (-1 stern .. 1 bow)
+float wHullW(float u, vec4 B, float transom) {
+  if (u > B.z) {
+    float s = clamp((u - B.z) / (1.0 - B.z), 0.0, 1.0);
+    return B.y * sqrt(max(0.0, 1.0 - pow(s, 2.2)));
+  }
+  if (u < B.w) {
+    float s = clamp((u + 1.0) / (B.w + 1.0), 0.0, 1.0);
+    return B.y * (transom + (1.0 - transom) * sqrt(s * s * (3.0 - 2.0 * s)));
+  }
+  return B.y;
+}
 
 vec4 waterBase() {
   vec3 p = vWW;
+  float t = uTime;
   vec4 fld = texture2D(tField, (p.xz - uSlabXf.xy) * uSlabXf.zw);
   float depth = fld.r + vDisp;
   float shore = fld.g;
   float beach = fld.b;
   float region = fld.a;
   float amp = vWave.x;
+  float mSea = 1.0 - smoothstep(0.15, 0.4, region);
+  float mPond = smoothstep(0.75, 0.95, region);
+  float mRiv = (1.0 - mSea) * (1.0 - mPond);
 
-  // per-pixel normal: analytic swell + ripples + scrolling noise
+  vec3 toCam = cameraPosition - p;
+  float dist = length(toCam);
+  vec3 V = toCam / dist;
+  // metres per pixel (box-filter scale for everything procedural)
+  float fp = max(length(fwidth(p.xz)), 1e-3);
+
+  // ── wind frame + macro field (survives the overview distance)
+  vec2 wdir = normalize(uWind + vec2(1e-4, 0.0));
+  vec2 wper = vec2(-wdir.y, wdir.x);
+  vec2 pw = vec2(dot(p.xz, wdir), dot(p.xz, wper));
+  vec4 mA = texture2D(tWM, pw * (1.0 / 270.0) + vec2(-t * 0.0019, 0.0));
+  vec4 mB = texture2D(tWM, p.xz * (1.0 / 160.0) + vec2(-t * 0.0012, t * 0.0008));
+  vec2 pr = vec2(p.x - t * 0.33, p.z);
+  vec4 mR = texture2D(tWM, pr * vec2(1.0 / 70.0, 1.0 / 16.0));
+  // 0 glassy slick .. 1 ruffled
+  float ruff = clamp(0.5 + 1.15 * (mA.r - 0.5) + 0.7 * (mB.g - 0.5), 0.0, 1.0);
+  ruff = mix(ruff, clamp(0.38 + 1.2 * (mR.r - 0.5), 0.0, 1.0), mRiv);
+  ruff = mix(ruff, 0.12, mPond);
+  float calm = 0.3 + 0.7 * smoothstep(0.05, 1.4, depth);
+
+  // ── normals
   vec2 g = vec2(0.0);
-  th_swellG(p.xz, uTime, g);
-  g *= amp;
+  th_swellG(p.xz, t, g);
+  vec2 tilt = -g * amp;
+  // ripple map, two scales: tile frame (u = downwind)
+  vec4 r1 = texture2D(tWN, pw * (1.0 / 29.0) + vec2(-t * 0.024, 0.0));
+  vec2 pw2 = vec2(dot(pw, vec2(0.80, 0.60)), dot(pw, vec2(-0.60, 0.80)));
+  vec4 r2 = texture2D(tWN, pw2 * (1.0 / 10.3) + vec2(-t * 0.052, t * 0.009));
+  vec3 n1 = r1.xyz * 2.0 - 1.0;
+  vec3 n2 = r2.xyz * 2.0 - 1.0;
+  float l1 = length(n1), l2 = length(n2);
+  float var1 = (1.0 - l1) / max(l1, 0.05);
+  float var2 = (1.0 - l2) / max(l2, 0.05);
+  vec2 s1 = n1.xz / max(n1.y, 0.25);
+  vec2 s2 = n2.xz / max(n2.y, 0.25);
+  float k1 = mix(0.16, 0.42, ruff) * calm * mix(1.0, 0.55, mRiv) * mix(1.0, 0.25, mPond);
+  float k2 = mix(0.10, 0.30, ruff) * calm * mix(1.0, 0.7, mRiv) * mix(1.0, 0.3, mPond);
+  vec2 rt = s1 * k1 + s2 * k2;
+  tilt += wdir * rt.x + wper * rt.y;
+  // river: flow ripples drift east
+  vec4 rf = texture2D(tWN, vec2(p.x * 0.11 - t * 0.075, p.z * 0.23));
+  tilt += (rf.xz * 2.0 - 1.0) * vec2(0.05, 0.12) * mRiv * calm;
+  // fine analytic ripples, box-filtered by the footprint
   vec2 gr = vec2(0.0);
-  th_ripple(p.xz, uTime, gr);
-  float calm = 0.35 + 0.65 * smoothstep(0.05, 1.2, depth);
-  g += gr * calm * (0.6 + 0.4 * amp);
-  vec4 n1 = texture2D(tNoise, p.xz * 0.045 + vec2(uTime * 0.011, uTime * 0.006));
-  vec4 n2 = texture2D(tNoise, p.xz * 0.13 - vec2(uTime * 0.009, -uTime * 0.013));
-  g += ((n1.xy - 0.5) * 0.10 + (n2.zw - 0.5) * 0.07) * calm;
-  // the river drifts east
-  float flow = smoothstep(0.3, 0.5, region) * (1.0 - smoothstep(0.75, 0.95, region));
-  vec4 nf = texture2D(tNoise, vec2(p.x * 0.07 - uTime * 0.04, p.z * 0.16));
-  g += (nf.xy - 0.5) * 0.08 * flow;
-  wN = normalize(vec3(-g.x, 1.0, -g.y));
+  th_ripple(p.xz, t, gr);
+  tilt -= gr * calm * (0.6 + 0.4 * amp) * (1.0 - smoothstep(0.12, 0.45, fp));
+  wN = normalize(vec3(tilt.x, 1.0, tilt.y));
+  // unresolved slope variance (mip + footprint) → roughness
+  float wVar = var1 * k1 * k1 * 2.2 + var2 * k2 * k2 * 2.2 + smoothstep(0.1, 0.6, fp) * 0.004;
 
-  // body colour by depth and region
+  // ── body colour
   float d = max(depth, 0.0);
-  vec3 seaC = mix(wShallow, wMid, smoothstep(0.0, 2.4, d));
-  seaC = mix(seaC, wDeep, smoothstep(2.2, 7.5, d));
-  vec3 rivC = mix(wRivS, wRivD, smoothstep(0.0, 2.2, d));
+  float band = d / 1.5;
+  float dq = (floor(band) + smoothstep(0.3, 0.7, fract(band))) * 1.5;
+  float dS = mix(d, dq, 0.3);
+  vec3 seaC = mix(wShallow, wMid, smoothstep(0.0, 2.3, dS));
+  seaC = mix(seaC, wDeep, smoothstep(2.0, 7.5, dS));
+  // broad patches: greener / bluer, lighter / darker (readable from far away)
+  float pt = mB.g - 0.5;
+  seaC *= vec3(1.0 - 0.16 * pt, 1.0 + 0.05 * pt, 1.0 + 0.1 * pt) * (0.93 + 0.16 * mA.g);
+  vec3 rivC = mix(wRivS, wRivD, smoothstep(0.0, 2.0, d));
+  rivC *= 0.9 + 0.2 * mR.r;
   vec3 pondC = mix(wPondS, wPondD, smoothstep(0.0, 0.9, d));
   vec3 wc = mix(seaC, rivC, smoothstep(0.15, 0.45, region));
-  wc = mix(wc, pondC, smoothstep(0.7, 0.9, region));
-  wc *= 0.93 + 0.1 * n1.b;
-  wc *= mix(1.0, 0.55, uNight);
+  wc = mix(wc, pondC, mPond);
+  wc = mix(wc, wc * wNightTint, uNight * 0.85);
 
-  // fresnel sky reflection (time-of-day colours)
-  vec3 V = normalize(cameraPosition - p);
+  // ── Fresnel
   float ndv = clamp(dot(wN, V), 0.0, 1.0);
-  float sea = 1.0 - smoothstep(0.15, 0.4, region);
-  float F = mix(0.04, mix(0.42, 0.7, sea), pow(1.0 - ndv, 3.0));
-  vec3 R = reflect(-V, wN);
-  vec3 skyH = mix(skyDayH, skyDuskH, uDusk);
-  skyH = mix(skyH, skyNightH, uNight);
-  vec3 skyZ = mix(skyDayZ, skyDuskZ, uDusk * 0.7);
-  skyZ = mix(skyZ, skyNightZ, uNight);
-  vec3 sky = mix(skyH, skyZ, smoothstep(0.0, 0.65, R.y));
+  float F0 = mix(mix(0.2, 0.26, mRiv), 0.3, mPond);
+  float F = mix(F0, 0.92, pow(1.0 - ndv, 4.0));
 
-  // sun glint + sparkles
-  float sunUp = smoothstep(-0.05, 0.08, uSunDir.y);
-  float sd = max(dot(R, normalize(uSunDir)), 0.0);
-  float spark = smoothstep(0.78, 0.95, texture2D(tNoise, p.xz * 0.41 + vec2(uTime * 0.07, -uTime * 0.05)).a);
-  vec3 sunC = mix(vec3(1.0, 0.6, 0.34), vec3(1.0, 0.97, 0.9), smoothstep(0.03, 0.4, uSunDir.y));
-  vec3 glint = sunC * (pow(sd, 420.0) * 3.5 + pow(sd, 60.0) * 0.18 + spark * pow(sd, 14.0) * 1.6) * sunUp;
-  // moon glint
-  float md = max(dot(R, normalize(uMoonDir)), 0.0);
-  vec3 moon = vec3(0.62, 0.72, 1.0) * (pow(md, 260.0) * 1.8 + spark * pow(md, 30.0) * 0.9) * uNight;
-  // warm city-light shimmer near the quays and banks at night
-  float near = 1.0 - smoothstep(0.6, 10.0, shore);
-  float shim = smoothstep(0.62, 0.92, texture2D(tNoise, vec2(p.x * 0.55, p.z * 1.9) + vec2(uTime * 0.02, uTime * 0.035)).b);
-  vec3 city = vec3(1.0, 0.7, 0.36) * near * shim * uLights * mix(0.25, 0.6, smoothstep(0.1, 0.5, region));
-  // reflections of the promenade lamps (reflected view ray vs. each lamp head)
-  if (uLights > 0.01 && region > 0.2 && region < 0.8) {
-    // anisotropic ripple normal: reflections smear into vertical streaks
-    vec3 Ns = normalize(vec3(-g.x * 0.45, 1.0, -g.y * 2.6 - (n2.w - 0.5) * 0.35));
-    vec3 Rs = reflect(-V, Ns);
-    float lr = 0.0;
-    for (int i = 0; i < 16; i++) {
-      if (i >= uLampCount) break;
-      vec3 L = uLamps[i].xyz - p;
-      float a = max(dot(Rs, normalize(L)), 0.0);
-      lr += pow(a, 900.0) * 3.0 + pow(a, 160.0) * 0.12;
-    }
-    float brk = 0.35 + 0.65 * smoothstep(0.35, 0.7, texture2D(tNoise, p.xz * vec2(0.5, 2.2) + vec2(0.0, uTime * 0.05)).r);
-    city += vec3(1.0, 0.62, 0.28) * lr * brk * uLights;
+  // ── reflection: analytic sky under the planar reflection
+  vec3 R = reflect(-V, wN);
+  R.y = abs(R.y) + 0.01;
+  vec3 sky = wSky(normalize(R));
+  vec4 rc = vec4(0.0);
+  float reflW = uReflInfo.x * (1.0 - mPond);
+  // fade toward the slab's cut faces
+  vec2 eb = min(p.xz - uSlabBox.xy, uSlabBox.zw - p.xz);
+  reflW *= smoothstep(0.0, 2.5, min(eb.x, eb.y));
+  if (reflW > 0.001) {
+    vec2 vh = normalize(V.xz + vec2(1e-5, 0.0));
+    vec2 vs = vec2(-vh.y, vh.x);
+    // distortion (m): reflections smear toward the viewer more than sideways
+    vec2 dt = tilt - (-g * amp) * 0.6;
+    float kd = mix(2.2, 5.0, ruff) * (0.6 + 0.4 * min(dist / 150.0, 1.5));
+    vec2 off = vh * dot(dt, vh) * kd * 2.4 + vs * dot(dt, vs) * kd * 0.8;
+    vec4 c0 = uReflMat * vec4(p.x, ${WATER_LEVEL.toFixed(2)}, p.z, 1.0);
+    vec2 uv0 = c0.xy / c0.w;
+    vec4 c1 = uReflMat * vec4(p.x + off.x, ${WATER_LEVEL.toFixed(2)}, p.z + off.y, 1.0);
+    vec2 uv = c1.xy / c1.w;
+    vec4 c2 = uReflMat * vec4(p.x + off.x + vh.x, ${WATER_LEVEL.toFixed(2)}, p.z + off.y + vh.y, 1.0);
+    vec2 su = c2.xy / c2.w - uv;
+    vec2 duv = fwidth(uv0) * uReflInfo.yz;
+    float lod0 = log2(max(max(duv.x, duv.y), 1e-3));
+    float lod = clamp(lod0 + 0.35 + 1.5 * ruff + 60.0 * wVar, 0.0, uReflInfo.w);
+    float sl = (0.8 + 2.2 * ruff) * exp2(lod);
+    vec2 st = su * (sl / max(length(su * uReflInfo.yz), 1e-3));
+    rc = textureLod(tRefl, uv, lod) * 0.5;
+    rc += textureLod(tRefl, uv + st, lod) * 0.25;
+    rc += textureLod(tRefl, uv - st, lod + 0.5) * 0.25;
+    vec2 ed = min(uv, 1.0 - uv);
+    rc *= smoothstep(0.0, 0.02, min(ed.x, ed.y)) * reflW;
   }
 
-  // foam: shoreline + swash, beach wave lines, wall lapping
-  float nb = texture2D(tNoise, p.xz * 0.33 + vec2(uTime * 0.03, uTime * 0.017)).r;
-  float swash = 0.5 + 0.5 * sin(uTime * 0.85 - shore * 0.9);
-  float edge = (1.0 - smoothstep(0.0, (0.12 + 0.16 * nb + 0.1 * swash) * mix(1.0, 0.35, smoothstep(0.75, 0.95, region)), depth)) * smoothstep(-0.02, 0.02, depth);
-  float ph = fract(shore * 0.17 + uTime * 0.11);
-  float line = smoothstep(0.84, 0.95, ph) * (1.0 - smoothstep(0.95, 0.995, ph));
-  line *= beach * sea * smoothstep(0.8, 2.5, shore) * (1.0 - smoothstep(7.0, 15.0, shore));
-  line *= smoothstep(0.42, 0.68, texture2D(tNoise, p.xz * 0.021 + vec2(0.0, uTime * 0.006)).g);
-  float lap = (1.0 - smoothstep(0.2, 0.95, shore)) * (1.0 - beach) * (0.55 + 0.45 * sin(uTime * 1.6 + (p.x + p.z) * 0.8));
-  float foam = clamp(max(edge, max(line * 0.8, lap * 0.55)), 0.0, 1.0);
-  foam *= mix(0.55, 1.0, smoothstep(0.25, 0.65, nb));
-  float pondF = smoothstep(0.75, 0.95, region);
-  foam *= 1.0 - 0.85 * pondF;
+  // ── hull contact: contact shadow + foam line
+  float hDark = 0.0, hFoam = 0.0;
+  for (int i = 0; i < ${MAX_HULLS}; i++) {
+    if (i >= uHullN) break;
+    vec4 A = uHullA[i];
+    vec4 B = uHullB[i];
+    vec4 Ch = uHullC[i];
+    vec2 dp = p.xz - A.xy;
+    float rr = B.x + 9.0;
+    if (dot(dp, dp) > rr * rr) continue;
+    float qa = dot(dp, A.zw);
+    float qx = dot(dp, vec2(A.w, -A.z));
+    float u = qa / B.x;
+    float w = wHullW(u, B, Ch.x);
+    float dx = abs(qx) - w;
+    float dy = abs(qa) - B.x;
+    float sd = max(dx, dy);
+    if (dx > 0.0 && dy > 0.0) sd = length(vec2(dx, dy));
+    float sc = clamp(B.y * 0.45, 0.25, 3.0);
+    float dk = exp(-max(sd, 0.0) / (0.75 * sc + 0.35)) * smoothstep(-0.4, 0.02, sd);
+    hDark = max(hDark, dk * Ch.w);
+    float bow = smoothstep(0.15, 0.95, u);
+    float spd = min(Ch.y / 3.0, 1.5);
+    float fw = (0.16 + 0.2 * sc) * (1.0 + bow * (0.6 + spd) + spd * 0.35);
+    float ring = (1.0 - smoothstep(0.0, fw, sd)) * smoothstep(-0.3, 0.0, sd);
+    hFoam = max(hFoam, ring * Ch.z * (0.6 + 0.4 * bow + 0.35 * spd));
+  }
 
-  // transparency: clear sandy shallows -> opaque deep water
+  // ── foam: shoreline + swash, beach wave lines, wall lapping, hull lines
+  vec4 lc = texture2D(tWM, p.xz * (1.0 / 9.0) + vec2(t * 0.011, -t * 0.007));
+  vec4 lf = texture2D(tWM, p.xz * (1.0 / 3.1) - vec2(t * 0.017, t * 0.023));
+  float lace = lc.b * 0.6 + lf.b * 0.4;
+  float swash = 0.5 + 0.5 * sin(t * 0.85 - shore * 0.9);
+  float edge = (1.0 - smoothstep(0.0, (0.12 + 0.16 * lace + 0.1 * swash) * mix(1.0, 0.35, mPond), depth)) * smoothstep(-0.02, 0.02, depth);
+  float ph = fract(shore * 0.17 + t * 0.11);
+  float lw = max(0.05, fp * 0.25);
+  float line = smoothstep(0.84 - lw, 0.95, ph) * (1.0 - smoothstep(0.95, 0.995 + lw, ph));
+  line *= beach * mSea * smoothstep(0.8, 2.5, shore) * (1.0 - smoothstep(7.0, 15.0, shore));
+  line *= smoothstep(0.42, 0.68, mB.b);
+  float lap = (1.0 - smoothstep(0.2, 0.95, shore)) * (1.0 - beach) * (0.55 + 0.45 * sin(t * 1.6 + (p.x + p.z) * 0.8));
+  hFoam *= smoothstep(0.2, 0.62, lace * (0.7 + 0.6 * hFoam) + 0.15 * sin(t * 2.1 + dot(p.xz, vec2(1.3, 0.9))));
+  float foam = clamp(max(max(edge, line * 0.8), max(lap * 0.55, hFoam * 0.95)), 0.0, 1.0);
+  foam *= mix(0.55, 1.0, smoothstep(0.25, 0.65, lace));
+  foam *= 1.0 - 0.85 * mPond;
+  foam *= wDebug.w;
+
+  // ── glints (sun / moon), evaluated after lighting (needs the shadow term)
+  wSunL = normalize(uSunDir);
+  float roughA2 = clamp(0.0012 + wVar * 0.9 + ruff * ruff * 0.006, 0.0008, 0.06);
+  wGlintA2 = roughA2;
+  float sunUp = smoothstep(-0.03, 0.06, wSunL.y) * uSkySunVis;
+  wGlintK = sunUp * (1.0 - uSkyOvercast * 0.9);
+  // sparkles: crest texels catching the sun (fade out before they could alias)
+  float crest = max(r1.a, r2.a);
+  wSparkle = smoothstep(0.55, 0.95, crest * (0.55 + 0.9 * texture2D(tWM, p.xz * 0.37 + vec2(t * 0.05, -t * 0.04)).a)) * (1.0 - smoothstep(0.08, 0.3, fp)) * ruff;
+  // moon
+  float md = max(dot(R, normalize(uSkyMoonDir)), 0.0);
+  vec3 moon = vec3(0.62, 0.72, 1.0) * (pow(md, mix(900.0, 120.0, ruff)) * 2.2 + pow(md, 40.0) * 0.08 + wSparkle * pow(md, 60.0) * 2.0) * uSkyMoonVis * uNight;
+
+  // night lights when the reflection pass is off: lamp map read where the reflected ray
+  // reaches lamp-head height (streaks toward the viewer through the anisotropic normal)
+  vec3 lampR = vec3(0.0);
+  if (uReflInfo.x < 0.5 && uLampGain > 0.01 && mPond < 0.5) {
+    vec2 vh = normalize(V.xz + vec2(1e-5, 0.0));
+    vec2 dt = tilt + g * amp;
+    vec3 Ns = normalize(vec3(dt.x * 0.4, 1.0, dt.y * 0.4) + vec3(vh.x, 0.0, vh.y) * dot(dt, vh) * 3.0);
+    vec3 Rs = reflect(-V, Ns);
+    vec2 q = p.xz + Rs.xz / max(Rs.y, 0.12) * 6.0;
+    vec2 luv = (q - uLampXf.xy) * uLampXf.zw;
+    if (luv.x > 0.0 && luv.y > 0.0 && luv.x < 1.0 && luv.y < 1.0) {
+      vec3 lm = texture2D(uLampMap, luv).rgb;
+      lampR = lm * lm * 1.6 * uLampGain;
+    }
+  }
+
+  // ── outputs for the final composite
   float alpha = smoothstep(0.0, 0.28, depth) * mix(0.5, 0.93, smoothstep(0.25, 3.6, depth));
-  float riv = smoothstep(0.2, 0.45, region) * (1.0 - smoothstep(0.75, 0.95, region));
-  alpha = mix(alpha, max(alpha, smoothstep(0.0, 0.2, depth) * 0.8), riv);
-  alpha = mix(alpha, min(1.0, alpha * 1.3 + 0.1), smoothstep(0.75, 0.95, region));
-  alpha = max(alpha, foam * 0.92);
-
+  alpha = mix(alpha, smoothstep(0.0, 0.25, depth) * mix(0.55, 0.88, smoothstep(0.2, 2.2, depth)), mRiv);
+  alpha = mix(alpha, min(1.0, alpha * 1.3 + 0.1), mPond);
+  wAlphaB = max(alpha, foam * 0.95);
+  wFoamA = foam;
+  wF = F * (1.0 - foam) * wDebug.x;
+  vec3 skyD = sky * (1.0 - hDark * 0.55);
+  wRefl = skyD * (1.0 - rc.a) + rc.rgb + moon + lampR;
+  wGlint = vec3(0.0);
   vec3 foamC = wFoam * mix(1.0, 0.45, uNight);
-  vec3 base = mix(wc * (1.0 - F * 0.6), foamC, foam);
-  wEmit = (sky * F * 0.9 + glint + moon + city) * (1.0 - foam * 0.8);
-  wRough = mix(0.22, 0.85, foam);
-  return vec4(base, alpha);
+  vec3 base = mix(wc * (1.0 - hDark * 0.4) * wDebug.y, foamC, foam);
+  return vec4(base, wAlphaB);
 }
 `;
 
-  const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.25, metalness: 0, transparent: true });
+  const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, metalness: 0, transparent: true });
   mat.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, uniforms);
     shader.vertexShader = shader.vertexShader
@@ -295,11 +491,44 @@ vec3 objectTangent = vec3( tangent.xyz );
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', '#include <common>\n' + FRAG_PARS)
       .replace('vec4 diffuseColor = vec4( diffuse, opacity );', 'vec4 diffuseColor = waterBase();')
-      .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = wRough;')
       .replace('#include <normal_fragment_maps>', '#include <normal_fragment_maps>\nnormal = normalize((viewMatrix * vec4(wN, 0.0)).xyz);')
-      .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += wEmit;');
+      .replace(
+        '#include <lights_fragment_end>',
+        /* glsl */ `#include <lights_fragment_end>
+#if NUM_DIR_LIGHTS > 0
+{
+  // direct-light visibility (shadow) = actual / unshadowed diffuse of the key light
+  float th_dnl = saturate(dot(normal, directionalLights[0].direction));
+  vec3 th_un = th_dnl * directionalLights[0].color * diffuseColor.rgb * RECIPROCAL_PI;
+  float th_lu = dot(th_un, vec3(0.3, 0.6, 0.1));
+  wShadow = th_lu > 1e-5 ? clamp(dot(reflectedLight.directDiffuse, vec3(0.3, 0.6, 0.1)) / th_lu, 0.0, 1.0) : 1.0;
+}
+#endif
+reflectedLight.directSpecular = vec3(0.0);
+reflectedLight.indirectSpecular = vec3(0.0);
+reflectedLight.indirectDiffuse += diffuseColor.rgb * thLampLight(vWW, vec3(0.0, 1.0, 0.0)) * 0.55;
+{
+  // sun glitter: GGX lobe (roughness from ripples, variance, wind) + crest sparkles, shadowed
+  vec3 th_V = normalize(cameraPosition - vWW);
+  vec3 th_H = normalize(wSunL + th_V);
+  float th_nh = max(dot(wN, th_H), 0.0);
+  float th_dd = th_nh * th_nh * (wGlintA2 - 1.0) + 1.0;
+  float th_D = wGlintA2 / (PI * th_dd * th_dd);
+  float th_nl = max(dot(wN, wSunL), 0.0);
+  float th_sp = th_D * th_nl * 0.06 + wSparkle * pow(th_nh, 900.0) * 6.0;
+  wGlint = uSkySunCol * th_sp * wGlintK * wShadow * (1.0 - wFoamA) * wDebug.z;
+}`,
+      )
+      .replace(
+        '#include <opaque_fragment>',
+        /* glsl */ `{
+  vec3 th_col = outgoingLight * wAlphaB * (1.0 - wF) + wRefl * wF + wGlint;
+  float th_a = clamp(wAlphaB * (1.0 - wF) + wF, 0.0, 1.0);
+  gl_FragColor = vec4(th_col / max(th_a, 1e-3), th_a);
+}`,
+      );
   };
-  mat.customProgramCacheKey = () => 'th-water-v1';
+  mat.customProgramCacheKey = () => 'th-water-v2';
   const mesh = new THREE.Mesh(geo, mat);
   mesh.name = 'water-surface';
   mesh.receiveShadow = true;

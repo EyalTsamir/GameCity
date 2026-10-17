@@ -4,6 +4,13 @@
 // art direction is explicit: pink-orange dawn, warm morning, neutral bright noon,
 // deep golden hour, magenta afterglow, blue hour, moody-but-readable night.
 // Colours are sRGB hex; they are converted to linear once and blended in linear space.
+//
+// Two key sets: KEYS (the "studio" key, default) and LEGACY_KEYS (the original rig, kept for
+// A/B runs with ?legacylight). The studio key is sun-dominated: a strong warm sun, a weak cool
+// sky fill (hemi + environment; the diffuse part of the environment is additionally scaled by
+// IBL_DIFFUSE in sky/iblPatch.ts) and exposure compensation, so faces separate, shadows read
+// and golden hour is clearly warm-against-cool. Night is a dark, desaturated moonlight that the
+// city's own lights (lamps, windows) can carry.
 
 import * as THREE from 'three';
 
@@ -31,9 +38,11 @@ interface KeyDef {
   env: number;
   /** bloom intensity hint for post-processing */
   bloom: number;
+  /** studio backdrop (cyclorama) colour: where the table fades to, and the dome below the horizon */
+  cyc?: string;
 }
 
-const NIGHT: Omit<KeyDef, 'h'> = {
+const LEGACY_NIGHT: Omit<KeyDef, 'h'> = {
   sun: '#8ea3dc',
   sunI: 0.62,
   hemiSky: '#41558f',
@@ -53,9 +62,9 @@ const NIGHT: Omit<KeyDef, 'h'> = {
   bloom: 1.0,
 };
 
-const KEYS: KeyDef[] = [
-  { h: 0, ...NIGHT },
-  { h: 4.6, ...NIGHT },
+const LEGACY_KEYS: KeyDef[] = [
+  { h: 0, ...LEGACY_NIGHT },
+  { h: 4.6, ...LEGACY_NIGHT },
   {
     h: 5.3,
     sun: '#8f98d0',
@@ -296,6 +305,294 @@ const KEYS: KeyDef[] = [
     env: 0.55,
     bloom: 0.95,
   },
+  { h: 21.3, ...LEGACY_NIGHT },
+  { h: 24, ...LEGACY_NIGHT },
+];
+
+// ───────────────────────────────────────────── studio key (default) ──
+
+const NIGHT: Omit<KeyDef, 'h'> = {
+  sun: '#a7b4d6',
+  sunI: 0.4,
+  hemiSky: '#3b4766',
+  hemiGround: '#24232a',
+  hemiI: 0.5,
+  zenith: '#050916',
+  horizon: '#141b33',
+  ground: '#0d1122',
+  glow: '#2c3866',
+  glowI: 0.0,
+  fog: '#121829',
+  exposure: 1.12,
+  cloudLit: '#5a6684',
+  cloudShade: '#242a40',
+  stars: 1,
+  env: 0.42,
+  bloom: 1.0,
+  cyc: '#0f1429',
+};
+
+const KEYS: KeyDef[] = [
+  { h: 0, ...NIGHT },
+  { h: 4.6, ...NIGHT },
+  {
+    // pre-dawn blue
+    h: 5.3,
+    sun: '#959dcc',
+    sunI: 0.3,
+    hemiSky: '#48557c',
+    hemiGround: '#2c2a33',
+    hemiI: 0.58,
+    zenith: '#0f1a3e',
+    horizon: '#5a5e8c',
+    ground: '#252943',
+    glow: '#d48c86',
+    glowI: 0.55,
+    fog: '#3a4268',
+    exposure: 1.12,
+    cloudLit: '#968cb0',
+    cloudShade: '#3a3f5e',
+    stars: 0.65,
+    env: 0.45,
+    bloom: 0.95,
+    cyc: '#2e3354',
+  },
+  {
+    // sunrise: rose light, lilac mist
+    h: 6.0,
+    sun: '#ff9c86',
+    sunI: 1.3,
+    hemiSky: '#8b8fbe',
+    hemiGround: '#5c4a4e',
+    hemiI: 0.6,
+    zenith: '#3a5694',
+    horizon: '#efb4a6',
+    ground: '#7d6c7e',
+    glow: '#ff8f78',
+    glowI: 1.0,
+    fog: '#c8a9b4',
+    exposure: 1.12,
+    cloudLit: '#ffb4a2',
+    cloudShade: '#7a6e98',
+    stars: 0.15,
+    env: 0.48,
+    bloom: 0.7,
+    cyc: '#b49aac',
+  },
+  {
+    // dawn: low apricot-pink sun, cool lavender fill (cooler and pinker than dusk)
+    h: 6.7,
+    sun: '#ffb592',
+    sunI: 3.1,
+    hemiSky: '#97a3d4',
+    hemiGround: '#7a6459',
+    hemiI: 0.54,
+    zenith: '#5a80c0',
+    horizon: '#f2c8b6',
+    ground: '#b7a4a6',
+    glow: '#ffae88',
+    glowI: 0.8,
+    fog: '#d8c4c8',
+    exposure: 1.12,
+    cloudLit: '#ffd2bc',
+    cloudShade: '#9792b8',
+    stars: 0,
+    env: 0.46,
+    bloom: 0.5,
+    cyc: '#d2c2c8',
+  },
+  {
+    h: 7.8,
+    sun: '#ffdab4',
+    sunI: 3.9,
+    hemiSky: '#a6bee4',
+    hemiGround: '#8a7a64',
+    hemiI: 0.54,
+    zenith: '#6a9fd8',
+    horizon: '#d9e4ea',
+    ground: '#cfc9c0',
+    glow: '#ffe0b8',
+    glowI: 0.45,
+    fog: '#d4dee6',
+    exposure: 1.1,
+    cloudLit: '#fff3e4',
+    cloudShade: '#a8b3cc',
+    stars: 0,
+    env: 0.48,
+    bloom: 0.42,
+    cyc: '#cfdbe6',
+  },
+  {
+    h: 10.0,
+    sun: '#ffefd8',
+    sunI: 4.3,
+    hemiSky: '#a5c0e8',
+    hemiGround: '#8c7f6a',
+    hemiI: 0.54,
+    zenith: '#5f99d8',
+    horizon: '#d6e6f0',
+    ground: '#d3cfc6',
+    glow: '#fff2dc',
+    glowI: 0.3,
+    fog: '#d2e0ea',
+    exposure: 1.08,
+    cloudLit: '#ffffff',
+    cloudShade: '#aab8d2',
+    stars: 0,
+    env: 0.5,
+    bloom: 0.4,
+    cyc: '#d0dfec',
+  },
+  {
+    h: 12.75,
+    sun: '#fff4e6',
+    sunI: 4.4,
+    hemiSky: '#a8c2ea',
+    hemiGround: '#8a8270',
+    hemiI: 0.54,
+    zenith: '#5896d8',
+    horizon: '#d8e8f2',
+    ground: '#d5d1c8',
+    glow: '#fff6e8',
+    glowI: 0.25,
+    fog: '#d4e2ec',
+    exposure: 1.06,
+    cloudLit: '#ffffff',
+    cloudShade: '#adbad3',
+    stars: 0,
+    env: 0.5,
+    bloom: 0.4,
+    cyc: '#d2e1ee',
+  },
+  {
+    h: 16.0,
+    sun: '#ffe9cc',
+    sunI: 4.3,
+    hemiSky: '#a6bce2',
+    hemiGround: '#8e806a',
+    hemiI: 0.52,
+    zenith: '#5c94d2',
+    horizon: '#dfe6e8',
+    ground: '#d3cdc2',
+    glow: '#ffe8c4',
+    glowI: 0.35,
+    fog: '#d8e0e4',
+    exposure: 1.08,
+    cloudLit: '#fffaf0',
+    cloudShade: '#aab4cc',
+    stars: 0,
+    env: 0.48,
+    bloom: 0.4,
+    cyc: '#d6e0e6',
+  },
+  {
+    // golden hour begins: amber sun, cool periwinkle fill
+    h: 17.6,
+    sun: '#ffc68a',
+    sunI: 4.1,
+    hemiSky: '#9cacd8',
+    hemiGround: '#8c7256',
+    hemiI: 0.48,
+    zenith: '#5684c4',
+    horizon: '#efd8bc',
+    ground: '#cbbcab',
+    glow: '#ffc684',
+    glowI: 0.65,
+    fog: '#e2d4c2',
+    exposure: 1.12,
+    cloudLit: '#ffe4c0',
+    cloudShade: '#a4a6c6',
+    stars: 0,
+    env: 0.44,
+    bloom: 0.45,
+    cyc: '#e6d2bc',
+  },
+  {
+    h: 18.6,
+    sun: '#ff9d56',
+    sunI: 3.6,
+    hemiSky: '#8e98cc',
+    hemiGround: '#7e5c42',
+    hemiI: 0.46,
+    zenith: '#4a6eb0',
+    horizon: '#f4bc86',
+    ground: '#b99f8c',
+    glow: '#ff9850',
+    glowI: 0.95,
+    fog: '#e2c0a0',
+    exposure: 1.16,
+    cloudLit: '#ffc08a',
+    cloudShade: '#988aae',
+    stars: 0,
+    env: 0.42,
+    bloom: 0.55,
+    cyc: '#e4b88e',
+  },
+  {
+    h: 19.3,
+    sun: '#ff7a46',
+    sunI: 2.1,
+    hemiSky: '#7f7fb6',
+    hemiGround: '#6a4a40',
+    hemiI: 0.56,
+    zenith: '#3a5090',
+    horizon: '#f09c72',
+    ground: '#8f7682',
+    glow: '#ff6c42',
+    glowI: 1.0,
+    fog: '#c99e92',
+    exposure: 1.18,
+    cloudLit: '#ff9e82',
+    cloudShade: '#7a6a9a',
+    stars: 0,
+    env: 0.48,
+    bloom: 0.7,
+    cyc: '#c4927e',
+  },
+  {
+    // afterglow (no direct light: the sky carries the scene)
+    h: 19.8,
+    sun: '#9aa2d8',
+    sunI: 0.25,
+    hemiSky: '#5a5f96',
+    hemiGround: '#3a3240',
+    hemiI: 0.66,
+    zenith: '#24336e',
+    horizon: '#c47c88',
+    ground: '#4a4058',
+    glow: '#e0627a',
+    glowI: 0.7,
+    fog: '#62567a',
+    exposure: 1.16,
+    cloudLit: '#d08ca2',
+    cloudShade: '#4c4a72',
+    stars: 0.2,
+    env: 0.52,
+    bloom: 0.85,
+    cyc: '#5a5076',
+  },
+  {
+    // blue hour
+    h: 20.3,
+    sun: '#9caee0',
+    sunI: 0.36,
+    hemiSky: '#41507c',
+    hemiGround: '#2a2834',
+    hemiI: 0.6,
+    zenith: '#111d48',
+    horizon: '#44548a',
+    ground: '#20263f',
+    glow: '#7a5c8c',
+    glowI: 0.35,
+    fog: '#283258',
+    exposure: 1.14,
+    cloudLit: '#7480aa',
+    cloudShade: '#30385a',
+    stars: 0.6,
+    env: 0.46,
+    bloom: 0.95,
+    cyc: '#232b4c',
+  },
   { h: 21.3, ...NIGHT },
   { h: 24, ...NIGHT },
 ];
@@ -319,11 +616,12 @@ export class SkyState {
   stars = 0;
   env = 0.6;
   bloom = 0.5;
+  cyc = new THREE.Color();
 }
 
-type ColorKey = 'sun' | 'hemiSky' | 'hemiGround' | 'zenith' | 'horizon' | 'ground' | 'glow' | 'fog' | 'cloudLit' | 'cloudShade';
+type ColorKey = 'sun' | 'hemiSky' | 'hemiGround' | 'zenith' | 'horizon' | 'ground' | 'glow' | 'fog' | 'cloudLit' | 'cloudShade' | 'cyc';
 type NumKey = 'sunI' | 'hemiI' | 'glowI' | 'exposure' | 'stars' | 'env' | 'bloom';
-const COLOR_KEYS: ColorKey[] = ['sun', 'hemiSky', 'hemiGround', 'zenith', 'horizon', 'ground', 'glow', 'fog', 'cloudLit', 'cloudShade'];
+const COLOR_KEYS: ColorKey[] = ['sun', 'hemiSky', 'hemiGround', 'zenith', 'horizon', 'ground', 'glow', 'fog', 'cloudLit', 'cloudShade', 'cyc'];
 const NUM_KEYS: NumKey[] = ['sunI', 'hemiI', 'glowI', 'exposure', 'stars', 'env', 'bloom'];
 
 interface LinearKey {
@@ -332,21 +630,27 @@ interface LinearKey {
   nums: Record<NumKey, number>;
 }
 
-const LINEAR: LinearKey[] = KEYS.map((k) => {
-  const colors = {} as Record<ColorKey, THREE.Color>;
-  for (const c of COLOR_KEYS) colors[c] = new THREE.Color(k[c]); // sRGB hex → linear working space
-  const nums = {} as Record<NumKey, number>;
-  for (const n of NUM_KEYS) nums[n] = k[n];
-  return { h: k.h, colors, nums };
-});
+function linearize(keys: KeyDef[]): LinearKey[] {
+  return keys.map((k) => {
+    const colors = {} as Record<ColorKey, THREE.Color>;
+    for (const c of COLOR_KEYS) colors[c] = new THREE.Color(c === 'cyc' ? (k.cyc ?? k.ground) : k[c]); // sRGB hex → linear working space
+    const nums = {} as Record<NumKey, number>;
+    for (const n of NUM_KEYS) nums[n] = k[n];
+    return { h: k.h, colors, nums };
+  });
+}
 
-/** Sample the palette at `hours` (0..24) into `out`. Smooth (C1) between keys. */
-export function samplePalette(hours: number, out: SkyState): SkyState {
+const LINEAR = linearize(KEYS);
+const LINEAR_LEGACY = linearize(LEGACY_KEYS);
+
+/** Sample the palette at `hours` (0..24) into `out`. Smooth (C1) between keys. `legacy` = the original rig. */
+export function samplePalette(hours: number, out: SkyState, legacy = false): SkyState {
+  const keys = legacy ? LINEAR_LEGACY : LINEAR;
   const h = ((hours % 24) + 24) % 24;
   let i = 0;
-  while (i < LINEAR.length - 2 && LINEAR[i + 1].h <= h) i++;
-  const a = LINEAR[i],
-    b = LINEAR[i + 1];
+  while (i < keys.length - 2 && keys[i + 1].h <= h) i++;
+  const a = keys[i],
+    b = keys[i + 1];
   let t = (h - a.h) / Math.max(1e-6, b.h - a.h);
   t = Math.min(1, Math.max(0, t));
   t = t * t * (3 - 2 * t);

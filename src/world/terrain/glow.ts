@@ -1,9 +1,47 @@
 // Night glows for the terrain's own lights (promenade lamps, portal lanterns, tunnel lamps):
-// camera-facing halos + soft light pools on the ground, all in ONE additive draw call.
-// Intensity follows uniforms.uLights (tunnel lamps keep a faint glow by day).
+// camera-facing halos in ONE additive draw call; intensity follows uniforms.uLights (tunnel lamps
+// keep a faint glow by day). The ground pools are registered as real light sources in the shared
+// lamp light map (core/lampLight.ts) instead of being drawn — each pool is paired with the halo of
+// its lamp (head height, aim); ?legacylamps draws the old flat additive pools again.
 
 import * as THREE from 'three';
 import type { CityContext } from '../../core/context';
+import { addLampLights, type LampLight } from '../../core/lampLight';
+
+const LEGACY = typeof location !== 'undefined' && new URLSearchParams(location.search).has('legacylamps');
+
+function registerPools(points: GlowPoint[]): void {
+  const halos = points.filter((p) => p.kind === 'halo');
+  const out: LampLight[] = [];
+  for (const p of points) {
+    if (p.kind !== 'pool') continue;
+    let best: GlowPoint | null = null,
+      bd = 2.6;
+    for (const h of halos) {
+      if (h.y < p.y + 1) continue;
+      const d = Math.hypot(h.x - p.x, h.z - p.z);
+      if (d < bd) {
+        bd = d;
+        best = h;
+      }
+    }
+    const color = '#' + new THREE.Color(p.color).getHexString();
+    const intensity = (p.intensity / 0.22) * 0.95;
+    if (best) {
+      const pole = best.y - p.y;
+      const l: LampLight = { x: best.x, y: best.y, z: best.z, pole, radius: p.size * 1.1, color, intensity, kind: pole > 5.5 ? 'portal' : 'path' };
+      if (bd > 0.3) {
+        // wall / railing lamp throwing its light forward: aimed at the old pool centre
+        l.aim = [p.x, p.y, p.z];
+        l.cone = Math.atan2(p.size * 1.1, Math.hypot(bd, pole)) + 0.25;
+      }
+      out.push(l);
+    } else {
+      out.push({ x: p.x, y: p.y + 3, z: p.z, pole: 3, radius: p.size, color, intensity: intensity * 0.7, kind: 'spill' });
+    }
+  }
+  addLampLights(out);
+}
 
 export interface GlowPoint {
   x: number;
@@ -68,7 +106,12 @@ void main() {
 }
 `;
 
-export function createGlows(ctx: CityContext, points: GlowPoint[]): THREE.Mesh {
+export function createGlows(ctx: CityContext, allPoints: GlowPoint[]): THREE.Mesh {
+  let points = allPoints;
+  if (!LEGACY) {
+    registerPools(allPoints);
+    points = allPoints.filter((p) => p.kind !== 'pool');
+  }
   const n = points.length;
   const center = new Float32Array(n * 4 * 3);
   const corner = new Float32Array(n * 4 * 2);
