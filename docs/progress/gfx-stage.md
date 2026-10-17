@@ -36,6 +36,11 @@ S4 before/after sheets, perf A/B.
   - shadows measured navy (cu 11 shadow asphalt sRGB 25,42,67) → hemi sky greyer, env sky desaturated 55/35 %,
     AO tint #25262c, grade shadow tint (−.004,0,.007);
   - golden-hour tree crowns near-black → hemi 0.58–0.64, warmer brighter hemiGround, exposure 1.15–1.22.
+* S1 check on the shared tree (5173, everyone's WIP): shots/stage/s1c/<overview|park|harbor|cu>_<11|18h2|21h5|2>_new.png.
+  Shadow fit: park 130 m → half 128 m / texel 12.5 cm / PCF 1.5 texel; overview 28 cm / 1.0; cu 2.2 cm / 3.2.
+  Shadow asphalt cu 11 now sRGB (29,39,57) (was 25,42,67 → navy). Golden hour: long crisp warm shadows, cool
+  crown sides. Night unlit p25 luminance (sRGB) −40 % overview, −45 % park vs baseline; roofs a bit too dark →
+  moon 0.40→0.50, night cyc #131a37, table→indigo fade pulled in at night (uFade 60/640 → 32/370).
 * S2: table + dome studio floor working (overview: model grounded on planks, analytic slab shadow visible
   east of the plinth at 16.5). First oak texture too orange/busy → paler limed oak, fade 60→640 m.
 * S3: aircraft routes moved (balloon/blimp loops NW, plane crossing N and left↔right in the hero view; blimp

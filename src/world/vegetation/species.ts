@@ -638,7 +638,11 @@ function broadleaf(s: GeoSink, w: Wind, t: TreeSpec, rng: Rng): number {
   return clear;
 }
 
-/** Airy birch: slender white trunk (dashes painted in the shader), a few separate small leaf clouds. */
+/**
+ * Airy birch: slender white trunk (dashes painted in the shader) running up through a narrow, deeply
+ * notched oval crown (leaf masses spiral up on alternating sides), plus one or two detached leaf
+ * clouds hanging off thin dark twigs — the gaps and satellites read as "light and loose".
+ */
 function birch(s: GeoSink, w: Wind, t: TreeSpec, rng: Rng): number {
   const { x, y, z, h, r } = t;
   let clear = t.clear ?? h * rng.range(0.32, 0.4);
@@ -652,51 +656,48 @@ function birch(s: GeoSink, w: Wind, t: TreeSpec, rng: Rng): number {
   const r0 = Math.max(0.08, Math.min(0.24, 0.02 * h + r * 0.02));
   const white = col(BARK.birch);
   const sides = t.far ? 4 : 5;
-  // leader runs up into the top cloud
-  trunk(s, x, y, z, tx, y + h * 0.9, tz, r0, r0 * 0.35, sides, white, 1.12, BARK_BIRCH);
+  // leader runs up into the crown
+  trunk(s, x, y, z, tx, y + h * 0.88, tz, r0, r0 * 0.35, sides, white, t.far ? 1 : 1.12, BARK_BIRCH);
   const leaf = pickLeaf(rng, LEAF.birch, 0.06, t.tone ?? 0.5).clone();
-  // clouds spiral up the leader, upper ones smaller, lower ones droop a little outwards
-  const n = r >= 1.8 ? 4 : 3;
+  // main crown: narrow core + leaf masses spiralling up, alternating sides (deep notches between them)
+  const Rv = crownH / 2;
+  const cy = y + clear + Rv * 0.92;
+  const lobes: Lobe[] = [{ x: 0, y: 0, z: 0, rx: r * 0.5, ry: Rv * 0.8, rz: r * 0.5, tint: 0.94 }];
+  const n = 6;
   const th0 = rng.range(0, 6.28);
-  const clouds: { x: number; y: number; z: number; rr: number; rv: number }[] = [];
   for (let i = 0; i < n; i++) {
-    const f = (i + 0.5) / n;
-    const top = i === n - 1;
-    const a = th0 + i * 2.35 + rng.range(-0.4, 0.4);
-    const off = top ? r * 0.06 : r * rng.range(0.26, 0.38);
-    const rr = r * (top ? 0.56 : rng.range(0.58, 0.68)) * (1 - 0.16 * f);
-    const rv = Math.min(rr * 1.1, (crownH / n) * rng.range(0.78, 0.92));
-    let fy = y + clear + crownH * (top ? 1 - rv / crownH - 0.02 : f * 0.92) + (top ? 0 : rv * 0.15);
-    fy = Math.max(y + clear + rv * 0.95, Math.min(y + h - rv, fy));
-    const lf = (fy - y) / h;
-    const o2 = Math.min(off, Math.max(0, r * 1.02 - rr));
-    clouds.push({ x: x + (tx - x) * lf + Math.cos(a) * o2, y: fy, z: z + (tz - z) * lf + Math.sin(a) * o2, rr, rv });
+    const f = i / (n - 1);
+    const a = th0 + i * 2.6 + rng.range(-0.35, 0.35);
+    const rad = r * rng.range(0.36, 0.46) * (1 - 0.25 * f);
+    const d = Math.min(r * 1.0 - rad, r * rng.range(0.34, 0.52));
+    lobes.push({ x: Math.cos(a) * d, y: (-0.62 + 1.2 * f) * Rv, z: Math.sin(a) * d, rx: rad, ry: Math.min(rad * 1.15, Rv * 0.36), rz: rad, tint: rng.range(0.88, 1.12) });
   }
-  // dark twigs from the leader to the side clouds
+  lobes.push({ x: rng.range(-0.1, 0.1) * r, y: Rv * 0.78, z: rng.range(-0.1, 0.1) * r, rx: r * 0.3, ry: Rv * 0.3, rz: r * 0.3, tint: 1.1 });
+  // satellites: detached leaf clouds on the lower flanks (drawn near only; their randoms always drawn)
+  const nSat = r >= 1.8 ? 2 : 1;
+  const sats: { x: number; y: number; z: number; rr: number; a: number }[] = [];
+  for (let i = 0; i < nSat; i++) {
+    const a = th0 + 1.3 + i * 3.1 + rng.range(-0.4, 0.4);
+    const rr = r * rng.range(0.28, 0.36);
+    const d = r * 1.02 - rr;
+    sats.push({ x: tx + Math.cos(a) * d, y: y + clear + crownH * rng.range(0.12, 0.38), z: tz + Math.sin(a) * d, rr, a });
+  }
   const twig = col('#6b625a');
-  for (const c of clouds) {
-    if (t.far) break;
-    const yb = Math.max(y + clear * 0.8, c.y - c.rv);
-    const lf = (yb - y) / h;
-    branch(s, x + (tx - x) * lf, yb, z + (tz - z) * lf, c.x, c.y - c.rv * 0.2, c.z, r0 * 0.35, r0 * 0.15, twig);
-  }
   w.at(x, y, z, 1 / 10, 1.3, 0);
-  const opts: CanopyOpts = { leaf, noise: 0.11, lo: 0.8, hi: 1.1, aoLo: 0.55, warm: 0.3, clump: 0.32, tone: 0.55 };
-  if (t.far || t.detail <= 1) {
-    // far LOD / forest: one union of all clouds (same silhouette mass, one surface)
-    const lobes: Lobe[] = clouds.map((c) => ({ x: c.x - tx, y: c.y - (y + clear + crownH * 0.5), z: c.z - tz, rx: c.rr, ry: c.rv, rz: c.rr, tint: 1 }));
-    lobes.push({ x: 0, y: 0, z: 0, rx: r * 0.5, ry: crownH * 0.4, rz: r * 0.5, tint: 0.95 });
-    lobedCanopy(s, tx, y + clear + crownH * 0.5, tz, lobes, t.far ? 1 : 2, rng.int(0, 1e9), opts);
-  } else {
-    for (const c of clouds) {
-      const a = rng.range(0, 6.28);
-      const lobes: Lobe[] = [
-        { x: 0, y: 0, z: 0, rx: c.rr * 0.82, ry: c.rv * 0.82, rz: c.rr * 0.82, tint: rng.range(0.92, 1.06) },
-        { x: Math.cos(a) * c.rr * 0.35, y: c.rv * 0.15, z: Math.sin(a) * c.rr * 0.35, rx: c.rr * 0.62, ry: c.rv * 0.62, rz: c.rr * 0.62, tint: rng.range(0.96, 1.12) },
-        { x: -Math.cos(a) * c.rr * 0.3, y: -c.rv * 0.12, z: -Math.sin(a) * c.rr * 0.3, rx: c.rr * 0.58, ry: c.rv * 0.55, rz: c.rr * 0.58, tint: rng.range(0.86, 1.0) },
+  const opts: CanopyOpts = { leaf, noise: 0.12, lo: 0.8, hi: 1.1, aoLo: 0.55, warm: 0.3, clump: 0.32, tone: 0.55 };
+  lobedCanopy(s, tx, cy, tz, lobes, t.far ? 1 : 2, rng.int(0, 1e9), opts);
+  const sseed = rng.int(0, 1e9);
+  if (!t.far && t.detail >= 2) {
+    sats.forEach((c, i) => {
+      const lf = (c.y - c.rr - y) / h;
+      branch(s, x + (tx - x) * lf, c.y - c.rr * 1.4, z + (tz - z) * lf, c.x, c.y - c.rr * 0.3, c.z, r0 * 0.3, r0 * 0.14, twig);
+      w.at(x, y, z, 1 / 10, 1.4, 0);
+      const sl: Lobe[] = [
+        { x: 0, y: 0, z: 0, rx: c.rr, ry: c.rr * 0.85, rz: c.rr, tint: 1.02 },
+        { x: Math.cos(c.a) * c.rr * 0.45, y: -c.rr * 0.25, z: Math.sin(c.a) * c.rr * 0.45, rx: c.rr * 0.7, ry: c.rr * 0.6, rz: c.rr * 0.7, tint: 0.94 },
       ];
-      lobedCanopy(s, c.x, c.y, c.z, lobes, t.detail >= 3 ? 2 : 1, rng.int(0, 1e9), opts);
-    }
+      lobedCanopy(s, c.x, c.y, c.z, sl, 1, sseed + i, opts);
+    });
   }
   return clear;
 }
