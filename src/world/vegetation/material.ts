@@ -6,10 +6,11 @@
 //     flex    — bendiness at this vertex (0 at the trunk base, ≈1 at the top of a 10 m tree);
 //               the displacement grows with flex² so trunks stay planted
 //     flutter — leaf shimmer amplitude (along the normal, high frequency)
-//   aLeaf = (ao, tone, leafiness, clump)                 (normalized Uint8)
+//   aLeaf = (ao, model+tone, leafiness, clump)           (normalized Uint8)
 //     ao        — baked occlusion (depth into the crown / seams / undersides); darkens the ambient
 //                 light fully and the sun partly, so sunlit leaves stay vivid and interiors go deep
-//     tone      — per-leaf-mass tone seed (0.5 neutral) — shifts the clump tint family
+//     model+tone— y < 0.5: clump cells, y ≥ 0.5: billowed relief (needles, clipped hedges); the rest
+//                 (·4) is the clump tone-drift amplitude (1 = default) — see species.ts leafTone()
 //     leafiness — 0 bark / hard parts … 1 foliage: drives clump relief, wrap, translucency
 //     clump     — leaf-clump size code: size = 0.1 + clump * 1.5 m
 // Gust fronts travel downwind across the city (driven by uniforms.uWind / uTime — deterministic).
@@ -147,14 +148,17 @@ float thAO = vThLeaf.x;
 thWrap = uThWrap * thAmt;
 if ( thAmt > 0.02 ) {
   float cs = ( 0.1 + vThLeaf.w * 1.5 ) * uThScale;
-  vec3 p = vThRest / cs + vec3( 0.0, vThLeaf.y * 7.0, 0.0 );
+  // aLeaf.y packs the relief model (≥ 0.5 → billowed needles/clipped leaves, else clump cells) and the tone amplitude
+  float billow = uThModel > 1.5 ? 0.0 : uThModel > 0.5 ? 1.0 : step( 0.5, vThLeaf.y );
+  float toneAmp = ( vThLeaf.y - step( 0.5, vThLeaf.y ) * 0.5 ) * 4.0;
+  vec3 p = vThRest / cs;
   float foot = length( fwidth( vThRest ) ) / cs;
   float f1 = thAmt * ( 1.0 - smoothstep( 0.12, 0.42, foot ) );
   float f2 = thAmt * ( 1.0 - smoothstep( 0.12, 0.42, foot * 2.37 ) );
   vec3 g = vec3( 0.0 );
   if ( f1 > 0.001 ) {
     float t;
-    if ( uThModel > 0.5 ) {
+    if ( billow > 0.5 ) {
       // billowed gradient noise (meandering creases)
       vec4 n1 = thNoised( p );
       // soft sign: crease width follows the pixel footprint (no stair-stepping)
@@ -162,7 +166,7 @@ if ( thAmt > 0.02 ) {
       float s1 = n1.x / sqrt( n1.x * n1.x + e1 * e1 );
       g += s1 * n1.yzw * f1;
       thAO *= mix( 1.0, smoothstep( 0.0, 0.2, abs( n1.x ) ), f1 * uThCrease );
-      t = s1 * smoothstep( 0.02, 0.22, abs( n1.x ) ) * f1 * uThTone;
+      t = s1 * smoothstep( 0.02, 0.22, abs( n1.x ) ) * f1 * uThTone * toneAmp;
     } else {
       // leaf clumps: every cell is a little dome (normal tilts away from its centre), creases between
       vec3 cd;
@@ -170,7 +174,7 @@ if ( thAmt > 0.02 ) {
       thCell( p, cd, edge, cid );
       g -= cd * ( 1.6 * f1 ); // height = -|d|² → the normal tilts outward from the clump centre
       thAO *= mix( 1.0, smoothstep( 0.0, 0.16 + foot * 0.6, edge ), f1 * uThCrease );
-      t = cid * f1 * uThTone;
+      t = cid * f1 * uThTone * toneAmp;
     }
     // clump tone families: warm/light vs cool/dark
     diffuseColor.rgb *= vec3( 1.0 ) + vec3( 0.11, 0.07, -0.05 ) * t;
@@ -237,7 +241,7 @@ export interface FoliageKnobs {
   trans: { value: number };
   wrap: { value: number };
   tone: { value: number };
-  /** clump model: 0 cellular domes, 1 billowed noise */
+  /** relief model: 0 per vertex (cells for broadleaf, billow for needles/hedges), 1 all billow, 2 all cells */
   model: { value: number };
   /** clump size multiplier */
   scale: { value: number };
@@ -249,14 +253,14 @@ export interface FoliageKnobs {
 
 /** shared tuning uniforms (one object drives every foliage material) */
 export const foliageKnobs: FoliageKnobs = {
-  bump: { value: 0.9 },
-  trans: { value: 0.9 },
+  bump: { value: 0.5 },
+  trans: { value: 0.6 },
   wrap: { value: 0.45 },
   tone: { value: 1.0 },
   model: { value: 0 },
-  scale: { value: 1 },
-  crease: { value: 0.42 },
-  fine: { value: 0.55 },
+  scale: { value: 1.5 },
+  crease: { value: 0.25 },
+  fine: { value: 0.35 },
 };
 
 let physPars: string | null = null;

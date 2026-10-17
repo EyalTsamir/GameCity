@@ -286,8 +286,10 @@ vec4 waterBase() {
   vec4 mB = texture2D(tWM, p.xz * (1.0 / 160.0) + vec2(-t * 0.0012, t * 0.0008));
   vec2 pr = vec2(p.x - t * 0.33, p.z);
   vec4 mR = texture2D(tWM, pr * vec2(1.0 / 70.0, 1.0 / 16.0));
-  // 0 glassy slick .. 1 ruffled
-  float ruff = clamp(0.5 + 1.15 * (mA.r - 0.5) + 0.7 * (mB.g - 0.5), 0.0, 1.0);
+  // 0 glassy slick .. 1 ruffled: broad patches + long glassy wind slicks (lanes along the wind)
+  float slick = smoothstep(0.6, 0.78, mA.r) * mSea;
+  float ruff = clamp(0.55 + 1.5 * (mB.g - 0.5) + 0.5 * (mA.r - 0.5), 0.0, 1.0);
+  ruff *= 1.0 - 0.85 * slick;
   ruff = mix(ruff, clamp(0.38 + 1.2 * (mR.r - 0.5), 0.0, 1.0), mRiv);
   ruff = mix(ruff, 0.12, mPond);
   float calm = 0.3 + 0.7 * smoothstep(0.05, 1.4, depth);
@@ -307,8 +309,9 @@ vec4 waterBase() {
   float var2 = (1.0 - l2) / max(l2, 0.05);
   vec2 s1 = n1.xz / max(n1.y, 0.25);
   vec2 s2 = n2.xz / max(n2.y, 0.25);
-  float k1 = mix(0.16, 0.42, ruff) * calm * mix(1.0, 0.55, mRiv) * mix(1.0, 0.25, mPond);
-  float k2 = mix(0.10, 0.30, ruff) * calm * mix(1.0, 0.7, mRiv) * mix(1.0, 0.3, mPond);
+  // the finer octave fades with the pixel footprint (no distant 'dash' noise), the coarse one less
+  float k1 = mix(0.12, 0.42, ruff) * calm * mix(1.0, 0.55, mRiv) * mix(1.0, 0.25, mPond) * (1.0 - 0.4 * smoothstep(0.15, 0.45, fp));
+  float k2 = mix(0.07, 0.30, ruff) * calm * mix(1.0, 0.7, mRiv) * mix(1.0, 0.3, mPond) * (1.0 - 0.75 * smoothstep(0.07, 0.3, fp));
   vec2 rt = s1 * k1 + s2 * k2;
   tilt += wdir * rt.x + wper * rt.y;
   // river: flow ripples drift east
@@ -331,7 +334,7 @@ vec4 waterBase() {
   seaC = mix(seaC, wDeep, smoothstep(2.0, 7.5, dS));
   // broad patches: greener / bluer, lighter / darker (readable from far away)
   float pt = mB.g - 0.5;
-  seaC *= vec3(1.0 - 0.16 * pt, 1.0 + 0.05 * pt, 1.0 + 0.1 * pt) * (0.93 + 0.16 * mA.g);
+  seaC *= vec3(1.0 - 0.3 * pt, 1.0 + 0.08 * pt, 1.0 + 0.16 * pt) * (0.88 + 0.26 * mA.g);
   vec3 rivC = mix(wRivS, wRivD, smoothstep(0.0, 2.0, d));
   rivC *= 0.9 + 0.2 * mR.r;
   vec3 pondC = mix(wPondS, wPondD, smoothstep(0.0, 0.9, d));
@@ -341,10 +344,10 @@ vec4 waterBase() {
 
   // ── Fresnel
   float ndv = clamp(dot(wN, V), 0.0, 1.0);
-  float F0 = mix(mix(0.3, 0.34, mRiv), 0.32, mPond);
+  float F0 = mix(mix(0.38, 0.42, mRiv), 0.34, mPond);
   float F = mix(F0, 0.92, pow(1.0 - ndv, 4.0));
-  // glassy slicks mirror more than ruffled streaks (macro tonal variation that survives distance)
-  F *= mix(1.18, 0.86, ruff);
+  // glassy slicks mirror more than ruffled patches (macro tonal variation that survives distance)
+  F = min(0.95, F * mix(1.16, 0.84, ruff) * (1.0 + 0.22 * slick));
 
   // ── reflection: analytic sky under the planar reflection
   vec3 R = reflect(-V, wN);
@@ -437,7 +440,7 @@ vec4 waterBase() {
   wSparkle = smoothstep(0.55, 0.95, crest * (0.55 + 0.9 * texture2D(tWM, p.xz * 0.37 + vec2(t * 0.05, -t * 0.04)).a)) * (1.0 - smoothstep(0.08, 0.3, fp)) * ruff;
   // moon
   float md = max(dot(R, normalize(uSkyMoonDir)), 0.0);
-  vec3 moon = vec3(0.62, 0.72, 1.0) * (pow(md, mix(900.0, 120.0, ruff)) * 2.2 + pow(md, 40.0) * 0.08 + wSparkle * pow(md, 60.0) * 2.0) * uSkyMoonVis * uNight;
+  vec3 moon = vec3(0.62, 0.72, 1.0) * (pow(md, mix(1400.0, 350.0, ruff)) * 1.1 + pow(md, 60.0) * 0.04 + wSparkle * pow(md, 260.0) * 0.5) * uSkyMoonVis * uNight * (1.0 - 0.5 * mRiv);
 
   // night lights when the reflection pass is off: lamp map read where the reflected ray
   // reaches lamp-head height (streaks toward the viewer through the anisotropic normal)

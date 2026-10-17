@@ -27,8 +27,10 @@ S4 before/after sheets, perf A/B.
   (`dome.setStudio`). Shadow fitter covers table strip (margin 14, minY −24.6).
 
 ## Toggles
-* `?legacylight` — original palette, shadow filtering, IBL, contact decal, no table.
-* runtime: `__city.ctx.services.sky.setLegacy(bool)`, `.tune = {sun,hemi,env,exposure,pcf,bias}` multipliers.
+* `?legacylight` — original palette, shadow filtering, IBL, contact decal, no table, legacy bloom/grade/AO.
+* `?notable` — studio key without the table (old contact decal shown; perf A/B of the table alone).
+* runtime: `__city.ctx.services.sky.setLegacy(bool)`, `.setTable(bool)`, `.tune = {sun,hemi,env,exposure,pcf,bias}`.
+* `?debug`: `ctx.services.postfxInternals.adaptive.set(level)` / `.ladder` to force ladder steps.
 
 ## Status
 * S1 DONE (announced 20:25): studio key live. First A/B on the private frozen copy :5175 →
@@ -53,6 +55,17 @@ S4 before/after sheets, perf A/B.
 * S3: aircraft routes moved (balloon/blimp loops NW, plane crossing N and left↔right in the hero view; blimp
   leaves north). Adaptive ladder: full → refl-low → no-ao → scale-0.85 → dof-lite → scale-0.72 → refl-off → scale-0.6.
 * S4: not started.
+
+* Dawn 6.5 (s1d): rose key / mauve backdrop, distinct from the amber dusk; exposure 1.16–1.18 at 5.3–6.7.
+* Queued: S4 before (5174) / after (5173) sets → shots/stage/{before,after}/<view>_<h>.png, ladder test
+  (shots/stage/ladder), single-page perf A/B on :5175 (shots/stage/perf_overview.log).
+
+* Dome now drawn after the opaque queue with a depth test (renderOrder 1000, z at the far plane): only
+  uncovered pixels are shaded — with the table in the background that is usually none (was a full-screen
+  pass, overdrawn). Offsets the table's fragment cost.
+* Aircraft (S3): at 140 m no position is both inside the hero frame and near its focus depth (computed by
+  projecting the loop points), so the blimp stays just above the hero frame (crisp in edge-on / low views);
+  the balloon (94–137 m) appears crisply at the top edge. Old routes sat ~180 m in front of the focus plane.
 
 ## Test setup notes
 * :5175 = /home/user/GameCity-stage (git archive f5ff0a5 + my files via sync.sh, own Vite cacheDir).

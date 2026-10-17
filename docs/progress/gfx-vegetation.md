@@ -27,7 +27,7 @@ V5 verification (before/after 5174 vs 5173, perf A/B). Budgets: tris ≤ +15 %, 
 
 ## URL switches
 `?legacyveg` (old generators + material, same placement) · `?vegfx=0` (new geometry, plain shading) ·
-`?vegbump= &vegtrans= &vegwrap= &vegtone=` (shading knobs) · existing `?vegparts=trees,forest,plants&vegshadow=0&vegmat=`.
+`?vegbump= &vegtrans= &vegwrap= &vegtone= &vegscale= &vegcrease= &vegfine=` (shading knobs), `?vegclump=billow` (all billow); runtime: `__city.ctx.services.vegetation.knobs.*.value` (model 0 per-vertex, 1 billow, 2 cells) · existing `?vegparts=trees,forest,plants&vegshadow=0&vegmat=`.
 
 ## Status / next steps
 1. [done] it1 new vs legacy (shots/vegetation/it1, it1L): FIREFLIES — wrapped N·L fed GGX specular (visibility
@@ -37,7 +37,17 @@ V5 verification (before/after 5174 vs 5173, perf A/B). Budgets: tris ≤ +15 %, 
    Forest birch = union crown (fewer tris). Forest rim undergrowth (shrubs under edge trees).
    Tri estimate: near ≈ +7.5 %, far ≈ +2 % (it1 stats: treeTris 120.9k vs 114.3k legacy; forest 64.4k→~53k after fixes).
    Scratch tool: scratchpad/vcap.mjs = many knob variants in one page load (list sep '@@').
-2. tune shading, check triangle counts vs budget (baseline near: trees 118k, far 53k, forest 46k, plants 45k, fine 33k)
+2. [done] it2 broken by core/lampLight.ts textureLod bug (reported, lead fixed). it3/it4 = knob grids
+   (shots/vegetation/it3, it4, it4_c.png, it4_b.png; legacy it3L): DECISION relief = clump CELLS (3x3x3
+   Voronoi, jitter .45) for broadleaf/bushes, BILLOW for needles / clipped hedges / willow / palm / small
+   plants (packed into aLeaf.y with the tone amplitude: species.ts leafTone()). Defaults: scale 1.5,
+   bump 0.5, crease 0.25, fine 0.35, trans 0.6, wrap 0.45. Translucency colour toned down (yellow glow).
+   Offline geometry preview (no browser): scratchpad/export.mjs + raster.py (numpy rasterizer) — used to
+   redesign birch (notched narrow crown + satellite cloud on a twig), pine (separate flat pads on limbs),
+   conifers (stepped wide skirts, convex profile, scalloped rim, geometric profile normals).
+   Forest rim broadleafs → detail 2. ctx1 (overview/night/riverside/industry, shots/vegetation/ctx1_sheet.png) OK.
+3. [in progress] it5 = new defaults + new geometry. Then hedges/bushes close-up check, full-city before/after, perf.
+   (old item: tune shading, check triangle counts vs budget (baseline near: trees 118k, far 53k, forest 46k, plants 45k, fine 33k)
 3. V5 full-city before/after + perf A/B.
 
 ## Baseline numbers (pre-change, only=sky,terrain,water,vegetation,postfx, park 11h)

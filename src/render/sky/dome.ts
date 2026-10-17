@@ -181,7 +181,10 @@ export function createSkyDome(): SkyDome {
     fragmentShader: FRAG,
     side: THREE.BackSide,
     depthWrite: false,
-    depthTest: false,
+    // drawn AFTER the opaque scene with a depth test (z pinned just inside the far plane): only
+    // pixels nothing else covered are shaded. With the studio table filling the background of most
+    // views, that is often no pixel at all (it used to be a full-screen pass that got overdrawn).
+    depthTest: true,
     fog: false,
     dithering: true,
   });
@@ -189,7 +192,7 @@ export function createSkyDome(): SkyDome {
   const mesh = new THREE.Mesh(geo, material);
   mesh.name = 'sky-dome';
   mesh.frustumCulled = false;
-  mesh.renderOrder = -1000;
+  mesh.renderOrder = 1000; // last of the opaque queue (transparents still follow)
   mesh.castShadow = false;
   mesh.receiveShadow = false;
   mesh.matrixAutoUpdate = false;

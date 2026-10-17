@@ -60,10 +60,10 @@ export const POSE_KEYS = [
   'tailFloor',
   'headRoll',
   'chestRoll',
-  'hairLen',
-  'tailHem',
-  'tailFlare',
-  'spare',
+  'footYawL',
+  'footYawR',
+  'spare1',
+  'spare2',
 ] as const;
 export type PoseKey = (typeof POSE_KEYS)[number];
 export const POSE_UINTS = POSE_KEYS.length / 2; // 24 → 6 uvec4
@@ -174,7 +174,8 @@ void pedChain(inout vec3 p, inout vec3 n, int bone, float w) {
   if (b == ${B.FOOT_L} || b == ${B.FOOT_R}) {
     bool left = b == ${B.FOOT_L};
     b = left ? ${B.SHIN_L} : ${B.SHIN_R};
-    pedJoint(p, n, pedRX(-(left ? P_ankleL : P_ankleR)), pedPivS(${PIV.ANKLE}, left), w);
+    float fy = left ? -P_footYawL : P_footYawR;
+    pedJoint(p, n, pedRY(fy) * pedRX(-(left ? P_ankleL : P_ankleR)), pedPivS(${PIV.ANKLE}, left), w);
   }
   if (b == ${B.SHIN_L} || b == ${B.SHIN_R}) {
     bool left = b == ${B.SHIN_L};
@@ -230,7 +231,7 @@ void pedPose(inout vec3 p, inout vec3 n) {
   // ── parametric garments
   if (region == ${R.HAIR} && aux.x > 0.0) {
     // long hair: vertices deeper than the hair length are lifted to the hem
-    p.y += max(0.0, aux.x - P_hairLen);
+    p.y += max(0.0, aux.x - pedP8(iC1.x) * 0.5);
   }
   if (region == ${R.HAT}) {
     uint st = (iC1.y >> 24u) & 7u;
@@ -260,10 +261,10 @@ void pedPose(inout vec3 p, inout vec3 n) {
     float u = aux.x;
     vec3 hip = pedPiv(${PIV.HIP});
     if (u > -0.25) {
-      float hemY = P_tailHem * hip.y;
+      float hemY = pedP8(iC1.z) * hip.y;
       p.y = p.y - u * max(0.0, p.y - hemY);
       vec2 rad = p.xz - vec2(0.0, -0.01);
-      p.xz += normalize(rad + vec2(1e-5)) * u * P_tailFlare;
+      p.xz += normalize(rad + vec2(1e-5)) * u * float(iC2.w & 255u) * 0.001;
     }
     // thighs (and shins for long hems) carry the skirt: blend by side and depth
     float k = u < -0.75 ? 0.0 : (u < -0.25 ? 0.15 : 0.25 + 0.5 * u);

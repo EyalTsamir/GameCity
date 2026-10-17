@@ -464,10 +464,10 @@ void bhWall(inout vec3 albedo, inout float rough, inout float metal, inout vec3 
   float fR = fwidth(R0.y);
   float lodC = clamp(log2(max(fwidth(R0.x) + fwidth(R0.z), 1e-5) * 256.0 * 0.4) , 0.0, 8.0);
   vec2 so = vec2(fract(seed * 0.1373), fract(seed * 0.3119)) * 17.0;
-  vec4 nm = texture2D(uBhNoise, q * 0.031 + so);                               // g: ~2 m tone patches
+  // one fetch serves three scales: r ~8 m blotches, g ~2 m tone patches, b 0.5 m × 16 m streaks
+  vec4 nm = texture2D(uBhNoise, q * 0.031 + so);
+  float stv = nm.b;
   float grain = texture2D(uBhNoise, q * 0.3 + so.yx).a;                         // a: ~5 cm stucco grain
-  vec4 nMac = texture2D(uBhNoise, q * 0.03 + so.yx);                            // r: ~8 m blotches
-  float stv = texture2D(uBhNoise, vec2(q.x * 0.026, q.y * 0.03) + so).b;        // b: 0.6 m wide, ~15 m long streaks
   float sn = texture2D(uBhNoise, vec2(q.x * 0.16, q.y * 0.09) + so.yx).b;       // b: 10 cm wide, ~5 m long streaks
 
   // ── 1. surface pattern
@@ -489,7 +489,7 @@ void bhWall(inout vec3 albedo, inout float rough, inout float metal, inout vec3 
   float corner = info * (1.0 - smoothstep(0.0, 0.6, min(dl, dr)));
   float dirt = (0.3 * underTop + 0.3 * topWash + 0.36 * base + 0.1 * baseWide + 0.2 * corner) * wStr;
   vec3 dirtTint = pat > 1.5 && pat < 2.5 ? vec3(0.62, 0.4, 0.27) : vec3(0.53, 0.49, 0.43);
-  albedo *= (1.0 + (nMac.r - 0.5) * 0.28 * wStr) * mix(vec3(1.0), dirtTint, clamp(dirt, 0.0, 0.75));
+  albedo *= (1.0 + (nm.r - 0.5) * 0.28 * wStr) * mix(vec3(1.0), dirtTint, clamp(dirt, 0.0, 0.75));
 
   if (vB.x < 0.5 || vB.y < 0.5) return;
   vec2 cell = floor(vFac);
@@ -581,24 +581,26 @@ void bhWall(inout vec3 albedo, inout float rough, inout float metal, inout vec3 
   vec3 reflTint = mix(vec3(1.0), gt * 1.3, curtain ? 0.78 : (ribbon ? 0.55 : 0.22));
   vec3 refl = env * reflTint + uSunCol * glint;
 
-  // far field: whole blocks of 2^k × 2^k cells switch together (block size follows the pixel
-  // footprint) so districts keep contrast when windows are unresolved, while the expected
-  // brightness stays the occupancy average (energy-conserving, no popping between levels)
-  float avgOcc = bhOccupancy(mod(uHours + 24.0, 24.0), prof) * (office ? 0.9 : 1.0);
-  float lvl = clamp(log2(max(px, 1e-4) * 2.4), 0.0, 6.0);
-  float l0 = floor(lvl);
-  float lfr = lvl - l0;
-  vec2 bc0 = floor(cell / exp2(l0)), bc1 = floor(cell / exp2(l0 + 1.0));
-  float hb0 = bhHash13(vec3(bc0 + 0.37, seed + l0 * 3.17)), hb1 = bhHash13(vec3(bc1 + 0.37, seed + l0 * 3.17 + 3.17));
-  float farLit = mix(step(hb0, avgOcc), step(hb1, avgOcc), lfr);
-  float hc = fract(mix(hb0, hb1, step(0.5, lfr)) * 9.73);
-  vec3 farCol = office ? mix(vec3(0.66, 0.78, 1.0), vec3(1.0, 0.8, 0.52), hc) : mix(vec3(1.0, 0.52, 0.2), vec3(1.0, 0.68, 0.36), hc);
-  float farGlow = mix(0.07, 2.0, nightF) * (prof > 1.5 && prof < 2.5 ? 1.25 : 1.0);
   vec3 transTint = mix(vec3(1.0), gt, curtain ? 0.75 : 0.3);
   // average daylight albedo of a window (room seen through the glass, curtains), cf. the near path
   vec3 avgAlb = vec3(0.16, 0.15, 0.14) * (1.0 - F) * transTint * (curtain ? 0.4 : 1.0);
-  vec3 avgGlass = refl * F + farLit * farGlow * farCol * 0.34 * (curtain ? 0.85 : 1.0);
-  avgGlass += gt * crown * 0.7;
+  vec3 avgGlass = vec3(0.0);
+  if (detail < 0.999) {
+    // far field: whole blocks of 2^k × 2^k cells switch together (block size follows the pixel
+    // footprint) so districts keep contrast when windows are unresolved, while the expected
+    // brightness stays the occupancy average (energy-conserving, no popping between levels)
+    float avgOcc = bhOccupancy(mod(uHours + 24.0, 24.0), prof) * (office ? 0.9 : 1.0);
+    float lvl = clamp(log2(max(px, 1e-4) * 2.4), 0.0, 6.0);
+    float l0 = floor(lvl);
+    float lfr = lvl - l0;
+    vec2 bc0 = floor(cell / exp2(l0)), bc1 = floor(cell / exp2(l0 + 1.0));
+    float hb0 = bhHash13(vec3(bc0 + 0.37, seed + l0 * 3.17)), hb1 = bhHash13(vec3(bc1 + 0.37, seed + l0 * 3.17 + 3.17));
+    float farLit = mix(step(hb0, avgOcc), step(hb1, avgOcc), lfr);
+    float hc = fract(mix(hb0, hb1, step(0.5, lfr)) * 9.73);
+    vec3 farCol = office ? mix(vec3(0.66, 0.78, 1.0), vec3(1.0, 0.8, 0.52), hc) : mix(vec3(1.0, 0.52, 0.2), vec3(1.0, 0.68, 0.36), hc);
+    float farGlow = mix(0.07, 2.0, nightF) * (prof > 1.5 && prof < 2.5 ? 1.25 : 1.0);
+    avgGlass = refl * F + farLit * farGlow * farCol * 0.34 * (curtain ? 0.85 : 1.0) + gt * crown * 0.7;
+  }
 
   if (edge < 0.0) {
     // wall pixel far away: fold in the average window look
@@ -747,10 +749,10 @@ void bhRoof(inout vec3 albedo, inout float rough, inout vec3 emit, vec3 N, vec3 
   vec2 p = vFac;
   vec2 fp = fwidth(p);
   vec2 so = vec2(fract(seed * 0.1373), fract(seed * 0.3119)) * 17.0;
-  vec4 nM = texture2D(uBhNoise, p * 0.035 + so);                          // r ~7 m, g ~1.8 m
+  vec4 nM = texture2D(uBhNoise, p * 0.035 + so);                          // r ~7 m, g ~1.8 m, b 0.45 m × 14 m streaks
   vec4 nF = texture2D(uBhNoise, p * 0.12 + so.yx);                        // r ~2 m, g ~0.5 m
   float grain = texture2D(uBhNoise, p * 0.5 + so).a;                      // a ~3 cm gravel / grit
-  float stv = texture2D(uBhNoise, vec2(p.x * 0.05, p.y * 0.033) + so.yx).b; // b: 0.3 m wide down-slope streaks
+  float stv = nM.b;                                                       // down-slope streaks (v runs up the slope)
   if (pat < 0.5) { // flat roof: membrane sheets with seams, repairs, gravel ballast, stains, drains, moss
     float kindR = fract(seed * 0.618 + 0.13);
     float sv = p.y / 1.05;

@@ -552,7 +552,9 @@ export default function create(ctx: CityContext): CityModule {
       if (occAny(occ, x, z, sz.r + 0.6, blockers)) continue;
       if (rocks.any(x, z, 6, (id, d) => d < rocks.r[id] + 1.2)) continue;
       if (trees.any(x, z, sz.r + 4.5, (id, d) => d < Math.max(1.6, (sz.r + trees.r[id]) * 0.58))) continue;
-      const p = plant({ sp, x, z, y: h0 - 0.1 - slope * 0.25, h: sz.h, r: sz.r, surround: 'none', syaw: 0, tag: 'forest', detail: 1, tone });
+      // broadleaf crowns on the visible rim get a finer surface (the faceting showed there)
+      const det = !legacy && edge > 0.35 && sp !== 'conifer' ? 2 : 1;
+      const p = plant({ sp, x, z, y: h0 - 0.1 - slope * 0.25, h: sz.h, r: sz.r, surround: 'none', syaw: 0, tag: 'forest', detail: det, tone });
       if (edge > 0.35 && slope < 0.5) forestEdge.push(p);
       forestCount++;
     }

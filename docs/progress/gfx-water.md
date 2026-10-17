@@ -40,7 +40,9 @@ Brief: GFX-PLAN.md (W1 planar reflections, W2 shading, W3 hull contact + wakes, 
   frame → contact shadow + lacy foam line (heavier at the bow / with speed).
 
 ## URL switches
-`?nowaterrefl` (analytic only), `?waterrefl=0|1|2` (force level), `?nohullfoam`.
+`?nowaterrefl` (analytic only), `?waterrefl=0|1|2` (force level), `?nohullfoam`, `?wakes=puffs` (old puff
+wakes), `?waterdebug=refl` (water shows only its reflection term), `?refldbg` (reflection pass draws one
+opted-in mesh at a time, console markers — for attributing driver warnings).
 
 ## State / milestones
 * 2026-10-17 ~19:30 — W1 pass + W2 shader + hull contact implemented, typecheck clean; first captures running
@@ -58,9 +60,19 @@ Brief: GFX-PLAN.md (W1 planar reflections, W2 shading, W3 hull contact + wakes, 
 * Lead's river view "-30,0,118,32,20,18" is blocked by trees → use river2=-30,-1.6,118,45,180,30.
   Lead's ship view "128,2,-78,42,70,16" only shows containers → use shipw=160,-1.6,-80,60,100,24.
 
+* ~21:55 — it3 (`shots/water/it3`): river now mirrors bank trees + quay wall; ship hull reflection visible
+  after the ring fix. GL warning "Mismatch between texture format and sampler type" WAS mine: found with
+  `?refldbg` (draws one opted-in mesh at a time with console markers) — the pass ran before three had
+  (re)created the sun's shadow map (first frame / after a shadow-map size change) → three's placeholder for
+  the shadow sampler is invalid. Fix: skip the pass while a shadow-casting light has no map. NaN bounding
+  sphere error = wake ribbons with negative sample age after a backwards time jump → clamped + stale tracks
+  reset. Tuning: F0 0.38/0.42/0.34, glassy wind slicks (long lanes along the wind: calmer, more reflective),
+  stronger colour patches, fine ripple octave fades with pixel footprint (no distant dash noise), softer moon
+  glint, wall-reflection band for the analytic (no-pass) mode, ribbon spacing adapts to speed (track covers
+  the whole wake life), lace foam with ragged edges.
+* Queued: it4 (8 views × 3 hours), baseline 5174 set at the same views/size (`shots/water/base`), perf A/B.
+
 ## Open issues / notes
-* GL warning "Mismatch between texture format and sampler type" seen in subset runs — A/B with
-  ?nowaterrefl pending (it3) to tell whether it is mine.
 * Depends (read-only) on the sky dome's uniform names: uZenith, uHorizon, uGlow, uGlowI, uSunCol, uSunVis,
   uMoonDir, uMoonVis, uOvercast (mesh name `sky-dome`). Missing → fixed day colours.
 * `scene.onBeforeRender` is chained (previous handler is called first) — other modules may also hook it.

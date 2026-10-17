@@ -185,6 +185,7 @@ export class WakeRibbons {
       tr = { d: new Float32Array(S * 8), head: 0, n: 0, acc: 0, lastX: b.x, lastZ: b.z };
       this.tracks.set(b.id, tr);
     }
+    if (tr.n > 0 && tr.d[((tr.head - 1 + S) % S) * 8 + 5] > now + 0.5) tr.n = 0;
     const moved = Math.hypot(b.x - tr.lastX, b.z - tr.lastZ);
     tr.lastX = b.x;
     tr.lastZ = b.z;
@@ -219,6 +220,11 @@ export class WakeRibbons {
       if (r + RIBBONS_PER_BOAT > this.maxRibbons) break;
       const tr = this.tracks.get(b.id);
       if (!tr || tr.n === 0 || !isNear(b)) continue;
+      // sim time went backwards (time jump): the recorded track is stale
+      if (tr.d[((tr.head - 1 + S) % S) * 8 + 5] > now + 0.5) {
+        tr.n = 0;
+        continue;
+      }
       const look = LOOK[b.type] ?? LOOK.motor;
       // usable samples: newest first, younger than the life span
       const life = look[2] * (0.6 + 0.4 * Math.min(1, b.v / 3 + 0.5));
@@ -286,7 +292,7 @@ export class WakeRibbons {
         fx = d[k + 2];
         fz = d[k + 3];
         v = d[k + 4];
-        age = Math.min(1, (now - d[k + 5]) / life);
+        age = Math.min(1, Math.max(0, (now - d[k + 5]) / life));
         amp = d[k + 6];
         rev = d[k + 7];
       }

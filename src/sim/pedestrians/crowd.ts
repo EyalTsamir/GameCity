@@ -30,7 +30,7 @@ import { buildRail, railSAt, sampleRail, Router, type Rail, type RailSample } fr
 import type { BenchPlace, DoorCat, DoorPlace, Places, Spot, SpotPlace, StopPlace } from './places';
 import { makeLook, type Look, type Persona } from './looks';
 import { F, DOG_OFFSET } from './figure';
-import { gaitCycle } from './rig';
+import { gaitConfig, gaitCycle } from './rig';
 
 // ───────────────────────────────────────────────────────────── types ──
 
@@ -2610,8 +2610,8 @@ export class Crowd {
       if (m.speed > 0.05) ampT = m.speed > 2.1 ? 1 + Math.min(0.8, (m.speed - 2.1) / 1.0) : Math.min(1, m.speed / 1.25);
       if (m.sit > 0.05 || m.lie > 0.05 || m.ground > 0.05) ampT = 0;
       m.amp += (ampT - m.amp) * Math.min(1, h * 6);
-      if (m.amp < 0.02 && ampT === 0) {
-        // settle the legs to a neutral stance
+      if (gaitConfig.legacy && m.amp < 0.02 && ampT === 0) {
+        // settle the legs to a neutral stance (legacy figures; the new gait keeps its feet planted)
         const target = Math.round(m.phase / Math.PI) * Math.PI;
         m.phase += (target - m.phase) * Math.min(1, h * 4);
       }

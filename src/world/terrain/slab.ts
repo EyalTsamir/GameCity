@@ -502,7 +502,7 @@ function nameplateTexture(): THREE.CanvasTexture {
   return t;
 }
 
-function buildNameplate(): THREE.Mesh {
+function buildNameplate(lights?: { value: number }): THREE.Mesh {
   const w = 30,
     h = 3.75;
   const tex = nameplateTexture();
@@ -515,6 +515,10 @@ function buildNameplate(): THREE.Mesh {
   const m = new THREE.Mesh(geo, front);
   m.position.set(0, (PLINTH.faceTop + PLINTH.faceBottom) / 2, SLAB.z1 + PLINTH.out + 0.08);
   m.name = 'terrain-nameplate';
+  // a museum-style display light on the brass at night (follows the city lights)
+  if (lights) m.onBeforeRender = () => {
+    front.emissiveIntensity = 0.06 + 0.32 * lights.value;
+  };
   return m;
 }
 
@@ -580,7 +584,7 @@ export function createSlab(ctx: CityContext, model: TerrainModel, edges: SlabEdg
   faces.receiveShadow = true;
   faces.castShadow = false;
   const plinth = buildPlinth(ctx.rng('terrain-wood'));
-  const nameplate = buildNameplate();
+  const nameplate = buildNameplate(ctx.uniforms.uLights);
   const contact = buildContactShadow();
   // the studio table (dynamic uniforms owned by the sky module; static fallback without it)
   let stage = ctx.services.stage as StageService | undefined;

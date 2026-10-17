@@ -143,7 +143,7 @@ export function fkPoint(r: Rig, P: Pose, bone: number, p: V3): V3 {
   }
   if (b === BONE.FOOT_L || b === BONE.FOOT_R) {
     const L = b === BONE.FOOT_L;
-    rotAbout(p, rX(-(L ? P.ankleL : P.ankleR), M), mir(r.ankle, L, pvTmp));
+    rotAbout(p, mm(rY(L ? -P.footYawL : P.footYawR, tmpA), rX(-(L ? P.ankleL : P.ankleR), tmpB), M), mir(r.ankle, L, pvTmp));
     b = L ? BONE.SHIN_L : BONE.SHIN_R;
   }
   if (b === BONE.SHIN_L || b === BONE.SHIN_R) {

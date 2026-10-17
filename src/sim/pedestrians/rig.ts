@@ -367,6 +367,8 @@ export interface Rig {
   heelZ: number;
   toeZ: number;
   ballZ: number;
+  /** sole profile for rolling (z from the ankle, height above the ground when flat): heel back, heel, ball, toe */
+  sole: { z: number; y: number }[];
   /** world hip-joint height (m) — the leg length used by the gait model */
   legLen: number;
   /** stature (m) */
@@ -476,6 +478,7 @@ export function rigOf(look: Look): Rig {
     heelZ: mixS((d) => d.foot[1].z, w, c, b),
     toeZ: mixS((d) => d.foot[7].z, w, c, b),
     ballZ: mixS((d) => d.foot[5].z, w, c, b),
+    sole: [0, 1, 5, 7].map((i) => ({ z: mixS((d) => d.foot[i].z, w, c, b), y: mixS((d) => d.foot[i].y0 - d.foot[1].y0, w, c, b) })),
     legLen: 0,
     stature: mixS((d) => d.H, w, c, b) * p.s,
   };

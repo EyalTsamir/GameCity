@@ -372,7 +372,7 @@ function buildMask(ctx: CityContext, feet: readonly CliffFoot[], legacy: boolean
   };
   for (const b of plan.blocks) if (b.kind === 'park') stripes(b.rect, 3.4, 38, true);
   for (const a of plan.areas) {
-    if (a.kind === 'lawn' || a.kind === 'courtyard') stripes(a.rect, a.rect.x1 - a.rect.x0 > 60 || a.rect.z1 - a.rect.z0 > 60 ? 3.6 : 2.6, 30);
+    if (a.kind === 'lawn' || a.kind === 'courtyard') stripes(a.rect, a.rect.x1 - a.rect.x0 > 60 || a.rect.z1 - a.rect.z0 > 60 ? 3.6 : 2.6, 34);
     else if (a.kind === 'garden') stripes(a.rect, 1.6, 20, a.rect.x1 - a.rect.x0 < a.rect.z1 - a.rect.z0);
   }
   const E = mk();

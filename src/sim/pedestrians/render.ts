@@ -11,6 +11,7 @@ import { DOG_OFFSET, F, buildBlobGeometry, buildDogGeometry, buildPramGeometry, 
 import { FB, figureMesh, type Lod } from './body';
 import { HAT_STYLES, POSE_KEYS, POSE_UINTS, makeInvisibleMaterial, makePeopleMaterials } from './shader';
 import { computePose } from './animate';
+import { newGaitState, type GaitState } from './gait';
 import { gripPoint, newPose, type Pose } from './pose';
 import { rigOf } from './rig';
 import { styleFromFlags, type Look, type Style } from './looks';
@@ -80,14 +81,14 @@ function writeColours(col: Uint32Array, L: Look, s: Style, top: number, bottom: 
   col[1] = w(top, q8(s.topHem));
   col[2] = w(bottom, q8(s.trouserEnd));
   col[3] = w(L.shoes, (Math.round(clamp(s.bootTop, 0, 0.63) * 100) & 63) | (s.sole << 6));
-  col[4] = w(L.hair, 0);
+  col[4] = w(L.hair, Math.round(clamp(s.hairLen / 0.5, 0, 1) * 255));
   col[5] = w(L.hat, s.hat & 7);
-  col[6] = w(L.bag, 0);
+  col[6] = w(L.bag, Math.round(clamp(s.tailHem, 0, 1) * 255));
   col[7] = w(s.outer, tailSrc << 5);
   col[8] = w(L.accent, s.legwear & 3);
   col[9] = w(L.towel, s.jacketHem < -0.05 ? 0 : q8(s.jacketHem));
   col[10] = 0;
-  col[11] = ((q8((s.neckTop - 0.95) / 0.4 * 1.275 - 0.1) << 24) | (q8(-0.1) << 16) | ((s.collar === 1 ? 1 : 0) << 8)) >>> 0;
+  col[11] = ((q8((s.neckTop - 0.95) / 0.4 * 1.275 - 0.1) << 24) | (q8(-0.1) << 16) | ((s.collar === 1 ? 1 : 0) << 8) | Math.round(clamp(s.tailFlare * 1000, 0, 255))) >>> 0;
 }
 
 function makeAttr(geo: THREE.BufferGeometry, name: string, arr: Float32Array | Uint32Array, size: number): THREE.InstancedBufferAttribute {
@@ -163,6 +164,7 @@ class Layer {
 /** per-member render state (LOD hysteresis; later: foot plants, idle variants) */
 interface RenderState {
   lod: number;
+  gait: GaitState;
 }
 const states = new WeakMap<Member, RenderState>();
 
@@ -213,6 +215,7 @@ export class CrowdRenderer {
   visible = 0;
   triangles = 0;
   vertices = 0;
+  private frame = 0;
 
   constructor(scene: THREE.Scene, capacity: number, castShadow: boolean) {
     this.capacity = capacity;
@@ -283,6 +286,7 @@ export class CrowdRenderer {
 
   /** @param pxHeight drawing-buffer height (px): level distances scale with it */
   write(crowd: Crowd, camera: THREE.PerspectiveCamera, t: number, rain: number, night: number, pxHeight = REF_HEIGHT): void {
+    this.frame++;
     this.pv.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
     this.frustum.setFromProjectionMatrix(this.pv);
     camera.getWorldPosition(this.cam);
@@ -325,7 +329,7 @@ export class CrowdRenderer {
         const d = Math.sqrt(d2);
         let st = states.get(m);
         if (!st) {
-          st = { lod: -1 };
+          st = { lod: -1, gait: newGaitState() };
           states.set(m, st);
         }
         // level with hysteresis around each switch distance
@@ -340,7 +344,7 @@ export class CrowdRenderer {
         if (layer.n >= layer.capacity) continue;
         const r = rigOf(L);
         const umbrella = raining && L.umbrellaOwner && m.sit < 0.3 && m.lie < 0.1 && m.ground < 0.1 && !L.pram;
-        computePose(m, t + m.seed * 10, umbrella, r, pose);
+        computePose(m, t + m.seed * 10, umbrella, r, pose, lv < 2 || this.forceLod >= 0 ? st.gait : null, this.frame);
         pose.scale = r.s;
         pose.fade = m.fade;
         pose.w = r.w;
@@ -351,9 +355,6 @@ export class CrowdRenderer {
         const s = ld.style;
         let flags = ld.flags;
         CC.set(ld.col);
-        pose.hairLen = s.hairLen;
-        pose.tailHem = s.tailHem;
-        pose.tailFlare = s.tailFlare;
         if (m.towel) flags |= bit(FB.TOWEL);
         if (umbrella) {
           flags |= bit(FB.UMBRELLA);
@@ -494,12 +495,12 @@ function swimwear(L: Look, s: Style, flags: number, C: Uint32Array): number {
     const bikini = (L.swim & 1) === 1;
     C[1] = w(swim, q8(0.12));
     C[2] = w(swim, q8(0.86));
-    C[11] = ((q8(-0.1) << 24) | ((bikini ? q8(0.5) : q8(-0.1)) << 16)) >>> 0;
+    C[11] = ((q8(-0.1) << 24) | ((bikini ? q8(0.5) : q8(-0.1)) << 16) | (C[11] & 255)) >>> 0;
   } else {
     // trunks; bare chest unless a swim shirt colour
     C[1] = w(L.skin, q8(0.12));
     C[2] = w(swim === L.skin ? 0x2f4566 : swim, q8(0.74));
-    C[11] = (q8(-0.1) << 24) | (q8(-0.1) << 16);
+    C[11] = ((q8(-0.1) << 24) | (q8(-0.1) << 16) | (C[11] & 255)) >>> 0;
   }
   C[7] = w(0, 0);
   C[9] = (C[9] & 0xffffff) >>> 0; // no jacket

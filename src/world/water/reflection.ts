@@ -78,6 +78,7 @@ export class PlanarReflection {
   private sz = new THREE.Vector2();
   private clearCol = new THREE.Color();
   private visSave: boolean[] = [];
+  private lights: THREE.DirectionalLight[] = [];
   private dbg: boolean;
   private dbgList: THREE.Object3D[] = [];
   // stats
@@ -126,6 +127,7 @@ export class PlanarReflection {
       // lights must be in the pass, or the materials compile a second (unlit) program variant
       if ((o as THREE.Light).isLight) {
         o.layers.enable(LAYERS.REFLECT);
+        if ((o as THREE.DirectionalLight).shadow) this.lights.push(o as THREE.DirectionalLight);
         return;
       }
       if (!(o as THREE.Mesh).isMesh || !o.name) return;
@@ -209,6 +211,12 @@ export class PlanarReflection {
     if (this.camPos.y < L + 0.3) {
       this.uniforms.uReflInfo.value.x = 0;
       return;
+    }
+    // a shadow-casting light without its shadow map yet (first frame, map re-created after a size
+    // change): three would bind an invalid placeholder to the shadow samplers in this pass (the main
+    // pass renders shadows first) → skip this frame, keep last frame's reflection
+    if (renderer.shadowMap.enabled) {
+      for (const l of this.lights) if (l.castShadow && l.visible && !l.shadow.map) return;
     }
     this.busy = true;
     this.resize();

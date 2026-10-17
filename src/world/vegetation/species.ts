@@ -94,7 +94,10 @@ export const clumpCode = (m: number): number => Math.min(1, Math.max(0, (m - 0.1
 export const BARK_FURROW = 0.2;
 export const BARK_BIRCH = 0.8;
 
-/** Set aLeaf (ao, tone amplitude, leafiness, clump code) for the vertices that follow. No-op on sinks without it. */
+/** aLeaf.y: relief model (billow for needles / clipped hedges, else clump cells) + tone-drift amplitude (1 = default, ≤ 1.99) */
+export const leafTone = (amp: number, billow = false): number => (billow ? 0.5 : 0) + Math.min(0.498, Math.max(0, amp * 0.25));
+
+/** Set aLeaf (ao, model+tone (leafTone), leafiness, clump code) for the vertices that follow. No-op on sinks without it. */
 export function leafAttr(s: GeoSink, ao: number, tone: number, amt: number, clump: number): void {
   const e = s.ex[1];
   if (!e) return;
@@ -141,8 +144,8 @@ export class Wind {
     this.fl = fl;
     this.base = base;
     this.kd = 0;
-    if (fl > 0) leafAttr(this.sink, 1, 0.5, 0.35, clumpCode(0.13));
-    else leafAttr(this.sink, 1, 0.5, 0, 0);
+    if (fl > 0) leafAttr(this.sink, 1, leafTone(1, true), 0.35, clumpCode(0.13));
+    else leafAttr(this.sink, 1, 0, 0, 0);
     return this;
   }
 }
@@ -181,6 +184,8 @@ export interface CanopyOpts {
   amt?: number;
   /** clump tone drift amplitude 0..1 (0.5 = default) */
   tone?: number;
+  /** billowed relief (needles) instead of clump cells */
+  billow?: boolean;
 }
 
 const MAXV = 252 * 3;
@@ -287,7 +292,7 @@ export function lobedCanopy(s: GeoSink, cx: number, cy: number, cz: number, lobe
     aoLo = o.aoLo ?? 0.42;
   const clump = clumpCode(o.clump ?? 0.55),
     amt = o.amt ?? 1,
-    tone = o.tone ?? 0.5;
+    tone = leafTone((o.tone ?? 0.5) * 2, o.billow);
   const L0 = o.leaf;
   const base = s.vcount;
   const groundY = o.ground;
@@ -389,7 +394,7 @@ export function trunk(s: GeoSink, x: number, y: number, z: number, tx: number, t
       cy = y + H * f,
       cz = z + (tz - z) * f;
     s.colorObj(bark, shade);
-    leafAttr(s, ao, 0.5, 0, pattern);
+    leafAttr(s, ao, 0, 0, pattern);
     for (let i = 0; i < sides; i++) {
       const a = rot + (i / sides) * Math.PI * 2;
       const c = Math.cos(a),
@@ -437,7 +442,7 @@ function branch(s: GeoSink, ax: number, ay: number, az: number, bx: number, by: 
     [bx, by, bz, r1, 1.0, 0.6],
   ] as [number, number, number, number, number, number][]) {
     s.colorObj(bark, sh);
-    leafAttr(s, ao, 0.5, 0, pattern);
+    leafAttr(s, ao, 0, 0, pattern);
     for (let i = 0; i < sides; i++) {
       const a = (i / sides) * Math.PI * 2;
       const c = Math.cos(a),
@@ -795,10 +800,10 @@ function willow(s: GeoSink, w: Wind, t: TreeSpec, rng: Rng): number {
       const nl = Math.hypot(1, ny);
       // lighter tips, darker inner face
       s.colorObj(leaf, shade * (1.06 - 0.18 * f) * (f > 0.85 ? 1.08 : 1));
-      leafAttr(s, 0.95 - 0.25 * f, 0.5, 1, clump);
+      leafAttr(s, 0.95 - 0.25 * f, leafTone(1, true), 1, clump);
       front.push(s.vert(qx - px * ww, qy, qz - pz * ww, ca / nl, ny / nl, sa / nl), s.vert(qx + px * ww, qy, qz + pz * ww, ca / nl, ny / nl, sa / nl));
       s.colorObj(leaf, shade * (0.7 - 0.16 * f));
-      leafAttr(s, 0.45 - 0.15 * f, 0.5, 1, clump);
+      leafAttr(s, 0.45 - 0.15 * f, leafTone(1, true), 1, clump);
       back.push(s.vert(qx - px * ww, qy, qz - pz * ww, -ca, -0.2, -sa), s.vert(qx + px * ww, qy, qz + pz * ww, -ca, -0.2, -sa));
     }
     for (let k = 0; k < pts.length - 1; k++) {
@@ -849,7 +854,7 @@ function conifer(s: GeoSink, w: Wind, t: TreeSpec, rng: Rng): number {
   w.at(x, y, z, 1 / 12, 0.45, 0);
   const rot0 = rng.range(0, 6.28);
   const clump = clumpCode(forest ? 0.4 : 0.32);
-  const tone = 0.45;
+  const tone = leafTone(0.9, true);
   // per-tier randoms are drawn in a fixed order for every LOD (near/far stay identical)
   for (let i = 0; i < tiers; i++) {
     const f = i / tiers;
@@ -984,7 +989,7 @@ function pine(s: GeoSink, w: Wind, t: TreeSpec, rng: Rng): number {
     if (i >= 4 - n || i === 3) pads.push({ x: tx + Math.cos(a) * d, y: y + clear + crownH * (0.18 + 0.62 * f), z: tz + Math.sin(a) * d, rad });
   }
   w.at(x, y, z, 1 / 12, 0.5, 0);
-  const opts: CanopyOpts = { leaf, noise: 0.12, lo: 0.74, hi: 1.08, aoLo: 0.38, warm: 0.2, clump: 0.36, tone: 0.45, amt: 0.85 };
+  const opts: CanopyOpts = { leaf, noise: 0.12, lo: 0.74, hi: 1.08, aoLo: 0.38, warm: 0.2, clump: 0.3, tone: 0.45, amt: 0.85, billow: true };
   pads.forEach((p, i) => {
     if (!t.far && !forest && i < pads.length - 1) {
       const lf = (p.y - p.rad * 0.25 - y) / h;
@@ -1028,7 +1033,7 @@ function palm(s: GeoSink, w: Wind, t: TreeSpec, rng: Rng): number {
       [B, rb * 0.95, 1.05, 1],
     ] as [[number, number, number], number, number, number][]) {
       s.colorObj(k % 2 ? barkA : barkB, sh);
-      leafAttr(s, ao, 0.5, 0, BARK_FURROW);
+      leafAttr(s, ao, 0, 0, BARK_FURROW);
       for (let i = 0; i < sides; i++) {
         const a = (i / sides) * Math.PI * 2;
         const c = Math.cos(a),
@@ -1082,14 +1087,14 @@ function palm(s: GeoSink, w: Wind, t: TreeSpec, rng: Rng): number {
       const shade = 0.84 + 0.22 * f;
       const c = _tmpC.copy(leaf).lerp(tip, f * f * 0.45);
       s.colorObj(c, shade);
-      leafAttr(s, 0.75 + 0.25 * f, 0.5, 1, clump);
+      leafAttr(s, 0.75 + 0.25 * f, leafTone(1, true), 1, clump);
       top.push(s.vert(px, py, pz, 0, 1, 0));
       s.colorObj(c, shade * 0.94);
       left.push(s.vert(px + sx * wd, py - wd * 0.45, pz + sz * wd, sx * 0.4, 0.9, sz * 0.4));
       right.push(s.vert(px - sx * wd, py - wd * 0.45, pz - sz * wd, -sx * 0.4, 0.9, -sz * 0.4));
       // underside copies
       s.colorObj(c, shade * 0.62);
-      leafAttr(s, 0.45 + 0.2 * f, 0.5, 1, clump);
+      leafAttr(s, 0.45 + 0.2 * f, leafTone(1, true), 1, clump);
       topB.push(s.vert(px, py - 0.01, pz, 0, -1, 0));
       leftB.push(s.vert(px + sx * wd, py - wd * 0.45 - 0.01, pz + sz * wd, 0, -1, 0));
       rightB.push(s.vert(px - sx * wd, py - wd * 0.45 - 0.01, pz - sz * wd, 0, -1, 0));
@@ -1112,7 +1117,7 @@ const _tmpC = new THREE.Color();
 export function blob(s: GeoSink, x: number, y: number, z: number, rx: number, ry: number, rz: number, c: THREE.Color, detail: number, shadeLo = 0.75): void {
   const t = icoTpl(detail);
   const base = s.vcount;
-  leafAttr(s, 1, 0.5, 0, 0);
+  leafAttr(s, 1, 0, 0, 0);
   for (let i = 0; i < t.vcount; i++) {
     const px = t.pos[i * 3],
       py = t.pos[i * 3 + 1],
@@ -1138,7 +1143,7 @@ export interface BushOpts {
 /** tiny 4-petal flower facing up (5 verts, 4 tris) */
 function bloom(s: GeoSink, x: number, y: number, z: number, r: number, c: THREE.Color, rot: number): void {
   s.colorObj(c, 1.08);
-  leafAttr(s, 1, 0.5, 0.3, 0);
+  leafAttr(s, 1, leafTone(1), 0.3, 0);
   const top = s.vert(x, y + r * 0.35, z, 0, 1, 0);
   s.colorObj(c, 0.9);
   const b = s.vcount;
@@ -1243,7 +1248,7 @@ export function hedge(s: GeoSink, w: Wind, ax: number, az: number, bx: number, b
         const lo = ground ? 0.72 : 1;
         const fresh = oy >= height * 0.99 ? 1.04 : 1;
         s.colorObj(leaf, face.sh * mott * lo * fresh);
-        leafAttr(s, face.ao[pi], 0.45, 0.62, clump);
+        leafAttr(s, face.ao[pi], leafTone(0.9, true), 0.62, clump);
         const nl = Math.hypot(face.n[0], face.n[1]);
         s.vert(cx + vx * vv, yy, cz + vz * vv, (vx * face.n[0]) / nl, face.n[1] / nl, (vz * face.n[0]) / nl);
       }
@@ -1282,7 +1287,7 @@ export function hedge(s: GeoSink, w: Wind, ax: number, az: number, bx: number, b
     const cb = s.vcount;
     s.colorObj(leaf, 0.84);
     for (const [ov, oy] of outline) {
-      leafAttr(s, oy < 0 ? 0.45 : 0.9, 0.45, 0.62, clump);
+      leafAttr(s, oy < 0 ? 0.45 : 0.9, leafTone(0.9, true), 0.62, clump);
       s.vert(cx + vx * ov, gy + oy, cz + vz * ov, ux * sgn, 0.1, uz * sgn);
     }
     for (let p = 1; p < outline.length - 1; p++) {
