@@ -98,6 +98,19 @@ export function shoulderMatrix(P: Pose, left: boolean, o: M3): M3 {
 }
 
 const M = new Float64Array(9);
+const fA = new Float64Array(9),
+  fB = new Float64Array(9),
+  fC = new Float64Array(9);
+/** m ← shᵀ · rY(fy) · sh · m with sh = hip · knee: the foot yaw turns about the pelvis-frame vertical
+ *  through the ankle (not about the tilted shin), as the shader does — the sole keeps its contact */
+export function footYawAbout(P: Pose, left: boolean, fy: number, m: M3): M3 {
+  hipMatrix(P, left, fC);
+  mm(fC, rX(left ? P.kneeL : P.kneeR, fA), fB); // sh
+  mm(rY(fy, fA), fB, fC); // rY · sh
+  // shᵀ · (rY · sh)
+  for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) fA[i * 3 + j] = fB[i] * fC[j] + fB[3 + i] * fC[3 + j] + fB[6 + i] * fC[6 + j];
+  return mm(fA, m, m);
+}
 
 /** Pelvis / whole-body transform and root offsets (figure units), as pedPelvis in the shader. */
 export function fkPelvis(r: Rig, P: Pose, p: V3): V3 {
@@ -150,7 +163,10 @@ export function fkPoint(r: Rig, P: Pose, bone: number, p: V3): V3 {
   }
   if (b === BONE.FOOT_L || b === BONE.FOOT_R) {
     const L = b === BONE.FOOT_L;
-    rotAbout(p, mm(rY(L ? -P.footYawL : P.footYawR, tmpA), rX(-(L ? P.ankleL : P.ankleR), tmpB), M), mir(r.ankle, L, pvTmp));
+    rX(-(L ? P.ankleL : P.ankleR), M);
+    const fy = L ? -P.footYawL : P.footYawR;
+    if (Math.abs(fy) > 1e-4) footYawAbout(P, L, fy, M);
+    rotAbout(p, M, mir(r.ankle, L, pvTmp));
     b = L ? BONE.SHIN_L : BONE.SHIN_R;
   }
   if (b === BONE.SHIN_L || b === BONE.SHIN_R) {

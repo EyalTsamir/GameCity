@@ -176,7 +176,13 @@ void pedChain(inout vec3 p, inout vec3 n, int bone, float w) {
     bool left = b == ${B.FOOT_L};
     b = left ? ${B.SHIN_L} : ${B.SHIN_R};
     float fy = left ? -P_footYawL : P_footYawR;
-    pedJoint(p, n, pedRY(fy) * pedRX(-(left ? P_ankleL : P_ankleR)), pedPivS(${PIV.ANKLE}, left), w);
+    mat3 rf = pedRX(-(left ? P_ankleL : P_ankleR));
+    if (abs(fy) > 1e-4) {
+      // the foot yaw turns about the vertical through the ankle (pelvis frame), not the tilted shin
+      mat3 sh = pedHipR(left) * pedRX(left ? P_kneeL : P_kneeR);
+      rf = transpose(sh) * pedRY(fy) * sh * rf;
+    }
+    pedJoint(p, n, rf, pedPivS(${PIV.ANKLE}, left), w);
   }
   if (b == ${B.SHIN_L} || b == ${B.SHIN_R}) {
     bool left = b == ${B.SHIN_L};

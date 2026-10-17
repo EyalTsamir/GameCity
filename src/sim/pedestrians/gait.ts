@@ -14,8 +14,7 @@
 // used — it is slide-free at constant speed.
 
 import type { Member } from './crowd';
-import { fkPoint, legIK, newPose, type LegSolve } from './pose';
-import { BONE } from './body';
+import { legIK, type LegSolve } from './pose';
 import { stepLength, type Rig } from './rig';
 
 const TAU = Math.PI * 2;
@@ -333,6 +332,18 @@ function planWalk(r: Rig, u: number, left: boolean, plant: FootPlant | null, pel
     let fx = x0 * Math.cos(KAPPA * fz) + (KAPPA * fz * fz) / 2;
     o.twist = 0;
     if (plant && plant.valid && plant.stance) {
+      // tight turns: a planted foot never twists more than ±0.6 rad against the pelvis — beyond that it
+      // pivots about its contact point (the heel while the heel carries, else the ball), as people do
+      const rel = wrapA(plant.wyaw - YAW - pelvisYaw);
+      if (Math.abs(rel) > 0.6) {
+        const e = rel - Math.sign(rel) * 0.6;
+        const pz = (u < p.uFlat ? r.sole[1].z : r.sole[2].z) * SC;
+        const pxw = plant.wx + Math.sin(plant.wyaw) * pz,
+          pzw = plant.wz + Math.cos(plant.wyaw) * pz;
+        plant.wyaw -= e;
+        plant.wx = pxw - Math.sin(plant.wyaw) * pz;
+        plant.wz = pzw - Math.cos(plant.wyaw) * pz;
+      }
       toBody(plant.wx, plant.wz, tmpB);
       const ex = tmpB.x - fx,
         ez = tmpB.z - fz;
@@ -493,23 +504,6 @@ function planStand(r: Rig, st: GaitState, dt: number, pelvisYaw: number): void {
   }
 }
 
-// leg-only pose scratch for the sole ground check (soleLow)
-const PS = newPose();
-const soleP = { x: 0, y: 0, z: 0 };
-/** lowest sole point (figure units above the ground) of a leg posed in PS */
-function soleLow(r: Rig, left: boolean): number {
-  let low = 1e9;
-  const S = r.sole;
-  for (let i = 0; i < S.length; i++) {
-    soleP.x = left ? r.ankle.x : -r.ankle.x;
-    soleP.y = S[i].y;
-    soleP.z = r.ankle.z + S[i].z;
-    fkPoint(r, PS, left ? BONE.FOOT_L : BONE.FOOT_R, soleP);
-    if (soleP.y < low) low = soleP.y;
-  }
-  return low;
-}
-
 /**
  * Leg / pelvis / torso / arm values for a member. `gw` (0 standing … 1 walking) blends the stand and
  * walk foot targets; `st` (optional) keeps planted feet in world space; `frame` is a renderer frame
@@ -541,7 +535,7 @@ export function gaitPose(m: Member, r: Rig, st: GaitState | null, frame: number,
   if (state && frame - state.frame <= 1 && dt > 1e-4) {
     const w = wrapA(m.yaw - state.lastYaw) / dt;
     state.yawRate += (w - state.yawRate) * Math.min(1, dt * 6);
-    KAPPA = clamp(state.yawRate / Math.max(0.35, v), -1.2, 1.2) * SC;
+    KAPPA = clamp(state.yawRate / Math.max(0.35, v), -1.6, 1.6) * SC;
   } else if (state) state.yawRate = 0;
   let fresh = true;
   if (state) {
@@ -678,66 +672,48 @@ export function gaitPose(m: Member, r: Rig, st: GaitState | null, frame: number,
     cr = Math.cos(-pelvisRoll),
     sr = Math.sin(-pelvisRoll);
   const hcY = r.hip.y;
-  PS.rootX = sway;
-  PS.rootY = rootY;
-  PS.pelvisYaw = pelvisYaw;
-  PS.pelvisRoll = pelvisRoll;
   for (let li = 0; li < 2; li++) {
     const leg = li === 0 ? legA : legB;
     const left = leg === legA;
-    for (let pass = 0; pass < 2; pass++) {
-      let tx = leg.x - sway,
-        ty = leg.y - rootY - hcY,
-        tz = leg.z;
-      const x1 = cyP * tx + syP * tz,
-        z1 = -syP * tx + cyP * tz;
-      const x2 = cr * x1 - sr * ty,
-        y2 = sr * x1 + cr * ty;
-      tx = x2;
-      ty = y2 + hcY;
-      tz = z1;
-      const sg = left ? 1 : -1;
-      const hx = sg * r.hip.x;
-      const restLat = r.ankle.x - r.hip.x;
-      const dy = r.hip.y - ty;
-      const lat = (tx - hx) * sg;
-      const abd = Math.atan2(lat, dy) - Math.atan2(restLat, r.hip.y - r.ankle.y);
-      const dyEff = Math.hypot(dy, lat - restLat);
-      legIK(r, r.hip.y, r.hip.z, r.hip.y - dyEff, tz, leg.pitch, solve);
-      // planted feet: correct the foot yaw so the heading through the whole chain is the wanted one
-      let fy = leg.twist;
-      if (leg.stance && Math.abs(fy) > 1e-4) {
-        const want = pelvisYaw + (left ? -fy : fy);
-        for (let it = 0; it < 2; it++) {
-          const hd = footHeading(left, fy, solve.ankle, solve.knee, solve.flex, abd, pelvisYaw, pelvisRoll);
-          fy += (left ? -1 : 1) * wrapA(want - hd);
-        }
-        fy = clamp(fy, -0.8, 0.8);
-      }
-      if (left) {
-        o.hipFlexL = PS.hipFlexL = solve.flex;
-        o.kneeL = PS.kneeL = solve.knee;
-        o.ankleL = PS.ankleL = solve.ankle;
-        o.hipAbdL = PS.hipAbdL = abd;
-        o.footYawL = PS.footYawL = fy;
-      } else {
-        o.hipFlexR = PS.hipFlexR = solve.flex;
-        o.kneeR = PS.kneeR = solve.knee;
-        o.ankleR = PS.ankleR = solve.ankle;
-        o.hipAbdR = PS.hipAbdR = abd;
-        o.footYawR = PS.footYawR = fy;
-      }
-      // a foot yawed about a tilted shin tips its sole: put the lowest sole point back on the ground
-      if (pass === 1 || !leg.stance || Math.abs(fy) < 0.05) {
-        leg.twist = fy;
-        break;
-      }
-      const low = soleLow(r, left);
-      if (Math.abs(low) < 0.002) {
-        leg.twist = fy;
-        break;
-      }
-      leg.y -= low;
+    let tx = leg.x - sway,
+      ty = leg.y - rootY - hcY,
+      tz = leg.z;
+    const x1 = cyP * tx + syP * tz,
+      z1 = -syP * tx + cyP * tz;
+    const x2 = cr * x1 - sr * ty,
+      y2 = sr * x1 + cr * ty;
+    tx = x2;
+    ty = y2 + hcY;
+    tz = z1;
+    const sg = left ? 1 : -1;
+    const hx = sg * r.hip.x;
+    const restLat = r.ankle.x - r.hip.x;
+    const dy = r.hip.y - ty;
+    const lat = (tx - hx) * sg;
+    const abd = Math.atan2(lat, dy) - Math.atan2(restLat, r.hip.y - r.ankle.y);
+    const dyEff = Math.hypot(dy, lat - restLat);
+    legIK(r, r.hip.y, r.hip.z, r.hip.y - dyEff, tz, leg.pitch, solve);
+    // planted feet: the foot yaw turns about the vertical through the ankle (shader / fkPoint), so the
+    // heading is exact in one step: wanted heading minus the heading of the un-yawed chain
+    let fy = leg.twist;
+    if (leg.stance && Math.abs(fy) > 1e-4) {
+      const want = pelvisYaw + (left ? -fy : fy);
+      const hd = footHeading(left, 0, solve.ankle, solve.knee, solve.flex, abd, pelvisYaw, pelvisRoll);
+      fy = clamp((left ? -1 : 1) * wrapA(want - hd), -0.8, 0.8);
+    }
+    leg.twist = fy;
+    if (left) {
+      o.hipFlexL = solve.flex;
+      o.kneeL = solve.knee;
+      o.ankleL = solve.ankle;
+      o.hipAbdL = abd;
+      o.footYawL = fy;
+    } else {
+      o.hipFlexR = solve.flex;
+      o.kneeR = solve.knee;
+      o.ankleR = solve.ankle;
+      o.hipAbdR = abd;
+      o.footYawR = fy;
     }
   }
 

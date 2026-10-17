@@ -152,11 +152,11 @@ export function createSurface(
     ...refl,
     ...hulls.uniforms,
     ...lampUniforms(),
-    wShallow: C('#5cc4b4'),
+    wShallow: C('#4cc6b6'),
     wMid: C('#1a6f8e'),
     wDeep: C('#0f3d62'),
-    wRivS: C('#4f9a86'),
-    wRivD: C('#18494c'),
+    wRivS: C('#4aa48a'),
+    wRivD: C('#1a5552'),
     wPondS: C('#6d9a72'),
     wPondD: C('#2c5640'),
     wFoam: C('#f4fbff'),
@@ -310,8 +310,8 @@ vec4 waterBase() {
   vec2 s1 = n1.xz / max(n1.y, 0.25);
   vec2 s2 = n2.xz / max(n2.y, 0.25);
   // the finer octave fades with the pixel footprint (no distant 'dash' noise), the coarse one less
-  float k1 = mix(0.12, 0.42, ruff) * calm * mix(1.0, 0.55, mRiv) * mix(1.0, 0.25, mPond) * (1.0 - 0.4 * smoothstep(0.15, 0.45, fp));
-  float k2 = mix(0.07, 0.30, ruff) * calm * mix(1.0, 0.7, mRiv) * mix(1.0, 0.3, mPond) * (1.0 - 0.75 * smoothstep(0.07, 0.3, fp));
+  float k1 = mix(0.1, 0.34, ruff) * calm * mix(1.0, 0.55, mRiv) * mix(1.0, 0.25, mPond) * (1.0 - 0.4 * smoothstep(0.15, 0.45, fp));
+  float k2 = mix(0.06, 0.25, ruff) * calm * mix(1.0, 0.7, mRiv) * mix(1.0, 0.3, mPond) * (1.0 - 0.75 * smoothstep(0.07, 0.3, fp));
   vec2 rt = s1 * k1 + s2 * k2;
   tilt += wdir * rt.x + wper * rt.y;
   // river: flow ripples drift east
@@ -344,7 +344,7 @@ vec4 waterBase() {
 
   // ── Fresnel
   float ndv = clamp(dot(wN, V), 0.0, 1.0);
-  float F0 = mix(mix(0.38, 0.42, mRiv), 0.34, mPond);
+  float F0 = mix(mix(0.38, 0.3, mRiv), 0.34, mPond);
   float F = mix(F0, 0.92, pow(1.0 - ndv, 4.0));
   // glassy slicks mirror more than ruffled patches (macro tonal variation that survives distance)
   F = min(0.95, F * mix(1.16, 0.84, ruff) * (1.0 + 0.22 * slick));
@@ -353,6 +353,8 @@ vec4 waterBase() {
   vec3 R = reflect(-V, wN);
   R.y = abs(R.y) + 0.01;
   vec3 sky = wSky(normalize(R));
+  // daytime: the studio horizon is near white; mirror it a little deeper so grazing water stays blue
+  sky = mix(sky, uSkyZen * 1.05, 0.22 * (1.0 - uDusk) * (1.0 - uNight));
   vec4 rc = vec4(0.0);
   float reflW = uReflInfo.x * (1.0 - mPond);
   // fade toward the slab's cut faces
@@ -459,7 +461,7 @@ vec4 waterBase() {
   }
 
   // ── outputs for the final composite
-  float alpha = smoothstep(0.0, 0.28, depth) * mix(0.5, 0.93, smoothstep(0.25, 3.6, depth));
+  float alpha = smoothstep(0.0, 0.28, depth) * mix(0.6, 0.94, smoothstep(0.25, 3.4, depth));
   alpha = mix(alpha, smoothstep(0.0, 0.25, depth) * mix(0.55, 0.88, smoothstep(0.2, 2.2, depth)), mRiv);
   alpha = mix(alpha, min(1.0, alpha * 1.3 + 0.1), mPond);
   wAlphaB = max(alpha, foam * 0.95);
