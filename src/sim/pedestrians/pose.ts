@@ -207,3 +207,104 @@ export function legIK(r: Rig, hy: number, hz: number, ay: number, az: number, pi
   o.ankle = pitch - (shin - s0);
   return o;
 }
+
+// ──────────────────────────────────────────────────────────────── arm IK ──
+
+export interface ArmSolve {
+  flex: number;
+  abd: number;
+  twist: number;
+  elbow: number;
+  reached: boolean;
+}
+
+type T3 = [number, number, number];
+const cr3 = (a: T3, b: T3): T3 => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+const nz3 = (a: T3): T3 => {
+  const l = Math.hypot(a[0], a[1], a[2]) || 1;
+  return [a[0] / l, a[1] / l, a[2] / l];
+};
+const dt3 = (a: T3, b: T3) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+
+/**
+ * Two-bone arm IK in the rest frame of the chest (figure units): put the hand's grip point at
+ * (tx, ty, tz) with the elbow bending towards the pole direction. Writes shoulder flex / abduction /
+ * twist and elbow flexion in the shader's conventions (rest arm directions of the rig included).
+ */
+export function armIK(r: Rig, left: boolean, tx: number, ty: number, tz: number, px: number, py: number, pz: number, o: ArmSolve): ArmSolve {
+  // work in the left-arm frame (mirror x for the right arm)
+  const sx = left ? 1 : -1;
+  const S: T3 = [r.shoulder.x, r.shoulder.y, r.shoulder.z];
+  const E0: T3 = [r.elbow.x, r.elbow.y, r.elbow.z];
+  const W0: T3 = [r.wrist.x, r.wrist.y, r.wrist.z];
+  const G0: T3 = [W0[0] + (r.tip.x - W0[0]) * 0.42, W0[1] + (r.tip.y - W0[1]) * 0.42, W0[2] + (r.tip.z - W0[2]) * 0.42];
+  const L1 = Math.hypot(E0[0] - S[0], E0[1] - S[1], E0[2] - S[2]);
+  const L2 = Math.hypot(G0[0] - E0[0], G0[1] - E0[1], G0[2] - E0[2]);
+  const u0 = nz3([E0[0] - S[0], E0[1] - S[1], E0[2] - S[2]]);
+  const f0 = nz3([G0[0] - E0[0], G0[1] - E0[1], G0[2] - E0[2]]);
+  const T: T3 = [tx * sx, ty, tz];
+  let dv: T3 = [T[0] - S[0], T[1] - S[1], T[2] - S[2]];
+  let d = Math.hypot(dv[0], dv[1], dv[2]);
+  o.reached = d <= (L1 + L2) * 0.999;
+  d = Math.min(Math.max(d, Math.abs(L1 - L2) + 1e-3), (L1 + L2) * 0.999);
+  dv = nz3(dv);
+  // elbow on the circle, towards the pole
+  const pole: T3 = [px * sx, py, pz];
+  let pp: T3 = [pole[0] - dv[0] * dt3(pole, dv), pole[1] - dv[1] * dt3(pole, dv), pole[2] - dv[2] * dt3(pole, dv)];
+  if (Math.hypot(pp[0], pp[1], pp[2]) < 1e-5) pp = [0, 0, -1];
+  pp = nz3(pp);
+  const ca = (L1 * L1 + d * d - L2 * L2) / (2 * L1 * d);
+  const a = Math.acos(Math.max(-1, Math.min(1, ca)));
+  const du = nz3([dv[0] * Math.cos(a) + pp[0] * Math.sin(a), dv[1] * Math.cos(a) + pp[1] * Math.sin(a), dv[2] * Math.cos(a) + pp[2] * Math.sin(a)]);
+  const Ep: T3 = [S[0] + du[0] * L1, S[1] + du[1] * L1, S[2] + du[2] * L1];
+  const Tp: T3 = [S[0] + dv[0] * d, S[1] + dv[1] * d, S[2] + dv[2] * d];
+  const df = nz3([Tp[0] - Ep[0], Tp[1] - Ep[1], Tp[2] - Ep[2]]);
+  // hinge axes: rest −x (flexion rotates the forearm forward); target from du × df (or the pole)
+  const x0 = nz3(cr3(cr3(u0, [-1, 0, 0]), u0).map((v) => -v) as T3);
+  let xh = cr3(du, df);
+  if (Math.hypot(xh[0], xh[1], xh[2]) < 1e-4) xh = cr3(du, pp);
+  xh = nz3(xh);
+  const z0 = cr3(u0, x0),
+    zh = cr3(du, xh);
+  // R = [du xh zh] · [u0 x0 z0]ᵀ
+  const Rm = (i: number, j: number) => du[i] * u0[j] + xh[i] * x0[j] + zh[i] * z0[j];
+  // R = RZ(A) · RX(B) · RY(C):  R21 = sin B, R01 = −sin A cos B, R11 = cos A cos B, R20 = −cos B sin C, R22 = cos B cos C
+  const B = Math.asin(Math.max(-1, Math.min(1, Rm(2, 1))));
+  const A = Math.atan2(-Rm(0, 1), Rm(1, 1));
+  const C = Math.atan2(-Rm(2, 0), Rm(2, 2));
+  o.abd = A;
+  o.flex = -B;
+  o.twist = -C;
+  // elbow: bend between the bones minus the rest bend
+  const bend = Math.acos(Math.max(-1, Math.min(1, dt3(du, df))));
+  const rest = Math.acos(Math.max(-1, Math.min(1, dt3(u0, f0))));
+  o.elbow = bend - rest;
+  return o;
+}
+
+/** figure-frame point → rest frame of the chest (inverse of pelvis · waist · chest of the pose) */
+export function toChestFrame(r: Rig, P: Pose, p: V3): V3 {
+  // inverse pelvis: remove root offsets, rotate back about the hip centre
+  p.x -= P.rootX;
+  p.y -= P.rootY;
+  p.z -= P.rootZ;
+  mm(rX(P.bodyPitch, tmpA), rY(P.pelvisYaw, tmpB), tmpC);
+  mm(tmpC, rZ(P.pelvisRoll, tmpA), M);
+  invRot(p, M, 0, r.hip.y, 0);
+  rotAboutInv(p, mm(rY(P.waistTwist, tmpA), rX(P.waistBend, tmpB), M), r.waist);
+  mm(rY(P.chestTwist, tmpA), rX(P.chestBend, tmpB), tmpC);
+  rotAboutInv(p, mm(tmpC, rZ(P.chestRoll, tmpA), M), r.chest);
+  return p;
+}
+function invRot(p: V3, m: M3, cx: number, cy: number, cz: number): void {
+  const x = p.x - cx,
+    y = p.y - cy,
+    z = p.z - cz;
+  // transpose = inverse for rotations
+  p.x = m[0] * x + m[3] * y + m[6] * z + cx;
+  p.y = m[1] * x + m[4] * y + m[7] * z + cy;
+  p.z = m[2] * x + m[5] * y + m[8] * z + cz;
+}
+function rotAboutInv(p: V3, m: M3, pv: V3): void {
+  invRot(p, m, pv.x, pv.y, pv.z);
+}
