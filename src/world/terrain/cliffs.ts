@@ -156,26 +156,6 @@ const _a = new THREE.Vector3();
 const _b = new THREE.Vector3();
 const _n = new THREE.Vector3();
 
-/** flat triangle whose normal is flipped (if needed) to face roughly along dir */
-function triFacing(b: GeoBuilder, p0: V3, p1: V3, p2: V3, dx: number, dy: number, dz: number): void {
-  _a.set(p1[0] - p0[0], p1[1] - p0[1], p1[2] - p0[2]);
-  _b.set(p2[0] - p0[0], p2[1] - p0[1], p2[2] - p0[2]);
-  _n.crossVectors(_a, _b);
-  if (_n.lengthSq() < 1e-10) return;
-  if (_n.x * dx + _n.y * dy + _n.z * dz < 0) b.triangle(p0, p2, p1);
-  else b.triangle(p0, p1, p2);
-}
-
-function quadFacets(b: GeoBuilder, p0: V3, p1: V3, p2: V3, p3: V3, flip: boolean, dx: number, dy: number, dz: number): void {
-  if (flip) {
-    triFacing(b, p0, p1, p3, dx, dy, dz);
-    triFacing(b, p1, p2, p3, dx, dy, dz);
-  } else {
-    triFacing(b, p0, p1, p2, dx, dy, dz);
-    triFacing(b, p0, p2, p3, dx, dy, dz);
-  }
-}
-
 function faces(model: TerrainModel): CliffFace[] {
   const roadPortals = model.portals.filter((p) => p.kind === 'road');
   const nearRoadPortal = (x: number) => roadPortals.some((p) => Math.abs(x - p.x) < Math.max(p.reach[0], p.reach[1]) + 0.8);
@@ -366,32 +346,72 @@ export function buildCliffs(
       };
       col.copy(tone).multiplyScalar(tint);
       b.set('aMas', KIND.cliff, (k % 8) / 8 + 0.01, tx, tz);
-      // front: lower (crease, darker) and upper bands
-      for (let q = 0; q < vs.length - 1; q++) {
-        const A = vs[q],
-          B = vs[q + 1];
-        b.color(_c.copy(col).multiplyScalar(0.8));
-        quadFacets(b, P3(A, 0), P3(B, 0), P3(B, 1), P3(A, 1), rng.chance(0.5), f.nx, 0, f.nz);
-        b.color(_c.copy(col).multiplyScalar(1.04));
-        quadFacets(b, P3(A, 1), P3(B, 1), P3(B, 2), P3(A, 2), rng.chance(0.5), f.nx, 0, f.nz);
-        // ledge top
-        b.color(_c.copy(col).multiplyScalar(1.0));
-        quadFacets(b, P3(A, 2), P3(B, 2), P3(B, 3), P3(A, 3), false, 0, 1, 0);
+      // shared (indexed) vertices: the masonry material shades facets from screen derivatives
+      const upN = 0.7071;
+      const ids: number[][] = [];
+      const pts: V3[][] = [];
+      const shade = [0.78, 1.04, 1.07, 1.0];
+      for (const v of vs) {
+        const row: number[] = [];
+        const rp: V3[] = [];
+        for (let w = 0; w < 4; w++) {
+          const p = P3(v, w as 0 | 1 | 2 | 3);
+          b.color(_c.copy(col).multiplyScalar(shade[w]));
+          const ny = w === 2 ? upN : w === 3 ? 1 : 0;
+          const nh = w === 2 ? upN : w === 3 ? 0 : 1;
+          row.push(b.vertex(p[0], p[1], p[2], f.nx * nh, ny, f.nz * nh));
+          rp.push(p);
+        }
+        ids.push(row);
+        pts.push(rp);
       }
-      // end caps (side faces)
-      b.color(_c.copy(col).multiplyScalar(0.88));
-      for (const [v, sg] of [
-        [vs[0], -1],
-        [vs[vs.length - 1], 1],
-      ] as [V, number][]) {
-        const p0 = P3(v, 0),
-          p1 = P3(v, 1),
-          p2 = P3(v, 2),
-          p3 = P3(v, 3),
-          p4 = P3(v, 4);
-        triFacing(b, p0, p1, p4, tx * sg, 0, tz * sg);
-        triFacing(b, p1, p3, p4, tx * sg, 0, tz * sg);
-        triFacing(b, p1, p2, p3, tx * sg, 0, tz * sg);
+      const T = (a: [number, number], bb: [number, number], cc: [number, number], dx: number, dy: number, dz: number) => {
+        const pa = pts[a[0]][a[1]],
+          pb = pts[bb[0]][bb[1]],
+          pc = pts[cc[0]][cc[1]];
+        _a.set(pb[0] - pa[0], pb[1] - pa[1], pb[2] - pa[2]);
+        _b.set(pc[0] - pa[0], pc[1] - pa[1], pc[2] - pa[2]);
+        _n.crossVectors(_a, _b);
+        if (_n.lengthSq() < 1e-10) return;
+        const ia = ids[a[0]][a[1]],
+          ib = ids[bb[0]][bb[1]],
+          ic = ids[cc[0]][cc[1]];
+        if (_n.x * dx + _n.y * dy + _n.z * dz < 0) b.tri(ia, ic, ib);
+        else b.tri(ia, ib, ic);
+      };
+      for (let q = 0; q < vs.length - 1; q++) {
+        const A = q,
+          B = q + 1;
+        // front: crease band (0→1) and upper band (1→2), random diagonals for facets
+        for (const [lo, hi] of [
+          [0, 1],
+          [1, 2],
+        ]) {
+          if (rng.chance(0.5)) {
+            T([A, lo], [B, lo], [B, hi], f.nx, 0, f.nz);
+            T([A, lo], [B, hi], [A, hi], f.nx, 0, f.nz);
+          } else {
+            T([A, lo], [B, lo], [A, hi], f.nx, 0, f.nz);
+            T([B, lo], [B, hi], [A, hi], f.nx, 0, f.nz);
+          }
+        }
+        // ledge top
+        T([A, 2], [B, 2], [B, 3], 0, 1, 0);
+        T([A, 2], [B, 3], [A, 3], 0, 1, 0);
+      }
+      // end caps (side faces) with their own bottom-inner vertex
+      for (const [q, sg] of [
+        [0, -1],
+        [vs.length - 1, 1],
+      ] as [number, number][]) {
+        const p4 = P3(vs[q], 4);
+        b.color(_c.copy(col).multiplyScalar(0.84));
+        const i4 = b.vertex(p4[0], p4[1], p4[2], tx * sg, 0, tz * sg);
+        ids[q].push(i4);
+        pts[q].push(p4);
+        T([q, 0], [q, 1], [q, 4], tx * sg, 0, tz * sg);
+        T([q, 1], [q, 3], [q, 4], tx * sg, 0, tz * sg);
+        T([q, 1], [q, 2], [q, 3], tx * sg, 0, tz * sg);
       }
     }
 

@@ -33,6 +33,8 @@ interface TerrainSvc {
 
 export interface VegetationService {
   trees: { x: number; z: number; r: number; h: number }[];
+  /** foliage shading knobs (uniform objects; for tuning from the console / test scripts) */
+  knobs: typeof foliageKnobs;
 }
 
 interface Planted extends TreeSpec {
@@ -117,7 +119,7 @@ export default function create(ctx: CityContext): CityModule {
     if (Number.isFinite(v)) u.value = v;
   }
   const fx = ctx.debug.params.get('vegfx') !== '0';
-  const billow = ctx.debug.params.get('vegclump') === 'billow';
+  if (ctx.debug.params.get('vegclump') === 'billow') foliageKnobs.model.value = 1;
 
   // ── obstacles for anything planted
   const furn = new DiscHash(6);
@@ -495,6 +497,8 @@ export default function create(ctx: CityContext): CityModule {
 
   // ─────────────────────────────────────────────────────────── forest ──
   let forestCount = 0;
+  /** forest trees on the lower rim (the edge the city looks at) — get undergrowth below */
+  const forestEdge: Planted[] = [];
   {
     const rng = ctx.rng('veg-forest');
     const turbines = plan.features.filter((f) => f.kind === 'windturbine');
@@ -545,7 +549,8 @@ export default function create(ctx: CityContext): CityModule {
       if (occAny(occ, x, z, sz.r + 0.6, blockers)) continue;
       if (rocks.any(x, z, 6, (id, d) => d < rocks.r[id] + 1.2)) continue;
       if (trees.any(x, z, sz.r + 4.5, (id, d) => d < Math.max(1.6, (sz.r + trees.r[id]) * 0.58))) continue;
-      plant({ sp, x, z, y: h0 - 0.1 - slope * 0.25, h: sz.h, r: sz.r, surround: 'none', syaw: 0, tag: 'forest', detail: 1, tone });
+      const p = plant({ sp, x, z, y: h0 - 0.1 - slope * 0.25, h: sz.h, r: sz.r, surround: 'none', syaw: 0, tag: 'forest', detail: 1, tone });
+      if (edge > 0.35 && slope < 0.5) forestEdge.push(p);
       forestCount++;
     }
   }
@@ -729,6 +734,20 @@ export default function create(ctx: CityContext): CityModule {
       const rr = rng.range(0.6, 1.1);
       if (h0 < 0.5 && z < -162.5) continue;
       addBush(x, z, rr, rr * rng.range(0.8, 1.1), rng.int(0, 1e9));
+    }
+  }
+
+  // forest rim undergrowth: low shrubs between the edge trees so the forest sits in its floor
+  {
+    const rng = ctx.rng('veg-forest-under');
+    for (const t of forestEdge) {
+      const n = rng.chance(0.55) ? 1 : 2;
+      for (let i = 0; i < n; i++) {
+        const a = rng.range(0, 6.28),
+          d = t.r * rng.range(0.85, 1.35);
+        const rr = rng.range(0.5, 0.95);
+        addBush(t.x + Math.cos(a) * d, t.z + Math.sin(a) * d, rr, rr * rng.range(0.85, 1.15), rng.int(0, 1e9), undefined);
+      }
     }
   }
 
@@ -945,8 +964,8 @@ export default function create(ctx: CityContext): CityModule {
   const parts = (ctx.debug.params.get('vegparts') ?? 'trees,forest,plants').split(',');
   const shadows = ctx.debug.params.get('vegshadow') !== '0';
   const vmat = ctx.debug.params.get('vegmat') ?? 'standard';
-  const tm = legacy ? legacyWindMaterials(ctx.uniforms, 'veg-trees', 0.9, vmat) : windMaterials(ctx.uniforms, 'veg-trees', 0.9, vmat, fx, billow);
-  const pm = legacy ? legacyWindMaterials(ctx.uniforms, 'veg-plants', 0.92, vmat) : windMaterials(ctx.uniforms, 'veg-plants', 0.92, vmat, fx, billow);
+  const tm = legacy ? legacyWindMaterials(ctx.uniforms, 'veg-trees', 0.9, vmat) : windMaterials(ctx.uniforms, 'veg-trees', 0.9, vmat, fx);
+  const pm = legacy ? legacyWindMaterials(ctx.uniforms, 'veg-plants', 0.92, vmat) : windMaterials(ctx.uniforms, 'veg-plants', 0.92, vmat, fx);
   const geos: THREE.BufferGeometry[] = [];
   const mk = (sink: GeoSink, name: string, mat: THREE.Material, shadow: boolean, part: string): THREE.Mesh => {
     const geo = sink.build();
@@ -975,7 +994,7 @@ export default function create(ctx: CityContext): CityModule {
   const sum = (a: { s: GeoSink }[], key: 'tcount' | 'vcount') => a.reduce((acc, c) => acc + c.s[key], 0);
   ctx.scene.add(root);
 
-  const service: VegetationService = { trees: planted.map((t) => ({ x: t.x, z: t.z, r: t.r, h: t.h })) };
+  const service: VegetationService = { trees: planted.map((t) => ({ x: t.x, z: t.z, r: t.r, h: t.h })), knobs: foliageKnobs };
   ctx.services.vegetation = service;
   const buildMs = performance.now() - t0;
 

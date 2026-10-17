@@ -78,6 +78,7 @@ uniform float uThBump;
 uniform float uThTrans;
 uniform float uThWrap;
 uniform float uThTone;
+uniform float uThModel;
 float thWrap;
 ${LAMP_GLSL}
 vec3 thHash( vec3 p ) {
@@ -148,28 +149,26 @@ if ( thAmt > 0.02 ) {
   float f1 = thAmt * ( 1.0 - smoothstep( 0.12, 0.42, foot ) );
   float f2 = thAmt * ( 1.0 - smoothstep( 0.12, 0.42, foot * 2.37 ) );
   vec3 g = vec3( 0.0 );
-  float n1v = 0.0;
   if ( f1 > 0.001 ) {
-#ifdef TH_BILLOW
-    vec4 n1 = thNoised( p );
-    // soft sign: crease width follows the pixel footprint (no stair-stepping)
-    float e1 = max( 0.02, foot * 0.9 );
-    float s1 = n1.x / sqrt( n1.x * n1.x + e1 * e1 );
-    g += s1 * n1.yzw * f1;
-    n1v = n1.x;
-    float crease = smoothstep( 0.0, 0.2, abs( n1.x ) );
-    thAO *= mix( 1.0, 0.6 + 0.4 * crease, f1 );
-    float t = s1 * smoothstep( 0.02, 0.22, abs( n1.x ) ) * f1 * uThTone;
-#else
-    // leaf clumps: every cell is a little dome (normal tilts away from its centre), creases between
-    vec3 cd;
-    float edge, cid;
-    thCell( p, cd, edge, cid );
-    g -= cd * ( 1.6 * f1 );  // height = -|d|² → normal tilts outward from the clump centre
-    float crease = smoothstep( 0.0, 0.12 + foot * 0.6, edge );
-    thAO *= mix( 1.0, 0.58 + 0.42 * crease, f1 );
-    float t = cid * f1 * uThTone;
-#endif
+    float t;
+    if ( uThModel > 0.5 ) {
+      // billowed gradient noise (meandering creases)
+      vec4 n1 = thNoised( p );
+      // soft sign: crease width follows the pixel footprint (no stair-stepping)
+      float e1 = max( 0.02, foot * 0.9 );
+      float s1 = n1.x / sqrt( n1.x * n1.x + e1 * e1 );
+      g += s1 * n1.yzw * f1;
+      thAO *= mix( 1.0, 0.6 + 0.4 * smoothstep( 0.0, 0.2, abs( n1.x ) ), f1 );
+      t = s1 * smoothstep( 0.02, 0.22, abs( n1.x ) ) * f1 * uThTone;
+    } else {
+      // leaf clumps: every cell is a little dome (normal tilts away from its centre), creases between
+      vec3 cd;
+      float edge, cid;
+      thCell( p, cd, edge, cid );
+      g -= cd * ( 1.6 * f1 ); // height = -|d|² → the normal tilts outward from the clump centre
+      thAO *= mix( 1.0, 0.58 + 0.42 * smoothstep( 0.0, 0.12 + foot * 0.6, edge ), f1 );
+      t = cid * f1 * uThTone;
+    }
     // clump tone families: warm/light vs cool/dark
     diffuseColor.rgb *= vec3( 1.0 ) + vec3( 0.11, 0.07, -0.05 ) * t;
     if ( f2 > 0.001 ) {
@@ -235,6 +234,8 @@ export interface FoliageKnobs {
   trans: { value: number };
   wrap: { value: number };
   tone: { value: number };
+  /** clump model: 0 cellular domes, 1 billowed noise */
+  model: { value: number };
 }
 
 /** shared tuning uniforms (one object drives every foliage material) */
@@ -243,6 +244,7 @@ export const foliageKnobs: FoliageKnobs = {
   trans: { value: 0.9 },
   wrap: { value: 0.45 },
   tone: { value: 1.0 },
+  model: { value: 0 },
 };
 
 let physPars: string | null = null;
@@ -277,7 +279,7 @@ function injectWind(shader: THREE.WebGLProgramParametersWithUniforms, u: GlobalU
 
 function injectFoliage(shader: THREE.WebGLProgramParametersWithUniforms, u: GlobalUniforms): void {
   injectWind(shader, u, LEAF_VERT_PARS, LEAF_VERT_MAIN);
-  Object.assign(shader.uniforms, lampUniforms(), { uThBump: foliageKnobs.bump, uThTrans: foliageKnobs.trans, uThWrap: foliageKnobs.wrap, uThTone: foliageKnobs.tone });
+  Object.assign(shader.uniforms, lampUniforms(), { uThBump: foliageKnobs.bump, uThTrans: foliageKnobs.trans, uThWrap: foliageKnobs.wrap, uThTone: foliageKnobs.tone, uThModel: foliageKnobs.model });
   shader.fragmentShader = shader.fragmentShader
     .replace('#include <common>', `#include <common>\n${LEAF_FRAG_PARS}`)
     .replace('#include <lights_physical_pars_fragment>', wrappedPhysicalPars())
@@ -296,7 +298,7 @@ export interface WindMaterials {
  * kind 'standard' gets the foliage shading (needs the aLeaf attribute) unless `fx` is false;
  * 'lambert' / 'basic' are cost-measurement variants (wind only).
  */
-export function windMaterials(u: GlobalUniforms, name: string, roughness = 0.9, kind = 'standard', fx = true, billow = false): WindMaterials {
+export function windMaterials(u: GlobalUniforms, name: string, roughness = 0.9, kind = 'standard', fx = true): WindMaterials {
   const foliage = kind === 'standard' && fx;
   const mat =
     kind === 'basic'
@@ -305,9 +307,8 @@ export function windMaterials(u: GlobalUniforms, name: string, roughness = 0.9, 
         ? (new THREE.MeshLambertMaterial({ vertexColors: true }) as unknown as THREE.MeshStandardMaterial)
         : new THREE.MeshStandardMaterial({ vertexColors: true, roughness, metalness: 0 });
   mat.name = name;
-  if (foliage && billow) mat.defines = { TH_BILLOW: '' };
   mat.onBeforeCompile = (shader) => (foliage ? injectFoliage(shader, u) : injectWind(shader, u));
-  mat.customProgramCacheKey = () => `veg-wind-2-${kind}-${foliage ? 'leaf' : 'plain'}${billow ? '-billow' : ''}`;
+  mat.customProgramCacheKey = () => `veg-wind-2-${kind}-${foliage ? 'leaf' : 'plain'}`;
   const depth = new THREE.MeshDepthMaterial();
   depth.name = `${name}-depth`;
   depth.onBeforeCompile = (shader) => injectWind(shader, u);

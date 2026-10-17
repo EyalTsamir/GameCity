@@ -30,7 +30,13 @@ V5 verification (before/after 5174 vs 5173, perf A/B). Budgets: tris ≤ +15 %, 
 `?vegbump= &vegtrans= &vegwrap= &vegtone=` (shading knobs) · existing `?vegparts=trees,forest,plants&vegshadow=0&vegmat=`.
 
 ## Status / next steps
-1. [in progress] first capture iteration new vs legacy (shots/vegetation/it1*, park/closeup/forest/station, 11 & 18.2 h)
+1. [done] it1 new vs legacy (shots/vegetation/it1, it1L): FIREFLIES — wrapped N·L fed GGX specular (visibility
+   explodes at back-lit grazing) → wrap now only on the diffuse term. Conifer scallops too star-like → softened
+   (gap 0.83, 7/5 tips, less droop). Billow relief read as "brain folds" → added cellular-dome clump model
+   (uThModel 0 = cells default, 1 = billow; `?vegclump=billow`), knobs exposed at ctx.services.vegetation.knobs.
+   Forest birch = union crown (fewer tris). Forest rim undergrowth (shrubs under edge trees).
+   Tri estimate: near ≈ +7.5 %, far ≈ +2 % (it1 stats: treeTris 120.9k vs 114.3k legacy; forest 64.4k→~53k after fixes).
+   Scratch tool: scratchpad/vcap.mjs = many knob variants in one page load (list sep '@@').
 2. tune shading, check triangle counts vs budget (baseline near: trees 118k, far 53k, forest 46k, plants 45k, fine 33k)
 3. V5 full-city before/after + perf A/B.
 
