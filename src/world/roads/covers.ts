@@ -74,7 +74,7 @@ function coverForArea(a: Area, plan: CityPlan): Cover | null {
     case 'quay':
       return { key: 'quay', mesh: 'H', mat: HM.quay, variant: 0, rect: a.rect, bands: [0, 0, 0, 0.05] };
     case 'platform':
-      return { key: 'platform', mesh: 'H', mat: HM.platform, variant: 0, rect: a.rect, bands: [0, 0, 0, 0.05] };
+      return { key: 'platform', mesh: 'H', mat: HM.platform, variant: 0, rect: a.rect, bands: [8.0, 0.36, 0.6, 0.06] };
     case 'parking':
       return { key: 'parking', mesh: 'A', mat: 0, variant: 1 };
     case 'schoolyard':

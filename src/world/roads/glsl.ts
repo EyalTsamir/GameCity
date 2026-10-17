@@ -83,8 +83,9 @@ vec3 rdAsphalt(inout float rough) {
   } else {
     age = clamp(0.35 + 0.9 * (nL.g - 0.5) + 0.35 * (rdHash(floor(p / vec2(13.0, 9.0)) + 3.3) - 0.5), 0.0, 1.0);
   }
-  float ag = smoothstep(0.0, 1.0, age);
-  c *= mix(vec3(0.76, 0.78, 0.85), vec3(1.2, 1.18, 1.11), ag);
+  // bimodal: most sections read clearly fresh (deep charcoal) or worn (pale grey) from afar
+  float ag = smoothstep(0.18, 0.82, age);
+  c *= mix(vec3(0.68, 0.7, 0.78), vec3(1.3, 1.27, 1.18), ag);
   c *= 0.9 + 0.12 * nL.r + 0.06 * nL.b;
   float spk = nS.a * 0.6 + nS.b * 0.4;
   c *= 1.0 + (spk - 0.5) * mix(0.1, 0.26, ag);
@@ -112,16 +113,16 @@ vec3 rdAsphalt(inout float rough) {
       float h2 = rdHash(sg + 2.3);
       float wig = 0.14 * sin(al * 0.37 + h2 * 6.0) + 0.1 * (nM.r - 0.5);
       float off = h2 < 0.5 ? 0.38 : -0.38;
-      float lon = rdLine(abs(lat - off - wig), 0.06 + 0.04 * nS.g, fw) * step(0.32, nM.b);
+      float lon = rdLine(abs(lat - off - wig), 0.07 + 0.05 * nS.g, fw) * step(0.3, nM.b);
       float tsp = 6.5 + 4.0 * h2;
       float kk = floor((al + h2 * 17.0) / tsp);
       float hk = rdHash(vec2(kk, sg.x + 0.5));
       float tr = (fract((al + h2 * 17.0) / tsp) - 0.5) * tsp + 0.22 * sin(lat * 1.7 + hk * 9.0) + 0.12 * (nS.b - 0.5);
       float span = 1.0 - smoothstep(0.9 + 2.6 * fract(hk * 7.3), 1.2 + 2.6 * fract(hk * 7.3), abs(lat - (hk - 0.5) * 3.0));
-      float trans = rdLine(abs(tr), 0.055, fw) * span * step(0.25, hk);
-      float net = rdCrackNet(p + sg * 13.0, 2.6, 0.035, fw) * smoothstep(1.9, 3.1, alat) * smoothstep(0.45, 0.6, nL.a);
+      float trans = rdLine(abs(tr), 0.07, fw) * span * step(0.25, hk);
+      float net = rdCrackNet(p + sg * 13.0, 2.4, 0.045, fw) * smoothstep(1.6, 3.0, alat) * smoothstep(0.42, 0.58, nL.a);
       float crack = max(max(lon, trans), net) * worn;
-      c *= 1.0 - 0.55 * crack;
+      c *= 1.0 - 0.62 * crack;
       rough -= 0.25 * crack;
     }
     c *= 1.0 - 0.5 * seam;
@@ -175,7 +176,8 @@ vec3 rdAsphalt(inout float rough) {
     float circ = 1.0 - smoothstep(1.8 - fw, 1.8 + fw, length(p - cc));
     vec3 paint = mix(uCourtB, uCourtA, inC);
     paint = mix(paint, uCourtC, max(max(key, keyArc), circ));
-    paint *= 0.94 + 0.1 * nS.r;
+    paint = mix(paint, vec3(dot(paint, vec3(0.3, 0.55, 0.15))), 0.14);   // painted-miniature, not neon
+    paint *= 0.93 + 0.12 * nS.r;
     float scuff = smoothstep(0.62, 0.8, nM.g * 0.6 + nS.a * 0.4) * 0.25;
     c = mix(c, mix(paint, c * 1.3, scuff), inR);
     rough = mix(rough, 0.7, inR);

@@ -53,7 +53,10 @@ export type ScatterKind =
   | 'sleepers'
   | 'heap'
   | 'courtTable'
-  | 'bikes';
+  | 'bikes'
+  | 'container'
+  | 'pipes'
+  | 'timber';
 
 export interface ScatterItem {
   kind: ScatterKind;
@@ -111,6 +114,9 @@ const SIZE: Record<ScatterKind, [number, number, boolean]> = {
   heap: [3.2, 3.0, false],
   courtTable: [1.9, 1.9, false],
   bikes: [1.9, 0.7, false],
+  container: [6.1, 2.45, true],
+  pipes: [3.0, 1.3, false],
+  timber: [2.8, 1.25, false],
 };
 
 export function scatterSize(kind: ScatterKind): [number, number] {
@@ -403,10 +409,12 @@ export function planScatter(inp: ScatterInputs): ScatterItem[] {
   // ─────────────────────────────────────────────── industrial yards ──
   const YARD_MIX: [ScatterKind, number][] = [
     ['pallets', 4],
-    ['palletGoods', 3],
+    ['palletGoods', 4],
     ['drums', 3],
     ['crates', 2],
     ['ibc', 2],
+    ['pipes', 1.4],
+    ['timber', 1.4],
     ['cableReel', 1.2],
     ['gasCage', 1],
     ['dumpster', 1],
@@ -443,6 +451,25 @@ export function planScatter(inp: ScatterInputs): ScatterItem[] {
     };
     const pts = wallPts();
     for (const [wx, wz, nx, nz] of pts) if (put(Z, 'skip', ...atWall('skip', wx, wz, nx, nz, 0.4), 0.4)) break;
+    // a storage container or two along a wall or the yard edge (strong, colourful read from afar)
+    {
+      let nC = 0;
+      for (const [wx, wz, nx, nz] of pts) {
+        if (nC >= 2) break;
+        if (put(Z, 'container', ...atWall('container', wx, wz, nx, nz, 0.3), 0.5)) nC++;
+      }
+      const edge: [number, number, number][] = [];
+      for (let x = r.x0 + 4; x < r.x1 - 4; x += 1) edge.push([x, r.z0 + 2.6, 0], [x, r.z1 - 2.6, Math.PI]);
+      for (let z = r.z0 + 4; z < r.z1 - 4; z += 1) edge.push([r.x0 + 2.6, z, Math.PI / 2], [r.x1 - 2.6, z, -Math.PI / 2]);
+      for (let i = edge.length - 1; i > 0; i--) {
+        const j = Math.floor(rnd() * (i + 1));
+        [edge[i], edge[j]] = [edge[j], edge[i]];
+      }
+      for (const [x, z, y] of edge) {
+        if (nC >= 2) break;
+        if (put(Z, 'container', x, z, y, 0.5)) nC++;
+      }
+    }
     if (rnd() < 0.85) {
       // forklift parked near a loading door, at right angles to the wall
       const doors = lots.flatMap((l) => l.doors);
@@ -456,7 +483,7 @@ export function planScatter(inp: ScatterInputs): ScatterItem[] {
     }
     // clusters along the walls
     let placed = 0;
-    const target = Math.round(((r.x1 - r.x0) * (r.z1 - r.z0)) / 70);
+    const target = Math.round(((r.x1 - r.x0) * (r.z1 - r.z0)) / 42);
     for (const [wx, wz, nx, nz] of pts) {
       if (placed >= target) break;
       const kind = weighted(YARD_MIX);
@@ -468,7 +495,7 @@ export function planScatter(inp: ScatterInputs): ScatterItem[] {
       const tx = -nz,
         tz = nx;
       let s = SIZE[kind][0] / 2;
-      for (let k = 1; k <= 2 + Math.floor(rnd() * 3); k++) {
+      for (let k = 1; k <= 2 + Math.floor(rnd() * 4); k++) {
         const kind2 = rnd() < 0.6 ? kind : weighted(YARD_MIX);
         s += SIZE[kind2][0] / 2 + 0.3;
         const [x2, z2, y2] = atWall(kind2, wx + tx * s, wz + tz * s, nx, nz, 0.15);
@@ -481,8 +508,14 @@ export function planScatter(inp: ScatterInputs): ScatterItem[] {
     const open = raster(Z, 1.0, () => rnd(), () => (rnd() < 0.5 ? 0 : Math.PI / 2));
     let loose = 0;
     for (const [x, z, y] of open) {
-      if (loose >= 3) break;
-      if (put(Z, rnd() < 0.5 ? 'pallets' : 'palletGoods', x, z, y, 1.2)) loose++;
+      if (loose >= 6) break;
+      const kind: ScatterKind = rnd() < 0.3 ? 'pipes' : rnd() < 0.5 ? 'pallets' : 'palletGoods';
+      if (!put(Z, kind, x, z, y, 1.1)) continue;
+      loose++;
+      // a second stack beside it
+      const tx = Math.cos(y),
+        tz = -Math.sin(y);
+      put(Z, rnd() < 0.5 ? kind : 'palletGoods', x + tx * 1.5, z + tz * 1.5, y, 0.2);
     }
   }
   // freight yard: sleeper stacks and ballast heaps along its edges

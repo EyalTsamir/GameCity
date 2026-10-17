@@ -333,6 +333,18 @@ export default function create(ctx: CityContext): CityModule {
           at(kf);
           SK.leaningBikes(kf, srng);
           break;
+        case 'container':
+          at(KS);
+          SK.container(KS, srng);
+          break;
+        case 'pipes':
+          at(kf);
+          SK.pipes(kf, srng);
+          break;
+        case 'timber':
+          at(kf);
+          SK.timber(kf, srng);
+          break;
       }
       inc(`s_${it.kind}`);
       layout.furniture.push(scatterDisc(it));

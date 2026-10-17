@@ -686,6 +686,69 @@ export function binRow(k: Kit, rng: Rng): void {
   wheelieBins(k, rng, 3);
 }
 
+/** 20 ft storage container (corrugated sides suggested by ribs), doors at +X end. */
+export function container(ks: Kit, rng: Rng): void {
+  const sh = ks.sh;
+  const col = rng.pick(['#2f6fb0', '#c9442c', '#3f8f5a', '#e8a33c', '#8a5aa8', '#2a7a8a', '#b8b0a0', '#7a3b2e']);
+  const L = 6.06,
+    W = 2.44,
+    H = 2.59;
+  ks.m(col, 'paint');
+  sh.box(0, H / 2, 0, L, H, W, 1);
+  // ribs on the long sides + top rails (slightly darker)
+  ks.m(col, 'paint');
+  ks.s.r *= 0.8;
+  ks.s.g *= 0.8;
+  ks.s.b *= 0.8;
+  for (let i = 0; i < 9; i++) {
+    const x = -L / 2 + 0.45 + i * ((L - 0.9) / 8);
+    sh.box(x, H / 2, W / 2 + 0.015, 0.1, H - 0.2, 0.03, 0);
+    sh.box(x, H / 2, -W / 2 - 0.015, 0.1, H - 0.2, 0.03, 0);
+  }
+  sh.box(0, H - 0.05, 0, L + 0.02, 0.1, W + 0.02, 0);
+  sh.box(0, 0.06, 0, L + 0.02, 0.12, W + 0.02, 1);
+  // door end: lock bars
+  ks.m('#2a2c2e', 'steel');
+  for (const z of [-0.8, -0.35, 0.35, 0.8]) sh.box(L / 2 + 0.03, H / 2, z, 0.03, H - 0.3, 0.04, 0);
+}
+
+/** Steel pipes stacked on timber bearers. */
+export function pipes(k: Kit, rng: Rng): void {
+  const sh = k.sh;
+  k.m('#8a6a48', 'wood');
+  for (const x of [-1.0, 1.0]) sh.box(x, 0.06, 0, 0.12, 0.12, 1.25, 1);
+  const col = rng.pick(['#6f7478', '#8a4a2e', '#3a5f7d', '#c9c3b7', '#e8a33c']);
+  const r = rng.range(0.13, 0.2);
+  let row = 0;
+  for (let n = 5; n > 0 && row < 4; n--, row++) {
+    for (let i = 0; i < n; i++) {
+      const z = (i - (n - 1) / 2) * r * 2.05;
+      k.m(col, 'steel');
+      sh.push().local(0, 0.12 + r + row * r * 1.75, z, 0, 0, Math.PI / 2).cyl(0, -1.45, 0, r, r, 2.9, 7, 0).pop();
+      k.m('#1d1f22', 'steel');
+      sh.push().local(1.451, 0.12 + r + row * r * 1.75, z, 0, 0, Math.PI / 2).disc(0, 0, 0, r * 0.82, 7, 1).pop();
+    }
+  }
+}
+
+/** Timber / board stack with spacer battens, sometimes wrapped. */
+export function timber(k: Kit, rng: Rng): void {
+  const sh = k.sh;
+  const layers = rng.int(4, 8);
+  const wood = rng.pick(['#c9a46a', '#d8b47a', '#b8946a']);
+  for (let l = 0; l < layers; l++) {
+    k.m('#8a6a48', 'wood');
+    for (const x of [-1.0, 0, 1.0]) sh.box(x, 0.04 + l * 0.18, 0, 0.06, 0.06, 1.15, 1);
+    k.m(wood, 'wood');
+    k.s.r *= 0.9 + 0.2 * rng.next();
+    sh.box(0, 0.12 + l * 0.18, 0, 2.7, 0.1, 1.1, 1);
+  }
+  if (rng.chance(0.35)) {
+    k.m('#2f6fb0', 'plastic');
+    sh.box(0, 0.08 + layers * 0.09, 0, 2.74, layers * 0.18, 1.14, 1);
+  }
+}
+
 // ───────────────────────────────────────────────────────── freight yard ──
 
 /** Stack of railway sleepers. */
