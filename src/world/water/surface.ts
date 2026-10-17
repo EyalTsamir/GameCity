@@ -403,7 +403,7 @@ vec4 waterBase() {
     hDark = max(hDark, dk * Ch.w);
     float bow = smoothstep(0.15, 0.95, u);
     float spd = min(Ch.y / 3.0, 1.5);
-    float fw = (0.16 + 0.2 * sc) * (1.0 + bow * (0.6 + spd) + spd * 0.35);
+    float fw = (0.14 + 0.09 * min(sc, 1.6)) * (1.0 + bow * (0.5 + spd) + spd * 0.35);
     float ring = (1.0 - smoothstep(0.0, fw, sd)) * smoothstep(-0.3, 0.0, sd);
     hFoam = max(hFoam, ring * Ch.z * (0.6 + 0.4 * bow + 0.35 * spd));
   }
@@ -531,10 +531,15 @@ reflectedLight.indirectDiffuse += diffuseColor.rgb * thLampLight(vWW, vec3(0.0, 
   vec3 th_col = outgoingLight * wAlphaB * (1.0 - wF) + wRefl * wF + wGlint;
   float th_a = clamp(wAlphaB * (1.0 - wF) + wF, 0.0, 1.0);
   gl_FragColor = vec4(th_col / max(th_a, 1e-3), th_a);
+#ifdef TH_WATER_DEBUG
+  gl_FragColor = vec4(wRefl, 1.0);
+#endif
 }`,
       );
   };
-  mat.customProgramCacheKey = () => 'th-water-v2';
+  const dbg = ctx.debug.params.get('waterdebug');
+  if (dbg === 'refl') mat.defines = { TH_WATER_DEBUG: 1 };
+  mat.customProgramCacheKey = () => 'th-water-v2' + (dbg ?? '');
   const mesh = new THREE.Mesh(geo, mat);
   mesh.name = 'water-surface';
   mesh.receiveShadow = true;

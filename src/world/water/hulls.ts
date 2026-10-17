@@ -79,7 +79,7 @@ export class HullContacts {
         zc = (zb + zs) / 2;
       const cx = ship.x + Math.sin(ship.yaw) * zc,
         cz = ship.z + Math.cos(ship.yaw) * zc;
-      push(cx, cz, ship.yaw, hl, ship.beam / 2, (15 - zc) / hl, (-25 - zc) / hl, 0.8, 0, 1.0, 1.25);
+      push(cx, cz, ship.yaw, hl, ship.beam / 2, (15 - zc) / hl, (-25 - zc) / hl, 0.8, 0, 0.7, 1.2);
     }
     const boats = (this.ctx.services.boats as { fleet?: { boats: BoatLike[] } } | undefined)?.fleet?.boats;
     if (boats) {

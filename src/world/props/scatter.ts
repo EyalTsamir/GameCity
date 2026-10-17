@@ -420,27 +420,27 @@ export function planScatter(inp: ScatterInputs): ScatterItem[] {
     const r = a.rect;
     const Z = zone(r, { paved: false, edge: 1.0, walkPad: 0.6, doorZone: 6.5 });
     const lots = plan.lots.filter((l) => l.footprint.x0 < r.x1 && l.footprint.x1 > r.x0 && l.footprint.z0 < r.z1 && l.footprint.z1 > r.z0);
-    // one skip + one forklift per yard first (they need the most room)
-    const wallCands = (depth: number): [number, number, number][] => {
-      const c: [number, number, number][] = [];
+    // wall points with their outward normal (items stand with their back to the wall)
+    const wallPts = (): [number, number, number, number][] => {
+      const c: [number, number, number, number][] = [];
       for (const lot of lots) {
         const f = lot.footprint;
-        const off = 0.45 + depth / 2;
-        for (let x = f.x0 + 1; x < f.x1 - 1; x += 0.75) {
-          c.push([x, f.z0 - off, Math.PI], [x, f.z1 + off, 0]);
-        }
-        for (let z = f.z0 + 1; z < f.z1 - 1; z += 0.75) {
-          c.push([f.x0 - off, z, -Math.PI / 2], [f.x1 + off, z, Math.PI / 2]);
-        }
+        for (let x = f.x0 + 1; x < f.x1 - 1; x += 0.75) c.push([x, f.z0, 0, -1], [x, f.z1, 0, 1]);
+        for (let z = f.z0 + 1; z < f.z1 - 1; z += 0.75) c.push([f.x0, z, -1, 0], [f.x1, z, 1, 0]);
       }
-      // deterministic shuffle
       for (let i = c.length - 1; i > 0; i--) {
         const j = Math.floor(rnd() * (i + 1));
         [c[i], c[j]] = [c[j], c[i]];
       }
       return c;
     };
-    putAny(Z, 'skip', wallCands(1.9), 0.4);
+    /** centre of an item of `kind` standing against the wall at (wx, wz) facing (nx, nz) */
+    const atWall = (kind: ScatterKind, wx: number, wz: number, nx: number, nz: number, clear: number): [number, number, number] => {
+      const off = 0.5 + SIZE[kind][1] / 2 + clear;
+      return [wx + nx * off, wz + nz * off, yawOf(nx, nz)];
+    };
+    const pts = wallPts();
+    for (const [wx, wz, nx, nz] of pts) if (put(Z, 'skip', ...atWall('skip', wx, wz, nx, nz, 0.4), 0.4)) break;
     if (rnd() < 0.85) {
       // forklift parked near a loading door, at right angles to the wall
       const doors = lots.flatMap((l) => l.doors);
@@ -448,29 +448,39 @@ export function planScatter(inp: ScatterInputs): ScatterItem[] {
       for (const d of doors) {
         const nx = d.dir === 'E' ? 1 : d.dir === 'W' ? -1 : 0,
           nz = d.dir === 'S' ? 1 : d.dir === 'N' ? -1 : 0;
-        for (const lat of [4.6, -4.6, 6.0, -6.0]) c.push([d.x + nx * 2.2 - nz * lat, d.z + nz * 2.2 + nx * lat, Math.atan2(nx, nz) + Math.PI]);
+        for (const lat of [4.8, -4.8, 6.2, -6.2, 8.0, -8.0]) c.push([d.x + nx * 2.0 - nz * lat, d.z + nz * 2.0 + nx * lat, Math.atan2(nx, nz) + Math.PI / 2]);
       }
       putAny(Z, 'forklift', c, 0.3);
     }
     // clusters along the walls
-    const cands = wallCands(1.2);
     let placed = 0;
-    const target = Math.round(((r.x1 - r.x0) * (r.z1 - r.z0)) / 75);
-    for (const [x, z, yaw] of cands) {
+    const target = Math.round(((r.x1 - r.x0) * (r.z1 - r.z0)) / 70);
+    for (const [wx, wz, nx, nz] of pts) {
       if (placed >= target) break;
       const kind = weighted(YARD_MIX);
+      const [x, z, yaw] = atWall(kind, wx, wz, nx, nz, 0.15);
       const it = put(Z, kind, x, z, yaw, 0.15);
       if (!it) continue;
       placed++;
       // grow the cluster along the wall
-      const tx = Math.cos(yaw),
-        tz = -Math.sin(yaw);
+      const tx = -nz,
+        tz = nx;
+      let s = SIZE[kind][0] / 2;
       for (let k = 1; k <= 2 + Math.floor(rnd() * 3); k++) {
         const kind2 = rnd() < 0.6 ? kind : weighted(YARD_MIX);
-        const step = (SIZE[kind][0] + SIZE[kind2][0]) / 2 + 0.25;
-        if (put(Z, kind2, x + tx * step * k, z + tz * step * k, yaw, 0.1)) placed++;
+        s += SIZE[kind2][0] / 2 + 0.3;
+        const [x2, z2, y2] = atWall(kind2, wx + tx * s, wz + tz * s, nx, nz, 0.15);
+        if (put(Z, kind2, x2, z2, y2, 0.1)) placed++;
         else break;
+        s += SIZE[kind2][0] / 2;
       }
+    }
+    // a few loose stacks in the open yard (away from the loading zones)
+    const open = raster(Z, 1.0, () => rnd(), () => (rnd() < 0.5 ? 0 : Math.PI / 2));
+    let loose = 0;
+    for (const [x, z, y] of open) {
+      if (loose >= 3) break;
+      if (put(Z, rnd() < 0.5 ? 'pallets' : 'palletGoods', x, z, y, 1.2)) loose++;
     }
   }
   // freight yard: sleeper stacks and ballast heaps along its edges
