@@ -27,10 +27,10 @@ interface MastSpec {
 // between z ≈ −112 and −44) and of the container drop lane; heads stay below the crane booms (22 m).
 // north-strip yard (stacks x 62.5..108.5, z −148..−129): masts in the free strips at both ends.
 const MASTS: MastSpec[] = [
-  { x: 126.9, z: -125.2, height: 18, aims: [[122.5, -109], [132, -112]], radius: 10, intensity: 1.35 },
-  { x: 126.9, z: -19.5, height: 18, aims: [[122.5, -36], [132, -33]], radius: 10, intensity: 1.35 },
-  { x: 61.2, z: -138.5, height: 15, aims: [[75, -133.5], [75, -143.5]], radius: 9, intensity: 1.25 },
-  { x: 109.8, z: -138.5, height: 15, aims: [[96, -133.5], [96, -143.5]], radius: 9, intensity: 1.25 },
+  { x: 126.9, z: -125.2, height: 18, aims: [[122.5, -109], [132, -112]], radius: 10, intensity: 0.95 },
+  { x: 126.9, z: -19.5, height: 18, aims: [[122.5, -36], [132, -33]], radius: 10, intensity: 0.95 },
+  { x: 61.2, z: -138.5, height: 15, aims: [[75, -133.5], [75, -143.5]], radius: 9, intensity: 0.9 },
+  { x: 109.8, z: -138.5, height: 15, aims: [[96, -133.5], [96, -143.5]], radius: 9, intensity: 0.9 },
 ];
 
 const STEEL = '#8b949a';

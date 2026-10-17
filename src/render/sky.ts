@@ -131,7 +131,7 @@ export default async function create(ctx: CityContext): Promise<CityModule> {
   ctx.services.stage = stage;
   const _cyc = new THREE.Color();
   // ?notable: studio key without the table (perf A/B of the table alone; the dome floor stays)
-  const noTable = ctx.debug.params.has('notable');
+  let noTable = ctx.debug.params.has('notable');
   const applyStageVisibility = () => {
     if (stage.table) stage.table.visible = !legacy && !noTable;
     if (stage.legacyContact) stage.legacyContact.visible = legacy || noTable;
@@ -176,6 +176,11 @@ export default async function create(ctx: CityContext): Promise<CityModule> {
       lastJump = true;
     },
     isLegacy: () => legacy,
+    /** A/B: show / hide the studio table at runtime (same as ?notable) */
+    setTable(on: boolean) {
+      noTable = !on;
+      applyStageVisibility();
+    },
     tune,
   };
   ctx.services.sky = skyService;
@@ -307,7 +312,8 @@ export default async function create(ctx: CityContext): Promise<CityModule> {
     stage.uniforms.uCityGlow.value = lights;
     // at night the table gives way to the indigo backdrop sooner (the lit town sits in a pool)
     const nightK = clock.night;
-    stage.uniforms.uFade.value.set(60 - 28 * nightK, 640 - 270 * nightK);
+    stage.uniforms.uFade.value.set(60 - 28 * nightK, 560 - 200 * nightK);
+    stage.uniforms.uTableSpec.value = 1 - 0.7 * nightK;
     if (stage.table && stage.table.visible !== (!legacy && !noTable)) applyStageVisibility();
     // clouds go dim + translucent only after the afterglow / blue hour (dusk keeps its pink glow)
     const cloudNight = smooth(-0.07, -0.3, sh);

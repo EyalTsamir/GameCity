@@ -29,6 +29,8 @@ export interface StageUniforms {
   uCityGlow: THREE.Uniform<number>;
   /** cyc fade: [start, end] metres from the plinth outline */
   uFade: THREE.Uniform<THREE.Vector2>;
+  /** varnish specular scale (damped at night: a moonlit sheen around the model read as haze) */
+  uTableSpec: THREE.Uniform<number>;
 }
 
 /** ctx.services.stage — created by the sky module, filled by the terrain slab */
@@ -46,7 +48,8 @@ export function createStageUniforms(): StageUniforms {
     uStageL: new THREE.Uniform(new THREE.Vector3(0.3, 0.8, 0.5).normalize()),
     uStageShadow: new THREE.Uniform(1),
     uCityGlow: new THREE.Uniform(0),
-    uFade: new THREE.Uniform(new THREE.Vector2(60, 640)),
+    uFade: new THREE.Uniform(new THREE.Vector2(60, 560)),
+    uTableSpec: new THREE.Uniform(1),
   };
 }
 
@@ -185,6 +188,7 @@ uniform vec3 uStageL;
 uniform float uStageShadow;
 uniform float uCityGlow;
 uniform vec2 uFade;
+uniform float uTableSpec;
 uniform sampler2D tEdge;
 varying vec3 vStageW;
 
@@ -319,10 +323,10 @@ export function createTable(rng: Rng, info: TableGeometryInfo, uniforms: StageUn
           float ao = 1.0 - 0.62 * exp(-stDp / 1.3) - 0.3 * exp(-stDp / 10.0);
           float sh = stSlabShadow(vStageW, stDp) * uStageShadow;
           reflectedLight.indirectDiffuse *= ao;
-          reflectedLight.indirectSpecular *= ao;
+          reflectedLight.indirectSpecular *= ao * uTableSpec;
           float direct = (1.0 - sh) * mix(1.0, ao, 0.45);
           reflectedLight.directDiffuse *= direct;
-          reflectedLight.directSpecular *= direct;
+          reflectedLight.directSpecular *= direct * uTableSpec;
         }`,
       )
       .replace(

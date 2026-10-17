@@ -8,19 +8,24 @@
 // admire fountains, queue at bus stops (and board when a bus arrives), pour out
 // of the station when a train arrives and step into doors at the end of a trip.
 //
-// Rendering: one instanced figure mesh posed in the vertex shader (+ prams, dogs
-// and soft contact shadows), see pedestrians/figure.ts and pedestrians/render.ts.
+// Rendering: sculpted figures (body.ts mesh, rig.ts anatomy, shader.ts posing, animate.ts poses)
+// in three instanced levels of detail + a shadow proxy, prams, dogs and soft contact shadows —
+// see pedestrians/render.ts. ?legacypeople restores the original figures (A/B, before/after).
 
 import type { CityContext, CityModule } from '../core/context';
 import { buildPlaces } from './pedestrians/places';
 import { Crowd, type BusEvent } from './pedestrians/crowd';
 import { CrowdRenderer } from './pedestrians/render';
+import { CrowdRenderer as LegacyRenderer } from './pedestrians/legacy/render';
+import { gaitConfig } from './pedestrians/rig';
 
 export default function create(ctx: CityContext): CityModule {
   const rng = ctx.rng('pedestrians');
+  const legacy = ctx.debug.params.has('legacypeople');
+  gaitConfig.legacy = legacy;
   const places = buildPlaces(ctx, rng.fork('places'));
   const crowd = new Crowd(ctx, places, rng.fork('crowd'));
-  const renderer = new CrowdRenderer(ctx.scene, 720, ctx.quality.shadows);
+  const renderer = legacy ? new LegacyRenderer(ctx.scene, 720, ctx.quality.shadows) : new CrowdRenderer(ctx.scene, 720, ctx.quality.shadows);
   // ?hide=pedestrians: simulate but draw nothing (isolates the rendering cost in perf runs)
   if ((ctx.debug.params.get('hide') ?? '').split(',').includes('pedestrians')) renderer.group.visible = false;
   if (ctx.debug.params.has('pedlod')) renderer.forceLod = Math.max(0, Math.min(2, Number(ctx.debug.params.get('pedlod')) || 0));

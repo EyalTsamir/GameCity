@@ -2,7 +2,7 @@
 // Loaded right after "props", so every static light source has been registered by then; the
 // bake itself waits for 'modules:ready' (CPU, ~20–60 ms, one RGBA8 texture 1636×696).
 //
-//  • uLampGain eases in with the street lights (uLights), slightly stronger in deep night.
+//  • uLampGain follows the street lights (uLights, clamped 0..1), slightly stronger in deep night.
 //  • scheduled / moving lights (registered with `channel`) are packed every frame into the
 //    analytic spot uniforms (stadium floodlights follow the 'stadium' channel, crane work lights
 //    the built-in 'lights' channel).
@@ -128,7 +128,8 @@ export default function create(ctx: CityContext): CityModule {
         cosGA = Math.max(0.08, -ay);
         reach = dl + l.radius * 1.6;
       }
-      const norm = (l.intensity * g * (dl * dl + 1)) / cosGA;
+      // the shader divides by (d² + (reach/4)²): normalise so the aim point receives `intensity`
+      const norm = (l.intensity * g * (dl * dl + 0.0625 * reach * reach)) / cosGA;
       const o = n * 4;
       P[o] = l.x;
       P[o + 1] = l.y;
@@ -181,15 +182,16 @@ export default function create(ctx: CityContext): CityModule {
     name: 'lamps',
     frame() {
       const u = ctx.uniforms;
-      const lights = u.uLights.value;
-      // lamps read stronger once the sky is fully dark (eye adaptation, like the windows)
-      const on = lights * lights * (3 - 2 * lights);
+      // uLights already eases in (exponential); lamps read a little stronger once the sky is fully
+      // dark (eye adaptation, like the windows)
+      const on = Math.min(1, Math.max(0, u.uLights.value));
       lightsCh.value = on * (0.8 + 0.2 * u.uNight.value);
       u.uLampGain.value = tex ? lightsCh.value * K : 0;
       packSpots();
     },
     stats() {
       return {
+        gain: Math.round(ctx.uniforms.uLampGain.value * 1000) / 1000,
         registered: lampLights().length,
         baked: result?.lights ?? 0,
         dynamic: spots.length,

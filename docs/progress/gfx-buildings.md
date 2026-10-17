@@ -45,7 +45,15 @@ daytime windows), house massing half of 9, far-field night windows of 2, lamp-li
 
 ## Status
 * [x] M0 code: shader rewrite, aD attribute, homes.ts variants, lamp light — typecheck clean (19:4x).
-* [ ] M1 first captures + fixes (iteration 1 running: shots/buildings/it1, baseline subset shots/buildings/base)
+* [x] M1 first captures (shots/buildings/it1, subset only=sky,terrain,roads,buildings,postfx at 1280×720) —
+  invariants {} / validate [] / 0 console errors; house variants confirmed (26 houses: 7 classic, 6 veranda,
+  5 bay, 6 lplan, 2 garage). Findings → fixes: noise lookups were 10–50× too fine (scale rule now documented in
+  materials.ts); roof lichen used the anisotropic streak channel (scratch marks) → isotropic; glass lost its
+  colour identity (pale grey / beige at golden hour) → coated-glass reflection tint 0.78, F0 0.26, daylight
+  interiors + curtains moved to ALBEDO (follow sun / shade / shadow; emission = lamps + reflection only);
+  reflected-neighbour window specks (glitter at night) removed → soft floor bands; panel wobble halved;
+  weathering strengthened (dirt tint darker, top wash longer, rain streaks 0.5).
+* [ ] M2 iteration 2 (shots/buildings/it2: + otclose facade view + overview)
 * [ ] tuning passes (glass, weathering strength, roofs, night far field), house validation (`?validate`, invariants)
 * [ ] re-tune under stage's new lighting
 * [ ] B6 full before/after sheets + perf A/B

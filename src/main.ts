@@ -171,6 +171,9 @@ async function boot(): Promise<void> {
   }
   if (ctx.services.sky) scene.remove(fallback);
   ctx.events.emit('modules:ready', modules.map((m) => m.name));
+  // street lights follow the clock with a short ease, but a clock jump (time slider, setHours) snaps them
+  let snapLights = true;
+  ctx.events.on('timejump', () => (snapLights = true));
 
   // ── main loop
   const timer = new THREE.Timer();
@@ -183,7 +186,8 @@ async function boot(): Promise<void> {
   let frameCount = 0;
   const loop = (timestamp: number) => {
     timer.update(timestamp);
-    const realDt = Math.min(timer.getDelta(), 0.1);
+    // never negative (out-of-order timestamps would ease uniforms away from their targets)
+    const realDt = Math.max(0, Math.min(timer.getDelta(), 0.1));
     const t0 = performance.now();
     const simDt = clock.update(realDt);
     globalUniforms.uTime.value = clock.simTime;
@@ -191,7 +195,10 @@ async function boot(): Promise<void> {
     globalUniforms.uNight.value = clock.night;
     globalUniforms.uDaylight.value = clock.daylight;
     globalUniforms.uDusk.value = clock.dusk;
-    globalUniforms.uLights.value += ((clock.lightsOn ? 1 : 0) - globalUniforms.uLights.value) * Math.min(1, realDt * 0.8);
+    const lightsTarget = clock.lightsOn ? 1 : 0;
+    if (snapLights) globalUniforms.uLights.value = lightsTarget;
+    else globalUniforms.uLights.value += (lightsTarget - globalUniforms.uLights.value) * Math.min(1, realDt * 0.8);
+    snapLights = false;
     globalUniforms.uSunDir.value.copy(clock.sunDir);
     // signals advance in small steps so phase changes are never skipped
     let rem = simDt;

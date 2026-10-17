@@ -225,6 +225,7 @@ vec3 thLampLight(vec3 wp, vec3 wn) {
     if (in0 || in1) {
       int s0 = in0 ? 0 : uLampSpotSplit;
       int s1 = in1 ? uLampSpotN : uLampSpotSplit;
+      vec3 sp = vec3(0.0);
       for (int i = 0; i < TH_LAMP_SPOTS; i++) {
         int k = s0 + i;
         if (k >= s1) break;
@@ -238,8 +239,12 @@ vec3 thLampLight(vec3 wp, vec3 wn) {
         vec4 Dd = uLampSpotD[k];
         float cone = smoothstep(C.w, Dd.w, dot(-L, Dd.xyz));
         float win = 1.0 - smoothstep(0.55, 1.0, d2 * id / P.w);
-        acc += C.rgb * (cone * win * max(dot(wn, L), 0.0) / (d2 + 1.0));
+        // softened inverse square (no blow-out on surfaces right below the heads)
+        sp += C.rgb * (cone * win * max(dot(wn, L), 0.0) / (d2 + 0.0625 * P.w * P.w));
       }
+      // overlapping floodlights brighten but compress (luminance knee 3)
+      float Y = dot(sp, vec3(0.2126, 0.7152, 0.0722));
+      acc += Y > 1e-5 ? sp * (3.0 * (1.0 - exp(-Y / 3.0)) / Y) : vec3(0.0);
     }
   }
   return acc;

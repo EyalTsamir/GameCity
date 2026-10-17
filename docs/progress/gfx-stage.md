@@ -43,6 +43,13 @@ S4 before/after sheets, perf A/B.
   moon 0.40→0.50, night cyc #131a37, table→indigo fade pulled in at night (uFade 60/640 → 32/370).
 * S2: table + dome studio floor working (overview: model grounded on planks, analytic slab shadow visible
   east of the plinth at 16.5). First oak texture too orange/busy → paler limed oak, fade 60→640 m.
+* S2 verified on :5175 (shots/stage/s2a/<view>_<h>_new.png; views overview, edge=0,0,-20,700,210,10,
+  low=-5,0,-15,450,120,14, top=0,0,-20,720,0,85, corner=203,-20,153,70,45,20, south=0,-10,150,160,0,12 ×
+  11/18.2/21.5): no table edge/seam/z-fight from any of them; top-down shows the hill-profile slab shadow north
+  at noon and the long slab shadow east at 18.2; edge-on shows the soft floor→sky sweep (pale blue by day, amber
+  at 18.2, indigo at night); corner close-up: strata, plinth, contact shadow, planks. Draw calls equal to
+  baseline (table replaces the decal). Fixes after review: moonlit varnish sheen read as haze → uTableSpec
+  1→0.3 at night; day fade far 640→560 so the time-of-day backdrop shows at the top of the hero frame.
 * S3: aircraft routes moved (balloon/blimp loops NW, plane crossing N and left↔right in the hero view; blimp
   leaves north). Adaptive ladder: full → refl-low → no-ao → scale-0.85 → dof-lite → scale-0.72 → refl-off → scale-0.6.
 * S4: not started.

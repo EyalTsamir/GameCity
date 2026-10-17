@@ -474,7 +474,7 @@ function registerHarborPools(points: GlowPoint[]): { keep: GlowPoint[]; cranes: 
       pole: CRANE_LIGHT_Y - p0.y,
       radius: p0.size * 1.15 + spread,
       color: HARBOR_FLOOD_COL,
-      intensity: 1.7,
+      intensity: 1.1,
       kind: 'flood',
       aim: [x, p0.y, p0.z],
       cone: Math.atan2(p0.size * 1.15 + spread, CRANE_LIGHT_Y - p0.y),

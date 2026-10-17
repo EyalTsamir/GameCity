@@ -48,7 +48,10 @@ function registerPools(points: GlowPoint[]): GlowPoint[] {
     const color = flood ? FLOOD_COL : '#' + c.getHexString();
     if (flood && best) {
       // floodlight: from the lamp bank to the pitch; four masts overlap into a crisp bright island
-      out.push({ x: best.x, y: best.y - 0.4, z: best.z, pole: best.y, radius: p.size * 1.75, color, intensity: 2.4, kind: 'flood', aim: [p.x, p.y, p.z], cone: 0.62, channel: 'stadium' });
+      // cross-aimed past the pitch centre (each mast lights the far half, as real stadium rigs do)
+      const ax = best.x + (p.x - best.x) * 1.7,
+        az = best.z + (p.z - best.z) * 1.7;
+      out.push({ x: best.x, y: best.y - 0.4, z: best.z, pole: best.y, radius: p.size * 1.9, color, intensity: 0.95, kind: 'flood', aim: [ax, p.y, az], cone: 0.5, channel: 'stadium' });
       continue;
     }
     const intensity = (p.intensity / 0.22) * 0.95;

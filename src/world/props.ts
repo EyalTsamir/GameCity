@@ -587,7 +587,14 @@ export default function create(ctx: CityContext): CityModule {
       for (const l of layout.lamps) {
         if (occ.has(l.x, l.z, OCC.BUILDING | OCC.ROAD | OCC.WATER)) out.push(`lamp at (${l.x.toFixed(1)}, ${l.z.toFixed(1)}) stands in a building/road/water cell`);
       }
-      return out;
+      // scatter + garden items must never stand on a walk line, road, sidewalk, building or water
+      const bad = OCC.BUILDING | OCC.ROAD | OCC.SIDEWALK | OCC.WATER | OCC.RAIL;
+      const check = (kind: string, x: number, z: number) => {
+        if (occ.has(x, z, bad) || layout.walk.get(x, z) & MASK_WALK) out.push(`${kind} at (${x.toFixed(1)}, ${z.toFixed(1)}) blocks a walkway / road / building cell`);
+      };
+      for (const it of scatter) check(it.kind, it.x, it.z);
+      for (const gp of layout.gardens) for (const it of gp.items) check(it.kind, it.x, it.z);
+      return out.slice(0, 20);
     },
     dispose() {
       for (const g2 of geos) g2.dispose();
