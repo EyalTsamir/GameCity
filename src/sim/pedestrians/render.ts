@@ -36,7 +36,7 @@ interface LookCache {
 
 const lookCache = new WeakMap<Look, LookCache>();
 
-function lookData(L: Look): LookCache {
+export function lookData(L: Look): LookCache {
   let c = lookCache.get(L);
   if (c && c.style === (L.style ?? c.style)) return c;
   const s = styleFromFlags(L);
@@ -483,7 +483,7 @@ export class CrowdRenderer {
 }
 
 /** sunbathing: swimwear colours / hems, accessories off */
-function swimwear(L: Look, s: Style, flags: number, C: Uint32Array): number {
+export function swimwear(L: Look, s: Style, flags: number, C: Uint32Array): number {
   const w = (rgb: number, p: number) => ((rgb & 0xffffff) | ((p & 255) << 24)) >>> 0;
   const female = L.kind === 'woman' || L.kind === 'girl';
   const swim = L.swim || L.skin;

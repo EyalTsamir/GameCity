@@ -36,7 +36,8 @@ all ten areas below — not token tweaks — while keeping the Adreno X1-45 perf
 
 Granted exceptions (lead): night may add the one-line `patchLampMaterial()` call (+ import) to
 `src/sim/traffic/vehicleMaterial.ts` and `src/sim/rail/trainMaterial.ts`; water applies it to boats;
-people to pedestrians.
+people to pedestrians. Night may also replace the station platform/canopy pool glows in
+`src/sim/rail.ts` with registered lamp lights (halos kept).
 
 Need something in a file you don't own? Write it under "Requests to other areas" in your log; the
 lead relays it. A minimal additive change to a lead-owned file is allowed if you are blocked — list it

@@ -66,6 +66,9 @@ export interface GaitState {
   lastPhase: number;
   frame: number;
   lastT: number;
+  lastYaw: number;
+  /** smoothed yaw rate (rad/s) */
+  yawRate: number;
   /** stand mode */
   standing: boolean;
   sp: [StandFoot, StandFoot];
@@ -82,7 +85,7 @@ const newPlan = (): LegPlan => ({ x: 0, y: 0, z: 0, pitch: 0, twist: 0, stance: 
 export function newGaitState(): GaitState {
   const f = (): FootPlant => ({ wx: 0, wz: 0, wyaw: 0, sx: 0, sz: 0, sy: 0, stw: 0, stance: false, valid: false });
   const s = (): StandFoot => ({ wx: 0, wz: 0, wyaw: 0 });
-  return { feet: [f(), f()], lastPhase: 0, frame: -10, lastT: 0, standing: false, sp: [s(), s()], stepFoot: -1, stepT: 0, stepFrom: s(), stepTo: s(), last: [newPlan(), newPlan()] };
+  return { feet: [f(), f()], lastPhase: 0, frame: -10, lastT: 0, lastYaw: 0, yawRate: 0, standing: false, sp: [s(), s()], stepFoot: -1, stepT: 0, stepFrom: s(), stepTo: s(), last: [newPlan(), newPlan()] };
 }
 
 /** values the gait writes (the caller blends upper-body values with its own pose) */
@@ -172,7 +175,7 @@ function params(r: Rig, v: number, pram: boolean): Params {
   P.uFlat = P.beta * mix(0.19, 0.22, run);
   P.uRise = P.beta * mix(0.6, 0.45, run);
   P.width = mix(0.048, 0.03, run) * hk + 0.012 * r.old * hk;
-  P.lift = (mix(0.085, 0.1, run) + 0.02 * clamp(vRel - 1, 0, 1)) * hk * (1 - 0.45 * r.old) * clamp(vRel / 0.9, 0.5, 1);
+  P.lift = (mix(0.1, 0.2, run) + 0.02 * clamp(vRel - 1, 0, 1)) * hk * (1 - 0.45 * r.old) * clamp(vRel / 0.9, 0.5, 1);
   P.hStand = r.hip.y - 0.004 * hk - 0.02 * r.old * hk;
   P.bob = mix(0.023 * clamp(vRel / 1.3, 0.3, 1.3), 0.03, run) * hk;
   return P;
@@ -227,6 +230,8 @@ function rollAnkle(r: Rig, fz: number, pitch: number, o: LegPlan): void {
   o.y = ay;
 }
 
+// path curvature of the current member (per figure unit, + = turning left)
+let KAPPA = 0;
 // world ↔ body frame of the current member (set per call)
 let BX = 0,
   BZ = 0,
@@ -321,7 +326,8 @@ function planWalk(r: Rig, u: number, left: boolean, plant: FootPlant | null, pel
     o.stance = true;
     o.s = -1;
     let fz = p.zHS - u * p.S;
-    let fx = x0;
+    // law position on the (possibly curved) path
+    let fx = x0 * Math.cos(KAPPA * fz) + (KAPPA * fz * fz) / 2;
     o.twist = 0;
     if (plant && plant.valid && plant.stance) {
       toBody(plant.wx, plant.wz, tmpB);
@@ -362,18 +368,23 @@ function planWalk(r: Rig, u: number, left: boolean, plant: FootPlant | null, pel
       toBody(plant.wx, plant.wz, tmpB);
       if (Math.abs(tmpB.z - (toZ - (u - p.beta) * p.S)) < 0.35) {
         rollAnkle(r, tmpB.z, p.thTO, legTmp);
-        z0 = legTmp.z;
+        // roll offset along the foot's heading, as in its last stance frame
+        const hr = wrapA(plant.wyaw - YAW);
+        const dzr = legTmp.z - tmpB.z;
+        z0 = tmpB.z + Math.cos(hr) * dzr;
         y0 = legTmp.y;
-        xs = tmpB.x;
+        xs = tmpB.x + Math.sin(hr) * dzr;
         tw0 = twistFor(left, plant.wyaw, pelvisYaw);
       }
     }
     rollAnkle(r, p.zHS, p.thHS, legTmp);
     const z1 = legTmp.z + (1 - u) * p.S,
       y1 = legTmp.y;
+    // turning: the landing point lies on the curved path (lateral offset κ·D²/2, side offset rotated)
+    const x1 = x0 * Math.cos(KAPPA * z1) + (KAPPA * z1 * z1) / 2;
     const e = s - Math.sin(TAU * s) / TAU; // ground-frame ease: leaves and lands at rest
     o.z = mix(z0, z1, e);
-    o.x = mix(xs, x0, sstep(0, 0.7, s));
+    o.x = mix(xs, x1, sstep(0, 0.7, s));
     o.twist = tw0 * (1 - sstep(0, 0.5, s));
     const pm = 0.08;
     o.pitch = s < 0.45 ? mix(p.thTO, pm, sstep(0, 0.45, s)) : mix(pm, p.thHS, sstep(0.45, 1, s));
@@ -495,6 +506,12 @@ export function gaitPose(m: Member, r: Rig, st: GaitState | null, frame: number,
   const uR = frac(uL + 0.5);
   const state = st;
   const dt = state ? clamp(t - state.lastT, 0, 0.1) : 0;
+  KAPPA = 0;
+  if (state && frame - state.frame <= 1 && dt > 1e-4) {
+    const w = wrapA(m.yaw - state.lastYaw) / dt;
+    state.yawRate += (w - state.yawRate) * Math.min(1, dt * 6);
+    KAPPA = clamp(state.yawRate / Math.max(0.35, v), -2.5, 2.5) * SC;
+  } else if (state) state.yawRate = 0;
   let fresh = true;
   if (state) {
     fresh = frame - state.frame > 1;
@@ -523,14 +540,29 @@ export function gaitPose(m: Member, r: Rig, st: GaitState | null, frame: number,
   if (state && gw < 0.999) {
     if (!state.standing) {
       for (let i = 0; i < 2; i++) {
-        const src = gw > 0.001 ? (i === 0 ? walkA : walkB) : state.last[i];
+        const W = i === 0 ? walkA : walkB;
+        const f = state.feet[i];
         const left = i === 0;
-        const bx = fresh ? homeX(r, left) : src.x,
-          bz = fresh ? 0 : src.z;
-        toWorld(bx, bz, tmpW);
-        state.sp[i].wx = tmpW.wx;
-        state.sp[i].wz = tmpW.wz;
-        state.sp[i].wyaw = fresh ? m.yaw : m.yaw + pelvisYaw + (left ? -src.twist : src.twist);
+        const u = left ? uL : uR;
+        const sp = state.sp[i];
+        if (!fresh && gw > 0.001 && W.stance && f.valid && f.stance) {
+          // planted: stay exactly there
+          sp.wx = f.wx;
+          sp.wz = f.wz;
+          sp.wyaw = f.wyaw;
+        } else if (!fresh && gw > 0.001 && !W.stance) {
+          // in the air: land where the step was going
+          toWorld((left ? 1 : -1) * p.width, p.zHS + (1 - u) * p.S, tmpW);
+          sp.wx = tmpW.wx;
+          sp.wz = tmpW.wz;
+          sp.wyaw = m.yaw + pelvisYaw;
+        } else {
+          const src = state.last[i];
+          toWorld(fresh ? homeX(r, left) : src.x, fresh ? 0 : src.z, tmpW);
+          sp.wx = tmpW.wx;
+          sp.wz = tmpW.wz;
+          sp.wyaw = m.yaw;
+        }
       }
       state.standing = true;
       state.stepFoot = -1;
@@ -661,7 +693,7 @@ export function gaitPose(m: Member, r: Rig, st: GaitState | null, frame: number,
       } else if (W.stance) {
         if (!f.stance || !f.valid) {
           // heel strike (or first frame): store the flat-foot reference and heading in world space
-          toWorld((left ? 1 : -1) * p.width, p.zHS - u * p.S, tmpW);
+          toWorld(L.x, p.zHS - u * p.S, tmpW);
           f.wx = tmpW.wx;
           f.wz = tmpW.wz;
           f.wyaw = m.yaw + pelvisYaw;
@@ -683,6 +715,7 @@ export function gaitPose(m: Member, r: Rig, st: GaitState | null, frame: number,
     state.lastPhase = m.phase;
     state.frame = frame;
     state.lastT = t;
+    state.lastYaw = m.yaw;
   }
 
   // ── upper body

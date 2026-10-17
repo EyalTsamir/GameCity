@@ -108,13 +108,13 @@ vec3 rdAsphalt(inout float rough) {
     c = mix(c, c * 1.16 + vec3(0.008), smoothstep(2.85, 3.35, alat) * onRoad * 0.6);
     c *= 1.0 - 0.2 * smoothstep(3.3, 3.48, alat) * onRoad;
     // sealed cracks on worn sections
-    float worn = smoothstep(0.55, 0.8, age) * onRoad * step(${JBOX}, dj);
+    float worn = smoothstep(0.42, 0.7, age) * onRoad * step(${JBOX}, dj);
     if (worn > 0.001) {
       float h2 = rdHash(sg + 2.3);
       float wig = 0.14 * sin(al * 0.37 + h2 * 6.0) + 0.1 * (nM.r - 0.5);
       float off = h2 < 0.5 ? 0.38 : -0.38;
       float lon = rdLine(abs(lat - off - wig), 0.07 + 0.05 * nS.g, fw) * step(0.3, nM.b);
-      float tsp = 6.5 + 4.0 * h2;
+      float tsp = 4.5 + 4.0 * h2;
       float kk = floor((al + h2 * 17.0) / tsp);
       float hk = rdHash(vec2(kk, sg.x + 0.5));
       float tr = (fract((al + h2 * 17.0) / tsp) - 0.5) * tsp + 0.22 * sin(lat * 1.7 + hk * 9.0) + 0.12 * (nS.b - 0.5);
@@ -144,7 +144,7 @@ vec3 rdAsphalt(inout float rough) {
   vec2 cs = vec2(9.0, 6.5);
   vec2 pc = floor(p / cs);
   float h = rdHash(pc);
-  if (h < 0.12) {
+  if (h < 0.18) {
     vec2 f = p - pc * cs;
     vec2 lo = vec2(0.6 + 3.0 * rdHash(pc + 3.1), 0.5 + 2.0 * rdHash(pc + 5.7));
     vec2 hi = lo + vec2(1.6 + 3.2 * rdHash(pc + 1.3), 1.2 + 2.4 * rdHash(pc + 7.9));
@@ -152,7 +152,7 @@ vec3 rdAsphalt(inout float rough) {
     float inside = inLo.x * inLo.y * inHi.x * inHi.y;
     vec2 de = min(abs(f - lo), abs(f - hi));
     float ps = max(rdLine(de.x, 0.05, fwP.x) * step(lo.y, f.y) * step(f.y, hi.y), rdLine(de.y, 0.05, fwP.y) * step(lo.x, f.x) * step(f.x, hi.x));
-    c = mix(c, c * (h < 0.06 ? 0.74 : 1.16), inside);
+    c = mix(c, c * (h < 0.09 ? 0.72 : 1.18), inside);
     c *= 1.0 - 0.45 * ps;
     rough -= 0.06 * inside;
   }
