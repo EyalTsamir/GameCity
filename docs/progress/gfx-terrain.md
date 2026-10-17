@@ -51,6 +51,10 @@ T1 cliffs & rock · T2 lawns & ground · T3 stadium shell · T4 lamp light in th
   not from my materials). terrain buildMs 3.7 s → 20.7 s (SwiftShader page): per-shape canvas blur on
   hundreds of mask shapes → now drawn sharp and blurred once (verify in it3).
 
+* it3 (`shots/terrain/it3/`): park POI shows mowing stripes + worn path edges, stadium POI reads as a
+  brick ground with towers, dark roofs and lattice masts; cliffs in golden hour show warm strata bands.
+  terrain buildMs back to 1.9 s (single blur pass). Lawn/courtyard stripes bumped to ±12 % after review.
+
 ## Toggles
 `?legacyterrain` (everything old), `?nocliffs` (no rock skin / tors), `?legacyground`, `?legacystadium`.
 

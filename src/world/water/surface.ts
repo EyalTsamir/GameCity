@@ -373,7 +373,7 @@ vec4 waterBase() {
     vec2 su = c2.xy / c2.w - uv;
     vec2 duv = fwidth(uv0) * uReflInfo.yz;
     float lod0 = log2(max(max(duv.x, duv.y), 1e-3));
-    float lod = clamp(lod0 + 0.35 + 1.5 * ruff + 60.0 * wVar, 0.0, uReflInfo.w);
+    float lod = clamp(lod0 + 0.35 + 1.4 * ruff + min(25.0 * wVar, 2.0), 0.0, uReflInfo.w);
     float sl = (0.8 + 2.2 * ruff) * exp2(lod);
     vec2 st = su * (sl / max(length(su * uReflInfo.yz), 1e-3));
     rc = textureLod(tRefl, uv, lod) * 0.5;

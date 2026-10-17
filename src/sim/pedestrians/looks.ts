@@ -588,8 +588,8 @@ function dressUp(L: Look, r: Rng, persona: Persona, ageClass: string, warm: bool
   if (s.sole === 1 && valueOf(L.shoes) < 0.15 && r.chance(0.5)) L.shoes = r.pick([0xe8e6e2, 0x7a7f86, 0x2a2d38]);
   // ── outfit value contrast: legs must read against the top
   const upper = s.jacketHem >= 0 && s.tail !== 3 ? s.outer : L.top;
-  if (s.tail === 0 && Math.abs(valueOf(upper) - valueOf(L.bottom)) < 0.18 && !(fl & F.SUIT) && !s.vest) {
-    L.bottom = valueOf(upper) > 0.45 ? r.pick([0x2f4566, 0x1d1e20, 0x24334c, 0x2e3034]) : r.pick([0x9c8f72, 0x4b6487, 0xc2b48f, 0x6f7378]);
+  if (s.tail === 0 && Math.abs(valueOf(upper) - valueOf(L.bottom)) < 0.14 && !(fl & F.SUIT) && !s.vest) {
+    L.bottom = valueOf(upper) > 0.45 ? r.pick([0x2f4566, 0x1d1e20, 0x24334c, 0x2e3034, 0x3a5478, 0x4a4e55]) : r.pick([0x6f86a8, 0x7d8a99, 0x8a8d90, 0x9c8f72, 0x5f7896, 0xa7a9aa, 0xb5ab95, 0x6b7f5a]);
   }
   L.style = s;
 }
