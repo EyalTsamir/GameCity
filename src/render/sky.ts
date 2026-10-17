@@ -18,6 +18,8 @@ import { cameraFocus } from './focus';
 import { TONE_MAPPING } from './look';
 import type { RenderTest } from './sky/renderTest';
 import { MAX_CLOUDS, type CloudShadowData } from './postfx/cloudShadow';
+import { createStageUniforms, type StageService } from './stage/table';
+import { PLINTH_BOTTOM_Y } from './stage/constants';
 
 const _focus = new THREE.Vector3();
 const _L = new THREE.Vector3();
@@ -117,6 +119,21 @@ export default async function create(ctx: CityContext): Promise<CityModule> {
   scene.environmentIntensity = 0.7;
 
   const fitter = new ShadowFitter({ slab: plan.slab, minY: -8, maxY: Math.max(maxStructure + 10, 175), sampleHeights: [0, 28] });
+  const fitStudio = () => {
+    // studio: the table (y ≈ plinth bottom) is a receiver and a strip of it around the plinth is covered
+    fitter.params.minY = legacy ? -8 : PLINTH_BOTTOM_Y - 2;
+    fitter.params.margin = legacy ? 6 : 14;
+  };
+  fitStudio();
+
+  // ── studio set: table uniforms (the terrain slab builds the table mesh after us)
+  const stage: StageService = { uniforms: createStageUniforms(), table: null, legacyContact: null };
+  ctx.services.stage = stage;
+  const _cyc = new THREE.Color();
+  const applyStageVisibility = () => {
+    if (stage.table) stage.table.visible = !legacy;
+    if (stage.legacyContact) stage.legacyContact.visible = legacy;
+  };
   const state = new SkyState();
 
   // ── weather (rare light showers; ?weather=rain|clear overrides)
@@ -152,6 +169,8 @@ export default async function create(ctx: CityContext): Promise<CityModule> {
     setLegacy(on: boolean) {
       legacy = !!on;
       env.studio = !legacy;
+      fitStudio();
+      applyStageVisibility();
       lastJump = true;
     },
     isLegacy: () => legacy,
@@ -223,6 +242,15 @@ export default async function create(ctx: CityContext): Promise<CityModule> {
     moonVis = smooth(0.06, -0.1, sh);
     _sunSky.copy(clock.sunDir);
     dome.update(state, _sunSky, clock.moonDir, sunVis, moonVis, clock.realTime, overcast);
+    if (!legacy) {
+      _cyc.copy(state.cyc);
+      if (overcast > 0) {
+        const g = lum(_cyc);
+        _cyc.lerp(_grey.setRGB(g * 0.92, g * 0.96, g * 1.02), overcast * 0.75);
+      }
+      dome.setStudio(_cyc);
+      stage.uniforms.uCyc.value.copy(_cyc);
+    } else dome.setStudio(null);
 
     // ── camera-dependent: focus, fog, shadows, clouds, rain
     const dist = cameraFocus(ctx, _focus);
@@ -271,6 +299,11 @@ export default async function create(ctx: CityContext): Promise<CityModule> {
     }
 
     const lights = ctx.uniforms.uLights.value;
+    // studio table: analytic slab shadow follows the shadow-casting light; city spill at night
+    stage.uniforms.uStageL.value.copy(_L);
+    stage.uniforms.uStageShadow.value = (usingMoon ? 0.6 * moonW : sunW) * (1 - overcast * 0.85);
+    stage.uniforms.uCityGlow.value = lights;
+    if (stage.table && stage.table.visible === legacy) applyStageVisibility();
     // clouds go dim + translucent only after the afterglow / blue hour (dusk keeps its pink glow)
     const cloudNight = smooth(-0.07, -0.3, sh);
     clouds.frame(ctx.camera, state, _L, sun.color, lightI, sunVis, lights * (1 - sunVis * 0.8), overcast, cloudNight);

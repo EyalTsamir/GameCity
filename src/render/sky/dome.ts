@@ -34,6 +34,8 @@ uniform float uStars;
 uniform float uTime;
 uniform float uOvercast;
 uniform float uDiscScale;
+uniform vec2 uBelow;
+uniform float uStudio;
 varying vec3 vDir;
 
 float hash13(vec3 p3) {
@@ -89,14 +91,19 @@ void main() {
   float glow = (pow(az, 3.0) * 0.85 + pow(max(dot(d, sd), 0.0), 24.0) * 0.6) * band;
   col += uGlow * uGlowI * glow;
 
-  // below the horizon: a calm haze (the backdrop behind/under the model)
-  float below = smoothstep(0.015, -0.22, y);
-  vec3 groundCol = uGround * mix(1.0, 0.84, smoothstep(-0.25, -0.95, y));
-  col = mix(col, groundCol, below);
-
   // overcast (rain): flatten toward a soft grey
   float grey = dot(col, vec3(0.3, 0.55, 0.15));
   col = mix(col, vec3(grey) * vec3(0.92, 0.96, 1.02), uOvercast * 0.75);
+
+  // below the horizon: legacy = a calm haze; studio = the cyclorama floor colour (exactly the
+  // colour the table fades into, overcast already applied by the caller) sweeping up into the sky
+  float below = smoothstep(uBelow.x, uBelow.y, y);
+  vec3 groundCol = uGround * mix(1.0, mix(0.84, 1.0, uStudio), smoothstep(-0.25, -0.95, y));
+  if (uStudio < 0.5) {
+    float g2 = dot(groundCol, vec3(0.3, 0.55, 0.15));
+    groundCol = mix(groundCol, vec3(g2) * vec3(0.92, 0.96, 1.02), uOvercast * 0.75);
+  }
+  col = mix(col, groundCol, below);
 
   float aboveH = smoothstep(-0.02, 0.06, y);
 
@@ -144,6 +151,8 @@ export interface SkyDome {
   mesh: THREE.Mesh;
   material: THREE.ShaderMaterial;
   update(state: SkyState, sunDir: THREE.Vector3, moonDir: THREE.Vector3, sunVis: number, moonVis: number, time: number, overcast: number): void;
+  /** studio backdrop: below-horizon colour (already overcast-adjusted) or null for the legacy haze */
+  setStudio(cyc: THREE.Color | null): void;
 }
 
 export function createSkyDome(): SkyDome {
@@ -162,6 +171,8 @@ export function createSkyDome(): SkyDome {
     uTime: { value: 0 },
     uOvercast: { value: 0 },
     uDiscScale: { value: 1 },
+    uBelow: { value: new THREE.Vector2(0.015, -0.22) },
+    uStudio: { value: 0 },
   };
   const material = new THREE.ShaderMaterial({
     name: 'SkyDome',
@@ -202,6 +213,16 @@ export function createSkyDome(): SkyDome {
       uniforms.uStars.value = state.stars;
       uniforms.uTime.value = time;
       uniforms.uOvercast.value = overcast;
+    },
+    setStudio(cyc) {
+      if (cyc) {
+        uniforms.uGround.value.copy(cyc);
+        uniforms.uBelow.value.set(0.06, -0.002);
+        uniforms.uStudio.value = 1;
+      } else {
+        uniforms.uBelow.value.set(0.015, -0.22);
+        uniforms.uStudio.value = 0;
+      }
     },
   };
 }

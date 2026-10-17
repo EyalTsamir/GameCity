@@ -29,8 +29,15 @@ export interface StageUniforms {
   uCityGlow: THREE.Uniform<number>;
   /** cyc fade: [start, end] metres from the plinth outline */
   uFade: THREE.Uniform<THREE.Vector2>;
-  /** 1 = studio set active (0 = legacy look: no table, the dome haze shows) */
-  uStageOn: THREE.Uniform<number>;
+}
+
+/** ctx.services.stage — created by the sky module, filled by the terrain slab */
+export interface StageService {
+  uniforms: StageUniforms;
+  /** the studio table (hidden with ?legacylight) */
+  table: THREE.Object3D | null;
+  /** the original blurred contact decal (shown only with ?legacylight) */
+  legacyContact: THREE.Object3D | null;
 }
 
 export function createStageUniforms(): StageUniforms {
@@ -40,7 +47,6 @@ export function createStageUniforms(): StageUniforms {
     uStageShadow: new THREE.Uniform(1),
     uCityGlow: new THREE.Uniform(0),
     uFade: new THREE.Uniform(new THREE.Vector2(90, 900)),
-    uStageOn: new THREE.Uniform(1),
   };
 }
 
@@ -84,7 +90,6 @@ function oakTexture(rng: Rng): THREE.CanvasTexture {
       g.fillStyle = `#${tone.getHexString()}`;
       const xa = half === 0 ? joint : joint - S;
       g.fillRect(xa, y0, S, pw);
-      g.fillRect(xa + (half === 0 ? -S : S) * 0, y0, 0, 0);
     }
     // soft lengthwise tone bands inside the plank (heartwood / sapwood)
     for (let b = 0; b < 3; b++) {
@@ -147,6 +152,7 @@ function oakTexture(rng: Rng): THREE.CanvasTexture {
     g.fillRect(0, y0 + 1.5, S, 1);
     g.fillStyle = 'rgba(55,32,14,0.45)';
     g.fillRect(joint, y0, 1.5, pw);
+    g.fillRect(0, y0, 1.5, pw);
   }
   const t = new THREE.CanvasTexture(cv);
   t.colorSpace = THREE.SRGBColorSpace;
@@ -177,7 +183,6 @@ uniform vec3 uStageL;
 uniform float uStageShadow;
 uniform float uCityGlow;
 uniform vec2 uFade;
-uniform float uStageOn;
 uniform sampler2D tEdge;
 varying vec3 vStageW;
 
@@ -321,8 +326,5 @@ export function createTable(rng: Rng, info: TableGeometryInfo, uniforms: StageUn
   mesh.frustumCulled = false;
   mesh.matrixAutoUpdate = false;
   mesh.updateMatrix();
-  mesh.onBeforeRender = () => {
-    mesh.visible = uniforms.uStageOn.value > 0.5;
-  };
   return mesh;
 }

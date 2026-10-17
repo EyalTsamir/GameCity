@@ -17,6 +17,8 @@ export interface ShadowFitParams {
   maxY: number;
   /** heights at which the visible region is evaluated (ground, rooftops) */
   sampleHeights: number[];
+  /** receivers considered around the slab rectangle (m): plinth + a strip of the table */
+  margin?: number;
 }
 
 const _frustum = new THREE.Frustum();
@@ -57,7 +59,7 @@ export class ShadowFitter {
   private pts: { x: number; y: number }[] = [];
   private lastHs = 0;
 
-  constructor(private params: ShadowFitParams) {}
+  constructor(public params: ShadowFitParams) {}
 
   /**
    * @param camera main camera (matrices up to date)
@@ -82,7 +84,7 @@ export class ShadowFitter {
     const fy = focus.x * _Y.x + focus.y * _Y.y + focus.z * _Y.z;
     const pts = this.pts;
     pts.length = 0;
-    const m = 6;
+    const m = this.params.margin ?? 6;
     for (const h of sampleHeights) {
       let poly = this.polyA;
       let other = this.polyB;

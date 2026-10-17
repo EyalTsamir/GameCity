@@ -1,6 +1,7 @@
 // The diorama base: soil cross-section on the four slab faces (procedural strata with
-// roots and pebbles), the varnished wooden plinth with its brass nameplate, and a soft
-// contact shadow underneath.
+// roots and pebbles), the varnished wooden plinth with its brass nameplate, and the studio
+// table it stands on (src/render/stage/table.ts: oak top fading into the cyclorama, analytic
+// slab shadow + contact occlusion). ?legacylight shows the original blurred contact decal instead.
 
 import * as THREE from 'three';
 import type { CityContext } from '../../core/context';
@@ -10,6 +11,8 @@ import type { TerrainModel } from './height';
 import { GROUND_DROP } from './height';
 import type { EdgeProfile, SlabEdges } from './layout';
 import { noiseTexture, GLSL_HASH } from './noise';
+import { WATER_LEVEL } from '../../core/constants';
+import { createStageUniforms, createTable, type StageService } from '../../render/stage/table';
 
 export const PLINTH = {
   /** ledge width around the slab */
@@ -548,8 +551,25 @@ export interface SlabResult {
   faces: THREE.Mesh;
   plinth: THREE.Mesh;
   nameplate: THREE.Mesh;
-  shadow: THREE.Mesh;
+  /** the studio table (+ the legacy contact decal, hidden unless ?legacylight) */
+  shadow: THREE.Object3D;
   triangles: number;
+}
+
+/** resample an edge profile's face-top heights uniformly over [a, b] */
+function sampleEdge(prof: EdgeProfile, a: number, b: number, n: number): Float32Array {
+  const out = new Float32Array(n);
+  let j = 0;
+  for (let i = 0; i < n; i++) {
+    const u = a + ((b - a) * i) / (n - 1);
+    while (j < prof.u.length - 2 && prof.u[j + 1] < u) j++;
+    const u0 = prof.u[j],
+      u1 = prof.u[Math.min(j + 1, prof.u.length - 1)];
+    const t = u1 > u0 ? Math.min(1, Math.max(0, (u - u0) / (u1 - u0))) : 0;
+    const h = prof.h[j] + (prof.h[Math.min(j + 1, prof.h.length - 1)] - prof.h[j]) * t;
+    out[i] = Math.max(h, WATER_LEVEL) + GROUND_DROP;
+  }
+  return out;
 }
 
 export function createSlab(ctx: CityContext, model: TerrainModel, edges: SlabEdges): SlabResult {
@@ -560,8 +580,35 @@ export function createSlab(ctx: CityContext, model: TerrainModel, edges: SlabEdg
   faces.castShadow = false;
   const plinth = buildPlinth(ctx.rng('terrain-wood'));
   const nameplate = buildNameplate();
-  const shadow = buildContactShadow();
-  for (const m of [faces, plinth, nameplate, shadow]) {
+  const contact = buildContactShadow();
+  // the studio table (dynamic uniforms owned by the sky module; static fallback without it)
+  let stage = ctx.services.stage as StageService | undefined;
+  if (!stage) stage = { uniforms: createStageUniforms(), table: null, legacyContact: null };
+  const NE = 256;
+  const table = createTable(
+    ctx.rng('stage-table'),
+    {
+      slab: SLAB,
+      y: PLINTH.bottom - 0.03,
+      plinthOut: PLINTH.out + 0.36,
+      plinthTop: PLINTH.top - 0.3,
+      plinthFace: PLINTH.out,
+      edgeN: sampleEdge(edges.north, SLAB.x0, SLAB.x1, NE),
+      edgeS: sampleEdge(edges.south, SLAB.x0, SLAB.x1, NE),
+      edgeW: sampleEdge(edges.west, SLAB.z0, SLAB.z1, NE),
+      edgeE: sampleEdge(edges.east, SLAB.z0, SLAB.z1, NE),
+    },
+    stage.uniforms,
+  );
+  stage.table = table;
+  stage.legacyContact = contact;
+  const legacy = ctx.debug.params.has('legacylight');
+  table.visible = !legacy;
+  contact.visible = legacy;
+  const shadow = new THREE.Group();
+  shadow.name = 'stage';
+  shadow.add(table, contact);
+  for (const m of [faces, plinth, nameplate, contact, shadow]) {
     m.matrixAutoUpdate = false;
     m.updateMatrix();
   }
