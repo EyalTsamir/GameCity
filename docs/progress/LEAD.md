@@ -77,6 +77,17 @@ Per-module logs live next to this file: `docs/progress/<module>.md`.
   first. Final build dist/index.html 2.2 MB runs from file:// (18 modules, 0 errors/warnings).
   DONE — launched for the user via scripts/serve.mjs.
 
+* 2026-10-17 evening — GRAPHICS OVERHAUL (all 10 items of the visual audit). Plan, ownership, contracts,
+  budgets and test protocol: `docs/progress/GFX-PLAN.md`. Harness now runs without a GPU (SwiftShader
+  fallback, `scripts/browser.mjs`, `TH_LOCK_SLOTS=2`); frozen baseline worktree `/home/user/GameCity-baseline`
+  served on 5174 (`shots/servers.sh`). Seven background agents launched ~18:40: stage (items 1+3, night
+  ambient), night (item 2: lamp light map + emitters), water (4), buildings (5, 8, house massing of 9,
+  far-field windows), vegetation (6), hardscape (7, gardens of 9), terrain (10). Each logs to
+  `docs/progress/gfx-<agent>.md`; agent ids in the session scratchpad (agents-gfx.json). If the session
+  is lost: respawn each agent from its log + GFX-PLAN.md. Next for the lead: relay stage S1 (new lighting)
+  to all, relay cross-area requests, commit checkpoints, then integration QA (before/after matrix
+  5174 vs 5173, perf A/B, soak, ui-test, build).
+
 ## Module status (round 1 work, verified by the lead 23:30)
 | module | state | open items |
 |---|---|---|
