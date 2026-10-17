@@ -227,6 +227,18 @@ export function clockPost(ks: Kit): void {
   sh.cone(0, 4.4, 0, 0.3, 0.25, 4, false, Math.PI / 4);
 }
 
+/** Taxi rank sign: post with a yellow TAXI box (lit at night). */
+export function taxiSign(k: Kit): void {
+  const sh = k.sh;
+  k.m('#3a3f44', 'paint');
+  sh.cyl(0, 0, 0, 0.06, 0.05, 2.5, 6, 0);
+  k.e('#f2c84b', '#ffe08a', 1.1);
+  sh.box(0, 2.6, 0, 0.7, 0.28, 0.16, 0);
+  k.m('#1d1f22', 'paint');
+  sh.box(0, 2.6, 0.082, 0.5, 0.1, 0.005, 0);
+  sh.box(0, 2.6, -0.082, 0.5, 0.1, 0.005, 0);
+}
+
 /** Drinks / ticket vending machine pair. Faces +Z. */
 export function vending(k: Kit, rng: Rng): void {
   const sh = k.sh;

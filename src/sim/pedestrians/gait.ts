@@ -192,17 +192,19 @@ function rollAnkle(r: Rig, fz: number, pitch: number, o: LegPlan): void {
   // rotate (dz, dy) about the X axis by `a` (+ = toes up): y' = c·dy + s·dz, z' = −s·dy + c·dz
   let ax = fz,
     ay = aH; // ankle (z, y) in the flat pose
-  const seq = pitch >= 0 ? [S[1], S[0]] : [S[2], S[3]];
+  // pivots: heel then heel back (toes up), or ball then toe (heel up)
+  const q0 = pitch >= 0 ? S[1] : S[2],
+    q1 = pitch >= 0 ? S[0] : S[3];
   // contact point of the first pivot in the flat pose
-  let pzG = fz + seq[0].z,
-    pyG = seq[0].y;
+  let pzG = fz + q0.z,
+    pyG = q0.y;
   let done = 0;
-  for (let i = 0; i < seq.length; i++) {
-    const piv = seq[i];
+  for (let i = 0; i < 2; i++) {
+    const piv = i === 0 ? q0 : q1;
     // angle at which the next point touches (relative to the flat pose, measured from the current pivot)
     let lim = pitch;
-    if (i + 1 < seq.length) {
-      const nx = seq[i + 1];
+    if (i === 0) {
+      const nx = q1;
       const t = Math.atan2(nx.y - piv.y, Math.abs(nx.z - piv.z));
       lim = pitch >= 0 ? Math.min(pitch, t) : Math.max(pitch, -t);
     }
@@ -216,9 +218,9 @@ function rollAnkle(r: Rig, fz: number, pitch: number, o: LegPlan): void {
       ay = pyG + (c * dy + s * dz);
       done = lim;
     }
-    if (done === pitch || i + 1 >= seq.length) break;
+    if (done === pitch || i >= 1) break;
     // next pivot: where the next sole point now touches the ground
-    const nx = seq[i + 1];
+    const nx = q1;
     const c = Math.cos(done),
       s = Math.sin(done);
     const dz0 = nx.z,
@@ -331,11 +333,22 @@ function planWalk(r: Rig, u: number, left: boolean, plant: FootPlant | null, pel
     o.twist = 0;
     if (plant && plant.valid && plant.stance) {
       toBody(plant.wx, plant.wz, tmpB);
-      if (Math.abs(tmpB.z - fz) < 0.35 && Math.abs(tmpB.x - fx) < 0.3) {
-        fz = tmpB.z;
-        fx = tmpB.x;
+      const ex = tmpB.x - fx,
+        ez = tmpB.z - fz;
+      if (Math.abs(ex) < 1.2 && Math.abs(ez) < 1.2) {
+        // sharp corners (the crowd's heading snaps): a plant far off the law is dragged along with the
+        // body instead of being dropped, so the foot never jumps
+        const cx = clamp(ex, -0.25, 0.25),
+          cz = clamp(ez, -0.32, 0.32);
+        if (cx !== ex || cz !== ez) {
+          toWorld(fx + cx, fz + cz, tmpW);
+          plant.wx = tmpW.wx;
+          plant.wz = tmpW.wz;
+        }
+        fz += cz;
+        fx += cx;
         o.twist = twistFor(left, plant.wyaw, pelvisYaw);
-      }
+      } else plant.valid = false; // teleported: re-plant on the law
     }
     let pitch: number;
     if (u < p.uFlat) pitch = p.thHS * (1 - sstep(0, p.uFlat, u));
@@ -510,7 +523,7 @@ export function gaitPose(m: Member, r: Rig, st: GaitState | null, frame: number,
   if (state && frame - state.frame <= 1 && dt > 1e-4) {
     const w = wrapA(m.yaw - state.lastYaw) / dt;
     state.yawRate += (w - state.yawRate) * Math.min(1, dt * 6);
-    KAPPA = clamp(state.yawRate / Math.max(0.35, v), -2.5, 2.5) * SC;
+    KAPPA = clamp(state.yawRate / Math.max(0.35, v), -1.2, 1.2) * SC;
   } else if (state) state.yawRate = 0;
   let fresh = true;
   if (state) {
@@ -604,6 +617,7 @@ export function gaitPose(m: Member, r: Rig, st: GaitState | null, frame: number,
   const hWalk = p.hStand - p.bob * (0.5 + 0.5 * Math.cos(2 * TAU * uL));
   const hRun = p.hStand * 0.955 - p.bob * Math.cos(2 * TAU * (uL - p.beta / 2));
   let h = mix(p.hStand - idle.drop, mix(hWalk, hRun, run), gw);
+  const hNom = h;
   const reach = (r.thighL + r.shinL) * mix(0.995, 0.985, run);
   for (let li = 0; li < 2; li++) {
     const leg = li === 0 ? legA : legB;
@@ -617,6 +631,26 @@ export function gaitPose(m: Member, r: Rig, st: GaitState | null, frame: number,
     const maxH = (d2 > 0 ? Math.sqrt(d2) : 0) + leg.y - hyOff;
     if (leg.stance || leg.s < 0.05) h = Math.min(h, maxH);
     else if (leg.s > 0.8) h = Math.min(h, mix(h, maxH, sstep(0.8, 0.97, leg.s)));
+  }
+  // never crouch for a foot left far behind (sharp corners): pull that foot in instead
+  h = Math.max(h, hNom - 0.045 * (r.legLen / r.s / 0.93));
+  for (let li = 0; li < 2; li++) {
+    const leg = li === 0 ? legA : legB;
+    if (!(leg.stance || leg.s < 0.05)) continue;
+    const side = leg === legA ? 1 : -1;
+    const hx = side * r.hip.x;
+    const cxh = hx * Math.cos(pelvisYaw) + sway,
+      hz = -Math.sin(pelvisYaw) * hx;
+    const dy = h - (leg.y - Math.sin(pelvisRoll) * hx);
+    const dx = leg.x - cxh,
+      dz = leg.z - hz;
+    const dh = Math.hypot(dx, dz);
+    const maxD = Math.sqrt(Math.max(0, reach * reach - dy * dy));
+    if (dh > maxD && dh > 1e-6) {
+      const k = maxD / dh;
+      leg.x = cxh + dx * k;
+      leg.z = hz + dz * k;
+    }
   }
   const rootY = h - r.hip.y;
 

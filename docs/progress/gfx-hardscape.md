@@ -54,6 +54,14 @@ Audit items: 7 (empty / faint hardscape), garden half of 9 (bare back gardens), 
   yards denser (+ containers, pipes, timber, forklifts alongside walls), kiosk seating, café on more towers,
   public art ≥ 10 m from statues/fountains, patio pot plants, wheelie-bin rows fixed, props invariants check
   scatter/garden items against walk lines / roads / buildings.
+- round 3: lead's night note on pools → only ~35 % of pools have a (subtle) underwater lamp; the rest are dark
+  water that only takes thLampLight; wider coping (0.38) + visible dark waterline tile band; round / paddling
+  pools no longer emissive. Trimmed tris: bikes in racks use open-ring tyres (bikeLite ~90 tris), planter
+  flowers 5-6 blobs, veg-bed heads 10. Asphalt: cracks start at age 0.42, transverse every 4.5-8.5 m, 18 % patch
+  cells. Taxi rank sign at the station.
+- perf (SwiftShader, westbrook 11 h): run was useless (same variant 816 vs 1051 ms; machine load ~10). Reliable:
+  draw calls 142 → 144 with scatter+gardens (props-casters + its shadow pass), triangles +120 k in that view
+  (before the trims; includes the casters' shadow pass). To redo in a quieter window.
 - Note: the lead's view "0,0,-65,60,30,45" is blocked by a tower at this angle; plaza 40 is best seen from
   "-28,0,-24,40,15,45".
 

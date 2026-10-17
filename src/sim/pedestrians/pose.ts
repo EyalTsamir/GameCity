@@ -40,23 +40,30 @@ const tmpA = new Float64Array(9),
 function rX(a: number, o: M3): M3 {
   const c = Math.cos(a),
     s = Math.sin(a);
-  o.set([1, 0, 0, 0, c, -s, 0, s, c]);
+  o[0] = 1; o[1] = 0; o[2] = 0;
+  o[3] = 0; o[4] = c; o[5] = -s;
+  o[6] = 0; o[7] = s; o[8] = c;
   return o;
 }
 function rY(a: number, o: M3): M3 {
   const c = Math.cos(a),
     s = Math.sin(a);
-  o.set([c, 0, s, 0, 1, 0, -s, 0, c]);
+  o[0] = c; o[1] = 0; o[2] = s;
+  o[3] = 0; o[4] = 1; o[5] = 0;
+  o[6] = -s; o[7] = 0; o[8] = c;
   return o;
 }
 function rZ(a: number, o: M3): M3 {
   const c = Math.cos(a),
     s = Math.sin(a);
-  o.set([c, -s, 0, s, c, 0, 0, 0, 1]);
+  o[0] = c; o[1] = -s; o[2] = 0;
+  o[3] = s; o[4] = c; o[5] = 0;
+  o[6] = 0; o[7] = 0; o[8] = 1;
   return o;
 }
+const mmR = new Float64Array(9);
 function mm(a: M3, b: M3, o: M3): M3 {
-  const r = [0, 0, 0, 0, 0, 0, 0, 0, 0];
+  const r = mmR;
   for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) r[i * 3 + j] = a[i * 3] * b[j] + a[i * 3 + 1] * b[3 + j] + a[i * 3 + 2] * b[6 + j];
   o.set(r);
   return o;
@@ -218,13 +225,39 @@ export interface ArmSolve {
   reached: boolean;
 }
 
-type T3 = [number, number, number];
-const cr3 = (a: T3, b: T3): T3 => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+// allocation-free 3-vector scratch (the IK runs per figure per frame)
+type T3 = Float64Array;
+const v3 = (): T3 => new Float64Array(3);
+const set3 = (o: T3, x: number, y: number, z: number): T3 => {
+  o[0] = x;
+  o[1] = y;
+  o[2] = z;
+  return o;
+};
+const cr3 = (a: T3, b: T3, o: T3): T3 => set3(o, a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]);
 const nz3 = (a: T3): T3 => {
   const l = Math.hypot(a[0], a[1], a[2]) || 1;
-  return [a[0] / l, a[1] / l, a[2] / l];
+  return set3(a, a[0] / l, a[1] / l, a[2] / l);
 };
 const dt3 = (a: T3, b: T3) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+const kS = v3(),
+  kE0 = v3(),
+  kG0 = v3(),
+  kU0 = v3(),
+  kF0 = v3(),
+  kDv = v3(),
+  kPole = v3(),
+  kPp = v3(),
+  kDu = v3(),
+  kEp = v3(),
+  kTp = v3(),
+  kDf = v3(),
+  kX0 = v3(),
+  kXh = v3(),
+  kZ0 = v3(),
+  kZh = v3(),
+  kT1 = v3(),
+  kT2 = v3();
 
 /**
  * Two-bone arm IK in the rest frame of the chest (figure units): put the hand's grip point at
@@ -275,44 +308,49 @@ function armGrip(r: Rig, left: boolean, o: ArmSolve, out: V3): V3 {
 function armIK1(r: Rig, left: boolean, tx: number, ty: number, tz: number, px: number, py: number, pz: number, o: ArmSolve): ArmSolve {
   // work in the left-arm frame (mirror x for the right arm)
   const sx = left ? 1 : -1;
-  const S: T3 = [r.shoulder.x, r.shoulder.y, r.shoulder.z];
-  const E0: T3 = [r.elbow.x, r.elbow.y, r.elbow.z];
-  const W0: T3 = [r.wrist.x, r.wrist.y, r.wrist.z];
-  const G0: T3 = [W0[0] + (r.tip.x - W0[0]) * 0.42, W0[1] + (r.tip.y - W0[1]) * 0.42, W0[2] + (r.tip.z - W0[2]) * 0.42];
+  const S = set3(kS, r.shoulder.x, r.shoulder.y, r.shoulder.z);
+  const E0 = set3(kE0, r.elbow.x, r.elbow.y, r.elbow.z);
+  const G0 = set3(kG0, r.wrist.x + (r.tip.x - r.wrist.x) * 0.42, r.wrist.y + (r.tip.y - r.wrist.y) * 0.42, r.wrist.z + (r.tip.z - r.wrist.z) * 0.42);
   const L1 = Math.hypot(E0[0] - S[0], E0[1] - S[1], E0[2] - S[2]);
   const L2 = Math.hypot(G0[0] - E0[0], G0[1] - E0[1], G0[2] - E0[2]);
-  const u0 = nz3([E0[0] - S[0], E0[1] - S[1], E0[2] - S[2]]);
-  const f0 = nz3([G0[0] - E0[0], G0[1] - E0[1], G0[2] - E0[2]]);
-  const T: T3 = [tx * sx, ty, tz];
-  let dv: T3 = [T[0] - S[0], T[1] - S[1], T[2] - S[2]];
+  const u0 = nz3(set3(kU0, E0[0] - S[0], E0[1] - S[1], E0[2] - S[2]));
+  const f0 = nz3(set3(kF0, G0[0] - E0[0], G0[1] - E0[1], G0[2] - E0[2]));
+  const dv = set3(kDv, tx * sx - S[0], ty - S[1], tz - S[2]);
   let d = Math.hypot(dv[0], dv[1], dv[2]);
   o.reached = d <= (L1 + L2) * 0.999;
   d = Math.min(Math.max(d, Math.abs(L1 - L2) + 1e-3), (L1 + L2) * 0.999);
-  dv = nz3(dv);
+  nz3(dv);
   // elbow on the circle, towards the pole
-  const pole: T3 = [px * sx, py, pz];
-  let pp: T3 = [pole[0] - dv[0] * dt3(pole, dv), pole[1] - dv[1] * dt3(pole, dv), pole[2] - dv[2] * dt3(pole, dv)];
-  if (Math.hypot(pp[0], pp[1], pp[2]) < 1e-5) pp = [0, 0, -1];
-  pp = nz3(pp);
+  const pole = set3(kPole, px * sx, py, pz);
+  const pd = dt3(pole, dv);
+  const pp = set3(kPp, pole[0] - dv[0] * pd, pole[1] - dv[1] * pd, pole[2] - dv[2] * pd);
+  if (Math.hypot(pp[0], pp[1], pp[2]) < 1e-5) set3(pp, 0, 0, -1);
+  nz3(pp);
   const ca = (L1 * L1 + d * d - L2 * L2) / (2 * L1 * d);
   const a = Math.acos(Math.max(-1, Math.min(1, ca)));
-  const du = nz3([dv[0] * Math.cos(a) + pp[0] * Math.sin(a), dv[1] * Math.cos(a) + pp[1] * Math.sin(a), dv[2] * Math.cos(a) + pp[2] * Math.sin(a)]);
-  const Ep: T3 = [S[0] + du[0] * L1, S[1] + du[1] * L1, S[2] + du[2] * L1];
-  const Tp: T3 = [S[0] + dv[0] * d, S[1] + dv[1] * d, S[2] + dv[2] * d];
-  const df = nz3([Tp[0] - Ep[0], Tp[1] - Ep[1], Tp[2] - Ep[2]]);
+  const c = Math.cos(a),
+    sn = Math.sin(a);
+  const du = nz3(set3(kDu, dv[0] * c + pp[0] * sn, dv[1] * c + pp[1] * sn, dv[2] * c + pp[2] * sn));
+  const Ep = set3(kEp, S[0] + du[0] * L1, S[1] + du[1] * L1, S[2] + du[2] * L1);
+  const Tp = set3(kTp, S[0] + dv[0] * d, S[1] + dv[1] * d, S[2] + dv[2] * d);
+  const df = nz3(set3(kDf, Tp[0] - Ep[0], Tp[1] - Ep[1], Tp[2] - Ep[2]));
   // hinge axes: rest −x (flexion rotates the forearm forward); target from du × df (or the pole)
-  const x0 = nz3(cr3(cr3(u0, [-1, 0, 0]), u0));
-  let xh = cr3(du, df);
-  if (Math.hypot(xh[0], xh[1], xh[2]) < 1e-4) xh = cr3(du, pp);
-  xh = nz3(xh);
-  const z0 = cr3(u0, x0),
-    zh = cr3(du, xh);
+  const x0 = nz3(cr3(cr3(u0, set3(kT2, -1, 0, 0), kT1), u0, kX0));
+  let xh = cr3(du, df, kXh);
+  if (Math.hypot(xh[0], xh[1], xh[2]) < 1e-4) xh = cr3(du, pp, kXh);
+  nz3(xh);
+  const z0 = cr3(u0, x0, kZ0),
+    zh = cr3(du, xh, kZh);
   // R = [du xh zh] · [u0 x0 z0]ᵀ
-  const Rm = (i: number, j: number) => du[i] * u0[j] + xh[i] * x0[j] + zh[i] * z0[j];
   // R = RZ(A) · RX(B) · RY(C):  R21 = sin B, R01 = −sin A cos B, R11 = cos A cos B, R20 = −cos B sin C, R22 = cos B cos C
-  const B = Math.asin(Math.max(-1, Math.min(1, Rm(2, 1))));
-  const A = Math.atan2(-Rm(0, 1), Rm(1, 1));
-  const C = Math.atan2(-Rm(2, 0), Rm(2, 2));
+  const R21 = du[2] * u0[1] + xh[2] * x0[1] + zh[2] * z0[1],
+    R01 = du[0] * u0[1] + xh[0] * x0[1] + zh[0] * z0[1],
+    R11 = du[1] * u0[1] + xh[1] * x0[1] + zh[1] * z0[1],
+    R20 = du[2] * u0[0] + xh[2] * x0[0] + zh[2] * z0[0],
+    R22 = du[2] * u0[2] + xh[2] * x0[2] + zh[2] * z0[2];
+  const B = Math.asin(Math.max(-1, Math.min(1, R21)));
+  const A = Math.atan2(-R01, R11);
+  const C = Math.atan2(-R20, R22);
   o.abd = A;
   o.flex = -B;
   o.twist = -C;

@@ -56,7 +56,8 @@ export type ScatterKind =
   | 'bikes'
   | 'container'
   | 'pipes'
-  | 'timber';
+  | 'timber'
+  | 'taxiSign';
 
 export interface ScatterItem {
   kind: ScatterKind;
@@ -117,6 +118,7 @@ const SIZE: Record<ScatterKind, [number, number, boolean]> = {
   container: [6.1, 2.45, true],
   pipes: [3.0, 1.3, false],
   timber: [2.8, 1.25, false],
+  taxiSign: [0.6, 0.6, false],
 };
 
 export function scatterSize(kind: ScatterKind): [number, number] {
@@ -390,6 +392,8 @@ export function planScatter(inp: ScatterInputs): ScatterItem[] {
           }
           for (let x = r.x0 + 2.2; x < r.x1 - 1.5; x += 3.6) put(Z, 'planterRound', x, r.z0 + 1.6, 0, 0.3);
           putAny(Z, 'infoBoard', raster(Z, 0.5, (x, z) => Math.abs(z - (r.z1 - 2.0)) + Math.abs(x - (r.x1 - 2.5))), 0.3);
+          // taxi rank sign at the kerb-side corner
+          putAny(Z, 'taxiSign', raster(Z, 0.5, (x, z) => Math.abs(z - (r.z1 - 1.0)) * 2 + Math.abs(x - (r.x0 + 2.0)), () => 0), 0.2);
           putAny(Z, 'vending', raster(Z, 0.5, (x, z) => Math.abs(z - (r.z0 + 1.0)) + Math.abs(x - (r.x1 - 1.0)), () => Math.PI / 2), 0.2);
         }
       }

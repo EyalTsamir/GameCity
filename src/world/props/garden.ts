@@ -444,33 +444,40 @@ export function toys(k: Kit, rng: Rng): void {
 const WATER_DEEP = '#2d9fc0';
 const WATER_EDGE = '#7fd6e2';
 
-/** In-ground pool w x d: stone coping, tiled waterline, graded water (lit turquoise at night), ladder, maybe a float. */
+/**
+ * In-ground pool w x d: stone coping, a tiled waterline band, graded water (deep centre, light edges),
+ * lane line, ladder, sometimes a float. Only some pools have an underwater lamp (subtle night glow);
+ * the others stay dark water that only picks up the street / window light (thLampLight).
+ */
 export function pool(k: Kit, rng: Rng, w: number, d: number): void {
   const sh = k.sh,
     s = k.s;
-  const cw = 0.32;
+  const cw = 0.38;
   const iw = w - 2 * cw,
     id = d - 2 * cw;
-  // coping
-  k.m(rng.pick(['#e9e4d8', '#d8d2c4', '#c9c4ba']), 'stone');
-  sh.box(0, 0.05, -d / 2 + cw / 2, w, 0.1, cw, 1);
-  sh.box(0, 0.05, d / 2 - cw / 2, w, 0.1, cw, 1);
-  sh.box(-w / 2 + cw / 2, 0.05, 0, cw, 0.1, id, 1);
-  sh.box(w / 2 - cw / 2, 0.05, 0, cw, 0.1, id, 1);
-  // tile band just inside the coping
-  k.m('#2f6f8f', 'ceramic');
-  sh.box(0, 0.045, 0, iw, 0.01, id, 1);
-  // water: outer ring light (shallow tile), centre deep; emissive at night (pool lights)
-  const y = 0.06;
-  const glow = 0.32;
-  const bx = iw / 2 - 0.04,
-    bz = id / 2 - 0.04;
+  const lit = rng.chance(0.35);
+  // coping (slightly raised, light stone with a darker outer kerb line)
+  const stone = rng.pick(['#e9e4d8', '#d8d2c4', '#cfc8ba']);
+  k.m(stone, 'stone');
+  sh.box(0, 0.06, -d / 2 + cw / 2, w, 0.12, cw, 1);
+  sh.box(0, 0.06, d / 2 - cw / 2, w, 0.12, cw, 1);
+  sh.box(-w / 2 + cw / 2, 0.06, 0, cw, 0.12, id, 1);
+  sh.box(w / 2 - cw / 2, 0.06, 0, cw, 0.12, id, 1);
+  // tiled waterline band (dark blue mosaic) visible between the coping and the water
+  k.m('#24597a', 'ceramic');
+  sh.box(0, 0.05, 0, iw, 0.012, id, 1);
+  // water: outer ring lighter (shallow tile showing through), centre deeper
+  const y = 0.065;
+  const bx = iw / 2 - 0.12,
+    bz = id / 2 - 0.12;
   const ix = bx * 0.62,
     iz = bz * 0.45;
   const V = (x: number, z: number, deep: boolean) => {
-    if (deep) k.e(WATER_DEEP, '#3fd0e0', glow, 0);
-    else k.e(WATER_EDGE, '#7fe8f0', glow * 0.8, 0);
-    s.setEx(0, 0.08, 0);
+    if (lit) {
+      if (deep) k.e(WATER_DEEP, '#3fc8d8', 0.2, 0);
+      else k.e(WATER_EDGE, '#6fdfe8', 0.1, 0);
+    } else k.m(deep ? WATER_DEEP : WATER_EDGE, 'glass');
+    s.setEx(0, 0.06, 0);
     return sh.v(x, y, z, 0, 1, 0);
   };
   const o = [V(-bx, -bz, false), V(bx, -bz, false), V(bx, bz, false), V(-bx, bz, false)];
@@ -486,13 +493,20 @@ export function pool(k: Kit, rng: Rng, w: number, d: number): void {
   s.tri(i[0], i[2], i[1]);
   s.tri(i[0], i[3], i[2]);
   // lane line on the floor (seen through the water)
-  k.e('#1f6f99', '#3fd0e0', glow * 0.6, 0);
+  if (lit) k.e('#1f6f99', '#3fc8d8', 0.12, 0);
+  else k.m('#1f6f99', 'glass');
   sh.box(0, y + 0.003, 0, iw * 0.7, 0.002, 0.12, 1);
+  // underwater lamp housings on the lit ones
+  if (lit) {
+    k.e('#f4f1e8', '#e8fbff', 1.2, 0);
+    sh.box(-iw * 0.25, y + 0.004, -bz + 0.02, 0.16, 0.002, 0.05, 1);
+    sh.box(iw * 0.25, y + 0.004, -bz + 0.02, 0.16, 0.002, 0.05, 1);
+  }
   // ladder
   const lx = rng.chance(0.5) ? -iw / 2 + 0.6 : iw / 2 - 0.6;
   k.m('#c9cfd2', 'steel');
   for (const dx of [-0.22, 0.22]) {
-    sh.tube(lx + dx, 0.1, -id / 2 - cw * 0.5, lx + dx, 0.75, -id / 2 - cw * 0.5 + 0.05, 0.02, 0.02, 4);
+    sh.tube(lx + dx, 0.12, -id / 2 - cw * 0.5, lx + dx, 0.75, -id / 2 - cw * 0.5 + 0.05, 0.02, 0.02, 4);
     sh.tube(lx + dx, 0.75, -id / 2 - cw * 0.5 + 0.05, lx + dx, 0.55, -id / 2 + 0.2, 0.02, 0.02, 4);
   }
   // inflatable ring floating
@@ -518,11 +532,9 @@ export function roundPool(k: Kit, rng: Rng, dia: number): void {
   sh.cyl(0, 0, 0, R, R, 0.88, 16, 0);
   k.m('#e9e4d8', 'plastic');
   sh.cyl(0, 0.88, 0, R + 0.05, R + 0.05, 0.05, 16, 2);
-  k.e(WATER_EDGE, '#7fe8f0', 0.45, 0);
-  k.s.setEx(0, 0.08, 0);
+  k.m(WATER_EDGE, 'glass');
   sh.disc(0, 0.86, 0, R - 0.03, 16, 1);
-  k.e(WATER_DEEP, '#3fd0e0', 0.5, 0);
-  k.s.setEx(0, 0.08, 0);
+  k.m(WATER_DEEP, 'glass');
   sh.disc(0, 0.865, 0, R * 0.62, 12, 1);
   k.m('#c9cfd2', 'steel');
   sh.beam(R + 0.05, 0.95, -0.2, R + 0.5, 0, -0.2, 0.03, 0.03);
@@ -541,8 +553,7 @@ export function paddling(k: Kit, rng: Rng, dia: number): void {
   sh.cyl(0, 0.14, 0, R, R, 0.1, 14, 0);
   k.m(c, 'plastic');
   sh.cyl(0, 0.24, 0, R, R - 0.02, 0.1, 14, 2);
-  k.e(WATER_EDGE, '#7fe8f0', 0.3, 0);
-  k.s.setEx(0, 0.08, 0);
+  k.m(WATER_EDGE, 'glass');
   sh.disc(0, 0.25, 0, R - 0.16, 14, 1);
   k.m(rng.pick(PLAY), 'plastic');
   sh.ellipsoid(R * 0.3, 0.32, -R * 0.2, 0.1, 0.1, 0.1, 0);

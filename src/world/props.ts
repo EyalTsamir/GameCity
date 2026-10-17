@@ -345,6 +345,10 @@ export default function create(ctx: CityContext): CityModule {
           at(kf);
           SK.timber(kf, srng);
           break;
+        case 'taxiSign':
+          at(kf);
+          SK.taxiSign(kf);
+          break;
       }
       inc(`s_${it.kind}`);
       layout.furniture.push(scatterDisc(it));
