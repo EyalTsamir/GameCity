@@ -65,7 +65,8 @@ export interface CliffResult {
   stones: { x: number; z: number; r: number }[];
 }
 
-const ROCK_TONES = ['#b9aa90', '#a69884', '#c2b192', '#988b79', '#b09b7b', '#8f8474', '#bcae98', '#a1927a'].map((h) => new THREE.Color(h));
+// warm limestone / sandstone beds with a few cooler grey and darker brown ones (banding reads far away)
+const ROCK_TONES = ['#bdae93', '#a39480', '#c8b693', '#8e8476', '#b59c76', '#857a6c', '#c0b39d', '#9c8b72'].map((h) => new THREE.Color(h));
 const DT = 0.05; // march step (m)
 const DY = 0.25; // profile grid step (m)
 const IN = -0.45; // buried inner edge of every block
@@ -179,9 +180,9 @@ function faces(model: TerrainModel): CliffFace[] {
   out.push({ name: 'nose-w', ax: SLAB.x0 + 1.2, az: -134.6, nx: 0, nz: 1, len: SPUR_W_X - 1.5 - (SLAB.x0 + 1.2), maxIn: 14, yMin: -0.5, steep: 0.8, flat: 1.15, seed: 2 });
   // east spur nose (faces south, above the container yard)
   out.push({ name: 'nose-e', ax: SPUR_E_X + 1.0, az: -134.6, nx: 0, nz: 1, len: QUAY_X - 1.2 - (SPUR_E_X + 1.0), maxIn: 14, yMin: -0.5, steep: 0.8, flat: 1.15, seed: 3 });
-  // south walls of the rail-portal approach cuts (face north, towards the track)
-  out.push({ name: 'cut-w', ax: SPUR_W_X + 5.8, az: RAIL_Z + 3.2, nx: 0, nz: -1, len: 6.2, maxIn: 9, yMin: -0.5, steep: 0.75, flat: 1.15, seed: 5 });
-  out.push({ name: 'cut-e', ax: SPUR_E_X + 0.6, az: RAIL_Z + 3.2, nx: 0, nz: -1, len: 4.6, maxIn: 9, yMin: -0.5, steep: 0.75, flat: 1.15, seed: 6 });
+  // spur flanks between the rail-portal wing walls and the noses (face the track yard)
+  out.push({ name: 'flank-w', ax: SPUR_W_X + 4, az: -136.8, nx: 1, nz: 0, len: 7.4, maxIn: 10, yMin: -0.5, steep: 0.75, flat: 1.15, seed: 5 });
+  out.push({ name: 'flank-e', ax: SPUR_E_X - 4, az: -144.2, nx: -1, nz: 0, len: 7.4, maxIn: 10, yMin: -0.5, steep: 0.75, flat: 1.15, seed: 6 });
   // harbour cliff (faces east into the sea), north of the sea wall
   out.push({
     name: 'harbour',
@@ -323,7 +324,7 @@ export function buildCliffs(
         const ym = yb + (yt - yb) * (0.38 + rng.next() * 0.22);
         const jit = () => (rng.next() - 0.5) * 0.22;
         // block ends round back into the joint (V-shaped crevices instead of brick ends)
-        const end = i === i0 || i === i1 ? 0.5 : 1;
+        const end = i === i0 || i === i1 ? 0.55 + 0.3 * vnoise(i * 1.7, k * 2.3, f.seed + 5) : 1;
         let db = P * 0.35 * end + jit() * 0.6;
         if (k > 0 && lip[i][k - 1] < 9) db = Math.min(db, lip[i][k - 1] - 0.07);
         db = Math.max(db, -0.05);

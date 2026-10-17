@@ -187,37 +187,45 @@ function buildMask(ctx: CityContext, feet: readonly CliffFoot[], legacy: boolean
   g.fill();
   // sea floor everywhere east of the quay (under water)
   g.fillRect(X(135.6), 0, X(SLAB.x1) - X(135.6), Z(-6.5));
-  // ── path wear (blue channel), blurred
-  g.filter = 'blur(1.5px)';
-  g.lineCap = 'round';
-  g.lineJoin = 'round';
+  // ── path wear (blue channel), blurred. Legacy: per-shape blur on the main canvas; new: drawn
+  // sharp on a separate canvas and blurred ONCE while compositing (per-shape filters were ~15 s
+  // of boot time on a CPU canvas with hundreds of shapes)
+  const WC = legacy ? null : mk();
+  const w = WC ? WC.g : g;
+  if (WC) {
+    w.fillStyle = '#000';
+    w.fillRect(0, 0, W, Hh);
+    w.globalCompositeOperation = 'lighter';
+  } else w.filter = 'blur(1.5px)';
+  w.lineCap = 'round';
+  w.lineJoin = 'round';
   for (const p of plan.paths) {
     if (!p.draw) continue;
-    g.strokeStyle = p.surface === 'paving' ? 'rgb(0,0,110)' : 'rgb(0,0,190)';
-    g.lineWidth = (p.width + 1.1) * sx;
-    g.beginPath();
-    p.pts.forEach((q, i) => (i ? g.lineTo(X(q.x), Z(q.z)) : g.moveTo(X(q.x), Z(q.z))));
-    g.stroke();
+    w.strokeStyle = p.surface === 'paving' ? 'rgb(0,0,110)' : 'rgb(0,0,190)';
+    w.lineWidth = (p.width + 1.1) * sx;
+    w.beginPath();
+    p.pts.forEach((q, i) => (i ? w.lineTo(X(q.x), Z(q.z)) : w.moveTo(X(q.x), Z(q.z))));
+    w.stroke();
   }
   // dirt patches under benches, picnic tables and around the playground
   for (const b of plan.benches) {
-    g.fillStyle = 'rgb(0,0,120)';
-    g.beginPath();
-    g.arc(X(b.x), Z(b.z), 1.4 * sx, 0, Math.PI * 2);
-    g.fill();
+    w.fillStyle = 'rgb(0,0,120)';
+    w.beginPath();
+    w.arc(X(b.x), Z(b.z), 1.4 * sx, 0, Math.PI * 2);
+    w.fill();
   }
   for (const f of plan.features) {
     if (f.kind === 'picnic' || f.kind === 'bandstand' || f.kind === 'gazebo') {
-      g.fillStyle = 'rgb(0,0,90)';
-      g.beginPath();
-      g.arc(X(f.x), Z(f.z), (f.radius + 1.6) * sx, 0, Math.PI * 2);
-      g.fill();
+      w.fillStyle = 'rgb(0,0,90)';
+      w.beginPath();
+      w.arc(X(f.x), Z(f.z), (f.radius + 1.6) * sx, 0, Math.PI * 2);
+      w.fill();
     }
   }
   if (!legacy) {
     // desire lines: corners of the drawn paths are cut across the lawn, gates (path ends at a
     // sidewalk) are trodden into fans, doorsteps worn
-    g.strokeStyle = 'rgb(0,0,78)';
+    w.strokeStyle = 'rgb(0,0,78)';
     for (const p of plan.paths) {
       if (!p.draw || p.surface === 'deck') continue;
       const P = p.pts;
@@ -236,22 +244,22 @@ function buildMask(ctx: CityContext, feet: readonly CliffFoot[], legacy: boolean
           szA = P[i].z - (az / la) * d;
         const sxB = P[i].x + (bx / lb) * d,
           szB = P[i].z + (bz / lb) * d;
-        g.lineWidth = 0.85 * sx;
-        g.beginPath();
-        g.moveTo(X(sxA), Z(szA));
-        g.quadraticCurveTo(X((sxA + sxB) * 0.5 * 0.6 + P[i].x * 0.4), Z((szA + szB) * 0.5 * 0.6 + P[i].z * 0.4), X(sxB), Z(szB));
-        g.stroke();
+        w.lineWidth = 0.85 * sx;
+        w.beginPath();
+        w.moveTo(X(sxA), Z(szA));
+        w.quadraticCurveTo(X((sxA + sxB) * 0.5 * 0.6 + P[i].x * 0.4), Z((szA + szB) * 0.5 * 0.6 + P[i].z * 0.4), X(sxB), Z(szB));
+        w.stroke();
       }
       for (const end of [P[0], P[P.length - 1]]) {
-        g.fillStyle = 'rgb(0,0,62)';
-        g.beginPath();
-        g.arc(X(end.x), Z(end.z), (p.width * 0.5 + 1.5) * sx, 0, Math.PI * 2);
-        g.fill();
+        w.fillStyle = 'rgb(0,0,62)';
+        w.beginPath();
+        w.arc(X(end.x), Z(end.z), (p.width * 0.5 + 1.5) * sx, 0, Math.PI * 2);
+        w.fill();
       }
     }
     // T-junctions: where a path ends on another path, both corners are cut across the grass
     const drawn = plan.paths.filter((p) => p.draw && p.surface !== 'deck' && p.pts.length >= 2);
-    g.lineWidth = 0.8 * sx;
+    w.lineWidth = 0.8 * sx;
     for (const p of drawn) {
       for (const endIdx of [0, p.pts.length - 1]) {
         const E = p.pts[endIdx];
@@ -292,36 +300,40 @@ function buildMask(ctx: CityContext, feet: readonly CliffFoot[], legacy: boolean
             bz = best.z + best.tz * sg * d;
           const mx = best.x + (tpx + best.tx * sg) * d * 0.32,
             mz = best.z + (tpz + best.tz * sg) * d * 0.32;
-          g.strokeStyle = 'rgb(0,0,72)';
-          g.beginPath();
-          g.moveTo(X(ax), Z(az));
-          g.quadraticCurveTo(X(mx), Z(mz), X(bx), Z(bz));
-          g.stroke();
+          w.strokeStyle = 'rgb(0,0,72)';
+          w.beginPath();
+          w.moveTo(X(ax), Z(az));
+          w.quadraticCurveTo(X(mx), Z(mz), X(bx), Z(bz));
+          w.stroke();
         }
       }
     }
     const DIRV: Record<string, [number, number]> = { N: [0, -1], S: [0, 1], E: [1, 0], W: [-1, 0] };
-    g.fillStyle = 'rgb(0,0,70)';
+    w.fillStyle = 'rgb(0,0,70)';
     for (const lot of plan.lots) {
       for (const d of lot.doors) {
         const v = DIRV[d.dir] ?? [0, 0];
-        g.beginPath();
-        g.arc(X(d.x + v[0] * 0.9), Z(d.z + v[1] * 0.9), 1.0 * sx, 0, Math.PI * 2);
-        g.fill();
+        w.beginPath();
+        w.arc(X(d.x + v[0] * 0.9), Z(d.z + v[1] * 0.9), 1.0 * sx, 0, Math.PI * 2);
+        w.fill();
       }
     }
     // scree / gravel aprons at the cliff feet
     for (const f of feet) {
       const r = Math.min(2.6, 0.9 + f.h * 0.09);
-      g.fillStyle = 'rgb(0,0,95)';
-      g.beginPath();
-      g.arc(X(f.x + f.nx * r * 0.55), Z(f.z + f.nz * r * 0.55), r * sx, 0, Math.PI * 2);
-      g.fill();
-      g.fillStyle = 'rgb(0,0,70)';
-      g.beginPath();
-      g.arc(X(f.x + f.nx * 0.25), Z(f.z + f.nz * 0.25), 0.9 * sx, 0, Math.PI * 2);
-      g.fill();
+      w.fillStyle = 'rgb(0,0,95)';
+      w.beginPath();
+      w.arc(X(f.x + f.nx * r * 0.55), Z(f.z + f.nz * r * 0.55), r * sx, 0, Math.PI * 2);
+      w.fill();
+      w.fillStyle = 'rgb(0,0,70)';
+      w.beginPath();
+      w.arc(X(f.x + f.nx * 0.25), Z(f.z + f.nz * 0.25), 0.9 * sx, 0, Math.PI * 2);
+      w.fill();
     }
+  }
+  if (WC) {
+    g.filter = 'blur(1.5px)';
+    g.drawImage(WC.cv, 0, 0);
   }
   g.filter = 'none';
   g.globalCompositeOperation = 'source-over';
@@ -358,7 +370,7 @@ function buildMask(ctx: CityContext, feet: readonly CliffFoot[], legacy: boolean
     }
     tg.restore();
   };
-  for (const b of plan.blocks) if (b.kind === 'park') stripes(b.rect, 3.4, 34, true);
+  for (const b of plan.blocks) if (b.kind === 'park') stripes(b.rect, 3.4, 38, true);
   for (const a of plan.areas) {
     if (a.kind === 'lawn' || a.kind === 'courtyard') stripes(a.rect, a.rect.x1 - a.rect.x0 > 60 || a.rect.z1 - a.rect.z0 > 60 ? 3.6 : 2.6, 30);
     else if (a.kind === 'garden') stripes(a.rect, 1.6, 20, a.rect.x1 - a.rect.x0 < a.rect.z1 - a.rect.z0);
@@ -367,7 +379,6 @@ function buildMask(ctx: CityContext, feet: readonly CliffFoot[], legacy: boolean
   const eg = E.g;
   eg.fillStyle = '#000';
   eg.fillRect(0, 0, W, Hh);
-  eg.filter = 'blur(1.6px)';
   eg.lineJoin = 'round';
   const strokeRect = (r: { x0: number; z0: number; x1: number; z1: number }, w: number, v: number) => {
     eg.strokeStyle = `rgb(${v},${v},${v})`;
@@ -394,10 +405,13 @@ function buildMask(ctx: CityContext, feet: readonly CliffFoot[], legacy: boolean
     eg.arc(X(f.x), Z(f.z), (f.radius + 0.7) * sx, 0, Math.PI * 2);
     eg.fill();
   }
-  eg.filter = 'none';
+  const E2 = mk();
+  E2.g.filter = 'blur(1.6px)';
+  E2.g.drawImage(E.cv, 0, 0);
+  E2.g.filter = 'none';
   const img = g.getImageData(0, 0, W, Hh);
   const ti = tg.getImageData(0, 0, W, Hh).data;
-  const ei = eg.getImageData(0, 0, W, Hh).data;
+  const ei = E2.g.getImageData(0, 0, W, Hh).data;
   const d = img.data;
   for (let i = 0; i < d.length; i += 4) d[i + 3] = Math.max(0, Math.min(255, ti[i] - ei[i] * 0.42));
   const tex = new THREE.DataTexture(new Uint8Array(d.buffer, d.byteOffset, d.byteLength), W, Hh, THREE.RGBAFormat, THREE.UnsignedByteType);
@@ -570,14 +584,15 @@ vec3 groundColor() {
   float macro = nM.r * 0.5 + nM.g * 0.3 + nA.r * 0.2;
   vec3 grass = mix(gSun, gLush, smoothstep(0.36, 0.64, macro));
   float mott = nA.g * 0.5 + nA.b * 0.3 + nB.r * 0.2;
-  grass *= 0.9 + 0.2 * smoothstep(0.2, 0.85, mott);
+  float mt = smoothstep(0.2, 0.85, mott);
+  grass *= (0.85 + 0.3 * mt) * vec3(1.03 - 0.06 * mt, 1.0, 0.97 + 0.06 * mt);   // clumps: darker + cooler / lighter + warmer
   grass = mix(grass, gLawn, smoothstep(0.62, 0.9, nA.a) * 0.22);
   float clover = smoothstep(0.57, 0.68, nM.a * 0.45 + nA.b * 0.35 + nB.g * 0.2) * kept;
   grass = mix(grass, gClover, clover * 0.62);
   grass = mix(grass, vec3(0.93, 0.95, 0.88), clover * smoothstep(0.8, 0.9, nC.b) * 0.5); // white heads (fade with mips)
   grass *= 0.93 + 0.14 * nC.r;
-  float stripe = clamp(tone, -0.3, 0.3);
-  float edge = clamp(-tone - 0.27, 0.0, 1.0);
+  float stripe = clamp(tone, -0.32, 0.32);
+  float edge = clamp(-tone - 0.33, 0.0, 1.0);
   grass *= 1.0 + stripe * 0.44 * kept;
   grass *= vec3(1.0 + stripe * 0.12 * kept, 1.0, 1.0 - stripe * 0.1 * kept);   // light stripes a touch yellower
   grass = mix(grass, grass * vec3(0.78, 0.86, 0.9), edge * (0.55 + 0.45 * kept));
@@ -662,9 +677,9 @@ export function createGround(ctx: CityContext, model: TerrainModel, feet: readon
     gBedA: C('#d3bf8e'),
     gBedB: C('#6b6a58'),
     gMud: C('#6a5c42'),
-    gLush: C('#78a94b'),
-    gSun: C('#a7c766'),
-    gClover: C('#6c9d55'),
+    gLush: C('#6fa24a'),
+    gSun: C('#a2c662'),
+    gClover: C('#5f9452'),
     gWorn: C('#b2b273'),
     gScree: C('#a39a89'),
     gHeather: C('#9a7a8c'),

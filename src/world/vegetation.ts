@@ -114,6 +114,9 @@ export default function create(ctx: CityContext): CityModule {
     ['vegtrans', foliageKnobs.trans],
     ['vegwrap', foliageKnobs.wrap],
     ['vegtone', foliageKnobs.tone],
+    ['vegscale', foliageKnobs.scale],
+    ['vegcrease', foliageKnobs.crease],
+    ['vegfine', foliageKnobs.fine],
   ] as const) {
     const v = parseFloat(ctx.debug.params.get(k) ?? '');
     if (Number.isFinite(v)) u.value = v;

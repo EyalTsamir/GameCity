@@ -409,7 +409,8 @@ function buildPlinth(rng: Rng): THREE.Mesh {
   const mat = new THREE.MeshStandardMaterial({ map: woodTexture(rng), color: '#ffffff', roughness: 0.4, metalness: 0.0 });
   const m = new THREE.Mesh(g, mat);
   m.name = 'terrain-plinth';
-  m.receiveShadow = false;
+  // receives: trees / buildings at the slab edge shadow the ledge and face at low sun
+  m.receiveShadow = true;
   m.castShadow = false;
   return m;
 }

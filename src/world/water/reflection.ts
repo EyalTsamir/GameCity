@@ -252,16 +252,24 @@ export class PlanarReflection {
     // level-dependent visibility overrides
     const vs = this.visSave;
     let n = 0;
-    const force = (o: THREE.Object3D, v: boolean) => {
-      vs[n++] = o.visible;
-      o.visible = v;
-    };
     const full = this.level === 2;
-    for (const o of this.full) force(o, full && o.visible);
-    if (this.treesFar) force(this.treesFar, full);
-    for (const o of this.treesNear) force(o, false);
+    for (const o of this.full) {
+      vs[n++] = o.visible;
+      o.visible = full && o.visible;
+    }
+    if (this.treesFar) {
+      vs[n++] = this.treesFar.visible;
+      this.treesFar.visible = full;
+    }
+    for (const o of this.treesNear) {
+      vs[n++] = o.visible;
+      o.visible = false;
+    }
     const day = this.ctx.uniforms.uLights.value < 0.02;
-    for (const o of this.night) force(o, !day && o.visible);
+    for (const o of this.night) {
+      vs[n++] = o.visible;
+      o.visible = !day && o.visible;
+    }
 
     const auto = renderer.info.autoReset;
     const c0 = auto ? 0 : renderer.info.render.calls,

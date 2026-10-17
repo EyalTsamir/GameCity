@@ -79,6 +79,9 @@ uniform float uThTrans;
 uniform float uThWrap;
 uniform float uThTone;
 uniform float uThModel;
+uniform float uThScale;
+uniform float uThCrease;
+uniform float uThFine;
 float thWrap;
 ${LAMP_GLSL}
 vec3 thHash( vec3 p ) {
@@ -114,17 +117,17 @@ vec4 thNoised( vec3 x ) {
     ga + u.x * ( gb - ga ) + u.y * ( gc - ga ) + u.z * ( ge - ga ) + u.x * u.y * ( ga - gb - gc + gd ) + u.y * u.z * ( ga - gc - ge + gg ) + u.z * u.x * ( ga - gb - ge + gf ) + ( -ga + gb + gc - gd + ge - gf - gg + gh ) * u.x * u.y * u.z
       + du * ( vec3( vb, vc, ve ) - va + u.yzx * vec3( k1, k2, k3 ) + u.zxy * vec3( k3, k1, k2 ) + u.yzx * u.zxy * k4 ) );
 }
-// 3D cellular clumps (2x2x2 search; feature jitter kept small so the short search stays exact enough):
+// 3D cellular clumps (3x3x3 search, well-jittered feature points so clumps never look gridded):
 // d = p - nearest feature point, edge = F2 - F1, id = per-clump random (-1..1)
 void thCell( vec3 p, out vec3 d, out float edge, out float id ) {
-  vec3 b = floor( p - 0.5 );
+  vec3 b = floor( p ) - 1.0;
   float f1 = 1e9, f2 = 1e9;
   d = vec3( 0.0 );
   id = 0.0;
-  for ( int k = 0; k < 8; k++ ) {
-    vec3 c = b + vec3( float( k & 1 ), float( ( k >> 1 ) & 1 ), float( ( k >> 2 ) & 1 ) );
+  for ( int k = 0; k < 27; k++ ) {
+    vec3 c = b + vec3( float( k % 3 ), float( ( k / 3 ) % 3 ), float( k / 9 ) );
     vec3 h = thHash( c );
-    vec3 v = p - ( c + 0.5 + h * 0.3 );
+    vec3 v = p - ( c + 0.5 + h * 0.45 );
     float dd = dot( v, v );
     if ( dd < f1 ) {
       f2 = f1;
@@ -143,7 +146,7 @@ float thAmt = vThLeaf.z;
 float thAO = vThLeaf.x;
 thWrap = uThWrap * thAmt;
 if ( thAmt > 0.02 ) {
-  float cs = 0.1 + vThLeaf.w * 1.5;
+  float cs = ( 0.1 + vThLeaf.w * 1.5 ) * uThScale;
   vec3 p = vThRest / cs + vec3( 0.0, vThLeaf.y * 7.0, 0.0 );
   float foot = length( fwidth( vThRest ) ) / cs;
   float f1 = thAmt * ( 1.0 - smoothstep( 0.12, 0.42, foot ) );
@@ -158,7 +161,7 @@ if ( thAmt > 0.02 ) {
       float e1 = max( 0.02, foot * 0.9 );
       float s1 = n1.x / sqrt( n1.x * n1.x + e1 * e1 );
       g += s1 * n1.yzw * f1;
-      thAO *= mix( 1.0, 0.6 + 0.4 * smoothstep( 0.0, 0.2, abs( n1.x ) ), f1 );
+      thAO *= mix( 1.0, smoothstep( 0.0, 0.2, abs( n1.x ) ), f1 * uThCrease );
       t = s1 * smoothstep( 0.02, 0.22, abs( n1.x ) ) * f1 * uThTone;
     } else {
       // leaf clumps: every cell is a little dome (normal tilts away from its centre), creases between
@@ -166,7 +169,7 @@ if ( thAmt > 0.02 ) {
       float edge, cid;
       thCell( p, cd, edge, cid );
       g -= cd * ( 1.6 * f1 ); // height = -|d|² → the normal tilts outward from the clump centre
-      thAO *= mix( 1.0, 0.58 + 0.42 * smoothstep( 0.0, 0.12 + foot * 0.6, edge ), f1 );
+      thAO *= mix( 1.0, smoothstep( 0.0, 0.16 + foot * 0.6, edge ), f1 * uThCrease );
       t = cid * f1 * uThTone;
     }
     // clump tone families: warm/light vs cool/dark
@@ -175,8 +178,8 @@ if ( thAmt > 0.02 ) {
       vec4 n2 = thNoised( p * 2.37 + vec3( 17.3, 5.1, 9.7 ) );
       float e2 = max( 0.02, foot * 2.1 );
       float s2 = n2.x / sqrt( n2.x * n2.x + e2 * e2 );
-      g += s2 * n2.yzw * ( 0.55 * f2 );
-      thAO *= mix( 1.0, 0.82 + 0.18 * smoothstep( 0.0, 0.18, abs( n2.x ) ), f2 );
+      g += s2 * n2.yzw * ( uThFine * f2 );
+      thAO *= mix( 1.0, smoothstep( 0.0, 0.18, abs( n2.x ) ), f2 * uThFine * 0.3 );
     }
     vec3 gv = mat3( viewMatrix ) * g;
     gv -= dot( gv, normal ) * normal;
@@ -208,7 +211,7 @@ if ( thAmt > 0.02 && uThTrans > 0.0 ) {
   float away = saturate( 0.5 - 0.5 * dot( geometryNormal, tL ) );
   float k = uThTrans * thAmt * back * ( 0.22 + 0.78 * rim * rim ) * ( 0.3 + 0.7 * away ) * ( 0.35 + 0.65 * thAO );
   // light through leaves is filtered by them twice: deeper, yellower green
-  vec3 tc = material.diffuseColor * ( 0.45 + 1.7 * material.diffuseColor ) * vec3( 1.06, 1.0, 0.62 );
+  vec3 tc = material.diffuseColor * ( 0.35 + 1.3 * material.diffuseColor ) * vec3( 1.04, 1.0, 0.66 );
   reflectedLight.directDiffuse += tc * directionalLights[ 0 ].color * k;
 }
 #endif
@@ -236,6 +239,12 @@ export interface FoliageKnobs {
   tone: { value: number };
   /** clump model: 0 cellular domes, 1 billowed noise */
   model: { value: number };
+  /** clump size multiplier */
+  scale: { value: number };
+  /** crease occlusion strength 0..1 */
+  crease: { value: number };
+  /** fine (2nd octave) relief amplitude */
+  fine: { value: number };
 }
 
 /** shared tuning uniforms (one object drives every foliage material) */
@@ -245,6 +254,9 @@ export const foliageKnobs: FoliageKnobs = {
   wrap: { value: 0.45 },
   tone: { value: 1.0 },
   model: { value: 0 },
+  scale: { value: 1 },
+  crease: { value: 0.42 },
+  fine: { value: 0.55 },
 };
 
 let physPars: string | null = null;
@@ -279,7 +291,7 @@ function injectWind(shader: THREE.WebGLProgramParametersWithUniforms, u: GlobalU
 
 function injectFoliage(shader: THREE.WebGLProgramParametersWithUniforms, u: GlobalUniforms): void {
   injectWind(shader, u, LEAF_VERT_PARS, LEAF_VERT_MAIN);
-  Object.assign(shader.uniforms, lampUniforms(), { uThBump: foliageKnobs.bump, uThTrans: foliageKnobs.trans, uThWrap: foliageKnobs.wrap, uThTone: foliageKnobs.tone, uThModel: foliageKnobs.model });
+  Object.assign(shader.uniforms, lampUniforms(), { uThBump: foliageKnobs.bump, uThTrans: foliageKnobs.trans, uThWrap: foliageKnobs.wrap, uThTone: foliageKnobs.tone, uThModel: foliageKnobs.model, uThScale: foliageKnobs.scale, uThCrease: foliageKnobs.crease, uThFine: foliageKnobs.fine });
   shader.fragmentShader = shader.fragmentShader
     .replace('#include <common>', `#include <common>\n${LEAF_FRAG_PARS}`)
     .replace('#include <lights_physical_pars_fragment>', wrappedPhysicalPars())

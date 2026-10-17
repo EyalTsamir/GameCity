@@ -462,7 +462,9 @@ vec4 waterBase() {
   wAlphaB = max(alpha, foam * 0.95);
   wFoamA = foam;
   wF = F * (1.0 - foam) * wDebug.x;
-  vec3 skyD = sky * (1.0 - hDark * 0.55);
+  // without the reflection pass: quay walls / steep banks still mirror as a dark band at the waterline
+  float wallR = (1.0 - smoothstep(0.2, 2.6, shore)) * (1.0 - beach) * (1.0 - uReflInfo.x) * (1.0 - mPond);
+  vec3 skyD = sky * (1.0 - hDark * 0.55) * (1.0 - 0.55 * wallR);
   wRefl = skyD * (1.0 - rc.a) + rc.rgb + moon + lampR;
   wGlint = vec3(0.0);
   vec3 foamC = wFoam * mix(1.0, 0.45, uNight);

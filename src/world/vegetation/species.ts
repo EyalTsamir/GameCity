@@ -842,7 +842,7 @@ function conifer(s: GeoSink, w: Wind, t: TreeSpec, rng: Rng): number {
   const S = tips * 2;
   const top = y + h;
   const span = top - y0;
-  const rWide = r * (fir ? 1.1 : 1.0);
+  const rWide = r * (fir ? 1.18 : 1.1);
   // whole-cone normal tilt (soft overall shading)
   const coneUp = rWide / Math.hypot(rWide, span);
   const coneOut = span / Math.hypot(rWide, span);
@@ -853,18 +853,33 @@ function conifer(s: GeoSink, w: Wind, t: TreeSpec, rng: Rng): number {
   // per-tier randoms are drawn in a fixed order for every LOD (near/far stay identical)
   for (let i = 0; i < tiers; i++) {
     const f = i / tiers;
-    const tb = y0 + span * f * 0.84;
-    const tt = i === tiers - 1 ? top : Math.min(top - 0.2, tb + span * (0.48 - 0.04 * i));
+    const tb = y0 + span * f * 0.86;
+    const tt = i === tiers - 1 ? top : Math.min(top - 0.2, tb + span * (0.5 - 0.055 * i));
     const th = tt - tb;
-    const rr = rWide * Math.pow(1 - f * 0.86, fir ? 0.85 : 1.0) * rng.range(0.9, 1.06);
-    const droop = th * rng.range(0.12, 0.2) * (fir ? 1.2 : 1);
+    // wide, flaring skirts: every tier's rim steps out beyond the tier above (stepped silhouette)
+    const rr = rWide * Math.pow(1 - f * 0.86, fir ? 0.85 : 0.95) * rng.range(0.92, 1.05);
+    const droop = th * rng.range(0.12, 0.18) * (fir ? 1.2 : 1);
     const rot = rot0 + i * 2.39996 + rng.range(-0.35, 0.35);
     const ox = rng.range(-0.07, 0.07) * rr,
       oz = rng.range(-0.07, 0.07) * rr;
     const tipLen: number[] = [];
-    for (let j = 0; j < 7; j++) tipLen.push(rng.range(0.9, 1.08));
+    for (let j = 0; j < 7; j++) tipLen.push(rng.range(0.94, 1.1));
     const tierAO = 0.72 + 0.28 * f; // lower skirts sit in the shade of the ones above
     const shadeT = 0.86 + 0.18 * f;
+    // convex skirt profile (radius, height above the rim): apex → shoulder → rim
+    const rS = 0.57,
+      hS = 0.34;
+    // outward profile normals from the two segments (radial, up), blended with the whole cone
+    const n1r = th * (1 - hS),
+      n1u = rr * rS; // apex→shoulder segment normal
+    const n2r = th * hS + droop,
+      n2u = rr * (1 - rS); // shoulder→rim segment normal
+    const l1 = Math.hypot(n1r, n1u),
+      l2 = Math.hypot(n2r, n2u);
+    const shR = (n1r / l1 + n2r / l2) * 0.5 * 0.7 + coneOut * 0.3,
+      shU = (n1u / l1 + n2u / l2) * 0.5 * 0.7 + coneUp * 0.3 + 0.08;
+    const rmR = (n2r / l2) * 0.7 + coneOut * 0.3,
+      rmU = (n2u / l2) * 0.7 + coneUp * 0.3;
     const base = s.vcount;
     // apex
     s.colorObj(leaf, 1.12 * shadeT);
@@ -876,34 +891,29 @@ function conifer(s: GeoSink, w: Wind, t: TreeSpec, rng: Rng): number {
       const tip = k % 2 === 0;
       const c = Math.cos(a),
         sn = Math.sin(a);
-      const rs = rr * (tip ? 0.54 : 0.5);
-      const ys = tt - th * (tip ? 0.5 : 0.46);
-      // profile normal apex→rim, blended with the cone
-      const pu = 0.62 * 0.6 + coneUp * 0.4,
-        po = 0.78 * 0.6 + coneOut * 0.4;
-      const pl = Math.hypot(pu, po);
-      s.colorObj(leaf, (tip ? 1.0 : 0.92) * shadeT);
-      leafAttr(s, (tip ? 0.92 : 0.82) * tierAO, tone, 0.8, clump);
-      s.vert(x + ox + c * rs, ys, z + oz + sn * rs, (c * po) / pl, pu / pl, (sn * po) / pl);
+      const rs = rr * rS * (tip ? 1.05 : 0.95);
+      const ys = tb + th * hS * (tip ? 0.96 : 1.04);
+      const pl = Math.hypot(shR, shU);
+      s.colorObj(leaf, (tip ? 1.0 : 0.93) * shadeT);
+      leafAttr(s, (tip ? 0.92 : 0.84) * tierAO, tone, 0.8, clump);
+      s.vert(x + ox + c * rs, ys, z + oz + sn * rs, (c * shR) / pl, shU / pl, (sn * shR) / pl);
     }
-    // rim ring: tips droop out and down, gaps tuck in and up
+    // rim ring: tips droop out and down, gaps tuck in a little
     for (let k = 0; k < S; k++) {
       const a = rot + (k / S) * Math.PI * 2;
       const tip = k % 2 === 0;
       const c = Math.cos(a),
         sn = Math.sin(a);
-      const L = tip ? tipLen[(k >> 1) % 7] : 0.89;
+      const L = tip ? tipLen[(k >> 1) % 7] * 1.03 : 0.9;
       const rad = rr * L;
-      const yy = tip ? tb - droop * L : tb - droop * 0.45;
-      const pu = (tip ? 0.32 : 0.55) * 0.6 + coneUp * 0.4,
-        po = (tip ? 0.95 : 0.84) * 0.6 + coneOut * 0.4;
-      const pl = Math.hypot(pu, po);
+      const yy = tip ? tb - droop * L : tb - droop * 0.35;
+      const pl = Math.hypot(rmR, rmU);
       if (tip) {
         _tipC.copy(leaf).lerp(TIP, 0.16).multiplyScalar(1.06 * shadeT);
         s.colorObj(_tipC);
       } else s.colorObj(leaf, 0.84 * shadeT);
-      leafAttr(s, (tip ? 1 : 0.68) * tierAO, tone, 0.8, clump);
-      s.vert(x + ox + c * rad, yy, z + oz + sn * rad, (c * po) / pl, pu / pl, (sn * po) / pl);
+      leafAttr(s, (tip ? 1 : 0.7) * tierAO, tone, 0.8, clump);
+      s.vert(x + ox + c * rad, yy, z + oz + sn * rad, (c * rmR) / pl, rmU / pl, (sn * rmR) / pl);
     }
     const sh0 = base + 1,
       rm0 = base + 1 + S;
@@ -921,9 +931,9 @@ function conifer(s: GeoSink, w: Wind, t: TreeSpec, rng: Rng): number {
       for (let k = 0; k < S; k++) {
         const a = rot + (k / S) * Math.PI * 2;
         const tip = k % 2 === 0;
-        const L = tip ? tipLen[(k >> 1) % 7] : 0.89;
+        const L = tip ? tipLen[(k >> 1) % 7] * 1.03 : 0.9;
         const rad = rr * L;
-        s.vert(x + ox + Math.cos(a) * rad, (tip ? tb - droop * L : tb - droop * 0.45) - 0.01, z + oz + Math.sin(a) * rad, Math.cos(a) * 0.3, -0.95, Math.sin(a) * 0.3);
+        s.vert(x + ox + Math.cos(a) * rad, (tip ? tb - droop * L : tb - droop * 0.35) - 0.01, z + oz + Math.sin(a) * rad, Math.cos(a) * 0.3, -0.95, Math.sin(a) * 0.3);
       }
       for (let k = 0; k < S; k++) s.tri(u, ub + 1 + k, ub + 1 + ((k + 1) % S));
     }
@@ -945,11 +955,11 @@ function conifer(s: GeoSink, w: Wind, t: TreeSpec, rng: Rng): number {
   return y0 - y;
 }
 
-/** Pine: tall clear trunk (warm bark), crown of a few flat cloud pads near the top. */
+/** Pine: tall clear trunk (warm bark), a few separate flat cloud pads on short limbs near the top. */
 function pine(s: GeoSink, w: Wind, t: TreeSpec, rng: Rng): number {
   const { x, y, z, h, r } = t;
   const forest = t.detail <= 1;
-  const clear = h * rng.range(0.46, 0.55);
+  const clear = h * rng.range(0.56, 0.64);
   const crownH = h - clear;
   const la = rng.range(0, 6.28),
     lm = rng.range(0.03, 0.07) * h;
@@ -958,25 +968,36 @@ function pine(s: GeoSink, w: Wind, t: TreeSpec, rng: Rng): number {
   w.at(x, y, z, 1 / 12, 0, 0);
   const r0 = Math.max(0.1, Math.min(0.3, 0.022 * h));
   const bark = col(rng.pick(BARK.pine));
-  trunk(s, x, y, z, tx, y + h - crownH * 0.35, tz, r0, r0 * 0.55, forest || t.far ? 4 : 5, bark, forest || t.far ? 1 : 1.15);
+  const topY = y + h - crownH * 0.25;
+  trunk(s, x, y, z, tx, topY, tz, r0, r0 * 0.5, forest || t.far ? 4 : 5, bark, forest || t.far ? 1 : 1.15);
   const leaf = pickLeaf(rng, LEAF.pine, 0.06, t.tone ?? 0.5).clone();
-  const cy = y + clear + crownH * 0.55;
-  const R = r * 1.0;
-  // flat, layered pads at different heights around a small core (Scots pine silhouette)
-  const lobes: Lobe[] = [{ x: 0, y: 0, z: 0, rx: R * 0.36, ry: crownH * 0.26, rz: R * 0.36, tint: 0.9 }];
-  const n = rng.int(3, 4);
+  const R = r * 1.15;
+  // pads: the top one centred, the others on limbs to the sides, lower ones larger
+  const n = forest || t.far ? 3 : 4;
   const a0 = rng.range(0, 6.28);
-  for (let i = 0; i < n; i++) {
-    const a = a0 + (i / n) * 6.28 + rng.range(-0.4, 0.4);
-    const d = R * rng.range(0.28, 0.46);
-    const rad = R * rng.range(0.42, 0.56);
-    lobes.push({ x: Math.cos(a) * d, y: (rng.range(-0.42, 0.25) + (i % 2) * 0.12) * crownH, z: Math.sin(a) * d, rx: rad, ry: rad * rng.range(0.3, 0.38), rz: rad * rng.range(0.85, 1), tint: rng.range(0.86, 1.1) });
+  const pads: { x: number; y: number; z: number; rad: number }[] = [];
+  for (let i = 0; i < 4; i++) {
+    const f = i / 3; // 0 = lowest
+    const a = a0 + i * 2.3 + rng.range(-0.4, 0.4);
+    const rad = R * (0.62 - 0.22 * f) * rng.range(0.9, 1.08);
+    const d = i === 3 ? R * 0.06 : Math.min(R * 1.02 - rad, R * rng.range(0.3, 0.5));
+    if (i >= 4 - n || i === 3) pads.push({ x: tx + Math.cos(a) * d, y: y + clear + crownH * (0.18 + 0.62 * f), z: tz + Math.sin(a) * d, rad });
   }
-  lobes.push({ x: rng.range(-0.12, 0.12) * R, y: crownH * 0.3, z: rng.range(-0.12, 0.12) * R, rx: R * 0.42, ry: crownH * 0.16, rz: R * 0.42, tint: 1.1 });
-  // a branch under each side pad
-  if (!t.far && !forest) for (let i = 1; i <= n; i++) branch(s, tx, cy - crownH * 0.25, tz, tx + lobes[i].x * 0.8, cy + lobes[i].y - lobes[i].ry * 0.5, tz + lobes[i].z * 0.8, r0 * 0.4, r0 * 0.18, bark);
   w.at(x, y, z, 1 / 12, 0.5, 0);
-  lobedCanopy(s, tx, cy, tz, lobes, t.far || forest ? 1 : 2, rng.int(0, 1e9), { leaf, noise: 0.13, lo: 0.76, hi: 1.06, aoLo: 0.4, warm: 0.2, clump: 0.36, tone: 0.45, amt: 0.85 });
+  const opts: CanopyOpts = { leaf, noise: 0.12, lo: 0.74, hi: 1.08, aoLo: 0.38, warm: 0.2, clump: 0.36, tone: 0.45, amt: 0.85 };
+  pads.forEach((p, i) => {
+    if (!t.far && !forest && i < pads.length - 1) {
+      const lf = (p.y - p.rad * 0.25 - y) / h;
+      branch(s, x + (tx - x) * lf, p.y - p.rad * 0.3, z + (tz - z) * lf, p.x, p.y - p.rad * 0.1, p.z, r0 * 0.38, r0 * 0.18, bark);
+      w.at(x, y, z, 1 / 12, 0.5, 0);
+    }
+    const sa = rng.range(0, 6.28);
+    const pl: Lobe[] = [
+      { x: 0, y: 0, z: 0, rx: p.rad, ry: p.rad * 0.36, rz: p.rad * 0.92, tint: rng.range(0.92, 1.06) },
+      { x: Math.cos(sa) * p.rad * 0.4, y: p.rad * 0.12, z: Math.sin(sa) * p.rad * 0.4, rx: p.rad * 0.66, ry: p.rad * 0.32, rz: p.rad * 0.66, tint: rng.range(1.0, 1.12) },
+    ];
+    lobedCanopy(s, p.x, p.y, p.z, pl, 1, rng.int(0, 1e9), opts);
+  });
   return clear;
 }
 

@@ -214,7 +214,19 @@ export function stadiumShell(env: Env, sp: ShellSpec): void {
     K.box(stone, 2 * hw + 0.36, 0.26, 2 * hw + 0.36, cx, Ht - 0.95, cz);
     K.box(stone, 2 * hw + 0.6, 0.24, 2 * hw + 0.6, cx, Ht - 0.69, cz);
     K.box(brickD, 2 * hw + 0.1, 0.45, 2 * hw + 0.1, cx, Ht - 0.45, cz);
-    K.box(stone, 2 * hw + 0.3, 0.14, 2 * hw + 0.3, cx, Ht, cz);
+    // parapet ring with stone coping around a dark felt roof (not one big cream slab)
+    const cw = 0.32;
+    for (const [ox, oz, w, d] of [
+      [0, -(hw + 0.15 - cw / 2), 2 * hw + 0.3, cw],
+      [0, hw + 0.15 - cw / 2, 2 * hw + 0.3, cw],
+      [-(hw + 0.15 - cw / 2), 0, cw, 2 * hw + 0.3 - 2 * cw],
+      [hw + 0.15 - cw / 2, 0, cw, 2 * hw + 0.3 - 2 * cw],
+    ])
+      K.box(stone, w, 0.32, d, cx + ox, Ht - 0.02, cz + oz);
+    K.box(M('#5f5d5a', PAT.GRAVEL, 0.95, 0, 0, 0, 0.3), 2 * hw - 0.3, 0.05, 2 * hw - 0.3, cx, Ht, cz);
+    // little roof-access hut with a door
+    K.box(brickD, 1.5, 1.7, 1.3, cx - sx * 0.9, Ht, cz - sz * 0.9);
+    K.box(stone, 1.7, 0.12, 1.5, cx - sx * 0.9, Ht + 1.7, cz - sz * 0.9);
     // stone quoins on the outer corner and the two returns
     quoins(K, stone, sx * TW1, sz * TW1, sx, sz, 1.0, Ht - 1.0, 0.55);
     // stacked stair windows on both outer faces (lit at night)
