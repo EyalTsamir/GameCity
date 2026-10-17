@@ -94,6 +94,8 @@ under "Changes outside my area". Never edit another agent's files. Never run git
 * `shots/servers.sh` (re)starts the dev servers: **5173 = working tree**, **5174 = frozen baseline**
   (original code) for before/after with `--url http://127.0.0.1:5174/`.
 * Prefix every script with `TH_LOCK_SLOTS=2` (two browsers may run at once; the lock queues the rest).
+* Fair share of the two browser slots (FIFO queue): keep each lock-holding job ≲ 15 min — split big
+  before/after matrices and perf variant lists into chunks.
 * Batch: one `capture-set.mjs` session for many views/hours beats many `shot.mjs` runs. Iterate with
   `--q "only=<modules you need>"` (loads much faster) at 1280×720; full-city sets at milestones.
   Deterministic query: `nointro&noidle&adaptive=0&quality=high` (+ `time=…`).

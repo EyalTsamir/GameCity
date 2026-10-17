@@ -579,7 +579,8 @@ void bhWall(inout vec3 albedo, inout float rough, inout float metal, inout vec3 
     float fl = 0.55 + 0.45 * sin(uTime * 7.3 + r1 * 40.0) * sin(uTime * 2.9 + r2 * 17.0);
     lcol = mix(lcol, vec3(0.35, 0.55, 1.0) * (0.6 + 0.7 * fl), tvOn);
   }
-  float glowI = mix(0.07, 2.0, nightF) * (0.75 + 0.5 * r2);
+  // lit rooms: bright enough to touch the night bloom threshold so districts glow from afar
+  float glowI = mix(0.07, 2.7, nightF) * (0.75 + 0.5 * r2);
   if (prof > 1.5 && prof < 2.5) glowI *= 1.25;
   if (prof > 4.5 && prof < 5.5) glowI *= 1.1;
 
@@ -618,7 +619,7 @@ void bhWall(inout vec3 albedo, inout float rough, inout float metal, inout vec3 
     float farLit = mix(step(hb0, avgOcc), step(hb1, avgOcc), lfr);
     float hc = fract(mix(hb0, hb1, step(0.5, lfr)) * 9.73);
     vec3 farCol = office ? mix(vec3(0.66, 0.78, 1.0), vec3(1.0, 0.8, 0.52), hc) : mix(vec3(1.0, 0.52, 0.2), vec3(1.0, 0.68, 0.36), hc);
-    float farGlow = mix(0.07, 2.0, nightF) * (prof > 1.5 && prof < 2.5 ? 1.25 : 1.0);
+    float farGlow = mix(0.07, 2.7, nightF) * (prof > 1.5 && prof < 2.5 ? 1.25 : 1.0);
     avgGlass = refl * F + farLit * farGlow * farCol * 0.34 * (curtain ? 0.85 : 1.0) + gt * crown * 0.7;
   }
 
