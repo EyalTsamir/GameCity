@@ -215,7 +215,7 @@ export function gardenShed(k: Kit, rng: Rng, w: number, d: number): void {
   const slope = Math.hypot(w / 2, R - H) + 0.18;
   k.m(roof, 'stone');
   for (const sx of [-1, 1]) {
-    sh.push().local((sx * w) / 4 + sx * 0.04, (H + R) / 2 + 0.04, 0, 0, 0, sx * pitch);
+    sh.push().local((sx * w) / 4 + sx * 0.04, (H + R) / 2 + 0.04, 0, 0, 0, -sx * pitch);
     sh.box(0, 0, 0, slope, 0.06, d + 0.3, 0);
     sh.pop();
   }
@@ -262,7 +262,7 @@ export function playhouse(k: Kit, rng: Rng, w: number, d: number): void {
   }
   const pitch = Math.atan2(R - H, w * 0.4);
   k.m(roof, 'paint');
-  for (const sx of [-1, 1]) sh.push().local(sx * w * 0.2, (H + R) / 2 + 0.03, 0, 0, 0, sx * pitch).box(0, 0, 0, Math.hypot(w * 0.4, R - H) + 0.12, 0.05, d * 0.8 + 0.2, 0).pop();
+  for (const sx of [-1, 1]) sh.push().local(sx * w * 0.2, (H + R) / 2 + 0.03, 0, 0, 0, -sx * pitch).box(0, 0, 0, Math.hypot(w * 0.4, R - H) + 0.12, 0.05, d * 0.8 + 0.2, 0).pop();
   k.m('#ffffff', 'paint');
   sh.box(0, 0.45, d * 0.4 + 0.01, 0.42, 0.8, 0.02, 0);
   k.m(roof, 'paint');
@@ -285,7 +285,7 @@ export function kennel(k: Kit, rng: Rng): void {
     else s.tri(b, a, t);
   }
   k.m('#3b3a38', 'stone');
-  for (const sx of [-1, 1]) sh.push().local(sx * 0.18, 0.79, 0, 0, 0, sx * 0.64).box(0, 0, 0, 0.5, 0.04, 0.95, 0).pop();
+  for (const sx of [-1, 1]) sh.push().local(sx * 0.18, 0.79, 0, 0, 0, -sx * 0.64).box(0, 0, 0, 0.5, 0.04, 0.95, 0).pop();
   k.m('#1b1b1b', 'rubber');
   sh.box(0, 0.25, 0.43, 0.3, 0.38, 0.01, 0);
   k.m('#b8643f', 'ceramic');
@@ -316,7 +316,7 @@ export function greenhouse(k: Kit, g: Kit, rng: Rng, w: number, d: number): void
   // glass
   g.m('#dfeeee', 'glass');
   gs.box(0, 0.24 + (H - 0.24) / 2, 0, w - 0.02, H - 0.24, d - 0.02, 3);
-  for (const sx of [-1, 1]) gs.push().local((sx * w) / 4, (H + R) / 2, 0, 0, 0, sx * pitch).box(0, 0, 0, Math.hypot(w / 2, R - H), 0.01, d, 0).pop();
+  for (const sx of [-1, 1]) gs.push().local((sx * w) / 4, (H + R) / 2, 0, 0, 0, -sx * pitch).box(0, 0, 0, Math.hypot(w / 2, R - H), 0.01, d, 0).pop();
   const s = g.s;
   for (const sz of [1, -1]) {
     const z = (sz * d) / 2;

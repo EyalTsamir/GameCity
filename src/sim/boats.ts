@@ -19,6 +19,7 @@ import { NavField } from './boats/nav';
 import { Fleet, FreePilot, RoutePilot, SmoothPath, ROW_HALF_SPAN, type Boat, type P2, type Step, type Zone } from './boats/fleet';
 import { BoatRenderer } from './boats/render';
 import { Wakes } from './boats/wakes';
+import { WakeRibbons } from './boats/ribbons';
 import { DIMS } from './boats/models';
 import { Glows } from './rail/glows';
 
@@ -410,10 +411,13 @@ export default function create(ctx: CityContext): CityModule {
   const nLights = fleet.boats.reduce((n, b) => n + DIMS[b.type].lights.length, 0);
   const glows = new Glows(ctx, nLights, 'boats-lights');
   const renderer = new BoatRenderer(ctx, glows, 0, nLights, 3, 8);
-  const wakes = new Wakes(ctx, 1100);
+  const ribbons = new WakeRibbons(ctx, fleet.boats.length);
+  const wakes = new Wakes(ctx, 700, ribbons.foamLight);
   const root = new THREE.Group();
   root.name = 'boats';
-  root.add(renderer.group, wakes.mesh, glows.mesh);
+  root.add(renderer.group, ribbons.mesh, wakes.mesh, glows.mesh);
+  // ?wakes=puffs → the old puff wakes (A/B)
+  const puffWakes = ctx.debug.params.get('wakes') === 'puffs';
   ctx.scene.add(root);
 
   // funnel smoke
@@ -508,7 +512,8 @@ export default function create(ctx: CityContext): CityModule {
       const soft = b.type === 'sail' ? 0.7 : 1;
       const fwdSign = b.vSigned >= 0 ? 1 : -1;
       // bow wave (both shoulders): crests that run outward → the V of the Kelvin wake
-      if (fwdSign > 0) {
+      // (continuous ribbons now; the puffs remain only for the ?wakes=puffs A/B)
+      if (puffWakes && fwdSign > 0) {
         const bxw = b.x + sx * L * 0.36,
           bzw = b.z + sz * L * 0.36;
         for (const side of [-1, 1]) {
@@ -521,22 +526,24 @@ export default function create(ctx: CityContext): CityModule {
       // turbulent wash behind the stern
       const tx = b.x - sx * fwdSign * L * 0.46,
         tz = b.z - sz * fwdSign * L * 0.46;
-      spawnPuff(now, tx, tz, -sx * fwdSign * 0.08 * v, -sz * fwdSign * 0.08 * v, 0.25 + B * 0.13, (0.16 + 0.03 * v) * big, 6.5 + v * 0.4, 0.85 * k * soft, 0.2);
+      if (puffWakes) spawnPuff(now, tx, tz, -sx * fwdSign * 0.08 * v, -sz * fwdSign * 0.08 * v, 0.25 + B * 0.13, (0.16 + 0.03 * v) * big, 6.5 + v * 0.4, 0.85 * k * soft, 0.2);
+      // planing motorboat: spray thrown off the transom corners
       if (b.type === 'motor' && v > 3) {
-        for (const side of [-1, 1]) spawnPuff(now, tx + px * side * 0.45, tz + pz * side * 0.45, px * side * 0.55, pz * side * 0.55, 0.14, 0.18, 2.4, 0.9, 0.8);
+        spawnPuff(now, tx + px * 0.45, tz + pz * 0.45, px * 0.55, pz * 0.55, 0.16, 0.2, 2.2, 0.75, 0.8);
+        spawnPuff(now, tx - px * 0.45, tz - pz * 0.45, -px * 0.55, -pz * 0.55, 0.16, 0.2, 2.2, 0.75, 0.8);
       }
     }
     if (st.acc > spacing * 6) st.acc = 0;
     // prop wash while manoeuvring / pushing
     if (b.wash > 0.01) {
-      st.washAcc += dt * 7 * b.wash;
+      st.washAcc += dt * 5 * b.wash;
       while (st.washAcc >= 1) {
         st.washAcc -= 1;
         const dir = b.vSigned < 0 ? 1 : -1;
         const tx = b.x - sx * L * 0.5,
           tz = b.z - sz * L * 0.5;
         const j = (fx.next() - 0.5) * 0.6;
-        spawnPuff(now, tx + px * j, tz + pz * j, sx * dir * 0.9 * b.wash + px * j * 0.4, sz * dir * 0.9 * b.wash + pz * j * 0.4, 0.3, 0.28, 3.4, 0.6 * b.wash, 0.4);
+        spawnPuff(now, tx + px * j, tz + pz * j, sx * dir * 0.9 * b.wash + px * j * 0.4, sz * dir * 0.9 * b.wash + pz * j * 0.4, 0.45 + B * 0.05, 0.34, 4.2, 0.5 * b.wash, 0.5);
       }
     }
   }
@@ -581,6 +588,17 @@ export default function create(ctx: CityContext): CityModule {
     },
   });
 
+  // wake ribbons are rebuilt only for boats whose trail may be in view
+  const camPM = new THREE.Matrix4();
+  const camFr = new THREE.Frustum();
+  const nearS = new THREE.Sphere();
+  const sunDir = new THREE.Vector3();
+  const isNear = (b: { x: number; z: number; dims: { L: number } }): boolean => {
+    nearS.center.set(b.x, WATER_LEVEL, b.z);
+    nearS.radius = b.dims.L + 70;
+    return camFr.intersectsSphere(nearS);
+  };
+
   const buildMs = performance.now() - t0;
   let cpuMs = 0;
   let simT = 0;
@@ -614,9 +632,11 @@ export default function create(ctx: CityContext): CityModule {
             lo.z += (dz / d) * (0.06 - gap) * 0.5;
           }
         }
+        const tSub = now - rem + h;
         for (const b of fleet.boats) {
           updatePose(b, h, now);
           spawnWakes(b, h, now);
+          ribbons.step(b, tSub, ampAt(b.x, b.z));
         }
         rem -= h;
       }
@@ -630,6 +650,21 @@ export default function create(ctx: CityContext): CityModule {
       glows.commit();
       wakes.commit();
       wakes.mesh.visible = renderer.nearView > 0;
+      // foam brightness = lit white (sun + sky), like the foam drawn by the water shader
+      const sky = ctx.services.sky;
+      if (sky) {
+        sunDir.copy(sky.sun.position).sub(sky.sun.target.position).normalize();
+        const kS = sky.sun.intensity * Math.max(0, sunDir.y),
+          kH = sky.hemi.intensity;
+        ribbons.foamLight.setRGB(
+          (sky.sun.color.r * kS + sky.hemi.color.r * kH * 1.35) * 0.3,
+          (sky.sun.color.g * kS + sky.hemi.color.g * kH * 1.35) * 0.3,
+          (sky.sun.color.b * kS + sky.hemi.color.b * kH * 1.35) * 0.3,
+        );
+      } else ribbons.foamLight.setRGB(0.9, 0.93, 0.95);
+      camPM.multiplyMatrices(ctx.camera.projectionMatrix, ctx.camera.matrixWorldInverse);
+      camFr.setFromProjectionMatrix(camPM);
+      ribbons.build(fleet.boats, isNear, ctx.uniforms.uTime.value, ampAt);
       cpuMs = cpuMs * 0.95 + (performance.now() - a) * 0.05;
     },
     stats() {
@@ -639,6 +674,7 @@ export default function create(ctx: CityContext): CityModule {
         drawn: renderer.drawn,
         cpuMs: Math.round(cpuMs * 1000) / 1000,
         foamSpawned: wakes.spawned,
+        wakeRibbons: ribbons.ribbons,
         navCells: nav.navigableCells,
         navMs: Math.round(nav.buildMs),
         boatTris: renderer.triangles,

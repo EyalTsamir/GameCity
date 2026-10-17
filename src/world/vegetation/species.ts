@@ -682,10 +682,10 @@ function birch(s: GeoSink, w: Wind, t: TreeSpec, rng: Rng): number {
   }
   w.at(x, y, z, 1 / 10, 1.3, 0);
   const opts: CanopyOpts = { leaf, noise: 0.11, lo: 0.8, hi: 1.1, aoLo: 0.55, warm: 0.3, clump: 0.32, tone: 0.55 };
-  if (t.far) {
-    // far LOD: one union of all clouds (same silhouette mass, one coarse surface)
+  if (t.far || t.detail <= 1) {
+    // far LOD / forest: one union of all clouds (same silhouette mass, one surface)
     const lobes: Lobe[] = clouds.map((c) => ({ x: c.x - tx, y: c.y - (y + clear + crownH * 0.5), z: c.z - tz, rx: c.rr, ry: c.rv, rz: c.rr, tint: 1 }));
-    lobedCanopy(s, tx, y + clear + crownH * 0.5, tz, lobes, 1, rng.int(0, 1e9), opts);
+    lobedCanopy(s, tx, y + clear + crownH * 0.5, tz, lobes, t.far ? 1 : 2, rng.int(0, 1e9), opts);
   } else {
     for (const c of clouds) {
       const a = rng.range(0, 6.28);
@@ -834,8 +834,9 @@ function conifer(s: GeoSink, w: Wind, t: TreeSpec, rng: Rng): number {
   trunk(s, x, y, z, x, y0 + (h - (y0 - y)) * 0.3, z, r0, r0 * 0.6, forest || t.far ? 4 : 5, col(rng.pick(BARK.conifer)), forest || t.far ? 1 : 1.2);
   const leaf = pickLeaf(rng, kind === 'spruce' ? LEAF.spruce : LEAF.fir, 0.06, t.tone ?? 0.5).clone();
   const fir = kind === 'fir';
-  const tiers = (h > 9.5 ? 5 : h > 6.5 ? 4 : 3) + (rng.chance(0.3) ? 1 : 0) - (fir ? 1 : 0);
-  const tips = t.far ? 4 : forest ? 5 : 6;
+  const extra = rng.chance(0.3) ? 1 : 0;
+  const tiers = forest ? Math.max(3, (h > 10 ? 4 : 3) + extra - (fir ? 1 : 0)) : (h > 9.5 ? 5 : h > 6.5 ? 4 : 3) + extra - (fir ? 1 : 0);
+  const tips = t.far ? 5 : forest ? 5 : 7;
   const S = tips * 2;
   const top = y + h;
   const span = top - y0;
@@ -854,12 +855,12 @@ function conifer(s: GeoSink, w: Wind, t: TreeSpec, rng: Rng): number {
     const tt = i === tiers - 1 ? top : Math.min(top - 0.2, tb + span * (0.48 - 0.04 * i));
     const th = tt - tb;
     const rr = rWide * Math.pow(1 - f * 0.86, fir ? 0.85 : 1.0) * rng.range(0.9, 1.06);
-    const droop = th * rng.range(0.18, 0.28) * (fir ? 1.2 : 1);
+    const droop = th * rng.range(0.12, 0.2) * (fir ? 1.2 : 1);
     const rot = rot0 + i * 2.39996 + rng.range(-0.35, 0.35);
     const ox = rng.range(-0.07, 0.07) * rr,
       oz = rng.range(-0.07, 0.07) * rr;
     const tipLen: number[] = [];
-    for (let j = 0; j < 6; j++) tipLen.push(rng.range(0.86, 1.12));
+    for (let j = 0; j < 7; j++) tipLen.push(rng.range(0.9, 1.08));
     const tierAO = 0.72 + 0.28 * f; // lower skirts sit in the shade of the ones above
     const shadeT = 0.86 + 0.18 * f;
     const base = s.vcount;
@@ -889,9 +890,9 @@ function conifer(s: GeoSink, w: Wind, t: TreeSpec, rng: Rng): number {
       const tip = k % 2 === 0;
       const c = Math.cos(a),
         sn = Math.sin(a);
-      const L = tip ? tipLen[(k >> 1) % 6] : 0.7;
+      const L = tip ? tipLen[(k >> 1) % 7] : 0.83;
       const rad = rr * L;
-      const yy = tip ? tb - droop * L : tb + th * 0.1;
+      const yy = tip ? tb - droop * L : tb + th * 0.05;
       const pu = (tip ? 0.32 : 0.55) * 0.6 + coneUp * 0.4,
         po = (tip ? 0.95 : 0.84) * 0.6 + coneOut * 0.4;
       const pl = Math.hypot(pu, po);
@@ -918,9 +919,9 @@ function conifer(s: GeoSink, w: Wind, t: TreeSpec, rng: Rng): number {
       for (let k = 0; k < S; k++) {
         const a = rot + (k / S) * Math.PI * 2;
         const tip = k % 2 === 0;
-        const L = tip ? tipLen[(k >> 1) % 6] : 0.7;
+        const L = tip ? tipLen[(k >> 1) % 7] : 0.83;
         const rad = rr * L;
-        s.vert(x + ox + Math.cos(a) * rad, (tip ? tb - droop * L : tb + th * 0.1) - 0.01, z + oz + Math.sin(a) * rad, Math.cos(a) * 0.3, -0.95, Math.sin(a) * 0.3);
+        s.vert(x + ox + Math.cos(a) * rad, (tip ? tb - droop * L : tb + th * 0.05) - 0.01, z + oz + Math.sin(a) * rad, Math.cos(a) * 0.3, -0.95, Math.sin(a) * 0.3);
       }
       for (let k = 0; k < S; k++) s.tri(u, ub + 1 + k, ub + 1 + ((k + 1) % S));
     }

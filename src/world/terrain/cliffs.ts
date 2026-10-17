@@ -199,6 +199,9 @@ function faces(model: TerrainModel): CliffFace[] {
   out.push({ name: 'nose-w', ax: SLAB.x0 + 1.2, az: -134.6, nx: 0, nz: 1, len: SPUR_W_X - 1.5 - (SLAB.x0 + 1.2), maxIn: 14, yMin: -0.5, steep: 0.8, flat: 1.15, seed: 2 });
   // east spur nose (faces south, above the container yard)
   out.push({ name: 'nose-e', ax: SPUR_E_X + 1.0, az: -134.6, nx: 0, nz: 1, len: QUAY_X - 1.2 - (SPUR_E_X + 1.0), maxIn: 14, yMin: -0.5, steep: 0.8, flat: 1.15, seed: 3 });
+  // south walls of the rail-portal approach cuts (face north, towards the track)
+  out.push({ name: 'cut-w', ax: SPUR_W_X + 5.8, az: RAIL_Z + 3.2, nx: 0, nz: -1, len: 6.2, maxIn: 9, yMin: -0.5, steep: 0.75, flat: 1.15, seed: 5 });
+  out.push({ name: 'cut-e', ax: SPUR_E_X + 0.6, az: RAIL_Z + 3.2, nx: 0, nz: -1, len: 4.6, maxIn: 9, yMin: -0.5, steep: 0.75, flat: 1.15, seed: 6 });
   // harbour cliff (faces east into the sea), north of the sea wall
   out.push({
     name: 'harbour',
@@ -269,6 +272,9 @@ export function buildCliffs(
       ph2 = f.seed * 4.1;
     const dip = (u: number) => 0.32 * Math.sin(u * 0.033 + ph1) + 0.18 * Math.sin(u * 0.081 + ph2) + 0.0022 * u;
     const layerY = (k: number, u: number) => base[k] + dip(u);
+    // per (column, boundary) wobble shared by the layer below and the one above: irregular ledges
+    const jb = (i: number, k: number) => (vnoise(i * 0.93 + k * 7.7, k * 3.1, f.seed + 11) - 0.5) * 0.36;
+    const layerYc = (k: number, i: number) => layerY(k, cols[i].u) + jb(i, k);
     const nL = base.length - 1;
     // lip D of the layer below, per column (no overhang at a block's foot)
     const lip: Float32Array[] = cols.map(() => new Float32Array(nL).fill(9));
@@ -290,10 +296,11 @@ export function buildCliffs(
         }
         let j = i;
         while (j + 1 < cols.length && present(cols[j + 1]) && cols[j + 1].u - cols[j].u < 2.6) j++;
-        // run i..j → blocks of 2–4 columns sharing their end columns
+        // run i..j → blocks of 3–5 columns sharing their end columns (short leftovers merge)
         let s = i;
         while (s < j) {
-          const span = Math.min(j - s, 1 + Math.floor(rng.next() * 3));
+          let span = Math.min(j - s, 2 + Math.floor(rng.next() * 3));
+          if (j - (s + span) < 2) span = j - s;
           emitBlock(s, s + span, k, tone);
           s += span;
         }
@@ -303,9 +310,11 @@ export function buildCliffs(
 
     function emitBlock(i0: number, i1: number, k: number, tone: THREE.Color): void {
       res.blocks++;
-      const recess = rng.chance(0.16);
-      const P = recess ? 0.08 + rng.next() * 0.14 : 0.3 + rng.next() * 0.55;
-      const tint = 0.9 + rng.next() * 0.18;
+      // thin beds weather back into dark recessed bands (they read as strata from far away)
+      const thin = base[k + 1] - base[k] < 1.0;
+      const recess = rng.chance(thin ? 0.7 : 0.14);
+      const P = recess ? 0.06 + rng.next() * 0.12 : 0.32 + rng.next() * 0.6;
+      const tint = (0.86 + rng.next() * 0.24) * (thin ? 0.8 : 1);
       const dropTop = rng.chance(0.18) ? 0.12 + rng.next() * 0.2 : 0;
       interface V {
         x: number;
@@ -319,25 +328,29 @@ export function buildCliffs(
         db: number;
         dm: number;
         dt: number;
+        /** slide of the mid row along the face */
+        sl: number;
       }
       const vs: V[] = [];
       for (let i = i0; i <= i1; i++) {
         const c = cols[i];
-        const yb = Math.max(layerY(k, c.u), c.yBot - 0.45);
-        let yt = Math.min(layerY(k + 1, c.u), c.yTop);
+        const yb = Math.max(layerYc(k, i), c.yBot - 0.45);
+        let yt = Math.min(layerYc(k + 1, i), c.yTop);
         // the very top of a face: a little lower at random so the rim is not a ruler line
         if (yt >= c.yTop - 1e-3) yt -= 0.05 + 0.25 * vnoise(c.u * 0.45, k, f.seed);
         else yt -= dropTop;
         yt = Math.max(yt, yb + 0.25);
         const ym = yb + (yt - yb) * (0.38 + rng.next() * 0.22);
-        const jit = () => (rng.next() - 0.5) * 0.2;
-        let db = P * 0.35 + jit() * 0.6;
+        const jit = () => (rng.next() - 0.5) * 0.22;
+        // block ends round back into the joint (V-shaped crevices instead of brick ends)
+        const end = i === i0 || i === i1 ? 0.5 : 1;
+        let db = P * 0.35 * end + jit() * 0.6;
         if (k > 0 && lip[i][k - 1] < 9) db = Math.min(db, lip[i][k - 1] - 0.07);
         db = Math.max(db, -0.05);
-        const dm = Math.max(db + 0.04, P + jit());
-        const dt = Math.max(0.0, Math.min(dm, P * 0.78 + jit()));
+        const dm = Math.max(db + 0.04, P * end + jit());
+        const dt = Math.max(0.0, Math.min(dm, P * 0.78 * end + jit()));
         lip[i][k] = Math.min(lip[i][k], dt);
-        vs.push({ x: c.qx, z: c.qz, tb: tAt(c, yb), tm: tAt(c, ym), tt: tAt(c, yt), yb, ym, yt, db, dm, dt });
+        vs.push({ x: c.qx, z: c.qz, tb: tAt(c, yb), tm: tAt(c, ym), tt: tAt(c, yt), yb, ym, yt, db, dm, dt, sl: i === i0 || i === i1 ? 0 : (rng.next() - 0.5) * 0.5 });
       }
       const P3 = (v: V, which: 0 | 1 | 2 | 3 | 4): V3 => {
         // 0 bottom front, 1 mid front, 2 top lip, 3 top inner, 4 bottom inner
@@ -348,7 +361,8 @@ export function buildCliffs(
         else if (which === 3) [t, y, d] = [v.tt, v.yt + 0.03, IN];
         else [t, y, d] = [v.tb, v.yb, IN];
         const o = d - t;
-        return [v.x + f.nx * o, y, v.z + f.nz * o];
+        const sl = which === 1 ? v.sl : 0;
+        return [v.x + f.nx * o + tx * sl, y, v.z + f.nz * o + tz * sl];
       };
       col.copy(tone).multiplyScalar(tint);
       b.set('aMas', KIND.cliff, (k % 8) / 8 + 0.01, tx, tz);

@@ -6,6 +6,8 @@
 import * as THREE from 'three';
 import type { CityContext } from '../../core/context';
 import { composeMatrix } from '../rail/geo';
+import { WATER_LEVEL } from '../../core/constants';
+import { LAYERS } from '../../core/layers';
 import type { Glows } from '../rail/glows';
 import { createBoatMaterials } from './material';
 import { buildBigBoats, buildSmallBoats, DIMS } from './models';
@@ -67,6 +69,7 @@ export class BoatRenderer {
       mesh.receiveShadow = true;
       mesh.count = 0;
       mesh.visible = false;
+      mesh.layers.enable(LAYERS.REFLECT);
       this.group.add(mesh);
       return { mesh, a1, a2, c2, n: 0 };
     };
@@ -102,7 +105,11 @@ export class BoatRenderer {
       if (this.frustum.intersectsSphere(this.sphere)) this.nearView++;
       else continue;
       this.sphere.radius = b.dims.L * 0.5 + (b.type === 'sail' ? 9 : 6);
-      if (!this.frustum.intersectsSphere(this.sphere)) continue;
+      if (!this.frustum.intersectsSphere(this.sphere)) {
+        // keep boats whose mirror image is in view: their water reflection is visible
+        this.sphere.center.y = 2 * WATER_LEVEL - this.sphere.center.y - (b.type === 'sail' ? 6 : 2);
+        if (!this.frustum.intersectsSphere(this.sphere)) continue;
+      }
       const p = this.pools[b.dims.mesh];
       if (p.n >= p.mesh.instanceMatrix.count) continue;
       const i = p.n++;

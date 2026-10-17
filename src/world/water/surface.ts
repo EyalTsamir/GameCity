@@ -153,8 +153,8 @@ export function createSurface(
     ...hulls.uniforms,
     ...lampUniforms(),
     wShallow: C('#71d3c3'),
-    wMid: C('#2a9bbb'),
-    wDeep: C('#17527d'),
+    wMid: C('#2489a8'),
+    wDeep: C('#134a73'),
     wRivS: C('#62ad97'),
     wRivD: C('#215b5c'),
     wPondS: C('#6d9a72'),
@@ -341,7 +341,7 @@ vec4 waterBase() {
 
   // ── Fresnel
   float ndv = clamp(dot(wN, V), 0.0, 1.0);
-  float F0 = mix(mix(0.2, 0.26, mRiv), 0.3, mPond);
+  float F0 = mix(mix(0.3, 0.34, mRiv), 0.32, mPond);
   float F = mix(F0, 0.92, pow(1.0 - ndv, 4.0));
 
   // ── reflection: analytic sky under the planar reflection
@@ -511,11 +511,15 @@ reflectedLight.indirectDiffuse += diffuseColor.rgb * thLampLight(vWW, vec3(0.0, 
   // sun glitter: GGX lobe (roughness from ripples, variance, wind) + crest sparkles, shadowed
   vec3 th_V = normalize(cameraPosition - vWW);
   vec3 th_H = normalize(wSunL + th_V);
-  float th_nh = max(dot(wN, th_H), 0.0);
-  float th_dd = th_nh * th_nh * (wGlintA2 - 1.0) + 1.0;
-  float th_D = wGlintA2 / (PI * th_dd * th_dd);
+  float th_nh = max(dot(wN, th_H), 1e-3);
+  float th_c2 = th_nh * th_nh;
+  float th_t2 = (1.0 - th_c2) / th_c2;
+  // Beckmann lobe (short tails: a path, not a sheen over the whole sea)
+  float th_lobe = exp(-th_t2 / wGlintA2);
+  float th_D = th_lobe / (PI * wGlintA2 * th_c2 * th_c2);
   float th_nl = max(dot(wN, wSunL), 0.0);
-  float th_sp = th_D * th_nl * 0.06 + wSparkle * pow(th_nh, 900.0) * 6.0;
+  float th_wide = exp(-th_t2 / (wGlintA2 * 5.0 + 0.004));
+  float th_sp = th_D * th_nl * 0.05 + wSparkle * pow(th_nh, 1400.0) * 5.0 * th_wide;
   wGlint = uSkySunCol * th_sp * wGlintK * wShadow * (1.0 - wFoamA) * wDebug.z;
 }`,
       )

@@ -103,10 +103,16 @@ vec3 th_ashlar(vec2 uv, float ch, vec3 base) {
   return mix(c, mMortar * (0.9 + 0.2 * bh), joint);
 }
 
+vec3 mN = vec3(0.0, 1.0, 0.0);
 vec3 masonryColor(vec3 base) {
   float kind = vMas.x;
   vec3 p = vMW;
+#ifdef TH_FLATN
+  vec3 n = normalize(cross(dFdx(vMW), dFdy(vMW)));
+#else
   vec3 n = normalize(vMN);
+#endif
+  mN = n;
   // cliff face coordinates (u along the face, y up) + derivatives taken outside the kind branches
   vec2 cuv = vec2(dot(p.xz, vMas.zw), p.y);
   vec2 cdx = dFdx(cuv), cdy = dFdy(cuv);
@@ -172,11 +178,11 @@ vec3 masonryColor(vec3 base) {
     float up = smoothstep(0.45, 0.85, n.y);
     vec2 mp = p.xz * 0.55;
     float mossN = textureGrad(tNoise, mp, pdx * 0.55, pdy * 0.55).g * 0.6 + nv.b * 0.4;
-    float moss = up * smoothstep(0.3, 0.52, mossN);
+    float moss = up * smoothstep(0.2, 0.42, mossN);
     vec3 mossC = mix(mMoss, mGrass, smoothstep(0.35, 0.7, nu.g)) * (0.85 + 0.3 * nv.r);
     col = mix(col, mossC, moss * 0.94);
     // a little green creeping over the lip of each ledge
-    col = mix(col, mMoss * 0.8, smoothstep(0.15, 0.45, n.y) * (1.0 - up) * 0.35 * smoothstep(0.4, 0.6, mossN));
+    col = mix(col, mMoss * 0.8, smoothstep(0.12, 0.45, n.y) * (1.0 - up) * 0.5 * smoothstep(0.35, 0.6, mossN));
     // undersides / creases in shade
     col *= 0.68 + 0.32 * smoothstep(-0.7, 0.1, n.y);
     mRough = 0.94;
@@ -193,7 +199,7 @@ vec3 masonryColor(vec3 base) {
 }
 `;
 
-function masonryMaterial(ctx: CityContext): THREE.MeshStandardMaterial {
+function masonryMaterial(ctx: CityContext, flat: boolean): THREE.MeshStandardMaterial {
   const uniforms = {
     tNoise: { value: noiseTexture() },
     uLights: ctx.uniforms.uLights,
@@ -203,7 +209,10 @@ function masonryMaterial(ctx: CityContext): THREE.MeshStandardMaterial {
     mGrass: { value: C('#86a54e') },
     ...lampUniforms(),
   };
-  const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9, metalness: 0 });
+  // flat: faceted shading from screen-space derivatives, so the rock skin and boulders can share
+  // vertices (indexed) — ~3–5x fewer vertices than per-triangle normals on a vertex-bound GPU
+  const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9, metalness: 0, flatShading: flat });
+  if (flat) mat.defines = { TH_FLATN: '' };
   mat.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, uniforms);
     shader.vertexShader = shader.vertexShader
@@ -211,7 +220,7 @@ function masonryMaterial(ctx: CityContext): THREE.MeshStandardMaterial {
       .replace('#include <begin_vertex>', '#include <begin_vertex>\nvMas = aMas;\nvMW = (modelMatrix * vec4(transformed, 1.0)).xyz;\nvMN = normalize(mat3(modelMatrix) * objectNormal);');
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', '#include <common>\n' + LAMP_GLSL + MASONRY_PARS)
-      .replace('#include <lights_fragment_end>', '#include <lights_fragment_end>\nreflectedLight.indirectDiffuse += diffuseColor.rgb * thLampLight(vMW, normalize(vMN));')
+      .replace('#include <lights_fragment_end>', '#include <lights_fragment_end>\nreflectedLight.indirectDiffuse += diffuseColor.rgb * thLampLight(vMW, mN);')
       .replace('#include <color_fragment>', '#include <color_fragment>\ndiffuseColor.rgb = masonryColor(diffuseColor.rgb);')
       .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = mRough;')
       .replace(
@@ -219,7 +228,7 @@ function masonryMaterial(ctx: CityContext): THREE.MeshStandardMaterial {
         '#include <emissivemap_fragment>\nif (vMas.x > 4.5 && vMas.x < 5.5) totalEmissiveRadiance += diffuseColor.rgb * (1.1 + 2.6 * uLights);',
       );
   };
-  mat.customProgramCacheKey = () => 'th-masonry-v2';
+  mat.customProgramCacheKey = () => (flat ? 'th-masonry-v3f' : 'th-masonry-v2');
   return mat;
 }
 
@@ -648,6 +657,9 @@ const _e = new THREE.Euler();
 const _s = new THREE.Vector3();
 const _p = new THREE.Vector3();
 
+/** set by createMasonry: masonry material is flat-shaded (new look) */
+let flatMasonry = false;
+
 function rockGeometry(rng: Rng, detail: number): THREE.BufferGeometry {
   let g: THREE.BufferGeometry = new THREE.IcosahedronGeometry(1, detail);
   g.deleteAttribute('uv');
@@ -666,24 +678,34 @@ function rockGeometry(rng: Rng, detail: number): THREE.BufferGeometry {
     _p.multiplyScalar(r);
     pos.setXYZ(i, _p.x, _p.y, _p.z);
   }
-  if (facet) {
+  if (facet && !flatMasonry) {
     // chiselled facets on the smaller stones
     const ng = g.toNonIndexed();
     g.dispose();
     ng.computeVertexNormals();
     return ng;
   }
+  // (flat-shaded masonry: the facets come from the fragment derivatives, vertices stay shared)
   g.computeVertexNormals();
   return g;
 }
 
-function addRock(b: GeoBuilder, rng: Rng, model: TerrainModel, x: number, z: number, size: number, embed: number, out: { x: number; z: number; r: number }[], yOverride?: number, tint = 1): void {
+interface RockStyle {
+  /** masonry kind for the shader (KIND.cliff: strata lines + mossy tops like the cliffs) */
+  kind?: number;
+  /** always chiselled facets (no smooth detail-2 blobs) */
+  facet?: boolean;
+  /** vertical squash (slabby stones) */
+  squash?: number;
+}
+
+function addRock(b: GeoBuilder, rng: Rng, model: TerrainModel, x: number, z: number, size: number, embed: number, out: { x: number; z: number; r: number }[], yOverride?: number, tint = 1, style: RockStyle = {}): void {
   // never poke out through the cut faces of the slab
   const m = size * 1.25 + 0.3;
   x = Math.min(SLAB.x1 - m, Math.max(SLAB.x0 + m, x));
   z = Math.min(SLAB.z1 - m, Math.max(SLAB.z0 + m, z));
-  const g = rockGeometry(rng, size > 1.6 ? 2 : 1);
-  const sy = size * (0.55 + rng.next() * 0.3);
+  const g = rockGeometry(rng, size > 1.6 && !style.facet ? 2 : 1);
+  const sy = size * (0.55 + rng.next() * 0.3) * (style.squash ?? 1);
   _s.set(size * (0.85 + rng.next() * 0.35), sy, size * (0.85 + rng.next() * 0.35));
   _e.set((rng.next() - 0.5) * 0.35, rng.next() * Math.PI * 2, (rng.next() - 0.5) * 0.35);
   _q.setFromEuler(_e);
@@ -691,7 +713,7 @@ function addRock(b: GeoBuilder, rng: Rng, model: TerrainModel, x: number, z: num
   _p.set(x, y + sy * (1 - 2 * embed) * 0.9, z);
   _m.compose(_p, _q, _s);
   const c = ROCK_COLS[Math.floor(rng.next() * ROCK_COLS.length)].clone().multiplyScalar((0.9 + rng.next() * 0.18) * tint);
-  b.color(c).set('aMas', KIND.rock, 0, 1, 0);
+  b.color(c).set('aMas', style.kind ?? KIND.rock, style.kind === KIND.cliff ? 0.31 : 0, 1, 0);
   b.geometry(g, _m);
   g.dispose();
   out.push({ x, z, r: size * 1.05 });
@@ -699,6 +721,9 @@ function addRock(b: GeoBuilder, rng: Rng, model: TerrainModel, x: number, z: num
 
 function placeRocks(b: GeoBuilder, ctx: CityContext, model: TerrainModel, rng: Rng): { x: number; z: number; r: number }[] {
   const out: { x: number; z: number; r: number }[] = [];
+  const prm = ctx.debug.params;
+  const tors = !prm.has('legacyterrain') && !prm.has('nocliffs');
+  const torRng = ctx.rng('terrain-tors');
   const turbines = ctx.plan.features.filter((f) => f.kind === 'windturbine');
   const nearPortal = (x: number, z: number, m: number) =>
     model.portals.some((p) => {
@@ -738,7 +763,26 @@ function placeRocks(b: GeoBuilder, ctx: CityContext, model: TerrainModel, rng: R
         d = k === 0 ? 0 : base * (0.9 + rng.next() * 1.2);
       const rx = x + Math.cos(a) * d,
         rz = z + Math.sin(a) * d;
-      addRock(b, rng, model, rx, rz, base * (k === 0 ? 1 : 0.45 + rng.next() * 0.5), 0.52, out);
+      const sz = base * (k === 0 ? 1 : 0.45 + rng.next() * 0.5);
+      if (!tors) {
+        addRock(b, rng, model, rx, rz, sz, 0.52, out);
+        continue;
+      }
+      // the same stones as chiselled, slabby tors in the cliff rock's language, the big one stacked
+      addRock(b, rng, model, rx, rz, sz, 0.5, out, undefined, 1, { kind: KIND.cliff, facet: true, squash: 0.78 });
+      if (k === 0) {
+        const ground = model.height(rx, rz);
+        let y = ground + sz * 0.42;
+        let s2 = sz * 0.72;
+        const nStack = 1 + Math.floor(torRng.next() * 2);
+        for (let j = 0; j < nStack; j++) {
+          const ox = (torRng.next() - 0.5) * s2 * 0.5,
+            oz = (torRng.next() - 0.5) * s2 * 0.5;
+          addRock(b, torRng, model, rx + ox, rz + oz, s2, 0.5, [], y + s2 * 0.25, 1.02, { kind: KIND.cliff, facet: true, squash: 0.62 });
+          y += s2 * 0.42;
+          s2 *= 0.7;
+        }
+      }
     }
   }
   // spurs
@@ -806,6 +850,7 @@ function placeRocks(b: GeoBuilder, ctx: CityContext, model: TerrainModel, rng: R
 export function createMasonry(ctx: CityContext, model: TerrainModel): MasonryResult {
   const b = new GeoBuilder({ aMas: 4 });
   const veils = new GeoBuilder({ aAlpha: 1 });
+  flatMasonry = !ctx.debug.params.has('legacyterrain');
   const rng = ctx.rng('terrain-masonry');
   const plan = ctx.plan;
   const bed = (x: number, z: number) => model.height(x, z) - 0.35;
@@ -890,7 +935,7 @@ export function createMasonry(ctx: CityContext, model: TerrainModel): MasonryRes
   const railings = createRailings(ladders, gaps, b);
 
   const geo = b.build(true);
-  const mesh = new THREE.Mesh(geo, masonryMaterial(ctx));
+  const mesh = new THREE.Mesh(geo, masonryMaterial(ctx, flatMasonry));
   mesh.name = 'terrain-masonry';
   mesh.castShadow = true;
   mesh.receiveShadow = true;

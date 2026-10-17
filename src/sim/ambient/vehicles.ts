@@ -380,7 +380,8 @@ export function createVehicles(ctx: CityContext, sparks: SparkSystem, skyline: S
       dx = P.dx,
       dz = P.dz;
     const alt = Math.max(140 + 6 * Math.sin(s * 0.004), lookupFloor(mFloor, mLoop, s));
-    // arrive from / leave to the west, far beyond the table edge
+    // arrive from the west and leave to the north, far beyond the table edge (both away from
+    // the hero camera, so it recedes into the backdrop instead of crossing in front of the town)
     const inK = 1 - smooth(9.5, 10.6, h);
     const outK = smooth(22.4, 23.5, h);
     if (inK > 0) {
@@ -392,10 +393,10 @@ export function createVehicles(ctx: CityContext, sparks: SparkSystem, skyline: S
       dz = dz * (1 - inK);
     }
     if (outK > 0) {
-      const far = 950;
-      x = x + (far - x) * outK * outK;
-      dx = dx * (1 - outK) + outK;
-      dz = dz * (1 - outK);
+      const far = -950;
+      z = z + (far - z) * outK * outK;
+      dx = dx * (1 - outK);
+      dz = dz * (1 - outK) - outK;
     }
     m.on = true;
     m.x = x;

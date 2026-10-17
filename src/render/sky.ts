@@ -272,7 +272,7 @@ export default async function create(ctx: CityContext): Promise<CityModule> {
     if (sun.castShadow) {
       const maxR = legacy ? THREE.MathUtils.clamp(dist * 1.55 + 30, 70, 420) : THREE.MathUtils.clamp(dist * 1.2 + 24, 60, 420);
       const minR = legacy ? THREE.MathUtils.clamp(dist * 0.55, 28, 200) : THREE.MathUtils.clamp(dist * 0.45, 22, 200);
-      fitter.fit(ctx.camera, sun, _L, _focus, maxR, minR);
+      fitter.fit(ctx.camera, sun, _L, _focus, maxR, minR, legacy ? 1 : 0.62);
       const cam = sun.shadow.camera;
       const range = Math.max(10, cam.far - cam.near);
       const texel = fitter.texel;

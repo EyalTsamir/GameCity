@@ -19,7 +19,7 @@ import type { Feature } from '../core/plan';
 import { rect, type P2, type Rect } from '../core/geom';
 import { QUAY_X, RIVER, WATER_LEVEL } from '../core/constants';
 import { HB, RIG } from './harbor/geo';
-import { createBeamMesh, createHarborMaterials, createGlowMesh, NMOB, type GlowPoint } from './harbor/material';
+import { createBeamMesh, createHarborMaterials, createGlowMesh, followCraneLamps, NMOB, type GlowPoint } from './harbor/material';
 import { buildBreakwater } from './harbor/breakwater';
 import { buildCarouselRotating, buildCarouselStatic, buildPier, buildWheelRotating, buildWheelStatic, type WheelSpec } from './harbor/pier';
 import { buildFerryDock, lifeguardTower, scatterBeach } from './harbor/beach';
@@ -27,6 +27,7 @@ import { bridgeProfile, buildFootbridge, buildJetty, type BridgeInfo } from './h
 import { buildCrane, buildCraneRails, CraneSim, type MobileBox } from './harbor/cranes';
 import { buildMooring, buildQuayEdge, buildShip, mobileShipPos, SHIP, type MobileSlot } from './harbor/ship';
 import { addContainer, CH, CW, fillYard, L20, pickLook, yardRows } from './harbor/containers';
+import { buildHarborFloodlights } from './lamps/harborLights';
 
 export interface HarborService {
   /** current crane states (world): gantry z, trolley x, spreader bottom y, busy phase */
@@ -140,6 +141,10 @@ export default function create(ctx: CityContext): CityModule {
     buildMooring(anim, ship, QX - 0.2, bol, fair);
     obstacles.push(rect(QX, shipF.z - SHIP.half - 1, QX + 16, shipF.z + SHIP.half + 1));
   }
+
+  // night work lighting (night agent): floodlight masts on the quay apron + in the container yard
+  const flood = buildHarborFloodlights(north, ground, ctx.occupancy, glows);
+  problems.push(...flood.skipped);
 
   // ───────────────────────────────────────────── breakwater + lighthouse
   const bwF = feats('breakwater')[0];
@@ -457,6 +462,8 @@ export default function create(ctx: CityContext): CityModule {
       const u = ctx.uniforms;
       // the glows are night lights (blinking aviation bulbs stay emissive by day)
       glowMesh.visible = u.uLights.value > 0.01 || u.uNight.value > 0.05;
+      // crane work lights (lamp light map spots) travel with their gantries
+      followCraneLamps(glowMesh, rig);
       if (!beam || !lantern) return;
       const lightsF = Math.min(1, Math.max(0, u.uLights.value * (0.45 + 0.55 * u.uNight.value)));
       beam.uniforms.uBeam.value = lightsF * 0.32;
@@ -476,6 +483,7 @@ export default function create(ctx: CityContext): CityModule {
         triangles: tris,
         meshes: meshes.length + animMeshes.length + 2,
         glows: glows.length,
+        floodMasts: flood.masts,
         containers: containerCount + (ship?.containers ?? 0) + mobs.length,
         craneJobs: sims.reduce((a, s) => a + s.jobs, 0),
         cranePhases: sims.map((s) => s.phase).join(','),

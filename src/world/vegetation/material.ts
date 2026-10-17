@@ -113,6 +113,27 @@ vec4 thNoised( vec3 x ) {
     ga + u.x * ( gb - ga ) + u.y * ( gc - ga ) + u.z * ( ge - ga ) + u.x * u.y * ( ga - gb - gc + gd ) + u.y * u.z * ( ga - gc - ge + gg ) + u.z * u.x * ( ga - gb - ge + gf ) + ( -ga + gb + gc - gd + ge - gf - gg + gh ) * u.x * u.y * u.z
       + du * ( vec3( vb, vc, ve ) - va + u.yzx * vec3( k1, k2, k3 ) + u.zxy * vec3( k3, k1, k2 ) + u.yzx * u.zxy * k4 ) );
 }
+// 3D cellular clumps (2x2x2 search; feature jitter kept small so the short search stays exact enough):
+// d = p - nearest feature point, edge = F2 - F1, id = per-clump random (-1..1)
+void thCell( vec3 p, out vec3 d, out float edge, out float id ) {
+  vec3 b = floor( p - 0.5 );
+  float f1 = 1e9, f2 = 1e9;
+  d = vec3( 0.0 );
+  id = 0.0;
+  for ( int k = 0; k < 8; k++ ) {
+    vec3 c = b + vec3( float( k & 1 ), float( ( k >> 1 ) & 1 ), float( ( k >> 2 ) & 1 ) );
+    vec3 h = thHash( c );
+    vec3 v = p - ( c + 0.5 + h * 0.3 );
+    float dd = dot( v, v );
+    if ( dd < f1 ) {
+      f2 = f1;
+      f1 = dd;
+      d = v;
+      id = h.y;
+    } else if ( dd < f2 ) f2 = dd;
+  }
+  edge = sqrt( f2 ) - sqrt( f1 );
+}
 `;
 
 // after normal_fragment_maps: clump relief, crease occlusion, tone drift
@@ -129,6 +150,7 @@ if ( thAmt > 0.02 ) {
   vec3 g = vec3( 0.0 );
   float n1v = 0.0;
   if ( f1 > 0.001 ) {
+#ifdef TH_BILLOW
     vec4 n1 = thNoised( p );
     // soft sign: crease width follows the pixel footprint (no stair-stepping)
     float e1 = max( 0.02, foot * 0.9 );
@@ -137,8 +159,18 @@ if ( thAmt > 0.02 ) {
     n1v = n1.x;
     float crease = smoothstep( 0.0, 0.2, abs( n1.x ) );
     thAO *= mix( 1.0, 0.6 + 0.4 * crease, f1 );
-    // clump tone families: warm/light vs cool/dark (blend toward the per-mass tone seed)
     float t = s1 * smoothstep( 0.02, 0.22, abs( n1.x ) ) * f1 * uThTone;
+#else
+    // leaf clumps: every cell is a little dome (normal tilts away from its centre), creases between
+    vec3 cd;
+    float edge, cid;
+    thCell( p, cd, edge, cid );
+    g -= cd * ( 1.6 * f1 );  // height = -|d|² → normal tilts outward from the clump centre
+    float crease = smoothstep( 0.0, 0.12 + foot * 0.6, edge );
+    thAO *= mix( 1.0, 0.58 + 0.42 * crease, f1 );
+    float t = cid * f1 * uThTone;
+#endif
+    // clump tone families: warm/light vs cool/dark
     diffuseColor.rgb *= vec3( 1.0 ) + vec3( 0.11, 0.07, -0.05 ) * t;
     if ( f2 > 0.001 ) {
       vec4 n2 = thNoised( p * 2.37 + vec3( 17.3, 5.1, 9.7 ) );
@@ -214,13 +246,26 @@ export const foliageKnobs: FoliageKnobs = {
 };
 
 let physPars: string | null = null;
-/** three's physical lighting functions with wrapped N·L for direct light (thWrap = 0 → unchanged) */
+/**
+ * three's physical lighting functions with a wrapped N·L for the DIFFUSE part of direct light only
+ * (thWrap = 0 → unchanged). The specular keeps the true N·L: GGX visibility explodes for back-lit grazing
+ * normals, so wrapped irradiance there turns into fireflies.
+ */
 function wrappedPhysicalPars(): string {
   if (physPars) return physPars;
   const src = THREE.ShaderChunk.lights_physical_pars_fragment;
-  const line = 'float dotNL = saturate( dot( geometryNormal, directLight.direction ) );';
-  const at = src.indexOf(line);
-  physPars = at < 0 ? src : src.slice(0, at) + 'float dotNL = saturate( ( dot( geometryNormal, directLight.direction ) + thWrap ) / ( 1.0 + thWrap ) );' + src.slice(at + line.length);
+  const irr = 'vec3 irradiance = dotNL * directLight.color;';
+  const dif = 'reflectedLight.directDiffuse += irradiance * BRDF_Lambert( material.diffuseContribution ) * ( 1.0 - F );';
+  const a = src.indexOf(irr),
+    b = src.indexOf(dif);
+  if (a < 0 || b < a) physPars = src;
+  else
+    physPars =
+      src.slice(0, a + irr.length) +
+      '\n\tvec3 thIrrW = saturate( ( dot( geometryNormal, directLight.direction ) + thWrap ) / ( 1.0 + thWrap ) ) * directLight.color;' +
+      src.slice(a + irr.length, b) +
+      'reflectedLight.directDiffuse += thIrrW * BRDF_Lambert( material.diffuseContribution ) * ( 1.0 - F );' +
+      src.slice(b + dif.length);
   return physPars;
 }
 
@@ -251,7 +296,7 @@ export interface WindMaterials {
  * kind 'standard' gets the foliage shading (needs the aLeaf attribute) unless `fx` is false;
  * 'lambert' / 'basic' are cost-measurement variants (wind only).
  */
-export function windMaterials(u: GlobalUniforms, name: string, roughness = 0.9, kind = 'standard', fx = true): WindMaterials {
+export function windMaterials(u: GlobalUniforms, name: string, roughness = 0.9, kind = 'standard', fx = true, billow = false): WindMaterials {
   const foliage = kind === 'standard' && fx;
   const mat =
     kind === 'basic'
@@ -260,8 +305,9 @@ export function windMaterials(u: GlobalUniforms, name: string, roughness = 0.9, 
         ? (new THREE.MeshLambertMaterial({ vertexColors: true }) as unknown as THREE.MeshStandardMaterial)
         : new THREE.MeshStandardMaterial({ vertexColors: true, roughness, metalness: 0 });
   mat.name = name;
+  if (foliage && billow) mat.defines = { TH_BILLOW: '' };
   mat.onBeforeCompile = (shader) => (foliage ? injectFoliage(shader, u) : injectWind(shader, u));
-  mat.customProgramCacheKey = () => `veg-wind-2-${kind}-${foliage ? 'leaf' : 'plain'}`;
+  mat.customProgramCacheKey = () => `veg-wind-2-${kind}-${foliage ? 'leaf' : 'plain'}${billow ? '-billow' : ''}`;
   const depth = new THREE.MeshDepthMaterial();
   depth.name = `${name}-depth`;
   depth.onBeforeCompile = (shader) => injectWind(shader, u);

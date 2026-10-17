@@ -12,6 +12,13 @@ import { wall, Opening } from './facade';
 import { C, flagpole } from './parts';
 import type { Env } from './env';
 import { drawText, signQuad } from './signs';
+import { stadiumShell, roofTruss, genFloodlightMast } from './stadiumShell';
+
+/** ?legacystadium / ?legacyterrain: the original plain shell + cylinder masts (A/B) */
+function legacyShell(env: Env): boolean {
+  const p = env.ctx.debug.params;
+  return p.has('legacystadium') || p.has('legacyterrain');
+}
 
 export interface StandSeat {
   /** world position of the seat surface centre */
@@ -78,6 +85,7 @@ export function genStadium(env: Env, lot: Lot): StadiumInfo {
   const white = '#f1efe9';
   const navy = '#203a6b';
 
+  const legacy = legacyShell(env);
   const seats: StandSeat[] = [];
   // stands: k = 0 N (outward -z), 1 E (+x), 2 S (+z), 3 W (-x)
   const standYaw = [Math.PI, Math.PI / 2, 0, -Math.PI / 2];
@@ -102,7 +110,7 @@ export function genStadium(env: Env, lot: Lot): StadiumInfo {
       const top = 0.7 + i * rise;
       const d0 = S0 + i * rowD;
       // tread-only box (the next row starts where this one ends → no hidden, overdrawn tops)
-      const depth = i === nRows - 1 ? W - d0 : rowD + 0.02;
+      const depth = i === nRows - 1 ? (legacy ? W : W - 0.5) - d0 : rowD + 0.02;
       // tread + mass below it (seats pattern on the top)
       const segs = 3;
       for (let sg = 0; sg < segs; sg++) {
@@ -138,7 +146,8 @@ export function genStadium(env: Env, lot: Lot): StadiumInfo {
     K.b.forceDetail = false;
     // back parapet
     const backTop = 0.7 + nRows * rise + 0.6;
-    sbox(k, concreteD, 2 * L + 0.4, backTop, W - (S0 + nRows * rowD) + 0.02, 0, 0, (S0 + nRows * rowD + W) / 2);
+    const backW = legacy ? W + 0.02 : W - 0.5;
+    sbox(k, concreteD, 2 * L + 0.4, backTop, backW - (S0 + nRows * rowD), 0, 0, (S0 + nRows * rowD + backW) / 2);
     // front wall (perimeter) and advertising boards facing the pitch
     sbox(k, concrete, 2 * L, 0.9, 0.25, 0, 0, S0 - 0.12);
     for (let a = 0; a < 4; a++) {
@@ -151,65 +160,69 @@ export function genStadium(env: Env, lot: Lot): StadiumInfo {
       sbox(k, M('#2b2f33', PAT.PLAIN, 0.6), (2 * L) / 4 - 0.25, 0.8, 0.14, u, 0, dep + 0.08);
     }
   }
-  // corner blocks (concourses) leaving room for the floodlight masts
-  for (const [sx, sz] of [
-    [-1, -1],
-    [1, -1],
-    [-1, 1],
-    [1, 1],
-  ]) {
-    const x0 = LEN,
-      x1 = W;
-    K.box(concreteD, x1 - x0 + 0.2, 3.2, x1 - x0 + 0.2, sx * (x0 + x1) / 2, 0, sz * (x0 + x1) / 2);
-  }
-
-  // ── outer facades with gates
-  const doorsLocal = lot.doors.map((d) => ({ x: d.x - cx, z: d.z - cz, dir: d.dir }));
   const facadeH = [9.4, 6.4, 6.4, 6.4];
-  for (let k = 0; k < 4; k++) {
-    const ry = standYaw[k];
-    const s = Math.sin(ry),
-      c = Math.cos(ry);
-    const len = 2 * W;
-    const ops: Opening[] = [];
-    // gates where the plan has doors on this side
-    for (const d of doorsLocal) {
-      const onSide = (k === 0 && d.dir === 'N') || (k === 1 && d.dir === 'E') || (k === 2 && d.dir === 'S') || (k === 3 && d.dir === 'W');
-      if (!onSide) continue;
-      // wall-local x: distance from the wall's left end (seen from outside)
-      const along = d.x * c - d.z * s; // projection on the wall's +X axis
-      ops.push({ x: W + along, y: 0, w: 3.0, h: 3.2, arch: 0.5, fill: 'dark', inset: 0.5, surround: M(C.stoneLight, PAT.PLAIN, 0.8), surroundW: 0.25 });
+  const doorsLocal = lot.doors.map((d) => ({ x: d.x - cx, z: d.z - cz, dir: d.dir }));
+  if (legacy) {
+    // corner blocks (concourses) leaving room for the floodlight masts
+    for (const [sx, sz] of [
+      [-1, -1],
+      [1, -1],
+      [-1, 1],
+      [1, 1],
+    ]) {
+      const x0 = LEN,
+        x1 = W;
+      K.box(concreteD, x1 - x0 + 0.2, 3.2, x1 - x0 + 0.2, sx * (x0 + x1) / 2, 0, sz * (x0 + x1) / 2);
     }
-    // high windows (ribbon) on the main stand facade, small vents elsewhere
-    const nWin = 9;
-    for (let i = 0; i < nWin; i++) {
-      const x = (len * (i + 0.5)) / nWin;
-      if (ops.some((o) => Math.abs(o.x - x) < 2.6)) continue;
-      if (k === 0) ops.push({ x, y: 5.6, w: 2.6, h: 2.2, fill: 'window', glow: 0.7, seed: 0.2 + (i % 4) * 0.2, surround: M(C.stoneLight, PAT.PLAIN, 0.8), surroundW: 0.12 });
-      else ops.push({ x, y: 4.0, w: 1.6, h: 0.9, fill: 'louvre', inset: 0.2 });
+
+    // ── outer facades with gates
+    for (let k = 0; k < 4; k++) {
+      const ry = standYaw[k];
+      const s = Math.sin(ry),
+        c = Math.cos(ry);
+      const len = 2 * W;
+      const ops: Opening[] = [];
+      // gates where the plan has doors on this side
+      for (const d of doorsLocal) {
+        const onSide = (k === 0 && d.dir === 'N') || (k === 1 && d.dir === 'E') || (k === 2 && d.dir === 'S') || (k === 3 && d.dir === 'W');
+        if (!onSide) continue;
+        // wall-local x: distance from the wall's left end (seen from outside)
+        const along = d.x * c - d.z * s; // projection on the wall's +X axis
+        ops.push({ x: W + along, y: 0, w: 3.0, h: 3.2, arch: 0.5, fill: 'dark', inset: 0.5, surround: M(C.stoneLight, PAT.PLAIN, 0.8), surroundW: 0.25 });
+      }
+      // high windows (ribbon) on the main stand facade, small vents elsewhere
+      const nWin = 9;
+      for (let i = 0; i < nWin; i++) {
+        const x = (len * (i + 0.5)) / nWin;
+        if (ops.some((o) => Math.abs(o.x - x) < 2.6)) continue;
+        if (k === 0) ops.push({ x, y: 5.6, w: 2.6, h: 2.2, fill: 'window', glow: 0.7, seed: 0.2 + (i % 4) * 0.2, surround: M(C.stoneLight, PAT.PLAIN, 0.8), surroundW: 0.12 });
+        else ops.push({ x, y: 4.0, w: 1.6, h: 0.9, fill: 'louvre', inset: 0.2 });
+      }
+      wall(K, { w: len, h: facadeH[k], depth: 0.5, x: s * W, y: 0, z: c * W, ry, mat: brick, openings: ops });
+      // concrete band on top + fins
+      K.box(concrete, len + 0.3, 0.5, 0.7, s * (W - 0.2), facadeH[k], c * (W - 0.2), ry);
+      for (let i = 0; i <= 10; i++) {
+        const u = -W + (2 * W * i) / 10;
+        const fx = u * c + (W + 0.06) * s,
+          fz = -u * s + (W + 0.06) * c;
+        if (ops.some((o) => Math.abs(o.x - (u + W)) < 1.9)) continue;
+        K.box(concrete, 0.3, facadeH[k] - 0.6, 0.12, fx, 0.6, fz, ry);
+      }
+      // banners between the fins
+      for (const bu of [-W * 0.62, W * 0.62]) {
+        const bx = bu * c + (W + 0.04) * s,
+          bz = -bu * s + (W + 0.04) * c;
+        const m = M('#ffffff', PAT.FLAG, 0.9, 0, 0, 0, (k % 2 === 0 ? 5.5 : 0.5) / 8);
+        const g = new THREE.PlaneGeometry(1.3, 3.4);
+        // vertical banner: flag uv rotated so stripes hang down
+        const uv = g.getAttribute('uv');
+        for (let i = 0; i < uv.count; i++) uv.setXY(i, 1 - uv.getY(i), uv.getX(i));
+        K.geo(m, g, bx, facadeH[k] - 3.9, bz, ry, 'native');
+        g.dispose();
+      }
     }
-    wall(K, { w: len, h: facadeH[k], depth: 0.5, x: s * W, y: 0, z: c * W, ry, mat: brick, openings: ops });
-    // concrete band on top + fins
-    K.box(concrete, len + 0.3, 0.5, 0.7, s * (W - 0.2), facadeH[k], c * (W - 0.2), ry);
-    for (let i = 0; i <= 10; i++) {
-      const u = -W + (2 * W * i) / 10;
-      const fx = u * c + (W + 0.06) * s,
-        fz = -u * s + (W + 0.06) * c;
-      if (ops.some((o) => Math.abs(o.x - (u + W)) < 1.9)) continue;
-      K.box(concrete, 0.3, facadeH[k] - 0.6, 0.12, fx, 0.6, fz, ry);
-    }
-    // banners between the fins
-    for (const bu of [-W * 0.62, W * 0.62]) {
-      const bx = bu * c + (W + 0.04) * s,
-        bz = -bu * s + (W + 0.04) * c;
-      const m = M('#ffffff', PAT.FLAG, 0.9, 0, 0, 0, (k % 2 === 0 ? 5.5 : 0.5) / 8);
-      const g = new THREE.PlaneGeometry(1.3, 3.4);
-      // vertical banner: flag uv rotated so stripes hang down
-      const uv = g.getAttribute('uv');
-      for (let i = 0; i < uv.count; i++) uv.setXY(i, 1 - uv.getY(i), uv.getX(i));
-      K.geo(m, g, bx, facadeH[k] - 3.9, bz, ry, 'native');
-      g.dispose();
-    }
+  } else {
+    stadiumShell(env, { W, LEN, facadeH, standYaw, doors: doorsLocal });
   }
   // stadium name over the main gates (outside) + on the main stand roof fascia (inside)
   const nameR = env.atlas.add(1024, 96, (g, w, h) => {
@@ -220,7 +233,12 @@ export function genStadium(env: Env, lot: Lot): StadiumInfo {
     g.fillRect(0, 6, w, 4);
     drawText(g, (lot.name ?? 'Haven Stadium').toUpperCase(), w / 2, h / 2 + 3, 'bold 62px "Arial Black", Impact, Arial, sans-serif', '#ffffff', 8);
   });
-  signQuad(env.T, nameR, 16, 1.5, 0, facadeH[0] - 2.4, -W - 0.04, Math.PI, 1);
+  if (legacy) signQuad(env.T, nameR, 16, 1.5, 0, facadeH[0] - 2.4, -W - 0.04, Math.PI, 1);
+  else {
+    // name board mounted proud of the pilasters, under the cornice
+    K.box(M('#7c1b20', PAT.PLAIN, 0.6), 12.2, 1.22, 0.08, 0, facadeH[0] - 1.86, -W - 0.36);
+    signQuad(env.T, nameR, 11.8, 1.06, 0, facadeH[0] - 1.78, -W - 0.41, Math.PI, 1);
+  }
 
   // ── main stand roof (north): cantilever with lattice trusses, fascia lettering, boxes
   {
@@ -254,6 +272,16 @@ export function genStadium(env: Env, lot: Lot): StadiumInfo {
       env.K.geo(M('#e3e6e8', PAT.LATTICE, 0.5, 0.5, 1.0), g, x, (yB + yF) / 2 - 0.55, (zB + zF2) / 2, 0, 'native', len, 1.0, ang);
       g.dispose();
     }
+    // exposed cantilever girders ON the roof (readable from above)
+    if (!legacy)
+      for (let i = 0; i <= 6; i++) {
+        const x = -L + 0.4 + ((2 * L - 0.8) * i) / 6;
+        const t0 = 0.04,
+          t1 = 0.97;
+        const a: [number, number, number] = [x, yB + (yF - yB) * t0 + 0.04, zB + (zF2 - zB) * t0];
+        const b: [number, number, number] = [x, yB + (yF - yB) * t1 + 0.04, zB + (zF2 - zB) * t1];
+        roofTruss(env, a, b, 2.3, 0.3);
+      }
     // hospitality boxes: glazed band at the back of the main stand
     const gy = 0.7 + nRows * rise + 0.6;
     K.box(M('#40505a', PAT.GLAZING, 0.2, 0.3, 0.8, 0, 0.6), 2 * LEN - 2, yB - gy - 0.6, 0.3, 0, gy, zB + 0.75);
@@ -279,6 +307,14 @@ export function genStadium(env: Env, lot: Lot): StadiumInfo {
       const f = P(u, 0, S0 + 1.8);
       env.K.rod(M('#e3e6e8', PAT.PLAIN, 0.5, 0.5), [b[0], yB - 0.2, b[2]], [f[0], yF - 0.1, f[2]], 0.08, 6);
     }
+    if (!legacy)
+      for (const u of [-L + 0.5, -L / 3, L / 3, L - 0.5]) {
+        const b = P(u, 0, W - 0.35);
+        const f = P(u, 0, S0 + 1.75);
+        const tb = (W - 0.35 - (W - 0.2)) / (S0 + 1.6 - (W - 0.2));
+        const tf = (S0 + 1.75 - (W - 0.2)) / (S0 + 1.6 - (W - 0.2));
+        roofTruss(env, [b[0], yB + (yF - yB) * tb + 0.04, b[2]], [f[0], yB + (yF - yB) * tf + 0.04, f[2]], 1.5, 0.22);
+      }
   }
 
   // ── scoreboard behind the south stand (two-sided LED display)
@@ -381,6 +417,10 @@ function adRect(env: Env, text: string, bg: string, fg: string) {
 /** Floodlight mast (plan feature) at a stadium corner: lattice-free tapered mast, a tilted
  *  lamp bank (emissive when uFlood), a light beam towards the pitch and a pool on the grass. */
 export function genFloodlight(env: Env, f: Feature, target: { x: number; z: number } | null): void {
+  if (!legacyShell(env)) {
+    genFloodlightMast(env, f, target);
+    return;
+  }
   const h = Number(f.params?.height ?? 26);
   // aim at the target (stadium centre) when known
   const yaw = target ? Math.atan2(target.x - f.x, target.z - f.z) : f.yaw;

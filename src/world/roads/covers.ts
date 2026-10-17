@@ -14,7 +14,7 @@ import { hash01 } from '../../core/rng';
 import { SIDEWALK_Y } from '../../core/constants';
 import type { MeshBuilder } from './builder';
 import { Y } from './streets';
-import { HM, surf } from './surfaces';
+import { HM, surf, band, coverRect } from './surfaces';
 import { getLayout } from '../props/layout';
 
 interface Cover {
@@ -24,6 +24,9 @@ interface Cover {
   mat: number;
   variant: number;
   area?: Area;
+  /** rectangle the band layout / specials align to, and the bands [period, width, border, macro] */
+  rect?: Rect;
+  bands?: [number, number, number, number];
 }
 
 export interface CoverStats {
@@ -51,22 +54,27 @@ function coverForArea(a: Area, plan: CityPlan): Cover | null {
       return null;
     case 'plaza': {
       const radial = plan.features.some((f) => f.kind === 'fountain' && f.x > a.rect.x0 && f.x < a.rect.x1 && f.z > a.rect.z0 && f.z < a.rect.z1);
-      return { key: `plaza${radial ? 'R' : ''}`, mesh: 'H', mat: HM.plaza, variant: radial ? 1 : 0 };
+      const dk = plan.blocks[a.blockId]?.kind;
+      if (radial) return { key: `plazaR${a.id}`, mesh: 'H', mat: HM.plaza, variant: 1, rect: a.rect, bands: [0, 0, 0.9, 0.04] };
+      if (dk === 'downtown') return { key: `plazaD${a.id}`, mesh: 'H', mat: HM.plaza, variant: 3, rect: a.rect, bands: [7.5, 0.42, 0.7, 0.06] };
+      if (dk === 'station') return { key: `plazaS${a.id}`, mesh: 'H', mat: HM.plaza, variant: 4, rect: a.rect, bands: [6.3, 0.45, 0.8, 0.05] };
+      if (dk === 'midtown') return { key: `plazaM${a.id}`, mesh: 'H', mat: HM.plaza, variant: 5, rect: a.rect, bands: [6.0, 0.36, 0.6, 0.06] };
+      return { key: `plaza${a.id}`, mesh: 'H', mat: HM.plaza, variant: 0, rect: a.rect, bands: [0, 0, 0.6, 0.05] };
     }
     case 'market':
-      return { key: 'market', mesh: 'H', mat: HM.setts, variant: 1 };
+      return { key: 'market', mesh: 'H', mat: HM.setts, variant: 1, rect: a.rect, bands: [0, 0, 0.6, 0.05] };
     case 'yard':
-      return { key: 'yard', mesh: 'H', mat: HM.concrete, variant: 0 };
+      return { key: `yard${a.id}`, mesh: 'H', mat: HM.concrete, variant: 0, rect: a.rect, bands: [0, 0, 0, 0.06] };
     case 'containeryard':
-      return { key: 'cyard', mesh: 'H', mat: HM.concrete, variant: 1 };
+      return { key: 'cyard', mesh: 'H', mat: HM.concrete, variant: 1, rect: a.rect, bands: [0, 0, 0, 0.05] };
     case 'construction':
       return { key: 'constr', mesh: 'H', mat: HM.gravel, variant: 0 };
     case 'freightyard':
       return { key: 'freight', mesh: 'H', mat: HM.gravel, variant: 1 };
     case 'quay':
-      return { key: 'quay', mesh: 'H', mat: HM.quay, variant: 0 };
+      return { key: 'quay', mesh: 'H', mat: HM.quay, variant: 0, rect: a.rect, bands: [0, 0, 0, 0.05] };
     case 'platform':
-      return { key: 'platform', mesh: 'H', mat: HM.platform, variant: 0 };
+      return { key: 'platform', mesh: 'H', mat: HM.platform, variant: 0, rect: a.rect, bands: [0, 0, 0, 0.05] };
     case 'parking':
       return { key: 'parking', mesh: 'A', mat: 0, variant: 1 };
     case 'schoolyard':
@@ -91,10 +99,10 @@ function coverForArea(a: Area, plan: CityPlan): Cover | null {
 function coverForBlock(b: Block): Cover | null {
   switch (b.surface) {
     case 'paving':
-      if (b.kind === 'oldtown' || b.kind === 'market') return { key: 'bsetts', mesh: 'H', mat: HM.setts, variant: 0 };
-      return { key: 'bpave', mesh: 'H', mat: HM.plaza, variant: 2 };
+      if (b.kind === 'oldtown' || b.kind === 'market') return { key: 'bsetts', mesh: 'H', mat: HM.setts, variant: 0, rect: b.rect, bands: [0, 0, 0, 0.06] };
+      return { key: 'bpave', mesh: 'H', mat: HM.plaza, variant: 2, rect: b.rect, bands: [10.5, 0.3, 0.5, 0.05] };
     case 'concrete':
-      return { key: 'yard', mesh: 'H', mat: HM.concrete, variant: 0 };
+      return { key: 'byard', mesh: 'H', mat: HM.concrete, variant: 0, rect: b.rect, bands: [0, 0, 0, 0.06] };
     case 'asphalt':
       return { key: 'basph', mesh: 'A', mat: 0, variant: 1 };
     case 'gravel':
@@ -196,7 +204,11 @@ export function buildCovers(ctx: CityContext, A: MeshBuilder, H: MeshBuilder): {
   function emitGridCover(c: Cover, gx: number[], gz: number[]): void {
     const B = c.mesh === 'A' ? A : H;
     if (c.mesh === 'A') A.set('aA', 0, c.variant);
-    else surf(H, c.mat, c.variant, 9, 0);
+    else {
+      surf(H, c.mat, c.variant, 9, 0);
+      if (c.rect && c.bands) band(H, c.rect, ...c.bands);
+      else if (c.rect) coverRect(H, c.rect);
+    }
     if (c.mat === HM.field && c.mesh === 'H') info.field = { x0: gx[0], z0: gz[0], x1: gx[gx.length - 1], z1: gz[gz.length - 1] };
     const ids: number[] = [];
     for (const z of gz) for (const x of gx) ids.push(B.v(x, Y.cover, z));
@@ -209,6 +221,7 @@ export function buildCovers(ctx: CityContext, A: MeshBuilder, H: MeshBuilder): {
     switch (c.mesh) {
       case 'H':
         surf(H, c.mat, c.variant, 9, 0);
+        if (c.rect && c.bands) band(H, c.rect, ...c.bands);
         H.rect(r.x0, r.z0, r.x1, r.z1, Y.cover);
         if (c.mat === HM.field) info.field = r;
         return;

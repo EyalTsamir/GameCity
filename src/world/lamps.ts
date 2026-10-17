@@ -10,12 +10,14 @@
 //  • ?lampall      — preview: add the lamp light to EVERY lit material that does not integrate it yet
 //  • ?lampk=1.0    — overall lamp-light gain (tuning)
 //  • ?lampdebug    — ctx.services.lamps.preview() returns a PNG data URL of the baked panels
+//  • ?nospill      — no shop-window spill lights
 
 import * as THREE from 'three';
 import type { CityContext, CityModule } from '../core/context';
-import { LAMP_MAP, TH_LAMP_SPOTS, bindLampChannel, lampChannel, lampLights, lampSpotUniforms, type LampLight } from '../core/lampLight';
+import { LAMP_MAP, TH_LAMP_SPOTS, addLampLights, bindLampChannel, lampChannel, lampLights, lampSpotUniforms, type LampLight } from '../core/lampLight';
 import { bakeLampMap, type BakeResult } from './lamps/bake';
 import { patchLampScene } from './lamps/integrate';
+import { shopSpillLights } from './lamps/spill';
 
 export interface LampsService {
   baked: boolean;
@@ -38,6 +40,14 @@ export default function create(ctx: CityContext): CityModule {
   const K = parseFloat(params.get('lampk') ?? '1') || 1;
   const terrain = ctx.services.terrain as { height?(x: number, z: number): number } | undefined;
   const ground = (x: number, z: number): number => (terrain?.height ? terrain.height(x, z) : ctx.plan.heightAt(x, z));
+
+  // warm spill from lit shop windows onto the pavements (?nospill to compare)
+  let spillCount = 0;
+  if (!legacy && !params.has('nospill')) {
+    const spill = shopSpillLights(ctx.plan, ground);
+    spillCount = spill.length;
+    addLampLights(spill);
+  }
 
   // built-in channel: street-light state (for moving lights that follow the street-light schedule)
   const lightsCh = { value: 0 };
@@ -183,6 +193,7 @@ export default function create(ctx: CityContext): CityModule {
         registered: lampLights().length,
         baked: result?.lights ?? 0,
         dynamic: spots.length,
+        spill: spillCount,
         activeSpots: lampSpotUniforms.uLampSpotN.value,
         bakeMs: Math.round(result?.ms ?? 0),
         texels: result?.texelsTouched ?? 0,

@@ -198,12 +198,27 @@ export default function create(ctx: CityContext): CityModule {
     if (changedScale) resize(ctx.size.width, ctx.size.height);
   };
 
-  const ladder = buildLadder(wantAO, quality.dof);
+  // water planar reflections (water module, loaded before us): the ladder caps their level
+  type WaterRefl = { setReflectionQuality?(l: 0 | 1 | 2): void; reflectionQuality?(): number };
+  const water = () => ctx.services.water as WaterRefl | undefined;
+  const reflAtLoad = (water()?.reflectionQuality?.() ?? 0) > 0;
+  /** apply the step's reflection cap — AFTER the 'quality' event (the water module resets to its preset on it) */
+  const applyRefl = (s: QualityStep) => {
+    const w = water();
+    if (!w?.setReflectionQuality || !w.reflectionQuality) return;
+    const cur = w.reflectionQuality();
+    if (cur > s.refl) w.setReflectionQuality(s.refl);
+  };
+  // any 'quality' event (ours, or a preset change in the UI) makes the water module restore its
+  // preset level; re-apply the current step's cap right after (water's handler was registered first)
+  ctx.events.on('quality', () => applyRefl(step));
+  const ladder = buildLadder(wantAO, quality.dof, reflAtLoad);
   const adaptive = new AdaptiveController(
     ladder,
     (s) => {
       applyStep(s);
       ctx.events.emit('quality', quality);
+      applyRefl(s);
       if (ctx.debug.enabled) console.info(`[postfx] quality → ${s.name}`);
     },
     params.get('adaptive') !== '0',
@@ -298,6 +313,7 @@ export default function create(ctx: CityContext): CityModule {
       }
       look.set('uWarm', 0.012 * (1 - night) + 0.018 * dusk - 0.025 * night);
       look.set('uSat', 1.2 - 0.08 * night);
+      look.set('uVignette', 0.28);
     } else {
       // studio key: sunlit whites sit higher (stronger sun), so the day threshold rises to keep
       // daylight crisp; at night only real emitters (lamps, windows, neon) cross it — the dark
@@ -309,6 +325,8 @@ export default function create(ctx: CityContext): CityModule {
       }
       look.set('uWarm', 0.014 * (1 - night) + 0.02 * dusk - 0.012 * night);
       look.set('uSat', 1.2 - 0.1 * night);
+      // a deeper vignette at night: the lit town sits in a soft pool, the backdrop sinks to indigo
+      look.set('uVignette', 0.28 + 0.14 * night);
     }
 
     // ── cloud shadows (data published by the sky module)
@@ -341,6 +359,7 @@ export default function create(ctx: CityContext): CityModule {
     stats() {
       return {
         step: step.name,
+        refl: water()?.reflectionQuality?.() ?? -1,
         renderScale: quality.renderScale,
         ao: ao && ao.enabled ? 'on' : 'off',
         dof: tilt.enabled ? 'on' : 'off',

@@ -117,6 +117,7 @@ export default function create(ctx: CityContext): CityModule {
     if (Number.isFinite(v)) u.value = v;
   }
   const fx = ctx.debug.params.get('vegfx') !== '0';
+  const billow = ctx.debug.params.get('vegclump') === 'billow';
 
   // ── obstacles for anything planted
   const furn = new DiscHash(6);
@@ -944,8 +945,8 @@ export default function create(ctx: CityContext): CityModule {
   const parts = (ctx.debug.params.get('vegparts') ?? 'trees,forest,plants').split(',');
   const shadows = ctx.debug.params.get('vegshadow') !== '0';
   const vmat = ctx.debug.params.get('vegmat') ?? 'standard';
-  const tm = legacy ? legacyWindMaterials(ctx.uniforms, 'veg-trees', 0.9, vmat) : windMaterials(ctx.uniforms, 'veg-trees', 0.9, vmat, fx);
-  const pm = legacy ? legacyWindMaterials(ctx.uniforms, 'veg-plants', 0.92, vmat) : windMaterials(ctx.uniforms, 'veg-plants', 0.92, vmat, fx);
+  const tm = legacy ? legacyWindMaterials(ctx.uniforms, 'veg-trees', 0.9, vmat) : windMaterials(ctx.uniforms, 'veg-trees', 0.9, vmat, fx, billow);
+  const pm = legacy ? legacyWindMaterials(ctx.uniforms, 'veg-plants', 0.92, vmat) : windMaterials(ctx.uniforms, 'veg-plants', 0.92, vmat, fx, billow);
   const geos: THREE.BufferGeometry[] = [];
   const mk = (sink: GeoSink, name: string, mat: THREE.Material, shadow: boolean, part: string): THREE.Mesh => {
     const geo = sink.build();

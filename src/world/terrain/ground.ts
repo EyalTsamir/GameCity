@@ -249,6 +249,57 @@ function buildMask(ctx: CityContext, feet: readonly CliffFoot[], legacy: boolean
         g.fill();
       }
     }
+    // T-junctions: where a path ends on another path, both corners are cut across the grass
+    const drawn = plan.paths.filter((p) => p.draw && p.surface !== 'deck' && p.pts.length >= 2);
+    g.lineWidth = 0.8 * sx;
+    for (const p of drawn) {
+      for (const endIdx of [0, p.pts.length - 1]) {
+        const E = p.pts[endIdx];
+        const N = p.pts[endIdx === 0 ? 1 : p.pts.length - 2];
+        const pl = Math.hypot(N.x - E.x, N.z - E.z);
+        if (pl < 2) continue;
+        const tpx = (N.x - E.x) / pl,
+          tpz = (N.z - E.z) / pl;
+        let best: { x: number; z: number; tx: number; tz: number; w: number } | null = null;
+        let bd = 1e9;
+        for (const q of drawn) {
+          if (q === p) continue;
+          for (let i = 0; i < q.pts.length - 1; i++) {
+            const A = q.pts[i],
+              B = q.pts[i + 1];
+            const L = Math.hypot(B.x - A.x, B.z - A.z);
+            if (L < 1e-3) continue;
+            const tx = (B.x - A.x) / L,
+              tz = (B.z - A.z) / L;
+            const t = Math.max(0, Math.min(L, (E.x - A.x) * tx + (E.z - A.z) * tz));
+            const cx = A.x + tx * t,
+              cz = A.z + tz * t;
+            const dd = Math.hypot(E.x - cx, E.z - cz);
+            if (dd < bd && t > 2.5 && t < L - 2.5) {
+              bd = dd;
+              best = { x: cx, z: cz, tx, tz, w: q.width };
+            }
+          }
+        }
+        if (!best || bd > (p.width + best.w) * 0.6 + 0.4) continue;
+        // only junctions that meet at a real angle
+        if (Math.abs(tpx * best.tx + tpz * best.tz) > 0.7) continue;
+        const d = 3.2 + p.width * 0.5;
+        for (const sg of [-1, 1]) {
+          const ax = E.x + tpx * d,
+            az = E.z + tpz * d;
+          const bx = best.x + best.tx * sg * d,
+            bz = best.z + best.tz * sg * d;
+          const mx = best.x + (tpx + best.tx * sg) * d * 0.32,
+            mz = best.z + (tpz + best.tz * sg) * d * 0.32;
+          g.strokeStyle = 'rgb(0,0,72)';
+          g.beginPath();
+          g.moveTo(X(ax), Z(az));
+          g.quadraticCurveTo(X(mx), Z(mz), X(bx), Z(bz));
+          g.stroke();
+        }
+      }
+    }
     const DIRV: Record<string, [number, number]> = { N: [0, -1], S: [0, 1], E: [1, 0], W: [-1, 0] };
     g.fillStyle = 'rgb(0,0,70)';
     for (const lot of plan.lots) {
@@ -307,10 +358,10 @@ function buildMask(ctx: CityContext, feet: readonly CliffFoot[], legacy: boolean
     }
     tg.restore();
   };
-  for (const b of plan.blocks) if (b.kind === 'park') stripes(b.rect, 3.4, 26, true);
+  for (const b of plan.blocks) if (b.kind === 'park') stripes(b.rect, 3.4, 34, true);
   for (const a of plan.areas) {
-    if (a.kind === 'lawn' || a.kind === 'courtyard') stripes(a.rect, a.rect.x1 - a.rect.x0 > 60 || a.rect.z1 - a.rect.z0 > 60 ? 3.6 : 2.6, 22);
-    else if (a.kind === 'garden') stripes(a.rect, 1.6, 15, a.rect.x1 - a.rect.x0 < a.rect.z1 - a.rect.z0);
+    if (a.kind === 'lawn' || a.kind === 'courtyard') stripes(a.rect, a.rect.x1 - a.rect.x0 > 60 || a.rect.z1 - a.rect.z0 > 60 ? 3.6 : 2.6, 30);
+    else if (a.kind === 'garden') stripes(a.rect, 1.6, 20, a.rect.x1 - a.rect.x0 < a.rect.z1 - a.rect.z0);
   }
   const E = mk();
   const eg = E.g;
@@ -517,17 +568,17 @@ vec3 groundColor() {
   // ── lawn: macro patches readable from afar (lush deep green ↔ sunny yellow-green), mid clumps,
   //    clover drifts, mowing stripes and darker grass along kerbs / walls / hedges
   float macro = nM.r * 0.5 + nM.g * 0.3 + nA.r * 0.2;
-  vec3 grass = mix(gSun, gLush, smoothstep(0.3, 0.72, macro));
+  vec3 grass = mix(gSun, gLush, smoothstep(0.36, 0.64, macro));
   float mott = nA.g * 0.5 + nA.b * 0.3 + nB.r * 0.2;
   grass *= 0.9 + 0.2 * smoothstep(0.2, 0.85, mott);
   grass = mix(grass, gLawn, smoothstep(0.62, 0.9, nA.a) * 0.22);
-  float clover = smoothstep(0.6, 0.72, nM.a * 0.45 + nA.b * 0.35 + nB.g * 0.2) * kept;
-  grass = mix(grass, gClover, clover * 0.5);
+  float clover = smoothstep(0.57, 0.68, nM.a * 0.45 + nA.b * 0.35 + nB.g * 0.2) * kept;
+  grass = mix(grass, gClover, clover * 0.62);
   grass = mix(grass, vec3(0.93, 0.95, 0.88), clover * smoothstep(0.8, 0.9, nC.b) * 0.5); // white heads (fade with mips)
   grass *= 0.93 + 0.14 * nC.r;
-  float stripe = clamp(tone, -0.25, 0.25);
-  float edge = clamp(-tone - 0.2, 0.0, 1.0);
-  grass *= 1.0 + stripe * 0.62 * kept;
+  float stripe = clamp(tone, -0.3, 0.3);
+  float edge = clamp(-tone - 0.27, 0.0, 1.0);
+  grass *= 1.0 + stripe * 0.44 * kept;
   grass *= vec3(1.0 + stripe * 0.12 * kept, 1.0, 1.0 - stripe * 0.1 * kept);   // light stripes a touch yellower
   grass = mix(grass, grass * vec3(0.78, 0.86, 0.9), edge * (0.55 + 0.45 * kept));
 

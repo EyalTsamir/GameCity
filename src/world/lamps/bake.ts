@@ -5,7 +5,7 @@
 //     under the head, P = head height above its ground, d = distance head → texel), or
 //   • an aimed spot (floodlights, shop spill): smooth cone around head → aim, normalised so that the
 //     aim point receives I,
-// times a smooth window that ends the pool at 1.5 × radius. Contributions add up linearly and are
+// times a smooth window that ends the light at 2 × radius (aimed: aim distance + 1.6 × radius). Contributions add up linearly and are
 // then soft-compressed per texel (luminance K·(1 − e^(−Y/K))) so overlaps brighten but never blow out.
 // Alongside the irradiance the baker stores, per texel, the luminance-weighted head height, head
 // height above ground, horizontal distance and direction towards the lights — enough for the shader
@@ -88,7 +88,10 @@ export function bakeLampMap(lights: readonly LampLight[], ground: (x: number, z:
       Iraw = (I * dl * dl) / cosGA;
       reach = Math.hypot(dx, dz) + l.radius * 1.6;
     } else {
-      reach = l.radius * 1.5;
+      // the profile already shapes the pool; the long window keeps a faint wash on nearby facades.
+      // Tall street poles throw wider: their pools overlap into a continuous, modulated street.
+      const rad = l.kind === 'street' ? Math.max(l.radius, P * 0.95) : l.radius;
+      reach = rad * 2.0;
     }
     const k = CORE[l.kind] ?? 1.2;
     const st = l.stretch && l.stretch !== 1 && !aimed ? l.stretch : 1;

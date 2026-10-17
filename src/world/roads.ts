@@ -24,7 +24,7 @@ export default function create(ctx: CityContext): CityModule {
   const streets = buildStreets(ctx, A, H);
   const covers = buildCovers(ctx, A, H);
   const atlas = buildAtlas();
-  const mats = createMaterials(ctx, covers.info.radial, atlas.tex);
+  const mats = createMaterials(ctx, { radial: covers.info.radial, court: covers.info.court }, atlas.tex);
   const marks = buildMarkings(ctx, atlas.g, mats.asphaltColor, covers.info);
 
   const root = new THREE.Group();

@@ -19,17 +19,31 @@ export interface QualityStep {
   renderScale: number;
   ao: boolean;
   dof: 'full' | 'lite' | 'off';
+  /** cap on the water's planar reflection level (0 off, 1 low, 2 full); the preset may be lower */
+  refl: 0 | 1 | 2;
 }
 
-export function buildLadder(ao: boolean, dof: boolean): QualityStep[] {
+/**
+ * The ladder, cheapest visual loss per saved millisecond first:
+ *   full → refl-low (planar reflection at ~1/4.5 res without trees/trim: big saving, small loss)
+ *   → no-ao (N8AO ≈ 2 ms) → scale-0.85 → dof-lite → scale-0.72
+ *   → refl-off (analytic sky only: the water loses the mirrored town — kept as long as possible)
+ *   → scale-0.6.
+ * Reflection steps exist only when the water module renders reflections at load (`refl`).
+ */
+export function buildLadder(ao: boolean, dof: boolean, refl = false): QualityStep[] {
   const steps: QualityStep[] = [];
   const d = dof ? 'full' : 'off';
-  steps.push({ name: 'full', renderScale: 1, ao, dof: d });
-  if (ao) steps.push({ name: 'no-ao', renderScale: 1, ao: false, dof: d });
-  steps.push({ name: 'scale-0.85', renderScale: 0.85, ao: false, dof: d });
-  if (dof) steps.push({ name: 'dof-lite', renderScale: 0.85, ao: false, dof: 'lite' });
-  steps.push({ name: 'scale-0.72', renderScale: 0.72, ao: false, dof: dof ? 'lite' : 'off' });
-  steps.push({ name: 'scale-0.6', renderScale: 0.6, ao: false, dof: dof ? 'lite' : 'off' });
+  const lite = dof ? 'lite' : 'off';
+  const r1: 0 | 1 | 2 = refl ? 1 : 2;
+  steps.push({ name: 'full', renderScale: 1, ao, dof: d, refl: 2 });
+  if (refl) steps.push({ name: 'refl-low', renderScale: 1, ao, dof: d, refl: 1 });
+  if (ao) steps.push({ name: 'no-ao', renderScale: 1, ao: false, dof: d, refl: r1 });
+  steps.push({ name: 'scale-0.85', renderScale: 0.85, ao: false, dof: d, refl: r1 });
+  if (dof) steps.push({ name: 'dof-lite', renderScale: 0.85, ao: false, dof: 'lite', refl: r1 });
+  steps.push({ name: 'scale-0.72', renderScale: 0.72, ao: false, dof: lite, refl: r1 });
+  if (refl) steps.push({ name: 'refl-off', renderScale: 0.72, ao: false, dof: lite, refl: 0 });
+  steps.push({ name: 'scale-0.6', renderScale: 0.6, ao: false, dof: lite, refl: refl ? 0 : 2 });
   return steps;
 }
 

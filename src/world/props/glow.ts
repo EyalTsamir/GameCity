@@ -35,13 +35,21 @@ function registerPools(glows: Glow[]): void {
     if (head) {
       const pole = Math.max(1, head.y - p.y);
       const white = c === '#fff1d6';
+      // a little life in the rows of warm lamps: some older amber sodium heads, a few paler ones
+      // (the lamp's halo gets the same tint)
+      let col = c;
+      if (!white) {
+        const h = hash2(p.z * 1.7, p.x * 0.9);
+        col = h < 0.16 ? '#ffb866' : h > 0.9 ? '#ffd9a0' : c;
+        if (col !== c) head.color = col;
+      }
       lights.push({
         x: head.x,
         y: head.y - 0.12,
         z: head.z,
         pole,
         radius: p.size * 1.05,
-        color: c,
+        color: col,
         intensity: (p.intensity / 0.22) * jitter,
         kind: pole >= 4.5 ? 'street' : white ? 'plaza' : 'path',
       });

@@ -7,7 +7,9 @@
 //   aV = (tile tint variance, bevel, bond offset (0 grid, 0.5 half bond, -1 random per row), speckle)
 //   aC = base colour (linear)
 //   aX = (stain amount, stripe period, stripe amplitude (+hard / -soft), roughness)
-// special: 0 none, 1 tactile paving next to crosswalks, 2 radial rings near fountains, 3 grass creeping in
+// special: 0 none, 1 tactile paving next to crosswalks, 2 radial rings near fountains, 3 grass creeping in,
+//          4 quay (rust at bollards, oil, tyre streaks), 5 yard (oil, tyre streaks)
+// bond: >= 0 row offset (running bond), -1 random row offsets, -2 herringbone (size.y = brick width)
 // frame: 0 world xz, 1 world zx (rotated tiles), 2 curb coordinates (u along the curb)
 
 import * as THREE from 'three';
@@ -73,10 +75,14 @@ const TABLE: Record<string, Surf> = {
   // plazas: warm sandstone bond (+ radial rings near fountains), block forecourt granite (rotated grid)
   [`${HM.plaza}:0`]: S({ size: [0.8, 0.4], jw: 0.02, jd: 0.42, tint: 0.16, bevel: 0.04, bond: 0.5, speck: 0.1, color: lin(0.56, 0.46, 0.34), stain: 0.06, special: 2 }),
   [`${HM.plaza}:1`]: S({ size: [0.8, 0.4], jw: 0.02, jd: 0.42, tint: 0.16, bevel: 0.04, bond: 0.5, speck: 0.1, color: lin(0.56, 0.46, 0.34), stain: 0.06, special: 2 }),
-  [`${HM.plaza}:2`]: S({ size: [0.6, 0.6], jw: 0.02, jd: 0.4, tint: 0.1, speck: 0.1, color: lin(0.38, 0.37, 0.355), stain: 0.08, frame: 1 }),
-  // concrete yards / container yard
-  [`${HM.concrete}:0`]: S({ size: [4, 4], jw: 0.035, jd: 0.4, tint: 0.08, speck: 0.14, color: lin(0.42, 0.41, 0.385), stain: 0.3 }),
-  [`${HM.concrete}:1`]: S({ size: [6.5, 13], jw: 0.04, jd: 0.35, tint: 0.06, speck: 0.14, color: lin(0.38, 0.37, 0.35), stain: 0.32 }),
+  [`${HM.plaza}:2`]: S({ size: [0.6, 0.6], jw: 0.02, jd: 0.4, tint: 0.12, speck: 0.1, color: lin(0.38, 0.37, 0.355), stain: 0.1, frame: 1 }),
+  // downtown: light granite large-format slabs (+ basalt band grid) · station: clay pavers in herringbone · midtown: buff pavers
+  [`${HM.plaza}:3`]: S({ size: [1.0, 0.5], jw: 0.012, jd: 0.34, tint: 0.13, bevel: 0.03, bond: 0.5, speck: 0.12, color: lin(0.5, 0.49, 0.47), stain: 0.1 }),
+  [`${HM.plaza}:4`]: S({ size: [0.2, 0.1], jw: 0.01, jd: 0.36, tint: 0.24, bevel: 0.12, bond: -2, speck: 0.1, color: lin(0.4, 0.22, 0.15), stain: 0.08 }),
+  [`${HM.plaza}:5`]: S({ size: [0.6, 0.3], jw: 0.012, jd: 0.34, tint: 0.16, bevel: 0.05, bond: 0.5, speck: 0.1, color: lin(0.5, 0.44, 0.36), stain: 0.08, frame: 1 }),
+  // concrete yards / container yard (special 5: oil blobs + tyre streaks)
+  [`${HM.concrete}:0`]: S({ size: [4, 4], jw: 0.035, jd: 0.45, tint: 0.12, speck: 0.14, color: lin(0.42, 0.41, 0.385), stain: 0.36, special: 5 }),
+  [`${HM.concrete}:1`]: S({ size: [6.5, 13], jw: 0.04, jd: 0.4, tint: 0.1, speck: 0.14, color: lin(0.38, 0.37, 0.35), stain: 0.36, special: 5 }),
   // gravel: construction site / freight yard
   [`${HM.gravel}:0`]: S({ speck: 0.45, color: lin(0.46, 0.37, 0.25), stain: 0.2, rough: 1 }),
   [`${HM.gravel}:1`]: S({ speck: 0.4, color: lin(0.36, 0.345, 0.32), stain: 0.2, rough: 1 }),
@@ -95,8 +101,8 @@ const TABLE: Record<string, Surf> = {
   // promenade, station platform area, quay, driveway pavers
   [`${HM.promenade}:0`]: S({ size: [0.8, 1.2], jw: 0.016, jd: 0.32, tint: 0.08, bond: 0.5, speck: 0.1, color: lin(0.56, 0.5, 0.41), stain: 0.05, frame: 1 }),
   [`${HM.platform}:0`]: S({ size: [2, 2], jw: 0.02, jd: 0.3, tint: 0.04, speck: 0.1, color: lin(0.48, 0.465, 0.44), stain: 0.1 }),
-  [`${HM.quay}:0`]: S({ size: [6, 6], jw: 0.05, jd: 0.42, tint: 0.1, speck: 0.16, color: lin(0.42, 0.405, 0.375), stain: 0.32 }),
-  [`${HM.pavers}:0`]: S({ size: [0.22, 0.11], jw: 0.012, jd: 0.4, tint: 0.2, bevel: 0.1, bond: 0.5, speck: 0.1, color: lin(0.45, 0.33, 0.28) }),
+  [`${HM.quay}:0`]: S({ size: [6, 6], jw: 0.05, jd: 0.48, tint: 0.16, speck: 0.16, color: lin(0.42, 0.405, 0.375), stain: 0.38, special: 4 }),
+  [`${HM.pavers}:0`]: S({ size: [0.2, 0.1], jw: 0.011, jd: 0.4, tint: 0.2, bevel: 0.1, bond: -2, speck: 0.1, color: lin(0.45, 0.33, 0.28) }),
   // park paths
   [`${HM.pathGravel}:0`]: S({ speck: 0.36, color: lin(0.56, 0.48, 0.36), rough: 1 }),
   [`${HM.pathPaved}:0`]: S({ size: [0.4, 0.4], jw: 0.016, jd: 0.32, tint: 0.1, bevel: 0.05, bond: 0.5, speck: 0.1, color: lin(0.55, 0.48, 0.38), special: 2 }),
@@ -133,7 +139,25 @@ export const HARD_ATTRS = [
   { name: 'aV', size: 4 },
   { name: 'aC', size: 3 },
   { name: 'aX', size: 4 },
+  { name: 'aR', size: 4 },
+  { name: 'aB', size: 4 },
 ];
+
+/**
+ * Band layout of the current cover (call after surf()): bands align to `r` (the plaza / block rectangle).
+ *   period  — band grid spacing (0: none) · width — band width · border — border band width (0: none)
+ *   macro   — per band-cell tint amplitude (readable patchwork at distance)
+ */
+export function band(H: MeshBuilder, r: { x0: number; z0: number; x1: number; z1: number }, period: number, width: number, border: number, macro: number): void {
+  H.set('aR', r.x0, r.z0, r.x1, r.z1);
+  H.set('aB', period, width, border, macro);
+}
+
+/** Rectangle only (specials that need the cover extent, e.g. tyre streak direction), no bands. */
+export function coverRect(H: MeshBuilder, r: { x0: number; z0: number; x1: number; z1: number }, macro = 0): void {
+  H.set('aR', r.x0, r.z0, r.x1, r.z1);
+  H.set('aB', 0, 0, 0, macro);
+}
 
 /** Set the current hardscape surface (material id + variant), curb distance d and coordinate u. */
 export function surf(H: MeshBuilder, mat: number, variant = 0, d = 9, u = 0, frame?: number): void {
@@ -143,4 +167,6 @@ export function surf(H: MeshBuilder, mat: number, variant = 0, d = 9, u = 0, fra
   H.set('aV', s.tint, s.bevel, s.bond, s.speck);
   H.set('aC', c.r, c.g, c.b);
   H.set('aX', s.stain, s.stripe[0], s.stripe[1], s.rough);
+  H.set('aR', 0, 0, 0, 0);
+  H.set('aB', 0, 0, 0, 0);
 }

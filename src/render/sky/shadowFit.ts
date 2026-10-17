@@ -68,7 +68,7 @@ export class ShadowFitter {
    * @param focus camera focus point on the ground
    * @param maxRadius limit of the shadowed region around the focus (m)
    */
-  fit(camera: THREE.PerspectiveCamera, light: THREE.DirectionalLight, L: THREE.Vector3, focus: THREE.Vector3, maxRadius: number, minRadius: number): void {
+  fit(camera: THREE.PerspectiveCamera, light: THREE.DirectionalLight, L: THREE.Vector3, focus: THREE.Vector3, maxRadius: number, minRadius: number, farK = 1): void {
     const { slab, minY, maxY, sampleHeights } = this.params;
     // light-space basis exactly as Object3D.lookAt builds it for the shadow camera
     _X.crossVectors(_up, L);
@@ -80,6 +80,15 @@ export class ShadowFitter {
     _pv.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
     _frustum.setFromProjectionMatrix(_pv);
 
+    // camera's horizontal forward: the region BEYOND the focus (deep in the tilt-shift blur) may be
+    // trimmed to farK × maxRadius, which buys texel density where the picture is sharp
+    let cfx = focus.x - camera.position.x,
+      cfz = focus.z - camera.position.z;
+    const cfl = Math.hypot(cfx, cfz);
+    if (cfl > 1e-3) {
+      cfx /= cfl;
+      cfz /= cfl;
+    } else farK = 1;
     const fx = focus.x * _X.x + focus.y * _X.y + focus.z * _X.z;
     const fy = focus.x * _Y.x + focus.y * _Y.y + focus.z * _Y.z;
     const pts = this.pts;
@@ -108,8 +117,22 @@ export class ShadowFitter {
         if (poly.length === 0) break;
       }
       for (const p of poly) {
-        let lx = p.x * _X.x + h * _X.y + p.z * _X.z - fx;
-        let ly = p.x * _Y.x + h * _Y.y + p.z * _Y.z - fy;
+        let px = p.x,
+          pz = p.z;
+        if (farK < 1) {
+          const dx = px - focus.x,
+            dz = pz - focus.z;
+          const d = Math.hypot(dx, dz);
+          // full radius to the sides and in front, farK × radius straight behind (smooth in angle)
+          const cosB = d > 1e-3 ? Math.max(0, (dx * cfx + dz * cfz) / d) : 0;
+          const lim = maxRadius * (1 + (farK - 1) * cosB);
+          if (d > lim) {
+            px = focus.x + (dx * lim) / d;
+            pz = focus.z + (dz * lim) / d;
+          }
+        }
+        let lx = px * _X.x + h * _X.y + pz * _X.z - fx;
+        let ly = px * _Y.x + h * _Y.y + pz * _Y.z - fy;
         // keep the region near the focus (beyond it the tilt-shift blur takes over)
         const r = Math.hypot(lx, ly);
         if (r > maxRadius) {

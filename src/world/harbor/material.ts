@@ -14,6 +14,9 @@
 
 import * as THREE from 'three';
 import type { GlobalUniforms } from '../../core/uniforms';
+import { LAMP_APPLY_VIEW, LAMP_GLSL, addLampLights, lampUniforms, type LampLight } from '../../core/lampLight';
+
+const LEGACY_LAMPS = typeof location !== 'undefined' && new URLSearchParams(location.search).has('legacylamps');
 
 export const NMOB = 6;
 
@@ -250,6 +253,8 @@ export function createHarborMaterials(g: GlobalUniforms, lambert = false): Harbo
         uRealTime: g.uRealTime,
         uFx: rig.uFx,
       });
+      // night street lights / floodlights / crane work lights (shared lamp light map)
+      Object.assign(shader.uniforms, lampUniforms());
       if (rigged) {
         Object.assign(shader.uniforms, {
           uTime: g.uTime,
@@ -265,13 +270,14 @@ export function createHarborMaterials(g: GlobalUniforms, lambert = false): Harbo
         .replace('#include <beginnormal_vertex>', `#include <beginnormal_vertex>\n${rigged ? 'rigSetup();\nobjectNormal = rigR * objectNormal;' : ''}`)
         .replace('#include <begin_vertex>', `#include <begin_vertex>\n${rigged ? 'transformed = rigR * transformed + rigT;' : ''}\n${VERT_PAT}`);
       shader.fragmentShader = shader.fragmentShader
-        .replace('#include <common>', `#include <common>\n${FRAG_PARS}`)
+        .replace('#include <common>', `#include <common>\n${FRAG_PARS}\n${LAMP_GLSL}`)
+        .replace('#include <lights_fragment_end>', `#include <lights_fragment_end>\n${LAMP_APPLY_VIEW}`)
         .replace('#include <color_fragment>', `#include <color_fragment>\n${FRAG_COLOR}`)
         .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>\nif (hbRough >= 0.0) roughnessFactor = hbRough;`)
         .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>\n${FRAG_NORMAL}`)
         .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>\n${FRAG_EMIT}`);
     };
-    m.customProgramCacheKey = () => (rigged ? 'tinyhaven-harbor-rigged-v1' : 'tinyhaven-harbor-solid-v1') + (lambert ? '-l' : '');
+    m.customProgramCacheKey = () => (rigged ? 'tinyhaven-harbor-rigged-v2' : 'tinyhaven-harbor-solid-v2') + (lambert ? '-l' : '');
     return m;
   };
   const solid = make(false);
@@ -394,7 +400,110 @@ void main() {
 }
 `;
 
-export function createGlowMesh(g: GlobalUniforms, rig: RigUniforms, points: GlowPoint[]): THREE.Mesh {
+/** crane floodlights hang under the boom (cranes.ts: CRANE.boomY0 − 0.2) */
+const CRANE_LIGHT_Y = 21.8;
+/** cool LED work / floodlight colour (night palette) */
+export const HARBOR_FLOOD_COL = '#d6e6ff';
+
+interface CraneLamp {
+  l: LampLight;
+  z: number;
+  crane: number;
+}
+
+/**
+ * Light pools are registered as real lights in the shared lamp light map instead of being drawn:
+ * quay / pier / bridge lamp pools pair with their lamp's halo (aimed from the head at the old pool
+ * centre); the crane work-light pools become moving spot lights (channel 'lights') that follow the
+ * gantries (followCraneLamps). Returns the glows that are still drawn (halos, beacons, lanterns).
+ */
+function registerHarborPools(points: GlowPoint[]): { keep: GlowPoint[]; cranes: CraneLamp[] } {
+  const keep: GlowPoint[] = [];
+  const out: LampLight[] = [];
+  const cranes: CraneLamp[] = [];
+  const heads = points.filter((p) => !p.pool && (p.mode ?? 0) === GLOW.LIGHTS && p.crane === undefined && p.size < 2.5);
+  const c = new THREE.Color();
+  // crane pools: merge the two ship-side pools of each crane into one spot
+  const groups = new Map<string, GlowPoint[]>();
+  for (const p of points) {
+    if (!p.pool) {
+      keep.push(p);
+      continue;
+    }
+    if (p.crane !== undefined) {
+      const key = `${p.crane}:${p.y.toFixed(2)}`;
+      const arr = groups.get(key) ?? [];
+      arr.push(p);
+      groups.set(key, arr);
+      continue;
+    }
+    c.set(p.color);
+    const color = '#' + c.getHexString();
+    const intensity = (p.intensity / 0.22) * 0.95;
+    let best: GlowPoint | null = null,
+      bd = 3;
+    for (const h of heads) {
+      if (h.y < p.y + 1.2) continue;
+      const d = Math.hypot(h.x - p.x, h.z - p.z);
+      if (d < bd) {
+        bd = d;
+        best = h;
+      }
+    }
+    if (best) {
+      const pole = best.y - p.y;
+      const l: LampLight = { x: best.x, y: best.y, z: best.z, pole, radius: p.size * 1.1, color, intensity, kind: 'path' };
+      if (bd > 0.3) {
+        l.aim = [p.x, p.y, p.z];
+        l.cone = Math.atan2(p.size * 1.1, Math.hypot(bd, pole)) + 0.25;
+      }
+      out.push(l);
+    } else out.push({ x: p.x, y: p.y + 2.8, z: p.z, pole: 2.8, radius: p.size * 1.1, color, intensity: intensity * 0.75, kind: 'spill' });
+  }
+  for (const arr of groups.values()) {
+    let x = 0;
+    for (const p of arr) x += p.x / arr.length;
+    const spread = Math.max(...arr.map((p) => Math.abs(p.x - x)));
+    const p0 = arr[0];
+    const l: LampLight = {
+      x,
+      y: CRANE_LIGHT_Y,
+      z: p0.z,
+      pole: CRANE_LIGHT_Y - p0.y,
+      radius: p0.size * 1.15 + spread,
+      color: HARBOR_FLOOD_COL,
+      intensity: 1.7,
+      kind: 'flood',
+      aim: [x, p0.y, p0.z],
+      cone: Math.atan2(p0.size * 1.15 + spread, CRANE_LIGHT_Y - p0.y),
+      channel: 'lights',
+    };
+    out.push(l);
+    cranes.push({ l, z: p0.z, crane: p0.crane! });
+  }
+  addLampLights(out);
+  return { keep, cranes };
+}
+
+/** Move the crane work lights with their gantries (call every frame). */
+export function followCraneLamps(mesh: THREE.Mesh, rig: RigUniforms): void {
+  const list = mesh.userData.craneLamps as CraneLamp[] | undefined;
+  if (!list) return;
+  for (const c of list) {
+    const z = c.z + rig.uCrane.value[c.crane].x;
+    c.l.z = z;
+    if (c.l.aim) c.l.aim[2] = z;
+  }
+}
+
+export function createGlowMesh(g: GlobalUniforms, rig: RigUniforms, allPoints: GlowPoint[]): THREE.Mesh {
+  let points = allPoints;
+  let craneLamps: CraneLamp[] | undefined;
+  if (!LEGACY_LAMPS) {
+    const r = registerHarborPools(allPoints);
+    points = r.keep;
+    craneLamps = r.cranes;
+  }
   const n = points.length;
   const pos = new Float32Array(n * 12);
   const corner = new Float32Array(n * 8);
@@ -451,6 +560,7 @@ export function createGlowMesh(g: GlobalUniforms, rig: RigUniforms, points: Glow
   mat.uniforms.uCrane = rig.uCrane;
   mat.uniforms.uFx = rig.uFx;
   const mesh = new THREE.Mesh(geo, mat);
+  mesh.userData.craneLamps = craneLamps;
   mesh.name = 'harbor-glows';
   mesh.renderOrder = 3;
   mesh.frustumCulled = false;
