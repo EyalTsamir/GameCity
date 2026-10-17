@@ -154,6 +154,16 @@ export async function acquireLock({ waitMs = 10_800_000, staleMs = 120_000 } = {
     await new Promise((r) => setTimeout(r, 300 + Math.random() * 300));
   }
   dropTicket();
+  // watchdog: a hung job must not hold a slot forever (multi-agent runs set TH_LOCK_SLOTS; override
+  // with TH_MAX_HOLD_MS, 0 = off). Fires only if the process is still alive at the deadline.
+  const maxHold = parseInt(process.env.TH_MAX_HOLD_MS ?? (process.env.TH_LOCK_SLOTS ? '2700000' : '0'), 10) || 0;
+  if (maxHold > 0) {
+    setTimeout(() => {
+      console.error(`[browser.mjs] held the screenshot lock for ${Math.round(maxHold / 60000)} min — aborting (TH_MAX_HOLD_MS)`);
+      releaseLock();
+      process.exit(124);
+    }, maxHold).unref();
+  }
   heartbeat = setInterval(() => {
     try {
       const now = new Date();
