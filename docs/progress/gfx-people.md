@@ -60,16 +60,25 @@ routes, speeds, avoidance and `invariants()` are untouched.
   Typical posed vertices per figure: LOD0 ≈ 900, lo ≈ 330, tiny ≈ 185, pin ≈ 80. Old: 1778 / 801 / 241.
 * Draw calls: 4 figure levels + 1 shadow proxy + pram + dog + blob (old: 3 levels + pram + dog + blob, each
   level also in the shadow pass).
-* Gait acceptance (`gaitfk.ts`, node FK of the real pose code): walking 0.6–1.6 m/s for man / woman / boy /
-  girl / teen / elderly: stance slide 0.18–0.70 cm, sole hover −0.0…+0.3 cm, knee peak 60° @1.3 (kids 63–64°,
-  elderly 46°), hip +32/−17°, bob 4.0 cm @1.3, cadence 109 spm @1.3, mid-swing clearance 1.5–1.6 cm;
-  running 2.75–3.0: slide 1.06–1.11 cm, knee 87°, flight; stop-go 0.51 cm; accel 0.66 cm; turning 40°/s
-  1.47 cm (inner foot hovers ≤ 2 cm late in stance), 90°/s 2.26 cm; standing turn 1.4 cm.
+* Gait acceptance (`gaitfk.ts`, node FK of the real pose code, 2026-10-17 late): walking 0.6–1.6 m/s for man /
+  woman / boy / girl / teen / elderly: stance slide 0.12–0.42 cm, sole hover −0.0…+0.1 cm, knee peak 60° @1.3
+  (kids 63–64°, elderly 46°), hip +32/−17°, bob 4.0 cm @1.3, cadence 109 spm @1.3, mid-swing clearance
+  1.5–1.6 cm; running 2.75–3.0: slide 0.60 cm, knee 87°, flight; stop-go 0.46 cm; accel 0.34 cm; turning
+  40°/s 0.82 cm (hover ≤ 0.2 cm); 90°/s ≈ 5 cm (the planted foot pivots on heel / ball beyond ±0.6 rad of
+  twist — intended); standing turn 1.6 cm. Crowd-style corners (`cornerfk.ts`: rails round corners with 4
+  straight segments, heading snaps followed at rate 9/s): 4-segment rail corner 2.6–4.2 cm slide, no crouch
+  (bob ≤ 6 cm); instantaneous 90° snaps (bevelled dead-end turns) drag the planted foot (17–35 cm) instead
+  of teleporting it.
+  Key fixes: the foot yaw turns about the vertical through the ankle (shader + fkPoint), not the tilted
+  shin (that tipped the sole by up to 5 cm); plants far off the gait law are dragged, never dropped; the
+  pelvis never drops more than 4.5 cm below its gait curve (an out-of-reach foot is pulled in instead).
+* CPU: `computePose` ≈ 5 µs per figure with gait state on this (loaded) container (`bench.ts`, 150 figures
+  0.77 ms); IK and FK helpers are allocation-free.
 
 ## Tools (shots/people/tools/)
 * `node build.mjs <file.ts>` bundles + runs node checks: `measure.ts` (verts/tris per LOD and feature),
-  `rngcheck.ts` (makeLook draw parity), `gaitfk.ts` (gait acceptance; `-v`, case filter), `gaitdbg*.ts`,
-  `turndbg.ts`, `armchk.ts` (arm IK error), `heavychk.ts`, `hairdbg.ts`, `dogchk.ts`.
+  `rngcheck.ts` (makeLook draw parity), `gaitfk.ts` (gait acceptance; `-v`, case filter), `cornerfk.ts` /
+  `cornerdbg.ts` (crowd-style corners), `bench.ts` (CPU cost), `ikparity.ts`, `gaitdbg*.ts`, `turndbg.ts`, `armchk.ts` (arm IK error), `heavychk.ts`, `hairdbg.ts`, `dogchk.ts`.
 * CPU previews without a browser: `preview.ts` (scenes lineupA/B, gen<seed>, gait, sit, poses, idle, bench,
   misc) → `vsmirror.ts` (JS mirror of the vertex shader) → `raster.py` (numpy rasteriser).
 * Browser: `lab.html`/`lab.ts` (real renderers, no city) + `lab_driver.mjs <specs.json> <outDir>`;
@@ -91,7 +100,7 @@ routes, speeds, avoidance and `invariants()` are untouched.
 
 ## Open issues / next
 * Visual verification in the browser (shader compile never yet run on a GPU / SwiftShader).
-* Tight turns (≥ 40°/s): inner-foot hover up to 2 cm, slide 1.5–2.3 cm; running slide ≈ 1.1 cm.
+* Sharp crowd corners still drag the planted foot a few cm (rail corners) and more at bevelled 90° snaps.
 * lo is 474 vertices (spec ≤ ~450; only ~330 posed per typical figure); pin 109 (spec ≈ 70).
 * No LOD cross-fade; no heels / headscarves / braids yet.
 
