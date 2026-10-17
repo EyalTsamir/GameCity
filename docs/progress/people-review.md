@@ -2,7 +2,7 @@
 
 Reviewer: people-review (read-only; no source edits). Implementer: **people** agent
 (`src/sim/pedestrians/figure.ts`, `render.ts`, `looks.ts`; pose plumbing only in `pedestrians.ts` / `crowd.ts`).
-Status: DRAFT in progress (code analysis done; screenshot evidence being captured under `shots/people-review/`).
+Status: **COMPLETE** (2026-10-17). Evidence sheet: `shots/people-review/review_sheet.png` (18 labelled tiles).
 
 Method: read figure/looks/render/crowd end to end; measured the meshes numerically (bundled `figure.ts` in
 node: vertex/triangle counts per LOD and per feature bit, part extents, joint pivots); replayed `computePose`
@@ -10,6 +10,36 @@ plus the shader's forward kinematics in node to measure foot height / foot slip 
 cycle; photographed a controlled lineup (sim frozen, everybody else hidden, hand-built looks and poses beside a
 real bench) and the natural crowd at 13–190 m. All "before" images come from the frozen baseline (port 5174;
 pedestrian code identical to the working tree at review time).
+
+## 0. Summary — top findings (ranked by visual impact)
+1. **Toy proportions** (every distance ≤ 60 m): arms 20 % short with mitten-ball hands (fingertips at the crotch,
+   0.81 m instead of 0.68 m), shoulders 16–25 % too wide (0.55 m; heavy figures 0.58 m), a ball head 25 % too wide,
+   no neck. The single biggest "low-poly avatar" tell. → sheet tiles 1, 2, 16.
+2. **One body for everybody**: women = men × 0.92–1.0 (no waist/hips/bust), children = scaled adults with a bigger
+   head, elderly = the same body tilted 5.7°, "heavy" = wider shoulders. → tiles 2, 3.
+3. **Gait**: stiff compass gait (swing knee 34° vs 60–65° real, straight stance leg, rigid feet), stance foot slides
+   11–24 cm per step, feet hover/sink ±3 cm, no pelvis/torso/head motion; elderly "moonwalk" (hips ±12° for 0.59 m
+   steps); run bob inverted; rigid skirts. → tiles 4–6, §1.3.
+4. **Sitting is broken at close range**: skirts hang through the bench as rigid cones, sitters perch 17–23 cm in
+   front of the backrest, a briefcase/shopping bag stays in the hand and swings up in front of the face of readers.
+   → tiles 7, 8.
+5. **Construction**: 6-/8-sided rigid open tubes and flat boxes (shoes, ears, nose, beard block, visor, slab backpack,
+   hair panel), blank faces, white-plate collars; knee/hip seams show when bent. → tiles 7, 10, 11.
+6. **Clothing monotony / wrong hems**: every top tucked at 1.00 m, "short sleeves" end at the elbow, no jackets,
+   coats, dresses or hoodies; swimwear is a onesie covering upper arms and thighs. → tiles 2, 9.
+7. **Candy palette**: ~70 % saturated accent tops → crowds read as confetti/toys at POI distance. → tile 15.
+8. **Night**: figures ignore the lamp light map; they read as evenly lit cut-outs in dark streets. → tile 14.
+9. **Static poses**: a single "toy soldier" stand (A-pose arms, parallel straight legs) for everyone waiting.
+10. **LOD/perf**: LOD0 and `lo` are indistinguishable at the 55/60 m switch and `lo`/tiny at 130/143 m (tiles 12, 13)
+    — distances can move in; `lo` (24–150 instances per view) dominates the vertex cost, all levels cast full-cost
+    shadows, 51 % of LOD0 triangles are hidden accessories, 15/16 attribute slots are used.
+
+Spec headline (§4): adult 7.5 heads (head 0.155 m wide), deltoids 0.46/0.40 m (m/f), upper arm/forearm/hand
+0.33/0.26/0.19 m, fingertips at 0.375 H, feet 0.27 m, per-kind rig table (man, woman, boy, girl, teen, elder m/f with
+stoop) + build axis; sculpted skinned lofts, thumbs + shoe lasts at LOD0, parametric hems + one skinned "tail" mesh
+for skirts/dresses/coats; gait from speed and leg length with IK-planted feet (slide ≤ 1 cm, hover ≤ 0.5 cm), knee
+peak 60–65°, ankle roll, pelvis/torso/head motion; LOD0 ≤ 1300 vertices < 40 m, `lo` ≤ 450 vertices 40–110 m, tiny
+≈ 240, optional 70-vertex pin > 300 m, tiny-geometry shadow proxy → people render cost at or below today's.
 
 ---
 
@@ -108,6 +138,114 @@ Phase advances with distance walked: cycle length = `scale·(0.85 + 0.42·v)` (c
   (render.ts:116–144, places.ts:233).
 * Handbag box at the left hip (x 0.155–0.215) overlaps the hanging left hand/forearm (x 0.19–0.257); the arm swings
   through it.
+
+---
+
+## 2. Findings in detail (ranked by visual impact; evidence = before images, code = where it comes from)
+
+**F1 — Toy proportions: short arms, mitten hands, wide square shoulders, ball head, no neck.**
+Evidence: `crops/proportions_overlay.png` (measured on the render: fingertips 0.81 m = crotch, real 0.68 m;
+shoulders 0.55 vs 0.47 m; head 0.20 vs 0.16 m), `lineup/lineupA_front.png`, `lineupA_34.png`, `lineupB_front.png`,
+`lineup/typical_16m.png` (still obvious at 16 m). Code: arms figure.ts:519–562 (upper loft 1.105–1.445 = 0.27 m long
+from the 1.40 pivot, forearm 0.87–1.15, hand ellipsoid 0.031×0.05×0.04 at y 0.835), `RIG` figure.ts:78–90
+(`armX` 0.222, `upperArm` 0.27), shoulder caps figure.ts:525, torso rings figure.ts:441–463 (rx 0.193 at 1.41 m),
+head ellipsoid figure.ts:468 (rx 0.097), neck figure.ts:466 (hidden inside the torso top ring at 1.51 m),
+girth arm shift figure.ts:1066/1073. Arms hang in a slight A (roll 0.07, render.ts:55) clear of the waist.
+
+**F2 — No body types: women, children, elderly and heavy people share the adult male mesh.**
+Evidence: `lineupA_front.png` (#3, a woman in trousers with a bun, reads as a man from the front), `lineupA_side.png`
+and `lineupB_side.png` (no bust/hips/belly in profile), `lineupB_front.png` (children = small broad adults; elderly
+upright). Code: looks.ts:136–138 (only `scale`, `girth`), figure.ts:1072 (girth scales BODY x/z → wider shoulders,
+bags, newspaper), figure.ts:1076 (child head factor from instance scale), render.ts:41–57 (elderly: hip ×0.78, arms
+×0.55, lean +0.1 rad from the hips).
+
+**F3 — Gait: compass legs, skating feet, rigid feet, rigid body, rigid skirt.**
+Evidence: `lineup/gait_walk_man.png` (8 phases, side view; legs straight and split like scissors, the swing foot
+toes point down with the shin), `crops/gait_man_feet_L_x2.png`/`_R_x2.png`, `gait_walk_elderly.png` (tiny hip
+swing for long steps → slides; cane follows the hand), `gait_walk_woman_skirt.png` (skirt never moves),
+`gait_jog.png` (acceptable silhouette), numbers in §1.3 (tools/fk/slip.ts, gait.ts). Code: render.ts:43–58
+(sinusoidal hip ±0.4·amp, knee 0.05 + 0.55·max(0, cos φ), bob 0.022·(|cos φ| − 0.6), elbows constant), crowd.ts:1304
+(step model independent of the hip amplitude), figure.ts:413–420 (shoes on the SHIN part: no ankle), figure.ts:565
+(skirt on BODY), no pelvis/chest parts exist (PART list figure.ts:17–30).
+
+**F4 — Bench sitting fails at close range.**
+Evidence: `lineup/sit_34.png`, `sit_front.png`, `sit_side.png`, `sit_14m.png` — two skirts hang as cones *through*
+the seat (hem 28 cm below the seat surface); all three sitters perch with a ~20 cm gap to the backrest; the reading
+commuter's briefcase (and any shopping bag/cane) stays on the forearm and swings up in front of his face next to the
+newspaper; thighs/knees show flat tube ends. Code: render.ts:116–144 (sit pose, `rootY` only, no backward offset),
+places.ts:235 (seat spot 0.06 m in front of the bench centre — sim file: fix render-side with a local rootZ),
+render.ts:465 (only `F.ROD` is dropped while sitting; `BRIEFCASE|SHOPBAG|CANE|HANDBAG` stay), figure.ts:565–580.
+
+**F5 — Primitive construction and missing details.**
+Evidence: `crops/lineupA_heavy_head_x3.png` (beard = brown block, box ears, blank face), `crops/lineupA_suit_skirt_upper_x2.png`
+(white plate collar, tube arms with puffed shoulder caps, no neck), `lineup/lineupA_back.png` (slab backpack, flat
+long-hair panel, ball bun), `lineup/poses_ground_side.png` (close-up of a suit figure: box nose/ears, hair helmet),
+`sit_front.png` (open knee ends). Code: `Builder.box` usage throughout `buildPersonGeometry`, open lofts (`capTop/
+capBottom` false for all limbs), 6-sided limbs / 8-sided trunk (figure.ts:371–373).
+
+**F6 — Clothing monotony and wrong hems; swimwear onesies.**
+Evidence: `lineupA_front.png` (#4: "T-shirt" sleeves to the elbow; all tops end at the same tucked waistline),
+`lineup/poses_ground.png` and `crops/poi_beach_from_oldtown_11_x3.png` (sunbathers in full-colour suits covering
+upper arms and thighs; a lying man still wears his cap, which stands up as a red block on his face). Code: derived
+slots figure.ts:1051–1055 (sleeve boundary = elbow, shorts boundary = knee), top/bottom boundary at y 1.0–1.02
+(figure.ts:424–463), swimwear swap render.ts:459–464 (`top = swim` colours TORSO **and** the TOP-slot upper arms;
+`bottom = swim` colours the thighs; hats not removed), wardrobe looks.ts:149–163.
+
+**F7 — Candy palette.** Evidence: `crops/poi_oldtown_11_x3.png`, `lineup/typical_40m.png`, `crowd/sqmid_18h2.png`.
+Code: looks.ts:58–62 (TOPS: 30 entries, ~22 saturated accents), 76 (SPORT), children add SPORT+TOPS (looks.ts:253).
+Real street crowds are dominated by neutrals and denim; the saturation is the main reason the crowd reads as toys at
+120–190 m where anatomy no longer matters.
+
+**F8 — Night: not lit by street lamps.** Evidence: `crops/poi_oldtown_21h5_x3.png` (figures equally bright inside
+and outside the lamp pools; pasted-on look) vs `poi_oldtown_11_x3.png`. Code: figure.ts:1144–1147 (only
+`0.07·albedo·uNight` emissive), no `LAMP_APPLY_VIEW` (core/lampLight.ts contract) in person/pram/dog materials.
+
+**F9 — Static "toy soldier" idle.** Evidence: every standing figure in the lineups and in `crowd/sqclose_11.png`,
+`crowd/sqmid_18h2.png`: legs parallel and straight, arms hanging stiffly in an A. Code: render.ts:61–72 (idle = ±2°
+weight shift only); waiting/bus/fountain states all use it.
+
+**F10 — Accessories and props.** Evidence: `lineup/dog_pram_34.png`, `dog_pram_side.png` (pram hands roughly on the
+bar — acceptable at this scale, but FK says 3–10 cm off depending on scale; the dog is a stack of boxes, crude next
+to the figures), `gait_walk_elderly.png` (cane rigid on the forearm, tip slides 19 cm per half cycle), lineup front
+(handbag box in the swing path of the left arm), `poses_ground.png` (lying "arms behind the head" puts the hands
+inside the head). Code: render.ts:75–107, figure.ts:601–640, figure.ts:931–995 (dog), render.ts:170–176 (lie arms).
+
+**F11 — LODs: invisible switches (good) but wasted budget.** Evidence: `crops/lod01_52m_stack.png` (LOD0 vs lo at
+52 m: no visible difference), `crops/lod12_128m_stack.png` (lo vs tiny at 128 m: none), `lineup/lod0_9m.png`,
+`lod1_9m.png`, `lod2_9m.png` (what each level is at 9 m). Census (§4.9): LOD0 holds only 5–17 figures in close views,
+`lo` 24–150. Code: render.ts:288–289 (55 / 130 m at the 930 px reference → 60.6 / 143 m at 1025 px), render.ts:386–387
+(all levels cast shadows unless camera y > 150), figure.ts hidden-feature collapse (`pedHidden`).
+
+**F12 — Shading.** Evidence: lineups (flat matte vertex colour, pale skin `#f7dcc8`/`#f3d2bb` blows out to near
+white in sun — tiles 2, 10), figures' shadow-map shadows are soft smudges at 7–16 m (`lineupA_34.png`,
+`typical_16m.png`; stage's shadow work), blob contact shadows barely visible on pale paving. Code:
+`MeshLambertMaterial` figure.ts:1136, blob figure.ts:1279–1291 / render.ts:400 (α 0.36).
+
+---
+
+## 3. Evidence index (`shots/people-review/`)
+* `review_sheet.png` — 18 labelled tiles (the summary above refers to its tile numbers).
+* `lineup/` — controlled lineup beside a real Central Park bench (-14, 0, 19.5), 11:00, DOF off unless noted:
+  `lineupA_{front,side,back,34}.png` (suit man, skirt woman, trousers woman, shorts+cap+backpack man, worker,
+  heavy bald bearded man; 1600×900, 7.2 m), `lineupB_*` (elderly man with cane + hat, elderly woman, teen, jogger
+  woman, boy 7, girl 6), `typical_16m.png` / `typical_40m.png` (DOF on), `lod{0,1,2}_9m.png`, `lod{0,1}_52m.png`,
+  `lod{1,2}_128m.png` (forced levels), `gait_{walk_man,walk_woman_skirt,jog,walk_elderly}.png` (8 phases π/4 apart,
+  side view), `gait_suit_34.png`, `sit_{front,side,34,14m}.png`, `poses_ground{,_side}.png` (towel sit, 3 lie
+  variants, wave, angler), `dog_pram_{side,34}.png` (1280×720).
+* `crowd/` — live crowd: `sqclose_11.png` (town square 14 m; some figures are mid-dither because a census had just
+  re-warmed the population), `parkbench_11.png` (park 13 m, natural walk with pram/child/elderly), `sqmid_18h2.png`
+  (40 m golden hour).
+* `crops/` — `proportions_overlay.png`, head/upper-body zooms, gait feet, LOD stacks, POI crops (from the lead's
+  full-city baseline `shots/baseline/oldtown_{11,21h5}.png`).
+* `census.json` — per-view LOD counts via the renderer's own `write()` (only the first block, hour 3 = the boot noon
+  population of 405, is representative; later blocks are inflated by repeated warm starts without sim time).
+* `tools/lineup_driver.mjs` — re-runnable lineup (freezes the sim, hides everybody, places hand-built looks/poses;
+  skips shots that already exist): `W=1280 H=720 TH_LOCK_SLOTS=2 node shots/people-review/tools/lineup_driver.mjs
+  <outDir> [http://127.0.0.1:5173/]`. It writes `Member` fields directly (look, x/z/yaw, amp/phase, sit/lie/ground,
+  wave…) — keep those field names or update the driver.
+* `tools/fk/` — node checks that bundle the real `figure.ts`/`render.ts`: `node build.mjs slip.ts` (foot slide /
+  hover per gait), `gait.ts` (per-phase table), `contact.ts` (pram hands, cane tip, wave, sit fit), `measure.ts`
+  (vertices/triangles per level, per feature bit, part extents). Use them as acceptance tests for P2.
 
 ---
 
@@ -268,10 +406,14 @@ Let v = speed (m/s), Lh = hip height of the kind × scale, Fr = v² / (9.81·Lh)
   surface, ≈ 0.13 m behind today's seat spot: a render-side local `rootZ` offset, no sim change), torso leaning back
   12–18° onto the backrest, thighs on the seat sloping ≤ 5°, knee 85–100°, shins near vertical with feet flat on the
   ground (IK: if the lower leg is shorter than the seat, the thigh slopes down / feet dangle only for children).
+  Held props while seated: briefcase/shopping bag set down beside the feet or on the lap (render-side: a prop
+  'parked' pose, never following a raised forearm); cane leaned against the bench; handbag on the lap.
   Variants: legs crossed at the knee, ankles crossed, leaning forward with forearms on thighs, arm along the
   backrest, reading (newspaper held at 0.35 m in front of the face), feeding birds (forearm out). Tail garments drape.
 * Ground sitting (towel): keep the leaning-back-on-hands pose but bend the elbows 5–10°, knees up 60–90° for one
-  leg, feet flat; variant: cross-legged, hugging knees. Lying: on back with arms behind the head (fix the
+  leg, feet flat; variant: cross-legged, hugging knees. Hats/caps come off (or lie beside the towel) when lying.
+  Swimwear: torso-only (men: trunks as a shorts hem at 0.70–0.80 m, bare chest; women: one-piece = torso + hip,
+  bikini = two bands) — upper arms and thighs stay skin (today the TOP/THIGH slots make a onesie). Lying: on back with arms behind the head (fix the
   arm–head intersection), arms along the body, one knee up; plus lying on the front (face down, head on forearms).
 * Wave: upper arm raised forward-side to ~110°, forearm vertical, hand open, wave from the elbow ±20° at 2.5 Hz
   (not the whole arm).
@@ -307,6 +449,8 @@ Let v = speed (m/s), Lh = hip height of the kind × scale, Fr = v² / (9.81·Lh)
   material collapses every vertex, `castShadow` only; LOD0/lo `castShadow = false`). Shadow texels are ≥ 5–10 cm, so
   hands/faces are invisible in shadows anyway. Today LOD0 figures cost 1778 vertices in the shadow pass; the proxy
   costs 241. Also skip shadow casting beyond ~150 m.
+* Switch distances can move in safely: today LOD0 vs `lo` are indistinguishable at 52 m and `lo` vs tiny at 128 m
+  (F11 evidence). Re-check with the new meshes (larger silhouette differences) using forced levels at the switch.
 * Transitions: hysteresis band ±3 m on each switch distance; optional 0.3 s dithered cross-fade using the existing
   Bayer fade (draw the figure in both levels while switching).
 * Measured census (renderer `write()` called synchronously per camera pose at 1920×1025, noon population ≈ 405;
@@ -389,7 +533,7 @@ Let v = speed (m/s), Lh = hip height of the kind × scale, Fr = v² / (9.81·Lh)
 1. **P1 — data model + proportions (biggest win per hour).** Free attribute slots (§4.9); per-kind rig table and
    build axis; fix arm length (upper arm 0.33, hands 0.19), shoulder width (0.46/0.40), head width (0.155), neck,
    feet length (0.27) — still with today's simple primitives, all three levels. Shadow proxy. Palette rebalance in
-   looks.ts. Re-run the lineup (scratchpad driver documented in §8) and perf.
+   looks.ts. Re-run the lineup (`shots/people-review/tools/lineup_driver.mjs`, §3) and perf.
 2. **P2 — gait.** Gait step model shared with crowd.ts phase, ankle joint, stance IK + swing trajectory, knee
    curve, pelvis/torso/head motion, arm/elbow curve, run with flight, start/stop. Node FK acceptance test (slide
    ≤ 1 cm, hover ≤ 0.5 cm) + side-view gait strips.

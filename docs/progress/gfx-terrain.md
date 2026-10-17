@@ -36,6 +36,13 @@ T1 cliffs & rock · T2 lawns & ground · T3 stadium shell · T4 lamp light in th
   boundary wobble, tapered block ends (V joints), thin beds recessed+dark (shale bands), slanted
   mid-row facets, more moss; portal approach cuts dressed too. Lawn stripes/macro too weak → boosted.
 
+* Perf structure (offline geometry count, node + rolldown, scratchpad/geo/masstat.ts): masonry mesh
+  legacy 25.7k tris / 51.5k verts → new 39.0k tris / 37.4k verts (cliff skin 12k tris / 9k verts,
+  scree 225 stones as 20-facet chunks). The masonry material is now `flatShading` (facets from
+  derivatives) so the skin + every boulder are indexed with shared vertices: FEWER vertices than before
+  despite the new rock. Cliff build 0.17 s at boot.
+* Stage S1 lighting is live (stronger warmer sun, weaker fill): re-tune under it.
+
 ## Toggles
 `?legacyterrain` (everything old), `?nocliffs` (no rock skin / tors), `?legacyground`, `?legacystadium`.
 

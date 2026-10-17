@@ -50,6 +50,12 @@ export class BoatRenderer {
   ) {
     this.group.name = 'boats';
     const { material, depth } = createBoatMaterials(ctx.uniforms);
+    // night: moored / passing boats catch the quay and pier lamps (lamp light map, lamps module)
+    import('../../world/lamps/integrate')
+      .then((m) => m.patchLampMaterial(material))
+      .catch(() => {
+        /* lamps module optional */
+      });
     const mk = (geo: THREE.BufferGeometry, cap: number, name: string): Pool => {
       this.triangles += (geo.index ? geo.index.count : geo.attributes.position.count) / 3;
       const a1 = new THREE.InstancedBufferAttribute(new Float32Array(cap * 4), 4);

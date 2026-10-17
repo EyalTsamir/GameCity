@@ -47,7 +47,20 @@ Brief: GFX-PLAN.md (W1 planar reflections, W2 shading, W3 hull contact + wakes, 
   (`shots/water/it1`). Next: judge frames, tune, wakes (Kelvin ribbons), boat reflection culling (mirrored
   frustum test in boats/render.ts), before/after sheets, perf.
 
+* ~20:45 — it2 captures (`shots/water/it2`, harbor/shipw/pier at 11/18.2/21.5): reflections work (ship
+  superstructure, cranes, tug, sailboat, pier pilings; night windows + pier lamps + wheel streaks). Reflection
+  pass at 1280x720: 427x240, 14 draw calls, ~209k tris (pier night). Fixes after review: body palette darkened
+  (S1 sun made the diffuse-lit body as bright as the sky → reflections washed out), Beckmann glitter lobe
+  (GGX tails covered the sea at sunset), narrower hull foam ring on the big ship (it hid the hull reflection),
+  F0 0.3/0.34/0.32, slick/ruffle Fresnel modulation, night-only emitter meshes skipped by day, wake ribbons
+  (sim/boats/ribbons.ts) replace bow/stern puffs (`?wakes=puffs` = old A/B), puffs only for prop wash + spray,
+  boats get the lamp light map (night agent's patchLampMaterial, dynamic import), `?waterdebug=refl`.
+* Lead's river view "-30,0,118,32,20,18" is blocked by trees → use river2=-30,-1.6,118,45,180,30.
+  Lead's ship view "128,2,-78,42,70,16" only shows containers → use shipw=160,-1.6,-80,60,100,24.
+
 ## Open issues / notes
+* GL warning "Mismatch between texture format and sampler type" seen in subset runs — A/B with
+  ?nowaterrefl pending (it3) to tell whether it is mine.
 * Depends (read-only) on the sky dome's uniform names: uZenith, uHorizon, uGlow, uGlowI, uSunCol, uSunVis,
   uMoonDir, uMoonVis, uOvercast (mesh name `sky-dome`). Missing → fixed day colours.
 * `scene.onBeforeRender` is chained (previous handler is called first) — other modules may also hook it.

@@ -244,10 +244,10 @@ export function planScatter(inp: ScatterInputs): ScatterItem[] {
       ox1 = Math.min(f.x1, r.x1),
       oz0 = Math.max(f.z0, r.z0),
       oz1 = Math.min(f.z1, r.z1);
-    if (ox1 - ox0 > 2 && f.z1 >= r.z0 - 0.6 && f.z1 <= r.z1 - reach) res.push([ox0, f.z1, ox1, f.z1, 0, 1]);
-    if (ox1 - ox0 > 2 && f.z0 <= r.z1 + 0.6 && f.z0 >= r.z0 + reach) res.push([ox0, f.z0, ox1, f.z0, 0, -1]);
-    if (oz1 - oz0 > 2 && f.x1 >= r.x0 - 0.6 && f.x1 <= r.x1 - reach) res.push([f.x1, oz0, f.x1, oz1, 1, 0]);
-    if (oz1 - oz0 > 2 && f.x0 <= r.x1 + 0.6 && f.x0 >= r.x0 + reach) res.push([f.x0, oz0, f.x0, oz1, -1, 0]);
+    if (ox1 - ox0 > 2 && f.z1 >= r.z0 - 3.6 && f.z1 <= r.z1 - reach) res.push([ox0, f.z1, ox1, f.z1, 0, 1]);
+    if (ox1 - ox0 > 2 && f.z0 <= r.z1 + 3.6 && f.z0 >= r.z0 + reach) res.push([ox0, f.z0, ox1, f.z0, 0, -1]);
+    if (oz1 - oz0 > 2 && f.x1 >= r.x0 - 3.6 && f.x1 <= r.x1 - reach) res.push([f.x1, oz0, f.x1, oz1, 1, 0]);
+    if (oz1 - oz0 > 2 && f.x0 <= r.x1 + 3.6 && f.x0 >= r.x0 + reach) res.push([f.x0, oz0, f.x0, oz1, -1, 0]);
     return res;
   };
   const yawOf = (nx: number, nz: number) => Math.atan2(nx, nz);
@@ -274,8 +274,10 @@ export function planScatter(inp: ScatterInputs): ScatterItem[] {
         const tx = (bx - ax) / L,
           tz = (bz - az) / L;
         const rows = rnd() < 0.55 ? 2 : 1;
+        // gap between the facade and the plaza edge (block paving in between)
+        const gap = nz > 0 ? r.z0 - az : nz < 0 ? az - r.z1 : nx > 0 ? r.x0 - ax : ax - r.x1;
         for (let row = 0; row < rows; row++) {
-          const off = 2.15 + row * 2.6;
+          const off = Math.max(2.15, gap + 1.45) + row * 2.6;
           const n = Math.floor((L - 1.6) / 2.75);
           const s0 = (L - (n - 1) * 2.75) / 2;
           for (let k = 0; k < n; k++) {
@@ -288,7 +290,7 @@ export function planScatter(inp: ScatterInputs): ScatterItem[] {
     }
     // planters along the plaza edges (between the sidewalk and the plaza), every ~7 m
     const edgeSlots: [number, number, number][] = [];
-    const inset = 1.35;
+    const inset = 1.65;
     for (let x = r.x0 + 2.5; x < r.x1 - 2; x += 6.8) {
       edgeSlots.push([x, r.z0 + inset, 0], [x, r.z1 - inset, 0]);
     }
@@ -348,8 +350,9 @@ export function planScatter(inp: ScatterInputs): ScatterItem[] {
         if (east) {
           // clock post at the corner nearest the entrance, then rows of bike parking
           put(Z, 'clock', r.x0 + 2.2, r.z1 - 2.2, 0, 0.3);
-          for (let z = r.z0 + 2.0; z < r.z1 - 3.0; z += 2.3)
-            for (let x = r.x0 + 4.2; x < r.x1 - 2.0; x += 3.05) put(Z, 'bikeRack', x, z, 0, 0.0);
+          // back-to-back rack pairs with an aisle between them
+          for (const dz of [2.0, 4.0, 8.6, 10.6])
+            for (let x = r.x0 + 4.4; x < r.x1 - 2.0; x += 3.0) put(Z, 'bikeRack', x, r.z0 + dz, dz === 2.0 || dz === 8.6 ? Math.PI : 0, 0.0);
           for (let x = r.x0 + 2.0; x < r.x1 - 1; x += 3.4) put(Z, 'planter', x, r.z1 - 1.3, 0, 0.3);
         } else {
           // café seating around the kiosk, planters, a taxi-rank style info pillar
@@ -375,13 +378,12 @@ export function planScatter(inp: ScatterInputs): ScatterItem[] {
       if (plat) {
         const r: Rect = { x0: plat.rect.x0, z0: plat.rect.z0, x1: plat.rect.x1, z1: plat.rect.z1 };
         const Z = zone(r, { paved: true, edge: 0, walkPad: 0.5 });
-        const zWall = st.footprint.z0; // back wall (north face)
-        // keep the strip in front of the platform wall, the stairs and both ramps clear
-        Z.grid.block(r.x0 - 1, r.z0 - 1, r.x1 + 1, zWall - 4.3);
+        // items line the lot edge behind the station; the strip along the platform wall, the stairs and both ramps stay clear
+        Z.grid.block(r.x0 - 1, r.z0 - 1, r.x1 + 1, r.z1 - 3.4);
         Z.grid.block(-6, r.z0 - 1, 6, r.z1 + 1);
         Z.grid.block(r.x0 - 1, r.z0 - 1, r.x0 + 7, r.z1 + 1);
         Z.grid.block(r.x1 - 7, r.z0 - 1, r.x1 + 1, r.z1 + 1);
-        const zRow = zWall - 1.35;
+        const zRow = r.z1 - 1.15;
         const seq: ScatterKind[] = ['planter', 'bikeRack', 'bikeRack', 'planter', 'vending', 'trolleys', 'planter', 'bikeRack', 'planter'];
         let k = 0;
         for (const sgn of [-1, 1]) {
