@@ -111,6 +111,8 @@ export interface Services {
   pedestrians?: { count(): number };
   rail?: { trains(): number };
   audio?: { setEnabled(on: boolean): void; enabled(): boolean };
+  // water (ctx.services.water, typed in world/water.ts) also offers setReflectionQuality(level 0 off |
+  // 1 low | 2 full) for the adaptive quality controller once reflections exist.
   ui?: { toast(msg: string): void };
   [name: string]: unknown;
 }

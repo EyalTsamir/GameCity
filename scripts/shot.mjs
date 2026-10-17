@@ -16,13 +16,13 @@
 //   --shots <n>          number of captures (default 1)  --interval <ms> between captures (default 1000)
 //   --stats              print window.__city.stats()      --invariants  print invariants()
 //   --validate           print window.__city.validate()
-//   --timeout <ms>       max wait for readiness (default 90000)
+//   --timeout <ms>       max wait for readiness (default 300000; software GL loads slowly)
 //
 // Prints a JSON report to stdout: console errors/warnings, page errors, failed modules,
 // stats, invariants. Only one browser runs at a time (lock dir scripts/.shotlock),
 // so several agents can call this concurrently without exhausting memory/GPU.
 
-import { chromium } from 'playwright-core';
+import { launchBrowser, acquireLock, releaseLock } from './browser.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -50,59 +50,20 @@ const height = parseInt(args.height ?? '720', 10);
 const wait = parseInt(args.wait ?? '2500', 10);
 const shots = parseInt(args.shots ?? '1', 10);
 const interval = parseInt(args.interval ?? '1000', 10);
-const timeout = parseInt(args.timeout ?? '90000', 10);
+const timeout = parseInt(args.timeout ?? '300000', 10);
 let url = args.url ?? 'http://127.0.0.1:5173/';
 if (args.q) url += (url.includes('?') ? '&' : '?') + args.q;
 const out = path.resolve(root, args.out ?? 'shots/shot.png');
 fs.mkdirSync(path.dirname(out), { recursive: true });
 
-// ── lock (one browser at a time across processes)
-const lockDir = path.join(here, '.shotlock');
-async function acquire() {
-  const t0 = Date.now();
-  for (;;) {
-    try {
-      fs.mkdirSync(lockDir);
-      fs.writeFileSync(path.join(lockDir, 'pid'), String(process.pid));
-      return;
-    } catch {
-      try {
-        const st = fs.statSync(lockDir);
-        if (Date.now() - st.mtimeMs > 150_000) {
-          fs.rmSync(lockDir, { recursive: true, force: true });
-          continue;
-        }
-      } catch {
-        /* vanished */
-      }
-      if (Date.now() - t0 > 600_000) throw new Error('timed out waiting for screenshot lock');
-      await new Promise((r) => setTimeout(r, 400 + Math.random() * 400));
-    }
-  }
-}
-function release() {
-  try {
-    fs.rmSync(lockDir, { recursive: true, force: true });
-  } catch {
-    /* ignore */
-  }
-}
-process.on('exit', release);
-process.on('SIGINT', () => {
-  release();
-  process.exit(130);
-});
-
 const report = { url, consoleErrors: [], consoleWarnings: [], pageErrors: [], failedModules: [], frameErrors: [], screenshots: [] };
 
-await acquire();
+await acquireLock();
 let browser;
 try {
-  browser = await chromium.launch({
-    channel: 'chrome',
-    headless: !args.headed,
-    args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist', '--enable-unsafe-swiftshader', '--disable-background-timer-throttling', '--disable-renderer-backgrounding'],
-  });
+  const launched = await launchBrowser({ headless: !args.headed });
+  browser = launched.browser;
+  report.softwareGL = launched.software;
   const page = await browser.newPage({ viewport: { width, height }, deviceScaleFactor: 1 });
   // Freeze the page against other agents' file edits: swallow Vite's HMR websocket so no mid-run reloads happen.
   await page.routeWebSocket(/.*/, () => {});
@@ -143,7 +104,7 @@ try {
   await page.waitForTimeout(wait);
   for (let i = 0; i < shots; i++) {
     const file = shots === 1 ? out : out.replace(/\.png$/i, `_${i + 1}.png`);
-    await page.screenshot({ path: file, type: 'png' });
+    await page.screenshot({ path: file, type: 'png', timeout: 240000 });
     report.screenshots.push(path.relative(root, file));
     if (i < shots - 1) await page.waitForTimeout(interval);
   }
@@ -155,6 +116,6 @@ try {
   report.harnessError = String(err?.stack ?? err);
 } finally {
   if (browser) await browser.close().catch(() => {});
-  release();
+  releaseLock();
 }
 console.log(JSON.stringify(report, null, 2));

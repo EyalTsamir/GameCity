@@ -4,7 +4,7 @@
 //
 //   node scripts/soak.mjs [--minutes 4] [--speed 4] [--every 10] [--view overview] [--q "..."]
 
-import { chromium } from 'playwright-core';
+import { launchBrowser, acquireLock, releaseLock } from './browser.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -18,29 +18,19 @@ const every = parseFloat(args.every ?? '10');
 let url = args.url ?? 'http://127.0.0.1:5173/';
 if (args.q) url += (url.includes('?') ? '&' : '?') + args.q;
 
-const lockDir = path.join(here, '.shotlock');
-for (const t0 = Date.now(); ; ) {
-  try {
-    fs.mkdirSync(lockDir);
-    break;
-  } catch {
-    if (Date.now() - t0 > 900_000) throw new Error('lock timeout');
-    await new Promise((r) => setTimeout(r, 500));
-  }
-}
-const release = () => fs.rmSync(lockDir, { recursive: true, force: true });
-process.on('exit', release);
+await acquireLock();
 
 const out = { url, minutes, speed, samples: [], consoleErrors: [], pageErrors: [], invariantHits: {} };
-const browser = await chromium.launch({ channel: 'chrome', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist', '--disable-background-timer-throttling', '--disable-renderer-backgrounding', '--enable-precise-memory-info'] });
+const { browser, software } = await launchBrowser({ extraArgs: ['--enable-precise-memory-info'] });
+out.softwareGL = software;
 try {
   const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
   // Freeze the page against other agents' file edits: swallow Vite's HMR websocket so no mid-run reloads happen.
   await page.routeWebSocket(/.*/, () => {});
   page.on('console', (m) => m.type() === 'error' && out.consoleErrors.push(m.text()));
   page.on('pageerror', (e) => out.pageErrors.push(String(e)));
-  await page.goto(url, { waitUntil: 'domcontentloaded' });
-  await page.waitForFunction(() => window.__city?.ready && window.__city.frames() > 3, null, { timeout: 120000 });
+  await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 300000 });
+  await page.waitForFunction(() => window.__city?.ready && window.__city.frames() > 3, null, { timeout: 300000 });
   out.failedModules = await page.evaluate(() => window.__city.failed.map((f) => f.name));
   await page.evaluate(([s, v]) => {
     window.__city.setSpeed(s);
@@ -71,6 +61,6 @@ try {
   out.harnessError = String(e?.stack ?? e);
 } finally {
   await browser.close().catch(() => {});
-  release();
+  releaseLock();
 }
 console.log(JSON.stringify(out, null, 2));

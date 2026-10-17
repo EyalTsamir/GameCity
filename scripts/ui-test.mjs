@@ -11,7 +11,7 @@
 // Shares the screenshot lock with scripts/shot.mjs. Prints a JSON report with per-step
 // pass/fail, camera state deltas, console errors and screenshots.
 
-import { chromium } from 'playwright-core';
+import { launchBrowser, acquireLock, releaseLock } from './browser.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -35,41 +35,6 @@ const url = `http://127.0.0.1:5173/?${q}${intro ? (q.includes('hint') ? '' : '&h
 const outBase = path.resolve(root, args.out ?? 'shots/uitest');
 fs.mkdirSync(path.dirname(outBase), { recursive: true });
 
-const lockDir = path.join(here, '.shotlock');
-async function acquire() {
-  const t0 = Date.now();
-  for (;;) {
-    try {
-      fs.mkdirSync(lockDir);
-      fs.writeFileSync(path.join(lockDir, 'pid'), String(process.pid));
-      return;
-    } catch {
-      try {
-        const st = fs.statSync(lockDir);
-        if (Date.now() - st.mtimeMs > 150_000) {
-          fs.rmSync(lockDir, { recursive: true, force: true });
-          continue;
-        }
-      } catch {
-        /* vanished */
-      }
-      if (Date.now() - t0 > 600_000) throw new Error('timed out waiting for screenshot lock');
-      await new Promise((r) => setTimeout(r, 400 + Math.random() * 400));
-    }
-  }
-}
-function release() {
-  try {
-    fs.rmSync(lockDir, { recursive: true, force: true });
-  } catch {
-    /* ignore */
-  }
-}
-process.on('exit', release);
-process.on('SIGINT', () => {
-  release();
-  process.exit(130);
-});
 
 const report = { url, viewport: `${width}x${height}@${dpr}`, steps: [], skipped: [], consoleErrors: [], consoleWarnings: [], pageErrors: [], screenshots: [], reloads: 0 };
 
@@ -145,14 +110,10 @@ function motionStats(frames) {
   return { frames: frames.length, maxRelDistPerFrame: Math.round(maxRel * 1000) / 1000, maxStepPerFrame: Math.round(maxStep * 10) / 10, maxAccel: Math.round(maxJerk * 100) / 100, insideFrames: inside, at, insideAt };
 }
 
-await acquire();
+await acquireLock();
 let browser;
 try {
-  browser = await chromium.launch({
-    channel: 'chrome',
-    headless: !args.headed,
-    args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist', '--disable-background-timer-throttling', '--disable-renderer-backgrounding'],
-  });
+  browser = (await launchBrowser({ headless: !args.headed })).browser;
   const page = await browser.newPage({ viewport: { width, height }, deviceScaleFactor: dpr });
   page.on('console', (m) => {
     if (m.type() === 'error') report.consoleErrors.push(m.text());
@@ -163,8 +124,8 @@ try {
   page.on('framenavigated', (f) => {
     if (f === page.mainFrame()) report.reloads++;
   });
-  await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 90000 });
-  await page.waitForFunction(() => window.__city && window.__city.ready && window.__city.frames() > 5, null, { timeout: 90000, polling: 250 });
+  await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 300000 });
+  await page.waitForFunction(() => window.__city && window.__city.ready && window.__city.frames() > 5, null, { timeout: 300000, polling: 250 });
   // the loading screen fades for ~1 s and takes the pointer meanwhile (the intro step watches it instead)
   if (!intro) await page.waitForTimeout(1500);
 
@@ -1008,7 +969,7 @@ try {
   report.harnessError = String(err?.stack ?? err);
 } finally {
   if (browser) await browser.close().catch(() => {});
-  release();
+  releaseLock();
 }
 report.passed = report.steps.filter((s) => s.ok).length;
 report.failed = report.steps.filter((s) => !s.ok).map((s) => s.name);

@@ -12,6 +12,7 @@
 //   'bus:stop' ({stopId:number, busId:number, phase:'arrive'|'depart'})
 //   'camera:follow' (hit:PickHit|null)
 //   'select' (hit:PickHit|null)
+//   'modules:ready' (names:string[]) every module has been created (emitted once, before the first frame)
 
 type Handler = (payload: any) => void;
 

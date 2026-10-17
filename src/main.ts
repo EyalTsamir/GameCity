@@ -24,6 +24,7 @@ const MODULES: [string, () => Promise<{ default: ModuleFactory }>][] = [
   ['harbor', () => import('./world/harbor')],
   ['vegetation', () => import('./world/vegetation')],
   ['props', () => import('./world/props')],
+  ['lamps', () => import('./world/lamps')],
   ['traffic', () => import('./sim/traffic')],
   ['pedestrians', () => import('./sim/pedestrians')],
   ['rail', () => import('./sim/rail')],
@@ -169,6 +170,7 @@ async function boot(): Promise<void> {
     }
   }
   if (ctx.services.sky) scene.remove(fallback);
+  ctx.events.emit('modules:ready', modules.map((m) => m.name));
 
   // ── main loop
   const timer = new THREE.Timer();
