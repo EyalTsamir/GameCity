@@ -15,6 +15,7 @@ import { SIDEWALK_Y } from '../../core/constants';
 import type { MeshBuilder } from './builder';
 import { Y } from './streets';
 import { HM, surf } from './surfaces';
+import { getLayout } from '../props/layout';
 
 interface Cover {
   key: string;
@@ -29,6 +30,7 @@ export interface CoverStats {
   coverRects: number;
   pathRibbons: number;
   plots: number;
+  patios: number;
 }
 
 export interface CoverInfo {
@@ -105,7 +107,7 @@ function coverForBlock(b: Block): Cover | null {
 export function buildCovers(ctx: CityContext, A: MeshBuilder, H: MeshBuilder): { stats: CoverStats; info: CoverInfo } {
   const plan = ctx.plan;
   const occ = ctx.occupancy;
-  const stats: CoverStats = { coverRects: 0, pathRibbons: 0, plots: 0 };
+  const stats: CoverStats = { coverRects: 0, pathRibbons: 0, plots: 0, patios: 0 };
   const info: CoverInfo = { radial: [], field: null, court: null };
   const terrainH = (ctx.services.terrain as { height?: (x: number, z: number) => number } | undefined)?.height ?? plan.heightAt;
   const deckArea = plan.areas.find((a) => a.kind === 'boardwalk');
@@ -490,6 +492,23 @@ export function buildCovers(ctx: CityContext, A: MeshBuilder, H: MeshBuilder): {
         H.wall(a.x, a.z, b.x, b.z, Y.ground, y, onx, onz);
       }
     }
+  }
+
+  // ── garden patios (layout shared with props / vegetation): flags, pavers, brick at 4.5 cm, decking raised
+  for (const gp of getLayout(ctx).gardens) {
+    const p = gp.patio;
+    if (!p) continue;
+    const deck = gp.patioMat === 2;
+    const y = deck ? 0.13 : 0.045;
+    const alongX = p.x1 - p.x0 >= p.z1 - p.z0;
+    surf(H, HM.patio, gp.patioMat, 9, 0, alongX ? 0 : 1);
+    H.rect(p.x0, p.z0, p.x1, p.z1, y);
+    surf(H, deck ? HM.side : HM.side, deck ? 3 : 0, 9, 0);
+    H.wall(p.x0, p.z0, p.x1, p.z0, Y.ground, y, 0, -1);
+    H.wall(p.x1, p.z1, p.x0, p.z1, Y.ground, y, 0, 1);
+    H.wall(p.x0, p.z1, p.x0, p.z0, Y.ground, y, -1, 0);
+    H.wall(p.x1, p.z0, p.x1, p.z1, Y.ground, y, 1, 0);
+    stats.patios++;
   }
 
   return { stats, info };

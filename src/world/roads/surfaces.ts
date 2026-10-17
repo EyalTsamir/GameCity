@@ -35,6 +35,7 @@ export const HM = {
   pathPaved: 17,
   side: 18,
   shoulder: 19,
+  patio: 20,
 } as const;
 
 interface Surf {
@@ -104,6 +105,11 @@ const TABLE: Record<string, Surf> = {
   [`${HM.side}:1`]: S({ speck: 0.14, color: lin(0.36, 0.35, 0.33) }),
   [`${HM.side}:2`]: S({ speck: 0.18, color: lin(0.34, 0.27, 0.18), rough: 1 }),
   [`${HM.side}:3`]: S({ speck: 0.2, color: lin(0.4, 0.28, 0.18), rough: 0.9 }),
+  // garden patios: sandstone flags, grey pavers, timber decking, brick
+  [`${HM.patio}:0`]: S({ size: [0.6, 0.6], jw: 0.012, jd: 0.4, tint: 0.2, bevel: 0.06, bond: 0.5, speck: 0.1, color: lin(0.6, 0.5, 0.36), stain: 0.08 }),
+  [`${HM.patio}:1`]: S({ size: [0.4, 0.4], jw: 0.01, jd: 0.38, tint: 0.14, bevel: 0.08, speck: 0.1, color: lin(0.44, 0.43, 0.41), stain: 0.08 }),
+  [`${HM.patio}:2`]: S({ size: [2.4, 0.145], jw: 0.012, jd: 0.65, tint: 0.22, bond: -1, speck: 0.1, color: lin(0.44, 0.29, 0.17), rough: 0.8 }),
+  [`${HM.patio}:3`]: S({ size: [0.22, 0.11], jw: 0.011, jd: 0.35, tint: 0.24, bevel: 0.1, bond: 0.5, speck: 0.1, color: lin(0.46, 0.22, 0.14) }),
   // tunnel-road shoulder: gravel with grass creeping in
   [`${HM.shoulder}:0`]: S({ speck: 0.35, color: lin(0.45, 0.41, 0.34), special: 3, rough: 1 }),
 };
@@ -130,9 +136,9 @@ export const HARD_ATTRS = [
 ];
 
 /** Set the current hardscape surface (material id + variant), curb distance d and coordinate u. */
-export function surf(H: MeshBuilder, mat: number, variant = 0, d = 9, u = 0): void {
+export function surf(H: MeshBuilder, mat: number, variant = 0, d = 9, u = 0, frame?: number): void {
   const { s, c } = lookup(mat, variant);
-  H.set('aS', d, u, s.special, s.frame);
+  H.set('aS', d, u, s.special, frame ?? s.frame);
   H.set('aP', s.size[0], s.size[1], s.jw, s.jd);
   H.set('aV', s.tint, s.bevel, s.bond, s.speck);
   H.set('aC', c.r, c.g, c.b);

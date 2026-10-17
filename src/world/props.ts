@@ -241,9 +241,12 @@ export default function create(ctx: CityContext): CityModule {
 
   // ───────────────────────────────────────────────────────── gardens ──
   for (const gp of layout.gardens) {
+    const pr = gp.patio;
+    const patioY = gp.patioMat === 2 ? 0.13 : 0.045;
     for (const it of gp.items) {
       const grng = new Rng(it.seed || 1);
-      const y = H(it.x, it.z);
+      const onPatio = !!pr && it.x > pr.x0 && it.x < pr.x1 && it.z > pr.z0 && it.z < pr.z1;
+      const y = onPatio ? Math.max(H(it.x, it.z), patioY) : H(it.x, it.z);
       const at = (kit: Kit) => kit.sh.frame(it.x, y, it.z, it.yaw);
       switch (it.kind) {
         case 'shed':

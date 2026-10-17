@@ -463,8 +463,6 @@ export function pool(k: Kit, rng: Rng, w: number, d: number): void {
   // water: outer ring light (shallow tile), centre deep; emissive at night (pool lights)
   const y = 0.06;
   const glow = 0.55;
-  const ring = (fx: number, fz: number) => [(-iw / 2 + 0.04) * fx, (-id / 2 + 0.04) * fz];
-  void ring;
   const bx = iw / 2 - 0.04,
     bz = id / 2 - 0.04;
   const ix = bx * 0.62,
