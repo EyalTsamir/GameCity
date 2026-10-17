@@ -602,7 +602,7 @@ export function createSlab(ctx: CityContext, model: TerrainModel, edges: SlabEdg
   );
   stage.table = table;
   stage.legacyContact = contact;
-  const legacy = ctx.debug.params.has('legacylight');
+  const legacy = ctx.debug.params.has('legacylight') || ctx.debug.params.has('notable');
   table.visible = !legacy;
   contact.visible = legacy;
   const shadow = new THREE.Group();

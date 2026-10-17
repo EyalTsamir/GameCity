@@ -34,6 +34,10 @@ all ten areas below — not token tweaks — while keeping the Adreno X1-45 perf
 | terrain | `src/world/terrain.ts`, `src/world/terrain/*` except `slab.ts`/`glow.ts`, `src/world/landmarks.ts`, `src/world/landmarks/*` except `glows.ts`/`shaders.ts`/`materials.ts` (stadium shell etc.) |
 | people (added later: realistic human figures) | `src/sim/pedestrians/figure.ts`, `render.ts`, `looks.ts`; render/pose plumbing only in `src/sim/pedestrians.ts` and `crowd.ts` (never movement logic). A read-only reviewer writes `docs/progress/people-review.md` first. |
 
+Granted exceptions (lead): night may add the one-line `patchLampMaterial()` call (+ import) to
+`src/sim/traffic/vehicleMaterial.ts` and `src/sim/rail/trainMaterial.ts`; water applies it to boats;
+people to pedestrians.
+
 Need something in a file you don't own? Write it under "Requests to other areas" in your log; the
 lead relays it. A minimal additive change to a lead-owned file is allowed if you are blocked — list it
 under "Changes outside my area". Never edit another agent's files. Never run git commands that write

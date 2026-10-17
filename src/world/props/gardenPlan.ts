@@ -67,9 +67,10 @@ export interface GardenPlan {
 
 // ───────────────────────────────────────────────────────────── helpers ──
 
-const CELL = 0.25;
+export const CELL = 0.25;
 
-class FreeGrid {
+/** 0.25 m free-cell raster over a rectangle (1 = blocked). */
+export class FreeGrid {
   readonly x0: number;
   readonly z0: number;
   readonly w: number;

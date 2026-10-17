@@ -130,9 +130,11 @@ export default async function create(ctx: CityContext): Promise<CityModule> {
   const stage: StageService = { uniforms: createStageUniforms(), table: null, legacyContact: null };
   ctx.services.stage = stage;
   const _cyc = new THREE.Color();
+  // ?notable: studio key without the table (perf A/B of the table alone; the dome floor stays)
+  const noTable = ctx.debug.params.has('notable');
   const applyStageVisibility = () => {
-    if (stage.table) stage.table.visible = !legacy;
-    if (stage.legacyContact) stage.legacyContact.visible = legacy;
+    if (stage.table) stage.table.visible = !legacy && !noTable;
+    if (stage.legacyContact) stage.legacyContact.visible = legacy || noTable;
   };
   const state = new SkyState();
 
@@ -303,7 +305,7 @@ export default async function create(ctx: CityContext): Promise<CityModule> {
     stage.uniforms.uStageL.value.copy(_L);
     stage.uniforms.uStageShadow.value = (usingMoon ? 0.6 * moonW : sunW) * (1 - overcast * 0.85);
     stage.uniforms.uCityGlow.value = lights;
-    if (stage.table && stage.table.visible === legacy) applyStageVisibility();
+    if (stage.table && stage.table.visible !== (!legacy && !noTable)) applyStageVisibility();
     // clouds go dim + translucent only after the afterglow / blue hour (dusk keeps its pink glow)
     const cloudNight = smooth(-0.07, -0.3, sh);
     clouds.frame(ctx.camera, state, _L, sun.color, lightI, sunVis, lights * (1 - sunVis * 0.8), overcast, cloudNight);

@@ -272,6 +272,7 @@ export default function create(ctx: CityContext): CityModule {
   const nightZen = new THREE.Color('#0b1426');
   const nightHor = new THREE.Color('#1c2740');
   const sky = new SkyState();
+  const legacyLight = ctx.debug.params.has('legacylight');
   const camDir = new THREE.Vector3();
   const tmpC = new THREE.Color();
   const cityAlb = new THREE.Color(0.4, 0.39, 0.38);
@@ -295,7 +296,7 @@ export default function create(ctx: CityContext): CityModule {
         mu.uSkyHor.value.copy(hor);
         mu.uGround.value.setRGB(0.18 * day + 0.015, 0.17 * day + 0.015, 0.15 * day + 0.02);
       } else {
-        samplePalette(c.clock.hours, sky);
+        samplePalette(c.clock.hours, sky, legacyLight);
         mu.uSkyZen.value.copy(sky.zenith);
         hor.copy(sky.horizon);
         if (fog && (fog as THREE.Fog).color) hor.lerp((fog as THREE.Fog).color, 0.25);
@@ -318,6 +319,9 @@ export default function create(ctx: CityContext): CityModule {
         if (L) gnd.copy(L.hemi.groundColor).multiplyScalar(hemiI * 0.5).add(tmpC.copy(L.sun.color).multiplyScalar(sunI * 0.3 * sunUp));
         else gnd.setRGB(0.5, 0.5, 0.5);
         gnd.multiplyScalar(0.3 / Math.PI);
+        // the studio backdrop (cyclorama) closes the reflected lower hemisphere like the sky dome does
+        const cyc = (sky as SkyState & { cyc?: THREE.Color }).cyc;
+        if (cyc) gnd.lerp(tmpC.copy(cyc).multiplyScalar(0.8), 0.45);
         // stylised horizon lift: the reflected horizon crosses the facades in view at any camera tilt
         c.camera.getWorldDirection(camDir);
         mu.uReflLift.value = THREE.MathUtils.clamp(-camDir.y * 0.8 + 0.06, 0.08, 0.72);
