@@ -120,7 +120,13 @@ export function stadiumShell(env: Env, sp: ShellSpec): void {
     for (const u of exits) ops.push({ x: WL + u, y: 0, w: 2.6, h: 2.9, arch: 0.6, fill: 'dark', inset: 0.38, surround: stone, surroundW: 0.26, keystone: stone });
     const bays = [-12, -7.2, -2.4, 2.4, 7.2, 12];
     for (let i = 0; i < bays.length; i++) {
-      const bu = bays[i];
+      let bu = bays[i];
+      // river facade: narrow windows flank the crest roundel
+      if (south && Math.abs(bu) < 3) {
+        bu = Math.sign(bu) * 3.1;
+        ops.push({ x: WL + bu, y: 2.95, w: 1.2, h: 1.6, arch: 0.36, fill: 'window', glow: 0.35, seed: 0.3 + i * 0.1, surround: stone, surroundW: 0.12, sill: stone });
+        continue;
+      }
       if (blocked(bu, 0.55)) continue;
       const seed = 0.15 + (i % 4) * 0.2;
       if (main) {
