@@ -91,7 +91,7 @@ export function lampChannel(name: string): number {
 }
 
 /** Max number of analytic (scheduled / moving) spot lights evaluated per fragment. */
-export const TH_LAMP_SPOTS = 8;
+export const TH_LAMP_SPOTS = 12;
 
 /** Map layout (shared by the baker and LAMP_GLSL). */
 export const LAMP_MAP = {
@@ -123,8 +123,10 @@ export const lampSpotUniforms = {
   uLampSpotC: { value: new Float32Array(TH_LAMP_SPOTS * 4) },
   /** xyz = beam axis, w = cos(inner half-angle) */
   uLampSpotD: { value: new Float32Array(TH_LAMP_SPOTS * 4) },
-  /** xz bounds of all active spots (x0, z0, x1, z1) */
+  /** xz bounds of the two spot groups (x0, z0, x1, z1): group 0 = spots [0, split), group 1 = [split, n) */
   uLampSpotBox: { value: new Float32Array(4) },
+  uLampSpotBox2: { value: new Float32Array(4) },
+  uLampSpotSplit: { value: 0 },
 };
 
 type U<T> = { value: T };
@@ -137,6 +139,8 @@ export interface LampUniforms {
   uLampSpotC: U<Float32Array>;
   uLampSpotD: U<Float32Array>;
   uLampSpotBox: U<Float32Array>;
+  uLampSpotBox2: U<Float32Array>;
+  uLampSpotSplit: U<number>;
 }
 
 /** Uniforms to merge into a shader that uses LAMP_GLSL (shared objects: one update drives all). */
@@ -150,6 +154,8 @@ export function lampUniforms(): LampUniforms {
     uLampSpotC: lampSpotUniforms.uLampSpotC,
     uLampSpotD: lampSpotUniforms.uLampSpotD,
     uLampSpotBox: lampSpotUniforms.uLampSpotBox,
+    uLampSpotBox2: lampSpotUniforms.uLampSpotBox2,
+    uLampSpotSplit: lampSpotUniforms.uLampSpotSplit,
   };
 }
 
@@ -173,6 +179,8 @@ uniform vec4 uLampSpotP[TH_LAMP_SPOTS];
 uniform vec4 uLampSpotC[TH_LAMP_SPOTS];
 uniform vec4 uLampSpotD[TH_LAMP_SPOTS];
 uniform vec4 uLampSpotBox;
+uniform vec4 uLampSpotBox2;
+uniform int uLampSpotSplit;
 vec3 thLampLight(vec3 wp, vec3 wn) {
   vec3 acc = vec3(0.0);
   wn = normalize(wn);
@@ -211,20 +219,27 @@ vec3 thLampLight(vec3 wp, vec3 wn) {
       }
     }
   }
-  if (uLampSpotN > 0 && wp.x > uLampSpotBox.x && wp.z > uLampSpotBox.y && wp.x < uLampSpotBox.z && wp.z < uLampSpotBox.w) {
-    for (int i = 0; i < TH_LAMP_SPOTS; i++) {
-      if (i >= uLampSpotN) break;
-      vec4 P = uLampSpotP[i];
-      vec3 toL = P.xyz - wp;
-      float d2 = dot(toL, toL);
-      if (d2 > P.w * P.w) continue;
-      float id = inversesqrt(max(d2, 1e-4));
-      vec3 L = toL * id;
-      vec4 C = uLampSpotC[i];
-      vec4 Dd = uLampSpotD[i];
-      float cone = smoothstep(C.w, Dd.w, dot(-L, Dd.xyz));
-      float win = 1.0 - smoothstep(0.55, 1.0, d2 * id / P.w);
-      acc += C.rgb * (cone * win * max(dot(wn, L), 0.0) / (d2 + 1.0));
+  if (uLampSpotN > 0) {
+    bool in0 = wp.x > uLampSpotBox.x && wp.z > uLampSpotBox.y && wp.x < uLampSpotBox.z && wp.z < uLampSpotBox.w;
+    bool in1 = wp.x > uLampSpotBox2.x && wp.z > uLampSpotBox2.y && wp.x < uLampSpotBox2.z && wp.z < uLampSpotBox2.w;
+    if (in0 || in1) {
+      int s0 = in0 ? 0 : uLampSpotSplit;
+      int s1 = in1 ? uLampSpotN : uLampSpotSplit;
+      for (int i = 0; i < TH_LAMP_SPOTS; i++) {
+        int k = s0 + i;
+        if (k >= s1) break;
+        vec4 P = uLampSpotP[k];
+        vec3 toL = P.xyz - wp;
+        float d2 = dot(toL, toL);
+        if (d2 > P.w * P.w) continue;
+        float id = inversesqrt(max(d2, 1e-4));
+        vec3 L = toL * id;
+        vec4 C = uLampSpotC[k];
+        vec4 Dd = uLampSpotD[k];
+        float cone = smoothstep(C.w, Dd.w, dot(-L, Dd.xyz));
+        float win = 1.0 - smoothstep(0.55, 1.0, d2 * id / P.w);
+        acc += C.rgb * (cone * win * max(dot(wn, L), 0.0) / (d2 + 1.0));
+      }
     }
   }
   return acc;

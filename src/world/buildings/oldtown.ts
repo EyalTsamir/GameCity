@@ -138,6 +138,8 @@ export function partitionSide(g: Gen, s: Side, L: number, shift: number): Part[]
 }
 
 const PREV: Side[] = [LEFT, FRONT, RIGHT, BACK];
+/** side at the far end (u = L) of each side */
+const NEXT: Side[] = [RIGHT, BACK, LEFT, FRONT];
 
 export function genTownhouse(g: Gen): void {
   const { lot, rng, W, D } = g;
@@ -190,6 +192,8 @@ export function genTownhouse(g: Gen): void {
     const sg = sideGeom(body, s);
     const parts = partitionSide(g, s, sg.L, ins[PREV[s]]);
     for (const p of parts) {
+      // facade-shader corner darkening only at real building corners (not at flush party walls)
+      g.shell.cornerMask = (p.a > 0.05 || exposed[PREV[s]] ? 1 : 0) | (p.b < sg.L - 0.05 || exposed[NEXT[s]] ? 2 : 0);
       if (p.covered) {
         wallPlain(g.shell, sg, p.a, p.b, 0, eave, wallLook);
         // painted advertisement on a tall blank party wall above a lower neighbour
@@ -203,6 +207,7 @@ export function genTownhouse(g: Gen): void {
       else buildSecondary(sg, p.a, p.b, s === BACK, exposed[s]);
     }
   }
+  g.shell.cornerMask = 3;
 
   function ghostSign(sg: SideGeom, uA: number, uB: number, yLow: number, yTop: number): void {
     const ad = GHOST[(lot.seed >>> 4) % GHOST.length];

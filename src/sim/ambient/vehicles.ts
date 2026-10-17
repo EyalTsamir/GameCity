@@ -185,37 +185,41 @@ export function createVehicles(ctx: CityContext, sparks: SparkSystem, skyline: S
   const water = () => ctx.services.water as { surfaceY(x: number, z: number): number } | undefined;
   const ground = (x: number, z: number) => (ctx.services.terrain as { height(x: number, z: number): number } | undefined)?.height(x, z) ?? plan.heightAt(x, z);
 
-  // ── balloon route
+  // Composition (stage agent): the hero overview camera sits high in the south-east looking NNW
+  // with a strong tilt-shift; anything flying between it and the town (the old routes looped over
+  // the southern half at ~100–140 m, ~180 m in front of the focus plane) became a big grey /
+  // rainbow blur smudge. The cruising loops now lie over the northern / western part of the slab,
+  // where an aircraft at its cruising height sits at (or just beyond) the hero focus distance — a
+  // crisp little silhouette over the hills and the backdrop instead of a smudge over the city.
+
+  // ── balloon route (launches from / lands in the stadium, cruises over the north-west)
   const field = plan.areas.find((a) => a.kind === 'field');
   const site = field ? { x: (field.rect.x0 + field.rect.x1) / 2, z: (field.rect.z0 + field.rect.z1) / 2 } : { x: -27.5, z: 72.5 };
   const siteY = ground(site.x, site.z) + 0.02;
   const bLoop = buildLoop([
-    { x: site.x, z: site.z },
-    { x: -72, z: 32 },
-    { x: -140, z: 12 },
-    { x: -165, z: 78 },
-    { x: -95, z: 132 },
-    { x: 0, z: 130 },
-    { x: 88, z: 112 },
-    { x: 142, z: 62 },
-    { x: 104, z: 6 },
-    { x: 44, z: 14 },
-    { x: 4, z: 48 },
+    { x: -95, z: -60 },
+    { x: -150, z: -30 },
+    { x: -168, z: -98 },
+    { x: -98, z: -148 },
+    { x: -22, z: -152 },
+    { x: 30, z: -124 },
+    { x: -30, z: -94 },
   ]);
   const bFloor = floorTable(bLoop, skyline, 16, 18);
   const B_SPEED = 3.0;
   const B_BASKET = 4.32; // basket bottom below the envelope mouth
 
-  // ── blimp route
+  // ── blimp route (wide loop over the north-west half, partly out over the table behind the hills)
   const mLoop = buildLoop([
-    { x: -140, z: 40 },
-    { x: -120, z: -20 },
-    { x: -40, z: 8 },
-    { x: 60, z: -12 },
-    { x: 150, z: 20 },
-    { x: 140, z: 105 },
-    { x: 20, z: 128 },
-    { x: -100, z: 120 },
+    { x: -185, z: 10 },
+    { x: -170, z: -80 },
+    { x: -110, z: -150 },
+    { x: -20, z: -200 },
+    { x: 80, z: -215 },
+    { x: 120, z: -175 },
+    { x: 40, z: -140 },
+    { x: -60, z: -110 },
+    { x: -130, z: -40 },
   ]);
   const mFloor = floorTable(mLoop, skyline, 26, 22);
   const M_SPEED = 6.5;
@@ -283,8 +287,10 @@ export function createVehicles(ctx: CityContext, sparks: SparkSystem, skyline: S
       phase = h < 6.3 ? 'inflating' : 'ready';
     } else if (h < 19.0) {
       const alt = cruiseAlt(s);
-      x = P.x;
-      z = P.z;
+      // drift from the stadium out to the cruising loop while climbing
+      const out = smooth(6.4, 7.6, h);
+      x = site.x + (P.x - site.x) * out;
+      z = site.z + (P.z - site.z) * out;
       const up = smooth(6.4, 7.3, h);
       y = siteY + B_BASKET + (alt - siteY - B_BASKET) * (1 - (1 - up) * (1 - up));
       phase = h < 7.3 ? 'ascending' : 'cruising';
@@ -338,13 +344,15 @@ export function createVehicles(ctx: CityContext, sparks: SparkSystem, skyline: S
       mats[1].copy(ZERO);
       return;
     }
-    // straight crossing at ~200 m over the southern half of the town (that is where the usual
-    // camera views — overview, beach, park, stadium — can actually see the sky above the table)
-    const hd = hash01(k, 11) * Math.PI * 2;
+    // straight crossing at ~200 m over the northern half of the town, roughly left↔right as seen
+    // from the hero overview (perpendicular to its view azimuth ±25°), so it passes near the
+    // focus distance instead of flying through the near-camera blur band
+    const side = hash01(k, 11);
+    const hd = THREE.MathUtils.degToRad((side < 0.5 ? 122 : 302) + (((side * 2) % 1) - 0.5) * 50);
     const dx = Math.sin(hd),
       dz = Math.cos(hd);
-    const cx = -50 + hash01(k, 12) * 150,
-      cz = 25 + hash01(k, 14) * 95;
+    const cx = -120 + hash01(k, 12) * 140,
+      cz = -170 + hash01(k, 14) * 90;
     const s = (u - 0.5) * PASS_LEN;
     p.on = true;
     p.pass = k;

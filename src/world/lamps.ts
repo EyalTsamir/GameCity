@@ -28,6 +28,8 @@ interface Spot {
   r: number;
   g: number;
   b: number;
+  /** spatial group (0/1): each group gets its own early-out box in the shader */
+  group: number;
 }
 
 export default function create(ctx: CityContext): CityModule {
@@ -62,12 +64,16 @@ export default function create(ctx: CityContext): CityModule {
     tex.needsUpdate = true;
     ctx.uniforms.uLampMap.value = tex;
     ctx.uniforms.uLampXf.value.set(LAMP_MAP.x0, LAMP_MAP.z0, 1 / (LAMP_MAP.x1 - LAMP_MAP.x0), 1 / (LAMP_MAP.z1 - LAMP_MAP.z0));
+    let first: LampLight | null = null;
     for (const l of all) {
       if (!l.channel) continue;
       _c.set(l.color);
       const lum = Math.max(1e-3, 0.2126 * _c.r + 0.7152 * _c.g + 0.0722 * _c.b);
-      spots.push({ l, r: _c.r / lum, g: _c.g / lum, b: _c.b / lum });
+      first ??= l;
+      const group = Math.hypot(l.x - first.x, l.z - first.z) < 90 ? 0 : 1;
+      spots.push({ l, r: _c.r / lum, g: _c.g / lum, b: _c.b / lum, group });
     }
+    spots.sort((a, b) => a.group - b.group);
     service.baked = true;
     if (ctx.debug.enabled) console.info(`[lamps] baked ${result.lights} lights (${spots.length} dynamic) in ${result.ms.toFixed(0)} ms, peak ${result.peak.toFixed(2)}`);
     if (params.has('lampall')) autoPatched = patchLampScene(ctx.scene);
@@ -76,14 +82,15 @@ export default function create(ctx: CityContext): CityModule {
 
   const P = lampSpotUniforms.uLampSpotP.value,
     C = lampSpotUniforms.uLampSpotC.value,
-    D = lampSpotUniforms.uLampSpotD.value,
-    BOX = lampSpotUniforms.uLampSpotBox.value;
+    D = lampSpotUniforms.uLampSpotD.value;
+  const BOX = [lampSpotUniforms.uLampSpotBox.value, lampSpotUniforms.uLampSpotBox2.value];
   const packSpots = () => {
     let n = 0;
-    let x0 = Infinity,
-      z0 = Infinity,
-      x1 = -Infinity,
-      z1 = -Infinity;
+    let split = 0;
+    for (const b of BOX) {
+      b[0] = b[1] = Infinity;
+      b[2] = b[3] = -Infinity;
+    }
     for (const s of spots) {
       if (n >= TH_LAMP_SPOTS) break;
       const l = s.l;
@@ -125,20 +132,18 @@ export default function create(ctx: CityContext): CityModule {
       D[o + 1] = ay;
       D[o + 2] = az;
       D[o + 3] = cosI;
-      const rr = Math.hypot(reach, 0);
-      x0 = Math.min(x0, l.x - rr);
-      z0 = Math.min(z0, l.z - rr);
-      x1 = Math.max(x1, l.x + rr);
-      z1 = Math.max(z1, l.z + rr);
+      const b = BOX[s.group];
+      b[0] = Math.min(b[0], l.x - reach);
+      b[1] = Math.min(b[1], l.z - reach);
+      b[2] = Math.max(b[2], l.x + reach);
+      b[3] = Math.max(b[3], l.z + reach);
       n++;
+      if (s.group === 0) split = n;
     }
     lampSpotUniforms.uLampSpotN.value = n;
-    if (n > 0) {
-      BOX[0] = x0;
-      BOX[1] = z0;
-      BOX[2] = x1;
-      BOX[3] = z1;
-    }
+    lampSpotUniforms.uLampSpotSplit.value = split;
+    // empty groups never match
+    for (const b of BOX) if (!(b[0] < b[2])) b[0] = b[1] = b[2] = b[3] = 0;
   };
 
   const service: LampsService = {
