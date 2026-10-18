@@ -46,7 +46,24 @@ Per-module logs live next to this file: `docs/progress/<module>.md`.
   each log's "Perf variants for lead", soak, ui-test, typecheck, single-file build, cross-module fixes,
   decide legacy toggles/folders → Phase 4: short Hebrew report to the user, write
   "GRAPHICS OVERHAUL DONE" here, delete the watchdog, stop autocheckpoint, push.
-* Phase-3 progress (fill in as it runs): —
+* Phase-3 plan (written 22:40 UTC; tick items off below as they complete):
+  1. Before/after matrix: `scripts/agent-tools/qa_matrix.sh base|new` (resumable; 8 chunks per side:
+     11 POIs × 11/18.2/21.5 h + overview/downtown/harbor/beach/oldtown × 6.5/2 h; 1600×900;
+     out shots/lead/qa/<side>/<chunk>/, log shots/lead/qa/<side>.log). The base side (5174) can't change,
+     so it runs while stage finishes; the new side runs once stage has reported.
+     Then build sheets (shots/tools/sheet.py) per hour, then Read and judge every view.
+  2. Typecheck + `npm run build` (single file; record dist size vs before, ~2.2 MB) + dist smoke test.
+  3. Consolidated perf A/B (machine quiet: no agent jobs) with perf.mjs, same-run variants, repeated ×2:
+     views downtown/overview/westbrook/station 12 h, overview/harbor/stadium 21.5 h, people square 12 h;
+     variants from every log's "Perf variants for lead" + an all-legacy variant. Note: `?legacyground`
+     is shared by hardscape (roads/props ground) and terrain (lawns) — it reverts both.
+     SwiftShader = relative only; the report tells the user to run perf.mjs on the Adreno.
+  4. soak.mjs --minutes 4 --speed 4 (invariants, heap, fps); ui-test.mjs (all steps).
+  5. Cross-module fixes from the QA notes above + whatever the matrix shows (small fixes by lead;
+     larger ones go back to the owning agent).
+  6. Legacy toggles/folders: decision after the perf A/B (they are the user's real-GPU A/B switch;
+     weigh bundle size).
+* Phase-3 progress: 22:33 base side of the matrix started (qa_matrix.sh base, background, resumable).
 
 ## History
 * 2026-10-16 ~19:20 — Round 1: 12 builders launched via a Workflow; the account hit its 5-hour usage
