@@ -550,4 +550,4 @@ Let v = speed (m/s), Lh = hip height of the kind × scale, Fr = v² / (9.81·Lh)
 ---
 
 ## Re-review (2026-10-18)
-Resume here: step 1/5 — reading docs/progress/gfx-people.md and the people agent's sheets (nothing judged yet).
+Resume here: step 2/5 — read gfx-people.md + city day/night sheets (city 22 m day/night look good); next: lineups/gait/poses/LOD sheets, lab4, then own captures under shots/people-review/re/.
