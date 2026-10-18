@@ -17,7 +17,7 @@ Per-module logs live next to this file: `docs/progress/<module>.md`.
     at the 22:04 firing (container had rebooted; auto-checkpoint 14d484c had saved everything).
     22:06: stage, night, water, buildings, vegetation, terrain + people-review resumed from their logs;
     watchdog switched to hourly so a reset never idles the team for more than ~1 h.
-  - DONE: terrain (22:12; stadium uFlood snap on 'timejump' added after its report — verify in QA),
+  - DONE: terrain (22:12; stadium uFlood snap on 'timejump' added after its report, browser-verified: sheet_flood_jump.png),
     vegetation (22:20; lead spot-checked final_close.png ✔ — clump relief, crown variety, stepped conifers).
     QA notes: backlit poplars at 18.2 look over-yellow (autumnal); station forest median at night still
     below adjacent ground (crown tops brighter); vegetation high = 27 clump cells pending the perf A/B.

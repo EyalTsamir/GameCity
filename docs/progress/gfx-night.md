@@ -26,7 +26,10 @@ of F3 show the pitch still floodlit — capture artifact: after setHours(2) the 
 slowly (stadiumLife: flood += (want-flood)*min(1, dt*0.8+0.02), no 'timejump' snap) and my spots follow it.
 Re-capturing those three at 2 h from a fresh session (time=2): `--views "riverside;stadium;overview" --hours 2
 --q "...&time=2" --out shots/night/final3b`. Beach 02:00 white sea glitter = water's moon glint (also in baseline).
-**Next:** streets sheet (final4 vs base215/base2h), replace C's 02:00 column with final3b
+F4 DONE (0 errors) → shots/night/final4/; street sheet shots/night/ba_night_street.png (street2 + town square
+21:30 judged: facade wash, lit sidewalk, lit people). base2h/street_2.png used an older view spec → recapturing
+baseline `street=55,1.5,52,28,35,12` at 2 h → shots/night/base2h_street/.
+**Next:** rebuild street sheet with base2h_street, rebuild C with final3b 02:00 column, final report.
 (shots/tools/sheet.py; cols baseline21.5 | new21.5 | baseline2 | new2; baseline = shots/baseline/<poi>_21h5.png,
 shots/night/base2h/<poi>_2.png, shots/night/base215/street*_21h5.png) → final report under "## Final report".
 
