@@ -154,3 +154,36 @@ routes, speeds, avoidance and `invariants()` are untouched.
 
 ## Changes outside my area
 * `patchLampMaterial()` call on the people / pram / dog materials (granted exception, render.ts).
+
+## Final report
+People (realistic pedestrians) — done. Files: `src/sim/pedestrians/{figure,render,looks}.ts` + new `rig`, `body`,
+`shader`, `pose`, `gait`, `animate`, `legacy/`; plumbing in `pedestrians.ts` and two lines in `crowd.ts` (stride →
+`gaitCycle`). Movement and invariants untouched. Toggles: `?legacypeople` (old figures), `?pedlod=0–3`.
+
+* P1 morph-target body (man/woman/child/heavy), packed per-instance data (14/16 slots), cheap shadow proxy,
+  calmer palettes (same RNG draws).
+* P2 planted-foot gait: heel-to-toe roll, vertical-axis foot yaw, pelvis/torso/arms, running with flight,
+  stop/turn steps, re-planting after teleports.
+* P3 lofted body, face, hands with thumb, shoes, per-joint skinning.
+* P4 parametric hems; skirts/dresses/coats drape over the thighs (seated too); hair length/volume, swinging
+  ponytail, 7 hat styles.
+* P5 idle variants, 5 bench poses, pram/cane/wave/reading/sand/lying via arm/leg IK.
+* P6 lamp light, painted value ramp, wrap/sheen, 0.4 s dithered LOD cross-fade, new dog.
+
+Four browser iteration rounds fixed: stale foot plants after moves, inside-out/dark skirts and brims (degenerate
+rest geometry → stand-in winding and normals), proxy self-shadow bands, hairline, crotch, shoes, shoulders, lo
+beard, eye band, backpack, sitting dog, zero-width handle/crook.
+
+Numbers: vertices per level 1346/458/261/101 (typical posed ≈ 900/330/185/71). Census vs old (main + shadow):
+square 20 m 39k + 17k (49k + 49k), plaza 63k + 28k (98k + 98k), overview 44k (98k). Draw calls: 4 levels + 1 proxy
++ pram/dog/blob. Gait (node FK): walking slide 0.12–0.35 cm, hover ≤ 0.1 cm, knee 60°, running 0.60 cm, 40°/s
+turns 0.8 cm. Full city: console clean, invariants `{}`, pickers 25/25. CPU ≈ 3 µs/figure, ≈ 2 KB garbage per
+figure-frame.
+
+Perf: SwiftShader A/B inconclusive (noise); variants for the consolidated run: `;legacypeople;hide=pedestrians`
+(optional `;pedlod=1;pedlod=2`).
+
+Evidence: `shots/people/sheet_{lineups,gait,poses,distance_lod,city_day,city_night}.png`.
+
+Open: route corners drag a planted foot 2–4 cm (bevelled 90° snaps more); faces mannequin-like under 8 m; no
+heels/headscarves/braids; lo 458 vs ~450 target.
