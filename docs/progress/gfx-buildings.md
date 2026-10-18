@@ -7,12 +7,13 @@
   no longer murky (luminance-based tint: `tintAmt` curtain 0.72 / ribbon 0.5 / punched 0.2, ×0.8 curtain): octagon
   clean teal, Haven Tower steel-blue at 18.2; noon identity kept. B1–B5 + house variants done earlier
   (invariants {} / validate []).
-* Jobs running (final full-city chunks, ≤ 15 min each):
-  `node scripts/capture-set.mjs --out shots/buildings/final --views "overview;downtown;oldtown;westbrook;industry;tower=-5,25,-60,60,25,12;house=-150,0,20,32,-35,22" --hours 11 --hideui 1 --width 1600 --height 900 --q "nointro&noidle&adaptive=0&quality=high"`
-  and the same views tower+house with `--url http://127.0.0.1:5174/ --hours 11,18.2,21.5 --out shots/buildings/final_base`.
-* Next: chunks 18.2 and 21.5 into shots/buildings/final (same command, --hours 18.2 / 21.5); then sheets
-  shots/buildings/ba_<view>.png (before = shots/baseline/<poi>_<h>.png and final_base/ for tower/house);
-  then the final report (here under "## Final report" + to lead).
+* DONE (verified after the 22:06 resume): final 11 h chunk complete in shots/buildings/final/ (7 views, 1600×900,
+  0 console errors / warnings, invariants {}, 117–155 dc, 1.46–1.88 M tris full city; buildings shell 3960 / trim
+  140.3k tris, 15 meshes); baseline close-ups complete in shots/buildings/final_base/ (tower/house × 11/18.2/21.5);
+  `?legacyfacade&legacyhouses` sanity shot clean (shots/buildings/val/legacy.json: 0 errors, invariants {}).
+* Jobs running: same capture-set command with `--hours 18.2 --out shots/buildings/final18` and
+  `--hours 21.5 --out shots/buildings/final21` (logs in my scratchpad log18.txt / log21.txt).
+* Next: sheets shots/buildings/ba_<view>.png (11 h now, 18.2/21.5 when the chunks land); final report.
 
 ## Brief (B1–B6)
 * B1 glass: coherent stylised reflection model (horizon line, reflected skyline + neighbours, cloud streaks,

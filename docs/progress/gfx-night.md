@@ -16,13 +16,12 @@ bake.ts CORE.path 0.6; terrain/glow.ts promenade radius ×1.4, intensity ×0.8.
 People (town square, footbridge, shots/night/it5/peds_21h5.png, boats1) visibly pick up lamp light.
 **Verified (program check, shots/night/progcheck.json):** the compiled colour programs of traffic-vehicle,
 rail-train, boats and the people (lambert) materials all contain thLampLight (depth programs don't, correct).
-**Running / in flight (check outputs on resume):**
-1. Final set F1: DONE (0 errors; draw calls 139–161) → shots/night/final/; sheet shots/night/ba_night_A.png (judged: clear win).
-2. Baseline street views at 21.5: DONE → shots/night/base215/street{,2}_21h5.png.
-3. Final set F3 running: `--views "riverside;stadium;overview" --out shots/night/final3` → final_f3.txt.
-4. Final set F2: same flags, `--views "downtown;harbor;beach" --out shots/night/final2` → shots/night/final_f2.txt.
-**Next:** F4 `street=55,1.5,52,28,35,12;street2=-150,0,20,32,-35,22`
-→ shots/night/final4 (same flags, hours 21.5,2) → sheets
+**Final sets (1600×900, q "nointro&noidle&adaptive=0&quality=high&time=21.5", hours 21.5,2):**
+F1 westbrook/park/oldtown → shots/night/final/ DONE · F2 downtown/harbor/beach → shots/night/final2/ DONE ·
+F3 riverside/stadium/overview → shots/night/final3/ DONE (all 0 console errors; draw calls 139–164).
+Baseline streets 21.5 → shots/night/base215/ DONE. Sheet A (westbrook/park/oldtown) → shots/night/ba_night_A.png.
+**Running (resume #4, 22:10 UTC):** F4 `capture-set.mjs --views "street=55,1.5,52,28,35,12;street2=-150,0,20,32,-35,22" --hours 21.5,2 --width 1600 --height 900 --out shots/night/final4` → shots/night/final_f4.txt.
+**Next:** sheets B (downtown/harbor/beach), C (riverside/stadium/overview), streets
 (shots/tools/sheet.py; cols baseline21.5 | new21.5 | baseline2 | new2; baseline = shots/baseline/<poi>_21h5.png,
 shots/night/base2h/<poi>_2.png, shots/night/base215/street*_21h5.png) → final report under "## Final report".
 

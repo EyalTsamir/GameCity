@@ -12,6 +12,10 @@ import { Effect } from 'postprocessing';
  */
 export const SAFE_COLOR_GLSL = /* glsl */ `
 vec3 thSafeColor(vec3 c) {
+#ifdef TH_NAN_VIZ
+  // ?nanviz: flag bad pixels magenta (tested BEFORE the clamp so they cannot hide)
+  if (any(isnan(c)) || any(isinf(c)) || any(greaterThan(c, vec3(64000.0)))) return vec3(40.0, 0.0, 40.0);
+#endif
   c = min(max(c, vec3(0.0)), vec3(64000.0));
   return (any(isnan(c)) || any(isinf(c))) ? vec3(0.0) : c;
 }
@@ -49,10 +53,12 @@ void mainImage(const in vec4 inputColor, const in vec2 uv, out vec4 outputColor)
 `;
 
 export class LookEffect extends Effect {
-  constructor(toneMapping: THREE.ToneMapping) {
+  constructor(toneMapping: THREE.ToneMapping, nanViz = false) {
     const fn = toneMapping === THREE.ACESFilmicToneMapping ? 'ACESFilmicToneMapping' : toneMapping === THREE.NeutralToneMapping ? 'NeutralToneMapping' : 'AgXToneMapping';
+    const defines = new Map([['TONE_FN', fn]]);
+    if (nanViz) defines.set('TH_NAN_VIZ', '1');
     super('LookEffect', FRAG, {
-      defines: new Map([['TONE_FN', fn]]),
+      defines,
       uniforms: new Map<string, THREE.Uniform>([
         ['uSat', new THREE.Uniform(1.18)],
         ['uContrast', new THREE.Uniform(0.22)],

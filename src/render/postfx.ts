@@ -154,7 +154,8 @@ export default function create(ctx: CityContext): CityModule {
       lm.needsUpdate = true;
     }
   }
-  const look = new LookEffect(TONE_MAPPING);
+  // ?nanviz (debug): NaN/Inf scene pixels show up magenta in the final image instead of black
+  const look = new LookEffect(TONE_MAPPING, params.has('nanviz'));
   const aaMode = params.get('aa') ?? 'smaa';
   let smaa: Effect;
   if (aaMode === 'fxaa') {
