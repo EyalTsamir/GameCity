@@ -75,8 +75,27 @@ lawn `-40,0,20,45,10,38`, stadium `-27,0,72,60,0,35`, hills/station `0,2,-142,12
 * After the restart: lawns still too subtle at 130 m → it4: per-lawn tone patchwork (±11 %), park stripes
   ±20 %, lawn stripes ±17 %, gardens ±10 % (A/B in `shots/terrain/it4/`).
 
+## it4 result (lawns, isolated A/B `?legacyterrain`): `shots/terrain/sheet_it4_lawns.png`
+Park, riverside, westbrook gardens and the apartment lawns now read clearly (stripes + per-lawn patchwork)
+at 120–140 m; console/invariants/validate clean in both variants. T2 considered done.
+
+## PAUSED (user request, 2026-10-18 ~10:45) — exact state
+* All code DONE and committed (T1–T4); typecheck clean; no edits in progress; no jobs of mine running.
+* Left to do (verification only):
+  1. perf A/B — never completed (the runs were cut by the usage stops). Re-run, one ≲10-min lock:
+     `TH_LOCK_SLOTS=2 node scratchpad/final.mjs --perfq "only=sky,terrain,water,roads,landmarks,vegetation,rail,postfx&nointro&noidle&quality=high" --perfvariants ";legacyterrain" --perfviews "stadium;station;park" --perfhours 12 --rounds 2 --seconds 4`
+     (scratchpad = /tmp/claude-0/-home-user-GameCity/899582e0-b206-557f-8197-7e6a78b6adac/scratchpad; or the
+     whole chain `scratchpad/finalchain.sh`, log → `shots/terrain/final2.log`).
+  2. small full-city A/B vs 5174 with the it4 lawns (park, riverside, westbrook, stadium @11 h) →
+     `shots/terrain/final2/` (second half of finalchain.sh), then a sheet.
+  3. Final report (≤350 words) to the lead.
+* GPU estimate (reasoned): ground shader +1 noise fetch, +~45 ALU/px on the ground (drawn under most of the
+  slab) ≈ +0.05–0.1 ms; masonry vertices DOWN 51k → 37k (flat shading via derivatives, indexed), +12k small
+  tris, cliff-branch fetches only on cliff pixels ≈ ±0.05 ms; landmarks +4k static / +3k LOD-detail tris
+  ≈ +0.05 ms. Total ≈ +0.1–0.2 ms on high, 0 extra draw calls.
+
 ## Next steps
-1. it4 lawn A/B review; perf A/B (`scratchpad/perfchain.sh` → `shots/terrain/perf2.log`). 2. Final report.
+See "PAUSED" above: perf A/B → final2 sheet → final report.
 
 ## Requests to other areas
 (none yet)

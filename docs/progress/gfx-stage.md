@@ -85,6 +85,23 @@ S4 before/after sheets, perf A/B.
   numbers meaningless; the single-page stage-perf.mjs hung for the same reason). Relative cost is measured in the
   normal launch mode instead: one page, alternating runtime variants (shots/stage/perfab).
 
+## PAUSED (user request, ~10:20 on 10-18) — exact state
+* Code: all edits complete, typecheck clean for my files; no edit half-way. Latest palette (final golden-hour /
+  dawn lift: hemi 0.62/0.66/0.70/0.72 at 16/17.6/18.6/19.3, exposure 1.14/1.25/1.32/1.30, dawn exp 1.28/1.26)
+  is committed in the checkpoints but NOT yet captured.
+* shots/stage/after3_INVALID_black/ = re-capture of 6.5/16.5/18.2 with that palette — frames are black (captured
+  while the container went down at the usage-limit stop); ignore.
+* Final sheets (valid): shots/stage/sheets/ba_<overview|downtown|harbor|park|oldtown|westbrook|beach|low|edge>.png
+  = before (5174) vs after (5173): after/ for 11/20/21.5/2, after2/ for 6.5/16.5/18.2 (merged in after_final/).
+* Perf: draw calls 155 for studio / legacy / notable (table replaces decal; triangles equal ±5 k). SwiftShader
+  single-page A/B (shots/stage/perfab, fps stat quantised): studio 11.1 fps vs legacy 10.0 vs notable 10.0 → no
+  measurable cost. A finer frame-count A/B (stage-perf.mjs, normal launch mode, no vsync flags) was started
+  and killed for the pause — not yet run.
+* Next steps: (1) re-capture 6.5/16.5/18.2 (one hour per run, ≲15 min lock) into shots/stage/after3/, verify
+  frames are not black, rebuild sheets (scratchpad ba_sheets.sh before after_final sheets …); (2) optional finer
+  perf A/B: stage-perf.mjs --url :5173 --variants "studio:;legacy:S.setLegacy(true);notable:S.setTable(false)"
+  --rounds 4 --seconds 6; (3) final report.
+
 ## Test setup notes
 * :5175 = /home/user/GameCity-stage (git archive f5ff0a5 + my files via sync.sh, own Vite cacheDir).
 * scratchpad stage-cap.mjs: views × hours × runtime variants in one page load (`S.setLegacy(true)`).

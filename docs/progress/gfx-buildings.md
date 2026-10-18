@@ -76,7 +76,29 @@ daytime windows), house massing half of 9, far-field night windows of 2, lamp-li
   OPEN: (a) lit house windows show fine dark speckles (also in the subset run → buildings path or postfx
   interaction) — diagnosing with no-postfx / no-AO shots (shots/buildings/speck); (b) one frame (house 21.5) had a
   black rectangle (NaN-style bloom/DOF blackout) — checking whether it comes from the shell.
-  Octagon tower crown wash slightly strong → to trim.
+  Octagon tower crown wash slightly strong → trimmed (glass 0.7→0.55).
+  (a) SOLVED in code (not yet re-verified by a capture): speckles = per-pixel lit/curtain flips. `seed` (an integer
+  per primitive) arrives as an interpolated varying with ~1e-4 jitter, which the chaotic hashes + `fract(r·k)`
+  re-hashes amplify; present without postfx (shots/buildings/speck/nopost.png). Fix: `seed = floor(vB.z + 0.5)`
+  (walls) and `floor(vA.x/.y + 0.5)` (roofs) in materials.ts. (The legacy shader has the same flaw.)
+  (b) black rectangle: only seen in a full-city frame, never in subset runs → probably not the shell; as a safety
+  measure Builder.quad/triangle now give degenerate faces a valid normal (a zero normal → NaN in shaders), and the
+  flat-roof drain smoothstep width is clamped ≥ 1e-3.
+
+## PAUSED (user budget pause) — exact state
+* All files typecheck (npx tsc --noEmit: no buildings errors). No background jobs of mine running.
+* Last capture launched (speck2: house/downtown/tower at 21.5 + 11, subset, 1600×900) was killed before finishing.
+## Next steps on resume
+1. Re-run speck2 (≤ 15 min lock): confirm speckles gone + crown trim; check night tower glass.
+2. Full-city day/golden chunks for B6 (POIs downtown, oldtown, westbrook, industry, overview + tower/house
+   close-ups at 11 and 18.2, 1600×900; one hour per run to stay ≤ 15 min); night chunk exists in shots/buildings/full21
+   but predates the speckle fix → re-run 21.5 too. Before = shots/baseline/<poi>_<h>.png (5174, 1600×900) +
+   close-ups from 5174 (shots/buildings/base is 1280×720 subset → re-capture close-ups on 5174 full city).
+3. Sheets: python3 -I shots/tools/sheet.py shots/buildings/ba_<x>.png 2 900 "before|…" "after|…".
+4. perf.mjs A/B (two runs ≤ 15 min each): downtown 12 h and overview 21.5 h, variants
+   ";legacyfacade&legacyhouses;skip=buildings" (+ ";legacyfacade" if time). Report draw calls (unchanged, 15
+   building meshes), tris (+~1.2 k), SwiftShader relative ms, GPU estimate.
+5. Final report to the lead (≤ 350 words).
 * [ ] tuning passes (glass, weathering strength, roofs, night far field), house validation (`?validate`, invariants)
 * [ ] re-tune under stage's new lighting
 * [ ] B6 full before/after sheets + perf A/B

@@ -94,3 +94,19 @@ Audit items: 7 (empty / faint hardscape), garden half of 9 (bare back gardens), 
 
 ## Notes
 - Offline plan tools in the scratchpad (rolldown-bundled plan/occupancy/ped graph + PIL map) are used for placement.
+
+## STATE AT PAUSE (user-requested pause, 2026-10-18 ~10:40)
+- All code done and typechecking (my files); nothing half-edited. Final full-city captures done
+  (shots/hardscape/final, chunks A-D) and 7 sheets built in shots/hardscape/sheets/ab_*.png.
+- Left to do (small):
+  1. Re-shoot two views — both attempts timed out loading (page-load 300 s on the busy machine):
+     `capture-set.mjs --views "school=-76,0,80,55,10,50;quayS=124,0,-20,48,60,42" --hours 11 --width 1600
+     --height 900 --hideui 1 --q "nointro&noidle&adaptive=0&quality=high&time=11" --out shots/hardscape/final2`
+     and quayS on 5174 (`--url http://127.0.0.1:5174/ --out shots/hardscape/before3`). Reason: final
+     school_11.png has a black rectangle (transient, not my geometry; subset runs were clean) and quayN gets
+     pulled into a close-up by the camera module in full-city mode.
+  2. Rebuild ab_court_quay.png with final2/school_11 + before school, harbour POI pair (shots/baseline vs
+     final harbor_11) and quayS before/after.
+  3. Optional: a second perf.mjs A/B in a quiet window (≤ 15 min lock): `--view westbrook --seconds 6
+     --variants ";noscatter&nogardens;legacyground;noscatter&nogardens&legacyground"`.
+  4. Send the final report (≤ 350 words) to the lead.
