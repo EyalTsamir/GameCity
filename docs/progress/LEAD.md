@@ -79,6 +79,9 @@ Per-module logs live next to this file: `docs/progress/<module>.md`.
      weigh bundle size).
 * Phase-3 progress: 22:33–23:20 base side of the matrix done (8 chunks, clean reports). 23:41 new side started
   (qa_matrix.sh new; check each chunk's report.json failedModules — people may be mid-edit; redo such chunks).
+  23:31 typecheck ✔ (clean). Build ✔: dist/index.html 2,597.7 kB vs baseline 2,202.4 kB (+395 kB, +18 %;
+  legacy A/B copies ≈ 126 kB of source of that). file:// smoke test of the single file ✔ (overview 21.5 h:
+  failedModules [], 0 errors/warnings, invariants {}, frameErrors []; shots/lead/dist_smoke.png).
 
 ## History
 * 2026-10-16 ~19:20 — Round 1: 12 builders launched via a Workflow; the account hit its 5-hour usage
