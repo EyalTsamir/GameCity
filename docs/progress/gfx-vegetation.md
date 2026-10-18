@@ -68,7 +68,28 @@ V5 verification (before/after 5174 vs 5173, perf A/B). Budgets: tris ≤ +15 %, 
    near +7.9 % / far +7.9 % vs 5174 (+11.8 % vs ?legacyveg in today's tree). Draw calls unchanged (same meshes).
 5. Perf: SwiftShader perf.mjs runs were dominated by machine contention (variants ordered randomly in
    cost). Added runtime knob fx (uThFx) and scratchpad/vperf2.mjs: ONE page load, states alternated
-   (hidden / plain / full 27-cell / cheap 8-cell / billow) × 3 rounds, medians → perf3.
+   (hidden / plain / full 27-cell / cheap 8-cell / billow), medians. perf3 (park 1280x720, 3 rounds) was
+   still noise (3–5 s/frame, load avg 20 on 4 cores; hidden 3421 / plain 4573 / full27 4231 / cheap8 3665 /
+   billow 4297 ms medians — not usable). perf4 (960x540, 5 rounds) was KILLED by the pause before it ran.
+
+## PAUSED (user budget pause, 2026-10-18 ~10:35) — exact state
+* Code: complete for V1–V4, typechecks (`npm run typecheck | grep world/vegetation` clean); committed by the
+  lead in b929af3 (+ later edits: runtime uThFx knob, runtime-editable cheap knob — also typechecked).
+  No edit half-way. No background jobs of mine running.
+* V5 done except a usable perf A/B. Final sheets exist (see item 4).
+* NEXT on resume:
+  1. Perf A/B when the machine is quiet: `scratchpad/veg_launch.sh perf4 node scratchpad/vperf2.mjs --q
+     "only=sky,terrain,water,vegetation,postfx&nointro&noidle&quality=high" --view park --hours 12
+     --seconds 4 --rounds 5 --width 960 --height 540` (reads shots/vegetation/perf4.log). Report draw calls
+     (unchanged: veg meshes same), triangles (+7.9 % near/far vs 5174), SwiftShader relative cost, GPU estimate.
+  2. GPU estimate to write up: +4 B/vertex (aLeaf u8), +2 varyings; fragment ≈ 27-cell Voronoi (~25 ops/cell
+     ≈ 700 ALU) + billow octave (~120) + lighting extras (~40) per near-foliage pixel; billow-only surfaces
+     (needles/hedges) ≈ 250; fades to ~40 ops beyond the clump footprint (overview). ~0.4 M foliage px at
+     1920×1025 POI views → ≈ 0.2–0.35 ms on Adreno X1-45; medium/low use the 8-cell path (≈ 4× cheaper).
+     If over budget on high: switch high to 8-cell too, or fade cells by distance earlier (smoothstep 0.12→0.42).
+  3. Polish candidates: hedge tops a touch lighter/yellower; replace the useless `plaza_11` view in the sheet
+     set with a downtown planter street (find a downtown 'tree' slot); check night trunk lighting near lamps.
+  4. Final report (≤ 350 words) via SubagentHandback.
 
 ## Baseline numbers (pre-change, only=sky,terrain,water,vegetation,postfx, park 11h)
 trees 944 (forest 469), treeTris 118336, treeFarTris 52830, forestTris 45940, plantTris 45180, fineTris 32762, verts 218303.

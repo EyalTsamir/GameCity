@@ -39,11 +39,21 @@ Audit items: 7 (empty / faint hardscape), garden half of 9 (bare back gardens), 
   pushed into `layout.furniture`. `?noscatter` disables it.
 
 ## Milestones
-- [x] H4 lamp light integrated (black until the night agent bakes the map)
-- [x] H3 gardens: layout + models + patios (first capture it1 looked good; roof pitch sign fixed)
-- [~] H1 surfaces: v2 shaders written, first full capture pending (shots/hardscape/it3)
-- [~] H2 scatter: planner + models written, capture pending
-- [ ] H5 verification
+- [x] H4 lamp light integrated (roads asphalt/hardscape/markings + props furniture; verified at night)
+- [x] H3 gardens: 26 lots, 235 items (pools, trampolines, sheds, patios, parasols, swings, veg beds, …)
+- [x] H1 surfaces v2 (asphalt patchwork/cracks/patches, plaza bands + bonds, yards/quay specials, court)
+- [x] H2 scatter: 268 items over plazas, station, yards, quay, car parks, courtyards, schoolyard
+- [x] H5 verification: final set shots/hardscape/final (+ final2 re-shots), sheets shots/hardscape/sheets/ab_*.png
+
+## Final numbers (full city, westbrook 11 h)
+- invariants(): empty (full-city run, shots/hardscape/stats_full.json); console clean.
+- draw calls: +2 (props-casters main pass + its shadow pass): 130 → 132 (perf.mjs variants).
+- triangles in view: 1.535 M → 1.642 M (+107 k incl. the casters' shadow pass). props module: 152 k tris
+  (fine 110 k, casters 15.7 k); roads 36.6 k tris (unchanged geometry except patios + painted extras).
+- SwiftShader perf (one run, noisy): 576 ms all on · 472 noscatter&nogardens · 560 legacyground · 352 both off.
+  SwiftShader rasterises on the CPU, so vertex-heavy props dominate there. GPU estimate (Adreno X1-45):
+  ≈ +0.1 ms vertex work for ~110 k extra tris (whole fine mesh is drawn ≤ 300 m), ≈ +0.02 ms casters
+  shadow pass, ≈ +0.05 ms extra ALU / 1-2 fetches in the ground shaders → ≈ 0.2 ms (budget 0.4 ms).
 
 ## Iteration notes
 - it3 (shots/hardscape/it3, subset modules, 11 h + 21.5 h): gardens read great (pools, trampolines, parasols,

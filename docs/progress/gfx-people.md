@@ -113,7 +113,27 @@ routes, speeds, avoidance and `invariants()` are untouched.
       Round 2 showed the real cause of the open-fronted skirts: the parametric skirt rings share one rest height,
       so their quads were degenerate at rest and got random winding (front panels back-face culled; the dark
       "hoop" was the hem lining seen through the gap) — buildTail now bridges with stand-in heights
-      (`tools/tailwind.ts` checks the winding). Round 3: `lab3/`.
+      (`tools/tailwind.ts` checks the winding). Round 3: `lab3/` — standing skirts now closed A-lines.
+- [ ] Round 4 (2026-10-18 10:30, code done, NOT yet re-shot): skirt/brim normals came from the degenerate rest
+      geometry (dark gradient on the lower skirt, black brims) → builder stand-in positions for normals
+      (`MeshBuilder.standIn`, `withStandIns`; check `tools/tailnrm.ts`); the hem lining was a sliver
+      z-fighting the skirt → flat ring 10 % inside at the hem, facing down; seated skirts follow the thighs fully
+      (k = 1 for the parametric rings, 0.45 at the hip ring) so the lap is covered to the knee (`tools/sitskirt.ts`);
+      briefcase handle / cane crook were zero-width sticks (limbFrame along Z) → fixed (`tools/windchk.ts`).
+      Typecheck clean.
+
+## PAUSED 2026-10-18 10:37 (lead request) — exact state / next steps
+* All code compiles; no browser jobs of mine are queued or running.
+* Evidence already shot (pre-round-4 code): `lab1/`–`lab3/`, `lineup/` (round 1), `lineup2/` (round 2, before
+  the skirt winding fix), `lineup3/` (after the winding fix, before round 4), `city_new/` vs `city_legacy/`,
+  `city2/`, `city_final/` vs `city_final_legacy/` (same crowd, 8 views day/golden/night; full-city invariants
+  `{}` after a 4× run in `city_final/report_final.json`). Perf: `scratchpad people_perf2.log` (SwiftShader,
+  square 20 m, full city): new 613/647 ms, legacy 750/456 ms, hide=pedestrians 630 ms — spread larger than the
+  differences (machine shared with other agents' runs) → no measurable SwiftShader difference.
+* Next: (1) one lab run (skirts standing/seated, brims, briefcase) + one lineup run (`lineup4/`) with round-4
+  code; (2) Read them, fix anything left; (3) before/after sheets (lineup vs `shots/people-review/lineup/`,
+  `city_final` vs `city_final_legacy`, day + night) into `shots/people/`; (4) final numbers into this log;
+  (5) SubagentHandback report.
 
 ## Open issues / next
 * Sharp crowd corners still drag the planted foot a few cm (rail corners) and more at bevelled 90° snaps.

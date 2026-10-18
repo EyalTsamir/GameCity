@@ -231,6 +231,12 @@ vec3 wSunL = vec3(0.0, 1.0, 0.0);
 float wGlintA2 = 0.01;
 float wSparkle = 0.0;
 
+float wHash12(vec2 p) {
+  vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+  p3 += dot(p3, p3.yzx + 33.33);
+  return fract((p3.x + p3.y) * p3.z);
+}
+
 // the sky dome's painted gradient + sun-side glow (render/sky/dome.ts), without disc/stars
 vec3 wSky(vec3 d) {
   float y = clamp(d.y, 0.0, 1.0);
@@ -441,12 +447,22 @@ vec4 waterBase() {
   wGlintA2 = roughA2;
   float sunUp = smoothstep(-0.03, 0.06, wSunL.y) * uSkySunVis;
   wGlintK = sunUp * (1.0 - uSkyOvercast * 0.9);
-  // sparkles: crest texels catching the sun (fade out before they could alias)
-  float crest = max(r1.a, r2.a);
-  wSparkle = smoothstep(0.55, 0.95, crest * (0.55 + 0.9 * texture2D(tWM, p.xz * 0.37 + vec2(t * 0.05, -t * 0.04)).a)) * (1.0 - smoothstep(0.08, 0.3, fp)) * ruff;
+  // sparkles: point glints — random wave facets on a 0.35 m grid flash when they face the light;
+  // ~1-2 px wide whatever the distance, faded out before they could alias
+  {
+    float cs = 0.35;
+    vec2 cq = p.xz / cs;
+    vec2 ci = floor(cq);
+    float seed = wHash12(ci);
+    float h = wHash12(ci + floor(t * (1.3 + seed * 1.6) + seed * 7.0) * 13.17);
+    vec2 o = (vec2(wHash12(ci + 3.1), wHash12(ci + 7.7)) - 0.5) * 0.6;
+    float r = length(fract(cq) - 0.5 - o) * cs;
+    float rad = max(0.025, fp * 0.75);
+    wSparkle = step(0.94 - 0.03 * ruff, h) * (1.0 - smoothstep(rad * 0.4, rad, r)) * (1.0 - smoothstep(0.05, 0.2, fp)) * (0.3 + 0.7 * ruff) * calm * (1.0 - mPond);
+  }
   // moon
   float md = max(dot(R, normalize(uSkyMoonDir)), 0.0);
-  vec3 moon = vec3(0.62, 0.72, 1.0) * (pow(md, mix(1400.0, 350.0, ruff)) * 0.75 + pow(md, 60.0) * 0.05 + wSparkle * pow(md, 260.0) * 0.3) * uSkyMoonVis * uNight * (1.0 - 0.75 * mRiv);
+  vec3 moon = vec3(0.62, 0.72, 1.0) * (pow(md, mix(1400.0, 350.0, ruff)) * 0.75 + pow(md, 60.0) * 0.05 + wSparkle * pow(md, 40.0) * 0.6) * uSkyMoonVis * uNight * (1.0 - 0.75 * mRiv);
 
   // night lights when the reflection pass is off: lamp map read where the reflected ray
   // reaches lamp-head height (streaks toward the viewer through the anisotropic normal)
@@ -521,7 +537,7 @@ reflectedLight.directSpecular = vec3(0.0);
 reflectedLight.indirectSpecular = vec3(0.0);
 reflectedLight.indirectDiffuse += diffuseColor.rgb * thLampLight(vWW, vec3(0.0, 1.0, 0.0)) * 0.55;
 {
-  // sun glitter: GGX lobe (roughness from ripples, variance, wind) + crest sparkles, shadowed
+  // sun glitter: Beckmann lobe (roughness from ripples, variance, wind) + point glints, shadowed
   vec3 th_V = normalize(cameraPosition - vWW);
   vec3 th_H = normalize(wSunL + th_V);
   float th_nh = max(dot(wN, th_H), 1e-3);
@@ -532,7 +548,7 @@ reflectedLight.indirectDiffuse += diffuseColor.rgb * thLampLight(vWW, vec3(0.0, 
   float th_D = th_lobe / (PI * wGlintA2 * th_c2 * th_c2);
   float th_nl = max(dot(wN, wSunL), 0.0);
   float th_wide = exp(-th_t2 / (wGlintA2 * 5.0 + 0.004));
-  float th_sp = th_D * th_nl * 0.05 + wSparkle * pow(th_nh, 1400.0) * 5.0 * th_wide;
+  float th_sp = th_D * th_nl * 0.05 + wSparkle * 4.0 * th_wide;
   wGlint = uSkySunCol * th_sp * wGlintK * wShadow * (1.0 - wFoamA) * wDebug.z;
 }`,
       )

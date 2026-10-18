@@ -102,6 +102,19 @@ opted-in mesh at a time, console markers — for attributing driver warnings).
   harbor-*, landmarks-lights/-glows, terrain-masonry (now 38k tris), terrain-glows, props-glows,
   boats-*, veg-trees-far 45k). No new emitter meshes from other agents to opt in.
 
+* 2026-10-18 ~10:30 — PAUSED by the user (budget). State at the pause:
+  - Code: all files typecheck; last edit = point glints (sun/moon sparkles are now random facets on a
+    0.35 m grid, ~1–2 px, faded by footprint — the crest-texel sparkles read as foam blobs in the medium
+    run `shots/water/med/sheet_med.png`). Not yet captured.
+  - `scratchpad/water_chain2.sh` (final verification chain) was started and KILLED during its first step
+    (stats). Nothing of it ran. Resume = re-run it as is (each step ≲15 min lock):
+    stats → `shots/water/stats_full3.json` (re-measure after the far-view / near-river trims), full-city
+    finals at 1600×900 (harbor, beach, riverside, overview, park × 11/18.2/21.5 → `shots/water/final`, compare
+    with `shots/baseline/*`), fresh custom views (`shots/water/it6`, compare with `shots/water/base`), perf A/B
+    harbour + overview (?nowaterrefl), medium quality + wakes (`shots/water/med2`).
+  - Then: build sheets (`scratchpad/water_sheets.sh NEWDIR OUTDIR views…` for custom views; POI sheets vs
+    shots/baseline via sheet.py), check pond (park), glints, night indigo, shallows; final report.
+
 ## Open issues / notes
 * Depends (read-only) on the sky dome's uniform names: uZenith, uHorizon, uGlow, uGlowI, uSunCol, uSunVis,
   uMoonDir, uMoonVis, uOvercast (mesh name `sky-dome`). Missing → fixed day colours.

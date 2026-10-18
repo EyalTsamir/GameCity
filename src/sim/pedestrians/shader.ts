@@ -290,7 +290,7 @@ void pedPose(inout vec3 p, inout vec3 n) {
       p.y = p.y - u * max(0.0, p.y - hemY);
       p.xz += rad0 * u * float(iC2.w & 255u) * (seated ? 0.0003 : 0.001);
     }
-    float k = u < -0.75 ? 0.0 : (u < -0.25 ? 0.15 : 0.25 + (seated ? 0.75 : 0.5) * u);
+    float k = u < -0.75 ? 0.0 : (u < -0.25 ? (seated ? 0.45 : 0.15) : (seated ? 1.0 : 0.25 + 0.5 * u));
     float side = aux.y;
     vec3 pl = p, pr = p, nl = n, nr = n;
     float z0 = 0.0;

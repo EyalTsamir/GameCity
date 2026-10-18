@@ -206,10 +206,10 @@ export class Builder {
     let nx = e1y * e2z - e1z * e2y;
     let ny = e1z * e2x - e1x * e2z;
     let nz = e1x * e2y - e1y * e2x;
-    const l = Math.hypot(nx, ny, nz) || 1;
-    nx /= l;
-    ny /= l;
-    nz /= l;
+    const l = Math.hypot(nx, ny, nz);
+    // degenerate quad: keep a valid unit normal (a zero normal turns into NaN in the shaders)
+    if (l < 1e-12) (nx = 0), (ny = 1), (nz = 0);
+    else (nx /= l), (ny /= l), (nz /= l);
     const i = this.vertex(ax, ay, az, nx, ny, nz, ua, va);
     this.vertex(bx, by, bz, nx, ny, nz, ub, vb);
     this.vertex(cx, cy, cz, nx, ny, nz, uc, vc);
@@ -305,10 +305,9 @@ export class Builder {
     let nx = e1y * e2z - e1z * e2y;
     let ny = e1z * e2x - e1x * e2z;
     let nz = e1x * e2y - e1y * e2x;
-    const l = Math.hypot(nx, ny, nz) || 1;
-    nx /= l;
-    ny /= l;
-    nz /= l;
+    const l = Math.hypot(nx, ny, nz);
+    if (l < 1e-12) (nx = 0), (ny = 1), (nz = 0);
+    else (nx /= l), (ny /= l), (nz /= l);
     const i = this.vertex(ax, ay, az, nx, ny, nz, ua, va);
     this.vertex(bx, by, bz, nx, ny, nz, ub, vb);
     this.vertex(cx, cy, cz, nx, ny, nz, uc, vc);

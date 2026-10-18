@@ -447,7 +447,9 @@ void bhWall(inout vec3 albedo, inout float rough, inout float metal, inout vec3 
   float kind = vB.w;
   float style = floor(mod(kind, 64.0) / 8.0 + 0.01);
   float prof = floor(mod(kind, 8.0) + 0.01);
-  float seed = vB.z;
+  // seeds are integers per primitive, but arrive as interpolated varyings with ~1e-4 jitter; the chaotic hashes
+  // below would turn that into per-pixel lit / curtain flips (speckles) — snap them
+  float seed = floor(vB.z + 0.5);
   vec2 csz = vC.xy;
   float pat = vC.z;
   float packCol = vC.w + 0.01;
@@ -626,7 +628,7 @@ void bhWall(inout vec3 albedo, inout float rough, inout float metal, inout vec3 
     }
     vec3 farCol = office ? mix(vec3(0.66, 0.78, 1.0), vec3(1.0, 0.8, 0.52), hc) : mix(vec3(1.0, 0.52, 0.2), vec3(1.0, 0.68, 0.36), hc);
     float farGlow = mix(0.07, 2.7, nightF) * (prof > 1.5 && prof < 2.5 ? 1.25 : 1.0);
-    avgGlass = refl * F + farLit * farGlow * farCol * 0.34 * (curtain ? 0.85 : 1.0) + gt * crown * 0.7;
+    avgGlass = refl * F + farLit * farGlow * farCol * 0.34 * (curtain ? 0.85 : 1.0) + gt * crown * 0.55;
   }
 
   if (edge < 0.0) {
@@ -757,7 +759,7 @@ void bhWall(inout vec3 albedo, inout float rough, inout float metal, inout vec3 
   vec3 glassAlb = dayA * (1.0 - Fs) * transTint * (curtain ? 0.4 : (ribbon ? 0.7 : 1.0));
   // open sash: the swung pane shows a strip of darker, skewed reflection at the hinge side
   glass = mix(glass, env * 0.35 * reflTint, openW * (1.0 - smoothstep(0.62, 0.66, wx)));
-  glass += gt * crown * mix(0.7, 0.2, spandrel);
+  glass += gt * crown * mix(0.55, 0.18, spandrel);
   if (detail < 0.999) {
     glass = mix(avgGlass, glass, detail);
     glassAlb = mix(avgAlb, glassAlb, detail);
@@ -771,8 +773,8 @@ void bhWall(inout vec3 albedo, inout float rough, inout float metal, inout vec3 
 }
 
 void bhRoof(inout vec3 albedo, inout float rough, inout vec3 emit, vec3 N, vec3 V) {
-  float pat = vA.x;
-  float seed = vA.y;
+  float pat = floor(vA.x + 0.5);
+  float seed = floor(vA.y + 0.5);
   vec2 p = vFac;
   vec2 fp = fwidth(p);
   vec2 so = vec2(fract(seed * 0.1373), fract(seed * 0.3119)) * 17.0;

@@ -78,6 +78,26 @@ material not integrated yet (`lamps/integrate.ts`, never double-applies) · `?la
   with uLights, no popping. Frames 1–2 show black bloom blocks (NaN somewhere) while the lamp gain is
   still 0 — being checked with/without ?legacylamps (shots/night/nan/).
 * 2026-10-18 10:15: resumed after the second stop (checkpoint b929af3).
+* 2026-10-18 ~10:40: PAUSED by the user (budget). No edit in progress; all my files typecheck; no
+  background job of mine running (the NaN check shots/night/nan/ was stopped before it produced frames).
+
+## Resume here (exact state)
+Done: bake + shader + spots, all glow files converted, harbour masts / crane spots / ferris + carousel,
+shop spill, landmarks + harbour material integration, rail platform lights, vehicles/trains patched,
+stadium roof fix verified (it4), dusk fade verified (dusk_sheet), perf A/B (no measurable SwiftShader
+delta after early-outs), 0 console errors in full-city runs (it3, it4).
+Left, in order:
+1. NaN check: `shot.mjs --q "nointro&noidle&adaptive=0&quality=high&time=19.2&speed=0.01[&legacylamps]"
+   --view oldtown --shots 2 --interval 2000` with and without ?legacylamps → if the black bloom blocks
+   appear in both, report to lead (not lamp-related; lamp gain is 0 at 19.2 h); else hunt NaN in thLampLight.
+2. Final before/after captures at 1600×900, split ≤ 15 min per run, q "nointro&noidle&adaptive=0&quality=high&time=…":
+   A1 westbrook;park;oldtown  A2 downtown;harbor;beach  A3 riverside;stadium;overview — hours 21.5,2
+   (separate runs per hour if needed); A4 street=55,1.5,52,28,35,12;street2=-150,0,20,32,-35,22 at 21.5,2.
+   Baseline: shots/baseline/<poi>_21h5.png and shots/night/base2h/<poi>_2.png (+ street/street2 at 2 h);
+   baseline street views at 21.5 still to capture (5174). Sheets: shots/tools/sheet.py → shots/night/ba_*.png.
+3. Polish candidates: path-lamp pools on grass read as isolated blobs in the blurred overview foreground
+   (maybe −10–15 % for kind 'path' on lawns); facade wash could be a touch stronger within ~6 m.
+4. Final report (≤ 350 words).
 
 ## Next
 1. Harbour: integrate thLampLight in harbor/material.ts; register harbour pools; crane work lights as

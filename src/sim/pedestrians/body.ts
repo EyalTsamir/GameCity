@@ -127,6 +127,9 @@ const se = (u: number, n: number) => Math.sign(u) * Math.pow(Math.abs(u), 2 / n)
 
 class MeshBuilder {
   pos: number[] = [];
+  /** stand-in positions for vertices whose rest position is degenerate (parametric skirt rings, the
+   *  outer brim ring): used for the normals only (figureMesh) */
+  standIn = new Map<number, P3>();
   d0: number[] = [];
   d1: number[] = [];
   d2: number[] = [];
@@ -998,6 +1001,7 @@ function buildHat(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
     if (under) b.quadDir(bi2[k], bi2[k1], bo2[k1], bo2[k], [0, -1, 0]);
   }
   outer.forEach((i, j) => {
+    b.standIn.set(i, [P[i * 3], P[i * 3 + 1] - 0.01, P[i * 3 + 2]]);
     P[i * 3] = saved[j][0];
     P[i * 3 + 2] = saved[j][1];
   });
@@ -1054,30 +1058,51 @@ function buildTail(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
     }
     rings.push({ ids, c: [0, belt.y - 0.2, -0.01] });
   }
-  // the parametric rings share one rest height (the shader spreads them down to the hem), so their
-  // quads are degenerate at rest and the winding test needs stand-in heights: descend each ring,
-  // bridge (outward winding), then restore the rest positions
+  // the parametric rings share one rest height (the shader spreads them down to the hem), so their quads
+  // are degenerate at rest: the winding test and the normals use stand-in positions of a hanging skirt
   const P = b.pos;
-  const restY: number[][] = rings.map((r) => r.ids.map((i) => P[i * 3 + 1]));
+  const rest = rings.map((r) => r.ids.map((i) => [P[i * 3], P[i * 3 + 1], P[i * 3 + 2]]));
   rings.forEach((r, j) => {
-    const fy = j === 0 ? belt.y : j === 1 && us[1] === -0.5 ? hipR.y : hipR.y - 0.12 * j;
+    const u = us[j];
+    if (u < 0) {
+      r.c = [0, P[r.ids[0] * 3 + 1], -0.01];
+      return;
+    }
+    const fy = hipR.y - 0.36 * u;
     r.c = [0, fy, -0.01];
-    for (const i of r.ids) P[i * 3 + 1] = fy;
+    for (const i of r.ids) {
+      const x = P[i * 3],
+        z = P[i * 3 + 2] + 0.01;
+      const l = Math.hypot(x, z) || 1;
+      const sp: P3 = [x + (x / l) * 0.025 * u, fy, P[i * 3 + 2] + (z / l) * 0.025 * u];
+      b.standIn.set(i, sp);
+      P[i * 3] = sp[0];
+      P[i * 3 + 1] = sp[1];
+      P[i * 3 + 2] = sp[2];
+    }
   });
   bridge(b, rings);
-  rings.forEach((r, j) => r.ids.forEach((i, k) => (P[i * 3 + 1] = restY[j][k])));
+  rings.forEach((r, j) =>
+    r.ids.forEach((i, k) => {
+      P[i * 3] = rest[j][k][0];
+      P[i * 3 + 1] = rest[j][k][1];
+      P[i * 3 + 2] = rest[j][k][2];
+    }),
+  );
   if (cfg.props === 'far' || cfg.props === 'pin') return;
-  // inside of the hem (darker), so the skirt never reads as an open tube from below / when seated
+  // hem lining: a flat darker ring 10 % inside the hem (u = 1: same height), facing down, so the skirt
+  // never reads as an open tube from below / when seated
   b.setTint(0.45);
   const inner: number[] = [];
   const last = rings[rings.length - 1];
-  const prev = rings[rings.length - 2];
   for (let k = 0; k < n; k++) {
-    const a = last.ids[k],
-      c = prev.ids[k];
-    const p: P3 = [P[a * 3] * 0.93 + P[c * 3] * 0.07, P[a * 3 + 1], P[a * 3 + 2] * 0.93 + P[c * 3 + 2] * 0.07];
+    const a = last.ids[k];
     const phi = (k / n) * Math.PI * 2 + Math.PI / n;
-    inner.push(b.v(p, 0, 0, us[us.length - 2] + (1 - us[us.length - 2]) * 0.88, Math.sin(phi)));
+    const p: P3 = [P[a * 3] * 0.9, P[a * 3 + 1], (P[a * 3 + 2] + 0.01) * 0.9 - 0.01];
+    const id = b.v(p, 0, 0, 1, Math.sin(phi));
+    const sa = b.standIn.get(a);
+    if (sa) b.standIn.set(id, [sa[0] * 0.9, sa[1], (sa[2] + 0.01) * 0.9 - 0.01]);
+    inner.push(id);
   }
   for (let k = 0; k < n; k++) {
     const k1 = (k + 1) % n;
@@ -1399,6 +1424,17 @@ function buildTarget(d: Dims, lod: Lod): MeshBuilder {
   return b;
 }
 
+/** positions for the normals: rest positions with the builder's stand-ins applied */
+function withStandIns(b: MeshBuilder): number[] {
+  const p = b.pos.slice();
+  for (const [i, q] of b.standIn) {
+    p[i * 3] = q[0];
+    p[i * 3 + 1] = q[1];
+    p[i * 3 + 2] = q[2];
+  }
+  return p;
+}
+
 function computeNormals(pos: number[], idx: number[]): Float32Array {
   const n = new Float32Array(pos.length);
   for (let t = 0; t < idx.length; t += 3) {
@@ -1451,8 +1487,8 @@ export function figureMesh(lod: Lod): FigureMesh {
   const base = T[0];
   const nv = base.count;
   for (const t of T) if (t.count !== nv || t.idx.length !== base.idx.length) throw new Error(`figure LOD${lod}: morph targets differ in topology`);
-  const N0 = computeNormals(base.pos, base.idx);
-  const N1 = computeNormals(T[1].pos, base.idx);
+  const N0 = computeNormals(withStandIns(base), base.idx);
+  const N1 = computeNormals(withStandIns(T[1]), base.idx);
   const morph = new Uint32Array(nv * 4);
   const data = new Uint32Array(nv * 4);
   for (let i = 0; i < nv; i++) {
