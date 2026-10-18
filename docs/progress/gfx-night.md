@@ -21,7 +21,12 @@ F1 westbrook/park/oldtown → shots/night/final/ DONE · F2 downtown/harbor/beac
 F3 riverside/stadium/overview → shots/night/final3/ DONE (all 0 console errors; draw calls 139–164).
 Baseline streets 21.5 → shots/night/base215/ DONE. Sheet A (westbrook/park/oldtown) → shots/night/ba_night_A.png.
 **Running (resume #4, 22:10 UTC):** F4 `capture-set.mjs --views "street=55,1.5,52,28,35,12;street2=-150,0,20,32,-35,22" --hours 21.5,2 --width 1600 --height 900 --out shots/night/final4` → shots/night/final_f4.txt.
-**Next:** sheets B (downtown/harbor/beach), C (riverside/stadium/overview), streets
+Sheets B, C → shots/night/ba_night_B.png, ba_night_C.png. Finding: 02:00 stadium/riverside/overview frames
+of F3 show the pitch still floodlit — capture artifact: after setHours(2) the landmarks' uFlood eases out
+slowly (stadiumLife: flood += (want-flood)*min(1, dt*0.8+0.02), no 'timejump' snap) and my spots follow it.
+Re-capturing those three at 2 h from a fresh session (time=2): `--views "riverside;stadium;overview" --hours 2
+--q "...&time=2" --out shots/night/final3b`. Beach 02:00 white sea glitter = water's moon glint (also in baseline).
+**Next:** streets sheet (final4 vs base215/base2h), replace C's 02:00 column with final3b
 (shots/tools/sheet.py; cols baseline21.5 | new21.5 | baseline2 | new2; baseline = shots/baseline/<poi>_21h5.png,
 shots/night/base2h/<poi>_2.png, shots/night/base215/street*_21h5.png) → final report under "## Final report".
 

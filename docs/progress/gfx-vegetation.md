@@ -17,10 +17,10 @@ foliage/wind material, plants.ts, `legacy/` = frozen pre-overhaul copies for `?l
   (lift ∝ min(1, leafiness·1.25)); verify once more in the final night sheet.
 * NEXT: tune `night` from night1 → write the value here → final sheets refresh (night + gardens + downtown
   street view dtst=-16,0,-65,30,30,30 and oldtown ot=77,0,-14,34,20,32 instead of plaza_11) → Final report.
-* Jobs RUNNING (launched via scratchpad/veg_launch.sh, outputs + .log in shots/vegetation/): finA (5173, 11 h,
-  14 views incl. dtst_11/ot_11), finC (5173, 21.5 h, 10 views incl. dtst_21h5), baseD (5174: dtst_11, ot_11,
-  dtst_21h5). Previous finA/finC moved to prev_finA/prev_finC. Then: rerun scratchpad/sheets.sh (add dtst/ot
-  pairs: baseD vs finA/finC) → final review → Final report.
+* Refresh runs DONE + verified (no errors, invariants empty): finA (11 h, 14 views), finC (21.5 h, 10 views),
+  baseD (5174 dtst/ot). Sheets rebuilt with scratchpad/sheets.sh → shots/vegetation/final_*.png.
+* NEXT: review final_night.png (night lift with conifer fix) + final_close.png (hedge tops, street views) →
+  write "## Final report" here → SubagentHandback. Jobs: none running.
 
 ## Brief
 V1 foliage shading · V2 silhouettes/species/conifers/forest variety · V3 bushes & hedges · V4 lamp light ·

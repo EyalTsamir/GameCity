@@ -1,18 +1,10 @@
 # gfx-terrain — graphics overhaul, audit item 10 + lamp light on the ground
 
 ## Resume here
-* DONE + verified: T1 cliffs, T2 lawns (it4), T3 stadium, T4 lamp light, all committed.
-* DONE + verified (lead item a): moonlit rock `mNightLift()` in `masonry.ts`, NIGHT_K = 0.07 (kept).
-  night1 medians (8-bit luma, new vs `?nightrock=0`): cliff close 21.5 h rock 20 (p90 40) vs meadow 14 /
-  lawn 16 (off: rock 5); harbour cliff 35 vs hilltop grass 17 (off 23); 2 h: rock 35 vs lawn 31. Ledges and
-  upper facets read; overview escarpment band visible (`shots/terrain/crop_night_ab.png`, left off / right new).
-* RUNNING (b): `TH_LOCK_SLOTS=2 node scratchpad/tcap.mjs --out shots/terrain/final2 --views "park;riverside;westbrook;stadium" --hours 11 --variants "new=http://127.0.0.1:5173/?nointro&noidle&adaptive=0&quality=high|old=http://127.0.0.1:5174/?…"`
-  → `shots/terrain/final2/{new,old}_*_11.png`, log `shots/terrain/final2.log`.
-* DONE (c, optional): spur flank faces `flank-w`/`flank-e` in `cliffs.ts` extended behind the low ends of the
-  rail-portal wing walls (len 10.9) with `yFloor` = wing-wall top + 0.75 (offline check: no rock below the wall
-  top in front of the walls; tris 12.1k). Visual check comes with the next capture that shows the west spur.
-* NEXT: (1) sheet `shots/terrain/sheet_final2_lawns.png` from final2 + night sheet (night1 new vs final_old);
-  (2) optional west-portal slope; (3) final report under "## Final report" + SendMessage main.
+* ALL DONE (T1–T5 + lead items a, b, c). Final report below under "## Final report" (also sent to the lead).
+* Last verification: `shots/terrain/final2/` complete (8 frames, report clean), sheets built
+  (`sheet_final2_lawns.png`, `sheet_final_night_rock.png`). Nothing running; tree committed (auto-checkpoint).
+* If resumed again: nothing left except answering the lead's QA questions.
 
 Owner: terrain agent. Files: `src/world/terrain.ts`, `src/world/terrain/*` (except `slab.ts`, `glow.ts`),
 `src/world/landmarks.ts`, `src/world/landmarks/*` (except `glows.ts`, `shaders.ts`, `materials.ts`).
@@ -115,3 +107,33 @@ final report.
 
 ## Changes outside my area
 (none)
+
+## Final report
+
+**What changed (files)**
+- **T1 cliffs** (`terrain/cliffs.ts`, `masonry.ts`): layered, faceted rock skin on the escarpment, spur noses and flanks, and the harbour cliff. Strata are broken into blocks with jagged joints, darker thin bands, mossy ledges, scree stones and a gravel strip at the foot. Hill boulders became chunky stacked rocks. Terrain heights are untouched, and the rock is merged into the masonry mesh, so no extra draw call.
+- **Moonlit rock at night**: `mNightLift()` in `masonry.ts` lifts upper facets and ledges while creases stay dark. Measured at 21.5 h: rock median 20 vs 14–16 for the lawns beside it (5 before); harbour cliff 26–35 vs grass 14–17.
+- **T2 lawns** (`ground.ts`, new RGBA mask): mowing stripes, a different tone per lawn, large-scale patches, clover, darker grass along kerbs, walls and fences, and worn shortcuts at path corners, path ends, benches and doorsteps. Hill meadows got heather and gorse; ground rock matches the cliffs.
+- **T3 stadium** (`landmarks/stadiumShell.ts`, `stadium.ts`): brick facades with pilasters and cornice, arched gates with signs and lanterns, and the club crest. Four corner stair towers, lattice girders on the roofs, and lattice floodlight masts with real lamp heads. Also fixed a grey z-fighting panel on the facade.
+- **T4**: ground and masonry take light from `thLampLight`; verified on the park and riverside lawns at night.
+
+**Toggles:** `?legacyterrain`, `?nocliffs`, `?legacyground`, `?legacystadium`, `?nightrock=0`
+
+**Before/after sheets** (`shots/terrain/`)
+- My changes only (same build): `sheet_it2_day.png`, `sheet_it4_lawns.png`.
+- Full city, original build (5174) vs current (5173): `sheet_final_11a.png`, `sheet_final_11b.png`, `sheet_final_golden.png`, `sheet_final_night.png`, `sheet_final2_lawns.png`.
+- Night rock: `sheet_final_night_rock.png`.
+
+**Stats**
+- Draw calls: +0.
+- Masonry: 26.9k → 38.4k triangles, but vertices fell 51k → 37k (flat shading via derivatives with shared vertices).
+- Landmarks: static mesh +4.5k triangles, detail +3.2k, kinetic +0.2k, lights +0.2k.
+- No console errors or warnings; invariants and validation clean.
+- GPU estimate: about +0.1–0.2 ms on high (reasoned, not measured).
+
+**Perf variants for lead:** `;legacyterrain;nocliffs;legacyground;legacystadium;nightrock=0`
+
+**Open**
+- Garden stripes look deliberately model-railway.
+- Forests on the hills are still dark at night (vegetation's area).
+- `nightrock` has no adaptive tie-in (none needed).

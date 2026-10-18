@@ -328,6 +328,10 @@ export function createStadiumLife(env: Env, info: StadiumInfo, g: GlobalUniforms
   let fill = 0;
   let matchMin = 0;
   let flood = 0;
+  // clock jumps (setHours / UI time controls) snap the floodlights like main.ts snaps the street
+  // lights: applied on the next update, normal clock flow keeps the ease
+  let snapFlood = true;
+  env.ctx.events.on('timejump', () => (snapFlood = true));
   const u = env.u;
 
   const kickoff = (team: number) => {
@@ -645,7 +649,9 @@ export function createStadiumLife(env: Env, info: StadiumInfo, g: GlobalUniforms
     // floodlights: matches & the hour around them, once the light fades
     const dark = 1 - ctx.clock.daylight;
     const wantFlood = (inMatch || preOrPost) && (dark > 0.2 || h > 18.5) ? 1 : 0;
-    flood += (wantFlood - flood) * Math.min(1, dt * 0.8 + 0.02);
+    if (snapFlood) flood = wantFlood;
+    else flood += (wantFlood - flood) * Math.min(1, dt * 0.8 + 0.02);
+    snapFlood = false;
     u.uFlood.value = flood;
     updatePlayers();
   };

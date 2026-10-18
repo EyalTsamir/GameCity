@@ -550,4 +550,4 @@ Let v = speed (m/s), Lh = hip height of the kind × scale, Fr = v² / (9.81·Lh)
 ---
 
 ## Re-review (2026-10-18)
-Resume here: step 3/5 (resumed 22:06) — seen: gfx-people.md, city day/night sheets, lineups, gait sheet. Next: poses + distance_lod sheets, lab4, then own captures (close walk/turn, 40–60 m street day/night, LOD transition) under shots/people-review/re/.
+Resume here: step 4/5 — evidence read (sheets, lineup4, city_final2), node checks re-run (measure, gaitfk, cornerfk: numbers reproduce). Capture job re_capture.mjs (scratchpad/re) queued → shots/people-review/re/ (seq_*, street45/junction35/park55 day+night). Next: write (a) table, (b) issues, (c) verdict.

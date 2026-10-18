@@ -9,7 +9,14 @@
   pass, day · night): harbour 7/129k · 13/138k, overview 8/157k · 14/168k, beach 9/163k · 15/174k,
   riverside 6/143k · 11/154k, park 4/70k · 9/81k, shipw 7/109k · 13/120k, river2 4/101k · 12/123k,
   pier 6/97k · 12/108k, bay 8/129k · 14/140k → all < 0.2 M.
-* Now: reviewing those frames (point glints, pond in park, night indigo, shallows F×0.62, landmarks-glows drop).
+* Reviewed: final POI sheets `shots/water/sheets_final/ba_{harbor,beach,riverside,overview,park}.png` (full city)
+  + custom views `ba_{shipw,river2,pier,bay}.png`, `ba_harbor_subset.png`: night indigo OK, turquoise shallows OK,
+  pond consistent. White blobs in medium frames = ambient swans/ducks (not foam).
+* NOW (PRIORITY from lead/night): at 02:00 the moon glint on the sea is a huge clipped white patch with sparkle
+  clusters (evidence shots/night/final2/beach_2.png). Target: narrow, sparse silvery moon path, peak ≈ sRGB
+  200–220, almost nothing above the night bloom threshold (0.88), weaker than the sun path. Fix in surface.ts
+  (`moon` term + point glints at night): scale by moon light vs sun, tighter lobe, fewer glints, clamp HDR.
+  Check beach/harbor/riverside/overview at 2 h and 21.5 h after the fix.
 * Next: (1) tune if the review finds problems (re-capture only the affected views, ≤15 min jobs);
   (2) sheets: POIs final vs `shots/baseline/<poi>_<h>.png` (sheet.py, → `shots/water/sheets_final/`),
   custom views it6 vs `shots/water/base` (`scratchpad/water_sheets.sh shots/water/it6 shots/water/sheets_final
