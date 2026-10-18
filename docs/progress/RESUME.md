@@ -17,7 +17,7 @@ The harness needs no GPU (SwiftShader fallback in `scripts/browser.mjs`); prefix
 `TH_LOCK_SLOTS=2`.
 
 ### Automatic resume (usage-limit stops, container restarts)
-* A watchdog scheduled task (`trig_01SEZGVfPdGEXrjuBsEYFnkw`, every 2 h) wakes the lead session —
+* A watchdog scheduled task (`trig_01SEZGVfPdGEXrjuBsEYFnkw`, every hour) wakes the lead session —
   also while the user's computer is off — restores the machine, checkpoints, and resumes every agent
   that is not running, has no "## Final report" in its log and has no live browser job.
 * `shots/tools/autocheckpoint.sh 15` runs detached and checkpoints + pushes every 15 min

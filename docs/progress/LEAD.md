@@ -4,7 +4,7 @@ Read this first when resuming after an interruption (usage limits have cut runs 
 Per-module logs live next to this file: `docs/progress/<module>.md`.
 
 ## Lead state (graphics overhaul) — keep current; the watchdog resumes from here
-* Updated 2026-10-18 16:25 UTC. Phase 2: workstream agents finishing (verify → fixes/polish →
+* Updated 2026-10-18 22:08 UTC. Phase 2: workstream agents finishing (verify → fixes/polish →
   final sheets → "## Final report" in their gfx-*.md).
   - DONE: hardscape (16:20; lead spot-checked ab_court_quay.png ✔). Note for QA: camera pulls views
     < 100 m into close-ups (LOS_DIST in src/ui/camera.ts) — use ≥ 105 m for quay views.
@@ -13,9 +13,13 @@ Per-module logs live next to this file: `docs/progress/<module>.md`.
   - 16:40: people-review `a224fa07f1ef5777b` resumed for the independent re-review → writes
     "## Re-review (2026-10-18)" / "## Re-review final" in people-review.md. If it asks for a fix round,
     resume people `a1dd73a4100e0d9b6` with its ranked list.
-  - Still working: stage, night, water, buildings, vegetation, terrain.
+  - ~16:50 UTC usage limit hit (reset 20:10); the 20:03 watchdog fired 7 min too early, so work resumed
+    at the 22:04 firing (container had rebooted; auto-checkpoint 14d484c had saved everything).
+    22:06: stage, night, water, buildings, vegetation, terrain + people-review resumed from their logs;
+    watchdog switched to hourly so a reset never idles the team for more than ~1 h.
+  - Still working: stage, night, water, buildings, vegetation, terrain; people-review (re-review).
 * Safety nets (user request: never lose state, never trade quality for speed):
-  - watchdog scheduled task `trig_01SEZGVfPdGEXrjuBsEYFnkw` (every 2 h at :03 UTC, fires into this
+  - watchdog scheduled task `trig_01SEZGVfPdGEXrjuBsEYFnkw` (hourly at :06 UTC since 22:06, fires into this
     session even with the user's computer off): resumes agents cut off by the usage limit / restarts.
     Delete it when the overhaul is done.
   - `shots/tools/autocheckpoint.sh 15` (detached loop): checkpoint + push every 15 min.

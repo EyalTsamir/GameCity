@@ -1,24 +1,19 @@
 # gfx-water — audit item 4: water that reads as water
 
 ## Resume here
-* State (2026-10-18 16:10): W1–W3 implemented and tuned; all files typecheck. Verified today: reflection
-  stats after the last cuts (`shots/water/stats_full3.json`, full city 1280×720, calls/tris of the pass,
-  day · night): harbour 7/129k · 13/138k, overview 8/157k · 14/168k, beach 9/163k · 15/174k, riverside
-  6/143k · 11/154k, park 4/70k · 9/81k, shipw 7/109k · 13/120k, river2 4/101k · 12/123k, pier 6/97k ·
-  12/108k, bay 8/129k · 14/140k → all < 0.2 M. Main scene ≈ 1.7–1.86 M tris / 137–166 calls (incl. pass).
-* Running: `scratchpad/water_chain3.sh` (background; log `shots/water/chain3.log`): fin11/fin18/fin21
-  (full city 1600×900 → `shots/water/final/<poi>_<h>.png`), it6a/it6b (module subset 1280×720 →
-  `shots/water/it6`), med2 (quality=medium + wakes → `shots/water/med2`). If cut off: check chain3.log,
-  re-run only the missing steps (copy the `run …` lines).
-* Unverified in the browser yet: point glints (surface.ts `wSparkle` block, 0.35 m grid, step 0.94),
-  night indigo lift (`sky = mix(sky, uSkyHor*1.5+…, 0.45*uNight)`), shallows F×0.62, landmarks-glows drop.
-* Next: (1) review final/it6/med2 frames (glints, pond in park, night, shallows); tune if needed;
-  (2) sheets: POIs final vs `shots/baseline/<poi>_<h>.png` (sheet.py), custom views it6 vs
-  `shots/water/base` (`scratchpad/water_sheets.sh shots/water/it6 shots/water/sheets_final …`);
-  (3) final report → "## Final report" here + SubagentHandback.
-
-Owner files: `src/world/water.ts`, `src/world/water/*`, `src/sim/boats.ts`, `src/sim/boats/*`.
-Brief: GFX-PLAN.md (W1 planar reflections, W2 shading, W3 hull contact + wakes, W4 verification).
+* State (2026-10-18 22:10): W1–W3 implemented and tuned; all files typecheck. chain3 COMPLETED (16:46):
+  `shots/water/final/<poi>_<11|18h2|21h5>.png` (full city 1600×900: harbor, beach, riverside, overview, park),
+  `shots/water/it6/` (module subset 1280×720: harbor, shipw, river2, pier, bay × 3 h), `shots/water/med2/`
+  (quality=medium + wakes) — all reports: 0 console errors/warnings, invariants empty, no failed modules.
+  Reflection stats after the last cuts (`shots/water/stats_full3.json`, full city 1280×720, calls/tris of the
+  pass, day · night): harbour 7/129k · 13/138k, overview 8/157k · 14/168k, beach 9/163k · 15/174k,
+  riverside 6/143k · 11/154k, park 4/70k · 9/81k, shipw 7/109k · 13/120k, river2 4/101k · 12/123k,
+  pier 6/97k · 12/108k, bay 8/129k · 14/140k → all < 0.2 M.
+* Now: reviewing those frames (point glints, pond in park, night indigo, shallows F×0.62, landmarks-glows drop).
+* Next: (1) tune if the review finds problems (re-capture only the affected views, ≤15 min jobs);
+  (2) sheets: POIs final vs `shots/baseline/<poi>_<h>.png` (sheet.py, → `shots/water/sheets_final/`),
+  custom views it6 vs `shots/water/base` (`scratchpad/water_sheets.sh shots/water/it6 shots/water/sheets_final
+  harbor shipw river2 pier bay`); (3) "## Final report" here + SubagentHandback.
 
 ## Design
 
