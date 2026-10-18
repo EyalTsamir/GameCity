@@ -10,7 +10,7 @@ import * as THREE from 'three';
 import { DOG_OFFSET, F, buildBlobGeometry, buildDogGeometry, buildPramGeometry, makeBlobMaterial, makeDogMaterials, makePramMaterials } from './figure';
 import { FB, figureMesh, type Lod } from './body';
 import { HAT_STYLES, POSE_KEYS, POSE_UINTS, makeInvisibleMaterial, makePeopleMaterials } from './shader';
-import { computePose } from './animate';
+import { computePoseA, poseIn } from './animate';
 import { newGaitState, type GaitState } from './gait';
 import { gripPoint, newPose, type Pose } from './pose';
 import { rigOf } from './rig';
@@ -405,7 +405,8 @@ export class CrowdRenderer {
         const r = rigOf(L);
         const umbrella = raining && L.umbrellaOwner && m.sit < 0.3 && m.lie < 0.1 && m.ground < 0.1 && !L.pram;
         const gaitOn = layer === this.near || layer === this.far || out === this.near || out === this.far;
-        computePose(m, t + m.seed * 10, umbrella, r, pose, gaitOn ? st.gait : null, this.frame);
+        poseIn.t = t + m.seed * 10;
+        computePoseA(m, umbrella, r, pose, gaitOn ? st.gait : null, this.frame);
         // drawn at the gait's smoothed root when the gait ran this frame (corners: the feet were planned
         // around it), else at the crowd's root
         const gs = gaitOn && st.gait.frame === this.frame;

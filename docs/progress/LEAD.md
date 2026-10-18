@@ -43,7 +43,9 @@ Per-module logs live next to this file: `docs/progress/<module>.md`.
     QA must re-check: quality=medium/low water, runtime reflection-quality switches.
   - DONE: stage (23:15; lead spot-checked sheets/ba_overview.png ✔ — table + time-of-day backdrop, warm
     golden hour, lit night city). Perf variants `;legacylight;notable`. All 8 workstreams have final reports.
-  - Still working: people (fix round), water (fix round). Then: qa_matrix.sh new → Phase 3.
+  - DONE: water fix round (23:40; lead checked fix/medlow_sheet.png ✔ — medium/low/nowaterrefl water correct
+    at 11/18.2/20/21.5 h; dusk square = additive harbor-glows alpha in the reflection target, fixed).
+  - Still working: people (fix round; not visible at matrix distances).
 * Safety nets (user request: never lose state, never trade quality for speed):
   - watchdog scheduled task `trig_01SEZGVfPdGEXrjuBsEYFnkw` (hourly at :06 UTC since 22:06, fires into this
     session even with the user's computer off): resumes agents cut off by the usage limit / restarts.
@@ -75,7 +77,8 @@ Per-module logs live next to this file: `docs/progress/<module>.md`.
      larger ones go back to the owning agent).
   6. Legacy toggles/folders: decision after the perf A/B (they are the user's real-GPU A/B switch;
      weigh bundle size).
-* Phase-3 progress: 22:33 base side of the matrix started (qa_matrix.sh base, background, resumable).
+* Phase-3 progress: 22:33–23:20 base side of the matrix done (8 chunks, clean reports). 23:41 new side started
+  (qa_matrix.sh new; check each chunk's report.json failedModules — people may be mid-edit; redo such chunks).
 
 ## History
 * 2026-10-16 ~19:20 — Round 1: 12 builders launched via a Workflow; the account hit its 5-hour usage

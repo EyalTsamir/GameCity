@@ -1,7 +1,7 @@
 # gfx-water — audit item 4: water that reads as water
 
 ## Resume here
-* FIX ROUND (stage findings, lead priority) — IN PROGRESS:
+* FIX ROUND (stage findings, lead priority) — DONE + VERIFIED 23:30 (see Final report › Fix round):
   1. Level 0 (nowaterrefl / medium / low / adaptive refl-off) renders beige water with rainbow blotches
      (shots/stage/nan/refl_off_20.png) → never sample the reflection target at level 0.
   2. Dark ~30 m square in the harbour near (178, −98) from ~19.4 h with reflections on (shots/stage/nan/sweep_14.png)
@@ -28,8 +28,8 @@
   - VERIFIED (shots/water/fix/switch_sheet.png, square_sheet.png; 0 errors/warnings, invariants empty):
     runtime 2→1→0→2 at harbour 20 h clean (level 0 = proper water, target freed and re-allocated: 427×240 →
     284×160 → off → 427×240); square gone (lighthouse glow now a soft warm reflection); blue-hour overview
-    reads as blue water instead of a lilac plane. Pending: medium/low/nowaterrefl chain
-    (`scratchpad/water_fixchain.sh`, log shots/water/fix/chain.log → shots/water/fix/{medium,low,noref}).
+    reads as blue water instead of a lilac plane. medium/low (overview, harbour, beach, riverside × 11/18.2/20/
+    21.5 h) and ?nowaterrefl verified clean: shots/water/fix/{medium_a,medlow_sheet}.png.
   - Bug 2: added debug hook `ctx.services.water._debugReflectFilter(regex|null)`; diagnostic session
     `node scratchpad/water_refldiag.mjs` → shots/water/diag/{ov_refl,close_all,close_<group>}.png (waterdebug=refl, 19.6 h).
 * (earlier) 2026-10-18 22:40 — main work complete, final report below.
@@ -236,3 +236,16 @@ Water now reads as water from close up, from the POIs and from the overview, at 
 - Facade trim isn't reflected.
 - The sky reflection depends on the dome's uniform names.
 - Boats draw every model variant per instance, so their geometry is redundant (an old cost).
+
+### Fix round (stage findings)
+1. **Reflection level 0 rendered garbage** (beige water with rainbow blotches; medium, low, `?nowaterrefl` and the adaptive "refl-off" step).
+   - Cause: not the reflection target. My level-0 lamp-streak fallback decoded `uLampMap` itself, and the lamps module has since repacked that map into two panels, so the fallback was reading the direction panel.
+   - Fix: it now calls the contract function `thLampLight()`. Level 0 also binds a 1×1 black texture and disposes the target, so a stale target after 2→0 can never be sampled.
+   - Verified: medium and low at 11/18.2/20/21.5 h (overview, harbour, beach, riverside), `?nowaterrefl`, and a runtime 2→1→0→2 switch in one session; the target is freed and re-allocated correctly.
+2. **Dark ~30 m square near the lighthouse from ~19.4 h.**
+   - Cause: `harbor-glows`. three's non-premultiplied additive blending also adds the glow's alpha, so the quad marked its whole footprint as covered in the reflection target and erased the mirrored sky.
+   - Fix: during the pass only, additive materials blend colour as before but leave alpha untouched; the exact original blend state is restored afterwards (GL state only, no recompiles).
+   - Found with a new debug hook, `water._debugReflectFilter(regex)`.
+3. **Blue-hour sea read as a flat lilac plane.** I judged it flat. At blue hour only (golden hour is untouched), the water now mirrors part of the deep-blue zenith, Fresnel is 25% lower, and the slick/patch variation is stronger. The night indigo lift now applies only at full night.
+
+Sheets: `shots/water/fix/{switch_sheet,square_sheet,medium_a,medlow_sheet}.png`. All runs: 0 console errors/warnings, invariants empty.

@@ -119,6 +119,14 @@ function idleVariant(m: Member, r: Rig, t: number): typeof iv {
 }
 
 export function computePose(m: Member, t: number, umbrella: boolean, r: Rig, o: Pose, gs: GaitState | null = null, frame = 0): Pose {
+  poseIn.t = t;
+  return computePoseA(m, umbrella, r, o, gs, frame);
+}
+/** computePoseA's time input (s): a field, as a computed double argument would be boxed per call */
+export const poseIn = { t: 0.5 };
+/** computePose with the time in poseIn.t (the renderer's per-figure path: no garbage) */
+export function computePoseA(m: Member, umbrella: boolean, r: Rig, o: Pose, gs: GaitState | null, frame: number): Pose {
+  const t = poseIn.t;
   const L = m.look;
   const a = m.amp;
   const old = r.old;
