@@ -550,4 +550,42 @@ Let v = speed (m/s), Lh = hip height of the kind × scale, Fr = v² / (9.81·Lh)
 ---
 
 ## Re-review (2026-10-18)
-Resume here: step 4/5 — evidence read (sheets, lineup4, city_final2), node checks re-run (measure, gaitfk, cornerfk: numbers reproduce). Capture job re_capture.mjs (scratchpad/re) queued → shots/people-review/re/ (seq_*, street45/junction35/park55 day+night). Next: write (a) table, (b) issues, (c) verdict.
+Resume here: step 4/5 — (a) table written (2 rows pending own captures: corners real-sim, 40–60 m other district). Capture job queued (scratchpad/re/re_capture.mjs → shots/people-review/re/). Next: (b) issues, (c) verdict.
+
+Evidence used: the people log (`docs/progress/gfx-people.md`), its sheets `shots/people/sheet_{lineups,gait,poses,distance_lod,city_day,city_night}.png`,
+`shots/people/lineup4/` (my lineup driver re-shot on the new code), `lab4/`, `city_final2/` (+ `report_final2.json`), plus my own
+re-runs of their node checks from a scratch copy (`measure.ts`, `gaitfk.ts`, `cornerfk.ts` — numbers reproduce exactly) and new
+captures under `shots/people-review/re/` (zoom crops in `re/crops/`). P = pass, ½ = partial, F = fail.
+
+### (a) Spec items (§4) and milestones (§7)
+
+| § | item | verdict | evidence / note |
+|---|---|---|---|
+| 4.1 | adult proportions (arm length, hands at mid-thigh, shoulders, head width, neck, feet) | **P** | `lineup4/lineupA_34.png`, `re/crops/lineupA34_upper_x2.png`, `sheet_lineups.png` — the "toy" look is gone; fingertips mid-thigh, narrow shoulders, neck visible |
+| 4.1 | women / children / teens / elderly / build as distinct bodies | **P** (build ½) | `sheet_lineups.png` B rows (children read as children, elderly stoop), `lab4/gait_old.png`; heavy build reads only mildly in profile (`lineup4/lineupA_side.png`, last figure) |
+| 4.2 | smooth skinned lofts, deltoids, calves, neck, no gaps when bent | **P** | `sheet_poses.png` bench rows (knees, laps), `lab4/sit_*.png` |
+| 4.2 | head with jaw/nose/chin, optional eyes | **½** | mannequin face (`re/crops/lineupA34_upper_x2.png`); invisible from ~12 m (`re/crops/sqclose14_couple_x3.png` is a 3× zoom of a 14 m view) |
+| 4.2 | hands with thumb, grips | **P** | `lineupA34_upper_x2.png` (phone, hand on hip), pram/leash grips in `sheet_poses.png` |
+| 4.2 | shoe lasts | **½** | long, flat, pointed "slipper" shoes at < 10 m (`re/crops/lineupA34_feet_x2.png`, `lineup4/lineupA_side.png`); fine from 14 m |
+| 4.3 | continuous hems (sleeves, tops, shorts, boots, soles) | **P** | `lineupA34_upper_x2.png` (T-shirt sleeve mid upper arm), `city_final2/sqwide_11.png` |
+| 4.3 | skirt/dress/coat tail skinned to the thighs, seated drape | **P** | `sheet_gait.png` skirt row, `sheet_poses.png` bench rows, `lab4/sit_side.png` |
+| 4.3 | jackets/coats/lapels/hoods, silhouette variety | **½** | suits, dresses, skirts, shorts, scarf/V-fronts visible (`sheet_city_day.png`); trousers are tight leggings-like tubes on most men (`lineupA34_feet_x2.png`) and long coats are rare in city views |
+| 4.3 | palette rebalance, swimwear torso-only | **P** | `sheet_city_day.png` (calm crowd), `sheet_poses.png` ground row (trunks, bikinis) |
+| 4.4 | hair shell params, ponytail, bun, beard, 7 hat styles | **P** | `re/crops/sqwide_11_x2.png` (ponytail, sun hat), `lab4/B_heads.png` |
+| 4.5 | pram IK, leash, cane, held props parked when seated | **P** | `sheet_poses.png` (hands on the bar, briefcase gone on the bench), `lab4/gait_old.png` (cane follows the steps) |
+| 4.6 | step model from speed + leg length | **P** | gaitfk: 109 spm @1.3 (adult), elderly 0.82 m/s short steps; cadence printout is quantised to ~22 spm steps (tool window), so read it as approximate |
+| 4.6 | planted feet: slide ≤ 1 cm, hover ≤ 0.5 cm (straight walking, all kinds, run) | **P** | gaitfk re-run: slide 0.12–0.60 cm, sole −0.0…+0.1 cm |
+| 4.6 | knee curve / ankle roll / pelvis-torso-head / arm curve / run with flight | **P** | knee 60° (elderly 46°, run 87°), `sheet_gait.png`, `lab4/gait_old.png` |
+| 4.6 | turning and corners (step-turns, no skating) | **½** | gaitfk 40°/s 0.8 cm ✓, 90°/s 5.1 cm; cornerfk: 4-segment rail corners 2.6–4.2 cm, 45° snap 9.4 cm, bevelled 90° 18.8 cm, hard 90° 34.7 cm; trailing hip extension reaches −40° in corners (real ≤ −20°); real-sim frames: pending (`re/seq_*`) |
+| 4.7 | idle variants + contrapposto | **P** | `sheet_lineups.png`, `city_final2/sqclose_11.png` |
+| 4.7 | bench against the backrest, feet down, variants, reading | **P** | `sheet_poses.png`, `lab4/sit_*.png` |
+| 4.7 | ground sit / lying / wave | **P** | `sheet_poses.png` ground row |
+| 4.7 | dog upgrade | **P** | `sheet_poses.png` dog row (lofted dog) |
+| 4.8 | lamp light map on figures | **P** | `city_final2/sqwide_21h5_lampzoom.png`, `sheet_city_night.png` |
+| 4.8 | value ramp, wrap/sheen, jitter, blob α 0.28 | **P** (subtle) | `sheet_city_day.png`; blob stretch with stride not verified |
+| 4.9 | LOD distances 40/110/300 m + hysteresis + 0.4 s dithered cross-fade | **P** | log; silhouettes consistent across levels (`sheet_distance_lod.png`, `lineup4/lod*_9m.png`) |
+| 4.9 | vertex budgets LOD0 ≤ 1300 / lo ≤ 450 / tiny ≤ 240 / pin ≈ 70 | **½** | measure re-run: 1346 / 458 / 261 / 101 total (typical posed ≈ 900 / 330 / 185 / 71) — all within 4–9 % (pin 44 %) on totals, under budget on posed vertices; triangles 2203 / 748 / 400 / 136 exceed the triangle column (≤ 1800 / 700 / ≈ 220) — acceptable for a vertex-bound scene except tiny, which is also the shadow proxy for every figure < 150 m |
+| 4.9 | shadow proxy, ≤ +2 draw calls, 14/16 attribute slots | **P** | log + census: square 20 m 39 k + 17 k VS vertices (old 49 k + 49 k), plaza 63 k + 28 k (old 98 k + 98 k), overview 44 k (old 98 k) |
+| 4.9 | no per-frame allocations | **F** | log: ≈ 2 KB garbage per figure-frame (boxed doubles in the pose functions) → ~0.1–0.3 MB/frame with 50–150 posed figures |
+| §7 P6 | final perf on the target GPU | **½** | SwiftShader A/B inconclusive by the people agent's own account; needs the lead's consolidated GPU run (`;legacypeople;hide=pedestrians`) |
+| §7 | milestones P1–P5 | **P** | all delivered as specified; P6 delivered except the proven GPU number |

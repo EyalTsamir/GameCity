@@ -458,11 +458,25 @@ vec4 waterBase() {
     vec2 o = (vec2(wHash12(ci + 3.1), wHash12(ci + 7.7)) - 0.5) * 0.6;
     float r = length(fract(cq) - 0.5 - o) * cs;
     float rad = max(0.025, fp * 0.75);
-    wSparkle = step(0.94 - 0.03 * ruff, h) * (1.0 - smoothstep(rad * 0.4, rad, r)) * (1.0 - smoothstep(0.05, 0.2, fp)) * (0.3 + 0.7 * ruff) * calm * (1.0 - mPond);
+    wSparkle = step(mix(0.94 - 0.03 * ruff, 0.975, uNight), h) * (1.0 - smoothstep(rad * 0.4, rad, r)) * (1.0 - smoothstep(0.05, 0.2, fp)) * (0.3 + 0.7 * ruff) * calm * (1.0 - mPond);
   }
   // moon
-  float md = max(dot(R, normalize(uSkyMoonDir)), 0.0);
-  vec3 moon = vec3(0.62, 0.72, 1.0) * (pow(md, mix(1400.0, 350.0, ruff)) * 0.75 + pow(md, 60.0) * 0.05 + wSparkle * pow(md, 40.0) * 0.6) * uSkyMoonVis * uNight * (1.0 - 0.75 * mRiv);
+  // moon path: a calm, narrow silvery streak — Beckmann lobe about the half vector (tight, short
+  // tails), a faint sheen and sparse pinpoint glints inside the lobe; peak capped well below the night
+  // bloom threshold (only single glints may touch it), much weaker than the sun path
+  vec3 moon = vec3(0.0);
+  float moonI = uSkyMoonVis * uNight * (1.0 - 0.7 * mRiv) * (1.0 - 0.9 * uSkyOvercast);
+  if (moonI > 0.001) {
+    vec3 Lm = normalize(uSkyMoonDir);
+    float nhm = max(dot(wN, normalize(Lm + V)), 1e-3);
+    float c2m = nhm * nhm;
+    float t2m = (1.0 - c2m) / c2m;
+    float a2m = clamp(0.0012 + wVar * 0.5 + ruff * ruff * 0.003, 0.0008, 0.02);
+    float core = exp(-t2m / a2m);
+    float sheen = exp(-t2m / (a2m * 6.0 + 0.006));
+    float pins = wSparkle * exp(-t2m / (a2m * 2.5 + 0.002));
+    moon = vec3(0.72, 0.8, 1.0) * min(core * 0.26 + sheen * 0.025 + pins * 0.7, 0.75) * moonI;
+  }
 
   // night lights when the reflection pass is off: lamp map read where the reflected ray
   // reaches lamp-head height (streaks toward the viewer through the anisotropic normal)

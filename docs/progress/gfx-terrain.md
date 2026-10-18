@@ -4,7 +4,11 @@
 * ALL DONE (T1–T5 + lead items a, b, c). Final report below under "## Final report" (also sent to the lead).
 * Last verification: `shots/terrain/final2/` complete (8 frames, report clean), sheets built
   (`sheet_final2_lawns.png`, `sheet_final_night_rock.png`). Nothing running; tree committed (auto-checkpoint).
-* If resumed again: nothing left except answering the lead's QA questions.
+* Fix request (lead/night): `landmarks/stadiumLife.ts` floodlights now snap (`flood = want`) on
+  ctx.events 'timejump' (flag applied on the next update; normal clock flow keeps the ease). Typechecks.
+  Verify job: `scratchpad/tcap.mjs --out shots/terrain/flood1 --views stadium --hours 21.5,2` (subset
+  sky,terrain,roads,landmarks,lamps,postfx) → expect lit pitch at 21.5 (post-match) and dark at 02:00.
+* If resumed again: check flood1, note result here; otherwise only the lead's QA questions remain.
 
 Owner: terrain agent. Files: `src/world/terrain.ts`, `src/world/terrain/*` (except `slab.ts`, `glow.ts`),
 `src/world/landmarks.ts`, `src/world/landmarks/*` (except `glows.ts`, `shaders.ts`, `materials.ts`).

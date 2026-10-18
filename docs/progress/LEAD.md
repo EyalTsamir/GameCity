@@ -17,7 +17,12 @@ Per-module logs live next to this file: `docs/progress/<module>.md`.
     at the 22:04 firing (container had rebooted; auto-checkpoint 14d484c had saved everything).
     22:06: stage, night, water, buildings, vegetation, terrain + people-review resumed from their logs;
     watchdog switched to hourly so a reset never idles the team for more than ~1 h.
-  - Still working: stage, night, water, buildings, vegetation, terrain; people-review (re-review).
+  - DONE: terrain (22:12; stadium uFlood snap on 'timejump' added after its report — verify in QA),
+    vegetation (22:20; lead spot-checked final_close.png ✔ — clump relief, crown variety, stepped conifers).
+    QA notes: backlit poplars at 18.2 look over-yellow (autumnal); station forest median at night still
+    below adjacent ground (crown tops brighter); vegetation high = 27 clump cells pending the perf A/B.
+  - Relayed 22:10: water — PRIORITY moon-glint blowout at 2 h (shots/night/final2/beach_2.png).
+  - Still working: stage, night, water, buildings; people-review (re-review).
 * Safety nets (user request: never lose state, never trade quality for speed):
   - watchdog scheduled task `trig_01SEZGVfPdGEXrjuBsEYFnkw` (hourly at :06 UTC since 22:06, fires into this
     session even with the user's computer off): resumes agents cut off by the usage limit / restarts.

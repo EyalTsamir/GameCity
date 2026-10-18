@@ -17,6 +17,11 @@
   200–220, almost nothing above the night bloom threshold (0.88), weaker than the sun path. Fix in surface.ts
   (`moon` term + point glints at night): scale by moon light vs sun, tighter lobe, fewer glints, clamp HDR.
   Check beach/harbor/riverside/overview at 2 h and 21.5 h after the fix.
+  - DONE in code (22:30): cause = moon term with a broad sparkle lobe (`wSparkle·pow(md,40)`) + strong core on
+    rippled normals. New: Beckmann moon path (a2 0.0008–0.02, core 0.26 + sheen 0.025 + pins 0.7, min(…,0.75),
+    × moonVis × night × (1−0.7 river) × (1−0.9 overcast)); glint cells at night 2.5 % (step 0.975).
+  - Verifying: `scratchpad/water_moon.sh` (log shots/water/moon.log) → shots/water/moon/{beach,harbor}_{2,21h5}.png,
+    shots/water/moonB/{riverside,overview}_{2,21h5}.png; compare with shots/night/final2/beach_2.png.
 * Next: (1) tune if the review finds problems (re-capture only the affected views, ≤15 min jobs);
   (2) sheets: POIs final vs `shots/baseline/<poi>_<h>.png` (sheet.py, → `shots/water/sheets_final/`),
   custom views it6 vs `shots/water/base` (`scratchpad/water_sheets.sh shots/water/it6 shots/water/sheets_final

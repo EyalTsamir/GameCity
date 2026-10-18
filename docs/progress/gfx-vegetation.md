@@ -17,10 +17,10 @@ foliage/wind material, plants.ts, `legacy/` = frozen pre-overhaul copies for `?l
   (lift ∝ min(1, leafiness·1.25)); verify once more in the final night sheet.
 * NEXT: tune `night` from night1 → write the value here → final sheets refresh (night + gardens + downtown
   street view dtst=-16,0,-65,30,30,30 and oldtown ot=77,0,-14,34,20,32 instead of plaza_11) → Final report.
-* Refresh runs DONE + verified (no errors, invariants empty): finA (11 h, 14 views), finC (21.5 h, 10 views),
-  baseD (5174 dtst/ot). Sheets rebuilt with scratchpad/sheets.sh → shots/vegetation/final_*.png.
-* NEXT: review final_night.png (night lift with conifer fix) + final_close.png (hedge tops, street views) →
-  write "## Final report" here → SubagentHandback. Jobs: none running.
+* Refresh runs DONE + verified (no errors, invariants empty): finA (11 h), finC (21.5 h), baseD. Sheets rebuilt
+  (scratchpad/sheets.sh; dtst/ot street views dropped — framing missed the trees). Night lift verified in
+  final_night.png (forest/park crowns read as green masses with moonlit tops; station forest no longer a hole).
+* STATUS: FINISHED — see "## Final report" at the end. Jobs: none running. Legacy toggle + legacy/ kept for QA.
 
 ## Brief
 V1 foliage shading · V2 silhouettes/species/conifers/forest variety · V3 bushes & hedges · V4 lamp light ·
@@ -125,3 +125,32 @@ trees 944 (forest 469), treeTris 118336, treeFarTris 52830, forestTris 45940, pl
 —
 ## Changes outside my area
 —
+
+## Final report
+Vegetation (audit item 6) — done; legacy toggle + `legacy/` kept for QA.
+
+**What changed (files)**
+- `vegetation/material.ts`: foliage shader on MeshStandard. Leaf-clump relief on the rest position (3x3x3 Voronoi
+  domes for broadleaf/bushes, billowed noise for needles/hedges/willow/palm), footprint-faded (no sparkle); crease
+  occlusion, per-clump tone drift, diffuse-only wrap, reduced plastic rim sheen, unshadowed backlit translucency
+  (golden-hour glow), crown occlusion from the new `aLeaf` attribute, `thLampLight` on trunks/canopies (+underside),
+  in-shader bark (furrows, birch dashes); night readability lift (relaxed AO, sky fill/moon on crown tops × uNight).
+- `species.ts`: crown families, silhouette bumps; birch (notched crown + detached cloud), poplar flame, pine pads;
+  conifers rebuilt as stepped drooping skirts with branch tips; bushes with blossoms; hedges with dark foot/fresh top.
+- `vegetation.ts`: per-tree/stand tones; forest rim above the cut gets broadleaf/birch/young trees, finer crowns,
+  undergrowth. `geo.ts`: u8 attributes.
+
+**Toggles**: `?legacyveg`, `?vegfx=0`, `?vegcells=8|27` (medium/low auto 8), `?vegclump=billow`,
+`?vegnight=`, `?vegbump/trans/wrap/tone/scale/crease/fine`; runtime `services.vegetation.knobs`.
+
+**Sheets** (shots/vegetation/): final_day, final_golden, final_night, final_close (5174 vs 5173),
+final_isolated (same build, legacyveg vs new), final_lod, rev_forest, night1_sheet.
+
+**Perf**: draw calls unchanged. Vegetation tris near 261k vs 242k (+7.9 %), far 155k vs 144k (+7.9 %); +11.8 % vs
+legacyveg. SwiftShader A/Bs were contention noise → deferred to the lead's consolidated run (variants listed above).
+GPU estimate: +4 B/vertex, 2 varyings, ≈860 ALU per near-foliage pixel (27 cells) → ≈0.2–0.35 ms on X1-45 at POI
+views; 8-cell path ≈4× cheaper (switch high to it if over budget).
+
+**Trade-offs / open**: relief fades at overview (trees rely on vertex AO + glow there); forest tris +39 %;
+night lift is a stylised boost (knob `night`=2); terrain cliffs at night are terrain's.
+
