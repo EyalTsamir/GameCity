@@ -65,15 +65,15 @@ routes, speeds, avoidance and `invariants()` are untouched.
   · old-town POI 54.5 k + 27.7 k · park POI 44.7 k + 30.3 k · overview 442 pins 48.2 k, no shadow (old 98 k).
 * Draw calls: 4 figure levels + 1 shadow proxy + pram + dog + blob (old: 3 levels + pram + dog + blob, each
   level also in the shadow pass).
-* Gait acceptance (`gaitfk.ts`, node FK of the real pose code, 2026-10-17 late): walking 0.6–1.6 m/s for man /
-  woman / boy / girl / teen / elderly: stance slide 0.12–0.42 cm, sole hover −0.0…+0.1 cm, knee peak 60° @1.3
+* Gait acceptance (`gaitfk.ts`, node FK of the real pose code, final 2026-10-18): walking 0.6–1.6 m/s for man /
+  woman / boy / girl / teen / elderly: stance slide 0.12–0.35 cm, sole hover −0.0…+0.1 cm, knee peak 60° @1.3
   (kids 63–64°, elderly 46°), hip +32/−17°, bob 4.0 cm @1.3, cadence 109 spm @1.3, mid-swing clearance
   1.5–1.6 cm; running 2.75–3.0: slide 0.60 cm, knee 87°, flight; stop-go 0.46 cm; accel 0.34 cm; turning
-  40°/s 0.82 cm (hover ≤ 0.2 cm); 90°/s ≈ 5 cm (the planted foot pivots on heel / ball beyond ±0.6 rad of
-  twist — intended); standing turn 1.6 cm. Crowd-style corners (`cornerfk.ts`: rails round corners with 4
+  40°/s 0.80 cm (hover ≤ 0.2 cm); 90°/s ≈ 5 cm (the planted foot pivots on heel / ball beyond ±0.6 rad of
+  twist — intended); standing turn 1.7 cm. Crowd-style corners (`cornerfk.ts`: rails round corners with 4
   straight segments, heading snaps followed at rate 9/s): 4-segment rail corner 2.6–4.2 cm slide, no crouch
   (bob ≤ 6 cm); instantaneous 90° snaps (bevelled dead-end turns) drag the planted foot (17–35 cm) instead
-  of teleporting it.
+  of teleporting it. Teleported / re-placed members re-plant (moves > 1.5 m per frame, stand plants > 0.6 m off).
   Key fixes: the foot yaw turns about the vertical through the ankle (shader + fkPoint), not the tilted
   shin (that tipped the sole by up to 5 cm); plants far off the gait law are dragged, never dropped; the
   pelvis never drops more than 4.5 cm below its gait curve (an out-of-reach foot is pulled in instead).
