@@ -1,19 +1,11 @@
 # gfx-buildings — graphics overhaul, buildings workstream
 
 ## Resume here (updated every step)
-* DONE + verified (shots/buildings/speck3, 1600×900 subset): speckles GONE — causes were (A) interpolated integer
-  seeds (now `floor(vB.z+0.5)`, roofs `floor(vA.x/y+0.5)`) and mainly (B) `mod(kind, 8)` wrapping to 8 for HOME
-  windows (now `kind = floor(vB.w + 0.5)` first; pre-existing bug, legacy shader still has it). Golden-hour glass
-  no longer murky (luminance-based tint: `tintAmt` curtain 0.72 / ribbon 0.5 / punched 0.2, ×0.8 curtain): octagon
-  clean teal, Haven Tower steel-blue at 18.2; noon identity kept. B1–B5 + house variants done earlier
-  (invariants {} / validate []).
-* DONE (verified after the 22:06 resume): final 11 h chunk complete in shots/buildings/final/ (7 views, 1600×900,
-  0 console errors / warnings, invariants {}, 117–155 dc, 1.46–1.88 M tris full city; buildings shell 3960 / trim
-  140.3k tris, 15 meshes); baseline close-ups complete in shots/buildings/final_base/ (tower/house × 11/18.2/21.5);
-  `?legacyfacade&legacyhouses` sanity shot clean (shots/buildings/val/legacy.json: 0 errors, invariants {}).
-* Jobs running: same capture-set command with `--hours 18.2 --out shots/buildings/final18` and
-  `--hours 21.5 --out shots/buildings/final21` (logs in my scratchpad log18.txt / log21.txt).
-* Next: sheets shots/buildings/ba_<view>.png (11 h now, 18.2/21.5 when the chunks land); final report.
+* FINISHED — final report below ("## Final report"). Nothing running. All B1–B6 items done except my own perf A/B
+  (handed to the lead's consolidated run, variants under "Perf variants for lead").
+* Final full-city sets (1600×900, 0 console errors / warnings, invariants {} in every run): shots/buildings/final
+  (11 h), final18 (18.2 h), final21 (21.5 h); baseline close-ups shots/buildings/final_base. Sheets:
+  shots/buildings/ba_day_11.png, ba_day_11b.png, ba_gold_18.png, ba_night_21.png, ba_closeups.png, ba_more.png.
 
 ## Brief (B1–B6)
 * B1 glass: coherent stylised reflection model (horizon line, reflected skyline + neighbours, cloud streaks,
@@ -130,3 +122,34 @@ Views: downtown 12 h and overview 21.5 h. Expected: draw calls identical (15 bui
 ## Changes outside my area
 * none. Dependency: `buildings.ts` imports `samplePalette`, `SkyState` from `src/render/sky/palette.ts` (stage) —
   please keep that API.
+
+## Final report
+**Visual changes** (`src/world/buildings/*`):
+* Glass (materials.ts shell shader rewrite): stylised reflected environment — sky gradient, warm glow toward the
+  sun, cloud streaks, per-facade horizon (lift follows camera tilt), hazy reflected skyline + neighbour silhouettes
+  (lower floors mirror the street canyon → vertical gradient), per-panel oil-canning, luminance-based coated-glass
+  tint (identity kept, no olive at golden hour), sun-glint streaks, metallic mullions, lit crowns at night,
+  box-filtered blinds/curtain folds.
+* Facades: readable weathering (coping/cornice dirt washing down in streaks, rain streaks under sills, splash zone,
+  corner darkening, 8 m blotches, per-floor drift) via a mip-mapped procedural noise texture + new per-wall `aD`
+  attribute (mesh.ts); stronger filtered brick/stone/plaster/siding/panels.
+* Windows: daylight interiors/curtains lit by the scene (albedo) so shaded facades no longer glow; nets, roller
+  blinds, plants, open sashes; pane reflection gradient. Fixed two speckle bugs (interpolated seeds; `mod(kind,8)`
+  wrapping for home windows — pre-existing, visible as sparkly panes in the baseline).
+* Roofs: membranes with seams/repairs/gravel/stains/drains/moss; tiles/slate with patches, streaks, lichen.
+* Night: brighter lit rooms (bloom-friendly), more late office lights, far-field block glow, `thLampLight` in shell
+  + trim (warm wash on fronts near lamps).
+* Houses (homes.ts): classic / veranda / L-plan wing / garage wing / bay plans × gable / front gable / hip /
+  half-hip / gambrel roofs, rear extensions, two-tone walls, dormer mix. invariants {} / validate [].
+
+**Toggles:** `?legacyfacade`, `?legacyhouses`, `?bdbg=weather|wallinfo`, `__city.ctx.services.buildings.setDebug/houses`.
+
+**Perf:** building meshes unchanged (15 → draw calls unchanged; full city 117–166 dc); tris shell 3816→3960,
+trim 139.4k→140.3k, lights 5424→5496. GPU estimate: shell fragment ALU +25–35 % (3 noise fetches per wall pixel,
+reflection model on glass; far-field hashing only when sub-pixel; lamp fetch gated by uniform) → ≈ +0.2–0.4 ms in
+glass-heavy downtown close views, less elsewhere; may exceed the 0.3 ms budget in downtown — to confirm in the lead's
+consolidated A/B (`;legacyfacade&legacyhouses;skip=buildings`).
+
+**Open:** garage-wing plan is rare (1–2 of 26 houses: door/driveway constraints); black-rectangle blackout under
+stage's investigation; sun glints only appear with the sun behind the camera (physically placed).
+

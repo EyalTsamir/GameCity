@@ -22,7 +22,10 @@ Per-module logs live next to this file: `docs/progress/<module>.md`.
     QA notes: backlit poplars at 18.2 look over-yellow (autumnal); station forest median at night still
     below adjacent ground (crown tops brighter); vegetation high = 27 clump cells pending the perf A/B.
   - Relayed 22:10: water — PRIORITY moon-glint blowout at 2 h (shots/night/final2/beach_2.png).
-  - Still working: stage, night, water, buildings; people-review (re-review).
+  - DONE: buildings (22:35; lead spot-checked ba_gold_18.png ✔ — glass keeps tower identity at sunset,
+    weathering reads). QA notes: Haven Tower reflections look blotchy at 18.2 downtown (check closer);
+    GPU estimate +0.2–0.4 ms in glass-heavy views (may exceed 0.3) — decide from the perf A/B.
+  - Still working: stage, night, water; people-review (re-review).
 * Safety nets (user request: never lose state, never trade quality for speed):
   - watchdog scheduled task `trig_01SEZGVfPdGEXrjuBsEYFnkw` (hourly at :06 UTC since 22:06, fires into this
     session even with the user's computer off): resumes agents cut off by the usage limit / restarts.
