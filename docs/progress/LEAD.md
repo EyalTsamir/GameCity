@@ -41,7 +41,9 @@ Per-module logs live next to this file: `docs/progress/<module>.md`.
     garbage (shots/stage/nan/refl_off_20.png); (2) dark ~30 m square near (178,−98) from 19.4 h with
     reflections on (sweep_14.png); (3, secondary) flat lilac dusk sea at overview.
     QA must re-check: quality=medium/low water, runtime reflection-quality switches.
-  - Still working: stage (re-captures + report); people (fix round); water (fix round).
+  - DONE: stage (23:15; lead spot-checked sheets/ba_overview.png ✔ — table + time-of-day backdrop, warm
+    golden hour, lit night city). Perf variants `;legacylight;notable`. All 8 workstreams have final reports.
+  - Still working: people (fix round), water (fix round). Then: qa_matrix.sh new → Phase 3.
 * Safety nets (user request: never lose state, never trade quality for speed):
   - watchdog scheduled task `trig_01SEZGVfPdGEXrjuBsEYFnkw` (hourly at :06 UTC since 22:06, fires into this
     session even with the user's computer off): resumes agents cut off by the usage limit / restarts.

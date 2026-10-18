@@ -4,30 +4,11 @@ Owner: stage agent. Files: `src/render/**` (sky, sky/*, postfx, postfx/*, stage/
 aircraft routes in `src/sim/ambient/vehicles.ts`.
 
 ## Resume here (updated every step)
-* State 22:20 (10-18), after the 3rd stop/reboot. Lead's tasks: (a) re-capture 6.5/16.5/18.2 into shots/stage/after3/
-  (one hour per run, ≤15 min lock, check for black frames), rebuild sheets; (b) black-block (NaN) hunt + guards;
-  (c) stadium roof clipping only if still visible. No own perf A/Bs.
-* DONE (code, typechecks): NaN/Inf guards — `SAFE_COLOR_GLSL`/`thSafeColor()` (postfx/look.ts) on the merged-pass
-  input (LookEffect), the tilt-shift prefilter input (postfx/tiltShift.ts), the bloom luminance input (postfx.ts
-  patches bloom.luminanceMaterial). New debug switch `?nanviz`: bad pixels → magenta in the final image (bloom/DOF
-  guards still stop the spread) — use it to localise the source.
-* VERIFIED: night agent's repro (time=19.18&speed=4, oldtown, 6 shots, +nanviz) → shots/stage/nan/dusk_1..6.png:
-  clean, 0 magenta, no blocks (not reproduced; intermittent). nanhunt.mjs (per-frame readback) too slow under
-  SwiftShader (5 frames / 30 s) — abandoned.
-* DONE: overview sweep 18.8 h → night (speed 8, 20 shots, nanviz; shots/stage/nan/sweep_<n>.png): 0 magenta (no
-  NaN), no big blocks. FOUND (water module, reported to lead): (1) from ~19.4 h a ~30 m dark square in the harbour
-  water near world (178, −98) with the lighthouse reflection inside — gone with ?nowaterrefl → planar-reflection
-  coverage artefact (sweep_8..20); (2) with ?nowaterrefl (= reflection level 0, also medium/low preset and my
-  ladder's refl-off step) the harbour water at 20 h renders beige + rainbow blotches (shots/stage/nan/refl_off_20.png).
-* Reported to lead 22:40 (guards, no NaN repro, water bugs). Stadium roof: 0 clipped px in night frames → OK.
-* RUNNING (22:42): after3 re-captures 18.2 → 6.5 → 16.5 (bash loop, logs shots/stage/after3_<h>.log, reports
-  shots/stage/after3/report_<h>.json).
-* Next: (1) check after3 frames are not black (mean luminance), merge into after_final, rebuild sheets;
-  (2) after3 re-captures (if missing): for h in 6.5 16.5 18.2: stage-cap.mjs --url :5173 --out shots/stage/after3 --views
-  "overview;downtown;harbor;park;oldtown;westbrook;beach;low=-5,0,-15,450,120,14;edge=0,0,-20,700,210,10"
-  --hours $h → check not black → after_final = after + after3 → ba_sheets.sh; (3) final report in log + to lead.
-* Perf variants for lead (consolidated A/B): `;legacylight;notable` (same build; legacylight = whole stage work
-  off, notable = studio key without the table).
+* DONE (23:20, 10-18). All tasks finished; final report below. No job of mine running.
+* Final sheets: shots/stage/sheets/ba_<view>.png (before = shots/stage/before/ on 5174; after = shots/stage/
+  after_final/ = after/ (11/20/21.5/2) + after3/ (6.5/16.5/18.2, final key)). All after-reports clean.
+* Perf variants for lead (consolidated A/B): `;legacylight;notable` (same build; legacylight = all stage work off,
+  notable = studio key without the table).
 
 ## Brief (audit items 1, 3 + night ambient of 2)
 S1 new lighting key (sun-dominated, weak cool fill, exposure comp., golden hour, dawn, crisp shadows, AO, dark night).
@@ -137,3 +118,30 @@ S4 before/after sheets, perf A/B.
 
 ## Changes outside my area
 (none)
+
+## Final report
+**Visual changes**
+* S1 studio key (`render/sky/palette.ts`, `sky.ts`, `sky/env.ts`, new `sky/iblPatch.ts`, `postfx.ts`, `postfx/look.ts`):
+  sun 4.3–4.4 warm vs neutral-cool fill (hemi 0.58–0.72, was 0.95; diffuse IBL ×0.6 via a global chunk patch,
+  reflections keep full env), exposure 1.06–1.32. Golden hour amber vs periwinkle with long crisp shadows; rose dawn.
+  Night: moon 0.5 desaturated, hemi 0.5 → unlit areas ~40–45 % darker, lamps carry the scene. Shadows: world-space
+  PCF (~0.15 m), normalBias texel×0.8, fitter trimmed behind the focus (POI 130 m: texel 12.5 cm). Neutral AO
+  tint, AO stronger with distance, bloom threshold 1.45 day / 0.88 night, night vignette. Shadowed asphalt sRGB
+  (29,39,57), was navy (25,42,67).
+* S2 studio set (new `render/stage/table.ts`, `world/terrain/slab.ts`): pale limed-oak table fading after fog into a
+  time-of-day cyclorama (= dome floor sweep); analytic slab+plinth shadow traced against the real edge profile
+  (golden-hour shadow across the table at any distance), contact AO, warm city spill at night, night-damped
+  varnish; plinth receives shadows; nameplate display light at night. Checked from overview / edge-on / low /
+  top-down / plinth corner / low south view: no edge, seam or z-fight. Dome drawn after opaques (depth-tested).
+* S3: balloon/blimp/plane routes in the NW at/behind the hero focus (`sim/ambient/vehicles.ts`); ladder full →
+  refl-low → no-ao → scale-0.85 → dof-lite → scale-0.72 → refl-off → scale-0.6 (`postfx/adaptive.ts`), verified.
+* NaN/Inf guards (bloom luminance input, tilt-shift prefilter, merged pass) + `?nanviz`; no NaN source reproduced.
+**Toggles:** `?legacylight`, `?notable`, `?nanviz`; runtime `sky.setLegacy/setTable/tune`.
+**Sheets:** shots/stage/sheets/ba_<9 views>.png (×7 hours); studio views shots/stage/s2a/.
+**Perf:** same build: 155 draw calls studio/legacy/notable, triangles ±5 k (table replaces the decal). GPU estimate
+≈ 0–0.1 ms net (table ~0.2 ms fragment, offset by the dome only shading uncovered pixels); no extra pass.
+**Trade-offs:** golden hour/dawn medians −8…−20 % vs before (deliberate contrast); blimp above the hero frame;
+global IBL patch.
+**Open (water agent, relayed):** dark square in reflections near (178,−98) after 19.4 h; broken water at reflection
+level 0 (refl-off step, medium/low).
+

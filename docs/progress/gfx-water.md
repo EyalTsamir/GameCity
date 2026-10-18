@@ -25,6 +25,11 @@
   - Fixes 1–3 in code (typecheck ok). Verifying: `node scratchpad/water_switch.mjs` → shots/water/fix/
     switch_{1_l2,2_l1,3_l0,4_l2}.png (harbour 20 h), square_196.png, overview_{196,199}.png; then medium/low
     capture-sets (subset, 1280×720) → shots/water/fix/{med,low}; then ?nowaterrefl.
+  - VERIFIED (shots/water/fix/switch_sheet.png, square_sheet.png; 0 errors/warnings, invariants empty):
+    runtime 2→1→0→2 at harbour 20 h clean (level 0 = proper water, target freed and re-allocated: 427×240 →
+    284×160 → off → 427×240); square gone (lighthouse glow now a soft warm reflection); blue-hour overview
+    reads as blue water instead of a lilac plane. Pending: medium/low/nowaterrefl chain
+    (`scratchpad/water_fixchain.sh`, log shots/water/fix/chain.log → shots/water/fix/{medium,low,noref}).
   - Bug 2: added debug hook `ctx.services.water._debugReflectFilter(regex|null)`; diagnostic session
     `node scratchpad/water_refldiag.mjs` → shots/water/diag/{ov_refl,close_all,close_<group>}.png (waterdebug=refl, 19.6 h).
 * (earlier) 2026-10-18 22:40 — main work complete, final report below.
