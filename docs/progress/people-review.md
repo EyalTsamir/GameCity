@@ -550,7 +550,7 @@ Let v = speed (m/s), Lh = hip height of the kind × scale, Fr = v² / (9.81·Lh)
 ---
 
 ## Re-review (2026-10-18)
-Resume here: step 4/5 — (a) table written; job 1 done (seq_junction_* = natural 16 m walker; park55 partly blocked). Job 2 (scratchpad/re/re_capture2.mjs, densest-cluster views 18/25/45/60 m day+night) queued. Next: (b) issues, (c) verdict, then "## Re-review final".
+Resume here: step 5/5 — (a)(b)(c) written, re/re_sheet.png built. Running re_ghost.mjs (night dithered silhouette = shadow without caster?) → re/ghost_*.png; then update issue 8, add "## Re-review final", report to lead.
 
 Evidence used: the people log (`docs/progress/gfx-people.md`), its sheets `shots/people/sheet_{lineups,gait,poses,distance_lod,city_day,city_night}.png`,
 `shots/people/lineup4/` (my lineup driver re-shot on the new code), `lab4/`, `city_final2/` (+ `report_final2.json`), plus my own
@@ -562,6 +562,7 @@ captures under `shots/people-review/re/` (zoom crops in `re/crops/`). P = pass, 
 | § | item | verdict | evidence / note |
 |---|---|---|---|
 | 4.1 | adult proportions (arm length, hands at mid-thigh, shoulders, head width, neck, feet) | **P** | `lineup4/lineupA_34.png`, `re/crops/lineupA34_upper_x2.png`, `sheet_lineups.png` — the "toy" look is gone; fingertips mid-thigh, narrow shoulders, neck visible |
+| — | city read at 20–60 m, day and night (the distances that matter) | **P** | `re/c0_25m_11.png` (old-town corner crowd), `re/crops/sqwide_11_x2.png` (22 m), `re/c1_45m_11.png`, `re/c1_45m_21h5.png` + `re/crops/night45_group_x3.png`, `city_final2/sqwide_21h5_lampzoom.png` — figures read as people with varied clothing, hats and poses; lamp-lit at night |
 | 4.1 | women / children / teens / elderly / build as distinct bodies | **P** (build ½) | `sheet_lineups.png` B rows (children read as children, elderly stoop), `lab4/gait_old.png`; heavy build reads only mildly in profile (`lineup4/lineupA_side.png`, last figure) |
 | 4.2 | smooth skinned lofts, deltoids, calves, neck, no gaps when bent | **P** | `sheet_poses.png` bench rows (knees, laps), `lab4/sit_*.png` |
 | 4.2 | head with jaw/nose/chin, optional eyes | **½** | mannequin face (`re/crops/lineupA34_upper_x2.png`); invisible from ~12 m (`re/crops/sqclose14_couple_x3.png` is a 3× zoom of a 14 m view) |
@@ -576,7 +577,7 @@ captures under `shots/people-review/re/` (zoom crops in `re/crops/`). P = pass, 
 | 4.6 | step model from speed + leg length | **P** | gaitfk: 109 spm @1.3 (adult), elderly 0.82 m/s short steps; cadence printout is quantised to ~22 spm steps (tool window), so read it as approximate |
 | 4.6 | planted feet: slide ≤ 1 cm, hover ≤ 0.5 cm (straight walking, all kinds, run) | **P** | gaitfk re-run: slide 0.12–0.60 cm, sole −0.0…+0.1 cm |
 | 4.6 | knee curve / ankle roll / pelvis-torso-head / arm curve / run with flight | **P** | knee 60° (elderly 46°, run 87°), `sheet_gait.png`, `lab4/gait_old.png` |
-| 4.6 | turning and corners (step-turns, no skating) | **½** | gaitfk 40°/s 0.8 cm ✓, 90°/s 5.1 cm; cornerfk: 4-segment rail corners 2.6–4.2 cm, 45° snap 9.4 cm, bevelled 90° 18.8 cm, hard 90° 34.7 cm; trailing hip extension reaches −40° in corners (real ≤ −20°); real-sim frames: pending (`re/seq_*`) |
+| 4.6 | turning and corners (step-turns, no skating) | **½** | gaitfk 40°/s 0.8 cm ✓, 90°/s 5.1 cm; cornerfk: 4-segment rail corners 2.6–4.2 cm, 45° snap 9.4 cm, bevelled 90° 18.8 cm, hard 90° 34.7 cm; trailing hip extension reaches −40° in corners (real ≤ −20°). Real sim at 18 m: straight walking natural (`re/crops/seq_junction_walker_strip.png`); at a kerb corner one walker shows an over-long split stride (`re/crops/seqA_0_corner_x3.png`) |
 | 4.7 | idle variants + contrapposto | **P** | `sheet_lineups.png`, `city_final2/sqclose_11.png` |
 | 4.7 | bench against the backrest, feet down, variants, reading | **P** | `sheet_poses.png`, `lab4/sit_*.png` |
 | 4.7 | ground sit / lying / wave | **P** | `sheet_poses.png` ground row |
@@ -589,3 +590,55 @@ captures under `shots/people-review/re/` (zoom crops in `re/crops/`). P = pass, 
 | 4.9 | no per-frame allocations | **F** | log: ≈ 2 KB garbage per figure-frame (boxed doubles in the pose functions) → ~0.1–0.3 MB/frame with 50–150 posed figures |
 | §7 P6 | final perf on the target GPU | **½** | SwiftShader A/B inconclusive by the people agent's own account; needs the lead's consolidated GPU run (`;legacypeople;hide=pedestrians`) |
 | §7 | milestones P1–P5 | **P** | all delivered as specified; P6 delivered except the proven GPU number |
+
+### (b) Remaining issues, ranked by visible impact at 20–60 m
+
+1. **Corner gait — split strides and foot drag at route corners** (severity: medium; visible at 15–30 m wherever people
+   turn at kerbs, i.e. in most orbit views). Evidence: `re/crops/seqA_0_corner_x3.png`; cornerfk: rail corners
+   2.6–4.2 cm drag, 45° snaps 9 cm, bevelled 90° 19 cm, hard 90° 35 cm, trailing hip to −40°.
+   Fix (`gait.ts`, CPU only, no vertex cost): when the heading rate exceeds ~60°/s or the planted foot's twist passes
+   ±0.5 rad, end the step early: shorten the current swing (land at the new heading) and start the next step from
+   there, as the standing step-turn already does; clamp hip extension to −22° by shortening the step (pull the swing
+   foot in) instead of stretching the trailing leg. A render-side low-pass of the yaw used for the feet (body follows
+   the rail, foot targets follow a 0.25 s smoothed heading) also removes the 90° snap drags.
+2. **Per-frame garbage ≈ 2 KB per posed figure** (severity: medium for smoothness, invisible in stills): with 50–150
+   posed figures that is 0.1–0.3 MB per frame, i.e. a minor GC every second or two on the target laptop CPU — frame
+   hitches, against the project rule "no per-frame allocations". Fix (`animate.ts`, `gait.ts`, `pose.ts`): find the
+   boxing sites with node `--trace-deopt` / allocation sampling on `tools/bench.ts`; keep per-member gait scalars in a
+   `Float64Array` per member (or one pooled SoA array) instead of object fields, initialise any remaining object
+   fields with non-integer doubles (the Smi → double field migration was the cause of the earlier 8 KB), and split
+   the largest pose functions so TurboFan keeps doubles unboxed. Target < 100 B per figure-frame.
+3. **Trousers are tights** (severity: low at 20 m, noticeable ≤ 12 m): men's trousers follow the leg exactly — thin
+   calves/ankles in dark cloth read as leggings (`re/crops/lineupA34_feet_x2.png`, suit, worker, heavy man). Fix
+   (`shader.ts`/`body.ts` garment parameters): a per-instance trouser looseness — push leg rings out +1–1.5 cm from
+   mid-thigh down and clamp the shin rings to the knee radius (straight leg), skirt-like in the VS, zero new vertices;
+   jeans/joggers keep a slimmer value.
+4. **Shoes read as long pointed slippers** at < 10 m (severity: low; fine from ~14 m). Evidence:
+   `re/crops/lineupA34_feet_x2.png`, `lineup4/lineupA_side.png`. Fix (`body.ts` shoe last): rounder, higher toe box
+   (+0.8 cm), blunter plan shape at the toe ring, a visible heel block; trainers a touch chunkier. No budget change.
+5. **Faces are blank mannequins** (severity: very low at viewing distance — at 14 m a face is ~10 px and reads as a
+   face from hair, nose and skin tone, `re/crops/sqclose14_couple_x3.png`; only obvious below ~8 m). Optional fix
+   (`shader.ts`, LOD0 only, fragment-only): darker eye sockets + brows as a region tint below the brow line, a faint
+   mouth line; no vertices.
+6. **Heavy build barely reads** (severity: low): the heavy man looks average in profile (`lineup4/lineupA_side.png`,
+   last figure). Fix (`rig.ts` build target): belly depth +3–4 cm, waist +4 cm at b = 1 (shoulders unchanged).
+7. **Tiny level over the triangle line and also the shadow proxy** (severity: low, perf): 261 vertices / 400 triangles
+   (spec ≈ 240 / 220) drawn for every figure < 150 m in the shadow pass. Fix (`body.ts`): a shadow-only variant of
+   tiny without soles, hair/hat detail and towel (~150 vertices), or trim tiny's limb sides 6 → 4.
+8. **Unverified: a fully dithered dark silhouette** on the promenade at night (`re/crops/night45_dither_x3.png`) —
+   most likely an ordinary despawn fade in shadow; if it is the 0.4 s LOD cross-fade, check that the cross-fade is
+   skipped when the camera snaps (it should be) and that faded halves keep their lighting.
+9. **Not a people issue, but now more visible**: party members still overlap each other at kerb corners (two figures
+   inside each other in `re/crops/seqA_1_corner_x3.png`) — crowd sim (`crowd.ts` avoidance), for the sim owner.
+10. **GPU cost not proven**: SwiftShader A/B was inconclusive; the lead's consolidated GPU run should include
+    `;legacypeople;hide=pedestrians` (census says the new figures push fewer vertices than the old ones).
+
+### (c) Verdict
+**Ship.** The rebuild meets the spec where it matters: at 20–60 m, day and night, the crowd now reads as varied,
+correctly proportioned miniature people — longer arms, natural shoulders, real women/children/elderly, calm
+palette, dresses, skirts and hats, planted feet with a convincing heel-to-toe gait, sitting against the backrest,
+lamp light at night — at fewer vertices than the old figures. Nothing left is a regression or visible from the
+normal viewing distance except the corner strides.
+One **small, optional fix round** is worth it if time allows, in this order: (1) corner step-shortening + hip clamp
+(issue 1), (2) the per-frame garbage (issue 2, a smoothness risk on the target), (3) trouser looseness and shoe
+toes (issues 3–4, cheap, close-up only). Faces, heavy build and the tiny/proxy trim can wait.

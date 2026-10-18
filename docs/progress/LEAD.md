@@ -28,7 +28,10 @@ Per-module logs live next to this file: `docs/progress/<module>.md`.
   - DONE: night (22:55; lead spot-checked ba_night_C.png ✔ — lit street grid, floodlit stadium, dark at 2 h).
     QA note: lit tree crowns still read as soft blobs in the blurred overview foreground (vegetation
     canopy-underside lamp term) — check, tone down in vegetation/material.ts if needed.
-  - Still working: stage (NaN black blocks + recaptures), water (moon-glint priority fix); people-review.
+  - DONE: water (23:10; lead spot-checked moon/moon_check.png ✔ — moon path narrow/silvery, 13.6 % → 0.07 %
+    clipped; sheets_final/ba_harbor.png ✔ — ship/crane reflections, lit night harbour). Reflection pass
+    +4–9 calls day / +9–15 night, < 0.2 M tris; GPU est. 0.6–1.2 ms (budget 1.5, high only + adaptive).
+  - Still working: stage (NaN black blocks + recaptures); people-review (re-review).
 * Safety nets (user request: never lose state, never trade quality for speed):
   - watchdog scheduled task `trig_01SEZGVfPdGEXrjuBsEYFnkw` (hourly at :06 UTC since 22:06, fires into this
     session even with the user's computer off): resumes agents cut off by the usage limit / restarts.

@@ -4,18 +4,23 @@ Owner: stage agent. Files: `src/render/**` (sky, sky/*, postfx, postfx/*, stage/
 aircraft routes in `src/sim/ambient/vehicles.ts`.
 
 ## Resume here (updated every step)
-* State 16:20 (10-18): resumed after the pause. Lead's tasks: (a) re-capture 6.5/16.5/18.2 into shots/stage/after3/
-  (one hour per run, check for black frames), rebuild sheets; (b) hunt the transient black blocks (NaN/Inf spread by
-  bloom/DOF) + add cheap guards; (c) stadium roof clipping only if still visible.
-* DONE (code, typechecks; NOT yet verified in browser): NaN/Inf guards — `SAFE_COLOR_GLSL`/`thSafeColor()` in
-  postfx/look.ts (applied to the merged-pass input in LookEffect), the tilt-shift prefilter input (postfx/tiltShift.ts)
-  and the bloom luminance input (postfx.ts patches bloom.luminanceMaterial: clamp 0..64000 + isnan/isinf → 0).
-* IN PROGRESS: NaN hunter scratchpad/nanhunt.mjs (wraps ctx.render, reads composer.inputBuffer every frame, logs
-  NaN/Inf half-float pixels + bounding-sphere candidates along the ray). First run (time=19.2 oldtown, 45 s) was
-  killed by `timeout 900` without output → make it write partial results and run shorter.
-  Output: shots/stage/nan/report.json.
-* Next: (1) get a NaN reproduction + culprit candidates, bisect with ?skip= if needed, report to lead;
-  (2) verify the guards remove the blocks; (3) after3 re-captures (6.5, 16.5, 18.2) + sheets; (4) final report.
+* State 22:20 (10-18), after the 3rd stop/reboot. Lead's tasks: (a) re-capture 6.5/16.5/18.2 into shots/stage/after3/
+  (one hour per run, ≤15 min lock, check for black frames), rebuild sheets; (b) black-block (NaN) hunt + guards;
+  (c) stadium roof clipping only if still visible. No own perf A/Bs.
+* DONE (code, typechecks): NaN/Inf guards — `SAFE_COLOR_GLSL`/`thSafeColor()` (postfx/look.ts) on the merged-pass
+  input (LookEffect), the tilt-shift prefilter input (postfx/tiltShift.ts), the bloom luminance input (postfx.ts
+  patches bloom.luminanceMaterial). New debug switch `?nanviz`: bad pixels → magenta in the final image (bloom/DOF
+  guards still stop the spread) — use it to localise the source.
+* VERIFIED: night agent's repro (time=19.18&speed=4, oldtown, 6 shots, +nanviz) → shots/stage/nan/dusk_1..6.png:
+  clean, 0 magenta, no blocks (not reproduced; intermittent). nanhunt.mjs (per-frame readback) too slow under
+  SwiftShader (5 frames / 30 s) — abandoned.
+* RUNNING: overview sweep 18.8 h → night at speed 8, 20 shots + nanviz → shots/stage/nan/sweep_<n>.png
+  (cmd: shot.mjs --q "nointro&noidle&adaptive=0&quality=high&time=18.8&speed=8&nanviz" --view overview --shots 20
+  --interval 1500 --hideui --out shots/stage/nan/sweep.png). Scan for magenta (r,b>200, g<80).
+* Next: (1) evaluate sweep; report to lead (culprit if magenta found, else: guards in place + ?nanviz for others);
+  (2) after3 re-captures: for h in 6.5 16.5 18.2: stage-cap.mjs --url :5173 --out shots/stage/after3 --views
+  "overview;downtown;harbor;park;oldtown;westbrook;beach;low=-5,0,-15,450,120,14;edge=0,0,-20,700,210,10"
+  --hours $h → check not black → after_final = after + after3 → ba_sheets.sh; (3) final report in log + to lead.
 * Perf variants for lead (consolidated A/B): `;legacylight;notable` (same build; legacylight = whole stage work
   off, notable = studio key without the table).
 

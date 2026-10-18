@@ -1,18 +1,15 @@
 # gfx-water — audit item 4: water that reads as water
 
 ## Resume here
-* State (2026-10-18 22:10): W1–W3 implemented and tuned; all files typecheck. chain3 COMPLETED (16:46):
-  `shots/water/final/<poi>_<11|18h2|21h5>.png` (full city 1600×900: harbor, beach, riverside, overview, park),
-  `shots/water/it6/` (module subset 1280×720: harbor, shipw, river2, pier, bay × 3 h), `shots/water/med2/`
-  (quality=medium + wakes) — all reports: 0 console errors/warnings, invariants empty, no failed modules.
-  Reflection stats after the last cuts (`shots/water/stats_full3.json`, full city 1280×720, calls/tris of the
-  pass, day · night): harbour 7/129k · 13/138k, overview 8/157k · 14/168k, beach 9/163k · 15/174k,
-  riverside 6/143k · 11/154k, park 4/70k · 9/81k, shipw 7/109k · 13/120k, river2 4/101k · 12/123k,
-  pier 6/97k · 12/108k, bay 8/129k · 14/140k → all < 0.2 M.
+* 2026-10-18 22:40 — WORK COMPLETE. Final report below ("## Final report"). All verification runs clean
+  (final, it6, med2, moon, moonB: 0 console errors/warnings, invariants empty). Nothing running.
+* Final sheets: `shots/water/sheets_final/ba_{harbor,beach,riverside,overview,park}.png` (full city vs original
+  baseline), `ba_{shipw,river2,pier,bay,harbor_subset}.png` (module subset vs 5174 at the same views),
+  `shots/water/moon/moon_check.png` (moon fix), `shots/water/med2` + `sheets_final/glints_check.png` (medium).
 * Reviewed: final POI sheets `shots/water/sheets_final/ba_{harbor,beach,riverside,overview,park}.png` (full city)
   + custom views `ba_{shipw,river2,pier,bay}.png`, `ba_harbor_subset.png`: night indigo OK, turquoise shallows OK,
   pond consistent. White blobs in medium frames = ambient swans/ducks (not foam).
-* NOW (PRIORITY from lead/night): at 02:00 the moon glint on the sea is a huge clipped white patch with sparkle
+* DONE (PRIORITY from lead/night): at 02:00 the moon glint on the sea is a huge clipped white patch with sparkle
   clusters (evidence shots/night/final2/beach_2.png). Target: narrow, sparse silvery moon path, peak ≈ sRGB
   200–220, almost nothing above the night bloom threshold (0.88), weaker than the sun path. Fix in surface.ts
   (`moon` term + point glints at night): scale by moon light vs sun, tighter lobe, fewer glints, clamp HDR.
@@ -23,7 +20,8 @@
   - VERIFIED beach/harbour 2 h + 21.5 h (`shots/water/moon/moon_check.png`, crop `crop_beach2.png`): in the
     bay region (x300–1100, y420–870 of beach_2) clipped pixels (>230) 13.6 % → 0.07 %, p99 192 (was 255);
     calm silvery ripple sheen + sparse flecks; wheel ring reflection kept; 0 console errors/warnings.
-  - Verifying: `scratchpad/water_moon.sh` (log shots/water/moon.log) → shots/water/moon/{beach,harbor}_{2,21h5}.png,
+  - VERIFIED riverside/overview 2 h + 21.5 h (`shots/water/moonB/moon_check_b.png`): no regression.
+  - (ran) `scratchpad/water_moon.sh` (log shots/water/moon.log) → shots/water/moon/{beach,harbor}_{2,21h5}.png,
     shots/water/moonB/{riverside,overview}_{2,21h5}.png; compare with shots/night/final2/beach_2.png.
 * Next: (1) tune if the review finds problems (re-capture only the affected views, ≤15 min jobs);
   (2) sheets: POIs final vs `shots/baseline/<poi>_<h>.png` (sheet.py, → `shots/water/sheets_final/`),
@@ -165,3 +163,46 @@ the opted-in meshes) + 1/9 of the screen in fragments (+ mip generation of a 427
 
 ## Changes outside my area
 * (none)
+
+## Final report
+Water now reads as water from close up, from the POIs and from the overview, at all three times of day. The final full-city frames and verification runs are clean: 0 console errors/warnings, invariants empty.
+
+**Changes**
+- **Planar reflections** (`world/water/reflection.ts`): a mirrored camera renders the opted-in meshes into a 1/3-resolution target, clipped at the water plane.
+  - It runs inside the main pass, so it uses this frame's camera, sits in postfx's GPU timer, and restores renderer state. Shadow maps are not re-rendered for it.
+  - What reflects: ship, cranes, quays, boats, building shells, bank trees (river views only), and night emitters (wheel, pier lamps, windows).
+  - `setReflectionQuality(0|1|2)` / `reflectionQuality()`; medium and low quality use an analytic sky only.
+- **Shading** (`water/surface.ts`, `water/noise.ts`): Fresnel sky that follows the sky dome, glassy wind slicks and colour patches visible from far away, depth bands, turquoise shallows, a sun glitter path with point glints, a deep indigo night, a clearer green-teal river, and a pond that matches.
+- **Moon glint fix (night agent's request):** the moon path was a clipped white patch at 02:00. It is now a capped, narrow silvery path. In the beach bay, clipped pixels went from 13.6% to 0.07%; the wheel's ring reflection is kept.
+- **Contact and wakes** (`water/hulls.ts`, `sim/boats/ribbons.ts`, `wakes.ts`, `render.ts`):
+  - Contact shadow and a lacy foam line around the moored ship and every boat.
+  - Continuous Kelvin arms and a dissolving stern wash replace the confetti puffs.
+  - Boats pick up the lamp light at night, and boats whose reflection is on screen are no longer culled.
+
+**Toggles:** `?nowaterrefl`, `?waterrefl=0|1|2`, `?nohullfoam`, `?wakes=puffs`, `?waterdebug=refl`, `?refldbg`.
+
+**Sheets** (in `shots/water/`):
+- Full city vs the original baseline: `sheets_final/ba_{harbor,beach,riverside,overview,park}.png`
+- Same views vs the 5174 baseline: `sheets_final/ba_{shipw,river2,pier,bay}.png`
+- Moon fix: `moon/moon_check.png`
+
+**Reflection-pass cost** (full city, 1280×720; draw calls / triangles of the extra pass):
+
+| View | Day | Night |
+|---|---|---|
+| Harbour | 7 / 129k | 13 / 138k |
+| Overview | 8 / 157k | 14 / 168k |
+| Beach | 9 / 163k | 15 / 174k |
+| Riverside | 6 / 143k | 11 / 154k |
+| Park | 4 / 70k | 9 / 81k |
+
+- Every view is under 0.2 M triangles.
+- Night adds 6 draw calls (night emitters). Merging them into one mesh isn't cheap: they come from five modules and four shader types. I dropped the inland landmark glows instead.
+- Rough GPU estimate: ≈0.6–1.2 ms on the Adreno.
+- Perf variants for your consolidated run: `;nowaterrefl;waterrefl=1`.
+
+**Trade-offs and open issues**
+- The pond shows the sky only; no planar reflection.
+- Facade trim isn't reflected.
+- The sky reflection depends on the dome's uniform names.
+- Boats draw every model variant per instance, so their geometry is redundant (an old cost).
