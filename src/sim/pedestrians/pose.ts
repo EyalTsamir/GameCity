@@ -136,7 +136,7 @@ const mir = (v: V3, left: boolean, o: V3): V3 => {
   o.z = v.z;
   return o;
 };
-const pvTmp = { x: 0, y: 0, z: 0 };
+const pvTmp = { x: 0.5, y: 0.5, z: 0.5 };
 
 export function hipMatrix(P: Pose, left: boolean, o: M3): M3 {
   const fl = left ? P.hipFlexL : P.hipFlexR,
@@ -261,6 +261,24 @@ export interface LegSolve {
  * gives a sole pitch of `pitch` (radians, + = toes up). Uses the rig's rest angles.
  */
 export function legIK(r: Rig, hy: number, hz: number, ay: number, az: number, pitch: number, o: LegSolve): LegSolve {
+  LIK[0] = hy;
+  LIK[1] = hz;
+  LIK[2] = ay;
+  LIK[3] = az;
+  LIK[4] = pitch;
+  return legIKa(r, o);
+}
+/**
+ * Garbage-free legIK for the per-frame paths: inputs in LIK = [hy, hz, ay, az, pitch]. (A call that is not
+ * inlined boxes every computed double argument — 16 B of garbage each — typed-array slots never do.)
+ */
+export const LIK = new Float64Array(5);
+export function legIKa(r: Rig, o: LegSolve): LegSolve {
+  const hy = LIK[0],
+    hz = LIK[1],
+    ay = LIK[2],
+    az = LIK[3],
+    pitch = LIK[4];
   const L1 = hyp2(r.knee.y - r.hip.y, r.knee.z - r.hip.z);
   const L2 = hyp2(r.ankle.y - r.knee.y, r.ankle.z - r.knee.z);
   const t0 = Math.atan2(r.knee.z - r.hip.z, r.hip.y - r.knee.y); // rest thigh angle (forward of down)
@@ -328,12 +346,34 @@ const kE0 = v3(),
  * twist and elbow flexion in the shader's conventions (rest arm directions of the rig included).
  */
 export function armIK(r: Rig, left: boolean, tx: number, ty: number, tz: number, px: number, py: number, pz: number, o: ArmSolve): ArmSolve {
+  AIK[0] = tx;
+  AIK[1] = ty;
+  AIK[2] = tz;
+  AIK[3] = px;
+  AIK[4] = py;
+  AIK[5] = pz;
+  return armIKa(r, left, o);
+}
+/** garbage-free armIK (see legIKa): inputs in AIK = [tx, ty, tz, px, py, pz] */
+export const AIK = new Float64Array(6);
+// armIK1 inputs: corrected target + pole
+const A1 = new Float64Array(6);
+export function armIKa(r: Rig, left: boolean, o: ArmSolve): ArmSolve {
   // solve, then correct the target by the residual of the exact arm FK (rest carrying angle etc.)
+  const tx = AIK[0],
+    ty = AIK[1],
+    tz = AIK[2];
   let ax = tx,
     ay = ty,
     az = tz;
+  A1[3] = AIK[3];
+  A1[4] = AIK[4];
+  A1[5] = AIK[5];
   for (let it = 0; it < 3; it++) {
-    armIK1(r, left, ax, ay, az, px, py, pz, o);
+    A1[0] = ax;
+    A1[1] = ay;
+    A1[2] = az;
+    armIK1(r, left, o);
     armGrip(r, left, o, gTmp);
     const ex = tx - gTmp.x,
       ey = ty - gTmp.y,
@@ -345,7 +385,7 @@ export function armIK(r: Rig, left: boolean, tx: number, ty: number, tz: number,
   }
   return o;
 }
-const gTmp = { x: 0, y: 0, z: 0 };
+const gTmp = { x: 0.5, y: 0.5, z: 0.5 };
 const PT = newPose();
 /** grip point of an arm solution in the chest rest frame */
 function armGrip(r: Rig, left: boolean, o: ArmSolve, out: V3): V3 {
@@ -401,7 +441,13 @@ function armRestOf(r: Rig): ArmRest {
   armRests.set(r, a);
   return a;
 }
-function armIK1(r: Rig, left: boolean, tx: number, ty: number, tz: number, px: number, py: number, pz: number, o: ArmSolve): ArmSolve {
+function armIK1(r: Rig, left: boolean, o: ArmSolve): ArmSolve {
+  const tx = A1[0],
+    ty = A1[1],
+    tz = A1[2],
+    px = A1[3],
+    py = A1[4],
+    pz = A1[5];
   // work in the left-arm frame (mirror x for the right arm)
   const sx = left ? 1 : -1;
   const AR = armRestOf(r);

@@ -14,7 +14,7 @@
 // used — it is slide-free at constant speed.
 
 import type { Member } from './crowd';
-import { legIK, type LegSolve } from './pose';
+import { legIKa, LIK, type LegSolve } from './pose';
 import { stepLength, type Rig } from './rig';
 
 const TAU = Math.PI * 2;
@@ -120,8 +120,8 @@ function copyPlan(o: LegPlan, a: LegPlan): void {
 
 export function newGaitState(): GaitState {
   const f = (): FootPlant => ({ wx: 0.5, wz: 0.5, wyaw: 0.5, sx: 0.5, sz: 0.5, sy: 0.5, stw: 0.5, stance: false, valid: false, qs: -1.5, qfx: 0.5, qfz: 0.5, pv: 0.5, pp: 0.5, qd: 0.5, lo: 1.5 });
-  const s = (): StandFoot => ({ wx: 0, wz: 0, wyaw: 0 });
-  return { feet: [f(), f()], lastPhase: 0, frame: -10, lastT: 0, lastYaw: 0, yawRate: 0, standing: false, sp: [s(), s()], stepFoot: -1, stepT: 0, stepFrom: s(), stepTo: s(), last: [newPlan(), newPlan()], lastX: 0.5, lastZ: 0.5, sx: 0.5, sz: 0.5 };
+  const s = (): StandFoot => ({ wx: 0.5, wz: 0.5, wyaw: 0.5 });
+  return { feet: [f(), f()], lastPhase: 0.5, frame: -10, lastT: 0.5, lastYaw: 0.5, yawRate: 0.5, standing: false, sp: [s(), s()], stepFoot: -1, stepT: 0.5, stepFrom: s(), stepTo: s(), last: [newPlan(), newPlan()], lastX: 0.5, lastZ: 0.5, sx: 0.5, sz: 0.5 };
 }
 
 /** values the gait writes (the caller blends upper-body values with its own pose) */
@@ -175,11 +175,13 @@ const walkA = newPlan(),
   legA = newPlan(),
   legB = newPlan(),
   legTmp = newPlan();
-const solve: LegSolve = { flex: 0, knee: 0, ankle: 0, reached: true };
+const solve: LegSolve = { flex: 0.5, knee: 0.5, ankle: 0.5, reached: true };
 // reach test of a rising stance foot (gaitPose): [fx − hip x, fz, sin hr, cos hr, fz − hip z, h + roll offset, reach²]
 const RQ = new Float64Array(7);
 function fitsReach(r: Rig, pitch: number): boolean {
-  rollAnkle(r, RQ[1], pitch, legTmp);
+  G.rz = RQ[1];
+  G.rp = pitch;
+  rollAnkle(r, legTmp);
   const dzr = legTmp.z - RQ[1];
   const ax = RQ[0] + RQ[2] * dzr,
     az = RQ[4] + RQ[3] * dzr,
@@ -206,7 +208,8 @@ interface Params {
 }
 const P: Params = { S: 1, beta: 0.62, run: 0, zHS: 0, thHS: 0, thTO: 0, uFlat: 0, uRise: 0, width: 0, lift: 0, hStand: 0, bob: 0 };
 
-function params(r: Rig, v: number, pram: boolean): Params {
+function params(r: Rig, pram: boolean): Params {
+  const v = G.v;
   const s = r.s;
   const step = stepLength(r, v) * (pram ? 0.9 : 1);
   const S = (2 * step) / s;
@@ -235,7 +238,9 @@ function params(r: Rig, v: number, pram: boolean): Params {
  * sole polygon (heel back → heel → ball → toe, with the heel rounding and toe spring) on the ground,
  * so the contact point never slides or sinks. o.y / o.z = ankle (body frame); o.x untouched.
  */
-function rollAnkle(r: Rig, fz: number, pitch: number, o: LegPlan): void {
+function rollAnkle(r: Rig, o: LegPlan): void {
+  const fz = G.rz,
+    pitch = G.rp;
   const S = r.sole;
   const aH = r.ankleH;
   // rotate (dz, dy) about the X axis by `a` (+ = toes up): y' = c·dy + s·dz, z' = −s·dy + c·dz
@@ -281,37 +286,33 @@ function rollAnkle(r: Rig, fz: number, pitch: number, o: LegPlan): void {
   o.y = ay;
 }
 
-// path curvature of the current member (per figure unit, + = turning left)
-let KAPPA = 0;
-// frame time of the current call (quick steps) and the lift of a quick re-step being planned
-let GDT = 0,
-  QLIFT = 0,
-  URATE = 0; // cycle fraction per second of the current call
-// world ↔ body frame of the current member (set per call)
-let BX = 0,
-  BZ = 0,
-  CY = 1,
-  SY = 0,
-  SC = 1,
-  YAW = 0;
+// per-call scalars of the current member, in one object with double fields: a module-level `let` holding a
+// double is re-boxed on every write (16 B of garbage each), a double field is updated in place.
+//   kappa: path curvature (per figure unit, + = turning left); dt: frame time; qlift: lift of a quick re-step
+//   being planned; urate: cycle fraction per second; bx, bz, cy, sy, sc, yaw: world ↔ body frame
+const G = { kappa: 0.5, dt: 0.5, qlift: 0.5, urate: 0.5, bx: 0.5, bz: 0.5, cy: 0.5, sy: 0.5, sc: 0.5, yaw: 0.5, uL: 0.5, uR: 0.5, pyaw: 0.5, proll: 0.5, v: 0.5, rz: 0.5, rp: 0.5, abd: 0.5, hd: 0.5 };
+// …and the other per-call inputs: uL / uR leg cycle fractions, pyaw / proll pelvis yaw / roll, v speed,
+// rz / rp rollAnkle's flat-foot z and pitch, abd / hd footHeading's abduction in and heading out
+/** gaitPose inputs t (s) and gw (0 stand … 1 walk), passed as fields for the same reason */
+export const gaitIn = { t: 0.5, gw: 0.5 };
 const toBody = (wx: number, wz: number, o: { x: number; z: number }) => {
-  const dx = (wx - BX) / SC,
-    dz = (wz - BZ) / SC;
-  o.x = CY * dx - SY * dz;
-  o.z = SY * dx + CY * dz;
+  const dx = (wx - G.bx) / G.sc,
+    dz = (wz - G.bz) / G.sc;
+  o.x = G.cy * dx - G.sy * dz;
+  o.z = G.sy * dx + G.cy * dz;
 };
 const toWorld = (bx: number, bz: number, o: { wx: number; wz: number }) => {
-  const x = bx * SC,
-    z = bz * SC;
-  o.wx = BX + CY * x + SY * z;
-  o.wz = BZ - SY * x + CY * z;
+  const x = bx * G.sc,
+    z = bz * G.sc;
+  o.wx = G.bx + G.cy * x + G.sy * z;
+  o.wz = G.bz - G.sy * x + G.cy * z;
 };
-const tmpB = { x: 0, z: 0 };
-const tmpW = { wx: 0, wz: 0 };
+const tmpB = { x: 0.5, z: 0.5 };
+const tmpW = { wx: 0.5, wz: 0.5 };
 
 /** foot heading → hip twist for a leg, given the pelvis yaw */
 const twistFor = (left: boolean, footYaw: number, pelvisYaw: number) => {
-  const rel = wrapA(footYaw - YAW - pelvisYaw);
+  const rel = wrapA(footYaw - G.yaw - pelvisYaw);
   return clamp(left ? -rel : rel, -0.7, 0.7);
 };
 
@@ -319,7 +320,14 @@ const twistFor = (left: boolean, footYaw: number, pelvisYaw: number) => {
  * Horizontal heading (relative to the body) of a foot's forward axis through the chain
  * foot yaw → ankle → knee → hip flex / abduction → pelvis yaw / roll (as the shader applies them).
  */
-function footHeading(left: boolean, fy: number, ankle: number, knee: number, flex: number, abd: number, pYaw: number, pRoll: number): number {
+function footHeading(left: boolean, sv: LegSolve): void {
+  const fy = 0,
+    ankle = sv.ankle,
+    knee = sv.knee,
+    flex = sv.flex,
+    abd = G.abd,
+    pYaw = G.pyaw,
+    pRoll = G.proll;
   // forward vector (0, 0, 1); rY(a): x' = c x + s z, z' = −s x + c z; rX(a): y' = c y − s z, z' = s y + c z; rZ(a): x' = c x − s y, y' = s x + c y
   const ry = left ? -fy : fy;
   let x = 0,
@@ -370,11 +378,13 @@ function footHeading(left: boolean, fy: number, ankle: number, knee: number, fle
     z = z2;
   }
   void y;
-  return Math.atan2(x, z);
+  G.hd = Math.atan2(x, z);
 }
 
 /** plan one leg at its own cycle fraction u (0 = its heel strike) */
-function planWalk(r: Rig, u: number, left: boolean, plant: FootPlant | null, pelvisYaw: number, o: LegPlan): void {
+function planWalk(r: Rig, left: boolean, plant: FootPlant | null, o: LegPlan): void {
+  const u = left ? G.uL : G.uR,
+    pelvisYaw = G.pyaw;
   const p = P;
   const x0 = (left ? 1 : -1) * p.width;
   const wr = left ? 0 : 4;
@@ -386,15 +396,15 @@ function planWalk(r: Rig, u: number, left: boolean, plant: FootPlant | null, pel
     o.s = -1;
     let fz = p.zHS - u * p.S;
     // law position on the (possibly curved) path
-    let fx = x0 * Math.cos(KAPPA * fz) + (KAPPA * fz * fz) / 2;
+    let fx = x0 * Math.cos(G.kappa * fz) + (G.kappa * fz * fz) / 2;
     o.twist = 0;
     if (plant && plant.valid && plant.stance) {
       // tight turns: a planted foot never twists more than ±0.6 rad against the pelvis — beyond that it
       // pivots about its contact point (the heel while the heel carries, else the ball), as people do
-      const rel = wrapA(plant.wyaw - YAW - pelvisYaw);
-      plant.pv = Math.max(0, plant.pv - GDT * 5);
+      const rel = wrapA(plant.wyaw - G.yaw - pelvisYaw);
+      plant.pv = Math.max(0, plant.pv - G.dt * 5);
       if (Math.abs(rel) > 0.6) {
-        plant.pv = Math.min(1, plant.pv + GDT * 15);
+        plant.pv = Math.min(1, plant.pv + G.dt * 15);
         const e = rel - Math.sign(rel) * 0.6;
         // the point the sole touches with (last frame's pitch): heel / heel back, ball, or toe tip
         const pp = plant.pp,
@@ -403,7 +413,7 @@ function planWalk(r: Rig, u: number, left: boolean, plant: FootPlant | null, pel
         if (pp > 0.01) pz = pp > Math.atan2(S[0].y - S[1].y, S[1].z - S[0].z) ? S[1].z - hyp2(S[1].z - S[0].z, S[0].y - S[1].y) : S[1].z;
         else if (pp < -Math.atan2(S[3].y - S[2].y, S[3].z - S[2].z)) pz = S[2].z + hyp2(S[3].z - S[2].z, S[3].y - S[2].y);
         else pz = u < p.uFlat ? S[1].z : S[2].z;
-        pz *= SC;
+        pz *= G.sc;
         const pxw = plant.wx + Math.sin(plant.wyaw) * pz,
           pzw = plant.wz + Math.cos(plant.wyaw) * pz;
         plant.wyaw -= e;
@@ -418,7 +428,7 @@ function planWalk(r: Rig, u: number, left: boolean, plant: FootPlant | null, pel
         // and put back on it with a short quick step (0.2 s) — never dragged, never split into a long stride
         // (0.2 s, shorter late in the stance so that it lands before the toe-off; too late → no re-step)
         if (plant.qs < 0 && (Math.abs(ex) > 0.16 || Math.abs(ez) > 0.24)) {
-          const left = URATE > 1e-3 ? (p.beta - 0.03 - u) / URATE : 0;
+          const left = G.urate > 1e-3 ? (p.beta - 0.03 - u) / G.urate : 0;
           if (left > 0.11) {
             plant.qs = 0;
             plant.qd = Math.min(0.2, left);
@@ -427,13 +437,13 @@ function planWalk(r: Rig, u: number, left: boolean, plant: FootPlant | null, pel
           }
         }
         if (plant.qs >= 0) {
-          plant.qs = Math.min(1, plant.qs + GDT / plant.qd);
+          plant.qs = Math.min(1, plant.qs + G.dt / plant.qd);
           const e = sstep(0, 1, plant.qs);
           toWorld(fx, fz, tmpW);
           plant.wx = mix(plant.qfx, tmpW.wx, e);
           plant.wz = mix(plant.qfz, tmpW.wz, e);
-          plant.wyaw += wrapA(YAW + pelvisYaw - plant.wyaw) * e;
-          QLIFT = 0.045 * (r.legLen / r.s / 0.93) * Math.sin(Math.PI * plant.qs);
+          plant.wyaw += wrapA(G.yaw + pelvisYaw - plant.wyaw) * e;
+          G.qlift = 0.045 * (r.legLen / r.s / 0.93) * Math.sin(Math.PI * plant.qs);
           if (plant.qs >= 1) plant.qs = -1;
           toBody(plant.wx, plant.wz, tmpB);
           fx = tmpB.x;
@@ -459,21 +469,23 @@ function planWalk(r: Rig, u: number, left: boolean, plant: FootPlant | null, pel
     else pitch = p.thTO * Math.pow(sstep(p.uRise, p.beta, u), 1.25);
     // pivoting: on the ball with the heel up (or on the heel with the toes up), so nothing scrapes round
     if (plant && plant.valid && plant.stance && plant.pv > 0) pitch = u < p.uFlat ? Math.max(pitch, 0.16 * plant.pv) : Math.min(pitch, -0.16 * plant.pv);
-    rollAnkle(r, fz, pitch, o);
+    G.rz = fz;
+    G.rp = pitch;
+    rollAnkle(r, o);
     // the roll displaces the ankle along the foot's own heading
-    const hr = plant && plant.valid && plant.stance ? wrapA(plant.wyaw - YAW) : 0;
+    const hr = plant && plant.valid && plant.stance ? wrapA(plant.wyaw - G.yaw) : 0;
     const dzr = o.z - fz;
     o.x = fx + Math.sin(hr) * dzr;
     o.z = fz + Math.cos(hr) * dzr;
     WREF[wr] = fx;
     WREF[wr + 1] = fz;
     WREF[wr + 2] = hr;
-    WREF[wr + 3] = QLIFT > 0 ? 0 : 1;
-    if (QLIFT > 0) {
+    WREF[wr + 3] = G.qlift > 0 ? 0 : 1;
+    if (G.qlift > 0) {
       // quick re-step in the air: lifted, flat-ish, clear of the ground
-      o.y += QLIFT;
-      pitch *= 1 - Math.min(1, QLIFT * 40);
-      QLIFT = 0;
+      o.y += G.qlift;
+      pitch *= 1 - Math.min(1, G.qlift * 40);
+      G.qlift = 0;
     }
     o.pitch = pitch;
   } else {
@@ -483,7 +495,9 @@ function planWalk(r: Rig, u: number, left: boolean, plant: FootPlant | null, pel
     // the sole leaves at the pitch it had (an early or deep push-off), else at the nominal toe-off
     const th0 = plant && plant.valid ? Math.min(plant.pp, 0) : p.thTO;
     const toZ = p.zHS - ub * p.S;
-    rollAnkle(r, toZ, p.thTO, legTmp);
+    G.rz = toZ;
+    G.rp = p.thTO;
+    rollAnkle(r, legTmp);
     const zLaw = legTmp.z - (u - ub) * p.S;
     let z0 = zLaw;
     let y0 = legTmp.y;
@@ -498,9 +512,11 @@ function planWalk(r: Rig, u: number, left: boolean, plant: FootPlant | null, pel
       // first swing frame: leave from where the planted foot actually is
       toBody(plant.wx, plant.wz, tmpB);
       if (Math.abs(tmpB.z - (toZ - (u - ub) * p.S)) < 0.35) {
-        rollAnkle(r, tmpB.z, th0, legTmp);
+        G.rz = tmpB.z;
+        G.rp = th0;
+        rollAnkle(r, legTmp);
         // roll offset along the foot's heading, as in its last stance frame
-        const hr = wrapA(plant.wyaw - YAW);
+        const hr = wrapA(plant.wyaw - G.yaw);
         const dzr = legTmp.z - tmpB.z;
         z0 = tmpB.z + Math.cos(hr) * dzr;
         y0 = legTmp.y;
@@ -511,11 +527,13 @@ function planWalk(r: Rig, u: number, left: boolean, plant: FootPlant | null, pel
     // a foot that left further back than its normal toe-off (corners) catches up once it is off the
     // ground instead of trailing a straight leg behind the body
     if (z0 < zLaw) z0 = zLaw + (z0 - zLaw) * (1 - sstep(0.03, 0.35, s));
-    rollAnkle(r, p.zHS, p.thHS, legTmp);
+    G.rz = p.zHS;
+    G.rp = p.thHS;
+    rollAnkle(r, legTmp);
     const z1 = legTmp.z + (1 - u) * p.S,
       y1 = legTmp.y;
     // turning: the landing point lies on the curved path (lateral offset κ·D²/2, side offset rotated)
-    const x1 = x0 * Math.cos(KAPPA * z1) + (KAPPA * z1 * z1) / 2;
+    const x1 = x0 * Math.cos(G.kappa * z1) + (G.kappa * z1 * z1) / 2;
     const e = s - Math.sin(TAU * s) / TAU; // ground-frame ease: leaves and lands at rest
     o.z = mix(z0, z1, e);
     o.x = mix(xs, x1, sstep(0, 0.7, s));
@@ -545,7 +563,9 @@ function homeX(r: Rig, left: boolean): number {
 }
 
 /** stand targets: both feet planted; settle / re-step one foot at a time */
-function planStand(r: Rig, st: GaitState, dt: number, pelvisYaw: number): void {
+function planStand(r: Rig, st: GaitState): void {
+  const dt = G.dt,
+    pelvisYaw = G.pyaw;
   const hk = r.legLen / r.s / 0.93;
   // a planted foot far from where it belongs (figure placed or moved while standing) is put back at
   // once — re-stepping needs time, and that stalls while the simulation is paused
@@ -559,7 +579,7 @@ function planStand(r: Rig, st: GaitState, dt: number, pelvisYaw: number): void {
       toWorld(homeX(r, left), (left ? 0.02 : -0.02) * hk, tmpW);
       f.wx = tmpW.wx;
       f.wz = tmpW.wz;
-      f.wyaw = YAW;
+      f.wyaw = G.yaw;
       if (st.stepFoot === i) st.stepFoot = -1;
     }
   }
@@ -583,7 +603,7 @@ function planStand(r: Rig, st: GaitState, dt: number, pelvisYaw: number): void {
       const dx = tmpB.x - homeX(r, left),
         dz = tmpB.z - (left ? 0.02 : -0.02) * hk;
       const d = hyp2(dx * 1.4, dz) / hk;
-      const yawErr = Math.abs(wrapA(st.sp[i].wyaw - YAW));
+      const yawErr = Math.abs(wrapA(st.sp[i].wyaw - G.yaw));
       const e = Math.max(d / 0.22, yawErr / 0.55);
       if (e > 1 && e > err) {
         err = e;
@@ -600,7 +620,7 @@ function planStand(r: Rig, st: GaitState, dt: number, pelvisYaw: number): void {
       toWorld(homeX(r, left), (left ? 0.02 : -0.02) * hk, tmpW);
       st.stepTo.wx = tmpW.wx;
       st.stepTo.wz = tmpW.wz;
-      st.stepTo.wyaw = YAW;
+      st.stepTo.wyaw = G.yaw;
     }
   }
   for (let i = 0; i < 2; i++) {
@@ -642,14 +662,17 @@ export interface IdleShift {
   drop: number;
 }
 
-export function gaitPose(m: Member, r: Rig, st: GaitState | null, frame: number, t: number, gw: number, idle: IdleShift, o: GaitOut): GaitOut {
+export function gaitPose(m: Member, r: Rig, st: GaitState | null, frame: number, idle: IdleShift, o: GaitOut): GaitOut {
+  const t = gaitIn.t,
+    gw = gaitIn.gw;
   const v = m.speed;
+  G.v = v;
   const pram = !!m.look.pram;
-  const p = params(r, v, pram);
+  const p = params(r, pram);
   const state = st;
   const dt = state ? clamp(t - state.lastT, 0, 0.1) : 0;
-  GDT = dt;
-  URATE = 0;
+  G.dt = dt;
+  G.urate = 0;
   let fresh = true;
   if (state) {
     // not drawn last frame, or moved further than any walk can in one frame (placed / teleported)
@@ -657,7 +680,7 @@ export function gaitPose(m: Member, r: Rig, st: GaitState | null, frame: number,
       jz = m.z - state.lastZ;
     fresh = frame - state.frame > 1 || jx * jx + jz * jz > 2.25;
     const jump = Math.abs(m.phase - state.lastPhase) / TAU;
-    URATE = dt > 1e-4 && !fresh ? clamp((m.phase - state.lastPhase) / TAU / dt, 0, 4) : 0;
+    G.urate = dt > 1e-4 && !fresh ? clamp((m.phase - state.lastPhase) / TAU / dt, 0, 4) : 0;
     if (fresh) {
       state.feet[0].valid = state.feet[1].valid = false;
       state.standing = false;
@@ -684,19 +707,19 @@ export function gaitPose(m: Member, r: Rig, st: GaitState | null, frame: number,
       state.sz = nz;
     }
   }
-  BX = state ? state.sx : m.x;
-  BZ = state ? state.sz : m.z;
-  YAW = m.yaw;
-  CY = Math.cos(m.yaw);
-  SY = Math.sin(m.yaw);
-  SC = r.s;
+  G.bx = state ? state.sx : m.x;
+  G.bz = state ? state.sz : m.z;
+  G.yaw = m.yaw;
+  G.cy = Math.cos(m.yaw);
+  G.sy = Math.sin(m.yaw);
+  G.sc = r.s;
   const uL = frac(m.phase / TAU);
   const uR = frac(uL + 0.5);
-  KAPPA = 0;
+  G.kappa = 0;
   if (state && !fresh && dt > 1e-4) {
     const w = wrapA(m.yaw - state.lastYaw) / dt;
     state.yawRate += (w - state.yawRate) * Math.min(1, dt * 6);
-    KAPPA = clamp(state.yawRate / Math.max(0.35, v), -1.6, 1.6) * SC;
+    G.kappa = clamp(state.yawRate / Math.max(0.35, v), -1.6, 1.6) * G.sc;
   } else if (state) state.yawRate = 0;
   const run = p.run;
   const vRel = v / Math.sqrt(r.legLen / 0.93);
@@ -706,11 +729,15 @@ export function gaitPose(m: Member, r: Rig, st: GaitState | null, frame: number,
   const pelvisYaw = -mix(0.075, 0.12, run) * kWalk * Math.cos(TAU * uL) * (1 - 0.4 * r.old) + idle.yaw * ig;
   const pelvisRoll = mix(0.05, 0.03, run) * clamp(kWalk, 0, 1) * Math.sin(TAU * uL) + idle.roll * ig;
   const sway = (mix(0.018, 0.008, run) * (r.legLen / r.s / 0.93) * clamp(kWalk, 0, 1) + 0.006 * r.old * gw) * Math.sin(TAU * uL) + idle.sway * ig;
+  G.uL = uL;
+  G.uR = uR;
+  G.pyaw = pelvisYaw;
+  G.proll = pelvisRoll;
 
   // ── walk targets
   if (gw > 0.001) {
-    planWalk(r, uL, true, state ? state.feet[0] : null, pelvisYaw, walkA);
-    planWalk(r, uR, false, state ? state.feet[1] : null, pelvisYaw, walkB);
+    planWalk(r, true, state ? state.feet[0] : null, walkA);
+    planWalk(r, false, state ? state.feet[1] : null, walkB);
   }
   // ── stand targets (plants initialised from wherever the feet are)
   if (state && gw < 0.999) {
@@ -743,7 +770,7 @@ export function gaitPose(m: Member, r: Rig, st: GaitState | null, frame: number,
       state.standing = true;
       state.stepFoot = -1;
     }
-    planStand(r, state, dt, pelvisYaw);
+    planStand(r, state);
   } else if (state && gw >= 0.999 && state.standing) {
     state.standing = false;
     state.stepFoot = -1;
@@ -793,7 +820,11 @@ export function gaitPose(m: Member, r: Rig, st: GaitState | null, frame: number,
     const d2 = reach * reach - dx * dx - dz * dz;
     const maxH = (d2 > 0 ? Math.sqrt(d2) : 0) + leg.y - hyOff;
     if (leg.stance || leg.s < 0.05) h = Math.min(h, maxH);
-    else if (leg.s > 0.8) h = Math.min(h, mix(h, maxH, sstep(0.8, 0.97, leg.s)));
+    else if (leg.s > 0.8) {
+      let e = (leg.s - 0.8) / 0.17;
+      e = e > 1 ? 1 : e;
+      h = Math.min(h, h + (maxH - h) * e * e * (3 - 2 * e));
+    }
   }
   // never crouch for a foot left far behind (sharp corners): pull that foot in instead
   h = Math.max(h, hNom - 0.045 * (r.legLen / r.s / 0.93));
@@ -806,7 +837,11 @@ export function gaitPose(m: Member, r: Rig, st: GaitState | null, frame: number,
       hz = -Math.sin(pelvisYaw) * hx;
     if (!(leg.stance || leg.s < 0.05)) {
       // a swinging (walking) foot never trails further behind the hip than ~30° (corners: it left late)
-      const w = sstep(0.03, 0.15, leg.s) * (1 - sstep(0.4, 0.55, leg.s)) * (1 - run);
+      let e0 = (leg.s - 0.03) / 0.12,
+        e1 = (leg.s - 0.4) / 0.15;
+      e0 = e0 < 0 ? 0 : e0 > 1 ? 1 : e0;
+      e1 = e1 < 0 ? 0 : e1 > 1 ? 1 : e1;
+      const w = e0 * e0 * (3 - 2 * e0) * (1 - e1 * e1 * (3 - 2 * e1)) * (1 - run);
       const zMin = hz - 0.58 * (h - (leg.y - Math.sin(pelvisRoll) * hx));
       if (w > 0 && leg.z < zMin) leg.z += (zMin - leg.z) * w;
       continue;
@@ -844,7 +879,9 @@ export function gaitPose(m: Member, r: Rig, st: GaitState | null, frame: number,
           }
           if (hi < p.thTO) stretched |= 1 << li;
         } else stretched |= 1 << li;
-        rollAnkle(r, fz, hi, legTmp);
+        G.rz = fz;
+        G.rp = hi;
+        rollAnkle(r, legTmp);
         const dzr = legTmp.z - fz;
         leg.x = fx + sh * dzr;
         leg.z = fz + ch * dzr;
@@ -891,7 +928,12 @@ export function gaitPose(m: Member, r: Rig, st: GaitState | null, frame: number,
     const lat = (tx - hx) * sg;
     const abd = Math.atan2(lat, dy) - Math.atan2(restLat, r.hip.y - r.ankle.y);
     const dyEff = hyp2(dy, lat - restLat);
-    legIK(r, r.hip.y, r.hip.z, r.hip.y - dyEff, tz, leg.pitch, solve);
+    LIK[0] = r.hip.y;
+    LIK[1] = r.hip.z;
+    LIK[2] = r.hip.y - dyEff;
+    LIK[3] = tz;
+    LIK[4] = leg.pitch;
+    legIKa(r, solve);
     // corners: a trailing foot stretched beyond a comfortable push-off leaves early, during the double
     // support (the other foot has landed) — the step ends instead of the leg dragging behind
     if (state && leg.stance && gw >= 0.999) {
@@ -904,8 +946,9 @@ export function gaitPose(m: Member, r: Rig, st: GaitState | null, frame: number,
     let fy = leg.twist;
     if (leg.stance && Math.abs(fy) > 1e-4) {
       const want = pelvisYaw + (left ? -fy : fy);
-      const hd = footHeading(left, 0, solve.ankle, solve.knee, solve.flex, abd, pelvisYaw, pelvisRoll);
-      fy = clamp((left ? -1 : 1) * wrapA(want - hd), -0.8, 0.8);
+      G.abd = abd;
+      footHeading(left, solve);
+      fy = clamp((left ? -1 : 1) * wrapA(want - G.hd), -0.8, 0.8);
     }
     leg.twist = fy;
     if (left) {

@@ -5,8 +5,8 @@
 
 import type { Member } from './crowd';
 import { F } from './figure';
-import { gaitPose, newGaitOut, type GaitState, type IdleShift } from './gait';
-import { armIK, fkPoint, legIK, toChestFrame, type ArmSolve, type LegSolve, type Pose } from './pose';
+import { gaitIn, gaitPose, newGaitOut, type GaitState, type IdleShift } from './gait';
+import { AIK, armIKa, fkPoint, legIKa, LIK, toChestFrame, type ArmSolve, type LegSolve, type Pose } from './pose';
 import type { Rig } from './rig';
 import { BONE } from './body';
 
@@ -26,11 +26,11 @@ export const BACKREST_Z = -0.3;
 /** prop shown in a hand (pose.spare1): 0 none, 1 phone, 2 coffee cup */
 export const PROP = { NONE: 0, PHONE: 1, CUP: 2 } as const;
 
-const leg: LegSolve = { flex: 0, knee: 0, ankle: 0, reached: true };
+const leg: LegSolve = { flex: 0.5, knee: 0.5, ankle: 0.5, reached: true };
 const G = newGaitOut();
-const idle: IdleShift = { sway: 0, roll: 0, yaw: 0, drop: 0 };
-const ik: ArmSolve = { flex: 0, abd: 0, twist: 0, elbow: 0, reached: true };
-const v3 = { x: 0, y: 0, z: 0 };
+const idle: IdleShift = { sway: 0.5, roll: 0.5, yaw: 0.5, drop: 0.5 };
+const ik: ArmSolve = { flex: 0.5, abd: 0.5, twist: 0.5, elbow: 0.5, reached: true };
+const v3 = { x: 0.5, y: 0.5, z: 0.5 };
 
 /** the arm values computePose works with */
 interface Arm {
@@ -41,13 +41,24 @@ interface Arm {
   wrist: number;
   grip: number;
 }
-const armL: Arm = { flex: 0, abd: 0, twist: 0, elbow: 0, wrist: 0, grip: 0 };
-const armR: Arm = { flex: 0, abd: 0, twist: 0, elbow: 0, wrist: 0, grip: 0 };
+const armL: Arm = { flex: 0.5, abd: 0.5, twist: 0.5, elbow: 0.5, wrist: 0.5, grip: 0.5 };
+const armR: Arm = { flex: 0.5, abd: 0.5, twist: 0.5, elbow: 0.5, wrist: 0.5, grip: 0.5 };
 
-/** blend an arm towards an IK solution for a grip target in the chest rest frame */
-function reach(r: Rig, a: Arm, left: boolean, x: number, y: number, z: number, px: number, py: number, pz: number, k: number, grip: number): void {
+// reach / reachFig target and weight [x, y, z, k]: written by the caller (computed doubles passed as
+// arguments to a call that is not inlined are boxed — 16 B of garbage each; typed-array slots are not)
+const RT = new Float64Array(4);
+
+/** blend an arm towards an IK solution for the grip target RT (chest rest frame), weight RT[3] */
+function reach(r: Rig, a: Arm, left: boolean, px: number, py: number, pz: number, grip: number): void {
+  const k = RT[3];
   if (k <= 0.001) return;
-  armIK(r, left, x, y, z, px, py, pz, ik);
+  AIK[0] = RT[0];
+  AIK[1] = RT[1];
+  AIK[2] = RT[2];
+  AIK[3] = px;
+  AIK[4] = py;
+  AIK[5] = pz;
+  armIKa(r, left, ik);
   a.flex = mix(a.flex, ik.flex, k);
   a.abd = mix(a.abd, ik.abd, k);
   a.twist = mix(a.twist, ik.twist, k);
@@ -56,14 +67,17 @@ function reach(r: Rig, a: Arm, left: boolean, x: number, y: number, z: number, p
   a.grip = mix(a.grip, grip, k);
 }
 
-/** blend an arm towards a figure-frame grip target (converted with the current torso pose in o) */
-function reachFig(r: Rig, o: Pose, a: Arm, left: boolean, x: number, y: number, z: number, px: number, py: number, pz: number, k: number, grip: number): void {
-  if (k <= 0.001) return;
-  v3.x = x;
-  v3.y = y;
-  v3.z = z;
+/** blend an arm towards a figure-frame grip target RT (converted with the current torso pose in o) */
+function reachFig(r: Rig, o: Pose, a: Arm, left: boolean, px: number, py: number, pz: number, grip: number): void {
+  if (RT[3] <= 0.001) return;
+  v3.x = RT[0];
+  v3.y = RT[1];
+  v3.z = RT[2];
   toChestFrame(r, o, v3);
-  reach(r, a, left, v3.x, v3.y, v3.z, px, py, pz, k, grip);
+  RT[0] = v3.x;
+  RT[1] = v3.y;
+  RT[2] = v3.z;
+  reach(r, a, left, px, py, pz, grip);
 }
 
 const IDLE = { RELAXED: 0, POCKETS: 1, CROSSED: 2, HIP: 3, BEHIND: 4, PHONE: 5, CUP: 6 } as const;
@@ -74,7 +88,7 @@ const IDLE_W_OLD = [0.38, 0.1, 0.12, 0.05, 0.33, 0, 0.02];
 const IDLE_W_KID = [0.6, 0.12, 0.1, 0.1, 0.08, 0, 0];
 const IDLE_W_ADULT = [0.3, 0.15, 0.12, 0.08, 0.04, 0.23, 0.08];
 const IDLE_W_MID = [0.3, 0.15, 0.12, 0.08, 0.04, 0.07, 0.08];
-const iv = { v: 0, k: 0 };
+const iv = { v: 0, k: 0.5 };
 
 /** idle variant of a standing figure: chosen per person and time window, held 6–18 s */
 function idleVariant(m: Member, r: Rig, t: number): typeof iv {
@@ -125,7 +139,9 @@ export function computePose(m: Member, t: number, umbrella: boolean, r: Rig, o: 
   idle.drop = 0.006 * hk * Math.abs(w);
 
   // ── legs, pelvis and the gait part of the upper body
-  gaitPose(m, r, gs, frame, t, gw, idle, G);
+  gaitIn.t = t;
+  gaitIn.gw = gw;
+  gaitPose(m, r, gs, frame, idle, G);
   let hipFlexL = G.hipFlexL,
     hipFlexR = G.hipFlexR;
   let kneeL = G.kneeL,
@@ -178,11 +194,17 @@ export function computePose(m: Member, t: number, umbrella: boolean, r: Rig, o: 
     const hipY = (SEAT_TOP + 0.088 * hk * sc) / sc; // hip joint above the root (figure units)
     const hipZ = (BACKREST_Z + 0.125 * hk * sc) / sc;
     const az = hipZ + r.thighL * 0.98 + 0.03;
-    legIK(r, hipY, hipZ, r.ankle.y, az, 0, leg);
+    LIK[0] = hipY;
+    LIK[1] = hipZ;
+    LIK[2] = r.ankle.y;
+    LIK[3] = az;
+    LIK[4] = 0;
+    legIKa(r, leg);
     hipFlexL = mix(hipFlexL, leg.flex, k);
     kneeL = mix(kneeL, leg.knee, k);
     ankleL = mix(ankleL, leg.ankle, k);
-    legIK(r, hipY, hipZ, r.ankle.y, az - 0.04, 0, leg);
+    LIK[3] = az - 0.04;
+    legIKa(r, leg);
     hipFlexR = mix(hipFlexR, leg.flex, k);
     kneeR = mix(kneeR, leg.knee, k);
     ankleR = mix(ankleR, leg.ankle, k);
@@ -290,38 +312,92 @@ export function computePose(m: Member, t: number, umbrella: boolean, r: Rig, o: 
     const belly = 0.04 * Math.max(0, r.b) * hk;
     switch (iv.v) {
       case IDLE.POCKETS:
-        if (handL) reach(r, armL, true, r.hip.x + 0.052 * hk, hy + 0.015 * hk, 0.065 * hk + belly, 1, -0.2, -0.6, k, 0.7);
-        if (handR) reach(r, armR, false, -(r.hip.x + 0.052 * hk), hy + 0.015 * hk, 0.065 * hk + belly, -1, -0.2, -0.6, k, 0.7);
+        if (handL) {
+          RT[0] = r.hip.x + 0.052 * hk;
+          RT[1] = hy + 0.015 * hk;
+          RT[2] = 0.065 * hk + belly;
+          RT[3] = k;
+          reach(r, armL, true, 1, -0.2, -0.6, 0.7);
+        }
+        if (handR) {
+          RT[0] = -(r.hip.x + 0.052 * hk);
+          RT[1] = hy + 0.015 * hk;
+          RT[2] = 0.065 * hk + belly;
+          RT[3] = k;
+          reach(r, armR, false, -1, -0.2, -0.6, 0.7);
+        }
         break;
       case IDLE.CROSSED:
         if (handL && handR) {
-          reach(r, armR, false, 0.1 * hk, cy - 0.035 * hk, 0.16 * hk + belly * 0.5, -1, -0.7, 0, k, 0.8);
-          reach(r, armL, true, -0.11 * hk, cy - 0.075 * hk, 0.145 * hk + belly * 0.5, 1, -0.7, 0, k, 0.8);
+          RT[0] = 0.1 * hk;
+          RT[1] = cy - 0.035 * hk;
+          RT[2] = 0.16 * hk + belly * 0.5;
+          RT[3] = k;
+          reach(r, armR, false, -1, -0.7, 0, 0.8);
+          RT[0] = -0.11 * hk;
+          RT[1] = cy - 0.075 * hk;
+          RT[2] = 0.145 * hk + belly * 0.5;
+          RT[3] = k;
+          reach(r, armL, true, 1, -0.7, 0, 0.8);
         }
         break;
       case IDLE.HIP: {
         const left = hash(m.seed, 1.3) < 0.5;
-        if (left && handL) reach(r, armL, true, 0.19 * hk + belly, wy - 0.03 * hk, 0.01, 1, 0.3, -0.5, k, 0.6);
-        if (!left && handR) reach(r, armR, false, -0.19 * hk - belly, wy - 0.03 * hk, 0.01, -1, 0.3, -0.5, k, 0.6);
+        if (left && handL) {
+          RT[0] = 0.19 * hk + belly;
+          RT[1] = wy - 0.03 * hk;
+          RT[2] = 0.01;
+          RT[3] = k;
+          reach(r, armL, true, 1, 0.3, -0.5, 0.6);
+        }
+        if (!left && handR) {
+          RT[0] = -0.19 * hk - belly;
+          RT[1] = wy - 0.03 * hk;
+          RT[2] = 0.01;
+          RT[3] = k;
+          reach(r, armR, false, -1, 0.3, -0.5, 0.6);
+        }
         break;
       }
       case IDLE.BEHIND:
         if (handL && handR) {
-          reach(r, armL, true, 0.035 * hk, wy - 0.09 * hk, -0.17 * hk, 1, -0.4, 0.2, k, 0.5);
-          reach(r, armR, false, -0.035 * hk, wy - 0.07 * hk, -0.175 * hk, -1, -0.4, 0.2, k, 0.5);
+          RT[0] = 0.035 * hk;
+          RT[1] = wy - 0.09 * hk;
+          RT[2] = -0.17 * hk;
+          RT[3] = k;
+          reach(r, armL, true, 1, -0.4, 0.2, 0.5);
+          RT[0] = -0.035 * hk;
+          RT[1] = wy - 0.07 * hk;
+          RT[2] = -0.175 * hk;
+          RT[3] = k;
+          reach(r, armR, false, -1, -0.4, 0.2, 0.5);
         }
         break;
       case IDLE.PHONE:
         if (handR) {
-          reach(r, armR, false, -0.05 * hk, cy - 0.04 * hk, 0.25 * hk + belly * 0.5, -1, -1, -0.2, k, 0.6);
+          RT[0] = -0.05 * hk;
+          RT[1] = cy - 0.04 * hk;
+          RT[2] = 0.25 * hk + belly * 0.5;
+          RT[3] = k;
+          reach(r, armR, false, -1, -1, -0.2, 0.6);
           headPitch = mix(headPitch, 0.42, k);
           if (k > 0.4) prop = PROP.PHONE;
-          if (handL && hash(m.seed, 2.2) < 0.4) reach(r, armL, true, 0.01 * hk, cy - 0.07 * hk, 0.24 * hk + belly * 0.5, 1, -1, -0.2, k, 0.5);
+          if (handL && hash(m.seed, 2.2) < 0.4) {
+            RT[0] = 0.01 * hk;
+            RT[1] = cy - 0.07 * hk;
+            RT[2] = 0.24 * hk + belly * 0.5;
+            RT[3] = k;
+            reach(r, armL, true, 1, -1, -0.2, 0.5);
+          }
         }
         break;
       case IDLE.CUP:
         if (handR) {
-          reach(r, armR, false, -0.13 * hk, wy + 0.04 * hk, 0.2 * hk + belly, -1, -0.6, -0.4, k, 0.85);
+          RT[0] = -0.13 * hk;
+          RT[1] = wy + 0.04 * hk;
+          RT[2] = 0.2 * hk + belly;
+          RT[3] = k;
+          reach(r, armR, false, -1, -0.6, -0.4, 0.85);
           if (k > 0.3) prop = PROP.CUP;
         }
         break;
@@ -364,15 +440,33 @@ export function computePose(m: Member, t: number, umbrella: boolean, r: Rig, o: 
   if (L.pram && upright > 0.5) {
     const ps = Math.min(1.05, Math.max(0.95, L.scale)) / r.s;
     o.waistBend = waistBend += 0.07;
-    reachFig(r, o, armL, true, 0.19 * ps, 1.0 * ps, 0.42 * ps, 0.7, -0.6, -0.5, 1, 1);
-    reachFig(r, o, armR, false, -0.19 * ps, 1.0 * ps, 0.42 * ps, -0.7, -0.6, -0.5, 1, 1);
+    RT[0] = 0.19 * ps;
+    RT[1] = 1.0 * ps;
+    RT[2] = 0.42 * ps;
+    RT[3] = 1;
+    reachFig(r, o, armL, true, 0.7, -0.6, -0.5, 1);
+    RT[0] = -0.19 * ps;
+    RT[1] = 1.0 * ps;
+    RT[2] = 0.42 * ps;
+    RT[3] = 1;
+    reachFig(r, o, armR, false, -0.7, -0.6, -0.5, 1);
   }
   // cane: the right hand stays over the tip (planted with the left foot), cane nearly vertical
-  if (fl & F.CANE && upright > 0.5) reachFig(r, o, armR, false, caneX + 0.02, 0.79 * hk, caneZ - 0.05, -1, -0.6, -0.4, 1, 1);
+  if (fl & F.CANE && upright > 0.5) {
+    RT[0] = caneX + 0.02;
+    RT[1] = 0.79 * hk;
+    RT[2] = caneZ - 0.05;
+    RT[3] = 1;
+    reachFig(r, o, armR, false, -1, -0.6, -0.4, 1);
+  }
   // waving: upper arm raised to the side, forearm up, the hand waves from the elbow
   if (m.wave > 0) {
     const k = smooth(Math.min(1, m.wave)) * (1 - 0.5 * kLie);
-    reach(r, armR, false, -0.34 * hk, r.shoulder.y + 0.33 * hk, 0.1 * hk, -1, -1, -0.25, k, 0);
+    RT[0] = -0.34 * hk;
+    RT[1] = r.shoulder.y + 0.33 * hk;
+    RT[2] = 0.1 * hk;
+    RT[3] = k;
+    reach(r, armR, false, -1, -1, -0.25, 0);
     armR.twist += 0.4 * Math.sin(t * 15.7 + m.seed * 6) * k;
   }
   // bench: hands on the thighs / the newspaper / the backrest / the lap
@@ -380,8 +474,16 @@ export function computePose(m: Member, t: number, umbrella: boolean, r: Rig, o: 
     const k = kSit;
     if (m.reading) {
       const cy = r.chest.y;
-      reach(r, armL, true, 0.215 * hk, cy + 0.05 * hk, 0.345 * hk, 1, -1, -0.3, k, 0.9);
-      reach(r, armR, false, -0.215 * hk, cy + 0.05 * hk, 0.345 * hk, -1, -1, -0.3, k, 0.9);
+      RT[0] = 0.215 * hk;
+      RT[1] = cy + 0.05 * hk;
+      RT[2] = 0.345 * hk;
+      RT[3] = k;
+      reach(r, armL, true, 1, -1, -0.3, 0.9);
+      RT[0] = -0.215 * hk;
+      RT[1] = cy + 0.05 * hk;
+      RT[2] = 0.345 * hk;
+      RT[3] = k;
+      reach(r, armR, false, -1, -1, -0.3, 0.9);
     } else {
       for (let li = 0; li < 2; li++) {
         const left = li === 0;
@@ -408,10 +510,18 @@ export function computePose(m: Member, t: number, umbrella: boolean, r: Rig, o: 
           z = rootZ + 0.2 * hk;
         } else if (sv === 2 && !left) {
           // arm along the backrest
-          reachFig(r, o, arm, false, -0.6 / r.s, (SEAT_TOP + 0.36) / r.s, (BACKREST_Z - 0.06) / r.s, -0.3, -0.4, -1, k, 0.4);
+          RT[0] = -0.6 / r.s;
+          RT[1] = (SEAT_TOP + 0.36) / r.s;
+          RT[2] = (BACKREST_Z - 0.06) / r.s;
+          RT[3] = k;
+          reachFig(r, o, arm, false, -0.3, -0.4, -1, 0.4);
           continue;
         }
-        reachFig(r, o, arm, left, x, y, z, left ? 1 : -1, -0.2, -0.6, k, 0.35);
+        RT[0] = x;
+        RT[1] = y;
+        RT[2] = z;
+        RT[3] = k;
+        reachFig(r, o, arm, left, left ? 1 : -1, -0.2, -0.6, 0.35);
       }
     }
   }
@@ -427,19 +537,45 @@ export function computePose(m: Member, t: number, umbrella: boolean, r: Rig, o: 
         v3.y = r.knee.y;
         v3.z = r.knee.z;
         fkPoint(r, o, left ? BONE.SHIN_L : BONE.SHIN_R, v3);
-        reachFig(r, o, arm, left, v3.x * 0.4, v3.y - 0.1 * hk, v3.z + 0.04 * hk, s, -0.3, -0.4, k, 0.8);
-      } else reachFig(r, o, arm, left, s * 0.21 * hk, 0.03 * hk, -0.3 * hk, s, 0.1, 0.6, k, 0.2);
+        RT[0] = v3.x * 0.4;
+        RT[1] = v3.y - 0.1 * hk;
+        RT[2] = v3.z + 0.04 * hk;
+        RT[3] = k;
+        reachFig(r, o, arm, left, s, -0.3, -0.4, 0.8);
+      } else {
+        RT[0] = s * 0.21 * hk;
+        RT[1] = 0.03 * hk;
+        RT[2] = -0.3 * hk;
+        RT[3] = k;
+        reachFig(r, o, arm, left, s, 0.1, 0.6, 0.2);
+      }
     }
   }
   // lying: hands behind the head (elbows out) / along the body / under the head (face down)
   if (m.lie > 0.05) {
     const k = kLie;
     if (m.lieVariant === 0) {
-      reach(r, armL, true, 0.065 * hk, r.head.y + 0.1 * hk, r.head.z - 0.11 * hk, 1, 0.4, 0, k, 0.4);
-      reach(r, armR, false, -0.065 * hk, r.head.y + 0.1 * hk, r.head.z - 0.11 * hk, -1, 0.4, 0, k, 0.4);
+      RT[0] = 0.065 * hk;
+      RT[1] = r.head.y + 0.1 * hk;
+      RT[2] = r.head.z - 0.11 * hk;
+      RT[3] = k;
+      reach(r, armL, true, 1, 0.4, 0, 0.4);
+      RT[0] = -0.065 * hk;
+      RT[1] = r.head.y + 0.1 * hk;
+      RT[2] = r.head.z - 0.11 * hk;
+      RT[3] = k;
+      reach(r, armR, false, -1, 0.4, 0, 0.4);
     } else if (front) {
-      reach(r, armL, true, 0.12 * hk, r.head.y + 0.05 * hk, r.head.z + 0.16 * hk, 1, 0, -0.3, k, 0.3);
-      reach(r, armR, false, -0.12 * hk, r.head.y + 0.02 * hk, r.head.z + 0.14 * hk, -1, 0, -0.3, k, 0.3);
+      RT[0] = 0.12 * hk;
+      RT[1] = r.head.y + 0.05 * hk;
+      RT[2] = r.head.z + 0.16 * hk;
+      RT[3] = k;
+      reach(r, armL, true, 1, 0, -0.3, 0.3);
+      RT[0] = -0.12 * hk;
+      RT[1] = r.head.y + 0.02 * hk;
+      RT[2] = r.head.z + 0.14 * hk;
+      RT[3] = k;
+      reach(r, armR, false, -1, 0, -0.3, 0.3);
     } else {
       for (let ai = 0; ai < 2; ai++) {
         const arm = ai === 0 ? armL : armR;
