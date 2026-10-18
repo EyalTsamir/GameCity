@@ -83,6 +83,7 @@ uniform float uThModel;
 uniform float uThScale;
 uniform float uThCrease;
 uniform float uThFine;
+uniform float uThCheap;
 float thWrap;
 ${LAMP_GLSL}
 vec3 thHash( vec3 p ) {
@@ -139,6 +140,26 @@ void thCell( vec3 p, out vec3 d, out float edge, out float id ) {
   }
   edge = sqrt( f2 ) - sqrt( f1 );
 }
+// cheaper 2x2x2 variant (medium / low quality): smaller jitter keeps the short search nearly exact
+void thCell8( vec3 p, out vec3 d, out float edge, out float id ) {
+  vec3 b = floor( p - 0.5 );
+  float f1 = 1e9, f2 = 1e9;
+  d = vec3( 0.0 );
+  id = 0.0;
+  for ( int k = 0; k < 8; k++ ) {
+    vec3 c = b + vec3( float( k & 1 ), float( ( k >> 1 ) & 1 ), float( k >> 2 ) );
+    vec3 h = thHash( c );
+    vec3 v = p - ( c + 0.5 + h * 0.3 );
+    float dd = dot( v, v );
+    if ( dd < f1 ) {
+      f2 = f1;
+      f1 = dd;
+      d = v;
+      id = h.y;
+    } else if ( dd < f2 ) f2 = dd;
+  }
+  edge = sqrt( f2 ) - sqrt( f1 );
+}
 `;
 
 // after normal_fragment_maps: clump relief, crease occlusion, tone drift
@@ -171,9 +192,10 @@ if ( thAmt > 0.02 ) {
       // leaf clumps: every cell is a little dome (normal tilts away from its centre), creases between
       vec3 cd;
       float edge, cid;
-      thCell( p, cd, edge, cid );
+      if ( uThCheap > 0.5 ) thCell8( p, cd, edge, cid );
+      else thCell( p, cd, edge, cid );
       g -= cd * ( 1.6 * f1 ); // height = -|d|² → the normal tilts outward from the clump centre
-      thAO *= mix( 1.0, smoothstep( 0.0, 0.16 + foot * 0.6, edge ), f1 * uThCrease );
+      thAO *= mix( 1.0, smoothstep( 0.0, 0.28 + foot * 0.6, edge ), f1 * uThCrease );
       t = cid * f1 * uThTone * toneAmp;
     }
     // clump tone families: warm/light vs cool/dark
@@ -249,6 +271,8 @@ export interface FoliageKnobs {
   crease: { value: number };
   /** fine (2nd octave) relief amplitude */
   fine: { value: number };
+  /** 1 = cheaper 2x2x2 clump search (medium / low quality) */
+  cheap: { value: number };
 }
 
 /** shared tuning uniforms (one object drives every foliage material) */
@@ -259,8 +283,9 @@ export const foliageKnobs: FoliageKnobs = {
   tone: { value: 1.0 },
   model: { value: 0 },
   scale: { value: 1.5 },
-  crease: { value: 0.25 },
+  crease: { value: 0.2 },
   fine: { value: 0.35 },
+  cheap: { value: 0 },
 };
 
 let physPars: string | null = null;
@@ -295,7 +320,7 @@ function injectWind(shader: THREE.WebGLProgramParametersWithUniforms, u: GlobalU
 
 function injectFoliage(shader: THREE.WebGLProgramParametersWithUniforms, u: GlobalUniforms): void {
   injectWind(shader, u, LEAF_VERT_PARS, LEAF_VERT_MAIN);
-  Object.assign(shader.uniforms, lampUniforms(), { uThBump: foliageKnobs.bump, uThTrans: foliageKnobs.trans, uThWrap: foliageKnobs.wrap, uThTone: foliageKnobs.tone, uThModel: foliageKnobs.model, uThScale: foliageKnobs.scale, uThCrease: foliageKnobs.crease, uThFine: foliageKnobs.fine });
+  Object.assign(shader.uniforms, lampUniforms(), { uThBump: foliageKnobs.bump, uThTrans: foliageKnobs.trans, uThWrap: foliageKnobs.wrap, uThTone: foliageKnobs.tone, uThModel: foliageKnobs.model, uThScale: foliageKnobs.scale, uThCrease: foliageKnobs.crease, uThFine: foliageKnobs.fine, uThCheap: foliageKnobs.cheap });
   shader.fragmentShader = shader.fragmentShader
     .replace('#include <common>', `#include <common>\n${LEAF_FRAG_PARS}`)
     .replace('#include <lights_physical_pars_fragment>', wrappedPhysicalPars())

@@ -53,7 +53,7 @@ function registerPools(points: GlowPoint[]): GlowPoint[] {
       // cross-aimed past the pitch centre (each mast lights the far half, as real stadium rigs do)
       const ax = best.x + (p.x - best.x) * 1.7,
         az = best.z + (p.z - best.z) * 1.7;
-      out.push({ x: best.x, y: best.y - 0.4, z: best.z, pole: best.y, radius: p.size * 1.9, color, intensity: 0.9, kind: 'flood', aim: [ax, p.y, az], cone: 0.46, channel: 'stadium' });
+      out.push({ x: best.x, y: best.y - 0.4, z: best.z, pole: best.y, radius: p.size * 1.9, color, intensity: 0.9, kind: 'flood', aim: [ax, p.y, az], cone: 0.46, channel: 'stadium', shield: true });
       continue;
     }
     const intensity = (p.intensity / 0.22) * 0.95;

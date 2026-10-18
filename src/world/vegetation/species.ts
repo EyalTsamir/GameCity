@@ -59,7 +59,7 @@ export const LEAF = {
   round: ['#4a8c30', '#54953a', '#5e9c36', '#468538', '#64a33c', '#55923a', '#3f7d31', '#6aa840', '#5b8f2e', '#4d8a3e'],
   roundDark: ['#3c7536', '#41793a', '#386f37', '#3a6e40'],
   roundOlive: ['#6d9433', '#789c3a', '#66902f'],
-  blossomPink: ['#e99ab6', '#eeacc2', '#e48aa8', '#f1b9cb'],
+  blossomPink: ['#e48aaa', '#ea9dbb', '#de7ea2', '#eda9c2'],
   blossomWhite: ['#ecdfe3', '#eee2dc', '#e8d8df'],
   autumn: ['#e09a3a', '#d8743a', '#cc5a34', '#d9b146', '#c98a2e'],
   fruit: ['#5a973d', '#62a043', '#4f8c3a'],
@@ -211,8 +211,7 @@ export function lobedCanopy(s: GeoSink, cx: number, cy: number, cz: number, lobe
     s2 = rng.range(0, 6.28),
     s3 = rng.range(0, 6.28),
     s4 = rng.range(0, 6.28);
-  let rmin = 1e9,
-    rmax = 0,
+  let rmax = 0,
     ymax = 0,
     rh = 0;
   for (const L of lobes) {
@@ -252,7 +251,6 @@ export function lobedCanopy(s: GeoSink, cx: number, cy: number, cz: number, lobe
     sL[i] = bi;
     // seam factor: 0 right on a seam between two leaf masses, 1 well inside one
     sG[i] = second > 0 ? Math.min(1, (best - second) / Math.max(0.05, best * 0.16)) : 1;
-    rmin = Math.min(rmin, rr);
     rmax = Math.max(rmax, rr);
     let py = cy + dy * rr;
     if (o.ground !== undefined && py < o.ground) py = o.ground + (py - o.ground) * 0.08;
@@ -360,7 +358,6 @@ export function lobedCanopy(s: GeoSink, cx: number, cy: number, cz: number, lobe
     }
   } else for (let k = 0; k < idx.length; k += 3) s.tri(base + idx[k], base + idx[k + 1], base + idx[k + 2]);
   lastCanopy.rmax = rmax;
-  void rmin;
 }
 
 function smooth01(x: number): number {
@@ -1181,19 +1178,18 @@ export function bush(s: GeoSink, w: Wind, x: number, y: number, z: number, r: nu
     warm: 0.25,
     clump: Math.min(0.42, 0.18 + r * 0.14),
     tone: 0.55,
-    speckle: o.flower ? { color: o.flower, p: 0.12, mix: 0.6 } : undefined,
   });
   // flowering shrubs: a few real blossoms on the sunny top
   if (o.flower) {
-    const nb = r > 0.6 ? rng.int(4, 7) : rng.int(2, 4);
+    const nb = r > 0.6 ? rng.int(7, 11) : rng.int(4, 6);
     const rm = lastCanopy.rmax;
     for (let i = 0; i < nb; i++) {
       const a = rng.range(0, 6.28),
-        el = rng.range(0.25, 1.1);
+        el = rng.range(0.05, 1.15);
       const bx = x + Math.cos(a) * Math.cos(el) * rm * 0.85,
         bz = z + Math.sin(a) * Math.cos(el) * rm * 0.85,
         by = cy + Math.sin(el) * h * 0.55;
-      bloom(s, bx, by, bz, Math.min(0.11, r * 0.12), o.flower, a);
+      bloom(s, bx, by, bz, Math.min(0.12, r * 0.13) * rng.range(0.8, 1.15), o.flower, a);
     }
   }
 }

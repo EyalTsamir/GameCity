@@ -77,9 +77,18 @@ export function tableSet(k: Kit, rng: Rng): void {
     chair(k, frame, mat, cushion);
     sh.pop();
   }
-  // something on the table
+  // something on the table; a candle lantern on some (warm glow after dusk)
   k.m(rng.pick(['#e9e4d8', '#7aa0c8', '#d9473f']), 'ceramic');
   sh.cyl(rng.range(-0.15, 0.15), round ? 0.74 : 0.75, rng.range(-0.1, 0.1), 0.08, 0.06, 0.12, 6, 2);
+  if (rng.chance(0.55)) {
+    const ty = round ? 0.74 : 0.75;
+    k.m('#2c3033', 'iron');
+    sh.box(0.12, ty + 0.01, 0.12, 0.12, 0.02, 0.12, 1);
+    k.e('#ffe2a8', '#ffb35c', 2.2, 0);
+    sh.box(0.12, ty + 0.09, 0.12, 0.09, 0.14, 0.09, 1);
+    k.m('#2c3033', 'iron');
+    sh.box(0.12, ty + 0.17, 0.12, 0.12, 0.02, 0.12, 0);
+  }
 }
 
 /** Rattan corner sofa + armchair + coffee table (fits 2.6 x 1.9 m). */

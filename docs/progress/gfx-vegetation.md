@@ -46,7 +46,17 @@ V5 verification (before/after 5174 vs 5173, perf A/B). Budgets: tris ≤ +15 %, 
    redesign birch (notched narrow crown + satellite cloud on a twig), pine (separate flat pads on limbs),
    conifers (stepped wide skirts, convex profile, scalloped rim, geometric profile normals).
    Forest rim broadleafs → detail 2. ctx1 (overview/night/riverside/industry, shots/vegetation/ctx1_sheet.png) OK.
-3. [in progress] it5 = new defaults + new geometry. Then hedges/bushes close-up check, full-city before/after, perf.
+3. [done] it5 (shots/vegetation/it5_a/b/c.png vs legacy): clumpy crowns with interior depth, backlit glow at
+   18.2 h (legacy: flat dark blobs with plastic rim sheen), forest richer. Follow-ups applied: forest rim now
+   also = top of a cliff/cut (terrain drop to the south) → rim gets broadleaf/birch/young trees, finer
+   crowns and undergrowth; softer creases (0.2, wider); deeper blossom pinks; flowering shrubs = real
+   blooms (7–11 little 4-petal flowers) instead of blotchy vertex speckles; cheap 2x2x2 clump search on
+   medium/low (`?vegcells=8|27`).
+   Tris (it5, only=sky,terrain,water,vegetation,lamps,postfx): treeTris 122.2k (legacy 114.3k), forest 62.2k
+   (45.9k), plants 43.8k (43.0k), fine 32.8k → near total +10.6 %, far total +9.2 % (budget +15 %).
+4. [in progress] final full-city captures queued (FIFO): shots/vegetation/finA|B|C (5173) vs baseA|B|C (5174),
+   legv (5173 &legacyveg, isolates vegetation); perf2a/b (scratchpad/vperf.mjs = perf.mjs with 2 h lock wait).
+   perf1 (park, SwiftShader) was too noisy to use (legacy slower than new, skip slower than all).
    (old item: tune shading, check triangle counts vs budget (baseline near: trees 118k, far 53k, forest 46k, plants 45k, fine 33k)
 3. V5 full-city before/after + perf A/B.
 

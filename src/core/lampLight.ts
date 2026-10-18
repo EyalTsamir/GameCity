@@ -64,6 +64,8 @@ export interface LampLight {
    * x/y/z/aim of the registered object (re-read every frame).
    */
   channel?: string;
+  /** analytic spots only: roofs high up near the head only catch a soft spill (stadium stands' roofs) */
+  shield?: boolean;
 }
 
 const registry: LampLight[] = [];
@@ -119,7 +121,7 @@ export const lampSpotUniforms = {
   uLampSpotN: { value: 0 },
   /** xyz head, w = reach (m) */
   uLampSpotP: { value: new Float32Array(TH_LAMP_SPOTS * 4) },
-  /** rgb = linear colour × intensity × gain (normalised), w = cos(outer half-angle) */
+  /** rgb = linear colour × intensity × gain (normalised), w = cos(outer half-angle), negative = shielded */
   uLampSpotC: { value: new Float32Array(TH_LAMP_SPOTS * 4) },
   /** xyz = beam axis, w = cos(inner half-angle) */
   uLampSpotD: { value: new Float32Array(TH_LAMP_SPOTS * 4) },
@@ -237,13 +239,15 @@ vec3 thLampLight(vec3 wp, vec3 wn) {
         vec3 L = toL * id;
         vec4 C = uLampSpotC[k];
         vec4 Dd = uLampSpotD[k];
-        float cone = smoothstep(C.w, Dd.w, dot(-L, Dd.xyz));
+        float cone = smoothstep(abs(C.w), Dd.w, dot(-L, Dd.xyz));
         // visor: no light steeper than the beam axis (roofs right below a mast stay dark; the near
         // half of a pitch is lit by the opposite masts, as on real stadium rigs)
         cone *= 1.0 - smoothstep(0.04, 0.16, L.y + Dd.y);
-        // roofs high up near the heads (stand roofs, container tops) only catch a soft spill
-        float rel = (P.y - wp.y) / max(P.y, 1.0);
-        cone *= 1.0 - 0.65 * smoothstep(0.6, 0.9, wn.y) * (1.0 - smoothstep(0.5, 0.72, rel));
+        // shielded spots (C.w < 0): roofs high up near the head only catch a soft spill
+        if (C.w < 0.0) {
+          float rel = (P.y - wp.y) / max(P.y, 1.0);
+          cone *= 1.0 - 0.85 * smoothstep(0.5, 0.85, wn.y) * (1.0 - smoothstep(0.5, 0.62, rel));
+        }
         float win = 1.0 - smoothstep(0.55, 1.0, d2 * id / P.w);
         // softened inverse square (no blow-out on surfaces right below the heads)
         sp += C.rgb * (cone * win * max(dot(wn, L), 0.0) / (d2 + 0.0625 * P.w * P.w));

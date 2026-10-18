@@ -138,7 +138,7 @@ export default function create(ctx: CityContext): CityModule {
       C[o] = s.r * norm;
       C[o + 1] = s.g * norm;
       C[o + 2] = s.b * norm;
-      C[o + 3] = cosO;
+      C[o + 3] = l.shield ? -Math.max(cosO, 1e-3) : cosO;
       D[o] = ax;
       D[o + 1] = ay;
       D[o + 2] = az;

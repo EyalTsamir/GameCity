@@ -2,10 +2,13 @@
 // forest on the northern hills, palms along the beach, bushes, garden hedges, flower beds,
 // allotment crops, pond reeds and lily pads.
 //
-// Everything is baked at start-up into TWO merged, vertex-coloured meshes:
-//   trees  — casts shadows (custom depth material so shadows sway with the wind)
-//   plants — bushes, hedges, flowers, crops, reeds, grates/planters (no shadows)
-// Wind sway is done in the vertex shader (see vegetation/material.ts), deterministic from uTime.
+// Everything is baked at start-up into a few merged, vertex-coloured meshes:
+//   trees (near) / trees-far (LOD beyond ~300 m) / forest — cast shadows (custom depth material so
+//   shadows sway with the wind); plants (bushes, hedges, soil rows) + fine plants (flowers, crops,
+//   reeds, grates/planters) — no shadows.
+// Wind sway and the painted foliage shading (leaf-clump relief, wrap, backlit translucency, crown
+// occlusion, night lamp light) live in vegetation/material.ts; per-vertex data in aWind + aLeaf.
+// A/B: ?legacyveg = pre-overhaul generators + material (vegetation/legacy/), same placement.
 //
 // Service: ctx.services.vegetation = { trees: { x, z, r, h }[] }
 
@@ -122,6 +125,8 @@ export default function create(ctx: CityContext): CityModule {
     if (Number.isFinite(v)) u.value = v;
   }
   const fx = ctx.debug.params.get('vegfx') !== '0';
+  // clump search: full 3x3x3 on high, 2x2x2 on medium/low (?vegcells=8|27 forces one)
+  const cellsParam = ctx.debug.params.get('vegcells');
   if (ctx.debug.params.get('vegclump') === 'billow') foliageKnobs.model.value = 1;
 
   // ── obstacles for anything planted
@@ -533,8 +538,10 @@ export default function create(ctx: CityContext): CityModule {
       if (bad) continue;
       if (turbines.some((t) => Math.hypot(t.x - x, t.z - z) < 4.5)) continue;
       const crest = smooth(4, 15, h0);
-      // lower rim of the forest (the edge the city looks at): more broadleaf, birch and young trees
-      const edge = legacy ? 0 : 1 - smooth(1.2, 4.5, h0);
+      // rim of the forest the city looks at — the low fringe, or the top of a cliff / cut dropping away
+      // to the south: more broadleaf, birch and young trees, finer crowns, undergrowth
+      const drop = h0 - Math.min(H(x, z + 5), H(x, z + 9));
+      const edge = legacy ? 0 : Math.max(1 - smooth(1.2, 4.5, h0), smooth(1.5, 4, drop));
       // patches: conifer-dominated stands vs. broadleaf stands (low-frequency noise), more conifers up high
       const stand = Math.sin(x * 0.043 + 0.7) * Math.sin(z * 0.11 + 2.1) + 0.5 * Math.sin(x * 0.11 - z * 0.07);
       const conP = Math.min(0.9, Math.max(0.12, 0.38 + 0.3 * crest + 0.32 * stand - 0.3 * edge));
@@ -1006,6 +1013,7 @@ export default function create(ctx: CityContext): CityModule {
   return {
     name: 'vegetation',
     frame() {
+      foliageKnobs.cheap.value = cellsParam === '8' ? 1 : cellsParam === '27' ? 0 : ctx.quality.level === 'high' ? 0 : 1;
       near = lod.near();
       farMesh.visible = !near;
       culler.update();
