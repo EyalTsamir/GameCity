@@ -94,6 +94,15 @@ Per-module logs live next to this file: `docs/progress/<module>.md`.
   LAMP_GLSL textureLod compile error, uLights not reaching 1 in captures (negative frame delta, no
   snap on clock jumps), FIFO screenshot queue + 45-min lock watchdog, ≲15-min-per-run fair-share rule.
 
+* 2026-10-18 10:25–15:43 UTC — user-requested ~5 h usage pause. All 8 agents paused cleanly (state
+  under "PAUSED"/"Resume here" in each gfx-*.md; checkpoint afdbf92). 15:43 — resumed (container had
+  rebooted: servers restarted, lock queue cleared). Resume brief: finishing only (verify → fixes/polish
+  → final sheets → report); no more per-agent SwiftShader perf A/Bs: the lead runs ONE consolidated A/B
+  on a quiet machine from each log's "Perf variants for lead". Cross-module assignments: stage bisects
+  the NaN-style black blocks seen in full-city night/dusk frames (night, buildings, hardscape) and adds
+  a NaN/Inf guard at the bloom/merge input; vegetation (forest) and terrain (cliffs) make night
+  silhouettes readable (median ≳ adjacent unlit lawn, moonlit tops); legacy toggles kept until QA.
+
 ## Module status (round 1 work, verified by the lead 23:30)
 | module | state | open items |
 |---|---|---|

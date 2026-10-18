@@ -108,6 +108,10 @@ daytime windows), house massing half of 9, far-field night windows of 2, lamp-li
 * iteration 1: `shots/buildings/it1/`, iteration 2: `shots/buildings/it2/` (+ otclose, overview),
   weathering mask: `shots/buildings/dbg/`, validation: `shots/buildings/val/` (inv1.json: invariants {}, validate [])
 
+## Perf variants for lead (consolidated A/B on a quiet machine)
+`;legacyfacade&legacyhouses;skip=buildings` (+ optionally `;legacyfacade` and `;legacyhouses` separately).
+Views: downtown 12 h and overview 21.5 h. Expected: draw calls identical (15 building meshes), tris +~1.2 k.
+
 ## Requests to other areas
 * (none yet)
 

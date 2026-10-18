@@ -26,7 +26,7 @@ export interface BakeResult {
 }
 
 /** profile exponent (core sharpness) per kind */
-const CORE: Record<LampLight['kind'], number> = { street: 1.6, path: 1.1, plaza: 1.4, flood: 0, spill: 0, portal: 1.0 };
+const CORE: Record<LampLight['kind'], number> = { street: 1.6, path: 0.6, plaza: 1.4, flood: 0, spill: 0, portal: 1.0 };
 /** soft-compression knee (stored range is 0..4) */
 const KNEE = 2.4;
 

@@ -35,7 +35,8 @@ const BASE: RegExp[] = [
   /^buildings-shell$/,
   /^buildings-lights$/,
   /^harbor-(north|beach|river|animated|rides|glows)$/,
-  /^landmarks-(lights|glows)$/,
+  // landmarks-glows dropped: all inland (bbox ≥16 m from the river, ≥27 m from the sea), 1 draw call
+  /^landmarks-lights$/,
   /^terrain-glows$/,
   /^props-glows$/,
   /^boats-(big|small|lights)$/,

@@ -602,9 +602,14 @@ void bhWall(inout vec3 albedo, inout float rough, inout float metal, inout vec3 
   float cosv = clamp(-dot(V, Np), 0.0, 1.0);
   float F0 = curtain ? 0.26 : (ribbon ? 0.2 : 0.1);
   float F = F0 + (1.0 - F0) * pow(1.0 - cosv, 5.0);
-  // coated glass reflects in its own colour: keeps each tower's identity, still warms at golden hour
-  vec3 reflTint = mix(vec3(1.0), gt * 1.3, curtain ? 0.78 : (ribbon ? 0.55 : 0.22));
-  vec3 refl = env * reflTint + uSunCol * glint;
+  // coated glass reflects in its own colour. Tint by luminance (env brightness × the glass hue normalised to
+  // unit luminance) instead of multiplying colours: a warm sky × teal glass would otherwise turn olive-grey at
+  // golden hour. Part of the environment's own chroma is kept so sunsets still warm the glass.
+  float tintAmt = curtain ? 0.72 : (ribbon ? 0.5 : 0.2);
+  vec3 gtN = gt / max(dot(gt, vec3(0.2126, 0.7152, 0.0722)), 1e-3);
+  float envL = dot(env, vec3(0.2126, 0.7152, 0.0722));
+  vec3 reflTint = mix(vec3(1.0), gtN, tintAmt) * (curtain ? 0.8 : 1.0); // (for the open-sash strip)
+  vec3 refl = mix(env, envL * gtN, tintAmt) * (curtain ? 0.8 : 1.0) + uSunCol * glint;
 
   vec3 transTint = mix(vec3(1.0), gt, curtain ? 0.75 : 0.3);
   // average daylight albedo of a window (room seen through the glass, curtains), cf. the near path
