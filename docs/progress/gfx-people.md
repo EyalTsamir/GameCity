@@ -25,7 +25,14 @@ routes, speeds, avoidance and `invariants()` are untouched.
   snaps to the root if > 1 m off. Test harnesses must emulate m.vx/vz (crowd rate 8/s). Result: hard corners
   unchanged (drag clamp is the mechanism) — kept (harmless, smoother body path). Next: quick re-step — a stance
   foot whose plant leaves the law by > 0.16 lateral / 0.24 along is lifted and re-placed on the law in 0.2 s
-  (FootPlant.qs/qfx/qfz, lift 4.5 cm) instead of being dragged.
+  (FootPlant.qs/qfx/qfz, lift 4.5 cm) instead of being dragged. → hard 90° 37.5 → 13.6 cm, bevel 15 → 9.4, 45° 7.6
+  → 5.3, rail 3.85 (unchanged). Remaining slide = heel swinging round during the twist-limit pivot on the ball
+  (heel 3–6 mm up). Next: heel-up / toes-up pivot (FootPlant.pv memory, pitch ∓0.15 while pivoting) → DONE (pv decays 5/s, +15/s
+  while |rel|>0.6; reset at heel strike): rail 3.29, bevel 2-seg 14.49 (!), hard 90° 2.92, 45° 2.01, 90°@0.9 6.32,
+  135° 9.24 cm; gaitfk straight 0.31/run 0.60, 40°/s 0.85, 90°/s 4.72, standing turn 1.67. Remaining slides =
+  toe point (pt 3) in late stance / toe-off (u 0.45–0.62), after the quick-step window (u < beta−0.08) closed.
+  Next: toe-off handling (earlier lift / pivot about toe when heel up), cap trailing hip ext, then render.ts at
+  st.gait.sx/sz, then city capture.
 
 ## Toggles
 * `?legacypeople` — original figures + original stride formula (frozen copies in `pedestrians/legacy/`).

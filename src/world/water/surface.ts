@@ -354,6 +354,9 @@ vec4 waterBase() {
   float F = mix(F0, 0.92, pow(1.0 - ndv, 4.0));
   // glassy slicks mirror more than ruffled patches (macro tonal variation that survives distance)
   F = min(0.95, F * mix(1.16, 0.84, ruff) * (1.0 + 0.22 * slick));
+  // blue hour: less mirror, more macro variation (else the sea is one flat sky-coloured plane)
+  float bhF = smoothstep(0.08, 0.4, uNight) * (1.0 - smoothstep(0.75, 1.0, uNight));
+  F *= (1.0 - 0.25 * bhF) * mix(1.0, mix(1.12, 0.85, ruff) * (1.0 + 0.15 * slick), bhF);
   // turquoise shallows keep their colour (stylised: less mirror over the sandy shelf)
   F *= mix(0.62, 1.0, smoothstep(0.3, 2.2, depth));
 
@@ -363,8 +366,12 @@ vec4 waterBase() {
   vec3 sky = wSky(normalize(R));
   // daytime: the studio horizon is near white; mirror it a little deeper so grazing water stays blue
   sky = mix(sky, uSkyZen * 1.05, 0.22 * (1.0 - uDusk) * (1.0 - uNight));
+  // blue hour: the horizon / table go lilac — mirror more of the deep-blue zenith so the water keeps
+  // reading as water (golden hour has uNight ≈ 0 and is untouched)
+  float bh = smoothstep(0.08, 0.4, uNight) * (1.0 - smoothstep(0.75, 1.0, uNight));
+  sky = mix(sky, uSkyZen * 1.3, 0.4 * bh);
   // night: keep the sea a deep readable indigo (the night zenith alone mirrors to near black)
-  sky = mix(sky, uSkyHor * 1.5 + vec3(0.004, 0.006, 0.02), 0.45 * uNight);
+  sky = mix(sky, uSkyHor * 1.5 + vec3(0.004, 0.006, 0.02), 0.45 * smoothstep(0.75, 1.0, uNight));
   vec4 rc = vec4(0.0);
   float reflW = uReflInfo.x * (1.0 - mPond);
   // fade toward the slab's cut faces
@@ -478,8 +485,9 @@ vec4 waterBase() {
     moon = vec3(0.72, 0.8, 1.0) * min(core * 0.26 + sheen * 0.025 + pins * 0.7, 0.75) * moonI;
   }
 
-  // night lights when the reflection pass is off: lamp map read where the reflected ray
-  // reaches lamp-head height (streaks toward the viewer through the anisotropic normal)
+  // night lights when the reflection pass is off: the lamp light (contract function of
+  // core/lampLight.ts — never decode the map here, its encoding belongs to the lamps module) where the
+  // reflected ray reaches lamp-head height (streaks toward the viewer through the anisotropic normal)
   vec3 lampR = vec3(0.0);
   if (uReflInfo.x < 0.5 && uLampGain > 0.01 && mPond < 0.5) {
     vec2 vh = normalize(V.xz + vec2(1e-5, 0.0));
@@ -487,11 +495,7 @@ vec4 waterBase() {
     vec3 Ns = normalize(vec3(dt.x * 0.4, 1.0, dt.y * 0.4) + vec3(vh.x, 0.0, vh.y) * dot(dt, vh) * 3.0);
     vec3 Rs = reflect(-V, Ns);
     vec2 q = p.xz + Rs.xz / max(Rs.y, 0.12) * 6.0;
-    vec2 luv = (q - uLampXf.xy) * uLampXf.zw;
-    if (luv.x > 0.0 && luv.y > 0.0 && luv.x < 1.0 && luv.y < 1.0) {
-      vec3 lm = texture2D(uLampMap, luv).rgb;
-      lampR = lm * lm * 1.6 * uLampGain;
-    }
+    lampR = min(thLampLight(vec3(q.x, 0.2, q.y), vec3(0.0, 1.0, 0.0)), vec3(3.0)) * 0.12;
   }
 
   // ── outputs for the final composite

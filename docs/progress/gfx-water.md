@@ -8,6 +8,17 @@
      → find the mesh (?refldbg / ?waterdebug=refl) and fix.
   3. (judge) overview sea at 19.4–20 h reads as a flat lilac plane → keep depth/slick variation if it is flat.
   Verify: medium + low at 11/18.2/20/21.5 h (overview, harbour, beach, riverside), ?nowaterrefl, runtime 2→1→0→2.
+  - Bug 1 CAUSE: not the reflection target (the level-0 branch never samples it) but my level-0 lamp-streak
+    fallback, which read `uLampMap` raw with full-width uv — the night agent's map is now two packed panels
+    (sqrt irradiance + head height | direction), so it read the direction panel → beige + rainbow blotches.
+    Fix: use the contract function thLampLight() at the reflected point instead; also bind a 1×1 black texture
+    to tRefl and dispose the target at level 0 (robust against stale targets after 2→0). (code done, unverified)
+  - Item 3 (judged: yes, flat — sweep_12..18 the sea/river = table/sky lilac until ~20 h): blue-hour factor
+    bh = smoothstep(0.08,0.4,uNight)·(1−smoothstep(0.75,1,uNight)) (golden hour untouched: uNight≈0) →
+    sky mixed 40 % toward uSkyZen·1.3, F ×(1−0.25 bh), stronger slick/patch F modulation; the night indigo lift
+    (toward the horizon) only at full night (smoothstep(0.75,1,uNight)) — at blue hour the horizon is lilac.
+  - Bug 2: added debug hook `ctx.services.water._debugReflectFilter(regex|null)`; diagnostic session
+    `node scratchpad/water_refldiag.mjs` → shots/water/diag/{ov_refl,close_all,close_<group>}.png (waterdebug=refl, 19.6 h).
 * (earlier) 2026-10-18 22:40 — main work complete, final report below.
 * Final sheets: `shots/water/sheets_final/ba_{harbor,beach,riverside,overview,park}.png` (full city vs original
   baseline), `ba_{shipw,river2,pier,bay,harbor_subset}.png` (module subset vs 5174 at the same views),

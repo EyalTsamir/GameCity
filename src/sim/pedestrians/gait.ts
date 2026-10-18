@@ -44,6 +44,8 @@ export interface FootPlant {
   qs: number;
   qfx: number;
   qfz: number;
+  /** pivot memory 0…1: the foot turning on the ball (heel lifted) or on the heel (toes lifted) */
+  pv: number;
 }
 
 interface StandFoot {
@@ -111,7 +113,7 @@ function copyPlan(o: LegPlan, a: LegPlan): void {
 }
 
 export function newGaitState(): GaitState {
-  const f = (): FootPlant => ({ wx: 0.5, wz: 0.5, wyaw: 0.5, sx: 0.5, sz: 0.5, sy: 0.5, stw: 0.5, stance: false, valid: false, qs: -1.5, qfx: 0.5, qfz: 0.5 });
+  const f = (): FootPlant => ({ wx: 0.5, wz: 0.5, wyaw: 0.5, sx: 0.5, sz: 0.5, sy: 0.5, stw: 0.5, stance: false, valid: false, qs: -1.5, qfx: 0.5, qfz: 0.5, pv: 0.5 });
   const s = (): StandFoot => ({ wx: 0, wz: 0, wyaw: 0 });
   return { feet: [f(), f()], lastPhase: 0, frame: -10, lastT: 0, lastYaw: 0, yawRate: 0, standing: false, sp: [s(), s()], stepFoot: -1, stepT: 0, stepFrom: s(), stepTo: s(), last: [newPlan(), newPlan()], lastX: 0.5, lastZ: 0.5, sx: 0.5, sz: 0.5 };
 }
@@ -168,6 +170,18 @@ const walkA = newPlan(),
   legB = newPlan(),
   legTmp = newPlan();
 const solve: LegSolve = { flex: 0, knee: 0, ankle: 0, reached: true };
+// reach test of a rising stance foot (gaitPose): [fx − hip x, fz, sin hr, cos hr, fz − hip z, h + roll offset, reach²]
+const RQ = new Float64Array(7);
+function fitsReach(r: Rig, pitch: number): boolean {
+  rollAnkle(r, RQ[1], pitch, legTmp);
+  const dzr = legTmp.z - RQ[1];
+  const ax = RQ[0] + RQ[2] * dzr,
+    az = RQ[4] + RQ[3] * dzr,
+    ay = RQ[5] - legTmp.y;
+  return ax * ax + az * az + ay * ay <= RQ[6];
+}
+// walk stance legs of this call: flat-foot reference (body frame), roll heading, valid flag (A: 0–3, B: 4–7)
+const WREF = new Float64Array(8);
 
 /** gait parameters for a figure at speed v (figure units) */
 interface Params {
@@ -356,6 +370,8 @@ function footHeading(left: boolean, fy: number, ankle: number, knee: number, fle
 function planWalk(r: Rig, u: number, left: boolean, plant: FootPlant | null, pelvisYaw: number, o: LegPlan): void {
   const p = P;
   const x0 = (left ? 1 : -1) * p.width;
+  const wr = left ? 0 : 4;
+  WREF[wr + 3] = 0;
   if (u < p.beta) {
     o.stance = true;
     o.s = -1;
@@ -367,7 +383,9 @@ function planWalk(r: Rig, u: number, left: boolean, plant: FootPlant | null, pel
       // tight turns: a planted foot never twists more than ±0.6 rad against the pelvis — beyond that it
       // pivots about its contact point (the heel while the heel carries, else the ball), as people do
       const rel = wrapA(plant.wyaw - YAW - pelvisYaw);
+      plant.pv = Math.max(0, plant.pv - GDT * 5);
       if (Math.abs(rel) > 0.6) {
+        plant.pv = Math.min(1, plant.pv + GDT * 15);
         const e = rel - Math.sign(rel) * 0.6;
         const pz = (u < p.uFlat ? r.sole[1].z : r.sole[2].z) * SC;
         const pxw = plant.wx + Math.sin(plant.wyaw) * pz,
@@ -418,12 +436,18 @@ function planWalk(r: Rig, u: number, left: boolean, plant: FootPlant | null, pel
     if (u < p.uFlat) pitch = p.thHS * (1 - sstep(0, p.uFlat, u));
     else if (u < p.uRise) pitch = 0;
     else pitch = p.thTO * Math.pow(sstep(p.uRise, p.beta, u), 1.25);
+    // pivoting: on the ball with the heel up (or on the heel with the toes up), so nothing scrapes round
+    if (plant && plant.valid && plant.stance && plant.pv > 0) pitch = u < p.uFlat ? Math.max(pitch, 0.16 * plant.pv) : Math.min(pitch, -0.16 * plant.pv);
     rollAnkle(r, fz, pitch, o);
     // the roll displaces the ankle along the foot's own heading
     const hr = plant && plant.valid && plant.stance ? wrapA(plant.wyaw - YAW) : 0;
     const dzr = o.z - fz;
     o.x = fx + Math.sin(hr) * dzr;
     o.z = fz + Math.cos(hr) * dzr;
+    WREF[wr] = fx;
+    WREF[wr + 1] = fz;
+    WREF[wr + 2] = hr;
+    WREF[wr + 3] = QLIFT > 0 ? 0 : 1;
     if (QLIFT > 0) {
       // quick re-step in the air: lifted, flat-ish, clear of the ground
       o.y += QLIFT;
@@ -754,8 +778,48 @@ export function gaitPose(m: Member, r: Rig, st: GaitState | null, frame: number,
     const dy = h - (leg.y - Math.sin(pelvisRoll) * hx);
     const dx = leg.x - cxh,
       dz = leg.z - hz;
-    const dh = Math.sqrt(dx * dx + dz * dz);
-    const maxD = Math.sqrt(Math.max(0, reach * reach - dy * dy));
+    let dh = Math.sqrt(dx * dx + dz * dz);
+    let maxD = Math.sqrt(Math.max(0, reach * reach - dy * dy));
+    const wr = li * 4;
+    if (dh > maxD && leg.stance && gw >= 0.999 && WREF[wr + 3] > 0) {
+      // out of reach (the trailing foot at a corner): first rise onto the ball / toes — rolling exactly,
+      // the contact stays put while the ankle climbs — as far as the push-off allows
+      const fx = WREF[wr],
+        fz = WREF[wr + 1],
+        hr = WREF[wr + 2];
+      const sh = Math.sin(hr),
+        ch = Math.cos(hr);
+      const yo = Math.sin(pelvisRoll) * hx;
+      let lo = Math.min(leg.pitch, 0),
+        hi = Math.min(lo, p.thTO * 1.15);
+      RQ[0] = fx - cxh;
+      RQ[1] = fz;
+      RQ[2] = sh;
+      RQ[3] = ch;
+      RQ[4] = fz - hz;
+      RQ[5] = h + yo;
+      RQ[6] = reach * reach;
+      if (hi < lo - 1e-3) {
+        if (fitsReach(r, hi)) {
+          for (let k = 0; k < 7; k++) {
+            const mid = 0.5 * (lo + hi);
+            if (fitsReach(r, mid)) hi = mid;
+            else lo = mid;
+          }
+        }
+        rollAnkle(r, fz, hi, legTmp);
+        const dzr = legTmp.z - fz;
+        leg.x = fx + sh * dzr;
+        leg.z = fz + ch * dzr;
+        leg.y = legTmp.y;
+        leg.pitch = hi;
+        const dy2 = h - (leg.y - yo),
+          dx2 = leg.x - cxh,
+          dz2 = leg.z - hz;
+        dh = Math.sqrt(dx2 * dx2 + dz2 * dz2);
+        maxD = Math.sqrt(Math.max(0, reach * reach - dy2 * dy2));
+      }
+    }
     if (dh > maxD && dh > 1e-6) {
       const k = maxD / dh;
       leg.x = cxh + dx * k;
@@ -841,6 +905,8 @@ export function gaitPose(m: Member, r: Rig, st: GaitState | null, frame: number,
           f.wx = tmpW.wx;
           f.wz = tmpW.wz;
           f.wyaw = m.yaw + pelvisYaw;
+          f.pv = 0;
+          f.qs = -1;
         }
         f.stance = true;
         f.valid = true;

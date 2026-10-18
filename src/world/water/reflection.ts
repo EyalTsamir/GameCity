@@ -87,6 +87,9 @@ export class PlanarReflection {
   private sz = new THREE.Vector2();
   private clearCol = new THREE.Color();
   private visSave: boolean[] = [];
+  private black: THREE.DataTexture;
+  /** debug: restrict the pass to opted-in meshes matching this (null = all) */
+  filter: RegExp | null = null;
   private lights: THREE.DirectionalLight[] = [];
   private frustum = new THREE.Frustum();
   private pm = new THREE.Matrix4();
@@ -120,8 +123,10 @@ export class PlanarReflection {
     this.rt.texture.colorSpace = THREE.LinearSRGBColorSpace;
     this.cam.layers.set(LAYERS.REFLECT);
     this.cam.matrixAutoUpdate = true;
+    this.black = new THREE.DataTexture(new Uint8Array([0, 0, 0, 0]), 1, 1);
+    this.black.needsUpdate = true;
     this.uniforms = {
-      tRefl: { value: this.rt.texture },
+      tRefl: { value: initial > 0 ? this.rt.texture : this.black },
       uReflMat: { value: new THREE.Matrix4() },
       uReflInfo: { value: new THREE.Vector4(0, 4, 4, 0) },
     };
@@ -172,7 +177,14 @@ export class PlanarReflection {
 
   setLevel(level: ReflectionLevel): void {
     this.level = level;
-    if (level === 0) this.uniforms.uReflInfo.value.x = 0;
+    if (level === 0) {
+      // off: never sample the (now stale) target — bind a black texel and free the GPU memory;
+      // the target is re-allocated by resize() when a level > 0 comes back
+      this.uniforms.uReflInfo.value.x = 0;
+      this.uniforms.tRefl.value = this.black;
+      this.rt.dispose();
+      this.width = this.height = 0;
+    } else this.uniforms.tRefl.value = this.rt.texture;
   }
 
   getLevel(): ReflectionLevel {
@@ -291,14 +303,21 @@ export class PlanarReflection {
       o.visible = !far && o.visible;
     }
 
+    // debug filter (water service `_debugReflectFilter`): only opted-in meshes whose name matches
+    let dbgHidden = 0;
+    if (this.filter) {
+      for (const o of this.dbgList) {
+        vs[n + dbgHidden++] = o.visible;
+        if (!this.filter.test(o.name)) o.visible = false;
+      }
+    }
     // ?refldbg: draw one opted-in mesh at a time (cycling every 6 passes) with console markers,
     // to attribute driver warnings to a mesh
-    let dbgHidden = 0;
     if (this.dbg) {
       const list = this.dbgList;
       const k = Math.floor(this.renders / 6) % (list.length + 1);
       if (this.renders % 6 === 0) console.warn(`[refldbg] ${k < list.length ? list[k].name : 'all'} (${k})`);
-      if (k < list.length) {
+      if (k < list.length && !this.filter) {
         for (const o of list) {
           vs[n + dbgHidden++] = o.visible;
           if (o !== list[k]) o.visible = false;
@@ -341,5 +360,6 @@ export class PlanarReflection {
   dispose(): void {
     if (this.attached && this.prevBefore) this.ctx.scene.onBeforeRender = this.prevBefore as unknown as THREE.Scene['onBeforeRender'];
     this.rt.dispose();
+    this.black.dispose();
   }
 }

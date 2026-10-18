@@ -108,6 +108,10 @@ export default function create(ctx: CityContext): CityModule {
     },
     reflectionQuality: () => reflection.getLevel(),
   };
+  // debug only (harness): restrict the reflection pass to opted-in meshes matching a regex (null = all)
+  (service as unknown as Record<string, unknown>)._debugReflectFilter = (re: string | null) => {
+    reflection.filter = re ? new RegExp(re) : null;
+  };
   ctx.services.water = service;
   const buildMs = performance.now() - t0;
 
