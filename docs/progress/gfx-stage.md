@@ -3,6 +3,22 @@
 Owner: stage agent. Files: `src/render/**` (sky, sky/*, postfx, postfx/*, stage/*), `src/world/terrain/slab.ts`,
 aircraft routes in `src/sim/ambient/vehicles.ts`.
 
+## Resume here (updated every step)
+* State 16:20 (10-18): resumed after the pause. Lead's tasks: (a) re-capture 6.5/16.5/18.2 into shots/stage/after3/
+  (one hour per run, check for black frames), rebuild sheets; (b) hunt the transient black blocks (NaN/Inf spread by
+  bloom/DOF) + add cheap guards; (c) stadium roof clipping only if still visible.
+* DONE (code, typechecks; NOT yet verified in browser): NaN/Inf guards — `SAFE_COLOR_GLSL`/`thSafeColor()` in
+  postfx/look.ts (applied to the merged-pass input in LookEffect), the tilt-shift prefilter input (postfx/tiltShift.ts)
+  and the bloom luminance input (postfx.ts patches bloom.luminanceMaterial: clamp 0..64000 + isnan/isinf → 0).
+* IN PROGRESS: NaN hunter scratchpad/nanhunt.mjs (wraps ctx.render, reads composer.inputBuffer every frame, logs
+  NaN/Inf half-float pixels + bounding-sphere candidates along the ray). First run (time=19.2 oldtown, 45 s) was
+  killed by `timeout 900` without output → make it write partial results and run shorter.
+  Output: shots/stage/nan/report.json.
+* Next: (1) get a NaN reproduction + culprit candidates, bisect with ?skip= if needed, report to lead;
+  (2) verify the guards remove the blocks; (3) after3 re-captures (6.5, 16.5, 18.2) + sheets; (4) final report.
+* Perf variants for lead (consolidated A/B): `;legacylight;notable` (same build; legacylight = whole stage work
+  off, notable = studio key without the table).
+
 ## Brief (audit items 1, 3 + night ambient of 2)
 S1 new lighting key (sun-dominated, weak cool fill, exposure comp., golden hour, dawn, crisp shadows, AO, dark night).
 S2 studio tabletop (table under the plinth, slab shadow + contact shadow, cyclorama backdrop following time of day).

@@ -5,6 +5,25 @@ Owner: night agent. Files: `src/world/lamps.ts`, `src/world/lamps/*` (bake.ts, i
 `src/world/landmarks/{glows,shaders,materials}.ts`, glow/floodlight parts of `src/world/harbor.ts` +
 `src/world/harbor/material.ts`.
 
+## Resume here
+_Updated 2026-10-18 (resume #3), after every step._
+**Done + verified:** bake + thLampLight + analytic spots; all glow files converted (pools → lights,
+halos kept); harbour masts / crane spots / ferris + carousel; shop spill; landmarks + harbour materials;
+rail platform lights; vehicles/trains patched; stadium roof fix (it4); dusk fade (dusk_sheet); perf A/B
+(no measurable delta); 0 console errors (it3, it4, it5). Path-lamp blob fix verified
+(shots/night/ov_fg_cmp.png): props/glow.ts `soft` path lanterns radius ×1.35, intensity ×0.72;
+bake.ts CORE.path 0.6; terrain/glow.ts promenade radius ×1.4, intensity ×0.8.
+People (town square, footbridge, shots/night/it5/peds_21h5.png, boats1) visibly pick up lamp light.
+**Running / in flight (check outputs on resume):**
+1. Program check (are boat/people/vehicle/train programs compiled WITH thLampLight?):
+   `shot.mjs --q "nointro&noidle&adaptive=0&quality=high&time=21.5&skip=buildings,vegetation,landmarks,ambient,audio" --view beach --eval <renderer.info.programs scan>` → shots/night/progcheck.json (evals[0] = [name, key, hasLamp]).
+2. Final set F1: `capture-set.mjs --views "westbrook;park;oldtown" --hours 21.5,2 --width 1600 --height 900 --q "nointro&noidle&adaptive=0&quality=high&time=21.5" --out shots/night/final` → shots/night/final/*.png, summary shots/night/final_f1.txt.
+3. Baseline street views at 21.5 (5174): `--views "street=55,1.5,52,28,35,12;street2=-150,0,20,32,-35,22" --out shots/night/base215`.
+**Next:** F2 `downtown;harbor;beach`, F3 `riverside;stadium;overview`, F4 `street;street2` (same flags,
+21.5,2, out shots/night/final, copy report.json → report_fN.json after each run) → sheets
+(shots/tools/sheet.py; cols baseline21.5 | new21.5 | baseline2 | new2; baseline = shots/baseline/<poi>_21h5.png,
+shots/night/base2h/<poi>_2.png, shots/night/base215/street*_21h5.png) → final report under "## Final report".
+
 ## Brief
 Replace the flat additive "polka-dot" light pools by real light: every static light is registered in
 `core/lampLight.ts`, baked once into a top-down light map, and every integrated material multiplies it
@@ -91,32 +110,6 @@ Same build, night (hours 21.5) — the lamp light map + analytic spots vs the ol
 * `""` vs `legacylamps` at views downtown, overview, harbor, stadium (21.5 h; stadium floods on ~19.5–22 h)
 * day sanity (hours 12): `""` vs `legacylamps` at overview (expected identical: uLampGain = 0 → uniform early-out)
 * optional: `nospill` (shop-window spill lights; bake-only, no runtime cost expected)
-
-## Resume here (exact state)
-Done: bake + shader + spots, all glow files converted, harbour masts / crane spots / ferris + carousel,
-shop spill, landmarks + harbour material integration, rail platform lights, vehicles/trains patched,
-stadium roof fix verified (it4), dusk fade verified (dusk_sheet), perf A/B (no measurable SwiftShader
-delta after early-outs), 0 console errors in full-city runs (it3, it4).
-Left, in order:
-1. NaN check: `shot.mjs --q "nointro&noidle&adaptive=0&quality=high&time=19.2&speed=0.01[&legacylamps]"
-   --view oldtown --shots 2 --interval 2000` with and without ?legacylamps → if the black bloom blocks
-   appear in both, report to lead (not lamp-related; lamp gain is 0 at 19.2 h); else hunt NaN in thLampLight.
-2. Final before/after captures at 1600×900, split ≤ 15 min per run, q "nointro&noidle&adaptive=0&quality=high&time=…":
-   A1 westbrook;park;oldtown  A2 downtown;harbor;beach  A3 riverside;stadium;overview — hours 21.5,2
-   (separate runs per hour if needed); A4 street=55,1.5,52,28,35,12;street2=-150,0,20,32,-35,22 at 21.5,2.
-   Baseline: shots/baseline/<poi>_21h5.png and shots/night/base2h/<poi>_2.png (+ street/street2 at 2 h);
-   baseline street views at 21.5 still to capture (5174). Sheets: shots/tools/sheet.py → shots/night/ba_*.png.
-3. Polish candidates: path-lamp pools on grass read as isolated blobs in the blurred overview foreground
-   (maybe −10–15 % for kind 'path' on lawns); facade wash could be a touch stronger within ~6 m.
-4. Final report (≤ 350 words).
-
-## Next
-1. Harbour: integrate thLampLight in harbor/material.ts; register harbour pools; crane work lights as
-   moving spots (follow uCrane); add quay / container-yard floodlight masts (geometry in a lamps/ file).
-2. First captures with `?lampall` (21.5 h, 2 h): westbrook, park, oldtown, downtown, harbor, beach,
-   riverside, stadium, overview + street level; tune intensities/colours/compression.
-3. Stadium pitch island; dusk 19.8 h fade; perf A/B (`?legacylamps`), draw calls.
-4. Re-tune after stage's night ambient lands; verify other owners' integrations; report gaps.
 
 ## Requests to other areas
 * boats (water agent) / pedestrians (people workstream): can get lamp light with one

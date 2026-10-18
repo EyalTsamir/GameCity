@@ -1,5 +1,19 @@
 # gfx-terrain — graphics overhaul, audit item 10 + lamp light on the ground
 
+## Resume here
+* DONE + verified: T1 cliffs, T2 lawns (it4), T3 stadium, T4 lamp light, all committed.
+* DONE + verified (lead item a): moonlit rock `mNightLift()` in `masonry.ts`, NIGHT_K = 0.07 (kept).
+  night1 medians (8-bit luma, new vs `?nightrock=0`): cliff close 21.5 h rock 20 (p90 40) vs meadow 14 /
+  lawn 16 (off: rock 5); harbour cliff 35 vs hilltop grass 17 (off 23); 2 h: rock 35 vs lawn 31. Ledges and
+  upper facets read; overview escarpment band visible (`shots/terrain/crop_night_ab.png`, left off / right new).
+* RUNNING (b): `TH_LOCK_SLOTS=2 node scratchpad/tcap.mjs --out shots/terrain/final2 --views "park;riverside;westbrook;stadium" --hours 11 --variants "new=http://127.0.0.1:5173/?nointro&noidle&adaptive=0&quality=high|old=http://127.0.0.1:5174/?…"`
+  → `shots/terrain/final2/{new,old}_*_11.png`, log `shots/terrain/final2.log`.
+* DONE (c, optional): spur flank faces `flank-w`/`flank-e` in `cliffs.ts` extended behind the low ends of the
+  rail-portal wing walls (len 10.9) with `yFloor` = wing-wall top + 0.75 (offline check: no rock below the wall
+  top in front of the walls; tris 12.1k). Visual check comes with the next capture that shows the west spur.
+* NEXT: (1) sheet `shots/terrain/sheet_final2_lawns.png` from final2 + night sheet (night1 new vs final_old);
+  (2) optional west-portal slope; (3) final report under "## Final report" + SendMessage main.
+
 Owner: terrain agent. Files: `src/world/terrain.ts`, `src/world/terrain/*` (except `slab.ts`, `glow.ts`),
 `src/world/landmarks.ts`, `src/world/landmarks/*` (except `glows.ts`, `shaders.ts`, `materials.ts`).
 

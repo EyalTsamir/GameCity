@@ -260,7 +260,7 @@ if ( uThFx > 0.5 ) {
     // the forest went black. Lift the sky fill on foliage and the moonlight on crown tops (multiplies the
     // night key, so it follows whatever the stage palette does): massed silhouettes with moonlit tops.
     float top = smoothstep( -0.2, 0.85, thWN.y );
-    float lift = uNight * uThNight * thAmt;
+    float lift = uNight * uThNight * min( 1.0, thAmt * 1.25 );
     reflectedLight.indirectDiffuse *= 1.0 + lift * ( 0.55 + 0.45 * top );
     reflectedLight.directDiffuse *= 1.0 + lift * 1.2 * top;
   }

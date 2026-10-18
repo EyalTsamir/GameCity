@@ -3,6 +3,25 @@
 Owner files: `src/world/vegetation.ts`, `src/world/vegetation/*` (species.ts generators, geo.ts sink, material.ts
 foliage/wind material, plants.ts, `legacy/` = frozen pre-overhaul copies for `?legacyveg`).
 
+
+## Resume here (updated every step)
+* DONE + verified: V1–V4, final before/after sheets (shots/vegetation/final_*.png), tris +7.9 % vs 5174.
+* CURRENT STEP (lead item a, night readability): material.ts LEAF_FRAG_AO now relaxes crown AO with uNight
+  (thAOn) and lifts sky fill ×(1+uNight·night·(0.55+0.45·top)) and moon on tops ×(1+uNight·night·1.2·top);
+  knob `foliageKnobs.night` default 2.0 (`?vegnight=`). Test run night1 → shots/vegetation/night1/
+  (ov21/st21 with night=0/2/3, fo21, pk21, ov2, fo2). Evaluate with luma medians (canopy vs unlit lawn).
+* Also done (unverified in browser): hedge tops lighter/yellower (species.ts hedge(), HEDGE_FRESH lerp 0.14, ×1.06).
+* night1 RESULT (shots/vegetation/night1_sheet.png): night=0 forest median luma 1.9 (station) / 9 (overview NE);
+  night=2 → 4.3 / 18.2 with moonlit tops clearly separated (90th pct 20–33), park crowns 46–48 vs unlit lawn 19;
+  night=3 slightly brighter, birches start to glow. DECISION: keep default 2.0, conifers now get the full lift
+  (lift ∝ min(1, leafiness·1.25)); verify once more in the final night sheet.
+* NEXT: tune `night` from night1 → write the value here → final sheets refresh (night + gardens + downtown
+  street view dtst=-16,0,-65,30,30,30 and oldtown ot=77,0,-14,34,20,32 instead of plaza_11) → Final report.
+* Jobs RUNNING (launched via scratchpad/veg_launch.sh, outputs + .log in shots/vegetation/): finA (5173, 11 h,
+  14 views incl. dtst_11/ot_11), finC (5173, 21.5 h, 10 views incl. dtst_21h5), baseD (5174: dtst_11, ot_11,
+  dtst_21h5). Previous finA/finC moved to prev_finA/prev_finC. Then: rerun scratchpad/sheets.sh (add dtst/ot
+  pairs: baseD vs finA/finC) → final review → Final report.
+
 ## Brief
 V1 foliage shading · V2 silhouettes/species/conifers/forest variety · V3 bushes & hedges · V4 lamp light ·
 V5 verification (before/after 5174 vs 5173, perf A/B). Budgets: tris ≤ +15 %, shader ≤ 0.3 ms GPU.

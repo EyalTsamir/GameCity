@@ -1,5 +1,22 @@
 # gfx-hardscape — progress (hardscape agent)
 
+## Resume here
+- DONE + verified: H1-H4 implemented and captured (full city: shots/hardscape/final, chunks A-D); sheets
+  shots/hardscape/sheets/ab_*.png (7). invariants() empty in full city; console clean.
+- DONE: school re-shot (shots/hardscape/final2/school_11.png) — the black rectangle did NOT persist.
+- FINDING (quay): every quay view < 100 m is pulled in by the camera module: src/ui/camera.ts
+  `LOS_DIST = 100` ("below this orbit distance the camera keeps a line of sight to the pivot") — cranes, ship
+  and container stacks block the line of sight, so quayN (32 m), quayS (48 m), quayT (55 m) all render as
+  ~5 m close-ups (final2/quayS_11.png, quayT_11.png; before3 same). Not editing the camera.
+- RUNNING (started 2026-10-18 after resume): quay views at 105 m (no LOS clamp), after + before:
+  `capture-set.mjs --views "quayN2=124,0,-118,105,-110,55;quayS2=124,0,-16,105,120,50" --hours 11 --width 1600
+  --height 900 --hideui 1 --q "nointro&noidle&adaptive=0&quality=high&time=11"` → out shots/hardscape/final2
+  (log final2b.log) and with `--url http://127.0.0.1:5174/` → shots/hardscape/before3 (log before3b.log).
+- NEXT: (1) read those PNGs; (2) rebuild shots/hardscape/sheets/ab_court_quay.png with before school
+  (shots/hardscape/before/school_11.png) vs final2/school_11.png and quayN2/quayS2 before/after (+ harbour
+  POI pair if the quay views are weak); (3) write "## Final report" here and send it to the lead.
+- Plaza view for sheets/report: "-28,0,-24,40,15,45" (lead agreed).
+
 Owner files: `src/world/roads.ts`, `src/world/roads/*`, `src/world/props.ts`, `src/world/props/*` (not `glow.ts`).
 Audit items: 7 (empty / faint hardscape), garden half of 9 (bare back gardens), lamp light on roads/props.
 

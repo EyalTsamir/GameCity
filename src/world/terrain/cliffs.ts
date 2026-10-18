@@ -42,6 +42,8 @@ interface CliffFace {
   flat: number;
   /** skip columns here (portals, slab corners) */
   skip?: (x: number, z: number) => boolean;
+  /** rock starts above this height here (e.g. the top of a portal wing wall in front of the face) */
+  yFloor?: (x: number, z: number) => number;
   /** global strata phase */
   seed: number;
 }
@@ -181,8 +183,29 @@ function faces(model: TerrainModel): CliffFace[] {
   // east spur nose (faces south, above the container yard)
   out.push({ name: 'nose-e', ax: SPUR_E_X + 1.0, az: -134.6, nx: 0, nz: 1, len: QUAY_X - 1.2 - (SPUR_E_X + 1.0), maxIn: 14, yMin: -0.5, steep: 0.8, flat: 1.15, seed: 3 });
   // spur flanks between the rail-portal wing walls and the noses (face the track yard)
-  out.push({ name: 'flank-w', ax: SPUR_W_X + 4, az: -136.8, nx: 1, nz: 0, len: 7.4, maxIn: 10, yMin: -0.5, steep: 0.75, flat: 1.15, seed: 5 });
-  out.push({ name: 'flank-e', ax: SPUR_E_X - 4, az: -144.2, nx: -1, nz: 0, len: 7.4, maxIn: 10, yMin: -0.5, steep: 0.75, flat: 1.15, seed: 6 });
+  // (they continue behind the low, sloping ends of the wing walls: rock only above the wall tops there)
+  const railPortals = model.portals.filter((p) => p.kind === 'rail');
+  const wingFloor = (x: number, z: number): number => {
+    let floor = -1e9;
+    for (const p of railPortals) {
+      const dx = x - p.x,
+        dz = z - p.z;
+      const lx = dx * p.cos - dz * p.sin;
+      const ax = Math.abs(lx);
+      const side: 0 | 1 = lx < 0 ? 0 : 1;
+      const reach = p.reach[side];
+      if (ax > reach + 0.6 || Math.abs(dx) + Math.abs(dz) > reach + 14) continue;
+      let top = p.top + 0.7;
+      if (ax > p.halfW) {
+        const t = Math.min(1, Math.max(0, (ax - p.halfW - 0.9) / Math.max(0.1, reach - p.halfW - 0.9)));
+        top = p.top - 1.1 + (p.wingEnd[side] - (p.top - 1.1)) * t + 0.75;
+      }
+      floor = Math.max(floor, top);
+    }
+    return floor;
+  };
+  out.push({ name: 'flank-w', ax: SPUR_W_X + 4, az: -136.8, nx: 1, nz: 0, len: 10.9, maxIn: 10, yMin: -0.5, steep: 0.75, flat: 1.15, seed: 5, yFloor: wingFloor });
+  out.push({ name: 'flank-e', ax: SPUR_E_X - 4, az: -147.7, nx: -1, nz: 0, len: 10.9, maxIn: 10, yMin: -0.5, steep: 0.75, flat: 1.15, seed: 6, yFloor: wingFloor });
   // harbour cliff (faces east into the sea), north of the sea wall
   out.push({
     name: 'harbour',
@@ -228,6 +251,10 @@ export function buildCliffs(
         qz = f.az + tz * u;
       const c = marchColumn(model, f, u);
       if (f.skip?.(qx, qz)) c.ok = false;
+      if (c.ok && f.yFloor) {
+        c.yBot = Math.max(c.yBot, f.yFloor(qx, qz));
+        c.ok = c.yTop - c.yBot > 1.2;
+      }
       cols.push(c);
       u += 1.25 + rng.next() * 0.5;
     }
