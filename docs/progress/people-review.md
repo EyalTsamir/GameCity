@@ -546,3 +546,8 @@ Let v = speed (m/s), Lh = hip height of the kind × scale, Fr = v² / (9.81·Lh)
 6. **P6 — shading + polish.** Lamp-map integration, drybrush value ramp/cavity tint, hair/shoe sheen, blob tuning,
    LOD hysteresis/cross-fade, optional pin LOD, dog upgrade. Final perf (target: ≤ today's pedestrian render cost on
    `high`; ≤ +0.3 ms worst case) and full-city evidence sheet.
+
+---
+
+## Re-review (2026-10-18)
+Resume here: step 1/5 — reading docs/progress/gfx-people.md and the people agent's sheets (nothing judged yet).
