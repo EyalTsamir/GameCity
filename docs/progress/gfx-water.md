@@ -1,8 +1,14 @@
 # gfx-water — audit item 4: water that reads as water
 
 ## Resume here
-* 2026-10-18 22:40 — WORK COMPLETE. Final report below ("## Final report"). All verification runs clean
-  (final, it6, med2, moon, moonB: 0 console errors/warnings, invariants empty). Nothing running.
+* FIX ROUND (stage findings, lead priority) — IN PROGRESS:
+  1. Level 0 (nowaterrefl / medium / low / adaptive refl-off) renders beige water with rainbow blotches
+     (shots/stage/nan/refl_off_20.png) → never sample the reflection target at level 0.
+  2. Dark ~30 m square in the harbour near (178, −98) from ~19.4 h with reflections on (shots/stage/nan/sweep_14.png)
+     → find the mesh (?refldbg / ?waterdebug=refl) and fix.
+  3. (judge) overview sea at 19.4–20 h reads as a flat lilac plane → keep depth/slick variation if it is flat.
+  Verify: medium + low at 11/18.2/20/21.5 h (overview, harbour, beach, riverside), ?nowaterrefl, runtime 2→1→0→2.
+* (earlier) 2026-10-18 22:40 — main work complete, final report below.
 * Final sheets: `shots/water/sheets_final/ba_{harbor,beach,riverside,overview,park}.png` (full city vs original
   baseline), `ba_{shipw,river2,pier,bay,harbor_subset}.png` (module subset vs 5174 at the same views),
   `shots/water/moon/moon_check.png` (moon fix), `shots/water/med2` + `sheets_final/glints_check.png` (medium).

@@ -22,7 +22,10 @@ routes, speeds, avoidance and `invariants()` are untouched.
   Now implementing instead: a smoothed gait root — GaitState.sx/sz follows the root by integrating the frame's
   displacement along the crowd's smoothed velocity direction (m.vx/vz, aligned with the lagging yaw) plus a
   6/s pull back to the true root; gait (BX/BZ) and the drawn figure (render.ts R[0..2], blob, pram, dog) use it;
-  snaps to the root if > 1 m off. Test harnesses must emulate m.vx/vz (crowd rate 8/s).
+  snaps to the root if > 1 m off. Test harnesses must emulate m.vx/vz (crowd rate 8/s). Result: hard corners
+  unchanged (drag clamp is the mechanism) — kept (harmless, smoother body path). Next: quick re-step — a stance
+  foot whose plant leaves the law by > 0.16 lateral / 0.24 along is lifted and re-placed on the law in 0.2 s
+  (FootPlant.qs/qfx/qfz, lift 4.5 cm) instead of being dragged.
 
 ## Toggles
 * `?legacypeople` — original figures + original stride formula (frozen copies in `pedestrians/legacy/`).

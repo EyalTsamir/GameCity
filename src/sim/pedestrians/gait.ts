@@ -39,6 +39,11 @@ export interface FootPlant {
   stw: number;
   stance: boolean;
   valid: boolean;
+  /** quick re-step of a planted foot left too far off its path (sharp corners): progress 0…1, −1 = none,
+   *  and the world point it started from */
+  qs: number;
+  qfx: number;
+  qfz: number;
 }
 
 interface StandFoot {
@@ -106,7 +111,7 @@ function copyPlan(o: LegPlan, a: LegPlan): void {
 }
 
 export function newGaitState(): GaitState {
-  const f = (): FootPlant => ({ wx: 0, wz: 0, wyaw: 0, sx: 0, sz: 0, sy: 0, stw: 0, stance: false, valid: false });
+  const f = (): FootPlant => ({ wx: 0.5, wz: 0.5, wyaw: 0.5, sx: 0.5, sz: 0.5, sy: 0.5, stw: 0.5, stance: false, valid: false, qs: -1.5, qfx: 0.5, qfz: 0.5 });
   const s = (): StandFoot => ({ wx: 0, wz: 0, wyaw: 0 });
   return { feet: [f(), f()], lastPhase: 0, frame: -10, lastT: 0, lastYaw: 0, yawRate: 0, standing: false, sp: [s(), s()], stepFoot: -1, stepT: 0, stepFrom: s(), stepTo: s(), last: [newPlan(), newPlan()], lastX: 0.5, lastZ: 0.5, sx: 0.5, sz: 0.5 };
 }
@@ -258,6 +263,9 @@ function rollAnkle(r: Rig, fz: number, pitch: number, o: LegPlan): void {
 
 // path curvature of the current member (per figure unit, + = turning left)
 let KAPPA = 0;
+// frame time of the current call (quick steps) and the lift of a quick re-step being planned
+let GDT = 0,
+  QLIFT = 0;
 // world ↔ body frame of the current member (set per call)
 let BX = 0,
   BZ = 0,
@@ -372,17 +380,37 @@ function planWalk(r: Rig, u: number, left: boolean, plant: FootPlant | null, pel
       const ex = tmpB.x - fx,
         ez = tmpB.z - fz;
       if (Math.abs(ex) < 1.2 && Math.abs(ez) < 1.2) {
-        // sharp corners (the crowd's heading snaps): a plant far off the law is dragged along with the
-        // body instead of being dropped, so the foot never jumps
-        const cx = clamp(ex, -0.25, 0.25),
-          cz = clamp(ez, -0.32, 0.32);
-        if (cx !== ex || cz !== ez) {
-          toWorld(fx + cx, fz + cz, tmpW);
-          plant.wx = tmpW.wx;
-          plant.wz = tmpW.wz;
+        // sharp corners (the crowd's heading snaps): a planted foot left too far off its path is lifted
+        // and put back on it with a short quick step (0.2 s) — never dragged, never split into a long stride
+        if (plant.qs < 0 && (Math.abs(ex) > 0.16 || Math.abs(ez) > 0.24) && u < p.beta - 0.08) {
+          plant.qs = 0;
+          plant.qfx = plant.wx;
+          plant.qfz = plant.wz;
         }
-        fz += cz;
-        fx += cx;
+        if (plant.qs >= 0) {
+          plant.qs = Math.min(1, plant.qs + GDT / 0.2);
+          const e = sstep(0, 1, plant.qs);
+          toWorld(fx, fz, tmpW);
+          plant.wx = mix(plant.qfx, tmpW.wx, e);
+          plant.wz = mix(plant.qfz, tmpW.wz, e);
+          plant.wyaw += wrapA(YAW + pelvisYaw - plant.wyaw) * e;
+          QLIFT = 0.045 * (r.legLen / r.s / 0.93) * Math.sin(Math.PI * plant.qs);
+          if (plant.qs >= 1) plant.qs = -1;
+          toBody(plant.wx, plant.wz, tmpB);
+          fx = tmpB.x;
+          fz = tmpB.z;
+        } else {
+          // safety net beyond the quick-step thresholds (late stance): drag rather than jump
+          const cx = clamp(ex, -0.25, 0.25),
+            cz = clamp(ez, -0.32, 0.32);
+          if (cx !== ex || cz !== ez) {
+            toWorld(fx + cx, fz + cz, tmpW);
+            plant.wx = tmpW.wx;
+            plant.wz = tmpW.wz;
+          }
+          fz += cz;
+          fx += cx;
+        }
         o.twist = twistFor(left, plant.wyaw, pelvisYaw);
       } else plant.valid = false; // teleported: re-plant on the law
     }
@@ -396,6 +424,12 @@ function planWalk(r: Rig, u: number, left: boolean, plant: FootPlant | null, pel
     const dzr = o.z - fz;
     o.x = fx + Math.sin(hr) * dzr;
     o.z = fz + Math.cos(hr) * dzr;
+    if (QLIFT > 0) {
+      // quick re-step in the air: lifted, flat-ish, clear of the ground
+      o.y += QLIFT;
+      pitch *= 1 - Math.min(1, QLIFT * 40);
+      QLIFT = 0;
+    }
     o.pitch = pitch;
   } else {
     o.stance = false;
@@ -563,6 +597,7 @@ export function gaitPose(m: Member, r: Rig, st: GaitState | null, frame: number,
   const p = params(r, v, pram);
   const state = st;
   const dt = state ? clamp(t - state.lastT, 0, 0.1) : 0;
+  GDT = dt;
   let fresh = true;
   if (state) {
     // not drawn last frame, or moved further than any walk can in one frame (placed / teleported)
