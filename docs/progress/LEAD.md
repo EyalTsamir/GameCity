@@ -8,7 +8,12 @@ Per-module logs live next to this file: `docs/progress/<module>.md`.
   final sheets → "## Final report" in their gfx-*.md).
   - DONE: hardscape (16:20; lead spot-checked ab_court_quay.png ✔). Note for QA: camera pulls views
     < 100 m into close-ups (LOS_DIST in src/ui/camera.ts) — use ≥ 105 m for quay views.
-  - Still working: stage, night, water, buildings, vegetation, terrain, people.
+  - DONE: people (16:35; lead spot-checked sheet_lineups + sheet_city_day ✔ — big close-up gain,
+    modest but real at city distance; faces still mannequin-like < 8 m).
+  - 16:40: people-review `a224fa07f1ef5777b` resumed for the independent re-review → writes
+    "## Re-review (2026-10-18)" / "## Re-review final" in people-review.md. If it asks for a fix round,
+    resume people `a1dd73a4100e0d9b6` with its ranked list.
+  - Still working: stage, night, water, buildings, vegetation, terrain.
 * Safety nets (user request: never lose state, never trade quality for speed):
   - watchdog scheduled task `trig_01SEZGVfPdGEXrjuBsEYFnkw` (every 2 h at :03 UTC, fires into this
     session even with the user's computer off): resumes agents cut off by the usage limit / restarts.
