@@ -5,6 +5,9 @@
 #   the check worktree, move the branch ref to it and reset the main index (working files untouched).
 #   usage: shots/tools/checkpoint.sh "commit subject"   [--push]
 set -u
+# one checkpoint at a time (the lead, the stop hook and autocheckpoint.sh may overlap)
+exec 9>/home/user/GameCity/.git/th-checkpoint.lock
+flock -w 900 9 || { echo "checkpoint: another checkpoint still running"; exit 5; }
 MAIN=/home/user/GameCity
 CHECK=/home/user/GameCity-check
 BRANCH=$(git -C "$MAIN" rev-parse --abbrev-ref HEAD)

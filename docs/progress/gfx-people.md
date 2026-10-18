@@ -6,6 +6,19 @@ Files: `src/sim/pedestrians/{figure,render,looks}.ts` + new `rig.ts`, `body.ts`,
 stats) and `crowd.ts` (2 lines: stride formula → `gaitCycle()`, phase-settle only for legacy). Movement,
 routes, speeds, avoidance and `invariants()` are untouched.
 
+## Resume here (updated 2026-10-18 16:20)
+* Done + verified: P1–P6, rounds 1–4 of visual fixes (lab4/ shows round-4 fixes OK), LOD trims (lo 458, pin
+  101), lineup before/after sheets `shots/people/sheet_{lineups,gait,poses,distance_lod}.png` (from `lineup4/`
+  vs `shots/people-review/lineup/`), final gait numbers (Numbers section).
+* Running: final city run (round-4 code, census + invariants) — command:
+  `VIEWS='<9 views: sqclose/sqwide/plaza25/beachmid 11h, sqmid 18.2h, oldtownPOI, sqclose/plaza25/sqwide 21.5h>' TAG=final2
+  TH_LOCK_SLOTS=2 node shots/people/tools/city_driver.mjs shots/people/city_final2 "nointro&noidle&adaptive=0&quality=high" --census`
+  → `shots/people/city_final2/` + `report_final2.json`; log in the scratchpad `people_cityF2.log`.
+  "Before" images for the same views: `shots/people/city_final_legacy/` (sqwide 21.5h has no legacy pair).
+* Next: (1) read city_final2 images + report (invariants `{}`, console clean, census numbers); (2) build
+  `sheet_city_day.png` / `sheet_city_night.png` (city_final_legacy vs city_final2) and check lamp light on
+  figures at night; (3) put final numbers + the "## Final report" section here and SubagentHandback.
+
 ## Toggles
 * `?legacypeople` — original figures + original stride formula (frozen copies in `pedestrians/legacy/`).
 * `?pedlod=0|1|2|3` forced level (3 = pin), `?hide=pedestrians` — as before. Runtime: `services.pedestrians._renderer.forceLod`.

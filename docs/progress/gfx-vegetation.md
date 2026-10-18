@@ -91,6 +91,14 @@ V5 verification (before/after 5174 vs 5173, perf A/B). Budgets: tris ≤ +15 %, 
      set with a downtown planter street (find a downtown 'tree' slot); check night trunk lighting near lamps.
   4. Final report (≤ 350 words) via SubagentHandback.
 
+## Perf variants for lead
+Consolidated A/B (same view list as everyone, quality=high): `;legacyveg;vegfx=0;vegcells=8;skip=vegetation`
+* `legacyveg` = whole pre-overhaul vegetation (geometry + material) → total vegetation delta
+* `vegfx=0` = new geometry, plain (wind-only) material → shader cost = baseline − vegfx=0
+* `vegcells=8` = cheap 2x2x2 clump search (what medium/low use) → if high is over budget, switch high to it
+* `skip=vegetation` = reference
+(optional `vegclump=billow` = cheapest relief model, all surfaces)
+
 ## Baseline numbers (pre-change, only=sky,terrain,water,vegetation,postfx, park 11h)
 trees 944 (forest 469), treeTris 118336, treeFarTris 52830, forestTris 45940, plantTris 45180, fineTris 32762, verts 218303.
 

@@ -144,6 +144,16 @@ export default function create(ctx: CityContext): CityModule {
   const tilt = new TiltShiftEffect(camera, cloudU, aoU);
   const bloom = new BloomEffect({ blendFunction: BlendFunction.ADD, mipmapBlur: true, luminanceThreshold: 1.0, luminanceSmoothing: 0.35, intensity: 0.6, radius: 0.7, levels: +(params.get('bloomlv') ?? 6) });
   bloom.luminancePass.resolution.scale = +(params.get('bloomres') ?? 0.5);
+  // NaN/Inf guard where scene colour enters the bloom chain: a single bad pixel would otherwise be
+  // spread by the mip downsample/upsample into big black blocks (seen in full-city frames)
+  {
+    const lm = bloom.luminanceMaterial;
+    const src = 'vec4 texel=texture2D(inputBuffer,vUv);';
+    if (lm.fragmentShader.includes(src)) {
+      lm.fragmentShader = lm.fragmentShader.replace(src, src + 'texel.rgb=min(max(texel.rgb,vec3(0.0)),vec3(64000.0));if(any(isnan(texel))||any(isinf(texel)))texel=vec4(0.0);');
+      lm.needsUpdate = true;
+    }
+  }
   const look = new LookEffect(TONE_MAPPING);
   const aaMode = params.get('aa') ?? 'smaa';
   let smaa: Effect;

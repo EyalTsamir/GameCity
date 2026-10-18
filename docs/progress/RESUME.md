@@ -10,11 +10,21 @@ npm ci                                   # if node_modules is missing (fresh con
 # frozen baseline (original code) for before/after, on port 5174:
 [ -d /home/user/GameCity-baseline ] || { git worktree add --detach /home/user/GameCity-baseline 9bf8ee1 && ln -s /home/user/GameCity/node_modules /home/user/GameCity-baseline/node_modules; }
 # shots/ is gitignored — on a fresh container restore the helper copies kept in git:
-mkdir -p shots/tools && cp scripts/agent-tools/servers.sh shots/ && cp scripts/agent-tools/{checkpoint.sh,sheet.py} shots/tools/
+mkdir -p shots/tools && cp scripts/agent-tools/servers.sh shots/ && cp scripts/agent-tools/{checkpoint.sh,autocheckpoint.sh,sheet.py} shots/tools/
 shots/servers.sh                         # dev servers: 5173 working tree, 5174 baseline
 ```
 The harness needs no GPU (SwiftShader fallback in `scripts/browser.mjs`); prefix scripts with
 `TH_LOCK_SLOTS=2`.
+
+### Automatic resume (usage-limit stops, container restarts)
+* A watchdog scheduled task (`trig_01SEZGVfPdGEXrjuBsEYFnkw`, every 2 h) wakes the lead session —
+  also while the user's computer is off — restores the machine, checkpoints, and resumes every agent
+  that is not running, has no "## Final report" in its log and has no live browser job.
+* `shots/tools/autocheckpoint.sh 15` runs detached and checkpoints + pushes every 15 min
+  (`setsid nohup shots/tools/autocheckpoint.sh 15 >/dev/null 2>&1 < /dev/null &`; single instance;
+  log `shots/autocheckpoint.log`). `checkpoint.sh` serialises itself with flock.
+* Every agent keeps "## Resume here" at the top of its log, updated after every step; the lead keeps
+  "Lead state" at the top of LEAD.md.
 
 ## 2. State
 * Shared plan, ownership, contracts, budgets, test protocol: `docs/progress/GFX-PLAN.md`.

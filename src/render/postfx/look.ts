@@ -5,8 +5,21 @@
 import * as THREE from 'three';
 import { Effect } from 'postprocessing';
 
+/**
+ * NaN/Inf guard for scene colour (GLSL). One bad pixel from any material must never spread: the
+ * bloom mip chain and the tilt-shift blur would smear it into big black blocks. min/max first
+ * (they return the non-NaN operand on D3D/most GPUs), isnan/isinf as the explicit test.
+ */
+export const SAFE_COLOR_GLSL = /* glsl */ `
+vec3 thSafeColor(vec3 c) {
+  c = min(max(c, vec3(0.0)), vec3(64000.0));
+  return (any(isnan(c)) || any(isinf(c))) ? vec3(0.0) : c;
+}
+`;
+
 const FRAG = /* glsl */ `
 #include <tonemapping_pars_fragment>
+${SAFE_COLOR_GLSL}
 uniform float uSat;
 uniform float uContrast;
 uniform vec3 uLift;
@@ -16,7 +29,7 @@ uniform float uVignette;
 uniform float uVigStart;
 uniform float uWarm;
 void mainImage(const in vec4 inputColor, const in vec2 uv, out vec4 outputColor) {
-  vec3 c = max(inputColor.rgb, vec3(0.0));
+  vec3 c = thSafeColor(inputColor.rgb);
   // white-balance nudge (warm by day, cool by night) before the curve
   c *= vec3(1.0 + uWarm, 1.0, 1.0 - uWarm);
   c = TONE_FN(c);

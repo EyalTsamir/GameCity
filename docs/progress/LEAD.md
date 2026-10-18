@@ -3,6 +3,25 @@
 Read this first when resuming after an interruption (usage limits have cut runs before).
 Per-module logs live next to this file: `docs/progress/<module>.md`.
 
+## Lead state (graphics overhaul) — keep current; the watchdog resumes from here
+* Updated 2026-10-18 16:05 UTC. Phase 2: all 8 workstream agents finishing (verify → fixes/polish →
+  final sheets → "## Final report" in their gfx-*.md). None has a final report yet.
+* Safety nets (user request: never lose state, never trade quality for speed):
+  - watchdog scheduled task `trig_01SEZGVfPdGEXrjuBsEYFnkw` (every 2 h at :03 UTC, fires into this
+    session even with the user's computer off): resumes agents cut off by the usage limit / restarts.
+    Delete it when the overhaul is done.
+  - `shots/tools/autocheckpoint.sh 15` (detached loop): checkpoint + push every 15 min.
+  - lead check-in every 45 min while agents work (send_later, re-armed each time).
+* Open cross-module items: stage bisects the NaN-style black blocks (night/buildings/hardscape frames);
+  vegetation forest + terrain cliffs night readability; reflection draw calls at night (water).
+* Next (lead): when people reports → resume people-review `a224fa07f1ef5777b` (re-review vs
+  people-review.md §4/§7). When all 8 report → Phase 3 integration QA: full before/after matrix
+  5174 vs 5173 (all POIs × 6.5/11/18.2/21.5/2 h), ONE consolidated perf A/B on a quiet machine from
+  each log's "Perf variants for lead", soak, ui-test, typecheck, single-file build, cross-module fixes,
+  decide legacy toggles/folders → Phase 4: short Hebrew report to the user, write
+  "GRAPHICS OVERHAUL DONE" here, delete the watchdog, stop autocheckpoint, push.
+* Phase-3 progress (fill in as it runs): —
+
 ## History
 * 2026-10-16 ~19:20 — Round 1: 12 builders launched via a Workflow; the account hit its 5-hour usage
   limit at 20:48–20:51. Six builders had worked ~1.5 h (traffic, pedestrians, buildings, render =
