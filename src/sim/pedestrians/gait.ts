@@ -219,18 +219,18 @@ function params(r: Rig, pram: boolean): Params {
   const vRel = v / Math.sqrt(r.legLen / 0.93);
   P.S = S;
   P.run = run;
-  P.beta = mix(clamp(0.665 - 0.035 * vRel, 0.58, 0.67) + 0.03 * r.old, mix(0.4, 0.34, clamp((v - 2.3) / 1.5, 0, 1)), run);
+  P.beta = ((Math.min(Math.max(0.665 - 0.035 * vRel, 0.58), 0.67) + 0.03 * r.old) * (1 - run) + ((0.4 + (0.34 - 0.4) * (Math.min(Math.max((v - 2.3) / 1.5, 0), 1)))) * run);
   const heelBack = -r.heelZ;
-  P.thHS = mix(0.3 * clamp(vRel / 1.3, 0.35, 1) * (1 - 0.4 * r.old), 0.08, run);
-  const aheadAnkle = (mix(0.43, 0.3, run) * step) / s;
+  P.thHS = ((0.3 * Math.min(Math.max(vRel / 1.3, 0.35), 1) * (1 - 0.4 * r.old)) * (1 - run) + 0.08 * run);
+  const aheadAnkle = ((0.43 + (0.3 - 0.43) * run) * step) / s;
   P.zHS = aheadAnkle + heelBack * (1 - Math.cos(P.thHS)) + r.ankleH * Math.sin(P.thHS);
-  P.thTO = -mix(0.85 * clamp(vRel / 1.3, 0.45, 1.05) * (1 - 0.35 * r.old), 0.75, run);
-  P.uFlat = P.beta * mix(0.19, 0.22, run);
-  P.uRise = P.beta * mix(0.6, 0.45, run);
-  P.width = mix(0.048, 0.03, run) * hk + 0.012 * r.old * hk;
-  P.lift = (mix(0.1, 0.2, run) + 0.02 * clamp(vRel - 1, 0, 1)) * hk * (1 - 0.45 * r.old) * clamp(vRel / 0.9, 0.5, 1);
+  P.thTO = -((0.85 * Math.min(Math.max(vRel / 1.3, 0.45), 1.05) * (1 - 0.35 * r.old)) * (1 - run) + 0.75 * run);
+  P.uFlat = P.beta * (0.19 + (0.22 - 0.19) * run);
+  P.uRise = P.beta * (0.6 + (0.45 - 0.6) * run);
+  P.width = (0.048 + (0.03 - 0.048) * run) * hk + 0.012 * r.old * hk;
+  P.lift = ((0.1 + (0.2 - 0.1) * run) + 0.02 * Math.min(Math.max(vRel - 1, 0), 1)) * hk * (1 - 0.45 * r.old) * Math.min(Math.max(vRel / 0.9, 0.5), 1);
   P.hStand = r.hip.y - 0.004 * hk - 0.02 * r.old * hk;
-  P.bob = mix(0.023 * clamp(vRel / 1.3, 0.3, 1.3), 0.03, run) * hk;
+  P.bob = ((0.023 * Math.min(Math.max(vRel / 1.3, 0.3), 1.3)) * (1 - run) + 0.03 * run) * hk;
   return P;
 }
 
@@ -445,8 +445,8 @@ function planWalk(r: Rig, left: boolean, plant: FootPlant | null, o: LegPlan): v
           tmpI.x = fx;
           tmpI.z = fz;
           toWorld(tmpI, tmpW);
-          plant.wx = mix(plant.qfx, tmpW.wx, e);
-          plant.wz = mix(plant.qfz, tmpW.wz, e);
+          plant.wx = (plant.qfx + (tmpW.wx - plant.qfx) * e);
+          plant.wz = (plant.qfz + (tmpW.wz - plant.qfz) * e);
           plant.wyaw += wrapA(G.yaw + pelvisYaw - plant.wyaw) * e;
           G.qlift = 0.045 * (r.legLen / r.s / 0.93) * Math.sin(Math.PI * plant.qs);
           if (plant.qs >= 1) plant.qs = -1;
@@ -455,8 +455,8 @@ function planWalk(r: Rig, left: boolean, plant: FootPlant | null, o: LegPlan): v
           fz = tmpB.z;
         } else {
           // safety net beyond the quick-step thresholds (late stance): drag rather than jump
-          const cx = clamp(ex, -0.25, 0.25),
-            cz = clamp(ez, -0.32, 0.32);
+          const cx = Math.min(Math.max(ex, -0.25), 0.25),
+            cz = Math.min(Math.max(ez, -0.32), 0.32);
           if (cx !== ex || cz !== ez) {
             tmpI.x = fx + cx;
             tmpI.z = fz + cz;
@@ -468,7 +468,7 @@ function planWalk(r: Rig, left: boolean, plant: FootPlant | null, o: LegPlan): v
           fx += cx;
         }
         const rel = wrapA(plant.wyaw - G.yaw - pelvisYaw);
-        o.twist = clamp(left ? -rel : rel, -0.7, 0.7);
+        o.twist = Math.min(Math.max(left ? -rel : rel, -0.7), 0.7);
       } else plant.valid = false; // teleported: re-plant on the law
     }
     let pitch: number;
@@ -530,7 +530,7 @@ function planWalk(r: Rig, left: boolean, plant: FootPlant | null, o: LegPlan): v
         y0 = legTmp.y;
         xs = tmpB.x + Math.sin(hr) * dzr;
         const rel = wrapA(plant.wyaw - G.yaw - pelvisYaw);
-        tw0 = clamp(left ? -rel : rel, -0.7, 0.7);
+        tw0 = Math.min(Math.max(left ? -rel : rel, -0.7), 0.7);
       }
     }
     // a foot that left further back than its normal toe-off (corners) catches up once it is off the
@@ -544,14 +544,14 @@ function planWalk(r: Rig, left: boolean, plant: FootPlant | null, o: LegPlan): v
     // turning: the landing point lies on the curved path (lateral offset κ·D²/2, side offset rotated)
     const x1 = x0 * Math.cos(G.kappa * z1) + (G.kappa * z1 * z1) / 2;
     const e = s - Math.sin(TAU * s) / TAU; // ground-frame ease: leaves and lands at rest
-    o.z = mix(z0, z1, e);
-    o.x = mix(xs, x1, sm(cl01(s / 0.7)));
+    o.z = (z0 + (z1 - z0) * e);
+    o.x = (xs + (x1 - xs) * (sm(cl01(s / 0.7))));
     o.twist = tw0 * (1 - sm(cl01(s / 0.5)));
     const pm = 0.08;
-    o.pitch = s < 0.45 ? mix(th0, pm, sm(cl01(s / 0.45))) : mix(pm, p.thHS, sm(cl01((s - 0.45) / 0.55)));
+    o.pitch = s < 0.45 ? (th0 + (pm - th0) * (sm(cl01(s / 0.45)))) : (pm + (p.thHS - pm) * (sm(cl01((s - 0.45) / 0.55))));
     // height: down to the landing height by mid-swing + an early bump (heel high behind the body)
     const bump = s < 0.7 ? Math.pow(Math.sin((Math.PI * s) / 0.7), 1.2) : 0;
-    o.y = mix(y0, y1, sm(cl01((s - 0.05) / 0.57))) + p.lift * bump * (1 - 0.4 * s) + 0.012 * Math.sin(Math.PI * s);
+    o.y = (y0 + (y1 - y0) * (sm(cl01((s - 0.05) / 0.57)))) + p.lift * bump * (1 - 0.4 * s) + 0.012 * Math.sin(Math.PI * s);
     G.need = 0.016 * sm(cl01((s - 0.02) / 0.13)) * (1 - sm(cl01((s - 0.85) / 0.15)));
     clearance(r, o);
   }
@@ -648,10 +648,10 @@ function planStand(r: Rig, st: GaitState): void {
     let lift = 0;
     if (st.stepFoot === i) {
       const e = sm(cl01(st.stepT));
-      wx = mix(st.stepFrom.wx, st.stepTo.wx, e);
-      wz = mix(st.stepFrom.wz, st.stepTo.wz, e);
+      wx = (st.stepFrom.wx + (st.stepTo.wx - st.stepFrom.wx) * e);
+      wz = (st.stepFrom.wz + (st.stepTo.wz - st.stepFrom.wz) * e);
       wyaw = st.stepFrom.wyaw + wrapA(st.stepTo.wyaw - st.stepFrom.wyaw) * e;
-      lift = 0.045 * hk * Math.sin(Math.PI * clamp(st.stepT, 0, 1));
+      lift = 0.045 * hk * Math.sin(Math.PI * Math.min(Math.max(st.stepT, 0), 1));
     }
     tmpW.wx = wx;
     tmpW.wz = wz;
@@ -665,7 +665,7 @@ function planStand(r: Rig, st: GaitState): void {
       clearance(r, o);
     }
     const rel = wrapA(wyaw - G.yaw - pelvisYaw);
-    o.twist = clamp(left ? -rel : rel, -0.7, 0.7);
+    o.twist = Math.min(Math.max(left ? -rel : rel, -0.7), 0.7);
     o.stance = lift <= 0;
     o.s = lift > 0 ? st.stepT : -1;
   }
@@ -692,7 +692,7 @@ export function gaitPose(m: Member, r: Rig, st: GaitState | null, frame: number,
   const pram = !!m.look.pram;
   const p = params(r, pram);
   const state = st;
-  const dt = state ? clamp(t - state.lastT, 0, 0.1) : 0;
+  const dt = state ? Math.min(Math.max(t - state.lastT, 0), 0.1) : 0;
   G.dt = dt;
   G.urate = 0;
   let fresh = true;
@@ -702,7 +702,7 @@ export function gaitPose(m: Member, r: Rig, st: GaitState | null, frame: number,
       jz = m.z - state.lastZ;
     fresh = frame - state.frame > 1 || jx * jx + jz * jz > 2.25;
     const jump = Math.abs(m.phase - state.lastPhase) / TAU;
-    G.urate = dt > 1e-4 && !fresh ? clamp((m.phase - state.lastPhase) / TAU / dt, 0, 4) : 0;
+    G.urate = dt > 1e-4 && !fresh ? Math.min(Math.max((m.phase - state.lastPhase) / TAU / dt, 0), 4) : 0;
     if (fresh) {
       state.feet[0].valid = state.feet[1].valid = false;
       state.standing = false;
@@ -741,16 +741,16 @@ export function gaitPose(m: Member, r: Rig, st: GaitState | null, frame: number,
   if (state && !fresh && dt > 1e-4) {
     const w = wrapA(m.yaw - state.lastYaw) / dt;
     state.yawRate += (w - state.yawRate) * Math.min(1, dt * 6);
-    G.kappa = clamp(state.yawRate / Math.max(0.35, v), -1.6, 1.6) * G.sc;
+    G.kappa = Math.min(Math.max(state.yawRate / Math.max(0.35, v), -1.6), 1.6) * G.sc;
   } else if (state) state.yawRate = 0;
   const run = p.run;
   const vRel = v / Math.sqrt(r.legLen / 0.93);
-  const kWalk = clamp(vRel / 1.3, 0, 1.4) * gw;
+  const kWalk = Math.min(Math.max(vRel / 1.3, 0), 1.4) * gw;
   // pelvis motion (rotation forward with the swing leg, list towards the swing side, sway to the stance side)
   const ig = 1 - gw;
-  const pelvisYaw = -mix(0.075, 0.12, run) * kWalk * Math.cos(TAU * uL) * (1 - 0.4 * r.old) + idle.yaw * ig;
-  const pelvisRoll = mix(0.05, 0.03, run) * clamp(kWalk, 0, 1) * Math.sin(TAU * uL) + idle.roll * ig;
-  const sway = (mix(0.018, 0.008, run) * (r.legLen / r.s / 0.93) * clamp(kWalk, 0, 1) + 0.006 * r.old * gw) * Math.sin(TAU * uL) + idle.sway * ig;
+  const pelvisYaw = -(0.075 + (0.12 - 0.075) * run) * kWalk * Math.cos(TAU * uL) * (1 - 0.4 * r.old) + idle.yaw * ig;
+  const pelvisRoll = (0.05 + (0.03 - 0.05) * run) * Math.min(Math.max(kWalk, 0), 1) * Math.sin(TAU * uL) + idle.roll * ig;
+  const sway = ((0.018 + (0.008 - 0.018) * run) * (r.legLen / r.s / 0.93) * Math.min(Math.max(kWalk, 0), 1) + 0.006 * r.old * gw) * Math.sin(TAU * uL) + idle.sway * ig;
   G.uL = uL;
   G.uR = uR;
   G.pyaw = pelvisYaw;
@@ -819,11 +819,11 @@ export function gaitPose(m: Member, r: Rig, st: GaitState | null, frame: number,
       }
     } else if (gw <= 0.001) copyPlan(o2, S);
     else {
-      o2.x = mix(S.x, W.x, gw);
-      o2.y = mix(S.y, W.y, gw);
-      o2.z = mix(S.z, W.z, gw);
-      o2.pitch = mix(S.pitch, W.pitch, gw);
-      o2.twist = mix(S.twist, W.twist, gw);
+      o2.x = (S.x + (W.x - S.x) * gw);
+      o2.y = (S.y + (W.y - S.y) * gw);
+      o2.z = (S.z + (W.z - S.z) * gw);
+      o2.pitch = (S.pitch + (W.pitch - S.pitch) * gw);
+      o2.twist = (S.twist + (W.twist - S.twist) * gw);
       o2.stance = gw > 0.5 ? W.stance : S.stance;
       o2.s = gw > 0.5 ? W.s : S.s;
     }
@@ -832,9 +832,9 @@ export function gaitPose(m: Member, r: Rig, st: GaitState | null, frame: number,
   // ── pelvis height: walking lowest at double support, running lowest mid-stance; legs must reach
   const hWalk = p.hStand - p.bob * (0.5 + 0.5 * Math.cos(2 * TAU * uL));
   const hRun = p.hStand * 0.955 - p.bob * Math.cos(2 * TAU * (uL - p.beta / 2));
-  let h = mix(p.hStand - idle.drop, mix(hWalk, hRun, run), gw);
+  let h = ((p.hStand - idle.drop) * (1 - gw) + ((hWalk + (hRun - hWalk) * run)) * gw);
   const hNom = h;
-  const reach = (r.thighL + r.shinL) * mix(0.995, 0.985, run);
+  const reach = (r.thighL + r.shinL) * (0.995 + (0.985 - 0.995) * run);
   for (let li = 0; li < 2; li++) {
     const leg = li === 0 ? legA : legB;
     const side = leg === legA ? 1 : -1;
@@ -974,7 +974,7 @@ export function gaitPose(m: Member, r: Rig, st: GaitState | null, frame: number,
       const want = pelvisYaw + (left ? -fy : fy);
       G.abd = abd;
       footHeading(left, solve);
-      fy = clamp((left ? -1 : 1) * wrapA(want - G.hd), -0.8, 0.8);
+      fy = Math.min(Math.max((left ? -1 : 1) * wrapA(want - G.hd), -0.8), 0.8);
     }
     leg.twist = fy;
     if (left) {
@@ -1053,25 +1053,25 @@ export function gaitPose(m: Member, r: Rig, st: GaitState | null, frame: number,
   o.rootY = rootY;
   o.pelvisYaw = pelvisYaw;
   o.pelvisRoll = pelvisRoll;
-  o.waistBend = (mix(0.04, 0.13, run) + 0.012 * clamp(vRel / 1.3, 0, 1.4)) * gw;
-  const chestTwist = mix(0.06, 0.12, run) * clamp(kWalk, 0, 1.2) * Math.cos(TAU * uL) * (1 - 0.5 * r.old);
+  o.waistBend = ((0.04 + (0.13 - 0.04) * run) + 0.012 * Math.min(Math.max(vRel / 1.3, 0), 1.4)) * gw;
+  const chestTwist = (0.06 + (0.12 - 0.06) * run) * Math.min(Math.max(kWalk, 0), 1.2) * Math.cos(TAU * uL) * (1 - 0.5 * r.old);
   o.waistTwist = -pelvisYaw;
   o.chestTwist = chestTwist;
   o.headYawCorr = -chestTwist;
   o.headPitch = (-0.3 * (rootY - (p.hStand - p.bob * 0.5 - r.hip.y)) - 0.02 * run) * gw;
   // arms: opposite to the legs, slightly lagging, more forward than back; elbows bend in front
   const kidK = r.c > 0.4 ? 1.15 : 1;
-  const A = mix((0.17 + 0.12 * Math.min(vRel, 2)) * kidK * (1 - 0.55 * r.old), 0.5, run) * clamp(kWalk * 1.2, 0, 1);
+  const A = (((0.17 + 0.12 * Math.min(vRel, 2)) * kidK * (1 - 0.55 * r.old)) * (1 - run) + 0.5 * run) * Math.min(Math.max(kWalk * 1.2, 0), 1);
   const fL = -Math.cos(TAU * (uL - 0.05));
   const fR = -fL;
-  const bias = mix(0.05, 0.12, run) * gw;
+  const bias = (0.05 + (0.12 - 0.05) * run) * gw;
   o.shFlexL = bias + A * fL;
   o.shFlexR = bias + A * fR;
   const eBase = mix(0.24 + 0.15 * r.old, 1.45, run * gw);
-  const eSw = mix(0.4 * clamp(A / 0.33, 0, 1.2), 0.25, run);
+  const eSw = ((0.4 * Math.min(Math.max(A / 0.33, 0), 1.2)) * (1 - run) + 0.25 * run);
   o.elbowL = eBase + eSw * Math.max(0, fL) * (1 - 0.3 * run) - 0.1 * run * fL;
   o.elbowR = eBase + eSw * Math.max(0, fR) * (1 - 0.3 * run) - 0.1 * run * fR;
-  o.shAbdL = mix(0.05, 0.12, run);
+  o.shAbdL = (0.05 + (0.12 - 0.05) * run);
   o.shAbdR = o.shAbdL;
   // cane (right hand): planted with the left foot's stance, swung forward with its swing
   o.caneX = -(r.hip.x * 2.3 + 0.05);

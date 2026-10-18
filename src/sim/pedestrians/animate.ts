@@ -14,7 +14,7 @@ const smooth = (t: number) => t * t * (3 - 2 * t);
 const mix = (a: number, b: number, t: number) => a + (b - a) * t;
 const clamp = (x: number, a: number, b: number) => (x < a ? a : x > b ? b : x);
 const frac = (x: number) => x - Math.floor(x);
-const sstep = (a: number, b: number, x: number) => smooth(clamp((x - a) / (b - a), 0, 1));
+const sstep = (a: number, b: number, x: number) => smooth(Math.min(Math.max((x - a) / (b - a), 0), 1));
 /** cheap hash → [0, 1) */
 const hash = (a: number, b: number) => frac(Math.sin(a * 127.1 + b * 311.7) * 43758.5453);
 
@@ -59,12 +59,12 @@ function reach(r: Rig, a: Arm, left: boolean, px: number, py: number, pz: number
   AIK[4] = py;
   AIK[5] = pz;
   armIKa(r, left, ik);
-  a.flex = mix(a.flex, ik.flex, k);
-  a.abd = mix(a.abd, ik.abd, k);
-  a.twist = mix(a.twist, ik.twist, k);
-  a.elbow = mix(a.elbow, ik.elbow, k);
-  a.wrist = mix(a.wrist, 0, k);
-  a.grip = mix(a.grip, grip, k);
+  a.flex = (a.flex + (ik.flex - a.flex) * k);
+  a.abd = (a.abd + (ik.abd - a.abd) * k);
+  a.twist = (a.twist + (ik.twist - a.twist) * k);
+  a.elbow = (a.elbow + (ik.elbow - a.elbow) * k);
+  a.wrist = (a.wrist + (0 - a.wrist) * k);
+  a.grip = (a.grip + (grip - a.grip) * k);
 }
 
 /** blend an arm towards a figure-frame grip target RT (converted with the current torso pose in o) */
@@ -133,7 +133,7 @@ export function computePoseA(m: Member, umbrella: boolean, r: Rig, o: Pose, gs: 
   const hk = r.stature / r.s / 1.76; // figure size relative to the average man (unscaled)
   const seated = Math.max(m.sit, m.lie, m.ground);
   const upright = 1 - smooth(Math.min(1, seated * 2));
-  const gw = smooth(clamp(a / 0.14, 0, 1));
+  const gw = smooth(Math.min(Math.max(a / 0.14, 0), 1));
   const kSit = smooth(Math.min(1, m.sit));
   const kGround = smooth(Math.min(1, m.ground));
   const kLie = smooth(Math.min(1, m.lie));
@@ -176,18 +176,18 @@ export function computePoseA(m: Member, umbrella: boolean, r: Rig, o: Pose, gs: 
   let headYaw = m.headYaw + G.headYawCorr;
   const headRoll = -0.25 * chestRoll;
   // arms: walking swing from the gait, relaxed (soft elbows, slightly forward) when standing
-  armL.flex = mix(0.08 + 0.06 * old + 0.03 * Math.sin(t * 0.6 + m.seed * 3), G.shFlexL, gw);
-  armR.flex = mix(0.08 + 0.06 * old + 0.03 * Math.sin(t * 0.52 + m.seed * 5), G.shFlexR, gw);
-  armL.elbow = mix(0.3 + 0.15 * old, G.elbowL, gw);
-  armR.elbow = mix(0.3 + 0.15 * old, G.elbowR, gw);
-  armL.abd = mix(0.07, G.shAbdL, gw);
-  armR.abd = mix(0.07, G.shAbdR, gw);
+  armL.flex = ((0.08 + 0.06 * old + 0.03 * Math.sin(t * 0.6 + m.seed * 3)) * (1 - gw) + G.shFlexL * gw);
+  armR.flex = ((0.08 + 0.06 * old + 0.03 * Math.sin(t * 0.52 + m.seed * 5)) * (1 - gw) + G.shFlexR * gw);
+  armL.elbow = ((0.3 + 0.15 * old) * (1 - gw) + G.elbowL * gw);
+  armR.elbow = ((0.3 + 0.15 * old) * (1 - gw) + G.elbowR * gw);
+  armL.abd = (0.07 + (G.shAbdL - 0.07) * gw);
+  armR.abd = (0.07 + (G.shAbdR - 0.07) * gw);
   armL.twist = armR.twist = 0;
   armL.wrist = armR.wrist = 0;
   armL.grip = armR.grip = 0.15;
   let tailFloor = 0;
   const caneX = G.caneX,
-    caneZ = mix(0.2, G.caneZ, gw);
+    caneZ = (0.2 + (G.caneZ - 0.2) * gw);
   let prop: number = PROP.NONE;
 
   const fl = L.flags;
@@ -208,31 +208,31 @@ export function computePoseA(m: Member, umbrella: boolean, r: Rig, o: Pose, gs: 
     LIK[3] = az;
     LIK[4] = 0;
     legIKa(r, leg);
-    hipFlexL = mix(hipFlexL, leg.flex, k);
-    kneeL = mix(kneeL, leg.knee, k);
-    ankleL = mix(ankleL, leg.ankle, k);
+    hipFlexL = (hipFlexL + (leg.flex - hipFlexL) * k);
+    kneeL = (kneeL + (leg.knee - kneeL) * k);
+    ankleL = (ankleL + (leg.ankle - ankleL) * k);
     LIK[3] = az - 0.04;
     legIKa(r, leg);
-    hipFlexR = mix(hipFlexR, leg.flex, k);
-    kneeR = mix(kneeR, leg.knee, k);
-    ankleR = mix(ankleR, leg.ankle, k);
+    hipFlexR = (hipFlexR + (leg.flex - hipFlexR) * k);
+    kneeR = (kneeR + (leg.knee - kneeR) * k);
+    ankleR = (ankleR + (leg.ankle - ankleR) * k);
     const crossed = sv === 3 && r.c < 0.4;
     if (crossed) {
       // right thigh over the left knee
-      hipFlexR = mix(hipFlexR, hipFlexL + 0.32, k);
-      hipAbdR = mix(hipAbdR, -0.32, k);
-      kneeR = mix(kneeR, 1.15, k);
-      ankleR = mix(ankleR, -0.35, k);
+      hipFlexR = (hipFlexR + (hipFlexL + 0.32 - hipFlexR) * k);
+      hipAbdR = (hipAbdR + (-0.32 - hipAbdR) * k);
+      kneeR = (kneeR + (1.15 - kneeR) * k);
+      ankleR = (ankleR + (-0.35 - ankleR) * k);
     } else {
-      hipAbdL = mix(hipAbdL, 0.06, k);
-      hipAbdR = mix(hipAbdR, 0.06, k);
+      hipAbdL = (hipAbdL + (0.06 - hipAbdL) * k);
+      hipAbdR = (hipAbdR + (0.06 - hipAbdR) * k);
     }
     const lean = sv === 1 && !m.reading;
-    waistBend = mix(waistBend, m.reading ? -0.1 : lean ? 0.25 : -0.19, k);
-    chestBend = mix(chestBend, lean ? 0.12 : 0.05 + 0.15 * old, k);
-    headPitch = mix(headPitch, m.reading ? 0.2 : lean ? -0.25 : 0.05, k);
-    rootY = mix(rootY, hipY - r.hip.y, k);
-    rootZ = mix(rootZ, hipZ, k);
+    waistBend = (waistBend + (m.reading ? -0.1 : lean ? 0.25 : -0.19 - waistBend) * k);
+    chestBend = (chestBend + (lean ? 0.12 : 0.05 + 0.15 * old - chestBend) * k);
+    headPitch = (headPitch + (m.reading ? 0.2 : lean ? -0.25 : 0.05 - headPitch) * k);
+    rootY = (rootY + (hipY - r.hip.y - rootY) * k);
+    rootZ = (rootZ + (hipZ - rootZ) * k);
     rootX *= 1 - k;
     pelvisRoll *= 1 - k;
     pelvisYaw *= 1 - k;
@@ -243,17 +243,17 @@ export function computePoseA(m: Member, umbrella: boolean, r: Rig, o: Pose, gs: 
   const hug = hash(m.seed, 4.2) < 0.3;
   if (m.ground > 0) {
     const k = kGround;
-    hipFlexL = mix(hipFlexL, hug ? 1.75 : 1.42, k);
-    hipFlexR = mix(hipFlexR, hug ? 1.8 : 1.15, k);
-    kneeL = mix(kneeL, hug ? 2.2 : 0.35, k);
-    kneeR = mix(kneeR, hug ? 2.25 : 1.3, k);
-    hipAbdL = mix(hipAbdL, 0.12, k);
-    hipAbdR = mix(hipAbdR, 0.12, k);
-    ankleL = mix(ankleL, hug ? 0.35 : -0.45, k);
-    ankleR = mix(ankleR, hug ? 0.35 : 0.2, k);
-    waistBend = mix(waistBend, hug ? 0.18 : -0.3, k);
-    chestBend = mix(chestBend, hug ? 0.15 : 0.05, k);
-    rootY = mix(rootY, 0.1 * hk - r.hip.y, k);
+    hipFlexL = (hipFlexL + (hug ? 1.75 : 1.42 - hipFlexL) * k);
+    hipFlexR = (hipFlexR + (hug ? 1.8 : 1.15 - hipFlexR) * k);
+    kneeL = (kneeL + (hug ? 2.2 : 0.35 - kneeL) * k);
+    kneeR = (kneeR + (hug ? 2.25 : 1.3 - kneeR) * k);
+    hipAbdL = (hipAbdL + (0.12 - hipAbdL) * k);
+    hipAbdR = (hipAbdR + (0.12 - hipAbdR) * k);
+    ankleL = (ankleL + (hug ? 0.35 : -0.45 - ankleL) * k);
+    ankleR = (ankleR + (hug ? 0.35 : 0.2 - ankleR) * k);
+    waistBend = (waistBend + (hug ? 0.18 : -0.3 - waistBend) * k);
+    chestBend = (chestBend + (hug ? 0.15 : 0.05 - chestBend) * k);
+    rootY = (rootY + (0.1 * hk - r.hip.y - rootY) * k);
     rootX *= 1 - k;
     pelvisRoll *= 1 - k;
     pelvisYaw *= 1 - k;
@@ -264,22 +264,22 @@ export function computePoseA(m: Member, umbrella: boolean, r: Rig, o: Pose, gs: 
     const k = kLie;
     bodyPitch = (front ? Math.PI / 2 : -Math.PI / 2) * k;
     const kneeUp = m.lieVariant === 2;
-    hipFlexL = mix(hipFlexL, kneeUp ? 0.95 : 0.0, k);
-    kneeL = mix(kneeL, kneeUp ? 1.7 : 0.05, k);
-    hipFlexR = mix(hipFlexR, -0.02, k);
-    kneeR = mix(kneeR, front ? 0.3 : 0.05, k);
-    ankleL = mix(ankleL, kneeUp ? 0.25 : -0.55, k);
-    ankleR = mix(ankleR, -0.55, k);
-    waistBend = mix(waistBend, front ? -0.08 : 0, k);
-    chestBend = mix(chestBend, 0, k);
-    headPitch = mix(headPitch, front ? -0.35 : -0.15, k);
-    rootY = mix(rootY, (front ? 0.1 : 0.11) * hk - r.hip.y, k);
-    headYaw = mix(headYaw, front ? 1.1 : headYaw * 0.3, k);
+    hipFlexL = (hipFlexL + (kneeUp ? 0.95 : 0.0 - hipFlexL) * k);
+    kneeL = (kneeL + (kneeUp ? 1.7 : 0.05 - kneeL) * k);
+    hipFlexR = (hipFlexR + (-0.02 - hipFlexR) * k);
+    kneeR = (kneeR + (front ? 0.3 : 0.05 - kneeR) * k);
+    ankleL = (ankleL + (kneeUp ? 0.25 : -0.55 - ankleL) * k);
+    ankleR = (ankleR + (-0.55 - ankleR) * k);
+    waistBend = (waistBend + (front ? -0.08 : 0 - waistBend) * k);
+    chestBend = (chestBend + (0 - chestBend) * k);
+    headPitch = (headPitch + (front ? -0.35 : -0.15 - headPitch) * k);
+    rootY = (rootY + ((front ? 0.1 : 0.11) * hk - r.hip.y - rootY) * k);
+    headYaw = (headYaw + (front ? 1.1 : headYaw * 0.3 - headYaw) * k);
     pelvisRoll *= 1 - k;
     pelvisYaw *= 1 - k;
     rootX *= 1 - k;
-    hipAbdL = mix(hipAbdL, 0.06, k);
-    hipAbdR = mix(hipAbdR, 0.06, k);
+    hipAbdL = (hipAbdL + (0.06 - hipAbdL) * k);
+    hipAbdR = (hipAbdR + (0.06 - hipAbdR) * k);
   }
   if (seated > 0) {
     waistTwist *= upright;
@@ -388,7 +388,7 @@ export function computePoseA(m: Member, umbrella: boolean, r: Rig, o: Pose, gs: 
           RT[2] = 0.25 * hk + belly * 0.5;
           RT[3] = k;
           reach(r, armR, false, -1, -1, -0.2, 0.6);
-          headPitch = mix(headPitch, 0.42, k);
+          headPitch = (headPitch + (0.42 - headPitch) * k);
           if (k > 0.4) prop = PROP.PHONE;
           if (handL && hash(m.seed, 2.2) < 0.4) {
             RT[0] = 0.01 * hk;
@@ -587,10 +587,10 @@ export function computePoseA(m: Member, umbrella: boolean, r: Rig, o: Pose, gs: 
     } else {
       for (let ai = 0; ai < 2; ai++) {
         const arm = ai === 0 ? armL : armR;
-        arm.flex = mix(arm.flex, -0.04, k);
-        arm.elbow = mix(arm.elbow, 0.1, k);
-        arm.abd = mix(arm.abd, 0.16, k);
-        arm.twist = mix(arm.twist, 0, k);
+        arm.flex = (arm.flex + (-0.04 - arm.flex) * k);
+        arm.elbow = (arm.elbow + (0.1 - arm.elbow) * k);
+        arm.abd = (arm.abd + (0.16 - arm.abd) * k);
+        arm.twist = (arm.twist + (0 - arm.twist) * k);
       }
     }
   }
