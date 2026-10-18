@@ -687,7 +687,7 @@ function birch(s: GeoSink, w: Wind, t: TreeSpec, rng: Rng): number {
   const twig = col('#6b625a');
   w.at(x, y, z, 1 / 10, 1.3, 0);
   const opts: CanopyOpts = { leaf, noise: 0.12, lo: 0.8, hi: 1.1, aoLo: 0.55, warm: 0.3, clump: 0.32, tone: 0.55 };
-  lobedCanopy(s, tx, cy, tz, lobes, t.far ? 1 : 2, rng.int(0, 1e9), opts);
+  lobedCanopy(s, tx, cy, tz, lobes, t.far || t.detail <= 1 ? 1 : 2, rng.int(0, 1e9), opts);
   const sseed = rng.int(0, 1e9);
   if (!t.far && t.detail >= 2) {
     sats.forEach((c, i) => {
@@ -829,7 +829,7 @@ const TIP = new THREE.Color('#8fbf5a');
  */
 function conifer(s: GeoSink, w: Wind, t: TreeSpec, rng: Rng): number {
   const { x, y, z, h, r } = t;
-  const kind: ConiferKind = rng.weighted<ConiferKind>(['spruce', 'fir', 'pine'], [5, 3.2, t.detail <= 1 ? 1.3 : 0.6]);
+  const kind: ConiferKind = rng.weighted<ConiferKind>(['spruce', 'fir', 'pine'], [5, 3.2, t.detail <= 1 ? 0.9 : 0.6]);
   if (kind === 'pine') return pine(s, w, t, rng);
   const forest = t.detail <= 1;
   const y0 = y + (t.clear ?? h * rng.range(0.05, 0.11));
@@ -840,7 +840,7 @@ function conifer(s: GeoSink, w: Wind, t: TreeSpec, rng: Rng): number {
   const fir = kind === 'fir';
   const extra = rng.chance(0.3) ? 1 : 0;
   const tiers = forest ? Math.max(3, (h > 10 ? 4 : 3) + extra - (fir ? 1 : 0)) : (h > 9.5 ? 5 : h > 6.5 ? 4 : 3) + extra - (fir ? 1 : 0);
-  const tips = t.far ? 5 : forest ? 5 : 7;
+  const tips = t.far ? 4 : forest ? 5 : 6;
   const S = tips * 2;
   const top = y + h;
   const span = top - y0;
@@ -924,8 +924,8 @@ function conifer(s: GeoSink, w: Wind, t: TreeSpec, rng: Rng): number {
       s.tri(apex, sh0 + k1, sh0 + k);
       s.quad(sh0 + k, sh0 + k1, rm0 + k1, rm0 + k);
     }
-    if (!forest && !t.far) {
-      // shallow dark underside (visible from low views): rim copies with downward normals → trunk
+    if (!forest && !t.far && i === 0) {
+      // shallow dark underside of the lowest skirt (visible from low views): rim copies with downward normals → trunk
       const ub = s.vcount;
       s.colorObj(leaf, 0.5);
       leafAttr(s, 0.3, tone, 0.6, clump);
@@ -975,7 +975,7 @@ function pine(s: GeoSink, w: Wind, t: TreeSpec, rng: Rng): number {
   const leaf = pickLeaf(rng, LEAF.pine, 0.06, t.tone ?? 0.5).clone();
   const R = r * 1.15;
   // pads: the top one centred, the others on limbs to the sides, lower ones larger
-  const n = forest || t.far ? 3 : 4;
+  const n = forest ? 2 : t.far ? 3 : 4;
   const a0 = rng.range(0, 6.28);
   const pads: { x: number; y: number; z: number; rad: number }[] = [];
   for (let i = 0; i < 4; i++) {

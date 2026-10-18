@@ -680,7 +680,7 @@ void dogPose(inout vec3 p, inout vec3 n) {
   }
   if (!(leg && !rear) && sit > 0.001) {
     vec3 sp = o + vec3(0.0, 0.3, 0.13) * size;
-    mat3 r = pedRX(-0.5 * sit);
+    mat3 r = pedRX(-0.75 * sit); // haunches down to ~7 cm, hind paws flat just behind the front paws
     p = r * (p - sp) + sp; n = r * n;
   }
   p.y += size * 0.012 * iDog.y * abs(cos(iDog.x));

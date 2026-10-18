@@ -506,7 +506,7 @@ void bhWall(inout vec3 albedo, inout float rough, inout float metal, inout vec3 
       float dinX = smoothstep(dwr.x - 0.1, dwr.x + 0.06, dpm.x) * (1.0 - smoothstep(dwr.y - 0.06, dwr.y + 0.1, dpm.x));
       float drs = dinX * (1.0 - smoothstep(0.0, 0.5 + 2.2 * sn * sn, ddS)) * smoothstep(0.1, 0.8, sn);
       bool inWin = abs(dpm.x - (dwr.x + dwr.y) * 0.5) < (dwr.y - dwr.x) * 0.5 && abs(dpm.y - (dwr.z + dwr.w) * 0.5) < (dwr.w - dwr.z) * 0.5;
-      albedo *= mix(vec3(1.0), dirtTint, clamp(drs, 0.0, 1.0) * 0.8 * wStr);
+      albedo *= mix(vec3(1.0), dirtTint, clamp(drs, 0.0, 1.0) * 0.7 * wStr);
       if (inWin && !curtain) albedo = vec3(0.2, 0.3, 0.5);
     }
     return;
@@ -547,7 +547,7 @@ void bhWall(inout vec3 albedo, inout float rough, inout float metal, inout vec3 
       float ends = (1.0 - smoothstep(0.0, ew, abs(pm.x - wr.x - 0.05))) + (1.0 - smoothstep(0.0, ew, abs(pm.x - wr.y + 0.05)));
       ends *= 0.09 / ew;
       float rs = inX * run * smoothstep(0.1, 0.8, sn) + ends * (1.0 - smoothstep(0.0, 1.3 + 1.8 * sn, dS));
-      albedo *= mix(vec3(1.0), dirtTint, clamp(rs, 0.0, 1.0) * 0.8 * wStr);
+      albedo *= mix(vec3(1.0), dirtTint, clamp(rs, 0.0, 1.0) * 0.7 * wStr);
     }
     emit += albedo * crown * vec3(0.55, 0.62, 0.75);
     if (detail >= 0.999) return;

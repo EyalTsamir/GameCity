@@ -474,8 +474,9 @@ function buildNeckHead(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
           reg = REG.LIPS;
         }
         // eye sockets / brows (soft darkening, never dots)
-        if (ri === 4 && front > 0.5 && k !== 0) tint = 0.66;
-        if (ri === 5 && front > 0.5 && k !== 0) tint = 0.86;
+        if (ri === 4 && front > 0.5 && k !== 0) tint = 0.56;
+        if (ri === 4 && k === 0) tint = 0.9;
+        if (ri === 5 && front > 0.5 && k !== 0) tint = 0.82;
         // ears: low flat bumps at the sides
         if ((ri === 3 || ri === 4) && Math.abs(Math.sin(phi)) > 0.9) {
           p[0] += Math.sign(Math.sin(phi)) * 0.008 * (d.H / 1.76);
@@ -683,7 +684,7 @@ function buildLeg(b: MeshBuilder, d: Dims, cfg: LodCfg, side: 1 | -1): void {
     f1 = fr[cfg.foot[cfg.foot.length - 1]];
   const heel = b.v(ft(f0.cx * side, (f0.y0 + f0.y1) / 2 - 0.004, f0.z - 0.008 * (d.H / 1.76)), 0.3, 0);
   capFan(b, rings[0], heel, ft(f0.cx * side, (f0.y0 + f0.y1) / 2, f0.z + 0.03));
-  const toe = b.v(ft(f1.cx * side, (f1.y0 + f1.y1) / 2 + 0.001, f1.z + 0.01 * (d.H / 1.76)), 0.3, 0);
+  const toe = b.v(ft(f1.cx * side, (f1.y0 + f1.y1) / 2 + 0.001, f1.z + 0.006 * (d.H / 1.76)), 0.3, 0);
   capFan(b, rings[rings.length - 1], toe, ft(f1.cx * side, (f1.y0 + f1.y1) / 2, f1.z - 0.03));
 }
 
@@ -693,13 +694,13 @@ function buildLeg(b: MeshBuilder, d: Dims, cfg: LodCfg, side: 1 | -1): void {
 function hairlineU(phi: number): number {
   const a = Math.abs(Math.atan2(Math.sin(phi), Math.cos(phi))); // 0 front … π back
   const pts: [number, number][] = [
-    [0, 0.8],
-    [0.6, 0.74],
-    [1.1, 0.62],
-    [1.45, 0.52],
-    [1.75, 0.5],
-    [2.2, 0.36],
-    [Math.PI, 0.27],
+    [0, 0.77],
+    [0.6, 0.715],
+    [1.1, 0.6],
+    [1.45, 0.5],
+    [1.75, 0.47],
+    [2.2, 0.34],
+    [Math.PI, 0.26],
   ];
   for (let i = 0; i < pts.length - 1; i++) {
     if (a <= pts[i + 1][0]) {
@@ -715,7 +716,7 @@ function buildHair(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
   const chin = d.headRings[0].y - 0.006;
   const crown = d.crown;
   const hk = d.H / 1.76;
-  const vol = 0.011 * Math.max(0.8, hk) * (cfg.details ? 1 : 1.35);
+  const vol = 0.0135 * Math.max(0.8, hk) * (cfg.details ? 1 : 1.3);
   // cap: rings from the hairline (s = 0) to the crown (s = 1); thickness tapers to the edge
   const rings: Ring[] = [];
   for (const s of cfg.hairCap) {
@@ -820,6 +821,16 @@ function buildHair(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
     // lo / tiny: a bun block only
     b.use(BONE.HEAD, REG.HAIR, FB.BUN, 0.95);
     blob(b, [0, d.headRings[5].y + 0.02 * hk, d.headRings[5].cz - d.headRings[5].b - 0.025 * hk], [0.04 * hk, 0.038 * hk, 0.036 * hk], cfg === LODS[1] ? 5 : 4, cfg === LODS[1] ? 3 : 2);
+    if (cfg === LODS[1]) {
+      // lo: a coarse beard shell (jaw + chin), so beards do not pop off at the LOD0 → lo switch
+      b.use(BONE.HEAD, REG.BEARD, FB.BEARD, 1);
+      const phis = [-1.75, -0.9, 0, 0.9, 1.75];
+      const ys = [d.headRings[0].y - 0.004 * hk, d.headRings[2].y - 0.004 * hk];
+      const rows = ys.map((y, ri) => phis.map((phi) => b.v(headSurface(d, phi, ri === 1 && Math.abs(phi) < 0.5 ? y - 0.02 * hk : y, 0.008 * hk), 2, ri === 0 ? 0.1 : 0)));
+      for (let k = 0; k < phis.length - 1; k++) b.quadOut(rows[0][k], rows[0][k + 1], rows[1][k + 1], rows[1][k], [0, ys[0], -0.01]);
+      const under = b.v([0, d.headRings[0].y - 0.012 * hk, d.headRings[0].cz + 0.01 * hk], 2, 0.15);
+      for (let k = 0; k < phis.length - 1; k++) b.triOut(rows[0][k], rows[0][k + 1], under, [0, ys[1], -0.01]);
+    }
     return;
   }
   // ponytail (3 rings hanging down the back of the head)
@@ -941,12 +952,12 @@ function buildHat(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
     for (let k = 0; k < n; k++) {
       const phi = (k / n) * Math.PI * 2;
       const y = rimY + (crown - rimY) * Math.pow(s, 0.8);
-      ids.push(b.v(headSurface(d, phi, Math.min(y, crown - 0.003), 0.013 * hk * hatK), 2, 0, s, phi));
+      ids.push(b.v(headSurface(d, phi, Math.min(y, crown - 0.003), 0.0145 * hk * hatK), 2, 0, s, phi));
     }
     rings.push({ ids, c: [0, rimY, -0.01 * hk] });
   }
   bridge(b, rings);
-  const apex = b.v([0, crown + 0.013 * hk * hatK, d.headRings[d.headRings.length - 1].cz - 0.004], 2, 0, 1, 0);
+  const apex = b.v([0, crown + 0.0145 * hk * hatK, d.headRings[d.headRings.length - 1].cz - 0.004], 2, 0, 1, 0);
   capFan(b, rings[rings.length - 1], apex, [0, rimY, 0]);
   if (pin) return;
   // brim (both faces): inner ring on the hat band, outer ring pushed out by the shader
@@ -1020,7 +1031,7 @@ function buildTail(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
       else if (u === -0.5) p = torsoPoint({ ...hipR, hw: hipR.hw + 0.012, f: hipR.f + 0.012, b: hipR.b + 0.012 }, 0, phi);
       else {
         // parametric rings: shape of the hips + the outer thighs; the shader sets y and the flare
-        const r = { ...crotch, hw: hipR.hw + 0.016, f: hipR.f + 0.016, b: hipR.b + 0.012 };
+        const r = { ...crotch, hw: hipR.hw + 0.018, f: hipR.f + 0.03, b: hipR.b + 0.016 };
         p = torsoPoint(r, 0, phi);
         p[1] = hipR.y;
       }
@@ -1195,7 +1206,9 @@ function buildProps(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
         for (let k = 0; k < n; k++) {
           const phi = (k / n) * Math.PI * 2 + Math.PI / n;
           const x = 0.135 * hk * shrink * se(Math.sin(phi), 3.2);
-          const z = back - 0.06 * hk + 0.055 * hk * shrink * se(Math.cos(phi), 3.2);
+          // the lower part leans in onto the lumbar curve (no gap behind the back)
+          const fwd = dy < 0 ? (-dy / 0.18) * 0.02 * hk : 0;
+          const z = back - 0.06 * hk + fwd + 0.055 * hk * shrink * se(Math.cos(phi), 3.2);
           ids.push(b.v([x, r7.y + dy * hk - 0.02 * hk, z], 0, 0));
         }
         rings.push({ ids, c: [0, r7.y + dy * hk, back - 0.06 * hk] });

@@ -473,7 +473,7 @@ function baseStyle(): Style {
     hood: false,
     tail: 0,
     tailHem: 0.5,
-    tailFlare: 0.06,
+    tailFlare: 0.035,
     sole: 0,
     bootTop: 0,
     neckTop: 0.95,
@@ -555,7 +555,7 @@ function dressUp(L: Look, r: Rng, persona: Persona, ageClass: string, warm: bool
         s.tail = 3;
         s.jacketHem = 0.0;
         s.tailHem = r.range(0.48, 0.6);
-        s.tailFlare = r.range(0.03, 0.06);
+        s.tailFlare = r.range(0.015, 0.04);
         s.collar = 2;
       } else {
         s.jacketHem = r.range(0.12, 0.2);
@@ -577,7 +577,7 @@ function dressUp(L: Look, r: Rng, persona: Persona, ageClass: string, warm: bool
     s.tail = dress ? 2 : 1;
     if (dress) L.bottom = L.top;
     s.tailHem = old ? r.range(0.25, 0.38) : r.chance(0.2) ? r.range(0.18, 0.3) : r.range(0.42, 0.62);
-    s.tailFlare = r.range(0.03, 0.11);
+    s.tailFlare = r.range(0.015, 0.06);
     s.trouserEnd = 1.2;
     s.legwear = fl & F.TIGHTS ? (r.chance(0.7) ? 1 : 2) : 0;
     if (!warm && !old && r.chance(0.3)) s.bootTop = r.range(0.3, 0.42);

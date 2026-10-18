@@ -58,6 +58,16 @@ material not integrated yet (`lamps/integrate.ts`, never double-applies) · `?la
   went negative / ramped slowly in harness runs (main.ts realDt; lead fixed). Map verified:
   shots/night/dbg_wb.png (westbrook, warm pools on all streets).
 * vehicles + trains: `patchLampMaterial()` one-liners (approved by lead).
+* ~22:30: it2/it3 (shots/night/it2, it3): westbrook/park/oldtown/beach/stadium/overview/station/street
+  views judged good; full city 0 console errors, 138–158 draw calls. Tuning done: tall street poles
+  widen (radius ≥ 0.95·pole), reach 2×radius; stadium spots cross-aimed past centre, cone 0.46,
+  intensity 0.9, near-side visor + softened 1/(d²+(reach/4)²) + luminance knee 3, `shield` flag
+  (roofs high up near the head get ≤15 %); flood lamp-bank halos ×0.55 size; harbour masts 0.9–0.95,
+  crane spots 1.1. Rail platform pools retired (rail.ts, approved).
+* Perf A/B (SwiftShader, downtown 21.5 h, 1280×720, one run): new 560 ms vs legacy 455 ms per frame
+  (second pair; first pair 923 vs 871 = warm-up). → added early-outs before the 2nd fetch (no light /
+  surface > head + 2.5 m). Rerun pending.
+* 2026-10-18 ~00:xx: resumed after the usage-limit stop (container restarted, checkpoint 01b96a3).
 
 ## Next
 1. Harbour: integrate thLampLight in harbor/material.ts; register harbour pools; crane work lights as

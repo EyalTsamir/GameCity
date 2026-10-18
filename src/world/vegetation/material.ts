@@ -84,6 +84,7 @@ uniform float uThScale;
 uniform float uThCrease;
 uniform float uThFine;
 uniform float uThCheap;
+uniform float uThFx;
 float thWrap;
 ${LAMP_GLSL}
 vec3 thHash( vec3 p ) {
@@ -166,8 +167,8 @@ void thCell8( vec3 p, out vec3 d, out float edge, out float id ) {
 const LEAF_FRAG_NORMAL = /* glsl */ `
 float thAmt = vThLeaf.z;
 float thAO = vThLeaf.x;
-thWrap = uThWrap * thAmt;
-if ( thAmt > 0.02 ) {
+thWrap = uThWrap * thAmt * uThFx;
+if ( thAmt > 0.02 && uThFx > 0.5 ) {
   float cs = ( 0.1 + vThLeaf.w * 1.5 ) * uThScale;
   // aLeaf.y packs the relief model (≥ 0.5 → billowed needles/clipped leaves, else clump cells) and the tone amplitude
   float billow = uThModel > 1.5 ? 0.0 : uThModel > 0.5 ? 1.0 : step( 0.5, vThLeaf.y );
@@ -211,7 +212,7 @@ if ( thAmt > 0.02 ) {
     gv -= dot( gv, normal ) * normal;
     normal = normalize( normal - gv * uThBump );
   }
-} else if ( vThLeaf.w > 0.01 ) {
+} else if ( vThLeaf.w > 0.01 && uThFx > 0.5 ) {
   // bark painted in-shader (faded to its mean by the pixel footprint): birch dashes / furrows
   float foot = length( fwidth( vThRest ) );
   if ( vThLeaf.w > 0.5 ) {
@@ -229,7 +230,7 @@ if ( thAmt > 0.02 ) {
 
 const LEAF_FRAG_TRANS = /* glsl */ `
 #if NUM_DIR_LIGHTS > 0
-if ( thAmt > 0.02 && uThTrans > 0.0 ) {
+if ( thAmt > 0.02 && uThTrans > 0.0 && uThFx > 0.5 ) {
   vec3 tL = directionalLights[ 0 ].direction;
   float back = saturate( dot( -geometryViewDir, tL ) );
   back *= back;
@@ -244,10 +245,12 @@ if ( thAmt > 0.02 && uThTrans > 0.0 ) {
 `;
 
 const LEAF_FRAG_AO = /* glsl */ `
-reflectedLight.indirectDiffuse *= thAO;
-reflectedLight.directDiffuse *= mix( 1.0, thAO, 0.35 );
-reflectedLight.indirectSpecular *= mix( thAO, 0.3 * thAO, thAmt );
-reflectedLight.directSpecular *= mix( 1.0, 0.55, thAmt );
+if ( uThFx > 0.5 ) {
+  reflectedLight.indirectDiffuse *= thAO;
+  reflectedLight.directDiffuse *= mix( 1.0, thAO, 0.35 );
+  reflectedLight.indirectSpecular *= mix( thAO, 0.3 * thAO, thAmt );
+  reflectedLight.directSpecular *= mix( 1.0, 0.55, thAmt );
+}
 if ( uLampGain > 0.001 ) {
   vec3 thWN = normalize( ( vec4( normal, 0.0 ) * viewMatrix ).xyz );
   vec3 lamp = thLampLight( vThRest, thWN );
@@ -273,6 +276,8 @@ export interface FoliageKnobs {
   fine: { value: number };
   /** 1 = cheaper 2x2x2 clump search (medium / low quality) */
   cheap: { value: number };
+  /** 0 = plain shading (runtime A/B of the whole foliage shading, for cost measurement) */
+  fx: { value: number };
 }
 
 /** shared tuning uniforms (one object drives every foliage material) */
@@ -286,6 +291,7 @@ export const foliageKnobs: FoliageKnobs = {
   crease: { value: 0.2 },
   fine: { value: 0.35 },
   cheap: { value: 0 },
+  fx: { value: 1 },
 };
 
 let physPars: string | null = null;
@@ -320,7 +326,7 @@ function injectWind(shader: THREE.WebGLProgramParametersWithUniforms, u: GlobalU
 
 function injectFoliage(shader: THREE.WebGLProgramParametersWithUniforms, u: GlobalUniforms): void {
   injectWind(shader, u, LEAF_VERT_PARS, LEAF_VERT_MAIN);
-  Object.assign(shader.uniforms, lampUniforms(), { uThBump: foliageKnobs.bump, uThTrans: foliageKnobs.trans, uThWrap: foliageKnobs.wrap, uThTone: foliageKnobs.tone, uThModel: foliageKnobs.model, uThScale: foliageKnobs.scale, uThCrease: foliageKnobs.crease, uThFine: foliageKnobs.fine, uThCheap: foliageKnobs.cheap });
+  Object.assign(shader.uniforms, lampUniforms(), { uThBump: foliageKnobs.bump, uThTrans: foliageKnobs.trans, uThWrap: foliageKnobs.wrap, uThTone: foliageKnobs.tone, uThModel: foliageKnobs.model, uThScale: foliageKnobs.scale, uThCrease: foliageKnobs.crease, uThFine: foliageKnobs.fine, uThCheap: foliageKnobs.cheap, uThFx: foliageKnobs.fx });
   shader.fragmentShader = shader.fragmentShader
     .replace('#include <common>', `#include <common>\n${LEAF_FRAG_PARS}`)
     .replace('#include <lights_physical_pars_fragment>', wrappedPhysicalPars())

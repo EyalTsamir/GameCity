@@ -127,6 +127,7 @@ export default function create(ctx: CityContext): CityModule {
   const fx = ctx.debug.params.get('vegfx') !== '0';
   // clump search: full 3x3x3 on high, 2x2x2 on medium/low (?vegcells=8|27 forces one)
   const cellsParam = ctx.debug.params.get('vegcells');
+  let qLevel = '';
   if (ctx.debug.params.get('vegclump') === 'billow') foliageKnobs.model.value = 1;
 
   // ── obstacles for anything planted
@@ -538,14 +539,16 @@ export default function create(ctx: CityContext): CityModule {
       if (bad) continue;
       if (turbines.some((t) => Math.hypot(t.x - x, t.z - z) < 4.5)) continue;
       const crest = smooth(4, 15, h0);
-      // rim of the forest the city looks at — the low fringe, or the top of a cliff / cut dropping away
-      // to the south: more broadleaf, birch and young trees, finer crowns, undergrowth
-      const drop = h0 - Math.min(H(x, z + 5), H(x, z + 9));
-      const edge = legacy ? 0 : Math.max(1 - smooth(1.2, 4.5, h0), smooth(1.5, 4, drop));
+      // rim of the forest the city looks at — the low fringe, or the first row above a cut / cliff
+      // (a steep step within 6 m to the south): more broadleaf, birch and young trees, finer crowns,
+      // undergrowth. (~20 % of the forest; a plain slope does not count)
+      let step = 0;
+      for (const d of [2, 4, 6]) step = Math.max(step, H(x, z + d - 2) - H(x, z + d));
+      const edge = legacy ? 0 : Math.max(1 - smooth(1.2, 4.5, h0), smooth(1.5, 2.5, step));
       // patches: conifer-dominated stands vs. broadleaf stands (low-frequency noise), more conifers up high
       const stand = Math.sin(x * 0.043 + 0.7) * Math.sin(z * 0.11 + 2.1) + 0.5 * Math.sin(x * 0.11 - z * 0.07);
       const conP = Math.min(0.9, Math.max(0.12, 0.38 + 0.3 * crest + 0.32 * stand - 0.3 * edge));
-      const sp: Species = rng.chance(conP) ? 'conifer' : rng.weighted<Species>(['round', 'birch', 'autumn', 'column'], [12, 1.4 + 4 * edge, 1.2, 0.5]);
+      const sp: Species = rng.chance(conP) ? 'conifer' : rng.weighted<Species>(['round', 'birch', 'autumn', 'column'], [12, 1.4 + 1.6 * edge, 1.2 + 0.6 * edge, 0.5]);
       const young = !legacy && hash01(x * 3.1, z * 1.9, 41) < 0.12 + 0.3 * edge;
       const sz = sp === 'conifer' ? size('conifer', rng, rng.chance(0.25 + crest * 0.4) ? 2 : young ? 0 : 1) : size(sp, rng, rng.chance(0.5) ? 2 : young ? 0 : 1);
       // stand tone: dark spruce stands vs lighter mixed groves, plus per-tree jitter
@@ -753,7 +756,7 @@ export default function create(ctx: CityContext): CityModule {
   {
     const rng = ctx.rng('veg-forest-under');
     for (const t of forestEdge) {
-      const n = rng.chance(0.55) ? 1 : 2;
+      const n = rng.chance(0.6) ? 1 : 0;
       for (let i = 0; i < n; i++) {
         const a = rng.range(0, 6.28),
           d = t.r * rng.range(0.85, 1.35);
@@ -1013,7 +1016,11 @@ export default function create(ctx: CityContext): CityModule {
   return {
     name: 'vegetation',
     frame() {
-      foliageKnobs.cheap.value = cellsParam === '8' ? 1 : cellsParam === '27' ? 0 : ctx.quality.level === 'high' ? 0 : 1;
+      if (ctx.quality.level !== qLevel) {
+        // (only on quality changes, so the knob stays editable at runtime)
+        qLevel = ctx.quality.level;
+        foliageKnobs.cheap.value = cellsParam === '8' ? 1 : cellsParam === '27' ? 0 : qLevel === 'high' ? 0 : 1;
+      }
       near = lod.near();
       farMesh.visible = !near;
       culler.update();

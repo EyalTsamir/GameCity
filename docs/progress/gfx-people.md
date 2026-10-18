@@ -58,6 +58,11 @@ routes, speeds, avoidance and `invariants()` are untouched.
 * Vertices / triangles per level (`measure.ts`): LOD0 1346 / 2203 (778 always posed, rest feature-gated:
   hidden features exit after one test), lo 474 / 770 (290 always), tiny 261 / 400 (161), pin 109 / 144 (74).
   Typical posed vertices per figure: LOD0 ≈ 900, lo ≈ 330, tiny ≈ 185, pin ≈ 80. Old: 1778 / 801 / 241.
+* LOD census (renderer `write()` at 1920×1025, noon population 442, `city_new/report_night.json`) — vertices
+  main pass + shadow pass, today vs the reviewer's census of the old figures:
+  square 20 m 17/30/29 (LOD0/lo/tiny) 44.7 k + 19.3 k (old 49 k + 49 k) · plaza 16 m 8/55/106: 64.5 k + 26.9 k
+  (old 98 k + 98 k) · street 40 m 24.6 k + 14.4 k (old 48 k + 48 k) · beach 45 m 25.1 k + 13.8 k (old 66 k + 66 k)
+  · old-town POI 54.5 k + 27.7 k · park POI 44.7 k + 30.3 k · overview 442 pins 48.2 k, no shadow (old 98 k).
 * Draw calls: 4 figure levels + 1 shadow proxy + pram + dog + blob (old: 3 levels + pram + dog + blob, each
   level also in the shadow pass).
 * Gait acceptance (`gaitfk.ts`, node FK of the real pose code, 2026-10-17 late): walking 0.6–1.6 m/s for man /
@@ -97,8 +102,14 @@ routes, speeds, avoidance and `invariants()` are untouched.
 - [x] P5 poses — idle variants, bench variants, pram IK, cane, wave, reading, sand, lying.
 - [x] P6 shading + polish — lamp light, value ramp, wrap/sheen, blob, LOD hysteresis + 0.4 s dithered
       cross-fade (complementary Bayer cells; skipped on camera jumps, `renderer.xfade` off for tools), dog upgrade.
-- [ ] GPU verification (lab + city, day/night), city invariants, SwiftShader perf A/B — queued behind the
-      shared browser lock (2026-10-17 22:20, run files in the scratchpad `people_run{1,2}.json`).
+- [x] GPU verification round 1 (2026-10-17 23:00): shaders compile, console clean, full-city invariants empty
+      after a 4× run, pickers 25/25, LOD census (below). Evidence: `shots/people/lab1/` (lab), `lineup/` (reviewer
+      lineup re-shot), `city_new/` vs `city_legacy/` (same crowd, `?legacypeople`).
+- [ ] Visual iteration round 2 (2026-10-18): fixes from round 1 — stale foot plants after a member is moved
+      (teleport / far-plant snap), lampshade skirts (flare halved, front drapes over the forward thigh, seated hem
+      follows the thighs), shadow proxy shrunk 1 cm (jagged self-shadow bands on hems), lower hairline + fuller
+      hair, crotch ring raised, rounder shoe toes, tucked shoulder caps, coarse beard at lo, stronger eye band,
+      backpack against the lumbar curve, dog sits on its haunches. Runs: `lab2/`, `lineup2/`, `city2/`.
 
 ## Open issues / next
 * Visual verification in the browser (shader compile never yet run on a GPU / SwiftShader).

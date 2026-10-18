@@ -107,9 +107,9 @@ export function genHouse(g: Gen): void {
   const roomL = doorX - 0.95 - F.x0;
   const wingRight = roomR >= roomL;
   const wingW = Math.min(4.4, Math.max(roomR, roomL));
-  const garW = THREE.MathUtils.clamp(F.x1 - F.x0 - 5.0, 3.0, 3.6);
+  const garW = THREE.MathUtils.clamp(F.x1 - F.x0 - 4.8, 2.9, 3.6);
   const garOk =
-    drive !== undefined && F.x1 - F.x0 - garW >= 4.5 && (drive === RIGHT ? doorX + 0.8 <= F.x1 - garW : doorX - 0.8 >= F.x0 + garW);
+    drive !== undefined && F.x1 - F.x0 - garW >= 4.3 && (drive === RIGHT ? doorX + 0.75 <= F.x1 - garW : doorX - 0.75 >= F.x0 + garW);
   const plans: Plan[] = ['classic', 'veranda', 'lplan', 'garage', 'bay'];
   const weights = floors === 2 ? [0.15, 0.2, 0.24, 0.22, 0.19] : [0.14, 0.24, 0.2, 0.3, 0.12];
   if (wingW < 3.2) weights[2] = 0;
@@ -535,7 +535,9 @@ export function genHouse(g: Gen): void {
   // ─────────────────────────────────────────── roof furniture ──
   const frontSlope = (roofKind === 'gableX' || roofKind === 'gambrel' || roofKind === 'halfhip' || roofKind === 'hip') && ridgeAlongX;
   // dormers (mostly on single-storey houses with a front slope; sometimes on two-storey ones)
+  let dormers = false;
   if (frontSlope && plan !== 'lplan' && rise > 2.3 && rng.chance(floors === 1 ? 0.7 : 0.2)) {
+    dormers = true;
     const kindD = rng.int(0, 2);
     const zc = (M.z0 + M.z1) / 2;
     const slope = roofKind === 'gambrel' ? GAMB_P : pitch;
@@ -549,7 +551,7 @@ export function genHouse(g: Gen): void {
       for (const x of xs) gableDormer(x, zFront, yBase, slope, kindD === 2);
     }
   }
-  if (frontSlope && roofKind !== 'gambrel' && rng.chance(0.2)) solar(eave, rise);
+  if (frontSlope && !dormers && roofKind !== 'gambrel' && rng.chance(0.2)) solar(eave, rise);
   // chimney: on the ridge near one end, or at a gable end
   {
     const ch = col(rng.pick(['#9a5a45', '#8a4f3e', '#a0a0a0', '#b5a48e']));

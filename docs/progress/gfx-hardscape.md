@@ -62,6 +62,14 @@ Audit items: 7 (empty / faint hardscape), garden half of 9 (bare back gardens), 
 - perf (SwiftShader, westbrook 11 h): run was useless (same variant 816 vs 1051 ms; machine load ~10). Reliable:
   draw calls 142 → 144 with scatter+gardens (props-casters + its shadow pass), triangles +120 k in that view
   (before the trims; includes the casters' shadow pass). To redo in a quieter window.
+- it6 (after the usage-limit restart, files intact): asphalt patchwork + crack lines now read at street-view
+  distance (wbN "-160,0,40,60,-30,45" is the best asphalt showcase, day and night under the lamp map); pools at
+  night = dark water + coping, a few with an underwater lamp; patio tables got candle lanterns (warm dots).
+  Fixed: greenhouse glass glowed at night (props-glass emission now gated to the bluish shelter panes);
+  planters on downtown/midtown band-grid crossings; more kiosk seating.
+- Final verification set: shots/hardscape/final (chunks A-D, ≤ 15 min lock each), before = shots/baseline
+  (POIs) + shots/hardscape/before (+ before2 for wbN), sheets → shots/hardscape/sheets (script in the
+  scratchpad: sheets.sh).
 - Note: the lead's view "0,0,-65,60,30,45" is blocked by a tower at this angle; plaza 40 is best seen from
   "-28,0,-24,40,15,45".
 

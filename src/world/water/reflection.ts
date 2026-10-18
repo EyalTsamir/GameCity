@@ -46,6 +46,9 @@ const BASE: RegExp[] = [
  * water): the far-LOD tree mesh is forced on for the pass (near tree chunks forced off)
  */
 const TREES_FAR = 'veg-trees-far';
+/** camera distance (m, orbit distance) beyond which SMALL meshes and the bank trees are skipped */
+const FAR_VIEW = 330;
+const SMALL = /^boats-small$/;
 /** emitter meshes skipped by day (their modules may keep them visible with zero intensity) */
 const NIGHT_ONLY = /-(glows|lights)$/;
 const TREES_NEAR = /^veg-trees-(w|e)$/;
@@ -66,6 +69,7 @@ export class PlanarReflection {
   private busy = false;
   private base: THREE.Object3D[] = [];
   private night: THREE.Object3D[] = [];
+  private small: THREE.Object3D[] = [];
   private treesFar: THREE.Object3D | null = null;
   private treesNear: THREE.Object3D[] = [];
   private attached = false;
@@ -139,6 +143,7 @@ export class PlanarReflection {
         o.layers.enable(LAYERS.REFLECT);
         this.base.push(o);
         if (NIGHT_ONLY.test(o.name)) this.night.push(o);
+        if (SMALL.test(o.name)) this.small.push(o);
         return;
       }
       if (o.name === TREES_FAR) {
@@ -259,7 +264,10 @@ export class PlanarReflection {
     const full = this.level === 2;
     this.pm.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
     this.frustum.setFromProjectionMatrix(this.pm);
-    const trees = full && this.frustum.intersectsBox(RIVER_BOX);
+    // far views (overview): small boats and bank trees mirror to a few pixels — skip them
+    const camSvc = this.ctx.services.camera;
+    const far = (camSvc ? camSvc.getState().distance : this.camPos.y * 1.6) > FAR_VIEW;
+    const trees = full && !far && this.frustum.intersectsBox(RIVER_BOX);
     if (this.treesFar) {
       vs[n++] = this.treesFar.visible;
       this.treesFar.visible = trees;
@@ -272,6 +280,10 @@ export class PlanarReflection {
     for (const o of this.night) {
       vs[n++] = o.visible;
       o.visible = !day && o.visible;
+    }
+    for (const o of this.small) {
+      vs[n++] = o.visible;
+      o.visible = !far && o.visible;
     }
 
     // ?refldbg: draw one opted-in mesh at a time (cycling every 6 passes) with console markers,
@@ -307,6 +319,7 @@ export class PlanarReflection {
       if (this.treesFar) this.treesFar.visible = vs[n++];
       for (const o of this.treesNear) o.visible = vs[n++];
       for (const o of this.night) o.visible = vs[n++];
+      for (const o of this.small) o.visible = vs[n++];
       if (dbgHidden) for (const o of this.dbgList) o.visible = vs[n++];
       scene.background = prevBg;
       scene.matrixWorldAutoUpdate = prevMWAU;

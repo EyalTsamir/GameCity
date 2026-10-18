@@ -322,8 +322,8 @@ export function greenhouse(k: Kit, g: Kit, rng: Rng, w: number, d: number): void
   }
   k.m('#c43b2f', 'plastic');
   for (let i = 0; i < 4; i++) sh.box(rng.range(-w / 2 + 0.3, w / 2 - 0.3), 0.75, rng.range(-d / 2 + 0.3, d / 2 - 0.3), 0.07, 0.07, 0.07, 0);
-  // glass
-  g.m('#dfeeee', 'glass');
+  // glass (neutral-greenish tint: not lit at night like the bus-shelter panes)
+  g.m('#e6ece2', 'glass');
   gs.box(0, 0.24 + (H - 0.24) / 2, 0, w - 0.02, H - 0.24, d - 0.02, 3);
   for (const sx of [-1, 1]) gs.push().local((sx * w) / 4, (H + R) / 2, 0, 0, 0, -sx * pitch).box(0, 0, 0, Math.hypot(w / 2, R - H), 0.01, d, 0).pop();
   const s = g.s;

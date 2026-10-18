@@ -332,9 +332,20 @@ export function planScatter(inp: ScatterInputs): ScatterItem[] {
           [0.0, -3.4],
         ]) {
           if (seats >= 5) break;
-          if (put(Z, 'cafe', k.x + fx * fwd + fz * lat, k.z + fz * fwd - fx * lat, k.yaw + (rnd() - 0.5) * 0.6, 0.25)) seats++;
+          if (put(Z, 'cafe', k.x + fx * fwd + fz * lat, k.z + fz * fwd - fx * lat, k.yaw + (rnd() - 0.5) * 0.6, 0.12)) seats++;
         }
       }
+    }
+    // planters on some band-grid crossings (downtown / midtown plazas with a band grid)
+    if (blk?.kind === 'downtown' || blk?.kind === 'midtown') {
+      const P = blk.kind === 'downtown' ? 7.5 : 6.0;
+      const cx = (r.x0 + r.x1) / 2,
+        cz = (r.z0 + r.z1) / 2;
+      for (let gx = cx - Math.floor((cx - r.x0) / P) * P; gx < r.x1; gx += P)
+        for (let gz = cz - Math.floor((cz - r.z0) / P) * P; gz < r.z1; gz += P) {
+          if (rnd() < 0.45) continue;
+          put(Z, rnd() < 0.5 ? 'planter' : 'planterRound', gx, gz, 0, 0.5);
+        }
     }
     if (area > 300 && (blk?.kind === 'downtown' || blk?.kind === 'midtown')) {
       // public art, well away from any existing statue / fountain

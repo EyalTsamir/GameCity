@@ -65,8 +65,12 @@ daytime windows), house massing half of 9, far-field night windows of 2, lamp-li
   The mask showed weathering far too weak (mix toward the dirt tint halves every weight; squared streak channel
   has a low mean) → weights roughly doubled, streak channels linearised (sqrt).
 * [x] House plan / roof weights rebalanced (garage plans 2 → more, gambrel weight 0.3 for single-storey gables).
-* [ ] M3 iteration 3 (shots/buildings/it3, re-run after the 23:10 usage stop): per-plan house close-ups (hA–hD),
-  facade weathering re-check with the stronger weights.
+* [x] M3 iteration 3 (shots/buildings/it3): variant close-ups hB/hC/hD (garage wing + two-tone + dormer +
+  solar; L-plan with porch; veranda + dormers; hip bungalow with door hood; full-width verandas) all read well at
+  11 h and 18.2 h; weathering now visible at POI distance (rain streaks under the hotel windows, darker bases, top
+  wash). Fixes: no solar panels on slopes that carry dormers; rain streaks 0.8→0.7; garage wing feasibility relaxed
+  (garage 2.9–3.6 m, main body ≥ 4.3 m). Tri cost: shell 3816→3962, trim 139.4k→140.4k, lights 5424→5496, meshes 15.
+* [ ] M4 full-city night (shots/buildings/full21): lamp light on facades, night glow, towers.
 * [ ] tuning passes (glass, weathering strength, roofs, night far field), house validation (`?validate`, invariants)
 * [ ] re-tune under stage's new lighting
 * [ ] B6 full before/after sheets + perf A/B

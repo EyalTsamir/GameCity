@@ -62,8 +62,9 @@ export function glassMaterial(u: GlobalUniforms): THREE.MeshStandardMaterial {
     shader.uniforms.uLights = u.uLights;
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', '#include <common>\nuniform float uLights;')
-      .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n  totalEmissiveRadiance += vec3(1.0, 0.86, 0.62) * 0.06 * uLights;');
+      // lit shelter glass only (bluish panes); greenhouse glass (neutral / greenish tint) stays dark at night
+      .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n  totalEmissiveRadiance += vec3(1.0, 0.86, 0.62) * 0.06 * uLights * step(0.05, vColor.b - vColor.r);');
   };
-  mat.customProgramCacheKey = () => 'props-glass-1';
+  mat.customProgramCacheKey = () => 'props-glass-2';
   return mat;
 }

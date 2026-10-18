@@ -78,6 +78,9 @@ export interface GaitState {
   stepTo: StandFoot;
   /** last solved foot targets (body frame) — seed for mode changes */
   last: [LegPlan, LegPlan];
+  /** root position of the last frame (teleport detection) */
+  lastX: number;
+  lastZ: number;
 }
 
 const hyp2 = (a: number, b: number) => Math.sqrt(a * a + b * b);
@@ -101,7 +104,7 @@ function copyPlan(o: LegPlan, a: LegPlan): void {
 export function newGaitState(): GaitState {
   const f = (): FootPlant => ({ wx: 0, wz: 0, wyaw: 0, sx: 0, sz: 0, sy: 0, stw: 0, stance: false, valid: false });
   const s = (): StandFoot => ({ wx: 0, wz: 0, wyaw: 0 });
-  return { feet: [f(), f()], lastPhase: 0, frame: -10, lastT: 0, lastYaw: 0, yawRate: 0, standing: false, sp: [s(), s()], stepFoot: -1, stepT: 0, stepFrom: s(), stepTo: s(), last: [newPlan(), newPlan()] };
+  return { feet: [f(), f()], lastPhase: 0, frame: -10, lastT: 0, lastYaw: 0, yawRate: 0, standing: false, sp: [s(), s()], stepFoot: -1, stepT: 0, stepFrom: s(), stepTo: s(), last: [newPlan(), newPlan()], lastX: 0.5, lastZ: 0.5 };
 }
 
 /** values the gait writes (the caller blends upper-body values with its own pose) */
@@ -455,6 +458,22 @@ function homeX(r: Rig, left: boolean): number {
 /** stand targets: both feet planted; settle / re-step one foot at a time */
 function planStand(r: Rig, st: GaitState, dt: number, pelvisYaw: number): void {
   const hk = r.legLen / r.s / 0.93;
+  // a planted foot far from where it belongs (figure placed or moved while standing) is put back at
+  // once — re-stepping needs time, and that stalls while the simulation is paused
+  for (let i = 0; i < 2; i++) {
+    const left = i === 0;
+    const f = st.sp[i];
+    toBody(f.wx, f.wz, tmpB);
+    const dx = tmpB.x - homeX(r, left),
+      dz = tmpB.z;
+    if (dx * dx + dz * dz > 0.36 * hk * hk) {
+      toWorld(homeX(r, left), (left ? 0.02 : -0.02) * hk, tmpW);
+      f.wx = tmpW.wx;
+      f.wz = tmpW.wz;
+      f.wyaw = YAW;
+      if (st.stepFoot === i) st.stepFoot = -1;
+    }
+  }
   if (st.stepFoot >= 0) {
     st.stepT += dt / 0.36;
     if (st.stepT >= 1) {
@@ -556,7 +575,10 @@ export function gaitPose(m: Member, r: Rig, st: GaitState | null, frame: number,
   } else if (state) state.yawRate = 0;
   let fresh = true;
   if (state) {
-    fresh = frame - state.frame > 1;
+    // not drawn last frame, or moved further than any walk can in one frame (placed / teleported)
+    const jx = m.x - state.lastX,
+      jz = m.z - state.lastZ;
+    fresh = frame - state.frame > 1 || jx * jx + jz * jz > 2.25;
     const jump = Math.abs(m.phase - state.lastPhase) / TAU;
     if (fresh) {
       state.feet[0].valid = state.feet[1].valid = false;
@@ -776,6 +798,8 @@ export function gaitPose(m: Member, r: Rig, st: GaitState | null, frame: number,
       copyPlan(state.last[i], L);
     }
     state.lastPhase = m.phase;
+    state.lastX = m.x;
+    state.lastZ = m.z;
     state.frame = frame;
     state.lastT = t;
     state.lastYaw = m.yaw;

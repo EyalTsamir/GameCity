@@ -353,8 +353,11 @@ function buildMask(ctx: CityContext, feet: readonly CliffFoot[], legacy: boolean
   const tg = T.g;
   tg.fillStyle = 'rgb(128,128,128)';
   tg.fillRect(0, 0, W, Hh);
+  const trng = ctx.rng('terrain-lawn-tone');
   const stripes = (r: { x0: number; z0: number; x1: number; z1: number }, w: number, amp: number, alongX?: boolean) => {
     const ax = alongX ?? r.x1 - r.x0 >= r.z1 - r.z0;
+    // every lawn its own freshness (a patchwork that reads from far away)
+    const off = Math.round((trng.next() - 0.5) * 28);
     tg.save();
     tg.beginPath();
     tg.rect(X(r.x0), Z(r.z0), X(r.x1) - X(r.x0), Z(r.z1) - Z(r.z0));
@@ -363,17 +366,17 @@ function buildMask(ctx: CityContext, feet: readonly CliffFoot[], legacy: boolean
       hi = ax ? r.z1 : r.x1;
     let k = 0;
     for (let v = lo; v < hi; v += w, k++) {
-      const c = 128 + (k % 2 === 0 ? amp : -amp);
+      const c = 128 + off + (k % 2 === 0 ? amp : -amp);
       tg.fillStyle = `rgb(${c},${c},${c})`;
       if (ax) tg.fillRect(X(r.x0), Z(v), X(r.x1) - X(r.x0), w * sx);
       else tg.fillRect(X(v), Z(r.z0), w * sx, Z(r.z1) - Z(r.z0));
     }
     tg.restore();
   };
-  for (const b of plan.blocks) if (b.kind === 'park') stripes(b.rect, 3.4, 38, true);
+  for (const b of plan.blocks) if (b.kind === 'park') stripes(b.rect, 3.4, 50, true);
   for (const a of plan.areas) {
-    if (a.kind === 'lawn' || a.kind === 'courtyard') stripes(a.rect, a.rect.x1 - a.rect.x0 > 60 || a.rect.z1 - a.rect.z0 > 60 ? 3.6 : 2.6, 34);
-    else if (a.kind === 'garden') stripes(a.rect, 1.6, 20, a.rect.x1 - a.rect.x0 < a.rect.z1 - a.rect.z0);
+    if (a.kind === 'lawn' || a.kind === 'courtyard') stripes(a.rect, a.rect.x1 - a.rect.x0 > 60 || a.rect.z1 - a.rect.z0 > 60 ? 3.6 : 2.6, 44);
+    else if (a.kind === 'garden') stripes(a.rect, 1.6, 26, a.rect.x1 - a.rect.x0 < a.rect.z1 - a.rect.z0);
   }
   const E = mk();
   const eg = E.g;
@@ -413,7 +416,7 @@ function buildMask(ctx: CityContext, feet: readonly CliffFoot[], legacy: boolean
   const ti = tg.getImageData(0, 0, W, Hh).data;
   const ei = E2.g.getImageData(0, 0, W, Hh).data;
   const d = img.data;
-  for (let i = 0; i < d.length; i += 4) d[i + 3] = Math.max(0, Math.min(255, ti[i] - ei[i] * 0.42));
+  for (let i = 0; i < d.length; i += 4) d[i + 3] = Math.max(0, Math.min(255, ti[i] - ei[i] * 0.5));
   const tex = new THREE.DataTexture(new Uint8Array(d.buffer, d.byteOffset, d.byteLength), W, Hh, THREE.RGBAFormat, THREE.UnsignedByteType);
   tex.flipY = false; // row 0 = north edge (v = 0)
   tex.colorSpace = THREE.NoColorSpace;
@@ -591,9 +594,9 @@ vec3 groundColor() {
   grass = mix(grass, gClover, clover * 0.62);
   grass = mix(grass, vec3(0.93, 0.95, 0.88), clover * smoothstep(0.8, 0.9, nC.b) * 0.5); // white heads (fade with mips)
   grass *= 0.93 + 0.14 * nC.r;
-  float stripe = clamp(tone, -0.32, 0.32);
-  float edge = clamp(-tone - 0.33, 0.0, 1.0);
-  grass *= 1.0 + stripe * 0.44 * kept;
+  float stripe = clamp(tone, -0.5, 0.5);
+  float edge = clamp(-tone - 0.52, 0.0, 1.0);
+  grass *= 1.0 + stripe * 0.4 * kept;
   grass *= vec3(1.0 + stripe * 0.12 * kept, 1.0, 1.0 - stripe * 0.1 * kept);   // light stripes a touch yellower
   grass = mix(grass, grass * vec3(0.78, 0.86, 0.9), edge * (0.55 + 0.45 * kept));
 

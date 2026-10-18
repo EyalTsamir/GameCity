@@ -281,26 +281,28 @@ void pedPose(inout vec3 p, inout vec3 n) {
   if (bone == ${B.TAIL}) {
     float u = aux.x;
     vec3 hip = pedPiv(${PIV.HIP});
+    vec2 rad0 = normalize(p.xz - vec2(0.0, -0.01) + vec2(1e-5));
+    // thighs (and shins for long hems) carry the skirt: the sides follow their own thigh, the front
+    // drapes over the forward thigh and the back over the rear one; seated, the hem follows fully
+    bool seated = P_tailFloor > 0.0;
     if (u > -0.25) {
       float hemY = pedP8(iC1.z) * hip.y;
       p.y = p.y - u * max(0.0, p.y - hemY);
-      vec2 rad = p.xz - vec2(0.0, -0.01);
-      p.xz += normalize(rad + vec2(1e-5)) * u * float(iC2.w & 255u) * 0.001;
+      p.xz += rad0 * u * float(iC2.w & 255u) * (seated ? 0.0003 : 0.001);
     }
-    // thighs (and shins for long hems) carry the skirt: blend by side and depth
-    float k = u < -0.75 ? 0.0 : (u < -0.25 ? 0.15 : 0.25 + 0.5 * u);
+    float k = u < -0.75 ? 0.0 : (u < -0.25 ? 0.15 : 0.25 + (seated ? 0.75 : 0.5) * u);
     float side = aux.y;
-    float wl = k * clamp(0.5 + 0.75 * side, 0.0, 1.0);
-    float wr = k * clamp(0.5 - 0.75 * side, 0.0, 1.0);
     vec3 pl = p, pr = p, nl = n, nr = n;
     float z0 = 0.0;
     vec3 kl = pedPivS(${PIV.KNEE}, true), kr = pedPivS(${PIV.KNEE}, false);
     if (p.y < kl.y) { pedJoint(pl, nl, pedRX(P_kneeL), kl, z0); z0 = 0.0; pedJoint(pr, nr, pedRX(P_kneeR), kr, z0); z0 = 0.0; }
     pedJoint(pl, nl, pedHipR(true), pedPivS(${PIV.HIP}, true), z0); z0 = 0.0;
     pedJoint(pr, nr, pedHipR(false), pedPivS(${PIV.HIP}, false), z0);
-    p += wl * (pl - p) + wr * (pr - p);
-    n = normalize(n + wl * (nl - n) + wr * (nr - n));
-    if (P_tailFloor > 0.0) p.y = max(p.y, P_tailFloor);
+    float ext = smoothstep(-0.015, 0.015, (pl.z - pr.z) * (rad0.y < 0.0 ? -1.0 : 1.0));
+    float wL = mix(clamp(0.5 + 0.75 * side, 0.0, 1.0), ext, (1.0 - abs(side)) * smoothstep(0.1, 0.5, abs(rad0.y)));
+    p = mix(p, mix(pr, pl, wL), k);
+    n = normalize(mix(n, mix(nr, nl, wL), k));
+    if (seated) p.y = max(p.y, P_tailFloor);
     bone = ${B.PELVIS};
   }
 
@@ -571,7 +573,9 @@ function injectVertex(src: string, normals: boolean): string {
       .replace('#include <beginnormal_vertex>', 'vec3 objectNormal = vec3( normal );\n  vec3 pedP = vec3( position );\n  pedPose( pedP, objectNormal );')
       .replace('#include <begin_vertex>', 'vec3 transformed = pedP;');
   } else {
-    s = s.replace('#include <begin_vertex>', 'vec3 transformed = vec3( position );\n  vec3 pedN = vec3( 0.0, 1.0, 0.0 );\n  pedPose( transformed, pedN );');
+    // depth (shadow proxy): shrunk 1 cm along the normal so the coarse proxy never pokes out of the
+    // detailed figure it shadows (jagged self-shadow bands on skirts and sleeves)
+    s = s.replace('#include <begin_vertex>', 'vec3 transformed = vec3( position );\n  vec3 pedN = vec3( normal );\n  pedPose( transformed, pedN );\n  transformed -= pedN * 0.01 * P_scale;');
   }
   return s;
 }
