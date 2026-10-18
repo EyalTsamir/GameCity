@@ -804,7 +804,7 @@ void bhRoof(inout vec3 albedo, inout float rough, inout vec3 emit, vec3 N, vec3 
     vec2 dcl = floor(p / 8.0 + so.yx);
     vec2 dp = (fract(p / 8.0 + so.yx) - 0.5) * 8.0 - (vec2(bhHash12(dcl), bhHash12(dcl + 3.1)) - 0.5) * 3.6;
     float drr = length(dp);
-    float fw = max(fp.x, fp.y);
+    float fw = max(max(fp.x, fp.y), 1e-3);
     float hasD = step(0.45, bhHash12(dcl + 7.0));
     float mouth = (1.0 - smoothstep(0.13 - fw, 0.13 + fw, drr)) * hasD;
     float wet = (1.0 - smoothstep(0.25, 1.7, drr)) * hasD;

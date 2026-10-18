@@ -70,7 +70,13 @@ daytime windows), house massing half of 9, far-field night windows of 2, lamp-li
   11 h and 18.2 h; weathering now visible at POI distance (rain streaks under the hotel windows, darker bases, top
   wash). Fixes: no solar panels on slopes that carry dormers; rain streaks 0.8→0.7; garage wing feasibility relaxed
   (garage 2.9–3.6 m, main body ≥ 4.3 m). Tri cost: shell 3816→3962, trim 139.4k→140.4k, lights 5424→5496, meshes 15.
-* [ ] M4 full-city night (shots/buildings/full21): lamp light on facades, night glow, towers.
+* [~] M4 full-city night (shots/buildings/full21, 1600×900, all modules): big step up — lamp light washes the
+  hotel / shop fronts warm (B5 works with the night agent's baked map), districts glow from the overview, tower
+  crowns lit, westbrook windows warm. Draw calls 132–167, 1.6–1.9 M tris (full city).
+  OPEN: (a) lit house windows show fine dark speckles (also in the subset run → buildings path or postfx
+  interaction) — diagnosing with no-postfx / no-AO shots (shots/buildings/speck); (b) one frame (house 21.5) had a
+  black rectangle (NaN-style bloom/DOF blackout) — checking whether it comes from the shell.
+  Octagon tower crown wash slightly strong → to trim.
 * [ ] tuning passes (glass, weathering strength, roofs, night far field), house validation (`?validate`, invariants)
 * [ ] re-tune under stage's new lighting
 * [ ] B6 full before/after sheets + perf A/B

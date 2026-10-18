@@ -82,6 +82,26 @@ opted-in mesh at a time, console markers — for attributing driver warnings).
   base11/18/21 (5174, same views), full-city stats (`shots/water/stats_full.json`, scratchpad/wstats.mjs),
   perf harbour/overview A/B, medium-quality + wakes.
 
+* 2026-10-18 ~00:10 — chain1 completed before the usage stop: `shots/water/it5` (mine, module subset,
+  8 views × 3 h), `shots/water/base` (5174, harbor/shipw/river2/pier/bay × 3 h, same size/subset),
+  perf + stats. Before/after sheets: `shots/water/sheets_it5/ba_{harbor,shipw,river2,pier,bay,overview,beach,
+  riverside}.png` (overview/beach/riverside "before" = the original full-city shots/baseline frames, "after"
+  = module subset without roads/props → those three are only indicative; full-city finals pending).
+* ~03:10 — reflection numbers, full city, 1280×720, level 2 (427×240 target), `shots/water/stats_full2.json`
+  (day / night, draw calls + triangles of the pass): harbour 7/129k · 14/138k, overview 8/157k · 15/169k,
+  beach 10/209k · 17/220k, riverside 6/143k · 12/154k, shipw 8/155k · 15/166k, river2 4/101k · 12/114k,
+  pier 6/97k · 13/108k, bay 8/129k · 15/140k. Then (after the lead's budget steer) far views (orbit
+  distance > 330 m: overview) skip small boats + bank trees, bank trees only while the camera target is
+  within 45 m of the river (beach no longer pays 45k for a glimpse of the river mouth) → re-measure pending.
+* SwiftShader perf A/B (perf.mjs, one run each, full city 1280×720, noon): harbour 314.7 ms (refl on) vs
+  287.4 ms (?nowaterrefl) = +9.5 %; overview 573 vs 713 ms (noise-dominated, inverted) → inconclusive.
+* ~03:20 polish: night sea lifted to a deep readable indigo (mirrors the night horizon, not the black zenith);
+  turquoise shallows keep their colour (F × 0.62 over the sandy shelf); moon glitter on the river softened;
+  scratchpad scripts renamed `water_*` (the scratchpad is shared — another agent overwrote my sheets.sh).
+* Mesh survey of the current tree (night): the opted-in names still exist (buildings-shell/-lights,
+  harbor-*, landmarks-lights/-glows, terrain-masonry (now 38k tris), terrain-glows, props-glows,
+  boats-*, veg-trees-far 45k). No new emitter meshes from other agents to opt in.
+
 ## Open issues / notes
 * Depends (read-only) on the sky dome's uniform names: uZenith, uHorizon, uGlow, uGlowI, uSunCol, uSunVis,
   uMoonDir, uMoonVis, uOvercast (mesh name `sky-dome`). Missing → fixed day colours.

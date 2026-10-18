@@ -68,6 +68,16 @@ material not integrated yet (`lamps/integrate.ts`, never double-applies) · `?la
   (second pair; first pair 923 vs 871 = warm-up). → added early-outs before the 2nd fetch (no light /
   surface > head + 2.5 m). Rerun pending.
 * 2026-10-18 ~00:xx: resumed after the usage-limit stop (container restarted, checkpoint 01b96a3).
+  it4 (shots/night/it4): stadium roofs 192→141–148 sRGB (no clipping; pitch ~180–195 = bright island),
+  station platform lit by registered rail lights (no discs), street level good, 0 console errors.
+* Perf A/B after early-outs (SwiftShader, 1280×720, 21.5 h, alternating pairs, ms/frame):
+  downtown new 636 / 523 vs legacy 573 / 608; overview new 410 / 375 vs legacy 423 / 509 → no
+  measurable difference (noise ±15 %). Draw calls identical (145 / 167): no mesh added or removed
+  (pools were vertices in existing glow meshes; masts merged into harbor-north).
+* Dusk (shots/night/dusk_sheet.png, oldtown from 19.18 h at 4×): lights + lamp light fade in together
+  with uLights, no popping. Frames 1–2 show black bloom blocks (NaN somewhere) while the lamp gain is
+  still 0 — being checked with/without ?legacylamps (shots/night/nan/).
+* 2026-10-18 10:15: resumed after the second stop (checkpoint b929af3).
 
 ## Next
 1. Harbour: integrate thLampLight in harbor/material.ts; register harbour pools; crane work lights as
