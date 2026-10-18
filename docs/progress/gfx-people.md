@@ -6,9 +6,23 @@ Files: `src/sim/pedestrians/{figure,render,looks}.ts` + new `rig.ts`, `body.ts`,
 stats) and `crowd.ts` (2 lines: stride formula → `gaitCycle()`, phase-settle only for legacy). Movement,
 routes, speeds, avoidance and `invariants()` are untouched.
 
-## Resume here (updated 2026-10-18 16:35)
-* DONE. All milestones verified; final report below ("## Final report"). Nothing running. If resumed: nothing
-  to do unless the reviewer / lead asks for changes.
+## Resume here (updated 2026-10-18 fix round start)
+* FIX ROUND from the re-review (`docs/progress/people-review.md` "## Re-review (2026-10-18)"), in order:
+  1. corners (gait.ts): end steps early on fast heading change / cap trailing-leg stretch (hip ext ≤ ~−22°);
+     targets drag ≤ ~3 cm normal turns, ≤ ~6 cm sudden 90° corners, no split strides; prove with
+     `tools/gaitfk.ts` + `tools/cornerfk.ts` and a 20–30 m city capture of kerb-corner turners (new vs before).
+     Baseline before the fix: cornerfk rail 90° 4.15 / 2.56 cm, bevel 18.8, hard 90° 34.7, 45° 9.4, hip −40°.
+  2. per-frame garbage (animate/gait/pose): < 100 B per figure-frame, measured with `tools/bench.ts` +
+     `--trace-gc` (scavenge count × semispace) — baseline ≈ 2.1 KB.
+  3. trousers looser (not tights) + rounder shoe toes, NO new vertices (shader.ts / body.ts); lab lineup ~10 m.
+* Status item 1: tried a travel-heading frame for the feet (feet follow the root's actual motion direction, body
+  keeps the lagging yaw) → WORSE (rail corner 9.3 cm, standing turn 5 cm: the law jumps with every rail segment
+  snap) — reverted (backup of the pre-fix gait.ts in the scratchpad `people_gait_prefix.ts`). Next try: phase
+  advance under corner stress (end the step early) + plant heading anticipating the turn.
+  Now implementing instead: a smoothed gait root — GaitState.sx/sz follows the root by integrating the frame's
+  displacement along the crowd's smoothed velocity direction (m.vx/vz, aligned with the lagging yaw) plus a
+  6/s pull back to the true root; gait (BX/BZ) and the drawn figure (render.ts R[0..2], blob, pram, dog) use it;
+  snaps to the root if > 1 m off. Test harnesses must emulate m.vx/vz (crowd rate 8/s).
 
 ## Toggles
 * `?legacypeople` — original figures + original stride formula (frozen copies in `pedestrians/legacy/`).

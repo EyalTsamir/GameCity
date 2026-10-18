@@ -14,11 +14,16 @@ aircraft routes in `src/sim/ambient/vehicles.ts`.
 * VERIFIED: night agent's repro (time=19.18&speed=4, oldtown, 6 shots, +nanviz) → shots/stage/nan/dusk_1..6.png:
   clean, 0 magenta, no blocks (not reproduced; intermittent). nanhunt.mjs (per-frame readback) too slow under
   SwiftShader (5 frames / 30 s) — abandoned.
-* RUNNING: overview sweep 18.8 h → night at speed 8, 20 shots + nanviz → shots/stage/nan/sweep_<n>.png
-  (cmd: shot.mjs --q "nointro&noidle&adaptive=0&quality=high&time=18.8&speed=8&nanviz" --view overview --shots 20
-  --interval 1500 --hideui --out shots/stage/nan/sweep.png). Scan for magenta (r,b>200, g<80).
-* Next: (1) evaluate sweep; report to lead (culprit if magenta found, else: guards in place + ?nanviz for others);
-  (2) after3 re-captures: for h in 6.5 16.5 18.2: stage-cap.mjs --url :5173 --out shots/stage/after3 --views
+* DONE: overview sweep 18.8 h → night (speed 8, 20 shots, nanviz; shots/stage/nan/sweep_<n>.png): 0 magenta (no
+  NaN), no big blocks. FOUND (water module, reported to lead): (1) from ~19.4 h a ~30 m dark square in the harbour
+  water near world (178, −98) with the lighthouse reflection inside — gone with ?nowaterrefl → planar-reflection
+  coverage artefact (sweep_8..20); (2) with ?nowaterrefl (= reflection level 0, also medium/low preset and my
+  ladder's refl-off step) the harbour water at 20 h renders beige + rainbow blotches (shots/stage/nan/refl_off_20.png).
+* Reported to lead 22:40 (guards, no NaN repro, water bugs). Stadium roof: 0 clipped px in night frames → OK.
+* RUNNING (22:42): after3 re-captures 18.2 → 6.5 → 16.5 (bash loop, logs shots/stage/after3_<h>.log, reports
+  shots/stage/after3/report_<h>.json).
+* Next: (1) check after3 frames are not black (mean luminance), merge into after_final, rebuild sheets;
+  (2) after3 re-captures (if missing): for h in 6.5 16.5 18.2: stage-cap.mjs --url :5173 --out shots/stage/after3 --views
   "overview;downtown;harbor;park;oldtown;westbrook;beach;low=-5,0,-15,450,120,14;edge=0,0,-20,700,210,10"
   --hours $h → check not black → after_final = after + after3 → ba_sheets.sh; (3) final report in log + to lead.
 * Perf variants for lead (consolidated A/B): `;legacylight;notable` (same build; legacylight = whole stage work

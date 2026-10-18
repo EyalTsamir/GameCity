@@ -35,7 +35,13 @@ Per-module logs live next to this file: `docs/progress/<module>.md`.
     the fix round anyway (quality bar + project rule): people `a1dd73a4100e0d9b6` resumed for (1) corner
     gait drag/split strides (visible at 15–30 m), (2) 2 KB/figure-frame garbage → < 100 B, (3) trousers +
     rounder shoe toes without new vertices. Reports under "### Fix round (re-review)".
-  - Still working: stage (NaN black blocks + recaptures); people (fix round).
+  - 23:00 stage NaN hunt: source not reproduced; NaN/Inf guards at bloom luminance, tilt-shift prefilter and
+    merged-pass input (+ ?nanviz debug). Found 2 water bugs → water `ab69acb77de46c492` resumed (priority):
+    (1) reflection level 0 (?nowaterrefl = medium/low preset + adaptive refl-off) renders beige/rainbow
+    garbage (shots/stage/nan/refl_off_20.png); (2) dark ~30 m square near (178,−98) from 19.4 h with
+    reflections on (sweep_14.png); (3, secondary) flat lilac dusk sea at overview.
+    QA must re-check: quality=medium/low water, runtime reflection-quality switches.
+  - Still working: stage (re-captures + report); people (fix round); water (fix round).
 * Safety nets (user request: never lose state, never trade quality for speed):
   - watchdog scheduled task `trig_01SEZGVfPdGEXrjuBsEYFnkw` (hourly at :06 UTC since 22:06, fires into this
     session even with the user's computer off): resumes agents cut off by the usage limit / restarts.

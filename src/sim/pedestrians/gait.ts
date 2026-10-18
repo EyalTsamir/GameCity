@@ -81,6 +81,10 @@ export interface GaitState {
   /** root position of the last frame (teleport detection) */
   lastX: number;
   lastZ: number;
+  /** smoothed gait root (world): the crowd's root turns route corners with heading snaps; the feet and the
+   *  drawn figure follow this C1 path instead (≤ ~10 cm off the root at the sharpest corners) */
+  sx: number;
+  sz: number;
 }
 
 const hyp2 = (a: number, b: number) => Math.sqrt(a * a + b * b);
@@ -104,7 +108,7 @@ function copyPlan(o: LegPlan, a: LegPlan): void {
 export function newGaitState(): GaitState {
   const f = (): FootPlant => ({ wx: 0, wz: 0, wyaw: 0, sx: 0, sz: 0, sy: 0, stw: 0, stance: false, valid: false });
   const s = (): StandFoot => ({ wx: 0, wz: 0, wyaw: 0 });
-  return { feet: [f(), f()], lastPhase: 0, frame: -10, lastT: 0, lastYaw: 0, yawRate: 0, standing: false, sp: [s(), s()], stepFoot: -1, stepT: 0, stepFrom: s(), stepTo: s(), last: [newPlan(), newPlan()], lastX: 0.5, lastZ: 0.5 };
+  return { feet: [f(), f()], lastPhase: 0, frame: -10, lastT: 0, lastYaw: 0, yawRate: 0, standing: false, sp: [s(), s()], stepFoot: -1, stepT: 0, stepFrom: s(), stepTo: s(), last: [newPlan(), newPlan()], lastX: 0.5, lastZ: 0.5, sx: 0.5, sz: 0.5 };
 }
 
 /** values the gait writes (the caller blends upper-body values with its own pose) */
@@ -557,22 +561,8 @@ export function gaitPose(m: Member, r: Rig, st: GaitState | null, frame: number,
   const v = m.speed;
   const pram = !!m.look.pram;
   const p = params(r, v, pram);
-  BX = m.x;
-  BZ = m.z;
-  YAW = m.yaw;
-  CY = Math.cos(m.yaw);
-  SY = Math.sin(m.yaw);
-  SC = r.s;
-  const uL = frac(m.phase / TAU);
-  const uR = frac(uL + 0.5);
   const state = st;
   const dt = state ? clamp(t - state.lastT, 0, 0.1) : 0;
-  KAPPA = 0;
-  if (state && frame - state.frame <= 1 && dt > 1e-4) {
-    const w = wrapA(m.yaw - state.lastYaw) / dt;
-    state.yawRate += (w - state.yawRate) * Math.min(1, dt * 6);
-    KAPPA = clamp(state.yawRate / Math.max(0.35, v), -1.6, 1.6) * SC;
-  } else if (state) state.yawRate = 0;
   let fresh = true;
   if (state) {
     // not drawn last frame, or moved further than any walk can in one frame (placed / teleported)
@@ -585,7 +575,41 @@ export function gaitPose(m: Member, r: Rig, st: GaitState | null, frame: number,
       state.standing = false;
       state.stepFoot = -1;
     } else if (jump > 0.3) state.feet[0].valid = state.feet[1].valid = false;
+    // smoothed gait root: this frame's displacement taken along the crowd's smoothed velocity (which turns
+    // with the body's yaw), then pulled back towards the true root — on straight walks it is the root
+    const ox = m.x - state.sx,
+      oz = m.z - state.sz;
+    if (fresh || ox * ox + oz * oz > 1) {
+      state.sx = m.x;
+      state.sz = m.z;
+    } else {
+      const dx = m.x - state.lastX,
+        dz = m.z - state.lastZ;
+      const d = Math.sqrt(dx * dx + dz * dz);
+      const vl = Math.sqrt(m.vx * m.vx + m.vz * m.vz);
+      let nx = state.sx + (vl > 1e-3 ? (m.vx / vl) * d : dx),
+        nz = state.sz + (vl > 1e-3 ? (m.vz / vl) * d : dz);
+      const c = 1 - Math.exp(-dt * 6);
+      nx += (m.x - nx) * c;
+      nz += (m.z - nz) * c;
+      state.sx = nx;
+      state.sz = nz;
+    }
   }
+  BX = state ? state.sx : m.x;
+  BZ = state ? state.sz : m.z;
+  YAW = m.yaw;
+  CY = Math.cos(m.yaw);
+  SY = Math.sin(m.yaw);
+  SC = r.s;
+  const uL = frac(m.phase / TAU);
+  const uR = frac(uL + 0.5);
+  KAPPA = 0;
+  if (state && !fresh && dt > 1e-4) {
+    const w = wrapA(m.yaw - state.lastYaw) / dt;
+    state.yawRate += (w - state.yawRate) * Math.min(1, dt * 6);
+    KAPPA = clamp(state.yawRate / Math.max(0.35, v), -1.6, 1.6) * SC;
+  } else if (state) state.yawRate = 0;
   const run = p.run;
   const vRel = v / Math.sqrt(r.legLen / 0.93);
   const kWalk = clamp(vRel / 1.3, 0, 1.4) * gw;
