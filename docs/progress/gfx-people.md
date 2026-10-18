@@ -47,8 +47,12 @@ routes, speeds, avoidance and `invariants()` are untouched.
   standing turn 1.67. cornerfk now also prints max sole 2nd difference (straight 14.9 = toe slap at foot-flat;
   corners 12–19, 135° 31 at the yaw snap).
   NEXT (item 1 evidence): before tree = current tree + gait.ts/render.ts from commit 26203d5 (git archive, read
-  only) in the scratchpad `before/`, vite on 5174; city_driver.mjs with URL=… on kerb-corner views at ~25 m,
-  new (5173) vs before (5174), out shots/people/fix/corners_{new,before}/. Then item 2 (garbage), item 3.
+  only) in the scratchpad `before/` (5174 is the lead's baseline server → mine runs on **5175**, background
+  `node …/node_modules/.bin/vite --port 5175 --strictPort --host 127.0.0.1` from that dir). STARTED (23:0x):
+  `TH_LOCK_SLOTS=2 URL=http://127.0.0.1:517{3,5}/ timeout 900 node shots/people/tools/corner_driver.mjs
+  shots/people/fix/corners_{new,before} 6 8` (new tool: waits for walkers starting to turn, slows sim to 0.3,
+  camera 25 m 3/4, 8 crops 300×240 per corner) → logs shots/people/fix_corners_{new,before}.log. Next: Read
+  crops, build strips (PIL ×2), then item 2 (garbage) and item 3.
 
 ## Toggles
 * `?legacypeople` — original figures + original stride formula (frozen copies in `pedestrians/legacy/`).
