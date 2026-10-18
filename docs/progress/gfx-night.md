@@ -81,6 +81,17 @@ material not integrated yet (`lamps/integrate.ts`, never double-applies) · `?la
 * 2026-10-18 ~10:40: PAUSED by the user (budget). No edit in progress; all my files typecheck; no
   background job of mine running (the NaN check shots/night/nan/ was stopped before it produced frames).
 
+* 2026-10-18 resume #3 (branch afdbf92): dusk NaN check handed to stage (lead). Path-lamp blobs fix:
+  park/riverbank/boardwalk lanterns radius 1.05→1.35 × old pool size, intensity ×0.72, CORE.path 1.1→0.6;
+  promenade lamps (terrain/glow) radius ×1.4, intensity ×0.8. Verification run shots/night/it5
+  (overview, park, people under lamps, boats at the jetty / ferry dock).
+
+## Perf variants for lead
+Same build, night (hours 21.5) — the lamp light map + analytic spots vs the old additive pools:
+* `""` vs `legacylamps` at views downtown, overview, harbor, stadium (21.5 h; stadium floods on ~19.5–22 h)
+* day sanity (hours 12): `""` vs `legacylamps` at overview (expected identical: uLampGain = 0 → uniform early-out)
+* optional: `nospill` (shop-window spill lights; bake-only, no runtime cost expected)
+
 ## Resume here (exact state)
 Done: bake + shader + spots, all glow files converted, harbour masts / crane spots / ferris + carousel,
 shop spill, landmarks + harbour material integration, rail platform lights, vehicles/trains patched,

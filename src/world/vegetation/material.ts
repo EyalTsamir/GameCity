@@ -85,6 +85,8 @@ uniform float uThCrease;
 uniform float uThFine;
 uniform float uThCheap;
 uniform float uThFx;
+uniform float uThNight;
+uniform float uNight;
 float thWrap;
 ${LAMP_GLSL}
 vec3 thHash( vec3 p ) {
@@ -245,14 +247,25 @@ if ( thAmt > 0.02 && uThTrans > 0.0 && uThFx > 0.5 ) {
 `;
 
 const LEAF_FRAG_AO = /* glsl */ `
+vec3 thWN = normalize( ( vec4( normal, 0.0 ) * viewMatrix ).xyz );
+// night: crown occlusion relaxes so canopies keep reading as masses under the (deliberately dark) night key
+float thAOn = mix( thAO, 1.0 - ( 1.0 - thAO ) * 0.35, uNight );
 if ( uThFx > 0.5 ) {
-  reflectedLight.indirectDiffuse *= thAO;
-  reflectedLight.directDiffuse *= mix( 1.0, thAO, 0.35 );
-  reflectedLight.indirectSpecular *= mix( thAO, 0.3 * thAO, thAmt );
+  reflectedLight.indirectDiffuse *= thAOn;
+  reflectedLight.directDiffuse *= mix( 1.0, thAOn, 0.35 );
+  reflectedLight.indirectSpecular *= mix( thAOn, 0.3 * thAOn, thAmt );
   reflectedLight.directSpecular *= mix( 1.0, 0.55, thAmt );
+  if ( uNight > 0.01 && thAmt > 0.02 ) {
+    // night readability: foliage albedo is ~3x darker than lawn, so under the same faint sky/moon light
+    // the forest went black. Lift the sky fill on foliage and the moonlight on crown tops (multiplies the
+    // night key, so it follows whatever the stage palette does): massed silhouettes with moonlit tops.
+    float top = smoothstep( -0.2, 0.85, thWN.y );
+    float lift = uNight * uThNight * thAmt;
+    reflectedLight.indirectDiffuse *= 1.0 + lift * ( 0.55 + 0.45 * top );
+    reflectedLight.directDiffuse *= 1.0 + lift * 1.2 * top;
+  }
 }
 if ( uLampGain > 0.001 ) {
-  vec3 thWN = normalize( ( vec4( normal, 0.0 ) * viewMatrix ).xyz );
   vec3 lamp = thLampLight( vThRest, thWN );
   // canopy undersides catch the lamp below them
   float under = saturate( -thWN.y );
@@ -278,6 +291,8 @@ export interface FoliageKnobs {
   cheap: { value: number };
   /** 0 = plain shading (runtime A/B of the whole foliage shading, for cost measurement) */
   fx: { value: number };
+  /** night readability lift of sky fill / moonlight on foliage (× uNight) */
+  night: { value: number };
 }
 
 /** shared tuning uniforms (one object drives every foliage material) */
@@ -292,6 +307,7 @@ export const foliageKnobs: FoliageKnobs = {
   fine: { value: 0.35 },
   cheap: { value: 0 },
   fx: { value: 1 },
+  night: { value: 2.0 },
 };
 
 let physPars: string | null = null;
@@ -326,7 +342,7 @@ function injectWind(shader: THREE.WebGLProgramParametersWithUniforms, u: GlobalU
 
 function injectFoliage(shader: THREE.WebGLProgramParametersWithUniforms, u: GlobalUniforms): void {
   injectWind(shader, u, LEAF_VERT_PARS, LEAF_VERT_MAIN);
-  Object.assign(shader.uniforms, lampUniforms(), { uThBump: foliageKnobs.bump, uThTrans: foliageKnobs.trans, uThWrap: foliageKnobs.wrap, uThTone: foliageKnobs.tone, uThModel: foliageKnobs.model, uThScale: foliageKnobs.scale, uThCrease: foliageKnobs.crease, uThFine: foliageKnobs.fine, uThCheap: foliageKnobs.cheap, uThFx: foliageKnobs.fx });
+  Object.assign(shader.uniforms, lampUniforms(), { uThBump: foliageKnobs.bump, uThTrans: foliageKnobs.trans, uThWrap: foliageKnobs.wrap, uThTone: foliageKnobs.tone, uThModel: foliageKnobs.model, uThScale: foliageKnobs.scale, uThCrease: foliageKnobs.crease, uThFine: foliageKnobs.fine, uThCheap: foliageKnobs.cheap, uThFx: foliageKnobs.fx, uThNight: foliageKnobs.night, uNight: u.uNight });
   shader.fragmentShader = shader.fragmentShader
     .replace('#include <common>', `#include <common>\n${LEAF_FRAG_PARS}`)
     .replace('#include <lights_physical_pars_fragment>', wrappedPhysicalPars())

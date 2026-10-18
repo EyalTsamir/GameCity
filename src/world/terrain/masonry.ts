@@ -71,7 +71,13 @@ const COL = {
 
 // ─────────────────────────────────────────────────────────── shader ──
 
+/** shared moon direction (terrain module copies ctx.clock.moonDir every frame) */
+export const MOON_DIR = { value: new THREE.Vector3(0, 1, 0) };
+/** night lift strength (?nightrock=0 turns it off for A/B) */
+const NIGHT_K = typeof location !== 'undefined' ? parseFloat(new URLSearchParams(location.search).get('nightrock') ?? '0.07') || 0 : 0.07;
+
 const MASONRY_PARS = /* glsl */ `
+#define TH_NIGHT_K ${NIGHT_K.toFixed(4)}
 uniform sampler2D tNoise;
 uniform float uLights;
 uniform vec3 mMortar;
@@ -104,6 +110,20 @@ vec3 th_ashlar(vec2 uv, float ch, vec3 base) {
 }
 
 vec3 mN = vec3(0.0, 1.0, 0.0);
+uniform float uNight;
+uniform vec3 uMoonDir;
+// Moonlit stone: the dark night key barely reaches the steep, mostly south-facing faces, so rock
+// (cliffs, boulders) and, less, the walls get a soft wrap-lit moon + sky term — upper facets and
+// ledges brightest, creases and undersides stay dark — so the forms still read at night.
+vec3 mNightLift() {
+  if (uNight < 0.01) return vec3(0.0);
+  float kind = vMas.x;
+  float k = kind > 5.5 ? 1.0 : (kind > 2.5 && kind < 3.5 ? 0.8 : (kind < 2.5 ? 0.35 : 0.0));
+  float up = clamp(mN.y * 0.5 + 0.5, 0.0, 1.0);
+  float wrapM = clamp((dot(mN, uMoonDir) + 0.5) / 1.5, 0.0, 1.0);
+  float shape = 0.25 + 0.55 * wrapM + 0.6 * up * up;
+  return vec3(0.39, 0.46, 0.67) * (uNight * TH_NIGHT_K * k * shape);
+}
 vec3 masonryColor(vec3 base) {
   float kind = vMas.x;
   vec3 p = vMW;
@@ -203,6 +223,8 @@ function masonryMaterial(ctx: CityContext, flat: boolean): THREE.MeshStandardMat
   const uniforms = {
     tNoise: { value: noiseTexture() },
     uLights: ctx.uniforms.uLights,
+    uNight: ctx.uniforms.uNight,
+    uMoonDir: MOON_DIR,
     mMortar: { value: C('#8a8276') },
     mAlgae: { value: C('#4e5a3a') },
     mMoss: { value: C('#6f8a45') },
@@ -220,7 +242,7 @@ function masonryMaterial(ctx: CityContext, flat: boolean): THREE.MeshStandardMat
       .replace('#include <begin_vertex>', '#include <begin_vertex>\nvMas = aMas;\nvMW = (modelMatrix * vec4(transformed, 1.0)).xyz;\nvMN = normalize(mat3(modelMatrix) * objectNormal);');
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', '#include <common>\n' + LAMP_GLSL + MASONRY_PARS)
-      .replace('#include <lights_fragment_end>', '#include <lights_fragment_end>\nreflectedLight.indirectDiffuse += diffuseColor.rgb * thLampLight(vMW, mN);')
+      .replace('#include <lights_fragment_end>', '#include <lights_fragment_end>\nreflectedLight.indirectDiffuse += diffuseColor.rgb * (thLampLight(vMW, mN) + mNightLift());')
       .replace('#include <color_fragment>', '#include <color_fragment>\ndiffuseColor.rgb = masonryColor(diffuseColor.rgb);')
       .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = mRough;')
       .replace(
@@ -228,7 +250,7 @@ function masonryMaterial(ctx: CityContext, flat: boolean): THREE.MeshStandardMat
         '#include <emissivemap_fragment>\nif (vMas.x > 4.5 && vMas.x < 5.5) totalEmissiveRadiance += diffuseColor.rgb * (1.1 + 2.6 * uLights);',
       );
   };
-  mat.customProgramCacheKey = () => (flat ? 'th-masonry-v3f' : 'th-masonry-v2');
+  mat.customProgramCacheKey = () => (flat ? 'th-masonry-v4f' : 'th-masonry-v4');
   return mat;
 }
 

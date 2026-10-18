@@ -115,6 +115,19 @@ opted-in mesh at a time, console markers — for attributing driver warnings).
   - Then: build sheets (`scratchpad/water_sheets.sh NEWDIR OUTDIR views…` for custom views; POI sheets vs
     shots/baseline via sheet.py), check pond (park), glints, night indigo, shallows; final report.
 
+* 2026-10-18 resume (branch afdbf92): perf timing runs removed from the chain (lead runs one consolidated
+  A/B) → `scratchpad/water_chain3.sh`: stats, full-city finals (1600×900) for harbor/beach/riverside/overview/
+  park × 3 h, custom views it6 × 3 h, medium + wakes. Night emitters (lead's question b): 7 meshes from 5
+  modules / 4 shader types (window quads, glow sprites, landmark-light shader, boat halos) — one merged
+  reflect-only mesh would be a new proxy representation, not cheap → documented; cheap cut instead:
+  `landmarks-glows` dropped (entirely inland) → night adds 6 calls, not 7.
+
+## Perf variants for lead
+`;nowaterrefl;waterrefl=1` (default high = level 2). Optional, wakes/contact (cheap):
+`;nohullfoam;wakes=puffs`. GPU expectation: level 2 ≈ +0.1–0.2 M vertices (one extra pass of
+the opted-in meshes) + 1/9 of the screen in fragments (+ mip generation of a 427×240 HalfFloat target) →
+≈ 0.6–1.2 ms on the Adreno X1-45; level 1 ≈ half the fill, same vertices minus trees.
+
 ## Open issues / notes
 * Depends (read-only) on the sky dome's uniform names: uZenith, uHorizon, uGlow, uGlowI, uSunCol, uSunVis,
   uMoonDir, uMoonVis, uOvercast (mesh name `sky-dome`). Missing → fixed day colours.

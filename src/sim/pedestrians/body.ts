@@ -334,7 +334,7 @@ const LODS: Record<Lod, LodCfg> = {
     torsoRings: [1, 5, 9, 11],
     headSides: 4,
     headRings: [0, 6],
-    neck: [0, 2],
+    neck: [], // the head sits on the torso (sub-pixel gap at > 300 m)
     neckSides: 4,
     limbSides: 3,
     upper: [1],
@@ -976,7 +976,7 @@ function buildHat(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
     bi.push(b.v(p, 2, 0, 0, phi));
     bo.push(b.v(p, 2, 0, 1, phi));
   }
-  const under = cfg.props !== 'far';
+  const under = cfg === LODS[0]; // brim underside only at LOD0 (lo and below are seen from above)
   b.setTint(0.7);
   if (under)
     for (let k = 0; k < n; k++) {
@@ -1089,7 +1089,7 @@ function buildTail(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
       P[i * 3 + 2] = rest[j][k][2];
     }),
   );
-  if (cfg.props === 'far' || cfg.props === 'pin') return;
+  if (cfg !== LODS[0]) return; // lo and below are seen from above: no lining
   // hem lining: a flat darker ring 10 % inside the hem (u = 1: same height), facing down, so the skirt
   // never reads as an open tube from below / when seated
   b.setTint(0.45);
@@ -1375,7 +1375,7 @@ function buildProps(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
     stick(b, add(g, [0, -0.06, 0]), add(g, [0, 0.82, 0]), 0.008);
   }
   b.use(BONE.UMB, REG.EXTRA, FB.UMBRELLA, 1);
-  umbrella(b, d, all ? 8 : cfg.props === 'pin' ? 4 : far ? 5 : 6, !far);
+  umbrella(b, d, all ? 8 : cfg.props === 'pin' ? 4 : far ? 5 : 6, all);
   b.use(BONE.GROUND, REG.TOWEL, FB.TOWEL, 1);
   towel(b);
 }

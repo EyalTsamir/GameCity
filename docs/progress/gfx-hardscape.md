@@ -110,3 +110,13 @@ Audit items: 7 (empty / faint hardscape), garden half of 9 (bare back gardens), 
   3. Optional: a second perf.mjs A/B in a quiet window (≤ 15 min lock): `--view westbrook --seconds 6
      --variants ";noscatter&nogardens;legacyground;noscatter&nogardens&legacyground"`.
   4. Send the final report (≤ 350 words) to the lead.
+
+## Perf variants for lead (one consolidated quiet-machine A/B)
+- variants: `;noscatter&nogardens;legacyground;propscast=0;noscatter&nogardens&legacyground`
+- views: `westbrook` (gardens), `downtown` (plazas + asphalt), `station` (bike parking / concourse),
+  `overview` (fine props LOD'd off, casters + ground shaders only)
+- expected: noscatter&nogardens = props vertex cost (fine mesh ~110 k tris drawn ≤ 300 m + casters);
+  legacyground = ground-shader ALU delta; propscast=0 = the casters' shadow pass.
+
+## RESUME (after the user pause)
+- Plaza view switched to "-28,0,-24,40,15,45" (lead agreed). Re-shooting school + quay (final2 / before3).

@@ -56,7 +56,7 @@ routes, speeds, avoidance and `invariants()` are untouched.
 
 ## Numbers
 * Vertices / triangles per level (`measure.ts`): LOD0 1346 / 2203 (778 always posed, rest feature-gated:
-  hidden features exit after one test), lo 485 / 782 (290 always), tiny 261 / 400 (161), pin 109 / 144 (74).
+  hidden features exit after one test), lo 458 / 748 (290 always), tiny 261 / 400 (161), pin 101 / 136 (66).
   Typical posed vertices per figure: LOD0 ≈ 900, lo ≈ 330, tiny ≈ 185, pin ≈ 80. Old: 1778 / 801 / 241.
 * LOD census (renderer `write()` at 1920×1025, noon population 442, `city_new/report_night.json`) — vertices
   main pass + shadow pass, today vs the reviewer's census of the old figures:
@@ -139,6 +139,11 @@ routes, speeds, avoidance and `invariants()` are untouched.
 * Sharp crowd corners still drag the planted foot a few cm (rail corners) and more at bevelled 90° snaps.
 * lo is 485 vertices with the lo beard (spec ≤ ~450; ~330 posed for a typical figure); pin 109 (spec ≈ 70).
 * No heels / headscarves / braids yet.
+
+## Perf variants for lead
+* Variants (same query base, people-dense views — square `27,0,17,20,30,18` and plaza `0,0,-65,16,200,16`, 12:00):
+  `;legacypeople;hide=pedestrians` — new figures vs the old ones vs no people drawn (simulation still runs).
+  Optional level isolation: `;pedlod=1;pedlod=2` (all figures forced to lo / tiny).
 
 ## Requests to other areas
 * none.

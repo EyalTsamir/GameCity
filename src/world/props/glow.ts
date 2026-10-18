@@ -43,15 +43,19 @@ function registerPools(glows: Glow[]): void {
         col = h < 0.16 ? '#ffb866' : h > 0.9 ? '#ffd9a0' : c;
         if (col !== c) head.color = col;
       }
+      const kind: LampLight['kind'] = pole >= 4.5 ? 'street' : white ? 'plaza' : 'path';
+      // park / riverbank / boardwalk lanterns: a broader, gentler glow (isolated bright cores on dark
+      // lawns read as polka dots again once the tilt-shift blurs the foreground)
+      const soft = kind === 'path';
       lights.push({
         x: head.x,
         y: head.y - 0.12,
         z: head.z,
         pole,
-        radius: p.size * 1.05,
+        radius: p.size * (soft ? 1.35 : 1.05),
         color: col,
-        intensity: (p.intensity / 0.22) * jitter,
-        kind: pole >= 4.5 ? 'street' : white ? 'plaza' : 'path',
+        intensity: (p.intensity / 0.22) * jitter * (soft ? 0.72 : 1),
+        kind,
       });
     } else {
       // kiosk / phone box / bus shelter spill: low, soft, slightly elongated

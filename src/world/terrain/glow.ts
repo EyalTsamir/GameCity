@@ -29,11 +29,14 @@ function registerPools(points: GlowPoint[]): void {
     const intensity = (p.intensity / 0.22) * 0.95;
     if (best) {
       const pole = best.y - p.y;
-      const l: LampLight = { x: best.x, y: best.y, z: best.z, pole, radius: p.size * 1.1, color, intensity, kind: pole > 5.5 ? 'portal' : 'path' };
+      const portal = pole > 5.5;
+      // promenade lamps: wider and gentler so the row along the river reads as one lit walk
+      const rad = p.size * (portal ? 1.1 : 1.4);
+      const l: LampLight = { x: best.x, y: best.y, z: best.z, pole, radius: rad, color, intensity: intensity * (portal ? 1 : 0.8), kind: portal ? 'portal' : 'path' };
       if (bd > 0.3) {
         // wall / railing lamp throwing its light forward: aimed at the old pool centre
         l.aim = [p.x, p.y, p.z];
-        l.cone = Math.atan2(p.size * 1.1, Math.hypot(bd, pole)) + 0.25;
+        l.cone = Math.atan2(rad, Math.hypot(bd, pole)) + 0.25;
       }
       out.push(l);
     } else {
