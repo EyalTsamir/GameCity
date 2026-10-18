@@ -504,7 +504,8 @@ function buildNeckHead(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
 /** orthonormal frame for a limb axis (dir) with U ≈ +x and V ≈ +z */
 function limbFrame(dir: P3): { U: P3; V: P3 } {
   const D = norm(dir);
-  let V = norm(sub([0, 0, 1], mul(D, D[2])));
+  // reference axis: +Z for limbs (they hang along Y); +Y for sticks along Z (briefcase handle, cane crook)
+  let V = Math.abs(D[2]) > 0.95 ? norm(sub([0, 1, 0], mul(D, D[1]))) : norm(sub([0, 0, 1], mul(D, D[2])));
   const U = norm(cross(V, D));
   // make U point to +x
   if (U[0] < 0) {
@@ -981,11 +982,25 @@ function buildHat(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
       bi2.push(b.v(p, 2, 0, 0, phi));
       bo2.push(b.v(p, 2, 0, 1, phi));
     }
+  // the outer brim ring sits on the inner one at rest (the shader pushes it out), so the winding test
+  // uses stand-in positions 5 cm further out, restored afterwards
+  const P = b.pos;
+  const outer = bo.concat(bo2);
+  const saved = outer.map((i) => [P[i * 3], P[i * 3 + 2]]);
+  for (const i of outer) {
+    const l = Math.hypot(P[i * 3], P[i * 3 + 2] - d.headRings[4].cz) || 1;
+    P[i * 3] += (P[i * 3] / l) * 0.05;
+    P[i * 3 + 2] += ((P[i * 3 + 2] - d.headRings[4].cz) / l) * 0.05;
+  }
   for (let k = 0; k < n; k++) {
     const k1 = (k + 1) % n;
     b.quadDir(bi[k], bi[k1], bo[k1], bo[k], [0, 1, 0]);
     if (under) b.quadDir(bi2[k], bi2[k1], bo2[k1], bo2[k], [0, -1, 0]);
   }
+  outer.forEach((i, j) => {
+    P[i * 3] = saved[j][0];
+    P[i * 3 + 2] = saved[j][1];
+  });
   if (!cfg.details) return;
   // visor (front half-disc, both faces)
   b.use(BONE.HEAD, REG.HAT, FB.VISOR, 0.9);

@@ -56,7 +56,7 @@ routes, speeds, avoidance and `invariants()` are untouched.
 
 ## Numbers
 * Vertices / triangles per level (`measure.ts`): LOD0 1346 / 2203 (778 always posed, rest feature-gated:
-  hidden features exit after one test), lo 474 / 770 (290 always), tiny 261 / 400 (161), pin 109 / 144 (74).
+  hidden features exit after one test), lo 485 / 782 (290 always), tiny 261 / 400 (161), pin 109 / 144 (74).
   Typical posed vertices per figure: LOD0 ≈ 900, lo ≈ 330, tiny ≈ 185, pin ≈ 80. Old: 1778 / 801 / 241.
 * LOD census (renderer `write()` at 1920×1025, noon population 442, `city_new/report_night.json`) — vertices
   main pass + shadow pass, today vs the reviewer's census of the old figures:
@@ -110,11 +110,14 @@ routes, speeds, avoidance and `invariants()` are untouched.
       follows the thighs), shadow proxy shrunk 1 cm (jagged self-shadow bands on hems), lower hairline + fuller
       hair, crotch ring raised, rounder shoe toes, tucked shoulder caps, coarse beard at lo, stronger eye band,
       backpack against the lumbar curve, dog sits on its haunches. Runs: `lab2/`, `lineup2/`, `city2/`.
+      Round 2 showed the real cause of the open-fronted skirts: the parametric skirt rings share one rest height,
+      so their quads were degenerate at rest and got random winding (front panels back-face culled; the dark
+      "hoop" was the hem lining seen through the gap) — buildTail now bridges with stand-in heights
+      (`tools/tailwind.ts` checks the winding). Round 3: `lab3/`.
 
 ## Open issues / next
-* Visual verification in the browser (shader compile never yet run on a GPU / SwiftShader).
 * Sharp crowd corners still drag the planted foot a few cm (rail corners) and more at bevelled 90° snaps.
-* lo is 474 vertices (spec ≤ ~450; only ~330 posed per typical figure); pin 109 (spec ≈ 70).
+* lo is 485 vertices with the lo beard (spec ≤ ~450; ~330 posed for a typical figure); pin 109 (spec ≈ 70).
 * No heels / headscarves / braids yet.
 
 ## Requests to other areas
