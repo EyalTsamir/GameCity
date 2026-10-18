@@ -17,6 +17,14 @@
     bh = smoothstep(0.08,0.4,uNight)·(1−smoothstep(0.75,1,uNight)) (golden hour untouched: uNight≈0) →
     sky mixed 40 % toward uSkyZen·1.3, F ×(1−0.25 bh), stronger slick/patch F modulation; the night indigo lift
     (toward the horizon) only at full night (smoothstep(0.75,1,uNight)) — at blue hour the horizon is lilac.
+  - Bug 2 CAUSE FOUND (shots/water/diag/diag_sheet.png): only `harbor-glows` produces the square. three's
+    non-premultiplied AdditiveBlending = blendFuncSeparate(SRC_ALPHA, ONE, ONE, ONE) → glow quads ADD their raw
+    alpha to the target; my composite (sky·(1−a)+rgb) then erases the sky under the whole quad (the lighthouse
+    glow is ~30 m). Fix: in the pass only, additive materials of opted-in meshes switch to CustomBlending with the
+    same colour factors and alpha untouched (src 0, dst 1); restored after (GL state only, no recompiles).
+  - Fixes 1–3 in code (typecheck ok). Verifying: `node scratchpad/water_switch.mjs` → shots/water/fix/
+    switch_{1_l2,2_l1,3_l0,4_l2}.png (harbour 20 h), square_196.png, overview_{196,199}.png; then medium/low
+    capture-sets (subset, 1280×720) → shots/water/fix/{med,low}; then ?nowaterrefl.
   - Bug 2: added debug hook `ctx.services.water._debugReflectFilter(regex|null)`; diagnostic session
     `node scratchpad/water_refldiag.mjs` → shots/water/diag/{ov_refl,close_all,close_<group>}.png (waterdebug=refl, 19.6 h).
 * (earlier) 2026-10-18 22:40 — main work complete, final report below.

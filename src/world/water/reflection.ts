@@ -88,6 +88,8 @@ export class PlanarReflection {
   private clearCol = new THREE.Color();
   private visSave: boolean[] = [];
   private black: THREE.DataTexture;
+  private additive: THREE.Material[] = [];
+  private blendSave: (number | null)[] = [];
   /** debug: restrict the pass to opted-in meshes matching this (null = all) */
   filter: RegExp | null = null;
   private lights: THREE.DirectionalLight[] = [];
@@ -160,6 +162,11 @@ export class PlanarReflection {
       if (TREES_NEAR.test(o.name)) this.treesNear.push(o);
     });
     this.meshes = this.base.length + (this.treesFar ? 1 : 0);
+    // additive (glow) materials: in the pass they must not write coverage alpha (see render())
+    for (const o of this.base) {
+      const mm = (o as THREE.Mesh).material;
+      for (const m of Array.isArray(mm) ? mm : [mm]) if (m && m.blending === THREE.AdditiveBlending && !this.additive.includes(m)) this.additive.push(m);
+    }
     this.dbgList = [...this.base, ...(this.treesFar ? [this.treesFar] : [])];
     // render from inside the main scene pass (see the header)
     this.prevBefore = scene.onBeforeRender as unknown as (...args: unknown[]) => void;
@@ -327,6 +334,27 @@ export class PlanarReflection {
     const auto = renderer.info.autoReset;
     const c0 = auto ? 0 : renderer.info.render.calls,
       t0 = auto ? 0 : renderer.info.render.triangles;
+    // three's non-premultiplied AdditiveBlending adds the source alpha too (ONE, ONE): a glow quad would
+    // mark its whole footprint as covered and erase the mirrored sky under it (dark squares) → same colour
+    // blending, alpha untouched
+    const bs = this.blendSave;
+    let bi = 0;
+    for (const m of this.additive) {
+      bs[bi++] = m.blending;
+      bs[bi++] = m.blendEquation;
+      bs[bi++] = m.blendSrc;
+      bs[bi++] = m.blendDst;
+      bs[bi++] = m.blendEquationAlpha;
+      bs[bi++] = m.blendSrcAlpha;
+      bs[bi++] = m.blendDstAlpha;
+      m.blending = THREE.CustomBlending;
+      m.blendEquation = THREE.AddEquation;
+      m.blendSrc = THREE.SrcAlphaFactor;
+      m.blendDst = THREE.OneFactor;
+      m.blendEquationAlpha = THREE.AddEquation;
+      m.blendSrcAlpha = THREE.ZeroFactor;
+      m.blendDstAlpha = THREE.OneFactor;
+    }
     try {
       scene.background = null;
       scene.matrixWorldAutoUpdate = false;
@@ -339,6 +367,16 @@ export class PlanarReflection {
       this.calls = renderer.info.render.calls - c0;
       this.tris = renderer.info.render.triangles - t0;
       // ── state restore
+      bi = 0;
+      for (const m of this.additive) {
+        m.blending = bs[bi++] as THREE.Blending;
+        m.blendEquation = bs[bi++] as THREE.BlendingEquation;
+        m.blendSrc = bs[bi++] as THREE.BlendingSrcFactor;
+        m.blendDst = bs[bi++] as THREE.BlendingDstFactor;
+        m.blendEquationAlpha = bs[bi++] as THREE.BlendingEquation | null;
+        m.blendSrcAlpha = bs[bi++] as THREE.BlendingSrcFactor | null;
+        m.blendDstAlpha = bs[bi++] as THREE.BlendingDstFactor | null;
+      }
       n = 0;
       if (this.treesFar) this.treesFar.visible = vs[n++];
       for (const o of this.treesNear) o.visible = vs[n++];

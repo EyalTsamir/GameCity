@@ -406,6 +406,11 @@ export class CrowdRenderer {
         const umbrella = raining && L.umbrellaOwner && m.sit < 0.3 && m.lie < 0.1 && m.ground < 0.1 && !L.pram;
         const gaitOn = layer === this.near || layer === this.far || out === this.near || out === this.far;
         computePose(m, t + m.seed * 10, umbrella, r, pose, gaitOn ? st.gait : null, this.frame);
+        // drawn at the gait's smoothed root when the gait ran this frame (corners: the feet were planned
+        // around it), else at the crowd's root
+        const gs = gaitOn && st.gait.frame === this.frame;
+        const mx = gs ? st.gait.sx : m.x,
+          mz = gs ? st.gait.sz : m.z;
         pose.scale = r.s;
         pose.fade = m.fade;
         pose.w = r.w;
@@ -429,9 +434,9 @@ export class CrowdRenderer {
           flags = swimwear(L, s, flags, CC);
         }
         // pack
-        R[0] = m.x;
+        R[0] = mx;
         R[1] = m.y;
-        R[2] = m.z;
+        R[2] = mz;
         R[3] = m.yaw;
         for (let k = 0; k < POSE_UINTS; k++) PP[k] = (fx16(pose[POSE_KEYS[2 * k]]) | (fx16(pose[POSE_KEYS[2 * k + 1]]) << 16)) >>> 0;
         CC[10] = flags >>> 0;
@@ -454,7 +459,7 @@ export class CrowdRenderer {
         const bl = (0.56 + 0.12 * m.amp + 0.25 * sitK + 1.4 * lying) * r.stature / 1.76;
         if (nb < bcap) {
           const off = 0.08 * sitK + 0.1 * lying;
-          this.pos.set(m.x + fx * off, m.y + 0.018, m.z + fz * off);
+          this.pos.set(mx + fx * off, m.y + 0.018, mz + fz * off);
           this.scl.set(bw, 1, bl);
           this.m4.compose(this.pos, this.q, this.scl);
           this.blob.setMatrixAt(nb, this.m4);
@@ -462,7 +467,7 @@ export class CrowdRenderer {
         }
         // pram
         if (L.pram && np < this.pram.instanceMatrix.count) {
-          this.pos.set(m.x, m.y, m.z);
+          this.pos.set(mx, m.y, mz);
           this.scl.setScalar(Math.min(1.05, Math.max(0.95, L.scale)));
           this.m4.compose(this.pos, this.q, this.scl);
           this.pram.setMatrixAt(np, this.m4);
@@ -472,7 +477,7 @@ export class CrowdRenderer {
           PM[np * 4 + 3] = 0;
           np++;
           if (nb < bcap) {
-            this.pos.set(m.x + fx * 0.9, m.y + 0.016, m.z + fz * 0.9);
+            this.pos.set(mx + fx * 0.9, m.y + 0.016, mz + fz * 0.9);
             this.scl.set(0.55, 1, 0.95);
             this.m4.compose(this.pos, this.q, this.scl);
             this.blob.setMatrixAt(nb, this.m4);
@@ -481,7 +486,7 @@ export class CrowdRenderer {
         }
         // dog
         if (L.dog && nd < this.dog.instanceMatrix.count) {
-          this.pos.set(m.x, m.y, m.z);
+          this.pos.set(mx, m.y, mz);
           this.scl.setScalar(L.scale);
           this.m4.compose(this.pos, this.q, this.scl);
           this.dog.setMatrixAt(nd, this.m4);
@@ -505,7 +510,7 @@ export class CrowdRenderer {
           nd++;
           if (nb < bcap) {
             const sc = L.scale;
-            this.pos.set(m.x + (fz * DOG_OFFSET.x + fx * DOG_OFFSET.z) * sc, m.y + 0.017, m.z + (-fx * DOG_OFFSET.x + fz * DOG_OFFSET.z) * sc);
+            this.pos.set(mx + (fz * DOG_OFFSET.x + fx * DOG_OFFSET.z) * sc, m.y + 0.017, mz + (-fx * DOG_OFFSET.x + fz * DOG_OFFSET.z) * sc);
             this.scl.set(0.32 * L.dog.size, 1, 0.6 * L.dog.size);
             this.m4.compose(this.pos, this.q, this.scl);
             this.blob.setMatrixAt(nb, this.m4);

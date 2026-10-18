@@ -31,8 +31,24 @@ routes, speeds, avoidance and `invariants()` are untouched.
   while |rel|>0.6; reset at heel strike): rail 3.29, bevel 2-seg 14.49 (!), hard 90° 2.92, 45° 2.01, 90°@0.9 6.32,
   135° 9.24 cm; gaitfk straight 0.31/run 0.60, 40°/s 0.85, 90°/s 4.72, standing turn 1.67. Remaining slides =
   toe point (pt 3) in late stance / toe-off (u 0.45–0.62), after the quick-step window (u < beta−0.08) closed.
-  Next: toe-off handling (earlier lift / pivot about toe when heel up), cap trailing hip ext, then render.ts at
-  st.gait.sx/sz, then city capture.
+  Then (all in gait.ts, DONE, typecheck clean): (a) heel-raise for reach — an out-of-reach stance foot first
+  rises onto ball/toe (bisection on pitch down to 1.15·thTO, exact rolling, WREF/RQ scratch, fitsReach()) before
+  the old horizontal pull-in; (b) pivot about the actual contact point from last frame's pitch (FootPlant.pp:
+  heel / heel back / ball / toe tip); (c) quick re-step only if it lands before toe-off (duration
+  min(0.2 s, time left), URATE = cycle/s; none if < 0.11 s left) — no late lifts/pops; (d) early toe-off
+  (FootPlant.lo) of a trailing stance foot over-stretched (hip flex < −0.5 or reach fail) during double support
+  (u > 0.52, other foot planted), swing from its actual pitch (th0 = pp); (e) swing catch-up: a foot that left
+  behind its law converges to it over s 0.03–0.35, and walking swing feet are capped at ~30° behind the hip.
+  Tried and reverted: world-fixed landing point over the last swing fifth (rail 1.9 → 5.7, 135° → 22.7 cm).
+  render.ts: figure, blob, pram, dog drawn at st.gait.sx/sz when the gait ran this frame (gait.frame === frame).
+  NUMBERS NOW (cornerfk): rail 90°@1.3 1.88 cm (hip −36°, 4 frames < −32°), rail@0.9 2.23, bevel 3.63 (−35°),
+  hard 90°@1.3 2.50, 45° 1.78, 90°@0.9 2.90, 135°@1.1 6.12 (landing glide while the body yaws 20°/frame);
+  gaitfk: straight 0.30 (unchanged), 1.6 m/s hip −25° (was −28), runs unchanged, 40°/s 0.86, 90°/s 1.79 (was 4.7),
+  standing turn 1.67. cornerfk now also prints max sole 2nd difference (straight 14.9 = toe slap at foot-flat;
+  corners 12–19, 135° 31 at the yaw snap).
+  NEXT (item 1 evidence): before tree = current tree + gait.ts/render.ts from commit 26203d5 (git archive, read
+  only) in the scratchpad `before/`, vite on 5174; city_driver.mjs with URL=… on kerb-corner views at ~25 m,
+  new (5173) vs before (5174), out shots/people/fix/corners_{new,before}/. Then item 2 (garbage), item 3.
 
 ## Toggles
 * `?legacypeople` — original figures + original stride formula (frozen copies in `pedestrians/legacy/`).

@@ -50,6 +50,8 @@ export interface FootPlant {
   pp: number;
   /** duration of the quick re-step (s): it must land before the stance ends */
   qd: number;
+  /** early toe-off (cycle fraction) of an over-stretched trailing foot at a corner; ≥ 1 = none */
+  lo: number;
 }
 
 interface StandFoot {
@@ -117,7 +119,7 @@ function copyPlan(o: LegPlan, a: LegPlan): void {
 }
 
 export function newGaitState(): GaitState {
-  const f = (): FootPlant => ({ wx: 0.5, wz: 0.5, wyaw: 0.5, sx: 0.5, sz: 0.5, sy: 0.5, stw: 0.5, stance: false, valid: false, qs: -1.5, qfx: 0.5, qfz: 0.5, pv: 0.5, pp: 0.5, qd: 0.5 });
+  const f = (): FootPlant => ({ wx: 0.5, wz: 0.5, wyaw: 0.5, sx: 0.5, sz: 0.5, sy: 0.5, stw: 0.5, stance: false, valid: false, qs: -1.5, qfx: 0.5, qfz: 0.5, pv: 0.5, pp: 0.5, qd: 0.5, lo: 1.5 });
   const s = (): StandFoot => ({ wx: 0, wz: 0, wyaw: 0 });
   return { feet: [f(), f()], lastPhase: 0, frame: -10, lastT: 0, lastYaw: 0, yawRate: 0, standing: false, sp: [s(), s()], stepFoot: -1, stepT: 0, stepFrom: s(), stepTo: s(), last: [newPlan(), newPlan()], lastX: 0.5, lastZ: 0.5, sx: 0.5, sz: 0.5 };
 }
@@ -377,7 +379,9 @@ function planWalk(r: Rig, u: number, left: boolean, plant: FootPlant | null, pel
   const x0 = (left ? 1 : -1) * p.width;
   const wr = left ? 0 : 4;
   WREF[wr + 3] = 0;
-  if (u < p.beta) {
+  // toe-off: normally at beta, earlier for a trailing foot the body has walked away from (corners)
+  const ub = plant && plant.valid && plant.lo < p.beta && u >= plant.lo ? plant.lo : p.beta;
+  if (u < ub) {
     o.stance = true;
     o.s = -1;
     let fz = p.zHS - u * p.S;
@@ -474,11 +478,14 @@ function planWalk(r: Rig, u: number, left: boolean, plant: FootPlant | null, pel
     o.pitch = pitch;
   } else {
     o.stance = false;
-    const s = (u - p.beta) / (1 - p.beta);
+    const s = (u - ub) / (1 - ub);
     o.s = s;
-    const toZ = p.zHS - p.beta * p.S;
+    // the sole leaves at the pitch it had (an early or deep push-off), else at the nominal toe-off
+    const th0 = plant && plant.valid ? Math.min(plant.pp, 0) : p.thTO;
+    const toZ = p.zHS - ub * p.S;
     rollAnkle(r, toZ, p.thTO, legTmp);
-    let z0 = legTmp.z - (u - p.beta) * p.S;
+    const zLaw = legTmp.z - (u - ub) * p.S;
+    let z0 = zLaw;
     let y0 = legTmp.y;
     let xs = x0;
     let tw0 = 0;
@@ -490,8 +497,8 @@ function planWalk(r: Rig, u: number, left: boolean, plant: FootPlant | null, pel
     } else if (plant && plant.valid && plant.stance) {
       // first swing frame: leave from where the planted foot actually is
       toBody(plant.wx, plant.wz, tmpB);
-      if (Math.abs(tmpB.z - (toZ - (u - p.beta) * p.S)) < 0.35) {
-        rollAnkle(r, tmpB.z, p.thTO, legTmp);
+      if (Math.abs(tmpB.z - (toZ - (u - ub) * p.S)) < 0.35) {
+        rollAnkle(r, tmpB.z, th0, legTmp);
         // roll offset along the foot's heading, as in its last stance frame
         const hr = wrapA(plant.wyaw - YAW);
         const dzr = legTmp.z - tmpB.z;
@@ -501,6 +508,9 @@ function planWalk(r: Rig, u: number, left: boolean, plant: FootPlant | null, pel
         tw0 = twistFor(left, plant.wyaw, pelvisYaw);
       }
     }
+    // a foot that left further back than its normal toe-off (corners) catches up once it is off the
+    // ground instead of trailing a straight leg behind the body
+    if (z0 < zLaw) z0 = zLaw + (z0 - zLaw) * (1 - sstep(0.03, 0.35, s));
     rollAnkle(r, p.zHS, p.thHS, legTmp);
     const z1 = legTmp.z + (1 - u) * p.S,
       y1 = legTmp.y;
@@ -511,7 +521,7 @@ function planWalk(r: Rig, u: number, left: boolean, plant: FootPlant | null, pel
     o.x = mix(xs, x1, sstep(0, 0.7, s));
     o.twist = tw0 * (1 - sstep(0, 0.5, s));
     const pm = 0.08;
-    o.pitch = s < 0.45 ? mix(p.thTO, pm, sstep(0, 0.45, s)) : mix(pm, p.thHS, sstep(0.45, 1, s));
+    o.pitch = s < 0.45 ? mix(th0, pm, sstep(0, 0.45, s)) : mix(pm, p.thHS, sstep(0.45, 1, s));
     // height: down to the landing height by mid-swing + an early bump (heel high behind the body)
     const bump = s < 0.7 ? Math.pow(Math.sin((Math.PI * s) / 0.7), 1.2) : 0;
     o.y = mix(y0, y1, sstep(0.05, 0.62, s)) + p.lift * bump * (1 - 0.4 * s) + 0.012 * Math.sin(Math.PI * s);
@@ -787,15 +797,22 @@ export function gaitPose(m: Member, r: Rig, st: GaitState | null, frame: number,
   }
   // never crouch for a foot left far behind (sharp corners): pull that foot in instead
   h = Math.max(h, hNom - 0.045 * (r.legLen / r.s / 0.93));
+  let stretched = 0;
   for (let li = 0; li < 2; li++) {
     const leg = li === 0 ? legA : legB;
-    if (!(leg.stance || leg.s < 0.05)) continue;
     const side = leg === legA ? 1 : -1;
     const hx = side * r.hip.x;
     const cxh = hx * Math.cos(pelvisYaw) + sway,
       hz = -Math.sin(pelvisYaw) * hx;
+    if (!(leg.stance || leg.s < 0.05)) {
+      // a swinging (walking) foot never trails further behind the hip than ~30° (corners: it left late)
+      const w = sstep(0.03, 0.15, leg.s) * (1 - sstep(0.4, 0.55, leg.s)) * (1 - run);
+      const zMin = hz - 0.58 * (h - (leg.y - Math.sin(pelvisRoll) * hx));
+      if (w > 0 && leg.z < zMin) leg.z += (zMin - leg.z) * w;
+      continue;
+    }
     const dy = h - (leg.y - Math.sin(pelvisRoll) * hx);
-    const dx = leg.x - cxh,
+    let dx = leg.x - cxh,
       dz = leg.z - hz;
     let dh = Math.sqrt(dx * dx + dz * dz);
     let maxD = Math.sqrt(Math.max(0, reach * reach - dy * dy));
@@ -825,17 +842,18 @@ export function gaitPose(m: Member, r: Rig, st: GaitState | null, frame: number,
             if (fitsReach(r, mid)) hi = mid;
             else lo = mid;
           }
-        }
+          if (hi < p.thTO) stretched |= 1 << li;
+        } else stretched |= 1 << li;
         rollAnkle(r, fz, hi, legTmp);
         const dzr = legTmp.z - fz;
         leg.x = fx + sh * dzr;
         leg.z = fz + ch * dzr;
         leg.y = legTmp.y;
         leg.pitch = hi;
-        const dy2 = h - (leg.y - yo),
-          dx2 = leg.x - cxh,
-          dz2 = leg.z - hz;
-        dh = Math.sqrt(dx2 * dx2 + dz2 * dz2);
+        const dy2 = h - (leg.y - yo);
+        dx = leg.x - cxh;
+        dz = leg.z - hz;
+        dh = Math.sqrt(dx * dx + dz * dz);
         maxD = Math.sqrt(Math.max(0, reach * reach - dy2 * dy2));
       }
     }
@@ -874,6 +892,13 @@ export function gaitPose(m: Member, r: Rig, st: GaitState | null, frame: number,
     const abd = Math.atan2(lat, dy) - Math.atan2(restLat, r.hip.y - r.ankle.y);
     const dyEff = hyp2(dy, lat - restLat);
     legIK(r, r.hip.y, r.hip.z, r.hip.y - dyEff, tz, leg.pitch, solve);
+    // corners: a trailing foot stretched beyond a comfortable push-off leaves early, during the double
+    // support (the other foot has landed) — the step ends instead of the leg dragging behind
+    if (state && leg.stance && gw >= 0.999) {
+      const u = left ? uL : uR;
+      const f = state.feet[li];
+      if (f.lo >= 1 && u > 0.52 && u < p.beta - 0.02 && (left ? legB : legA).stance && (solve.flex < -0.5 || (stretched >> li) & 1)) f.lo = u;
+    }
     // planted feet: the foot yaw turns about the vertical through the ankle (shader / fkPoint), so the
     // heading is exact in one step: wanted heading minus the heading of the un-yawed chain
     let fy = leg.twist;
@@ -917,6 +942,7 @@ export function gaitPose(m: Member, r: Rig, st: GaitState | null, frame: number,
         f.sz = L.z;
         f.sy = L.y;
         f.stw = L.twist;
+        f.pp = L.pitch;
       } else if (W.stance) {
         if (!f.stance || !f.valid) {
           // heel strike (or first frame): store the flat-foot reference and heading in world space
@@ -926,6 +952,7 @@ export function gaitPose(m: Member, r: Rig, st: GaitState | null, frame: number,
           f.wyaw = m.yaw + pelvisYaw;
           f.pv = 0;
           f.qs = -1;
+          f.lo = 1.5;
         }
         f.pp = L.pitch;
         f.stance = true;
