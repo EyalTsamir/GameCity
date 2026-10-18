@@ -550,7 +550,7 @@ Let v = speed (m/s), Lh = hip height of the kind × scale, Fr = v² / (9.81·Lh)
 ---
 
 ## Re-review (2026-10-18)
-Resume here: step 5/5 — (a)(b)(c) written, re/re_sheet.png built. Running re_ghost.mjs (night dithered silhouette = shadow without caster?) → re/ghost_*.png; then update issue 8, add "## Re-review final", report to lead.
+Resume here: DONE (22:40) — (a)(b)(c) written, evidence sheet `shots/people-review/re/re_sheet.png`, report sent to the lead. Nothing pending.
 
 Evidence used: the people log (`docs/progress/gfx-people.md`), its sheets `shots/people/sheet_{lineups,gait,poses,distance_lod,city_day,city_night}.png`,
 `shots/people/lineup4/` (my lineup driver re-shot on the new code), `lab4/`, `city_final2/` (+ `report_final2.json`), plus my own
@@ -625,9 +625,10 @@ captures under `shots/people-review/re/` (zoom crops in `re/crops/`). P = pass, 
 7. **Tiny level over the triangle line and also the shadow proxy** (severity: low, perf): 261 vertices / 400 triangles
    (spec ≈ 240 / 220) drawn for every figure < 150 m in the shadow pass. Fix (`body.ts`): a shadow-only variant of
    tiny without soles, hair/hat detail and towel (~150 vertices), or trim tiny's limb sides 6 → 4.
-8. **Unverified: a fully dithered dark silhouette** on the promenade at night (`re/crops/night45_dither_x3.png`) —
-   most likely an ordinary despawn fade in shadow; if it is the 0.4 s LOD cross-fade, check that the cross-fade is
-   skipped when the camera snaps (it should be) and that faded halves keep their lighting.
+8. **Dithered long shadow without a visible caster** at night (`re/crops/night45_dither_x3.png`, severity: very low,
+   not reproduced in 4 later frames `re/ghost_*.png`). At 21:30 the shadow light sits at ~17° elevation, so a figure's
+   shadow is ~3× its height; a despawning (Bayer-faded) figure is a few dark pixels while its dithered shadow on lit
+   paving is not. Optional fix (`render.ts`): skip the shadow proxy for members with `fade < 0.5`.
 9. **Not a people issue, but now more visible**: party members still overlap each other at kerb corners (two figures
    inside each other in `re/crops/seqA_1_corner_x3.png`) — crowd sim (`crowd.ts` avoidance), for the sim owner.
 10. **GPU cost not proven**: SwiftShader A/B was inconclusive; the lead's consolidated GPU run should include
@@ -642,3 +643,15 @@ normal viewing distance except the corner strides.
 One **small, optional fix round** is worth it if time allows, in this order: (1) corner step-shortening + hip clamp
 (issue 1), (2) the per-frame garbage (issue 2, a smoothness risk on the target), (3) trouser looseness and shoe
 toes (issues 3–4, cheap, close-up only). Faces, heavy build and the tiny/proxy trim can wait.
+
+Re-review evidence sheet: `shots/people-review/re/re_sheet.png` (9 tiles). Capture drivers (read-only, ≤ 15 min lock
+each): scratchpad copies of `re_capture.mjs` / `re_capture2.mjs` (densest walking cluster → 18/25/45/60 m day + night)
+and `re_ghost.mjs`; people-agent node checks re-run from a scratch copy (their `tools/` untouched).
+
+## Re-review final
+**Verdict: ship.** The spec is met where it matters: at 20–60 m by day and night the crowd reads as correctly
+proportioned, varied miniature people with planted, heel-to-toe gait, proper sitting and lamp light, at fewer vertices
+than before. No item regressed. Optional fix round, in order: (1) corner strides / foot drag (`gait.ts`), (2) per-frame
+garbage ≈ 2 KB per figure-frame (`animate.ts`/`gait.ts`/`pose.ts`), (3) trouser looseness + shoe toes (`shader.ts`/`body.ts`).
+Faces, heavy build, tiny/proxy trim and the faded-figure shadow can wait. The GPU cost still needs the lead's
+consolidated run (`;legacypeople;hide=pedestrians`).
