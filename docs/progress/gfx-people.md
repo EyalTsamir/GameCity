@@ -6,18 +6,9 @@ Files: `src/sim/pedestrians/{figure,render,looks}.ts` + new `rig.ts`, `body.ts`,
 stats) and `crowd.ts` (2 lines: stride formula → `gaitCycle()`, phase-settle only for legacy). Movement,
 routes, speeds, avoidance and `invariants()` are untouched.
 
-## Resume here (updated 2026-10-18 16:20)
-* Done + verified: P1–P6, rounds 1–4 of visual fixes (lab4/ shows round-4 fixes OK), LOD trims (lo 458, pin
-  101), lineup before/after sheets `shots/people/sheet_{lineups,gait,poses,distance_lod}.png` (from `lineup4/`
-  vs `shots/people-review/lineup/`), final gait numbers (Numbers section).
-* Running: final city run (round-4 code, census + invariants) — command:
-  `VIEWS='<9 views: sqclose/sqwide/plaza25/beachmid 11h, sqmid 18.2h, oldtownPOI, sqclose/plaza25/sqwide 21.5h>' TAG=final2
-  TH_LOCK_SLOTS=2 node shots/people/tools/city_driver.mjs shots/people/city_final2 "nointro&noidle&adaptive=0&quality=high" --census`
-  → `shots/people/city_final2/` + `report_final2.json`; log in the scratchpad `people_cityF2.log`.
-  "Before" images for the same views: `shots/people/city_final_legacy/` (sqwide 21.5h has no legacy pair).
-* Next: (1) read city_final2 images + report (invariants `{}`, console clean, census numbers); (2) build
-  `sheet_city_day.png` / `sheet_city_night.png` (city_final_legacy vs city_final2) and check lamp light on
-  figures at night; (3) put final numbers + the "## Final report" section here and SubagentHandback.
+## Resume here (updated 2026-10-18 16:35)
+* DONE. All milestones verified; final report below ("## Final report"). Nothing running. If resumed: nothing
+  to do unless the reviewer / lead asks for changes.
 
 ## Toggles
 * `?legacypeople` — original figures + original stride formula (frozen copies in `pedestrians/legacy/`).
@@ -71,11 +62,11 @@ routes, speeds, avoidance and `invariants()` are untouched.
 * Vertices / triangles per level (`measure.ts`): LOD0 1346 / 2203 (778 always posed, rest feature-gated:
   hidden features exit after one test), lo 458 / 748 (290 always), tiny 261 / 400 (161), pin 101 / 136 (66).
   Typical posed vertices per figure: LOD0 ≈ 900, lo ≈ 330, tiny ≈ 185, pin ≈ 80. Old: 1778 / 801 / 241.
-* LOD census (renderer `write()` at 1920×1025, noon population 442, `city_new/report_night.json`) — vertices
-  main pass + shadow pass, today vs the reviewer's census of the old figures:
-  square 20 m 17/30/29 (LOD0/lo/tiny) 44.7 k + 19.3 k (old 49 k + 49 k) · plaza 16 m 8/55/106: 64.5 k + 26.9 k
-  (old 98 k + 98 k) · street 40 m 24.6 k + 14.4 k (old 48 k + 48 k) · beach 45 m 25.1 k + 13.8 k (old 66 k + 66 k)
-  · old-town POI 54.5 k + 27.7 k · park POI 44.7 k + 30.3 k · overview 442 pins 48.2 k, no shadow (old 98 k).
+* LOD census (renderer `write()` at 1920×1025, noon population ≈ 440, final code, `city_final2/report_final2.json`) —
+  vertices main pass + shadow pass, today vs the reviewer's census of the old figures:
+  square 20 m 15/24/31 (LOD0/lo/tiny) 39.3 k + 17.2 k (old 49 k + 49 k) · plaza 16 m 5/60/109: 62.7 k + 28.2 k
+  (old 98 k + 98 k) · street 40 m 25.7 k + 15.9 k (old 48 k + 48 k) · beach 45 m 23.8 k + 12.5 k (old 66 k + 66 k)
+  · old-town POI 66.2 k + 33.7 k (old 65–97 k + same) · overview 438 pins 44.2 k, no shadow pass (old 98 k).
 * Draw calls: 4 figure levels + 1 shadow proxy + pram + dog + blob (old: 3 levels + pram + dog + blob, each
   level also in the shadow pass).
 * Gait acceptance (`gaitfk.ts`, node FK of the real pose code, final 2026-10-18): walking 0.6–1.6 m/s for man /
@@ -138,6 +129,14 @@ routes, speeds, avoidance and `invariants()` are untouched.
 - [x] LOD budgets (2026-10-18): lo 485 → 458 (no hem lining, brim or umbrella underside at lo: seen from above
       from 40 m on), pin 109 → 101 total / 66 always / ≈ 71 for a figure with hair (no neck: the head sits on the
       torso, sub-pixel at > 300 m). No visible change in `lab4/lod*`.
+
+## Evidence (final, 2026-10-18)
+* Before/after sheets in `shots/people/`: `sheet_lineups.png` (lineups A/B front/side/¾), `sheet_gait.png` (walk,
+  skirt walk, jog, elderly + cane), `sheet_poses.png` (bench ¾/front, ground poses, dog + pram),
+  `sheet_distance_lod.png` (16 / 40 m, LOD0 / lo / tiny at 9 m) — after = `lineup4/`, before =
+  `shots/people-review/lineup/`; `sheet_city_day.png`, `sheet_city_night.png` — after = `city_final2/`, before =
+  `city_final_legacy/` (same crowd with `?legacypeople`); lamp light on figures: `city_final2/sqwide_21h5_lampzoom.png`.
+* Full city (final code): console clean, invariants `{}` after a 4× run, pickers 25/25 (earlier run), census above.
 
 ## Open issues / next
 * Sharp crowd corners still drag the planted foot a few cm (rail corners) and more at bevelled 90° snaps.

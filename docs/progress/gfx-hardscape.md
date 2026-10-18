@@ -1,24 +1,9 @@
 # gfx-hardscape — progress (hardscape agent)
 
 ## Resume here
-- DONE + verified: H1-H4 implemented and captured (full city: shots/hardscape/final, chunks A-D); sheets
-  shots/hardscape/sheets/ab_*.png (7). invariants() empty in full city; console clean.
-- DONE: school re-shot (shots/hardscape/final2/school_11.png) — the black rectangle did NOT persist.
-- FINDING (quay): every quay view < 100 m is pulled in by the camera module: src/ui/camera.ts
-  `LOS_DIST = 100` ("below this orbit distance the camera keeps a line of sight to the pivot") — cranes, ship
-  and container stacks block the line of sight, so quayN (32 m), quayS (48 m), quayT (55 m) all render as
-  ~5 m close-ups (final2/quayS_11.png, quayT_11.png; before3 same). Not editing the camera.
-- RUNNING (started 2026-10-18 after resume): quay views at 105 m (no LOS clamp), after + before:
-  `capture-set.mjs --views "quayN2=124,0,-118,105,-110,55;quayS2=124,0,-16,105,120,50" --hours 11 --width 1600
-  --height 900 --hideui 1 --q "nointro&noidle&adaptive=0&quality=high&time=11"` → out shots/hardscape/final2
-  (log final2b.log) and with `--url http://127.0.0.1:5174/` → shots/hardscape/before3 (log before3b.log).
-- NEXT: (1) read those PNGs; (2) rebuild shots/hardscape/sheets/ab_court_quay.png with before school
-  (shots/hardscape/before/school_11.png) vs final2/school_11.png and quayN2/quayS2 before/after (+ harbour
-  POI pair if the quay views are weak); (3) write "## Final report" here and send it to the lead.
-- Plaza view for sheets/report: "-28,0,-24,40,15,45" (lead agreed).
-
-Owner files: `src/world/roads.ts`, `src/world/roads/*`, `src/world/props.ts`, `src/world/props/*` (not `glow.ts`).
-Audit items: 7 (empty / faint hardscape), garden half of 9 (bare back gardens), lamp light on roads/props.
+- ALL DONE. Final report below ("## Final report"). School re-shot clean (black rectangle did not persist);
+  quay shown at 105 m (camera LOS clamp below 100 m, src/ui/camera.ts LOS_DIST); ab_court_quay.png rebuilt.
+- Nothing running. Only open item: the lead's consolidated perf A/B (variants under "Perf variants for lead").
 
 ## Brief
 - H1 surfaces: macro asphalt patchwork, crack seal, patches, lane wear, queue oil, gutters; readable paving
@@ -137,3 +122,16 @@ Audit items: 7 (empty / faint hardscape), garden half of 9 (bare back gardens), 
 
 ## RESUME (after the user pause)
 - Plaza view switched to "-28,0,-24,40,15,45" (lead agreed). Re-shooting school + quay (final2 / before3).
+
+## Final report
+**Visual changes.** The asphalt now has a fresh/worn resurfacing patchwork on every street segment, with sealed seams, junction boxes surfaced separately, one-lane resurfacing, sealed cracks, trench cuts, patches, wheel-track polish and oil where cars queue (roads/glsl.ts, materials.ts). Paving got border bands and band grids aligned to each plaza or block, and plazas now differ by district: downtown granite with basalt bands, station clay herringbone, midtown buff pavers, civic sandstone. Driveways are herringbone; yards and the quay have oil and tyre streaks, plus rust at the quay bollards (surfaces.ts, covers.ts). Painted extras: a multi-sport schoolyard court, hatched loading boxes, a quay lane line, accessible/EV bays (markings.ts). Scatter adds 268 items: cafés with parasols, a kiosk, planters, bike parking, a station clock and taxi sign, yard clutter (containers, skips, forklifts, pallets…), quay gear and car-park machines (props/scatter.ts, kit.ts). Gardens: 235 items over 26 lots — patios, pools (dark at night, a lamp in about a third), trampolines, sheds, swings, veg beds, greenhouses (props/gardenPlan.ts, garden.ts); trees and bushes avoid them through layout.furniture. thLampLight now lights the roads and props materials.
+
+**URL toggles:** `?legacyground`, `?noscatter`, `?nogardens`, `?propscast=0`.
+
+**Sheets:** shots/hardscape/sheets/ab_{overview_station,industry_harbor,gardens,plazas,court_quay,asphalt,night}.png.
+
+**Performance (--stats, full city, Westbrook).** Draw calls +2 (a new shadow-casting props mesh plus its shadow pass, 130 → 132). Triangles in view +107k (1.535M → 1.642M); the props module is 152k triangles in total. invariants() is empty and the console is clean. My GPU estimate is about 0.2 ms against a 0.4 ms budget; the consolidated A/B variants are listed above.
+
+**Trade-off.** The whole fine-props mesh is drawn whenever the camera is within 300 m, so every point-of-interest view pays for all of it.
+
+**Notes.** Quay views under 100 m get pulled in by the camera's line-of-sight rule (src/ui/camera.ts, LOS_DIST), so I show the quay at 105 m and left the camera alone. The black rectangle in the earlier school frame was transient and did not come back in the re-shoot. For the plaza use "-28,0,-24,40,15,45"; "0,0,-65,60,30,45" is blocked by a tower.

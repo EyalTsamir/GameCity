@@ -4,8 +4,11 @@ Read this first when resuming after an interruption (usage limits have cut runs 
 Per-module logs live next to this file: `docs/progress/<module>.md`.
 
 ## Lead state (graphics overhaul) — keep current; the watchdog resumes from here
-* Updated 2026-10-18 16:05 UTC. Phase 2: all 8 workstream agents finishing (verify → fixes/polish →
-  final sheets → "## Final report" in their gfx-*.md). None has a final report yet.
+* Updated 2026-10-18 16:25 UTC. Phase 2: workstream agents finishing (verify → fixes/polish →
+  final sheets → "## Final report" in their gfx-*.md).
+  - DONE: hardscape (16:20; lead spot-checked ab_court_quay.png ✔). Note for QA: camera pulls views
+    < 100 m into close-ups (LOS_DIST in src/ui/camera.ts) — use ≥ 105 m for quay views.
+  - Still working: stage, night, water, buildings, vegetation, terrain, people.
 * Safety nets (user request: never lose state, never trade quality for speed):
   - watchdog scheduled task `trig_01SEZGVfPdGEXrjuBsEYFnkw` (every 2 h at :03 UTC, fires into this
     session even with the user's computer off): resumes agents cut off by the usage limit / restarts.

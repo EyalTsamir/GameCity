@@ -14,13 +14,14 @@ rail platform lights; vehicles/trains patched; stadium roof fix (it4); dusk fade
 (shots/night/ov_fg_cmp.png): props/glow.ts `soft` path lanterns radius ×1.35, intensity ×0.72;
 bake.ts CORE.path 0.6; terrain/glow.ts promenade radius ×1.4, intensity ×0.8.
 People (town square, footbridge, shots/night/it5/peds_21h5.png, boats1) visibly pick up lamp light.
+**Verified (program check, shots/night/progcheck.json):** the compiled colour programs of traffic-vehicle,
+rail-train, boats and the people (lambert) materials all contain thLampLight (depth programs don't, correct).
 **Running / in flight (check outputs on resume):**
-1. Program check (are boat/people/vehicle/train programs compiled WITH thLampLight?):
-   `shot.mjs --q "nointro&noidle&adaptive=0&quality=high&time=21.5&skip=buildings,vegetation,landmarks,ambient,audio" --view beach --eval <renderer.info.programs scan>` → shots/night/progcheck.json (evals[0] = [name, key, hasLamp]).
-2. Final set F1: `capture-set.mjs --views "westbrook;park;oldtown" --hours 21.5,2 --width 1600 --height 900 --q "nointro&noidle&adaptive=0&quality=high&time=21.5" --out shots/night/final` → shots/night/final/*.png, summary shots/night/final_f1.txt.
-3. Baseline street views at 21.5 (5174): `--views "street=55,1.5,52,28,35,12;street2=-150,0,20,32,-35,22" --out shots/night/base215`.
-**Next:** F2 `downtown;harbor;beach`, F3 `riverside;stadium;overview`, F4 `street;street2` (same flags,
-21.5,2, out shots/night/final, copy report.json → report_fN.json after each run) → sheets
+1. Final set F1: `capture-set.mjs --views "westbrook;park;oldtown" --hours 21.5,2 --width 1600 --height 900 --q "nointro&noidle&adaptive=0&quality=high&time=21.5" --out shots/night/final` → shots/night/final/*.png, summary shots/night/final_f1.txt.
+2. Baseline street views at 21.5: DONE → shots/night/base215/street{,2}_21h5.png.
+3. Final set F2: same flags, `--views "downtown;harbor;beach" --out shots/night/final2` → shots/night/final_f2.txt.
+**Next:** F3 `riverside;stadium;overview` → shots/night/final3, F4 `street=55,1.5,52,28,35,12;street2=-150,0,20,32,-35,22`
+→ shots/night/final4 (same flags, hours 21.5,2) → sheets
 (shots/tools/sheet.py; cols baseline21.5 | new21.5 | baseline2 | new2; baseline = shots/baseline/<poi>_21h5.png,
 shots/night/base2h/<poi>_2.png, shots/night/base215/street*_21h5.png) → final report under "## Final report".
 
