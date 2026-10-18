@@ -20,6 +20,9 @@
   - DONE in code (22:30): cause = moon term with a broad sparkle lobe (`wSparkle·pow(md,40)`) + strong core on
     rippled normals. New: Beckmann moon path (a2 0.0008–0.02, core 0.26 + sheen 0.025 + pins 0.7, min(…,0.75),
     × moonVis × night × (1−0.7 river) × (1−0.9 overcast)); glint cells at night 2.5 % (step 0.975).
+  - VERIFIED beach/harbour 2 h + 21.5 h (`shots/water/moon/moon_check.png`, crop `crop_beach2.png`): in the
+    bay region (x300–1100, y420–870 of beach_2) clipped pixels (>230) 13.6 % → 0.07 %, p99 192 (was 255);
+    calm silvery ripple sheen + sparse flecks; wheel ring reflection kept; 0 console errors/warnings.
   - Verifying: `scratchpad/water_moon.sh` (log shots/water/moon.log) → shots/water/moon/{beach,harbor}_{2,21h5}.png,
     shots/water/moonB/{riverside,overview}_{2,21h5}.png; compare with shots/night/final2/beach_2.png.
 * Next: (1) tune if the review finds problems (re-capture only the affected views, ≤15 min jobs);

@@ -550,7 +550,7 @@ Let v = speed (m/s), Lh = hip height of the kind × scale, Fr = v² / (9.81·Lh)
 ---
 
 ## Re-review (2026-10-18)
-Resume here: step 4/5 — (a) table written (2 rows pending own captures: corners real-sim, 40–60 m other district). Capture job queued (scratchpad/re/re_capture.mjs → shots/people-review/re/). Next: (b) issues, (c) verdict.
+Resume here: step 4/5 — (a) table written; job 1 done (seq_junction_* = natural 16 m walker; park55 partly blocked). Job 2 (scratchpad/re/re_capture2.mjs, densest-cluster views 18/25/45/60 m day+night) queued. Next: (b) issues, (c) verdict, then "## Re-review final".
 
 Evidence used: the people log (`docs/progress/gfx-people.md`), its sheets `shots/people/sheet_{lineups,gait,poses,distance_lod,city_day,city_night}.png`,
 `shots/people/lineup4/` (my lineup driver re-shot on the new code), `lab4/`, `city_final2/` (+ `report_final2.json`), plus my own

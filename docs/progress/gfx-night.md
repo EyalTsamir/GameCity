@@ -29,7 +29,10 @@ Re-capturing those three at 2 h from a fresh session (time=2): `--views "riversi
 F4 DONE (0 errors) → shots/night/final4/; street sheet shots/night/ba_night_street.png (street2 + town square
 21:30 judged: facade wash, lit sidewalk, lit people). base2h/street_2.png used an older view spec → recapturing
 baseline `street=55,1.5,52,28,35,12` at 2 h → shots/night/base2h_street/.
-**Next:** rebuild street sheet with base2h_street, rebuild C with final3b 02:00 column, final report.
+final3b DONE (fresh session at 2 h, 0 errors): stadium dark at 02:00 as it should be; sheet C rebuilt with it.
+(Terrain has since added the uFlood snap on 'timejump', so jump captures are fine now too.)
+Street sheet rebuilt with the matching baseline view (base2h_street). Final typecheck clean.
+**DONE — final report below.** No jobs running.
 (shots/tools/sheet.py; cols baseline21.5 | new21.5 | baseline2 | new2; baseline = shots/baseline/<poi>_21h5.png,
 shots/night/base2h/<poi>_2.png, shots/night/base215/street*_21h5.png) → final report under "## Final report".
 
@@ -131,3 +134,34 @@ Same build, night (hours 21.5) — the lamp light map + analytic spots vs the ol
   ?legacylamps; the lights are registered with addLampLights (rail loads before the bake).
 * src/world/harbor.ts: floodlight masts call (buildHarborFloodlights), carousel light, followCraneLamps
   in frame(), floodMasts stat (harbour glow/floodlight parts = my area).
+
+## Final report
+**Visual change.** The flat additive "polka-dot" pools are gone. Every static light is a real light: it's
+baked once into a top-down lamp map (0.5 m texels, two RGBA8 panels: irradiance + head height /
+dominant direction, distance, pole height). `thLampLight` multiplies it by each surface's albedo and
+re-projects it by height and orientation. Result: warm pools with bright cores and soft edges, scalloped
+washes on facades near lamps, roofs dark above the heads, trees, people, cars, trains and boats lit
+from below (compiled programs verified), shop-window spill on old-town pavements, glowing park paths.
+Harbour: 4 new floodlight masts (quay + yard) and 6 crane work lights that move with the gantries
+(cool white). Stadium: cross-aimed, visored floodlights make the pitch a bright island; roofs
+~145 sRGB, no clipping. The overview reads as a lit street grid. Halos, beams and aviation lights are kept.
+
+**Files.** core/lampLight.ts (internals; API kept), world/lamps.ts, world/lamps/{bake,integrate,harborLights,spill}.ts,
+props/glow.ts, terrain/glow.ts, landmarks/{glows,materials}.ts, harbor/material.ts and the glow parts
+of harbor.ts. Approved one-liners: traffic vehicleMaterial, rail trainMaterial, sim/rail.ts.
+
+**Toggles.** ?legacylamps (A/B), ?lampall, ?lampk=, ?nospill, ?lampdebug.
+
+**Sheets.** shots/night/ba_night_A.png (westbrook/park/oldtown), ba_night_B.png (downtown/harbor/beach),
+ba_night_C.png (riverside/stadium/overview), ba_night_street.png (street level). Each at 21:30 and
+02:00, before vs after. Also ov_fg_cmp.png, stadium_roof_cmp.png, dusk_sheet.png (no popping).
+
+**Perf.** Draw calls unchanged; masts merged into harbor-north (~+0.6k tris, ~−1.2k pool tris).
+Full city 136–164 calls, 1.5–1.86 M tris, 0 console errors. SwiftShader A/B: within noise
+after the early-outs. GPU estimate: ≈0.2 ms at night (2 texture fetches + ~55 ALU per lit pixel, early-outs
+in the dark and above the heads), ~0 by day, minus the retired pool overdraw. Bake ≈0.3 s at boot on this
+loaded box. Variants for the lead's run are listed under "Perf variants for lead".
+
+**Trade-offs / open.** No light occlusion in the map (facing and height terms hide most of it). At most 12
+analytic spots. The lit tree crowns in the blurred foreground still read as soft blobs (the vegetation
+shader's underside term). Dusk NaN blocks are with stage; 02:00 moon-glint blowout is with water.
