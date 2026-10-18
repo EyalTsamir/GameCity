@@ -1109,6 +1109,7 @@ function palm(s: GeoSink, w: Wind, t: TreeSpec, rng: Rng): number {
 }
 
 const _tmpC = new THREE.Color();
+const HEDGE_FRESH = new THREE.Color('#8dbb4f');
 
 /** small closed ellipsoid (fruit, nuts, buds…) */
 export function blob(s: GeoSink, x: number, y: number, z: number, rx: number, ry: number, rz: number, c: THREE.Color, detail: number, shadeLo = 0.75): void {
@@ -1242,8 +1243,9 @@ export function hedge(s: GeoSink, w: Wind, ax: number, az: number, bx: number, b
         const vv = ov * (end ? 0.93 : 1) + (ground ? 0 : Math.sign(ov) * bulge);
         const yy = gy + (ground ? oy : oy * (end ? 0.97 : 1) + (oy > height * 0.8 ? topB : 0));
         const lo = ground ? 0.72 : 1;
-        const fresh = oy >= height * 0.99 ? 1.04 : 1;
-        s.colorObj(leaf, face.sh * mott * lo * fresh);
+        // clipped top: fresh, lighter and a touch yellower new growth (reads at POI distance)
+        if (oy >= height * 0.99) s.colorObj(_tmpC.copy(leaf).lerp(HEDGE_FRESH, 0.14), face.sh * mott * 1.06);
+        else s.colorObj(leaf, face.sh * mott * lo);
         leafAttr(s, face.ao[pi], leafTone(0.9, true), 0.62, clump);
         const nl = Math.hypot(face.n[0], face.n[1]);
         s.vert(cx + vx * vv, yy, cz + vz * vv, (vx * face.n[0]) / nl, face.n[1] / nl, (vz * face.n[0]) / nl);

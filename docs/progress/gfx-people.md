@@ -105,7 +105,7 @@ routes, speeds, avoidance and `invariants()` are untouched.
 - [x] GPU verification round 1 (2026-10-17 23:00): shaders compile, console clean, full-city invariants empty
       after a 4× run, pickers 25/25, LOD census (below). Evidence: `shots/people/lab1/` (lab), `lineup/` (reviewer
       lineup re-shot), `city_new/` vs `city_legacy/` (same crowd, `?legacypeople`).
-- [ ] Visual iteration round 2 (2026-10-18): fixes from round 1 — stale foot plants after a member is moved
+- [x] Visual iteration rounds 2–3 (2026-10-18): fixes from round 1 — stale foot plants after a member is moved
       (teleport / far-plant snap), lampshade skirts (flare halved, front drapes over the forward thigh, seated hem
       follows the thighs), shadow proxy shrunk 1 cm (jagged self-shadow bands on hems), lower hairline + fuller
       hair, crotch ring raised, rounder shoe toes, tucked shoulder caps, coarse beard at lo, stronger eye band,
@@ -114,30 +114,22 @@ routes, speeds, avoidance and `invariants()` are untouched.
       so their quads were degenerate at rest and got random winding (front panels back-face culled; the dark
       "hoop" was the hem lining seen through the gap) — buildTail now bridges with stand-in heights
       (`tools/tailwind.ts` checks the winding). Round 3: `lab3/` — standing skirts now closed A-lines.
-- [ ] Round 4 (2026-10-18 10:30, code done, NOT yet re-shot): skirt/brim normals came from the degenerate rest
-      geometry (dark gradient on the lower skirt, black brims) → builder stand-in positions for normals
-      (`MeshBuilder.standIn`, `withStandIns`; check `tools/tailnrm.ts`); the hem lining was a sliver
-      z-fighting the skirt → flat ring 10 % inside at the hem, facing down; seated skirts follow the thighs fully
-      (k = 1 for the parametric rings, 0.45 at the hip ring) so the lap is covered to the knee (`tools/sitskirt.ts`);
-      briefcase handle / cane crook were zero-width sticks (limbFrame along Z) → fixed (`tools/windchk.ts`).
-      Typecheck clean.
-
-## PAUSED 2026-10-18 10:37 (lead request) — exact state / next steps
-* All code compiles; no browser jobs of mine are queued or running.
-* Evidence already shot (pre-round-4 code): `lab1/`–`lab3/`, `lineup/` (round 1), `lineup2/` (round 2, before
-  the skirt winding fix), `lineup3/` (after the winding fix, before round 4), `city_new/` vs `city_legacy/`,
-  `city2/`, `city_final/` vs `city_final_legacy/` (same crowd, 8 views day/golden/night; full-city invariants
-  `{}` after a 4× run in `city_final/report_final.json`). Perf: `scratchpad people_perf2.log` (SwiftShader,
-  square 20 m, full city): new 613/647 ms, legacy 750/456 ms, hide=pedestrians 630 ms — spread larger than the
-  differences (machine shared with other agents' runs) → no measurable SwiftShader difference.
-* Next: (1) one lab run (skirts standing/seated, brims, briefcase) + one lineup run (`lineup4/`) with round-4
-  code; (2) Read them, fix anything left; (3) before/after sheets (lineup vs `shots/people-review/lineup/`,
-  `city_final` vs `city_final_legacy`, day + night) into `shots/people/`; (4) final numbers into this log;
-  (5) SubagentHandback report.
+- [x] Round 4 (2026-10-18), verified in `lab4/`: skirt/brim normals came from the degenerate rest geometry
+      (dark gradient on the lower skirt, black brims) → builder stand-in positions for normals
+      (`MeshBuilder.standIn`, `withStandIns`; `tools/tailnrm.ts`) — skirts and fedora brims now evenly lit; the
+      hem lining was a sliver z-fighting the skirt → flat ring 10 % inside at the hem, facing down — no flicker,
+      no "hoop"; seated skirts follow the thighs fully (k = 1 for the parametric rings, 0.45 at the hip ring) —
+      laps covered to the knee from front / side / ¾ (`lab4/sit_*`, `tools/sitskirt.ts`); briefcase handle /
+      cane crook were zero-width sticks (limbFrame along Z) — crook visible, handle inside the fist
+      (`lab4/B_heads`, `A_case`, `tools/windchk.ts`).
+- [x] LOD budgets (2026-10-18): lo 485 → 458 (no hem lining, brim or umbrella underside at lo: seen from above
+      from 40 m on), pin 109 → 101 total / 66 always / ≈ 71 for a figure with hair (no neck: the head sits on the
+      torso, sub-pixel at > 300 m). No visible change in `lab4/lod*`.
 
 ## Open issues / next
 * Sharp crowd corners still drag the planted foot a few cm (rail corners) and more at bevelled 90° snaps.
-* lo is 485 vertices with the lo beard (spec ≤ ~450; ~330 posed for a typical figure); pin 109 (spec ≈ 70).
+* lo 458 vertices total (spec ≤ ~450; ~330 posed for a typical figure); pin 101 total / ≈ 71 typical (spec ≈ 70).
+* Faces stay mannequin-like at < 8 m (nose, chin, soft eye band only) — fine at the 12–60 m viewing range.
 * No heels / headscarves / braids yet.
 
 ## Perf variants for lead

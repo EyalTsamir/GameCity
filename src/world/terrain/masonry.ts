@@ -77,7 +77,6 @@ export const MOON_DIR = { value: new THREE.Vector3(0, 1, 0) };
 const NIGHT_K = typeof location !== 'undefined' ? parseFloat(new URLSearchParams(location.search).get('nightrock') ?? '0.07') || 0 : 0.07;
 
 const MASONRY_PARS = /* glsl */ `
-#define TH_NIGHT_K ${NIGHT_K.toFixed(4)}
 uniform sampler2D tNoise;
 uniform float uLights;
 uniform vec3 mMortar;
@@ -234,7 +233,8 @@ function masonryMaterial(ctx: CityContext, flat: boolean): THREE.MeshStandardMat
   // flat: faceted shading from screen-space derivatives, so the rock skin and boulders can share
   // vertices (indexed) — ~3–5x fewer vertices than per-triangle normals on a vertex-bound GPU
   const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9, metalness: 0, flatShading: flat });
-  if (flat) mat.defines = { TH_FLATN: '' };
+  // (legacy look: no night lift either)
+  mat.defines = flat ? { TH_FLATN: '', TH_NIGHT_K: NIGHT_K.toFixed(4) } : { TH_NIGHT_K: '0.0' };
   mat.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, uniforms);
     shader.vertexShader = shader.vertexShader

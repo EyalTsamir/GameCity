@@ -9,7 +9,7 @@ import type { CityContext, CityModule } from '../core/context';
 import { getTerrainModel } from './terrain/height';
 import { createGround } from './terrain/ground';
 import { createSlab } from './terrain/slab';
-import { createMasonry } from './terrain/masonry';
+import { createMasonry, MOON_DIR } from './terrain/masonry';
 import { createGlows, type GlowPoint } from './terrain/glow';
 
 export interface TerrainService {
@@ -55,6 +55,10 @@ export default function create(ctx: CityContext): CityModule {
 
   return {
     name: 'terrain',
+    frame() {
+      // moonlit-rock term in the masonry shader (no allocation)
+      MOON_DIR.value.copy(ctx.clock.moonDir);
+    },
     stats() {
       return {
         groundTris: ground.triangles,
