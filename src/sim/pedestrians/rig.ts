@@ -146,8 +146,8 @@ function man(): Dims {
       Fr(0.04, 0.042, -0.075, 0.012),
       Fr(0.092, 0.047, -0.075, -0.012, 0.002),
       Fr(0.146, 0.05, -0.075, -0.03, 0.004),
-      Fr(0.184, 0.047, -0.071, -0.037, 0.005),
-      Fr(0.207, 0.038, -0.067, -0.045, 0.005),
+      Fr(0.184, 0.0485, -0.071, -0.032, 0.005),
+      Fr(0.207, 0.042, -0.067, -0.039, 0.005),
     ],
   };
 }
@@ -515,6 +515,18 @@ export function gaitCycle(look: Look, v: number): number {
   if (gaitConfig.legacy) return look.scale * (0.85 + 0.42 * Math.min(v, 3.5));
   const r = rigOf(look);
   return 2 * stepLength(r, v);
+}
+/** gaitCycle of a member (look, speed) into GC.cycle — the crowd's per-member path: a double passed to or
+ *  returned from a call that is not inlined is boxed (16 B of garbage each), a field is not */
+export const GC = { cycle: 0.5 };
+export function gaitCycleOf(m: { look: Look; speed: number }): void {
+  const look = m.look,
+    v = m.speed;
+  if (gaitConfig.legacy) {
+    GC.cycle = look.scale * (0.85 + 0.42 * Math.min(v, 3.5));
+    return;
+  }
+  GC.cycle = 2 * stepLength(rigOf(look), v);
 }
 
 /** Step length (m) for a rig at speed v (≥ a small minimum so the phase never races). */

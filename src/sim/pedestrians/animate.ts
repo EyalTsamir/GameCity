@@ -85,7 +85,8 @@ const IDLE_W_MID = [0.3, 0.15, 0.12, 0.08, 0.04, 0.07, 0.08];
 const iv = { v: 0, k: 0.5 };
 
 /** idle variant of a standing figure: chosen per person and time window, held 6–18 s */
-function idleVariant(m: Member, r: Rig, t: number): typeof iv {
+function idleVariant(m: Member, r: Rig): typeof iv {
+  const t = poseIn.t;
   if (poseDebug.idle >= 0) {
     iv.v = poseDebug.idle;
     iv.k = 1;
@@ -182,10 +183,10 @@ export function computePoseA(m: Member, umbrella: boolean, r: Rig, o: Pose, gs: 
   let headYaw = m.headYaw + G.headYawCorr;
   const headRoll = -0.25 * chestRoll;
   // arms: walking swing from the gait, relaxed (soft elbows, slightly forward) when standing
-  armL.flex = ((0.08 + 0.06 * old + 0.03 * Math.sin(t * 0.6 + m.seed * 3)) * (1 - gw) + G.shFlexL * gw);
-  armR.flex = ((0.08 + 0.06 * old + 0.03 * Math.sin(t * 0.52 + m.seed * 5)) * (1 - gw) + G.shFlexR * gw);
-  armL.elbow = ((0.3 + 0.15 * old) * (1 - gw) + G.elbowL * gw);
-  armR.elbow = ((0.3 + 0.15 * old) * (1 - gw) + G.elbowR * gw);
+  armL.flex = ((0.08 + 0.06 * old + 0.03 * Math.sin(t * 0.6 + m.seed * 3)) + (G.shFlexL - (0.08 + 0.06 * old + 0.03 * Math.sin(t * 0.6 + m.seed * 3))) * gw);
+  armR.flex = ((0.08 + 0.06 * old + 0.03 * Math.sin(t * 0.52 + m.seed * 5)) + (G.shFlexR - (0.08 + 0.06 * old + 0.03 * Math.sin(t * 0.52 + m.seed * 5))) * gw);
+  armL.elbow = ((0.3 + 0.15 * old) + (G.elbowL - (0.3 + 0.15 * old)) * gw);
+  armR.elbow = ((0.3 + 0.15 * old) + (G.elbowR - (0.3 + 0.15 * old)) * gw);
   armL.abd = (0.07 + (G.shAbdL - 0.07) * gw);
   armR.abd = (0.07 + (G.shAbdR - 0.07) * gw);
   armL.twist = armR.twist = 0;
@@ -318,7 +319,7 @@ export function computePoseA(m: Member, umbrella: boolean, r: Rig, o: Pose, gs: 
   // standing idle variants (hands free, not walking)
   const idleK = (1 - gw) * upright;
   if (idleK > 0.01) {
-    const iv = idleVariant(m, r, t);
+    const iv = idleVariant(m, r);
     const k = iv.k * idleK;
     const hy = r.hip.y,
       wy = r.waist.y,

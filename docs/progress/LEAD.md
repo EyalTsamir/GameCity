@@ -82,6 +82,9 @@ Per-module logs live next to this file: `docs/progress/<module>.md`.
   23:31 typecheck ✔ (clean). Build ✔: dist/index.html 2,597.7 kB vs baseline 2,202.4 kB (+395 kB, +18 %;
   legacy A/B copies ≈ 126 kB of source of that). file:// smoke test of the single file ✔ (overview 21.5 h:
   failedModules [], 0 errors/warnings, invariants {}, frameErrors []; shots/lead/dist_smoke.png).
+  23:45 matrix sheets 11a/11b/18a built (scripts/agent-tools/qa_sheets.sh → shots/lead/qa/sheets/) and judged:
+  11a ✔ 18a ✔ (consistent integration, no defects; 'ghost' ferris wheel was a downscale artefact —
+  wheel_crop.png identical). New-side reports clean so far (failedModules [], 0 errors, invariants {}).
 
 ## History
 * 2026-10-16 ~19:20 — Round 1: 12 builders launched via a Workflow; the account hit its 5-hour usage

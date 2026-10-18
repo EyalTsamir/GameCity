@@ -276,7 +276,7 @@ const LODS: Record<Lod, LodCfg> = {
     thigh: [0, 1, 2, 3, 5],
     shin: [0, 2, 3, 4, 5, 6],
     footSides: 8,
-    foot: [0, 1, 2, 3, 5, 7],
+    foot: [0, 1, 2, 5, 6, 7],
     hairCap: [0, 0.4, 0.8, 1],
     hairLong: [0.08, 0.2, 0.42],
     tailSides: 10,
@@ -688,7 +688,7 @@ function buildLeg(b: MeshBuilder, d: Dims, cfg: LodCfg, side: 1 | -1): void {
     f1 = fr[cfg.foot[cfg.foot.length - 1]];
   const heel = b.v(ft(f0.cx * side, (f0.y0 + f0.y1) / 2 - 0.004, f0.z - 0.008 * (d.H / 1.76)), 0.3, 0);
   capFan(b, rings[0], heel, ft(f0.cx * side, (f0.y0 + f0.y1) / 2, f0.z + 0.03));
-  const toe = b.v(ft(f1.cx * side, (f1.y0 + f1.y1) / 2 + 0.001, f1.z + 0.006 * (d.H / 1.76)), 0.3, 0);
+  const toe = b.v(ft(f1.cx * side, (f1.y0 + f1.y1) / 2 - 0.001, f1.z + 0.005 * (d.H / 1.76)), 0.3, 0);
   capFan(b, rings[rings.length - 1], toe, ft(f1.cx * side, (f1.y0 + f1.y1) / 2, f1.z - 0.03));
 }
 

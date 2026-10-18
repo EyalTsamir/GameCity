@@ -48,11 +48,47 @@ routes, speeds, avoidance and `invariants()` are untouched.
   corners 12–19, 135° 31 at the yaw snap).
   NEXT (item 1 evidence): before tree = current tree + gait.ts/render.ts from commit 26203d5 (git archive, read
   only) in the scratchpad `before/` (5174 is the lead's baseline server → mine runs on **5175**, background
-  `node …/node_modules/.bin/vite --port 5175 --strictPort --host 127.0.0.1` from that dir). STARTED (23:0x):
+  `node …/node_modules/.bin/vite --port 5175 --strictPort --host 127.0.0.1` from that dir). corner_driver.mjs
+  first version (waits for heading change) found ~no turners → rewritten: predicts corners from the party rail
+  (leg change > 55° 0.6–1.1 m ahead), slows sim 0.3, camera 25 m, 8 crops 300×240. RUNNING (23:3x, background):
   `TH_LOCK_SLOTS=2 URL=http://127.0.0.1:517{3,5}/ timeout 900 node shots/people/tools/corner_driver.mjs
-  shots/people/fix/corners_{new,before} 6 8` (new tool: waits for walkers starting to turn, slows sim to 0.3,
-  camera 25 m 3/4, 8 crops 300×240 per corner) → logs shots/people/fix_corners_{new,before}.log. Next: Read
-  crops, build strips (PIL ×2), then item 2 (garbage) and item 3.
+  shots/people/fix/corners_{new,before} 6 8` → logs shots/people/fix_corners_{new,before}.log. Next: Read crops,
+  build strips (PIL ×2) into shots/people/fix/corners_strip_{new,before}.png.
+* Item 2 (garbage) — DONE in code (typecheck clean, all checks identical): cause = boxing of doubles at call
+  boundaries that TurboFan does not inline (module `let` doubles: 16 B per write; computed double args/results
+  of un-inlined calls; small helpers in branches below --min-inlining-frequency 0.15 are never inlined).
+  Fixes: gait per-call scalars in object G (double fields), gaitIn/poseIn/LIK/AIK/AN/RT/RQ/WREF input slots,
+  legIKa/armIKa/computePoseA garbage-free entry points (old signatures kept as wrappers for tools), armIK1 /
+  rotation builders read slots, cr3/nz3 without set3, footHeading without closure, toBody/toWorld take
+  objects, mix/clamp/smoothstep/hash/wrap written out inline in animate.ts and gait.ts (python transformer,
+  exact a + (b − a)·t form; parity tool `tools/animparity.ts` vs `tools/ref/animate_ref.ts`: 5.18 M pose values,
+  max |diff| 0), crowd plumbing gaitCycleOf(m) → GC.cycle. Found + fixed a latent bug: G.qlift's literal 0.5
+  was read by the first planWalk of the process (FootPlant pv/pp likewise reset to 0 after the literal).
+  Measured (tools/bench.ts, now prints median/90th pct; tools/allocpose.ts per type; tools/allocmicro.ts per
+  function; TurboFan graph scan `scratchpad/turbo_box.py` lists ChangeFloat64ToTagged + Calls): bench median
+  44 B per figure-frame incl. 39 B harness (was ≈ 2.1 KB; mean 140–300 B = JIT warm-up frames after idle-variant
+  deopts); per type steady: walk 11–13, stand 17, sit 1, pram 9–12, cane 12–14 B per call.
+  render.ts write() DONE too: packPose() from named fields into a Float64Array (keyed `pose[POSE_KEYS[k]]` reads
+  were megamorphic → boxed; order checked against POSE_KEYS at load), instance matrices via yawMatrix() from
+  slot array MI (no Vector3.set / setFromAxisAngle / compose), sphere centre by field. idleVariant reads poseIn.t.
+  TurboFan scan of every hot function: 0 ChangeFloat64ToTagged left. Bench (WARM=600): median 39 B per figure-
+  frame = exactly the harness (39 B without computePose) → computePose ≈ 0 B steady; mean 120–260 B = JIT
+  warm-up frames (idle-variant deopts); WARM=6000: mean 50 B (incl. 39 harness). Per type walk/stand/sit: 0/0/0.
+  In-browser check of write(): tools/gc_driver.mjs (performance.memory around write(), Chrome
+  --enable-precise-memory-info) — to run new (5173) vs before (5175) after the corner captures.
+* Item 3 (trousers / shoes) — IN CODE, not yet looked at: looks.ts Style.trouserFit (no RNG draw: from outfit —
+  denim 0.42, suit 0.85, worker 1, other 0.75, shorts 0.95, leggings 0, track pants 0.55, +0.15 elderly, ≤0.6
+  kids, ×0.7 capri; styleFromFlags: suit 0.85 / shorts 0.95 / 0.6), packed in col[8] bits 26–29 (iC2.x);
+  shader.ts: LEG vertices with h > trouserEnd and h < 0.8 pushed radially from the rest leg axis up to
+  rt = (0.052 + 0.0215 h)·legScale (5.4 cm ankle … 6.8 cm mid-thigh), weight fit × (1 − smoothstep(0.66, 0.8, h)).
+  Shoes: man rings 6/7 taller + wider (Fr(0.184, 0.0485, −0.071, −0.032), Fr(0.207, 0.042, −0.067, −0.039)), z
+  and y0 unchanged (gait sole identical), LOD0 foot rings [0,1,2,5,6,7] (ring 3 was linear-redundant), toe tip
+  5 mm ahead, 1 mm lower. Vertex counts unchanged (tools/vcount.ts: 1346/458/261/101). lineup_people.mjs got
+  `SHOTS=` filter + lineup{A,B}_{34,front}_10m. QUEUED 23:51 (background chain, each timeout 900):
+  `SHOTS=lineupA_34_10m,lineupA_front_10m,lineupB_34_10m,lineupB_front_10m,lod0_9m,gait_suit_34,typical_16m
+  TH_LOCK_SLOTS=2 node shots/people/tools/lineup_people.mjs shots/people/fix/lineup_{new,before}
+  http://127.0.0.1:517{3,5}/` then `TH_LOCK_SLOTS=2 URL=http://127.0.0.1:517{3,5}/ node
+  shots/people/tools/gc_driver.mjs shots/people/fix/gc_{new,before}.json`; logs shots/people/fix_*.log.
 
 ## Toggles
 * `?legacypeople` — original figures + original stride formula (frozen copies in `pedestrians/legacy/`).

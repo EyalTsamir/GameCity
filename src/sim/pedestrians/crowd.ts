@@ -30,7 +30,7 @@ import { buildRail, railSAt, sampleRail, Router, type Rail, type RailSample } fr
 import type { BenchPlace, DoorCat, DoorPlace, Places, Spot, SpotPlace, StopPlace } from './places';
 import { makeLook, type Look, type Persona } from './looks';
 import { F, DOG_OFFSET } from './figure';
-import { gaitConfig, gaitCycle } from './rig';
+import { gaitConfig, gaitCycleOf, GC } from './rig';
 
 // ───────────────────────────────────────────────────────────── types ──
 
@@ -1302,7 +1302,8 @@ export class Crowd {
     m.speed = Math.hypot(m.vx, m.vz);
     if (d > 1e-4 && d < 2) {
       // gait phase from distance walked (one cycle = two steps; length from leg length and speed, rig.ts)
-      const stride = gaitCycle(m.look, m.speed);
+      gaitCycleOf(m);
+      const stride = GC.cycle;
       m.phase += (d / stride) * Math.PI * 2;
       if (m.look.dog) m.dogPhase += (d / (0.62 * m.look.dog.size)) * Math.PI * 2;
     }

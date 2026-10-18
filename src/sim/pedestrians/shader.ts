@@ -306,6 +306,25 @@ void pedPose(inout vec3 p, inout vec3 n) {
     bone = ${B.PELVIS};
   }
 
+  // ── trousers: from mid-thigh down the cloth hangs as a straight, slightly tapered tube instead of
+  // following the leg (fit 0 leggings … 0.45 jeans … 1 loose): a radial push from the rest leg axis up to the
+  // drape radius (5.4 cm at the ankle … 6.8 cm at mid-thigh, average man), no new vertices
+  if (region == ${R.LEG}) {
+    float fit = float((iC2.x >> 26u) & 15u) * (1.0 / 15.0);
+    float te = pedP8(iC0.z) * 1.275 - 0.1;
+    if (fit > 0.0 && h > te - 0.002 && h < 0.8) {
+      bool left = bone == ${B.THIGH_L} || bone == ${B.SHIN_L} || bone == ${B.FOOT_L};
+      vec3 hp = pedPivS(${PIV.HIP}, left), kn = pedPivS(${PIV.KNEE}, left), an = pedPivS(${PIV.ANKLE}, left);
+      vec3 ax = p.y > kn.y ? mix(kn, hp, clamp((p.y - kn.y) / max(1e-4, hp.y - kn.y), 0.0, 1.0))
+                           : mix(an, kn, clamp((p.y - an.y) / max(1e-4, kn.y - an.y), 0.0, 1.0));
+      vec2 d = p.xz - ax.xz;
+      float r = length(d);
+      float rt = (0.052 + 0.0215 * h) * (hp.y - an.y) * ${(1 / 0.855).toFixed(5)};
+      float k = fit * (1.0 - smoothstep(0.66, 0.8, h));
+      if (r > 1e-4 && rt > r) p.xz += d * ((rt - r) * k / r);
+    }
+  }
+
   // ── hand grip: fingers curl towards the palm about the knuckles
   if ((bone == ${B.HAND_L} || bone == ${B.HAND_R}) && aux.x > 0.0) {
     bool left = bone == ${B.HAND_L};

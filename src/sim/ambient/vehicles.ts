@@ -48,13 +48,27 @@ function makeMaterials(tex: THREE.Texture): { material: THREE.MeshStandardMateri
       );
   };
   material.customProgramCacheKey = () => 'tinyhaven-ambient-vehicles-1';
+  // Aircraft shadows fade out with height (dithered discard, smoothed by the shadow PCF): the balloon
+  // keeps its contact shadow on the pitch at launch / landing, but at cruising height (~95–140 m) the
+  // crisp shadow map turned it into a hard dark blot drifting over the town. The barge always casts.
   const depth = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking });
   depth.onBeforeCompile = (shader) => {
     shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', '#include <common>\nattribute float aModel;\nattribute float iModel;')
-      .replace('#include <begin_vertex>', '#include <begin_vertex>\nif (abs(aModel - iModel) > 0.5) transformed = vec3(0.0);');
+      .replace('#include <common>', '#include <common>\nattribute float aModel;\nattribute float iModel;\nvarying float vShadowFade;')
+      .replace(
+        '#include <begin_vertex>',
+        `#include <begin_vertex>
+        if (abs(aModel - iModel) > 0.5) transformed = vec3(0.0);
+        vShadowFade = abs(iModel - ${MODEL.BARGE}.0) < 0.5 ? 0.0 : smoothstep(12.0, 40.0, (modelMatrix * instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0)).y);`,
+      );
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', '#include <common>\nvarying float vShadowFade;')
+      .replace(
+        'void main() {',
+        'void main() {\n  if (vShadowFade > 0.0 && fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715)))) < vShadowFade) discard;',
+      );
   };
-  depth.customProgramCacheKey = () => 'tinyhaven-ambient-vehicles-depth-1';
+  depth.customProgramCacheKey = () => 'tinyhaven-ambient-vehicles-depth-2';
   return { material, depth };
 }
 

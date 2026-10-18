@@ -21,9 +21,10 @@ const TAU = Math.PI * 2;
 // No numeric helper calls (mix / clamp / smoothstep / wrap) in the per-frame code: TurboFan does not inline a
 // call site in a branch taken less often than --min-inlining-frequency (0.15 of the calls), and a call left
 // un-inlined boxes its computed double arguments and its double result — 16 B of garbage each, per figure per
-// frame. So the arithmetic is written out: smoothsteps as ((q = Math.min(Math.max((x − a) / (b − a), 0), 1)) *
-// q * (3 − 2q)), angle wraps as a − TAU·round(a / TAU), clamps with Math.min / Math.max (builtins are lowered,
-// never called); per-call inputs travel in the double fields of G / gaitIn / LIK (pose.ts), never as arguments.
+// frame. So the arithmetic is written out: mixes as a + (b − a)·t, smoothsteps as ((q = Math.min(Math.max((x −
+// a) / (b − a), 0), 1)) * q * (3 − 2q)), angle wraps as a − TAU·round(a / TAU), clamps with Math.min / Math.max
+// (builtins are lowered, never called); per-call inputs travel in the double fields of G / gaitIn / LIK
+// (pose.ts), never as arguments.
 
 export interface FootPlant {
   /** world position of the flat-foot reference (ankle projected) and heading while planted */
@@ -116,7 +117,14 @@ function copyPlan(o: LegPlan, a: LegPlan): void {
 }
 
 export function newGaitState(): GaitState {
-  const f = (): FootPlant => ({ wx: 0.5, wz: 0.5, wyaw: 0.5, sx: 0.5, sz: 0.5, sy: 0.5, stw: 0.5, stance: false, valid: false, qs: -1.5, qfx: 0.5, qfz: 0.5, pv: 0.5, pp: 0.5, qd: 0.5, lo: 1.5 });
+  // double-valued literal (unboxed double fields), then the real start values
+  const f = (): FootPlant => {
+    const o: FootPlant = { wx: 0.5, wz: 0.5, wyaw: 0.5, sx: 0.5, sz: 0.5, sy: 0.5, stw: 0.5, stance: false, valid: false, qs: -1.5, qfx: 0.5, qfz: 0.5, pv: 0.5, pp: 0.5, qd: 0.5, lo: 1.5 };
+    o.wx = o.wz = o.wyaw = o.sx = o.sz = o.sy = o.stw = o.qfx = o.qfz = o.pv = o.pp = 0;
+    o.qs = -1;
+    o.qd = 0.2;
+    return o;
+  };
   const s = (): StandFoot => ({ wx: 0.5, wz: 0.5, wyaw: 0.5 });
   return { feet: [f(), f()], lastPhase: 0.5, frame: -10, lastT: 0.5, lastYaw: 0.5, yawRate: 0.5, standing: false, sp: [s(), s()], stepFoot: -1, stepT: 0.5, stepFrom: s(), stepTo: s(), last: [newPlan(), newPlan()], lastX: 0.5, lastZ: 0.5, sx: 0.5, sz: 0.5 };
 }
@@ -216,18 +224,18 @@ function params(r: Rig, pram: boolean): Params {
   const vRel = v / Math.sqrt(r.legLen / 0.93);
   P.S = S;
   P.run = run;
-  P.beta = ((Math.min(Math.max(0.665 - 0.035 * vRel, 0.58), 0.67) + 0.03 * r.old) * (1 - run) + ((0.4 + (0.34 - 0.4) * (Math.min(Math.max((v - 2.3) / 1.5, 0), 1)))) * run);
+  P.beta = ((Math.min(Math.max(0.665 - 0.035 * vRel, 0.58), 0.67) + 0.03 * r.old) + ((0.4 + (0.34 - 0.4) * (Math.min(Math.max((v - 2.3) / 1.5, 0), 1))) - (Math.min(Math.max(0.665 - 0.035 * vRel, 0.58), 0.67) + 0.03 * r.old)) * run);
   const heelBack = -r.heelZ;
-  P.thHS = ((0.3 * Math.min(Math.max(vRel / 1.3, 0.35), 1) * (1 - 0.4 * r.old)) * (1 - run) + 0.08 * run);
+  P.thHS = ((0.3 * Math.min(Math.max(vRel / 1.3, 0.35), 1) * (1 - 0.4 * r.old)) + (0.08 - (0.3 * Math.min(Math.max(vRel / 1.3, 0.35), 1) * (1 - 0.4 * r.old))) * run);
   const aheadAnkle = ((0.43 + (0.3 - 0.43) * run) * step) / s;
   P.zHS = aheadAnkle + heelBack * (1 - Math.cos(P.thHS)) + r.ankleH * Math.sin(P.thHS);
-  P.thTO = -((0.85 * Math.min(Math.max(vRel / 1.3, 0.45), 1.05) * (1 - 0.35 * r.old)) * (1 - run) + 0.75 * run);
+  P.thTO = -((0.85 * Math.min(Math.max(vRel / 1.3, 0.45), 1.05) * (1 - 0.35 * r.old)) + (0.75 - (0.85 * Math.min(Math.max(vRel / 1.3, 0.45), 1.05) * (1 - 0.35 * r.old))) * run);
   P.uFlat = P.beta * (0.19 + (0.22 - 0.19) * run);
   P.uRise = P.beta * (0.6 + (0.45 - 0.6) * run);
   P.width = (0.048 + (0.03 - 0.048) * run) * hk + 0.012 * r.old * hk;
   P.lift = ((0.1 + (0.2 - 0.1) * run) + 0.02 * Math.min(Math.max(vRel - 1, 0), 1)) * hk * (1 - 0.45 * r.old) * Math.min(Math.max(vRel / 0.9, 0.5), 1);
   P.hStand = r.hip.y - 0.004 * hk - 0.02 * r.old * hk;
-  P.bob = ((0.023 * Math.min(Math.max(vRel / 1.3, 0.3), 1.3)) * (1 - run) + 0.03 * run) * hk;
+  P.bob = ((0.023 * Math.min(Math.max(vRel / 1.3, 0.3), 1.3)) + (0.03 - (0.023 * Math.min(Math.max(vRel / 1.3, 0.3), 1.3))) * run) * hk;
   return P;
 }
 
@@ -289,6 +297,7 @@ function rollAnkle(r: Rig, o: LegPlan): void {
 //   kappa: path curvature (per figure unit, + = turning left); dt: frame time; qlift: lift of a quick re-step
 //   being planned; urate: cycle fraction per second; bx, bz, cy, sy, sc, yaw: world ↔ body frame
 const G = { kappa: 0.5, dt: 0.5, qlift: 0.5, urate: 0.5, bx: 0.5, bz: 0.5, cy: 0.5, sy: 0.5, sc: 0.5, yaw: 0.5, uL: 0.5, uR: 0.5, pyaw: 0.5, proll: 0.5, v: 0.5, rz: 0.5, rp: 0.5, abd: 0.5, hd: 0.5, need: 0.5 };
+for (const k in G) G[k as keyof typeof G] = 0; // (the literal's 0.5s only fix the field representation)
 // …and the other per-call inputs: uL / uR leg cycle fractions, pyaw / proll pelvis yaw / roll, v speed,
 // rz / rp rollAnkle's flat-foot z and pitch, abd / hd footHeading's abduction in and heading out
 /** gaitPose inputs t (s) and gw (0 stand … 1 walk), passed as fields for the same reason */
@@ -433,10 +442,10 @@ function planWalk(r: Rig, left: boolean, plant: FootPlant | null, o: LegPlan): v
         // and put back on it with a short quick step (0.2 s) — never dragged, never split into a long stride
         // (0.2 s, shorter late in the stance so that it lands before the toe-off; too late → no re-step)
         if (plant.qs < 0 && (Math.abs(ex) > 0.16 || Math.abs(ez) > 0.24)) {
-          const left = G.urate > 1e-3 ? (p.beta - 0.03 - u) / G.urate : 0;
-          if (left > 0.11) {
+          const tLeft = G.urate > 1e-3 ? (p.beta - 0.03 - u) / G.urate : 0; // s until the toe-off
+          if (tLeft > 0.11) {
             plant.qs = 0;
-            plant.qd = Math.min(0.2, left);
+            plant.qd = Math.min(0.2, tLeft);
             plant.qfx = plant.wx;
             plant.qfz = plant.wz;
           }
@@ -835,7 +844,7 @@ export function gaitPose(m: Member, r: Rig, st: GaitState | null, frame: number,
   // ── pelvis height: walking lowest at double support, running lowest mid-stance; legs must reach
   const hWalk = p.hStand - p.bob * (0.5 + 0.5 * Math.cos(2 * TAU * uL));
   const hRun = p.hStand * 0.955 - p.bob * Math.cos(2 * TAU * (uL - p.beta / 2));
-  let h = ((p.hStand - idle.drop) * (1 - gw) + ((hWalk + (hRun - hWalk) * run)) * gw);
+  let h = ((p.hStand - idle.drop) + ((hWalk + (hRun - hWalk) * run) - (p.hStand - idle.drop)) * gw);
   const hNom = h;
   const reach = (r.thighL + r.shinL) * (0.995 + (0.985 - 0.995) * run);
   for (let li = 0; li < 2; li++) {
@@ -1065,14 +1074,14 @@ export function gaitPose(m: Member, r: Rig, st: GaitState | null, frame: number,
   o.headPitch = (-0.3 * (rootY - (p.hStand - p.bob * 0.5 - r.hip.y)) - 0.02 * run) * gw;
   // arms: opposite to the legs, slightly lagging, more forward than back; elbows bend in front
   const kidK = r.c > 0.4 ? 1.15 : 1;
-  const A = (((0.17 + 0.12 * Math.min(vRel, 2)) * kidK * (1 - 0.55 * r.old)) * (1 - run) + 0.5 * run) * Math.min(Math.max(kWalk * 1.2, 0), 1);
+  const A = (((0.17 + 0.12 * Math.min(vRel, 2)) * kidK * (1 - 0.55 * r.old)) + (0.5 - ((0.17 + 0.12 * Math.min(vRel, 2)) * kidK * (1 - 0.55 * r.old))) * run) * Math.min(Math.max(kWalk * 1.2, 0), 1);
   const fL = -Math.cos(TAU * (uL - 0.05));
   const fR = -fL;
   const bias = (0.05 + (0.12 - 0.05) * run) * gw;
   o.shFlexL = bias + A * fL;
   o.shFlexR = bias + A * fR;
-  const eBase = (0.24 + 0.15 * r.old) * (1 - run * gw) + 1.45 * run * gw;
-  const eSw = ((0.4 * Math.min(Math.max(A / 0.33, 0), 1.2)) * (1 - run) + 0.25 * run);
+  const eBase = ((0.24 + 0.15 * r.old) + (1.45 - (0.24 + 0.15 * r.old)) * (run * gw));
+  const eSw = ((0.4 * Math.min(Math.max(A / 0.33, 0), 1.2)) + (0.25 - (0.4 * Math.min(Math.max(A / 0.33, 0), 1.2))) * run);
   o.elbowL = eBase + eSw * Math.max(0, fL) * (1 - 0.3 * run) - 0.1 * run * fL;
   o.elbowR = eBase + eSw * Math.max(0, fR) * (1 - 0.3 * run) - 0.1 * run * fR;
   o.shAbdL = (0.05 + (0.12 - 0.05) * run);

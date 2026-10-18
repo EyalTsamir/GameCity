@@ -52,6 +52,8 @@ export interface Style {
   trouserEnd: number;
   /** legs below the trousers / skirt: 0 skin, 1 dark tights, 2 sheer tights, 3 light socks */
   legwear: number;
+  /** trouser cut from mid-thigh down: 0 skin-tight (leggings) … 0.45 jeans … 1 loose work / suit trousers */
+  trouserFit: number;
   /** jacket / coat / cardigan: hem on the torso (< 0 = none) and colour */
   jacketHem: number;
   outer: number;
@@ -465,6 +467,7 @@ function baseStyle(): Style {
     topHem: 0.24,
     trouserEnd: 0.06,
     legwear: 0,
+    trouserFit: 0.75,
     jacketHem: -1,
     outer: 0x2f3236,
     collar: 0,
@@ -595,10 +598,29 @@ function dressUp(L: Look, r: Rng, persona: Persona, ageClass: string, warm: bool
   if (s.tail === 0 && Math.abs(valueOf(upper) - valueOf(L.bottom)) < 0.14 && !(fl & F.SUIT) && !s.vest) {
     L.bottom = valueOf(upper) > 0.45 ? r.pick([0x2f4566, 0x1d1e20, 0x24334c, 0x2e3034, 0x3a5478, 0x4a4e55]) : r.pick([0x6f86a8, 0x7d8a99, 0x8a8d90, 0x9c8f72, 0x5f7896, 0xa7a9aa, 0xb5ab95, 0x6b7f5a]);
   }
+  // ── trouser cut (no RNG draw: the outfits drawn above stay as they were)
+  s.trouserFit = trouserFitOf(L, s, persona, child, old);
   L.style = s;
 }
 
 const OUTERS_LIST = OUTERS;
+
+/** trouser cut from the outfit: blue (denim) slim, suits / chinos / workwear loose, leggings tight */
+function trouserFitOf(L: Look, s: Style, persona: Persona, child: boolean, old: boolean): number {
+  if (s.tail > 0 || s.trouserEnd > 1) return 0;
+  if (persona === 'jogger') return s.trouserEnd < 0.4 ? (L.kind === 'woman' || L.kind === 'girl' ? 0 : 0.55) : 0.9; // leggings / track pants, loose shorts
+  if (s.trouserEnd > 0.45) return 0.95; // shorts
+  const c = L.bottom;
+  const r = ((c >> 16) & 255) / 255,
+    g = ((c >> 8) & 255) / 255,
+    b = (c & 255) / 255;
+  const denim = b > r * 1.22 && b >= g;
+  let fit = L.flags & F.SUIT ? 0.85 : denim ? 0.42 : persona === 'worker' ? 1 : 0.75;
+  if (old) fit = Math.min(1, fit + 0.15);
+  if (child) fit = Math.min(fit, 0.6);
+  if (s.trouserEnd > 0.2) fit *= 0.7; // capri
+  return fit;
+}
 
 /** Style for looks built without one (hand-made looks in tools): derived from the flags only. */
 export function styleFromFlags(L: Look): Style {
@@ -629,5 +651,6 @@ export function styleFromFlags(L: Look): Style {
     s.tailHem = 0.5;
     s.legwear = fl & F.TIGHTS ? 1 : 0;
   } else if (fl & F.SHORTS) s.trouserEnd = 0.6;
+  s.trouserFit = s.tail > 0 ? 0 : fl & F.SUIT ? 0.85 : fl & F.SHORTS ? 0.95 : 0.6;
   return s;
 }

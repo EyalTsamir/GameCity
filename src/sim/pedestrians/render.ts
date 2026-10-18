@@ -18,14 +18,56 @@ import { styleFromFlags, type Look, type Style } from './looks';
 import type { Crowd, Member } from './crowd';
 import { patchLampMaterial } from '../../world/lamps/integrate';
 
-const smooth = (t: number) => t * t * (3 - 2 * t);
 const clamp = (x: number, a: number, b: number) => (x < a ? a : x > b ? b : x);
-const fx16 = (v: number) => {
-  const u = Math.round((v + 8) * 4096);
-  return u < 0 ? 0 : u > 65535 ? 65535 : u;
-};
 const q8 = (h: number) => clamp(Math.round(((h + 0.1) / 1.275) * 255), 0, 255);
 const bit = (b: number) => (1 << b) >>> 0;
+
+// Per-figure hot path without garbage: the pose is packed from named field reads (a keyed read with a varying
+// key, pose[POSE_KEYS[k]], is megamorphic and boxes every double it returns), and instance matrices are written
+// element by element (three's setters take doubles as arguments, boxed when the call is not inlined).
+const PV = new Float64Array(POSE_KEYS.length);
+const PACK_ORDER = 'scale fade w c b bodyPitch rootX rootY rootZ pelvisYaw pelvisRoll waistBend waistTwist chestBend chestTwist headYaw headPitch hipFlexL hipAbdL kneeL ankleL hipFlexR hipAbdR kneeR ankleR shFlexL shAbdL shTwistL elbowL wristL shFlexR shAbdR shTwistR elbowR wristR gripL gripR caneX caneZ bagSwingL bagSwingR tailFloor headRoll chestRoll footYawL footYawR spare1 spare2';
+if (PACK_ORDER !== POSE_KEYS.join(' ')) throw new Error('render.ts packPose: field order differs from POSE_KEYS');
+function packPose(p: Pose, o: Uint32Array): void {
+  const v = PV;
+  v[0] = p.scale; v[1] = p.fade; v[2] = p.w; v[3] = p.c; v[4] = p.b; v[5] = p.bodyPitch; v[6] = p.rootX; v[7] = p.rootY;
+  v[8] = p.rootZ; v[9] = p.pelvisYaw; v[10] = p.pelvisRoll; v[11] = p.waistBend; v[12] = p.waistTwist; v[13] = p.chestBend;
+  v[14] = p.chestTwist; v[15] = p.headYaw; v[16] = p.headPitch; v[17] = p.hipFlexL; v[18] = p.hipAbdL; v[19] = p.kneeL;
+  v[20] = p.ankleL; v[21] = p.hipFlexR; v[22] = p.hipAbdR; v[23] = p.kneeR; v[24] = p.ankleR; v[25] = p.shFlexL;
+  v[26] = p.shAbdL; v[27] = p.shTwistL; v[28] = p.elbowL; v[29] = p.wristL; v[30] = p.shFlexR; v[31] = p.shAbdR;
+  v[32] = p.shTwistR; v[33] = p.elbowR; v[34] = p.wristR; v[35] = p.gripL; v[36] = p.gripR; v[37] = p.caneX; v[38] = p.caneZ;
+  v[39] = p.bagSwingL; v[40] = p.bagSwingR; v[41] = p.tailFloor; v[42] = p.headRoll; v[43] = p.chestRoll; v[44] = p.footYawL;
+  v[45] = p.footYawR; v[46] = p.spare1; v[47] = p.spare2;
+  for (let k = 0; k < POSE_UINTS; k++) {
+    let a = Math.round((v[2 * k] + 8) * 4096),
+      b = Math.round((v[2 * k + 1] + 8) * 4096);
+    a = a < 0 ? 0 : a > 65535 ? 65535 : a;
+    b = b < 0 ? 0 : b > 65535 ? 65535 : b;
+    o[k] = (a | (b << 16)) >>> 0;
+  }
+}
+/** pose word 0 with the scale and a given fade (LOD cross-fades) */
+function packScaleFade(scale: number, fade: number, o: Uint32Array): void {
+  PV[0] = scale;
+  PV[1] = fade;
+  let a = Math.round((PV[0] + 8) * 4096),
+    b = Math.round((PV[1] + 8) * 4096);
+  a = a < 0 ? 0 : a > 65535 ? 65535 : a;
+  b = b < 0 ? 0 : b > 65535 ? 65535 : b;
+  o[0] = (a | (b << 16)) >>> 0;
+}
+// instance matrix inputs: x, y, z, yaw, sx, sy, sz (written by the caller)
+const MI = new Float64Array(7);
+/** m ← T(x, y, z) · Ry(yaw) · S(sx, sy, sz) from MI (what compose(pos, quatY(yaw), scl) gives) */
+function yawMatrix(m: THREE.Matrix4): void {
+  const e = m.elements;
+  const c = Math.cos(MI[3]),
+    s = Math.sin(MI[3]);
+  e[0] = c * MI[4]; e[1] = 0; e[2] = -s * MI[4]; e[3] = 0;
+  e[4] = 0; e[5] = MI[5]; e[6] = 0; e[7] = 0;
+  e[8] = s * MI[6]; e[9] = 0; e[10] = c * MI[6]; e[11] = 0;
+  e[12] = MI[0]; e[13] = MI[1]; e[14] = MI[2]; e[15] = 1;
+}
 
 /** per-look static render data (colours with garment parameters, feature mask) */
 interface LookCache {
@@ -85,7 +127,7 @@ function writeColours(col: Uint32Array, L: Look, s: Style, top: number, bottom: 
   col[5] = w(L.hat, (s.hat & 7) | ((s.hat > 0 ? 0 : Math.round(clamp(s.hairVol ?? 0, 0, 1) * 31)) << 3));
   col[6] = w(L.bag, Math.round(clamp(s.tailHem, 0, 1) * 255));
   col[7] = w(s.outer, tailSrc << 5);
-  col[8] = w(L.accent, s.legwear & 3);
+  col[8] = w(L.accent, (s.legwear & 3) | (Math.round(clamp(s.trouserFit ?? 0, 0, 1) * 15) << 2));
   col[9] = w(L.towel, s.jacketHem < -0.05 ? 0 : q8(s.jacketHem));
   col[10] = 0;
   col[11] = ((q8((s.neckTop - 0.95) / 0.4 * 1.275 - 0.1) << 24) | (q8(-0.1) << 16) | ((s.collar === 1 ? 1 : 0) << 8) | Math.round(clamp(s.tailFlare * 1000, 0, 255))) >>> 0;
@@ -210,13 +252,9 @@ export class CrowdRenderer {
   readonly frustum = new THREE.Frustum();
   private pv = new THREE.Matrix4();
   private m4 = new THREE.Matrix4();
-  private q = new THREE.Quaternion();
-  private pos = new THREE.Vector3();
-  private scl = new THREE.Vector3();
   readonly sph = new THREE.Sphere();
   private hand = { x: 0, y: 0, z: 0 };
   private cam = new THREE.Vector3();
-  private up = new THREE.Vector3(0, 1, 0);
   private pose: Pose = newPose();
   private sRoot = new Float32Array(4);
   private sPose = new Uint32Array(POSE_UINTS);
@@ -372,7 +410,10 @@ export class CrowdRenderer {
         if (!m.present || m.fade <= 0.01) continue;
         const L = m.look;
         const extra = L.pram || L.dog ? 1.4 : L.flags & F.ROD ? 2.2 : 0;
-        this.sph.center.set(m.x, m.y + 0.9, m.z);
+        const sc0 = this.sph.center;
+        sc0.x = m.x;
+        sc0.y = m.y + 0.9;
+        sc0.z = m.z;
         this.sph.radius = 1.4 + extra;
         if (!this.frustum.intersectsSphere(this.sph)) continue;
         const d2 = (m.x - this.cam.x) ** 2 + (m.y - this.cam.y) ** 2 + (m.z - this.cam.z) ** 2;
@@ -439,38 +480,44 @@ export class CrowdRenderer {
         R[1] = m.y;
         R[2] = mz;
         R[3] = m.yaw;
-        for (let k = 0; k < POSE_UINTS; k++) PP[k] = (fx16(pose[POSE_KEYS[2 * k]]) | (fx16(pose[POSE_KEYS[2 * k + 1]]) << 16)) >>> 0;
+        packPose(pose, PP);
         CC[10] = flags >>> 0;
         if (shadows && d2 < shadowD2 && this.shadow.n < this.shadow.capacity) this.shadow.put(R, PP, CC);
         if (out && out !== layer && out.n < out.capacity) {
           // incoming level keeps the dither cells below xf, the outgoing one (negative fade) the rest
-          const s0 = fx16(pose.scale);
-          PP[0] = (s0 | (fx16(-Math.max(0.002, st.xf)) << 16)) >>> 0;
+          packScaleFade(pose.scale, -Math.max(0.002, st.xf), PP);
           out.put(R, PP, CC);
-          PP[0] = (s0 | (fx16(Math.min(0.994, st.xf)) << 16)) >>> 0;
+          packScaleFade(pose.scale, Math.min(0.994, st.xf), PP);
         }
         layer.put(R, PP, CC);
         // blob shadow
-        this.q.setFromAxisAngle(this.up, m.yaw);
         const fx = Math.sin(m.yaw),
           fz = Math.cos(m.yaw);
+        MI[3] = m.yaw;
         const lying = Math.max(m.lie, m.ground * 0.6);
-        const sitK = smooth(Math.min(1, m.sit));
+        const ms = Math.min(1, m.sit);
+        const sitK = ms * ms * (3 - 2 * ms);
         const bw = (0.56 + 0.18 * Math.max(sitK, lying)) * r.stature / 1.76;
         const bl = (0.56 + 0.12 * m.amp + 0.25 * sitK + 1.4 * lying) * r.stature / 1.76;
         if (nb < bcap) {
           const off = 0.08 * sitK + 0.1 * lying;
-          this.pos.set(mx + fx * off, m.y + 0.018, mz + fz * off);
-          this.scl.set(bw, 1, bl);
-          this.m4.compose(this.pos, this.q, this.scl);
+          MI[0] = mx + fx * off;
+          MI[1] = m.y + 0.018;
+          MI[2] = mz + fz * off;
+          MI[4] = bw;
+          MI[5] = 1;
+          MI[6] = bl;
+          yawMatrix(this.m4);
           this.blob.setMatrixAt(nb, this.m4);
           BA[nb++] = blobAlpha * m.fade;
         }
         // pram
         if (L.pram && np < this.pram.instanceMatrix.count) {
-          this.pos.set(mx, m.y, mz);
-          this.scl.setScalar(Math.min(1.05, Math.max(0.95, L.scale)));
-          this.m4.compose(this.pos, this.q, this.scl);
+          MI[0] = mx;
+          MI[1] = m.y;
+          MI[2] = mz;
+          MI[4] = MI[5] = MI[6] = Math.min(1.05, Math.max(0.95, L.scale));
+          yawMatrix(this.m4);
           this.pram.setMatrixAt(np, this.m4);
           PM[np * 4] = L.pram.fabric;
           PM[np * 4 + 1] = m.fade;
@@ -478,24 +525,30 @@ export class CrowdRenderer {
           PM[np * 4 + 3] = 0;
           np++;
           if (nb < bcap) {
-            this.pos.set(mx + fx * 0.9, m.y + 0.016, mz + fz * 0.9);
-            this.scl.set(0.55, 1, 0.95);
-            this.m4.compose(this.pos, this.q, this.scl);
+            MI[0] = mx + fx * 0.9;
+            MI[1] = m.y + 0.016;
+            MI[2] = mz + fz * 0.9;
+            MI[4] = 0.55;
+            MI[5] = 1;
+            MI[6] = 0.95;
+            yawMatrix(this.m4);
             this.blob.setMatrixAt(nb, this.m4);
             BA[nb++] = blobAlpha * 0.9 * m.fade;
           }
         }
         // dog
         if (L.dog && nd < this.dog.instanceMatrix.count) {
-          this.pos.set(mx, m.y, mz);
-          this.scl.setScalar(L.scale);
-          this.m4.compose(this.pos, this.q, this.scl);
+          MI[0] = mx;
+          MI[1] = m.y;
+          MI[2] = mz;
+          MI[4] = MI[5] = MI[6] = L.scale;
+          yawMatrix(this.m4);
           this.dog.setMatrixAt(nd, this.m4);
           const d4 = nd * 4;
           const dogAmp = Math.min(1.5, m.speed / (0.95 * L.dog.size));
           DA[d4] = m.dogPhase;
           DA[d4 + 1] = dogAmp;
-          DA[d4 + 2] = smooth(m.dogSit);
+          DA[d4 + 2] = m.dogSit * m.dogSit * (3 - 2 * m.dogSit);
           DA[d4 + 3] = m.fade;
           DC[d4] = L.dog.fur;
           DC[d4 + 1] = L.dog.fur2;
@@ -511,9 +564,13 @@ export class CrowdRenderer {
           nd++;
           if (nb < bcap) {
             const sc = L.scale;
-            this.pos.set(mx + (fz * DOG_OFFSET.x + fx * DOG_OFFSET.z) * sc, m.y + 0.017, mz + (-fx * DOG_OFFSET.x + fz * DOG_OFFSET.z) * sc);
-            this.scl.set(0.32 * L.dog.size, 1, 0.6 * L.dog.size);
-            this.m4.compose(this.pos, this.q, this.scl);
+            MI[0] = mx + (fz * DOG_OFFSET.x + fx * DOG_OFFSET.z) * sc;
+            MI[1] = m.y + 0.017;
+            MI[2] = mz + (-fx * DOG_OFFSET.x + fz * DOG_OFFSET.z) * sc;
+            MI[4] = 0.32 * L.dog.size;
+            MI[5] = 1;
+            MI[6] = 0.6 * L.dog.size;
+            yawMatrix(this.m4);
             this.blob.setMatrixAt(nb, this.m4);
             BA[nb++] = blobAlpha * 0.85 * m.fade;
           }
