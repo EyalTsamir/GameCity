@@ -78,6 +78,13 @@ S4 before/after sheets, perf A/B.
 * Ladder test (?debug, harbor 11, shots/stage/ladder/report.json): set(0) full refl 2 · set(1) refl-low refl 1 ·
   set(2) no-ao refl 1 · set(6) refl-off refl 0 @0.72 · set(7) scale-0.6 refl 0 · back to 0 → refl 2. Console clean.
 
+* 23:10 usage-limit stop / container restart; :5175 not restarted (not needed any more — 5173 is stable).
+* after2 (6.5/16.5/18.2 with the first lift) still −10…−15 % median at golden hour → final lift: hemi 0.62/0.66/
+  0.70/0.72 at 16/17.6/18.6/19.3, exposure 1.14/1.25/1.32/1.30; dawn exposure 1.28/1.26 → after3 re-capture.
+* perf.mjs under SwiftShader with vsync + frame cap disabled backs up the compositor (0.5 fps, cpuFrameMs ≈ 2 s,
+  numbers meaningless; the single-page stage-perf.mjs hung for the same reason). Relative cost is measured in the
+  normal launch mode instead: one page, alternating runtime variants (shots/stage/perfab).
+
 ## Test setup notes
 * :5175 = /home/user/GameCity-stage (git archive f5ff0a5 + my files via sync.sh, own Vite cacheDir).
 * scratchpad stage-cap.mjs: views × hours × runtime variants in one page load (`S.setLegacy(true)`).

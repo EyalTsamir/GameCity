@@ -266,8 +266,12 @@ export class PlanarReflection {
     this.frustum.setFromProjectionMatrix(this.pm);
     // far views (overview): small boats and bank trees mirror to a few pixels — skip them
     const camSvc = this.ctx.services.camera;
-    const far = (camSvc ? camSvc.getState().distance : this.camPos.y * 1.6) > FAR_VIEW;
-    const trees = full && !far && this.frustum.intersectsBox(RIVER_BOX);
+    const st = camSvc ? camSvc.getState() : null;
+    const far = (st ? st.distance : this.camPos.y * 1.6) > FAR_VIEW;
+    // bank trees only when the view is about the river (not a river mouth glimpsed at the edge)
+    if (st) this.target.set(st.target.x, WATER_LEVEL, st.target.z);
+    const nearRiver = !st || RIVER_BOX.distanceToPoint(this.target) < 45;
+    const trees = full && !far && nearRiver && this.frustum.intersectsBox(RIVER_BOX);
     if (this.treesFar) {
       vs[n++] = this.treesFar.visible;
       this.treesFar.visible = trees;

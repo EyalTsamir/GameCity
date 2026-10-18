@@ -348,6 +348,8 @@ vec4 waterBase() {
   float F = mix(F0, 0.92, pow(1.0 - ndv, 4.0));
   // glassy slicks mirror more than ruffled patches (macro tonal variation that survives distance)
   F = min(0.95, F * mix(1.16, 0.84, ruff) * (1.0 + 0.22 * slick));
+  // turquoise shallows keep their colour (stylised: less mirror over the sandy shelf)
+  F *= mix(0.62, 1.0, smoothstep(0.3, 2.2, depth));
 
   // ── reflection: analytic sky under the planar reflection
   vec3 R = reflect(-V, wN);
@@ -355,6 +357,8 @@ vec4 waterBase() {
   vec3 sky = wSky(normalize(R));
   // daytime: the studio horizon is near white; mirror it a little deeper so grazing water stays blue
   sky = mix(sky, uSkyZen * 1.05, 0.22 * (1.0 - uDusk) * (1.0 - uNight));
+  // night: keep the sea a deep readable indigo (the night zenith alone mirrors to near black)
+  sky = mix(sky, uSkyHor * 1.5 + vec3(0.004, 0.006, 0.02), 0.45 * uNight);
   vec4 rc = vec4(0.0);
   float reflW = uReflInfo.x * (1.0 - mPond);
   // fade toward the slab's cut faces
@@ -442,7 +446,7 @@ vec4 waterBase() {
   wSparkle = smoothstep(0.55, 0.95, crest * (0.55 + 0.9 * texture2D(tWM, p.xz * 0.37 + vec2(t * 0.05, -t * 0.04)).a)) * (1.0 - smoothstep(0.08, 0.3, fp)) * ruff;
   // moon
   float md = max(dot(R, normalize(uSkyMoonDir)), 0.0);
-  vec3 moon = vec3(0.62, 0.72, 1.0) * (pow(md, mix(1400.0, 350.0, ruff)) * 1.1 + pow(md, 60.0) * 0.04 + wSparkle * pow(md, 260.0) * 0.5) * uSkyMoonVis * uNight * (1.0 - 0.5 * mRiv);
+  vec3 moon = vec3(0.62, 0.72, 1.0) * (pow(md, mix(1400.0, 350.0, ruff)) * 0.75 + pow(md, 60.0) * 0.05 + wSparkle * pow(md, 260.0) * 0.3) * uSkyMoonVis * uNight * (1.0 - 0.75 * mRiv);
 
   // night lights when the reflection pass is off: lamp map read where the reflected ray
   // reaches lamp-head height (streaks toward the viewer through the anisotropic normal)

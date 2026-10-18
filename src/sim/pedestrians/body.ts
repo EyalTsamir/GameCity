@@ -1039,7 +1039,18 @@ function buildTail(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
     }
     rings.push({ ids, c: [0, belt.y - 0.2, -0.01] });
   }
+  // the parametric rings share one rest height (the shader spreads them down to the hem), so their
+  // quads are degenerate at rest and the winding test needs stand-in heights: descend each ring,
+  // bridge (outward winding), then restore the rest positions
+  const P = b.pos;
+  const restY: number[][] = rings.map((r) => r.ids.map((i) => P[i * 3 + 1]));
+  rings.forEach((r, j) => {
+    const fy = j === 0 ? belt.y : j === 1 && us[1] === -0.5 ? hipR.y : hipR.y - 0.12 * j;
+    r.c = [0, fy, -0.01];
+    for (const i of r.ids) P[i * 3 + 1] = fy;
+  });
   bridge(b, rings);
+  rings.forEach((r, j) => r.ids.forEach((i, k) => (P[i * 3 + 1] = restY[j][k])));
   if (cfg.props === 'far' || cfg.props === 'pin') return;
   // inside of the hem (darker), so the skirt never reads as an open tube from below / when seated
   b.setTint(0.45);
@@ -1047,7 +1058,6 @@ function buildTail(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
   const last = rings[rings.length - 1];
   const prev = rings[rings.length - 2];
   for (let k = 0; k < n; k++) {
-    const P = b.pos;
     const a = last.ids[k],
       c = prev.ids[k];
     const p: P3 = [P[a * 3] * 0.93 + P[c * 3] * 0.07, P[a * 3 + 1], P[a * 3 + 2] * 0.93 + P[c * 3 + 2] * 0.07];

@@ -64,12 +64,19 @@ Baseline close-ups (5174, subset `only=sky,terrain,water,roads,landmarks,vegetat
 Views: cliff `-30,5,-160,55,-15,18`, harbour cliff `136,4,-162,75,75,22`, west spur `-184,4,-150,60,70,22`,
 lawn `-40,0,20,45,10,38`, stadium `-27,0,72,60,0,35`, hills/station `0,2,-142,120,-95,42`.
 
+## Final verification (2026-10-17 23:38–00:06, full city 5173 vs 5174, 1280×720)
+* `shots/terrain/final_new/`, `shots/terrain/final_old/` (10 views × 11 / 18.2 / 21.5 h). Sheets:
+  `shots/terrain/sheet_final_11a.png` (overview, station, industry, harbour), `sheet_final_11b.png` (park,
+  riverside, stadium, stadium north), `sheet_final_golden.png`, `sheet_final_night.png`; isolated A/B of my
+  areas only (`?legacyterrain`, same build/lighting): `shots/terrain/sheet_it2_day.png`.
+* New page: 0 console errors/warnings, invariants {}, validate [] ; terrain masonry 26.9k → 38.5k tris,
+  landmarks stadium 5.6k → 11.9k, floodlights 0.9k → 2.8k tris; terrain buildMs ≈ legacy (1.3 s).
+* T4 verified at night: lamp pools light the park / riverside lawns (albedo × lamp map).
+* After the restart: lawns still too subtle at 130 m → it4: per-lawn tone patchwork (±11 %), park stripes
+  ±20 %, lawn stripes ±17 %, gardens ±10 % (A/B in `shots/terrain/it4/`).
+
 ## Next steps
-1. Final job queued (`scratchpad/final.mjs`, log `shots/terrain/final.log`): perf A/B new vs `?legacyterrain`
-   (subset page, round-robin medians) + full-city captures 5173 vs 5174 → `shots/terrain/final/` → sheets.
-2. Night check of T4 with the lamps module loaded (full city) after the lead's uLights fix.
-3. Final report. Tools: `scratchpad/tcap.mjs` (multi-variant capture, 4 h lock wait), `scratchpad/tperf.mjs`,
-   `scratchpad/geo/*.ts` (offline geometry stats via rolldown + node).
+1. it4 lawn A/B review; perf A/B (`scratchpad/perfchain.sh` → `shots/terrain/perf2.log`). 2. Final report.
 
 ## Requests to other areas
 (none yet)
