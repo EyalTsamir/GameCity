@@ -88,6 +88,12 @@ Per-module logs live next to this file: `docs/progress/<module>.md`.
   to all, relay cross-area requests, commit checkpoints, then integration QA (before/after matrix
   5174 vs 5173, perf A/B, soak, ui-test, build).
 
+* 2026-10-17 ~23:10 — account usage limit: all 8 agents stopped mid-task (work saved; container
+  later restarted). 2026-10-18 03:02 — limit reset: dev servers restarted, checkpoint 01b96a3 pushed,
+  all 8 agents resumed via SendMessage with their context. Earlier coordination fixes (lead):
+  LAMP_GLSL textureLod compile error, uLights not reaching 1 in captures (negative frame delta, no
+  snap on clock jumps), FIFO screenshot queue + 45-min lock watchdog, ≲15-min-per-run fair-share rule.
+
 ## Module status (round 1 work, verified by the lead 23:30)
 | module | state | open items |
 |---|---|---|
