@@ -91,25 +91,28 @@ const tmpA = new Float64Array(9),
   tmpB = new Float64Array(9),
   tmpC = new Float64Array(9);
 
-function rX(a: number, o: M3): M3 {
-  const c = Math.cos(a),
-    s = Math.sin(a);
+// rotation builders take their angle from AN[0] (a computed double passed to a call that is not inlined
+// is boxed — 16 B of garbage — and these run in chains per figure per frame)
+const AN = new Float64Array(1);
+function rXa(o: M3): M3 {
+  const c = Math.cos(AN[0]),
+    s = Math.sin(AN[0]);
   o[0] = 1; o[1] = 0; o[2] = 0;
   o[3] = 0; o[4] = c; o[5] = -s;
   o[6] = 0; o[7] = s; o[8] = c;
   return o;
 }
-function rY(a: number, o: M3): M3 {
-  const c = Math.cos(a),
-    s = Math.sin(a);
+function rYa(o: M3): M3 {
+  const c = Math.cos(AN[0]),
+    s = Math.sin(AN[0]);
   o[0] = c; o[1] = 0; o[2] = s;
   o[3] = 0; o[4] = 1; o[5] = 0;
   o[6] = -s; o[7] = 0; o[8] = c;
   return o;
 }
-function rZ(a: number, o: M3): M3 {
-  const c = Math.cos(a),
-    s = Math.sin(a);
+function rZa(o: M3): M3 {
+  const c = Math.cos(AN[0]),
+    s = Math.sin(AN[0]);
   o[0] = c; o[1] = -s; o[2] = 0;
   o[3] = s; o[4] = c; o[5] = 0;
   o[6] = 0; o[7] = 0; o[8] = 1;
@@ -139,16 +142,21 @@ const mir = (v: V3, left: boolean, o: V3): V3 => {
 const pvTmp = { x: 0.5, y: 0.5, z: 0.5 };
 
 export function hipMatrix(P: Pose, left: boolean, o: M3): M3 {
-  const fl = left ? P.hipFlexL : P.hipFlexR,
-    ab = left ? P.hipAbdL : P.hipAbdR;
-  return mm(rZ(left ? ab : -ab, tmpA), rX(-fl, tmpB), o);
+  AN[0] = left ? P.hipAbdL : -P.hipAbdR;
+  rZa(tmpA);
+  AN[0] = -(left ? P.hipFlexL : P.hipFlexR);
+  rXa(tmpB);
+  return mm(tmpA, tmpB, o);
 }
 export function shoulderMatrix(P: Pose, left: boolean, o: M3): M3 {
-  const fl = left ? P.shFlexL : P.shFlexR,
-    ab = left ? P.shAbdL : P.shAbdR,
-    tw = left ? P.shTwistL : P.shTwistR;
-  mm(rZ(left ? ab : -ab, tmpA), rX(-fl, tmpB), tmpC);
-  return mm(tmpC, rY(left ? -tw : tw, tmpA), o);
+  AN[0] = left ? P.shAbdL : -P.shAbdR;
+  rZa(tmpA);
+  AN[0] = -(left ? P.shFlexL : P.shFlexR);
+  rXa(tmpB);
+  mm(tmpA, tmpB, tmpC);
+  AN[0] = left ? -P.shTwistL : P.shTwistR;
+  rYa(tmpA);
+  return mm(tmpC, tmpA, o);
 }
 
 const M = new Float64Array(9);
@@ -158,18 +166,50 @@ const fA = new Float64Array(9),
 /** m ← shᵀ · rY(fy) · sh · m with sh = hip · knee: the foot yaw turns about the pelvis-frame vertical
  *  through the ankle (not about the tilted shin), as the shader does — the sole keeps its contact */
 export function footYawAbout(P: Pose, left: boolean, fy: number, m: M3): M3 {
+  AN[0] = fy;
+  return footYawAboutA(P, left, m);
+}
+/** footYawAbout with the yaw in AN[0] */
+function footYawAboutA(P: Pose, left: boolean, m: M3): M3 {
+  const fy = AN[0];
   hipMatrix(P, left, fC);
-  mm(fC, rX(left ? P.kneeL : P.kneeR, fA), fB); // sh
-  mm(rY(fy, fA), fB, fC); // rY · sh
+  AN[0] = left ? P.kneeL : P.kneeR;
+  mm(fC, rXa(fA), fB); // sh
+  AN[0] = fy;
+  mm(rYa(fA), fB, fC); // rY · sh
   // shᵀ · (rY · sh)
   for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) fA[i * 3 + j] = fB[i] * fC[j] + fB[3 + i] * fC[3 + j] + fB[6 + i] * fC[6 + j];
   return mm(fA, m, m);
 }
 
+/** M ← rX(bodyPitch) · rY(pelvisYaw) · rZ(pelvisRoll) */
+function pelvisMatrix(P: Pose): void {
+  AN[0] = P.bodyPitch;
+  rXa(tmpA);
+  AN[0] = P.pelvisYaw;
+  rYa(tmpB);
+  mm(tmpA, tmpB, tmpC);
+  AN[0] = P.pelvisRoll;
+  mm(tmpC, rZa(tmpA), M);
+}
+/** M ← rY(yaw) · rX(pitch) [· rZ(roll)] for the head (0), chest (1) or waist (2) joint */
+function trunkMatrix(P: Pose, j: number): void {
+  AN[0] = j === 0 ? P.headYaw : j === 1 ? P.chestTwist : P.waistTwist;
+  rYa(tmpA);
+  AN[0] = j === 0 ? P.headPitch : j === 1 ? P.chestBend : P.waistBend;
+  rXa(tmpB);
+  if (j === 2) {
+    mm(tmpA, tmpB, M);
+    return;
+  }
+  mm(tmpA, tmpB, tmpC);
+  AN[0] = j === 0 ? P.headRoll : P.chestRoll;
+  mm(tmpC, rZa(tmpA), M);
+}
+
 /** Pelvis / whole-body transform and root offsets (figure units), as pedPelvis in the shader. */
 export function fkPelvis(r: Rig, P: Pose, p: V3): V3 {
-  mm(rX(P.bodyPitch, tmpA), rY(P.pelvisYaw, tmpB), tmpC);
-  mm(tmpC, rZ(P.pelvisRoll, tmpA), M);
+  pelvisMatrix(P);
   pvTmp.x = 0;
   pvTmp.y = r.hip.y;
   pvTmp.z = 0;
@@ -188,12 +228,14 @@ export function fkPoint(r: Rig, P: Pose, bone: number, p: V3): V3 {
   let b = bone;
   if (b === BONE.HAND_L || b === BONE.HAND_R) {
     const L = b === BONE.HAND_L;
-    rotAbout(p, rX(-(L ? P.wristL : P.wristR), M), mir(r.wrist, L, pvTmp));
+    AN[0] = -(L ? P.wristL : P.wristR);
+    rotAbout(p, rXa(M), mir(r.wrist, L, pvTmp));
     b = L ? BONE.FORE_L : BONE.FORE_R;
   }
   if (b === BONE.FORE_L || b === BONE.FORE_R) {
     const L = b === BONE.FORE_L;
-    rotAbout(p, rX(-(L ? P.elbowL : P.elbowR), M), mir(r.elbow, L, pvTmp));
+    AN[0] = -(L ? P.elbowL : P.elbowR);
+    rotAbout(p, rXa(M), mir(r.elbow, L, pvTmp));
     b = L ? BONE.UPPER_L : BONE.UPPER_R;
   }
   if (b === BONE.UPPER_L || b === BONE.UPPER_R) {
@@ -202,30 +244,36 @@ export function fkPoint(r: Rig, P: Pose, bone: number, p: V3): V3 {
     b = BONE.CHEST;
   }
   if (b === BONE.HEAD) {
-    mm(rY(P.headYaw, tmpA), rX(P.headPitch, tmpB), tmpC);
-    rotAbout(p, mm(tmpC, rZ(P.headRoll, tmpA), M), r.head);
+    trunkMatrix(P, 0);
+    rotAbout(p, M, r.head);
     b = BONE.CHEST;
   }
   if (b === BONE.CHEST) {
-    mm(rY(P.chestTwist, tmpA), rX(P.chestBend, tmpB), tmpC);
-    rotAbout(p, mm(tmpC, rZ(P.chestRoll, tmpA), M), r.chest);
+    trunkMatrix(P, 1);
+    rotAbout(p, M, r.chest);
     b = BONE.SPINE;
   }
   if (b === BONE.SPINE) {
-    rotAbout(p, mm(rY(P.waistTwist, tmpA), rX(P.waistBend, tmpB), M), r.waist);
+    trunkMatrix(P, 2);
+    rotAbout(p, M, r.waist);
     b = BONE.PELVIS;
   }
   if (b === BONE.FOOT_L || b === BONE.FOOT_R) {
     const L = b === BONE.FOOT_L;
-    rX(-(L ? P.ankleL : P.ankleR), M);
+    AN[0] = -(L ? P.ankleL : P.ankleR);
+    rXa(M);
     const fy = L ? -P.footYawL : P.footYawR;
-    if (Math.abs(fy) > 1e-4) footYawAbout(P, L, fy, M);
+    if (Math.abs(fy) > 1e-4) {
+      AN[0] = fy;
+      footYawAboutA(P, L, M);
+    }
     rotAbout(p, M, mir(r.ankle, L, pvTmp));
     b = L ? BONE.SHIN_L : BONE.SHIN_R;
   }
   if (b === BONE.SHIN_L || b === BONE.SHIN_R) {
     const L = b === BONE.SHIN_L;
-    rotAbout(p, rX(L ? P.kneeL : P.kneeR, M), mir(r.knee, L, pvTmp));
+    AN[0] = L ? P.kneeL : P.kneeR;
+    rotAbout(p, rXa(M), mir(r.knee, L, pvTmp));
     b = L ? BONE.THIGH_L : BONE.THIGH_R;
   }
   if (b === BONE.THIGH_L || b === BONE.THIGH_R) {
@@ -322,10 +370,22 @@ const set3 = (o: T3, x: number, y: number, z: number): T3 => {
   o[2] = z;
   return o;
 };
-const cr3 = (a: T3, b: T3, o: T3): T3 => set3(o, a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]);
+// (element stores, no set3 call: a helper call left un-inlined would box its computed double arguments)
+const cr3 = (a: T3, b: T3, o: T3): T3 => {
+  const x = a[1] * b[2] - a[2] * b[1],
+    y = a[2] * b[0] - a[0] * b[2],
+    z = a[0] * b[1] - a[1] * b[0];
+  o[0] = x;
+  o[1] = y;
+  o[2] = z;
+  return o;
+};
 const nz3 = (a: T3): T3 => {
   const l = Math.sqrt(a[0] * a[0] + a[1] * a[1] + a[2] * a[2]) || 1;
-  return set3(a, a[0] / l, a[1] / l, a[2] / l);
+  a[0] /= l;
+  a[1] /= l;
+  a[2] /= l;
+  return a;
 };
 const dt3 = (a: T3, b: T3) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 const kE0 = v3(),
@@ -404,7 +464,8 @@ function armGrip(r: Rig, left: boolean, o: ArmSolve, out: V3): V3 {
     PT.shTwistR = o.twist;
     PT.elbowR = o.elbow;
   }
-  rotAbout(out, rX(-(left ? PT.elbowL : PT.elbowR), M), mir(r.elbow, left, pvTmp));
+  AN[0] = -(left ? PT.elbowL : PT.elbowR);
+  rotAbout(out, rXa(M), mir(r.elbow, left, pvTmp));
   rotAbout(out, shoulderMatrix(PT, left, M), mir(r.shoulder, left, pvTmp));
   return out;
 }
@@ -520,23 +581,26 @@ export function toChestFrame(r: Rig, P: Pose, p: V3): V3 {
   p.x -= P.rootX;
   p.y -= P.rootY;
   p.z -= P.rootZ;
-  mm(rX(P.bodyPitch, tmpA), rY(P.pelvisYaw, tmpB), tmpC);
-  mm(tmpC, rZ(P.pelvisRoll, tmpA), M);
-  invRot(p, M, 0, r.hip.y, 0);
-  rotAboutInv(p, mm(rY(P.waistTwist, tmpA), rX(P.waistBend, tmpB), M), r.waist);
-  mm(rY(P.chestTwist, tmpA), rX(P.chestBend, tmpB), tmpC);
-  rotAboutInv(p, mm(tmpC, rZ(P.chestRoll, tmpA), M), r.chest);
+  pelvisMatrix(P);
+  pvTmp.x = 0;
+  pvTmp.y = r.hip.y;
+  pvTmp.z = 0;
+  rotAboutInv(p, M, pvTmp);
+  trunkMatrix(P, 2);
+  rotAboutInv(p, M, r.waist);
+  trunkMatrix(P, 1);
+  rotAboutInv(p, M, r.chest);
   return p;
 }
-function invRot(p: V3, m: M3, cx: number, cy: number, cz: number): void {
-  const x = p.x - cx,
-    y = p.y - cy,
-    z = p.z - cz;
-  // transpose = inverse for rotations
-  p.x = m[0] * x + m[3] * y + m[6] * z + cx;
-  p.y = m[1] * x + m[4] * y + m[7] * z + cy;
-  p.z = m[2] * x + m[5] * y + m[8] * z + cz;
-}
 function rotAboutInv(p: V3, m: M3, pv: V3): void {
-  invRot(p, m, pv.x, pv.y, pv.z);
+  const x = p.x - pv.x,
+    y = p.y - pv.y,
+    z = p.z - pv.z;
+  // transpose = inverse for rotations
+  p.x = m[0] * x + m[3] * y + m[6] * z + pv.x;
+  p.y = m[1] * x + m[4] * y + m[7] * z + pv.y;
+  p.z = m[2] * x + m[5] * y + m[8] * z + pv.z;
 }
+
+/** node tools only (allocation checks) */
+export const _poseDebug = { armIK1, armGrip, A1 };
