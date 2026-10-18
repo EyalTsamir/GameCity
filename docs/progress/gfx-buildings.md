@@ -64,14 +64,17 @@ daytime windows), house massing half of 9, far-field night windows of 2, lamp-li
   `__city.ctx.services.buildings.setDebug(n)` / `.houses()` (per-house plan log for close-up views).
   The mask showed weathering far too weak (mix toward the dirt tint halves every weight; squared streak channel
   has a low mean) → weights roughly doubled, streak channels linearised (sqrt).
-* [ ] M3 iteration 3 (shots/buildings/it3): per-plan house close-ups (hA–hD), facade weathering re-check.
+* [x] House plan / roof weights rebalanced (garage plans 2 → more, gambrel weight 0.3 for single-storey gables).
+* [ ] M3 iteration 3 (shots/buildings/it3, re-run after the 23:10 usage stop): per-plan house close-ups (hA–hD),
+  facade weathering re-check with the stronger weights.
 * [ ] tuning passes (glass, weathering strength, roofs, night far field), house validation (`?validate`, invariants)
 * [ ] re-tune under stage's new lighting
 * [ ] B6 full before/after sheets + perf A/B
 
 ## Shots
 * baseline subset (5174, only=sky,terrain,roads,buildings,postfx, 1280×720): `shots/buildings/base/`
-* iteration 1: `shots/buildings/it1/`
+* iteration 1: `shots/buildings/it1/`, iteration 2: `shots/buildings/it2/` (+ otclose, overview),
+  weathering mask: `shots/buildings/dbg/`, validation: `shots/buildings/val/` (inv1.json: invariants {}, validate [])
 
 ## Requests to other areas
 * (none yet)
