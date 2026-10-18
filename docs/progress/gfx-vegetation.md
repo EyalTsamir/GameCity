@@ -54,11 +54,21 @@ V5 verification (before/after 5174 vs 5173, perf A/B). Budgets: tris ≤ +15 %, 
    medium/low (`?vegcells=8|27`).
    Tris (it5, only=sky,terrain,water,vegetation,lamps,postfx): treeTris 122.2k (legacy 114.3k), forest 62.2k
    (45.9k), plants 43.8k (43.0k), fine 32.8k → near total +10.6 %, far total +9.2 % (budget +15 %).
-4. [in progress] final full-city captures queued (FIFO): shots/vegetation/finA|B|C (5173) vs baseA|B|C (5174),
-   legv (5173 &legacyveg, isolates vegetation); perf2a/b (scratchpad/vperf.mjs = perf.mjs with 2 h lock wait).
-   perf1 (park, SwiftShader) was too noisy to use (legacy slower than new, skip slower than all).
-   (old item: tune shading, check triangle counts vs budget (baseline near: trees 118k, far 53k, forest 46k, plants 45k, fine 33k)
-3. V5 full-city before/after + perf A/B.
+4. [done] final full-city captures (5174 baseline vs 5173): shots/vegetation/finA|B|C vs baseA|B|C,
+   legacyveg isolation: legv. Sheets: shots/vegetation/final_day.png, final_golden.png, final_night.png,
+   final_close.png (closeups/backlit/forest edge/gardens/allotments), final_isolated.png (same build,
+   ?legacyveg vs new), final_lod.png (285 m near LOD vs 320 m far LOD), rev_forest.png.
+   First final pass found the cliff-rim criterion (terrain drop over 9 m) marked 80 % of the forest as
+   "edge" → forest 106k tris, plants 59k (+32 % total!). Fixed: rim = steep step (>1.5–2.5 m within 2 m)
+   in the first 6 m to the south (~20 % of the forest), rim birch weight 1.4+1.6·edge, undergrowth 60 %
+   chance of one shrub, forest pines 2 pads (weight 0.9), forest birch crown detail 1 (rim: 2),
+   near conifers 6 tips + underside only on the lowest skirt, far conifers 4 tips.
+   Final stats (finA, full city): trees 948 (forest 497), bushes 413; treeTris 118.5k (base 118.3k),
+   treeFarTris 45.2k (52.8k), forestTris 63.8k (45.9k), plantTris 46.2k (45.2k), fine 32.8k →
+   near +7.9 % / far +7.9 % vs 5174 (+11.8 % vs ?legacyveg in today's tree). Draw calls unchanged (same meshes).
+5. Perf: SwiftShader perf.mjs runs were dominated by machine contention (variants ordered randomly in
+   cost). Added runtime knob fx (uThFx) and scratchpad/vperf2.mjs: ONE page load, states alternated
+   (hidden / plain / full 27-cell / cheap 8-cell / billow) × 3 rounds, medians → perf3.
 
 ## Baseline numbers (pre-change, only=sky,terrain,water,vegetation,postfx, park 11h)
 trees 944 (forest 469), treeTris 118336, treeFarTris 52830, forestTris 45940, plantTris 45180, fineTris 32762, verts 218303.
