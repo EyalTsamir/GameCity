@@ -444,7 +444,9 @@ vec3 bhEnv(vec3 R, float yW, float seed, float fR, float lodC, float nightF) {
 }
 
 void bhWall(inout vec3 albedo, inout float rough, inout float metal, inout vec3 emit, vec3 N, vec3 V) {
-  float kind = vB.w;
+  // kind = style·8 + profile is an integer per primitive; round it first — for profile 0 (homes) the interpolation
+  // jitter of the varying made mod(kind, 8) wrap to ~8 on scattered pixels (prof flipped home → 8 = unlit: speckles)
+  float kind = floor(vB.w + 0.5);
   float style = floor(mod(kind, 64.0) / 8.0 + 0.01);
   float prof = floor(mod(kind, 8.0) + 0.01);
   // seeds are integers per primitive, but arrive as interpolated varyings with ~1e-4 jitter; the chaotic hashes
