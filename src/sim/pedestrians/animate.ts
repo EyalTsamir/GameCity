@@ -10,13 +10,7 @@ import { AIK, armIKa, fkPoint, legIKa, LIK, toChestFrame, type ArmSolve, type Le
 import type { Rig } from './rig';
 import { BONE } from './body';
 
-const smooth = (t: number) => t * t * (3 - 2 * t);
-const mix = (a: number, b: number, t: number) => a + (b - a) * t;
-const clamp = (x: number, a: number, b: number) => (x < a ? a : x > b ? b : x);
-const frac = (x: number) => x - Math.floor(x);
-const sstep = (a: number, b: number, x: number) => smooth(Math.min(Math.max((x - a) / (b - a), 0), 1));
-/** cheap hash → [0, 1) */
-const hash = (a: number, b: number) => frac(Math.sin(a * 127.1 + b * 311.7) * 43758.5453);
+// (mix / smooth / clamp / hash are written out inline in this file: see computePoseA)
 
 /** bench seat top above the seat spot (props/furniture.ts bench(): slats 0.45 ± 0.0175) */
 export const SEAT_TOP = 0.467;
@@ -97,12 +91,16 @@ function idleVariant(m: Member, r: Rig, t: number): typeof iv {
     iv.k = 1;
     return iv;
   }
-  const period = 6 + 12 * hash(m.seed, 3.1);
+  let hv = Math.sin(m.seed * 127.1 + 3.1 * 311.7) * 43758.5453;
+  const period = 6 + 12 * (hv - Math.floor(hv));
   const tt = t + m.seed * 97;
   const epoch = Math.floor(tt / period);
   const tin = tt - epoch * period;
-  iv.k = sstep(0, 0.8, tin) * sstep(0, 0.8, period - tin);
-  const h = hash(m.seed, epoch + 0.5);
+  const k0 = Math.min(Math.max(tin / 0.8, 0), 1),
+    k1 = Math.min(Math.max((period - tin) / 0.8, 0), 1);
+  iv.k = k0 * k0 * (3 - 2 * k0) * (k1 * k1 * (3 - 2 * k1));
+  hv = Math.sin(m.seed * 127.1 + (epoch + 0.5) * 311.7) * 43758.5453;
+  const h = hv - Math.floor(hv);
   const w = r.old > 0.25 ? IDLE_W_OLD : r.c > 0.45 ? IDLE_W_KID : m.look.age < 50 ? IDLE_W_ADULT : IDLE_W_MID;
   let tot = 0;
   for (let i = 0; i < w.length; i++) tot += w[i];
@@ -132,11 +130,19 @@ export function computePoseA(m: Member, umbrella: boolean, r: Rig, o: Pose, gs: 
   const old = r.old;
   const hk = r.stature / r.s / 1.76; // figure size relative to the average man (unscaled)
   const seated = Math.max(m.sit, m.lie, m.ground);
-  const upright = 1 - smooth(Math.min(1, seated * 2));
-  const gw = smooth(Math.min(Math.max(a / 0.14, 0), 1));
-  const kSit = smooth(Math.min(1, m.sit));
-  const kGround = smooth(Math.min(1, m.ground));
-  const kLie = smooth(Math.min(1, m.lie));
+  // (no helper calls in here: TurboFan leaves calls in rarely taken branches un-inlined, and those box their
+  // double arguments and results — garbage per figure per frame; mix / smooth / hash are written out)
+  const s2 = Math.min(1, seated * 2),
+    ga = Math.min(Math.max(a / 0.14, 0), 1),
+    ms = Math.min(1, m.sit),
+    mg = Math.min(1, m.ground),
+    ml = Math.min(1, m.lie);
+  const upright = 1 - s2 * s2 * (3 - 2 * s2);
+  const gw = ga * ga * (3 - 2 * ga);
+  const kSit = ms * ms * (3 - 2 * ms);
+  const kGround = mg * mg * (3 - 2 * mg);
+  const kLie = ml * ml * (3 - 2 * ml);
+  let hv = 0.5; // hash scratch
 
   // ── idle weight shift (contrapposto: pelvis list + sway onto one leg), passed into the gait
   const ph = t * 0.32 + m.seed * 40;
@@ -195,7 +201,7 @@ export function computePoseA(m: Member, umbrella: boolean, r: Rig, o: Pose, gs: 
   const handR = !(L.pram || umbrella || m.wave > 0 || fl & (F.SHOPBAG | F.CANE | F.ROD));
 
   // sitting on a bench: pelvis back against the backrest, thighs on the seat, feet on the ground
-  const sv = poseDebug.bench >= 0 ? poseDebug.bench : Math.floor(hash(m.seed, 9.7) * 5); // bench variant
+  const sv = poseDebug.bench >= 0 ? poseDebug.bench : Math.floor(((hv = Math.sin(m.seed * 127.1 + 9.7 * 311.7) * 43758.5453) - Math.floor(hv)) * 5); // bench variant
   if (m.sit > 0) {
     const k = kSit;
     const sc = r.s;
@@ -228,9 +234,9 @@ export function computePoseA(m: Member, umbrella: boolean, r: Rig, o: Pose, gs: 
       hipAbdR = (hipAbdR + (0.06 - hipAbdR) * k);
     }
     const lean = sv === 1 && !m.reading;
-    waistBend = (waistBend + (m.reading ? -0.1 : lean ? 0.25 : -0.19 - waistBend) * k);
-    chestBend = (chestBend + (lean ? 0.12 : 0.05 + 0.15 * old - chestBend) * k);
-    headPitch = (headPitch + (m.reading ? 0.2 : lean ? -0.25 : 0.05 - headPitch) * k);
+    waistBend = (waistBend + ((m.reading ? -0.1 : lean ? 0.25 : -0.19) - waistBend) * k);
+    chestBend = (chestBend + ((lean ? 0.12 : 0.05 + 0.15 * old) - chestBend) * k);
+    headPitch = (headPitch + ((m.reading ? 0.2 : lean ? -0.25 : 0.05) - headPitch) * k);
     rootY = (rootY + (hipY - r.hip.y - rootY) * k);
     rootZ = (rootZ + (hipZ - rootZ) * k);
     rootX *= 1 - k;
@@ -240,41 +246,41 @@ export function computePoseA(m: Member, umbrella: boolean, r: Rig, o: Pose, gs: 
     tailFloor = k > 0.5 ? hipY - 0.075 * hk : 0;
   }
   // sitting on the sand / a towel: leaning back on the hands, one knee up (or hugging the knees)
-  const hug = hash(m.seed, 4.2) < 0.3;
+  const hug = (hv = Math.sin(m.seed * 127.1 + 4.2 * 311.7) * 43758.5453) - Math.floor(hv) < 0.3;
   if (m.ground > 0) {
     const k = kGround;
-    hipFlexL = (hipFlexL + (hug ? 1.75 : 1.42 - hipFlexL) * k);
-    hipFlexR = (hipFlexR + (hug ? 1.8 : 1.15 - hipFlexR) * k);
-    kneeL = (kneeL + (hug ? 2.2 : 0.35 - kneeL) * k);
-    kneeR = (kneeR + (hug ? 2.25 : 1.3 - kneeR) * k);
+    hipFlexL = (hipFlexL + ((hug ? 1.75 : 1.42) - hipFlexL) * k);
+    hipFlexR = (hipFlexR + ((hug ? 1.8 : 1.15) - hipFlexR) * k);
+    kneeL = (kneeL + ((hug ? 2.2 : 0.35) - kneeL) * k);
+    kneeR = (kneeR + ((hug ? 2.25 : 1.3) - kneeR) * k);
     hipAbdL = (hipAbdL + (0.12 - hipAbdL) * k);
     hipAbdR = (hipAbdR + (0.12 - hipAbdR) * k);
-    ankleL = (ankleL + (hug ? 0.35 : -0.45 - ankleL) * k);
-    ankleR = (ankleR + (hug ? 0.35 : 0.2 - ankleR) * k);
-    waistBend = (waistBend + (hug ? 0.18 : -0.3 - waistBend) * k);
-    chestBend = (chestBend + (hug ? 0.15 : 0.05 - chestBend) * k);
+    ankleL = (ankleL + ((hug ? 0.35 : -0.45) - ankleL) * k);
+    ankleR = (ankleR + ((hug ? 0.35 : 0.2) - ankleR) * k);
+    waistBend = (waistBend + ((hug ? 0.18 : -0.3) - waistBend) * k);
+    chestBend = (chestBend + ((hug ? 0.15 : 0.05) - chestBend) * k);
     rootY = (rootY + (0.1 * hk - r.hip.y - rootY) * k);
     rootX *= 1 - k;
     pelvisRoll *= 1 - k;
     pelvisYaw *= 1 - k;
   }
   // lying on the back (or on the front for some of variant 1)
-  const front = m.lieVariant === 1 && hash(m.seed, 7.7) < 0.5;
+  const front = m.lieVariant === 1 && (hv = Math.sin(m.seed * 127.1 + 7.7 * 311.7) * 43758.5453) - Math.floor(hv) < 0.5;
   if (m.lie > 0) {
     const k = kLie;
     bodyPitch = (front ? Math.PI / 2 : -Math.PI / 2) * k;
     const kneeUp = m.lieVariant === 2;
-    hipFlexL = (hipFlexL + (kneeUp ? 0.95 : 0.0 - hipFlexL) * k);
-    kneeL = (kneeL + (kneeUp ? 1.7 : 0.05 - kneeL) * k);
+    hipFlexL = (hipFlexL + ((kneeUp ? 0.95 : 0.0) - hipFlexL) * k);
+    kneeL = (kneeL + ((kneeUp ? 1.7 : 0.05) - kneeL) * k);
     hipFlexR = (hipFlexR + (-0.02 - hipFlexR) * k);
-    kneeR = (kneeR + (front ? 0.3 : 0.05 - kneeR) * k);
-    ankleL = (ankleL + (kneeUp ? 0.25 : -0.55 - ankleL) * k);
+    kneeR = (kneeR + ((front ? 0.3 : 0.05) - kneeR) * k);
+    ankleL = (ankleL + ((kneeUp ? 0.25 : -0.55) - ankleL) * k);
     ankleR = (ankleR + (-0.55 - ankleR) * k);
-    waistBend = (waistBend + (front ? -0.08 : 0 - waistBend) * k);
+    waistBend = (waistBend + ((front ? -0.08 : 0) - waistBend) * k);
     chestBend = (chestBend + (0 - chestBend) * k);
-    headPitch = (headPitch + (front ? -0.35 : -0.15 - headPitch) * k);
-    rootY = (rootY + ((front ? 0.1 : 0.11) * hk - r.hip.y - rootY) * k);
-    headYaw = (headYaw + (front ? 1.1 : headYaw * 0.3 - headYaw) * k);
+    headPitch = (headPitch + ((front ? -0.35 : -0.15) - headPitch) * k);
+    rootY = (rootY + (((front ? 0.1 : 0.11) * hk - r.hip.y) - rootY) * k);
+    headYaw = (headYaw + ((front ? 1.1 : headYaw * 0.3) - headYaw) * k);
     pelvisRoll *= 1 - k;
     pelvisYaw *= 1 - k;
     rootX *= 1 - k;
@@ -350,7 +356,7 @@ export function computePoseA(m: Member, umbrella: boolean, r: Rig, o: Pose, gs: 
         }
         break;
       case IDLE.HIP: {
-        const left = hash(m.seed, 1.3) < 0.5;
+        const left = (hv = Math.sin(m.seed * 127.1 + 1.3 * 311.7) * 43758.5453) - Math.floor(hv) < 0.5;
         if (left && handL) {
           RT[0] = 0.19 * hk + belly;
           RT[1] = wy - 0.03 * hk;
@@ -390,7 +396,7 @@ export function computePoseA(m: Member, umbrella: boolean, r: Rig, o: Pose, gs: 
           reach(r, armR, false, -1, -1, -0.2, 0.6);
           headPitch = (headPitch + (0.42 - headPitch) * k);
           if (k > 0.4) prop = PROP.PHONE;
-          if (handL && hash(m.seed, 2.2) < 0.4) {
+          if (handL && (hv = Math.sin(m.seed * 127.1 + 2.2 * 311.7) * 43758.5453) - Math.floor(hv) < 0.4) {
             RT[0] = 0.01 * hk;
             RT[1] = cy - 0.07 * hk;
             RT[2] = 0.24 * hk + belly * 0.5;
@@ -469,7 +475,8 @@ export function computePoseA(m: Member, umbrella: boolean, r: Rig, o: Pose, gs: 
   }
   // waving: upper arm raised to the side, forearm up, the hand waves from the elbow
   if (m.wave > 0) {
-    const k = smooth(Math.min(1, m.wave)) * (1 - 0.5 * kLie);
+    const mw = Math.min(1, m.wave);
+    const k = mw * mw * (3 - 2 * mw) * (1 - 0.5 * kLie);
     RT[0] = -0.34 * hk;
     RT[1] = r.shoulder.y + 0.33 * hk;
     RT[2] = 0.1 * hk;
