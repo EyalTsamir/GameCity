@@ -531,7 +531,7 @@ vec3 bhShop(vec2 pm, vec2 csz, vec3 rd, float rs, float shopT, float litI, vec3 
         float hk = bhHash12(vec2(k, rs + 2.0));
         float gar = step(abs(q.x - W * 0.5), W * 0.36) * step(q.y, 1.66) * step(1.66 - (0.55 + 0.45 * hk), q.y) * step(0.1, fract(q.x / 0.11));
         m = max(rail, gar);
-        mc = mix(vec3(0.6), bhPal(hk) * 0.85, gar);
+        mc = mix(vec3(0.6), bhPal(hk) * 0.85 * (0.7 + 0.3 * fract(q.x / 0.11)) * (0.75 + 0.25 * smoothstep(0.7, 1.6, q.y)), gar);
       }
       c = mix(c, mc, m);
       lf = mix(lf, 0.8, m);
@@ -556,6 +556,7 @@ vec3 bhShop(vec2 pm, vec2 csz, vec3 rd, float rs, float shopT, float litI, vec3 
           float stand = bhBox2(q, vec2(x, 0.08), vec2(0.18, 0.02));
           float mm = max(max(body, legs), stand);
           vec3 cc = mix(bhPal(fract(hk * 3.0 + float(i) * 0.37)), vec3(0.9, 0.86, 0.8), step(1.62, q.y));
+          cc *= 0.62 + 0.45 * (1.0 - smoothstep(0.0, 0.2, abs(q.x - x - 0.05)));    // rounded body
           mc = mix(mc, cc, mm);
           m = max(m, mm);
         }
@@ -589,9 +590,17 @@ vec3 bhShop(vec2 pm, vec2 csz, vec3 rd, float rs, float shopT, float litI, vec3 
     }
   }
   float dz = clamp(h.z / depth, 0.0, 1.0);
+  // depth cues: corner occlusion where the room's faces meet, pools of light under the ceiling spots
+  // (floor + walls), darker towards the back and the floor
+  float ex = min(h.x, W - h.x), ey = min(h.y, Hc - h.y), ez = depth - h.z;
+  float ao = onBack ? smoothstep(0.0, 0.5, min(ex, ey)) : (onFlat ? smoothstep(0.0, 0.45, min(ex, ez)) : smoothstep(0.0, 0.45, min(ey, ez)));
+  ao = 0.55 + 0.45 * ao;
+  vec2 lp = vec2(fract(h.x / 1.4) - 0.5, fract(h.z / 1.6) - 0.5) * vec2(1.4, 1.6);
+  float pool = onFlat && rd.y < 0.0 ? exp(-dot(lp, lp) / 0.35) : (onBack ? exp(-lp.x * lp.x / 0.12) * smoothstep(0.6, Hc - 0.2, h.y) : 0.0);
+  float shade = ao * (0.75 + 0.55 * pool) * mix(1.0, 0.8, smoothstep(1.6, 0.0, h.y) * float(!onFlat));
   // shops are deep: little daylight reaches the back, the lights carry the look
-  dayAlb = c * 0.3 * (1.0 - 0.6 * dz) * (0.85 + 0.3 * lf);
-  vec3 lamp = c * lcol * lf * (1.0 - 0.3 * dz);
+  dayAlb = c * 0.3 * (1.0 - 0.6 * dz) * (0.85 + 0.3 * lf) * ao;
+  vec3 lamp = c * lcol * lf * (1.0 - 0.35 * dz) * shade;
   return lamp * litI + lcol * self * max(litI, 0.0) * 1.2 + c * 0.012;
 }
 

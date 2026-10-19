@@ -482,8 +482,12 @@ function paintAtlas(): HTMLCanvasElement {
   return cv;
 }
 
+let _tex: THREE.CanvasTexture | null = null;
+/** The leaf atlas (painted once, shared by the buildings and props greenery). */
 export function makeGreenTexture(): THREE.CanvasTexture {
+  if (_tex) return _tex;
   const tex = new THREE.CanvasTexture(paintAtlas());
+  _tex = tex;
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.generateMipmaps = true;
   tex.minFilter = THREE.LinearMipmapLinearFilter;

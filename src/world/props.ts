@@ -23,6 +23,8 @@ import * as SK from './props/kit';
 import { planScatter, scatterDisc, type ScatterItem } from './props/scatter';
 import type { PropsService, ChairOut, Cafe } from './props/service';
 import type { BuildingsService } from './buildings/anchors';
+import { Builder } from './buildings/mesh';
+import { GreenKit, makeGreenTexture, createGreenMaterial } from './buildings/green';
 import { XS, ZS, FURN_OFFSET } from '../core/constants';
 
 interface TerrainSvc {
@@ -56,6 +58,10 @@ export default function create(ctx: CityContext): CityModule {
   const g = new Kit(gsink);
   // static laundry on the garden rotary dryers (own small mesh: life may replace it with animated cloth)
   const KL = new Kit(new GeoSink(extras));
+  // leaf cards (planter planting): shared atlas + material with the buildings greenery; one draw call, no shadow
+  const noGreen = ctx.debug.params.has('nogreen');
+  const greenB = new Builder({ normal: true, color: true, uv: true, aux: true });
+  const greenKit = noGreen ? undefined : new GreenKit(greenB, new Rng('props:green'));
   const glows: Glow[] = [];
   const count: Record<string, number> = {};
   const inc = (key: string) => (count[key] = (count[key] ?? 0) + 1);
@@ -238,7 +244,8 @@ export default function create(ctx: CityContext): CityModule {
         case 'planter':
         case 'planterRound':
           at(kf);
-          SK.planter(kf, srng, it.kind === 'planterRound');
+          greenB.frame(it.yaw, it.x, y, it.z);
+          SK.planter(kf, srng, it.kind === 'planterRound', greenKit);
           break;
         case 'bikeRack': {
           at(kf);
@@ -606,7 +613,7 @@ export default function create(ctx: CityContext): CityModule {
   root.name = 'props';
   // debug toggle for cost measurements: ?propsparts=furniture,glass,glows
   const parts = (ctx.debug.params.get('propsparts') ?? 'furniture,glass,glows').split(',');
-  const mat: THREE.Material = ctx.debug.params.get('propsmat') === 'basic' ? new THREE.MeshBasicMaterial({ vertexColors: true }) : furnitureMaterial(ctx.uniforms);
+  const mat: THREE.Material = ctx.debug.params.get('propsmat') === 'basic' ? new THREE.MeshBasicMaterial({ vertexColors: true }) : furnitureMaterial(ctx.uniforms, !ctx.debug.params.has('nowear'));
   const lod = new DistanceLod(ctx);
   const culler = new ChunkCuller(ctx);
   let near = true;
@@ -634,6 +641,21 @@ export default function create(ctx: CityContext): CityModule {
     culler.add(m, () => true, 8);
   }
   KF.forEach((kit, i) => addFurniture(kit, `props-furniture-fine-${i ? 'e' : 'w'}`, true));
+  let greenMat: THREE.Material | null = null;
+  if (greenB.vertexCount > 0) {
+    const geo = greenB.toGeometry();
+    greenB.dispose();
+    geos.push(geo);
+    greenMat = createGreenMaterial(ctx.uniforms, makeGreenTexture());
+    const m = new THREE.Mesh(geo, greenMat);
+    m.name = 'props-green';
+    m.castShadow = false;
+    m.receiveShadow = true;
+    m.matrixAutoUpdate = false;
+    m.updateMatrix();
+    root.add(m);
+    culler.add(m, () => near, 8);
+  }
   if (KL.s.vcount > 0) {
     const geo = KL.s.build();
     geos.push(geo);
@@ -699,6 +721,7 @@ export default function create(ctx: CityContext): CityModule {
     dispose() {
       for (const g2 of geos) g2.dispose();
       mat.dispose();
+      greenMat?.dispose();
       glassGeo?.dispose();
       glassMat?.dispose();
       glowMesh.geometry.dispose();

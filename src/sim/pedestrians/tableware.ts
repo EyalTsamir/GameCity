@@ -48,11 +48,11 @@ function parts(): PartSpec[] {
   const out: PartSpec[] = [];
   const add = (part: number, geo: THREE.BufferGeometry, color: string) => out.push({ part, geo, color });
   // coffee
-  add(TW.SAUCER, cyl(0.062, 0.066, 0.008, 10, -0.14, 0, 0.03), '#f4f1ea');
-  add(TW.CUP, cyl(0.03, 0.04, 0.058, 8, -0.14, 0.008, 0.03, false), '#f7f4ee');
-  add(TW.CUP, cyl(0.037, 0.037, 0.001, 8, -0.14, 0.06, 0.03), '#5b3a26');
+  add(TW.SAUCER, cyl(0.062, 0.066, 0.008, 10, -0.14, 0, 0.03), '#fbfaf6');
+  add(TW.CUP, cyl(0.03, 0.04, 0.058, 8, -0.14, 0.008, 0.03, false), '#fdfcf9');
+  add(TW.CUP, cyl(0.037, 0.037, 0.001, 8, -0.14, 0.06, 0.03), '#3a2216');
   // plate + food
-  add(TW.PLATE, cyl(0.09, 0.105, 0.012, 12, 0.0, 0, 0.12), '#f6f4ee');
+  add(TW.PLATE, cyl(0.09, 0.105, 0.012, 12, 0.0, 0, 0.12), '#fbfaf6');
   add(TW.SALAD, dome(0.062, 0.04, -0.01, 0.012, 0.12), '#7fa04a');
   add(TW.SALAD, dome(0.03, 0.022, 0.035, 0.03, 0.1), '#c8463a');
   add(TW.PASTA, dome(0.06, 0.035, 0.0, 0.012, 0.12), '#e3b55a');
@@ -77,7 +77,7 @@ function parts(): PartSpec[] {
   add(TW.ICED, cyl(0.03, 0.034, 0.13, 8, -0.12, 0, 0.12), '#c99a66');
   add(TW.ICED, cyl(0.004, 0.004, 0.06, 4, -0.11, 0.12, 0.12), '#e8e2d4');
   // croissant on a small plate
-  add(TW.CROISSANT, cyl(0.07, 0.075, 0.008, 10, 0.07, 0, 0.12), '#f6f4ee');
+  add(TW.CROISSANT, cyl(0.07, 0.075, 0.008, 10, 0.07, 0, 0.12), '#fbfaf6');
   {
     const g = new THREE.TorusGeometry(0.035, 0.018, 4, 7, Math.PI * 1.1);
     g.rotateX(-Math.PI / 2);
@@ -93,6 +93,8 @@ function parts(): PartSpec[] {
 
 function buildGeometry(): THREE.InstancedBufferGeometry {
   const ps = parts();
+  // a touch over life size so cups and glasses still read at 10–15 m
+  for (const p of ps) p.geo.scale(1.18, 1.18, 1.18);
   const pos: number[] = [],
     nrm: number[] = [],
     col: number[] = [],

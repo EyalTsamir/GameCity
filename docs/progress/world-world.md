@@ -20,9 +20,11 @@
   tussocks, dune marram, distant ships (landscape/ships.ts, one dynamic mesh), reflection proxies
   (land-reflect = coastal land triangles sharing the land buffers, land-reflect-mtn = coarse mountains; opted in
   water/reflection.ts BASE with land-ships), quality tiers (tree near radius 1 / 0.7 / 0) + service.setTreeDetail(k).
-* Running: m2a capture (hero_n, wb_out, sw_corner, east_eye, river_w, vista_w × 11/18.2) → shots/world/world/m2a;
-  stats probes → shots/world/world/stats/hero_n{,_noland}.json.
-* Next: judge m2a; perf breakdown; POI proposals; night check.
+* 20:50 — second container restart (all edits committed in a69c834). Added since: village/farm night lights
+  (landscape/lights.ts, additive points ≥1.6 px, distance-dimmed), island fishing hamlet + lighthouse (white
+  tower, beacon light). Re-running: m2a capture (hero_n, wb_out, sw_corner, vista_w × 11/18.2, east_eye) →
+  shots/world/world/m2a; stats probes → shots/world/world/stats/hero_n{,_noland}.json.
+* Next: judge m2a; perf breakdown; POI proposals; night check (21.5).
 * Tools: my capture script copy with 20-min load timeout = scratchpad `cap.mjs` (scratchpad is SHARED with other
   agents — keep my files under scratchpad/world* or land/). Offline map tool: scratchpad `land/map.ts` (bundle:
   `npx rolldown land/map.ts --platform node -o land/map.mjs`; `node land/map.mjs x0 z0 x1 z1 N out.bin &&

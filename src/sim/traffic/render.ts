@@ -26,6 +26,10 @@ export interface ParkedCar {
   x: number;
   z: number;
   yaw: number;
+  /** two-wheelers on the pavement: lean on the stand / lying on the side (rad), height, card label */
+  roll?: number;
+  y?: number;
+  label?: string;
 }
 
 const MOVING_CAP: Record<ModelKind, number> = { compact: 70, hatch: 80, sedan: 90, suv: 60, delivery: 40, lorry: 30, bus: 10, icecream: 4, bike: 70, moto: 70 };
@@ -138,9 +142,9 @@ export class VehicleRenderer {
     this.pCol = new Float32Array(P * 3);
     parked.forEach((p, i) => {
       this.pModel[i] = MODEL_KINDS.indexOf(p.model);
-      this.eul.set(0, p.yaw, 0);
+      this.eul.set(0, p.yaw, p.roll ?? 0);
       this.q.setFromEuler(this.eul);
-      this.pos.set(p.x, ROAD_Y + 0.005, p.z);
+      this.pos.set(p.x, p.y ?? ROAD_Y + 0.005, p.z);
       this.m4.compose(this.pos, this.q, this.scl);
       this.m4.toArray(this.pMat, i * 16);
       const c = this.colorOf(p.color);

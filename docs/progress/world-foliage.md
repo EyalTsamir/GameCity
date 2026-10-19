@@ -1,14 +1,19 @@
 # world-foliage — leafy, living trees (world round, workstream 4)
 
 ## Resume here (update after EVERY step)
-* 2026-10-19 20:35 — RESUMED after usage-limit stop + reboot. M1 code is in and runs (first test
-  shots/world/foliage/t1_park.png: cards + needle sprays render; ground was white = ground agent's shader error).
-  Fixed since: wood shader vNormal → vThWN varying; buildMips rewritten (per-level push-pull, alpha histogram).
-  Told lead (seam): I extend my hill forest a ~45 m band beyond the slab N edge (z −190…−235) via
-  landscape.cover().forest/height; world starts its trees at z < −225 with a ramp (M3 task).
-  Node bench harness: scratchpad/bench (`node --experimental-transform-types --import ./register.mjs bench*.ts`).
-  Quiet machine: atlas mips ~1.4 s (stub data) — still too slow; near gen ~0.6–1.9 ms/plant; far ~1.2 ms/plant.
-  NEXT: atlas timing split (paint vs mips) in browser, optimise; first real look at eye level + overview; tune.
+* 2026-10-19 21:00 — RESUMED after reboot; M1 runs. Since: buildMips split into hot helpers (cold 1.5 s →
+  0.11 s in node), static wood = trunks only (limbs near-only), 8-sided tubes, palm bark (diamond lattice
+  date/Canary, rings Washingtonia), palm trunk radii fixed (lead note: plaza palm trunk was a faceted twisted
+  column — re-check at eye level), Mediterranean species mapping by district (kindFor), per-kind proportions,
+  forest band 45 m beyond the slab N edge via landscape.cover/height (cards only), bushes → leaf-card shrubs
+  (shrub / oleander / bougainvillea). All typechecks.
+* 20:50 second container restart (all jobs lost). Since then also: hedges get a near-only skin of shrub cards
+  (kind 'hedge', PlantDef.seg/color), all typechecks. World will start its 3D trees at z < −225 (lead).
+* RUNNING: shot t2_park (background) → shots/world/foliage/t2_park.png + t2.json (stats via scratchpad/vstat.py).
+  Capture wrapper: scratchpad/capset.sh OUT HOURS [extra-q] [views].
+* NEXT: judge t2; then capture set m1 (views below) 11/18.2/21.5; tune card size/density/colours.
+* Views: park=-55,4,15,26,200,6; ot=66,3.5,-13.9,13,25,4; dt=-22,3.5,-68.9,14,35,4; palms=118,5,30,18,90,6;
+  forest=10,10,-158,70,10,10; parkair=-55,0,17,90,30,30; overview.
 
 ## Brief (from WORLD-PLAN.md + briefs)
 Owns `src/world/vegetation.ts` + `src/world/vegetation/*`. Trees are smooth faceted blobs (lollipops from afar,

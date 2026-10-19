@@ -2,20 +2,21 @@
 
 ## Resume here
 * M1 DONE (services live, lead messaged). Dump: shots/world/wear/m1_eval.json.
-* M2 code written + typechecks (not yet judged clean): `buildings/green.ts` (leaf cards), `buildings/clutter.ts`
-  (windowBox, balconyLife, potPlant, julietBalcony, ironRail, climber, shutterPair/State, acUnit, dish,
-  downpipe, gutter, roofClutter, solarHeater, waterTankSmall, aerial), old town fully wired (balconies with
-  life, window boxes, Juliet balconies, shutter states, climbers, rear AC/dish/downpipes, kitchen flues, flat
-  roof clutter), apartments + hotels (balconyLife, roofClutter), chimneys get aerials (30 %).
-  Shell shader: shop interiors per shop type (`bhShop`, type in pattern attr + 16·type; oldtown `shopType()`),
-  eye-level wall wear (rising damp + salt line, north algae, peeling render), roof age + north-slope moss.
-  Roads: `roads/puddles.ts` (uWet drying model, lamp-head grid from lampLights() at modules:ready, mirrored lamp
-  glints) + puddle masks in ASPHALT2 (gutter puddles + low spots after rain), `?nopuddles`.
-* it2 was INVALID (TDZ bug: all townhouses threw → floating balconies) — fixed. it3 running (day + night):
-  shots/world/wear/it3 (views otfac, otbal, otst, oldtown at 11 / 21.5).
-* NEXT: judge it3; then sidewalk cafés in front of shopfronts (props scatter), sidewalk wear (HARD2), gutter
-  litter, props rust; perf/stats (green tris, draw calls).
-* Capture recipe: `capture-set.mjs --out shots/world/wear/itN --q "nointro&noidle&adaptive=0&quality=high&only=sky,terrain,roads,buildings,vegetation,props,postfx" --hideui 1 --width 1280 --height 720 --hours 11 --views "otfac=83,5,-16,25,70,6;otfac2=72,5,-4,25,110,6;otbal=83,5,-16,10,20,10;otst=70,1.7,-10,14,90,4;oldtown"`
+* M2/M3/M4/M6/M7 code written + typechecks, NOT YET JUDGED (two container restarts killed the captures):
+  - buildings: `buildings/green.ts` (leaf cards, cached atlas `makeGreenTexture()`), `buildings/clutter.ts`
+    (windowBox, balconyLife, potPlant, julietBalcony, ironRail, climber, shutterPair/State, acUnit, dish, downpipe,
+    gutter, roofClutter, solarHeater, waterTankSmall, aerial); old town fully wired; apartments + hotels; chimney
+    aerials; shell shader: `bhShop` interiors (types via pattern + 16·type, AO + light pools + layers), eye-level
+    wall wear (damp, salt line, north algae, peeling render), roof age + north moss. Service additions: `shops[]`.
+  - roads: `roads/puddles.ts` + puddle masks (ASPHALT2), gutter litter (`rdLitter` in COMMON2), sidewalk/plaza wear
+    in rdHard (cracked / replaced / sunken slabs, grime by walls + kerb, walking-line polish, grime blotches, joint
+    dirt, stain rings, gum/butts/leaves/paper), uWetH drying wetness.
+  - props: kerbside 2-seat café tables in front of cafés/bakeries (`SK.kerbCafe`, cafes[] source 'sidewalk'),
+    plaza planters planted with leaf cards (`props-green` mesh, no shadow), furniture wear shader (props/material.ts
+    WEAR_GLSL: stone grime/streaks/lichen/algae, iron rust, paint chips + stickers, wood greying, plastic fading).
+  - toggles: ?nogreen ?nopuddles ?nowear (props) — TODO: ?nowear for buildings/roads masks too.
+* NEXT: re-run it3 (day + night) → judge → fix; then message the lead (M2 milestone) with sheet paths.
+* Capture recipe: `capture-set.mjs --out shots/world/wear/itN --q "nointro&noidle&adaptive=0&quality=high&only=sky,terrain,roads,buildings,vegetation,props,postfx" --hideui 1 --width 1280 --height 720 --hours 11,21.5 --views "otfac=83,5,-16,25,70,6;otbal=83,5,-16,10,20,10;otst=70,1.7,-10,14,90,4;oldtown"`
   (baseline = same with `--url http://127.0.0.1:5174/` → shots/world/wear/before, before2).
 
 ## Brief (from WORLD-PLAN.md scope 7 + briefs "### wear")

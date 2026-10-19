@@ -11,7 +11,7 @@ import { Rng, hash01 } from '../../core/rng';
 import { InstBuf, pushCard, pushWood, CARD_SPECS, WOOD_SPECS, STILL, type PlantRef, type Sway, type CardIn } from './foliage';
 import { getLeafAtlas, type LeafTile, type UvRect } from './atlas';
 
-export type Form = 'dome' | 'oval' | 'spread' | 'irregular' | 'umbrella' | 'vase' | 'column' | 'weep' | 'cone' | 'palm' | 'fan' | 'bush';
+export type Form = 'dome' | 'oval' | 'spread' | 'irregular' | 'umbrella' | 'vase' | 'column' | 'weep' | 'cone' | 'palm' | 'fan' | 'bush' | 'hedge';
 
 /** species definition (art parameters) */
 export interface Kind {
@@ -64,9 +64,10 @@ const KIND_TABLE = {
   stonepine: { form: ['umbrella'], tile: 'pine', dense: 'needleDense', leaf: ['#3c6634', '#426d38'], bark: ['#7a5a42', '#866248'], pattern: 0.5, clear: [0.55, 0.66], girth: 1.1, card: 0.55, density: 1.15, gloss: 0.3, trans: 0.5, flutter: 0.7, moss: 0 },
   datepalm: { form: ['palm'], tile: 'frond', dense: 'frond', leaf: ['#5c8a4a', '#64904e', '#577f48', '#6e9452'], bark: ['#8a7356', '#7f6a50'], pattern: 0.7, clear: [1, 1], girth: 1, card: 1, density: 1, gloss: 0.45, trans: 0.8, flutter: 1.2, moss: 0 },
   canarypalm: { form: ['palm'], tile: 'frond', dense: 'frond', leaf: ['#4e8a3e', '#579444', '#4a8238'], bark: ['#7d6a52', '#86735a'], pattern: 0.7, clear: [1, 1], girth: 1.8, card: 1, density: 1.6, gloss: 0.45, trans: 0.8, flutter: 1.1, moss: 0 },
-  fanpalm: { form: ['fan'], tile: 'fan', dense: 'fan', leaf: ['#5f8f45', '#67974a', '#5a8a42'], bark: ['#7e6b56', '#8a765e'], pattern: 0.7, clear: [1, 1], girth: 0.75, card: 1, density: 1, gloss: 0.5, trans: 0.8, flutter: 1, moss: 0 },
+  fanpalm: { form: ['fan'], tile: 'fan', dense: 'fan', leaf: ['#5f8f45', '#67974a', '#5a8a42'], bark: ['#8a7d6c', '#948674'], pattern: 0.63, clear: [1, 1], girth: 0.75, card: 1, density: 1, gloss: 0.5, trans: 0.8, flutter: 1, moss: 0 },
   shrub: { form: ['bush'], tile: 'shrub', dense: 'shrub', leaf: ['#4a8a3b', '#53913d', '#447f37', '#5b9843', '#3e7836', '#5e8f36'], bark: ['#4a3e34'], pattern: 0.1, clear: [0, 0], girth: 1, card: 0.3, density: 1, gloss: 0.4, trans: 0.7, flutter: 0.8, moss: 0 },
   oleander: { form: ['bush'], tile: 'oleander', dense: 'shrub', leaf: ['#3f6e36', '#46763a'], bark: ['#4a3e34'], pattern: 0.1, clear: [0, 0], girth: 1, card: 0.36, density: 1, gloss: 0.5, trans: 0.6, flutter: 0.9, flowers: ['#f08fb3', '#f7c6d6', '#e8628f', '#f6f0ea'], bloom: 1, moss: 0 },
+  hedge: { form: ['hedge'], tile: 'shrub', dense: 'shrub', leaf: ['#3f7a35'], bark: ['#4a3e34'], pattern: 0.1, clear: [0, 0], girth: 1, card: 0.26, density: 1, gloss: 0.4, trans: 0.6, flutter: 0.5, moss: 0 },
   bougain: { form: ['bush'], tile: 'bougain', dense: 'shrub', leaf: ['#3f7a35', '#468039'], bark: ['#4a3e34'], pattern: 0.1, clear: [0, 0], girth: 1, card: 0.34, density: 1, gloss: 0.4, trans: 0.8, flutter: 0.9, flowers: ['#d4237a', '#c21e6a', '#e0408e', '#b5229a'], bloom: 1, moss: 0 },
 } satisfies Record<string, Kind>;
 
@@ -92,6 +93,10 @@ export interface PlantDef {
   forest?: boolean;
   /** 0 young .. 1 old */
   age?: number;
+  /** explicit leaf colour (hedges match their clipped core) */
+  color?: string;
+  /** hedge segment: ax, az, bx, bz, width */
+  seg?: [number, number, number, number, number];
 }
 
 type V3 = [number, number, number];
@@ -237,13 +242,14 @@ export function structure(def: PlantDef): Struct {
   const forms = Array.isArray(kind.form) ? kind.form : [kind.form];
   const form = forms[Math.floor(rng.next() * forms.length)];
   const tone = def.tone ?? 0.5;
-  const leaf = pickColor(rng, kind.leaf, tone, 0.06);
+  const leaf = def.color ? new THREE.Color(def.color) : pickColor(rng, kind.leaf, tone, 0.06);
   const bark = pickColor(rng, kind.bark, 0.5, 0.04);
   const flower = kind.flowers ? new THREE.Color(rng.pick(kind.flowers)) : null;
   const st: Struct = { def, kind, form, c: [def.x, def.y + def.h * 0.6, def.z], cr: def.r, cry: def.h * 0.3, lobes: [], segs: [], tips: [], fronds: [], leaf, bark, flower, cardHalf: kind.card };
   if (form === 'palm' || form === 'fan') palmStruct(st, rng);
   else if (form === 'cone') coneStruct(st, rng);
   else if (form === 'bush') bushStruct(st, rng);
+  else if (form === 'hedge') hedgeStruct(st, rng);
   else broadStruct(st, rng);
   return st;
 }
@@ -387,8 +393,9 @@ function broadStruct(st: Struct, rng: Rng): void {
     const lsA: Sway = { ph1: L.ph, w1: 0, ph2: 0, w2: 0 };
     const lsM: Sway = { ph1: L.ph, w1: L.w * 0.45, ph2: 0, w2: 0 };
     const lsB: Sway = { ph1: L.ph, w1: L.w, ph2: 0, w2: 0 };
-    st.segs.push({ a: start, b: m, ra: lr, rb: lr * 0.78, sa: lsA, sb: lsM, near: false, aoA: 0.7, aoB: 0.65 });
-    st.segs.push({ a: m, b: tgt, ra: lr * 0.78, rb: lr * 0.5, sa: lsM, sb: lsB, near: false, aoA: 0.65, aoB: 0.55 });
+    // limbs belong to the near LOD (the far cards hide them; the static part keeps trunks only)
+    st.segs.push({ a: start, b: m, ra: lr, rb: lr * 0.78, sa: lsA, sb: lsM, near: true, aoA: 0.7, aoB: 0.65 });
+    st.segs.push({ a: m, b: tgt, ra: lr * 0.78, rb: lr * 0.5, sa: lsM, sb: lsB, near: true, aoA: 0.65, aoB: 0.55 });
     // branches radiating to the lobe's shell
     const lobeR = (L.rx + L.ry + L.rz) / 3;
     const nb = Math.max(3, Math.round(2.6 + lobeR * 2.6));
@@ -495,7 +502,8 @@ function palmStruct(st: Struct, rng: Rng): void {
   const th = h - (fan ? 0.4 : 0.6);
   const segs = 7;
   const pt = (f: number): V3 => [x + Math.cos(la) * lm * f * f, y + th * f, z + Math.sin(la) * lm * f * f];
-  const rBase = (fan ? 0.24 : canary ? 0.42 : 0.24) * kind.girth;
+  // trunk radius: slender Washingtonia, medium date palm, massive Canary palm
+  const rBase = fan ? 0.18 : canary ? 0.44 : 0.23;
   for (let k = 0; k < segs; k++) {
     const fa = k / segs,
       fb = (k + 1) / segs;
@@ -572,6 +580,47 @@ function bushStruct(st: Struct, rng: Rng): void {
       st.tips.push({ p, d, sway: { ph1: L.ph, w1: L.w, ph2: rng.next(), w2: 0.4 }, lobe: li, s: rng.range(0.8, 1.15) });
     }
   });
+}
+
+/** clipped hedge: tips spread over both faces and the top (cards lie along the faces, tops break the line) */
+function hedgeStruct(st: Struct, rng: Rng): void {
+  const { def } = st;
+  const [ax, az, bx, bz, wd] = def.seg ?? [def.x, def.z, def.x + 1, def.z, 0.6];
+  const L = Math.hypot(bx - ax, bz - az);
+  const ux = (bx - ax) / L,
+    uz = (bz - az) / L;
+  const vx = -uz,
+    vz = ux;
+  const hw = wd / 2,
+    hh = def.h,
+    y = def.y;
+  st.c = [(ax + bx) / 2, y + hh * 0.5, (az + bz) / 2];
+  st.cr = Math.max(hw, L / 2);
+  st.cry = hh * 0.6;
+  st.cardHalf = st.kind.card;
+  const ph = rng.next();
+  // AO "lobes": a row of ellipsoids along the hedge
+  const nl = Math.max(1, Math.round(L / 1.2));
+  for (let i = 0; i < nl; i++) {
+    const f = (i + 0.5) / nl;
+    st.lobes.push({ x: ax + ux * L * f, y: y + hh * 0.5, z: az + uz * L * f, rx: Math.max(hw, 0.7), ry: hh * 0.55, rz: Math.max(hw, 0.7), tint: rng.range(0.94, 1.06), ph: (ph + i * 0.37) % 1, w: 0.15 });
+  }
+  const step = 0.3;
+  for (let u = 0.15; u < L - 0.1; u += step * rng.range(0.8, 1.2)) {
+    const cx = ax + ux * u,
+      cz = az + uz * u;
+    const li = Math.min(nl - 1, Math.floor((u / L) * nl));
+    for (const side of [-1, 1]) {
+      for (let k = 0; k < 2; k++) {
+        const hy = y + rng.range(0.12, hh * 0.92);
+        const p: V3 = [cx + vx * side * (hw + 0.02), hy, cz + vz * side * (hw + 0.02)];
+        st.tips.push({ p, d: [vx * side, 0, vz * side], sway: { ph1: ph, w1: 0.08, ph2: rng.next(), w2: 0.2 }, lobe: li, s: rng.range(0.85, 1.15) });
+      }
+    }
+    // top
+    const p: V3 = [cx + vx * rng.range(-hw, hw) * 0.8, y + hh + 0.01, cz + vz * rng.range(-hw, hw) * 0.8];
+    st.tips.push({ p, d: [0, 1, 0], sway: { ph1: ph, w1: 0.1, ph2: rng.next(), w2: 0.25 }, lobe: li, s: rng.range(0.9, 1.2) });
+  }
 }
 
 // ─────────────────────────────────────────────────────────────── emission ──
@@ -684,6 +733,7 @@ export function emitFar(st: Struct, ref: PlantRef, cards: InstBuf, woodBuf: Inst
   const rng = new Rng(st.def.seed ^ 0x51f15e);
   for (const s of st.segs) if (!s.near) wood(woodBuf, ref, st, s, 0);
   const atlas = getLeafAtlas();
+  if (st.form === 'hedge') return;
   if (st.form === 'palm' || st.form === 'fan') {
     emitFronds(st, ref, cards, rng, -1, st.def.forest ? 0.35 : 0.5);
     return;
@@ -693,7 +743,7 @@ export function emitFar(st: Struct, ref: PlantRef, cards: InstBuf, woodBuf: Inst
   st.lobes.forEach((L, li) => {
     const lobeR = (L.rx + L.ry + L.rz) / 3;
     const out = norm([L.x - st.c[0], L.y - st.c[1] + 0.2 * st.cry, L.z - st.c[2]]);
-    const n = st.form === 'cone' ? 4 : (forest ? 2 : 3) + (lobeR > 1.3 ? 1 : 0) + (lobeR > 1.9 && !forest ? 1 : 0);
+    const n = st.form === 'cone' ? 4 : st.form === 'bush' ? 2 : (forest ? 2 : 3) + (lobeR > 1.3 ? 1 : 0) + (lobeR > 1.9 && !forest ? 1 : 0);
     for (let k = 0; k < n; k++) {
       const off = randDir(rng);
       const e = li === 0 && st.form !== 'cone' ? 0.15 : 0.32;
@@ -751,6 +801,15 @@ export function emitNear(st: Struct, ref: PlantRef, cards: InstBuf, woodBuf: Ins
         U = [side[0] * hu, 0, side[2] * hu];
         V = [rng.range(-0.1, 0.1) * hv, -hv, rng.range(-0.1, 0.1) * hv];
         F = norm(cross(U, V));
+      } else if (st.form === 'hedge') {
+        // clusters lying along the clipped face: leaves point up/along, a little outward
+        const d = t.d;
+        const up = d[1] > 0.5;
+        const Vd = up ? norm(add([rng.range(-0.6, 0.6), 0.25, rng.range(-0.6, 0.6)], [0, 0, 0])) : norm(add([0, 1, 0], add(d, randDir(rng), 0.6), 0.45));
+        const Ud = norm(cross(Vd, up ? [0, 1, 0] : d));
+        U = [Ud[0] * hu, Ud[1] * hu, Ud[2] * hu];
+        V = [Vd[0] * hv, Vd[1] * hv, Vd[2] * hv];
+        F = norm(cross(Ud, Vd));
       } else if (st.form === 'cone') {
         // needle sprays: along the branch, mostly flat, rolled ±35°
         const d = t.d;
@@ -767,12 +826,17 @@ export function emitNear(st: Struct, ref: PlantRef, cards: InstBuf, woodBuf: Ins
         [U, V, F] = frame(rng, out, t.d, hu, hv);
       }
       // the twig base of the drawing sits at the tip; the cluster extends outwards
-      const c: V3 = t.hang ? [t.p[0], t.p[1] - hv, t.p[2]] : [t.p[0] + V[0] * 0.75, t.p[1] + V[1] * 0.75, t.p[2] + V[2] * 0.75];
+      const c: V3 = t.hang
+        ? [t.p[0], t.p[1] - hv, t.p[2]]
+        : st.form === 'hedge'
+          ? [t.p[0] + V[0] * 0.55 + t.d[0] * 0.04, t.p[1] + V[1] * 0.55, t.p[2] + V[2] * 0.55 + t.d[2] * 0.04]
+          : [t.p[0] + V[0] * 0.75, t.p[1] + V[1] * 0.75, t.p[2] + V[2] * 0.75];
       const ao = crownAO(st, c);
       // fresh growth on the sunny top is lighter/yellower, shaded underside cooler
       const vy = (c[1] - st.c[1]) / Math.max(0.3, st.cry);
       const tint = L.tint * rng.range(0.9, 1.08) * (0.94 + 0.1 * smooth01(vy * 0.6 + 0.5));
-      card(cards, ref, st, c, U, V, sphereNormal(st, c, L, F, st.form === 'bush' ? 0.85 : 0.78), ao, 1, uvLeaf, tint, t.sway, 1);
+      const nrm = st.form === 'hedge' ? norm(lerp3(dot(F, t.d) < 0 ? ([-F[0], -F[1], -F[2]] as V3) : F, add(t.d, [0, 0.35, 0]), 0.7)) : sphereNormal(st, c, L, F, st.form === 'bush' ? 0.85 : 0.78);
+      card(cards, ref, st, c, U, V, nrm, st.form === 'hedge' ? 0.55 + 0.45 * smooth01((c[1] - st.def.y) / Math.max(0.3, st.def.h)) : ao, 1, uvLeaf, tint, t.sway, 1);
     }
   }
 }

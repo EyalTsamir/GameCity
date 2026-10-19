@@ -2,7 +2,7 @@
 //
 // Two instanced meshes draw every tree, bush and palm of the city (+ their two shadow passes):
 //   cards — one quad per leaf cluster, textured from the procedural leaf atlas (atlas.ts), alpha-tested;
-//   wood  — one tapered 6-sided tube per segment.
+//   wood  — one tapered 8-sided tube per segment.
 // Each instance buffer has a STATIC part (all plants' far LOD: a few big dense cards per leaf mass, trunks
 // and main limbs) followed by a DYNAMIC part (fine cluster cards, branches and twigs of the plants near the
 // camera, rewritten by vegetation.ts whenever that set changes). A per-plant LOD texture (R8, one texel per
@@ -396,6 +396,7 @@ varying vec3 vThRest;
 varying vec3 vThWPos;
 varying float vThPat;
 varying vec3 vThWN;
+varying float vThAng;
 #endif
 void thWood( out vec3 P, out vec3 N ) {
   float nearW = thLodW( iR.w );
@@ -420,6 +421,7 @@ void thWood( out vec3 P, out vec3 N ) {
   vThAO = mix( iX.z, iX.w, t );
   vThPat = iW2.z;
   vThWN = N;
+  vThAng = atan( position.z, position.x );
 #endif
   if ( hide ) {
     P = iR.xyz;
@@ -521,6 +523,7 @@ varying vec3 vThRest;
 varying vec3 vThWPos;
 varying float vThPat;
 varying vec3 vThWN;
+varying float vThAng;
 float thWrap;
 ${NOISE_GLSL}
 ${LAMP_GLSL}
@@ -541,10 +544,21 @@ thWrap = 0.0;
       float m = mix( 0.13, smoothstep( 0.12, 0.22, n ), fade );
       bc = mix( bc, vec3( 0.05, 0.045, 0.04 ), m * 0.9 );
     } else if ( pat > 0.6 ) {
-      // palm: leaf-scar rings / diamond pattern
-      float fade = 1.0 - smoothstep( 0.03, 0.1, foot );
-      float ring = abs( fract( vThRest.y * 3.2 + 0.15 * sin( atan( vThRest.x, vThRest.z ) * 3.0 ) ) - 0.5 );
-      bc *= mix( 0.88, 0.62 + 0.5 * smoothstep( 0.05, 0.3, ring ), fade );
+      float fade = 1.0 - smoothstep( 0.03, 0.12, foot );
+      float yy = vThRest.y;
+      if ( pat > 0.66 ) {
+        // date / Canary palm: diamond lattice of old leaf-base scars (two families of helices)
+        float n = 7.0 / 6.2831853;
+        float u = fract( yy * 3.1 + vThAng * n ), v = fract( yy * 3.1 - vThAng * n );
+        float d = min( min( u, 1.0 - u ), min( v, 1.0 - v ) );
+        float boss = smoothstep( 0.0, 0.2, d );
+        float n2 = thNoised( vThRest * 7.0 ).x;
+        bc *= mix( 0.84, ( 0.58 + 0.52 * boss ) * ( 0.92 + 0.16 * n2 ), fade );
+      } else {
+        // Washingtonia: fine horizontal growth rings on a smooth grey-brown column
+        float ring = abs( fract( yy * 4.6 + 0.08 * sin( vThAng * 2.0 ) ) - 0.5 );
+        bc *= mix( 0.93, 0.8 + 0.24 * smoothstep( 0.04, 0.22, ring ), fade );
+      }
     } else if ( pat > 0.4 ) {
       // plane: camouflage mottling (cream, olive, grey-brown plates)
       float fade = 1.0 - smoothstep( 0.04, 0.16, foot );
@@ -713,7 +727,7 @@ function quadGeometry(): THREE.InstancedBufferGeometry {
   return g;
 }
 
-const TUBE_SIDES = 6;
+const TUBE_SIDES = 8;
 function tubeGeometry(): THREE.InstancedBufferGeometry {
   const g = new THREE.InstancedBufferGeometry();
   const pos: number[] = [];

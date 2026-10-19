@@ -410,7 +410,6 @@ export default function create(ctx: CityContext): CityModule {
       mats.lights.dispose();
       mats.signs.dispose();
       greenMat?.dispose();
-      greenTex?.dispose();
       tex.map.dispose();
       tex.glow.dispose();
     },

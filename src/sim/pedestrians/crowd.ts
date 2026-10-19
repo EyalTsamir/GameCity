@@ -220,6 +220,8 @@ export class Member {
   cupOrder = 0;
   /** waiter: 0 hands free, 1 order pad, 2 carrying an order (cup / plate) */
   carry = 0;
+  /** walking with something in the right hand: 0 nothing, 1 a takeaway coffee, 2 looking at the phone */
+  walkProp = 0;
   /** riding a two-wheeler (riders.ts): the vehicle's anchor points, crank angle, lean, foot down */
   rideG: RideGeom | null = null;
   pedal = 0;
@@ -527,9 +529,12 @@ export class Crowd {
   private stuckReports: string[] = [];
   stats = { spawned: 0, despawned: 0, crossings: 0, boarded: 0, alighted: 0, trainCrowds: 0, routeFails: 0, cornerWaits: 0, cornerFull: 0, longWaits: 0, turnBacks: 0 };
 
+  private cafeSeatCount = 0;
+
   constructor(ctx: CityContext, places: Places, rng: Rng) {
     this.ctx = ctx;
     this.places = places;
+    for (const c of places.cafes) this.cafeSeatCount += c.seats.length;
     this.rng = rng;
     this.router = new Router(ctx.peds);
     this.maxPop = Math.round(440 * ctx.quality.density);
@@ -553,17 +558,24 @@ export class Crowd {
     const h = this.ctx.clock.hours;
     const rain = this.ctx.uniforms.uRain.value;
     // café patrons come on top of the street crowd (≈ 1.8 people per taken table)
-    return Math.round(this.maxPop * popFactor(h) * (1 - 0.35 * rain) + this.cafeWanted() * 1.8);
+    return Math.round(this.maxPop * popFactor(h) * (1 - 0.35 * rain) + this.cafeWanted());
   }
 
-  /** number of café tables that should be taken now */
+  /** number of café seats that should be taken now (busy hours ≈ 90 %) */
   cafeWanted(): number {
     const rain = this.ctx.uniforms.uRain.value;
-    return Math.round(this.places.cafes.length * cafeFactor(this.ctx.clock.hours) * (1 - 0.8 * rain) * Math.min(1, this.ctx.quality.density + 0.15));
+    return Math.round(this.cafeSeatCount * cafeFactor(this.ctx.clock.hours) * 0.93 * (1 - 0.8 * rain) * Math.min(1, this.ctx.quality.density + 0.15));
   }
 
-  /** café tables taken (or claimed by a party on its way) */
+  /** café seats taken (or claimed by a party on its way) */
   cafeTaken(): number {
+    let n = 0;
+    for (const c of this.places.cafes) for (const st of c.seats) if (st.taken >= 0) n++;
+    return n;
+  }
+
+  /** café tables with somebody at (or on the way to) them */
+  cafeTablesTaken(): number {
     let n = 0;
     for (const c of this.places.cafes) if (c.taken >= 0) n++;
     return n;
@@ -606,10 +618,10 @@ export class Crowd {
     guard = 0;
     let cafes = this.cafeTaken();
     const cafeWanted = this.cafeWanted();
-    while (cafes < cafeWanted && guard++ < 160) {
+    while (cafes < cafeWanted && guard++ < 200) {
       const p = this.warmPlace('cafe');
       if (!p) continue;
-      cafes++;
+      cafes += p.size;
       alive += p.size;
     }
     guard = 0;
@@ -2529,12 +2541,19 @@ export class Crowd {
   }
 
   /** claim a free café table near `from` for the whole party (seats in member order) */
-  private cafeGoal(p: Party, from: number, scale = 140): Goal | null {
+  private cafeGoal(p: Party, from: number, scale = 140, table: CafePlace | null = null): Goal | null {
     const fp = this.nodePos(from);
-    const c = this.pickNear(this.places.cafes, (t) => t, fp, scale, (t) => t.taken < 0 && t.seats.length >= p.size, 24);
+    // a free table; friends may join a couple at a table for four
+    const fits = (t: CafePlace): boolean => {
+      let free = 0;
+      for (const st of t.seats) if (st.taken < 0) free++;
+      if (free < p.size) return false;
+      return t.taken < 0 || (p.size === 2 && t.seats.length >= 4 && free === 2);
+    };
+    const c = table && fits(table) ? table : table ? null : this.pickNear(this.places.cafes, (t) => t, fp, scale, fits, 24);
     if (!c) return null;
     const seats = this.cafeSeats(c, p.size);
-    c.taken = p.id;
+    if (c.taken < 0) c.taken = p.id;
     for (const st of seats) st.taken = p.id;
     // the walk ends at the far end of the café's walkway edge, so its last leg passes the entry point
     const A = this.ctx.peds.nodes[c.ea],
@@ -2551,14 +2570,13 @@ export class Crowd {
     return near === from ? [g] : [{ kind: 'waypoint', node: near, dur: 0, label: '', pose: 'stand' }, g];
   }
 
-  /** which chairs a party of n takes: across the table for two, the rest round it */
+  /** which (free) chairs a party of n takes: across the table for two, the rest round it */
   private cafeSeats(c: CafePlace, n: number): CafeSeat[] {
     const s = c.seats;
     const k0 = Math.floor(this.rng.next() * s.length);
-    if (n === 1) return [s[k0]];
-    if (n === 2 && s.length >= 4) return [s[k0], s[(k0 + 2) % s.length]];
+    if (n === 2 && s.length >= 4 && s[k0].taken < 0 && s[(k0 + 2) % s.length].taken < 0) return [s[k0], s[(k0 + 2) % s.length]];
     const out: CafeSeat[] = [];
-    for (let i = 0; i < n; i++) out.push(s[(k0 + i) % s.length]);
+    for (let i = 0; i < s.length && out.length < n; i++) if (s[(k0 + i) % s.length].taken < 0) out.push(s[(k0 + i) % s.length]);
     return out;
   }
 
@@ -2599,7 +2617,7 @@ export class Crowd {
   private cafeChance(p: Party): number {
     const wanted = this.cafeWanted();
     if (wanted <= 0) return 0;
-    const k = clamp(((wanted - this.cafeTaken()) / Math.max(3, wanted)) * 2.4, 0, 0.9);
+    const k = clamp(((wanted - this.cafeTaken()) / Math.max(4, wanted)) * 2.6, 0, 0.92);
     return k * CAFE_LIKE[p.persona];
   }
 
@@ -2796,7 +2814,12 @@ export class Crowd {
   }
 
   private releaseGoal(g: Goal | null, p: Party): void {
-    if (g?.cafe && g.cafe.taken === p.id) g.cafe.taken = -1;
+    if (g?.cafe && g.cafe.taken === p.id) {
+      // another party may still sit at this table (friends who joined)
+      let other = -1;
+      for (const st of g.cafe.seats) if (st.taken >= 0 && st.taken !== p.id) other = st.taken;
+      g.cafe.taken = other;
+    }
     if (!g?.spots) return;
     for (const s of g.spots) if (s.taken === p.id) s.taken = -1;
   }
@@ -3137,6 +3160,16 @@ export class Crowd {
       looks.push(look);
     }
     for (let k = 0; k < size; k++) p.members.push(new Member(this.nextMember++, p, k, looks[k], rng.next()));
+    // a takeaway coffee on the way to work, a phone in the hand (teens, commuters)
+    const hh = this.ctx.clock.hours;
+    for (const m of p.members) {
+      const L = m.look;
+      if (L.kind === 'boy' || L.kind === 'girl' || L.pram || L.dog || L.flags & (F.SHOPBAG | F.CANE | F.ROD)) continue;
+      const coffee = (persona === 'commuter' || persona === 'worker' ? (hh > 6.5 && hh < 11 ? 0.32 : 0.08) : persona === 'shopper' || persona === 'stroller' || persona === 'tourist' || persona === 'student' || persona === 'couple' ? (hh > 7 && hh < 18 ? 0.12 : 0.03) : 0.02);
+      const phone = persona === 'student' ? 0.22 : persona === 'commuter' || persona === 'nightowl' ? 0.1 : persona === 'jogger' || persona === 'elderly' ? 0 : 0.05;
+      const r = rng.next();
+      m.walkProp = r < coffee ? 1 : r < coffee + phone ? 2 : 0;
+    }
     // speeds
     const base: Record<Persona, number> = {
       commuter: 1.45,
@@ -3424,10 +3457,23 @@ export class Crowd {
       return this.placeAtActivity(p, g, rng.range(0, 0.7));
     }
     if (kind === 'cafe') {
+      // a table with free chairs first, then a party that fits it: couples at the twos, friends round the fours
+      const free = this.places.cafes.filter((t) => t.seats.some((st) => st.taken < 0));
+      if (!free.length) return null;
+      const t = rng.pick(free);
+      const nFree = t.seats.filter((st) => st.taken < 0).length;
+      const r = rng.next();
+      const size = Math.min(nFree, nFree >= 3 ? (r < 0.5 ? 3 : r < 0.85 ? 2 : 1) : nFree === 2 ? (r < 0.72 ? 2 : 1) : 1);
       const lunch = h > 11.5 && h < 14.5;
-      const persona = rng.weighted<Persona>(['couple', 'stroller', 'tourist', 'commuter', 'shopper', 'elderly', 'nightowl', 'student'], [3, 2, 1.6, lunch ? 3.5 : 1, 1.1, h < 18 ? 1 : 0.4, h > 19 ? 2.4 : 0.15, 0.5]);
-      const p = this.makeParty(persona, this.sizeFor(persona));
-      const g = this.cafeGoal(p, rng.pick(doors).node, 1e5);
+      const eve = h > 18.5;
+      const persona: Persona =
+        size === 1
+          ? rng.weighted<Persona>(['commuter', 'stroller', 'elderly', 'student', 'shopper', 'tourist'], [lunch ? 3 : 1.5, 1.5, h < 18 ? 1.2 : 0.3, 0.8, 1, 0.8])
+          : size === 2
+            ? rng.weighted<Persona>(['couple', 'stroller', 'tourist', 'commuter', 'nightowl', 'dogwalker', 'parent'], [3, 1.2, 1.4, lunch ? 2 : 0.5, eve ? 1.6 : 0.1, 0.5, h < 18 ? 0.5 : 0])
+            : rng.weighted<Persona>(['nightowl', 'tourist', 'family', 'student'], [eve ? 3 : 0.3, 1.5, h < 20 ? 1.5 : 0.2, 1]);
+      const p = this.makeParty(persona, size);
+      const g = this.cafeGoal(p, rng.pick(doors).node, 1e5, t);
       if (!g) return null;
       return this.placeAtActivity(p, g, rng.range(0, 0.85));
     }
@@ -3692,7 +3738,8 @@ export class Crowd {
       crossing,
       atBusStops: bus,
       atCafes: cafe,
-      cafeTables: `${this.cafeTaken()}/${this.places.cafes.length} (want ${this.cafeWanted()})`,
+      cafeSeats: `${this.cafeTaken()}/${this.cafeSeatCount} (want ${this.cafeWanted()})`,
+      cafeTables: `${this.cafeTablesTaken()}/${this.places.cafes.length}`,
       spawned: this.stats.spawned,
       crossingsDone: this.stats.crossings,
       boarded: this.stats.boarded,

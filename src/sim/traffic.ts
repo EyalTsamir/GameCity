@@ -11,7 +11,8 @@ import { OCC } from '../core/occupancy';
 import { TrafficSim, Vehicle, St } from './traffic/sim';
 import { VehicleRenderer, ParkedCar, pickParkedModel } from './traffic/render';
 import { SignalRenderer } from './traffic/signals';
-import { BODY_COLORS, SPECS, SEDAN_TAXI } from './traffic/specs';
+import { BODY_COLORS, SPECS, SEDAN_TAXI, TWO_WHEELERS, COLORS_2W, type TwoWheelType } from './traffic/specs';
+import { FURN_OFFSET, SIDEWALK_Y } from '../core/constants';
 import { debugGround } from './traffic/debugGround';
 
 const LOGO_NAMES = ['Haven Bakery van', 'Haven Post van', 'Fresh Fish Co. van', 'Bloom Florist van'];
@@ -22,6 +23,9 @@ export default function create(ctx: CityContext): CityModule {
     busStop: (stopId, busId, phase) => ctx.events.emit('bus:stop', { stopId, busId, phase }),
   };
   const parked = buildParked(ctx);
+  // bicycles, mopeds and hire e-scooters parked in the kerbside furniture band (?noparked2w: none)
+  const parked2w = ctx.debug.params.has('noparked2w') ? [] : buildParked2W(ctx);
+  parked.push(...parked2w);
   const renderer = new VehicleRenderer(ctx, sim, parked);
   const signals = new SignalRenderer(ctx);
   if (ctx.debug.params.has('tground')) ctx.scene.add(debugGround(ctx));
@@ -54,8 +58,8 @@ export default function create(ctx: CityContext): CityModule {
         }
       }
       for (const p of parked) {
-        sphere.center.set(p.x, 0.75, p.z);
-        sphere.radius = 1.6;
+        sphere.center.set(p.x, p.label ? 0.5 : 0.75, p.z);
+        sphere.radius = p.label ? 0.9 : 1.6;
         if (!ray.intersectSphere(sphere, hitP)) continue;
         const d = hitP.distanceTo(ray.origin);
         if (d < bd) {
@@ -169,13 +173,13 @@ export default function create(ctx: CityContext): CityModule {
       kind: 'vehicle',
       id: -1 - parked.indexOf(p),
       distance,
-      label: `Parked ${SPECS[p.model].label.toLowerCase()}`,
+      label: p.label ?? `Parked ${SPECS[p.model].label.toLowerCase()}`,
       getPosition(out: THREE.Vector3): boolean {
         out.set(p.x, 0.7, p.z);
         return true;
       },
       getHeading: () => p.yaw,
-      info: () => ['Parked', 'Engine off'],
+      info: () => (p.label ? (p.label.startsWith('Hire') ? ['Unlocked with an app', p.roll && Math.abs(p.roll) > 1 ? 'Somebody knocked it over' : 'Waiting for its next rider'] : ['Parked on the pavement', 'Locked']) : ['Parked', 'Engine off']),
     };
   }
 
@@ -186,6 +190,8 @@ export default function create(ctx: CityContext): CityModule {
      * two-wheelers (V.twoWheel) are drawn by the pedestrians module from V.x/z/yaw/lean/crank */
     vehicles: () => sim.vehicles,
     busCount: () => sim.busCount(),
+    /** parked bicycles / mopeds / e-scooters on the pavement (keep-clear points for walkers) */
+    parked2w: parked2w.map((p) => ({ x: p.x, z: p.z, yaw: p.yaw, len: p.model === 'moto' ? 1.9 : p.variant === 1 ? 1.2 : 1.8 })),
     /** number of moving vehicles within r of (x, z) — handy for ambient audio */
     near: (x: number, z: number, r: number) => {
       let n = 0;
@@ -312,6 +318,117 @@ function buildParked(ctx: CityContext): ParkedCar[] {
     for (const st of a.stalls) {
       if (!st.filled) continue;
       out.push({ model: pickParkedModel(rng.next()), variant: 0, color: rng.pick(BODY_COLORS), x: st.x, z: st.z, yaw: st.yaw });
+    }
+  }
+  return out;
+}
+
+/**
+ * Two-wheelers parked in the kerbside furniture band (between the lamps, trees and bins): rows of one to four
+ * bicycles, mopeds and hire e-scooters along the kerb — more in the busy districts, a few e-scooters knocked
+ * over. Every one keeps clear of the props' keep-clear discs, trees, crossings and bus stops.
+ */
+function buildParked2W(ctx: CityContext): ParkedCar[] {
+  const rng = ctx.rng('traffic-parked2w');
+  const plan = ctx.plan;
+  const occ = ctx.occupancy;
+  const discs = ((ctx.services.props as { discs?: { x: number; z: number; r: number }[] } | undefined)?.discs ?? []).slice();
+  const trees = (ctx.services.vegetation as { trees?: { x: number; z: number }[] } | undefined)?.trees ?? [];
+  for (const t of trees) discs.push({ x: t.x, z: t.z, r: 0.7 });
+  // coarse hash of the discs
+  const cell = 6;
+  const grid = new Map<number, { x: number; z: number; r: number }[]>();
+  const key = (i: number, j: number) => i * 100003 + j;
+  for (const d of discs) {
+    const i = Math.floor(d.x / cell),
+      j = Math.floor(d.z / cell);
+    const k = key(i, j);
+    const l = grid.get(k);
+    if (l) l.push(d);
+    else grid.set(k, [d]);
+  }
+  const clear = (x: number, z: number, r: number): boolean => {
+    const i0 = Math.floor((x - r - 3) / cell),
+      i1 = Math.floor((x + r + 3) / cell),
+      j0 = Math.floor((z - r - 3) / cell),
+      j1 = Math.floor((z + r + 3) / cell);
+    for (let i = i0; i <= i1; i++)
+      for (let j = j0; j <= j1; j++) {
+        const l = grid.get(key(i, j));
+        if (!l) continue;
+        for (const d of l) if ((d.x - x) ** 2 + (d.z - z) ** 2 < (d.r + r) ** 2) return false;
+      }
+    return true;
+  };
+  const busy: Record<string, number> = { downtown: 0.55, midtown: 0.5, oldtown: 0.6, market: 0.6, beach: 0.55, station: 0.7, civic: 0.4, riverside: 0.35, residential: 0.18, park: 0.15, harbor: 0.15, industrial: 0.06, stadium: 0.3 };
+  const out: ParkedCar[] = [];
+  for (const seg of plan.roadSegments) {
+    if (!seg.sidewalks || seg.kind === 'tunnel') continue;
+    const A = plan.roadNodes[seg.a],
+      B = plan.roadNodes[seg.b];
+    const L = Math.hypot(B.x - A.x, B.z - A.z);
+    if (L < 24) continue;
+    const tx = (B.x - A.x) / L,
+      tz = (B.z - A.z) / L;
+    for (const side of [1, -1]) {
+      // band centre line (side +1: left of a→b)
+      const nx = -tz * side,
+        nz = tx * side;
+      let u = 10 + rng.range(0, 6);
+      while (u < L - 10) {
+        const cx = A.x + tx * u + nx * FURN_OFFSET,
+          cz = A.z + tz * u + nz * FURN_OFFSET;
+        const d = plan.districtAt(cx, cz)?.kind ?? 'residential';
+        const p = busy[d] ?? 0.2;
+        if (!rng.chance(p * 0.55)) {
+          u += rng.range(4, 9);
+          continue;
+        }
+        // a row of 1–4 along the kerb
+        const n = rng.chance(0.45) ? 1 : rng.chance(0.55) ? 2 : rng.chance(0.6) ? 3 : 4;
+        const types: TwoWheelType[] = [];
+        for (let k = 0; k < n; k++) {
+          const r = rng.next();
+          types.push(d === 'industrial' || d === 'residential' ? (r < 0.45 ? 'bicycle' : r < 0.7 ? 'scooter' : r < 0.85 ? 'dutch' : 'escooter') : r < 0.3 ? 'escooter' : r < 0.55 ? 'scooter' : r < 0.72 ? 'bicycle' : r < 0.84 ? 'dutch' : r < 0.94 ? 'motorbike' : 'courier');
+        }
+        let uu = u;
+        const row: ParkedCar[] = [];
+        let ok = true;
+        for (const t of types) {
+          const sp = TWO_WHEELERS[t];
+          const half = sp.len / 2 + 0.15;
+          const px = A.x + tx * (uu + half) + nx * (FURN_OFFSET + rng.range(-0.06, 0.06)),
+            pz = A.z + tz * (uu + half) + nz * (FURN_OFFSET + rng.range(-0.06, 0.06));
+          // whole length on the pavement, clear of furniture, trees, junction corners
+          for (const e of [-half, 0, half]) {
+            const ex = px + tx * e,
+              ez = pz + tz * e;
+            if (!(occ.get(ex, ez) & OCC.SIDEWALK) || occ.get(ex, ez) & (OCC.ROAD | OCC.BUILDING | OCC.SOLID) || !clear(ex, ez, 0.45)) ok = false;
+          }
+          if (uu + half * 2 > L - 10) ok = false;
+          if (!ok) break;
+          const flip = rng.chance(0.5);
+          const fallen = t === 'escooter' && rng.chance(0.12);
+          const roll = fallen ? (rng.chance(0.5) ? 1.32 : -1.32) : t === 'escooter' ? -0.09 : t === 'motorbike' || t === 'scooter' || t === 'courier' ? -0.07 : -0.11;
+          row.push({
+            model: sp.model,
+            variant: sp.variant ?? 0,
+            color: rng.pick(COLORS_2W[t]),
+            x: px,
+            z: pz,
+            yaw: Math.atan2(tx, tz) + (flip ? Math.PI : 0) + rng.range(-0.05, 0.05) + (t === 'escooter' && !fallen ? rng.range(-0.25, 0.25) : 0),
+            roll,
+            y: SIDEWALK_Y + (fallen ? 0.1 : 0),
+            label: t === 'escooter' ? 'Hire e-scooter' : t === 'bicycle' || t === 'dutch' ? 'Parked bicycle' : t === 'motorbike' ? 'Parked motorbike' : 'Parked moped',
+          });
+          uu += half * 2 + rng.range(0.05, 0.35);
+        }
+        if (ok && row.length) {
+          out.push(...row);
+          // the next row a little further on
+          u = uu + rng.range(6, 16);
+        } else u += rng.range(2, 4);
+      }
     }
   }
   return out;

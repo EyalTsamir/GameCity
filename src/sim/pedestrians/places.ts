@@ -605,6 +605,13 @@ export function buildPlaces(ctx: CityContext, rng: Rng): Places {
     else furn.set(k, [x, z]);
   };
   for (const sl of plan.slots) if (sl.kind !== 'empty' && sl.kind !== 'busstop') addFurn(sl.x, sl.z);
+  // bicycles / mopeds / e-scooters parked on the pavement (traffic module): points along each
+  const p2w = (ctx.services.traffic as { parked2w?: { x: number; z: number; yaw: number; len: number }[] } | undefined)?.parked2w ?? [];
+  for (const b of p2w) {
+    const fx = Math.sin(b.yaw),
+      fz = Math.cos(b.yaw);
+    for (const k of [-0.35, 0, 0.35]) addFurn(b.x + fx * b.len * k, b.z + fz * b.len * k);
+  }
   for (const I of ctx.roads.intersections) {
     for (const hd of I.signals) addFurn(hd.x, hd.z);
     for (const hd of I.stopSigns) addFurn(hd.x, hd.z);

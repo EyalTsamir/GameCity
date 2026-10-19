@@ -860,8 +860,15 @@ export default function create(ctx: CityContext): CityModule {
   };
   const addBush = (x: number, z: number, r: number, h: number, seed: number, flower?: THREE.Color, detail = 1): boolean => {
     if (!bushOk(x, z, r)) return false;
-    selP(x);
-    bush(plantSink, pw, x, H(x, z), z, r, h, seed, { flower, detail });
+    if (cardsOn) {
+      // leaf-card shrub: oleander / bougainvillea when flowering, else a leafy evergreen
+      const fh = hash01(x * 2.3, z * 1.7, 31);
+      const kind: KindName = flower ? (fh < 0.55 ? 'oleander' : 'bougain') : 'shrub';
+      plants.push({ kind, x, y: H(x, z), z, h, r, seed, tone: 0.35 + 0.3 * fh, age: 0.5 });
+    } else {
+      selP(x);
+      bush(plantSink, pw, x, H(x, z), z, r, h, seed, { flower, detail });
+    }
     bushes.add(x, z, r);
     bushCount++;
     return true;
@@ -986,6 +993,19 @@ export default function create(ctx: CityContext): CityModule {
     selP((b.ax + b.bx) / 2);
     hedge(plantSink, pw, b.ax, b.az, b.bx, b.bz, H(b.ax, b.az), b.street ? 0.6 : 0.66, height, leaf, b.lot * 7 + 3);
     hedgeLen += L;
+    // near LOD: a skin of small leaf clusters over the clipped faces (the solid hedge stays as the core / far LOD)
+    if (cardsOn && L > 0.4)
+      plants.push({
+        kind: 'hedge',
+        x: (b.ax + b.bx) / 2,
+        y: H(b.ax, b.az),
+        z: (b.az + b.bz) / 2,
+        h: height,
+        r: L / 2,
+        seed: b.lot * 7919 + Math.round(b.ax * 13 + b.az * 7),
+        color: '#' + leaf.getHexString(),
+        seg: [b.ax, b.az, b.bx, b.bz, b.street ? 0.6 : 0.66],
+      });
   }
 
   // flower beds: park hub, civic square

@@ -12,6 +12,8 @@ import type { Rng } from '../../core/rng';
 import { Kit } from './furniture';
 import { parasol, wheelieBins, CANVAS } from './garden';
 import type { ChairOut } from './service';
+import { GREEN, type GreenKit } from '../buildings/green';
+import { sideGeom } from '../buildings/gen';
 
 const _seat = new THREE.Vector3();
 const _fwd = new THREE.Vector3();
@@ -131,8 +133,12 @@ export function kiosk(ks: Kit, k: Kit, rng: Rng): void {
   k.sh.cyl(-1.6, 0, 0.7, 0.2, 0.2, 0.75, 8, 2);
 }
 
-/** Large square concrete / corten planter with flowers and a shrub ball. */
-export function planter(k: Kit, rng: Rng, round: boolean): void {
+/**
+ * Large square concrete / corten planter with flowers and a shrub ball. With `green` (leaf cards framed at the
+ * same spot) the planting is a lush mix of a shrub / palm / grass centre, flowering clumps round it and ivy or
+ * petunias trailing over the rim instead of the blob shrub.
+ */
+export function planter(k: Kit, rng: Rng, round: boolean, green?: GreenKit): void {
   const sh = k.sh;
   const body = round ? rng.pick(['#c9c3b7', '#8a6a52', '#4f5a52']) : rng.pick(['#c4beb3', '#8a4a2e', '#3f4549', '#d8d0c0']);
   k.m(body, body === '#8a4a2e' ? 'iron' : 'stone');
@@ -141,6 +147,28 @@ export function planter(k: Kit, rng: Rng, round: boolean): void {
   k.m('#4a3424', 'stone');
   if (round) sh.disc(0, 0.56, 0, 0.55, 10, 1);
   else sh.box(0, 0.6, 0, 1.18, 0.02, 1.18, 1);
+  if (green) {
+    const top = round ? 0.56 : 0.6;
+    const centre = rng.weighted([GREEN.SHRUB, GREEN.PALM, GREEN.GRASS, GREEN.LAVENDER], [3, 2, 1.5, 1]);
+    green.clump(0, top - 0.03, 0, centre === GREEN.PALM ? 0.65 : 0.5, centre === GREEN.PALM ? rng.range(1.3, 1.9) : rng.range(0.8, 1.25), centre, 3);
+    const ring = rng.weighted([GREEN.GERANIUM, GREEN.LAVENDER, GREEN.JASMINE, GREEN.GRASS], [3, 1.5, 1, 1]);
+    const m = round ? 5 : 6;
+    for (let i = 0; i < m; i++) {
+      const a = (i / m) * TAU + rng.range(-0.2, 0.2);
+      const rr = round ? 0.4 : 0.45;
+      green.clump(Math.cos(a) * rr, top - 0.02, Math.sin(a) * rr, 0.2, rng.range(0.3, 0.5), i % 3 === 2 ? GREEN.GERANIUM : ring, 2);
+    }
+    if (rng.chance(0.75)) {
+      const trail = rng.chance(0.5) ? GREEN.IVY_HANG : GREEN.PETUNIA;
+      const hw = round ? 0.45 : 0.62;
+      for (const s of [0, 1, 2, 3] as const) {
+        if (rng.chance(0.35)) continue;
+        const sg = sideGeom({ x0: -hw, x1: hw, z0: -hw, z1: hw }, s);
+        green.hang(sg, 0.08, sg.L - 0.08, round ? 0.12 : 0.02, top + 0.02, 0.15, rng.range(0.3, 0.5), trail, 0.04, 1, 0.08);
+      }
+    }
+    return;
+  }
   // shrub ball or low bush in the middle
   k.m(rng.pick(['#3f7a3a', '#4f8a3a', '#2f6a35']), 'wood');
   sh.ellipsoid(0, round ? 0.95 : 1.0, 0, 0.42, 0.42, 0.42, 1);

@@ -493,6 +493,31 @@ export function computePoseA(m: Member, umbrella: boolean, r: Rig, o: Pose, gs: 
         break;
     }
   }
+  // walking with a takeaway coffee (a sip now and then) or eyes on the phone
+  if (m.walkProp > 0 && handR && upright > 0.5 && m.carry === 0 && RG === null && m.sit < 0.05) {
+    const cy = r.chest.y,
+      wy = r.waist.y;
+    if (m.walkProp === 1) {
+      const ph = (t * 0.11 + m.seed * 3) % 1;
+      const up = ph < 0.84 ? 0 : ph < 0.88 ? (ph - 0.84) / 0.04 : ph < 0.96 ? 1 : 1 - (ph - 0.96) / 0.04;
+      const u = up * up * (3 - 2 * up);
+      RT[0] = -0.14 * hk + 0.1 * hk * u;
+      RT[1] = wy + 0.1 * hk + (r.head.y - wy - 0.1 * hk) * u;
+      RT[2] = 0.2 * hk + (r.head.z + 0.12 * hk - 0.2 * hk) * u;
+      RT[3] = 1;
+      reach(r, armR, false, -1, -0.8, -0.3, 0.85);
+      headPitch -= 0.1 * u;
+      prop = PROP.CUP;
+    } else {
+      RT[0] = -0.06 * hk;
+      RT[1] = cy - 0.05 * hk;
+      RT[2] = 0.25 * hk;
+      RT[3] = 1;
+      reach(r, armR, false, -1, -1, -0.2, 0.6);
+      headPitch = (headPitch + (0.42 - headPitch) * (0.6 + 0.4 * (1 - gw)));
+      prop = PROP.PHONE;
+    }
+  }
   // rider: both hands on the grips
   if (RG !== null) {
     const sc = r.s;

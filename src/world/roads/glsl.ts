@@ -459,9 +459,30 @@ vec3 rdHard(inout float rough) {
     float walkLine = onSide * (1.0 - smoothstep(0.25, 0.65, abs(lat - 5.35)));
     c *= 1.0 + 0.035 * walkLine;
     rough -= 0.08 * walkLine;
-    // drink / food stains on plazas and in front of doors
+    // used look: soft grime blotches (2–8 m), dirt in the joints, grime along the cover edges (walls, planters)
+    c *= 1.0 - 0.13 * smoothstep(0.42, 0.82, nL.g * 0.5 + nM.r * 0.5);
+    c *= 1.0 - 0.22 * joint * det;
+    if (vR.z > vR.x) {
+      vec2 lo2 = p - vR.xy, hi2 = vR.zw - p;
+      float dE = min(min(lo2.x, hi2.x), min(lo2.y, hi2.y));
+      c *= 1.0 - 0.12 * (1.0 - smoothstep(0.0, 0.9, dE)) * (0.6 + 0.4 * nM.g);
+    }
+    // drink / food stains: irregular blots + dried rings, more where people sit and wait
     float stn = smoothstep(0.7, 0.74, nS.r * 0.55 + nM.a * 0.45) * (1.0 - onSide * 0.5);
     c = mix(c, c * vec3(0.78, 0.74, 0.7), stn * 0.6);
+    {
+      vec2 sc = floor(p / 1.7);
+      float hs = rdHash(sc + 41.3);
+      if (hs < 0.16) {
+        vec2 ctr = (sc + vec2(rdHash(sc + 1.9), rdHash(sc + 7.7))) * 1.7;
+        float rr = 0.1 + 0.28 * rdHash(sc + 3.3);
+        float dd = length((p - ctr) * vec2(1.0, 0.8 + 0.4 * rdHash(sc + 5.1))) / rr + 0.25 * (nS.b - 0.5);
+        float fill = 1.0 - smoothstep(0.92, 1.0, dd);
+        float ring = rdLine(abs(dd - 0.95) * rr, 0.012, fwm) * step(0.5, rdHash(sc + 8.8));
+        vec3 sc3 = mix(vec3(0.82, 0.76, 0.66), vec3(0.7, 0.7, 0.72), step(0.6, rdHash(sc + 2.6)));
+        c = mix(c, c * sc3, clamp(fill * 0.5 + ring * 0.6, 0.0, 1.0));
+      }
+    }
     vec4 lt = rdLitter(p, fwm, (onSide * 0.22 + 0.08) * (0.6 + 0.6 * nM.g) + onSide * 0.25 * smoothstep(5.9, 6.5, lat), 0.35);
     c = mix(c, lt.rgb, lt.a * 0.9);
   }

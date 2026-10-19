@@ -17,6 +17,10 @@ Branch: work continues from `claude/tinyhaven-graphics-audit-l089m8` (fast-forwa
 `claude/pensive-gates-bim12i` (the session's designated branch).
 
 ## Resume here (keep current)
+* 2026-10-19 20:50 UTC — container restarted again ~20:49 (agents + all background captures killed). Restored:
+  servers, autocheckpoint, locks cleared; 17 uncommitted agent edits survived on disk. All 7 agents resumed via
+  SendMessage 20:51. Earlier today: streetlife M1 (café parties, 31 terraces/94 seats, waiters, tableware) done;
+  pedestrians.near() live; review notes sent (streetlife density, wear plaza/shop interiors, foliage palm trunk).
 * 2026-10-19 20:30 UTC — account usage limit stopped ALL agents ~17:30 (reset 20:00); container rebooted ~20:29.
   Watchdog: tree clean + pushed (fe25a85), servers + autocheckpoint restarted, stale shot locks cleared, all 7
   agents resumed via SendMessage at 20:31 (each from its log's Resume here). State then: world M1 (landscape,
