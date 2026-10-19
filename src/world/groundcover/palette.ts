@@ -79,6 +79,6 @@ vec3 gcTipColor( vec3 base, vec4 nA, float len ) {
 }
 vec3 gcTopColor( vec3 base, vec3 tip, float len ) {
   // seen from above: mostly upper blades, a little shaded thatch in the gaps (more in long grass)
-  return mix( base, tip, 0.5 ) * mix( 0.93, 0.84, smoothstep( 0.2, 0.7, len ) );
+  return mix( base, tip, 0.5 ) * mix( 0.88, 0.84, smoothstep( 0.2, 0.7, len ) );
 }
 `;

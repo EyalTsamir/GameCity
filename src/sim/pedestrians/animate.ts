@@ -75,7 +75,9 @@ function reachFig(r: Rig, o: Pose, a: Arm, left: boolean, px: number, py: number
   reach(r, a, left, px, py, pz, grip);
 }
 
-const IDLE = { RELAXED: 0, POCKETS: 1, CROSSED: 2, HIP: 3, BEHIND: 4, PHONE: 5, CUP: 6 } as const;
+const IDLE = { RELAXED: 0, POCKETS: 1, CROSSED: 2, HIP: 3, BEHIND: 4, PHONE: 5, CUP: 6, TALK: 7 } as const;
+/** standing with friends: listening poses (talking is decided by the party's conversation turns) */
+const IDLE_W_CHAT = [0.35, 0.25, 0.2, 0.15, 0.05, 0, 0];
 /** debug / tools: force an idle variant (0–6) or bench variant (0–4); −1 = by seed */
 export const poseDebug = { idle: -1, bench: -1 };
 
@@ -87,11 +89,50 @@ const IDLE_W_MID = [0.3, 0.15, 0.12, 0.08, 0.04, 0.07, 0.08];
 const IDLE_W_STAFF = [0.45, 0, 0.05, 0.1, 0.4, 0, 0];
 const iv = { v: 0, k: 0.5 };
 
+/** slow (≈ 12 s) epoch counter of a listener's pose */
+function tt0(t: number, m: Member): number {
+  return (t + m.seed * 97) / 12;
+}
+
 /** idle variant of a standing figure: chosen per person and time window, held 6–18 s */
 function idleVariant(m: Member, r: Rig): typeof iv {
   const t = poseIn.t;
   if (poseDebug.idle >= 0) {
     iv.v = poseDebug.idle;
+    iv.k = 1;
+    return iv;
+  }
+  if (m.forceIdle >= 0) {
+    iv.v = m.forceIdle;
+    iv.k = 1;
+    return iv;
+  }
+  if (m.chat > 0) {
+    // conversation turns shared by the party (4–7 s), the speaker talks with a hand
+    const tg = t - m.seed * 10;
+    const pid = m.party.id;
+    const turn = Math.floor((tg + pid * 7.3) / 5.5);
+    const tin = tg + pid * 7.3 - turn * 5.5;
+    let hs = Math.sin(pid * 12.9898 + turn * 78.233) * 43758.5453;
+    const n = m.party.members.length;
+    if (Math.floor((hs - Math.floor(hs)) * n) === m.idx) {
+      const a0 = Math.min(Math.max(tin / 0.6, 0), 1),
+        a1 = Math.min(Math.max((5.5 - tin) / 0.6, 0), 1);
+      iv.v = IDLE.TALK;
+      iv.k = a0 * a0 * (3 - 2 * a0) * (a1 * a1 * (3 - 2 * a1));
+      return iv;
+    }
+    hs = Math.sin(m.seed * 127.1 + Math.floor((tt0(t, m) + 0.5)) * 311.7) * 43758.5453;
+    const h2 = hs - Math.floor(hs);
+    let acc = 0;
+    iv.v = 0;
+    for (let i = 0; i < IDLE_W_CHAT.length; i++) {
+      acc += IDLE_W_CHAT[i];
+      if (h2 < acc) {
+        iv.v = i;
+        break;
+      }
+    }
     iv.k = 1;
     return iv;
   }
@@ -209,7 +250,7 @@ export function computePoseA(m: Member, umbrella: boolean, r: Rig, o: Pose, gs: 
   if (m.sit > 0) {
     const k = kSit;
     const sc = r.s;
-    const hipY = (SEAT_TOP + 0.088 * hk * sc) / sc; // hip joint above the root (figure units)
+    const hipY = (SEAT_TOP + m.seatH + 0.088 * hk * sc) / sc; // hip joint above the root (figure units)
     const hipZ = (BACKREST_Z + 0.125 * hk * sc) / sc;
     const az = hipZ + r.thighL * 0.98 + 0.03;
     LIK[0] = hipY;
@@ -240,7 +281,8 @@ export function computePoseA(m: Member, umbrella: boolean, r: Rig, o: Pose, gs: 
     const lean = sv === 1 && !m.reading && m.cafe === 0;
     // at a café table people sit up, a little forward, towards the table
     const cafeLean = m.cafe > 0 ? (m.reading ? -0.02 : 0.07) : 0;
-    waistBend = (waistBend + ((m.cafe > 0 ? cafeLean : m.reading ? -0.1 : lean ? 0.25 : -0.19) - waistBend) * k);
+    // (no backrest on a fountain rim: sitting up)
+    waistBend = (waistBend + ((m.cafe > 0 ? cafeLean : m.reading ? -0.1 : lean ? 0.25 : m.seatH > 0.05 ? 0.04 : -0.19) - waistBend) * k);
     chestBend = (chestBend + ((lean ? 0.12 : 0.05 + 0.15 * old) - chestBend) * k);
     headPitch = (headPitch + ((m.reading ? 0.2 : lean ? -0.25 : m.cafe > 0 ? 0.12 : 0.05) - headPitch) * k);
     rootY = (rootY + (hipY - r.hip.y - rootY) * k);
@@ -481,6 +523,25 @@ export function computePoseA(m: Member, umbrella: boolean, r: Rig, o: Pose, gs: 
           }
         }
         break;
+      case IDLE.TALK: {
+        // talking with a hand from the elbow, a little nod
+        const left = (m.seed * 7.31) % 1 < 0.3 ? handL : false;
+        const arm = left ? armL : armR;
+        if (left || handR) {
+          const s = left ? 1 : -1;
+          const g1 = Math.sin(t * 2.7 + m.seed * 11),
+            g2 = Math.sin(t * 4.1 + m.seed * 5);
+          RT[0] = s * (0.13 + 0.04 * g1) * hk;
+          RT[1] = cy - (0.06 - 0.05 * g2) * hk;
+          RT[2] = (0.28 + 0.04 * g1) * hk + belly * 0.5;
+          RT[3] = k;
+          reach(r, arm, left, s, -1, -0.4, 0.25);
+          arm.twist += 0.35 * g2 * k;
+          arm.wrist += 0.3 * g1 * k;
+          headPitch += 0.03 * Math.sin(t * 3.3 + m.seed) * k;
+        }
+        break;
+      }
       case IDLE.CUP:
         if (handR) {
           RT[0] = -0.13 * hk;
@@ -834,7 +895,7 @@ export function computePoseA(m: Member, umbrella: boolean, r: Rig, o: Pose, gs: 
           x = (left ? 1 : -1) * 0.025 * hk;
           y = r.hip.y + rootY + 0.06 * hk;
           z = rootZ + 0.2 * hk;
-        } else if (sv === 2 && !left) {
+        } else if (sv === 2 && !left && m.seatH < 0.05) {
           // arm along the backrest
           RT[0] = -0.6 / r.s;
           RT[1] = (SEAT_TOP + 0.36) / r.s;

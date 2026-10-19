@@ -49,6 +49,8 @@ export interface VegetationService {
    */
   setLeafDistance(m: number | null): void;
   getLeafDistance(): number;
+  /** the procedural leaf atlas (debug / inspection) */
+  atlasTex: THREE.Texture | null;
 }
 
 interface Planted extends TreeSpec {
@@ -1411,6 +1413,7 @@ export default function create(ctx: CityContext): CityModule {
       leafOverride = m === null ? null : Math.max(0, m);
     },
     getLeafDistance: () => leafDist(),
+    atlasTex: atlas?.texture ?? null,
   };
   ctx.services.vegetation = service;
   const buildMs = performance.now() - t0;

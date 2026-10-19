@@ -404,6 +404,25 @@ export default function create(ctx: CityContext): CityModule {
       const L = Math.hypot(sh.bx - sh.ax, sh.bz - sh.az);
       const n = Math.floor((L - 1.0) / 2.0);
       const krng = new Rng(Math.floor(hash01(sh.ax, sh.az, 31) * 1e9) || 1);
+      // menu board in the furniture band in line with the door
+      {
+        const x = alongX ? sh.doorX : band,
+          z = alongX ? band : sh.doorZ;
+        const free =
+          occ.has(x, z, OCC.SIDEWALK) &&
+          !layout.furniture.some((f) => Math.hypot(f.x - x, f.z - z) < f.r + 0.55) &&
+          !vegTrees.some((tr) => Math.hypot(tr.x - x, tr.z - z) < 0.9) &&
+          !layout.walk.anyInCircle(x, z, 0.2, MASK_WALK) &&
+          (alongX ? Math.abs(x - nearest(x, XS)) : Math.abs(z - nearest(z, ZS))) > 8.5;
+        if (free) {
+          sel(x);
+          // boards face along the pavement, towards the people walking up to the café
+          kf.sh.frame(x, SIDEWALK_Y + 0.005, z, alongX ? Math.PI / 2 : 0);
+          SK.aFrame(kf, krng);
+          layout.furniture.push({ x, z, r: 0.45 });
+          inc('aFrame');
+        }
+      }
       for (let i = 0; i < n; i++) {
         const t = (i + 0.5 + (L - 1.0 - n * 2.0) / 4.0) / n;
         const fx = sh.ax + (sh.bx - sh.ax) * (0.5 / L + t * (1 - 1.0 / L)),

@@ -550,7 +550,7 @@ function jacaranda(g: CanvasRenderingContext2D, rng: Rng, w: number, h: number):
 /** olive: thin twigs with narrow lanceolate leaves in opposite pairs; upper side dark, underside silvery */
 function olive(g: CanvasRenderingContext2D, rng: Rng, w: number, h: number): void {
   const forks: [number, number][][] = [];
-  for (let i = 0; i < 4; i++) forks.push(stem(rng.range(-10, 10), 0, rng.range(-0.75, 0.75), h * rng.range(0.6, 0.9), rng.range(-0.5, 0.5), 7));
+  for (let i = 0; i < 6; i++) forks.push(stem(rng.range(-14, 14), 0, rng.range(-0.8, 0.8), h * rng.range(0.55, 0.9), rng.range(-0.5, 0.5), 7));
   const leaves: { x: number; y: number; a: number; L: number; b: number }[] = [];
   for (const st of forks) {
     for (let k = 0; k < 11; k++) {
@@ -558,7 +558,7 @@ function olive(g: CanvasRenderingContext2D, rng: Rng, w: number, h: number): voi
       for (const side of [-1, 1]) {
         // silvery underside shows on ~40 % of the leaves (brightness up)
         const silver = rng.chance(0.4);
-        leaves.push({ x: p.x, y: p.y, a: p.a + side * rng.range(0.35, 0.7), L: rng.range(30, 44), b: silver ? rng.range(0.82, 1.0) : rng.range(0.42, 0.66) });
+        leaves.push({ x: p.x, y: p.y, a: p.a + side * rng.range(0.35, 0.7), L: rng.range(22, 32), b: silver ? rng.range(0.82, 1.0) : rng.range(0.42, 0.66) });
       }
     }
   }
@@ -640,12 +640,12 @@ function citrus(g: CanvasRenderingContext2D, rng: Rng, w: number, h: number): vo
 }
 
 const PAINT: Record<LeafTile, Painter> = {
-  broad: (g, s, w, h) => broadCluster(g, new Rng(s), w, h, 24, 40, { w: 0.36, wide: 0.38, base: 1.1, tip: 0.85 }),
-  broadDense: (g, s, w, h) => denseClump(g, new Rng(s), w, h, 120, 30, { w: 0.36, wide: 0.38, base: 1.1, tip: 0.8 }),
-  plane: (g, s, w, h) => broadCluster(g, new Rng(s), w, h, 11, 62, { w: 0.5, lobes: 5, fold: 0.18 }, 1.15, 0.5, 0.95),
-  oak: (g, s, w, h) => broadCluster(g, new Rng(s), w, h, 26, 36, { w: 0.3, lobes: 7, fold: 0.15 }, 1.0, 0.45, 0.9),
-  small: (g, s, w, h) => broadCluster(g, new Rng(s), w, h, 48, 24, { w: 0.3, wide: 0.45, base: 0.5, tip: 0.35 }, 1.05, 0.42, 0.92),
-  smallDense: (g, s, w, h) => denseClump(g, new Rng(s), w, h, 210, 21, { w: 0.3, wide: 0.45, base: 0.5, tip: 0.35, rib: false }),
+  broad: (g, s, w, h) => broadCluster(g, new Rng(s), w, h, 46, 27, { w: 0.36, wide: 0.38, base: 1.1, tip: 0.85 }),
+  broadDense: (g, s, w, h) => denseClump(g, new Rng(s), w, h, 210, 22, { w: 0.36, wide: 0.38, base: 1.1, tip: 0.8 }),
+  plane: (g, s, w, h) => broadCluster(g, new Rng(s), w, h, 22, 42, { w: 0.5, lobes: 5, fold: 0.18 }, 1.15, 0.5, 0.95),
+  oak: (g, s, w, h) => broadCluster(g, new Rng(s), w, h, 42, 27, { w: 0.3, lobes: 7, fold: 0.15 }, 1.0, 0.45, 0.9),
+  small: (g, s, w, h) => broadCluster(g, new Rng(s), w, h, 74, 18, { w: 0.3, wide: 0.45, base: 0.5, tip: 0.35 }, 1.05, 0.42, 0.92),
+  smallDense: (g, s, w, h) => denseClump(g, new Rng(s), w, h, 320, 15, { w: 0.3, wide: 0.45, base: 0.5, tip: 0.35, rib: false }),
   olive: (g, s, w, h) => olive(g, new Rng(s), w, h),
   birch: (g, s, w, h) => birchSpray(g, new Rng(s), w, h),
   jacaranda: (g, s, w, h) => jacaranda(g, new Rng(s), w, h),
@@ -654,7 +654,7 @@ const PAINT: Record<LeafTile, Painter> = {
   needleDense: (g, s, w, h) => needleSpray(g, new Rng(s), w, h, true),
   pine: (g, s, w, h) => pineTufts(g, new Rng(s), w, h),
   cypress: (g, s, w, h) => cypressSpray(g, new Rng(s), w, h),
-  shrub: (g, s, w, h) => denseClump(g, new Rng(s), w, h, 170, 17, { w: 0.34, wide: 0.45, base: 0.6, tip: 0.4, rib: false }),
+  shrub: (g, s, w, h) => denseClump(g, new Rng(s), w, h, 240, 14, { w: 0.34, wide: 0.45, base: 0.6, tip: 0.4, rib: false }),
   oleander: (g, s, w, h) => oleander(g, new Rng(s), w, h),
   willow: (g, s, w, h) => willowStrands(g, new Rng(s), w, h),
   citrus: (g, s, w, h) => citrus(g, new Rng(s), w, h),

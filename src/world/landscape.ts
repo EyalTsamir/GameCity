@@ -14,7 +14,7 @@ import { getTerrainModel } from './terrain/height';
 import { groundBands, slabEdges } from './terrain/layout';
 import { createLandscapeModel, type Cover, type LandscapeModel } from './landscape/model';
 import { buildRings, type RingTopology } from './landscape/rings';
-import { evalHeights, buildLandGeometry, makeSlabNormal, LAND_MAX_D, GROUND_DROP, type LandHeights } from './landscape/terrain';
+import { buildLand, makeSlabNormal, LAND_MAX_D, GROUND_DROP, type LandHeights } from './landscape/terrain';
 import { landUniforms, landMaterial } from './landscape/shader';
 import { buildMountains } from './landscape/mountains';
 import { placeTrees, createLandTrees, type LandTrees } from './landscape/trees';
@@ -77,7 +77,9 @@ export default function create(ctx: CityContext): CityModule {
   const t1 = performance.now();
   const edges = slabEdges(tmodel, groundBands(tmodel));
   const topo = buildRings(edges, LAND_MAX_D);
-  const heights = evalHeights(topo, model, LAND_MAX_D, LAND_MAX_D, slabH);
+  const built = buildLand(topo, model, LAND_MAX_D, slabH, makeSlabNormal(slabH));
+  const heights = built.heights;
+  const geo = built.geo;
   service.topo = topo;
   service.heights = heights;
   const ringMs = performance.now() - t1;
@@ -85,7 +87,6 @@ export default function create(ctx: CityContext): CityModule {
   // ── ground mesh
   const uniforms = landUniforms(ctx.uniforms) as unknown as Record<string, THREE.IUniform>;
   if (params.has('landdbg')) (uniforms.uLandDbg as { value: number }).value = 1;
-  const geo = buildLandGeometry(topo, heights, LAND_MAX_D, makeSlabNormal(slabH));
   const land = new THREE.Mesh(geo, landMaterial(uniforms, fog));
   land.name = 'land-ground';
   land.position.y = GROUND_DROP;
@@ -104,7 +105,7 @@ export default function create(ctx: CityContext): CityModule {
     root.add(m.mesh);
     mtnTris = m.triangles;
     mtnVerts = m.vertices;
-    mtnMat = m.mesh.material as THREE.Material;
+    mtnMat = m.material;
   }
   // ── water reflection proxies (drawn only by the water module's reflection pass, LAYERS.REFLECT):
   // the coastal land + island (land triangles within 2.5 km of the sea, sharing the land mesh's
@@ -139,6 +140,7 @@ export default function create(ctx: CityContext): CityModule {
       const mr = buildMountains(model, uniforms, fog, 4, mtnMat);
       mr.mesh.name = 'land-reflect-mtn';
       mr.mesh.layers.set(LAYERS.REFLECT);
+      mr.mesh.matrixAutoUpdate = false;
       root.add(mr.mesh);
       reflTris += mr.triangles;
     }

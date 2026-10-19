@@ -26,7 +26,7 @@ export function landUniforms(globals: { uTime: { value: number }; uWind: { value
     ...lampUniforms(),
     // natural summer palette (sRGB hex → linear by THREE.Color)
     cWheat: C('#b39550'),
-    cStubble: C('#c2ad79'),
+    cStubble: C('#b2a26e'),
     cGreens: C('#58772f'),
     cSoil: C('#6a523a'),
     cPasture: C('#66843b'),
@@ -36,12 +36,12 @@ export function landUniforms(globals: { uTime: { value: number }; uWind: { value
     cSunfl: C('#c39a22'),
     cMeadow: C('#68833e'),
     cMeadowDry: C('#9a9558'),
-    cForestB: C('#3d6630'),
+    cForestB: C('#456f30'),
     cForestC: C('#284c31'),
     cGap: C('#16220f'),
     cHedge: C('#36502a'),
     cTrack: C('#988567'),
-    cSand: C('#d2c094'),
+    cSand: C('#dccfac'),
     cWetSand: C('#9c8f70'),
     cRock: C('#8b8478'),
     cRock2: C('#6d665d'),
@@ -138,6 +138,10 @@ vec3 landAlbedo() {
     vec4 nT2 = texture2D(tLN, p.zx * (1.0 / 11.0));
     meadow *= 1.0 + (nT1.r - 0.5) * 0.34 * nf + (nT2.g - 0.5) * 0.22 * midF;
     meadow = mix(meadow, meadow * vec3(1.18, 1.1, 0.82), smoothstep(0.55, 0.8, nT2.b) * 0.5 * midF);
+    // 5–15 m mottling (clover, rushes, sorrel patches) visible from the town edge
+    vec4 nT3 = texture2D(tLN, p.xz * (1.0 / 29.0) + 0.37);
+    meadow *= 1.0 + (nT3.a - 0.5) * 0.3 * (1.0 - smoothstep(2.0, 8.0, fp));
+    meadow = mix(meadow, meadow * vec3(0.86, 1.04, 0.9), smoothstep(0.6, 0.75, nT3.r) * 0.6);
   }
   meadow = mix(meadow, meadow * vec3(1.12, 1.13, 1.05), gust * 0.5);
   // wildflower specks: tiny and sparse up close, an average tint further away (the ground agent's
@@ -163,78 +167,129 @@ vec3 landAlbedo() {
     vec2 q = FROT * p.xz + (texture2D(tLN, p.xz * (1.0 / 160.0)).ba - 0.5) * 3.6;
     ivec2 id; vec4 box;
     float ch = fParcel(q, id, box);
+    int pid = id.x * 13 + id.y;
+    vec4 pbox = box;
+    float longX = step(box.w - box.y, box.z - box.x);
+    // many parcels are worked as 2–3 strips / paddocks (each its own crop, fenced, no hedge)
+    float sub = lhash(pid, 31);
+    if (sub < 0.5) {
+      float n = sub < 0.2 ? 3.0 : 2.0;
+      if (longX > 0.5) {
+        float w = (box.z - box.x) / n;
+        float si = clamp(floor((q.x - box.x) / w), 0.0, n - 1.0);
+        box.x += si * w; box.z = box.x + w;
+        pid += int(si) * 977;
+      } else {
+        float w = (box.w - box.y) / n;
+        float si = clamp(floor((q.y - box.y) / w), 0.0, n - 1.0);
+        box.y += si * w; box.w = box.y + w;
+        pid += int(si) * 977;
+      }
+      ch = lhash(pid, 17);
+    }
     float dx0 = q.x - box.x, dx1 = box.z - q.x, dy0 = q.y - box.y, dy1 = box.w - q.y;
     float dB = min(min(dx0, dx1), min(dy0, dy1));
-    float longX = step(box.w - box.y, box.z - box.x);
-    // rows run along the parcel's long side (or across, by hash)
-    float flip = step(0.8, lhash(id.x * 13 + id.y, 19));
+    // distance to the parcel's own (hedged / tracked) borders
+    float pdx0 = q.x - pbox.x, pdx1 = pbox.z - q.x, pdy0 = q.y - pbox.y, pdy1 = pbox.w - q.y;
+    float pB = min(min(pdx0, pdx1), min(pdy0, pdy1));
+    longX = step(box.w - box.y, box.z - box.x);
+    // rows run along the field's long side (or across, by hash)
+    float flip = step(0.8, lhash(pid, 19));
     float along = mix(longX, 1.0 - longX, flip);
     float tr = mix(q.y, q.x, along);   // coordinate across the rows
+    float tl = mix(q.x, q.y, along);   // along the rows
     // headland: the turning strip round the field is drilled parallel to the border
-    float hdW = 7.0 + 3.0 * lhash(id.x * 13 + id.y, 29);
+    float hdW = 7.0 + 3.0 * lhash(pid, 29);
     float dAcross = along > 0.5 ? min(dy0, dy1) : min(dx0, dx1);
     float dAlong = along > 0.5 ? min(dx0, dx1) : min(dy0, dy1);
-    if (dAlong < hdW && dAlong < dAcross) tr = along > 0.5 ? q.x : q.y;
+    float head = step(dAlong, hdW) * step(dAlong, dAcross);
+    if (head > 0.5) { float t0 = tr; tr = tl; tl = t0; }
     float fpt = fp;
+    // striation along the drill direction (passes of the machines): anisotropic noise, metres across ×
+    // tens of metres along — it is what reads at 50–700 m where single rows are sub-pixel
+    vec4 nS = texture2D(tLN, vec2(tr * (1.0 / 9.0), tl * (1.0 / 140.0)) + vec2(float(id.y) * 0.13, float(id.x) * 0.29));
+    vec4 nP = texture2D(tLN, q * (1.0 / 23.0) + vec2(float(id.x) * 0.37, float(id.y) * 0.71));
+    vec4 nW = texture2D(tLN, q * (1.0 / 95.0) + vec2(float(id.y) * 0.21, 0.4));
+    float stri = (nS.g - 0.5) * smoothstep(0.03, 0.25, fp) * (1.0 - smoothstep(3.0, 9.0, fp));
+    // tramlines: paired wheel tracks every 18–24 m, kept ≥ ~1 px wide far away
+    float tlP = 18.0 + 6.0 * lhash(pid, 37);
+    float tlW = max(0.05, fp * 0.6 / tlP);
+    float tram = lStripe(tr + lhash(pid, 41) * tlP, tlP, tlW, fpt) * (1.0 - head);
     vec3 fc;
-    float pv = lhash(id.x * 13 + id.y, 23);   // parcel tone
+    float pv = lhash(pid, 23);   // field tone
     if (ch < 0.22) {
-      // ripe wheat: faint drill rows, tramlines, wind sheen
-      fc = cWheat * (0.92 + 0.16 * pv);
+      // ripe wheat: drill rows, tramlines, striation, lodged patches, wind sheen
+      fc = cWheat * (0.9 + 0.2 * pv);
       fc *= 1.0 - 0.07 * lStripe(tr, 0.6, 0.35, fpt);
-      fc *= 1.0 - 0.18 * lStripe(tr + pv * 20.0, 20.0, 0.05, fpt);
+      fc *= 1.0 - 0.32 * tram;
+      fc *= 1.0 + 0.26 * stri;
+      fc = mix(fc, fc * vec3(1.12, 1.08, 0.95), smoothstep(0.66, 0.8, nP.b) * 0.65);
+      fc = mix(fc, fc * vec3(0.9, 0.97, 0.85), smoothstep(0.62, 0.78, nW.r) * 0.5); // greener, later patches
       fc = mix(fc, fc * vec3(1.16, 1.12, 1.0), gust * 0.75);
     } else if (ch < 0.33) {
-      // stubble with straw windrows
-      fc = cStubble * (0.92 + 0.12 * pv);
-      fc = mix(fc, fc * 1.15, lStripe(tr, 6.0, 0.18, fpt));
+      // stubble: straw windrows, baler / tractor tracks, burnt-pale and dark bands
+      fc = cStubble * (0.9 + 0.16 * pv) * (1.0 + 0.24 * stri);
+      fc = mix(fc, fc * 1.2, lStripe(tr, 6.0, 0.2, fpt));
       fc *= 1.0 - 0.12 * lStripe(tr, 0.4, 0.4, fpt);
+      fc *= 1.0 - 0.25 * tram;
     } else if (ch < 0.48) {
-      // row crop: green rows on soil
+      // row crop: green rows on soil, the soil showing more where it is drier
       float rw = lStripe(tr, 0.75, 0.55, fpt);
-      fc = mix(cSoil, cGreens * (0.9 + 0.2 * pv), 0.35 + 0.65 * rw);
+      float cvr = 0.3 + 0.6 * smoothstep(0.25, 0.7, nW.g);
+      fc = mix(cSoil, cGreens * (0.88 + 0.24 * pv), cvr + (1.0 - cvr) * rw) * (1.0 + 0.3 * stri);
+      fc *= 1.0 - 0.3 * tram;
     } else if (ch < 0.66) {
-      // pasture: patchy green, darker tufts, cattle paths
-      fc = cPasture * (0.86 + 0.22 * nB.r * midF + 0.1 * pv);
-      fc *= 1.0 - 0.06 * smoothstep(0.55, 0.75, nB.b) * midF;
+      // pasture: grazed patchwork, darker rank tufts, worn cattle paths toward the gate
+      fc = cPasture * (0.84 + 0.24 * nB.r * midF + 0.12 * pv);
+      fc *= 1.0 - 0.1 * smoothstep(0.55, 0.75, nB.b) * midF;
+      fc = mix(fc, fc * vec3(1.1, 1.05, 0.85), smoothstep(0.6, 0.8, nW.b) * 0.5);
+      float path = 1.0 - smoothstep(0.012, 0.012 + fp * 0.02 + 0.006, abs(nP.g - 0.5));
+      fc = mix(fc, cTrack * 0.95, path * 0.55 * (1.0 - smoothstep(1.0, 4.0, fp)));
     } else if (ch < 0.76) {
-      // hay meadow, cut: pale lanes + green
+      // hay meadow, cut: mown swaths alternate light / dark (mower direction), windrows
       fc = mix(cHay, cMeadow, 0.35 * pv);
+      float sw = step(0.5, fract(tr / 9.0));
+      fc *= mix(1.0, mix(0.9, 1.12, sw), 1.0 - smoothstep(2.0, 6.0, fp));
       fc = mix(fc, fc * 1.18 + 0.01, lStripe(tr, 4.5, 0.3, fpt));
       fc = mix(fc, fc * vec3(1.1, 1.12, 1.04), gust * 0.4);
     } else if (ch < 0.83) {
-      // ploughed: furrows
-      fc = cPlough * (0.9 + 0.2 * pv);
-      fc *= 1.0 - 0.18 * lStripe(tr, 0.9, 0.45, fpt);
+      // ploughed: furrows, damp dark hollows, drier pale crowns
+      fc = cPlough * (0.88 + 0.24 * pv) * (1.0 + 0.32 * stri);
+      fc *= 1.0 - 0.2 * lStripe(tr, 0.9, 0.45, fpt);
+      fc *= 0.85 + 0.3 * nW.a;
     } else if (ch < 0.91) {
       // fallow wildflower meadow
       fc = mix(meadow, cFallow, 0.4);
+      fc = mix(fc, vec3(0.42, 0.12, 0.08), smoothstep(0.7, 0.85, nP.r) * 0.25 * smoothstep(0.1, 0.6, fp)); // poppy haze
     } else if (ch < 0.95) {
       // sunflowers: yellow heads in rows over green
       float rw = lStripe(tr, 0.75, 0.6, fpt);
-      fc = mix(cGreens * 0.8, cSunfl, 0.55 + 0.35 * rw);
+      fc = mix(cGreens * 0.8, cSunfl, 0.55 + 0.35 * rw) * (1.0 + 0.2 * stri);
+      fc *= 1.0 - 0.3 * tram;
     } else {
       // orchard floor (the trees are instanced): mown grass with darker rows
       fc = cPasture * 1.05;
       fc *= 1.0 - 0.15 * lStripe(tr, 6.0, 0.3, fpt);
     }
     // in-field moisture / growth patches (stronger in crops, faint in grass)
-    vec4 nP = texture2D(tLN, q * (1.0 / 23.0) + vec2(float(id.x) * 0.37, float(id.y) * 0.71));
-    float patchK = (ch < 0.48 || ch > 0.76) ? 0.22 : 0.12;
+    float patchK = (ch < 0.48 || ch > 0.76) ? 0.24 : 0.12;
     fc *= 1.0 - patchK * 0.5 + patchK * mix(0.5, nP.r * 0.6 + nB.g * 0.4, midF) + 0.1 * macro;
-    fc *= 1.0 - 0.08 * smoothstep(0.62, 0.8, nA.g) * (ch < 0.33 ? 1.0 : 0.0);
-    // grassy margin inside each border
-    float margin = 1.0 - smoothstep(1.0, 2.6 + 2.2 * pv + 1.5 * nB.r, dB);
-    fc = mix(fc, meadow * 0.92, margin);
-    // hedgerows and tracks on the borders
-    bool onRow = min(dy0, dy1) < min(dx0, dx1);
-    int bk = dy0 < dy1 ? id.x : id.x + 1;
-    int bj = dx0 < dx1 ? id.y : id.y + 1;
+    // field edges: weedy margin (rank grass, poppies / cow parsley as a tint far away)
+    float margin = 1.0 - smoothstep(0.8, 2.2 + 2.2 * pv + 1.5 * nB.r, dB);
+    vec3 weeds = meadow * mix(vec3(0.92), vec3(1.06, 0.92, 0.88), smoothstep(0.55, 0.7, nP.a));
+    fc = mix(fc, weeds, margin);
+    // fence / ditch line between the strips of one parcel (no hedge)
+    float fence = (1.0 - smoothstep(0.25, 0.25 + fp, dB)) * step(0.6, pB - dB + 0.6) * step(0.01, pB - dB);
+    fc = mix(fc, meadow * 0.7, fence * 0.8);
+    // hedgerows and tracks on the parcel borders
+    bool onRow = min(pdy0, pdy1) < min(pdx0, pdx1);
+    int bk = pdy0 < pdy1 ? id.x : id.x + 1;
+    int bj = pdx0 < pdx1 ? id.y : id.y + 1;
     float hedge = onRow ? step(lhash(bk, 44), 0.55) : step(lhash(id.x * 7 + bj, 55), 0.45);
     float track = onRow ? step(lhash(bk, 45), 0.16) : 0.0;
     float hw = 1.6 + 0.8 * nB.a;
-    hedgeM = hedge * (1.0 - smoothstep(hw - fp * 0.5, hw + fp * 0.5, dB));
-    trackM = track * (1.0 - smoothstep(1.4 - fp * 0.5, 1.4 + fp * 0.5, abs(dB - 0.0)));
+    hedgeM = hedge * (1.0 - smoothstep(hw - fp * 0.5, hw + fp * 0.5, pB));
+    trackM = track * (1.0 - smoothstep(1.4 - fp * 0.5, 1.4 + fp * 0.5, pB));
     col = mix(col, fc, field);
   }
 
@@ -262,7 +317,7 @@ vec3 landAlbedo() {
       fcol *= mix(1.0, 0.82 + 0.36 * bh, fade);
       fcol = mix(fcol, cGap, (1.0 - inC) * fade * 0.8);
     } else {
-      fcol *= 0.82;   // average of crowns + gaps
+      fcol *= 0.93;   // average of crowns + gaps (matches the impostor forest's lit tops)
     }
     col = mix(col, fcol, forest);
     lnN = normalize(mix(lnN, Nf, forest));

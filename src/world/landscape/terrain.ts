@@ -28,64 +28,19 @@ export interface LandHeights {
   ms: number;
 }
 
-/** evaluate the model at every ring vertex up to `landMaxD` (heights) and `waterMaxD` (heights only) */
-export function evalHeights(topo: RingTopology, model: LandscapeModel, landMaxD: number, waterMaxD: number, slabH: (x: number, z: number) => number): LandHeights {
+/**
+ * Heights, cover and the land geometry over the ring topology up to `landMaxD`: heights first, then
+ * the mesh normals give the slope for the cover (no extra height evaluations), then the forest canopy
+ * is raised and the normals recomputed; ring 0 keeps the slab ground's own normals.
+ */
+export function buildLand(
+  topo: RingTopology,
+  model: LandscapeModel,
+  landMaxD: number,
+  slabH: (x: number, z: number) => number,
+  slabNormal: (x: number, z: number, out: number[]) => void,
+): { geo: THREE.BufferGeometry; heights: LandHeights } {
   const t0 = performance.now();
-  const n = topo.count;
-  const h = new Float32Array(n).fill(NaN);
-  const canopy = new Float32Array(n);
-  const cover = new Float32Array(n * CW);
-  const rq = { d: 0, halfW: 8, s: 0, tx: 1, tz: 0, side: 1 };
-  const c: Cover = { water: 0, sand: 0, rock: 0, forest: 0, field: 0, meadow: 0, wet: 0 };
-  let landVerts = 0;
-  for (const ring of topo.rings) {
-    if (ring.d > waterMaxD) break;
-    const land = ring.d <= landMaxD;
-    for (let i = 0; i < ring.n; i++) {
-      const v = ring.start + i;
-      const x = topo.x[v],
-        z = topo.z[v];
-      const y = ring.d === 0 ? slabH(x, z) : model.height(x, z);
-      h[v] = y;
-      if (!land) continue;
-      landVerts++;
-      if (ring.d === 0 || y < WL - 6) {
-        // seam / deep water: no canopy; cover from the model where cheap
-        cover[v * CW + 1] = 0;
-        cover[v * CW + 5] = ring.d === 0 ? 1 : 0;
-        cover[v * CW + 6] = 1;
-        cover[v * CW + 8] = 60;
-        continue;
-      }
-      model.cover(x, z, c);
-      const k = v * CW;
-      cover[k] = c.forest;
-      cover[k + 1] = c.field;
-      cover[k + 2] = c.sand;
-      cover[k + 3] = c.rock;
-      cover[k + 4] = c.wet;
-      cover[k + 5] = c.meadow;
-      cover[k + 6] = 1 - smooth(4, 30, ring.d); // seam zone
-      // canopy: closed forest far from the slab becomes part of the terrain surface
-      const cw = smooth(CANOPY_NEAR, CANOPY_FULL, ring.d) * smooth(0.3, 0.8, c.forest);
-      if (cw > 0) {
-        const ch = (9 + 5 * vnoise(x / 37, z / 37, 61) + 3 * vnoise(x / 11, z / 11, 62)) * cw;
-        canopy[v] = ch;
-        cover[k + 7] = cw;
-      }
-      // river bank coordinate (m from the waterline, < 0 in the water), bank side, slab distance
-      if (x < -150 && model.river(x, z, rq) && rq.d < rq.halfW + 60) {
-        cover[k + 8] = rq.d - rq.halfW;
-        cover[k + 10] = rq.side ?? 1;
-      } else cover[k + 8] = 60;
-      cover[k + 9] = model.slabDist(x, z);
-    }
-  }
-  return { h, canopy, cover, landVerts, ms: performance.now() - t0 };
-}
-
-export function buildLandGeometry(topo: RingTopology, H: LandHeights, landMaxD: number, slabNormal: (x: number, z: number, out: number[]) => void): THREE.BufferGeometry {
-  // vertices of the land rings only (they come first in the topology)
   let nv = 0,
     lastRing = 0;
   for (let k = 0; k < topo.rings.length; k++) {
@@ -93,30 +48,72 @@ export function buildLandGeometry(topo: RingTopology, H: LandHeights, landMaxD: 
     lastRing = k;
     nv = topo.rings[k].start + topo.rings[k].n;
   }
-  const pos = new Float32Array(nv * 3);
-  const cov = new Float32Array(nv * 4);
-  const cov2 = new Float32Array(nv * 4);
-  const cov3 = new Float32Array(nv * 4);
-  for (let v = 0; v < nv; v++) {
-    pos[v * 3] = topo.x[v];
-    pos[v * 3 + 1] = H.h[v] + H.canopy[v];
-    pos[v * 3 + 2] = topo.z[v];
-    for (let q = 0; q < 4; q++) {
-      cov[v * 4 + q] = H.cover[v * CW + q];
-      cov2[v * 4 + q] = H.cover[v * CW + 4 + q];
-      cov3[v * 4 + q] = H.cover[v * CW + 8 + q];
+  const h = new Float32Array(topo.count).fill(NaN);
+  const canopy = new Float32Array(topo.count);
+  const cover = new Float32Array(topo.count * CW);
+  const ringD = new Float32Array(nv);
+  for (let k = 0; k <= lastRing; k++) {
+    const ring = topo.rings[k];
+    for (let i = 0; i < ring.n; i++) {
+      const v = ring.start + i;
+      ringD[v] = ring.d;
+      h[v] = ring.d === 0 ? slabH(topo.x[v], topo.z[v]) : model.height(topo.x[v], topo.z[v]);
     }
   }
+  const pos = new Float32Array(nv * 3);
+  for (let v = 0; v < nv; v++) {
+    pos[v * 3] = topo.x[v];
+    pos[v * 3 + 1] = h[v];
+    pos[v * 3 + 2] = topo.z[v];
+  }
   const triEnd = topo.triStart[lastRing];
-  const idx = topo.tris.subarray(0, triEnd * 3);
   const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-  geo.setAttribute('aCov', new THREE.BufferAttribute(cov, 4));
-  geo.setAttribute('aCov2', new THREE.BufferAttribute(cov2, 4));
-  geo.setAttribute('aCov3', new THREE.BufferAttribute(cov3, 4));
-  geo.setIndex(new THREE.BufferAttribute(new Uint32Array(idx), 1));
+  const pa = new THREE.BufferAttribute(pos, 3);
+  geo.setAttribute('position', pa);
+  geo.setIndex(new THREE.BufferAttribute(new Uint32Array(topo.tris.subarray(0, triEnd * 3)), 1));
   geo.computeVertexNormals();
-  // the seam ring takes the slab ground's own normals (same formula as terrain/ground.ts)
+  const nor0 = (geo.getAttribute('normal') as THREE.BufferAttribute).array as Float32Array;
+  // ── cover
+  const c: Cover = { water: 0, sand: 0, rock: 0, forest: 0, field: 0, meadow: 0, wet: 0 };
+  const rq = { d: 0, halfW: 8, s: 0, tx: 1, tz: 0, side: 1 };
+  for (let v = 0; v < nv; v++) {
+    const x = topo.x[v],
+      z = topo.z[v],
+      y = h[v],
+      d = ringD[v];
+    const k = v * CW;
+    if (d === 0 || y < WL - 6) {
+      cover[k + 5] = d === 0 ? 1 : 0;
+      cover[k + 6] = 1;
+      cover[k + 8] = 60;
+      continue;
+    }
+    const ny = Math.max(0.05, nor0[v * 3 + 1]);
+    const slope = Math.sqrt(Math.max(0, 1 - ny * ny)) / ny;
+    model.cover(x, z, c, y, slope);
+    cover[k] = c.forest;
+    cover[k + 1] = c.field;
+    cover[k + 2] = c.sand;
+    cover[k + 3] = c.rock;
+    cover[k + 4] = c.wet;
+    cover[k + 5] = c.meadow;
+    cover[k + 6] = 1 - smooth(4, 30, d); // seam zone
+    // canopy: closed forest far from the slab becomes part of the terrain surface
+    const cw = smooth(CANOPY_NEAR, CANOPY_FULL, d) * smooth(0.3, 0.8, c.forest);
+    if (cw > 0) {
+      canopy[v] = (9 + 5 * vnoise(x / 37, z / 37, 61) + 3 * vnoise(x / 11, z / 11, 62)) * cw;
+      cover[k + 7] = cw;
+    }
+    // river bank coordinate (m from the waterline, < 0 in the water), bank side, slab distance
+    if (x < -150 && model.river(x, z, rq) && rq.d < rq.halfW + 60) {
+      cover[k + 8] = rq.d - rq.halfW;
+      cover[k + 10] = rq.side ?? 1;
+    } else cover[k + 8] = 60;
+    cover[k + 9] = model.slabDist(x, z);
+  }
+  // ── raise the canopy, final normals
+  for (let v = 0; v < nv; v++) pos[v * 3 + 1] = h[v] + canopy[v];
+  geo.computeVertexNormals();
   const nor = geo.getAttribute('normal') as THREE.BufferAttribute;
   const tmp = [0, 1, 0];
   const r0 = topo.rings[0];
@@ -125,9 +122,22 @@ export function buildLandGeometry(topo: RingTopology, H: LandHeights, landMaxD: 
     slabNormal(topo.x[v], topo.z[v], tmp);
     nor.setXYZ(v, tmp[0], tmp[1], tmp[2]);
   }
+  const cov = new Float32Array(nv * 4);
+  const cov2 = new Float32Array(nv * 4);
+  const cov3 = new Float32Array(nv * 4);
+  for (let v = 0; v < nv; v++) {
+    for (let q = 0; q < 4; q++) {
+      cov[v * 4 + q] = cover[v * CW + q];
+      cov2[v * 4 + q] = cover[v * CW + 4 + q];
+      cov3[v * 4 + q] = cover[v * CW + 8 + q];
+    }
+  }
+  geo.setAttribute('aCov', new THREE.BufferAttribute(cov, 4));
+  geo.setAttribute('aCov2', new THREE.BufferAttribute(cov2, 4));
+  geo.setAttribute('aCov3', new THREE.BufferAttribute(cov3, 4));
   geo.computeBoundingBox();
   geo.computeBoundingSphere();
-  return geo;
+  return { geo, heights: { h, canopy, cover, landVerts: nv, ms: performance.now() - t0 } };
 }
 
 /** slab ground normal at an edge vertex (terrain/ground.ts slopePick formula) */

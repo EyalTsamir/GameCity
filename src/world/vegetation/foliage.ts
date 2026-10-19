@@ -286,6 +286,8 @@ export const cardKnobs = {
   night: { value: 2.0 },
   /** 0 = plain (A/B of the leaf shading) */
   fx: { value: 1 },
+  /** dissolve cards seen edge-on (0 off .. 1 full) */
+  edgeFade: { value: 1 },
 };
 
 // ──────────────────────────────────────────────────────────────── GLSL ──
@@ -341,6 +343,7 @@ varying vec2 vThUv;
 varying float vThVis;
 ${VERT_COMMON}
 #ifndef TH_DEPTH
+uniform float uThEdgeFade;
 varying vec4 vThK;
 varying vec4 vThF;
 varying float vThAO;
@@ -370,6 +373,10 @@ void thCard( out vec3 P, out vec3 N ) {
     P += N * ( fl * iU.w * uThWindK.w * ( 0.3 + g ) * length( uWind ) );
   }
 #ifndef TH_DEPTH
+  // cards seen edge-on dissolve (their leaves would smear into streaks); the others cover for them
+  vec3 fN = normalize( cross( U, V ) );
+  vec3 toCam = normalize( cameraPosition - P );
+  vThVis *= mix( 1.0, smoothstep( 0.08, 0.32, abs( dot( fN, toCam ) ) ), uThEdgeFade );
   vThK = iK;
   vThF = iF;
   vThAO = iV.w;
@@ -406,6 +413,11 @@ void thWood( out vec3 P, out vec3 N ) {
   vec3 ax = B - A;
   float L = max( 1e-4, length( ax ) );
   vec3 d = ax / L;
+  // overlap neighbours a little at the joints (ring planes differ at a bend → no cracks)
+  A -= d * iA.w * 0.45;
+  B += d * iE.w * 0.45;
+  ax = B - A;
+  L = length( ax );
   vec3 ref = abs( d.y ) > 0.95 ? vec3( 1.0, 0.0, 0.0 ) : vec3( 0.0, 1.0, 0.0 );
   vec3 s1 = normalize( cross( ref, d ) );
   vec3 s2 = cross( d, s1 );
@@ -655,6 +667,7 @@ export function cardMaterials(u: GlobalUniforms, atlas: THREE.Texture, lod: THRE
       uThNightK: cardKnobs.night,
       uThFx: cardKnobs.fx,
       uThShadowShift: cardKnobs.shadowShift,
+      uThEdgeFade: cardKnobs.edgeFade,
       uNight: u.uNight,
     });
     sh.vertexShader = sh.vertexShader

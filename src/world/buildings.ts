@@ -83,7 +83,7 @@ export default function create(ctx: CityContext): CityModule {
   const t0 = performance.now();
   const plan = ctx.plan;
   // A/B switches: ?legacyfacade = original shell shader
-  const mats = createMaterials(ctx.uniforms, { legacy: ctx.debug.params.has('legacyfacade') });
+  const mats = createMaterials(ctx.uniforms, { legacy: ctx.debug.params.has('legacyfacade'), wear: !ctx.debug.params.has('nowear') });
   const shell = new Builder({ normal: true, color: true, uv: true, facade: true });
   const trimChunks = new Map<number, Builder>();
   const trimOf = (x: number, z: number): Builder => {

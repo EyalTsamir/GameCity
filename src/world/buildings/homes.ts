@@ -23,6 +23,8 @@ import {
 } from './gen';
 import { WIN, PROF, WALLPAT, ROOFPAT, FRAME, GLASS, LIGHT_MODE } from './materials';
 import { genHouseLegacy } from './houses';
+import { windowBox, shutterPair, shutterState, downpipe, acUnit, climber } from './clutter';
+import { GREEN } from './green';
 
 const HOUSE_WALLS = ['#f4efe4', '#efe3c8', '#dfe4e2', '#c9dcea', '#cfdcbf', '#f2dfa0', '#efcfc4', '#d8c4a6', '#e8e8e8', '#bfd3d6', '#e3d6ee', '#f0d9b5'];
 const HOUSE_ROOFS = ['#a24c36', '#b5583e', '#5a6270', '#4d5560', '#6b4a3a', '#8a5a44', '#3f454d', '#7c3b2e', '#55606b'];
@@ -566,6 +568,27 @@ export function genHouse(g: Gen): void {
     }
   }
 
+  // gutters' downpipes at the front corners of the main body, an AC unit at the back, a climber on some houses
+  {
+    const fr = sideGeom(M, ridgeAlongX ? FRONT : RIGHT);
+    if (ridgeAlongX) {
+      downpipe(g, fr, 0.14, eave - 0.12, undefined, INS);
+      if (rng.chance(0.6)) downpipe(g, fr, fr.L - 0.14, eave - 0.12, undefined, INS);
+    } else {
+      downpipe(g, fr, 0.14, eave - 0.12, undefined, INS);
+      const lf = sideGeom(M, LEFT);
+      if (rng.chance(0.6)) downpipe(g, lf, lf.L - 0.14, eave - 0.12, undefined, INS);
+    }
+    if (floors === 2 && rng.chance(0.4)) {
+      const bk = sideGeom(M, BACK);
+      if (bk.L > 3) acUnit(g, bk, rng.range(1.0, bk.L - 1.0), gH + 0.4, 0);
+    }
+    if (rng.chance(0.18)) {
+      const sd = sideGeom(M, rng.chance(0.5) ? LEFT : RIGHT);
+      if (sd.L > 3) climber(g, sd, rng.range(1.2, sd.L - 1.2), rng.range(1.2, 2.6), rng.range(2.2, eave - 0.3), INS, rng.chance(0.6) ? GREEN.IVY_WALL : GREEN.JASMINE);
+    }
+  }
+
   // ──────────────────────────────────────────────────── helpers ──
 
   function porchLamp(x: number, z: number, y: number): void {
@@ -887,30 +910,20 @@ export function genHouse(g: Gen): void {
   }
 
   function shutterSet(sg: SideGeom, gr: Grid, ground: boolean): void {
-    setCol(t, shutterC);
-    const out = ground ? 0.06 : 0.07;
+    // shutters in different positions (never swung out over the garden path on the ground floor)
     for (let i = 0; i < gr.n; i++) {
       const u = gridU(gr, i);
       const ww = gr.wx1 - gr.wx0;
       const y0 = gridY0(gr, 0),
         y1 = gr.v0 + gr.wy1;
-      sideBox(t, sg, u - ww / 2 - ww * 0.48 - 0.04, u - ww / 2 - 0.04, 0, out, y0, y1);
-      sideBox(t, sg, u + ww / 2 + 0.04, u + ww / 2 + ww * 0.48 + 0.04, 0, out, y0, y1);
+      let st = shutterState(g, sg.nz > 0.5 || sg.nx < -0.5);
+      if (ground && st === 3) st = 0;
+      shutterPair(g, sg, u, ww * 0.96, y0, y1, shutterC, st);
     }
   }
 
   function flowerBox(sg: SideGeom, u: number, ww: number, y0: number): void {
-    setCol(t, col('#7a4b2a'));
-    sideBox(t, sg, u - ww / 2, u + ww / 2, 0.08, 0.32, y0 - 0.02, y0 + 0.2, true);
-    setCol(t, col('#4f8a3c'));
-    sideBox(t, sg, u - ww / 2 + 0.03, u + ww / 2 - 0.03, 0.1, 0.3, y0 + 0.2, y0 + 0.28);
-    setCol(t, col(rng.pick(FLOWERS)));
-    const n = Math.max(3, Math.round(ww / 0.22));
-    for (let k = 0; k < n; k++) {
-      const fu = u - ww / 2 + 0.08 + ((ww - 0.16) * (k + 0.5)) / n;
-      const fo = 0.13 + (k % 2) * 0.09;
-      sideBox(t, sg, fu - 0.06, fu + 0.06, fo, fo + 0.1, y0 + 0.28, y0 + 0.38);
-    }
+    windowBox(g, sg, u, ww, y0);
   }
 
   function solar(ye: number, rr: number): void {

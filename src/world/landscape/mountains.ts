@@ -34,8 +34,8 @@ interface LayerDef {
 }
 
 const LAYERS: LayerDef[] = [
-  { r0: 2400, rc: 3500, r1: 4700, a0: 168, a1: 370, step: 0.16, hS: 45, hW: 80, hN: 230, scale: 1600, seed: 1 },
-  { r0: 4600, rc: 6300, r1: 8200, a0: 176, a1: 368, step: 0.14, hS: 85, hW: 170, hN: 560, scale: 2600, seed: 2 },
+  { r0: 2400, rc: 3500, r1: 4700, a0: 168, a1: 370, step: 0.21, hS: 45, hW: 80, hN: 230, scale: 1600, seed: 1 },
+  { r0: 4600, rc: 6300, r1: 8200, a0: 176, a1: 368, step: 0.17, hS: 85, hW: 170, hN: 560, scale: 2600, seed: 2 },
   { r0: 8000, rc: 11000, r1: 14500, a0: 196, a1: 366, step: 0.12, hS: 150, hW: 520, hN: 2100, scale: 3400, seed: 3 },
   { r0: 13500, rc: 17500, r1: 22000, a0: 226, a1: 364, step: 0.11, hS: 260, hW: 1100, hN: 3700, scale: 4600, seed: 4 },
 ];
@@ -44,7 +44,9 @@ const LAYERS: LayerDef[] = [
 const ROWS = [0, 0.16, 0.3, 0.4, 0.47, 0.53, 0.6, 0.72, 1];
 
 export interface MountainResult {
-  mesh: THREE.Mesh;
+  /** a group of azimuth chunks (frustum-culled separately), or one mesh for the coarse proxy */
+  mesh: THREE.Object3D;
+  material: THREE.Material;
   triangles: number;
   vertices: number;
 }
@@ -127,13 +129,43 @@ export function buildMountains(model: LandscapeModel, uniforms: Record<string, T
   geo.computeBoundingSphere();
   geo.computeBoundingBox();
   const mat = mat0 ?? mountainMaterial(uniforms, fog);
-  const mesh = new THREE.Mesh(geo, mat);
-  mesh.name = 'land-mountains';
-  mesh.matrixAutoUpdate = false;
-  mesh.updateMatrix();
-  mesh.castShadow = false;
-  mesh.receiveShadow = false;
-  return { mesh, triangles: idx.length / 3, vertices: pos.length / 3 };
+  const mk = (g: THREE.BufferGeometry, name: string) => {
+    const m = new THREE.Mesh(g, mat);
+    m.name = name;
+    m.matrixAutoUpdate = false;
+    m.updateMatrix();
+    m.castShadow = false;
+    m.receiveShadow = false;
+    return m;
+  };
+  if (decimate > 1) return { mesh: mk(geo, 'land-mountains'), material: mat, triangles: idx.length / 3, vertices: pos.length / 3 };
+  // azimuth chunks (all layers of a sector in one mesh): sectors behind the camera are culled
+  const CH = 5;
+  const bins: number[][] = Array.from({ length: CH }, () => []);
+  for (let t = 0; t < idx.length; t += 3) {
+    const v = idx[t];
+    const a = Math.atan2(pos[v * 3] - CX, -(pos[v * 3 + 2] - CZ)) / DEG; // 0 = north, 90 = east
+    const am = (((a - 165) % 360) + 360) % 360; // 0 at the S end of the layers
+    const k = Math.min(CH - 1, Math.floor(am / (210 / CH)));
+    bins[k].push(idx[t], idx[t + 1], idx[t + 2]);
+  }
+  const group = new THREE.Group();
+  group.name = 'land-mountains';
+  for (let k = 0; k < CH; k++) {
+    if (!bins[k].length) continue;
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', geo.getAttribute('position'));
+    g.setAttribute('normal', geo.getAttribute('normal'));
+    g.setIndex(new THREE.BufferAttribute(new Uint32Array(bins[k]), 1));
+    // tight bounds from this chunk's vertices
+    const box = new THREE.Box3();
+    const p = new THREE.Vector3();
+    for (const v of bins[k]) box.expandByPoint(p.set(pos[v * 3], pos[v * 3 + 1], pos[v * 3 + 2]));
+    g.boundingBox = box;
+    g.boundingSphere = box.getBoundingSphere(new THREE.Sphere());
+    group.add(mk(g, 'land-mountains'));
+  }
+  return { mesh: group, material: mat, triangles: idx.length / 3, vertices: pos.length / 3 };
 }
 
 function mountainMaterial(uniforms: Record<string, THREE.IUniform>, fog: boolean): THREE.MeshStandardMaterial {

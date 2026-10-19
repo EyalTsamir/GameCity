@@ -1,18 +1,27 @@
 # world — streetlife (café terraces, street sitters, vendors, two-wheelers)
 
 ## Resume here
-* 2026-10-19 20:50 UTC — M1 (cafés) working in the browser: patrons are crowd parties with goal 'cafe'
-  (walk in between the tables, sit, act, leave), table activities (talk / sip / hold cup / eat / phone /
-  read / lean back, conversation turns), waiters (party state 'serve': order pad → kitchen → bring the order;
-  tableware appears when the order is delivered), tableware mesh (1 draw call). Evidence `shots/world/
-  streetlife/m1b_sheet.png`. M2 code written, typechecks, first browser run in progress
-  (`shots/world/streetlife/m2a/`, views road / road2 / junc / cafeA at 13 h): two-wheelers in traffic
-  (specs TWO_WHEELERS + MIX_2W, 27 % of regular traffic, `?no2w`), models 'bike' (city bicycle, e-scooter,
-  Dutch bike) and 'moto' (Vespa scooter, delivery scooter with top box, motorbike) with bitmask variant
-  parts (aPart ≥ 16) and a pedal crank (aWheel.w = 3, angle in aInst2.y), lean into turns, ridden 0.35–0.9 m
-  right of the lane centre; riders = Members fed to the crowd renderer (pedestrians/riders.ts, animate.ts
-  ride branch: pedalling leg IK, feet on floor / pegs / deck, hands on the grips, foot down when stopped).
-* Next: judge m2a (rider poses at 5–10 m, pedalling, lean), fix; parked bikes / e-scooters; then M3.
+* 2026-10-19 21:05 UTC — after two container restarts. All code typechecks. State:
+  - M1 cafés working (`m1b_sheet.png`): patrons = crowd parties with goal 'cafe' (entry point on a walkway
+    edge → planned path between tables → sit → act → leave), table activities with conversation turns,
+    waiters (state 'serve': pad → order → bring), tableware (1 draw call). After the lead's review:
+    seat-based occupancy (~93 % of seats at peak hours), groups sized to the table, couples may join a
+    couple at a four, takeaway cups / phones while walking (Member.walkProp), tableware 1.18× and whiter.
+  - M2 two-wheelers (27 % of regular traffic, `?no2w`): models 'bike' (city bicycle, e-scooter, Dutch
+    bike) / 'moto' (Vespa, delivery scooter, motorbike), bitmask variant parts (aPart ≥ 16), pedal crank
+    (aWheel.w = 3, angle aInst2.y), lean into turns, ridden right of the lane centre; riders = Members in
+    the crowd renderer (riders.ts + animate ride branch); parked bikes / mopeds / hire e-scooters in the
+    furniture band (`traffic.ts` buildParked2W, `?noparked2w`; walkers keep clear via furnitureNear).
+    Street shots good (`m2a_sheet.png`). Rider close-ups: scratchpad `tools/riders.mjs <outDir> [hours]`
+    → `shots/world/streetlife/riders1/` (running).
+  - M3 coded, not yet seen in a browser: hangouts (pairs / trios chatting with hand gestures in turns,
+    someone on the phone; places.ts buildHangouts, crowd hangGoal, ~65 % warm), street vendors
+    (`vendors.ts`: gelato / orange-juice / flower / pretzel carts, one merged mesh, vendor parties
+    p.stall, customers theme 'vendor' leave with a cup), fountain-rim sitters (BenchPlace.rim,
+    Member.seatH, invariant exemption while seated). Toggles `?nohang`, `?novendors`, `?norim`, `?nocafe`.
+  - Invariants run `shots/world/streetlife/inv1.json` (4×, 30 s) queued.
+* Next: judge riders1 + inv1; browser pass of M3 (civic square fountain 27.5,25.5; downtown plazas);
+  market-stall vendor request to the lead (landmarks' toy vendors → real figures); soak; perf.
 
 ## Brief (WORLD-PLAN.md workstream 5 + world-briefs.md notes)
 Gap: at eye level the city is thinly populated compared to reference 2 (sunny Tel-Aviv café street — every

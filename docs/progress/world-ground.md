@@ -1,17 +1,17 @@
 # world-ground — grass, meadows, flowers, weeds, litter, reeds (world round)
 
 ## Resume here
-* 2026-10-19 20:50 — M1 iterating. Done since the reboot: t3 judged (shots/world/ground/t3: lawn reads as a
-  lawn at eye level; bank meadow far too golden; meadow islands dark from above; lawn-flower confetti;
-  665 k blade verts in park_eye), then: straw down (palette + seed heads), species mixing, ring B/C
-  flowers as floating heads, greener lawn palette, darker turf under ring A + view-elevation-aware
-  presence, tuft/tussock bump on the ground normal (GROUND_BUMP, uGcBump), patchy wear, slab-edge meadow
-  margin (seam with world), ring B 512 / C 640 blades, lily pads (`groundcover/lily.ts`, ?nolilies),
-  reed stands with gaps. Maps boot 3.2 s under load (was 38 s); combine loop trimmed further.
-* Running: t4 (park_eye, bank_band, bank_meadow, park_mid, overview × 11 h / 18.2 h, with props) →
-  shots/world/ground/t4.
-* Next: judge t4 → milestone note to lead (+ palette offer to world, foliage request for pond reeds/lilies
-  once mine are verified) → M2 (edge tufts / weeds check at street level, wind gusts visible) → night.
+* 2026-10-19 20:52 — resumed after the 2nd container restart (~20:49; all my files committed in a69c834).
+  State: M1 iteration done in code (see below), M5 started: `groundcover/outer.ts` builds cover / flower /
+  height maps for a 96 m band of the landscape around the slab (ctx.services.landscape.cover/height; 2 m
+  cover lattice, 1 m height lattice, 0.5 m texels), tile grids now span slab ± 96 m (`GRID_PAD`,
+  `addToGrids`), the blade shader reads tCoverO/tFlowerO/tGHO outside the slab (?nogcouter = off).
+  Typecheck of my files clean.
+* Running: t4 (park_eye, bank_band, bank_meadow, park_mid, edge_w (W slab edge), overview × 11 / 18.2 h)
+  → shots/world/ground/t4 via shots/world/ground/gcap.mjs.
+* Next: judge t4 (straw fix, flowers as heads, turf darkening, bump, lily pads, outer band at edge_w),
+  milestone note to lead, then M2 checks (edge tufts + pavement weeds at street level, gust motion),
+  night 21.5 h.
 
 ## Brief (from WORLD-PLAN.md + world-briefs.md "### ground")
 Owner of `src/world/terrain/ground.ts` (+ its mask), `src/world/groundcover.ts` + `src/world/groundcover/*`.

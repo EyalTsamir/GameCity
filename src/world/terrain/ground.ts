@@ -459,7 +459,7 @@ const gcUniforms = {
   uGcPresL: { value: new THREE.Vector2(-10, -9) },
   /** micro-relief strength of the grass (tufts / tussocks), 0 = off */
   uGcBump: { value: 1 },
-  gFlowerCol: { value: ['#c42a1c', '#3c62d4', '#f0ede2', '#ebbf18', '#e9e5d3', '#a8519f', '#efb417', '#f2f0e8'].map((h) => new THREE.Color(h)) },
+  gFlowerCol: { value: ['#c42a1c', '#3c62d4', '#f0ede2', '#ebbf18', '#e9e5d3', '#93549a', '#efb417', '#f2f0e8'].map((h) => new THREE.Color(h)) },
 };
 
 /** Called by the groundcover module: the ground shader starts reading the cover maps. */
@@ -732,7 +732,7 @@ vec3 groundColor() {
     float farF = smoothstep( 0.3, 1.1, pxc );
     int sp = int( clamp( fw.g * 6.0, 0.0, 5.0 ) );
     vec3 fcol = gFlowerCol[ sp ];
-    grass = mix( grass, fcol, mix( dotM, meadowF * 0.22, farF ) );
+    grass = mix( grass, fcol, mix( dotM * 0.85, meadowF * 0.12, farF ) );
   }
   float lawnF = fw.b * uGcOn;
   if ( lawnF > 0.004 ) {
@@ -767,7 +767,7 @@ vec3 groundColor() {
   presL *= 1.0 - smoothstep( 0.2, 0.7, vz ) * 0.5;
   float pres = mix( presM, presL, kept ) * smoothstep( 0.05, 0.5, cv.r ) * uGcOn;
   vec3 under = mix( gb * 0.5, gcThatch, 0.35 );
-  grass = mix( grass, under, pres * mix( 0.78, 0.66, kept ) );
+  grass = mix( grass, under, pres * mix( 0.78, 0.45, kept ) );
   gGrassTrans = smoothstep( 0.35, 0.8, len ) * ( 1.0 - pres ) * 0.6;
 
   // ── wear: trampled yellowish grass → bare soil; scree / gravel at cliff feet (wild areas)

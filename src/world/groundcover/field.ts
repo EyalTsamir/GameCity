@@ -65,8 +65,8 @@ export function ringSpecs(level: QualityLevel): RingSpec[] {
     ];
   return [
     { index: 0, tile: 2, levels: 3, blades: 640, in0: -10, in1: -10, out0: 10, out1: 13, width: 1.0, flowers: 0.12, lawnFlowers: 0.08, litter: 0.55 },
-    { index: 1, tile: 4, levels: 2, blades: 512, in0: 10, in1: 13, out0: 30, out1: 36, width: 2.2, flowers: 0.2, lawnFlowers: 0, litter: 0.12 },
-    { index: 2, tile: 8, levels: 1, blades: 640, in0: 30, in1: 36, out0: 58, out1: 68, width: 3.9, flowers: 0.28, lawnFlowers: 0, litter: 0 },
+    { index: 1, tile: 4, levels: 2, blades: 512, in0: 10, in1: 13, out0: 30, out1: 36, width: 2.2, flowers: 0.15, lawnFlowers: 0, litter: 0.12 },
+    { index: 2, tile: 8, levels: 1, blades: 640, in0: 30, in1: 36, out0: 58, out1: 68, width: 3.9, flowers: 0.12, lawnFlowers: 0, litter: 0 },
   ];
 }
 
@@ -313,7 +313,7 @@ vGcRough = 0.85;
           float hsz = fk == 4 ? mix( 0.06, 0.09, rc.y ) : ( fk == 0 ? mix( 0.045, 0.065, rc.y ) : ( fk >= 6 ? mix( 0.012, 0.02, rc.y ) : mix( 0.025, 0.04, rc.y ) ) );
           if ( fk < 6 ) L = max( L * 1.1, ( fk == 4 ? 0.55 : 0.32 ) + 0.3 * rc.y ) * ( len > 0.5 ? 1.0 : 0.6 );
           else L = mix( 0.06, 0.12, rc.y );
-          float ringBoost = uKind.w > 0.5 ? ( uKind.w > 1.5 ? 2.6 : 1.6 ) : 1.0;
+          float ringBoost = uKind.w > 0.5 ? ( uKind.w > 1.5 ? 1.7 : 1.35 ) : 1.0;
           headW = max( hsz * ringBoost, pxw * 1.8 );
           W = max( 0.0035, pxw * 0.6 );
           wd = perp;
@@ -478,7 +478,7 @@ export function createField(ctx: CityContext, maps: CoverMaps, outer: OuterMaps 
   const group = new THREE.Group();
   group.name = 'groundcover-field';
   const pal = gcPalette();
-  const flowerCols = ['#c42a1c', '#3c62d4', '#f0ede2', '#ebbf18', '#e9e5d3', '#a8519f', '#efb417', '#f2f0e8', '#e6d0dd', '#ffffff'].map((h) => new THREE.Color(h));
+  const flowerCols = ['#c42a1c', '#3c62d4', '#f0ede2', '#ebbf18', '#e9e5d3', '#93549a', '#efb417', '#f2f0e8', '#e6d0dd', '#ffffff'].map((h) => new THREE.Color(h));
   const shared = {
     tCover: { value: maps.texCover },
     tFlower: { value: maps.texFlower },

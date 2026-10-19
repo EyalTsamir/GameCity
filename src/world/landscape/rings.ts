@@ -33,12 +33,12 @@ export interface RingTopology {
 
 /** step between ring k and k+1 at offset d */
 export function ringStep(d: number): number {
-  return Math.min(900, 1.15 + 0.041 * d + 2e-7 * d * d);
+  return Math.min(900, Math.max(1.6, 1.15 + 0.041 * d + 2e-7 * d * d));
 }
 
 /** tangential vertex spacing target at offset d */
 function tangential(d: number, scale: number): number {
-  return Math.max(1.5 * scale, 0.95 * scale * ringStep(d));
+  return Math.max(2.1 * scale, 1.0 * scale * ringStep(d));
 }
 
 /** slab edges sampled uniformly every `step` m (the water module's surface grid boundary) */

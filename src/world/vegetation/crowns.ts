@@ -56,10 +56,10 @@ const KIND_TABLE = {
   fruit: { form: ['dome'], tile: 'citrus', dense: 'smallDense', leaf: ['#3c6e30', '#43763a'], bark: ['#5e4c3e'], pattern: 0.1, clear: [0.24, 0.3], girth: 0.9, card: 0.36, density: 1.35, gloss: 0.65, trans: 0.6, flutter: 0.8, flowers: ['#f08a1e', '#f3a426', '#ecc43a'], bloom: 1, moss: 0.1 },
   birch: { form: ['oval', 'irregular'], tile: 'birch', dense: 'broadDense', leaf: ['#8fbb52', '#97c25a', '#86b24e'], bark: ['#e6e1d6'], pattern: 0.9, clear: [0.32, 0.4], girth: 0.7, card: 0.42, density: 1.1, gloss: 0.3, trans: 1.2, flutter: 1.5, moss: 0 },
   poplar: { form: ['column'], tile: 'broad', dense: 'broadDense', leaf: ['#4a8238', '#52893c', '#447a36'], bark: ['#6a604f'], pattern: 0.1, clear: [0.08, 0.14], girth: 0.85, card: 0.4, density: 1.2, gloss: 0.35, trans: 0.9, flutter: 1.6, moss: 0.2 },
-  cypress: { form: ['column'], tile: 'cypress', dense: 'needleDense', leaf: ['#2c4e2c', '#2f532e', '#294a2b'], bark: ['#5a4a3e'], pattern: 0.1, clear: [0.02, 0.05], girth: 0.8, card: 0.36, density: 1.6, gloss: 0.15, trans: 0.3, flutter: 0.4, moss: 0 },
+  cypress: { form: ['column'], tile: 'cypress', dense: 'needleDense', leaf: ['#3b6136', '#3f6739', '#375c34'], bark: ['#5a4a3e'], pattern: 0.1, clear: [0.02, 0.05], girth: 0.8, card: 0.36, density: 1.6, gloss: 0.15, trans: 0.3, flutter: 0.4, moss: 0 },
   willow: { form: ['weep'], tile: 'willow', dense: 'broadDense', leaf: ['#86ad48', '#8fb550', '#7da244'], bark: ['#4f4438'], pattern: 0.1, clear: [0.42, 0.5], girth: 1.2, card: 0.5, density: 1.1, gloss: 0.3, trans: 1.1, flutter: 1.6, moss: 0.3 },
-  spruce: { form: ['cone'], tile: 'needle', dense: 'needleDense', leaf: ['#2b5a3a', '#2f6040', '#28553a', '#2c5848'], bark: ['#4e3a2d', '#5a4232'], pattern: 0.1, clear: [0.04, 0.1], girth: 1, card: 0.42, density: 1, gloss: 0.25, trans: 0.35, flutter: 0.45, moss: 0.3 },
-  fir: { form: ['cone'], tile: 'needle', dense: 'needleDense', leaf: ['#33683f', '#397044', '#30623b'], bark: ['#5a4a3e'], pattern: 0.3, clear: [0.04, 0.1], girth: 0.95, card: 0.42, density: 1, gloss: 0.25, trans: 0.35, flutter: 0.45, moss: 0.25 },
+  spruce: { form: ['cone'], tile: 'needle', dense: 'needleDense', leaf: ['#33683f', '#376d44', '#30623f', '#346648'], bark: ['#4e3a2d', '#5a4232'], pattern: 0.1, clear: [0.04, 0.1], girth: 1, card: 0.5, density: 2, gloss: 0.25, trans: 0.35, flutter: 0.45, moss: 0.3 },
+  fir: { form: ['cone'], tile: 'needle', dense: 'needleDense', leaf: ['#3a7546', '#3f7c4a', '#376e42'], bark: ['#5a4a3e'], pattern: 0.3, clear: [0.04, 0.1], girth: 0.95, card: 0.5, density: 2, gloss: 0.25, trans: 0.35, flutter: 0.45, moss: 0.25 },
   pine: { form: ['umbrella', 'irregular'], tile: 'pine', dense: 'needleDense', leaf: ['#3d6a36', '#44723b', '#39653a'], bark: ['#7a4f34', '#835639'], pattern: 0.1, clear: [0.55, 0.65], girth: 0.9, card: 0.5, density: 1.1, gloss: 0.3, trans: 0.5, flutter: 0.7, moss: 0.1 },
   stonepine: { form: ['umbrella'], tile: 'pine', dense: 'needleDense', leaf: ['#3c6634', '#426d38'], bark: ['#7a5a42', '#866248'], pattern: 0.5, clear: [0.55, 0.66], girth: 1.1, card: 0.55, density: 1.15, gloss: 0.3, trans: 0.5, flutter: 0.7, moss: 0 },
   datepalm: { form: ['palm'], tile: 'frond', dense: 'frond', leaf: ['#5c8a4a', '#64904e', '#577f48', '#6e9452'], bark: ['#8a7356', '#7f6a50'], pattern: 0.7, clear: [1, 1], girth: 1, card: 1, density: 1, gloss: 0.45, trans: 0.8, flutter: 1.2, moss: 0 },
@@ -219,7 +219,7 @@ function crownAO(st: Struct, p: V3): number {
   const depth = lobeDepth(st, p);
   const vy = (p[1] - st.c[1]) / Math.max(0.3, st.cry);
   const rad = Math.hypot((p[0] - st.c[0]) / st.cr, (p[1] - st.c[1]) / st.cry, (p[2] - st.c[2]) / st.cr);
-  return (0.32 + 0.68 * (1 - sstep(0.05, 0.75, depth))) * (0.62 + 0.38 * sstep(-1.1, 0.7, vy)) * (0.7 + 0.3 * sstep(0.35, 1.0, rad));
+  return (0.45 + 0.55 * (1 - sstep(0.05, 0.75, depth))) * (0.68 + 0.32 * sstep(-1.1, 0.7, vy)) * (0.76 + 0.24 * sstep(0.35, 1.0, rad));
 }
 
 /** spherized normal: crown direction (ellipsoid-corrected) blended with the lobe direction and the card face */
@@ -352,18 +352,14 @@ function broadStruct(st: Struct, rng: Rng): void {
   const sway0 = STILL;
   for (const s of stems) {
     // S-curved trunk in 3 segments with a root flare
-    const mid1 = lerp3(s.base, s.top, 0.38),
-      mid2 = lerp3(s.base, s.top, 0.72);
-    const wob = (form === 'irregular' || multi > 1 ? 0.06 : 0.025) * h;
-    mid1[0] += rng.range(-wob, wob);
-    mid1[2] += rng.range(-wob, wob);
-    mid2[0] += rng.range(-wob, wob) * 0.7;
-    mid2[2] += rng.range(-wob, wob) * 0.7;
-    const flare: V3 = [s.base[0], s.base[1] + Math.min(0.5, h * 0.05), s.base[2]];
-    st.segs.push({ a: [s.base[0], s.base[1] - 0.15, s.base[2]], b: flare, ra: s.r * 1.55, rb: s.r * 1.05, sa: sway0, sb: sway0, near: false, aoA: 0.55, aoB: 0.75 });
-    st.segs.push({ a: flare, b: mid1, ra: s.r * 1.05, rb: s.r * 0.9, sa: sway0, sb: sway0, near: false, aoA: 0.75, aoB: 0.9 });
-    st.segs.push({ a: mid1, b: mid2, ra: s.r * 0.9, rb: s.r * 0.78, sa: sway0, sb: sway0, near: false, aoA: 0.9, aoB: 0.85 });
-    st.segs.push({ a: mid2, b: s.top, ra: s.r * 0.78, rb: s.r * 0.62, sa: sway0, sb: sway0, near: false, aoA: 0.85, aoB: 0.7 });
+    const mid = lerp3(s.base, s.top, 0.5);
+    const wob = (form === 'irregular' || multi > 1 ? 0.06 : 0.022) * h;
+    mid[0] += rng.range(-wob, wob);
+    mid[2] += rng.range(-wob, wob);
+    const flare: V3 = [s.base[0] + (mid[0] - s.base[0]) * 0.08, s.base[1] + Math.min(0.55, h * 0.06), s.base[2] + (mid[2] - s.base[2]) * 0.08];
+    st.segs.push({ a: [s.base[0], s.base[1] - 0.2, s.base[2]], b: flare, ra: s.r * 1.5, rb: s.r * 1.04, sa: sway0, sb: sway0, near: false, aoA: 0.5, aoB: 0.78 });
+    st.segs.push({ a: flare, b: mid, ra: s.r * 1.04, rb: s.r * 0.86, sa: sway0, sb: sway0, near: false, aoA: 0.78, aoB: 0.9 });
+    st.segs.push({ a: mid, b: s.top, ra: s.r * 0.86, rb: s.r * 0.64, sa: sway0, sb: sway0, near: false, aoA: 0.9, aoB: 0.72 });
   }
   // limbs: from the stem tops / upper trunk to each leaf mass
   const stemFor = (L: Lobe3) => {
@@ -743,7 +739,7 @@ export function emitFar(st: Struct, ref: PlantRef, cards: InstBuf, woodBuf: Inst
   st.lobes.forEach((L, li) => {
     const lobeR = (L.rx + L.ry + L.rz) / 3;
     const out = norm([L.x - st.c[0], L.y - st.c[1] + 0.2 * st.cry, L.z - st.c[2]]);
-    const n = st.form === 'cone' ? 4 : st.form === 'bush' ? 2 : (forest ? 2 : 3) + (lobeR > 1.3 ? 1 : 0) + (lobeR > 1.9 && !forest ? 1 : 0);
+    const n = st.form === 'cone' ? (forest ? 3 : 4) : st.form === 'bush' ? 1 : (forest ? 1 : 2) + (lobeR > 1.4 ? 1 : 0) + (lobeR > 2.0 && !forest ? 1 : 0);
     for (let k = 0; k < n; k++) {
       const off = randDir(rng);
       const e = li === 0 && st.form !== 'cone' ? 0.15 : 0.32;

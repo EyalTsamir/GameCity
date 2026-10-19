@@ -119,6 +119,8 @@ export interface BuildingMaterials {
     uReflLift: { value: number };
     /** 0 off, 1 weathering mask, 2 wall-quad info (diagnostics via ctx.services.buildings.setDebug) */
     uBhDebug: { value: number };
+    /** 1 = eye-level wear masks on (damp, algae, peeling render, roof age / moss); ?nowear sets 0 */
+    uWear: { value: number };
   };
 }
 
@@ -280,6 +282,7 @@ uniform vec3 uCloudCol;
 uniform vec3 uSunDir;
 uniform float uReflLift;
 uniform float uBhDebug;
+uniform float uWear;
 ${LAMP_GLSL}
 
 // box-filtered square wave: fraction of [x - w/2, x + w/2] where fract(x) > 0.5
@@ -763,7 +766,7 @@ void bhWall(inout vec3 albedo, inout float rough, inout float metal, inout vec3 
   // ── 2b. eye-level wear (reads at 2–40 m): rising damp with a ragged tide mark and a pale salt line,
   //        green algae on north faces near the ground and in the drip streaks, peeling paint / spalled
   //        render showing the substrate, and per-building age (old plaster and stone weather most)
-  if (!curtain && uDetail > 0.2) {
+  if (!curtain && uDetail > 0.2 && uWear > 0.5) {
     float age = fract(seed * 0.6180339 + 0.21);
     float oldness = pat < 0.5 || (pat > 3.5 && pat < 4.5) ? mix(0.35, 1.0, age) : (pat < 1.5 ? mix(0.3, 0.8, age) : (pat > 4.5 ? 0.25 * age : mix(0.2, 0.6, age)));
     float tide = 0.35 + 0.6 * oldness + 0.35 * (nm.g - 0.5) + 0.1 * (grain - 0.5) + 0.2 * (np.r - 0.5);
@@ -1143,7 +1146,7 @@ void bhRoof(inout vec3 albedo, inout float rough, inout vec3 emit, vec3 N, vec3 
     vec3 lichC = slate ? cT * vec3(1.12, 1.16, 1.06) : mix(cT, vec3(0.36, 0.38, 0.2), 0.55);
     albedo = mix(cT, lichC * (0.85 + 0.25 * grain), lich);
     // per-roof age (older roofs darker, browner, flatter in colour) + moss on the shaded north slopes
-    float age = fract(seed * 0.6180339 + 0.37);
+    float age = fract(seed * 0.6180339 + 0.37) * uWear;
     albedo *= mix(1.06, 0.84, age);
     albedo = mix(albedo, vec3(dot(albedo, vec3(0.3, 0.59, 0.11))) * vec3(1.02, 0.98, 0.9), 0.28 * age);
     float northR = smoothstep(-0.05, 0.45, -N.z) * smoothstep(0.2, 0.7, N.y);
@@ -1279,7 +1282,7 @@ ${LAMP_GLSL}
 
 // ───────────────────────────────────────────────────────── factory ──
 
-export function createMaterials(g: GlobalUniforms, opts: { legacy?: boolean } = {}): BuildingMaterials {
+export function createMaterials(g: GlobalUniforms, opts: { legacy?: boolean; wear?: boolean } = {}): BuildingMaterials {
   const legacy = !!opts.legacy;
   const uniforms = {
     uHours: { value: 12 },
@@ -1293,6 +1296,7 @@ export function createMaterials(g: GlobalUniforms, opts: { legacy?: boolean } = 
     uCloudCol: { value: new THREE.Color('#ffffff') },
     uReflLift: { value: 0.3 },
     uBhDebug: { value: 0 },
+    uWear: { value: opts.wear === false ? 0 : 1 },
   };
   const frameCols = { value: FRAME_COLS.map((c) => new THREE.Color(c)) };
   const glassCols = { value: GLASS_COLS.map((c) => new THREE.Color(c)) };
@@ -1325,6 +1329,7 @@ export function createMaterials(g: GlobalUniforms, opts: { legacy?: boolean } = 
         uCloudCol: uniforms.uCloudCol,
         uReflLift: uniforms.uReflLift,
         uBhDebug: uniforms.uBhDebug,
+        uWear: uniforms.uWear,
         uSunDir: g.uSunDir,
         ...lampUniforms(),
       });

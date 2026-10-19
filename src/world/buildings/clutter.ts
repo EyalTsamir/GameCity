@@ -301,18 +301,23 @@ export function dish(g: Gen, sg: SideGeom, u: number, y: number, o: number): voi
   t.beam(cx, y + 0.12, cz, cx + ax * 0.35, y + 0.12 + ay * 0.35, cz + az * 0.35, 0.025, 0.025);
 }
 
-/** Downpipe at side position u from the eave gutter (yTop) to the ground, with a shoe and brackets. */
-export function downpipe(g: Gen, sg: SideGeom, u: number, yTop: number, c?: THREE.Color): void {
+/**
+ * Downpipe at side position u from the eave gutter (yTop) to the ground, with a shoe and brackets; `oMax` = room
+ * in front of the wall below 2.4 m (footprint rule).
+ */
+export function downpipe(g: Gen, sg: SideGeom, u: number, yTop: number, c?: THREE.Color, oMax = 0.2): void {
   const t = g.trim;
   const pc = c ?? col(g.rng.pick(['#5a5f62', '#3a3f44', '#8a7a6a', '#6f4a3a', '#e9e6dd']));
   setCol(t, pc);
-  const px = sx(sg, u, 0.09),
-    pz = sz(sg, u, 0.09);
-  t.cylinder(px, pz, 0.055, 0.25, yTop, 6, false);
+  const po = Math.min(0.09, oMax - 0.058);
+  const px = sx(sg, u, po),
+    pz = sz(sg, u, po);
+  t.cylinder(px, pz, 0.05, 0.25, yTop, 6, false);
   // shoe at the bottom (kicks out over the gully)
-  t.beam(px, 0.32, pz, sx(sg, u, 0.12), 0.08, sz(sg, u, 0.12), 0.1, 0.1);
+  const so = Math.min(0.12, oMax - 0.055);
+  t.beam(px, 0.32, pz, sx(sg, u, so), 0.08, sz(sg, u, so), 0.09, 0.09);
   setCol(t, shade(pc, 0.75));
-  for (let y = 1.6; y < yTop - 0.4; y += 1.9) sideBox(t, sg, u - 0.07, u + 0.07, 0, 0.16, y, y + 0.05, true);
+  for (let y = 1.6; y < yTop - 0.4; y += 1.9) sideBox(t, sg, u - 0.07, u + 0.07, 0, Math.min(0.16, oMax - 0.01), y, y + 0.05, true);
   // hopper head under the gutter
   setCol(t, pc);
   sideBox(t, sg, u - 0.12, u + 0.12, 0.0, 0.2, yTop - 0.05, yTop + 0.18, true);
@@ -623,5 +628,5 @@ export function climber(g: Gen, sg: SideGeom, u: number, w: number, yTop: number
   }
   // trailing tips over the top edge
   const tip = cell === GREEN.IVY_WALL ? GREEN.IVY_HANG : cell === GREEN.JASMINE ? GREEN.IVY_HANG : GREEN.BOUGAIN;
-  g.green.hang(sg, u - w * 0.45, u + w * 0.45, o + 0.04, yTop + 0.35, 0.4, 0.9, tip, 0.04, 1, 0.3);
+  g.green.hang(sg, u - w * 0.45, u + w * 0.45, o + 0.02, yTop + 0.35, 0.4, 0.9, tip, 0.03, 1, o + 0.08 < oMax ? 0.3 : 2.45);
 }

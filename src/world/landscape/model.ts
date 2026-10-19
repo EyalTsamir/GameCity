@@ -60,7 +60,8 @@ export interface LandscapeModel {
   /** still-water level at (x, z) (WL; the park pond is the terrain's) */
   waterLevel(x: number, z: number): number;
   isWater(x: number, z: number): boolean;
-  cover(x: number, z: number, out: Cover): Cover;
+  /** ground cover; pass the height / slope (tan) when known (saves five height evaluations) */
+  cover(x: number, z: number, out: Cover, h?: number, slope?: number): Cover;
   insideSlab(x: number, z: number): boolean;
   /** distance outside the slab rectangle (0 inside) */
   slabDist(x: number, z: number): number;
@@ -381,11 +382,13 @@ export function createLandscapeModel(slabHeight: SlabHeight): LandscapeModel {
     const d = Math.hypot(dx * 1.55, dz * 0.62) / rr;
     if (d > 1.6) return -1e3;
     const core = 1 - smooth(0, 1, d);
-    const twin = 0.75 + 0.25 * Math.cos((dz / rr) * 5.2 + 0.6);
-    const hill = ISLAND.peak * Math.pow(core, 1.25) * twin * (0.7 + 0.55 * ridged(x / 300, z / 300, 4, 42));
-    // shore: tall cliffs facing the open sea (east), a cove with a beach on the town side (west)
+    // a ridge with three summits and saddles between them
+    const tri = 0.62 + 0.38 * Math.cos((dz / rr) * 7.5 + 0.6);
+    const hill = ISLAND.peak * Math.pow(core, 1.15) * tri * (0.6 + 0.7 * ridged(x / 260, z / 260, 4, 42));
+    // shore: cliffs all round (tallest facing the open sea), one cove with a beach on the town side
     const sea = smooth(-0.4, 0.5, Math.cos(a));
-    const shore = WL + (1 - d) * lerp(25, 260, sea);
+    const cove = smooth(0.93, 0.995, -Math.cos(a));
+    const shore = WL + (1 - d) * lerp(lerp(95, 260, sea), 16, cove);
     return Math.min(Math.max(hill, shore), shore + hill * 0.6) - (d > 1 ? (d - 1) * 60 : 0);
   }
 
@@ -418,12 +421,15 @@ export function createLandscapeModel(slabHeight: SlabHeight): LandscapeModel {
   const waterLevel = (_x: number, _z: number): number => WL;
   const isWater = (x: number, z: number): boolean => height(x, z) < WL - 0.02;
 
-  const cover = (x: number, z: number, out: Cover): Cover => {
-    const h = height(x, z);
-    const e = 1.5;
-    const gx = (height(x + e, z) - height(x - e, z)) / (2 * e),
-      gz = (height(x, z + e) - height(x, z - e)) / (2 * e);
-    const slope = Math.hypot(gx, gz);
+  const cover = (x: number, z: number, out: Cover, h0?: number, slope0?: number): Cover => {
+    const h = h0 ?? height(x, z);
+    let slope = slope0 ?? -1;
+    if (slope < 0) {
+      const e = 1.5;
+      const gx = (height(x + e, z) - height(x - e, z)) / (2 * e),
+        gz = (height(x, z + e) - height(x, z - e)) / (2 * e);
+      slope = Math.hypot(gx, gz);
+    }
     out.water = h < WL - 0.02 ? 1 : 0;
     const sd = coastSD(x, z);
     const cl = cliffness(z, x);
@@ -437,7 +443,9 @@ export function createLandscapeModel(slabHeight: SlabHeight): LandscapeModel {
     const settled = siteAt(x, z, 0) >= 0;
     const arable = (1 - out.forest) * (1 - out.sand) * (1 - out.rock) * (1 - wet) * (1 - smooth(0.12, 0.3, slope)) * (1 - out.water);
     const north = smooth(-300, -600, z) * (x > -900 ? 1 : 0.3);
-    out.field = settled ? 0 : arable * (1 - north) * (1 - smooth(180, 320, h));
+    // the low coastal strip south of the town is grazing marsh / meadow, not arable
+    const coastal = z > 120 && z < 1100 ? 1 - smooth(260, 460, sd) : 0;
+    out.field = settled ? 0 : arable * (1 - north) * (1 - smooth(180, 320, h)) * (1 - coastal);
     out.meadow = Math.max(0, (1 - out.water) * (1 - out.forest) * (1 - out.sand) - out.field - out.rock * 0.7);
     return out;
   };

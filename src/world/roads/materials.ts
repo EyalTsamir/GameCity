@@ -422,7 +422,7 @@ export function createMaterials(ctx: CityContext, info: SurfaceInfo, atlas: THRE
   const flat = flatQ === '1' || flatQ.includes('h');
   const Std = (p: THREE.MeshStandardMaterialParameters) => (ctx.debug.params.get('roadsLambert') === '1' ? (new THREE.MeshLambertMaterial(p as THREE.MeshLambertMaterialParameters) as unknown as THREE.MeshStandardMaterial) : new THREE.MeshStandardMaterial(p));
   const asphaltColor = new THREE.Color('#4a4d52');
-  const shared = { tRN: { value: noise }, uRain: ctx.uniforms.uRain };
+  const shared = { tRN: { value: noise }, uRain: ctx.uniforms.uRain, uRdWear: { value: ctx.debug.params.has('nowear') ? 0 : 1 } };
 
   const lin = (h: string) => new THREE.Color(h);
   const court = info.court ? new THREE.Vector4(info.court.x0, info.court.z0, info.court.x1, info.court.z1) : new THREE.Vector4(0, 0, 0, 0);

@@ -29,9 +29,10 @@ uniform sampler2D tRC;
 // small litter / leaves / gum on the ground at p: returns (colour, coverage) — dens = items per 0.36 m² cell
 // probability; kinds: leaves (browns, ochres), cigarette butts, paper bits, gum. Fades out (cov → 0) once the
 // pixel footprint fw exceeds ~1.5 cm, so it never sparkles in the distance.
+uniform float uRdWear;
 vec4 rdLitter(vec2 p, float fw, float dens, float leafy) {
   float near = 1.0 - smoothstep(0.006, 0.016, fw);
-  if (near <= 0.0 || dens <= 0.0) return vec4(0.0);
+  if (near <= 0.0 || dens <= 0.0 || uRdWear < 0.5) return vec4(0.0);
   vec2 g = floor(p / 0.6);
   vec4 acc = vec4(0.0);
   for (int k = 0; k < 2; k++) {
@@ -141,6 +142,15 @@ vec3 rdAsphalt(inout float rough) {
     trk *= fadeJ * onRoad * (0.7 + 0.6 * nM.g);
     c *= 1.0 - 0.12 * trk * (0.45 + 0.55 * ag);
     rough -= 0.16 * trk;
+    // braking / tyre marks in the wheel paths on the approach to the stop lines (broken streaks)
+    {
+      float wp = max(1.0 - smoothstep(0.06, 0.16, abs(alat - 0.95)), 1.0 - smoothstep(0.06, 0.16, abs(alat - 2.55)));
+      float zone = smoothstep(7.7, 8.3, dj) * (1.0 - smoothstep(12.0, 19.0, dj));
+      float brk = smoothstep(0.45, 0.62, texture2D(tRN, vec2(al * 0.11, lat * 0.9 + sg.x * 0.37)).g);
+      float mk = wp * zone * brk * onRoad * (1.0 - smoothstep(0.02, 0.06, fw));
+      c *= 1.0 - 0.28 * mk;
+      rough -= 0.12 * mk;
+    }
     float lane = 1.0 - smoothstep(0.1, 0.55, abs(alat - 1.75));
     float queue = smoothstep(7.6, 8.8, dj) * (1.0 - smoothstep(13.0, 27.0, dj));
     c *= 1.0 - lane * onRoad * smoothstep(7.6, 9.0, dj) * (0.05 + 0.1 * queue);
@@ -436,7 +446,7 @@ vec3 rdHard(inout float rough) {
   }
   // ── pavement wear (sidewalks, plazas): cracked / replaced / sunken slabs, grime along the walls and the
   //    kerb, a polished walking line, gum, butts, leaves and paper. Small things fade with the pixel size.
-  if (sp < 1.5) {
+  if (sp < 1.5 && uRdWear > 0.5) {
     vec2 sw = rdStreet(p);
     float lat = abs(sw.x);
     float onSide = step(3.45, lat) * (1.0 - step(6.75, lat)) * step(7.2, sw.y);

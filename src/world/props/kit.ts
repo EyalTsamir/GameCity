@@ -101,6 +101,28 @@ export function kerbCafe(k: Kit, rng: Rng, chairs?: ChairOut[]): void {
   }
 }
 
+/** A-frame chalkboard sign (café menu) standing on the pavement, boards facing ±Z. */
+export function aFrame(k: Kit, rng: Rng): void {
+  const sh = k.sh;
+  const wood = rng.pick(['#7a5236', '#3b2a20', '#2c3033']);
+  for (const sgn of [1, -1]) {
+    sh.push().local(0, 0, sgn * 0.17, sgn * 0.19);
+    k.m(wood, 'wood');
+    sh.box(0, 0.47, 0, 0.58, 0.94, 0.03, 0);
+    k.m('#1f2421', 'stone');
+    sh.box(0, 0.52, sgn * 0.017, 0.48, 0.72, 0.006, 0);
+    // chalk: title + a few lines
+    k.m('#e9e6dd', 'stone');
+    sh.box(0, 0.78, sgn * 0.022, 0.3, 0.05, 0.004, 0);
+    for (let i = 0; i < 4; i++) sh.box(rng.range(-0.06, 0.04), 0.64 - i * 0.1, sgn * 0.022, rng.range(0.18, 0.34), 0.018, 0.004, 0);
+    if (rng.chance(0.6)) {
+      k.m(rng.pick(['#e8574f', '#f2c84b', '#8fcf8a']), 'stone');
+      sh.box(0.14, 0.34, sgn * 0.022, 0.08, 0.06, 0.004, 0);
+    }
+    sh.pop();
+  }
+}
+
 /** Coffee kiosk: little cabin with a serving hatch, striped awning and a lit menu board. Faces +Z. */
 export function kiosk(ks: Kit, k: Kit, rng: Rng): void {
   const sh = ks.sh;

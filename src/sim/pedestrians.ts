@@ -19,6 +19,7 @@ import { CrowdRenderer } from './pedestrians/render';
 import { CrowdRenderer as LegacyRenderer } from './pedestrians/legacy/render';
 import { gaitConfig } from './pedestrians/rig';
 import { Riders } from './pedestrians/riders';
+import { buildStallMesh } from './pedestrians/vendors';
 
 export default function create(ctx: CityContext): CityModule {
   const rng = ctx.rng('pedestrians');
@@ -31,6 +32,12 @@ export default function create(ctx: CityContext): CityModule {
   if ((ctx.debug.params.get('hide') ?? '').split(',').includes('pedestrians')) renderer.group.visible = false;
   if (ctx.debug.params.has('pedlod')) renderer.forceLod = Math.max(0, Math.min(legacy ? 2 : 3, Number(ctx.debug.params.get('pedlod')) || 0));
   crowd.warmStart();
+  // street vendors' carts (one static mesh)
+  const stallMesh = buildStallMesh(places.vendors, rng.fork('stalls'));
+  if (stallMesh) {
+    stallMesh.castShadow = ctx.quality.shadows;
+    renderer.group.add(stallMesh);
+  }
   // riders of the traffic's two-wheelers (drawn with the crowd)
   const riders = legacy ? null : new Riders(ctx);
 
@@ -42,6 +49,7 @@ export default function create(ctx: CityContext): CityModule {
     ctx.events.on('quality', () => {
       crowd.onQuality();
       renderer.setShadows(ctx.quality.shadows);
+      if (stallMesh) stallMesh.castShadow = ctx.quality.shadows;
     }),
   );
 

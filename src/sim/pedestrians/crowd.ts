@@ -32,6 +32,7 @@ import { makeLook, type Look, type Persona } from './looks';
 import { F, DOG_OFFSET } from './figure';
 import { gaitConfig, gaitCycleOf, GC } from './rig';
 import type { CafePlace, CafeSeat, Terrace } from './cafes';
+import type { Stall } from './vendors';
 import { settingMask, HELD_CUP } from './tableware';
 import type { RideGeom } from '../traffic/models';
 
@@ -222,6 +223,11 @@ export class Member {
   carry = 0;
   /** walking with something in the right hand: 0 nothing, 1 a takeaway coffee, 2 looking at the phone */
   walkProp = 0;
+  /** sitting on a seat higher than a bench and without a backrest (fountain rim): extra height, m */
+  seatH = 0;
+  /** standing about with friends (talking with the hands in turns), or a forced idle pose (-1 none, 5 phone) */
+  chat = 0;
+  forceIdle = -1;
   /** riding a two-wheeler (riders.ts): the vehicle's anchor points, crank angle, lean, foot down */
   rideG: RideGeom | null = null;
   pedal = 0;
@@ -334,6 +340,8 @@ export class Party {
   exitS = Infinity;
   /** waiter of a café terrace (state 'serve'): phase 0 at the service point, 1 going to a table, 2 at it, 3 back */
   staff: Terrace | null = null;
+  /** street vendor at a cart */
+  stall: Stall | null = null;
   servePhase = 0;
   serveCafe: CafePlace | null = null;
   constructor(id: number, persona: Persona) {
@@ -398,6 +406,43 @@ export function cafeFactor(h: number): number {
   const f = h - Math.floor(h);
   return CAFE[i] * (1 - f) + CAFE[(i + 1) % 24] * f;
 }
+/** chance of stopping to chat on a plaza (or take a call) on the way */
+const HANG_LIKE: Record<Persona, number> = {
+  commuter: 0.1,
+  worker: 0.04,
+  shopper: 0.1,
+  stroller: 0.16,
+  tourist: 0.14,
+  beachgoer: 0.04,
+  jogger: 0,
+  dogwalker: 0.1,
+  parent: 0.08,
+  elderly: 0.1,
+  couple: 0.14,
+  family: 0.06,
+  student: 0.3,
+  nightowl: 0.3,
+  angler: 0,
+};
+/** chance of buying something from a street vendor on the way */
+const VENDOR_LIKE: Record<Persona, number> = {
+  commuter: 0.06,
+  worker: 0.04,
+  shopper: 0.1,
+  stroller: 0.12,
+  tourist: 0.14,
+  beachgoer: 0.1,
+  jogger: 0,
+  dogwalker: 0.06,
+  parent: 0.12,
+  elderly: 0.06,
+  couple: 0.12,
+  family: 0.16,
+  student: 0.12,
+  nightowl: 0.05,
+  angler: 0,
+};
+const isHang = (pl: SpotPlace): boolean => pl.theme === 'pair' || pl.theme === 'trio' || pl.theme === 'lean';
 /** how much each persona likes a café stop */
 const CAFE_LIKE: Record<Persona, number> = {
   commuter: 0.9,
@@ -550,7 +595,7 @@ export class Crowd {
 
   private alive(): number {
     let n = 0;
-    for (const p of this.parties) if (p.state !== 'gone' && p.state !== 'fadeout' && p.state !== 'board' && !p.staff) n += p.size;
+    for (const p of this.parties) if (p.state !== 'gone' && p.state !== 'fadeout' && p.state !== 'board' && !p.staff && !p.stall) n += p.size;
     return n;
   }
 
@@ -623,6 +668,18 @@ export class Crowd {
       if (!p) continue;
       cafes += p.size;
       alive += p.size;
+    }
+    // groups standing about on the plazas (about two thirds of the places by day)
+    if (this.places.hangouts.length) {
+      const want = Math.round(this.places.hangouts.length * 0.65 * Math.min(1, popFactor(h) * 1.1));
+      let have = this.places.hangouts.filter((pl) => pl.spots[0].taken >= 0).length;
+      guard = 0;
+      while (have < want && guard++ < 60) {
+        const p = this.warmPlace('hang');
+        if (!p) continue;
+        have++;
+        alive += p.size;
+      }
     }
     guard = 0;
     while (alive < target && guard++ < 600) {
@@ -2016,7 +2073,8 @@ export class Crowd {
         m.faceYaw = seat.yaw;
         this.setFree(m, [seat.x, seat.z, seat.y]);
         m.sitGoal = 1;
-        m.reading = this.rng.chance(p.persona === 'elderly' || p.persona === 'commuter' ? 0.35 : 0.12) && p.size === 1;
+        m.seatH = g.bench?.rim ?? 0;
+        m.reading = this.rng.chance(p.persona === 'elderly' || p.persona === 'commuter' ? 0.35 : 0.12) && p.size === 1 && !g.bench?.rim;
       } else if (g.kind === 'cafe' && g.spots) {
         const seat = g.spots[m.idx];
         m.faceYaw = seat.yaw;
@@ -2035,6 +2093,9 @@ export class Crowd {
           m.lieGoal = 1;
           m.lieVariant = this.rng.int(0, 2);
         }
+      } else if (g.spots && g.place && isHang(g.place)) {
+        m.faceYaw = g.spots[m.idx].yaw;
+        this.hangSet(m, g.place);
       } else if (g.spots) {
         m.faceYaw = g.spots[m.idx].yaw;
         if (p.size > 1 && g.kind === 'view' && this.rng.chance(0.5)) {
@@ -2084,6 +2145,10 @@ export class Crowd {
           m.sunbathing = false;
           m.reading = false;
           m.cafe = 0;
+          m.chat = 0;
+          m.forceIdle = -1;
+          m.seatH = 0;
+          if (g.place?.theme === 'vendor' && g.place.label !== 'Buying flowers' && m.idx === 0 && !(m.look.flags & (F.SHOPBAG | F.CANE | F.ROD)) && !m.look.pram) m.walkProp = 1;
         }
         this.releaseGoal(g, p);
         this.planNext(p, g.node, true);
@@ -2613,6 +2678,35 @@ export class Crowd {
     }
   }
 
+  /** stand about on a plaza: a pair / trio of friends, or one person on the phone (by party size) */
+  private hangGoal(p: Party, from: number, scale = 90): Goal | null {
+    if (p.size > 3) return null;
+    const theme = p.size === 1 ? 'lean' : p.size === 2 ? 'pair' : 'trio';
+    const fp = this.nodePos(from);
+    const pl = this.pickNear(this.places.hangouts, (t) => t, fp, scale, (t) => t.theme === theme && t.spots.every((s) => s.taken < 0), 20);
+    if (!pl) return null;
+    const spots = pl.spots.slice(0, p.size);
+    for (const st of spots) st.taken = p.id;
+    return { kind: 'view', node: pl.node, place: pl, spots, dur: this.rng.range(25, 95), label: pl.label, pose: 'stand' };
+  }
+
+  /** buy something at a vendor's cart (open, both customer spots free for a party of two) */
+  private vendorGoal(p: Party, from: number): Goal | null {
+    if (p.size > 2) return null;
+    const h = this.ctx.clock.hours;
+    const fp = this.nodePos(from);
+    const st = this.pickNear(this.places.vendors, (t) => t, fp, 80, (t) => h >= t.open && h < t.close && t.place.spots.every((s) => s.taken < 0), 12);
+    if (!st) return null;
+    const spots = st.place.spots.slice(0, p.size);
+    for (const s of spots) s.taken = p.id;
+    return { kind: 'view', node: st.place.node, place: st.place, spots, dur: this.rng.range(8, 16), label: st.place.label, pose: 'stand' };
+  }
+
+  private hangSet(m: Member, pl: SpotPlace): void {
+    m.chat = pl.theme === 'pair' || pl.theme === 'trio' ? 1 : 0;
+    m.forceIdle = pl.theme === 'lean' ? (this.rng.chance(0.7) ? 5 : 2) : -1;
+  }
+
   /** chance that a fresh party stops at a café (higher while the terraces are emptier than the hour wants) */
   private cafeChance(p: Party): number {
     const wanted = this.cafeWanted();
@@ -2671,6 +2765,16 @@ export class Crowd {
         push(cg);
         return out;
       }
+    }
+    // an ice cream, a fresh juice, flowers, a pretzel from a cart on the way
+    if (this.places.vendors.length && p.size <= 2 && rng.chance(VENDOR_LIKE[p.persona])) {
+      const vg = this.vendorGoal(p, from);
+      if (vg) push(vg);
+    }
+    // meeting friends / a phone call on a plaza on the way
+    if (this.places.hangouts.length && p.size <= 3 && rng.chance(HANG_LIKE[p.persona] * (h > 7 && h < 23.5 ? 1 : 0.3))) {
+      const hg = this.hangGoal(p, from);
+      if (hg) push(hg);
     }
     switch (p.persona) {
       case 'jogger': {
@@ -2968,8 +3072,82 @@ export class Crowd {
     }
   }
 
+  /** party by id (plain loop: no closure garbage in the per-step paths) */
+  private partyById(id: number): Party | null {
+    const ps = this.parties;
+    for (let i = 0; i < ps.length; i++) if (ps[i].id === id) return ps[i];
+    return null;
+  }
+
+  /** street vendors: one at each cart while it is open */
+  private staffStalls(): void {
+    const h = this.ctx.clock.hours;
+    const dry = this.ctx.uniforms.uRain.value < 0.4;
+    for (const st of this.places.vendors) {
+      const open = dry && h >= st.open && h < st.close;
+      let have: Party | null = null;
+      for (const p of this.parties) if (p.stall === st && p.state === 'serve') have = p;
+      if (open && !have) {
+        if (this.busyAt(st.vx, st.vz, 0.6)) continue;
+        const p = this.makeParty(this.rng.chance(0.5) ? 'worker' : 'shopper', 1);
+        const m = p.members[0];
+        m.look.flags = 0;
+        m.look.dog = null;
+        m.look.pram = null;
+        m.walkProp = 0;
+        p.stall = st;
+        p.state = 'serve';
+        p.servePhase = 0;
+        m.x = m.px = st.vx;
+        m.z = m.pz = st.vz;
+        m.y = st.y;
+        m.yaw = m.faceYaw = st.yaw;
+        m.faceHold = true;
+        m.fade = 0;
+        m.present = true;
+        m.fdone = true;
+        this.parties.push(p);
+        this.stats.spawned++;
+      } else if (!open && have && !st.place.spots.some((s) => s.taken >= 0)) this.beginFadeOut(have, 1.2);
+    }
+  }
+
+  /** a vendor: behind the cart, turning to whoever is buying and handing it over */
+  private stepVendor(p: Party, h: number): void {
+    const m = p.members[0];
+    const st = p.stall!;
+    m.fade = Math.min(1, m.fade + h / 0.8);
+    m.present = true;
+    this.moveMember(m, m.x, m.z, m.y, h, false);
+    p.timer -= h;
+    let cust: Spot | null = null;
+    for (const sp of st.place.spots) {
+      if (sp.taken < 0) continue;
+      const q = this.partyById(sp.taken);
+      if (q && q.state === 'act') cust = sp;
+    }
+    if (cust) {
+      m.faceYaw = Math.atan2(cust.x - m.x, cust.z - m.z);
+      if (p.timer <= 0) {
+        // serve: hand it over for a moment, then a pause
+        m.carry = m.carry === 2 ? 0 : 2;
+        p.timer = m.carry === 2 ? this.rng.range(1.6, 2.6) : this.rng.range(2.5, 5);
+      }
+    } else {
+      m.carry = 0;
+      if (p.timer <= 0) {
+        m.faceYaw = st.yaw + this.rng.range(-0.7, 0.7);
+        p.timer = this.rng.range(3, 8);
+      }
+    }
+  }
+
   /** a waiter's round: wait by the café, take an order at a table, bring it, back again */
   private stepServe(p: Party, h: number): void {
+    if (p.stall) {
+      this.stepVendor(p, h);
+      return;
+    }
     const m = p.members[0];
     const T = p.staff!;
     m.fade = Math.min(1, m.fade + h / 0.8);
@@ -2988,7 +3166,7 @@ export class Crowd {
         let best = -Infinity;
         for (const t of T.cafes) {
           if (t.taken < 0 || !t.wpath.length || t.served >= 2 || t.waiter >= 0) continue;
-          const q = this.parties.find((o) => o.id === t.taken);
+          const q = this.partyById(t.taken);
           if (!q || (q.state !== 'act' && q.state !== 'settle')) continue;
           const wait = this.time - t.since;
           if (t.served === 1 && this.time - t.servedAt < 6) continue; // the kitchen needs a moment
@@ -3058,6 +3236,7 @@ export class Crowd {
     for (const p of this.parties) if (p.goal?.kind === 'beach' && p.state !== 'gone') beach += p.size;
     this.onBeach = beach;
     this.staffing();
+    this.staffStalls();
     const target = this.target();
     const alive = this.alive();
     const deficit = target - alive;
@@ -3442,7 +3621,7 @@ export class Crowd {
 
   // ── warm placement (load / time jumps) ───────────────────────────
 
-  private warmPlace(kind: 'walk' | 'bench' | 'beach' | 'view' | 'bus' | 'cafe'): Party | null {
+  private warmPlace(kind: 'walk' | 'bench' | 'beach' | 'view' | 'bus' | 'cafe' | 'hang'): Party | null {
     const h = this.ctx.clock.hours;
     const doors = this.places.doors;
     if (!doors.length) return null;
@@ -3455,6 +3634,23 @@ export class Crowd {
       if (!g) return null;
       g.dur = rng.range(60, 220);
       return this.placeAtActivity(p, g, rng.range(0, 0.7));
+    }
+    if (kind === 'hang') {
+      const free = this.places.hangouts.filter((pl) => pl.spots.every((st) => st.taken < 0));
+      if (!free.length) return null;
+      const pl = rng.pick(free);
+      const size = pl.theme === 'lean' ? 1 : pl.theme === 'pair' ? 2 : 3;
+      const persona: Persona =
+        size === 1
+          ? rng.weighted<Persona>(['commuter', 'student', 'shopper', 'stroller'], [2, 1.5, 1, 1])
+          : size === 2
+            ? rng.weighted<Persona>(['couple', 'stroller', 'student', 'tourist', 'dogwalker', 'nightowl'], [2, 1.5, 1.2, 1, 0.6, h > 19 ? 1.5 : 0.1])
+            : rng.weighted<Persona>(['student', 'tourist', 'nightowl', 'family'], [2, 1.2, h > 19 ? 2 : 0.2, 0.8]);
+      const p = this.makeParty(persona, size);
+      const spots = pl.spots.slice(0, size);
+      for (const st of spots) st.taken = p.id;
+      const g: Goal = { kind: 'view', node: pl.node, place: pl, spots, dur: rng.range(30, 110), label: pl.label, pose: 'stand' };
+      return this.placeAtActivity(p, g, rng.range(0, 0.8));
     }
     if (kind === 'cafe') {
       // a table with free chairs first, then a party that fits it: couples at the twos, friends round the fours
@@ -3569,10 +3765,13 @@ export class Crowd {
       m.fdone = true;
       if (g.kind === 'bench') {
         m.sit = m.sitGoal = 1;
-        m.reading = p.size === 1 && this.rng.chance(0.2);
+        m.seatH = g.bench?.rim ?? 0;
+        m.reading = p.size === 1 && this.rng.chance(0.2) && !g.bench?.rim;
       } else if (g.kind === 'cafe') {
         m.sit = m.sitGoal = 1;
         this.cafeSit(p, m, g);
+      } else if (g.place && isHang(g.place)) {
+        this.hangSet(m, g.place);
       } else if (g.kind === 'beach') {
         m.towel = true;
         m.sunbathing = true;
@@ -3598,6 +3797,10 @@ export class Crowd {
     let doing = '';
     switch (p.state) {
       case 'serve':
+        if (p.stall) {
+          doing = m.carry === 2 ? 'Serving a customer' : `Minding the ${p.stall.label.toLowerCase()}`;
+          break;
+        }
         doing = p.servePhase === 2 ? (m.carry === 1 ? 'Taking an order' : 'Serving a table') : m.carry === 2 ? 'Bringing an order out' : p.servePhase === 0 ? 'Waiting tables, keeping an eye on the terrace' : 'Waiting tables';
         break;
       case 'wait':
@@ -3762,6 +3965,8 @@ export class Crowd {
         if (this.places.insideBuilding(m.x, m.z)) flags |= OCC.BUILDING;
         if (flags & OCC.WATER && this.places.onDeck(m.x, m.z)) flags &= ~OCC.WATER;
         const onCrosswalkLeg = this.onCrosswalk(p, m);
+        // sitting on a fountain rim (and getting on / off it) is inside the fountain's footprint by design
+        if (p.goal?.bench?.rim && (p.state === 'settle' || p.state === 'act' || p.state === 'rise')) flags &= ~OCC.SOLID;
         if (flags & (OCC.BUILDING | OCC.WATER | OCC.SOLID)) {
           if (nBad++ < 12) out.push(`pedestrian ${m.uid} (${p.state}) inside ${flags & OCC.BUILDING ? 'a building' : flags & OCC.WATER ? 'water' : 'a solid prop'} at (${m.x.toFixed(1)}, ${m.z.toFixed(1)})`);
         }

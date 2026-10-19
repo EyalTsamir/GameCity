@@ -351,10 +351,11 @@ function shapeOf(kind: number): Shape {
     sh.trunkTop = 0.3;
     sh.trunkR = 0.03;
   } else if (kind === KIND.poplar) {
-    for (let i = 0; i < 6; i++) {
-      const y = 0.3 + i * 0.12;
-      const r = 0.42 - 0.035 * i;
-      sh.clumps.push({ x: (rnd(i, 5) - 0.5) * 0.12, y, z: (rnd(i, 6) - 0.5) * 0.12, r: r * 0.55 });
+    // a slim column of leaf masses on the axis, tapering to a point
+    for (let i = 0; i < 7; i++) {
+      const y = 0.3 + i * 0.1;
+      const r = 0.5 * (1 - Math.pow(i / 7, 1.6)) + 0.08;
+      sh.clumps.push({ x: (rnd(i, 5) - 0.5) * 0.06, y, z: (rnd(i, 6) - 0.5) * 0.06, r: r * 0.36 });
     }
     sh.trunkTop = 0.3;
     sh.trunkR = 0.03;

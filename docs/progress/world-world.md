@@ -24,7 +24,15 @@
   (landscape/lights.ts, additive points ≥1.6 px, distance-dimmed), island fishing hamlet + lighthouse (white
   tower, beacon light). Re-running: m2a capture (hero_n, wb_out, sw_corner, vista_w × 11/18.2, east_eye) →
   shots/world/world/m2a; stats probes → shots/world/world/stats/hero_n{,_noland}.json.
-* Next: judge m2a; perf breakdown; POI proposals; night check (21.5).
+* 21:15 — m2a judged (shots/world/world/m2a): wb_out/vista_w/east_eye good; golden hour is fog soup (air's
+  haze — reported to the lead with POI proposals vista/country/coast/riverbend). Since m2a: land build refactor
+  (terrain.ts buildLand: heights → normals → slope → cover, no 5× height evals), coarser near rings (≥1.6 m radial,
+  ≥2.1 m tangential), mountains in 5 frustum-culled azimuth chunks + coarser L0/L1, field striation / lodged
+  patches / meadow mottling, poplar shape, rugged island (cliffs all round, a cove with the hamlet), colours
+  (stubble, sand, canopy). Stats (subset hero_n before the cuts): 50 dc / 562k tris, landscape land 108k, mtn 85k,
+  impostors 16.4k trees, refl +98k (pass total). invariants {}, console clean.
+* Running: m2b (hero_n, vista_w, east_eye, north_far × 11/18.2) + m2b_noatmo (judge my mountain shading).
+* Next: judge m2b; night 21.5; ?diorama check; full-city capture; perf numbers vs noland.
 * Tools: my capture script copy with 20-min load timeout = scratchpad `cap.mjs` (scratchpad is SHARED with other
   agents — keep my files under scratchpad/world* or land/). Offline map tool: scratchpad `land/map.ts` (bundle:
   `npx rolldown land/map.ts --platform node -o land/map.mjs`; `node land/map.mjs x0 z0 x1 z1 N out.bin &&
