@@ -128,6 +128,13 @@ Per-module logs live next to this file: `docs/progress/<module>.md`.
   only ~140k tris at 1/3 res and the water shader adds 3 taps). Page-to-page noise is large ⇒ next:
   in-page runtime A/B probe (scripts/agent-tools/qa_toggleprobe.mjs --probe refl|light|table|veg|vegcheap)
   and round 2 with alternating variants (scripts/agent-tools/qa_perf2.sh), both after rep 1 ends.
+  06:00 rep 1 done. Original build (5174) vs new, same views, SwiftShader ms/frame: downtown 199→506, westbrook
+  177→438, overview 718→1087, harbour 21.5 h 241→341 (draw calls +7–9, tris +15–20 %). In-page probe:
+  reflections on/off at harbour 21.5 h 932/509 ms (+83 %). Pass probe (qa_passprobe.mjs): JS time per frame
+  main render 12.4 ms + reflection 2.0 ms of a 181 ms frame ⇒ the rest is SwiftShader raster (CPU-emulated
+  fragment work, half-float targets, mip generation). CONCLUSION: SwiftShader cannot measure GPU cost; the CPU
+  side is small. Report must say so + give the user exact perf.mjs commands for the Adreno. Round-2 page A/B
+  skipped (noise, not representative); in-page probes for light/table/veg/vegcheap running for a ranking.
 
 ## History
 * 2026-10-16 ~19:20 — Round 1: 12 builders launched via a Workflow; the account hit its 5-hour usage
