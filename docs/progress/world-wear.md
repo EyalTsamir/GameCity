@@ -1,13 +1,19 @@
 # world-wear — weathering and lived-in clutter (world round)
 
 ## Resume here
-* M1 DONE (services live, typecheck clean, invariants {}, lead messaged). Verification dump:
-  shots/world/wear/m1_eval.json (counts: chimneys 88, balconies 204, facades 89, spans street 4 / court 26,
-  perches 61, laundry 15, vents 7, cafes 31 / 94 seats, bbqs 15, dryers 17).
-* NOW: M2 eye-level buildings — start with balcony life + hanging greenery (new `buildings/green.ts`: leaf-card
-  mesh + canvas leaf atlas + wind), then shutters at varied positions, facade AC/dishes/downpipes, more balconies.
-* Capture note: subsets with terrain/vegetation currently fail (other agents' shader errors) → use
-  `only=sky,roads,buildings,props` for now.
+* M1 DONE (services live, lead messaged). Dump: shots/world/wear/m1_eval.json.
+* M2 IN PROGRESS (code written, typechecks; first captures shots/world/wear/it1 partially done before the
+  17:30 usage stop / reboot): new files `buildings/green.ts` (leaf-card mesh `buildings-green`: canvas leaf atlas
+  12 cells, wind sway, mip-alpha, lamp light; GreenKit.hang/clump/wall), `buildings/clutter.ts` (windowBox,
+  balconyLife, potPlant, julietBalcony, shutterPair+shutterState, acUnit, dish, downpipe, gutter, roofClutter,
+  solarHeater, waterTankSmall, aerial). Builder got an `aux` attribute (aX). Gen got `green` + `cloth`.
+  Old town uses them (window boxes, balconies on ~50 % 1st floors + some upper, Juliet balconies, shutter
+  states, rear AC/dish/downpipes, front downpipe/dish). `?nogreen` turns the leaf cards off.
+* NEXT: judge it1 vs before (shots/world/wear/before/sheet11.png), iterate; then apply balconyLife to
+  apartments (houses.ts) + hotels (special.ts), roofClutter to flat roofs (oldtown flat, apartments, hotels,
+  towers) = M3 start.
+* Capture recipe: `capture-set.mjs --out shots/world/wear/itN --q "nointro&noidle&adaptive=0&quality=high&only=sky,terrain,roads,buildings,vegetation,props,postfx" --hideui 1 --width 1280 --height 720 --hours 11 --views "otst=70,1.7,-10,14,90,4;otst2=85,1.7,45,14,-90,4;beach=110,1.7,5,16,180,5;market=27,1.7,74,16,0,5;oldtown"`
+  (baseline = same with `--url http://127.0.0.1:5174/` → shots/world/wear/before).
 
 ## Brief (from WORLD-PLAN.md scope 7 + briefs "### wear")
 Roads: patches, cracks + sealant, tyre polish, oil stains, faded markings, drains, puddles in low spots (mirror

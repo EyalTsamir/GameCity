@@ -1,6 +1,12 @@
 # world — streetlife (café terraces, street sitters, vendors, two-wheelers)
 
 ## Resume here
+* 2026-10-19 20:32 UTC — resumed after the usage-limit stop / container reboot. Code state: café goal fully
+  wired in crowd.ts (typechecks), animate.ts café pose (activities: talk / sip / hold cup / eat / phone /
+  read / lean back, conversation turns per party), render.ts newspaper via PROP.PAPER. First browser check
+  running: `shots/world/streetlife/m1a/` (views dtcafe, dtcafe2, dtwide × 13 h, 19 h). Next after judging:
+  table items (`pedestrians/tableware.ts`, one instanced mesh, masks per setting, drawn from render.ts while
+  writing seated café members), then waiters (party state 'serve').
 * 2026-10-19 16:50 UTC — M1 in progress. DESIGN CHANGE: café patrons are real crowd parties (new goal
   kind 'cafe' reusing the bench flow approach→settle→act→rise→leave), not a static layer — they walk in
   between the tables, sit, stay, leave. Done: `pedestrians/cafes.ts` (CafePlace from

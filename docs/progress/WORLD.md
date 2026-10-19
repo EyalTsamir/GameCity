@@ -17,6 +17,12 @@ Branch: work continues from `claude/tinyhaven-graphics-audit-l089m8` (fast-forwa
 `claude/pensive-gates-bim12i` (the session's designated branch).
 
 ## Resume here (keep current)
+* 2026-10-19 20:30 UTC — account usage limit stopped ALL agents ~17:30 (reset 20:00); container rebooted ~20:29.
+  Watchdog: tree clean + pushed (fe25a85), servers + autocheckpoint restarted, stale shot locks cleared, all 7
+  agents resumed via SendMessage at 20:31 (each from its log's Resume here). State then: world M1 (landscape,
+  sea/river extension, camera far/FOV) iterating; air M1 atmosphere in tree; ground M1 blades rendering; foliage M1
+  leaf cards (wood shader fix pending); streetlife M1 café parties mid-edit (crowd.ts); life M1 cloth/decor;
+  wear M1 done → M2 balcony greenery.
 * 2026-10-19 16:45 UTC — watchdog: 7 agents running. wear M1 DONE (ctx.services.buildings / props live;
   relayed to life + streetlife). air M1 code written (render/atmosphere.ts, sky/atmoDrive.ts). foliage M1 code
   written (atlas/foliage/crowns). ground: groundcover blade rings wired, first capture running (its terrain

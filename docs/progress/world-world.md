@@ -1,17 +1,21 @@
 # world-world — the frame: a city in a landscape that continues to the horizon
 
 ## Resume here
-* 2026-10-19 ~16:40 — M1 code written, typecheck clean (my paths): landscape/{noise,polyline,model,fields,rings,
-  terrain,shader,mountains}.ts, landscape.ts (service + meshes), slab.ts (world mode → placeholders),
-  water/extension.ts + surface.ts (aFld per-vertex field, TH_DIORAMA edge fade) + water.ts (ext, no cut-away in
-  world mode), camera.ts (WORLD_FAR 60 km, worldFov 50°→34° by distance).
-* Running: first world capture `shots/world/world/m1a/` (subset sky,terrain,landscape,water,postfx,camera,
-  landfog=0, 11 h) via my copy of capture-set with a 20-min load timeout: scratchpad `cap.mjs` (the lead's script
-  has a 300 s timeout that the loaded machine (load ~20) exceeds). Before captures on 5174 failed twice (timeout) →
-  re-run with cap.mjs when the machine is calmer.
-* Offline map tool: scratchpad `land/map.ts` (bundle: `npx rolldown land/map.ts --platform node -o land/map.mjs`;
-  `node land/map.mjs x0 z0 x1 z1 N out.bin && python3 -I land/map.py out.bin out.png`).
-* Next: judge m1a, fix, then M2 trees.
+* 2026-10-19 20:35 — resumed after the usage-limit stop + container reboot (all my files intact, committed fe25a85).
+  State: M1 done (frame off, landscape model/service, ring terrain, mountains, sea/river extension, camera far/FOV)
+  + first fixes after m1a (mountain shapes, sand width, canopy edges, flowers) + M2 code (landscape/trees.ts: 3D near
+  set + impostors; landscape/settlements.ts: farms/hamlets/villages + church spires) — typecheck clean, NOT yet
+  captured (m1b died in the reboot / screenshot timeout under load 20).
+* Air's atmosphere is in the tree: drop ?landfog=0 (switches ?noatmo, ?atmo=<k>, ?nomist).
+* Lead review of m1a to address: (a) fields = flat paint with ruler edges → hedgerows/tree lines, crop texture,
+  soft irregular edges, tracks, farmsteads; (b) mountains must tower over the hills: rock faces/scree, snow on the
+  highest, layered haze; (c) north forest flat until trees; (d) island reads as a small mound; river embankment →
+  natural transition must be gradual.
+* Next: capture m1c (subset incl. roads/buildings/vegetation, with atmosphere) → judge trees/settlements/mountains.
+* Tools: my capture script copy with 20-min load timeout = scratchpad `cap.mjs` (scratchpad is SHARED with other
+  agents — keep my files under scratchpad/world* or land/). Offline map tool: scratchpad `land/map.ts` (bundle:
+  `npx rolldown land/map.ts --platform node -o land/map.mjs`; `node land/map.mjs x0 z0 x1 z1 N out.bin &&
+  python3 -I land/map.py out.bin out.png`).
 
 ## Brief (from WORLD-PLAN.md scope 1 + briefs "### world")
 Remove the frame in world mode (soil faces, plinth, nameplate, table, cyclorama, sea cut-away, slab shadow) and
