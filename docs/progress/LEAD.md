@@ -117,6 +117,11 @@ Per-module logs live next to this file: `docs/progress/<module>.md`.
   running ⇒ idle session ⇒ reclaim kills setsid jobs). LESSON: run long lead jobs as harness-tracked
   background Bash tasks (run_in_background, ≤ 2 h each). 04:43 restarted; running (tracked): ui-test on the
   ORIGINAL — default mode (uitest_default_base.json) then full city (uitest_full_base.json). Then perf A/B.
+  05:07 ui-test verdict ✔ NO REGRESSION: default mode identical (new 34/35 = base 34/35, same step); full city
+  the original fails the same time-based steps under SwiftShader (base 23/40, new 18/36 incl. a harness
+  screenshot timeout); only diff 'T starts the auto-tour' = flaky 1.5 s window: probe
+  (scripts/agent-tools/qa_tourprobe.mjs) shows the tour identical on both builds (same slow opening orbit
+  ~0.1–0.4°/2 s at ~12 fps, same 'Tinyhaven' caption). 05:25 perf A/B rep 1 started (tracked).
 
 ## History
 * 2026-10-16 ~19:20 — Round 1: 12 builders launched via a Workflow; the account hit its 5-hour usage
