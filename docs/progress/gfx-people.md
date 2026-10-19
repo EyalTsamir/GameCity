@@ -13,6 +13,22 @@ routes, speeds, avoidance and `invariants()` are untouched.
   (7 shots each), corners_new (2 corners), corners_before (corner 0 = same walker as new c0; c1 cut off),
   gc_{new,before}.json = useless (SwiftShader ran 1–2 writes per view → cold JIT; redo with a tight
   write() loop in the page). Before-tree server 5175 died with the reboot (restart from scratchpad `before/`).
+* 03:10 item 3 judged on lineup_{before,new_v1} at 10 m: trousers straighter but still slim, toes slightly
+  rounder → strengthened: drape rt = (0.059 + 0.018 h)·legScale (6.1 cm ankle, 6.8 knee, 7.2 mid-thigh), denim
+  0.6, default 0.8; toe rings Fr(0.184, 0.0485, −0.071, −0.030), Fr(0.207, 0.043, −0.067, −0.037). Corner v1
+  crops (corners_{new,before}_v1, strips corner{0,1}_before_new_x3.png): c0 fine both, c1 occluded by a signal.
+  5175 restarted (background vite from scratchpad before/). QUEUED 03:13 one chain (each timeout 900, logs
+  shots/people/fix_*.log, marker shots/people/fix_chain.done): lineup_new (SHOTS=lineupA_34_10m,
+  lineupA_front_10m,lineupB_34_10m,lineupB_front_10m,lod0_9m) → NEW tool tools/city_slide.mjs (real-city
+  stance slide: shadow-poses every walker with the build's own modules + fkPoint, bins straight / turning /
+  sharp) slide_{new,before}.json 240 s → gc_driver (tight in-page crowd.update + write loop) gc_{new,before}.json
+  → corner_driver (22 m, pitch 36°, 1280×720) corners_{new,before} 4 corners. Then (waits for fix_chain.done)
+  lineup_new2 with SHOTS=dog_pram_34,dog_pram_side,sit_34 (checks render.ts yawMatrix for pram/dog/blob).
+  Docs: Numbers + Tools sections already updated for the fix round; Final report subsection still to write.
+* 03:18 item 3 VERIFIED visually (legs_lineup{A,B}_{34,front}_10m_before_after.png: straight trouser legs,
+  jeans straighter, shorts wider, toes blunter). city_slide first try ran ~2.7 fps with 0.1 s sim per frame
+  (too coarse) → SPEED env (default 0.2) added, new-run killed (pid of my own node), before-run continues with
+  the fixed script; slide_new re-queued after fix_chain2.done (marker fix_chain3.done).
 
 * FIX ROUND from the re-review (`docs/progress/people-review.md` "## Re-review (2026-10-18)"), in order:
   1. corners (gait.ts): end steps early on fast heading change / cap trailing-leg stretch (hip ext ≤ ~−22°);
@@ -168,10 +184,23 @@ routes, speeds, avoidance and `invariants()` are untouched.
   Key fixes: the foot yaw turns about the vertical through the ankle (shader + fkPoint), not the tilted
   shin (that tipped the sole by up to 5 cm); plants far off the gait law are dragged, never dropped; the
   pelvis never drops more than 4.5 cm below its gait curve (an out-of-reach foot is pulled in instead).
-* CPU: `computePose` ≈ 3.1 µs per figure with gait state on this (loaded) container (`bench.ts`, 150 figures
-  0.46 ms/frame). Garbage ≈ 2 KB per figure-frame (boxed doubles in the big pose functions; was 7.8 KB: the
-  pose objects were dictionary-mode — now built from literals — plus Object.assign / Math.hypot / per-call
-  vectors in the arm IK, whose rest-pose constants are now cached per rig).
+* Corners after the fix round (2026-10-19, `cornerfk.ts` / `gaitfk.ts`; before → after): 4-segment rail 90°
+  @1.3 4.15 → 1.88 cm, @0.9 2.56 → 2.23; bevelled 2-segment 90° 18.8 → 3.63; hard 90° snap @1.3 34.7 → 2.50,
+  @0.9 → 2.90; 45° snap 9.4 → 1.78; 135° @1.1 → 6.12 (landing glide while the body yaws 20°/frame); 90°/s
+  turning 4.7 → 1.75; 40°/s 0.85; straight walking / running unchanged (0.30 / 0.60 cm). Trailing hip extension
+  −40° (sustained) → ≤ −36° for ≤ 4 frames at the sharpest corners, normal walking −16°; 1.6 m/s −28 → −25°.
+  Mechanisms (gait.ts): smoothed gait root (sx/sz) that the figure is drawn at; quick re-step (0.2 s lift, only
+  if it lands before toe-off); heel-raise for reach (bisection on the rolling pitch); pivots about the actual
+  contact point (heel / ball / toe tip) with heel-up / toes-up pitch; early toe-off of an over-stretched trailing
+  foot during double support; swing catch-up and ~30° swing cap. "stance sole … 6 cm" in cornerfk = the quick
+  re-step's lift (intended).
+* CPU: `computePose` ≈ 2.2 µs per figure (`bench.ts`, 150 figures 0.33 ms/frame; was 3.1 µs).
+* Garbage (fix round, `bench.ts` — the tool of the 2 KB figure, now with median / 90th pct and a harness-only
+  pass): median 39 B per figure-frame = exactly the harness's own 39 B (member motion), i.e. computePose ≈ 0 B
+  steady; mean 120–140 B over frames 12–32 s (V8 re-optimising after the first idle variants appear), mean
+  42 B (≈ 3 B net) after 100 s; per type (walk / stand / sit / pram / cane) 0–3 B. Before: ≈ 2.1 KB (and 7.8 KB
+  earlier). Causes and fixes: see the helper note at the top of gait.ts (boxed doubles at un-inlined call
+  boundaries, module `let` doubles, cold-branch helper calls, megamorphic keyed pose reads in render.ts).
 
 ## Tools (shots/people/tools/)
 * `node build.mjs <file.ts>` bundles + runs node checks: `measure.ts` (verts/tris per LOD and feature),
@@ -183,6 +212,16 @@ routes, speeds, avoidance and `invariants()` are untouched.
   `city_driver.mjs <outDir> [query] [--legacy] [--census]` (crowd views × hours, picker check, invariants
   after a 4× sim run, LOD census via `write()`); `lineup_people.mjs` (copy of the reviewer's lineup driver);
   `run_locked.mjs <cmds.json>` (one lock ticket for several drivers).
+* Fix round: `allocmicro.ts` (garbage per call of the IK / FK functions), `allocpose.ts <walk|stand|sit|pram|
+  cane>` (computePose per figure type, median and warm-up blocks), `bench.ts` (MODE=walk|stand|sit|ws|wsit,
+  WARM=frames), `animparity.ts` (pose parity vs `ref/animate_ref.ts`, the pre-inlining copy: 5.18 M values,
+  max diff 0), `vcount.ts` (verts per LOD), `turbo_box.py <dir> <bundle> <fn,…>` (lists ChangeFloat64ToTagged /
+  Call nodes per function from `node --trace-turbo --trace-turbo-path=<dir>` dumps — how the boxing sites were
+  found), `inline_helpers.py` (the helper-inlining transformer, exact a + (b − a)·t form);
+  browser: `corner_driver.mjs <outDir> [corners] [frames]` (predicts kerb corners from party rails, slows the
+  sim, follows the walker with crops), `strips.py`, `city_slide.mjs <out.json> [s]` (real-city stance slide per
+  build: shadow-poses every walker with that build's modules + fkPoint, bins by heading change),
+  `gc_driver.mjs <out.json>` (garbage of renderer.write() in a tight in-page loop, performance.memory).
 
 ## Status
 - [x] P1 data model + proportions — morph rig, 4 targets, packed attributes, shadow proxy, palette.
