@@ -13,7 +13,7 @@ CHECK=/home/user/GameCity-check
 BRANCH=$(git -C "$MAIN" rev-parse --abbrev-ref HEAD)
 SUBJECT=${1:-"Checkpoint"}
 PUSH=${2:-}
-TRAILER=$'\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_01Pv5V4pjhiULwsSnXLcJVFw'
+TRAILER=$'\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_017phrqi4GgwkWn4PGQaZz7v'
 
 if [ ! -d "$CHECK" ]; then
   git -C "$MAIN" worktree add --detach "$CHECK" HEAD >/dev/null 2>&1 || exit 1
