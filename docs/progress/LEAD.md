@@ -135,6 +135,13 @@ Per-module logs live next to this file: `docs/progress/<module>.md`.
   fragment work, half-float targets, mip generation). CONCLUSION: SwiftShader cannot measure GPU cost; the CPU
   side is small. Report must say so + give the user exact perf.mjs commands for the Adreno. Round-2 page A/B
   skipped (noise, not representative); in-page probes for light/table/veg/vegcheap running for a ranking.
+  06:30 in-page probes unusable after round 1 (runtime toggles recompile shaders ⇒ 4–17 s SwiftShader stalls).
+  Round-1 signals only: overview table on/off 804/184 ms, downtown light on/off 342/196 ms ⇒ the table (a PBR +
+  shadowed surface over up to half the screen where the void was) is the largest SwiftShader-visible add after
+  reflections; GPU estimate 0.2–0.5 ms — to be verified on the Adreno. Attribution stopped here (limits stated).
+  LEGACY DECISION: keep all legacy toggles/copies for now — they are the user's one-build A/B for the real-GPU
+  measurement (~100 kB bundle, zero runtime cost unless switched); strip in a follow-up after measuring.
+  06:32 8-min soaks of new + original running (tracked) for the pedestrian-overlap question.
 
 ## History
 * 2026-10-16 ~19:20 — Round 1: 12 builders launched via a Workflow; the account hit its 5-hour usage
