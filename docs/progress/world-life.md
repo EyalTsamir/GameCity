@@ -1,10 +1,18 @@
 # world-life — wind consumers, smoke, birds, small motion (world round)
 
 ## Resume here
-* 2026-10-19 ~15:00 — Survey done, log written, requests sent to the lead. No code edited yet.
-  Next: before-captures on 5174 (shots/world/life/before/), then M1 (cloth system: bunting + festoons
-  across old-town / market streets, flags) in `src/world/life.ts` + `life/*`.
-* Running commands: none.
+* 2026-10-19 ~16:40 — M1 in progress. Written + typechecking: `src/world/life.ts`, `life/glsl.ts` (line +
+  cloth GLSL), `life/cloth.ts` (ClothSystem: cloth / wires / bulbs, 3 draws + 1 shadow), `life/decor.ts`
+  (street lines generated from `buildings.facades` in oldtown+market, several per facing pair, zig-zags,
+  tree/lamp avoidance; court spans → laundry (market court → bunting); balcony laundry → cloth, then
+  `buildings.setStaticLaundry(false)`). Landmark FLAG mode (src/world/landmarks/shaders.ts) now on
+  `thWindAt(pivot)` with calm droop. First shot OK: shots/world/life/m1/t1.png (prayer flags + festoon
+  across an old-town street; only 4 wear spans then — now generated from facades).
+* Running: test shot t2 (shots/world/life/m1/t2.png/.json, only=…,vegetation,props,life).
+* Baseline captures on 5174 time out at 300 s under load (capture-set has a fixed 300 s ready timeout) —
+  use shot.mjs --timeout 900000 for before shots later.
+* Next: judge t2; M2 smoke (smoke.ts shader/wind upgrade + `life/chimneys.ts` emitters from
+  buildings.chimneys / vents, props.bbqs with schedules); then laundry on props.washing (+ props.setStaticLaundry(false)).
 
 ## Brief (from WORLD-PLAN.md §6 + briefs)
 Wind consumers: flags on poles flap, bunting / festoon strings across old-town streets and the market,

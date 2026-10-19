@@ -33,6 +33,8 @@ export interface BuilderOptions {
   facade?: boolean;
   /** one vec4 light attribute aL */
   light?: boolean;
+  /** one generic vec4 attribute aX (current value `X`), e.g. wind sway weights of the greenery */
+  aux?: boolean;
 }
 
 /** Footprint check hook: called with world coords of every emitted vertex. */
@@ -49,6 +51,7 @@ export class Builder {
   private fc: FBuf | null;
   private fd: FBuf | null;
   private fl: FBuf | null;
+  private fx: FBuf | null;
   private idx = new Uint32Array(6 * 4096);
   ni = 0;
   nv = 0;
@@ -77,6 +80,8 @@ export class Builder {
   cornerMask = 3;
   /** current light attribute */
   readonly L = [0, 0, 0, 0];
+  /** current generic attribute (aX) */
+  readonly X = [0, 0, 0, 0];
 
   check: VertexCheck | null = null;
 
@@ -90,6 +95,7 @@ export class Builder {
     this.fc = opts.facade ? new FBuf(4 * 4096) : null;
     this.fd = opts.facade ? new FBuf(4 * 4096) : null;
     this.fl = opts.light ? new FBuf(4 * 4096) : null;
+    this.fx = opts.aux ? new FBuf(4 * 4096) : null;
   }
 
   /** Set the local frame: rotation `yaw` about +Y, then translation. */
@@ -171,6 +177,7 @@ export class Builder {
       push4(this.fd, this.D);
     }
     if (this.fl) push4(this.fl, this.L);
+    if (this.fx) push4(this.fx, this.X);
     return this.nv++;
   }
 
@@ -465,6 +472,7 @@ export class Builder {
       g.setAttribute('aD', new THREE.BufferAttribute(this.fd.a.slice(0, this.fd.n), 4));
     }
     if (this.fl) g.setAttribute('aL', new THREE.BufferAttribute(this.fl.a.slice(0, this.fl.n), 4));
+    if (this.fx) g.setAttribute('aX', new THREE.BufferAttribute(this.fx.a.slice(0, this.fx.n), 4));
     const index = this.nv > 65535 ? this.idx.slice(0, this.ni) : Uint16Array.from(this.idx.subarray(0, this.ni));
     g.setIndex(new THREE.BufferAttribute(index, 1));
     g.computeBoundingSphere();
@@ -484,6 +492,7 @@ export class Builder {
     this.fc = this.fc ? new FBuf(4) : null;
     this.fd = this.fd ? new FBuf(4) : null;
     this.fl = this.fl ? new FBuf(4) : null;
+    this.fx = this.fx ? new FBuf(4) : null;
     this.nv = 0;
     this.ni = 0;
   }

@@ -1,8 +1,11 @@
 // Smoke & steam: one shared pool of soft, lit billboard puffs (ONE draw call for every
-// chimney, funnel and locomotive in the city). Puffs rise, slow down, drift with
-// ctx.uniforms.uWind, grow and fade; they are shaded from a procedural pseudo-normal atlas
-// with the live sun/moon + sky light (warm under-glow from the city at night), sorted
-// back-to-front every frame (insertion sort — the order is temporally coherent).
+// chimney, funnel and locomotive in the city). Puffs rise, slow down, drift with the shared
+// wind field (core/wind.ts: gust fronts push a plume over as they pass; wind grows with height so
+// a plume bends over as it rises), grow and erode (thin edges vanish first); they are shaded from
+// a procedural pseudo-normal atlas with the live sun/moon + sky light, a Henyey–Greenstein forward
+// scatter rim (backlit smoke glows at golden hour, dense cores stay grey), warm under-glow from the
+// city at night, and sorted back-to-front every frame (insertion sort — temporally coherent).
+// Distant emitters emit fewer, larger puffs (same plume, smaller particle count).
 //
 // Public API: see SmokeService below (registered as ctx.services.smoke by ambient.ts).
 
@@ -10,6 +13,7 @@ import * as THREE from 'three';
 import type { CityContext } from '../../core/context';
 import type { Rng } from '../../core/rng';
 import { makeLight, sampleLight, smooth } from './shared';
+import { windAt } from '../../core/wind';
 
 export interface SmokeEmitterOptions {
   /** World position of the emission point (polled every sim step). Return `false` to pause emission. */
@@ -144,11 +148,11 @@ const VERT = /* glsl */ `
 #include <fog_pars_vertex>
 attribute vec4 iPosSize;
 attribute vec4 iColor;
-attribute vec4 iMisc; // rotation, variant, shade, glow
+attribute vec4 iMisc; // rotation, variant, age (0..1), glow
 varying vec2 vUv;
 varying vec4 vColor;
 varying vec2 vRot;
-varying vec2 vShadeGlow;
+varying vec2 vAgeGlow;
 varying float vH;
 void main() {
   vec4 mvPosition = viewMatrix * vec4(iPosSize.xyz, 1.0);
@@ -163,7 +167,7 @@ void main() {
   float v = iMisc.y;
   vUv = (position.xy + 0.5) * 0.5 + vec2(mod(v, 2.0), floor(v * 0.5)) * 0.5;
   vRot = vec2(c, s);
-  vShadeGlow = iMisc.zw;
+  vAgeGlow = iMisc.zw;
   vH = iPosSize.y;
   gl_Position = projectionMatrix * mvPosition;
   if (vColor.a < 0.003) gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
@@ -183,14 +187,25 @@ uniform vec3 uGlow;
 uniform vec3 uRight;
 uniform vec3 uUp;
 uniform vec3 uBack;
+uniform float uScatter;
 varying vec2 vUv;
 varying vec4 vColor;
 varying vec2 vRot;
-varying vec2 vShadeGlow;
+varying vec2 vAgeGlow;
 varying float vH;
+float smokeHG(float mu, float g) {
+  float g2 = g * g;
+  return (1.0 - g2) / pow(max(1.0 + g2 - 2.0 * g * mu, 1e-4), 1.5);
+}
 void main() {
   vec4 t = texture2D(uTex, vUv);
-  float a = t.a * vColor.a;
+  float age = vAgeGlow.x;
+  // erosion: the thin fringe of a puff dissolves first as it ages, the core lasts
+  float er = age * age * 0.7;
+  float cov = smoothstep(er, er + 0.32, t.a);
+  float a = cov * vColor.a;
+  // dither against 8-bit banding in thin smoke
+  a += (fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453) - 0.5) * (2.0 / 255.0);
   if (a < 0.004) discard;
   vec2 n2 = t.rg * 2.0 - 1.0;
   n2 = vec2(vRot.x * n2.x - vRot.y * n2.y, vRot.y * n2.x + vRot.x * n2.y);
@@ -198,12 +213,16 @@ void main() {
   vec3 n = normalize(uRight * n2.x + uUp * n2.y + uBack * nz);
   float ndl = dot(n, uKeyDir);
   float wrap = clamp(ndl * 0.6 + 0.4, 0.0, 1.0);
-  float dens = t.b * vShadeGlow.x;
-  float self = mix(1.0, 0.62, dens * (1.0 - clamp(ndl, 0.0, 1.0)));
+  float dens = t.b * (1.0 - age * 0.55);
+  float self = mix(1.0, 0.6, dens * (1.0 - clamp(ndl, 0.0, 1.0)));
   vec3 hemi = mix(uGround, uSky, n.y * 0.5 + 0.5);
-  // forward scattering when looking towards the light (silver lining on thin edges)
-  float fwd = pow(max(dot(-uBack, uKeyDir), 0.0), 5.0) * (1.0 - t.b) * 0.9;
-  float under = clamp(0.55 - 0.45 * n.y, 0.0, 1.0) * vShadeGlow.y;
+  // forward scattering (Henyey-Greenstein, g 0.65 + a weak back lobe) when looking towards the
+  // light: thin edges glow ("silver lining"), dense cores stay grey
+  float mu = dot(-uBack, uKeyDir);
+  float phase = 0.8 * smokeHG(mu, 0.65) + 0.2 * smokeHG(mu, -0.2);
+  float thin = (1.0 - t.b * 0.85) * (0.35 + 0.65 * (1.0 - cov * 0.6));
+  float fwd = min(phase * thin * uScatter, 3.0);
+  float under = clamp(0.55 - 0.45 * n.y, 0.0, 1.0) * vAgeGlow.y;
   vec3 col = vColor.rgb * (uKey * (wrap * wrap * self * 1.15 + fwd) + hemi * 1.25 + uGlow * under);
   gl_FragColor = vec4(col, a);
   #include <tonemapping_fragment>
@@ -214,7 +233,7 @@ void main() {
 
 export function createSmoke(ctx: CityContext): SmokeSystem {
   const rng = ctx.rng('ambient-smoke');
-  const MAX = 900;
+  const MAX = 1400;
   const budget = () => Math.round(MAX * (0.55 + 0.45 * Math.min(1, Math.max(0.4, ctx.quality.density))));
 
   // ── particle state (SoA)
@@ -233,6 +252,7 @@ export function createSmoke(ctx: CityContext): SmokeSystem {
     rotV = new Float32Array(MAX),
     seed = new Float32Array(MAX),
     glow = new Float32Array(MAX),
+    gy = new Float32Array(MAX),
     variant = new Uint8Array(MAX);
   const cr = new Float32Array(MAX),
     cg = new Float32Array(MAX),
@@ -278,6 +298,7 @@ export function createSmoke(ctx: CityContext): SmokeSystem {
       uRight: { value: new THREE.Vector3(1, 0, 0) },
       uUp: { value: new THREE.Vector3(0, 1, 0) },
       uBack: { value: new THREE.Vector3(0, 0, 1) },
+      uScatter: { value: 0.22 },
     },
   ]);
   uniforms.uTex.value = makePuffAtlas(rng.fork('atlas'));

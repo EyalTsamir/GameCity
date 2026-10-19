@@ -17,6 +17,7 @@ import { buildRings, type RingTopology } from './landscape/rings';
 import { evalHeights, buildLandGeometry, makeSlabNormal, LAND_MAX_D, GROUND_DROP, type LandHeights } from './landscape/terrain';
 import { landUniforms, landMaterial } from './landscape/shader';
 import { buildMountains } from './landscape/mountains';
+import { placeTrees, createLandTrees, type LandTrees } from './landscape/trees';
 
 export interface LandscapeService {
   /** true when the world beyond the slab is rendered (world mode, not ?noland) */
@@ -96,6 +97,15 @@ export default function create(ctx: CityContext): CityModule {
     mtnTris = m.triangles;
     mtnVerts = m.vertices;
   }
+  // ── countryside trees (near 3D set around the camera + far impostors)
+  let trees: LandTrees | null = null;
+  let treeMs = 0;
+  if (params.get('landtrees') !== '0') {
+    const placed = placeTrees(model, ctx.quality.density);
+    treeMs = placed.ms;
+    trees = createLandTrees(placed.list, uniforms, fog, ctx.quality.shadows && ctx.quality.level !== 'low');
+    root.add(trees.group);
+  }
   ctx.scene.add(root);
   const buildMs = performance.now() - t0;
   const landTris = (geo.index?.count ?? 0) / 3;
@@ -103,9 +113,14 @@ export default function create(ctx: CityContext): CityModule {
 
   return {
     name: 'landscape',
+    frame() {
+      trees?.update(ctx.camera);
+    },
     stats() {
       return {
         active: 1,
+        ...(trees ? trees.stats() : {}),
+        treeMs: Math.round(treeMs),
         landVerts,
         landTris,
         mtnVerts,
