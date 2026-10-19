@@ -85,6 +85,12 @@ Per-module logs live next to this file: `docs/progress/<module>.md`.
   23:45 matrix sheets 11a/11b/18a built (scripts/agent-tools/qa_sheets.sh → shots/lead/qa/sheets/) and judged:
   11a ✔ 18a ✔ (consistent integration, no defects; 'ghost' ferris wheel was a downscale artefact —
   wheel_crop.png identical). New-side reports clean so far (failedModules [], 0 errors, invariants {}).
+  23:50 FIX (lead, integration): balloon at cruise height cast a crisp dark blot over industry (stage's NW
+  route + crisper shadows; shots/lead/qa/industry_air_ab.png). src/sim/ambient/vehicles.ts depth material:
+  aircraft shadows fade out with height 12→40 m (dithered discard smoothed by PCF), barge always casts.
+  Verified: shots/lead/qa/airshadow_check.png, 0 errors. ~23:50–03:00 usage-limit stop + container reboot;
+  03:07 resumed (servers + autocheckpoint restarted, people resumed for its fix round). New-side matrix
+  finished 00:00 (ALL DONE).
 
 ## History
 * 2026-10-16 ~19:20 — Round 1: 12 builders launched via a Workflow; the account hit its 5-hour usage
