@@ -20,6 +20,7 @@
 import { Rng, hashString } from './rng';
 import { CORRIDOR_HALF, FURN_OFFSET, QUAY_X, RAIL_Z, RIVER, SLAB, WATER_LEVEL, XS, ZS, SIDEWALK_Y } from './constants';
 import { P2, Rect, Dir, rect, rectInset, rectContains, rectsOverlap, clamp, smoothstep, DIR_YAW } from './geom';
+import { DIORAMA } from './world';
 
 // ───────────────────────────────────────────────────────────── types ──
 
@@ -1872,6 +1873,18 @@ function buildPois(plan: CityPlan): void {
     { id: 'westbrook', name: 'Westbrook', target: { x: -150, y: 0, z: 20 }, distance: 140, yaw: -35, pitch: 36 },
     { id: 'industry', name: 'Northgate Works', target: { x: -135, y: 0, z: -115 }, distance: 140, yaw: -30, pitch: 34 },
   ];
+  if (DIORAMA) return;
+  // world mode: the hero overview lowers toward the horizon (mountains and sky in frame), and views of the
+  // landscape around the town (proposed by the world agent; no number keys — they are in the Places menu)
+  const ov = plan.pois[0];
+  ov.distance = 600;
+  ov.pitch = 20;
+  plan.pois.push(
+    { id: 'vista', name: 'Tinyhaven & the mountains', target: { x: -10, y: 15, z: -90 }, distance: 720, yaw: 12, pitch: 12 },
+    { id: 'country', name: 'Westbrook fields', target: { x: -230, y: 2, z: 30 }, distance: 150, yaw: 70, pitch: 8 },
+    { id: 'coast', name: 'Harbour & open sea', target: { x: 150, y: 5, z: -40 }, distance: 300, yaw: -100, pitch: 9 },
+    { id: 'riverbend', name: 'River west', target: { x: -330, y: 1, z: 125 }, distance: 60, yaw: 70, pitch: 6 },
+  );
 }
 
 // ─────────────────────────────────────────────────────── terrain queries ──

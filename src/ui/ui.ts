@@ -37,6 +37,10 @@ const POI_NOTES: Record<string, string> = {
   stadium: 'Floodlights & stalls',
   westbrook: 'Quiet suburban streets',
   industry: 'Chimneys & warehouses',
+  vista: 'The town, forest & mountains',
+  country: 'Farmland, hedgerows & villages',
+  coast: 'Open sea, the island & ships',
+  riverbend: 'Eye level on the riverbank',
 };
 
 const KIND_WORD: Record<PickHit['kind'], string> = {
