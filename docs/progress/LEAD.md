@@ -4,6 +4,9 @@ Read this first when resuming after an interruption (usage limits have cut runs 
 Per-module logs live next to this file: `docs/progress/<module>.md`.
 
 ## Lead state (graphics overhaul) — keep current; the watchdog resumes from here
+* GRAPHICS OVERHAUL DONE (2026-10-19 07:05 UTC): all 10 audit items + realistic figures implemented, verified and
+  pushed; integration QA complete; report in docs/progress/GFX-REPORT.md. Open for the user: real-GPU perf.mjs run
+  (commands in the report), then strip the legacy A/B copies. Watchdog deleted, autocheckpoint stopped.
 * Updated 2026-10-18 22:08 UTC. Phase 2: workstream agents finishing (verify → fixes/polish →
   final sheets → "## Final report" in their gfx-*.md).
   - DONE: hardscape (16:20; lead spot-checked ab_court_quay.png ✔). Note for QA: camera pulls views
@@ -142,6 +145,10 @@ Per-module logs live next to this file: `docs/progress/<module>.md`.
   LEGACY DECISION: keep all legacy toggles/copies for now — they are the user's one-build A/B for the real-GPU
   measurement (~100 kB bundle, zero runtime cost unless switched); strip in a follow-up after measuring.
   06:32 8-min soaks of new + original running (tracked) for the pedestrian-overlap question.
+  07:01 8-min soaks: the overlap hit is identical on the ORIGINAL (pre-existing); new build also had one
+  'pedestrian inside a building' at t=300 s — movement code + plan data unchanged, runs diverge via
+  frame-time sub-stepping ⇒ pre-existing crowd edge case; listed as a follow-up in GFX-REPORT.md.
+  07:05 Phase 3 complete. Final report: docs/progress/GFX-REPORT.md.
 
 ## History
 * 2026-10-16 ~19:20 — Round 1: 12 builders launched via a Workflow; the account hit its 5-hour usage

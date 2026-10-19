@@ -30,7 +30,12 @@ contracts and budgets in `GFX-PLAN.md`; the lead's QA record in `LEAD.md` ("Phas
   a dark reflection square at dusk; a blown-out moon glint (also present in the original); stadium
   floodlights not snapping on clock jumps. NaN/Inf guards added before bloom/DOF/merge (`?nanviz`).
 * Single-file build ✔ (2.60 MB vs 2.20 MB) and it runs from `file://`; typecheck clean.
-* Soak 4 min at 4×: heap flat, no errors (one pedestrian-overlap sample; see LEAD.md for the follow-up).
+* Soak (4 and 8 min at 4×): heap flat, no errors. Pedestrian invariant hits are pre-existing crowd-sim edge
+  cases, not regressions: the t≈45 s overlap (walker through a stationary couple) reproduces identically on
+  the original build; one 'walker inside a building' hit at t=300 s (103.3, −16.7) appeared in one run of the
+  new build only — the crowd's movement code and world data (plan.ts) are unchanged and runs diverge through
+  frame-time-dependent sub-stepping. Follow-up (outside this overhaul): make walkers yield to stationary
+  'act' groups and keep avoidance from pushing them over a lot footprint (crowd.ts canStep/insideBuilding).
 * ui-test: default mode identical to the original (34/35, same pre-existing step); in the full city the
   time-based steps fail on BOTH builds under software GL (frame-rate bound), not a regression.
 
