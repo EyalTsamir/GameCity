@@ -17,9 +17,13 @@ Branch: work continues from `claude/tinyhaven-graphics-audit-l089m8` (fast-forwa
 `claude/pensive-gates-bim12i` (the session's designated branch).
 
 ## Resume here (keep current)
-* 2026-10-19 — Setup: node_modules installed; baseline worktree `/home/user/GameCity-baseline` = 9de79e9
-  (state at the start of this round) served on 5174; working tree on 5173 (`shots/servers.sh`).
-  Next: critique captures (shots/world/critique/), write the critique + plan below.
+* 2026-10-19 14:45 UTC — Critique done (below). Plan: `WORLD-PLAN.md` (binding), briefs: `world-briefs.md`.
+  7 agents launched ~14:40 (ids under "Agents"). Second user reference received mid-turn (Tel-Aviv café
+  street, "even more alive and realistic than this") → streetlife workstream + wear priorities.
+  Lead next: relay cross-agent requests (wear → buildings/props services for life + streetlife; world ↔ air
+  horizon; ground ↔ foliage reeds; air adaptive setters), judge milestone shots, set hero POIs (plan.ts)
+  once the landscape exists, put the high-tier perf price (≈ +6 ms est.) to the user. Watchdog
+  `trig_01Dosn8CiDr2iqF7HZGRccm3` (hourly :29), autocheckpoint every 20 min (setsid loop).
 
 ## Machine restore (fresh container)
 ```bash
@@ -67,9 +71,25 @@ night lighting (strong). Layout regularity (orthogonal grid) is a secondary toy 
 cover (trees overhanging, unmown edges, irregular gardens) rather than re-planning the city.
 
 ## Plan
-(pending)
+See `WORLD-PLAN.md` (workstreams ranked by gap: world, air, ground, foliage, streetlife, life, wear; ownership,
+contracts, art direction, budgets, testing, logging). Lead-side contracts done: `src/core/wind.ts` (shared wind
+field, updated per frame in main.ts), `src/core/world.ts` (`DIORAMA` via `?diorama`), stub modules landscape /
+groundcover / life registered in main.ts.
 
-## Agents
-(none yet)
+Rule-break proposal for the user (not silent): the full vision on **high** is estimated at ≈ +6 ms GPU on the
+Adreno at 1920×1025 (old rule: ≤ +2 ms for new work). Built as quality tiers (medium ≤ +2 ms, low ≤ +0.5 ms) with
+a URL switch per feature, so the user decides after measuring on the real GPU.
+
+## Agents (launched 2026-10-19 ~14:40 UTC; resume with SendMessage by id, or respawn from world-briefs.md)
+| agent | id | log |
+|---|---|---|
+| world | a1ae2952c87afea00 | world-world.md |
+| air | afa484aa1f5b0fe9d | world-air.md |
+| ground | a7357a9a5f8ec4dd2 | world-ground.md |
+| foliage | a9a7f496024b731c0 | world-foliage.md |
+| streetlife | adc3e786bf6ae6688 | world-streetlife.md |
+| life | a47266d2b0f89bfcd | world-life.md |
+| wear | aef3c345a9e493659 | world-wear.md |
+Research agent (done): docs/progress/world-research.md.
 
 ## Log
