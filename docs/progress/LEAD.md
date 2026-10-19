@@ -112,6 +112,11 @@ Per-module logs live next to this file: `docs/progress/<module>.md`.
   default stand-in city; (2) ORIGINAL build, full city. 04:20 people fix round DONE (corners median
   6.3→1.8 cm, max 61→11 cm; garbage 2.1 KB→2 B bench / 50–140 B in Chrome; trousers + toe box; sheet ✔).
   ALL agent work complete.
+  04:12 ui-test DEFAULT mode (stand-in city, new build): 34 ok / 1 fail ('kinds': bus framing + no pedestrian
+  on screen in the stand-in city) ⇒ camera/UI logic works. ~04:15–04:42 container reclaimed AGAIN (no agent
+  running ⇒ idle session ⇒ reclaim kills setsid jobs). LESSON: run long lead jobs as harness-tracked
+  background Bash tasks (run_in_background, ≤ 2 h each). 04:43 restarted; running (tracked): ui-test on the
+  ORIGINAL — default mode (uitest_default_base.json) then full city (uitest_full_base.json). Then perf A/B.
 
 ## History
 * 2026-10-16 ~19:20 — Round 1: 12 builders launched via a Workflow; the account hit its 5-hour usage
