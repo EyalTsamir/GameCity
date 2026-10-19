@@ -253,6 +253,7 @@ export class CrowdRenderer {
   private pv = new THREE.Matrix4();
   private m4 = new THREE.Matrix4();
   readonly sph = new THREE.Sphere();
+  private fPlanes = new Float64Array(24);
   private hand = { x: 0, y: 0, z: 0 };
   private cam = new THREE.Vector3();
   private pose: Pose = newPose();
@@ -404,18 +405,35 @@ export class CrowdRenderer {
     const R = this.sRoot,
       PP = this.sPose,
       CC = this.sCol;
-    for (const p of crowd.parties) {
+    // frustum planes as plain numbers (the sphere test is inlined: three's Plane.distanceToPoint returns a
+    // double through an un-inlined call — garbage per figure; index loops for the same reason as for-of)
+    const FP = this.fPlanes;
+    for (let i = 0; i < 6; i++) {
+      const pl = this.frustum.planes[i];
+      FP[i * 4] = pl.normal.x;
+      FP[i * 4 + 1] = pl.normal.y;
+      FP[i * 4 + 2] = pl.normal.z;
+      FP[i * 4 + 3] = pl.constant;
+    }
+    const parties = crowd.parties;
+    for (let pi = 0; pi < parties.length; pi++) {
+      const p = parties[pi];
       if (p.state === 'gone') continue;
-      for (const m of p.members) {
+      const members = p.members;
+      for (let mi = 0; mi < members.length; mi++) {
+        const m = members[mi];
         if (!m.present || m.fade <= 0.01) continue;
         const L = m.look;
-        const extra = L.pram || L.dog ? 1.4 : L.flags & F.ROD ? 2.2 : 0;
-        const sc0 = this.sph.center;
-        sc0.x = m.x;
-        sc0.y = m.y + 0.9;
-        sc0.z = m.z;
-        this.sph.radius = 1.4 + extra;
-        if (!this.frustum.intersectsSphere(this.sph)) continue;
+        const rad = 1.4 + (L.pram || L.dog ? 1.4 : L.flags & F.ROD ? 2.2 : 0);
+        const cyS = m.y + 0.9;
+        let inside = true;
+        for (let i = 0; i < 24; i += 4) {
+          if (FP[i] * m.x + FP[i + 1] * cyS + FP[i + 2] * m.z + FP[i + 3] < -rad) {
+            inside = false;
+            break;
+          }
+        }
+        if (!inside) continue;
         const d2 = (m.x - this.cam.x) ** 2 + (m.y - this.cam.y) ** 2 + (m.z - this.cam.z) ** 2;
         const d = Math.sqrt(d2);
         let st = states.get(m);
