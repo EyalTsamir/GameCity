@@ -23,7 +23,7 @@ try {
   await page.evaluate(([v, h]) => { window.__city.setHours(+h); window.__city.setSpeed(0); window.__city.view(v); }, [args.view ?? 'harbor', args.hours ?? '21.5']);
   await page.waitForTimeout(6000);
   const measure = (code) => page.evaluate(async ([code, secs]) => {
-    const s = window.__city.ctx.services; (0, eval)(code);
+    const s = window.__city.ctx.services; new Function("s", code)(s);
     await new Promise((r) => setTimeout(r, 1500)); // settle (shader compile, target alloc)
     return await new Promise((res) => { let n = 0; const t0 = performance.now(); const tick = () => { n++; if (performance.now() - t0 < secs * 1000) requestAnimationFrame(tick); else res((performance.now() - t0) / n); }; requestAnimationFrame(tick); });
   }, [code, secs]);
