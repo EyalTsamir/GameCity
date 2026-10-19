@@ -6,7 +6,14 @@ Files: `src/sim/pedestrians/{figure,render,looks}.ts` + new `rig.ts`, `body.ts`,
 stats) and `crowd.ts` (2 lines: stride formula → `gaitCycle()`, phase-settle only for legacy). Movement,
 routes, speeds, avoidance and `invariants()` are untouched.
 
-## Resume here (updated 2026-10-18 fix round start)
+## Resume here (updated 2026-10-19 03:10 after the reboot)
+* POST-REBOOT STATUS: tree typechecks (auto-checkpoint d2e1de0 has it). Items 1 (corners) and 2 (garbage) DONE
+  in code + node-verified; item 3 (trouser fit + rounder toes) fully applied in code (looks/render/shader/rig/
+  body), NOT yet judged visually. Jobs that finished before the stop: shots/people/fix/lineup_{new,before}/
+  (7 shots each), corners_new (2 corners), corners_before (corner 0 = same walker as new c0; c1 cut off),
+  gc_{new,before}.json = useless (SwiftShader ran 1–2 writes per view → cold JIT; redo with a tight
+  write() loop in the page). Before-tree server 5175 died with the reboot (restart from scratchpad `before/`).
+
 * FIX ROUND from the re-review (`docs/progress/people-review.md` "## Re-review (2026-10-18)"), in order:
   1. corners (gait.ts): end steps early on fast heading change / cap trailing-leg stretch (hip ext ≤ ~−22°);
      targets drag ≤ ~3 cm normal turns, ≤ ~6 cm sudden 90° corners, no split strides; prove with
