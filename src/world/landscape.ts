@@ -22,6 +22,8 @@ import { buildSettlements } from './landscape/settlements';
 import { createShips, type Ships } from './landscape/ships';
 import { LAYERS } from '../core/layers';
 import { buildLandLights, type LandLights } from './landscape/lights';
+import { createFarmLife, type FarmLife } from './landscape/farmlife';
+import type { SmokeService } from '../sim/ambient';
 
 export interface LandscapeService {
   /** true when the world beyond the slab is rendered (world mode, not ?noland) */
@@ -166,6 +168,48 @@ export default function create(ctx: CityContext): CityModule {
     lamps = buildLandLights(model, ctx.uniforms.uLights, beacon);
     root.add(lamps.points);
   }
+  // ── farm life: herds, a working tractor; chimney smoke from villages and farms (ambient's smoke)
+  let farm: FarmLife | null = null;
+  if (params.get('landlife') !== '0') {
+    farm = createFarmLife(model, uniforms, fog, ctx.quality.density);
+    root.add(farm.group);
+    ctx.events.on('modules:ready', () => {
+      const smoke = ctx.services.smoke as SmokeService | undefined;
+      if (!smoke) return;
+      farm?.attachSmoke(smoke);
+      // wood smoke from chimneys: mornings and evenings (cool hours), a few all day
+      const clock = ctx.clock;
+      let n = 0;
+      for (const site of model.sites) {
+        const k = site.kind === 'village' ? 6 : site.kind === 'hamlet' ? 2 : model.slabDist(site.x, site.z) < 1600 && (site.seed % 3 === 0) ? 1 : 0;
+        for (let i = 0; i < k; i++) {
+          const a = ((site.seed * 7 + i * 13) % 100) / 100 * Math.PI * 2;
+          const r = site.kind === 'farm' ? 3 : site.r * (0.2 + 0.6 * (((site.seed + i * 31) % 17) / 17));
+          const x = site.x + Math.cos(a) * r,
+            z = site.z + Math.sin(a) * r;
+          const y = model.height(x, z) + (site.kind === 'farm' ? 10 : 9.5);
+          const allDay = (site.seed + i) % 4 === 0;
+          smoke.addEmitter({
+            getPosition: (out) => {
+              const h = clock.hours;
+              const cool = h < 10.5 || h > 17;
+              if (!cool && !allDay) return false;
+              out.set(x, y, z);
+            },
+            rate: 0.9,
+            size: 0.9,
+            color: '#a29c94',
+            life: 14,
+            rise: 1.2,
+            opacity: 0.5,
+          });
+          n++;
+        }
+      }
+      chimneys = n;
+    });
+  }
+  let chimneys = 0;
   // ── countryside trees (near 3D set around the camera + far impostors)
   let trees: LandTrees | null = null;
   let treeMs = 0;
@@ -198,6 +242,7 @@ export default function create(ctx: CityContext): CityModule {
     name: 'landscape',
     update(dt) {
       if (ships && dt > 0) ships.update(ctx.uniforms.uTime.value, dt);
+      if (farm && dt > 0) farm.update(dt);
     },
     frame() {
       trees?.update(ctx.camera);
@@ -209,6 +254,8 @@ export default function create(ctx: CityContext): CityModule {
         ...(trees ? trees.stats() : {}),
         treeMs: Math.round(treeMs),
         buildings: bldCount,
+        animals: farm ? farm.animals : 0,
+        chimneys,
         landVerts,
         landTris,
         mtnVerts,

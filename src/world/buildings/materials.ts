@@ -779,14 +779,17 @@ void bhWall(inout vec3 albedo, inout float rough, inout float metal, inout vec3 
     albedo = mix(albedo, albedo * vec3(0.6, 0.72, 0.46), clamp(algae * wStr, 0.0, 0.75));
     if (pat < 0.5) {
       // peeling paint / spalled render: lower storeys, under the copings and around the corners
-      float zone = 0.65 * (1.0 - smoothstep(0.4, 3.2, y)) + 0.5 * underTop + 0.35 * corner + 0.2;
-      float thr = 0.86 - 0.26 * oldness * zone;
-      float ew = 0.012 + fq.x * 0.08;
-      float peel = smoothstep(thr, thr + ew, np.g) * step(0.3, oldness);
-      float rim = smoothstep(thr - 0.035, thr, np.g) - peel;
-      vec3 sub = fract(seed * 0.377) > 0.55 ? vec3(0.58, 0.36, 0.28) : vec3(0.62, 0.6, 0.56);
-      albedo = mix(albedo, sub * (0.8 + 0.35 * grain), peel * 0.9);
-      albedo *= 1.0 + 0.12 * rim * step(0.3, oldness);
+      // irregular patches: two noise scales + grain → ragged outlines; mostly at the foot of the wall, under
+      // the copings and at the corners, almost none on the open wall
+      float pv = np.g * 0.55 + nm.g * 0.25 + grain * 0.2 + 0.12 * (sn - 0.5);
+      float zone = 0.9 * (1.0 - smoothstep(0.3, 2.4, y)) + 0.6 * underTop + 0.45 * corner;
+      float thr = 0.92 - 0.3 * oldness * zone;
+      float ew = 0.006 + fq.x * 0.06;
+      float peel = smoothstep(thr, thr + ew, pv) * step(0.3, oldness);
+      float rim = smoothstep(thr - 0.02, thr, pv) - peel;
+      vec3 sub = fract(seed * 0.377) > 0.62 ? vec3(0.56, 0.36, 0.28) : albedo * 0.72 + vec3(0.12, 0.115, 0.1);
+      albedo = mix(albedo, sub * (0.85 + 0.3 * grain), peel * 0.85);
+      albedo *= 1.0 - 0.1 * rim * step(0.3, oldness);
     }
   }
   if (uBhDebug > 0.5) {
@@ -926,6 +929,7 @@ void bhWall(inout vec3 albedo, inout float rough, inout float metal, inout vec3 
     }
     vec3 farCol = office ? mix(vec3(0.66, 0.78, 1.0), vec3(1.0, 0.8, 0.52), hc) : mix(vec3(1.0, 0.52, 0.2), vec3(1.0, 0.68, 0.36), hc);
     float farGlow = mix(0.07, 2.7, nightF) * (prof > 1.5 && prof < 2.5 ? 1.25 : 1.0);
+    if (style > 5.5 && style < 6.5) farGlow = mix(1.6, 2.6, nightF);  // shop windows: lit by day, toned at night (≈ bhShop mean)
     avgGlass = refl * F + farLit * farGlow * farCol * 0.34 * (curtain ? 0.85 : 1.0) + gt * crown * 0.55;
   }
 
@@ -982,7 +986,8 @@ void bhWall(inout vec3 albedo, inout float rough, inout float metal, inout vec3 
   float litI = lit * glowI;
   bool shopWin = style > 5.5 && style < 6.5;
   // open shops keep their lights on in daytime too
-  if (shopWin) litI = lit * max(glowI, 0.62 + 0.25 * r2);
+  // (and at night stay readable rather than a blown-out glow: the interior detail carries the window)
+  if (shopWin) litI = lit * mix(0.62 + 0.25 * r2, 1.15 + 0.3 * r2, nightF);
   vec3 interior; // lamp-lit radiance seen through the glass
   vec3 dayA;     // daylight-lit albedo seen through the glass
   if (uDetail > 0.5 && shopWin) interior = bhShop(pm, csz, normalize(rd), seed * 1.37 + shopT * 11.0, shopT, litI, lcol, dayA);
@@ -1071,6 +1076,33 @@ void bhWall(inout vec3 albedo, inout float rough, inout float metal, inout vec3 
   rough = mix(0.14, (curtain || ribbon) ? 0.34 : 0.7, frame);
   // metallic mullions on curtain walls pick up the environment (sheen lines between panels)
   metal = (curtain || ribbon) ? frame * 0.7 : 0.0;
+  // closed shops: many pull down a ribbed steel roller shutter (tagged with graffiti on some), a few leave
+  // it half down in the early morning
+  if (shopWin && uWear > 0.5) {
+    float sh = bhHash12(vec2(seed, 4.4));
+    float hs = mod(uHours + 24.0, 24.0);
+    float open = step(sh * 0.5 + 0.25, bhOccupancy(hs, 2.0));
+    float hasShutter = step(sh, 0.62);
+    float half = (1.0 - step(0.5, fract(sh * 7.3))) * bhBump(hs, 6.2, 6.6, 8.2, 8.8);
+    float downTo = mix(wr.w + 0.01, wr.z + (wr.w - wr.z) * 0.55, half);
+    float cover = hasShutter * max(1.0 - open, half) * step(min(downTo, mix(wr.z - 0.01, downTo, half)), pm.y) * step(pm.y, wr.w + 0.02) * step(wr.x - 0.02, pm.x) * step(pm.x, wr.y + 0.02);
+    if (cover > 0.5) {
+      float rib = 0.82 + 0.18 * bhStripe(pm.y / 0.075, fpy / 0.075 * 1.5);
+      vec3 sc = mix(vec3(0.52, 0.53, 0.54), vec3(0.62, 0.6, 0.55), step(0.5, fract(sh * 3.1))) * rib;
+      // graffiti tags: blobby letters in 1–2 colours on the lower half
+      float tagOn = step(0.45, fract(sh * 11.7));
+      vec2 tq = vec2(pm.x * 1.4 + seed, pm.y * 2.2);
+      float tg = smoothstep(0.55, 0.6, texture2D(uBhNoise, tq * 0.09).g * 0.6 + texture2D(uBhNoise, tq * 0.37).a * 0.4) * step(pm.y, wr.z + (wr.w - wr.z) * 0.7) * tagOn;
+      vec3 tc = mix(vec3(0.85, 0.25, 0.3), vec3(0.2, 0.35, 0.75), step(0.5, fract(sh * 5.9)));
+      sc = mix(sc, tc * 0.9, tg * 0.85);
+      sc *= mix(1.0, 0.75, smoothstep(wr.z + 0.6, wr.z, pm.y));   // grime at the bottom
+      albedo = sc;
+      rough = 0.55;
+      metal = 0.35;
+      emit = vec3(0.0);
+      return;
+    }
+  }
   emit += glass * (1.0 - frame) + fcol * crown * 0.4 * frame;
 }
 

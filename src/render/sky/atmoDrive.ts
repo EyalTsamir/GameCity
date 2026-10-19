@@ -22,12 +22,17 @@ export interface AtmosphereService {
   distanceFor(T: number, y: number): number;
   /** true when the fog chunks were replaced (false with ?noatmo / ?diorama) */
   active: boolean;
+  /** 0..1 golden-hour weight of the authored key (evening 17–20 h, dawn) — for the grade */
+  golden(): number;
 }
 
 const RING_N = 12;
 /** sky aerosol relative to the fog's boundary-layer haze (vertical AOD is far smaller than the
  *  horizontal haze suggests; a 1:1 sky turns the noon zenith white) */
-const SKY_HAZE = 0.2;
+const SKY_HAZE = 0.45;
+/** "blue air": the fog's Rayleigh-like part relative to pure Rayleigh (humid air scatters more, still
+ *  bluish) — far ridges step lighter AND bluer instead of milky grey */
+const BLUE_AIR = 1.8;
 /** Mie phase in the LUT: isotropic — the forward peak depends on the TRUE scattering angle, so it lives
  *  in the analytic sun lobe (dome and fog alike), never in the azimuth-only horizon ring */
 const SKY_G = 0;
@@ -38,6 +43,25 @@ const RING_EL = 0.052;
 const _c = new THREE.Color();
 const _g = new THREE.Color();
 const _t = [0, 0, 0];
+
+function smooth(a: number, b: number, x: number): number {
+  const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
+  return t * t * (3 - 2 * t);
+}
+
+/**
+ * Elevation (deg) the sky model uses. The key light of the palette is authored as a LOW golden sun from
+ * ~17.5 h (and a rose dawn) while the true sun is still 15–25° up; the sky follows the authored light so
+ * light, sky colour, clouds and sun-disc colour tell one story. The disc and the glow stay at the true sun.
+ */
+export function goldenHour(hours: number): number {
+  const eve = smooth(16.8, 17.8, hours) * (1 - smooth(19.45, 20.0, hours));
+  const morn = smooth(5.4, 6.0, hours) * (1 - smooth(6.9, 7.7, hours));
+  return Math.max(eve, morn * 0.7);
+}
+export function skyElevationDeg(trueDeg: number, hours: number): number {
+  return trueDeg - goldenHour(hours) * Math.min(10.5, 0.8 * Math.max(0, trueDeg));
+}
 
 function grey(c: THREE.Color, k: number): void {
   const g = c.r * 0.3 + c.g * 0.55 + c.b * 0.15;
@@ -82,6 +106,7 @@ export class AtmosphereDriver {
   private overcast = 0;
   private band0 = 1;
   lutUpdates = 0;
+  golden = 0;
 
   constructor(physical: boolean) {
     this.params.waterY = WATER_LEVEL;
@@ -93,7 +118,7 @@ export class AtmosphereDriver {
       p.sunSin = Math.sin(e);
       p.sunCos = Math.cos(e);
       p.camH = 60;
-      p.haze = 1e-4 * SKY_HAZE;
+      p.haze = 4.5e-5 * SKY_HAZE;
       this.evalCPU();
       this.refNoon = this.refL;
       skyRadiance(p, 0, Math.sin(RING_EL), Math.cos(RING_EL), _c);
@@ -154,12 +179,13 @@ export class AtmosphereDriver {
    * @param sunDir true sun direction (not the lifted light direction)
    * @param sunVis 0..1 sun above the horizon
    */
-  update(renderer: THREE.WebGLRenderer, state: SkyState, sunDir: THREE.Vector3, sunVis: number, overcast: number, camY: number, wind: THREE.Vector2, dt: number): void {
+  update(renderer: THREE.WebGLRenderer, state: SkyState, sunDir: THREE.Vector3, sunVis: number, overcast: number, camY: number, wind: THREE.Vector2, dt: number, hours: number): void {
     const p = this.params;
     this.state = state;
     this.overcast = overcast;
     this.sd.set(sunDir.x, Math.max(sunDir.y, -0.25), sunDir.z).normalize();
     this.band0 = Math.exp(-Math.abs(Math.max(this.sd.y, 0) * 0.35) * 5);
+    this.golden = goldenHour(hours) * smooth(-0.06, 0.02, sunDir.y);
     const haze = state.haze * (1 + overcast * 2.2) * this.hazeK;
 
     // ── physical sky: LUT + CPU twin (only when something moved)
@@ -169,8 +195,9 @@ export class AtmosphereDriver {
     this.nightW = tn * tn * (3 - 2 * tn);
     if (this.lut) {
       const ph = this.phys;
-      ph.sunSin = sh;
-      ph.sunCos = Math.sqrt(Math.max(0, 1 - sh * sh));
+      const el = THREE.MathUtils.degToRad(skyElevationDeg(THREE.MathUtils.radToDeg(Math.asin(Math.max(-1, Math.min(1, sh)))), hours));
+      ph.sunSin = Math.sin(el);
+      ph.sunCos = Math.cos(el);
       ph.camH = Math.min(3000, Math.max(1, camY));
       ph.haze = haze * SKY_HAZE;
       if (this.lut.update(renderer, ph)) {
@@ -213,8 +240,10 @@ export class AtmosphereDriver {
     p.upBlend = 0.3;
 
     p.haze = haze;
-    p.hazeScaleHeight = 1200;
-    p.desat = 0.38;
+    p.hazeScaleHeight = 1000;
+    p.rayleigh.set(5.802e-6, 13.558e-6, 33.1e-6).multiplyScalar(BLUE_AIR * (1 + overcast));
+    p.rayleighScaleHeight = 8000;
+    p.desat = 0.3;
 
     // ground mist: denser in calm air, colour = lit haze (dawn rose / dusk lilac), drifts downwind
     const ws = Math.hypot(wind.x, wind.y);
@@ -245,6 +274,7 @@ export class AtmosphereDriver {
       transmittance: (t, yc, yp) => atmoTransmittance(p, t, yc, yp),
       distanceFor: (T, y) => atmoDistanceFor(p, T, y),
       active,
+      golden: () => this.golden,
     };
   }
 }

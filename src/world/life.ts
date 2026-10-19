@@ -66,6 +66,8 @@ export default function create(ctx: CityContext): CityModule {
     const trees = (ctx.services.vegetation as { trees?: { x: number; z: number; r: number; h: number }[] } | undefined)?.trees ?? [];
     drift = new Drift(ctx, trees, { leaves: q === 'high' ? 320 : q === 'medium' ? 160 : 0, motes: q === 'high' ? 420 : q === 'medium' ? 220 : 0, moths: q === 'low' ? 0 : 60 });
     ctx.scene.add(drift.group);
+    const d = drift;
+    ctx.events.on('timejump', () => d.timejump());
   }
   let lastT = ctx.uniforms.uTime.value;
 

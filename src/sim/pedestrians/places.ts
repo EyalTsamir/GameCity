@@ -11,7 +11,7 @@ import { SIDEWALK_Y, WATER_LEVEL } from '../../core/constants';
 import type { Rng } from '../../core/rng';
 import { buildCafes, type CafePlace, type Terrace } from './cafes';
 import { SEAT_TOP } from './animate';
-import { planStalls, type Stall } from './vendors';
+import { planStalls, marketStalls, type Stall } from './vendors';
 
 export type DoorCat = 'home' | 'shop' | 'office' | 'hotel' | 'industry' | 'civic' | 'school' | 'station' | 'stadium' | 'kiosk' | 'club';
 
@@ -661,7 +661,7 @@ export function buildPlaces(ctx: CityContext, rng: Rng): Places {
   };
 
   const { cafes, terraces } = ctx.debug.params.has('nocafe') ? { cafes: [], terraces: [] } : buildCafes(ctx, districtName);
-  const vendors = ctx.debug.params.has('novendors') ? [] : planStalls(ctx, rng, []);
+  const vendors = ctx.debug.params.has('novendors') ? [] : [...planStalls(ctx, rng, []), ...marketStalls(ctx)];
   const hangouts = ctx.debug.params.has('nohang') ? [] : buildHangouts(ctx, rng, districtName, vendors);
 
   return {
@@ -720,7 +720,7 @@ function buildHangouts(ctx: CityContext, rng: Rng, districtName: (x: number, z: 
     if (a.kind !== 'plaza') continue;
     const r = a.rect;
     const area = (r.x1 - r.x0) * (r.z1 - r.z0);
-    const maxN = Math.min(5, Math.max(1, Math.round(area / 110)));
+    const maxN = Math.min(8, Math.max(1, Math.round(area / 75)));
     const edges = peds.edges.filter((e) => {
       const A = peds.nodes[e.a],
         B = peds.nodes[e.b];
@@ -738,7 +738,7 @@ function buildHangouts(ctx: CityContext, rng: Rng, districtName: (x: number, z: 
           band = Math.min(band, segD(A.x, A.z, B.x, B.z, x, z) - e.halfWidth);
         }
         // close enough to the walkers to read as street life, never in their way
-        if (band < 1.0 || band > 5.5) continue;
+        if (band < 1.0 || band > 7) continue;
         if (lKeep.some((d) => Math.hypot(d.x - x, d.z - z) < d.r + 1.05)) continue;
         cands.push({ x, z, band, key: band + rng.next() * 3 });
       }
@@ -747,7 +747,7 @@ function buildHangouts(ctx: CityContext, rng: Rng, districtName: (x: number, z: 
     let n = 0;
     for (const c of cands) {
       if (n >= maxN) break;
-      if (out.some((o) => Math.hypot(o.x - c.x, o.z - c.z) < 6)) continue;
+      if (out.some((o) => Math.hypot(o.x - c.x, o.z - c.z) < 4.6)) continue;
       // a walkway node with a clear straight walk to it
       let best = -1,
         bd = 10;

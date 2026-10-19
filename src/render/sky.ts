@@ -284,7 +284,7 @@ export default async function create(ctx: CityContext): Promise<CityModule> {
       // sky glow of the lit town (and the villages around): warm, low, only with the street lights on
       atmo.cityGlow.setRGB(1.0, 0.6, 0.32).multiplyScalar(0.045 * ctx.uniforms.uLights.value * (1 - overcast * 0.3) + 0.03 * overcast * ctx.uniforms.uLights.value);
       dome.setCityGlow(atmo.cityGlow);
-      atmo.update(renderer, state, _sunSky, sunVis, overcast, ctx.camera.position.y, ctx.uniforms.uWind.value, clock.speed > 0 ? realDt * clock.speed : 0);
+      atmo.update(renderer, state, _sunSky, sunVis, overcast, ctx.camera.position.y, ctx.uniforms.uWind.value, clock.speed > 0 ? realDt * clock.speed : 0, clock.hours);
       if (atmo.lut) dome.setPhysical(atmo.lut.texture, atmo.skyScale, state.zenith, state.horizon, atmo.nightW, atmo.sunColor, atmo.zenith, atmo.params.ring[0]);
       if (envPhys) {
         envPhys.scale = atmo.skyScale;
@@ -411,6 +411,8 @@ export default async function create(ctx: CityContext): Promise<CityModule> {
       // shadows on the ground from the same field (soft, faded by the haze in front of them)
       cloudShadows.light.copy(_L);
       cloudShadows.strength = shStrength * smooth(0.0, 0.1, cu.uCu.value.x);
+      // under a real cloud only the (blue) sky light remains: darker and cooler than the toy puffs' shade
+      cloudShadows.tint.setRGB(0.44, 0.49, 0.62);
       cloudShadows.haze = atmo.params.haze + atmo.params.rayleigh.y;
     }
     _tmpC.copy(state.cloudShade).lerp(state.fog, 0.4).multiplyScalar(1.3);

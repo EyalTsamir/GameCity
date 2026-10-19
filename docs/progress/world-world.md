@@ -31,8 +31,17 @@
   patches / meadow mottling, poplar shape, rugged island (cliffs all round, a cove with the hamlet), colours
   (stubble, sand, canopy). Stats (subset hero_n before the cuts): 50 dc / 562k tris, landscape land 108k, mtn 85k,
   impostors 16.4k trees, refl +98k (pass total). invariants {}, console clean.
-* Running: m2b (hero_n, vista_w, east_eye, north_far × 11/18.2) + m2b_noatmo (judge my mountain shading).
-* Next: judge m2b; night 21.5; ?diorama check; full-city capture; perf numbers vs noland.
+* 21:20 — lead review of M2 (fields still flat blocks at 150–700 m; beige strip SE of the river = make it
+  meadow; clump trees blob-like; farm life) → done in code: fields split into 2–3 strips/paddocks per parcel
+  (fields.ts fieldAt/fieldsOfParcel = CPU twin of the shader split), tramlines kept ≥1 px, mown swaths, pasture
+  paths, row-crop soil patches, weedy margins + fences between strips, poppy haze in fallow; coastal grazing
+  meadow (no fields within ~260–460 m of the south coast); denser hedgerow trees; broadleaf crown = core + 8
+  shell masses with gaps; landscape/farmlife.ts (herds of cattle/sheep with grazing head-bob in the vertex
+  shader, a tractor working a stubble/ploughed field near the town with a dust trail via the smoke service);
+  chimney smoke for villages/hamlets/some farms (cool hours) via ctx.services.smoke at modules:ready.
+  Lead added POIs vista / country / coast / riverbend (world mode) and world overview = 600 m / pitch 20.
+* Running: m2c (overview, vista, country, coast, riverbend × 11/18.2, subset incl. ambient) + m2c_noatmo.
+* Next: judge m2c; night 21.5; ?diorama check; full-city capture; perf numbers vs noland.
 * Tools: my capture script copy with 20-min load timeout = scratchpad `cap.mjs` (scratchpad is SHARED with other
   agents — keep my files under scratchpad/world* or land/). Offline map tool: scratchpad `land/map.ts` (bundle:
   `npx rolldown land/map.ts --platform node -o land/map.mjs`; `node land/map.mjs x0 z0 x1 z1 N out.bin &&

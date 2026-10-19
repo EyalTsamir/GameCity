@@ -87,6 +87,7 @@ export default function create(ctx: CityContext): CityModule {
     },
     frame() {
       if (riders) riders.sync();
+      if (renderer instanceof CrowdRenderer) renderer.tableware.lights.value = ctx.uniforms.uLights.value;
       if (renderer instanceof CrowdRenderer)
         renderer.write(crowd, ctx.camera, ctx.uniforms.uTime.value, ctx.uniforms.uRain.value, ctx.uniforms.uNight.value, ctx.size.height * ctx.renderer.getPixelRatio(), riders ? riders.list : null, riders ? riders.n : 0);
       else renderer.write(crowd, ctx.camera, ctx.uniforms.uTime.value, ctx.uniforms.uRain.value, ctx.uniforms.uNight.value, ctx.size.height * ctx.renderer.getPixelRatio());

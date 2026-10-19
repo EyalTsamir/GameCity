@@ -18,8 +18,8 @@ const C = (h: string) => ({ value: new THREE.Color(h) });
 export function createPalette() {
   return {
     // mown lawns: deep blue-green ↔ sunny yellow-green ↔ dry, never lime
-    gcLawnLush: C('#4a7836'),
-    gcLawnSun: C('#729440'),
+    gcLawnLush: C('#4c7437'),
+    gcLawnSun: C('#758f45'),
     gcLawnDry: C('#979559'),
     // long grass / meadows: green ↔ olive, straw where dry or in seed
     gcMeadowA: C('#68833e'),

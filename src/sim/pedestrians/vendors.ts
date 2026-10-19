@@ -10,7 +10,7 @@ import type { Rng } from '../../core/rng';
 import { patchLampMaterial } from '../../world/lamps/integrate';
 import type { Spot, SpotPlace } from './places';
 
-export type StallKind = 'icecream' | 'juice' | 'flowers' | 'pretzel';
+export type StallKind = 'icecream' | 'juice' | 'flowers' | 'pretzel' | 'market';
 
 export interface Stall {
   kind: StallKind;
@@ -29,6 +29,10 @@ export interface Stall {
   close: number;
   /** what customers carry away (Member.walkProp: 1 = a cup / cone) */
   label: string;
+  /** market stalls: a shopper is stopped at the counter (where) — refreshed by the vendor */
+  served?: number;
+  cx?: number;
+  cz?: number;
 }
 
 const LABELS: Record<StallKind, [string, string]> = {
@@ -36,7 +40,36 @@ const LABELS: Record<StallKind, [string, string]> = {
   juice: ['Getting a fresh orange juice', 'Orange-juice stand'],
   flowers: ['Buying flowers', 'Flower cart'],
   pretzel: ['Buying a pretzel and a coffee', 'Pretzel & coffee cart'],
+  market: ['Browsing the market stalls', 'market stall'],
 };
+
+/**
+ * The market's stalls (landmarks draw them): a vendor behind each counter (stall frame z −0.15, facing the
+ * aisle); the customers are the shoppers who stop at the stalls on their walk (crowd rail stops).
+ */
+export function marketStalls(ctx: CityContext): Stall[] {
+  const out: Stall[] = [];
+  for (const f of ctx.plan.features) {
+    if (f.kind !== 'marketstall') continue;
+    const yaw = f.yaw ?? 0;
+    const fx = Math.sin(yaw),
+      fz = Math.cos(yaw);
+    out.push({
+      kind: 'market',
+      x: f.x,
+      z: f.z,
+      y: 0,
+      yaw,
+      vx: f.x - fx * 0.15 + fz * 0.2 * ((f.id % 2) * 2 - 1),
+      vz: f.z - fz * 0.15 - fx * 0.2 * ((f.id % 2) * 2 - 1),
+      place: { kind: 'view', node: -1, label: 'Browsing the market stalls', theme: 'market', spots: [], x: f.x + fx * 1.2, z: f.z + fz * 1.2 },
+      open: 7.5,
+      close: 14.5,
+      label: 'market stall',
+    });
+  }
+  return out;
+}
 
 interface Cand {
   x: number;
@@ -285,9 +318,10 @@ function cart(s: Sink, st: Stall, rng: Rng): void {
 
 /** one merged mesh of all the carts (casts shadows; lamp light at night) */
 export function buildStallMesh(stalls: Stall[], rng: Rng): THREE.Mesh | null {
-  if (!stalls.length) return null;
+  if (!stalls.some((st) => st.kind !== 'market')) return null;
   const s = new Sink();
   for (const st of stalls) {
+    if (st.kind === 'market') continue;
     s.m.makeRotationY(st.yaw);
     s.m.setPosition(st.x, st.y, st.z);
     cart(s, st, rng);

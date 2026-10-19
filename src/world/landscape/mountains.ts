@@ -81,7 +81,7 @@ export function buildMountains(model: LandscapeModel, uniforms: Record<string, T
       else if (am >= 270) hA = lerp(L.hW, L.hN, smooth(270, 345, am));
       else hA = L.hN * (1 - smooth(0, 14, am)); // NNE: the range runs out toward the coast
       // massifs and saddles along the range (broad), secondary summits (smaller)
-      const env = (0.62 + 0.45 * fbm(aDeg / 26, L.seed * 3.1, 3, 70 + L.seed)) * (0.82 + 0.3 * ridged(aDeg / 7, L.seed * 1.7, 2, 75 + L.seed));
+      const env = (0.6 + 0.5 * fbm(aDeg / 30, L.seed * 3.1, 3, 70 + L.seed)) * (0.9 + 0.16 * ridged(aDeg / 11, L.seed * 1.7, 2, 75 + L.seed));
       // rolling hills in the S / W, ridged mountains toward the N
       const alp = smooth(285, 335, am < 90 ? am + 360 : am) * Math.min(1, L.seed / 2.5);
       // the far ends dip into the sea / fade
@@ -98,7 +98,10 @@ export function buildMountains(model: LandscapeModel, uniforms: Record<string, T
         // across-range profile: a broad massif rising to the crest, falling behind it
         const prof = t < 0.5 ? Math.pow(Math.sin((t / 0.5) * Math.PI * 0.5), 0.9) : Math.pow(Math.cos(((t - 0.5) / 0.5) * Math.PI * 0.5), 0.7);
         // relief across the layer: ridged (valleys and spurs) in the mountains, soft fbm in the hills
-        const rr = ridged(x / L.scale, z / L.scale, 4, 80 + L.seed);
+        // domain-warped ridges at two scales: massifs with spurs and gullies, no row of lone cones
+        const wx = x + L.scale * 0.35 * fbm(x / (L.scale * 1.3), z / (L.scale * 1.3), 2, 86 + L.seed);
+        const wz = z + L.scale * 0.35 * fbm(z / (L.scale * 1.3) + 5.2, x / (L.scale * 1.3), 2, 87 + L.seed);
+        const rr = 0.62 * ridged(wx / L.scale, wz / L.scale, 4, 80 + L.seed) + 0.38 * ridged(wx / (L.scale * 0.42), wz / (L.scale * 0.42), 3, 88 + L.seed);
         const ff = 0.5 + 0.5 * fbm(x / L.scale, z / L.scale, 3, 85 + L.seed);
         const rel = lerp(0.55 + 0.45 * ff, 0.4 + 0.6 * rr, alp);
         const fine = 1 + 0.08 * fbm(x / (L.scale * 0.15), z / (L.scale * 0.15), 3, 90 + L.seed);

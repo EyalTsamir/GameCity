@@ -71,6 +71,8 @@ export interface LandscapeModel {
   river(x: number, z: number, out: { d: number; halfW: number; s: number; tx: number; tz: number; side?: number }): boolean;
   /** forest canopy density 0..1 (h = ground height at the point) */
   forestAt(x: number, z: number, h: number): number;
+  /** 0..1: the low coastal strip south of the town is grazing land (pasture / hay parcels only) */
+  grazing(x: number, z: number, sd?: number): number;
   /** coast profile 0 beach … 1 cliff */
   cliffness(x: number, z: number): number;
   /** index of the settlement covering (x, z) within `pad` m of its radius, or -1 */
@@ -196,8 +198,8 @@ function buildSites(model: { world0(x: number, z: number): number; isWaterW(x: n
       if (Math.hypot(x - CX, z - CZ) > 3600) continue;
       if (model.isWaterW(x, z) || model.isWaterW(x + 30, z) || model.isWaterW(x - 30, z) || model.isWaterW(x, z + 30) || model.isWaterW(x, z - 30)) continue;
       if (sites.some((s) => Math.hypot(s.x - x, s.z - z) < s.r + 120)) continue;
-      // northern hills are forest: farms only on the lower slopes
-      if (z < -420 && x > -900) continue;
+      // northern hills are forest (a continuous wood behind the town's ridge): farms only further west
+      if (z < -200 && x > -700) continue;
       const h0 = model.world0(x, z);
       if (h0 > 70) continue;
       sites.push({ kind: 'farm', x, z, r: 34, seed: seed++ });
@@ -443,9 +445,7 @@ export function createLandscapeModel(slabHeight: SlabHeight): LandscapeModel {
     const settled = siteAt(x, z, 0) >= 0;
     const arable = (1 - out.forest) * (1 - out.sand) * (1 - out.rock) * (1 - wet) * (1 - smooth(0.12, 0.3, slope)) * (1 - out.water);
     const north = smooth(-300, -600, z) * (x > -900 ? 1 : 0.3);
-    // the low coastal strip south of the town is grazing marsh / meadow, not arable
-    const coastal = z > 120 && z < 1100 ? 1 - smooth(260, 460, sd) : 0;
-    out.field = settled ? 0 : arable * (1 - north) * (1 - smooth(180, 320, h)) * (1 - coastal);
+    out.field = settled ? 0 : arable * (1 - north) * (1 - smooth(180, 320, h));
     out.meadow = Math.max(0, (1 - out.water) * (1 - out.forest) * (1 - out.sand) - out.field - out.rock * 0.7);
     return out;
   };
@@ -484,6 +484,7 @@ export function createLandscapeModel(slabHeight: SlabHeight): LandscapeModel {
     world,
     forestAt: (x, z, h) => (siteAt(x, z, 25) >= 0 ? 0 : forestAt(x, z, h)),
     cliffness: (x, z) => cliffness(z, x),
+    grazing: (x, z, sd) => (z > 120 && z < 1100 ? 1 - smooth(260, 460, sd ?? coastSD(x, z)) : 0),
     siteAt,
     waterLevel,
     isWater,

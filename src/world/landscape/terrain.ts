@@ -109,6 +109,7 @@ export function buildLand(
       cover[k + 8] = rq.d - rq.halfW;
       cover[k + 10] = rq.side ?? 1;
     } else cover[k + 8] = 60;
+    cover[k + 11] = model.grazing(x, z);
     cover[k + 9] = model.slabDist(x, z);
   }
   // ── raise the canopy, final normals

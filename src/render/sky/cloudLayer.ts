@@ -142,33 +142,36 @@ uniform vec4 uCu;
 uniform vec4 uCi;
 uniform vec2 uCloudWind;
 const float CL_RG = 6360e3;
-// cumulus density 0..1 at world xz (m); lod = extra mip bias for distant samples
+// cumulus density 0..1 at world xz (m); lod = extra mip bias for distant samples.
+// Placement first (one cloud per ~1.7 km noise cell, how many of them host one = coverage, varied by large
+// weather patches), then the billowy body and cauliflower rims — fair-weather cumulus are ~0.5–2 km
+// clouds with clear gaps between them, never a scatter of tiny flakes.
 float cuDensity(vec2 xz, float lod) {
   vec2 drift = uCloudWind * uCu.w;
   vec2 p = (xz - drift) / uCu.z;
-  // large weather patches (clear gaps / cloud streets), domain-warped billows
-  vec4 wx = textureLod(tCloudNoise, p * 0.17 + vec2(0.31, 0.77), lod);
-  vec2 warp = (vec2(wx.r, wx.a) - 0.5) * 0.35;
-  vec4 n1 = textureLod(tCloudNoise, p + warp, lod);
-  vec4 n2 = textureLod(tCloudNoise, p * 2.3 + warp * 1.7 + vec2(0.53, 0.19), lod + 0.5);
-  float billow = n1.g * 0.62 + n2.g * 0.38;
-  float shape = billow * 0.75 + n1.r * 0.25;
-  float cov = clamp(uCu.x * (0.45 + 1.1 * smoothstep(0.3, 0.75, wx.a)), 0.0, 1.0);
-  float d = clamp((shape - (1.0 - cov)) / max(0.12, 0.35 * (1.0 - cov) + 0.05), 0.0, 1.0);
-  // erode the rims with fine detail (cauliflower edges)
-  d = clamp(d - (1.0 - d) * (n2.b - 0.45) * 0.9, 0.0, 1.0);
-  return d;
+  vec4 wx = textureLod(tCloudNoise, p * 0.13 + vec2(0.31, 0.77), lod + 1.0);
+  vec2 warp = (vec2(wx.r, wx.a) - 0.5) * 0.3;
+  vec4 c = textureLod(tCloudNoise, p * 0.5 + warp, lod);
+  float cov = clamp(uCu.x * (0.35 + 1.3 * smoothstep(0.3, 0.72, wx.a)), 0.0, 1.0);
+  float body = c.g * 0.8 + c.r * 0.35 - 0.12;
+  float th = 1.0 - cov;
+  float place = smoothstep(th - 0.06, th + 0.24, body);
+  if (place <= 0.0) return 0.0;
+  vec4 b = textureLod(tCloudNoise, p * 1.9 + warp * 1.5 + vec2(0.53, 0.19), lod + 0.4);
+  float d = place * (0.72 + 0.45 * b.g) - (1.0 - place) * (0.62 - 0.5 * b.g) - 0.14 * (b.b - 0.5);
+  return clamp(d * 1.35, 0.0, 1.0);
 }
-// cirrus: thin streaks stretched along the wind
+// cirrus: broad veils with fibres stretched along the wind (opacity texture, never thresholded detail)
 float ciDensity(vec2 xz, float lod) {
   vec2 w = uCloudWind;
   vec2 q = vec2(dot(xz, w), dot(xz, vec2(-w.y, w.x)));
   q.x -= uCu.w * 1.8;
-  vec2 p = q / uCi.z * vec2(0.35, 1.6);
-  vec4 n1 = textureLod(tCloudNoise, p + vec2(0.13, 0.41), lod);
-  vec4 n2 = textureLod(tCloudNoise, p * vec2(3.1, 1.3) + n1.ra * 0.4, lod + 0.5);
-  float s = n1.a * 0.6 + n2.r * 0.4;
-  return clamp((s - (1.0 - uCi.x)) * 3.0, 0.0, 1.0) * smoothstep(0.2, 0.7, n2.a);
+  vec2 p = q / uCi.z;
+  vec4 n1 = textureLod(tCloudNoise, p * vec2(0.45, 1.1) + vec2(0.13, 0.41), lod);
+  float veil = smoothstep(1.0 - uCi.x, 1.0 - uCi.x + 0.4, n1.a * 0.75 + n1.r * 0.25);
+  if (veil <= 0.0) return 0.0;
+  vec4 n2 = textureLod(tCloudNoise, p * vec2(1.1, 6.5) + n1.rg * 0.35, lod + 0.3);
+  return veil * (0.45 + 0.55 * n2.r);
 }
 // distance from the camera (height camH) along unit dir to a shell at altitude alt; < 0: no hit
 float clShell(float camH, vec3 d, float alt) {

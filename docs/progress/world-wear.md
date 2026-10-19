@@ -67,6 +67,26 @@ stains/gum/broken slabs. Props: rust / chips / stickers in the furniture materia
 Toggles (planned): `?nowear` (all new wear masks off), `?nogreen` (balcony greenery mesh), `?noclutter`
 (new facade / roof clutter), `?nopuddles`.
 
+## Iterations (captures under shots/world/wear/)
+* before / before2 = baseline 5174 (same subset). it1/it2 partial (it2 invalid: TDZ bug → townhouses threw).
+* it3 (old town, 11 + 21.5): big step at eye level — window boxes with trailing petunias/ivy, Juliet
+  balconies, balconies with pots / palms / bougainvillea, hanging pot brackets, shutters, dishes, downpipes,
+  kerbside café tables (21) + A-frames, shop interiors readable by day (Tailor shelves), hotel balconies all
+  green from the overview, ivy on side walls. Problems found → fixed: footprint violations (climbers past the
+  corners, palm clumps 1.7 m out, back-wall downpipes on non-inset walls), peeling render = round "polka dots"
+  (now ragged, concentrated at the foot / under copings), shop windows blown out at night (toned), night test
+  subset lacked the `lamps` module (no lamp map → no pools, no puddle glints).
+* it4 running: same views + downtown plaza, with `lamps`.
+
+## Perf notes (it3 stats, full old-town subset)
+* buildings: trim 140.3k → 203.7k tris (+63k: railings, plants pots, chairs, bikes, AC, dishes, pipes, roof
+  clutter), new `buildings-green` 14.9k tris (alpha-tested cards, +1 dc + shadow pass), `buildings-laundry`
+  (+1 dc until life hides it). props: −4k (planter blobs → cards), new `props-green` (+1 dc, no shadow),
+  `props-laundry` (+1 dc until hidden). Draw calls otfac 69 → 72 (other agents' changes included).
+* GPU estimate (Adreno X1-45, high): vertex ≈ +0.1 ms (≈ +80k tris main + shadow), wall wear +1 fetch +ALU
+  on facade pixels ≈ +0.05–0.1 ms, shop interiors only on shop glass, road litter/puddles/wear ALU on near
+  ground pixels ≈ +0.1 ms → ≈ 0.3–0.4 ms (budget 0.5).
+
 ## Milestones
 * [x] M1 services (buildings anchors + café seats) → lead messaged. Life/streetlife requests folded in:
   laundry wires, kitchen vents, bbqs, rotary dryers, discs, cafes in streetlife's shape, setStaticLaundry().

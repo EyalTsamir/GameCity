@@ -187,6 +187,8 @@ vec3 landAlbedo() {
       }
       ch = lhash(pid, 17);
     }
+    // grazing land along the southern coast: pastures, hay meadows, fallow (same remap as fields.ts)
+    if (vCov3.w > 0.5) ch = ch < 0.6 ? 0.48 + ch * 0.3 : ch < 0.85 ? 0.66 + (ch - 0.6) * 0.4 : 0.83 + (ch - 0.85) * 0.5;
     float dx0 = q.x - box.x, dx1 = box.z - q.x, dy0 = q.y - box.y, dy1 = box.w - q.y;
     float dB = min(min(dx0, dx1), min(dy0, dy1));
     // distance to the parcel's own (hedged / tracked) borders

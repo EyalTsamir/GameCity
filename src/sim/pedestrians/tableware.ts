@@ -21,6 +21,7 @@ export const TW = {
   CROISSANT: 9,
   BOTTLE: 10,
   ICED: 11,
+  CANDLE: 12,
 } as const;
 
 interface PartSpec {
@@ -85,6 +86,9 @@ function parts(): PartSpec[] {
     g.translate(0.07, 0.02, 0.12);
     add(TW.CROISSANT, g, '#c98a3c');
   }
+  // tea light in a little glass (evenings; glows with the street lights)
+  add(TW.CANDLE, cyl(0.026, 0.028, 0.05, 8, -0.07, 0, 0.26, false), '#e9d9b8');
+  add(TW.CANDLE, cyl(0.02, 0.02, 0.001, 8, -0.07, 0.035, 0.26), '#ffcf7a');
   // bottle (one per table, stands towards the middle)
   add(TW.BOTTLE, cyl(0.032, 0.032, 0.17, 8, 0.08, 0, 0.27), '#2e5a3a');
   add(TW.BOTTLE, cyl(0.012, 0.03, 0.07, 8, 0.08, 0.17, 0.27), '#2e5a3a');
@@ -140,6 +144,8 @@ export class Tableware {
   private rng2 = { start: 0, count: 0 };
   n = 0;
   readonly tris: number;
+  /** street-lights factor (globalUniforms.uLights): the tea lights glow with it */
+  readonly lights = { value: 0 };
 
   constructor(capacity: number) {
     this.capacity = capacity;
@@ -157,13 +163,16 @@ export class Tableware {
     this.geo = geo;
     const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.35, metalness: 0 });
     mat.onBeforeCompile = (sh) => {
+      sh.uniforms.uLights = this.lights;
       sh.vertexShader = sh.vertexShader
         .replace(
           '#include <common>',
           `#include <common>
 attribute vec4 iRoot;
 attribute float iMask;
-attribute float aPart;`,
+attribute float aPart;
+uniform float uLights;
+varying float vTwGlow;`,
         )
         .replace(
           '#include <beginnormal_vertex>',
@@ -175,10 +184,14 @@ objectNormal = vec3(twC * objectNormal.x + twS * objectNormal.z, objectNormal.y,
           '#include <begin_vertex>',
           `vec3 transformed = vec3(twC * position.x + twS * position.z, position.y, -twS * position.x + twC * position.z) + iRoot.xyz;
 // parts not in this setting's mask collapse to a point (degenerate triangles)
-if (mod(floor(iMask / exp2(aPart)), 2.0) < 0.5) transformed = iRoot.xyz;`,
+if (mod(floor(iMask / exp2(aPart)), 2.0) < 0.5) transformed = iRoot.xyz;
+vTwGlow = abs(aPart - ${TW.CANDLE}.0) < 0.5 ? uLights : 0.0;`,
         );
+      sh.fragmentShader = sh.fragmentShader
+        .replace('#include <common>', '#include <common>\nvarying float vTwGlow;')
+        .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += diffuseColor.rgb * vTwGlow * 2.5;');
     };
-    mat.customProgramCacheKey = () => 'tableware1';
+    mat.customProgramCacheKey = () => 'tableware2';
     patchLampMaterial(mat);
     this.mesh = new THREE.Mesh(geo, mat);
     this.mesh.frustumCulled = false;
@@ -252,6 +265,7 @@ export function settingMask(seed: number, meal: number, hours: number, first: bo
     else if (r2 < 0.25) m |= bit(TW.WATER);
   }
   if (first && evening && r2 > 0.6) m |= bit(TW.BOTTLE);
+  if (first && (hours >= 18.3 || hours < 2)) m |= bit(TW.CANDLE);
   return m;
 }
 

@@ -357,7 +357,7 @@ export function createSmoke(ctx: CityContext): SmokeSystem {
     const i = free[--freeTop];
     alive[i] = 1;
     bornFlag[i] = 1;
-    born[bornLen++] = i;
+    if (bornLen < MAX) born[bornLen++] = i;
     spawnedTotal++;
     const s = o.size * rng.range(0.8, 1.2);
     const rise = o.rise * rng.range(0.85, 1.15);
@@ -472,77 +472,98 @@ export function createSmoke(ctx: CityContext): SmokeSystem {
 
   const density = () => 0.6 + 0.4 * Math.min(1, Math.max(0.4, ctx.quality.density));
   const softOff = ctx.debug.params.has('nosoftsmoke');
+  /** seconds of plume history to fast-forward on the next update (start-up, time jumps) */
+  let prewarm = 14;
+  ctx.events.on('timejump', () => {
+    prewarm = 14;
+  });
+
+  const advance = (dt: number): void => {
+    // integrate the living
+    for (let i = 0; i < MAX; i++) if (alive[i] && !bornFlag[i]) step(i, dt);
+    for (let k = 0; k < bornLen; k++) {
+      const i = born[k];
+      if (alive[i]) step(i, dt);
+    }
+    // distance LOD per emitter (fewer, larger puffs far from the camera), then keep the whole city
+    // inside the shared budget: scale every emitter's rate together
+    const ce = ctx.camera.matrixWorld.elements;
+    let expected = 0;
+    for (const e of emitters) {
+      if (e.hasPrev) {
+        const d = Math.hypot(e.cur.x - ce[12], e.cur.y - ce[13], e.cur.z - ce[14]);
+        e.lod = Math.min(1, Math.max(0.28, 120 / Math.max(1, d)));
+      }
+      if (e.active && !e.failed) expected += e.rate * e.lod * e.life;
+    }
+    const dens = density();
+    expected *= dens;
+    rateScale = expected > 0 ? Math.min(1, (budget() * 0.9) / expected) : 1;
+    // emit
+    for (const e of emitters) {
+      if (e.failed) continue;
+      let res: void | boolean;
+      try {
+        res = e.getPosition(tmp);
+      } catch (err) {
+        e.failed = true;
+        if (ctx.debug.enabled) console.warn('[ambient] smoke emitter getPosition threw — disabled', err);
+        continue;
+      }
+      if (res === false || !Number.isFinite(tmp.x + tmp.y + tmp.z)) {
+        e.active = false;
+        e.hasPrev = false;
+        continue;
+      }
+      e.active = true;
+      e.cur.copy(tmp);
+      if (!e.hasPrev) {
+        e.prev.copy(tmp);
+        e.hasPrev = true;
+      }
+      e.phase += dt * 0.12;
+      const mod = 0.8 + 0.2 * Math.sin(e.phase) + 0.12 * Math.sin(e.phase * 3.7);
+      e.acc += e.rate * e.lod * rateScale * dens * mod * dt;
+      let n = Math.floor(e.acc);
+      e.acc -= n;
+      if (n > 0) {
+        if (n > 40) n = 40;
+        emitOpts.size = e.size * (1 + (1 - Math.min(1, rateScale * dens)) * 0.35) / Math.pow(e.lod, 0.4);
+        emitOpts.life = e.life;
+        emitOpts.rise = e.rise;
+        emitOpts.glow = e.glow;
+        emitOpts.opacity = e.opacity;
+        emitOpts.color.copy(e.color);
+        for (let k = 0; k < n; k++) {
+          const f = (k + rng.next()) / n;
+          const x = e.prev.x + (e.cur.x - e.prev.x) * f,
+            y = e.prev.y + (e.cur.y - e.prev.y) * f,
+            z = e.prev.z + (e.cur.z - e.prev.z) * f;
+          spawn(x, y, z, (1 - f) * dt, emitOpts);
+        }
+      }
+      e.prev.copy(e.cur);
+    }
+  };
 
   return {
     service,
     mesh,
     update(dt) {
       if (dt <= 0) return;
-      // integrate the living
-      for (let i = 0; i < MAX; i++) if (alive[i] && !bornFlag[i]) step(i, dt);
-      for (let k = 0; k < bornLen; k++) {
-        const i = born[k];
-        if (alive[i]) step(i, dt);
+      if (prewarm > 0) {
+        // fast-forward the plumes (start-up and after every time jump) so they appear fully formed
+        const p = prewarm;
+        prewarm = 0;
+        for (let t = 0; t < p; t += 0.25) {
+          advance(0.25);
+          for (let k = 0; k < bornLen; k++) bornFlag[born[k]] = 0;
+          bornLen = 0;
+        }
+        orderLen = 0;
+        for (let i = 0; i < MAX; i++) if (alive[i]) order[orderLen++] = i;
       }
-      // distance LOD per emitter (fewer, larger puffs far from the camera), then keep the whole city
-      // inside the shared budget: scale every emitter's rate together
-      const ce = ctx.camera.matrixWorld.elements;
-      let expected = 0;
-      for (const e of emitters) {
-        if (e.hasPrev) {
-          const d = Math.hypot(e.cur.x - ce[12], e.cur.y - ce[13], e.cur.z - ce[14]);
-          e.lod = Math.min(1, Math.max(0.28, 120 / Math.max(1, d)));
-        }
-        if (e.active && !e.failed) expected += e.rate * e.lod * e.life;
-      }
-      const dens = density();
-      expected *= dens;
-      rateScale = expected > 0 ? Math.min(1, (budget() * 0.9) / expected) : 1;
-      // emit
-      for (const e of emitters) {
-        if (e.failed) continue;
-        let res: void | boolean;
-        try {
-          res = e.getPosition(tmp);
-        } catch (err) {
-          e.failed = true;
-          if (ctx.debug.enabled) console.warn('[ambient] smoke emitter getPosition threw — disabled', err);
-          continue;
-        }
-        if (res === false || !Number.isFinite(tmp.x + tmp.y + tmp.z)) {
-          e.active = false;
-          e.hasPrev = false;
-          continue;
-        }
-        e.active = true;
-        e.cur.copy(tmp);
-        if (!e.hasPrev) {
-          e.prev.copy(tmp);
-          e.hasPrev = true;
-        }
-        e.phase += dt * 0.12;
-        const mod = 0.8 + 0.2 * Math.sin(e.phase) + 0.12 * Math.sin(e.phase * 3.7);
-        e.acc += e.rate * e.lod * rateScale * dens * mod * dt;
-        let n = Math.floor(e.acc);
-        e.acc -= n;
-        if (n > 0) {
-          if (n > 40) n = 40;
-          emitOpts.size = e.size * (1 + (1 - Math.min(1, rateScale * dens)) * 0.35) / Math.pow(e.lod, 0.4);
-          emitOpts.life = e.life;
-          emitOpts.rise = e.rise;
-          emitOpts.glow = e.glow;
-          emitOpts.opacity = e.opacity;
-          emitOpts.color.copy(e.color);
-          for (let k = 0; k < n; k++) {
-            const f = (k + rng.next()) / n;
-            const x = e.prev.x + (e.cur.x - e.prev.x) * f,
-              y = e.prev.y + (e.cur.y - e.prev.y) * f,
-              z = e.prev.z + (e.cur.z - e.prev.z) * f;
-            spawn(x, y, z, (1 - f) * dt, emitOpts);
-          }
-        }
-        e.prev.copy(e.cur);
-      }
+      advance(dt);
     },
     frame() {
       // compact the draw order (drop the dead & the newborn, then append the newborn)

@@ -290,25 +290,20 @@ export function buildCafes(ctx: CityContext, districtName: (x: number, z: number
       const T = tables[ti];
       const seats = seatsOf[mi];
       if (!seats.length || !bands.length) return;
-      // nearest entry point (walking) from the table: sum over its seats of the walk from each seat
-      const cost = new Float32Array(bands.length);
-      const reach = new Uint8Array(bands.length);
-      for (const st of seats) {
-        dijkstra(blocked, NX, NZ, cellOf(st.sx, st.sz), dist, prev, MAX_WALK);
-        for (let q = 0; q < bands.length; q++) {
-          const d = dist[cellOf(bands[q].x, bands[q].z)];
-          if (isFinite(d)) {
-            cost[q] += d;
-            reach[q]++;
-          }
-        }
-      }
+      // nearest entry point (walking) from the table: one search from all its standing points at once
+      dijkstra(blocked, NX, NZ, seats.map((st) => cellOf(st.sx, st.sz)), dist, prev, MAX_WALK);
       let best = -1;
-      for (let q = 0; q < bands.length; q++) if (reach[q] === seats.length && (best < 0 || cost[q] < cost[best])) best = q;
+      for (let q = 0; q < bands.length; q++) {
+        const d = dist[cellOf(bands[q].x, bands[q].z)];
+        if (isFinite(d) && (best < 0 || d < dist[cellOf(bands[best].x, bands[best].z)])) best = q;
+      }
       if (best < 0) return;
       const bp = bands[best];
       // paths: from the entry point to every seat's standing point
-      dijkstra(blocked, NX, NZ, cellOf(bp.x, bp.z), dist, prev, MAX_WALK);
+      dijkstra(blocked, NX, NZ, [cellOf(bp.x, bp.z)], dist, prev, MAX_WALK);
+      let unreached = false;
+      for (const st of seats) if (!isFinite(dist[cellOf(st.sx, st.sz)])) unreached = true;
+      if (unreached) return;
       for (const st of seats) {
         const pts: [number, number][] = [];
         for (let c = cellOf(st.sx, st.sz); c >= 0; c = prev[c]) pts.push([cx(c % NX), cz(Math.floor(c / NX))]);
@@ -428,7 +423,7 @@ export function buildCafes(ctx: CityContext, districtName: (x: number, z: number
       if (sc >= 0) {
         const sx = cx(sc % NX),
           sz = cz(Math.floor(sc / NX));
-        dijkstra(blocked, NX, NZ, sc, dist, prev, 30);
+        dijkstra(blocked, NX, NZ, [sc], dist, prev, 30);
         const ty = mine[0].y - 0.02;
         const T: Terrace = { id: terraces.length, x: sx, z: sz, y: ty, yaw: Math.atan2(mx - sx, mz - sz), cafes: [] };
         for (const c of mine) {
@@ -483,12 +478,16 @@ function segDist(ax: number, az: number, bx: number, bz: number, px: number, pz:
   return Math.hypot(px - (ax + t * dx), pz - (az + t * dz));
 }
 
-/** 8-connected Dijkstra from cell s0 over the free cells (no corner cutting), up to maxD metres */
-function dijkstra(blocked: Uint8Array, NX: number, NZ: number, s0: number, dist: Float32Array, prev: Int32Array, maxD: number): void {
+/** 8-connected Dijkstra from the source cells over the free cells (no corner cutting), up to maxD metres */
+function dijkstra(blocked: Uint8Array, NX: number, NZ: number, src: number[], dist: Float32Array, prev: Int32Array, maxD: number): void {
   dist.fill(Infinity);
   prev.fill(-1);
-  const heap: number[] = [s0];
-  dist[s0] = 0;
+  const heap: number[] = [];
+  for (const s0 of src) {
+    if (s0 < 0 || dist[s0] === 0) continue;
+    dist[s0] = 0;
+    heap.push(s0);
+  }
   const free = (i: number, j: number) => i >= 0 && j >= 0 && i < NX && j < NZ && !blocked[j * NX + i];
   while (heap.length) {
     const top = heap[0];

@@ -27,6 +27,19 @@ Owner: **air** agent (world round). Files: `src/render/**` except `src/render/st
 * M5 partly: ladder steps grass-0.7 / leaf-0.65 / detail-low via groundcover.setDensity /
   vegetation.setLeafDistance (postfx/adaptive.ts + postfx.ts applyDetail).
 * m2b noon judged (m2b_sheet11.png): land haze good (blue-grey layers), sky band still pale/whitish.
+* 21:05 (2nd container restart ~20:49; files intact). Lead/world feedback acted on:
+  (1) noon haze milky grey, ridges don't separate → atmosphere is now TWO components: "blue air"
+  (Rayleigh ×1.8, per channel, 8 km scale height) + aerosol (grey, 1 km scale height, much lower:
+  noon 4.5e-5, golden 1–1.5e-4, dawn 1.6e-4) — slot thAtmo[11] = (aerosol, 1/H, 0, 0);
+  (2) daytime "specks" = tiny cumulus fragments → cumulus = placement per ~1.7 km cell × billows,
+  cirrus = veils with fibres; (3) world POIs (vista/country/coast/riverbend, overview pitch 20) noted;
+  landscape.setTreeDetail joined the ladder's leaf steps.
+* Running: sky2 (skycap, hz_n/hz_w/up_ne/hz_e × 11/18.2/19.3/21.5) and m3a (vista/overview/coast × 11/18.2)
+  — queued behind other agents' captures (3 lock slots full).
+* Since then (typechecks): golden-hour sky elevation remap (`skyElevationDeg` in atmoDrive: the sky model
+  follows the palette's low golden key 17–20 h / rose dawn; disc + glow stay at the true sun);
+  new `postfx/sunShafts.ts` (quarter-res mask + 28-tap radial blur, only while a low sun is on/near the
+  screen; `?noshafts`), wired after tilt / before bloom; Milky Way + city sky glow in the world dome.
 * Before set (5174) incomplete: only overview_11 + ot_eye_11 exist → re-run later when the box is idle.
 
 ## Brief (WORLD-PLAN scope 2 + lead notes)

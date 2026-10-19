@@ -425,7 +425,7 @@ export function buildCoverMaps(ctx: CityContext): CoverMaps {
       len *= 1 - smooth(0.1, 0.5, wear) * 0.7; // trampled grass stays short
       // the slab's west / south edges hand over to the landscape's meadows: unmown margin
       const dEdge = Math.min(x - SLAB.x0, SLAB.z1 - z);
-      if (dEdge < 10) len = Math.max(len, 0.72 * (1 - smooth(3, 10, dEdge)));
+      if (dEdge < 18) len = Math.max(len, 0.72 * (1 - smooth(4, 15, dEdge + (nA[1] - 0.5) * 6)));
       // habitat: wet shores (natural banks only) and dunes
       let hab = 0;
       if ((pondish || mouth) && above > -0.5 && above < 0.6 && (o & HARD) === 0) {

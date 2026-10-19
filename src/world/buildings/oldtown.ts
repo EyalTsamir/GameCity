@@ -204,6 +204,8 @@ export function genTownhouse(g: Gen): void {
     });
   };
 
+  /** inset of the body from the footprint on the side sg lies on (room for things below 2.4 m) */
+  const sideIns = (sg: SideGeom): number => (sg.nz > 0.5 ? ins[FRONT] : sg.nz < -0.5 ? ins[BACK] : sg.nx > 0.5 ? ins[RIGHT] : ins[LEFT]);
   let shopName: string | null = null;
   /** windows (row:col) that already carry a balcony — no window box there */
   let skipBox = new Set<string>();
@@ -423,10 +425,10 @@ export function genTownhouse(g: Gen): void {
       const kind = rng.weighted([GREEN.IVY_WALL, GREEN.BOUGAIN, GREEN.JASMINE], [2, 1.6, 0.8]);
       const atDoor = kind === GREEN.BOUGAIN && !shop;
       const cu = atDoor ? doorU + (rng.chance(0.5) ? -1 : 1) * (dw / 2 + 0.45) : rng.chance(0.5) ? uA + 0.7 : uB - 0.7;
-      climber(g, sg, cu, rng.range(1.0, 2.4), Math.min(eave - 0.6, gH + rng.range(0.5, 1.6) * fH), INS, kind);
+      climber(g, sg, cu, rng.range(1.0, 2.4), Math.min(eave - 0.6, gH + rng.range(0.5, 1.6) * fH), ins[FRONT], kind);
     }
     // services on the front: a downpipe at one end of the gutter, maybe an AC unit or a dish up top
-    if (lot.roof !== 'flat' && rng.chance(0.75)) downpipe(g, sg, rng.chance(0.5) ? uA + 0.18 : uB - 0.18, eave - 0.15);
+    if (lot.roof !== 'flat' && ins[FRONT] > 0.1 && rng.chance(0.75)) downpipe(g, sg, rng.chance(0.5) ? uA + 0.18 : uB - 0.18, eave - 0.15, undefined, ins[FRONT]);
     if (gr.n > 0 && gr.m > 1 && rng.chance(0.22)) dish(g, sg, rng.chance(0.5) ? uA + 0.5 : uB - 0.5, eave - 1.2, 0.02);
   }
 
@@ -506,7 +508,7 @@ export function genTownhouse(g: Gen): void {
     // old ivy on exposed side / back walls
     if (rng.chance(isBack ? 0.3 : 0.22) && len > 3) {
       const w = rng.range(1.6, Math.min(5, len - 0.6));
-      climber(g, sg, uA + 0.3 + w / 2 + rng.next() * Math.max(0, len - w - 0.6), w, rng.range(3.5, Math.max(4, eave - 0.8)), INS, rng.chance(0.75) ? GREEN.IVY_WALL : GREEN.JASMINE);
+      climber(g, sg, uA + 0.3 + w / 2 + rng.next() * Math.max(0, len - w - 0.6), w, rng.range(3.5, Math.max(4, eave - 0.8)), sideIns(sg), rng.chance(0.75) ? GREEN.IVY_WALL : GREEN.JASMINE);
     }
     // ground floor
     const n0 = Math.max(1, Math.min(4, Math.round((len - 0.8) / 2.7)));
@@ -528,7 +530,7 @@ export function genTownhouse(g: Gen): void {
       }
       if (isBack && rng.chance(0.3)) dish(g, sg, rng.chance(0.5) ? uA + 0.45 : uB - 0.45, eave - 1.0, 0.02);
     }
-    if (isBack && lot.roof !== 'flat' && rng.chance(0.6)) downpipe(g, sg, rng.chance(0.5) ? uA + 0.18 : uB - 0.18, eave - 0.15);
+    if (isBack && lot.roof !== 'flat' && sideIns(sg) > 0.1 && rng.chance(0.6)) downpipe(g, sg, rng.chance(0.5) ? uA + 0.18 : uB - 0.18, eave - 0.15, undefined, sideIns(sg));
     setCol(t, trimC);
     if (!isBack || fullSide) sideBox(t, sg, uA, uB, 0, 0.12, gH - 0.02, gH + 0.16, true);
     if (lot.roof !== 'flat') sideBox(t, sg, uA, uB, 0, 0.18, eave - 0.3, eave - 0.12, true);

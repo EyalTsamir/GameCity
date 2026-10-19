@@ -14,7 +14,7 @@
 import * as THREE from 'three';
 import type { LandscapeModel } from './model';
 import { WL, CX, CZ } from './model';
-import { FROW, toField, fromField, rowB, colB, colOff, colW, rowHedge, colHedge, lhash, parcelAt, type Parcel } from './fields';
+import { FROW, toField, fromField, rowB, colB, colOff, colW, rowHedge, colHedge, lhash, fieldsOfParcel, grazeCrop } from './fields';
 import { hash2i, vnoise, smooth } from './noise';
 import { WIND_GLSL } from '../../core/wind';
 import { SLAB } from '../../core/constants';
@@ -27,7 +27,7 @@ const NEAR_R = 125;
 /** rebuild the near set after the camera moved this far (m) */
 const NEAR_STEP = 18;
 /** per-kind cap of 3D instances */
-const NEAR_CAP = [1600, 1600, 500, 3000];
+const NEAR_CAP = [1100, 1500, 500, 3000];
 const TILE = 64;
 
 export interface TreeList {
@@ -181,7 +181,7 @@ export function placeTrees(model: LandscapeModel, density: number): { list: Tree
         const jx = (lhash(key * 977 + i, 3) - 0.5) * 1.2;
         fromField(fx + (ax === bx ? jx : 0), fy + (ay === by ? jx : 0), w);
         if (i * 2.7 >= nextTree) {
-          nextTree += 10 + 26 * lhash(key * 977 + i, 4);
+          nextTree += 7 + 20 * lhash(key * 977 + i, 4);
           const r = lhash(key * 977 + i, 5);
           const kind = r < 0.12 ? KIND.conifer : r < 0.2 ? KIND.poplar : KIND.broad;
           const hh = kind === KIND.poplar ? 17 + 8 * s : kind === KIND.conifer ? 11 + 7 * s : 9 + 9 * s;
@@ -195,7 +195,6 @@ export function placeTrees(model: LandscapeModel, density: number): { list: Tree
     };
     const k0 = Math.floor(qy0 / FROW) - 1,
       k1 = Math.ceil(qy1 / FROW) + 1;
-    const P: Parcel = { k: 0, j: 0, x0: 0, y0: 0, x1: 0, y1: 0, crop: 0 };
     for (let k = k0; k <= k1; k++) {
       const y0 = rowB(k),
         y1 = rowB(k + 1);
@@ -212,15 +211,16 @@ export function placeTrees(model: LandscapeModel, density: number): { list: Tree
           cy = (y0 + y1) / 2;
         fromField(cx, cy, w);
         if (cityR(w.x, w.z) > R) continue;
-        parcelAt(cx, cy, P);
-        const crop = P.crop;
-        if (crop >= 0.48 && crop < 0.66 && lhash(k * 13 + j, 61) < 0.55) {
+        for (const P of fieldsOfParcel(cx, cy)) {
+        const crop = grazeCrop(P.crop, model.grazing(w.x, w.z));
+        const pk = P.pid;
+        if (crop >= 0.48 && crop < 0.66 && lhash(pk, 61) < 0.55) {
           // pasture oak
-          const fx = P.x0 + (P.x1 - P.x0) * (0.2 + 0.6 * lhash(k * 13 + j, 62));
-          const fy = P.y0 + (P.y1 - P.y0) * (0.2 + 0.6 * lhash(k * 13 + j, 63));
+          const fx = P.x0 + (P.x1 - P.x0) * (0.2 + 0.6 * lhash(pk, 62));
+          const fy = P.y0 + (P.y1 - P.y0) * (0.2 + 0.6 * lhash(pk, 63));
           fromField(fx, fy, w);
           const y = H(w.x, w.z);
-          if (arable(w.x, w.z, y)) B.add(w.x, y, w.z, 13 + 7 * lhash(k * 13 + j, 64), 15 + 7 * lhash(k * 13 + j, 65), KIND.broad, seed++);
+          if (arable(w.x, w.z, y)) B.add(w.x, y, w.z, 13 + 7 * lhash(pk, 64), 15 + 7 * lhash(pk, 65), KIND.broad, seed++);
         } else if (crop >= 0.95 && cityR(w.x, w.z) < 1900) {
           // orchard rows
           const ox0 = P.x0 + 4,
@@ -232,11 +232,12 @@ export function placeTrees(model: LandscapeModel, density: number): { list: Tree
               fromField(fx, fy, w);
               const y = H(w.x, w.z);
               if (!arable(w.x, w.z, y)) continue;
-              const s = lhash(Math.round(fx * 3) ^ (k * 13 + j), Math.round(fy * 3));
+              const s = lhash(Math.round(fx * 3) ^ pk, Math.round(fy * 3));
               if (s < 0.06) continue; // a missing tree here and there
               B.add(w.x, y, w.z, 4.2 + 1.6 * s, 4.8 + 1.4 * s, KIND.small, seed++);
             }
           }
+        }
         }
       }
     }
@@ -332,14 +333,16 @@ function shapeOf(kind: number): Shape {
   const sh: Shape = { clumps: [], tiers: [], trunkTop: 0.45, trunkR: 0.035, branches: [] };
   const rnd = (i: number, k: number) => hash2i(kind * 100 + i, k, 4417);
   if (kind === KIND.broad) {
-    sh.clumps.push({ x: 0, y: 0.6, z: 0, r: 0.27 });
-    sh.clumps.push({ x: 0.04, y: 0.82, z: -0.02, r: 0.17 });
-    for (let i = 0; i < 7; i++) {
-      const a = (i / 7) * Math.PI * 2 + (rnd(i, 1) - 0.5) * 0.5;
-      const rr = 0.25 + 0.06 * rnd(i, 2);
-      const y = 0.5 + 0.22 * rnd(i, 3);
-      sh.clumps.push({ x: Math.cos(a) * rr, y, z: Math.sin(a) * rr, r: 0.15 + 0.06 * rnd(i, 4) });
-      if (i % 2 === 0) sh.branches.push([Math.cos(a) * rr * 0.8, y - 0.04, Math.sin(a) * rr * 0.8]);
+    // a darker core and an irregular shell of leaf masses with gaps between them (sky shows through
+    // the silhouette), a few masses pushed out or hanging low
+    sh.clumps.push({ x: 0, y: 0.6, z: 0, r: 0.2 });
+    sh.clumps.push({ x: 0.03, y: 0.78, z: -0.02, r: 0.15 });
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2 + (rnd(i, 1) - 0.5) * 0.6;
+      const rr = 0.24 + 0.1 * rnd(i, 2);
+      const y = 0.46 + 0.36 * rnd(i, 3);
+      sh.clumps.push({ x: Math.cos(a) * rr, y, z: Math.sin(a) * rr, r: 0.1 + 0.07 * rnd(i, 4) });
+      if (i % 2 === 0) sh.branches.push([Math.cos(a) * rr * 0.75, y - 0.05, Math.sin(a) * rr * 0.75]);
     }
     sh.trunkTop = 0.48;
   } else if (kind === KIND.conifer) {

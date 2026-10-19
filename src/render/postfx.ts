@@ -19,6 +19,7 @@ import { CloudShadowEffect, cloudShadowUniforms, type CloudShadowData } from './
 import { AOApplyEffect, aoUniforms } from './postfx/aoApply';
 import { AdaptiveController, GpuTimer, buildLadder, type QualityStep } from './postfx/adaptive';
 import { WORLD_MODE } from '../core/world';
+import { SunShaftsEffect } from './postfx/sunShafts';
 import type { AtmosphereService } from './sky/atmoDrive';
 
 /** previous frame's scene depth for soft particles (see ctx.services.postfx.softDepth) */
@@ -197,10 +198,12 @@ export default function create(ctx: CityContext): CityModule {
     sm.edgeDetectionMaterial.edgeDetectionThreshold = 0.06;
     smaa = sm;
   }
-  // ?fx=smaa,ao,clouds,tilt,bloom,look (debug: build the chain from a subset). SMAA's blending
+  // world: golden-hour sun shafts (?noshafts) — only rendered while a low sun is on / near the screen
+  const shafts = world && !params.has('noshafts') ? new SunShaftsEffect() : null;
+  // ?fx=smaa,ao,clouds,tilt,shafts,bloom,look (debug: build the chain from a subset). SMAA's blending
   // samples the input buffer itself, so the AO step comes right after it.
-  const fxList = (params.get('fx') ?? (aaMode === 'none' ? 'ao,clouds,tilt,bloom,look' : 'smaa,ao,clouds,tilt,bloom,look')).split(',').filter((k) => k !== 'ao' || !!ao);
-  const all = { smaa, ao: aoFx, clouds, tilt, bloom, look } as const;
+  const fxList = (params.get('fx') ?? (aaMode === 'none' ? 'ao,clouds,tilt,shafts,bloom,look' : 'smaa,ao,clouds,tilt,shafts,bloom,look')).split(',').filter((k) => (k !== 'ao' || !!ao) && (k !== 'shafts' || !!shafts));
+  const all = { smaa, ao: aoFx, clouds, tilt, shafts: shafts as SunShaftsEffect, bloom, look } as const;
   const fxPass = new EffectPass(camera, ...(Object.keys(all) as (keyof typeof all)[]).filter((k) => fxList.includes(k)).map((k) => all[k]));
   fxPass.dithering = true;
   composer.addPass(fxPass);
@@ -237,6 +240,9 @@ export default function create(ctx: CityContext): CityModule {
   type Leaves = { setLeafDistance?(m: number | null): void; getLeafDistance?(): number };
   const grassSvc = ctx.services.groundcover as Grass | undefined;
   const leafSvc = ctx.services.vegetation as Leaves | undefined;
+  type Land = { active?: boolean; setTreeDetail?(k: number): void };
+  const landSvc = ctx.services.landscape as Land | undefined;
+  const landTrees = !!landSvc?.active && !!landSvc.setTreeDetail;
   const grassBase = grassSvc?.getDensity?.() ?? 0;
   const leafBase = leafSvc?.getLeafDistance?.() ?? 0;
   let grassK = 1,
@@ -246,9 +252,11 @@ export default function create(ctx: CityContext): CityModule {
       grassK = s.grass;
       grassSvc.setDensity(Math.max(0.25, grassBase * grassK));
     }
-    if (leafSvc?.setLeafDistance && leafBase > 0 && s.leaf !== leafK) {
+    if (s.leaf !== leafK) {
       leafK = s.leaf;
-      leafSvc.setLeafDistance(leafK >= 1 ? null : leafBase * leafK);
+      // tree detail: near leaf cards in town (vegetation) and the 3D countryside trees (landscape)
+      if (leafSvc?.setLeafDistance && leafBase > 0) leafSvc.setLeafDistance(leafK >= 1 ? null : leafBase * leafK);
+      if (landTrees) landSvc!.setTreeDetail!(leafK);
     }
   };
 
@@ -277,7 +285,7 @@ export default function create(ctx: CityContext): CityModule {
   // any 'quality' event (ours, or a preset change in the UI) makes the water module restore its
   // preset level; re-apply the current step's cap right after (water's handler was registered first)
   ctx.events.on('quality', () => applyRefl(step));
-  const ladder = buildLadder(wantAO, quality.dof, reflAtLoad, grassBase > 0 && !!grassSvc?.setDensity, leafBase > 0 && !!leafSvc?.setLeafDistance);
+  const ladder = buildLadder(wantAO, quality.dof, reflAtLoad, grassBase > 0 && !!grassSvc?.setDensity, (leafBase > 0 && !!leafSvc?.setLeafDistance) || landTrees);
   const adaptive = new AdaptiveController(
     ladder,
     (s) => {
@@ -415,7 +423,7 @@ export default function create(ctx: CityContext): CityModule {
         bloom.luminanceMaterial.threshold = 1.45 - 0.57 * night;
         bloom.luminanceMaterial.smoothing = 0.32 - 0.08 * night;
       }
-      const gold = dusk * (1 - night);
+      const gold = Math.max(dusk * (1 - night), atmo()?.golden() ?? 0);
       const gk = 0.32 * gold;
       look.setVec('uLookSlope', 1, 1 - 0.1 * gk, 1 - 0.5 * gk);
       look.set('uLookPower', 1 - 0.2 * gk);
@@ -444,6 +452,28 @@ export default function create(ctx: CityContext): CityModule {
 
     // ── cloud shadows (data published by the sky module)
     clouds.source = ctx.services.cloudShadows as CloudShadowData | undefined;
+
+    // ── sun shafts: a low sun in or near the frame (fades with elevation, off-screen distance, rain)
+    if (shafts) {
+      const sd = ctx.clock.sunDir;
+      camera.getWorldDirection(_fwd);
+      const facing = _fwd.dot(sd);
+      let k = 0;
+      if (facing > 0.05 && sd.y > 0) {
+        _tmp.copy(sd).multiplyScalar(1000).add(camera.position).project(camera);
+        shafts.sunUv.set(_tmp.x * 0.5 + 0.5, _tmp.y * 0.5 + 0.5);
+        const off = Math.max(0, Math.max(Math.abs(_tmp.x), Math.abs(_tmp.y)) - 1);
+        k = (1 - smooth(0, 0.6, off)) * smooth(0.05, 0.35, facing) * smooth(0.0, 0.04, sd.y) * (1 - smooth(0.3, 0.55, sd.y)) * (1 - ctx.uniforms.uRain.value);
+      }
+      shafts.active = k > 0.002;
+      shafts.strength = 0.55 * k;
+      const skySun = (ctx.services.sky as { sun?: THREE.DirectionalLight } | undefined)?.sun;
+      if (skySun) {
+        const c = skySun.color;
+        const m = Math.max(c.r, c.g, c.b, 1e-3);
+        shafts.tint.setRGB(c.r / m, c.g / m, c.b / m);
+      }
+    }
 
     // ── AO radius follows the zoom (contact shadows in close-ups, broad grounding from afar)
     if (ao && ao.enabled) {
@@ -495,6 +525,7 @@ export default function create(ctx: CityContext): CityModule {
         ao: ao && ao.enabled ? 'on' : 'off',
         dof: tilt.enabled ? 'on' : lensMode && dofWanted ? 'lens-idle' : 'off',
         bloom: bloomOn ? 'on' : 'off',
+        shafts: shafts && shafts.active ? Math.round(shafts.strength * 100) / 100 : 0,
         focus: Math.round(focusPlanar),
         cocPx: Math.round(kPx * 10) / 10,
         fpsWin: Math.round(adaptive.fps),

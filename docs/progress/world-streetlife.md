@@ -1,27 +1,22 @@
 # world — streetlife (café terraces, street sitters, vendors, two-wheelers)
 
 ## Resume here
-* 2026-10-19 21:05 UTC — after two container restarts. All code typechecks. State:
-  - M1 cafés working (`m1b_sheet.png`): patrons = crowd parties with goal 'cafe' (entry point on a walkway
-    edge → planned path between tables → sit → act → leave), table activities with conversation turns,
-    waiters (state 'serve': pad → order → bring), tableware (1 draw call). After the lead's review:
-    seat-based occupancy (~93 % of seats at peak hours), groups sized to the table, couples may join a
-    couple at a four, takeaway cups / phones while walking (Member.walkProp), tableware 1.18× and whiter.
-  - M2 two-wheelers (27 % of regular traffic, `?no2w`): models 'bike' (city bicycle, e-scooter, Dutch
-    bike) / 'moto' (Vespa, delivery scooter, motorbike), bitmask variant parts (aPart ≥ 16), pedal crank
-    (aWheel.w = 3, angle aInst2.y), lean into turns, ridden right of the lane centre; riders = Members in
-    the crowd renderer (riders.ts + animate ride branch); parked bikes / mopeds / hire e-scooters in the
-    furniture band (`traffic.ts` buildParked2W, `?noparked2w`; walkers keep clear via furnitureNear).
-    Street shots good (`m2a_sheet.png`). Rider close-ups: scratchpad `tools/riders.mjs <outDir> [hours]`
-    → `shots/world/streetlife/riders1/` (running).
-  - M3 coded, not yet seen in a browser: hangouts (pairs / trios chatting with hand gestures in turns,
-    someone on the phone; places.ts buildHangouts, crowd hangGoal, ~65 % warm), street vendors
-    (`vendors.ts`: gelato / orange-juice / flower / pretzel carts, one merged mesh, vendor parties
-    p.stall, customers theme 'vendor' leave with a cup), fountain-rim sitters (BenchPlace.rim,
-    Member.seatH, invariant exemption while seated). Toggles `?nohang`, `?novendors`, `?norim`, `?nocafe`.
-  - Invariants run `shots/world/streetlife/inv1.json` (4×, 30 s) queued.
-* Next: judge riders1 + inv1; browser pass of M3 (civic square fountain 27.5,25.5; downtown plazas);
-  market-stall vendor request to the lead (landmarks' toy vendors → real figures); soak; perf.
+* 2026-10-19 21:12 UTC — everything typechecks; headless benches clean (invariants 0). Running:
+  full-city capture set `shots/world/streetlife/m3b/` (dtroad, junc, cafeA, square, market, otstreet,
+  overview × 12.5 h / 18.2 h) and rider close-ups `riders2/` (scratchpad `tools/riders.mjs`).
+* Done since the last entry: M3 browser check (`m3a_fountain.png`: Town Square busy, rim sitters, juice
+  cart); fixed a crash (vendorGoal picked market stalls with node −1); market vendors are now crowd
+  figures (granted landmarks edit); invariant exemptions for market vendors (behind counters) and rim
+  sitters; café-directed spawning (doors within ~80 m) + longer stays (120–300 s) → ~90 % of claimed
+  seats occupied; pavement chat stops (pairs / trios facing each other in file, `CHAT_STOP`) and phone
+  calls; BASE_POP 440 → 560 + busier districts weighted up (lead: streets near-empty); more hangouts (16);
+  café planner multi-source Dijkstra (buildCafes ≈ 100 ms); motorbike side covers / swing arm; tea lights
+  on café tables after 18:20 (glow with uLights).
+* Headless tools (scratchpad `h/`): `node h/build.mjs h/crowdbench.ts && node h/crowdbench.mjs "h=13&s=40&speed=2[&nocafe…]"`
+  (crowd + traffic CPU, stats, invariants), `h/tw.ts` (traffic only, `no2w`), `h/cafes.ts` (café planner).
+* Known pre-existing: a bus's rear axle point crosses the kerb corner at (58.7, −68.6) for one sample
+  (same with ?no2w) — traffic invariant, transient.
+* Next: judge m3b + riders2; perf A/B (draw calls / tris / verts) with toggles; soak 4 min @4×; final shots.
 
 ## Brief (WORLD-PLAN.md workstream 5 + world-briefs.md notes)
 Gap: at eye level the city is thinly populated compared to reference 2 (sunny Tel-Aviv café street — every
@@ -81,9 +76,9 @@ may be a separate light layer drawn by the existing figure renderer. Budget (hig
 
 ## Milestones
 - [x] M0 survey, log (before captures: the critique set + baseline 5174 at the same views, pending)
-- [~] M1 café terraces occupied (patrons + activities + table items + waiters) — working, polishing
-- [ ] M2 two-wheelers in traffic (models, sim, riders posed) + parked bikes / e-scooters
-- [ ] M3 sitters (steps / low walls / fountain rims), standing groups, vendors, buskers
+- [x] M1 café terraces occupied (patrons + activities + table items + waiters)
+- [x] M2 two-wheelers in traffic (models, sim, riders posed) + parked bikes / e-scooters (rider close-ups pending)
+- [~] M3 rim sitters, standing groups (plazas + pavement chats), vendors (carts + market stalls); buskers skipped
 - [ ] M4 polish: filtering scooters, delivery stops, night behaviour, perf pass, soak
 
 ## Requests to other areas
@@ -92,7 +87,9 @@ may be a separate light layer drawn by the existing figure renderer. Budget (hig
   lead 15:05. Until then I derive the same data read-only (planScatter + cafe() chair replica).
 
 ## Changes outside my area
-* none yet.
+* `src/world/landmarks/civic.ts` (lead's grant, 2026-10-19 ~21:10): removed the old toy `person()` vendor (and
+  its two `env.anim` lines) behind the 20 market counters, in the same change that puts real vendor
+  figures there (`pedestrians/vendors.ts` marketStalls + crowd stepVendor). Imports left untouched.
 
 ## Perf notes
 

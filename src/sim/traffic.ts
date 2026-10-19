@@ -380,7 +380,7 @@ function buildParked2W(ctx: CityContext): ParkedCar[] {
           cz = A.z + tz * u + nz * FURN_OFFSET;
         const d = plan.districtAt(cx, cz)?.kind ?? 'residential';
         const p = busy[d] ?? 0.2;
-        if (!rng.chance(p * 0.55)) {
+        if (!rng.chance(p * 0.55 * Math.min(1, ctx.quality.density + 0.2))) {
           u += rng.range(4, 9);
           continue;
         }

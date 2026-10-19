@@ -187,8 +187,28 @@ export class Drift {
     }
   }
 
+  private lastFx = 1e9;
+  private lastFz = 1e9;
+  private warm = 0;
+
   update(dt: number): void {
     if (!this.leaves || dt <= 0) return;
+    this.step(dt);
+    // the camera jumped somewhere new (or the time jumped): fast-forward a few seconds of leaf fall
+    if (this.warm > 0) {
+      const w = this.warm;
+      this.warm = 0;
+      for (let t = 0; t < w; t += 0.15) this.step(0.15);
+    }
+  }
+
+  /** time jump: refill the air around the camera */
+  timejump(): void {
+    this.warm = 8;
+  }
+
+  private step(dt: number): void {
+    const leaves = this.leaves!;
     const ctx = this.ctx;
     const t = ctx.uniforms.uTime.value;
     const wind = ctx.uniforms.uWind.value;
@@ -196,6 +216,9 @@ export class Drift {
     if (this.refresh <= 0) {
       this.refresh = 1;
       this.focus();
+      if (Math.hypot(this.fx - this.lastFx, this.fz - this.lastFz) > 25) this.warm = 8;
+      this.lastFx = this.fx;
+      this.lastFz = this.fz;
       const cp = ctx.camera.position;
       // only worth it when the camera is near the ground: leaves are invisible from the overview
       const camH = cp.y - this.ground(cp.x, cp.z);
@@ -293,10 +316,10 @@ export class Drift {
       _q.setFromEuler(_e);
       _p.set(this.px[i], this.py[i], this.pz[i]);
       _s.set(sc, sc, sc);
-      this.leaves.setMatrixAt(i, _m.compose(_p, _q, _s));
+      leaves.setMatrixAt(i, _m.compose(_p, _q, _s));
     }
-    this.leaves.instanceMatrix.needsUpdate = true;
-    if (this.leaves.instanceColor) this.leaves.instanceColor.needsUpdate = true;
+    leaves.instanceMatrix.needsUpdate = true;
+    if (leaves.instanceColor) leaves.instanceColor.needsUpdate = true;
   }
 
   // ───────────────────────────────────────────────────────── sparkles ──

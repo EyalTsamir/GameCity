@@ -29,8 +29,9 @@ export function potPlant(g: Gen, sg: SideGeom, u: number, o: number, y: number, 
   t.cylinder(px, pz, pr * 0.78, y, y + ph, 7, true, pr);
   const c = cell ?? r.weighted(POT_PLANTS, POT_W);
   const big = c === GREEN.PALM ? 1.6 : c === GREEN.SHRUB ? 1.25 : c === GREEN.SUCCULENT ? 0.8 : 1;
-  const h = (0.45 + r.next() * 0.45) * scale * big;
-  g.green.clump(px, y + ph - 0.04, pz, Math.max(pr * 1.9, h * 0.42), h, c, c === GREEN.PALM ? 3 : 2);
+  const h = Math.min(1.9, (0.45 + r.next() * 0.45) * scale * big);
+  // crown radius: stays within ~0.6 m (balconies are ≤ 1 m deep; overhangs must stay < 1.2 m)
+  g.green.clump(px, y + ph - 0.04, pz, Math.min(0.6, Math.max(pr * 1.9, h * 0.42)), h, c, c === GREEN.PALM ? 3 : 2);
 }
 
 /** Window box below a window: box + flowers on top + trailing plants over the front. */
@@ -613,7 +614,11 @@ export function ironRail(g: Gen, sg: SideGeom, uA: number, uB: number, o: number
  */
 export function climber(g: Gen, sg: SideGeom, u: number, w: number, yTop: number, oMax: number, cell: number = GREEN.IVY_WALL): void {
   const r = g.rng;
-  const o = Math.max(0.015, Math.min(oMax - 0.02, 0.07));
+  // keep the plant on this wall (no cards past the building corners) and inside the footprint (cards reach o + 0.1)
+  w = Math.min(w, sg.L - 0.4);
+  if (w < 0.5 || oMax < 0.1) return;
+  u = Math.min(Math.max(u, 0.2 + w / 2 + 0.25), sg.L - 0.2 - w / 2 - 0.25);
+  const o = Math.max(0.012, Math.min(oMax - 0.11, 0.07));
   // main mass: narrower at the base (a trunk), widening upward
   const base = Math.min(0.5, w * 0.35);
   g.green.wall(sg, u - base / 2, u + base / 2, 0.05, Math.min(1.4, yTop), o, cell, 0.75, 0.9);

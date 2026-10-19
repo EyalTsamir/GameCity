@@ -660,9 +660,9 @@ export class GreenKit {
     const r = this.rng;
     const n = [sg.nx, 0.25, sg.nz];
     for (let y = y0; y < y1 - size * 0.25; y += size * 0.62) {
-      for (let u = uA - size * 0.2; u < uB - size * 0.3; u += size * 0.6) {
-        const s = size * r.range(0.8, 1.2);
-        const uu = u + r.range(-0.15, 0.15) * size,
+      for (let u = uA; u < uB - size * 0.3; u += size * 0.6) {
+        const s = Math.min(size * r.range(0.8, 1.2), uB - uA);
+        const uu = Math.min(Math.max(u + r.range(-0.15, 0.15) * size, uA), uB - s),
           yy = y + r.range(-0.12, 0.12) * size;
         const oo = o + r.next() * 0.06;
         this.tint(tint * r.range(0.85, 1.08));

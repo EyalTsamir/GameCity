@@ -36,7 +36,7 @@ export const ATMO_N = 12;
  * Layout of `thAtmo` (vec4[ATMO_N]):
  *  [0] sun direction (unit, towards the sun).xyz, sun-lobe exponent
  *  [1] sun-lobe colour (in-scattered sunlight toward the sun).rgb, mist forward-scatter weight
- *  [2] haze extinction at the reference height (rgb, 1/m), 1 / haze scale height (1/m)
+ *  [2] Rayleigh-like (blue air) extinction at the reference height (rgb, 1/m), 1 / its scale height (1/m)
  *  [3] horizon ring a0.rgb (Fourier series in the azimuth relative to the sun), haze reference height (m)
  *  [4] ring a1.rgb, fold plane = water level (m)
  *  [5] ring a2.rgb, 1 / mist scale height (1/m)
@@ -45,7 +45,7 @@ export const ATMO_N = 12;
  *  [8] mist colour.rgb, mist extinction at the water level (1/m)
  *  [9] mist drift offset x, z (m), patch frequency (1/m), patchiness (0..1)
  * [10] haze start distance (m), overall in-scatter gain, tight sun-lobe weight, tight sun-lobe exponent
- * [11] reserved
+ * [11] aerosol (grey haze) extinction at the reference height (1/m), 1 / aerosol scale height, 0, 0
  */
 export const atmoData = new Float32Array(ATMO_N * 4);
 
@@ -95,12 +95,15 @@ float atmNoise2(vec2 p) {
   f = f * f * (3.0 - 2.0 * f);
   return mix(mix(atmHash12(i), atmHash12(i + vec2(1.0, 0.0)), f.x), mix(atmHash12(i + vec2(0.0, 1.0)), atmHash12(i + vec2(1.0, 1.0)), f.x), f.y);
 }
-// haze transmittance (rgb) and mist transmittance (a) along camera → camera + ray
+// haze transmittance (rgb) and mist transmittance (a) along camera → camera + ray: blue air (Rayleigh,
+// per channel, ~8 km scale height: far ridges turn blue) + aerosol (grey, ~1 km: valleys haze, peaks clear)
 vec4 thAtmoT(vec3 ray) {
   float t = length(ray);
   float yc = cameraPosition.y, yp = yc + ray.y;
   float ts = max(t - thAtmo[10].x, 0.0) / max(t, 1e-3);
-  vec3 T = exp(-thAtmo[2].rgb * (atmOD(yc, yp, t, thAtmo[3].w, thAtmo[2].w) * ts));
+  float odR = atmOD(yc, yp, t, thAtmo[3].w, thAtmo[2].w) * ts;
+  float odM = atmOD(yc, yp, t, thAtmo[3].w, thAtmo[11].y) * ts;
+  vec3 T = exp(-(thAtmo[2].rgb * odR + thAtmo[11].x * odM));
   float Tm = 1.0;
   if (thAtmo[8].w > 0.0) {
     vec2 q = (cameraPosition.xz + ray.xz + thAtmo[9].xy) * thAtmo[9].z;
@@ -218,9 +221,12 @@ export interface AtmosphereParams {
   lobeColor: THREE.Color;
   /** aerosol (grey) extinction at the reference height (1/m) */
   haze: number;
-  /** Rayleigh extinction per channel (1/m) */
+  /** blue-air (Rayleigh-like) extinction per channel (1/m) */
   rayleigh: THREE.Vector3;
+  /** aerosol scale height (m) */
   hazeScaleHeight: number;
+  /** blue-air scale height (m) */
+  rayleighScaleHeight: number;
   refY: number;
   waterY: number;
   /** horizon ring Fourier coefficients a0..a3 (colour = a0 + a1 cosφ + a2 cos2φ + a3 cos3φ) */
@@ -248,9 +254,10 @@ export function createAtmosphereParams(): AtmosphereParams {
     sunDir: new THREE.Vector3(0, 1, 0),
     lobeExp: 12,
     lobeColor: new THREE.Color(0, 0, 0),
-    haze: 1.2e-4,
+    haze: 5e-5,
     rayleigh: new THREE.Vector3(5.8e-6, 13.5e-6, 33.1e-6),
-    hazeScaleHeight: 1200,
+    hazeScaleHeight: 1000,
+    rayleighScaleHeight: 8000,
     refY: 0,
     waterY: -1.6,
     ring: [new THREE.Color(0.7, 0.8, 0.9), new THREE.Color(0, 0, 0), new THREE.Color(0, 0, 0), new THREE.Color(0, 0, 0)],
@@ -282,7 +289,7 @@ export function writeAtmosphere(p: AtmosphereParams): void {
   };
   set(0, p.sunDir.x, p.sunDir.y, p.sunDir.z, p.lobeExp);
   set(1, p.lobeColor.r, p.lobeColor.g, p.lobeColor.b, p.mistForward);
-  set(2, p.haze + p.rayleigh.x, p.haze + p.rayleigh.y, p.haze + p.rayleigh.z, 1 / Math.max(1, p.hazeScaleHeight));
+  set(2, p.rayleigh.x, p.rayleigh.y, p.rayleigh.z, 1 / Math.max(1, p.rayleighScaleHeight));
   set(3, p.ring[0].r, p.ring[0].g, p.ring[0].b, p.refY);
   set(4, p.ring[1].r, p.ring[1].g, p.ring[1].b, p.waterY);
   set(5, p.ring[2].r, p.ring[2].g, p.ring[2].b, 1 / Math.max(0.5, p.mistScaleHeight));
@@ -291,6 +298,7 @@ export function writeAtmosphere(p: AtmosphereParams): void {
   set(8, p.mistColor.r, p.mistColor.g, p.mistColor.b, p.mist);
   set(9, p.mistDrift.x, p.mistDrift.y, p.mistFreq, p.mistPatchiness);
   set(10, p.startDist, p.gain, p.lobe2, p.lobe2Exp);
+  set(11, p.haze, 1 / Math.max(1, p.hazeScaleHeight), 0, 0);
 }
 
 /** optical depth factor of an exponential layer (CPU mirror of atmOD1; heights above the base) */
@@ -307,19 +315,22 @@ function od1(ha: number, hb: number, t: number, k: number): number {
  * after the atmosphere (AO, cloud shadows) to fade with it.
  */
 export function atmoTransmittance(p: AtmosphereParams, t: number, yc: number, yp: number): number {
-  const k = 1 / Math.max(1, p.hazeScaleHeight);
   const o = p.refY - p.waterY;
-  const od = od1(Math.abs(yc - p.waterY) - o, Math.abs(yp - p.waterY) - o, Math.max(0, t - p.startDist), k);
-  const r = Math.exp(-(p.haze + p.rayleigh.x) * od),
-    g = Math.exp(-(p.haze + p.rayleigh.y) * od),
-    b = Math.exp(-(p.haze + p.rayleigh.z) * od);
+  const ha = Math.abs(yc - p.waterY) - o,
+    hb = Math.abs(yp - p.waterY) - o;
+  const tt = Math.max(0, t - p.startDist);
+  const odM = od1(ha, hb, tt, 1 / Math.max(1, p.hazeScaleHeight)) * p.haze;
+  const odR = od1(ha, hb, tt, 1 / Math.max(1, p.rayleighScaleHeight));
+  const r = Math.exp(-(odM + p.rayleigh.x * odR)),
+    g = Math.exp(-(odM + p.rayleigh.y * odR)),
+    b = Math.exp(-(odM + p.rayleigh.z * odR));
   return 0.2126 * r + 0.7152 * g + 0.0722 * b;
 }
 
 /** distance at which the (horizontal, at height y) haze transmittance drops to `T` */
 export function atmoDistanceFor(p: AtmosphereParams, T: number, y: number): number {
-  const k = 1 / Math.max(1, p.hazeScaleHeight);
-  const dens = (p.haze + p.rayleigh.y) * Math.exp(-(Math.abs(y - p.waterY) - (p.refY - p.waterY)) * k);
+  const h = Math.abs(y - p.waterY) - (p.refY - p.waterY);
+  const dens = p.haze * Math.exp(-h / Math.max(1, p.hazeScaleHeight)) + p.rayleigh.y * Math.exp(-h / Math.max(1, p.rayleighScaleHeight));
   return p.startDist - Math.log(Math.max(1e-4, Math.min(0.9999, T))) / Math.max(1e-9, dens);
 }
 

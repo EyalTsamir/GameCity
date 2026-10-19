@@ -105,6 +105,12 @@ export function parcelAt(qx: number, qy: number, out: Parcel): Parcel {
   return out;
 }
 
+/** crop hash → grazing-land crop (pasture 0.48–0.66 / hay 0.66–0.76 / fallow 0.83–0.91), GLSL twin in the shader */
+export function grazeCrop(ch: number, g: number): number {
+  if (g < 0.5) return ch;
+  return ch < 0.6 ? 0.48 + ch * 0.3 : ch < 0.85 ? 0.66 + (ch - 0.6) * 0.4 : 0.83 + (ch - 0.85) * 0.5;
+}
+
 /** crop kinds by hash (shader uses the same thresholds) */
 export const CROPS = ['wheat', 'stubble', 'greens', 'pasture', 'hay', 'ploughed', 'fallow', 'sunflower', 'orchard'] as const;
 export type Crop = (typeof CROPS)[number];
@@ -144,3 +150,51 @@ float fParcel(vec2 q, out ivec2 id, out vec4 box) {
   return lhash(k * 13 + j, 17);
 }
 `;
+
+export interface Field extends Parcel {
+  /** field id after the strip split (hash key for crop / tone) */
+  pid: number;
+}
+
+/** the field (a parcel or one of its 2–3 strips) at a field-frame point — the shader's split, on the CPU */
+export function fieldAt(qx: number, qy: number, out: Field): Field {
+  parcelAt(qx, qy, out);
+  let pid = out.k * 13 + out.j;
+  const longX = out.x1 - out.x0 >= out.y1 - out.y0;
+  const sub = lhash(pid, 31);
+  if (sub < 0.5) {
+    const n = sub < 0.2 ? 3 : 2;
+    if (longX) {
+      const w = (out.x1 - out.x0) / n;
+      const si = Math.min(n - 1, Math.max(0, Math.floor((qx - out.x0) / w)));
+      out.x0 += si * w;
+      out.x1 = out.x0 + w;
+      pid += si * 977;
+    } else {
+      const w = (out.y1 - out.y0) / n;
+      const si = Math.min(n - 1, Math.max(0, Math.floor((qy - out.y0) / w)));
+      out.y0 += si * w;
+      out.y1 = out.y0 + w;
+      pid += si * 977;
+    }
+    out.crop = lhash(pid, 17);
+  }
+  out.pid = pid;
+  return out;
+}
+
+/** the fields (strips) of parcel (k, j), given its centre in the field frame */
+export function fieldsOfParcel(cx: number, cy: number): Field[] {
+  const P: Field = { k: 0, j: 0, x0: 0, y0: 0, x1: 0, y1: 0, crop: 0, pid: 0 };
+  parcelAt(cx, cy, P);
+  const longX = P.x1 - P.x0 >= P.y1 - P.y0;
+  const sub = lhash(P.k * 13 + P.j, 31);
+  const n = sub < 0.2 ? 3 : sub < 0.5 ? 2 : 1;
+  const out: Field[] = [];
+  for (let si = 0; si < n; si++) {
+    const qx = longX ? P.x0 + ((si + 0.5) * (P.x1 - P.x0)) / n : cx;
+    const qy = longX ? cy : P.y0 + ((si + 0.5) * (P.y1 - P.y0)) / n;
+    out.push(fieldAt(qx, qy, { k: 0, j: 0, x0: 0, y0: 0, x1: 0, y1: 0, crop: 0, pid: 0 }));
+  }
+  return out;
+}

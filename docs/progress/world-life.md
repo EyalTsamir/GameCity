@@ -1,21 +1,19 @@
 # world-life — wind consumers, smoke, birds, small motion (world round)
 
 ## Resume here
-* 2026-10-19 20:50 — code written + typechecking, NOT yet verified by capture (m2a running):
-  - M1 cloth: `src/world/life.ts`, `life/glsl.ts`, `life/cloth.ts`, `life/decor.ts`, `life/poles.ts`,
-    `life/extras.ts` (market masts + radiating festoons/bunting, lifeguard flags, hotel entrance flags,
-    rotary-dryer laundry → `props.setStaticLaundry(false)`); landmark FLAG mode on `thWindAt` + calm droop.
-  - M2 smoke: `sim/ambient/smoke.ts` (windAt gusts + shear, HG rim, erosion, dither, distance LOD,
-    `opacity`, soft depth from `postfx.softDepth()`), `life/chimneys.ts` (chimneys/vents/bbqs schedules).
-  - M4 birds (`sim/ambient/birds.ts`): pigeons hop aside / group lifts when people pass
-    (`pedestrians.near`), swift screaming parties over old town + market at dawn/dusk (`?` locate 'swift'),
-    gulls perch on waterfront roof ridges (`buildings.perches`, modes 4/5).
-  - M5 drift: `life/drift.ts` (leaves in gusts from `vegetation.trees` near the camera focus; dust motes
-    lit by HG forward scatter of the low sun; moths at the 12 nearest lamps at night).
-* Running: capture set → shots/world/life/m2a (task output in the session; log shots/world/life/m2a.log);
-  private capture script: scratchpad/life/cap.mjs (= scripts/capture-set.mjs with a 25-min ready timeout).
-* Next: judge m2a (bunting, smoke at 7.5/18.2/11, market), then a capture with leaves/motes/swifts
-  (eye level 18.2 looking at the sun), fix, full-city milestone set, message lead.
+* 2026-10-19 21:15 (after the 2nd reboot) — all features coded + typechecking (see below); verified so far:
+  bunting/festoons/market masts (shots/world/life/m2a: market_*.png, otstreet_*.png — good; market reads
+  like the reference's flag lines). Smoke was invisible in captures because the sim crawls in SwiftShader
+  (realDt capped at 0.1 s/frame at ~1 fps) → added smoke prewarm (14 s fast-forward at start + every
+  'timejump') and leaf prewarm (8 s when the camera focus moves > 25 m or time jumps).
+  Wear's townhouse generator was throwing in m2a (their WIP) — re-judge market anchors once fixed.
+* Files: `src/world/life.ts`, `life/{glsl,cloth,decor,poles,extras,chimneys,drift}.ts`,
+  `sim/ambient/{smoke,birds}.ts`, `sim/ambient.ts` (doc), landmarks/shaders.ts FLAG mode.
+* Running: capture set m3a → shots/world/life/m3a (views roofs, industry, parkeye, otsun, market, square ×
+  7.5/18.6/21.5 h; subset incl. vegetation, pedestrians, lamps, postfx). Private capture script:
+  scratchpad/life/cap.mjs (= scripts/capture-set.mjs with a 25-min ready timeout; recreate with sed).
+* Next: judge m3a (smoke plumes, leaves, motes, swifts, moths, pigeons, night festoons); tune; then
+  full-city milestone set + message lead.
 
 ## Brief (from WORLD-PLAN.md §6 + briefs)
 Wind consumers: flags on poles flap, bunting / festoon strings across old-town streets and the market,

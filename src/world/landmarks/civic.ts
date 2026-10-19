@@ -100,10 +100,7 @@ export function genMarketStall(env: Env, f: Feature): void {
     drawText(g, goods.name, w / 2, h / 2 + 1, 'bold 22px Georgia, serif', '#3a2c20', 1);
   }, `stall:${goods.name}:${col}`);
   signQuad(env.T, sign, 1.1, 0.23, 0, 2.36, fz + 0.23, 0, 0);
-  // vendor behind the counter (market hours: uVis.z)
-  env.anim({ mode: ANIM.VIS, pivot: new THREE.Vector3(0, 0, 0), axis: new THREE.Vector3(0, 1, 0), a: 2, b: 0.12, c: f.id * 1.3 });
-  person(env.K, 0.2, 0, -0.12, 0, ['#f1efe8', '#c8382f', '#2a9d8f', '#e9c46a'][f.id % 4], '#3a3f4a', ['#e8c3a0', '#c99a72', '#8d5a3c'][f.id % 3], f.id % 3 === 0 ? '#3a3f4a' : undefined);
-  env.anim(null);
+  // (the vendor behind the counter is a crowd figure: streetlife, src/sim/pedestrians/vendors.ts marketStalls)
   env.endChecks();
   env.pick(f.id, `Market stall · ${goods.name.toLowerCase()}`, new THREE.Box3(new THREE.Vector3(f.x - R, 0, f.z - R), new THREE.Vector3(f.x + R, 2.7, f.z + R)), () => {
     const h = env.hours();

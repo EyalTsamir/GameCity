@@ -1163,12 +1163,17 @@ function motos(): THREE.BufferGeometry {
     taper(tank, 0.66, 0.88, 0.2, 0.25, 0.05, 0.12);
     b.add(tank, { color: '#ffffff', paint: true, rough: 0.6, part: MB });
     b.add(rbox(0.27, 0.09, 0.55, 0.04, 0, 0.76, -0.3), { color: '#1d1f22', rough: 1.2, part: MB });
+    // side covers under the seat (body colour) and the frame between tank and engine
+    b.add(rbox(0.25, 0.22, 0.42, 0.05, 0, 0.53, -0.24), { color: '#ffffff', paint: true, rough: 0.6, part: MB });
+    b.add(rbox(0.16, 0.2, 0.3, 0.03, 0, 0.5, 0.36), { color: '#2c2f33', rough: 0.9, part: MB });
     const tail = rbox(0.22, 0.12, 0.38, 0.05, 0, 0.74, -0.66);
     taper(tail, 0.74, 0.86, -0.66, 0.3, 0.0, 0.1);
     b.add(tail, { color: '#ffffff', paint: true, rough: 0.6, part: MB });
     for (const sd of [1, -1]) {
       b.add(tube(sd * 0.08, R, zf, sd * 0.08, 0.98, 0.52, 0.022), { color: CHROME, rough: 0.4, part: MB });
-      b.add(tube(sd * 0.1, R, zr, sd * 0.11, 0.66, -0.3, 0.02), { color: '#2c2f33', rough: 0.9, part: MB });
+      // swing arm to the engine, a shock absorber up to the seat frame
+      b.add(tube(sd * 0.1, R, zr, sd * 0.11, 0.36, -0.12, 0.022), { color: '#2c2f33', rough: 0.9, part: MB });
+      b.add(tube(sd * 0.1, 0.4, -0.52, sd * 0.1, 0.72, -0.36, 0.018), { color: '#c99a2e', rough: 0.5, part: MB });
       // foot pegs
       b.add(tube(sd * 0.12, 0.36, -0.12, sd * 0.2, 0.36, -0.12, 0.012), { color: '#2c2f33', rough: 0.9, part: MB });
     }
