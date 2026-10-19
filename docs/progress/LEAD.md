@@ -122,6 +122,12 @@ Per-module logs live next to this file: `docs/progress/<module>.md`.
   screenshot timeout); only diff 'T starts the auto-tour' = flaky 1.5 s window: probe
   (scripts/agent-tools/qa_tourprobe.mjs) shows the tour identical on both builds (same slow opening orbit
   ~0.1–0.4°/2 s at ~12 fps, same 'Tinyhaven' caption). 05:25 perf A/B rep 1 started (tracked).
+  Perf rep 1 (SwiftShader, relative only; shots/lead/qa/perf/1_*.json): downtown 12 h new 506 ms vs all-legacy
+  321; legacylight&notable alone 257 (?!) ⇒ stage lighting/table suspect; harbour 21.5 h new 341 vs
+  nowaterrefl 154 (consistent across the 5 variants ⇒ reflection ≈ 2× in SwiftShader although the pass is
+  only ~140k tris at 1/3 res and the water shader adds 3 taps). Page-to-page noise is large ⇒ next:
+  in-page runtime A/B probe (scripts/agent-tools/qa_toggleprobe.mjs --probe refl|light|table|veg|vegcheap)
+  and round 2 with alternating variants (scripts/agent-tools/qa_perf2.sh), both after rep 1 ends.
 
 ## History
 * 2026-10-16 ~19:20 — Round 1: 12 builders launched via a Workflow; the account hit its 5-hour usage
