@@ -55,14 +55,19 @@ function dirOf(aDeg: number): [number, number] {
   return [Math.sin(a), -Math.cos(a)];
 }
 
-export function buildMountains(model: LandscapeModel, uniforms: Record<string, THREE.IUniform>, fog: boolean): MountainResult {
+/**
+ * `decimate` > 1 builds a coarse copy (angular step × decimate, 5 rows) — the water reflection proxy.
+ * `mat` reuses an existing material (same program).
+ */
+export function buildMountains(model: LandscapeModel, uniforms: Record<string, THREE.IUniform>, fog: boolean, decimate = 1, mat0: THREE.Material | null = null): MountainResult {
+  const rows = decimate > 1 ? [0, 0.3, 0.5, 0.7, 1] : ROWS;
   const pos: number[] = [];
   const idx: number[] = [];
   // the river valley notch (the river comes down from the hills in the WNW)
   const rvA = 288;
   for (const L of LAYERS) {
-    const nA = Math.ceil((L.a1 - L.a0) / L.step);
-    const nR = ROWS.length;
+    const nA = Math.ceil((L.a1 - L.a0) / (L.step * decimate));
+    const nR = rows.length;
     const base = pos.length / 3;
     for (let i = 0; i <= nA; i++) {
       const aDeg = L.a0 + ((L.a1 - L.a0) * i) / nA;
@@ -84,7 +89,7 @@ export function buildMountains(model: LandscapeModel, uniforms: Record<string, T
       // crest distance wobbles
       const rc = L.rc + (vnoise(aDeg / 6, L.seed * 7.3, 71) - 0.5) * (L.r1 - L.r0) * 0.35;
       for (let j = 0; j < nR; j++) {
-        const t = ROWS[j];
+        const t = rows[j];
         const r = t < 0.5 ? lerp(L.r0, rc, t / 0.5) : lerp(rc, L.r1, (t - 0.5) / 0.5);
         const x = CX + dx * r,
           z = CZ + dz * r;
@@ -121,7 +126,7 @@ export function buildMountains(model: LandscapeModel, uniforms: Record<string, T
   geo.computeVertexNormals();
   geo.computeBoundingSphere();
   geo.computeBoundingBox();
-  const mat = mountainMaterial(uniforms, fog);
+  const mat = mat0 ?? mountainMaterial(uniforms, fog);
   const mesh = new THREE.Mesh(geo, mat);
   mesh.name = 'land-mountains';
   mesh.matrixAutoUpdate = false;

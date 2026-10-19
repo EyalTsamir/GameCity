@@ -23,10 +23,18 @@ uniform float uTime;
 uniform float uLights;
 varying vec4 vEmit;
 varying float vRough;
+// variant parts: n = only for variant n - 1; 16 + bits = for the variants whose bit is set
+bool thHidden(float part, float variant) {
+  if (part < 0.5) return false;
+  if (part > 15.5) return mod(floor((part - 16.0) / exp2(floor(variant + 0.5))), 2.0) < 0.5;
+  return abs(part - variant - 1.0) > 0.25;
+}
 vec3 thWheel(vec3 p) {
-  float c = cos(aInst.z), s = sin(aInst.z);
+  // wheels spin by the wheel angle, a bicycle crank (w = 3) by the pedalling angle (aInst2.y)
+  float wa = aWheel.w > 2.5 ? aInst2.y : aInst.z;
+  float c = cos(wa), s = sin(wa);
   p = vec3(p.x, p.y * c - p.z * s, p.y * s + p.z * c);
-  if (aWheel.w > 1.5) {
+  if (aWheel.w > 1.5 && aWheel.w < 2.5) {
     float cs = cos(aInst.w), ss = sin(aInst.w);
     p = vec3(p.x * cs + p.z * ss, p.y, -p.x * ss + p.z * cs);
   }
@@ -50,7 +58,7 @@ const VERT_COLOR = /* glsl */ `
 
 const VERT_BEGIN = /* glsl */ `
 if ( aWheel.w > 0.5 ) transformed = aWheel.xyz + thWheel( transformed - aWheel.xyz );
-if ( aPart > 0.5 && abs( aPart - aInst2.x - 1.0 ) > 0.25 ) transformed = vec3( 0.0 );
+if ( thHidden( aPart, aInst2.x ) ) transformed = vec3( 0.0 );
 {
   int lt = int( aMeta.y + 0.5 );
   float lon = uLights * aInst2.w;
@@ -103,16 +111,19 @@ export function createVehicleMaterial(uniforms: GlobalUniforms, atlas: THREE.Tex
       .replace('#include <roughnessmap_fragment>', 'float roughnessFactor = clamp( roughness * vRough, 0.04, 1.0 );')
       .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += vEmit.rgb * mix( vec3( 1.0 ), diffuseColor.rgb, vEmit.a );');
   };
-  material.customProgramCacheKey = () => 'traffic-vehicle-v1';
+  material.customProgramCacheKey = () => 'traffic-vehicle-v2';
   patchLampMaterial(material); // night street-light map (night agent)
 
   const depth = new THREE.MeshDepthMaterial();
   depth.name = 'traffic-vehicle-depth';
   depth.onBeforeCompile = (shader) => {
     shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', '#include <common>\nattribute float aPart;\nattribute vec4 aInst2;')
-      .replace('#include <begin_vertex>', '#include <begin_vertex>\nif ( aPart > 0.5 && abs( aPart - aInst2.x - 1.0 ) > 0.25 ) transformed = vec3( 0.0 );');
+      .replace(
+        '#include <common>',
+        '#include <common>\nattribute float aPart;\nattribute vec4 aInst2;\nbool thHidden(float part, float variant) {\n  if (part < 0.5) return false;\n  if (part > 15.5) return mod(floor((part - 16.0) / exp2(floor(variant + 0.5))), 2.0) < 0.5;\n  return abs(part - variant - 1.0) > 0.25;\n}',
+      )
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nif ( thHidden( aPart, aInst2.x ) ) transformed = vec3( 0.0 );');
   };
-  depth.customProgramCacheKey = () => 'traffic-vehicle-depth-v1';
+  depth.customProgramCacheKey = () => 'traffic-vehicle-depth-v2';
   return { material, depth };
 }

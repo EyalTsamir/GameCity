@@ -246,6 +246,7 @@ export default function create(ctx: CityContext): CityModule {
   // harness: __city.ctx.services.buildings.setDebug(0 | 1 | 2). Types: src/world/buildings/anchors.ts
   const facades = collectFacades(lots);
   const service: BuildingsService = {
+    shops: anchors.shops,
     chimneys: anchors.chimneys,
     balconies: anchors.balconies,
     facades,
@@ -387,6 +388,7 @@ export default function create(ctx: CityContext): CityModule {
         perches: service.perches.length,
         laundryLines: service.laundry.length,
         vents: service.vents.length,
+        shops: service.shops.length,
         ...Object.fromEntries(Object.entries(kindCounts).map(([k, v]) => [`n_${k}`, v])),
         ...Object.fromEntries(Object.entries(houseStats).map(([k, v]) => [`house_${k}`, v])),
       };

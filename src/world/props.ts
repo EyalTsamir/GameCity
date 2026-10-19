@@ -22,6 +22,8 @@ import * as GK from './props/garden';
 import * as SK from './props/kit';
 import { planScatter, scatterDisc, type ScatterItem } from './props/scatter';
 import type { PropsService, ChairOut, Cafe } from './props/service';
+import type { BuildingsService } from './buildings/anchors';
+import { XS, ZS, FURN_OFFSET } from '../core/constants';
 
 interface TerrainSvc {
   height(x: number, z: number): number;
@@ -375,6 +377,56 @@ export default function create(ctx: CityContext): CityModule {
       }
       inc(`s_${it.kind}`);
       layout.furniture.push(scatterDisc(it));
+    }
+  }
+
+  // ─────────────────────────────────────────── kerbside café tables ──
+  // two-seat bistro tables in the furniture band in front of cafés, bars and bakeries (Tel-Aviv / Paris
+  // street cue); clear of lamps, trees, benches, bins, bus stops and the crosswalk zones
+  let kerbTables = 0;
+  if (!ctx.debug.params.has('noscatter')) {
+    const shops = (ctx.services.buildings as BuildingsService | undefined)?.shops ?? [];
+    const vegTrees = (ctx.services.vegetation as { trees?: { x: number; z: number; r: number }[] } | undefined)?.trees ?? [];
+    const nearest = (v: number, list: readonly number[]) => list.reduce((b, c) => (Math.abs(c - v) < Math.abs(b - v) ? c : b), list[0]);
+    for (const sh of shops) {
+      if (sh.type !== 1 && sh.type !== 2) continue;
+      const alongX = Math.abs(sh.nz) > 0.5;
+      // street centre line in front of the facade, then the furniture band on the facade's side of it
+      const c = alongX ? nearest(sh.az + sh.nz * 8, ZS) : nearest(sh.ax + sh.nx * 8, XS);
+      const band = c - (alongX ? sh.nz : sh.nx) * FURN_OFFSET;
+      const L = Math.hypot(sh.bx - sh.ax, sh.bz - sh.az);
+      const n = Math.floor((L - 1.0) / 2.0);
+      const krng = new Rng(Math.floor(hash01(sh.ax, sh.az, 31) * 1e9) || 1);
+      for (let i = 0; i < n; i++) {
+        const t = (i + 0.5 + (L - 1.0 - n * 2.0) / 4.0) / n;
+        const fx = sh.ax + (sh.bx - sh.ax) * (0.5 / L + t * (1 - 1.0 / L)),
+          fz = sh.az + (sh.bz - sh.az) * (0.5 / L + t * (1 - 1.0 / L));
+        const x = alongX ? fx : band,
+          z = alongX ? band : fz;
+        // away from junctions (crosswalks, dropped kerbs)
+        const jd = alongX ? Math.abs(x - nearest(x, XS)) : Math.abs(z - nearest(z, ZS));
+        if (jd < 9.5) continue;
+        const ax = alongX ? 1 : 0,
+          az = alongX ? 0 : 1;
+        let ok = true;
+        for (const s2 of [-0.85, 0, 0.85]) if (!occ.has(x + ax * s2, z + az * s2, OCC.SIDEWALK)) ok = false;
+        if (!ok) continue;
+        if (layout.furniture.some((f) => Math.hypot(f.x - x, f.z - z) < f.r + 0.95)) continue;
+        if (vegTrees.some((tr) => Math.hypot(tr.x - x, tr.z - z) < 1.25)) continue;
+        if (plan.slots.some((sl) => (sl.kind === 'busstop' ? Math.hypot(sl.x - x, sl.z - z) < 6 : Math.hypot(sl.x - x, sl.z - z) < 1.3))) continue;
+        if (layout.walk.anyInCircle(x, z, 0.3, MASK_WALK)) continue;
+        const yaw = alongX ? 0 : Math.PI / 2;
+        sel(x);
+        kf.sh.frame(x, SIDEWALK_Y + 0.005, z, yaw);
+        chairs.length = 0;
+        SK.kerbCafe(kf, krng, chairs);
+        const cafe: Cafe = { x, z, yaw, tableY: SIDEWALK_Y + 0.755, tableR: 0.29, seats: [], parasol: false, source: 'sidewalk' };
+        for (const ch of chairs) cafe.seats.push({ x: ch.sx, z: ch.sz, yaw: Math.atan2(ch.fx - ch.sx, ch.fz - ch.sz), seatY: ch.sy });
+        service.cafes.push(cafe);
+        layout.furniture.push({ x, z, r: 1.0 });
+        kerbTables++;
+        inc('kerbCafe');
+      }
     }
   }
 

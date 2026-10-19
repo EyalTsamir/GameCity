@@ -21,6 +21,10 @@ export interface QualityStep {
   dof: 'full' | 'lite' | 'off';
   /** cap on the water's planar reflection level (0 off, 1 low, 2 full); the preset may be lower */
   refl: 0 | 1 | 2;
+  /** grass blade density relative to the preset (groundcover.setDensity) */
+  grass: number;
+  /** leaf-card LOD distance relative to the preset (vegetation.setLeafDistance) */
+  leaf: number;
 }
 
 /**
@@ -29,21 +33,32 @@ export interface QualityStep {
  *   → no-ao (N8AO ≈ 2 ms) → scale-0.85 → dof-lite → scale-0.72
  *   → refl-off (analytic sky only: the water loses the mirrored town — kept as long as possible)
  *   → scale-0.6.
+ * World round: grass-0.7 / leaf-0.65 after refl-low and detail-low (0.45 / 0.4) after scale-0.85, when
+ * the groundcover / vegetation services offer their setters.
  * Reflection steps exist only when the water module renders reflections at load (`refl`).
  */
-export function buildLadder(ao: boolean, dof: boolean, refl = false): QualityStep[] {
+export function buildLadder(ao: boolean, dof: boolean, refl = false, grass = false, leaf = false): QualityStep[] {
   const steps: QualityStep[] = [];
   const d = dof ? 'full' : 'off';
   const lite = dof ? 'lite' : 'off';
   const r1: 0 | 1 | 2 = refl ? 1 : 2;
-  steps.push({ name: 'full', renderScale: 1, ao, dof: d, refl: 2 });
-  if (refl) steps.push({ name: 'refl-low', renderScale: 1, ao, dof: d, refl: 1 });
-  if (ao) steps.push({ name: 'no-ao', renderScale: 1, ao: false, dof: d, refl: r1 });
-  steps.push({ name: 'scale-0.85', renderScale: 0.85, ao: false, dof: d, refl: r1 });
-  if (dof) steps.push({ name: 'dof-lite', renderScale: 0.85, ao: false, dof: 'lite', refl: r1 });
-  steps.push({ name: 'scale-0.72', renderScale: 0.72, ao: false, dof: lite, refl: r1 });
-  if (refl) steps.push({ name: 'refl-off', renderScale: 0.72, ao: false, dof: lite, refl: 0 });
-  steps.push({ name: 'scale-0.6', renderScale: 0.6, ao: false, dof: lite, refl: refl ? 0 : 2 });
+  // world round: the grass blades (groundcover) and the near leaf cards (vegetation) are the expensive
+  // new vertex work — thinned early (barely visible in motion), then once more before the bigger losses
+  const g1 = grass ? 0.7 : 1,
+    g2 = grass ? 0.45 : 1;
+  const l1 = leaf ? 0.65 : 1,
+    l2 = leaf ? 0.4 : 1;
+  steps.push({ name: 'full', renderScale: 1, ao, dof: d, refl: 2, grass: 1, leaf: 1 });
+  if (refl) steps.push({ name: 'refl-low', renderScale: 1, ao, dof: d, refl: 1, grass: 1, leaf: 1 });
+  if (grass) steps.push({ name: 'grass-0.7', renderScale: 1, ao, dof: d, refl: r1, grass: g1, leaf: 1 });
+  if (leaf) steps.push({ name: 'leaf-0.65', renderScale: 1, ao, dof: d, refl: r1, grass: g1, leaf: l1 });
+  if (ao) steps.push({ name: 'no-ao', renderScale: 1, ao: false, dof: d, refl: r1, grass: g1, leaf: l1 });
+  steps.push({ name: 'scale-0.85', renderScale: 0.85, ao: false, dof: d, refl: r1, grass: g1, leaf: l1 });
+  if (grass || leaf) steps.push({ name: 'detail-low', renderScale: 0.85, ao: false, dof: d, refl: r1, grass: g2, leaf: l2 });
+  if (dof) steps.push({ name: 'dof-lite', renderScale: 0.85, ao: false, dof: 'lite', refl: r1, grass: g2, leaf: l2 });
+  steps.push({ name: 'scale-0.72', renderScale: 0.72, ao: false, dof: lite, refl: r1, grass: g2, leaf: l2 });
+  if (refl) steps.push({ name: 'refl-off', renderScale: 0.72, ao: false, dof: lite, refl: 0, grass: g2, leaf: l2 });
+  steps.push({ name: 'scale-0.6', renderScale: 0.6, ao: false, dof: lite, refl: refl ? 0 : 2, grass: g2, leaf: l2 });
   return steps;
 }
 

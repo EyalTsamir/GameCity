@@ -457,6 +457,8 @@ const gcUniforms = {
   uGcPresA: { value: new THREE.Vector4(-10, -9, -10, -9) },
   /** long grass (meadows, edges, reeds) out0, out1 */
   uGcPresL: { value: new THREE.Vector2(-10, -9) },
+  /** micro-relief strength of the grass (tufts / tussocks), 0 = off */
+  uGcBump: { value: 1 },
   gFlowerCol: { value: ['#c42a1c', '#3c62d4', '#f0ede2', '#ebbf18', '#e9e5d3', '#a8519f', '#efb417', '#f2f0e8'].map((h) => new THREE.Color(h)) },
 };
 
@@ -611,12 +613,28 @@ uniform sampler2D tGcFlower;
 uniform float uGcOn;
 uniform vec4 uGcPresA;
 uniform vec2 uGcPresL;
+uniform float uGcBump;
 uniform vec3 gFlowerCol[ 8 ];
 uniform vec2 uWind;
 float gGrassTrans = 0.0;
+float gBumpH = 0.0;
 ${WIND_GLSL}
 ${GLSL_HASH}
 ${GC_PALETTE_GLSL}
+`;
+
+/** grass micro relief: three's perturbNormalArb on the height gBumpH (screen derivatives) */
+const GROUND_BUMP = /* glsl */ `
+{
+  vec3 bSx = dFdx( - vViewPosition );
+  vec3 bSy = dFdy( - vViewPosition );
+  vec3 bR1 = cross( bSy, normal );
+  vec3 bR2 = cross( normal, bSx );
+  float bDet = dot( bSx, bR1 );
+  vec2 dH = vec2( dFdx( gBumpH ), dFdy( gBumpH ) );
+  vec3 bGrad = sign( bDet ) * ( dH.x * bR1 + dH.y * bR2 );
+  normal = normalize( abs( bDet ) * normal - bGrad );
+}
 `;
 
 /** long grass seen against the sun glows (shadowed light colour → no glow in shade) */
@@ -684,6 +702,12 @@ vec3 groundColor() {
   float tus = nB.g * 0.6 + nC.b * 0.4;
   float tfw = fwidth( p.x * 1.6 ) + fwidth( p.z * 1.6 );
   grass *= 1.0 + ( tus - 0.5 ) * 0.34 * lg * ( 1.0 - smoothstep( 0.3, 1.2, tfw ) );
+  // micro relief for the lighting (tufts in lawns, tussocks in long grass): a height whose screen
+  // derivatives bend the normal (see normal stage); faded before it could alias
+  float fpx = fwidth( p.x ) + fwidth( p.z );
+  float hLawn = ( nC.b * 0.6 + nC.g * 0.4 ) * 0.014 * ( 1.0 - smoothstep( 0.03, 0.09, fpx ) );
+  float hLong = ( nB.g * 0.55 + nC.b * 0.45 ) * 0.07 * ( 1.0 - smoothstep( 0.1, 0.3, fpx ) );
+  gBumpH = mix( hLawn, hLong, lg ) * ( 1.0 - sand ) * uGcBump;
   // the wild hills: heather + gorse drifts, warmer sun-facing slopes, bleached steep banks
   float heath = smoothstep( 0.6, 0.76, nM.b * 0.6 + nA.r * 0.4 ) * smoothstep( 0.3, 0.6, wild );
   float gorse = smoothstep( 0.62, 0.78, nM.a * 0.5 + nA.b * 0.5 ) * ( 1.0 - heath ) * smoothstep( 0.3, 0.6, wild );
@@ -717,10 +741,10 @@ vec3 groundColor() {
     vec2 hh = th_hash22( fi + 17.0 );
     float pxc = fwidth( fc.x ) + fwidth( fc.y );
     float rr = length( fract( fc ) - 0.5 - ( hh - 0.5 ) * 0.5 );
-    float dotM = step( hh.x, lawnF * 0.35 ) * ( 1.0 - smoothstep( 0.1, 0.1 + pxc * 0.7, rr ) );
+    float dotM = step( hh.x, lawnF * 0.16 ) * ( 1.0 - smoothstep( 0.1, 0.1 + pxc * 0.7, rr ) );
     float farF = smoothstep( 0.3, 1.1, pxc );
     vec3 fcol = hh.y < 0.42 ? gFlowerCol[ 6 ] : gFlowerCol[ 7 ];
-    grass = mix( grass, fcol, mix( dotM, lawnF * 0.07, farF ) );
+    grass = mix( grass, fcol, mix( dotM, lawnF * 0.04, farF ) );
   }
   // fallen leaves under the trees
   float lit = cv.a * uGcOn;
@@ -734,16 +758,20 @@ vec3 groundColor() {
   float bdist = distance( p, cameraPosition );
   float camH = cameraPosition.y - p.y;
   float horiz = max( 1.0, length( cameraPosition.xz - p.xz ) );
-  vec2 lawnEnd = camH / horiz < 0.3 ? uGcPresA.zw : uGcPresA.xy;
+  vec2 lawnEnd = camH / horiz < 0.22 ? uGcPresA.zw : uGcPresA.xy;
   float presL = 1.0 - smoothstep( lawnEnd.x - 1.5, lawnEnd.y, bdist );
   float presM = 1.0 - smoothstep( uGcPresL.x - 1.5, uGcPresL.y, bdist );
+  // from above, sparse far blades do not hide the ground: the gaps darken only at grazing views
+  float vz = camH / max( bdist, 1.0 );
+  presM *= 1.0 - smoothstep( 0.12, 0.5, vz ) * 0.85;
+  presL *= 1.0 - smoothstep( 0.2, 0.7, vz ) * 0.5;
   float pres = mix( presM, presL, kept ) * smoothstep( 0.05, 0.5, cv.r ) * uGcOn;
-  vec3 under = mix( gb * 0.55, gcThatch, 0.3 );
-  grass = mix( grass, under, pres * mix( 0.72, 0.5, kept ) );
+  vec3 under = mix( gb * 0.5, gcThatch, 0.35 );
+  grass = mix( grass, under, pres * mix( 0.78, 0.66, kept ) );
   gGrassTrans = smoothstep( 0.35, 0.8, len ) * ( 1.0 - pres ) * 0.6;
 
   // ── wear: trampled yellowish grass → bare soil; scree / gravel at cliff feet (wild areas)
-  float w = smoothstep(0.06, 0.8, wear);
+  float w = smoothstep(0.06, 0.8, wear) * smoothstep(0.15, 0.6, nB.g * 0.5 + nC.r * 0.3 + wear * 0.6);
   vec3 worn = mix(gWorn, gSoil, smoothstep(0.35, 0.8, wear));
   vec3 scree = gScree * (0.82 + 0.3 * nC.a) * (0.9 + 0.2 * nB.b);
   scree = mix(scree, gScree * 1.22, smoothstep(0.7, 0.8, nB.a) * 0.6);   // pale stones
@@ -831,6 +859,7 @@ export function createGround(ctx: CityContext, model: TerrainModel, feet: readon
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', '#include <common>\n' + LAMP_GLSL + (legacy ? GROUND_PARS_LEGACY : GROUND_PARS))
       .replace('vec4 diffuseColor = vec4( diffuse, opacity );', 'vec4 diffuseColor = vec4( groundColor(), opacity );')
+      .replace('#include <normal_fragment_maps>', '#include <normal_fragment_maps>\n' + (legacy ? '' : GROUND_BUMP))
       .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = gRough;')
       .replace('#include <lights_physical_pars_fragment>', '#include <lights_physical_pars_fragment>\n' + (legacy ? '' : GROUND_RE))
       // night street lights: the baked lamp map multiplies the ground albedo (lawns, sand, paths)

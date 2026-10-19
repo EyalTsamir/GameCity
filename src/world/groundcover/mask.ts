@@ -38,8 +38,13 @@ export type Species = (typeof SPECIES)[number];
 
 /** tile sizes of the three LOD rings (metres) */
 export const RING_TILE = [2, 4, 8] as const;
+/** tile grids reach this far beyond the slab (= outer.ts OUTER_M) */
+export const GRID_PAD = 96;
 
 export interface TileGrid {
+  /** world origin of tile (0, 0): the slab expanded by GRID_PAD on every side (landscape band) */
+  x0: number;
+  z0: number;
   size: number;
   nx: number;
   nz: number;
@@ -111,6 +116,31 @@ function makeNoiseSampler(): (u: number, v: number, out: Float32Array) => void {
       f = (y1 * S + x1) * 4;
     for (let c = 0; c < 4; c++) out[c] = ((d[a + c] + (d[b + c] - d[a + c]) * tx) * (1 - ty) + (d[e + c] + (d[f + c] - d[e + c]) * tx) * ty) / 255;
   };
+}
+
+/** add blade content of another cover map (RGBA8 cover + R32F height, origin, res) to the tile grids */
+export function addToGrids(grids: TileGrid[], cover: Uint8Array, height: Float32Array, w: number, h: number, x0: number, z0: number, res: number): void {
+  for (let j = 0; j < h; j++) {
+    const z = z0 + (j + 0.5) * res;
+    for (let i = 0; i < w; i++) {
+      const p = j * w + i,
+        q = p * 4;
+      if (cover[q] < 6) continue;
+      const x = x0 + (i + 0.5) * res;
+      let fl = 1;
+      if (cover[q + 1] > 70 || cover[q + 2] > 0) fl |= 2 | 4;
+      const y = height[p];
+      for (const g of grids) {
+        const ti = Math.floor((x - g.x0) / g.size),
+          tj = Math.floor((z - g.z0) / g.size);
+        if (ti < 0 || tj < 0 || ti >= g.nx || tj >= g.nz) continue;
+        const t = tj * g.nx + ti;
+        g.flags[t] |= fl;
+        if (y < g.ymin[t]) g.ymin[t] = y;
+        if (y > g.ymax[t]) g.ymax[t] = y;
+      }
+    }
+  }
 }
 
 export function buildCoverMaps(ctx: CityContext): CoverMaps {
@@ -361,7 +391,14 @@ export function buildCoverMaps(ctx: CityContext): CoverMaps {
       const pondish = pond ? ((x - pond.cx) / pond.rx) ** 2 + ((z - pond.cz) / pond.rz) ** 2 < 1.6 : false;
       const mouth = x > 121 && z > 104 && z < 132;
       const beachBack = x > boardwalkX && x < boardwalkX + 16 && z > -4 && z < 108;
-      if (al < 0.01 && wk < 0.3 && lt0 < 0.03 && !pondish && !mouth && !beachBack) continue;
+      if (al < 0.01 && wk < 0.3 && !pondish && !mouth && !beachBack) {
+        // nothing grows here: fallen leaves only (on paving under the trees)
+        if (lt0 >= 0.03 && above > 0.05 && (o & OCC.BUILDING) === 0) {
+          cover[q + 3] = Math.round(Math.min(1, lt0 * 1.6) * 255);
+          stats.litterCells++;
+        }
+        continue;
+      }
       // ground-mask channels (R/G warped like the shader, B/A straight)
       noise(x * 0.0104, z * 0.0104, nA);
       noise(x * 0.111, z * 0.111, nB);
@@ -374,7 +411,7 @@ export function buildCoverMaps(ctx: CityContext): CoverMaps {
       // slope → rock (same rule as the ground shader)
       const gx = ((lb - la) * (1 - tz) + (ld - lc) * tz) * 2,
         gz = ((lc - la) * (1 - tx) + (ld - lb) * tx) * 2;
-      const ny = 1 / Math.hypot(gx, 1, gz);
+      const ny = 1 / Math.sqrt(gx * gx + 1 + gz * gz);
       const rock = smooth(0.24, 0.46, 1 - ny + (nB[0] - 0.5) * 0.22);
       // ── density
       let dens = al * (1 - sand) * (1 - rock * 0.95) * (1 - smooth(0.06, 0.8, wear) * 0.92);
@@ -394,8 +431,8 @@ export function buildCoverMaps(ctx: CityContext): CoverMaps {
       if ((pondish || mouth) && above > -0.5 && above < 0.6 && (o & HARD) === 0) {
         const wet = above < 0 ? smooth(-0.5, -0.12, above) : 1 - smooth(0.15, 0.6, above);
         // reeds come in stands, not a continuous fringe
-        const stand = smooth(0.38, 0.62, fbm(x * 0.09, z * 0.09, 41));
-        const sv = wet * (0.25 + 0.75 * stand) * (1 - sand * 0.6);
+        const stand = smooth(0.4, 0.6, fbm(x * 0.11, z * 0.11, 41));
+        const sv = wet * (0.06 + 0.94 * stand) * (1 - sand * 0.6);
         if (sv > 0.04) {
           hab = Math.round(1 + sv * 99);
           dens = Math.max(dens, sv * 0.85);
@@ -533,11 +570,12 @@ export function buildCoverMaps(ctx: CityContext): CoverMaps {
 
   // ── 11. per-tile metadata for the CPU ring walker
   const grids: TileGrid[] = RING_TILE.map((size) => {
-    const nx = Math.ceil((SLAB.x1 - SLAB.x0) / size),
-      nz = Math.ceil((SLAB.z1 - SLAB.z0) / size);
-    return { size, nx, nz, flags: new Uint8Array(nx * nz), ymin: new Float32Array(nx * nz).fill(1e9), ymax: new Float32Array(nx * nz).fill(-1e9) };
+    const nx = Math.ceil((SLAB.x1 - SLAB.x0 + 2 * GRID_PAD) / size),
+      nz = Math.ceil((SLAB.z1 - SLAB.z0 + 2 * GRID_PAD) / size);
+    return { x0: SLAB.x0 - GRID_PAD, z0: SLAB.z0 - GRID_PAD, size, nx, nz, flags: new Uint8Array(nx * nz), ymin: new Float32Array(nx * nz).fill(1e9), ymax: new Float32Array(nx * nz).fill(-1e9) };
   });
   const tpx = grids.map((g) => g.size / CRES);
+  const pad = GRID_PAD / CRES;
   for (let j = 0; j < CH; j++) {
     for (let i = 0; i < CW; i++) {
       const p = j * CW + i,
@@ -553,7 +591,7 @@ export function buildCoverMaps(ctx: CityContext): CoverMaps {
       const y = height[p];
       for (let gi = 0; gi < grids.length; gi++) {
         const g = grids[gi];
-        const t = Math.floor(j / tpx[gi]) * g.nx + Math.floor(i / tpx[gi]);
+        const t = Math.floor((j + pad) / tpx[gi]) * g.nx + Math.floor((i + pad) / tpx[gi]);
         g.flags[t] |= fl;
         if (y < g.ymin[t]) g.ymin[t] = y;
         if (y > g.ymax[t]) g.ymax[t] = y;

@@ -27,8 +27,11 @@ export interface Cafe {
   seats: CafeSeat[];
   /** a market parasol stands in the middle */
   parasol: boolean;
-  /** 'plaza' = terrace outside shops / towers on a plaza, 'kiosk' = round a coffee kiosk, 'station' = station forecourt */
-  source: 'plaza' | 'kiosk' | 'station';
+  /**
+   * 'plaza' = terrace outside shops / towers on a plaza, 'kiosk' = round a coffee kiosk, 'station' = station
+   * forecourt, 'sidewalk' = two-seat bistro table in the kerbside furniture band in front of a café / bakery
+   */
+  source: 'plaza' | 'kiosk' | 'station' | 'sidewalk';
 }
 
 /** Garden barbecue: smoke starts at the grill top. */

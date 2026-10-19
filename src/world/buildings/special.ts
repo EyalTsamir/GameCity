@@ -13,6 +13,8 @@ import {
   col, shade, setCol, lightBox, wallLamp,
 } from './gen';
 import { anchors } from './anchors';
+import { balconyLife, potPlant, roofClutter } from './clutter';
+import { GREEN } from './green';
 import { WIN, PROF, WALLPAT, ROOFPAT, FRAME, GLASS, LIGHT_MODE } from './materials';
 import { letterSign, boardSign, clockFace } from './signs';
 import { partitionSide } from './oldtown';
@@ -102,6 +104,12 @@ function grand(g: Gen): void {
             sideBox(t, sg, u - ww / 2 - 0.3, u + ww / 2 + 0.3, 0, 0.55, yb - 0.12, yb, true);
             railing(t, sx(sg, u - ww / 2 - 0.28, 0.52), sz(sg, u - ww / 2 - 0.28, 0.52), sx(sg, u + ww / 2 + 0.28, 0.52), sz(sg, u + ww / 2 + 0.28, 0.52), yb, 0.9, col('#2c3035'), 0.14, 1);
             anchors.balcony(sx(sg, u, 0.27), yb, sz(sg, u, 0.27), sg.nx, sg.nz, ww + 0.6, 0.55, 0.9);
+            // flower troughs / pots behind the iron railing
+            if (rng.chance(0.55)) {
+              const c = rng.weighted([GREEN.GERANIUM, GREEN.PETUNIA, GREEN.IVY_HANG], [3, 2, 1]);
+              if (c === GREEN.GERANIUM) for (const du of [-ww * 0.3, ww * 0.3]) potPlant(g, sg, u + du, 0.22, yb, 0.85, c);
+              else g.green.hang(sg, u - ww / 2 - 0.2, u + ww / 2 + 0.2, 0.55, yb + 0.9, 0.35, 0.9, c, 0.08);
+            }
           }
         }
       }
@@ -126,6 +134,7 @@ function grand(g: Gen): void {
   innerParapet(g, inner, H, H + 1.2, shade(stone, 0.9));
   setCol(t, col('#cfc4ae'));
   t.box(inner.x0 + 3, H, inner.z0 + 2, inner.x1 - 3, H + 3.0, inner.z0 + 6);
+  roofClutter(g, inner.x0, inner.z0, inner.x1, inner.z1, H + 0.02, { keep: [{ x0: inner.x0 + 2.6, x1: inner.x1 - 2.6, z0: inner.z0 + 1.6, z1: inner.z0 + 6.4 }, { x0: inner.x0, x1: inner.x1, z0: inner.z1 - 2.5, z1: inner.z1 }], density: 1.2 });
   setCol(t, col('#8f8c85'));
   t.box(inner.x0 + 2.8, H + 3.0, inner.z0 + 1.8, inner.x1 - 2.8, H + 3.15, inner.z0 + 6.2);
   // rooftop letters on a steel frame, facing the front
@@ -244,7 +253,8 @@ function seaview(g: Gen): void {
             sideBox(t, sg, u - 1.1, u + 1.1, 0, 0.9, yb - 0.14, yb, true);
             railing(t, sx(sg, u - 1.08, 0.86), sz(sg, u - 1.08, 0.86), sx(sg, u + 1.08, 0.86), sz(sg, u + 1.08, 0.86), yb, 0.95, col('#ffffff'), 0.16, 2);
             anchors.balcony(sx(sg, u, 0.45), yb, sz(sg, u, 0.45), sg.nx, sg.nz, 2.2, 0.9, 0.95);
-            if (rng.chance(0.3)) {
+            balconyLife(g, sg, u - 1.04, u + 1.04, yb, { rail: 0.95, depth: 0.82, green: 0.75 });
+            if (rng.chance(0.22)) {
               setCol(t, col(rng.pick(['#e63946', '#2a9d8f', '#f4a261', '#457b9d'])));
               const px = sx(sg, u + 0.6, 0.5), pz = sz(sg, u + 0.6, 0.5);
               t.cone(px, pz, 0.6, yb + 1.6, yb + 1.9, 8);

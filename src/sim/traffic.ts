@@ -134,6 +134,8 @@ export default function create(ctx: CityContext): CityModule {
     if (V.leaving) return `Leaving town via the ${sim.lanePortalName(V)} tunnel`;
     if (V.spec.model === 'sedan' && V.variant === SEDAN_TAXI) return V.id % 3 === 0 ? 'Looking for a fare' : 'Carrying a passenger';
     if (V.spec.model === 'delivery') return 'Out on deliveries';
+    if (V.spec.model === 'moto' && V.spec.variant === 1) return ['Delivering a takeaway', 'On the way to a pickup', 'Racing the clock with a pizza'][V.id % 3];
+    if (V.spec.model === 'bike' && V.spec.variant === 1) return ['Scooting to a meeting', 'Last mile home', 'Off to the beach'][V.id % 3];
     if (V.spec.model === 'lorry') return 'Hauling freight';
     const h = ctx.clock.hours;
     const k = V.id % 3;
@@ -180,6 +182,9 @@ export default function create(ctx: CityContext): CityModule {
   // ── service
   const service = {
     count: () => sim.vehicles.length,
+    /** live vehicle list (the array is replaced when vehicles leave: fetch it every frame); riders of the
+     * two-wheelers (V.twoWheel) are drawn by the pedestrians module from V.x/z/yaw/lean/crank */
+    vehicles: () => sim.vehicles,
     busCount: () => sim.busCount(),
     /** number of moving vehicles within r of (x, z) — handy for ambient audio */
     near: (x: number, z: number, r: number) => {

@@ -5,7 +5,7 @@
 
 import * as THREE from 'three';
 import type { Gen, SideGeom } from './gen';
-import { sideBox, sx, sz, setCol, col, shade, railing } from './gen';
+import { sideBox, sx, sz, setCol, col, shade } from './gen';
 import { GREEN } from './green';
 import { anchors } from './anchors';
 
@@ -85,7 +85,7 @@ export function balconyLife(g: Gen, sg: SideGeom, uA: number, uB: number, y: num
     return true;
   };
   // trailing plants over the railing (front) — the strongest Tel-Aviv / Mediterranean cue
-  if (r.chance(0.55 * gp)) {
+  if (r.chance(Math.min(0.9, 0.72 * gp))) {
     const cell = r.weighted(TRAIL, [2, 1.5, 1.2, 1.4]);
     const a = uA + r.range(0, W * 0.3),
       b = uB - r.range(0, W * 0.3);
@@ -101,22 +101,28 @@ export function balconyLife(g: Gen, sg: SideGeom, uA: number, uB: number, y: num
     }
   }
   // pot plants in the corners and along the wall
-  const nPots = Math.round(r.range(0.5, 3.6) * gp);
+  const nPots = Math.round(r.range(1.2, 4.4) * gp);
   for (let k = 0; k < nPots; k++) {
     const end = k % 2 === 0;
     const u = end ? uA + 0.25 + r.next() * 0.2 : uB - 0.25 - r.next() * 0.2;
     if (!take(u - 0.2, u + 0.2)) continue;
-    potPlant(g, sg, u, r.range(0.25, Math.max(0.3, D - 0.3)), y, r.range(0.9, 1.6));
+    potPlant(g, sg, u, r.range(0.25, Math.max(0.3, D - 0.3)), y, r.range(1.0, 1.9));
   }
-  // hanging pot under the balcony above / from the ceiling
-  if (r.chance(0.18 * gp) && W > 1.2) {
-    const u = uA + W * r.range(0.25, 0.75);
-    setCol(t, col('#e9e4d8'));
-    const hx = sx(sg, u, D * 0.55),
-      hz = sz(sg, u, D * 0.55);
-    t.cylinder(hx, hz, 0.006, y + 1.75, y + 2.4, 3, false);
-    t.cylinder(hx, hz, 0.13, y + 1.55, y + 1.75, 7, true, 0.16);
-    g.green.clump(hx, y + 1.3, hz, 0.25, 0.55, GREEN.POTHOS, 2);
+  // hanging pot on an iron wall bracket
+  if (r.chance(0.22 * gp) && W > 1.2) {
+    const u = r.chance(0.5) ? uA + 0.3 : uB - 0.3;
+    const yb = y + 2.15;
+    setCol(t, col('#2c3035'));
+    t.beam(sx(sg, u, 0), yb, sz(sg, u, 0), sx(sg, u, 0.45), yb, sz(sg, u, 0.45), 0.025, 0.025);
+    t.beam(sx(sg, u, 0), yb - 0.3, sz(sg, u, 0), sx(sg, u, 0.3), yb, sz(sg, u, 0.3), 0.02, 0.02);
+    const hx = sx(sg, u, 0.4),
+      hz = sz(sg, u, 0.4);
+    setCol(t, col('#d8d4ca'));
+    t.cylinder(hx, hz, 0.005, yb - 0.4, yb, 3, false);
+    setCol(t, col(r.pick(['#e9e4d8', '#b5653f', '#3a3f44'])));
+    t.cylinder(hx, hz, 0.12, yb - 0.6, yb - 0.4, 7, true, 0.15);
+    g.green.clump(hx, yb - 0.45, hz, 0.22, 0.32, r.pick([GREEN.GERANIUM, GREEN.GRASS, GREEN.JASMINE]), 2);
+    g.green.hang({ ...sg, x0: hx - sg.tx * 0.2, z0: hz - sg.tz * 0.2 }, 0, 0.4, 0.0, yb - 0.45, 0.3, 0.8, GREEN.POTHOS, 0.05, 1, 0.3);
   }
   // furniture: two chairs and a little table, or a single chair
   const roll = r.next();
@@ -396,7 +402,7 @@ export function julietBalcony(g: Gen, sg: SideGeom, u: number, ww: number, y0: n
   const t = g.trim;
   setCol(t, col('#cfc8bb'));
   sideBox(t, sg, u - ww / 2 - 0.12, u + ww / 2 + 0.12, 0, 0.32, y0 - 0.1, y0, true);
-  railing(t, sx(sg, u - ww / 2 - 0.1, 0.3), sz(sg, u - ww / 2 - 0.1, 0.3), sx(sg, u + ww / 2 + 0.1, 0.3), sz(sg, u + ww / 2 + 0.1, 0.3), y0, 0.85, col('#2c3035'), 0.11, 1);
+  ironRail(g, sg, u - ww / 2 - 0.1, u + ww / 2 + 0.1, 0.29, y0, 0.85, col('#2c3035'), true);
   if (g.rng.chance(0.75)) {
     const c = g.rng.weighted([GREEN.GERANIUM, GREEN.PETUNIA, GREEN.IVY_HANG, GREEN.BOUGAIN], [3, 2, 1, 1]);
     if (c === GREEN.GERANIUM) {
@@ -570,4 +576,52 @@ export function roofClutter(g: Gen, x0: number, z0: number, x1: number, z1: numb
     const p = place(0.2, 0.2);
     if (p) t.cylinder(p[0], p[1], 0.08, y, y + r.range(0.5, 1.1), 6, true);
   }
+}
+
+/**
+ * See-through iron railing along a side from uA to uB at offset o (balusters every ~0.12 m, thin), plus the two
+ * returns back to the wall when `returns` is set. Top rail at y + h.
+ */
+export function ironRail(g: Gen, sg: SideGeom, uA: number, uB: number, o: number, y: number, h: number, c: THREE.Color, returns = true): void {
+  const t = g.trim;
+  setCol(t, c);
+  const L = uB - uA;
+  sideBox(t, sg, uA, uB, o - 0.025, o + 0.025, y + h - 0.05, y + h, true, true);
+  sideBox(t, sg, uA, uB, o - 0.015, o + 0.015, y + 0.08, y + 0.11, true, true);
+  const n = Math.max(2, Math.round(L / 0.12));
+  for (let i = 0; i <= n; i++) {
+    const u = uA + (L * i) / n;
+    sideBox(t, sg, u - 0.011, u + 0.011, o - 0.011, o + 0.011, y, y + h - 0.05, false, true);
+  }
+  if (returns) {
+    for (const u of [uA, uB]) {
+      sideBox(t, sg, u - 0.02, u + 0.02, 0, o, y + h - 0.05, y + h, true, true);
+      const m = Math.max(1, Math.round(o / 0.12));
+      for (let k = 1; k < m; k++) sideBox(t, sg, u - 0.011, u + 0.011, (o * k) / m - 0.011, (o * k) / m + 0.011, y, y + h - 0.05, false, true);
+    }
+  }
+}
+
+/**
+ * Climbing plant on a wall: ivy / bougainvillea / jasmine rising from the ground at u over width w to yTop
+ * (ragged top, trailing tips), cards at offset ≤ oMax (stay inside the footprint below 2.4 m).
+ */
+export function climber(g: Gen, sg: SideGeom, u: number, w: number, yTop: number, oMax: number, cell: number = GREEN.IVY_WALL): void {
+  const r = g.rng;
+  const o = Math.max(0.015, Math.min(oMax - 0.02, 0.07));
+  // main mass: narrower at the base (a trunk), widening upward
+  const base = Math.min(0.5, w * 0.35);
+  g.green.wall(sg, u - base / 2, u + base / 2, 0.05, Math.min(1.4, yTop), o, cell, 0.75, 0.9);
+  if (yTop > 1.4) {
+    const rows = Math.max(1, Math.floor((yTop - 1.2) / 1.0));
+    for (let k = 0; k < rows; k++) {
+      const y0 = 1.2 + k * 1.0;
+      const ww = Math.min(w, base + (w - base) * Math.min(1, (k + 1) / 2)) * r.range(0.85, 1.1);
+      const cu = u + r.range(-0.2, 0.2);
+      g.green.wall(sg, cu - ww / 2, cu + ww / 2, y0, y0 + 1.25, o, cell, r.range(1.0, 1.4), r.range(0.9, 1.05));
+    }
+  }
+  // trailing tips over the top edge
+  const tip = cell === GREEN.IVY_WALL ? GREEN.IVY_HANG : cell === GREEN.JASMINE ? GREEN.IVY_HANG : GREEN.BOUGAIN;
+  g.green.hang(sg, u - w * 0.45, u + w * 0.45, o + 0.04, yTop + 0.35, 0.4, 0.9, tip, 0.04, 1, 0.3);
 }

@@ -18,6 +18,7 @@ import { Crowd, type BusEvent } from './pedestrians/crowd';
 import { CrowdRenderer } from './pedestrians/render';
 import { CrowdRenderer as LegacyRenderer } from './pedestrians/legacy/render';
 import { gaitConfig } from './pedestrians/rig';
+import { Riders } from './pedestrians/riders';
 
 export default function create(ctx: CityContext): CityModule {
   const rng = ctx.rng('pedestrians');
@@ -30,6 +31,8 @@ export default function create(ctx: CityContext): CityModule {
   if ((ctx.debug.params.get('hide') ?? '').split(',').includes('pedestrians')) renderer.group.visible = false;
   if (ctx.debug.params.has('pedlod')) renderer.forceLod = Math.max(0, Math.min(legacy ? 2 : 3, Number(ctx.debug.params.get('pedlod')) || 0));
   crowd.warmStart();
+  // riders of the traffic's two-wheelers (drawn with the crowd)
+  const riders = legacy ? null : new Riders(ctx);
 
   const offs: (() => void)[] = [];
   offs.push(ctx.events.on('bus:stop', (e: BusEvent) => crowd.onBus(e)));
@@ -75,11 +78,14 @@ export default function create(ctx: CityContext): CityModule {
       ms = ms * 0.9 + (performance.now() - t0) * 0.1;
     },
     frame() {
-      renderer.write(crowd, ctx.camera, ctx.uniforms.uTime.value, ctx.uniforms.uRain.value, ctx.uniforms.uNight.value, ctx.size.height * ctx.renderer.getPixelRatio());
+      if (riders) riders.sync();
+      if (renderer instanceof CrowdRenderer)
+        renderer.write(crowd, ctx.camera, ctx.uniforms.uTime.value, ctx.uniforms.uRain.value, ctx.uniforms.uNight.value, ctx.size.height * ctx.renderer.getPixelRatio(), riders ? riders.list : null, riders ? riders.n : 0);
+      else renderer.write(crowd, ctx.camera, ctx.uniforms.uTime.value, ctx.uniforms.uRain.value, ctx.uniforms.uNight.value, ctx.size.height * ctx.renderer.getPixelRatio());
     },
     stats() {
       const extra: Record<string, number> = renderer instanceof CrowdRenderer ? { pinLod: renderer.pin.n, figureVerts: renderer.vertices, shadowVerts: renderer.shadowVertices } : {};
-      return { ...crowd.statsSummary(), drawn: renderer.visible, nearLod: renderer.near.n, tinyLod: renderer.tiny.n, ...extra, figureTris: renderer.triangles, simMs: Math.round(ms * 100) / 100 };
+      return { ...crowd.statsSummary(), riders: riders ? riders.n : 0, drawn: renderer.visible, nearLod: renderer.near.n, tinyLod: renderer.tiny.n, ...extra, figureTris: renderer.triangles, simMs: Math.round(ms * 100) / 100 };
     },
     invariants() {
       return crowd.invariants();

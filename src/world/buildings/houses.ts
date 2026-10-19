@@ -10,6 +10,7 @@ import {
   col, shade, setCol, lightBox, wallLamp,
 } from './gen';
 import { anchors } from './anchors';
+import { balconyLife, roofClutter } from './clutter';
 import { WIN, PROF, WALLPAT, ROOFPAT, FRAME, GLASS, LIGHT_MODE } from './materials';
 import { partitionSide } from './oldtown';
 
@@ -398,16 +399,13 @@ export function genApartment(g: Gen): void {
   }
   flatRoof(s, inner, H + 0.02, col('#8e8b84'), ROOFPAT.FLAT, g.seed);
   railing(t, inner.x0 + 0.1, inner.z1 - 0.1, inner.x1 - 0.1, inner.z1 - 0.1, H + 0.68, 0.5, col('#9aa3aa'), 2.0, 0);
-  // TV aerials
-  for (let k = 0; k < 4; k++) {
-    const ax = inner.x0 + 2 + rng.next() * (inner.x1 - inner.x0 - 4),
-      az = inner.z0 + 1 + rng.next() * (inner.z1 - inner.z0 - 2);
-    setCol(t, col('#b9bec2'));
-    t.cylinder(ax, az, 0.03, H, H + 2.2, 4, false);
-    for (let q = 0; q < 3; q++) t.box(ax - 0.5 + q * 0.12, H + 1.7 + q * 0.15, az - 0.02, ax + 0.5 - q * 0.12, H + 1.74 + q * 0.15, az + 0.02, 0b111111);
-  }
+  // lived-in roof: solar water heaters, tanks, AC condensers, aerials (stair-core roofs + PV strip kept clear)
+  const keep = cores.map((u) => ({ x0: body.x0 + u - coreW / 2 - 0.4, x1: body.x0 + u + coreW / 2 + 0.4, z0: body.z1 - 1.2, z1: body.z1 + 1 }));
+  const pv = rng.chance(0.3);
+  if (pv) keep.push({ x0: inner.x0, x1: inner.x1, z0: inner.z0, z1: inner.z0 + 2.7 });
+  roofClutter(g, inner.x0, inner.z0, inner.x1, inner.z1 - 0.3, H + 0.02, { keep, density: 1.3 });
   // solar panels
-  if (rng.chance(0.7)) {
+  if (pv) {
     for (let k = 0; k < 3; k++) {
       const px = inner.x0 + 3 + k * 3.2;
       if (px + 2.4 > inner.x1 - 2) break;
@@ -463,13 +461,17 @@ export function genApartment(g: Gen): void {
     anchors.balcony(sx(sg, u, dep / 2), y, sz(sg, u, dep / 2), sg.nx, sg.nz, w - 0.16, dep - 0.08, 1.0);
     // life on the balcony
     const r = rng.next();
-    if (r < 0.3) {
-      setCol(t, col('#b5653f'));
-      const px = sx(sg, u + w / 2 - 0.45, 0.5), pz = sz(sg, u + w / 2 - 0.45, 0.5);
-      t.cylinder(px, pz, 0.16, y, y + 0.35, 6, true, 0.2);
-      setCol(t, col('#4f8a3c'));
-      t.sphere(px, y + 0.7, pz, 0.32, 6, 4);
-    } else if (r < 0.5) {
+    if (r >= 0.22) {
+      balconyLife(g, sg, u - w / 2 + 0.1, u + w / 2 - 0.1, y, { rail: 1.0, depth: dep - 0.1, solid: true, green: back ? 0.75 : 0.95 });
+      if (r > 0.9) {
+        // parasol
+        setCol(t, col(rng.pick(APT_ACCENT)));
+        const px = sx(sg, u, 0.6), pz = sz(sg, u, 0.6);
+        t.cone(px, pz, 0.85, y + 1.7, y + 2.05, 8);
+        setCol(t, col('#dddddd'));
+        t.cylinder(px, pz, 0.025, y, y + 1.72, 4, false);
+      }
+    } else {
       // laundry line
       setCol(t, col('#dddddd'));
       const ax = sx(sg, u - w / 2 + 0.3, 0.55), az = sz(sg, u - w / 2 + 0.3, 0.55);
@@ -485,13 +487,6 @@ export function genApartment(g: Gen): void {
         const cx = ax + (bx - ax) * f, cz = az + (bz - az) * f;
         c.box(cx - 0.18 * Math.abs(sg.tx) - 0.01, y + 0.85, cz - 0.18 * Math.abs(sg.tz) - 0.01, cx + 0.18 * Math.abs(sg.tx) + 0.01, y + 1.24, cz + 0.18 * Math.abs(sg.tz) + 0.01, 0b111111);
       }
-    } else if (r < 0.6) {
-      // parasol
-      setCol(t, col(rng.pick(APT_ACCENT)));
-      const px = sx(sg, u, 0.6), pz = sz(sg, u, 0.6);
-      t.cone(px, pz, 0.85, y + 1.7, y + 2.05, 8);
-      setCol(t, col('#dddddd'));
-      t.cylinder(px, pz, 0.025, y, y + 1.72, 4, false);
     }
   }
 }

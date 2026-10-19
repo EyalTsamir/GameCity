@@ -525,6 +525,13 @@ export function chimney(g: Gen, x: number, z: number, y0: number, y1: number, w 
     t.cylinder(x, pz, 0.11, y1 + 0.12, y1 + 0.42, 6, true, 0.09);
   }
   anchors.chimney(x, z, y1 + 0.42, w, d);
+  // a TV aerial strapped to some stacks (classic roofscape clutter)
+  if (g.rng.chance(0.3)) {
+    setCol(t, col('#b9bec2'));
+    const ax = x + w / 2 + 0.05;
+    t.cylinder(ax, z, 0.022, y1 - 0.4, y1 + 1.6, 4, false);
+    for (let q = 0; q < 3; q++) t.box(ax - 0.42 + q * 0.1, y1 + 1.1 + q * 0.14, z - 0.014, ax + 0.42 - q * 0.1, y1 + 1.13 + q * 0.14, z + 0.014, 0b111111);
+  }
 }
 
 /** Wall lantern (emissive) beside a door. Kept above 2.4 m so it may project past the footprint. */

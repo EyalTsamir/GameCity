@@ -23,6 +23,7 @@ import { PLINTH_BOTTOM_Y } from './stage/constants';
 import { WORLD_MODE } from '../core/world';
 import { installAtmosphere } from './atmosphere';
 import { AtmosphereDriver } from './sky/atmoDrive';
+import { cloudLayerUniforms } from './sky/cloudLayer';
 
 const _focus = new THREE.Vector3();
 const _L = new THREE.Vector3();
@@ -93,7 +94,12 @@ export default async function create(ctx: CityContext): Promise<CityModule> {
   scene.add(hemi);
 
   // ── backdrop, clouds, rain
-  const dome = createSkyDome(world, physSky);
+  // world: the high cloud sky (cumulus deck + cirrus), shared with the cloud-shadow map (?noclouds)
+  const cloudLayer = world && !ctx.debug.params.has('noclouds') ? cloudLayerUniforms() : null;
+  const cloudCovParam = ctx.debug.params.has('clouds') ? Number(ctx.debug.params.get('clouds')) : NaN;
+  const cloudDayRng = ctx.rng('cloud-days');
+  const cloudDay = { day: -1, cu: 1, ci: 1 };
+  const dome = createSkyDome(world, physSky, cloudLayer);
   scene.add(dome.mesh);
 
   const obstacles: Obstacle[] = [];
@@ -180,7 +186,7 @@ export default async function create(ctx: CityContext): Promise<CityModule> {
   };
 
   // soft cloud shadows are drawn by post-processing from this shared data
-  const cloudShadows: CloudShadowData = { data: new Float32Array(MAX_CLOUDS * 8), count: 0, light: new THREE.Vector3(0, 1, 0), strength: 0, tint: new THREE.Color(0.6, 0.64, 0.74) };
+  const cloudShadows: CloudShadowData = { data: new Float32Array(MAX_CLOUDS * 8), count: 0, light: new THREE.Vector3(0, 1, 0), strength: 0, tint: new THREE.Color(0.6, 0.64, 0.74), field: cloudLayer ?? undefined };
   ctx.services.cloudShadows = cloudShadows;
   const _shTint = new THREE.Color();
 
@@ -275,6 +281,9 @@ export default async function create(ctx: CityContext): Promise<CityModule> {
     _sunSky.copy(clock.sunDir);
     dome.update(state, _sunSky, clock.moonDir, sunVis, moonVis, clock.realTime, overcast);
     if (world) {
+      // sky glow of the lit town (and the villages around): warm, low, only with the street lights on
+      atmo.cityGlow.setRGB(1.0, 0.6, 0.32).multiplyScalar(0.045 * ctx.uniforms.uLights.value * (1 - overcast * 0.3) + 0.03 * overcast * ctx.uniforms.uLights.value);
+      dome.setCityGlow(atmo.cityGlow);
       atmo.update(renderer, state, _sunSky, sunVis, overcast, ctx.camera.position.y, ctx.uniforms.uWind.value, clock.speed > 0 ? realDt * clock.speed : 0);
       if (atmo.lut) dome.setPhysical(atmo.lut.texture, atmo.skyScale, state.zenith, state.horizon, atmo.nightW, atmo.sunColor, atmo.zenith, atmo.params.ring[0]);
       if (envPhys) {
@@ -368,6 +377,42 @@ export default async function create(ctx: CityContext): Promise<CityModule> {
     const shStrength = (usingMoon ? 0.3 * moonW : sunW) * (1 - overcast * 0.85);
     _shTint.setRGB(0.6, 0.645, 0.75);
     clouds.writeShadows(cloudShadows, _L, shStrength, _shTint);
+    if (cloudLayer) {
+      const cu = cloudLayer;
+      // fair-weather cumulus: few in the morning, building up by early afternoon, thinning at dusk;
+      // every day a little different; rain fills the sky
+      if (cloudDay.day !== clock.day) {
+        cloudDay.day = clock.day;
+        cloudDay.cu = cloudDayRng.range(0.65, 1.3);
+        cloudDay.ci = cloudDayRng.range(0.4, 1.4);
+      }
+      const h = clock.hours;
+      let cov = (0.16 + 0.26 * smooth(8.5, 14, h) - 0.16 * smooth(18, 21.5, h)) * cloudDay.cu;
+      if (Number.isFinite(cloudCovParam)) cov = cloudCovParam;
+      cov += (0.97 - cov) * overcast;
+      cu.uCu.value.x = Math.min(1, Math.max(0, cov));
+      cu.uCi.value.x = Math.min(0.85, 0.32 * cloudDay.ci) * (1 - overcast * 0.6);
+      // light on the clouds: the sun after the atmosphere at deck height (pink after sunset), or the moon
+      const comp = Math.pow(Math.max(1, atmo.comp), 0.6);
+      if (usingMoon) {
+        cu.uCloudL.value.copy(clock.moonDir);
+        cu.uCloudSun.value.copy(state.sun).multiplyScalar(0.16 * moonW);
+      } else {
+        cu.uCloudL.value.copy(_sunSky);
+        cu.uCloudSun.value.copy(atmo.cloudSunT).multiplyScalar(2.5 * comp * (1 - overcast * 0.7));
+      }
+      cu.uCloudAmbTop.value.copy(atmo.params.ring[0]).lerp(atmo.zenith, 0.55).multiplyScalar(1.05);
+      cu.uCloudAmbBot.value.copy(state.hemiGround).multiplyScalar(state.hemiI * 0.55).add(_tmpC.copy(state.sun).multiplyScalar(lightI * 0.04));
+      if (overcast > 0) {
+        const g = lum(cu.uCloudAmbTop.value);
+        cu.uCloudAmbTop.value.lerp(_grey.setRGB(g, g * 1.02, g * 1.06), overcast * 0.7).multiplyScalar(1 - overcast * 0.35);
+      }
+      cu.uCloudCity.value.setRGB(1.0, 0.62, 0.34).multiplyScalar(0.1 * lights);
+      // shadows on the ground from the same field (soft, faded by the haze in front of them)
+      cloudShadows.light.copy(_L);
+      cloudShadows.strength = shStrength * smooth(0.0, 0.1, cu.uCu.value.x);
+      cloudShadows.haze = atmo.params.haze + atmo.params.rayleigh.y;
+    }
     _tmpC.copy(state.cloudShade).lerp(state.fog, 0.4).multiplyScalar(1.3);
     rain.update(clock.simTime, rainAmt, _focus, dist, ctx.uniforms.uWind.value, _tmpC);
 
@@ -384,7 +429,14 @@ export default async function create(ctx: CityContext): Promise<CityModule> {
   return {
     name: 'sky',
     update(dt) {
-      clouds.step(dt, ctx.uniforms.uWind.value);
+      if (cottonClouds) clouds.step(dt, ctx.uniforms.uWind.value);
+      if (cloudLayer && dt > 0) {
+        // the deck drifts with the (veering) wind, ~12 m/s at full strength; cirrus faster (in the shader)
+        const w = ctx.uniforms.uWind.value;
+        const ws = Math.hypot(w.x, w.y);
+        cloudLayer.uCu.value.w = (cloudLayer.uCu.value.w + (4 + 9 * ws) * dt) % 1e7;
+        if (ws > 1e-3) cloudLayer.uCloudWind.value.lerp(_w2.set(w.x / ws, w.y / ws), Math.min(1, dt * 0.02)).normalize();
+      }
     },
     frame(realDt) {
       frameUpdate(realDt);
@@ -403,9 +455,9 @@ export default async function create(ctx: CityContext): Promise<CityModule> {
         key: legacy ? 'legacy' : world ? 'world' : 'studio',
         hazeKm: world ? Math.round(3.912 / Math.max(1e-6, atmo.params.haze + atmo.params.rayleigh.y) / 100) / 10 : -1,
         mist: world ? Math.round(atmo.params.mist * 1e4) / 1e4 : 0,
-        clouds: clouds.count,
-        cloudsActive: clouds.stats().active,
-        cloudsOverCity: clouds.stats().overCity,
+        clouds: cloudLayer ? Math.round(cloudLayer.uCu.value.x * 100) / 100 : clouds.count,
+        cloudsActive: cottonClouds ? clouds.stats().active : 0,
+        cloudsOverCity: cottonClouds ? clouds.stats().overCity : 0,
         envBakes: env.bakes,
         skyLut: atmo.lutUpdates,
         skyScale: Math.round(atmo.skyScale * 10) / 10,
@@ -438,3 +490,4 @@ export default async function create(ctx: CityContext): Promise<CityModule> {
 }
 
 const _tmpV = new THREE.Vector3();
+const _w2 = new THREE.Vector2();

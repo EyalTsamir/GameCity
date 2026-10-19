@@ -31,7 +31,9 @@ import type { BenchPlace, DoorCat, DoorPlace, Places, Spot, SpotPlace, StopPlace
 import { makeLook, type Look, type Persona } from './looks';
 import { F, DOG_OFFSET } from './figure';
 import { gaitConfig, gaitCycleOf, GC } from './rig';
-import type { CafePlace, CafeSeat } from './cafes';
+import type { CafePlace, CafeSeat, Terrace } from './cafes';
+import { settingMask, HELD_CUP } from './tableware';
+import type { RideGeom } from '../traffic/models';
 
 // ───────────────────────────────────────────────────────────── types ──
 
@@ -49,6 +51,7 @@ export type PartyState =
   | 'board'
   | 'fadein'
   | 'fadeout'
+  | 'serve'
   | 'gone';
 
 export type GoalKind = 'door' | 'bench' | 'beach' | 'view' | 'bus' | 'waypoint' | 'cafe';
@@ -212,6 +215,16 @@ export class Member {
   /** café: table edge distance in front of the seat spot, table-top height above the seat spot's y (m) */
   tabD = 0.15;
   tabH = 0.75;
+  /** café: what is on the table in front of them (tableware.ts part bits); 1 if that includes a cup */
+  order = 0;
+  cupOrder = 0;
+  /** waiter: 0 hands free, 1 order pad, 2 carrying an order (cup / plate) */
+  carry = 0;
+  /** riding a two-wheeler (riders.ts): the vehicle's anchor points, crank angle, lean, foot down */
+  rideG: RideGeom | null = null;
+  pedal = 0;
+  lean = 0;
+  stopped = false;
   towel = false;
   sunbathing = false;
   lieVariant = 0;
@@ -317,6 +330,10 @@ export class Party {
   rest = 0; // seconds since the party last moved along its rail
   /** café goals: rail arc length where the party leaves its walk for the terrace (Infinity = none) */
   exitS = Infinity;
+  /** waiter of a café terrace (state 'serve'): phase 0 at the service point, 1 going to a table, 2 at it, 3 back */
+  staff: Terrace | null = null;
+  servePhase = 0;
+  serveCafe: CafePlace | null = null;
   constructor(id: number, persona: Persona) {
     this.id = id;
     this.persona = persona;
@@ -528,7 +545,7 @@ export class Crowd {
 
   private alive(): number {
     let n = 0;
-    for (const p of this.parties) if (p.state !== 'gone' && p.state !== 'fadeout' && p.state !== 'board') n += p.size;
+    for (const p of this.parties) if (p.state !== 'gone' && p.state !== 'fadeout' && p.state !== 'board' && !p.staff) n += p.size;
     return n;
   }
 
@@ -1109,6 +1126,9 @@ export class Crowd {
       case 'act':
         this.stepAct(p, h);
         break;
+      case 'serve':
+        this.stepServe(p, h);
+        break;
       case 'fadeout':
         for (const m of p.members) {
           m.fade = Math.max(0, m.fade - h / Math.max(0.1, p.timer));
@@ -1480,7 +1500,7 @@ export class Crowd {
     // here — the walkway avoidance (with its jam fallbacks) takes over
     let wait = 0;
     for (const m of p.members) wait = Math.max(wait, m.yieldT);
-    if (wait > 30) {
+    if (wait > 30 && !p.staff) {
       // hemmed in for half a minute: they quietly go some other way (very rare)
       this.beginFadeOut(p, 1.5);
       return;
@@ -1703,6 +1723,8 @@ export class Crowd {
       case 'board':
         p.state = 'gone';
         this.stats.boarded += p.size;
+        break;
+      case 'serve':
         break;
       case 'fadein':
         p.state = 'walk';
@@ -2038,7 +2060,10 @@ export class Crowd {
         p.state = 'act';
         p.timer = 0;
         if (g.kind === 'bus') p.busStop = g.place as StopPlace;
-        if (g.cafe) g.cafe.since = this.time;
+        if (g.cafe) {
+          g.cafe.since = this.time;
+          g.cafe.served = 0;
+        }
       }
     } else if (p.state === 'rise') {
       if (settled || p.timer > 4) {
@@ -2549,6 +2574,8 @@ export class Crowd {
       m.cafe = r < 0.3 ? 3 : r < 0.6 ? 4 : r < 0.85 ? 2 : 5;
     } else m.cafe = rng.chance(0.75) ? 1 : rng.chance(0.5) ? 5 : 4;
     m.reading = m.cafe === 3;
+    m.order = settingMask(m.seed, m.meal, h, m.idx === 0);
+    m.cupOrder = m.order & HELD_CUP ? 1 : 0;
     if (g.cafe && g.spots) {
       const st = g.spots[m.idx];
       const c = g.cafe;
@@ -2775,6 +2802,7 @@ export class Crowd {
   }
 
   private release(p: Party): void {
+    if (p.serveCafe && p.serveCafe.waiter === p.id) p.serveCafe.waiter = -1;
     if (p.crossing) {
       this.ctx.intersections.endCross(p.id);
       p.crossing = null;
@@ -2879,10 +2907,134 @@ export class Crowd {
 
   // ── director: spawning, trains, buses ────────────────────────────
 
+  /** waiters on the café terraces while they are open: one per terrace, two on the big ones */
+  private staffing(): void {
+    const h = this.ctx.clock.hours;
+    const open = cafeFactor(h) > 0.03 && this.ctx.uniforms.uRain.value < 0.5;
+    for (const T of this.places.terraces) {
+      const want = open ? (T.cafes.length >= 7 ? 2 : 1) : 0;
+      let have = 0;
+      for (const p of this.parties) if (p.staff === T && p.state === 'serve') have++;
+      if (have < want) {
+        if (this.busyAt(T.x, T.z, 0.75)) continue;
+        const p = this.makeParty('worker', 1);
+        const m = p.members[0];
+        dressWaiter(m.look, this.rng);
+        p.staff = T;
+        p.state = 'serve';
+        p.servePhase = 0;
+        p.timer = this.rng.range(1, 4);
+        m.x = m.px = T.x;
+        m.z = m.pz = T.z;
+        m.y = T.y;
+        m.yaw = m.faceYaw = T.yaw;
+        m.faceHold = true;
+        m.fade = 0;
+        m.present = true;
+        m.fdone = true;
+        this.parties.push(p);
+        this.stats.spawned++;
+      } else if (have > want) {
+        // closing: a waiter back at the service point goes inside
+        for (const p of this.parties) {
+          if (p.staff !== T || p.state !== 'serve' || p.servePhase !== 0) continue;
+          this.beginFadeOut(p, 1);
+          break;
+        }
+      }
+    }
+  }
+
+  /** a waiter's round: wait by the café, take an order at a table, bring it, back again */
+  private stepServe(p: Party, h: number): void {
+    const m = p.members[0];
+    const T = p.staff!;
+    m.fade = Math.min(1, m.fade + h / 0.8);
+    m.present = true;
+    if (!m.fdone) {
+      this.stepFree(p, h);
+      if (!m.fdone) return;
+    } else this.moveMember(m, m.x, m.z, m.y, h, false);
+    p.timer -= h;
+    const c = p.serveCafe;
+    switch (p.servePhase) {
+      case 0: {
+        if (p.timer > 0) return;
+        // a table that needs us: newly seated (no order yet), or an order waiting to be brought
+        let pick: CafePlace | null = null;
+        let best = -Infinity;
+        for (const t of T.cafes) {
+          if (t.taken < 0 || !t.wpath.length || t.served >= 2 || t.waiter >= 0) continue;
+          const q = this.parties.find((o) => o.id === t.taken);
+          if (!q || (q.state !== 'act' && q.state !== 'settle')) continue;
+          const wait = this.time - t.since;
+          if (t.served === 1 && this.time - t.servedAt < 6) continue; // the kitchen needs a moment
+          const score = wait + this.rng.next() * 4 + (t.served === 1 ? 5 : 0);
+          if (score > best) {
+            best = score;
+            pick = t;
+          }
+        }
+        if (!pick) {
+          p.timer = this.rng.range(1.5, 4);
+          m.faceYaw = T.yaw + this.rng.range(-0.6, 0.6);
+          return;
+        }
+        p.serveCafe = pick;
+        pick.waiter = p.id;
+        m.carry = pick.served === 1 ? 2 : 0;
+        this.setFree(m, pick.wpath);
+        m.faceHold = false;
+        p.servePhase = 1;
+        return;
+      }
+      case 1:
+        // arrived at the table
+        if (!c) {
+          p.servePhase = 3;
+          return;
+        }
+        p.servePhase = 2;
+        p.timer = c.served === 1 ? this.rng.range(2, 3.2) : this.rng.range(4, 7);
+        m.faceYaw = Math.atan2(c.x - m.x, c.z - m.z);
+        m.faceHold = true;
+        if (c.served === 0) m.carry = 1;
+        return;
+      case 2: {
+        if (p.timer > 0) return;
+        if (c) {
+          if (c.served === 1) c.served = 2;
+          else if (c.served === 0) {
+            c.served = 1;
+            c.servedAt = this.time;
+          }
+          c.waiter = -1;
+          // back the way we came
+          const P = c.wpath;
+          const back: number[] = [];
+          for (let k = P.length - 6; k >= 0; k -= 3) back.push(P[k], P[k + 1], P[k + 2]);
+          back.push(T.x, T.z, T.y);
+          this.setFree(m, back);
+        }
+        m.carry = 0;
+        m.faceHold = false;
+        p.serveCafe = null;
+        p.servePhase = 3;
+        return;
+      }
+      default:
+        p.servePhase = 0;
+        p.timer = this.rng.range(2, 6);
+        m.faceYaw = T.yaw;
+        m.faceHold = true;
+    }
+  }
+
   private director(dt: number): void {
     let beach = 0;
     for (const p of this.parties) if (p.goal?.kind === 'beach' && p.state !== 'gone') beach += p.size;
     this.onBeach = beach;
+    this.staffing();
     const target = this.target();
     const alive = this.alive();
     const deficit = target - alive;
@@ -3353,7 +3505,10 @@ export class Crowd {
     p.timer = g.dur * progress;
     p.rail = null;
     p.exitS = Infinity;
-    if (g.cafe) g.cafe.since = this.time - g.dur * progress;
+    if (g.cafe) {
+      g.cafe.since = this.time - g.dur * progress;
+      g.cafe.served = 2;
+    }
     if (g.kind === 'bus') p.busStop = g.place as StopPlace;
     for (const m of p.members) {
       const sp = g.spots[m.idx];
@@ -3396,6 +3551,9 @@ export class Crowd {
     const lines: string[] = [];
     let doing = '';
     switch (p.state) {
+      case 'serve':
+        doing = p.servePhase === 2 ? (m.carry === 1 ? 'Taking an order' : 'Serving a table') : m.carry === 2 ? 'Bringing an order out' : p.servePhase === 0 ? 'Waiting tables, keeping an eye on the terrace' : 'Waiting tables';
+        break;
       case 'wait':
       case 'toWait':
         doing = 'Waiting to cross';
@@ -3635,4 +3793,36 @@ function segDist(ax: number, az: number, bx: number, bz: number, px: number, pz:
   let t = l2 > 0 ? ((px - ax) * dx + (pz - az) * dz) / l2 : 0;
   t = clamp(t, 0, 1);
   return Math.hypot(px - (ax + t * dx), pz - (az + t * dz));
+}
+
+/** a waiter: white shirt, black trousers, a long black bistro apron, no bags or hats */
+function dressWaiter(L: Look, rng: Rng): void {
+  L.top = rng.chance(0.75) ? 0xf2f0eb : 0x26272b;
+  L.bottom = 0x1d1e21;
+  L.shoes = 0x161616;
+  L.flags = 0;
+  L.umbrellaOwner = false;
+  L.dog = null;
+  L.pram = null;
+  const s = L.style;
+  if (s) {
+    s.hat = 0;
+    s.jacketHem = -1;
+    s.hood = false;
+    s.vest = false;
+    s.tie = false;
+    s.lapels = false;
+    s.sleeve = rng.chance(0.5) ? 0.42 : 0.04;
+    s.topHem = 0.3;
+    s.trouserEnd = 0.08;
+    s.trouserFit = 0.85;
+    s.legwear = 0;
+    s.bootTop = 0;
+    s.sole = 0;
+    s.neckTop = 0.95;
+    // long apron from the waist to below the knee (skirt garment in the trouser colour)
+    s.tail = 1;
+    s.tailHem = 0.3;
+    s.tailFlare = 0.02;
+  }
 }

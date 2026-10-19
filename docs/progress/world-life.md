@@ -1,20 +1,21 @@
 # world-life — wind consumers, smoke, birds, small motion (world round)
 
 ## Resume here
-* 2026-10-19 20:40 (after the usage-limit stop + reboot) — M1 + M2 code written, typechecking:
-  - M1 cloth: `src/world/life.ts`, `life/glsl.ts`, `life/cloth.ts`, `life/decor.ts` (street lines from
-    `buildings.facades` in oldtown+market; court spans → laundry; balcony laundry → cloth +
-    `buildings.setStaticLaundry(false)`); landmark FLAG mode on `thWindAt` + calm droop
-    (src/world/landmarks/shaders.ts). Shot t2 (shots/world/life/m1/t2.png): bunting + festoons read well.
-    Only ~8 street lines exist (old town has 2 inner streets; facing fronts are rare) → plan: market masts
-    with radiating lines, pole flags, maybe lamp-post zig-zags.
-  - M2 smoke: `sim/ambient/smoke.ts` (windAt gusts + height shear, HG forward scatter, erosion, dither,
-    emitter distance LOD, `opacity` option, soft depth via `postfx.softDepth()` (`?nosoftsmoke` off),
-    MAX 1400); `life/chimneys.ts` (buildings.chimneys/vents + props.bbqs with day schedules).
-* Running: capture set → shots/world/life/m2a (log shots/world/life/m2a.log), private copy of capture-set
-  with a 25-min ready timeout: scratchpad/life/cap.mjs (recreate: sed of scripts/capture-set.mjs, see log).
-* Next: judge m2a; pennant twist variation; market masts + radiating festoons; rotary-dryer laundry
-  (props.washing + props.setStaticLaundry(false)); pole flags (harbour, beach, hotel facades).
+* 2026-10-19 20:50 — code written + typechecking, NOT yet verified by capture (m2a running):
+  - M1 cloth: `src/world/life.ts`, `life/glsl.ts`, `life/cloth.ts`, `life/decor.ts`, `life/poles.ts`,
+    `life/extras.ts` (market masts + radiating festoons/bunting, lifeguard flags, hotel entrance flags,
+    rotary-dryer laundry → `props.setStaticLaundry(false)`); landmark FLAG mode on `thWindAt` + calm droop.
+  - M2 smoke: `sim/ambient/smoke.ts` (windAt gusts + shear, HG rim, erosion, dither, distance LOD,
+    `opacity`, soft depth from `postfx.softDepth()`), `life/chimneys.ts` (chimneys/vents/bbqs schedules).
+  - M4 birds (`sim/ambient/birds.ts`): pigeons hop aside / group lifts when people pass
+    (`pedestrians.near`), swift screaming parties over old town + market at dawn/dusk (`?` locate 'swift'),
+    gulls perch on waterfront roof ridges (`buildings.perches`, modes 4/5).
+  - M5 drift: `life/drift.ts` (leaves in gusts from `vegetation.trees` near the camera focus; dust motes
+    lit by HG forward scatter of the low sun; moths at the 12 nearest lamps at night).
+* Running: capture set → shots/world/life/m2a (task output in the session; log shots/world/life/m2a.log);
+  private capture script: scratchpad/life/cap.mjs (= scripts/capture-set.mjs with a 25-min ready timeout).
+* Next: judge m2a (bunting, smoke at 7.5/18.2/11, market), then a capture with leaves/motes/swifts
+  (eye level 18.2 looking at the sun), fix, full-city milestone set, message lead.
 
 ## Brief (from WORLD-PLAN.md §6 + briefs)
 Wind consumers: flags on poles flap, bunting / festoon strings across old-town streets and the market,

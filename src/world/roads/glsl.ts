@@ -26,6 +26,49 @@ const JBOX = (CORRIDOR_HALF + 1.4).toFixed(2);
 /** shared by v2 asphalt + hardscape (needs COMMON from materials.ts) */
 export const COMMON2 = /* glsl */ `
 uniform sampler2D tRC;
+// small litter / leaves / gum on the ground at p: returns (colour, coverage) — dens = items per 0.36 m² cell
+// probability; kinds: leaves (browns, ochres), cigarette butts, paper bits, gum. Fades out (cov → 0) once the
+// pixel footprint fw exceeds ~1.5 cm, so it never sparkles in the distance.
+vec4 rdLitter(vec2 p, float fw, float dens, float leafy) {
+  float near = 1.0 - smoothstep(0.006, 0.016, fw);
+  if (near <= 0.0 || dens <= 0.0) return vec4(0.0);
+  vec2 g = floor(p / 0.6);
+  vec4 acc = vec4(0.0);
+  for (int k = 0; k < 2; k++) {
+    vec2 gc = g + vec2(float(k) * 17.0, 0.0);
+    float h = rdHash(gc + 3.7);
+    if (h > dens) continue;
+    vec2 ctr = (g + vec2(rdHash(gc + 1.1), rdHash(gc + 2.3))) * 0.6;
+    float a = rdHash(gc + 4.9) * 6.2832;
+    vec2 d = p - ctr;
+    vec2 r = vec2(cos(a) * d.x + sin(a) * d.y, -sin(a) * d.x + cos(a) * d.y);
+    float kind = rdHash(gc + 6.1);
+    float m;
+    vec3 col;
+    if (kind < leafy) {
+      // leaf: ellipse with a pointed tip
+      m = 1.0 - smoothstep(0.8, 1.0, length(r / vec2(0.055, 0.03)) + 0.3 * max(r.x / 0.055, 0.0));
+      float lc = rdHash(gc + 8.3);
+      col = mix(vec3(0.42, 0.24, 0.08), vec3(0.62, 0.46, 0.14), lc);
+      col = mix(col, vec3(0.3, 0.32, 0.12), step(0.85, lc));
+    } else if (kind < leafy + (1.0 - leafy) * 0.45) {
+      // cigarette butt
+      m = (1.0 - smoothstep(0.85, 1.0, max(abs(r.x) / 0.018, abs(r.y) / 0.005)));
+      col = r.x > 0.008 ? vec3(0.78, 0.5, 0.24) : vec3(0.9, 0.88, 0.82);
+    } else if (kind < leafy + (1.0 - leafy) * 0.75) {
+      // chewing gum: flattened grey disc
+      m = 1.0 - smoothstep(0.7, 1.0, length(r) / 0.016);
+      col = vec3(0.3, 0.3, 0.31);
+    } else {
+      // paper / wrapper bit
+      m = 1.0 - smoothstep(0.85, 1.0, max(abs(r.x) / 0.05, abs(r.y) / 0.035));
+      col = mix(vec3(0.86, 0.85, 0.8), vec3(0.75, 0.3, 0.25), step(0.7, rdHash(gc + 9.7)));
+    }
+    acc = mix(acc, vec4(col, 1.0), m);
+  }
+  acc.a *= near;
+  return acc;
+}
 // Voronoi crack network: cell borders as box-filtered lines, fading to their mean coverage with distance
 float rdCrackNet(vec2 p, float cell, float w, float fw) {
   vec4 v = texture2D(tRC, p / (cell * 8.0));
@@ -182,14 +225,57 @@ vec3 rdAsphalt(inout float rough) {
     c = mix(c, mix(paint, c * 1.3, scuff), inR);
     rough = mix(rough, 0.7, inR);
   }
+  // ── gutter litter: leaves, butts, gum and paper collect along the kerb
+  {
+    float gut = step(0.5, vA.x) * smoothstep(2.75, 3.15, abs(lat)) * onRoad;
+    vec4 lt = rdLitter(p, fw, gut * (0.35 + 0.4 * smoothstep(0.4, 0.7, nM.g)), 0.7);
+    c = mix(c, lt.rgb, lt.a);
+    rough = mix(rough, 0.85, lt.a);
+  }
+  // ── puddles (roads/puddles.ts): a few in the gutters even in dry weather, many after rain
+  {
+    float wet = uWet;
+    float mRoad = step(0.5, vA.x) * onRoad * smoothstep(7.0, 8.0, dj);
+    float alat = abs(lat);
+    // gutter puddles: one candidate per 7 m of kerb, elongated along it
+    float k = floor(al / 7.0);
+    float sideP = step(0.0, lat);
+    float hk = rdHash(vec2(k + sideP * 31.0, sg.x * 1.7 + 3.0));
+    float has = step(hk, 0.2 * uPdBase + 0.6 * wet) * mRoad;
+    float c0 = (k + 0.25 + 0.5 * fract(hk * 7.3)) * 7.0;
+    float len = (0.45 + 1.0 * fract(hk * 13.1)) * (0.55 + 0.45 * uPdBase + 1.3 * wet);
+    float wid = (0.16 + 0.2 * fract(hk * 5.7)) * (1.0 + 0.9 * wet);
+    vec2 e = vec2((al - c0) / len, (alat - (3.42 - wid * 0.75)) / wid);
+    float d = length(e) + 0.32 * (nS.g - 0.5) + 0.22 * (nM.b - 0.5);
+    float fd = fwidth(d) + 1e-4;
+    float pud = has * (1.0 - smoothstep(1.0 - fd, 1.0 + fd, d));
+    float prim = has * (1.0 - smoothstep(1.0, 1.3, d));
+    // low spots of worn sections and the wheel ruts fill when it has rained
+    float low = nL.g * 0.55 + nM.r * 0.45 + 0.12 * smoothstep(0.5, 0.85, age);
+    float rut = (1.0 - smoothstep(0.1, 0.35, min(abs(alat - 0.95), abs(alat - 2.55)))) * wet * 0.1;
+    float thr = mix(0.9, 0.67, wet);
+    float lw = low + rut;
+    float flw = fwidth(lw) + 1e-4;
+    float lmask = mix(0.5, 1.0, step(0.5, vA.x)) * step(vA.y, 1.5);
+    pud = max(pud, smoothstep(thr - flw, thr + flw, lw) * lmask);
+    prim = max(prim, smoothstep(thr - 0.035, thr, lw) * lmask);
+    float rimW = clamp(prim - pud, 0.0, 1.0);
+    c *= mix(1.0, 0.7, rimW);
+    rough = mix(rough, 0.3, rimW);
+    c = mix(c, c * 0.3 + vec3(0.004, 0.005, 0.006), pud);
+    rough = mix(rough, 0.03, pud);
+    if (pud > 0.002) rdEmit += pud * rdPuddleLamps(vWP, normalize(vWP - cameraPosition));
+  }
+  float wetAll = max(uRain, uWet * 0.85);
   float puddle = smoothstep(0.64, 0.72, nL.g * 0.6 + nM.r * 0.4) * uRain;
-  c *= mix(1.0, 0.58, uRain) * (1.0 - 0.18 * puddle);
-  rough = mix(rough, 0.22, clamp(uRain * 0.75 + puddle * 0.5, 0.0, 1.0));
+  c *= mix(1.0, 0.58, wetAll) * (1.0 - 0.18 * puddle);
+  rough = mix(rough, 0.22, clamp(wetAll * 0.75 + puddle * 0.5, 0.0, 1.0));
   return c;
 }
 `;
 
 export const HARD2 = /* glsl */ `
+uniform float uWetH;
 uniform vec4 uRad[3];
 uniform vec3 uTactile;
 uniform vec3 uBandCol;
@@ -232,6 +318,7 @@ vec3 rdHard(inout float rough) {
   float minS = min(size.x, size.y);
   vec2 cell;
   float joint, edge;
+  vec2 sl = vec2(0.5);
   if (vV.z < -1.5) {
     // herringbone (size.y = brick width)
     float u = size.y;
@@ -247,6 +334,7 @@ vec3 rdHard(inout float rough) {
     float dy = abs(fract(q.y / size.y + 0.5) - 0.5) * size.y;
     joint = max(rdLine(dx, vP.z, fq.x), rdLine(dy, vP.z, fq.y));
     edge = min(dx, dy);
+    sl = vec2(fract(qx), fract(q.y / size.y));
   }
   float det = 1.0 - smoothstep(0.1, 0.35, fwm / minS);
   vec3 c = vC * (1.0 + (rdHash(cell) - 0.5) * vV.x * det);
@@ -346,8 +434,40 @@ vec3 rdHard(inout float rough) {
       c *= 1.0 + 0.08 * smoothstep(131.0, 135.5, p.x);
     }
   }
-  c *= mix(1.0, 0.76, uRain);
-  rough = mix(rough, rough * 0.55, uRain);
+  // ── pavement wear (sidewalks, plazas): cracked / replaced / sunken slabs, grime along the walls and the
+  //    kerb, a polished walking line, gum, butts, leaves and paper. Small things fade with the pixel size.
+  if (sp < 1.5) {
+    vec2 sw = rdStreet(p);
+    float lat = abs(sw.x);
+    float onSide = step(3.45, lat) * (1.0 - step(6.75, lat)) * step(7.2, sw.y);
+    float hc = rdHash(cell + 17.3);
+    if (vV.z > -1.5 && det > 0.01 && minS > 0.18) {
+      float crk = 0.0;
+      if (hc < 0.05) {
+        vec2 dn = normalize(vec2(rdHash(cell + 2.2) - 0.5, rdHash(cell + 4.4) - 0.5) + 1e-3);
+        float dd = abs(dot((sl - 0.5) * size, dn) + (rdHash(cell + 6.6) - 0.5) * minS * 0.4);
+        crk = rdLine(dd, 0.008, fwm) * det;
+      }
+      c *= 1.0 - 0.55 * crk;
+      c *= hc > 0.05 && hc < 0.09 ? 1.0 + 0.1 * det : 1.0;                 // replaced, fresher slab
+      float sunk = hc > 0.09 && hc < 0.12 ? 1.0 : 0.0;                        // sunken: darker, dirty joints
+      c *= 1.0 - sunk * det * (0.08 + 0.22 * (1.0 - smoothstep(0.0, minS * 0.2, edge)));
+    }
+    // grime by the walls and on the kerb side, polished walking line
+    c *= 1.0 - 0.14 * onSide * smoothstep(5.95, 6.6, lat) * (0.6 + 0.4 * nM.r);
+    c *= 1.0 - 0.08 * onSide * (1.0 - smoothstep(3.5, 3.95, lat));
+    float walkLine = onSide * (1.0 - smoothstep(0.25, 0.65, abs(lat - 5.35)));
+    c *= 1.0 + 0.035 * walkLine;
+    rough -= 0.08 * walkLine;
+    // drink / food stains on plazas and in front of doors
+    float stn = smoothstep(0.7, 0.74, nS.r * 0.55 + nM.a * 0.45) * (1.0 - onSide * 0.5);
+    c = mix(c, c * vec3(0.78, 0.74, 0.7), stn * 0.6);
+    vec4 lt = rdLitter(p, fwm, (onSide * 0.22 + 0.08) * (0.6 + 0.6 * nM.g) + onSide * 0.25 * smoothstep(5.9, 6.5, lat), 0.35);
+    c = mix(c, lt.rgb, lt.a * 0.9);
+  }
+  float wetH = max(uRain, uWetH * 0.85);
+  c *= mix(1.0, 0.76, wetH);
+  rough = mix(rough, rough * 0.55, wetH);
   return c;
 }
 `;

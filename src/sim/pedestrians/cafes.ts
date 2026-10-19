@@ -51,15 +51,35 @@ export interface CafePlace {
   /** table top radius */
   r: number;
   seats: CafeSeat[];
-  /** a waiter's standing point next to the table (towards the walkway) */
+  /** a waiter's standing point next to the table, the way there from the terrace's service point (x, z, y
+   * triples excl. the service point; empty: no waiter serves this table) */
   wx: number;
   wz: number;
+  wpath: number[];
+  /** terrace (cluster of neighbouring tables) this table belongs to */
+  terrace: number;
   district: string;
   label: string;
   /** party sitting here (-1 none) */
   taken: number;
   /** sim time the current party sat down (table items appear a little later) */
   since: number;
+  /** service of the current party: 0 waiting for the waiter, 1 ordered, 2 order on the table */
+  served: number;
+  servedAt: number;
+  /** waiter (party id) on the way to / at this table, -1 none */
+  waiter: number;
+}
+
+/** a cluster of café tables with a service point (by the café's facade) its waiters work from */
+export interface Terrace {
+  id: number;
+  x: number;
+  z: number;
+  y: number;
+  /** direction the waiter faces while waiting (towards the tables) */
+  yaw: number;
+  cafes: CafePlace[];
 }
 
 /** table + chairs as placed by props: chair centres and the direction each chair faces */
@@ -114,9 +134,10 @@ interface Disc {
 }
 
 /** Build the café places: seats, walkway nodes and approach paths. */
-export function buildCafes(ctx: CityContext, districtName: (x: number, z: number) => string): CafePlace[] {
+export function buildCafes(ctx: CityContext, districtName: (x: number, z: number) => string): { cafes: CafePlace[]; terraces: Terrace[] } {
+  const terraces: Terrace[] = [];
   const { tables, discs: keep } = cafeTables(ctx);
-  if (!tables.length) return [];
+  if (!tables.length) return { cafes: [], terraces };
   const { peds, occupancy: occ } = ctx;
   // static obstacles: every placed item (props keep-clear discs, which include the café sets themselves:
   // those are replaced by the finer table-top + chair discs), trees, every table top and chair
@@ -324,14 +345,142 @@ export function buildCafes(ctx: CityContext, districtName: (x: number, z: number
         seats,
         wx: T.x + ((bp.x - T.x) / wl) * 1.25,
         wz: T.z + ((bp.z - T.z) / wl) * 1.25,
+        wpath: [],
+        terrace: -1,
         district: districtName(T.x, T.z),
         label: `Sitting at a café in ${districtName(T.x, T.z)}`,
         taken: -1,
         since: 0,
+        served: 2,
+        servedAt: 0,
+        waiter: -1,
       });
     });
+    // ── the terrace's service point and the waiter's way to every table
+    const mine = out.filter((c) => c.terrace === -1);
+    if (mine.length >= 2) {
+      let mx = 0,
+        mz = 0;
+      for (const c of mine) {
+        mx += c.x;
+        mz += c.z;
+      }
+      mx /= mine.length;
+      mz /= mine.length;
+      // nearest building cell to the tables' centroid: the café is that side
+      let bxB = 0,
+        bzB = 0,
+        bd = Infinity;
+      for (let j = 0; j < NZ; j += 2)
+        for (let i = 0; i < NX; i += 2) {
+          if (!(occ.get(cx(i), cz(j)) & OCC.BUILDING)) continue;
+          const d = Math.hypot(cx(i) - mx, cz(j) - mz);
+          if (d < bd) {
+            bd = d;
+            bxB = cx(i);
+            bzB = cz(j);
+          }
+        }
+      const nearEdge = (x: number, z: number): boolean => {
+        for (const e of peds.edges) {
+          const A = peds.nodes[e.a],
+            B = peds.nodes[e.b];
+          if (Math.min(A.x, B.x) - 3 > x || Math.max(A.x, B.x) + 3 < x || Math.min(A.z, B.z) - 3 > z || Math.max(A.z, B.z) + 3 < z) continue;
+          if (segDist(A.x, A.z, B.x, B.z, x, z) < e.halfWidth + 0.55) return true;
+        }
+        return false;
+      };
+      // service point: a free cell ~1.2–2.5 m off the facade, close to the tables, off the walkways
+      let sc = -1,
+        sBest = Infinity;
+      if (isFinite(bd)) {
+        for (let j = 0; j < NZ; j++)
+          for (let i = 0; i < NX; i++) {
+            const c = j * NX + i;
+            if (blocked[c]) continue;
+            const x = cx(i),
+              z = cz(j);
+            const dB = Math.hypot(x - bxB, z - bzB);
+            if (dB > 6) continue;
+            let wall = Infinity;
+            for (let q = -10; q <= 10 && wall > 0.6; q++) {
+              for (const [di, dj] of [
+                [q, -10],
+                [q, 10],
+                [-10, q],
+                [10, q],
+              ]) {
+                // coarse: distance to the nearest building cell within 2.5 m
+                const ii = i + Math.round((di * 2.5) / 10 / CELL),
+                  jj = j + Math.round((dj * 2.5) / 10 / CELL);
+                if (ii < 0 || jj < 0 || ii >= NX || jj >= NZ) continue;
+                if (occ.get(cx(ii), cz(jj)) & OCC.BUILDING) wall = Math.min(wall, Math.hypot(cx(ii) - x, cz(jj) - z));
+              }
+            }
+            if (wall < 0.9 || wall > 3) continue;
+            if (mine.some((t) => Math.hypot(t.x - x, t.z - z) < 1.5)) continue;
+            const score = Math.hypot(x - mx, z - mz) + Math.abs(wall - 1.6) * 2;
+            if (score >= sBest || nearEdge(x, z)) continue;
+            sBest = score;
+            sc = c;
+          }
+      }
+      if (sc >= 0) {
+        const sx = cx(sc % NX),
+          sz = cz(Math.floor(sc / NX));
+        dijkstra(blocked, NX, NZ, sc, dist, prev, 30);
+        const ty = mine[0].y - 0.02;
+        const T: Terrace = { id: terraces.length, x: sx, z: sz, y: ty, yaw: Math.atan2(mx - sx, mz - sz), cafes: [] };
+        for (const c of mine) {
+          // waiter's spot: round the table at 1.15 m, free, reachable, nearest to the service point
+          let best = -1,
+            bdist = Infinity;
+          for (let a = 0; a < 12; a++) {
+            const ang = (a / 12) * TAU;
+            const x = c.x + Math.sin(ang) * 1.15,
+              z = c.z + Math.cos(ang) * 1.15;
+            const q = cellOf(x, z);
+            if (q < 0 || blocked[q] || !isFinite(dist[q])) continue;
+            if (c.seats.some((st) => Math.hypot(st.sx - x, st.sz - z) < 0.55)) continue;
+            if (dist[q] < bdist) {
+              bdist = dist[q];
+              best = q;
+            }
+          }
+          if (best < 0) continue;
+          const pts: [number, number][] = [];
+          for (let q = best; q >= 0; q = prev[q]) pts.push([cx(q % NX), cz(Math.floor(q / NX))]);
+          pts.reverse();
+          pts[0] = [sx, sz];
+          const simp: [number, number][] = [pts[0]];
+          let a = 0;
+          while (a < pts.length - 1) {
+            let b = pts.length - 1;
+            for (; b > a + 1; b--) if (losFree(pts[a], pts[b], blocked, NX, NZ, ox, oz)) break;
+            simp.push(pts[b]);
+            a = b;
+          }
+          c.wx = pts[pts.length - 1][0];
+          c.wz = pts[pts.length - 1][1];
+          for (let q = 1; q < simp.length; q++) c.wpath.push(simp[q][0], simp[q][1], ty);
+          c.terrace = T.id;
+          T.cafes.push(c);
+        }
+        if (T.cafes.length) terraces.push(T);
+      }
+    }
+    for (const c of mine) if (c.terrace === -1) c.terrace = -2;
   }
-  return out;
+  return { cafes: out, terraces };
+}
+
+function segDist(ax: number, az: number, bx: number, bz: number, px: number, pz: number): number {
+  const dx = bx - ax,
+    dz = bz - az;
+  const l2 = dx * dx + dz * dz;
+  let t = l2 > 0 ? ((px - ax) * dx + (pz - az) * dz) / l2 : 0;
+  t = t < 0 ? 0 : t > 1 ? 1 : t;
+  return Math.hypot(px - (ax + t * dx), pz - (az + t * dz));
 }
 
 /** 8-connected Dijkstra from cell s0 over the free cells (no corner cutting), up to maxD metres */

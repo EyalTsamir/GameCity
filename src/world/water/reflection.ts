@@ -41,6 +41,9 @@ const BASE: RegExp[] = [
   /^props-glows$/,
   /^boats-(big|small|lights)$/,
   /^terrain-masonry$/,
+  // world mode: the coast, island and mountain layers (reflection-only proxies of the landscape module)
+  /^land-reflect(-mtn)?$/,
+  /^land-ships$/,
 ];
 /**
  * level 2 only, and only while the river is in view (the bank trees are what makes it read as

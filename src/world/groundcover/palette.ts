@@ -18,9 +18,9 @@ const C = (h: string) => ({ value: new THREE.Color(h) });
 export function createPalette() {
   return {
     // mown lawns: deep blue-green ↔ sunny yellow-green ↔ dry, never lime
-    gcLawnLush: C('#4d7a38'),
-    gcLawnSun: C('#7e9a45'),
-    gcLawnDry: C('#a29e60'),
+    gcLawnLush: C('#4a7836'),
+    gcLawnSun: C('#729440'),
+    gcLawnDry: C('#979559'),
     // long grass / meadows: green ↔ olive, straw where dry or in seed
     gcMeadowA: C('#68833e'),
     gcMeadowB: C('#86894a'),
@@ -63,7 +63,7 @@ vec3 gcLawnColor( vec4 nM, vec4 nA ) {
 }
 vec3 gcMeadowColor( vec4 nM, vec4 nA ) {
   vec3 c = mix( gcMeadowA, gcMeadowB, smoothstep( 0.3, 0.7, nA.g * 0.6 + nM.a * 0.4 ) );
-  c = mix( c, gcStraw, smoothstep( 0.55, 0.85, nA.r * 0.6 + nM.b * 0.4 ) * 0.45 );
+  c = mix( c, gcStraw, smoothstep( 0.6, 0.9, nA.r * 0.6 + nM.b * 0.4 ) * 0.3 );
   return c;
 }
 vec3 gcGrassColor( vec4 nM, vec4 nA, float len, float wet, float dune ) {
@@ -73,8 +73,9 @@ vec3 gcGrassColor( vec4 nM, vec4 nA, float len, float wet, float dune ) {
   return c;
 }
 vec3 gcTipColor( vec3 base, vec4 nA, float len ) {
-  vec3 t = base * vec3( 1.2, 1.15, 0.98 );
-  return mix( t, gcStraw, smoothstep( 0.42, 0.9, len ) * ( 0.22 + 0.45 * nA.b ) );
+  float lawn = 1.0 - smoothstep( 0.18, 0.4, len );
+  vec3 t = base * mix( vec3( 1.16, 1.14, 0.96 ), vec3( 1.3, 1.24, 0.98 ), lawn );
+  return mix( t, gcStraw, smoothstep( 0.45, 0.95, len ) * ( 0.06 + 0.24 * smoothstep( 0.45, 0.85, nA.b ) ) );
 }
 vec3 gcTopColor( vec3 base, vec3 tip, float len ) {
   // seen from above: mostly upper blades, a little shaded thatch in the gaps (more in long grass)

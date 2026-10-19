@@ -83,6 +83,10 @@ void lifePiece( out vec3 pos, out vec3 nrm ) {
   // dead calm on a pole: keep the last sensible direction (along +x of the hoist frame)
   F = fl > 1e-4 ? F / fl : normalize( vec3( 1.0, 0.0, 0.3 ) - T * dot( vec3( 1.0, 0.0, 0.3 ), T ) );
   float lenP = aPiece.z;
+  // each piece also swings / twists on its own about the hinge (no two pennants alike)
+  vec3 N1 = normalize( cross( T, F ) );
+  float tw = ( 0.1 + 0.2 * min( wl, 1.2 ) ) * sin( uTime * ( 1.0 + 0.6 * fract( aMisc.x * 3.7 ) ) / sqrt( weight ) + aMisc.x * 2.3 ) * ( mode < 0.5 ? 1.0 : 0.25 );
+  F = normalize( F * cos( tw ) + N1 * sin( tw ) );
   vec3 N0 = normalize( cross( T, F ) );
   vec3 Fd = F;
   if ( mode > 0.5 ) {

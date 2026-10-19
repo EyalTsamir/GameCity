@@ -12,7 +12,7 @@ import type { Lane, Movement, RoadNetwork, Intersection } from '../../core/roadN
 import type { IntersectionManager } from '../../core/intersections';
 import { Path2, P2 } from '../../core/geom';
 import type { Rng } from '../../core/rng';
-import { MIX, SPECS, SEDAN_POLICE, VehicleSpec, BODY_COLORS, TAXI_COLOR, POLICE_COLOR, ICECREAM_COLORS, LORRY_CAB_COLORS, DELIVERY_LOGOS, SEDAN_TAXI } from './specs';
+import { MIX, SPECS, SEDAN_POLICE, VehicleSpec, BODY_COLORS, TAXI_COLOR, POLICE_COLOR, ICECREAM_COLORS, LORRY_CAB_COLORS, DELIVERY_LOGOS, SEDAN_TAXI, MIX_2W, TWO_WHEELERS, COLORS_2W, isTwoWheeler } from './specs';
 
 export const STEP = 0.05;
 const S0 = 2.0; // jam distance (bumper to bumper)
@@ -42,7 +42,9 @@ export const St = {
 } as const;
 export type St = (typeof St)[keyof typeof St];
 
-const BASE_POPULATION = 100;
+const BASE_POPULATION = 128;
+/** share of ordinary traffic on two wheels (?no2w: none) */
+const SHARE_2W = 0.27;
 const DAY_PROFILE: [number, number][] = [
   [0, 0.3],
   [4.5, 0.26],
@@ -133,6 +135,17 @@ export class Vehicle {
   /** inside the view frustum */
   onScreen = true;
   phase: number;
+  /** two-wheelers: pedal crank angle (bicycles), lean into turns (rad, + = right), lateral offset in use,
+   * path curvature estimate (render) */
+  readonly twoWheel: boolean;
+  crank = 0;
+  lean = 0;
+  lat = 0;
+  kappa = 0;
+  lastYaw = 0;
+  lastOdo = 0;
+  /** the rider figure (pedestrians/riders.ts keeps it here) */
+  rider: unknown = null;
 
   constructor(id: number, spec: VehicleSpec, variant: number, color: string, rng: Rng) {
     this.id = id;
@@ -146,6 +159,8 @@ export class Vehicle {
     this.B = spec.decel * rng.range(0.9, 1.1);
     this.vf = spec.speedFactor * rng.range(0.9, 1.06);
     this.phase = rng.next();
+    this.twoWheel = isTwoWheeler(spec);
+    if (this.twoWheel) this.vf = spec.speedFactor * rng.range(0.85, 1.15);
   }
 
   get isBus(): boolean {
@@ -204,9 +219,11 @@ export class TrafficSim {
   target = 0;
   stats = { spawned: 0, despawned: 0, tunnelIn: 0, tunnelOut: 0, watchdog: 0, reroutes: 0, hiddenSpawns: 0, hiddenDespawns: 0, steps: 0 };
   private tNow = 0;
+  private share2w: number;
 
   constructor(ctx: CityContext) {
     this.ctx = ctx;
+    this.share2w = ctx.debug.params.has('no2w') ? 0 : SHARE_2W;
     this.net = ctx.roads;
     this.mgr = ctx.intersections;
     this.rng = ctx.rng('traffic');
@@ -306,6 +323,14 @@ export class TrafficSim {
 
   private pickRegular(): { spec: VehicleSpec; variant: number; color: string } {
     const rng = this.rng;
+    if (this.share2w > 0 && rng.chance(this.share2w)) {
+      const t = rng.weighted(
+        MIX_2W,
+        MIX_2W.map((m) => m.w),
+      ).type;
+      const sp = TWO_WHEELERS[t];
+      return { spec: sp, variant: sp.variant ?? 0, color: rng.pick(COLORS_2W[t]) };
+    }
     const pick = rng.weighted(
       MIX,
       MIX.map((m) => m.w),
@@ -1009,6 +1034,8 @@ export class TrafficSim {
     V.v = v1;
     V.s += ds;
     V.odo += ds;
+    // bicycles: pedal while riding on (≈ 0.42 crank turns per wheel turn), freewheel when braking
+    if (V.spec.model === 'bike' && V.spec.variant !== 1 && V.a > -0.35) V.crank = (V.crank + (ds / V.spec.wheelR) * 0.42) % (Math.PI * 2);
     // watchdog progress
     if (V.dwell > 0) {
       V.dwell -= h;
@@ -1320,6 +1347,14 @@ export class TrafficSim {
     V.x = R.x + ux * k;
     V.z = R.z + uz * k;
     V.yaw = Math.atan2(ux, uz);
+    if (V.twoWheel) {
+      // ridden on the right of the lane: eases in after a junction, back to the centre line through the next
+      const off = sp.offset ?? 0;
+      const lk = V.elem < this.NL ? Math.min(1, V.s / 5) : Math.max(0, 1 - V.s / 5);
+      V.lat = off * lk * lk * (3 - 2 * lk);
+      V.x += -uz * V.lat;
+      V.z += ux * V.lat;
+    }
     // steering: direction from the front axle to a point a little further on
     const A = this.pointAhead(V, 1.6 - sp.frontOverhang, this._q);
     const sx = A.x - fx,

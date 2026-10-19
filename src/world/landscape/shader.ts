@@ -36,8 +36,8 @@ export function landUniforms(globals: { uTime: { value: number }; uWind: { value
     cSunfl: C('#c39a22'),
     cMeadow: C('#68833e'),
     cMeadowDry: C('#9a9558'),
-    cForestB: C('#3c5628'),
-    cForestC: C('#2a4226'),
+    cForestB: C('#3d6630'),
+    cForestC: C('#284c31'),
     cGap: C('#16220f'),
     cHedge: C('#36502a'),
     cTrack: C('#988567'),
@@ -46,6 +46,7 @@ export function landUniforms(globals: { uTime: { value: number }; uWind: { value
     cRock: C('#8b8478'),
     cRock2: C('#6d665d'),
     cMud: C('#5a5040'),
+    cStone: C('#b3a68f'),
     uLandDbg: { value: 0 },
   };
 }
@@ -53,6 +54,8 @@ export function landUniforms(globals: { uTime: { value: number }; uWind: { value
 export const LAND_VERT_PARS = /* glsl */ `
 attribute vec4 aCov;
 attribute vec4 aCov2;
+attribute vec4 aCov3;
+varying vec4 vCov3;
 varying vec3 vLW;
 varying vec3 vLN;
 varying vec4 vCov;
@@ -64,6 +67,7 @@ vLW = (modelMatrix * vec4(transformed, 1.0)).xyz;
 vLN = normalize(mat3(modelMatrix) * objectNormal);
 vCov = aCov;
 vCov2 = aCov2;
+vCov3 = aCov3;
 `;
 
 export const LAND_FRAG_PARS = /* glsl */ `
@@ -80,6 +84,8 @@ varying vec3 vLW;
 varying vec3 vLN;
 varying vec4 vCov;
 varying vec4 vCov2;
+varying vec4 vCov3;
+uniform vec3 cStone;
 ${FIELDS_GLSL}
 ${WIND_GLSL}
 ${LAMP_GLSL}
@@ -125,6 +131,14 @@ vec3 landAlbedo() {
   // ── meadow (wild grass): green ↔ dry patches
   vec3 meadow = mix(cMeadow, cMeadowDry, 0.75 * smoothstep(0.5, 0.95, nA.b * 0.7 + nB.g * 0.5 * midF + 0.15 * macro));
   meadow *= 0.88 + 0.24 * nB.a * midF + 0.12 * macro;
+  // tussocks and trampled patches (metre scale, faded by the footprint), fresh vs dry tips
+  {
+    float nf = 1.0 - smoothstep(0.08, 0.5, fp);
+    vec4 nT1 = texture2D(tLN, p.xz * (1.0 / 3.7));
+    vec4 nT2 = texture2D(tLN, p.zx * (1.0 / 11.0));
+    meadow *= 1.0 + (nT1.r - 0.5) * 0.34 * nf + (nT2.g - 0.5) * 0.22 * midF;
+    meadow = mix(meadow, meadow * vec3(1.18, 1.1, 0.82), smoothstep(0.55, 0.8, nT2.b) * 0.5 * midF);
+  }
   meadow = mix(meadow, meadow * vec3(1.12, 1.13, 1.05), gust * 0.5);
   // wildflower specks: tiny and sparse up close, an average tint further away (the ground agent's
   // blades carry the near meadow)
@@ -145,7 +159,8 @@ vec3 landAlbedo() {
   // ── field patchwork
   float hedgeM = 0.0, trackM = 0.0;
   if (field > 0.01) {
-    vec2 q = FROT * p.xz;
+    // borders wander a little (hedges and ditches are never ruler-straight)
+    vec2 q = FROT * p.xz + (texture2D(tLN, p.xz * (1.0 / 160.0)).ba - 0.5) * 3.6;
     ivec2 id; vec4 box;
     float ch = fParcel(q, id, box);
     float dx0 = q.x - box.x, dx1 = box.z - q.x, dy0 = q.y - box.y, dy1 = box.w - q.y;
@@ -155,6 +170,11 @@ vec3 landAlbedo() {
     float flip = step(0.8, lhash(id.x * 13 + id.y, 19));
     float along = mix(longX, 1.0 - longX, flip);
     float tr = mix(q.y, q.x, along);   // coordinate across the rows
+    // headland: the turning strip round the field is drilled parallel to the border
+    float hdW = 7.0 + 3.0 * lhash(id.x * 13 + id.y, 29);
+    float dAcross = along > 0.5 ? min(dy0, dy1) : min(dx0, dx1);
+    float dAlong = along > 0.5 ? min(dx0, dx1) : min(dy0, dy1);
+    if (dAlong < hdW && dAlong < dAcross) tr = along > 0.5 ? q.x : q.y;
     float fpt = fp;
     vec3 fc;
     float pv = lhash(id.x * 13 + id.y, 23);   // parcel tone
@@ -198,10 +218,13 @@ vec3 landAlbedo() {
       fc = cPasture * 1.05;
       fc *= 1.0 - 0.15 * lStripe(tr, 6.0, 0.3, fpt);
     }
-    // in-field moisture / growth patches
-    fc *= 0.9 + 0.2 * mix(0.5, nB.g, midF) + 0.1 * macro;
+    // in-field moisture / growth patches (stronger in crops, faint in grass)
+    vec4 nP = texture2D(tLN, q * (1.0 / 23.0) + vec2(float(id.x) * 0.37, float(id.y) * 0.71));
+    float patchK = (ch < 0.48 || ch > 0.76) ? 0.22 : 0.12;
+    fc *= 1.0 - patchK * 0.5 + patchK * mix(0.5, nP.r * 0.6 + nB.g * 0.4, midF) + 0.1 * macro;
+    fc *= 1.0 - 0.08 * smoothstep(0.62, 0.8, nA.g) * (ch < 0.33 ? 1.0 : 0.0);
     // grassy margin inside each border
-    float margin = 1.0 - smoothstep(1.2, 3.2 + 2.0 * pv, dB);
+    float margin = 1.0 - smoothstep(1.0, 2.6 + 2.2 * pv + 1.5 * nB.r, dB);
     fc = mix(fc, meadow * 0.92, margin);
     // hedgerows and tracks on the borders
     bool onRow = min(dy0, dy1) < min(dx0, dx1);
@@ -251,8 +274,42 @@ vec3 landAlbedo() {
 
   // ── wet banks / mud
   col = mix(col, mix(cMud, cMeadow * 0.8, smoothstep(-1.2, 0.3, p.y)), wet * 0.85);
-  // ── sand (dunes, beach) — wet near the waterline
+  // ── the river leaving the town: the stone embankment carries on for a stretch, steps down into
+  // riprap and then into grassy natural banks; a gravel towpath continues the promenade (north bank)
+  {
+    float ru = vCov3.x, sd = vCov3.y, side = vCov3.z;
+    if (ru < 12.0 && sd < 140.0) {
+      float steep = smoothstep(0.35, 0.8, 1.0 - Ng.y);
+      float bank = (1.0 - smoothstep(1.5, 4.5, ru)) * smoothstep(-6.0, -1.0, ru);
+      // dressed stone courses → loose riprap with distance from the town
+      float stoneW = 1.0 - smoothstep(18.0, 46.0, sd + nB.r * 10.0);
+      vec2 sc = vec2(p.x + p.z * 0.3, p.y);
+      float course = floor(sc.y / 0.46);
+      float bx = fract(sc.x / 1.15 + lhash(int(course), 7) * 0.5);
+      float by = fract(sc.y / 0.46);
+      float joint = max(1.0 - smoothstep(0.0, 0.05, bx), 1.0 - smoothstep(0.0, 0.08, by));
+      joint *= 1.0 - smoothstep(0.03, 0.12, fp);
+      vec3 stone = cStone * (0.88 + 0.16 * lhash(int(floor(sc.x / 1.15)) * 31 + int(course), 9));
+      stone = mix(stone, stone * 0.55, joint);
+      stone = mix(stone, stone * vec3(0.7, 0.75, 0.6), smoothstep(${(WL + 0.6).toFixed(2)}, ${(WL - 0.2).toFixed(2)}, p.y)); // wet / algae line
+      vec2 rc2 = p.xz * 0.9 + vec2(p.y);
+      vec2 rh = lhash22(floor(rc2));
+      float rr = length(fract(rc2) - 0.5 - (rh - 0.5) * 0.4);
+      vec3 riprap = mix(cRock2, cRock, rh.x) * (0.75 + 0.35 * (1.0 - smoothstep(0.25, 0.5, rr)));
+      vec3 bankC = mix(riprap, stone, stoneW);
+      float rip = (1.0 - smoothstep(60.0, 110.0, sd + nA.r * 30.0));
+      col = mix(col, bankC, bank * max(steep * 0.9, stoneW) * rip);
+      // towpath along the north bank (continues the town promenade)
+      float tp = (1.0 - smoothstep(1.0, 1.0 + fp, abs(ru - 4.2 - 0.6 * nA.g))) * step(0.0, side);
+      tp *= 1.0 - smoothstep(1500.0, 1700.0, sd);
+      col = mix(col, cTrack * (0.95 + 0.15 * nB.b), tp * (1.0 - forest) * 0.9);
+    }
+  }
+  // ── sand (dunes, beach) — wet near the waterline; marram grass on the dunes
   vec3 sc = mix(cWetSand, cSand, smoothstep(${(WL + 0.2).toFixed(2)}, ${(WL + 1.0).toFixed(2)}, p.y));
+  float marram = smoothstep(0.3, 0.8, (1.0 - sand) * 1.4 + nB.b * 0.6 - 0.3) * smoothstep(${(WL + 2.0).toFixed(2)}, ${(WL + 3.0).toFixed(2)}, p.y);
+  sc = mix(sc, vec3(0.32, 0.36, 0.2) * (0.8 + 0.4 * nB.r), marram * 0.75);
+  sand = max(sand, marram * 0.5 * step(0.05, vCov.z));
   sc *= 0.94 + 0.08 * nB.g * midF;
   if (fp < 0.4) sc *= 1.0 - 0.05 * lStripe(p.x * 0.8 + p.z * 0.6 + nB.r * 3.0, 0.7, 0.4, fp);
   col = mix(col, sc, sand);

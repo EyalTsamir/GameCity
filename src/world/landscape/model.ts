@@ -67,7 +67,7 @@ export interface LandscapeModel {
   /** signed distance to the coast (>0 land, <0 sea), exact within ~900 m */
   coastSD(x: number, z: number): number;
   /** distance to the river centreline (≤ maxD) and its local half width */
-  river(x: number, z: number, out: { d: number; halfW: number; s: number; tx: number; tz: number }): boolean;
+  river(x: number, z: number, out: { d: number; halfW: number; s: number; tx: number; tz: number; side?: number }): boolean;
   /** forest canopy density 0..1 (h = ground height at the point) */
   forestAt(x: number, z: number, h: number): number;
   /** coast profile 0 beach … 1 cliff */
@@ -179,6 +179,8 @@ function buildSites(model: { world0(x: number, z: number): number; isWaterW(x: n
     { kind: 'village', x: -420, z: 1650, r: 120, seed: 23 },
     { kind: 'hamlet', x: -880, z: 520, r: 60, seed: 37 },
     { kind: 'hamlet', x: -1250, z: -700, r: 55, seed: 41 },
+    // a fishing hamlet on the island's sheltered west side
+    { kind: 'hamlet', x: 1995, z: -540, r: 45, seed: 57 },
   ];
   // farmsteads: a jittered lattice over the farmland W and S, skipping water, steep or forested ground
   let seed = 100;
@@ -223,7 +225,7 @@ export function createLandscapeModel(slabHeight: SlabHeight): LandscapeModel {
   const riverLine = new Polyline(RIVER_CTRL, 12, 160);
   const coastLine = new Polyline(COAST_CTRL, 14, 200, true);
   const hit: PolyHit = { d: 0, s: 0, side: 1, tx: 1, tz: 0 };
-  const rv = { d: 0, halfW: 8, s: 0, tx: 1, tz: 0 };
+  const rv = { d: 0, halfW: 8, s: 0, tx: 1, tz: 0, side: 1 };
 
   /** x of the coast at a given z (the coast polyline is monotonic in z) */
   const cz = coastLine.z,
@@ -249,7 +251,7 @@ export function createLandscapeModel(slabHeight: SlabHeight): LandscapeModel {
     return x < coastX(z) ? Math.max(900, coastX(z) - x) : -Math.max(900, x - coastX(z));
   };
 
-  const riverQ = (x: number, z: number, out: typeof rv, maxD = 420): boolean => {
+  const riverQ = (x: number, z: number, out: { d: number; halfW: number; s: number; tx: number; tz: number; side?: number }, maxD = 420): boolean => {
     if (x > -150) {
       out.d = maxD;
       return false;
@@ -262,6 +264,7 @@ export function createLandscapeModel(slabHeight: SlabHeight): LandscapeModel {
     out.s = hit.s;
     out.tx = hit.tx;
     out.tz = hit.tz;
+    out.side = hit.side;
     // 8 m at the slab (16 m channel), ~13 m in the farmland, narrowing upstream in the hills
     out.halfW = 8 + 5.5 * smooth(0, 420, hit.s) - 3.5 * smooth(2600, 6000, hit.s);
     return true;

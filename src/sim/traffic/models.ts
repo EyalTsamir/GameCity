@@ -6,8 +6,9 @@
 //   color   base colour (white where the instance body colour should show)
 //   aMeta   x: paint mask (1 = multiply by instance colour)
 //           y: light type (LIGHT_*), z: decal row step in UV units, w: roughness multiplier
-//   aWheel  xyz: wheel centre, w: 0 none / 1 wheel / 2 steered (front) wheel
-//   aPart   0 = always drawn, n = only drawn for instance variant n-1
+//   aWheel  xyz: wheel centre, w: 0 none / 1 wheel / 2 steered (front) wheel / 3 crank (pedals, angle aInst2.y)
+//   aPart   0 = always drawn, n = only drawn for instance variant n-1, 16 + bits = drawn for the variants whose
+//           bit is set (two-wheelers share parts between variants)
 //   uv      atlas coordinates (non-decal parts point at a white texel)
 
 //
@@ -297,7 +298,7 @@ interface PartOpts {
   light?: number;
   rough?: number;
   part?: number;
-  wheel?: { x: number; y: number; z: number; front: boolean };
+  wheel?: { x: number; y: number; z: number; front: boolean; crank?: boolean };
   /** map the geometry's own 0..1 UVs into this atlas rect */
   decal?: AtlasRect;
   /** UV step per instance variant (rows downwards) */
@@ -343,7 +344,7 @@ class Builder {
         wheel[i * 4] = o.wheel.x;
         wheel[i * 4 + 1] = o.wheel.y;
         wheel[i * 4 + 2] = o.wheel.z;
-        wheel[i * 4 + 3] = o.wheel.front ? 2 : 1;
+        wheel[i * 4 + 3] = o.wheel.crank ? 3 : o.wheel.front ? 2 : 1;
       }
       part[i] = o.part ?? 0;
       if (o.decal && srcUv) {
@@ -907,5 +908,282 @@ function buildKind(kind: ModelKind): THREE.BufferGeometry {
       return bus();
     case 'icecream':
       return icecream();
+    case 'bike':
+      return bikes();
+    case 'moto':
+      return motos();
   }
+}
+
+// ──────────────────────────────────────────────────────── two-wheelers ──
+// Kinds 'bike' (variants 0 city bicycle, 1 e-scooter, 2 Dutch bike with basket and rack) and 'moto'
+// (0 Vespa-style scooter, 1 delivery scooter with a top box, 2 motorbike). Body centre at z = 0; the axle
+// positions match specs.ts; rider anchor points (saddle, bars, pedals / pegs / deck) are in RIDE below.
+
+/** variant bitmask part id (aPart ≥ 16) */
+const VB = (...v: number[]): number => 16 + v.reduce((m, x) => m | (1 << x), 0);
+
+/** a round tube between two points (radius r), simplified with the level */
+function tube(ax: number, ay: number, az: number, bx2: number, by: number, bz: number, r: number): THREE.BufferGeometry {
+  const dx = bx2 - ax,
+    dy = by - ay,
+    dz = bz - az;
+  const L = Math.hypot(dx, dy, dz);
+  const g = LOD === 0 ? new THREE.CylinderGeometry(r, r, L, 6, 1, true) : LOD === 1 ? new THREE.CylinderGeometry(r * 1.2, r * 1.2, L, 4, 1, true) : new THREE.BoxGeometry(r * 2.4, L, r * 2.4);
+  // cylinder axis = +Y → along (dx, dy, dz)
+  const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), new THREE.Vector3(dx / L, dy / L, dz / L));
+  g.applyQuaternion(q);
+  g.translate((ax + bx2) / 2, (ay + by) / 2, (az + bz) / 2);
+  return g;
+}
+
+/** thin spoked wheel (bicycle / kick scooter): tyre ring, rim, hub, a few spokes; spins about its axle */
+function thinWheel(b: Builder, z: number, r: number, front: boolean, part: number, tyreW = 0.02, spokes = true): void {
+  const wh = { x: 0, y: r, z, front };
+  const tyre = new THREE.TorusGeometry(r - tyreW, tyreW, LOD === 0 ? 5 : 3, LOD === 0 ? 20 : LOD === 1 ? 12 : 8);
+  tyre.rotateY(Math.PI / 2);
+  tyre.translate(0, r, z);
+  b.add(tyre, { color: TYRE, rough: 1.8, wheel: wh, part });
+  if (LOD === 0) {
+    const rim = new THREE.TorusGeometry(r - tyreW * 2.2, tyreW * 0.45, 3, 18);
+    rim.rotateY(Math.PI / 2);
+    rim.translate(0, r, z);
+    b.add(rim, { color: RIM, rough: 0.6, wheel: wh, part });
+  }
+  if (spokes && LOD < 2) {
+    for (let k = 0; k < (LOD === 0 ? 6 : 3); k++) {
+      const a = (k / (LOD === 0 ? 6 : 3)) * Math.PI;
+      const ca = Math.cos(a) * (r - tyreW * 2),
+        sa = Math.sin(a) * (r - tyreW * 2);
+      b.add(tube(0, r - sa, z - ca, 0, r + sa, z + ca, 0.004), { color: '#aeb4ba', rough: 0.6, wheel: wh, part });
+    }
+  }
+  const hub = new THREE.CylinderGeometry(r * 0.12, r * 0.12, 0.1, 6);
+  hub.rotateZ(Math.PI / 2);
+  hub.translate(0, r, z);
+  b.add(hub, { color: DARK, wheel: wh, part });
+}
+
+/** fat wheel (scooter / motorbike): tyre + hub discs on both sides */
+function fatWheel(b: Builder, z: number, r: number, w: number, front: boolean, part: number): void {
+  const wh = { x: 0, y: r, z, front };
+  const n = LOD === 0 ? 14 : LOD === 1 ? 9 : 6;
+  const tyre = new THREE.CylinderGeometry(r, r, w, n, 1, LOD > 0);
+  tyre.rotateZ(Math.PI / 2);
+  tyre.translate(0, r, z);
+  b.add(tyre, { color: TYRE, rough: 1.8, wheel: wh, part });
+  for (const sd of [1, -1]) {
+    const hub = new THREE.CircleGeometry(r * 0.62, LOD === 0 ? 10 : 6);
+    hub.rotateY((sd * Math.PI) / 2);
+    hub.translate((sd * w) / 2 + sd * 0.003, r, z);
+    b.add(hub, { color: RIM, rough: 0.7, wheel: wh, part });
+  }
+}
+
+/**
+ * Rider anchor points per (kind, variant), vehicle frame (m, body centre at z = 0, +Z forward): saddle top
+ * (seatY, seatZ), grips (barY, barZ, ±barX), pedal crank centre / crank length (bicycles), foot rests (scooter
+ * floorboard, motorbike pegs, scooter deck), and how the rider holds the body (lean: torso forward, rad).
+ */
+export interface RideGeom {
+  /** 1 bicycle (pedals), 2 seated with feet on a floor / pegs, 3 standing (kick scooter) */
+  mode: number;
+  seatY: number;
+  seatZ: number;
+  barY: number;
+  barZ: number;
+  barX: number;
+  /** crank centre and length (mode 1) or foot rest (mode 2/3: y, z, x half-spread; mode 3 second foot behind) */
+  footY: number;
+  footZ: number;
+  footX: number;
+  crank: number;
+  lean: number;
+}
+export const RIDE: Record<'bike' | 'moto', RideGeom[]> = {
+  bike: [
+    { mode: 1, seatY: 0.93, seatZ: -0.22, barY: 1.0, barZ: 0.32, barX: 0.27, footY: 0.29, footZ: -0.01, footX: 0.11, crank: 0.17, lean: 0.38 },
+    { mode: 3, seatY: 0.0, seatZ: -0.05, barY: 1.04, barZ: 0.36, barX: 0.22, footY: 0.13, footZ: 0.1, footX: 0.07, crank: 0, lean: 0.06 },
+    { mode: 1, seatY: 0.92, seatZ: -0.26, barY: 1.06, barZ: 0.26, barX: 0.29, footY: 0.29, footZ: -0.04, footX: 0.11, crank: 0.17, lean: 0.12 },
+  ],
+  moto: [
+    { mode: 2, seatY: 0.78, seatZ: -0.3, barY: 1.03, barZ: 0.44, barX: 0.3, footY: 0.33, footZ: 0.18, footX: 0.11, crank: 0, lean: 0.1 },
+    { mode: 2, seatY: 0.78, seatZ: -0.3, barY: 1.03, barZ: 0.44, barX: 0.3, footY: 0.33, footZ: 0.18, footX: 0.11, crank: 0, lean: 0.12 },
+    { mode: 2, seatY: 0.84, seatZ: -0.28, barY: 1.0, barZ: 0.38, barX: 0.33, footY: 0.36, footZ: -0.12, footX: 0.17, crank: 0, lean: 0.42 },
+  ],
+};
+
+function bikes(): THREE.BufferGeometry {
+  const b = new Builder();
+  // ── bicycles (v0 city / sport, v2 Dutch): frame painted, black parts
+  const BK = VB(0, 2);
+  const zf = 0.52,
+    zr = -0.53,
+    R = 0.34;
+  thinWheel(b, zf, R, true, BK);
+  thinWheel(b, zr, R, false, BK);
+  for (const v of [0, 2]) {
+    const part = VB(v);
+    const dutch = v === 2;
+    const bbY = 0.29,
+      bbZ = dutch ? -0.04 : -0.01;
+    const seatC = dutch ? [0.72, -0.2] : [0.84, -0.17];
+    const headTop = dutch ? [0.98, 0.33] : [0.88, 0.37],
+      headBot = dutch ? [0.72, 0.39] : [0.7, 0.42];
+    const tr = 0.017;
+    // top tube (Dutch: low step-through tube), down tube, seat tube, stays, fork
+    if (dutch) b.add(tube(0, 0.48, bbZ + 0.12, 0, headBot[0] + 0.02, headBot[1] - 0.02, tr), { color: '#ffffff', paint: true, rough: 0.8, part });
+    else b.add(tube(0, seatC[0], seatC[1], 0, headTop[0] - 0.04, headTop[1] - 0.01, tr), { color: '#ffffff', paint: true, rough: 0.8, part });
+    b.add(tube(0, headBot[0], headBot[1], 0, bbY, bbZ, tr * 1.15), { color: '#ffffff', paint: true, rough: 0.8, part });
+    b.add(tube(0, bbY, bbZ, 0, seatC[0], seatC[1], tr), { color: '#ffffff', paint: true, rough: 0.8, part });
+    b.add(tube(0, headBot[0], headBot[1], 0, headTop[0], headTop[1], tr * 1.2), { color: '#ffffff', paint: true, rough: 0.8, part });
+    for (const sd of [1, -1]) {
+      b.add(tube(sd * 0.05, bbY, bbZ - 0.02, sd * 0.06, R, zr, 0.009), { color: '#ffffff', paint: true, rough: 0.8, part });
+      b.add(tube(sd * 0.03, seatC[0] - 0.02, seatC[1] - 0.01, sd * 0.06, R, zr, 0.008), { color: '#ffffff', paint: true, rough: 0.8, part });
+      b.add(tube(sd * 0.03, headBot[0], headBot[1], sd * 0.05, R, zf, 0.009), { color: dutch ? '#ffffff' : CHROME, paint: dutch, rough: 0.6, part });
+    }
+    // seat post + saddle
+    const sy = dutch ? 0.92 : 0.93,
+      sz = dutch ? -0.26 : -0.22;
+    b.add(tube(0, seatC[0], seatC[1], 0, sy - 0.03, sz + 0.01, 0.011), { color: CHROME, rough: 0.5, part });
+    b.add(rbox(dutch ? 0.2 : 0.13, 0.05, dutch ? 0.24 : 0.27, 0.02, 0, sy - 0.05, sz), { color: dutch ? '#4a3426' : '#1d1f22', rough: 1.1, part });
+    // stem + handlebar (Dutch: swept-back upright bar) + grips
+    const by = dutch ? 1.06 : 1.0,
+      bz = dutch ? 0.26 : 0.32;
+    b.add(tube(0, headTop[0], headTop[1], 0, by, bz + 0.06, 0.012), { color: CHROME, rough: 0.5, part });
+    if (dutch) {
+      for (const sd of [1, -1]) b.add(tube(0, by, bz + 0.06, sd * 0.29, by - 0.01, bz, 0.011), { color: CHROME, rough: 0.5, part });
+    } else b.add(tube(0.28, by, bz + 0.03, -0.28, by, bz + 0.03, 0.012), { color: '#2a2c30', rough: 0.9, part });
+    for (const sd of [1, -1]) b.add(tube(sd * 0.24, by, bz + (dutch ? 0.0 : 0.03), sd * 0.31, by, bz + (dutch ? 0.0 : 0.03), 0.017), { color: '#1d1f22', rough: 1.2, part });
+    // mudguards
+    for (const [z0, front] of [
+      [zf, true],
+      [zr, false],
+    ] as const) {
+      const g = new THREE.CylinderGeometry(R + 0.03, R + 0.03, 0.06, LOD === 0 ? 10 : 6, 1, true, front ? -0.3 : Math.PI * 0.45, Math.PI * 0.7);
+      g.rotateZ(Math.PI / 2);
+      g.translate(0, R, z0);
+      if (dutch || v === 0) b.add(g, { color: dutch ? '#ffffff' : '#2a2c30', paint: dutch, rough: 0.9, part });
+    }
+    // chainring + crank arms + pedals (turn with the pedalling: wheel tag 3 about the bottom bracket)
+    const ck = { x: 0, y: bbY, z: bbZ, front: false, crank: true };
+    const ring = new THREE.CircleGeometry(0.09, LOD === 0 ? 12 : 6);
+    ring.rotateY(-Math.PI / 2);
+    ring.translate(-0.045, bbY, bbZ);
+    b.add(ring, { color: '#5b6066', rough: 0.6, wheel: ck, part });
+    for (const sd of [1, -1]) {
+      const ang = sd > 0 ? 0 : Math.PI;
+      const pz = bbZ + Math.sin(ang) * 0.17,
+        py = bbY - Math.cos(ang) * 0.17;
+      b.add(tube(sd * 0.07, bbY, bbZ, sd * 0.08, py, pz, 0.01), { color: '#3c4046', rough: 0.6, wheel: ck, part });
+      b.add(bx(0.09, 0.025, 0.07, sd * 0.13, py - 0.012, pz), { color: '#1d1f22', rough: 1.2, wheel: ck, part });
+    }
+    if (dutch) {
+      // front basket (wicker) and rear rack
+      b.add(rbox(0.36, 0.2, 0.28, 0.03, 0, 0.84, zf + 0.04), { color: '#a07a48', rough: 1.4, part });
+      b.add(bx(0.2, 0.025, 0.36, 0, R + 0.32, zr + 0.1), { color: '#2a2c30', rough: 0.8, part });
+      // lamp on the basket
+      b.add(rbox(0.07, 0.07, 0.05, 0.02, 0, 0.8, zf + 0.2), { color: HEAD, light: LIGHT_HEAD, rough: 0.4, part });
+    } else b.add(rbox(0.05, 0.05, 0.04, 0.015, 0, 0.9, 0.42), { color: HEAD, light: LIGHT_HEAD, rough: 0.4, part });
+    b.add(rbox(0.05, 0.04, 0.025, 0.01, 0, dutch ? 0.62 : 0.66, zr - 0.08), { color: TAIL, light: LIGHT_TAIL, rough: 0.5, part });
+  }
+  // ── e-scooter (v1): deck, stem, T-bar, small wheels; painted in the operator's colour
+  {
+    const part = VB(1);
+    const r = 0.11;
+    thinWheel(b, 0.4, r, true, part, 0.03, false);
+    thinWheel(b, -0.4, r, false, part, 0.03, false);
+    b.add(rbox(0.15, 0.05, 0.66, 0.02, 0, 0.07, -0.02), { color: '#ffffff', paint: true, rough: 0.8, part });
+    b.add(bx(0.13, 0.008, 0.5, 0, 0.12, -0.04), { color: '#1d1f22', rough: 1.6, part });
+    b.add(tube(0, 0.12, 0.33, 0, 1.0, 0.4, 0.022), { color: '#ffffff', paint: true, rough: 0.8, part });
+    b.add(tube(0.23, 1.02, 0.4, -0.23, 1.02, 0.4, 0.014), { color: '#2a2c30', rough: 0.9, part });
+    for (const sd of [1, -1]) b.add(tube(sd * 0.17, 1.02, 0.4, sd * 0.24, 1.02, 0.4, 0.019), { color: '#1d1f22', rough: 1.2, part });
+    b.add(tube(0, 0.2, 0.4, 0, 0.11, 0.4, 0.012), { color: '#2a2c30', rough: 0.9, part });
+    b.add(rbox(0.06, 0.05, 0.03, 0.015, 0, 0.92, 0.43), { color: HEAD, light: LIGHT_HEAD, rough: 0.4, part });
+    b.add(rbox(0.06, 0.02, 0.02, 0.008, 0, 0.17, -0.38), { color: TAIL, light: LIGHT_TAIL, rough: 0.5, part });
+    // rear mudguard
+    b.add(bx(0.08, 0.012, 0.18, 0, 0.23, -0.38), { color: '#2a2c30', rough: 1.0, part });
+  }
+  return b.build();
+}
+
+function motos(): THREE.BufferGeometry {
+  const b = new Builder();
+  // ── Vespa-style scooter (v0) + delivery scooter (v1, same body + top box)
+  {
+    const SC = VB(0, 1);
+    const zf = 0.65,
+      zr = -0.65,
+      R = 0.24;
+    fatWheel(b, zf, R, 0.1, true, SC);
+    fatWheel(b, zr, R, 0.11, false, SC);
+    // rear cowl (body colour), tapering towards the top
+    const cowl = rbox(0.5, 0.42, 0.78, 0.16, 0, 0.26, -0.42, 2);
+    taper(cowl, 0.26, 0.68, -0.42, 0.18, 0.1, 0.12);
+    b.add(cowl, { color: '#ffffff', paint: true, rough: 0.7, part: SC });
+    // floorboard + leg shield + front fender + headset
+    b.add(rbox(0.36, 0.07, 0.56, 0.03, 0, 0.24, 0.1), { color: '#2c2f33', rough: 1.4, part: SC });
+    const shield = rbox(0.48, 0.62, 0.07, 0.03, 0, 0.27, 0.44);
+    taper(shield, 0.27, 0.89, 0.44, 0.35, 0.0, 0.0);
+    b.add(shield, { color: '#ffffff', paint: true, rough: 0.7, part: SC });
+    b.add(rbox(0.16, 0.12, 0.42, 0.05, 0, 0.42, 0.66), { color: '#ffffff', paint: true, rough: 0.7, part: SC });
+    b.add(tube(0, 0.5, 0.6, 0, 0.98, 0.5, 0.03), { color: '#2c2f33', rough: 0.9, part: SC });
+    b.add(rbox(0.3, 0.12, 0.16, 0.05, 0, 0.94, 0.5), { color: '#ffffff', paint: true, rough: 0.7, part: SC });
+    b.add(tube(0.3, 1.03, 0.45, -0.3, 1.03, 0.45, 0.014), { color: CHROME, rough: 0.5, part: SC });
+    for (const sd of [1, -1]) {
+      b.add(tube(sd * 0.24, 1.03, 0.45, sd * 0.32, 1.03, 0.45, 0.02), { color: '#1d1f22', rough: 1.2, part: SC });
+      b.add(tube(sd * 0.2, 1.03, 0.47, sd * 0.25, 1.2, 0.47, 0.006), { color: CHROME, rough: 0.5, part: SC });
+      b.add(rbox(0.08, 0.05, 0.02, 0.015, sd * 0.26, 1.19, 0.47), { color: '#7d8a94', rough: 0.3, part: SC });
+    }
+    b.add(rbox(0.13, 0.1, 0.06, 0.04, 0, 0.92, 0.6), { color: HEAD, light: LIGHT_HEAD, rough: 0.4, part: SC });
+    // seat + tail light + blinkers
+    b.add(rbox(0.3, 0.1, 0.62, 0.05, 0, 0.66, -0.32), { color: '#2a241f', rough: 1.1, part: SC });
+    b.add(rbox(0.14, 0.06, 0.04, 0.02, 0, 0.52, -0.83), { color: TAIL, light: LIGHT_TAIL, rough: 0.5, part: SC });
+    for (const sd of [1, -1]) {
+      b.add(bx(0.05, 0.04, 0.04, sd * 0.17, 0.86, 0.56), { color: AMBER, light: sd > 0 ? LIGHT_BLINK_L : LIGHT_BLINK_R, part: SC });
+      b.add(bx(0.05, 0.04, 0.04, sd * 0.13, 0.5, -0.83), { color: AMBER, light: sd > 0 ? LIGHT_BLINK_L : LIGHT_BLINK_R, part: SC });
+    }
+    // delivery: rack + insulated top box (light grey with a coloured lid)
+    const DV = VB(1);
+    b.add(bx(0.32, 0.03, 0.34, 0, 0.74, -0.66), { color: '#2a2c30', rough: 0.9, part: DV });
+    b.add(rbox(0.46, 0.4, 0.44, 0.05, 0, 0.77, -0.68), { color: '#ffffff', paint: true, rough: 1.0, part: DV });
+    b.add(rbox(0.47, 0.06, 0.45, 0.03, 0, 1.15, -0.68), { color: '#f2f2f0', rough: 1.0, part: DV });
+  }
+  // ── motorbike (v2): tank in the body colour, dark engine, chrome exhaust and forks
+  {
+    const MB = VB(2);
+    const zf = 0.71,
+      zr = -0.71,
+      R = 0.3;
+    fatWheel(b, zf, R, 0.11, true, MB);
+    fatWheel(b, zr, R, 0.15, false, MB);
+    b.add(rbox(0.3, 0.32, 0.5, 0.06, 0, 0.24, 0.05), { color: '#3a3d42', rough: 0.9, part: MB });
+    b.add(rbox(0.22, 0.12, 0.4, 0.04, 0, 0.56, 0.1), { color: '#2c2f33', rough: 0.9, part: MB });
+    const tank = rbox(0.32, 0.22, 0.5, 0.1, 0, 0.66, 0.2, 2);
+    taper(tank, 0.66, 0.88, 0.2, 0.25, 0.05, 0.12);
+    b.add(tank, { color: '#ffffff', paint: true, rough: 0.6, part: MB });
+    b.add(rbox(0.27, 0.09, 0.55, 0.04, 0, 0.76, -0.3), { color: '#1d1f22', rough: 1.2, part: MB });
+    const tail = rbox(0.22, 0.12, 0.38, 0.05, 0, 0.74, -0.66);
+    taper(tail, 0.74, 0.86, -0.66, 0.3, 0.0, 0.1);
+    b.add(tail, { color: '#ffffff', paint: true, rough: 0.6, part: MB });
+    for (const sd of [1, -1]) {
+      b.add(tube(sd * 0.08, R, zf, sd * 0.08, 0.98, 0.52, 0.022), { color: CHROME, rough: 0.4, part: MB });
+      b.add(tube(sd * 0.1, R, zr, sd * 0.11, 0.66, -0.3, 0.02), { color: '#2c2f33', rough: 0.9, part: MB });
+      // foot pegs
+      b.add(tube(sd * 0.12, 0.36, -0.12, sd * 0.2, 0.36, -0.12, 0.012), { color: '#2c2f33', rough: 0.9, part: MB });
+    }
+    b.add(tube(0.34, 1.0, 0.42, -0.34, 1.0, 0.42, 0.013), { color: '#2a2c30', rough: 0.8, part: MB });
+    for (const sd of [1, -1]) b.add(tube(sd * 0.27, 1.0, 0.42, sd * 0.35, 1.0, 0.42, 0.02), { color: '#1d1f22', rough: 1.2, part: MB });
+    const lamp = new THREE.CylinderGeometry(0.09, 0.08, 0.08, LOD === 0 ? 12 : 6);
+    lamp.rotateX(Math.PI / 2);
+    lamp.translate(0, 0.92, 0.62);
+    b.add(lamp, { color: HEAD, light: LIGHT_HEAD, rough: 0.4, part: MB });
+    b.add(tube(-0.15, 0.26, 0.1, -0.18, 0.44, -0.78, 0.035), { color: CHROME, rough: 0.35, part: MB });
+    b.add(rbox(0.12, 0.05, 0.04, 0.02, 0, 0.8, -0.86), { color: TAIL, light: LIGHT_TAIL, rough: 0.5, part: MB });
+    const fender = new THREE.CylinderGeometry(R + 0.03, R + 0.03, 0.13, LOD === 0 ? 10 : 6, 1, true, -0.4, Math.PI * 0.6);
+    fender.rotateZ(Math.PI / 2);
+    fender.translate(0, R, zf);
+    b.add(fender, { color: '#ffffff', paint: true, rough: 0.6, part: MB });
+  }
+  return b.build();
 }

@@ -142,7 +142,8 @@ export default function create(ctx: CityContext): CityModule {
 
   const cloudU = cloudShadowUniforms();
   const sl = ctx.plan.slab;
-  const clouds = new CloudShadowEffect(cloudU, camera, { x0: sl.x0 - 260, z0: sl.z0 - 260, x1: sl.x1 + 260, z1: sl.z1 + 260 });
+  const cloudField = (ctx.services.cloudShadows as CloudShadowData | undefined)?.field ?? null;
+  const clouds = new CloudShadowEffect(cloudU, camera, { x0: sl.x0 - 260, z0: sl.z0 - 260, x1: sl.x1 + 260, z1: sl.z1 + 260 }, 256, cloudField);
   // ambient occlusion applied in the effect pass (and in the tilt-shift prefilter), see postfx/aoApply.ts
   const aoU = aoUniforms();
   const aoFx = new AOApplyEffect(aoU, params.has('aoexact'));
@@ -231,8 +232,29 @@ export default function create(ctx: CityContext): CityModule {
     if (ao) ao.enabled = enabledAll && aoUser && quality.ao;
   };
 
+  // world round: expensive features of other modules, thinned through their setters
+  type Grass = { setDensity?(k: number): void; getDensity?(): number };
+  type Leaves = { setLeafDistance?(m: number | null): void; getLeafDistance?(): number };
+  const grassSvc = ctx.services.groundcover as Grass | undefined;
+  const leafSvc = ctx.services.vegetation as Leaves | undefined;
+  const grassBase = grassSvc?.getDensity?.() ?? 0;
+  const leafBase = leafSvc?.getLeafDistance?.() ?? 0;
+  let grassK = 1,
+    leafK = 1;
+  const applyDetail = (s: QualityStep) => {
+    if (grassSvc?.setDensity && grassBase > 0 && s.grass !== grassK) {
+      grassK = s.grass;
+      grassSvc.setDensity(Math.max(0.25, grassBase * grassK));
+    }
+    if (leafSvc?.setLeafDistance && leafBase > 0 && s.leaf !== leafK) {
+      leafK = s.leaf;
+      leafSvc.setLeafDistance(leafK >= 1 ? null : leafBase * leafK);
+    }
+  };
+
   const applyStep = (s: QualityStep) => {
     step = s;
+    applyDetail(s);
     const changedScale = Math.abs(quality.renderScale - s.renderScale) > 1e-3;
     quality.renderScale = s.renderScale;
     quality.ao = wantAO && s.ao;
@@ -255,7 +277,7 @@ export default function create(ctx: CityContext): CityModule {
   // any 'quality' event (ours, or a preset change in the UI) makes the water module restore its
   // preset level; re-apply the current step's cap right after (water's handler was registered first)
   ctx.events.on('quality', () => applyRefl(step));
-  const ladder = buildLadder(wantAO, quality.dof, reflAtLoad);
+  const ladder = buildLadder(wantAO, quality.dof, reflAtLoad, grassBase > 0 && !!grassSvc?.setDensity, leafBase > 0 && !!leafSvc?.setLeafDistance);
   const adaptive = new AdaptiveController(
     ladder,
     (s) => {
@@ -466,6 +488,8 @@ export default function create(ctx: CityContext): CityModule {
     stats() {
       return {
         step: step.name,
+        grassK,
+        leafK,
         refl: water()?.reflectionQuality?.() ?? -1,
         renderScale: quality.renderScale,
         ao: ao && ao.enabled ? 'on' : 'off',

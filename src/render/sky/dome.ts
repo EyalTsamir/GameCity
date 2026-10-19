@@ -7,6 +7,7 @@ import * as THREE from 'three';
 import type { SkyState } from './palette';
 import { ATMO_FUNCS, ATMO_N, atmoData } from '../atmosphere';
 import { SKY_LUT_GLSL } from './physical';
+import { CLOUD_LAYER_GLSL, CLOUD_SHADE_GLSL, type CloudLayerUniforms } from './cloudLayer';
 
 const VERT = /* glsl */ `
 varying vec3 vDir;
@@ -39,6 +40,8 @@ uniform float uDiscScale;
 uniform vec2 uBelow;
 uniform float uStudio;
 uniform float uSunDisc;
+uniform float uMilky;
+uniform vec3 uCityGlow;
 varying vec3 vDir;
 #ifdef TH_WORLD
 uniform vec4 thAtmo[${ATMO_N}];
@@ -52,6 +55,10 @@ uniform vec3 uNightHor;
 uniform float uNightW;
 uniform vec3 uDiscCol;
 ${SKY_LUT_GLSL}
+#endif
+#ifdef TH_CLOUDS
+${CLOUD_LAYER_GLSL}
+${CLOUD_SHADE_GLSL}
 #endif
 
 float hash13(vec3 p3) {
@@ -70,6 +77,28 @@ float vnoise(vec2 p) {
   float a = hash13(vec3(i, 1.7)), b = hash13(vec3(i + vec2(1.0, 0.0), 1.7));
   float c = hash13(vec3(i + vec2(0.0, 1.0), 1.7)), d = hash13(vec3(i + vec2(1.0, 1.0), 1.7));
   return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+}
+
+float vnoise3(vec3 p) {
+  vec3 i = floor(p), f = fract(p);
+  f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(mix(hash13(i), hash13(i + vec3(1, 0, 0)), f.x), mix(hash13(i + vec3(0, 1, 0)), hash13(i + vec3(1, 1, 0)), f.x), f.y),
+             mix(mix(hash13(i + vec3(0, 0, 1)), hash13(i + vec3(1, 0, 1)), f.x), mix(hash13(i + vec3(0, 1, 1)), hash13(i + vec3(1, 1, 1)), f.x), f.y), f.z);
+}
+// the galactic band: a great circle tilted across the night sky, brighter toward its centre
+float milkyWay(vec3 d) {
+  const vec3 N = vec3(0.4146, 0.5528, -0.7230);
+  float b = dot(d, N);
+  float band = exp(-b * b / (2.0 * 0.11 * 0.11));
+  if (band < 0.01) return 0.0;
+  vec3 u = normalize(cross(N, vec3(0.0, 1.0, 0.0)));
+  vec3 v = cross(N, u);
+  float lon = atan(dot(d, v), dot(d, u));
+  float bulge = exp(-(lon - 1.1) * (lon - 1.1) / 0.9);
+  float n = vnoise3(d * 7.0) * 0.55 + vnoise3(d * 17.0 + 3.1) * 0.3 + vnoise3(d * 41.0 + 7.7) * 0.15;
+  float lane = vnoise3(d * 11.0 + 1.3);
+  float dust = smoothstep(0.05, 0.0, abs(b + (lane - 0.5) * 0.06)) * smoothstep(0.35, 0.65, n + lane * 0.3);
+  return band * smoothstep(0.25, 0.85, n) * (0.5 + 1.1 * bulge) * (1.0 - 0.8 * dust);
 }
 
 vec3 starLayer(vec3 d, float scale, float threshold) {
@@ -123,7 +152,7 @@ void main() {
   // world: the horizon band and everything below it is the atmosphere's haze at infinity (the
   // exact colour distant land and sea fade into in every material's fog → no seam at the horizon)
   vec3 hz = thHazeColor(d) * thAtmo[10].y;
-  col = mix(hz, col, smoothstep(-0.004, 0.16, y));
+  col = mix(hz, col, smoothstep(-0.002, 0.1, y));
 #else
   // below the horizon: legacy = a calm haze; studio = the cyclorama floor colour (exactly the
   // colour the table fades into, overcast already applied by the caller) sweeping up into the sky
@@ -137,13 +166,27 @@ void main() {
 #endif
 
   float aboveH = smoothstep(-0.02, 0.06, y);
+  vec3 skyBase = col;
 
   // stars (hidden by haze near the horizon)
   if (uStars > 0.001) {
     float ext = smoothstep(0.02, 0.35, y);
+#ifdef TH_WORLD
+    // a real night sky: the Milky Way (clumpy band with dark dust lanes) and more, fainter stars in it;
+    // the town's own glow washes the low sky
+    float mw = milkyWay(d);
+    vec3 st = starLayer(d, 240.0, 0.9965 - 0.004 * mw) + starLayer(d.zxy, 130.0, 0.9975) * 1.3 + starLayer(d.yzx, 420.0, 0.9955 - 0.006 * mw) * 0.45;
+    float lp = 1.0 - smoothstep(0.0, 0.5, y) * 0.75; // light pollution near the horizon
+    col += (st + vec3(0.78, 0.84, 1.0) * mw * uMilky) * uStars * ext * (1.0 - uOvercast) * mix(1.0, 0.35, clamp(lp * uCityGlow.r * 12.0, 0.0, 1.0));
+#else
     vec3 st = starLayer(d, 240.0, 0.9965) + starLayer(d.zxy, 130.0, 0.9975) * 1.3;
     col += st * uStars * ext * (1.0 - uOvercast);
+#endif
   }
+#ifdef TH_WORLD
+  // sky glow of the lit town and the villages: warm, hugging the horizon, a little overhead
+  col += uCityGlow * (exp(-max(y, 0.0) * 7.0) * 0.85 + 0.15) * (1.0 - smoothstep(-0.05, -0.3, y));
+#endif
 
   // sun: soft disc + halo
   float ca = dot(d, uSunDir);
@@ -176,6 +219,11 @@ void main() {
     col += vec3(0.55, 0.62, 0.85) * (exp(-am * 2500.0) * 0.25 + exp(-am * 160.0) * 0.06) * uMoonVis * aboveH;
   }
 
+#ifdef TH_CLOUDS
+  // the high cloud sky over everything else in the dome (sun, moon and stars hide behind it)
+  vec4 cl = thClouds(d, skyBase);
+  col = col * (1.0 - cl.a) + cl.rgb;
+#endif
   gl_FragColor = vec4(col, 1.0);
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
@@ -188,6 +236,8 @@ export interface SkyDome {
   material: THREE.ShaderMaterial;
   /** world mode, physical sky: LUT, scale, night gradient (zenith, horizon) and its weight */
   setPhysical(lut: THREE.Texture, scale: number, nightZen: THREE.Color, nightHor: THREE.Color, nightW: number, discCol: THREE.Color, zenith: THREE.Color, horizon: THREE.Color): void;
+  /** world mode: the night sky glow of the lit town (warm, near the horizon) */
+  setCityGlow(c: THREE.Color): void;
   update(state: SkyState, sunDir: THREE.Vector3, moonDir: THREE.Vector3, sunVis: number, moonVis: number, time: number, overcast: number): void;
   /** studio backdrop: below-horizon colour (already overcast-adjusted) or null for the legacy haze */
   setStudio(cyc: THREE.Color | null): void;
@@ -196,8 +246,9 @@ export interface SkyDome {
 /**
  * @param world world mode: real sky to the horizon (haze below it), near real-size sun
  * @param phys world mode with the physical sky LUT (else the painted gradient)
+ * @param clouds world mode: the high cloud layers (uniform objects shared with the cloud-shadow map)
  */
-export function createSkyDome(world = false, phys = false): SkyDome {
+export function createSkyDome(world = false, phys = false, clouds: CloudLayerUniforms | null = null): SkyDome {
   const uniforms = {
     uZenith: { value: new THREE.Color() },
     uHorizon: { value: new THREE.Color() },
@@ -216,6 +267,8 @@ export function createSkyDome(world = false, phys = false): SkyDome {
     uBelow: { value: new THREE.Vector2(0.015, -0.22) },
     uStudio: { value: 0 },
     uSunDisc: { value: world ? 40 : 9 },
+    uMilky: { value: 0.05 },
+    uCityGlow: { value: new THREE.Color(0, 0, 0) },
     thAtmo: { value: atmoData },
     uSkyLUT: { value: null as THREE.Texture | null },
     uSkyScale: { value: 1 },
@@ -223,6 +276,7 @@ export function createSkyDome(world = false, phys = false): SkyDome {
     uNightHor: { value: new THREE.Color() },
     uNightW: { value: 0 },
     uDiscCol: { value: new THREE.Color(1, 1, 1) },
+    ...(clouds ?? {}),
   };
   const material = new THREE.ShaderMaterial({
     name: 'SkyDome',
@@ -237,7 +291,7 @@ export function createSkyDome(world = false, phys = false): SkyDome {
     depthTest: true,
     fog: false,
     dithering: true,
-    defines: world ? (phys ? { TH_WORLD: '', TH_PHYS: '' } : { TH_WORLD: '' }) : {},
+    defines: world ? { TH_WORLD: '', ...(phys ? { TH_PHYS: '' } : {}), ...(clouds ? { TH_CLOUDS: '' } : {}) } : {},
   });
   // world: the sun disc near its real size (0.27° radius → ~0.38° here; 1.3° in the diorama)
   if (world) uniforms.uDiscScale.value = 0.085;
@@ -280,6 +334,9 @@ export function createSkyDome(world = false, phys = false): SkyDome {
       // what other modules read from the dome (water reflections): the sky actually shown
       uniforms.uZenith.value.copy(zenith);
       uniforms.uHorizon.value.copy(horizon);
+    },
+    setCityGlow(c) {
+      uniforms.uCityGlow.value.copy(c);
     },
     setStudio(cyc) {
       if (cyc) {

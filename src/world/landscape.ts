@@ -19,6 +19,9 @@ import { landUniforms, landMaterial } from './landscape/shader';
 import { buildMountains } from './landscape/mountains';
 import { placeTrees, createLandTrees, type LandTrees } from './landscape/trees';
 import { buildSettlements } from './landscape/settlements';
+import { createShips, type Ships } from './landscape/ships';
+import { LAYERS } from '../core/layers';
+import { buildLandLights, type LandLights } from './landscape/lights';
 
 export interface LandscapeService {
   /** true when the world beyond the slab is rendered (world mode, not ?noland) */
@@ -31,6 +34,8 @@ export interface LandscapeService {
   /** signed distance to the sea coast (> 0 land) */
   coastSD(x: number, z: number): number;
   model: LandscapeModel;
+  /** countryside tree detail 0..1 (3D near-set radius; 0 = impostors only) — for the adaptive ladder */
+  setTreeDetail(k: number): void;
   /** ring topology + heights of the land mesh */
   topo: RingTopology | null;
   heights: LandHeights | null;
@@ -50,6 +55,7 @@ export default function create(ctx: CityContext): CityModule {
     isWater: model.isWater,
     cover: (x, z, out) => model.cover(x, z, out ?? coverTmp),
     coastSD: model.coastSD,
+    setTreeDetail: () => {},
     model,
     topo: null,
     heights: null,
@@ -92,18 +98,71 @@ export default function create(ctx: CityContext): CityModule {
   // ── mountains / distant hill layers
   let mtnTris = 0,
     mtnVerts = 0;
+  let mtnMat: THREE.Material | null = null;
   if (!params.has('nomountains')) {
     const m = buildMountains(model, uniforms, fog);
     root.add(m.mesh);
     mtnTris = m.triangles;
     mtnVerts = m.vertices;
+    mtnMat = m.mesh.material as THREE.Material;
+  }
+  // ── water reflection proxies (drawn only by the water module's reflection pass, LAYERS.REFLECT):
+  // the coastal land + island (land triangles within 2.5 km of the sea, sharing the land mesh's
+  // vertex buffers) and a coarse copy of the mountain layers
+  let reflTris = 0;
+  {
+    const idx = geo.index!.array as Uint32Array;
+    const P = geo.getAttribute('position') as THREE.BufferAttribute;
+    const keep: number[] = [];
+    for (let t = 0; t < idx.length; t += 3) {
+      const a = idx[t];
+      const x = P.getX(a),
+        z = P.getZ(a);
+      if (x < 0 && z < 2000) continue; // the river side is covered by the slab's own set + bank trees
+      const sd = model.coastSD(x, z);
+      if (sd > 2500 || sd < -1500) continue;
+      keep.push(idx[t], idx[t + 1], idx[t + 2]);
+    }
+    const pg = new THREE.BufferGeometry();
+    for (const name of Object.keys(geo.attributes)) pg.setAttribute(name, geo.getAttribute(name));
+    pg.setIndex(new THREE.BufferAttribute(new Uint32Array(keep), 1));
+    pg.boundingSphere = geo.boundingSphere!.clone();
+    const proxy = new THREE.Mesh(pg, land.material);
+    proxy.name = 'land-reflect';
+    proxy.position.y = GROUND_DROP;
+    proxy.matrixAutoUpdate = false;
+    proxy.updateMatrix();
+    proxy.layers.set(LAYERS.REFLECT);
+    root.add(proxy);
+    reflTris += keep.length / 3;
+    if (mtnMat) {
+      const mr = buildMountains(model, uniforms, fog, 4, mtnMat);
+      mr.mesh.name = 'land-reflect-mtn';
+      mr.mesh.layers.set(LAYERS.REFLECT);
+      root.add(mr.mesh);
+      reflTris += mr.triangles;
+    }
+  }
+  // ── distant shipping
+  let ships: Ships | null = null;
+  if (params.get('landships') !== '0') {
+    ships = createShips(model, fog, ctx.uniforms.uLights);
+    root.add(ships.mesh);
   }
   // ── farmsteads, hamlets, villages
   let bldCount = 0;
+  let beacon: { x: number; y: number; z: number } | null = null;
   if (params.get('landbld') !== '0') {
     const st = buildSettlements(model, uniforms, ctx.uniforms.uLights, ctx.uniforms.uNight, fog);
     root.add(st.group);
     bldCount = st.count;
+    beacon = st.beacon;
+  }
+  // ── night lights of villages and farms
+  let lamps: LandLights | null = null;
+  if (params.get('landbld') !== '0') {
+    lamps = buildLandLights(model, ctx.uniforms.uLights, beacon);
+    root.add(lamps.points);
   }
   // ── countryside trees (near 3D set around the camera + far impostors)
   let trees: LandTrees | null = null;
@@ -113,6 +172,20 @@ export default function create(ctx: CityContext): CityModule {
     treeMs = placed.ms;
     trees = createLandTrees(placed.list, uniforms, fog, ctx.quality.shadows && ctx.quality.level !== 'low');
     root.add(trees.group);
+    const t = trees;
+    const tierDetail = (lvl: string) => (lvl === 'low' ? 0 : lvl === 'medium' ? 0.7 : 1);
+    let tier = tierDetail(ctx.quality.level);
+    let adapt = 1;
+    t.setDetail(tier * adapt);
+    service.setTreeDetail = (k) => {
+      adapt = Math.min(1, Math.max(0, k));
+      t.setDetail(tier * adapt);
+    };
+    ctx.events.on('quality', (q: { level?: string }) => {
+      if (!q || !q.level) return;
+      tier = tierDetail(q.level);
+      t.setDetail(tier * adapt);
+    });
   }
   ctx.scene.add(root);
   const buildMs = performance.now() - t0;
@@ -121,8 +194,12 @@ export default function create(ctx: CityContext): CityModule {
 
   return {
     name: 'landscape',
+    update(dt) {
+      if (ships && dt > 0) ships.update(ctx.uniforms.uTime.value, dt);
+    },
     frame() {
       trees?.update(ctx.camera);
+      if (lamps) lamps.frame(ctx.size.height * ctx.renderer.getPixelRatio() * ctx.quality.renderScale);
     },
     stats() {
       return {
@@ -134,6 +211,7 @@ export default function create(ctx: CityContext): CityModule {
         landTris,
         mtnVerts,
         mtnTris,
+        reflTris,
         rings: topo.rings.length,
         modelMs: Math.round(modelMs),
         heightMs: Math.round(heights.ms),

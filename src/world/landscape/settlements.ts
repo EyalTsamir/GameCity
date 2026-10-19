@@ -29,6 +29,8 @@ export interface Settlements {
   group: THREE.Group;
   count: number;
   triangles: number;
+  /** lighthouse lantern position (or null) */
+  beacon: { x: number; y: number; z: number } | null;
 }
 
 function placeSite(site: Site, model: LandscapeModel, out: Bld[], towers: { x: number; z: number; y: number; h: number; yaw: number }[]): void {
@@ -287,8 +289,15 @@ vec3 bAlbedo() {
 
 export function buildSettlements(model: LandscapeModel, uniforms: Record<string, THREE.IUniform>, lights: { value: number }, night: { value: number }, fog: boolean): Settlements {
   const blds: Bld[] = [];
-  const towers: { x: number; z: number; y: number; h: number; yaw: number }[] = [];
+  const towers: { x: number; z: number; y: number; h: number; yaw: number; light?: boolean }[] = [];
   for (const s of model.sites) placeSite(s, model, blds, towers);
+  // the island lighthouse on the northern cliff top (white tower, red lantern roof)
+  const isl = model.island;
+  const lx = isl.x + 10,
+    lz = isl.z - isl.r * 0.9;
+  const ly = model.height(lx, lz);
+  const beacon = ly > 5 ? { x: lx, z: lz, y: ly - 0.3, h: 26, yaw: 0, light: true } : null;
+  if (beacon) towers.push(beacon);
   const group = new THREE.Group();
   group.name = 'land-settlements';
   const u = {
@@ -330,10 +339,11 @@ export function buildSettlements(model: LandscapeModel, uniforms: Record<string,
   // church towers
   const tg = towerGeometry();
   const tb = new Float32Array(Math.max(1, towers.length) * 4);
-  towers.forEach((_, i) => {
+  towers.forEach((t, i) => {
+    const lh = (t as { light?: boolean }).light === true;
     tb[i * 4] = 1;
-    tb[i * 4 + 1] = 3;
-    tb[i * 4 + 2] = 4;
+    tb[i * 4 + 1] = lh ? 0 : 3;
+    tb[i * 4 + 2] = lh ? 1 : 4;
     tb[i * 4 + 3] = 3;
   });
   tg.setAttribute('aB', new THREE.InstancedBufferAttribute(tb, 4));
@@ -341,7 +351,8 @@ export function buildSettlements(model: LandscapeModel, uniforms: Record<string,
   towers.forEach((t, i) => {
     p.set(t.x, t.y, t.z);
     q.setFromAxisAngle(ax, t.yaw);
-    sc.set(5.5, t.h, 5.5);
+    const lh = (t as { light?: boolean }).light === true;
+    sc.set(lh ? 4.2 : 5.5, t.h, lh ? 4.2 : 5.5);
     m4.compose(p, q, sc);
     tmesh.setMatrixAt(i, m4);
   });
@@ -352,5 +363,5 @@ export function buildSettlements(model: LandscapeModel, uniforms: Record<string,
   tmesh.computeBoundingSphere();
   group.add(tmesh);
   const triangles = blds.length * 14 + towers.length * (12 + 16);
-  return { group, count: blds.length + towers.length, triangles };
+  return { group, count: blds.length + towers.length, triangles, beacon: beacon ? { x: beacon.x, y: beacon.y + beacon.h * 0.82, z: beacon.z } : null };
 }

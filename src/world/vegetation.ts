@@ -584,6 +584,55 @@ export default function create(ctx: CityContext): CityModule {
     }
   }
 
+  // forest band beyond the slab (world mode): the hill forest continues ~45 m into the landscape so the
+  // camera never sees where our trees stop; world's landscape trees start further out (z < −225).
+  let bandCount = 0;
+  {
+    const land = ctx.services.landscape as
+      | { active: boolean; height(x: number, z: number): number; cover(x: number, z: number): { forest: number; water: number } }
+      | undefined;
+    if (cardsOn && land?.active) {
+      const rng = ctx.rng('veg-forest-band');
+      const BAND = 45;
+      const zs = slab.z0 - BAND,
+        ze = slab.z0 + 1;
+      const xs = slab.x0 - BAND,
+        xe = slab.x1 + BAND;
+      const N = Math.round(((xe - xs) * (ze - zs) + 2 * BAND * 80) * 0.9 * Math.max(0.5, density));
+      for (let k = 0; k < N; k++) {
+        // north band + short strips down the W and E sides of the ridge
+        let x: number, z: number;
+        const u = rng.next();
+        if (u < 0.82) {
+          x = rng.range(xs, xe);
+          z = rng.range(zs, ze);
+        } else {
+          x = u < 0.91 ? rng.range(xs, slab.x0 + 1) : rng.range(slab.x1 - 1, xe);
+          z = rng.range(slab.z0, slab.z0 + 80);
+        }
+        const inside = x > slab.x0 + 1 && x < slab.x1 - 1 && z > slab.z0 + 1;
+        if (inside) continue;
+        const cov = land.cover(x, z);
+        if (cov.water > 0.05) continue;
+        const out = Math.max(slab.z0 - z, slab.x0 - x, x - slab.x1, 0);
+        if (rng.next() > cov.forest * (1 - 0.45 * smooth(BAND * 0.5, BAND, out))) continue;
+        const h0 = land.height(x, z);
+        const gx = (land.height(x + 0.8, z) - land.height(x - 0.8, z)) / 1.6,
+          gz = (land.height(x, z + 0.8) - land.height(x, z - 0.8)) / 1.6;
+        const slope = Math.hypot(gx, gz);
+        if (slope > 0.8) continue;
+        const stand = Math.sin(x * 0.043 + 0.7) * Math.sin(z * 0.11 + 2.1) + 0.5 * Math.sin(x * 0.11 - z * 0.07);
+        const sp: Species = rng.chance(Math.min(0.85, Math.max(0.25, 0.55 + 0.3 * stand))) ? 'conifer' : 'round';
+        const sz = size(sp, rng, rng.chance(0.4) ? 2 : rng.chance(0.15) ? 0 : 1);
+        if (trees.any(x, z, sz.r + 4.5, (id, d) => d < Math.max(1.6, (sz.r + trees.r[id]) * 0.6))) continue;
+        const toneN = 0.5 + 0.3 * Math.sin(x * 0.067 + 2.3) * Math.sin(z * 0.091 + 0.6) + 0.16 * Math.sin(x * 0.19 - z * 0.13);
+        const tone = Math.min(1, Math.max(0, toneN + (hash01(x * 5.3, z * 4.7, 43) - 0.5) * 0.4));
+        plant({ sp, x, z, y: h0 - 0.1 - slope * 0.25, h: sz.h, r: sz.r, surround: 'none', syaw: 0, tag: 'forest', detail: 1, tone });
+        bandCount++;
+      }
+    }
+  }
+
   // ─────────────────────────────────────────────────────────── build trees ──
   const mkTree = () => {
     const sk = new GeoSink(EXTRAS);
@@ -620,27 +669,69 @@ export default function create(ctx: CityContext): CityModule {
   const bySpecies: Record<string, number> = {};
   // ── leaf-card plant registry (defs only; far LOD emitted below, near LOD generated lazily)
   const plants: PlantDef[] = [];
+  /**
+   * Species by role and district — a Mediterranean city: planes, ficus and Washingtonia palms on the
+   * avenues, olives / jacarandas / cypresses in the old town and on squares, date / Canary palms on the
+   * front, citrus and olives in gardens, oaks + stone pines in the park, spruce / fir / pine on the hills.
+   */
   const kindFor = (t: { sp: Species; x: number; z: number; tag: string }): KindName => {
     const hh = hash01(t.x * 1.31, t.z * 2.07, 77);
+    const dk: DistrictKind = (plan.districtAt(t.x, t.z)?.kind ?? 'park') as DistrictKind;
+    const pick = (ks: KindName[], ws: number[]): KindName => {
+      let tot = 0;
+      for (const w of ws) tot += w;
+      let u = hh * tot;
+      for (let i = 0; i < ks.length; i++) {
+        u -= ws[i];
+        if (u <= 0) return ks[i];
+      }
+      return ks[ks.length - 1];
+    };
+    const forest = t.tag === 'forest';
     switch (t.sp) {
-      case 'round':
-        return t.tag === 'forest' ? (hh < 0.55 ? 'oak' : hh < 0.85 ? 'linden' : 'maple') : hh < 0.45 ? 'linden' : hh < 0.75 ? 'maple' : 'oak';
+      case 'palm':
+        return t.tag === 'beach' ? pick(['datepalm', 'fanpalm', 'canarypalm'], [5, 3.5, 1.5]) : pick(['datepalm', 'fanpalm'], [1, 1]);
+      case 'conifer':
+        if (forest) return pick(['spruce', 'fir', 'pine', 'stonepine'], [4.5, 2.5, 2, 1]);
+        return pick(['cypress', 'stonepine', 'spruce', 'pine'], [3, 2.5, 2.5, 2]);
+      case 'column':
+        if (t.tag === 'river' || dk === 'riverside') return 'poplar';
+        if (dk === 'downtown' || dk === 'midtown') return pick(['fanpalm', 'cypress'], [6, 4]);
+        if (dk === 'industrial' || dk === 'harbor' || dk === 'station') return pick(['poplar', 'fanpalm'], [7, 3]);
+        return pick(['cypress', 'poplar'], [7, 3]);
       case 'blossom':
-        return 'blossom';
+        return dk === 'civic' || dk === 'park' ? pick(['jacaranda', 'blossom'], [1, 1]) : pick(['blossom', 'jacaranda'], [6, 4]);
+      case 'fruit':
+        return pick(['fruit', 'olive'], [6, 4]);
       case 'autumn':
         return 'autumn';
-      case 'fruit':
-        return 'fruit';
       case 'birch':
         return 'birch';
-      case 'column':
-        return 'poplar';
-      case 'conifer':
-        return hh < 0.55 ? 'spruce' : hh < 0.85 ? 'fir' : 'pine';
-      case 'palm':
-        return 'datepalm';
       case 'willow':
         return 'willow';
+      default:
+        if (forest) return pick(['oak', 'linden', 'maple'], [5.5, 3, 1.5]);
+        switch (dk) {
+          case 'downtown':
+          case 'midtown':
+          case 'station':
+          case 'harbor':
+          case 'industrial':
+            return pick(['plane', 'ficus', 'linden'], [4.5, 3, 2.5]);
+          case 'oldtown':
+          case 'market':
+          case 'civic':
+            return pick(['plane', 'olive', 'jacaranda', 'ficus'], [3.5, 2.5, 2, 2]);
+          case 'beach':
+            return pick(['ficus', 'olive'], [6, 4]);
+          case 'residential':
+          case 'suburb':
+            return pick(['jacaranda', 'linden', 'maple', 'olive', 'fruit'], [2.5, 2.5, 2, 2, 1]);
+          case 'riverside':
+            return pick(['linden', 'plane', 'oak', 'maple'], [3.5, 3, 2, 1.5]);
+          default:
+            return pick(['oak', 'linden', 'plane', 'maple', 'jacaranda'], [3, 2.5, 2, 1.5, 1]);
+        }
     }
   };
   /** growth bias: crowns lean away from close neighbours and walls, toward light */
@@ -672,13 +763,47 @@ export default function create(ctx: CityContext): CityModule {
   };
   function addPlant(t: Planted, y: number, clear: number | undefined): void {
     const [bx, bz] = t.tag === 'forest' ? [0, 0.35] : biasFor(t.x, t.z, t.r);
+    const kind = kindFor(t);
+    let h = t.h - (y - t.y),
+      r = t.r;
+    const street = t.tag === 'street';
+    // species proportions (placement checked the generic size; grow only where it is not tight)
+    switch (kind) {
+      case 'fanpalm':
+        h *= 1.4;
+        r = 1.7;
+        break;
+      case 'canarypalm':
+        h *= 0.85;
+        r = 3.6;
+        break;
+      case 'cypress':
+        r = Math.min(r, 1.15);
+        h *= 1.1;
+        break;
+      case 'stonepine':
+        if (!street) r *= 1.3;
+        h *= 1.05;
+        break;
+      case 'olive':
+        h = Math.max(Math.min(h, (clear ?? 1.4) + 3.6), (clear ?? 0) + 2.2);
+        if (!street) r *= 1.05;
+        break;
+      case 'jacaranda':
+        if (!street) r *= 1.12;
+        h *= 0.92;
+        break;
+      case 'ficus':
+        if (!street) r *= 1.12;
+        break;
+    }
     plants.push({
-      kind: kindFor(t),
+      kind,
       x: t.x,
       y,
       z: t.z,
-      h: t.h - (y - t.y),
-      r: t.r,
+      h,
+      r,
       seed: t.seed,
       clear,
       tone: t.tone,
@@ -1145,10 +1270,11 @@ export default function create(ctx: CityContext): CityModule {
     nearCards = 0,
     nearWood = 0;
   const camPos = new THREE.Vector3();
-  const sunLight: { l: THREE.DirectionalLight | null } = { l: null };
-  ctx.scene.traverse((o) => {
-    if (!sunLight.l && (o as THREE.DirectionalLight).isDirectionalLight && o.castShadow) sunLight.l = o as THREE.DirectionalLight;
-  });
+  const sunLight: { l: THREE.DirectionalLight | null } = { l: ctx.services.sky?.sun ?? null };
+  if (!sunLight.l)
+    ctx.scene.traverse((o) => {
+      if (!sunLight.l && (o as THREE.DirectionalLight).isDirectionalLight && o.castShadow) sunLight.l = o as THREE.DirectionalLight;
+    });
   const lightDir = new THREE.Vector3();
   const partsC: InstBuf[] = [];
   const partsW: InstBuf[] = [];
@@ -1183,7 +1309,7 @@ export default function create(ctx: CityContext): CityModule {
     }
     next.sort((a, b) => dist[a] - dist[b]);
     // 2. generate missing detail (bounded) and apply the capacity budget
-    let budget = 10;
+    let budget = 4;
     let usedC = 0,
       usedW = 0;
     for (const id of members) target[id] = 0;
@@ -1290,6 +1416,7 @@ export default function create(ctx: CityContext): CityModule {
       return {
         trees: planted.length,
         forest: forestCount,
+        forestBand: bandCount,
         street: planted.filter((t) => t.tag === 'street').length,
         bushes: bushCount,
         hedgeM: Math.round(hedgeLen),
@@ -1311,7 +1438,7 @@ export default function create(ctx: CityContext): CityModule {
         wood: woodLayer ? `${woodLayer.staticCount}+${nearWood}` : 'off',
         nearPlants: members.length,
         leafDist: leafDist(),
-        atlasMs: atlas ? Math.round(atlas.buildMs) : 0,
+        atlasMs: atlas ? `${Math.round(atlas.buildMs)} (paint ${Math.round(atlas.paintMs)})` : 0,
         farMs: Math.round(farMs),
         nearGen: `${genCount} in ${Math.round(genMs)} ms`,
         rebuilds,

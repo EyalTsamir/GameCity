@@ -1,17 +1,17 @@
 # world-ground — grass, meadows, flowers, weeds, litter, reeds (world round)
 
 ## Resume here
-* 2026-10-19 20:35 — resumed after the usage-limit stop + container reboot (everything committed up to
-  fe25a85). M1 code in place and rendering (t2 shots: lawn fuzz + lawn flowers, meadow with poppies /
-  cornflowers, reeds round the pond). Cover maps rewritten on a typed-array rasteriser
-  (`groundcover/raster.ts`) — the canvas version cost 38 s at boot on the loaded machine.
-* Running: t3 capture (only=sky,terrain,landscape,water,roads,vegetation,groundcover,postfx,camera;
-  park_eye, bank_eye, park_mid, hill_eye, overview @11 h) → shots/world/ground/t3 (+ mapsPhases in stats).
-* Next: (1) read t3: map boot time, look; (2) slab-edge seam reported by world (lawn lighter than their
-  meadow at x=−200 / z=150): blend to meadow length + tone within ~10 m of the W/S slab edges, align
-  gcMeadowA with world's cMeadow #68833e, offer world the shared palette GLSL; (3) tune colours
-  (bank meadow far too golden/straw, reeds too flowery, lawn pale), then eye-level judgement.
-* Capture helper: shots/world/ground/gcap.mjs (copy of the scratchpad script).
+* 2026-10-19 20:50 — M1 iterating. Done since the reboot: t3 judged (shots/world/ground/t3: lawn reads as a
+  lawn at eye level; bank meadow far too golden; meadow islands dark from above; lawn-flower confetti;
+  665 k blade verts in park_eye), then: straw down (palette + seed heads), species mixing, ring B/C
+  flowers as floating heads, greener lawn palette, darker turf under ring A + view-elevation-aware
+  presence, tuft/tussock bump on the ground normal (GROUND_BUMP, uGcBump), patchy wear, slab-edge meadow
+  margin (seam with world), ring B 512 / C 640 blades, lily pads (`groundcover/lily.ts`, ?nolilies),
+  reed stands with gaps. Maps boot 3.2 s under load (was 38 s); combine loop trimmed further.
+* Running: t4 (park_eye, bank_band, bank_meadow, park_mid, overview × 11 h / 18.2 h, with props) →
+  shots/world/ground/t4.
+* Next: judge t4 → milestone note to lead (+ palette offer to world, foliage request for pond reeds/lilies
+  once mine are verified) → M2 (edge tufts / weeds check at street level, wind gusts visible) → night.
 
 ## Brief (from WORLD-PLAN.md + world-briefs.md "### ground")
 Owner of `src/world/terrain/ground.ts` (+ its mask), `src/world/groundcover.ts` + `src/world/groundcover/*`.
@@ -82,7 +82,12 @@ instances if the field can't place them well.
       adaptive hook, perf report, final report
 
 ## Requests to other areas
-(none yet)
+* world (via lead, pending): include `GC_PALETTE_GLSL` + `gcPalette()` (src/world/groundcover/palette.ts,
+  shared uniform objects) in the land shader for meadows that match the slab exactly; my gcMeadowA is now
+  their cMeadow #68833e. Seam fix on my side: meadow margin within 10 m of the W/S slab edges.
+* foliage (via lead, after my reeds/lilies are verified): remove the pond reeds + lily pads from
+  src/world/vegetation.ts (pond section ~l.917–965) — groundcover now draws reed stands, cattails, shore
+  grass and lily pads.
 
 ## Changes outside my area
 (none)

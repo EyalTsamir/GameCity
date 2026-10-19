@@ -11,7 +11,18 @@
   soft irregular edges, tracks, farmsteads; (b) mountains must tower over the hills: rock faces/scree, snow on the
   highest, layered haze; (c) north forest flat until trees; (d) island reads as a small mound; river embankment →
   natural transition must be gradual.
-* Next: capture m1c (subset incl. roads/buildings/vegetation, with atmosphere) → judge trees/settlements/mountains.
+* 21:00 — m1c captured (shots/world/world/m1c/, subset with atmosphere): city in a landscape, impostor forest,
+  farms, hedgerows read well (hero_n, wb_out); 3D countryside trees were faceted blobs → rebuilt as clump crowns
+  sharing one shape with the impostor atlas (trees.ts shapeOf), near radius 125 m (impostors beyond); foliage band
+  overlap (my forest starts ~33–48 m beyond the north edge, their tones); taller far ranges (L2 2.1 km, L3 3.7 km),
+  bigger N-S rocky island (r 640, 230 m), field borders warped ±1.8 m + headlands + in-field patches, embankment →
+  riprap → grass bank shader transition + towpath on the north bank (aCov3 = riverU, slabD, side), meadow
+  tussocks, dune marram, distant ships (landscape/ships.ts, one dynamic mesh), reflection proxies
+  (land-reflect = coastal land triangles sharing the land buffers, land-reflect-mtn = coarse mountains; opted in
+  water/reflection.ts BASE with land-ships), quality tiers (tree near radius 1 / 0.7 / 0) + service.setTreeDetail(k).
+* Running: m2a capture (hero_n, wb_out, sw_corner, east_eye, river_w, vista_w × 11/18.2) → shots/world/world/m2a;
+  stats probes → shots/world/world/stats/hero_n{,_noland}.json.
+* Next: judge m2a; perf breakdown; POI proposals; night check.
 * Tools: my capture script copy with 20-min load timeout = scratchpad `cap.mjs` (scratchpad is SHARED with other
   agents — keep my files under scratchpad/world* or land/). Offline map tool: scratchpad `land/map.ts` (bundle:
   `npx rolldown land/map.ts --platform node -o land/map.mjs`; `node land/map.mjs x0 z0 x1 z1 N out.bin &&

@@ -14,7 +14,8 @@ import { WIN, PROF, WALLPAT, ROOFPAT, FRAME, GLASS, LIGHT_MODE } from './materia
 import { boardSign, bladeSign } from './signs';
 import { PALETTE } from '../../core/gfx';
 import { anchors } from './anchors';
-import { windowBox, balconyLife, shutterPair, shutterState, julietBalcony, acUnit, dish, downpipe } from './clutter';
+import { windowBox, balconyLife, shutterPair, shutterState, julietBalcony, acUnit, dish, downpipe, potPlant, ironRail, climber, roofClutter as clutterRoof } from './clutter';
+import { GREEN } from './green';
 
 const SHOPS: { name: string; blade: string }[] = [
   { name: 'Bakery', blade: 'B' },
@@ -110,6 +111,18 @@ function ghostPainter(ad: GhostAd) {
 }
 
 let shopCounter = 0;
+
+/** shop interior type for the facade shader (materials.ts bhShop): 1 café/bar, 2 bakery/deli, 3 books,
+ *  4 florist/grocer, 5 fashion, 6 pharmacy/hardware, 7 gallery/antiques/toys */
+function shopType(name: string): number {
+  if (/Café|Bistro|Wine|Tea|Pizzeria|Fish|Anchor|Pub|Gelato|Ice/.test(name)) return 1;
+  if (/Bakery|Pâtisserie|Chocolates|Cheese|Delicatessen|Butcher/.test(name)) return 2;
+  if (/Books|Records|Stationery|Bookbinder/.test(name)) return 3;
+  if (/Florist|Greengrocer/.test(name)) return 4;
+  if (/Shoes|Hat|Tailor|Optician|Barber/.test(name)) return 5;
+  if (/Pharmacy|Hardware|Post|Bike/.test(name)) return 6;
+  return 7;
+}
 export function resetOldtown(): void {
   shopCounter = 0;
 }
@@ -192,6 +205,8 @@ export function genTownhouse(g: Gen): void {
   };
 
   let shopName: string | null = null;
+  /** windows (row:col) that already carry a balcony — no window box there */
+  let skipBox = new Set<string>();
   // ── sides
   for (const s of [FRONT, RIGHT, BACK, LEFT] as Side[]) {
     const sg = sideGeom(body, s);
@@ -225,8 +240,6 @@ export function genTownhouse(g: Gen): void {
     signOnSide(g, sg, uc - w / 2, uc + w / 2, 0.035, y0, y0 + h, r);
   }
 
-  /** windows (row:col) that already carry a balcony — no window box there */
-  let skipBox = new Set<string>();
   function windowTrim(sg: SideGeom, gr: Grid, rich: boolean): void {
     const t = g.trim;
     for (let j = 0; j < gr.m; j++) {
@@ -288,13 +301,17 @@ export function genTownhouse(g: Gen): void {
     if (shop) {
       const fasciaY0 = gH - 0.82,
         fasciaY1 = gH - 0.14;
+      const shopDef = SHOPS[(shopCounter++ * 7 + (lot.seed % 5)) % SHOPS.length];
+      shopName = shopDef.name;
+      const shopT = shopType(shopDef.name);
+      anchors.shop(sx(sg, uA, 0), sz(sg, uA, 0), sx(sg, uB, 0), sz(sg, uB, 0), sg.nx, sg.nz, sx(sg, doorU, 0), sz(sg, doorU, 0), shopDef.name, shopT);
       bandWithOpenings(
         sg, uA, uB, ops,
         (a, b) => {
           const len = b - a;
           const n = len > 4.6 ? 2 : 1;
           const gr = makeGrid(a, b, 0, gH, 1, { spacing: len / n, cols: n, winW: (len - 0.5) / n - 0.25, winH: fasciaY0 - 0.12 - 0.3, sill: 0.3, margin: 0.22 });
-          wallGrid(g.shell, sg, a, b, 0, groundTop, gr, { ...look(PROF.SHOP, WIN.SHOP), color: shopC, pattern: WALLPAT.SMOOTH, frame: FRAME.DARK });
+          wallGrid(g.shell, sg, a, b, 0, groundTop, gr, { ...look(PROF.SHOP, WIN.SHOP), color: shopC, pattern: WALLPAT.SMOOTH + 16 * shopT, frame: FRAME.DARK });
         },
         (a, b, y0) => wallPlain(g.shell, sg, a, b, y0, groundTop, { color: shopC, pattern: WALLPAT.SMOOTH, seed: g.seed }),
       );
@@ -311,8 +328,6 @@ export function genTownhouse(g: Gen): void {
       sideBox(t, sg, uA + 0.3, uB - 0.3, 0, 0.16, fasciaY0, fasciaY1, true);
       setCol(t, trimC);
       sideBox(t, sg, uA + 0.2, uB - 0.2, 0, 0.22, fasciaY1, fasciaY1 + 0.08, true);
-      const shopDef = SHOPS[(shopCounter++ * 7 + (lot.seed % 5)) % SHOPS.length];
-      shopName = shopDef.name;
       const gold = rng.chance(0.6) ? '#f2d27a' : '#f6f0e0';
       const signRect = g.atlas.add(`shop:${shopDef.name}:${shopC.getHexString()}`, 256, 48, boardSign(shopDef.name, { bg: `#${shopC.getHexString()}`, fg: gold, border: gold, glow: 0.75, glowColor: '#ffd9a0' }));
       const sLen = Math.min(uB - uA - 0.9, (fasciaY1 - fasciaY0 - 0.1) * 5.3);
@@ -395,9 +410,7 @@ export function genTownhouse(g: Gen): void {
         // corbels under the slab
         setCol(t, shade(trimC, 0.9));
         for (const cu of [u0 + 0.15, u1 - 0.15]) sideBox(t, sg, cu - 0.08, cu + 0.08, 0, dep - 0.1, yb - 0.42, yb - 0.14, true);
-        railing(t, sx(sg, u0, dep - 0.04), sz(sg, u0, dep - 0.04), sx(sg, u1, dep - 0.04), sz(sg, u1, dep - 0.04), yb, 0.95, ironC, 0.13, 1);
-        railing(t, sx(sg, u0 + 0.03, 0.02), sz(sg, u0 + 0.03, 0.02), sx(sg, u0 + 0.03, dep - 0.06), sz(sg, u0 + 0.03, dep - 0.06), yb, 0.95, ironC, 0.13, 1);
-        railing(t, sx(sg, u1 - 0.03, 0.02), sz(sg, u1 - 0.03, 0.02), sx(sg, u1 - 0.03, dep - 0.06), sz(sg, u1 - 0.03, dep - 0.06), yb, 0.95, ironC, 0.13, 1);
+        ironRail(g, sg, u0 + 0.03, u1 - 0.03, dep - 0.05, yb, 0.95, ironC, true);
         anchors.balcony(sx(sg, (u0 + u1) / 2, dep / 2), yb, sz(sg, (u0 + u1) / 2, dep / 2), sg.nx, sg.nz, u1 - u0, dep, 0.95);
         balconyLife(g, sg, u0 + 0.06, u1 - 0.06, yb, { rail: 0.95, depth: dep - 0.06, green: 1.1 * lived });
         for (let k = i; k <= i2; k++) used.add(`${j}:${k}`);
@@ -405,6 +418,13 @@ export function genTownhouse(g: Gen): void {
       return used;
     }
 
+    // a climber on some fronts: ivy / jasmine up one end, or bougainvillea framing the door
+    if (!shop && rng.chance(0.3 * lived)) {
+      const kind = rng.weighted([GREEN.IVY_WALL, GREEN.BOUGAIN, GREEN.JASMINE], [2, 1.6, 0.8]);
+      const atDoor = kind === GREEN.BOUGAIN && !shop;
+      const cu = atDoor ? doorU + (rng.chance(0.5) ? -1 : 1) * (dw / 2 + 0.45) : rng.chance(0.5) ? uA + 0.7 : uB - 0.7;
+      climber(g, sg, cu, rng.range(1.0, 2.4), Math.min(eave - 0.6, gH + rng.range(0.5, 1.6) * fH), INS, kind);
+    }
     // services on the front: a downpipe at one end of the gutter, maybe an AC unit or a dish up top
     if (lot.roof !== 'flat' && rng.chance(0.75)) downpipe(g, sg, rng.chance(0.5) ? uA + 0.18 : uB - 0.18, eave - 0.15);
     if (gr.n > 0 && gr.m > 1 && rng.chance(0.22)) dish(g, sg, rng.chance(0.5) ? uA + 0.5 : uB - 0.5, eave - 1.2, 0.02);
@@ -483,6 +503,11 @@ export function genTownhouse(g: Gen): void {
   function buildSecondary(sg: SideGeom, uA: number, uB: number, isBack: boolean, fullSide: boolean): void {
     const t = g.trim;
     const len = uB - uA;
+    // old ivy on exposed side / back walls
+    if (rng.chance(isBack ? 0.3 : 0.22) && len > 3) {
+      const w = rng.range(1.6, Math.min(5, len - 0.6));
+      climber(g, sg, uA + 0.3 + w / 2 + rng.next() * Math.max(0, len - w - 0.6), w, rng.range(3.5, Math.max(4, eave - 0.8)), INS, rng.chance(0.75) ? GREEN.IVY_WALL : GREEN.JASMINE);
+    }
     // ground floor
     const n0 = Math.max(1, Math.min(4, Math.round((len - 0.8) / 2.7)));
     const gr0 = makeGrid(uA, uB, 0, gH, 1, { spacing: 2.7, cols: n0, winW: 1.0, winH: Math.min(1.7, gH - 1.4), sill: 0.95, margin: 0.5 });
@@ -574,7 +599,8 @@ export function genTownhouse(g: Gen): void {
       g.trim.box(body.x0, yTop, body.z0 + 0.27, body.x0 + 0.27, yTop + 0.08, body.z1 - 0.27, 0b110111);
       g.trim.box(body.x1 - 0.27, yTop, body.z0 + 0.27, body.x1, yTop + 0.08, body.z1 - 0.27, 0b110111);
       flatRoof(g.shell, inner, eave + 0.02, col('#8d8a84'), ROOFPAT.FLAT, g.seed);
-      if (rng.chance(0.5)) roofTerrace(inner, eave + 0.02);
+      const keep: LRect[] = [];
+      if (rng.chance(0.5)) keep.push(roofTerrace(inner, eave + 0.02));
       else {
         // roof hatch / stair hut
         const hx = (inner.x0 + inner.x1) / 2 + rng.range(-1, 1),
@@ -583,8 +609,12 @@ export function genTownhouse(g: Gen): void {
         g.trim.box(hx - 1.1, eave, hz - 1.0, hx + 1.1, eave + 2.3, hz + 1.0);
         setCol(g.trim, col('#6e6a64'));
         g.trim.box(hx - 1.2, eave + 2.3, hz - 1.1, hx + 1.2, eave + 2.42, hz + 1.1);
-        roofClutter(inner, eave + 0.02, hz + 1.3);
+        keep.push({ x0: hx - 1.5, x1: hx + 1.5, z0: hz - 1.4, z1: hz + 1.4 });
+        keep.push(skylight(inner, eave + 0.02, hz + 1.3));
       }
+      // chimney stack position stays clear too
+      keep.push({ x0: body.x0, x1: body.x0 + 1.2, z0: body.z0, z1: body.z1 });
+      clutterRoof(g, inner.x0, inner.z0, inner.x1, inner.z1, eave + 0.02, { keep, density: 1.1 });
       chimney(g, body.x0 + 0.5, (body.z0 + body.z1) / 2 + rng.range(-2, 2), eave, yTop + rng.range(1.0, 1.8));
       return;
     }
@@ -810,7 +840,8 @@ export function genTownhouse(g: Gen): void {
     chimney(g, body.x0 + 0.55, (body.z0 + body.z1) / 2, yTop - 0.5, yTop + rng.range(0.8, 1.4));
   }
 
-  function roofClutter(r: LRect, y: number, zMin: number): void {
+  /** skylight on a flat roof; returns its keep-clear rect */
+  function skylight(r: LRect, y: number, zMin: number): LRect {
     const t = g.trim;
     // skylight
     const sxm = r.x0 + (r.x1 - r.x0) * rng.range(0.3, 0.7),
@@ -823,45 +854,26 @@ export function genTownhouse(g: Gen): void {
     setCol(t, col('#d8d2c4'));
     t.triangle(sxm - 0.8, y + 0.35, szm - 0.6, sxm - 0.8, y + 0.35, szm + 0.6, sxm - 0.8, y + 0.75, szm);
     t.triangle(sxm + 0.8, y + 0.35, szm + 0.6, sxm + 0.8, y + 0.35, szm - 0.6, sxm + 0.8, y + 0.75, szm);
-    // vent pipes + an AC unit + a satellite dish
-    setCol(t, col('#a9adb0'));
-    for (let k = 0; k < 2; k++) {
-      const vx = r.x0 + 0.6 + rng.next() * (r.x1 - r.x0 - 1.2),
-        vz = r.z0 + 0.6 + rng.next() * (r.z1 - r.z0 - 1.2);
-      t.cylinder(vx, vz, 0.09, y, y + 0.7, 6, true);
-    }
-    if (rng.chance(0.6)) {
-      const ax = r.x1 - 1.0,
-        az = r.z1 - 1.0;
-      setCol(t, col('#d6d8d6'));
-      t.box(ax - 0.5, y, az - 0.35, ax + 0.5, y + 0.7, az + 0.35);
-      setCol(t, col('#3a3f44'));
-      t.cylinder(ax, az + 0.36, 0.25, y + 0.1, y + 0.6, 8, false);
-    }
-    if (rng.chance(0.5)) {
-      const dx = r.x0 + 0.8,
-        dz = r.z1 - 0.9;
-      setCol(t, col('#e9e9e6'));
-      t.cylinder(dx, dz, 0.04, y, y + 0.7, 4, false);
-      t.cone(dx, dz, 0.42, y + 0.62, y + 0.9, 8);
-    }
+    return { x0: sxm - 1.2, x1: sxm + 1.2, z0: szm - 1.0, z1: szm + 1.0 };
   }
 
-  function roofTerrace(r: LRect, y: number): void {
+  /** roof terrace (decking, planters, parasol); returns its keep-clear rect */
+  function roofTerrace(r: LRect, y: number): LRect {
     const t = g.trim;
     // decking
     setCol(t, col('#a87f58'));
     const dx0 = r.x0 + 0.2, dx1 = r.x1 - 0.2, dz0 = r.z0 + (r.z1 - r.z0) * 0.45, dz1 = r.z1 - 0.2;
     t.box(dx0, y, dz0, dx1, y + 0.06, dz1, 0b111111);
     anchors.balcony((dx0 + dx1) / 2, y + 0.06, (dz0 + dz1) / 2, 0, 1, dx1 - dx0, dz1 - dz0, 0.8, 'terrace');
-    // planters + plants
+    // planters + plants along the parapet, pot plants in the corners
     for (let k = 0; k < 3; k++) {
       const px = dx0 + 0.4 + ((dx1 - dx0 - 0.8) * k) / 2;
       setCol(t, col('#b5653f'));
       t.box(px - 0.3, y, dz1 - 0.6, px + 0.3, y + 0.4, dz1 - 0.1);
-      setCol(t, col(rng.pick(['#4f8a3c', '#5c9a45', '#6aa84f'])));
-      t.sphere(px, y + 0.7, dz1 - 0.35, 0.38, 6, 4);
+      g.green.clump(px, y + 0.36, dz1 - 0.35, 0.4, rng.range(0.7, 1.3), rng.weighted([GREEN.SHRUB, GREEN.PALM, GREEN.LAVENDER, GREEN.GRASS], [3, 2, 1, 1]), 3);
     }
+    const sgT = sideGeom({ x0: dx0, x1: dx1, z0: dz0, z1: dz1 }, BACK);
+    for (const pu of [0.35, sgT.L - 0.35]) if (rng.chance(0.7)) potPlant(g, sgT, pu, -0.35, y + 0.06, rng.range(1.0, 1.7));
     // parasol + table
     const cx = (dx0 + dx1) / 2 + rng.range(-0.8, 0.8),
       cz = (dz0 + dz1) / 2;
@@ -872,6 +884,7 @@ export function genTownhouse(g: Gen): void {
     setCol(t, col('#f4f1ea'));
     t.cylinder(cx, cz, 0.38, y + 0.68, y + 0.74, 8, true);
     t.cylinder(cx, cz, 0.04, y, y + 0.7, 4, false);
+    return { x0: dx0 - 0.3, x1: dx1 + 0.3, z0: dz0 - 0.3, z1: dz1 + 0.3 };
   }
 }
 

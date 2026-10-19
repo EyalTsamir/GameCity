@@ -217,6 +217,11 @@ export function createBirds(ctx: CityContext, skyline: SkylineGrid): BirdSystem 
   const GULLS = Math.round(7 + 4 * dens);
   const PIGEONS = Math.round(8 + 4 * dens);
   const BUTTERFLIES = Math.round(14 + 10 * dens);
+  const SWIFT_N = Math.round(7 + 3 * dens);
+  const SWIFT_REGIONS: Rect[] = [
+    { x0: 60, z0: -55, x1: 106, z1: 92 }, // old town roofs
+    { x0: 6, z0: 2, x1: 50, z1: 94 }, // town square + market
+  ];
 
   // ── regions
   const park = plan.districts.find((d) => d.kind === 'park');
@@ -229,7 +234,7 @@ export function createBirds(ctx: CityContext, skyline: SkylineGrid): BirdSystem 
     { region: { x0: -45, z0: 50, x1: 50, z1: 140 }, alt: [26, 44], roost: { x: -60, z: 138 } }, // market & river
   ];
 
-  const total = flockDefs.length * FLOCK_N + GULLS + PIGEONS * 3 + BUTTERFLIES;
+  const total = flockDefs.length * FLOCK_N + GULLS + PIGEONS * 3 + BUTTERFLIES + SWIFT_REGIONS.length * SWIFT_N;
   const rm = new BirdMesh(total);
   let nextIdx = 0;
   const all: Bird[] = [];
@@ -426,6 +431,125 @@ export function createBirds(ctx: CityContext, skyline: SkylineGrid): BirdSystem 
     }
   };
 
+  // ───────────────────── swifts: screaming parties racing low over the roofs at dawn and dusk
+  interface Party {
+    birds: Bird[];
+    region: Rect;
+    lx: number;
+    ly: number;
+    lz: number;
+    hd: number;
+    tx: number;
+    ty: number;
+    tz: number;
+    timer: number;
+    /** leader trail (ring buffer, one sample per 0.04 s) — the party chases along it */
+    hist: Float32Array;
+    head: number;
+    acc: number;
+  }
+  const HN = 96;
+  const parties: Party[] = [];
+  const bumpH = (h: number, a: number, b: number, c: number, d: number) => (h <= a || h >= d ? 0 : h < b ? smooth(a, b, h) : h <= c ? 1 : 1 - smooth(c, d, h));
+  const swiftActivity = () => {
+    const h = ctx.clock.hours;
+    return Math.max(bumpH(h, 5.8, 6.5, 8, 9), bumpH(h, 17.4, 18.1, 20.6, 21.3)) * (1 - ctx.uniforms.uRain.value);
+  };
+  for (const region of SWIFT_REGIONS) {
+    const p: Party = { birds: [], region, lx: (region.x0 + region.x1) / 2, ly: 30, lz: (region.z0 + region.z1) / 2, hd: rng.range(0, 6.28), tx: 0, ty: 0, tz: 0, timer: 0, hist: new Float32Array(HN * 3), head: 0, acc: 0 };
+    for (let i = 0; i < SWIFT_N; i++) {
+      const b = alloc(KIND.BIRD, rng.range(0.34, 0.39));
+      b.freq = rng.range(11, 14);
+      b.th = 0.15;
+      rm.colors(b.idx, '#2b2521', '#211c19', '#3b322b');
+      // long, narrow, swept-back (sickle) wings
+      rm.setShape(b.idx, 1.32, 0.04, -0.24, KIND.BIRD);
+      b.vis = 0;
+      b.y = -100;
+      p.birds.push(b);
+    }
+    parties.push(p);
+  }
+  const pickSwiftTarget = (p: Party) => {
+    const r = p.region;
+    p.tx = rng.range(r.x0, r.x1);
+    p.tz = rng.range(r.z0, r.z1);
+    p.ty = skyline.around(p.tx, p.tz, 6) + rng.range(2.5, 14);
+    p.timer = rng.range(1.4, 3.4);
+  };
+  const resetParty = (p: Party, on: boolean) => {
+    pickSwiftTarget(p);
+    p.lx = rng.range(p.region.x0, p.region.x1);
+    p.lz = rng.range(p.region.z0, p.region.z1);
+    p.ly = on ? skyline.around(p.lx, p.lz, 6) + 8 : 140;
+    for (let k = 0; k < HN; k++) p.hist.set([p.lx - Math.sin(p.hd) * (HN - k) * 0.6, p.ly, p.lz - Math.cos(p.hd) * (HN - k) * 0.6], k * 3);
+    p.head = HN - 1;
+    p.birds.forEach((b, i) => {
+      const k = (p.head - 3 - i * 4 + HN * 4) % HN;
+      b.x = p.hist[k * 3];
+      b.y = p.hist[k * 3 + 1];
+      b.z = p.hist[k * 3 + 2];
+      b.vx = Math.sin(p.hd) * 15;
+      b.vz = Math.cos(p.hd) * 15;
+      b.vy = 0;
+      b.vis = on ? 1 : 0;
+      b.mode = on ? 0 : 2;
+    });
+  };
+  const stepParty = (p: Party, dt: number, act: number) => {
+    const on = act > 0.15;
+    const vis0 = p.birds[0]?.vis ?? 0;
+    if (!on && vis0 <= 0) return;
+    p.timer -= dt;
+    const dx = p.tx - p.lx,
+      dz = p.tz - p.lz;
+    if (p.timer <= 0 || dx * dx + dz * dz < 36) pickSwiftTarget(p);
+    const sp = 16 + 3 * Math.sin(p.timer * 2.1);
+    const turn = clamp(angleDiff(p.hd, Math.atan2(dx, dz)), -2.4 * dt, 2.4 * dt);
+    p.hd += turn;
+    p.lx += Math.sin(p.hd) * sp * dt;
+    p.lz += Math.cos(p.hd) * sp * dt;
+    const floor = skyline.around(p.lx, p.lz, 6) + 2.5;
+    const ty = on ? Math.max(p.ty, floor) : 150;
+    p.ly += (ty - p.ly) * (1 - Math.exp(-dt * (on ? 1.4 : 0.5)));
+    p.acc += dt;
+    while (p.acc >= 0.04) {
+      p.acc -= 0.04;
+      p.head = (p.head + 1) % HN;
+      p.hist[p.head * 3] = p.lx;
+      p.hist[p.head * 3 + 1] = p.ly;
+      p.hist[p.head * 3 + 2] = p.lz;
+    }
+    for (let i = 0; i < p.birds.length; i++) {
+      const b = p.birds[i];
+      const k = (p.head - 2 - i * 4 + HN * 4) % HN;
+      const wob = Math.sin(ctx.uniforms.uTime.value * 1.7 + b.seed) * 0.8;
+      const tx = p.hist[k * 3] + Math.cos(b.seed) * wob,
+        ty2 = p.hist[k * 3 + 1] + Math.sin(b.seed * 1.3) * 0.6,
+        tz = p.hist[k * 3 + 2] + Math.sin(b.seed) * wob;
+      const k2 = 1 - Math.exp(-dt * 5);
+      b.vx += ((tx - b.x) * 5 - b.vx) * k2;
+      b.vy += ((ty2 - b.y) * 4 - b.vy) * k2;
+      b.vz += ((tz - b.z) * 5 - b.vz) * k2;
+      const v = Math.hypot(b.vx, b.vz);
+      if (v > 24) {
+        b.vx *= 24 / v;
+        b.vz *= 24 / v;
+      }
+      b.x += b.vx * dt;
+      b.y += b.vy * dt;
+      b.z += b.vz * dt;
+      const fl = skyline.at(b.x, b.z) + 1.2;
+      if (b.y < fl) b.y = fl;
+      b.mode = on ? 0 : 1;
+      b.vis = on ? Math.min(1, b.vis + dt * 1.5) : b.y > 60 ? Math.max(0, b.vis - dt * 0.8) : b.vis;
+      orient(b, dt, 0.16, 1.1);
+      wings(b, dt, rng, 0.8, 0.04, 0.55, 0.15, 0.6);
+      b.fold = 0;
+    }
+  };
+  for (const p of parties) resetParty(p, swiftActivity() > 0.15);
+
   // ───────────────────── gulls
   interface GullState {
     b: Bird;
@@ -444,6 +568,10 @@ export function createBirds(ctx: CityContext, skyline: SkylineGrid): BirdSystem 
     /** daytime rests on the water */
     restT: number;
     restLeft: number;
+    /** roof perch target (modes 4 = gliding to it, 5 = standing on it) */
+    px: number;
+    py: number;
+    pz: number;
   }
   const gullZones: Rect[] = [
     { x0: 150, z0: -130, x1: 192, z1: -25 }, // harbour basin
@@ -478,7 +606,7 @@ export function createBirds(ctx: CityContext, skyline: SkylineGrid): BirdSystem 
     const raft = rafts[i % rafts.length];
     const rx = raft.x + rng.range(-7, 7),
       rz = raft.z + rng.range(-7, 7);
-    const g: GullState = { b, cx: 0, cz: 0, r: 20, dir: rng.chance(0.5) ? 1 : -1, theta: rng.range(0, 6.28), alt: 20, timer: 0, raftX: rx, raftZ: rz, nightX: rx, nightZ: rz, restT: rng.range(20, 160), restLeft: 0 };
+    const g: GullState = { b, cx: 0, cz: 0, r: 20, dir: rng.chance(0.5) ? 1 : -1, theta: rng.range(0, 6.28), alt: 20, timer: 0, raftX: rx, raftZ: rz, nightX: rx, nightZ: rz, restT: rng.range(20, 160), restLeft: 0, px: 0, py: 0, pz: 0 };
     pickGull(g);
     b.x = g.cx + Math.cos(g.theta) * g.r;
     b.z = g.cz + Math.sin(g.theta) * g.r;
@@ -506,9 +634,63 @@ export function createBirds(ctx: CityContext, skyline: SkylineGrid): BirdSystem 
     }
     return false;
   };
+  // roof ridges / parapets near the waterfront (buildings service, loaded after us → looked up lazily)
+  type PerchLike = { ax: number; ay: number; az: number; bx: number; by: number; bz: number };
+  let gullPerches: PerchLike[] | null = null;
+  const perchList = (): PerchLike[] => {
+    if (gullPerches) return gullPerches;
+    const bs = ctx.services.buildings as { perches?: PerchLike[] } | undefined;
+    if (!bs?.perches) return [];
+    gullPerches = bs.perches.filter((p) => Math.max(p.ax, p.bx) > 84 && Math.hypot(p.bx - p.ax, p.bz - p.az) > 2);
+    return gullPerches;
+  };
+  const pickPerch = (g: GullState): boolean => {
+    const list = perchList();
+    if (!list.length) return false;
+    for (let k = 0; k < 6; k++) {
+      const p = list[Math.floor(rng.next() * list.length)];
+      const u = rng.range(0.1, 0.9);
+      const x = p.ax + (p.bx - p.ax) * u,
+        z = p.az + (p.bz - p.az) * u,
+        y = p.ay + (p.by - p.ay) * u;
+      // not on top of another gull
+      if (gulls.some((o) => o !== g && (o.b.mode === 4 || o.b.mode === 5) && Math.hypot(o.px - x, o.pz - z) < 0.9)) continue;
+      g.px = x;
+      g.py = y + 0.03 + g.b.scale * 0.17;
+      g.pz = z;
+      return true;
+    }
+    return false;
+  };
+  let gullPerched = 0;
+
   const stepGull = (g: GullState, dt: number, act: number) => {
     const b = g.b;
     const w = water();
+    if (b.mode === 5) {
+      // standing on a roof ridge, facing into the wind; looks around, shuffles, leaves after a while
+      const wv = ctx.uniforms.uWind.value;
+      const want = Math.atan2(-wv.x, -wv.y);
+      b.yaw += clamp(angleDiff(b.yaw, want + Math.sin(ctx.clock.simTime * 0.3 + b.seed) * 0.5), -dt * 1.5, dt * 1.5);
+      b.x = g.px;
+      b.y = g.py;
+      b.z = g.pz;
+      b.fold = 1;
+      b.amp = 0;
+      b.pitch = 0.05;
+      b.roll = 0;
+      b.head = 0.15 + 0.15 * Math.max(0, Math.sin(ctx.clock.simTime * 0.9 + b.seed * 3));
+      g.restLeft -= dt;
+      if (g.restLeft <= 0 || act < b.th + 0.04) {
+        b.mode = 3;
+        b.t = 0;
+        b.vy = 2.8;
+        b.vx = Math.sin(b.yaw) * 3;
+        b.vz = Math.cos(b.yaw) * 3;
+        pickGull(g);
+      }
+      return;
+    }
     if (b.mode === 2 && boatNear(b.x, b.z, 7)) {
       // a boat is coming: up and away (at night the raft moves somewhere quieter)
       b.mode = 3;
@@ -544,7 +726,7 @@ export function createBirds(ctx: CityContext, skyline: SkylineGrid): BirdSystem 
       }
       return;
     }
-    if (b.mode === 0 && act < b.th) {
+    if ((b.mode === 0 || b.mode === 4) && act < b.th) {
       b.mode = 1;
       g.raftX = g.nightX;
       g.raftZ = g.nightZ;
@@ -558,7 +740,11 @@ export function createBirds(ctx: CityContext, skyline: SkylineGrid): BirdSystem 
         const x = g.cx + rng.range(-6, 6),
           z = g.cz + rng.range(-6, 6);
         const clear = plan.isWater(x, z) && x > 156 && x < 196 && Math.hypot(x - bargeX, z - bargeZ) > 10 && Math.abs(z - PIER_Z) > 10;
-        if (clear && rng.next() < 0.5) {
+        const roll = rng.next();
+        if (roll < 0.45 && pickPerch(g)) {
+          b.mode = 4;
+          g.restLeft = rng.range(30, 110);
+        } else if (clear && roll < 0.75) {
           b.mode = 1;
           g.raftX = x;
           g.raftZ = z;
@@ -568,7 +754,24 @@ export function createBirds(ctx: CityContext, skyline: SkylineGrid): BirdSystem 
     }
     let tx: number, ty: number, tz: number;
     let sp = 8.5;
-    if (b.mode === 1) {
+    if (b.mode === 4) {
+      // glide in to the perch, flare, land
+      tx = g.px;
+      tz = g.pz;
+      const dh = Math.hypot(tx - b.x, tz - b.z);
+      ty = g.py + Math.min(18, dh * 0.3);
+      sp = clamp(dh * 0.45 + 1.0, 1.2, 8.5);
+      if (dh < 0.5 && Math.abs(b.y - g.py) < 0.5) {
+        b.mode = 5;
+        b.vx = b.vy = b.vz = 0;
+        gullPerched++;
+        return;
+      }
+      if (dh < 4) {
+        b.ampT = 1;
+        b.pitch = Math.max(b.pitch, 0.4);
+      }
+    } else if (b.mode === 1) {
       // glide down onto the raft spot
       tx = g.raftX;
       tz = g.raftZ;
@@ -622,6 +825,10 @@ export function createBirds(ctx: CityContext, skyline: SkylineGrid): BirdSystem 
     fcz: number;
     roof: { x: number; y: number; z: number };
     name: string;
+    /** seconds until the next "anyone close?" check */
+    peek: number;
+    /** recent startles (decays): several in a row lift the whole group */
+    alarm: number;
   }
   interface PigeonState {
     tx: number;
@@ -679,7 +886,7 @@ export function createBirds(ctx: CityContext, skyline: SkylineGrid): BirdSystem 
       }
     }
     const c0 = freeSpot(r, (r.x0 + r.x1) / 2, (r.z0 + r.z1) / 2, Math.min(r.x1 - r.x0, r.z1 - r.z0) * 0.4);
-    const g: PigeonGroup = { birds: [], area: r, cx: c0.x, cz: c0.z, state: 0, timer: rng.range(25, 70), fcx: 0, fcz: 0, roof: best, name: plan.blocks[a.blockId]?.kind ?? 'plaza' };
+    const g: PigeonGroup = { birds: [], area: r, cx: c0.x, cz: c0.z, state: 0, timer: rng.range(25, 70), fcx: 0, fcz: 0, roof: best, name: plan.blocks[a.blockId]?.kind ?? 'plaza', peek: rng.range(0, 0.3), alarm: 0 };
     for (let i = 0; i < PIGEONS; i++) {
       const b = alloc(KIND.PIGEON, rng.range(0.46, 0.52));
       b.freq = rng.range(6.5, 8);
@@ -722,7 +929,62 @@ export function createBirds(ctx: CityContext, skyline: SkylineGrid): BirdSystem 
     }
   };
 
+  // people walking through a flock: the pigeons in their way hop-flutter a few metres aside; when
+  // several are startled at once (or a crowd comes through) the whole group lifts off
+  type PedSvc = { near?(x: number, z: number, r: number): number } | undefined;
+  let startles = 0;
+  const hopAside = (g: PigeonGroup, b: Bird, near: (x: number, z: number, r: number) => number) => {
+    const s = pstate.get(b)!;
+    let tx = b.x,
+      tz = b.z;
+    for (let k = 0; k < 6; k++) {
+      const a = rng.range(0, Math.PI * 2),
+        d = rng.range(2.2, 4.5);
+      const x = clamp(b.x + Math.cos(a) * d, g.area.x0 + 0.8, g.area.x1 - 0.8),
+        z = clamp(b.z + Math.sin(a) * d, g.area.z0 + 0.8, g.area.z1 - 0.8);
+      if (blockedForPigeon(x, z) || near(x, z, 1.6) > 0) continue;
+      tx = x;
+      tz = z;
+      break;
+    }
+    if (tx === b.x && tz === b.z) return false;
+    s.tx = tx;
+    s.tz = tz;
+    s.act = 3;
+    b.mode = 3;
+    b.t = 0;
+    b.vy = rng.range(2.2, 3.2);
+    b.bout = 0;
+    startles++;
+    return true;
+  };
+  const checkPeople = (g: PigeonGroup, dt: number) => {
+    g.alarm = Math.max(0, g.alarm - dt * 0.5);
+    g.peek -= dt;
+    if (g.peek > 0 || g.state !== 0) return;
+    g.peek = 0.25;
+    const peds = ctx.services.pedestrians as PedSvc;
+    const near = peds?.near;
+    if (!near) return;
+    if (near(g.cx, g.cz, 9) === 0) return;
+    // a crowd right through the middle: everyone up
+    if (near(g.cx, g.cz, 3.2) >= 3) {
+      startFlight(g);
+      startles++;
+      return;
+    }
+    for (const b of g.birds) {
+      if (b.mode !== 0) continue;
+      if (near(b.x, b.z, 1.35) > 0 && hopAside(g, b, near)) g.alarm += 1;
+    }
+    if (g.alarm >= 3.5 && rng.chance(0.6)) {
+      startFlight(g);
+      g.alarm = 0;
+    }
+  };
+
   const stepPigeons = (g: PigeonGroup, dt: number, act: number) => {
+    checkPeople(g, dt);
     // group state machine
     if (g.state === 0 || g.state === 1) {
       if (act < 0.45) {
@@ -1049,6 +1311,7 @@ export function createBirds(ctx: CityContext, skyline: SkylineGrid): BirdSystem 
     }
     const fa = flyActivity();
     for (const f of flies) f.b.vis = fa > f.b.th - 0.75 ? 1 : 0;
+    for (const p of parties) resetParty(p, swiftActivity() > 0.15);
     for (const b of all) rm.pose(b);
     rm.commit();
   };
@@ -1061,6 +1324,11 @@ export function createBirds(ctx: CityContext, skyline: SkylineGrid): BirdSystem 
     mesh: rm.mesh,
     timejump,
     locate(kind, i) {
+      if (kind === 'swift') {
+        const sw = parties.flatMap((p) => p.birds);
+        const b = sw[Math.max(0, Math.min(sw.length - 1, i))];
+        return b ? { x: b.x, y: b.y, z: b.z } : null;
+      }
       const k = kind === 'gull' ? KIND.GULL : kind === 'pigeon' ? KIND.PIGEON : kind === 'butterfly' ? KIND.BUTTERFLY : KIND.BIRD;
       const list = all.filter((b) => b.kind === k);
       const b = list[Math.max(0, Math.min(list.length - 1, i))];
@@ -1071,6 +1339,7 @@ export function createBirds(ctx: CityContext, skyline: SkylineGrid): BirdSystem 
       acc = dt;
       const act = activity();
       const fa = flyActivity();
+      const sa = swiftActivity();
       boats = liveBoats(ctx);
       // sub-step (8x speed → dt up to 0.8 s)
       const steps = Math.min(8, Math.ceil(acc / 0.05));
@@ -1080,6 +1349,7 @@ export function createBirds(ctx: CityContext, skyline: SkylineGrid): BirdSystem 
         for (const g of gulls) stepGull(g, h, act);
         for (const g of groups) stepPigeons(g, h, act);
         for (const f of flies) stepFly(f, h, fa);
+        for (const p of parties) stepParty(p, h, sa);
       }
       for (const b of all) rm.pose(b);
       rm.commit();
@@ -1094,16 +1364,17 @@ export function createBirds(ctx: CityContext, skyline: SkylineGrid): BirdSystem 
           else flying++;
         }
       for (const g of gulls) {
-        if (g.b.mode === 2) perched++;
+        if (g.b.mode === 2 || g.b.mode === 5) perched++;
         else flying++;
       }
+      for (const p of parties) for (const b of p.birds) if (b.vis > 0.05) flying++;
       for (const g of groups)
         for (const b of g.birds) {
           if (b.mode === 0) perched++;
           else if (b.mode === 4) roosting++;
           else flying++;
         }
-      return { birdsFlying: flying, birdsPerched: perched, birdsRoosting: roosting, butterflies: flies.filter((f) => f.b.vis > 0.05).length };
+      return { birdsFlying: flying, birdsPerched: perched, birdsRoosting: roosting, butterflies: flies.filter((f) => f.b.vis > 0.05).length, pigeonStartles: startles, gullRoofLandings: gullPerched };
     },
     invariants() {
       const out: string[] = [];

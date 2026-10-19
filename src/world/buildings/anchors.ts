@@ -115,7 +115,27 @@ export interface VentTop {
   lot: number;
 }
 
+/** A ground-floor shop front (old town / market): facade line, name and interior type. */
+export interface ShopFront {
+  /** facade base line, left → right seen from the street */
+  ax: number;
+  az: number;
+  bx: number;
+  bz: number;
+  /** outward normal (towards the street) */
+  nx: number;
+  nz: number;
+  name: string;
+  /** 1 café / bar, 2 bakery / deli, 3 books, 4 florist / grocer, 5 fashion, 6 pharmacy / hardware, 7 gallery / toys */
+  type: number;
+  /** door centre on the facade line */
+  doorX: number;
+  doorZ: number;
+  lot: number;
+}
+
 export interface BuildingsService {
+  shops: ShopFront[];
   chimneys: ChimneyTop[];
   balconies: BalconyAnchor[];
   facades: FacadeSpan[];
@@ -140,6 +160,7 @@ class AnchorSink {
   perches: Perch[] = [];
   laundry: LaundryLine[] = [];
   vents: VentTop[] = [];
+  shops: ShopFront[] = [];
   private lot: Lot | null = null;
   private b: Builder | null = null;
 
@@ -149,6 +170,7 @@ class AnchorSink {
     this.perches = [];
     this.laundry = [];
     this.vents = [];
+    this.shops = [];
     this.lot = null;
     this.b = null;
   }
@@ -194,6 +216,18 @@ class AnchorSink {
       wnz = b.toWorldZ(nx, nz) - oz;
     const l = Math.hypot(wnx, wnz) || 1;
     this.laundry.push({ ax: b.toWorldX(ax, az), ay, az: b.toWorldZ(ax, az), bx: b.toWorldX(bx, bz), by, bz: b.toWorldZ(bx, bz), nx: wnx / l, nz: wnz / l, lot: lot.id });
+  }
+
+  /** shop front between local points a and b (left → right), local outward normal, door at local (dx, dz) */
+  shop(ax: number, az: number, bx: number, bz: number, nx: number, nz: number, dx: number, dz: number, name: string, type: number): void {
+    const { lot, b } = this;
+    if (!lot || !b) return;
+    const ox = b.toWorldX(0, 0),
+      oz = b.toWorldZ(0, 0);
+    const wnx = b.toWorldX(nx, nz) - ox,
+      wnz = b.toWorldZ(nx, nz) - oz;
+    const l = Math.hypot(wnx, wnz) || 1;
+    this.shops.push({ ax: b.toWorldX(ax, az), az: b.toWorldZ(ax, az), bx: b.toWorldX(bx, bz), bz: b.toWorldZ(bx, bz), nx: wnx / l, nz: wnz / l, name, type, doorX: b.toWorldX(dx, dz), doorZ: b.toWorldZ(dx, dz), lot: lot.id });
   }
 
   vent(x: number, y: number, z: number, kind: 'bakery' | 'kitchen', shop: string): void {

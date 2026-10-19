@@ -27,10 +27,13 @@ export interface AtmosphereService {
 const RING_N = 12;
 /** sky aerosol relative to the fog's boundary-layer haze (vertical AOD is far smaller than the
  *  horizontal haze suggests; a 1:1 sky turns the noon zenith white) */
-const SKY_HAZE = 0.35;
-/** Mie asymmetry in the LUT: broad (the tight aureole is the art-directed lobe) */
-const SKY_G = 0.5;
-const SKY_MS = 0.35;
+const SKY_HAZE = 0.2;
+/** Mie phase in the LUT: isotropic — the forward peak depends on the TRUE scattering angle, so it lives
+ *  in the analytic sun lobe (dome and fog alike), never in the azimuth-only horizon ring */
+const SKY_G = 0;
+const SKY_MS = 0.15;
+/** elevation of the horizon ring: the sky ~3° up (the true horizon is a long, reddened, yellowish path) */
+const RING_EL = 0.052;
 
 const _c = new THREE.Color();
 const _g = new THREE.Color();
@@ -60,8 +63,14 @@ export class AtmosphereDriver {
   readonly zenith = new THREE.Color();
   /** physical sun colour after the atmosphere (normalised to max 1) — the sun disc */
   readonly sunColor = new THREE.Color(1, 1, 1);
+  /** sunlight reaching the cumulus deck (absolute transmittance incl. the earth shadow) */
+  readonly cloudSunT = new THREE.Color(1, 1, 1);
   /** night gradient weight (authored moonlit sky) */
   nightW = 0;
+  /** the lit town's sky glow at the horizon (set by the sky module; part of the night haze) */
+  readonly cityGlow = new THREE.Color(0, 0, 0);
+  /** brightness compensation of the sky at this time of day (skyScale / noon scale, ≥ 1) */
+  comp = 1;
   private s0 = 1;
   private ringRaw = new Float32Array(RING_N * 3);
   private zenRaw = new THREE.Color();
@@ -87,7 +96,7 @@ export class AtmosphereDriver {
       p.haze = 1e-4 * SKY_HAZE;
       this.evalCPU();
       this.refNoon = this.refL;
-      skyRadiance(p, 0.01, 0.01, 0.99995, _c);
+      skyRadiance(p, 0, Math.sin(RING_EL), Math.cos(RING_EL), _c);
       this.s0 = 0.72 / Math.max(1e-6, lum(_c));
       p.sunSin = NaN; // force the first real update
     }
@@ -96,9 +105,8 @@ export class AtmosphereDriver {
   /** CPU twin: horizon ring, zenith, reference luminance, sun colour */
   private evalCPU(): void {
     const p = this.phys;
-    const el = 0.006; // just above the horizon
-    const ce = Math.cos(el),
-      se = Math.sin(el);
+    const ce = Math.cos(RING_EL),
+      se = Math.sin(RING_EL);
     for (let j = 0; j < RING_N; j++) {
       const phi = ((j + 0.5) / RING_N) * Math.PI;
       skyRadiance(p, ce * Math.cos(phi), se, ce * Math.sin(phi), _c);
@@ -119,6 +127,9 @@ export class AtmosphereDriver {
     sunTransmittance(Math.max(1, p.camH), p.sunSin, p.haze, _t);
     const m = Math.max(_t[0], _t[1], _t[2], 1e-6);
     this.sunColor.setRGB(_t[0] / m, _t[1] / m, _t[2] / m);
+    // clouds at ~1.8 km stay lit (reddening) after the ground has lost the sun
+    sunTransmittance(1800, p.sunSin, p.haze, _t);
+    this.cloudSunT.setRGB(_t[0], _t[1], _t[2]);
   }
 
   /**
@@ -131,7 +142,7 @@ export class AtmosphereDriver {
       const j = Math.min(RING_N - 1, Math.max(0, Math.round((phi / Math.PI) * RING_N - 0.5)));
       const k = this.skyScale;
       out.setRGB(this.ringRaw[j * 3] * k, this.ringRaw[j * 3 + 1] * k, this.ringRaw[j * 3 + 2] * k);
-      out.add(_g.copy(s.horizon).multiplyScalar(this.nightW));
+      out.add(_g.copy(s.horizon).multiplyScalar(this.nightW)).add(this.cityGlow);
     } else {
       const az = Math.cos(phi) * 0.5 + 0.5;
       out.copy(s.horizon).add(_g.copy(s.glow).multiplyScalar(s.glowI * az * az * az * 0.85 * this.band0));
@@ -171,6 +182,7 @@ export class AtmosphereDriver {
       const r = this.refNoon / Math.max(1e-9, this.refL);
       const k = 0.85 - 0.25 * (1 - Math.min(1, Math.max(0, (sh + 0.06) / 0.16)));
       this.skyScale = this.s0 * Math.min(2000, Math.pow(Math.max(1, r), k));
+      this.comp = this.skyScale / this.s0;
       this.zenith.copy(this.zenRaw).multiplyScalar(this.skyScale).add(_g.copy(state.zenith).multiplyScalar(this.nightW));
     } else this.zenith.copy(state.zenith);
     fitRing(p.ring, this.horizonAt, this.lut ? RING_N : 16);

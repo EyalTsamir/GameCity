@@ -8,12 +8,16 @@
 //     dust motes, moths at lamps.
 // Anchors come from the buildings service (ctx.services.buildings: spans, facades, laundry).
 //
-// URL switches: ?nocloth (no cloth at all), ?nobunting, ?nolaundry, ?lifedebug (counts in the console).
+// URL switches: ?nocloth (no cloth at all), ?nobunting, ?nolaundry, ?noflags, ?nochimneys, ?nodrift,
+// ?lifedebug (counts in the console).
 
 import type { CityContext, CityModule } from '../core/context';
 import { ClothSystem } from './life/cloth';
 import { decorate, type BuildingsLike, type DecorStats } from './life/decor';
-import { lampLights } from '../core/lampLight';
+import { addLampLights, lampLights, type LampLight } from '../core/lampLight';
+import { PoleBuilder } from './life/poles';
+import { buildExtras, type ExtraStats } from './life/extras';
+import { Drift } from './life/drift';
 import { createChimneySmoke, type ChimneySmoke } from './life/chimneys';
 
 export default function create(ctx: CityContext): CityModule {
@@ -21,12 +25,19 @@ export default function create(ctx: CityContext): CityModule {
   const problems: string[] = [];
   const cloth = new ClothSystem(ctx);
   let decor: DecorStats | null = null;
+  let extras: ExtraStats | null = null;
+  const poles = new PoleBuilder();
   const buildings = ctx.services.buildings as BuildingsLike | undefined;
 
   if (!params.has('nocloth')) {
     const trees = (ctx.services.vegetation as { trees?: { x: number; z: number; r: number; h: number }[] } | undefined)?.trees ?? [];
     decor = decorate(ctx, cloth, buildings, { trees, lamps: lampLights() }, { bunting: !params.has('nobunting'), laundry: !params.has('nolaundry') });
+    const extraLamps: LampLight[] = [];
+    extras = buildExtras(ctx, cloth, poles, extraLamps, { bunting: !params.has('nobunting'), laundry: !params.has('nolaundry'), flags: !params.has('noflags') });
+    if (extraLamps.length) addLampLights(extraLamps);
     cloth.build();
+    const poleMesh = poles.build();
+    if (poleMesh) cloth.group.add(poleMesh);
     ctx.scene.add(cloth.group);
     // the animated cloth now hangs on the balcony lines: hide the buildings' static stand-ins
     if (decor.balcony > 0) buildings?.setStaticLaundry?.(false);
@@ -48,13 +59,29 @@ export default function create(ctx: CityContext): CityModule {
     chimneySmoke = createChimneySmoke(ctx, bs?.chimneys ?? [], bs?.vents ?? [], ps?.bbqs ?? []);
   }
 
+  // leaves / petals in gusts, golden-hour motes, moths at the lamps (camera-local)
+  let drift: Drift | null = null;
+  if (!params.has('nodrift')) {
+    const q = ctx.quality.level;
+    const trees = (ctx.services.vegetation as { trees?: { x: number; z: number; r: number; h: number }[] } | undefined)?.trees ?? [];
+    drift = new Drift(ctx, trees, { leaves: q === 'high' ? 320 : q === 'medium' ? 160 : 0, motes: q === 'high' ? 420 : q === 'medium' ? 220 : 0, moths: q === 'low' ? 0 : 60 });
+    ctx.scene.add(drift.group);
+  }
+  let lastT = ctx.uniforms.uTime.value;
+
   return {
     name: 'life',
     update(dt) {
-      if (dt > 0) chimneySmoke?.update(dt);
+      if (dt > 0) {
+        chimneySmoke?.update(dt);
+        drift?.update(dt);
+      }
     },
-    frame() {
+    frame(realDt) {
       cloth.frame();
+      const t = ctx.uniforms.uTime.value;
+      drift?.frame(realDt, Math.max(0, Math.min(1, t - lastT)));
+      lastT = t;
     },
     stats() {
       return {
@@ -64,6 +91,9 @@ export default function create(ctx: CityContext): CityModule {
         clothTris: cloth.tris,
         clothVerts: cloth.verts,
         ...(chimneySmoke ? chimneySmoke.stats() : {}),
+        ...(extras ?? {}),
+        poleTris: poles.tris,
+        leaves: drift?.live ?? 0,
         ...(decor ? { street: decor.street, court: decor.court, balcony: decor.balcony, bunting: decor.bunting, prayer: decor.prayer, festoon: decor.festoon, laundryItems: decor.laundryItems, lowestY: Math.round(decor.lowest * 100) / 100, festoonLights: decor.lights } : {}),
       };
     },

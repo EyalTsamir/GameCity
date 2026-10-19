@@ -10,10 +10,24 @@ Owner: **air** agent (world round). Files: `src/render/**` except `src/render/st
   fog / hidden cotton puffs), `sky/dome.ts` (TH_WORLD: haze at/below the horizon, real-size sun),
   `sky/palette.ts` (WORLD_KEYS: haze/mist per hour, deeper zenith), `postfx.ts` (lens DOF, world grade, AO fade
   from the atmosphere, `softDepth()`), `postfx/look.ts` (thAgX with CDL look), `core/context.ts` (type only).
-* Running: before set on 5174 → shots/world/air/before (scratch copy of capture-set with 900 s timeout:
-  `<scratchpad>/air/cap.mjs`; the stock script's 300 s load timeout fails on this loaded box);
-  M1 test set on 5173 → shots/world/air/m1a (log shots/world/air/m1a.log).
-* Next: judge m1a (sheet), tune; then M2 physical sky LUT.
+* 20:35 (after the usage-limit stop + container reboot; all my files were committed in fe25a85):
+  M2 code in: `sky/physical.ts` (GPU sky-view LUT 64² + identical CPU twin), `atmoDrive.ts` drives LUT +
+  fog ring + lobe, dome TH_PHYS path, env bake from the LUT (`EnvPhysical`).
+  m2a judged (shots/world/air/m2a_sheet.png): golden-hour overview washed beige — the azimuth-only fog
+  ring contained the Mie forward peak (×17) → fixed: LUT/twin Mie isotropic (g 0), the forward peak only
+  in the analytic sun lobe (true scattering angle, dome + fog alike); sky too white → sky aerosol = 0.2×
+  fog haze, MS 0.15, ring sampled 3° up (the true horizon is a reddened long path).
+* Running: m2b (hz/overview/beach_e/ot_eye/river_w × 11/18.2, 960×540) → shots/world/air/m2b
+  (`<scratchpad>/air/cap.mjs` = capture-set copy with 900 s load / 600 s screenshot timeouts);
+  sky1 (free camera, `<scratchpad>/air/skycap.mjs`, views "name=camX,Y,Z,targetX,Y,Z", only=sky,terrain,
+  landscape,water,postfx) → shots/world/air/sky1 — first look at the M3 cloud layer.
+* M3 code in (typechecks): `sky/cloudLayer.ts` (procedural 128² noise, cumulus deck 1.8 km + cirrus 8.5 km,
+  2.5D lighting), dome TH_CLOUDS, `postfx/cloudShadow.ts` field mode (camera-centred 9 km map, haze fade),
+  sky.ts drives coverage by hour/day/weather, light at deck height (pink after sunset), drift with the wind.
+* M5 partly: ladder steps grass-0.7 / leaf-0.65 / detail-low via groundcover.setDensity /
+  vegetation.setLeafDistance (postfx/adaptive.ts + postfx.ts applyDetail).
+* m2b noon judged (m2b_sheet11.png): land haze good (blue-grey layers), sky band still pale/whitish.
+* Before set (5174) incomplete: only overview_11 + ot_eye_11 exist → re-run later when the box is idle.
 
 ## Brief (WORLD-PLAN scope 2 + lead notes)
 Aerial perspective via a global fog-chunk override (`src/render/atmosphere.ts`: height fog, Rayleigh-blue

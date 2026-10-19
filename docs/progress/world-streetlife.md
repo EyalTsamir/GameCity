@@ -1,22 +1,18 @@
 # world — streetlife (café terraces, street sitters, vendors, two-wheelers)
 
 ## Resume here
-* 2026-10-19 20:32 UTC — resumed after the usage-limit stop / container reboot. Code state: café goal fully
-  wired in crowd.ts (typechecks), animate.ts café pose (activities: talk / sip / hold cup / eat / phone /
-  read / lean back, conversation turns per party), render.ts newspaper via PROP.PAPER. First browser check
-  running: `shots/world/streetlife/m1a/` (views dtcafe, dtcafe2, dtwide × 13 h, 19 h). Next after judging:
-  table items (`pedestrians/tableware.ts`, one instanced mesh, masks per setting, drawn from render.ts while
-  writing seated café members), then waiters (party state 'serve').
-* 2026-10-19 16:50 UTC — M1 in progress. DESIGN CHANGE: café patrons are real crowd parties (new goal
-  kind 'cafe' reusing the bench flow approach→settle→act→rise→leave), not a static layer — they walk in
-  between the tables, sit, stay, leave. Done: `pedestrians/cafes.ts` (CafePlace from
-  `ctx.services.props.cafes` (wear, live) + `props.discs`; per table an entry point on a walkway edge
-  (edge, u) and per seat a planned free-walk path round the other tables), `places.cafes`.
-  `pedestrians.ts` service `near(x,z,r)` for life (done). Next: crowd.ts goal 'cafe' (route via edge ends
-  ea→eb, leave the rail at exitS = the entry point, arrive → seat path), leisure/warmStart selection,
-  target boost, describe; animate.ts café pose; table items; waiters.
-* Node harness (no browser): scratchpad `h/` — `node h/build.mjs h/cafes.ts && node h/cafes.mjs`
-  (bundles core + cafes.ts with rolldown, stands in a props service).
+* 2026-10-19 20:50 UTC — M1 (cafés) working in the browser: patrons are crowd parties with goal 'cafe'
+  (walk in between the tables, sit, act, leave), table activities (talk / sip / hold cup / eat / phone /
+  read / lean back, conversation turns), waiters (party state 'serve': order pad → kitchen → bring the order;
+  tableware appears when the order is delivered), tableware mesh (1 draw call). Evidence `shots/world/
+  streetlife/m1b_sheet.png`. M2 code written, typechecks, first browser run in progress
+  (`shots/world/streetlife/m2a/`, views road / road2 / junc / cafeA at 13 h): two-wheelers in traffic
+  (specs TWO_WHEELERS + MIX_2W, 27 % of regular traffic, `?no2w`), models 'bike' (city bicycle, e-scooter,
+  Dutch bike) and 'moto' (Vespa scooter, delivery scooter with top box, motorbike) with bitmask variant
+  parts (aPart ≥ 16) and a pedal crank (aWheel.w = 3, angle in aInst2.y), lean into turns, ridden 0.35–0.9 m
+  right of the lane centre; riders = Members fed to the crowd renderer (pedestrians/riders.ts, animate.ts
+  ride branch: pedalling leg IK, feet on floor / pegs / deck, hands on the grips, foot down when stopped).
+* Next: judge m2a (rider poses at 5–10 m, pedalling, lean), fix; parked bikes / e-scooters; then M3.
 
 ## Brief (WORLD-PLAN.md workstream 5 + world-briefs.md notes)
 Gap: at eye level the city is thinly populated compared to reference 2 (sunny Tel-Aviv café street — every
@@ -75,8 +71,8 @@ may be a separate light layer drawn by the existing figure renderer. Budget (hig
 * Table items: 1 draw call. Target total ≤ 0.6 ms, ≤ +6 draw calls.
 
 ## Milestones
-- [ ] M0 survey, log, before captures
-- [ ] M1 café terraces occupied (patrons + activities + table items + waiters)
+- [x] M0 survey, log (before captures: the critique set + baseline 5174 at the same views, pending)
+- [~] M1 café terraces occupied (patrons + activities + table items + waiters) — working, polishing
 - [ ] M2 two-wheelers in traffic (models, sim, riders posed) + parked bikes / e-scooters
 - [ ] M3 sitters (steps / low walls / fountain rims), standing groups, vendors, buskers
 - [ ] M4 polish: filtering scooters, delivery stops, night behaviour, perf pass, soak

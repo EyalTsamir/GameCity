@@ -15,6 +15,7 @@ import { buildAtlas, buildMarkings } from './roads/markings';
 import { createMaterials, legacyGround } from './roads/materials';
 import { HARD_ATTRS } from './roads/surfaces';
 import { pointInPoly, type P2 } from '../core/geom';
+import { createPuddles } from './roads/puddles';
 import { ROAD_HALF } from '../core/constants';
 
 export default function create(ctx: CityContext): CityModule {
@@ -24,7 +25,8 @@ export default function create(ctx: CityContext): CityModule {
   const streets = buildStreets(ctx, A, H);
   const covers = buildCovers(ctx, A, H);
   const atlas = buildAtlas();
-  const mats = createMaterials(ctx, { radial: covers.info.radial, court: covers.info.court }, atlas.tex);
+  const puddles = createPuddles(ctx);
+  const mats = createMaterials(ctx, { radial: covers.info.radial, court: covers.info.court }, atlas.tex, puddles.uniforms);
   const marks = buildMarkings(ctx, atlas.g, mats.asphaltColor, covers.info, legacyGround(ctx));
 
   const root = new THREE.Group();
@@ -52,8 +54,12 @@ export default function create(ctx: CityContext): CityModule {
 
   return {
     name: 'roads',
+    update(simDt) {
+      puddles.update(simDt);
+    },
     stats() {
       return {
+        ...puddles.stats(),
         drawCalls: meshes.length,
         tris: Math.round(tris),
         verts,
@@ -104,6 +110,7 @@ export default function create(ctx: CityContext): CityModule {
       mats.hard.dispose();
       mats.paint.dispose();
       atlas.tex.dispose();
+      puddles.dispose();
     },
   };
 }

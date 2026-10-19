@@ -9,7 +9,7 @@ import { OCC } from '../../core/occupancy';
 import { DIR_VEC } from '../../core/geom';
 import { SIDEWALK_Y, WATER_LEVEL } from '../../core/constants';
 import type { Rng } from '../../core/rng';
-import { buildCafes, type CafePlace } from './cafes';
+import { buildCafes, type CafePlace, type Terrace } from './cafes';
 
 export type DoorCat = 'home' | 'shop' | 'office' | 'hotel' | 'industry' | 'civic' | 'school' | 'station' | 'stadium' | 'kiosk' | 'club';
 
@@ -100,6 +100,8 @@ export interface Places {
   stalls: { x: number; z: number }[];
   /** café tables (terraces, kiosk tables): seats, walkway node, approach paths */
   cafes: CafePlace[];
+  /** clusters of café tables with a service point for waiters */
+  terraces: Terrace[];
   bridgeEdges: Set<number>;
   districtName(x: number, z: number): string;
   surfaceY(x: number, z: number, fallback: number): number;
@@ -622,7 +624,7 @@ export function buildPlaces(ctx: CityContext, rng: Rng): Places {
     return false;
   };
 
-  const cafes = ctx.debug.params.has('nocafe') ? [] : buildCafes(ctx, districtName);
+  const { cafes, terraces } = ctx.debug.params.has('nocafe') ? { cafes: [], terraces: [] } : buildCafes(ctx, districtName);
 
   return {
     doors,
@@ -642,6 +644,7 @@ export function buildPlaces(ctx: CityContext, rng: Rng): Places {
     facades,
     stalls,
     cafes,
+    terraces,
     bridgeEdges,
     districtName,
     surfaceY,

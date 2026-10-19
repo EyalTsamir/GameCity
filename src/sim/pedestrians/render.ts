@@ -17,6 +17,7 @@ import { rigOf } from './rig';
 import { styleFromFlags, type Look, type Style } from './looks';
 import type { Crowd, Member } from './crowd';
 import { patchLampMaterial } from '../../world/lamps/integrate';
+import { Tableware, HELD_CUP, HELD_GLASS } from './tableware';
 
 const clamp = (x: number, a: number, b: number) => (x < a ? a : x > b ? b : x);
 const q8 = (h: number) => clamp(Math.round(((h + 0.1) / 1.275) * 255), 0, 255);
@@ -254,6 +255,8 @@ export class CrowdRenderer {
   readonly pram: THREE.InstancedMesh;
   readonly dog: THREE.InstancedMesh;
   readonly blob: THREE.InstancedMesh;
+  /** cups, plates and glasses on the café tables in front of seated patrons */
+  readonly tableware = new Tableware(256);
   readonly group = new THREE.Group();
   private pramMisc: THREE.InstancedBufferAttribute;
   private dogA: THREE.InstancedBufferAttribute;
@@ -281,6 +284,8 @@ export class CrowdRenderer {
   private lastCam = new THREE.Vector3(1e9, 0, 0);
   private layers: Layer[] = [];
   private levels: Layer[] = [];
+  /** members drawn this frame (reused, no garbage) */
+  private list: Member[] = [];
   private edges = [0, 0, 0];
   private camRef: THREE.PerspectiveCamera | null = null;
 
@@ -341,6 +346,7 @@ export class CrowdRenderer {
     this.blob.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     this.blobA = makeAttr(bg, 'iBlobA', new Float32Array(bcap), 1);
     this.blob.renderOrder = 2;
+    this.group.add(this.tableware.mesh);
 
     for (const mesh of [this.near.mesh, this.far.mesh, this.tiny.mesh, this.pin.mesh, this.shadow.mesh, this.pram, this.dog, this.blob]) {
       mesh.frustumCulled = mesh === this.shadow.mesh;
@@ -372,7 +378,7 @@ export class CrowdRenderer {
   }
 
   /** @param pxHeight drawing-buffer height (px): level distances scale with it */
-  write(crowd: Crowd, camera: THREE.PerspectiveCamera, t: number, rain: number, night: number, pxHeight = REF_HEIGHT): void {
+  write(crowd: Crowd, camera: THREE.PerspectiveCamera, t: number, rain: number, night: number, pxHeight = REF_HEIGHT, extra: Member[] | null = null, nExtra = 0): void {
     this.frame++;
     this.camRef = camera;
     this.pv.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
@@ -403,6 +409,9 @@ export class CrowdRenderer {
       shadowD2 = (SHADOW_FAR * ls) ** 2;
     const levels = this.levels;
     const edges = this.edges;
+    // table settings only where a 5–15 cm object still covers a few pixels
+    const tableD = 70 * ls;
+    this.tableware.begin();
     edges[0] = nearD;
     edges[1] = tinyD;
     edges[2] = pinD;
@@ -426,13 +435,21 @@ export class CrowdRenderer {
       FP[i * 4 + 2] = pl.normal.z;
       FP[i * 4 + 3] = pl.constant;
     }
+    // the crowd's members, then the extra figures (riders of the two-wheelers)
+    const list = this.list;
+    let nl = 0;
     const parties = crowd.parties;
     for (let pi = 0; pi < parties.length; pi++) {
       const p = parties[pi];
       if (p.state === 'gone') continue;
       const members = p.members;
-      for (let mi = 0; mi < members.length; mi++) {
-        const m = members[mi];
+      for (let mi = 0; mi < members.length; mi++) list[nl++] = members[mi];
+    }
+    for (let i = 0; i < nExtra; i++) list[nl++] = extra![i];
+    for (let li = 0; li < nl; li++) {
+      const m = list[li];
+      const p = m.party;
+      {
         if (!m.present || m.fade <= 0.01) continue;
         const L = m.look;
         const rad = 1.4 + (L.pram || L.dog ? 1.4 : L.flags & F.ROD ? 2.2 : 0);
@@ -474,7 +491,7 @@ export class CrowdRenderer {
         const out = st.prev >= 0 ? levels[st.prev] : null;
         const r = rigOf(L);
         const umbrella = raining && L.umbrellaOwner && m.sit < 0.3 && m.lie < 0.1 && m.ground < 0.1 && !L.pram;
-        const gaitOn = layer === this.near || layer === this.far || out === this.near || out === this.far;
+        const gaitOn = m.rideG === null && (layer === this.near || layer === this.far || out === this.near || out === this.far);
         poseIn.t = t + m.seed * 10;
         computePoseA(m, umbrella, r, pose, gaitOn ? st.gait : null, this.frame);
         // drawn at the gait's smoothed root when the gait ran this frame (corners: the feet were planned
@@ -497,8 +514,16 @@ export class CrowdRenderer {
           flags |= bit(FB.UMBRELLA);
           CC[9] = ((L.umbrella & 0xffffff) | (CC[9] & 0xff000000)) >>> 0;
         }
-        if ((m.reading && m.sit > 0.75 && m.cafe === 0) || pose.spare1 > 2.5) flags |= bit(FB.NEWSPAPER);
-        else if (pose.spare1 > 0.5) flags |= bit(pose.spare1 < 1.5 ? FB.PHONE : FB.CUP);
+        if ((m.reading && m.sit > 0.75 && m.cafe === 0) || (pose.spare1 > 2.5 && pose.spare1 < 3.5)) flags |= bit(FB.NEWSPAPER);
+        else if (pose.spare1 > 0.5 && pose.spare1 < 2.5) flags |= bit(pose.spare1 < 1.5 ? FB.PHONE : FB.CUP);
+        // café: what stands on the table in front of a seated patron (the cup / glass not while in the hand)
+        if (m.cafe > 0 && m.sit > 0.85 && d < tableD && p.state === 'act' && ((p.goal?.cafe?.served ?? 2) >= 2 || p.timer > 50)) {
+          const held = pose.spare1 > 1.5 && pose.spare1 < 2.5 ? HELD_CUP : pose.spare1 > 3.5 ? HELD_GLASS : 0;
+          const fxT = Math.sin(m.yaw),
+            fzT = Math.cos(m.yaw);
+          const off = m.tabD + 0.05;
+          this.tableware.add(m.x + fxT * off, m.y + m.tabH, m.z + fzT * off, m.yaw, m.order & ~held);
+        }
         if (m.sit > 0.5 || m.lie > 0.3 || m.ground > 0.3) flags &= ~(bit(FB.ROD) | bit(FB.CANE) | bit(FB.SHOPBAG) | bit(FB.BRIEFCASE));
         if (m.lie > 0.3) flags &= ~(bit(FB.HAT) | bit(FB.BRIM) | bit(FB.VISOR) | bit(FB.BACKPACK));
         if (m.sunbathing && (m.lie > 0.3 || m.ground > 0.3)) {
@@ -607,6 +632,7 @@ export class CrowdRenderer {
       }
     }
     for (let i = 0; i < all.length; i++) all[i].finish();
+    this.tableware.finish();
     this.visible = this.near.n + this.far.n + this.tiny.n + this.pin.n;
     this.triangles = this.near.n * this.near.tris + this.far.n * this.far.tris + this.tiny.n * this.tiny.tris + this.pin.n * this.pin.tris;
     this.vertices = this.near.n * this.near.verts + this.far.n * this.far.verts + this.tiny.n * this.tiny.verts + this.pin.n * this.pin.verts;
@@ -640,6 +666,7 @@ export class CrowdRenderer {
       if (mesh.customDepthMaterial) mats.add(mesh.customDepthMaterial);
     }
     for (const m of mats) m.dispose();
+    this.tableware.dispose();
     this.group.removeFromParent();
   }
 }

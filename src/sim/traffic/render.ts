@@ -28,7 +28,7 @@ export interface ParkedCar {
   yaw: number;
 }
 
-const MOVING_CAP: Record<ModelKind, number> = { compact: 70, hatch: 80, sedan: 90, suv: 60, delivery: 40, lorry: 30, bus: 10, icecream: 4 };
+const MOVING_CAP: Record<ModelKind, number> = { compact: 70, hatch: 80, sedan: 90, suv: 60, delivery: 40, lorry: 30, bus: 10, icecream: 4, bike: 70, moto: 70 };
 const ROAD_Y = 0.012;
 /** beyond this camera distance a car popping in/out is a sub-4-pixel event */
 const POP_DIST = 290;
@@ -283,8 +283,26 @@ export class VehicleRenderer {
         rollT = -0.022; // the bus kneels towards the kerb
         pitchT = 0;
       }
+      if (V.twoWheel) {
+        // two-wheelers lean into turns (curvature from the heading change per metre ridden); stopped,
+        // the rider has a foot down and the bike tips a little to the left
+        const ds = V.odo - V.lastOdo;
+        if (ds > 0.04 || ds < 0) {
+          let dy = V.yaw - V.lastYaw;
+          dy -= Math.PI * 2 * Math.round(dy / (Math.PI * 2));
+          const kap = ds > 0 ? Math.max(-0.5, Math.min(0.5, dy / ds)) : 0;
+          V.kappa += (kap - V.kappa) * Math.min(1, ds * 0.9);
+          V.lastOdo = V.odo;
+          V.lastYaw = V.yaw;
+        }
+        rollT = V.v < 0.35 ? -0.1 : -Math.atan((V.v * V.v * V.kappa) / 9.81);
+        rollT = Math.max(-0.5, Math.min(0.5, rollT));
+        pitchT *= 0.3;
+        V.lean += (rollT - V.lean) * k;
+        V.roll = V.lean;
+      }
       V.pitch += (pitchT - V.pitch) * k;
-      V.roll += (rollT - V.roll) * k;
+      if (!V.twoWheel) V.roll += (rollT - V.roll) * k;
       const braking = V.a < -0.6 || (V.v < 0.25 && V.status !== St.Cruise) || V.dwell > 0;
       V.brakeVis += ((braking ? 1 : 0) - V.brakeVis) * kb;
       this.sphere.center.set(V.x, 1.5, V.z);
@@ -309,7 +327,7 @@ export class VehicleRenderer {
         L.mesh.setMatrixAt(idx, this.m4);
         L.mesh.setColorAt(idx, this.colorOf(V.color));
         L.a1.setXYZW(idx, V.brakeVis, this.blinker(V), (V.odo / sp.wheelR) % (Math.PI * 2), V.steer);
-        L.a2.setXYZW(idx, V.variant, V.siren, V.phase, 1);
+        L.a2.setXYZW(idx, V.variant, V.twoWheel ? V.crank : V.siren, V.phase, 1);
       }
 
       if (showLights && V.onScreen) {
@@ -346,9 +364,9 @@ export class VehicleRenderer {
           this.scl.set(1, 1, 1);
         }
         if (nf + 4 <= this.maxFlares) {
-          const hy = sp.model === 'bus' ? 0.8 : sp.model === 'lorry' || sp.model === 'delivery' ? 0.72 : sp.model === 'suv' ? 0.92 : 0.72;
-          const hx = sp.width / 2 - 0.3;
-          for (let side = 1; side >= -1; side -= 2) {
+          const hy = V.twoWheel ? 0.92 : sp.model === 'bus' ? 0.8 : sp.model === 'lorry' || sp.model === 'delivery' ? 0.72 : sp.model === 'suv' ? 0.92 : 0.72;
+          const hx = V.twoWheel ? 0 : sp.width / 2 - 0.3;
+          for (let side = 1; side >= (V.twoWheel ? 1 : -1); side -= 2) {
             let o = nf * 3;
             this.flarePos[o] = V.x + fx * (hl + 0.05) + rx * hx * side;
             this.flarePos[o + 1] = hy;

@@ -10,6 +10,7 @@ import type { CityContext } from '../../core/context';
 import { XS, ZS } from '../../core/constants';
 import { LAMP_GLSL, lampUniforms } from '../../core/lampLight';
 import { ASPHALT2, COMMON2, HARD2 } from './glsl';
+import { PUDDLE_GLSL } from './puddles';
 
 // ─────────────────────────────────────────────────────────────── noise ──
 
@@ -216,7 +217,7 @@ vec2 rdStreet(vec2 p) {
 }
 `;
 
-function inject(mat: THREE.MeshStandardMaterial, opts: { attrs: string; varyings: string; assign: string; pars: string; color: string; key: string; uniforms: Record<string, THREE.IUniform>; after?: string }): void {
+function inject(mat: THREE.MeshStandardMaterial, opts: { attrs: string; varyings: string; assign: string; pars: string; color: string; key: string; uniforms: Record<string, THREE.IUniform>; after?: string; emit?: string }): void {
   mat.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, opts.uniforms, lampUniforms());
     shader.vertexShader = shader.vertexShader
@@ -232,6 +233,7 @@ function inject(mat: THREE.MeshStandardMaterial, opts: { attrs: string; varyings
         .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = rdRough;');
     }
     if (opts.after) fs = fs.replace('#include <alphatest_fragment>', `#include <alphatest_fragment>\n${opts.after}`);
+    if (opts.emit) fs = fs.replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>\ntotalEmissiveRadiance += ${opts.emit};`);
     shader.fragmentShader = fs;
   };
   mat.customProgramCacheKey = () => opts.key;
@@ -409,7 +411,7 @@ export function legacyGround(ctx: CityContext): boolean {
   return ctx.debug.params.has('legacyground');
 }
 
-export function createMaterials(ctx: CityContext, info: SurfaceInfo, atlas: THREE.Texture): RoadMaterials {
+export function createMaterials(ctx: CityContext, info: SurfaceInfo, atlas: THREE.Texture, puddles: Record<string, THREE.IUniform>): RoadMaterials {
   const radial = info.radial;
   const legacy = legacyGround(ctx);
   const noise = roadNoise();
@@ -429,11 +431,13 @@ export function createMaterials(ctx: CityContext, info: SurfaceInfo, atlas: THRE
     attrs: 'attribute vec2 aA;',
     varyings: 'varying vec2 vA;',
     assign: 'vA = aA;',
-    pars: legacy ? ASPHALT : COMMON2 + ASPHALT2,
+    pars: legacy ? ASPHALT : COMMON2 + PUDDLE_GLSL + ASPHALT2,
     color: flatA ? 'uAsph' : 'rdAsphalt(rdRough)',
-    key: 'roads-asphalt-v3' + (flatA ? 'f' : '') + (legacy ? 'L' : ''),
+    emit: legacy || flatA ? undefined : 'rdEmit',
+    key: 'roads-asphalt-v4' + (flatA ? 'f' : '') + (legacy ? 'L' : ''),
     uniforms: {
       ...shared,
+      ...puddles,
       tRC: { value: cracks },
       uAsph: { value: asphaltColor },
       uCourt: { value: court },
@@ -454,8 +458,8 @@ export function createMaterials(ctx: CityContext, info: SurfaceInfo, atlas: THRE
     assign: 'vS = aS; vP = aP; vV = aV; vC = aC; vX = aX; vR = aR; vB = aB;',
     pars: legacy ? HARD : COMMON2 + HARD2,
     color: flat ? 'vec3(0.5)' : 'rdHard(rdRough)',
-    key: 'roads-hard-v4' + (flat ? 'f' : '') + (legacy ? 'L' : ''),
-    uniforms: { ...shared, tRC: { value: cracks }, uRad: { value: rad }, uTactile: { value: new THREE.Color('#c09c4e') }, uBandCol: { value: new THREE.Color(0.16, 0.165, 0.175) } },
+    key: 'roads-hard-v5' + (flat ? 'f' : '') + (legacy ? 'L' : ''),
+    uniforms: { ...shared, tRC: { value: cracks }, uRad: { value: rad }, uTactile: { value: new THREE.Color('#c09c4e') }, uBandCol: { value: new THREE.Color(0.16, 0.165, 0.175) }, uWetH: puddles.uWet },
   });
 
   const paint = Std({

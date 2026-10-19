@@ -347,6 +347,254 @@ vec3 bhWallPattern(float pat, vec2 q, float seed, vec2 fq, vec4 nm, float grain)
   return res;
 }
 
+// ── shop interiors (style SHOP): a room box per window cell plus parallax layers in front of the back wall
+// (display stands / mannequins / buckets near the glass, tables / counters / clothes rails mid-room), each
+// shop type with its own goods. Soft edges (~1.5 cm) so the silhouettes don't alias.
+float bhBox2(vec2 p, vec2 c, vec2 hs) { vec2 d = abs(p - c) - hs; return 1.0 - smoothstep(-0.012, 0.012, max(d.x, d.y)); }
+float bhDisc(vec2 p, vec2 c, float r) { return 1.0 - smoothstep(r - 0.012, r + 0.012, length(p - c)); }
+vec3 bhPal(float h) {
+  // saturated-but-natural goods palette
+  vec3 c = vec3(0.62, 0.14, 0.12);
+  c = mix(c, vec3(0.12, 0.26, 0.5), step(0.14, h));
+  c = mix(c, vec3(0.16, 0.4, 0.22), step(0.28, h));
+  c = mix(c, vec3(0.86, 0.76, 0.52), step(0.42, h));
+  c = mix(c, vec3(0.18, 0.18, 0.2), step(0.55, h));
+  c = mix(c, vec3(0.82, 0.48, 0.16), step(0.66, h));
+  c = mix(c, vec3(0.52, 0.28, 0.5), step(0.77, h));
+  c = mix(c, vec3(0.9, 0.88, 0.84), step(0.88, h));
+  return c;
+}
+// shelves of goods on a wall: q = (along the wall, height); kind 0 small boxes, 1 book spines, 2 bottles, 3 loaves
+vec3 bhShelves(vec2 q, vec3 wallC, float kind, float rs, float y0, float y1, float rowH) {
+  if (q.y < y0 || q.y > y1) return wallC;
+  float row = floor((q.y - y0) / rowH);
+  float fy = (q.y - y0) / rowH - row;
+  vec3 board = vec3(0.32, 0.22, 0.14);
+  if (fy < 0.09) return board;
+  vec3 c = wallC * 0.55;
+  if (kind < 0.5) {
+    float w = 0.16 + 0.1 * bhHash12(vec2(row, rs));
+    float k = floor(q.x / w);
+    float hh = bhHash12(vec2(k, row + rs * 3.1));
+    float ht = 0.35 + 0.5 * fract(hh * 7.3);
+    if (fy < ht && fract(q.x / w) > 0.08 && hh > 0.12) c = bhPal(fract(hh * 3.7)) * (0.75 + 0.35 * fract(hh * 13.1));
+  } else if (kind < 1.5) {
+    float w = 0.035 + 0.025 * bhHash12(vec2(floor(q.x / 0.05), row + rs));
+    float k = floor(q.x / w + row * 0.37);
+    float hh = bhHash12(vec2(k, row * 1.7 + rs));
+    float ht = 0.62 + 0.3 * fract(hh * 5.1);
+    if (fy < ht) c = bhPal(hh) * (0.6 + 0.5 * fract(hh * 11.3)) * mix(0.82, 1.0, step(0.15, fract(q.x / w)));
+  } else if (kind < 2.5) {
+    float k = floor(q.x / 0.09);
+    float hh = bhHash12(vec2(k, row + rs * 1.3));
+    float bx = abs(fract(q.x / 0.09) - 0.5) * 0.09;
+    float neck = mix(0.028, 0.01, smoothstep(0.45, 0.6, fy));
+    if (fy < 0.78 && bx < neck && hh > 0.08) c = mix(vec3(0.18, 0.32, 0.16), vec3(0.55, 0.32, 0.1), step(0.45, hh)) * (0.7 + 0.6 * fract(hh * 9.1));
+    if (fy < 0.78 && bx < neck && hh > 0.8) c = vec3(0.8, 0.78, 0.7);
+  } else {
+    float k = floor(q.x / 0.26);
+    float hh = bhHash12(vec2(k, row + rs * 2.3));
+    vec2 lp = vec2((fract(q.x / 0.26) - 0.5) * 0.26, (fy - 0.32) * rowH);
+    float loaf = 1.0 - smoothstep(0.9, 1.05, length(lp / vec2(0.11, 0.06 + 0.03 * hh)));
+    c = mix(c, mix(vec3(0.72, 0.45, 0.18), vec3(0.5, 0.28, 0.1), fract(hh * 5.0)) * (0.85 + 0.3 * lp.y / 0.08), loaf * step(0.15, hh));
+  }
+  return c;
+}
+vec3 bhShop(vec2 pm, vec2 csz, vec3 rd, float rs, float shopT, float litI, vec3 lcol, out vec3 dayAlb) {
+  float W = csz.x, Hc = csz.y;
+  float depth = max(4.2, W * 1.6);
+  vec3 ro = vec3(pm, 0.0);
+  vec3 pos = step(0.0, rd);
+  vec3 ard = max(abs(rd), vec3(1e-4));
+  vec3 tt = (pos * vec3(W, Hc, depth) - ro) * (pos * 2.0 - 1.0) / ard;
+  float t = min(tt.x, min(tt.y, tt.z));
+  vec3 h = ro + rd * t;
+  float T = shopT;
+  if (T < 0.5) T = 1.0 + floor(bhHash12(vec2(rs, 3.3)) * 6.99);
+  float eps = 1e-3;
+  bool onBack = tt.z <= t + eps;
+  bool onFlat = !onBack && tt.y <= t + eps;
+  // ── type looks
+  vec3 wallC = vec3(0.86, 0.84, 0.8);
+  vec3 floorC = vec3(0.45, 0.33, 0.22);
+  float shelfKind = 0.0;
+  if (T < 1.5) { wallC = vec3(0.6, 0.42, 0.28); floorC = vec3(0.32, 0.22, 0.15); shelfKind = 2.0; }        // café / bar
+  else if (T < 2.5) { wallC = vec3(0.88, 0.82, 0.7); floorC = vec3(0.6, 0.5, 0.4); shelfKind = 3.0; }      // bakery
+  else if (T < 3.5) { wallC = vec3(0.42, 0.3, 0.2); floorC = vec3(0.35, 0.24, 0.16); shelfKind = 1.0; }     // books
+  else if (T < 4.5) { wallC = vec3(0.7, 0.72, 0.66); floorC = vec3(0.4, 0.4, 0.38); }                        // florist / grocer
+  else if (T < 5.5) { wallC = vec3(0.92, 0.9, 0.87); floorC = vec3(0.55, 0.45, 0.36); }                      // fashion
+  else if (T < 6.5) { wallC = vec3(0.92, 0.93, 0.94); floorC = vec3(0.7, 0.7, 0.68); shelfKind = 0.0; }    // pharmacy / hardware
+  else { wallC = vec3(0.9, 0.88, 0.84); floorC = vec3(0.38, 0.28, 0.2); }                                    // gallery / antiques
+  vec3 c;
+  float lf = 0.85;
+  float self = 0.0; // self-lit (lamp bulbs)
+  if (onBack) {
+    vec2 q = h.xy;
+    c = wallC;
+    if (T < 1.5) {
+      c = h.y < 1.1 ? wallC * 0.6 : bhShelves(vec2(q.x, q.y), wallC, 2.0, rs, 1.25, min(Hc - 0.5, 2.6), 0.42);
+      // menu board
+      c = mix(c, vec3(0.12, 0.13, 0.12), bhBox2(q, vec2(W * 0.5, Hc - 0.75), vec2(min(0.6, W * 0.25), 0.3)));
+    } else if (T < 2.5) c = bhShelves(q, wallC, 3.0, rs, 0.9, min(Hc - 0.4, 2.5), 0.36);
+    else if (T < 3.5) c = bhShelves(q, wallC, 1.0, rs, 0.15, Hc - 0.25, 0.34);
+    else if (T < 4.5) {
+      // greenery / produce wall
+      float n = bhHash12(floor(q * 6.0) + rs);
+      c = mix(vec3(0.16, 0.3, 0.12), vec3(0.3, 0.45, 0.18), n) * step(q.y, Hc - 0.6);
+      float fl = step(0.82, bhHash12(floor(q * 9.0) + rs * 1.7)) * step(0.5, q.y);
+      c = mix(c, bhPal(bhHash12(floor(q * 9.0) + 2.0)) * 1.2, fl);
+      c = mix(c, wallC, step(Hc - 0.6, q.y));
+    } else if (T < 5.5) {
+      // shelves of folded clothes / shoe boxes on the back wall
+      c = bhShelves(q, wallC, 0.0, rs, 0.4, min(Hc - 0.5, 2.4), 0.45) * mix(1.0, 0.95, step(q.y, 0.4));
+    } else if (T < 6.5) c = bhShelves(q, wallC, 0.0, rs, 0.2, min(Hc - 0.4, 2.4), 0.36);
+    else {
+      // framed pictures
+      vec2 fc = vec2((floor(q.x / 1.1) + 0.5) * 1.1, 1.65 + 0.25 * (bhHash12(vec2(floor(q.x / 1.1), rs)) - 0.5));
+      float hs = bhHash12(vec2(floor(q.x / 1.1), rs + 1.0));
+      vec2 fs = vec2(0.3 + 0.15 * hs, 0.24 + 0.18 * fract(hs * 7.0));
+      float fr = bhBox2(q, fc, fs + 0.04);
+      float pic = bhBox2(q, fc, fs);
+      c = mix(c, vec3(0.25, 0.18, 0.1), fr);
+      c = mix(c, bhPal(fract(hs * 3.1)) * (0.7 + 0.5 * fract(q.y * 3.0 + q.x)), pic);
+    }
+    lf = 0.85;
+  } else if (onFlat) {
+    if (rd.y < 0.0) {
+      c = floorC * (0.85 + 0.15 * bhStripe(h.x * 2.0 + h.z * 0.0, 0.5));
+      lf = 0.55;
+    } else {
+      c = vec3(0.9, 0.88, 0.84);
+      lf = 1.0;
+      // ceiling lamps: bright discs / spot rows
+      vec2 lp = vec2(fract(h.x / 1.4) - 0.5, fract(h.z / 1.6) - 0.5) * vec2(1.4, 1.6);
+      self = (1.0 - smoothstep(0.07, 0.11, length(lp)));
+    }
+  } else {
+    // side walls
+    vec2 q = vec2(h.z, h.y);
+    c = wallC * 0.9;
+    if (T > 2.5 && T < 3.5) c = bhShelves(q, wallC, 1.0, rs + 5.0, 0.15, Hc - 0.25, 0.34) * 0.9;
+    else if (T > 5.5 && T < 6.5) c = bhShelves(q, wallC, 0.0, rs + 5.0, 0.2, min(Hc - 0.4, 2.4), 0.36) * 0.9;
+    else if (T < 1.5) c = h.y < 1.1 ? wallC * 0.55 : wallC * 0.85;
+    lf = 0.65;
+  }
+  // ── parallax layers (front to back), each a plane parallel to the glass
+  float dzMid = depth * 0.5;
+  // mid layer
+  {
+    float tz = dzMid / max(rd.z, 1e-3);
+    if (tz < t) {
+      vec2 q = (ro + rd * tz).xy;
+      float m = 0.0;
+      vec3 mc = vec3(0.0);
+      if (T < 1.5) {
+        // café tables with chairs and a few seated guests
+        float k = floor(q.x / 1.5);
+        float lx = (fract(q.x / 1.5) - 0.5) * 1.5;
+        float hk = bhHash12(vec2(k, rs + 9.0));
+        float tab = max(bhBox2(vec2(lx, q.y), vec2(0.0, 0.74), vec2(0.34, 0.025)), bhBox2(vec2(lx, q.y), vec2(0.0, 0.37), vec2(0.03, 0.37)));
+        float ch = max(bhBox2(vec2(abs(lx), q.y), vec2(0.5, 0.45), vec2(0.18, 0.025)), bhBox2(vec2(abs(lx), q.y), vec2(0.66, 0.68), vec2(0.025, 0.24)));
+        float guest = step(0.35, hk) * max(bhDisc(vec2(lx, q.y), vec2(-0.48, 1.22), 0.11), bhBox2(vec2(lx, q.y), vec2(-0.48, 0.88), vec2(0.17, 0.24)));
+        float guest2 = step(0.65, hk) * max(bhDisc(vec2(lx, q.y), vec2(0.5, 1.2), 0.1), bhBox2(vec2(lx, q.y), vec2(0.5, 0.86), vec2(0.16, 0.23)));
+        m = max(max(tab, ch), max(guest, guest2));
+        mc = mix(vec3(0.2, 0.14, 0.1), bhPal(fract(hk * 7.7)) * 0.8, max(guest * step(q.y, 1.1), guest2 * step(q.y, 1.08)));
+        mc = mix(mc, vec3(0.62, 0.45, 0.35), max(guest * step(1.1, q.y), guest2 * step(1.08, q.y)));
+        // pendant lamps
+        float lamp = bhDisc(vec2(lx, q.y), vec2(0.0, Hc - 0.85), 0.13) * step(q.y, Hc - 0.8);
+        float cord = bhBox2(vec2(lx, q.y), vec2(0.0, Hc - 0.4), vec2(0.006, 0.42));
+        m = max(m, max(lamp, cord));
+        mc = mix(mc, vec3(1.0, 0.85, 0.6), lamp);
+        self = mix(self, 2.2, lamp);
+      } else if (T < 2.5) {
+        // glass counter with pastries
+        float cnt = step(q.y, 1.0);
+        float glassBand = step(0.45, q.y) * step(q.y, 0.92);
+        float k = floor(q.x / 0.14);
+        float pastry = step(0.3, bhHash12(vec2(k, floor(q.y / 0.16) + rs))) * step(fract(q.y / 0.16), 0.55) * glassBand;
+        m = cnt;
+        mc = mix(vec3(0.42, 0.3, 0.2), vec3(0.85, 0.85, 0.8) * 0.45, glassBand);
+        mc = mix(mc, mix(vec3(0.85, 0.6, 0.3), bhPal(bhHash12(vec2(k, 4.0))), 0.35), pastry);
+        mc = mix(mc, vec3(0.9, 0.88, 0.84), step(0.95, q.y));
+      } else if (T < 3.5) {
+        // table with stacks of books
+        float tab = bhBox2(q, vec2(W * 0.5, 0.74), vec2(W * 0.3, 0.03)) + bhBox2(vec2(abs(q.x - W * 0.5), q.y), vec2(W * 0.27, 0.36), vec2(0.03, 0.36));
+        float k = floor(q.x / 0.3);
+        float hk = bhHash12(vec2(k, rs));
+        float stack = step(0.77, q.y) * step(q.y, 0.8 + 0.25 * hk) * step(abs(q.x - W * 0.5), W * 0.28) * step(0.06, fract(q.x / 0.3));
+        m = clamp(tab + stack, 0.0, 1.0);
+        mc = mix(vec3(0.3, 0.2, 0.12), bhPal(fract(hk * 3.0 + floor(q.y / 0.04) * 0.37)), stack);
+      } else if (T < 5.5 && T > 4.5) {
+        // clothes rail
+        float rail = bhBox2(q, vec2(W * 0.5, 1.68), vec2(W * 0.38, 0.012));
+        float k = floor(q.x / 0.11);
+        float hk = bhHash12(vec2(k, rs + 2.0));
+        float gar = step(abs(q.x - W * 0.5), W * 0.36) * step(q.y, 1.66) * step(1.66 - (0.55 + 0.45 * hk), q.y) * step(0.1, fract(q.x / 0.11));
+        m = max(rail, gar);
+        mc = mix(vec3(0.6), bhPal(hk) * 0.85, gar);
+      }
+      c = mix(c, mc, m);
+      lf = mix(lf, 0.8, m);
+      if (m > 0.5) t = tz;
+    }
+  }
+  // display layer just behind the glass
+  {
+    float dz = 0.55;
+    float tz = dz / max(rd.z, 1e-3);
+    if (tz < t) {
+      vec2 q = (ro + rd * tz).xy;
+      float m = 0.0;
+      vec3 mc = vec3(0.0);
+      float hk = bhHash12(vec2(rs, 5.0));
+      if (T > 4.5 && T < 5.5) {
+        // two mannequins
+        for (int i = 0; i < 2; i++) {
+          float x = W * (0.3 + 0.4 * float(i));
+          float body = max(bhDisc(q, vec2(x, 1.72), 0.1), bhBox2(q, vec2(x, 1.28), vec2(0.17, 0.32)));
+          float legs = bhBox2(vec2(abs(q.x - x), q.y), vec2(0.07, 0.6), vec2(0.045, 0.4));
+          float stand = bhBox2(q, vec2(x, 0.08), vec2(0.18, 0.02));
+          float mm = max(max(body, legs), stand);
+          vec3 cc = mix(bhPal(fract(hk * 3.0 + float(i) * 0.37)), vec3(0.9, 0.86, 0.8), step(1.62, q.y));
+          mc = mix(mc, cc, mm);
+          m = max(m, mm);
+        }
+      } else if (T > 3.5 && T < 4.5) {
+        // buckets of flowers / crates of fruit along the window
+        float k = floor(q.x / 0.42);
+        float lx = (fract(q.x / 0.42) - 0.5) * 0.42;
+        float hb = bhHash12(vec2(k, rs + 4.0));
+        float bucket = bhBox2(vec2(lx, q.y), vec2(0.0, 0.2), vec2(0.13, 0.2));
+        vec2 fq = vec2(lx, q.y - 0.62);
+        float bloom = (1.0 - smoothstep(0.17, 0.2, length(fq * vec2(1.0, 1.4)))) * step(0.12, hb);
+        float spot = step(0.45, bhHash12(floor(q * 22.0) + k));
+        m = max(bucket, bloom);
+        mc = mix(vec3(0.55, 0.57, 0.58), mix(vec3(0.2, 0.38, 0.14), bhPal(hb) * 1.15, spot), bloom);
+      } else if (T > 6.5) {
+        // a display plinth with an object
+        float pl = bhBox2(q, vec2(W * 0.5, 0.45), vec2(0.22, 0.45));
+        float ob = bhDisc(q, vec2(W * 0.5, 1.08), 0.16);
+        m = max(pl, ob);
+        mc = mix(vec3(0.9, 0.9, 0.88), bhPal(hk), ob);
+      } else if (T > 5.5 && T < 6.5) {
+        // low display stand with products
+        float st = bhBox2(q, vec2(W * 0.5, 0.5), vec2(W * 0.3, 0.5));
+        float k = floor(q.x / 0.12);
+        float pr = step(0.3, bhHash12(vec2(k, floor(q.y / 0.2) + rs))) * step(fract(q.y / 0.2), 0.6) * step(0.25, q.y);
+        m = st;
+        mc = mix(vec3(0.95), bhPal(bhHash12(vec2(k, 7.0))), pr * step(q.y, 0.95));
+      }
+      c = mix(c, mc, m);
+      lf = mix(lf, 0.9, m);
+    }
+  }
+  float dz = clamp(h.z / depth, 0.0, 1.0);
+  // shops are deep: little daylight reaches the back, the lights carry the look
+  dayAlb = c * 0.3 * (1.0 - 0.6 * dz) * (0.85 + 0.3 * lf);
+  vec3 lamp = c * lcol * lf * (1.0 - 0.3 * dz);
+  return lamp * litI + lcol * self * max(litI, 0.0) * 1.2 + c * 0.012;
+}
+
 // fake room behind the window (interior mapping). Returns the lamp-lit radiance (emission) and
 // writes the daylight-lit part as an albedo (dayAlb) so it follows the facade's real lighting
 // (sun / shade / shadows) instead of glowing uniformly.
@@ -453,7 +701,10 @@ void bhWall(inout vec3 albedo, inout float rough, inout float metal, inout vec3 
   // below would turn that into per-pixel lit / curtain flips (speckles) — snap them
   float seed = floor(vB.z + 0.5);
   vec2 csz = vC.xy;
-  float pat = vC.z;
+  // pattern + 16 · shop type (shop type only on SHOP walls; 0 = pick from the seed)
+  float patRaw = floor(vC.z + 0.5);
+  float pat = mod(patRaw, 16.0);
+  float shopT = floor(patRaw / 16.0);
   float packCol = vC.w + 0.01;
   int frameIdx = int(mod(packCol, 8.0));
   int glassIdx = int(mod(floor(packCol / 8.0), 8.0));
@@ -476,6 +727,7 @@ void bhWall(inout vec3 albedo, inout float rough, inout float metal, inout vec3 
   float stv = sqrt(nm.b); // the streak channel is stored squared (contrast); linearise for weights
   float grain = texture2D(uBhNoise, q * 0.3 + so.yx).a;                         // a: ~5 cm stucco grain
   float sn = sqrt(texture2D(uBhNoise, vec2(q.x * 0.16, q.y * 0.09) + so.yx).b); // b: 10 cm wide, ~5 m long streaks
+  vec4 np = texture2D(uBhNoise, q * 0.105 + so * 1.31);                       // g ~0.6 m blobs (peeling), r ~2.4 m
 
   // ── 1. surface pattern
   albedo *= bhWallPattern(pat, q, seed, fq, nm, grain);
@@ -498,6 +750,33 @@ void bhWall(inout vec3 albedo, inout float rough, inout float metal, inout vec3 
   vec3 dirtTint = pat > 1.5 && pat < 2.5 ? vec3(0.6, 0.38, 0.25) : vec3(0.5, 0.46, 0.4);
   float macro = 1.0 + (nm.r - 0.5) * 0.45 * wStr;
   albedo *= macro * mix(vec3(1.0), dirtTint, clamp(dirt, 0.0, 0.9));
+
+  // ── 2b. eye-level wear (reads at 2–40 m): rising damp with a ragged tide mark and a pale salt line,
+  //        green algae on north faces near the ground and in the drip streaks, peeling paint / spalled
+  //        render showing the substrate, and per-building age (old plaster and stone weather most)
+  if (!curtain && uDetail > 0.2) {
+    float age = fract(seed * 0.6180339 + 0.21);
+    float oldness = pat < 0.5 || (pat > 3.5 && pat < 4.5) ? mix(0.35, 1.0, age) : (pat < 1.5 ? mix(0.3, 0.8, age) : (pat > 4.5 ? 0.25 * age : mix(0.2, 0.6, age)));
+    float tide = 0.35 + 0.6 * oldness + 0.35 * (nm.g - 0.5) + 0.1 * (grain - 0.5) + 0.2 * (np.r - 0.5);
+    float damp = 1.0 - smoothstep(tide - 0.14, tide + 0.03, y);
+    float salt = smoothstep(tide - 0.08, tide + 0.0, y) * (1.0 - smoothstep(tide + 0.0, tide + 0.07, y));
+    albedo *= mix(vec3(1.0), vec3(0.74, 0.73, 0.67), damp * 0.75 * oldness * wStr);
+    albedo = mix(albedo, vec3(0.86, 0.85, 0.8) * (0.9 + 0.2 * grain), salt * 0.3 * oldness * wStr);
+    float north = smoothstep(0.15, 0.85, -N.z);
+    float algae = north * oldness * (damp * 0.9 + 0.55 * smoothstep(0.35, 0.9, stv) * (1.0 - smoothstep(0.0, 7.0, y)));
+    albedo = mix(albedo, albedo * vec3(0.6, 0.72, 0.46), clamp(algae * wStr, 0.0, 0.75));
+    if (pat < 0.5) {
+      // peeling paint / spalled render: lower storeys, under the copings and around the corners
+      float zone = 0.65 * (1.0 - smoothstep(0.4, 3.2, y)) + 0.5 * underTop + 0.35 * corner + 0.2;
+      float thr = 0.86 - 0.26 * oldness * zone;
+      float ew = 0.012 + fq.x * 0.08;
+      float peel = smoothstep(thr, thr + ew, np.g) * step(0.3, oldness);
+      float rim = smoothstep(thr - 0.035, thr, np.g) - peel;
+      vec3 sub = fract(seed * 0.377) > 0.55 ? vec3(0.58, 0.36, 0.28) : vec3(0.62, 0.6, 0.56);
+      albedo = mix(albedo, sub * (0.8 + 0.35 * grain), peel * 0.9);
+      albedo *= 1.0 + 0.12 * rim * step(0.3, oldness);
+    }
+  }
   if (uBhDebug > 0.5) {
     // debug 1: weathering mask on white; debug 2: wall-quad info (red = corner, green = under top)
     albedo = uBhDebug < 1.5 ? vec3(macro) * mix(vec3(1.0), dirtTint, clamp(dirt, 0.0, 0.9))
@@ -689,9 +968,13 @@ void bhWall(inout vec3 albedo, inout float rough, inout float metal, inout vec3 
   vec3 rd = vec3(dot(V, T), V.y, -dot(V, N));
   rd.z = max(rd.z, 0.04);
   float litI = lit * glowI;
+  bool shopWin = style > 5.5 && style < 6.5;
+  // open shops keep their lights on in daytime too
+  if (shopWin) litI = lit * max(glowI, 0.62 + 0.25 * r2);
   vec3 interior; // lamp-lit radiance seen through the glass
   vec3 dayA;     // daylight-lit albedo seen through the glass
-  if (uDetail > 0.5) interior = bhRoom(pm, csz, normalize(rd), r1 * 31.0 + seed, litI, lcol, prof, style, dayA);
+  if (uDetail > 0.5 && shopWin) interior = bhShop(pm, csz, normalize(rd), seed * 1.37 + shopT * 11.0, shopT, litI, lcol, dayA);
+  else if (uDetail > 0.5) interior = bhRoom(pm, csz, normalize(rd), r1 * 31.0 + seed, litI, lcol, prof, style, dayA);
   else {
     interior = lcol * 0.8 * litI;
     dayA = vec3(0.14, 0.13, 0.12);
@@ -850,6 +1133,14 @@ void bhRoof(inout vec3 albedo, inout float rough, inout vec3 emit, vec3 N, vec3 
     float lich = smoothstep(0.62, 0.84, nM.g * 0.5 + nF.r * 0.5) * (slate ? 0.3 : 0.38);
     vec3 lichC = slate ? cT * vec3(1.12, 1.16, 1.06) : mix(cT, vec3(0.36, 0.38, 0.2), 0.55);
     albedo = mix(cT, lichC * (0.85 + 0.25 * grain), lich);
+    // per-roof age (older roofs darker, browner, flatter in colour) + moss on the shaded north slopes
+    float age = fract(seed * 0.6180339 + 0.37);
+    albedo *= mix(1.06, 0.84, age);
+    albedo = mix(albedo, vec3(dot(albedo, vec3(0.3, 0.59, 0.11))) * vec3(1.02, 0.98, 0.9), 0.28 * age);
+    float northR = smoothstep(-0.05, 0.45, -N.z) * smoothstep(0.2, 0.7, N.y);
+    float moss = northR * smoothstep(0.5, 0.78, nM.g * 0.55 + nF.r * 0.45 + 0.22 * age) * (0.4 + 0.6 * age);
+    moss = max(moss, northR * (1.0 - smoothstep(0.0, 1.4, p.y)) * 0.55 * age); // damp eaves
+    albedo = mix(albedo, mix(vec3(0.17, 0.21, 0.09), vec3(0.3, 0.32, 0.14), grain), clamp(moss * (slate ? 0.6 : 0.85), 0.0, 0.85));
     rough = slate ? 0.7 : 0.88;
     return;
   }

@@ -15,13 +15,15 @@ export const LAND_MAX_D = 21000;
 /** forest canopy is raised into the terrain beyond this slab distance (instanced trees closer in) */
 export const CANOPY_NEAR = 150;
 export const CANOPY_FULL = 420;
+/** floats per vertex in LandHeights.cover: forest, field, sand, rock | wet, meadow, seam, canopy | riverU, slabD, side, - */
+const CW = 12;
 
 export interface LandHeights {
   /** ground height per topology vertex (NaN beyond the land extent) */
   h: Float32Array;
   /** canopy height added on top (forest) */
   canopy: Float32Array;
-  cover: Float32Array; // 8 floats per vertex
+  cover: Float32Array; // CW floats per vertex
   landVerts: number;
   ms: number;
 }
@@ -32,7 +34,8 @@ export function evalHeights(topo: RingTopology, model: LandscapeModel, landMaxD:
   const n = topo.count;
   const h = new Float32Array(n).fill(NaN);
   const canopy = new Float32Array(n);
-  const cover = new Float32Array(n * 8);
+  const cover = new Float32Array(n * CW);
+  const rq = { d: 0, halfW: 8, s: 0, tx: 1, tz: 0, side: 1 };
   const c: Cover = { water: 0, sand: 0, rock: 0, forest: 0, field: 0, meadow: 0, wet: 0 };
   let landVerts = 0;
   for (const ring of topo.rings) {
@@ -48,13 +51,14 @@ export function evalHeights(topo: RingTopology, model: LandscapeModel, landMaxD:
       landVerts++;
       if (ring.d === 0 || y < WL - 6) {
         // seam / deep water: no canopy; cover from the model where cheap
-        cover[v * 8 + 1] = 0;
-        cover[v * 8 + 5] = ring.d === 0 ? 1 : 0;
-        cover[v * 8 + 6] = 1;
+        cover[v * CW + 1] = 0;
+        cover[v * CW + 5] = ring.d === 0 ? 1 : 0;
+        cover[v * CW + 6] = 1;
+        cover[v * CW + 8] = 60;
         continue;
       }
       model.cover(x, z, c);
-      const k = v * 8;
+      const k = v * CW;
       cover[k] = c.forest;
       cover[k + 1] = c.field;
       cover[k + 2] = c.sand;
@@ -69,6 +73,12 @@ export function evalHeights(topo: RingTopology, model: LandscapeModel, landMaxD:
         canopy[v] = ch;
         cover[k + 7] = cw;
       }
+      // river bank coordinate (m from the waterline, < 0 in the water), bank side, slab distance
+      if (x < -150 && model.river(x, z, rq) && rq.d < rq.halfW + 60) {
+        cover[k + 8] = rq.d - rq.halfW;
+        cover[k + 10] = rq.side ?? 1;
+      } else cover[k + 8] = 60;
+      cover[k + 9] = model.slabDist(x, z);
     }
   }
   return { h, canopy, cover, landVerts, ms: performance.now() - t0 };
@@ -86,13 +96,15 @@ export function buildLandGeometry(topo: RingTopology, H: LandHeights, landMaxD: 
   const pos = new Float32Array(nv * 3);
   const cov = new Float32Array(nv * 4);
   const cov2 = new Float32Array(nv * 4);
+  const cov3 = new Float32Array(nv * 4);
   for (let v = 0; v < nv; v++) {
     pos[v * 3] = topo.x[v];
     pos[v * 3 + 1] = H.h[v] + H.canopy[v];
     pos[v * 3 + 2] = topo.z[v];
     for (let q = 0; q < 4; q++) {
-      cov[v * 4 + q] = H.cover[v * 8 + q];
-      cov2[v * 4 + q] = H.cover[v * 8 + 4 + q];
+      cov[v * 4 + q] = H.cover[v * CW + q];
+      cov2[v * 4 + q] = H.cover[v * CW + 4 + q];
+      cov3[v * 4 + q] = H.cover[v * CW + 8 + q];
     }
   }
   const triEnd = topo.triStart[lastRing];
@@ -101,6 +113,7 @@ export function buildLandGeometry(topo: RingTopology, H: LandHeights, landMaxD: 
   geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
   geo.setAttribute('aCov', new THREE.BufferAttribute(cov, 4));
   geo.setAttribute('aCov2', new THREE.BufferAttribute(cov2, 4));
+  geo.setAttribute('aCov3', new THREE.BufferAttribute(cov3, 4));
   geo.setIndex(new THREE.BufferAttribute(new Uint32Array(idx), 1));
   geo.computeVertexNormals();
   // the seam ring takes the slab ground's own normals (same formula as terrain/ground.ts)

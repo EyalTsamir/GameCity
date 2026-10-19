@@ -28,6 +28,7 @@ import { noiseTexture } from '../terrain/noise';
 import { GC_PALETTE_GLSL, gcPalette } from './palette';
 import { CRES, FRES, CW, CH, FW, FH, type CoverMaps, type TileGrid } from './mask';
 import { setGroundBladeFade } from '../terrain/ground';
+import type { OuterMaps } from './outer';
 
 export interface RingSpec {
   /** 0 = A, 1 = B, 2 = C */
@@ -64,8 +65,8 @@ export function ringSpecs(level: QualityLevel): RingSpec[] {
     ];
   return [
     { index: 0, tile: 2, levels: 3, blades: 640, in0: -10, in1: -10, out0: 10, out1: 13, width: 1.0, flowers: 0.12, lawnFlowers: 0.08, litter: 0.55 },
-    { index: 1, tile: 4, levels: 2, blades: 640, in0: 10, in1: 13, out0: 30, out1: 36, width: 2.0, flowers: 0.18, lawnFlowers: 0, litter: 0.12 },
-    { index: 2, tile: 8, levels: 1, blades: 768, in0: 30, in1: 36, out0: 62, out1: 72, width: 3.6, flowers: 0.26, lawnFlowers: 0, litter: 0 },
+    { index: 1, tile: 4, levels: 2, blades: 512, in0: 10, in1: 13, out0: 30, out1: 36, width: 2.2, flowers: 0.2, lawnFlowers: 0, litter: 0.12 },
+    { index: 2, tile: 8, levels: 1, blades: 640, in0: 30, in1: 36, out0: 58, out1: 68, width: 3.9, flowers: 0.28, lawnFlowers: 0, litter: 0 },
   ];
 }
 
@@ -94,6 +95,11 @@ uniform sampler2D tGH;
 uniform sampler2D tNoise;
 uniform vec4 uCovXf;
 uniform vec4 uCovDim;
+uniform sampler2D tCoverO;
+uniform sampler2D tFlowerO;
+uniform sampler2D tGHO;
+uniform vec4 uOutXf;
+uniform vec4 uOutDim;
 uniform float uTime;
 uniform vec2 uWind;
 uniform vec4 uFade;
@@ -109,16 +115,16 @@ ${WIND_GLSL}
 ${HASH_GLSL}
 ${GC_PALETTE_GLSL}
 
-// surface height at xz: 4 taps of the 0.25 m height map, taps across a step (kerb) are ignored
-float gcGroundY( vec2 xz ) {
-  vec2 t = ( xz - uCovXf.xy ) * uCovXf.z - 0.5;
+// surface height at xz: 4 taps of a height map (xf = origin.xy, 1/res), taps across a step (kerb) ignored
+float gcGroundY( sampler2D tH, vec2 xz, vec4 xf, vec2 dim ) {
+  vec2 t = ( xz - xf.xy ) * xf.z - 0.5;
   vec2 fl = floor( t );
   vec2 f = t - fl;
-  ivec2 i0 = clamp( ivec2( fl ), ivec2( 0 ), ivec2( uCovDim.xy ) - 2 );
-  float h00 = texelFetch( tGH, i0, 0 ).r;
-  float h10 = texelFetch( tGH, i0 + ivec2( 1, 0 ), 0 ).r;
-  float h01 = texelFetch( tGH, i0 + ivec2( 0, 1 ), 0 ).r;
-  float h11 = texelFetch( tGH, i0 + ivec2( 1, 1 ), 0 ).r;
+  ivec2 i0 = clamp( ivec2( fl ), ivec2( 0 ), ivec2( dim ) - 2 );
+  float h00 = texelFetch( tH, i0, 0 ).r;
+  float h10 = texelFetch( tH, i0 + ivec2( 1, 0 ), 0 ).r;
+  float h01 = texelFetch( tH, i0 + ivec2( 0, 1 ), 0 ).r;
+  float h11 = texelFetch( tH, i0 + ivec2( 1, 1 ), 0 ).r;
   float hn = f.y < 0.5 ? ( f.x < 0.5 ? h00 : h10 ) : ( f.x < 0.5 ? h01 : h11 );
   vec4 w = vec4( ( 1.0 - f.x ) * ( 1.0 - f.y ), f.x * ( 1.0 - f.y ), ( 1.0 - f.x ) * f.y, f.x * f.y );
   w *= step( abs( vec4( h00, h10, h01, h11 ) - hn ), vec4( 0.06 ) );
@@ -167,9 +173,22 @@ vGcRough = 0.85;
   float spacing = iTile.z * inversesqrt( uBlade.x );
   vec2 root = iTile.xy + r2 * iTile.z + ( ra.xy - 0.5 ) * spacing * 0.7;
   vec2 cu = ( root - uCovXf.xy ) * uCovXf.z;
-  if ( cu.x >= 0.0 && cu.y >= 0.0 && cu.x < uCovDim.x && cu.y < uCovDim.y ) {
-    vec4 cov = texelFetch( tCover, ivec2( cu ), 0 );
-    vec4 flw = texelFetch( tFlower, ivec2( ( root - uCovXf.xy ) * uCovXf.w ), 0 );
+  vec2 ou = ( root - uOutXf.xy ) * uOutXf.z;
+  bool inS = cu.x >= 0.0 && cu.y >= 0.0 && cu.x < uCovDim.x && cu.y < uCovDim.y;
+  bool inO = !inS && uOutDim.z > 0.5 && ou.x >= 0.0 && ou.y >= 0.0 && ou.x < uOutDim.x && ou.y < uOutDim.y;
+  if ( inS || inO ) {
+    vec4 cov, flw;
+    float y0;
+    if ( inS ) {
+      cov = texelFetch( tCover, ivec2( cu ), 0 );
+      flw = texelFetch( tFlower, ivec2( ( root - uCovXf.xy ) * uCovXf.w ), 0 );
+      y0 = gcGroundY( tGH, root, uCovXf, uCovDim.xy );
+    } else {
+      // landscape band around the slab (groundcover/outer.ts)
+      cov = texelFetch( tCoverO, ivec2( ou ), 0 );
+      flw = texelFetch( tFlowerO, ivec2( ( root - uOutXf.xy ) * uOutXf.w ), 0 );
+      y0 = gcGroundY( tGHO, root, uOutXf, uOutDim.xy );
+    }
     float hab = cov.b * 255.0;
     float wet = ( hab > 0.5 && hab < 100.5 ) ? hab / 100.0 : 0.0;
     float dune = hab > 149.5 ? clamp( ( hab - 150.0 ) / 105.0, 0.0, 1.0 ) : 0.0;
@@ -177,7 +196,6 @@ vGcRough = 0.85;
     float lawnOK = iTile.w;
     bool leaf = rc.x < cov.a * uKind.z;
     bool alive = ra.z < cov.r * uBlade.z && ( len > 0.22 || wet > 0.0 || lawnOK > 0.5 );
-    float y0 = gcGroundY( root );
     vec3 rw = vec3( root.x, y0, root.y );
     float dist = distance( rw, cameraPosition );
     float fin = uFade.x + ( uFade.y - uFade.x ) * rb.x;
@@ -235,10 +253,13 @@ vGcRough = 0.85;
         base *= mix( vec3( 1.0 ), vec3( 0.8, 0.88, 0.92 ), clamp( -tone - 0.52, 0.0, 1.0 ) );
         base *= ( 0.9 + 0.2 * cl.y ) * ( 0.92 + 0.16 * fract( rb.z * 21.7 ) );
         vec3 tip = gcTipColor( base, nA, len );
-        float aoRoot = mix( 0.42, 0.3, smoothstep( 0.2, 0.6, len ) );
+        float aoRoot = mix( 0.66, 0.32, smoothstep( 0.2, 0.6, len ) );
         // seed heads on long grass
-        bool seed = len > 0.48 && fract( rc.x * 17.9 ) < 0.2;
-        if ( seed ) tip = mix( gcStraw, vec3( 0.32, 0.22, 0.2 ), step( 0.6, fract( rc.y * 5.1 ) ) * 0.6 );
+        bool seed = len > 0.48 && fract( rc.x * 17.9 ) < 0.13;
+        if ( seed ) {
+          float sk = fract( rc.y * 5.1 );
+          tip = sk < 0.45 ? mix( tip, gcStraw, 0.55 ) : ( sk < 0.8 ? tip * vec3( 1.05, 1.0, 0.85 ) : mix( tip, vec3( 0.2, 0.12, 0.13 ), 0.55 ) );
+        }
         if ( reed ) {
           L = mix( 0.95, 1.9, rc.y ) * ( 0.75 + 0.25 * wet );
           W = mix( 0.012, 0.02, fract( rc.z * 5.3 ) );
@@ -260,7 +281,10 @@ vGcRough = 0.85;
         int fk = -1;
         float flowerP = flw.r * uKind.x;
         if ( !reed && !marram && rb.z < 1.0 ) {
-          if ( fract( ra.z * 31.7 + rc.x * 3.1 ) < flowerP ) fk = int( flw.g * 6.0 );
+          if ( fract( ra.z * 31.7 + rc.x * 3.1 ) < flowerP ) {
+            // the patch's dominant species, mixed with a third of the others
+            fk = fract( rc.z * 7.77 + ra.x ) < 0.34 ? int( fract( rb.y * 9.31 + rc.x ) * 5.99 ) : int( flw.g * 6.0 );
+          }
           else if ( len < 0.3 && fract( ra.z * 47.3 + rb.x * 2.3 ) < flw.b * uKind.y ) {
             float q = fract( rc.y * 11.3 );
             fk = q < 0.38 ? 6 : ( q < 0.8 ? 7 : 8 );
@@ -304,7 +328,12 @@ vGcRough = 0.85;
             else if ( lv >= 0.5 && lv < 0.9 ) { hf = 1.0 - hh * mix( 0.45, 0.12, cup ); wp = 0.0; }
             else if ( lv >= 0.9 ) { hf = 1.0; wp = 0.0; }
           } else if ( uKind.w < 1.5 ) {
-            if ( lv > 0.2 && lv < 0.9 ) { hf = 1.0 - hh * 0.6; wp = 0.0; }
+            // ring B: the head alone, a camera-facing diamond at the stem top (the stem is sub-pixel)
+            if ( lv < 0.2 ) { hf = 1.0 - hh; wp = 0.0; }
+            else if ( lv < 0.9 ) { hf = 1.0 - hh * 0.5; wp = 0.0; }
+          } else {
+            // ring C: a fleck — triangle from the head's base to its top
+            if ( lv < 0.2 ) { hf = 1.0 - hh; wp = 0.0; }
           }
         } else if ( cattail ) {
           headW = 0.026;
@@ -323,7 +352,7 @@ vGcRough = 0.85;
         L *= fade;
         float wNow = W * wp;
         if ( headW > 0.0 ) {
-          bool isHead = uKind.w < 0.5 ? ( lv >= 0.5 && lv < 0.9 ) : ( lv > 0.2 && lv < 0.9 );
+          bool isHead = uKind.w < 0.5 ? ( lv >= 0.5 && lv < 0.9 ) : ( uKind.w < 1.5 ? ( lv > 0.2 && lv < 0.9 ) : lv < 0.2 );
           if ( isHead ) wNow = headW * fade;
         }
         vec2 hoff = B * ( L * hf * hf );
@@ -343,7 +372,7 @@ vGcRough = 0.85;
         float press = smoothstep( 0.25, 0.7, wl * flexK * stiff ) * smoothstep( 0.3, 1.0, hf );
         col = mix( col, col * vec3( 1.12, 1.14, 1.05 ) + vec3( 0.015 ), press * 0.6 );
         if ( headW > 0.0 ) {
-          float hm = uKind.w < 0.5 ? ( lv >= 0.5 ? 1.0 : ( lv > 0.2 ? 0.0 : -1.0 ) ) : ( uKind.w < 1.5 ? ( lv > 0.2 ? 1.0 : -1.0 ) : ( lv > 0.9 ? 1.0 : -1.0 ) );
+          float hm = uKind.w < 0.5 ? ( lv >= 0.5 ? 1.0 : ( lv > 0.2 ? 0.0 : -1.0 ) ) : ( fk >= 0 ? 1.0 : ( lv > 0.2 ? 1.0 : -1.0 ) );
           if ( hm > 0.5 ) col = headC * ( 0.85 + 0.25 * fract( rc.y * 9.1 ) );
           else if ( hm > -0.5 ) col = mix( eyeC, base * 0.8, fk == 0 ? 0.0 : 0.55 );
           else col = mix( base * aoRoot, base * 0.9, smoothstep( 0.0, 0.5, lv ) );
@@ -445,7 +474,7 @@ export interface Field {
   dispose(): void;
 }
 
-export function createField(ctx: CityContext, maps: CoverMaps, level: QualityLevel, opts: { rings?: string; flowers?: boolean; litter?: boolean }): Field {
+export function createField(ctx: CityContext, maps: CoverMaps, outer: OuterMaps | null, level: QualityLevel, opts: { rings?: string; flowers?: boolean; litter?: boolean }): Field {
   const group = new THREE.Group();
   group.name = 'groundcover-field';
   const pal = gcPalette();
@@ -457,6 +486,12 @@ export function createField(ctx: CityContext, maps: CoverMaps, level: QualityLev
     tNoise: { value: noiseTexture() },
     uCovXf: { value: new THREE.Vector4(SLAB.x0, SLAB.z0, 1 / CRES, 1 / FRES) },
     uCovDim: { value: new THREE.Vector4(CW, CH, FW, FH) },
+    tCoverO: { value: (outer?.texCover ?? maps.texCover) as THREE.Texture },
+    tFlowerO: { value: (outer?.texFlower ?? maps.texFlower) as THREE.Texture },
+    tGHO: { value: (outer?.texHeight ?? maps.texHeight) as THREE.Texture },
+    uOutXf: { value: outer ? new THREE.Vector4(outer.x0, outer.z0, 1 / outer.res, 1 / outer.fres) : new THREE.Vector4(0, 0, 1, 1) },
+    /** w, h (cover texels), on (z > 0.5) */
+    uOutDim: { value: new THREE.Vector4(outer?.w ?? 1, outer?.h ?? 1, outer ? 1 : 0, 0) },
     uTime: ctx.uniforms.uTime,
     uWind: ctx.uniforms.uWind,
     uGcTrans: { value: 1 },
@@ -570,8 +605,8 @@ export function createField(ctx: CityContext, maps: CoverMaps, level: QualityLev
     for (const r of rings) {
       const g = r.grid;
       const S = g.size;
-      const ci = Math.floor((camPos.x - SLAB.x0) / S),
-        cj = Math.floor((camPos.z - SLAB.z0) / S);
+      const ci = Math.floor((camPos.x - g.x0) / S),
+        cj = Math.floor((camPos.z - g.z0) / S);
       const f = r.uniforms.uFade.value;
       const rIn = r.spec.in0 < 0 ? -1 : f.x - 1.3;
       const rOut = f.w + 0.2;
@@ -585,8 +620,8 @@ export function createField(ctx: CityContext, maps: CoverMaps, level: QualityLev
         const t = tj * g.nx + ti;
         const fl = g.flags[t];
         if (fl === 0) continue;
-        const x0 = SLAB.x0 + ti * S,
-          z0 = SLAB.z0 + tj * S;
+        const x0 = g.x0 + ti * S,
+          z0 = g.z0 + tj * S;
         const y0 = g.ymin[t],
           y1 = g.ymax[t] + BLADE_UP;
         // distance from the camera to the tile box (3D)
@@ -607,7 +642,7 @@ export function createField(ctx: CityContext, maps: CoverMaps, level: QualityLev
         if (r.spec.index >= 1) {
           const camH = Math.max(0.5, camPos.y - y0);
           const horiz = Math.max(1, Math.hypot(x0 + S / 2 - camPos.x, z0 + S / 2 - camPos.z));
-          lawn = r.spec.index === 1 && camH / horiz < 0.3 ? 1 : 0;
+          lawn = r.spec.index === 1 && camH / horiz < 0.22 ? 1 : 0;
           if (!lawn && !(fl & 2) && !(fl & 4) && !(fl & 8 && r.spec.litter > 0)) continue;
         }
         box.min.set(x0 - BLADE_SIDE, y0 - 0.1, z0 - BLADE_SIDE);

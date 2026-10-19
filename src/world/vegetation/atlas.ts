@@ -60,6 +60,7 @@ export interface LeafAtlas {
   /** coverage (0..1) of a region at the alpha threshold — for card-count heuristics */
   coverage(tile: LeafTile): number;
   buildMs: number;
+  paintMs: number;
 }
 
 let cached: LeafAtlas | null = null;
@@ -85,6 +86,7 @@ export function getLeafAtlas(): LeafAtlas {
     PAINT[name as LeafTile](g, rng.int(0, 1e9), w * T, h * T - 12);
     g.restore();
   }
+  const tPaint = performance.now();
   const img = g.getImageData(0, 0, ATLAS_W, ATLAS_H);
   const { levels, cover } = buildMips(img.data);
   const tex = new THREE.DataTexture(levels[0].data, ATLAS_W, ATLAS_H, THREE.RGBAFormat, THREE.UnsignedByteType);
@@ -109,6 +111,7 @@ export function getLeafAtlas(): LeafAtlas {
       return cover.get(tile) ?? 0.5;
     },
     buildMs: performance.now() - t0,
+    paintMs: tPaint - t0,
   };
   return cached;
 }
@@ -670,9 +673,136 @@ interface Level {
 }
 
 /**
+ * First reduction straight from the canvas bytes: premultiplied level-1 floats of a region, and the
+ * region's coverage at the 0.5 threshold (counted on the full-size texels).
+ */
+function regionLevel1(src: Uint8ClampedArray, x0: number, y0: number, W: number, H: number, out: Float32Array): number {
+  let covered = 0;
+  const nw = W >> 1,
+    nh = H >> 1;
+  const row = ATLAS_W * 4;
+  for (let y = 0; y < nh; y++) {
+    let si = ((y0 + y * 2) * ATLAS_W + x0) * 4;
+    let o = y * nw * 4;
+    for (let x = 0; x < nw; x++) {
+      const a0 = src[si + 3],
+        a1 = src[si + 7],
+        a2 = src[si + row + 3],
+        a3 = src[si + row + 7];
+      covered += (a0 > 127 ? 1 : 0) + (a1 > 127 ? 1 : 0) + (a2 > 127 ? 1 : 0) + (a3 > 127 ? 1 : 0);
+      for (let k = 0; k < 3; k++) out[o + k] = (src[si + k] * a0 + src[si + 4 + k] * a1 + src[si + row + k] * a2 + src[si + row + 4 + k] * a3) * (0.25 / 65025);
+      out[o + 3] = (a0 + a1 + a2 + a3) * (0.25 / 255);
+      si += 8;
+      o += 4;
+    }
+  }
+  return covered / (W * H);
+}
+
+/** level 0 = the canvas bytes; transparent texels take the level-1 colour (push-pull) */
+function writeLevel0(src: Uint8ClampedArray, L: Level, x0: number, y0: number, W: number, H: number, C1: Float32Array): void {
+  const d = L.data;
+  const nw = W >> 1;
+  for (let y = 0; y < H; y++) {
+    let i = ((y0 + y) * ATLAS_W + x0) * 4;
+    for (let x = 0; x < W; x++) {
+      if (src[i + 3] > 5) {
+        d[i] = src[i];
+        d[i + 1] = src[i + 1];
+        d[i + 2] = src[i + 2];
+      } else {
+        const j = ((y >> 1) * nw + (x >> 1)) * 3;
+        d[i] = C1[j] * 255 + 0.5;
+        d[i + 1] = C1[j + 1] * 255 + 0.5;
+        d[i + 2] = C1[j + 2] * 255 + 0.5;
+      }
+      d[i + 3] = src[i + 3];
+      i += 4;
+    }
+  }
+}
+
+/** 2x2 box reduction of a premultiplied rgba float image (even sizes) */
+function reduce2(cur: Float32Array, cw: number, ch: number): Float32Array {
+  const nw = cw >> 1,
+    nh = ch >> 1;
+  const nx = new Float32Array(nw * nh * 4);
+  const row4 = cw * 4;
+  for (let y = 0; y < nh; y++) {
+    let a = y * 2 * row4;
+    let o = y * nw * 4;
+    for (let x = 0; x < nw; x++) {
+      for (let k = 0; k < 4; k++) nx[o + k] = (cur[a + k] + cur[a + 4 + k] + cur[a + row4 + k] + cur[a + row4 + 4 + k]) * 0.25;
+      a += 8;
+      o += 4;
+    }
+  }
+  return nx;
+}
+
+/** un-premultiplied colour of a level; transparent texels take the parent level's colour (push-pull) */
+function pullColour(p: Float32Array, lw: number, lh: number, C: Float32Array, P: Float32Array | null, pw: number): void {
+  for (let y = 0; y < lh; y++) {
+    for (let x = 0; x < lw; x++) {
+      const i = y * lw + x;
+      const a = p[i * 4 + 3];
+      if (a > 0.02 || P === null) {
+        const ia = a > 1e-5 ? 1 / a : 0;
+        C[i * 3] = p[i * 4] * ia;
+        C[i * 3 + 1] = p[i * 4 + 1] * ia;
+        C[i * 3 + 2] = p[i * 4 + 2] * ia;
+      } else {
+        const j = ((y >> 1) * pw + (x >> 1)) * 3;
+        C[i * 3] = P[j];
+        C[i * 3 + 1] = P[j + 1];
+        C[i * 3 + 2] = P[j + 2];
+      }
+    }
+  }
+}
+
+/** alpha scale s so that coverage(a·s > 0.5) ≈ cov (histogram of alpha, 256 bins) */
+function coverageScale(p: Float32Array, n: number, cov: number, hist: Uint32Array): number {
+  hist.fill(0);
+  for (let i = 0; i < n; i++) {
+    const b = (p[i * 4 + 3] * 255) | 0;
+    hist[b > 255 ? 255 : b]++;
+  }
+  const want = cov * n;
+  let acc = 0,
+    t = 255;
+  for (; t > 0; t--) {
+    if (acc + hist[t] > want) break;
+    acc += hist[t];
+  }
+  return Math.min(6, Math.max(0.5, 0.5 / Math.max(1 / 255, (t + 1) / 255)));
+}
+
+function writeLevel(L: Level, ox: number, oy: number, lw: number, lh: number, p: Float32Array, C: Float32Array, s: number): void {
+  const d = L.data;
+  for (let y = 0; y < lh; y++) {
+    let di = ((oy + y) * L.width + ox) * 4;
+    let i = y * lw;
+    for (let x = 0; x < lw; x++) {
+      const r = C[i * 3] * 255 + 0.5,
+        g = C[i * 3 + 1] * 255 + 0.5,
+        b = C[i * 3 + 2] * 255 + 0.5,
+        a = p[i * 4 + 3] * s * 255 + 0.5;
+      d[di] = r > 255 ? 255 : r;
+      d[di + 1] = g > 255 ? 255 : g;
+      d[di + 2] = b > 255 ? 255 : b;
+      d[di + 3] = a > 255 ? 255 : a;
+      di += 4;
+      i++;
+    }
+  }
+}
+
+/**
  * Mip chain per region (no bleeding between regions) with colour push-pull into transparent texels and
  * coverage-preserving alpha; levels below one texel per tile are plain averages of the atlas.
- * (Regions are power-of-two sized, so every 2x2 reduction is exact.)
+ * (Regions are power-of-two sized, so every 2x2 reduction is exact. Small hot helpers so V8 optimises
+ * them after the first region — one big function stayed in slow on-stack-replaced code.)
  */
 function buildMips(src: Uint8ClampedArray): { levels: Level[]; cover: Map<LeafTile, number> } {
   const nLevels = Math.floor(Math.log2(Math.max(ATLAS_W, ATLAS_H))) + 1;
@@ -689,110 +819,29 @@ function buildMips(src: Uint8ClampedArray): { levels: Level[]; cover: Map<LeafTi
     const [c, row, rw, rh] = r;
     const W = rw * T,
       H = rh * T;
-    // premultiplied float pyramid of this region (rgb·a, a)
-    const pyr: Float32Array[] = [];
-    const dims: [number, number][] = [];
-    let cur = new Float32Array(W * H * 4);
-    let covered = 0;
-    for (let y = 0; y < H; y++) {
-      let si = ((row * T + y) * ATLAS_W + c * T) * 4;
-      let di = y * W * 4;
-      for (let x = 0; x < W; x++, si += 4, di += 4) {
-        const a = src[si + 3] * (1 / 255);
-        const k = a * (1 / 255);
-        cur[di] = src[si] * k;
-        cur[di + 1] = src[si + 1] * k;
-        cur[di + 2] = src[si + 2] * k;
-        cur[di + 3] = a;
-        if (a > 0.5) covered++;
-      }
-    }
-    const cov = covered / (W * H);
+    // pyramid index 0 = level 1 (level 0 stays the canvas bytes)
+    const pyr: Float32Array[] = [new Float32Array((W >> 1) * (H >> 1) * 4)];
+    const dw: number[] = [W >> 1],
+      dh: number[] = [H >> 1];
+    const cov = regionLevel1(src, c * T, row * T, W, H, pyr[0]);
     cover.set(name as LeafTile, cov);
-    pyr.push(cur);
-    dims.push([W, H]);
-    let cw = W,
-      ch = H;
-    while (cw > 1 && ch > 1) {
-      const nw = cw >> 1,
-        nh = ch >> 1;
-      const nx = new Float32Array(nw * nh * 4);
-      const row4 = cw * 4;
-      for (let y = 0; y < nh; y++) {
-        let a = y * 2 * row4;
-        let o = y * nw * 4;
-        for (let x = 0; x < nw; x++, a += 8, o += 4) {
-          nx[o] = (cur[a] + cur[a + 4] + cur[a + row4] + cur[a + row4 + 4]) * 0.25;
-          nx[o + 1] = (cur[a + 1] + cur[a + 5] + cur[a + row4 + 1] + cur[a + row4 + 5]) * 0.25;
-          nx[o + 2] = (cur[a + 2] + cur[a + 6] + cur[a + row4 + 2] + cur[a + row4 + 6]) * 0.25;
-          nx[o + 3] = (cur[a + 3] + cur[a + 7] + cur[a + row4 + 3] + cur[a + row4 + 7]) * 0.25;
-        }
-      }
-      pyr.push(nx);
-      dims.push([nw, nh]);
-      cur = nx;
-      cw = nw;
-      ch = nh;
+    while (dw[dw.length - 1] > 1 && dh[dh.length - 1] > 1) {
+      const l = pyr.length - 1;
+      pyr.push(reduce2(pyr[l], dw[l], dh[l]));
+      dw.push(dw[l] >> 1);
+      dh.push(dh[l] >> 1);
     }
-    // push-pull: un-premultiplied colour per level; transparent texels take their parent's colour
     const colr: Float32Array[] = pyr.map((p) => new Float32Array((p.length / 4) * 3));
     for (let l = pyr.length - 1; l >= 0; l--) {
-      const p = pyr[l],
-        C = colr[l];
-      const [lw, lh] = dims[l];
-      const P = l + 1 < pyr.length ? colr[l + 1] : null;
-      const pw = l + 1 < pyr.length ? dims[l + 1][0] : 1;
-      for (let y = 0; y < lh; y++) {
-        for (let x = 0; x < lw; x++) {
-          const i = y * lw + x;
-          const a = p[i * 4 + 3];
-          if (a > 0.02 || !P) {
-            const ia = a > 1e-5 ? 1 / a : 0;
-            C[i * 3] = p[i * 4] * ia;
-            C[i * 3 + 1] = p[i * 4 + 1] * ia;
-            C[i * 3 + 2] = p[i * 4 + 2] * ia;
-          } else {
-            const j = ((y >> 1) * pw + (x >> 1)) * 3;
-            C[i * 3] = P[j];
-            C[i * 3 + 1] = P[j + 1];
-            C[i * 3 + 2] = P[j + 2];
-          }
-        }
-      }
+      const top = l + 1 >= pyr.length;
+      pullColour(pyr[l], dw[l], dh[l], colr[l], top ? null : colr[l + 1], top ? 1 : dw[l + 1]);
     }
-    for (let l = 0; l <= tileLevels && l < pyr.length; l++) {
-      const [lw, lh] = dims[l];
-      const p = pyr[l],
-        C = colr[l];
-      const n = lw * lh;
-      // alpha scale so that coverage(a·s > 0.5) ≈ cov  (histogram of alpha, 256 bins)
-      let s = 1;
-      if (l > 0 && cov > 0.001) {
-        hist.fill(0);
-        for (let i = 0; i < n; i++) hist[Math.min(255, (p[i * 4 + 3] * 255) | 0)]++;
-        // smallest threshold bin t such that count(a ≥ t) ≤ cov·n  →  s = 0.5 / (t/255)
-        const want = cov * n;
-        let acc = 0,
-          t = 255;
-        for (; t > 0; t--) {
-          if (acc + hist[t] > want) break;
-          acc += hist[t];
-        }
-        s = Math.min(6, Math.max(0.5, 0.5 / Math.max(1 / 255, (t + 1) / 255)));
-      }
-      const L = levels[l];
-      const ox = (c * T) >> l,
-        oy = (row * T) >> l;
-      for (let y = 0; y < lh; y++) {
-        let di = ((oy + y) * L.width + ox) * 4;
-        for (let x = 0; x < lw; x++, di += 4) {
-          const i = y * lw + x;
-          L.data[di] = Math.min(255, C[i * 3] * 255 + 0.5);
-          L.data[di + 1] = Math.min(255, C[i * 3 + 1] * 255 + 0.5);
-          L.data[di + 2] = Math.min(255, C[i * 3 + 2] * 255 + 0.5);
-          L.data[di + 3] = Math.min(255, p[i * 4 + 3] * s * 255 + 0.5);
-        }
-      }
+    writeLevel0(src, levels[0], c * T, row * T, W, H, colr[0]);
+    for (let q = 0; q < pyr.length && q + 1 <= tileLevels; q++) {
+      const l = q + 1;
+      const n = dw[q] * dh[q];
+      const s = cov > 0.001 ? coverageScale(pyr[q], n, cov, hist) : 1;
+      writeLevel(levels[l], (c * T) >> l, (row * T) >> l, dw[q], dh[q], pyr[q], colr[q], s);
     }
   }
   // atlas levels below one texel per tile: plain 2x2 averages of the previous level

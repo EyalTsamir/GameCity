@@ -12,14 +12,16 @@
 //   palette            shared colour uniforms (console tuning)
 //
 // URL: ?nograss (no blades; ground shader only) · ?grass=<0.25..1> · ?gcrings=A,B,C · ?gcflowers=0 ·
-//      ?nolitter
+//      ?nolitter · ?nolilies · ?nogcouter (no blades beyond the slab)
 
 import type * as THREE from 'three';
 import type { CityContext, CityModule } from '../core/context';
-import { buildCoverMaps, type FlowerPatch } from './groundcover/mask';
+import { buildCoverMaps, addToGrids, type FlowerPatch } from './groundcover/mask';
+import { buildOuterMaps } from './groundcover/outer';
 import { createField, type Field, type QualityLevel } from './groundcover/field';
 import { gcPalette, type GcPalette } from './groundcover/palette';
 import { setGroundCover } from './terrain/ground';
+import { createLilies } from './groundcover/lily';
 
 export interface GroundcoverService {
   density(x: number, z: number): number;
@@ -33,13 +35,16 @@ export default function create(ctx: CityContext): CityModule {
   const t0 = performance.now();
   const prm = ctx.debug.params;
   const maps = buildCoverMaps(ctx);
+  // the landscape band around the slab (world mode): meadows / reeds / dunes continue in blades
+  const outer = prm.has('nogcouter') ? null : buildOuterMaps(ctx);
+  if (outer) addToGrids(maps.grids, outer.cover, outer.height, outer.w, outer.h, outer.x0, outer.z0, outer.res);
   // hand the maps to the ground shader (far field: lengths, flowers, litter, blade presence)
   setGroundCover(maps.texCover, maps.texFlower);
 
   let field: Field | null = null;
   let level = ctx.quality.level as QualityLevel;
   if (!prm.has('nograss')) {
-    field = createField(ctx, maps, level, {
+    field = createField(ctx, maps, outer, level, {
       rings: prm.get('gcrings') ?? undefined,
       flowers: prm.get('gcflowers') !== '0',
       litter: !prm.has('nolitter'),
@@ -48,6 +53,10 @@ export default function create(ctx: CityContext): CityModule {
     const g = Number(prm.get('grass'));
     if (Number.isFinite(g) && g > 0) field.setDensity(g);
   }
+
+  // lily pads on the park pond
+  const lilies = prm.has('nolilies') ? { mesh: null, pads: 0, flowers: 0 } : createLilies(ctx);
+  if (lilies.mesh) ctx.scene.add(lilies.mesh);
 
   // tile selection with the final camera of this frame: chained scene.onBeforeRender, once per frame
   let frameNo = 0;
@@ -98,6 +107,7 @@ export default function create(ctx: CityContext): CityModule {
         bladeVerts: s?.verts ?? 0,
         density: Math.round((field?.density() ?? 0) * 100) / 100,
         patches: maps.patches.length,
+        lilyPads: lilies.pads,
         grassCells: maps.stats.grassCells,
         meadowCells: maps.stats.meadowCells,
         wetCells: maps.stats.wetCells,
@@ -106,6 +116,8 @@ export default function create(ctx: CityContext): CityModule {
         litterCells: maps.stats.litterCells,
         mapsMs: Math.round(maps.buildMs),
         mapsPhases: maps.phases,
+        outerMs: Math.round(outer?.buildMs ?? 0),
+        outerCells: outer?.cells ?? 0,
         buildMs: Math.round(buildMs),
       };
     },

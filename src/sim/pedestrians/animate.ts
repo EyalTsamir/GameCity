@@ -17,8 +17,9 @@ export const SEAT_TOP = 0.467;
 /** backrest surface behind the seat spot at hip height (m, negative = behind) */
 export const BACKREST_Z = -0.3;
 
-/** prop shown in a hand (pose.spare1): 0 none, 1 phone, 2 coffee cup, 3 newspaper (both hands) */
-export const PROP = { NONE: 0, PHONE: 1, CUP: 2, PAPER: 3 } as const;
+/** prop shown in a hand (pose.spare1): 0 none, 1 phone, 2 coffee cup, 3 newspaper (both hands), 4 the glass of a
+ * café patron's drink is in the hand (no figure prop: the renderer takes it off the table) */
+export const PROP = { NONE: 0, PHONE: 1, CUP: 2, PAPER: 3, GLASS: 4 } as const;
 
 const leg: LegSolve = { flex: 0.5, knee: 0.5, ankle: 0.5, reached: true };
 const G = newGaitOut();
@@ -82,6 +83,8 @@ const IDLE_W_OLD = [0.38, 0.1, 0.12, 0.05, 0.33, 0, 0.02];
 const IDLE_W_KID = [0.6, 0.12, 0.1, 0.1, 0.08, 0, 0];
 const IDLE_W_ADULT = [0.3, 0.15, 0.12, 0.08, 0.04, 0.23, 0.08];
 const IDLE_W_MID = [0.3, 0.15, 0.12, 0.08, 0.04, 0.07, 0.08];
+/** waiters: relaxed or hands behind the back, now and then a hand on the hip */
+const IDLE_W_STAFF = [0.45, 0, 0.05, 0.1, 0.4, 0, 0];
 const iv = { v: 0, k: 0.5 };
 
 /** idle variant of a standing figure: chosen per person and time window, held 6–18 s */
@@ -102,7 +105,7 @@ function idleVariant(m: Member, r: Rig): typeof iv {
   iv.k = k0 * k0 * (3 - 2 * k0) * (k1 * k1 * (3 - 2 * k1));
   hv = Math.sin(m.seed * 127.1 + (epoch + 0.5) * 311.7) * 43758.5453;
   const h = hv - Math.floor(hv);
-  const w = r.old > 0.25 ? IDLE_W_OLD : r.c > 0.45 ? IDLE_W_KID : m.look.age < 50 ? IDLE_W_ADULT : IDLE_W_MID;
+  const w = m.party.staff ? IDLE_W_STAFF : r.old > 0.25 ? IDLE_W_OLD : r.c > 0.45 ? IDLE_W_KID : m.look.age < 50 ? IDLE_W_ADULT : IDLE_W_MID;
   let tot = 0;
   for (let i = 0; i < w.length; i++) tot += w[i];
   let acc = 0;
@@ -296,6 +299,76 @@ export function computePoseA(m: Member, umbrella: boolean, r: Rig, o: Pose, gs: 
     footYawL *= upright;
     footYawR *= upright;
   }
+  // ── riding a two-wheeler: hips on the saddle (or standing on the deck), feet on the pedals / floor / pegs,
+  // the whole body leaning with the vehicle (pelvis roll about the hip, moved to where the leaned saddle is)
+  const RG = m.rideG;
+  if (RG !== null) {
+    const sc = r.s;
+    const mode = RG.mode;
+    const hipY = mode === 3 ? (RG.footY + 0.0) / sc + r.hip.y : (RG.seatY + 0.075 * hk * sc) / sc;
+    const hipZ = mode === 3 ? 0 : 0.02 / sc;
+    const lean = m.lean;
+    const stop = m.stopped;
+    for (let li = 0; li < 2; li++) {
+      const left = li === 0;
+      let ay = 0,
+        az = 0,
+        fp = 0;
+      if (stop && left && mode !== 3) {
+        // left foot down on the road beside the bike
+        ay = r.ankle.y;
+        az = 0.12 / sc;
+        fp = 0;
+      } else if (mode === 1) {
+        // pedals on the crank circle (the left one down at crank angle 0), the ankle just above and behind
+        const a = m.pedal + (left ? 0 : Math.PI);
+        ay = (RG.footY - RG.crank * Math.cos(a) + 0.075) / sc;
+        az = (RG.footZ - RG.crank * Math.sin(a) - RG.seatZ - 0.1) / sc;
+        fp = 0.12 + 0.18 * Math.sin(a);
+      } else if (mode === 2) {
+        ay = (RG.footY + 0.075) / sc;
+        az = (RG.footZ - RG.seatZ - 0.08) / sc;
+        fp = 0.05;
+      } else {
+        // kick scooter: one foot in front of the other on the deck
+        ay = RG.footY / sc + r.ankle.y;
+        az = (left ? 0.13 : -0.17) / sc;
+        fp = left ? 0 : 0.25;
+      }
+      LIK[0] = hipY;
+      LIK[1] = hipZ;
+      LIK[2] = ay;
+      LIK[3] = az;
+      LIK[4] = fp;
+      legIKa(r, leg);
+      if (left) {
+        hipFlexL = leg.flex;
+        kneeL = leg.knee;
+        ankleL = leg.ankle;
+        hipAbdL = stop && mode !== 3 ? 0.2 : mode === 2 ? 0.13 : 0.05;
+        footYawL = 0;
+      } else {
+        hipFlexR = leg.flex;
+        kneeR = leg.knee;
+        ankleR = leg.ankle;
+        hipAbdR = mode === 2 ? 0.13 : 0.05;
+        footYawR = 0;
+      }
+    }
+    rootY = hipY * Math.cos(lean) - r.hip.y;
+    rootX = -hipY * Math.sin(lean);
+    rootZ = hipZ;
+    pelvisRoll = lean;
+    pelvisYaw = 0;
+    chestRoll = 0;
+    waistTwist = 0;
+    chestTwist = 0;
+    waistBend = RG.lean * 0.75;
+    chestBend = RG.lean * 0.35 + 0.05;
+    headPitch = -RG.lean * 0.9 + 0.08;
+    headYaw *= 0.4;
+    tailFloor = 0;
+  }
   // torso / legs so far (the arm IK below converts targets with this torso)
   o.waistBend = waistBend;
   o.waistTwist = waistTwist;
@@ -319,7 +392,7 @@ export function computePoseA(m: Member, umbrella: boolean, r: Rig, o: Pose, gs: 
 
   // ── arms
   // standing idle variants (hands free, not walking)
-  const idleK = (1 - gw) * upright;
+  const idleK = RG !== null ? 0 : (1 - gw) * upright;
   if (idleK > 0.01) {
     const iv = idleVariant(m, r);
     const k = iv.k * idleK;
@@ -418,6 +491,58 @@ export function computePoseA(m: Member, umbrella: boolean, r: Rig, o: Pose, gs: 
           if (k > 0.3) prop = PROP.CUP;
         }
         break;
+    }
+  }
+  // rider: both hands on the grips
+  if (RG !== null) {
+    const sc = r.s;
+    o.waistBend = waistBend;
+    o.chestBend = chestBend;
+    o.rootX = rootX;
+    o.rootY = rootY;
+    o.rootZ = rootZ;
+    o.pelvisRoll = pelvisRoll;
+    o.pelvisYaw = pelvisYaw;
+    o.chestRoll = chestRoll;
+    o.waistTwist = waistTwist;
+    o.chestTwist = chestTwist;
+    RT[0] = RG.barX / sc;
+    RT[1] = RG.barY / sc;
+    RT[2] = (RG.barZ - RG.seatZ) / sc;
+    RT[3] = 1;
+    reachFig(r, o, armL, true, 0.6, -0.8, -0.3, 1);
+    RT[0] = -RG.barX / sc;
+    RT[1] = RG.barY / sc;
+    RT[2] = (RG.barZ - RG.seatZ) / sc;
+    RT[3] = 1;
+    reachFig(r, o, armR, false, -0.6, -0.8, -0.3, 1);
+  }
+  // waiter: order pad at the chest (writing), or an order carried forward on the right hand
+  if (m.carry > 0 && handR && upright > 0.5) {
+    const cy = r.chest.y,
+      wy = r.waist.y;
+    if (m.carry === 1) {
+      RT[0] = -0.04 * hk;
+      RT[1] = cy - 0.07 * hk;
+      RT[2] = 0.25 * hk;
+      RT[3] = 1;
+      reach(r, armR, false, -1, -1, -0.2, 0.6);
+      if (handL) {
+        RT[0] = 0.03 * hk;
+        RT[1] = cy - 0.05 * hk;
+        RT[2] = 0.24 * hk;
+        RT[3] = 1;
+        reach(r, armL, true, 1, -1, -0.2, 0.5);
+      }
+      headPitch = 0.38;
+      prop = PROP.PHONE;
+    } else {
+      RT[0] = -0.17 * hk;
+      RT[1] = wy + 0.12 * hk;
+      RT[2] = 0.3 * hk;
+      RT[3] = 1;
+      reach(r, armR, false, -1, -0.8, -0.2, 0.8);
+      prop = PROP.CUP;
     }
   }
   // props held in the hands
@@ -572,9 +697,10 @@ export function computePoseA(m: Member, umbrella: boolean, r: Rig, o: Pose, gs: 
       const ph = (tg * 0.45 + m.seed * 3) % 1;
       const up = act === 2 ? (ph < 0.3 ? ph / 0.3 : ph < 0.55 ? 1 : ph < 0.8 ? 1 - (ph - 0.55) / 0.25 : 0) : 0;
       const u = up * up * (3 - 2 * up);
-      RT[0] = -0.11 * hk;
-      RT[1] = tH + 0.05 / sc;
-      RT[2] = tD + 0.17 / sc;
+      // (the cup / glass stands 12–17 cm in from the table edge, 12–14 cm to the right: tableware.ts)
+      RT[0] = -0.13 / sc;
+      RT[1] = tH + (m.cupOrder ? 0.05 : 0.07) / sc;
+      RT[2] = tD + 0.12 / sc;
       RT[3] = ak;
       reachFig(r, o, armR, false, -1, -0.6, -0.2, 0.85);
       if (u > 0.01) {
@@ -586,7 +712,9 @@ export function computePoseA(m: Member, umbrella: boolean, r: Rig, o: Pose, gs: 
         reach(r, armR, false, -1, -1, -0.3, 0.85);
         headPitch -= 0.12 * u * ak;
       }
-      if (ak > 0.3) prop = PROP.CUP;
+      if (m.cupOrder) {
+        if (ak > 0.3) prop = PROP.CUP;
+      } else if (u * ak > 0.3) prop = PROP.GLASS;
     } else if (act === 4 && handR) {
       // eating: fork from the plate to the mouth every ~3 s, the other hand on the table
       const ph = (tg * 0.33 + m.seed * 5) % 1;
