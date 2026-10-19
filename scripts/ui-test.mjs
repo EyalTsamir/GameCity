@@ -2,7 +2,7 @@
 // Interactive test of the camera / UI / audio modules with real mouse & keyboard input.
 //
 //   node scripts/ui-test.mjs [--q "only=camera,ui,audio&camdebug"] [--out shots/uitest] [--url http://127.0.0.1:5174/] [--width 1280 --height 720] [--dpr 1.25]
-//                            [--steps intro,drag,pan,wheel,keys,poi,pois,follow,chase,kinds,building,dbl,aircraft,tour,help,places,
+//                            [--steps intro,drag,pan,wheel,keys,poi,pois,follow,chase,kinds,building,dbl,aircraft,freecam,tour,help,places,
 //                                     sound,time,speed,labels,resize,sweep,tourwatch]
 //
 // Full city: --q noidle (the default `only=camera,ui,audio&camdebug` tests the camera on a stand-in city).
@@ -28,11 +28,12 @@ const width = parseInt(args.width ?? '1280', 10);
 const height = parseInt(args.height ?? '720', 10);
 const dpr = parseFloat(args.dpr ?? '1');
 const q = args.q ?? 'only=camera,ui,audio&camdebug';
-const DEFAULT_STEPS = 'drag,pan,wheel,keys,poi,pois,follow,chase,kinds,building,dbl,aircraft,sweep,tour,help,places,sound,time,speed,labels,resize';
+const DEFAULT_STEPS = 'drag,pan,wheel,keys,poi,pois,follow,chase,kinds,building,dbl,aircraft,sweep,freecam,tour,help,places,sound,time,speed,labels,resize';
 const wanted = new Set((args.steps ?? DEFAULT_STEPS).split(','));
 const intro = wanted.has('intro');
 const baseUrl = (args.url ?? 'http://127.0.0.1:5173/').replace(/\/?$/, '/'); // --url: another dev server (e.g. a baseline worktree)
-const url = `${baseUrl}?${q}${intro ? (q.includes('hint') ? '' : '&hint') : q.includes('nointro') ? '' : '&nointro'}`;
+// the steps test the guided camera's contract (min distance, never inside); the freecam step toggles G itself
+const url = `${baseUrl}?${q}&guidedcam${intro ? (q.includes('hint') ? '' : '&hint') : q.includes('nointro') ? '' : '&nointro'}`;
 const outBase = path.resolve(root, args.out ?? 'shots/uitest');
 fs.mkdirSync(path.dirname(outBase), { recursive: true });
 
@@ -933,6 +934,34 @@ try {
       res.push(m);
     }
     step('low orbit eases around the towers (no pops, never inside)', ok, res);
+  }
+
+  if (wanted.has('freecam')) {
+    // free camera (G): the orbit arm is never shortened by buildings, may come closer than the guided
+    // minimum, and still moves without pops; G again restores the guided camera for the other steps
+    await page.keyboard.press('KeyG');
+    await view({ target: { x: -5, y: 2, z: -60 }, distance: 70, yaw: 0, pitch: 12 });
+    await settle(800);
+    const s0 = await st();
+    await page.evaluate(REC_START);
+    await page.keyboard.down('KeyQ');
+    await page.waitForTimeout(3000);
+    await page.keyboard.up('KeyQ');
+    await settle(600);
+    const m = motionStats(await page.evaluate(REC_STOP));
+    await page.mouse.move(width / 2, height / 2);
+    for (let i = 0; i < 40; i++) await page.mouse.wheel(0, -400);
+    await settle(1500);
+    const near = await st();
+    await page.keyboard.press('KeyG');
+    await settle(300);
+    step('free camera (G): full arm through buildings, closer zoom, no pops', Math.abs(s0.distance - 70) < 1.5 && near.distance < 11 && near.distance >= 2.5 && m.maxAccel < 6 && m.maxRelDistPerFrame < 0.15, {
+      arm: Math.round(s0.distance * 10) / 10,
+      nearest: Math.round(near.distance * 10) / 10,
+      maxAccel: m.maxAccel,
+      maxRel: m.maxRelDistPerFrame,
+      insideFrames: m.insideFrames,
+    });
   }
 
   if (wanted.has('tourwatch')) {

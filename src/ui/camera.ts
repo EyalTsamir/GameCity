@@ -43,6 +43,9 @@ const ROOF_MARGIN = 0.3;
 const ARM_HORIZON = 0.62;
 /** below this orbit distance the camera keeps a line of sight to the pivot */
 const LOS_DIST = 100;
+/** free camera (default): the orbit may come this close / this low (guided: MIN_DIST / MIN_PITCH) */
+const FREE_MIN_DIST = 3;
+const FREE_MIN_PITCH = 2 * DEG;
 
 interface Flight {
   from: Pose;
@@ -234,6 +237,23 @@ export default function create(ctx: CityContext): CityModule {
   const toast = (msg: string) => (ctx.services.ui as { toast?: (m: string) => void } | undefined)?.toast?.(msg);
   const emit = (name: string, payload?: unknown) => ctx.events.emit(name, payload);
 
+  // Camera feel. FREE (default): the orbit camera goes exactly where it is steered — through facades and
+  // roofs if need be, only the ground stops it — and never starts touring by itself. GUIDED (G key,
+  // ?guidedcam): the original spring arm that keeps the orbit out of buildings (slides in front of
+  // facades, keeps a line of sight, lifts over roofs) plus the idle auto-tour. Follow cams, flights and
+  // the tour keep their own framing rules in both modes. The choice is remembered (?freecam forces free).
+  let guided = ctx.debug.params.has('guidedcam')
+    ? true
+    : ctx.debug.params.has('freecam')
+      ? false
+      : (() => {
+          try {
+            return localStorage.getItem('tinyhaven.guidedCam') === 'true';
+          } catch {
+            return false;
+          }
+        })();
+
   // ───────────────────────────────────────────── helpers
   const canvasXY = (e: { clientX: number; clientY: number }) => {
     const r = canvas.getBoundingClientRect();
@@ -276,8 +296,8 @@ export default function create(ctx: CityContext): CityModule {
     }
   };
 
-  const minDistNow = () => (!follow ? MIN_DIST : follow.chase || follow.tour ? Math.max(CHASE_MIN_DIST, follow.cls === 'air' ? 24 : 0) : follow.minDist);
-  const minPitchNow = () => (follow?.cls === 'air' ? AIR_MIN_PITCH : follow?.chase ? 4 * DEG : MIN_PITCH);
+  const minDistNow = () => (!follow ? (guided ? MIN_DIST : FREE_MIN_DIST) : follow.chase || follow.tour ? Math.max(CHASE_MIN_DIST, follow.cls === 'air' ? 24 : 0) : follow.minDist);
+  const minPitchNow = () => (follow?.cls === 'air' ? AIR_MIN_PITCH : follow?.chase ? 4 * DEG : follow || guided ? MIN_PITCH : FREE_MIN_PITCH);
   /** how far the pivot may leave the slab (following an aircraft lets it roam much further) */
   const boundsMargin = () => (follow?.cls === 'air' ? AIR_MARGIN : 0);
 
@@ -815,8 +835,9 @@ export default function create(ctx: CityContext): CityModule {
   const relaxTargetY = (dt: number) => {
     let g = field.groundAt(goal.tx, goal.tz);
     // close to the city the pivot rides over the roofs it crosses instead of sinking into the buildings
-    // (an orbit pivot inside a block leaves the camera nothing to look at but that block's roof)
-    if (goal.dist < 240) {
+    // (an orbit pivot inside a block leaves the camera nothing to look at but that block's roof);
+    // the free camera pans along the ground instead — riding every roof made the view bob up and down
+    if (goal.dist < 240 && (guided || follow)) {
       const top = field.topSmoothAt(goal.tx, goal.tz) - 0.6;
       if (top > g + 1) g = top;
     }
@@ -1130,6 +1151,16 @@ export default function create(ctx: CityContext): CityModule {
         if (tour.active) stopTour();
         else startTour();
         break;
+      case 'KeyG':
+        guided = !guided;
+        try {
+          localStorage.setItem('tinyhaven.guidedCam', String(guided));
+        } catch {
+          /* storage unavailable */
+        }
+        clampGoal();
+        toast(guided ? 'Guided camera — keeps out of buildings, tours when idle (G: free)' : 'Free camera — goes wherever you steer it (G: guided)');
+        break;
       case 'Escape':
         if (tour.active) stopTour();
         else if (follow) releaseFollow();
@@ -1175,7 +1206,7 @@ export default function create(ctx: CityContext): CityModule {
   window.addEventListener('wheel', onActivity, { capture: true, passive: true });
   window.addEventListener('pointermove', onActivity, { capture: true, passive: true });
   const automated = (navigator as Navigator & { webdriver?: boolean }).webdriver === true;
-  const idleTourAfter = ctx.debug.params.has('noidle') || automated ? Infinity : 120_000;
+  const idleTourAfter = () => (ctx.debug.params.has('noidle') || automated || !guided ? Infinity : 120_000);
 
   canvas.tabIndex = 0;
   canvas.addEventListener('pointerdown', onPointerDown);
@@ -1374,7 +1405,24 @@ export default function create(ctx: CityContext): CityModule {
     _pos.copy(_tgt).addScaledVector(_dir, d);
     let liftAll = false;
     const looking = dt > 0 && motion.valid;
-    {
+    // free camera (see `guided`): plain orbit, no collision rules — follow cams and flights keep theirs
+    const freeOrbit = !guided && !follow && !flight;
+    if (freeOrbit) {
+      // the arm runs to its full length, through facades if need be; one left shorter by a follow, a
+      // flight or the guided mode eases back out (ω 3.2 ≈ 1.5 s) instead of snapping
+      let L = isFinite(armLen) ? Math.min(armLen, d) : d;
+      if (dt <= 0 || L >= d - 0.01) {
+        L = d;
+        armLenVel = 0;
+      } else [L, armLenVel] = spring(L, armLenVel, d, 3.2, dt);
+      armLen = L;
+      armPrevD = d;
+      if (L < d - 0.01) {
+        d = L;
+        _pos.copy(_tgt).addScaledVector(_dir, d);
+      }
+      armShown = d;
+    } else {
       // Between buildings the camera slides along its arm (pivot → camera) like a spring arm.
       //  * it heads for the full arm length, or for the front of the block the arm ends in;
       //  * it never slides *through* a building — it waits in front of one until the arm swings clear;
@@ -1499,12 +1547,13 @@ export default function create(ctx: CityContext): CityModule {
       armShown = d;
     }
     // never inside hills / water; glide over (low) roofs — rising ahead of the roofs the arm is sweeping towards
-    const hard = field.groundMaxAt(_pos.x, _pos.z) + 2;
+    // (free camera: only the ground stops it — a lift left from a guided / follow view eases out)
+    const hard = field.groundMaxAt(_pos.x, _pos.z) + (freeOrbit ? 1.2 : 2);
     const soft = field.roofAt(_pos.x, _pos.z, ROOF_MARGIN) + 1.6;
-    let need = Math.max(0, soft - _pos.y);
+    let need = freeOrbit ? 0 : Math.max(0, soft - _pos.y);
     if (!liftAll && need > LIFT_MAX + 2) need = 0;
     const needNow = need;
-    if (looking) {
+    if (looking && !freeOrbit) {
       const nl = lookSamples(4, 16);
       for (let k = 1; k <= nl; k++) {
         const p = lookAhead((ARM_HORIZON * k) / nl, pitch, d);
@@ -1713,7 +1762,7 @@ export default function create(ctx: CityContext): CityModule {
       applyCamera(dt);
       checkMode();
       // attract mode: a quiet city starts showing itself off
-      if (!tour.active && !follow && !flight && !document.hidden && t0 - lastActivity > idleTourAfter) {
+      if (!tour.active && !follow && !flight && !document.hidden && t0 - lastActivity > idleTourAfter()) {
         startTour();
         lastActivity = t0;
       }

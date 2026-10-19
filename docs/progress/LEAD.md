@@ -151,6 +151,12 @@ Per-module logs live next to this file: `docs/progress/<module>.md`.
   07:05 Phase 3 complete. Final report: docs/progress/GFX-REPORT.md.
 
 ## History
+* 2026-10-19 (after the overhaul) — user feedback: the camera felt jumpy. Free camera is now the default
+  (src/ui/camera.ts): plain orbit with no spring-arm / line-of-sight / roof-lift / escape rules (only the
+  ground stops it), min distance 3 m and pitch 2°, pan follows the ground (no roof riding), no idle
+  auto-tour. G (or ?guidedcam) restores the guided camera; remembered in localStorage. Follow cams, flights
+  and the tour keep their framing. ui-test pins ?guidedcam for its contract steps + new 'freecam' step
+  (default mode 35/36, same pre-existing 'kinds' step as the original).
 * 2026-10-16 ~19:20 — Round 1: 12 builders launched via a Workflow; the account hit its 5-hour usage
   limit at 20:48–20:51. Six builders had worked ~1.5 h (traffic, pedestrians, buildings, render =
   sky+postfx, terrain(+water), camera/ui/audio); the other six died on start (stubs only).
