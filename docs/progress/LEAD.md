@@ -45,7 +45,7 @@ Per-module logs live next to this file: `docs/progress/<module>.md`.
     golden hour, lit night city). Perf variants `;legacylight;notable`. All 8 workstreams have final reports.
   - DONE: water fix round (23:40; lead checked fix/medlow_sheet.png ✔ — medium/low/nowaterrefl water correct
     at 11/18.2/20/21.5 h; dusk square = additive harbor-glows alpha in the reflection target, fixed).
-  - Still working: people (fix round; not visible at matrix distances).
+  - DONE: people fix round (04:20). No agent is working any more; Phase 3 is lead-only.
 * Safety nets (user request: never lose state, never trade quality for speed):
   - watchdog scheduled task `trig_01SEZGVfPdGEXrjuBsEYFnkw` (hourly at :06 UTC since 22:06, fires into this
     session even with the user's computer off): resumes agents cut off by the usage limit / restarts.
@@ -103,6 +103,15 @@ Per-module logs live next to this file: `docs/progress/<module>.md`.
   failedModules []; ONE invariant sample at t=50 s: 2 pedestrians overlapping 3.2 s (couple 'act' vs elderly
   walking). Movement code unchanged by people (only stride/phase) ⇒ likely pre-existing crowd behaviour;
   base soak on 5174 queued to confirm (shots/lead/qa/soak_base.json). ui-test running since 03:15.
+  04:00 base soak (5174): invariants {} in 4 min ⇒ the one overlap is inconclusive (rare event) — rerun longer
+  soaks for both builds after the perf A/B. 03:58 ui-test full city (5173): 18 ok / 18 fail — every instant
+  step passes (drag, pan, zoom, clamps, hover, click-follow + card, building framing, Esc, help, slider,
+  speed), every time-based step fails (W/D/Q/R keys, POI flights, double-click flights, tour, chase, audio
+  levels) + harness screenshot timeout ⇒ looks like SwiftShader full-city slowness (~10 fps) vs the test's
+  time windows. Cross-check running (scripts/agent-tools/qa_ui2.sh; ui-test.mjs got --url): (1) new build,
+  default stand-in city; (2) ORIGINAL build, full city. 04:20 people fix round DONE (corners median
+  6.3→1.8 cm, max 61→11 cm; garbage 2.1 KB→2 B bench / 50–140 B in Chrome; trousers + toe box; sheet ✔).
+  ALL agent work complete.
 
 ## History
 * 2026-10-16 ~19:20 — Round 1: 12 builders launched via a Workflow; the account hit its 5-hour usage

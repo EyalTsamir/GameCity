@@ -21,6 +21,8 @@ import { patchLampMaterial } from '../../world/lamps/integrate';
 const clamp = (x: number, a: number, b: number) => (x < a ? a : x > b ? b : x);
 const q8 = (h: number) => clamp(Math.round(((h + 0.1) / 1.275) * 255), 0, 255);
 const bit = (b: number) => (1 << b) >>> 0;
+/** colour word: rgb24 + parameter byte (module level: a closure made per call is an allocation) */
+const w = (rgb: number, p: number) => ((rgb & 0xffffff) | ((p & 255) << 24)) >>> 0;
 
 // Per-figure hot path without garbage: the pose is packed from named field reads (a keyed read with a varying
 // key, pose[POSE_KEYS[k]], is megamorphic and boxes every double it returns), and instance matrices are written
@@ -117,7 +119,6 @@ export function lookData(L: Look): LookCache {
 }
 
 function writeColours(col: Uint32Array, L: Look, s: Style, top: number, bottom: number): void {
-  const w = (rgb: number, p: number) => ((rgb & 0xffffff) | ((p & 255) << 24)) >>> 0;
   const tailSrc = s.tail === 2 ? 1 : s.tail === 3 ? 2 : 0;
   col[0] = w(L.skin, q8(s.sleeve));
   col[1] = w(top, q8(s.topHem));
@@ -140,10 +141,20 @@ function makeAttr(geo: THREE.BufferGeometry, name: string, arr: Float32Array | U
   return a;
 }
 
+// one persistent update range per attribute (three's addUpdateRange pushes a new object every call; the
+// renderer only empties the array after the upload, so the same range object can be pushed again each frame)
+const ranges = new WeakMap<object, { start: number; count: number }>();
 function flush(attr: THREE.BufferAttribute | THREE.InstancedBufferAttribute | THREE.InterleavedBuffer, count: number, itemSize: number): void {
-  attr.clearUpdateRanges();
+  attr.updateRanges.length = 0;
   if (count > 0) {
-    attr.addUpdateRange(0, count * itemSize);
+    let r = ranges.get(attr);
+    if (!r) {
+      r = { start: 0, count: 0 };
+      ranges.set(attr, r);
+    }
+    r.start = 0;
+    r.count = count * itemSize;
+    attr.updateRanges.push(r);
     attr.needsUpdate = true;
   }
 }
@@ -635,7 +646,6 @@ export class CrowdRenderer {
 
 /** sunbathing: swimwear colours / hems, accessories off */
 export function swimwear(L: Look, s: Style, flags: number, C: Uint32Array): number {
-  const w = (rgb: number, p: number) => ((rgb & 0xffffff) | ((p & 255) << 24)) >>> 0;
   const female = L.kind === 'woman' || L.kind === 'girl';
   const swim = L.swim || L.skin;
   const keep = bit(FB.HAIR) | bit(FB.HAIRLONG) | bit(FB.PONY) | bit(FB.BUN) | bit(FB.FRINGE) | bit(FB.BEARD) | bit(FB.MOUSTACHE) | bit(FB.TOWEL) | bit(FB.HAT) | bit(FB.BRIM) | bit(FB.VISOR);

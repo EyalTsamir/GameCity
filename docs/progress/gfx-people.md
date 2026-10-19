@@ -6,118 +6,13 @@ Files: `src/sim/pedestrians/{figure,render,looks}.ts` + new `rig.ts`, `body.ts`,
 stats) and `crowd.ts` (2 lines: stride formula → `gaitCycle()`, phase-settle only for legacy). Movement,
 routes, speeds, avoidance and `invariants()` are untouched.
 
-## Resume here (updated 2026-10-19 03:10 after the reboot)
-* POST-REBOOT STATUS: tree typechecks (auto-checkpoint d2e1de0 has it). Items 1 (corners) and 2 (garbage) DONE
-  in code + node-verified; item 3 (trouser fit + rounder toes) fully applied in code (looks/render/shader/rig/
-  body), NOT yet judged visually. Jobs that finished before the stop: shots/people/fix/lineup_{new,before}/
-  (7 shots each), corners_new (2 corners), corners_before (corner 0 = same walker as new c0; c1 cut off),
-  gc_{new,before}.json = useless (SwiftShader ran 1–2 writes per view → cold JIT; redo with a tight
-  write() loop in the page). Before-tree server 5175 died with the reboot (restart from scratchpad `before/`).
-* 03:10 item 3 judged on lineup_{before,new_v1} at 10 m: trousers straighter but still slim, toes slightly
-  rounder → strengthened: drape rt = (0.059 + 0.018 h)·legScale (6.1 cm ankle, 6.8 knee, 7.2 mid-thigh), denim
-  0.6, default 0.8; toe rings Fr(0.184, 0.0485, −0.071, −0.030), Fr(0.207, 0.043, −0.067, −0.037). Corner v1
-  crops (corners_{new,before}_v1, strips corner{0,1}_before_new_x3.png): c0 fine both, c1 occluded by a signal.
-  5175 restarted (background vite from scratchpad before/). QUEUED 03:13 one chain (each timeout 900, logs
-  shots/people/fix_*.log, marker shots/people/fix_chain.done): lineup_new (SHOTS=lineupA_34_10m,
-  lineupA_front_10m,lineupB_34_10m,lineupB_front_10m,lod0_9m) → NEW tool tools/city_slide.mjs (real-city
-  stance slide: shadow-poses every walker with the build's own modules + fkPoint, bins straight / turning /
-  sharp) slide_{new,before}.json 240 s → gc_driver (tight in-page crowd.update + write loop) gc_{new,before}.json
-  → corner_driver (22 m, pitch 36°, 1280×720) corners_{new,before} 4 corners. Then (waits for fix_chain.done)
-  lineup_new2 with SHOTS=dog_pram_34,dog_pram_side,sit_34 (checks render.ts yawMatrix for pram/dog/blob).
-  Docs: Numbers + Tools sections already updated for the fix round; Final report subsection still to write.
-* 03:18 item 3 VERIFIED visually (legs_lineup{A,B}_{34,front}_10m_before_after.png: straight trouser legs,
-  jeans straighter, shorts wider, toes blunter). city_slide first try ran ~2.7 fps with 0.1 s sim per frame
-  (too coarse) → SPEED env (default 0.2) added, new-run killed (pid of my own node), before-run continues with
-  the fixed script; slide_new re-queued after fix_chain2.done (marker fix_chain3.done).
-* 03:22 RESULTS so far: slide_before.json (real city, 9.3 s sim, 2072 stances): straight median 0.18 / p90 0.86
-  cm; turning 15–45° median 1.43 / p90 9.1; sharp > 45° (44 stances) median 6.3 / p90 15.8 / max 61 cm.
-  gc_{new,before}.json (tight write() loop in Chrome): far views (no gait) 52 vs 1514 B per figure, but near
-  views still 1.5–3.0 KB per gait figure (before 2.4–4.7 KB) although node says ≈ 0 → Chrome's V8 differs
-  (newer tiering / Maglev?) — investigating with tools/chrome_alloc.mjs (app modules imported in the page,
-  per-call garbage of computePose walk/stand, armIKa, legIKa, fkPoint) → shots/people/fix/chrome_alloc.json.
-
-* FIX ROUND from the re-review (`docs/progress/people-review.md` "## Re-review (2026-10-18)"), in order:
-  1. corners (gait.ts): end steps early on fast heading change / cap trailing-leg stretch (hip ext ≤ ~−22°);
-     targets drag ≤ ~3 cm normal turns, ≤ ~6 cm sudden 90° corners, no split strides; prove with
-     `tools/gaitfk.ts` + `tools/cornerfk.ts` and a 20–30 m city capture of kerb-corner turners (new vs before).
-     Baseline before the fix: cornerfk rail 90° 4.15 / 2.56 cm, bevel 18.8, hard 90° 34.7, 45° 9.4, hip −40°.
-  2. per-frame garbage (animate/gait/pose): < 100 B per figure-frame, measured with `tools/bench.ts` +
-     `--trace-gc` (scavenge count × semispace) — baseline ≈ 2.1 KB.
-  3. trousers looser (not tights) + rounder shoe toes, NO new vertices (shader.ts / body.ts); lab lineup ~10 m.
-* Status item 1: tried a travel-heading frame for the feet (feet follow the root's actual motion direction, body
-  keeps the lagging yaw) → WORSE (rail corner 9.3 cm, standing turn 5 cm: the law jumps with every rail segment
-  snap) — reverted (backup of the pre-fix gait.ts in the scratchpad `people_gait_prefix.ts`). Next try: phase
-  advance under corner stress (end the step early) + plant heading anticipating the turn.
-  Now implementing instead: a smoothed gait root — GaitState.sx/sz follows the root by integrating the frame's
-  displacement along the crowd's smoothed velocity direction (m.vx/vz, aligned with the lagging yaw) plus a
-  6/s pull back to the true root; gait (BX/BZ) and the drawn figure (render.ts R[0..2], blob, pram, dog) use it;
-  snaps to the root if > 1 m off. Test harnesses must emulate m.vx/vz (crowd rate 8/s). Result: hard corners
-  unchanged (drag clamp is the mechanism) — kept (harmless, smoother body path). Next: quick re-step — a stance
-  foot whose plant leaves the law by > 0.16 lateral / 0.24 along is lifted and re-placed on the law in 0.2 s
-  (FootPlant.qs/qfx/qfz, lift 4.5 cm) instead of being dragged. → hard 90° 37.5 → 13.6 cm, bevel 15 → 9.4, 45° 7.6
-  → 5.3, rail 3.85 (unchanged). Remaining slide = heel swinging round during the twist-limit pivot on the ball
-  (heel 3–6 mm up). Next: heel-up / toes-up pivot (FootPlant.pv memory, pitch ∓0.15 while pivoting) → DONE (pv decays 5/s, +15/s
-  while |rel|>0.6; reset at heel strike): rail 3.29, bevel 2-seg 14.49 (!), hard 90° 2.92, 45° 2.01, 90°@0.9 6.32,
-  135° 9.24 cm; gaitfk straight 0.31/run 0.60, 40°/s 0.85, 90°/s 4.72, standing turn 1.67. Remaining slides =
-  toe point (pt 3) in late stance / toe-off (u 0.45–0.62), after the quick-step window (u < beta−0.08) closed.
-  Then (all in gait.ts, DONE, typecheck clean): (a) heel-raise for reach — an out-of-reach stance foot first
-  rises onto ball/toe (bisection on pitch down to 1.15·thTO, exact rolling, WREF/RQ scratch, fitsReach()) before
-  the old horizontal pull-in; (b) pivot about the actual contact point from last frame's pitch (FootPlant.pp:
-  heel / heel back / ball / toe tip); (c) quick re-step only if it lands before toe-off (duration
-  min(0.2 s, time left), URATE = cycle/s; none if < 0.11 s left) — no late lifts/pops; (d) early toe-off
-  (FootPlant.lo) of a trailing stance foot over-stretched (hip flex < −0.5 or reach fail) during double support
-  (u > 0.52, other foot planted), swing from its actual pitch (th0 = pp); (e) swing catch-up: a foot that left
-  behind its law converges to it over s 0.03–0.35, and walking swing feet are capped at ~30° behind the hip.
-  Tried and reverted: world-fixed landing point over the last swing fifth (rail 1.9 → 5.7, 135° → 22.7 cm).
-  render.ts: figure, blob, pram, dog drawn at st.gait.sx/sz when the gait ran this frame (gait.frame === frame).
-  NUMBERS NOW (cornerfk): rail 90°@1.3 1.88 cm (hip −36°, 4 frames < −32°), rail@0.9 2.23, bevel 3.63 (−35°),
-  hard 90°@1.3 2.50, 45° 1.78, 90°@0.9 2.90, 135°@1.1 6.12 (landing glide while the body yaws 20°/frame);
-  gaitfk: straight 0.30 (unchanged), 1.6 m/s hip −25° (was −28), runs unchanged, 40°/s 0.86, 90°/s 1.79 (was 4.7),
-  standing turn 1.67. cornerfk now also prints max sole 2nd difference (straight 14.9 = toe slap at foot-flat;
-  corners 12–19, 135° 31 at the yaw snap).
-  NEXT (item 1 evidence): before tree = current tree + gait.ts/render.ts from commit 26203d5 (git archive, read
-  only) in the scratchpad `before/` (5174 is the lead's baseline server → mine runs on **5175**, background
-  `node …/node_modules/.bin/vite --port 5175 --strictPort --host 127.0.0.1` from that dir). corner_driver.mjs
-  first version (waits for heading change) found ~no turners → rewritten: predicts corners from the party rail
-  (leg change > 55° 0.6–1.1 m ahead), slows sim 0.3, camera 25 m, 8 crops 300×240. RUNNING (23:3x, background):
-  `TH_LOCK_SLOTS=2 URL=http://127.0.0.1:517{3,5}/ timeout 900 node shots/people/tools/corner_driver.mjs
-  shots/people/fix/corners_{new,before} 6 8` → logs shots/people/fix_corners_{new,before}.log. Next: Read crops,
-  build strips (PIL ×2) into shots/people/fix/corners_strip_{new,before}.png.
-* Item 2 (garbage) — DONE in code (typecheck clean, all checks identical): cause = boxing of doubles at call
-  boundaries that TurboFan does not inline (module `let` doubles: 16 B per write; computed double args/results
-  of un-inlined calls; small helpers in branches below --min-inlining-frequency 0.15 are never inlined).
-  Fixes: gait per-call scalars in object G (double fields), gaitIn/poseIn/LIK/AIK/AN/RT/RQ/WREF input slots,
-  legIKa/armIKa/computePoseA garbage-free entry points (old signatures kept as wrappers for tools), armIK1 /
-  rotation builders read slots, cr3/nz3 without set3, footHeading without closure, toBody/toWorld take
-  objects, mix/clamp/smoothstep/hash/wrap written out inline in animate.ts and gait.ts (python transformer,
-  exact a + (b − a)·t form; parity tool `tools/animparity.ts` vs `tools/ref/animate_ref.ts`: 5.18 M pose values,
-  max |diff| 0), crowd plumbing gaitCycleOf(m) → GC.cycle. Found + fixed a latent bug: G.qlift's literal 0.5
-  was read by the first planWalk of the process (FootPlant pv/pp likewise reset to 0 after the literal).
-  Measured (tools/bench.ts, now prints median/90th pct; tools/allocpose.ts per type; tools/allocmicro.ts per
-  function; TurboFan graph scan `scratchpad/turbo_box.py` lists ChangeFloat64ToTagged + Calls): bench median
-  44 B per figure-frame incl. 39 B harness (was ≈ 2.1 KB; mean 140–300 B = JIT warm-up frames after idle-variant
-  deopts); per type steady: walk 11–13, stand 17, sit 1, pram 9–12, cane 12–14 B per call.
-  render.ts write() DONE too: packPose() from named fields into a Float64Array (keyed `pose[POSE_KEYS[k]]` reads
-  were megamorphic → boxed; order checked against POSE_KEYS at load), instance matrices via yawMatrix() from
-  slot array MI (no Vector3.set / setFromAxisAngle / compose), sphere centre by field. idleVariant reads poseIn.t.
-  TurboFan scan of every hot function: 0 ChangeFloat64ToTagged left. Bench (WARM=600): median 39 B per figure-
-  frame = exactly the harness (39 B without computePose) → computePose ≈ 0 B steady; mean 120–260 B = JIT
-  warm-up frames (idle-variant deopts); WARM=6000: mean 50 B (incl. 39 harness). Per type walk/stand/sit: 0/0/0.
-  In-browser check of write(): tools/gc_driver.mjs (performance.memory around write(), Chrome
-  --enable-precise-memory-info) — to run new (5173) vs before (5175) after the corner captures.
-* Item 3 (trousers / shoes) — IN CODE, not yet looked at: looks.ts Style.trouserFit (no RNG draw: from outfit —
-  denim 0.42, suit 0.85, worker 1, other 0.75, shorts 0.95, leggings 0, track pants 0.55, +0.15 elderly, ≤0.6
-  kids, ×0.7 capri; styleFromFlags: suit 0.85 / shorts 0.95 / 0.6), packed in col[8] bits 26–29 (iC2.x);
-  shader.ts: LEG vertices with h > trouserEnd and h < 0.8 pushed radially from the rest leg axis up to
-  rt = (0.052 + 0.0215 h)·legScale (5.4 cm ankle … 6.8 cm mid-thigh), weight fit × (1 − smoothstep(0.66, 0.8, h)).
-  Shoes: man rings 6/7 taller + wider (Fr(0.184, 0.0485, −0.071, −0.032), Fr(0.207, 0.042, −0.067, −0.039)), z
-  and y0 unchanged (gait sole identical), LOD0 foot rings [0,1,2,5,6,7] (ring 3 was linear-redundant), toe tip
-  5 mm ahead, 1 mm lower. Vertex counts unchanged (tools/vcount.ts: 1346/458/261/101). lineup_people.mjs got
-  `SHOTS=` filter + lineup{A,B}_{34,front}_10m. QUEUED 23:51 (background chain, each timeout 900):
-  `SHOTS=lineupA_34_10m,lineupA_front_10m,lineupB_34_10m,lineupB_front_10m,lod0_9m,gait_suit_34,typical_16m
-  TH_LOCK_SLOTS=2 node shots/people/tools/lineup_people.mjs shots/people/fix/lineup_{new,before}
-  http://127.0.0.1:517{3,5}/` then `TH_LOCK_SLOTS=2 URL=http://127.0.0.1:517{3,5}/ node
-  shots/people/tools/gc_driver.mjs shots/people/fix/gc_{new,before}.json`; logs shots/people/fix_*.log.
+## Resume here (updated 2026-10-19 04:10 — FIX ROUND DONE, report sent)
+* Fix round from the re-review: all three items done and verified; results in "### Fix round (re-review)" under
+  "## Final report"; evidence in `shots/people/fix/`. Nothing half-done; no jobs running from me. The
+  before-tree dev server (scratchpad `before/`, port 5175) was only for the comparisons and can die.
+* If resumed for more: candidates are the 135° landing glide (6 cm, body yaw snaps 20°/frame), the ~1.5 KB per
+  frame of three.js update-range arrays (fixed cost, not per figure), and trouser/leg interpenetration at the
+  passing moment of the swing leg (not visible at ≥ 10 m).
 
 ## Toggles
 * `?legacypeople` — original figures + original stride formula (frozen copies in `pedestrians/legacy/`).
@@ -207,6 +102,19 @@ routes, speeds, avoidance and `invariants()` are untouched.
   42 B (≈ 3 B net) after 100 s; per type (walk / stand / sit / pram / cane) 0–3 B. Before: ≈ 2.1 KB (and 7.8 KB
   earlier). Causes and fixes: see the helper note at the top of gait.ts (boxed doubles at un-inlined call
   boundaries, module `let` doubles, cold-branch helper calls, megamorphic keyed pose reads in render.ts).
+  Later the same day: rigOf allocated a 56 B context on every call (closures of the rig build captured its
+  locals) → build split out; the harness's 39 B was that → bench median now 2 B total, 16 B mean after warm-up.
+* Garbage in Chrome (`tools/chrome_heapprof.mjs`, tight in-page crowd.update + renderer.write() loop at the
+  square 20 m view, 12 000 warm-up steps, 12 windows of 600): 1.0–2.7 KB per write for ~20 gait-posed figures
+  (+ about as many tiny / pin) = 50–140 B per gait figure including fixed per-write costs (≈ 1.5 KB of three.js
+  update-range arrays re-grown after the renderer empties them); before this round 1.8–2.3 KB per gait figure.
+  Fixed on the way (found with the CDP sampling heap profiler): for-of iterators and three's
+  Frustum.intersectsSphere in write(), per-call closures, update-range objects, rigOf's context.
+* Real-city foot slide (`tools/city_slide.mjs`: every walker shadow-posed with the build's own modules, sole
+  points through fkPoint, ~10 s of sim at 1/40 s per frame, ≈ 2 400 stances per build), new vs before:
+  straight stances median 0.18 / 0.18 cm, p99 2.4 / 6.0, max 15 / 46; turning 15–45° (150 / 120 stances)
+  median 1.1 / 1.4, p90 3.2 / 9.1, p99 19 / 43; sharp > 45° (47 / 44) median 1.8 / 6.3, p90 4.2 / 15.8,
+  max 11 / 61 cm, stances > 6 cm 2 / 24.
 
 ## Tools (shots/people/tools/)
 * `node build.mjs <file.ts>` bundles + runs node checks: `measure.ts` (verts/tris per LOD and feature),
@@ -319,3 +227,57 @@ Evidence: `shots/people/sheet_{lineups,gait,poses,distance_lod,city_day,city_nig
 
 Open: route corners drag a planted foot 2–4 cm (bevelled 90° snaps more); faces mannequin-like under 8 m; no
 heels/headscarves/braids; lo 458 vs ~450 target.
+
+### Fix round (re-review)
+All three items from the re-review are done and verified. Files touched: `gait.ts`, `animate.ts`, `pose.ts`, `render.ts`,
+`rig.ts`, `body.ts`, `shader.ts`, `looks.ts`, plus one plumbing line in `crowd.ts` (`gaitCycle` → `gaitCycleOf`, same
+formula). Movement, routes and `invariants()` are unchanged.
+
+1. **Corners** (`gait.ts`; `render.ts` draws at the gait's smoothed root). New mechanisms:
+   * a smoothed gait root;
+   * a quick 0.2 s re-step instead of dragging a foot, used only if it lands before toe-off;
+   * a heel raise onto ball/toe for reach, with exact rolling;
+   * pivots about the actual contact point (heel/ball/toe tip) with the heel or toes lifted;
+   * an early toe-off of an over-stretched trailing foot during double support;
+   * a swing catch-up and a ~30° swing cap.
+
+   Node checks, before → after:
+   * rail 90° corners: 4.15 → 1.88 cm and 2.56 → 2.23 cm
+   * bevelled 90°: 18.8 → 3.63 cm
+   * hard 90° snap: 34.7 → 2.50 cm (2.90 at 0.9 m/s)
+   * 45° snap: 9.4 → 1.78 cm
+   * 90°/s turning: 4.7 → 1.75 cm
+   * straight walking and running: unchanged
+   * trailing hip extension: was −40° sustained, now ≤ −36° for at most 4 frames (normal walking −16°)
+   * still outside target: the 135° corner at 6.1 cm
+
+   Real city (`city_slide.mjs`, every walker, about 2,400 stances per build), new vs before:
+   * sharp turns (> 45°): median 1.8 vs 6.3 cm, p90 4.2 vs 15.8 cm, max 11 vs 61 cm
+   * 15–45° turns: median 1.1 vs 1.4 cm, p90 3.2 vs 9.1 cm
+
+   City capture at 22 m (`fix/sheet_corners_before_new.png`, same walkers at the same corners): the 110° kerb corner
+   loses the over-long split stride and the flung trailing leg.
+2. **Garbage**. Causes: doubles boxed at call boundaries that are not inlined, double writes to module-level `let`
+   variables, helper calls in cold branches (TurboFan never inlines below `--min-inlining-frequency`), megamorphic
+   keyed pose reads, and per-call contexts and closures (rigOf).
+
+   Fixes: input fields and typed-array slots instead of arguments, `legIKa`/`armIKa`/`computePoseA` entry points (old
+   signatures kept as wrappers), helpers written out inline, `packPose`, and matrices written directly.
+   `animparity.ts` confirms poses are bit-identical (5.18 M values).
+
+   Results:
+   * `bench.ts`: median 2 B per figure-frame (was ≈ 2.1 KB); mean 16 B after warm-up.
+   * Chrome, `renderer.write()` loop: 50–140 B per gait figure, including ≈ 1.5 KB per frame of fixed three.js
+     update-range cost (before: 1.8–2.3 KB).
+   * Also fixed: a latent bug where an initial scratch value leaked into the first `planWalk`.
+3. **Trousers and shoes**, with no new vertices (vertex counts per level still 1346/458/261/101).
+   * New `Style.trouserFit`: 0 for leggings, 0.6 jeans, 0.8 default, 0.85 suits, 1 workwear, 0.95 shorts. It is
+     derived from the outfit with no extra RNG draw.
+   * The vertex shader pushes leg vertices from mid-thigh down out to a straight drape: 6.1 cm at the ankle, 6.8 at
+     the knee.
+   * The toe box is taller and wider, and LOD0 uses its redundant ring 3 for the toe instead.
+   * At 10 m (`fix/legs_lineup{A,B}_{34,front}_10m_before_after.png`): trousers read as straight trouser legs, jeans
+     are straighter, shorts are looser, and toes are blunter. Dog, pram and sitting checks are in `fix/lineup_new2/`.
+
+Typecheck is clean; the console is clean and `invariants()` returns `{}` (city shot and corner runs). Tools are listed
+under Tools.

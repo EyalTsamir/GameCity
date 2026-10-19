@@ -452,8 +452,16 @@ const rigCache = new WeakMap<object, Rig>();
 /** Morphed rig of a look (cached per look object). */
 export function rigOf(look: Look): Rig {
   const hit = rigCache.get(look) as RigSrc | undefined;
-  // the look's body fields are compared directly (no key string: rigOf runs per figure per frame)
-  if (hit && hit._kind === look.kind && hit._age === look.age && hit._scale === look.scale && hit._girth === look.girth) return hit;
+  // cached per look object (looks are not edited after their first use: crowd.ts adjusts ages right after
+  // makeLook, tools build new look objects); only the kind (an interned string, compared by pointer) is
+  // checked — reading the double fields (scale, girth) of looks with many shapes boxes them: 96 B per call
+  if (hit && hit._kind === look.kind) return hit;
+  return buildRig(look);
+}
+
+/** (separate from rigOf: its closures capture locals, and a function with captured locals allocates its
+ *  context on every call — 56 B even on rigOf's cache hit) */
+function buildRig(look: Look): Rig {
   const p = { w: 0, c: 0, b: 0, s: 1, old: 0 };
   bodyParams(look, p);
   const { w, c, b } = p;

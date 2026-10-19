@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Interactive test of the camera / UI / audio modules with real mouse & keyboard input.
 //
-//   node scripts/ui-test.mjs [--q "only=camera,ui,audio&camdebug"] [--out shots/uitest] [--width 1280 --height 720] [--dpr 1.25]
+//   node scripts/ui-test.mjs [--q "only=camera,ui,audio&camdebug"] [--out shots/uitest] [--url http://127.0.0.1:5174/] [--width 1280 --height 720] [--dpr 1.25]
 //                            [--steps intro,drag,pan,wheel,keys,poi,pois,follow,chase,kinds,building,dbl,aircraft,tour,help,places,
 //                                     sound,time,speed,labels,resize,sweep,tourwatch]
 //
@@ -31,7 +31,8 @@ const q = args.q ?? 'only=camera,ui,audio&camdebug';
 const DEFAULT_STEPS = 'drag,pan,wheel,keys,poi,pois,follow,chase,kinds,building,dbl,aircraft,sweep,tour,help,places,sound,time,speed,labels,resize';
 const wanted = new Set((args.steps ?? DEFAULT_STEPS).split(','));
 const intro = wanted.has('intro');
-const url = `http://127.0.0.1:5173/?${q}${intro ? (q.includes('hint') ? '' : '&hint') : q.includes('nointro') ? '' : '&nointro'}`;
+const baseUrl = (args.url ?? 'http://127.0.0.1:5173/').replace(/\/?$/, '/'); // --url: another dev server (e.g. a baseline worktree)
+const url = `${baseUrl}?${q}${intro ? (q.includes('hint') ? '' : '&hint') : q.includes('nointro') ? '' : '&nointro'}`;
 const outBase = path.resolve(root, args.out ?? 'shots/uitest');
 fs.mkdirSync(path.dirname(outBase), { recursive: true });
 
