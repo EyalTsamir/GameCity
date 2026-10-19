@@ -52,7 +52,7 @@ export interface Style {
   trouserEnd: number;
   /** legs below the trousers / skirt: 0 skin, 1 dark tights, 2 sheer tights, 3 light socks */
   legwear: number;
-  /** trouser cut from mid-thigh down: 0 skin-tight (leggings) … 0.45 jeans … 1 loose work / suit trousers */
+  /** trouser cut from mid-thigh down: 0 skin-tight (leggings) … 0.6 jeans … 1 loose work / suit trousers */
   trouserFit: number;
   /** jacket / coat / cardigan: hem on the torso (< 0 = none) and colour */
   jacketHem: number;
@@ -615,7 +615,7 @@ function trouserFitOf(L: Look, s: Style, persona: Persona, child: boolean, old: 
     g = ((c >> 8) & 255) / 255,
     b = (c & 255) / 255;
   const denim = b > r * 1.22 && b >= g;
-  let fit = L.flags & F.SUIT ? 0.85 : denim ? 0.42 : persona === 'worker' ? 1 : 0.75;
+  let fit = L.flags & F.SUIT ? 0.85 : denim ? 0.6 : persona === 'worker' ? 1 : 0.8;
   if (old) fit = Math.min(1, fit + 0.15);
   if (child) fit = Math.min(fit, 0.6);
   if (s.trouserEnd > 0.2) fit *= 0.7; // capri

@@ -307,8 +307,9 @@ void pedPose(inout vec3 p, inout vec3 n) {
   }
 
   // ── trousers: from mid-thigh down the cloth hangs as a straight, slightly tapered tube instead of
-  // following the leg (fit 0 leggings … 0.45 jeans … 1 loose): a radial push from the rest leg axis up to the
-  // drape radius (5.4 cm at the ankle … 6.8 cm at mid-thigh, average man), no new vertices
+  // following the leg (fit 0 leggings … 0.6 jeans … 1 loose): a radial push from the rest leg axis up to the
+  // drape radius (6.1 cm at the ankle, 6.8 at the knee, 7.2 at mid-thigh: a regular trouser leg on the
+  // average man), no new vertices
   if (region == ${R.LEG}) {
     float fit = float((iC2.x >> 26u) & 15u) * (1.0 / 15.0);
     float te = pedP8(iC0.z) * 1.275 - 0.1;
@@ -319,7 +320,7 @@ void pedPose(inout vec3 p, inout vec3 n) {
                            : mix(an, kn, clamp((p.y - an.y) / max(1e-4, kn.y - an.y), 0.0, 1.0));
       vec2 d = p.xz - ax.xz;
       float r = length(d);
-      float rt = (0.052 + 0.0215 * h) * (hp.y - an.y) * ${(1 / 0.855).toFixed(5)};
+      float rt = (0.059 + 0.018 * h) * (hp.y - an.y) * ${(1 / 0.855).toFixed(5)};
       float k = fit * (1.0 - smoothstep(0.66, 0.8, h));
       if (r > 1e-4 && rt > r) p.xz += d * ((rt - r) * k / r);
     }

@@ -96,7 +96,9 @@ Per-module logs live next to this file: `docs/progress/<module>.md`.
   Golden-hour forest yellow = warm light + birches, OK (station_forest18.png). Minor: one conifer near the
   station renders near-black at 11 and 18.2 h (vegetation crown AO?) — low priority.
   03:10 soak + ui-test started (scripts/agent-tools/qa_soak_ui.sh, resumable; log shots/lead/qa/soak_ui.log).
-  Remaining: consolidated perf A/B (after people's fix round, quiet machine); legacy decision; report.
+  Remaining: consolidated perf A/B = scripts/agent-tools/qa_perf.sh 1 then 2 (resumable; 4 views × new / ALL-legacy /
+  per-feature toggles + original-build reference; out shots/lead/qa/perf/; start ONLY when people is done and
+  soak/ui-test finished — machine must be quiet); legacy decision; final report.
 
 ## History
 * 2026-10-16 ~19:20 — Round 1: 12 builders launched via a Workflow; the account hit its 5-hour usage
