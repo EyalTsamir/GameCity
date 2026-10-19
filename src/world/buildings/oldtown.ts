@@ -188,6 +188,7 @@ export function genTownhouse(g: Gen): void {
     });
   };
 
+  let shopName: string | null = null;
   // ── sides
   for (const s of [FRONT, RIGHT, BACK, LEFT] as Side[]) {
     const sg = sideGeom(body, s);
@@ -330,6 +331,7 @@ export function genTownhouse(g: Gen): void {
       setCol(t, trimC);
       sideBox(t, sg, uA + 0.2, uB - 0.2, 0, 0.22, fasciaY1, fasciaY1 + 0.08, true);
       const shopDef = SHOPS[(shopCounter++ * 7 + (lot.seed % 5)) % SHOPS.length];
+      shopName = shopDef.name;
       const gold = rng.chance(0.6) ? '#f2d27a' : '#f6f0e0';
       const signRect = g.atlas.add(`shop:${shopDef.name}:${shopC.getHexString()}`, 256, 48, boardSign(shopDef.name, { bg: `#${shopC.getHexString()}`, fg: gold, border: gold, glow: 0.75, glowColor: '#ffd9a0' }));
       const sLen = Math.min(uB - uA - 0.9, (fasciaY1 - fasciaY0 - 0.1) * 5.3);
@@ -503,6 +505,31 @@ export function genTownhouse(g: Gen): void {
 
   // ── roof
   buildRoof();
+  if (shopName && exposed[BACK]) kitchenFlue(shopName);
+
+  /** stainless extract duct up the back wall of cafés / bakeries / pubs, with a rain cowl */
+  function kitchenFlue(name: string): void {
+    const bakery = /Bakery|Pâtisserie|Pizzeria/.test(name);
+    const kitchen = /Café|Bistro|Fish|Tea Room|Pub|Anchor|Delicatessen|Butcher/.test(name);
+    if (!bakery && !kitchen) return;
+    const t = g.trim;
+    const sg = sideGeom(body, BACK);
+    const u = rng.chance(0.5) ? 0.42 : sg.L - 0.42;
+    const top = eave + (lot.roof === 'flat' ? 1.9 : 1.45);
+    setCol(t, col('#b9bfc3'));
+    // fan box where the duct leaves the wall, then the riser with a couple of brackets
+    sideBox(t, sg, u - 0.3, u + 0.3, 0, 0.24, 2.45, 2.95, true);
+    const px = sx(sg, u, 0.13),
+      pz = sz(sg, u, 0.13);
+    t.cylinder(px, pz, 0.1, 2.95, top, 8, false);
+    setCol(t, col('#8d9397'));
+    for (let y = 4.5; y < top - 1; y += 2.6) sideBox(t, sg, u - 0.13, u + 0.13, 0, 0.2, y, y + 0.05, true);
+    // cowl
+    setCol(t, col('#a6acb0'));
+    t.cylinder(px, pz, 0.025, top, top + 0.16, 4, false);
+    t.cone(px, pz, 0.2, top + 0.14, top + 0.3, 8);
+    anchors.vent(px, top + 0.1, pz, bakery ? 'bakery' : 'kitchen', name);
+  }
 
   function buildRoof(): void {
     const roofKind = lot.roof;

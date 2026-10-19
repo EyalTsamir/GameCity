@@ -475,12 +475,15 @@ export function genApartment(g: Gen): void {
       const ax = sx(sg, u - w / 2 + 0.3, 0.55), az = sz(sg, u - w / 2 + 0.3, 0.55);
       const bx = sx(sg, u + w / 2 - 0.3, 0.55), bz = sz(sg, u + w / 2 - 0.3, 0.55);
       t.beam(ax, y + 1.25, az, bx, y + 1.25, bz, 0.02, 0.02);
+      anchors.laundryLine(ax, y + 1.24, az, bx, y + 1.24, bz, sg.nx, sg.nz);
+      // static cloth (separate mesh; life replaces it with flapping cloth)
       const cols = ['#e63946', '#f1faee', '#457b9d', '#e9c46a'];
+      const c = g.cloth;
       for (let k = 0; k < 3; k++) {
         const f = 0.2 + k * 0.28;
-        setCol(t, col(cols[(k + Math.floor(r * 10)) % 4]));
+        setCol(c, col(cols[(k + Math.floor(r * 10)) % 4]));
         const cx = ax + (bx - ax) * f, cz = az + (bz - az) * f;
-        t.box(cx - 0.18 * Math.abs(sg.tx) - 0.01, y + 0.85, cz - 0.18 * Math.abs(sg.tz) - 0.01, cx + 0.18 * Math.abs(sg.tx) + 0.01, y + 1.24, cz + 0.18 * Math.abs(sg.tz) + 0.01, 0b111111);
+        c.box(cx - 0.18 * Math.abs(sg.tx) - 0.01, y + 0.85, cz - 0.18 * Math.abs(sg.tz) - 0.01, cx + 0.18 * Math.abs(sg.tx) + 0.01, y + 1.24, cz + 0.18 * Math.abs(sg.tz) + 0.01, 0b111111);
       }
     } else if (r < 0.6) {
       // parasol

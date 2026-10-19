@@ -13,6 +13,7 @@
 // city's own lights (lamps, windows) can carry.
 
 import * as THREE from 'three';
+import { WORLD_MODE } from '../../core/world';
 
 interface KeyDef {
   h: number;
@@ -40,6 +41,11 @@ interface KeyDef {
   bloom: number;
   /** studio backdrop (cyclorama) colour: where the table fades to, and the dome below the horizon */
   cyc?: string;
+  /** world mode: aerosol haze extinction at ground level (1/m; visibility ≈ 3.9 / haze) */
+  haze?: number;
+  /** world mode: ground-mist extinction at the water level (1/m) and its scale height (m) */
+  mist?: number;
+  mistH?: number;
 }
 
 const LEGACY_NIGHT: Omit<KeyDef, 'h'> = {
@@ -597,6 +603,30 @@ const KEYS: KeyDef[] = [
   { h: 24, ...NIGHT },
 ];
 
+// ───────────────────────────────────────────── world key (default world mode) ──
+// The studio key's light (sun-dominated, cool fill, golden hour) with a real sky: deeper blue zenith,
+// a paler, slightly hazier horizon band, and the atmosphere's haze / mist per hour (aerial
+// perspective: clear noon ≈ 30–40 km visibility, golden hour ≈ 12–15 km, misty dawn).
+const WORLD_OVERRIDES: Record<string, Partial<KeyDef>> = {
+  '0': { haze: 1.3e-4, mist: 1.0e-3, mistH: 6 },
+  '4.6': { haze: 1.5e-4, mist: 1.6e-3, mistH: 7 },
+  '5.3': { haze: 2.2e-4, mist: 3.5e-3, mistH: 9 },
+  '6': { haze: 2.8e-4, mist: 4.5e-3, mistH: 11 },
+  '6.7': { haze: 2.6e-4, mist: 3.0e-3, mistH: 13, zenith: '#4f7cc0' },
+  '7.8': { haze: 1.8e-4, mist: 0.8e-3, mistH: 14, zenith: '#4d86cc', horizon: '#cfdde8' },
+  '10': { haze: 1.15e-4, mist: 0, zenith: '#3f7ccb', horizon: '#c6d9e8' },
+  '12.75': { haze: 1.0e-4, mist: 0, zenith: '#3877c8', horizon: '#c4d8e8' },
+  '16': { haze: 1.25e-4, mist: 0, zenith: '#3d79c4', horizon: '#cfdbe4' },
+  '17.6': { haze: 1.9e-4, mist: 0, zenith: '#4474bb' },
+  '18.6': { haze: 2.6e-4, mist: 0.3e-3, mistH: 6, zenith: '#3f62a8' },
+  '19.3': { haze: 3.0e-4, mist: 0.7e-3, mistH: 6 },
+  '19.8': { haze: 2.8e-4, mist: 1.1e-3, mistH: 6 },
+  '20.3': { haze: 2.2e-4, mist: 1.3e-3, mistH: 6 },
+  '21.3': { haze: 1.4e-4, mist: 1.1e-3, mistH: 6 },
+  '24': { haze: 1.3e-4, mist: 1.0e-3, mistH: 6 },
+};
+const WORLD_KEYS: KeyDef[] = KEYS.map((k) => ({ ...k, ...(WORLD_OVERRIDES[String(k.h)] ?? {}) }));
+
 /** Linear-space sample of the palette (mutable, reused every frame). */
 export class SkyState {
   sun = new THREE.Color();
@@ -617,12 +647,16 @@ export class SkyState {
   env = 0.6;
   bloom = 0.5;
   cyc = new THREE.Color();
+  haze = 1.2e-4;
+  mist = 0;
+  mistH = 10;
 }
 
 type ColorKey = 'sun' | 'hemiSky' | 'hemiGround' | 'zenith' | 'horizon' | 'ground' | 'glow' | 'fog' | 'cloudLit' | 'cloudShade' | 'cyc';
-type NumKey = 'sunI' | 'hemiI' | 'glowI' | 'exposure' | 'stars' | 'env' | 'bloom';
+type NumKey = 'sunI' | 'hemiI' | 'glowI' | 'exposure' | 'stars' | 'env' | 'bloom' | 'haze' | 'mist' | 'mistH';
 const COLOR_KEYS: ColorKey[] = ['sun', 'hemiSky', 'hemiGround', 'zenith', 'horizon', 'ground', 'glow', 'fog', 'cloudLit', 'cloudShade', 'cyc'];
-const NUM_KEYS: NumKey[] = ['sunI', 'hemiI', 'glowI', 'exposure', 'stars', 'env', 'bloom'];
+const NUM_KEYS: NumKey[] = ['sunI', 'hemiI', 'glowI', 'exposure', 'stars', 'env', 'bloom', 'haze', 'mist', 'mistH'];
+const NUM_DEFAULTS: Partial<Record<NumKey, number>> = { haze: 1.2e-4, mist: 0, mistH: 10 };
 
 interface LinearKey {
   h: number;
@@ -635,15 +669,18 @@ function linearize(keys: KeyDef[]): LinearKey[] {
     const colors = {} as Record<ColorKey, THREE.Color>;
     for (const c of COLOR_KEYS) colors[c] = new THREE.Color(c === 'cyc' ? (k.cyc ?? k.ground) : k[c]); // sRGB hex → linear working space
     const nums = {} as Record<NumKey, number>;
-    for (const n of NUM_KEYS) nums[n] = k[n];
+    for (const n of NUM_KEYS) nums[n] = k[n] ?? NUM_DEFAULTS[n] ?? 0;
     return { h: k.h, colors, nums };
   });
 }
 
-const LINEAR = linearize(KEYS);
+const LINEAR = linearize(WORLD_MODE ? WORLD_KEYS : KEYS);
 const LINEAR_LEGACY = linearize(LEGACY_KEYS);
 
-/** Sample the palette at `hours` (0..24) into `out`. Smooth (C1) between keys. `legacy` = the original rig. */
+/**
+ * Sample the palette at `hours` (0..24) into `out`. Smooth (C1) between keys. `legacy` = the original
+ * rig; otherwise the world key (default) or the studio key (?diorama).
+ */
 export function samplePalette(hours: number, out: SkyState, legacy = false): SkyState {
   const keys = legacy ? LINEAR_LEGACY : LINEAR;
   const h = ((hours % 24) + 24) % 24;

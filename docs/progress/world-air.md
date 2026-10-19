@@ -95,6 +95,13 @@ in far views −0.4…−0.8 ms. Net ≈ 0 … +0.4 ms; 0 extra draw calls (cott
 ## Views used (capture-set `--views`)
 `overview;ot_eye=82,1.6,20,10,40,4;river_w=-30,1.6,118,14,95,3;hz=0,30,-20,300,200,8;beach_e=148,2,58,15,-90,4`
 
+## Requests from other areas
+* life (via lead): `ctx.services.postfx.softDepth()` → previous frame's scene depth for soft particles.
+  Plan: return the composer's stable depth texture (full res, raw depth, blitted after the RenderPass, so it
+  is a separate FBO and legal to sample during the next scene pass) + near/far/size of the frame it belongs
+  to: `{ texture, linear: false, near, far, width, height } | null` (null while postfx is off). Main view only
+  (the water reflection pass has another size → disable the fade there). — in M1.
+
 ## Requests to other areas
 (none yet)
 

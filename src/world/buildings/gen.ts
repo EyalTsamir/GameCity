@@ -60,6 +60,8 @@ export interface Gen {
   trim: Builder;
   lights: Builder;
   signs: Builder;
+  /** static laundry cloth (trim material, separate mesh: life may hide it and hang animated cloth) */
+  cloth: Builder;
   atlas: SignAtlas;
   /** neighbour coverage along each footprint side (sorted, merged) */
   cover: Interval[][];

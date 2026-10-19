@@ -1,0 +1,468 @@
+// The world beyond the slab (three-free, deterministic): height, water and ground cover for any
+// point. Inside the slab everything is the terrain module's (`terrain.height`); outside, the
+// height is the slab-edge height blended over BLEND metres into the world relief, so the slab
+// ground mesh and the landscape mesh meet without a crack or a step.
+//
+// World map (1 unit = 1 m, north = −z, east = +x; slab x −200..200, z −190..150):
+//   N   the slab's ridge continues, a shallow wooded valley behind its crest, then forested hills
+//       rising toward the mountain layers (landscape/mountains.ts, 4–16 km)
+//   W   farmland (field patchwork, hedgerows, copses, farmsteads) and a village with a spire;
+//       the west spur continues as low wooded hills in the NW
+//   S   meadows and fields rising to low hills, orchards
+//   E   open sea to the horizon; cliff coast north of the harbour up to a NE headland, beach and
+//       dunes south of the town up to a SE headland; an island ENE
+//   the river leaves the slab at x = −200 (walled channel z 110–126) and meanders W/NW into the hills,
+//   at the sea's level (−1.6: the same reflection plane as the sea)
+
+import { SLAB, WATER_LEVEL, RIVER } from '../../core/constants';
+import { fbm, ridged, smooth, lerp, smin, vnoise, hash2i } from './noise';
+import { Polyline, type PolyHit } from './polyline';
+
+/** slab-edge → world height blend distance (m) */
+export const BLEND = 46;
+/** water level of the sea and the river outside the slab */
+export const WL = WATER_LEVEL;
+/** city centre (rough) — distances for LOD / relief growth are measured from here */
+export const CX = 0,
+  CZ = -20;
+
+export interface Cover {
+  /** 1 under water */
+  water: number;
+  /** beach sand / dunes 0..1 */
+  sand: number;
+  /** bare rock (cliffs, steep slopes) 0..1 */
+  rock: number;
+  /** forest canopy density 0..1 */
+  forest: number;
+  /** cultivated fields (patchwork) 0..1 */
+  field: number;
+  /** wild / long grass meadow (not cultivated, not forest) 0..1 */
+  meadow: number;
+  /** wet ground: river banks, marsh 0..1 */
+  wet: number;
+}
+
+export interface Site {
+  kind: 'village' | 'farm' | 'hamlet';
+  x: number;
+  z: number;
+  /** radius of the flattened / built area */
+  r: number;
+  seed: number;
+}
+
+export interface LandscapeModel {
+  /** rendered ground height (= terrain.height inside the slab) */
+  height(x: number, z: number): number;
+  /** world relief before the slab-edge blend (outside the slab only meaningful) */
+  world(x: number, z: number): number;
+  /** still-water level at (x, z) (WL; the park pond is the terrain's) */
+  waterLevel(x: number, z: number): number;
+  isWater(x: number, z: number): boolean;
+  cover(x: number, z: number, out: Cover): Cover;
+  insideSlab(x: number, z: number): boolean;
+  /** distance outside the slab rectangle (0 inside) */
+  slabDist(x: number, z: number): number;
+  /** signed distance to the coast (>0 land, <0 sea), exact within ~900 m */
+  coastSD(x: number, z: number): number;
+  /** distance to the river centreline (≤ maxD) and its local half width */
+  river(x: number, z: number, out: { d: number; halfW: number; s: number; tx: number; tz: number }): boolean;
+  riverLine: Polyline;
+  coastLine: Polyline;
+  sites: Site[];
+  /** island centre / radius (for boats, ships) */
+  island: { x: number; z: number; r: number; peak: number };
+}
+
+// ───────────────────────────────────────────────────── geography ──
+
+/** river centreline from the slab edge upstream (W / NW) */
+const RIVER_CTRL: [number, number][] = [
+  [-200, 118],
+  [-232, 117.5],
+  [-275, 120],
+  [-330, 132],
+  [-400, 154],
+  [-480, 170],
+  [-565, 168],
+  [-650, 146],
+  [-735, 112],
+  [-830, 96],
+  [-935, 106],
+  [-1040, 140],
+  [-1160, 156],
+  [-1290, 136],
+  [-1420, 92],
+  [-1560, 58],
+  [-1720, 46],
+  [-1880, 62],
+  [-2040, 40],
+  [-2220, -18],
+  [-2420, -110],
+  [-2640, -230],
+  [-2900, -380],
+  [-3200, -560],
+  [-3560, -770],
+  [-4000, -1010],
+  [-4600, -1330],
+  [-5400, -1760],
+  [-6600, -2400],
+  [-8200, -3200],
+];
+
+/**
+ * coastline from far north to far south (land on the west side). Through the slab it follows the
+ * harbour cliff / quay (x 136) and the beach waterline (x 141); outside: a cliffy coast north to a NE
+ * headland, a beach + dunes south to a SE headland.
+ */
+const COAST_CTRL: [number, number][] = [
+  [1700, -14000],
+  [1400, -8000],
+  [1150, -5000],
+  [980, -3400],
+  [820, -2500],
+  [640, -1900],
+  [520, -1450],
+  [500, -1180],
+  [560, -1000],
+  [690, -880],
+  [735, -805],
+  [700, -745],
+  [600, -690],
+  [470, -630],
+  [345, -560],
+  [240, -470],
+  [175, -370],
+  [146, -280],
+  [137, -215],
+  [136, -190],
+  [136, -140],
+  [136, -6],
+  [141, 6],
+  [141, 150],
+  [143, 215],
+  [152, 300],
+  [172, 395],
+  [212, 490],
+  [278, 580],
+  [372, 655],
+  [500, 712],
+  [640, 742],
+  [760, 770],
+  [812, 815],
+  [790, 880],
+  [700, 950],
+  [612, 1040],
+  [570, 1200],
+  [600, 1480],
+  [700, 1900],
+  [860, 2600],
+  [1050, 3600],
+  [1300, 5200],
+  [1700, 8500],
+  [2100, 14000],
+];
+
+const ISLAND = { x: 2350, z: -480, r: 420, peak: 135 };
+
+/** villages, hamlets, farmsteads (flattened ground, buildings in landscape/settlements.ts) */
+function buildSites(model: { world0(x: number, z: number): number; isWaterW(x: number, z: number): boolean }): Site[] {
+  const sites: Site[] = [
+    { kind: 'village', x: -1720, z: -95, r: 150, seed: 11 },
+    { kind: 'village', x: -420, z: 1650, r: 120, seed: 23 },
+    { kind: 'hamlet', x: -880, z: 520, r: 60, seed: 37 },
+    { kind: 'hamlet', x: -1250, z: -700, r: 55, seed: 41 },
+  ];
+  // farmsteads: a jittered lattice over the farmland W and S, skipping water, steep or forested ground
+  let seed = 100;
+  for (let gx = -12; gx <= 3; gx++) {
+    for (let gz = -4; gz <= 10; gz++) {
+      const h = hash2i(gx, gz, 77);
+      if (h < 0.45) continue;
+      const x = gx * 330 + (hash2i(gx, gz, 78) - 0.5) * 220 - 60;
+      const z = gz * 330 + (hash2i(gx, gz, 79) - 0.5) * 220 + 40;
+      // not on the slab, not too close to it, not in the sea / river
+      if (x > -260 && x < 260 && z > -250 && z < 210) continue;
+      if (Math.hypot(x - CX, z - CZ) > 3600) continue;
+      if (model.isWaterW(x, z) || model.isWaterW(x + 30, z) || model.isWaterW(x - 30, z) || model.isWaterW(x, z + 30) || model.isWaterW(x, z - 30)) continue;
+      if (sites.some((s) => Math.hypot(s.x - x, s.z - z) < s.r + 120)) continue;
+      // northern hills are forest: farms only on the lower slopes
+      if (z < -420 && x > -900) continue;
+      const h0 = model.world0(x, z);
+      if (h0 > 70) continue;
+      sites.push({ kind: 'farm', x, z, r: 34, seed: seed++ });
+    }
+  }
+  return sites;
+}
+
+/**
+ * southern foot of the northern hill country: the slab ridge's foot (z −163), bending south over the
+ * west spur (z −137 at the west edge), then wandering north-west
+ */
+function footZ(x: number): number {
+  const west = -137 - 190 * smooth(-260, -1600, x) + 50 * Math.sin((x + 200) / 410) * smooth(-220, -420, x);
+  return lerp(west, -163, smooth(-215, -182, x));
+}
+
+// ───────────────────────────────────────────────────── the model ──
+
+export interface SlabHeight {
+  /** terrain.height (refined slab ground) */
+  (x: number, z: number): number;
+}
+
+export function createLandscapeModel(slabHeight: SlabHeight): LandscapeModel {
+  const riverLine = new Polyline(RIVER_CTRL, 12, 160);
+  const coastLine = new Polyline(COAST_CTRL, 14, 200, true);
+  const hit: PolyHit = { d: 0, s: 0, side: 1, tx: 1, tz: 0 };
+  const rv = { d: 0, halfW: 8, s: 0, tx: 1, tz: 0 };
+
+  /** x of the coast at a given z (the coast polyline is monotonic in z) */
+  const cz = coastLine.z,
+    cxs = coastLine.x;
+  const coastX = (z: number): number => {
+    if (z <= cz[0]) return cxs[0];
+    const n = cz.length - 1;
+    if (z >= cz[n]) return cxs[n];
+    let lo = 0,
+      hi = n;
+    while (hi - lo > 1) {
+      const m = (lo + hi) >> 1;
+      if (cz[m] <= z) lo = m;
+      else hi = m;
+    }
+    const t = (z - cz[lo]) / (cz[hi] - cz[lo] || 1);
+    return cxs[lo] + (cxs[hi] - cxs[lo]) * t;
+  };
+
+  const coastSD = (x: number, z: number): number => {
+    if (coastLine.nearest(x, z, hit, 900)) return hit.side > 0 ? hit.d : -hit.d;
+    // far from the coast: the sign from the monotonic coast function, magnitude ≥ 900
+    return x < coastX(z) ? Math.max(900, coastX(z) - x) : -Math.max(900, x - coastX(z));
+  };
+
+  const riverQ = (x: number, z: number, out: typeof rv, maxD = 420): boolean => {
+    if (x > -150) {
+      out.d = maxD;
+      return false;
+    }
+    if (!riverLine.nearest(x, z, hit, maxD)) {
+      out.d = maxD;
+      return false;
+    }
+    out.d = hit.d;
+    out.s = hit.s;
+    out.tx = hit.tx;
+    out.tz = hit.tz;
+    // 8 m at the slab (16 m channel), ~13 m in the farmland, narrowing upstream in the hills
+    out.halfW = 8 + 5.5 * smooth(0, 420, hit.s) - 3.5 * smooth(2600, 6000, hit.s);
+    return true;
+  };
+
+  /** coast profile type at a coast point: 0 beach … 1 cliff */
+  const cliffness = (z: number, x: number): number => {
+    // north coast cliffs, beaches south of the town, rocky headland tips
+    let c = 1 - smooth(-260, -120, z); // cliffs north of the harbour
+    c = Math.max(c, smooth(560, 700, z) * (1 - smooth(1000, 1250, z))); // SE headland
+    c = Math.max(c, smooth(1500, 2000, z) * 0.6);
+    c *= 0.75 + 0.25 * vnoise(x / 90, z / 90, 5);
+    return Math.min(1, c);
+  };
+
+  // ── world relief (no slab blend, no carving) ──
+  const relief = (x: number, z: number): number => {
+    const r = Math.hypot(x - CX, z - CZ);
+    // plains: soft undulation around +0.6
+    let h = 0.6 + 1.5 * fbm(x / 240, z / 240, 3, 11) + 0.6 * fbm(x / 70, z / 70, 2, 12) * smooth(150, 400, r);
+    // rolling country hills growing with distance from the town
+    const amp = 26 * smooth(380, 2600, r) + 150 * smooth(2600, 9000, r);
+    h += amp * Math.max(0, fbm(x / 1250, z / 1250, 4, 13) * 0.85 + 0.3);
+    // ── the northern hill country (and the NW, where the west spur continues)
+    const zf = footZ(x);
+    const n = zf - z; // metres north of the foot line
+    if (n > -120) {
+      // slab ridge crest profile, continued (plan.ts hills(): crest(x) · taper); west of the slab the
+      // spur's ~14 m ridge wanders on as a line of low hills
+      const xc = Math.max(-200, Math.min(140, x));
+      const crest = Math.max(11, 17 + 6 * Math.sin(xc * 0.021 + 0.7) + 3.5 * Math.sin(xc * 0.057 + 2.1) + 1.5 * Math.sin(xc * 0.13));
+      const taper = 1 - smooth(118, 142, x) * 0.8;
+      const ridgeW = 14 + 4 * Math.sin((x + 200) / 180) + 6 * fbm(x / 300, z / 300, 2, 14);
+      const ridgeTop = lerp(ridgeW, crest * taper, smooth(-260, -200, x));
+      // behind the crest: a shallow wooded valley, then hills rising toward the mountains
+      const valley = 7 + 5 * fbm(x / 500, z / 500, 2, 15);
+      let hn = lerp(ridgeTop, valley, smooth(45, 290, n));
+      const hillA = smooth(260, 1300, n) * (70 + 120 * smooth(1300, 3600, n));
+      hn += hillA * (0.35 + 0.75 * ridged(x / 950, z / 950, 4, 16));
+      hn += smooth(-60, 40, n) * 3 * fbm(x / 120, z / 120, 2, 17);
+      const w = smooth(-120, 0, n);
+      h = lerp(h, Math.max(h, hn), w);
+    }
+    // south: gentle rise to low hills
+    if (z > 400) h += smooth(400, 2600, z) * 22 * (0.5 + 0.5 * fbm(x / 700, z / 700, 3, 18));
+    return h;
+  };
+
+  // ── world height: relief + river + coast + island + sites (no slab blend) ──
+  let sitesRef: Site[] = [];
+  const world0 = (x: number, z: number, withSites: boolean): number => {
+    let h = relief(x, z);
+    // settlements sit on gently levelled ground
+    if (withSites) {
+      for (let i = 0; i < sitesRef.length; i++) {
+        const s = sitesRef[i];
+        const dx = x - s.x,
+          dz = z - s.z;
+        const R = s.r * 1.8;
+        if (dx > R || dx < -R || dz > R || dz < -R) continue;
+        const d = Math.hypot(dx, dz);
+        if (d > R) continue;
+        const lvl = siteLevel[i];
+        h = lerp(lvl + (h - lvl) * 0.25, h, smooth(s.r * 0.6, R, d));
+      }
+    }
+    // river: a flat floodplain, then the channel with natural banks
+    if (riverQ(x, z, rv)) {
+      const plain = 0.45 + 0.25 * vnoise(x / 60, z / 60, 21);
+      const hw = rv.halfW;
+      h = lerp(Math.min(h, plain + (h - plain) * 0.15), h, smooth(hw + 25, hw + 300, rv.d));
+      const u = rv.d - hw; // < 0 in the water
+      if (u < 8) {
+        let p: number;
+        if (u < -5) p = -3.5 - 0.5 * smooth(-5, -hw, u);
+        else if (u < 0) p = lerp(-3.5, WL - 0.05, smooth(-5, 0, u));
+        else p = lerp(WL - 0.05, plain + 0.15, smooth(0, 7.5, u));
+        h = smin(h, p, 0.8);
+      }
+    }
+    // coast
+    const sd = coastSD(x, z);
+    if (sd < 600) {
+      const cl = cliffness(z, x);
+      if (sd < 0) {
+        const e = -sd;
+        const shelf = lerp(0.085, 0.3, cl);
+        const floor = WL - Math.min(e * shelf, 3 + e * 0.045) - smooth(400, 3000, e) * 30;
+        h = Math.min(h, floor);
+        // the island
+        h = Math.max(h, islandH(x, z));
+      } else {
+        // beach: 8 % from the waterline + dunes; cliff: steep face up to the land
+        const beach = WL + sd * 0.08 + smooth(28, 60, sd) * (1.2 + 1.6 * vnoise(x / 23, z / 23, 31)) * (1 - smooth(70, 160, sd));
+        const cliff = WL + sd * (1.6 + 1.2 * vnoise(x / 40, z / 40, 32));
+        const prof = lerp(beach, cliff, cl);
+        h = smin(h, prof, 1.5 + 6 * cl);
+        // beaches stay low behind the dunes (no hills right at the shore)
+        h = lerp(Math.min(h, 3.5 + sd * 0.04), h, Math.max(cl, smooth(120, 420, sd)));
+      }
+    } else {
+      // far inland or far out at sea
+      if (sd < -599) h = Math.max(WL - 30 - 30 * smooth(1000, 4000, -sd), islandH(x, z));
+    }
+    return h;
+  };
+
+  function islandH(x: number, z: number): number {
+    const dx = x - ISLAND.x,
+      dz = z - ISLAND.z;
+    const a = Math.atan2(dz, dx);
+    const rr = ISLAND.r * (0.78 + 0.32 * vnoise(Math.cos(a) * 2.2 + 5, Math.sin(a) * 2.2 + 5, 41) + 0.12 * Math.sin(a * 3 + 1));
+    const d = Math.hypot(dx * 0.85, dz * 1.2) / rr; // elongated N-S... rather E-W
+    if (d > 1.6) return -1e3;
+    const core = 1 - smooth(0, 1, d);
+    const hill = ISLAND.peak * Math.pow(core, 1.6) * (0.75 + 0.5 * ridged(x / 260, z / 260, 3, 42));
+    // shore: cliffs on the east, a small beach on the west
+    const shore = WL + (1 - d) * 60 * lerp(0.4, 1.2, smooth(-0.3, 0.6, Math.cos(a)));
+    return Math.min(Math.max(hill, shore), shore + hill) - (d > 1 ? (d - 1) * 40 : 0);
+  }
+
+  const water0 = (x: number, z: number) => world0(x, z, false) < WL - 0.02;
+  sitesRef = buildSites({ world0: (x, z) => world0(x, z, false), isWaterW: water0 });
+  const siteLevel = sitesRef.map((s) => relief(s.x, s.z));
+
+  const world = (x: number, z: number): number => world0(x, z, true);
+
+  const insideSlab = (x: number, z: number): boolean => x >= SLAB.x0 && x <= SLAB.x1 && z >= SLAB.z0 && z <= SLAB.z1;
+  const slabDist = (x: number, z: number): number => {
+    const dx = x < SLAB.x0 ? SLAB.x0 - x : x > SLAB.x1 ? x - SLAB.x1 : 0;
+    const dz = z < SLAB.z0 ? SLAB.z0 - z : z > SLAB.z1 ? z - SLAB.z1 : 0;
+    return Math.hypot(dx, dz);
+  };
+
+  const height = (x: number, z: number): number => {
+    if (insideSlab(x, z)) return slabHeight(x, z);
+    const d = slabDist(x, z);
+    const w = world(x, z);
+    if (d >= BLEND) return w;
+    const px = Math.max(SLAB.x0, Math.min(SLAB.x1, x)),
+      pz = Math.max(SLAB.z0, Math.min(SLAB.z1, z));
+    const e = slabHeight(px, pz);
+    // walled river channel at the west edge: keep the channel open while the walls fade into banks
+    const t = smooth(0, BLEND, d);
+    return lerp(e, w, t);
+  };
+
+  const waterLevel = (_x: number, _z: number): number => WL;
+  const isWater = (x: number, z: number): boolean => height(x, z) < WL - 0.02;
+
+  const cover = (x: number, z: number, out: Cover): Cover => {
+    const h = height(x, z);
+    const e = 1.5;
+    const gx = (height(x + e, z) - height(x - e, z)) / (2 * e),
+      gz = (height(x, z + e) - height(x, z - e)) / (2 * e);
+    const slope = Math.hypot(gx, gz);
+    out.water = h < WL - 0.02 ? 1 : 0;
+    const sd = coastSD(x, z);
+    const cl = cliffness(z, x);
+    out.sand = out.water ? 0 : (1 - smooth(70, 150, sd)) * (1 - cl) * (1 - smooth(4, 7, h));
+    out.rock = Math.min(1, smooth(0.75, 1.25, slope) + cl * (1 - smooth(4, 30, sd)) * smooth(0.35, 0.7, slope));
+    let wet = 0;
+    if (riverQ(x, z, rv, 60)) wet = 1 - smooth(rv.halfW, rv.halfW + 9, rv.d);
+    out.wet = out.water ? 0 : wet;
+    out.forest = out.water ? 0 : forestAt(x, z, h) * (1 - out.sand) * (1 - out.rock * 0.8) * (1 - wet);
+    const settled = sitesRef.some((s) => Math.hypot(x - s.x, z - s.z) < s.r);
+    const arable = (1 - out.forest) * (1 - out.sand) * (1 - out.rock) * (1 - wet) * (1 - smooth(0.12, 0.3, slope)) * (1 - out.water);
+    const north = smooth(-300, -600, z) * (x > -900 ? 1 : 0.3);
+    out.field = settled ? 0 : arable * (1 - north) * (1 - smooth(180, 320, h));
+    out.meadow = Math.max(0, (1 - out.water) * (1 - out.forest) * (1 - out.sand) - out.field - out.rock * 0.7);
+    return out;
+  };
+
+  /** forest canopy density (0..1) from the world map (hills, copses, the ridge) */
+  const forestAt = (x: number, z: number, h: number): number => {
+    const r = Math.hypot(x - CX, z - CZ);
+    // northern hills: closed forest with clearings
+    const n = footZ(x) - z;
+    let f = smooth(-30, 20, n);
+    if (n > 140) f *= 1 - 0.85 * smooth(0.58, 0.68, vnoise(x / 260, z / 260, 51)) * smooth(140, 400, n);
+    // copses + woods in the farmland (more of them further out)
+    const cop = fbm(x / 210, z / 210, 3, 52) + 0.15 * smooth(800, 3000, r);
+    f = Math.max(f, smooth(0.36, 0.44, cop) * smooth(260, 420, r));
+    // hill tops in the far country are wooded
+    f = Math.max(f, smooth(45, 90, h) * 0.85);
+    // the island is wooded inland
+    // treeline (only the highest land-mesh hills reach it; the mountain layers do their own)
+    f *= 1 - smooth(650, 900, h);
+    return Math.min(1, f);
+  };
+
+  return {
+    height,
+    world,
+    waterLevel,
+    isWater,
+    cover,
+    insideSlab,
+    slabDist,
+    coastSD,
+    river: (x, z, out) => riverQ(x, z, out),
+    riverLine,
+    coastLine,
+    sites: sitesRef,
+    island: { ...ISLAND },
+  };
+}
+
+/** height used for things placed by RIVER constants elsewhere (kept for reference) */
+export const RIVER_EDGE = { z0: RIVER.z0, z1: RIVER.z1 };

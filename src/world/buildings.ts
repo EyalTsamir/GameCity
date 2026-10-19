@@ -98,6 +98,7 @@ export default function create(ctx: CityContext): CityModule {
   };
   const lights = new Builder({ color: true, light: true });
   const signs = new Builder({ normal: true, uv: true });
+  const cloth = new Builder({ normal: true, color: true });
   const atlas = new SignAtlas();
   resetOldtown();
   resetTowers();
@@ -125,7 +126,7 @@ export default function create(ctx: CityContext): CityModule {
     const W = ns ? fp.x1 - fp.x0 : fp.z1 - fp.z0;
     const D = ns ? fp.z1 - fp.z0 : fp.x1 - fp.x0;
     const trim = trimOf(cx, cz);
-    for (const b of [shell, trim, lights, signs]) b.frame(yaw, cx, 0, cz);
+    for (const b of [shell, trim, lights, signs, cloth]) b.frame(yaw, cx, 0, cz);
     const g: Gen = {
       lot,
       rng: new Rng(lot.seed >>> 0 || 1),
@@ -136,6 +137,7 @@ export default function create(ctx: CityContext): CityModule {
       trim,
       lights,
       signs,
+      cloth,
       atlas,
       cover: computeCover(lot, plan.lots, yaw, cx, cz, W, D),
       doors: localDoors(lot, yaw, cx, cz, W, D),
@@ -157,7 +159,7 @@ export default function create(ctx: CityContext): CityModule {
         if (bad++ === 0) firstBad = `(${x.toFixed(2)}, ${y.toFixed(2)}, ${z.toFixed(2)}) is ${d.toFixed(2)} m outside`;
       }
     };
-    for (const b of [shell, trim, lights, signs]) b.check = check;
+    for (const b of [shell, trim, lights, signs, cloth]) b.check = check;
     const gen = GENERATORS[lot.kind] ?? genFallback;
     anchors.begin(lot, trim);
     try {
@@ -167,7 +169,7 @@ export default function create(ctx: CityContext): CityModule {
       if (ctx.debug.enabled) console.error('[buildings]', lot.id, err);
     }
     anchors.end();
-    for (const b of [shell, trim, lights, signs]) b.check = null;
+    for (const b of [shell, trim, lights, signs, cloth]) b.check = null;
     if (bad > 0) {
       violations++;
       problems.push(`lot ${lot.id} (${lot.kind}): ${bad} vertices break the footprint rule, e.g. ${firstBad}`);
@@ -212,6 +214,9 @@ export default function create(ctx: CityContext): CityModule {
   for (const b of trimChunks.values()) add(b, mats.trim, 'buildings-trim', true, true);
   add(lights, mats.lights, 'buildings-lights', false, false);
   add(signs, mats.signs, 'buildings-signs', false, true);
+  // static balcony laundry (no shadow; life hides it once its animated cloth hangs on service.laundry)
+  add(cloth, mats.trim, 'buildings-laundry', false, true);
+  const clothMesh = meshes.find((m) => m.name === 'buildings-laundry') ?? null;
   group.matrixAutoUpdate = false;
   ctx.scene.add(group);
 
@@ -235,6 +240,11 @@ export default function create(ctx: CityContext): CityModule {
     facades,
     spans: collectSpans(lots, facades, (d) => d === 'oldtown' || d === 'market'),
     perches: anchors.perches,
+    laundry: anchors.laundry,
+    vents: anchors.vents,
+    setStaticLaundry(on: boolean) {
+      if (clothMesh) clothMesh.visible = on;
+    },
     setDebug(n: number) {
       mats.uniforms.uBhDebug.value = n;
     },
@@ -363,6 +373,8 @@ export default function create(ctx: CityContext): CityModule {
         balconies: service.balconies.length,
         spans: service.spans.length,
         perches: service.perches.length,
+        laundryLines: service.laundry.length,
+        vents: service.vents.length,
         ...Object.fromEntries(Object.entries(kindCounts).map(([k, v]) => [`n_${k}`, v])),
         ...Object.fromEntries(Object.entries(houseStats).map(([k, v]) => [`house_${k}`, v])),
       };

@@ -30,6 +30,43 @@ import * as THREE from 'three';
 import type { GlobalUniforms } from '../../core/uniforms';
 import { LAMP_GLSL, lampUniforms } from '../../core/lampLight';
 
+/** integer-hash 3D gradient noise with analytic derivatives (thHash, thNoised) — shared with foliage.ts */
+export const NOISE_GLSL = /* glsl */ `
+vec3 thHash( vec3 p ) {
+  uvec3 q = uvec3( ivec3( p ) ) * uvec3( 1597334673u, 3812015801u, 2798796415u );
+  q = ( q.x ^ q.y ^ q.z ) * uvec3( 1597334673u, 3812015801u, 2798796415u );
+  return vec3( q ) * ( 2.0 / 4294967295.0 ) - 1.0;
+}
+// 3D gradient noise: value in x, analytic derivatives in yzw (after I. Quilez)
+vec4 thNoised( vec3 x ) {
+  vec3 i = floor( x );
+  vec3 f = x - i;
+  vec3 u = f * f * f * ( f * ( f * 6.0 - 15.0 ) + 10.0 );
+  vec3 du = 30.0 * f * f * ( f * ( f - 2.0 ) + 1.0 );
+  vec3 ga = thHash( i );
+  vec3 gb = thHash( i + vec3( 1.0, 0.0, 0.0 ) );
+  vec3 gc = thHash( i + vec3( 0.0, 1.0, 0.0 ) );
+  vec3 gd = thHash( i + vec3( 1.0, 1.0, 0.0 ) );
+  vec3 ge = thHash( i + vec3( 0.0, 0.0, 1.0 ) );
+  vec3 gf = thHash( i + vec3( 1.0, 0.0, 1.0 ) );
+  vec3 gg = thHash( i + vec3( 0.0, 1.0, 1.0 ) );
+  vec3 gh = thHash( i + vec3( 1.0, 1.0, 1.0 ) );
+  float va = dot( ga, f );
+  float vb = dot( gb, f - vec3( 1.0, 0.0, 0.0 ) );
+  float vc = dot( gc, f - vec3( 0.0, 1.0, 0.0 ) );
+  float vd = dot( gd, f - vec3( 1.0, 1.0, 0.0 ) );
+  float ve = dot( ge, f - vec3( 0.0, 0.0, 1.0 ) );
+  float vf = dot( gf, f - vec3( 1.0, 0.0, 1.0 ) );
+  float vg = dot( gg, f - vec3( 0.0, 1.0, 1.0 ) );
+  float vh = dot( gh, f - vec3( 1.0, 1.0, 1.0 ) );
+  float k1 = va - vb - vc + vd, k2 = va - vc - ve + vg, k3 = va - vb - ve + vf, k4 = -va + vb + vc - vd + ve - vf - vg + vh;
+  return vec4(
+    va + u.x * ( vb - va ) + u.y * ( vc - va ) + u.z * ( ve - va ) + u.x * u.y * k1 + u.y * u.z * k2 + u.z * u.x * k3 + k4 * u.x * u.y * u.z,
+    ga + u.x * ( gb - ga ) + u.y * ( gc - ga ) + u.z * ( ge - ga ) + u.x * u.y * ( ga - gb - gc + gd ) + u.y * u.z * ( ga - gc - ge + gg ) + u.z * u.x * ( ga - gb - ge + gf ) + ( -ga + gb + gc - gd + ge - gf - gg + gh ) * u.x * u.y * u.z
+      + du * ( vec3( vb, vc, ve ) - va + u.yzx * vec3( k1, k2, k3 ) + u.zxy * vec3( k3, k1, k2 ) + u.yzx * u.zxy * k4 ) );
+}
+`;
+
 const WIND_PARS = /* glsl */ `
 attribute vec4 aWind;
 uniform float uTime;
@@ -89,39 +126,7 @@ uniform float uThNight;
 uniform float uNight;
 float thWrap;
 ${LAMP_GLSL}
-vec3 thHash( vec3 p ) {
-  uvec3 q = uvec3( ivec3( p ) ) * uvec3( 1597334673u, 3812015801u, 2798796415u );
-  q = ( q.x ^ q.y ^ q.z ) * uvec3( 1597334673u, 3812015801u, 2798796415u );
-  return vec3( q ) * ( 2.0 / 4294967295.0 ) - 1.0;
-}
-// 3D gradient noise: value in x, analytic derivatives in yzw (after I. Quilez)
-vec4 thNoised( vec3 x ) {
-  vec3 i = floor( x );
-  vec3 f = x - i;
-  vec3 u = f * f * f * ( f * ( f * 6.0 - 15.0 ) + 10.0 );
-  vec3 du = 30.0 * f * f * ( f * ( f - 2.0 ) + 1.0 );
-  vec3 ga = thHash( i );
-  vec3 gb = thHash( i + vec3( 1.0, 0.0, 0.0 ) );
-  vec3 gc = thHash( i + vec3( 0.0, 1.0, 0.0 ) );
-  vec3 gd = thHash( i + vec3( 1.0, 1.0, 0.0 ) );
-  vec3 ge = thHash( i + vec3( 0.0, 0.0, 1.0 ) );
-  vec3 gf = thHash( i + vec3( 1.0, 0.0, 1.0 ) );
-  vec3 gg = thHash( i + vec3( 0.0, 1.0, 1.0 ) );
-  vec3 gh = thHash( i + vec3( 1.0, 1.0, 1.0 ) );
-  float va = dot( ga, f );
-  float vb = dot( gb, f - vec3( 1.0, 0.0, 0.0 ) );
-  float vc = dot( gc, f - vec3( 0.0, 1.0, 0.0 ) );
-  float vd = dot( gd, f - vec3( 1.0, 1.0, 0.0 ) );
-  float ve = dot( ge, f - vec3( 0.0, 0.0, 1.0 ) );
-  float vf = dot( gf, f - vec3( 1.0, 0.0, 1.0 ) );
-  float vg = dot( gg, f - vec3( 0.0, 1.0, 1.0 ) );
-  float vh = dot( gh, f - vec3( 1.0, 1.0, 1.0 ) );
-  float k1 = va - vb - vc + vd, k2 = va - vc - ve + vg, k3 = va - vb - ve + vf, k4 = -va + vb + vc - vd + ve - vf - vg + vh;
-  return vec4(
-    va + u.x * ( vb - va ) + u.y * ( vc - va ) + u.z * ( ve - va ) + u.x * u.y * k1 + u.y * u.z * k2 + u.z * u.x * k3 + k4 * u.x * u.y * u.z,
-    ga + u.x * ( gb - ga ) + u.y * ( gc - ga ) + u.z * ( ge - ga ) + u.x * u.y * ( ga - gb - gc + gd ) + u.y * u.z * ( ga - gc - ge + gg ) + u.z * u.x * ( ga - gb - ge + gf ) + ( -ga + gb + gc - gd + ge - gf - gg + gh ) * u.x * u.y * u.z
-      + du * ( vec3( vb, vc, ve ) - va + u.yzx * vec3( k1, k2, k3 ) + u.zxy * vec3( k3, k1, k2 ) + u.yzx * u.zxy * k4 ) );
-}
+${NOISE_GLSL}
 // 3D cellular clumps (3x3x3 search, well-jittered feature points so clumps never look gridded):
 // d = p - nearest feature point, edge = F2 - F1, id = per-clump random (-1..1)
 void thCell( vec3 p, out vec3 d, out float edge, out float id ) {
@@ -316,7 +321,7 @@ let physPars: string | null = null;
  * (thWrap = 0 → unchanged). The specular keeps the true N·L: GGX visibility explodes for back-lit grazing
  * normals, so wrapped irradiance there turns into fireflies.
  */
-function wrappedPhysicalPars(): string {
+export function wrappedPhysicalPars(): string {
   if (physPars) return physPars;
   const src = THREE.ShaderChunk.lights_physical_pars_fragment;
   const irr = 'vec3 irradiance = dotNL * directLight.color;';

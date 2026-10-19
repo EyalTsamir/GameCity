@@ -90,12 +90,44 @@ export interface Perch {
   kind: 'ridge' | 'parapet';
 }
 
+/** A rigid laundry line on a balcony (wire drawn by buildings; cloth hangs below it). */
+export interface LaundryLine {
+  ax: number;
+  ay: number;
+  az: number;
+  bx: number;
+  by: number;
+  bz: number;
+  /** outward facade normal of the balcony */
+  nx: number;
+  nz: number;
+  lot: number;
+}
+
+/** Kitchen / bakery extract flue top (shopfront lots) — light steam / cooking smoke starts here. */
+export interface VentTop {
+  x: number;
+  y: number;
+  z: number;
+  kind: 'bakery' | 'kitchen';
+  /** the shop's name (sign text) */
+  shop: string;
+  lot: number;
+}
+
 export interface BuildingsService {
   chimneys: ChimneyTop[];
   balconies: BalconyAnchor[];
   facades: FacadeSpan[];
   spans: LineSpan[];
   perches: Perch[];
+  laundry: LaundryLine[];
+  vents: VentTop[];
+  /**
+   * Show / hide the static cloth boxes on balcony laundry lines (a separate small mesh). Life calls
+   * setStaticLaundry(false) once its animated cloth hangs on `laundry`, so there is never a bare state.
+   */
+  setStaticLaundry(on: boolean): void;
   /** diagnostics: 0 off, 1 weathering mask, 2 wall-quad info */
   setDebug(n: number): void;
   houses(): unknown;
@@ -106,6 +138,8 @@ class AnchorSink {
   chimneys: ChimneyTop[] = [];
   balconies: BalconyAnchor[] = [];
   perches: Perch[] = [];
+  laundry: LaundryLine[] = [];
+  vents: VentTop[] = [];
   private lot: Lot | null = null;
   private b: Builder | null = null;
 
@@ -113,6 +147,8 @@ class AnchorSink {
     this.chimneys = [];
     this.balconies = [];
     this.perches = [];
+    this.laundry = [];
+    this.vents = [];
     this.lot = null;
     this.b = null;
   }
@@ -146,6 +182,24 @@ class AnchorSink {
       wnz = b.toWorldZ(nx, nz) - oz;
     const l = Math.hypot(wnx, wnz) || 1;
     this.balconies.push({ x: wx, y, z: wz, nx: wnx / l, nz: wnz / l, w, d, rail, lot: lot.id, district: lot.district, kind });
+  }
+
+  /** laundry wire between two local points; (nx, nz) local outward normal */
+  laundryLine(ax: number, ay: number, az: number, bx: number, by: number, bz: number, nx: number, nz: number): void {
+    const { lot, b } = this;
+    if (!lot || !b) return;
+    const ox = b.toWorldX(0, 0),
+      oz = b.toWorldZ(0, 0);
+    const wnx = b.toWorldX(nx, nz) - ox,
+      wnz = b.toWorldZ(nx, nz) - oz;
+    const l = Math.hypot(wnx, wnz) || 1;
+    this.laundry.push({ ax: b.toWorldX(ax, az), ay, az: b.toWorldZ(ax, az), bx: b.toWorldX(bx, bz), by, bz: b.toWorldZ(bx, bz), nx: wnx / l, nz: wnz / l, lot: lot.id });
+  }
+
+  vent(x: number, y: number, z: number, kind: 'bakery' | 'kitchen', shop: string): void {
+    const { lot, b } = this;
+    if (!lot || !b) return;
+    this.vents.push({ x: b.toWorldX(x, z), y, z: b.toWorldZ(x, z), kind, shop, lot: lot.id });
   }
 
   /** perch line between two local points */

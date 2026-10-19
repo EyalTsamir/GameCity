@@ -129,6 +129,10 @@ export function buildGroundGeometry(model: TerrainModel): { geo: THREE.BufferGeo
 
 const MASK_W = 1024;
 
+/** CPU copy of the last ground mask (RGBA, row 0 = north) — read by the groundcover module so the
+ *  blade field agrees with the ground shader (sand, wildness, wear, lawn tone). */
+export let groundMaskInfo: { data: Uint8Array | Uint8ClampedArray; w: number; h: number } | null = null;
+
 /**
  * Ground mask: R = sand, G = wildness (0 manicured lawn … 1 meadow), B = wear (paths, desire lines,
  * benches, gates, doorsteps, scree aprons at cliff feet), A = lawn tone (0.5 neutral; mowing
@@ -338,6 +342,7 @@ function buildMask(ctx: CityContext, feet: readonly CliffFoot[], legacy: boolean
   g.filter = 'none';
   g.globalCompositeOperation = 'source-over';
   if (legacy) {
+    groundMaskInfo = { data: g.getImageData(0, 0, W, Hh).data, w: W, h: Hh };
     const tex = new THREE.CanvasTexture(cv);
     tex.flipY = false; // canvas row 0 = north edge (v = 0)
     tex.colorSpace = THREE.NoColorSpace;
@@ -417,6 +422,7 @@ function buildMask(ctx: CityContext, feet: readonly CliffFoot[], legacy: boolean
   const ei = E2.g.getImageData(0, 0, W, Hh).data;
   const d = img.data;
   for (let i = 0; i < d.length; i += 4) d[i + 3] = Math.max(0, Math.min(255, ti[i] - ei[i] * 0.5));
+  groundMaskInfo = { data: d, w: W, h: Hh };
   const tex = new THREE.DataTexture(new Uint8Array(d.buffer, d.byteOffset, d.byteLength), W, Hh, THREE.RGBAFormat, THREE.UnsignedByteType);
   tex.flipY = false; // row 0 = north edge (v = 0)
   tex.colorSpace = THREE.NoColorSpace;

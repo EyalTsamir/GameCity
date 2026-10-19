@@ -227,7 +227,7 @@ function twig(g: CanvasRenderingContext2D, pts: [number, number][], w0: number, 
     g.lineTo(pts[i + 1][0], pts[i + 1][1]);
     g.lineWidth = w0 + (w1 - w0) * f;
     g.lineCap = 'round';
-    g.strokeStyle = css(bright * (0.9 + 0.2 * f), 0, 0.5);
+    g.strokeStyle = css(bright * (0.9 + 0.2 * f), 0, 0);
     g.stroke();
   }
 }
