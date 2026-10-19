@@ -36,8 +36,8 @@ interface LayerDef {
 const LAYERS: LayerDef[] = [
   { r0: 2400, rc: 3500, r1: 4700, a0: 168, a1: 370, step: 0.21, hS: 45, hW: 80, hN: 230, scale: 1600, seed: 1 },
   { r0: 4600, rc: 6300, r1: 8200, a0: 176, a1: 368, step: 0.17, hS: 85, hW: 170, hN: 560, scale: 2600, seed: 2 },
-  { r0: 8000, rc: 11000, r1: 14500, a0: 196, a1: 366, step: 0.12, hS: 150, hW: 520, hN: 2100, scale: 3400, seed: 3 },
-  { r0: 13500, rc: 17500, r1: 22000, a0: 226, a1: 364, step: 0.11, hS: 260, hW: 1100, hN: 3700, scale: 4600, seed: 4 },
+  { r0: 8000, rc: 11000, r1: 14500, a0: 172, a1: 366, step: 0.12, hS: 150, hW: 520, hN: 2100, scale: 3400, seed: 3 },
+  { r0: 13500, rc: 17500, r1: 22000, a0: 176, a1: 364, step: 0.12, hS: 300, hW: 1100, hN: 3700, scale: 4600, seed: 4 },
 ];
 
 /** depth rows (0 = front foot, 1 = back) — dense around the crest (~0.4..0.6) */

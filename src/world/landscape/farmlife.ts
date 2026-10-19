@@ -108,8 +108,10 @@ export function createFarmLife(model: LandscapeModel, uniforms: Record<string, T
     qy0 = Math.min(qy0, q.y);
     qy1 = Math.max(qy1, q.y);
   }
+  const rh = { d: 0, i: 0, s: 0, level: 0, tx: 1, tz: 0 };
   const fieldOK = (x: number, z: number) => {
     if (slabD(x, z) < 12) return false;
+    if (model.road(x, z, rh, 10) && rh.d < model.roads[rh.i].halfW + 3) return false;
     const y = H(x, z);
     if (y < WL + 0.6 || y > 120) return false;
     if (model.forestAt(x, z, y) > 0.3 || model.siteAt(x, z, 5) >= 0 || model.coastSD(x, z) < 60) return false;

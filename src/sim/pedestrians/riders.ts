@@ -5,7 +5,7 @@
 
 import type { CityContext } from '../../core/context';
 import { Rng } from '../../core/rng';
-import { RIDE } from '../traffic/models';
+import { RIDE, RIDE_PILLION, type RideGeom } from '../traffic/models';
 import type { Vehicle } from '../traffic/sim';
 import { Member, Party } from './crowd';
 import { makeLook, type Persona } from './looks';
@@ -47,6 +47,21 @@ export class Riders {
       }
       const sp = V.spec;
       const G = RIDE[sp.model as 'bike' | 'moto'][sp.variant ?? 0];
+      this.place(m, V, G);
+      // now and then two on a Vespa
+      if (sp.model === 'moto' && (sp.variant ?? 0) === 0 && V.id % 4 === 1) {
+        let q = V.pillion as Member | null;
+        if (!q) {
+          q = this.make(V, 1);
+          V.pillion = q;
+        }
+        this.place(q, V, RIDE_PILLION);
+      }
+    }
+  }
+
+  private place(m: Member, V: Vehicle, G: RideGeom): void {
+    {
       m.rideG = G;
       // root on the ground under the saddle (vehicle frame z = seatZ)
       const fx = Math.sin(V.yaw),
@@ -59,7 +74,7 @@ export class Riders {
       m.yaw = V.yaw;
       m.lean = V.lean;
       m.pedal = V.crank;
-      m.stopped = V.v < 0.3;
+      m.stopped = G !== RIDE_PILLION && V.v < 0.3;
       m.speed = V.v;
       m.vx = fx * V.v;
       m.vz = fz * V.v;
@@ -70,8 +85,8 @@ export class Riders {
     }
   }
 
-  private make(V: Vehicle): Member {
-    const rng = new Rng(V.id * 7919 + 13);
+  private make(V: Vehicle, k = 0): Member {
+    const rng = new Rng(V.id * 7919 + 13 + k * 101);
     const sp = V.spec;
     const persona = PERSONA[V.id % PERSONA.length];
     const p = new Party(-V.id, persona);

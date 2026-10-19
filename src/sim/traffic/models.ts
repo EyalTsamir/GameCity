@@ -1013,6 +1013,9 @@ export const RIDE: Record<'bike' | 'moto', RideGeom[]> = {
   ],
 };
 
+/** a passenger on the back of a Vespa: hands round the rider's waist, feet on the floorboard's rear */
+export const RIDE_PILLION: RideGeom = { mode: 2, seatY: 0.8, seatZ: -0.6, barY: 0.98, barZ: -0.38, barX: 0.15, footY: 0.31, footZ: -0.3, footX: 0.15, crank: 0, lean: 0.06 };
+
 function bikes(): THREE.BufferGeometry {
   const b = new Builder();
   // ── bicycles (v0 city / sport, v2 Dutch): frame painted, black parts

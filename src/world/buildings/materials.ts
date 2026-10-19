@@ -1083,13 +1083,13 @@ void bhWall(inout vec3 albedo, inout float rough, inout float metal, inout vec3 
     float hs = mod(uHours + 24.0, 24.0);
     float open = step(sh * 0.5 + 0.25, bhOccupancy(hs, 2.0));
     float hasShutter = step(sh, 0.62);
-    float half = (1.0 - step(0.5, fract(sh * 7.3))) * bhBump(hs, 6.2, 6.6, 8.2, 8.8);
-    float downTo = mix(wr.w + 0.01, wr.z + (wr.w - wr.z) * 0.55, half);
-    float cover = hasShutter * max(1.0 - open, half) * step(min(downTo, mix(wr.z - 0.01, downTo, half)), pm.y) * step(pm.y, wr.w + 0.02) * step(wr.x - 0.02, pm.x) * step(pm.x, wr.y + 0.02);
+    float halfD = (1.0 - step(0.5, fract(sh * 7.3))) * bhBump(hs, 6.2, 6.6, 8.2, 8.8);
+    float downTo = mix(wr.w + 0.01, wr.z + (wr.w - wr.z) * 0.55, halfD);
+    float cover = hasShutter * max(1.0 - open, halfD) * step(min(downTo, mix(wr.z - 0.01, downTo, halfD)), pm.y) * step(pm.y, wr.w + 0.02) * step(wr.x - 0.02, pm.x) * step(pm.x, wr.y + 0.02);
     if (cover > 0.5) {
       float rib = 0.82 + 0.18 * bhStripe(pm.y / 0.075, fpy / 0.075 * 1.5);
       vec3 sc = mix(vec3(0.52, 0.53, 0.54), vec3(0.62, 0.6, 0.55), step(0.5, fract(sh * 3.1))) * rib;
-      // graffiti tags: blobby letters in 1–2 colours on the lower half
+      // graffiti tags: blobby letters in 1–2 colours on the lower halfD
       float tagOn = step(0.45, fract(sh * 11.7));
       vec2 tq = vec2(pm.x * 1.4 + seed, pm.y * 2.2);
       float tg = smoothstep(0.55, 0.6, texture2D(uBhNoise, tq * 0.09).g * 0.6 + texture2D(uBhNoise, tq * 0.37).a * 0.4) * step(pm.y, wr.z + (wr.w - wr.z) * 0.7) * tagOn;

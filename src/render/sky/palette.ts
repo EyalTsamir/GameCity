@@ -604,7 +604,8 @@ const KEYS: KeyDef[] = [
 ];
 
 // ───────────────────────────────────────────── world key (default world mode) ──
-// The studio key's light (sun-dominated, cool fill, golden hour) with a real sky: deeper blue zenith,
+// The studio key's light (sun-dominated, cool fill, golden hour — a little more golden, less red: low
+// sunlight is ~3500 K, the red-orange key turned grey pavement salmon) with a real sky: deeper blue zenith,
 // a paler, slightly hazier horizon band, and the atmosphere's haze / mist per hour (aerial
 // perspective: aerosol at noon ≈ 4.5e-5/m (+ blue air, see sky/atmoDrive.ts), golden hour 1–1.5e-4, misty dawn).
 const WORLD_OVERRIDES: Record<string, Partial<KeyDef>> = {
@@ -617,9 +618,9 @@ const WORLD_OVERRIDES: Record<string, Partial<KeyDef>> = {
   '10': { haze: 5e-5, mist: 0, zenith: '#3f7ccb', horizon: '#c6d9e8' },
   '12.75': { haze: 4.5e-5, mist: 0, zenith: '#3877c8', horizon: '#c4d8e8' },
   '16': { haze: 5.5e-5, mist: 0, zenith: '#3d79c4', horizon: '#cfdbe4' },
-  '17.6': { haze: 8e-5, mist: 0, zenith: '#4474bb' },
-  '18.6': { haze: 1.2e-4, mist: 0.3e-3, mistH: 6, zenith: '#3f62a8' },
-  '19.3': { haze: 1.5e-4, mist: 0.7e-3, mistH: 6 },
+  '17.6': { haze: 8e-5, mist: 0, zenith: '#4474bb', sun: '#ffd09a' },
+  '18.6': { haze: 1.2e-4, mist: 0.3e-3, mistH: 6, zenith: '#3f62a8', sun: '#ffb46c' },
+  '19.3': { haze: 1.5e-4, mist: 0.7e-3, mistH: 6, sun: '#ff9256' },
   '19.8': { haze: 1.4e-4, mist: 1.1e-3, mistH: 6 },
   '20.3': { haze: 1.1e-4, mist: 1.3e-3, mistH: 6 },
   '21.3': { haze: 7e-5, mist: 1.1e-3, mistH: 6 },

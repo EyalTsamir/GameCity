@@ -16,7 +16,14 @@
   (crowd + traffic CPU, stats, invariants), `h/tw.ts` (traffic only, `no2w`), `h/cafes.ts` (café planner).
 * Known pre-existing: a bus's rear axle point crosses the kerb corner at (58.7, −68.6) for one sample
   (same with ?no2w) — traffic invariant, transient.
-* Next: judge m3b + riders2; perf A/B (draw calls / tris / verts) with toggles; soak 4 min @4×; final shots.
+* 21:15 — riders2 judged (`riders2a_sheet.png`, `riders2b_sheet.png`): cyclist on the saddle pedalling, courier
+  backpack + helmet, e-scooter rider standing, moped / courier / motorcyclist seated with feet on floor /
+  pegs — all read well. Added since: pillion passengers on every 4th Vespa (RIDE_PILLION, hands round the
+  rider's waist), a street musician with a guitar + open case on the biggest plaza with a little audience
+  (Stall kind 'busker', IDLE.GUITAR pose), quality-scaled parked two-wheelers.
+* Running / queued: `m3b/` (full city, 7 views × 12.5 / 18.2 h), `perf_on|off.json` (downtown POI, all street
+  life vs `no2w&noparked2w&nocafe&nohang&novendors&norim`), `m3c/` (table close-ups day / night, busker).
+* Next: judge m3b / m3c, perf numbers into the log; soak 4 min @4×; `?diorama` check; final report.
 
 ## Brief (WORLD-PLAN.md workstream 5 + world-briefs.md notes)
 Gap: at eye level the city is thinly populated compared to reference 2 (sunny Tel-Aviv café street — every

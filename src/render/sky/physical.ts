@@ -34,7 +34,7 @@ export interface PhysSkyParams {
   haze: number;
   /** Mie phase asymmetry */
   g: number;
-  /** isotropic multiple-scattering boost (fraction of single scattering, phase-free) */
+  /** multiple scattering: strength of the re-scattered (blue) skylight term */
   ms: number;
 }
 
@@ -46,6 +46,11 @@ uniform float uHaze;
 uniform float uG;
 uniform float uMs;
 varying vec2 vUv;
+// multiple scattering ≈ re-scattered SKYLIGHT (blue), not more sunlight: what keeps the zenith blue at a
+// low sun (single scattering of reddened sunlight alone turns it grey)
+vec3 msLight(float sunSin) {
+  return vec3(0.55, 0.72, 1.0) * uMs * clamp(sunSin * 3.0 + 0.12, 0.0, 1.0);
+}
 const float RG = ${RG.toFixed(1)};
 const float RT = ${RT.toFixed(1)};
 const float HR = ${HR.toFixed(1)};
@@ -100,6 +105,7 @@ vec3 skyRadiance(vec3 V) {
   float pM = 3.0 / (8.0 * PI) * (1.0 - g * g) * (1.0 + mu * mu) / ((2.0 + g * g) * pow(max(1.0 + g * g - 2.0 * g * mu, 1e-4), 1.5));
   vec3 sum = vec3(0.0);
   vec3 od = vec3(0.0);
+  vec3 ms = msLight(L.y);
   float invN2 = 1.0 / float(${NV * NV});
   for (int i = 0; i < ${NV}; i++) {
     float fi = float(i);
@@ -115,7 +121,7 @@ vec3 skyRadiance(vec3 V) {
     vec3 Ts = sunT(h, cs);
     vec3 sR = BR * rR;
     float sM = uHaze * 0.9 * rM;
-    sum += Tv * Ts * (sR * (pR + uMs / (4.0 * PI)) + sM * (pM + uMs / (4.0 * PI))) * dt;
+    sum += Tv * (Ts * (sR * pR + sM * pM) + (sR + sM) * ms / (4.0 * PI)) * dt;
   }
   return sum;
 }
@@ -275,7 +281,11 @@ export function skyRadiance(p: PhysSkyParams, vx: number, vy: number, vz: number
   const pR = (3 / (16 * Math.PI)) * (1 + mu * mu);
   const g = p.g;
   const pM = ((3 / (8 * Math.PI)) * (1 - g * g) * (1 + mu * mu)) / ((2 + g * g) * Math.pow(Math.max(1 + g * g - 2 * g * mu, 1e-4), 1.5));
-  const iso = p.ms / (4 * Math.PI);
+  // multiple scattering: re-scattered (blue) skylight — CPU twin of msLight()
+  const msK = (p.ms * Math.min(1, Math.max(0, p.sunSin * 3 + 0.12))) / (4 * Math.PI);
+  const ms0 = 0.55 * msK,
+    ms1 = 0.72 * msK,
+    ms2 = 1.0 * msK;
   _sum[0] = _sum[1] = _sum[2] = 0;
   _od[0] = _od[1] = _od[2] = 0;
   const invN2 = 1 / (NV * NV);
@@ -294,10 +304,10 @@ export function skyRadiance(p: PhysSkyParams, vx: number, vy: number, vz: number
     _od[2] += _e[2] * dt;
     const cs = (t * mu + r0 * p.sunSin) / (RG + h);
     sunTransmittance(h, cs, p.haze, _ts);
-    const sM = p.haze * 0.9 * rM * (pM + iso);
-    _sum[0] += tv0 * _ts[0] * (BR[0] * rR * (pR + iso) + sM) * dt;
-    _sum[1] += tv1 * _ts[1] * (BR[1] * rR * (pR + iso) + sM) * dt;
-    _sum[2] += tv2 * _ts[2] * (BR[2] * rR * (pR + iso) + sM) * dt;
+    const sM = p.haze * 0.9 * rM;
+    _sum[0] += tv0 * (_ts[0] * (BR[0] * rR * pR + sM * pM) + (BR[0] * rR + sM) * ms0) * dt;
+    _sum[1] += tv1 * (_ts[1] * (BR[1] * rR * pR + sM * pM) + (BR[1] * rR + sM) * ms1) * dt;
+    _sum[2] += tv2 * (_ts[2] * (BR[2] * rR * pR + sM * pM) + (BR[2] * rR + sM) * ms2) * dt;
   }
   return out.setRGB(_sum[0], _sum[1], _sum[2]);
 }

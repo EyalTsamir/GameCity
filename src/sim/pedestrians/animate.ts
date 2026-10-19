@@ -75,7 +75,7 @@ function reachFig(r: Rig, o: Pose, a: Arm, left: boolean, px: number, py: number
   reach(r, a, left, px, py, pz, grip);
 }
 
-const IDLE = { RELAXED: 0, POCKETS: 1, CROSSED: 2, HIP: 3, BEHIND: 4, PHONE: 5, CUP: 6, TALK: 7 } as const;
+const IDLE = { RELAXED: 0, POCKETS: 1, CROSSED: 2, HIP: 3, BEHIND: 4, PHONE: 5, CUP: 6, TALK: 7, GUITAR: 8 } as const;
 /** standing with friends: listening poses (talking is decided by the party's conversation turns) */
 const IDLE_W_CHAT = [0.35, 0.25, 0.2, 0.15, 0.05, 0, 0];
 /** debug / tools: force an idle variant (0–6) or bench variant (0–4); −1 = by seed */
@@ -540,6 +540,23 @@ export function computePoseA(m: Member, umbrella: boolean, r: Rig, o: Pose, gs: 
           arm.wrist += 0.3 * g1 * k;
           headPitch += 0.03 * Math.sin(t * 3.3 + m.seed) * k;
         }
+        break;
+      }
+      case IDLE.GUITAR: {
+        // playing the guitar (vendors.ts models it for the average man): fretting hand up the neck on the
+        // left, strumming hand over the sound hole, head tilted to the strings now and then
+        RT[0] = 0.33 * hk;
+        RT[1] = 1.25 * hk + 0.012 * Math.sin(t * 1.7) * hk;
+        RT[2] = 0.24 * hk;
+        RT[3] = k;
+        reach(r, armL, true, 1, -0.6, -0.5, 0.8);
+        RT[0] = -0.02 * hk;
+        RT[1] = 1.09 * hk + 0.045 * Math.sin(t * 11.0) * hk;
+        RT[2] = 0.27 * hk;
+        RT[3] = k;
+        reach(r, armR, false, -1, -0.3, -0.6, 0.5);
+        headPitch += (0.2 + 0.08 * Math.sin(t * 0.7)) * k;
+        headYaw += 0.25 * k;
         break;
       }
       case IDLE.CUP:

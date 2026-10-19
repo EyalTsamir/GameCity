@@ -691,6 +691,17 @@ export class Crowd {
       cafes += p.size;
       alive += p.size;
     }
+    // a few listeners round the street musician
+    for (const st of this.places.vendors) {
+      if (st.kind !== 'busker' || h < st.open || h >= st.close) continue;
+      for (let k = 0; k < 2; k++) {
+        const p = this.makeParty(this.rng.weighted<Persona>(['tourist', 'stroller', 'couple', 'student'], [2, 1.5, 1, 1]), 1);
+        const g = this.buskerGoal(p, st.place.node);
+        if (!g) break;
+        this.placeAtActivity(p, g, this.rng.range(0, 0.7));
+        alive += p.size;
+      }
+    }
     // groups standing about on the plazas (about two thirds of the places by day)
     if (this.places.hangouts.length) {
       const want = Math.round(this.places.hangouts.length * 0.65 * Math.min(1, popFactor(h) * 1.1));
@@ -2755,12 +2766,30 @@ export class Crowd {
     return { kind: 'view', node: pl.node, place: pl, spots, dur: this.rng.range(25, 95), label: pl.label, pose: 'stand' };
   }
 
+  /** stop and listen to the street musician (a spot in the half circle in front) */
+  private buskerGoal(p: Party, from: number): Goal | null {
+    if (p.size > 2) return null;
+    const h = this.ctx.clock.hours;
+    for (const st of this.places.vendors) {
+      if (st.kind !== 'busker' || h < st.open || h >= st.close) continue;
+      const free = st.place.spots.filter((s) => s.taken < 0);
+      if (free.length < p.size) return null;
+      const fp = this.nodePos(from);
+      if (Math.hypot(fp.x - st.x, fp.z - st.z) > 160) return null;
+      const k0 = Math.floor(this.rng.next() * (free.length - p.size + 1));
+      const spots = free.slice(k0, k0 + p.size);
+      for (const s of spots) s.taken = p.id;
+      return { kind: 'view', node: st.place.node, place: st.place, spots, dur: this.rng.range(15, 45), label: st.place.label, pose: 'stand' };
+    }
+    return null;
+  }
+
   /** buy something at a vendor's cart (open, both customer spots free for a party of two) */
   private vendorGoal(p: Party, from: number): Goal | null {
     if (p.size > 2) return null;
     const h = this.ctx.clock.hours;
     const fp = this.nodePos(from);
-    const st = this.pickNear(this.places.vendors, (t) => t, fp, 80, (t) => t.kind !== 'market' && t.place.spots.length > 0 && h >= t.open && h < t.close && t.place.spots.every((s) => s.taken < 0), 12);
+    const st = this.pickNear(this.places.vendors, (t) => t, fp, 80, (t) => t.kind !== 'market' && t.kind !== 'busker' && t.place.spots.length > 0 && h >= t.open && h < t.close && t.place.spots.every((s) => s.taken < 0), 12);
     if (!st) return null;
     const spots = st.place.spots.slice(0, p.size);
     for (const s of spots) s.taken = p.id;
@@ -2831,9 +2860,9 @@ export class Crowd {
         return out;
       }
     }
-    // an ice cream, a fresh juice, flowers, a pretzel from a cart on the way
+    // an ice cream, a fresh juice, flowers, a pretzel from a cart on the way; a song from the busker
     if (this.places.vendors.length && p.size <= 2 && rng.chance(VENDOR_LIKE[p.persona])) {
-      const vg = this.vendorGoal(p, from);
+      const vg = rng.chance(0.3) ? this.buskerGoal(p, from) : this.vendorGoal(p, from);
       if (vg) push(vg);
     }
     // meeting friends / a phone call on a plaza on the way
@@ -3154,7 +3183,14 @@ export class Crowd {
       for (const p of this.parties) if (p.stall === st && p.state === 'serve') have = p;
       if (open && !have) {
         if (this.busyAt(st.vx, st.vz, 0.6)) continue;
-        const p = this.makeParty(this.rng.chance(0.5) ? 'worker' : 'shopper', 1);
+        let p = this.makeParty(this.rng.chance(0.5) ? 'worker' : 'shopper', 1);
+        if (st.kind === 'busker') {
+          // the guitar is modelled for an average man: the musician is one
+          p = new Party(this.nextParty++, 'stroller');
+          const warm = this.ctx.clock.hours > 9 && this.ctx.clock.hours < 20;
+          p.members.push(new Member(this.nextMember++, p, 0, makeLook(this.rng, { persona: 'stroller', warm, kind: 'man', age: 'adult' }), this.rng.next()));
+          p.members[0].forceIdle = 8;
+        }
         const m = p.members[0];
         m.look.flags = 0;
         m.look.dog = null;
@@ -3196,6 +3232,10 @@ export class Crowd {
         cx = sp.x;
         cz = sp.z;
       }
+    }
+    if (st.kind === 'busker') {
+      m.faceYaw = st.yaw;
+      return;
     }
     if (st.kind === 'market' && p.timer <= 0) {
       // shoppers stopped at this stall on their walk (crowd rail stops)
@@ -3944,7 +3984,7 @@ export class Crowd {
     switch (p.state) {
       case 'serve':
         if (p.stall) {
-          doing = m.carry === 2 ? 'Serving a customer' : `Minding the ${p.stall.label.toLowerCase()}`;
+          doing = p.stall.kind === 'busker' ? 'Playing the guitar for passers-by' : m.carry === 2 ? 'Serving a customer' : `Minding the ${p.stall.label.toLowerCase()}`;
           break;
         }
         doing = p.servePhase === 2 ? (m.carry === 1 ? 'Taking an order' : 'Serving a table') : m.carry === 2 ? 'Bringing an order out' : p.servePhase === 0 ? 'Waiting tables, keeping an eye on the terrace' : 'Waiting tables';

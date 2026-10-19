@@ -77,6 +77,9 @@ export interface LandscapeModel {
   cliffness(x: number, z: number): number;
   /** index of the settlement covering (x, z) within `pad` m of its radius, or -1 */
   siteAt(x: number, z: number, pad: number): number;
+  /** nearest country road within maxD: distance, road index, arc length, level there */
+  road(x: number, z: number, out: RoadHit, maxD?: number): boolean;
+  roads: Road[];
   riverLine: Polyline;
   coastLine: Polyline;
   sites: Site[];
@@ -175,6 +178,36 @@ const COAST_CTRL: [number, number][] = [
 
 const ISLAND = { x: 2250, z: -560, r: 640, peak: 230 };
 
+/**
+ * country roads: the two town roads emerge from their tunnels on the far side of the ridge (portals) and
+ * wind off through the valley — west to the villages, north into the hills; lanes link the hamlets.
+ */
+interface RoadDef {
+  kind: 'road' | 'lane';
+  halfW: number;
+  ctrl: [number, number][];
+  /** the first control point is a tunnel portal (facing along the road) */
+  portal?: boolean;
+}
+const ROAD_DEFS: RoadDef[] = [
+  { kind: 'road', halfW: 3.2, portal: true, ctrl: [[-110, -372], [-112, -430], [-150, -480], [-260, -505], [-420, -470], [-600, -400], [-820, -330], [-1050, -250], [-1300, -170], [-1520, -110], [-1720, -95], [-1950, -70], [-2300, -40], [-2900, 20], [-3800, 60]] },
+  { kind: 'road', halfW: 3.0, portal: true, ctrl: [[55, -372], [52, -440], [20, -560], [-40, -720], [-150, -930], [-260, -1180], [-420, -1500], [-640, -1900], [-900, -2500], [-1150, -3300]] },
+  { kind: 'road', halfW: 2.9, ctrl: [[-1720, -95], [-1660, 60], [-1560, 230], [-1380, 380], [-1120, 470], [-880, 520], [-720, 700], [-600, 960], [-520, 1250], [-420, 1650], [-330, 2100], [-250, 2900]] },
+  { kind: 'lane', halfW: 2.1, ctrl: [[-1300, -170], [-1290, -330], [-1265, -520], [-1250, -700], [-1290, -950], [-1380, -1300]] },
+  { kind: 'lane', halfW: 2.1, ctrl: [[-880, 520], [-760, 420], [-640, 330], [-520, 300], [-420, 330]] },
+];
+
+export interface Road {
+  kind: 'road' | 'lane';
+  halfW: number;
+  line: Polyline;
+  /** road surface level at each polyline vertex */
+  level: Float32Array;
+  /** true where the road crosses water (bridge deck) */
+  bridge: Uint8Array;
+  portal: { x: number; z: number; y: number; dx: number; dz: number } | null;
+}
+
 /** villages, hamlets, farmsteads (flattened ground, buildings in landscape/settlements.ts) */
 function buildSites(model: { world0(x: number, z: number): number; isWaterW(x: number, z: number): boolean }): Site[] {
   const sites: Site[] = [
@@ -218,6 +251,15 @@ function footZ(x: number): number {
 }
 
 // ───────────────────────────────────────────────────── the model ──
+
+export interface RoadHit {
+  d: number;
+  i: number;
+  s: number;
+  level: number;
+  tx: number;
+  tz: number;
+}
 
 export interface SlabHeight {
   /** terrain.height (refined slab ground) */
@@ -318,7 +360,46 @@ export function createLandscapeModel(slabHeight: SlabHeight): LandscapeModel {
 
   // ── world height: relief + river + coast + island + sites (no slab blend) ──
   let sitesRef: Site[] = [];
-  const world0 = (x: number, z: number, withSites: boolean): number => {
+  let roadsRef: Road[] = [];
+  const rhit: PolyHit = { d: 0, s: 0, side: 1, tx: 1, tz: 0 };
+  const levelAt = (r: Road, s: number): number => {
+    const L = r.line;
+    let lo = 0,
+      hi = L.s.length - 1;
+    if (s <= 0) return r.level[0];
+    if (s >= L.length) return r.level[hi];
+    while (hi - lo > 1) {
+      const m = (lo + hi) >> 1;
+      if (L.s[m] <= s) lo = m;
+      else hi = m;
+    }
+    const t = (s - L.s[lo]) / (L.s[hi] - L.s[lo] || 1);
+    return r.level[lo] + (r.level[hi] - r.level[lo]) * t;
+  };
+  const roadQ = (x: number, z: number, out: RoadHit, maxD = 40): boolean => {
+    let best = maxD,
+      found = false;
+    for (let i = 0; i < roadsRef.length; i++) {
+      const r = roadsRef[i];
+      if (x < r.line.x0 - maxD || x > r.line.x1 + maxD || z < r.line.z0 - maxD || z > r.line.z1 + maxD) continue;
+      if (!r.line.nearest(x, z, rhit, best)) continue;
+      if (rhit.d < best) {
+        best = rhit.d;
+        found = true;
+        out.d = rhit.d;
+        out.i = i;
+        out.s = rhit.s;
+        out.tx = rhit.tx;
+        out.tz = rhit.tz;
+      }
+    }
+    if (found) out.level = levelAt(roadsRef[out.i], out.s);
+    else out.d = maxD;
+    return found;
+  };
+  const roadHit: RoadHit = { d: 0, i: 0, s: 0, level: 0, tx: 1, tz: 0 };
+
+  const world0 = (x: number, z: number, withSites: boolean, withRoads = true): number => {
     let h = relief(x, z);
     // settlements sit on gently levelled ground
     if (withSites) {
@@ -347,6 +428,14 @@ export function createLandscapeModel(slabHeight: SlabHeight): LandscapeModel {
         else p = lerp(WL - 0.05, plain + 0.15, smooth(0, 7.5, u));
         h = smin(h, p, 0.8);
       }
+    }
+    // country roads: a level bench across the road (cuttings / embankments), not over the river (bridges)
+    if (withRoads && roadsRef.length && roadQ(x, z, roadHit, 16)) {
+      const r = roadsRef[roadHit.i];
+      const river = x < -150 && riverQ(x, z, rv, 40) && rv.d < rv.halfW + 3;
+      // nothing is cut behind a tunnel portal (that is the hill the tunnel runs through)
+      const behind = r.portal !== null && roadHit.s < 0.5 && (x - r.portal.x) * r.portal.dx + (z - r.portal.z) * r.portal.dz < 0;
+      if (!river && !behind) h = lerp(roadHit.level - 0.05, h, smooth(r.halfW + 0.8, r.halfW + 9, roadHit.d));
     }
     // coast
     const sd = coastSD(x, z);
@@ -397,6 +486,62 @@ export function createLandscapeModel(slabHeight: SlabHeight): LandscapeModel {
   const water0 = (x: number, z: number) => world0(x, z, false) < WL - 0.02;
   sitesRef = buildSites({ world0: (x, z) => world0(x, z, false), isWaterW: water0 });
   const siteLevel = sitesRef.map((s) => relief(s.x, s.z));
+  // road levels: the terrain along the centreline, smoothed (roads ignore small bumps), bridge decks
+  // over water, portals cut into the hillside
+  roadsRef = ROAD_DEFS.map((def) => {
+    const line = new Polyline(def.ctrl, 8, 120);
+    const n = line.x.length;
+    const raw = new Float32Array(n);
+    const wet = new Uint8Array(n);
+    for (let i = 0; i < n; i++) {
+      raw[i] = world0(line.x[i], line.z[i], true, false);
+      wet[i] = raw[i] < WL + 0.6 ? 1 : 0;
+    }
+    const level = new Float32Array(n);
+    for (let i = 0; i < n; i++) {
+      let sum = 0,
+        wsum = 0;
+      for (let k = -6; k <= 6; k++) {
+        const j = i + k;
+        if (j < 0 || j >= n || wet[j]) continue;
+        const w = 1 - Math.abs(k) / 7;
+        sum += raw[j] * w;
+        wsum += w;
+      }
+      level[i] = wsum > 0 ? sum / wsum : raw[i];
+    }
+    // bridges: decks over wet stretches, at the higher bank + 1.8 m
+    const bridge = new Uint8Array(n);
+    for (let i = 0; i < n; i++) {
+      if (!wet[i]) continue;
+      let a = i,
+        b = i;
+      while (a > 0 && wet[a]) a--;
+      while (b < n - 1 && wet[b]) b++;
+      const deck = Math.max(level[a], level[b], WL + 1.5) + 1.8;
+      for (let k = a; k <= b; k++) {
+        level[k] = deck;
+        bridge[k] = 1;
+      }
+      i = b;
+    }
+    let portal: Road['portal'] = null;
+    if (def.portal) {
+      // the portal sits where the hill is ~6 m above the road; the road rises out of the tunnel
+      const px = line.x[0],
+        pz = line.z[0];
+      const py = raw[0] - 7;
+      const dx = line.x[1] - px,
+        dz = line.z[1] - pz;
+      const dl = Math.hypot(dx, dz) || 1;
+      portal = { x: px, z: pz, y: py, dx: dx / dl, dz: dz / dl };
+      for (let i = 0; i < n; i++) {
+        const t = smooth(10, 110, line.s[i]);
+        level[i] = lerp(py, level[i], t);
+      }
+    }
+    return { kind: def.kind, halfW: def.halfW, line, level, bridge, portal };
+  });
 
   const world = (x: number, z: number): number => world0(x, z, true);
 
@@ -441,7 +586,8 @@ export function createLandscapeModel(slabHeight: SlabHeight): LandscapeModel {
     let wet = 0;
     if (riverQ(x, z, rv, 60)) wet = 1 - smooth(rv.halfW, rv.halfW + 9, rv.d);
     out.wet = out.water ? 0 : wet;
-    out.forest = out.water || siteAt(x, z, 25) >= 0 ? 0 : forestAt(x, z, h) * (1 - out.sand) * (1 - out.rock * 0.8) * (1 - wet);
+    const onRoad = roadQ(x, z, roadHit, 14) ? 1 - smooth(roadsRef[roadHit.i].halfW + 2, roadsRef[roadHit.i].halfW + 7, roadHit.d) : 0;
+    out.forest = out.water || siteAt(x, z, 25) >= 0 ? 0 : forestAt(x, z, h) * (1 - out.sand) * (1 - out.rock * 0.8) * (1 - wet) * (1 - onRoad);
     const settled = siteAt(x, z, 0) >= 0;
     const arable = (1 - out.forest) * (1 - out.sand) * (1 - out.rock) * (1 - wet) * (1 - smooth(0.12, 0.3, slope)) * (1 - out.water);
     const north = smooth(-300, -600, z) * (x > -900 ? 1 : 0.3);
@@ -482,7 +628,9 @@ export function createLandscapeModel(slabHeight: SlabHeight): LandscapeModel {
   return {
     height,
     world,
-    forestAt: (x, z, h) => (siteAt(x, z, 25) >= 0 ? 0 : forestAt(x, z, h)),
+    forestAt: (x, z, h) => (siteAt(x, z, 25) >= 0 || (roadQ(x, z, roadHit, 12) && roadHit.d < roadsRef[roadHit.i].halfW + 5) ? 0 : forestAt(x, z, h)),
+    road: (x, z, out, maxD) => roadQ(x, z, out, maxD ?? 40),
+    roads: roadsRef,
     cliffness: (x, z) => cliffness(z, x),
     grazing: (x, z, sd) => (z > 120 && z < 1100 ? 1 - smooth(260, 460, sd ?? coastSD(x, z)) : 0),
     siteAt,

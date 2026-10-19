@@ -11,7 +11,7 @@ import type { RingTopology } from './rings';
 import { smooth, vnoise } from './noise';
 
 /** the land mesh ends here (m outside the slab); the water extension goes further */
-export const LAND_MAX_D = 21000;
+export const LAND_MAX_D = 45000;
 /** forest canopy is raised into the terrain beyond this slab distance (instanced trees closer in) */
 export const CANOPY_NEAR = 150;
 export const CANOPY_FULL = 420;

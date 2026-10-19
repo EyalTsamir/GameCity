@@ -36,7 +36,9 @@ const BLUE_AIR = 1.8;
 /** Mie phase in the LUT: isotropic — the forward peak depends on the TRUE scattering angle, so it lives
  *  in the analytic sun lobe (dome and fog alike), never in the azimuth-only horizon ring */
 const SKY_G = 0;
-const SKY_MS = 0.15;
+const SKY_MS = 0.12;
+/** scene-unit luminance of the clear noon sky 3° above the horizon, 90° from the sun */
+const SKY_HORIZON_L = 0.52;
 /** elevation of the horizon ring: the sky ~3° up (the true horizon is a long, reddened, yellowish path) */
 const RING_EL = 0.052;
 
@@ -122,7 +124,9 @@ export class AtmosphereDriver {
       this.evalCPU();
       this.refNoon = this.refL;
       skyRadiance(p, 0, Math.sin(RING_EL), Math.cos(RING_EL), _c);
-      this.s0 = 0.72 / Math.max(1e-6, lum(_c));
+      // a sunlit white wall is ~0.9 in scene units; a clear horizon is ~half of that (brighter skies get
+      // pushed into AgX's desaturating shoulder and read milky)
+      this.s0 = SKY_HORIZON_L / Math.max(1e-6, lum(_c));
       p.sunSin = NaN; // force the first real update
     }
   }

@@ -261,50 +261,57 @@ function along(pts: [number, number][], f: number): { x: number; y: number; a: n
   return { x: x0 + (x1 - x0) * u, y: y0 + (y1 - y0) * u, a: Math.atan2(x1 - x0, y1 - y0) };
 }
 
+/** clip a stem where it would leave the tile (keeps a margin for the leaves around it) */
+function clipStem(pts: [number, number][], w: number, h: number, m: number): [number, number][] {
+  const out: [number, number][] = [pts[0]];
+  for (let i = 1; i < pts.length; i++) {
+    const [x, y] = pts[i];
+    if (Math.abs(x) > w / 2 - m || y > h - m || y < 2) break;
+    out.push(pts[i]);
+  }
+  if (out.length < 2) out.push([pts[0][0], pts[0][1] + 1]);
+  return out;
+}
+
 /**
- * Generic broadleaf cluster: a forked twig with alternate leaves, back leaves darker, front lighter.
- * `n` leaves of length L (px) ± 25 %.
+ * Generic broadleaf cluster filling its tile: a forked twig with alternate leaves on the outer part of every
+ * shoot, back leaves darker, front lighter. `n` leaves of length L (px) ± 25 %.
  */
 function broadCluster(g: CanvasRenderingContext2D, rng: Rng, w: number, h: number, n: number, L: number, o: LeafOpts, spread = 1, brightLo = 0.5, brightHi = 0.95): void {
-  const main = stem(rng.range(-6, 6), 0, rng.range(-0.15, 0.15), h * 0.62, rng.range(-0.4, 0.4));
+  const m = L * 0.9;
+  const main = clipStem(stem(rng.range(-6, 6), 0, rng.range(-0.12, 0.12), h * 0.8, rng.range(-0.35, 0.35), 8), w, h, m);
   const forks = [main];
-  const nf = 2 + rng.int(0, 1);
+  const nf = 3 + rng.int(0, 2);
   for (let i = 0; i < nf; i++) {
-    const p = along(main, rng.range(0.25, 0.6));
+    const p = along(main, rng.range(0.16, 0.6));
     const side = i % 2 ? 1 : -1;
-    forks.push(stem(p.x, p.y, p.a + side * rng.range(0.5, 0.95) * spread, h * rng.range(0.32, 0.46), side * rng.range(0.1, 0.5)));
+    forks.push(clipStem(stem(p.x, p.y, p.a + side * rng.range(0.55, 1.15) * spread, h * rng.range(0.42, 0.62), side * rng.range(-0.15, 0.5), 7), w, h, m));
   }
   // leaves: collect then draw back-to-front (darker first)
   const leaves: { x: number; y: number; a: number; L: number; b: number }[] = [];
   for (let k = 0; k < n; k++) {
     const st = forks[k % forks.length];
-    const f = rng.range(0.15, 1.0);
+    const f = Math.sqrt(rng.range(0.04, 1.0));
     const p = along(st, f);
     const side = rng.chance(0.5) ? 1 : -1;
-    const a = p.a + side * rng.range(0.45, 1.25) * spread + rng.range(-0.15, 0.15);
+    const a = p.a + side * rng.range(0.4, 1.3) * spread + rng.range(-0.15, 0.15);
     const len = L * rng.range(0.75, 1.2) * (0.8 + 0.3 * f);
     leaves.push({ x: p.x, y: p.y, a, L: len, b: rng.range(brightLo, brightHi) });
   }
   // terminal leaves on each fork tip
   for (const st of forks) {
     const p = along(st, 1);
-    leaves.push({ x: p.x, y: p.y, a: p.a + rng.range(-0.2, 0.2), L: L * rng.range(0.9, 1.15), b: rng.range(brightLo, brightHi) });
+    leaves.push({ x: p.x, y: p.y, a: p.a + rng.range(-0.2, 0.2), L: L * rng.range(0.95, 1.2), b: rng.range(brightLo, brightHi) });
   }
   leaves.sort((a, b) => a.b - b.b);
   const nTw = Math.floor(leaves.length * 0.45);
-  // twigs between the back and the front leaves
   for (let i = 0; i < leaves.length; i++) {
     if (i === nTw) for (const st of forks) twig(g, st, st === main ? 5 : 3, 1.2);
     const lf = leaves[i];
-    // keep inside the tile
     const tipx = lf.x + Math.sin(lf.a) * lf.L,
       tipy = lf.y + Math.cos(lf.a) * lf.L;
-    if (Math.abs(tipx) > w / 2 - 4 || tipy > h - 2 || tipy < 4) {
-      const sc = 0.6;
-      leaf(g, lf.x, lf.y, lf.a, lf.L * sc, lf.b, lid(rng), o);
-      continue;
-    }
-    leaf(g, lf.x, lf.y, lf.a, lf.L, lf.b, lid(rng), o);
+    const sc = Math.abs(tipx) > w / 2 - 3 || tipy > h + 4 || tipy < 3 ? 0.6 : 1;
+    leaf(g, lf.x, lf.y, lf.a, lf.L * sc, lf.b, lid(rng), o);
   }
 }
 
@@ -381,15 +388,15 @@ function needleSpray(g: CanvasRenderingContext2D, rng: Rng, w: number, h: number
 function pineTufts(g: CanvasRenderingContext2D, rng: Rng, w: number, h: number): void {
   const main = stem(0, 0, rng.range(-0.1, 0.1), h * 0.55, rng.range(-0.3, 0.3), 6);
   const shoots: [number, number][][] = [main];
-  for (let i = 0; i < 3; i++) {
-    const p = along(main, 0.35 + i * 0.22);
-    shoots.push(stem(p.x, p.y, p.a + (i % 2 ? 1 : -1) * rng.range(0.6, 0.9), h * rng.range(0.25, 0.35), 0, 4));
+  for (let i = 0; i < 5; i++) {
+    const p = along(main, 0.25 + i * 0.15);
+    shoots.push(clipStem(stem(p.x, p.y, p.a + (i % 2 ? 1 : -1) * rng.range(0.5, 1.0), h * rng.range(0.3, 0.42), 0, 4), w, h, 40));
   }
   for (const st of shoots) twig(g, st, st === main ? 5 : 3, 2, 0.45);
   for (const st of shoots) {
     // tuft on the last 45 % of each shoot + the tip
-    for (let k = 0; k < 40; k++) {
-      const f = rng.range(0.55, 1);
+    for (let k = 0; k < 64; k++) {
+      const f = rng.range(0.45, 1);
       const p = along(st, f);
       const a = p.a + rng.range(-1.35, 1.35) * (0.6 + 0.4 * f);
       needle(g, p.x, p.y, a, rng.range(26, 46), rng.range(0.42, 0.9), lid(rng), 1.6);
@@ -475,21 +482,21 @@ function fanLeaf(g: CanvasRenderingContext2D, rng: Rng, w: number, h: number): v
 
 /** blossom: twigs crowded with 5-petal flowers (B = 1) and a few young leaves */
 function blossom(g: CanvasRenderingContext2D, rng: Rng, w: number, h: number): void {
-  const main = stem(0, 0, rng.range(-0.15, 0.15), h * 0.7, rng.range(-0.4, 0.4), 6);
+  const main = clipStem(stem(0, 0, rng.range(-0.15, 0.15), h * 0.82, rng.range(-0.4, 0.4), 7), w, h, 16);
   const forks = [main];
-  for (let i = 0; i < 3; i++) {
-    const p = along(main, 0.25 + i * 0.2);
-    forks.push(stem(p.x, p.y, p.a + (i % 2 ? 1 : -1) * rng.range(0.5, 0.9), h * rng.range(0.3, 0.42), 0, 4));
+  for (let i = 0; i < 4; i++) {
+    const p = along(main, 0.2 + i * 0.16);
+    forks.push(clipStem(stem(p.x, p.y, p.a + (i % 2 ? 1 : -1) * rng.range(0.55, 1.05), h * rng.range(0.38, 0.55), 0, 5), w, h, 16));
   }
   for (const st of forks) twig(g, st, st === main ? 5 : 3, 1.2, 0.3);
-  for (let k = 0; k < 10; k++) {
+  for (let k = 0; k < 14; k++) {
     const st = forks[k % forks.length];
     const p = along(st, rng.range(0.3, 1));
     leaf(g, p.x, p.y, p.a + rng.range(-1.2, 1.2), rng.range(18, 26), rng.range(0.45, 0.8), lid(rng), { w: 0.3, tip: 0.8 });
   }
-  for (let k = 0; k < 70; k++) {
+  for (let k = 0; k < 130; k++) {
     const st = forks[k % forks.length];
-    const p = along(st, rng.range(0.15, 1));
+    const p = along(st, Math.sqrt(rng.range(0.03, 1)));
     const ox = p.x + rng.range(-18, 18),
       oy = p.y + rng.range(-14, 14);
     if (Math.abs(ox) > w / 2 - 12 || oy > h - 10) continue;
@@ -524,20 +531,20 @@ function jacaranda(g: CanvasRenderingContext2D, rng: Rng, w: number, h: number):
       const q = along(rach, 0.1 + k * 0.1);
       for (const side of [-1, 1]) {
         const pa = q.a + side * 1.0;
-        const pin = stem(q.x, q.y, pa, rng.range(14, 22), 0, 3);
-        for (let m = 0; m < 6; m++) {
-          const r = along(pin, m / 6);
-          for (const s2 of [-1, 1]) leaf(g, r.x, r.y, r.a + s2 * 1.2, rng.range(4.5, 6.5), rng.range(0.45, 0.85), lid(rng), { w: 0.32, rib: false, fold: 0.1 });
+        const pin = stem(q.x, q.y, pa, rng.range(16, 26), 0, 3);
+        for (let m = 0; m < 5; m++) {
+          const r = along(pin, m / 5);
+          for (const s2 of [-1, 1]) leaf(g, r.x, r.y, r.a + s2 * 1.2, rng.range(5.5, 8), rng.range(0.45, 0.85), lid(rng), { w: 0.3, rib: false, fold: 0.1 });
         }
       }
     }
   }
-  // panicles: cones of small trumpet flowers
-  for (let i = 0; i < 4; i++) {
-    const p = along(main, 0.55 + i * 0.13);
-    const a = p.a + rng.range(-0.8, 0.8);
-    const L = h * rng.range(0.22, 0.32);
-    for (let k = 0; k < 26; k++) {
+  // panicles: cones of small trumpet flowers, spread over the whole spray
+  for (let i = 0; i < 7; i++) {
+    const p = { x: rng.range(-w * 0.32, w * 0.32), y: rng.range(h * 0.3, h * 0.72), a: rng.range(-0.7, 0.7) };
+    const a = p.a + rng.range(-0.4, 0.4);
+    const L = h * rng.range(0.18, 0.28);
+    for (let k = 0; k < 30; k++) {
       const f = rng.next();
       const spread = (1 - f) * L * 0.35;
       const x = p.x + Math.sin(a) * L * f + rng.range(-spread, spread),
@@ -623,11 +630,11 @@ function bougainvillea(g: CanvasRenderingContext2D, rng: Rng, w: number, h: numb
 
 /** citrus: dense glossy dark elliptic leaves + a few oranges/lemons (B = 1, round) */
 function citrus(g: CanvasRenderingContext2D, rng: Rng, w: number, h: number): void {
-  broadCluster(g, rng, w, h, 30, 34, { w: 0.24, wide: 0.45, base: 0.5, tip: 0.5 }, 1.0, 0.42, 0.9);
-  for (let k = 0; k < 3; k++) {
+  broadCluster(g, rng, w, h, 62, 26, { w: 0.26, wide: 0.45, base: 0.5, tip: 0.5 }, 1.0, 0.4, 0.9);
+  for (let k = 0; k < 4; k++) {
     const x = rng.range(-w * 0.25, w * 0.25),
       y = rng.range(h * 0.35, h * 0.8);
-    const r = rng.range(11, 14);
+    const r = rng.range(8, 11);
     const gr = g.createRadialGradient(x - r * 0.3, y + r * 0.3, r * 0.2, x, y, r);
     const id = lid(rng);
     gr.addColorStop(0, css(1, id, 1));

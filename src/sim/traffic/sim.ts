@@ -144,8 +144,9 @@ export class Vehicle {
   kappa = 0;
   lastYaw = 0;
   lastOdo = 0;
-  /** the rider figure (pedestrians/riders.ts keeps it here) */
+  /** the rider figure and a passenger (pedestrians/riders.ts keeps them here) */
   rider: unknown = null;
+  pillion: unknown = null;
 
   constructor(id: number, spec: VehicleSpec, variant: number, color: string, rng: Rng) {
     this.id = id;

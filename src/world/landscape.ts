@@ -23,6 +23,7 @@ import { createShips, type Ships } from './landscape/ships';
 import { LAYERS } from '../core/layers';
 import { buildLandLights, type LandLights } from './landscape/lights';
 import { createFarmLife, type FarmLife } from './landscape/farmlife';
+import { buildCountryRoads, type CountryRoads } from './landscape/roads';
 import type { SmokeService } from '../sim/ambient';
 
 export interface LandscapeService {
@@ -147,6 +148,12 @@ export default function create(ctx: CityContext): CityModule {
       reflTris += mr.triangles;
     }
   }
+  // ── country roads, tunnel portals, bridge, cars
+  let roads: CountryRoads | null = null;
+  if (params.get('landroads') !== '0') {
+    roads = buildCountryRoads(model, uniforms, fog, ctx.uniforms.uLights);
+    root.add(roads.group);
+  }
   // ── distant shipping
   let ships: Ships | null = null;
   if (params.get('landships') !== '0') {
@@ -243,6 +250,7 @@ export default function create(ctx: CityContext): CityModule {
     update(dt) {
       if (ships && dt > 0) ships.update(ctx.uniforms.uTime.value, dt);
       if (farm && dt > 0) farm.update(dt);
+      if (roads && dt > 0) roads.update(dt);
     },
     frame() {
       trees?.update(ctx.camera);
@@ -255,6 +263,7 @@ export default function create(ctx: CityContext): CityModule {
         treeMs: Math.round(treeMs),
         buildings: bldCount,
         animals: farm ? farm.animals : 0,
+        roadTris: roads ? roads.triangles : 0,
         chimneys,
         landVerts,
         landTris,

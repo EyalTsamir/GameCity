@@ -10,7 +10,7 @@ import type { Rng } from '../../core/rng';
 import { patchLampMaterial } from '../../world/lamps/integrate';
 import type { Spot, SpotPlace } from './places';
 
-export type StallKind = 'icecream' | 'juice' | 'flowers' | 'pretzel' | 'market';
+export type StallKind = 'icecream' | 'juice' | 'flowers' | 'pretzel' | 'market' | 'busker';
 
 export interface Stall {
   kind: StallKind;
@@ -41,6 +41,7 @@ const LABELS: Record<StallKind, [string, string]> = {
   flowers: ['Buying flowers', 'Flower cart'],
   pretzel: ['Buying a pretzel and a coffee', 'Pretzel & coffee cart'],
   market: ['Browsing the market stalls', 'market stall'],
+  busker: ['Listening to a street musician', 'street musician'],
 };
 
 /**
@@ -183,6 +184,72 @@ export function planStalls(ctx: CityContext, rng: Rng, avoid: { x: number; z: nu
       n++;
     }
   }
+  // a street musician on the biggest plaza: room for a little audience in front, off the walkways
+  const big = areas[0];
+  if (big) {
+    const r = big.rect;
+    const edges = peds.edges.filter((e) => e.kind !== 'crosswalk' && e.kind !== 'door');
+    const bandAt = (x: number, z: number): [number, number, number] => {
+      let best = Infinity,
+        fx = 0,
+        fz = 0;
+      for (const e of edges) {
+        const A = peds.nodes[e.a],
+          B = peds.nodes[e.b];
+        if (Math.max(A.x, B.x) < x - 12 || Math.min(A.x, B.x) > x + 12 || Math.max(A.z, B.z) < z - 12 || Math.min(A.z, B.z) > z + 12) continue;
+        const dx = B.x - A.x,
+          dz = B.z - A.z;
+        const l2 = dx * dx + dz * dz;
+        let t = l2 > 0 ? ((x - A.x) * dx + (z - A.z) * dz) / l2 : 0;
+        t = t < 0 ? 0 : t > 1 ? 1 : t;
+        const d = Math.hypot(x - (A.x + dx * t), z - (A.z + dz * t)) - e.halfWidth;
+        if (d < best) {
+          best = d;
+          fx = A.x + dx * t - x;
+          fz = A.z + dz * t - z;
+        }
+      }
+      return [best, fx, fz];
+    };
+    const lKeep = keep.filter((d) => d.x > r.x0 - 4 - d.r && d.x < r.x1 + 4 + d.r && d.z > r.z0 - 4 - d.r && d.z < r.z1 + 4 + d.r);
+    let pick: { x: number; z: number; yaw: number; key: number } | null = null;
+    for (let z = r.z0 + 2; z < r.z1 - 2; z += 0.75)
+      for (let x = r.x0 + 2; x < r.x1 - 2; x += 0.75) {
+        const [band, fx, fz] = bandAt(x, z);
+        if (band < 3.4 || band > 6.5) continue;
+        if (occ.anyInCircle(x, z, 3.0, hard)) continue;
+        if (lKeep.some((d) => Math.hypot(d.x - x, d.z - z) < d.r + 3.2)) continue;
+        if (out.some((o) => Math.hypot(o.x - x, o.z - z) < 9)) continue;
+        const yaw = Math.round(Math.atan2(fx, fz) / (Math.PI / 4)) * (Math.PI / 4);
+        const key = Math.abs(band - 4.5) + rng.next();
+        if (!pick || key < pick.key) pick = { x, z, yaw, key };
+      }
+    if (pick) {
+      const fx = Math.sin(pick.yaw),
+        fz = Math.cos(pick.yaw);
+      const spots: Spot[] = [];
+      for (const a of [-0.85, -0.3, 0.3, 0.85]) {
+        const dx = Math.sin(pick.yaw + a) * 2.3,
+          dz = Math.cos(pick.yaw + a) * 2.3;
+        spots.push({ x: pick.x + dx, z: pick.z + dz, y: 0, yaw: Math.atan2(-dx, -dz) + rng.range(-0.15, 0.15), taken: -1 });
+      }
+      let node = -1,
+        bd = 12;
+      for (const nd of peds.nodes) {
+        if (nd.kind === 'door' || Math.abs(nd.x - pick.x) > bd || Math.abs(nd.z - pick.z) > bd) continue;
+        if (nd.edges.some((eid) => peds.edges[eid].kind === 'crosswalk' || peds.edges[eid].kind === 'door')) continue;
+        const d = Math.hypot(nd.x - (pick.x + fx * 2.3), nd.z - (pick.z + fz * 2.3));
+        if (d < bd) {
+          bd = d;
+          node = nd.id;
+        }
+      }
+      if (node >= 0) {
+        const [label, name] = LABELS.busker;
+        out.push({ kind: 'busker', x: pick.x, z: pick.z, y: 0, yaw: pick.yaw, vx: pick.x, vz: pick.z, place: { kind: 'view', node, label, theme: 'busker', spots, x: pick.x, z: pick.z }, open: 11, close: 21.5, label: name });
+      }
+    }
+  }
   return out;
 }
 
@@ -295,6 +362,30 @@ function cart(s: Sink, st: Stall, rng: Rng): void {
           s.ball(0.07, x + 0.06, 1.25 + j * 0.06, z + 0.05, '#4f7a3a');
         }
       s.canopy(0.95, 2.0, 0, 0, '#3f6b4f', '#f5f0e6');
+      break;
+    }
+    case 'busker': {
+      // guitar in the musician's hands (average figure), the open case on the ground in front
+      const body = new THREE.CylinderGeometry(0.17, 0.17, 0.09, 12);
+      body.rotateX(Math.PI / 2);
+      body.rotateZ(0.5);
+      body.translate(-0.05, 1.06, 0.2);
+      s.add(body, '#b9773a');
+      const upper = new THREE.CylinderGeometry(0.13, 0.13, 0.09, 12);
+      upper.rotateX(Math.PI / 2);
+      upper.translate(0.08, 1.14, 0.21);
+      s.add(upper, '#b9773a');
+      const hole = new THREE.CircleGeometry(0.045, 10);
+      hole.translate(0.02, 1.1, 0.256);
+      s.add(hole, '#2a1a10');
+      const neck = new THREE.BoxGeometry(0.42, 0.05, 0.03);
+      neck.rotateZ(0.5);
+      neck.translate(0.3, 1.27, 0.23);
+      s.add(neck, '#4a2f1c');
+      s.box(0.95, 0.08, 0.36, 0, 0, 0.75, '#2a2c30');
+      s.box(0.85, 0.02, 0.28, 0, 0.06, 0.75, '#8c1f2a');
+      s.ball(0.03, 0.15, 0.09, 0.75, '#d8b84a');
+      s.ball(0.03, -0.1, 0.09, 0.72, '#d8b84a');
       break;
     }
     case 'pretzel': {

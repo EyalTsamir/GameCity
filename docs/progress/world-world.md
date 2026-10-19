@@ -40,8 +40,20 @@
   shader, a tractor working a stubble/ploughed field near the town with a dust trail via the smoke service);
   chimney smoke for villages/hamlets/some farms (cool hours) via ctx.services.smoke at modules:ready.
   Lead added POIs vista / country / coast / riverbend (world mode) and world overview = 600 m / pitch 20.
-* Running: m2c (overview, vista, country, coast, riverbend × 11/18.2, subset incl. ambient) + m2c_noatmo.
-* Next: judge m2c; night 21.5; ?diorama check; full-city capture; perf numbers vs noland.
+* 21:15 — m2c judged (shots/world/world/m2c*): overview at pitch 20 still has no sky (propose 15°, see ov15);
+  coast POI is blocked by downtown towers (propose coast2 = 230,3,-40,140,-40,6); riverbend good; south coastal
+  strip became a featureless lawn → now grazing parcels (pasture/hay/fallow remap, shader + CPU via
+  fields.ts grazeCrop + model.grazing, aCov3.w). Mountains: domain-warped two-scale ridges (no row of cones);
+  far ranges L2/L3 now also cover the south (a0 172/176); land mesh to 45 km (no land edge at the horizon);
+  no farms right behind the ridge (z < -200 for x > -700).
+* M3 in code (typecheck clean, not yet captured): country roads (model.ts ROAD_DEFS: 2 roads out of tunnel
+  portals behind the ridge at (-110,-372) / (55,-372), a road S through the villages, 2 lanes; smoothed levels,
+  bridge decks over water, terrain bench carving, no carving behind portals; cover/forestAt clear the corridor),
+  landscape/roads.ts (draped ribbons asphalt/gravel, portals with wing walls + dark bore, bridge parapets + piers,
+  8 cars with headlights). Trees/herds avoid roads. Toggles: ?landroads=0 ?landlife=0.
+* Running: m3a (ov15, vista, country, coast2, riverbend × 11/18.2/21.5; subset with landmarks/harbor/ambient) —
+  started 20:58, built from code BEFORE the roads/grazing changes.
+* Next: judge m3a; capture roads (north_far, a view of the west road/bridge); ?diorama check; medium/low; perf.
 * Tools: my capture script copy with 20-min load timeout = scratchpad `cap.mjs` (scratchpad is SHARED with other
   agents — keep my files under scratchpad/world* or land/). Offline map tool: scratchpad `land/map.ts` (bundle:
   `npx rolldown land/map.ts --platform node -o land/map.mjs`; `node land/map.mjs x0 z0 x1 z1 N out.bin &&

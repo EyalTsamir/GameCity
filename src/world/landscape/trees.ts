@@ -86,9 +86,11 @@ export function placeTrees(model: LandscapeModel, density: number): { list: Tree
   let seed = 1;
   const slabD = model.slabDist;
   /** dry, open land outside the slab, not in a settlement core / river / beach / rock */
+  const rh = { d: 0, i: 0, s: 0, level: 0, tx: 1, tz: 0 };
   const landOK = (x: number, z: number, y: number, minSlab = 2): boolean => {
     if (slabD(x, z) < minSlab) return false;
     if (y < WL + 0.35) return false;
+    if (model.road(x, z, rh, 10) && rh.d < model.roads[rh.i].halfW + 2.5) return false;
     return true;
   };
   const rv = { d: 0, halfW: 8, s: 0, tx: 1, tz: 0 };
