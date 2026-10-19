@@ -99,6 +99,10 @@ Per-module logs live next to this file: `docs/progress/<module>.md`.
   Remaining: consolidated perf A/B = scripts/agent-tools/qa_perf.sh 1 then 2 (resumable; 4 views × new / ALL-legacy /
   per-feature toggles + original-build reference; out shots/lead/qa/perf/; start ONLY when people is done and
   soak/ui-test finished — machine must be quiet); legacy decision; final report.
+  03:15 soak ✔ (4 min at 4×, full city): heap flat 285–291 MB (no leak), fps steady, 0 console/page/frame errors,
+  failedModules []; ONE invariant sample at t=50 s: 2 pedestrians overlapping 3.2 s (couple 'act' vs elderly
+  walking). Movement code unchanged by people (only stride/phase) ⇒ likely pre-existing crowd behaviour;
+  base soak on 5174 queued to confirm (shots/lead/qa/soak_base.json). ui-test running since 03:15.
 
 ## History
 * 2026-10-16 ~19:20 — Round 1: 12 builders launched via a Workflow; the account hit its 5-hour usage
