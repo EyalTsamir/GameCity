@@ -12,6 +12,9 @@ import { groundBands, slabEdges, type Band, type SlabEdges } from './layout';
 import { noiseTexture } from './noise';
 import type { CliffFoot } from './cliffs';
 import { LAMP_GLSL, lampUniforms } from '../../core/lampLight';
+import { WIND_GLSL } from '../../core/wind';
+import { GLSL_HASH } from './noise';
+import { GC_PALETTE_GLSL, gcPalette } from '../groundcover/palette';
 
 export interface GroundResult {
   mesh: THREE.Mesh;
@@ -437,6 +440,37 @@ function buildMask(ctx: CityContext, feet: readonly CliffFoot[], legacy: boolean
 
 // ───────────────────────────────────────────────────────── material ──
 
+function blankTex(): THREE.DataTexture {
+  const t = new THREE.DataTexture(new Uint8Array([0, 0, 0, 0]), 1, 1);
+  t.needsUpdate = true;
+  return t;
+}
+
+/** cover maps of the blade field (set by the groundcover module once it has baked them) */
+const gcUniforms = {
+  tGcCover: { value: blankTex() as THREE.Texture },
+  tGcFlower: { value: blankTex() as THREE.Texture },
+  uGcOn: { value: 0 },
+  /** blade presence for the near-field ground: (lawn out0, out1 · lawn out0, out1 at grazing views) */
+  uGcPresA: { value: new THREE.Vector4(-10, -9, -10, -9) },
+  /** long grass (meadows, edges, reeds) out0, out1 */
+  uGcPresL: { value: new THREE.Vector2(-10, -9) },
+  gFlowerCol: { value: ['#c42a1c', '#3c62d4', '#f0ede2', '#ebbf18', '#e9e5d3', '#a8519f', '#efb417', '#f2f0e8'].map((h) => new THREE.Color(h)) },
+};
+
+/** Called by the groundcover module: the ground shader starts reading the cover maps. */
+export function setGroundCover(cover: THREE.Texture, flower: THREE.Texture): void {
+  gcUniforms.tGcCover.value = cover;
+  gcUniforms.tGcFlower.value = flower;
+  gcUniforms.uGcOn.value = 1;
+}
+
+/** Called by the blade field whenever its ring radii change (quality / adaptive density). */
+export function setGroundBladeFade(lawnA0: number, lawnA1: number, lawnB0: number, lawnB1: number, long0: number, long1: number): void {
+  gcUniforms.uGcPresA.value.set(lawnA0, lawnA1, lawnB0, lawnB1);
+  gcUniforms.uGcPresL.value.set(long0, long1);
+}
+
 const GROUND_UNIFORMS = /* glsl */ `
 uniform sampler2D tNoise;
 uniform sampler2D tMask;
@@ -568,8 +602,35 @@ vec3 groundColor() {
 ` +
   GROUND_BEDS;
 
+/** extra declarations of the v2 ground: blade-field cover maps, shared palette, wind, hashes */
+const GROUND_GC_PARS = /* glsl */ `
+uniform sampler2D tGcCover;
+uniform sampler2D tGcFlower;
+uniform float uGcOn;
+uniform vec4 uGcPresA;
+uniform vec2 uGcPresL;
+uniform vec3 gFlowerCol[ 8 ];
+uniform vec2 uWind;
+float gGrassTrans = 0.0;
+${WIND_GLSL}
+${GLSL_HASH}
+${GC_PALETTE_GLSL}
+`;
+
+/** long grass seen against the sun glows (shadowed light colour → no glow in shade) */
+const GROUND_RE = /* glsl */ `
+void RE_Direct_Ground( const in IncidentLight directLight, const in vec3 geometryPosition, const in vec3 geometryNormal, const in vec3 geometryViewDir, const in vec3 geometryClearcoatNormal, const in PhysicalMaterial material, inout ReflectedLight reflectedLight ) {
+  RE_Direct_Physical( directLight, geometryPosition, geometryNormal, geometryViewDir, geometryClearcoatNormal, material, reflectedLight );
+  float back = saturate( - dot( geometryViewDir, directLight.direction ) );
+  reflectedLight.directDiffuse += directLight.color * material.diffuseColor * vec3( 1.05, 1.1, 0.8 ) * pow( back, 4.0 ) * gGrassTrans * RECIPROCAL_PI * 1.6;
+}
+#undef RE_Direct
+#define RE_Direct RE_Direct_Ground
+`;
+
 const GROUND_PARS =
   GROUND_UNIFORMS +
+  GROUND_GC_PARS +
   /* glsl */ `
 vec3 groundColor() {
   vec3 p = vGW;
@@ -586,43 +647,95 @@ vec3 groundColor() {
   float tone = (mu.a - 0.502) * 2.0;            // + light mowing stripe … − edge / dark stripe
   float sand = smoothstep(0.25, 0.75, m.r);
   float wild = m.g;
-  float kept = 1.0 - smoothstep(0.1, 0.4, wild);  // manicured lawn
 
-  // ── lawn: macro patches readable from afar (lush deep green ↔ sunny yellow-green), mid clumps,
-  //    clover drifts, mowing stripes and darker grass along kerbs / walls / hedges
-  float macro = nM.r * 0.5 + nM.g * 0.3 + nA.r * 0.2;
-  vec3 grass = mix(gSun, gLush, smoothstep(0.36, 0.64, macro));
+  // ── cover maps of the blade field (groundcover module): grass length class, habitat, litter,
+  //    flowers, so the far field shows exactly what the blades show up close
+  vec4 cv = texture2D( tGcCover, muv );
+  vec4 fw = texture2D( tGcFlower, muv );
+  float len = mix( smoothstep( 0.08, 0.75, wild ) * 0.8, cv.g, uGcOn );
+  float kept = 1.0 - smoothstep( 0.18, 0.4, len );   // mown lawn
+  float hab = cv.b * 255.0;
+  float wetA = uGcOn * clamp( hab / 100.0, 0.0, 1.0 ) * ( 1.0 - step( 120.0, hab ) );
+
+  // ── blade-average colour (shared palette): macro patches lush ↔ sunny ↔ dry, meadows olive ↔ straw
+  vec3 gb = gcGrassColor( nM, nA, len, wetA, 0.0 );
+  vec3 gt = gcTipColor( gb, nA, len );
+  vec3 grass = gcTopColor( gb, gt, len );
+  // meso: clumps / tussocks (darker + cooler ↔ lighter + warmer), grain
   float mott = nA.g * 0.5 + nA.b * 0.3 + nB.r * 0.2;
-  float mt = smoothstep(0.2, 0.85, mott);
-  grass *= (0.85 + 0.3 * mt) * vec3(1.03 - 0.06 * mt, 1.0, 0.97 + 0.06 * mt);   // clumps: darker + cooler / lighter + warmer
-  grass = mix(grass, gLawn, smoothstep(0.62, 0.9, nA.a) * 0.22);
-  float clover = smoothstep(0.57, 0.68, nM.a * 0.45 + nA.b * 0.35 + nB.g * 0.2) * kept;
-  grass = mix(grass, gClover, clover * 0.62);
-  grass = mix(grass, vec3(0.93, 0.95, 0.88), clover * smoothstep(0.8, 0.9, nC.b) * 0.5); // white heads (fade with mips)
-  grass *= 0.93 + 0.14 * nC.r;
-  float stripe = clamp(tone, -0.5, 0.5);
-  float edge = clamp(-tone - 0.52, 0.0, 1.0);
-  grass *= 1.0 + stripe * 0.4 * kept;
-  grass *= vec3(1.0 + stripe * 0.12 * kept, 1.0, 1.0 - stripe * 0.1 * kept);   // light stripes a touch yellower
-  grass = mix(grass, grass * vec3(0.78, 0.86, 0.9), edge * (0.55 + 0.45 * kept));
-
-  // ── wild meadow on the hills: tussocks, dry patches, heather + gorse drifts, flowers;
-  //    sun-facing (south) slopes warmer and drier, steep banks bleached
-  vec3 meadow = mix(gMeadowB, gMeadowA, smoothstep(0.25, 0.75, nA.g * 0.6 + nB.r * 0.4));
-  meadow = mix(meadow, gDry, smoothstep(0.55, 0.85, nA.r * 0.6 + nB.g * 0.4) * 0.6);
-  meadow *= 0.84 + 0.3 * nC.g * (0.6 + 0.4 * nB.a);
-  float heath = smoothstep(0.6, 0.76, nM.b * 0.6 + nA.r * 0.4);
-  float gorse = smoothstep(0.62, 0.78, nM.a * 0.5 + nA.b * 0.5) * (1.0 - heath);
-  meadow = mix(meadow, gHeather * (0.85 + 0.3 * nB.b), heath * 0.5);
-  meadow = mix(meadow, gGorse * (0.85 + 0.3 * nB.g), gorse * 0.42);
-  float sunny = clamp(n.z * 2.5, -1.0, 1.0);
-  meadow *= 1.0 + 0.08 * sunny;
-  meadow = mix(meadow, gDry, smoothstep(0.1, 0.32, 1.0 - n.y) * 0.32);
-  float flz = 1.0 + heath * 0.6 + gorse * 0.8;
-  float fl = smoothstep(0.76, 0.83, nC.b) * smoothstep(0.42 / flz, 0.66 / flz, nB.a) * smoothstep(0.3, 0.6, nA.a);
-  vec3 flc = gorse > 0.3 ? gFlowerB : (heath > 0.3 ? gFlowerC : (nB.b > 0.62 ? gFlowerC : (nB.b > 0.4 ? gFlowerA : gFlowerB)));
-  meadow = mix(meadow, flc, fl * 0.9);
-  grass = mix(grass, meadow, wild);
+  float mt = smoothstep( 0.2, 0.85, mott );
+  grass *= ( 0.87 + 0.26 * mt ) * vec3( 1.03 - 0.06 * mt, 1.0, 0.97 + 0.06 * mt );
+  float clover = smoothstep( 0.57, 0.68, nM.a * 0.45 + nA.b * 0.35 + nB.g * 0.2 ) * kept;
+  grass = mix( grass, gClover, clover * 0.45 );
+  grass *= 0.94 + 0.12 * nC.r;
+  // mowing stripes, darker lusher grass along kerbs / walls / hedges
+  float stripe = clamp( tone, -0.5, 0.5 );
+  float edge = clamp( -tone - 0.52, 0.0, 1.0 );
+  grass *= 1.0 + stripe * 0.36 * kept;
+  grass *= vec3( 1.0 + stripe * 0.1 * kept, 1.0, 1.0 - stripe * 0.08 * kept );
+  grass = mix( grass, grass * vec3( 0.8, 0.88, 0.92 ), edge * ( 0.5 + 0.4 * kept ) );
+  // long grass: tussock relief (fwidth-faded so it never crawls), dry stems
+  float lg = smoothstep( 0.3, 0.7, len );
+  float tus = nB.g * 0.6 + nC.b * 0.4;
+  float tfw = fwidth( p.x * 1.6 ) + fwidth( p.z * 1.6 );
+  grass *= 1.0 + ( tus - 0.5 ) * 0.34 * lg * ( 1.0 - smoothstep( 0.3, 1.2, tfw ) );
+  // the wild hills: heather + gorse drifts, warmer sun-facing slopes, bleached steep banks
+  float heath = smoothstep( 0.6, 0.76, nM.b * 0.6 + nA.r * 0.4 ) * smoothstep( 0.3, 0.6, wild );
+  float gorse = smoothstep( 0.62, 0.78, nM.a * 0.5 + nA.b * 0.5 ) * ( 1.0 - heath ) * smoothstep( 0.3, 0.6, wild );
+  grass = mix( grass, gHeather * ( 0.85 + 0.3 * nB.b ), heath * 0.45 );
+  grass = mix( grass, gGorse * ( 0.85 + 0.3 * nB.g ), gorse * 0.38 );
+  float sunny = clamp( n.z * 2.5, -1.0, 1.0 );
+  grass *= 1.0 + 0.07 * sunny * lg;
+  grass = mix( grass, gDry, smoothstep( 0.1, 0.32, 1.0 - n.y ) * 0.3 * lg );
+  // wind: gust fronts press the long grass flat → paler travelling bands (same field as the blades)
+  float gust = thGust( p.xz );
+  float press = gust * smoothstep( 0.3, 0.75, len ) * clamp( length( uWind ) * 1.4, 0.0, 1.0 );
+  grass = mix( grass, grass * vec3( 1.13, 1.15, 1.06 ) + vec3( 0.012 ), press * 0.55 );
+  // wildflowers: dots where a dot is a few pixels, the patch's average tint where it is sub-pixel
+  float meadowF = fw.r * uGcOn;
+  if ( meadowF > 0.004 ) {
+    vec2 fc = p.xz * 2.6;
+    vec2 fi = floor( fc );
+    vec2 hh = th_hash22( fi );
+    float pxc = fwidth( fc.x ) + fwidth( fc.y );
+    float rr = length( fract( fc ) - 0.5 - ( hh - 0.5 ) * 0.5 );
+    float dotM = step( hh.x, meadowF * 0.6 ) * ( 1.0 - smoothstep( 0.13, 0.13 + pxc * 0.7, rr ) );
+    float farF = smoothstep( 0.3, 1.1, pxc );
+    int sp = int( clamp( fw.g * 6.0, 0.0, 5.0 ) );
+    vec3 fcol = gFlowerCol[ sp ];
+    grass = mix( grass, fcol, mix( dotM, meadowF * 0.22, farF ) );
+  }
+  float lawnF = fw.b * uGcOn;
+  if ( lawnF > 0.004 ) {
+    vec2 fc = p.xz * 4.0;
+    vec2 fi = floor( fc );
+    vec2 hh = th_hash22( fi + 17.0 );
+    float pxc = fwidth( fc.x ) + fwidth( fc.y );
+    float rr = length( fract( fc ) - 0.5 - ( hh - 0.5 ) * 0.5 );
+    float dotM = step( hh.x, lawnF * 0.35 ) * ( 1.0 - smoothstep( 0.1, 0.1 + pxc * 0.7, rr ) );
+    float farF = smoothstep( 0.3, 1.1, pxc );
+    vec3 fcol = hh.y < 0.42 ? gFlowerCol[ 6 ] : gFlowerCol[ 7 ];
+    grass = mix( grass, fcol, mix( dotM, lawnF * 0.07, farF ) );
+  }
+  // fallen leaves under the trees
+  float lit = cv.a * uGcOn;
+  if ( lit > 0.01 ) {
+    float sp = smoothstep( 0.45, 0.75, nC.g * 0.6 + nB.a * 0.4 );
+    vec3 lc = mix( vec3( 0.36, 0.22, 0.08 ), vec3( 0.52, 0.36, 0.12 ), nB.b );
+    grass = mix( grass, lc, lit * ( 0.18 + 0.5 * sp ) );
+  }
+  // under the near blade rings the ground is the shaded thatch between the stems (same fade as the
+  // blades shrink, so the hand-over is seamless)
+  float bdist = distance( p, cameraPosition );
+  float camH = cameraPosition.y - p.y;
+  float horiz = max( 1.0, length( cameraPosition.xz - p.xz ) );
+  vec2 lawnEnd = camH / horiz < 0.3 ? uGcPresA.zw : uGcPresA.xy;
+  float presL = 1.0 - smoothstep( lawnEnd.x - 1.5, lawnEnd.y, bdist );
+  float presM = 1.0 - smoothstep( uGcPresL.x - 1.5, uGcPresL.y, bdist );
+  float pres = mix( presM, presL, kept ) * smoothstep( 0.05, 0.5, cv.r ) * uGcOn;
+  vec3 under = mix( gb * 0.55, gcThatch, 0.3 );
+  grass = mix( grass, under, pres * mix( 0.72, 0.5, kept ) );
+  gGrassTrans = smoothstep( 0.35, 0.8, len ) * ( 1.0 - pres ) * 0.6;
 
   // ── wear: trampled yellowish grass → bare soil; scree / gravel at cliff feet (wild areas)
   float w = smoothstep(0.06, 0.8, wear);
@@ -669,6 +782,9 @@ export function createGround(ctx: CityContext, model: TerrainModel, feet: readon
     uTime: ctx.uniforms.uTime,
     uDaylight: ctx.uniforms.uDaylight,
     ...lampUniforms(),
+    ...gcUniforms,
+    ...gcPalette(),
+    uWind: ctx.uniforms.uWind,
     gGrassA: C(PALETTE.grass),
     gGrassB: C(PALETTE.grassDark),
     gLawn: C(PALETTE.lawn),
@@ -711,12 +827,14 @@ export function createGround(ctx: CityContext, model: TerrainModel, feet: readon
       .replace('#include <common>', '#include <common>\n' + LAMP_GLSL + (legacy ? GROUND_PARS_LEGACY : GROUND_PARS))
       .replace('vec4 diffuseColor = vec4( diffuse, opacity );', 'vec4 diffuseColor = vec4( groundColor(), opacity );')
       .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = gRough;')
+      .replace('#include <lights_physical_pars_fragment>', '#include <lights_physical_pars_fragment>\n' + (legacy ? '' : GROUND_RE))
+      .replace('#include <lights_physical_pars_fragment>', '#include <lights_physical_pars_fragment>\n' + (legacy ? '' : GROUND_RE))
       // night street lights: the baked lamp map multiplies the ground albedo (lawns, sand, paths)
       .replace('#include <lights_fragment_end>', '#include <lights_fragment_end>\nreflectedLight.indirectDiffuse += diffuseColor.rgb * thLampLight(vGW, normalize(vGN));');
   };
   const dbg = ctx.debug.enabled ? ctx.debug.params.get('tdebug') : null;
   if (dbg) mat.defines = { TH_DEBUG: dbg };
-  mat.customProgramCacheKey = () => (legacy ? 'th-ground-v1' : 'th-ground-v2') + (dbg ?? '');
+  mat.customProgramCacheKey = () => (legacy ? 'th-ground-v1' : 'th-ground-v3') + (dbg ?? '');
   const mesh = new THREE.Mesh(geo, mat);
   mesh.name = 'terrain-ground';
   mesh.position.y = GROUND_DROP;

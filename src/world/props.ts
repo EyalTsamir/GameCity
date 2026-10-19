@@ -21,7 +21,7 @@ import { Kit, lamp, bench, bin, hydrant, mailbox, phonebox, newsstand, planterBo
 import * as GK from './props/garden';
 import * as SK from './props/kit';
 import { planScatter, scatterDisc, type ScatterItem } from './props/scatter';
-import type { PropsService, ChairOut } from './props/service';
+import type { PropsService, ChairOut, Cafe } from './props/service';
 
 interface TerrainSvc {
   height(x: number, z: number): number;
@@ -52,6 +52,8 @@ export default function create(ctx: CityContext): CityModule {
   const KS = new Kit(new GeoSink(extras));
   const gsink = new GeoSink(extras);
   const g = new Kit(gsink);
+  // static laundry on the garden rotary dryers (own small mesh: life may replace it with animated cloth)
+  const KL = new Kit(new GeoSink(extras));
   const glows: Glow[] = [];
   const count: Record<string, number> = {};
   const inc = (key: string) => (count[key] = (count[key] ?? 0) + 1);
@@ -192,7 +194,16 @@ export default function create(ctx: CityContext): CityModule {
   // ────────────────────────────────────────────── hardscape scatter ──
   // (after vegetation planted its trees; before the bollards, which keep clear of it)
   // café seats are exposed as ctx.services.props (streetlife seats patrons there)
-  const service: PropsService = { cafeSeats: [], cafeTables: [] };
+  let staticLaundry = true;
+  const service: PropsService = {
+    cafes: [],
+    discs: layout.furniture,
+    bbqs: [],
+    washing: [],
+    setStaticLaundry(on: boolean) {
+      staticLaundry = on;
+    },
+  };
   const chairs: ChairOut[] = [];
   let scatter: ScatterItem[] = [];
   if (!ctx.debug.params.has('noscatter')) {
@@ -209,15 +220,12 @@ export default function create(ctx: CityContext): CityModule {
           at(KS);
           chairs.length = 0;
           const shade = SK.cafe(kf, KS, srng, undefined, chairs);
-          const ti = service.cafeTables.length;
-          const seats: number[] = [];
-          for (const c of chairs) {
-            seats.push(service.cafeSeats.length);
-            service.cafeSeats.push({ x: c.sx, y: c.sy, z: c.sz, yaw: Math.atan2(c.fx - c.sx, c.fz - c.sz), table: ti });
-          }
-          // kiosk seating sits within ~7 m of a kiosk placed just before it
+          const sb = plan.blocks[stationBlock]?.rect;
+          const inStation = !!sb && it.x > sb.x0 && it.x < sb.x1 && it.z > sb.z0 && it.z < sb.z1;
           const nearKiosk = scatter.some((o) => o.kind === 'kiosk' && Math.hypot(o.x - it.x, o.z - it.z) < 7.5);
-          service.cafeTables.push({ x: it.x, z: it.z, y: y + 0.755, r: 0.36, parasol: shade, kind: nearKiosk ? 'kiosk' : 'terrace', seats });
+          const cafe: Cafe = { x: it.x, z: it.z, yaw: it.yaw, tableY: y + 0.755, tableR: 0.36, seats: [], parasol: shade, source: inStation ? 'station' : nearKiosk ? 'kiosk' : 'plaza' };
+          for (const c of chairs) cafe.seats.push({ x: c.sx, z: c.sz, yaw: Math.atan2(c.fx - c.sx, c.fz - c.sz), seatY: c.sy });
+          service.cafes.push(cafe);
           break;
         }
         case 'kiosk':
@@ -474,18 +482,24 @@ export default function create(ctx: CityContext): CityModule {
           at(kf);
           GK.loungeSet(kf, grng);
           break;
-        case 'bbq':
+        case 'bbq': {
           at(kf);
-          GK.bbq(kf, grng);
+          const top = GK.bbq(kf, grng);
+          service.bbqs.push({ x: it.x, y: y + top, z: it.z });
           break;
+        }
         case 'paddling':
           at(kf);
           GK.paddling(kf, grng, it.w);
           break;
-        case 'washing':
+        case 'washing': {
           at(kf);
-          GK.washing(kf, grng);
+          at(KL);
+          const w = GK.washing(kf, grng, KL);
+          // local arm angle a → world angle a − yaw (frame = translate · rotY(yaw))
+          service.washing.push({ x: it.x, y, z: it.z, yaw0: w.yaw0 - it.yaw, R: w.R, H: y + w.H });
           break;
+        }
         case 'vegBeds':
           at(kf);
           GK.vegBeds(kf, grng, 2 + (it.seed & 3), it.d);
@@ -568,6 +582,16 @@ export default function create(ctx: CityContext): CityModule {
     culler.add(m, () => true, 8);
   }
   KF.forEach((kit, i) => addFurniture(kit, `props-furniture-fine-${i ? 'e' : 'w'}`, true));
+  if (KL.s.vcount > 0) {
+    const geo = KL.s.build();
+    geos.push(geo);
+    const m = staticMesh(geo, mat, 'props-laundry');
+    m.castShadow = false;
+    m.receiveShadow = true;
+    m.renderOrder = -1;
+    if (parts.includes('furniture')) root.add(m);
+    culler.add(m, () => near && staticLaundry, 8);
+  }
   let glassGeo: THREE.BufferGeometry | null = null;
   let glassMat: THREE.Material | null = null;
   if (gsink.vcount > 0) {
@@ -600,8 +624,10 @@ export default function create(ctx: CityContext): CityModule {
         fineTris: KF.reduce((a, c) => a + c.s.tcount, 0),
         verts: [...KC, ...KF, KS].reduce((a, c) => a + c.s.vcount, 0) + gsink.vcount,
         buildMs: Math.round(buildMs),
-        cafeTables: service.cafeTables.length,
-        cafeSeats: service.cafeSeats.length,
+        cafes: service.cafes.length,
+        cafeSeats: service.cafes.reduce((a, c) => a + c.seats.length, 0),
+        bbqs: service.bbqs.length,
+        dryers: service.washing.length,
       };
     },
     invariants() {

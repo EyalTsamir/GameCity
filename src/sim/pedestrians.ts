@@ -43,7 +43,26 @@ export default function create(ctx: CityContext): CityModule {
   );
 
   // `_crowd` / `_renderer` are debug handles for automated tests (window.__city.ctx.services.pedestrians._crowd)
-  const service = { count: () => crowd.count(), _crowd: crowd, _renderer: renderer };
+  /** number of people (walkers, sitters, street actors) within r of (x, z) — read-only, allocation-free */
+  const near = (x: number, z: number, r: number): number => {
+    const r2 = r * r;
+    let n = 0;
+    const parties = crowd.parties;
+    for (let i = 0; i < parties.length; i++) {
+      const p = parties[i];
+      if (p.state === 'gone') continue;
+      const ms = p.members;
+      for (let k = 0; k < ms.length; k++) {
+        const m = ms[k];
+        if (!m.present) continue;
+        const dx = m.x - x,
+          dz = m.z - z;
+        if (dx * dx + dz * dz < r2) n++;
+      }
+    }
+    return n;
+  };
+  const service = { count: () => crowd.count(), near, _crowd: crowd, _renderer: renderer };
   ctx.services.pedestrians = service;
   ctx.pickers.push({ name: 'pedestrians', pick: (ray) => crowd.pick(ray) });
 

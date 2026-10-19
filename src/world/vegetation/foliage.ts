@@ -560,9 +560,10 @@ thWrap = 0.0;
       float n = thNoised( vThRest * vec3( 9.0, 1.4, 9.0 ) ).x;
       bc *= 1.0 - 0.34 * mix( 0.45, smoothstep( -0.08, 0.22, n ), fade );
     }
-    // moss / green algae on the weather side + base
-    float moss = vThK.a * smoothstep( 0.6, 0.0, vThRest.y - vThWPos.y + 0.0 );
-    bc = mix( bc, vec3( 0.13, 0.17, 0.06 ), vThK.a * 0.5 );
+    // moss / green algae on the shaded north side
+    vec3 wNm = normalize( ( vec4( vNormal, 0.0 ) * viewMatrix ).xyz );
+    float moss = vThK.a * smoothstep( 0.1, -0.7, wNm.z ) * ( 0.6 + 0.4 * thNoised( vThRest * 2.3 ).x );
+    bc = mix( bc, vec3( 0.075, 0.1, 0.035 ), saturate( moss ) * 0.7 );
   }
   diffuseColor.rgb = bc;
 }

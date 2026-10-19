@@ -5,7 +5,7 @@
 // leaves fanning outwards). Channels are data, not colour:
 //   R  leaf brightness / shading (fold of the blade, darker leaves underneath, lighter midrib)
 //   G  per-leaf random 0.08..1 (hue drift per leaf, leaf-by-leaf LOD dissolve); 0 on twigs (always kept)
-//   B  material: 0 leaf, ~0.5 twig / bark, 1 flower / fruit (coloured by the card's flower colour)
+//   B  flower / fruit mask (coloured by the card's flower colour); twigs are G = 0 (bark colour)
 //   A  coverage (alpha-tested at 0.5)
 // The mip chain is built here: colour is pulled into transparent texels (no dark fringes when filtered)
 // and every mip's alpha is rescaled per region so its coverage at the 0.5 threshold equals the full-size
@@ -218,7 +218,7 @@ function leaf(g: CanvasRenderingContext2D, x: number, y: number, a: number, L: n
   g.restore();
 }
 
-/** twig / branchlet line (wood: B 0.5, G 0 → never dissolved) */
+/** twig / branchlet line (wood: G 0 → coloured as bark, never dissolved) */
 function twig(g: CanvasRenderingContext2D, pts: [number, number][], w0: number, w1: number, bright = 0.42): void {
   for (let i = 0; i < pts.length - 1; i++) {
     const f = i / Math.max(1, pts.length - 2);

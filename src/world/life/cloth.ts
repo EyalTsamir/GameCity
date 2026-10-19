@@ -27,6 +27,8 @@ export interface Line {
   wire: string;
   /** wire radius (m) */
   r: number;
+  /** wire drawn by someone else (e.g. rigid balcony lines of the buildings module) */
+  hidden?: boolean;
 }
 
 export interface PieceOpts {
@@ -69,6 +71,11 @@ export class ClothSystem {
     return this.lines.length - 1;
   }
 
+  /** do not draw this line's wire (cloth / bulbs still hang on it) */
+  noWire(i: number): void {
+    this.lines[i].hidden = true;
+  }
+
   /** a piece hinged on line `line` centred at parameter s */
   addPiece(line: number, s: number, o: PieceOpts): void {
     this.pieces.push({ line, s, pole: null, o });
@@ -109,7 +116,7 @@ export class ClothSystem {
     const sphere = bounds.isEmpty() ? new THREE.Sphere(new THREE.Vector3(), 1) : bounds.getBoundingSphere(new THREE.Sphere());
 
     if (this.pieces.length) this.buildCloth(shared, sphere);
-    if (this.lines.length) this.buildWires(shared, sphere);
+    if (this.lines.some((l) => !l.hidden)) this.buildWires(shared, sphere);
     if (this.bulbs.length) this.buildBulbs(shared, sphere);
   }
 
@@ -244,11 +251,12 @@ void RE_Direct_Cloth( const in IncidentLight directLight, const in vec3 geometry
     geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
     geo.setAttribute('normal', new THREE.Float32BufferAttribute(new Array(pos.length).fill(0), 3));
     geo.setIndex(idx);
-    const n = this.lines.length;
+    const vis = this.lines.filter((l) => !l.hidden);
+    const n = vis.length;
     const P0 = new Float32Array(n * 4),
       P1 = new Float32Array(n * 4),
       WC = new Float32Array(n * 4);
-    this.lines.forEach((l, i) => {
+    vis.forEach((l, i) => {
       P0.set([l.ax, l.ay, l.az, l.sag], i * 4);
       P1.set([l.bx, l.by, l.bz, l.seed], i * 4);
       _c.set(l.wire);

@@ -171,7 +171,8 @@ export function parasol(k: Kit, rng: Rng, r = 1.3, h = 2.35, colors?: [string, s
 }
 
 /** Kettle BBQ or a small gas grill. */
-export function bbq(k: Kit, rng: Rng): void {
+/** Kettle or cart barbecue; returns the local height of the grill top (smoke origin). */
+export function bbq(k: Kit, rng: Rng): number {
   const sh = k.sh;
   if (rng.chance(0.6)) {
     k.m('#202224', 'iron');
@@ -183,7 +184,7 @@ export function bbq(k: Kit, rng: Rng): void {
     sh.cyl(0, 0.84, 0, 0.03, 0.03, 0.06, 5, 2);
     k.m('#8a9399', 'steel');
     sh.box(0, 0.35, 0, 0.36, 0.015, 0.36, 0);
-    return;
+    return 0.86;
   }
   k.m('#3a3f44', 'steel');
   sh.box(0, 0.42, 0, 0.95, 0.84, 0.5, 1);
@@ -192,6 +193,7 @@ export function bbq(k: Kit, rng: Rng): void {
   k.m('#9aa3a8', 'steel');
   sh.box(0.65, 0.82, 0, 0.36, 0.03, 0.42, 0);
   sh.box(-0.65, 0.82, 0, 0.36, 0.03, 0.42, 0);
+  return 1.12;
 }
 
 // ─────────────────────────────────────────────────────────── buildings ──
@@ -571,7 +573,11 @@ export function paddling(k: Kit, rng: Rng, dia: number): void {
 // ─────────────────────────────────────────────────────────── chores ──
 
 /** Rotary washing line with laundry. */
-export function washing(k: Kit, rng: Rng): void {
+/**
+ * Rotary dryer; the hanging laundry goes to `cloth` (framed at the same spot by the caller) or to `k`.
+ * Returns the local arm angle yaw0 (corners at (cos, sin)(yaw0 + i·π/2)·R), R and the line height H.
+ */
+export function washing(k: Kit, rng: Rng, cloth?: Kit): { yaw0: number; R: number; H: number } {
   const sh = k.sh;
   const H = 1.75,
     R = 1.1;
@@ -593,6 +599,7 @@ export function washing(k: Kit, rng: Rng): void {
   // laundry hanging from the outer square
   const cols = ['#f4efe4', '#7da3c4', '#e86a8a', '#e8c35a', '#3f8f5a', '#d9473f', '#2f3a52', '#f4efe4'];
   const n = rng.int(4, 9);
+  const ck = cloth ?? k;
   for (let j = 0; j < n; j++) {
     const side = rng.int(0, 3);
     const t = rng.range(0.15, 0.85);
@@ -603,11 +610,12 @@ export function washing(k: Kit, rng: Rng): void {
       z = Math.sin(a0) * rr * (1 - t) + Math.sin(a1) * rr * t;
     const along = Math.atan2(Math.sin(a1) - Math.sin(a0), Math.cos(a1) - Math.cos(a0));
     const big = rng.chance(0.35);
-    k.m(rng.pick(cols), 'rubber');
-    sh.push().local(x, H - (big ? 0.42 : 0.22), z, 0, -along);
-    sh.box(0, 0, 0, big ? 0.7 : 0.36, big ? 0.8 : 0.42, 0.012, 0);
-    sh.pop();
+    ck.m(rng.pick(cols), 'rubber');
+    ck.sh.push().local(x, H - (big ? 0.42 : 0.22), z, 0, -along);
+    ck.sh.box(0, 0, 0, big ? 0.7 : 0.36, big ? 0.8 : 0.42, 0.012, 0);
+    ck.sh.pop();
   }
+  return { yaw0, R, H: H - 0.01 };
 }
 
 /** n raised vegetable beds (2.4 x 1.1) in a row along z. */
