@@ -29,6 +29,12 @@ routes, speeds, avoidance and `invariants()` are untouched.
   jeans straighter, shorts wider, toes blunter). city_slide first try ran ~2.7 fps with 0.1 s sim per frame
   (too coarse) → SPEED env (default 0.2) added, new-run killed (pid of my own node), before-run continues with
   the fixed script; slide_new re-queued after fix_chain2.done (marker fix_chain3.done).
+* 03:22 RESULTS so far: slide_before.json (real city, 9.3 s sim, 2072 stances): straight median 0.18 / p90 0.86
+  cm; turning 15–45° median 1.43 / p90 9.1; sharp > 45° (44 stances) median 6.3 / p90 15.8 / max 61 cm.
+  gc_{new,before}.json (tight write() loop in Chrome): far views (no gait) 52 vs 1514 B per figure, but near
+  views still 1.5–3.0 KB per gait figure (before 2.4–4.7 KB) although node says ≈ 0 → Chrome's V8 differs
+  (newer tiering / Maglev?) — investigating with tools/chrome_alloc.mjs (app modules imported in the page,
+  per-call garbage of computePose walk/stand, armIKa, legIKa, fkPoint) → shots/people/fix/chrome_alloc.json.
 
 * FIX ROUND from the re-review (`docs/progress/people-review.md` "## Re-review (2026-10-18)"), in order:
   1. corners (gait.ts): end steps early on fast heading change / cap trailing-leg stretch (hip ext ≤ ~−22°);
