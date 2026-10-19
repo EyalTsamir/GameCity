@@ -143,6 +143,10 @@ const CELL = 0.25;
 const BODY = 0.26; // walker radius + a little
 const CHAIR_R = 0.34;
 const TOP_R = 0.4;
+/** margin of the planning grid round a cluster of tables (m) */
+const MARGIN = 13;
+/** longest approach walk considered (m) */
+const MAX_WALK = 22;
 
 interface Disc {
   x: number;
@@ -154,100 +158,104 @@ interface Disc {
 export function buildCafes(ctx: CityContext, districtName: (x: number, z: number) => string): CafePlace[] {
   const { tables, scatter } = cafeTables(ctx);
   if (!tables.length) return [];
-  const { peds, occupancy: occ, plan } = ctx;
+  const { peds, occupancy: occ } = ctx;
   const layout = getLayout(ctx);
-  // static obstacles (discs): street furniture, trees, other scatter items, features
+  // static obstacles: street furniture, trees, other scatter items, every table top and chair
   const discs: Disc[] = [];
   for (const f of layout.furniture) discs.push({ x: f.x, z: f.z, r: Math.min(f.r, 1.2) });
   const vegTrees = (ctx.services.vegetation as { trees?: { x: number; z: number; r: number }[] } | undefined)?.trees ?? [];
   for (const t of vegTrees) discs.push({ x: t.x, z: t.z, r: 0.35 });
-  const rects: { x: number; z: number; c: number; s: number; hw: number; hd: number }[] = [];
-  for (const it of scatter) {
-    if (it.kind === 'cafe') continue;
-    rects.push({ x: it.x, z: it.z, c: Math.cos(it.yaw), s: Math.sin(it.yaw), hw: it.w / 2, hd: it.d / 2 });
-  }
   for (const T of tables) {
     discs.push({ x: T.x, z: T.z, r: TOP_R });
     for (const ch of T.chairs) discs.push({ x: ch.x, z: ch.z, r: CHAIR_R });
   }
+  const rects: { x: number; z: number; c: number; s: number; hw: number; hd: number }[] = [];
+  for (const it of scatter) if (it.kind !== 'cafe') rects.push({ x: it.x, z: it.z, c: Math.cos(it.yaw), s: Math.sin(it.yaw), hw: it.w / 2, hd: it.d / 2 });
   // walkway nodes a patron may come from (not doors / bus stops / crosswalk ends)
-  const cand = peds.nodes.filter((n) => n.kind !== 'door' && n.kind !== 'busstop' && n.edges.length >= 2 && !n.edges.some((e) => peds.edges[e].kind === 'crosswalk' || peds.edges[e].kind === 'door'));
+  const cand = peds.nodes.filter((n) => n.kind !== 'door' && n.kind !== 'busstop' && n.edges.length >= 2 && !n.edges.some((e) => peds.edges[e].kind === 'crosswalk'));
+
+  // clusters of neighbouring tables share one planning grid
+  const cl = tables.map((_, i) => i);
+  const find = (i: number): number => (cl[i] === i ? i : (cl[i] = find(cl[i])));
+  for (let i = 0; i < tables.length; i++)
+    for (let j = i + 1; j < tables.length; j++) if (Math.hypot(tables[i].x - tables[j].x, tables[i].z - tables[j].z) < 7) cl[find(i)] = find(j);
+  const groups = new Map<number, number[]>();
+  for (let i = 0; i < tables.length; i++) {
+    const g = groups.get(find(i));
+    if (g) g.push(i);
+    else groups.set(find(i), [i]);
+  }
 
   const out: CafePlace[] = [];
-  const R = 15;
-  const N = Math.ceil((2 * R) / CELL);
-  const blocked = new Uint8Array(N * N);
-  const dist = new Float32Array(N * N);
-  const prev = new Int32Array(N * N);
-  const heap: number[] = [];
-  for (const T of tables) {
-    const ox = T.x - R,
-      oz = T.z - R;
+  for (const members of groups.values()) {
+    let bx0 = Infinity,
+      bz0 = Infinity,
+      bx1 = -Infinity,
+      bz1 = -Infinity;
+    for (const i of members) {
+      bx0 = Math.min(bx0, tables[i].x);
+      bz0 = Math.min(bz0, tables[i].z);
+      bx1 = Math.max(bx1, tables[i].x);
+      bz1 = Math.max(bz1, tables[i].z);
+    }
+    const ox = bx0 - MARGIN,
+      oz = bz0 - MARGIN;
+    const NX = Math.ceil((bx1 - bx0 + 2 * MARGIN) / CELL),
+      NZ = Math.ceil((bz1 - bz0 + 2 * MARGIN) / CELL);
     const cx = (i: number) => ox + (i + 0.5) * CELL;
     const cz = (j: number) => oz + (j + 0.5) * CELL;
-    // static blocking for this table's neighbourhood (own chairs handled per seat)
-    blocked.fill(0);
-    for (let j = 0; j < N; j++) {
-      for (let i = 0; i < N; i++) {
-        const x = cx(i),
-          z = cz(j);
-        const f = occ.get(x, z);
-        let b = (f & (OCC.BUILDING | OCC.WATER | OCC.ROAD | OCC.RAIL | OCC.SOLID)) !== 0;
-        if (!b) {
-          for (const r of rects) {
-            const dx = x - r.x,
-              dz = z - r.z;
-            if (Math.abs(dx) > 4 || Math.abs(dz) > 4) continue;
-            const lx = dx * r.c - dz * r.s,
-              lz = dx * r.s + dz * r.c;
-            if (Math.abs(lx) < r.hw + BODY && Math.abs(lz) < r.hd + BODY) {
-              b = true;
-              break;
-            }
-          }
-        }
-        if (!b) {
-          for (const d of discs) {
-            const dx = x - d.x,
-              dz = z - d.z;
-            const rr = d.r + BODY;
-            if (dx * dx + dz * dz < rr * rr) {
-              // own table's chairs are re-opened per seat below; mark them 2
-              const own = Math.hypot(d.x - T.x, d.z - T.z) < 0.7 && d.r === CHAIR_R;
-              b = true;
-              if (own) blocked[j * N + i] = 2;
-              break;
-            }
-          }
-        }
-        if (b && blocked[j * N + i] !== 2) blocked[j * N + i] = 1;
-      }
+    const blocked = new Uint8Array(NX * NZ);
+    for (let j = 0; j < NZ; j++) for (let i = 0; i < NX; i++) if (occ.get(cx(i), cz(j)) & (OCC.BUILDING | OCC.WATER | OCC.ROAD | OCC.RAIL | OCC.SOLID)) blocked[j * NX + i] = 1;
+    const stamp = (x0: number, z0: number, x1: number, z1: number, inside: (x: number, z: number) => boolean) => {
+      const i0 = Math.max(0, Math.floor((x0 - ox) / CELL)),
+        i1 = Math.min(NX - 1, Math.floor((x1 - ox) / CELL));
+      const j0 = Math.max(0, Math.floor((z0 - oz) / CELL)),
+        j1 = Math.min(NZ - 1, Math.floor((z1 - oz) / CELL));
+      for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) if (!blocked[j * NX + i] && inside(cx(i), cz(j))) blocked[j * NX + i] = 1;
+    };
+    const inBox = (x: number, z: number, m: number) => x > ox - m && x < ox + NX * CELL + m && z > oz - m && z < oz + NZ * CELL + m;
+    for (const r of rects) {
+      if (!inBox(r.x, r.z, 5)) continue;
+      const ext = Math.hypot(r.hw, r.hd) + BODY;
+      stamp(r.x - ext, r.z - ext, r.x + ext, r.z + ext, (x, z) => {
+        const dx = x - r.x,
+          dz = z - r.z;
+        const lx = dx * r.c - dz * r.s,
+          lz = dx * r.s + dz * r.c;
+        return Math.abs(lx) < r.hw + BODY && Math.abs(lz) < r.hd + BODY;
+      });
     }
-    // nodes within reach
-    const near = cand.filter((n) => Math.abs(n.x - T.x) < R - 1 && Math.abs(n.z - T.z) < R - 1).sort((a, b) => Math.hypot(a.x - T.x, a.z - T.z) - Math.hypot(b.x - T.x, b.z - T.z)).slice(0, 6);
-    if (!near.length) continue;
-    const seats: CafeSeat[] = [];
-    let bestNode = -1;
-    let bestCost = Infinity;
-    const paths: { seat: CafeSeat; per: Map<number, number[]>; cost: Map<number, number> }[] = [];
-    const nch = T.chairs.length;
-    for (let k = 0; k < nch; k++) {
-      const ch = T.chairs[k];
-      const fx = Math.sin(ch.yaw),
-        fz = Math.cos(ch.yaw);
-      // seat spot: the bench-sit pose expects the backrest 0.30 m behind the spot (chair: 0.19 behind its centre)
-      const back = -BACKREST_Z - ch.back;
-      const sx0 = ch.x + fx * back,
-        sz0 = ch.z + fz * back;
-      // standing point beside the chair, on the side with the larger gap to the neighbouring chair
-      const out0x = ch.x - T.x,
-        out0z = ch.z - T.z;
-      const ol = Math.hypot(out0x, out0z) || 1;
-      const ux = out0x / ol,
-        uz = out0z / ol;
-      let side = 1;
-      if (nch > 2) {
-        const a0 = Math.atan2(out0x, out0z);
+    for (const d of discs) {
+      if (!inBox(d.x, d.z, d.r + 1)) continue;
+      const rr = d.r + BODY;
+      stamp(d.x - rr, d.z - rr, d.x + rr, d.z + rr, (x, z) => (x - d.x) ** 2 + (z - d.z) ** 2 < rr * rr);
+    }
+    const cellOf = (x: number, z: number): number => {
+      const i = Math.floor((x - ox) / CELL),
+        j = Math.floor((z - oz) / CELL);
+      return i < 0 || j < 0 || i >= NX || j >= NZ ? -1 : j * NX + i;
+    };
+    // seats: spot on the chair + standing point beside it
+    const seatsOf: CafeSeat[][] = [];
+    for (const ti of members) {
+      const T = tables[ti];
+      const nch = T.chairs.length;
+      const list: CafeSeat[] = [];
+      for (let k = 0; k < nch; k++) {
+        const ch = T.chairs[k];
+        const fx = Math.sin(ch.yaw),
+          fz = Math.cos(ch.yaw);
+        // seat spot: the bench-sit pose expects the backrest 0.30 m behind the spot (chair: `back` behind its centre)
+        const back = -BACKREST_Z - ch.back;
+        const sx0 = ch.x + fx * back,
+          sz0 = ch.z + fz * back;
+        const ux0 = ch.x - T.x,
+          uz0 = ch.z - T.z;
+        const ol = Math.hypot(ux0, uz0) || 1;
+        const ux = ux0 / ol,
+          uz = uz0 / ol;
+        // standing point beside the chair, on the side of the larger gap to the neighbouring chairs
+        const a0 = Math.atan2(ux0, uz0);
         let gapL = TAU,
           gapR = TAU;
         for (const o of T.chairs) {
@@ -258,185 +266,168 @@ export function buildCafes(ctx: CityContext, districtName: (x: number, z: number
           if (d > 0) gapL = Math.min(gapL, d);
           else gapR = Math.min(gapR, -d);
         }
-        side = gapL >= gapR ? 1 : -1;
-      }
-      // tangent (left of the outward direction for side +1)
-      const tx = uz * side,
-        tz = -ux * side;
-      let stx = ch.x + ux * 0.18 + tx * 0.5,
-        stz = ch.z + uz * 0.18 + tz * 0.5;
-      // relative direction of the table from the sitter's facing
-      let rel = Math.atan2(T.x - sx0, T.z - sz0) - ch.yaw;
-      while (rel > Math.PI) rel -= TAU;
-      while (rel < -Math.PI) rel += TAU;
-      // Dijkstra from the standing point over the local grid (own chair open, other own chairs blocked)
-      const open = (i: number, j: number): boolean => {
-        if (i < 0 || j < 0 || i >= N || j >= N) return false;
-        const b = blocked[j * N + i];
-        if (b === 0) return true;
-        if (b === 1) return false;
-        // own chairs: only ours is passable
-        const x = cx(i),
-          z = cz(j);
-        for (let q = 0; q < nch; q++) {
-          if (q === k) continue;
-          const o = T.chairs[q];
-          if ((x - o.x) ** 2 + (z - o.z) ** 2 < (CHAIR_R + BODY) ** 2) return false;
-        }
-        return (x - T.x) ** 2 + (z - T.z) ** 2 > (TOP_R + BODY) ** 2;
-      };
-      let si = Math.floor((stx - ox) / CELL),
-        sj = Math.floor((stz - oz) / CELL);
-      if (!open(si, sj)) {
-        // try the other side
-        stx = ch.x + ux * 0.18 - tx * 0.5;
-        stz = ch.z + uz * 0.18 - tz * 0.5;
-        si = Math.floor((stx - ox) / CELL);
-        sj = Math.floor((stz - oz) / CELL);
-        if (!open(si, sj)) continue;
-      }
-      dist.fill(Infinity);
-      prev.fill(-1);
-      heap.length = 0;
-      const s0 = sj * N + si;
-      dist[s0] = 0;
-      heap.push(s0);
-      while (heap.length) {
-        // tiny binary heap on dist
-        const top = heap[0];
-        const last = heap.pop()!;
-        if (heap.length) {
-          heap[0] = last;
-          let a = 0;
-          for (;;) {
-            const l = a * 2 + 1,
-              r = l + 1;
-            let m = a;
-            if (l < heap.length && dist[heap[l]] < dist[heap[m]]) m = l;
-            if (r < heap.length && dist[heap[r]] < dist[heap[m]]) m = r;
-            if (m === a) break;
-            const t = heap[a];
-            heap[a] = heap[m];
-            heap[m] = t;
-            a = m;
-          }
-        }
-        const ti = top % N,
-          tj = (top - ti) / N;
-        const d0 = dist[top];
-        for (let dj = -1; dj <= 1; dj++) {
-          for (let di = -1; di <= 1; di++) {
-            if (!di && !dj) continue;
-            const ni = ti + di,
-              nj = tj + dj;
-            if (!open(ni, nj)) continue;
-            if (di && dj && (!open(ti + di, tj) || !open(ti, tj + dj))) continue;
-            const nd = d0 + (di && dj ? 1.4142 : 1) * CELL;
-            const id = nj * N + ni;
-            if (nd < dist[id]) {
-              dist[id] = nd;
-              prev[id] = top;
-              heap.push(id);
-              let a = heap.length - 1;
-              while (a > 0) {
-                const p = (a - 1) >> 1;
-                if (dist[heap[p]] <= dist[heap[a]]) break;
-                const t = heap[a];
-                heap[a] = heap[p];
-                heap[p] = t;
-                a = p;
-              }
+        let stx = 0,
+          stz = 0,
+          found = false;
+        for (const side of gapL >= gapR ? [1, -1] : [-1, 1]) {
+          for (const [o, t] of [
+            [0.3, 0.58],
+            [0.5, 0.5],
+            [0.7, 0.3],
+          ]) {
+            // tangent: left of the outward direction for side +1
+            const x = ch.x + ux * o + uz * side * t,
+              z = ch.z + uz * o - ux * side * t;
+            const c = cellOf(x, z);
+            if (c >= 0 && !blocked[c]) {
+              stx = x;
+              stz = z;
+              found = true;
+              break;
             }
           }
+          if (found) break;
+        }
+        if (!found) continue;
+        let rel = Math.atan2(T.x - sx0, T.z - sz0) - ch.yaw;
+        while (rel > Math.PI) rel -= TAU;
+        while (rel < -Math.PI) rel += TAU;
+        list.push({ x: sx0, z: sz0, y: ch.seatTop - SEAT_TOP, yaw: ch.yaw, taken: -1, cx: ch.x, cz: ch.z, sx: stx, sz: stz, path: [], k, rel });
+      }
+      seatsOf.push(list);
+    }
+    // one Dijkstra per candidate node over the cluster grid
+    const near = cand.filter((n) => n.x > bx0 - MARGIN + 1 && n.x < bx1 + MARGIN - 1 && n.z > bz0 - MARGIN + 1 && n.z < bz1 + MARGIN - 1 && cellOf(n.x, n.z) >= 0 && !blocked[cellOf(n.x, n.z)]);
+    const dist = new Float32Array(NX * NZ);
+    const prev = new Int32Array(NX * NZ);
+    const results: { node: number; dist: Float32Array; prev: Int32Array }[] = [];
+    for (const n of near) {
+      dijkstra(blocked, NX, NZ, cellOf(n.x, n.z), dist, prev, MAX_WALK);
+      results.push({ node: n.id, dist: dist.slice(), prev: prev.slice() });
+    }
+    members.forEach((ti, mi) => {
+      const T = tables[ti];
+      const seats = seatsOf[mi];
+      if (!seats.length || !results.length) return;
+      // the node with the shortest total walk to all the table's seats
+      let best: (typeof results)[number] | null = null;
+      let bestCost = Infinity;
+      for (const r of results) {
+        let c = 0;
+        for (const s of seats) c += r.dist[cellOf(s.sx, s.sz)];
+        if (c < bestCost) {
+          bestCost = c;
+          best = r;
         }
       }
-      const seat: CafeSeat = { x: sx0, z: sz0, y: T.y + (ch.seatTop - T.y) - SEAT_TOP, yaw: ch.yaw, taken: -1, cx: ch.x, cz: ch.z, sx: stx, sz: stz, path: [], k, rel };
-      const per = new Map<number, number[]>();
-      const cost = new Map<number, number>();
-      for (const n of near) {
-        const ni = Math.floor((n.x - ox) / CELL),
-          nj = Math.floor((n.z - oz) / CELL);
-        if (ni < 0 || nj < 0 || ni >= N || nj >= N) continue;
-        const id = nj * N + ni;
-        if (!isFinite(dist[id])) continue;
-        // walk back from the node to the standing point, then simplify (line of sight on the grid)
-        const cells: number[] = [];
-        for (let c = id; c >= 0; c = prev[c]) cells.push(c);
-        const pts: [number, number][] = cells.map((c) => [cx(c % N), cz(Math.floor(c / N))]);
-        pts[pts.length - 1] = [stx, stz];
+      if (!best || !isFinite(bestCost)) return;
+      const nd = peds.nodes[best.node];
+      for (const s of seats) {
+        const pts: [number, number][] = [];
+        for (let c = cellOf(s.sx, s.sz); c >= 0; c = best.prev[c]) pts.push([cx(c % NX), cz(Math.floor(c / NX))]);
+        pts.reverse(); // node → standing point
+        pts[0] = [nd.x, nd.z];
+        pts[pts.length - 1] = [s.sx, s.sz];
         const simp: [number, number][] = [pts[0]];
         let a = 0;
         while (a < pts.length - 1) {
           let b = pts.length - 1;
-          for (; b > a + 1; b--) if (losFree(pts[a], pts[b], open, ox, oz)) break;
+          for (; b > a + 1; b--) if (losFree(pts[a], pts[b], blocked, NX, NZ, ox, oz)) break;
           simp.push(pts[b]);
           a = b;
         }
-        const flat: number[] = [];
-        for (let q = 1; q < simp.length; q++) flat.push(simp[q][0], simp[q][1], T.y);
-        per.set(n.id, flat);
-        cost.set(n.id, dist[id]);
+        for (let q = 1; q < simp.length; q++) s.path.push(simp[q][0], simp[q][1], T.y);
       }
-      paths.push({ seat, per, cost });
-      seats.push(seat);
-    }
-    if (!seats.length) continue;
-    for (const n of near) {
-      let c = 0;
-      let ok = true;
-      for (const p of paths) {
-        const v = p.cost.get(n.id);
-        if (v === undefined) {
-          ok = false;
-          break;
-        }
-        c += v;
-      }
-      if (ok && c < bestCost) {
-        bestCost = c;
-        bestNode = n.id;
-      }
-    }
-    if (bestNode < 0 || bestCost / seats.length > 22) continue;
-    for (const p of paths) p.seat.path = p.per.get(bestNode)!;
-    // seats keep the table's chair order (k) — pairs sit opposite each other where possible
-    const nd = peds.nodes[bestNode];
-    let wx = (T.x + nd.x) / 2,
-      wz = (T.z + nd.z) / 2;
-    const wl = Math.hypot(nd.x - T.x, nd.z - T.z) || 1;
-    wx = T.x + ((nd.x - T.x) / wl) * 1.25;
-    wz = T.z + ((nd.z - T.z) / wl) * 1.25;
-    const lot = plan.lots.find((l) => Math.abs((l.footprint.x0 + l.footprint.x1) / 2 - T.x) < 30 && Math.abs((l.footprint.z0 + l.footprint.z1) / 2 - T.z) < 30 && l.name);
-    void lot;
-    out.push({
-      id: out.length,
-      node: bestNode,
-      x: T.x,
-      z: T.z,
-      y: T.y,
-      top: T.top,
-      r: T.r,
-      seats,
-      wx,
-      wz,
-      district: districtName(T.x, T.z),
-      label: `Having a coffee on a terrace in ${districtName(T.x, T.z)}`,
-      taken: -1,
-      since: 0,
+      // a waiter stands next to the table on the side towards the walkway
+      const wl = Math.hypot(nd.x - T.x, nd.z - T.z) || 1;
+      out.push({
+        id: out.length,
+        node: best.node,
+        x: T.x,
+        z: T.z,
+        y: T.y,
+        top: T.top,
+        r: T.r,
+        seats,
+        wx: T.x + ((nd.x - T.x) / wl) * 1.25,
+        wz: T.z + ((nd.z - T.z) / wl) * 1.25,
+        district: districtName(T.x, T.z),
+        label: `Sitting at a café in ${districtName(T.x, T.z)}`,
+        taken: -1,
+        since: 0,
+      });
     });
   }
   return out;
 }
 
-/** straight walk between two points stays on open cells (sampled every half cell) */
-function losFree(a: [number, number], b: [number, number], open: (i: number, j: number) => boolean, ox: number, oz: number): boolean {
+/** 8-connected Dijkstra from cell s0 over the free cells (no corner cutting), up to maxD metres */
+function dijkstra(blocked: Uint8Array, NX: number, NZ: number, s0: number, dist: Float32Array, prev: Int32Array, maxD: number): void {
+  dist.fill(Infinity);
+  prev.fill(-1);
+  const heap: number[] = [s0];
+  dist[s0] = 0;
+  const free = (i: number, j: number) => i >= 0 && j >= 0 && i < NX && j < NZ && !blocked[j * NX + i];
+  while (heap.length) {
+    const top = heap[0];
+    const last = heap.pop()!;
+    if (heap.length) {
+      heap[0] = last;
+      let a = 0;
+      for (;;) {
+        const l = a * 2 + 1,
+          r = l + 1;
+        let m = a;
+        if (l < heap.length && dist[heap[l]] < dist[heap[m]]) m = l;
+        if (r < heap.length && dist[heap[r]] < dist[heap[m]]) m = r;
+        if (m === a) break;
+        const t = heap[a];
+        heap[a] = heap[m];
+        heap[m] = t;
+        a = m;
+      }
+    }
+    const d0 = dist[top];
+    if (d0 > maxD) break;
+    const ti = top % NX,
+      tj = (top - ti) / NX;
+    for (let dj = -1; dj <= 1; dj++) {
+      for (let di = -1; di <= 1; di++) {
+        if (!di && !dj) continue;
+        const ni = ti + di,
+          nj = tj + dj;
+        if (!free(ni, nj)) continue;
+        if (di && dj && (!free(ti + di, tj) || !free(ti, tj + dj))) continue;
+        const nd = d0 + (di && dj ? 1.4142 : 1) * CELL;
+        const id = nj * NX + ni;
+        if (nd < dist[id] - 1e-6) {
+          dist[id] = nd;
+          prev[id] = top;
+          heap.push(id);
+          let a = heap.length - 1;
+          while (a > 0) {
+            const p = (a - 1) >> 1;
+            if (dist[heap[p]] <= dist[heap[a]]) break;
+            const t = heap[a];
+            heap[a] = heap[p];
+            heap[p] = t;
+            a = p;
+          }
+        }
+      }
+    }
+  }
+}
+
+/** straight walk between two points stays on free cells (sampled every half cell) */
+function losFree(a: [number, number], b: [number, number], blocked: Uint8Array, NX: number, NZ: number, ox: number, oz: number): boolean {
   const L = Math.hypot(b[0] - a[0], b[1] - a[1]);
   const n = Math.max(1, Math.ceil(L / (CELL * 0.5)));
   for (let k = 1; k < n; k++) {
     const t = k / n;
-    const x = a[0] + (b[0] - a[0]) * t,
-      z = a[1] + (b[1] - a[1]) * t;
-    if (!open(Math.floor((x - ox) / CELL), Math.floor((z - oz) / CELL))) return false;
+    const i = Math.floor((a[0] + (b[0] - a[0]) * t - ox) / CELL),
+      j = Math.floor((a[1] + (b[1] - a[1]) * t - oz) / CELL);
+    if (i < 0 || j < 0 || i >= NX || j >= NZ || blocked[j * NX + i]) return false;
   }
   return true;
 }

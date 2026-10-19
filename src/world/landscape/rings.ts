@@ -37,8 +37,19 @@ export function ringStep(d: number): number {
 }
 
 /** tangential vertex spacing target at offset d */
-function tangential(d: number): number {
-  return Math.max(1.5, 0.95 * ringStep(d));
+function tangential(d: number, scale: number): number {
+  return Math.max(1.5 * scale, 0.95 * scale * ringStep(d));
+}
+
+/** slab edges sampled uniformly every `step` m (the water module's surface grid boundary) */
+export function uniformEdges(step: number): SlabEdges {
+  const run = (a: number, b: number) => {
+    const n = Math.round((b - a) / step);
+    const u: number[] = [];
+    for (let i = 0; i <= n; i++) u.push(a + ((b - a) * i) / n);
+    return { u, h: u.map(() => 0) };
+  };
+  return { north: run(SLAB.x0, SLAB.x1), south: run(SLAB.x0, SLAB.x1), west: run(SLAB.z0, SLAB.z1), east: run(SLAB.z0, SLAB.z1) };
 }
 
 const W = SLAB.x1 - SLAB.x0;
@@ -79,7 +90,7 @@ function stadium(d: number, u: number, out: [number, number]): void {
   out[1] = z0 - d * Math.sin(a);
 }
 
-export function buildRings(edges: SlabEdges, maxD: number): RingTopology {
+export function buildRings(edges: SlabEdges, maxD: number, tangentialScale = 1): RingTopology {
   const { x0, x1, z0, z1 } = SLAB;
   // ── ring 0: the slab boundary, clockwise seen from above (north side first, west → east)
   const r0x: number[] = [],
@@ -118,7 +129,7 @@ export function buildRings(edges: SlabEdges, maxD: number): RingTopology {
   while (d < maxD) {
     d = Math.min(maxD, d + ringStep(d));
     const P = 2 * (W + H) + 2 * Math.PI * d;
-    const n = Math.max(96, Math.round(P / tangential(d)));
+    const n = Math.max(96, Math.round(P / tangential(d, tangentialScale)));
     const u = new Float64Array(n);
     const start = xs.length;
     for (let i = 0; i < n; i++) {

@@ -53,21 +53,21 @@ export const atmoData = new Float32Array(ATMO_N * 4);
 export const ATMO_FUNCS = /* glsl */ `
 // optical depth of an exponential layer along a straight segment of length t whose ends are at
 // heights ha, hb ABOVE the layer base (density = 1 at the base, scale 1/k); overflow-safe
-float thOD1(float ha, float hb, float t, float k) {
+float atmOD1(float ha, float hb, float t, float k) {
   float da = ha * k, db = hb * k;
   float d = db - da;
   return abs(d) > 1e-4 ? t * (exp(-da) - exp(-db)) / d : t * exp(-da) * (1.0 - 0.5 * d);
 }
 // same along camera (height ya) → point (yb); heights folded about the water plane (reflection pass)
-float thOD(float ya, float yb, float t, float base, float k) {
+float atmOD(float ya, float yb, float t, float base, float k) {
   float yf = thAtmo[4].w;
   float o = base - yf;
   float a = ya - yf, b = yb - yf;
   if (a * b < 0.0) {
     float s = a / (a - b);
-    return thOD1(abs(a) - o, -o, t * s, k) + thOD1(-o, abs(b) - o, t * (1.0 - s), k);
+    return atmOD1(abs(a) - o, -o, t * s, k) + atmOD1(-o, abs(b) - o, t * (1.0 - s), k);
   }
-  return thOD1(abs(a) - o, abs(b) - o, t, k);
+  return atmOD1(abs(a) - o, abs(b) - o, t, k);
 }
 // colour of the haze at infinity in direction V (= the sky dome at / below the horizon)
 vec3 thHazeColor(vec3 V) {
@@ -81,28 +81,28 @@ vec3 thHazeColor(vec3 V) {
   float mu = max(dot(V, L), 0.0);
   return ring + thAtmo[1].rgb * pow(mu, max(thAtmo[0].w, 1.0));
 }
-float thHash12(vec2 p) {
+float atmHash12(vec2 p) {
   vec3 p3 = fract(vec3(p.xyx) * 0.1031);
   p3 += dot(p3, p3.yzx + 33.33);
   return fract((p3.x + p3.y) * p3.z);
 }
-float thNoise2(vec2 p) {
+float atmNoise2(vec2 p) {
   vec2 i = floor(p), f = fract(p);
   f = f * f * (3.0 - 2.0 * f);
-  return mix(mix(thHash12(i), thHash12(i + vec2(1.0, 0.0)), f.x), mix(thHash12(i + vec2(0.0, 1.0)), thHash12(i + vec2(1.0, 1.0)), f.x), f.y);
+  return mix(mix(atmHash12(i), atmHash12(i + vec2(1.0, 0.0)), f.x), mix(atmHash12(i + vec2(0.0, 1.0)), atmHash12(i + vec2(1.0, 1.0)), f.x), f.y);
 }
 // haze transmittance (rgb) and mist transmittance (a) along camera → camera + ray
 vec4 thAtmoT(vec3 ray) {
   float t = length(ray);
   float yc = cameraPosition.y, yp = yc + ray.y;
   float ts = max(t - thAtmo[10].x, 0.0) / max(t, 1e-3);
-  vec3 T = exp(-thAtmo[2].rgb * (thOD(yc, yp, t, thAtmo[3].w, thAtmo[2].w) * ts));
+  vec3 T = exp(-thAtmo[2].rgb * (atmOD(yc, yp, t, thAtmo[3].w, thAtmo[2].w) * ts));
   float Tm = 1.0;
   if (thAtmo[8].w > 0.0) {
     vec2 q = (cameraPosition.xz + ray.xz + thAtmo[9].xy) * thAtmo[9].z;
-    float n = thNoise2(q) * 0.65 + thNoise2(q * 2.7 + 5.3) * 0.35;
+    float n = atmNoise2(q) * 0.65 + atmNoise2(q * 2.7 + 5.3) * 0.35;
     float patchy = mix(1.0, smoothstep(0.25, 0.75, n) * 1.8, thAtmo[9].w);
-    Tm = exp(-thAtmo[8].w * patchy * thOD(yc, yp, t, thAtmo[4].w, thAtmo[5].w));
+    Tm = exp(-thAtmo[8].w * patchy * atmOD(yc, yp, t, thAtmo[4].w, thAtmo[5].w));
   }
   return vec4(T, Tm);
 }
@@ -284,7 +284,7 @@ export function writeAtmosphere(p: AtmosphereParams): void {
   set(10, p.startDist, p.gain, 0, 0);
 }
 
-/** optical depth factor of an exponential layer (CPU mirror of thOD1; heights above the base) */
+/** optical depth factor of an exponential layer (CPU mirror of atmOD1; heights above the base) */
 function od1(ha: number, hb: number, t: number, k: number): number {
   const da = ha * k,
     db = hb * k;

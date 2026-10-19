@@ -79,44 +79,41 @@ export interface DecorStats {
 }
 
 /** Hang cloth on every line the buildings service offers. Returns counts for stats(). */
-export function decorate(ctx: CityContext, cloth: ClothSystem, b: BuildingsLike | undefined, opts: { bunting: boolean; laundry: boolean }): DecorStats {
+export interface Obstacles {
+  /** street / park trees (vegetation service) */
+  trees: readonly { x: number; z: number; r: number; h: number }[];
+  /** light heads (lamp registry) */
+  lamps: readonly { x: number; y: number; z: number }[];
+}
+
+export function decorate(ctx: CityContext, cloth: ClothSystem, b: BuildingsLike | undefined, obstacles: Obstacles, opts: { bunting: boolean; laundry: boolean }): DecorStats {
   const st: DecorStats = { street: 0, court: 0, balcony: 0, bunting: 0, prayer: 0, festoon: 0, laundryLines: 0, laundryItems: 0, lowest: Infinity, lights: 0 };
   if (!b) return st;
   const spans = b.spans ?? [];
   const facades = b.facades ?? [];
   const lamps: LampLight[] = [];
-  const facadeOf = new Map<number, FacadeLike>();
-  for (const f of facades) facadeOf.set(f.lot, f);
 
-  for (const sp of spans) {
-    const rng = new Rng((Math.imul(sp.lotA + 1, 92821) ^ Math.imul(sp.lotB + 7, 68917)) >>> 0 || 3);
-    if (sp.kind === 'street') {
-      if (!opts.bunting) continue;
+  // street lines: generated here from the facing street fronts (several per pair of facades, zig-zags)
+  if (opts.bunting) {
+    for (const sp of streetSpans(ctx, facades, obstacles)) {
+      const rng = new Rng((Math.imul(sp.lotA + 1, 92821) ^ Math.imul(sp.lotB + 7, 68917) ^ Math.floor(sp.ax * 13 + sp.az * 7)) >>> 0 || 3);
       st.street++;
-      streetLine(cloth, rng, sp, sp.ax, sp.az, sp.bx, sp.bz, st, lamps, false);
-      // zig-zag partner: a diagonal line from A shifted along the street to B shifted the other way,
-      // when both facades are long enough there
-      const fa = facadeOf.get(sp.lotA),
-        fb = facadeOf.get(sp.lotB);
-      if (fa && fb && rng.chance(0.55)) {
-        const shift = rng.range(2.2, 3.4) * (rng.chance(0.5) ? 1 : -1);
-        const pa = slideOnFacade(fa, sp.ax, sp.az, shift, 0.9),
-          pb = slideOnFacade(fb, sp.bx, sp.bz, -shift, 0.9);
-        if (pa && pb) {
-          const r2 = rng.fork('zig');
-          streetLine(cloth, r2, { ...sp, ay: sp.ay + r2.range(0.35, 0.8), by: sp.by + r2.range(0.35, 0.8) }, pa[0], pa[1], pb[0], pb[1], st, lamps, true);
-        }
-      }
-    } else {
-      if (!opts.laundry) continue;
-      st.court++;
-      const L = Math.hypot(sp.bx - sp.ax, sp.bz - sp.az);
-      if (sp.district === 'market' && L > 11 && rng.chance(0.6) && opts.bunting) {
-        streetLine(cloth, rng, sp, sp.ax, sp.az, sp.bx, sp.bz, st, lamps, false);
-        continue;
-      }
-      laundryLine(cloth, rng, sp.ax, sp.ay, sp.az, sp.bx, sp.by, sp.bz, 0.22 + 0.012 * L, true, st);
+      streetLine(cloth, rng, sp, sp.ax, sp.az, sp.bx, sp.bz, st, lamps, sp.second);
     }
+  }
+  // back courtyards: laundry (the market square gets bunting / festoons instead)
+  for (const sp of spans) {
+    if (sp.kind !== 'court') continue;
+    const rng = new Rng((Math.imul(sp.lotA + 1, 92821) ^ Math.imul(sp.lotB + 7, 68917)) >>> 0 || 3);
+    const L = Math.hypot(sp.bx - sp.ax, sp.bz - sp.az);
+    if (sp.district === 'market' && L > 11 && rng.chance(0.6)) {
+      if (!opts.bunting) continue;
+      streetLine(cloth, rng, sp, sp.ax, sp.az, sp.bx, sp.bz, st, lamps, false);
+      continue;
+    }
+    if (!opts.laundry) continue;
+    st.court++;
+    laundryLine(cloth, rng, sp.ax, sp.ay, sp.az, sp.bx, sp.by, sp.bz, 0.22 + 0.012 * L, true, st);
   }
 
   // balcony lines (rigid, wire drawn by buildings)
@@ -135,15 +132,95 @@ export function decorate(ctx: CityContext, cloth: ClothSystem, b: BuildingsLike 
   return st;
 }
 
-/** point on facade f near (x, z) moved by `d` along the facade; null when it would leave the facade (margin m) */
-function slideOnFacade(f: FacadeLike, x: number, z: number, d: number, m: number): [number, number] | null {
-  const len = Math.hypot(f.bx - f.ax, f.bz - f.az);
-  if (len < 1e-3) return null;
-  const tx = (f.bx - f.ax) / len,
-    tz = (f.bz - f.az) / len;
-  const s = (x - f.ax) * tx + (z - f.az) * tz + d;
-  if (s < m || s > len - m) return null;
-  return [f.ax + tx * s, f.az + tz * s];
+interface StreetSpan extends SpanLike {
+  second: boolean;
+}
+
+const BUNTING_DISTRICTS = new Set(['oldtown', 'market']);
+
+/**
+ * Lines across the streets between facing fronts: every 5.5–8.5 m along the overlap of two facing
+ * facades, alternating straight and diagonal (zig-zag) lines, at 2.2–4 m above the first upper floor
+ * and ≥ 1.2 m below the eaves; skipped where a tree crown or a lamp head is in the way.
+ */
+function streetSpans(ctx: CityContext, facades: FacadeLike[], obs: Obstacles): StreetSpan[] {
+  const out: StreetSpan[] = [];
+  const plan = ctx.plan;
+  const lotOf = new Map(plan.lots.map((l) => [l.id, l]));
+  const fr = facades.filter((f) => {
+    const lot = lotOf.get(f.lot);
+    return lot && BUNTING_DISTRICTS.has(lot.district) && lot.floors >= 2 && f.top - f.upper > 3.2;
+  });
+  for (let i = 0; i < fr.length; i++) {
+    const A = fr[i];
+    for (let j = 0; j < fr.length; j++) {
+      const B = fr[j];
+      if (B.lot <= A.lot || A.nx * B.nx + A.nz * B.nz > -0.99) continue;
+      const mAx = (A.ax + A.bx) / 2,
+        mAz = (A.az + A.bz) / 2,
+        mBx = (B.ax + B.bx) / 2,
+        mBz = (B.az + B.bz) / 2;
+      const gap = (mBx - mAx) * A.nx + (mBz - mAz) * A.nz;
+      if (gap < 9 || gap > 24) continue;
+      const tx = -A.nz,
+        tz = A.nx;
+      const pa = (x: number, z: number) => x * tx + z * tz;
+      const a0 = Math.min(pa(A.ax, A.az), pa(A.bx, A.bz)),
+        a1 = Math.max(pa(A.ax, A.az), pa(A.bx, A.bz));
+      const b0 = Math.min(pa(B.ax, B.az), pa(B.bx, B.bz)),
+        b1 = Math.max(pa(B.ax, B.az), pa(B.bx, B.bz));
+      const o0 = Math.max(a0, b0) + 0.9,
+        o1 = Math.min(a1, b1) - 0.9;
+      if (o1 - o0 < 0.5) continue;
+      const lo = Math.max(A.upper, B.upper) + 2.2;
+      const hi = Math.min(A.top, B.top) - 1.2;
+      if (hi < lo) continue;
+      const rng = new Rng((Math.imul(A.lot + 11, 2654435761) ^ Math.imul(B.lot + 5, 40503)) >>> 0 || 9);
+      // points along the overlap
+      const len = o1 - o0;
+      const step = rng.range(5.5, 8.5);
+      const n = Math.max(1, Math.floor(len / step) + 1);
+      const first = o0 + (len - (n - 1) * step) / 2;
+      for (let k = 0; k < n; k++) {
+        const s = Math.min(o1, Math.max(o0, first + k * step + rng.range(-0.6, 0.6)));
+        const diag = k % 2 === 1 && rng.chance(0.7);
+        const sB = diag ? Math.min(o1, Math.max(o0, s + (rng.chance(0.5) ? 1 : -1) * rng.range(2.5, 4))) : s;
+        const p = onFacade(A, s, tx, tz),
+          q = onFacade(B, sB, tx, tz);
+        const ay = Math.min(hi, lo + rng.range(0, 1.8)),
+          by = Math.min(hi, ay + rng.range(-0.35, 0.35));
+        if (blocked(p[0], ay, p[1], q[0], by, q[1], obs)) continue;
+        out.push({ ax: p[0], ay, az: p[1], bx: q[0], by: Math.max(lo - 0.3, by), bz: q[1], kind: 'street', district: lotOf.get(A.lot)!.district, lotA: A.lot, lotB: B.lot, second: diag });
+      }
+    }
+  }
+  return out;
+}
+
+function onFacade(F: FacadeLike, s: number, tx: number, tz: number): [number, number] {
+  const sa = F.ax * tx + F.az * tz,
+    sb = F.bx * tx + F.bz * tz;
+  const t = Math.abs(sb - sa) < 1e-6 ? 0.5 : (s - sa) / (sb - sa);
+  return [F.ax + (F.bx - F.ax) * t, F.az + (F.bz - F.az) * t];
+}
+
+/** a tree crown or a lamp head too close to the line */
+function blocked(ax: number, ay: number, az: number, bx: number, by: number, bz: number, obs: Obstacles): boolean {
+  const dx = bx - ax,
+    dz = bz - az;
+  const L2 = dx * dx + dz * dz || 1;
+  const low = Math.min(ay, by) - 1.4;
+  for (const t of obs.trees) {
+    const u = Math.min(1, Math.max(0, ((t.x - ax) * dx + (t.z - az) * dz) / L2));
+    const d = Math.hypot(ax + dx * u - t.x, az + dz * u - t.z);
+    if (d < t.r + 0.6 && t.h > low) return true;
+  }
+  for (const l of obs.lamps) {
+    const u = Math.min(1, Math.max(0, ((l.x - ax) * dx + (l.z - az) * dz) / L2));
+    const d = Math.hypot(ax + dx * u - l.x, az + dz * u - l.z);
+    if (d < 1.0 && l.y > low - 0.5) return true;
+  }
+  return false;
 }
 
 function streetLine(cloth: ClothSystem, rng: Rng, sp: SpanLike, ax: number, az: number, bx: number, bz: number, st: DecorStats, lamps: LampLight[], second: boolean): void {

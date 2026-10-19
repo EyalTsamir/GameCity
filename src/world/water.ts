@@ -16,6 +16,9 @@ import { createCutaway } from './water/cutaway';
 import { swell } from './water/waves';
 import { PlanarReflection, type ReflectionLevel } from './water/reflection';
 import { HullContacts } from './water/hulls';
+import { buildWaterExtension, type WaterExtension } from './water/extension';
+import { WORLD_MODE } from '../core/world';
+import type { LandscapeService } from './landscape';
 
 export interface WaterService {
   /** vertical displacement of the water surface at (x, z) at sim time t (seconds, = uniforms.uTime) */
@@ -66,11 +69,17 @@ export default function create(ctx: CityContext): CityModule {
   const reflection = new PlanarReflection(ctx, wanted);
   const hulls = new HullContacts(ctx);
   const sky = createSkyUniforms();
-  const surface = createSurface(ctx, model, field, reflection.uniforms, hulls, sky);
-  const cut = createCutaway(ctx, model, field, edges);
+  // world mode: the sea to the horizon and the river into the country (needs the landscape model)
+  const land = ctx.services.landscape as LandscapeService | undefined;
+  let ext: WaterExtension | null = null;
+  if (WORLD_MODE && land && land.active) ext = buildWaterExtension(land.model, field);
+  const surface = createSurface(ctx, model, field, reflection.uniforms, hulls, sky, ext);
+  // diorama: translucent cut-away sections where the water meets the slab faces
+  const cut = WORLD_MODE ? null : createCutaway(ctx, model, field, edges);
   const root = new THREE.Group();
   root.name = 'water';
-  root.add(surface.mesh, cut.mesh);
+  root.add(surface.mesh);
+  if (cut) root.add(cut.mesh);
   ctx.scene.add(root);
   const hullsOn = !params.has('nohullfoam');
 
@@ -144,8 +153,10 @@ export default function create(ctx: CityContext): CityModule {
     stats() {
       return {
         surfaceTris: surface.triangles,
-        cutawayTris: cut.triangles,
-        cutawaySpans: cut.spans.length,
+        cutawayTris: cut ? cut.triangles : 0,
+        cutawaySpans: cut ? cut.spans.length : 0,
+        extVerts: ext ? ext.vertices : 0,
+        extMs: ext ? Math.round(ext.ms) : 0,
         reflLevel: reflection.getLevel(),
         reflRes: reflection.getLevel() > 0 ? `${reflection.width}x${reflection.height}` : 'off',
         reflCalls: reflection.getLevel() > 0 ? reflection.calls : 0,
@@ -182,7 +193,7 @@ export default function create(ctx: CityContext): CityModule {
         if (!Number.isFinite(h) || Math.abs(h) > 0.5) out.push(`waveHeight(${x}, ${z}) = ${h}`);
       }
       if (waveHeight(0, 0, 5) !== 0) out.push('waveHeight on dry land is not 0');
-      if (cut.spans.length === 0) out.push('no cut-away water sections built');
+      if (cut && cut.spans.length === 0) out.push('no cut-away water sections built');
       if (reflection.getLevel() > 0 && reflection.meshes === 0) out.push('reflection pass has no meshes');
       return out;
     },

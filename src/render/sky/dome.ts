@@ -5,6 +5,7 @@
 
 import * as THREE from 'three';
 import type { SkyState } from './palette';
+import { ATMO_FUNCS, ATMO_N, atmoData } from '../atmosphere';
 
 const VERT = /* glsl */ `
 varying vec3 vDir;
@@ -36,7 +37,12 @@ uniform float uOvercast;
 uniform float uDiscScale;
 uniform vec2 uBelow;
 uniform float uStudio;
+uniform float uSunDisc;
 varying vec3 vDir;
+#ifdef TH_WORLD
+uniform vec4 thAtmo[${ATMO_N}];
+${ATMO_FUNCS}
+#endif
 
 float hash13(vec3 p3) {
   p3 = fract(p3 * 0.1031);
@@ -95,6 +101,12 @@ void main() {
   float grey = dot(col, vec3(0.3, 0.55, 0.15));
   col = mix(col, vec3(grey) * vec3(0.92, 0.96, 1.02), uOvercast * 0.75);
 
+#ifdef TH_WORLD
+  // world: the horizon band and everything below it is the atmosphere's haze at infinity (the
+  // exact colour distant land and sea fade into in every material's fog → no seam at the horizon)
+  vec3 hz = thHazeColor(d) * thAtmo[10].y;
+  col = mix(hz, col, smoothstep(-0.004, 0.16, y));
+#else
   // below the horizon: legacy = a calm haze; studio = the cyclorama floor colour (exactly the
   // colour the table fades into, overcast already applied by the caller) sweeping up into the sky
   float below = smoothstep(uBelow.x, uBelow.y, y);
@@ -104,6 +116,7 @@ void main() {
     groundCol = mix(groundCol, vec3(g2) * vec3(0.92, 0.96, 1.02), uOvercast * 0.75);
   }
   col = mix(col, groundCol, below);
+#endif
 
   float aboveH = smoothstep(-0.02, 0.06, y);
 
@@ -120,7 +133,7 @@ void main() {
   float r2 = 2.6e-4 * uDiscScale;
   float disc = smoothstep(r2 * 1.25, r2 * 0.75, a);
   float halo = exp(-a * 900.0) * 0.5 + exp(-a * 90.0) * 0.18;
-  col += uSunCol * (disc * 9.0 + halo) * uSunVis * aboveH * (1.0 - uOvercast * 0.85);
+  col += uSunCol * (disc * uSunDisc + halo) * uSunVis * aboveH * (1.0 - uOvercast * 0.85);
 
   // moon: textured disc + faint halo
   if (uMoonVis > 0.001) {
@@ -155,7 +168,8 @@ export interface SkyDome {
   setStudio(cyc: THREE.Color | null): void;
 }
 
-export function createSkyDome(): SkyDome {
+/** @param world world mode: real sky to the horizon (haze below it), near real-size sun */
+export function createSkyDome(world = false): SkyDome {
   const uniforms = {
     uZenith: { value: new THREE.Color() },
     uHorizon: { value: new THREE.Color() },
@@ -173,6 +187,8 @@ export function createSkyDome(): SkyDome {
     uDiscScale: { value: 1 },
     uBelow: { value: new THREE.Vector2(0.015, -0.22) },
     uStudio: { value: 0 },
+    uSunDisc: { value: world ? 40 : 9 },
+    thAtmo: { value: atmoData },
   };
   const material = new THREE.ShaderMaterial({
     name: 'SkyDome',
@@ -187,7 +203,10 @@ export function createSkyDome(): SkyDome {
     depthTest: true,
     fog: false,
     dithering: true,
+    defines: world ? { TH_WORLD: '' } : {},
   });
+  // world: the sun disc near its real size (0.27° radius → ~0.38° here; 1.3° in the diorama)
+  if (world) uniforms.uDiscScale.value = 0.085;
   const geo = new THREE.SphereGeometry(1, 48, 24);
   const mesh = new THREE.Mesh(geo, material);
   mesh.name = 'sky-dome';

@@ -26,6 +26,9 @@ import * as OLD from './vegetation/legacy/species';
 import { Wind, col, LEAF, type Species, type TreeSpec } from './vegetation/species';
 import { flowerBed, flowerClump, crop, soilRow, reeds, lily, surround, FLOWERS, type Surround } from './vegetation/plants';
 import { getLayout, occAny, PLANTER, hrand, MASK_WALK, DistanceLod, ChunkCuller, chunkOf, type Layout } from './props/layout';
+import { getLeafAtlas } from './vegetation/atlas';
+import { FoliageLayer, LodTexture, cardMaterials, woodMaterials, cardKnobs, type InstBuf, type PlantRef } from './vegetation/foliage';
+import { structure, emitFar, emitNear, newCardBuf, newWoodBuf, type PlantDef, type KindName } from './vegetation/crowns';
 
 interface TerrainSvc {
   height(x: number, z: number): number;
@@ -38,6 +41,14 @@ export interface VegetationService {
   trees: { x: number; z: number; r: number; h: number }[];
   /** foliage shading knobs (uniform objects; for tuning from the console / test scripts) */
   knobs: typeof foliageKnobs;
+  /** leaf-card shading / wind knobs */
+  cardKnobs: typeof cardKnobs;
+  /**
+   * Leaf-card LOD distance (m) for the adaptive quality ladder: plants within it get leaf clusters and
+   * branches, beyond it the far cards. `null` restores the quality preset (high 75, medium 42, low 0).
+   */
+  setLeafDistance(m: number | null): void;
+  getLeafDistance(): number;
 }
 
 interface Planted extends TreeSpec {
@@ -104,6 +115,8 @@ export default function create(ctx: CityContext): CityModule {
   const density = ctx.quality.density;
   // A/B: ?legacyveg = the pre-overhaul generators + material (same placement)
   const legacy = ctx.debug.params.has('legacyveg') && ctx.debug.params.get('legacyveg') !== '0';
+  // leaf-card trees (default) vs the lobed-hull trees (?noleafcards — A/B + fallback)
+  const cardsOn = !legacy && !ctx.debug.params.has('noleafcards');
   const buildTree: (s: GeoSink, w: Wind, t: TreeSpec) => unknown = legacy ? OLD.buildTree : NEW.buildTree;
   const bush = legacy ? OLD.bush : NEW.bush;
   const hedge = legacy ? OLD.hedge : NEW.hedge;
@@ -605,6 +618,76 @@ export default function create(ctx: CityContext): CityModule {
     fsh = c.sh;
   };
   const bySpecies: Record<string, number> = {};
+  // ── leaf-card plant registry (defs only; far LOD emitted below, near LOD generated lazily)
+  const plants: PlantDef[] = [];
+  const kindFor = (t: { sp: Species; x: number; z: number; tag: string }): KindName => {
+    const hh = hash01(t.x * 1.31, t.z * 2.07, 77);
+    switch (t.sp) {
+      case 'round':
+        return t.tag === 'forest' ? (hh < 0.55 ? 'oak' : hh < 0.85 ? 'linden' : 'maple') : hh < 0.45 ? 'linden' : hh < 0.75 ? 'maple' : 'oak';
+      case 'blossom':
+        return 'blossom';
+      case 'autumn':
+        return 'autumn';
+      case 'fruit':
+        return 'fruit';
+      case 'birch':
+        return 'birch';
+      case 'column':
+        return 'poplar';
+      case 'conifer':
+        return hh < 0.55 ? 'spruce' : hh < 0.85 ? 'fir' : 'pine';
+      case 'palm':
+        return 'datepalm';
+      case 'willow':
+        return 'willow';
+    }
+  };
+  /** growth bias: crowns lean away from close neighbours and walls, toward light */
+  const biasFor = (x: number, z: number, r: number): [number, number] => {
+    let bx = 0,
+      bz = 0;
+    trees.any(x, z, r * 2.6 + 4, (id, d) => {
+      if (d < 0.05) return false;
+      const w = 1 - d / (r * 2.6 + 4);
+      bx += ((x - trees.x[id]) / d) * w;
+      bz += ((z - trees.z[id]) / d) * w;
+      return false;
+    });
+    for (let k = 0; k < 8; k++) {
+      const a = (k / 8) * Math.PI * 2;
+      const ca = Math.cos(a),
+        sa = Math.sin(a);
+      for (const dd of [r * 0.8 + 0.5, r * 1.3 + 1]) {
+        if (occ.has(x + ca * dd, z + sa * dd, OCC.BUILDING)) {
+          bx -= ca * 0.6;
+          bz -= sa * 0.6;
+          break;
+        }
+      }
+    }
+    const l = Math.hypot(bx, bz);
+    const k = l > 0.8 ? 0.8 / l : 1;
+    return [bx * k, bz * k];
+  };
+  function addPlant(t: Planted, y: number, clear: number | undefined): void {
+    const [bx, bz] = t.tag === 'forest' ? [0, 0.35] : biasFor(t.x, t.z, t.r);
+    plants.push({
+      kind: kindFor(t),
+      x: t.x,
+      y,
+      z: t.z,
+      h: t.h - (y - t.y),
+      r: t.r,
+      seed: t.seed,
+      clear,
+      tone: t.tone,
+      bx,
+      bz,
+      forest: t.tag === 'forest',
+      age: hash01(t.x * 0.7, t.z * 1.9, 5),
+    });
+  }
   // build near-to-far for the usual camera direction (south → north) so early-z rejects hidden canopies
   const order = planted.slice().sort((a, b) => b.z - a.z);
   for (const t of order) {
@@ -613,7 +696,8 @@ export default function create(ctx: CityContext): CityModule {
     selF(t.x);
     if (t.surround !== 'none') y = surround(fsh, fpw, t.surround, t.x, t.y, t.z, t.syaw, srng);
     const clear = t.clear !== undefined ? t.clear - (y - t.y) : undefined;
-    if (t.tag === 'forest') buildTree(forestSink, fw, { ...t, y, h: t.h - (y - t.y), clear });
+    if (cardsOn) addPlant(t, y, clear);
+    else if (t.tag === 'forest') buildTree(forestSink, fw, { ...t, y, h: t.h - (y - t.y), clear });
     else {
       const T = TC[chunkOf(t.x)];
       buildTree(T.s, T.w, { ...t, y, h: t.h - (y - t.y), clear });
@@ -906,9 +990,12 @@ export default function create(ctx: CityContext): CityModule {
       const tx = p.tree.x,
         tz = p.tree.z;
       const ft: TreeSpec = { sp: 'fruit', x: tx, y: H(tx, tz), z: tz, h: 4, r: 1.6, seed: Math.floor(hash01(tx, tz) * 1e9), detail: 2 };
-      const T = TC[chunkOf(tx)];
-      buildTree(T.s, T.w, ft);
-      buildTree(farSink, tfw, { ...ft, far: true });
+      if (cardsOn) plants.push({ kind: 'fruit', x: tx, y: ft.y, z: tz, h: 4, r: 1.6, seed: ft.seed, age: 0.5 });
+      else {
+        const T = TC[chunkOf(tx)];
+        buildTree(T.s, T.w, ft);
+        buildTree(farSink, tfw, { ...ft, far: true });
+      }
       bySpecies.fruit = (bySpecies.fruit ?? 0) + 1;
       trees.add(tx, tz, 1.6);
     }
@@ -1008,11 +1095,180 @@ export default function create(ctx: CityContext): CityModule {
   FC.forEach((c, i) => culler.add(mk(c.s, `veg-plants-fine-${sides[i]}`, pm.mat, false, 'plants'), () => near));
   farMesh.visible = false;
   const sum = (a: { s: GeoSink }[], key: 'tcount' | 'vcount') => a.reduce((acc, c) => acc + c.s[key], 0);
+
+  // ───────────────────────────────────────────── leaf-card trees (far static + near dynamic) ──
+  const atlas = cardsOn ? getLeafAtlas() : null;
+  const lodTex = new LodTexture(Math.max(1, plants.length));
+  const refs: PlantRef[] = plants.map((p, i) => ({ x: p.x, y: p.y, z: p.z, h: p.h, id: i }));
+  let cardLayer: FoliageLayer | null = null;
+  let woodLayer: FoliageLayer | null = null;
+  let cm: ReturnType<typeof cardMaterials> | null = null;
+  let wm: ReturnType<typeof woodMaterials> | null = null;
+  const farMs0 = performance.now();
+  // near capacity per quality (instances)
+  const NEAR_CAP = { high: 70000, medium: 36000, low: 4000 };
+  const DIST = { high: 75, medium: 42, low: 0 };
+  let leafOverride: number | null = null;
+  const leafDist = (): number => leafOverride ?? DIST[ctx.quality.level] ?? 75;
+  if (cardsOn && atlas) {
+    const farCards = newCardBuf(plants.length * 30);
+    const farWood = newWoodBuf(plants.length * 14);
+    plants.forEach((p, i) => emitFar(structure(p), refs[i], farCards, farWood));
+    cm = cardMaterials(ctx.uniforms, atlas.texture, lodTex.tex);
+    wm = woodMaterials(ctx.uniforms, lodTex.tex);
+    cardLayer = new FoliageLayer('cards', farCards, NEAR_CAP.high, cm, 'veg-cards');
+    woodLayer = new FoliageLayer('wood', farWood, Math.round(NEAR_CAP.high / 3), wm, 'veg-wood');
+    cardLayer.mesh.castShadow = woodLayer.mesh.castShadow = shadows;
+    if (parts.includes('trees')) root.add(cardLayer.mesh, woodLayer.mesh);
+  }
+  const farMs = performance.now() - farMs0;
+
+  // near set: per-plant weights eased in/out, detail generated lazily (bounded per frame)
+  const GRID = 16;
+  const grid = new Map<number, number[]>();
+  plants.forEach((p, i) => {
+    const k = Math.floor(p.x / GRID) * 4096 + Math.floor(p.z / GRID);
+    let a = grid.get(k);
+    if (!a) grid.set(k, (a = []));
+    a.push(i);
+  });
+  const detail: ({ cards: InstBuf; wood: InstBuf } | null)[] = plants.map(() => null);
+  const weight = new Float32Array(plants.length);
+  const target = new Uint8Array(plants.length);
+  const dist = new Float32Array(plants.length);
+  let members: number[] = [];
+  let next: number[] = [];
+  const memberSet = new Uint8Array(plants.length);
+  let genMs = 0,
+    genCount = 0,
+    rebuilds = 0,
+    nearCards = 0,
+    nearWood = 0;
+  const camPos = new THREE.Vector3();
+  const sunLight: { l: THREE.DirectionalLight | null } = { l: null };
+  ctx.scene.traverse((o) => {
+    if (!sunLight.l && (o as THREE.DirectionalLight).isDirectionalLight && o.castShadow) sunLight.l = o as THREE.DirectionalLight;
+  });
+  const lightDir = new THREE.Vector3();
+  const partsC: InstBuf[] = [];
+  const partsW: InstBuf[] = [];
+
+  function updateNear(dt: number): void {
+    if (!cardLayer || !woodLayer) return;
+    const cam = ctx.camera;
+    cam.getWorldPosition(camPos);
+    const D = leafDist();
+    const cap = NEAR_CAP[ctx.quality.level] ?? NEAR_CAP.high;
+    // 1. candidates around the camera → targets
+    next.length = 0;
+    if (D > 1) {
+      const R = D + 6;
+      const i0 = Math.floor((camPos.x - R) / GRID),
+        i1 = Math.floor((camPos.x + R) / GRID);
+      const j0 = Math.floor((camPos.z - R) / GRID),
+        j1 = Math.floor((camPos.z + R) / GRID);
+      for (let i = i0; i <= i1; i++) {
+        for (let j = j0; j <= j1; j++) {
+          const a = grid.get(i * 4096 + j);
+          if (!a) continue;
+          for (const id of a) {
+            const p = plants[id];
+            const d = Math.hypot(p.x - camPos.x, p.y + p.h * 0.55 - camPos.y, p.z - camPos.z) - p.r * 0.5;
+            dist[id] = d;
+            const lim = weight[id] > 0.5 ? D + 4 : D;
+            if (d < lim) next.push(id);
+          }
+        }
+      }
+    }
+    next.sort((a, b) => dist[a] - dist[b]);
+    // 2. generate missing detail (bounded) and apply the capacity budget
+    let budget = 10;
+    let usedC = 0,
+      usedW = 0;
+    for (const id of members) target[id] = 0;
+    const want: number[] = [];
+    for (const id of next) {
+      if (!detail[id]) {
+        if (budget <= 0) continue;
+        budget--;
+        const g0 = performance.now();
+        const c = newCardBuf(256),
+          w = newWoodBuf(64);
+        emitNear(structure(plants[id]), refs[id], c, w);
+        detail[id] = { cards: c.trim(), wood: w.trim() };
+        genMs += performance.now() - g0;
+        genCount++;
+      }
+      const dd = detail[id]!;
+      if (usedC + dd.cards.n > cap || usedW + dd.wood.n > woodLayer.dynCap) break;
+      usedC += dd.cards.n;
+      usedW += dd.wood.n;
+      target[id] = 1;
+      want.push(id);
+    }
+    // 3. ease weights; members = wanted ∪ still fading out (if they still fit)
+    const k = Math.min(1, dt / 0.6);
+    let changed = false;
+    for (const id of want) if (!memberSet[id]) changed = true;
+    const keep: number[] = [];
+    for (const id of members) {
+      if (target[id]) continue;
+      weight[id] = Math.max(0, weight[id] - k);
+      if (weight[id] > 0) {
+        const dd = detail[id]!;
+        if (usedC + dd.cards.n <= cap && usedW + dd.wood.n <= woodLayer.dynCap) {
+          usedC += dd.cards.n;
+          usedW += dd.wood.n;
+          keep.push(id);
+          continue;
+        }
+        weight[id] = 0;
+      }
+      lodTex.set(id, 0);
+      changed = true;
+    }
+    for (const id of want) {
+      weight[id] = Math.min(1, weight[id] + k);
+      lodTex.set(id, weight[id]);
+    }
+    for (const id of keep) lodTex.set(id, weight[id]);
+    if (changed) {
+      for (const id of members) memberSet[id] = 0;
+      members = want.concat(keep);
+      for (const id of members) memberSet[id] = 1;
+      partsC.length = 0;
+      partsW.length = 0;
+      for (const id of members) {
+        partsC.push(detail[id]!.cards);
+        partsW.push(detail[id]!.wood);
+      }
+      nearCards = cardLayer.setDynamic(partsC);
+      nearWood = woodLayer.setDynamic(partsW);
+      rebuilds++;
+    }
+    lodTex.flush();
+    // received-shadow lookup shifted toward the light
+    const L = sunLight.l;
+    if (L) {
+      lightDir.subVectors(L.position, L.target.position).normalize();
+      cardKnobs.shadowShift.value.copy(lightDir).multiplyScalar(cardKnobs.shadowShiftLen.value);
+    }
+  }
   ctx.scene.add(root);
 
-  const service: VegetationService = { trees: planted.map((t) => ({ x: t.x, z: t.z, r: t.r, h: t.h })), knobs: foliageKnobs };
+  const service: VegetationService = {
+    trees: planted.map((t) => ({ x: t.x, z: t.z, r: t.r, h: t.h })),
+    knobs: foliageKnobs,
+    cardKnobs,
+    setLeafDistance(m) {
+      leafOverride = m === null ? null : Math.max(0, m);
+    },
+    getLeafDistance: () => leafDist(),
+  };
   ctx.services.vegetation = service;
   const buildMs = performance.now() - t0;
+  let lastT = performance.now();
 
   return {
     name: 'vegetation',
@@ -1025,6 +1281,10 @@ export default function create(ctx: CityContext): CityModule {
       near = lod.near();
       farMesh.visible = !near;
       culler.update();
+      const now = performance.now();
+      const dt = Math.min(0.25, (now - lastT) / 1000);
+      lastT = now;
+      updateNear(dt);
     },
     stats() {
       return {
@@ -1047,6 +1307,14 @@ export default function create(ctx: CityContext): CityModule {
           .filter((c) => c.visible)
           .map((c) => c.name.replace('veg-', ''))
           .join(' '),
+        cards: cardLayer ? `${cardLayer.staticCount}+${nearCards}` : 'off',
+        wood: woodLayer ? `${woodLayer.staticCount}+${nearWood}` : 'off',
+        nearPlants: members.length,
+        leafDist: leafDist(),
+        atlasMs: atlas ? Math.round(atlas.buildMs) : 0,
+        farMs: Math.round(farMs),
+        nearGen: `${genCount} in ${Math.round(genMs)} ms`,
+        rebuilds,
         species: Object.entries(bySpecies)
           .map(([k, v]) => `${k}:${v}`)
           .join(' '),
@@ -1070,6 +1338,13 @@ export default function create(ctx: CityContext): CityModule {
       tm.depth.dispose();
       pm.mat.dispose();
       pm.depth.dispose();
+      cardLayer?.dispose();
+      woodLayer?.dispose();
+      cm?.mat.dispose();
+      cm?.depth.dispose();
+      wm?.mat.dispose();
+      wm?.depth.dispose();
+      lodTex.tex.dispose();
     },
   };
 }

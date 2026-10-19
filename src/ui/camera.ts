@@ -12,6 +12,7 @@ import { Scout, type LiveEntity } from './camera/scout';
 import { TourDirector, type Pose, type TourRig } from './camera/tour';
 import { buildDebugProxy } from './camera/debugProxy';
 import type { CameraServiceExt, PointerInfo, TourShotInfo } from './shared';
+import { WORLD_MODE } from '../core/world';
 
 const DEG = Math.PI / 180;
 const MIN_PITCH = 10 * DEG;
@@ -22,6 +23,17 @@ const CHASE_MIN_DIST = 5;
 const TARGET_MARGIN = 30;
 const BASE_FOV = 32;
 const CHASE_FOV = 42;
+// world mode (world agent's grant): the far plane reaches the sea horizon and the mountain layers;
+// a wider lens at eye level easing to a longer one toward the overview (diorama keeps BASE_FOV)
+const WORLD_FAR = 60000;
+const WORLD_FOV_NEAR = 50;
+const WORLD_FOV_FAR = 34;
+const WORLD_FOV_D0 = 12;
+const WORLD_FOV_D1 = 380;
+function worldFov(d: number): number {
+  const t = Math.min(1, Math.max(0, (Math.log(Math.max(d, 1)) - Math.log(WORLD_FOV_D0)) / (Math.log(WORLD_FOV_D1) - Math.log(WORLD_FOV_D0))));
+  return WORLD_FOV_NEAR + (WORLD_FOV_FAR - WORLD_FOV_NEAR) * t * t * (3 - 2 * t);
+}
 
 const CLICK_PX = 5;
 const DBL_MS = 380;
@@ -1583,11 +1595,12 @@ export default function create(ctx: CityContext): CityModule {
     camera.up.set(0, 1, 0);
     camera.lookAt(_tgt);
     const effDist = _pos.distanceTo(_tgt);
-    const wantFov = follow?.chase ? CHASE_FOV : BASE_FOV;
+    const baseFov = WORLD_MODE ? worldFov(effDist) : BASE_FOV;
+    const wantFov = follow?.chase ? Math.max(CHASE_FOV, baseFov) : baseFov;
     fov += (wantFov - fov) * (dt > 0 ? damp(3, dt) : 1);
     camera.fov = fov;
     camera.near = clamp(effDist * 0.02, 0.3, 20);
-    camera.far = effDist * 6 + 2500;
+    camera.far = WORLD_MODE ? WORLD_FAR : effDist * 6 + 2500;
     camera.updateProjectionMatrix();
     camera.updateMatrixWorld();
     eff.tx = _tgt.x;

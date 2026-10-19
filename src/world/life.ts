@@ -13,6 +13,7 @@
 import type { CityContext, CityModule } from '../core/context';
 import { ClothSystem } from './life/cloth';
 import { decorate, type BuildingsLike, type DecorStats } from './life/decor';
+import { lampLights } from '../core/lampLight';
 
 export default function create(ctx: CityContext): CityModule {
   const params = ctx.debug.params;
@@ -22,7 +23,8 @@ export default function create(ctx: CityContext): CityModule {
   const buildings = ctx.services.buildings as BuildingsLike | undefined;
 
   if (!params.has('nocloth')) {
-    decor = decorate(ctx, cloth, buildings, { bunting: !params.has('nobunting'), laundry: !params.has('nolaundry') });
+    const trees = (ctx.services.vegetation as { trees?: { x: number; z: number; r: number; h: number }[] } | undefined)?.trees ?? [];
+    decor = decorate(ctx, cloth, buildings, { trees, lamps: lampLights() }, { bunting: !params.has('nobunting'), laundry: !params.has('nolaundry') });
     cloth.build();
     ctx.scene.add(cloth.group);
     // the animated cloth now hangs on the balcony lines: hide the buildings' static stand-ins

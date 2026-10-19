@@ -604,7 +604,9 @@ const tmpCard: CardIn = {
   sway: STILL,
 };
 
-function card(buf: InstBuf, ref: PlantRef, st: Struct, centre: V3, U: V3, V: V3, normal: V3, ao: number, lod: number, uv: UvRect, tint: number, sway: Sway, flutter = 1): void {
+const DRY = new THREE.Color('#9a7f55');
+
+function card(buf: InstBuf, ref: PlantRef, st: Struct, centre: V3, U: V3, V: V3, normal: V3, ao: number, lod: number, uv: UvRect, tint: number, sway: Sway, flutter = 1, col: THREE.Color = st.leaf): void {
   const k = st.kind;
   const c = tmpCard;
   c.cx = centre[0];
@@ -623,9 +625,9 @@ function card(buf: InstBuf, ref: PlantRef, st: Struct, centre: V3, U: V3, V: V3,
   c.flutter = Math.min(1, 0.5 * flutter * k.flutter);
   c.lod = lod;
   c.uv = uv;
-  c.r = st.leaf.r * tint;
-  c.g = st.leaf.g * tint;
-  c.b = st.leaf.b * tint;
+  c.r = col.r * tint;
+  c.g = col.g * tint;
+  c.b = col.b * tint;
   c.trans = Math.min(1, k.trans * 0.8);
   const fl = st.flower;
   c.fr = fl ? fl.r : 1;
@@ -732,7 +734,6 @@ export function emitNear(st: Struct, ref: PlantRef, cards: InstBuf, woodBuf: Ins
       }
     });
   }
-  const bloomK = k.bloom ?? 0;
   for (const t of st.tips) {
     const L = st.lobes[t.lobe];
     const nC = Math.max(1, Math.round(k.density + rng.range(-0.45, 0.45)));
@@ -771,8 +772,7 @@ export function emitNear(st: Struct, ref: PlantRef, cards: InstBuf, woodBuf: Ins
       // fresh growth on the sunny top is lighter/yellower, shaded underside cooler
       const vy = (c[1] - st.c[1]) / Math.max(0.3, st.cry);
       const tint = L.tint * rng.range(0.9, 1.08) * (0.94 + 0.1 * smooth01(vy * 0.6 + 0.5));
-      const uv = bloomK > 0 && rng.next() > bloomK ? uvLeaf : uvLeaf;
-      card(cards, ref, st, c, U, V, sphereNormal(st, c, L, F, st.form === 'bush' ? 0.85 : 0.78), ao, 1, uv, tint, t.sway, 1);
+      card(cards, ref, st, c, U, V, sphereNormal(st, c, L, F, st.form === 'bush' ? 0.85 : 0.78), ao, 1, uvLeaf, tint, t.sway, 1);
     }
   }
 }
@@ -823,7 +823,7 @@ function emitFronds(st: Struct, ref: PlantRef, cards: InstBuf, rng: Rng, lod: nu
       const sub = { u0: uv.u0, v0, u1: uv.u1, v1 };
       const sw: Sway = { ph1: fr.sway.ph1, w1: fr.sway.w1 * (0.3 + 0.7 * ((k + 0.5) / n)), ph2: fr.sway.ph2, w2: fr.sway.w2 * ((k + 0.5) / n) };
       const nrm = sphereNormal(st, c, null, F, 0.35);
-      card(cards, ref, st, c, U, V, [nrm[0], nrm[1] + 0.25, nrm[2]], fr.dry ? 0.7 : 0.75 + 0.25 * (k / n), lod, sub, fr.dry ? 1 : tint, sw, 0.8);
+      card(cards, ref, st, c, U, V, [nrm[0], nrm[1] + 0.25, nrm[2]], fr.dry ? 0.7 : 0.75 + 0.25 * (k / n), lod, sub, tint, sw, 0.8, fr.dry ? DRY : st.leaf);
     }
   });
 }

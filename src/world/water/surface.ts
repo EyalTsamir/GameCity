@@ -31,6 +31,8 @@ import { rippleTexture, macroTexture } from './noise';
 import type { ReflectionUniforms } from './reflection';
 import type { HullContacts } from './hulls';
 import { MAX_HULLS } from './hulls';
+import type { WaterExtension } from './extension';
+import { WORLD_MODE } from '../../core/world';
 
 export interface SurfaceResult {
   mesh: THREE.Mesh;
@@ -72,6 +74,7 @@ export function createSurface(
   refl: ReflectionUniforms,
   hulls: HullContacts,
   sky: Record<string, THREE.IUniform>,
+  ext: WaterExtension | null = null,
 ): SurfaceResult {
   const pond = model.pond;
   const domains: Domain[] = [
@@ -124,10 +127,22 @@ export function createSurface(
       }
     }
   }
+  // slab vertices sample the field texture (aFld.w = −1); world mode appends the sea / river
+  // extension beyond the slab with its own per-vertex field values (water/extension.ts)
+  const fldA: number[] = new Array((pos.length / 3) * 4).fill(0);
+  for (let k = 3; k < fldA.length; k += 4) fldA[k] = -1;
+  if (ext) {
+    const base = pos.length / 3;
+    for (let k = 0; k < ext.pos.length; k++) pos.push(ext.pos[k]);
+    for (let k = 0; k < ext.wave.length; k++) wav.push(ext.wave[k]);
+    for (let k = 0; k < ext.fld.length; k++) fldA.push(ext.fld[k]);
+    for (let k = 0; k < ext.index.length; k++) idx.push(ext.index[k] + base);
+  }
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
   geo.setAttribute('normal', new THREE.Float32BufferAttribute(new Float32Array(pos.length).map((_, k) => (k % 3 === 1 ? 1 : 0)), 3));
   geo.setAttribute('aWave', new THREE.Float32BufferAttribute(wav, 2));
+  geo.setAttribute('aFld', new THREE.Float32BufferAttribute(fldA, 4));
   geo.setIndex(pos.length / 3 > 65535 ? new THREE.Uint32BufferAttribute(idx, 1) : new THREE.Uint16BufferAttribute(idx, 1));
   geo.computeBoundingSphere();
   geo.computeBoundingBox();
@@ -167,9 +182,11 @@ export function createSurface(
 
   const VERT_PARS = /* glsl */ `
 attribute vec2 aWave;
+attribute vec4 aFld;
 uniform float uTime;
 varying vec3 vWW;
 varying vec2 vWave;
+varying vec4 vFld;
 varying float vDisp;
 float th_disp;
 ${WAVES_GLSL}
@@ -215,6 +232,7 @@ uniform vec3 wNightTint;
 uniform vec4 wDebug;
 varying vec3 vWW;
 varying vec2 vWave;
+varying vec4 vFld;
 varying float vDisp;
 ${LAMP_GLSL}
 ${WAVES_GLSL}
@@ -268,7 +286,8 @@ float wHullW(float u, vec4 B, float transom) {
 vec4 waterBase() {
   vec3 p = vWW;
   float t = uTime;
-  vec4 fld = texture2D(tField, (p.xz - uSlabXf.xy) * uSlabXf.zw);
+  // slab: baked field texture; beyond the slab (world mode): per-vertex field values
+  vec4 fld = vFld.w < -0.5 ? texture2D(tField, (p.xz - uSlabXf.xy) * uSlabXf.zw) : vFld;
   float depth = fld.r + vDisp;
   float shore = fld.g;
   float beach = fld.b;
@@ -374,9 +393,11 @@ vec4 waterBase() {
   sky = mix(sky, uSkyHor * 1.5 + vec3(0.004, 0.006, 0.02), 0.45 * smoothstep(0.75, 1.0, uNight));
   vec4 rc = vec4(0.0);
   float reflW = uReflInfo.x * (1.0 - mPond);
+#ifdef TH_DIORAMA
   // fade toward the slab's cut faces
   vec2 eb = min(p.xz - uSlabBox.xy, uSlabBox.zw - p.xz);
   reflW *= smoothstep(0.0, 2.5, min(eb.x, eb.y));
+#endif
   if (reflW > 0.001) {
     vec2 vh = normalize(V.xz + vec2(1e-5, 0.0));
     vec2 vs = vec2(-vh.y, vh.x);
@@ -534,7 +555,7 @@ vec3 objectTangent = vec3( tangent.xyz );
 #endif
 `,
       )
-      .replace('#include <begin_vertex>', '#include <begin_vertex>\ntransformed.y += th_disp;\nvWW = (modelMatrix * vec4(transformed, 1.0)).xyz;\nvWave = aWave;\nvDisp = th_disp;');
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\ntransformed.y += th_disp;\nvWW = (modelMatrix * vec4(transformed, 1.0)).xyz;\nvWave = aWave;\nvFld = aFld;\nvDisp = th_disp;');
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', '#include <common>\n' + FRAG_PARS)
       .replace('vec4 diffuseColor = vec4( diffuse, opacity );', 'vec4 diffuseColor = waterBase();')
@@ -583,8 +604,11 @@ reflectedLight.indirectDiffuse += diffuseColor.rgb * thLampLight(vWW, vec3(0.0, 
       );
   };
   const dbg = ctx.debug.params.get('waterdebug');
-  if (dbg === 'refl') mat.defines = { TH_WATER_DEBUG: 1 };
-  mat.customProgramCacheKey = () => 'th-water-v2' + (dbg ?? '');
+  const defs: Record<string, number> = {};
+  if (dbg === 'refl') defs.TH_WATER_DEBUG = 1;
+  if (!WORLD_MODE) defs.TH_DIORAMA = 1;
+  mat.defines = defs;
+  mat.customProgramCacheKey = () => 'th-water-v3' + (dbg ?? '') + (WORLD_MODE ? 'w' : 'd');
   const mesh = new THREE.Mesh(geo, mat);
   mesh.name = 'water-surface';
   mesh.receiveShadow = true;

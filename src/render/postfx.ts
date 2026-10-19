@@ -18,6 +18,21 @@ import { LookEffect } from './postfx/look';
 import { CloudShadowEffect, cloudShadowUniforms, type CloudShadowData } from './postfx/cloudShadow';
 import { AOApplyEffect, aoUniforms } from './postfx/aoApply';
 import { AdaptiveController, GpuTimer, buildLadder, type QualityStep } from './postfx/adaptive';
+import { WORLD_MODE } from '../core/world';
+import type { AtmosphereService } from './sky/atmoDrive';
+
+/** previous frame's scene depth for soft particles (see ctx.services.postfx.softDepth) */
+export interface SoftDepth {
+  /** full-resolution depth texture (raw depth-buffer values, perspective) of the previous frame */
+  texture: THREE.Texture;
+  /** false: raw [0,1] depth — linear view depth = near·far / (far − d·(far − near)) */
+  linear: boolean;
+  near: number;
+  far: number;
+  /** size in pixels: uv = gl_FragCoord.xy / (width, height) in the main view */
+  width: number;
+  height: number;
+}
 
 const _focus = new THREE.Vector3();
 const _fwd = new THREE.Vector3();
@@ -33,6 +48,14 @@ type FxName = 'dof' | 'bloom' | 'ao';
 export default function create(ctx: CityContext): CityModule {
   const { renderer, scene, camera, quality } = ctx;
   const params = ctx.debug.params;
+  // world mode: natural optics — a thin-lens DOF that only shows at close focus instead of the
+  // tilt-shift miniature blur (?tiltshift forces the miniature DOF back for comparison), and a natural
+  // grade (AgX + time-of-day CDL look; ?gradeold = the diorama grade)
+  const world = WORLD_MODE;
+  const lensMode = world && !params.has('tiltshift');
+  const lensN = Math.max(0.7, Number(params.get('lensN') ?? 1.6) || 1.6);
+  const worldGrade = world && !params.has('gradeold');
+  const atmo = () => ctx.services.atmosphere as AtmosphereService | undefined;
 
   const fbType = params.get('fbtype') === 'u8' ? THREE.UnsignedByteType : THREE.HalfFloatType;
   const composer = new EffectComposer(renderer, { frameBufferType: fbType, multisampling: 0, stencilBuffer: false });
@@ -137,8 +160,13 @@ export default function create(ctx: CityContext): CityModule {
     aoU.uAOTint.value.copy(aoTint.copy(c.color).convertSRGBToLinear());
     aoU.uAOProjInv.value.copy(camera.projectionMatrixInverse);
     aoU.uAORes.value.set(composer.inputBuffer.width, composer.inputBuffer.height);
+    const at = atmo();
     const fog = scene.fog as THREE.Fog | null;
-    if (fog && (fog as THREE.Fog).isFog) aoU.uAOFog.value.set(fog.near, fog.far);
+    if (at && at.active) {
+      // AO multiplies the final colour (incl. the haze in front): fade it out as the haze takes over
+      const y = Math.max(0, camera.position.y);
+      aoU.uAOFog.value.set(at.distanceFor(0.9, y), at.distanceFor(0.35, y));
+    } else if (fog && (fog as THREE.Fog).isFog) aoU.uAOFog.value.set(fog.near, fog.far);
     else aoU.uAOFog.value.set(0, 0);
   };
   const tilt = new TiltShiftEffect(camera, cloudU, aoU);
@@ -155,7 +183,7 @@ export default function create(ctx: CityContext): CityModule {
     }
   }
   // ?nanviz (debug): NaN/Inf scene pixels show up magenta in the final image instead of black
-  const look = new LookEffect(TONE_MAPPING, params.has('nanviz'));
+  const look = new LookEffect(TONE_MAPPING, params.has('nanviz'), worldGrade);
   const aaMode = params.get('aa') ?? 'smaa';
   let smaa: Effect;
   if (aaMode === 'fxaa') {
@@ -190,10 +218,14 @@ export default function create(ctx: CityContext): CityModule {
   let aoUser = true;
   let focusOverride: number | null = null;
   let step: QualityStep;
+  /** world lens: blur too small to see this frame → the DOF passes are skipped */
+  let lensIdle = false;
+  let dofWanted = true;
 
   const applyEnabled = () => {
     const dofOn = enabledAll && dofUser && quality.dof;
-    tilt.enabled = dofOn;
+    dofWanted = dofOn;
+    tilt.enabled = dofOn && !lensIdle;
     bloomOn = enabledAll && bloomUser && quality.bloom;
     bloom.intensity = bloomOn ? bloom.intensity : 0;
     if (ao) ao.enabled = enabledAll && aoUser && quality.ao;
@@ -268,7 +300,13 @@ export default function create(ctx: CityContext): CityModule {
     setFocus(distance) {
       focusOverride = distance !== null && Number.isFinite(distance) && distance > 0 ? distance : null;
     },
+    softDepth(): SoftDepth | null {
+      return softDepth.texture && enabledAll ? softDepth : null;
+    },
   };
+  // the composer's "stable" depth target is blitted right after the RenderPass every frame; during the
+  // next frame's scene pass it still holds the previous frame (a separate FBO: legal to sample)
+  const softDepth: SoftDepth = { texture: null as unknown as THREE.Texture, linear: false, near: camera.near, far: camera.far, width: 1, height: 1 };
 
   applyStep(ladder[0]);
 
@@ -304,14 +342,33 @@ export default function create(ctx: CityContext): CityModule {
     firstFrame = false;
 
     renderer.getDrawingBufferSize(_sz);
-    const hScale = _sz.y / 930;
-    const zoom = smooth(30, 560, camDist);
     const lite = step.dof === 'lite';
-    kPx = (4.5 + 14.5 * zoom) * hScale * (lite ? 0.8 : 1);
-    tilt.params.focus = focusPlanar;
-    tilt.params.k = kPx;
-    tilt.params.band = 0.035 + 0.03 * (1 - zoom);
-    tilt.params.skyCoc = Math.min(kPx * 0.35, 4 * hScale);
+    if (lensMode) {
+      // thin lens, 35 mm full-frame equivalent (24 mm sensor height, focal length from the vertical
+      // FOV), aperture f/lensN: blur-circle radius at infinity in output pixels. coc(z) = K·(1 − F/z)
+      // is exactly the tilt-shift model with no sharp band. Beyond ~40 m focus it is sub-pixel → skipped.
+      const fmm = 12 / Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2);
+      const Fmm = Math.max(focusPlanar * 1000, fmm * 2);
+      kPx = 0.5 * ((fmm * fmm) / (lensN * (Fmm - fmm)) / 24) * _sz.y * (lite ? 0.8 : 1);
+      kPx = Math.min(kPx, 24);
+      tilt.params.focus = focusPlanar;
+      tilt.params.k = kPx;
+      tilt.params.band = 0.004;
+      tilt.params.skyCoc = kPx;
+      const idle = kPx < 0.6;
+      if (idle !== lensIdle) {
+        lensIdle = idle;
+        tilt.enabled = dofWanted && !lensIdle;
+      }
+    } else {
+      const hScale = _sz.y / 930;
+      const zoom = smooth(30, 560, camDist);
+      kPx = (4.5 + 14.5 * zoom) * hScale * (lite ? 0.8 : 1);
+      tilt.params.focus = focusPlanar;
+      tilt.params.k = kPx;
+      tilt.params.band = 0.035 + 0.03 * (1 - zoom);
+      tilt.params.skyCoc = Math.min(kPx * 0.35, 4 * hScale);
+    }
 
     // ── bloom & grade by time of day
     const night = ctx.clock.night;
@@ -327,6 +384,26 @@ export default function create(ctx: CityContext): CityModule {
       look.set('uSat', 1.2 - 0.08 * night);
       look.set('uVignette', 0.28);
       look.setVec('uShadowTint', -0.01, 0.0, 0.018);
+    } else if (worldGrade) {
+      // world: natural grade — AgX with a time-of-day look: neutral by day, a partial "Golden" CDL
+      // when the sun is low (warm, slightly compressed highlights), cool and calm at night; little
+      // extra saturation (saturation comes from the light), clean blacks, a faint lens vignette
+      if (bloomOn) {
+        bloom.intensity = 0.26 + 0.74 * night;
+        bloom.luminanceMaterial.threshold = 1.45 - 0.57 * night;
+        bloom.luminanceMaterial.smoothing = 0.32 - 0.08 * night;
+      }
+      const gold = dusk * (1 - night);
+      const gk = 0.32 * gold;
+      look.setVec('uLookSlope', 1, 1 - 0.1 * gk, 1 - 0.5 * gk);
+      look.set('uLookPower', 1 - 0.2 * gk);
+      look.set('uLookSat', 1 + 0.06 * gold - 0.08 * night);
+      look.set('uSat', 1.04);
+      look.set('uContrast', 0.14);
+      look.setVec('uLift', 0.006, 0.007, 0.011);
+      look.set('uWarm', 0.006 * (1 - night) + 0.008 * dusk - 0.012 * night);
+      look.set('uVignette', 0.16 + 0.12 * night);
+      look.setVec('uShadowTint', -0.003, 0.0, 0.006);
     } else {
       // studio key: sunlit whites sit higher (stronger sun), so the day threshold rises to keep
       // daylight crisp; at night only real emitters (lamps, windows, neon) cross it — the dark
@@ -367,6 +444,15 @@ export default function create(ctx: CityContext): CityModule {
     gpuTimer.begin();
     composer.render(realDt);
     gpuTimer.end();
+    // what softDepth() hands out during the next frame
+    const sd = (composer as unknown as { stableDepthTexture: THREE.Texture | null }).stableDepthTexture;
+    if (sd) {
+      softDepth.texture = sd;
+      softDepth.near = camera.near;
+      softDepth.far = camera.far;
+      softDepth.width = composer.inputBuffer.width;
+      softDepth.height = composer.inputBuffer.height;
+    }
   };
 
   return {
@@ -383,7 +469,7 @@ export default function create(ctx: CityContext): CityModule {
         refl: water()?.reflectionQuality?.() ?? -1,
         renderScale: quality.renderScale,
         ao: ao && ao.enabled ? 'on' : 'off',
-        dof: tilt.enabled ? 'on' : 'off',
+        dof: tilt.enabled ? 'on' : lensMode && dofWanted ? 'lens-idle' : 'off',
         bloom: bloomOn ? 'on' : 'off',
         focus: Math.round(focusPlanar),
         cocPx: Math.round(kPx * 10) / 10,

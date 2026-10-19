@@ -18,9 +18,6 @@ import { evalHeights, buildLandGeometry, makeSlabNormal, LAND_MAX_D, GROUND_DROP
 import { landUniforms, landMaterial } from './landscape/shader';
 import { buildMountains } from './landscape/mountains';
 
-/** the water extension (sea to the horizon) uses the same rings out to here */
-export const WATER_MAX_D = 52000;
-
 export interface LandscapeService {
   /** true when the world beyond the slab is rendered (world mode, not ?noland) */
   active: boolean;
@@ -32,7 +29,7 @@ export interface LandscapeService {
   /** signed distance to the sea coast (> 0 land) */
   coastSD(x: number, z: number): number;
   model: LandscapeModel;
-  /** ring topology + heights (water module: sea / river extension) */
+  /** ring topology + heights of the land mesh */
   topo: RingTopology | null;
   heights: LandHeights | null;
 }
@@ -71,8 +68,8 @@ export default function create(ctx: CityContext): CityModule {
   // ── rings + heights (shared with the water module)
   const t1 = performance.now();
   const edges = slabEdges(tmodel, groundBands(tmodel));
-  const topo = buildRings(edges, WATER_MAX_D);
-  const heights = evalHeights(topo, model, LAND_MAX_D, WATER_MAX_D, slabH);
+  const topo = buildRings(edges, LAND_MAX_D);
+  const heights = evalHeights(topo, model, LAND_MAX_D, LAND_MAX_D, slabH);
   service.topo = topo;
   service.heights = heights;
   const ringMs = performance.now() - t1;

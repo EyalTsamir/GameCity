@@ -1,11 +1,13 @@
 # world-foliage — leafy, living trees (world round, workstream 4)
 
 ## Resume here (update after EVERY step)
-* 2026-10-19 14:50 — Started. Read briefs/plan/critique/research/earlier logs + all vegetation code.
-  Design written below. NEXT: "before" captures (shots/world/foliage/before/), then M1 (leaf atlas +
-  instanced card crowns + branch skeleton for broadleaf, far cards, wind) in new files
-  `src/world/vegetation/{atlas,cards,skeleton,crowns}.ts`; old hull path stays as `?noleafcards`.
-* No edits made yet. No jobs running.
+* 2026-10-19 15:40 — M1 code written, typechecks: `vegetation/atlas.ts` (canvas leaf atlas, 22 regions,
+  coverage-preserving mips), `foliage.ts` (InstBuf, card/wood instanced layers, shaders, LodTexture),
+  `crowns.ts` (KINDS table, structure() broadleaf/cone/palm/bush, emitFar/emitNear), vegetation.ts wiring
+  (plants registry → far static at boot, near lazily per frame `updateNear`, `?noleafcards` = old hulls).
+  material.ts now exports NOISE_GLSL + wrappedPhysicalPars. Before captures: shots/world/foliage/before/
+  (+ before_sheet.png). NEXT: first browser test (shader compile!), fix, capture eye-level + overview.
+* No jobs running.
 
 ## Brief (from WORLD-PLAN.md + briefs)
 Owns `src/world/vegetation.ts` + `src/world/vegetation/*`. Trees are smooth faceted blobs (lollipops from afar,

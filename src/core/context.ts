@@ -106,6 +106,8 @@ export interface Services {
     isEnabled(effect: 'dof' | 'bloom' | 'ao'): boolean;
     /** focus distance override (world units) or null for automatic */
     setFocus?(distance: number | null): void;
+    /** previous frame's scene depth (soft particles; main view only): raw perspective depth unless `linear` */
+    softDepth?(): { texture: THREE.Texture; linear: boolean; near: number; far: number; width: number; height: number } | null;
   };
   traffic?: { count(): number; busCount(): number };
   pedestrians?: { count(): number };

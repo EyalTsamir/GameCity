@@ -20,6 +20,9 @@ import type { RenderTest } from './sky/renderTest';
 import { MAX_CLOUDS, type CloudShadowData } from './postfx/cloudShadow';
 import { createStageUniforms, type StageService } from './stage/table';
 import { PLINTH_BOTTOM_Y } from './stage/constants';
+import { WORLD_MODE } from '../core/world';
+import { installAtmosphere } from './atmosphere';
+import { AtmosphereDriver } from './sky/atmoDrive';
 
 const _focus = new THREE.Vector3();
 const _L = new THREE.Vector3();
@@ -49,6 +52,18 @@ function liftElevation(src: THREE.Vector3, minSin: number, out: THREE.Vector3): 
 
 export default async function create(ctx: CityContext): Promise<CityModule> {
   const { renderer, scene, clock, plan } = ctx;
+  // world mode (default): real sky to the horizon + aerial perspective replacing three's fog chunks
+  // (installed before ANY material compiles); ?diorama keeps the studio tabletop exactly as it was.
+  // ?noatmo = world sky but three's linear fog (A/B of the atmosphere alone)
+  const world = WORLD_MODE;
+  const atmoOn = world && !ctx.debug.params.has('noatmo');
+  if (atmoOn) installAtmosphere();
+  const atmo = new AtmosphereDriver();
+  const atmoParam = Number(ctx.debug.params.get('atmo'));
+  if (Number.isFinite(atmoParam) && ctx.debug.params.has('atmo')) atmo.hazeK = Math.max(0, atmoParam);
+  atmo.mistOn = !ctx.debug.params.has('nomist');
+  const atmoSvc = atmo.service(atmoOn);
+  if (world) ctx.services.atmosphere = atmoSvc;
   // ?legacylight = the original light rig (palette, shadow filtering, IBL) for A/B runs
   const legacyParam = ctx.debug.params.has('legacylight');
   let legacy = legacyParam;
@@ -76,7 +91,7 @@ export default async function create(ctx: CityContext): Promise<CityModule> {
   scene.add(hemi);
 
   // ── backdrop, clouds, rain
-  const dome = createSkyDome();
+  const dome = createSkyDome(world);
   scene.add(dome.mesh);
 
   const obstacles: Obstacle[] = [];
@@ -103,7 +118,10 @@ export default async function create(ctx: CityContext): Promise<CityModule> {
     hero = { target, position: target.clone().addScaledVector(dir, heroPoi.distance) };
   }
   const clouds = createClouds(ctx.rng('clouds'), plan.slab, obstacles, cloudCount, hero, ctx.uniforms.uWind.value);
-  clouds.setShadows(ctx.quality.shadows);
+  // world mode: the low cotton puffs are a tabletop prop (the high cloud sky replaces them)
+  const cottonClouds = !world;
+  clouds.setShadows(ctx.quality.shadows && cottonClouds);
+  clouds.mesh.visible = cottonClouds;
   scene.add(clouds.mesh);
 
   const rainRng = ctx.rng('rain-streaks');
@@ -118,11 +136,14 @@ export default async function create(ctx: CityContext): Promise<CityModule> {
   env.studio = !legacy;
   scene.environmentIntensity = 0.7;
 
-  const fitter = new ShadowFitter({ slab: plan.slab, minY: -8, maxY: Math.max(maxStructure + 10, 175), sampleHeights: [0, 28] });
+  // world: the ground continues beyond the slab (landscape near ring) — the visible region is limited
+  // by the radius around the focus instead of by the slab
+  const shadowArea = world ? { x0: plan.slab.x0 - 1400, x1: plan.slab.x1 + 1400, z0: plan.slab.z0 - 1400, z1: plan.slab.z1 + 1400 } : plan.slab;
+  const fitter = new ShadowFitter({ slab: shadowArea, minY: -8, maxY: Math.max(maxStructure + 10, 175), sampleHeights: [0, 28] });
   const fitStudio = () => {
     // studio: the table (y ≈ plinth bottom) is a receiver and a strip of it around the plinth is covered
-    fitter.params.minY = legacy ? -8 : PLINTH_BOTTOM_Y - 2;
-    fitter.params.margin = legacy ? 6 : 14;
+    fitter.params.minY = legacy || world ? -8 : PLINTH_BOTTOM_Y - 2;
+    fitter.params.margin = legacy || world ? 6 : 14;
   };
   fitStudio();
 
@@ -249,7 +270,8 @@ export default async function create(ctx: CityContext): Promise<CityModule> {
     moonVis = smooth(0.06, -0.1, sh);
     _sunSky.copy(clock.sunDir);
     dome.update(state, _sunSky, clock.moonDir, sunVis, moonVis, clock.realTime, overcast);
-    if (!legacy) {
+    if (world) atmo.update(state, _sunSky, sunVis, overcast, ctx.uniforms.uWind.value, clock.speed > 0 ? realDt * clock.speed : 0);
+    if (!legacy && !world) {
       _cyc.copy(state.cyc);
       if (overcast > 0) {
         const g = lum(_cyc);
@@ -267,19 +289,28 @@ export default async function create(ctx: CityContext): Promise<CityModule> {
       const g = lum(_tmpC);
       _tmpC.lerp(_grey.setRGB(g * 1.05, g * 1.08, g * 1.14), overcast * 0.6);
     }
-    fog.color.copy(_tmpC);
     (scene.background as THREE.Color).copy(state.horizon);
-    const camH = Math.max(1, camPos.y);
-    fog.near = (dist * 1.1 + 160) * (1 - overcast * 0.45);
-    fog.far = (dist * 3.2 + 1700 + camH * 1.5) * (1 - overcast * 0.5);
+    if (world) {
+      // the atmosphere owns the look; these values only serve CPU consumers (reflection horizons)
+      // and the ?noatmo A/B (three's linear fog over the same distances)
+      atmo.fogColor(fog.color);
+      fog.near = atmoSvc.distanceFor(0.97, Math.max(0, camPos.y));
+      fog.far = Math.max(fog.near + 10, atmoSvc.distanceFor(0.08, Math.max(0, camPos.y)));
+    } else {
+      fog.color.copy(_tmpC);
+      const camH = Math.max(1, camPos.y);
+      fog.near = (dist * 1.1 + 160) * (1 - overcast * 0.45);
+      fog.far = (dist * 3.2 + 1700 + camH * 1.5) * (1 - overcast * 0.5);
+    }
 
     renderer.toneMappingExposure = state.exposure * (1 + overcast * 0.12) * tune.exposure;
     scene.environmentIntensity = state.env * (1 - overcast * 0.2) * tune.env;
 
     if (sun.castShadow) {
-      const maxR = legacy ? THREE.MathUtils.clamp(dist * 1.55 + 30, 70, 420) : THREE.MathUtils.clamp(dist * 1.2 + 24, 60, 420);
+      // world: no tilt-shift blur hides the distance → a wider shadowed region, not trimmed behind the focus
+      const maxR = world ? THREE.MathUtils.clamp(dist * 1.3 + 90, 130, 520) : legacy ? THREE.MathUtils.clamp(dist * 1.55 + 30, 70, 420) : THREE.MathUtils.clamp(dist * 1.2 + 24, 60, 420);
       const minR = legacy ? THREE.MathUtils.clamp(dist * 0.55, 28, 200) : THREE.MathUtils.clamp(dist * 0.45, 22, 200);
-      fitter.fit(ctx.camera, sun, _L, _focus, maxR, minR, legacy ? 1 : 0.62);
+      fitter.fit(ctx.camera, sun, _L, _focus, maxR, minR, legacy || world ? 1 : 0.62);
       const cam = sun.shadow.camera;
       const range = Math.max(10, cam.far - cam.near);
       const texel = fitter.texel;
@@ -317,7 +348,7 @@ export default async function create(ctx: CityContext): Promise<CityModule> {
     if (stage.table && stage.table.visible !== (!legacy && !noTable)) applyStageVisibility();
     // clouds go dim + translucent only after the afterglow / blue hour (dusk keeps its pink glow)
     const cloudNight = smooth(-0.07, -0.3, sh);
-    clouds.frame(ctx.camera, state, _L, sun.color, lightI, sunVis, lights * (1 - sunVis * 0.8), overcast, cloudNight);
+    if (cottonClouds) clouds.frame(ctx.camera, state, _L, sun.color, lightI, sunVis, lights * (1 - sunVis * 0.8), overcast, cloudNight);
     const shStrength = (usingMoon ? 0.3 * moonW : sunW) * (1 - overcast * 0.85);
     _shTint.setRGB(0.6, 0.645, 0.75);
     clouds.writeShadows(cloudShadows, _L, shStrength, _shTint);
@@ -353,7 +384,9 @@ export default async function create(ctx: CityContext): Promise<CityModule> {
         shadowRadius: Math.round(sun.shadow.radius * 100) / 100,
         hemiI: Math.round(hemi.intensity * 100) / 100,
         envI: Math.round(scene.environmentIntensity * 100) / 100,
-        key: legacy ? 'legacy' : 'studio',
+        key: legacy ? 'legacy' : world ? 'world' : 'studio',
+        hazeKm: world ? Math.round(3.912 / Math.max(1e-6, atmo.params.haze + atmo.params.rayleigh.y) / 100) / 10 : -1,
+        mist: world ? Math.round(atmo.params.mist * 1e4) / 1e4 : 0,
         clouds: clouds.count,
         cloudsActive: clouds.stats().active,
         cloudsOverCity: clouds.stats().overCity,

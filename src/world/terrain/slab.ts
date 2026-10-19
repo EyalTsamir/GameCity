@@ -1,7 +1,8 @@
-// The diorama base: soil cross-section on the four slab faces (procedural strata with
-// roots and pebbles), the varnished wooden plinth with its brass nameplate, and the studio
+// The diorama base (?diorama only): soil cross-section on the four slab faces (procedural strata
+// with roots and pebbles), the varnished wooden plinth with its brass nameplate, and the studio
 // table it stands on (src/render/stage/table.ts: oak top fading into the cyclorama, analytic
 // slab shadow + contact occlusion). ?legacylight shows the original blurred contact decal instead.
+// World mode (default): nothing — the landscape module continues the ground beyond the edge.
 
 import * as THREE from 'three';
 import type { CityContext } from '../../core/context';
@@ -13,6 +14,7 @@ import type { EdgeProfile, SlabEdges } from './layout';
 import { noiseTexture, GLSL_HASH } from './noise';
 import { WATER_LEVEL } from '../../core/constants';
 import { createStageUniforms, createTable, type StageService } from '../../render/stage/table';
+import { WORLD_MODE } from '../../core/world';
 
 export const PLINTH = {
   /** ledge width around the slab */
@@ -578,6 +580,22 @@ function sampleEdge(prof: EdgeProfile, a: number, b: number, n: number): Float32
 }
 
 export function createSlab(ctx: CityContext, model: TerrainModel, edges: SlabEdges): SlabResult {
+  if (WORLD_MODE) {
+    // world mode: no soil faces, plinth, nameplate or studio table — the landscape module continues
+    // the ground beyond the slab edge (placeholders keep the terrain module's wiring unchanged;
+    // ctx.services.stage.table stays null, so the sky module's table code is skipped)
+    const empty = (name: string) => {
+      const m = new THREE.Mesh();
+      m.name = name;
+      m.visible = false;
+      m.matrixAutoUpdate = false;
+      return m;
+    };
+    const shadow = new THREE.Group();
+    shadow.name = 'stage';
+    shadow.visible = false;
+    return { faces: empty('terrain-slab-faces'), plinth: empty('terrain-plinth'), nameplate: empty('terrain-nameplate'), shadow, triangles: 0 };
+  }
   const fg = buildFaces(model, edges);
   const faces = new THREE.Mesh(fg, facesMaterial());
   faces.name = 'terrain-slab-faces';
