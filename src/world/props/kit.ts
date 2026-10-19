@@ -7,9 +7,14 @@
 // Local frame as in furniture.ts (origin on the ground, +Y up, +Z = the item's front).
 // `k` = the kit the small parts go to, `ks` = the shadow-casting kit for the big silhouettes.
 
+import * as THREE from 'three';
 import type { Rng } from '../../core/rng';
 import { Kit } from './furniture';
 import { parasol, wheelieBins, CANVAS } from './garden';
+import type { ChairOut } from './service';
+
+const _seat = new THREE.Vector3();
+const _fwd = new THREE.Vector3();
 
 const TAU = Math.PI * 2;
 const FLOWERS = ['#e8649a', '#f2c84b', '#e8574f', '#b46ad6', '#f5f0e6', '#f08a3c', '#8f9ee8'];
@@ -17,8 +22,11 @@ const BIKE_COLS = ['#e63946', '#2a9d8f', '#457b9d', '#e9c46a', '#264653', '#f1fa
 
 // ──────────────────────────────────────────────────────────── plazas ──
 
-/** Bistro table with 2-4 chairs (k); market parasol on most (ks). */
-export function cafe(k: Kit, ks: Kit, rng: Rng, canvas?: [string, string]): void {
+/**
+ * Bistro table with 2-4 chairs (k); market parasol on most (ks). If `chairs` is given, every chair's
+ * seat (world) is appended to it; returns whether a parasol was built.
+ */
+export function cafe(k: Kit, ks: Kit, rng: Rng, canvas?: [string, string], chairs?: ChairOut[]): boolean {
   const sh = k.sh;
   const metal = rng.pick(['#2c3033', '#3b4a40', '#5a3a2a', '#d8d4ca']);
   k.m(metal, 'iron');
@@ -37,13 +45,22 @@ export function cafe(k: Kit, ks: Kit, rng: Rng, canvas?: [string, string]): void
     }
     sh.box(0, 0.44, 0, 0.42, 0.035, 0.4, 0);
     sh.push().local(0, 0.68, -0.19, -0.1).box(0, 0, 0, 0.4, 0.26, 0.025, 0).pop();
+    if (chairs) {
+      sh.world(0, 0.4575, 0.02, _seat);
+      sh.world(0, 0.4575, 1.02, _fwd);
+      chairs.push({ sx: _seat.x, sy: _seat.y, sz: _seat.z, fx: _fwd.x, fz: _fwd.z });
+    }
     sh.pop();
   }
   // cups
   k.m('#f2efe6', 'ceramic');
   if (rng.chance(0.6)) sh.cyl(rng.range(-0.12, 0.12), 0.755, rng.range(-0.12, 0.12), 0.045, 0.035, 0.07, 6, 2);
   // (the caller frames `ks` at the same spot)
-  if (rng.chance(0.72)) parasol(ks, rng, 1.25, 2.35, canvas);
+  if (rng.chance(0.72)) {
+    parasol(ks, rng, 1.25, 2.35, canvas);
+    return true;
+  }
+  return false;
 }
 
 /** Coffee kiosk: little cabin with a serving hatch, striped awning and a lit menu board. Faces +Z. */

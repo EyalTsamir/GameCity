@@ -13,6 +13,7 @@ import {
 import { WIN, PROF, WALLPAT, ROOFPAT, FRAME, GLASS, LIGHT_MODE } from './materials';
 import { boardSign, bladeSign } from './signs';
 import { PALETTE } from '../../core/gfx';
+import { anchors } from './anchors';
 
 const SHOPS: { name: string; blade: string }[] = [
   { name: 'Bakery', blade: 'B' },
@@ -398,6 +399,7 @@ export function genTownhouse(g: Gen): void {
       railing(t, c0x, c0z, c1x, c1z, yb, 0.95, col('#2c3035'), 0.13, 1);
       railing(t, sx(sg, u0 + 0.03, 0.02), sz(sg, u0 + 0.03, 0.02), sx(sg, u0 + 0.03, 0.72), sz(sg, u0 + 0.03, 0.72), yb, 0.95, col('#2c3035'), 0.13, 1);
       railing(t, sx(sg, u1 - 0.03, 0.02), sz(sg, u1 - 0.03, 0.02), sx(sg, u1 - 0.03, 0.72), sz(sg, u1 - 0.03, 0.72), yb, 0.95, col('#2c3035'), 0.13, 1);
+      anchors.balcony(sx(sg, (u0 + u1) / 2, 0.39), yb, sz(sg, (u0 + u1) / 2, 0.39), sg.nx, sg.nz, u1 - u0, 0.78, 0.95);
       if (rng.chance(0.7)) {
         // potted plants on the balcony
         for (const pu of [u0 + 0.3, u1 - 0.3]) {
@@ -535,6 +537,7 @@ export function genTownhouse(g: Gen): void {
       setCol(g.trim, col('#cfc8bb'));
       g.trim.box(body.x0, yTop, body.z0, body.x1, yTop + 0.08, body.z0 + 0.27, 0b111111);
       g.trim.box(body.x0, yTop, body.z1 - 0.27, body.x1, yTop + 0.08, body.z1, 0b111111);
+      anchors.perch(body.x0 + 0.3, yTop + 0.08, body.z1 - 0.13, body.x1 - 0.3, yTop + 0.08, body.z1 - 0.13, 'parapet');
       g.trim.box(body.x0, yTop, body.z0 + 0.27, body.x0 + 0.27, yTop + 0.08, body.z1 - 0.27, 0b110111);
       g.trim.box(body.x1 - 0.27, yTop, body.z0 + 0.27, body.x1, yTop + 0.08, body.z1 - 0.27, 0b110111);
       flatRoof(g.shell, inner, eave + 0.02, col('#8d8a84'), ROOFPAT.FLAT, g.seed);
@@ -817,6 +820,7 @@ export function genTownhouse(g: Gen): void {
     setCol(t, col('#a87f58'));
     const dx0 = r.x0 + 0.2, dx1 = r.x1 - 0.2, dz0 = r.z0 + (r.z1 - r.z0) * 0.45, dz1 = r.z1 - 0.2;
     t.box(dx0, y, dz0, dx1, y + 0.06, dz1, 0b111111);
+    anchors.balcony((dx0 + dx1) / 2, y + 0.06, (dz0 + dz1) / 2, 0, 1, dx1 - dx0, dz1 - dz0, 0.8, 'terrace');
     // planters + plants
     for (let k = 0; k < 3; k++) {
       const px = dx0 + 0.4 + ((dx1 - dx0 - 0.8) * k) / 2;

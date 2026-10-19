@@ -178,6 +178,12 @@ export function collectFacades(lots: Lot[]): FacadeSpan[] {
     else if (l.front === 'N') [ax, az, bx, bz] = [f.x1, f.z0, f.x0, f.z0];
     else if (l.front === 'E') [ax, az, bx, bz] = [f.x1, f.z1, f.x1, f.z0];
     else [ax, az, bx, bz] = [f.x0, f.z0, f.x0, f.z1];
+    // the real wall sits inside the footprint line for some kinds (townhouse plaster inset, apartment stair cores)
+    const ins = l.kind === 'apartment' ? 0.75 : l.kind === 'townhouse' ? 0.16 : 0;
+    ax -= nx * ins;
+    bx -= nx * ins;
+    az -= nz * ins;
+    bz -= nz * ins;
     const floors = Math.max(1, l.floors);
     const upper = l.kind === 'house' ? 2.9 : l.shopfront ? 4.0 : floors > 1 ? Math.min(4.2, l.height / floors + 0.4) : l.height;
     out.push({ ax, az, bx, bz, nx, nz, top: l.height, upper, floors, lot: l.id, district: l.district, kind: l.kind });
@@ -244,6 +250,11 @@ export function collectSpans(lots: Lot[], facades: FacadeSpan[], dense: (d: Dist
       else if (l.front === 'N') [ax, az, bx, bz] = [fp.x0, fp.z1, fp.x1, fp.z1];
       else if (l.front === 'E') [ax, az, bx, bz] = [fp.x0, fp.z0, fp.x0, fp.z1];
       else [ax, az, bx, bz] = [fp.x1, fp.z1, fp.x1, fp.z0];
+      const ins = l.kind === 'apartment' ? 0.8 : 0.16;
+      ax -= nx * ins;
+      bx -= nx * ins;
+      az -= nz * ins;
+      bz -= nz * ins;
       return { ...f, ax, az, bx, bz, nx, nz };
     });
   for (let i = 0; i < backs.length; i++) {

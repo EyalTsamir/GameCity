@@ -12,6 +12,7 @@ import {
   roofLook, roofPoly, flatRoof, doorNiche, bandWithOpenings, signOnSide,
   col, shade, setCol, lightBox, wallLamp,
 } from './gen';
+import { anchors } from './anchors';
 import { WIN, PROF, WALLPAT, ROOFPAT, FRAME, GLASS, LIGHT_MODE } from './materials';
 import { letterSign, boardSign } from './signs';
 import { PALETTE } from '../../core/gfx';
@@ -413,6 +414,7 @@ export function genIndustrial(g: Gen): void {
       t2.cylinder(vx, vz, 0.35, y - 1.2, y + 0.8, 8, false);
       setCol(t2, col('#7d858b'));
       t2.cone(vx, vz, 0.55, y + 0.8, y + 1.15, 8);
+      anchors.chimney(vx, vz, y + 0.9, 0.7, 0.7);
     }
   }
 

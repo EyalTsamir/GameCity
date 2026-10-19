@@ -11,6 +11,7 @@ import type { Rng } from '../../core/rng';
 import { Builder } from './mesh';
 import { SignAtlas, SignRect } from './signs';
 import { LIGHT_MODE, ROOFPAT, WIN } from './materials';
+import { anchors } from './anchors';
 
 export type Side = 0 | 1 | 2 | 3;
 export const FRONT: Side = 0,
@@ -411,6 +412,7 @@ export function gableRoof(g: Gen, r: LRect, alongX: boolean, ye: number, yr: num
     // ridge cap
     t.setRGB(color.r * 0.8, color.g * 0.8, color.b * 0.8);
     t.box(x0, yr - 0.06, zc - 0.12, x1, yr + 0.1, zc + 0.12, 0b110111);
+    anchors.perch(x0 + 0.3, yr + 0.1, zc, x1 - 0.3, yr + 0.1, zc, 'ridge');
   } else {
     const xc = (r.x0 + r.x1) / 2;
     const half = (r.x1 - r.x0) / 2;
@@ -443,6 +445,7 @@ export function gableRoof(g: Gen, r: LRect, alongX: boolean, ye: number, yr: num
     }
     t.setRGB(color.r * 0.8, color.g * 0.8, color.b * 0.8);
     t.box(xc - 0.12, yr - 0.06, z0, xc + 0.12, yr + 0.1, z1, 0b110111);
+    anchors.perch(xc, yr + 0.1, z0 + 0.3, xc, yr + 0.1, z1 - 0.3, 'ridge');
   }
 }
 
@@ -473,6 +476,7 @@ export function hipRoof(g: Gen, r: LRect, ye: number, yr: number, oh: number, co
     slope([x0, yb, z0], [x0, yb, z1], [ra, yr, zm], null, [0, 0, 1], [half / sl, rise / sl, 0]);
     setCol(g.trim, shade(color, 0.8));
     if (rb - ra > 0.05) g.trim.box(ra, yr - 0.06, zm - 0.1, rb, yr + 0.09, zm + 0.1, 0b110111);
+    anchors.perch(ra, yr + 0.09, zm, rb, yr + 0.09, zm, 'ridge');
   } else {
     const ra = z0 + half,
       rb = z1 - half;
@@ -483,6 +487,7 @@ export function hipRoof(g: Gen, r: LRect, ye: number, yr: number, oh: number, co
     roofPoly(b, [[x1, yb, z0], [x0, yb, z0], [xm, yr, ra]], [-1, 0, 0], [0, rise / sl, half / sl]);
     setCol(g.trim, shade(color, 0.8));
     if (rb - ra > 0.05) g.trim.box(xm - 0.1, yr - 0.06, ra, xm + 0.1, yr + 0.09, rb, 0b110111);
+    anchors.perch(xm, yr + 0.09, ra, xm, yr + 0.09, rb, 'ridge');
   }
   if (oh > 0.05) {
     // soffit ring + fascia
@@ -514,6 +519,7 @@ export function chimney(g: Gen, x: number, z: number, y0: number, y1: number, w 
     const pz = n === 1 ? z : z + (i - 0.5) * d * 0.5;
     t.cylinder(x, pz, 0.11, y1 + 0.12, y1 + 0.42, 6, true, 0.09);
   }
+  anchors.chimney(x, z, y1 + 0.42, w, d);
 }
 
 /** Wall lantern (emissive) beside a door. Kept above 2.4 m so it may project past the footprint. */

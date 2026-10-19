@@ -9,6 +9,7 @@ import {
   gableRoof, hipRoof, flatRoof, roofLook, roofPoly, chimney, doorNiche, bandWithOpenings, railing,
   col, shade, setCol, lightBox, wallLamp,
 } from './gen';
+import { anchors } from './anchors';
 import { WIN, PROF, WALLPAT, ROOFPAT, FRAME, GLASS, LIGHT_MODE } from './materials';
 import { partitionSide } from './oldtown';
 
@@ -385,6 +386,7 @@ export function genApartment(g: Gen): void {
   setCol(t, shade(wallC, 0.8));
   t.box(body.x0, H + 0.6, body.z0, body.x1, H + 0.68, body.z0 + 0.25, 0b111111);
   t.box(body.x0, H + 0.6, body.z1 - 0.25, body.x1, H + 0.68, body.z1, 0b111111);
+  anchors.perch(body.x0 + 0.3, H + 0.68, body.z0 + 0.12, body.x1 - 0.3, H + 0.68, body.z0 + 0.12, 'parapet');
   t.box(body.x0, H + 0.6, body.z0 + 0.25, body.x0 + 0.25, H + 0.68, body.z1 - 0.25, 0b110111);
   t.box(body.x1 - 0.25, H + 0.6, body.z0 + 0.25, body.x1, H + 0.68, body.z1 - 0.25, 0b110111);
   const inner: LRect = { x0: body.x0 + 0.25, x1: body.x1 - 0.25, z0: body.z0 + 0.25, z1: body.z1 - 0.25 };
@@ -458,6 +460,7 @@ export function genApartment(g: Gen): void {
     sideBox(t, sg, u + w / 2 - 0.08, u + w / 2, 0, dep - 0.08, y, y + 1.0, true);
     setCol(t, col('#e8e8e4'));
     sideBox(t, sg, u - w / 2 - 0.02, u + w / 2 + 0.02, dep - 0.1, dep + 0.02, y + 1.0, y + 1.06, true);
+    anchors.balcony(sx(sg, u, dep / 2), y, sz(sg, u, dep / 2), sg.nx, sg.nz, w - 0.16, dep - 0.08, 1.0);
     // life on the balcony
     const r = rng.next();
     if (r < 0.3) {

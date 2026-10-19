@@ -12,6 +12,7 @@ import {
   gableRoof, hipRoof, flatRoof, roofLook, roofPoly, chimney, doorNiche, bandWithOpenings, railing, signOnSide,
   col, shade, setCol, lightBox, wallLamp,
 } from './gen';
+import { anchors } from './anchors';
 import { WIN, PROF, WALLPAT, ROOFPAT, FRAME, GLASS, LIGHT_MODE } from './materials';
 import { letterSign, boardSign, clockFace } from './signs';
 import { partitionSide } from './oldtown';
@@ -100,6 +101,7 @@ function grand(g: Gen): void {
             setCol(t, col('#efe4cc'));
             sideBox(t, sg, u - ww / 2 - 0.3, u + ww / 2 + 0.3, 0, 0.55, yb - 0.12, yb, true);
             railing(t, sx(sg, u - ww / 2 - 0.28, 0.52), sz(sg, u - ww / 2 - 0.28, 0.52), sx(sg, u + ww / 2 + 0.28, 0.52), sz(sg, u + ww / 2 + 0.28, 0.52), yb, 0.9, col('#2c3035'), 0.14, 1);
+            anchors.balcony(sx(sg, u, 0.27), yb, sz(sg, u, 0.27), sg.nx, sg.nz, ww + 0.6, 0.55, 0.9);
           }
         }
       }
@@ -241,6 +243,7 @@ function seaview(g: Gen): void {
             setCol(t, white);
             sideBox(t, sg, u - 1.1, u + 1.1, 0, 0.9, yb - 0.14, yb, true);
             railing(t, sx(sg, u - 1.08, 0.86), sz(sg, u - 1.08, 0.86), sx(sg, u + 1.08, 0.86), sz(sg, u + 1.08, 0.86), yb, 0.95, col('#ffffff'), 0.16, 2);
+            anchors.balcony(sx(sg, u, 0.45), yb, sz(sg, u, 0.45), sg.nx, sg.nz, 2.2, 0.9, 0.95);
             if (rng.chance(0.3)) {
               setCol(t, col(rng.pick(['#e63946', '#2a9d8f', '#f4a261', '#457b9d'])));
               const px = sx(sg, u + 0.6, 0.5), pz = sz(sg, u + 0.6, 0.5);

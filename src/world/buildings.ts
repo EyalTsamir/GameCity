@@ -29,6 +29,7 @@ import { genHouse, setLegacyHouses, resetHomes, houseStats, houseLog } from './b
 import { genIndustrial } from './buildings/industry';
 import { genHotel, genSchool, genHarbormaster, genKiosk, genBoathouse } from './buildings/special';
 import { samplePalette, SkyState } from '../render/sky/palette';
+import { anchors, collectFacades, collectSpans, type BuildingsService } from './buildings/anchors';
 
 /** edge (m) of the square trim chunks (≈ two city blocks), grid origin at the slab's NW corner */
 const TRIM_CHUNK = 110;
@@ -101,6 +102,7 @@ export default function create(ctx: CityContext): CityModule {
   resetOldtown();
   resetTowers();
   resetHomes();
+  anchors.reset();
   // ?legacyhouses = original single house massing (A/B)
   setLegacyHouses(ctx.debug.params.has('legacyhouses'));
 
@@ -157,12 +159,14 @@ export default function create(ctx: CityContext): CityModule {
     };
     for (const b of [shell, trim, lights, signs]) b.check = check;
     const gen = GENERATORS[lot.kind] ?? genFallback;
+    anchors.begin(lot, trim);
     try {
       gen(g);
     } catch (err) {
       problems.push(`lot ${lot.id} (${lot.kind}) generator threw: ${err instanceof Error ? err.message : String(err)}`);
       if (ctx.debug.enabled) console.error('[buildings]', lot.id, err);
     }
+    anchors.end();
     for (const b of [shell, trim, lights, signs]) b.check = null;
     if (bad > 0) {
       violations++;
@@ -222,13 +226,21 @@ export default function create(ctx: CityContext): CityModule {
   if (bdbg.includes('nodetail')) mats.uniforms.uDetail.value = 0;
   if (bdbg.includes('weather')) mats.uniforms.uBhDebug.value = 1;
   if (bdbg.includes('wallinfo')) mats.uniforms.uBhDebug.value = 2;
-  // diagnostics for the harness: __city.ctx.services.buildings.setDebug(0 | 1 | 2)
-  ctx.services.buildings = {
+  // anchors for other modules (life: smoke, laundry, bunting, birds; streetlife) + diagnostics for the
+  // harness: __city.ctx.services.buildings.setDebug(0 | 1 | 2). Types: src/world/buildings/anchors.ts
+  const facades = collectFacades(lots);
+  const service: BuildingsService = {
+    chimneys: anchors.chimneys,
+    balconies: anchors.balconies,
+    facades,
+    spans: collectSpans(lots, facades, (d) => d === 'oldtown' || d === 'market'),
+    perches: anchors.perches,
     setDebug(n: number) {
       mats.uniforms.uBhDebug.value = n;
     },
     houses: () => houseLog,
   };
+  ctx.services.buildings = service;
 
   // ── picking (ray vs building boxes)
   const tmpV = new THREE.Vector3();
@@ -347,6 +359,10 @@ export default function create(ctx: CityContext): CityModule {
         signTris: triCounts.signs,
         meshes: meshes.length,
         buildMs: Math.round(buildMs),
+        chimneys: service.chimneys.length,
+        balconies: service.balconies.length,
+        spans: service.spans.length,
+        perches: service.perches.length,
         ...Object.fromEntries(Object.entries(kindCounts).map(([k, v]) => [`n_${k}`, v])),
         ...Object.fromEntries(Object.entries(houseStats).map(([k, v]) => [`house_${k}`, v])),
       };

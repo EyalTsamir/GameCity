@@ -21,6 +21,7 @@ import { Kit, lamp, bench, bin, hydrant, mailbox, phonebox, newsstand, planterBo
 import * as GK from './props/garden';
 import * as SK from './props/kit';
 import { planScatter, scatterDisc, type ScatterItem } from './props/scatter';
+import type { PropsService, ChairOut } from './props/service';
 
 interface TerrainSvc {
   height(x: number, z: number): number;
@@ -190,6 +191,9 @@ export default function create(ctx: CityContext): CityModule {
 
   // ────────────────────────────────────────────── hardscape scatter ──
   // (after vegetation planted its trees; before the bollards, which keep clear of it)
+  // café seats are exposed as ctx.services.props (streetlife seats patrons there)
+  const service: PropsService = { cafeSeats: [], cafeTables: [] };
+  const chairs: ChairOut[] = [];
   let scatter: ScatterItem[] = [];
   if (!ctx.debug.params.has('noscatter')) {
     const vegTrees = (ctx.services.vegetation as { trees?: { x: number; z: number; r: number; h: number }[] } | undefined)?.trees ?? [];
@@ -200,11 +204,22 @@ export default function create(ctx: CityContext): CityModule {
       const y = H(it.x, it.z) + 0.02;
       const at = (kit: Kit) => kit.sh.frame(it.x, y, it.z, it.yaw);
       switch (it.kind) {
-        case 'cafe':
+        case 'cafe': {
           at(kf);
           at(KS);
-          SK.cafe(kf, KS, srng);
+          chairs.length = 0;
+          const shade = SK.cafe(kf, KS, srng, undefined, chairs);
+          const ti = service.cafeTables.length;
+          const seats: number[] = [];
+          for (const c of chairs) {
+            seats.push(service.cafeSeats.length);
+            service.cafeSeats.push({ x: c.sx, y: c.sy, z: c.sz, yaw: Math.atan2(c.fx - c.sx, c.fz - c.sz), table: ti });
+          }
+          // kiosk seating sits within ~7 m of a kiosk placed just before it
+          const nearKiosk = scatter.some((o) => o.kind === 'kiosk' && Math.hypot(o.x - it.x, o.z - it.z) < 7.5);
+          service.cafeTables.push({ x: it.x, z: it.z, y: y + 0.755, r: 0.36, parasol: shade, kind: nearKiosk ? 'kiosk' : 'terrace', seats });
           break;
+        }
         case 'kiosk':
           at(KS);
           at(kf);
@@ -563,6 +578,7 @@ export default function create(ctx: CityContext): CityModule {
     gm.frustumCulled = false;
     if (parts.includes('glass')) root.add(gm);
   }
+  ctx.services.props = service;
   const glowMesh = createGlowMesh(ctx.uniforms, glows);
   if (parts.includes('glows')) root.add(glowMesh);
   ctx.scene.add(root);
@@ -584,6 +600,8 @@ export default function create(ctx: CityContext): CityModule {
         fineTris: KF.reduce((a, c) => a + c.s.tcount, 0),
         verts: [...KC, ...KF, KS].reduce((a, c) => a + c.s.vcount, 0) + gsink.vcount,
         buildMs: Math.round(buildMs),
+        cafeTables: service.cafeTables.length,
+        cafeSeats: service.cafeSeats.length,
       };
     },
     invariants() {
