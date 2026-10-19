@@ -68,6 +68,12 @@ export interface LandscapeModel {
   coastSD(x: number, z: number): number;
   /** distance to the river centreline (≤ maxD) and its local half width */
   river(x: number, z: number, out: { d: number; halfW: number; s: number; tx: number; tz: number }): boolean;
+  /** forest canopy density 0..1 (h = ground height at the point) */
+  forestAt(x: number, z: number, h: number): number;
+  /** coast profile 0 beach … 1 cliff */
+  cliffness(x: number, z: number): number;
+  /** index of the settlement covering (x, z) within `pad` m of its radius, or -1 */
+  siteAt(x: number, z: number, pad: number): number;
   riverLine: Polyline;
   coastLine: Polyline;
   sites: Site[];
@@ -420,8 +426,8 @@ export function createLandscapeModel(slabHeight: SlabHeight): LandscapeModel {
     let wet = 0;
     if (riverQ(x, z, rv, 60)) wet = 1 - smooth(rv.halfW, rv.halfW + 9, rv.d);
     out.wet = out.water ? 0 : wet;
-    out.forest = out.water ? 0 : forestAt(x, z, h) * (1 - out.sand) * (1 - out.rock * 0.8) * (1 - wet);
-    const settled = sitesRef.some((s) => Math.hypot(x - s.x, z - s.z) < s.r);
+    out.forest = out.water || siteAt(x, z, 25) >= 0 ? 0 : forestAt(x, z, h) * (1 - out.sand) * (1 - out.rock * 0.8) * (1 - wet);
+    const settled = siteAt(x, z, 0) >= 0;
     const arable = (1 - out.forest) * (1 - out.sand) * (1 - out.rock) * (1 - wet) * (1 - smooth(0.12, 0.3, slope)) * (1 - out.water);
     const north = smooth(-300, -600, z) * (x > -900 ? 1 : 0.3);
     out.field = settled ? 0 : arable * (1 - north) * (1 - smooth(180, 320, h));
@@ -435,7 +441,7 @@ export function createLandscapeModel(slabHeight: SlabHeight): LandscapeModel {
     // northern hills: closed forest with clearings
     const n = footZ(x) - z;
     let f = smooth(-30, 20, n);
-    if (n > 140) f *= 1 - 0.85 * smooth(0.58, 0.68, vnoise(x / 260, z / 260, 51)) * smooth(140, 400, n);
+    if (n > 140) f *= 1 - 0.9 * smooth(0.3, 0.42, fbm(x / 300, z / 300, 3, 51)) * smooth(140, 400, n);
     // copses + woods in the farmland (more of them further out)
     const cop = fbm(x / 210, z / 210, 3, 52) + 0.15 * smooth(800, 3000, r);
     f = Math.max(f, smooth(0.36, 0.44, cop) * smooth(260, 420, r));
@@ -447,9 +453,23 @@ export function createLandscapeModel(slabHeight: SlabHeight): LandscapeModel {
     return Math.min(1, f);
   };
 
+  const siteAt = (x: number, z: number, pad: number): number => {
+    for (let i = 0; i < sitesRef.length; i++) {
+      const s = sitesRef[i];
+      const R = s.r + pad;
+      const dx = x - s.x,
+        dz = z - s.z;
+      if (dx * dx + dz * dz < R * R) return i;
+    }
+    return -1;
+  };
+
   return {
     height,
     world,
+    forestAt: (x, z, h) => (siteAt(x, z, 25) >= 0 ? 0 : forestAt(x, z, h)),
+    cliffness: (x, z) => cliffness(z, x),
+    siteAt,
     waterLevel,
     isWater,
     cover,

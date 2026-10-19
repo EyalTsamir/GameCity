@@ -395,6 +395,7 @@ varying float vThAO;
 varying vec3 vThRest;
 varying vec3 vThWPos;
 varying float vThPat;
+varying vec3 vThWN;
 #endif
 void thWood( out vec3 P, out vec3 N ) {
   float nearW = thLodW( iR.w );
@@ -418,6 +419,7 @@ void thWood( out vec3 P, out vec3 N ) {
   vThK = iK;
   vThAO = mix( iX.z, iX.w, t );
   vThPat = iW2.z;
+  vThWN = N;
 #endif
   if ( hide ) {
     P = iR.xyz;
@@ -518,6 +520,7 @@ varying float vThAO;
 varying vec3 vThRest;
 varying vec3 vThWPos;
 varying float vThPat;
+varying vec3 vThWN;
 float thWrap;
 ${NOISE_GLSL}
 ${LAMP_GLSL}
@@ -561,7 +564,7 @@ thWrap = 0.0;
       bc *= 1.0 - 0.34 * mix( 0.45, smoothstep( -0.08, 0.22, n ), fade );
     }
     // moss / green algae on the shaded north side
-    vec3 wNm = normalize( ( vec4( vNormal, 0.0 ) * viewMatrix ).xyz );
+    vec3 wNm = normalize( vThWN );
     float moss = vThK.a * smoothstep( 0.1, -0.7, wNm.z ) * ( 0.6 + 0.4 * thNoised( vThRest * 2.3 ).x );
     bc = mix( bc, vec3( 0.075, 0.1, 0.035 ), saturate( moss ) * 0.7 );
   }

@@ -70,6 +70,8 @@ export interface CoverMaps {
   /** density at a world point (0..1), 0 outside the slab */
   densityAt(x: number, z: number): number;
   buildMs: number;
+  /** boot cost per phase (ms) */
+  phases: string;
   stats: { grassCells: number; meadowCells: number; wetCells: number; duneCells: number; weedCells: number; litterCells: number };
 }
 
@@ -121,8 +123,45 @@ function canvas(w: number, h: number, fill: string): { cv: HTMLCanvasElement; g:
   return { cv, g };
 }
 
+/** separable box blur (radius r texels, 2 passes ≈ gaussian) of one RGBA channel, in place */
+function boxBlur(img: Uint8ClampedArray, w: number, h: number, c: number, r: number): void {
+  const tmp = new Float32Array(w * h);
+  const out = new Float32Array(w * h);
+  for (let i = 0; i < w * h; i++) tmp[i] = img[i * 4 + c];
+  const n = 2 * r + 1;
+  for (let pass = 0; pass < 2; pass++) {
+    // horizontal: tmp → out
+    for (let y = 0; y < h; y++) {
+      const row = y * w;
+      let acc = 0;
+      for (let x = -r; x <= r; x++) acc += tmp[row + Math.min(w - 1, Math.max(0, x))];
+      for (let x = 0; x < w; x++) {
+        out[row + x] = acc / n;
+        acc += tmp[row + Math.min(w - 1, x + r + 1)] - tmp[row + Math.max(0, x - r)];
+      }
+    }
+    // vertical: out → tmp
+    for (let x = 0; x < w; x++) {
+      let acc = 0;
+      for (let y = -r; y <= r; y++) acc += out[Math.min(h - 1, Math.max(0, y)) * w + x];
+      for (let y = 0; y < h; y++) {
+        tmp[y * w + x] = acc / n;
+        acc += out[Math.min(h - 1, y + r + 1) * w + x] - out[Math.max(0, y - r) * w + x];
+      }
+    }
+  }
+  for (let i = 0; i < w * h; i++) img[i * 4 + c] = tmp[i];
+}
+
 export function buildCoverMaps(ctx: CityContext): CoverMaps {
   const t0 = performance.now();
+  let tp = t0;
+  const phases: string[] = [];
+  const mark = (name: string) => {
+    const t = performance.now();
+    phases.push(`${name} ${Math.round(t - tp)}`);
+    tp = t;
+  };
   const { plan } = ctx;
   const model = getTerrainModel(plan);
   const H = (ctx.services.terrain as { height?: (x: number, z: number) => number } | undefined)?.height ?? model.height;
@@ -284,6 +323,7 @@ export function buildCoverMaps(ctx: CityContext): CoverMaps {
     ga.fill();
   }
   const allowImg = ga.getImageData(0, 0, CW, CH).data;
+  mark('allow');
 
   // ── 2. unmown edge tufts (length boost): wall bases, fences, kerbs, tree bases, poles, features
   const E = canvas(CW, CH, '#000');
@@ -322,11 +362,9 @@ export function buildCoverMaps(ctx: CityContext): CoverMaps {
     ge.fillStyle = 'rgb(70,70,70)';
     disc(ge, b.x, b.z, 0.9);
   }
-  const E2 = canvas(CW, CH, '#000');
-  E2.g.filter = 'blur(1.2px)';
-  E2.g.drawImage(E.cv, 0, 0);
-  E2.g.filter = 'none';
-  const edgeImg = E2.g.getImageData(0, 0, CW, CH).data;
+  const edgeImg = ge.getImageData(0, 0, CW, CH).data;
+  boxBlur(edgeImg, CW, CH, 0, 1);
+  mark('edges');
 
   // ── 3. meadow zones (R = meadow, G = mown override)
   const M = canvas(CW, CH, '#000');
@@ -381,11 +419,10 @@ export function buildCoverMaps(ctx: CityContext): CoverMaps {
   gm.fillStyle = 'rgb(0,255,0)';
   for (const f of plan.features) if (f.kind === 'picnic') disc(gm, f.x, f.z, f.radius + 4.5);
   gm.globalCompositeOperation = 'source-over';
-  const M2 = canvas(CW, CH, '#000');
-  M2.g.filter = 'blur(3px)';
-  M2.g.drawImage(M.cv, 0, 0);
-  M2.g.filter = 'none';
-  const meadowImg = M2.g.getImageData(0, 0, CW, CH).data;
+  const meadowImg = gm.getImageData(0, 0, CW, CH).data;
+  boxBlur(meadowImg, CW, CH, 0, 3);
+  boxBlur(meadowImg, CW, CH, 1, 3);
+  mark('meadow');
 
   // ── 4. pavement weeds: small spots along wall bases and kerbs, in tree pits and at pole feet
   const W = canvas(CW, CH, '#000');
@@ -429,6 +466,7 @@ export function buildCoverMaps(ctx: CityContext): CoverMaps {
     } else if ((s.kind === 'lamp' || s.kind === 'hydrant' || s.kind === 'bin') && wr.next() < 0.5) disc(gw, s.x + wr.range(-0.12, 0.12), s.z + wr.range(-0.12, 0.12), wr.range(0.1, 0.18));
   }
   const weedImg = gw.getImageData(0, 0, CW, CH).data;
+  mark('weeds');
 
   // ── 5. leaf litter under the trees (additive radial falloff)
   const L = canvas(CW, CH, '#000');
@@ -447,12 +485,14 @@ export function buildCoverMaps(ctx: CityContext): CoverMaps {
     gl.fill();
   }
   const litterImg = gl.getImageData(0, 0, CW, CH).data;
+  mark('litter');
 
   // ── 6. heights on a 0.5 m lattice (bilinear for the 0.25 m texels), sidewalk tops overridden
   const LW = Math.round((SLAB.x1 - SLAB.x0) / 0.5) + 1,
     LH = Math.round((SLAB.z1 - SLAB.z0) / 0.5) + 1;
   const lat = new Float32Array(LW * LH);
   for (let j = 0; j < LH; j++) for (let i = 0; i < LW; i++) lat[j * LW + i] = H(SLAB.x0 + i * 0.5, SLAB.z0 + j * 0.5);
+  mark('heights');
   const latAt = (x: number, z: number) => {
     const fx = Math.min(LW - 1.001, Math.max(0, (x - SLAB.x0) * 2)),
       fz = Math.min(LH - 1.001, Math.max(0, (z - SLAB.z0) * 2));
@@ -587,6 +627,7 @@ export function buildCoverMaps(ctx: CityContext): CoverMaps {
     }
   }
 
+  mark('combine');
   // ── 9. flowers (0.5 m): species fields at 1 m, niches from the cover map
   const flower = new Uint8Array(FW * FH * 4);
   const SPW = Math.ceil(FW / 2),
@@ -653,6 +694,7 @@ export function buildCoverMaps(ctx: CityContext): CoverMaps {
     }
   }
 
+  mark('flowers');
   // ── 10. textures
   const mk = (data: Uint8Array, w: number, h: number) => {
     const t = new THREE.DataTexture(data, w, h, THREE.RGBAFormat, THREE.UnsignedByteType);
@@ -707,6 +749,7 @@ export function buildCoverMaps(ctx: CityContext): CoverMaps {
     }
   }
 
+  mark('tex+tiles');
   // ── 12. flower patches for life (butterflies, bees): 8 m cells with enough flowers
   const patches: FlowerPatch[] = [];
   const PC = 8;
@@ -740,5 +783,6 @@ export function buildCoverMaps(ctx: CityContext): CoverMaps {
     return cover[(j * CW + i) * 4] / 255;
   };
 
-  return { cover, flower, height, texCover, texFlower, texHeight, grids, patches, densityAt, buildMs: performance.now() - t0, stats };
+  mark('patches');
+  return { cover, flower, height, texCover, texFlower, texHeight, grids, patches, densityAt, buildMs: performance.now() - t0, phases: phases.join(' · '), stats };
 }

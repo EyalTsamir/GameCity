@@ -4,9 +4,16 @@ Owner: **air** agent (world round). Files: `src/render/**` except `src/render/st
 `src/render/atmosphere.ts`. Never git-writes; the lead commits.
 
 ## Resume here
-* 2026-10-19 — Survey done, log + design written. Next: "before" captures (5174 baseline), then M1
-  (atmosphere fog override + world-mode dome below the horizon + world palette + optics/grade).
-* Running jobs: none yet.
+* 2026-10-19 16:30 — M1 code written, render typecheck clean (`npx tsc --noEmit -p <scratch>/air/../tsconfig.air.json`
+  = render-only config in the scratchpad, 20 s; whole project takes 5 min):
+  new `render/atmosphere.ts`, `render/sky/atmoDrive.ts`; edits in `sky.ts` (install + driver + world fitter /
+  fog / hidden cotton puffs), `sky/dome.ts` (TH_WORLD: haze at/below the horizon, real-size sun),
+  `sky/palette.ts` (WORLD_KEYS: haze/mist per hour, deeper zenith), `postfx.ts` (lens DOF, world grade, AO fade
+  from the atmosphere, `softDepth()`), `postfx/look.ts` (thAgX with CDL look), `core/context.ts` (type only).
+* Running: before set on 5174 → shots/world/air/before (scratch copy of capture-set with 900 s timeout:
+  `<scratchpad>/air/cap.mjs`; the stock script's 300 s load timeout fails on this loaded box);
+  M1 test set on 5173 → shots/world/air/m1a (log shots/world/air/m1a.log).
+* Next: judge m1a (sheet), tune; then M2 physical sky LUT.
 
 ## Brief (WORLD-PLAN scope 2 + lead notes)
 Aerial perspective via a global fog-chunk override (`src/render/atmosphere.ts`: height fog, Rayleigh-blue

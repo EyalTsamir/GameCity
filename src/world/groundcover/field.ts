@@ -517,7 +517,7 @@ export function createField(ctx: CityContext, maps: CoverMaps, level: QualityLev
         shader.fragmentShader = shader.fragmentShader
           .replace('#include <common>', '#include <common>\n' + FRAG_PARS)
           .replace('vec4 diffuseColor = vec4( diffuse, opacity );', 'vec4 diffuseColor = vec4( vGcCol, 1.0 );')
-          .replace('#include <normal_fragment_begin>', 'float faceDirection = 1.0;\nvec3 normal = normalize( vNormal );\nvec3 nonPerturbedNormal = normal;')
+          .replace('#include <normal_fragment_begin>', 'float faceDirection = 1.0;\nvec3 normal = normalize( ( viewMatrix * vec4( vGcN, 0.0 ) ).xyz );\nvec3 nonPerturbedNormal = normal;')
           .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = vGcRough;')
           .replace('#include <lights_physical_pars_fragment>', '#include <lights_physical_pars_fragment>\n' + RE_GRASS)
           .replace('#include <lights_fragment_end>', '#include <lights_fragment_end>\nreflectedLight.indirectDiffuse += diffuseColor.rgb * thLampLight( vGcW, vec3( 0.0, 1.0, 0.0 ) );');

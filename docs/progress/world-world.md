@@ -1,10 +1,17 @@
 # world-world — the frame: a city in a landscape that continues to the horizon
 
 ## Resume here
-* 2026-10-19 ~15:15 — Started. Survey done, design below. Before captures (5174, module subset) running in the
-  background → `shots/world/world/before/` (log.txt there). Next: M1 code (slab hidden in world mode, landscape
-  model + service + ring terrain mesh + mountains, sea/river extension, camera far/FOV).
-* Nothing half-edited yet.
+* 2026-10-19 ~16:40 — M1 code written, typecheck clean (my paths): landscape/{noise,polyline,model,fields,rings,
+  terrain,shader,mountains}.ts, landscape.ts (service + meshes), slab.ts (world mode → placeholders),
+  water/extension.ts + surface.ts (aFld per-vertex field, TH_DIORAMA edge fade) + water.ts (ext, no cut-away in
+  world mode), camera.ts (WORLD_FAR 60 km, worldFov 50°→34° by distance).
+* Running: first world capture `shots/world/world/m1a/` (subset sky,terrain,landscape,water,postfx,camera,
+  landfog=0, 11 h) via my copy of capture-set with a 20-min load timeout: scratchpad `cap.mjs` (the lead's script
+  has a 300 s timeout that the loaded machine (load ~20) exceeds). Before captures on 5174 failed twice (timeout) →
+  re-run with cap.mjs when the machine is calmer.
+* Offline map tool: scratchpad `land/map.ts` (bundle: `npx rolldown land/map.ts --platform node -o land/map.mjs`;
+  `node land/map.mjs x0 z0 x1 z1 N out.bin && python3 -I land/map.py out.bin out.png`).
+* Next: judge m1a, fix, then M2 trees.
 
 ## Brief (from WORLD-PLAN.md scope 1 + briefs "### world")
 Remove the frame in world mode (soil faces, plinth, nameplate, table, cyclorama, sea cut-away, slab shadow) and

@@ -830,7 +830,6 @@ export function createGround(ctx: CityContext, model: TerrainModel, feet: readon
       .replace('vec4 diffuseColor = vec4( diffuse, opacity );', 'vec4 diffuseColor = vec4( groundColor(), opacity );')
       .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = gRough;')
       .replace('#include <lights_physical_pars_fragment>', '#include <lights_physical_pars_fragment>\n' + (legacy ? '' : GROUND_RE))
-      .replace('#include <lights_physical_pars_fragment>', '#include <lights_physical_pars_fragment>\n' + (legacy ? '' : GROUND_RE))
       // night street lights: the baked lamp map multiplies the ground albedo (lawns, sand, paths)
       .replace('#include <lights_fragment_end>', '#include <lights_fragment_end>\nreflectedLight.indirectDiffuse += diffuseColor.rgb * thLampLight(vGW, normalize(vGN));');
   };

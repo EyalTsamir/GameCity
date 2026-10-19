@@ -105,6 +105,7 @@ export default function create(ctx: CityContext): CityModule {
         weedCells: maps.stats.weedCells,
         litterCells: maps.stats.litterCells,
         mapsMs: Math.round(maps.buildMs),
+        mapsPhases: maps.phases,
         buildMs: Math.round(buildMs),
       };
     },

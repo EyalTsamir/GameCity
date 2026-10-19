@@ -4,16 +4,12 @@
 // the chair (planned once on a 0.25 m grid round the other tables, chairs, planters, lamps, trees and
 // buildings), so patrons walk in between the tables, sit down, stay a while and leave the same way.
 //
-// Table / chair geometry: from `ctx.services.props.cafes` when the props module exposes it (requested
-// from wear), otherwise derived read-only from the same deterministic planner the props module runs
-// (planScatter) plus a replica of the RNG draws of props/kit.ts cafe() (chairs at 0.62 m round the
-// table, facing it, backrest 0.19 m behind the chair centre, seat top 0.4575 m, table top 0.7375 m).
+// Table / chair geometry: `ctx.services.props.cafes` (props/service.ts — chair centres, the direction the
+// sitter faces, seat and table-top heights); obstacles: `ctx.services.props.discs` + trees.
 
 import type { CityContext } from '../../core/context';
 import { OCC } from '../../core/occupancy';
-import { Rng } from '../../core/rng';
-import { getLayout, MASK_WALK } from '../../world/props/layout';
-import { planScatter, type ScatterItem } from '../../world/props/scatter';
+import type { PropsService } from '../../world/props/service';
 import type { Spot } from './places';
 import { SEAT_TOP, BACKREST_Z } from './animate';
 
@@ -36,7 +32,15 @@ export interface CafeSeat extends Spot {
 
 export interface CafePlace {
   id: number;
-  /** walkway node the patrons come from / leave to */
+  /** walkway edge (and its end nodes) where the patrons leave / join their walk, at distance u from ea */
+  edge: number;
+  ea: number;
+  eb: number;
+  u: number;
+  /** that entry point (on the edge's centre line) */
+  bx: number;
+  bz: number;
+  /** goal node of the current approach (ea or eb, whichever the walk ends at) */
   node: number;
   /** table centre and the ground height under it */
   x: number;
@@ -69,72 +73,27 @@ export interface CafeTable {
   source: string;
 }
 
-interface PropsCafeService {
-  cafes?: { x: number; z: number; yaw?: number; tableY: number; y?: number; r?: number; seats: { x: number; z: number; yaw: number; seatY: number }[]; source?: string }[];
-}
-
 interface TerrainSvc {
   height(x: number, z: number): number;
 }
 
-/** chair layout of props/kit.ts cafe(): RNG draws replayed from the scatter item's seed */
-function chairsOf(it: ScatterItem): { lx: number; lz: number; yaw: number }[] {
-  const rng = new Rng(it.seed || 1);
-  rng.next(); // metal colour
-  rng.next(); // top colour
-  rng.next(); // wood / stone
-  const n = rng.int(2, 4);
-  rng.next(); // chair colour
-  const out: { lx: number; lz: number; yaw: number }[] = [];
-  for (let i = 0; i < n; i++) {
-    const a = (i / n) * TAU + rng.range(-0.3, 0.3) + 0.4;
-    const yaw = a + Math.PI + rng.range(-0.25, 0.25);
-    out.push({ lx: Math.sin(a) * 0.62, lz: Math.cos(a) * 0.62, yaw });
-  }
-  return out;
-}
-
-/** Café tables of the city (props service, or the deterministic replica). */
-export function cafeTables(ctx: CityContext): { tables: CafeTable[]; scatter: ScatterItem[] } {
+/** Café tables of the city, from the props module's service (no props → no café tables). */
+export function cafeTables(ctx: CityContext): { tables: CafeTable[]; discs: { x: number; z: number; r: number }[] } {
+  const svc = ctx.services.props as PropsService | undefined;
+  if (!svc?.cafes?.length) return { tables: [], discs: [] };
   const terrain = ctx.services.terrain as TerrainSvc | undefined;
   const H = (x: number, z: number) => (terrain ? terrain.height(x, z) : ctx.plan.heightAt(x, z));
-  const svc = ctx.services.props as PropsCafeService | undefined;
-  if (svc?.cafes && svc.cafes.length) {
-    const tables = svc.cafes.map((c) => {
-      const y = c.y ?? H(c.x, c.z) + 0.02;
-      return {
-        x: c.x,
-        z: c.z,
-        y,
-        top: c.tableY,
-        r: c.r ?? 0.36,
-        chairs: c.seats.map((s) => ({ x: s.x, z: s.z, yaw: s.yaw, seatTop: s.seatY, back: 0.19 })),
-        source: c.source ?? 'props',
-      };
-    });
-    return { tables, scatter: [] };
-  }
-  if (ctx.debug.params.has('noscatter')) return { tables: [], scatter: [] };
-  // replica: the props module's own planner, same inputs
-  const layout = getLayout(ctx);
-  const vegTrees = (ctx.services.vegetation as { trees?: { x: number; z: number; r: number; h: number }[] } | undefined)?.trees ?? [];
-  const scatter = planScatter({ plan: ctx.plan, occ: ctx.occupancy, walkAt: (x, z) => (layout.walk.get(x, z) & MASK_WALK) !== 0, trees: vegTrees, discs: layout.furniture });
-  const tables: CafeTable[] = [];
-  for (const it of scatter) {
-    if (it.kind !== 'cafe') continue;
-    const y = H(it.x, it.z) + 0.02;
-    const c = Math.cos(it.yaw),
-      s = Math.sin(it.yaw);
-    const chairs = chairsOf(it).map((ch) => ({
-      x: it.x + ch.lx * c + ch.lz * s,
-      z: it.z - ch.lx * s + ch.lz * c,
-      yaw: it.yaw + ch.yaw,
-      seatTop: y + 0.4575,
-      back: 0.19,
-    }));
-    tables.push({ x: it.x, z: it.z, y, top: y + 0.7375, r: 0.36, chairs, source: 'scatter' });
-  }
-  return { tables, scatter };
+  const tables = svc.cafes.map((c) => ({
+    x: c.x,
+    z: c.z,
+    y: H(c.x, c.z) + 0.02,
+    top: c.tableY,
+    r: c.tableR ?? 0.36,
+    // bistro chairs (props/kit.ts cafe()): backrest 0.19 m behind the chair centre
+    chairs: c.seats.map((s) => ({ x: s.x, z: s.z, yaw: s.yaw, seatTop: s.seatY, back: 0.19 })),
+    source: c.source,
+  }));
+  return { tables, discs: svc.discs ?? [] };
 }
 
 // ───────────────────────────────────────────────────────── planning ──
@@ -156,23 +115,22 @@ interface Disc {
 
 /** Build the café places: seats, walkway nodes and approach paths. */
 export function buildCafes(ctx: CityContext, districtName: (x: number, z: number) => string): CafePlace[] {
-  const { tables, scatter } = cafeTables(ctx);
+  const { tables, discs: keep } = cafeTables(ctx);
   if (!tables.length) return [];
   const { peds, occupancy: occ } = ctx;
-  const layout = getLayout(ctx);
-  // static obstacles: street furniture, trees, other scatter items, every table top and chair
+  // static obstacles: every placed item (props keep-clear discs, which include the café sets themselves:
+  // those are replaced by the finer table-top + chair discs), trees, every table top and chair
   const discs: Disc[] = [];
-  for (const f of layout.furniture) discs.push({ x: f.x, z: f.z, r: Math.min(f.r, 1.2) });
+  for (const f of keep) {
+    if (tables.some((T) => Math.abs(T.x - f.x) < 0.05 && Math.abs(T.z - f.z) < 0.05)) continue;
+    discs.push({ x: f.x, z: f.z, r: Math.min(f.r, 2.5) });
+  }
   const vegTrees = (ctx.services.vegetation as { trees?: { x: number; z: number; r: number }[] } | undefined)?.trees ?? [];
   for (const t of vegTrees) discs.push({ x: t.x, z: t.z, r: 0.35 });
   for (const T of tables) {
     discs.push({ x: T.x, z: T.z, r: TOP_R });
     for (const ch of T.chairs) discs.push({ x: ch.x, z: ch.z, r: CHAIR_R });
   }
-  const rects: { x: number; z: number; c: number; s: number; hw: number; hd: number }[] = [];
-  for (const it of scatter) if (it.kind !== 'cafe') rects.push({ x: it.x, z: it.z, c: Math.cos(it.yaw), s: Math.sin(it.yaw), hw: it.w / 2, hd: it.d / 2 });
-  // walkway nodes a patron may come from (not doors / bus stops / crosswalk ends)
-  const cand = peds.nodes.filter((n) => n.kind !== 'door' && n.kind !== 'busstop' && n.edges.length >= 2 && !n.edges.some((e) => peds.edges[e].kind === 'crosswalk'));
 
   // clusters of neighbouring tables share one planning grid
   const cl = tables.map((_, i) => i);
@@ -214,17 +172,6 @@ export function buildCafes(ctx: CityContext, districtName: (x: number, z: number
       for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) if (!blocked[j * NX + i] && inside(cx(i), cz(j))) blocked[j * NX + i] = 1;
     };
     const inBox = (x: number, z: number, m: number) => x > ox - m && x < ox + NX * CELL + m && z > oz - m && z < oz + NZ * CELL + m;
-    for (const r of rects) {
-      if (!inBox(r.x, r.z, 5)) continue;
-      const ext = Math.hypot(r.hw, r.hd) + BODY;
-      stamp(r.x - ext, r.z - ext, r.x + ext, r.z + ext, (x, z) => {
-        const dx = x - r.x,
-          dz = z - r.z;
-        const lx = dx * r.c - dz * r.s,
-          lz = dx * r.s + dz * r.c;
-        return Math.abs(lx) < r.hw + BODY && Math.abs(lz) < r.hd + BODY;
-      });
-    }
     for (const d of discs) {
       if (!inBox(d.x, d.z, d.r + 1)) continue;
       const rr = d.r + BODY;
@@ -296,38 +243,57 @@ export function buildCafes(ctx: CityContext, districtName: (x: number, z: number
       }
       seatsOf.push(list);
     }
-    // one Dijkstra per candidate node over the cluster grid
-    const near = cand.filter((n) => n.x > bx0 - MARGIN + 1 && n.x < bx1 + MARGIN - 1 && n.z > bz0 - MARGIN + 1 && n.z < bz1 + MARGIN - 1 && cellOf(n.x, n.z) >= 0 && !blocked[cellOf(n.x, n.z)]);
+    // entry points: samples every 0.5 m along the walkway edges round the cluster (patrons leave / join
+    // their walk there, so the café needs no graph node of its own)
+    const bandCell = new Int32Array(NX * NZ).fill(-1);
+    const bands: { e: number; u: number; x: number; z: number }[] = [];
+    for (const e of peds.edges) {
+      if (e.kind === 'crosswalk' || e.kind === 'door' || e.kind === 'link') continue;
+      const A = peds.nodes[e.a],
+        B = peds.nodes[e.b];
+      const L = Math.hypot(B.x - A.x, B.z - A.z);
+      if (L < 1) continue;
+      if (Math.max(A.x, B.x) < ox || Math.min(A.x, B.x) > ox + NX * CELL || Math.max(A.z, B.z) < oz || Math.min(A.z, B.z) > oz + NZ * CELL) continue;
+      for (let u = 0.6; u < L - 0.6; u += 0.5) {
+        const x = A.x + ((B.x - A.x) * u) / L,
+          z = A.z + ((B.z - A.z) * u) / L;
+        const c = cellOf(x, z);
+        if (c < 0 || blocked[c] || bandCell[c] >= 0) continue;
+        bandCell[c] = bands.length;
+        bands.push({ e: e.id, u, x, z });
+      }
+    }
     const dist = new Float32Array(NX * NZ);
     const prev = new Int32Array(NX * NZ);
-    const results: { node: number; dist: Float32Array; prev: Int32Array }[] = [];
-    for (const n of near) {
-      dijkstra(blocked, NX, NZ, cellOf(n.x, n.z), dist, prev, MAX_WALK);
-      results.push({ node: n.id, dist: dist.slice(), prev: prev.slice() });
-    }
     members.forEach((ti, mi) => {
       const T = tables[ti];
       const seats = seatsOf[mi];
-      if (!seats.length || !results.length) return;
-      // the node with the shortest total walk to all the table's seats
-      let best: (typeof results)[number] | null = null;
-      let bestCost = Infinity;
-      for (const r of results) {
-        let c = 0;
-        for (const s of seats) c += r.dist[cellOf(s.sx, s.sz)];
-        if (c < bestCost) {
-          bestCost = c;
-          best = r;
+      if (!seats.length || !bands.length) return;
+      // nearest entry point (walking) from the table: sum over its seats of the walk from each seat
+      const cost = new Float32Array(bands.length);
+      const reach = new Uint8Array(bands.length);
+      for (const st of seats) {
+        dijkstra(blocked, NX, NZ, cellOf(st.sx, st.sz), dist, prev, MAX_WALK);
+        for (let q = 0; q < bands.length; q++) {
+          const d = dist[cellOf(bands[q].x, bands[q].z)];
+          if (isFinite(d)) {
+            cost[q] += d;
+            reach[q]++;
+          }
         }
       }
-      if (!best || !isFinite(bestCost)) return;
-      const nd = peds.nodes[best.node];
-      for (const s of seats) {
+      let best = -1;
+      for (let q = 0; q < bands.length; q++) if (reach[q] === seats.length && (best < 0 || cost[q] < cost[best])) best = q;
+      if (best < 0) return;
+      const bp = bands[best];
+      // paths: from the entry point to every seat's standing point
+      dijkstra(blocked, NX, NZ, cellOf(bp.x, bp.z), dist, prev, MAX_WALK);
+      for (const st of seats) {
         const pts: [number, number][] = [];
-        for (let c = cellOf(s.sx, s.sz); c >= 0; c = best.prev[c]) pts.push([cx(c % NX), cz(Math.floor(c / NX))]);
-        pts.reverse(); // node → standing point
-        pts[0] = [nd.x, nd.z];
-        pts[pts.length - 1] = [s.sx, s.sz];
+        for (let c = cellOf(st.sx, st.sz); c >= 0; c = prev[c]) pts.push([cx(c % NX), cz(Math.floor(c / NX))]);
+        pts.reverse(); // entry → standing point
+        pts[0] = [bp.x, bp.z];
+        pts[pts.length - 1] = [st.sx, st.sz];
         const simp: [number, number][] = [pts[0]];
         let a = 0;
         while (a < pts.length - 1) {
@@ -336,21 +302,28 @@ export function buildCafes(ctx: CityContext, districtName: (x: number, z: number
           simp.push(pts[b]);
           a = b;
         }
-        for (let q = 1; q < simp.length; q++) s.path.push(simp[q][0], simp[q][1], T.y);
+        for (let q = 1; q < simp.length; q++) st.path.push(simp[q][0], simp[q][1], T.y);
       }
+      const e = peds.edges[bp.e];
       // a waiter stands next to the table on the side towards the walkway
-      const wl = Math.hypot(nd.x - T.x, nd.z - T.z) || 1;
+      const wl = Math.hypot(bp.x - T.x, bp.z - T.z) || 1;
       out.push({
         id: out.length,
-        node: best.node,
+        edge: e.id,
+        ea: e.a,
+        eb: e.b,
+        u: bp.u,
+        bx: bp.x,
+        bz: bp.z,
+        node: e.b,
         x: T.x,
         z: T.z,
         y: T.y,
         top: T.top,
         r: T.r,
         seats,
-        wx: T.x + ((nd.x - T.x) / wl) * 1.25,
-        wz: T.z + ((nd.z - T.z) / wl) * 1.25,
+        wx: T.x + ((bp.x - T.x) / wl) * 1.25,
+        wz: T.z + ((bp.z - T.z) / wl) * 1.25,
         district: districtName(T.x, T.z),
         label: `Sitting at a café in ${districtName(T.x, T.z)}`,
         taken: -1,

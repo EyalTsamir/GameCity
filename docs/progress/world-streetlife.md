@@ -1,10 +1,16 @@
 # world — streetlife (café terraces, street sitters, vendors, two-wheelers)
 
 ## Resume here
-* 2026-10-19 15:05 UTC — survey done, log + design written. Next: node harness (scratchpad) to list café
-  tables / plazas / sitting spots for view picking; "before" captures (5173 + 5174 baseline) at café plazas,
-  a street junction and the overview (11 / 18.2 / 21.5 h); then M1 (café patrons).
-* Nothing half-done in the code yet. No jobs running.
+* 2026-10-19 16:50 UTC — M1 in progress. DESIGN CHANGE: café patrons are real crowd parties (new goal
+  kind 'cafe' reusing the bench flow approach→settle→act→rise→leave), not a static layer — they walk in
+  between the tables, sit, stay, leave. Done: `pedestrians/cafes.ts` (CafePlace from
+  `ctx.services.props.cafes` (wear, live) + `props.discs`; per table an entry point on a walkway edge
+  (edge, u) and per seat a planned free-walk path round the other tables), `places.cafes`.
+  `pedestrians.ts` service `near(x,z,r)` for life (done). Next: crowd.ts goal 'cafe' (route via edge ends
+  ea→eb, leave the rail at exitS = the entry point, arrive → seat path), leisure/warmStart selection,
+  target boost, describe; animate.ts café pose; table items; waiters.
+* Node harness (no browser): scratchpad `h/` — `node h/build.mjs h/cafes.ts && node h/cafes.mjs`
+  (bundles core + cafes.ts with rolldown, stands in a props service).
 
 ## Brief (WORLD-PLAN.md workstream 5 + world-briefs.md notes)
 Gap: at eye level the city is thinly populated compared to reference 2 (sunny Tel-Aviv café street — every

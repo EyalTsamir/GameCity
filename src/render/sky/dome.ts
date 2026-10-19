@@ -6,6 +6,7 @@
 import * as THREE from 'three';
 import type { SkyState } from './palette';
 import { ATMO_FUNCS, ATMO_N, atmoData } from '../atmosphere';
+import { SKY_LUT_GLSL } from './physical';
 
 const VERT = /* glsl */ `
 varying vec3 vDir;
@@ -42,6 +43,14 @@ varying vec3 vDir;
 #ifdef TH_WORLD
 uniform vec4 thAtmo[${ATMO_N}];
 ${ATMO_FUNCS}
+#endif
+#ifdef TH_PHYS
+uniform sampler2D uSkyLUT;
+uniform float uSkyScale;
+uniform vec3 uNightZen;
+uniform vec3 uNightHor;
+uniform float uNightW;
+${SKY_LUT_GLSL}
 #endif
 
 float hash13(vec3 p3) {
@@ -85,6 +94,11 @@ void main() {
   float y = d.y;
   float up = clamp(y, 0.0, 1.0);
 
+#ifdef TH_PHYS
+  // physical sky (single scattering LUT, earth shadow at twilight) + the authored moonlit night sky
+  vec3 col = thSkyLUT(uSkyLUT, d, uSunDir) * uSkyScale;
+  col += mix(uNightHor, uNightZen, smoothstep(0.0, 1.0, pow(up, 0.55))) * uNightW;
+#else
   // painted gradient: broad horizon band easing into the zenith colour
   vec3 col = mix(uHorizon, uZenith, smoothstep(0.0, 1.0, pow(up, 0.55)));
 
@@ -96,6 +110,7 @@ void main() {
   float band = exp(-abs(y - max(sd.y, 0.0) * 0.35) * 5.0);
   float glow = (pow(az, 3.0) * 0.85 + pow(max(dot(d, sd), 0.0), 24.0) * 0.6) * band;
   col += uGlow * uGlowI * glow;
+#endif
 
   // overcast (rain): flatten toward a soft grey
   float grey = dot(col, vec3(0.3, 0.55, 0.15));
@@ -163,13 +178,18 @@ void main() {
 export interface SkyDome {
   mesh: THREE.Mesh;
   material: THREE.ShaderMaterial;
+  /** world mode, physical sky: LUT, scale, night gradient (zenith, horizon) and its weight */
+  setPhysical(lut: THREE.Texture, scale: number, nightZen: THREE.Color, nightHor: THREE.Color, nightW: number): void;
   update(state: SkyState, sunDir: THREE.Vector3, moonDir: THREE.Vector3, sunVis: number, moonVis: number, time: number, overcast: number): void;
   /** studio backdrop: below-horizon colour (already overcast-adjusted) or null for the legacy haze */
   setStudio(cyc: THREE.Color | null): void;
 }
 
-/** @param world world mode: real sky to the horizon (haze below it), near real-size sun */
-export function createSkyDome(world = false): SkyDome {
+/**
+ * @param world world mode: real sky to the horizon (haze below it), near real-size sun
+ * @param phys world mode with the physical sky LUT (else the painted gradient)
+ */
+export function createSkyDome(world = false, phys = false): SkyDome {
   const uniforms = {
     uZenith: { value: new THREE.Color() },
     uHorizon: { value: new THREE.Color() },
@@ -189,6 +209,11 @@ export function createSkyDome(world = false): SkyDome {
     uStudio: { value: 0 },
     uSunDisc: { value: world ? 40 : 9 },
     thAtmo: { value: atmoData },
+    uSkyLUT: { value: null as THREE.Texture | null },
+    uSkyScale: { value: 1 },
+    uNightZen: { value: new THREE.Color() },
+    uNightHor: { value: new THREE.Color() },
+    uNightW: { value: 0 },
   };
   const material = new THREE.ShaderMaterial({
     name: 'SkyDome',
@@ -203,7 +228,7 @@ export function createSkyDome(world = false): SkyDome {
     depthTest: true,
     fog: false,
     dithering: true,
-    defines: world ? { TH_WORLD: '' } : {},
+    defines: world ? (phys ? { TH_WORLD: '', TH_PHYS: '' } : { TH_WORLD: '' }) : {},
   });
   // world: the sun disc near its real size (0.27° radius → ~0.38° here; 1.3° in the diorama)
   if (world) uniforms.uDiscScale.value = 0.085;
@@ -235,6 +260,13 @@ export function createSkyDome(world = false): SkyDome {
       uniforms.uStars.value = state.stars;
       uniforms.uTime.value = time;
       uniforms.uOvercast.value = overcast;
+    },
+    setPhysical(lut, scale, nightZen, nightHor, nightW) {
+      uniforms.uSkyLUT.value = lut;
+      uniforms.uSkyScale.value = scale;
+      uniforms.uNightZen.value.copy(nightZen);
+      uniforms.uNightHor.value.copy(nightHor);
+      uniforms.uNightW.value = nightW;
     },
     setStudio(cyc) {
       if (cyc) {

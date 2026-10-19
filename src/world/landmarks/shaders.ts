@@ -11,6 +11,8 @@
 //
 // Pattern ids are listed in builder.ts (PAT); keep both in sync.
 
+import { WIND_GLSL } from '../../core/wind';
+
 export const LM_COMMON = /* glsl */ `
 float lmH12(vec2 p) {
   vec3 p3 = fract(vec3(p.xyx) * 0.1031);
@@ -63,6 +65,7 @@ uniform vec4 uCrane;
 uniform vec4 uSpin;
 uniform vec4 uVis;
 uniform vec2 uWind;
+${WIND_GLSL}
 vec3 lmRot(vec3 v, vec3 k, float a) {
   float c = cos(a), s = sin(a);
   return v * c + cross(k, v) * s + k * dot(k, v) * (1.0 - c);
@@ -97,23 +100,30 @@ void lmKin(inout vec3 p, inout vec3 n) {
     p = piv + lmRot(p - piv, vec3(0.0, 1.0, 0.0), a);
     n = lmRot(n, vec3(0.0, 1.0, 0.0), a);
   } else if (mode < 8.5) {
-    // flag: rest pose extends from the pole along aAxis (horizontal), cloth in the vertical plane
+    // flag: rest pose extends from the pole along aAxis (horizontal), cloth in the vertical plane.
+    // [life agent, flag-cloth grant] local wind from the shared gust field (core/wind.ts): the flag
+    // flies out and flutters faster as a gust passes, droops along the pole and folds in a calm.
     float L = aAnim.y;
     vec3 d = aAxis;
     vec3 sd = normalize(cross(vec3(0.0, 1.0, 0.0), d));
     float s = dot(p - piv, d);
     float u = clamp(s / L, 0.0, 1.0);
-    float ws = clamp(length(uWind), 0.15, 1.5);
-    float amp = L * (0.05 + 0.06 * ws);
-    float ph = 7.0 * u - uTime * (4.0 + 3.0 * ws) + aAnim.z;
+    vec2 lw = thWindAt(piv.xz);
+    float wl = length(lw);
+    float ws = clamp(wl, 0.05, 1.5);
+    float lift = smoothstep(0.06, 0.6, wl);
+    float amp = L * (0.045 + 0.07 * ws) * (1.0 + 0.9 * (1.0 - lift));
+    float ph = 7.0 * u - uTime * (3.2 + 6.0 * ws) + aAnim.z;
     float w = amp * u * sin(ph) + amp * 0.35 * u * sin(ph * 1.7 + 1.3);
     float dw = (amp * (sin(ph) + u * 7.0 * cos(ph)) + amp * 0.35 * (sin(ph * 1.7 + 1.3) + u * 11.9 * cos(ph * 1.7 + 1.3))) / L;
     p += sd * w;
-    p.y -= L * 0.06 * u * u * (1.6 - ws);
+    // droop: the fly end swings down towards the pole (shear keeps the hoist on the mast)
+    float droop = (1.0 - lift) * 1.0 + 0.05 + 0.04 * sin(uTime * 0.9 + aAnim.z);
+    p += d * (s * (cos(droop) - 1.0)) - vec3(0.0, s * sin(droop), 0.0);
     n = normalize(n - d * dot(n, sd) * dw);
-    // turn down-wind
-    vec3 wd = length(uWind) > 0.01 ? normalize(vec3(uWind.x, 0.0, uWind.y)) : d;
-    float a = atan(d.z * wd.x - d.x * wd.z, dot(d, wd)) + 0.12 * sin(uTime * 0.7 + aAnim.z);
+    // turn down-wind (local wind; keeps its heading in a dead calm)
+    vec3 wd = wl > 0.01 ? normalize(vec3(lw.x, 0.0, lw.y)) : d;
+    float a = atan(d.z * wd.x - d.x * wd.z, dot(d, wd)) + (0.06 + 0.1 * lift) * sin(uTime * 0.7 + aAnim.z);
     p = piv + lmRot(p - piv, vec3(0.0, 1.0, 0.0), a);
     n = lmRot(n, vec3(0.0, 1.0, 0.0), a);
   } else if (mode < 9.5) {

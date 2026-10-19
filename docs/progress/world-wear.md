@@ -1,10 +1,13 @@
 # world-wear — weathering and lived-in clutter (world round)
 
 ## Resume here
-* 2026-10-19 — started. Survey done (buildings / roads / props code, earlier logs, research §5, critique shots).
-  Writing M1 (services) now: `src/world/buildings/anchors.ts` (collector + types), hooks in gen.ts `chimney()`,
-  oldtown/houses/special balconies, buildings.ts export; props café seats via `SK.cafe` returning seats.
-* Next: typecheck, verify with `__city.ctx.services.buildings` / `.props` in a shot `--eval`, message the lead.
+* M1 DONE (services live, typecheck clean, invariants {}, lead messaged). Verification dump:
+  shots/world/wear/m1_eval.json (counts: chimneys 88, balconies 204, facades 89, spans street 4 / court 26,
+  perches 61, laundry 15, vents 7, cafes 31 / 94 seats, bbqs 15, dryers 17).
+* NOW: M2 eye-level buildings — start with balcony life + hanging greenery (new `buildings/green.ts`: leaf-card
+  mesh + canvas leaf atlas + wind), then shutters at varied positions, facade AC/dishes/downpipes, more balconies.
+* Capture note: subsets with terrain/vegetation currently fail (other agents' shader errors) → use
+  `only=sky,roads,buildings,props` for now.
 
 ## Brief (from WORLD-PLAN.md scope 7 + briefs "### wear")
 Roads: patches, cracks + sealant, tyre polish, oil stains, faded markings, drains, puddles in low spots (mirror
@@ -55,7 +58,8 @@ Toggles (planned): `?nowear` (all new wear masks off), `?nogreen` (balcony green
 (new facade / roof clutter), `?nopuddles`.
 
 ## Milestones
-* [ ] M1 services (buildings anchors + café seats) → message lead
+* [x] M1 services (buildings anchors + café seats) → lead messaged. Life/streetlife requests folded in:
+  laundry wires, kitchen vents, bbqs, rotary dryers, discs, cafes in streetlife's shape, setStaticLaundry().
 * [ ] M2 balconies / greenery / shutters / facade clutter (eye level old town + beach street)
 * [ ] M3 roofs (solar heaters, tanks, AC, antennas; roof tone/moss) — overview
 * [ ] M4 shop interiors

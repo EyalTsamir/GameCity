@@ -17,6 +17,10 @@ Branch: work continues from `claude/tinyhaven-graphics-audit-l089m8` (fast-forwa
 `claude/pensive-gates-bim12i` (the session's designated branch).
 
 ## Resume here (keep current)
+* 2026-10-19 16:45 UTC — watchdog: 7 agents running. wear M1 DONE (ctx.services.buildings / props live;
+  relayed to life + streetlife). air M1 code written (render/atmosphere.ts, sky/atmoDrive.ts). foliage M1 code
+  written (atlas/foliage/crowns). ground: groundcover blade rings wired, first capture running (its terrain
+  shader break fixed). world/streetlife/life: coding M1 (logs not updated since ~15:25). Push flaky (proxy).
 * 2026-10-19 15:58 UTC — watchdog check: all 7 agents running (surveys + logs done; before-captures / M1 in
   progress; first code: wear services, foliage atlas/cards, life decor, air dome). GitHub push was failing
   ~15:00–15:55 (proxy tunnel to github.com: handshake timeouts, 502); pushed OK at 15:57 (cb5bc25). Requests
