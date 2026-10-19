@@ -21,9 +21,51 @@ vec3 thSafeColor(vec3 c) {
 }
 `;
 
+/**
+ * AgX with an ASC-CDL "look" in AgX log space (after the sigmoid, before the outset — where Blender /
+ * Filament put agxLook; three.js leaves it out). Same constants and steps as three's AgXToneMapping.
+ * Golden: slope (1, 0.9, 0.5), power 0.8, sat 0.8; neutral = slope 1, power 1, sat 1.
+ */
+const AGX_LOOK_GLSL = /* glsl */ `
+uniform vec3 uLookSlope;
+uniform float uLookPower;
+uniform float uLookSat;
+vec3 thAgX(vec3 color) {
+  const mat3 AgXInsetMatrix = mat3(
+    vec3(0.856627153315983, 0.137318972929847, 0.11189821299995),
+    vec3(0.0951212405381588, 0.761241990602591, 0.0767994186031903),
+    vec3(0.0482516061458583, 0.101439036467562, 0.811302368396859));
+  const mat3 AgXOutsetMatrix = mat3(
+    vec3(1.1271005818144368, -0.1413297634984383, -0.14132976349843826),
+    vec3(-0.11060664309660323, 1.157823702216272, -0.11060664309660294),
+    vec3(-0.016493938717834573, -0.016493938717834257, 1.2519364065950405));
+  const float AgxMinEv = -12.47393;
+  const float AgxMaxEv = 4.026069;
+  color *= toneMappingExposure;
+  color = LINEAR_SRGB_TO_LINEAR_REC2020 * color;
+  color = AgXInsetMatrix * color;
+  color = max(color, 1e-10);
+  color = log2(color);
+  color = (color - AgxMinEv) / (AgxMaxEv - AgxMinEv);
+  color = clamp(color, 0.0, 1.0);
+  color = agxDefaultContrastApprox(color);
+  // look (ASC CDL)
+  float luma = dot(color, vec3(0.2126, 0.7152, 0.0722));
+  color = pow(max(color * uLookSlope, vec3(0.0)), vec3(uLookPower));
+  color = luma + uLookSat * (color - luma);
+  color = AgXOutsetMatrix * color;
+  color = pow(max(vec3(0.0), color), vec3(2.2));
+  color = LINEAR_REC2020_TO_LINEAR_SRGB * color;
+  return clamp(color, 0.0, 1.0);
+}
+`;
+
 const FRAG = /* glsl */ `
 #include <tonemapping_pars_fragment>
 ${SAFE_COLOR_GLSL}
+#ifdef TH_WORLD_LOOK
+${AGX_LOOK_GLSL}
+#endif
 uniform float uSat;
 uniform float uContrast;
 uniform vec3 uLift;
@@ -36,7 +78,11 @@ void mainImage(const in vec4 inputColor, const in vec2 uv, out vec4 outputColor)
   vec3 c = thSafeColor(inputColor.rgb);
   // white-balance nudge (warm by day, cool by night) before the curve
   c *= vec3(1.0 + uWarm, 1.0, 1.0 - uWarm);
+#ifdef TH_WORLD_LOOK
+  c = thAgX(c);
+#else
   c = TONE_FN(c);
+#endif
   vec3 g = pow(c, vec3(1.0 / 2.2));
   float l = dot(g, vec3(0.2126, 0.7152, 0.0722));
   g += uShadowTint * (1.0 - smoothstep(0.05, 0.55, l)) + uHighTint * smoothstep(0.45, 1.0, l);
@@ -53,10 +99,12 @@ void mainImage(const in vec4 inputColor, const in vec2 uv, out vec4 outputColor)
 `;
 
 export class LookEffect extends Effect {
-  constructor(toneMapping: THREE.ToneMapping, nanViz = false) {
+  /** @param worldLook AgX with a time-of-day CDL look (world mode); false = three's tone map (diorama) */
+  constructor(toneMapping: THREE.ToneMapping, nanViz = false, worldLook = false) {
     const fn = toneMapping === THREE.ACESFilmicToneMapping ? 'ACESFilmicToneMapping' : toneMapping === THREE.NeutralToneMapping ? 'NeutralToneMapping' : 'AgXToneMapping';
     const defines = new Map([['TONE_FN', fn]]);
     if (nanViz) defines.set('TH_NAN_VIZ', '1');
+    if (worldLook && toneMapping === THREE.AgXToneMapping) defines.set('TH_WORLD_LOOK', '1');
     super('LookEffect', FRAG, {
       defines,
       uniforms: new Map<string, THREE.Uniform>([
@@ -68,6 +116,9 @@ export class LookEffect extends Effect {
         ['uVignette', new THREE.Uniform(0.28)],
         ['uVigStart', new THREE.Uniform(0.42)],
         ['uWarm', new THREE.Uniform(0.0)],
+        ['uLookSlope', new THREE.Uniform(new THREE.Vector3(1, 1, 1))],
+        ['uLookPower', new THREE.Uniform(1.0)],
+        ['uLookSat', new THREE.Uniform(1.0)],
       ]),
     });
   }

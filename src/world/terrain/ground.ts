@@ -345,7 +345,9 @@ function buildMask(ctx: CityContext, feet: readonly CliffFoot[], legacy: boolean
   g.filter = 'none';
   g.globalCompositeOperation = 'source-over';
   if (legacy) {
-    groundMaskInfo = { data: g.getImageData(0, 0, W, Hh).data, w: W, h: Hh };
+    const ld = g.getImageData(0, 0, W, Hh).data;
+    for (let i = 3; i < ld.length; i += 4) ld[i] = 128;
+    groundMaskInfo = { data: ld, w: W, h: Hh };
     const tex = new THREE.CanvasTexture(cv);
     tex.flipY = false; // canvas row 0 = north edge (v = 0)
     tex.colorSpace = THREE.NoColorSpace;

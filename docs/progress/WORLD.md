@@ -17,6 +17,11 @@ Branch: work continues from `claude/tinyhaven-graphics-audit-l089m8` (fast-forwa
 `claude/pensive-gates-bim12i` (the session's designated branch).
 
 ## Resume here (keep current)
+* 2026-10-19 15:58 UTC — watchdog check: all 7 agents running (surveys + logs done; before-captures / M1 in
+  progress; first code: wear services, foliage atlas/cards, life decor, air dome). GitHub push was failing
+  ~15:00–15:55 (proxy tunnel to github.com: handshake timeouts, 502); pushed OK at 15:57 (cb5bc25). Requests
+  relayed 15:10: life→wear (anchors, laundry ends, roof vents, bbqs/washing), streetlife→wear (cafes, discs,
+  sidewalk cafés), life→streetlife (pedestrians.near), life→air (postfx.softDepth).
 * 2026-10-19 14:45 UTC — Critique done (below). Plan: `WORLD-PLAN.md` (binding), briefs: `world-briefs.md`.
   7 agents launched ~14:40 (ids under "Agents"). Second user reference received mid-turn (Tel-Aviv café
   street, "even more alive and realistic than this") → streetlife workstream + wear priorities.
