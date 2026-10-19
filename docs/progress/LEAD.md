@@ -91,6 +91,12 @@ Per-module logs live next to this file: `docs/progress/<module>.md`.
   Verified: shots/lead/qa/airshadow_check.png, 0 errors. ~23:50–03:00 usage-limit stop + container reboot;
   03:07 resumed (servers + autocheckpoint restarted, people resumed for its fix round). New-side matrix
   finished 00:00 (ALL DONE).
+  03:10 ALL matrix sheets judged ✔ (11a/11b/18a/18b/21a/21b/06k/02k; all 16 chunk reports clean). Night set
+  excellent; 2 h beach moon blowout of the ORIGINAL is gone; floodlit quay not clipped (max mean 203).
+  Golden-hour forest yellow = warm light + birches, OK (station_forest18.png). Minor: one conifer near the
+  station renders near-black at 11 and 18.2 h (vegetation crown AO?) — low priority.
+  03:10 soak + ui-test started (scripts/agent-tools/qa_soak_ui.sh, resumable; log shots/lead/qa/soak_ui.log).
+  Remaining: consolidated perf A/B (after people's fix round, quiet machine); legacy decision; report.
 
 ## History
 * 2026-10-16 ~19:20 — Round 1: 12 builders launched via a Workflow; the account hit its 5-hour usage
