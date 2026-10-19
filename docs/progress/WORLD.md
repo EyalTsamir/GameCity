@@ -31,8 +31,40 @@ shots/servers.sh        # 5173 working tree, 5174 baseline
 ```
 Scripts need no GPU (SwiftShader fallback); prefix with `TH_LOCK_SLOTS=2`.
 
-## Critique
-(pending)
+## Critique (2026-10-19, captures: shots/world/critique/a/*.png — 12 views × 11 h / 18.2 h, 1600×900)
+
+Reference: golden hour; four depth layers (dense flowering meadow foreground → village → layered conifer
+forest → mountains) separated by warm/blue aerial haze; every surface is busy with organic detail (grass
+blades, flowers, reeds, foliage edges, weathered walls); life cues everywhere (smoke, flag lines, wind in the
+grass, reflections). Tinyhaven today, honestly:
+
+1. **The frame IS the toy (biggest gap).** Every view above street level shows the slab on a plinth on an
+   oak table, the soil cross-section, a wooden frame where the sea ends (beach_11), cotton-ball clouds hovering
+   over the table (overview_18h2) and tilt-shift blur. There is no horizon, no sky in frame, no land beyond the
+   city, so there is no depth layering and no atmosphere — the two strongest "real place" cues in the
+   reference. No amount of detail inside the slab can make a model on a table read as a world.
+   → Answer to "does the diorama frame serve the goal?": **no**. Default becomes a world that continues to
+   the horizon; the diorama stays available as an optional mode (`?diorama`), not deleted.
+2. **Ground = flat paint.** Lawns, verges, riverbanks and park are one flat lime-green felt (park_11,
+   riverside_11; at street level park_low_11 it is a green floor). No grass, no meadow, no flowers in the
+   grass, no weeds at walls/kerbs/fences, no leaf litter, no worn earth. This is the reference's whole
+   foreground and it is missing entirely.
+3. **Trees = smooth faceted blobs.** At distance lollipops in rows; at street level (ot_street_11,
+   river_low_11) giant faceted green polyhedra. No leaves, no gaps, no branches, no undergrowth.
+4. **No air.** Fog starts ~800 m from the camera, so a tower at 500 m has the same contrast and saturation
+   as a car at 20 m. Golden hour is a colour tint on a table; the sun, its glow and the sky never appear.
+   Candy-saturated pastel palette (lime grass, toy red roofs) reads as painted plastic.
+5. **Too clean.** Pristine asphalt and concrete, plazas with nothing on them, uniform roofs, flat facades
+   (dt_street_11), canal of clean stone walls with no plants at the waterline. Nothing is old, used or
+   repaired.
+6. **Life is thin and mechanical.** Traffic and walkers exist, but the wind is a constant vector (nothing
+   gusts), smoke only from ships/industry (no chimneys in a town of houses), nothing flutters (no flags,
+   laundry, bunting, awnings), no birds over the roofs in most views, no "things happening" in gardens or
+   on balconies.
+
+Not the gap: the building and street layout (dense, readable), people figures (good at city distance),
+night lighting (strong). Layout regularity (orthogonal grid) is a secondary toy cue — mitigated by organic
+cover (trees overhanging, unmown edges, irregular gardens) rather than re-planning the city.
 
 ## Plan
 (pending)

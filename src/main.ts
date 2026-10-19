@@ -8,6 +8,7 @@ import { IntersectionManager } from './core/intersections';
 import { WorldClock } from './core/time';
 import { EventBus } from './core/events';
 import { globalUniforms } from './core/uniforms';
+import { updateWind } from './core/wind';
 import { Rng } from './core/rng';
 import type { CityContext, CityModule, ModuleFactory, QualityState, CameraState, DebugFlags } from './core/context';
 import { validateWorld } from './debug/validate';
@@ -200,6 +201,7 @@ async function boot(): Promise<void> {
     else globalUniforms.uLights.value += (lightsTarget - globalUniforms.uLights.value) * Math.min(1, realDt * 0.8);
     snapLights = false;
     globalUniforms.uSunDir.value.copy(clock.sunDir);
+    updateWind(clock, globalUniforms.uWind.value);
     // signals advance in small steps so phase changes are never skipped
     let rem = simDt;
     while (rem > 1e-6) {
