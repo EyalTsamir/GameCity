@@ -63,9 +63,9 @@ export function evalHeights(topo: RingTopology, model: LandscapeModel, landMaxD:
       cover[k + 5] = c.meadow;
       cover[k + 6] = 1 - smooth(4, 30, ring.d); // seam zone
       // canopy: closed forest far from the slab becomes part of the terrain surface
-      const cw = smooth(CANOPY_NEAR, CANOPY_FULL, ring.d) * smooth(0.45, 0.85, c.forest);
+      const cw = smooth(CANOPY_NEAR, CANOPY_FULL, ring.d) * smooth(0.3, 0.8, c.forest);
       if (cw > 0) {
-        const ch = (13 + 7 * vnoise(x / 37, z / 37, 61) + 4 * vnoise(x / 11, z / 11, 62)) * cw;
+        const ch = (9 + 5 * vnoise(x / 37, z / 37, 61) + 3 * vnoise(x / 11, z / 11, 62)) * cw;
         canopy[v] = ch;
         cover[k + 7] = cw;
       }

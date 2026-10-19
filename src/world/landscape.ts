@@ -18,6 +18,7 @@ import { evalHeights, buildLandGeometry, makeSlabNormal, LAND_MAX_D, GROUND_DROP
 import { landUniforms, landMaterial } from './landscape/shader';
 import { buildMountains } from './landscape/mountains';
 import { placeTrees, createLandTrees, type LandTrees } from './landscape/trees';
+import { buildSettlements } from './landscape/settlements';
 
 export interface LandscapeService {
   /** true when the world beyond the slab is rendered (world mode, not ?noland) */
@@ -97,6 +98,13 @@ export default function create(ctx: CityContext): CityModule {
     mtnTris = m.triangles;
     mtnVerts = m.vertices;
   }
+  // ── farmsteads, hamlets, villages
+  let bldCount = 0;
+  if (params.get('landbld') !== '0') {
+    const st = buildSettlements(model, uniforms, ctx.uniforms.uLights, ctx.uniforms.uNight, fog);
+    root.add(st.group);
+    bldCount = st.count;
+  }
   // ── countryside trees (near 3D set around the camera + far impostors)
   let trees: LandTrees | null = null;
   let treeMs = 0;
@@ -121,6 +129,7 @@ export default function create(ctx: CityContext): CityModule {
         active: 1,
         ...(trees ? trees.stats() : {}),
         treeMs: Math.round(treeMs),
+        buildings: bldCount,
         landVerts,
         landTris,
         mtnVerts,

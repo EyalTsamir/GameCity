@@ -30,6 +30,7 @@ import { genIndustrial } from './buildings/industry';
 import { genHotel, genSchool, genHarbormaster, genKiosk, genBoathouse } from './buildings/special';
 import { samplePalette, SkyState } from '../render/sky/palette';
 import { anchors, collectFacades, collectSpans, type BuildingsService } from './buildings/anchors';
+import { GreenKit, makeGreenTexture, createGreenMaterial } from './buildings/green';
 
 /** edge (m) of the square trim chunks (≈ two city blocks), grid origin at the slab's NW corner */
 const TRIM_CHUNK = 110;
@@ -99,6 +100,10 @@ export default function create(ctx: CityContext): CityModule {
   const lights = new Builder({ color: true, light: true });
   const signs = new Builder({ normal: true, uv: true });
   const cloth = new Builder({ normal: true, color: true });
+  // ?nogreen = no leaf cards (A/B)
+  const noGreen = ctx.debug.params.has('nogreen');
+  const greenB = new Builder({ normal: true, color: true, uv: true, aux: true });
+  const greenKit = new GreenKit(greenB, new Rng('buildings:green'));
   const atlas = new SignAtlas();
   resetOldtown();
   resetTowers();
@@ -126,7 +131,7 @@ export default function create(ctx: CityContext): CityModule {
     const W = ns ? fp.x1 - fp.x0 : fp.z1 - fp.z0;
     const D = ns ? fp.z1 - fp.z0 : fp.x1 - fp.x0;
     const trim = trimOf(cx, cz);
-    for (const b of [shell, trim, lights, signs, cloth]) b.frame(yaw, cx, 0, cz);
+    for (const b of [shell, trim, lights, signs, cloth, greenB]) b.frame(yaw, cx, 0, cz);
     const g: Gen = {
       lot,
       rng: new Rng(lot.seed >>> 0 || 1),
@@ -138,6 +143,7 @@ export default function create(ctx: CityContext): CityModule {
       lights,
       signs,
       cloth,
+      green: greenKit,
       atlas,
       cover: computeCover(lot, plan.lots, yaw, cx, cz, W, D),
       doors: localDoors(lot, yaw, cx, cz, W, D),
@@ -159,7 +165,7 @@ export default function create(ctx: CityContext): CityModule {
         if (bad++ === 0) firstBad = `(${x.toFixed(2)}, ${y.toFixed(2)}, ${z.toFixed(2)}) is ${d.toFixed(2)} m outside`;
       }
     };
-    for (const b of [shell, trim, lights, signs, cloth]) b.check = check;
+    for (const b of [shell, trim, lights, signs, cloth, greenB]) b.check = check;
     const gen = GENERATORS[lot.kind] ?? genFallback;
     anchors.begin(lot, trim);
     try {
@@ -169,7 +175,7 @@ export default function create(ctx: CityContext): CityModule {
       if (ctx.debug.enabled) console.error('[buildings]', lot.id, err);
     }
     anchors.end();
-    for (const b of [shell, trim, lights, signs, cloth]) b.check = null;
+    for (const b of [shell, trim, lights, signs, cloth, greenB]) b.check = null;
     if (bad > 0) {
       violations++;
       problems.push(`lot ${lot.id} (${lot.kind}): ${bad} vertices break the footprint rule, e.g. ${firstBad}`);
@@ -209,7 +215,7 @@ export default function create(ctx: CityContext): CityModule {
   };
   let trimTris = 0;
   for (const b of trimChunks.values()) trimTris += b.triangleCount;
-  const triCounts = { shell: shell.triangleCount, trim: trimTris, lights: lights.triangleCount, signs: signs.triangleCount };
+  const triCounts = { shell: shell.triangleCount, trim: trimTris, lights: lights.triangleCount, signs: signs.triangleCount, green: greenB.triangleCount };
   add(shell, mats.shell, 'buildings-shell', true, true);
   for (const b of trimChunks.values()) add(b, mats.trim, 'buildings-trim', true, true);
   add(lights, mats.lights, 'buildings-lights', false, false);
@@ -217,6 +223,11 @@ export default function create(ctx: CityContext): CityModule {
   // static balcony laundry (no shadow; life hides it once its animated cloth hangs on service.laundry)
   add(cloth, mats.trim, 'buildings-laundry', false, true);
   const clothMesh = meshes.find((m) => m.name === 'buildings-laundry') ?? null;
+  // plants: alpha-tested leaf cards (one draw call + shadow pass on medium/high)
+  const greenTex = noGreen ? null : makeGreenTexture();
+  const greenMat = greenTex ? createGreenMaterial(ctx.uniforms, greenTex) : null;
+  if (greenMat) add(greenB, greenMat, 'buildings-green', ctx.quality.level !== 'low', true);
+  else greenB.dispose();
   group.matrixAutoUpdate = false;
   ctx.scene.add(group);
 
@@ -367,6 +378,7 @@ export default function create(ctx: CityContext): CityModule {
         trimTris: triCounts.trim,
         lightTris: triCounts.lights,
         signTris: triCounts.signs,
+        greenTris: triCounts.green,
         meshes: meshes.length,
         buildMs: Math.round(buildMs),
         chimneys: service.chimneys.length,
@@ -395,6 +407,8 @@ export default function create(ctx: CityContext): CityModule {
       mats.trim.dispose();
       mats.lights.dispose();
       mats.signs.dispose();
+      greenMat?.dispose();
+      greenTex?.dispose();
       tex.map.dispose();
       tex.glow.dispose();
     },

@@ -1,10 +1,20 @@
 # world-ground — grass, meadows, flowers, weeds, litter, reeds (world round)
 
 ## Resume here
-* 2026-10-19 14:45 — M0: survey done, log + design written. No code changed yet.
-* Next: "before" captures (5174 baseline + 5173 current) of park / riverside / hills / westbrook / beach at
-  eye level + overview (11 h, 18.2 h), then M1 (cover mask + blade field, near/mid rings).
-* Running: nothing.
+* 2026-10-19 ~16:45 — M1 code written (first pass), iterating on the first captures:
+  - `src/world/groundcover/mask.ts` (cover maps tCover/tFlower/tGH + tile metadata + flower patches),
+    `groundcover/palette.ts` (shared grass palette GLSL), `groundcover/field.ts` (rings A/B/C, blade
+    vertex shader, translucency RE wrapper, CPU tile walker), `groundcover.ts` (module, service, chained
+    scene.onBeforeRender for the tile walk with the final camera).
+  - `terrain/ground.ts`: exports `groundMaskInfo` (CPU mask copy), `setGroundCover()`,
+    `setGroundBladeFade()`; v2 grass section rewritten on the shared palette (cover-map length class,
+    flowers dots/tint, litter, gust sheen, presence darkening under the rings, RE_Direct_Ground glow).
+  - Fixed: duplicated RE_Direct_Ground (broke terrain for everyone ~16:30 — lead informed), blades had no
+    normal attribute → three auto-defined FLAT_SHADED (now uses vGcN world normal in the fragment).
+  - Open: maps took 21.8 s at boot (busy machine) → phase timings added (stats.groundcover.mapsPhases),
+    canvas blur filters replaced by a JS box blur. Capture t2 (only=sky,terrain,groundcover,camera) running.
+* Next: read t2 (errors, mapsPhases, look), fix, then judge park/bank/hill eye level + overview.
+* Capture helper: scratchpad gcap.mjs (copy kept in this log's "Tools" if the scratchpad is lost).
 
 ## Brief (from WORLD-PLAN.md + world-briefs.md "### ground")
 Owner of `src/world/terrain/ground.ts` (+ its mask), `src/world/groundcover.ts` + `src/world/groundcover/*`.

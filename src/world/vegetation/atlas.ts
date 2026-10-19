@@ -672,6 +672,7 @@ interface Level {
 /**
  * Mip chain per region (no bleeding between regions) with colour push-pull into transparent texels and
  * coverage-preserving alpha; levels below one texel per tile are plain averages of the atlas.
+ * (Regions are power-of-two sized, so every 2x2 reduction is exact.)
  */
 function buildMips(src: Uint8ClampedArray): { levels: Level[]; cover: Map<LeafTile, number> } {
   const nLevels = Math.floor(Math.log2(Math.max(ATLAS_W, ATLAS_H))) + 1;
@@ -683,42 +684,48 @@ function buildMips(src: Uint8ClampedArray): { levels: Level[]; cover: Map<LeafTi
   }
   const cover = new Map<LeafTile, number>();
   const tileLevels = Math.log2(T); // 8 → levels 0..8 (256 → 1 px per tile)
+  const hist = new Uint32Array(256);
   for (const [name, r] of Object.entries(REGIONS)) {
     const [c, row, rw, rh] = r;
     const W = rw * T,
       H = rh * T;
-    // premultiplied float pyramid of this region
+    // premultiplied float pyramid of this region (rgb·a, a)
     const pyr: Float32Array[] = [];
     const dims: [number, number][] = [];
     let cur = new Float32Array(W * H * 4);
+    let covered = 0;
     for (let y = 0; y < H; y++) {
-      for (let x = 0; x < W; x++) {
-        const si = ((row * T + y) * ATLAS_W + c * T + x) * 4;
-        const di = (y * W + x) * 4;
-        const a = src[si + 3] / 255;
-        cur[di] = (src[si] / 255) * a;
-        cur[di + 1] = (src[si + 1] / 255) * a;
-        cur[di + 2] = (src[si + 2] / 255) * a;
+      let si = ((row * T + y) * ATLAS_W + c * T) * 4;
+      let di = y * W * 4;
+      for (let x = 0; x < W; x++, si += 4, di += 4) {
+        const a = src[si + 3] * (1 / 255);
+        const k = a * (1 / 255);
+        cur[di] = src[si] * k;
+        cur[di + 1] = src[si + 1] * k;
+        cur[di + 2] = src[si + 2] * k;
         cur[di + 3] = a;
+        if (a > 0.5) covered++;
       }
     }
+    const cov = covered / (W * H);
+    cover.set(name as LeafTile, cov);
     pyr.push(cur);
     dims.push([W, H]);
     let cw = W,
       ch = H;
-    while (cw > 1 || ch > 1) {
-      const nw = Math.max(1, cw >> 1),
-        nh = Math.max(1, ch >> 1);
+    while (cw > 1 && ch > 1) {
+      const nw = cw >> 1,
+        nh = ch >> 1;
       const nx = new Float32Array(nw * nh * 4);
+      const row4 = cw * 4;
       for (let y = 0; y < nh; y++) {
-        for (let x = 0; x < nw; x++) {
-          for (let k = 0; k < 4; k++) {
-            const x0 = Math.min(cw - 1, x * 2),
-              x1 = Math.min(cw - 1, x * 2 + 1),
-              y0 = Math.min(ch - 1, y * 2),
-              y1 = Math.min(ch - 1, y * 2 + 1);
-            nx[(y * nw + x) * 4 + k] = (cur[(y0 * cw + x0) * 4 + k] + cur[(y0 * cw + x1) * 4 + k] + cur[(y1 * cw + x0) * 4 + k] + cur[(y1 * cw + x1) * 4 + k]) * 0.25;
-          }
+        let a = y * 2 * row4;
+        let o = y * nw * 4;
+        for (let x = 0; x < nw; x++, a += 8, o += 4) {
+          nx[o] = (cur[a] + cur[a + 4] + cur[a + row4] + cur[a + row4 + 4]) * 0.25;
+          nx[o + 1] = (cur[a + 1] + cur[a + 5] + cur[a + row4 + 1] + cur[a + row4 + 5]) * 0.25;
+          nx[o + 2] = (cur[a + 2] + cur[a + 6] + cur[a + row4 + 2] + cur[a + row4 + 6]) * 0.25;
+          nx[o + 3] = (cur[a + 3] + cur[a + 7] + cur[a + row4 + 3] + cur[a + row4 + 7]) * 0.25;
         }
       }
       pyr.push(nx);
@@ -727,68 +734,63 @@ function buildMips(src: Uint8ClampedArray): { levels: Level[]; cover: Map<LeafTi
       cw = nw;
       ch = nh;
     }
-    // coverage of the full-size region at the alpha-test threshold
-    const a0 = pyr[0];
-    let cnt = 0;
-    for (let i = 3; i < a0.length; i += 4) if (a0[i] > 0.5) cnt++;
-    const cov = cnt / (W * H);
-    cover.set(name as LeafTile, cov);
-    // write levels 0..tileLevels (+ the region's own extra levels for tall regions are folded in)
+    // push-pull: un-premultiplied colour per level; transparent texels take their parent's colour
+    const colr: Float32Array[] = pyr.map((p) => new Float32Array((p.length / 4) * 3));
+    for (let l = pyr.length - 1; l >= 0; l--) {
+      const p = pyr[l],
+        C = colr[l];
+      const [lw, lh] = dims[l];
+      const P = l + 1 < pyr.length ? colr[l + 1] : null;
+      const pw = l + 1 < pyr.length ? dims[l + 1][0] : 1;
+      for (let y = 0; y < lh; y++) {
+        for (let x = 0; x < lw; x++) {
+          const i = y * lw + x;
+          const a = p[i * 4 + 3];
+          if (a > 0.02 || !P) {
+            const ia = a > 1e-5 ? 1 / a : 0;
+            C[i * 3] = p[i * 4] * ia;
+            C[i * 3 + 1] = p[i * 4 + 1] * ia;
+            C[i * 3 + 2] = p[i * 4 + 2] * ia;
+          } else {
+            const j = ((y >> 1) * pw + (x >> 1)) * 3;
+            C[i * 3] = P[j];
+            C[i * 3 + 1] = P[j + 1];
+            C[i * 3 + 2] = P[j + 2];
+          }
+        }
+      }
+    }
     for (let l = 0; l <= tileLevels && l < pyr.length; l++) {
       const [lw, lh] = dims[l];
-      const p = pyr[l];
-      // alpha scale so coverage(a * s > 0.5) ≈ cov
+      const p = pyr[l],
+        C = colr[l];
+      const n = lw * lh;
+      // alpha scale so that coverage(a·s > 0.5) ≈ cov  (histogram of alpha, 256 bins)
       let s = 1;
       if (l > 0 && cov > 0.001) {
-        let lo = 0.5,
-          hi = 6;
-        for (let it = 0; it < 14; it++) {
-          const mid = (lo + hi) / 2;
-          let n = 0;
-          for (let i = 3; i < p.length; i += 4) if (p[i] * mid > 0.5) n++;
-          if (n / (lw * lh) > cov) hi = mid;
-          else lo = mid;
+        hist.fill(0);
+        for (let i = 0; i < n; i++) hist[Math.min(255, (p[i * 4 + 3] * 255) | 0)]++;
+        // smallest threshold bin t such that count(a ≥ t) ≤ cov·n  →  s = 0.5 / (t/255)
+        const want = cov * n;
+        let acc = 0,
+          t = 255;
+        for (; t > 0; t--) {
+          if (acc + hist[t] > want) break;
+          acc += hist[t];
         }
-        s = (lo + hi) / 2;
+        s = Math.min(6, Math.max(0.5, 0.5 / Math.max(1 / 255, (t + 1) / 255)));
       }
       const L = levels[l];
       const ox = (c * T) >> l,
         oy = (row * T) >> l;
       for (let y = 0; y < lh; y++) {
-        for (let x = 0; x < lw; x++) {
-          const si = (y * lw + x) * 4;
-          // colour: own if covered enough, else pulled from coarser levels (push-pull)
-          let a = p[si + 3];
-          let rr = 0,
-            gg = 0,
-            bb = 0;
-          if (a > 0.02) {
-            rr = p[si] / a;
-            gg = p[si + 1] / a;
-            bb = p[si + 2] / a;
-          } else {
-            let found = false;
-            for (let q = l + 1; q < pyr.length && !found; q++) {
-              const [qw, qh] = dims[q];
-              const sh = q - l;
-              const qx = Math.min(qw - 1, x >> sh),
-                qy = Math.min(qh - 1, y >> sh);
-              const qi = (qy * qw + qx) * 4;
-              const qa = pyr[q][qi + 3];
-              if (qa > 0.01) {
-                rr = pyr[q][qi] / qa;
-                gg = pyr[q][qi + 1] / qa;
-                bb = pyr[q][qi + 2] / qa;
-                found = true;
-              }
-            }
-          }
-          a = Math.min(1, a * s);
-          const di = ((oy + y) * L.width + ox + x) * 4;
-          L.data[di] = Math.round(Math.min(1, rr) * 255);
-          L.data[di + 1] = Math.round(Math.min(1, gg) * 255);
-          L.data[di + 2] = Math.round(Math.min(1, bb) * 255);
-          L.data[di + 3] = Math.round(a * 255);
+        let di = ((oy + y) * L.width + ox) * 4;
+        for (let x = 0; x < lw; x++, di += 4) {
+          const i = y * lw + x;
+          L.data[di] = Math.min(255, C[i * 3] * 255 + 0.5);
+          L.data[di + 1] = Math.min(255, C[i * 3 + 1] * 255 + 0.5);
+          L.data[di + 2] = Math.min(255, C[i * 3 + 2] * 255 + 0.5);
+          L.data[di + 3] = Math.min(255, p[i * 4 + 3] * s * 255 + 0.5);
         }
       }
     }

@@ -10,7 +10,7 @@ import { samplePalette, SkyState } from './sky/palette';
 import { createSkyDome } from './sky/dome';
 import { createClouds, type HeroView, type Obstacle } from './sky/clouds';
 import { ShadowFitter } from './sky/shadowFit';
-import { EnvironmentBaker } from './sky/env';
+import { EnvironmentBaker, type EnvPhysical } from './sky/env';
 import { patchShadowChunk } from './sky/shadowPatch';
 import { patchIBLChunk } from './sky/iblPatch';
 import { createRain } from './sky/rain';
@@ -58,7 +58,9 @@ export default async function create(ctx: CityContext): Promise<CityModule> {
   const world = WORLD_MODE;
   const atmoOn = world && !ctx.debug.params.has('noatmo');
   if (atmoOn) installAtmosphere();
-  const atmo = new AtmosphereDriver();
+  // world sky: physical single scattering (?paintsky = the painted gradient instead)
+  const physSky = world && !ctx.debug.params.has('paintsky');
+  const atmo = new AtmosphereDriver(physSky);
   const atmoParam = Number(ctx.debug.params.get('atmo'));
   if (Number.isFinite(atmoParam) && ctx.debug.params.has('atmo')) atmo.hazeK = Math.max(0, atmoParam);
   atmo.mistOn = !ctx.debug.params.has('nomist');
@@ -91,7 +93,7 @@ export default async function create(ctx: CityContext): Promise<CityModule> {
   scene.add(hemi);
 
   // ── backdrop, clouds, rain
-  const dome = createSkyDome(world);
+  const dome = createSkyDome(world, physSky);
   scene.add(dome.mesh);
 
   const obstacles: Obstacle[] = [];
@@ -132,7 +134,9 @@ export default async function create(ctx: CityContext): Promise<CityModule> {
   const fog = new THREE.Fog('#d4e2ec', 800, 4000);
   scene.fog = fog;
   scene.background = new THREE.Color('#d8e8f2');
-  const env = new EnvironmentBaker(renderer, 128);
+  const env = new EnvironmentBaker(renderer, 128, physSky);
+  const envPhys: EnvPhysical | null = atmo.lut ? { lut: atmo.lut.texture, scale: 1, nightZen: new THREE.Color(), nightHor: new THREE.Color(), nightW: 0, lobe: new THREE.Color(), lobeExp: 7, sat: 0.7 } : null;
+  env.phys = envPhys;
   env.studio = !legacy;
   scene.environmentIntensity = 0.7;
 
@@ -270,7 +274,19 @@ export default async function create(ctx: CityContext): Promise<CityModule> {
     moonVis = smooth(0.06, -0.1, sh);
     _sunSky.copy(clock.sunDir);
     dome.update(state, _sunSky, clock.moonDir, sunVis, moonVis, clock.realTime, overcast);
-    if (world) atmo.update(state, _sunSky, sunVis, overcast, ctx.uniforms.uWind.value, clock.speed > 0 ? realDt * clock.speed : 0);
+    if (world) {
+      atmo.update(renderer, state, _sunSky, sunVis, overcast, ctx.camera.position.y, ctx.uniforms.uWind.value, clock.speed > 0 ? realDt * clock.speed : 0);
+      if (atmo.lut) dome.setPhysical(atmo.lut.texture, atmo.skyScale, state.zenith, state.horizon, atmo.nightW, atmo.sunColor, atmo.zenith, atmo.params.ring[0]);
+      if (envPhys) {
+        envPhys.scale = atmo.skyScale;
+        envPhys.nightZen.copy(state.zenith);
+        envPhys.nightHor.copy(state.horizon);
+        envPhys.nightW = atmo.nightW;
+        // the broad part of the sun lobe only (the direct light owns the highlight)
+        envPhys.lobe.copy(atmo.params.lobeColor);
+        envPhys.lobeExp = atmo.params.lobeExp;
+      }
+    }
     if (!legacy && !world) {
       _cyc.copy(state.cyc);
       if (overcast > 0) {
@@ -391,6 +407,8 @@ export default async function create(ctx: CityContext): Promise<CityModule> {
         cloudsActive: clouds.stats().active,
         cloudsOverCity: clouds.stats().overCity,
         envBakes: env.bakes,
+        skyLut: atmo.lutUpdates,
+        skyScale: Math.round(atmo.skyScale * 10) / 10,
         rain: Math.round(rainAmt * 100) / 100,
       };
     },

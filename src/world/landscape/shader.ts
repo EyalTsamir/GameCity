@@ -110,6 +110,8 @@ vec3 landAlbedo() {
   float fp = max(length(fwidth(p.xz)), 1e-3);
   float forest = vCov.x, field = vCov.y, sand = vCov.z, rock = vCov.w;
   float wet = vCov2.x, meadowW = vCov2.y, seam = vCov2.z;
+  // raised canopy (far woods): its edge slopes are forest too, never lit meadow terraces
+  forest = max(forest, smoothstep(0.05, 0.35, vCov2.w));
   vec3 Ng = normalize(vLN);
   lnN = Ng;
   // macro tonal patches (survive any distance) + mid variation (faded by the footprint)
@@ -121,17 +123,22 @@ vec3 landAlbedo() {
   float gust = thGust(p.xz) * clamp(length(uWind) * 1.3, 0.0, 1.0);
 
   // ── meadow (wild grass): green ↔ dry patches
-  vec3 meadow = mix(cMeadow, cMeadowDry, smoothstep(0.35, 0.85, nA.b * 0.7 + nB.g * 0.5 * midF + 0.15 * macro));
+  vec3 meadow = mix(cMeadow, cMeadowDry, 0.75 * smoothstep(0.5, 0.95, nA.b * 0.7 + nB.g * 0.5 * midF + 0.15 * macro));
   meadow *= 0.88 + 0.24 * nB.a * midF + 0.12 * macro;
   meadow = mix(meadow, meadow * vec3(1.12, 1.13, 1.05), gust * 0.5);
-  // wildflower specks (footprint-faded to an average tint)
-  if (fp < 1.2) {
-    vec2 fc = p.xz * 1.7;
-    vec2 hh = lhash22(floor(fc));
-    float rr = length(fract(fc) - 0.5 - (hh - 0.5) * 0.5);
-    float dotM = step(hh.x, 0.18) * (1.0 - smoothstep(0.12, 0.12 + fp * 1.7, rr));
-    vec3 fcol = hh.y < 0.3 ? vec3(0.75, 0.08, 0.05) : hh.y < 0.55 ? vec3(0.25, 0.32, 0.8) : hh.y < 0.8 ? vec3(0.9, 0.88, 0.8) : vec3(0.9, 0.75, 0.1);
-    meadow = mix(meadow, fcol, dotM * (1.0 - smoothstep(0.3, 1.2, fp)) * 0.85);
+  // wildflower specks: tiny and sparse up close, an average tint further away (the ground agent's
+  // blades carry the near meadow)
+  {
+    float fl = smoothstep(0.55, 0.8, nA.a) * 0.5 + 0.12;
+    if (fp < 0.25) {
+      vec2 fc = p.xz * 3.1;
+      vec2 hh = lhash22(floor(fc));
+      float rr = length(fract(fc) - 0.5 - (hh - 0.5) * 0.6);
+      float dotM = step(hh.x, fl * 0.35) * (1.0 - smoothstep(0.06, 0.06 + fp * 3.0, rr));
+      vec3 fcol = hh.y < 0.3 ? vec3(0.55, 0.08, 0.05) : hh.y < 0.5 ? vec3(0.28, 0.34, 0.65) : hh.y < 0.8 ? vec3(0.75, 0.74, 0.68) : vec3(0.72, 0.6, 0.12);
+      meadow = mix(meadow, fcol, dotM * (1.0 - smoothstep(0.08, 0.25, fp)) * 0.7);
+    }
+    meadow *= 1.0 + fl * 0.06 * smoothstep(0.08, 0.4, fp);
   }
   vec3 col = meadow;
 

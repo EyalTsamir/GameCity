@@ -31,6 +31,7 @@ import type { BenchPlace, DoorCat, DoorPlace, Places, Spot, SpotPlace, StopPlace
 import { makeLook, type Look, type Persona } from './looks';
 import { F, DOG_OFFSET } from './figure';
 import { gaitConfig, gaitCycleOf, GC } from './rig';
+import type { CafePlace, CafeSeat } from './cafes';
 
 // ───────────────────────────────────────────────────────────── types ──
 
@@ -50,7 +51,7 @@ export type PartyState =
   | 'fadeout'
   | 'gone';
 
-export type GoalKind = 'door' | 'bench' | 'beach' | 'view' | 'bus' | 'waypoint';
+export type GoalKind = 'door' | 'bench' | 'beach' | 'view' | 'bus' | 'waypoint' | 'cafe';
 
 export interface Goal {
   kind: GoalKind;
@@ -58,6 +59,8 @@ export interface Goal {
   door?: DoorPlace;
   bench?: BenchPlace;
   place?: SpotPlace;
+  /** café table (goal kind 'cafe'); spots are its claimed CafeSeats */
+  cafe?: CafePlace;
   /** claimed seats / spots, one per member */
   spots?: Spot[];
   dur: number;
@@ -200,6 +203,15 @@ export class Member {
   fade = 0;
   present = false;
   reading = false;
+  /** seated at a café table: 0 no, else 1 + activity profile (animate.ts) */
+  cafe = 0;
+  /** café: 1 = eating (plate), 0 = drinks only */
+  meal = 0;
+  /** café: head yaw (rad, figure frame) towards the companion this patron talks to */
+  talkYaw = 0;
+  /** café: table edge distance in front of the seat spot, table-top height above the seat spot's y (m) */
+  tabD = 0.15;
+  tabH = 0.75;
   towel = false;
   sunbathing = false;
   lieVariant = 0;
@@ -303,6 +315,8 @@ export class Party {
   busStop: StopPlace | null = null;
   origin = '';
   rest = 0; // seconds since the party last moved along its rail
+  /** café goals: rail arc length where the party leaves its walk for the terrace (Infinity = none) */
+  exitS = Infinity;
   constructor(id: number, persona: Persona) {
     this.id = id;
     this.persona = persona;
@@ -358,6 +372,31 @@ function bump(h: number, a: number, b: number, fade = 1): number {
 function beachFactor(h: number): number {
   return bump(h, 10.5, 17, 1.5);
 }
+/** share of the café tables taken by hour: breakfast, lunch, the long evening (closed 1:30–6:30) */
+const CAFE = [0.35, 0.1, 0, 0, 0, 0, 0.04, 0.42, 0.62, 0.62, 0.66, 0.78, 0.96, 0.95, 0.82, 0.72, 0.75, 0.88, 0.98, 1, 1, 0.96, 0.82, 0.62];
+export function cafeFactor(h: number): number {
+  const i = Math.floor(h) % 24;
+  const f = h - Math.floor(h);
+  return CAFE[i] * (1 - f) + CAFE[(i + 1) % 24] * f;
+}
+/** how much each persona likes a café stop */
+const CAFE_LIKE: Record<Persona, number> = {
+  commuter: 0.9,
+  worker: 0.25,
+  shopper: 0.9,
+  stroller: 1,
+  tourist: 1.15,
+  beachgoer: 0.35,
+  jogger: 0,
+  dogwalker: 0.35,
+  parent: 0.45,
+  elderly: 0.85,
+  couple: 1.25,
+  family: 0.55,
+  student: 0.7,
+  nightowl: 1.2,
+  angler: 0,
+};
 
 /** Spatial hash of obstacles (members + their prams/dogs). */
 class Grid {
@@ -496,7 +535,21 @@ export class Crowd {
   target(): number {
     const h = this.ctx.clock.hours;
     const rain = this.ctx.uniforms.uRain.value;
-    return Math.round(this.maxPop * popFactor(h) * (1 - 0.35 * rain));
+    // café patrons come on top of the street crowd (≈ 1.8 people per taken table)
+    return Math.round(this.maxPop * popFactor(h) * (1 - 0.35 * rain) + this.cafeWanted() * 1.8);
+  }
+
+  /** number of café tables that should be taken now */
+  cafeWanted(): number {
+    const rain = this.ctx.uniforms.uRain.value;
+    return Math.round(this.places.cafes.length * cafeFactor(this.ctx.clock.hours) * (1 - 0.8 * rain) * Math.min(1, this.ctx.quality.density + 0.15));
+  }
+
+  /** café tables taken (or claimed by a party on its way) */
+  cafeTaken(): number {
+    let n = 0;
+    for (const c of this.places.cafes) if (c.taken >= 0) n++;
+    return n;
   }
 
   onQuality(): void {
@@ -530,6 +583,16 @@ export class Crowd {
       const p = this.warmPlace('beach');
       if (!p) break;
       onBeach += p.size;
+      alive += p.size;
+    }
+    // café terraces: as full as the hour wants them
+    guard = 0;
+    let cafes = this.cafeTaken();
+    const cafeWanted = this.cafeWanted();
+    while (cafes < cafeWanted && guard++ < 160) {
+      const p = this.warmPlace('cafe');
+      if (!p) continue;
+      cafes++;
       alive += p.size;
     }
     guard = 0;
@@ -1144,8 +1207,8 @@ export class Crowd {
       }
       vT = Math.min(vT, Math.sqrt(2 * 1.4 * Math.max(0, st.s - p.s)) + 0.05);
     }
-    // end of rail
-    if (!p.endDoor) vT = Math.min(vT, Math.sqrt(2 * 1.6 * Math.max(0, r.length - p.s)) + 0.15);
+    // end of rail (or the café entry point)
+    if (!p.endDoor) vT = Math.min(vT, Math.sqrt(2 * 1.6 * Math.max(0, Math.min(r.length, p.exitS) - p.s)) + 0.15);
     if (p.vCap < vT) vT = Math.max(0, p.vCap);
     const dv = vT - p.v;
     p.v += clamp(dv, -3.2 * h, 1.3 * h);
@@ -1202,10 +1265,12 @@ export class Crowd {
     // arrival
     if (p.endDoor) {
       if (this.trailS(p) > r.length + 0.5) this.finish(p);
+    } else if (p.s >= p.exitS - 0.05) {
+      this.arrive(p);
     } else if (p.s >= r.length - 0.02) {
       p.s = r.length;
       this.arrive(p);
-    } else if (p.goal?.spots && r.length - p.s < 3 && p.v < 0.1 && p.vCap < 0.2 && p.blockedT > 0.6) {
+    } else if (p.goal?.spots && Math.min(r.length, p.exitS) - p.s < 3 && p.v < 0.1 && p.vCap < 0.2 && p.blockedT > 0.6) {
       // our seat / spot is right there but people stand in the way to the end of the walk: go straight to it
       this.arrive(p);
     }
@@ -1859,6 +1924,17 @@ export class Crowd {
       return;
     }
     p.v = 0;
+    if (g.kind === 'cafe' && g.cafe && g.spots) {
+      // in between the tables to a standing point beside the chair (planned in cafes.ts)
+      for (const m of p.members) {
+        const seat = g.spots[m.idx] as CafeSeat;
+        this.setFree(m, seat.path);
+        m.faceYaw = seat.yaw;
+      }
+      p.exitS = Infinity;
+      p.state = 'approach';
+      return;
+    }
     if (g.kind === 'bench' && g.bench && g.spots) {
       const b = g.bench;
       const fx = Math.sin(b.yaw),
@@ -1907,6 +1983,12 @@ export class Crowd {
         this.setFree(m, [seat.x, seat.z, seat.y]);
         m.sitGoal = 1;
         m.reading = this.rng.chance(p.persona === 'elderly' || p.persona === 'commuter' ? 0.35 : 0.12) && p.size === 1;
+      } else if (g.kind === 'cafe' && g.spots) {
+        const seat = g.spots[m.idx];
+        m.faceYaw = seat.yaw;
+        this.setFree(m, [seat.x, seat.z, seat.y]);
+        m.sitGoal = 1;
+        this.cafeSit(p, m, g);
       } else if (g.kind === 'beach' && g.spots) {
         m.faceYaw = g.spots[m.idx].yaw;
         m.towel = true;
@@ -1956,6 +2038,7 @@ export class Crowd {
         p.state = 'act';
         p.timer = 0;
         if (g.kind === 'bus') p.busStop = g.place as StopPlace;
+        if (g.cafe) g.cafe.since = this.time;
       }
     } else if (p.state === 'rise') {
       if (settled || p.timer > 4) {
@@ -1963,6 +2046,7 @@ export class Crowd {
           m.towel = false;
           m.sunbathing = false;
           m.reading = false;
+          m.cafe = 0;
         }
         this.releaseGoal(g, p);
         this.planNext(p, g.node, true);
@@ -1984,6 +2068,8 @@ export class Crowd {
     if (g.kind === 'bus') {
       done = p.timer >= g.dur; // gave up waiting
     }
+    // closing time: the terraces empty gradually (each party has its own moment)
+    if (g.kind === 'cafe' && cafeFactor(this.ctx.clock.hours) < 0.02 + 0.3 * ((p.id * 0.618034) % 1)) done = true;
     if (!done) return;
     if (g.kind === 'bus') {
       // walk away instead
@@ -2005,6 +2091,9 @@ export class Crowd {
         const seat = g.spots![m.idx];
         const stand = g.bench.sidewalk ? 0.3 : 0.5;
         this.setFree(m, [seat.x + fx * stand, seat.z + fz * stand, seat.y]);
+      } else if (g.kind === 'cafe' && g.cafe) {
+        const seat = g.spots![m.idx] as CafeSeat;
+        this.setFree(m, [seat.sx, seat.sz, g.cafe.y - 0.02]);
       } else m.fdone = true;
     }
   }
@@ -2039,7 +2128,19 @@ export class Crowd {
         nodes.push(goal.node);
       }
     }
-    const route = this.routeThrough(nodes);
+    let route = this.routeThrough(nodes);
+    // leaving a café: the walk starts with the café's walkway edge, joined at its entry point
+    let joinU = -1;
+    if (route && route.length >= 2 && viaLeave && prev?.kind === 'cafe' && prev.cafe) {
+      const c = prev.cafe;
+      const e = this.ctx.peds.edges[c.edge];
+      const other = route[0] === c.ea ? c.eb : c.ea;
+      if (route[1] === other) joinU = route[0] === e.a ? c.u : e.length - c.u;
+      else {
+        route = [other, ...route];
+        joinU = other === e.a ? c.u : e.length - c.u;
+      }
+    }
     if (!route || route.length < 2 || !goal) {
       this.stats.routeFails++;
       if (goal) this.releaseGoal(goal, p);
@@ -2057,8 +2158,14 @@ export class Crowd {
       // the walkway at its near edge rather than cutting into the middle of it
       p.state = 'leave';
       const r = p.rail!;
+      const s0 = joinU >= 0 ? railSAt(r, 0, clamp(joinU, 0, r.legs[0].len)) : 0;
+      if (s0 > 0) {
+        p.s = p.progressS = s0;
+        p.crossIdx = p.crosses.filter((c) => c.sExit < s0).length;
+        p.stopIdx = p.stops.filter((st) => st.s < s0 + 1).length;
+      }
       {
-        const S = sampleRail(r, 0, this.sample);
+        const S = sampleRail(r, s0, this.sample);
         const m0 = p.members[0];
         const [lo, hi] = this.bounds(p, 0);
         const ax = m0.x - S.x,
@@ -2067,7 +2174,7 @@ export class Crowd {
         // standing on the walkway already (viewpoints on paths): just set off from here
         const along = ax * S.tx + az * S.tz;
         const off0 = ax * -S.tz + az * S.tx - (p.delta + p.offs[0] * (1 - p.file));
-        if (prev?.kind !== 'bench' && prev?.kind !== 'beach' && Math.hypot(Math.min(0, along), off0) < 0.9 && along > -0.6) {
+        if (prev?.kind !== 'bench' && prev?.kind !== 'beach' && prev?.kind !== 'cafe' && Math.hypot(Math.min(0, along), off0) < 0.9 && along > -0.6) {
           p.state = 'walk';
           p.s = Math.max(0, along);
           p.progressS = p.s;
@@ -2086,11 +2193,16 @@ export class Crowd {
         }
       }
       for (const m of p.members) {
-        const S = sampleRail(r, 0, this.sample);
+        const S = sampleRail(r, s0, this.sample);
         const nx = -S.tz,
           nz = S.tx;
         const lat = p.delta + p.offs[m.idx] * (1 - p.file);
         const pts: number[] = [];
+        if (prev?.kind === 'cafe' && prev.spots) {
+          // back out between the tables the way they came (path minus the standing point, reversed)
+          const P = (prev.spots[m.idx] as CafeSeat).path;
+          for (let k = P.length - 6; k >= 0; k -= 3) pts.push(P[k], P[k + 1], P[k + 2]);
+        }
         if (prev?.kind === 'bench' && prev.bench?.sidewalk && prev.spots) {
           const b = prev.bench;
           const fx = Math.sin(b.yaw),
@@ -2170,6 +2282,18 @@ export class Crowd {
     });
     p.stops = this.railStops(p, rail);
     p.stopIdx = 0;
+    // café: leave the walk where it passes the café's entry point (on the last traverse of its edge)
+    p.exitS = Infinity;
+    if (goal.kind === 'cafe' && goal.cafe) {
+      const c = goal.cafe;
+      for (let i = rail.legs.length - 1; i >= 0; i--) {
+        const L = rail.legs[i];
+        if (L.edge.id !== c.edge) continue;
+        p.exitS = railSAt(rail, i, clamp(L.forward ? c.u : L.len - c.u, 0, L.len));
+        break;
+      }
+      if (p.exitS === Infinity) p.exitS = rail.length;
+    }
     return true;
   }
 
@@ -2379,6 +2503,79 @@ export class Crowd {
     return null;
   }
 
+  /** claim a free café table near `from` for the whole party (seats in member order) */
+  private cafeGoal(p: Party, from: number, scale = 140): Goal | null {
+    const fp = this.nodePos(from);
+    const c = this.pickNear(this.places.cafes, (t) => t, fp, scale, (t) => t.taken < 0 && t.seats.length >= p.size, 24);
+    if (!c) return null;
+    const seats = this.cafeSeats(c, p.size);
+    c.taken = p.id;
+    for (const st of seats) st.taken = p.id;
+    // the walk ends at the far end of the café's walkway edge, so its last leg passes the entry point
+    const A = this.ctx.peds.nodes[c.ea],
+      B = this.ctx.peds.nodes[c.eb];
+    const nearA = from === c.ea || (from !== c.eb && Math.hypot(A.x - fp.x, A.z - fp.z) <= Math.hypot(B.x - fp.x, B.z - fp.z));
+    return { kind: 'cafe', node: nearA ? c.eb : c.ea, cafe: c, spots: seats, dur: this.rng.range(60, 180), label: c.label, pose: 'sit' };
+  }
+
+  /** café stop for a leisure itinerary: [walk to the near end of the café's edge, the café] */
+  private cafeGoals(p: Party, from: number): Goal[] | null {
+    const g = this.cafeGoal(p, from);
+    if (!g || !g.cafe) return null;
+    const near = g.node === g.cafe.eb ? g.cafe.ea : g.cafe.eb;
+    return near === from ? [g] : [{ kind: 'waypoint', node: near, dur: 0, label: '', pose: 'stand' }, g];
+  }
+
+  /** which chairs a party of n takes: across the table for two, the rest round it */
+  private cafeSeats(c: CafePlace, n: number): CafeSeat[] {
+    const s = c.seats;
+    const k0 = Math.floor(this.rng.next() * s.length);
+    if (n === 1) return [s[k0]];
+    if (n === 2 && s.length >= 4) return [s[k0], s[(k0 + 2) % s.length]];
+    const out: CafeSeat[] = [];
+    for (let i = 0; i < n; i++) out.push(s[(k0 + i) % s.length]);
+    return out;
+  }
+
+  /** settle a patron at a café table: activity profile, meal, who they talk to */
+  private cafeSit(p: Party, m: Member, g: Goal): void {
+    const h = this.ctx.clock.hours;
+    const rng = this.rng;
+    const meal = h > 11.7 && h < 14.6 ? 0.7 : h > 18.4 && h < 22 ? 0.6 : h > 7 && h < 10.2 ? 0.4 : 0.08;
+    m.meal = rng.chance(meal) ? 1 : 0;
+    // profiles (animate.ts): 1 talker, 2 coffee sipper, 3 reader, 4 phone, 5 listener / people-watcher
+    if (p.size === 1) {
+      const r = rng.next();
+      m.cafe = r < 0.3 ? 3 : r < 0.6 ? 4 : r < 0.85 ? 2 : 5;
+    } else m.cafe = rng.chance(0.75) ? 1 : rng.chance(0.5) ? 5 : 4;
+    m.reading = m.cafe === 3;
+    if (g.cafe && g.spots) {
+      const st = g.spots[m.idx];
+      const c = g.cafe;
+      const fx = Math.sin(st.yaw),
+        fz = Math.cos(st.yaw);
+      m.tabD = clamp((c.x - st.x) * fx + (c.z - st.z) * fz - c.r, 0.05, 0.4);
+      m.tabH = clamp(c.top - st.y, 0.6, 0.85);
+    }
+    // look at a companion: the next member round the table
+    m.talkYaw = 0;
+    if (p.size > 1 && g.spots) {
+      const me = g.spots[m.idx],
+        other = g.spots[(m.idx + 1) % p.size];
+      let a = Math.atan2(other.x - me.x, other.z - me.z) - me.yaw;
+      a = angleDiff(0, a);
+      m.talkYaw = clamp(a, -1.1, 1.1);
+    }
+  }
+
+  /** chance that a fresh party stops at a café (higher while the terraces are emptier than the hour wants) */
+  private cafeChance(p: Party): number {
+    const wanted = this.cafeWanted();
+    if (wanted <= 0) return 0;
+    const k = clamp(((wanted - this.cafeTaken()) / Math.max(3, wanted)) * 2.4, 0, 0.9);
+    return k * CAFE_LIKE[p.persona];
+  }
+
   private viewGoal(p: Party, from: number, themes: string[] | null, scale = 120, long = false): Goal | null {
     const fp = this.nodePos(from);
     const v = this.pickNear(this.places.views, (t) => t, fp, scale, (t) => t.node !== from && (!themes || themes.includes(t.theme)) && this.freeSpots(t, p.size) !== null, 16);
@@ -2422,6 +2619,14 @@ export class Crowd {
       else out.push(g);
     };
     const last = () => (out.length ? out[out.length - 1].node : from);
+    // a café stop (more likely while the terraces are emptier than the hour wants them)
+    if (this.places.cafes.length && rng.chance(this.cafeChance(p))) {
+      const cg = this.cafeGoals(p, from);
+      if (cg) {
+        push(cg);
+        return out;
+      }
+    }
     switch (p.persona) {
       case 'jogger': {
         const set = rng.chance(0.55) ? this.places.parkNodes : rng.chance(0.75) ? this.places.riverNodes : this.places.boardwalkNodes;
@@ -2564,6 +2769,7 @@ export class Crowd {
   }
 
   private releaseGoal(g: Goal | null, p: Party): void {
+    if (g?.cafe && g.cafe.taken === p.id) g.cafe.taken = -1;
     if (!g?.spots) return;
     for (const s of g.spots) if (s.taken === p.id) s.taken = -1;
   }
@@ -3051,7 +3257,7 @@ export class Crowd {
 
   // ── warm placement (load / time jumps) ───────────────────────────
 
-  private warmPlace(kind: 'walk' | 'bench' | 'beach' | 'view' | 'bus'): Party | null {
+  private warmPlace(kind: 'walk' | 'bench' | 'beach' | 'view' | 'bus' | 'cafe'): Party | null {
     const h = this.ctx.clock.hours;
     const doors = this.places.doors;
     if (!doors.length) return null;
@@ -3064,6 +3270,14 @@ export class Crowd {
       if (!g) return null;
       g.dur = rng.range(60, 220);
       return this.placeAtActivity(p, g, rng.range(0, 0.7));
+    }
+    if (kind === 'cafe') {
+      const lunch = h > 11.5 && h < 14.5;
+      const persona = rng.weighted<Persona>(['couple', 'stroller', 'tourist', 'commuter', 'shopper', 'elderly', 'nightowl', 'student'], [3, 2, 1.6, lunch ? 3.5 : 1, 1.1, h < 18 ? 1 : 0.4, h > 19 ? 2.4 : 0.15, 0.5]);
+      const p = this.makeParty(persona, this.sizeFor(persona));
+      const g = this.cafeGoal(p, rng.pick(doors).node, 1e5);
+      if (!g) return null;
+      return this.placeAtActivity(p, g, rng.range(0, 0.85));
     }
     if (kind === 'bench' || kind === 'view' || kind === 'bus') {
       const persona = this.rng.weighted<Persona>(['stroller', 'elderly', 'couple', 'tourist', 'parent', 'commuter'], [3, 2, 1.5, 1, 0.6, kind === 'bus' ? 3 : 0.3]);
@@ -3138,6 +3352,8 @@ export class Crowd {
     p.state = 'act';
     p.timer = g.dur * progress;
     p.rail = null;
+    p.exitS = Infinity;
+    if (g.cafe) g.cafe.since = this.time - g.dur * progress;
     if (g.kind === 'bus') p.busStop = g.place as StopPlace;
     for (const m of p.members) {
       const sp = g.spots[m.idx];
@@ -3153,6 +3369,9 @@ export class Crowd {
       if (g.kind === 'bench') {
         m.sit = m.sitGoal = 1;
         m.reading = p.size === 1 && this.rng.chance(0.2);
+      } else if (g.kind === 'cafe') {
+        m.sit = m.sitGoal = 1;
+        this.cafeSit(p, m, g);
       } else if (g.kind === 'beach') {
         m.towel = true;
         m.sunbathing = true;
@@ -3201,6 +3420,7 @@ export class Crowd {
         else if (g?.kind === 'beach') doing = m.lie > 0.5 ? 'Sunbathing on Sunny Beach' : 'Relaxing on the beach';
         else if (g?.kind === 'view') doing = m.look.flags & F.ROD ? 'Fishing off the pier' : g.label;
         else if (g?.kind === 'bus') doing = g.label;
+        else if (g?.kind === 'cafe') doing = this.cafeDoing(m);
         break;
       case 'rise':
       case 'leave':
@@ -3217,6 +3437,7 @@ export class Crowd {
           if (g.kind === 'door' || g.kind === 'bus') doing = g.label;
           else if (g.kind === 'bench') doing = `Walking to a bench in ${g.bench?.district ?? 'town'}`;
           else if (g.kind === 'beach') doing = 'Going to the beach';
+          else if (g.kind === 'cafe') doing = `Heading for a café table in ${g.cafe?.district ?? 'town'}`;
           else if (g.kind === 'view') doing = `Walking to ${viewTarget(g.place?.theme ?? '', this.places.districtName(g.place?.x ?? m.x, g.place?.z ?? m.z))}`;
           else doing = `Walking to ${this.places.districtName(m.x, m.z)}`;
         } else doing = 'Out for a walk';
@@ -3230,6 +3451,14 @@ export class Crowd {
     if (m.look.dog) lines.push('With a very good dog');
     if (m.speed > 0.3) lines.push(`${(m.speed * 3.6).toFixed(1)} km/h`);
     return lines;
+  }
+
+  private cafeDoing(m: Member): string {
+    const h = this.ctx.clock.hours;
+    if (m.reading) return 'Reading the paper over a coffee';
+    if (m.meal) return h < 11 ? 'Having breakfast at a café' : h < 16 ? 'Having lunch on a café terrace' : 'Having dinner on a terrace';
+    if (h >= 17 || h < 2) return 'Having a drink on a terrace';
+    return m.cafe === 4 ? 'Coffee and a look at the phone' : 'Having a coffee on a terrace';
   }
 
   pick(ray: THREE.Ray): PickHit | null {
@@ -3280,6 +3509,7 @@ export class Crowd {
       waitCross = 0,
       crossing = 0,
       bus = 0,
+      cafe = 0,
       parties = 0;
     for (const p of this.parties) {
       if (p.state === 'gone') continue;
@@ -3291,6 +3521,7 @@ export class Crowd {
       if (p.goal?.kind === 'bench' && (p.state === 'act' || p.state === 'settle')) sitting += n;
       if (p.goal?.kind === 'beach' && (p.state === 'act' || p.state === 'settle')) beach += n;
       if (p.goal?.kind === 'bus' && p.state === 'act') bus += n;
+      if (p.goal?.kind === 'cafe' && (p.state === 'act' || p.state === 'settle')) cafe += n;
     }
     return {
       people: this.count(),
@@ -3302,6 +3533,8 @@ export class Crowd {
       waitingToCross: waitCross,
       crossing,
       atBusStops: bus,
+      atCafes: cafe,
+      cafeTables: `${this.cafeTaken()}/${this.places.cafes.length} (want ${this.cafeWanted()})`,
       spawned: this.stats.spawned,
       crossingsDone: this.stats.crossings,
       boarded: this.stats.boarded,

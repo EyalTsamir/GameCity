@@ -16,6 +16,7 @@
 //       life?: number;                          // seconds a puff lives       (default 9)
 //       rise?: number;                          // initial rise speed, m/s    (default 2.4)
 //       glow?: number;                          // optional 0..1 warm under-glow at night
+//       opacity?: number;                       // optional opacity multiplier (thin wood smoke ~0.5)
 //     }): { remove(): void; set(opts: Partial<…>): void };
 //     burst(position: THREE.Vector3, count: number, opts?): void;   // optional one-shot puffs
 //   }
@@ -24,9 +25,10 @@
 //     const smoke = ctx.services.smoke as SmokeService | undefined;
 //     const h = smoke?.addEmitter({ getPosition: (o) => o.set(x, 14, z), rate: 4, size: 0.9, color: '#9a9894' });
 //     … h?.remove();
-//   Puffs live in sim time (frozen while paused) and drift with ctx.uniforms.uWind. All emitters
-//   share one particle budget (~900 puffs, scaled by quality.density); rates are scaled down
-//   together when the city would exceed it.
+//   Puffs live in sim time (frozen while paused) and drift with the shared wind field
+//   (core/wind.ts windAt: gust fronts, stronger aloft). All emitters share one particle budget
+//   (~1400 puffs, scaled by quality.density); distant emitters emit fewer, larger puffs, and rates
+//   are scaled down together when the city would exceed the budget.
 //
 // ── Events
 //   listens  'fireworks:launch' (payload optional { duration?: seconds, x?, z? }) → starts a show

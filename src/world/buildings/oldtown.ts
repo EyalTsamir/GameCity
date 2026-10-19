@@ -14,6 +14,7 @@ import { WIN, PROF, WALLPAT, ROOFPAT, FRAME, GLASS, LIGHT_MODE } from './materia
 import { boardSign, bladeSign } from './signs';
 import { PALETTE } from '../../core/gfx';
 import { anchors } from './anchors';
+import { windowBox, balconyLife, shutterPair, shutterState, julietBalcony, acUnit, dish, downpipe } from './clutter';
 
 const SHOPS: { name: string; blade: string }[] = [
   { name: 'Bakery', blade: 'B' },
@@ -161,9 +162,11 @@ export function genTownhouse(g: Gen): void {
   // ── look
   const wallC = g.wallColor;
   const trimC = rng.chance(0.7) ? col(rng.pick(['#f4efe4', '#efe6d2', '#f7f3ea'])) : shade(wallC, rng.chance(0.5) ? 0.78 : 1.12);
-  const shutters = rng.chance(0.45);
+  const shutters = rng.chance(0.5);
   const shutterC = col(rng.pick(SHUTTER));
-  const flowers = rng.chance(0.55);
+  const flowers = rng.chance(0.72);
+  // how lived-in the upper floors look (plants, balconies) — varies per house
+  const lived = rng.range(0.55, 1.25);
   const surrounds = rng.chance(0.45);
   const pediments = rng.chance(0.25);
   const arched = rng.chance(0.2);
@@ -222,6 +225,8 @@ export function genTownhouse(g: Gen): void {
     signOnSide(g, sg, uc - w / 2, uc + w / 2, 0.035, y0, y0 + h, r);
   }
 
+  /** windows (row:col) that already carry a balcony — no window box there */
+  let skipBox = new Set<string>();
   function windowTrim(sg: SideGeom, gr: Grid, rich: boolean): void {
     const t = g.trim;
     for (let j = 0; j < gr.m; j++) {
@@ -260,37 +265,13 @@ export function genTownhouse(g: Gen): void {
           // keystone on arched windows
           sideBox(t, sg, u - 0.1, u + 0.1, 0, 0.07, y1 - 0.12, y1 + 0.16);
         }
-        if (shutters) {
-          setCol(t, shutterC);
-          const sw = ww * 0.5;
-          sideBox(t, sg, u - ww / 2 - sw - 0.05, u - ww / 2 - 0.05, 0, 0.05, y0 + 0.02, y1 - (arched ? ww * 0.5 : 0.02));
-          sideBox(t, sg, u + ww / 2 + 0.05, u + ww / 2 + sw + 0.05, 0, 0.05, y0 + 0.02, y1 - (arched ? ww * 0.5 : 0.02));
-          setCol(t, shade(shutterC, 0.7));
-          for (let k = 1; k <= 3; k++) {
-            const yy = y0 + ((y1 - y0) * k) / 4;
-            sideBox(t, sg, u - ww / 2 - sw - 0.03, u - ww / 2 - 0.07, 0.05, 0.065, yy - 0.025, yy + 0.025);
-            sideBox(t, sg, u + ww / 2 + 0.07, u + ww / 2 + sw + 0.03, 0.05, 0.065, yy - 0.025, yy + 0.025);
-          }
-        }
-        if (flowers && rng.chance(0.6)) flowerBox(sg, u, ww, y0);
+        // shutters in different positions: open, closed against the sun, one leaf, ajar
+        if (shutters) shutterPair(g, sg, u, ww, y0, y1, shutterC, shutterState(g, sg.nz > 0.5 || sg.nx < -0.5), arched ? ww * 0.5 : 0);
+        if (skipBox.has(`${j}:${i}`)) continue;
+        if (flowers && rng.chance(0.62 * lived)) windowBox(g, sg, u, ww, y0);
+        else if (y0 > 3 && rng.chance(0.14 * lived)) julietBalcony(g, sg, u, ww, y0);
+        else if (!shutters && y0 > 3 && rng.chance(0.08)) acUnit(g, sg, u + ww / 2 + 0.55, y0 + 0.1, 0);
       }
-    }
-  }
-
-  function flowerBox(sg: SideGeom, u: number, ww: number, y0: number): void {
-    const t = g.trim;
-    setCol(t, rng.chance(0.5) ? col('#7a4b2a') : col('#3f5f3a'));
-    sideBox(t, sg, u - ww / 2, u + ww / 2, 0.12, 0.36, y0 - 0.02, y0 + 0.2, true);
-    setCol(t, col(rng.pick(['#4f8a3c', '#5c9a45', '#3f7a35'])));
-    sideBox(t, sg, u - ww / 2 + 0.03, u + ww / 2 - 0.03, 0.14, 0.34, y0 + 0.2, y0 + 0.3);
-    const fc = col(rng.pick(FLOWERS));
-    setCol(t, fc);
-    const n = Math.max(3, Math.round(ww / 0.2));
-    for (let k = 0; k < n; k++) {
-      const fu = u - ww / 2 + 0.08 + ((ww - 0.16) * (k + 0.5)) / n;
-      const fo = 0.18 + (k % 2) * 0.1;
-      const fh = 0.3 + ((k * 37) % 5) * 0.025;
-      sideBox(t, sg, fu - 0.06, fu + 0.06, fo, fo + 0.1, y0 + fh, y0 + fh + 0.1);
     }
   }
 
@@ -378,42 +359,55 @@ export function genTownhouse(g: Gen): void {
     // ── upper floors
     const gr = upperGrid(uA, uB);
     wallGrid(g.shell, sg, uA, uB, gH, eave, gr, look(PROF.HOME));
+    skipBox = planBalconies(gr);
     windowTrim(sg, gr, true);
+    skipBox = new Set();
     // string course + cornice
     setCol(t, trimC);
     sideBox(t, sg, uA, uB, 0, 0.12, gH - 0.02, gH + 0.16, true);
     if (lot.roof !== 'flat') {
       sideBox(t, sg, uA, uB, 0, 0.2, eave - 0.32, eave - 0.12, true);
     }
-    // balcony on the first floor
-    if (floors >= 3 && rng.chance(0.32) && gr.n >= 2) {
-      const i = Math.floor(gr.n / 2) - (gr.n % 2 === 0 ? 1 : 0);
-      const i2 = gr.n % 2 === 0 ? i + 1 : i;
-      const u0 = gridU(gr, i) - (gr.wx1 - gr.wx0) / 2 - 0.4,
-        u1 = gridU(gr, i2) + (gr.wx1 - gr.wx0) / 2 + 0.4;
-      const yb = gridY0(gr, 0) - 0.1;
-      setCol(t, trimC);
-      sideBox(t, sg, u0, u1, 0, 0.78, yb - 0.14, yb, true);
-      const c0x = sx(sg, u0, 0.74),
-        c0z = sz(sg, u0, 0.74),
-        c1x = sx(sg, u1, 0.74),
-        c1z = sz(sg, u1, 0.74);
-      railing(t, c0x, c0z, c1x, c1z, yb, 0.95, col('#2c3035'), 0.13, 1);
-      railing(t, sx(sg, u0 + 0.03, 0.02), sz(sg, u0 + 0.03, 0.02), sx(sg, u0 + 0.03, 0.72), sz(sg, u0 + 0.03, 0.72), yb, 0.95, col('#2c3035'), 0.13, 1);
-      railing(t, sx(sg, u1 - 0.03, 0.02), sz(sg, u1 - 0.03, 0.02), sx(sg, u1 - 0.03, 0.72), sz(sg, u1 - 0.03, 0.72), yb, 0.95, col('#2c3035'), 0.13, 1);
-      anchors.balcony(sx(sg, (u0 + u1) / 2, 0.39), yb, sz(sg, (u0 + u1) / 2, 0.39), sg.nx, sg.nz, u1 - u0, 0.78, 0.95);
-      if (rng.chance(0.7)) {
-        // potted plants on the balcony
-        for (const pu of [u0 + 0.3, u1 - 0.3]) {
-          setCol(t, col('#b5653f'));
-          const px = sx(sg, pu, 0.5),
-            pz = sz(sg, pu, 0.5);
-          t.cylinder(px, pz, 0.14, yb, yb + 0.28, 6, true, 0.17);
-          setCol(t, col('#4f8a3c'));
-          t.sphere(px, yb + 0.48, pz, 0.24, 6, 4);
+
+    /** balconies (with life) across one or two window columns; returns the windows they serve */
+    function planBalconies(grd: Grid): Set<string> {
+      const used = new Set<string>();
+      if (grd.n < 1 || grd.m < 1) return used;
+      const ironC = col(rng.pick(['#2c3035', '#2c3035', '#3b4a40', '#5a3a2a', '#e9e4d8']));
+      const wide = rng.chance(0.55);
+      for (let j = 0; j < grd.m; j++) {
+        // first floor: a central balcony on about half the houses; higher floors: fewer
+        const p = (j === 0 ? 0.5 : j === grd.m - 1 ? 0.18 : 0.3) * lived;
+        if (floors < 3 || !rng.chance(p)) continue;
+        let i: number, i2: number;
+        if (wide && grd.n >= 2) {
+          i = Math.floor(grd.n / 2) - (grd.n % 2 === 0 ? 1 : 0);
+          i2 = grd.n % 2 === 0 ? i + 1 : i;
+        } else {
+          i = i2 = rng.int(0, grd.n - 1);
         }
+        const u0 = gridU(grd, i) - (grd.wx1 - grd.wx0) / 2 - 0.4,
+          u1 = gridU(grd, i2) + (grd.wx1 - grd.wx0) / 2 + 0.4;
+        const yb = gridY0(grd, j) - 0.1;
+        const dep = j === 0 ? 0.78 : 0.62;
+        setCol(t, trimC);
+        sideBox(t, sg, u0, u1, 0, dep, yb - 0.14, yb, true);
+        // corbels under the slab
+        setCol(t, shade(trimC, 0.9));
+        for (const cu of [u0 + 0.15, u1 - 0.15]) sideBox(t, sg, cu - 0.08, cu + 0.08, 0, dep - 0.1, yb - 0.42, yb - 0.14, true);
+        railing(t, sx(sg, u0, dep - 0.04), sz(sg, u0, dep - 0.04), sx(sg, u1, dep - 0.04), sz(sg, u1, dep - 0.04), yb, 0.95, ironC, 0.13, 1);
+        railing(t, sx(sg, u0 + 0.03, 0.02), sz(sg, u0 + 0.03, 0.02), sx(sg, u0 + 0.03, dep - 0.06), sz(sg, u0 + 0.03, dep - 0.06), yb, 0.95, ironC, 0.13, 1);
+        railing(t, sx(sg, u1 - 0.03, 0.02), sz(sg, u1 - 0.03, 0.02), sx(sg, u1 - 0.03, dep - 0.06), sz(sg, u1 - 0.03, dep - 0.06), yb, 0.95, ironC, 0.13, 1);
+        anchors.balcony(sx(sg, (u0 + u1) / 2, dep / 2), yb, sz(sg, (u0 + u1) / 2, dep / 2), sg.nx, sg.nz, u1 - u0, dep, 0.95);
+        balconyLife(g, sg, u0 + 0.06, u1 - 0.06, yb, { rail: 0.95, depth: dep - 0.06, green: 1.1 * lived });
+        for (let k = i; k <= i2; k++) used.add(`${j}:${k}`);
       }
+      return used;
     }
+
+    // services on the front: a downpipe at one end of the gutter, maybe an AC unit or a dish up top
+    if (lot.roof !== 'flat' && rng.chance(0.75)) downpipe(g, sg, rng.chance(0.5) ? uA + 0.18 : uB - 0.18, eave - 0.15);
+    if (gr.n > 0 && gr.m > 1 && rng.chance(0.22)) dish(g, sg, rng.chance(0.5) ? uA + 0.5 : uB - 0.5, eave - 1.2, 0.02);
   }
 
   function awning(sg: SideGeom, uA: number, uB: number, yTop: number): void {
@@ -498,6 +492,18 @@ export function genTownhouse(g: Gen): void {
     const gr = upperGrid(uA, uB, Math.max(1, Math.min(4, Math.round((len - 0.9) / (isBack ? 2.9 : 2.6)))));
     wallGrid(g.shell, sg, uA, uB, gH, eave, gr, look(PROF.HOME));
     windowTrim(sg, gr, !isBack);
+    // the back of the house: AC condensers under windows, a dish, a downpipe
+    if (gr.n > 0) {
+      for (let j = 0; j < gr.m; j++) {
+        if (!rng.chance(isBack ? 0.45 : 0.2)) continue;
+        const i = rng.int(0, gr.n - 1);
+        const side = rng.chance(0.5) ? -1 : 1;
+        const uu = gridU(gr, i) + side * ((gr.wx1 - gr.wx0) / 2 + 0.55);
+        if (uu > uA + 0.5 && uu < uB - 0.5) acUnit(g, sg, uu, gridY0(gr, j) - 0.05, 0);
+      }
+      if (isBack && rng.chance(0.3)) dish(g, sg, rng.chance(0.5) ? uA + 0.45 : uB - 0.45, eave - 1.0, 0.02);
+    }
+    if (isBack && lot.roof !== 'flat' && rng.chance(0.6)) downpipe(g, sg, rng.chance(0.5) ? uA + 0.18 : uB - 0.18, eave - 0.15);
     setCol(t, trimC);
     if (!isBack || fullSide) sideBox(t, sg, uA, uB, 0, 0.12, gH - 0.02, gH + 0.16, true);
     if (lot.roof !== 'flat') sideBox(t, sg, uA, uB, 0, 0.18, eave - 0.3, eave - 0.12, true);

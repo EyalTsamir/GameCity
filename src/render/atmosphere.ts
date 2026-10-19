@@ -44,7 +44,7 @@ export const ATMO_N = 12;
  *  [7] colour seen by rays looking up (higher sky haze).rgb, its blend weight
  *  [8] mist colour.rgb, mist extinction at the water level (1/m)
  *  [9] mist drift offset x, z (m), patch frequency (1/m), patchiness (0..1)
- * [10] haze start distance (m), overall in-scatter gain, unused, unused
+ * [10] haze start distance (m), overall in-scatter gain, tight sun-lobe weight, tight sun-lobe exponent
  * [11] reserved
  */
 export const atmoData = new Float32Array(ATMO_N * 4);
@@ -69,6 +69,11 @@ float atmOD(float ya, float yb, float t, float base, float k) {
   }
   return atmOD1(abs(a) - o, abs(b) - o, t, k);
 }
+// glow of the sunlit haze around the sun (broad + tight lobe); the dome adds the same above the horizon
+vec3 thSunLobe(vec3 V) {
+  float mu = max(dot(V, thAtmo[0].xyz), 0.0);
+  return thAtmo[1].rgb * (pow(mu, max(thAtmo[0].w, 1.0)) + thAtmo[10].z * pow(mu, max(thAtmo[10].w, 1.0)));
+}
 // colour of the haze at infinity in direction V (= the sky dome at / below the horizon)
 vec3 thHazeColor(vec3 V) {
   vec3 L = thAtmo[0].xyz;
@@ -78,8 +83,7 @@ vec3 thHazeColor(vec3 V) {
   float c3 = (2.0 * c2 - 1.0) * c;
   vec3 ring = max(thAtmo[3].rgb + thAtmo[4].rgb * c + thAtmo[5].rgb * c2 + thAtmo[6].rgb * c3, vec3(0.0));
   ring = mix(ring, thAtmo[7].rgb, thAtmo[7].a * smoothstep(0.04, 0.7, V.y));
-  float mu = max(dot(V, L), 0.0);
-  return ring + thAtmo[1].rgb * pow(mu, max(thAtmo[0].w, 1.0));
+  return ring + thSunLobe(V);
 }
 float atmHash12(vec2 p) {
   vec3 p3 = fract(vec3(p.xyx) * 0.1031);
@@ -234,6 +238,9 @@ export interface AtmosphereParams {
   mistPatchiness: number;
   startDist: number;
   gain: number;
+  /** tight sun lobe (aureole) weight relative to the broad one, and its exponent */
+  lobe2: number;
+  lobe2Exp: number;
 }
 
 export function createAtmosphereParams(): AtmosphereParams {
@@ -259,6 +266,8 @@ export function createAtmosphereParams(): AtmosphereParams {
     mistPatchiness: 0.6,
     startDist: 0,
     gain: 1,
+    lobe2: 0,
+    lobe2Exp: 64,
   };
 }
 
@@ -281,7 +290,7 @@ export function writeAtmosphere(p: AtmosphereParams): void {
   set(7, p.up.r, p.up.g, p.up.b, p.upBlend);
   set(8, p.mistColor.r, p.mistColor.g, p.mistColor.b, p.mist);
   set(9, p.mistDrift.x, p.mistDrift.y, p.mistFreq, p.mistPatchiness);
-  set(10, p.startDist, p.gain, 0, 0);
+  set(10, p.startDist, p.gain, p.lobe2, p.lobe2Exp);
 }
 
 /** optical depth factor of an exponential layer (CPU mirror of atmOD1; heights above the base) */

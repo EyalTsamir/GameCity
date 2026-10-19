@@ -30,6 +30,8 @@ export interface SmokeEmitterOptions {
   rise?: number;
   /** extra (optional): 0..1 warm under-glow at night (furnace / yard lights), default 0 */
   glow?: number;
+  /** extra (optional): opacity multiplier (thin wood smoke ≈ 0.5), default 1 */
+  opacity?: number;
 }
 
 export interface SmokeHandle {
@@ -52,6 +54,7 @@ interface Emitter {
   life: number;
   rise: number;
   glow: number;
+  opacity: number;
   color: THREE.Color;
   acc: number;
   prev: THREE.Vector3;
@@ -62,6 +65,8 @@ interface Emitter {
   failed: boolean;
   /** slow "production" modulation phase */
   phase: number;
+  /** distance LOD: < 1 = fewer, larger puffs */
+  lod: number;
 }
 
 export interface SmokeSystem {
@@ -322,8 +327,15 @@ export function createSmoke(ctx: CityContext): SmokeSystem {
   const emitters: Emitter[] = [];
   let nextId = 1;
   const wind = ctx.uniforms.uWind.value;
+  const terrainSvc = () => ctx.services.terrain as { height(x: number, z: number): number } | undefined;
+  const groundAt = (x: number, z: number): number => {
+    const t = terrainSvc();
+    const h = t ? t.height(x, z) : ctx.plan.heightAt(x, z);
+    return Number.isFinite(h) ? Math.max(h, ctx.plan.water.level) : 0;
+  };
+  const _w = new THREE.Vector2();
 
-  const spawn = (x: number, y: number, z: number, a0: number, o: { size: number; life: number; rise: number; color: THREE.Color; glow: number }): void => {
+  const spawn = (x: number, y: number, z: number, a0: number, o: { size: number; life: number; rise: number; color: THREE.Color; glow: number; opacity: number }): void => {
     if (freeTop === 0 || MAX - freeTop >= budget()) {
       dropped++;
       return;
@@ -346,11 +358,12 @@ export function createSmoke(ctx: CityContext): SmokeSystem {
     life[i] = o.life * rng.range(0.82, 1.18);
     size0[i] = s;
     grow[i] = rng.range(2.8, 3.8);
-    alpha0[i] = rng.range(0.5, 0.68);
+    alpha0[i] = rng.range(0.5, 0.68) * o.opacity;
     rot[i] = rng.range(0, Math.PI * 2);
     rotV[i] = rng.range(-0.25, 0.25);
     seed[i] = rng.next() * 100;
     glow[i] = o.glow;
+    gy[i] = groundAt(px[i], pz[i]);
     variant[i] = rng.int(0, 3);
     const lj = rng.range(0.94, 1.04);
     cr[i] = o.color.r * lj;
@@ -369,16 +382,18 @@ export function createSmoke(ctx: CityContext): SmokeSystem {
     // buoyancy fades, a little lift remains
     const keep = Math.exp(-dt * 0.42);
     vy[i] = vy[i] * keep + (1 - keep) * 0.35;
-    // wind: stronger aloft; gentle eddies
-    const h = Math.min(Math.max(py[i], 0), 140);
-    const wf = 2.1 * (0.55 + h / 70);
+    // wind: the shared field (gust fronts bend the plume as they pass), stronger aloft
+    // (power-law profile from the ground under the puff's birth point); gentle eddies
+    const hag = Math.min(Math.max(py[i] - gy[i], 1.5), 160);
+    const wf = 3.1 * Math.pow(hag / 10, 0.22);
+    windAt(px[i], pz[i], ctx.uniforms.uTime.value, wind, _w);
     const sd = seed[i];
     const ea = Math.min(1, a * 0.25);
     const ex = (Math.sin(a * 0.8 + sd) * 0.5 + Math.sin(a * 1.9 + sd * 1.7) * 0.2) * ea;
     const ez = (Math.cos(a * 0.7 + sd * 1.3) * 0.5 + Math.sin(a * 1.6 + sd * 0.6) * 0.2) * ea;
     const k = 1 - Math.exp(-dt * 0.75);
-    vx[i] += (wind.x * wf + ex - vx[i]) * k;
-    vz[i] += (wind.y * wf + ez - vz[i]) * k;
+    vx[i] += (_w.x * wf + ex - vx[i]) * k;
+    vz[i] += (_w.y * wf + ez - vz[i]) * k;
     px[i] += vx[i] * dt;
     py[i] += (vy[i] + Math.sin(a * 1.3 + sd * 2.1) * 0.15) * dt;
     pz[i] += vz[i] * dt;
@@ -386,7 +401,7 @@ export function createSmoke(ctx: CityContext): SmokeSystem {
   };
 
   const tmp = new THREE.Vector3();
-  const emitOpts = { size: 1, life: 1, rise: 1, color: new THREE.Color(), glow: 0 };
+  const emitOpts = { size: 1, life: 1, rise: 1, color: new THREE.Color(), glow: 0, opacity: 1 };
 
   const service: SmokeService = {
     addEmitter(opts) {
@@ -398,6 +413,7 @@ export function createSmoke(ctx: CityContext): SmokeSystem {
         life: opts.life ?? DEFAULTS.life,
         rise: opts.rise ?? DEFAULTS.rise,
         glow: opts.glow ?? DEFAULTS.glow,
+        opacity: opts.opacity ?? 1,
         color: new THREE.Color(opts.color ?? '#ebe7e1'),
         acc: rng.next(),
         prev: new THREE.Vector3(),
@@ -407,6 +423,7 @@ export function createSmoke(ctx: CityContext): SmokeSystem {
         removed: false,
         failed: false,
         phase: rng.range(0, 100),
+        lod: 1,
       };
       emitters.push(e);
       return {
@@ -422,6 +439,7 @@ export function createSmoke(ctx: CityContext): SmokeSystem {
           if (o.life !== undefined) e.life = o.life;
           if (o.rise !== undefined) e.rise = o.rise;
           if (o.glow !== undefined) e.glow = o.glow;
+          if (o.opacity !== undefined) e.opacity = o.opacity;
           if (o.color !== undefined) e.color.set(o.color);
         },
       };
@@ -431,6 +449,7 @@ export function createSmoke(ctx: CityContext): SmokeSystem {
       emitOpts.life = o?.life ?? DEFAULTS.life;
       emitOpts.rise = o?.rise ?? DEFAULTS.rise;
       emitOpts.glow = o?.glow ?? 0;
+      emitOpts.opacity = o?.opacity ?? 1;
       emitOpts.color.set(o?.color ?? '#ebe7e1');
       const n = Math.min(64, Math.max(0, Math.round(count)));
       for (let k = 0; k < n; k++) spawn(p.x, p.y, p.z, rng.range(0, 0.3), emitOpts);
@@ -450,9 +469,17 @@ export function createSmoke(ctx: CityContext): SmokeSystem {
         const i = born[k];
         if (alive[i]) step(i, dt);
       }
-      // keep the whole city inside the shared budget: scale every emitter's rate together
+      // distance LOD per emitter (fewer, larger puffs far from the camera), then keep the whole city
+      // inside the shared budget: scale every emitter's rate together
+      const ce = ctx.camera.matrixWorld.elements;
       let expected = 0;
-      for (const e of emitters) if (e.active && !e.failed) expected += e.rate * e.life;
+      for (const e of emitters) {
+        if (e.hasPrev) {
+          const d = Math.hypot(e.cur.x - ce[12], e.cur.y - ce[13], e.cur.z - ce[14]);
+          e.lod = Math.min(1, Math.max(0.28, 120 / Math.max(1, d)));
+        }
+        if (e.active && !e.failed) expected += e.rate * e.lod * e.life;
+      }
       const dens = density();
       expected *= dens;
       rateScale = expected > 0 ? Math.min(1, (budget() * 0.9) / expected) : 1;
@@ -480,15 +507,16 @@ export function createSmoke(ctx: CityContext): SmokeSystem {
         }
         e.phase += dt * 0.12;
         const mod = 0.8 + 0.2 * Math.sin(e.phase) + 0.12 * Math.sin(e.phase * 3.7);
-        e.acc += e.rate * rateScale * dens * mod * dt;
+        e.acc += e.rate * e.lod * rateScale * dens * mod * dt;
         let n = Math.floor(e.acc);
         e.acc -= n;
         if (n > 0) {
           if (n > 40) n = 40;
-          emitOpts.size = e.size * (1 + (1 - Math.min(1, rateScale * dens)) * 0.35);
+          emitOpts.size = e.size * (1 + (1 - Math.min(1, rateScale * dens)) * 0.35) / Math.pow(e.lod, 0.4);
           emitOpts.life = e.life;
           emitOpts.rise = e.rise;
           emitOpts.glow = e.glow;
+          emitOpts.opacity = e.opacity;
           emitOpts.color.copy(e.color);
           for (let k = 0; k < n; k++) {
             const f = (k + rng.next()) / n;
@@ -559,10 +587,12 @@ export function createSmoke(ctx: CityContext): SmokeSystem {
         C[o] = cr[i];
         C[o + 1] = cg[i];
         C[o + 2] = cb[i];
-        C[o + 3] = alpha0[i] * smooth(0, 0.05, t) * Math.pow(1 - t, 1.3);
+        // fade in, erode (shader), thin out; soft where the puff dips into the ground / a roof
+        const rr = P[o + 3];
+        C[o + 3] = alpha0[i] * smooth(0, 0.05, t) * Math.pow(1 - t, 0.75) * smooth(-0.3 * rr, 0.7 * rr, py[i] - gy[i]);
         M[o] = rot[i];
         M[o + 1] = variant[i];
-        M[o + 2] = 1 - t * 0.55;
+        M[o + 2] = t;
         M[o + 3] = glow[i] * (1 - t * 0.7);
       }
       const n4 = orderLen * 4;

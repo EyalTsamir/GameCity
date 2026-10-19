@@ -14,6 +14,7 @@ import type { CityContext, CityModule } from '../core/context';
 import { ClothSystem } from './life/cloth';
 import { decorate, type BuildingsLike, type DecorStats } from './life/decor';
 import { lampLights } from '../core/lampLight';
+import { createChimneySmoke, type ChimneySmoke } from './life/chimneys';
 
 export default function create(ctx: CityContext): CityModule {
   const params = ctx.debug.params;
@@ -38,8 +39,20 @@ export default function create(ctx: CityContext): CityModule {
   }
   if (!buildings) problems.push('life: ctx.services.buildings missing — no bunting / laundry anchors');
 
+  // smoke from daily life: chimneys, kitchen / bakery flues, garden barbecues (emitters of the
+  // ambient module's shared smoke pool)
+  let chimneySmoke: ChimneySmoke | null = null;
+  if (!params.has('nochimneys')) {
+    const bs = ctx.services.buildings as { chimneys?: []; vents?: [] } | undefined;
+    const ps = ctx.services.props as { bbqs?: [] } | undefined;
+    chimneySmoke = createChimneySmoke(ctx, bs?.chimneys ?? [], bs?.vents ?? [], ps?.bbqs ?? []);
+  }
+
   return {
     name: 'life',
+    update(dt) {
+      if (dt > 0) chimneySmoke?.update(dt);
+    },
     frame() {
       cloth.frame();
     },
@@ -50,6 +63,7 @@ export default function create(ctx: CityContext): CityModule {
         bulbs: cloth.bulbCount,
         clothTris: cloth.tris,
         clothVerts: cloth.verts,
+        ...(chimneySmoke ? chimneySmoke.stats() : {}),
         ...(decor ? { street: decor.street, court: decor.court, balcony: decor.balcony, bunting: decor.bunting, prayer: decor.prayer, festoon: decor.festoon, laundryItems: decor.laundryItems, lowestY: Math.round(decor.lowest * 100) / 100, festoonLights: decor.lights } : {}),
       };
     },

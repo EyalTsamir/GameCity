@@ -12,6 +12,7 @@ import { Builder } from './mesh';
 import { SignAtlas, SignRect } from './signs';
 import { LIGHT_MODE, ROOFPAT, WIN } from './materials';
 import { anchors } from './anchors';
+import type { GreenKit } from './green';
 
 export type Side = 0 | 1 | 2 | 3;
 export const FRONT: Side = 0,
@@ -62,6 +63,8 @@ export interface Gen {
   signs: Builder;
   /** static laundry cloth (trim material, separate mesh: life may hide it and hang animated cloth) */
   cloth: Builder;
+  /** leaf cards (balcony / window-box plants, hanging greenery, ivy) — see green.ts */
+  green: GreenKit;
   atlas: SignAtlas;
   /** neighbour coverage along each footprint side (sorted, merged) */
   cover: Interval[][];

@@ -302,7 +302,7 @@ export function buildCafes(ctx: CityContext, districtName: (x: number, z: number
           simp.push(pts[b]);
           a = b;
         }
-        for (let q = 1; q < simp.length; q++) st.path.push(simp[q][0], simp[q][1], T.y);
+        for (let q = 1; q < simp.length; q++) st.path.push(simp[q][0], simp[q][1], T.y - 0.02);
       }
       const e = peds.edges[bp.e];
       // a waiter stands next to the table on the side towards the walkway

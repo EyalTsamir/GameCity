@@ -355,7 +355,7 @@ export function createLandscapeModel(slabHeight: SlabHeight): LandscapeModel {
         h = Math.max(h, islandH(x, z));
       } else {
         // beach: 8 % from the waterline + dunes; cliff: steep face up to the land
-        const beach = WL + sd * 0.08 + smooth(28, 60, sd) * (1.2 + 1.6 * vnoise(x / 23, z / 23, 31)) * (1 - smooth(70, 160, sd));
+        const beach = WL + sd * 0.08 + smooth(28, 55, sd) * (1.0 + 1.6 * vnoise(x / 23, z / 23, 31)) * (1 - smooth(70, 140, sd));
         const cliff = WL + sd * (1.6 + 1.2 * vnoise(x / 40, z / 40, 32));
         const prof = lerp(beach, cliff, cl);
         h = smin(h, prof, 1.5 + 6 * cl);
@@ -421,7 +421,8 @@ export function createLandscapeModel(slabHeight: SlabHeight): LandscapeModel {
     out.water = h < WL - 0.02 ? 1 : 0;
     const sd = coastSD(x, z);
     const cl = cliffness(z, x);
-    out.sand = out.water ? 0 : (1 - smooth(70, 150, sd)) * (1 - cl) * (1 - smooth(4, 7, h));
+    // beach (~40 m), then dunes with marram grass (half sand) out to ~95 m
+    out.sand = out.water ? 0 : (1 - smooth(32, 50, sd) * 0.55 - smooth(70, 100, sd) * 0.45) * (1 - cl) * (1 - smooth(4, 7, h));
     out.rock = Math.min(1, smooth(0.75, 1.25, slope) + cl * (1 - smooth(4, 30, sd)) * smooth(0.35, 0.7, slope));
     let wet = 0;
     if (riverQ(x, z, rv, 60)) wet = 1 - smooth(rv.halfW, rv.halfW + 9, rv.d);
@@ -441,7 +442,7 @@ export function createLandscapeModel(slabHeight: SlabHeight): LandscapeModel {
     // northern hills: closed forest with clearings
     const n = footZ(x) - z;
     let f = smooth(-30, 20, n);
-    if (n > 140) f *= 1 - 0.9 * smooth(0.3, 0.42, fbm(x / 300, z / 300, 3, 51)) * smooth(140, 400, n);
+    if (n > 140) f *= 1 - 0.9 * smooth(0.36, 0.48, fbm(x / 340, z / 340, 3, 51)) * smooth(140, 400, n);
     // copses + woods in the farmland (more of them further out)
     const cop = fbm(x / 210, z / 210, 3, 52) + 0.15 * smooth(800, 3000, r);
     f = Math.max(f, smooth(0.36, 0.44, cop) * smooth(260, 420, r));

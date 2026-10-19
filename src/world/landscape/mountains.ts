@@ -34,10 +34,10 @@ interface LayerDef {
 }
 
 const LAYERS: LayerDef[] = [
-  { r0: 2300, rc: 3300, r1: 4300, a0: 168, a1: 370, step: 0.16, hS: 70, hW: 150, hN: 330, scale: 1500, seed: 1 },
-  { r0: 4300, rc: 5800, r1: 7600, a0: 176, a1: 368, step: 0.14, hS: 130, hW: 330, hN: 900, scale: 2300, seed: 2 },
-  { r0: 7600, rc: 9800, r1: 12500, a0: 190, a1: 366, step: 0.12, hS: 220, hW: 620, hN: 1750, scale: 3200, seed: 3 },
-  { r0: 12000, rc: 14800, r1: 18500, a0: 214, a1: 364, step: 0.12, hS: 380, hW: 1100, hN: 2700, scale: 4200, seed: 4 },
+  { r0: 2400, rc: 3500, r1: 4700, a0: 168, a1: 370, step: 0.16, hS: 45, hW: 85, hN: 260, scale: 1600, seed: 1 },
+  { r0: 4600, rc: 6300, r1: 8200, a0: 176, a1: 368, step: 0.14, hS: 90, hW: 190, hN: 720, scale: 2600, seed: 2 },
+  { r0: 8000, rc: 10800, r1: 13800, a0: 196, a1: 366, step: 0.12, hS: 150, hW: 420, hN: 1500, scale: 3600, seed: 3 },
+  { r0: 13000, rc: 16500, r1: 20500, a0: 226, a1: 364, step: 0.11, hS: 260, hW: 800, hN: 2600, scale: 5200, seed: 4 },
 ];
 
 /** depth rows (0 = front foot, 1 = back) — dense around the crest (~0.4..0.6) */
@@ -73,8 +73,10 @@ export function buildMountains(model: LandscapeModel, uniforms: Record<string, T
       if (am >= 160 && am < 270) hA = lerp(L.hS, L.hW, smooth(180, 270, am));
       else if (am >= 270) hA = lerp(L.hW, L.hN, smooth(270, 345, am));
       else hA = L.hN * (1 - smooth(0, 14, am)); // NNE: the range runs out toward the coast
-      // peaks and saddles along the range
-      const env = 0.55 + 0.6 * ridged(aDeg / 9, L.seed * 3.1, 3, 70 + L.seed);
+      // massifs and saddles along the range (broad), secondary summits (smaller)
+      const env = (0.62 + 0.45 * fbm(aDeg / 26, L.seed * 3.1, 3, 70 + L.seed)) * (0.82 + 0.3 * ridged(aDeg / 7, L.seed * 1.7, 2, 75 + L.seed));
+      // rolling hills in the S / W, ridged mountains toward the N
+      const alp = smooth(285, 335, am < 90 ? am + 360 : am) * Math.min(1, L.seed / 2.5);
       // the far ends dip into the sea / fade
       const endF = smooth(L.a0, L.a0 + 10, aDeg) * (1 - smooth(L.a1 - 8, L.a1, aDeg));
       // river valley notch
@@ -86,11 +88,13 @@ export function buildMountains(model: LandscapeModel, uniforms: Record<string, T
         const r = t < 0.5 ? lerp(L.r0, rc, t / 0.5) : lerp(rc, L.r1, (t - 0.5) / 0.5);
         const x = CX + dx * r,
           z = CZ + dz * r;
-        // across-range profile: rise to the crest, fall behind it
-        const prof = t < 0.5 ? Math.pow(Math.sin((t / 0.5) * Math.PI * 0.5), 1.25) : Math.pow(Math.cos(((t - 0.5) / 0.5) * Math.PI * 0.5), 0.8);
-        // ridged relief across the layer (valleys and spurs run across the range)
-        const rel = 0.45 + 0.7 * ridged(x / L.scale, z / L.scale, 4, 80 + L.seed);
-        const fine = 1 + 0.12 * fbm(x / (L.scale * 0.18), z / (L.scale * 0.18), 3, 90 + L.seed);
+        // across-range profile: a broad massif rising to the crest, falling behind it
+        const prof = t < 0.5 ? Math.pow(Math.sin((t / 0.5) * Math.PI * 0.5), 0.9) : Math.pow(Math.cos(((t - 0.5) / 0.5) * Math.PI * 0.5), 0.7);
+        // relief across the layer: ridged (valleys and spurs) in the mountains, soft fbm in the hills
+        const rr = ridged(x / L.scale, z / L.scale, 4, 80 + L.seed);
+        const ff = 0.5 + 0.5 * fbm(x / L.scale, z / L.scale, 3, 85 + L.seed);
+        const rel = lerp(0.55 + 0.45 * ff, 0.4 + 0.6 * rr, alp);
+        const fine = 1 + 0.08 * fbm(x / (L.scale * 0.15), z / (L.scale * 0.15), 3, 90 + L.seed);
         let y = hA * env * prof * rel * fine * endF * notch;
         // feet: buried below the landscape surface; at sea the foot sinks below the water
         const ground = model.world(x, z);
@@ -151,7 +155,8 @@ vec3 mtnAlbedo() {
   vec4 n3 = texture2D(tLN, p.xz * (1.0 / 150.0));
   float alt = p.y + (n1.r - 0.5) * 260.0 + (n2.g - 0.5) * 120.0;
   // forest (conifers dominate up high), alpine meadow, rock, snow
-  vec3 forest = mix(cForestB, cForestC, smoothstep(250.0, 900.0, alt)) * (0.8 + 0.35 * n3.b);
+  vec4 n4 = texture2D(tLN, p.xz * (1.0 / 47.0));
+  vec3 forest = mix(cForestB, cForestC, smoothstep(250.0, 900.0, alt) * 0.7 + 0.3 * smoothstep(0.4, 0.6, n2.b)) * (0.72 + 0.3 * n3.b + 0.18 * n4.r);
   vec3 meadow = mix(cMeadow, cMeadowDry, n2.b) * (0.85 + 0.3 * n3.r);
   vec3 rock = mix(cRock, cRock2, smoothstep(0.35, 0.65, n3.g + 0.25 * sin(p.y * 0.05 + n2.r * 5.0)));
   float treeline = 1350.0 + (n2.r - 0.5) * 300.0;
@@ -161,8 +166,10 @@ vec3 mtnAlbedo() {
   float rM = smoothstep(0.32, 0.55, slope + (n3.a - 0.5) * 0.2) * (1.0 - fM * 0.6);
   rM = max(rM, smoothstep(treeline + 250.0, treeline + 650.0, alt) * 0.8);
   col = mix(col, rock, rM);
-  float snowLine = 1950.0 + (n2.a - 0.5) * 380.0;
-  float sM = smoothstep(snowLine - 60.0, snowLine + 140.0, alt) * (1.0 - smoothstep(0.55, 0.85, slope + (n3.r - 0.5) * 0.25));
+  float snowLine = 2050.0 + (n2.a - 0.5) * 420.0 - 120.0 * N.z;
+  // snow lies in gullies and on gentler ledges, steep faces stay dark
+  float gully = smoothstep(0.35, 0.7, n3.g * 0.6 + n4.b * 0.4);
+  float sM = smoothstep(snowLine - 80.0, snowLine + 220.0, alt + gully * 160.0) * (1.0 - smoothstep(0.5, 0.8, slope + (n3.r - 0.5) * 0.3));
   col = mix(col, vec3(0.86, 0.88, 0.92), sM);
   return col;
 }

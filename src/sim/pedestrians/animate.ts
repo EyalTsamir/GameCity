@@ -17,8 +17,8 @@ export const SEAT_TOP = 0.467;
 /** backrest surface behind the seat spot at hip height (m, negative = behind) */
 export const BACKREST_Z = -0.3;
 
-/** prop shown in a hand (pose.spare1): 0 none, 1 phone, 2 coffee cup */
-export const PROP = { NONE: 0, PHONE: 1, CUP: 2 } as const;
+/** prop shown in a hand (pose.spare1): 0 none, 1 phone, 2 coffee cup, 3 newspaper (both hands) */
+export const PROP = { NONE: 0, PHONE: 1, CUP: 2, PAPER: 3 } as const;
 
 const leg: LegSolve = { flex: 0.5, knee: 0.5, ankle: 0.5, reached: true };
 const G = newGaitOut();
@@ -234,10 +234,12 @@ export function computePoseA(m: Member, umbrella: boolean, r: Rig, o: Pose, gs: 
       hipAbdL = (hipAbdL + (0.06 - hipAbdL) * k);
       hipAbdR = (hipAbdR + (0.06 - hipAbdR) * k);
     }
-    const lean = sv === 1 && !m.reading;
-    waistBend = (waistBend + ((m.reading ? -0.1 : lean ? 0.25 : -0.19) - waistBend) * k);
+    const lean = sv === 1 && !m.reading && m.cafe === 0;
+    // at a café table people sit up, a little forward, towards the table
+    const cafeLean = m.cafe > 0 ? (m.reading ? -0.02 : 0.07) : 0;
+    waistBend = (waistBend + ((m.cafe > 0 ? cafeLean : m.reading ? -0.1 : lean ? 0.25 : -0.19) - waistBend) * k);
     chestBend = (chestBend + ((lean ? 0.12 : 0.05 + 0.15 * old) - chestBend) * k);
-    headPitch = (headPitch + ((m.reading ? 0.2 : lean ? -0.25 : 0.05) - headPitch) * k);
+    headPitch = (headPitch + ((m.reading ? 0.2 : lean ? -0.25 : m.cafe > 0 ? 0.12 : 0.05) - headPitch) * k);
     rootY = (rootY + (hipY - r.hip.y - rootY) * k);
     rootZ = (rootZ + (hipZ - rootZ) * k);
     rootX *= 1 - k;
@@ -485,8 +487,163 @@ export function computePoseA(m: Member, umbrella: boolean, r: Rig, o: Pose, gs: 
     reach(r, armR, false, -1, -1, -0.25, 0);
     armR.twist += 0.4 * Math.sin(t * 15.7 + m.seed * 6) * k;
   }
+  // café table: forearms on the table, cup / fork / phone / newspaper, talking with the hands
+  if (m.sit > 0.05 && m.cafe > 0) {
+    const k = kSit;
+    const sc = r.s;
+    const tH = m.tabH / sc,
+      tD = m.tabD / sc;
+    // activity epochs (3–9 s) per patron; a party shares one conversation clock (who is speaking)
+    const tg = t - m.seed * 10; // the renderer adds seed·10 to the time
+    hv = Math.sin(m.seed * 91.7 + 1.9) * 43758.5453;
+    const per = 3 + 6 * (hv - Math.floor(hv));
+    const tt = tg + m.seed * 53;
+    const ep = Math.floor(tt / per);
+    const tin = tt - ep * per;
+    const e0 = Math.min(Math.max(tin / 0.7, 0), 1),
+      e1 = Math.min(Math.max((per - tin) / 0.7, 0), 1);
+    const ek = e0 * e0 * (3 - 2 * e0) * (e1 * e1 * (3 - 2 * e1));
+    hv = Math.sin(m.seed * 127.1 + (ep + 0.5) * 311.7) * 43758.5453;
+    const hr = hv - Math.floor(hv);
+    // conversation turn (party-wide): 4–7 s turns, the speaker is one member
+    const pid = m.party.id;
+    const turn = Math.floor((tg + pid * 7.3) / 5.5);
+    hv = Math.sin(pid * 12.9898 + turn * 78.233) * 43758.5453;
+    const n = m.party.members.length;
+    const speaking = n > 1 && Math.floor((hv - Math.floor(hv)) * n) === m.idx;
+    // activity: 0 rest (forearms on the table), 1 talk, 2 sip, 3 hold cup, 4 eat, 5 phone, 6 read, 7 lean back
+    let act = 0;
+    const prof = m.cafe;
+    if (prof === 3) act = hr < 0.78 ? 6 : hr < 0.9 ? 2 : 0;
+    else if (prof === 4) act = hr < 0.6 ? 5 : hr < 0.8 ? 2 : 3;
+    else if (m.meal && hr < 0.5) act = speaking && hr < 0.15 ? 1 : 4;
+    else if (prof === 1) act = speaking ? (hr < 0.82 ? 1 : 2) : hr < 0.45 ? 0 : hr < 0.7 ? 3 : hr < 0.85 ? 2 : 7;
+    else if (prof === 5) act = hr < 0.35 ? 7 : hr < 0.65 ? 3 : hr < 0.8 ? 2 : 0;
+    else act = speaking ? 1 : hr < 0.35 ? 3 : hr < 0.6 ? 2 : hr < 0.8 ? 0 : 7;
+    const ak = ek * k;
+    // head: towards the companion while talking / listening, down to the paper / phone / plate
+    if (n > 1 && act !== 5 && act !== 6) headYaw = (headYaw + (m.talkYaw * (speaking ? 0.85 : 0.7) - headYaw) * k);
+    if (act === 0 || act === 3) headPitch += 0.04 * Math.sin(tg * 2.3 + m.seed * 9) * k * (speaking ? 0 : 1); // nods
+    if (act === 5) headPitch = (headPitch + (0.45 - headPitch) * ak);
+    if (act === 4) headPitch = (headPitch + (0.3 - headPitch) * ak * 0.6);
+    if (act === 7) {
+      o.waistBend = waistBend = (waistBend + (-0.16 - waistBend) * ak);
+      headPitch = (headPitch + (-0.02 - headPitch) * ak);
+    }
+    // laughing now and then (talkers): head back for a moment
+    hv = Math.sin(m.seed * 33.3 + Math.floor(tg / 2.1) * 17.17) * 43758.5453;
+    if (prof === 1 && !speaking && hv - Math.floor(hv) < 0.06) headPitch -= 0.22 * k;
+    // base: both forearms on the table edge, hands a little in from the edge
+    for (let li = 0; li < 2; li++) {
+      const left = li === 0;
+      const arm = left ? armL : armR;
+      const free = left ? handL || (fl & F.BRIEFCASE) !== 0 : handR || (fl & (F.SHOPBAG | F.CANE)) !== 0;
+      if (!free) continue;
+      RT[0] = (left ? 0.15 : -0.15) * hk;
+      RT[1] = tH + 0.035 / sc;
+      RT[2] = tD + 0.13 / sc;
+      RT[3] = k;
+      reachFig(r, o, arm, left, left ? 1 : -1, -0.6, -0.3, 0.3);
+    }
+    if (act === 6) {
+      // newspaper held open above the table
+      const cy = r.chest.y;
+      RT[0] = 0.215 * hk;
+      RT[1] = cy + 0.06 * hk;
+      RT[2] = 0.36 * hk;
+      RT[3] = ak;
+      reach(r, armL, true, 1, -1, -0.3, 0.9);
+      RT[0] = -0.215 * hk;
+      RT[1] = cy + 0.06 * hk;
+      RT[2] = 0.36 * hk;
+      RT[3] = ak;
+      reach(r, armR, false, -1, -1, -0.3, 0.9);
+      if (ak > 0.3) prop = PROP.PAPER;
+    } else if (act === 5 && handR) {
+      // phone in front of the chest, elbows on the table
+      RT[0] = -0.05 * hk;
+      RT[1] = r.chest.y - 0.06 * hk;
+      RT[2] = 0.27 * hk;
+      RT[3] = ak;
+      reach(r, armR, false, -1, -1, -0.2, 0.6);
+      if (ak > 0.4) prop = PROP.PHONE;
+    } else if ((act === 2 || act === 3) && handR) {
+      // cup: on the table (hand round it) or lifted to the mouth (2 s sips)
+      const ph = (tg * 0.45 + m.seed * 3) % 1;
+      const up = act === 2 ? (ph < 0.3 ? ph / 0.3 : ph < 0.55 ? 1 : ph < 0.8 ? 1 - (ph - 0.55) / 0.25 : 0) : 0;
+      const u = up * up * (3 - 2 * up);
+      RT[0] = -0.11 * hk;
+      RT[1] = tH + 0.05 / sc;
+      RT[2] = tD + 0.17 / sc;
+      RT[3] = ak;
+      reachFig(r, o, armR, false, -1, -0.6, -0.2, 0.85);
+      if (u > 0.01) {
+        // chest rest frame: in front of the mouth
+        RT[0] = -0.035 * hk;
+        RT[1] = r.head.y + 0.0 * hk;
+        RT[2] = r.head.z + 0.13 * hk;
+        RT[3] = ak * u;
+        reach(r, armR, false, -1, -1, -0.3, 0.85);
+        headPitch -= 0.12 * u * ak;
+      }
+      if (ak > 0.3) prop = PROP.CUP;
+    } else if (act === 4 && handR) {
+      // eating: fork from the plate to the mouth every ~3 s, the other hand on the table
+      const ph = (tg * 0.33 + m.seed * 5) % 1;
+      const up = ph < 0.45 ? 0 : ph < 0.6 ? (ph - 0.45) / 0.15 : ph < 0.75 ? 1 : ph < 0.9 ? 1 - (ph - 0.75) / 0.15 : 0;
+      const u = up * up * (3 - 2 * up);
+      RT[0] = -0.07 * hk;
+      RT[1] = tH + 0.06 / sc;
+      RT[2] = tD + 0.2 / sc;
+      RT[3] = ak;
+      reachFig(r, o, armR, false, -1, -0.6, -0.2, 0.7);
+      if (u > 0.01) {
+        RT[0] = -0.03 * hk;
+        RT[1] = r.head.y - 0.01 * hk;
+        RT[2] = r.head.z + 0.12 * hk;
+        RT[3] = ak * u;
+        reach(r, armR, false, -1, -1, -0.3, 0.7);
+      }
+      if (handL) {
+        RT[0] = 0.08 * hk;
+        RT[1] = tH + 0.05 / sc;
+        RT[2] = tD + 0.18 / sc;
+        RT[3] = ak;
+        reachFig(r, o, armL, true, 1, -0.6, -0.2, 0.7);
+      }
+    } else if (act === 1) {
+      // talking with one hand: forearm up, the hand moving from the elbow
+      const left = (m.seed * 7.31) % 1 < 0.3 ? handL : false;
+      const arm = left ? armL : armR;
+      if (left || handR) {
+        const s = left ? 1 : -1;
+        const g1 = Math.sin(tg * 2.7 + m.seed * 11),
+          g2 = Math.sin(tg * 4.1 + m.seed * 5);
+        RT[0] = s * (0.13 + 0.04 * g1) * hk;
+        RT[1] = r.chest.y - (0.07 - 0.05 * g2) * hk;
+        RT[2] = (0.3 + 0.04 * g1) * hk;
+        RT[3] = ak;
+        reach(r, arm, left, s, -1, -0.4, 0.25);
+        arm.twist += 0.35 * g2 * ak;
+        arm.wrist += 0.3 * g1 * ak;
+      }
+    } else if (act === 7 && handL && handR) {
+      // leaning back, arms crossed
+      const cy = r.chest.y;
+      RT[0] = 0.1 * hk;
+      RT[1] = cy - 0.05 * hk;
+      RT[2] = 0.17 * hk;
+      RT[3] = ak;
+      reach(r, armR, false, -1, -0.7, 0, 0.8);
+      RT[0] = -0.11 * hk;
+      RT[1] = cy - 0.09 * hk;
+      RT[2] = 0.155 * hk;
+      RT[3] = ak;
+      reach(r, armL, true, 1, -0.7, 0, 0.8);
+    }
+  }
   // bench: hands on the thighs / the newspaper / the backrest / the lap
-  if (m.sit > 0.05) {
+  if (m.sit > 0.05 && m.cafe === 0) {
     const k = kSit;
     if (m.reading) {
       const cy = r.chest.y;

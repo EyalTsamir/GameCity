@@ -5,6 +5,21 @@
 
 import * as THREE from 'three';
 import type { SkyState } from './palette';
+import { SKY_LUT_GLSL } from './physical';
+
+/** world mode: the physical sky the environment is baked from (set by the sky module) */
+export interface EnvPhysical {
+  lut: THREE.Texture;
+  scale: number;
+  nightZen: THREE.Color;
+  nightHor: THREE.Color;
+  nightW: number;
+  /** broad sun glow (the fog's sun lobe) */
+  lobe: THREE.Color;
+  lobeExp: number;
+  /** saturation of the sky part of the fill (1 = as seen) */
+  sat: number;
+}
 
 const VERT = /* glsl */ `
 varying vec3 vDir;
@@ -25,10 +40,29 @@ uniform vec3 uSunCol;
 uniform float uSunI;
 uniform vec3 uCity;
 varying vec3 vDir;
+#ifdef TH_PHYS
+uniform sampler2D uSkyLUT;
+uniform float uSkyScale;
+uniform vec3 uNightZen;
+uniform vec3 uNightHor;
+uniform float uNightW;
+uniform vec3 uLobe;
+uniform float uLobeExp;
+uniform float uSkySat;
+${SKY_LUT_GLSL}
+#endif
 void main() {
   vec3 d = normalize(vDir);
   float y = d.y;
   float up = clamp(y, 0.0, 1.0);
+#ifdef TH_PHYS
+  // the physical sky as shown by the dome (horizon band: the LUT just above it)
+  vec3 col = thSkyLUT(uSkyLUT, vec3(d.x, max(d.y, 0.01), d.z), uSunDir) * uSkyScale;
+  col += mix(uNightHor, uNightZen, smoothstep(0.0, 1.0, pow(up, 0.55))) * uNightW;
+  float l = dot(col, vec3(0.2126, 0.7152, 0.0722));
+  col = mix(vec3(l), col, uSkySat);
+  col += uLobe * pow(max(dot(d, uSunDir), 0.0), uLobeExp);
+#else
   vec3 col = mix(uHorizon, uZenith, smoothstep(0.0, 1.0, pow(up, 0.55)));
   vec3 sd = normalize(vec3(uSunDir.x, max(uSunDir.y, -0.25), uSunDir.z));
   float az = dot(normalize(d.xz + vec2(1e-5)), normalize(sd.xz + vec2(1e-5))) * 0.5 + 0.5;
@@ -36,6 +70,7 @@ void main() {
   col += uGlow * uGlowI * pow(az, 3.0) * band;
   // broad bright region around the sun (no hard disc: the direct light owns the highlight)
   col += uSunCol * uSunI * pow(max(dot(d, uSunDir), 0.0), 8.0) * 0.6;
+#endif
   // below the horizon: the lit city / ground bounce, with a warm glow at night
   float below = smoothstep(0.02, -0.12, y);
   vec3 groundCol = uGround + uCity * smoothstep(0.0, -0.5, y);
@@ -62,8 +97,10 @@ export class EnvironmentBaker {
   bakes = 0;
   /** studio key: smaller sun lobe and a slightly desaturated sky in the fill (false = original) */
   studio = true;
+  /** world mode: bake from the physical sky (null = the painted gradient) */
+  phys: EnvPhysical | null = null;
 
-  constructor(private renderer: THREE.WebGLRenderer, private size = 128) {
+  constructor(private renderer: THREE.WebGLRenderer, private size = 128, physical = false) {
     this.pmrem = new THREE.PMREMGenerator(renderer);
     this.material = new THREE.ShaderMaterial({
       name: 'SkyEnv',
@@ -77,7 +114,16 @@ export class EnvironmentBaker {
         uSunCol: { value: new THREE.Color() },
         uSunI: { value: 0 },
         uCity: { value: new THREE.Color() },
+        uSkyLUT: { value: null },
+        uSkyScale: { value: 1 },
+        uNightZen: { value: new THREE.Color() },
+        uNightHor: { value: new THREE.Color() },
+        uNightW: { value: 0 },
+        uLobe: { value: new THREE.Color() },
+        uLobeExp: { value: 8 },
+        uSkySat: { value: 1 },
       },
+      defines: physical ? { TH_PHYS: '' } : {},
       vertexShader: VERT,
       fragmentShader: FRAG,
       side: THREE.BackSide,
@@ -127,6 +173,17 @@ export class EnvironmentBaker {
     // broad sun lobe: the direct light already models the sun side, so the studio key keeps it small
     u.uSunI.value = sunVis * (this.studio ? Math.min(1.1, state.sunI * 0.25) : Math.min(1.5, state.sunI * 0.35));
     (u.uCity.value as THREE.Color).setRGB(1.0, 0.6, 0.32).multiplyScalar(0.08 * cityGlow);
+    const ph = this.phys;
+    if (ph) {
+      u.uSkyLUT.value = ph.lut;
+      u.uSkyScale.value = ph.scale;
+      (u.uNightZen.value as THREE.Color).copy(ph.nightZen);
+      (u.uNightHor.value as THREE.Color).copy(ph.nightHor);
+      u.uNightW.value = ph.nightW;
+      (u.uLobe.value as THREE.Color).copy(ph.lobe);
+      u.uLobeExp.value = ph.lobeExp;
+      u.uSkySat.value = ph.sat;
+    }
 
     // three's GGX prefilter shader trips a benign HLSL constant-folding warning
     // (X4122) on ANGLE/D3D; it is compiled exactly once (fixed PMREM size), so skip

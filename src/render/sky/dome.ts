@@ -50,6 +50,7 @@ uniform float uSkyScale;
 uniform vec3 uNightZen;
 uniform vec3 uNightHor;
 uniform float uNightW;
+uniform vec3 uDiscCol;
 ${SKY_LUT_GLSL}
 #endif
 
@@ -98,6 +99,8 @@ void main() {
   // physical sky (single scattering LUT, earth shadow at twilight) + the authored moonlit night sky
   vec3 col = thSkyLUT(uSkyLUT, d, uSunDir) * uSkyScale;
   col += mix(uNightHor, uNightZen, smoothstep(0.0, 1.0, pow(up, 0.55))) * uNightW;
+  // the glow of sunlit haze around the sun: exactly the fog's sun lobe (continues below the horizon)
+  col += thSunLobe(d) * thAtmo[10].y;
 #else
   // painted gradient: broad horizon band easing into the zenith colour
   vec3 col = mix(uHorizon, uZenith, smoothstep(0.0, 1.0, pow(up, 0.55)));
@@ -147,8 +150,13 @@ void main() {
   float a = max(1.0 - ca, 0.0);
   float r2 = 2.6e-4 * uDiscScale;
   float disc = smoothstep(r2 * 1.25, r2 * 0.75, a);
+#ifdef TH_PHYS
+  // physical sun: its colour after the atmosphere; the glare around it is the sun lobe (above)
+  col += uDiscCol * (disc * uSunDisc + exp(-a * 2500.0) * 0.6) * uSunVis * aboveH * (1.0 - uOvercast * 0.85);
+#else
   float halo = exp(-a * 900.0) * 0.5 + exp(-a * 90.0) * 0.18;
   col += uSunCol * (disc * uSunDisc + halo) * uSunVis * aboveH * (1.0 - uOvercast * 0.85);
+#endif
 
   // moon: textured disc + faint halo
   if (uMoonVis > 0.001) {
@@ -179,7 +187,7 @@ export interface SkyDome {
   mesh: THREE.Mesh;
   material: THREE.ShaderMaterial;
   /** world mode, physical sky: LUT, scale, night gradient (zenith, horizon) and its weight */
-  setPhysical(lut: THREE.Texture, scale: number, nightZen: THREE.Color, nightHor: THREE.Color, nightW: number): void;
+  setPhysical(lut: THREE.Texture, scale: number, nightZen: THREE.Color, nightHor: THREE.Color, nightW: number, discCol: THREE.Color, zenith: THREE.Color, horizon: THREE.Color): void;
   update(state: SkyState, sunDir: THREE.Vector3, moonDir: THREE.Vector3, sunVis: number, moonVis: number, time: number, overcast: number): void;
   /** studio backdrop: below-horizon colour (already overcast-adjusted) or null for the legacy haze */
   setStudio(cyc: THREE.Color | null): void;
@@ -214,6 +222,7 @@ export function createSkyDome(world = false, phys = false): SkyDome {
     uNightZen: { value: new THREE.Color() },
     uNightHor: { value: new THREE.Color() },
     uNightW: { value: 0 },
+    uDiscCol: { value: new THREE.Color(1, 1, 1) },
   };
   const material = new THREE.ShaderMaterial({
     name: 'SkyDome',
@@ -261,12 +270,16 @@ export function createSkyDome(world = false, phys = false): SkyDome {
       uniforms.uTime.value = time;
       uniforms.uOvercast.value = overcast;
     },
-    setPhysical(lut, scale, nightZen, nightHor, nightW) {
+    setPhysical(lut, scale, nightZen, nightHor, nightW, discCol, zenith, horizon) {
       uniforms.uSkyLUT.value = lut;
       uniforms.uSkyScale.value = scale;
       uniforms.uNightZen.value.copy(nightZen);
       uniforms.uNightHor.value.copy(nightHor);
       uniforms.uNightW.value = nightW;
+      uniforms.uDiscCol.value.copy(discCol);
+      // what other modules read from the dome (water reflections): the sky actually shown
+      uniforms.uZenith.value.copy(zenith);
+      uniforms.uHorizon.value.copy(horizon);
     },
     setStudio(cyc) {
       if (cyc) {
