@@ -17,6 +17,7 @@ import { validateWorld } from './debug/validate';
 const MODULES: [string, () => Promise<{ default: ModuleFactory }>][] = [
   ['sky', () => import('./render/sky')],
   ['terrain', () => import('./world/terrain')],
+  ['landscape', () => import('./world/landscape')],
   ['water', () => import('./world/water')],
   ['ambient', () => import('./sim/ambient')],
   ['roads', () => import('./world/roads')],
@@ -25,6 +26,8 @@ const MODULES: [string, () => Promise<{ default: ModuleFactory }>][] = [
   ['harbor', () => import('./world/harbor')],
   ['vegetation', () => import('./world/vegetation')],
   ['props', () => import('./world/props')],
+  ['groundcover', () => import('./world/groundcover')],
+  ['life', () => import('./world/life')],
   ['lamps', () => import('./world/lamps')],
   ['traffic', () => import('./sim/traffic')],
   ['pedestrians', () => import('./sim/pedestrians')],
