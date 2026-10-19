@@ -1,13 +1,14 @@
 # world-foliage — leafy, living trees (world round, workstream 4)
 
 ## Resume here (update after EVERY step)
-* 2026-10-19 15:40 — M1 code written, typechecks: `vegetation/atlas.ts` (canvas leaf atlas, 22 regions,
-  coverage-preserving mips), `foliage.ts` (InstBuf, card/wood instanced layers, shaders, LodTexture),
-  `crowns.ts` (KINDS table, structure() broadleaf/cone/palm/bush, emitFar/emitNear), vegetation.ts wiring
-  (plants registry → far static at boot, near lazily per frame `updateNear`, `?noleafcards` = old hulls).
-  material.ts now exports NOISE_GLSL + wrappedPhysicalPars. Before captures: shots/world/foliage/before/
-  (+ before_sheet.png). NEXT: first browser test (shader compile!), fix, capture eye-level + overview.
-* No jobs running.
+* 2026-10-19 20:35 — RESUMED after usage-limit stop + reboot. M1 code is in and runs (first test
+  shots/world/foliage/t1_park.png: cards + needle sprays render; ground was white = ground agent's shader error).
+  Fixed since: wood shader vNormal → vThWN varying; buildMips rewritten (per-level push-pull, alpha histogram).
+  Told lead (seam): I extend my hill forest a ~45 m band beyond the slab N edge (z −190…−235) via
+  landscape.cover().forest/height; world starts its trees at z < −225 with a ramp (M3 task).
+  Node bench harness: scratchpad/bench (`node --experimental-transform-types --import ./register.mjs bench*.ts`).
+  Quiet machine: atlas mips ~1.4 s (stub data) — still too slow; near gen ~0.6–1.9 ms/plant; far ~1.2 ms/plant.
+  NEXT: atlas timing split (paint vs mips) in browser, optimise; first real look at eye level + overview; tune.
 
 ## Brief (from WORLD-PLAN.md + briefs)
 Owns `src/world/vegetation.ts` + `src/world/vegetation/*`. Trees are smooth faceted blobs (lollipops from afar,

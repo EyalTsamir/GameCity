@@ -170,7 +170,7 @@ const COAST_CTRL: [number, number][] = [
   [2100, 14000],
 ];
 
-const ISLAND = { x: 2350, z: -480, r: 420, peak: 135 };
+const ISLAND = { x: 2250, z: -560, r: 640, peak: 230 };
 
 /** villages, hamlets, farmsteads (flattened ground, buildings in landscape/settlements.ts) */
 function buildSites(model: { world0(x: number, z: number): number; isWaterW(x: number, z: number): boolean }): Site[] {
@@ -373,14 +373,17 @@ export function createLandscapeModel(slabHeight: SlabHeight): LandscapeModel {
     const dx = x - ISLAND.x,
       dz = z - ISLAND.z;
     const a = Math.atan2(dz, dx);
-    const rr = ISLAND.r * (0.78 + 0.32 * vnoise(Math.cos(a) * 2.2 + 5, Math.sin(a) * 2.2 + 5, 41) + 0.12 * Math.sin(a * 3 + 1));
-    const d = Math.hypot(dx * 0.85, dz * 1.2) / rr; // elongated N-S... rather E-W
+    const rr = ISLAND.r * (0.72 + 0.36 * vnoise(Math.cos(a) * 2.2 + 5, Math.sin(a) * 2.2 + 5, 41) + 0.14 * Math.sin(a * 3 + 1));
+    // a long rocky island running N-S (a ridge with two summits)
+    const d = Math.hypot(dx * 1.55, dz * 0.62) / rr;
     if (d > 1.6) return -1e3;
     const core = 1 - smooth(0, 1, d);
-    const hill = ISLAND.peak * Math.pow(core, 1.6) * (0.75 + 0.5 * ridged(x / 260, z / 260, 3, 42));
-    // shore: cliffs on the east, a small beach on the west
-    const shore = WL + (1 - d) * 60 * lerp(0.4, 1.2, smooth(-0.3, 0.6, Math.cos(a)));
-    return Math.min(Math.max(hill, shore), shore + hill) - (d > 1 ? (d - 1) * 40 : 0);
+    const twin = 0.75 + 0.25 * Math.cos((dz / rr) * 5.2 + 0.6);
+    const hill = ISLAND.peak * Math.pow(core, 1.25) * twin * (0.7 + 0.55 * ridged(x / 300, z / 300, 4, 42));
+    // shore: tall cliffs facing the open sea (east), a cove with a beach on the town side (west)
+    const sea = smooth(-0.4, 0.5, Math.cos(a));
+    const shore = WL + (1 - d) * lerp(25, 260, sea);
+    return Math.min(Math.max(hill, shore), shore + hill * 0.6) - (d > 1 ? (d - 1) * 60 : 0);
   }
 
   const water0 = (x: number, z: number) => world0(x, z, false) < WL - 0.02;

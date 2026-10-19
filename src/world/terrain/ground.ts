@@ -655,6 +655,9 @@ vec3 groundColor() {
   vec4 cv = texture2D( tGcCover, muv );
   vec4 fw = texture2D( tGcFlower, muv );
   float len = mix( smoothstep( 0.08, 0.75, wild ) * 0.8, cv.g, uGcOn );
+  // unmown margin along the west / south slab edges (meets the landscape's meadows without a line)
+  float dEdge = min( p.x - uSlabXf.x, uSlabXf.y + 1.0 / uSlabXf.w - p.z );
+  len = max( len, 0.72 * ( 1.0 - smoothstep( 3.0, 10.0, dEdge ) ) );
   float kept = 1.0 - smoothstep( 0.18, 0.4, len );   // mown lawn
   float hab = cv.b * 255.0;
   float wetA = uGcOn * clamp( hab / 100.0, 0.0, 1.0 ) * ( 1.0 - step( 120.0, hab ) );

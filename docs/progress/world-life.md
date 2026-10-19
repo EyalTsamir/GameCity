@@ -1,18 +1,20 @@
 # world-life — wind consumers, smoke, birds, small motion (world round)
 
 ## Resume here
-* 2026-10-19 ~16:40 — M1 in progress. Written + typechecking: `src/world/life.ts`, `life/glsl.ts` (line +
-  cloth GLSL), `life/cloth.ts` (ClothSystem: cloth / wires / bulbs, 3 draws + 1 shadow), `life/decor.ts`
-  (street lines generated from `buildings.facades` in oldtown+market, several per facing pair, zig-zags,
-  tree/lamp avoidance; court spans → laundry (market court → bunting); balcony laundry → cloth, then
-  `buildings.setStaticLaundry(false)`). Landmark FLAG mode (src/world/landmarks/shaders.ts) now on
-  `thWindAt(pivot)` with calm droop. First shot OK: shots/world/life/m1/t1.png (prayer flags + festoon
-  across an old-town street; only 4 wear spans then — now generated from facades).
-* Running: test shot t2 (shots/world/life/m1/t2.png/.json, only=…,vegetation,props,life).
-* Baseline captures on 5174 time out at 300 s under load (capture-set has a fixed 300 s ready timeout) —
-  use shot.mjs --timeout 900000 for before shots later.
-* Next: judge t2; M2 smoke (smoke.ts shader/wind upgrade + `life/chimneys.ts` emitters from
-  buildings.chimneys / vents, props.bbqs with schedules); then laundry on props.washing (+ props.setStaticLaundry(false)).
+* 2026-10-19 20:40 (after the usage-limit stop + reboot) — M1 + M2 code written, typechecking:
+  - M1 cloth: `src/world/life.ts`, `life/glsl.ts`, `life/cloth.ts`, `life/decor.ts` (street lines from
+    `buildings.facades` in oldtown+market; court spans → laundry; balcony laundry → cloth +
+    `buildings.setStaticLaundry(false)`); landmark FLAG mode on `thWindAt` + calm droop
+    (src/world/landmarks/shaders.ts). Shot t2 (shots/world/life/m1/t2.png): bunting + festoons read well.
+    Only ~8 street lines exist (old town has 2 inner streets; facing fronts are rare) → plan: market masts
+    with radiating lines, pole flags, maybe lamp-post zig-zags.
+  - M2 smoke: `sim/ambient/smoke.ts` (windAt gusts + height shear, HG forward scatter, erosion, dither,
+    emitter distance LOD, `opacity` option, soft depth via `postfx.softDepth()` (`?nosoftsmoke` off),
+    MAX 1400); `life/chimneys.ts` (buildings.chimneys/vents + props.bbqs with day schedules).
+* Running: capture set → shots/world/life/m2a (log shots/world/life/m2a.log), private copy of capture-set
+  with a 25-min ready timeout: scratchpad/life/cap.mjs (recreate: sed of scripts/capture-set.mjs, see log).
+* Next: judge m2a; pennant twist variation; market masts + radiating festoons; rotary-dryer laundry
+  (props.washing + props.setStaticLaundry(false)); pole flags (harbour, beach, hotel facades).
 
 ## Brief (from WORLD-PLAN.md §6 + briefs)
 Wind consumers: flags on poles flap, bunting / festoon strings across old-town streets and the market,

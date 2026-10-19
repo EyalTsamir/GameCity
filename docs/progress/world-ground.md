@@ -1,20 +1,17 @@
 # world-ground — grass, meadows, flowers, weeds, litter, reeds (world round)
 
 ## Resume here
-* 2026-10-19 ~16:45 — M1 code written (first pass), iterating on the first captures:
-  - `src/world/groundcover/mask.ts` (cover maps tCover/tFlower/tGH + tile metadata + flower patches),
-    `groundcover/palette.ts` (shared grass palette GLSL), `groundcover/field.ts` (rings A/B/C, blade
-    vertex shader, translucency RE wrapper, CPU tile walker), `groundcover.ts` (module, service, chained
-    scene.onBeforeRender for the tile walk with the final camera).
-  - `terrain/ground.ts`: exports `groundMaskInfo` (CPU mask copy), `setGroundCover()`,
-    `setGroundBladeFade()`; v2 grass section rewritten on the shared palette (cover-map length class,
-    flowers dots/tint, litter, gust sheen, presence darkening under the rings, RE_Direct_Ground glow).
-  - Fixed: duplicated RE_Direct_Ground (broke terrain for everyone ~16:30 — lead informed), blades had no
-    normal attribute → three auto-defined FLAT_SHADED (now uses vGcN world normal in the fragment).
-  - Open: maps took 21.8 s at boot (busy machine) → phase timings added (stats.groundcover.mapsPhases),
-    canvas blur filters replaced by a JS box blur. Capture t2 (only=sky,terrain,groundcover,camera) running.
-* Next: read t2 (errors, mapsPhases, look), fix, then judge park/bank/hill eye level + overview.
-* Capture helper: scratchpad gcap.mjs (copy kept in this log's "Tools" if the scratchpad is lost).
+* 2026-10-19 20:35 — resumed after the usage-limit stop + container reboot (everything committed up to
+  fe25a85). M1 code in place and rendering (t2 shots: lawn fuzz + lawn flowers, meadow with poppies /
+  cornflowers, reeds round the pond). Cover maps rewritten on a typed-array rasteriser
+  (`groundcover/raster.ts`) — the canvas version cost 38 s at boot on the loaded machine.
+* Running: t3 capture (only=sky,terrain,landscape,water,roads,vegetation,groundcover,postfx,camera;
+  park_eye, bank_eye, park_mid, hill_eye, overview @11 h) → shots/world/ground/t3 (+ mapsPhases in stats).
+* Next: (1) read t3: map boot time, look; (2) slab-edge seam reported by world (lawn lighter than their
+  meadow at x=−200 / z=150): blend to meadow length + tone within ~10 m of the W/S slab edges, align
+  gcMeadowA with world's cMeadow #68833e, offer world the shared palette GLSL; (3) tune colours
+  (bank meadow far too golden/straw, reeds too flowery, lawn pale), then eye-level judgement.
+* Capture helper: shots/world/ground/gcap.mjs (copy of the scratchpad script).
 
 ## Brief (from WORLD-PLAN.md + world-briefs.md "### ground")
 Owner of `src/world/terrain/ground.ts` (+ its mask), `src/world/groundcover.ts` + `src/world/groundcover/*`.

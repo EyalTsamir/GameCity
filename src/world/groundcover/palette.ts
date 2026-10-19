@@ -22,7 +22,7 @@ export function createPalette() {
     gcLawnSun: C('#7e9a45'),
     gcLawnDry: C('#a29e60'),
     // long grass / meadows: green ↔ olive, straw where dry or in seed
-    gcMeadowA: C('#68873c'),
+    gcMeadowA: C('#68833e'),
     gcMeadowB: C('#86894a'),
     gcStraw: C('#c3ae78'),
     // damp shore grass, reeds, dune marram

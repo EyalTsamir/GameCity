@@ -159,6 +159,7 @@ varying vec4 vColor;
 varying vec2 vRot;
 varying vec2 vAgeGlow;
 varying float vH;
+varying vec2 vSoft; // view depth of the puff, soft range
 void main() {
   vec4 mvPosition = viewMatrix * vec4(iPosSize.xyz, 1.0);
   float c = cos(iMisc.x), s = sin(iMisc.x);
@@ -174,6 +175,7 @@ void main() {
   vRot = vec2(c, s);
   vAgeGlow = iMisc.zw;
   vH = iPosSize.y;
+  vSoft = vec2(-mvPosition.z, clamp(r * 0.7, 0.25, 3.0));
   gl_Position = projectionMatrix * mvPosition;
   if (vColor.a < 0.003) gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
   #include <fog_vertex>
@@ -193,6 +195,9 @@ uniform vec3 uRight;
 uniform vec3 uUp;
 uniform vec3 uBack;
 uniform float uScatter;
+uniform sampler2D uDepth;
+uniform vec4 uDepthInfo; // width, height, near, far (width 0 = no soft depth)
+varying vec2 vSoft;
 varying vec2 vUv;
 varying vec4 vColor;
 varying vec2 vRot;
@@ -209,6 +214,13 @@ void main() {
   float er = age * age * 0.7;
   float cov = smoothstep(er, er + 0.32, t.a);
   float a = cov * vColor.a;
+  // soft particles: fade where the puff meets the scene (previous frame's depth from postfx)
+  if (uDepthInfo.x > 0.5) {
+    float dz = texture2D(uDepth, gl_FragCoord.xy / uDepthInfo.xy).r;
+    float sceneZ = uDepthInfo.z * uDepthInfo.w / (uDepthInfo.w - dz * (uDepthInfo.w - uDepthInfo.z));
+    float x = clamp((sceneZ - vSoft.x) / vSoft.y, 0.0, 1.0);
+    a *= x * x * (3.0 - 2.0 * x);
+  }
   // dither against 8-bit banding in thin smoke
   a += (fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453) - 0.5) * (2.0 / 255.0);
   if (a < 0.004) discard;
@@ -304,6 +316,8 @@ export function createSmoke(ctx: CityContext): SmokeSystem {
       uUp: { value: new THREE.Vector3(0, 1, 0) },
       uBack: { value: new THREE.Vector3(0, 0, 1) },
       uScatter: { value: 0.22 },
+      uDepth: { value: null },
+      uDepthInfo: { value: new THREE.Vector4(0, 0, 1, 1000) },
     },
   ]);
   uniforms.uTex.value = makePuffAtlas(rng.fork('atlas'));
@@ -457,6 +471,7 @@ export function createSmoke(ctx: CityContext): SmokeSystem {
   };
 
   const density = () => 0.6 + 0.4 * Math.min(1, Math.max(0.4, ctx.quality.density));
+  const softOff = ctx.debug.params.has('nosoftsmoke');
 
   return {
     service,
@@ -613,6 +628,17 @@ export function createSmoke(ctx: CityContext): SmokeSystem {
       (u.uRight.value as THREE.Vector3).set(e[0], e[1], e[2]);
       (u.uUp.value as THREE.Vector3).set(e[4], e[5], e[6]);
       (u.uBack.value as THREE.Vector3).set(e[8], e[9], e[10]);
+      // soft particles: the previous frame's scene depth (postfx loads after us — look it up lazily)
+      const pf = ctx.services.postfx as { softDepth?: () => { texture: THREE.Texture; linear: boolean; near: number; far: number; width: number; height: number } | null } | undefined;
+      const sd = softOff ? null : (pf?.softDepth?.() ?? null);
+      const di = u.uDepthInfo.value as THREE.Vector4;
+      if (sd && !sd.linear) {
+        u.uDepth.value = sd.texture;
+        di.set(sd.width, sd.height, sd.near, sd.far);
+      } else {
+        u.uDepth.value = null;
+        di.x = 0;
+      }
     },
     stats() {
       return { smokePuffs: MAX - freeTop, smokeBudget: budget(), smokeEmitters: emitters.length, smokeDropped: dropped, smokeRateScale: Math.round(rateScale * 100) / 100, smokeSpawned: spawnedTotal };
