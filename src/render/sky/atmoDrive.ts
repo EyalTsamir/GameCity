@@ -36,7 +36,7 @@ const BLUE_AIR = 1.8;
 /** Mie phase in the LUT: isotropic — the forward peak depends on the TRUE scattering angle, so it lives
  *  in the analytic sun lobe (dome and fog alike), never in the azimuth-only horizon ring */
 const SKY_G = 0;
-const SKY_MS = 0.12;
+const SKY_MS = 0.3;
 /** scene-unit luminance of the clear noon sky 3° above the horizon, 90° from the sun */
 const SKY_HORIZON_L = 0.52;
 /** elevation of the horizon ring: the sky ~3° up (the true horizon is a long, reddened, yellowish path) */
@@ -222,10 +222,10 @@ export class AtmosphereDriver {
     p.sunDir.copy(this.sd);
     if (this.lut) {
       const vis = sunVis * (1 - overcast * 0.7);
-      p.lobeExp = 7;
-      p.lobeColor.copy(state.sun).multiplyScalar(Math.min(4.5, state.sunI) * vis * (0.03 + 0.09 * state.glowI));
-      p.lobe2 = 2.2;
-      p.lobe2Exp = 90;
+      p.lobeExp = 11;
+      p.lobeColor.copy(state.sun).multiplyScalar(Math.min(4.5, state.sunI) * vis * (0.022 + 0.055 * state.glowI));
+      p.lobe2 = 2.4;
+      p.lobe2Exp = 140;
     } else {
       // painted sky: its narrow glow toward the sun (pow 24, 0.6·band at the horizon) + a little haze
       p.lobeExp = 18;

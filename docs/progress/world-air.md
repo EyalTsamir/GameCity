@@ -4,6 +4,15 @@ Owner: **air** agent (world round). Files: `src/render/**` except `src/render/st
 `src/render/atmosphere.ts`. Never git-writes; the lead commits.
 
 ## Resume here
+* 2026-10-20 01:35 (3rd stop + reboot; all files intact, committed dc885c7). sky2 judged
+  (shots/world/air/sky2_11.png, sky2_gold.png): noon sky properly blue, ridges in blue layers ✓; golden
+  hour = sepia (AgX Golden CDL far too strong, isotropic MS term coloured by the REDDENED sunlight, sun
+  lobe too wide) → fixed: MS = re-scattered blue SKYLIGHT (`msLight`, physical.ts + twin, SKY_MS 0.3),
+  golden CDL gk 0.32→0.14, lobe exp 11 / 0.022+0.055·glowI. Clouds = flat white pebbles (2.5D cannot do
+  flat bases + domed sunlit tops) → NEXT: raymarched cumulus slab at half res (`sky/cloudVolume.ts`,
+  rendered by postfx before the composer, composited by the dome; cirrus stays 2D in the dome).
+* Running: sky3 (skycap hz_n/hz_w/up_ne × 11/18.2/19.3/21.5), m3a (vista/overview/riverbend/coast × 11/18.2).
+
 * 2026-10-19 16:30 — M1 code written, render typecheck clean (`npx tsc --noEmit -p <scratch>/air/../tsconfig.air.json`
   = render-only config in the scratchpad, 20 s; whole project takes 5 min):
   new `render/atmosphere.ts`, `render/sky/atmoDrive.ts`; edits in `sky.ts` (install + driver + world fitter /

@@ -93,14 +93,14 @@ export function buildOuterMaps(ctx: CityContext): OuterMaps | null {
       cov[o + 6] = tmp.wet;
     }
   }
-  const HG = 1;
+  const HG = 2;
   const hw = Math.round(W / HG) + 1,
     hh = Math.round(D / HG) + 1;
   const lat = new Float32Array(hw * hh);
   for (let j = 0; j < hh; j++) for (let i = 0; i < hw; i++) {
     const x = x0 + i * HG,
       z = z0 + j * HG;
-    lat[j * hw + i] = inSlab(x, z, 2) ? 0 : land.height(x, z);
+    lat[j * hw + i] = inSlab(x, z, 3) ? 0 : land.height(x, z);
   }
   const cs = new Float32Array(7);
   const coverAt = (x: number, z: number) => {

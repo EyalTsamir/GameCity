@@ -403,8 +403,11 @@ const RE_GRASS = /* glsl */ `
 void RE_Direct_Grass( const in IncidentLight directLight, const in vec3 geometryPosition, const in vec3 geometryNormal, const in vec3 geometryViewDir, const in vec3 geometryClearcoatNormal, const in PhysicalMaterial material, inout ReflectedLight reflectedLight ) {
   RE_Direct_Physical( directLight, geometryPosition, geometryNormal, geometryViewDir, geometryClearcoatNormal, material, reflectedLight );
   float back = saturate( - dot( geometryViewDir, directLight.direction ) );
-  float tr = ( pow( back, 5.0 ) * 1.5 + 0.3 * saturate( - dot( geometryNormal, directLight.direction ) ) ) * vGcTrans * uGcTrans;
-  reflectedLight.directDiffuse += directLight.color * material.diffuseColor * vec3( 1.05, 1.1, 0.8 ) * tr * RECIPROCAL_PI * 2.2;
+  // forward-scattered sun through thin blades: a broad glow when looking toward a low sun, plus
+  // diffuse transmission whenever the sun lights the far side of the blade
+  float lobe = pow( back, 3.0 ) * 1.4 + pow( back, 12.0 ) * 1.6;
+  float tr = ( lobe + 0.35 * saturate( - dot( geometryNormal, directLight.direction ) ) ) * vGcTrans * uGcTrans;
+  reflectedLight.directDiffuse += directLight.color * material.diffuseColor * vec3( 1.1, 1.12, 0.72 ) * tr * RECIPROCAL_PI * 2.4;
 }
 #undef RE_Direct
 #define RE_Direct RE_Direct_Grass

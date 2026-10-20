@@ -44,7 +44,7 @@ export interface Kind {
 
 const KIND_TABLE = {
   // broadleaf city / park trees
-  linden: { form: ['dome', 'oval', 'dome', 'irregular'], tile: 'broad', dense: 'broadDense', leaf: ['#4f8a33', '#55913a', '#5a9636', '#4c8538', '#5f9a3a'], bark: ['#5a4a3c', '#625040', '#55463a'], pattern: 0.1, clear: [0.26, 0.34], girth: 1, card: 0.46, density: 1.25, gloss: 0.25, trans: 0.9, flutter: 1, moss: 0.25 },
+  linden: { form: ['dome', 'oval', 'dome', 'irregular'], tile: 'broad', dense: 'broadDense', leaf: ['#4f8a33', '#55913a', '#5a9636', '#4c8538', '#5f9a3a'], bark: ['#5a4a3c', '#625040', '#55463a'], pattern: 0.1, clear: [0.26, 0.34], girth: 1, card: 0.46, density: 1.5, gloss: 0.25, trans: 0.9, flutter: 1, moss: 0.25 },
   maple: { form: ['dome', 'spread', 'irregular'], tile: 'plane', dense: 'broadDense', leaf: ['#5a9238', '#62983b', '#4f8a36'], bark: ['#5e5048', '#6a5a4c'], pattern: 0.3, clear: [0.24, 0.32], girth: 0.95, card: 0.48, density: 1.2, gloss: 0.2, trans: 1, flutter: 1.1, moss: 0.2 },
   oak: { form: ['spread', 'irregular', 'dome'], tile: 'oak', dense: 'broadDense', leaf: ['#4a7a30', '#52823a', '#466f2e'], bark: ['#4e4238', '#57493c'], pattern: 0.1, clear: [0.2, 0.28], girth: 1.25, card: 0.46, density: 1.25, gloss: 0.15, trans: 0.75, flutter: 0.8, moss: 0.45 },
   plane: { form: ['vase', 'spread', 'irregular'], tile: 'plane', dense: 'broadDense', leaf: ['#5b8f35', '#64963a', '#55892f'], bark: ['#8a8470', '#958c74'], pattern: 0.5, clear: [0.3, 0.38], girth: 1.1, card: 0.55, density: 1.1, gloss: 0.2, trans: 1, flutter: 1, moss: 0 },
@@ -336,7 +336,7 @@ function broadStruct(st: Struct, rng: Rng): void {
   st.cardHalf = kind.card * Math.min(1.3, Math.max(0.72, r / 2.5));
   // trunk(s)
   const age = def.age ?? 0.5;
-  const r0 = Math.max(0.07, Math.min(0.55, (0.028 * h + 0.03 * r) * kind.girth * (0.8 + 0.4 * age)));
+  const r0 = Math.max(0.06, Math.min(0.42, (0.016 * h + 0.022 * r) * kind.girth * (0.8 + 0.45 * age)));
   const trunkTop: V3 = [x + lx * 0.75, y + clear + Rv * (form === 'umbrella' ? 0.75 : form === 'column' ? 0.2 : 0.3), z + lz * 0.75];
   const stems: { base: V3; top: V3; r: number }[] = [];
   const multi = kind.stems && rng.chance(kind.stems[0]) ? rng.int(2, kind.stems[1]) : 1;
@@ -409,9 +409,9 @@ function broadStruct(st: Struct, rng: Rng): void {
       const br0 = Math.max(0.018, lr * 0.42);
       st.segs.push({ a: tgt, b, ra: br0, rb: Math.max(0.008, br0 * 0.3), sa: sA, sb: sB, near: true, aoA: 0.5, aoB: 0.75 });
       // tips along the branch; curtains for weeping forms
-      const nt = 3;
+      const nt = 4;
       for (let q = 0; q < nt; q++) {
-        const f = 0.45 + (q / (nt - 1)) * 0.55;
+        const f = 0.35 + (q / (nt - 1)) * 0.65;
         const p = lerp3(tgt, b, f);
         // a little sideways scatter so clusters don't line up on the branch
         p[0] += rng.range(-0.18, 0.18) * lobeR;
@@ -739,12 +739,12 @@ export function emitFar(st: Struct, ref: PlantRef, cards: InstBuf, woodBuf: Inst
   st.lobes.forEach((L, li) => {
     const lobeR = (L.rx + L.ry + L.rz) / 3;
     const out = norm([L.x - st.c[0], L.y - st.c[1] + 0.2 * st.cry, L.z - st.c[2]]);
-    const n = st.form === 'cone' ? (forest ? 3 : 4) : st.form === 'bush' ? 1 : (forest ? 1 : 2) + (lobeR > 1.4 ? 1 : 0) + (lobeR > 2.0 && !forest ? 1 : 0);
+    const n = st.form === 'cone' ? (forest ? 3 : 4) : st.form === 'bush' ? 2 : (forest ? 2 : 3) + (lobeR > 1.5 ? 1 : 0);
     for (let k = 0; k < n; k++) {
       const off = randDir(rng);
       const e = li === 0 && st.form !== 'cone' ? 0.15 : 0.32;
       const p: V3 = [L.x + (out[0] * 0.55 + off[0] * 0.45) * L.rx * e, L.y + (out[1] * 0.55 + off[1] * 0.45) * L.ry * e, L.z + (out[2] * 0.55 + off[2] * 0.45) * L.rz * e];
-      const hs = lobeR * (st.form === 'cone' ? 1.05 : 0.98) * rng.range(0.9, 1.1);
+      const hs = lobeR * (st.form === 'cone' ? 1.1 : 1.12) * rng.range(0.92, 1.1);
       const [U, V, F] = frame(rng, out, randDir(rng), hs, hs * Math.min(1.2, L.ry / Math.max(0.2, (L.rx + L.rz) / 2)) + 0.0);
       // centre the clump drawing on the mass (the dense tile's twig base sits at the bottom)
       const c: V3 = [p[0] - V[0] * 0.15, p[1] - V[1] * 0.15, p[2] - V[2] * 0.15];
@@ -770,11 +770,11 @@ export function emitNear(st: Struct, ref: PlantRef, cards: InstBuf, woodBuf: Ins
   if (st.form !== 'bush') {
     st.lobes.forEach((L) => {
       const lobeR = (L.rx + L.ry + L.rz) / 3;
-      const n = st.form === 'cone' ? 1 : lobeR > 1.1 ? 2 : 1;
+      const n = st.form === 'cone' ? 1 : lobeR > 1.1 ? 3 : 2;
       for (let i = 0; i < n; i++) {
-        const p: V3 = [L.x + rng.range(-0.2, 0.2) * L.rx, L.y + rng.range(-0.15, 0.2) * L.ry, L.z + rng.range(-0.2, 0.2) * L.rz];
+        const p: V3 = [L.x + rng.range(-0.25, 0.25) * L.rx, L.y + rng.range(-0.2, 0.2) * L.ry, L.z + rng.range(-0.25, 0.25) * L.rz];
         const out = norm([p[0] - st.c[0], p[1] - st.c[1], p[2] - st.c[2]]);
-        const hs = lobeR * 0.72;
+        const hs = lobeR * 0.85;
         const [U, V, F] = frame(rng, out, randDir(rng), hs, hs);
         card(cards, ref, st, p, U, V, sphereNormal(st, p, L, F, 0.9), crownAO(st, p) * 0.75, 1, uvDense, L.tint * 0.9, { ph1: L.ph, w1: L.w * 0.7, ph2: 0, w2: 0 }, 0.3);
       }
@@ -873,17 +873,36 @@ function emitFronds(st: Struct, ref: PlantRef, cards: InstBuf, rng: Rng, lod: nu
       const side = norm(cross([0, 1, 0], vd));
       // keel: leaflets rise in a shallow V → tilt the card plane a little per segment
       const up = norm(cross(vd, side));
-      const tilt = 0.25;
-      const w = fr.width * (fr.dry ? 1 : 1);
-      const U: V3 = [(side[0] + up[0] * tilt) * w, (side[1] + up[1] * tilt) * w, (side[2] + up[2] * tilt) * w];
-      const F = norm(cross(U, V));
+      const w = fr.width;
       // v sub-range of the (bottom → top) frond drawing
       const v0 = uv.v0 + (uv.v1 - uv.v0) * (k / n),
         v1 = uv.v0 + (uv.v1 - uv.v0) * ((k + 1) / n);
-      const sub = { u0: uv.u0, v0, u1: uv.u1, v1 };
       const sw: Sway = { ph1: fr.sway.ph1, w1: fr.sway.w1 * (0.3 + 0.7 * ((k + 0.5) / n)), ph2: fr.sway.ph2, w2: fr.sway.w2 * ((k + 0.5) / n) };
+      const ao = fr.dry ? 0.7 : 0.75 + 0.25 * (k / n);
+      const colr = fr.dry ? DRY : st.leaf;
+      if (lod > 0 && !fr.dry) {
+        // near: two half-cards per segment forming the keeled V of a real frond (leaflets rise from the
+        // rachis), so the crown reads from below and from the side, not only from above
+        const keel = 0.62 - 0.25 * (k / n);
+        const um = (uv.u0 + uv.u1) / 2;
+        for (const sgn of [-1, 1]) {
+          const t: V3 = norm([side[0] * sgn * Math.cos(keel) + up[0] * Math.sin(keel), side[1] * sgn * Math.cos(keel) + up[1] * Math.sin(keel), side[2] * sgn * Math.cos(keel) + up[2] * Math.sin(keel)]);
+          const hc: V3 = [c[0] + t[0] * w * 0.5, c[1] + t[1] * w * 0.5, c[2] + t[2] * w * 0.5];
+          // x = -1 at the rachis for the right half, at the tip for the left half (tile is symmetric)
+          const U: V3 = [t[0] * w * 0.5 * sgn, t[1] * w * 0.5 * sgn, t[2] * w * 0.5 * sgn];
+          const F = norm(cross(U, V));
+          const sub = sgn < 0 ? { u0: uv.u0, v0, u1: um, v1 } : { u0: um, v0, u1: uv.u1, v1 };
+          const nrm = sphereNormal(st, hc, null, F, 0.4);
+          card(cards, ref, st, hc, U, V, [nrm[0], nrm[1] + 0.3, nrm[2]], ao, lod, sub, tint * (sgn < 0 ? 0.97 : 1.03), sw, 0.8, colr);
+        }
+        continue;
+      }
+      const tilt = 0.25;
+      const U: V3 = [(side[0] + up[0] * tilt) * w, (side[1] + up[1] * tilt) * w, (side[2] + up[2] * tilt) * w];
+      const F = norm(cross(U, V));
+      const sub = { u0: uv.u0, v0, u1: uv.u1, v1 };
       const nrm = sphereNormal(st, c, null, F, 0.35);
-      card(cards, ref, st, c, U, V, [nrm[0], nrm[1] + 0.25, nrm[2]], fr.dry ? 0.7 : 0.75 + 0.25 * (k / n), lod, sub, tint, sw, 0.8, fr.dry ? DRY : st.leaf);
+      card(cards, ref, st, c, U, V, [nrm[0], nrm[1] + 0.25, nrm[2]], ao, lod, sub, tint, sw, 0.8, colr);
     }
   });
 }

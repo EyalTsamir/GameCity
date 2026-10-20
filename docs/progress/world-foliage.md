@@ -1,17 +1,14 @@
 # world-foliage — leafy, living trees (world round, workstream 4)
 
 ## Resume here (update after EVERY step)
-* 2026-10-19 21:00 — RESUMED after reboot; M1 runs. Since: buildMips split into hot helpers (cold 1.5 s →
-  0.11 s in node), static wood = trunks only (limbs near-only), 8-sided tubes, palm bark (diamond lattice
-  date/Canary, rings Washingtonia), palm trunk radii fixed (lead note: plaza palm trunk was a faceted twisted
-  column — re-check at eye level), Mediterranean species mapping by district (kindFor), per-kind proportions,
-  forest band 45 m beyond the slab N edge via landscape.cover/height (cards only), bushes → leaf-card shrubs
-  (shrub / oleander / bougainvillea). All typechecks.
-* 20:50 second container restart (all jobs lost). Since then also: hedges get a near-only skin of shrub cards
-  (kind 'hedge', PlantDef.seg/color), all typechecks. World will start its 3D trees at z < −225 (lead).
-* RUNNING: shot t2_park (background) → shots/world/foliage/t2_park.png + t2.json (stats via scratchpad/vstat.py).
-  Capture wrapper: scratchpad/capset.sh OUT HOURS [extra-q] [views].
-* NEXT: judge t2; then capture set m1 (views below) 11/18.2/21.5; tune card size/density/colours.
+* 2026-10-20 01:35 — RESUMED after the 3rd stop/reboot. M1 + species/bushes/hedges/forest band in code.
+  m1a (shots/world/foliage/m1a_sheet.png, 11 h): leafy trees render everywhere, no errors; verdict: crowns
+  too SPARSE at every distance (atlas tiles only ~30 % filled, few far cards), trunks too thick (street trees
+  look like tufts on poles), palms sparse. Since: atlas clusters fill their tiles (clipStem, more/smaller
+  leaves, denser pine/citrus/blossom/jacaranda), trunk girth ↓, 4 tips/branch, 2–3 inner dense cards per lobe,
+  far cards 2–4 per lobe ×1.12 size, edge-on fade softened. Typechecks.
+* NEXT: dumpatlas.sh + capset.sh m1b 11 → judge; then palms, golden hour/night, overview, perf counts.
+* Tools: scratchpad/{capset.sh OUT HOURS [q] [views], dumpatlas.sh, vstat.py, bench/}.
 * Views: park=-55,4,15,26,200,6; ot=66,3.5,-13.9,13,25,4; dt=-22,3.5,-68.9,14,35,4; palms=118,5,30,18,90,6;
   forest=10,10,-158,70,10,10; parkair=-55,0,17,90,30,30; overview.
 

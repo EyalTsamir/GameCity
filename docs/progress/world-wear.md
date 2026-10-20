@@ -1,22 +1,14 @@
 # world-wear — weathering and lived-in clutter (world round)
 
 ## Resume here
-* M1 DONE (services live, lead messaged). Dump: shots/world/wear/m1_eval.json.
-* M2/M3/M4/M6/M7 code written + typechecks, NOT YET JUDGED (two container restarts killed the captures):
-  - buildings: `buildings/green.ts` (leaf cards, cached atlas `makeGreenTexture()`), `buildings/clutter.ts`
-    (windowBox, balconyLife, potPlant, julietBalcony, ironRail, climber, shutterPair/State, acUnit, dish, downpipe,
-    gutter, roofClutter, solarHeater, waterTankSmall, aerial); old town fully wired; apartments + hotels; chimney
-    aerials; shell shader: `bhShop` interiors (types via pattern + 16·type, AO + light pools + layers), eye-level
-    wall wear (damp, salt line, north algae, peeling render), roof age + north moss. Service additions: `shops[]`.
-  - roads: `roads/puddles.ts` + puddle masks (ASPHALT2), gutter litter (`rdLitter` in COMMON2), sidewalk/plaza wear
-    in rdHard (cracked / replaced / sunken slabs, grime by walls + kerb, walking-line polish, grime blotches, joint
-    dirt, stain rings, gum/butts/leaves/paper), uWetH drying wetness.
-  - props: kerbside 2-seat café tables in front of cafés/bakeries (`SK.kerbCafe`, cafes[] source 'sidewalk'),
-    plaza planters planted with leaf cards (`props-green` mesh, no shadow), furniture wear shader (props/material.ts
-    WEAR_GLSL: stone grime/streaks/lichen/algae, iron rust, paint chips + stickers, wood greying, plastic fading).
-  - toggles: ?nogreen ?nopuddles ?nowear (props) — TODO: ?nowear for buildings/roads masks too.
-* NEXT: re-run it3 (day + night) → judge → fix; then message the lead (M2 milestone) with sheet paths.
-* Capture recipe: `capture-set.mjs --out shots/world/wear/itN --q "nointro&noidle&adaptive=0&quality=high&only=sky,terrain,roads,buildings,vegetation,props,postfx" --hideui 1 --width 1280 --height 720 --hours 11,21.5 --views "otfac=83,5,-16,25,70,6;otbal=83,5,-16,10,20,10;otst=70,1.7,-10,14,90,4;oldtown"`
+* M1 + M2 DONE (lead messaged 2026-10-20 ~01:45 with it3/it4 shots). it4: invariants {} / console clean.
+* Since it4 (not yet captured): shop interiors darker + higher contrast (+ side-wall goods, stronger lamp discs,
+  AO / light pools), shop night litI toned, roller shutters with graffiti on closed shops, litter visibility uses
+  the geometric-mean pixel footprint, stronger sidewalk/plaza wear. it5 running: shots/world/wear/it5
+  (otst, otbal, plaza, beach, oldtown × 11 / 21.5, with `lamps`).
+* NEXT: judge it5; overview + roofs (M3 polish); market + beach + downtown street eye level; maybe overhead
+  wires / street signs; final perf check (perf.mjs variants `;nogreen&nowear&nopuddles`).
+* Capture recipe: `capture-set.mjs --out shots/world/wear/itN --q "nointro&noidle&adaptive=0&quality=high&only=sky,terrain,roads,buildings,vegetation,props,lamps,postfx" --hideui 1 --width 1280 --height 720 --hours 11,21.5 --views "otfac=83,5,-16,25,70,6;otbal=83,5,-16,10,20,10;otst=70,1.7,-10,14,90,4;plaza=-28,1.5,-24,16,15,7;beach=110,1.7,5,16,180,5;oldtown"`
   (baseline = same with `--url http://127.0.0.1:5174/` → shots/world/wear/before, before2).
 
 ## Brief (from WORLD-PLAN.md scope 7 + briefs "### wear")
@@ -90,9 +82,9 @@ Toggles (planned): `?nowear` (all new wear masks off), `?nogreen` (balcony green
 ## Milestones
 * [x] M1 services (buildings anchors + café seats) → lead messaged. Life/streetlife requests folded in:
   laundry wires, kitchen vents, bbqs, rotary dryers, discs, cafes in streetlife's shape, setStaticLaundry().
-* [ ] M2 balconies / greenery / shutters / facade clutter (eye level old town + beach street)
+* [x] M2 balconies / greenery / shutters / facade clutter (eye level old town) — it3/it4, lead messaged
 * [ ] M3 roofs (solar heaters, tanks, AC, antennas; roof tone/moss) — overview
-* [ ] M4 shop interiors
+* [x] M4 shop interiors (bhShop) + roller shutters — iterating
 * [ ] M5 facade wear at eye level (peeling, damp, moss, ivy, posters)
 * [ ] M6 roads + sidewalks (puddles mirroring lamps, litter, wear)
 * [ ] M7 props wear; final report

@@ -356,6 +356,31 @@ export function buildCoverMaps(ctx: CityContext): CoverMaps {
   const boardwalkX = 118.2;
   const nA = new Float32Array(4),
     nB = new Float32Array(4);
+  // noise-dependent ground-mask fields on the 0.5 m lattice (R/G warped like the shader, B straight);
+  // the 0.25 m texels interpolate them (4× fewer noise / mask lookups)
+  const Lsand = new Float32Array(LW * LH),
+    Lwild = new Float32Array(LW * LH),
+    Lwear = new Float32Array(LW * LH),
+    LnB0 = new Float32Array(LW * LH),
+    LnAg = new Float32Array(LW * LH);
+  for (let j = 0; j < LH; j++) {
+    const z = SLAB.z0 + j * 0.5;
+    for (let i = 0; i < LW; i++) {
+      const x = SLAB.x0 + i * 0.5;
+      const k = j * LW + i;
+      noise(x * 0.0104, z * 0.0104, nA);
+      noise(x * 0.111, z * 0.111, nB);
+      const u = (x - SLAB.x0) * SX,
+        v = (z - SLAB.z0) * SZ;
+      const gw = gmSample(u + ((nA[2] - 0.5) * 5 + (nB[0] - 0.5) * 0.9) * SX, v + ((nA[3] - 0.5) * 5 + (nB[1] - 0.5) * 0.9) * SZ);
+      Lsand[k] = smooth(0.25, 0.75, gw[0]);
+      Lwild[k] = gw[1];
+      Lwear[k] = gmSample(u, v)[2];
+      LnB0[k] = nB[0];
+      LnAg[k] = nA[1];
+    }
+  }
+  mark('lattice');
   const AD = allow.data,
     ED = edge.data,
     MD = meadow.data,
@@ -399,20 +424,25 @@ export function buildCoverMaps(ctx: CityContext): CoverMaps {
         }
         continue;
       }
-      // ground-mask channels (R/G warped like the shader, B/A straight)
-      noise(x * 0.0104, z * 0.0104, nA);
-      noise(x * 0.111, z * 0.111, nB);
-      const u = (x - SLAB.x0) * SX,
-        v = (z - SLAB.z0) * SZ;
-      const gw = gmSample(u + ((nA[2] - 0.5) * 5 + (nB[0] - 0.5) * 0.9) * SX, v + ((nA[3] - 0.5) * 5 + (nB[1] - 0.5) * 0.9) * SZ);
-      const sand = smooth(0.25, 0.75, gw[0]);
-      const wild = gw[1];
-      const wear = gmSample(u, v)[2];
+      // lattice fields (bilinear, same weights as the height)
+      const k00 = lj * LW + li,
+        k10 = k00 + 1,
+        k01 = k00 + LW,
+        k11 = k01 + 1;
+      const w00 = (1 - tx) * (1 - tz),
+        w10 = tx * (1 - tz),
+        w01 = (1 - tx) * tz,
+        w11 = tx * tz;
+      const sand = Lsand[k00] * w00 + Lsand[k10] * w10 + Lsand[k01] * w01 + Lsand[k11] * w11;
+      const wild = Lwild[k00] * w00 + Lwild[k10] * w10 + Lwild[k01] * w01 + Lwild[k11] * w11;
+      const wear = Lwear[k00] * w00 + Lwear[k10] * w10 + Lwear[k01] * w01 + Lwear[k11] * w11;
+      const nb0 = LnB0[k00] * w00 + LnB0[k10] * w10 + LnB0[k01] * w01 + LnB0[k11] * w11;
+      const nag = LnAg[k00] * w00 + LnAg[k10] * w10 + LnAg[k01] * w01 + LnAg[k11] * w11;
       // slope → rock (same rule as the ground shader)
       const gx = ((lb - la) * (1 - tz) + (ld - lc) * tz) * 2,
         gz = ((lc - la) * (1 - tx) + (ld - lb) * tx) * 2;
       const ny = 1 / Math.sqrt(gx * gx + 1 + gz * gz);
-      const rock = smooth(0.24, 0.46, 1 - ny + (nB[0] - 0.5) * 0.22);
+      const rock = smooth(0.24, 0.46, 1 - ny + (nb0 - 0.5) * 0.22);
       // ── density
       let dens = al * (1 - sand) * (1 - rock * 0.95) * (1 - smooth(0.06, 0.8, wear) * 0.92);
       if (above < 0.03) dens = 0;
@@ -425,7 +455,7 @@ export function buildCoverMaps(ctx: CityContext): CoverMaps {
       len *= 1 - smooth(0.1, 0.5, wear) * 0.7; // trampled grass stays short
       // the slab's west / south edges hand over to the landscape's meadows: unmown margin
       const dEdge = Math.min(x - SLAB.x0, SLAB.z1 - z);
-      if (dEdge < 18) len = Math.max(len, 0.72 * (1 - smooth(4, 15, dEdge + (nA[1] - 0.5) * 6)));
+      if (dEdge < 18) len = Math.max(len, 0.72 * (1 - smooth(4, 15, dEdge + (nag - 0.5) * 6)));
       // habitat: wet shores (natural banks only) and dunes
       let hab = 0;
       if ((pondish || mouth) && above > -0.5 && above < 0.6 && (o & HARD) === 0) {

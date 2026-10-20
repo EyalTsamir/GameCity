@@ -324,7 +324,7 @@ function denseClump(g: CanvasRenderingContext2D, rng: Rng, w: number, h: number,
   for (let k = 0; k < n; k++) {
     // lumpy blob radius
     const ang = rng.range(0, Math.PI * 2);
-    const R = (w * 0.42) * (0.82 + 0.18 * Math.sin(ang * 3 + 1.3) + 0.08 * Math.sin(ang * 7)) * Math.sqrt(rng.next());
+    const R = (w * 0.45) * (0.84 + 0.16 * Math.sin(ang * 3 + 1.3) + 0.08 * Math.sin(ang * 7)) * Math.sqrt(rng.next());
     const x = cx + Math.sin(ang) * R,
       y = cy + Math.cos(ang) * R * (h / w);
     const out = Math.atan2(x - cx, y - cy * 0.6);

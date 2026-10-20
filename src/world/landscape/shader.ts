@@ -13,6 +13,7 @@ import { WIND_GLSL } from '../../core/wind';
 import { LAMP_GLSL, lampUniforms } from '../../core/lampLight';
 import { noiseTexture } from '../terrain/noise';
 import { WL } from './model';
+import { gcPalette, GC_PALETTE_GLSL } from '../groundcover/palette';
 
 const C = (hex: string) => ({ value: new THREE.Color(hex) });
 
@@ -24,6 +25,9 @@ export function landUniforms(globals: { uTime: { value: number }; uWind: { value
     uSunDir: globals.uSunDir,
     tLN: { value: noiseTexture() },
     ...lampUniforms(),
+    // the ground agent's grass palette (shared uniform objects): the land's meadow far field is the
+    // average colour of their blades, so the hand-over at the edge of their blade band is invisible
+    ...gcPalette(),
     // natural summer palette (sRGB hex → linear by THREE.Color)
     cWheat: C('#b39550'),
     cStubble: C('#b2a26e'),
@@ -89,6 +93,7 @@ uniform vec3 cStone;
 ${FIELDS_GLSL}
 ${WIND_GLSL}
 ${LAMP_GLSL}
+${GC_PALETTE_GLSL}
 
 vec3 lnN = vec3(0.0, 1.0, 0.0);
 
@@ -129,15 +134,19 @@ vec3 landAlbedo() {
   float gust = thGust(p.xz) * clamp(length(uWind) * 1.3, 0.0, 1.0);
 
   // ── meadow (wild grass): green ↔ dry patches
-  vec3 meadow = mix(cMeadow, cMeadowDry, 0.75 * smoothstep(0.5, 0.95, nA.b * 0.7 + nB.g * 0.5 * midF + 0.15 * macro));
-  meadow *= 0.88 + 0.24 * nB.a * midF + 0.12 * macro;
+  // = groundcover's long-grass blades seen from above (same palette functions, same noise and scales)
+  vec4 gM = texture2D(tLN, p.xz * 0.0031);
+  vec4 gA = texture2D(tLN, p.xz * 0.0104);
+  vec3 gBase = gcGrassColor(gM, gA, 0.72, wet, 0.0);
+  vec3 meadow = gcTopColor(gBase, gcTipColor(gBase, gA, 0.72), 0.72);
+  meadow *= 0.94 + 0.12 * nB.a * midF + 0.08 * macro;
   // tussocks and trampled patches (metre scale, faded by the footprint), fresh vs dry tips
   {
     float nf = 1.0 - smoothstep(0.08, 0.5, fp);
     vec4 nT1 = texture2D(tLN, p.xz * (1.0 / 3.7));
     vec4 nT2 = texture2D(tLN, p.zx * (1.0 / 11.0));
-    meadow *= 1.0 + (nT1.r - 0.5) * 0.34 * nf + (nT2.g - 0.5) * 0.22 * midF;
-    meadow = mix(meadow, meadow * vec3(1.18, 1.1, 0.82), smoothstep(0.55, 0.8, nT2.b) * 0.5 * midF);
+    meadow *= 1.0 + (nT1.r - 0.5) * 0.2 * nf + (nT2.g - 0.5) * 0.14 * midF;
+    meadow = mix(meadow, meadow * vec3(1.12, 1.07, 0.88), smoothstep(0.55, 0.8, nT2.b) * 0.35 * midF);
     // 5–15 m mottling (clover, rushes, sorrel patches) visible from the town edge
     vec4 nT3 = texture2D(tLN, p.xz * (1.0 / 29.0) + 0.37);
     meadow *= 1.0 + (nT3.a - 0.5) * 0.3 * (1.0 - smoothstep(2.0, 8.0, fp));

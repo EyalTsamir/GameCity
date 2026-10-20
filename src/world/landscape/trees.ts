@@ -828,6 +828,7 @@ export function createLandTrees(list: TreeList, uniforms: Record<string, THREE.I
     const m = new THREE.InstancedMesh(geo, tmat, NEAR_CAP[k]);
     m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     m.count = 0;
+    m.visible = false;
     m.name = `land-trees-near${k}`;
     m.castShadow = shadows;
     m.receiveShadow = true;
@@ -917,8 +918,12 @@ export function createLandTrees(list: TreeList, uniforms: Record<string, THREE.I
     }
     for (let k = 0; k < NK; k++) {
       near[k].count = counts[k];
-      near[k].instanceMatrix.needsUpdate = true;
-      instData[k].needsUpdate = true;
+      // an empty set costs nothing (no draw call, no shadow draw)
+      near[k].visible = counts[k] > 0;
+      if (counts[k] > 0) {
+        near[k].instanceMatrix.needsUpdate = true;
+        instData[k].needsUpdate = true;
+      }
     }
     rebuilds++;
   };

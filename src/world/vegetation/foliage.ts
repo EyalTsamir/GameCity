@@ -376,7 +376,7 @@ void thCard( out vec3 P, out vec3 N ) {
   // cards seen edge-on dissolve (their leaves would smear into streaks); the others cover for them
   vec3 fN = normalize( cross( U, V ) );
   vec3 toCam = normalize( cameraPosition - P );
-  vThVis *= mix( 1.0, smoothstep( 0.08, 0.32, abs( dot( fN, toCam ) ) ), uThEdgeFade );
+  vThVis *= mix( 1.0, smoothstep( 0.04, 0.22, abs( dot( fN, toCam ) ) ), uThEdgeFade );
   vThK = iK;
   vThF = iF;
   vThAO = iV.w;

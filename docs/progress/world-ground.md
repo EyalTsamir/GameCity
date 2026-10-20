@@ -1,17 +1,19 @@
 # world-ground — grass, meadows, flowers, weeds, litter, reeds (world round)
 
 ## Resume here
-* 2026-10-19 20:52 — resumed after the 2nd container restart (~20:49; all my files committed in a69c834).
-  State: M1 iteration done in code (see below), M5 started: `groundcover/outer.ts` builds cover / flower /
-  height maps for a 96 m band of the landscape around the slab (ctx.services.landscape.cover/height; 2 m
-  cover lattice, 1 m height lattice, 0.5 m texels), tile grids now span slab ± 96 m (`GRID_PAD`,
-  `addToGrids`), the blade shader reads tCoverO/tFlowerO/tGHO outside the slab (?nogcouter = off).
-  Typecheck of my files clean.
-* Running: t4 (park_eye, bank_band, bank_meadow, park_mid, edge_w (W slab edge), overview × 11 / 18.2 h)
-  → shots/world/ground/t4 via shots/world/ground/gcap.mjs.
-* Next: judge t4 (straw fix, flowers as heads, turf darkening, bump, lily pads, outer band at edge_w),
-  milestone note to lead, then M2 checks (edge tufts + pavement weeds at street level, gust motion),
-  night 21.5 h.
+* 2026-10-20 01:40 — resumed after the usage-limit stop + reboot (all committed at dc885c7).
+  Since the last entry: t4 judged (shots/world/ground/t4: bank_meadow = best shot so far; slab-edge seam
+  gone from the overview; park meadow islands were a pink haze at 45 m → ring B/C flowers fewer/smaller;
+  near/far lawn brightness step → lighter turf under ring A for lawns, darker far top colour); world's
+  2nd seam note → edge meadow margin widened to ~15 m with a noisy line (ground.ts + mask.ts), lawn
+  palette desaturated slightly; milestone note M1 sent to the lead. "No blades" at edge_w was the camera
+  inside a house footprint (buildings not loaded) — not a bug (probed density along z=60).
+  Now: golden-hour glow (broader forward-scatter lobe on blades + long-grass ground), boot time: noise /
+  mask fields on the 0.5 m lattice (was per 0.25 m texel), outer band height lattice 2 m.
+* Running: tsc + t5 (pond close-up, park_eye, bank_meadow, edge_s (landscape band beyond z=150), ot_walk
+  (old-town sidewalk weeds) × 11 / 18.2 h, with buildings) → shots/world/ground/t5.
+* Next: judge t5 → confirm pond to lead (foliage removes their pond reeds/lilies) → M2 street-level edge
+  tufts/weeds, night 21.5 h, perf numbers.
 
 ## Brief (from WORLD-PLAN.md + world-briefs.md "### ground")
 Owner of `src/world/terrain/ground.ts` (+ its mask), `src/world/groundcover.ts` + `src/world/groundcover/*`.

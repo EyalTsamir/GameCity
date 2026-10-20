@@ -597,11 +597,14 @@ export class Crowd {
   stats = { spawned: 0, despawned: 0, crossings: 0, boarded: 0, alighted: 0, trainCrowds: 0, routeFails: 0, cornerWaits: 0, cornerFull: 0, longWaits: 0, turnBacks: 0 };
 
   private cafeSeatCount = 0;
+  /** ?nofocus: spawn without regard to where the camera looks */
+  private readonly noFocus: boolean;
 
   constructor(ctx: CityContext, places: Places, rng: Rng) {
     this.ctx = ctx;
     this.places = places;
     for (const c of places.cafes) this.cafeSeatCount += c.seats.length;
+    this.noFocus = ctx.debug.params.has('nofocus');
     this.rng = rng;
     this.router = new Router(ctx.peds);
     this.maxPop = Math.round(BASE_POP * ctx.quality.density);
@@ -3363,7 +3366,60 @@ export class Crowd {
     }
   }
 
+  /** where the camera looks at street level (attention focus for spawning), or off when it is high up */
+  private focusOn = false;
+  private focusX = 0;
+  private focusZ = 0;
+  private recycleT = 0;
+  private readonly fdir = new THREE.Vector3();
+  private updateFocus(): void {
+    this.focusOn = false;
+    if (this.noFocus) return;
+    const cam = this.ctx.camera;
+    if (cam.position.y > 75) return;
+    cam.getWorldDirection(this.fdir);
+    const t = this.fdir.y < -0.05 ? Math.min(160, cam.position.y / -this.fdir.y) : 60;
+    this.focusX = cam.position.x + this.fdir.x * t * 0.85;
+    this.focusZ = cam.position.z + this.fdir.z * t * 0.85;
+    this.focusOn = true;
+  }
+
+  /** a door within a short walk of the camera's focus (street-level views fill up where you look) */
+  private focusDoor(): DoorPlace | null {
+    const ds = this.places.doors;
+    let best: DoorPlace | null = null;
+    let bd = Infinity;
+    for (let k = 0; k < 40; k++) {
+      const d = ds[Math.floor(this.rng.next() * ds.length)];
+      if (d.cat === 'industry' || d.cat === 'stadium') continue;
+      const dd = Math.abs(d.x - this.focusX) + Math.abs(d.z - this.focusZ);
+      if (dd < bd) {
+        bd = dd;
+        best = d;
+      }
+    }
+    return best && bd < 130 ? best : null;
+  }
+
   private director(dt: number): void {
+    this.updateFocus();
+    // attention: walkers far from what the camera looks at (and well away from it) go home a little
+    // early, so the street-level view the viewer is looking at gets the newcomers
+    if (this.focusOn) {
+      this.recycleT += dt;
+      if (this.recycleT > 0.6 && this.alive() > this.target() * 0.92) {
+        this.recycleT = 0;
+        const cam = this.ctx.camera.position;
+        for (let k = 0; k < 6; k++) {
+          const p = this.parties[Math.floor(this.rng.next() * this.parties.length)];
+          if (!p || p.state !== 'walk' || p.crossing || p.endDoor || p.staff || p.stall || p.goal?.kind === 'cafe') continue;
+          const m = p.members[0];
+          if (Math.hypot(m.x - this.focusX, m.z - this.focusZ) < 240 || Math.hypot(m.x - cam.x, m.z - cam.z) < 180) continue;
+          this.beginFadeOut(p, 1.2);
+          break;
+        }
+      }
+    }
     let beach = 0;
     for (const p of this.parties) if (p.goal?.kind === 'beach' && p.state !== 'gone') beach += p.size;
     this.onBeach = beach;
@@ -3642,7 +3698,7 @@ export class Crowd {
     const [ps, w] = this.globalPersonaWeights(h);
     if (w.every((x) => x <= 0)) return;
     const persona = this.rng.weighted(ps, w);
-    const door = this.originFor(persona, h);
+    const door = (this.focusOn && persona !== 'beachgoer' && persona !== 'angler' && this.rng.chance(0.4) ? this.focusDoor() : null) ?? this.originFor(persona, h);
     if (!door) return;
     this.spawnAtDoor(door, persona, this.sizeFor(persona));
   }

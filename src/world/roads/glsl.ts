@@ -31,7 +31,7 @@ uniform sampler2D tRC;
 // pixel footprint fw exceeds ~1.5 cm, so it never sparkles in the distance.
 uniform float uRdWear;
 vec4 rdLitter(vec2 p, float fw, float dens, float leafy) {
-  float near = 1.0 - smoothstep(0.006, 0.016, fw);
+  float near = 1.0 - smoothstep(0.008, 0.02, fw);
   if (near <= 0.0 || dens <= 0.0 || uRdWear < 0.5) return vec4(0.0);
   vec2 g = floor(p / 0.6);
   vec4 acc = vec4(0.0);
@@ -238,7 +238,7 @@ vec3 rdAsphalt(inout float rough) {
   // ── gutter litter: leaves, butts, gum and paper collect along the kerb
   {
     float gut = step(0.5, vA.x) * smoothstep(2.75, 3.15, abs(lat)) * onRoad;
-    vec4 lt = rdLitter(p, fw, gut * (0.35 + 0.4 * smoothstep(0.4, 0.7, nM.g)), 0.7);
+    vec4 lt = rdLitter(p, sqrt(fwP.x * fwP.y) + 1e-5, gut * (0.35 + 0.4 * smoothstep(0.4, 0.7, nM.g)), 0.7);
     c = mix(c, lt.rgb, lt.a);
     rough = mix(rough, 0.85, lt.a);
   }
@@ -464,13 +464,13 @@ vec3 rdHard(inout float rough) {
       c *= 1.0 - sunk * det * (0.08 + 0.22 * (1.0 - smoothstep(0.0, minS * 0.2, edge)));
     }
     // grime by the walls and on the kerb side, polished walking line
-    c *= 1.0 - 0.14 * onSide * smoothstep(5.95, 6.6, lat) * (0.6 + 0.4 * nM.r);
-    c *= 1.0 - 0.08 * onSide * (1.0 - smoothstep(3.5, 3.95, lat));
-    float walkLine = onSide * (1.0 - smoothstep(0.25, 0.65, abs(lat - 5.35)));
-    c *= 1.0 + 0.035 * walkLine;
+    c *= 1.0 - 0.2 * onSide * smoothstep(5.9, 6.55, lat) * (0.6 + 0.4 * nM.r);
+    c *= 1.0 - 0.12 * onSide * (1.0 - smoothstep(3.5, 4.0, lat)) * (0.7 + 0.3 * nM.b);
+    float walkLine = onSide * (1.0 - smoothstep(0.3, 0.75, abs(lat - 5.35)));
+    c *= 1.0 + 0.06 * walkLine;
     rough -= 0.08 * walkLine;
     // used look: soft grime blotches (2–8 m), dirt in the joints, grime along the cover edges (walls, planters)
-    c *= 1.0 - 0.13 * smoothstep(0.42, 0.82, nL.g * 0.5 + nM.r * 0.5);
+    c *= 1.0 - 0.2 * smoothstep(0.42, 0.82, nL.g * 0.5 + nM.r * 0.5);
     c *= 1.0 - 0.22 * joint * det;
     if (vR.z > vR.x) {
       vec2 lo2 = p - vR.xy, hi2 = vR.zw - p;
@@ -490,10 +490,10 @@ vec3 rdHard(inout float rough) {
         float fill = 1.0 - smoothstep(0.92, 1.0, dd);
         float ring = rdLine(abs(dd - 0.95) * rr, 0.012, fwm) * step(0.5, rdHash(sc + 8.8));
         vec3 sc3 = mix(vec3(0.82, 0.76, 0.66), vec3(0.7, 0.7, 0.72), step(0.6, rdHash(sc + 2.6)));
-        c = mix(c, c * sc3, clamp(fill * 0.5 + ring * 0.6, 0.0, 1.0));
+        c = mix(c, c * sc3, clamp(fill * 0.8 + ring * 0.7, 0.0, 1.0));
       }
     }
-    vec4 lt = rdLitter(p, fwm, (onSide * 0.22 + 0.08) * (0.6 + 0.6 * nM.g) + onSide * 0.25 * smoothstep(5.9, 6.5, lat), 0.35);
+    vec4 lt = rdLitter(p, sqrt(fwp.x * fwp.y) + 1e-5, (onSide * 0.22 + 0.08) * (0.6 + 0.6 * nM.g) + onSide * 0.25 * smoothstep(5.9, 6.5, lat), 0.35);
     c = mix(c, lt.rgb, lt.a * 0.9);
   }
   float wetH = max(uRain, uWetH * 0.85);

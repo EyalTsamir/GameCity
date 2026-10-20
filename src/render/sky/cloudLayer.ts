@@ -117,7 +117,9 @@ export function cloudLayerUniforms() {
   return {
     tCloudNoise: { value: cloudNoiseTexture() as THREE.Texture },
     /** cumulus: x coverage 0..1, y base altitude (m), z feature scale (m per noise tile), w drift time (m) */
-    uCu: { value: new THREE.Vector4(0.4, 1800, 5200, 0) },
+    uCu: { value: new THREE.Vector4(0.4, 1500, 5200, 0) },
+    /** cumulus slab: x thickness (m), y extinction (1/m at density 1), z, w unused */
+    uCuSlab: { value: new THREE.Vector4(1100, 0.03, 0, 0) },
     /** cirrus: x coverage, y altitude, z scale, w opacity */
     uCi: { value: new THREE.Vector4(0.3, 8500, 26000, 0.35) },
     /** drift direction (unit xz) */
@@ -139,27 +141,30 @@ export type CloudLayerUniforms = ReturnType<typeof cloudLayerUniforms>;
 export const CLOUD_LAYER_GLSL = /* glsl */ `
 uniform sampler2D tCloudNoise;
 uniform vec4 uCu;
+uniform vec4 uCuSlab;
 uniform vec4 uCi;
 uniform vec2 uCloudWind;
 const float CL_RG = 6360e3;
-// cumulus density 0..1 at world xz (m); lod = extra mip bias for distant samples.
-// Placement first (one cloud per ~1.7 km noise cell, how many of them host one = coverage, varied by large
-// weather patches), then the billowy body and cauliflower rims — fair-weather cumulus are ~0.5–2 km
-// clouds with clear gaps between them, never a scatter of tiny flakes.
-float cuDensity(vec2 xz, float lod) {
-  vec2 drift = uCloudWind * uCu.w;
-  vec2 p = (xz - drift) / uCu.z;
+// cumulus thickness field 0..1 at world xz (m): which ~1.7 km noise cells host a cloud (coverage, varied by
+// large weather patches), its rounded body (~1 km across), and (full) billowy cauliflower rims. Fair-weather
+// cumulus are separate ~0.5–2 km clouds with clear gaps, never a scatter of tiny flakes.
+float cuField(vec2 xz, float lod, bool full) {
+  vec2 p = (xz - uCloudWind * uCu.w) / uCu.z;
   vec4 wx = textureLod(tCloudNoise, p * 0.13 + vec2(0.31, 0.77), lod + 1.0);
   vec2 warp = (vec2(wx.r, wx.a) - 0.5) * 0.3;
   vec4 c = textureLod(tCloudNoise, p * 0.5 + warp, lod);
-  float cov = clamp(uCu.x * (0.35 + 1.3 * smoothstep(0.3, 0.72, wx.a)), 0.0, 1.0);
-  float body = c.g * 0.8 + c.r * 0.35 - 0.12;
-  float th = 1.0 - cov;
-  float place = smoothstep(th - 0.06, th + 0.24, body);
-  if (place <= 0.0) return 0.0;
-  vec4 b = textureLod(tCloudNoise, p * 1.9 + warp * 1.5 + vec2(0.53, 0.19), lod + 0.4);
-  float d = place * (0.72 + 0.45 * b.g) - (1.0 - place) * (0.62 - 0.5 * b.g) - 0.14 * (b.b - 0.5);
-  return clamp(d * 1.35, 0.0, 1.0);
+  float cov = clamp(uCu.x * (0.4 + 1.2 * smoothstep(0.3, 0.72, wx.a)), 0.0, 1.0);
+  float pick = smoothstep(1.0 - cov - 0.12, 1.0 - cov + 0.12, c.r * 0.75 + wx.a * 0.25);
+  float body = smoothstep(0.34, 0.82, c.g) * pick;
+  if (!full || body <= 0.0) return body;
+  vec4 b = textureLod(tCloudNoise, p * 2.1 + warp * 1.6 + vec2(0.53, 0.19), lod + 0.3);
+  return clamp(body * (0.62 + 0.55 * b.g) - (1.0 - body) * 0.4 * (1.0 - b.g) - 0.1 * (b.b - 0.5), 0.0, 1.0);
+}
+// cumulus density inside the slab: h01 = 0 at the (flat) base … 1 at the top; thick cells tower higher
+float cuDens(vec2 xz, float h01, float lod, bool full) {
+  float f = cuField(xz - uCloudWind * (h01 * 150.0), lod, full);
+  float prof = 0.08 + 0.92 * h01 * h01;
+  return clamp((f - prof) * 3.5, 0.0, 1.0) * smoothstep(0.0, 0.04, h01);
 }
 // cirrus: broad veils with fibres stretched along the wind (opacity texture, never thresholded detail)
 float ciDensity(vec2 xz, float lod) {
@@ -185,7 +190,8 @@ float clShell(float camH, vec3 d, float alt) {
 }
 `;
 
-/** GLSL (dome): `vec4 thClouds(vec3 dir, vec3 skyCol)` → rgb premultiplied colour, a alpha. Needs CLOUD_LAYER_GLSL. */
+/** GLSL (dome): `vec4 thClouds(vec3 dir, vec3 skyCol)` → the cirrus veil (rgb premultiplied, a alpha); the
+ *  cumulus come from the raymarched volume (sky/cloudVolume.ts). Needs CLOUD_LAYER_GLSL. */
 export const CLOUD_SHADE_GLSL = /* glsl */ `
 uniform vec3 uCloudSun;
 uniform vec3 uCloudAmbTop;
@@ -195,7 +201,7 @@ uniform vec3 uCloudL;
 vec4 thClouds(vec3 d, vec3 skyCol) {
   vec3 cam = cameraPosition;
   vec4 acc = vec4(0.0);
-  // cirrus (behind the cumulus)
+  // cirrus (high and thin: cheap 2D veil; the cumulus volume is composited over it)
   if (uCi.x > 0.01 && d.y > -0.02) {
     float t = clShell(cam.y, d, uCi.y);
     if (t > 0.0) {
@@ -211,40 +217,6 @@ vec4 thClouds(vec3 d, vec3 skyCol) {
       acc = vec4(c * a, a);
     }
   }
-  // cumulus
-  if (uCu.x > 0.005 && d.y > -0.02) {
-    float t = clShell(cam.y, d, uCu.y);
-    if (t > 0.0) {
-      vec2 xz = cam.xz + d.xz * t;
-      float lod = clamp(log2(t / 3500.0), 0.0, 5.0);
-      float den = cuDensity(xz, lod);
-      if (den > 0.002) {
-        // self-shadowing: density toward the light along the layer (2 taps)
-        vec2 lxz = uCloudL.xz / max(length(uCloudL.xz), 1e-3);
-        float slope = clamp(1.0 - uCloudL.y, 0.15, 1.0);
-        float s1 = cuDensity(xz + lxz * 260.0 * slope, lod + 0.5);
-        float s2 = cuDensity(xz + lxz * 700.0 * slope, lod + 1.0);
-        float occ = exp(-(s1 * 1.6 + s2 * 1.0) - den * 1.1 * (1.0 - uCloudL.y));
-        float tau = den * 7.0;
-        float alpha = 1.0 - exp(-tau);
-        float powder = 1.0 - exp(-tau * 2.0);
-        float mu = dot(d, uCloudL);
-        // forward scattering (silver lining on thin rims toward the sun) + soft back scattering
-        float hg = 0.65 + 2.2 * pow(max(mu, 0.0), 8.0) * (1.0 - den * 0.7) + 0.25 * max(-mu, 0.0);
-        // looking up at a cloud overhead we see its flat, shaded base; near the horizon its lit sides
-        float under = smoothstep(0.05, 0.6, d.y);
-        vec3 amb = mix(uCloudAmbTop, uCloudAmbBot, under * 0.65) * (0.75 + 0.25 * (1.0 - den));
-        vec3 c = uCloudSun * (occ * powder * hg) * mix(1.0, 0.55, under * den) + amb;
-        c += uCloudCity * (0.5 + 0.5 * under) * smoothstep(9000.0, 1500.0, t);
-        // aerial perspective toward the sky behind / the horizon haze
-        float far = 1.0 - exp(-t / 45000.0);
-        c = mix(c, skyCol, clamp(far, 0.0, 1.0));
-        alpha *= smoothstep(-0.02, 0.025, d.y);
-        acc.rgb = c * alpha + acc.rgb * (1.0 - alpha);
-        acc.a = alpha + acc.a * (1.0 - alpha);
-      }
-    }
-  }
   return acc;
 }
 `;
@@ -253,8 +225,9 @@ vec4 thClouds(vec3 d, vec3 skyCol) {
 export const CLOUD_SHADOW_FIELD_GLSL = /* glsl */ `
 float thCloudLit(vec2 g, vec3 L) {
   vec2 slope = L.xz / max(L.y, 0.08);
-  float d = cuDensity(g + slope * uCu.y, 1.0);
+  // the sun ray crosses the deck around its lower third; thickness there ≈ how much light it eats
+  float d = cuField(g + slope * (uCu.y + uCuSlab.x * 0.3), 1.0, true);
   float c = ciDensity(g + slope * uCi.y, 2.0) * uCi.w;
-  return exp(-d * 2.6) * (1.0 - c * 0.35);
+  return exp(-d * 2.8) * (1.0 - c * 0.35);
 }
 `;

@@ -421,13 +421,14 @@ vec3 bhShop(vec2 pm, vec2 csz, vec3 rd, float rs, float shopT, float litI, vec3 
   vec3 wallC = vec3(0.86, 0.84, 0.8);
   vec3 floorC = vec3(0.45, 0.33, 0.22);
   float shelfKind = 0.0;
-  if (T < 1.5) { wallC = vec3(0.6, 0.42, 0.28); floorC = vec3(0.32, 0.22, 0.15); shelfKind = 2.0; }        // café / bar
-  else if (T < 2.5) { wallC = vec3(0.88, 0.82, 0.7); floorC = vec3(0.6, 0.5, 0.4); shelfKind = 3.0; }      // bakery
-  else if (T < 3.5) { wallC = vec3(0.42, 0.3, 0.2); floorC = vec3(0.35, 0.24, 0.16); shelfKind = 1.0; }     // books
-  else if (T < 4.5) { wallC = vec3(0.7, 0.72, 0.66); floorC = vec3(0.4, 0.4, 0.38); }                        // florist / grocer
-  else if (T < 5.5) { wallC = vec3(0.92, 0.9, 0.87); floorC = vec3(0.55, 0.45, 0.36); }                      // fashion
-  else if (T < 6.5) { wallC = vec3(0.92, 0.93, 0.94); floorC = vec3(0.7, 0.7, 0.68); shelfKind = 0.0; }    // pharmacy / hardware
-  else { wallC = vec3(0.9, 0.88, 0.84); floorC = vec3(0.38, 0.28, 0.2); }                                    // gallery / antiques
+  // (mid-dark, coloured surfaces: a lit room seen from the street has contrast, not a white glow)
+  if (T < 1.5) { wallC = vec3(0.46, 0.3, 0.19); floorC = vec3(0.26, 0.17, 0.11); shelfKind = 2.0; }        // café / bar
+  else if (T < 2.5) { wallC = vec3(0.68, 0.58, 0.44); floorC = vec3(0.45, 0.36, 0.28); shelfKind = 3.0; }  // bakery
+  else if (T < 3.5) { wallC = vec3(0.32, 0.22, 0.14); floorC = vec3(0.3, 0.2, 0.13); shelfKind = 1.0; }     // books
+  else if (T < 4.5) { wallC = vec3(0.42, 0.48, 0.4); floorC = vec3(0.32, 0.31, 0.29); }                     // florist / grocer
+  else if (T < 5.5) { wallC = vec3(0.7, 0.66, 0.62); floorC = vec3(0.42, 0.33, 0.26); }                     // fashion
+  else if (T < 6.5) { wallC = vec3(0.74, 0.76, 0.76); floorC = vec3(0.5, 0.5, 0.48); shelfKind = 0.0; }    // pharmacy / hardware
+  else { wallC = vec3(0.66, 0.64, 0.6); floorC = vec3(0.3, 0.22, 0.16); }                                    // gallery / antiques
   vec3 c;
   float lf = 0.85;
   float self = 0.0; // self-lit (lamp bulbs)
@@ -479,7 +480,10 @@ vec3 bhShop(vec2 pm, vec2 csz, vec3 rd, float rs, float shopT, float litI, vec3 
     c = wallC * 0.9;
     if (T > 2.5 && T < 3.5) c = bhShelves(q, wallC, 1.0, rs + 5.0, 0.15, Hc - 0.25, 0.34) * 0.9;
     else if (T > 5.5 && T < 6.5) c = bhShelves(q, wallC, 0.0, rs + 5.0, 0.2, min(Hc - 0.4, 2.4), 0.36) * 0.9;
-    else if (T < 1.5) c = h.y < 1.1 ? wallC * 0.55 : wallC * 0.85;
+    else if (T < 1.5) c = h.y < 1.1 ? wallC * 0.55 : bhShelves(q, wallC, 2.0, rs + 5.0, 1.3, min(Hc - 0.5, 2.5), 0.42) * 0.85;
+    else if (T < 2.5) c = bhShelves(q, wallC, 3.0, rs + 5.0, 0.9, min(Hc - 0.4, 2.3), 0.36) * 0.9;
+    else if (T < 5.5 && T > 4.5) c = bhShelves(q, wallC, 0.0, rs + 5.0, 0.5, min(Hc - 0.5, 2.3), 0.5) * 0.9;
+    else if (T > 6.5) c = mix(wallC, bhPal(bhHash12(floor(q / vec2(1.1, 0.9)) + rs)) * 0.8, bhBox2(vec2(fract(q.x / 1.1) * 1.1, q.y), vec2(0.55, 1.6), vec2(0.32, 0.26)));
     lf = 0.65;
   }
   // ── parallax layers (front to back), each a plane parallel to the glass
@@ -596,15 +600,15 @@ vec3 bhShop(vec2 pm, vec2 csz, vec3 rd, float rs, float shopT, float litI, vec3 
   // depth cues: corner occlusion where the room's faces meet, pools of light under the ceiling spots
   // (floor + walls), darker towards the back and the floor
   float ex = min(h.x, W - h.x), ey = min(h.y, Hc - h.y), ez = depth - h.z;
-  float ao = onBack ? smoothstep(0.0, 0.5, min(ex, ey)) : (onFlat ? smoothstep(0.0, 0.45, min(ex, ez)) : smoothstep(0.0, 0.45, min(ey, ez)));
-  ao = 0.55 + 0.45 * ao;
+  float ao = onBack ? smoothstep(0.0, 0.6, min(ex, ey)) : (onFlat ? smoothstep(0.0, 0.55, min(ex, ez)) : smoothstep(0.0, 0.55, min(ey, ez)));
+  ao = 0.35 + 0.65 * ao;
   vec2 lp = vec2(fract(h.x / 1.4) - 0.5, fract(h.z / 1.6) - 0.5) * vec2(1.4, 1.6);
   float pool = onFlat && rd.y < 0.0 ? exp(-dot(lp, lp) / 0.35) : (onBack ? exp(-lp.x * lp.x / 0.12) * smoothstep(0.6, Hc - 0.2, h.y) : 0.0);
-  float shade = ao * (0.75 + 0.55 * pool) * mix(1.0, 0.8, smoothstep(1.6, 0.0, h.y) * float(!onFlat));
+  float shade = ao * (0.5 + 0.95 * pool) * mix(1.0, 0.72, smoothstep(1.6, 0.0, h.y) * float(!onFlat));
   // shops are deep: little daylight reaches the back, the lights carry the look
   dayAlb = c * 0.3 * (1.0 - 0.6 * dz) * (0.85 + 0.3 * lf) * ao;
   vec3 lamp = c * lcol * lf * (1.0 - 0.35 * dz) * shade;
-  return lamp * litI + lcol * self * max(litI, 0.0) * 1.2 + c * 0.012;
+  return lamp * litI + lcol * self * max(litI, 0.0) * 2.4 + c * 0.012;
 }
 
 // fake room behind the window (interior mapping). Returns the lamp-lit radiance (emission) and
@@ -987,7 +991,7 @@ void bhWall(inout vec3 albedo, inout float rough, inout float metal, inout vec3 
   bool shopWin = style > 5.5 && style < 6.5;
   // open shops keep their lights on in daytime too
   // (and at night stay readable rather than a blown-out glow: the interior detail carries the window)
-  if (shopWin) litI = lit * mix(0.62 + 0.25 * r2, 1.15 + 0.3 * r2, nightF);
+  if (shopWin) litI = lit * mix(0.62 + 0.25 * r2, 0.9 + 0.25 * r2, nightF);
   vec3 interior; // lamp-lit radiance seen through the glass
   vec3 dayA;     // daylight-lit albedo seen through the glass
   if (uDetail > 0.5 && shopWin) interior = bhShop(pm, csz, normalize(rd), seed * 1.37 + shopT * 11.0, shopT, litI, lcol, dayA);

@@ -424,7 +424,8 @@ export default function create(ctx: CityContext): CityModule {
         bloom.luminanceMaterial.smoothing = 0.32 - 0.08 * night;
       }
       const gold = Math.max(dusk * (1 - night), atmo()?.golden() ?? 0);
-      const gk = 0.32 * gold;
+      // (a whisper of the CDL: at full strength it cuts blue by half in log space — sepia, not golden)
+      const gk = 0.14 * gold;
       look.setVec('uLookSlope', 1, 1 - 0.1 * gk, 1 - 0.5 * gk);
       look.set('uLookPower', 1 - 0.2 * gk);
       look.set('uLookSat', 1 + 0.06 * gold - 0.08 * night);

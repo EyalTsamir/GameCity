@@ -642,7 +642,8 @@ const GROUND_RE = /* glsl */ `
 void RE_Direct_Ground( const in IncidentLight directLight, const in vec3 geometryPosition, const in vec3 geometryNormal, const in vec3 geometryViewDir, const in vec3 geometryClearcoatNormal, const in PhysicalMaterial material, inout ReflectedLight reflectedLight ) {
   RE_Direct_Physical( directLight, geometryPosition, geometryNormal, geometryViewDir, geometryClearcoatNormal, material, reflectedLight );
   float back = saturate( - dot( geometryViewDir, directLight.direction ) );
-  reflectedLight.directDiffuse += directLight.color * material.diffuseColor * vec3( 1.05, 1.1, 0.8 ) * pow( back, 4.0 ) * gGrassTrans * RECIPROCAL_PI * 1.6;
+  float lobe = pow( back, 3.0 ) * 1.2 + pow( back, 12.0 ) * 1.2;
+  reflectedLight.directDiffuse += directLight.color * material.diffuseColor * vec3( 1.1, 1.12, 0.72 ) * lobe * gGrassTrans * RECIPROCAL_PI * 1.8;
 }
 #undef RE_Direct
 #define RE_Direct RE_Direct_Ground
