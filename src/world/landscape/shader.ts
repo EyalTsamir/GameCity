@@ -232,9 +232,11 @@ vec3 landAlbedo() {
       // ripe wheat: drill rows, tramlines, striation, lodged patches, wind sheen
       fc = cWheat * (0.9 + 0.2 * pv);
       fc *= 1.0 - 0.07 * lStripe(tr, 0.6, 0.35, fpt);
-      fc *= 1.0 - 0.32 * tram;
-      fc *= 1.0 + 0.26 * stri;
-      fc = mix(fc, fc * vec3(1.12, 1.08, 0.95), smoothstep(0.66, 0.8, nP.b) * 0.65);
+      fc *= 1.0 - 0.45 * tram;
+      fc *= 1.0 + 0.3 * stri;
+      // a gentle tonal drift across the whole field (soil, sowing date) and lodged patches
+      fc *= 0.9 + 0.2 * smoothstep(-0.6, 0.6, (dot(q - box.xy, vec2(0.7, 0.7)) / max(10.0, box.z - box.x + box.w - box.y) - 0.35) * 2.0 + (pv - 0.5));
+      fc = mix(fc, fc * vec3(1.15, 1.1, 0.93), smoothstep(0.64, 0.78, nP.b) * 0.75);
       fc = mix(fc, fc * vec3(0.9, 0.97, 0.85), smoothstep(0.62, 0.78, nW.r) * 0.5); // greener, later patches
       fc = mix(fc, fc * vec3(1.16, 1.12, 1.0), gust * 0.75);
     } else if (ch < 0.33) {

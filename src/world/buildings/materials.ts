@@ -428,7 +428,8 @@ vec3 bhShop(vec2 pm, vec2 csz, vec3 rd, float rs, float shopT, float litI, vec3 
   else if (T < 4.5) { wallC = vec3(0.42, 0.48, 0.4); floorC = vec3(0.32, 0.31, 0.29); }                     // florist / grocer
   else if (T < 5.5) { wallC = vec3(0.7, 0.66, 0.62); floorC = vec3(0.42, 0.33, 0.26); }                     // fashion
   else if (T < 6.5) { wallC = vec3(0.74, 0.76, 0.76); floorC = vec3(0.5, 0.5, 0.48); shelfKind = 0.0; }    // pharmacy / hardware
-  else { wallC = vec3(0.66, 0.64, 0.6); floorC = vec3(0.3, 0.22, 0.16); }                                    // gallery / antiques
+  else if (T < 7.5) { wallC = vec3(0.66, 0.64, 0.6); floorC = vec3(0.3, 0.22, 0.16); }                    // gallery / antiques
+  else { wallC = vec3(0.56, 0.54, 0.5); floorC = vec3(0.16, 0.16, 0.17); }                                   // office lobby
   vec3 c;
   float lf = 0.85;
   float self = 0.0; // self-lit (lamp bulbs)
@@ -452,7 +453,14 @@ vec3 bhShop(vec2 pm, vec2 csz, vec3 rd, float rs, float shopT, float litI, vec3 
       // shelves of folded clothes / shoe boxes on the back wall
       c = bhShelves(q, wallC, 0.0, rs, 0.4, min(Hc - 0.5, 2.4), 0.45) * mix(1.0, 0.95, step(q.y, 0.4));
     } else if (T < 6.5) c = bhShelves(q, wallC, 0.0, rs, 0.2, min(Hc - 0.4, 2.4), 0.36);
-    else {
+    else if (T > 7.5) {
+      // lobby: timber feature wall with a lit logo, stone elsewhere
+      float pan = step(abs(q.x - W * 0.5), W * 0.42) * step(q.y, Hc - 0.5);
+      c = mix(wallC, vec3(0.42, 0.28, 0.17) * (0.9 + 0.1 * bhStripe(q.x / 0.12, 0.2)), pan);
+      float logo = bhBox2(q, vec2(W * 0.5, min(Hc - 1.0, 2.4)), vec2(min(0.8, W * 0.25), 0.12));
+      c = mix(c, vec3(0.95, 0.92, 0.85), logo);
+      self = max(self, logo * 0.8);
+    } else {
       // framed pictures
       vec2 fc = vec2((floor(q.x / 1.1) + 0.5) * 1.1, 1.65 + 0.25 * (bhHash12(vec2(floor(q.x / 1.1), rs)) - 0.5));
       float hs = bhHash12(vec2(floor(q.x / 1.1), rs + 1.0));
@@ -531,6 +539,17 @@ vec3 bhShop(vec2 pm, vec2 csz, vec3 rd, float rs, float shopT, float litI, vec3 
         float stack = step(0.77, q.y) * step(q.y, 0.8 + 0.25 * hk) * step(abs(q.x - W * 0.5), W * 0.28) * step(0.06, fract(q.x / 0.3));
         m = clamp(tab + stack, 0.0, 1.0);
         mc = mix(vec3(0.3, 0.2, 0.12), bhPal(fract(hk * 3.0 + floor(q.y / 0.04) * 0.37)), stack);
+      } else if (T > 7.5) {
+        // reception desk, a person behind it, lounge chairs
+        float desk = bhBox2(q, vec2(W * 0.5, 0.55), vec2(min(1.2, W * 0.3), 0.55));
+        float top = bhBox2(q, vec2(W * 0.5, 1.1), vec2(min(1.25, W * 0.31), 0.03));
+        float clerk = max(bhDisc(q, vec2(W * 0.5 + 0.3, 1.45), 0.11), bhBox2(q, vec2(W * 0.5 + 0.3, 1.18), vec2(0.18, 0.2)));
+        float lounge = bhBox2(vec2(abs(q.x - W * 0.5), q.y), vec2(W * 0.5 - 0.5, 0.35), vec2(0.35, 0.22));
+        m = max(max(desk, top), max(clerk, lounge));
+        mc = mix(vec3(0.22, 0.2, 0.18), vec3(0.75, 0.72, 0.66), top);
+        mc = mix(mc, vec3(0.2, 0.25, 0.35), clerk * (1.0 - step(1.33, q.y)));
+        mc = mix(mc, vec3(0.62, 0.5, 0.42), clerk * step(1.33, q.y));
+        mc = mix(mc, vec3(0.3, 0.32, 0.36), lounge);
       } else if (T < 5.5 && T > 4.5) {
         // clothes rail
         float rail = bhBox2(q, vec2(W * 0.5, 1.68), vec2(W * 0.38, 0.012));
@@ -578,6 +597,13 @@ vec3 bhShop(vec2 pm, vec2 csz, vec3 rd, float rs, float shopT, float litI, vec3 
         float spot = step(0.45, bhHash12(floor(q * 22.0) + k));
         m = max(bucket, bloom);
         mc = mix(vec3(0.55, 0.57, 0.58), mix(vec3(0.2, 0.38, 0.14), bhPal(hb) * 1.15, spot), bloom);
+      } else if (T > 7.5) {
+        // big potted plant beside the glass
+        float x = W * (0.15 + 0.7 * hk);
+        float pot = bhBox2(q, vec2(x, 0.25), vec2(0.22, 0.25));
+        float leaves = (1.0 - smoothstep(0.85, 1.0, length((q - vec2(x, 1.2)) / vec2(0.5, 0.75)) + 0.25 * (bhHash12(floor(q * 14.0)) - 0.5)));
+        m = max(pot, leaves);
+        mc = mix(vec3(0.3, 0.3, 0.32), mix(vec3(0.1, 0.22, 0.08), vec3(0.22, 0.38, 0.14), bhHash12(floor(q * 11.0))), leaves);
       } else if (T > 6.5) {
         // a display plinth with an object
         float pl = bhBox2(q, vec2(W * 0.5, 0.45), vec2(0.22, 0.45));
@@ -773,6 +799,18 @@ void bhWall(inout vec3 albedo, inout float rough, inout float metal, inout vec3 
   if (!curtain && uDetail > 0.2 && uWear > 0.5) {
     float age = fract(seed * 0.6180339 + 0.21);
     float oldness = pat < 0.5 || (pat > 3.5 && pat < 4.5) ? mix(0.35, 1.0, age) : (pat < 1.5 ? mix(0.3, 0.8, age) : (pat > 4.5 ? 0.25 * age : mix(0.2, 0.6, age)));
+    // macro variation that survives distance (20–300 m): per-building age tone (older = darker, greyer), sun-
+    // bleached south / west faces vs damp north faces, a soot / grime gradient under the eaves and a broad
+    // darker damp band along the foot of the wall
+    float lumA = dot(albedo, vec3(0.299, 0.587, 0.114));
+    albedo = mix(albedo, vec3(lumA) * vec3(1.02, 0.99, 0.94), 0.3 * oldness);
+    albedo *= mix(1.05, 0.84, oldness * age);
+    float sunF = clamp(N.z * 0.75 - N.x * 0.55, -1.0, 1.0);
+    albedo = mix(albedo, mix(vec3(lumA), albedo, 0.7) * 1.08, smoothstep(0.1, 0.9, sunF) * 0.35 * oldness);
+    albedo *= 1.0 - 0.08 * smoothstep(0.2, 0.9, -sunF) * oldness;
+    float eaveG = info * (1.0 - smoothstep(0.0, 2.6 + 2.0 * nm.r, dTop)) * (0.55 + 0.45 * smoothstep(0.2, 0.7, stv));
+    albedo *= 1.0 - 0.22 * eaveG * oldness * wStr;
+    albedo *= 1.0 - 0.16 * (1.0 - smoothstep(0.2, 1.3 + 0.5 * nm.g, y)) * oldness * wStr;
     float tide = 0.35 + 0.6 * oldness + 0.35 * (nm.g - 0.5) + 0.1 * (grain - 0.5) + 0.2 * (np.r - 0.5);
     float damp = 1.0 - smoothstep(tide - 0.14, tide + 0.03, y);
     float salt = smoothstep(tide - 0.08, tide + 0.0, y) * (1.0 - smoothstep(tide + 0.0, tide + 0.07, y));
@@ -994,7 +1032,10 @@ void bhWall(inout vec3 albedo, inout float rough, inout float metal, inout vec3 
   if (shopWin) litI = lit * mix(0.62 + 0.25 * r2, 0.9 + 0.25 * r2, nightF);
   vec3 interior; // lamp-lit radiance seen through the glass
   vec3 dayA;     // daylight-lit albedo seen through the glass
+  bool lobbyWin = style > 6.5 && csz.y > 2.6 && prof > 4.5 && prof < 5.5;
+  if (lobbyWin) litI = lit * mix(0.55 + 0.2 * r2, 0.85 + 0.2 * r2, nightF);
   if (uDetail > 0.5 && shopWin) interior = bhShop(pm, csz, normalize(rd), seed * 1.37 + shopT * 11.0, shopT, litI, lcol, dayA);
+  else if (uDetail > 0.5 && lobbyWin) interior = bhShop(pm, csz, normalize(rd), seed * 1.37 + cell.x * 3.1, 8.0, litI, vec3(1.0, 0.82, 0.6), dayA);
   else if (uDetail > 0.5) interior = bhRoom(pm, csz, normalize(rd), r1 * 31.0 + seed, litI, lcol, prof, style, dayA);
   else {
     interior = lcol * 0.8 * litI;

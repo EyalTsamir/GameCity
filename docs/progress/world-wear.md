@@ -1,13 +1,14 @@
 # world-wear — weathering and lived-in clutter (world round)
 
 ## Resume here
-* M1 + M2 DONE (lead messaged 2026-10-20 ~01:45 with it3/it4 shots). it4: invariants {} / console clean.
-* Since it4 (not yet captured): shop interiors darker + higher contrast (+ side-wall goods, stronger lamp discs,
-  AO / light pools), shop night litI toned, roller shutters with graffiti on closed shops, litter visibility uses
-  the geometric-mean pixel footprint, stronger sidewalk/plaza wear. it5 running: shots/world/wear/it5
-  (otst, otbal, plaza, beach, oldtown × 11 / 21.5, with `lamps`).
-* NEXT: judge it5; overview + roofs (M3 polish); market + beach + downtown street eye level; maybe overhead
-  wires / street signs; final perf check (perf.mjs variants `;nogreen&nowear&nopuddles`).
+* M1 + M2 DONE (lead messaged). it4/it5 invariants {} + clean console.
+* After the lead's M2 review + streetlife's night note (all coded, typechecks, NOT yet captured): facade macro
+  variation (age tone, sun bleaching, eave soot gradient, base damp band); asphalt eye-level rework (worn mid-grey
+  base, lighter wheel paths, patches/sealant, gutter sediment, braking marks), paint wear visible at grazing angles
+  (geometric-mean footprint), litter visibility fix; café terrace lights (props: parasol lamps + lanterns +
+  addLampLights, `?noterracelights`); tower lobby interior type 8; roller shutters on closed shops.
+* it6 running: shots/world/wear/it6 (otfac, otst, plaza, beach × 11 / 18.2 / 21.5).
+* NEXT: judge it6; overview roofs; market/downtown street; perf A/B; final report.
 * Capture recipe: `capture-set.mjs --out shots/world/wear/itN --q "nointro&noidle&adaptive=0&quality=high&only=sky,terrain,roads,buildings,vegetation,props,lamps,postfx" --hideui 1 --width 1280 --height 720 --hours 11,21.5 --views "otfac=83,5,-16,25,70,6;otbal=83,5,-16,10,20,10;otst=70,1.7,-10,14,90,4;plaza=-28,1.5,-24,16,15,7;beach=110,1.7,5,16,180,5;oldtown"`
   (baseline = same with `--url http://127.0.0.1:5174/` → shots/world/wear/before, before2).
 

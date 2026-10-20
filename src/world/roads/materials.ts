@@ -386,8 +386,12 @@ const PAINT_AFTER = /* glsl */ `
   float wheel = max(1.0 - smoothstep(0.15, 0.5, abs(lat - 0.95)), 1.0 - smoothstep(0.15, 0.5, abs(lat - 2.55)));
   float wearAmt = vM.y * (0.4 + 0.6 * wheel);
   float nw = texture2D(tRN, vWP.xz * 0.8).a * 0.6 + texture2D(tRN, vWP.xz * 0.21).b * 0.4;
-  float worn = smoothstep(0.74 - 0.42 * wearAmt, 0.8 - 0.42 * wearAmt, nw) * rdDetail(vWP.xz, 0.1);
-  diffuseColor.rgb = mix(diffuseColor.rgb, vB, worn * 0.85);
+  // (detail fade from the geometric-mean pixel footprint: at eye level the paint is seen at grazing angles)
+  vec2 fwq = fwidth(vWP.xz);
+  float detq = 1.0 - smoothstep(0.1, 0.35, sqrt(fwq.x * fwq.y) / 0.1);
+  float worn = smoothstep(0.7 - 0.5 * wearAmt, 0.76 - 0.5 * wearAmt, nw) * detq;
+  diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * 0.82 + vB * 0.18, 0.6);   // dirty, sun-faded paint
+  diffuseColor.rgb = mix(diffuseColor.rgb, vB, worn * 0.9);
   float fw = length(fwidth(vWP.xz));
   diffuseColor.rgb = mix(vB, diffuseColor.rgb, clamp(vM.x / max(fw, 1e-4), 0.0, 1.0));
   diffuseColor.rgb *= mix(1.0, 0.7, uRain);
@@ -480,7 +484,7 @@ export function createMaterials(ctx: CityContext, info: SurfaceInfo, atlas: THRE
     pars: '',
     color: '',
     after: PAINT_AFTER,
-    key: 'roads-paint-v3',
+    key: 'roads-paint-v4',
     uniforms: shared,
   });
   return { asphalt, hard, paint, asphaltColor };

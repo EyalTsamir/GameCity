@@ -300,6 +300,117 @@ export function lily(s: GeoSink, w: Wind, x: number, y: number, z: number, r: nu
 
 // ──────────────────────────────────────────────────── tree surrounds ──
 
+const STONES = ['#cbc3b4', '#bdb3a3', '#c7bfb2', '#b3aa9b', '#d0c8ba'];
+const LITTER = ['#7a5a30', '#a07a3a', '#6b6a34', '#5a4428', '#b08840', '#8a4a2a', '#4f5a2c'];
+
+/**
+ * Weathered precast planter on the polygon `pts` (local xz, counter-clockwise seen from above), wall height
+ * hgt: splash grime and green algae at the foot, per-panel tone drift, a worn lighter rim with chipped edges,
+ * damp dark soil with fallen leaves. Returns the soil height above the base.
+ */
+function stonePlanter(sh: Shaper, rng: Rng, pts: [number, number][], hgt: number): number {
+  const s = sh.s;
+  const base = new THREE.Color(rng.pick(STONES));
+  const n = pts.length;
+  const soilY = hgt - 0.05;
+  const levels: [number, number][] = [
+    [0, 0.58],
+    [0.07, 0.72],
+    [0.16, 0.9],
+    [hgt, 1.0],
+  ];
+  const algae = rng.range(0, 6.28);
+  for (let i = 0; i < n; i++) {
+    const [ax, az] = pts[i],
+      [bx, bz] = pts[(i + 1) % n];
+    const ex = bx - ax,
+      ez = bz - az;
+    const el = Math.hypot(ex, ez) || 1;
+    // outward normal of a counter-clockwise polygon in local xz (+x right, +z towards the viewer)
+    const nx = ez / el,
+      nz = -ex / el;
+    const jit = rng.range(0.92, 1.06);
+    // algae / moss on the shaded side of the foot
+    const green = Math.max(0, Math.cos(Math.atan2(nz, nx) - algae)) * rng.range(0.4, 1);
+    const idx: number[] = [];
+    for (const [ly, k] of levels) {
+      const g = ly < 0.1 ? green : 0;
+      s.rgb(base.r * k * jit * (1 - 0.25 * g), base.g * k * jit * (1 - 0.08 * g), base.b * k * jit * (1 - 0.4 * g));
+      idx.push(sh.v(ax, ly, az, nx, 0, nz), sh.v(bx, ly, bz, nx, 0, nz));
+    }
+    for (let k = 0; k < levels.length - 1; k++) s.quad(idx[k * 2], idx[k * 2 + 2], idx[k * 2 + 3], idx[k * 2 + 1]);
+  }
+  // rim: outer lip + worn top band + inner edge, edge heights chipped a few mm
+  const rimO = 1.05,
+    rimI = 0.86;
+  for (let i = 0; i < n; i++) {
+    const [ax, az] = pts[i],
+      [bx, bz] = pts[(i + 1) % n];
+    const ex = bx - ax,
+      ez = bz - az;
+    const el = Math.hypot(ex, ez) || 1;
+    const nx = ez / el,
+      nz = -ex / el;
+    const ca = rng.range(-0.006, 0.004),
+      cb = rng.range(-0.006, 0.004);
+    const wear = rng.range(1.02, 1.12);
+    s.rgb(base.r * 0.88, base.g * 0.88, base.b * 0.86);
+    const l0 = sh.v(ax * rimO, hgt - 0.02, az * rimO, nx, 0, nz),
+      l1 = sh.v(bx * rimO, hgt - 0.02, bz * rimO, nx, 0, nz);
+    const l2 = sh.v(ax * rimO, hgt + 0.045 + ca, az * rimO, nx, 0.2, nz),
+      l3 = sh.v(bx * rimO, hgt + 0.045 + cb, bz * rimO, nx, 0.2, nz);
+    s.quad(l0, l2, l3, l1);
+    s.rgb(base.r * wear, base.g * wear, base.b * wear * 0.98);
+    const t0 = sh.v(ax * rimO, hgt + 0.045 + ca, az * rimO, 0, 1, 0),
+      t1 = sh.v(bx * rimO, hgt + 0.045 + cb, bz * rimO, 0, 1, 0);
+    s.rgb(base.r * 0.9, base.g * 0.9, base.b * 0.88);
+    const t2 = sh.v(ax * rimI, hgt + 0.045, az * rimI, 0, 1, 0),
+      t3 = sh.v(bx * rimI, hgt + 0.045, bz * rimI, 0, 1, 0);
+    s.quad(t2, t3, t1, t0);
+    // inner wall down to the soil (shaded)
+    s.rgb(base.r * 0.5, base.g * 0.48, base.b * 0.45);
+    const i0 = sh.v(ax * rimI, hgt + 0.045, az * rimI, -nx, 0, -nz),
+      i1 = sh.v(bx * rimI, hgt + 0.045, bz * rimI, -nx, 0, -nz);
+    const i2 = sh.v(ax * rimI, soilY, az * rimI, -nx, 0, -nz),
+      i3 = sh.v(bx * rimI, soilY, bz * rimI, -nx, 0, -nz);
+    s.quad(i0, i2, i3, i1);
+  }
+  // soil: damp dark earth, darker towards the rim
+  s.rgb(0.13, 0.085, 0.055);
+  const c = sh.v(0, soilY + 0.01, 0, 0, 1, 0);
+  const ring: number[] = [];
+  for (let i = 0; i < n; i++) {
+    const d = rng.range(0.8, 1.05);
+    s.rgb(0.09 * d, 0.06 * d, 0.04 * d);
+    ring.push(sh.v(pts[i][0] * rimI, soilY, pts[i][1] * rimI, 0, 1, 0));
+  }
+  for (let i = 0; i < n; i++) s.tri(c, ring[(i + 1) % n], ring[i]);
+  // fallen leaves on the soil
+  let rmin = 1e9;
+  for (const [px, pz] of pts) rmin = Math.min(rmin, Math.hypot(px, pz));
+  for (let k = 0; k < 26; k++) {
+    const a = rng.range(0, 6.28),
+      d = Math.sqrt(rng.next()) * rmin * rimI * 0.85;
+    if (d < 0.18) continue;
+    const lx = Math.cos(a) * d,
+      lz = Math.sin(a) * d;
+    const lc = new THREE.Color(rng.pick(LITTER)).multiplyScalar(rng.range(0.75, 1.05));
+    s.rgb(lc.r, lc.g, lc.b);
+    const r0 = rng.range(0.025, 0.05),
+      r1 = r0 * rng.range(0.45, 0.65),
+      rot = rng.range(0, 6.28);
+    const yy = soilY + 0.006 + rng.range(0, 0.006);
+    const cs = Math.cos(rot),
+      sn = Math.sin(rot);
+    const p0 = sh.v(lx + cs * r0, yy, lz + sn * r0, 0, 1, 0),
+      p1 = sh.v(lx - sn * r1, yy, lz + cs * r1, 0, 1, 0),
+      p2 = sh.v(lx - cs * r0, yy, lz - sn * r0, 0, 1, 0),
+      p3 = sh.v(lx + sn * r1, yy, lz - cs * r1, 0, 1, 0);
+    s.quad(p0, p3, p2, p1);
+  }
+  return soilY;
+}
+
 export type Surround = 'grate' | 'roundgrate' | 'verge' | 'planter' | 'roundplanter' | 'none';
 
 /**
@@ -327,18 +438,21 @@ export function surround(sh: Shaper, w: Wind, kind: Surround, x: number, y: numb
       return y + 0.02;
     }
     case 'planter': {
-      const c = rng.chance(0.5) ? '#c9c3b8' : '#a8a198';
-      sh.color(c).box(0, 0.23, 0, 1.5, 0.46, 0.7, 1);
-      sh.color('#d8d2c6').box(0, 0.47, 0, 1.56, 0.04, 0.76, 1);
-      sh.color('#4e3828').box(0, 0.44, 0, 1.38, 0.03, 0.58, 3);
-      return y + 0.45;
+      const pts: [number, number][] = [
+        [-0.75, -0.35],
+        [0.75, -0.35],
+        [0.75, 0.35],
+        [-0.75, 0.35],
+      ];
+      return y + stonePlanter(sh, rng, pts, 0.46);
     }
     case 'roundplanter': {
-      const r = 0.95;
-      sh.color(rng.chance(0.5) ? '#cfc6b6' : '#b9ab95').cyl(0, 0, 0, r, r * 1.04, 0.5, 12, 0, false);
-      sh.color('#ddd5c6').cyl(0, 0.5, 0, r * 1.06, r * 1.06, 0.05, 12, 2, false);
-      sh.color('#4e3828').disc(0, 0.53, 0, r * 0.92, 10, 1);
-      return y + 0.52;
+      const pts: [number, number][] = [];
+      for (let i = 0; i < 8; i++) {
+        const a = (i / 8) * Math.PI * 2 + Math.PI / 8;
+        pts.push([Math.cos(a) * 0.98, Math.sin(a) * 0.98]);
+      }
+      return y + stonePlanter(sh, rng, pts, 0.5);
     }
     default:
       return y;

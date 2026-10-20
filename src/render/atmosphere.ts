@@ -41,7 +41,7 @@ export const ATMO_N = 12;
  *  [4] ring a1.rgb, fold plane = water level (m)
  *  [5] ring a2.rgb, 1 / mist scale height (1/m)
  *  [6] ring a3.rgb, distance desaturation (0..1)
- *  [7] colour seen by rays looking up (higher sky haze).rgb, its blend weight
+ *  [7] in-scattered colour of the blue air (cool, any direction).rgb, unused
  *  [8] mist colour.rgb, mist extinction at the water level (1/m)
  *  [9] mist drift offset x, z (m), patch frequency (1/m), patchiness (0..1)
  * [10] haze start distance (m), overall in-scatter gain, tight sun-lobe weight, tight sun-lobe exponent
@@ -82,7 +82,6 @@ vec3 thHazeColor(vec3 V) {
   float c2 = 2.0 * c * c - 1.0;
   float c3 = (2.0 * c2 - 1.0) * c;
   vec3 ring = max(thAtmo[3].rgb + thAtmo[4].rgb * c + thAtmo[5].rgb * c2 + thAtmo[6].rgb * c3, vec3(0.0));
-  ring = mix(ring, thAtmo[7].rgb, thAtmo[7].a * smoothstep(0.04, 0.7, V.y));
   return ring + thSunLobe(V);
 }
 float atmHash12(vec2 p) {
@@ -95,15 +94,14 @@ float atmNoise2(vec2 p) {
   f = f * f * (3.0 - 2.0 * f);
   return mix(mix(atmHash12(i), atmHash12(i + vec2(1.0, 0.0)), f.x), mix(atmHash12(i + vec2(0.0, 1.0)), atmHash12(i + vec2(1.0, 1.0)), f.x), f.y);
 }
-// haze transmittance (rgb) and mist transmittance (a) along camera → camera + ray: blue air (Rayleigh,
-// per channel, ~8 km scale height: far ridges turn blue) + aerosol (grey, ~1 km: valleys haze, peaks clear)
-vec4 thAtmoT(vec3 ray) {
+// transmittances along camera → camera + ray: blue air (Rayleigh-like, per channel, ~8 km scale height:
+// far ridges turn blue) → TR; aerosol (grey, ~1 km: valleys haze, peaks clear) → TM; ground mist → Tmist
+void thAtmoTs(vec3 ray, out vec3 TR, out float TM, out float Tmist) {
   float t = length(ray);
   float yc = cameraPosition.y, yp = yc + ray.y;
   float ts = max(t - thAtmo[10].x, 0.0) / max(t, 1e-3);
-  float odR = atmOD(yc, yp, t, thAtmo[3].w, thAtmo[2].w) * ts;
-  float odM = atmOD(yc, yp, t, thAtmo[3].w, thAtmo[11].y) * ts;
-  vec3 T = exp(-(thAtmo[2].rgb * odR + thAtmo[11].x * odM));
+  TR = exp(-thAtmo[2].rgb * (atmOD(yc, yp, t, thAtmo[3].w, thAtmo[2].w) * ts));
+  TM = exp(-thAtmo[11].x * (atmOD(yc, yp, t, thAtmo[3].w, thAtmo[11].y) * ts));
   float Tm = 1.0;
   if (thAtmo[8].w > 0.0) {
     vec2 q = (cameraPosition.xz + ray.xz + thAtmo[9].xy) * thAtmo[9].z;
@@ -111,22 +109,35 @@ vec4 thAtmoT(vec3 ray) {
     float patchy = mix(1.0, smoothstep(0.25, 0.75, n) * 1.8, thAtmo[9].w);
     Tm = exp(-thAtmo[8].w * patchy * atmOD(yc, yp, t, thAtmo[4].w, thAtmo[5].w));
   }
-  return vec4(T, Tm);
+  Tmist = Tm;
 }
-// apply the atmosphere to a lit colour seen along ray (world space, camera → point)
+// combined transmittance (rgb) and mist (a) — for legacy / additive paths
+vec4 thAtmoT(vec3 ray) {
+  vec3 TR;
+  float TM, Tmist;
+  thAtmoTs(ray, TR, TM, Tmist);
+  return vec4(TR * TM, Tmist);
+}
+// apply the atmosphere to a lit colour seen along ray (world space, camera → point). Each medium has its
+// own in-scattered light: the blue air is cool in every direction (thAtmo[7]); the aerosol scatters
+// mostly FORWARD — golden toward a low sun (ring + sun lobe), dim and cool away from it.
 vec3 thAtmoApply(vec3 col, vec3 ray) {
-  vec4 Tt = thAtmoT(ray);
-  vec3 T = Tt.rgb;
+  vec3 TR;
+  float TM, Tmist;
+  thAtmoTs(ray, TR, TM, Tmist);
+  vec3 T = TR * TM;
   float Ta = dot(T, vec3(0.2126, 0.7152, 0.0722));
   vec3 V = ray * inversesqrt(max(dot(ray, ray), 1e-8));
   // aerial perspective takes saturation before it takes value
   float l = dot(col, vec3(0.2126, 0.7152, 0.0722));
   col = mix(col, vec3(l), thAtmo[6].w * (1.0 - Ta));
-  col = col * T + thHazeColor(V) * thAtmo[10].y * (1.0 - T);
-  if (Tt.a < 1.0) {
+  float g = thAtmo[10].y;
+  // blue air nearer the object, aerosol (low, the valley haze) layered over it
+  col = (col * TR + thAtmo[7].rgb * g * (1.0 - TR)) * TM + thHazeColor(V) * g * (1.0 - TM);
+  if (Tmist < 1.0) {
     float mu = max(dot(V, thAtmo[0].xyz), 0.0);
     vec3 mc = thAtmo[8].rgb + thAtmo[1].rgb * thAtmo[1].w * mu * mu * mu * mu;
-    col = mix(mc, col, Tt.a);
+    col = mix(mc, col, Tmist);
   }
   return col;
 }
@@ -231,8 +242,8 @@ export interface AtmosphereParams {
   waterY: number;
   /** horizon ring Fourier coefficients a0..a3 (colour = a0 + a1 cosφ + a2 cos2φ + a3 cos3φ) */
   ring: [THREE.Color, THREE.Color, THREE.Color, THREE.Color];
-  up: THREE.Color;
-  upBlend: number;
+  /** in-scattered colour of the blue air (cool) */
+  airColor: THREE.Color;
   desat: number;
   mistColor: THREE.Color;
   /** mist extinction at the water level (1/m); 0 = no mist */
@@ -261,8 +272,7 @@ export function createAtmosphereParams(): AtmosphereParams {
     refY: 0,
     waterY: -1.6,
     ring: [new THREE.Color(0.7, 0.8, 0.9), new THREE.Color(0, 0, 0), new THREE.Color(0, 0, 0), new THREE.Color(0, 0, 0)],
-    up: new THREE.Color(0.6, 0.7, 0.9),
-    upBlend: 0.25,
+    airColor: new THREE.Color(0.45, 0.6, 0.9),
     desat: 0.35,
     mistColor: new THREE.Color(0.8, 0.8, 0.8),
     mist: 0,
@@ -294,7 +304,7 @@ export function writeAtmosphere(p: AtmosphereParams): void {
   set(4, p.ring[1].r, p.ring[1].g, p.ring[1].b, p.waterY);
   set(5, p.ring[2].r, p.ring[2].g, p.ring[2].b, 1 / Math.max(0.5, p.mistScaleHeight));
   set(6, p.ring[3].r, p.ring[3].g, p.ring[3].b, p.desat);
-  set(7, p.up.r, p.up.g, p.up.b, p.upBlend);
+  set(7, p.airColor.r, p.airColor.g, p.airColor.b, 0);
   set(8, p.mistColor.r, p.mistColor.g, p.mistColor.b, p.mist);
   set(9, p.mistDrift.x, p.mistDrift.y, p.mistFreq, p.mistPatchiness);
   set(10, p.startDist, p.gain, p.lobe2, p.lobe2Exp);

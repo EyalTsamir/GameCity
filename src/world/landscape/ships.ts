@@ -4,7 +4,7 @@
 // every frame (≈ 3 k vertices → one draw call, no per-frame allocation). Gentle pitch / roll, white
 // bow waves, navigation and deck lights at night.
 
-import * as THREE from 'three';
+import { frontXtoZ, type Fleet } from './fleet';
 import type { LandscapeModel } from './model';
 import { WL } from './model';
 import { hash2i } from './noise';
@@ -201,12 +201,11 @@ interface Vessel {
 }
 
 export interface Ships {
-  mesh: THREE.Mesh;
   update(t: number, dt: number): void;
   count: number;
 }
 
-export function createShips(model: LandscapeModel, fog: boolean, lights: { value: number }): Ships {
+export function createShips(model: LandscapeModel, fleet: Fleet): Ships {
   const T = makeTemplates();
   const vessels: Vessel[] = [];
   const add = (type: number, x: number, z: number, heading: number, speed: number, z0: number, z1: number) => vessels.push({ type, x, z, heading, speed, phase: hash2i(vessels.length, type, 5) * 6.28, z0, z1 });
@@ -226,73 +225,19 @@ export function createShips(model: LandscapeModel, fog: boolean, lights: { value
   for (const v of vessels) {
     for (let i = 0; i < 30 && model.coastSD(v.x, v.z) > -260; i++) v.x += 150;
   }
-  let nv = 0;
-  for (const v of vessels) nv += T[v.type].pos.length / 3;
-  const pos = new Float32Array(nv * 3);
-  const col = new Float32Array(nv * 3);
-  const emi = new Float32Array(nv);
-  let o = 0;
-  for (const v of vessels) {
-    const t = T[v.type];
-    col.set(t.col, o * 3);
-    emi.set(t.emi, o);
-    o += t.pos.length / 3;
-  }
-  const geo = new THREE.BufferGeometry();
-  const pa = new THREE.BufferAttribute(pos, 3);
-  pa.setUsage(THREE.DynamicDrawUsage);
-  geo.setAttribute('position', pa);
-  geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
-  geo.setAttribute('aEmi', new THREE.BufferAttribute(emi, 1));
-  geo.boundingSphere = new THREE.Sphere(new THREE.Vector3(6000, 0, 0), 20000);
-  const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.6, metalness: 0.05, fog, flatShading: true, side: THREE.DoubleSide });
-  mat.onBeforeCompile = (shader) => {
-    shader.uniforms.uLights = lights;
-    shader.vertexShader = shader.vertexShader.replace('#include <common>', '#include <common>\nattribute float aEmi;\nvarying float vEmi;').replace('#include <begin_vertex>', '#include <begin_vertex>\nvEmi = aEmi;');
-    shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', '#include <common>\nuniform float uLights;\nvarying float vEmi;')
-      .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += vec3(1.0, 0.8, 0.5) * vEmi * uLights * 0.9;');
-  };
-  mat.customProgramCacheKey = () => 'th-landships-v1';
-  const mesh = new THREE.Mesh(geo, mat);
-  mesh.name = 'land-ships';
-  mesh.frustumCulled = false;
-  mesh.castShadow = false;
-  mesh.receiveShadow = false;
-  mesh.matrixAutoUpdate = false;
-
+  // register with the shared vehicle mesh (templates rotated to front = +z)
+  const tz = T.map((t) => frontXtoZ(t));
+  const ids = vessels.map((v) => fleet.add(tz[v.type]));
   const update = (time: number, dt: number) => {
-    let o2 = 0;
-    for (const v of vessels) {
-      // sail along the course, turn round at the ends (or when the coast comes near)
+    vessels.forEach((v, k) => {
+      // sail along the course, turn round at the ends
       v.x += Math.sin(v.heading) * v.speed * dt;
       v.z -= Math.cos(v.heading) * v.speed * dt;
       if ((v.z < v.z0 && Math.cos(v.heading) > 0) || (v.z > v.z1 && Math.cos(v.heading) < 0)) v.heading += Math.PI;
-      const t = T[v.type];
-      const ch = Math.cos(v.heading),
-        sh = Math.sin(v.heading);
       const pitch = Math.sin(time * 0.7 + v.phase) * (v.type >= 3 ? 0.03 : 0.006);
-      const roll = Math.sin(time * 0.53 + v.phase * 1.7) * (v.type >= 3 ? 0.06 : 0.01);
-      const heel = v.type === 4 ? 0.12 : 0;
-      const src = t.pos;
-      for (let i = 0; i < src.length; i += 3) {
-        const lx = src[i],
-          ly = src[i + 1],
-          lz = src[i + 2];
-        // pitch (about z) and roll / heel (about x) in the ship frame
-        const y1 = ly + lx * pitch + lz * (roll + heel);
-        const z1 = lz - ly * (roll + heel);
-        // ship frame (bow +x) → world: heading 0 = sailing north (−z)
-        const wx = v.x + sh * lx + ch * z1;
-        const wz = v.z - ch * lx + sh * z1;
-        pos[o2 * 3] = wx;
-        pos[o2 * 3 + 1] = WL + y1;
-        pos[o2 * 3 + 2] = wz;
-        o2++;
-      }
-    }
-    pa.needsUpdate = true;
+      const roll = Math.sin(time * 0.53 + v.phase * 1.7) * (v.type >= 3 ? 0.06 : 0.01) + (v.type === 4 ? 0.12 : 0);
+      fleet.set(ids[k], v.x, WL, v.z, Math.PI - v.heading, pitch, roll);
+    });
   };
-  update(0, 0);
-  return { mesh, update, count: vessels.length };
+  return { update, count: vessels.length };
 }

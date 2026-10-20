@@ -510,6 +510,7 @@ export class CrowdRenderer {
         let flags = ld.flags;
         CC.set(ld.col);
         if (m.towel) flags |= bit(FB.TOWEL);
+        if (m.bag) flags |= bit(FB.SHOPBAG);
         if (umbrella) {
           flags |= bit(FB.UMBRELLA);
           CC[9] = ((L.umbrella & 0xffffff) | (CC[9] & 0xff000000)) >>> 0;

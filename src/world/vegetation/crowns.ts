@@ -97,6 +97,8 @@ export interface PlantDef {
   color?: string;
   /** hedge segment: ax, az, bx, bz, width */
   seg?: [number, number, number, number, number];
+  /** crown stretched along a horizontal axis (street trees grow along the street gap): ax, az, factor */
+  stretch?: [number, number, number];
 }
 
 type V3 = [number, number, number];
@@ -331,6 +333,17 @@ function broadStruct(st: Struct, rng: Rng): void {
   st.cr = r;
   st.cry = Rv;
   const rel = makeLobes(form, r, Rv, rng, bx, bz);
+  if (def.stretch) {
+    const [sx, sz, k] = def.stretch;
+    for (const L of rel) {
+      const along = L.x * sx + L.z * sz;
+      L.x += sx * along * (k - 1);
+      L.z += sz * along * (k - 1);
+      const g = Math.sqrt(k);
+      L.rx *= 1 + (g - 1) * Math.abs(sx);
+      L.rz *= 1 + (g - 1) * Math.abs(sz);
+    }
+  }
   const ph0 = rng.next();
   st.lobes = rel.map((L, i) => ({ ...L, x: c[0] + L.x, y: c[1] + L.y, z: c[2] + L.z, ph: (ph0 + i * 0.381966) % 1, w: Math.min(1, Math.hypot(L.x, L.z, L.y * 0.5) / 2.2 + 0.25) }));
   st.cardHalf = kind.card * Math.min(1.3, Math.max(0.72, r / 2.5));

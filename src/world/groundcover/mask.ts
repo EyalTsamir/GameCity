@@ -5,7 +5,7 @@
 //   R density   where grass grows (0 none … 1 full): lawns, verges, meadows, unmown edges, pavement weeds
 //   G length    0 mown lawn (5–9 cm) · ~0.3 rough / unmown tuft · ~0.65 meadow · 1 tall meadow
 //   B habitat   0 normal · 1..100 wet shore (reeds, cattails, shore grass; value = strength) ·
-//               150..255 dune (marram; strength = (v − 150) / 105)
+//               120 pavement weed (leafy rosettes, dandelions) · 150..255 dune (marram; (v − 150) / 105)
 //   A litter    fallen leaves under trees (also on paving)
 // tFlower  RGBA8, 0.5 m (FW × FH)
 //   R wildflower density (meadows) · G species band (see SPECIES) · B lawn flowers (daisy, dandelion,
@@ -293,7 +293,7 @@ export function buildCoverMaps(ctx: CityContext): CoverMaps {
     for (const sg of [-1, 1]) {
       // wall / fence base (inner sidewalk edge) and the kerb joint (both sides of the kerb stone)
       const offs = [CORRIDOR_HALF - 0.16, ROAD_HALF + 0.42, ROAD_HALF - 0.32];
-      const prob = [0.32, 0.14, 0.12];
+      const prob = [0.5, 0.26, 0.2];
       offs.forEach((o, qi) => {
         if (horiz) weedLine(a0, P.z + sg * o, a1, P.z + sg * o, prob[qi], 0.07, qi === 0 ? 0.2 : 0.13);
         else weedLine(P.x + sg * o, a0, P.x + sg * o, a1, prob[qi], 0.07, qi === 0 ? 0.2 : 0.13);
@@ -485,8 +485,9 @@ export function buildCoverMaps(ctx: CityContext): CoverMaps {
       }
       // pavement weeds (on hard surfaces, sparse spots)
       if (wk > 0.3 && dens < 0.2 && (o & (OCC.BUILDING | OCC.WATER | OCC.SOLID)) === 0) {
-        dens = Math.max(dens, wk * 0.85);
+        dens = Math.max(dens, wk * 0.9);
         len = Math.max(len, 0.22 + 0.18 * hash2(i >> 2, j >> 2, 5));
+        if (hab === 0) hab = 120; // pavement weed habitat (leafy rosettes, dandelions)
         stats.weedCells++;
       }
       const lit = Math.min(1, lt0 * 1.6) * (above > 0.05 ? 1 : 0) * ((o & OCC.BUILDING) === 0 ? 1 : 0);
@@ -526,7 +527,7 @@ export function buildCoverMaps(ctx: CityContext): CoverMaps {
       let best = 0;
       for (let s = 1; s < 6; s++) if (fs[s] > fs[best]) best = s;
       spIdx[j * SPW + i] = best;
-      spDen[j * SPW + i] = smooth(0.5, 0.72, fs[best]);
+      spDen[j * SPW + i] = smooth(0.44, 0.68, fs[best]);
       lawnF[j * SPW + i] = smooth(0.48, 0.72, fbm(x * 0.11, z * 0.11, 707)) * 0.85;
     }
   }

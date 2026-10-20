@@ -26,6 +26,7 @@ import type { BuildingsService } from './buildings/anchors';
 import { Builder } from './buildings/mesh';
 import { GreenKit, makeGreenTexture, createGreenMaterial } from './buildings/green';
 import { XS, ZS, FURN_OFFSET } from '../core/constants';
+import { addLampLights, type LampLight } from '../core/lampLight';
 
 interface TerrainSvc {
   height(x: number, z: number): number;
@@ -213,6 +214,8 @@ export default function create(ctx: CityContext): CityModule {
     },
   };
   const chairs: ChairOut[] = [];
+  /** café terrace lights for the night lamp map (registered below, before the lamps module bakes) */
+  const terraceLights: LampLight[] = [];
   let scatter: ScatterItem[] = [];
   if (!ctx.debug.params.has('noscatter')) {
     const vegTrees = (ctx.services.vegetation as { trees?: { x: number; z: number; r: number; h: number }[] } | undefined)?.trees ?? [];
@@ -234,6 +237,19 @@ export default function create(ctx: CityContext): CityModule {
           const cafe: Cafe = { x: it.x, z: it.z, yaw: it.yaw, tableY: y + 0.755, tableR: 0.36, seats: [], parasol: shade, source: inStation ? 'station' : nearKiosk ? 'kiosk' : 'plaza' };
           for (const c of chairs) cafe.seats.push({ x: c.sx, z: c.sz, yaw: Math.atan2(c.fx - c.sx, c.fz - c.sz), seatY: c.sy });
           service.cafes.push(cafe);
+          // night: a warm lamp hung under the parasol (or a lantern on bare tables), registered in the lamp map
+          if (shade) {
+            kf.m('#3b3f42', 'iron');
+            kf.sh.cyl(0, 2.02, 0, 0.012, 0.012, 0.24, 4, 0);
+            kf.e('#fff1d6', '#ffbf6a', 2.6);
+            kf.sh.ellipsoid(0, 1.98, 0, 0.09, 0.07, 0.09, 0);
+            glows.push({ x: it.x, y: y + 1.98, z: it.z, size: 0.45, halo: true, color: '#ffc27a', intensity: 0.7 });
+            terraceLights.push({ x: it.x, y: y + 1.98, z: it.z, pole: 1.98, radius: 2.8, color: '#ffc27a', intensity: 0.42, kind: 'plaza' });
+          } else {
+            kf.e('#fff1d6', '#ffbf6a', 2.2);
+            kf.sh.cyl(0.12, 0.755, -0.08, 0.035, 0.035, 0.09, 6, 2);
+            terraceLights.push({ x: it.x, y: y + 0.9, z: it.z, pole: 0.9, radius: 1.5, color: '#ffc27a', intensity: 0.22, kind: 'spill' });
+          }
           break;
         }
         case 'kiosk':
@@ -450,6 +466,10 @@ export default function create(ctx: CityContext): CityModule {
         for (const ch of chairs) cafe.seats.push({ x: ch.sx, z: ch.sz, yaw: Math.atan2(ch.fx - ch.sx, ch.fz - ch.sz), seatY: ch.sy });
         service.cafes.push(cafe);
         layout.furniture.push({ x, z, r: 1.0 });
+        // table lantern + its warm pool (the shop window spill and the awning lights do the rest)
+        kf.e('#fff1d6', '#ffbf6a', 2.2);
+        kf.sh.cyl(0.09, 0.755, 0.09, 0.035, 0.035, 0.09, 6, 2);
+        terraceLights.push({ x, y: SIDEWALK_Y + 0.9, z, pole: 0.9, radius: 1.6, color: '#ffc27a', intensity: 0.25, kind: 'spill' });
         kerbTables++;
         inc('kerbCafe');
       }
@@ -696,6 +716,7 @@ export default function create(ctx: CityContext): CityModule {
     if (parts.includes('glass')) root.add(gm);
   }
   ctx.services.props = service;
+  if (terraceLights.length && !ctx.debug.params.has('noterracelights')) addLampLights(terraceLights);
   const glowMesh = createGlowMesh(ctx.uniforms, glows);
   if (parts.includes('glows')) root.add(glowMesh);
   ctx.scene.add(root);
@@ -718,6 +739,7 @@ export default function create(ctx: CityContext): CityModule {
         verts: [...KC, ...KF, KS].reduce((a, c) => a + c.s.vcount, 0) + gsink.vcount,
         buildMs: Math.round(buildMs),
         cafes: service.cafes.length,
+        terraceLights: terraceLights.length,
         cafeSeats: service.cafes.reduce((a, c) => a + c.seats.length, 0),
         bbqs: service.bbqs.length,
         dryers: service.washing.length,

@@ -1,29 +1,18 @@
 # world — streetlife (café terraces, street sitters, vendors, two-wheelers)
 
 ## Resume here
-* 2026-10-19 21:12 UTC — everything typechecks; headless benches clean (invariants 0). Running:
-  full-city capture set `shots/world/streetlife/m3b/` (dtroad, junc, cafeA, square, market, otstreet,
-  overview × 12.5 h / 18.2 h) and rider close-ups `riders2/` (scratchpad `tools/riders.mjs`).
-* Done since the last entry: M3 browser check (`m3a_fountain.png`: Town Square busy, rim sitters, juice
-  cart); fixed a crash (vendorGoal picked market stalls with node −1); market vendors are now crowd
-  figures (granted landmarks edit); invariant exemptions for market vendors (behind counters) and rim
-  sitters; café-directed spawning (doors within ~80 m) + longer stays (120–300 s) → ~90 % of claimed
-  seats occupied; pavement chat stops (pairs / trios facing each other in file, `CHAT_STOP`) and phone
-  calls; BASE_POP 440 → 560 + busier districts weighted up (lead: streets near-empty); more hangouts (16);
-  café planner multi-source Dijkstra (buildCafes ≈ 100 ms); motorbike side covers / swing arm; tea lights
-  on café tables after 18:20 (glow with uLights).
-* Headless tools (scratchpad `h/`): `node h/build.mjs h/crowdbench.ts && node h/crowdbench.mjs "h=13&s=40&speed=2[&nocafe…]"`
-  (crowd + traffic CPU, stats, invariants), `h/tw.ts` (traffic only, `no2w`), `h/cafes.ts` (café planner).
-* Known pre-existing: a bus's rear axle point crosses the kerb corner at (58.7, −68.6) for one sample
-  (same with ?no2w) — traffic invariant, transient.
-* 21:15 — riders2 judged (`riders2a_sheet.png`, `riders2b_sheet.png`): cyclist on the saddle pedalling, courier
-  backpack + helmet, e-scooter rider standing, moped / courier / motorcyclist seated with feet on floor /
-  pegs — all read well. Added since: pillion passengers on every 4th Vespa (RIDE_PILLION, hands round the
-  rider's waist), a street musician with a guitar + open case on the biggest plaza with a little audience
-  (Stall kind 'busker', IDLE.GUITAR pose), quality-scaled parked two-wheelers.
-* Running / queued: `m3b/` (full city, 7 views × 12.5 / 18.2 h), `perf_on|off.json` (downtown POI, all street
-  life vs `no2w&noparked2w&nocafe&nohang&novendors&norim`), `m3c/` (table close-ups day / night, busker).
-* Next: judge m3b / m3c, perf numbers into the log; soak 4 min @4×; `?diorama` check; final report.
+* 2026-10-20 01:45 UTC — resumed after the usage-limit stop + reboot (01:29). All code typechecks; headless
+  invariants clean. Judged: `m3b_sheet1-3.png` (full city: old town street busy, market vendors, gelato
+  cart + terrace), `m3c_sheet.png` (table close-ups; night terraces too dark → request to wear via lead),
+  riders2 (all six two-wheeler types with riders: good).
+* Since the last entry: attention-weighted spawning (crowd.updateFocus/focusDoor + early recycling of far
+  off-camera walkers; `?nofocus`), busier market mornings (more stall stops, 5–16 s, market detours for
+  tourists / couples / elderly / families), brighter tea lights.
+* Running: `focus_junc.json/.png`, `focus_dtroad.json/.png` (shot.mjs, view set, 4× for 40 s → density
+  where the camera looks + invariants + vendor positions incl. the busker).
+* Perf (downtown POI 1920×1025, all street life on vs off): 165 vs 161 draw calls, 2.512 M vs 2.440 M tris
+  (+73 k), figures 60.8 k vs 39.4 k verts, vehicles 44.5 k vs 28.7 k tris (`perf_on|off.json`).
+* Next: judge focus shots; busker view; soak 4 min @4× (full city); `?diorama` check; final report.
 
 ## Brief (WORLD-PLAN.md workstream 5 + world-briefs.md notes)
 Gap: at eye level the city is thinly populated compared to reference 2 (sunny Tel-Aviv café street — every

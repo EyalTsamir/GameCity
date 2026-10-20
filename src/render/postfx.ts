@@ -351,6 +351,8 @@ export default function create(ctx: CityContext): CityModule {
   ctx.render = (realDt: number) => {
     renderer.info.reset();
     camera.updateMatrixWorld();
+    // world: the raymarched cumulus deck for this frame's final camera (the dome composites it)
+    (ctx.services.sky as { renderClouds?(r: THREE.WebGLRenderer, c: THREE.PerspectiveCamera): void } | undefined)?.renderClouds?.(renderer, camera);
     if (!enabledAll) {
       const ac = renderer.autoClear;
       renderer.autoClear = true;
@@ -495,6 +497,7 @@ export default function create(ctx: CityContext): CityModule {
     // the whole frame's GPU time (shadow map + scene + post), read back asynchronously
     gpuTimer.poll(gpuSample);
     gpuTimer.begin();
+
     composer.render(realDt);
     gpuTimer.end();
     // what softDepth() hands out during the next frame

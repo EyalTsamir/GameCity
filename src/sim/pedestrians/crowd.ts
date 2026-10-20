@@ -227,6 +227,8 @@ export class Member {
   carry = 0;
   /** walking with something in the right hand: 0 nothing, 1 a takeaway coffee, 2 looking at the phone */
   walkProp = 0;
+  /** carrying a shopping bag bought on the way (market) */
+  bag = false;
   /** sitting on a seat higher than a bench and without a backrest (fountain rim): extra height, m */
   seatH = 0;
   /** standing about with friends (talking with the hands in turns), or a forced idle pose (-1 none, 5 phone) */
@@ -1433,6 +1435,8 @@ export class Crowd {
         m.faceHold = false;
         m.chat = 0;
         m.forceIdle = -1;
+        // bought something at the market: carried away in a bag
+        if (st?.label === 'Buying at a market stall' && m.idx === 0 && !(m.look.flags & (F.SHOPBAG | F.CANE | F.ROD)) && !m.look.pram && m.walkProp === 0) m.bag = true;
       }
     }
   }
@@ -2488,16 +2492,17 @@ export class Crowd {
       const e = L.edge;
       const nx = -L.dz,
         nz = L.dx;
-      if (e.kind === 'market') {
+      const hh = this.ctx.clock.hours;
+      if (e.kind === 'market' && hh > 7.5 && hh < 14.4) {
         for (const st of pl.stalls) {
           const rx = st.x - L.ax,
             rz = st.z - L.az;
           const u = rx * L.dx + rz * L.dz,
             l = rx * nx + rz * nz;
           if (u < 1.2 || u > L.len - 1.2 || Math.abs(l) < 1.6 || Math.abs(l) > 3.4) continue;
-          if (!rng.chance(p.persona === 'shopper' ? 0.35 : 0.14)) continue;
+          if (!rng.chance(p.persona === 'shopper' ? 0.5 : 0.28)) continue;
           const side = l > 0 ? 1 : -1;
-          out.push({ s: railSAt(rail, i, u), side, yaw: Math.atan2(nx * side, nz * side), dur: rng.range(3, 8), label: 'Browsing the market stalls' });
+          out.push({ s: railSAt(rail, i, u), side, yaw: Math.atan2(nx * side, nz * side), dur: rng.range(5, 16), label: rng.chance(0.5) ? 'Buying at a market stall' : 'Browsing the market stalls' });
         }
       } else if (e.kind === 'sidewalk' && (p.persona === 'shopper' || p.persona === 'tourist' || p.persona === 'stroller' || p.persona === 'couple')) {
         for (const f of pl.facades) {
@@ -2867,6 +2872,14 @@ export class Crowd {
     if (this.places.vendors.length && p.size <= 2 && rng.chance(VENDOR_LIKE[p.persona])) {
       const vg = rng.chance(0.3) ? this.buskerGoal(p, from) : this.vendorGoal(p, from);
       if (vg) push(vg);
+    }
+    // the market in the morning: a stroll along the stalls on the way (and through the empty square at dusk)
+    if (this.places.marketNodes.length && ((h > 7.6 && h < 14.2) || (h > 16.5 && h < 21.5)) && p.persona !== 'shopper' && p.persona !== 'jogger' && p.persona !== 'angler' && p.persona !== 'worker') {
+      const mk = this.ctx.peds.nodes[this.places.marketNodes[0]];
+      const fp = this.nodePos(from);
+      const open = h < 14.2;
+      if (Math.hypot(mk.x - fp.x, mk.z - fp.z) < 260 && rng.chance((p.persona === 'tourist' || p.persona === 'elderly' || p.persona === 'couple' || p.persona === 'family' ? 0.3 : 0.15) * (open ? 1 : 0.45)))
+        push(this.waypoints(last(), this.places.marketNodes, rng.int(2, 3), 30));
     }
     // meeting friends / a phone call on a plaza on the way
     if (this.places.hangouts.length && p.size <= 3 && rng.chance(HANG_LIKE[p.persona] * (h > 7 && h < 23.5 ? 1 : 0.3))) {
@@ -3240,6 +3253,16 @@ export class Crowd {
       m.faceYaw = st.yaw;
       return;
     }
+    if (st.kind === 'market' && this.ctx.clock.hours >= 14.5) {
+      // packing up: crates from the counter to the back of the stall and back again
+      if (p.timer <= 0) {
+        const toBack = m.carry !== 2;
+        m.carry = toBack ? 2 : 0;
+        m.faceYaw = st.yaw + (toBack ? Math.PI : 0) + this.rng.range(-0.3, 0.3);
+        p.timer = toBack ? this.rng.range(2, 4) : this.rng.range(1.5, 3.5);
+      }
+      return;
+    }
     if (st.kind === 'market' && p.timer <= 0) {
       // shoppers stopped at this stall on their walk (crowd rail stops)
       const ps = this.parties;
@@ -3407,7 +3430,7 @@ export class Crowd {
     // early, so the street-level view the viewer is looking at gets the newcomers
     if (this.focusOn) {
       this.recycleT += dt;
-      if (this.recycleT > 0.6 && this.alive() > this.target() * 0.92) {
+      if (this.recycleT > 2.0 && this.alive() > this.target() * 0.95) {
         this.recycleT = 0;
         const cam = this.ctx.camera.position;
         for (let k = 0; k < 6; k++) {
@@ -3698,7 +3721,7 @@ export class Crowd {
     const [ps, w] = this.globalPersonaWeights(h);
     if (w.every((x) => x <= 0)) return;
     const persona = this.rng.weighted(ps, w);
-    const door = (this.focusOn && persona !== 'beachgoer' && persona !== 'angler' && this.rng.chance(0.4) ? this.focusDoor() : null) ?? this.originFor(persona, h);
+    const door = (this.focusOn && persona !== 'beachgoer' && persona !== 'angler' && this.rng.chance(0.3) ? this.focusDoor() : null) ?? this.originFor(persona, h);
     if (!door) return;
     this.spawnAtDoor(door, persona, this.sizeFor(persona));
   }

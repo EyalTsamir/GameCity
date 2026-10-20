@@ -49,7 +49,8 @@ varying vec2 vUv;
 // multiple scattering ≈ re-scattered SKYLIGHT (blue), not more sunlight: what keeps the zenith blue at a
 // low sun (single scattering of reddened sunlight alone turns it grey)
 vec3 msLight(float sunSin) {
-  return vec3(0.55, 0.72, 1.0) * uMs * clamp(sunSin * 3.0 + 0.12, 0.0, 1.0);
+  // relatively stronger at a low sun (the whole bright sky re-scatters into the dimmer direct beam's gap)
+  return vec3(0.5, 0.7, 1.0) * uMs * clamp(sunSin * 2.0 + 0.55, 0.0, 1.0) * smoothstep(-0.12, 0.0, sunSin);
 }
 const float RG = ${RG.toFixed(1)};
 const float RT = ${RT.toFixed(1)};
@@ -282,9 +283,10 @@ export function skyRadiance(p: PhysSkyParams, vx: number, vy: number, vz: number
   const g = p.g;
   const pM = ((3 / (8 * Math.PI)) * (1 - g * g) * (1 + mu * mu)) / ((2 + g * g) * Math.pow(Math.max(1 + g * g - 2 * g * mu, 1e-4), 1.5));
   // multiple scattering: re-scattered (blue) skylight — CPU twin of msLight()
-  const msK = (p.ms * Math.min(1, Math.max(0, p.sunSin * 3 + 0.12))) / (4 * Math.PI);
-  const ms0 = 0.55 * msK,
-    ms1 = 0.72 * msK,
+  const tw = Math.min(1, Math.max(0, (p.sunSin + 0.12) / 0.12));
+  const msK = (p.ms * Math.min(1, Math.max(0, p.sunSin * 2 + 0.55)) * tw * tw * (3 - 2 * tw)) / (4 * Math.PI);
+  const ms0 = 0.5 * msK,
+    ms1 = 0.7 * msK,
     ms2 = 1.0 * msK;
   _sum[0] = _sum[1] = _sum[2] = 0;
   _od[0] = _od[1] = _od[2] = 0;

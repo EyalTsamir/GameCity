@@ -32,6 +32,7 @@ uniform vec3 uCloudL;
 uniform mat4 uVProjInv;
 uniform mat4 uVCamWorld;
 uniform vec3 uVCamPos;
+uniform float uSteps;
 varying vec2 vUv;
 const float RE = 6360e3;
 
@@ -52,7 +53,7 @@ void main() {
   if (t0 < 0.0 || t1 < 0.0) return;
   // grazing rays cross tens of km of deck: march only its first part (beyond, haze takes over)
   t1 = min(t1, t0 + 16000.0);
-  float dt = (t1 - t0) / float(${STEPS});
+  float dt = (t1 - t0) / uSteps;
   float j = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));
   float lod = clamp(log2(t0 / 2500.0), 0.0, 4.0);
   float mu = dot(dir, uCloudL);
@@ -63,6 +64,7 @@ void main() {
   vec3 S = vec3(0.0);
   float tw = 0.0, ww = 0.0;
   for (int i = 0; i < ${STEPS}; i++) {
+    if (float(i) >= uSteps) break;
     float t = t0 + (float(i) + j) * dt;
     vec3 p = cam + dir * t;
     float dxz = length(p.xz - cam.xz);
@@ -74,13 +76,16 @@ void main() {
     if (dc <= 0.002) continue;
     float d = cuDens(p.xz, h01, lod, true);
     if (d <= 0.002) continue;
-    // sunlight through the cloud above this sample (two cheap taps toward the light)
-    vec3 q1 = p + lstep * min(140.0, (1.0 - h01) * thick + 40.0);
-    vec3 q2 = p + lstep * min(420.0, (1.0 - h01) * thick + 120.0);
+    // sunlight through the cloud between this sample and the sun (two cheap taps along the slant path)
+    float up = (1.0 - h01) * thick;
+    vec3 o1 = lstep * min(120.0, up * 0.35 + 30.0);
+    vec3 o2 = lstep * min(380.0, up + 90.0);
+    vec3 q1 = p + o1, q2 = p + o2;
     float h1 = clamp((q1.y - base) / thick, 0.0, 1.0), h2 = clamp((q2.y - base) / thick, 0.0, 1.0);
-    float od = cuDens(q1.xz, h1, lod + 0.5, false) * 140.0 + cuDens(q2.xz, h2, lod + 1.0, false) * 280.0;
-    float Tl = exp(-sigma * od);
-    Tl = max(Tl, 0.28 * exp(-sigma * 0.22 * od)); // multiple scattering keeps cloud cores from going black
+    float l1 = length(o1), l2 = length(o2);
+    float od = cuDens(q1.xz, h1, lod + 0.5, false) * l1 + cuDens(q2.xz, h2, lod + 1.0, false) * (l2 - l1);
+    // Beer + a multiple-scattering octave (light diffusing through the cloud keeps bases grey, not black)
+    float Tl = exp(-sigma * od) + 0.32 * exp(-sigma * 0.08 * od);
     float tau = d * sigma * dt;
     float a = 1.0 - exp(-tau);
     vec3 amb = mix(uCloudAmbBot, uCloudAmbTop, smoothstep(0.0, 0.85, h01)) * (0.65 + 0.35 * h01);
@@ -110,6 +115,14 @@ export class CloudVolume {
   /** full drawing-buffer size the dome divides gl_FragCoord by */
   readonly fullRes = new THREE.Vector2(1, 1);
   renders = 0;
+  /** drawing-buffer divisor (2 = half resolution) */
+  private div = 2;
+
+  /** quality tier: low ⅓ res / 6 steps, medium ½ / 8, high ½ / 10 */
+  setQuality(level: string): void {
+    this.div = level === 'low' ? 3 : 2;
+    this.pass.material.uniforms.uSteps.value = level === 'low' ? 6 : level === 'medium' ? 8 : STEPS;
+  }
 
   constructor(uniforms: CloudLayerUniforms) {
     this.target = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, depthBuffer: false, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter });
@@ -123,6 +136,7 @@ export class CloudVolume {
           uVProjInv: { value: new THREE.Matrix4() },
           uVCamWorld: { value: new THREE.Matrix4() },
           uVCamPos: { value: new THREE.Vector3() },
+          uSteps: { value: STEPS },
         },
         vertexShader: FS_VERT,
         fragmentShader: FRAG,
@@ -142,8 +156,8 @@ export class CloudVolume {
   render(renderer: THREE.WebGLRenderer, camera: THREE.PerspectiveCamera): void {
     renderer.getDrawingBufferSize(this.size);
     this.fullRes.copy(this.size);
-    const w = Math.max(1, Math.ceil(this.size.x / 2)),
-      h = Math.max(1, Math.ceil(this.size.y / 2));
+    const w = Math.max(1, Math.ceil(this.size.x / this.div)),
+      h = Math.max(1, Math.ceil(this.size.y / this.div));
     if (this.target.width !== w || this.target.height !== h) this.target.setSize(w, h);
     const u = this.pass.material.uniforms;
     camera.updateMatrixWorld();

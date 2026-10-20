@@ -9,6 +9,12 @@ import { sideBox, sx, sz, setCol, col, shade } from './gen';
 import { GREEN } from './green';
 import { anchors } from './anchors';
 
+/** ?noclutter (A/B): skip the lived-in clutter geometry (plants, balcony life, AC, dishes, pipes, roof kit) */
+let clutterOn = true;
+export function setClutter(on: boolean): void {
+  clutterOn = on;
+}
+
 const POTS = ['#b5653f', '#a9573a', '#c47a52', '#e9e4d8', '#6f6a64', '#3a3f44', '#8a4a2e'];
 const CHAIRS = ['#2c3033', '#e9e4d8', '#3f7a8f', '#c9473f', '#7a5a3a', '#4f7a4a', '#d8b24a'];
 
@@ -19,6 +25,7 @@ const TRAIL = [GREEN.IVY_HANG, GREEN.PETUNIA, GREEN.POTHOS, GREEN.BOUGAIN];
 
 /** Terracotta (or plastic) pot at side coordinates (u, o) on a floor at y, with a plant. */
 export function potPlant(g: Gen, sg: SideGeom, u: number, o: number, y: number, scale = 1, cell?: number): void {
+  if (!clutterOn) return;
   const t = g.trim;
   const r = g.rng;
   const pr = 0.14 * scale * r.range(0.85, 1.25);
@@ -36,6 +43,7 @@ export function potPlant(g: Gen, sg: SideGeom, u: number, o: number, y: number, 
 
 /** Window box below a window: box + flowers on top + trailing plants over the front. */
 export function windowBox(g: Gen, sg: SideGeom, u: number, ww: number, y0: number, boxCol?: THREE.Color): void {
+  if (!clutterOn) return;
   const t = g.trim;
   const r = g.rng;
   setCol(t, boxCol ?? (r.chance(0.5) ? col('#7a4b2a') : r.chance(0.5) ? col('#3f5f3a') : col('#b5653f')));
@@ -71,6 +79,7 @@ export interface BalconyOpts {
  * a bike, gas bottle or AC unit; sometimes a bougainvillea / ivy cascade down the facade.
  */
 export function balconyLife(g: Gen, sg: SideGeom, uA: number, uB: number, y: number, o: BalconyOpts): void {
+  if (!clutterOn) return;
   const t = g.trim;
   const r = g.rng;
   const W = uB - uA;
@@ -225,6 +234,7 @@ function bikeAlong(g: Gen, sg: SideGeom, u: number, o: number, y: number): void 
 
 /** Wall-mounted AC condenser (on brackets) at side position u, bottom y; `floor` = standing on a floor. */
 export function acUnit(g: Gen, sg: SideGeom, u: number, y: number, o = 0, floor = false): void {
+  if (!clutterOn) return;
   const t = g.trim;
   const r = g.rng;
   const w = r.range(0.72, 0.86),
@@ -267,6 +277,7 @@ export function acUnit(g: Gen, sg: SideGeom, u: number, y: number, o = 0, floor 
 
 /** Satellite dish on a bracket at side position u, height y, offset o. */
 export function dish(g: Gen, sg: SideGeom, u: number, y: number, o: number): void {
+  if (!clutterOn) return;
   const t = g.trim;
   setCol(t, col('#8f9497'));
   const bx = sx(sg, u, o),
@@ -307,6 +318,7 @@ export function dish(g: Gen, sg: SideGeom, u: number, y: number, o: number): voi
  * in front of the wall below 2.4 m (footprint rule).
  */
 export function downpipe(g: Gen, sg: SideGeom, u: number, yTop: number, c?: THREE.Color, oMax = 0.2): void {
+  if (!clutterOn) return;
   const t = g.trim;
   const pc = c ?? col(g.rng.pick(['#5a5f62', '#3a3f44', '#8a7a6a', '#6f4a3a', '#e9e6dd']));
   setCol(t, pc);
@@ -405,6 +417,7 @@ export function shutterState(g: Gen, sunny: boolean): number {
 
 /** Juliet balcony: iron railing across a tall window + a couple of pots behind it. */
 export function julietBalcony(g: Gen, sg: SideGeom, u: number, ww: number, y0: number): void {
+  if (!clutterOn) return;
   const t = g.trim;
   setCol(t, col('#cfc8bb'));
   sideBox(t, sg, u - ww / 2 - 0.12, u + ww / 2 + 0.12, 0, 0.32, y0 - 0.1, y0, true);
@@ -531,6 +544,7 @@ export function aerial(g: Gen, x: number, z: number, y: number, h = 2.2): void {
  * water tanks, AC condensers, aerials, dishes, vent pipes; `keep` rects stay clear (hatches, terraces).
  */
 export function roofClutter(g: Gen, x0: number, z0: number, x1: number, z1: number, y: number, opts: { heaters?: number; keep?: { x0: number; z0: number; x1: number; z1: number }[]; density?: number } = {}): void {
+  if (!clutterOn) return;
   const r = g.rng;
   const keep = [...(opts.keep ?? [])];
   const free = (a: number, b: number, c: number, d: number) => a > x0 + 0.3 && b < x1 - 0.3 && c > z0 + 0.3 && d < z1 - 0.3 && keep.every((k) => b < k.x0 || a > k.x1 || d < k.z0 || c > k.z1);
@@ -613,6 +627,7 @@ export function ironRail(g: Gen, sg: SideGeom, uA: number, uB: number, o: number
  * (ragged top, trailing tips), cards at offset ≤ oMax (stay inside the footprint below 2.4 m).
  */
 export function climber(g: Gen, sg: SideGeom, u: number, w: number, yTop: number, oMax: number, cell: number = GREEN.IVY_WALL): void {
+  if (!clutterOn) return;
   const r = g.rng;
   // keep the plant on this wall (no cards past the building corners) and inside the footprint (cards reach o + 0.1)
   w = Math.min(w, sg.L - 0.4);
@@ -634,4 +649,39 @@ export function climber(g: Gen, sg: SideGeom, u: number, w: number, yTop: number
   // trailing tips over the top edge
   const tip = cell === GREEN.IVY_WALL ? GREEN.IVY_HANG : cell === GREEN.JASMINE ? GREEN.IVY_HANG : GREEN.BOUGAIN;
   g.green.hang(sg, u - w * 0.45, u + w * 0.45, o + 0.02, yTop + 0.35, 0.4, 0.9, tip, 0.03, 1, o + 0.08 < oMax ? 0.3 : 2.45);
+}
+
+/**
+ * Cables run along a facade (power / telecom): a slightly sagging black cable on little brackets at height y
+ * over [uA, uB], sometimes dropping down to a grey junction box. Kept above 2.4 m.
+ */
+export function facadeCable(g: Gen, sg: SideGeom, uA: number, uB: number, y: number): void {
+  if (!clutterOn) return;
+  const t = g.trim;
+  const r = g.rng;
+  y = Math.max(y, 2.5);
+  const o = 0.05;
+  setCol(t, col('#1c1d1f'));
+  const n = Math.max(1, Math.round((uB - uA) / 1.6));
+  let pu = uA,
+    py = y;
+  for (let i = 1; i <= n; i++) {
+    const u = uA + ((uB - uA) * i) / n;
+    const yy = y + (r.next() - 0.5) * 0.04;
+    // two segments with a little sag between the brackets
+    const mu = (pu + u) / 2,
+      my = (py + yy) / 2 - 0.035;
+    t.beam(sx(sg, pu, o), py, sz(sg, pu, o), sx(sg, mu, o), my, sz(sg, mu, o), 0.016, 0.016);
+    t.beam(sx(sg, mu, o), my, sz(sg, mu, o), sx(sg, u, o), yy, sz(sg, u, o), 0.016, 0.016);
+    sideBox(t, sg, u - 0.015, u + 0.015, 0, o + 0.02, yy - 0.03, yy + 0.02, true);
+    pu = u;
+    py = yy;
+  }
+  if (r.chance(0.45)) {
+    const u = uA + (uB - uA) * r.range(0.15, 0.85);
+    const yb = Math.max(2.5, y - r.range(0.5, 1.1));
+    t.beam(sx(sg, u, o), y, sz(sg, u, o), sx(sg, u, o), yb + 0.3, sz(sg, u, o), 0.016, 0.016);
+    setCol(t, col(r.pick(['#9ea3a6', '#c9c6bd', '#6f7579'])));
+    sideBox(t, sg, u - 0.16, u + 0.16, 0, 0.12, yb - 0.1, yb + 0.3, true);
+  }
 }

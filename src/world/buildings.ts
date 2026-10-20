@@ -31,6 +31,7 @@ import { genHotel, genSchool, genHarbormaster, genKiosk, genBoathouse } from './
 import { samplePalette, SkyState } from '../render/sky/palette';
 import { anchors, collectFacades, collectSpans, type BuildingsService } from './buildings/anchors';
 import { GreenKit, makeGreenTexture, createGreenMaterial } from './buildings/green';
+import { setClutter } from './buildings/clutter';
 
 /** edge (m) of the square trim chunks (≈ two city blocks), grid origin at the slab's NW corner */
 const TRIM_CHUNK = 110;
@@ -109,6 +110,7 @@ export default function create(ctx: CityContext): CityModule {
   resetTowers();
   resetHomes();
   anchors.reset();
+  setClutter(!ctx.debug.params.has('noclutter'));
   // ?legacyhouses = original single house massing (A/B)
   setLegacyHouses(ctx.debug.params.has('legacyhouses'));
 

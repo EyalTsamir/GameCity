@@ -241,7 +241,7 @@ export function computePoseA(m: Member, umbrella: boolean, r: Rig, o: Pose, gs: 
     caneZ = (0.2 + (G.caneZ - 0.2) * gw);
   let prop: number = PROP.NONE;
 
-  const fl = L.flags;
+  const fl = L.flags | (m.bag ? F.SHOPBAG : 0);
   const handL = !(L.pram || L.dog || fl & (F.BRIEFCASE | F.ROD));
   const handR = !(L.pram || umbrella || m.wave > 0 || fl & (F.SHOPBAG | F.CANE | F.ROD));
 

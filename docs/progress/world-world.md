@@ -51,9 +51,22 @@
   bridge decks over water, terrain bench carving, no carving behind portals; cover/forestAt clear the corridor),
   landscape/roads.ts (draped ribbons asphalt/gravel, portals with wing walls + dark bore, bridge parapets + piers,
   8 cars with headlights). Trees/herds avoid roads. Toggles: ?landroads=0 ?landlife=0.
-* Running: m3a (ov15, vista, country, coast2, riverbend × 11/18.2/21.5; subset with landmarks/harbor/ambient) —
-  started 20:58, built from code BEFORE the roads/grazing changes.
-* Next: judge m3a; capture roads (north_far, a view of the west road/bridge); ?diorama check; medium/low; perf.
+* 01:45 (10-20, after the 21:30 usage stop + reboot) — m3a (pre-roads) + m3b (with air's new atmosphere) judged:
+  vista/ov15/coast2/country good; ?diorama verified unchanged (shots/world/world/dio/). Fixed after: near-tree
+  meshes hidden when empty, meadow far field = ground's palette (gcGrassColor/gcTopColor, same noise scales;
+  import from groundcover/palette.ts), narrower beach (sand ≤ 32 m, dunes ≤ 62 m), stronger wheat tramlines +
+  field tonal drift. POI corrections sent to the lead (overview pitch 13 / distance 640, coast = coast2
+  230,3,-40,140,-40,6, riverbend = -300,1,118,70,95,7).
+* m3b stats (subset sky…vegetation+ambient+landmarks+harbor+groundcover): vista 135 dc / 2.05 M tris.
+* 02:10 — lead applied the POIs (overview d640/p13, coast, riverbend). Lead note: hills at 1–4 km = smooth
+  felt → done: northern hill country is now a patchwork (woods on ridges/steep ground, hill pastures + hay
+  meadows via the grazing remap with hedgerows and herds, hill farms beyond a 400 m wood belt behind the ridge),
+  spurs/gullies relief on the slopes (ridged 360 m + fbm 140 m). Draw-call consolidation: towers + lighthouse
+  are kind-3 instances of the gable unit (ridge collapses to a spire) → one building mesh; ships + country
+  cars + tractor share one dynamic mesh (landscape/fleet.ts, name 'land-ships' for the reflection pass).
+* Running: m3c (overview, vista, country, coast, riverbend × 11/18.2), m3c_med (overview, country, medium),
+  stats2 probes (vista/country ± ?noland). NOTE: m3c may have loaded mid-refactor — check failedModules.
+* Next: judge; perf delta; full-city check; final report.
 * Tools: my capture script copy with 20-min load timeout = scratchpad `cap.mjs` (scratchpad is SHARED with other
   agents — keep my files under scratchpad/world* or land/). Offline map tool: scratchpad `land/map.ts` (bundle:
   `npx rolldown land/map.ts --platform node -o land/map.mjs`; `node land/map.mjs x0 z0 x1 z1 N out.bin &&

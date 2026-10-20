@@ -59,6 +59,8 @@ ${SKY_LUT_GLSL}
 #ifdef TH_CLOUDS
 ${CLOUD_LAYER_GLSL}
 ${CLOUD_SHADE_GLSL}
+uniform sampler2D tCloudVol;
+uniform vec2 uCloudVolRes;
 #endif
 
 float hash13(vec3 p3) {
@@ -220,9 +222,17 @@ void main() {
   }
 
 #ifdef TH_CLOUDS
-  // the high cloud sky over everything else in the dome (sun, moon and stars hide behind it)
+  // the high cloud sky over everything else in the dome (sun, moon and stars hide behind it): the cirrus
+  // veil, then the raymarched cumulus deck (half-res, rendered for this frame's camera)
   vec4 cl = thClouds(d, skyBase);
   col = col * (1.0 - cl.a) + cl.rgb;
+  // 5-tap rotated-grid filter over the half-res march: hides its per-pixel step jitter
+  vec2 cuv = gl_FragCoord.xy / uCloudVolRes;
+  vec2 ct = 1.5 / uCloudVolRes;
+  vec4 cv = texture2D(tCloudVol, cuv) * 0.36
+    + (texture2D(tCloudVol, cuv + vec2(ct.x, 0.4 * ct.y)) + texture2D(tCloudVol, cuv - vec2(ct.x, 0.4 * ct.y))
+     + texture2D(tCloudVol, cuv + vec2(-0.4 * ct.x, ct.y)) + texture2D(tCloudVol, cuv - vec2(-0.4 * ct.x, ct.y))) * 0.16;
+  col = col * (1.0 - cv.a) + cv.rgb;
 #endif
   gl_FragColor = vec4(col, 1.0);
   #include <tonemapping_fragment>
@@ -238,6 +248,8 @@ export interface SkyDome {
   setPhysical(lut: THREE.Texture, scale: number, nightZen: THREE.Color, nightHor: THREE.Color, nightW: number, discCol: THREE.Color, zenith: THREE.Color, horizon: THREE.Color): void;
   /** world mode: the night sky glow of the lit town (warm, near the horizon) */
   setCityGlow(c: THREE.Color): void;
+  /** world mode: the raymarched cumulus image and the full-resolution size it maps to */
+  setCloudVolume(tex: THREE.Texture, fullRes: THREE.Vector2): void;
   update(state: SkyState, sunDir: THREE.Vector3, moonDir: THREE.Vector3, sunVis: number, moonVis: number, time: number, overcast: number): void;
   /** studio backdrop: below-horizon colour (already overcast-adjusted) or null for the legacy haze */
   setStudio(cyc: THREE.Color | null): void;
@@ -277,6 +289,8 @@ export function createSkyDome(world = false, phys = false, clouds: CloudLayerUni
     uNightW: { value: 0 },
     uDiscCol: { value: new THREE.Color(1, 1, 1) },
     ...(clouds ?? {}),
+    tCloudVol: { value: null as THREE.Texture | null },
+    uCloudVolRes: { value: new THREE.Vector2(1, 1) },
   };
   const material = new THREE.ShaderMaterial({
     name: 'SkyDome',
@@ -337,6 +351,10 @@ export function createSkyDome(world = false, phys = false, clouds: CloudLayerUni
     },
     setCityGlow(c) {
       uniforms.uCityGlow.value.copy(c);
+    },
+    setCloudVolume(tex, fullRes) {
+      uniforms.tCloudVol.value = tex;
+      uniforms.uCloudVolRes.value.copy(fullRes);
     },
     setStudio(cyc) {
       if (cyc) {

@@ -8,10 +8,13 @@ import * as THREE from 'three';
 import type { LandscapeModel, Road } from './model';
 import { WL } from './model';
 import { hash2i } from './noise';
+import type { Fleet, FleetTemplate } from './fleet';
 
 export interface CountryRoads {
   group: THREE.Group;
   update(dt: number): void;
+  /** colours of the cars' bodies (Fleet.finish tint callback) */
+  tint(item: number, vertex: number, out: number[]): boolean;
   triangles: number;
   cars: number;
 }
@@ -171,7 +174,7 @@ function ribbon(sink: Sink, road: Road, model: LandscapeModel): void {
   }
 }
 
-function carGeometry(): { pos: number[]; col: number[]; emi: number[] } {
+function carGeometry(): FleetTemplate {
   const pos: number[] = [],
     col: number[] = [],
     emi: number[] = [];
@@ -192,7 +195,7 @@ function carGeometry(): { pos: number[]; col: number[]; emi: number[] } {
   return { pos, col, emi };
 }
 
-export function buildCountryRoads(model: LandscapeModel, uniforms: Record<string, THREE.IUniform>, fog: boolean, lights: { value: number }): CountryRoads {
+export function buildCountryRoads(model: LandscapeModel, uniforms: Record<string, THREE.IUniform>, fog: boolean, fleet: Fleet): CountryRoads {
   const group = new THREE.Group();
   group.name = 'land-roads';
   const sink = new Sink();
@@ -212,9 +215,9 @@ export function buildCountryRoads(model: LandscapeModel, uniforms: Record<string
   // make the bore plane black: kind 3 → the stone branch darkened via vertex colour? simpler: own tiny mesh
   // (kind 3 renders as stone; the arch reads dark because it is recessed and unlit — good enough far away)
 
-  // ── country traffic
+  // ── country traffic (registered with the shared vehicle mesh)
   const tpl = carGeometry();
-  const cars: { road: Road; s: number; dir: number; speed: number; tint: [number, number, number] }[] = [];
+  const cars: { road: Road; s: number; dir: number; speed: number; tint: [number, number, number]; id: number }[] = [];
   const palette: [number, number, number][] = [
     [0.55, 0.05, 0.04],
     [0.05, 0.12, 0.35],
@@ -228,44 +231,19 @@ export function buildCountryRoads(model: LandscapeModel, uniforms: Record<string
     if (r.kind !== 'road') return;
     const n = ri === 2 ? 2 : 3;
     for (let k = 0; k < n; k++) {
-      cars.push({ road: r, s: r.line.length * hash2i(ri, k, 401), dir: k % 2 === 0 ? 1 : -1, speed: 13 + 6 * hash2i(ri, k, 402), tint: palette[Math.floor(hash2i(ri, k, 403) * palette.length)] });
+      cars.push({ road: r, s: r.line.length * hash2i(ri, k, 401), dir: k % 2 === 0 ? 1 : -1, speed: 13 + 6 * hash2i(ri, k, 402), tint: palette[Math.floor(hash2i(ri, k, 403) * palette.length)], id: fleet.add(tpl) });
     }
   });
-  const nvC = tpl.pos.length / 3;
-  const cpos = new Float32Array(nvC * cars.length * 3);
-  const ccol = new Float32Array(nvC * cars.length * 3);
-  const cemi = new Float32Array(nvC * cars.length);
-  cars.forEach((c, k) => {
-    for (let i = 0; i < nvC; i++) {
-      const isBody = i < 36;
-      ccol[(k * nvC + i) * 3] = isBody ? c.tint[0] : tpl.col[i * 3];
-      ccol[(k * nvC + i) * 3 + 1] = isBody ? c.tint[1] : tpl.col[i * 3 + 1];
-      ccol[(k * nvC + i) * 3 + 2] = isBody ? c.tint[2] : tpl.col[i * 3 + 2];
-      cemi[k * nvC + i] = tpl.emi[i];
-    }
-  });
-  const cg = new THREE.BufferGeometry();
-  const cpa = new THREE.BufferAttribute(cpos, 3);
-  cpa.setUsage(THREE.DynamicDrawUsage);
-  cg.setAttribute('position', cpa);
-  cg.setAttribute('color', new THREE.BufferAttribute(ccol, 3));
-  cg.setAttribute('aEmi', new THREE.BufferAttribute(cemi, 1));
-  cg.boundingSphere = new THREE.Sphere(new THREE.Vector3(-1000, 0, 0), 6000);
-  const cm = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.4, metalness: 0.3, fog, flatShading: true });
-  cm.onBeforeCompile = (shader) => {
-    shader.uniforms.uLights = lights;
-    shader.vertexShader = shader.vertexShader.replace('#include <common>', '#include <common>\nattribute float aEmi;\nvarying float vEmi;').replace('#include <begin_vertex>', '#include <begin_vertex>\nvEmi = aEmi;');
-    shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', '#include <common>\nuniform float uLights;\nvarying float vEmi;')
-      .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += diffuseColor.rgb * vEmi * (0.15 + 3.0 * uLights);');
+  const carById = new Map<number, (typeof cars)[number]>();
+  for (const c of cars) carById.set(c.id, c);
+  const tintCar = (item: number, v: number, out: number[]): boolean => {
+    const c = carById.get(item);
+    if (!c || v >= 36) return false;
+    out[0] = c.tint[0];
+    out[1] = c.tint[1];
+    out[2] = c.tint[2];
+    return true;
   };
-  cm.customProgramCacheKey = () => 'th-landcars-v1';
-  const carMesh = new THREE.Mesh(cg, cm);
-  carMesh.name = 'land-cars';
-  carMesh.frustumCulled = false;
-  carMesh.castShadow = false;
-  carMesh.matrixAutoUpdate = false;
-  group.add(carMesh);
   const P = { x: 0, z: 0 },
     Q = { x: 0, z: 0 };
   const levelAt = (r: Road, s: number) => {
@@ -281,7 +259,6 @@ export function buildCountryRoads(model: LandscapeModel, uniforms: Record<string
     return r.level[lo] + (r.level[hi] - r.level[lo]) * t;
   };
   const update = (dt: number) => {
-    let o = 0;
     for (const c of cars) {
       const L = c.road.line;
       c.s += c.dir * c.speed * dt;
@@ -302,23 +279,9 @@ export function buildCountryRoads(model: LandscapeModel, uniforms: Record<string
       hz /= hl;
       // right-hand traffic
       const off = c.road.halfW * 0.48;
-      const x = P.x - hz * off,
-        z = P.z + hx * off;
-      const y = levelAt(c.road, c.s) + 0.12;
-      const cy = hz,
-        sy = hx; // model faces +z: world = x' * (cy, -sy) ... rotation by yaw atan2(hx, hz)
-      for (let i = 0; i < nvC; i++) {
-        const lx = tpl.pos[i * 3],
-          ly = tpl.pos[i * 3 + 1],
-          lz = tpl.pos[i * 3 + 2];
-        cpos[o * 3] = x + lx * cy + lz * sy;
-        cpos[o * 3 + 1] = y + ly;
-        cpos[o * 3 + 2] = z - lx * sy + lz * cy;
-        o++;
-      }
+      fleet.set(c.id, P.x - hz * off, levelAt(c.road, c.s) + 0.12, P.z + hx * off, Math.atan2(hx, hz));
     }
-    cpa.needsUpdate = true;
   };
   update(0);
-  return { group, update, triangles: sink.idx.length / 3 + cars.length * (nvC / 3), cars: cars.length };
+  return { group, update, tint: tintCar, triangles: sink.idx.length / 3 + cars.length * (tpl.pos.length / 9), cars: cars.length };
 }

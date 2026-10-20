@@ -87,8 +87,9 @@ function parts(): PartSpec[] {
     add(TW.CROISSANT, g, '#c98a3c');
   }
   // tea light in a little glass (evenings; glows with the street lights)
-  add(TW.CANDLE, cyl(0.026, 0.028, 0.05, 8, -0.07, 0, 0.26, false), '#e9d9b8');
-  add(TW.CANDLE, cyl(0.02, 0.02, 0.001, 8, -0.07, 0.035, 0.26), '#ffcf7a');
+  add(TW.CANDLE, cyl(0.03, 0.032, 0.06, 8, -0.07, 0, 0.26, false), '#f0dcb0');
+  add(TW.CANDLE, cyl(0.026, 0.026, 0.002, 8, -0.07, 0.04, 0.26), '#ffcf7a');
+  add(TW.CANDLE, dome(0.012, 0.03, -0.07, 0.042, 0.26), '#ffd890');
   // bottle (one per table, stands towards the middle)
   add(TW.BOTTLE, cyl(0.032, 0.032, 0.17, 8, 0.08, 0, 0.27), '#2e5a3a');
   add(TW.BOTTLE, cyl(0.012, 0.03, 0.07, 8, 0.08, 0.17, 0.27), '#2e5a3a');
@@ -189,7 +190,7 @@ vTwGlow = abs(aPart - ${TW.CANDLE}.0) < 0.5 ? uLights : 0.0;`,
         );
       sh.fragmentShader = sh.fragmentShader
         .replace('#include <common>', '#include <common>\nvarying float vTwGlow;')
-        .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += diffuseColor.rgb * vTwGlow * 2.5;');
+        .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += diffuseColor.rgb * vTwGlow * 7.0;');
     };
     mat.customProgramCacheKey = () => 'tableware2';
     patchLampMaterial(mat);

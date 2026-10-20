@@ -163,8 +163,11 @@ float cuField(vec2 xz, float lod, bool full) {
 // cumulus density inside the slab: h01 = 0 at the (flat) base … 1 at the top; thick cells tower higher
 float cuDens(vec2 xz, float h01, float lod, bool full) {
   float f = cuField(xz - uCloudWind * (h01 * 150.0), lod, full);
-  float prof = 0.08 + 0.92 * h01 * h01;
-  return clamp((f - prof) * 3.5, 0.0, 1.0) * smoothstep(0.0, 0.04, h01);
+  // the cell body is cone-like; a cubic height profile turns it into a wide, flat-based cloud with a
+  // rounded (billowy, via the field's detail) top instead of a pyramid
+  float fr = sqrt(f);
+  float prof = 0.1 + 0.9 * h01 * h01 * h01;
+  return clamp((fr - prof) * 3.0, 0.0, 1.0) * smoothstep(0.0, 0.035, h01);
 }
 // cirrus: broad veils with fibres stretched along the wind (opacity texture, never thresholded detail)
 float ciDensity(vec2 xz, float lod) {

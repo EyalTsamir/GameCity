@@ -36,7 +36,7 @@ const BLUE_AIR = 1.8;
 /** Mie phase in the LUT: isotropic — the forward peak depends on the TRUE scattering angle, so it lives
  *  in the analytic sun lobe (dome and fog alike), never in the azimuth-only horizon ring */
 const SKY_G = 0;
-const SKY_MS = 0.3;
+const SKY_MS = 0.45;
 /** scene-unit luminance of the clear noon sky 3° above the horizon, 90° from the sun */
 const SKY_HORIZON_L = 0.52;
 /** elevation of the horizon ring: the sky ~3° up (the true horizon is a long, reddened, yellowish path) */
@@ -171,6 +171,13 @@ export class AtmosphereDriver {
       const j = Math.min(RING_N - 1, Math.max(0, Math.round((phi / Math.PI) * RING_N - 0.5)));
       const k = this.skyScale;
       out.setRGB(this.ringRaw[j * 3] * k, this.ringRaw[j * 3 + 1] * k, this.ringRaw[j * 3 + 2] * k);
+      // golden hour: the aerosol glows toward the sun (forward scattering, + the lobe); away from it the
+      // haze (and the earth-shadow band at the anti-solar horizon) is cool blue-grey, not warm
+      const w = this.golden * 0.62 * smooth(0.25 * Math.PI, Math.PI, phi);
+      if (w > 0) {
+        const l = lum(out);
+        out.lerp(_g.setRGB(l * 0.84, l * 0.97, l * 1.24), w);
+      }
       out.add(_g.copy(s.horizon).multiplyScalar(this.nightW)).add(this.cityGlow);
     } else {
       const az = Math.cos(phi) * 0.5 + 0.5;
@@ -238,10 +245,11 @@ export class AtmosphereDriver {
       p.lobeColor.multiplyScalar(1 - overcast * 0.6);
     }
 
-    // rays looking up see the sky a little above the horizon band
-    p.up.copy(p.ring[0]).lerp(this.zenith, 0.3);
-    if (overcast > 0) grey(p.up, overcast * 0.75);
-    p.upBlend = 0.3;
+    // the blue air's in-scatter: the zenith's hue at the brightness of the horizon haze, a little greyed
+    // (distant ridges step bluer and lighter in every direction — never warm away from the sun)
+    const zl = Math.max(1e-5, lum(this.zenith));
+    p.airColor.copy(this.zenith).multiplyScalar((lum(p.ring[0]) * 0.92) / zl);
+    grey(p.airColor, 0.35 + overcast * 0.5);
 
     p.haze = haze;
     p.hazeScaleHeight = 1000;

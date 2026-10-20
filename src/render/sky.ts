@@ -21,9 +21,10 @@ import { MAX_CLOUDS, type CloudShadowData } from './postfx/cloudShadow';
 import { createStageUniforms, type StageService } from './stage/table';
 import { PLINTH_BOTTOM_Y } from './stage/constants';
 import { WORLD_MODE } from '../core/world';
-import { installAtmosphere } from './atmosphere';
+import { installAtmosphere, evalRing } from './atmosphere';
 import { AtmosphereDriver } from './sky/atmoDrive';
 import { cloudLayerUniforms } from './sky/cloudLayer';
+import { CloudVolume } from './sky/cloudVolume';
 
 const _focus = new THREE.Vector3();
 const _L = new THREE.Vector3();
@@ -100,6 +101,19 @@ export default async function create(ctx: CityContext): Promise<CityModule> {
   const cloudDayRng = ctx.rng('cloud-days');
   const cloudDay = { day: -1, cu: 1, ci: 1 };
   const dome = createSkyDome(world, physSky, cloudLayer);
+  // the cumulus deck is raymarched at half resolution for the final camera of each frame: post-processing
+  // calls renderClouds() right before the scene pass; without it the sky module renders it in frame()
+  const cloudVol = cloudLayer ? new CloudVolume(cloudLayer) : null;
+  cloudVol?.setQuality(ctx.quality.level);
+  ctx.events.on('quality', () => cloudVol?.setQuality(ctx.quality.level));
+  let cloudVolFrame = -1;
+  let frameNo = 0;
+  const renderClouds = (r: THREE.WebGLRenderer, cam: THREE.PerspectiveCamera) => {
+    if (!cloudVol || cloudVolFrame === frameNo) return;
+    cloudVolFrame = frameNo;
+    cloudVol.render(r, cam);
+    dome.setCloudVolume(cloudVol.texture, cloudVol.fullRes);
+  };
   scene.add(dome.mesh);
 
   const obstacles: Obstacle[] = [];
@@ -213,6 +227,8 @@ export default async function create(ctx: CityContext): Promise<CityModule> {
       applyStageVisibility();
     },
     tune,
+    /** world: render the raymarched cumulus deck for this frame's final camera (postfx calls it) */
+    renderClouds,
   };
   ctx.services.sky = skyService;
 
@@ -235,6 +251,9 @@ export default async function create(ctx: CityContext): Promise<CityModule> {
 
   const frameUpdate = (realDt: number) => {
     realTime += realDt;
+    frameNo++;
+    // no post-processing to call renderClouds() with the final camera: render with last frame's camera
+    if (cloudVol && !ctx.services.postfx) renderClouds(renderer, ctx.camera);
     samplePalette(clock.hours, state, legacy);
     const sh = clock.sunHeight;
 
@@ -285,14 +304,16 @@ export default async function create(ctx: CityContext): Promise<CityModule> {
       atmo.cityGlow.setRGB(1.0, 0.6, 0.32).multiplyScalar(0.045 * ctx.uniforms.uLights.value * (1 - overcast * 0.3) + 0.03 * overcast * ctx.uniforms.uLights.value);
       dome.setCityGlow(atmo.cityGlow);
       atmo.update(renderer, state, _sunSky, sunVis, overcast, ctx.camera.position.y, ctx.uniforms.uWind.value, clock.speed > 0 ? realDt * clock.speed : 0, clock.hours);
-      if (atmo.lut) dome.setPhysical(atmo.lut.texture, atmo.skyScale, state.zenith, state.horizon, atmo.nightW, atmo.sunColor, atmo.zenith, atmo.params.ring[0]);
+      // the horizon other modules mirror (water): the haze ~120° from the sun — the sea mostly reflects
+      // the sky away from the sun; the sun side is the palette glow they already add
+      if (atmo.lut) dome.setPhysical(atmo.lut.texture, atmo.skyScale, state.zenith, state.horizon, atmo.nightW, atmo.sunColor, atmo.zenith, evalRing(atmo.params.ring, 2.1, _hor));
       if (envPhys) {
         envPhys.scale = atmo.skyScale;
         envPhys.nightZen.copy(state.zenith);
         envPhys.nightHor.copy(state.horizon);
         envPhys.nightW = atmo.nightW;
         // the broad part of the sun lobe only (the direct light owns the highlight)
-        envPhys.lobe.copy(atmo.params.lobeColor);
+        envPhys.lobe.copy(atmo.params.lobeColor).multiplyScalar(0.35);
         envPhys.lobeExp = atmo.params.lobeExp;
       }
     }
@@ -391,6 +412,8 @@ export default async function create(ctx: CityContext): Promise<CityModule> {
       if (Number.isFinite(cloudCovParam)) cov = cloudCovParam;
       cov += (0.97 - cov) * overcast;
       cu.uCu.value.x = Math.min(1, Math.max(0, cov));
+      // humilis (~0.6 km) when sparse, mediocris (~1.5 km) when the deck fills in
+      cu.uCuSlab.value.x = 550 + 1100 * Math.min(1, cu.uCu.value.x * 1.6);
       cu.uCi.value.x = Math.min(0.85, 0.32 * cloudDay.ci) * (1 - overcast * 0.6);
       // light on the clouds: the sun after the atmosphere at deck height (pink after sunset), or the moon
       const comp = Math.pow(Math.max(1, atmo.comp), 0.6);
@@ -401,7 +424,8 @@ export default async function create(ctx: CityContext): Promise<CityModule> {
         cu.uCloudL.value.copy(_sunSky);
         cu.uCloudSun.value.copy(atmo.cloudSunT).multiplyScalar(2.5 * comp * (1 - overcast * 0.7));
       }
-      cu.uCloudAmbTop.value.copy(atmo.params.ring[0]).lerp(atmo.zenith, 0.55).multiplyScalar(1.05);
+      // ambient from the (blue) sky dome above the deck — not from the horizon haze (warm at golden hour)
+      cu.uCloudAmbTop.value.copy(atmo.zenith).lerp(atmo.params.ring[0], 0.3).multiplyScalar(1.15);
       cu.uCloudAmbBot.value.copy(state.hemiGround).multiplyScalar(state.hemiI * 0.55).add(_tmpC.copy(state.sun).multiplyScalar(lightI * 0.04));
       if (overcast > 0) {
         const g = lum(cu.uCloudAmbTop.value);
@@ -458,6 +482,7 @@ export default async function create(ctx: CityContext): Promise<CityModule> {
         hazeKm: world ? Math.round(3.912 / Math.max(1e-6, atmo.params.haze + atmo.params.rayleigh.y) / 100) / 10 : -1,
         mist: world ? Math.round(atmo.params.mist * 1e4) / 1e4 : 0,
         clouds: cloudLayer ? Math.round(cloudLayer.uCu.value.x * 100) / 100 : clouds.count,
+        cloudVolRenders: cloudVol ? cloudVol.renders : 0,
         cloudsActive: cottonClouds ? clouds.stats().active : 0,
         cloudsOverCity: cottonClouds ? clouds.stats().overCity : 0,
         envBakes: env.bakes,
@@ -493,3 +518,4 @@ export default async function create(ctx: CityContext): Promise<CityModule> {
 
 const _tmpV = new THREE.Vector3();
 const _w2 = new THREE.Vector2();
+const _hor = new THREE.Color();

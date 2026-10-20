@@ -717,7 +717,7 @@ function buildHangouts(ctx: CityContext, rng: Rng, districtName: (x: number, z: 
   };
   const hard = OCC.BUILDING | OCC.SOLID | OCC.ROAD | OCC.WATER | OCC.RAIL;
   for (const a of plan.areas) {
-    if (a.kind !== 'plaza') continue;
+    if (a.kind !== 'plaza' && a.kind !== 'market') continue;
     const r = a.rect;
     const area = (r.x1 - r.x0) * (r.z1 - r.z0);
     const maxN = Math.min(8, Math.max(1, Math.round(area / 75)));

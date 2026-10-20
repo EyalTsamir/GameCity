@@ -25,6 +25,7 @@ import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { mergeGeometries, mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { ModelKind } from './specs';
+import { loftCar, topAt, type CarShape } from './carBody';
 
 /** number of detail levels buildModel() can produce */
 export const MODEL_LODS = 3;
@@ -581,8 +582,8 @@ function carDetails(b: Builder, d: CarDims): void {
   wheel(b, d.wheelX, d.wheelR, d.axR, d.wheelR, d.wheelW, false);
   wheel(b, -d.wheelX, d.wheelR, d.axR, d.wheelR, d.wheelW, false);
   // bumpers
-  b.add(rbox(W + 0.03, 0.17, 0.2, 0.07, 0, d.bodyY - 0.02, L / 2 - 0.08), { color: DARK, rough: 1.2 });
-  b.add(rbox(W + 0.03, 0.17, 0.2, 0.07, 0, d.bodyY - 0.02, -L / 2 + 0.08), { color: DARK, rough: 1.2 });
+  b.add(rbox(W - 0.05, 0.17, 0.2, 0.08, 0, d.bodyY - 0.02, L / 2 - 0.08), { color: DARK, rough: 1.2 });
+  b.add(rbox(W - 0.05, 0.17, 0.2, 0.08, 0, d.bodyY - 0.02, -L / 2 + 0.08), { color: DARK, rough: 1.2 });
   // headlights
   const hw = d.roundLights ? 0.26 : 0.36,
     hh = d.roundLights ? 0.22 : 0.13;
@@ -599,35 +600,53 @@ function carDetails(b: Builder, d: CarDims): void {
   b.add(bx(0.38, 0.1, 0.02, 0, d.bodyY + 0.02, -L / 2 - 0.02), { color: '#f4d35e' });
 }
 
-/** Glass greenhouse + roof cap + B-pillars for a car. Returns roof top y. */
-function cabin(b: Builder, W: number, y0: number, h: number, d: number, zc: number, sx: number, front: number, rear: number, r = 0.12): { topY: number; topZ: number; topD: number; topW: number } {
-  const cw = W - 0.14;
-  const g = rbox(cw, h, d, r, 0, y0, zc, 1);
-  taper(g, y0, y0 + h, zc, sx, front, rear);
-  b.add(g, { color: GLASS, rough: 0.22 });
-  const topW = cw * (1 - sx) + 0.03;
-  const zf = zc + d / 2 - front,
-    zr = zc - d / 2 + rear;
-  const topD = zf - zr + 0.04;
-  const topZ = (zf + zr) / 2;
-  b.add(rbox(topW, 0.075, topD, 0.035, 0, y0 + h - 0.03, topZ, 1), { color: '#ffffff', paint: true, rough: 0.85 });
-  // B pillars
-  const midW = (cw * (1 - sx * 0.5)) / 2 + 0.008;
-  for (const s of [1, -1]) b.add(bx(0.03, h * 0.86, 0.13, s * midW, y0 + 0.02, zc + (front - rear) * -0.15), { color: '#ffffff', paint: true, rough: 0.85 });
-  // mirrors
-  for (const s of [1, -1]) b.add(rbox(0.11, 0.08, 0.13, 0.03, s * (W / 2 + 0.03), y0 + 0.02, zc + d / 2 - 0.22), { color: '#ffffff', paint: true, rough: 0.85 });
-  return { topY: y0 + h + 0.045, topZ, topD, topW };
-}
-
 // ─────────────────────────────────────────────────────────── models ──
+
+const TRIM = '#1b1e22';
+const WELL = '#121315';
+
+/** Lofted body shell (paint, glass, trim, wheel wells, cladding) + mirrors, door seams and handles. Returns the roof top. */
+function loftBody(b: Builder, s: CarShape, doors4: boolean): { topY: number; topZ: number; topW: number; topD: number } {
+  const p = loftCar(s, LOD);
+  if (p.body) b.add(p.body, { color: '#ffffff', paint: true, rough: 0.85 });
+  if (p.glass) b.add(p.glass, { color: GLASS, rough: 0.22 });
+  if (p.trim) b.add(p.trim, { color: TRIM, rough: 0.9 });
+  if (p.well) b.add(p.well, { color: WELL, rough: 1.6 });
+  if (p.clad) b.add(p.clad, { color: '#3b3e43', rough: 1.3 });
+  const hw = s.W / 2;
+  for (const sd of [1, -1]) {
+    // mirror on a short arm at the base of the A pillar (dropped at the far level)
+    const mz = s.wsBase - 0.13;
+    b.add(rbox(0.1, 0.085, 0.14, 0.035, sd * (hw + 0.045), s.belt + 0.015, mz), { color: '#ffffff', paint: true, rough: 0.85 });
+    b.add(bx(0.06, 0.03, 0.05, sd * (hw - 0.01), s.belt + 0.03, mz + 0.02), { color: TRIM });
+    // door seams + handles (fine detail: close level only)
+    if (LOD === 0) {
+      const ra = s.wheelR + 0.075;
+      const cuts = [s.axF - ra - 0.05, s.pillarB];
+      if (doors4) cuts.push(Math.max(s.axR + ra + 0.04, s.glassRear - 0.02));
+      for (const z of cuts) {
+        const y0 = s.sill + 0.13,
+          y1 = s.belt - 0.012;
+        b.add(decalPlane(0.008, y1 - y0, sd * (hw + 0.0075), (y0 + y1) / 2, z, sd > 0 ? 'px' : 'nx'), { color: TRIM, rough: 1.2 });
+      }
+      const handles = doors4 ? [s.pillarB + 0.14, cuts[2] + 0.14] : [s.pillarB + 0.16];
+      for (const z of handles) b.add(bx(0.016, 0.024, 0.12, sd * (hw + 0.004), s.belt - 0.085, z), { color: '#ffffff', paint: true, rough: 0.5 });
+    }
+  }
+  const topZ = (s.wsTop + s.rwTop) / 2;
+  return { topY: topAt(s, topZ) + 0.012, topZ, topW: 2 * (s.W / 2 - s.tumble - 0.07), topD: s.wsTop - s.rwTop };
+}
 
 function compact(): THREE.BufferGeometry {
   const b = new Builder();
   const L = 3.55,
     W = 1.66;
-  b.add(rbox(W, 0.62, L, 0.26, 0, 0.26, 0, 2), { color: '#ffffff', paint: true, rough: 0.85 });
-  cabin(b, W, 0.85, 0.57, 2.3, -0.32, 0.12, 0.42, 0.13, 0.15);
-  carDetails(b, { L, W, wheelR: 0.29, wheelW: 0.22, axF: 1.155, axR: -1.145, wheelX: W / 2 - 0.08, bodyY: 0.3, bodyH: 0.62, bodyR: 0.26, lightY: 0.68, roundLights: true });
+  loftBody(
+    b,
+    { L, W, sill: 0.27, belt: 0.86, roof: 1.47, noseH: 0.75, hoodH: 0.86, wsBase: 0.82, wsTop: 0.08, rwTop: -1.32, rwBase: -1.6, deckH: 0.96, tailH: 0.9, pillarB: -0.42, glassRear: -1.28, tumble: 0.14, axF: 1.155, axR: -1.145, wheelR: 0.29 },
+    false,
+  );
+  carDetails(b, { L, W, wheelR: 0.29, wheelW: 0.22, axF: 1.155, axR: -1.145, wheelX: W / 2 - 0.08, bodyY: 0.3, bodyH: 0.62, bodyR: 0.26, lightY: 0.62, roundLights: true });
   return b.build();
 }
 
@@ -635,11 +654,14 @@ function hatch(): THREE.BufferGeometry {
   const b = new Builder();
   const L = 4.0,
     W = 1.74;
-  b.add(rbox(W, 0.6, L, 0.2, 0, 0.28, 0, 2), { color: '#ffffff', paint: true, rough: 0.85 });
-  const c = cabin(b, W, 0.86, 0.52, 2.55, -0.42, 0.13, 0.5, 0.28);
+  const c = loftBody(
+    b,
+    { L, W, sill: 0.3, belt: 0.9, roof: 1.46, noseH: 0.76, hoodH: 0.9, wsBase: 0.85, wsTop: -0.05, rwTop: -1.5, rwBase: -1.86, deckH: 1.0, tailH: 0.95, pillarB: -0.5, pillarC: -1.2, glassRear: -1.45, tumble: 0.13, axF: 1.22, axR: -1.33, wheelR: 0.31 },
+    true,
+  );
   // small roof spoiler
-  b.add(rbox(c.topW - 0.1, 0.05, 0.22, 0.02, 0, c.topY - 0.02, c.topZ - c.topD / 2 - 0.02), { color: '#ffffff', paint: true });
-  carDetails(b, { L, W, wheelR: 0.31, wheelW: 0.23, axF: 1.22, axR: -1.33, wheelX: W / 2 - 0.09, bodyY: 0.31, bodyH: 0.6, bodyR: 0.2, lightY: 0.72 });
+  b.add(rbox(c.topW - 0.1, 0.05, 0.22, 0.02, 0, c.topY - 0.03, -1.5 + 0.06), { color: '#ffffff', paint: true });
+  carDetails(b, { L, W, wheelR: 0.31, wheelW: 0.23, axF: 1.22, axR: -1.33, wheelX: W / 2 - 0.09, bodyY: 0.31, bodyH: 0.6, bodyR: 0.2, lightY: 0.68 });
   return b.build();
 }
 
@@ -647,25 +669,28 @@ function sedan(): THREE.BufferGeometry {
   const b = new Builder();
   const L = 4.45,
     W = 1.78;
-  b.add(rbox(W, 0.58, L, 0.18, 0, 0.3, 0, 2), { color: '#ffffff', paint: true, rough: 0.85 });
-  const c = cabin(b, W, 0.86, 0.5, 2.25, -0.3, 0.14, 0.48, 0.42);
-  carDetails(b, { L, W, wheelR: 0.32, wheelW: 0.24, axF: 1.375, axR: -1.325, wheelX: W / 2 - 0.1, bodyY: 0.33, bodyH: 0.58, bodyR: 0.18, lightY: 0.74 });
+  const c = loftBody(
+    b,
+    { L, W, sill: 0.31, belt: 0.9, roof: 1.42, noseH: 0.76, hoodH: 0.88, wsBase: 1.0, wsTop: 0.2, rwTop: -0.85, rwBase: -1.5, deckH: 0.99, tailH: 0.96, pillarB: -0.3, pillarC: -1.0, glassRear: -1.25, tumble: 0.15, axF: 1.375, axR: -1.325, wheelR: 0.32 },
+    true,
+  );
+  carDetails(b, { L, W, wheelR: 0.32, wheelW: 0.24, axF: 1.375, axR: -1.325, wheelX: W / 2 - 0.1, bodyY: 0.33, bodyH: 0.58, bodyR: 0.18, lightY: 0.69 });
   // taxi (variant 1 → part 2): roof sign + chequer band
   b.add(rbox(0.6, 0.18, 0.28, 0.05, 0, c.topY - 0.01, c.topZ), { color: '#fff3b8', light: LIGHT_TAXI, part: 2, rough: 0.6 });
   b.add(decalPlane(0.54, 0.15, 0, c.topY + 0.08, c.topZ + 0.142, 'pz'), { color: '#ffffff', decal: R_TAXI, light: LIGHT_TAXI, part: 2 });
   b.add(decalPlane(0.54, 0.15, 0, c.topY + 0.08, c.topZ - 0.142, 'nz'), { color: '#ffffff', decal: R_TAXI, light: LIGHT_TAXI, part: 2 });
   for (const s of [1, -1]) {
-    for (let i = 0; i < 9; i++) {
-      b.add(bx(0.012, 0.07, 0.17, s * (W / 2 + 0.003), 0.66 + (i % 2) * 0.07, -1.05 + i * 0.26), { color: '#1d1d1d', part: 2 });
-      b.add(bx(0.012, 0.07, 0.17, s * (W / 2 + 0.003), 0.66 + ((i + 1) % 2) * 0.07, -1.05 + i * 0.26), { color: '#ffffff', part: 2 });
+    for (let i = 0; i < 8; i++) {
+      b.add(bx(0.012, 0.07, 0.17, s * (W / 2 + 0.01), 0.66 + (i % 2) * 0.07, -0.88 + i * 0.22), { color: '#1d1d1d', part: 2 });
+      b.add(bx(0.012, 0.07, 0.17, s * (W / 2 + 0.01), 0.66 + ((i + 1) % 2) * 0.07, -0.88 + i * 0.22), { color: '#ffffff', part: 2 });
     }
   }
   // police (variant 2 → part 3): light bar + livery band
   b.add(rbox(1.18, 0.08, 0.32, 0.03, 0, c.topY - 0.01, c.topZ), { color: '#2b2e33', part: 3 });
   b.add(rbox(0.52, 0.13, 0.26, 0.05, 0.29, c.topY + 0.06, c.topZ), { color: '#ff3b30', light: LIGHT_POLICE_RED, part: 3, rough: 0.4 });
   b.add(rbox(0.52, 0.13, 0.26, 0.05, -0.29, c.topY + 0.06, c.topZ), { color: '#3d6dff', light: LIGHT_POLICE_BLUE, part: 3, rough: 0.4 });
-  b.add(decalPlane(2.5, 0.3, W / 2 + 0.006, 0.66, -0.1, 'px'), { color: '#ffffff', decal: R_POLICE, part: 3 });
-  b.add(decalPlane(2.5, 0.3, -W / 2 - 0.006, 0.66, -0.1, 'nx'), { color: '#ffffff', decal: R_POLICE, part: 3 });
+  b.add(decalPlane(1.8, 0.28, W / 2 + 0.014, 0.72, -0.05, 'px'), { color: '#ffffff', decal: R_POLICE, part: 3 });
+  b.add(decalPlane(1.8, 0.28, -W / 2 - 0.014, 0.72, -0.05, 'nx'), { color: '#ffffff', decal: R_POLICE, part: 3 });
   return b.build();
 }
 
@@ -673,22 +698,23 @@ function suv(): THREE.BufferGeometry {
   const b = new Builder();
   const L = 4.55,
     W = 1.86;
-  b.add(rbox(W, 0.74, L, 0.18, 0, 0.36, 0, 2), { color: '#ffffff', paint: true, rough: 0.85 });
-  // dark cladding along the bottom
-  b.add(rbox(W + 0.03, 0.2, L - 0.2, 0.07, 0, 0.35, 0), { color: '#3b3e43', rough: 1.3 });
-  const c = cabin(b, W, 1.08, 0.58, 2.95, -0.45, 0.1, 0.42, 0.08);
+  const c = loftBody(
+    b,
+    { L, W, sill: 0.42, belt: 1.1, roof: 1.72, noseH: 0.98, hoodH: 1.08, wsBase: 1.1, wsTop: 0.4, rwTop: -1.95, rwBase: -2.15, deckH: 1.2, tailH: 1.15, pillarB: -0.35, pillarC: -1.3, glassRear: -1.85, tumble: 0.1, axF: 1.425, axR: -1.325, wheelR: 0.37, clad: true },
+    true,
+  );
   // roof rails
-  for (const s of [1, -1]) b.add(bx(0.05, 0.06, c.topD - 0.3, s * (c.topW / 2 - 0.08), c.topY, c.topZ), { color: '#2e3136' });
+  for (const s of [1, -1]) b.add(bx(0.05, 0.06, c.topD - 0.3, s * (c.topW / 2 - 0.08), c.topY - 0.01, c.topZ), { color: '#2e3136' });
   // spare wheel on the tailgate
   const sp = new THREE.CylinderGeometry(0.31, 0.31, 0.2, sg(14));
   sp.rotateX(Math.PI / 2);
-  sp.translate(0, 0.86, -L / 2 - 0.09);
+  sp.translate(0, 0.84, -L / 2 - 0.09);
   b.add(sp, { color: TYRE, rough: 1.8 });
   const cov = new THREE.CylinderGeometry(0.24, 0.24, 0.05, sg(14));
   cov.rotateX(Math.PI / 2);
-  cov.translate(0, 0.86, -L / 2 - 0.2);
+  cov.translate(0, 0.84, -L / 2 - 0.2);
   b.add(cov, { color: '#ffffff', paint: true });
-  carDetails(b, { L, W, wheelR: 0.37, wheelW: 0.27, axF: 1.425, axR: -1.325, wheelX: W / 2 - 0.1, bodyY: 0.4, bodyH: 0.74, bodyR: 0.18, lightY: 0.92 });
+  carDetails(b, { L, W, wheelR: 0.37, wheelW: 0.27, axF: 1.425, axR: -1.325, wheelX: W / 2 - 0.1, bodyY: 0.4, bodyH: 0.74, bodyR: 0.18, lightY: 0.9 });
   return b.build();
 }
 

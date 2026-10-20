@@ -221,7 +221,7 @@ function buildSites(model: { world0(x: number, z: number): number; isWaterW(x: n
   // farmsteads: a jittered lattice over the farmland W and S, skipping water, steep or forested ground
   let seed = 100;
   for (let gx = -12; gx <= 3; gx++) {
-    for (let gz = -4; gz <= 10; gz++) {
+    for (let gz = -8; gz <= 10; gz++) {
       const h = hash2i(gx, gz, 77);
       if (h < 0.45) continue;
       const x = gx * 330 + (hash2i(gx, gz, 78) - 0.5) * 220 - 60;
@@ -231,10 +231,11 @@ function buildSites(model: { world0(x: number, z: number): number; isWaterW(x: n
       if (Math.hypot(x - CX, z - CZ) > 3600) continue;
       if (model.isWaterW(x, z) || model.isWaterW(x + 30, z) || model.isWaterW(x - 30, z) || model.isWaterW(x, z + 30) || model.isWaterW(x, z - 30)) continue;
       if (sites.some((s) => Math.hypot(s.x - x, s.z - z) < s.r + 120)) continue;
-      // northern hills are forest (a continuous wood behind the town's ridge): farms only further west
-      if (z < -200 && x > -700) continue;
+      // a continuous wood right behind the town's ridge; hill farms further north
+      if (z < -200 && z > -720 && x > -700) continue;
+      if (z < -600 && h < 0.62) continue; // hill farms are fewer
       const h0 = model.world0(x, z);
-      if (h0 > 70) continue;
+      if (h0 > (z < -600 ? 230 : 70)) continue;
       sites.push({ kind: 'farm', x, z, r: 34, seed: seed++ });
     }
   }
@@ -349,6 +350,8 @@ export function createLandscapeModel(slabHeight: SlabHeight): LandscapeModel {
       let hn = lerp(ridgeTop, valley, smooth(45, 290, n));
       const hillA = smooth(260, 1300, n) * (70 + 120 * smooth(1300, 3600, n));
       hn += hillA * (0.35 + 0.75 * ridged(x / 950, z / 950, 4, 16));
+      // spurs and gullies on the slopes (they catch the light from 1–4 km)
+      hn += smooth(200, 900, n) * (26 * (ridged(x / 360, z / 360, 3, 19) - 0.42) + 9 * fbm(x / 140, z / 140, 2, 20));
       hn += smooth(-60, 40, n) * 3 * fbm(x / 120, z / 120, 2, 17);
       const w = smooth(-120, 0, n);
       h = lerp(h, Math.max(h, hn), w);
@@ -450,7 +453,7 @@ export function createLandscapeModel(slabHeight: SlabHeight): LandscapeModel {
         h = Math.max(h, islandH(x, z));
       } else {
         // beach: 8 % from the waterline + dunes; cliff: steep face up to the land
-        const beach = WL + sd * 0.08 + smooth(28, 55, sd) * (1.0 + 1.6 * vnoise(x / 23, z / 23, 31)) * (1 - smooth(70, 140, sd));
+        const beach = WL + sd * 0.08 + smooth(20, 40, sd) * (0.8 + 1.4 * vnoise(x / 23, z / 23, 31)) * (1 - smooth(55, 110, sd));
         const cliff = WL + sd * (1.6 + 1.2 * vnoise(x / 40, z / 40, 32));
         const prof = lerp(beach, cliff, cl);
         h = smin(h, prof, 1.5 + 6 * cl);
@@ -581,7 +584,7 @@ export function createLandscapeModel(slabHeight: SlabHeight): LandscapeModel {
     const sd = coastSD(x, z);
     const cl = cliffness(z, x);
     // beach (~40 m), then dunes with marram grass (half sand) out to ~95 m
-    out.sand = out.water ? 0 : (1 - smooth(32, 50, sd) * 0.55 - smooth(70, 100, sd) * 0.45) * (1 - cl) * (1 - smooth(4, 7, h));
+    out.sand = out.water ? 0 : (1 - smooth(20, 32, sd) * 0.55 - smooth(42, 62, sd) * 0.45) * (1 - cl) * (1 - smooth(4, 7, h));
     out.rock = Math.min(1, smooth(0.75, 1.25, slope) + cl * (1 - smooth(4, 30, sd)) * smooth(0.35, 0.7, slope));
     let wet = 0;
     if (riverQ(x, z, rv, 60)) wet = 1 - smooth(rv.halfW, rv.halfW + 9, rv.d);
@@ -590,8 +593,7 @@ export function createLandscapeModel(slabHeight: SlabHeight): LandscapeModel {
     out.forest = out.water || siteAt(x, z, 25) >= 0 ? 0 : forestAt(x, z, h) * (1 - out.sand) * (1 - out.rock * 0.8) * (1 - wet) * (1 - onRoad);
     const settled = siteAt(x, z, 0) >= 0;
     const arable = (1 - out.forest) * (1 - out.sand) * (1 - out.rock) * (1 - wet) * (1 - smooth(0.12, 0.3, slope)) * (1 - out.water);
-    const north = smooth(-300, -600, z) * (x > -900 ? 1 : 0.3);
-    out.field = settled ? 0 : arable * (1 - north) * (1 - smooth(180, 320, h));
+    out.field = settled ? 0 : arable * (1 - smooth(260, 420, h));
     out.meadow = Math.max(0, (1 - out.water) * (1 - out.forest) * (1 - out.sand) - out.field - out.rock * 0.7);
     return out;
   };
@@ -602,7 +604,12 @@ export function createLandscapeModel(slabHeight: SlabHeight): LandscapeModel {
     // northern hills: closed forest with clearings
     const n = footZ(x) - z;
     let f = smooth(-30, 20, n);
-    if (n > 140) f *= 1 - 0.9 * smooth(0.36, 0.48, fbm(x / 340, z / 340, 3, 51)) * smooth(140, 400, n);
+    // the hill country is a patchwork: woods on the ridges and steep ground, hill pastures / meadows
+    // (with hedgerows) in the valleys and on the gentler slopes; the belt behind the ridge stays wood
+    if (n > 140) {
+      const open = smooth(0.18, 0.34, fbm(x / 420, z / 420, 3, 51) + 0.25 * (1 - smooth(60, 220, h)) - 0.12 * smooth(150, 300, h));
+      f *= 1 - 0.95 * open * smooth(420, 760, n);
+    }
     // copses + woods in the farmland (more of them further out)
     const cop = fbm(x / 210, z / 210, 3, 52) + 0.15 * smooth(800, 3000, r);
     f = Math.max(f, smooth(0.36, 0.44, cop) * smooth(260, 420, r));
@@ -632,7 +639,7 @@ export function createLandscapeModel(slabHeight: SlabHeight): LandscapeModel {
     road: (x, z, out, maxD) => roadQ(x, z, out, maxD ?? 40),
     roads: roadsRef,
     cliffness: (x, z) => cliffness(z, x),
-    grazing: (x, z, sd) => (z > 120 && z < 1100 ? 1 - smooth(260, 460, sd ?? coastSD(x, z)) : 0),
+    grazing: (x, z, sd) => Math.max(z > 120 && z < 1100 ? 1 - smooth(260, 460, sd ?? coastSD(x, z)) : 0, smooth(-560, -760, z) * (x > -1400 ? 1 : 0.4)),
     siteAt,
     waterLevel,
     isWater,

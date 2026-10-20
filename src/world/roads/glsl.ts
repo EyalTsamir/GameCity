@@ -128,8 +128,9 @@ vec3 rdAsphalt(inout float rough) {
     age = clamp(0.35 + 0.9 * (nL.g - 0.5) + 0.35 * (rdHash(floor(p / vec2(13.0, 9.0)) + 3.3) - 0.5), 0.0, 1.0);
   }
   // bimodal: most sections read clearly fresh (deep charcoal) or worn (pale grey) from afar
-  float ag = smoothstep(0.18, 0.82, age);
-  c *= mix(vec3(0.68, 0.7, 0.78), vec3(1.3, 1.27, 1.18), ag);
+  // (most of the network is worn mid-grey, fresh charcoal sections are the minority; eye level needs tone)
+  float ag = smoothstep(0.1, 0.72, age);
+  c *= mix(vec3(0.8, 0.82, 0.88), vec3(1.4, 1.36, 1.26), ag);
   c *= 0.9 + 0.12 * nL.r + 0.06 * nL.b;
   float spk = nS.a * 0.6 + nS.b * 0.4;
   c *= 1.0 + (spk - 0.5) * mix(0.1, 0.26, ag);
@@ -140,8 +141,9 @@ vec3 rdAsphalt(inout float rough) {
     float fadeJ = smoothstep(6.0, 13.0, dj);
     float trk = max(1.0 - smoothstep(0.12, 0.45, abs(alat - 0.95)), 1.0 - smoothstep(0.12, 0.45, abs(alat - 2.55)));
     trk *= fadeJ * onRoad * (0.7 + 0.6 * nM.g);
-    c *= 1.0 - 0.12 * trk * (0.45 + 0.55 * ag);
-    rough -= 0.16 * trk;
+    // wheel paths: polished, lighter exposed aggregate with a slight sheen
+    c *= 1.0 + 0.1 * trk * (0.4 + 0.6 * ag);
+    rough -= 0.22 * trk;
     // braking / tyre marks in the wheel paths on the approach to the stop lines (broken streaks)
     {
       float wp = max(1.0 - smoothstep(0.06, 0.16, abs(alat - 0.95)), 1.0 - smoothstep(0.06, 0.16, abs(alat - 2.55)));
@@ -158,10 +160,10 @@ vec3 rdAsphalt(inout float rough) {
     c *= 1.0 - 0.4 * oil;
     rough -= 0.35 * oil;
     // gutter: dusty band along the kerb, darker damp line right at it
-    c = mix(c, c * 1.16 + vec3(0.008), smoothstep(2.85, 3.35, alat) * onRoad * 0.6);
-    c *= 1.0 - 0.2 * smoothstep(3.3, 3.48, alat) * onRoad;
+    c = mix(c, vec3(0.2, 0.185, 0.16) * (0.85 + 0.3 * nS.r), smoothstep(2.85, 3.3, alat) * onRoad * 0.45);
+    c *= 1.0 - 0.25 * smoothstep(3.28, 3.48, alat) * onRoad;
     // sealed cracks on worn sections
-    float worn = smoothstep(0.42, 0.7, age) * onRoad * step(${JBOX}, dj);
+    float worn = smoothstep(0.22, 0.55, age) * onRoad * step(${JBOX}, dj);
     if (worn > 0.001) {
       float h2 = rdHash(sg + 2.3);
       float wig = 0.14 * sin(al * 0.37 + h2 * 6.0) + 0.1 * (nM.r - 0.5);
@@ -175,8 +177,8 @@ vec3 rdAsphalt(inout float rough) {
       float trans = rdLine(abs(tr), 0.07, fw) * span * step(0.25, hk);
       float net = rdCrackNet(p + sg * 13.0, 2.4, 0.045, fw) * smoothstep(1.6, 3.0, alat) * smoothstep(0.42, 0.58, nL.a);
       float crack = max(max(lon, trans), net) * worn;
-      c *= 1.0 - 0.62 * crack;
-      rough -= 0.25 * crack;
+      c *= 1.0 - 0.72 * crack;
+      rough -= 0.35 * crack;
     }
     c *= 1.0 - 0.5 * seam;
     rough -= 0.2 * seam;
@@ -197,16 +199,16 @@ vec3 rdAsphalt(inout float rough) {
   vec2 cs = vec2(9.0, 6.5);
   vec2 pc = floor(p / cs);
   float h = rdHash(pc);
-  if (h < 0.18) {
+  if (h < 0.3) {
     vec2 f = p - pc * cs;
     vec2 lo = vec2(0.6 + 3.0 * rdHash(pc + 3.1), 0.5 + 2.0 * rdHash(pc + 5.7));
     vec2 hi = lo + vec2(1.6 + 3.2 * rdHash(pc + 1.3), 1.2 + 2.4 * rdHash(pc + 7.9));
     vec2 inLo = smoothstep(lo - fwP, lo + fwP, f), inHi = 1.0 - smoothstep(hi - fwP, hi + fwP, f);
     float inside = inLo.x * inLo.y * inHi.x * inHi.y;
     vec2 de = min(abs(f - lo), abs(f - hi));
-    float ps = max(rdLine(de.x, 0.05, fwP.x) * step(lo.y, f.y) * step(f.y, hi.y), rdLine(de.y, 0.05, fwP.y) * step(lo.x, f.x) * step(f.x, hi.x));
-    c = mix(c, c * (h < 0.09 ? 0.72 : 1.18), inside);
-    c *= 1.0 - 0.45 * ps;
+    float ps = max(rdLine(de.x, 0.07, fwP.x) * step(lo.y, f.y) * step(f.y, hi.y), rdLine(de.y, 0.07, fwP.y) * step(lo.x, f.x) * step(f.x, hi.x));
+    c = mix(c, c * (h < 0.13 ? 0.7 : 1.22), inside);
+    c *= 1.0 - 0.7 * ps;
     rough -= 0.06 * inside;
   }
   // car parks: oil spots where cars stand

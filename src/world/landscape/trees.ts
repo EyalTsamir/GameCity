@@ -158,7 +158,7 @@ export function placeTrees(model: LandscapeModel, density: number): { list: Tree
       if (model.siteAt(x, z, 8) >= 0) return false;
       if (model.coastSD(x, z) < 90) return false;
       if (x < -150 && model.river(x, z, rv) && rv.d < rv.halfW + 7) return false;
-      if (y > 140) return false;
+      if (y > 320) return false;
       return true;
     };
     const hedgeLine = (ax: number, ay: number, bx: number, by: number, key: number) => {

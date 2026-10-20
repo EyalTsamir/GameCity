@@ -14,7 +14,7 @@ import { WIN, PROF, WALLPAT, ROOFPAT, FRAME, GLASS, LIGHT_MODE } from './materia
 import { boardSign, bladeSign } from './signs';
 import { PALETTE } from '../../core/gfx';
 import { anchors } from './anchors';
-import { windowBox, balconyLife, shutterPair, shutterState, julietBalcony, acUnit, dish, downpipe, potPlant, ironRail, climber, roofClutter as clutterRoof } from './clutter';
+import { windowBox, balconyLife, shutterPair, shutterState, julietBalcony, acUnit, dish, downpipe, potPlant, ironRail, climber, facadeCable, roofClutter as clutterRoof } from './clutter';
 import { GREEN } from './green';
 
 const SHOPS: { name: string; blade: string }[] = [
@@ -427,6 +427,8 @@ export function genTownhouse(g: Gen): void {
       const cu = atDoor ? doorU + (rng.chance(0.5) ? -1 : 1) * (dw / 2 + 0.45) : rng.chance(0.5) ? uA + 0.7 : uB - 0.7;
       climber(g, sg, cu, rng.range(1.0, 2.4), Math.min(eave - 0.6, gH + rng.range(0.5, 1.6) * fH), ins[FRONT], kind);
     }
+    // cable run above the shop fascias / ground floor
+    if (rng.chance(0.55) && uB - uA > 2) facadeCable(g, sg, uA + 0.05, uB - 0.05, gH + 0.22);
     // services on the front: a downpipe at one end of the gutter, maybe an AC unit or a dish up top
     if (lot.roof !== 'flat' && ins[FRONT] > 0.1 && rng.chance(0.75)) downpipe(g, sg, rng.chance(0.5) ? uA + 0.18 : uB - 0.18, eave - 0.15, undefined, ins[FRONT]);
     if (gr.n > 0 && gr.m > 1 && rng.chance(0.22)) dish(g, sg, rng.chance(0.5) ? uA + 0.5 : uB - 0.5, eave - 1.2, 0.02);

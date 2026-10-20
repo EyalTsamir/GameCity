@@ -64,8 +64,9 @@ export function marketStalls(ctx: CityContext): Stall[] {
       vx: f.x - fx * 0.15 + fz * 0.2 * ((f.id % 2) * 2 - 1),
       vz: f.z - fz * 0.15 - fx * 0.2 * ((f.id % 2) * 2 - 1),
       place: { kind: 'view', node: -1, label: 'Browsing the market stalls', theme: 'market', spots: [], x: f.x + fx * 1.2, z: f.z + fz * 1.2 },
+      // trading until 14:30, then packing up until 16:30
       open: 7.5,
-      close: 14.5,
+      close: 16.5,
       label: 'market stall',
     });
   }

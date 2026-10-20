@@ -64,7 +64,7 @@ export function ringSpecs(level: QualityLevel): RingSpec[] {
       { index: 1, tile: 4, levels: 2, blades: 448, in0: 9, in1: 12, out0: 24, out1: 29, width: 2.2, flowers: 0.2, lawnFlowers: 0, litter: 0 },
     ];
   return [
-    { index: 0, tile: 2, levels: 3, blades: 640, in0: -10, in1: -10, out0: 10, out1: 13, width: 1.0, flowers: 0.12, lawnFlowers: 0.08, litter: 0.55 },
+    { index: 0, tile: 2, levels: 3, blades: 640, in0: -10, in1: -10, out0: 10, out1: 13, width: 1.0, flowers: 0.2, lawnFlowers: 0.08, litter: 0.55 },
     { index: 1, tile: 4, levels: 2, blades: 512, in0: 10, in1: 13, out0: 30, out1: 36, width: 2.2, flowers: 0.15, lawnFlowers: 0, litter: 0.12 },
     { index: 2, tile: 8, levels: 1, blades: 640, in0: 30, in1: 36, out0: 58, out1: 68, width: 3.9, flowers: 0.12, lawnFlowers: 0, litter: 0 },
   ];
@@ -192,6 +192,7 @@ vGcRough = 0.85;
     float hab = cov.b * 255.0;
     float wet = ( hab > 0.5 && hab < 100.5 ) ? hab / 100.0 : 0.0;
     float dune = hab > 149.5 ? clamp( ( hab - 150.0 ) / 105.0, 0.0, 1.0 ) : 0.0;
+    float weedH = abs( hab - 120.0 ) < 0.5 ? 1.0 : 0.0;
     float len = cov.g;
     float lawnOK = iTile.w;
     bool leaf = rc.x < cov.a * uKind.z;
@@ -229,7 +230,7 @@ vGcRough = 0.85;
       } else {
         // ── a blade: grass / unmown tuft / meadow / reed / marram / flower
         vec2 cc;
-        float csz = dune > 0.0 ? 0.55 : ( len > 0.5 ? 0.9 : 0.7 );
+        float csz = weedH > 0.5 ? 0.22 : ( dune > 0.0 ? 0.55 : ( len > 0.5 ? 0.9 : 0.7 ) );
         vec4 cl = gcClump( root, csz, cc );
         vec2 outw = root - cc;
         float ol = length( outw );
@@ -243,7 +244,7 @@ vGcRough = 0.85;
         float kept = 1.0 - smoothstep( 0.18, 0.4, len );
         // length class → metres
         float Lc = len < 0.25 ? mix( 0.045, 0.1, len / 0.25 ) : ( len < 0.5 ? mix( 0.1, 0.36, ( len - 0.25 ) / 0.25 ) : mix( 0.36, 0.85, ( len - 0.5 ) / 0.5 ) );
-        float L = Lc * ( 0.62 + 0.62 * rc.y ) * ( 0.82 + 0.36 * cl.x );
+        float L = Lc * ( 0.62 + 0.62 * rc.y ) * mix( 0.82 + 0.36 * cl.x, 0.66 + 0.68 * cl.x, smoothstep( 0.45, 0.7, len ) );
         float W = mix( 0.008, 0.013, fract( rc.z * 5.3 ) ) * ( 1.0 + 0.25 * kept );
         float stiff = 1.0;
         vec2 lean = mix( wd, outw, 0.6 ) * mix( 0.12, 0.42, fract( rc.z * 9.7 ) ) * ( 0.6 + 0.6 * cl.w );
@@ -253,7 +254,7 @@ vGcRough = 0.85;
         base *= mix( vec3( 1.0 ), vec3( 0.8, 0.88, 0.92 ), clamp( -tone - 0.52, 0.0, 1.0 ) );
         base *= ( 0.9 + 0.2 * cl.y ) * ( 0.92 + 0.16 * fract( rb.z * 21.7 ) );
         vec3 tip = gcTipColor( base, nA, len );
-        float aoRoot = mix( 0.66, 0.32, smoothstep( 0.2, 0.6, len ) );
+        float aoRoot = mix( 0.66, 0.46, smoothstep( 0.2, 0.6, len ) );
         // seed heads on long grass
         bool seed = len > 0.48 && fract( rc.x * 17.9 ) < 0.13;
         if ( seed ) {
@@ -268,6 +269,14 @@ vGcRough = 0.85;
           base = gcReed * ( 0.85 + 0.25 * cl.y );
           tip = mix( base * 1.15, gcStraw, 0.3 * nA.b );
           aoRoot = 0.45;
+        } else if ( weedH > 0.5 ) {
+          // pavement weed: broad leaves splayed from a joint (rosette), fresh green
+          L = mix( 0.05, 0.16, rc.y );
+          W = mix( 0.014, 0.026, fract( rc.z * 5.3 ) );
+          lean = outw * mix( 0.45, 0.85, fract( rc.z * 9.7 ) );
+          base = vec3( 0.13, 0.25, 0.05 ) * ( 0.8 + 0.4 * cl.y );
+          tip = base * vec3( 1.25, 1.2, 1.0 );
+          aoRoot = 0.55;
         } else if ( marram ) {
           L = mix( 0.4, 0.82, rc.y );
           W = mix( 0.005, 0.008, fract( rc.z * 5.3 ) );
@@ -285,6 +294,7 @@ vGcRough = 0.85;
             // the patch's dominant species, mixed with a third of the others
             fk = fract( rc.z * 7.77 + ra.x ) < 0.34 ? int( fract( rb.y * 9.31 + rc.x ) * 5.99 ) : int( flw.g * 6.0 );
           }
+          else if ( weedH > 0.5 && fract( ra.z * 47.3 + rb.x * 2.3 ) < 0.07 && uKind.w < 0.5 ) fk = 6;
           else if ( len < 0.3 && fract( ra.z * 47.3 + rb.x * 2.3 ) < flw.b * uKind.y ) {
             float q = fract( rc.y * 11.3 );
             fk = q < 0.38 ? 6 : ( q < 0.8 ? 7 : 8 );
@@ -310,7 +320,7 @@ vGcRough = 0.85;
         vec3 eyeC = vec3( 0.0 );
         if ( fk >= 0 ) {
           // stem + head; the head faces the camera
-          float hsz = fk == 4 ? mix( 0.06, 0.09, rc.y ) : ( fk == 0 ? mix( 0.045, 0.065, rc.y ) : ( fk >= 6 ? mix( 0.012, 0.02, rc.y ) : mix( 0.025, 0.04, rc.y ) ) );
+          float hsz = fk == 4 ? mix( 0.06, 0.09, rc.y ) : ( fk == 0 ? mix( 0.05, 0.075, rc.y ) : ( fk >= 6 ? mix( 0.014, 0.024, rc.y ) : mix( 0.03, 0.045, rc.y ) ) );
           if ( fk < 6 ) L = max( L * 1.1, ( fk == 4 ? 0.55 : 0.32 ) + 0.3 * rc.y ) * ( len > 0.5 ? 1.0 : 0.6 );
           else L = mix( 0.06, 0.12, rc.y );
           float ringBoost = uKind.w > 0.5 ? ( uKind.w > 1.5 ? 1.7 : 1.35 ) : 1.0;

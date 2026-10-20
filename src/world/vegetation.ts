@@ -799,6 +799,8 @@ export default function create(ctx: CityContext): CityModule {
         if (!street) r *= 1.12;
         break;
     }
+    // a forest is a closed canopy: crowns reach their neighbours
+    if (t.tag === 'forest') r *= 1.18;
     plants.push({
       kind,
       x: t.x,
@@ -813,6 +815,8 @@ export default function create(ctx: CityContext): CityModule {
       bz,
       forest: t.tag === 'forest',
       age: hash01(t.x * 0.7, t.z * 1.9, 5),
+      // street trees spread along the street (the gap between facades), not into them
+      stretch: street ? [Math.cos(t.syaw), -Math.sin(t.syaw), 1.4] : undefined,
     });
   }
   // build near-to-far for the usual camera direction (south → north) so early-z rejects hidden canopies
@@ -982,6 +986,19 @@ export default function create(ctx: CityContext): CityModule {
         const rr = rng.range(0.5, 0.95);
         addBush(t.x + Math.cos(a) * d, t.z + Math.sin(a) * d, rr, rr * rng.range(0.85, 1.15), rng.int(0, 1e9), undefined);
       }
+    }
+  }
+
+  // forest floor (leaf-card mode): shrubs and young saplings under the canopy so the hills read as woodland,
+  // not as trees standing on a lawn
+  if (cardsOn) {
+    const rng = ctx.rng('veg-forest-floor');
+    for (const t of planted) {
+      if (t.tag !== 'forest' || !rng.chance(0.42)) continue;
+      const a = rng.range(0, 6.28),
+        d = t.r * rng.range(0.6, 1.2);
+      const rr = rng.range(0.55, 1.05);
+      addBush(t.x + Math.cos(a) * d, t.z + Math.sin(a) * d, rr, rr * rng.range(0.9, 1.3), rng.int(0, 1e9), undefined);
     }
   }
 

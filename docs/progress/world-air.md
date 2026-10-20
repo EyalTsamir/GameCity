@@ -12,6 +12,28 @@ Owner: **air** agent (world round). Files: `src/render/**` except `src/render/st
   flat bases + domed sunlit tops) → NEXT: raymarched cumulus slab at half res (`sky/cloudVolume.ts`,
   rendered by postfx before the composer, composited by the dome; cirrus stays 2D in the dome).
 * Running: sky3 (skycap hz_n/hz_w/up_ne × 11/18.2/19.3/21.5), m3a (vista/overview/riverbend/coast × 11/18.2).
+* 01:35 sky3 judged (sky3_a.png / sky3_b.png, still with the old 2.5D clouds): noon blue + layered blue
+  ridges ✓; 18.2 warm haze toward the sun with a tight golden glow ✓ but zenith grey-lavender; 19.3 salmon
+  clouds + horizon glow = first real sunset ✓. → MS term made stronger at a low sun (msLight ∝
+  clamp(2·sinEl+0.55), SKY_MS 0.45): probe zenith at 6.7° sun (0.87,0.98,1.53) = blue.
+  Cloud VOLUME written + wired (typechecks): `sky/cloudVolume.ts` (10-step half-res march, light 2 taps,
+  MS floor, dual-lobe phase, haze fade), `cloudLayer.ts` cuField/cuDens (placement × billows × height
+  profile), dome composites `tCloudVol` (gl_FragCoord / full res) over the 2D cirrus, postfx calls
+  `sky.renderClouds(renderer, camera)` at the top of ctx.render (sky renders it itself without postfx).
+* Note for world (via lead): at 19.3 the countryside trees in hz_w read bright lime as if at noon.
+* 01:55 LEAD: golden hour 18.2 = uniform sepia murk (m3b ov15/coast2, captured 01:37 = before most fixes)
+  — "the most important look of the project". Root cause: ONE in-scatter colour for both media → now
+  thAtmoApply = (col·TR + airColor·(1−TR))·TM + haze(V)·(1−TM): blue air cool everywhere (thAtmo[7] =
+  zenith hue at the haze's brightness, 35 % greyed), aerosol = ring + forward lobe; at golden hour the
+  ring turns cool blue-grey away from the sun (`horizonAt`, golden·0.62·smooth(0.25π, π, φ)).
+  Golden key (palette WORLD_OVERRIDES 17.6/18.6/19.3): aerosol 6.5e-5/9e-5/1.1e-4, exposure 1.16/1.2/1.22,
+  bluer hemiSky, less orange hemiGround; env bake lobe ×0.35.
+* sky4 judged (sky4_a/sky4_b.png): VOLUME CLOUDS WORK — 3D cumulus, golden rims when backlit, mauve
+  twilight clouds; fixed since: comb artefacts (5-tap rotated-grid filter in the dome), pyramid tops
+  (cuDens: sqrt field + cubic profile), beige ambient (ambient = zenith-led), thickness by coverage
+  (550 + 1100·min(1, 1.6·cov) m).
+* ?diorama verified unchanged in look (shots/world/air/dio_check.png; baseline set dio_base pending).
+* Running: g1 (overview/vista/coast/riverbend/country @18.2), sky5 (hz_n/hz_w/hz_s × 11/18.2/19.6).
 
 * 2026-10-19 16:30 — M1 code written, render typecheck clean (`npx tsc --noEmit -p <scratch>/air/../tsconfig.air.json`
   = render-only config in the scratchpad, 20 s; whole project takes 5 min):
@@ -146,7 +168,14 @@ in far views −0.4…−0.8 ms. Net ≈ 0 … +0.4 ms; 0 extra draw calls (cott
   (the water reflection pass has another size → disable the fade there). — in M1.
 
 ## Requests to other areas
-(none yet)
+* world (water): the sea mirrors my dome uniforms (uZenith/uHorizon = the shown physical sky; uHorizon =
+  the haze ~120° from the sun). A hot glitter path toward a low sun and a saturated teal/blue body are
+  the water shader's; clouds are not in the reflection (the deck is a screen-space volume) — if wanted,
+  `cuField()` in sky/cloudLayer.ts gives a cheap 2D cloud mask for a mirrored direction.
+* world (landscape): at 19.3 the countryside trees looked noon-bright lime in hz_w (sky3_b.png).
+* ui (lead): in world mode the DOF button toggles the natural lens DOF, not tilt-shift — label
+  "Depth of field" instead of "Tilt-shift focus" when !DIORAMA.
+* life: thin bright diagonal line across the sea in world/m3b coast2_18h2 — likely a kite string.
 
 ## Changes outside my area
 (none)

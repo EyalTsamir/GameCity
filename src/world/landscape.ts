@@ -24,6 +24,7 @@ import { LAYERS } from '../core/layers';
 import { buildLandLights, type LandLights } from './landscape/lights';
 import { createFarmLife, type FarmLife } from './landscape/farmlife';
 import { buildCountryRoads, type CountryRoads } from './landscape/roads';
+import { Fleet } from './landscape/fleet';
 import type { SmokeService } from '../sim/ambient';
 
 export interface LandscapeService {
@@ -148,18 +149,17 @@ export default function create(ctx: CityContext): CityModule {
       reflTris += mr.triangles;
     }
   }
+  // every moving vehicle (ships, country cars, the tractor) shares one dynamic mesh
+  const fleet = new Fleet();
   // ── country roads, tunnel portals, bridge, cars
   let roads: CountryRoads | null = null;
   if (params.get('landroads') !== '0') {
-    roads = buildCountryRoads(model, uniforms, fog, ctx.uniforms.uLights);
+    roads = buildCountryRoads(model, uniforms, fog, fleet);
     root.add(roads.group);
   }
   // ── distant shipping
   let ships: Ships | null = null;
-  if (params.get('landships') !== '0') {
-    ships = createShips(model, fog, ctx.uniforms.uLights);
-    root.add(ships.mesh);
-  }
+  if (params.get('landships') !== '0') ships = createShips(model, fleet);
   // ── farmsteads, hamlets, villages
   let bldCount = 0;
   let beacon: { x: number; y: number; z: number } | null = null;
@@ -178,7 +178,7 @@ export default function create(ctx: CityContext): CityModule {
   // ── farm life: herds, a working tractor; chimney smoke from villages and farms (ambient's smoke)
   let farm: FarmLife | null = null;
   if (params.get('landlife') !== '0') {
-    farm = createFarmLife(model, uniforms, fog, ctx.quality.density);
+    farm = createFarmLife(model, uniforms, fog, ctx.quality.density, fleet);
     root.add(farm.group);
     ctx.events.on('modules:ready', () => {
       const smoke = ctx.services.smoke as SmokeService | undefined;
@@ -217,6 +217,12 @@ export default function create(ctx: CityContext): CityModule {
     });
   }
   let chimneys = 0;
+  root.add(fleet.finish(ctx.uniforms.uLights, fog, (k, v, out) => (roads ? roads.tint(k, v, out) : false)));
+  // first placement (the sim may start paused)
+  ships?.update(0, 0);
+  roads?.update(0);
+  farm?.update(0);
+  fleet.commit();
   // ── countryside trees (near 3D set around the camera + far impostors)
   let trees: LandTrees | null = null;
   let treeMs = 0;
@@ -251,6 +257,7 @@ export default function create(ctx: CityContext): CityModule {
       if (ships && dt > 0) ships.update(ctx.uniforms.uTime.value, dt);
       if (farm && dt > 0) farm.update(dt);
       if (roads && dt > 0) roads.update(dt);
+      if (dt > 0) fleet.commit();
     },
     frame() {
       trees?.update(ctx.camera);

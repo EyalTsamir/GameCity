@@ -9,6 +9,7 @@ import { WL, CX, CZ } from './model';
 import { FROW, toField, fromField, rowB, colB, colOff, colW, lhash, fieldsOfParcel, grazeCrop, type Field } from './fields';
 import { hash2i } from './noise';
 import { SLAB } from '../../core/constants';
+import type { Fleet, FleetTemplate } from './fleet';
 
 /** unit cow (faces +z, length ~2.2 m): body, head, four legs; aPart 0 body, 1 head, 2 legs */
 function animalGeometry(): THREE.BufferGeometry {
@@ -46,9 +47,10 @@ function animalGeometry(): THREE.BufferGeometry {
   return g;
 }
 
-function tractorGeometry(): THREE.BufferGeometry {
+function tractorGeometry(): FleetTemplate {
   const pos: number[] = [],
-    col: number[] = [];
+    col: number[] = [],
+    emi: number[] = [];
   const box = (w: number, h: number, l: number, x: number, y: number, z: number, c: [number, number, number]) => {
     const g = new THREE.BoxGeometry(w, h, l).toNonIndexed();
     g.translate(x, y, z);
@@ -56,6 +58,7 @@ function tractorGeometry(): THREE.BufferGeometry {
     for (let i = 0; i < a.count; i++) {
       pos.push(a.getX(i), a.getY(i), a.getZ(i));
       col.push(c[0], c[1], c[2]);
+      emi.push(0);
     }
   };
   const red: [number, number, number] = [0.45, 0.06, 0.04];
@@ -68,10 +71,7 @@ function tractorGeometry(): THREE.BufferGeometry {
   box(0.35, 0.95, 0.95, -0.75, 0.48, 1.3, dark); // front wheels
   box(0.35, 0.95, 0.95, 0.75, 0.48, 1.3, dark);
   box(2.8, 0.5, 2.6, 0, 0.6, -3.2, [0.35, 0.33, 0.3]); // cultivator / trailer
-  const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-  g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
-  return g;
+  return { pos, col, emi };
 }
 
 export interface FarmLife {
@@ -82,7 +82,7 @@ export interface FarmLife {
   attachSmoke(smoke: { addEmitter(o: { getPosition(out: THREE.Vector3): void | boolean; rate?: number; size?: number; color?: THREE.ColorRepresentation; life?: number; rise?: number; opacity?: number }): unknown } | undefined): void;
 }
 
-export function createFarmLife(model: LandscapeModel, uniforms: Record<string, THREE.IUniform>, fog: boolean, density: number): FarmLife {
+export function createFarmLife(model: LandscapeModel, uniforms: Record<string, THREE.IUniform>, fog: boolean, density: number, fleet: Fleet): FarmLife {
   const group = new THREE.Group();
   group.name = 'land-farmlife';
   const H = model.height;
@@ -254,13 +254,7 @@ varying vec3 vAc;`,
   let working = false;
   if (tractorField) {
     const F = tractorField;
-    const tg = tractorGeometry();
-    const tm = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.55, metalness: 0.1, fog });
-    const tractor = new THREE.Mesh(tg, tm);
-    tractor.name = 'land-tractor';
-    tractor.castShadow = true;
-    tractor.receiveShadow = true;
-    group.add(tractor);
+    const tid = fleet.add(tractorGeometry());
     const longX = F.x1 - F.x0 >= F.y1 - F.y0;
     const len = longX ? F.x1 - F.x0 - 16 : F.y1 - F.y0 - 16;
     const across = longX ? F.y1 - F.y0 - 16 : F.x1 - F.x0 - 16;
@@ -301,13 +295,12 @@ varying vec3 vAc;`,
         fy = longX ? b : a;
       fromField(fx, fy, P);
       const y = H(P.x, P.z);
-      tractor.position.set(P.x, y, P.z);
       // field-frame heading → world yaw (model faces +z; field x axis = world (cos r, sin r))
       const hx = longX ? Math.cos(heading) : Math.sin(heading),
         hy = longX ? Math.sin(heading) : Math.cos(heading);
       const dx = hx * 0.990268 - hy * 0.139173,
         dz = hx * 0.139173 + hy * 0.990268;
-      tractor.rotation.y = Math.atan2(dx, dz);
+      fleet.set(tid, P.x, y, P.z, Math.atan2(dx, dz));
       tractorPos!.set(P.x - dx * 3.5, y + 0.6, P.z - dz * 3.5);
     };
     update(0);

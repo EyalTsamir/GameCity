@@ -767,8 +767,8 @@ vec3 groundColor() {
   presM *= 1.0 - smoothstep( 0.12, 0.5, vz ) * 0.85;
   presL *= 1.0 - smoothstep( 0.2, 0.7, vz ) * 0.5;
   float pres = mix( presM, presL, kept ) * smoothstep( 0.05, 0.5, cv.r ) * uGcOn;
-  vec3 under = mix( gb * 0.5, gcThatch, 0.35 );
-  grass = mix( grass, under, pres * mix( 0.78, 0.45, kept ) );
+  vec3 under = mix( gb * 0.58, gcThatch, 0.3 );
+  grass = mix( grass, under, pres * mix( 0.62, 0.45, kept ) );
   gGrassTrans = smoothstep( 0.35, 0.8, len ) * ( 1.0 - pres ) * 0.6;
 
   // ── wear: trampled yellowish grass → bare soil; scree / gravel at cliff feet (wild areas)

@@ -287,6 +287,16 @@ function broadCluster(g: CanvasRenderingContext2D, rng: Rng, w: number, h: numbe
     const side = i % 2 ? 1 : -1;
     forks.push(clipStem(stem(p.x, p.y, p.a + side * rng.range(0.55, 1.15) * spread, h * rng.range(0.42, 0.62), side * rng.range(-0.15, 0.5), 7), w, h, m));
   }
+  // short side shoots along every fork (where most leaves of a real spray sit)
+  const nMain = forks.length;
+  for (let i = 0; i < nMain; i++) {
+    const st = forks[i];
+    for (let j = 0; j < 3; j++) {
+      const p = along(st, rng.range(0.3, 0.92));
+      const side = j % 2 ? 1 : -1;
+      forks.push(clipStem(stem(p.x, p.y, p.a + side * rng.range(0.6, 1.1) * spread, L * rng.range(1.4, 2.4), side * rng.range(0, 0.4), 3), w, h, m * 0.7));
+    }
+  }
   // leaves: collect then draw back-to-front (darker first)
   const leaves: { x: number; y: number; a: number; L: number; b: number }[] = [];
   for (let k = 0; k < n; k++) {
@@ -306,7 +316,7 @@ function broadCluster(g: CanvasRenderingContext2D, rng: Rng, w: number, h: numbe
   leaves.sort((a, b) => a.b - b.b);
   const nTw = Math.floor(leaves.length * 0.45);
   for (let i = 0; i < leaves.length; i++) {
-    if (i === nTw) for (const st of forks) twig(g, st, st === main ? 5 : 3, 1.2);
+    if (i === nTw) forks.forEach((st, si) => twig(g, st, st === main ? 5 : si < nMain ? 3 : 1.6, 1.0));
     const lf = leaves[i];
     const tipx = lf.x + Math.sin(lf.a) * lf.L,
       tipy = lf.y + Math.cos(lf.a) * lf.L;
@@ -630,7 +640,7 @@ function bougainvillea(g: CanvasRenderingContext2D, rng: Rng, w: number, h: numb
 
 /** citrus: dense glossy dark elliptic leaves + a few oranges/lemons (B = 1, round) */
 function citrus(g: CanvasRenderingContext2D, rng: Rng, w: number, h: number): void {
-  broadCluster(g, rng, w, h, 62, 26, { w: 0.26, wide: 0.45, base: 0.5, tip: 0.5 }, 1.0, 0.4, 0.9);
+  broadCluster(g, rng, w, h, 90, 22, { w: 0.26, wide: 0.45, base: 0.5, tip: 0.5 }, 1.0, 0.4, 0.9);
   for (let k = 0; k < 4; k++) {
     const x = rng.range(-w * 0.25, w * 0.25),
       y = rng.range(h * 0.35, h * 0.8);
@@ -647,11 +657,11 @@ function citrus(g: CanvasRenderingContext2D, rng: Rng, w: number, h: number): vo
 }
 
 const PAINT: Record<LeafTile, Painter> = {
-  broad: (g, s, w, h) => broadCluster(g, new Rng(s), w, h, 46, 27, { w: 0.36, wide: 0.38, base: 1.1, tip: 0.85 }),
+  broad: (g, s, w, h) => broadCluster(g, new Rng(s), w, h, 72, 25, { w: 0.36, wide: 0.38, base: 1.1, tip: 0.85 }),
   broadDense: (g, s, w, h) => denseClump(g, new Rng(s), w, h, 210, 22, { w: 0.36, wide: 0.38, base: 1.1, tip: 0.8 }),
-  plane: (g, s, w, h) => broadCluster(g, new Rng(s), w, h, 22, 42, { w: 0.5, lobes: 5, fold: 0.18 }, 1.15, 0.5, 0.95),
-  oak: (g, s, w, h) => broadCluster(g, new Rng(s), w, h, 42, 27, { w: 0.3, lobes: 7, fold: 0.15 }, 1.0, 0.45, 0.9),
-  small: (g, s, w, h) => broadCluster(g, new Rng(s), w, h, 74, 18, { w: 0.3, wide: 0.45, base: 0.5, tip: 0.35 }, 1.05, 0.42, 0.92),
+  plane: (g, s, w, h) => broadCluster(g, new Rng(s), w, h, 30, 38, { w: 0.5, lobes: 5, fold: 0.18 }, 1.15, 0.5, 0.95),
+  oak: (g, s, w, h) => broadCluster(g, new Rng(s), w, h, 60, 25, { w: 0.3, lobes: 7, fold: 0.15 }, 1.0, 0.45, 0.9),
+  small: (g, s, w, h) => broadCluster(g, new Rng(s), w, h, 125, 16, { w: 0.3, wide: 0.45, base: 0.5, tip: 0.35 }, 1.05, 0.42, 0.92),
   smallDense: (g, s, w, h) => denseClump(g, new Rng(s), w, h, 320, 15, { w: 0.3, wide: 0.45, base: 0.5, tip: 0.35, rib: false }),
   olive: (g, s, w, h) => olive(g, new Rng(s), w, h),
   birch: (g, s, w, h) => birchSpray(g, new Rng(s), w, h),

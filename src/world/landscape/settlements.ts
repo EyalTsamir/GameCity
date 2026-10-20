@@ -1,6 +1,7 @@
 // Farmsteads, hamlets and villages of the countryside (sites from landscape/model.ts):
 // gabled houses, barns and sheds (one instanced unit mesh: body + roof, roof pitch per instance),
-// church towers with spires (a second instanced mesh). Walls get window rows (shader), lit at night.
+// church towers with spires and the island lighthouse (the same unit, its ridge collapsed to a point) —
+// one instanced mesh. Walls get window rows (shader), lit at night.
 
 import * as THREE from 'three';
 import type { LandscapeModel, Site } from './model';
@@ -171,36 +172,7 @@ function gableGeometry(): THREE.BufferGeometry {
   return g;
 }
 
-/** church tower (square shaft, unit 1×1 base, height 1) + spire (flagged) */
-function towerGeometry(): THREE.BufferGeometry {
-  const shaft = new THREE.BoxGeometry(1, 0.62, 1).toNonIndexed();
-  shaft.translate(0, 0.31, 0);
-  const spire = new THREE.ConeGeometry(0.62, 0.38, 8, 1, false).toNonIndexed();
-  spire.rotateY(Math.PI / 8);
-  spire.translate(0, 0.62 + 0.19, 0);
-  const pos: number[] = [],
-    nrm: number[] = [],
-    roof: number[] = [];
-  for (const [g, r] of [
-    [shaft, 0],
-    [spire, 1],
-  ] as [THREE.BufferGeometry, number][]) {
-    const p = g.getAttribute('position'),
-      n = g.getAttribute('normal');
-    for (let i = 0; i < p.count; i++) {
-      pos.push(p.getX(i), p.getY(i), p.getZ(i));
-      nrm.push(n.getX(i), n.getY(i), n.getZ(i));
-      roof.push(r);
-    }
-  }
-  const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-  g.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3));
-  g.setAttribute('aRoof', new THREE.Float32BufferAttribute(roof, 1));
-  return g;
-}
-
-function buildingMaterial(uniforms: Record<string, THREE.IUniform>, fog: boolean, tower: boolean): THREE.MeshStandardMaterial {
+function buildingMaterial(uniforms: Record<string, THREE.IUniform>, fog: boolean): THREE.MeshStandardMaterial {
   const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.85, metalness: 0, fog });
   mat.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, uniforms);
@@ -219,7 +191,11 @@ varying vec3 vBS;`,
       .replace(
         '#include <begin_vertex>',
         `#include <begin_vertex>
-${tower ? '' : '// roof rise relative to the eaves height\nif (transformed.y > 1.0) transformed.y = 1.0 + (transformed.y - 1.0) * aB.x;'}
+// roof rise relative to the eaves height; towers (kind 3): the ridge collapses to a point → a spire
+if (transformed.y > 1.0) {
+  transformed.y = 1.0 + (transformed.y - 1.0) * aB.x;
+  if (aB.w > 2.5) transformed.x = 0.0;
+}
 vRoof = aRoof;
 vB = aB;
 vBL = transformed;
@@ -246,23 +222,22 @@ vec3 bAlbedo() {
   int wi = int(vB.y + 0.5), ri = int(vB.z + 0.5);
   vec3 wall = uWalls[wi];
   vec3 roof = uRoofs[ri];
-  if (vRoof > 0.75) {
-    // tile courses
-    float c = fract(vBL.y * vBS.y * ${tower ? '1.0' : '2.2'});
+  if (vRoof > 0.75 || (vB.w > 2.5 && vBL.y > 1.001)) {
+    // tile / slate courses
+    float c = fract(vBL.y * vBS.y * 2.2);
     return roof * (0.85 + 0.15 * smoothstep(0.1, 0.4, c)) * (0.9 + 0.2 * bHash(floor(vBW.xz * 0.5)));
   }
   // windows: rows per storey on the long walls and gables (not on barns / towers)
   float fp = length(fwidth(vBW));
   vec3 col = wall * (0.92 + 0.08 * bHash(floor(vBW.xz * 3.0 + vBW.y * 2.0)));
-  ${tower
-        ? `{
-    // louvred belfry openings near the top
+  if (vB.w > 2.5) {
+    // tower: louvred belfry openings (church) / lantern band (lighthouse) under the spire
     float u = abs(vBL.x) > 0.499 ? vBL.z : vBL.x;
     float y = vBL.y;
-    float op = step(0.47, y) * step(y, 0.56) * step(abs(u), 0.16);
+    float op = step(0.8, y) * step(y, 0.93) * step(abs(u), 0.17);
     col = mix(col, vec3(0.05), op * (1.0 - smoothstep(0.4, 1.2, fp)));
-  }`
-        : `if (vB.w < 0.5 && fp < 1.6) {
+  }
+  if (vB.w < 0.5 && fp < 1.6) {
     float along = abs(vBL.z) > 0.499 ? vBL.x * vBS.x : vBL.z * vBS.z;
     float y = vBL.y * vBS.y;
     float storey = floor((y - 0.9) / 2.8);
@@ -273,7 +248,7 @@ vec3 bAlbedo() {
     float lit = step(0.45, bHash(floor(vec2(along / 3.1, storey) + vBW.xz * 0.013) + vB.y));
     bWin = win * lit;
     col = mix(col, vec3(0.06, 0.07, 0.08), win);
-  }`}
+  }
   return col;
 }`,
       )
@@ -283,7 +258,7 @@ vec3 bAlbedo() {
         '#include <emissivemap_fragment>\ntotalEmissiveRadiance += vec3(1.0, 0.68, 0.34) * bWin * uLights * 2.2;',
       );
   };
-  mat.customProgramCacheKey = () => (tower ? 'th-landtower-v1' : 'th-landbld-v1');
+  mat.customProgramCacheKey = () => 'th-landbld-v2';
   return mat;
 }
 
@@ -312,7 +287,13 @@ export function buildSettlements(model: LandscapeModel, uniforms: Record<string,
     sc = new THREE.Vector3(),
     p = new THREE.Vector3(),
     ax = new THREE.Vector3(0, 1, 0);
-  // gabled buildings
+  // towers (church spires, the lighthouse): gable units whose ridge collapses into a spire (kind 3)
+  for (const t of towers) {
+    const lh = t.light === true;
+    const w = lh ? 4.2 : 5.5;
+    blds.push({ x: t.x, z: t.z, y: t.y, w, d: w, h: t.h * 0.66, roof: t.h * 0.34, yaw: t.yaw, wall: lh ? 0 : 3, roofC: lh ? 1 : 4, kind: 3 });
+  }
+  // all buildings: one instanced mesh
   const geo = gableGeometry();
   const ab = new Float32Array(blds.length * 4);
   blds.forEach((b, i) => {
@@ -322,7 +303,7 @@ export function buildSettlements(model: LandscapeModel, uniforms: Record<string,
     ab[i * 4 + 3] = b.kind;
   });
   geo.setAttribute('aB', new THREE.InstancedBufferAttribute(ab, 4));
-  const mesh = new THREE.InstancedMesh(geo, buildingMaterial(u, fog, false), Math.max(1, blds.length));
+  const mesh = new THREE.InstancedMesh(geo, buildingMaterial(u, fog), Math.max(1, blds.length));
   blds.forEach((b, i) => {
     p.set(b.x, b.y, b.z);
     q.setFromAxisAngle(ax, b.yaw);
@@ -336,32 +317,6 @@ export function buildSettlements(model: LandscapeModel, uniforms: Record<string,
   mesh.receiveShadow = true;
   mesh.computeBoundingSphere();
   group.add(mesh);
-  // church towers
-  const tg = towerGeometry();
-  const tb = new Float32Array(Math.max(1, towers.length) * 4);
-  towers.forEach((t, i) => {
-    const lh = (t as { light?: boolean }).light === true;
-    tb[i * 4] = 1;
-    tb[i * 4 + 1] = lh ? 0 : 3;
-    tb[i * 4 + 2] = lh ? 1 : 4;
-    tb[i * 4 + 3] = 3;
-  });
-  tg.setAttribute('aB', new THREE.InstancedBufferAttribute(tb, 4));
-  const tmesh = new THREE.InstancedMesh(tg, buildingMaterial(u, fog, true), Math.max(1, towers.length));
-  towers.forEach((t, i) => {
-    p.set(t.x, t.y, t.z);
-    q.setFromAxisAngle(ax, t.yaw);
-    const lh = (t as { light?: boolean }).light === true;
-    sc.set(lh ? 4.2 : 5.5, t.h, lh ? 4.2 : 5.5);
-    m4.compose(p, q, sc);
-    tmesh.setMatrixAt(i, m4);
-  });
-  tmesh.count = towers.length;
-  tmesh.name = 'land-towers';
-  tmesh.castShadow = true;
-  tmesh.receiveShadow = true;
-  tmesh.computeBoundingSphere();
-  group.add(tmesh);
-  const triangles = blds.length * 14 + towers.length * (12 + 16);
-  return { group, count: blds.length + towers.length, triangles, beacon: beacon ? { x: beacon.x, y: beacon.y + beacon.h * 0.82, z: beacon.z } : null };
+  const triangles = blds.length * 14;
+  return { group, count: blds.length, triangles, beacon: beacon ? { x: beacon.x, y: beacon.y + beacon.h * 0.82, z: beacon.z } : null };
 }
