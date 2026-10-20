@@ -520,7 +520,7 @@ const TAIL = '#d8352c';
 const AMBER = '#ffad3d';
 const PLATE = '#f3f0e7';
 
-function wheel(b: Builder, x: number, y: number, z: number, r: number, w: number, front: boolean, rim = RIM): void {
+function wheel(b: Builder, x: number, y: number, z: number, r: number, w: number, front: boolean, rim = RIM, alloy = false): void {
   const side = Math.sign(x) || 1;
   const wh = { x, y, z, front };
   if (LOD > 0) {
@@ -547,6 +547,23 @@ function wheel(b: Builder, x: number, y: number, z: number, r: number, w: number
   const hub = new THREE.CylinderGeometry(r * 0.58, r * 0.58, 0.03, 12, 1);
   hub.rotateZ(Math.PI / 2);
   hub.translate(x + side * (w / 2 + 0.004), y, z);
+  if (alloy) {
+    // car alloy: dark dished disc, five spokes and a centre cap (the spokes carry the spin up close)
+    hub.translate(-side * 0.008, 0, 0);
+    b.add(hub, { color: '#3d4247', rough: 1.1, wheel: wh });
+    for (let k = 0; k < 5; k++) {
+      const sp = new THREE.BoxGeometry(0.022, r * 0.5, r * 0.15);
+      sp.translate(0, r * 0.29, 0);
+      sp.rotateX((k * 2 * Math.PI) / 5);
+      sp.translate(x + side * (w / 2 + 0.012), y, z);
+      b.add(sp, { color: rim, rough: 0.55, wheel: wh });
+    }
+    const cap = new THREE.CylinderGeometry(r * 0.15, r * 0.15, 0.03, 10, 1);
+    cap.rotateZ(Math.PI / 2);
+    cap.translate(x + side * (w / 2 + 0.018), y, z);
+    b.add(cap, { color: rim, rough: 0.5, wheel: wh });
+    return;
+  }
   b.add(hub, { color: rim, rough: 0.7, wheel: wh });
   // two crossing spokes so the spin reads up close
   const s1 = new THREE.BoxGeometry(0.02, r * 1.05, r * 0.16);
@@ -577,10 +594,10 @@ interface CarDims {
 /** Wheels, bumpers, lights, plates, mirrors common to the cars. */
 function carDetails(b: Builder, d: CarDims): void {
   const { L, W } = d;
-  wheel(b, d.wheelX, d.wheelR, d.axF, d.wheelR, d.wheelW, true);
-  wheel(b, -d.wheelX, d.wheelR, d.axF, d.wheelR, d.wheelW, true);
-  wheel(b, d.wheelX, d.wheelR, d.axR, d.wheelR, d.wheelW, false);
-  wheel(b, -d.wheelX, d.wheelR, d.axR, d.wheelR, d.wheelW, false);
+  wheel(b, d.wheelX, d.wheelR, d.axF, d.wheelR, d.wheelW, true, RIM, true);
+  wheel(b, -d.wheelX, d.wheelR, d.axF, d.wheelR, d.wheelW, true, RIM, true);
+  wheel(b, d.wheelX, d.wheelR, d.axR, d.wheelR, d.wheelW, false, RIM, true);
+  wheel(b, -d.wheelX, d.wheelR, d.axR, d.wheelR, d.wheelW, false, RIM, true);
   // bumpers
   b.add(rbox(W - 0.05, 0.17, 0.2, 0.08, 0, d.bodyY - 0.02, L / 2 - 0.08), { color: DARK, rough: 1.2 });
   b.add(rbox(W - 0.05, 0.17, 0.2, 0.08, 0, d.bodyY - 0.02, -L / 2 + 0.08), { color: DARK, rough: 1.2 });
@@ -656,11 +673,11 @@ function hatch(): THREE.BufferGeometry {
     W = 1.74;
   const c = loftBody(
     b,
-    { L, W, sill: 0.3, belt: 0.9, roof: 1.46, noseH: 0.76, hoodH: 0.9, wsBase: 0.85, wsTop: -0.05, rwTop: -1.5, rwBase: -1.86, deckH: 1.0, tailH: 0.95, pillarB: -0.5, pillarC: -1.2, glassRear: -1.45, tumble: 0.13, axF: 1.22, axR: -1.33, wheelR: 0.31 },
+    { L, W, sill: 0.3, belt: 0.9, roof: 1.44, noseH: 0.76, hoodH: 0.9, wsBase: 0.88, wsTop: 0.0, rwTop: -1.22, rwBase: -1.78, deckH: 1.0, tailH: 0.94, pillarB: -0.45, glassRear: -1.12, tumble: 0.14, axF: 1.22, axR: -1.33, wheelR: 0.31 },
     true,
   );
   // small roof spoiler
-  b.add(rbox(c.topW - 0.1, 0.05, 0.22, 0.02, 0, c.topY - 0.03, -1.5 + 0.06), { color: '#ffffff', paint: true });
+  b.add(rbox(c.topW - 0.12, 0.045, 0.2, 0.02, 0, c.topY - 0.035, -1.22 + 0.04), { color: '#ffffff', paint: true });
   carDetails(b, { L, W, wheelR: 0.31, wheelW: 0.23, axF: 1.22, axR: -1.33, wheelX: W / 2 - 0.09, bodyY: 0.31, bodyH: 0.6, bodyR: 0.2, lightY: 0.68 });
   return b.build();
 }

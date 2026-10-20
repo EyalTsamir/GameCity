@@ -1,19 +1,19 @@
 # world-life — wind consumers, smoke, birds, small motion (world round)
 
 ## Resume here
-* 2026-10-19 21:15 (after the 2nd reboot) — all features coded + typechecking (see below); verified so far:
-  bunting/festoons/market masts (shots/world/life/m2a: market_*.png, otstreet_*.png — good; market reads
-  like the reference's flag lines). Smoke was invisible in captures because the sim crawls in SwiftShader
-  (realDt capped at 0.1 s/frame at ~1 fps) → added smoke prewarm (14 s fast-forward at start + every
-  'timejump') and leaf prewarm (8 s when the camera focus moves > 25 m or time jumps).
-  Wear's townhouse generator was throwing in m2a (their WIP) — re-judge market anchors once fixed.
+* 2026-10-20 02:05 (after the 3rd stop/reboot) — all features coded + typechecking. Verified: bunting /
+  festoons / market masts (m2a), factory smoke with soft depth + prewarm (shots/world/life/dbg/a.png,
+  dbg2/s.png). m3a (heavy load) showed no smoke for unknown reasons; single shots + quiet-machine
+  capture-set show it fine → re-running as m3b.
+* New since: smoke prewarm (14 s at start + 'timejump'), leaf prewarm, café terrace string lights
+  (props.cafes parasol tops, MST ≤ 6.5 m, `extras.ts cafeLights`), kite strings thinner/darker and
+  vanishing below ~0.6 px (lead's coast-shot note; `sim/ambient/kites.ts`).
 * Files: `src/world/life.ts`, `life/{glsl,cloth,decor,poles,extras,chimneys,drift}.ts`,
-  `sim/ambient/{smoke,birds}.ts`, `sim/ambient.ts` (doc), landmarks/shaders.ts FLAG mode.
-* Running: capture set m3a → shots/world/life/m3a (views roofs, industry, parkeye, otsun, market, square ×
-  7.5/18.6/21.5 h; subset incl. vegetation, pedestrians, lamps, postfx). Private capture script:
-  scratchpad/life/cap.mjs (= scripts/capture-set.mjs with a 25-min ready timeout; recreate with sed).
-* Next: judge m3a (smoke plumes, leaves, motes, swifts, moths, pigeons, night festoons); tune; then
-  full-city milestone set + message lead.
+  `sim/ambient/{smoke,birds,kites}.ts`, `sim/ambient.ts` (doc), landmarks/shaders.ts FLAG mode.
+* Running: capture set m3b → shots/world/life/m3b (roofs, otsun, parkeye, market, square, harbroof ×
+  7.5/18.6/21.5). Private script: scratchpad/life/cap.mjs (capture-set with a 25-min ready timeout).
+  Debug probe: scratchpad/life/smokedbg.js (prints smoke instance data via console.warn).
+* Next: judge m3b; tune; full-city milestone set; message lead.
 
 ## Brief (from WORLD-PLAN.md §6 + briefs)
 Wind consumers: flags on poles flap, bunting / festoon strings across old-town streets and the market,

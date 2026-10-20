@@ -80,7 +80,9 @@ export default function create(ctx: CityContext): CityModule {
   // ── rings + heights (shared with the water module)
   const t1 = performance.now();
   const edges = slabEdges(tmodel, groundBands(tmodel));
-  const topo = buildRings(edges, LAND_MAX_D);
+  // quality tiers (build time): coarser land rings / mountain columns on medium and low
+  const tierScale = ctx.quality.level === 'low' ? 1.7 : ctx.quality.level === 'medium' ? 1.3 : 1;
+  const topo = buildRings(edges, LAND_MAX_D, tierScale);
   const built = buildLand(topo, model, LAND_MAX_D, slabH, makeSlabNormal(slabH));
   const heights = built.heights;
   const geo = built.geo;
@@ -105,7 +107,7 @@ export default function create(ctx: CityContext): CityModule {
     mtnVerts = 0;
   let mtnMat: THREE.Material | null = null;
   if (!params.has('nomountains')) {
-    const m = buildMountains(model, uniforms, fog);
+    const m = buildMountains(model, uniforms, fog, ctx.quality.level === 'low' ? 2.2 : ctx.quality.level === 'medium' ? 1.5 : 1);
     root.add(m.mesh);
     mtnTris = m.triangles;
     mtnVerts = m.vertices;
@@ -125,7 +127,7 @@ export default function create(ctx: CityContext): CityModule {
         z = P.getZ(a);
       if (x < 0 && z < 2000) continue; // the river side is covered by the slab's own set + bank trees
       const sd = model.coastSD(x, z);
-      if (sd > 2500 || sd < -1500) continue;
+      if (sd > 1200 || sd < -1500) continue;
       keep.push(idx[t], idx[t + 1], idx[t + 2]);
     }
     const pg = new THREE.BufferGeometry();

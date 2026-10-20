@@ -584,7 +584,7 @@ export function createLandscapeModel(slabHeight: SlabHeight): LandscapeModel {
     const sd = coastSD(x, z);
     const cl = cliffness(z, x);
     // beach (~40 m), then dunes with marram grass (half sand) out to ~95 m
-    out.sand = out.water ? 0 : (1 - smooth(20, 32, sd) * 0.55 - smooth(42, 62, sd) * 0.45) * (1 - cl) * (1 - smooth(4, 7, h));
+    out.sand = out.water ? 0 : (1 - smooth(14, 24, sd) * 0.6 - smooth(30, 46, sd) * 0.4) * (1 - cl) * (1 - smooth(4, 7, h));
     out.rock = Math.min(1, smooth(0.75, 1.25, slope) + cl * (1 - smooth(4, 30, sd)) * smooth(0.35, 0.7, slope));
     let wet = 0;
     if (riverQ(x, z, rv, 60)) wet = 1 - smooth(rv.halfW, rv.halfW + 9, rv.d);

@@ -384,7 +384,7 @@ const PAINT_AFTER = /* glsl */ `
   vec2 st = rdStreet(vWP.xz);
   float lat = abs(st.x);
   float wheel = max(1.0 - smoothstep(0.15, 0.5, abs(lat - 0.95)), 1.0 - smoothstep(0.15, 0.5, abs(lat - 2.55)));
-  float wearAmt = vM.y * (0.4 + 0.6 * wheel);
+  float wearAmt = max(vM.y, 0.35) * (0.5 + 0.6 * wheel);
   float nw = texture2D(tRN, vWP.xz * 0.8).a * 0.6 + texture2D(tRN, vWP.xz * 0.21).b * 0.4;
   // (detail fade from the geometric-mean pixel footprint: at eye level the paint is seen at grazing angles)
   vec2 fwq = fwidth(vWP.xz);

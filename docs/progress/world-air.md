@@ -33,7 +33,14 @@ Owner: **air** agent (world round). Files: `src/render/**` except `src/render/st
   (cuDens: sqrt field + cubic profile), beige ambient (ambient = zenith-led), thickness by coverage
   (550 + 1100·min(1, 1.6·cov) m).
 * ?diorama verified unchanged in look (shots/world/air/dio_check.png; baseline set dio_base pending).
-* Running: g1 (overview/vista/coast/riverbend/country @18.2), sky5 (hz_n/hz_w/hz_s × 11/18.2/19.6).
+* g1 judged (g1_sheet.png): golden POIs no longer sepia — cool blue-grey distance haze away from the
+  sun, warm-lit city, grey-blue sea; riverbend backlit with glitter. Defects → fixed: vertical stripe
+  artefacts in clouds (IGN jitter varies ~only along x) → white-noise jitter, 12 steps, ≤ 11 km march;
+  low sky still cream → golden remap gentler (sky at ~10° at 18.2: min(7, 0.6·el)), SKY_MS 0.55;
+  LUT/twin refresh thresholds loosened (sun Δsin 1e-3, camera height 15 % / 20 m).
+* sky5 judged (sky5_sheet.png) = BEST SO FAR: noon fair-weather cumulus with cauliflower edges over
+  layered blue ridges; 18.2 backlit golden clouds, sun glow, sun shafts over the fields, cool haze away.
+* Running: g2 (overview/riverbend/country/coast × 18.2/11), ladder test (shots/world/air/dbg/ladder.json).
 
 * 2026-10-19 16:30 — M1 code written, render typecheck clean (`npx tsc --noEmit -p <scratch>/air/../tsconfig.air.json`
   = render-only config in the scratchpad, 20 s; whole project takes 5 min):

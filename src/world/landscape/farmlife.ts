@@ -14,20 +14,34 @@ import type { Fleet, FleetTemplate } from './fleet';
 /** unit cow (faces +z, length ~2.2 m): body, head, four legs; aPart 0 body, 1 head, 2 legs */
 function animalGeometry(): THREE.BufferGeometry {
   const parts: [THREE.BufferGeometry, number][] = [];
-  const box = (w: number, h: number, l: number, x: number, y: number, z: number, part: number) => {
-    const g = new THREE.BoxGeometry(w, h, l).toNonIndexed();
-    g.translate(x, y, z);
+  // boxes without bottom faces (never seen): body + head 10 tris each, a front and a rear leg pair 4 each
+  const box = (w: number, h: number, l: number, x: number, y: number, z: number, part: number, sides = true) => {
+    const g0 = new THREE.BoxGeometry(w, h, l).toNonIndexed();
+    // drop the −y face (vertices 18..23 of BoxGeometry's non-indexed order: +x, −x, +y, −y, +z, −z)
+    const src = g0.getAttribute('position'),
+      nsrc = g0.getAttribute('normal');
+    const keep: number[] = [];
+    for (let f = 0; f < 6; f++) {
+      if (f === 3) continue;
+      if (!sides && (f === 0 || f === 1 || f === 2)) continue; // legs: front / back faces only
+      for (let v = 0; v < 6; v++) keep.push(f * 6 + v);
+    }
+    const pos = new Float32Array(keep.length * 3),
+      nor = new Float32Array(keep.length * 3);
+    keep.forEach((v, i) => {
+      pos.set([src.getX(v) + x, src.getY(v) + y, src.getZ(v) + z], i * 3);
+      nor.set([nsrc.getX(v), nsrc.getY(v), nsrc.getZ(v)], i * 3);
+    });
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    g.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
     parts.push([g, part]);
   };
   box(0.72, 0.68, 1.55, 0, 1.0, 0, 0);
   box(0.36, 0.38, 0.55, 0, 1.12, 1.02, 1);
-  for (const [lx, lz] of [
-    [-0.24, 0.6],
-    [0.24, 0.6],
-    [-0.24, -0.6],
-    [0.24, -0.6],
-  ])
-    box(0.15, 0.7, 0.15, lx, 0.35, lz, 2);
+  // leg pairs as thin slabs (sides only)
+  box(0.6, 0.7, 0.15, 0, 0.35, 0.6, 2, false);
+  box(0.6, 0.7, 0.15, 0, 0.35, -0.6, 2, false);
   const pos: number[] = [],
     nrm: number[] = [],
     part: number[] = [];
@@ -121,7 +135,7 @@ export function createFarmLife(model: LandscapeModel, uniforms: Record<string, T
   let bestT = Infinity;
   const k0 = Math.floor(qy0 / FROW) - 1,
     k1 = Math.ceil(qy1 / FROW) + 1;
-  const maxN = Math.round(1100 * Math.max(0.4, density));
+  const maxN = Math.round(720 * Math.max(0.4, density));
   for (let k = k0; k <= k1 && inst.length / 7 < maxN; k++) {
     const y0 = rowB(k),
       y1 = rowB(k + 1);
@@ -233,7 +247,8 @@ varying vec3 vAc;`,
   const herd = new THREE.Mesh(ig, mat);
   herd.name = 'land-herds';
   herd.frustumCulled = false;
-  herd.castShadow = true;
+  // tiny at the distances they are seen from: no shadow pass (saves a full extra draw of every animal)
+  herd.castShadow = false;
   herd.receiveShadow = true;
   // three's default depth material ignores the custom vertex code: give the shadow pass the same placement
   herd.customDepthMaterial = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking });

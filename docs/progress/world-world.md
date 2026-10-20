@@ -66,7 +66,22 @@
   cars + tractor share one dynamic mesh (landscape/fleet.ts, name 'land-ships' for the reflection pass).
 * Running: m3c (overview, vista, country, coast, riverbend × 11/18.2), m3c_med (overview, country, medium),
   stats2 probes (vista/country ± ?noland). NOTE: m3c may have loaded mid-refactor — check failedModules.
-* Next: judge; perf delta; full-city check; final report.
+* 02:00 — m3c overview (d640/p13) = best hero so far (hill patchwork, farms, ranges, beach, sea). Then: far
+  land cells stretched along the rings (tangential ×1.8 beyond 1.5 km: fewer vertices), beach narrower again
+  (sand ≤ 24 m, dunes ≤ 46 m) + greener marram (ground's gcMarram) + darker sand + wrack line. Water (air's
+  request): world-mode sky reflection = the atmosphere's horizon ring per azimuth (thHazeColor·gain, warm
+  toward the sun, blue away; water FRAG_PARS now inserted after fog_pars_fragment), golden-hour glitter
+  narrower/hotter, teal body kept under warm light. NOT yet captured.
+* Stats (subset incl. landmarks/harbor/ambient, vista): 133 dc / 2.25 M tris; reflection pass 184k / 10 calls;
+  landscape land 108k tris (before the stretch), mtn 84k, 19.3k trees (impostors), 1024 animals, 27 chimneys,
+  buildMs 2.5 s (calm machine). vista_noland pending → delta.
+* 02:15 — PERF DELTA (vista, subset, ?noland vs on): 110 → 133 dc (+23), 1.54 → 2.25 M tris (+712k incl.
+  shadow + reflection passes; reflection 130k → 184k / 7 → 10 calls; water surface 15k → 43k). Too much → cut:
+  herds 72 → 28 tris/animal, cap 1100 → 720, no shadow pass for herds; mountains L2/L3 step 0.12 → 0.15, 8 rows;
+  reflection land proxy only ≤ 1.2 km from the coast; fleet removed from the reflection pass; far land cells
+  stretched. Pond (lead, low prio): peat-dark middle + bank-vegetation reflection band (warm when backlit).
+* Running: m3d (overview, vista, coast, pond × 11/18.2) + stats2/vista2.json (after the cuts).
+* Next: judge m3d (golden-hour sea, pond); full-city check; quality tiers; final report.
 * Tools: my capture script copy with 20-min load timeout = scratchpad `cap.mjs` (scratchpad is SHARED with other
   agents — keep my files under scratchpad/world* or land/). Offline map tool: scratchpad `land/map.ts` (bundle:
   `npx rolldown land/map.ts --platform node -o land/map.mjs`; `node land/map.mjs x0 z0 x1 z1 N out.bin &&

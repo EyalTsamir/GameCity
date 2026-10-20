@@ -64,7 +64,7 @@ export default function create(ctx: CityContext): CityModule {
   if (!params.has('nodrift')) {
     const q = ctx.quality.level;
     const trees = (ctx.services.vegetation as { trees?: { x: number; z: number; r: number; h: number }[] } | undefined)?.trees ?? [];
-    drift = new Drift(ctx, trees, { leaves: q === 'high' ? 320 : q === 'medium' ? 160 : 0, motes: q === 'high' ? 420 : q === 'medium' ? 220 : 0, moths: q === 'low' ? 0 : 60 });
+    drift = new Drift(ctx, trees, { leaves: q === 'high' ? 320 : q === 'medium' ? 160 : 0, motes: q === 'high' ? 420 : q === 'medium' ? 220 : 0, moths: q === 'low' ? 0 : 60, butterflies: q === 'high' ? 14 : q === 'medium' ? 8 : 0, bees: q === 'high' ? 22 : q === 'medium' ? 10 : 0 });
     ctx.scene.add(drift.group);
     const d = drift;
     ctx.events.on('timejump', () => d.timejump());
@@ -96,6 +96,7 @@ export default function create(ctx: CityContext): CityModule {
         ...(extras ?? {}),
         poleTris: poles.tris,
         leaves: drift?.live ?? 0,
+        insects: drift?.insectsVisible ?? 0,
         ...(decor ? { street: decor.street, court: decor.court, balcony: decor.balcony, bunting: decor.bunting, prayer: decor.prayer, festoon: decor.festoon, laundryItems: decor.laundryItems, lowestY: Math.round(decor.lowest * 100) / 100, festoonLights: decor.lights } : {}),
       };
     },

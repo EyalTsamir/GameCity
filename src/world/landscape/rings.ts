@@ -38,7 +38,9 @@ export function ringStep(d: number): number {
 
 /** tangential vertex spacing target at offset d */
 function tangential(d: number, scale: number): number {
-  return Math.max(2.1 * scale, 1.0 * scale * ringStep(d));
+  // beyond a few hundred metres the land is seen at grazing angles: cells may stretch along the ring
+  const t = Math.min(1, Math.max(0, (d - 150) / 1350));
+  return Math.max(2.1 * scale, scale * ringStep(d) * (1 + 0.8 * t * t * (3 - 2 * t)));
 }
 
 /** slab edges sampled uniformly every `step` m (the water module's surface grid boundary) */

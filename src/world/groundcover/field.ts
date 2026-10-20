@@ -64,9 +64,9 @@ export function ringSpecs(level: QualityLevel): RingSpec[] {
       { index: 1, tile: 4, levels: 2, blades: 448, in0: 9, in1: 12, out0: 24, out1: 29, width: 2.2, flowers: 0.2, lawnFlowers: 0, litter: 0 },
     ];
   return [
-    { index: 0, tile: 2, levels: 3, blades: 640, in0: -10, in1: -10, out0: 10, out1: 13, width: 1.0, flowers: 0.2, lawnFlowers: 0.08, litter: 0.55 },
-    { index: 1, tile: 4, levels: 2, blades: 512, in0: 10, in1: 13, out0: 30, out1: 36, width: 2.2, flowers: 0.15, lawnFlowers: 0, litter: 0.12 },
-    { index: 2, tile: 8, levels: 1, blades: 640, in0: 30, in1: 36, out0: 58, out1: 68, width: 3.9, flowers: 0.12, lawnFlowers: 0, litter: 0 },
+    { index: 0, tile: 2, levels: 3, blades: 576, in0: -10, in1: -10, out0: 9.5, out1: 12.5, width: 1.06, flowers: 0.2, lawnFlowers: 0.08, litter: 0.55 },
+    { index: 1, tile: 4, levels: 2, blades: 448, in0: 9.5, in1: 12.5, out0: 29, out1: 35, width: 2.35, flowers: 0.15, lawnFlowers: 0, litter: 0.12 },
+    { index: 2, tile: 8, levels: 1, blades: 512, in0: 29, in1: 35, out0: 56, out1: 66, width: 4.3, flowers: 0.12, lawnFlowers: 0, litter: 0 },
   ];
 }
 
@@ -255,8 +255,16 @@ vGcRough = 0.85;
         base *= ( 0.9 + 0.2 * cl.y ) * ( 0.92 + 0.16 * fract( rb.z * 21.7 ) );
         vec3 tip = gcTipColor( base, nA, len );
         float aoRoot = mix( 0.66, 0.46, smoothstep( 0.2, 0.6, len ) );
+        // long grass has a dense low layer under the tall stems (no dark gaps at the base)
+        bool lowLayer = len > 0.45 && fract( rb.x * 7.31 + rc.y * 0.7 ) < 0.38;
+        if ( lowLayer ) {
+          L *= mix( 0.28, 0.45, fract( rc.z * 3.7 ) );
+          W *= 1.25;
+          base = mix( base, gcLawnLush, 0.35 ) * 1.05;
+          aoRoot = 0.62;
+        }
         // seed heads on long grass
-        bool seed = len > 0.48 && fract( rc.x * 17.9 ) < 0.13;
+        bool seed = len > 0.48 && !lowLayer && fract( rc.x * 17.9 ) < 0.13;
         if ( seed ) {
           float sk = fract( rc.y * 5.1 );
           tip = sk < 0.45 ? mix( tip, gcStraw, 0.55 ) : ( sk < 0.8 ? tip * vec3( 1.05, 1.0, 0.85 ) : mix( tip, vec3( 0.2, 0.12, 0.13 ), 0.55 ) );
@@ -271,10 +279,10 @@ vGcRough = 0.85;
           aoRoot = 0.45;
         } else if ( weedH > 0.5 ) {
           // pavement weed: broad leaves splayed from a joint (rosette), fresh green
-          L = mix( 0.05, 0.16, rc.y );
-          W = mix( 0.014, 0.026, fract( rc.z * 5.3 ) );
-          lean = outw * mix( 0.45, 0.85, fract( rc.z * 9.7 ) );
-          base = vec3( 0.13, 0.25, 0.05 ) * ( 0.8 + 0.4 * cl.y );
+          L = mix( 0.08, 0.24, rc.y );
+          W = mix( 0.016, 0.03, fract( rc.z * 5.3 ) );
+          lean = outw * mix( 0.3, 0.65, fract( rc.z * 9.7 ) );
+          base = vec3( 0.17, 0.32, 0.06 ) * ( 0.8 + 0.4 * cl.y );
           tip = base * vec3( 1.25, 1.2, 1.0 );
           aoRoot = 0.55;
         } else if ( marram ) {
@@ -290,9 +298,11 @@ vGcRough = 0.85;
         int fk = -1;
         float flowerP = flw.r * uKind.x;
         if ( !reed && !marram && rb.z < 1.0 ) {
-          if ( fract( ra.z * 31.7 + rc.x * 3.1 ) < flowerP ) {
-            // the patch's dominant species, mixed with a third of the others
-            fk = fract( rc.z * 7.77 + ra.x ) < 0.34 ? int( fract( rb.y * 9.31 + rc.x ) * 5.99 ) : int( flw.g * 6.0 );
+          // flowers grow in clusters: a third of the clumps carry most of them, one species per clump
+          // (the patch's dominant species, a third of the clumps another one)
+          float clusterK = cl.z > 0.64 ? 2.4 : 0.3;
+          if ( fract( ra.z * 31.7 + rc.x * 3.1 ) < flowerP * clusterK ) {
+            fk = fract( cl.y * 7.77 + cl.x * 3.1 ) < 0.34 ? int( fract( cl.y * 9.31 + cl.z * 5.3 ) * 5.99 ) : int( flw.g * 6.0 );
           }
           else if ( weedH > 0.5 && fract( ra.z * 47.3 + rb.x * 2.3 ) < 0.07 && uKind.w < 0.5 ) fk = 6;
           else if ( len < 0.3 && fract( ra.z * 47.3 + rb.x * 2.3 ) < flw.b * uKind.y ) {
@@ -320,8 +330,9 @@ vGcRough = 0.85;
         vec3 eyeC = vec3( 0.0 );
         if ( fk >= 0 ) {
           // stem + head; the head faces the camera
-          float hsz = fk == 4 ? mix( 0.06, 0.09, rc.y ) : ( fk == 0 ? mix( 0.05, 0.075, rc.y ) : ( fk >= 6 ? mix( 0.014, 0.024, rc.y ) : mix( 0.03, 0.045, rc.y ) ) );
-          if ( fk < 6 ) L = max( L * 1.1, ( fk == 4 ? 0.55 : 0.32 ) + 0.3 * rc.y ) * ( len > 0.5 ? 1.0 : 0.6 );
+          float hsz = fk == 4 ? mix( 0.07, 0.1, rc.y ) : ( fk == 0 ? mix( 0.06, 0.085, rc.y ) : ( fk == 2 ? mix( 0.042, 0.056, rc.y ) : ( fk == 3 ? mix( 0.026, 0.036, rc.y ) : ( fk >= 6 ? mix( 0.016, 0.026, rc.y ) : mix( 0.036, 0.05, rc.y ) ) ) ) );
+          // stems stand a little above the grass, a few well above it
+          if ( fk < 6 ) L = max( L * 1.12, ( fk == 4 ? 0.6 : 0.42 ) + 0.32 * rc.y ) * ( len > 0.5 ? 1.0 : 0.6 ) * ( fract( rc.x * 13.3 ) < 0.2 ? 1.3 : 1.0 );
           else L = mix( 0.06, 0.12, rc.y );
           float ringBoost = uKind.w > 0.5 ? ( uKind.w > 1.5 ? 1.7 : 1.35 ) : 1.0;
           headW = max( hsz * ringBoost, pxw * 1.8 );
@@ -374,7 +385,7 @@ vGcRough = 0.85;
         vec3 N = normalize( cross( wd3, T ) );
         if ( dot( N.xz, toCam ) < 0.0 ) N = -N;
         N = normalize( N + wd3 * side * 0.6 );
-        float upK = 0.3 + 0.5 * smoothstep( 3.0, 22.0, dist ) + 0.15 * kept;
+        float upK = 0.42 + 0.4 * smoothstep( 3.0, 22.0, dist ) + 0.1 * kept;
         objectNormal = normalize( mix( N, nUp, clamp( upK, 0.0, 0.92 ) ) );
         // colour: shaded roots → mid → tip; gusts press the blades and show the paler side
         float ao = mix( aoRoot, 1.0, smoothstep( 0.0, 0.55, hf ) );
@@ -389,7 +400,8 @@ vGcRough = 0.85;
         }
         vGcCol = col;
         vGcTrans = smoothstep( 0.25, 0.85, hf ) * ( headW > 0.0 ? 1.0 : 0.85 );
-        vGcRough = headW > 0.0 ? 0.8 : mix( 0.62, 0.8, kept );
+        // waxy upper blades catch a soft sheen of the sun
+        vGcRough = headW > 0.0 ? 0.8 : mix( mix( 0.72, 0.5, smoothstep( 0.4, 1.0, hf ) ), 0.8, kept );
       }
     }
   }

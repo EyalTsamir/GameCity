@@ -7,7 +7,14 @@
   look like tufts on poles), palms sparse. Since: atlas clusters fill their tiles (clipStem, more/smaller
   leaves, denser pine/citrus/blossom/jacaranda), trunk girth ↓, 4 tips/branch, 2–3 inner dense cards per lobe,
   far cards 2–4 per lobe ×1.12 size, edge-on fade softened. Typechecks.
-* NEXT: dumpatlas.sh + capset.sh m1b 11 → judge; then palms, golden hour/night, overview, perf counts.
+* m1b (m1b_sheet.png): fuller; still lollipop street crowns, sparse palms (fronds edge-on from below),
+  forest = trees on a lawn. Since: atlas side shoots/denser tiles, street crowns stretched ×1.4 along the
+  street (PlantDef.stretch), palm fronds = keeled V half-cards (near), forest crowns ×1.18 + forest-floor
+  shrubs (42 % of forest trees), lead note → weathered octagonal/box planters (plants.ts stonePlanter: grime,
+  algae, worn chipped rim, damp soil, fallen leaves) + trailing ivy / groundcover cards (crowns emitPlanter,
+  atlas 'ivy' tile). Typechecks.
+* RUNNING: background b170hxfmr = dumpatlas.sh + capset.sh m1c 11 (queued behind other agents).
+* NEXT: judge m1c → golden hour 18.2 + night 21.5 set, overview stats (cards/wood counts), perf estimate.
 * Tools: scratchpad/{capset.sh OUT HOURS [q] [views], dumpatlas.sh, vstat.py, bench/}.
 * Views: park=-55,4,15,26,200,6; ot=66,3.5,-13.9,13,25,4; dt=-22,3.5,-68.9,14,35,4; palms=118,5,30,18,90,6;
   forest=10,10,-158,70,10,10; parkair=-55,0,17,90,30,30; overview.
@@ -73,7 +80,12 @@ far part ≈ 30k cards (120k verts) + 3k segments; fragment: alpha-tested overdr
 (pending)
 
 ## Requests to other areas
-(none yet)
+* world (via lead, 2026-10-20 ~20:35, accepted): world's 3D landscape trees start at z < −225 with a 15 m ramp;
+  foliage plants its hill forest in a 45 m band beyond the slab N edge (landscape.cover().forest/height).
+  Tones: spruce/fir ≈ #33683f…#3f7c4a, pine #3d6a36, broadleaf #4f8a33…#5a9636 (vertex colour, pre-light).
+* ground (pending, to send at M3): under the hill forest canopy the floor still reads as lawn — a forest-floor
+  look (needle/leaf litter, darker, ferns/moss patches) where `services.vegetation.trees` are dense / landscape
+  cover.forest > 0.5 would complete the woodland. Foliage adds shrubs + saplings under the canopy.
 
 ## Changes outside my area
 (none)

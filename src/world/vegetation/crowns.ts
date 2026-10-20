@@ -99,6 +99,8 @@ export interface PlantDef {
   seg?: [number, number, number, number, number];
   /** crown stretched along a horizontal axis (street trees grow along the street gap): ax, az, factor */
   stretch?: [number, number, number];
+  /** raised planter at the foot (y = its soil): trailing ivy over the rim + groundcover (near LOD) */
+  planter?: { round: boolean; yaw: number };
 }
 
 type V3 = [number, number, number];
@@ -766,10 +768,65 @@ export function emitFar(st: Struct, ref: PlantRef, cards: InstBuf, woodBuf: Inst
   });
 }
 
+const IVY = new THREE.Color('#2f5a2a');
+const GROUNDCOVER = new THREE.Color('#4a7a34');
+
+/** trailing ivy over a planter rim + a little groundcover on its soil */
+function emitPlanter(st: Struct, ref: PlantRef, cards: InstBuf, rng: Rng): void {
+  const pl = st.def.planter;
+  if (!pl) return;
+  const atlas = getLeafAtlas();
+  const uvI = atlas.uv('ivy'),
+    uvS = atlas.uv('shrub');
+  const { x, y, z } = st.def;
+  const cs = Math.cos(pl.yaw),
+    sn = Math.sin(pl.yaw);
+  // rim outline in local xz (same polygons as plants.ts stonePlanter)
+  const rim = (a: number): V3 => {
+    let lx: number, lz: number;
+    if (pl.round) {
+      lx = Math.cos(a) * 1.03;
+      lz = Math.sin(a) * 1.03;
+    } else {
+      const ca = Math.cos(a),
+        sa = Math.sin(a);
+      const k = Math.min(0.79 / Math.max(1e-3, Math.abs(ca)), 0.38 / Math.max(1e-3, Math.abs(sa)));
+      lx = ca * k;
+      lz = sa * k;
+    }
+    // Shaper frame: local x → (cos yaw, −sin yaw), local z → (sin yaw, cos yaw)
+    return [x + lx * cs + lz * sn, y + 0.095, z - lx * sn + lz * cs];
+  };
+  const n = pl.round ? rng.int(5, 8) : rng.int(3, 5);
+  const a0 = rng.range(0, 6.28);
+  for (let i = 0; i < n; i++) {
+    const a = a0 + (i / n) * 6.28 + rng.range(-0.3, 0.3);
+    const p = rim(a);
+    const out = norm([p[0] - x, 0, p[2] - z]);
+    const hv = rng.range(0.16, 0.26),
+      hu = rng.range(0.14, 0.22);
+    const V: V3 = [out[0] * 0.12 * hv, -hv, out[2] * 0.12 * hv];
+    const U: V3 = [-out[2] * hu, 0, out[0] * hu];
+    const c: V3 = [p[0] + out[0] * 0.03 + V[0], p[1] + V[1], p[2] + out[2] * 0.03 + V[2]];
+    card(cards, ref, st, c, U, V, norm([out[0], 0.35, out[2]]), 0.8, 1, uvI, rng.range(0.85, 1.1), STILL, 0.6, IVY);
+  }
+  for (let i = 0; i < 3; i++) {
+    const a = rng.range(0, 6.28),
+      d = rng.range(0.3, 0.6);
+    const p: V3 = [x + Math.cos(a) * d, y + 0.02, z + Math.sin(a) * d];
+    const hs = rng.range(0.16, 0.24);
+    const dir: V3 = norm([Math.cos(a), 0.25, Math.sin(a)]);
+    const V: V3 = [dir[0] * hs, dir[1] * hs, dir[2] * hs];
+    const U: V3 = [-dir[2] * hs, 0, dir[0] * hs];
+    card(cards, ref, st, [p[0] + V[0], p[1] + V[1], p[2] + V[2]], U, V, [0, 1, 0], 0.75, 1, uvS, rng.range(0.85, 1.1), STILL, 0.4, GROUNDCOVER);
+  }
+}
+
 /** NEAR LOD: branches (dynamic wood) + fine cluster cards on every tip + dense inner cards */
 export function emitNear(st: Struct, ref: PlantRef, cards: InstBuf, woodBuf: InstBuf): void {
   const rng = new Rng(st.def.seed ^ 0x7ea4f00d);
   for (const s of st.segs) if (s.near) wood(woodBuf, ref, st, s, 1);
+  emitPlanter(st, ref, cards, new Rng(st.def.seed ^ 0x9a17));
   const atlas = getLeafAtlas();
   if (st.form === 'palm' || st.form === 'fan') {
     emitFronds(st, ref, cards, rng, 1, 1);

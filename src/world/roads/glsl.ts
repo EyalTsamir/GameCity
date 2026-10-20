@@ -129,9 +129,11 @@ vec3 rdAsphalt(inout float rough) {
   }
   // bimodal: most sections read clearly fresh (deep charcoal) or worn (pale grey) from afar
   // (most of the network is worn mid-grey, fresh charcoal sections are the minority; eye level needs tone)
-  float ag = smoothstep(0.1, 0.72, age);
+  float ag = smoothstep(0.02, 0.62, age);
   c *= mix(vec3(0.8, 0.82, 0.88), vec3(1.4, 1.36, 1.26), ag);
   c *= 0.9 + 0.12 * nL.r + 0.06 * nL.b;
+  // mid-scale mottling (0.5–2 m): binder-rich dark patches, dusty lighter ones — tone at eye level
+  c *= 0.92 + 0.16 * smoothstep(0.25, 0.75, nM.r * 0.6 + nM.b * 0.4);
   float spk = nS.a * 0.6 + nS.b * 0.4;
   c *= 1.0 + (spk - 0.5) * mix(0.1, 0.26, ag);
   c += vec3(0.024, 0.023, 0.021) * smoothstep(0.78, 0.95, nS.a) * ag * (1.0 - smoothstep(0.1, 0.35, fw / 0.06));
@@ -182,6 +184,20 @@ vec3 rdAsphalt(inout float rough) {
     }
     c *= 1.0 - 0.5 * seam;
     rough -= 0.2 * seam;
+    // overbanding: wide black sealant strips over old joints / crack repairs, meandering across the lanes
+    {
+      float ob = 0.0;
+      for (int k = 0; k < 2; k++) {
+        float hk = rdHash(sg + vec2(float(k) * 3.1, 19.3));
+        if (hk < 0.55) {
+          float tp = 6.0 + 40.0 * fract(hk * 13.3 + float(k) * 0.37);
+          float wv = (t - tp) + 0.35 * sin(lat * 0.9 + hk * 7.0) + 0.6 * (lat / 3.5) * (fract(hk * 5.1) - 0.5);
+          ob = max(ob, rdLine(abs(wv), 0.09 + 0.05 * fract(hk * 9.7), fw) * onRoad * step(${JBOX}, dj));
+        }
+      }
+      c = mix(c, vec3(0.03, 0.03, 0.032), ob * 0.85);
+      rough -= 0.45 * ob;
+    }
     // utility trench cut across one lane
     float tc = rdHash(sg + 8.8);
     if (tc < 0.45) {

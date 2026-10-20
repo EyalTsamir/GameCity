@@ -266,6 +266,12 @@ vec3 wSky(vec3 d) {
   float band = exp(-abs(d.y - max(sd.y, 0.0) * 0.35) * 5.0);
   float glow = (pow(az, 3.0) * 0.85 + pow(max(dot(d, sd), 0.0), 24.0) * 0.6) * band;
   col += uSkyGlow * uSkyGlowI * glow;
+#if defined(TH_WORLD) && defined(USE_FOG)
+  // world: the low sky in this azimuth is the atmosphere's horizon haze (warm toward the sun, cool and
+  // blue away from it) — exactly what the dome shows at the horizon, so the sea mirrors the real sky
+  vec3 hz = thHazeColor(normalize(vec3(d.x, max(d.y, 0.0), d.z) + vec3(1e-5, 0.0, 0.0))) * thAtmo[10].y;
+  col = mix(hz, col, smoothstep(0.02, 0.4, y));
+#endif
   float grey = dot(col, vec3(0.3, 0.55, 0.15));
   return mix(col, vec3(grey) * vec3(0.92, 0.96, 1.02), uSkyOvercast * 0.75);
 }
@@ -362,10 +368,13 @@ vec4 waterBase() {
   seaC *= vec3(1.0 - 0.3 * pt, 1.0 + 0.08 * pt, 1.0 + 0.16 * pt) * (0.88 + 0.26 * mA.g);
   vec3 rivC = mix(wRivS, wRivD, smoothstep(0.0, 2.0, d));
   rivC *= 0.9 + 0.2 * mR.r;
-  vec3 pondC = mix(wPondS, wPondD, smoothstep(0.0, 0.9, d));
+  // pond: peat-dark in the middle, clearer and greener over the shallow margins
+  vec3 pondC = mix(wPondS, wPondD * 0.75, smoothstep(0.0, 0.8, d));
   vec3 wc = mix(seaC, rivC, smoothstep(0.15, 0.45, region));
   wc = mix(wc, pondC, mPond);
   wc = mix(wc, wc * wNightTint, uNight * 0.85);
+  // golden hour: keep a saturated teal body under the warm light (not milky tea)
+  wc = mix(wc, wc * vec3(0.8, 1.0, 1.12), 0.45 * uDusk * (1.0 - uNight));
 
   // ── Fresnel
   float ndv = clamp(dot(wN, V), 0.0, 1.0);
@@ -471,10 +480,11 @@ vec4 waterBase() {
 
   // ── glints (sun / moon), evaluated after lighting (needs the shadow term)
   wSunL = normalize(uSunDir);
-  float roughA2 = clamp(0.0012 + wVar * 0.9 + ruff * ruff * 0.006, 0.0008, 0.06);
+  // golden hour: a hotter, narrower path toward the low sun
+  float roughA2 = clamp(0.0012 + wVar * 0.9 + ruff * ruff * 0.006, 0.0008, 0.06) * mix(1.0, 0.6, uDusk);
   wGlintA2 = roughA2;
   float sunUp = smoothstep(-0.03, 0.06, wSunL.y) * uSkySunVis;
-  wGlintK = sunUp * (1.0 - uSkyOvercast * 0.9);
+  wGlintK = sunUp * (1.0 - uSkyOvercast * 0.9) * (1.0 + 0.6 * uDusk);
   // sparkles: point glints — random wave facets on a 0.35 m grid flash when they face the light;
   // ~1-2 px wide whatever the distance, faded out before they could alias
   {
@@ -529,6 +539,11 @@ vec4 waterBase() {
   // without the reflection pass: quay walls / steep banks still mirror as a dark band at the waterline
   float wallR = (1.0 - smoothstep(0.2, 2.6, shore)) * (1.0 - beach) * (1.0 - uReflInfo.x) * (1.0 - mPond);
   vec3 skyD = sky * (1.0 - hDark * 0.55) * (1.0 - 0.55 * wallR);
+  // the pond has no planar reflection (another plane): its banks — reeds, shrubs, trees — mirror as a
+  // dark band that thins toward the middle; backlit at golden hour they glow warm
+  float pondBank = (1.0 - smoothstep(0.6, 5.5, shore + 1.2 * (lc.g - 0.5))) * mPond;
+  vec3 vegR = vec3(0.025, 0.04, 0.018) + uSkySunCol * vec3(0.05, 0.04, 0.012) * uDusk;
+  skyD = mix(skyD, vegR, pondBank * 0.85);
   wRefl = skyD * (1.0 - rc.a) + rc.rgb + moon + lampR;
   wGlint = vec3(0.0);
   vec3 foamC = wFoam * mix(1.0, 0.45, uNight);
@@ -557,7 +572,8 @@ vec3 objectTangent = vec3( tangent.xyz );
       )
       .replace('#include <begin_vertex>', '#include <begin_vertex>\ntransformed.y += th_disp;\nvWW = (modelMatrix * vec4(transformed, 1.0)).xyz;\nvWave = aWave;\nvFld = aFld;\nvDisp = th_disp;');
     shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', '#include <common>\n' + FRAG_PARS)
+      // after the fog pars: the world-mode sky reflection uses the atmosphere's horizon ring
+      .replace('#include <fog_pars_fragment>', '#include <fog_pars_fragment>\n' + FRAG_PARS)
       .replace('vec4 diffuseColor = vec4( diffuse, opacity );', 'vec4 diffuseColor = waterBase();')
       .replace('#include <normal_fragment_maps>', '#include <normal_fragment_maps>\nnormal = normalize((viewMatrix * vec4(wN, 0.0)).xyz);')
       .replace(
@@ -607,6 +623,7 @@ reflectedLight.indirectDiffuse += diffuseColor.rgb * thLampLight(vWW, vec3(0.0, 
   const defs: Record<string, number> = {};
   if (dbg === 'refl') defs.TH_WATER_DEBUG = 1;
   if (!WORLD_MODE) defs.TH_DIORAMA = 1;
+  else defs.TH_WORLD = 1;
   mat.defines = defs;
   mat.customProgramCacheKey = () => 'th-water-v3' + (dbg ?? '') + (WORLD_MODE ? 'w' : 'd');
   const mesh = new THREE.Mesh(geo, mat);

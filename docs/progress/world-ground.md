@@ -1,19 +1,17 @@
 # world-ground — grass, meadows, flowers, weeds, litter, reeds (world round)
 
 ## Resume here
-* 2026-10-20 01:40 — resumed after the usage-limit stop + reboot (all committed at dc885c7).
-  Since the last entry: t4 judged (shots/world/ground/t4: bank_meadow = best shot so far; slab-edge seam
-  gone from the overview; park meadow islands were a pink haze at 45 m → ring B/C flowers fewer/smaller;
-  near/far lawn brightness step → lighter turf under ring A for lawns, darker far top colour); world's
-  2nd seam note → edge meadow margin widened to ~15 m with a noisy line (ground.ts + mask.ts), lawn
-  palette desaturated slightly; milestone note M1 sent to the lead. "No blades" at edge_w was the camera
-  inside a house footprint (buildings not loaded) — not a bug (probed density along z=60).
-  Now: golden-hour glow (broader forward-scatter lobe on blades + long-grass ground), boot time: noise /
-  mask fields on the 0.5 m lattice (was per 0.25 m texel), outer band height lattice 2 m.
-* Running: tsc + t5 (pond close-up, park_eye, bank_meadow, edge_s (landscape band beyond z=150), ot_walk
-  (old-town sidewalk weeds) × 11 / 18.2 h, with buildings) → shots/world/ground/t5.
-* Next: judge t5 → confirm pond to lead (foliage removes their pond reeds/lilies) → M2 street-level edge
-  tufts/weeds, night 21.5 h, perf numbers.
+* 2026-10-20 02:05 — t5 judged (shots/world/ground/t5): pond verified (reed stands, cattails, lily pads,
+  shore meadow) → lead asked to have foliage remove their pond reeds/lilies; golden hour glows (pond_18h2:
+  backlit meadow + reeds warm and luminous — the reference's foreground feeling); landscape band works
+  (edge_s: blades continue into world's meadow beyond z=150); lawn near/far step fixed (park_eye_11).
+  Fixed after t5: pavement weeds = own habitat code 120 (leafy rosettes, 7 % dandelions, more spots along
+  walls 0.5 / kerbs 0.26 / gutters 0.2 per 0.9 m), shaded meadow brighter (root AO 0.46, turf lighter),
+  more/larger meadow flowers (ring A 20 %, species patches wider), meadow tussock heights ±34 %, ring
+  budgets A 576 / B 448 / C 512 (edge_s had 653 k verts). Boot: maps 1.7 s + band 0.9 s (load ~13).
+* Running: t6 (ot_walk weeds, fence tufts, park_eye, bank_band × 11 / 21.5 h night, overview) → t6.
+* Next: judge t6 → perf/stat numbers in the log → gust motion check (2 frames) → M4 far-field polish
+  (overview) → quality tiers (medium/low captures) → final report.
 
 ## Brief (from WORLD-PLAN.md + world-briefs.md "### ground")
 Owner of `src/world/terrain/ground.ts` (+ its mask), `src/world/groundcover.ts` + `src/world/groundcover/*`.

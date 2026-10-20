@@ -30,6 +30,7 @@ const _s = new THREE.Vector3();
 const _w = new THREE.Vector2();
 const _c = new THREE.Color();
 const _f = new THREE.Vector3();
+const _m2 = new THREE.Matrix4();
 
 export class Drift {
   readonly group = new THREE.Group();
@@ -82,10 +83,12 @@ export class Drift {
   constructor(
     private ctx: CityContext,
     private trees: readonly TreeLike[],
-    opts: { leaves: number; motes: number; moths: number },
+    opts: { leaves: number; motes: number; moths: number; butterflies?: number; bees?: number },
   ) {
     this.group.name = 'life-drift';
-    if (opts.leaves > 0 && trees.length) this.buildLeaves(opts.leaves);
+    this.NB = opts.butterflies ?? 0;
+    this.NE = opts.bees ?? 0;
+    if ((opts.leaves > 0 && trees.length) || this.NB + this.NE > 0) this.buildLeaves(trees.length ? opts.leaves : 0);
     if (opts.motes + opts.moths > 0) this.buildSparkles(opts.motes, opts.moths);
   }
 
@@ -119,17 +122,19 @@ export class Drift {
     g.setIndex([0, 2, 1, 0, 3, 2]);
     const mat = new THREE.MeshStandardMaterial({ roughness: 0.75, side: THREE.DoubleSide });
     mat.name = 'life-leaves';
-    const mesh = new THREE.InstancedMesh(g, mat, n);
+    const total = n + this.NB * 2 + this.NE;
+    const mesh = new THREE.InstancedMesh(g, mat, Math.max(1, total));
     mesh.name = 'life-leaves';
     mesh.frustumCulled = false;
     mesh.castShadow = false;
     mesh.receiveShadow = true;
     mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-    for (let i = 0; i < n; i++) {
+    for (let i = 0; i < total; i++) {
       mesh.setMatrixAt(i, _m.makeScale(0, 0, 0));
       mesh.setColorAt(i, _c.set('#7d9a3a'));
     }
-    mesh.count = n;
+    mesh.count = total;
+    this.initInsects(n);
     this.leaves = mesh;
     this.group.add(mesh);
   }
@@ -187,6 +192,29 @@ export class Drift {
     }
   }
 
+  // butterflies (2 wing instances each) and bees (1 instance) around flower patches near the camera
+  private NB = 0;
+  private NE = 0;
+  private ins0 = 0;
+  private ix!: Float32Array;
+  private iy!: Float32Array;
+  private iz!: Float32Array;
+  private ivx!: Float32Array;
+  private ivy!: Float32Array;
+  private ivz!: Float32Array;
+  private itx!: Float32Array;
+  private ity!: Float32Array;
+  private itz!: Float32Array;
+  private iT!: Float32Array;
+  private iph!: Float32Array;
+  private iyaw!: Float32Array;
+  /** 0 hidden, 1 flying, 2 resting on a flower */
+  private ist!: Uint8Array;
+  private ipatch!: Int16Array;
+  private patches: { x: number; z: number; r: number }[] = [];
+  private insectsOn = 0;
+  insectsVisible = 0;
+
   private lastFx = 1e9;
   private lastFz = 1e9;
   private warm = 0;
@@ -223,6 +251,15 @@ export class Drift {
       // only worth it when the camera is near the ground: leaves are invisible from the overview
       const camH = cp.y - this.ground(cp.x, cp.z);
       this.near.length = 0;
+      this.patches.length = 0;
+      if (camH < 40 && this.NB + this.NE > 0) {
+        const gc = ctx.services.groundcover as { flowerPatches?: { x: number; z: number; r: number; density: number }[] } | undefined;
+        for (const p of gc?.flowerPatches ?? []) {
+          if (p.density < 0.15) continue;
+          if (Math.hypot(p.x - this.fx, p.z - this.fz) < 35 + p.r) this.patches.push(p);
+          if (this.patches.length >= 24) break;
+        }
+      }
       if (camH < 90) {
         for (const tr of this.trees) {
           const d1 = Math.hypot(tr.x - this.fx, tr.z - this.fz),
@@ -318,8 +355,148 @@ export class Drift {
       _s.set(sc, sc, sc);
       leaves.setMatrixAt(i, _m.compose(_p, _q, _s));
     }
+    this.stepInsects(dt);
     leaves.instanceMatrix.needsUpdate = true;
     if (leaves.instanceColor) leaves.instanceColor.needsUpdate = true;
+  }
+
+  // ─────────────────────────────────────────────────── butterflies + bees ──
+  private initInsects(base: number): void {
+    const m = this.NB + this.NE;
+    this.ins0 = base;
+    const f = () => new Float32Array(m);
+    this.ix = f();
+    this.iy = f();
+    this.iz = f();
+    this.ivx = f();
+    this.ivy = f();
+    this.ivz = f();
+    this.itx = f();
+    this.ity = f();
+    this.itz = f();
+    this.iT = f();
+    this.iph = f();
+    this.iyaw = f();
+    this.ist = new Uint8Array(m);
+    this.ipatch = new Int16Array(m).fill(-1);
+    const BF = ['#f4f2e8', '#f4f2e8', '#f2e08a', '#e8902e', '#7aa0e0', '#f0eee4'];
+    for (let k = 0; k < this.NB; k++) {
+      const c = this.rng.pick(BF);
+      this.leaves!.setColorAt(base + k * 2, _c.set(c));
+      this.leaves!.setColorAt(base + k * 2 + 1, _c.set(c));
+      this.iph[k] = this.rng.range(0, 6.28);
+    }
+    for (let k = 0; k < this.NE; k++) {
+      this.leaves!.setColorAt(base + this.NB * 2 + k, _c.set(this.rng.chance(0.7) ? '#b8862a' : '#3a2e1a'));
+      this.iph[this.NB + k] = this.rng.range(0, 6.28);
+    }
+  }
+
+  private pickFlower(k: number): void {
+    const p = this.patches[this.ipatch[k]];
+    const a = this.rng.range(0, Math.PI * 2),
+      d = Math.sqrt(this.rng.next()) * p.r * 0.9;
+    this.itx[k] = p.x + Math.cos(a) * d;
+    this.itz[k] = p.z + Math.sin(a) * d;
+    const bee = k >= this.NB;
+    this.ity[k] = this.ground(this.itx[k], this.itz[k]) + (bee ? this.rng.range(0.25, 0.6) : this.rng.range(0.35, 1.4));
+    this.iT[k] = bee ? this.rng.range(0.6, 2.2) : this.rng.range(1.5, 4.5);
+  }
+
+  private stepInsects(dt: number): void {
+    const m = this.NB + this.NE;
+    if (!m || !this.leaves) return;
+    const ctx = this.ctx;
+    const t = ctx.uniforms.uTime.value;
+    const leaves = this.leaves;
+    // daytime, not too windy, flowers nearby (refreshed with the tree list)
+    const wind = ctx.uniforms.uWind.value;
+    const on = ctx.uniforms.uDaylight.value > 0.45 && Math.hypot(wind.x, wind.y) < 1.15 && this.patches.length > 0;
+    this.insectsOn += ((on ? 1 : 0) - this.insectsOn) * Math.min(1, dt * 0.5);
+    let vis = 0;
+    for (let k = 0; k < m; k++) {
+      const bee = k >= this.NB;
+      const slot = bee ? this.ins0 + this.NB * 2 + (k - this.NB) : this.ins0 + k * 2;
+      if (!on || this.ipatch[k] < 0 || this.ipatch[k] >= this.patches.length) {
+        if (on && this.patches.length) {
+          // (re)assign to a nearby patch and appear on a flower there
+          this.ipatch[k] = Math.floor(this.rng.next() * this.patches.length);
+          this.pickFlower(k);
+          this.ix[k] = this.itx[k];
+          this.iy[k] = this.ity[k];
+          this.iz[k] = this.itz[k];
+          this.ist[k] = 1;
+        } else {
+          this.ist[k] = 0;
+          leaves.setMatrixAt(slot, _m.makeScale(0, 0, 0));
+          if (!bee) leaves.setMatrixAt(slot + 1, _m.makeScale(0, 0, 0));
+          continue;
+        }
+      }
+      this.iT[k] -= dt;
+      if (this.ist[k] === 2) {
+        // resting on a flower, wings folded up, now and then a slow open
+        if (this.iT[k] <= 0) {
+          this.ist[k] = 1;
+          this.pickFlower(k);
+        }
+      } else {
+        const dx = this.itx[k] - this.ix[k],
+          dy = this.ity[k] - this.iy[k],
+          dz = this.itz[k] - this.iz[k];
+        const d = Math.hypot(dx, dy, dz);
+        if (d < 0.15 || this.iT[k] <= 0) {
+          if (!bee && this.rng.chance(0.35)) {
+            this.ist[k] = 2;
+            this.iT[k] = this.rng.range(2, 6);
+            this.iy[k] = this.ground(this.ix[k], this.iz[k]) + this.rng.range(0.2, 0.5);
+          } else this.pickFlower(k);
+        }
+        // erratic flight: seek + jitter, drifted a little by the wind
+        windAt(this.ix[k], this.iz[k], t, wind, _w);
+        const sp = bee ? 2.2 : 1.1;
+        const jx = Math.sin(t * (bee ? 13 : 3.1) + this.iph[k] * 7) * (bee ? 1.5 : 1.2),
+          jy = Math.sin(t * (bee ? 11 : 4.3) + this.iph[k] * 3) * (bee ? 0.6 : 0.9),
+          jz = Math.cos(t * (bee ? 12 : 2.7) + this.iph[k] * 5) * (bee ? 1.5 : 1.2);
+        const inv = 1 / Math.max(d, 0.2);
+        const a = 1 - Math.exp(-dt * (bee ? 6 : 3));
+        this.ivx[k] += (dx * inv * sp + jx + _w.x * 0.5 - this.ivx[k]) * a;
+        this.ivy[k] += (dy * inv * sp + jy - this.ivy[k]) * a;
+        this.ivz[k] += (dz * inv * sp + jz + _w.y * 0.5 - this.ivz[k]) * a;
+        this.ix[k] += this.ivx[k] * dt;
+        this.iy[k] += this.ivy[k] * dt;
+        this.iz[k] += this.ivz[k] * dt;
+        const g = this.ground(this.ix[k], this.iz[k]) + 0.12;
+        if (this.iy[k] < g) this.iy[k] = g;
+        const h = Math.hypot(this.ivx[k], this.ivz[k]);
+        if (h > 0.05) this.iyaw[k] = Math.atan2(this.ivx[k], this.ivz[k]);
+      }
+      const sc = this.insectsOn * (bee ? 0.016 : 0.045);
+      _p.set(this.ix[k], this.iy[k], this.iz[k]);
+      if (bee) {
+        _e.set(0.2, this.iyaw[k], 0);
+        _q.setFromEuler(_e);
+        _s.set(sc * 0.8, sc, sc * 1.2);
+        leaves.setMatrixAt(slot, _m.compose(_p, _q, _s));
+      } else {
+        // two wings hinged on the body axis, beating (or slowly opening when resting)
+        const flap = this.ist[k] === 2 ? 1.25 + 0.25 * Math.sin(t * 1.3 + this.iph[k]) : 0.15 + 1.15 * Math.abs(Math.sin(t * 9 + this.iph[k]));
+        for (let w = 0; w < 2; w++) {
+          const sg = w === 0 ? 1 : -1;
+          _m.makeRotationY(this.iyaw[k]);
+          _m2.makeRotationZ(sg * flap);
+          _m.multiply(_m2);
+          _m2.makeTranslation(sg * 0.32 * sc, 0, 0);
+          _m.multiply(_m2);
+          _m2.makeScale(sc, sc, sc * 0.8);
+          _m.multiply(_m2);
+          _m.setPosition(_p.x + _m.elements[12], _p.y + _m.elements[13], _p.z + _m.elements[14]);
+          leaves.setMatrixAt(slot + w, _m);
+        }
+      }
+      vis++;
+    }
+    this.insectsVisible = this.insectsOn > 0.05 ? vis : 0;
   }
 
   // ───────────────────────────────────────────────────────── sparkles ──

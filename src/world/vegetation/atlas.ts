@@ -41,6 +41,7 @@ const REGIONS = {
   citrus: [4, 2, 1, 1],
   dryFrond: [5, 2, 1, 1],
   bougain: [6, 2, 1, 1],
+  ivy: [0, 3, 1, 1],
   frond: [7, 0, 1, 4],
 } as const;
 
@@ -656,6 +657,19 @@ function citrus(g: CanvasRenderingContext2D, rng: Rng, w: number, h: number): vo
   }
 }
 
+/** ivy / trailing creeper: strands from the base (the rim they hang over) with small lobed leaves */
+function ivy(g: CanvasRenderingContext2D, rng: Rng, w: number, h: number): void {
+  for (let i = 0; i < 7; i++) {
+    const st = clipStem(stem(rng.range(-w * 0.38, w * 0.38), 0, rng.range(-0.25, 0.25), h * rng.range(0.45, 0.95), rng.range(-0.6, 0.6), 8), w, h, 12);
+    twig(g, st, 1.6, 0.8, 0.35);
+    const nl = 6 + rng.int(0, 5);
+    for (let k = 0; k < nl; k++) {
+      const p = along(st, (k + 0.5) / nl);
+      leaf(g, p.x, p.y, p.a + (k % 2 ? 1 : -1) * rng.range(0.7, 1.5), rng.range(13, 20), rng.range(0.4, 0.9), lid(rng), { w: 0.45, lobes: 3, fold: 0.12 });
+    }
+  }
+}
+
 const PAINT: Record<LeafTile, Painter> = {
   broad: (g, s, w, h) => broadCluster(g, new Rng(s), w, h, 72, 25, { w: 0.36, wide: 0.38, base: 1.1, tip: 0.85 }),
   broadDense: (g, s, w, h) => denseClump(g, new Rng(s), w, h, 210, 22, { w: 0.36, wide: 0.38, base: 1.1, tip: 0.8 }),
@@ -676,6 +690,7 @@ const PAINT: Record<LeafTile, Painter> = {
   willow: (g, s, w, h) => willowStrands(g, new Rng(s), w, h),
   citrus: (g, s, w, h) => citrus(g, new Rng(s), w, h),
   bougain: (g, s, w, h) => bougainvillea(g, new Rng(s), w, h),
+  ivy: (g, s, w, h) => ivy(g, new Rng(s), w, h),
   fan: (g, s, w, h) => fanLeaf(g, new Rng(s), w, h),
   frond: (g, s, w, h) => palmFrond(g, new Rng(s), w, h),
   dryFrond: (g, s, w, h) => palmFrond(g, new Rng(s), w * 1, h * 1, true),

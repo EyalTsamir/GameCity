@@ -548,11 +548,24 @@ ${WIND_GLSL}`,
 #endif`,
       )
       .replace(
+        '#include <lights_physical_pars_fragment>',
+        `#include <lights_physical_pars_fragment>
+// leaves seen against the sun glow (thin-leaf transmission; the shadowed light colour → no glow in shade)
+void RE_Direct_Green( const in IncidentLight directLight, const in vec3 geometryPosition, const in vec3 geometryNormal, const in vec3 geometryViewDir, const in vec3 geometryClearcoatNormal, const in PhysicalMaterial material, inout ReflectedLight reflectedLight ) {
+  RE_Direct_Physical( directLight, geometryPosition, geometryNormal, geometryViewDir, geometryClearcoatNormal, material, reflectedLight );
+  float back = saturate( - dot( geometryViewDir, directLight.direction ) );
+  float lobe = pow( back, 3.0 ) * 0.9 + pow( back, 12.0 ) * 1.1;
+  reflectedLight.directDiffuse += directLight.color * material.diffuseColor * vec3( 1.1, 1.12, 0.7 ) * lobe * RECIPROCAL_PI * 1.6;
+}
+#undef RE_Direct
+#define RE_Direct RE_Direct_Green`,
+      )
+      .replace(
         '#include <lights_fragment_end>',
         `#include <lights_fragment_end>\nreflectedLight.indirectDiffuse += diffuseColor.rgb * thLampLight(vGWPos, normalize(vGWNrm));`,
       );
   };
-  m.customProgramCacheKey = () => 'tinyhaven-buildings-green-v1';
+  m.customProgramCacheKey = () => 'tinyhaven-buildings-green-v2';
   return m;
 }
 

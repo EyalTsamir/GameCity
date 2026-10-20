@@ -36,7 +36,7 @@ const BLUE_AIR = 1.8;
 /** Mie phase in the LUT: isotropic — the forward peak depends on the TRUE scattering angle, so it lives
  *  in the analytic sun lobe (dome and fog alike), never in the azimuth-only horizon ring */
 const SKY_G = 0;
-const SKY_MS = 0.45;
+const SKY_MS = 0.55;
 /** scene-unit luminance of the clear noon sky 3° above the horizon, 90° from the sun */
 const SKY_HORIZON_L = 0.52;
 /** elevation of the horizon ring: the sky ~3° up (the true horizon is a long, reddened, yellowish path) */
@@ -62,7 +62,7 @@ export function goldenHour(hours: number): number {
   return Math.max(eve, morn * 0.7);
 }
 export function skyElevationDeg(trueDeg: number, hours: number): number {
-  return trueDeg - goldenHour(hours) * Math.min(10.5, 0.8 * Math.max(0, trueDeg));
+  return trueDeg - goldenHour(hours) * Math.min(7, 0.6 * Math.max(0, trueDeg));
 }
 
 function grey(c: THREE.Color, k: number): void {

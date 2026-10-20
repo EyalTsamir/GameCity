@@ -36,12 +36,12 @@ interface LayerDef {
 const LAYERS: LayerDef[] = [
   { r0: 2400, rc: 3500, r1: 4700, a0: 168, a1: 370, step: 0.21, hS: 45, hW: 80, hN: 230, scale: 1600, seed: 1 },
   { r0: 4600, rc: 6300, r1: 8200, a0: 176, a1: 368, step: 0.17, hS: 85, hW: 170, hN: 560, scale: 2600, seed: 2 },
-  { r0: 8000, rc: 11000, r1: 14500, a0: 172, a1: 366, step: 0.12, hS: 150, hW: 520, hN: 2100, scale: 3400, seed: 3 },
-  { r0: 13500, rc: 17500, r1: 22000, a0: 176, a1: 364, step: 0.12, hS: 300, hW: 1100, hN: 3700, scale: 4600, seed: 4 },
+  { r0: 8000, rc: 11000, r1: 14500, a0: 172, a1: 366, step: 0.15, hS: 150, hW: 520, hN: 2100, scale: 3400, seed: 3 },
+  { r0: 13500, rc: 17500, r1: 22000, a0: 176, a1: 364, step: 0.15, hS: 300, hW: 1100, hN: 3700, scale: 4600, seed: 4 },
 ];
 
 /** depth rows (0 = front foot, 1 = back) — dense around the crest (~0.4..0.6) */
-const ROWS = [0, 0.16, 0.3, 0.4, 0.47, 0.53, 0.6, 0.72, 1];
+const ROWS = [0, 0.2, 0.36, 0.46, 0.54, 0.64, 0.78, 1];
 
 export interface MountainResult {
   /** a group of azimuth chunks (frustum-culled separately), or one mesh for the coarse proxy */
@@ -62,7 +62,7 @@ function dirOf(aDeg: number): [number, number] {
  * `mat` reuses an existing material (same program).
  */
 export function buildMountains(model: LandscapeModel, uniforms: Record<string, THREE.IUniform>, fog: boolean, decimate = 1, mat0: THREE.Material | null = null): MountainResult {
-  const rows = decimate > 1 ? [0, 0.3, 0.5, 0.7, 1] : ROWS;
+  const rows = decimate >= 3 ? [0, 0.3, 0.5, 0.7, 1] : ROWS;
   const pos: number[] = [];
   const idx: number[] = [];
   // the river valley notch (the river comes down from the hills in the WNW)
@@ -141,7 +141,7 @@ export function buildMountains(model: LandscapeModel, uniforms: Record<string, T
     m.receiveShadow = false;
     return m;
   };
-  if (decimate > 1) return { mesh: mk(geo, 'land-mountains'), material: mat, triangles: idx.length / 3, vertices: pos.length / 3 };
+  if (decimate >= 3) return { mesh: mk(geo, 'land-mountains'), material: mat, triangles: idx.length / 3, vertices: pos.length / 3 };
   // azimuth chunks (all layers of a sector in one mesh): sectors behind the camera are culled
   const CH = 5;
   const bins: number[][] = Array.from({ length: CH }, () => []);

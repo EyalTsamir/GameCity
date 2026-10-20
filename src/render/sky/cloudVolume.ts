@@ -18,7 +18,7 @@ import { FS_VERT, FullscreenPass } from '../postfx/fullscreen';
 import { CLOUD_LAYER_GLSL, type CloudLayerUniforms } from './cloudLayer';
 import { ATMO_FUNCS, ATMO_N, atmoData } from '../atmosphere';
 
-const STEPS = 10;
+const STEPS = 12;
 
 const FRAG = /* glsl */ `
 uniform vec4 thAtmo[${ATMO_N}];
@@ -52,9 +52,13 @@ void main() {
   float t1 = clShell(cam.y, dir, base + thick);
   if (t0 < 0.0 || t1 < 0.0) return;
   // grazing rays cross tens of km of deck: march only its first part (beyond, haze takes over)
-  t1 = min(t1, t0 + 16000.0);
+  t1 = min(t1, t0 + 11000.0);
   float dt = (t1 - t0) / uSteps;
-  float j = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));
+  // white-noise start offset (interleaved-gradient noise varies almost only along x: with this few steps it
+  // painted vertical bars); the dome's 5-tap filter turns the grain into smooth cloud
+  vec3 jp = fract(vec3(gl_FragCoord.xyx) * 0.1031);
+  jp += dot(jp, jp.yzx + 33.33);
+  float j = fract((jp.x + jp.y) * jp.z);
   float lod = clamp(log2(t0 / 2500.0), 0.0, 4.0);
   float mu = dot(dir, uCloudL);
   float phase = mix(hg(mu, 0.65), hg(mu, -0.2), 0.3) * 4.0 * 3.14159265;
@@ -121,7 +125,7 @@ export class CloudVolume {
   /** quality tier: low ⅓ res / 6 steps, medium ½ / 8, high ½ / 10 */
   setQuality(level: string): void {
     this.div = level === 'low' ? 3 : 2;
-    this.pass.material.uniforms.uSteps.value = level === 'low' ? 6 : level === 'medium' ? 8 : STEPS;
+    this.pass.material.uniforms.uSteps.value = level === 'low' ? 7 : level === 'medium' ? 9 : STEPS;
   }
 
   constructor(uniforms: CloudLayerUniforms) {

@@ -455,9 +455,13 @@ vec3 bhShop(vec2 pm, vec2 csz, vec3 rd, float rs, float shopT, float litI, vec3 
     } else if (T < 6.5) c = bhShelves(q, wallC, 0.0, rs, 0.2, min(Hc - 0.4, 2.4), 0.36);
     else if (T > 7.5) {
       // lobby: timber feature wall with a lit logo, stone elsewhere
-      float pan = step(abs(q.x - W * 0.5), W * 0.42) * step(q.y, Hc - 0.5);
+      // (each bay differs: timber or stone, the logo only on some, artwork on others)
+      float hb = bhHash12(vec2(rs, 2.9));
+      float pan = step(abs(q.x - W * 0.5), W * 0.42) * step(q.y, Hc - 0.5) * step(0.35, hb);
       c = mix(wallC, vec3(0.42, 0.28, 0.17) * (0.9 + 0.1 * bhStripe(q.x / 0.12, 0.2)), pan);
-      float logo = bhBox2(q, vec2(W * 0.5, min(Hc - 1.0, 2.4)), vec2(min(0.8, W * 0.25), 0.12));
+      float logo = bhBox2(q, vec2(W * 0.5, min(Hc - 1.0, 2.4)), vec2(min(0.8, W * 0.25), 0.12)) * step(0.72, hb);
+      float art = bhBox2(q, vec2(W * 0.5, 1.7), vec2(min(0.7, W * 0.22), 0.5)) * step(hb, 0.35);
+      c = mix(c, bhPal(fract(hb * 7.0)) * (0.6 + 0.5 * bhHash12(floor(q * 4.0) + rs)), art);
       c = mix(c, vec3(0.95, 0.92, 0.85), logo);
       self = max(self, logo * 0.8);
     } else {

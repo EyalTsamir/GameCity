@@ -192,7 +192,7 @@ export class SkyLUT {
   /** re-render if the inputs changed noticeably (or `force`); returns true if rendered */
   update(renderer: THREE.WebGLRenderer, p: PhysSkyParams, force = false): boolean {
     const l = this.last;
-    const changed = force || !(Math.abs(l[0] - p.sunSin) < 4e-4 && Math.abs(l[1] - p.camH) < Math.max(4, l[1] * 0.05) && Math.abs(l[2] - p.haze) < l[2] * 0.01 + 1e-8 && l[3] === p.g && l[4] === p.ms);
+    const changed = force || !(Math.abs(l[0] - p.sunSin) < 1e-3 && Math.abs(l[1] - p.camH) < Math.max(20, l[1] * 0.15) && Math.abs(l[2] - p.haze) < l[2] * 0.01 + 1e-8 && l[3] === p.g && l[4] === p.ms);
     if (!changed) return false;
     l[0] = p.sunSin;
     l[1] = p.camH;

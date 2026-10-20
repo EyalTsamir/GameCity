@@ -22,6 +22,7 @@ const MARKET_SETS = [
 const BULB_WARM = ['#ffd9a0', '#ffd39a', '#ffe0b0'];
 
 export interface ExtraStats {
+  cafeLines: number;
   masts: number;
   marketLines: number;
   flags: number;
@@ -32,7 +33,7 @@ export interface ExtraStats {
 type Ground = (x: number, z: number) => number;
 
 export function buildExtras(ctx: CityContext, cloth: ClothSystem, poles: PoleBuilder, lamps: LampLight[], opts: { bunting: boolean; laundry: boolean; flags: boolean }): ExtraStats {
-  const st: ExtraStats = { masts: 0, marketLines: 0, flags: 0, dryers: 0, dryerItems: 0 };
+  const st: ExtraStats = { cafeLines: 0, masts: 0, marketLines: 0, flags: 0, dryers: 0, dryerItems: 0 };
   const terrain = ctx.services.terrain as { height(x: number, z: number): number } | undefined;
   const ground: Ground = (x, z) => terrain?.height(x, z) ?? ctx.plan.heightAt(x, z);
   if (opts.bunting) market(ctx, cloth, poles, lamps, ground, st);
@@ -41,6 +42,7 @@ export function buildExtras(ctx: CityContext, cloth: ClothSystem, poles: PoleBui
     hotels(ctx, cloth, poles, ground, st);
   }
   if (opts.laundry) dryers(ctx, cloth, st);
+  if (opts.bunting) cafeLights(ctx, cloth, lamps, st);
   return st;
 }
 
@@ -257,4 +259,61 @@ function dryers(ctx: CityContext, cloth: ClothSystem, st: ExtraStats): void {
     }
   }
   if (st.dryerItems > 0) ps?.setStaticLaundry?.(false);
+}
+
+// ─────────────────────────────────────────────────────── café string lights ──
+interface CafeLike {
+  x: number;
+  z: number;
+  tableY: number;
+  parasol: boolean;
+  source: string;
+}
+
+/**
+ * Warm bulb strings between the parasol tops of a café terrace (props.cafes): a minimum spanning tree
+ * over the parasols of each terrace cluster, spans ≤ 6.5 m, hanging ~2.6 m above the paving.
+ */
+function cafeLights(ctx: CityContext, cloth: ClothSystem, lamps: LampLight[], st: ExtraStats): void {
+  const ps = ctx.services.props as { cafes?: CafeLike[] } | undefined;
+  const tops = (ps?.cafes ?? []).filter((c) => c.parasol).map((c) => ({ x: c.x, y: c.tableY + 1.95, z: c.z }));
+  if (tops.length < 2) return;
+  const rng = new Rng(9091);
+  // Prim's MST over all tops, keeping only short edges (terraces are separate clusters)
+  const n = tops.length;
+  const inTree = new Uint8Array(n);
+  const best = new Float64Array(n).fill(Infinity);
+  const from = new Int32Array(n).fill(-1);
+  for (let root = 0; root < n; root++) {
+    if (inTree[root]) continue;
+    best[root] = 0;
+    from[root] = -1;
+    for (;;) {
+      let u = -1;
+      for (let i = 0; i < n; i++) if (!inTree[i] && best[i] < 6.5 && (u < 0 || best[i] < best[u])) u = i;
+      if (u < 0) break;
+      inTree[u] = 1;
+      if (from[u] >= 0) {
+        const a = tops[from[u]],
+          b = tops[u];
+        const L = Math.hypot(b.x - a.x, b.z - a.z);
+        if (L > 1.6) {
+          const sag = 0.1 + L * 0.03;
+          const line = cloth.addLine({ ax: a.x, ay: a.y, az: a.z, bx: b.x, by: b.y, bz: b.z, sag, seed: rng.next(), wire: '#2a2826', r: 0.006 });
+          const m = Math.max(2, Math.floor((L - 0.3) / 0.42));
+          for (let i = 0; i < m; i++) cloth.addBulb(line, (0.15 + (i + 0.5) * ((L - 0.3) / m)) / L, rng.pick(BULB_WARM), rng.range(0.05, 0.07), 0.028);
+          lamps.push({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 - sag - 0.1, z: (a.z + b.z) / 2, radius: 2.8, color: '#ffcf8f', intensity: 0.16, kind: 'plaza' });
+          st.cafeLines++;
+        }
+      }
+      for (let i = 0; i < n; i++) {
+        if (inTree[i]) continue;
+        const d = Math.hypot(tops[i].x - tops[u].x, tops[i].z - tops[u].z);
+        if (d < best[i]) {
+          best[i] = d;
+          from[i] = u;
+        }
+      }
+    }
+  }
 }

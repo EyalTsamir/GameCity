@@ -295,8 +295,8 @@ export function buildCoverMaps(ctx: CityContext): CoverMaps {
       const offs = [CORRIDOR_HALF - 0.16, ROAD_HALF + 0.42, ROAD_HALF - 0.32];
       const prob = [0.5, 0.26, 0.2];
       offs.forEach((o, qi) => {
-        if (horiz) weedLine(a0, P.z + sg * o, a1, P.z + sg * o, prob[qi], 0.07, qi === 0 ? 0.2 : 0.13);
-        else weedLine(P.x + sg * o, a0, P.x + sg * o, a1, prob[qi], 0.07, qi === 0 ? 0.2 : 0.13);
+        if (horiz) weedLine(a0, P.z + sg * o, a1, P.z + sg * o, prob[qi], 0.1, qi === 0 ? 0.3 : 0.17);
+        else weedLine(P.x + sg * o, a0, P.x + sg * o, a1, prob[qi], 0.1, qi === 0 ? 0.3 : 0.17);
       });
     }
   }

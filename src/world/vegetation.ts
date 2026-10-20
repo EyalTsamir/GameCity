@@ -24,7 +24,7 @@ import { windMaterials as legacyWindMaterials } from './vegetation/legacy/materi
 import * as NEW from './vegetation/species';
 import * as OLD from './vegetation/legacy/species';
 import { Wind, col, LEAF, type Species, type TreeSpec } from './vegetation/species';
-import { flowerBed, flowerClump, crop, soilRow, reeds, lily, surround, FLOWERS, type Surround } from './vegetation/plants';
+import { flowerBed, flowerClump, crop, soilRow, surround, FLOWERS, type Surround } from './vegetation/plants';
 import { getLayout, occAny, PLANTER, hrand, MASK_WALK, DistanceLod, ChunkCuller, chunkOf, type Layout } from './props/layout';
 import { getLeafAtlas } from './vegetation/atlas';
 import { FoliageLayer, LodTexture, cardMaterials, woodMaterials, cardKnobs, type InstBuf, type PlantRef } from './vegetation/foliage';
@@ -817,6 +817,7 @@ export default function create(ctx: CityContext): CityModule {
       age: hash01(t.x * 0.7, t.z * 1.9, 5),
       // street trees spread along the street (the gap between facades), not into them
       stretch: street ? [Math.cos(t.syaw), -Math.sin(t.syaw), 1.4] : undefined,
+      planter: t.surround === 'planter' || t.surround === 'roundplanter' ? { round: t.surround === 'roundplanter', yaw: t.syaw } : undefined,
     });
   }
   // build near-to-far for the usual camera direction (south → north) so early-z rejects hidden canopies
@@ -1165,57 +1166,11 @@ export default function create(ctx: CityContext): CityModule {
     }
   }
 
-  // pond: reeds along the shore, lily pads on the water
-  let reedCount = 0;
+  // pond: reeds, cattails and lily pads are drawn by groundcover (ground agent) — only the island shrubs here
+  const reedCount = 0;
   {
     const pond = plan.water.ponds[0];
     if (pond) {
-      const rng = ctx.rng('veg-pond');
-      const level = pond.level;
-      const n = 90;
-      for (let k = 0; k < n; k++) {
-        const a = (k / n) * Math.PI * 2;
-        // patches
-        const patch = Math.sin(a * 3 + 1.1) + 0.6 * Math.sin(a * 7 + 0.3);
-        if (patch < 0.35) continue;
-        const rho = rng.range(0.93, 1.03);
-        const x = pond.cx + Math.cos(a) * pond.rx * rho,
-          z = pond.cz + Math.sin(a) * pond.rz * rho;
-        if (rocks.any(x, z, 3, (id, d) => d < rocks.r[id] + 0.25)) continue;
-        if (furn.any(x, z, 3, (id, d) => d < furn.r[id] + 0.6)) continue;
-        selF(x);
-        reeds(fineSink, fpw, fsh, x, Math.min(H(x, z), level - 0.05), z, rng);
-        reedCount++;
-      }
-      if (island) {
-        for (let k = 0; k < 7; k++) {
-          const a = rng.range(0, 6.28);
-          const rr = Number(island.params?.radius ?? 2.6) * rng.range(0.92, 1.08);
-          const x = island.x + Math.cos(a) * rr,
-            z = island.z + Math.sin(a) * rr;
-          if (rocks.any(x, z, 3, (id, d) => d < rocks.r[id] + 0.2)) continue;
-          selF(x);
-          reeds(fineSink, fpw, fsh, x, Math.min(H(x, z), level - 0.05), z, rng, 0.8);
-          reedCount++;
-        }
-      }
-      // lily pads in a few clusters
-      for (let c = 0; c < 5; c++) {
-        const a = rng.range(0, 6.28),
-          rho = rng.range(0.45, 0.78);
-        const cx = pond.cx + Math.cos(a) * pond.rx * rho,
-          cz = pond.cz + Math.sin(a) * pond.rz * rho;
-        if (island && Math.hypot(cx - island.x, cz - island.z) < 4.5) continue;
-        for (let i = 0; i < rng.int(4, 8); i++) {
-          const x = cx + rng.range(-1.6, 1.6),
-            z = cz + rng.range(-1.2, 1.2);
-          const ex = (x - pond.cx) / pond.rx,
-            ez = (z - pond.cz) / pond.rz;
-          if (ex * ex + ez * ez > 0.8) continue;
-          selF(x);
-          lily(fineSink, fpw, x, level + 0.03, z, rng.range(0.22, 0.42), rng);
-        }
-      }
       // island shrubs
       if (island) {
         addBush(island.x + 0.9, island.z + 1.0, 0.55, 0.6, 77, undefined);
@@ -1300,8 +1255,11 @@ export default function create(ctx: CityContext): CityModule {
   const weight = new Float32Array(plants.length);
   const target = new Uint8Array(plants.length);
   const dist = new Float32Array(plants.length);
-  let members: number[] = [];
-  let next: number[] = [];
+  const members: number[] = [];
+  const next: number[] = [];
+  const byDist = (a: number, b: number): number => dist[a] - dist[b];
+  const wantA: number[] = [];
+  const keepA: number[] = [];
   const memberSet = new Uint8Array(plants.length);
   let genMs = 0,
     genCount = 0,
@@ -1346,13 +1304,14 @@ export default function create(ctx: CityContext): CityModule {
         }
       }
     }
-    next.sort((a, b) => dist[a] - dist[b]);
+    next.sort(byDist);
     // 2. generate missing detail (bounded) and apply the capacity budget
     let budget = 4;
     let usedC = 0,
       usedW = 0;
     for (const id of members) target[id] = 0;
-    const want: number[] = [];
+    const want = wantA;
+    want.length = 0;
     for (const id of next) {
       if (!detail[id]) {
         if (budget <= 0) continue;
@@ -1376,7 +1335,8 @@ export default function create(ctx: CityContext): CityModule {
     const k = Math.min(1, dt / 0.6);
     let changed = false;
     for (const id of want) if (!memberSet[id]) changed = true;
-    const keep: number[] = [];
+    const keep = keepA;
+    keep.length = 0;
     for (const id of members) {
       if (target[id]) continue;
       weight[id] = Math.max(0, weight[id] - k);
@@ -1400,7 +1360,9 @@ export default function create(ctx: CityContext): CityModule {
     for (const id of keep) lodTex.set(id, weight[id]);
     if (changed) {
       for (const id of members) memberSet[id] = 0;
-      members = want.concat(keep);
+      members.length = 0;
+      for (const id of want) members.push(id);
+      for (const id of keep) members.push(id);
       for (const id of members) memberSet[id] = 1;
       partsC.length = 0;
       partsW.length = 0;

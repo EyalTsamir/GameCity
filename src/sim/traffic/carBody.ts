@@ -107,7 +107,7 @@ function archAt(s: CarShape, z: number): number {
 // 5 shoulder (belt), 6 glass bottom, 7 glass top, 8 roof edge, 9 roof centre
 const KEEP = [
   [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
-  [0, 2, 3, 5, 6, 7, 8, 9],
+  [0, 2, 3, 5, 7, 8, 9],
   [0, 2, 5, 7, 8, 9],
 ];
 
@@ -224,11 +224,14 @@ export function loftCar(s: CarShape, lod: number): LoftParts {
     const rear = zc > s.rwBase + 0.02 && zc < s.rwTop - 0.02;
     const sideGlass = Ts[j] > tall && Ts[j + 1] > tall && zc > s.glassRear && zc < s.wsBase;
     const pillar = Math.abs(zc - s.pillarB) < 0.05 || (s.pillarC !== undefined && Math.abs(zc - s.pillarC) < 0.035);
+    const inArch = Math.abs(zc - s.axF) < ra || Math.abs(zc - s.axR) < ra;
     for (let i = 0; i < RU; i++) {
       const k0 = ringIdx(i),
         k1 = ringIdx((i + 1) % RU);
       const a = Math.min(k0, k1),
         b = Math.max(k0, k1);
+      // the flat underside is never seen from above the sill: only the wheel-well walls are kept
+      if (a === 0 && (b === 1 || !inArch)) continue;
       // the bands (a, a+1) … (b−1, b) this face covers; pick the most telling one
       let g: LoftRegion = 'body';
       if (a <= 6 && b >= 7) g = sideGlass ? (pillar ? 'trim' : 'glass') : 'body';

@@ -237,8 +237,12 @@ void kitePose(inout vec3 p, inout vec3 n) {
   vec3 b = C + B * vec3(0.0, 0.05, -0.05);
   vec3 c = mix(a, b, s) + vec3(0.0, -iKite2.z * 4.0 * s * (1.0 - s), 0.0);
   n = normalize(vec3(p.x * 0.3, 1.0, 0.0));
-  p = c + vec3(p.x, p.y, 0.0) * 0.025;
-  vKiteCol = vec3(0.95, 0.93, 0.88);
+  // a real kite line is a hair-thin cord: draw it ~1.4 cm wide, darker than the sky, and let it vanish
+  // once it would be thinner than ~0.6 px (no hard bright line across the sea at grazing angles)
+  vec3 wc = (modelMatrix * instanceMatrix * vec4(c, 1.0)).xyz;
+  float pxw = 0.014 * projectionMatrix[1][1] * 500.0 / max(length(cameraPosition - wc), 0.5);
+  p = c + vec3(p.x, p.y, 0.0) * 0.014 * smoothstep(0.35, 0.9, pxw);
+  vKiteCol = vec3(0.62, 0.6, 0.55);
 }
 `;
 
@@ -251,7 +255,7 @@ function makeKiteMaterial(): THREE.MeshLambertMaterial {
       .replace('#include <begin_vertex>', 'vec3 transformed = kiteP;\nvColor.rgb = vKiteCol;');
     shader.fragmentShader = shader.fragmentShader.replace('#include <common>', '#include <common>');
   };
-  m.customProgramCacheKey = () => 'tinyhaven-ambient-kite-1';
+  m.customProgramCacheKey = () => 'tinyhaven-ambient-kite-2';
   return m;
 }
 

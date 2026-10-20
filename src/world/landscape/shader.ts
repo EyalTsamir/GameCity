@@ -45,7 +45,7 @@ export function landUniforms(globals: { uTime: { value: number }; uWind: { value
     cGap: C('#16220f'),
     cHedge: C('#36502a'),
     cTrack: C('#988567'),
-    cSand: C('#dccfac'),
+    cSand: C('#cdbf9b'),
     cWetSand: C('#9c8f70'),
     cRock: C('#8b8478'),
     cRock2: C('#6d665d'),
@@ -375,8 +375,10 @@ vec3 landAlbedo() {
   }
   // ── sand (dunes, beach) — wet near the waterline; marram grass on the dunes
   vec3 sc = mix(cWetSand, cSand, smoothstep(${(WL + 0.2).toFixed(2)}, ${(WL + 1.0).toFixed(2)}, p.y));
-  float marram = smoothstep(0.3, 0.8, (1.0 - sand) * 1.4 + nB.b * 0.6 - 0.3) * smoothstep(${(WL + 2.0).toFixed(2)}, ${(WL + 3.0).toFixed(2)}, p.y);
-  sc = mix(sc, vec3(0.32, 0.36, 0.2) * (0.8 + 0.4 * nB.r), marram * 0.75);
+  float marram = smoothstep(0.2, 0.7, (1.0 - sand) * 1.6 + nB.b * 0.6 - 0.3) * smoothstep(${(WL + 1.6).toFixed(2)}, ${(WL + 2.6).toFixed(2)}, p.y);
+  sc = mix(sc, mix(gcMarram, gcMeadowB, 0.35) * (0.75 + 0.4 * nB.r), marram * 0.85);
+  // wrack line of dried seaweed along the last high tide
+  sc *= 1.0 - 0.18 * (1.0 - smoothstep(0.15, 0.45 + fp, abs(p.y - ${(WL + 0.75).toFixed(2)} - 0.12 * (nB.g - 0.5)))) * (1.0 - smoothstep(0.5, 2.0, fp));
   sand = max(sand, marram * 0.5 * step(0.05, vCov.z));
   sc *= 0.94 + 0.08 * nB.g * midF;
   if (fp < 0.4) sc *= 1.0 - 0.05 * lStripe(p.x * 0.8 + p.z * 0.6 + nB.r * 3.0, 0.7, 0.4, fp);

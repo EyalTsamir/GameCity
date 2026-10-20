@@ -1,18 +1,18 @@
 # world — streetlife (café terraces, street sitters, vendors, two-wheelers)
 
 ## Resume here
-* 2026-10-20 01:45 UTC — resumed after the usage-limit stop + reboot (01:29). All code typechecks; headless
-  invariants clean. Judged: `m3b_sheet1-3.png` (full city: old town street busy, market vendors, gelato
-  cart + terrace), `m3c_sheet.png` (table close-ups; night terraces too dark → request to wear via lead),
-  riders2 (all six two-wheeler types with riders: good).
-* Since the last entry: attention-weighted spawning (crowd.updateFocus/focusDoor + early recycling of far
-  off-camera walkers; `?nofocus`), busier market mornings (more stall stops, 5–16 s, market detours for
-  tourists / couples / elderly / families), brighter tea lights.
-* Running: `focus_junc.json/.png`, `focus_dtroad.json/.png` (shot.mjs, view set, 4× for 40 s → density
-  where the camera looks + invariants + vendor positions incl. the busker).
-* Perf (downtown POI 1920×1025, all street life on vs off): 165 vs 161 draw calls, 2.512 M vs 2.440 M tris
-  (+73 k), figures 60.8 k vs 39.4 k verts, vehicles 44.5 k vs 28.7 k tris (`perf_on|off.json`).
-* Next: judge focus shots; busker view; soak 4 min @4× (full city); `?diorama` check; final report.
+* 2026-10-20 02:05 UTC — lead notes (1)–(3) applied and typechecked (milder attention: recycle every 2 s,
+  spawn bias 0.3; market bags after buying, vendors packing up until 16:30, no stall stops when closed,
+  evening market strolls, hangouts on the market square). Focus shots judged: invariants {} (dtroad's
+  sky failure was air's mid-edit, not mine); café occupancy 78/92 seats.
+* **M4 started (lead note 4: boxy cars)**: `traffic/carBody.ts` (new) lofts compact / hatch / sedan / SUV
+  bodies (profile-driven sections, tumblehome greenhouse, rounded nose / tail, wheel arches over dark wells,
+  regions paint / glass / trim (belt seal, B / C pillars) / well / SUV cladding); `models.ts loftBody()`
+  replaces rbox body + `cabin()` (removed), adds mirrors on arms, door seams + handles (LOD0).
+  Tris per car L0/L1/L2 ≈ 3.4k/1.15k/0.46k (was 2.1k/0.6k/0.24k). Lineup m4a judged: big lift; hatch
+  reshaped (was estate-like) → m4b running (LOD rows up close). Then eye-level street shots + perf.
+* Queued: `m3d` (21.5 h terrace re-check after wear's terrace lamps), soak1 (4 min @4×).
+* Next: m4b → tune; perf.mjs downtown before/after; busker view; `?diorama`; final report.
 
 ## Brief (WORLD-PLAN.md workstream 5 + world-briefs.md notes)
 Gap: at eye level the city is thinly populated compared to reference 2 (sunny Tel-Aviv café street — every
