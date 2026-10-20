@@ -17,6 +17,15 @@ Branch: work continues from `claude/tinyhaven-graphics-audit-l089m8` (fast-forwa
 `claude/pensive-gates-bim12i` (the session's designated branch).
 
 ## Resume here (keep current)
+* 2026-10-20 01:31 UTC — 2nd usage-limit stop: all agents stopped ~21:30 (reset 01:20); watchdog firings
+  21:29–00:29 could not act (session also limited); container rebooted ~01:29. Restored servers/autocheckpoint/
+  locks; tree clean at dc885c7 (pushed). All 7 agents resumed 01:31. State at stop: world M2 done (countryside,
+  villages, island, reflection proxies) + M3 roads/portals/country traffic in progress; air two-component haze +
+  cumulus/cirrus rework (verifying); ground M1 done (blades, meadows, reeds, lilies, 96 m outer band; pond
+  doubles → foliage removal pending ground's confirmation); foliage M1 leaf cards + palm bark (judging); streetlife
+  M1+M2 done, M3 (plaza groups, vendor carts, fountain sitters) capturing; market vendors grant (civic.ts);
+  life M2 bunting/festoons verified, smoke visibility issue in SwiftShader; wear M2–M7 coded, not yet judged.
+  World POIs added in plan.ts (overview d600/p20, vista, country, coast, riverbend).
 * 2026-10-19 20:50 UTC — container restarted again ~20:49 (agents + all background captures killed). Restored:
   servers, autocheckpoint, locks cleared; 17 uncommitted agent edits survived on disk. All 7 agents resumed via
   SendMessage 20:51. Earlier today: streetlife M1 (café parties, 31 terraces/94 seats, waiters, tableware) done;
