@@ -17,7 +17,7 @@
 import type * as THREE from 'three';
 import type { CityContext, CityModule } from '../core/context';
 import { buildCoverMaps, addToGrids, type FlowerPatch } from './groundcover/mask';
-import { buildOuterMaps } from './groundcover/outer';
+import { outerMapsBuilder, type OuterMaps } from './groundcover/outer';
 import { createField, type Field, type QualityLevel } from './groundcover/field';
 import { gcPalette, type GcPalette } from './groundcover/palette';
 import { setGroundCover } from './terrain/ground';
@@ -35,16 +35,18 @@ export default function create(ctx: CityContext): CityModule {
   const t0 = performance.now();
   const prm = ctx.debug.params;
   const maps = buildCoverMaps(ctx);
-  // the landscape band around the slab (world mode): meadows / reeds / dunes continue in blades
-  const outer = prm.has('nogcouter') ? null : buildOuterMaps(ctx);
-  if (outer) addToGrids(maps.grids, outer.cover, outer.height, outer.w, outer.h, outer.x0, outer.z0, outer.res);
+  // the landscape band around the slab (world mode): meadows / reeds / dunes continue in blades; built
+  // incrementally in frame() (≈ 4 ms per frame) so it never delays the boot
+  let outerGen = prm.has('nogcouter') ? null : outerMapsBuilder(ctx);
+  let outer: OuterMaps | null = null;
+  let outerWork = 0;
   // hand the maps to the ground shader (far field: lengths, flowers, litter, blade presence)
   setGroundCover(maps.texCover, maps.texFlower);
 
   let field: Field | null = null;
   let level = ctx.quality.level as QualityLevel;
   if (!prm.has('nograss')) {
-    field = createField(ctx, maps, outer, level, {
+    field = createField(ctx, maps, null, level, {
       rings: prm.get('gcrings') ?? undefined,
       flowers: prm.get('gcflowers') !== '0',
       litter: !prm.has('nolitter'),
@@ -97,6 +99,21 @@ export default function create(ctx: CityContext): CityModule {
     name: 'groundcover',
     frame() {
       frameNo++;
+      if (outerGen) {
+        const t0 = performance.now();
+        let r = outerGen.next();
+        while (!r.done && performance.now() - t0 < 4) r = outerGen.next();
+        outerWork += performance.now() - t0;
+        if (r.done) {
+          outerGen = null;
+          outer = r.value ?? null;
+          if (outer) {
+            outer.workMs = outerWork;
+            addToGrids(maps.grids, outer.cover, outer.height, outer.w, outer.h, outer.x0, outer.z0, outer.res);
+            field?.setOuter(outer);
+          }
+        }
+      }
       if (ctx.quality.level !== level) onQuality();
     },
     stats() {
@@ -116,7 +133,7 @@ export default function create(ctx: CityContext): CityModule {
         litterCells: maps.stats.litterCells,
         mapsMs: Math.round(maps.buildMs),
         mapsPhases: maps.phases,
-        outerMs: Math.round(outer?.buildMs ?? 0),
+        outerMs: outer ? Math.round(outer.workMs) : outerGen ? 'building' : 'off',
         outerCells: outer?.cells ?? 0,
         buildMs: Math.round(buildMs),
       };

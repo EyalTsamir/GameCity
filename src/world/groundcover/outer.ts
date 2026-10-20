@@ -45,8 +45,10 @@ export interface OuterMaps {
   texCover: THREE.DataTexture;
   texFlower: THREE.DataTexture;
   texHeight: THREE.DataTexture;
+  /** wall time from start to finish (spread over frames) */
   buildMs: number;
   cells: number;
+  workMs: number;
 }
 
 const clamp01 = (v: number) => (v < 0 ? 0 : v > 1 ? 1 : v);
@@ -55,9 +57,18 @@ function smooth(e0: number, e1: number, x: number): number {
   return t * t * (3 - 2 * t);
 }
 
-export function buildOuterMaps(ctx: CityContext): OuterMaps | null {
+/**
+ * Incremental builder (a generator that yields every few rows) so the band never delays the boot: the
+ * module drives it from frame() with a small time budget; the result arrives a second or two later
+ * (the band is only seen from near the slab edge).
+ */
+export function outerMapsBuilder(ctx: CityContext): Generator<void, OuterMaps | null, void> | null {
   const land = ctx.services.landscape as LandscapeLike | undefined;
   if (!land || !land.active) return null;
+  return build(land);
+}
+
+function* build(land: LandscapeLike): Generator<void, OuterMaps | null, void> {
   const t0 = performance.now();
   const x0 = SLAB.x0 - OUTER_M,
     z0 = SLAB.z0 - OUTER_M;
@@ -78,6 +89,7 @@ export function buildOuterMaps(ctx: CityContext): OuterMaps | null {
   const cov = new Float32Array(cw * ch * 7);
   const tmp: LandCover = { water: 0, sand: 0, rock: 0, forest: 0, field: 0, meadow: 0, wet: 0 };
   for (let j = 0; j < ch; j++) {
+    yield;
     for (let i = 0; i < cw; i++) {
       const x = x0 + i * CG,
         z = z0 + j * CG;
@@ -97,10 +109,13 @@ export function buildOuterMaps(ctx: CityContext): OuterMaps | null {
   const hw = Math.round(W / HG) + 1,
     hh = Math.round(D / HG) + 1;
   const lat = new Float32Array(hw * hh);
-  for (let j = 0; j < hh; j++) for (let i = 0; i < hw; i++) {
+  for (let j = 0; j < hh; j++) {
+    yield;
+    for (let i = 0; i < hw; i++) {
     const x = x0 + i * HG,
       z = z0 + j * HG;
     lat[j * hw + i] = inSlab(x, z, 3) ? 0 : land.height(x, z);
+    }
   }
   const cs = new Float32Array(7);
   const coverAt = (x: number, z: number) => {
@@ -136,6 +151,7 @@ export function buildOuterMaps(ctx: CityContext): OuterMaps | null {
   const height = new Float32Array(w * h);
   let cells = 0;
   for (let j = 0; j < h; j++) {
+    if ((j & 3) === 0) yield;
     const z = z0 + (j + 0.5) * res;
     for (let i = 0; i < w; i++) {
       const x = x0 + (i + 0.5) * res;
@@ -185,6 +201,7 @@ export function buildOuterMaps(ctx: CityContext): OuterMaps | null {
   const flower = new Uint8Array(fw * fh * 4);
   const fs = new Float32Array(6);
   for (let j = 0; j < fh; j++) {
+    if ((j & 1) === 0) yield;
     const z = z0 + (j + 0.5) * fres;
     for (let i = 0; i < fw; i++) {
       const x = x0 + (i + 0.5) * fres;
@@ -243,5 +260,6 @@ export function buildOuterMaps(ctx: CityContext): OuterMaps | null {
     texHeight,
     buildMs: performance.now() - t0,
     cells,
+    workMs: 0,
   };
 }

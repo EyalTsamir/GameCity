@@ -55,7 +55,7 @@ export class ClothSystem {
   readonly lines: Line[] = [];
   private pieces: { line: number; s: number; pole: null | { top: THREE.Vector3; bottom: THREE.Vector3 }; o: PieceOpts }[] = [];
   private bulbs: { line: number; s: number; drop: number; r: number; col: string }[] = [];
-  readonly uniforms = { uLifeFarFlutter: { value: 220 }, uClothTrans: { value: 0.75 }, uLifePxK: { value: 0.001 }, uBulbGain: { value: 0 } };
+  readonly uniforms = { uLifeFarFlutter: { value: 220 }, uClothTrans: { value: 0.75 }, uLifePxK: { value: 0.001 }, uBulbGain: { value: 0 }, uBulbNight: { value: 0 } };
   clothMesh: THREE.Mesh | null = null;
   wireMesh: THREE.Mesh | null = null;
   bulbMesh: THREE.Mesh | null = null;
@@ -286,7 +286,8 @@ void RE_Direct_Cloth( const in IncidentLight directLight, const in vec3 geometry
           vec3 wDir = position.z < 0.5 ? wS : wU;
           vec3 objectNormal = position.z < 0.5 ? wU : wS;
           float wD = length( cameraPosition - wP );
-          float wR = max( aWire.w, wD * uLifePxK * 0.45 );
+          // ≥ ~0.9 px wide up close, then thin out and vanish (real wires are invisible from afar)
+          float wR = max( aWire.w, wD * uLifePxK * 0.45 ) * ( 1.0 - smoothstep( 110.0, 190.0, wD ) );
           vWireCol = aWire.rgb;
           `,
         )
@@ -345,7 +346,7 @@ void RE_Direct_Cloth( const in IncidentLight directLight, const in vec3 geometry
       sh.vertexShader = sh.vertexShader
         .replace(
           '#include <common>',
-          `#include <common>\nuniform float uTime;\nuniform vec2 uWind;\nuniform float uLifePxK;\nattribute vec4 aP0;\nattribute vec4 aP1;\nattribute vec4 aBulb;\nattribute vec3 aBulbCol;\nvarying vec3 vBulbCol;\n${WIND_GLSL}${LIFE_LINE_GLSL}`,
+          `#include <common>\nuniform float uTime;\nuniform vec2 uWind;\nuniform float uLifePxK;\nuniform float uBulbNight;\nattribute vec4 aP0;\nattribute vec4 aP1;\nattribute vec4 aBulb;\nattribute vec3 aBulbCol;\nvarying vec3 vBulbCol;\n${WIND_GLSL}${LIFE_LINE_GLSL}`,
         )
         .replace(
           '#include <begin_vertex>',
@@ -354,7 +355,10 @@ void RE_Direct_Cloth( const in IncidentLight directLight, const in vec3 geometry
           vec3 bP = lifeLine( aP0.xyz, aP1.xyz, aP0.w, aP1.w, aBulb.x, bT ) - vec3( 0.0, aBulb.y, 0.0 );
           float bD = length( cameraPosition - bP );
           // keep a lit bulb at least ~1.2 px wide so festoons read as dotted light lines from afar
-          float bR = max( aBulb.z, bD * uLifePxK * 0.6 );
+          // at night a lit bulb stays ≥ ~1.2 px (festoons read as dotted light lines from afar); by day
+          // only nearby bulbs get the floor
+          float bFloor = max( uBulbNight, 1.0 - smoothstep( 50.0, 90.0, bD ) );
+          float bR = max( aBulb.z, bD * uLifePxK * 0.6 * bFloor );
           vec3 transformed = bP + position * bR;
           vBulbCol = aBulbCol;
           `,
@@ -383,5 +387,6 @@ void RE_Direct_Cloth( const in IncidentLight directLight, const in vec3 geometry
     this.uniforms.uLifePxK.value = (2 * Math.tan((cam.fov * Math.PI) / 360)) / h;
     const lights = Math.min(1, Math.max(0, this.ctx.uniforms.uLights.value));
     this.uniforms.uBulbGain.value = 0.04 + lights * 5.5;
+    this.uniforms.uBulbNight.value = lights;
   }
 }

@@ -495,6 +495,8 @@ export interface Field {
   setDensity(k: number): void;
   density(): number;
   setQuality(level: QualityLevel): void;
+  /** the landscape band's maps became available (built incrementally after boot) */
+  setOuter(outer: OuterMaps): void;
   stats(): { tiles: string; blades: number; verts: number };
   dispose(): void;
 }
@@ -702,6 +704,13 @@ export function createField(ctx: CityContext, maps: CoverMaps, outer: OuterMaps 
     density: () => densityK,
     setQuality(lvl: QualityLevel) {
       build(lvl);
+    },
+    setOuter(o: OuterMaps) {
+      shared.tCoverO.value = o.texCover;
+      shared.tFlowerO.value = o.texFlower;
+      shared.tGHO.value = o.texHeight;
+      shared.uOutXf.value.set(o.x0, o.z0, 1 / o.res, 1 / o.fres);
+      shared.uOutDim.value.set(o.w, o.h, 1, 0);
     },
     stats() {
       let blades = 0,

@@ -660,10 +660,10 @@ function compact(): THREE.BufferGeometry {
     W = 1.66;
   loftBody(
     b,
-    { L, W, sill: 0.27, belt: 0.86, roof: 1.47, noseH: 0.75, hoodH: 0.86, wsBase: 0.82, wsTop: 0.08, rwTop: -1.32, rwBase: -1.6, deckH: 0.96, tailH: 0.9, pillarB: -0.42, glassRear: -1.28, tumble: 0.14, axF: 1.155, axR: -1.145, wheelR: 0.29 },
+    { L, W, sill: 0.28, belt: 0.93, roof: 1.46, noseH: 0.78, hoodH: 0.9, wsBase: 0.92, wsTop: 0.12, rwTop: -1.18, rwBase: -1.6, deckH: 1.0, tailH: 0.93, pillarB: -0.36, glassRear: -1.12, tumble: 0.15, axF: 1.155, axR: -1.145, wheelR: 0.29 },
     false,
   );
-  carDetails(b, { L, W, wheelR: 0.29, wheelW: 0.22, axF: 1.155, axR: -1.145, wheelX: W / 2 - 0.08, bodyY: 0.3, bodyH: 0.62, bodyR: 0.26, lightY: 0.62, roundLights: true });
+  carDetails(b, { L, W, wheelR: 0.29, wheelW: 0.22, axF: 1.155, axR: -1.145, wheelX: W / 2 - 0.08, bodyY: 0.3, bodyH: 0.62, bodyR: 0.26, lightY: 0.66, roundLights: true });
   return b.build();
 }
 
