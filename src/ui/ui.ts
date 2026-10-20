@@ -39,7 +39,7 @@ const POI_NOTES: Record<string, string> = {
   industry: 'Chimneys & warehouses',
   vista: 'The town, forest & mountains',
   country: 'Farmland, hedgerows & villages',
-  coast: 'Open sea, the island & ships',
+  coast: 'Headland, island & open sea',
   riverbend: 'Eye level on the riverbank',
 };
 
