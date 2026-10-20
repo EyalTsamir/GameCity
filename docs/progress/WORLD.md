@@ -17,6 +17,15 @@ Branch: work continues from `claude/tinyhaven-graphics-audit-l089m8` (fast-forwa
 `claude/pensive-gates-bim12i` (the session's designated branch).
 
 ## Resume here (keep current)
+* 2026-10-20 07:31 UTC — 3rd usage-limit stop (agents stopped ~02:30, reset 06:30; container rebooted ~07:28).
+  Restored, tree clean at 9c3dc05; all 7 agents resumed 07:31. Lead running integration capture
+  shots/world/lead/int1 (the 12 critique views at 18.2 h, full city) for a before/after vs critique/a.
+  Since 01:31: wear M2 (old town eye level, roofs, shops, puddles, terrace night lights) done; streetlife M2–M4
+  (riders, plaza life, vendors, rounder cars) done → car paint gloss pending; ground pond verified, foliage removed
+  its pond reeds; air golden-hour rework (two-medium in-scatter, raymarched clouds) → cloud artefacts + long
+  shadows pending; world M3 (country roads, herds, tractor, villages, far land) done; POIs final: overview
+  d640/p13, coast (230,3,−40), riverbend (−300,1,118). Lesson: when a stop says "resets HH:MM", schedule a
+  one-shot wake (send_later) for HH:MM+3 min — hourly watchdog firings during the limit cannot act.
 * 2026-10-20 01:31 UTC — 2nd usage-limit stop: all agents stopped ~21:30 (reset 01:20); watchdog firings
   21:29–00:29 could not act (session also limited); container rebooted ~01:29. Restored servers/autocheckpoint/
   locks; tree clean at dc885c7 (pushed). All 7 agents resumed 01:31. State at stop: world M2 done (countryside,
