@@ -106,9 +106,9 @@ export function decorate(ctx: CityContext, cloth: ClothSystem, b: BuildingsLike 
     if (sp.kind !== 'court') continue;
     const rng = new Rng((Math.imul(sp.lotA + 1, 92821) ^ Math.imul(sp.lotB + 7, 68917)) >>> 0 || 3);
     const L = Math.hypot(sp.bx - sp.ax, sp.bz - sp.az);
-    if (sp.district === 'market' && L > 11 && rng.chance(0.6)) {
-      if (!opts.bunting) continue;
-      streetLine(cloth, rng, sp, sp.ax, sp.az, sp.bx, sp.bz, st, lamps, false);
+    if (sp.district === 'market') {
+      // the market square gets festive lines, never laundry (it hung right over the stalls)
+      if (opts.bunting && L > 6 && rng.chance(0.7)) streetLine(cloth, rng, sp, sp.ax, sp.az, sp.bx, sp.bz, st, lamps, false);
       continue;
     }
     if (!opts.laundry) continue;

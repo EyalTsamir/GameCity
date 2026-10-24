@@ -1,11 +1,9 @@
 # world-wear — weathering and lived-in clutter (world round)
 
 ## Resume here
-* DONE except the last verification: it10 (hotel sparse + atlas mip fix, apartments, golden hour) invariants {} and
-  judged good; it11w beach wet night shows broken lamp glare streaks in puddles; A/B stats read (Final report).
-* RUNNING (2026-10-24 ~08:35): full-city `final` (otfac + otst × 11 / 18.2 / 21.5, all modules) and `finalw`
-  (otst wet night). When done: check invariants/console, Read the PNGs, then message the lead + SubagentHandback.
-* Sheets: shots/world/wear/sheets/ba_street.png, ba_beach_oldtown.png, ba_close.png, streets_night.png.
+* FINISHED (2026-10-24 ~09:00). Final full-city verification shots/world/wear/final (otfac + otst × 11 / 18.2 /
+  21.5, all modules): invariants {}, console clean, no failed modules; wet-night street shots/world/wear/finalw.
+  Final report below; nothing running.
 
 ## Brief (from WORLD-PLAN.md scope 7 + briefs "### wear")
 Roads: patches, cracks + sealant, tyre polish, oil stains, faded markings, drains, puddles in low spots (mirror
@@ -92,37 +90,28 @@ Toggles (planned): `?nowear` (all new wear masks off), `?nogreen` (balcony green
 * (none yet)
 
 ## Final report
-**What changed** (all owned files; invariants {} and a clean console in every capture since it4):
-* *Buildings* — new `buildings/green.ts`: one alpha-tested leaf-card mesh (procedural 12-cell canvas atlas
-  uploaded as a DataTexture with colour bled into transparent texels so mips stay green; wind sway, mip-alpha,
-  back-light transmission, lamp light). New `buildings/clutter.ts`: window boxes with trailing flowers, balconies
-  with life (pots, palms, bougainvillea, hooked boxes, chairs, bikes, drying racks, AC, dishes, bracket pots),
-  Juliet balconies, see-through iron railings, climbers, shutters in four states, downpipes, rear AC, cables,
-  kitchen flues, flat-roof kit (solar water heaters, tanks, AC rows, aerials). Old town, market, houses,
-  apartments (hooked boxes), hotels (sparse `hotel` mode). Shell shader: shop interiors per shop type + office
-  lobbies (`bhShop`, parallax layers, AO, light pools), roller shutters with graffiti on closed shops, eye-level
-  wear (damp + salt line, north algae, ragged peeling render) and macro wear (age tone, sun bleaching, eave soot,
-  damp foot band), roof age + north-slope moss.
-* *Roads* — `roads/puddles.ts` (wetness that follows rain and dries; lamp reflections that follow the mirrored ray
-  to lamp height), gutter litter, worn mid-grey asphalt with lighter wheel paths, patches + sealant, overbanding,
-  braking marks, sediment gutter, faded paint that wears through at grazing angles; sidewalks / plazas: cracked,
-  replaced, sunken slabs, joint dirt, grime blotches, stain rings, gum / butts / leaves / paper.
-* *Props* — furniture wear shader, plaza planters planted with leaf cards, 21 kerbside café tables + A-frames,
-  terrace lights (parasol lamps, lanterns, lamp-map lights).
+**What changed** (owned files only; invariants {} and a clean console in every capture since it4, incl. the full city):
+* *Buildings* — `buildings/green.ts`: one alpha-tested leaf-card mesh (procedural atlas uploaded with colour bled
+  into transparent texels so mips stay green; wind sway, mip-alpha, back-light, lamp light). `buildings/clutter.ts`:
+  window boxes with trailing flowers, balconies with life (pots, palms, bougainvillea, hooked boxes, chairs, bikes,
+  racks, AC, dishes), Juliet balconies, iron railings, climbers, four shutter states, downpipes, cables, kitchen
+  flues, flat-roof kit (solar water heaters, tanks, AC, aerials); sparse `hotel` mode. Shell shader: shop interiors
+  per shop type + office lobbies, roller shutters with graffiti, eye-level and macro wall wear, roof age + moss.
+* *Roads* — `roads/puddles.ts` (wetness model, lamp reflections followed to lamp height), worn asphalt (wheel
+  paths, patches, sealant, overbanding, braking marks, sediment gutter, worn paint), litter, slab wear, stains.
+* *Props* — wear shader (rust, chips, stickers, lichen, greying), planted planters, 21 kerbside café tables +
+  A-frames, terrace lights (parasol lamps, lanterns, lamp-map lights).
 * *Services* — `ctx.services.buildings` (chimneys, balconies, facades, spans, perches, laundry, vents, shops,
-  setStaticLaundry) and `ctx.services.props` (cafes incl. 'sidewalk', discs, bbqs, washing, setStaticLaundry).
+  setStaticLaundry), `ctx.services.props` (cafes incl. 'sidewalk', discs, bbqs, washing, setStaticLaundry).
 
 **Toggles:** `?noclutter ?nogreen ?nowear ?nopuddles ?noterracelights`, `?wet=0..1`.
 
 **Shots:** shots/world/wear/sheets/ba_street.png, ba_beach_oldtown.png, ba_close.png, streets_night.png;
-it11w/beach_21h5.png (wet night), final/ (full city).
+final/sheet.png (full city), finalw/otst_21h5.png (wet night).
 
-**Cost** (A/B, otfac 11 h, same subset, toggles on vs off): draw calls 71 → 74 (+green, its shadow pass,
-props-green; the two static-laundry meshes vanish once life hides them), triangles 1.025 M → 1.125 M (+100 k;
-trim +41 k clutter, green 12 k, props −8 k; structural balconies/railings +26 k vs the pre-round trim). GPU
-estimate on the Adreno: ≈ 0.1–0.2 ms vertex (main + shadow), ≈ 0.2 ms fragment (wall wear 1 fetch, shop
-interiors on shop glass only, road wear / litter near the camera) → ≈ 0.35–0.45 ms of the 0.5 ms budget.
+**Cost** (otfac 11 h, toggles on vs off): draw calls 71 → 74 (green + its shadow pass, props-green; the two
+static-laundry meshes disappear once life hides them), triangles 1.025 M → 1.125 M. GPU estimate (Adreno X1-45):
+≈ 0.1–0.2 ms vertex + ≈ 0.2 ms fragment → ≈ 0.35–0.45 ms of the 0.5 ms budget.
 
-**Open:** puddle glare streaks are a little regular (ripple term); kerbside tables only in front of old-town
-cafés/bakeries; downtown curtain-wall towers barely weather (by design, glass); the tree planters on the plazas are
-vegetation's.
+**Open:** puddle glare streaks a little regular; kerbside tables only at old-town cafés/bakeries; glass towers
+barely weather (by design); plaza tree planters are vegetation's.

@@ -1,19 +1,19 @@
 # world-life — wind consumers, smoke, birds, small motion (world round)
 
 ## Resume here
-* 2026-10-24 03:35 (after the weekly stop) — all features coded + typechecking. Fixed the boot failure
-  the lead saw (Drift.initInsects ran before the instanced mesh existed); life.ts now fault-isolates every
-  part (cloth / extras / chimneys / drift) at creation AND at runtime (a failing part is switched off and
-  reported in invariants, the rest keeps running).
-* Verified earlier: bunting / festoons / market masts (m2a), factory smoke with soft depth + prewarm
-  (dbg/a.png, dbg2/s.png). Pending verification (m3b): house chimney smoke, leaves, motes, swifts, moths,
-  pigeons, gull perches, café string lights, butterflies/bees, kite strings.
-* Files: `src/world/life.ts`, `life/{glsl,cloth,decor,poles,extras,chimneys,drift}.ts`,
-  `sim/ambient/{smoke,birds,kites}.ts`, `sim/ambient.ts` (doc), landmarks/shaders.ts FLAG mode.
-* Running: capture set m3b → shots/world/life/m3b (roofs, otsun, parkeye, market, square, harbroof ×
-  7.5/18.6/21.5; incl. groundcover for flower patches). Private script: scratchpad/life/cap.mjs
-  (= scripts/capture-set.mjs with a 25-min ready timeout); debug probe scratchpad/life/smokedbg.js.
-* Next: judge m3b; tune; full-city milestone set (confirm failedModules empty); message lead.
+* 2026-10-24 09:10 (after the 5th stop) — m3c judged (shots/world/life/m3c/s1..s3.png): market star +
+  festoons at night excellent, courtyard + dryer laundry good, house smoke now visible (roofs_18h6,
+  harbroof_18h6) but near-camera puffs read as big round blobs. Fixes applied since (not yet re-shot):
+  market court spans festive-only (no laundry over the stalls); smoke nearFade r·1.2..5.5; cloth
+  translucency tinted by albedo² (backlit bunting kept its colours instead of washing to cream);
+  insects: faster ease-in, 6 nearest patches to the camera, bigger butterflies; leaves: flurries in gust
+  fronts (rate ∝ gust³), nearer trees; motes gain 0.09. Kite line now 2 mm + fades within 1.5 m of the
+  camera (lead: int1 tan band was likely a kite line ~1 m from the camera).
+* Running: full-city confirm shot at the lead's camera "82,1.6,20,14,40,4" 18.2 h →
+  shots/world/life/band/full_18h2.png (+ full.json).
+* Next: m3d capture (otsun 18.6 backlit bunting + motes, market 7.5 no laundry, flowers 11 insects,
+  parkeye leaves, swifts from street "otup=82,25,45,30,95,-40" at 18.6, harbroof smoke), then the
+  full-city milestone set + message lead.
 
 ## Brief (from WORLD-PLAN.md §6 + briefs)
 Wind consumers: flags on poles flap, bunting / festoon strings across old-town streets and the market,

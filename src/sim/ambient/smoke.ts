@@ -82,6 +82,29 @@ const DEFAULTS = { rate: 5, size: 1.0, life: 9, rise: 2.4, glow: 0 };
 
 // ─────────────────────────────────────────────────────────────── puff atlas ──
 // 2×2 variants. RG = pseudo-normal xy (0.5 = flat), B = thickness, A = coverage.
+/** cheap 2D value noise (hash lattice, smooth interpolation) → fbm in ~0..1, used at atlas build only */
+function vhash(i: number, j: number): number {
+  let h = Math.imul(i, 374761393) ^ Math.imul(j, 668265263);
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+}
+function vnoise(x: number, y: number): number {
+  const i = Math.floor(x),
+    j = Math.floor(y);
+  const fx = x - i,
+    fy = y - j;
+  const ux = fx * fx * (3 - 2 * fx),
+    uy = fy * fy * (3 - 2 * fy);
+  const a = vhash(i, j),
+    b = vhash(i + 1, j),
+    c = vhash(i, j + 1),
+    d = vhash(i + 1, j + 1);
+  return a + (b - a) * ux + (c - a) * uy + (a - b - c + d) * ux * uy;
+}
+function puffFbm(x: number, y: number): number {
+  return vnoise(x, y) * 0.55 + vnoise(x * 2.1 + 3.7, y * 2.1 - 1.3) * 0.3 + vnoise(x * 4.3 - 2.2, y * 4.3 + 5.1) * 0.15;
+}
+
 function makePuffAtlas(rng: Rng): THREE.DataTexture {
   const S = 128,
     N = 2,
@@ -109,6 +132,8 @@ function makePuffAtlas(rng: Rng): THREE.DataTexture {
           const q = 1 - (dx * dx + dy * dy);
           if (q > 0) f += q * q * b.w;
         }
+        // billowy detail: fbm modulation so the age erosion eats the puff into wisps, not a shrinking disc
+        f *= 0.5 + 0.5 * puffFbm(x * 2.6 + v * 11.3, y * 2.6 - v * 5.7);
         // keep a clean margin so mip levels don't bleed into the neighbouring variant
         const rr = Math.sqrt(x * x + y * y);
         f *= 1 - smooth(0.78, 0.97, rr);
@@ -168,7 +193,7 @@ void main() {
   mvPosition.xy += vec2(c * q.x - s * q.y, s * q.x + c * q.y) * r * 2.0;
   float d = -mvPosition.z;
   // fade when the camera gets close (avoids full-screen overdraw when flying through a plume)
-  float nearFade = smoothstep(r * 0.9, r * 3.5, d);
+  float nearFade = smoothstep(r * 1.2, r * 5.5, d);
   vColor = vec4(iColor.rgb, iColor.a * nearFade);
   float v = iMisc.y;
   vUv = (position.xy + 0.5) * 0.5 + vec2(mod(v, 2.0), floor(v * 0.5)) * 0.5;

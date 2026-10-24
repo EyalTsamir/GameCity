@@ -154,7 +154,7 @@ export function createFarmLife(model: LandscapeModel, uniforms: Record<string, T
           fy = (F.y0 + F.y1) / 2;
         fromField(fx, fy, w);
         if (!fieldOK(w.x, w.z)) continue;
-        const ck = cropKind(F.crop, F.small, model.grazing(w.x, w.z));
+        const ck = cropKind(F.crop, F.small, model.grazing(w.x, w.z), F.tun);
         const sd = slabD(w.x, w.z);
         // the tractor works a stubble / ploughed field in view of the town (W or S)
         if (ck === CK.stubble || ck === CK.ploughed) {

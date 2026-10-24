@@ -212,6 +212,7 @@ export class Drift {
   private ist!: Uint8Array;
   private ipatch!: Int16Array;
   private patches: { x: number; z: number; r: number }[] = [];
+  private patchD: number[] = [];
   private insectsOn = 0;
   insectsVisible = 0;
 
@@ -243,28 +244,34 @@ export class Drift {
     this.refresh -= dt;
     if (this.refresh <= 0) {
       this.refresh = 1;
+      const cp = ctx.camera.position;
       this.focus();
       if (Math.hypot(this.fx - this.lastFx, this.fz - this.lastFz) > 25) this.warm = 8;
       this.lastFx = this.fx;
       this.lastFz = this.fz;
-      const cp = ctx.camera.position;
       // only worth it when the camera is near the ground: leaves are invisible from the overview
       const camH = cp.y - this.ground(cp.x, cp.z);
       this.near.length = 0;
       this.patches.length = 0;
       if (camH < 40 && this.NB + this.NE > 0) {
         const gc = ctx.services.groundcover as { flowerPatches?: { x: number; z: number; r: number; density: number }[] } | undefined;
-        for (const p of gc?.flowerPatches ?? []) {
+        // the flower patches closest to the camera (insects are only seen within ~20 m)
+        const all = gc?.flowerPatches ?? [];
+        this.patchD.length = 0;
+        for (let k = 0; k < all.length; k++) {
+          const p = all[k];
           if (p.density < 0.15) continue;
-          if (Math.hypot(p.x - this.fx, p.z - this.fz) < 35 + p.r) this.patches.push(p);
-          if (this.patches.length >= 24) break;
+          const d = Math.hypot(p.x - cp.x, p.z - cp.z) - p.r;
+          if (d < 28) this.patchD.push(k + Math.max(0, d) / 64);
         }
+        this.patchD.sort((a, b) => (a % 1) - (b % 1));
+        for (let k = 0; k < Math.min(6, this.patchD.length); k++) this.patches.push(all[Math.floor(this.patchD[k])]);
       }
       if (camH < 90) {
         for (const tr of this.trees) {
           const d1 = Math.hypot(tr.x - this.fx, tr.z - this.fz),
             d2 = Math.hypot(tr.x - cp.x, tr.z - cp.z);
-          if (d1 < 50 || d2 < 35) this.near.push(tr);
+          if (d1 < 40 || d2 < 30) this.near.push(tr);
           if (this.near.length > 160) break;
         }
       }
@@ -274,7 +281,8 @@ export class Drift {
       const n = this.near.length;
       const gs = gustAt(this.fx, this.fz, t, wind);
       const ws = Math.hypot(wind.x, wind.y);
-      const rate = Math.min(60, n * (0.04 + 0.5 * gs * gs) * (0.3 + ws));
+      // a trickle in calm air, a flurry when a gust front passes through the crowns
+      const rate = Math.min(90, n * (0.03 + 1.6 * gs * gs * gs) * (0.3 + ws));
       this.spawnAcc += rate * dt;
       let guard = 0;
       while (this.spawnAcc >= 1 && guard++ < 20) {
@@ -412,7 +420,7 @@ export class Drift {
     // daytime, not too windy, flowers nearby (refreshed with the tree list)
     const wind = ctx.uniforms.uWind.value;
     const on = ctx.uniforms.uDaylight.value > 0.45 && Math.hypot(wind.x, wind.y) < 1.15 && this.patches.length > 0;
-    this.insectsOn += ((on ? 1 : 0) - this.insectsOn) * Math.min(1, dt * 0.5);
+    this.insectsOn += ((on ? 1 : 0) - this.insectsOn) * Math.min(1, dt * 2.5);
     let vis = 0;
     for (let k = 0; k < m; k++) {
       const bee = k >= this.NB;
@@ -471,7 +479,7 @@ export class Drift {
         const h = Math.hypot(this.ivx[k], this.ivz[k]);
         if (h > 0.05) this.iyaw[k] = Math.atan2(this.ivx[k], this.ivz[k]);
       }
-      const sc = this.insectsOn * (bee ? 0.016 : 0.045);
+      const sc = this.insectsOn * (bee ? 0.018 : 0.06);
       _p.set(this.ix[k], this.iy[k], this.iz[k]);
       if (bee) {
         _e.set(0.2, this.iyaw[k], 0);
@@ -616,7 +624,7 @@ export class Drift {
     this.su.uSunDir.value.copy(sd);
     const elev = sd.y;
     const low = Math.max(0, Math.min(1, (elev + 0.02) / 0.08)) * (1 - Math.min(1, Math.max(0, (elev - 0.15) / 0.5)) * 0.75);
-    this.su.uMoteGain.value = this.motes ? 0.05 * low * u.uDaylight.value : 0;
+    this.su.uMoteGain.value = this.motes ? 0.09 * low * u.uDaylight.value : 0;
     const sky = ctx.services.sky as { sun?: THREE.DirectionalLight } | undefined;
     if (sky?.sun) this.su.uSunCol.value.copy(sky.sun.color).multiplyScalar(Math.min(3, sky.sun.intensity) * 0.5);
     else this.su.uSunCol.value.setRGB(1, 0.85, 0.6);

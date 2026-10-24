@@ -97,6 +97,22 @@
   trees.ts). Running: m4b (overview, fields_w=180,2,330,260,32,18, coast, bay_w, pond_w × 11/18.2).
 * Next: judge m4b → golden-hour sea (saturate away from the sun, lower F at dusk), pond; full-city check;
   medium/low; final report.
+* 04:40 → 08:31 (10-24) usage stop + reboot; edits committed by the lead (9399c3f). Since 03:45:
+  m4b/m4c judged (smallholding patchwork reads well in the hero overview; pond at golden hour fine).
+  Lead notes done in code: landscape trees = leaf-card crowns (trees.ts: each clump → 8–20 alpha-tested
+  cards from a procedural leaf-cluster texture, rounded lighting normals, DoubleSide + face-flip undo, card
+  depth material for shadows; conifers = dark core cone + branch-spray cards), darker / varied greens
+  (treeAlbedo shared with impostors), weaker lime translucency; impostor atlas gets leafy surface clusters
+  (z-buffer splat) and transparent texels bleed mean values (no black / brown mips; also the leaf texture);
+  river banks = narrow mud line + reed patches + lush bank grass (no tan band), narrower worn towpath,
+  riprap only to ~75 m with grass between stones; water: far reflections shorter / darker / weaker
+  (farR), golden-hour sea mirrors more of the zenith with lower F + body scattering term (wBodyGlow, world
+  only); polytunnels only west of the town (fields.ts tunnelsOK / fTun: the white block in the hero beach
+  foreground was a tunnel plot at the dune edge), greyer plastic; market-garden beds narrower + brown soil;
+  dune pines / scrub never in fields (cover check); far forest: crisp noisy edges, stands (conifer dark /
+  broadleaf light), crown-group texture to 60 m footprint; hill meadows greener with height; hedges keep
+  ≥ ~1.5 px width far away; dune hummock normals + marram tussocks.
+* Running: m5a (overview, vista, riverbend, coast, fields2 × 18.2/11).
 * Tools: my capture script copy with 20-min load timeout = scratchpad `cap.mjs` (scratchpad is SHARED with other
   agents — keep my files under scratchpad/world* or land/). Offline map tool: scratchpad `land/map.ts` (bundle:
   `npx rolldown land/map.ts --platform node -o land/map.mjs`; `node land/map.mjs x0 z0 x1 z1 N out.bin &&

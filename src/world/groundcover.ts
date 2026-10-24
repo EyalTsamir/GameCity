@@ -90,6 +90,7 @@ export default function create(ctx: CityContext): CityModule {
     palette: gcPalette(),
   };
   ctx.services.groundcover = service;
+  if (ctx.debug.enabled) (service as unknown as Record<string, unknown>)._debug = { maps, window: cwin, field: () => field };
   const buildMs = performance.now() - t0;
 
   return {

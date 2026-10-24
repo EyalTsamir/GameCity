@@ -374,6 +374,9 @@ function broadStruct(st: Struct, rng: Rng): void {
     // two segments: the root flare tapers over the lower one (static for every LOD — keep it cheap)
     st.segs.push({ a: [s.base[0], s.base[1] - 0.2, s.base[2]], b: mid, ra: s.r * 1.38, rb: s.r * 0.88, sa: sway0, sb: sway0, near: false, aoA: 0.5, aoB: 0.9 });
     st.segs.push({ a: mid, b: s.top, ra: s.r * 0.88, rb: s.r * 0.64, sa: sway0, sb: sway0, near: false, aoA: 0.9, aoB: 0.72 });
+    // leader: the stem tapers on up into the crown (no open, cut-off trunk top shows through gaps)
+    const lead: V3 = [s.top[0] + (c[0] - s.top[0]) * 0.5, c[1] + Rv * (form === 'column' ? 0.75 : form === 'umbrella' ? 0.1 : 0.35), s.top[2] + (c[2] - s.top[2]) * 0.5];
+    st.segs.push({ a: s.top, b: lead, ra: s.r * 0.64, rb: Math.max(0.012, s.r * 0.12), sa: sway0, sb: { ph1: 0, w1: 0.3, ph2: 0, w2: 0 }, near: false, aoA: 0.72, aoB: 0.6 });
   }
   // limbs: from the stem tops / upper trunk to each leaf mass
   const stemFor = (L: Lobe3) => {
@@ -739,6 +742,24 @@ function frame(rng: Rng, out: V3, d: V3, hu: number, hv: number, rollRange = Mat
   ];
 }
 
+/**
+ * Card frame facing OUT of the crown (billboard-cloud style): the card plane is ⟂ `out` (± tilt), V rolled
+ * randomly around it, leaves leaning a little outward. Covers the crown surface seen from outside, where
+ * radial cards (frame()) are edge-on.
+ */
+function tangentFrame(rng: Rng, out: V3, hu: number, hv: number, tilt = 0.35): [V3, V3, V3] {
+  const r = randDir(rng);
+  let V = norm(cross(out, r));
+  V = norm(add(V, out, tilt));
+  const U = norm(cross(V, out));
+  const F = norm(cross(U, V));
+  return [
+    [U[0] * hu, U[1] * hu, U[2] * hu],
+    [V[0] * hv, V[1] * hv, V[2] * hv],
+    F,
+  ];
+}
+
 /** FAR LOD: trunk + limbs (static wood, always) and a few big dense cards per leaf mass */
 export function emitFar(st: Struct, ref: PlantRef, cards: InstBuf, woodBuf: InstBuf): void {
   const rng = new Rng(st.def.seed ^ 0x51f15e);
@@ -760,7 +781,8 @@ export function emitFar(st: Struct, ref: PlantRef, cards: InstBuf, woodBuf: Inst
       const e = li === 0 && st.form !== 'cone' ? 0.15 : 0.32;
       const p: V3 = [L.x + (out[0] * 0.55 + off[0] * 0.45) * L.rx * e, L.y + (out[1] * 0.55 + off[1] * 0.45) * L.ry * e, L.z + (out[2] * 0.55 + off[2] * 0.45) * L.rz * e];
       const hs = lobeR * (st.form === 'cone' ? 1.1 : 1.12) * rng.range(0.92, 1.1);
-      const [U, V, F] = frame(rng, out, randDir(rng), hs, hs * Math.min(1.2, L.ry / Math.max(0.2, (L.rx + L.rz) / 2)) + 0.0);
+      const cdir = norm(add(out, randDir(rng), 0.55));
+      const [U, V, F] = tangentFrame(rng, cdir, hs, hs * Math.min(1.2, L.ry / Math.max(0.2, (L.rx + L.rz) / 2)), 0.2);
       // centre the clump drawing on the mass (the dense tile's twig base sits at the bottom)
       const c: V3 = [p[0] - V[0] * 0.15, p[1] - V[1] * 0.15, p[2] - V[2] * 0.15];
       card(cards, ref, st, c, U, V, sphereNormal(st, p, L, F, 0.86), crownAO(st, p) * 0.95, -1, uv, L.tint * rng.range(0.94, 1.06), { ph1: L.ph, w1: L.w * 0.8, ph2: rng.next(), w2: 0.2 }, 0.6);
@@ -889,6 +911,9 @@ export function emitNear(st: Struct, ref: PlantRef, cards: InstBuf, woodBuf: Ins
         U = [Ud[0] * hu * 0.85, Ud[1] * hu * 0.85, Ud[2] * hu * 0.85];
         V = [Vd[0] * hv, Vd[1] * hv, Vd[2] * hv];
         F = norm(cross(Ud, Vd));
+      } else if (i % 2 === 1 || rng.chance(0.3)) {
+        // every other cluster faces out of the crown (covers its surface seen from outside)
+        [U, V, F] = tangentFrame(rng, norm(add(out, randDir(rng), 0.5)), hu, hv);
       } else {
         [U, V, F] = frame(rng, out, t.d, hu, hv);
       }

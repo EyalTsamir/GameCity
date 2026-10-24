@@ -122,10 +122,11 @@ Budget (high): 0.6 ms GPU, few draw calls.
   `detail-0.7` / `detail-0.45` steps (after refl-low, before no-ao); postfx calls the setter on every
   service that has it.
 
-### URL toggles (planned)
-`?noatmo` (three's linear fog in world mode, A/B), `?atmo=<k>` density multiplier, `?nomist`,
-`?noclouds`, `?nocloudshadow`, `?tiltshift` (force the miniature DOF in world mode), `?nodof`,
-`?gradeold` (diorama grade in world mode).
+### URL toggles (final)
+`?noatmo` (three's linear fog in world mode), `?atmo=<k>` haze multiplier, `?nomist`, `?paintsky` (old
+gradient sky), `?noclouds` (no cumulus/cirrus/cloud shadows), `?clouds=<0..1>` (fixed coverage),
+`?noshafts`, `?tiltshift` (miniature DOF in world mode), `?lensN=<f-number>` (default 1.6), `?gradeold`
+(diorama grade in world mode), `?weather=rain|clear`. Diorama: `?diorama` (everything original).
 
 ### GPU estimate (high, 1920×1025)
 fog chunk ~50–70 ALU per lit fragment (~4 M fragments incl. overdraw) ≈ 0.15–0.3 ms; sky LUT ≈ 0.05 ms per
@@ -133,11 +134,15 @@ refresh (rare); clouds in the dome ≈ 0.2–0.3 ms when the sky fills ~40 % of 
 in far views −0.4…−0.8 ms. Net ≈ 0 … +0.4 ms; 0 extra draw calls (cotton puffs −1 in world mode).
 
 ## Milestones
-* M1 atmosphere + world dome + world palette + optics/grade — pending
-* M2 physical sky LUT + light from the sky — pending
-* M3 high clouds + cloud shadows — pending
-* M4 night sky — pending
-* M5 adaptive steps for others, mist, light shafts (if the sun is in hero frames), polish — pending
+* M1 atmosphere (two media, own in-scatter colours, mist, legacy-fog macros) + world dome + world key +
+  optics (lens DOF) + grade — DONE (m2b/sky2…g4)
+* M2 physical sky (LUT + CPU twin, skylight MS, golden-hour visual sun, Belt of Venus, exposure-compensated
+  brightness) + env bake from it — DONE (sky5…sky8)
+* M3 clouds: raymarched half-res cumulus volume + temporal resolve, 2D cirrus, field cloud shadows,
+  evening decay — DONE (sky7_a, sky8)
+* M4 night: Milky Way, denser stars, town sky glow, moonlit clouds — DONE (sky3_night, t1)
+* M5 adaptive steps (grass/leaf/landscape trees, tested), dawn/dusk mist, sun shafts, golden-hour pass
+  (lead-approved g3/g4/sky7) — DONE
 
 ## Views used (capture-set `--views`)
 `overview;ot_eye=82,1.6,20,10,40,4;river_w=-30,1.6,118,14,95,3;hz=0,30,-20,300,200,8;beach_e=148,2,58,15,-90,4`
@@ -147,11 +152,11 @@ in far views −0.4…−0.8 ms. Net ≈ 0 … +0.4 ms; 0 extra draw calls (cott
   Plan: return the composer's stable depth texture (full res, raw depth, blitted after the RenderPass, so it
   is a separate FBO and legal to sample during the next scene pass) + near/far/size of the frame it belongs
   to: `{ texture, linear: false, near, far, width, height } | null` (null while postfx is off). Main view only
-  (the water reflection pass has another size → disable the fade there). — in M1.
+  (the water reflection pass has another size → disable the fade there). — DONE (postfx.ts), relayed.
 
 ## Requests to other areas
 * world (water): the sea mirrors my dome uniforms (uZenith/uHorizon = the shown physical sky; uHorizon =
-  the haze ~120° from the sun). A hot glitter path toward a low sun and a saturated teal/blue body are
+  the haze ~120° from the sun, 35 % toward the blue air). A hot glitter path toward a low sun and a saturated teal/blue body are
   the water shader's; clouds are not in the reflection (the deck is a screen-space volume) — if wanted,
   `cuField()` in sky/cloudLayer.ts gives a cheap 2D cloud mask for a mirrored direction.
 * world (landscape): at 19.3 the countryside trees looked noon-bright lime in hz_w (sky3_b.png).
@@ -160,4 +165,7 @@ in far views −0.4…−0.8 ms. Net ≈ 0 … +0.4 ms; 0 extra draw calls (cott
 * life: thin bright diagonal line across the sea in world/m3b coast2_18h2 — likely a kite string.
 
 ## Changes outside my area
-(none)
+* `src/core/context.ts` (lead-owned, additive type only): `Services.postfx.softDepth?()` for life.
+* Contract nuance (no file change): in world mode the sky module writes `globalUniforms.uSunDir` every
+  frame after main.ts with the VISUAL sun (= clock sun, lowered at golden hour by `skyElevationDeg`), so
+  every shader's backlight / translucency matches the rendered light. `clock.sunDir` stays the clock's.

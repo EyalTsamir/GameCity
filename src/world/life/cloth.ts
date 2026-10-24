@@ -55,7 +55,7 @@ export class ClothSystem {
   readonly lines: Line[] = [];
   private pieces: { line: number; s: number; pole: null | { top: THREE.Vector3; bottom: THREE.Vector3 }; o: PieceOpts }[] = [];
   private bulbs: { line: number; s: number; drop: number; r: number; col: string }[] = [];
-  readonly uniforms = { uLifeFarFlutter: { value: 220 }, uClothTrans: { value: 0.75 }, uLifePxK: { value: 0.001 }, uBulbGain: { value: 0 }, uBulbNight: { value: 0 } };
+  readonly uniforms = { uLifeFarFlutter: { value: 220 }, uClothTrans: { value: 1.1 }, uLifePxK: { value: 0.001 }, uBulbGain: { value: 0 }, uBulbNight: { value: 0 } };
   clothMesh: THREE.Mesh | null = null;
   wireMesh: THREE.Mesh | null = null;
   bulbMesh: THREE.Mesh | null = null;
@@ -197,7 +197,7 @@ void RE_Direct_Cloth( const in IncidentLight directLight, const in vec3 geometry
   RE_Direct_Physical( directLight, geometryPosition, geometryNormal, geometryViewDir, geometryClearcoatNormal, material, reflectedLight );
   float back = max( -dot( geometryNormal, directLight.direction ), 0.0 );
   float fwd = pow( max( dot( -geometryViewDir, directLight.direction ), 0.0 ), 5.0 );
-  reflectedLight.directDiffuse += directLight.color * material.diffuseColor * uClothTrans * back * ( 0.35 + 1.6 * fwd );
+  reflectedLight.directDiffuse += directLight.color * material.diffuseColor * material.diffuseColor * uClothTrans * back * ( 0.5 + 1.2 * fwd );
 }
 #undef RE_Direct
 #define RE_Direct RE_Direct_Cloth

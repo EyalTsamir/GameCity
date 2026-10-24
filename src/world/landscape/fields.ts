@@ -121,6 +121,8 @@ export interface Field extends Parcel {
   iy: number;
   /** the parent parcel's id (k·13 + j) */
   ppid: number;
+  /** polytunnels allowed (smallholdings west of the town, never in the beach foreground) */
+  tun: boolean;
 }
 
 /** the belt of small plots round the town (parcel centre within this of the slab, not in the north) */
@@ -139,6 +141,11 @@ export function isSmall(x0: number, y0: number, x1: number, y1: number): boolean
   fromField((x0 + x1) / 2, (y0 + y1) / 2, _w);
   return slabDistXZ(_w.x, _w.z) < TOWN_EDGE && _w.z > -150;
 }
+/** polytunnels only west of the town (twin: fTun) */
+export function tunnelsOK(x0: number, y0: number, x1: number, y1: number): boolean {
+  fromField((x0 + x1) / 2, (y0 + y1) / 2, _w);
+  return _w.x < -40;
+}
 
 /** the field at a field-frame point — parcel, its 2–3 strips, or (town edge) its grid of small plots */
 export function fieldAt(qx: number, qy: number, out: Field): Field {
@@ -146,6 +153,7 @@ export function fieldAt(qx: number, qy: number, out: Field): Field {
   let pid = out.k * 13 + out.j;
   out.ppid = pid;
   out.small = isSmall(out.x0, out.y0, out.x1, out.y1);
+  out.tun = out.small && tunnelsOK(out.x0, out.y0, out.x1, out.y1);
   out.nx = out.ny = 1;
   out.ix = out.iy = 0;
   if (out.small) {
@@ -191,7 +199,7 @@ export function fieldAt(qx: number, qy: number, out: Field): Field {
   return out;
 }
 
-const newField = (): Field => ({ k: 0, j: 0, x0: 0, y0: 0, x1: 0, y1: 0, crop: 0, pid: 0, small: false, nx: 1, ny: 1, ix: 0, iy: 0, ppid: 0 });
+const newField = (): Field => ({ k: 0, j: 0, x0: 0, y0: 0, x1: 0, y1: 0, crop: 0, pid: 0, small: false, nx: 1, ny: 1, ix: 0, iy: 0, ppid: 0, tun: false });
 
 /** the fields (strips / plots) of the parcel at field-frame point (cx, cy) */
 export function fieldsOfParcel(cx: number, cy: number): Field[] {
@@ -230,10 +238,10 @@ const KIND_N = [0, 1, 2, 3, 4, 5, 6, 7, 8];
 const CUM_S = [0.16, 0.26, 0.36, 0.48, 0.56, 0.66, 0.74, 0.82, 0.9, 0.95, 1.01];
 const KIND_S = [9, 10, 2, 3, 8, 0, 5, 4, 6, 7, 11];
 /** crop kind of a field: smallholding mix, grazing land (pasture / hay / fallow) or the farmland mix */
-export function cropKind(ch: number, small: boolean, graze: number): number {
+export function cropKind(ch: number, small: boolean, graze: number, tun = false): number {
   if (small) {
-    for (let i = 0; i < CUM_S.length; i++) if (ch < CUM_S[i]) return KIND_S[i];
-    return 11;
+    for (let i = 0; i < CUM_S.length; i++) if (ch < CUM_S[i]) return KIND_S[i] === 11 && !tun ? 9 : KIND_S[i];
+    return tun ? 11 : 9;
   }
   if (graze >= 0.5) return ch < 0.6 ? 3 : ch < 0.85 ? 4 : 6;
   for (let i = 0; i < CUM_N.length; i++) if (ch < CUM_N[i]) return KIND_N[i];
@@ -278,12 +286,17 @@ bool fSmall(vec4 box) {
   vec2 d = max(max(vec2(${SLAB.x0.toFixed(1)}, ${SLAB.z0.toFixed(1)}) - w, w - vec2(${SLAB.x1.toFixed(1)}, ${SLAB.z1.toFixed(1)})), 0.0);
   return length(d) < ${TOWN_EDGE.toFixed(1)} && w.y > -150.0;
 }
+// polytunnels only west of the town (twin of tunnelsOK)
+bool fTun(vec4 box) {
+  vec2 c = 0.5 * (box.xy + box.zw);
+  return FROT[0][0] * c.x + FROT[0][1] * c.y < -40.0;
+}
 // crop kind (twin of cropKind): 0 wheat 1 stubble 2 greens 3 pasture 4 hay 5 ploughed 6 fallow
 // 7 sunflower 8 orchard 9 market garden 10 maize 11 polytunnels
-int fCropKind(float ch, bool small, float graze) {
+int fCropKind(float ch, bool small, float graze, bool tun) {
   if (small) {
     return ch < ${CUM_S[0]} ? 9 : ch < ${CUM_S[1]} ? 10 : ch < ${CUM_S[2]} ? 2 : ch < ${CUM_S[3]} ? 3 : ch < ${CUM_S[4]} ? 8 :
-      ch < ${CUM_S[5]} ? 0 : ch < ${CUM_S[6]} ? 5 : ch < ${CUM_S[7]} ? 4 : ch < ${CUM_S[8]} ? 6 : ch < ${CUM_S[9]} ? 7 : 11;
+      ch < ${CUM_S[5]} ? 0 : ch < ${CUM_S[6]} ? 5 : ch < ${CUM_S[7]} ? 4 : ch < ${CUM_S[8]} ? 6 : ch < ${CUM_S[9]} ? 7 : (tun ? 11 : 9);
   }
   if (graze >= 0.5) return ch < 0.6 ? 3 : ch < 0.85 ? 4 : 6;
   return ch < ${CUM_N[0]} ? 0 : ch < ${CUM_N[1]} ? 1 : ch < ${CUM_N[2]} ? 2 : ch < ${CUM_N[3]} ? 3 : ch < ${CUM_N[4]} ? 4 :

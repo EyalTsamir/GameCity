@@ -239,6 +239,7 @@ ${WAVES_GLSL}
 
 vec3 wN = vec3(0.0, 1.0, 0.0);
 vec3 wRefl = vec3(0.0);
+vec3 wBodyGlow = vec3(0.0);
 vec3 wGlint = vec3(0.0);
 float wAlphaB = 1.0;
 float wF = 0.0;
@@ -575,6 +576,11 @@ vec4 waterBase() {
   wGlint = vec3(0.0);
   vec3 foamC = wFoam * mix(1.0, 0.45, uNight);
   vec3 base = mix(wc * (1.0 - hDark * 0.4) * wDebug.y, foamC, foam);
+#ifdef TH_WORLD
+  // golden hour (world): sky light scattered inside the water keeps the body a readable teal-blue
+  // under the weak low sun (without it the sea is only a dim mirror of the pale haze)
+  wBodyGlow = wc * (uSkyZen * 0.7 + vec3(0.004, 0.012, 0.016)) * 0.9 * uDusk * (1.0 - uNight) * (1.0 - foam) * (1.0 - mPond) * wDebug.y;
+#endif
   return vec4(base, wAlphaB);
 }
 `;
@@ -637,7 +643,7 @@ reflectedLight.indirectDiffuse += diffuseColor.rgb * thLampLight(vWW, vec3(0.0, 
       .replace(
         '#include <opaque_fragment>',
         /* glsl */ `{
-  vec3 th_col = outgoingLight * wAlphaB * (1.0 - wF) + wRefl * wF + wGlint;
+  vec3 th_col = (outgoingLight + wBodyGlow) * wAlphaB * (1.0 - wF) + wRefl * wF + wGlint;
   float th_a = clamp(wAlphaB * (1.0 - wF) + wF, 0.0, 1.0);
   gl_FragColor = vec4(th_col / max(th_a, 1e-3), th_a);
 #ifdef TH_WATER_DEBUG

@@ -304,7 +304,7 @@ export function placeTrees(model: LandscapeModel, density: number): { list: Tree
         }
         for (const P of plots) {
         fromField((P.x0 + P.x1) / 2, (P.y0 + P.y1) / 2, w);
-        const ck = cropKind(P.crop, P.small, model.grazing(w.x, w.z));
+        const ck = cropKind(P.crop, P.small, model.grazing(w.x, w.z), P.tun);
         const pk = P.pid;
         if (ck === CK.pasture && lhash(pk, 61) < (P.small ? 0.35 : 0.55)) {
           // pasture oak
@@ -368,6 +368,7 @@ export function placeTrees(model: LandscapeModel, density: number): { list: Tree
 
   // ── dune pines behind the southern beach, a few wind-bent trees on the cliff tops
   {
+    const dc = { water: 0, sand: 0, rock: 0, forest: 0, field: 0, meadow: 0, wet: 0 };
     for (let i = 0; i < 900; i++) {
       const z = 160 + 560 * hash2i(i, 1, 41);
       const x = 60 + 520 * hash2i(i, 2, 41);
@@ -376,6 +377,8 @@ export function placeTrees(model: LandscapeModel, density: number): { list: Tree
       const y = H(x, z);
       if (!landOK(x, z, y, 8)) continue;
       if (vnoise(x / 70, z / 70, 42) < 0.45) continue;
+      // on the dunes / coastal meadow, never in a field
+      if (model.cover(x, z, dc, y).field > 0.3) continue;
       const s = hash2i(i, 3, 41);
       B.add(x, y, z, 8 + 6 * s, 7 + 4 * s, KIND.conifer, seed++);
     }
@@ -385,9 +388,12 @@ export function placeTrees(model: LandscapeModel, density: number): { list: Tree
       const x = 60 + 560 * hash2i(i, 5, 43);
       const sd = model.coastSD(x, z);
       if (sd < 26 || sd > 95) continue;
-      if (vnoise(x / 38, z / 38, 44) < 0.5 - 0.15 * smooth(40, 80, sd)) continue;
+      // a few thickets, not a dotted carpet (dark dots read as a leopard pattern from the hero view)
+      if (vnoise(x / 45, z / 45, 44) < 0.6) continue;
       const y = H(x, z);
       if (!landOK(x, z, y, 3)) continue;
+      model.cover(x, z, dc, y);
+      if (dc.sand < 0.06 || dc.field > 0.2) continue;
       const s = hash2i(i, 6, 43);
       const hh = 1.2 + 1.5 * s;
       B.add(x, y, z, hh, hh * (1.3 + 0.6 * hash2i(i, 7, 43)), KIND.small, seed++);
