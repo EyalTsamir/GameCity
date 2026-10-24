@@ -229,7 +229,7 @@ vGcRough = 0.85;
         vec3 lc = pick < 0.36 ? vec3( 0.075, 0.045, 0.022 ) : pick < 0.64 ? vec3( 0.14, 0.085, 0.035 ) : pick < 0.86 ? vec3( 0.1, 0.095, 0.035 ) : pick < 1.0 - bright ? vec3( 0.2, 0.13, 0.05 ) : ( fract( rc.z * 5.7 ) < 0.5 ? vec3( 0.38, 0.2, 0.045 ) : vec3( 0.36, 0.1, 0.03 ) );
         vGcCol = lc * ( 0.8 + 0.35 * fract( rc.z * 13.1 ) ) * ( 0.75 + 0.25 * abs( side ) );
         objectNormal = normalize( vec3( ( rc.y - 0.5 ) * 0.3, 1.0, ( rc.z - 0.5 ) * 0.3 ) );
-        vGcRough = 0.7;
+        vGcRough = 0.95;   // dry litter: matte (no sheen that would read as pale pebbles)
         vGcTrans = 0.15;
       } else {
         // ── a blade: grass / unmown tuft / meadow / reed / marram / flower

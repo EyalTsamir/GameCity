@@ -469,6 +469,11 @@ export function setGroundCover(cover: THREE.Texture, flower: THREE.Texture): voi
   gcUniforms.uGcOn.value = 1;
 }
 
+/** true once the ground shader reads the cover maps (groundcover invariant) */
+export function groundCoverOn(): boolean {
+  return gcUniforms.uGcOn.value > 0.5;
+}
+
 /** Called by the blade field whenever its ring radii change (quality / adaptive density). */
 export function setGroundBladeFade(lawnA0: number, lawnA1: number, lawnB0: number, lawnB1: number, long0: number, long1: number): void {
   gcUniforms.uGcPresA.value.set(lawnA0, lawnA1, lawnB0, lawnB1);

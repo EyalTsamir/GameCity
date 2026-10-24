@@ -20,7 +20,7 @@ import { buildCoverMaps, type FlowerPatch } from './groundcover/mask';
 import { createCoverWindow } from './groundcover/outer';
 import { createField, type Field, type QualityLevel } from './groundcover/field';
 import { gcPalette, type GcPalette } from './groundcover/palette';
-import { setGroundCover } from './terrain/ground';
+import { setGroundCover, groundCoverOn } from './terrain/ground';
 import { createLilies } from './groundcover/lily';
 
 export interface GroundcoverService {
@@ -35,6 +35,8 @@ export default function create(ctx: CityContext): CityModule {
   const t0 = performance.now();
   const prm = ctx.debug.params;
   const maps = buildCoverMaps(ctx);
+  // hand the maps to the ground shader (far field: lengths, flowers, litter, forest floor, blade presence)
+  setGroundCover(maps.texCover, maps.texFlower);
   // blades beyond the slab: a roaming cover window around the camera, built in the background from the
   // world's landscape (≈ 4 ms per frame at 60 fps), double-buffered — no boot cost, no hitch
   const cwin = prm.has('nogcouter') ? null : createCoverWindow(ctx);
@@ -133,6 +135,12 @@ export default function create(ctx: CityContext): CityModule {
         windowCells: cwin?.active()?.cells ?? 0,
         buildMs: Math.round(buildMs),
       };
+    },
+    invariants() {
+      const out: string[] = [];
+      // the terrain ground must read the cover maps, or the far field loses flowers / forest floor / turf
+      if (ctx.services.terrain && !groundCoverOn()) out.push('terrain ground is not reading the cover maps (setGroundCover)');
+      return out;
     },
     dispose() {
       scene.onBeforeRender = prev as unknown as THREE.Scene['onBeforeRender'];
