@@ -89,7 +89,7 @@ if ( thHidden( aPart, aInst2.x ) ) transformed = vec3( 0.0 );
   vRough = aMeta.w - fin * 4.0;
   vCoat = ( fin > 0.5 && fin < 2.5 ) ? 1.0 : 0.0;
   vMetal = ( fin > 2.5 ) ? 1.0 : 0.0;
-  vGain = fin < 0.5 ? 1.0 : fin < 1.5 ? 1.8 : fin < 2.5 ? 3.2 : 1.4;
+  vGain = fin < 0.5 ? 1.0 : fin < 1.5 ? 2.4 : fin < 2.5 ? 3.6 : 1.5;
 }
 `;
 
@@ -114,7 +114,7 @@ float thStreetRefl( vec3 viewDir, vec3 n, float soft ) {
   float hs = 0.05 + 0.24 * hb * hb;
   float sky = smoothstep( hs - w, hs + w, e );
   float gnd = smoothstep( -w, w, e );
-  return mix( 0.2, mix( 0.5, 1.0 + 0.7 * exp( -max( e - hs, 0.0 ) * 8.0 ), sky ), gnd );
+  return mix( 0.16, mix( 0.36, 1.0 + 0.8 * exp( -max( e - hs, 0.0 ) * 8.0 ), sky ), gnd );
 }
 `;
 
@@ -126,7 +126,7 @@ export function createVehicleMaterial(uniforms: GlobalUniforms, atlas: THREE.Tex
     roughness: 0.5,
     metalness: 0.0,
     clearcoat: 1,
-    clearcoatRoughness: 0.06,
+    clearcoatRoughness: 0.1,
   });
   material.name = 'traffic-vehicle';
   material.onBeforeCompile = (shader) => {
@@ -155,7 +155,7 @@ export function createVehicleMaterial(uniforms: GlobalUniforms, atlas: THREE.Tex
       )
       .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += vEmit.rgb * mix( vec3( 1.0 ), diffuseColor.rgb, vEmit.a );');
   };
-  material.customProgramCacheKey = () => 'traffic-vehicle-v6';
+  material.customProgramCacheKey = () => 'traffic-vehicle-v7';
   patchLampMaterial(material); // night street-light map (night agent)
 
   const depth = new THREE.MeshDepthMaterial();

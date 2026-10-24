@@ -16,10 +16,17 @@
 * m1c/m1d (m1d_sheet.png): date palms now full arching crowns ✔, planters weathered ✔, ot street tree reads
   as a real leafy tree ✔; Washingtonia crowns looked like stacked tufts → fixed (28–36 fans on short petioles,
   blade ⟂ petiole facing out, petiole wood). Pond reeds/lilies removed (groundcover owns them, lead request).
-* 2026-10-24 03:40 — resumed after the weekly stop. RUNNING: capset m1e (11/18.2/21.5 × palmB, ot, park, parkair,
-  forest, dtp, overview) + stats shots.
-* NEXT: judge golden hour (translucency) + night (lamp light), overview; counts → GPU estimate; wind check;
-  milestone message to lead.
+* m1e (m1e_11/18h2/21h5.png): park at golden hour reads as a real park ✔; spruce = sparse skeleton of
+  sprays (needs density); unexplained bare trunk stubs in the park view (investigating: scratchpad/proj.js
+  prints plant roots projected to screen via console.warn after 15 s); fan palms fixed after m1e.
+* Lead notes done in code (to verify): sky fill on cards (cardKnobs.skyFill 0.7 × sky-facing × AO) so shaded
+  crowns are dark green not black; cards within ~0.7–1.9 m of the camera dissolve.
+* Stats (quiet machine, full-ish city, high): veg build 0.6–2.2 s (atlas 0.23 s, far 0.15–1 s); park eye:
+  cards 50.1k static + 2.9k near, wood 7.8k + 0.6k; scene 1.59 M tris vs 1.55 M with ?noleafcards; draws 84 vs 86.
+  → cut: trunks 2 segments, forest far cards 1–2/lobe (cone 2), band density 0.9 → 0.6. Quality tiers: far-card
+  keep (cardKnobs.farKeep high 1 / medium 0.85 / low 0.6) + leafDist 75/42/0.
+* 2026-10-24 08:35 resumed after 5th stop. NEXT: verification capture m1f (18.2 shade, inside-crown, park stub
+  check), spruce density, then milestone message.
 * Tools: scratchpad/{capset.sh OUT HOURS [q] [views], dumpatlas.sh, vstat.py, bench/}.
 * Views: park=-55,4,15,26,200,6; ot=66,3.5,-13.9,13,25,4; dt=-22,3.5,-68.9,14,35,4; palms=118,5,30,18,90,6;
   forest=10,10,-158,70,10,10; parkair=-55,0,17,90,30,30; overview.

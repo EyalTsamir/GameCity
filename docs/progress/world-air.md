@@ -40,7 +40,12 @@ Owner: **air** agent (world round). Files: `src/render/**` except `src/render/st
   decay gentler (a few clouds catch the sunset); sky brightness × 1.06/exposure (golden sky no longer in
   AgX's grey shoulder); Belt of Venus arch in the dome; lavender anti-sun haze; golden aerosol 5/6.5/8.5e-5;
   upper-sky saturation +0.4·golden.
-* Running: g4 (FULL CITY overview/vista/oldtown/coast @18.2) — lead note (3): overview milky at 300–1500 m.
+* g4 judged (g4_sheet.png, FULL city 18.2): overview/vista mid-distance clear, long tree shadows over the
+  fields, warm town, blue ridges ✓. Water horizon (dome uHorizon) now 35 % toward the blue air (sea
+  read lilac). Lead informed (08:35) that the three open items are verified.
+* 08:35 (after the 5th stop; tree clean at 9399c3f) running: sky8 (hz_e/hz_n/up_ne × 18.2/19.5: belt +
+  upper-sky saturation), t1 (FULL CITY overview/riverbend/oldtown/coast × 6.3 dawn mist / 19.6 / 21.5).
+* NEXT: lens-DOF close-focus check, final report (≤ 350 words) + perf summary.
 
 ## History (condensed)
 * 10-19: survey, design, M1 atmosphere; m1a/m2a/m2b judged (beige veil = Mie peak in an azimuth-only ring

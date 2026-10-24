@@ -602,7 +602,7 @@ export default function create(ctx: CityContext): CityModule {
         ze = slab.z0 + 1;
       const xs = slab.x0 - BAND,
         xe = slab.x1 + BAND;
-      const N = Math.round(((xe - xs) * (ze - zs) + 2 * BAND * 80) * 0.9 * Math.max(0.5, density));
+      const N = Math.round(((xe - xs) * (ze - zs) + 2 * BAND * 80) * 0.6 * Math.max(0.5, density));
       for (let k = 0; k < N; k++) {
         // north band + short strips down the W and E sides of the ridge
         let x: number, z: number;

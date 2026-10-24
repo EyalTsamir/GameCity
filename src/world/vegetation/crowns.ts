@@ -371,10 +371,9 @@ function broadStruct(st: Struct, rng: Rng): void {
     const wob = (form === 'irregular' || multi > 1 ? 0.06 : 0.022) * h;
     mid[0] += rng.range(-wob, wob);
     mid[2] += rng.range(-wob, wob);
-    const flare: V3 = [s.base[0] + (mid[0] - s.base[0]) * 0.08, s.base[1] + Math.min(0.55, h * 0.06), s.base[2] + (mid[2] - s.base[2]) * 0.08];
-    st.segs.push({ a: [s.base[0], s.base[1] - 0.2, s.base[2]], b: flare, ra: s.r * 1.5, rb: s.r * 1.04, sa: sway0, sb: sway0, near: false, aoA: 0.5, aoB: 0.78 });
-    st.segs.push({ a: flare, b: mid, ra: s.r * 1.04, rb: s.r * 0.86, sa: sway0, sb: sway0, near: false, aoA: 0.78, aoB: 0.9 });
-    st.segs.push({ a: mid, b: s.top, ra: s.r * 0.86, rb: s.r * 0.64, sa: sway0, sb: sway0, near: false, aoA: 0.9, aoB: 0.72 });
+    // two segments: the root flare tapers over the lower one (static for every LOD — keep it cheap)
+    st.segs.push({ a: [s.base[0], s.base[1] - 0.2, s.base[2]], b: mid, ra: s.r * 1.38, rb: s.r * 0.88, sa: sway0, sb: sway0, near: false, aoA: 0.5, aoB: 0.9 });
+    st.segs.push({ a: mid, b: s.top, ra: s.r * 0.88, rb: s.r * 0.64, sa: sway0, sb: sway0, near: false, aoA: 0.9, aoB: 0.72 });
   }
   // limbs: from the stem tops / upper trunk to each leaf mass
   const stemFor = (L: Lobe3) => {
@@ -448,19 +447,16 @@ function coneStruct(st: Struct, rng: Rng): void {
   const fir = def.kind === 'fir';
   const y0 = y + (def.clear ?? h * rng.range(kind.clear[0], kind.clear[1]));
   const top = y + h;
-  const r0 = Math.max(0.08, Math.min(0.4, 0.026 * h * kind.girth));
+  const r0 = Math.max(0.07, Math.min(0.32, 0.018 * h * kind.girth));
   st.c = [x, y0 + (top - y0) * 0.4, z];
   st.cr = r * 1.1;
   st.cry = (top - y0) * 0.55;
   st.cardHalf = kind.card * Math.min(1.25, Math.max(0.7, r / 2.2));
   const lean: V3 = [rng.range(-0.02, 0.02) * h, 0, rng.range(-0.02, 0.02) * h];
   const T: V3 = [x + lean[0], top, z + lean[2]];
-  const m1 = lerp3([x, y, z], T, 0.35),
-    m2 = lerp3([x, y, z], T, 0.7);
-  st.segs.push({ a: [x, y - 0.15, z], b: [x, y + 0.35, z], ra: r0 * 1.45, rb: r0, sa: STILL, sb: STILL, near: false, aoA: 0.5, aoB: 0.7 });
-  st.segs.push({ a: [x, y + 0.35, z], b: m1, ra: r0, rb: r0 * 0.75, sa: STILL, sb: STILL, near: false, aoA: 0.7, aoB: 0.6 });
-  st.segs.push({ a: m1, b: m2, ra: r0 * 0.75, rb: r0 * 0.45, sa: STILL, sb: STILL, near: false, aoA: 0.6, aoB: 0.6 });
-  st.segs.push({ a: m2, b: T, ra: r0 * 0.45, rb: 0.015, sa: STILL, sb: STILL, near: false, aoA: 0.6, aoB: 0.9 });
+  const m1 = lerp3([x, y, z], T, 0.45);
+  st.segs.push({ a: [x, y - 0.15, z], b: m1, ra: r0 * 1.3, rb: r0 * 0.68, sa: STILL, sb: STILL, near: false, aoA: 0.5, aoB: 0.6 });
+  st.segs.push({ a: m1, b: T, ra: r0 * 0.68, rb: 0.015, sa: STILL, sb: STILL, near: false, aoA: 0.6, aoB: 0.9 });
   // whorls
   const span = top - y0;
   const step = rng.range(0.42, 0.55) * Math.max(0.8, h / 10);
@@ -758,7 +754,7 @@ export function emitFar(st: Struct, ref: PlantRef, cards: InstBuf, woodBuf: Inst
   st.lobes.forEach((L, li) => {
     const lobeR = (L.rx + L.ry + L.rz) / 3;
     const out = norm([L.x - st.c[0], L.y - st.c[1] + 0.2 * st.cry, L.z - st.c[2]]);
-    const n = st.form === 'cone' ? (forest ? 3 : 4) : st.form === 'bush' ? 2 : (forest ? 2 : 3) + (lobeR > 1.5 ? 1 : 0);
+    const n = st.form === 'cone' ? (forest ? 2 : 4) : st.form === 'bush' ? 2 : forest ? 1 + (lobeR > 1.6 ? 1 : 0) : 3 + (lobeR > 1.5 ? 1 : 0);
     for (let k = 0; k < n; k++) {
       const off = randDir(rng);
       const e = li === 0 && st.form !== 'cone' ? 0.15 : 0.32;
@@ -881,12 +877,13 @@ export function emitNear(st: Struct, ref: PlantRef, cards: InstBuf, woodBuf: Ins
         V = [Vd[0] * hv, Vd[1] * hv, Vd[2] * hv];
         F = norm(cross(Ud, Vd));
       } else if (st.form === 'cone') {
-        // needle sprays: along the branch, mostly flat, rolled ±35°
+        // needle sprays along the branch: one lying flat (rolled ±25°), the next one hanging (rolled ~90°,
+        // the curtain of branchlets a spruce limb carries) so the cone reads solid from the side too
         const d = t.d;
         const Vd = norm(add(d, randDir(rng), 0.15));
         let Ud = norm(cross([0, 1, 0], Vd));
         const W = cross(Vd, Ud);
-        const a = rng.range(-0.6, 0.6);
+        const a = (i % 2 === 1 ? Math.PI / 2 : 0) + rng.range(-0.45, 0.45);
         Ud = norm(add([Ud[0] * Math.cos(a), Ud[1] * Math.cos(a), Ud[2] * Math.cos(a)], W, Math.sin(a)));
         hv = hu * 1.15;
         U = [Ud[0] * hu * 0.85, Ud[1] * hu * 0.85, Ud[2] * hu * 0.85];

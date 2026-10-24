@@ -1,6 +1,13 @@
 # world — streetlife (café terraces, street sitters, vendors, two-wheelers)
 
 ## Resume here
+* 2026-10-24 08:35 UTC — resumed after the session-limit stop (tree at 9399c3f). Glossy-car work state:
+  `vehicleMaterial.ts` v6 = MeshPhysical clearcoat + `thStreetRefl()` (stylised street reflection: dark
+  asphalt below a lifted horizon, blocky facade skyline, bright haze band, sky) scaling the coat / chrome
+  reflections; gains coat 1.8 / glass 3.2 / chrome 1.4; chrome window seal + handles on sedan / SUV
+  (`carBody` region 'seal'); hatch got roofDrop + raked rear (m4d: reads as a hatchback now).
+  m4e (gain 1.35) too weak, m4f (gain 3) = uniform hazy sheen (reads as dust) → v6 skyline shaping;
+  m4g (v6) captured before the stop — judge it next.
 * 2026-10-24 03:50 UTC — resumed after the weekly usage-limit stop (tree clean at 582500f). Judged before the
   stop: m3d (night terraces with wear's lamps: pass), soak1 (4 min @4×, software GL: invariants 0, heap flat
   353–358 MB, no errors; only ~14 game min covered at 10 fps), m4b / m4c (lofted cars at all 3 LODs: pass;

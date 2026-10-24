@@ -1,18 +1,15 @@
 # world-ground — grass, meadows, flowers, weeds, litter, reeds (world round)
 
 ## Resume here
-* 2026-10-24 04:10 — t8 judged (1600×900): bank_meadow 11 = clustered poppies / cornflowers / knapweed /
-  buttercups / daisies, the reference's meadow; pond 18.2 = backlit flower meadow + reeds glowing (best
-  shot). Edge tufts no longer paint a pale rim (palette: edge length keeps lawn colour).
-  NEW (lead approved): the fixed 96 m landscape band is replaced by a ROAMING COVER WINDOW
-  (`groundcover/outer.ts` createCoverWindow: 224 m square around the camera, 0.5 m texels, rebuilt when
-  the camera is > 24 m from its centre, generator stepped in frame() with 4 ms/frame at 60 fps (wall-time
-  proportional on slow frames), double-buffered buffer sets + textures allocated once, own tile grids).
-  Slab tile grids now sit on the global 8 m lattice (GRID_ALIGN) so slab + window tiles coincide; the
-  walker ORs both. Typecheck clean. Lead moved the riverbend POI camera to 52 m.
-* Running: tier captures t9_{high,medium,low,nograss} (pond, park_eye, park_mid, edge_s @11 h).
-* Next: hop test (shots/world/ground/hop.mjs: riverbend view, hop 40 m W → a_before / b_hop_now /
-  c_hop_rebuilt) + riverbend POI at 11 / 18.2 for the lead; judge tiers; final report.
+* 2026-10-24 08:35 — resumed after the session-limit stop (tree at dd1fffb, my files intact, tsc clean).
+  Roaming cover window is fully wired (module drives createCoverWindow in frame(), walker ORs slab +
+  window tile grids on the 8 m lattice) — see the 04:10 entry in the log history below. Tiers judged
+  partly (t9_high vs t9_medium: medium meadow too thin → medium/low blades wider, more flowers).
+* Running: t10 (riverbend POI, dune, mouth, edge_s × 11 / 18.2 at 1600×900, 25 s warm-up so the window
+  is built) + hop test (riverbend view, hop 40 m W: shots/world/ground/hop/{a_before,b_hop_now,
+  c_hop_rebuilt}.png).
+* Next: judge t10 + hop → send lead the riverbend shots; t9 low + nograss A/B stats (re-run, killed);
+  final report.
 
 ## Brief (from WORLD-PLAN.md + world-briefs.md "### ground")
 Owner of `src/world/terrain/ground.ts` (+ its mask), `src/world/groundcover.ts` + `src/world/groundcover/*`.
