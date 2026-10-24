@@ -4,12 +4,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-**Tinyhaven** — a self-running miniature-city diorama (traffic, pedestrians, trains, boats, day/night) in
-Three.js r186 + TypeScript, built with Vite 8. Everything is procedural (geometry, canvas textures, WebAudio
+**Tinyhaven** — a self-running city (traffic, pedestrians, trains, boats, day/night) set in a landscape that runs to
+the horizon (farmland, forest, mountains, sea), in Three.js r186 + TypeScript, built with Vite 8. `?diorama` shows the
+original tabletop model (slab on a plinth on an oak table, tilt-shift) — `src/core/world.ts` (`DIORAMA` / `WORLD_MODE`). Everything is procedural (geometry, canvas textures, WebAudio
 synthesis): no external assets, URLs or CDNs. Runtime deps are only `three`, `postprocessing`, `n8ao`.
 
 Deeper reference: `docs/ARCHITECTURE.md`. Project history and per-module status / next steps:
-`docs/progress/LEAD.md` and `docs/progress/<module>.md` — read these first when resuming work, and keep them
+`docs/progress/LEAD.md`, `docs/progress/WORLD.md` (the "world" realism round: plan, contracts, per-feature toggles and
+costs; agent logs `world-*.md`) and `docs/progress/<module>.md` — read these first when resuming work, and keep them
 updated after each milestone (work here has repeatedly been cut off by account usage limits; the logs are how
 an interrupted task is resumed without loss).
 
@@ -17,7 +19,7 @@ an interrupted task is resumed without loss).
 
 - `npm run dev` — dev server at http://127.0.0.1:5173 (strict port). The verification scripts below expect it running.
 - `npm run typecheck` — `tsc --noEmit` (TypeScript 7 native compiler). The only static check: no linter, no unit-test framework.
-- `npm run build` — Vite + `vite-plugin-singlefile` → one self-contained `dist/index.html` (~2.2 MB) that also runs from `file://`.
+- `npm run build` — Vite + `vite-plugin-singlefile` → one self-contained `dist/index.html` (~3.1 MB) that also runs from `file://`.
 - `npm start` — `scripts/serve.mjs`: serve `dist/` on 127.0.0.1:4173 (next free port) and open the browser.
   `Launch Tinyhaven.cmd` = build if `dist/` is missing, then serve (or open the file directly when Node is absent).
 
@@ -48,7 +50,9 @@ and swallow Vite's HMR websocket so a test page never reloads mid-run. Always Re
 `?validate` (static world checks → console), `?planview[=x0,z0,x1,z1][&layers=lots,peds,lanes,…]` (2D map of the
 plan and graphs), `?time=21.5`, `?speed=4`, `?quality=low|medium|high`, `?seed=…`, `?adaptive=0` (freeze adaptive
 quality), `?nointro` (skip the opening camera glide), `?noidle` (no auto-tour after 2 idle minutes),
-`?hide=traffic,pedestrians` (simulate without drawing). Modules have more debug switches, listed in their progress logs.
+`?hide=traffic,pedestrians` (simulate without drawing), `?diorama` (tabletop presentation), `?wind=<0..1.5>` /
+`?winddir=<deg>` (pin the wind). Modules have more debug switches (one per world-round feature, e.g. `?noland`,
+`?nograss`, `?noleafcards`, `?nocloth`, `?noatmo`) — listed in `docs/progress/WORLD.md` and their progress logs.
 In the page, `window.__city` exposes `view()`, `setHours()`, `setSpeed()`, `stats()`, `invariants()`, `validate()`, `frameErrors`, `ctx`.
 
 ## Architecture
@@ -71,14 +75,17 @@ In the page, `window.__city` exposes `view()`, `setHours()`, `setSpeed()`, `stat
 **Modules.** Each subsystem is a file default-exporting `create(ctx) → CityModule`
 (`update(simDt)`, `frame(realDt)`, `stats()`, `invariants()`), with helpers in a same-named folder. `main.ts` loads
 them by dynamic import in this order, each fault-isolated (a module that throws is skipped and the city still runs):
-sky, terrain, water, ambient, roads, buildings, landmarks, harbor, vegetation, props, traffic, pedestrians, rail,
-boats, postfx, camera, ui, audio. A module may rely only on services of modules loaded before it; anything from
+sky, terrain, landscape, water, ambient, roads, buildings, landmarks, harbor, vegetation, props, groundcover, life, lamps,
+traffic, pedestrians, rail, boats, postfx, camera, ui, audio. A module may rely only on services of modules loaded before it; anything from
 later modules (e.g. camera state used by sky/postfx) is looked up lazily every frame and null-checked.
 `simDt` is scaled by `clock.speed` (0 when paused, up to ~0.8 s at 8×): simulations sub-step.
 
 **Cross-module contracts**
 
 - `ctx.services`: `terrain.height(x,z)` (rendered ground incl. local refinements — prefer it over `plan.heightAt`),
+  `landscape.height/isWater/cover(x,z)` (anywhere, also beyond the slab), `buildings` (chimneys, balconies, spans,
+  laundry wires) and `props.cafes` (terrace tables/seats) from `buildings/anchors.ts` / `props/service.ts`,
+  `groundcover` (flower patches, density), `vegetation.setLeafDistance`, `postfx.softDepth()`,
   `terrain.portals/rocks/promenadeLamps`; `water.waveHeight/surfaceY`; `smoke.addEmitter` (ambient — signature at the
   top of `src/sim/ambient.ts`); `camera` (`flyTo(view, 0)` snaps — used by `__city.view`); `postfx.setEnabled`;
   `boats.fleet.boats`; harbour obstacles for boat navigation.
@@ -92,11 +99,16 @@ later modules (e.g. camera state used by sky/postfx) is looked up lazily every f
 
 **Rendering.** `postfx` replaces `ctx.render` with a pmndrs postprocessing pipeline on HalfFloat targets (kept for HDR
 bloom and a banding-free sky): N8AO computed at half resolution but applied inside the final merged effect pass
-(`postfx/aoApply.ts`), a custom depth-aware tilt-shift DOF (focus = camera target distance), bloom, SMAA, grading.
+(`postfx/aoApply.ts`), depth of field (world mode: a natural lens that only acts at close focus; `?diorama`: the
+depth-aware tilt-shift, focus = camera target distance), sun shafts, bloom, SMAA, AgX grading.
 `postfx/adaptive.ts` steps quality down (AO first, then render scale) from async GPU timer queries — never a
 synchronous `readPixels` probe (that once forced the image to 0.6 scale). `sky` owns the sun/moon light, shadow-frustum
-fitting around the camera focus, and clouds on planned paths that frame (not cover) the hero overview, with
-screen-space cloud shadows. three r186 removed `PCFSoftShadowMap`: use `PCFShadowMap` + `light.shadow.radius`.
+fitting around the camera focus, and the sky: world mode installs a global aerial-perspective fog override
+(`render/atmosphere.ts`, blue air + aerosol, coloured from the physical sky in each direction), a physical sky LUT
+(`sky/physical.ts`), a raymarched half-res cumulus deck + cirrus with matching cloud shadows, and a lowered golden-hour
+"visual sun" written into `globalUniforms.uSunDir` (`clock.sunDir` stays physical); `?diorama` keeps the cotton-ball
+clouds on planned paths that frame the hero overview. One wind for everything: `src/core/wind.ts` (`thGust` /
+`thWindAt` in GLSL, `gustAt` / `windAt` in JS; prevailing wind updated per frame in `main.ts`). three r186 removed `PCFSoftShadowMap`: use `PCFShadowMap` + `light.shadow.radius`.
 
 ## Conventions
 
@@ -110,7 +122,9 @@ screen-space cloud shadows. three r186 removed `PCFSoftShadowMap`: use `PCFShado
   lanes/movements; both are checked by `invariants()` against the occupancy grid. Lots: building geometry stays inside
   `footprint` (overhangs ≤ 1.2 m and only above 2.4 m).
 - Performance target is an integrated Qualcomm Adreno X1-45 at ~1920×1025 device px. The scene pass is largely
-  vertex-bound: merge/instance (≈145 draw calls total), distance LODs, few shadow casters, no per-frame allocations.
-  Measure with `perf.mjs` before and after.
+  vertex-bound: merge/instance (≈165–190 draw calls in full-city views since the world round, 2.3–2.8 M triangles), distance LODs, few shadow casters, no per-frame allocations.
+  Measure with `perf.mjs` before and after. The world round (2026-10) exceeds the old ≤ +2 ms rule on high by design
+  (estimated +4–6 ms at eye level / +3.5–4.5 ms overview, unmeasured on the target): every feature has a quality
+  tier and a URL toggle so the budget can be decided from real measurements — see `docs/progress/WORLD.md`.
 - Keep the console clean (diagnostics only behind `?debug`) and keep the build single-file: no web workers, no
   runtime-fetched assets, no new dependencies.
