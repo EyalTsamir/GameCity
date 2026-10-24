@@ -26,6 +26,11 @@ Branch: work continues from `claude/tinyhaven-graphics-audit-l089m8` (fast-forwa
   ALL 7 AGENTS DONE. Lead: final QA = int2 (running) → judge vs critique/a → typecheck, build + file:// smoke,
   soak, ui-test, ?diorama check → perf toggles/commands for the user → CLAUDE.md/ARCHITECTURE/LEAD updates →
   final Hebrew report → delete watchdog trig_01Dosn8CiDr2iqF7HZGRccm3, stop autocheckpoint → WORLD ROUND DONE.
+* 19:20 — final typecheck clean; build OK (3.15 MB single file). int2 h18.2 judged (sheets shots/world/lead/
+  int2_sheet_a.png / _b.png; console clean, invariants {}, 147–188 dc, 2.4–2.85 M tris): the frame, light, streets
+  and park read as a real place (wb_street 18.2, park_low, oldtown superb). Two issues sent back: ground → flower
+  dots form a regular lattice at 100–150 m (riverside_speckle.png; visible only since the cover-map fix); world →
+  riverside POI foreground = two flat parcels south of the slab. Re-capture riverside/park after their fixes.
 * 2026-10-24 13:31 UTC — 6th stop (session limit ~11:45, reset 13:20; container rebooted 13:29). Restored; tree
   clean at 7a27edf. Resumed the 4 open agents (world, ground, foliage, life). DONE: air, wear, streetlife.
   Lead next: judge milestone notes → int2 full-city capture (presets below) → final QA.
