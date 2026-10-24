@@ -142,7 +142,15 @@
   radius (no impostor lollipops at eye level). Full city (final1): console clean, invariants {}, overview
   177 dc / 2.62 M tris (all passes). stats3 vista full city: land 186 dc / 2.65 M vs ?noland 165 / 2.14 M.
 * 14:30 — final2 + dio2 judged: dunes clean (no blotches), island irregular, ?diorama tabletop unchanged.
-  console clean, invariants {}. DONE — see "## Final report".
+  console clean, invariants {}.
+* 14:40 — lead review of final1: island = low-poly pyramid, dark dot strip on the back-dune. Done: the island
+  is its own 14 m grid patch (landscape/terrain.ts buildIslandPatch; the far rings sink under the sea inside
+  its box, heights.h stays true for the water; coarse 40 m copy for the reflection pass; ?landisland=0 →
+  old rings; tiers 26/19/14 m); islandH = curving N–S crest line with three summits + saddles, S profile
+  (convex shoulders, concave foot), steep sea side, domain-warped ridged spurs / gullies, rim blended to a
+  constant toward the centre (no star); rock above ~105–165 m, maquis woods below. Dune tufts lighter,
+  sparser. final3 (island, islandnear, dunes, coast × 18.2/11): natural massif, clean dunes, console
+  clean, invariants {}. DONE — see "## Final report".
 * Tools: my capture script copy with 20-min load timeout = scratchpad `cap.mjs` (scratchpad is SHARED with other
   agents — keep my files under scratchpad/world* or land/). Offline map tool: scratchpad `land/map.ts` (bundle:
   `npx rolldown land/map.ts --platform node -o land/map.mjs`; `node land/map.mjs x0 z0 x1 z1 N out.bin &&
@@ -231,20 +239,22 @@ land and 52 km of sea: farmland W/S, forested hill country rising to four domain
 the river from the W, and the open sea E with a rugged island. The town edge has a smallholding patchwork
 (CPU/GPU twin crop kinds, plot hedges, wildflower margins); hedgerows, orchards, farms, hamlets, villages
 and roads with tunnels and bridges fill the country. Life: herds, a tractor, cars, ships, chimney smoke and
-night lights. Landscape trees are leaf-card crowns with impostors beyond 125 m. Other passes: river banks
-(mud, reeds, towpath), dunes, the water (haze-ring sky, golden-hour body, glitter, short far reflections,
-pond mirror), the cliffs (granted), and camera far/FOV. `?diorama` keeps the original tabletop (dio2).
+night lights. Landscape trees are leaf-card crowns with impostors beyond 125 m. The island is a natural massif on
+its own 14 m patch. Other passes: river banks (mud, reeds, towpath), dunes, the water (haze-ring sky,
+golden-hour body, glitter, short far reflections, pond mirror), the cliffs (granted), and camera far/FOV.
+`?diorama` keeps the original tabletop (dio2).
 **Files.** src/world/landscape.ts + landscape/*, terrain/slab.ts, water.ts + water/*, ui/camera.ts constants;
 granted: terrain/cliffs.ts, masonry.ts cliff branch.
 **Toggles.** ?diorama ?noland ?nomountains ?landdbg ?landtrees=0 ?landbld=0 ?landships=0 ?landlife=0
-?landroads=0 ?nocliffs ?waterdebug=refl. Tiers (low/med/high): land rings ×1.7/1.3/1, mountain decimation
-2.2/1.5/1, 3D-tree radius 0.35/0.7/1 (also on the adaptive ladder via setTreeDetail).
-**Shots.** before: shots/world/world/before/. after: final1/ (overview, vista, riverbend, country, coast,
-dunes, island × 11/18.2), final2/, cliff1/, m5d/sheep_*, qlow/, qmed/, diag/ (?noatmo A/B).
+?landroads=0 ?landisland=0 ?nocliffs ?waterdebug=refl. Tiers (low/med/high): land rings ×1.7/1.3/1, island
+grid 26/19/14 m, mountain decimation 2.2/1.5/1, 3D-tree radius 0.35/0.7/1 (also on the adaptive ladder via
+setTreeDetail).
+**Shots** (shots/world/world/): before/; after: final1/ (all POIs × 11/18.2), final3/, cliff1/, m5d/, qlow/,
+qmed/, diag/.
 **Cost.** Full city vista: 186 dc / 2.65 M tris, against 165 / 2.14 M with ?noland (+21 dc, +0.51 M, all passes).
-The landscape itself: land 92k tris, mountains 65k, reflection proxy 48k, 20.9k trees, 750 animals ×
-54 tris, build ≈1.8 s. Measured on software GL only. My estimate is +2–3 ms on the Adreno X1-45 at
-1920×1025; it needs `perf.mjs --variants ";noland"` on the target.
+The island patch adds 2 dc / ~40k tris on top. The landscape itself: land 92k tris,
+island 36k, mountains 65k, reflection proxy 48k, 20.9k trees, 750 animals × 54 tris, build ≈1.8 s. Software GL only; I estimate +2–3 ms on the Adreno X1-45 at 1920×1025, to check with
+`perf.mjs --variants ";noland"` on the target.
 **Trade-offs / open.** At 18.2 the hills read grey-brown mostly through air's haze (the ?noatmo A/B shows them
-green). Sheep keep a 20-face body: faceted at under 5 m, cheap. The island peak is still a little conical from the
-SW. Shader plot hedges have no gaps, unlike the CPU hedge trees. The cliffs.ts rng changes moved the scree.
+green). Sheep keep a 20-face body: faceted at under 5 m, cheap. The island reads warm rock-brown at 18.2.
+Shader plot hedges have no gaps, unlike the CPU hedge trees. The cliffs.ts rng changes moved the scree.
