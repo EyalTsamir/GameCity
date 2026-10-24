@@ -143,30 +143,38 @@ uniform float uPdBase;
 uniform sampler2D tPdLamp;
 uniform vec4 uPdXf;
 vec3 rdEmit = vec3(0.0);
-// image of the two nearest lamp heads mirrored in a water film at wp (V = view direction, towards the surface)
+// image of the lamp heads mirrored in a water film at wp (V = view direction, towards the surface). The lamp a
+// puddle mirrors is where its reflected ray reaches lamp height — usually several times further away than the
+// puddle itself — so the ray is followed to two typical head heights and the lamps nearest to those points
+// are tested (exact direction → crisp image + a vertical glare streak).
 vec3 rdPuddleLamps(vec3 wp, vec3 V) {
   if (uLampGain < 0.01) return vec3(0.0);
-  vec2 cell = floor((wp.xz - uPdXf.xy) * uPdXf.z);
-  vec2 sz = vec2(textureSize(tPdLamp, 0));
-  if (cell.x < 0.0 || cell.y < 0.0 || cell.x >= sz.x * 0.5 || cell.y >= sz.y) return vec3(0.0);
   vec3 R = reflect(V, vec3(0.0, 1.0, 0.0));
-  float cosT = clamp(R.y, 0.0, 1.0);
-  float F = 0.02 + 0.98 * pow(1.0 - cosT, 5.0);
+  if (R.y < 0.01) return vec3(0.0);
+  float F = 0.02 + 0.98 * pow(1.0 - clamp(R.y, 0.0, 1.0), 5.0);
+  vec2 sz = vec2(textureSize(tPdLamp, 0));
+  float halfW = sz.x * 0.5;
+  vec2 rh = normalize(R.xz + vec2(1e-5, 0.0));
   vec3 acc = vec3(0.0);
-  for (int s = 0; s < 2; s++) {
-    vec4 L = texelFetch(tPdLamp, ivec2(int(cell.x) + s * int(sz.x * 0.5), int(cell.y)), 0);
-    if (L.w <= 0.0) continue;
-    vec3 D = L.xyz - wp;
-    float dl = length(D);
-    vec3 Ld = D / max(dl, 1e-3);
-    // angular offsets: across (azimuth, tight) and along the view plane (elevation, stretched = streak)
-    vec2 rh = normalize(R.xz + vec2(1e-5, 0.0));
-    vec2 lh = normalize(Ld.xz + vec2(1e-5, 0.0));
-    float az = rh.x * lh.y - rh.y * lh.x;
-    float el = R.y - Ld.y;
-    float core = exp(-(az * az + el * el) / 0.0011);
-    float streak = exp(-(az * az) / 0.0024 - (el * el) / 0.06) * 0.22;
-    acc += vec3(1.0, 0.78, 0.5) * L.w * (core * 9.0 + streak * 2.4) / (1.0 + dl * 0.05);
+  for (int pl = 0; pl < 2; pl++) {
+    float hgt = pl == 0 ? 4.4 : 6.6;
+    float tH = min((hgt - wp.y) / R.y, 90.0);
+    vec2 hp = wp.xz + R.xz * tH;
+    vec2 cell = floor((hp - uPdXf.xy) * uPdXf.z);
+    if (cell.x < 0.0 || cell.y < 0.0 || cell.x >= halfW || cell.y >= sz.y) continue;
+    for (int s = 0; s < 2; s++) {
+      vec4 L = texelFetch(tPdLamp, ivec2(int(cell.x) + s * int(halfW), int(cell.y)), 0);
+      if (L.w <= 0.0) continue;
+      vec3 D = L.xyz - wp;
+      float dl = length(D);
+      vec3 Ld = D / max(dl, 1e-3);
+      vec2 lh = normalize(Ld.xz + vec2(1e-5, 0.0));
+      float az = rh.x * lh.y - rh.y * lh.x;
+      float el = R.y - Ld.y;
+      float core = exp(-(az * az + el * el) / 0.0007);
+      float streak = exp(-(az * az) / 0.0018 - (el * el) / 0.05) * 0.25;
+      acc += vec3(1.0, 0.78, 0.5) * L.w * (core * 10.0 + streak * 2.6);
+    }
   }
   return acc * F * uLampGain;
 }

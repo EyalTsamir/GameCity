@@ -29,6 +29,67 @@ const NEAR_STEP = 18;
 /** per-kind cap of 3D instances */
 const NEAR_CAP = [1100, 1500, 500, 3000];
 const TILE = 64;
+/** typical crown width / height per kind: leaf cards are pre-squashed so they stay square in the world */
+const KIND_ASPECT = [0.85, 0.55, 0.35, 1.25];
+/** leaf cards use uv 0..LEAF_U of the leaf texture; bark / core cones sample the solid corner */
+const LEAF_U = 0.875;
+const SOLID_UV = 0.95;
+
+/** procedural leaf-cluster texture: R = leaf shade, A = coverage (one cluster, ragged edge, gaps) */
+function leafTexture(): THREE.DataTexture {
+  const S = 128,
+    C = Math.round(S * LEAF_U);
+  const data = new Uint8Array(S * S * 4);
+  // leaves: centre, direction, length, width, shade (drawn in order: later on top)
+  const L: number[][] = [];
+  for (let i = 0; i < 64; i++) {
+    const r = Math.sqrt(hash2i(i, 1, 5101)) * 0.4 * C,
+      a = hash2i(i, 2, 5101) * Math.PI * 2;
+    const cx = C / 2 + Math.cos(a) * r,
+      cy = C / 2 + Math.sin(a) * r;
+    // leaves point outward (petioles toward the cluster centre) with some scatter
+    const d = a + (hash2i(i, 3, 5101) - 0.5) * 1.6;
+    const len = C * (0.13 + 0.06 * hash2i(i, 4, 5101));
+    // lit from above-left, inner leaves darker
+    const shade = 0.62 + 0.3 * hash2i(i, 5, 5101) + 0.12 * (r / (0.4 * C)) - 0.1 * Math.sin(a);
+    L.push([cx, cy, Math.cos(d), Math.sin(d), len, len * 0.42, shade]);
+  }
+  for (let y = 0; y < S; y++) {
+    for (let x = 0; x < S; x++) {
+      const o = (y * S + x) * 4;
+      if (x >= C + 2 && y >= C + 2) {
+        data[o] = 200;
+        data[o + 3] = 255;
+        continue;
+      }
+      if (x >= C || y >= C) continue;
+      let sh = -1;
+      for (const [cx, cy, dx, dy, len, wid, shade] of L) {
+        const px = x + 0.5 - cx,
+          py = y + 0.5 - cy;
+        const u = px * dx + py * dy,
+          v = -px * dy + py * dx;
+        // leaf blade: pointed ellipse along u ∈ [-len/2, len/2]
+        const t = u / (len * 0.5);
+        if (t < -1 || t > 1) continue;
+        const hw = wid * 0.5 * Math.sqrt(1 - t * t) * (1 - 0.25 * t);
+        if (Math.abs(v) > hw) continue;
+        // midrib a little darker, the edge a little lighter
+        sh = shade * (0.9 + 0.12 * Math.min(1, Math.abs(v) / Math.max(hw, 0.5)));
+      }
+      if (sh < 0) continue;
+      data[o] = Math.round(Math.min(1, sh / 1.3) * 255);
+      data[o + 3] = 255;
+    }
+  }
+  const tex = new THREE.DataTexture(data, S, S, THREE.RGBAFormat);
+  tex.generateMipmaps = true;
+  tex.minFilter = THREE.LinearMipmapLinearFilter;
+  tex.magFilter = THREE.LinearFilter;
+  tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
+  tex.needsUpdate = true;
+  return tex;
+}
 
 export interface TreeList {
   n: number;
@@ -416,6 +477,7 @@ function kindGeometry(kind: number): THREE.BufferGeometry {
   const nrm: number[] = [];
   const crown: number[] = [];
   const ao: number[] = [];
+  const uvs: number[] = [];
   const idx: number[] = [];
   const addGeo = (g: THREE.BufferGeometry, isCrown: number, centre: [number, number, number] | null, crownC: [number, number, number]) => {
     const p = g.getAttribute('position') as THREE.BufferAttribute;
@@ -447,6 +509,7 @@ function kindGeometry(kind: number): THREE.BufferGeometry {
         ao.push(isCrown ? Math.min(1, Math.max(0.2, (y - 0.1) / 0.8)) : 0.6);
       }
       crown.push(isCrown);
+      uvs.push(SOLID_UV, SOLID_UV);
     }
     if (g.index) for (let i = 0; i < g.index.count; i++) idx.push(g.index.getX(i) + base);
     else for (let i = 0; i < p.count; i++) idx.push(base + i);
@@ -477,39 +540,118 @@ function kindGeometry(kind: number): THREE.BufferGeometry {
     cw += c.r;
   }
   const crownC: [number, number, number] = cw > 0 ? [ccx / cw, ccy / cw, ccz / cw] : [0, 0.6, 0];
-  sh.clumps.forEach((c, i) => {
-    const g = new THREE.IcosahedronGeometry(c.r, 0);
-    // irregular clumps: displace vertices (a function of position only: shared vertices stay welded)
-    const p = g.getAttribute('position') as THREE.BufferAttribute;
-    for (let v = 0; v < p.count; v++) {
-      const x = p.getX(v),
-        y = p.getY(v),
-        z = p.getZ(v);
-      const k = 1 + 0.22 * (vnoise(x * 13 + i * 3.1, z * 13 + y * 7, 300 + kind) - 0.5);
-      p.setXYZ(v, x * k, y * k * 0.92, z * k);
+  // leaf masses as clusters of alpha-tested leaf cards (broken silhouettes with sky gaps; the lighting
+  // normal stays the rounded clump / crown normal so the crown still reads as a lit volume)
+  const ky = KIND_ASPECT[kind];
+  const v3 = new THREE.Vector3(),
+    nC = new THREE.Vector3(),
+    t1 = new THREE.Vector3(),
+    t2 = new THREE.Vector3(),
+    up = new THREE.Vector3(0, 1, 0);
+  let cs = kind * 7919 + 13;
+  const rnd = () => hash2i(cs++, kind, 4421);
+  const card = (cx: number, cy: number, cz: number, s: number, ox: number, oy: number, oz: number, nx: number, ny: number, nz: number, clump: [number, number, number] | null) => {
+    nC.set(nx, ny, nz).normalize();
+    t1.crossVectors(Math.abs(nC.y) > 0.9 ? v3.set(1, 0, 0) : up, nC).normalize();
+    t2.crossVectors(nC, t1);
+    const a = rnd() * Math.PI * 2,
+      ca = Math.cos(a),
+      sa = Math.sin(a);
+    const ax = t1.x * ca + t2.x * sa,
+      ay = t1.y * ca + t2.y * sa,
+      az = t1.z * ca + t2.z * sa;
+    const bx = -t1.x * sa + t2.x * ca,
+      by = -t1.y * sa + t2.y * ca,
+      bz = -t1.z * sa + t2.z * ca;
+    const base = pos.length / 3;
+    const corners = [
+      [-1, -1, 0, 0],
+      [1, -1, LEAF_U, 0],
+      [1, 1, LEAF_U, LEAF_U],
+      [-1, 1, 0, LEAF_U],
+    ];
+    for (const [u, w, tu, tv] of corners) {
+      const x = cx + (ax * u + bx * w) * s,
+        y = cy + (ay * u + by * w) * s * ky,
+        z = cz + (az * u + bz * w) * s;
+      pos.push(x, y, z);
+      // rounded lighting normal: the clump's (or the given outward) direction blended with the crown's
+      let lx = ox,
+        ly = oy,
+        lz = oz;
+      if (clump) {
+        lx = x - clump[0];
+        ly = y - clump[1];
+        lz = z - clump[2];
+      }
+      const ll = Math.hypot(lx, ly, lz) || 1;
+      const gx = x - crownC[0],
+        gy = (y - crownC[1]) * 1.3,
+        gz = z - crownC[2];
+      const gl = Math.hypot(gx, gy, gz) || 1;
+      const mx = (lx / ll) * 0.55 + (gx / gl) * 0.45,
+        my = (ly / ll) * 0.55 + (gy / gl) * 0.45 + 0.08,
+        mz = (lz / ll) * 0.55 + (gz / gl) * 0.45;
+      const ml = Math.hypot(mx, my, mz) || 1;
+      nrm.push(mx / ml, my / ml, mz / ml);
+      ao.push(Math.min(1, Math.max(0, (gl - 0.08) / 0.32)));
+      crown.push(1);
+      uvs.push(tu, tv);
     }
-    g.rotateY(hash2i(i, kind, 4418) * 3);
-    g.translate(c.x, c.y, c.z);
-    addGeo(g, 1, [c.x, c.y, c.z], crownC);
+    idx.push(base, base + 1, base + 2, base, base + 2, base + 3);
+  };
+  sh.clumps.forEach((c) => {
+    const n = Math.max(6, Math.min(16, Math.round(c.r * 70)));
+    for (let i = 0; i < n; i++) {
+      // directions over the sphere (a little upward), centres toward the clump's surface
+      const zz = 1 - 2 * rnd(),
+        ph = rnd() * Math.PI * 2;
+      const rr = Math.sqrt(Math.max(0, 1 - zz * zz));
+      const dx = rr * Math.cos(ph),
+        dy = zz * 0.9 + 0.1,
+        dz = rr * Math.sin(ph);
+      const d = c.r * (0.25 + 0.6 * rnd());
+      const px = c.x + dx * d,
+        py = c.y + dy * d * ky,
+        pz = c.z + dz * d;
+      // card planes: half facing out, half random (seen edge-on from some side: depth in the crown)
+      const q = rnd();
+      card(px, py, pz, c.r * (0.62 + 0.2 * rnd()), 0, 0, 0, dx * q + (rnd() - 0.5), dy * q + (rnd() - 0.5), dz * q + (rnd() - 0.5), [c.x, c.y, c.z]);
+    }
   });
   sh.tiers.forEach((t, i) => {
-    const g = new THREE.ConeGeometry(t[2], t[1] - t[0], 9, 1, true);
-    // drooping, ragged lower edge
-    const p = g.getAttribute('position') as THREE.BufferAttribute;
-    for (let v = 0; v < p.count; v++) {
-      if (p.getY(v) > 0) continue;
-      const a = Math.atan2(p.getZ(v), p.getX(v));
-      const k = 1 + 0.18 * Math.sin(a * 5 + i * 1.7);
-      p.setXYZ(v, p.getX(v) * k, p.getY(v) - 0.02 * Math.cos(a * 3 + i), p.getZ(v) * k);
-    }
+    // conifer tier: a dark core cone (no gaps through the trunk zone) + drooping branch sprays round it
+    const g = new THREE.ConeGeometry(t[2] * 0.55, t[1] - t[0], 7, 1, true);
     g.translate(0, (t[0] + t[1]) / 2, 0);
-    addGeo(g, 1, null, [0, 0.55, 0]);
+    const p = g.getAttribute('position') as THREE.BufferAttribute;
+    const nb = g.getAttribute('normal') as THREE.BufferAttribute;
+    const base = pos.length / 3;
+    for (let v = 0; v < p.count; v++) {
+      pos.push(p.getX(v), p.getY(v), p.getZ(v));
+      nrm.push(nb.getX(v), nb.getY(v), nb.getZ(v));
+      ao.push(0.25);
+      crown.push(1);
+      uvs.push(SOLID_UV, SOLID_UV);
+    }
+    for (let k = 0; k < g.index!.count; k++) idx.push(g.index!.getX(k) + base);
+    const m = 9 + i;
+    for (let k = 0; k < m; k++) {
+      const a = ((k + 0.5 * (i % 2)) / m) * Math.PI * 2 + (rnd() - 0.5) * 0.4;
+      const u = 0.45 + 0.5 * rnd();
+      const r = t[2] * u;
+      const y = t[1] - (t[1] - t[0]) * (0.25 + 0.75 * u) * 0.85;
+      const ca = Math.cos(a),
+        sa = Math.sin(a);
+      // spray normal: up and out (branches droop), lit like the cone's surface
+      card(ca * r, y, sa * r, t[2] * (0.34 + 0.12 * rnd()), ca, 0.9, sa, ca * 0.5 + (rnd() - 0.5) * 0.3, 1, sa * 0.5 + (rnd() - 0.5) * 0.3, null);
+    }
   });
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
   g.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3));
   g.setAttribute('aCrown', new THREE.Float32BufferAttribute(crown, 1));
   g.setAttribute('aAO', new THREE.Float32BufferAttribute(ao, 1));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
   g.setIndex(idx);
   g.computeBoundingSphere();
   return g;
@@ -533,20 +675,25 @@ const TREE_ALBEDO = /* glsl */ `
 vec3 treeAlbedo(float kind, float tint, float crown, float ly) {
   // tones matched to the vegetation module's forest (sRGB #4f8a33…#5a9636 broadleaf, #2b5a3a…#33683f
   // spruce/fir, #3d6a36 pine), linear
-  vec3 broad = mix(vec3(0.078, 0.254, 0.033), vec3(0.102, 0.305, 0.037), tint) * 0.8;
-  vec3 conif = mix(vec3(0.024, 0.102, 0.042), mix(vec3(0.033, 0.138, 0.05), vec3(0.047, 0.141, 0.037), step(0.7, tint)), tint) * 0.85;
-  vec3 poplar = mix(vec3(0.07, 0.21, 0.035), vec3(0.09, 0.25, 0.04), tint) * 0.8;
-  vec3 small = mix(vec3(0.09, 0.24, 0.04), vec3(0.12, 0.28, 0.05), tint) * 0.8;
+  // darker and more varied than the first pass (lead: no bright lime): oak / ash / alder / willow greens
+  vec3 broad = mix(vec3(0.046, 0.118, 0.03), vec3(0.07, 0.158, 0.038), tint);
+  broad = mix(broad, vec3(0.034, 0.096, 0.045), step(0.72, fract(tint * 3.7)) * 0.75);   // dark blue-green
+  broad = mix(broad, vec3(0.085, 0.14, 0.04), step(0.8, fract(tint * 5.3)) * 0.6);        // olive / grey-green
+  vec3 conif = mix(vec3(0.022, 0.085, 0.036), mix(vec3(0.03, 0.11, 0.042), vec3(0.042, 0.115, 0.032), step(0.7, tint)), tint) * 0.9;
+  vec3 poplar = mix(vec3(0.055, 0.15, 0.035), vec3(0.075, 0.18, 0.04), tint);
+  vec3 small = mix(vec3(0.06, 0.15, 0.036), vec3(0.085, 0.18, 0.045), tint);
+  small = mix(small, vec3(0.045, 0.11, 0.035), step(0.7, fract(tint * 4.1)) * 0.7);
   vec3 c = kind < 0.5 ? broad : kind < 1.5 ? conif : kind < 2.5 ? poplar : small;
   vec3 bark = vec3(0.09, 0.07, 0.055);
   return mix(bark, c * (0.75 + 0.45 * ly), crown);
 }
 `;
 
-function treeMaterial(uniforms: Record<string, THREE.IUniform>, fog: boolean): THREE.MeshStandardMaterial {
-  const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.88, metalness: 0, fog });
+function treeMaterial(uniforms: Record<string, THREE.IUniform>, fog: boolean, leaf: THREE.Texture): THREE.MeshStandardMaterial {
+  const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.88, metalness: 0, fog, side: THREE.DoubleSide });
+  const u = { ...uniforms, tLeaf: { value: leaf } };
   mat.onBeforeCompile = (shader) => {
-    Object.assign(shader.uniforms, uniforms);
+    Object.assign(shader.uniforms, u);
     shader.vertexShader = shader.vertexShader
       .replace(
         '#include <common>',
@@ -555,6 +702,7 @@ attribute float aCrown;
 attribute float aAO;
 attribute vec4 aInst; // kind, tint, height, phase
 varying float vAO;
+varying vec2 vLeafUv;
 uniform float uTime;
 uniform vec2 uWind;
 varying vec3 vTW;
@@ -569,6 +717,7 @@ ${WIND_GLSL}`,
         `#include <begin_vertex>
 vCrown = aCrown;
 vAO = aAO;
+vLeafUv = uv;
 vKind = aInst.x;
 vTint = aInst.y;
 vLocalY = clamp((position.y - 0.25) / 0.7, 0.0, 1.0);
@@ -586,12 +735,22 @@ vLocalY = clamp((position.y - 0.25) / 0.7, 0.0, 1.0);
       )
       .replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvTW = (modelMatrix * instanceMatrix * vec4(transformed, 1.0)).xyz;');
     shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', '#include <common>\nvarying float vAO;\n' + TREE_FRAG_PARS + TREE_ALBEDO)
+      .replace('#include <common>', '#include <common>\nvarying float vAO;\nvarying vec2 vLeafUv;\nuniform sampler2D tLeaf;\n' + TREE_FRAG_PARS + TREE_ALBEDO)
       .replace(
         'vec4 diffuseColor = vec4( diffuse, opacity );',
-        `vec4 nT = texture2D(tLN, vTW.xz * 0.37 + vTW.y * 0.21);
-float leafAO = mix(0.42, 1.0, vAO) * (0.78 + 0.44 * nT.r);
+        `vec4 lt = texture2D(tLeaf, vLeafUv);
+if (lt.a < 0.5) discard;
+vec4 nT = texture2D(tLN, vTW.xz * 0.37 + vTW.y * 0.21);
+float leafAO = mix(0.42, 1.0, vAO) * (0.78 + 0.44 * nT.r) * mix(1.0, lt.r * 1.3, vCrown);
 vec4 diffuseColor = vec4(treeAlbedo(vKind, vTint, vCrown, vLocalY) * mix(1.0, leafAO, vCrown), opacity);`,
+      )
+      .replace(
+        '#include <normal_fragment_begin>',
+        `#include <normal_fragment_begin>
+#ifdef DOUBLE_SIDED
+// leaf cards: both faces keep the crown's outward lighting normal
+if (vCrown > 0.5) normal *= faceDirection;
+#endif`,
       )
       .replace(
         '#include <normal_fragment_maps>',
@@ -616,12 +775,28 @@ if (vCrown > 0.5) {
 #if NUM_DIR_LIGHTS > 0
   sunC = directionalLights[0].color;
 #endif
-  reflectedLight.indirectDiffuse += diffuseColor.rgb * sunC * vec3(1.0, 0.92, 0.6) * bt * 0.32;
+  reflectedLight.indirectDiffuse += diffuseColor.rgb * sunC * vec3(0.9, 1.0, 0.55) * bt * 0.22;
 }`,
       );
   };
-  mat.customProgramCacheKey = () => 'th-landtree-v1';
+  mat.customProgramCacheKey = () => 'th-landtree-v2';
   return mat;
+}
+
+/** shadow depth of the near trees: leaf cards cut out like the colour pass */
+function treeDepthMaterial(leaf: THREE.Texture): THREE.MeshDepthMaterial {
+  const d = new THREE.MeshDepthMaterial();
+  d.onBeforeCompile = (shader) => {
+    shader.uniforms.tLeaf = { value: leaf };
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec2 vLeafUv;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvLeafUv = uv;');
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', '#include <common>\nvarying vec2 vLeafUv;\nuniform sampler2D tLeaf;')
+      .replace('#include <clipping_planes_fragment>', '#include <clipping_planes_fragment>\nif (texture2D(tLeaf, vLeafUv).a < 0.5) discard;');
+  };
+  d.customProgramCacheKey = () => 'th-landtree-depth-v1';
+  return d;
 }
 
 // ───────────────────────────────────────────────────── impostors ──
@@ -827,11 +1002,11 @@ vec4 diffuseColor = vec4(treeAlbedo(vKind, vTint, tc.g, tc.b) * (0.6 + 0.6 * tc.
 #if NUM_DIR_LIGHTS > 0
   sunC = directionalLights[0].color;
 #endif
-  reflectedLight.indirectDiffuse += diffuseColor.rgb * sunC * vec3(1.0, 0.92, 0.6) * bt * 0.32;
+  reflectedLight.indirectDiffuse += diffuseColor.rgb * sunC * vec3(0.9, 1.0, 0.55) * bt * 0.22;
 }`,
       );
   };
-  mat.customProgramCacheKey = () => 'th-landimp-v1';
+  mat.customProgramCacheKey = () => 'th-landimp-v2';
   return mat;
 }
 
@@ -859,7 +1034,9 @@ export function createLandTrees(list: TreeList, uniforms: Record<string, THREE.I
     a.push(t);
   }
   // ── near 3D sets
-  const tmat = treeMaterial(uniforms, fog);
+  const leaf = leafTexture();
+  const tmat = treeMaterial(uniforms, fog, leaf);
+  const tdepth = treeDepthMaterial(leaf);
   const near: THREE.InstancedMesh[] = [];
   const instData: THREE.InstancedBufferAttribute[] = [];
   for (let k = 0; k < NK; k++) {
@@ -873,6 +1050,7 @@ export function createLandTrees(list: TreeList, uniforms: Record<string, THREE.I
     m.visible = false;
     m.name = `land-trees-near${k}`;
     m.castShadow = shadows;
+    m.customDepthMaterial = tdepth;
     m.receiveShadow = true;
     m.frustumCulled = false;
     near.push(m);
