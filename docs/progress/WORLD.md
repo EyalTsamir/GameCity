@@ -35,6 +35,10 @@ Branch: work continues from `claude/tinyhaven-graphics-audit-l089m8` (fast-forwa
   life milestone approved (full1: otsun_18h2 = best frame of the round; +6–7 calls, ~0.3–0.45 ms) → soak +
   final report; optional: market bunting a bit dense.
 * 15:10 — planter fix VERIFIED (shots/world/lead/cam/terrace_crop.png: shrub/lavender clumps; invariants {}, console clean).
+* 15:30 — ground FINAL REPORT (world-ground.md; est. 1.0–1.4 ms eye level in a meadow, ~0.1 ms overview; toggles
+  ?nograss ?grass ?gcrings ?gcflowers ?nolitter ?nolilies ?nogcouter). Judged: pond/bank meadow 18.2 = reference
+  foreground ✓. Sent back one tune: forest floor pale beige + confetti leaves → darker umber litter, moss.
+  foliage: near trunk 8-sided prism + no root flare (t11/forest_11.png).
 * 2026-10-24 08:31 UTC — 5th stop (SESSION limit, all agents ~04:40, reset 08:20; container rebooted 08:29).
   Restored servers/autocheckpoint/locks; tree clean at 9399c3f (pushed). All 7 agents resumed 08:31 with open
   notes repeated (see 03:55 / 04:20 entries). Lead next: wait for milestone notes; then a second full-city
