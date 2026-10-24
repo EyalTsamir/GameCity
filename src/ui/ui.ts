@@ -7,12 +7,16 @@ import './ui.css';
 import * as THREE from 'three';
 import type { CityContext, CityModule, PickHit, QualityLevel, QualityState } from '../core/context';
 import { CITY_NAME } from '../core/constants';
+import { DIORAMA } from '../core/world';
 import { ICONS, SKY_DIAL, type IconName } from './hud/icons';
 import { Minimap, type LiveDot } from './hud/minimap';
 import { DistrictLabels, type ScreenRect } from './hud/labels';
 import { cameraExt, audioExt, type TourShotInfo } from './shared';
 
 type QualityMode = 'auto' | QualityLevel;
+
+/** the depth-of-field control: tilt-shift in the tabletop diorama, a natural lens in world mode */
+const DOF_NAME = DIORAMA ? 'Tilt-shift focus' : 'Depth of field';
 
 const SPEEDS = [1, 2, 4, 8];
 
@@ -208,7 +212,7 @@ export default function create(ctx: CityContext): CityModule {
   g2.append(timeLabel, slider, scrub);
 
   const g3 = el('div', 'th-group');
-  const dofBtn = btn('tiltshift', 'Tilt-shift focus (B)');
+  const dofBtn = btn('tiltshift', `${DOF_NAME} (B)`);
   const tourBtn = btn('tour', 'Auto-tour (T)');
   const weatherBtn = btn('weatherAuto', 'Weather: automatic');
   const soundBtn = btn('soundOff', 'Sound');
@@ -258,7 +262,7 @@ export default function create(ctx: CityContext): CityModule {
   const qualityItems: Record<QualityMode, HTMLButtonElement> = {} as Record<QualityMode, HTMLButtonElement>;
   const qualityNotes: Record<QualityMode, string> = {
     auto: 'Adapts to your device',
-    low: 'Fast · no AO, no tilt-shift',
+    low: `Fast · no AO, no ${DOF_NAME.toLowerCase()}`,
     medium: 'Balanced',
     high: 'All effects',
   };
@@ -306,7 +310,7 @@ export default function create(ctx: CityContext): CityModule {
         <dt>${k('Space')}</dt><dd>Pause / play</dd>
         <dt>${k(',', '.')}</dt><dd>Slower / faster</dd>
         <dt>${k('T')}</dt><dd>Cinematic auto-tour</dd>
-        <dt>${k('B')}</dt><dd>Tilt-shift focus</dd>
+        <dt>${k('B')}</dt><dd>${DOF_NAME}</dd>
         <dt>${k('L')}${k('M')}</dt><dd>Labels · minimap</dd>
         <dt>${k('P')}${k('H')}</dt><dd>Places · this help</dd>
         <dt>${k('U')}</dt><dd>Hide the controls</dd>
@@ -408,14 +412,14 @@ export default function create(ctx: CityContext): CityModule {
   dofBtn.addEventListener('click', () => {
     const p = postfx();
     if (!p) {
-      toast('Tilt-shift needs the post-processing module');
+      toast(`${DOF_NAME} needs the post-processing module`);
       return;
     }
     dofPref = !safeIsEnabled('dof');
     if (dofPref && !ctx.quality.dof) ctx.quality.dof = true;
     applyDof(dofPref);
     save('dof', dofPref);
-    toast(dofPref ? 'Tilt-shift focus on' : 'Tilt-shift focus off');
+    toast(`${DOF_NAME} ${dofPref ? 'on' : 'off'}`);
     syncToolbar();
   });
   const safeIsEnabled = (e: 'dof' | 'bloom' | 'ao'): boolean => {
