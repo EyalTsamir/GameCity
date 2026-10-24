@@ -17,6 +17,22 @@ Branch: work continues from `claude/tinyhaven-graphics-audit-l089m8` (fast-forwa
 `claude/pensive-gates-bim12i` (the session's designated branch).
 
 ## Resume here (keep current)
+* 2026-10-24 03:33 UTC — 4th stop = WEEKLY limit: agents resumed 2026-10-20 07:31 hit it at once (no agent
+  edits since 02:08 on 10-20; logs' Resume here are from ~02:05). Limit reset 10-24 03:00; container rebooted
+  ~03:30. Restored: servers 5173/5174, autocheckpoint 20 min, locks cleared, tree clean at 582500f (pushed);
+  44+48+4 queued watchdog firings drained. All 7 agents resumed 03:33 with their open lead notes repeated.
+  Lead next: judge integration capture shots/world/lead/int1 (if it survived; else re-run) vs critique/a,
+  before/after sheet for the user.
+* 03:40 — int1 judged (sheets shots/world/lead/int1_sheet_a.png 18.2 vs 18.2, _b.png street views 11 vs 18.2;
+  code of 10-20 07:30). ✓ frame solved: horizon, landscape, mountains, sea; park_low reads as a real park
+  (flowering tree, meadow, leafy crowns); old town lived-in (laundry, AC units, cobbles); dt_street grittier.
+  ✗ (a) 18.2 reads grey/overcast + dim in every city view — warm sunlit facades of "before" lost → air top item;
+  (b) farmland beside the beach in the hero overview = flat ochre rectangles + empty pasture → world;
+  (c) wide tan ribbon across the old-town street (ot_street) → life (cord width?); (d) street trees near-black
+  in shade, leaf cards huge/flat when the camera is inside a crown → foliage; (e) life FAILED to load in int1
+  (Drift.initInsects null setColorAt; mid-edit) → life to confirm. Perf note: 165–184 draw calls, 2.3–2.8 M
+  triangles in full-city views (target ≈145 calls) — final perf pass must address. My view presets to fix:
+  river_low (inside a tree) and wb_street (clips a roof).
 * 2026-10-20 07:31 UTC — 3rd usage-limit stop (agents stopped ~02:30, reset 06:30; container rebooted ~07:28).
   Restored, tree clean at 9c3dc05; all 7 agents resumed 07:31. Lead running integration capture
   shots/world/lead/int1 (the 12 critique views at 18.2 h, full city) for a before/after vs critique/a.
