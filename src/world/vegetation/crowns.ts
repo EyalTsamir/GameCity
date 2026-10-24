@@ -11,7 +11,7 @@ import { Rng, hash01 } from '../../core/rng';
 import { InstBuf, pushCard, pushWood, CARD_SPECS, WOOD_SPECS, STILL, type PlantRef, type Sway, type CardIn } from './foliage';
 import { getLeafAtlas, type LeafTile, type UvRect } from './atlas';
 
-export type Form = 'dome' | 'oval' | 'spread' | 'irregular' | 'umbrella' | 'vase' | 'column' | 'weep' | 'cone' | 'palm' | 'fan' | 'bush' | 'hedge';
+export type Form = 'dome' | 'oval' | 'spread' | 'irregular' | 'umbrella' | 'vase' | 'column' | 'weep' | 'cone' | 'palm' | 'fan' | 'bush' | 'hedge' | 'fern';
 
 /** species definition (art parameters) */
 export interface Kind {
@@ -58,8 +58,8 @@ const KIND_TABLE = {
   poplar: { form: ['column'], tile: 'broad', dense: 'broadDense', leaf: ['#4a8238', '#52893c', '#447a36'], bark: ['#6a604f'], pattern: 0.1, clear: [0.08, 0.14], girth: 0.85, card: 0.4, density: 1.2, gloss: 0.35, trans: 0.9, flutter: 1.6, moss: 0.2 },
   cypress: { form: ['column'], tile: 'cypress', dense: 'needleDense', leaf: ['#3b6136', '#3f6739', '#375c34'], bark: ['#5a4a3e'], pattern: 0.1, clear: [0.02, 0.05], girth: 0.8, card: 0.36, density: 1.6, gloss: 0.15, trans: 0.3, flutter: 0.4, moss: 0 },
   willow: { form: ['weep'], tile: 'willow', dense: 'broadDense', leaf: ['#86ad48', '#8fb550', '#7da244'], bark: ['#4f4438'], pattern: 0.1, clear: [0.42, 0.5], girth: 1.2, card: 0.5, density: 1.1, gloss: 0.3, trans: 1.1, flutter: 1.6, moss: 0.3 },
-  spruce: { form: ['cone'], tile: 'needle', dense: 'needleDense', leaf: ['#33683f', '#376d44', '#30623f', '#346648'], bark: ['#4e3a2d', '#5a4232'], pattern: 0.1, clear: [0.04, 0.1], girth: 1, card: 0.5, density: 2, gloss: 0.25, trans: 0.35, flutter: 0.45, moss: 0.3 },
-  fir: { form: ['cone'], tile: 'needle', dense: 'needleDense', leaf: ['#3a7546', '#3f7c4a', '#376e42'], bark: ['#5a4a3e'], pattern: 0.3, clear: [0.04, 0.1], girth: 0.95, card: 0.5, density: 2, gloss: 0.25, trans: 0.35, flutter: 0.45, moss: 0.25 },
+  spruce: { form: ['cone'], tile: 'needle', dense: 'needleDense', leaf: ['#33683f', '#376d44', '#30623f', '#346648'], bark: ['#4e3a2d', '#5a4232'], pattern: 0.1, clear: [0.04, 0.1], girth: 1, card: 0.5, density: 1, gloss: 0.25, trans: 0.35, flutter: 0.45, moss: 0.3 },
+  fir: { form: ['cone'], tile: 'needle', dense: 'needleDense', leaf: ['#3a7546', '#3f7c4a', '#376e42'], bark: ['#5a4a3e'], pattern: 0.3, clear: [0.04, 0.1], girth: 0.95, card: 0.5, density: 1, gloss: 0.25, trans: 0.35, flutter: 0.45, moss: 0.25 },
   pine: { form: ['umbrella', 'irregular'], tile: 'pine', dense: 'needleDense', leaf: ['#3d6a36', '#44723b', '#39653a'], bark: ['#7a4f34', '#835639'], pattern: 0.1, clear: [0.55, 0.65], girth: 0.9, card: 0.5, density: 1.1, gloss: 0.3, trans: 0.5, flutter: 0.7, moss: 0.1 },
   stonepine: { form: ['umbrella'], tile: 'pine', dense: 'needleDense', leaf: ['#3c6634', '#426d38'], bark: ['#7a5a42', '#866248'], pattern: 0.5, clear: [0.55, 0.66], girth: 1.1, card: 0.55, density: 1.15, gloss: 0.3, trans: 0.5, flutter: 0.7, moss: 0 },
   datepalm: { form: ['palm'], tile: 'frond', dense: 'frond', leaf: ['#5c8a4a', '#64904e', '#577f48', '#6e9452'], bark: ['#8a7356', '#7f6a50'], pattern: 0.7, clear: [1, 1], girth: 1, card: 1, density: 1, gloss: 0.45, trans: 0.8, flutter: 1.2, moss: 0 },
@@ -67,6 +67,7 @@ const KIND_TABLE = {
   fanpalm: { form: ['fan'], tile: 'fan', dense: 'fan', leaf: ['#5f8f45', '#67974a', '#5a8a42'], bark: ['#8a7d6c', '#948674'], pattern: 0.63, clear: [1, 1], girth: 0.75, card: 1, density: 1, gloss: 0.5, trans: 0.8, flutter: 1, moss: 0 },
   shrub: { form: ['bush'], tile: 'shrub', dense: 'shrub', leaf: ['#4a8a3b', '#53913d', '#447f37', '#5b9843', '#3e7836', '#5e8f36'], bark: ['#4a3e34'], pattern: 0.1, clear: [0, 0], girth: 1, card: 0.3, density: 1, gloss: 0.4, trans: 0.7, flutter: 0.8, moss: 0 },
   oleander: { form: ['bush'], tile: 'oleander', dense: 'shrub', leaf: ['#3f6e36', '#46763a'], bark: ['#4a3e34'], pattern: 0.1, clear: [0, 0], girth: 1, card: 0.36, density: 1, gloss: 0.5, trans: 0.6, flutter: 0.9, flowers: ['#f08fb3', '#f7c6d6', '#e8628f', '#f6f0ea'], bloom: 1, moss: 0 },
+  fern: { form: ['fern'], tile: 'fern', dense: 'fern', leaf: ['#4f7a34', '#57823a', '#4a7232', '#5e8838'], bark: ['#4a3e34'], pattern: 0.1, clear: [0, 0], girth: 1, card: 0.5, density: 1, gloss: 0.3, trans: 1.1, flutter: 1.2, moss: 0 },
   hedge: { form: ['hedge'], tile: 'shrub', dense: 'shrub', leaf: ['#3f7a35'], bark: ['#4a3e34'], pattern: 0.1, clear: [0, 0], girth: 1, card: 0.26, density: 1, gloss: 0.4, trans: 0.6, flutter: 0.5, moss: 0 },
   bougain: { form: ['bush'], tile: 'bougain', dense: 'shrub', leaf: ['#3f7a35', '#468039'], bark: ['#4a3e34'], pattern: 0.1, clear: [0, 0], girth: 1, card: 0.34, density: 1, gloss: 0.4, trans: 0.8, flutter: 0.9, flowers: ['#d4237a', '#c21e6a', '#e0408e', '#b5229a'], bloom: 1, moss: 0 },
 } satisfies Record<string, Kind>;
@@ -168,6 +169,8 @@ export interface Struct {
   bark: THREE.Color;
   flower: THREE.Color | null;
   cardHalf: number;
+  /** conifer whorl tiers: axis point, branch length, tier spacing, phase */
+  tiers: { ax: number; ay: number; az: number; r: number; step: number; ph: number }[];
 }
 
 // ───────────────────────────────────────────────────────────── helpers ──
@@ -249,11 +252,12 @@ export function structure(def: PlantDef): Struct {
   const leaf = def.color ? new THREE.Color(def.color) : pickColor(rng, kind.leaf, tone, 0.06);
   const bark = pickColor(rng, kind.bark, 0.5, 0.04);
   const flower = kind.flowers ? new THREE.Color(rng.pick(kind.flowers)) : null;
-  const st: Struct = { def, kind, form, c: [def.x, def.y + def.h * 0.6, def.z], cr: def.r, cry: def.h * 0.3, lobes: [], segs: [], tips: [], fronds: [], leaf, bark, flower, cardHalf: kind.card };
+  const st: Struct = { def, kind, form, c: [def.x, def.y + def.h * 0.6, def.z], cr: def.r, cry: def.h * 0.3, lobes: [], segs: [], tips: [], fronds: [], leaf, bark, flower, cardHalf: kind.card, tiers: [] };
   if (form === 'palm' || form === 'fan') palmStruct(st, rng);
   else if (form === 'cone') coneStruct(st, rng);
   else if (form === 'bush') bushStruct(st, rng);
   else if (form === 'hedge') hedgeStruct(st, rng);
+  else if (form === 'fern') fernStruct(st, rng);
   else broadStruct(st, rng);
   return st;
 }
@@ -352,59 +356,101 @@ function broadStruct(st: Struct, rng: Rng): void {
   // trunk(s)
   const age = def.age ?? 0.5;
   const r0 = Math.max(0.06, Math.min(0.42, (0.016 * h + 0.022 * r) * kind.girth * (0.8 + 0.45 * age)));
-  const trunkTop: V3 = [x + lx * 0.75, y + clear + Rv * (form === 'umbrella' ? 0.75 : form === 'column' ? 0.2 : 0.3), z + lz * 0.75];
-  const stems: { base: V3; top: V3; r: number }[] = [];
+  const sway0 = STILL;
+  const forest = !!def.forest;
+  /** where limbs start: scaffold ends (or stem tops) with their radius and the leaf-mass phase they carry */
+  const anchors: { p: V3; r: number; ph: number; w: number; dirx: number; dirz: number }[] = [];
   const multi = kind.stems && rng.chance(kind.stems[0]) ? rng.int(2, kind.stems[1]) : 1;
-  if (multi > 1) {
-    // olive-like: stems diverge from a gnarled base, each heading for its share of the crown
+  if (multi > 1 || form === 'column') {
+    // olive-like multi-stems diverging from a gnarled base / columnar trees with a central leader
+    const trunkTop: V3 = [x + lx * 0.75, y + clear + Rv * (form === 'column' ? 0.2 : 0.3), z + lz * 0.75];
     const sa = rng.range(0, 6.28);
     for (let i = 0; i < multi; i++) {
       const a = sa + (i / multi) * 6.28 + rng.range(-0.4, 0.4);
-      const top: V3 = [trunkTop[0] + Math.cos(a) * r * 0.32, trunkTop[1] - rng.range(0, Rv * 0.3), trunkTop[2] + Math.sin(a) * r * 0.32];
-      stems.push({ base: [x + Math.cos(a) * r0 * 0.4, y, z + Math.sin(a) * r0 * 0.4], top, r: r0 * 0.7 });
+      const top: V3 = multi > 1 ? [trunkTop[0] + Math.cos(a) * r * 0.32, trunkTop[1] - rng.range(0, Rv * 0.3), trunkTop[2] + Math.sin(a) * r * 0.32] : trunkTop;
+      const base: V3 = multi > 1 ? [x + Math.cos(a) * r0 * 0.4, y, z + Math.sin(a) * r0 * 0.4] : [x, y, z];
+      const sr = multi > 1 ? r0 * 0.7 : r0;
+      const mid = lerp3(base, top, 0.5);
+      const wob = (multi > 1 ? 0.06 : 0.022) * h;
+      mid[0] += rng.range(-wob, wob);
+      mid[2] += rng.range(-wob, wob);
+      st.segs.push({ a: [base[0], base[1] - 0.2, base[2]], b: mid, ra: sr * 1.38, rb: sr * 0.88, sa: sway0, sb: sway0, near: false, aoA: 0.5, aoB: 0.9 });
+      st.segs.push({ a: mid, b: top, ra: sr * 0.88, rb: sr * 0.64, sa: sway0, sb: sway0, near: false, aoA: 0.9, aoB: 0.72 });
+      const lead: V3 = [top[0] + (c[0] - top[0]) * 0.5, c[1] + Rv * (form === 'column' ? 0.75 : 0.35), top[2] + (c[2] - top[2]) * 0.5];
+      st.segs.push({ a: top, b: lead, ra: sr * 0.64, rb: Math.max(0.012, sr * 0.12), sa: sway0, sb: { ph1: 0, w1: 0.3, ph2: 0, w2: 0 }, near: false, aoA: 0.72, aoB: 0.6 });
+      anchors.push({ p: top, r: sr * 0.64, ph: rng.next(), w: 0, dirx: Math.cos(a), dirz: Math.sin(a) });
+      anchors.push({ p: lerp3(top, lead, 0.55), r: sr * 0.38, ph: rng.next(), w: 0.15, dirx: Math.cos(a), dirz: Math.sin(a) });
     }
-  } else stems.push({ base: [x, y, z], top: trunkTop, r: r0 });
-  const sway0 = STILL;
-  for (const s of stems) {
-    // S-curved trunk in 3 segments with a root flare
-    const mid = lerp3(s.base, s.top, 0.5);
-    const wob = (form === 'irregular' || multi > 1 ? 0.06 : 0.022) * h;
-    mid[0] += rng.range(-wob, wob);
-    mid[2] += rng.range(-wob, wob);
-    // two segments: the root flare tapers over the lower one (static for every LOD — keep it cheap)
-    st.segs.push({ a: [s.base[0], s.base[1] - 0.2, s.base[2]], b: mid, ra: s.r * 1.38, rb: s.r * 0.88, sa: sway0, sb: sway0, near: false, aoA: 0.5, aoB: 0.9 });
-    st.segs.push({ a: mid, b: s.top, ra: s.r * 0.88, rb: s.r * 0.64, sa: sway0, sb: sway0, near: false, aoA: 0.9, aoB: 0.72 });
-    // leader: the stem tapers on up into the crown (no open, cut-off trunk top shows through gaps)
-    const lead: V3 = [s.top[0] + (c[0] - s.top[0]) * 0.5, c[1] + Rv * (form === 'column' ? 0.75 : form === 'umbrella' ? 0.1 : 0.35), s.top[2] + (c[2] - s.top[2]) * 0.5];
-    st.segs.push({ a: s.top, b: lead, ra: s.r * 0.64, rb: Math.max(0.012, s.r * 0.12), sa: sway0, sb: { ph1: 0, w1: 0.3, ph2: 0, w2: 0 }, near: false, aoA: 0.72, aoB: 0.6 });
+  } else {
+    // a tapering trunk that FORKS below the leaves into 2–4 scaffold limbs spreading up and out
+    // (planes, lindens, oaks: the structure you see under a city tree)
+    const fork: V3 = [x + lx * 0.45, y + Math.max(1.6, clear * rng.range(0.74, 0.86)), z + lz * 0.45];
+    const mid = lerp3([x, y, z], fork, 0.5);
+    mid[0] += rng.range(-0.015, 0.015) * h;
+    mid[2] += rng.range(-0.015, 0.015) * h;
+    st.segs.push({ a: [x, y - 0.2, z], b: mid, ra: r0 * 1.38, rb: r0 * 0.96, sa: sway0, sb: sway0, near: false, aoA: 0.5, aoB: 0.88 });
+    st.segs.push({ a: mid, b: fork, ra: r0 * 0.96, rb: r0 * 0.82, sa: sway0, sb: sway0, near: false, aoA: 0.88, aoB: 0.8 });
+    const nS = form === 'vase' || form === 'spread' || form === 'umbrella' ? rng.int(3, 4) : form === 'weep' ? 3 : rng.int(2, 3);
+    // elevation of the scaffolds (from horizontal)
+    const e0 = form === 'vase' ? 1.15 : form === 'umbrella' ? 0.78 : form === 'spread' ? 0.9 : 1.05;
+    let a0 = rng.range(0, 6.28);
+    if (def.stretch) a0 = Math.atan2(def.stretch[1], def.stretch[0]) + rng.range(-0.3, 0.3);
+    const topY = y + clear + crownH * (form === 'vase' ? 0.42 : form === 'umbrella' ? 0.25 : 0.32);
+    for (let i = 0; i < nS; i++) {
+      const az = a0 + (i / nS) * 6.28 + rng.range(-0.35, 0.35);
+      const e = e0 + rng.range(-0.15, 0.15);
+      const rise = Math.max(0.6, topY - fork[1]) * rng.range(0.85, 1.1);
+      let horiz = rise / Math.tan(e);
+      horiz = Math.min(horiz, r * (form === 'umbrella' ? 0.6 : 0.5));
+      const end: V3 = [fork[0] + Math.cos(az) * horiz, fork[1] + rise, fork[2] + Math.sin(az) * horiz];
+      // a gentle outward bow
+      const bow: V3 = lerp3(fork, end, 0.5);
+      bow[0] += Math.cos(az) * horiz * 0.12;
+      bow[2] += Math.sin(az) * horiz * 0.12;
+      bow[1] -= rise * 0.04;
+      const sr = r0 * rng.range(0.55, 0.68) * (nS > 3 ? 0.9 : 1);
+      const ph = rng.next();
+      st.segs.push({ a: fork, b: bow, ra: sr, rb: sr * 0.8, sa: sway0, sb: { ph1: ph, w1: 0.12, ph2: 0, w2: 0 }, near: forest, aoA: 0.8, aoB: 0.75 });
+      st.segs.push({ a: bow, b: end, ra: sr * 0.8, rb: sr * 0.55, sa: { ph1: ph, w1: 0.12, ph2: 0, w2: 0 }, sb: { ph1: ph, w1: 0.3, ph2: 0, w2: 0 }, near: true, aoA: 0.75, aoB: 0.65 });
+      anchors.push({ p: end, r: sr * 0.55, ph, w: 0.3, dirx: Math.cos(az), dirz: Math.sin(az) });
+      anchors.push({ p: bow, r: sr * 0.8, ph, w: 0.12, dirx: Math.cos(az), dirz: Math.sin(az) });
+    }
+    if (form === 'dome' || form === 'oval') {
+      // central leader up into the top of the crown
+      const lead: V3 = [c[0], c[1] + Rv * 0.4, c[2]];
+      st.segs.push({ a: fork, b: lead, ra: r0 * 0.5, rb: Math.max(0.012, r0 * 0.1), sa: sway0, sb: { ph1: 0, w1: 0.3, ph2: 0, w2: 0 }, near: forest, aoA: 0.8, aoB: 0.6 });
+      anchors.push({ p: lerp3(fork, lead, 0.6), r: r0 * 0.3, ph: rng.next(), w: 0.2, dirx: 0, dirz: 0 });
+    }
   }
-  // limbs: from the stem tops / upper trunk to each leaf mass
-  const stemFor = (L: Lobe3) => {
-    let best = stems[0],
-      bd = 1e9;
-    for (const s of stems) {
-      const d = Math.hypot(L.x - s.top[0], L.z - s.top[2]);
-      if (d < bd) {
-        bd = d;
-        best = s;
+  // limbs: from the best anchor (direction + reach) to each leaf mass
+  const anchorFor = (L: Lobe3): (typeof anchors)[number] => {
+    let best = anchors[0],
+      bs = -1e9;
+    const dx = L.x - c[0],
+      dz = L.z - c[2];
+    const dl = Math.hypot(dx, dz) || 1;
+    for (const A of anchors) {
+      const al = Math.hypot(A.dirx, A.dirz);
+      const dirScore = al > 0.01 ? (dx * A.dirx + dz * A.dirz) / dl : 0.2;
+      const reach = -Math.hypot(L.x - A.p[0], L.y - A.p[1], L.z - A.p[2]) / Math.max(1, r);
+      const sc = dirScore * 1.2 + reach;
+      if (sc > bs) {
+        bs = sc;
+        best = A;
       }
     }
     return best;
   };
   st.lobes.forEach((L, li) => {
-    const s = stemFor(L);
-    const outward = Math.hypot(L.x - s.top[0], L.z - s.top[2]);
-    const low = (L.y - c[1]) / Math.max(0.5, Rv);
-    // limb start: lower lobes branch off lower on the stem
-    const sf = Math.min(1, Math.max(0.55, 0.85 + low * 0.25));
-    const start = lerp3(lerp3(s.base, s.top, 0.6), s.top, sf);
-    const lr = Math.max(0.03, s.r * (0.42 + 0.18 * Math.min(1, outward / r)) * (li === 0 ? 0.9 : 1));
+    const A = anchorFor(L);
+    const start: V3 = A.p;
+    const lr = Math.max(0.025, Math.min(A.r * 0.85, r0 * 0.5));
     // aim into the mass, stop ~30 % short of its centre
     const tgt: V3 = [L.x - (L.x - start[0]) * 0.22, L.y - L.ry * 0.25, L.z - (L.z - start[2]) * 0.22];
     const m: V3 = lerp3(start, tgt, 0.5);
     m[1] += (form === 'vase' ? 0.05 : form === 'spread' || form === 'umbrella' ? 0.14 : 0.1) * Math.hypot(tgt[0] - start[0], tgt[2] - start[2]);
-    const lsA: Sway = { ph1: L.ph, w1: 0, ph2: 0, w2: 0 };
-    const lsM: Sway = { ph1: L.ph, w1: L.w * 0.45, ph2: 0, w2: 0 };
+    const lsA: Sway = { ph1: L.ph, w1: A.w * 0.6, ph2: 0, w2: 0 };
+    const lsM: Sway = { ph1: L.ph, w1: Math.max(A.w * 0.6, L.w * 0.45), ph2: 0, w2: 0 };
     const lsB: Sway = { ph1: L.ph, w1: L.w, ph2: 0, w2: 0 };
     // limbs belong to the near LOD (the far cards hide them; the static part keeps trunks only)
     st.segs.push({ a: start, b: m, ra: lr, rb: lr * 0.78, sa: lsA, sb: lsM, near: true, aoA: 0.7, aoB: 0.65 });
@@ -480,6 +526,10 @@ function coneStruct(st: Struct, rng: Rng): void {
     if (L0 < 0.18) continue;
     rot += 2.39996 + rng.range(-0.3, 0.3);
     const lph = rng.next();
+    {
+      const axp = lerp3([x, y, z], T, (yy - y) / (top - y));
+      st.tiers.push({ ax: axp[0], ay: yy, az: axp[2], r: L0, step, ph: lph });
+    }
     const n = Math.max(3, Math.round(per * (0.6 + 0.4 * prof)));
     for (let k = 0; k < n; k++) {
       const a = rot + (k / n) * Math.PI * 2 + rng.range(-0.2, 0.2);
@@ -594,6 +644,24 @@ function bushStruct(st: Struct, rng: Rng): void {
       st.tips.push({ p, d, sway: { ph1: L.ph, w1: L.w, ph2: rng.next(), w2: 0.4 }, lobe: li, s: rng.range(0.8, 1.15) });
     }
   });
+}
+
+/** fern clump: fronds arching out of a crown at the ground */
+function fernStruct(st: Struct, rng: Rng): void {
+  const { x, y, z, h, r } = st.def;
+  st.c = [x, y + h * 0.4, z];
+  st.cr = r;
+  st.cry = h * 0.5;
+  st.cardHalf = r * 0.5;
+  st.lobes.push({ x, y: y + h * 0.35, z, rx: r, ry: h * 0.5, rz: r, tint: 1, ph: rng.next(), w: 0.3 });
+  const n = rng.int(7, 11);
+  const a0 = rng.range(0, 6.28);
+  for (let i = 0; i < n; i++) {
+    const a = a0 + (i / n) * 6.28 + rng.range(-0.25, 0.25);
+    const el = rng.range(0.55, 1.05);
+    const d: V3 = [Math.cos(a) * Math.cos(el), Math.sin(el), Math.sin(a) * Math.cos(el)];
+    st.tips.push({ p: [x + Math.cos(a) * 0.05, y + 0.03, z + Math.sin(a) * 0.05], d, sway: { ph1: rng.next(), w1: 0.25, ph2: rng.next(), w2: 0.5 }, lobe: 0, s: rng.range(0.8, 1.15) });
+  }
 }
 
 /** clipped hedge: tips spread over both faces and the top (cards lie along the faces, tops break the line) */
@@ -760,6 +828,48 @@ function tangentFrame(rng: Rng, out: V3, hu: number, hv: number, tilt = 0.35): [
   ];
 }
 
+/**
+ * Conifer volume: every whorl tier gets a ring of drooping needle sprays lying ON the cone (inner end at the
+ * trunk, needles hanging out and down over the tier below), so the tree reads as a dark cone from any side;
+ * the top ends in an upright leader spray. `every` thins tiers (far LOD), `k` scales the spray size.
+ */
+function emitConeShell(st: Struct, ref: PlantRef, cards: InstBuf, rng: Rng, lod: number, tile: LeafTile, every: number, k: number): void {
+  const uv = getLeafAtlas().uv(tile);
+  const T = st.tiers;
+  for (let i = 0; i < T.length; i += every) {
+    const t = T[i];
+    const f = i / Math.max(1, T.length - 1);
+    const hw = Math.min(0.75, Math.max(0.22, t.r * 0.42)) * k;
+    const n = Math.max(3, Math.round((Math.PI * 2 * t.r * 0.95) / (hw * 2)));
+    const a0 = rng.range(0, 6.28);
+    const drop = t.step * every * (0.95 + 0.5 * (1 - f)) + 0.12 * t.r;
+    for (let j = 0; j < n; j++) {
+      const a = a0 + (j / n) * Math.PI * 2 + rng.range(-0.15, 0.15);
+      const ca = Math.cos(a),
+        sa = Math.sin(a);
+      const rr = t.r * rng.range(0.92, 1.08) * k;
+      const inner: V3 = [t.ax + ca * rr * 0.08, t.ay + t.step * 0.35, t.az + sa * rr * 0.08];
+      const outer: V3 = [t.ax + ca * rr, t.ay - drop * rng.range(0.85, 1.1), t.az + sa * rr];
+      const c: V3 = lerp3(inner, outer, 0.5);
+      const V: V3 = [(outer[0] - inner[0]) / 2, (outer[1] - inner[1]) / 2, (outer[2] - inner[2]) / 2];
+      const U: V3 = [-sa * hw, 0, ca * hw];
+      const F = norm(cross(U, V));
+      const out: V3 = norm([ca, 0.55, sa]);
+      const nrm = norm(lerp3(dot(F, out) < 0 ? ([-F[0], -F[1], -F[2]] as V3) : F, out, 0.6));
+      const ao = (0.62 + 0.38 * f) * crownAO(st, c);
+      const sw: Sway = { ph1: t.ph, w1: Math.min(1, t.r / 2.5) * 0.8, ph2: rng.next(), w2: 0.3 };
+      card(cards, ref, st, c, U, V, nrm, ao, lod, uv, rng.range(0.9, 1.06) * (0.92 + 0.12 * f), sw, 0.6);
+    }
+  }
+  // leader spray at the very top (narrow, pointing up)
+  if (T.length) {
+    const t = T[T.length - 1];
+    const hv = Math.max(0.35, t.step * 1.4) * k;
+    card(cards, ref, st, [t.ax, t.ay + hv * 0.9, t.az], [hv * 0.32, 0, 0], [0, hv, 0], [0, 1, 0], 1, lod, uv, 1.05, { ph1: t.ph, w1: 0.6, ph2: 0, w2: 0.3 }, 0.5);
+    card(cards, ref, st, [t.ax, t.ay + hv * 0.9, t.az], [0, 0, hv * 0.32], [0, hv, 0], [0, 1, 0], 1, lod, uv, 1.05, { ph1: t.ph, w1: 0.6, ph2: 0, w2: 0.3 }, 0.5);
+  }
+}
+
 /** FAR LOD: trunk + limbs (static wood, always) and a few big dense cards per leaf mass */
 export function emitFar(st: Struct, ref: PlantRef, cards: InstBuf, woodBuf: InstBuf): void {
   const rng = new Rng(st.def.seed ^ 0x51f15e);
@@ -772,6 +882,25 @@ export function emitFar(st: Struct, ref: PlantRef, cards: InstBuf, woodBuf: Inst
   }
   const uv = atlas.uv(st.kind.dense);
   const forest = !!st.def.forest;
+  if (st.form === 'fern') {
+    // far: three fronds
+    const uvF = atlas.uv('fern');
+    for (let i = 0; i < 3; i++) {
+      const a = rng.range(0, 6.28) + i * 2.1;
+      const hv = st.def.r * 0.55;
+      const Vd: V3 = norm([Math.cos(a), 1.1, Math.sin(a)]);
+      const Ud = norm(cross([0, 1, 0], Vd));
+      const V: V3 = [Vd[0] * hv, Vd[1] * hv, Vd[2] * hv];
+      const U: V3 = [Ud[0] * hv * 0.45, Ud[1] * hv * 0.45, Ud[2] * hv * 0.45];
+      card(cards, ref, st, [st.def.x + V[0], st.def.y + V[1], st.def.z + V[2]], U, V, [0, 1, 0], 0.8, -1, uvF, 1, { ph1: 0, w1: 0.2, ph2: 0, w2: 0.3 }, 0.6);
+    }
+    return;
+  }
+  if (st.form === 'cone') {
+    // a cone of drooping sprays (every 2nd/3rd tier, bigger) instead of billboard clumps
+    emitConeShell(st, ref, cards, rng, -1, st.kind.dense, forest ? 3 : 2, forest ? 1.25 : 1.12);
+    return;
+  }
   st.lobes.forEach((L, li) => {
     const lobeR = (L.rx + L.ry + L.rz) / 3;
     const out = norm([L.x - st.c[0], L.y - st.c[1] + 0.2 * st.cry, L.z - st.c[2]]);
@@ -858,17 +987,18 @@ export function emitNear(st: Struct, ref: PlantRef, cards: InstBuf, woodBuf: Ins
   const uvLeaf = atlas.uv(k.tile);
   const uvDense = atlas.uv(k.dense);
   const half = st.cardHalf;
+  if (st.form === 'cone') emitConeShell(st, ref, cards, rng, 1, k.tile, 1, 1);
   // inner dense cards: fill the core of every leaf mass (no sky through the middle of a crown)
-  if (st.form !== 'bush') {
+  if (st.form !== 'bush' && st.form !== 'fern') {
     st.lobes.forEach((L) => {
       const lobeR = (L.rx + L.ry + L.rz) / 3;
-      const n = st.form === 'cone' ? 1 : lobeR > 1.1 ? 3 : 2;
+      const n = st.form === 'cone' ? 2 : lobeR > 1.1 ? 3 : 2;
       for (let i = 0; i < n; i++) {
         const p: V3 = [L.x + rng.range(-0.25, 0.25) * L.rx, L.y + rng.range(-0.2, 0.2) * L.ry, L.z + rng.range(-0.25, 0.25) * L.rz];
         const out = norm([p[0] - st.c[0], p[1] - st.c[1], p[2] - st.c[2]]);
         const hs = lobeR * 0.85;
         const [U, V, F] = frame(rng, out, randDir(rng), hs, hs);
-        card(cards, ref, st, p, U, V, sphereNormal(st, p, L, F, 0.9), crownAO(st, p) * 0.75, 1, uvDense, L.tint * 0.9, { ph1: L.ph, w1: L.w * 0.7, ph2: 0, w2: 0 }, 0.3);
+        card(cards, ref, st, p, U, V, sphereNormal(st, p, L, F, 0.9), crownAO(st, p) * (st.form === 'cone' ? 0.55 : 0.75), 1, uvDense, L.tint * (st.form === 'cone' ? 0.8 : 0.9), { ph1: L.ph, w1: L.w * 0.7, ph2: 0, w2: 0 }, 0.3);
       }
     });
   }
@@ -889,6 +1019,15 @@ export function emitNear(st: Struct, ref: PlantRef, cards: InstBuf, woodBuf: Ins
         U = [side[0] * hu, 0, side[2] * hu];
         V = [rng.range(-0.1, 0.1) * hv, -hv, rng.range(-0.1, 0.1) * hv];
         F = norm(cross(U, V));
+      } else if (st.form === 'fern') {
+        // one frond per card: from the clump centre arching out (curvature drawn in the tile)
+        hv = st.def.r * t.s * 0.55;
+        hu = hv * 0.42;
+        const Vd = t.d;
+        const Ud = norm(cross([0, 1, 0], Vd));
+        U = [Ud[0] * hu, Ud[1] * hu, Ud[2] * hu];
+        V = [Vd[0] * hv, Vd[1] * hv, Vd[2] * hv];
+        F = norm(cross(Ud, Vd));
       } else if (st.form === 'hedge') {
         // clusters lying along the clipped face: leaves point up/along, a little outward
         const d = t.d;
@@ -905,7 +1044,7 @@ export function emitNear(st: Struct, ref: PlantRef, cards: InstBuf, woodBuf: Ins
         const Vd = norm(add(d, randDir(rng), 0.15));
         let Ud = norm(cross([0, 1, 0], Vd));
         const W = cross(Vd, Ud);
-        const a = (i % 2 === 1 ? Math.PI / 2 : 0) + rng.range(-0.45, 0.45);
+        const a = (rng.chance(0.4) ? Math.PI / 2 : 0) + rng.range(-0.45, 0.45);
         Ud = norm(add([Ud[0] * Math.cos(a), Ud[1] * Math.cos(a), Ud[2] * Math.cos(a)], W, Math.sin(a)));
         hv = hu * 1.15;
         U = [Ud[0] * hu * 0.85, Ud[1] * hu * 0.85, Ud[2] * hu * 0.85];
@@ -920,7 +1059,9 @@ export function emitNear(st: Struct, ref: PlantRef, cards: InstBuf, woodBuf: Ins
       // the twig base of the drawing sits at the tip; the cluster extends outwards
       const c: V3 = t.hang
         ? [t.p[0], t.p[1] - hv, t.p[2]]
-        : st.form === 'hedge'
+        : st.form === 'fern'
+          ? [t.p[0] + V[0], t.p[1] + V[1], t.p[2] + V[2]]
+          : st.form === 'hedge'
           ? [t.p[0] + V[0] * 0.55 + t.d[0] * 0.04, t.p[1] + V[1] * 0.55, t.p[2] + V[2] * 0.55 + t.d[2] * 0.04]
           : [t.p[0] + V[0] * 0.75, t.p[1] + V[1] * 0.75, t.p[2] + V[2] * 0.75];
       const ao = crownAO(st, c);

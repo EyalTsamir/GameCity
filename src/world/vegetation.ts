@@ -1018,16 +1018,33 @@ export default function create(ctx: CityContext): CityModule {
     }
   }
 
-  // forest floor (leaf-card mode): shrubs and young saplings under the canopy so the hills read as woodland,
+  // forest floor (leaf-card mode): shrubs and fern clumps under the canopy so the hills read as woodland,
   // not as trees standing on a lawn
+  let fernCount = 0;
   if (cardsOn) {
     const rng = ctx.rng('veg-forest-floor');
     for (const t of planted) {
-      if (t.tag !== 'forest' || !rng.chance(0.42)) continue;
-      const a = rng.range(0, 6.28),
-        d = t.r * rng.range(0.6, 1.2);
-      const rr = rng.range(0.55, 1.05);
-      addBush(t.x + Math.cos(a) * d, t.z + Math.sin(a) * d, rr, rr * rng.range(0.9, 1.3), rng.int(0, 1e9), undefined);
+      if (t.tag !== 'forest') continue;
+      if (rng.chance(0.42)) {
+        const a = rng.range(0, 6.28),
+          d = t.r * rng.range(0.6, 1.2);
+        const rr = rng.range(0.55, 1.05);
+        addBush(t.x + Math.cos(a) * d, t.z + Math.sin(a) * d, rr, rr * rng.range(0.9, 1.3), rng.int(0, 1e9), undefined);
+      }
+      const nf = rng.int(0, 3);
+      for (let i = 0; i < nf; i++) {
+        const a = rng.range(0, 6.28),
+          d = t.r * rng.range(0.3, 1.1) + 0.4;
+        const x = t.x + Math.cos(a) * d,
+          z = t.z + Math.sin(a) * d;
+        if (x < slab.x0 + 1 || x > slab.x1 - 1 || z < slab.z0 + 1 || z > slab.z1 - 1) continue;
+        if (occAny(occ, x, z, 0.5, HARD | OCC.PATH)) continue;
+        if (rocks.any(x, z, 4, (id, dd) => dd < rocks.r[id] + 0.3)) continue;
+        if (trees.any(x, z, 1.5, (_id, dd) => dd < 0.45)) continue;
+        const rr = rng.range(0.45, 0.75);
+        plants.push({ kind: 'fern', x, y: H(x, z), z, h: rr * rng.range(0.9, 1.2), r: rr, seed: rng.int(0, 1e9), tone: rng.range(0.35, 0.7), age: 0.5 });
+        fernCount++;
+      }
     }
   }
 
@@ -1459,6 +1476,7 @@ export default function create(ctx: CityContext): CityModule {
         forest: forestCount,
         forestBand: bandCount,
         forestMantle: mantleCount,
+        ferns: fernCount,
         street: planted.filter((t) => t.tag === 'street').length,
         bushes: bushCount,
         hedgeM: Math.round(hedgeLen),

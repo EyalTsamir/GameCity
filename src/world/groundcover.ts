@@ -103,7 +103,8 @@ export default function create(ctx: CityContext): CityModule {
         const t0 = performance.now();
         const wall = lastFrameT > 0 ? t0 - lastFrameT : 16;
         lastFrameT = t0;
-        const budget = Math.min(80, Math.max(4, wall * 0.12));
+        // (> 250 ms frames only happen under software GL / heavy load: finish in a few frames)
+        const budget = wall > 250 ? Math.min(2000, wall * 0.5) : Math.min(80, Math.max(4, wall * 0.12));
         const p = ctx.camera.position;
         const ready = cwin.update(p.x, p.z, budget);
         if (ready) field.setOuter(ready);

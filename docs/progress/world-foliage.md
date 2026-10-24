@@ -31,8 +31,19 @@
   near clusters face OUT of the crown (tangentFrame) so crowns are not see-through face-on. Wind verified
   (wind_sheet.png diff: crowns, trunks and dappled shadows move). M1 milestone message sent to lead
   (ba_m1.png before/after sheet).
-* NEXT: capture m1g (park/parkair/ot 11 + forest + hedges + bushes views) to check tangent cards & leaders;
-  then forest-edge layering, overview + perf numbers (counts below), log + final report sections.
+* Lead review of M1 (approved) → 3 notes, all coded (to verify):
+  (1) "hat on a stick": broadleaf trunks now taper and FORK at 0.74–0.86 × clear into 2–4 scaffold limbs
+      (vase/spread/umbrella 3–4) bowing up/out (first scaffold segment static, rest near), central leader for
+      dome/oval; limbs to leaf masses start from scaffold anchors (anchorFor: direction + reach). Columns and
+      olive multi-stems keep their own stems.
+  (2) conifers: emitConeShell — every whorl tier gets a ring of drooping needle sprays lying on the cone
+      (inner end at the trunk, needles over the tier below), 2 dark inner cards per lobe, upright leader spray;
+      far LOD = same shell every 2nd (forest 3rd) tier with needleDense; sprays density 1 (40 % hanging).
+  (3) forest understory: mantle of young birch/oak in front of edge trees (veg-forest-mantle), 1–3 shrubs
+      per edge tree on the city side, fern clumps (atlas 'fern', kind fern, 0–3 per forest tree) + shrubs under
+      the canopy. Asked ground (via lead) for a forest-floor shading under the canopy.
+* RUNNING: capset m1g (queued; loads the current code when it gets the lock).
+* NEXT: judge m1g (park, parkair, ot, forest, westbrook, ovw); fix; perf counts; final report.
 * Tools: scratchpad/{capset.sh OUT HOURS [q] [views], dumpatlas.sh, vstat.py, bench/}.
 * Views: park=-55,4,15,26,200,6; ot=66,3.5,-13.9,13,25,4; dt=-22,3.5,-68.9,14,35,4; palms=118,5,30,18,90,6;
   forest=10,10,-158,70,10,10; parkair=-55,0,17,90,30,30; overview.

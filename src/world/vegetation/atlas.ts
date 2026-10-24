@@ -42,6 +42,7 @@ const REGIONS = {
   dryFrond: [5, 2, 1, 1],
   bougain: [6, 2, 1, 1],
   ivy: [0, 3, 1, 1],
+  fern: [1, 3, 1, 1],
   frond: [7, 0, 1, 4],
 } as const;
 
@@ -670,6 +671,32 @@ function ivy(g: CanvasRenderingContext2D, rng: Rng, w: number, h: number): void 
   }
 }
 
+/** fern frond: arching rachis, pinnae shrinking toward the tip, each pinna a row of small rounded lobes */
+function fernFrond(g: CanvasRenderingContext2D, rng: Rng, w: number, h: number): void {
+  const rach = clipStem(stem(0, 0, rng.range(-0.1, 0.1), h * 0.97, rng.range(-0.35, 0.35), 14), w, h, 6);
+  const n = 22;
+  const items: { x: number; y: number; a: number; L: number; b: number; side: number }[] = [];
+  for (let k = 2; k < n; k++) {
+    const f = k / n;
+    const p = along(rach, f);
+    const L = w * 0.42 * Math.sin(Math.min(1, f * 1.15) * Math.PI) * (1 - f * 0.25);
+    for (const side of [-1, 1]) items.push({ x: p.x, y: p.y, a: p.a + side * rng.range(0.95, 1.25), L, b: rng.range(0.5, 0.92), side });
+  }
+  items.sort((a, b) => a.b - b.b);
+  for (const it of items) {
+    const pin = stem(it.x, it.y, it.a, it.L, it.side * 0.25, 5);
+    twig(g, pin, 1.2, 0.6, 0.55);
+    const m = Math.max(3, Math.round(it.L / 6));
+    const id = lid(rng);
+    for (let j = 0; j < m; j++) {
+      const q = along(pin, (j + 0.5) / m);
+      const s2 = it.L * 0.16 * (1 - (j / m) * 0.5);
+      for (const sd of [-1, 1]) leaf(g, q.x, q.y, q.a + sd * 1.1, s2, it.b * rng.range(0.92, 1.05), id, { w: 0.45, wide: 0.5, base: 0.8, tip: 0.1, rib: false, fold: 0.1 });
+    }
+  }
+  twig(g, rach, 2.4, 1, 0.45);
+}
+
 const PAINT: Record<LeafTile, Painter> = {
   broad: (g, s, w, h) => broadCluster(g, new Rng(s), w, h, 72, 25, { w: 0.36, wide: 0.38, base: 1.1, tip: 0.85 }),
   broadDense: (g, s, w, h) => denseClump(g, new Rng(s), w, h, 210, 22, { w: 0.36, wide: 0.38, base: 1.1, tip: 0.8 }),
@@ -691,6 +718,7 @@ const PAINT: Record<LeafTile, Painter> = {
   citrus: (g, s, w, h) => citrus(g, new Rng(s), w, h),
   bougain: (g, s, w, h) => bougainvillea(g, new Rng(s), w, h),
   ivy: (g, s, w, h) => ivy(g, new Rng(s), w, h),
+  fern: (g, s, w, h) => fernFrond(g, new Rng(s), w, h),
   fan: (g, s, w, h) => fanLeaf(g, new Rng(s), w, h),
   frond: (g, s, w, h) => palmFrond(g, new Rng(s), w, h),
   dryFrond: (g, s, w, h) => palmFrond(g, new Rng(s), w * 1, h * 1, true),
