@@ -437,9 +437,12 @@ vec3 landAlbedo() {
       float rip = (1.0 - smoothstep(60.0, 110.0, sd + nA.r * 30.0));
       col = mix(col, bankC, bank * max(steep * 0.9, stoneW) * rip);
       // towpath along the north bank (continues the town promenade)
-      float tp = (1.0 - smoothstep(1.0, 1.0 + fp, abs(ru - 4.2 - 0.6 * nA.g))) * step(0.0, side);
+      // (narrow, worn into the grass: gravel in the middle, grassy verges, puddle-dark patches)
+      float tpd = abs(ru - 4.6 - 0.6 * nA.g);
+      float tp = (1.0 - smoothstep(0.55, 0.75 + fp, tpd)) * step(0.0, side);
       tp *= 1.0 - smoothstep(1500.0, 1700.0, sd);
-      col = mix(col, cTrack * (0.95 + 0.15 * nB.b), tp * (1.0 - forest) * 0.9);
+      vec3 tpc = mix(cTrack * (0.85 + 0.2 * nB.b), meadow * 0.85, 0.3 * smoothstep(0.2, 0.6, tpd) + 0.15 * smoothstep(0.6, 0.8, nB.r));
+      col = mix(col, tpc, tp * (1.0 - forest) * 0.85);
     }
   }
   // ── sand (dunes, beach) — wet near the waterline; marram grass on the dunes

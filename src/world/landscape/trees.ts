@@ -611,7 +611,7 @@ function kindGeometry(kind: number): THREE.BufferGeometry {
     idx.push(base, base + 1, base + 2, base, base + 2, base + 3);
   };
   sh.clumps.forEach((c) => {
-    const n = Math.max(6, Math.min(16, Math.round(c.r * 70)));
+    const n = Math.max(8, Math.min(20, Math.round(c.r * 88)));
     for (let i = 0; i < n; i++) {
       // directions over the sphere (a little upward), centres toward the clump's surface
       const zz = 1 - 2 * rnd(),
@@ -626,7 +626,7 @@ function kindGeometry(kind: number): THREE.BufferGeometry {
         pz = c.z + dz * d;
       // card planes: half facing out, half random (seen edge-on from some side: depth in the crown)
       const q = rnd();
-      card(px, py, pz, c.r * (0.62 + 0.2 * rnd()), 0, 0, 0, dx * q + (rnd() - 0.5), dy * q + (rnd() - 0.5), dz * q + (rnd() - 0.5), [c.x, c.y, c.z]);
+      card(px, py, pz, c.r * (0.66 + 0.2 * rnd()), 0, 0, 0, dx * q + (rnd() - 0.5), dy * q + (rnd() - 0.5), dz * q + (rnd() - 0.5), [c.x, c.y, c.z]);
     }
   });
   sh.tiers.forEach((t, i) => {

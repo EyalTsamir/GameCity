@@ -89,7 +89,7 @@ if ( thHidden( aPart, aInst2.x ) ) transformed = vec3( 0.0 );
   vRough = aMeta.w - fin * 4.0;
   vCoat = ( fin > 0.5 && fin < 2.5 ) ? 1.0 : 0.0;
   vMetal = ( fin > 2.5 ) ? 1.0 : 0.0;
-  vGain = fin < 0.5 ? 1.0 : fin < 1.5 ? 3.0 : fin < 2.5 ? 4.5 : 1.6;
+  vGain = fin < 0.5 ? 1.0 : fin < 1.5 ? 1.8 : fin < 2.5 ? 3.2 : 1.4;
 }
 `;
 
@@ -99,15 +99,22 @@ varying float vRough;
 varying float vCoat;
 varying float vMetal;
 varying float vGain;
-// A street, not a studio: what a glossy car reflects below the horizon is asphalt and facades (dark), just
-// above it a bright band of hazy sky, higher up the sky dome. The PMREM sky alone is too smooth to read as
-// gloss, so the sharp reflections are shaped by the reflected direction's height — that gives the bright
-// horizon line along the flanks and the dark lower doors of real paint, at the cost of a few ALU.
+// A street, not a studio: what a glossy car reflects below the horizon is asphalt (dark), just above it the
+// facades across the street (a blocky skyline over the azimuth, mid-grey), then a bright band of hazy sky and
+// the sky dome. The PMREM sky alone is too smooth to read as gloss (a uniform sheen reads as dust), so the
+// sharp reflections are shaped by the reflected direction: crisp horizon / skyline lines run along the
+// flanks and shoulders, windscreens mirror the roofline. The horizon is lifted a little because the diorama
+// camera looks down. A few ALU; no extra pass or texture.
 float thStreetRefl( vec3 viewDir, vec3 n, float soft ) {
-  float y = inverseTransformDirection( reflect( -viewDir, n ), viewMatrix ).y;
-  float w = 0.025 + soft;
-  float above = smoothstep( -w, w, y );
-  return mix( 0.3, 1.0, above ) + 0.85 * above * exp( -max( y, 0.0 ) * ( 9.0 - soft * 20.0 ) );
+  vec3 R = inverseTransformDirection( reflect( -viewDir, n ), viewMatrix );
+  float e = R.y + 0.12;
+  float w = 0.018 + soft;
+  float b = floor( atan( R.x, R.z ) * 5.0 );
+  float hb = fract( sin( b * 91.7 + 3.1 ) * 43758.55 );
+  float hs = 0.05 + 0.24 * hb * hb;
+  float sky = smoothstep( hs - w, hs + w, e );
+  float gnd = smoothstep( -w, w, e );
+  return mix( 0.2, mix( 0.5, 1.0 + 0.7 * exp( -max( e - hs, 0.0 ) * 8.0 ), sky ), gnd );
 }
 `;
 
@@ -148,7 +155,7 @@ export function createVehicleMaterial(uniforms: GlobalUniforms, atlas: THREE.Tex
       )
       .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += vEmit.rgb * mix( vec3( 1.0 ), diffuseColor.rgb, vEmit.a );');
   };
-  material.customProgramCacheKey = () => 'traffic-vehicle-v5';
+  material.customProgramCacheKey = () => 'traffic-vehicle-v6';
   patchLampMaterial(material); // night street-light map (night agent)
 
   const depth = new THREE.MeshDepthMaterial();
