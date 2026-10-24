@@ -17,6 +17,10 @@ Branch: work continues from `claude/tinyhaven-graphics-audit-l089m8` (fast-forwa
 `claude/pensive-gates-bim12i` (the session's designated branch).
 
 ## Resume here (keep current)
+* **WORLD ROUND DONE** (2026-10-24 19:19 UTC). All 7 workstreams have final reports; lead integration QA complete (see
+  "Final report (lead)" at the end). ui-test 35/36 (the 1 failure is pre-existing in the ?camdebug stand-in city).
+  Watchdog scheduled task deleted, autocheckpoint stopped. Open for the user: real-GPU perf.mjs runs (commands in
+  the final report) → decide tiers / defaults per feature.
 * 2026-10-24 18:31 UTC — 7th stop (session limit ~17:00, reset 18:20; reboot 18:29). Restored; tree clean at cc89b83.
   Life resumed (last open agent: m4 re-capture + final report). Lead next: int2 full-city QA once life reports.
   18:35 — int2 started (background): shots/world/lead/int2/h{18.2,11,21.5} (12 views each, presets above); log
