@@ -255,6 +255,12 @@ Research agent (done): docs/progress/world-research.md.
 
 ## Log
 
+* 19:14 — final QA: typecheck ✓, build ✓ (3.15 MB), file:// ✓, ?diorama ✓, soak 4 min@4× ✓ (no errors/invariant hits),
+  int2 ×3 hours ✓. ui-test 33/36 → fixed: stale overview distance in the test; district flags now rise on longer
+  stems instead of hiding at the low hero overview (labels.ts/ui.css; 6 visible, baseline 12 at the old high view);
+  tagline per mode (core/world.ts TAGLINE). Remaining ui-test fails (bus info line, no pedestrian on screen) are
+  pre-existing in the ?camdebug stand-in city (same on baseline 5174). Re-running the full ui-test (qa/ui2.log).
+
 ## Final report (lead, 2026-10-24)
 
 **Outcome.** Tinyhaven is no longer a model on a table: by default it is a town in a landscape that runs to the
