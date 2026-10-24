@@ -21,9 +21,11 @@ Branch: work continues from `claude/tinyhaven-graphics-audit-l089m8` (fast-forwa
   Restored servers/autocheckpoint/locks; tree clean at 9399c3f (pushed). All 7 agents resumed 08:31 with open
   notes repeated (see 03:55 / 04:20 entries). Lead next: wait for milestone notes; then a second full-city
   integration capture (int2: critique views at 11 + 18.2 + 21.5, fixed river_low / wb_street presets).
-  int2 presets: ot_street=82,1.6,20,14,40,4; park_low=-55,1.2,17,16,15,5; wb_street=-130,1.5,50,18,90,3
-  (sidewalk of the z=45 street, looking E); dt_street=-5,1.7,-60,22,25,6; river_low=-30,0.6,118,26,90,3
-  (over the river, looking E along it); + riverbend, coast, vista POIs.
+  int2 presets (view "x,y,z,dist,yaw,deg": camera = target + dist·(sin yaw, cos yaw) — it sits on the +yaw side,
+  looking back): ot_street=82,1.6,20,8,40,4 (14 m put the eye inside the Seaview Hotel → the int1 "band" was its
+  rear trim seen from inside, per wear's probe); park_low=-55,1.2,17,16,15,5; wb_street=-130,1.5,50,18,90,3
+  (camera at x −112 on the z=45 street's S sidewalk, looking W); dt_street=-5,1.7,-60,22,25,6;
+  river_low=-30,0.6,118,26,270,3 (camera over the river at x −56, looking E); + riverbend, coast, vista POIs.
 * 08:45 — air sky7/g4 APPROVED (cumulus fields with flat bases, blue anti-solar sky, lavender twilight, clear
   golden overview with long shadows). Relayed to world: white blurred block on the overview beach, grey-brown
   hills behind the forest, sea body near shore.
@@ -48,6 +50,9 @@ Branch: work continues from `claude/tinyhaven-graphics-audit-l089m8` (fast-forwa
   Remaining agents: world, ground, foliage, life.
 * 11:20 — old-town band traced by life: NOT kites (my guess was wrong) — reproduces with only=roads,buildings,camera
   (needs camera module: near 0.3 m) → wear resumed to identify/fix (shots/world/life/band/cam_sheet.png).
+* 11:40 — band SOLVED by wear (probe.json): my preset put the camera 0.56 m inside the Seaview Hotel; the band is
+  its rear string course seen from inside. No code change; preset fixed (ot_street distance 8). Free camera may
+  enter buildings by design (guided mode keeps out — G toggles). wear DONE again.
 * 2026-10-24 03:33 UTC — 4th stop = WEEKLY limit: agents resumed 2026-10-20 07:31 hit it at once (no agent
   edits since 02:08 on 10-20; logs' Resume here are from ~02:05). Limit reset 10-24 03:00; container rebooted
   ~03:30. Restored: servers 5173/5174, autocheckpoint 20 min, locks cleared, tree clean at 582500f (pushed);
