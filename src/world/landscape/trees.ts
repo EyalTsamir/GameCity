@@ -830,11 +830,60 @@ function buildAtlas(): { col: THREE.DataTexture; nrm: THREE.DataTexture } {
         clumps.push([cx + px * rx, cy + py * ry, cz + pz * rx, cr * (0.7 + 0.6 * rnd()), rnd()]);
       }
     };
-    for (const c of sh.clumps) fill(c.x, c.y, c.z, c.r * 0.8, c.r * 0.8, Math.round(10 + 60 * c.r), Math.max(0.05, c.r * 0.42));
+    for (const c of sh.clumps) fill(c.x, c.y, c.z, c.r * 0.72, c.r * 0.72, Math.round(10 + 60 * c.r), Math.max(0.05, c.r * 0.4));
     for (const t of sh.tiers) {
       for (let k = 0; k < 4; k++) {
         const f = k / 4;
         fill(0, t[0] + (t[1] - t[0]) * f * 0.6, 0, t[2] * (1 - f * 0.8), 0.03, 6, 0.05 + 0.03 * (1 - f));
+      }
+    }
+    // leaf clusters on the surface: a ragged, broken silhouette (sky between the outer twigs)
+    for (const c of sh.clumps) {
+      const n = Math.round(30 + 260 * c.r);
+      for (let i = 0; i < n; i++) {
+        const zz = 1 - 2 * rnd(),
+          ph = rnd() * Math.PI * 2;
+        const rr = Math.sqrt(Math.max(0, 1 - zz * zz));
+        const d = c.r * (0.78 + 0.32 * rnd());
+        clumps.push([c.x + rr * Math.cos(ph) * d, c.y + zz * d * 0.95, c.z + rr * Math.sin(ph) * d, (0.02 + 0.018 * rnd()) * (kind === KIND.small ? 1.3 : 1), rnd()]);
+      }
+    }
+    for (const t of sh.tiers) {
+      for (let i = 0; i < 44; i++) {
+        const a = rnd() * Math.PI * 2,
+          u = 0.45 + 0.6 * rnd();
+        const y = t[1] - (t[1] - t[0]) * (0.25 + 0.75 * Math.min(1, u)) * 0.85;
+        clumps.push([Math.cos(a) * t[2] * u * 0.95, y, Math.sin(a) * t[2] * u * 0.95, 0.018 + 0.012 * rnd(), rnd()]);
+      }
+    }
+    // splat the spheres into a z-buffer (cheap for the many small ones)
+    const zb = new Float32Array(CW * ATLAS_H).fill(-9),
+      nb = new Float32Array(CW * ATLAS_H * 3),
+      tb = new Float32Array(CW * ATLAS_H);
+    for (const c of clumps) {
+      const x0 = Math.max(0, Math.floor((c[0] - c[3] + 0.5) * CW)),
+        x1 = Math.min(CW - 1, Math.ceil((c[0] + c[3] + 0.5) * CW));
+      const y0 = Math.max(0, Math.floor((1 - (c[1] + c[3])) * ATLAS_H)),
+        y1 = Math.min(ATLAS_H - 1, Math.ceil((1 - (c[1] - c[3])) * ATLAS_H));
+      for (let py = y0; py <= y1; py++) {
+        const y = 1 - (py + 0.5) / ATLAS_H;
+        for (let px = x0; px <= x1; px++) {
+          const x = (px + 0.5) / CW - 0.5;
+          const dx = (x - c[0]) / c[3],
+            dy = (y - c[1]) / c[3];
+          const d2 = dx * dx + dy * dy;
+          if (d2 >= 1) continue;
+          const dz = Math.sqrt(1 - d2);
+          const zz = c[2] + dz * c[3];
+          const o = py * CW + px;
+          if (zz > zb[o]) {
+            zb[o] = zz;
+            nb[o * 3] = dx;
+            nb[o * 3 + 1] = dy;
+            nb[o * 3 + 2] = dz;
+            tb[o] = c[4];
+          }
+        }
       }
     }
     const trunkTop = sh.trunkTop,
@@ -843,22 +892,10 @@ function buildAtlas(): { col: THREE.DataTexture; nrm: THREE.DataTexture } {
       const y = 1 - (py + 0.5) / ATLAS_H;
       for (let px = 0; px < CW; px++) {
         const x = (px + 0.5) / CW - 0.5;
-        let bz = -9,
-          bn: [number, number, number] = [0, 0, 1],
-          bt = 0;
-        for (const c of clumps) {
-          const dx = (x - c[0]) / c[3],
-            dy = (y - c[1]) / c[3];
-          const d2 = dx * dx + dy * dy;
-          if (d2 >= 1) continue;
-          const dz = Math.sqrt(1 - d2);
-          const zz = c[2] + dz * c[3];
-          if (zz > bz) {
-            bz = zz;
-            bn = [dx, dy, dz];
-            bt = c[4];
-          }
-        }
+        const o = py * CW + px;
+        const bz = zb[o],
+          bt = tb[o];
+        const bn = [nb[o * 3], nb[o * 3 + 1], nb[o * 3 + 2]];
         const k = (py * ATLAS_W + kind * CW + px) * 4;
         if (bz > -9) {
           // blend the clump normal toward the crown's overall shape

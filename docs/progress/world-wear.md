@@ -1,13 +1,17 @@
 # world-wear — weathering and lived-in clutter (world round)
 
 ## Resume here
-* M1 + M2 DONE (lead messaged). it7 judged (2026-10-24 after the weekly stop): invariants {}; market street (worn
-  STOP BUS paint, crack lines), downtown street, overview fine; Westbrook apartment balconies had stringy
-  trailing plants over the solid parapets → balcony boxes hooked over parapets / some railings (clutter.ts).
-* RUNNING: it8 (wet night: `weather=rain`, otst / beach / otfac at 21.5 → puddle lamp glints) and it8b (apt,
-  otbal, oldtown at 11) — background jobs, outputs in shots/world/wear/it8, it8b.
-* NEXT: judge it8/it8b; perf A/B (shot --stats with `noclutter&nogreen&nowear&nopuddles&noterracelights` vs on,
-  same view); before/after sheets; final report + message lead.
+* M1 + M2 DONE. Since it7: hooked balcony boxes (it8b ok), `?wet=0..1` pin; it9 (wet=1): wet street by day
+  reads well (sky in puddles), but NO lamp glints at night → rdPuddleLamps rewritten: follow the reflected ray to
+  two head heights (4.4 / 6.6 m) and test the lamps nearest those points (the mirrored lamp is ~4× further than
+  the puddle at eye level). Lead/air note: Seaview hotel balconies = dark blotches at golden hour → hotel
+  balconies sparse + tidy (40 % get life, `hotel` mode: white chairs, petunia/bougainvillea, no laundry/bikes),
+  leaf atlas uploaded as DataTexture with colour bled into transparent texels (mips no longer average leaves with
+  black → plants stayed dark/black at distance) + lighter greens.
+* RUNNING: it10w (wet=1 night: otst, beach) and it10 (oldtown/apt/otbal × 11 / 18.2, with water). Also queued:
+  ab_on / ab_off (stats A/B at otfac + oldtown, toggles `noclutter&nogreen&nowear&nopuddles&noterracelights`).
+* NEXT: judge it10/it10w; read A/B stats; final sheets (shots/world/wear/sheets/ba_*.png exist for street +
+  beach/oldtown); final report + message lead.
 * Capture recipe: `capture-set.mjs --out shots/world/wear/itN --q "nointro&noidle&adaptive=0&quality=high&only=sky,terrain,roads,buildings,vegetation,props,lamps,postfx" --hideui 1 --width 1280 --height 720 --hours 11,21.5 --views "otfac=83,5,-16,25,70,6;otbal=83,5,-16,10,20,10;otst=70,1.7,-10,14,90,4;plaza=-28,1.5,-24,16,15,7;beach=110,1.7,5,16,180,5;oldtown"`
   (baseline = same with `--url http://127.0.0.1:5174/` → shots/world/wear/before, before2).
 

@@ -374,7 +374,7 @@ vec4 waterBase() {
   wc = mix(wc, pondC, mPond);
   wc = mix(wc, wc * wNightTint, uNight * 0.85);
   // golden hour: keep a saturated teal body under the warm light (not milky tea)
-  wc = mix(wc, wc * vec3(0.8, 1.0, 1.12), 0.45 * uDusk * (1.0 - uNight));
+  wc = mix(wc, wc * vec3(0.72, 1.06, 1.22), 0.55 * uDusk * (1.0 - uNight));
 
   // ── Fresnel
   float ndv = clamp(dot(wN, V), 0.0, 1.0);
@@ -408,8 +408,8 @@ vec4 waterBase() {
     vec2 rh = normalize(R.xz + vec2(1e-5, 0.0));
     vec2 shz = normalize(uSunDir.xz + vec2(1e-5, 0.0));
     float gk = uDusk * (1.0 - uNight) * (1.0 - 0.75 * smoothstep(0.55, 0.95, dot(rh, shz)));
-    sky = mix(sky, uSkyZen * vec3(0.9, 1.0, 1.1), 0.38 * gk);
-    F *= 1.0 - 0.3 * gk;
+    sky = mix(sky, uSkyZen * vec3(0.85, 1.0, 1.12), 0.55 * gk);
+    F *= 1.0 - 0.38 * gk;
   }
 #endif
   vec4 rc = vec4(0.0);
@@ -424,7 +424,7 @@ vec4 waterBase() {
     vec2 vs = vec2(-vh.y, vh.x);
     // distortion (m): reflections smear toward the viewer more than sideways
     vec2 dt = tilt - (-g * amp) * 0.6;
-    float kd = mix(2.2, 5.0, ruff) * (0.6 + 0.4 * min(dist / 150.0, 1.5));
+    float kd = mix(2.2, 5.0, ruff) * (0.6 + 0.4 * min(dist / 150.0, 1.5)) * (1.0 - 0.35 * smoothstep(200.0, 600.0, dist));
     vec2 off = vh * dot(dt, vh) * kd * 2.4 + vs * dot(dt, vs) * kd * 0.8;
     vec4 c0 = uReflMat * vec4(p.x, ${WATER_LEVEL.toFixed(2)}, p.z, 1.0);
     vec2 uv0 = c0.xy / c0.w;
@@ -435,13 +435,17 @@ vec4 waterBase() {
     vec2 duv = fwidth(uv0) * uReflInfo.yz;
     float lod0 = log2(max(max(duv.x, duv.y), 1e-3));
     float lod = clamp(lod0 + 0.35 + 1.4 * ruff + min(25.0 * wVar, 2.0), 0.0, uReflInfo.w);
-    float sl = (0.8 + 2.2 * ruff) * exp2(lod);
+    // far away the waves break a reflection into a soft, short, darker smear (no ghost copies)
+    float farR = smoothstep(140.0, 520.0, dist);
+    float sl = (0.8 + 2.2 * ruff) * exp2(lod) * mix(1.0, 0.45, farR);
     vec2 st = su * (sl / max(length(su * uReflInfo.yz), 1e-3));
     rc = textureLod(tRefl, uv, lod) * 0.5;
     rc += textureLod(tRefl, uv + st, lod) * 0.25;
     rc += textureLod(tRefl, uv - st, lod + 0.5) * 0.25;
     vec2 ed = min(uv, 1.0 - uv);
     rc *= smoothstep(0.0, 0.02, min(ed.x, ed.y)) * reflW;
+    rc.rgb *= mix(1.0, 0.62, farR);
+    rc *= 1.0 - farR * (0.3 + 0.35 * ruff);
   }
 
   // ── hull contact: contact shadow + foam line

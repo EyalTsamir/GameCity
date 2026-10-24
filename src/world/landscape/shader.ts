@@ -400,8 +400,17 @@ vec3 landAlbedo() {
   col = mix(col, cHedge * (0.85 + 0.3 * nB.r), hedgeM * field * (1.0 - forest));
   col = mix(col, cTrack * (0.9 + 0.2 * nB.g), trackM * field * (1.0 - forest));
 
-  // ── wet banks / mud
-  col = mix(col, mix(cMud, cMeadow * 0.8, smoothstep(-1.2, 0.3, p.y)), wet * 0.85);
+  // ── river banks: a narrow strip of mud at the waterline, reed beds in patches, then lush bank grass
+  // (the meadow's own colour and variation, greener) — never a bare tan band
+  {
+    float hy = p.y - ${WL.toFixed(2)};
+    vec3 bankG = meadow * vec3(0.84, 0.98, 0.8) * (0.9 + 0.2 * nB.g);
+    vec3 bc = mix(cMud * (0.85 + 0.25 * nB.b), bankG, smoothstep(0.1, 0.45, hy + 0.2 * (nB.g - 0.5)));
+    float reedP = smoothstep(0.42, 0.62, nA.b + 0.3 * (nB.r - 0.5));
+    vec3 reed = mix(vec3(0.07, 0.1, 0.035), vec3(0.17, 0.16, 0.07), nB.a);
+    bc = mix(bc, reed, reedP * smoothstep(0.0, 0.2, hy) * (1.0 - smoothstep(0.9, 1.8, hy)) * 0.85);
+    col = mix(col, bc, wet * 0.85);
+  }
   // ── the river leaving the town: the stone embankment carries on for a stretch, steps down into
   // riprap and then into grassy natural banks; a gravel towpath continues the promenade (north bank)
   {
