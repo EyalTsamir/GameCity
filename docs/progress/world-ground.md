@@ -1,18 +1,8 @@
 # world-ground — grass, meadows, flowers, weeds, litter, reeds (world round)
 
 ## Resume here
-* 2026-10-24 13:35 — resumed after the 6th stop (tree at 1e5813f, my edits intact, tsc clean).
-  Since 08:35: roaming window verified at riverbend (t10b: reed stands + bank meadow; transect probe:
-  banks = meadow+wet within ~6 m of the water, beyond = world's fields → sparse blades, correct). The
-  window looked missing at first only because software GL renders ~0.15 fps (3 frames / 20 s): frames
-  > 250 ms now get a large build slice (never on the target GPU). Camera module clamps the riverbend
-  target to ~30 m past the slab (camera ends at x ≈ −179) — told nobody yet (lead: FYI in next note).
-  Forest floor (foliage request via lead): canopy raster (tree crowns, blurred to stand density ~10 m)
-  → cover A ≥ 0.62 = forest floor: blades × (1 − 0.88 f) and short; ground shader: leaf/needle litter,
-  moss patches, shadowed hollows (gForestA/B, gMoss). NOT yet verified in captures.
-* Next: captures: forest floor (hill forest eye level + station POI), hop test (z-hop, no pop),
-  t9 low + nograss A/B stats → note to lead → final report.
-* Tools: shots/world/ground/{gcap,hop,probe}.mjs (probe = eval after frames ran).
+* 2026-10-24 14:40 — DONE. Final report below ("## Final report"), sent to the lead. Nothing running.
+  If resumed: only follow-ups from the lead's full-city review (open issues listed in the report).
 
 ## Brief (from WORLD-PLAN.md + world-briefs.md "### ground")
 Owner of `src/world/terrain/ground.ts` (+ its mask), `src/world/groundcover.ts` + `src/world/groundcover/*`.
@@ -73,14 +63,12 @@ instances if the field can't place them well.
 `?noreeds`, `?gcflowers=0`, `?legacyground` (old ground shader, shared with wear's hardscape).
 
 ## Milestones
-- [ ] M0 survey, log, before captures
-- [ ] M1 cover mask + height texture + blade field rings A/B/C (lawns + meadows), wind, ground shader
-      palette + seam
-- [ ] M2 flowers (meadow species + lawn dandelion/clover), unmown edge tufts, pavement weeds
-- [ ] M3 shore: reeds/cattails/shore grass, lily pads; dunes (marram); leaf litter under trees
-- [ ] M4 ground far field: gust sheen, flower dots, backlit lift, desire lines; overview judged
-- [ ] M5 landscape near-ring meadows (needs world's `ctx.services.landscape`), quality tiers, service,
-      adaptive hook, perf report, final report
+- [x] M0 survey, log, before captures (shots/world/ground/before_base, 5174)
+- [x] M1 cover maps + height map + blade rings A/B/C, wind, shared palette, ground shader v3, edge seam
+- [x] M2 clustered meadow flowers + lawn daisies/dandelions/clover, unmown edge tufts, pavement weeds
+- [x] M3 reed stands/cattails/shore meadow, lily pads (pond), marram dunes, fallen leaves, forest floor
+- [x] M4 far field: gust sheen, flower dots/tint, backlit glow, tuft bump, desire-line wear
+- [x] M5 roaming landscape window (blades anywhere beyond the slab), tiers, service, density setter
 
 ## Requests to other areas
 * world (via lead, pending): include `GC_PALETTE_GLSL` + `gcPalette()` (src/world/groundcover/palette.ts,
@@ -112,3 +100,36 @@ instances if the field can't place them well.
   0.4–0.6 s, flowers 0.15 s); landscape band built incrementally after boot (≈ 1 s CPU spread over
   frames, 4 ms/frame at 60 fps). GPU memory: tCover 8.7 MB (+mips), tFlower 2.2 MB, tGH 8.7 MB R32F,
   band 5 + 1.1 + 5 MB.
+
+## Final report
+
+**What changed.** Lawns, verges, banks and hills are no longer flat felt. An instanced blade field in three
+camera-centred rings (A ≤ 12.5 m 7-vertex blades, B ≤ 35 m, C ≤ 66 m; one instanced draw each; blades
+generated in the vertex shader from tile + blade hashes) draws mown lawns with daisies/dandelions/clover,
+unmown tufts at walls/fences/kerbs/trees/poles, wildflower meadows (clustered poppies, cornflowers, daisies,
+buttercups, cow parsley, knapweed; taller stems), pavement-joint weeds, fallen leaves, forest floor, reed
+stands with cattails and loosestrife, shore meadow, marram on dunes, and lily pads. Everything bends with
+core/wind.ts gust fronts and glows when backlit at golden hour. The ground shader shares the blade palette
+(natural greens, no lime), shades the turf under the rings, adds flower dots/tints, gust sheen, tuft
+bump, forest floor and a 15 m meadow margin at the W/S slab edges (world seam). A roaming 224 m cover
+window, double-buffered and built in the background from landscape.cover/height, extends blades to any
+landscape meadow, bank or dune near the camera (riverbend).
+
+**Files.** src/world/groundcover.ts; groundcover/{mask,raster,field,palette,outer,lily}.ts;
+src/world/terrain/ground.ts.
+
+**Toggles.** ?nograss ?grass=k ?gcrings=A,B,C ?gcflowers=0 ?nolitter ?nolilies ?nogcouter; service
+ctx.services.groundcover {density, flowerPatches, setDensity/getDensity, palette}.
+
+**Shots.** sheet_before_after_11.png, sheet_before_after_golden.png (shots/world/ground);
+t8/pond_18h2 (best), t10b/riverbend_*, hop2/*, t11/forest_*, gust_{1,2}.
+
+**Cost** (t12, high vs ?nograss, eye level): +3 draw calls, +0.45 M triangles (incl. degenerate),
+≈ 0.5 M blade vertices worst case; medium 0.29 M; low 0.09 M; overview +0. GPU estimate (Adreno X1-45):
+≈ 1.0–1.4 ms at eye level in meadows, ≈ 0.1 ms at POI/overview (ground shader only). Boot: slab maps
+≈ 1.4–1.6 s on this loaded box, window ≈ 0.3 s spread over frames.
+
+**Open.** Measure perf.mjs `;nograss;grass=0.5;gcrings=A` on the real GPU. Reeds are not in the water
+reflection. Flower heads are flat cards (crude below ~2 m). Fields beyond the slab get only sparse
+blades. A window rebuild uploads ~1.8 MB in one frame. Medium-tier lawns read lighter because AO is off
+there (air's ladder).
