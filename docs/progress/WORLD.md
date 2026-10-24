@@ -39,6 +39,10 @@ Branch: work continues from `claude/tinyhaven-graphics-audit-l089m8` (fast-forwa
   ?nograss ?grass ?gcrings ?gcflowers ?nolitter ?nolilies ?nogcouter). Judged: pond/bank meadow 18.2 = reference
   foreground ✓. Sent back one tune: forest floor pale beige + confetti leaves → darker umber litter, moss.
   foliage: near trunk 8-sided prism + no root flare (t11/forest_11.png).
+* 15:50 — world FINAL REPORT (world-world.md; full city vista 186 dc / 2.65 M tris vs 165 / 2.14 M ?noland; est.
+  +2–3 ms on Adreno — unmeasured; toggles ?noland ?nomountains ?landtrees=0 ?landbld=0 ?landships=0 ?landlife=0
+  ?landroads=0 ?nocliffs; tiers low/med/high). Judged final1 (shots/world/lead/world_final_a.png): approved except
+  island = low-poly pyramid + dune back-band blotches → sent back.
 * 2026-10-24 08:31 UTC — 5th stop (SESSION limit, all agents ~04:40, reset 08:20; container rebooted 08:29).
   Restored servers/autocheckpoint/locks; tree clean at 9399c3f (pushed). All 7 agents resumed 08:31 with open
   notes repeated (see 03:55 / 04:20 entries). Lead next: wait for milestone notes; then a second full-city
