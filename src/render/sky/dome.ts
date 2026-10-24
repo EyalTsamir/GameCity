@@ -54,6 +54,7 @@ uniform vec3 uNightZen;
 uniform vec3 uNightHor;
 uniform float uNightW;
 uniform vec3 uDiscCol;
+uniform vec3 uBelt;
 ${SKY_LUT_GLSL}
 #endif
 #ifdef TH_CLOUDS
@@ -132,6 +133,14 @@ void main() {
   col += mix(uNightHor, uNightZen, smoothstep(0.0, 1.0, pow(up, 0.55))) * uNightW;
   // the glow of sunlit haze around the sun: exactly the fog's sun lobe (continues below the horizon)
   col += thSunLobe(d) * thAtmo[10].y;
+  // Belt of Venus: the pink anti-twilight arch above the anti-solar horizon (backscattered red light),
+  // over the darker blue earth-shadow band — from late golden hour to just after sunset
+  {
+    float hs = dot(d.xz, d.xz) * dot(uSunDir.xz, uSunDir.xz);
+    float anti = hs > 1e-10 ? max(-dot(d.xz, uSunDir.xz) * inversesqrt(hs), 0.0) : 0.0;
+    float band = smoothstep(0.015, 0.07, y) * (1.0 - smoothstep(0.12, 0.34, y));
+    col += uBelt * band * anti * sqrt(anti);
+  }
 #else
   // painted gradient: broad horizon band easing into the zenith colour
   vec3 col = mix(uHorizon, uZenith, smoothstep(0.0, 1.0, pow(up, 0.55)));
@@ -248,6 +257,8 @@ export interface SkyDome {
   setPhysical(lut: THREE.Texture, scale: number, nightZen: THREE.Color, nightHor: THREE.Color, nightW: number, discCol: THREE.Color, zenith: THREE.Color, horizon: THREE.Color): void;
   /** world mode: the night sky glow of the lit town (warm, near the horizon) */
   setCityGlow(c: THREE.Color): void;
+  /** world mode: Belt of Venus colour × strength (0 outside the twilight hours) */
+  setBelt(c: THREE.Color): void;
   /** world mode: the raymarched cumulus image and the full-resolution size it maps to */
   setCloudVolume(tex: THREE.Texture, fullRes: THREE.Vector2): void;
   update(state: SkyState, sunDir: THREE.Vector3, moonDir: THREE.Vector3, sunVis: number, moonVis: number, time: number, overcast: number): void;
@@ -288,6 +299,7 @@ export function createSkyDome(world = false, phys = false, clouds: CloudLayerUni
     uNightHor: { value: new THREE.Color() },
     uNightW: { value: 0 },
     uDiscCol: { value: new THREE.Color(1, 1, 1) },
+    uBelt: { value: new THREE.Color(0, 0, 0) },
     ...(clouds ?? {}),
     tCloudVol: { value: null as THREE.Texture | null },
     uCloudVolRes: { value: new THREE.Vector2(1, 1) },
@@ -351,6 +363,9 @@ export function createSkyDome(world = false, phys = false, clouds: CloudLayerUni
     },
     setCityGlow(c) {
       uniforms.uCityGlow.value.copy(c);
+    },
+    setBelt(c) {
+      uniforms.uBelt.value.copy(c);
     },
     setCloudVolume(tex, fullRes) {
       uniforms.tCloudVol.value = tex;

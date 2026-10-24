@@ -148,7 +148,7 @@ function dot(c: Ctx, x: number, y: number, r: number, fill: string): void {
   c.fill();
 }
 
-const LEAF_GREENS = ['#3f5f2a', '#4b6d30', '#35532a', '#567935', '#2f4a26', '#5f7d3a'];
+const LEAF_GREENS = ['#4a6b32', '#56783a', '#405f30', '#62833d', '#3a582e', '#6a8742'];
 
 /** cascading vines from the top edge of a tall cell */
 function paintVines(c: Ctx, rng: Rng, cx: number, cy: number, w: number, h: number, o: {
@@ -482,11 +482,59 @@ function paintAtlas(): HTMLCanvasElement {
   return cv;
 }
 
-let _tex: THREE.CanvasTexture | null = null;
-/** The leaf atlas (painted once, shared by the buildings and props greenery). */
-export function makeGreenTexture(): THREE.CanvasTexture {
+/**
+ * Fill the colour of transparent texels with the average leaf colour of their cell (alpha untouched), so the
+ * mip chain doesn't average leaves with black: without it, plants turn dark / black at distance.
+ */
+function bleedColour(d: Uint8ClampedArray | Uint8Array): void {
+  for (const [x0, yc, w, h] of CELLS) {
+    const y0 = N - yc - h; // rows are flipped (row 0 = canvas bottom)
+    let r = 0,
+      g = 0,
+      b = 0,
+      n = 0;
+    for (let y = y0; y < y0 + h; y += 2)
+      for (let x = x0; x < x0 + w; x += 2) {
+        const i = (y * N + x) * 4;
+        if (d[i + 3] > 200) {
+          r += d[i];
+          g += d[i + 1];
+          b += d[i + 2];
+          n++;
+        }
+      }
+    if (!n) continue;
+    r /= n;
+    g /= n;
+    b /= n;
+    for (let y = y0; y < y0 + h; y++)
+      for (let x = x0; x < x0 + w; x++) {
+        const i = (y * N + x) * 4;
+        const a = d[i + 3] / 255;
+        if (a >= 0.999) continue;
+        // un-premultiplied canvas colour where partly covered; average leaf colour where empty
+        const k = a > 0.02 ? a : 0;
+        d[i] = Math.round(d[i] * k + r * (1 - k));
+        d[i + 1] = Math.round(d[i + 1] * k + g * (1 - k));
+        d[i + 2] = Math.round(d[i + 2] * k + b * (1 - k));
+      }
+  }
+}
+
+let _tex: THREE.DataTexture | null = null;
+/**
+ * The leaf atlas (painted once, shared by the buildings and props greenery). Uploaded as a DataTexture: a 2D
+ * canvas stores premultiplied colour, so the colour bled into transparent texels would be lost on upload.
+ * Rows are flipped here (canvas top = v 1, as cellUV expects).
+ */
+export function makeGreenTexture(): THREE.DataTexture {
   if (_tex) return _tex;
-  const tex = new THREE.CanvasTexture(paintAtlas());
+  const cv = paintAtlas();
+  const src = cv.getContext('2d')!.getImageData(0, 0, N, N).data;
+  const data = new Uint8Array(N * N * 4);
+  for (let y = 0; y < N; y++) data.set(src.subarray((N - 1 - y) * N * 4, (N - y) * N * 4), y * N * 4);
+  bleedColour(data);
+  const tex = new THREE.DataTexture(data, N, N, THREE.RGBAFormat, THREE.UnsignedByteType);
   _tex = tex;
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.generateMipmaps = true;

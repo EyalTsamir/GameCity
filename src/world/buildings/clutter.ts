@@ -71,6 +71,8 @@ export interface BalconyOpts {
   green?: number;
   /** wall-to-railing depth */
   depth: number;
+  /** hotel room balcony: sparse and tidy (a plant or two, white chairs; no laundry, bikes, gas bottles) */
+  hotel?: boolean;
 }
 
 /**
@@ -94,9 +96,10 @@ export function balconyLife(g: Gen, sg: SideGeom, uA: number, uB: number, y: num
     for (let i = i0; i <= i1; i++) cells[i] = 1;
     return true;
   };
+  const hotel = !!o.hotel;
   // trailing plants over the railing (front) — the strongest Tel-Aviv / Mediterranean cue
-  if (r.chance(Math.min(0.9, 0.72 * gp))) {
-    const cell = r.weighted(TRAIL, [2, 1.5, 1.2, 1.4]);
+  if (r.chance(Math.min(0.9, (hotel ? 0.3 : 0.72) * gp))) {
+    const cell = hotel ? r.weighted([GREEN.PETUNIA, GREEN.BOUGAIN], [1.5, 1]) : r.weighted(TRAIL, [2, 1.5, 1.2, 1.4]);
     const a = uA + r.range(0, W * 0.3),
       b = uB - r.range(0, W * 0.3);
     const top = r.weighted([GREEN.GERANIUM, GREEN.SHRUB, GREEN.JASMINE, GREEN.LAVENDER], [3, 2, 1, 1]);
@@ -130,7 +133,7 @@ export function balconyLife(g: Gen, sg: SideGeom, uA: number, uB: number, y: num
     }
   }
   // pot plants in the corners and along the wall
-  const nPots = Math.round(r.range(1.2, 4.4) * gp);
+  const nPots = Math.round((hotel ? r.range(0, 1.6) : r.range(1.2, 4.4)) * gp);
   for (let k = 0; k < nPots; k++) {
     const end = k % 2 === 0;
     const u = end ? uA + 0.25 + r.next() * 0.2 : uB - 0.25 - r.next() * 0.2;
@@ -138,7 +141,7 @@ export function balconyLife(g: Gen, sg: SideGeom, uA: number, uB: number, y: num
     potPlant(g, sg, u, r.range(0.25, Math.max(0.3, D - 0.3)), y, r.range(1.0, 1.9));
   }
   // hanging pot on an iron wall bracket
-  if (r.chance(0.22 * gp) && W > 1.2) {
+  if (!hotel && r.chance(0.22 * gp) && W > 1.2) {
     const u = r.chance(0.5) ? uA + 0.3 : uB - 0.3;
     const yb = y + 2.15;
     setCol(t, col('#2c3035'));
@@ -154,11 +157,11 @@ export function balconyLife(g: Gen, sg: SideGeom, uA: number, uB: number, y: num
     g.green.hang({ ...sg, x0: hx - sg.tx * 0.2, z0: hz - sg.tz * 0.2 }, 0, 0.4, 0.0, yb - 0.45, 0.3, 0.8, GREEN.POTHOS, 0.05, 1, 0.3);
   }
   // furniture: two chairs and a little table, or a single chair
-  const roll = r.next();
+  const roll = hotel ? r.next() * 0.9 : r.next();
   if (roll < 0.45 && D > 0.75 && W > 1.6) {
     const u = uA + W * r.range(0.3, 0.7);
     if (take(u - 0.6, u + 0.6)) {
-      const cc = col(r.pick(CHAIRS));
+      const cc = col(hotel ? r.pick(['#f1efe9', '#e9e4d8', '#d8e2e6']) : r.pick(CHAIRS));
       for (const du of [-0.42, 0.42]) chair(g, sg, u + du, D * 0.5, y, cc);
       if (r.chance(0.7)) {
         setCol(t, col(r.pick(['#e9e4d8', '#2c3033', '#9a6a43'])));
@@ -168,6 +171,8 @@ export function balconyLife(g: Gen, sg: SideGeom, uA: number, uB: number, y: num
         t.cylinder(tx, tz, 0.24, y + 0.68, y + 0.71, 8, true);
       }
     }
+  } else if (hotel) {
+    // (hotel: nothing else on most balconies)
   } else if (roll < 0.62) {
     // drying rack with laundry (wire = rigid; cloth goes to the static-laundry mesh)
     const u = uA + W * r.range(0.3, 0.7);
@@ -195,7 +200,7 @@ export function balconyLife(g: Gen, sg: SideGeom, uA: number, uB: number, y: num
     if (take(u - 0.6, u + 0.6)) bikeAlong(g, sg, u, 0.25, y);
   }
   // odds and ends: gas bottle / AC condenser / broom / dish on the railing
-  const extra = r.next();
+  const extra = hotel ? 1 : r.next();
   if (extra < 0.25) {
     const u = r.chance(0.5) ? uA + 0.2 : uB - 0.2;
     if (take(u - 0.15, u + 0.15)) {

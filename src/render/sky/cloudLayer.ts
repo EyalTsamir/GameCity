@@ -152,7 +152,7 @@ float cuField(vec2 xz, float lod, bool full) {
   vec2 p = (xz - uCloudWind * uCu.w) / uCu.z;
   vec4 wx = textureLod(tCloudNoise, p * 0.13 + vec2(0.31, 0.77), lod + 1.0);
   vec2 warp = (vec2(wx.r, wx.a) - 0.5) * 0.3;
-  vec4 c = textureLod(tCloudNoise, p * 0.5 + warp, lod);
+  vec4 c = textureLod(tCloudNoise, p * 0.42 + warp, lod);
   float cov = clamp(uCu.x * (0.4 + 1.2 * smoothstep(0.3, 0.72, wx.a)), 0.0, 1.0);
   float pick = smoothstep(1.0 - cov - 0.12, 1.0 - cov + 0.12, c.r * 0.75 + wx.a * 0.25);
   // dome cross-section over the (cone-like) Worley cell: r 0 at the centre → 1 at the rim
@@ -167,7 +167,8 @@ float cuDens(vec2 xz, float h01, float lod, bool full) {
   float f = cuField(xz - uCloudWind * (h01 * 150.0), lod, full);
   // the field is dome-shaped per cell; with a linear height profile the top follows it (rounded, billowy
   // via the field's detail), the base stays flat, and small / partly picked clouds stay low and flat
-  float prof = 0.08 + 0.92 * h01;
+  // (1.12: even the thickest cloud tops out below the slab ceiling — never box-clipped)
+  float prof = 0.08 + 1.12 * h01;
   return clamp((f - prof) * 3.2, 0.0, 1.0) * smoothstep(0.0, 0.035, h01);
 }
 // cirrus: broad veils with fibres stretched along the wind (opacity texture, never thresholded detail)

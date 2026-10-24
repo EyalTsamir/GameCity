@@ -322,6 +322,14 @@ export default async function create(ctx: CityContext): Promise<CityModule> {
       atmo.update(renderer, state, _sunSky, sunVis, overcast, ctx.camera.position.y, ctx.uniforms.uWind.value, clock.speed > 0 ? realDt * clock.speed : 0, clock.hours);
       // the horizon other modules mirror (water): the haze ~120° from the sun — the sea mostly reflects
       // the sky away from the sun; the sun side is the palette glow they already add
+      // Belt of Venus: strongest with the (visual) sun from ~+3° to −5°, a faint pink arch at golden hour
+      {
+        const el = THREE.MathUtils.radToDeg(Math.asin(THREE.MathUtils.clamp(_sunVisual.y, -1, 1)));
+        const k = smooth(-9, -3, el) * (1 - smooth(4, 16, el) * 0.7) * (1 - smooth(16, 22, el));
+        const l = THREE.MathUtils.clamp(lum(atmo.params.ring[0]), 0, 2);
+        _belt.setRGB(1.0, 0.6, 0.66).multiplyScalar(0.32 * k * l * (1 - overcast));
+        dome.setBelt(_belt);
+      }
       if (atmo.lut) dome.setPhysical(atmo.lut.texture, atmo.skyScale, state.zenith, state.horizon, atmo.nightW, atmo.sunColor, atmo.zenith, evalRing(atmo.params.ring, 2.1, _hor));
       if (envPhys) {
         envPhys.scale = atmo.skyScale;
@@ -432,8 +440,8 @@ export default async function create(ctx: CityContext): Promise<CityModule> {
       if (Number.isFinite(cloudCovParam)) cov = cloudCovParam;
       cov += (0.97 - cov) * overcast;
       cu.uCu.value.x = Math.min(1, Math.max(0, cov));
-      // humilis (~0.6 km) when sparse, mediocris (~1.5 km) when the deck fills in
-      cu.uCuSlab.value.x = 550 + 1100 * Math.min(1, cu.uCu.value.x * 1.6);
+      // humilis (~0.4–0.6 km) when sparse, mediocris (~1 km) when the deck fills in
+      cu.uCuSlab.value.x = 380 + 700 * Math.min(1, cu.uCu.value.x * 1.6); // wider than tall
       cu.uCi.value.x = Math.min(0.85, 0.32 * cloudDay.ci) * (1 - overcast * 0.6);
       // light on the clouds: the sun after the atmosphere at deck height (pink after sunset), or the moon
       const comp = Math.pow(Math.max(1, atmo.comp), 0.6);
@@ -541,3 +549,4 @@ export default async function create(ctx: CityContext): Promise<CityModule> {
 const _tmpV = new THREE.Vector3();
 const _w2 = new THREE.Vector2();
 const _hor = new THREE.Color();
+const _belt = new THREE.Color();

@@ -65,7 +65,9 @@ void main() {
   vec3 jp = fract(vec3(gl_FragCoord.xy, uFrame) * vec3(0.1031, 0.1030, 0.0973));
   jp += dot(jp, jp.yzx + 33.33);
   float j = fract((jp.x + jp.y) * jp.z);
-  float lod = clamp(log2(t0 / 2500.0), 0.0, 4.0);
+  // (gentle mip bias: coarse mips average the cloud cells away — the far deck toward the horizon vanished;
+  // the haze and the temporal resolve hide what aliasing remains)
+  float lod = clamp(log2(t0 / 7000.0), 0.0, 2.0);
   float mu = dot(dir, uCloudL);
   float phase = mix(hg(mu, 0.65), hg(mu, -0.2), 0.3) * 4.0 * 3.14159265;
   vec3 lstep = uCloudL / max(uCloudL.y, 0.15);

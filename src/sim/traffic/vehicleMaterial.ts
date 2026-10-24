@@ -28,6 +28,7 @@ varying vec4 vEmit;
 varying float vRough;
 varying float vCoat;
 varying float vMetal;
+varying float vGain;
 // variant parts: n = only for variant n - 1; 16 + bits = for the variants whose bit is set
 bool thHidden(float part, float variant) {
   if (part < 0.5) return false;
@@ -88,6 +89,7 @@ if ( thHidden( aPart, aInst2.x ) ) transformed = vec3( 0.0 );
   vRough = aMeta.w - fin * 4.0;
   vCoat = ( fin > 0.5 && fin < 2.5 ) ? 1.0 : 0.0;
   vMetal = ( fin > 2.5 ) ? 1.0 : 0.0;
+  vGain = fin < 0.5 ? 1.0 : fin < 1.5 ? 1.35 : fin < 2.5 ? 2.2 : 1.25;
 }
 `;
 
@@ -96,6 +98,17 @@ varying vec4 vEmit;
 varying float vRough;
 varying float vCoat;
 varying float vMetal;
+varying float vGain;
+// A street, not a studio: what a glossy car reflects below the horizon is asphalt and facades (dark), just
+// above it a bright band of hazy sky, higher up the sky dome. The PMREM sky alone is too smooth to read as
+// gloss, so the sharp reflections are shaped by the reflected direction's height — that gives the bright
+// horizon line along the flanks and the dark lower doors of real paint, at the cost of a few ALU.
+float thStreetRefl( vec3 viewDir, vec3 n, float soft ) {
+  float y = inverseTransformDirection( reflect( -viewDir, n ), viewMatrix ).y;
+  float w = 0.025 + soft;
+  float above = smoothstep( -w, w, y );
+  return mix( 0.3, 1.0, above ) + 0.85 * above * exp( -max( y, 0.0 ) * ( 9.0 - soft * 20.0 ) );
+}
 `;
 
 export function createVehicleMaterial(uniforms: GlobalUniforms, atlas: THREE.Texture): { material: THREE.MeshPhysicalMaterial; depth: THREE.MeshDepthMaterial } {
@@ -123,9 +136,19 @@ export function createVehicleMaterial(uniforms: GlobalUniforms, atlas: THREE.Tex
       .replace('#include <roughnessmap_fragment>', 'float roughnessFactor = clamp( roughness * vRough, 0.04, 1.0 );')
       .replace('#include <metalnessmap_fragment>', 'float metalnessFactor = vMetal;')
       .replace('#include <lights_physical_fragment>', '#include <lights_physical_fragment>\n#ifdef USE_CLEARCOAT\n  material.clearcoat = vCoat;\n#endif')
+      .replace(
+        '#include <lights_fragment_maps>',
+        `#include <lights_fragment_maps>
+#if defined( RE_IndirectSpecular )
+  #ifdef USE_CLEARCOAT
+    clearcoatRadiance *= vGain * thStreetRefl( geometryViewDir, geometryClearcoatNormal, 0.0 );
+  #endif
+  if ( vMetal > 0.5 ) radiance *= vGain * thStreetRefl( geometryViewDir, geometryNormal, material.roughness * 0.3 );
+#endif`,
+      )
       .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += vEmit.rgb * mix( vec3( 1.0 ), diffuseColor.rgb, vEmit.a );');
   };
-  material.customProgramCacheKey = () => 'traffic-vehicle-v3';
+  material.customProgramCacheKey = () => 'traffic-vehicle-v4';
   patchLampMaterial(material); // night street-light map (night agent)
 
   const depth = new THREE.MeshDepthMaterial();

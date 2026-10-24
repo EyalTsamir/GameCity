@@ -253,8 +253,9 @@ function seaview(g: Gen): void {
             sideBox(t, sg, u - 1.1, u + 1.1, 0, 0.9, yb - 0.14, yb, true);
             railing(t, sx(sg, u - 1.08, 0.86), sz(sg, u - 1.08, 0.86), sx(sg, u + 1.08, 0.86), sz(sg, u + 1.08, 0.86), yb, 0.95, col('#ffffff'), 0.16, 2);
             anchors.balcony(sx(sg, u, 0.45), yb, sz(sg, u, 0.45), sg.nx, sg.nz, 2.2, 0.9, 0.95);
-            balconyLife(g, sg, u - 1.04, u + 1.04, yb, { rail: 0.95, depth: 0.82, green: 0.75 });
-            if (rng.chance(0.22)) {
+            // seafront hotel: mostly clean balconies with sparse personal touches
+            if (rng.chance(0.4)) balconyLife(g, sg, u - 1.04, u + 1.04, yb, { rail: 0.95, depth: 0.82, green: 0.7, hotel: true });
+            if (rng.chance(0.14)) {
               setCol(t, col(rng.pick(['#e63946', '#2a9d8f', '#f4a261', '#457b9d'])));
               const px = sx(sg, u + 0.6, 0.5), pz = sz(sg, u + 0.6, 0.5);
               t.cone(px, pz, 0.6, yb + 1.6, yb + 1.9, 8);

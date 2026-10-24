@@ -178,7 +178,7 @@ export class AtmosphereDriver {
       const w = this.golden * 0.62 * smooth(0.25 * Math.PI, Math.PI, phi);
       if (w > 0) {
         const l = lum(out);
-        out.lerp(_g.setRGB(l * 0.84, l * 0.97, l * 1.24), w);
+        out.lerp(_g.setRGB(l * 0.92, l * 0.93, l * 1.22), w); // lavender-blue earth-shadow side
       }
       out.add(_g.copy(s.horizon).multiplyScalar(this.nightW)).add(this.cityGlow);
     } else {
