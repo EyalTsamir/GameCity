@@ -108,7 +108,8 @@ export function decorate(ctx: CityContext, cloth: ClothSystem, b: BuildingsLike 
     const L = Math.hypot(sp.bx - sp.ax, sp.bz - sp.az);
     if (sp.district === 'market') {
       // the market square gets festive lines, never laundry (it hung right over the stalls)
-      if (opts.bunting && L > 6 && rng.chance(0.7)) streetLine(cloth, rng, sp, sp.ax, sp.az, sp.bx, sp.bz, st, lamps, false);
+      // (sparingly: the market's masts already carry a star of lines — keep sky between them)
+      if (opts.bunting && L > 6 && rng.chance(0.3)) streetLine(cloth, rng, sp, sp.ax, sp.az, sp.bx, sp.bz, st, lamps, true);
       continue;
     }
     if (!opts.laundry) continue;
@@ -229,7 +230,7 @@ function streetLine(cloth: ClothSystem, rng: Rng, sp: SpanLike, ax: number, az: 
   const L = Math.hypot(bx - ax, by - ay, bz - az);
   if (L < 4) return;
   const roll = rng.next();
-  const style = sp.district === 'market' ? (roll < 0.45 ? 'festoon' : roll < 0.8 ? 'bunting' : 'prayer') : second ? (roll < 0.5 ? 'festoon' : 'bunting') : roll < 0.6 ? 'bunting' : roll < 0.8 ? 'prayer' : 'festoon';
+  const style = sp.district === 'market' ? (second ? 'festoon' : roll < 0.45 ? 'festoon' : roll < 0.8 ? 'bunting' : 'prayer') : second ? (roll < 0.5 ? 'festoon' : 'bunting') : roll < 0.6 ? 'bunting' : roll < 0.8 ? 'prayer' : 'festoon';
   const sag = L * rng.range(0.03, 0.05) + 0.12;
   const seed = rng.next();
   const line = cloth.addLine({ ax, ay, az, bx, by, bz, sag, seed, wire: style === 'festoon' ? '#2a2826' : '#4a4640', r: style === 'festoon' ? 0.008 : 0.006 });

@@ -140,10 +140,10 @@ function market(ctx: CityContext, cloth: ClothSystem, poles: PoleBuilder, lamps:
       .map((a) => ({ a, d: Math.hypot(a.x - top.x, a.z - top.z), ang: Math.atan2(a.z - top.z, a.x - top.x) }))
       .filter((o) => o.d > 5 && o.d < 19)
       .sort((p, q) => p.ang - q.ang);
-    // pick up to 7 anchors spread around the mast
+    // pick 4 anchors well spread around the mast (2–4 spans per side, sky between them)
     const picked: typeof near = [];
-    for (const o of near) if (picked.every((p) => Math.abs(Math.atan2(Math.sin(p.ang - o.ang), Math.cos(p.ang - o.ang))) > 0.55)) picked.push(o);
-    picked.slice(0, 7).forEach((o, k) => addLine(top, o.a, (k + ti) % 2 === 0 ? 'festoon' : 'bunting'));
+    for (const o of near) if (picked.every((p) => Math.abs(Math.atan2(Math.sin(p.ang - o.ang), Math.cos(p.ang - o.ang))) > 1.1)) picked.push(o);
+    picked.slice(0, 4).forEach((o, k) => addLine(top, o.a, (k + ti) % 2 === 0 ? 'festoon' : 'bunting'));
   });
 }
 
