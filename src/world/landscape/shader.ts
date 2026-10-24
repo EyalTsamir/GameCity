@@ -188,8 +188,9 @@ vec3 landAlbedo() {
     bool tun = small && fTun(box);
     float nxp = 1.0, nyp = 1.0, ixp = 0.0, iyp = 0.0;
     if (small) {
-      nxp = max(1.0, floor((box.z - box.x) / FPLOT + 0.5));
-      nyp = max(1.0, floor((box.w - box.y) / FPLOT + 0.5));
+      float plotS = fPlot(box);
+      nxp = max(1.0, floor((box.z - box.x) / plotS + 0.5));
+      nyp = max(1.0, floor((box.w - box.y) / plotS + 0.5));
       float wx = (box.z - box.x) / nxp, wy = (box.w - box.y) / nyp;
       ixp = clamp(floor((q.x - box.x) / wx), 0.0, nxp - 1.0);
       iyp = clamp(floor((q.y - box.y) / wy), 0.0, nyp - 1.0);

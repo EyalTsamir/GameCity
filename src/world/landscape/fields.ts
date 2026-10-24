@@ -141,8 +141,10 @@ export interface Field extends Parcel {
 
 /** the belt of small plots round the town (parcel centre within this of the slab, not in the north) */
 export const TOWN_EDGE = 470;
-/** target size of a smallholding plot (m) */
+/** target size of a smallholding plot (m); allotment-sized right at the town's edge */
 export const PLOT = 44;
+export const PLOT_NEAR = 27;
+export const PLOT_NEAR_D = 230;
 
 function slabDistXZ(x: number, z: number): number {
   const dx = Math.max(SLAB.x0 - x, x - SLAB.x1, 0),
@@ -154,6 +156,11 @@ const _w = { x: 0, z: 0 };
 export function isSmall(x0: number, y0: number, x1: number, y1: number): boolean {
   fromField((x0 + x1) / 2, (y0 + y1) / 2, _w);
   return slabDistXZ(_w.x, _w.z) < TOWN_EDGE && _w.z > -150;
+}
+/** plot size of a smallholding parcel (twin: fPlot) */
+export function plotSizeOf(x0: number, y0: number, x1: number, y1: number): number {
+  fromField((x0 + x1) / 2, (y0 + y1) / 2, _w);
+  return slabDistXZ(_w.x, _w.z) < PLOT_NEAR_D ? PLOT_NEAR : PLOT;
 }
 /** polytunnels only west of the town (twin: fTun) */
 export function tunnelsOK(x0: number, y0: number, x1: number, y1: number): boolean {
@@ -171,8 +178,9 @@ export function fieldAt(qx: number, qy: number, out: Field): Field {
   out.nx = out.ny = 1;
   out.ix = out.iy = 0;
   if (out.small) {
-    const nx = Math.max(1, Math.round((out.x1 - out.x0) / PLOT)),
-      ny = Math.max(1, Math.round((out.y1 - out.y0) / PLOT));
+    const ps = plotSizeOf(out.x0, out.y0, out.x1, out.y1);
+    const nx = Math.max(1, Math.round((out.x1 - out.x0) / ps)),
+      ny = Math.max(1, Math.round((out.y1 - out.y0) / ps));
     const wx = (out.x1 - out.x0) / nx,
       wy = (out.y1 - out.y0) / ny;
     const ix = Math.min(nx - 1, Math.max(0, Math.floor((qx - out.x0) / wx))),
@@ -222,8 +230,9 @@ export function fieldsOfParcel(cx: number, cy: number): Field[] {
   parcelAt(cx, cy, P);
   const out: Field[] = [];
   if (isSmall(P.x0, P.y0, P.x1, P.y1)) {
-    const nx = Math.max(1, Math.round((P.x1 - P.x0) / PLOT)),
-      ny = Math.max(1, Math.round((P.y1 - P.y0) / PLOT));
+    const ps = plotSizeOf(P.x0, P.y0, P.x1, P.y1);
+    const nx = Math.max(1, Math.round((P.x1 - P.x0) / ps)),
+      ny = Math.max(1, Math.round((P.y1 - P.y0) / ps));
     for (let iy = 0; iy < ny; iy++)
       for (let ix = 0; ix < nx; ix++)
         out.push(fieldAt(P.x0 + ((ix + 0.5) * (P.x1 - P.x0)) / nx, P.y0 + ((iy + 0.5) * (P.y1 - P.y0)) / ny, newField()));
@@ -320,6 +329,13 @@ bool fSmall(vec4 box) {
   vec2 w = vec2(FROT[0][0] * c.x + FROT[0][1] * c.y, FROT[1][0] * c.x + FROT[1][1] * c.y);
   vec2 d = max(max(vec2(${SLAB.x0.toFixed(1)}, ${SLAB.z0.toFixed(1)}) - w, w - vec2(${SLAB.x1.toFixed(1)}, ${SLAB.z1.toFixed(1)})), 0.0);
   return length(d) < ${TOWN_EDGE.toFixed(1)} && w.y > -150.0;
+}
+// plot size (twin of plotSizeOf)
+float fPlot(vec4 box) {
+  vec2 c = 0.5 * (box.xy + box.zw);
+  vec2 w = vec2(FROT[0][0] * c.x + FROT[0][1] * c.y, FROT[1][0] * c.x + FROT[1][1] * c.y);
+  vec2 d = max(max(vec2(${SLAB.x0.toFixed(1)}, ${SLAB.z0.toFixed(1)}) - w, w - vec2(${SLAB.x1.toFixed(1)}, ${SLAB.z1.toFixed(1)})), 0.0);
+  return length(d) < ${PLOT_NEAR_D.toFixed(1)} ? ${PLOT_NEAR.toFixed(1)} : FPLOT;
 }
 // polytunnels only west of the town (twin of tunnelsOK)
 bool fTun(vec4 box) {
