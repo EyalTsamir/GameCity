@@ -470,9 +470,9 @@ vec3 landAlbedo() {
   // the dunes (noise only in the transition, the open beach and the inland stay as they are)
   // (the noise moves the marram / bare-sand boundary only: the cover weight against the fields stays
   // smooth, else the field colours show through the dunes in blotches)
-  float sN = (nA.b - 0.5) * 1.1 + (nB.g - 0.5) * 0.7 + (texture2D(tLN, p.xz * (1.0 / 13.0)).r - 0.5) * 0.35 * midF;
+  float sN = (nA.b - 0.5) * 1.1 + (nB.g - 0.5) * 0.7 + (texture2D(tLN, p.xz * (1.0 / 13.0)).r - 0.5) * 0.15 * midF;
   vec3 sc = mix(cWetSand, cSand, smoothstep(${(WL + 0.2).toFixed(2)}, ${(WL + 1.0).toFixed(2)}, p.y));
-  float marram = smoothstep(0.2, 0.7, (1.0 - sand) * 1.6 + nB.b * 0.6 - 0.3 + sN * 0.7) * smoothstep(${(WL + 1.6).toFixed(2)}, ${(WL + 2.6).toFixed(2)}, p.y);
+  float marram = smoothstep(0.2, 0.7, (1.0 - sand) * 1.6 + nB.b * 0.4 - 0.2 + sN * 0.45) * smoothstep(${(WL + 1.6).toFixed(2)}, ${(WL + 2.6).toFixed(2)}, p.y);
   // tussocks of marram with sand between them (mid distance), dune hummocks lit and shaded
   if (vCov.z > 0.02 && fp < 4.0) {
     vec4 nT5 = texture2D(tLN, p.xz * (1.0 / 5.3));
@@ -484,7 +484,8 @@ vec3 landAlbedo() {
     float dk = smoothstep(0.02, 0.15, vCov.z) * (1.0 - smoothstep(0.8, 1.0, vCov.z)) * (1.0 - smoothstep(1.5, 4.0, fp)) * step(${(WL + 1.2).toFixed(2)}, p.y);
     lnN = normalize(mix(lnN, normalize(lnN + vec3(-gr.x, 0.0, -gr.y)), dk));
   }
-  sc = mix(sc, mix(gcMarram, gcMeadowB, 0.35) * (0.75 + 0.4 * nB.r), marram * 0.85);
+  // marram from above: grey-green over pale sand, straw-tipped (low contrast against the sand)
+  sc = mix(sc, mix(mix(gcMarram, gcMeadowB, 0.3), cSand * 0.92, 0.3) * (0.86 + 0.24 * nB.r), marram * 0.8);
   // dune scrub (sea buckthorn, gorse, creeping willow): dark clumps among the marram, a tint far away
   {
     float scrubA = marram * smoothstep(0.45, 0.7, nA.g + 0.3 * (nB.a - 0.5));

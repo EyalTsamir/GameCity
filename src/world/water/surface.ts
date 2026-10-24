@@ -256,6 +256,14 @@ float wHash12(vec2 p) {
   return fract((p3.x + p3.y) * p3.z);
 }
 
+// golden-hour weight: the project's uDusk peaks at sunset only (≈ 0.07 at 18.2 h); the world's golden
+// light (air's key, 17–20 h) starts while the sun is still ~25° up
+float wGoldK() { return (1.0 - smoothstep(0.2, 0.45, uSunDir.y)) * (1.0 - uNight); }
+#ifdef TH_WORLD
+#define TH_GOLD max(uDusk, wGoldK())
+#else
+#define TH_GOLD uDusk
+#endif
 // the sky dome's painted gradient + sun-side glow (render/sky/dome.ts), without disc/stars
 vec3 wSky(vec3 d) {
   float y = clamp(d.y, 0.0, 1.0);
@@ -375,7 +383,7 @@ vec4 waterBase() {
   wc = mix(wc, pondC, mPond);
   wc = mix(wc, wc * wNightTint, uNight * 0.85);
   // golden hour: keep a saturated teal body under the warm light (not milky tea)
-  wc = mix(wc, wc * vec3(0.72, 1.06, 1.22), 0.55 * uDusk * (1.0 - uNight));
+  wc = mix(wc, wc * vec3(0.72, 1.06, 1.22), 0.55 * TH_GOLD * (1.0 - uNight));
 
   // ── Fresnel
   float ndv = clamp(dot(wN, V), 0.0, 1.0);
@@ -408,7 +416,7 @@ vec4 waterBase() {
   {
     vec2 rh = normalize(R.xz + vec2(1e-5, 0.0));
     vec2 shz = normalize(uSunDir.xz + vec2(1e-5, 0.0));
-    float gk = uDusk * (1.0 - uNight) * (1.0 - 0.75 * smoothstep(0.55, 0.95, dot(rh, shz)));
+    float gk = TH_GOLD * (1.0 - uNight) * (1.0 - 0.75 * smoothstep(0.55, 0.95, dot(rh, shz)));
     sky = mix(sky, uSkyZen * vec3(0.85, 1.0, 1.12), 0.55 * gk);
     F *= 1.0 - 0.38 * gk;
   }
@@ -498,10 +506,10 @@ vec4 waterBase() {
   // ── glints (sun / moon), evaluated after lighting (needs the shadow term)
   wSunL = normalize(uSunDir);
   // golden hour: a hotter, narrower path toward the low sun
-  float roughA2 = clamp(0.0012 + wVar * 0.9 + ruff * ruff * 0.006, 0.0008, 0.06) * mix(1.0, 0.6, uDusk);
+  float roughA2 = clamp(0.0012 + wVar * 0.9 + ruff * ruff * 0.006, 0.0008, 0.06) * mix(1.0, 0.6, TH_GOLD);
   wGlintA2 = roughA2;
   float sunUp = smoothstep(-0.03, 0.06, wSunL.y) * uSkySunVis;
-  wGlintK = sunUp * (1.0 - uSkyOvercast * 0.9) * (1.0 + 0.6 * uDusk);
+  wGlintK = sunUp * (1.0 - uSkyOvercast * 0.9) * (1.0 + 0.6 * TH_GOLD);
   // sparkles: point glints — random wave facets on a 0.35 m grid flash when they face the light;
   // ~1-2 px wide whatever the distance, faded out before they could alias
   {
@@ -559,7 +567,7 @@ vec4 waterBase() {
   // the pond has no planar reflection (another plane): its banks — reeds, shrubs, trees — mirror as a
   // dark band that thins toward the middle; backlit at golden hour they glow warm
   float pondBank = (1.0 - smoothstep(0.6, 5.5, shore + 1.2 * (lc.g - 0.5))) * mPond;
-  vec3 vegR = vec3(0.025, 0.04, 0.018) + uSkySunCol * vec3(0.05, 0.04, 0.012) * uDusk;
+  vec3 vegR = vec3(0.025, 0.04, 0.018) + uSkySunCol * vec3(0.05, 0.04, 0.012) * TH_GOLD;
   if (mPond > 0.01) {
     // beyond the band, the park round the pond (trees ~8–12 m tall, ~30 m away) fills the low part of
     // its mirror: reflected rays below an irregular tree line see foliage, above it the sky
@@ -568,7 +576,7 @@ vec4 waterBase() {
     float az = atan(Rn.z, Rn.x);
     float tline = 0.24 + 0.07 * sin(az * 5.0 + 1.3) + 0.05 * sin(az * 11.0 + 0.7) + 0.03 * sin(az * 23.0 + 2.1);
     float veg = (1.0 - smoothstep(tline - 0.03, tline + 0.03, tanE)) * mPond;
-    vec3 trees = vec3(0.03, 0.05, 0.026) * (0.8 + 0.4 * lc.b) + uSkySunCol * vec3(0.045, 0.05, 0.016) * (0.5 + 0.8 * uDusk);
+    vec3 trees = vec3(0.03, 0.05, 0.026) * (0.8 + 0.4 * lc.b) + uSkySunCol * vec3(0.045, 0.05, 0.016) * (0.5 + 0.8 * TH_GOLD);
     skyD = mix(skyD, trees * (1.0 - 0.85 * uNight), veg * 0.88);
   }
   skyD = mix(skyD, vegR, pondBank * 0.85);
@@ -584,7 +592,7 @@ vec4 waterBase() {
     vec3 LW = vec3(0.2126, 0.7152, 0.0722);
     float skyL = dot(uSkyZen * 0.5 + uSkyHor * 0.5, LW);
     vec3 wcN = mix(vec3(1.0), wc / max(dot(wc, LW), 1e-4), 0.7);
-    wBodyGlow = wcN * skyL * 0.3 * uDusk * (1.0 - uNight) * (1.0 - foam) * (1.0 - mPond) * wDebug.y;
+    wBodyGlow = wcN * skyL * 0.3 * TH_GOLD * (1.0 - uNight) * (1.0 - foam) * (1.0 - mPond) * wDebug.y;
   }
 #endif
   return vec4(base, wAlphaB);

@@ -1,15 +1,18 @@
 # world-ground — grass, meadows, flowers, weeds, litter, reeds (world round)
 
 ## Resume here
-* 2026-10-24 08:35 — resumed after the session-limit stop (tree at dd1fffb, my files intact, tsc clean).
-  Roaming cover window is fully wired (module drives createCoverWindow in frame(), walker ORs slab +
-  window tile grids on the 8 m lattice) — see the 04:10 entry in the log history below. Tiers judged
-  partly (t9_high vs t9_medium: medium meadow too thin → medium/low blades wider, more flowers).
-* Running: t10 (riverbend POI, dune, mouth, edge_s × 11 / 18.2 at 1600×900, 25 s warm-up so the window
-  is built) + hop test (riverbend view, hop 40 m W: shots/world/ground/hop/{a_before,b_hop_now,
-  c_hop_rebuilt}.png).
-* Next: judge t10 + hop → send lead the riverbend shots; t9 low + nograss A/B stats (re-run, killed);
-  final report.
+* 2026-10-24 13:35 — resumed after the 6th stop (tree at 1e5813f, my edits intact, tsc clean).
+  Since 08:35: roaming window verified at riverbend (t10b: reed stands + bank meadow; transect probe:
+  banks = meadow+wet within ~6 m of the water, beyond = world's fields → sparse blades, correct). The
+  window looked missing at first only because software GL renders ~0.15 fps (3 frames / 20 s): frames
+  > 250 ms now get a large build slice (never on the target GPU). Camera module clamps the riverbend
+  target to ~30 m past the slab (camera ends at x ≈ −179) — told nobody yet (lead: FYI in next note).
+  Forest floor (foliage request via lead): canopy raster (tree crowns, blurred to stand density ~10 m)
+  → cover A ≥ 0.62 = forest floor: blades × (1 − 0.88 f) and short; ground shader: leaf/needle litter,
+  moss patches, shadowed hollows (gForestA/B, gMoss). NOT yet verified in captures.
+* Next: captures: forest floor (hill forest eye level + station POI), hop test (z-hop, no pop),
+  t9 low + nograss A/B stats → note to lead → final report.
+* Tools: shots/world/ground/{gcap,hop,probe}.mjs (probe = eval after frames ran).
 
 ## Brief (from WORLD-PLAN.md + world-briefs.md "### ground")
 Owner of `src/world/terrain/ground.ts` (+ its mask), `src/world/groundcover.ts` + `src/world/groundcover/*`.

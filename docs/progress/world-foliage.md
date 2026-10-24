@@ -45,8 +45,11 @@
 * m1g (m1g_sheet.png): spruces now read as real cones (forest view) ✔, parkair crowns fuller (tangent cards) ✔,
   street trees fork (Y) ✔ but far/crossfading trees showed cut scaffold stubs → scaffolds fully static
   (non-forest); after a camera jump near detail is generated in one batch (budget 60) and weights snap.
-* RUNNING: capset m1h (11, 18.2: ot, park, wbst, forest, fored, parkair).
-* NEXT: judge m1h → stats (overview + park eye with landscape) → GPU estimate → final report.
+* m1h (m1h_sheet.png) verified the review fixes: ot street tree forks into scaffolds with a full crown ✔,
+  spruce cones ✔, forest with mantle/understory ✔. Milestone note sent.
+* 2026-10-24 13:35 resumed after 6th stop. RUNNING: stats2 shots (ovw / parkeye / oteye × cards / ?noleafcards)
+  → shots/world/foliage/stats2_*.json.
+* NEXT: GPU estimate + final report (≤ 350 words) in this log; message lead; SubagentHandback.
 * Tools: scratchpad/{capset.sh OUT HOURS [q] [views], dumpatlas.sh, vstat.py, bench/}.
 * Views: park=-55,4,15,26,200,6; ot=66,3.5,-13.9,13,25,4; dt=-22,3.5,-68.9,14,35,4; palms=118,5,30,18,90,6;
   forest=10,10,-158,70,10,10; parkair=-55,0,17,90,30,30; overview.
