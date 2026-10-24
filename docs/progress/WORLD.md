@@ -43,6 +43,9 @@ Branch: work continues from `claude/tinyhaven-graphics-audit-l089m8` (fast-forwa
   +2–3 ms on Adreno — unmeasured; toggles ?noland ?nomountains ?landtrees=0 ?landbld=0 ?landships=0 ?landlife=0
   ?landroads=0 ?nocliffs; tiers low/med/high). Judged final1 (shots/world/lead/world_final_a.png): approved except
   island = low-poly pyramid + dune back-band blotches → sent back.
+* 16:05 — foliage DONE (fin_sheet.png approved: swept trunks with root flare/buttresses, dense forest, park eye
+  level with flowers). Est. +0.5–0.8 ms eye level / +0.2 ms overview on high, draw calls equal (?noleafcards A/B).
+  DONE: air, wear, streetlife, foliage. Open: world (island, dunes), ground (forest floor tune), life (soak+report).
 * 2026-10-24 08:31 UTC — 5th stop (SESSION limit, all agents ~04:40, reset 08:20; container rebooted 08:29).
   Restored servers/autocheckpoint/locks; tree clean at 9399c3f (pushed). All 7 agents resumed 08:31 with open
   notes repeated (see 03:55 / 04:20 entries). Lead next: wait for milestone notes; then a second full-city
