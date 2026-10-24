@@ -477,18 +477,13 @@ vec3 landAlbedo() {
   // marram: sparse on the fore-dune, closing into a soft vegetated back-dune (a smooth gradient with
   // only broad variation — 5–15 m patches read as camouflage blotches against sunlit sand)
   float marram = smoothstep(0.25, 0.85, (1.0 - sand) * 1.6 - 0.15 + sN * 0.22) * smoothstep(${(WL + 1.6).toFixed(2)}, ${(WL + 2.6).toFixed(2)}, p.y);
-  // close up: single tufts (sub-metre speckle with the same mean), dune hummocks lit and shaded
+  // close up: single tufts (sub-metre speckle with the same mean)
   if (vCov.z > 0.02 && fp < 4.0) {
     vec2 tc = p.xz / 0.7;
     vec2 th = lhash22(floor(tc));
     float tuft = step(th.x, marram) * (1.0 - smoothstep(0.25, 0.42, length(fract(tc) - 0.5 - (th - 0.5) * 0.4)));
     marram = mix(marram, clamp(tuft * 1.6, 0.0, 1.0), (1.0 - smoothstep(0.08, 0.25, fp)) * 0.85);
-    float h0 = texture2D(tLN, p.xz * (1.0 / 29.0)).g;
-    float hx = texture2D(tLN, (p.xz + vec2(2.0, 0.0)) * (1.0 / 29.0)).g;
-    float hz = texture2D(tLN, (p.xz + vec2(0.0, 2.0)) * (1.0 / 29.0)).g;
-    vec2 gr = vec2(hx - h0, hz - h0) * 2.2;
-    float dk = smoothstep(0.02, 0.15, vCov.z) * (1.0 - smoothstep(0.8, 1.0, vCov.z)) * (1.0 - smoothstep(0.5, 1.2, fp)) * step(${(WL + 1.2).toFixed(2)}, p.y) * 0.7;
-    lnN = normalize(mix(lnN, normalize(lnN + vec3(-gr.x, 0.0, -gr.y)), dk));
+    // (no fake hummock normals: under the low golden-hour sun any tilt became leopard blotches)
   }
   // marram from above: grey-green over pale sand, straw-tipped (low contrast against the sand)
   sc = mix(sc, mix(mix(gcMarram, gcMeadowB, 0.3), cSand * 0.92, 0.3) * (0.86 + 0.24 * nB.r), marram * 0.8);

@@ -2,7 +2,7 @@
 //
 // Two instanced meshes draw every tree, bush and palm of the city (+ their two shadow passes):
 //   cards — one quad per leaf cluster, textured from the procedural leaf atlas (atlas.ts), alpha-tested;
-//   wood  — one tapered tube per segment: a far layer (8 sides: trunks + scaffolds of every tree) and a near
+//   wood  — one tapered tube per segment: a far layer (6 sides: trunks + scaffolds of every tree) and a near
 //           layer (12 sides: the whole skeleton of the trees near the camera, smooth curved limbs).
 // Each instance buffer has a STATIC part (all plants' far LOD: a few big dense cards per leaf mass, trunks
 // and main limbs) followed by a DYNAMIC part (fine cluster cards, branches and twigs of the plants near the

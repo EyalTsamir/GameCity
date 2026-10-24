@@ -1285,7 +1285,7 @@ export default function create(ctx: CityContext): CityModule {
     cm = cardMaterials(ctx.uniforms, atlas.texture, lodTex.tex);
     wm = woodMaterials(ctx.uniforms, lodTex.tex);
     cardLayer = new FoliageLayer('cards', farCards, NEAR_CAP.high, cm, 'veg-cards');
-    woodLayer = new FoliageLayer('wood', farWood, 0, wm, 'veg-wood-far', 8);
+    woodLayer = new FoliageLayer('wood', farWood, 0, wm, 'veg-wood-far', 6);
     woodNear = new FoliageLayer('wood', newWoodBuf(1), Math.round(NEAR_CAP.high / 2.5), wm, 'veg-wood-near', 12);
     cardLayer.mesh.castShadow = woodLayer.mesh.castShadow = woodNear.mesh.castShadow = shadows;
     if (parts.includes('trees')) root.add(cardLayer.mesh, woodLayer.mesh, woodNear.mesh);

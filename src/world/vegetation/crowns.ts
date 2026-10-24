@@ -320,6 +320,42 @@ function makeLobes(form: Form, r: number, Rv: number, rng: Rng, bx: number, bz: 
   return L;
 }
 
+/**
+ * Near-LOD trunk from `base` to `top`: a quadratic arc with a small sweep (no two trunks perfectly straight),
+ * 4 tapering segments flaring into the ground, plus 3–5 buttress roots.
+ */
+function nearTrunk(st: Struct, rng: Rng, base: V3, top: V3, r0: number, h: number, roots = 4): void {
+  const sa = rng.range(0, 6.28),
+    sweep = rng.range(0.012, 0.035) * h;
+  const ctl: V3 = [(base[0] + top[0]) / 2 + Math.cos(sa) * sweep, (base[1] + top[1]) / 2, (base[2] + top[2]) / 2 + Math.sin(sa) * sweep];
+  const bez = (t: number): V3 => {
+    const u = 1 - t;
+    return [u * u * base[0] + 2 * u * t * ctl[0] + t * t * top[0], u * u * base[1] + 2 * u * t * ctl[1] + t * t * top[1], u * u * base[2] + 2 * u * t * ctl[2] + t * t * top[2]];
+  };
+  const T = [0, 0.1, 0.4, 0.72, 1];
+  const R = [r0 * 1.32, r0 * 1.04, r0 * 0.95, r0 * 0.87, r0 * 0.8];
+  const P = T.map((t) => bez(t));
+  P[0] = [P[0][0], P[0][1] - 0.15, P[0][2]];
+  for (let k = 0; k < 4; k++) st.segs.push({ a: P[k], b: P[k + 1], ra: R[k], rb: R[k + 1], sa: STILL, sb: STILL, near: true, aoA: k === 0 ? 0.5 : 0.75 + 0.05 * k, aoB: 0.78 + 0.04 * k });
+  buttress(st, rng, base, r0, roots);
+}
+
+/** buttress roots: short tapering lobes spreading from the trunk foot into the ground (near LOD) */
+function buttress(st: Struct, rng: Rng, base: V3, r0: number, n: number): void {
+  const a0 = rng.range(0, 6.28);
+  for (let i = 0; i < n; i++) {
+    const a = a0 + (i / n) * 6.28 + rng.range(-0.35, 0.35);
+    const ca = Math.cos(a),
+      sn = Math.sin(a);
+    const reach = r0 * rng.range(1.9, 2.8);
+    const A: V3 = [base[0] + ca * r0 * 0.35, base[1] + r0 * rng.range(0.9, 1.6), base[2] + sn * r0 * 0.35];
+    const M: V3 = [base[0] + ca * reach * 0.55, base[1] + r0 * 0.25, base[2] + sn * reach * 0.55];
+    const B: V3 = [base[0] + ca * reach, base[1] - 0.12, base[2] + sn * reach];
+    st.segs.push({ a: A, b: M, ra: r0 * 0.5, rb: r0 * 0.3, sa: STILL, sb: STILL, near: true, aoA: 0.6, aoB: 0.5 });
+    st.segs.push({ a: M, b: B, ra: r0 * 0.3, rb: r0 * 0.06, sa: STILL, sb: STILL, near: true, aoA: 0.5, aoB: 0.4 });
+  }
+}
+
 /** broadleaf: trunk (+ stems), limbs to every leaf mass, branches inside the masses, tips on the shell */
 function broadStruct(st: Struct, rng: Rng): void {
   const { def, kind, form } = st;
@@ -376,8 +412,9 @@ function broadStruct(st: Struct, rng: Rng): void {
       const wob = (multi > 1 ? 0.06 : 0.022) * h;
       mid[0] += rng.range(-wob, wob);
       mid[2] += rng.range(-wob, wob);
-      st.segs.push({ a: [base[0], base[1] - 0.2, base[2]], b: mid, ra: sr * 1.38, rb: sr * 0.88, sa: sway0, sb: sway0, near: false, aoA: 0.5, aoB: 0.9 });
-      st.segs.push({ a: mid, b: top, ra: sr * 0.88, rb: sr * 0.64, sa: sway0, sb: sway0, near: false, aoA: 0.9, aoB: 0.72 });
+      st.segs.push({ a: [base[0], base[1] - 0.2, base[2]], b: mid, ra: sr * 1.38, rb: sr * 0.88, sa: sway0, sb: sway0, near: false, farOnly: true, aoA: 0.5, aoB: 0.9 });
+      st.segs.push({ a: mid, b: top, ra: sr * 0.88, rb: sr * 0.64, sa: sway0, sb: sway0, near: false, farOnly: true, aoA: 0.9, aoB: 0.72 });
+      nearTrunk(st, rng, base, top, sr * 0.8, h, multi > 1 ? 3 : 4);
       const lead: V3 = [top[0] + (c[0] - top[0]) * 0.5, c[1] + Rv * (form === 'column' ? 0.75 : 0.35), top[2] + (c[2] - top[2]) * 0.5];
       st.segs.push({ a: top, b: lead, ra: sr * 0.64, rb: Math.max(0.012, sr * 0.12), sa: sway0, sb: { ph1: 0, w1: 0.3, ph2: 0, w2: 0 }, near: false, aoA: 0.72, aoB: 0.6 });
       anchors.push({ p: top, r: sr * 0.64, ph: rng.next(), w: 0, dirx: Math.cos(a), dirz: Math.sin(a) });
@@ -388,10 +425,11 @@ function broadStruct(st: Struct, rng: Rng): void {
     // (planes, lindens, oaks: the structure you see under a city tree)
     const fork: V3 = [x + lx * 0.45, y + Math.max(1.6, clear * rng.range(0.74, 0.86)), z + lz * 0.45];
     const mid = lerp3([x, y, z], fork, 0.5);
-    mid[0] += rng.range(-0.015, 0.015) * h;
-    mid[2] += rng.range(-0.015, 0.015) * h;
-    st.segs.push({ a: [x, y - 0.2, z], b: mid, ra: r0 * 1.38, rb: r0 * 0.96, sa: sway0, sb: sway0, near: false, aoA: 0.5, aoB: 0.88 });
-    st.segs.push({ a: mid, b: fork, ra: r0 * 0.96, rb: r0 * 0.82, sa: sway0, sb: sway0, near: false, aoA: 0.88, aoB: 0.8 });
+    // far layer: straight two-segment stand-in
+    st.segs.push({ a: [x, y - 0.2, z], b: mid, ra: r0 * 1.38, rb: r0 * 0.96, sa: sway0, sb: sway0, near: false, farOnly: true, aoA: 0.5, aoB: 0.88 });
+    st.segs.push({ a: mid, b: fork, ra: r0 * 0.96, rb: r0 * 0.82, sa: sway0, sb: sway0, near: false, farOnly: true, aoA: 0.88, aoB: 0.8 });
+    // near layer: a gently swept trunk (quadratic arc, 4 segments, flaring at the foot) + buttress roots
+    nearTrunk(st, rng, [x, y, z], fork, r0, h);
     const nS = form === 'vase' || form === 'spread' || form === 'umbrella' ? rng.int(3, 4) : form === 'weep' ? 3 : rng.int(2, 3);
     // elevation of the scaffolds (from horizontal)
     const e0 = form === 'vase' ? 1.15 : form === 'umbrella' ? 0.78 : form === 'spread' ? 0.9 : 1.05;
@@ -515,6 +553,7 @@ function coneStruct(st: Struct, rng: Rng): void {
   const m1 = lerp3([x, y, z], T, 0.45);
   st.segs.push({ a: [x, y - 0.15, z], b: m1, ra: r0 * 1.3, rb: r0 * 0.68, sa: STILL, sb: STILL, near: false, aoA: 0.5, aoB: 0.6 });
   st.segs.push({ a: m1, b: T, ra: r0 * 0.68, rb: 0.015, sa: STILL, sb: STILL, near: false, aoA: 0.6, aoB: 0.9 });
+  buttress(st, rng, [x, y, z], r0, rng.int(3, 5));
   // whorls
   const span = top - y0;
   const step = rng.range(0.42, 0.55) * Math.max(0.8, h / 10);

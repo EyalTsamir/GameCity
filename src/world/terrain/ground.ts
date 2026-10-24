@@ -617,6 +617,7 @@ uniform float uGcBump;
 uniform vec3 gForestA;
 uniform vec3 gForestB;
 uniform vec3 gMoss;
+uniform vec3 gNeedle;
 uniform vec3 gFlowerCol[ 8 ];
 uniform vec2 uWind;
 float gGrassTrans = 0.0;
@@ -754,17 +755,22 @@ vec3 groundColor() {
   float lit = cv.a * uGcOn;
   if ( lit > 0.01 ) {
     float sp = smoothstep( 0.45, 0.75, nC.g * 0.6 + nB.a * 0.4 );
-    vec3 lc = mix( vec3( 0.36, 0.22, 0.08 ), vec3( 0.52, 0.36, 0.12 ), nB.b );
+    vec3 lc = mix( vec3( 0.13, 0.08, 0.035 ), vec3( 0.24, 0.15, 0.06 ), nB.b );
     grass = mix( grass, lc, lit * ( 0.18 + 0.5 * sp ) );
   }
   // forest floor under a closed canopy (cover A ≥ 0.62): leaf / needle litter, moss, shadowed hollows
   float forestF = smoothstep( 0.62, 0.95, cv.a ) * uGcOn;
   if ( forestF > 0.001 ) {
-    vec3 floorC = mix( gForestA, gForestB, smoothstep( 0.35, 0.7, nB.g * 0.6 + nC.r * 0.4 ) );
-    float moss = smoothstep( 0.56, 0.72, nA.b * 0.5 + nB.b * 0.5 );
-    floorC = mix( floorC, gMoss * ( 0.85 + 0.3 * nC.b ), moss * 0.65 );
-    float hollow = smoothstep( 0.55, 0.8, nA.a * 0.6 + nB.a * 0.4 );
-    floorC *= ( 1.0 - 0.35 * hollow ) * ( 0.88 + 0.24 * nC.a );
+    // umber leaf litter ↔ reddish needle carpet (conifer patches), damp dark hollows, moss
+    float needle = smoothstep( 0.45, 0.65, nM.g * 0.6 + nA.r * 0.4 );
+    vec3 leafC = mix( gForestA, gForestB, smoothstep( 0.3, 0.75, nB.g * 0.6 + nC.r * 0.4 ) );
+    vec3 needleC = gNeedle * ( 0.82 + 0.36 * nC.g );
+    vec3 floorC = mix( leafC, needleC, needle );
+    float damp = smoothstep( 0.5, 0.75, nA.a * 0.6 + nB.a * 0.4 );
+    floorC *= 1.0 - 0.42 * damp;
+    float moss = smoothstep( 0.56, 0.72, nA.b * 0.5 + nB.b * 0.5 ) * ( 1.0 - needle * 0.6 );
+    floorC = mix( floorC, gMoss * ( 0.8 + 0.3 * nC.b ), moss * 0.7 );
+    floorC *= 0.85 + 0.25 * nC.a;
     grass = mix( grass, floorC, forestF );
   }
   // under the near blade rings the ground is the shaded thatch between the stems (same fade as the
@@ -797,6 +803,7 @@ vec3 groundColor() {
   // rock on steep slopes (matches the cliff skin): strata bands + ledges, cracks, moss
   float slope = 1.0 - n.y;
   float rockAmt = smoothstep(0.24, 0.46, slope + (nB.r - 0.5) * 0.22);
+  rockAmt *= 1.0 - 0.8 * forestF;   // a wooded slope keeps its litter (roots hold the soil)
   vec3 rock = mix(gRockB, gRockA, smoothstep(0.25, 0.75, nB.g * 0.55 + nA.b * 0.45));
   float sy = p.y * 0.85 + nA.r * 1.6 + nB.a * 0.2;
   float band = floor(sy);
@@ -832,9 +839,10 @@ export function createGround(ctx: CityContext, model: TerrainModel, feet: readon
     ...gcUniforms,
     ...gcPalette(),
     uWind: ctx.uniforms.uWind,
-    gForestA: C('#3e3122'),
-    gForestB: C('#6a5034'),
-    gMoss: C('#4a5a28'),
+    gForestA: C('#2c2217'),
+    gForestB: C('#4d3b27'),
+    gNeedle: C('#4b2f1d'),
+    gMoss: C('#3c4a21'),
     gGrassA: C(PALETTE.grass),
     gGrassB: C(PALETTE.grassDark),
     gLawn: C(PALETTE.lawn),

@@ -55,9 +55,11 @@
   Far-cost cut after stats2 (ovw: 66.8k static cards, 6.7k wood, scene 1.63 M tris vs 1.40 M hulls):
   forest cone shells every 4th tier ×1.45, broadleaf far 2–3 cards/lobe (forest 1–2), bushes 1/lobe,
   ferns 2, band density 0.45.
-* RUNNING: b95t2vkie = capset m1i (park, parkc close, ot, palmA, forest, parkair @11) then stats3_* (cards vs
-  ?noleafcards at ovw / parkeye / oteye).
-* NEXT: judge m1i → GPU estimate from stats3 → final report → message lead → SubagentHandback.
+* stats3 done (table below). Since: ground's note — near trunks are swept 4-segment arcs with root flare +
+  3–5 buttress roots (nearTrunk/buttress; the far layer keeps a straight 2-segment stand-in), far wood 6 sides.
+* RUNNING: bzuci5tcg = final verification via ground's gcap.mjs (fe1/fe2 forest eye level, ptrunk, ot, park,
+  overview @ 11 & 18.2, groundcover on) → shots/world/foliage/fin/.
+* NEXT: judge fin → Final report (below) → message lead → SubagentHandback.
 * Tools: scratchpad/{capset.sh OUT HOURS [q] [views], dumpatlas.sh, vstat.py, bench/}.
 * Views: park=-55,4,15,26,200,6; ot=66,3.5,-13.9,13,25,4; dt=-22,3.5,-68.9,14,35,4; palms=118,5,30,18,90,6;
   forest=10,10,-158,70,10,10; parkair=-55,0,17,90,30,30; overview.
@@ -119,8 +121,32 @@ far part ≈ 30k cards (120k verts) + 3k segments; fragment: alpha-tested overdr
 * M4 lighting polish (golden-hour translucency, night), quality tiers, adaptive setter, perf/stats.
 * M5 final captures, report.
 
-## Captures
-(pending)
+## Captures (shots/world/foliage/)
+* before: before_sheet.png (+ before/*). Atlas: atlas.png. Iterations: m1a…m1i sheets (m1x_sheet.png).
+* Best: ba_m1.png (before/after), m1h/ot_11.png (forked street tree), m1h/park_11.png + m1i/park_11.png (park,
+  spruce cone, plane scaffolds), m1f/park_18h2.png (golden hour), m1d/palmB_11.png (date palms), m1h/forest_18h2.png,
+  wind_sheet.png (gust motion diff), fin/ (final verification incl. forest eye level, groundcover on).
+
+## Perf (stats3, quality high, only=sky,terrain,landscape,water,roads,buildings,vegetation,props,lamps,postfx)
+| view | leaf cards | ?noleafcards | veg instances |
+|---|---|---|---|
+| overview (0,0,−20, 420 m) | 1.52 M tris, 90 draws | 1.40 M, 90 | cards 47.6k static, wood 5.6k |
+| park eye | 1.70 M, 86 | 1.60 M, 86 | + near 12.0k cards, 3.0k wood |
+| old-town eye | 1.72 M, 86 | 1.61 M, 85 | + near 10.8k cards, 3.1k wood |
+Build (quiet machine): vegetation 1.1–1.3 s (atlas 0.19–0.29 s, far 0.2–0.3 s); near gen ≈ 1.5–2 ms/plant
+(lazy, 4/frame, 60 after a camera jump). Draw calls: cards + far wood + near wood (+3 shadow) replace trees
+near/far/forest (+shadows): net ±0. Far wood since then 8 → 6 sides (−25 % of its tris).
+GPU estimate (Adreno X1-45, 1920×1025): vertices ≈ 0.40 M per pass at eye level (cards ×4, tubes 2×sides),
+≈ 0.8 M with the shadow pass → ≈ 0.6–0.8 ms; fragments: alpha-tested foliage ≈ 35 % of the screen × ~2.5
+overdraw × ~180 ALU ≈ 0.3 ms + shadow-map alpha test ≈ 0.1–0.2 ms → ≈ 1.0–1.3 ms at eye level (hulls ≈ 0.5)
+→ net ≈ +0.5–0.8 ms; overview ≈ +0.2 ms. Medium: leafDist 42 m, far cards ×0.85; low: no near cards, far ×0.6.
+
+## Toggles / knobs
+`?noleafcards` (previous lobed hulls, A/B + fallback), `?legacyveg`, `?vegparts=trees,forest,plants`,
+`?vegshadow=0`. Runtime: `services.vegetation.setLeafDistance(m|null)`, `getLeafDistance()`,
+`cardKnobs` (windK main/limb/branch/flutter, trans, wrap, tilt, skyFill, edgeFade, farKeep, shadowShiftLen,
+night, fx), `debugPlants(x,z,r)`, `atlasTex`. Stats: cards/wood `static+near`, nearPlants, leafDist,
+atlasMs, farMs, nearGen, rebuilds, forestBand, forestMantle, ferns.
 
 ## Requests to other areas
 * world (via lead, 2026-10-20 ~20:35, accepted): world's 3D landscape trees start at z < −225 with a 15 m ramp;
@@ -131,4 +157,4 @@ far part ≈ 30k cards (120k verts) + 3k segments; fragment: alpha-tested overdr
   cover.forest > 0.5 would complete the woodland. Foliage adds shrubs + saplings under the canopy.
 
 ## Changes outside my area
-(none)
+(none) — note: pond reeds/lily pads removed from vegetation.ts at ground's request (groundcover owns them).

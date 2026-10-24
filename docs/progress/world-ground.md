@@ -1,8 +1,13 @@
 # world-ground — grass, meadows, flowers, weeds, litter, reeds (world round)
 
 ## Resume here
-* 2026-10-24 14:40 — DONE. Final report below ("## Final report"), sent to the lead. Nothing running.
-  If resumed: only follow-ups from the lead's full-city review (open issues listed in the report).
+* 2026-10-24 15:00 — final report delivered; lead approved, one tune requested: forest floor at eye level
+  read as pale beige sand with bright confetti leaves. Done: ground forest floor darker umber leaf
+  litter ↔ reddish needle carpet in conifer-like patches, damp dark hollows (−42 %), moss; litter tint
+  muted; leaf blades mostly muted browns/olive (≤ 4 % bright on the forest floor), clustered by a 0.3–1 m
+  noise (against roots / hollows). tsc clean.
+* Running: t13 (forest, forest_in, forest_w × 11 / 18.2) → shots/world/ground/sheet_forest_floor.png.
+* Next: judge t13, update the final report (forest-floor line + shot), hand back.
 
 ## Brief (from WORLD-PLAN.md + world-briefs.md "### ground")
 Owner of `src/world/terrain/ground.ts` (+ its mask), `src/world/groundcover.ts` + `src/world/groundcover/*`.

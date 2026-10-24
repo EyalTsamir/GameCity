@@ -131,7 +131,18 @@
   wall = beige shelves → cliffs.ts: greyer/darker bed tones with more spread, bigger ledge wobble, 24 %
   overhanging lips, more rubble; masonry.ts cliff shading: stronger water streaks, damp dark seeps,
   grey-green lichen, vertical joints per bed, shrub clumps on ledges, darker undersides.
-* Running: m5d (overview, coast, dunes, sheep close-up × 18.2/11), cliff1 (fored, forest × 11/18.2).
+* 14:30 — m5d/cliff1/m5e/final1 judged. Sea at 18.2 teal-blue (83,112,138 vs 97,107,120). Cliffs read as rock
+  (+ faults stepping the beds). Lead camera fix (pivot roams 320 m into the land) → riverbend frames x = −300.
+  Lead notes done since: river edge foam broken (water: edge × lace flecks on rivers) + dark wet mud at the
+  waterline (land); open-coast surf band in the land shader (> 400 m from the slab); island reshaped
+  (asymmetric ridge, crest east with a steep sea side, 3 summits / saddles, cliffed rim with a beach cove,
+  peak 190, scrub woods on the west slopes, shingle on low flat shore); dunes: smooth marram gradient
+  (fore-dune sparse → vegetated back-dune) + sub-metre tufts close up, no fake hummock normals (low sun
+  turned any tilt into leopard blotches), scrub dots only < 1.2 m footprint; low tier keeps a 0.35 near
+  radius (no impostor lollipops at eye level). Full city (final1): console clean, invariants {}, overview
+  177 dc / 2.62 M tris (all passes). stats3 vista full city: land 186 dc / 2.65 M vs ?noland 165 / 2.14 M.
+* 14:30 — final2 + dio2 judged: dunes clean (no blotches), island irregular, ?diorama tabletop unchanged.
+  console clean, invariants {}. DONE — see "## Final report".
 * Tools: my capture script copy with 20-min load timeout = scratchpad `cap.mjs` (scratchpad is SHARED with other
   agents — keep my files under scratchpad/world* or land/). Offline map tool: scratchpad `land/map.ts` (bundle:
   `npx rolldown land/map.ts --platform node -o land/map.mjs`; `node land/map.mjs x0 z0 x1 z1 N out.bin &&
@@ -210,4 +221,30 @@ eye level ~45–55°, far ≥ mountains). Sea to the horizon, reflections of the
 (none yet)
 
 ## Changes outside my area
-(none yet)
+* src/world/terrain/cliffs.ts + the cliff branch of src/world/terrain/masonry.ts (granted by the lead,
+  10-24): rock tones, faults, ledge wobble, overhangs, rubble; streaks / seeps / lichen / joints / ledge
+  shrubs. `?nocliffs` / `?legacyterrain` unchanged.
+
+## Final report
+**Changes.** In world mode the tabletop is gone. The city sits in a continuous landscape out to 45 km of
+land and 52 km of sea: farmland W/S, forested hill country rising to four domain-warped mountain layers N,
+the river from the W, and the open sea E with a rugged island. The town edge has a smallholding patchwork
+(CPU/GPU twin crop kinds, plot hedges, wildflower margins); hedgerows, orchards, farms, hamlets, villages
+and roads with tunnels and bridges fill the country. Life: herds, a tractor, cars, ships, chimney smoke and
+night lights. Landscape trees are leaf-card crowns with impostors beyond 125 m. Other passes: river banks
+(mud, reeds, towpath), dunes, the water (haze-ring sky, golden-hour body, glitter, short far reflections,
+pond mirror), the cliffs (granted), and camera far/FOV. `?diorama` keeps the original tabletop (dio2).
+**Files.** src/world/landscape.ts + landscape/*, terrain/slab.ts, water.ts + water/*, ui/camera.ts constants;
+granted: terrain/cliffs.ts, masonry.ts cliff branch.
+**Toggles.** ?diorama ?noland ?nomountains ?landdbg ?landtrees=0 ?landbld=0 ?landships=0 ?landlife=0
+?landroads=0 ?nocliffs ?waterdebug=refl. Tiers (low/med/high): land rings ×1.7/1.3/1, mountain decimation
+2.2/1.5/1, 3D-tree radius 0.35/0.7/1 (also on the adaptive ladder via setTreeDetail).
+**Shots.** before: shots/world/world/before/. after: final1/ (overview, vista, riverbend, country, coast,
+dunes, island × 11/18.2), final2/, cliff1/, m5d/sheep_*, qlow/, qmed/, diag/ (?noatmo A/B).
+**Cost.** Full city vista: 186 dc / 2.65 M tris, against 165 / 2.14 M with ?noland (+21 dc, +0.51 M, all passes).
+The landscape itself: land 92k tris, mountains 65k, reflection proxy 48k, 20.9k trees, 750 animals ×
+54 tris, build ≈1.8 s. Measured on software GL only. My estimate is +2–3 ms on the Adreno X1-45 at
+1920×1025; it needs `perf.mjs --variants ";noland"` on the target.
+**Trade-offs / open.** At 18.2 the hills read grey-brown mostly through air's haze (the ?noatmo A/B shows them
+green). Sheep keep a 20-face body: faceted at under 5 m, cheap. The island peak is still a little conical from the
+SW. Shader plot hedges have no gaps, unlike the CPU hedge trees. The cliffs.ts rng changes moved the scree.

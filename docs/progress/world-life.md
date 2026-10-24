@@ -1,11 +1,12 @@
 # world-life — wind consumers, smoke, birds, small motion (world round)
 
 ## Resume here
-* 2026-10-24 14:20 — DONE except the soak verdict. Full-city set shots/world/life/full1 (failedModules [],
-  invariants empty, console clean); A/B shots/world/life/perf (skip=life). Final report below.
-* Running: soak 4 min @4× (life subset, view oldtown) → shots/world/life/soak/soak.json (private script
-  scratchpad/life/soak.mjs = scripts/soak.mjs with a 25-min ready timeout). When it ends: check
-  invariantHits / heap trend / console, note the verdict under "Final report", message the lead.
+* 2026-10-24 16:30 — DONE pending the last check. Soak 4 min @4× (shots/world/life/soak/soak.json): heap
+  flat 330–336 MB, console clean, failedModules [], no life/ambient invariant hits (only 2 pedestrian
+  overlap hits — streetlife's). Lead's taste note applied: market lines thinned (4 radial lines per mast,
+  wide spread; market court spans festoon-only at 30 %) → 8 mast lines.
+* Running: shots/world/life/m4 (full-city market 11/21.5 + overview; motes_18h6.png subset). When done:
+  judge, then send the final report (below) to the lead via SubagentHandback.
 
 ## Brief (from WORLD-PLAN.md §6 + briefs)
 Wind consumers: flags on poles flap, bunting / festoon strings across old-town streets and the market,

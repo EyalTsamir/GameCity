@@ -195,7 +195,9 @@ vGcRough = 0.85;
     float weedH = abs( hab - 120.0 ) < 0.5 ? 1.0 : 0.0;
     float len = cov.g;
     float lawnOK = iTile.w;
-    bool leaf = rc.x < cov.a * uKind.z;
+    // fallen leaves drift into clusters (against roots, in hollows), not an even sprinkle
+    float leafCl = cov.a > 0.01 ? smoothstep( 0.35, 0.75, textureLod( tNoise, root * 0.37, 0.0 ).g ) * 1.9 + 0.08 : 0.0;
+    bool leaf = rc.x < cov.a * uKind.z * leafCl;
     bool alive = ra.z < cov.r * uBlade.z && ( len > 0.22 || wet > 0.0 || lawnOK > 0.5 );
     vec3 rw = vec3( root.x, y0, root.y );
     float dist = distance( rw, cameraPosition );
@@ -221,8 +223,10 @@ vGcRough = 0.85;
         vec2 across = vec2( -wd.y, wd.x ) * side * lw * 0.5 * prof;
         gcPos = vec3( root.x + along.x + across.x, y0 + 0.012 + lv * ( 1.0 - lv ) * 0.02 * fade, root.y + along.y + across.y );
         gcPos = mix( rw + vec3( 0.0, 0.012, 0.0 ), gcPos, fade );
+        // mostly muted browns and olive; only a few bright leaves (fewer still on the forest floor)
         float pick = fract( rc.y * 7.13 + rc.z * 3.7 );
-        vec3 lc = pick < 0.3 ? vec3( 0.25, 0.13, 0.05 ) : pick < 0.55 ? vec3( 0.45, 0.27, 0.06 ) : pick < 0.72 ? vec3( 0.48, 0.14, 0.035 ) : pick < 0.88 ? vec3( 0.22, 0.24, 0.07 ) : vec3( 0.36, 0.3, 0.16 );
+        float bright = cov.a > 0.62 ? 0.04 : 0.12;
+        vec3 lc = pick < 0.36 ? vec3( 0.075, 0.045, 0.022 ) : pick < 0.64 ? vec3( 0.14, 0.085, 0.035 ) : pick < 0.86 ? vec3( 0.1, 0.095, 0.035 ) : pick < 1.0 - bright ? vec3( 0.2, 0.13, 0.05 ) : ( fract( rc.z * 5.7 ) < 0.5 ? vec3( 0.38, 0.2, 0.045 ) : vec3( 0.36, 0.1, 0.03 ) );
         vGcCol = lc * ( 0.8 + 0.35 * fract( rc.z * 13.1 ) ) * ( 0.75 + 0.25 * abs( side ) );
         objectNormal = normalize( vec3( ( rc.y - 0.5 ) * 0.3, 1.0, ( rc.z - 0.5 ) * 0.3 ) );
         vGcRough = 0.7;

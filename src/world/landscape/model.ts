@@ -176,7 +176,7 @@ const COAST_CTRL: [number, number][] = [
   [2100, 14000],
 ];
 
-const ISLAND = { x: 2250, z: -560, r: 640, peak: 230 };
+const ISLAND = { x: 2250, z: -560, r: 640, peak: 190 };
 
 /**
  * country roads: the two town roads emerge from their tunnels on the far side of the ridge (portals) and
@@ -482,7 +482,7 @@ export function createLandscapeModel(slabHeight: SlabHeight): LandscapeModel {
     const dr = Math.hypot(ex * (ex > 0 ? 2.6 : 1.25), dz * 0.62) / rr;
     const core = 1 - smooth(0, 0.95, dr);
     const tri = 0.5 + 0.5 * Math.cos((dz / rr) * 7.5 + 0.6);
-    const rough = 0.55 + 0.75 * ridged(x / 230, z / 230, 4, 42);
+    const rough = 0.6 + 0.6 * ridged(x / 230, z / 230, 4, 42);
     const hill = ISLAND.peak * Math.pow(core, 0.85) * (0.45 + 0.55 * tri) * rough;
     // rim: sea cliffs (tallest facing the open sea), low rocks, one cove with a beach on the town side
     const sea = smooth(-0.4, 0.5, Math.cos(a));
@@ -625,7 +625,16 @@ export function createLandscapeModel(slabHeight: SlabHeight): LandscapeModel {
     f = Math.max(f, smooth(0.36, 0.44, cop) * smooth(260, 420, r));
     // hill tops in the far country are wooded
     f = Math.max(f, smooth(45, 90, h) * 0.85);
-    // the island is wooded inland
+    // the island: scrub and wind-cut woods in the hollows and on the gentle western slopes
+    {
+      const dx = x - ISLAND.x,
+        dz = z - ISLAND.z;
+      const d = Math.hypot(dx * 1.55, dz * 0.62) / ISLAND.r;
+      if (d < 1.1) {
+        const patch = smooth(0.42, 0.58, fbm(x / 160, z / 160, 3, 53) + 0.12 * (dx < 0 ? 1 : -1));
+        f = Math.max(f, patch * (1 - smooth(0.8, 0.95, d)) * (1 - smooth(120, 200, h)) * 0.9);
+      }
+    }
     // treeline (only the highest land-mesh hills reach it; the mountain layers do their own)
     f *= 1 - smooth(650, 900, h);
     return Math.min(1, f);
