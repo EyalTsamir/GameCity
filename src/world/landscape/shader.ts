@@ -304,8 +304,8 @@ vec3 landAlbedo() {
       float bw = 4.0 + 4.0 * lhash(pid, 47);
       float bi = floor(tr / bw);
       float bh = lhash(pid + int(bi) * 7, 53);
-      vec3 vc = bh < 0.2 ? vec3(0.13, 0.26, 0.11) : bh < 0.38 ? vec3(0.2, 0.31, 0.25) : bh < 0.58 ? vec3(0.34, 0.5, 0.14)
-        : bh < 0.7 ? vec3(0.3, 0.13, 0.15) : bh < 0.85 ? cSoil * 0.85 : vec3(0.52, 0.45, 0.3);
+      vec3 vc = bh < 0.24 ? vec3(0.13, 0.25, 0.1) : bh < 0.42 ? vec3(0.19, 0.29, 0.22) : bh < 0.62 ? vec3(0.3, 0.44, 0.13)
+        : bh < 0.7 ? vec3(0.19, 0.11, 0.1) : bh < 0.85 ? cSoil * 0.85 : vec3(0.5, 0.44, 0.31);
       float rw = lStripe(tl, 0.55, 0.6, fpt);
       float vcv = bh < 0.7 ? 0.45 + 0.4 * rw : 0.0;
       fc = mix(cSoil * (0.8 + 0.2 * nP.g), vc * (0.9 + 0.2 * pv), vcv + 0.25 * smoothstep(0.6, 1.5, fp) * step(bh, 0.7));

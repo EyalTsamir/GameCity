@@ -258,7 +258,20 @@ export default async function create(ctx: CityContext): Promise<CityModule> {
     // no post-processing to call renderClouds() with the final camera: render with last frame's camera
     if (cloudVol && !ctx.services.postfx) renderClouds(renderer, ctx.camera);
     samplePalette(clock.hours, state, legacy);
-    const sh = clock.sunHeight;
+    // world: the rendered sun follows the authored golden key — the clock's sine path keeps the sun ~17° up
+    // 1.3 h before sunset, a real late-afternoon sun sinks almost linearly (~10–12°) — so light, shadows
+    // (long and raking), disc, glow, sky and clouds all use one lower "visual" sun at golden hour
+    _sunVisual.copy(clock.sunDir);
+    if (world) {
+      const elT = THREE.MathUtils.radToDeg(Math.asin(THREE.MathUtils.clamp(clock.sunDir.y, -1, 1)));
+      const elV = THREE.MathUtils.degToRad(skyElevationDeg(elT, clock.hours));
+      const hz = Math.hypot(clock.sunDir.x, clock.sunDir.z);
+      if (hz > 1e-6) _sunVisual.set((clock.sunDir.x / hz) * Math.cos(elV), Math.sin(elV), (clock.sunDir.z / hz) * Math.cos(elV));
+      // shared with every shader (backlight / translucency): the sun they light by is the one shown
+      ctx.uniforms.uSunDir.value.copy(_sunVisual);
+    }
+    // (sun height of the rendered sun: direct light, disc, clouds and twilight follow the visual sunset)
+    const sh = world ? _sunVisual.y : clock.sunHeight;
 
     // ── weather envelope
     let target = 0;
@@ -281,18 +294,6 @@ export default async function create(ctx: CityContext): Promise<CityModule> {
     const sunW = smooth(-0.035, 0.07, sh);
     const moonW = smooth(0.0, -0.12, sh);
     usingMoon = moonW > sunW;
-    // world: the rendered sun follows the authored golden key — the clock's sine path keeps the sun ~17° up
-    // 1.3 h before sunset, a real late-afternoon sun sinks almost linearly (~10–12°) — so light, shadows
-    // (long and raking), disc, glow, sky and clouds all use one lower "visual" sun at golden hour
-    _sunVisual.copy(clock.sunDir);
-    if (world) {
-      const elT = THREE.MathUtils.radToDeg(Math.asin(THREE.MathUtils.clamp(clock.sunDir.y, -1, 1)));
-      const elV = THREE.MathUtils.degToRad(skyElevationDeg(elT, clock.hours));
-      const hz = Math.hypot(clock.sunDir.x, clock.sunDir.z);
-      if (hz > 1e-6) _sunVisual.set((clock.sunDir.x / hz) * Math.cos(elV), Math.sin(elV), (clock.sunDir.z / hz) * Math.cos(elV));
-      // shared with every shader (backlight / translucency): the sun they light by is the one shown
-      ctx.uniforms.uSunDir.value.copy(_sunVisual);
-    }
     if (usingMoon) liftElevation(clock.moonDir, Math.sin(THREE.MathUtils.degToRad(14)), _L);
     else liftElevation(_sunVisual, Math.sin(THREE.MathUtils.degToRad(6.5)), _L);
     lightI = state.sunI * Math.max(sunW, moonW) * (1 - overcast * 0.72) * tune.sun;
@@ -427,7 +428,7 @@ export default async function create(ctx: CityContext): Promise<CityModule> {
       const h = clock.hours;
       // fair-weather cumulus build up after the morning and dissolve in the evening (convection stops):
       // the golden hour is mostly clear, a few clouds left to catch the sunset
-      let cov = (0.16 + 0.26 * smooth(8.5, 14, h) - 0.28 * smooth(15.5, 19.2, h)) * cloudDay.cu;
+      let cov = (0.17 + 0.26 * smooth(8.5, 14, h) - 0.2 * smooth(15.5, 19.2, h)) * cloudDay.cu;
       if (Number.isFinite(cloudCovParam)) cov = cloudCovParam;
       cov += (0.97 - cov) * overcast;
       cu.uCu.value.x = Math.min(1, Math.max(0, cov));

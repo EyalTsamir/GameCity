@@ -39,6 +39,8 @@ const SKY_G = 0;
 const SKY_MS = 0.55;
 /** scene-unit luminance of the clear noon sky 3° above the horizon, 90° from the sun */
 const SKY_HORIZON_L = 0.52;
+/** exposure of the noon key the sky brightness is calibrated against */
+const EXPOSURE_REF = 1.06;
 /** elevation of the horizon ring: the sky ~3° up (the true horizon is a long, reddened, yellowish path) */
 const RING_EL = 0.052;
 
@@ -219,7 +221,9 @@ export class AtmosphereDriver {
       // (partial: twilight still darkens; exposure in the palette does the rest)
       const r = this.refNoon / Math.max(1e-9, this.refL);
       const k = 0.85 - 0.25 * (1 - Math.min(1, Math.max(0, (sh + 0.06) / 0.16)));
-      this.skyScale = this.s0 * Math.min(2000, Math.pow(Math.max(1, r), k));
+      // …and the authored exposure rises at golden hour / dusk: keep the SHOWN sky (and the haze derived
+      // from it) from climbing into AgX's desaturating shoulder — a golden sky stays blue away from the sun
+      this.skyScale = this.s0 * Math.min(2000, Math.pow(Math.max(1, r), k)) * Math.min(1, EXPOSURE_REF / Math.max(0.5, state.exposure));
       this.comp = this.skyScale / this.s0;
       this.zenith.copy(this.zenRaw).multiplyScalar(this.skyScale).add(_g.copy(state.zenith).multiplyScalar(this.nightW));
     } else this.zenith.copy(state.zenith);

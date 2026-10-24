@@ -51,6 +51,8 @@ export interface VegetationService {
   getLeafDistance(): number;
   /** the procedural leaf atlas (debug / inspection) */
   atlasTex: THREE.Texture | null;
+  /** debug: plants within rad of (x, z) with kind, near weight, LOD texel and near detail counts */
+  debugPlants(x: number, z: number, rad: number): string[];
 }
 
 interface Planted extends TreeSpec {
@@ -1393,6 +1395,16 @@ export default function create(ctx: CityContext): CityModule {
     },
     getLeafDistance: () => leafDist(),
     atlasTex: atlas?.texture ?? null,
+    debugPlants(x: number, z: number, rad: number) {
+      const out: string[] = [];
+      plants.forEach((p, i) => {
+        const d = Math.hypot(p.x - x, p.z - z);
+        if (d > rad) return;
+        const dd = detail[i];
+        out.push(`${i} ${p.kind} (${p.x.toFixed(1)},${p.z.toFixed(1)}) h${p.h.toFixed(1)} r${p.r.toFixed(1)} w${weight[i].toFixed(2)} lod${lodTex.data[i]} near${dd ? dd.cards.n + '/' + dd.wood.n : '-'}`);
+      });
+      return out;
+    },
   };
   ctx.services.vegetation = service;
   const buildMs = performance.now() - t0;
