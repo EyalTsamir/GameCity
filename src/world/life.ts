@@ -106,6 +106,8 @@ export default function create(ctx: CityContext): CityModule {
     }
   }
   let lastT = ctx.uniforms.uTime.value;
+  // debug handle for the harness: __city.ctx.services.lifeDebug
+  ctx.services.lifeDebug = { cloth, get drift() { return drift; }, get smoke() { return chimneySmoke; } };
 
   // runtime isolation: a part that throws is switched off (and reported), the rest keeps running
   const guard = (part: string, fn: () => void, off: () => void) => {

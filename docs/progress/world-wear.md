@@ -118,3 +118,11 @@ balconies use greens, white and pale canvas only.
 
 **Open:** puddle glare streaks a little regular; kerbside tables only at old-town cafés/bakeries; glass towers
 barely weather (by design); plaza tree planters are vegetation's.
+
+## Addendum (after the final report)
+* Courtyard "band" (life's camera 82,1.6,20,14,40,4): not a stray object or wire. A scene probe (triangles
+passing < 2 m from the eye, shots/world/wear/band/probe.json) shows the camera at (90.86, 4.03, 30.56) is *inside*
+the Seaview Hotel (rear wall at x = 90.3, footprint x 90–103.5). The ribbon is the hotel's rear string course
+(white trim, 4.25–4.5 m, 0.18 m deep, pre-existing) seen from below 0.6 m away through the back-face-culled wall;
+`bdbg=notrim` removes it, and dist 8 (camera in the courtyard) renders clean (band/sheet.png). Camera-side issue
+(free orbit can enter footprints) → lead/camera.

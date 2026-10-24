@@ -1,19 +1,15 @@
 # world-life — wind consumers, smoke, birds, small motion (world round)
 
 ## Resume here
-* 2026-10-24 09:10 (after the 5th stop) — m3c judged (shots/world/life/m3c/s1..s3.png): market star +
-  festoons at night excellent, courtyard + dryer laundry good, house smoke now visible (roofs_18h6,
-  harbroof_18h6) but near-camera puffs read as big round blobs. Fixes applied since (not yet re-shot):
-  market court spans festive-only (no laundry over the stalls); smoke nearFade r·1.2..5.5; cloth
-  translucency tinted by albedo² (backlit bunting kept its colours instead of washing to cream);
-  insects: faster ease-in, 6 nearest patches to the camera, bigger butterflies; leaves: flurries in gust
-  fronts (rate ∝ gust³), nearer trees; motes gain 0.09. Kite line now 2 mm + fades within 1.5 m of the
-  camera (lead: int1 tan band was likely a kite line ~1 m from the camera).
-* Running: full-city confirm shot at the lead's camera "82,1.6,20,14,40,4" 18.2 h →
-  shots/world/life/band/full_18h2.png (+ full.json).
-* Next: m3d capture (otsun 18.6 backlit bunting + motes, market 7.5 no laundry, flowers 11 insects,
-  parkeye leaves, swifts from street "otup=82,25,45,30,95,-40" at 18.6, harbroof smoke), then the
-  full-city milestone set + message lead.
+* 2026-10-24 09:40 — m3d judged (shots/world/life/m3d/s1.png): chimney plume now a proper wispy, bending
+  column (harbroof_18h6 — fbm puff atlas + rate/opacity), bunting keeps its colours backlit (otsun_18h6),
+  swift party visible against the sky (otup_18h6), market without laundry. Old-town "band" pinned to
+  roads/buildings + camera near plane (lead passed it to wear; not life).
+* Just changed (not yet re-shot): motes (box 18 m, gain 0.22, hg cap 6, bigger) — they were invisible
+  against the bright sky near the sun; insects prefer the 4 nearest flower patches in front of the camera.
+* Running: insect probe shot shots/world/life/dbg/ins.png/.json (prints in-view insect count).
+* Next: verify motes + insects; full-city milestone set (overview + POIs, 11/18.2/21.5, failedModules
+  empty); draw calls/tris with ?nolife-style A/B (`skip=life`); message lead; final report.
 
 ## Brief (from WORLD-PLAN.md §6 + briefs)
 Wind consumers: flags on poles flap, bunting / festoon strings across old-town streets and the market,

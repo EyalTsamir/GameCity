@@ -216,6 +216,8 @@ export class Drift {
   private insectsOn = 0;
   insectsVisible = 0;
 
+  private lastCx = 1e9;
+  private lastCz = 1e9;
   private lastFx = 1e9;
   private lastFz = 1e9;
   private warm = 0;
@@ -236,54 +238,55 @@ export class Drift {
     this.warm = 8;
   }
 
+  /** nearby trees / flower patches around the camera focus (real time: also on camera jumps) */
+  private refreshLists(): void {
+    const ctx = this.ctx;
+    const cp = ctx.camera.position;
+    this.focus();
+    if (Math.hypot(this.fx - this.lastFx, this.fz - this.lastFz) > 25) this.warm = 8;
+    this.lastFx = this.fx;
+    this.lastFz = this.fz;
+    // only worth it when the camera is near the ground: leaves are invisible from the overview
+    const camH = cp.y - this.ground(cp.x, cp.z);
+    this.near.length = 0;
+    this.patches.length = 0;
+    if (camH < 40 && this.NB + this.NE > 0) {
+      const gc = ctx.services.groundcover as { flowerPatches?: { x: number; z: number; r: number; density: number }[] } | undefined;
+      // the flower patches closest to the camera (insects are only seen within ~20 m)
+      const all = gc?.flowerPatches ?? [];
+      ctx.camera.getWorldDirection(_f);
+      const fl = Math.hypot(_f.x, _f.z) || 1;
+      const fwdX = _f.x / fl,
+        fwdZ = _f.z / fl;
+      this.patchD.length = 0;
+      for (let k = 0; k < all.length; k++) {
+        const p = all[k];
+        if (p.density < 0.15) continue;
+        const dx = p.x - cp.x,
+          dz = p.z - cp.z;
+        let d = Math.hypot(dx, dz) - p.r;
+        // prefer patches in front of the camera (insects behind it are wasted)
+        if (dx * fwdX + dz * fwdZ < -p.r) d += 20;
+        if (d < 28) this.patchD.push(k + Math.max(0, d) / 64);
+      }
+      this.patchD.sort((a, b) => (a % 1) - (b % 1));
+      for (let k = 0; k < Math.min(4, this.patchD.length); k++) this.patches.push(all[Math.floor(this.patchD[k])]);
+    }
+    if (camH < 90) {
+      for (const tr of this.trees) {
+        const d1 = Math.hypot(tr.x - this.fx, tr.z - this.fz),
+          d2 = Math.hypot(tr.x - cp.x, tr.z - cp.z);
+        if (d1 < 40 || d2 < 30) this.near.push(tr);
+        if (this.near.length > 160) break;
+      }
+    }
+  }
+
   private step(dt: number): void {
     const leaves = this.leaves!;
     const ctx = this.ctx;
     const t = ctx.uniforms.uTime.value;
     const wind = ctx.uniforms.uWind.value;
-    this.refresh -= dt;
-    if (this.refresh <= 0) {
-      this.refresh = 1;
-      const cp = ctx.camera.position;
-      this.focus();
-      if (Math.hypot(this.fx - this.lastFx, this.fz - this.lastFz) > 25) this.warm = 8;
-      this.lastFx = this.fx;
-      this.lastFz = this.fz;
-      // only worth it when the camera is near the ground: leaves are invisible from the overview
-      const camH = cp.y - this.ground(cp.x, cp.z);
-      this.near.length = 0;
-      this.patches.length = 0;
-      if (camH < 40 && this.NB + this.NE > 0) {
-        const gc = ctx.services.groundcover as { flowerPatches?: { x: number; z: number; r: number; density: number }[] } | undefined;
-        // the flower patches closest to the camera (insects are only seen within ~20 m)
-        const all = gc?.flowerPatches ?? [];
-        ctx.camera.getWorldDirection(_f);
-        const fl = Math.hypot(_f.x, _f.z) || 1;
-        const fwdX = _f.x / fl,
-          fwdZ = _f.z / fl;
-        this.patchD.length = 0;
-        for (let k = 0; k < all.length; k++) {
-          const p = all[k];
-          if (p.density < 0.15) continue;
-          const dx = p.x - cp.x,
-            dz = p.z - cp.z;
-          let d = Math.hypot(dx, dz) - p.r;
-          // prefer patches in front of the camera (insects behind it are wasted)
-          if (dx * fwdX + dz * fwdZ < -p.r) d += 20;
-          if (d < 28) this.patchD.push(k + Math.max(0, d) / 64);
-        }
-        this.patchD.sort((a, b) => (a % 1) - (b % 1));
-        for (let k = 0; k < Math.min(4, this.patchD.length); k++) this.patches.push(all[Math.floor(this.patchD[k])]);
-      }
-      if (camH < 90) {
-        for (const tr of this.trees) {
-          const d1 = Math.hypot(tr.x - this.fx, tr.z - this.fz),
-            d2 = Math.hypot(tr.x - cp.x, tr.z - cp.z);
-          if (d1 < 40 || d2 < 30) this.near.push(tr);
-          if (this.near.length > 160) break;
-        }
-      }
-    }
     // spawn: leaves come off in gusts
     if (this.near.length) {
       const n = this.near.length;
@@ -616,6 +619,18 @@ export class Drift {
   }
 
   frame(realDt: number, simDt: number): void {
+    if (this.leaves) {
+      const cp = this.ctx.camera.position;
+      this.refresh -= realDt;
+      const jumped = Math.hypot(cp.x - this.lastCx, cp.z - this.lastCz) > 15;
+      if (this.refresh <= 0 || jumped) {
+        this.refresh = 0.75;
+        this.lastCx = cp.x;
+        this.lastCz = cp.z;
+        this.refreshLists();
+        if (jumped) this.insectsOn = this.patches.length ? 1 : this.insectsOn;
+      }
+    }
     if (!this.points) return;
     const ctx = this.ctx;
     const u = ctx.uniforms;
