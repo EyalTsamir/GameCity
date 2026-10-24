@@ -499,7 +499,9 @@ vec3 landAlbedo() {
   }
   // wrack line of dried seaweed along the last high tide
   sc *= 1.0 - 0.18 * (1.0 - smoothstep(0.15, 0.45 + fp, abs(p.y - ${(WL + 0.75).toFixed(2)} - 0.12 * (nB.g - 0.5)))) * (1.0 - smoothstep(0.5, 2.0, fp));
-  sand = max(sand, marram * 0.5 * step(0.05, vCov.z));
+  // the dune band is dune all through (marram over sand), never a half-mix with the meadow / fields
+  // inland of it (that read as camouflage blotches); its inland edge wanders with the noise
+  sand = max(sand, smoothstep(0.04, 0.3, vCov.z + sN * 0.12));
   sc *= 0.94 + 0.08 * nB.g * midF;
   if (fp < 0.4) sc *= 1.0 - 0.05 * lStripe(p.x * 0.8 + p.z * 0.6 + nB.r * 3.0, 0.7, 0.4, fp);
   col = mix(col, sc, sand);

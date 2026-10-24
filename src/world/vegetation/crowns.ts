@@ -129,6 +129,8 @@ interface Seg {
   sb: Sway;
   /** 0 trunk/limb (static, far too) · 1 branch (near) */
   near: boolean;
+  /** simplified stand-in drawn by the far layer only (e.g. one straight scaffold for its curved near arc) */
+  farOnly?: boolean;
   aoA: number;
   aoB: number;
 }
@@ -403,17 +405,24 @@ function broadStruct(st: Struct, rng: Rng): void {
       let horiz = rise / Math.tan(e);
       horiz = Math.min(horiz, r * (form === 'umbrella' ? 0.6 : 0.5));
       const end: V3 = [fork[0] + Math.cos(az) * horiz, fork[1] + rise, fork[2] + Math.sin(az) * horiz];
-      // a gentle outward bow
-      const bow: V3 = lerp3(fork, end, 0.5);
-      bow[0] += Math.cos(az) * horiz * 0.12;
-      bow[2] += Math.sin(az) * horiz * 0.12;
-      bow[1] -= rise * 0.04;
-      const sr = r0 * rng.range(0.55, 0.68) * (nS > 3 ? 0.9 : 1);
+      // a smooth arc (quadratic Bézier: leaves the fork steeply, then leans outward), 3 segments, tapering
+      const ctl: V3 = [fork[0] + Math.cos(az) * horiz * 0.15, fork[1] + rise * 0.62, fork[2] + Math.sin(az) * horiz * 0.15];
+      const bez = (t: number): V3 => {
+        const u = 1 - t;
+        return [u * u * fork[0] + 2 * u * t * ctl[0] + t * t * end[0], u * u * fork[1] + 2 * u * t * ctl[1] + t * t * end[1], u * u * fork[2] + 2 * u * t * ctl[2] + t * t * end[2]];
+      };
+      const sr = r0 * rng.range(0.52, 0.64) * (nS > 3 ? 0.9 : 1);
       const ph = rng.next();
-      st.segs.push({ a: fork, b: bow, ra: sr, rb: sr * 0.8, sa: sway0, sb: { ph1: ph, w1: 0.12, ph2: 0, w2: 0 }, near: forest, aoA: 0.8, aoB: 0.75 });
-      st.segs.push({ a: bow, b: end, ra: sr * 0.8, rb: sr * 0.55, sa: { ph1: ph, w1: 0.12, ph2: 0, w2: 0 }, sb: { ph1: ph, w1: 0.3, ph2: 0, w2: 0 }, near: forest, aoA: 0.75, aoB: 0.65 });
-      anchors.push({ p: end, r: sr * 0.55, ph, w: 0.3, dirx: Math.cos(az), dirz: Math.sin(az) });
-      anchors.push({ p: bow, r: sr * 0.8, ph, w: 0.12, dirx: Math.cos(az), dirz: Math.sin(az) });
+      const P = [fork, bez(1 / 3), bez(2 / 3), end];
+      const R = [sr, sr * 0.74, sr * 0.54, sr * 0.36];
+      const W = [0, 0.08, 0.18, 0.3];
+      for (let q = 0; q < 3; q++) {
+        st.segs.push({ a: P[q], b: P[q + 1], ra: R[q], rb: R[q + 1], sa: { ph1: ph, w1: W[q], ph2: 0, w2: 0 }, sb: { ph1: ph, w1: W[q + 1], ph2: 0, w2: 0 }, near: true, aoA: 0.8 - q * 0.05, aoB: 0.75 - q * 0.05 });
+      }
+      // far layer: one straight, slightly shorter stand-in (hidden in the far crown except at its foot)
+      if (!forest) st.segs.push({ a: fork, b: lerp3(fork, end, 0.92), ra: sr, rb: sr * 0.45, sa: sway0, sb: { ph1: ph, w1: 0.25, ph2: 0, w2: 0 }, near: false, farOnly: true, aoA: 0.8, aoB: 0.7 });
+      anchors.push({ p: end, r: R[3], ph, w: 0.3, dirx: Math.cos(az), dirz: Math.sin(az) });
+      anchors.push({ p: P[2], r: R[2], ph, w: 0.18, dirx: Math.cos(az), dirz: Math.sin(az) });
     }
     if (form === 'dome' || form === 'oval') {
       // central leader up into the top of the crown
@@ -444,7 +453,7 @@ function broadStruct(st: Struct, rng: Rng): void {
   st.lobes.forEach((L, li) => {
     const A = anchorFor(L);
     const start: V3 = A.p;
-    const lr = Math.max(0.025, Math.min(A.r * 0.85, r0 * 0.5));
+    const lr = Math.max(0.022, Math.min(A.r * 0.8, r0 * 0.42));
     // aim into the mass, stop ~30 % short of its centre
     const tgt: V3 = [L.x - (L.x - start[0]) * 0.22, L.y - L.ry * 0.25, L.z - (L.z - start[2]) * 0.22];
     const m: V3 = lerp3(start, tgt, 0.5);
@@ -873,7 +882,8 @@ function emitConeShell(st: Struct, ref: PlantRef, cards: InstBuf, rng: Rng, lod:
 /** FAR LOD: trunk + limbs (static wood, always) and a few big dense cards per leaf mass */
 export function emitFar(st: Struct, ref: PlantRef, cards: InstBuf, woodBuf: InstBuf): void {
   const rng = new Rng(st.def.seed ^ 0x51f15e);
-  for (const s of st.segs) if (!s.near) wood(woodBuf, ref, st, s, 0);
+  // far layer: trunks / scaffolds (hidden while the plant is near — the near layer redraws them smoother)
+  for (const s of st.segs) if (!s.near) wood(woodBuf, ref, st, s, 2);
   const atlas = getLeafAtlas();
   if (st.form === 'hedge') return;
   if (st.form === 'palm' || st.form === 'fan') {
@@ -883,9 +893,9 @@ export function emitFar(st: Struct, ref: PlantRef, cards: InstBuf, woodBuf: Inst
   const uv = atlas.uv(st.kind.dense);
   const forest = !!st.def.forest;
   if (st.form === 'fern') {
-    // far: three fronds
+    // far: two fronds
     const uvF = atlas.uv('fern');
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < 2; i++) {
       const a = rng.range(0, 6.28) + i * 2.1;
       const hv = st.def.r * 0.55;
       const Vd: V3 = norm([Math.cos(a), 1.1, Math.sin(a)]);
@@ -898,13 +908,13 @@ export function emitFar(st: Struct, ref: PlantRef, cards: InstBuf, woodBuf: Inst
   }
   if (st.form === 'cone') {
     // a cone of drooping sprays (every 2nd/3rd tier, bigger) instead of billboard clumps
-    emitConeShell(st, ref, cards, rng, -1, st.kind.dense, forest ? 3 : 2, forest ? 1.25 : 1.12);
+    emitConeShell(st, ref, cards, rng, -1, st.kind.dense, forest ? 4 : 3, forest ? 1.45 : 1.25);
     return;
   }
   st.lobes.forEach((L, li) => {
     const lobeR = (L.rx + L.ry + L.rz) / 3;
     const out = norm([L.x - st.c[0], L.y - st.c[1] + 0.2 * st.cry, L.z - st.c[2]]);
-    const n = st.form === 'cone' ? (forest ? 2 : 4) : st.form === 'bush' ? 2 : forest ? 1 + (lobeR > 1.6 ? 1 : 0) : 3 + (lobeR > 1.5 ? 1 : 0);
+    const n = st.form === 'bush' ? (li === 0 ? 2 : 1) : forest ? 1 + (lobeR > 1.6 ? 1 : 0) : 2 + (lobeR > 1.3 ? 1 : 0);
     for (let k = 0; k < n; k++) {
       const off = randDir(rng);
       const e = li === 0 && st.form !== 'cone' ? 0.15 : 0.32;
@@ -976,7 +986,8 @@ function emitPlanter(st: Struct, ref: PlantRef, cards: InstBuf, rng: Rng): void 
 /** NEAR LOD: branches (dynamic wood) + fine cluster cards on every tip + dense inner cards */
 export function emitNear(st: Struct, ref: PlantRef, cards: InstBuf, woodBuf: InstBuf): void {
   const rng = new Rng(st.def.seed ^ 0x7ea4f00d);
-  for (const s of st.segs) if (s.near) wood(woodBuf, ref, st, s, 1);
+  // near layer: the whole skeleton (trunk, scaffolds, limbs, branches)
+  for (const s of st.segs) if (!s.farOnly) wood(woodBuf, ref, st, s, 1);
   emitPlanter(st, ref, cards, new Rng(st.def.seed ^ 0x9a17));
   const atlas = getLeafAtlas();
   if (st.form === 'palm' || st.form === 'fan') {

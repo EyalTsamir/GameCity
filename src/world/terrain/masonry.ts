@@ -186,13 +186,20 @@ vec3 masonryColor(vec3 base) {
     float fb = fract(bed);
     float line = (1.0 - smoothstep(0.0, 0.1 + fw, min(fb, 1.0 - fb))) * (1.0 - smoothstep(0.25, 0.7, fw));
     col *= 1.0 - 0.17 * line * side;
-    // vertical weathering streaks (water stains) + grain + ochre lichen blotches
-    col *= mix(1.0, 0.82 + 0.26 * streak, side);
-    col *= 0.9 + 0.18 * nv.g;
+    // vertical weathering streaks (water stains) + damp dark seeps + grain + lichen (ochre, grey-green)
+    vec4 st4 = textureGrad(tNoise, ss, cdx * vec2(0.21, 0.016), cdy * vec2(0.21, 0.016));
+    col *= mix(1.0, 0.64 + 0.44 * smoothstep(0.15, 0.85, streak), side);
+    col = mix(col, col * vec3(0.5, 0.53, 0.55), smoothstep(0.6, 0.78, st4.a) * side * 0.75);
+    col *= 0.86 + 0.26 * nv.g;
     col = mix(col, col * vec3(1.1, 1.04, 0.86) + vec3(0.035, 0.028, 0.0), smoothstep(0.6, 0.8, nu.a) * 0.55 * side);
-    // hairline cracks across the strata
+    col = mix(col, vec3(0.5, 0.52, 0.44) * (0.85 + 0.3 * nv.b), smoothstep(0.64, 0.8, nv.a) * 0.4 * side);
+    // hairline cracks across the strata + vertical joints that split the beds into blocks
     float ck = 1.0 - smoothstep(0.0, 0.03 + fw * 0.2, abs(nv.r - 0.5));
-    col *= 1.0 - 0.22 * ck * side * (1.0 - smoothstep(0.15, 0.5, fw));
+    col *= 1.0 - 0.3 * ck * side * (1.0 - smoothstep(0.15, 0.5, fw));
+    float fwu = length(vec2(cdx.x, cdy.x)) * 0.37 + 1e-4;
+    float ju = abs(fract(cuv.x * 0.37 + nu.b * 0.9 + vMas.y * 2.3) - 0.5);
+    float joint = (1.0 - smoothstep(0.012, 0.03 + fwu, 0.5 - ju)) * (1.0 - smoothstep(0.08, 0.3, fwu));
+    col *= 1.0 - 0.45 * joint * side;
     // ledges: moss and grass tufts on everything facing up, the edge broken by noise
     float up = smoothstep(0.45, 0.85, n.y);
     vec2 mp = p.xz * 0.55;
@@ -200,10 +207,12 @@ vec3 masonryColor(vec3 base) {
     float moss = up * smoothstep(0.2, 0.42, mossN);
     vec3 mossC = mix(mMoss, mGrass, smoothstep(0.35, 0.7, nu.g)) * (0.85 + 0.3 * nv.r);
     col = mix(col, mossC, moss * 0.94);
+    // shrubs and tufts rooting in the ledges (darker clumps in the moss)
+    col = mix(col, mGrass * vec3(0.42, 0.48, 0.36), up * smoothstep(0.6, 0.74, nv.r * 0.6 + mossN * 0.4) * 0.85);
     // a little green creeping over the lip of each ledge
     col = mix(col, mMoss * 0.8, smoothstep(0.12, 0.45, n.y) * (1.0 - up) * 0.5 * smoothstep(0.35, 0.6, mossN));
-    // undersides / creases in shade
-    col *= 0.68 + 0.32 * smoothstep(-0.7, 0.1, n.y);
+    // undersides / creases in shade (overhanging lips throw a dark band)
+    col *= 0.6 + 0.4 * smoothstep(-0.7, 0.1, n.y);
     mRough = 0.94;
   }
   // waterline: wet band + algae, darker below
@@ -250,7 +259,7 @@ function masonryMaterial(ctx: CityContext, flat: boolean): THREE.MeshStandardMat
         '#include <emissivemap_fragment>\nif (vMas.x > 4.5 && vMas.x < 5.5) totalEmissiveRadiance += diffuseColor.rgb * (1.1 + 2.6 * uLights);',
       );
   };
-  mat.customProgramCacheKey = () => (flat ? 'th-masonry-v4f' : 'th-masonry-v4');
+  mat.customProgramCacheKey = () => (flat ? 'th-masonry-v5f' : 'th-masonry-v5');
   return mat;
 }
 

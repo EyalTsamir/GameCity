@@ -490,7 +490,7 @@ export class Drift {
         const h = Math.hypot(this.ivx[k], this.ivz[k]);
         if (h > 0.05) this.iyaw[k] = Math.atan2(this.ivx[k], this.ivz[k]);
       }
-      const sc = this.insectsOn * (bee ? 0.018 : 0.06);
+      const sc = this.insectsOn * (bee ? 0.018 : 0.072);
       _p.set(this.ix[k], this.iy[k], this.iz[k]);
       if (bee) {
         _e.set(0.2, this.iyaw[k], 0);

@@ -68,7 +68,8 @@ export interface CliffResult {
 }
 
 // warm limestone / sandstone beds with a few cooler grey and darker brown ones (banding reads far away)
-const ROCK_TONES = ['#bdae93', '#a39480', '#c8b693', '#8e8476', '#b59c76', '#857a6c', '#c0b39d', '#9c8b72'].map((h) => new THREE.Color(h));
+// (greyer and darker than the first pass, more spread between beds: weathered limestone, not beige board)
+const ROCK_TONES = ['#a39a8a', '#8a8072', '#b0a48c', '#767066', '#9c8a6c', '#6c655c', '#a8a090', '#8c7c66'].map((h) => new THREE.Color(h));
 const DT = 0.05; // march step (m)
 const DY = 0.25; // profile grid step (m)
 const IN = -0.45; // buried inner edge of every block
@@ -281,7 +282,7 @@ export function buildCliffs(
     const dip = (u: number) => 0.32 * Math.sin(u * 0.033 + ph1) + 0.18 * Math.sin(u * 0.081 + ph2) + 0.0022 * u;
     const layerY = (k: number, u: number) => base[k] + dip(u);
     // per (column, boundary) wobble shared by the layer below and the one above: irregular ledges
-    const jb = (i: number, k: number) => (vnoise(i * 0.93 + k * 7.7, k * 3.1, f.seed + 11) - 0.5) * 0.36;
+    const jb = (i: number, k: number) => (vnoise(i * 0.93 + k * 7.7, k * 3.1, f.seed + 11) - 0.5) * 0.6;
     const layerYc = (k: number, i: number) => layerY(k, cols[i].u) + jb(i, k);
     const nL = base.length - 1;
     // lip D of the layer below, per column (no overhang at a block's foot)
@@ -322,7 +323,9 @@ export function buildCliffs(
       const thin = base[k + 1] - base[k] < 1.0;
       const recess = rng.chance(thin ? 0.7 : 0.14);
       const P = recess ? 0.06 + rng.next() * 0.12 : 0.32 + rng.next() * 0.6;
-      const tint = (0.86 + rng.next() * 0.24) * (thin ? 0.8 : 1);
+      const tint = (0.74 + rng.next() * 0.36) * (thin ? 0.78 : 1);
+      // some beds overhang: the lip juts out past the face below it (a shadowed underside)
+      const over = !recess && rng.chance(0.24) ? 0.12 + rng.next() * 0.22 : 0;
       const dropTop = rng.chance(0.18) ? 0.12 + rng.next() * 0.2 : 0;
       interface V {
         x: number;
@@ -356,7 +359,7 @@ export function buildCliffs(
         if (k > 0 && lip[i][k - 1] < 9) db = Math.min(db, lip[i][k - 1] - 0.07);
         db = Math.max(db, -0.05);
         const dm = Math.max(db + 0.04, P * end + jit());
-        const dt = Math.max(0.0, Math.min(dm, P * 0.78 * end + jit()));
+        const dt = over > 0 ? dm + over * end : Math.max(0.0, Math.min(dm, P * 0.78 * end + jit()));
         lip[i][k] = Math.min(lip[i][k], dt);
         vs.push({ x: c.qx, z: c.qz, tb: tAt(c, yb), tm: tAt(c, ym), tt: tAt(c, yt), yb, ym, yt, db, dm, dt, sl: i === i0 || i === i1 ? 0 : (rng.next() - 0.5) * 0.5 });
       }
@@ -452,7 +455,8 @@ export function buildCliffs(
         fz = c.qz - f.nz * tf;
       if (c.yFoot > -1.4) res.feet.push({ x: fx, z: fz, nx: f.nx, nz: f.nz, h });
       if (h < 2.2) continue;
-      const nStones = rng.next() < 0.75 ? 1 + (rng.next() < 0.45 ? 1 : 0) : 0;
+      // rubble at the foot: a few bigger blocks and smaller scree
+      const nStones = rng.next() < 0.85 ? 1 + (rng.next() < 0.6 ? 1 : 0) + (rng.next() < 0.3 ? 1 : 0) : 0;
       for (let s = 0; s < nStones; s++) {
         const out = 0.35 + Math.pow(rng.next(), 1.6) * Math.min(2.4, 0.6 + h * 0.15);
         const along = (rng.next() - 0.5) * 1.3;

@@ -2,7 +2,8 @@
 //
 // Two instanced meshes draw every tree, bush and palm of the city (+ their two shadow passes):
 //   cards — one quad per leaf cluster, textured from the procedural leaf atlas (atlas.ts), alpha-tested;
-//   wood  — one tapered 8-sided tube per segment.
+//   wood  — one tapered tube per segment: a far layer (8 sides: trunks + scaffolds of every tree) and a near
+//           layer (12 sides: the whole skeleton of the trees near the camera, smooth curved limbs).
 // Each instance buffer has a STATIC part (all plants' far LOD: a few big dense cards per leaf mass, trunks
 // and main limbs) followed by a DYNAMIC part (fine cluster cards, branches and twigs of the plants near the
 // camera, rewritten by vegetation.ts whenever that set changes). A per-plant LOD texture (R8, one texel per
@@ -416,15 +417,16 @@ varying float vThAng;
 #endif
 void thWood( out vec3 P, out vec3 N ) {
   float nearW = thLodW( iR.w );
-  bool hide = iX.y > 0.5 && nearW < 0.5;
+  // lod: 1 near layer (hidden while the plant is far), 2 far layer (hidden while it is near), 0 always
+  bool hide = ( iX.y > 0.5 && iX.y < 1.5 && nearW < 0.5 ) || ( iX.y > 1.5 && nearW >= 0.5 );
   float t = position.y;
   vec3 A = iA.xyz, B = iE.xyz;
   vec3 ax = B - A;
   float L = max( 1e-4, length( ax ) );
   vec3 d = ax / L;
   // overlap neighbours a little at the joints (ring planes differ at a bend → no cracks)
-  A -= d * iA.w * 0.45;
-  B += d * iE.w * 0.45;
+  A -= d * iA.w * 0.3;
+  B += d * iE.w * 0.3;
   ax = B - A;
   L = length( ax );
   vec3 ref = abs( d.y ) > 0.95 ? vec3( 1.0, 0.0, 0.0 ) : vec3( 0.0, 1.0, 0.0 );
@@ -754,20 +756,19 @@ function quadGeometry(): THREE.InstancedBufferGeometry {
   return g;
 }
 
-const TUBE_SIDES = 8;
-function tubeGeometry(): THREE.InstancedBufferGeometry {
+function tubeGeometry(sides: number): THREE.InstancedBufferGeometry {
   const g = new THREE.InstancedBufferGeometry();
   const pos: number[] = [];
   for (let r = 0; r < 2; r++) {
-    for (let i = 0; i < TUBE_SIDES; i++) {
-      const a = (i / TUBE_SIDES) * Math.PI * 2;
+    for (let i = 0; i < sides; i++) {
+      const a = (i / sides) * Math.PI * 2;
       pos.push(Math.cos(a), r, Math.sin(a));
     }
   }
   const idx: number[] = [];
-  for (let i = 0; i < TUBE_SIDES; i++) {
-    const i1 = (i + 1) % TUBE_SIDES;
-    idx.push(i, i1, TUBE_SIDES + i1, i, TUBE_SIDES + i1, TUBE_SIDES + i);
+  for (let i = 0; i < sides; i++) {
+    const i1 = (i + 1) % sides;
+    idx.push(i, i1, sides + i1, i, sides + i1, sides + i);
   }
   g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(pos), 3));
   g.setIndex(idx);
@@ -786,8 +787,8 @@ export class FoliageLayer {
   dynCount = 0;
   readonly dynCap: number;
 
-  constructor(kind: 'cards' | 'wood', stat: InstBuf, dynCap: number, mats: FoliageMaterials, name: string) {
-    this.geo = kind === 'cards' ? quadGeometry() : tubeGeometry();
+  constructor(kind: 'cards' | 'wood', stat: InstBuf, dynCap: number, mats: FoliageMaterials, name: string, sides = 8) {
+    this.geo = kind === 'cards' ? quadGeometry() : tubeGeometry(sides);
     this.staticCount = stat.n;
     this.dynCap = dynCap;
     const total = stat.n + dynCap;

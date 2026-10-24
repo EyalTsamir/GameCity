@@ -1,15 +1,16 @@
 # world-life — wind consumers, smoke, birds, small motion (world round)
 
 ## Resume here
-* 2026-10-24 09:40 — m3d judged (shots/world/life/m3d/s1.png): chimney plume now a proper wispy, bending
-  column (harbroof_18h6 — fbm puff atlas + rate/opacity), bunting keeps its colours backlit (otsun_18h6),
-  swift party visible against the sky (otup_18h6), market without laundry. Old-town "band" pinned to
-  roads/buildings + camera near plane (lead passed it to wear; not life).
-* Just changed (not yet re-shot): motes (box 18 m, gain 0.22, hg cap 6, bigger) — they were invisible
-  against the bright sky near the sun; insects prefer the 4 nearest flower patches in front of the camera.
-* Running: insect probe shot shots/world/life/dbg/ins.png/.json (prints in-view insect count).
-* Next: verify motes + insects; full-city milestone set (overview + POIs, 11/18.2/21.5, failedModules
-  empty); draw calls/tris with ?nolife-style A/B (`skip=life`); message lead; final report.
+* 2026-10-24 13:45 (after the 6th stop) — all features in; verified: bunting/festoons/market/café lights,
+  laundry (court, balcony, dryers), chimney plumes (wispy, bending), backlit bunting colours, swifts,
+  pigeons, insects ON at flower patches (probe: 4 patches, 36 insects; drift lists now refresh in REAL
+  time + on camera jumps — in SwiftShader the sim crawls at 0.1 s/frame, so sim-time timers never fired).
+  The old-town "band" was the lead's camera preset inside the Seaview Hotel (solved, not life).
+  `ctx.services.lifeDebug` = { cloth, drift, smoke } (harness handle).
+* Running: full-city milestone set → shots/world/life/full1 (overview, oldtown, market, otsun, harbroof,
+  parkeye × 11/18.2/21.5), log shots/world/life/full1.log. Private script scratchpad/life/cap.mjs.
+* Next: judge full1 (failedModules must be empty), draw calls/tris A/B (`skip=life` vs default at
+  overview + otsun), message lead, final report.
 
 ## Brief (from WORLD-PLAN.md §6 + briefs)
 Wind consumers: flags on poles flap, bunting / festoon strings across old-town streets and the market,
@@ -117,7 +118,17 @@ golden hour), drift ≤ 600 tiny quads (≈ 0.03 ms). Total ≈ 0.3–0.4 ms; +4
   calm droop, WIND_GLSL include.
 
 ## Toggles
-(see Design)
+`?nocloth` (no lines / cloth / bulbs / poles), `?nobunting` (street + market + café lines), `?nolaundry`,
+`?noflags` (new pole / hotel flags; landmark flags stay), `?nochimneys` (house / vent / BBQ smoke),
+`?nodrift` (leaves, insects, motes, moths), `?nosoftsmoke` (soft-particle depth fade off), `?lifedebug`
+(counts in the console), `skip=life` (whole module). Harness handle: `__city.ctx.services.lifeDebug`
+({ cloth, drift, smoke }); `ambientDebug.locate('swift', i)`.
 
 ## Best views
-(pending)
+* old-town street, golden hour, backlit bunting + festoons: `75,3,45,14,95,3` @18.6 (night @21.5)
+* market star of lines (masts, festoons, bunting): `28,2.4,80,17,0,6` @7.5 / @21.5
+* chimney plume bending in the wind: `122,9,-13,30,-120,20` @18.6 (harbour master)
+* swifts against the evening sky: `82,25,45,30,95,-40` @18.6
+* courtyard laundry: `82,1.6,20,14,40,6`; garden dryer: eval `props.washing[2]`, dist 8, yaw 35, pitch 9
+* insects at a flower patch: eval best `groundcover.flowerPatches` near the park, dist 7, pitch 8 @11
+* factory smoke with soft depth: `-116,42,-98,95,-40,12` @7.5

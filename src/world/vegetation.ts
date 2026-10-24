@@ -627,7 +627,7 @@ export default function create(ctx: CityContext): CityModule {
         ze = slab.z0 + 1;
       const xs = slab.x0 - BAND,
         xe = slab.x1 + BAND;
-      const N = Math.round(((xe - xs) * (ze - zs) + 2 * BAND * 80) * 0.6 * Math.max(0.5, density));
+      const N = Math.round(((xe - xs) * (ze - zs) + 2 * BAND * 80) * 0.45 * Math.max(0.5, density));
       for (let k = 0; k < N; k++) {
         // north band + short strips down the W and E sides of the ridge
         let x: number, z: number;
@@ -1143,7 +1143,10 @@ export default function create(ctx: CityContext): CityModule {
     for (let i = -2; i <= 2; i++) {
       const u = i * 0.3;
       if (i === 0) {
-        bush(fineSink, fpw, s.x, y, s.z, 0.32, 0.5, rng.int(0, 1e9), { leaf: col('#4f8f3e') });
+        const bseed = rng.int(0, 1e9);
+        // leaf-card mode: an irregular leafy shrub (box / pittosporum), not a smooth ball
+        if (cardsOn) plants.push({ kind: 'shrub', x: s.x, y, z: s.z, h: rng.range(0.5, 0.75), r: rng.range(0.34, 0.46), seed: bseed, tone: 0.4 + 0.3 * hash01(s.x, s.z, 17), age: 0.5 });
+        else bush(fineSink, fpw, s.x, y, s.z, 0.32, 0.5, bseed, { leaf: col('#4f8f3e') });
         continue;
       }
       flowerClump(fineSink, fpw, s.x + ux * u, y, s.z + uz * u, 0.17, i % 2 ? pc : pc2, rng);
@@ -1266,6 +1269,7 @@ export default function create(ctx: CityContext): CityModule {
   const refs: PlantRef[] = plants.map((p, i) => ({ x: p.x, y: p.y, z: p.z, h: p.h, id: i }));
   let cardLayer: FoliageLayer | null = null;
   let woodLayer: FoliageLayer | null = null;
+  let woodNear: FoliageLayer | null = null;
   let cm: ReturnType<typeof cardMaterials> | null = null;
   let wm: ReturnType<typeof woodMaterials> | null = null;
   const farMs0 = performance.now();
@@ -1281,9 +1285,10 @@ export default function create(ctx: CityContext): CityModule {
     cm = cardMaterials(ctx.uniforms, atlas.texture, lodTex.tex);
     wm = woodMaterials(ctx.uniforms, lodTex.tex);
     cardLayer = new FoliageLayer('cards', farCards, NEAR_CAP.high, cm, 'veg-cards');
-    woodLayer = new FoliageLayer('wood', farWood, Math.round(NEAR_CAP.high / 3), wm, 'veg-wood');
-    cardLayer.mesh.castShadow = woodLayer.mesh.castShadow = shadows;
-    if (parts.includes('trees')) root.add(cardLayer.mesh, woodLayer.mesh);
+    woodLayer = new FoliageLayer('wood', farWood, 0, wm, 'veg-wood-far', 8);
+    woodNear = new FoliageLayer('wood', newWoodBuf(1), Math.round(NEAR_CAP.high / 2.5), wm, 'veg-wood-near', 12);
+    cardLayer.mesh.castShadow = woodLayer.mesh.castShadow = woodNear.mesh.castShadow = shadows;
+    if (parts.includes('trees')) root.add(cardLayer.mesh, woodLayer.mesh, woodNear.mesh);
   }
   const farMs = performance.now() - farMs0;
 
@@ -1323,7 +1328,7 @@ export default function create(ctx: CityContext): CityModule {
   const partsW: InstBuf[] = [];
 
   function updateNear(dt: number): void {
-    if (!cardLayer || !woodLayer) return;
+    if (!cardLayer || !woodNear) return;
     const cam = ctx.camera;
     cam.getWorldPosition(camPos);
     const D = leafDist();
@@ -1374,7 +1379,7 @@ export default function create(ctx: CityContext): CityModule {
         genCount++;
       }
       const dd = detail[id]!;
-      if (usedC + dd.cards.n > cap || usedW + dd.wood.n > woodLayer.dynCap) break;
+      if (usedC + dd.cards.n > cap || usedW + dd.wood.n > woodNear.dynCap) break;
       usedC += dd.cards.n;
       usedW += dd.wood.n;
       target[id] = 1;
@@ -1391,7 +1396,7 @@ export default function create(ctx: CityContext): CityModule {
       weight[id] = Math.max(0, weight[id] - k);
       if (weight[id] > 0) {
         const dd = detail[id]!;
-        if (usedC + dd.cards.n <= cap && usedW + dd.wood.n <= woodLayer.dynCap) {
+        if (usedC + dd.cards.n <= cap && usedW + dd.wood.n <= woodNear.dynCap) {
           usedC += dd.cards.n;
           usedW += dd.wood.n;
           keep.push(id);
@@ -1420,7 +1425,7 @@ export default function create(ctx: CityContext): CityModule {
         partsW.push(detail[id]!.wood);
       }
       nearCards = cardLayer.setDynamic(partsC);
-      nearWood = woodLayer.setDynamic(partsW);
+      nearWood = woodNear.setDynamic(partsW);
       rebuilds++;
     }
     lodTex.flush();
@@ -1531,6 +1536,7 @@ export default function create(ctx: CityContext): CityModule {
       pm.depth.dispose();
       cardLayer?.dispose();
       woodLayer?.dispose();
+      woodNear?.dispose();
       cm?.mat.dispose();
       cm?.depth.dispose();
       wm?.mat.dispose();

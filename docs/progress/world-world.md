@@ -123,7 +123,15 @@
   chunks are installed — ?noatmo compiled to an error before). Herds (lead): new animal geometry ~54 tris
   (lumpy icosahedron body with smooth normals, tapered head lowered when grazing, 4 thin prism legs),
   sheep = fat wool barrel with dirty underside + dark head/legs, cattle coats incl. piebald, size ±12 %.
-* Running: m5c (overview, riverbend, dunes, coast, sheep × 18.2/11).
+* 13:31 (after the 3rd usage stop, 7a27edf) — m5c judged: banks grassy + reeds (good); sea still grey at
+  18.2 because uDusk ≈ 0.07 at 18.2 h (it peaks at sunset) → water uses TH_GOLD = max(uDusk, wGoldK())
+  in world mode (wGoldK from the sun height: ~0.66 at 18.2) for body tint, zenith mirroring / lower F,
+  body scattering, narrow hot glitter, pond bank warmth. Dunes still camo (marram dark vs golden sand) →
+  marram lighter / closer to sand, less 13 m noise. Lead note (cliffs, granted to me): north-edge rock
+  wall = beige shelves → cliffs.ts: greyer/darker bed tones with more spread, bigger ledge wobble, 24 %
+  overhanging lips, more rubble; masonry.ts cliff shading: stronger water streaks, damp dark seeps,
+  grey-green lichen, vertical joints per bed, shrub clumps on ledges, darker undersides.
+* Running: m5d (overview, coast, dunes, sheep close-up × 18.2/11), cliff1 (fored, forest × 11/18.2).
 * Tools: my capture script copy with 20-min load timeout = scratchpad `cap.mjs` (scratchpad is SHARED with other
   agents — keep my files under scratchpad/world* or land/). Offline map tool: scratchpad `land/map.ts` (bundle:
   `npx rolldown land/map.ts --platform node -o land/map.mjs`; `node land/map.mjs x0 z0 x1 z1 N out.bin &&

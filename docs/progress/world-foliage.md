@@ -47,9 +47,17 @@
   (non-forest); after a camera jump near detail is generated in one batch (budget 60) and weights snap.
 * m1h (m1h_sheet.png) verified the review fixes: ot street tree forks into scaffolds with a full crown ✔,
   spruce cones ✔, forest with mantle/understory ✔. Milestone note sent.
-* 2026-10-24 13:35 resumed after 6th stop. RUNNING: stats2 shots (ovw / parkeye / oteye × cards / ?noleafcards)
-  → shots/world/foliage/stats2_*.json.
-* NEXT: GPU estimate + final report (≤ 350 words) in this log; message lead; SubagentHandback.
+* 2026-10-24 ~14:30 — lead review of m1h approved + 2 close-range notes, coded:
+  (1) plane scaffolds at 5 m = angular pipes → wood now has a NEAR layer (12-sided tubes, whole skeleton of
+      the near trees) and a FAR layer (8 sides, trunks + one straight stand-in per scaffold, lod 2 = hidden
+      while near); scaffolds are smooth Bézier arcs in 3 tapering segments; joint overlap 0.45 → 0.3 r.
+  (2) round green balls on the station terrace = my planter-slot hull bushes → leaf-card shrubs now.
+  Far-cost cut after stats2 (ovw: 66.8k static cards, 6.7k wood, scene 1.63 M tris vs 1.40 M hulls):
+  forest cone shells every 4th tier ×1.45, broadleaf far 2–3 cards/lobe (forest 1–2), bushes 1/lobe,
+  ferns 2, band density 0.45.
+* RUNNING: b95t2vkie = capset m1i (park, parkc close, ot, palmA, forest, parkair @11) then stats3_* (cards vs
+  ?noleafcards at ovw / parkeye / oteye).
+* NEXT: judge m1i → GPU estimate from stats3 → final report → message lead → SubagentHandback.
 * Tools: scratchpad/{capset.sh OUT HOURS [q] [views], dumpatlas.sh, vstat.py, bench/}.
 * Views: park=-55,4,15,26,200,6; ot=66,3.5,-13.9,13,25,4; dt=-22,3.5,-68.9,14,35,4; palms=118,5,30,18,90,6;
   forest=10,10,-158,70,10,10; parkair=-55,0,17,90,30,30; overview.
