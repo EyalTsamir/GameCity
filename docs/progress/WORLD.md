@@ -33,6 +33,13 @@ Branch: work continues from `claude/tinyhaven-graphics-audit-l089m8` (fast-forwa
   (Drift.initInsects null setColorAt; mid-edit) → life to confirm. Perf note: 165–184 draw calls, 2.3–2.8 M
   triangles in full-city views (target ≈145 calls) — final perf pass must address. My view presets to fix:
   river_low (inside a tree) and wb_street (clips a roof).
+* 03:55 — air g3 (full city 18.2) APPROVED for city light: warm facades, long raking shadows, cool shade
+  (causes of int1 grey: evening cumulus shadows, over-dimmed key, sun too high → "visual sun" ~10° at golden
+  hour, shadow map to 950 m; temporal cloud resolve = clean edges). Notes sent: air → cloud shapes (columns →
+  wide flat-based fields toward the horizon), anti-solar sky grey at 18.2 (want blue + Belt of Venus), overview
+  mid-distance milky; world → riverbend landscape trees faceted lime polyhedra + bare tan banks + ghost town
+  reflections in the sea; ground → can the blade band reach riverbend/country/coast POIs (price?); wear →
+  Seaview hotel balconies = dark blotches at 100 m.
 * 2026-10-20 07:31 UTC — 3rd usage-limit stop (agents stopped ~02:30, reset 06:30; container rebooted ~07:28).
   Restored, tree clean at 9c3dc05; all 7 agents resumed 07:31. Lead running integration capture
   shots/world/lead/int1 (the 12 critique views at 18.2 h, full city) for a before/after vs critique/a.
