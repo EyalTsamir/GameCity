@@ -1,28 +1,14 @@
 # world — streetlife (café terraces, street sitters, vendors, two-wheelers)
 
 ## Resume here
-* 2026-10-24 08:35 UTC — resumed after the session-limit stop (tree at 9399c3f). Glossy-car work state:
-  `vehicleMaterial.ts` v6 = MeshPhysical clearcoat + `thStreetRefl()` (stylised street reflection: dark
-  asphalt below a lifted horizon, blocky facade skyline, bright haze band, sky) scaling the coat / chrome
-  reflections; gains coat 1.8 / glass 3.2 / chrome 1.4; chrome window seal + handles on sedan / SUV
-  (`carBody` region 'seal'); hatch got roofDrop + raked rear (m4d: reads as a hatchback now).
-  m4e (gain 1.35) too weak, m4f (gain 3) = uniform hazy sheen (reads as dust) → v6 skyline shaping;
-  m4g (v6) captured before the stop — judge it next.
-* 2026-10-24 03:50 UTC — resumed after the weekly usage-limit stop (tree clean at 582500f). Judged before the
-  stop: m3d (night terraces with wear's lamps: pass), soak1 (4 min @4×, software GL: invariants 0, heap flat
-  353–358 MB, no errors; only ~14 game min covered at 10 fps), m4b / m4c (lofted cars at all 3 LODs: pass;
-  compact reshaped, hatch still estate-like → roofDrop + raked rear window added).
-* **Lead note 5 (glossy cars)** in progress: `vehicleMaterial.ts` is now a MeshPhysicalMaterial with
-  per-part finishes packed in aMeta.w (= rough + 4 × class): 1 clear-coated paint (sharp Fresnel sky
-  reflection), 2 glass (coat over near-mirror base), 3 chrome (metallic: CHROME / RIM colours); `models.ts`
-  PartOpts.finish (default: paint → coat, GLASS → glass, CHROME/RIM → chrome). Typechecks.
-  Running: `m4d` (lineup + street at 13 h / 18.2 h).
-* M4 so far: `traffic/carBody.ts` lofts compact / hatch / sedan / SUV (tumblehome greenhouse, rounded nose /
-  tail, wheel arches over dark wells, trim B/C pillars + belt seal, SUV cladding); `models.ts loftBody()`
-  (mirrors on arms, door seams + handles at LOD0), 5-spoke alloys on cars; underside faces culled.
-  Tris per car L0/L1/L2 ≈ 3.5k/1.0k/0.45k (was 2.1k/0.6k/0.24k); draw calls unchanged.
-* Next: judge m4d → tune finishes; eye-level + overview finals (12 / 18.2 / 21.5 h); `?diorama`; tri counts
-  at downtown (perf.mjs counts only — this container is software GL); final report.
+* 2026-10-24 09:40 UTC — M4 (cars) + lead note 5 (gloss) done and judged: m4h (v7: coat gain 2.4, glass
+  3.6, chrome 1.5, clearcoatRoughness 0.1, skyline / horizon-shaped street reflections) — backlit golden
+  hour now sparkles (roofs, rear glass, boot lids), noon glass reflects the sky, flanks stay deep.
+  Perf counts (downtown 1920×1025, 12:30): vehicles 44.5 k → 63.8 k tris (+19 k), vehicle draw calls 20
+  (unchanged), invariants {} (`perf_m4.json`).
+* Running: `final/` (overview, downtown, tables, street, buskerA/B × 12 / 18.2 / 21.5 h, all modules) and
+  `diorama.png/json`. Next: judge them → milestones / perf / best views / open issues → final report →
+  SubagentHandback.
 
 ## Brief (WORLD-PLAN.md workstream 5 + world-briefs.md notes)
 Gap: at eye level the city is thinly populated compared to reference 2 (sunny Tel-Aviv café street — every
@@ -84,8 +70,10 @@ may be a separate light layer drawn by the existing figure renderer. Budget (hig
 - [x] M0 survey, log (before captures: the critique set + baseline 5174 at the same views, pending)
 - [x] M1 café terraces occupied (patrons + activities + table items + waiters)
 - [x] M2 two-wheelers in traffic (models, sim, riders posed) + parked bikes / e-scooters (rider close-ups pending)
-- [~] M3 rim sitters, standing groups (plazas + pavement chats), vendors (carts + market stalls); buskers skipped
-- [ ] M4 polish: filtering scooters, delivery stops, night behaviour, perf pass, soak
+- [x] M3 rim sitters, standing groups (plazas + pavement chats + market hangouts), vendors (carts + market
+  stalls, packing up after 14:30), busker with an audience, attention-weighted spawning, soak
+- [x] M4 (lead notes 4–5) lofted car bodies (`traffic/carBody.ts`) + glossy finishes (clear-coated paint,
+  reflective glass, chrome) in the existing vehicle material
 
 ## Requests to other areas
 * wear (props): `ctx.services.props.cafes = [{ x, z, yaw, tableY, seats: [{ x, z, yaw, seatY }], parasol,

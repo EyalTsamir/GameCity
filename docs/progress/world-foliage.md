@@ -25,8 +25,14 @@
   cards 50.1k static + 2.9k near, wood 7.8k + 0.6k; scene 1.59 M tris vs 1.55 M with ?noleafcards; draws 84 vs 86.
   → cut: trunks 2 segments, forest far cards 1–2/lobe (cone 2), band density 0.9 → 0.6. Quality tiers: far-card
   keep (cardKnobs.farKeep high 1 / medium 0.85 / low 0.6) + leafDist 75/42/0.
-* 2026-10-24 08:35 resumed after 5th stop. NEXT: verification capture m1f (18.2 shade, inside-crown, park stub
-  check), spruce density, then milestone message.
+* 2026-10-24 ~09:30 — m1f verified lead notes (sky fill: 18.2 street crowns dark green ✔; inside-crown clean ✔);
+  stub mystery = cypress trunk top showing under a crown → leaders added (trunks taper on into the crown);
+  spruce alternates flat + hanging spray cards (reads as a conifer now, wind_1.png); far cards and ~half of
+  near clusters face OUT of the crown (tangentFrame) so crowns are not see-through face-on. Wind verified
+  (wind_sheet.png diff: crowns, trunks and dappled shadows move). M1 milestone message sent to lead
+  (ba_m1.png before/after sheet).
+* NEXT: capture m1g (park/parkair/ot 11 + forest + hedges + bushes views) to check tangent cards & leaders;
+  then forest-edge layering, overview + perf numbers (counts below), log + final report sections.
 * Tools: scratchpad/{capset.sh OUT HOURS [q] [views], dumpatlas.sh, vstat.py, bench/}.
 * Views: park=-55,4,15,26,200,6; ot=66,3.5,-13.9,13,25,4; dt=-22,3.5,-68.9,14,35,4; palms=118,5,30,18,90,6;
   forest=10,10,-158,70,10,10; parkair=-55,0,17,90,30,30; overview.
