@@ -1,68 +1,14 @@
 # world-foliage — leafy, living trees (world round, workstream 4)
 
 ## Resume here (update after EVERY step)
-* 2026-10-20 01:35 — RESUMED after the 3rd stop/reboot. M1 + species/bushes/hedges/forest band in code.
-  m1a (shots/world/foliage/m1a_sheet.png, 11 h): leafy trees render everywhere, no errors; verdict: crowns
-  too SPARSE at every distance (atlas tiles only ~30 % filled, few far cards), trunks too thick (street trees
-  look like tufts on poles), palms sparse. Since: atlas clusters fill their tiles (clipStem, more/smaller
-  leaves, denser pine/citrus/blossom/jacaranda), trunk girth ↓, 4 tips/branch, 2–3 inner dense cards per lobe,
-  far cards 2–4 per lobe ×1.12 size, edge-on fade softened. Typechecks.
-* m1b (m1b_sheet.png): fuller; still lollipop street crowns, sparse palms (fronds edge-on from below),
-  forest = trees on a lawn. Since: atlas side shoots/denser tiles, street crowns stretched ×1.4 along the
-  street (PlantDef.stretch), palm fronds = keeled V half-cards (near), forest crowns ×1.18 + forest-floor
-  shrubs (42 % of forest trees), lead note → weathered octagonal/box planters (plants.ts stonePlanter: grime,
-  algae, worn chipped rim, damp soil, fallen leaves) + trailing ivy / groundcover cards (crowns emitPlanter,
-  atlas 'ivy' tile). Typechecks.
-* m1c/m1d (m1d_sheet.png): date palms now full arching crowns ✔, planters weathered ✔, ot street tree reads
-  as a real leafy tree ✔; Washingtonia crowns looked like stacked tufts → fixed (28–36 fans on short petioles,
-  blade ⟂ petiole facing out, petiole wood). Pond reeds/lilies removed (groundcover owns them, lead request).
-* m1e (m1e_11/18h2/21h5.png): park at golden hour reads as a real park ✔; spruce = sparse skeleton of
-  sprays (needs density); unexplained bare trunk stubs in the park view (investigating: scratchpad/proj.js
-  prints plant roots projected to screen via console.warn after 15 s); fan palms fixed after m1e.
-* Lead notes done in code (to verify): sky fill on cards (cardKnobs.skyFill 0.7 × sky-facing × AO) so shaded
-  crowns are dark green not black; cards within ~0.7–1.9 m of the camera dissolve.
-* Stats (quiet machine, full-ish city, high): veg build 0.6–2.2 s (atlas 0.23 s, far 0.15–1 s); park eye:
-  cards 50.1k static + 2.9k near, wood 7.8k + 0.6k; scene 1.59 M tris vs 1.55 M with ?noleafcards; draws 84 vs 86.
-  → cut: trunks 2 segments, forest far cards 1–2/lobe (cone 2), band density 0.9 → 0.6. Quality tiers: far-card
-  keep (cardKnobs.farKeep high 1 / medium 0.85 / low 0.6) + leafDist 75/42/0.
-* 2026-10-24 ~09:30 — m1f verified lead notes (sky fill: 18.2 street crowns dark green ✔; inside-crown clean ✔);
-  stub mystery = cypress trunk top showing under a crown → leaders added (trunks taper on into the crown);
-  spruce alternates flat + hanging spray cards (reads as a conifer now, wind_1.png); far cards and ~half of
-  near clusters face OUT of the crown (tangentFrame) so crowns are not see-through face-on. Wind verified
-  (wind_sheet.png diff: crowns, trunks and dappled shadows move). M1 milestone message sent to lead
-  (ba_m1.png before/after sheet).
-* Lead review of M1 (approved) → 3 notes, all coded (to verify):
-  (1) "hat on a stick": broadleaf trunks now taper and FORK at 0.74–0.86 × clear into 2–4 scaffold limbs
-      (vase/spread/umbrella 3–4) bowing up/out (first scaffold segment static, rest near), central leader for
-      dome/oval; limbs to leaf masses start from scaffold anchors (anchorFor: direction + reach). Columns and
-      olive multi-stems keep their own stems.
-  (2) conifers: emitConeShell — every whorl tier gets a ring of drooping needle sprays lying on the cone
-      (inner end at the trunk, needles over the tier below), 2 dark inner cards per lobe, upright leader spray;
-      far LOD = same shell every 2nd (forest 3rd) tier with needleDense; sprays density 1 (40 % hanging).
-  (3) forest understory: mantle of young birch/oak in front of edge trees (veg-forest-mantle), 1–3 shrubs
-      per edge tree on the city side, fern clumps (atlas 'fern', kind fern, 0–3 per forest tree) + shrubs under
-      the canopy. Asked ground (via lead) for a forest-floor shading under the canopy.
-* m1g (m1g_sheet.png): spruces now read as real cones (forest view) ✔, parkair crowns fuller (tangent cards) ✔,
-  street trees fork (Y) ✔ but far/crossfading trees showed cut scaffold stubs → scaffolds fully static
-  (non-forest); after a camera jump near detail is generated in one batch (budget 60) and weights snap.
-* m1h (m1h_sheet.png) verified the review fixes: ot street tree forks into scaffolds with a full crown ✔,
-  spruce cones ✔, forest with mantle/understory ✔. Milestone note sent.
-* 2026-10-24 ~14:30 — lead review of m1h approved + 2 close-range notes, coded:
-  (1) plane scaffolds at 5 m = angular pipes → wood now has a NEAR layer (12-sided tubes, whole skeleton of
-      the near trees) and a FAR layer (8 sides, trunks + one straight stand-in per scaffold, lod 2 = hidden
-      while near); scaffolds are smooth Bézier arcs in 3 tapering segments; joint overlap 0.45 → 0.3 r.
-  (2) round green balls on the station terrace = my planter-slot hull bushes → leaf-card shrubs now.
-  Far-cost cut after stats2 (ovw: 66.8k static cards, 6.7k wood, scene 1.63 M tris vs 1.40 M hulls):
-  forest cone shells every 4th tier ×1.45, broadleaf far 2–3 cards/lobe (forest 1–2), bushes 1/lobe,
-  ferns 2, band density 0.45.
-* stats3 done (table below). Since: ground's note — near trunks are swept 4-segment arcs with root flare +
-  3–5 buttress roots (nearTrunk/buttress; the far layer keeps a straight 2-segment stand-in), far wood 6 sides.
-* RUNNING: bzuci5tcg = final verification via ground's gcap.mjs (fe1/fe2 forest eye level, ptrunk, ot, park,
-  overview @ 11 & 18.2, groundcover on) → shots/world/foliage/fin/.
-* NEXT: judge fin → Final report (below) → message lead → SubagentHandback.
-* Tools: scratchpad/{capset.sh OUT HOURS [q] [views], dumpatlas.sh, vstat.py, bench/}.
-* Views: park=-55,4,15,26,200,6; ot=66,3.5,-13.9,13,25,4; dt=-22,3.5,-68.9,14,35,4; palms=118,5,30,18,90,6;
-  forest=10,10,-158,70,10,10; parkair=-55,0,17,90,30,30; overview.
+* 2026-10-24 ~15:30 — FINISHED (see "## Final report"). Final verification: shots/world/foliage/fin_sheet.png
+  (forest eye level with buttress roots + smooth near trunk, park, old town, world overview; no console errors,
+  invariants empty). All files typecheck. No jobs running.
+* If resumed for follow-ups: tools in scratchpad/{capset.sh, dumpatlas.sh, vstat.py, proj.js, bench/};
+  views listed below; lead notes all addressed (sky fill, near-camera dissolve, scaffolds, spruce cones,
+  understory, close-range limbs, planter shrubs, near trunks).
+* Views: park=-55,4,15,26,200,6; ot=66,3.5,-13.9,13,25,4; palmB=118,8,28,28,40,25; forest=10,10,-158,70,10,10;
+  parkair=-55,0,17,90,30,30; ovw=0,0,-20,420,25,38; forest eye via ground's gcap.mjs fe1=-40,-172,9,160,5,1.6.
 
 ## Brief (from WORLD-PLAN.md + briefs)
 Owns `src/world/vegetation.ts` + `src/world/vegetation/*`. Trees are smooth faceted blobs (lollipops from afar,
@@ -158,3 +104,33 @@ atlasMs, farMs, nearGen, rebuilds, forestBand, forestMantle, ferns.
 
 ## Changes outside my area
 (none) — note: pond reeds/lily pads removed from vegetation.ts at ground's request (groundcover owns them).
+
+## Final report
+**What changed.** Trees, palms, shrubs and hedges are leaf-card foliage instead of faceted hull blobs.
+A procedural canvas leaf atlas (24 cluster tiles: broadleaf, plane, oak, ficus/citrus, olive, birch,
+jacaranda, blossom, spruce/pine/cypress sprays, date frond, fan leaf, ivy, fern, shrubs; coverage-preserving
+mips, colour push-pull) feeds instanced cards; instanced tapered tubes draw the skeletons. Every plant is one
+deterministic structure (lobed envelope → swept trunk with root buttresses → fork → Bézier scaffold limbs →
+limbs → branches → tips). Far LOD: out-facing dense cards per leaf mass, conifer cone shells, straight trunks;
+near LOD (≤ 75 m, lazily generated): clusters on every tip (half out-facing), dense inner cards, whorled
+spruce cones, keeled palm fronds, 12-sided skeleton; per-plant LOD texture dissolves leaf by leaf (shadows
+too). One wind (core/wind.ts): main bend per root (gusts roll through rows), limb + branch bob, flutter.
+Shading: spherized normals + per-leaf tilt, wrap, shadow-aware backlit translucency, sky fill, AO, night
+lift, lamp light, edge-on and near-camera dissolve. Mediterranean species by district, street crowns along
+streets, forest mantle/understory/ferns, 45 m forest band beyond the slab, weathered planters with ivy.
+
+**Files.** `src/world/vegetation.ts`, `vegetation/{atlas,foliage,crowns}.ts` (new), `material.ts`, `plants.ts`.
+
+**Toggles.** `?noleafcards` (old hulls), `services.vegetation.setLeafDistance(m|null)` for air's ladder,
+`cardKnobs.*` (farKeep per tier), `debugPlants()`.
+
+**Shots.** ba_m1.png (before/after), m1h_sheet.png, m1i/park_11.png, fin_sheet.png, wind_sheet.png.
+
+**Cost.** Draw calls ±0 (cards + far/near wood + shadows replace 3+3). Triangles vs `?noleafcards`:
+overview 1.52 M vs 1.40 M, park eye 1.70 M vs 1.60 M, old town 1.72 M vs 1.61 M. GPU estimate ≈ +0.5–0.8 ms at
+eye level, ≈ +0.2 ms overview (high); medium leafDist 42 m + 85 % far cards; low far cards only (60 %).
+Build ≈ 1.2 s.
+
+**Open.** Real-GPU perf A/B pending (lead's run); forest floor shading under the canopy is ground's; blossom
+and autumn tiles could use smaller leaves; olive/citrus tiles a little sparse.
+
