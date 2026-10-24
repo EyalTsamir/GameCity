@@ -21,6 +21,12 @@ Branch: work continues from `claude/tinyhaven-graphics-audit-l089m8` (fast-forwa
   Restored servers/autocheckpoint/locks; tree clean at 9399c3f (pushed). All 7 agents resumed 08:31 with open
   notes repeated (see 03:55 / 04:20 entries). Lead next: wait for milestone notes; then a second full-city
   integration capture (int2: critique views at 11 + 18.2 + 21.5, fixed river_low / wb_street presets).
+  int2 presets: ot_street=82,1.6,20,14,40,4; park_low=-55,1.2,17,16,15,5; wb_street=-130,1.5,50,18,90,3
+  (sidewalk of the z=45 street, looking E); dt_street=-5,1.7,-60,22,25,6; river_low=-30,0.6,118,26,90,3
+  (over the river, looking E along it); + riverbend, coast, vista POIs.
+* 08:45 — air sky7/g4 APPROVED (cumulus fields with flat bases, blue anti-solar sky, lavender twilight, clear
+  golden overview with long shadows). Relayed to world: white blurred block on the overview beach, grey-brown
+  hills behind the forest, sea body near shore.
 * 2026-10-24 03:33 UTC — 4th stop = WEEKLY limit: agents resumed 2026-10-20 07:31 hit it at once (no agent
   edits since 02:08 on 10-20; logs' Resume here are from ~02:05). Limit reset 10-24 03:00; container rebooted
   ~03:30. Restored: servers 5173/5174, autocheckpoint 20 min, locks cleared, tree clean at 582500f (pushed);
