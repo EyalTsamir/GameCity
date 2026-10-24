@@ -1,12 +1,8 @@
 # world-wear — weathering and lived-in clutter (world round)
 
 ## Resume here
-* Final report written; lead review asked for two more fixes (coded, typecheck clean, being verified):
-  (1) Westbrook apartments: balcony fronts now muted weathered painted concrete / frosted glass / slim metal
-  railings per building (houses.ts APT_BALC, balStyle), drip edge + run-off band; sill rain streaks varied per
-  window (amount, length, darkness, end drips) — no more barcode (materials.ts). (2) Seaview hotel: hotel-mode
-  balconies use greens + white only (ivy / pothos, shrub / jasmine / palm pots), white tables, pale parasols.
-* RUNNING: it12 (apt, oldtown, otfac × 11 / 18.2). Then update the Final report, message the lead, hand back.
+* FINISHED (2026-10-24). Lead-review fixes verified in it12 (invariants {}, console clean): apartments without
+  violet slabs / barcode streaks, Seaview hotel sea facade clean with sparse green touches. Nothing running.
 
 ## Brief (from WORLD-PLAN.md scope 7 + briefs "### wear")
 Roads: patches, cracks + sealant, tyre polish, oil stains, faded markings, drains, puddles in low spots (mirror
@@ -115,6 +111,10 @@ final/sheet.png (full city), finalw/otst_21h5.png (wet night).
 **Cost** (otfac 11 h, toggles on vs off): draw calls 71 → 74 (green + its shadow pass, props-green; the two
 static-laundry meshes disappear once life hides them), triangles 1.025 M → 1.125 M. GPU estimate (Adreno X1-45):
 ≈ 0.1–0.2 ms vertex + ≈ 0.2 ms fragment → ≈ 0.35–0.45 ms of the 0.5 ms budget.
+
+**Review fixes (it12/sheet.png):** apartment balcony fronts are muted weathered concrete / frosted glass / slim
+metal railings per building with a drip edge; sill rain streaks vary per window (no barcode); the seafront hotel's
+balconies use greens, white and pale canvas only.
 
 **Open:** puddle glare streaks a little regular; kerbside tables only at old-town cafés/bakeries; glass towers
 barely weather (by design); plaza tree planters are vegetation's.
