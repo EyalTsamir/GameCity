@@ -31,6 +31,8 @@ Branch: work continues from `claude/tinyhaven-graphics-audit-l089m8` (fast-forwa
   and park read as a real place (wb_street 18.2, park_low, oldtown superb). Two issues sent back: ground → flower
   dots form a regular lattice at 100–150 m (riverside_speckle.png; visible only since the cover-map fix); world →
   riverside POI foreground = two flat parcels south of the slab. Re-capture riverside/park after their fixes.
+* 19:45 — ground flower-dot lattice FIXED (sheet_flower_dots.png ✓; jitter, clumps, distance tint). ground DONE.
+  Waiting on world (riverside fields). int2 h11/h21.5 running.
 * 2026-10-24 13:31 UTC — 6th stop (session limit ~11:45, reset 13:20; container rebooted 13:29). Restored; tree
   clean at 7a27edf. Resumed the 4 open agents (world, ground, foliage, life). DONE: air, wear, streetlife.
   Lead next: judge milestone notes → int2 full-city capture (presets below) → final QA.
