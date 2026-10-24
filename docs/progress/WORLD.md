@@ -254,3 +254,38 @@ a URL switch per feature, so the user decides after measuring on the real GPU.
 Research agent (done): docs/progress/world-research.md.
 
 ## Log
+
+## Final report (lead, 2026-10-24)
+
+**Outcome.** Tinyhaven is no longer a model on a table: by default it is a town in a landscape that runs to the
+horizon (farmland patchwork, villages, forested hills, four mountain layers, river from the W, sea + island to the E),
+under a physical sky with aerial perspective, real cumulus and a golden hour with long raking shadows. Every surface
+carries organic detail (grass blades, meadows, reeds, leaf-card trees, balcony greenery, weathering, puddles) and life
+(one wind for grass/trees/cloth/smoke; café terraces, two-wheelers, vendors, buskers; bunting, laundry, chimney smoke,
+birds, insects). `?diorama` keeps the original tabletop. Before/after: shots/world/lead/int2_sheet_a.png (18.2,
+aerial), int2_sheet_b.png (eye level), int2_h11.png, int2_h21h5.png; per-agent best shots in their final reports.
+
+**Verified (software GL, this container).** `npm run typecheck` clean; `npm run build` → one `dist/index.html`
+(3.15 MB, no external fetches) that runs from `file://` (shots/world/lead/qa/file_overview.png); int2 = 12 critique views
+× 11 / 18.2 / 21.5 h, full city: console clean, no failed modules, invariants {} (147–188 draw calls, 2.4–2.85 M tris);
+`?diorama` clean (qa/diorama_overview.png); soak + ui-test: see qa/soak.log, qa/ui.log.
+
+**Cost (agents' estimates for the Adreno X1-45 at 1920×1025, high; NOT measured — no GPU here).**
+landscape +2–3 ms (vista; +21 dc, +0.5 M tris) · grass 1.0–1.4 ms in a meadow at eye level (≈0.1 overview) · leaf cards
++0.5–0.8 eye level (+0.2 overview) · wear 0.35–0.45 · street life 0.3–0.4 · life 0.3–0.45 · atmosphere/sky net 0…+0.3
+(tilt-shift removed in world mode) ⇒ ≈ +4–6 ms at eye level, +3.5–4.5 ms overview on high. Medium/low tiers cut
+each feature (grass rings, leaf distance 75/42/0 m, landscape mesh/trees, cloud steps, drift).
+
+**Measure on the real GPU** (dev server running; system Chrome = real GPU; compare variants within one run):
+```
+node scripts/perf.mjs --view overview --hours 18.2 --width 1920 --height 1025 --variants ";diorama;quality=medium;quality=low"
+node scripts/perf.mjs --view overview --hours 18.2 --width 1920 --height 1025 --variants ";noland;nograss;noleafcards;skip=life;noatmo&noclouds&noshafts;noclutter&nogreen&nowear&nopuddles&noterracelights"
+node scripts/perf.mjs --view "-55,1.2,17,16,15,5" --hours 18.2 --width 1920 --height 1025 --variants ";nograss;grass=0.5;gcrings=A;noleafcards;noland"
+node scripts/perf.mjs --view "82,1.6,20,8,40,4" --hours 21.5 --width 1920 --height 1025 --variants ";noclutter&nogreen&nowear&nopuddles&noterracelights;skip=life;nograss"
+```
+Decide per feature from the numbers (keep / tier down / default off); `postfx/adaptive.ts` already steps grass, leaf
+distance and landscape trees down when the frame budget is exceeded.
+
+**Open (small, documented in the agent logs).** Sheep facets < 5 m; flower heads crude < 2 m; reeds not in the water
+reflection; awnings/parasols static; petals fall from all trees; a pre-existing bus rear-axle glitch at (58.7, −68.6);
+hedges between small plots have no gaps; the free camera may enter buildings (guided mode keeps out).
