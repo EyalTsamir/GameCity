@@ -1,16 +1,11 @@
 # world-life — wind consumers, smoke, birds, small motion (world round)
 
 ## Resume here
-* 2026-10-24 13:45 (after the 6th stop) — all features in; verified: bunting/festoons/market/café lights,
-  laundry (court, balcony, dryers), chimney plumes (wispy, bending), backlit bunting colours, swifts,
-  pigeons, insects ON at flower patches (probe: 4 patches, 36 insects; drift lists now refresh in REAL
-  time + on camera jumps — in SwiftShader the sim crawls at 0.1 s/frame, so sim-time timers never fired).
-  The old-town "band" was the lead's camera preset inside the Seaview Hotel (solved, not life).
-  `ctx.services.lifeDebug` = { cloth, drift, smoke } (harness handle).
-* Running: full-city milestone set → shots/world/life/full1 (overview, oldtown, market, otsun, harbroof,
-  parkeye × 11/18.2/21.5), log shots/world/life/full1.log. Private script scratchpad/life/cap.mjs.
-* Next: judge full1 (failedModules must be empty), draw calls/tris A/B (`skip=life` vs default at
-  overview + otsun), message lead, final report.
+* 2026-10-24 14:20 — DONE except the soak verdict. Full-city set shots/world/life/full1 (failedModules [],
+  invariants empty, console clean); A/B shots/world/life/perf (skip=life). Final report below.
+* Running: soak 4 min @4× (life subset, view oldtown) → shots/world/life/soak/soak.json (private script
+  scratchpad/life/soak.mjs = scripts/soak.mjs with a 25-min ready timeout). When it ends: check
+  invariantHits / heap trend / console, note the verdict under "Final report", message the lead.
 
 ## Brief (from WORLD-PLAN.md §6 + briefs)
 Wind consumers: flags on poles flap, bunting / festoon strings across old-town streets and the market,
@@ -132,3 +127,29 @@ golden hour), drift ≤ 600 tiny quads (≈ 0.03 ms). Total ≈ 0.3–0.4 ms; +4
 * courtyard laundry: `82,1.6,20,14,40,6`; garden dryer: eval `props.washing[2]`, dist 8, yaw 35, pitch 9
 * insects at a flower patch: eval best `groundcover.flowerPatches` near the park, dist 7, pitch 8 @11
 * factory smoke with soft depth: `-116,42,-98,95,-40,12` @7.5
+
+## Final report
+**What changed.** The town now breathes with the one wind (`core/wind.ts`). *Cloth*: bunting and prayer
+flags hang across the old-town streets (lines generated from facing facades, zig-zags, ≥ 4.27 m clearance).
+The market gets a star of 14 festoon and bunting lines radiating from two masts between the stall rows.
+Café terraces get string lights between their parasols. Laundry hangs in courtyards, on balconies and on
+garden dryers, and there are lifeguard and hotel flags. Lines swing about their chord in cross-wind, the
+pieces stream out and flutter towards their free edge, and backlit cloth glows in its own colour. Landmark
+flags follow the gust field and droop in calm air. *Smoke*: 83 house chimneys (heat/cook/cold schedules),
+hotel boilers, works vents, bakery/kitchen flues and evening BBQs feed the shared smoke pool, which now has
+gusts with height shear, an HG backlit rim, fbm erosion into wisps, soft depth fade, distance LOD and a 14 s
+prewarm on start and time jumps. *Birds*: pigeons scatter from walkers, swift parties race over the roofs at
+dawn and dusk, gulls perch on waterfront ridges. *Drift*: leaves torn off in gust flurries, butterflies and
+bees at flower patches, golden-hour motes, moths at lamps. Kite lines are now 2 mm and fade near the camera.
+**Files.** `src/world/life.ts`, `life/{glsl,cloth,decor,extras,poles,chimneys,drift}.ts`;
+`sim/ambient/{smoke,birds,kites}.ts` (+ doc in `ambient.ts`); the FLAG mode in `landmarks/shaders.ts` (grant).
+**Toggles.** `?nocloth ?nobunting ?nolaundry ?noflags ?nochimneys ?nodrift ?nosoftsmoke ?lifedebug`,
+`skip=life`. Harness handle: `services.lifeDebug`.
+**Shots.** Before (diorama): shots/world/critique/a/ot_street_11.png and oldtown_18h2.png. After:
+shots/world/life/full1/s1.png and s2.png, perf/s.png (life vs no life), m3d/s1.png.
+**Cost.** +6–7 draw calls (cloth+shadow, wires, bulbs, poles+shadow, leaves/insects, sparkles), ~+77k
+tris over all passes (cloth 43k = 1002 pieces × 25 verts; wires 13k; bulbs 6.5k). GPU estimate on high:
+≈ 0.3–0.45 ms, mostly smoke overdraw near plumes plus the cloth vertex/shadow work. Medium halves the drift;
+low has no cloth shadows and no drift.
+**Open.** Awnings and parasols are still static (wear's geometry; request logged). Petals fall from every
+tree (no blossom flag yet). The overview shows little of the cloth, by nature.

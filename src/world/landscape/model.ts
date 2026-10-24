@@ -472,18 +472,24 @@ export function createLandscapeModel(slabHeight: SlabHeight): LandscapeModel {
       dz = z - ISLAND.z;
     const a = Math.atan2(dz, dx);
     const rr = ISLAND.r * (0.72 + 0.36 * vnoise(Math.cos(a) * 2.2 + 5, Math.sin(a) * 2.2 + 5, 41) + 0.14 * Math.sin(a * 3 + 1));
-    // a long rocky island running N-S (a ridge with two summits)
+    // a long rocky island running N-S: an asymmetric ridge (crest pushed east, a steep cliff side to the
+    // open sea, long gentler slopes toward the town) with three summits and saddles, a cliffed rim with a
+    // beach cove on the town side — not a cone
     const d = Math.hypot(dx * 1.55, dz * 0.62) / rr;
     if (d > 1.6) return -1e3;
-    const core = 1 - smooth(0, 1, d);
-    // a ridge with three summits and saddles between them
-    const tri = 0.62 + 0.38 * Math.cos((dz / rr) * 7.5 + 0.6);
-    const hill = ISLAND.peak * Math.pow(core, 1.15) * tri * (0.6 + 0.7 * ridged(x / 260, z / 260, 4, 42));
-    // shore: cliffs all round (tallest facing the open sea), one cove with a beach on the town side
+    const crest = 0.22 * rr;
+    const ex = dx - crest;
+    const dr = Math.hypot(ex * (ex > 0 ? 2.6 : 1.25), dz * 0.62) / rr;
+    const core = 1 - smooth(0, 0.95, dr);
+    const tri = 0.5 + 0.5 * Math.cos((dz / rr) * 7.5 + 0.6);
+    const rough = 0.55 + 0.75 * ridged(x / 230, z / 230, 4, 42);
+    const hill = ISLAND.peak * Math.pow(core, 0.85) * (0.45 + 0.55 * tri) * rough;
+    // rim: sea cliffs (tallest facing the open sea), low rocks, one cove with a beach on the town side
     const sea = smooth(-0.4, 0.5, Math.cos(a));
     const cove = smooth(0.93, 0.995, -Math.cos(a));
-    const shore = WL + (1 - d) * lerp(lerp(95, 260, sea), 16, cove);
-    return Math.min(Math.max(hill, shore), shore + hill * 0.6) - (d > 1 ? (d - 1) * 60 : 0);
+    const rimH = lerp(lerp(14, 48, sea), 1.5, cove) * (0.75 + 0.5 * vnoise(a * 4 + 3, 7, 43));
+    const rim = rimH * (1 - smooth(0.9, 1.0, d)) + 4 * (1 - smooth(0.6, 0.95, d));
+    return WL + rim + hill * (1 - smooth(0.85, 1.0, d)) - (d > 1 ? (d - 1) * 60 : 0);
   }
 
   const water0 = (x: number, z: number) => world0(x, z, false) < WL - 0.02;
