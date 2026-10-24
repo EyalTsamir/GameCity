@@ -295,7 +295,8 @@ try {
     await page.keyboard.press('Digit0');
     await settle(4200);
     const c = await st();
-    step('key 0 returns to the overview', Math.abs(c.distance - 560) < 10, { dist: Math.round(c.distance) });
+    const ovD = await page.evaluate(() => window.__city.ctx.plan.pois.find((p) => p.id === 'overview').distance);
+    step('key 0 returns to the overview', Math.abs(c.distance - ovD) < 10, { dist: Math.round(c.distance), poi: ovD });
   }
 
   if (wanted.has('pois')) {

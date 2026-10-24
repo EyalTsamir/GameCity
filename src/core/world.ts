@@ -11,3 +11,6 @@ const params = typeof location !== 'undefined' ? new URLSearchParams(location.se
 
 export const DIORAMA: boolean = params.has('diorama');
 export const WORLD_MODE: boolean = !DIORAMA;
+
+/** the city's one-line tagline (HUD brand, tour captions) */
+export const TAGLINE: string = DIORAMA ? 'A living miniature city' : 'A living city by the sea';

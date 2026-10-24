@@ -729,7 +729,8 @@
 
 .th-dl-tag {
   position: absolute;
-  bottom: 24px;
+  /* --lift: set by hud/labels.ts when a crowded flag rises on a longer stem */
+  bottom: calc(24px + var(--lift, 0px));
   left: 0;
   transform: translateX(-50%);
   display: flex;
@@ -749,7 +750,7 @@
   box-shadow: 0 3px 8px -3px rgba(30, 40, 50, 0.45);
   pointer-events: none;
   cursor: pointer;
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, bottom 0.25s ease;
 }
 
 /* flags never take the pointer (a drag that starts on one must still orbit): the camera routes
@@ -771,7 +772,8 @@
   left: -0.5px;
   bottom: 2px;
   width: 1px;
-  height: 22px;
+  height: calc(22px + var(--lift, 0px));
+  transition: height 0.25s ease;
   background: linear-gradient(rgba(37, 49, 58, 0.55), rgba(37, 49, 58, 0.25));
 }
 

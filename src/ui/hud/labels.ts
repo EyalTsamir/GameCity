@@ -73,7 +73,14 @@ interface Item {
   z: number;
   want: number;
   prio: number;
+  /** stacking level: the tag rises on a longer stem (0 = normal) when it would overlap a flag below it */
+  lift: number;
+  /** that rise in CSS px (applied as --lift) */
+  liftPx: number;
 }
+
+/** a crowded flag may rise this many tag heights on a longer stem before it steps aside */
+const MAX_LIFT = 2;
 
 export interface ScreenRect {
   x0: number;
@@ -114,7 +121,7 @@ export class DistrictLabels {
       this.el.appendChild(el);
       const h = d.kind === 'hills' ? ctx.plan.heightAt(d.label.x, d.label.z) : 0;
       const tag = el.querySelector('.th-dl-tag') as HTMLElement;
-      this.items.push({ d, el, tag, pos: new THREE.Vector3(d.label.x, Math.max(0, h) + 2, d.label.z), shown: 0, visible: false, w: 0, h: 0, sx: 0, sy: 0, z: 0, want: 0, prio: PRIORITY[d.id] ?? 20 });
+      this.items.push({ d, el, tag, pos: new THREE.Vector3(d.label.x, Math.max(0, h) + 2, d.label.z), shown: 0, visible: false, w: 0, h: 0, sx: 0, sy: 0, z: 0, want: 0, prio: PRIORITY[d.id] ?? 20, lift: 0, liftPx: 0 });
     }
     this.order = [...this.items].sort((a, b) => a.prio - b.prio);
   }
@@ -128,7 +135,8 @@ export class DistrictLabels {
       if (!it.visible || it.shown < 0.5) continue;
       const w = it.w || 110,
         h = it.h || 24;
-      if (x >= it.sx - w / 2 && x <= it.sx + w / 2 && y >= it.sy - 24 - h && y <= it.sy - 24) return it.d;
+      const top = it.sy - 24 - it.liftPx;
+      if (x >= it.sx - w / 2 && x <= it.sx + w / 2 && y >= top - h && y <= top) return it.d;
     }
     return null;
   }
@@ -147,6 +155,15 @@ export class DistrictLabels {
     const poi = DISTRICT_POI[d.id] ?? DISTRICT_POI[d.kind];
     if (poi && cam.pois().some((p) => p.id === poi)) cam.flyToPoi(poi);
     else cam.flyToPoint(d.label.x, d.label.z, 150);
+  }
+
+  /** does the flag fit at stacking level `lv` (tag + its stem clear of placed flags / HUD, tag on screen)? */
+  private fits(it: Item, lv: number, w: number, h: number, hit: (r: ScreenRect) => boolean): boolean {
+    const lift = lv * (h + 8);
+    const tag = { x0: it.sx - w / 2 - 4, y0: it.sy - 24 - lift - h - 3, x1: it.sx + w / 2 + 4, y1: it.sy - 24 - lift + 4 };
+    if (lv > 0 && tag.y0 < 30) return false;
+    if (hit(tag)) return false;
+    return !hit({ x0: it.sx - 3, y0: it.sy - 24 - lift, x1: it.sx + 3, y1: it.sy + 4 });
   }
 
   private lastKey = '';
@@ -189,8 +206,16 @@ export class DistrictLabels {
       const edge = onScreen ? Math.min(1, Math.min(it.sx, W - it.sx) / 90 + 0.25, Math.min(it.sy, H - it.sy) / 80 + 0.2) : 0;
       it.want = onScreen ? zoomAlpha * edge * stagger : 0;
     }
-    // declutter: a flag that would overlap a more important one, or a HUD panel, steps aside (fades out)
+    // declutter: a flag that would overlap a more important one rises on a longer stem (up to MAX_LIFT tag
+    // heights — the low hero overview packs the districts into a narrow band); if no level is free, or it
+    // would cover a HUD panel, it steps aside (fades out). A raised flag keeps its level while it fits, so
+    // flags don't hop between levels as the camera moves.
     const placed: ScreenRect[] = [];
+    const hit = (r: ScreenRect): boolean => {
+      for (const q of placed) if (r.x0 < q.x1 && q.x0 < r.x1 && r.y0 < q.y1 && q.y0 < r.y1) return true;
+      for (const q of this.avoid) if (r.x0 < q.x1 && q.x0 < r.x1 && r.y0 < q.y1 && q.y0 < r.y1) return true;
+      return false;
+    };
     for (const it of this.order) {
       if (it.want <= 0) continue;
       if (it.w === 0 && it.visible) {
@@ -199,13 +224,22 @@ export class DistrictLabels {
       }
       const w = it.w || 110,
         h = it.h || 24;
-      // the tag sits 24 px above its pin, centred on it
-      const r = { x0: it.sx - w / 2 - 4, y0: it.sy - 24 - h - 3, x1: it.sx + w / 2 + 4, y1: it.sy + 4 };
-      let clash = false;
-      for (const q of placed) if (r.x0 < q.x1 && q.x0 < r.x1 && r.y0 < q.y1 && q.y0 < r.y1) clash = true;
-      for (const q of this.avoid) if (r.x0 < q.x1 && q.x0 < r.x1 && r.y0 < q.y1 && q.y0 < r.y1) clash = true;
-      if (clash) it.want = 0;
-      else placed.push(r);
+      let level = -1;
+      for (const lv of it.lift > 0 ? [0, it.lift] : [0]) if (level < 0 && this.fits(it, lv, w, h, hit)) level = lv;
+      for (let lv = 1; level < 0 && lv <= MAX_LIFT; lv++) if (this.fits(it, lv, w, h, hit)) level = lv;
+      if (level < 0) {
+        it.want = 0;
+        continue;
+      }
+      // the tag sits 24 px (+ its lift) above its pin, centred on it; the stem below it is a thin obstacle too
+      const lift = level * (h + 8);
+      placed.push({ x0: it.sx - w / 2 - 4, y0: it.sy - 24 - lift - h - 3, x1: it.sx + w / 2 + 4, y1: it.sy - 24 - lift + 4 });
+      placed.push({ x0: it.sx - 3, y0: it.sy - 24 - lift, x1: it.sx + 3, y1: it.sy + 4 });
+      if (level !== it.lift) {
+        it.lift = level;
+        it.liftPx = lift;
+        it.el.style.setProperty('--lift', `${lift}px`);
+      }
     }
     for (const it of this.items) {
       it.shown += (it.want - it.shown) * k;

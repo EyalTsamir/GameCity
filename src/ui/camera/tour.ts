@@ -6,6 +6,7 @@ import type { PickHit } from '../../core/context';
 import type { Poi } from '../../core/plan';
 import type { Scout, ScoutKind } from './scout';
 import type { TourShotInfo } from '../shared';
+import { TAGLINE } from '../../core/world';
 
 export interface Pose {
   tx: number;
@@ -36,7 +37,7 @@ export interface TourRig {
 }
 
 const POI_NOTES: Record<string, [string, string]> = {
-  overview: ['Tinyhaven', 'A living miniature city'],
+  overview: ['Tinyhaven', TAGLINE],
   downtown: ['Downtown', 'Glass towers around the TV mast'],
   harbor: ['The Harbour', 'Gantry cranes, containers and a cargo ship'],
   beach: ['Sunny Beach & Pier', 'Ferris wheel, carousel and parasols'],

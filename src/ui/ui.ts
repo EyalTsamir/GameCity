@@ -7,7 +7,7 @@ import './ui.css';
 import * as THREE from 'three';
 import type { CityContext, CityModule, PickHit, QualityLevel, QualityState } from '../core/context';
 import { CITY_NAME } from '../core/constants';
-import { DIORAMA } from '../core/world';
+import { DIORAMA, TAGLINE } from '../core/world';
 import { ICONS, SKY_DIAL, type IconName } from './hud/icons';
 import { Minimap, type LiveDot } from './hud/minimap';
 import { DistrictLabels, type ScreenRect } from './hud/labels';
@@ -123,7 +123,7 @@ export default function create(ctx: CityContext): CityModule {
   const title = el(
     'header',
     'th-title th-card',
-    `<div class="th-brand"><div class="th-name">${CITY_NAME.slice(0, 4)}<b>${CITY_NAME.slice(4)}</b></div><div class="th-tag">A living miniature city</div></div>
+    `<div class="th-brand"><div class="th-name">${CITY_NAME.slice(0, 4)}<b>${CITY_NAME.slice(4)}</b></div><div class="th-tag">${TAGLINE}</div></div>
      <div class="th-sep"></div>
      <div class="th-clock">${SKY_DIAL}<div class="th-clock-text"><div class="th-time">--:--</div><div class="th-day">Day 1</div></div></div>`,
   );
