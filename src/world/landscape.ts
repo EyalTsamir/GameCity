@@ -14,7 +14,7 @@ import { getTerrainModel } from './terrain/height';
 import { groundBands, slabEdges } from './terrain/layout';
 import { createLandscapeModel, type Cover, type LandscapeModel } from './landscape/model';
 import { buildRings, type RingTopology } from './landscape/rings';
-import { buildLand, makeSlabNormal, LAND_MAX_D, GROUND_DROP, type LandHeights } from './landscape/terrain';
+import { buildLand, buildIslandPatch, makeSlabNormal, LAND_MAX_D, GROUND_DROP, type LandHeights, type LandHole } from './landscape/terrain';
 import { landUniforms, landMaterial } from './landscape/shader';
 import { buildMountains } from './landscape/mountains';
 import { placeTrees, createLandTrees, type LandTrees } from './landscape/trees';
@@ -83,7 +83,11 @@ export default function create(ctx: CityContext): CityModule {
   // quality tiers (build time): coarser land rings / mountain columns on medium and low
   const tierScale = ctx.quality.level === 'low' ? 1.7 : ctx.quality.level === 'medium' ? 1.3 : 1;
   const topo = buildRings(edges, LAND_MAX_D, tierScale);
-  const built = buildLand(topo, model, LAND_MAX_D, slabH, makeSlabNormal(slabH));
+  // the island gets its own fine grid (?landisland=0: the coarse far rings draw it)
+  const isl = model.island;
+  const islandBox: LandHole | undefined =
+    params.get('landisland') !== '0' ? { x0: isl.x - 620, x1: isl.x + 620, z0: isl.z - 1400, z1: isl.z + 1400 } : undefined;
+  const built = buildLand(topo, model, LAND_MAX_D, slabH, makeSlabNormal(slabH), islandBox);
   const heights = built.heights;
   const geo = built.geo;
   service.topo = topo;
@@ -101,6 +105,28 @@ export default function create(ctx: CityContext): CityModule {
   land.matrixAutoUpdate = false;
   land.updateMatrix();
   root.add(land);
+  let islandTris = 0;
+  if (islandBox) {
+    const step = ctx.quality.level === 'low' ? 26 : ctx.quality.level === 'medium' ? 19 : 14;
+    const ig = buildIslandPatch(model, islandBox, step);
+    const island = new THREE.Mesh(ig, land.material);
+    island.name = 'land-island';
+    island.position.y = GROUND_DROP;
+    island.receiveShadow = true;
+    island.matrixAutoUpdate = false;
+    island.updateMatrix();
+    root.add(island);
+    islandTris = ig.index!.count / 3;
+    // a coarse copy for the water's reflection pass
+    const rg = buildIslandPatch(model, islandBox, 40);
+    const ir = new THREE.Mesh(rg, land.material);
+    ir.name = 'land-reflect-island';
+    ir.position.y = GROUND_DROP;
+    ir.matrixAutoUpdate = false;
+    ir.updateMatrix();
+    ir.layers.set(LAYERS.REFLECT);
+    root.add(ir);
+  }
 
   // ── mountains / distant hill layers
   let mtnTris = 0,
@@ -277,6 +303,7 @@ export default function create(ctx: CityContext): CityModule {
         chimneys,
         landVerts,
         landTris,
+        islandTris,
         mtnVerts,
         mtnTris,
         reflTris,

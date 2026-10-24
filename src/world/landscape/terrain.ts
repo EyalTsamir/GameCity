@@ -39,6 +39,7 @@ export function buildLand(
   landMaxD: number,
   slabH: (x: number, z: number) => number,
   slabNormal: (x: number, z: number, out: number[]) => void,
+  hole?: LandHole,
 ): { geo: THREE.BufferGeometry; heights: LandHeights } {
   const t0 = performance.now();
   let nv = 0,
@@ -74,46 +75,17 @@ export function buildLand(
   geo.computeVertexNormals();
   const nor0 = (geo.getAttribute('normal') as THREE.BufferAttribute).array as Float32Array;
   // ── cover
-  const c: Cover = { water: 0, sand: 0, rock: 0, forest: 0, field: 0, meadow: 0, wet: 0 };
-  const rq = { d: 0, halfW: 8, s: 0, tx: 1, tz: 0, side: 1 };
   for (let v = 0; v < nv; v++) {
-    const x = topo.x[v],
-      z = topo.z[v],
-      y = h[v],
-      d = ringD[v];
-    const k = v * CW;
-    if (d === 0 || y < WL - 6) {
-      cover[k + 5] = d === 0 ? 1 : 0;
-      cover[k + 6] = 1;
-      cover[k + 8] = 60;
-      continue;
-    }
     const ny = Math.max(0.05, nor0[v * 3 + 1]);
-    const slope = Math.sqrt(Math.max(0, 1 - ny * ny)) / ny;
-    model.cover(x, z, c, y, slope);
-    cover[k] = c.forest;
-    cover[k + 1] = c.field;
-    cover[k + 2] = c.sand;
-    cover[k + 3] = c.rock;
-    cover[k + 4] = c.wet;
-    cover[k + 5] = c.meadow;
-    cover[k + 6] = 1 - smooth(4, 30, d); // seam zone
-    // canopy: closed forest far from the slab becomes part of the terrain surface
-    const cw = smooth(CANOPY_NEAR, CANOPY_FULL, d) * smooth(0.3, 0.8, c.forest);
-    if (cw > 0) {
-      canopy[v] = (9 + 5 * vnoise(x / 37, z / 37, 61) + 3 * vnoise(x / 11, z / 11, 62)) * cw;
-      cover[k + 7] = cw;
-    }
-    // river bank coordinate (m from the waterline, < 0 in the water), bank side, slab distance
-    if (x < -150 && model.river(x, z, rq) && rq.d < rq.halfW + 60) {
-      cover[k + 8] = rq.d - rq.halfW;
-      cover[k + 10] = rq.side ?? 1;
-    } else cover[k + 8] = 60;
-    cover[k + 11] = model.grazing(x, z);
-    cover[k + 9] = model.slabDist(x, z);
+    coverAt(model, topo.x[v], topo.z[v], h[v], ringD[v], Math.sqrt(Math.max(0, 1 - ny * ny)) / ny, cover, canopy, v);
   }
-  // ── raise the canopy, final normals
-  for (let v = 0; v < nv; v++) pos[v * 3 + 1] = h[v] + canopy[v];
+  // ── raise the canopy, final normals; inside the hole the rings sink under the sea (a finer patch
+  // draws that land; heights.h keeps the true values for the water's depth field)
+  for (let v = 0; v < nv; v++) {
+    let y = h[v] + canopy[v];
+    if (hole && topo.x[v] > hole.x0 && topo.x[v] < hole.x1 && topo.z[v] > hole.z0 && topo.z[v] < hole.z1) y = Math.min(y, WL - 8);
+    pos[v * 3 + 1] = y;
+  }
   geo.computeVertexNormals();
   const nor = geo.getAttribute('normal') as THREE.BufferAttribute;
   const tmp = [0, 1, 0];
@@ -123,6 +95,49 @@ export function buildLand(
     slabNormal(topo.x[v], topo.z[v], tmp);
     nor.setXYZ(v, tmp[0], tmp[1], tmp[2]);
   }
+  setCoverAttributes(geo, cover, nv);
+  geo.computeBoundingBox();
+  geo.computeBoundingSphere();
+  return { geo, heights: { h, canopy, cover, landVerts: nv, ms: performance.now() - t0 } };
+}
+
+const _c: Cover = { water: 0, sand: 0, rock: 0, forest: 0, field: 0, meadow: 0, wet: 0 };
+const _rq = { d: 0, halfW: 8, s: 0, tx: 1, tz: 0, side: 1 };
+/** cover channels (CW floats at v·CW) + raised canopy of one land vertex */
+function coverAt(model: LandscapeModel, x: number, z: number, y: number, d: number, slope: number, cover: Float32Array, canopy: Float32Array, v: number): void {
+  const c = _c,
+    rq = _rq;
+  const k = v * CW;
+  if (d === 0 || y < WL - 6) {
+    cover[k + 5] = d === 0 ? 1 : 0;
+    cover[k + 6] = 1;
+    cover[k + 8] = 60;
+    return;
+  }
+  model.cover(x, z, c, y, slope);
+  cover[k] = c.forest;
+  cover[k + 1] = c.field;
+  cover[k + 2] = c.sand;
+  cover[k + 3] = c.rock;
+  cover[k + 4] = c.wet;
+  cover[k + 5] = c.meadow;
+  cover[k + 6] = 1 - smooth(4, 30, d); // seam zone
+  // canopy: closed forest far from the slab becomes part of the terrain surface
+  const cw = smooth(CANOPY_NEAR, CANOPY_FULL, d) * smooth(0.3, 0.8, c.forest);
+  if (cw > 0) {
+    canopy[v] = (9 + 5 * vnoise(x / 37, z / 37, 61) + 3 * vnoise(x / 11, z / 11, 62)) * cw;
+    cover[k + 7] = cw;
+  }
+  // river bank coordinate (m from the waterline, < 0 in the water), bank side, slab distance
+  if (x < -150 && model.river(x, z, rq) && rq.d < rq.halfW + 60) {
+    cover[k + 8] = rq.d - rq.halfW;
+    cover[k + 10] = rq.side ?? 1;
+  } else cover[k + 8] = 60;
+  cover[k + 11] = model.grazing(x, z);
+  cover[k + 9] = model.slabDist(x, z);
+}
+
+function setCoverAttributes(geo: THREE.BufferGeometry, cover: Float32Array, nv: number): void {
   const cov = new Float32Array(nv * 4);
   const cov2 = new Float32Array(nv * 4);
   const cov3 = new Float32Array(nv * 4);
@@ -136,9 +151,68 @@ export function buildLand(
   geo.setAttribute('aCov', new THREE.BufferAttribute(cov, 4));
   geo.setAttribute('aCov2', new THREE.BufferAttribute(cov2, 4));
   geo.setAttribute('aCov3', new THREE.BufferAttribute(cov3, 4));
+}
+
+/** a rectangle the ring mesh leaves to a finer patch (its vertices sink under the sea there) */
+export interface LandHole {
+  x0: number;
+  z0: number;
+  x1: number;
+  z1: number;
+}
+
+/** the island as its own fine grid (the far rings are 80–150 m apart out there: a faceted pyramid) */
+export function buildIslandPatch(model: LandscapeModel, box: LandHole, step: number): THREE.BufferGeometry {
+  const nx = Math.ceil((box.x1 - box.x0) / step) + 1,
+    nz = Math.ceil((box.z1 - box.z0) / step) + 1;
+  const nv = nx * nz;
+  const pos = new Float32Array(nv * 3);
+  const h = new Float32Array(nv);
+  for (let j = 0; j < nz; j++)
+    for (let i = 0; i < nx; i++) {
+      const v = j * nx + i;
+      const x = box.x0 + ((box.x1 - box.x0) * i) / (nx - 1),
+        z = box.z0 + ((box.z1 - box.z0) * j) / (nz - 1);
+      h[v] = model.height(x, z);
+      pos[v * 3] = x;
+      pos[v * 3 + 1] = h[v];
+      pos[v * 3 + 2] = z;
+    }
+  const idx = new Uint32Array((nx - 1) * (nz - 1) * 6);
+  let t = 0;
+  for (let j = 0; j < nz - 1; j++)
+    for (let i = 0; i < nx - 1; i++) {
+      const a = j * nx + i,
+        b = a + 1,
+        c = a + nx,
+        d = c + 1;
+      // alternate the diagonal (no directional grain)
+      if ((i + j) & 1) {
+        idx.set([a, c, b, b, c, d], t);
+      } else {
+        idx.set([a, c, d, a, d, b], t);
+      }
+      t += 6;
+    }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  geo.setIndex(new THREE.BufferAttribute(idx, 1));
+  geo.computeVertexNormals();
+  const nor0 = (geo.getAttribute('normal') as THREE.BufferAttribute).array as Float32Array;
+  const cover = new Float32Array(nv * CW);
+  const canopy = new Float32Array(nv);
+  for (let v = 0; v < nv; v++) {
+    const ny = Math.max(0.05, nor0[v * 3 + 1]);
+    const x = pos[v * 3],
+      z = pos[v * 3 + 2];
+    coverAt(model, x, z, h[v], model.slabDist(x, z), Math.sqrt(Math.max(0, 1 - ny * ny)) / ny, cover, canopy, v);
+  }
+  for (let v = 0; v < nv; v++) pos[v * 3 + 1] = h[v] + canopy[v];
+  geo.computeVertexNormals();
+  setCoverAttributes(geo, cover, nv);
   geo.computeBoundingBox();
   geo.computeBoundingSphere();
-  return { geo, heights: { h, canopy, cover, landVerts: nv, ms: performance.now() - t0 } };
+  return geo;
 }
 
 /** slab ground normal at an edge vertex (terrain/ground.ts slopePick formula) */

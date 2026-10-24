@@ -471,23 +471,35 @@ export function createLandscapeModel(slabHeight: SlabHeight): LandscapeModel {
     const dx = x - ISLAND.x,
       dz = z - ISLAND.z;
     const a = Math.atan2(dz, dx);
-    const rr = ISLAND.r * (0.72 + 0.36 * vnoise(Math.cos(a) * 2.2 + 5, Math.sin(a) * 2.2 + 5, 41) + 0.14 * Math.sin(a * 3 + 1));
-    // a long rocky island running N-S: an asymmetric ridge (crest pushed east, a steep cliff side to the
-    // open sea, long gentler slopes toward the town) with three summits and saddles, a cliffed rim with a
-    // beach cove on the town side — not a cone
+    const ca = Math.cos(a),
+      sa = Math.sin(a);
+    const rr = ISLAND.r * (0.72 + 0.36 * vnoise(ca * 2.2 + 5, sa * 2.2 + 5, 41) + 0.14 * Math.sin(a * 3 + 1));
     const d = Math.hypot(dx * 1.55, dz * 0.62) / rr;
     if (d > 1.6) return -1e3;
-    const crest = 0.22 * rr;
-    const ex = dx - crest;
-    const dr = Math.hypot(ex * (ex > 0 ? 2.6 : 1.25), dz * 0.62) / rr;
-    const core = 1 - smooth(0, 0.95, dr);
-    const tri = 0.5 + 0.5 * Math.cos((dz / rr) * 7.5 + 0.6);
-    const rough = 0.6 + 0.6 * ridged(x / 230, z / 230, 4, 42);
-    const hill = ISLAND.peak * Math.pow(core, 0.85) * (0.45 + 0.55 * tri) * rough;
+    // a natural massif, not a cone: a curving N–S crest LINE (east of centre) with three summits and
+    // saddles, slopes convex at the shoulders and concave at the foot (an S profile across the crest),
+    // a steep sea side, spurs and gullies (ridged noise), all domain-warped
+    const ux = dx + 80 * (fbm(x / 520, z / 520, 2, 44) - 0.5) * 2,
+      uz = dz + 80 * (fbm(x / 520 + 7.3, z / 520 + 3.1, 2, 45) - 0.5) * 2;
+    const Lh = 640;
+    const crestX = 0.18 * ISLAND.r + 60 * Math.sin(uz / 380 + 0.7);
+    const across = ux - crestX;
+    const along = Math.max(0, Math.abs(uz) - Lh);
+    const t = Math.hypot(across / (across > 0 ? 230 : 440), along / 330);
+    const prof = Math.pow(1 - smooth(0, 1, t), 1.25);
+    const sz = uz / Lh;
+    const g = (m: number, w: number) => Math.exp(-(((sz - m) / w) ** 2));
+    const summits = 0.6 + 0.4 * Math.max(g(-0.5, 0.3), 0.88 * g(0.22, 0.26), 0.7 * g(0.85, 0.24));
+    const rough = ridged(ux / 170, uz / 170, 4, 42);
+    const zone = smooth(0.06, 0.28, t) * (1 - smooth(0.82, 1.0, t));
+    const hill = Math.max(0, ISLAND.peak * prof * summits * (0.84 + 0.3 * rough * zone) - 24 * (1 - rough) ** 2 * zone);
     // rim: sea cliffs (tallest facing the open sea), low rocks, one cove with a beach on the town side
-    const sea = smooth(-0.4, 0.5, Math.cos(a));
-    const cove = smooth(0.93, 0.995, -Math.cos(a));
-    const rimH = lerp(lerp(14, 48, sea), 1.5, cove) * (0.75 + 0.5 * vnoise(a * 4 + 3, 7, 43));
+    const sea = smooth(-0.4, 0.5, ca);
+    const cove = smooth(0.93, 0.995, -ca);
+    // (the angle-dependent cliff height only near the shore: toward the centre it blends to one value,
+    // else every angle term radiates from the middle as a star)
+    const rimA = lerp(lerp(14, 48, sea), 1.5, cove) * (0.75 + 0.5 * vnoise(ca * 3 + 3, sa * 3 + 7, 43));
+    const rimH = lerp(22, rimA, smooth(0.4, 0.85, d));
     const rim = rimH * (1 - smooth(0.9, 1.0, d)) + 4 * (1 - smooth(0.6, 0.95, d));
     return WL + rim + hill * (1 - smooth(0.85, 1.0, d)) - (d > 1 ? (d - 1) * 60 : 0);
   }
@@ -592,12 +604,14 @@ export function createLandscapeModel(slabHeight: SlabHeight): LandscapeModel {
     // beach (~40 m), then dunes with marram grass (half sand) out to ~95 m
     out.sand = out.water ? 0 : (1 - smooth(14, 24, sd) * 0.6 - smooth(30, 46, sd) * 0.4) * (1 - cl) * (1 - smooth(4, 7, h));
     // the island: shingle / sand where its shore is low and flat (the cove, a few pockets between rocks)
-    if (!out.water && Math.abs(x - ISLAND.x) < 900 && Math.abs(z - ISLAND.z) < 1300)
-      out.sand = Math.max(out.sand, (1 - smooth(WL + 1.2, WL + 3.5, h)) * (1 - smooth(0.12, 0.35, slope)));
+    const onIsland = !out.water && Math.abs(x - ISLAND.x) < 900 && Math.abs(z - ISLAND.z) < 1400;
+    if (onIsland) out.sand = Math.max(out.sand, (1 - smooth(WL + 1.2, WL + 3.5, h)) * (1 - smooth(0.12, 0.35, slope)));
     let wet = 0;
     if (riverQ(x, z, rv, 60)) wet = 1 - smooth(rv.halfW, rv.halfW + 9, rv.d);
     // river banks are earth and grass (reeds at the water), not bare rock, however steep
     out.rock = Math.min(1, smooth(0.75, 1.25, slope) * (1 - 0.9 * wet) + cl * (1 - smooth(4, 30, sd)) * smooth(0.35, 0.7, slope));
+    // the island: bare rock and scree on the upper slopes and crest (maquis below, forestAt)
+    if (onIsland) out.rock = Math.max(out.rock, smooth(105, 165, h) * (0.45 + 0.4 * vnoise(x / 60, z / 60, 46)) + smooth(0.45, 0.8, slope) * 0.5);
     out.wet = out.water ? 0 : wet;
     const onRoad = roadQ(x, z, roadHit, 14) ? 1 - smooth(roadsRef[roadHit.i].halfW + 2, roadsRef[roadHit.i].halfW + 7, roadHit.d) : 0;
     out.forest = out.water || siteAt(x, z, 25) >= 0 ? 0 : forestAt(x, z, h) * (1 - out.sand) * (1 - out.rock * 0.8) * (1 - wet) * (1 - onRoad);
