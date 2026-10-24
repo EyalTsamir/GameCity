@@ -384,7 +384,10 @@ void thCard( out vec3 P, out vec3 N ) {
   // cards seen edge-on dissolve (their leaves would smear into streaks); the others cover for them
   vec3 fN = normalize( cross( U, V ) );
   vec3 toCam = normalize( cameraPosition - P );
-  vThVis *= mix( 1.0, smoothstep( 0.04, 0.22, abs( dot( fN, toCam ) ) ), uThEdgeFade );
+  // (stricter close to the camera, where a grazing card smears its leaves into streaks)
+  float camD = length( cameraPosition - P );
+  float sF = smoothstep( 8.0, 25.0, camD );
+  vThVis *= mix( 1.0, smoothstep( mix( 0.14, 0.04, sF ), mix( 0.4, 0.22, sF ), abs( dot( fN, toCam ) ) ), uThEdgeFade );
   // cards right at the lens dissolve (a free camera inside a crown would otherwise see huge flat leaves)
   vThVis *= smoothstep( 0.7, 1.9, length( cameraPosition - iC.xyz ) - length( U + V ) * 0.35 );
   vThK = iK;
