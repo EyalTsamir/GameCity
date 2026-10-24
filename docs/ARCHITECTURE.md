@@ -27,15 +27,16 @@ src/core/              shared, three-free data + small engine services (OWNED BY
   rng.ts               seeded Rng (+ fork(label)), hash01()
 src/render/sky.ts      lights, sky, sun/moon/stars, clouds, fog, shadow fitting       (module "sky")
 src/render/postfx.ts   post-processing, tone mapping, adaptive quality              (module "postfx")
-src/world/*.ts         static world renderers: terrain, water, roads, buildings, landmarks, harbor, vegetation, props
+src/world/*.ts         static world renderers: terrain, landscape (beyond the slab), water, roads, buildings, landmarks,
+                       harbor, vegetation, props, groundcover (grass/meadows), life (cloth, chimneys, drift), lamps
 src/sim/*.ts           dynamic life: ambient, traffic, pedestrians, rail, boats
 src/ui/*.ts            camera, ui (HTML overlay), audio
 src/debug/             validate.ts (static checks), planView.ts (2D map: ?planview)
 scripts/shot.mjs       headless screenshot + console/invariant report (real GPU)
 ```
 
-Load order (main.ts): sky, terrain, water, ambient, roads, buildings, landmarks, harbor, vegetation, props,
-traffic, pedestrians, rail, boats, postfx, camera, ui, audio. (sky/postfx run before the camera module exists:
+Load order (main.ts): sky, terrain, landscape, water, ambient, roads, buildings, landmarks, harbor, vegetation, props,
+groundcover, life, lamps, traffic, pedestrians, rail, boats, postfx, camera, ui, audio. (sky/postfx run before the camera module exists:
 look services up lazily every frame, e.g. `ctx.services.camera?.getState()`.) A module may use services registered by
 modules **earlier** in the list (always null-check: a module can fail or be excluded with `?only=`).
 
@@ -112,19 +113,23 @@ A module that throws during creation is skipped (logged) — the rest of the cit
 * **Services** `ctx.services.<name>` (typed in context.ts): camera, sky, postfx, traffic, pedestrians,
   rail, audio, ui, and anything else a module wants to expose (`ctx.services.smoke` etc.).
 
-## 6. Art direction — "painted tabletop model"
+## 6. Art direction — "a world, not a model" (since 2026-10; the tabletop look lives on as `?diorama`)
 
-The city must read instantly as a **handcrafted miniature / diorama**, not a generic low-poly city:
-* the city sits on a finite slab with a visible layered-earth cross-section and a wooden plinth;
-* matte, softly lit, gently saturated painted colours (see `PALETTE` in gfx.ts); subtle procedural variation
-  (no photo textures); rounded / bevelled silhouettes where cheap;
-* soft warm sun, long soft shadows, cool sky fill, contact darkening (AO), tilt-shift depth of field;
-* lots of small, legible detail that rewards zooming in (window rhythm, awnings, rooftop clutter, street
-  furniture, signage) — but coherent and uncluttered from afar;
-* night is a showcase: warm windows, street-light pools, headlights/taillights, neon accents, lit ferris wheel,
-  lighthouse beam, blinking aviation lights — bloom-friendly emissives (no hundreds of real lights).
-Use colours from `PALETTE`; keep each district's identity distinct (glassy downtown, pastel old town,
-brick industry, cosy suburbs, green park, sandy beach, steel-and-rust harbour).
+The city must read as a **place one could live in**, from the hero overview down to eye level
+(binding brief + references: `docs/progress/WORLD-PLAN.md`; critique and history: `docs/progress/WORLD.md`):
+* it sits in a landscape that continues to the horizon — farmland patchwork, hedgerows, villages, forested hills,
+  mountain ranges in blue aerial perspective, the river arriving from the W, open sea and an island to the E;
+  no slab, plinth, table or visible end of the world from any camera position;
+* organic density at every scale: grass blades, wildflower meadows, reeds, weeds in pavement joints, leaf-card trees
+  with sky gaps, balcony greenery, weathering (damp, streaks, moss, worn asphalt, puddles) — no clean flat surface;
+* light like the references: golden hour = warm sunlit faces, cool blue shade, long raking shadows, backlit
+  foliage / bunting / meadows; physical sky with real cumulus; haze that separates depth layers;
+* life everywhere, all moved by one wind (`core/wind.ts`): gusts through meadows and trees, flags, bunting, laundry,
+  chimney smoke, birds, insects, leaves; busy café terraces, two-wheelers, vendors, buskers;
+* night stays a showcase: warm windows, street-light pools, terrace string lights, puddle reflections, town glow;
+* keep each district's identity (glassy downtown, pastel old town, brick industry, cosy suburbs, green park,
+  sandy beach, harbour); procedural only (canvas / data textures, no photo assets).
+In `?diorama` the original painted-tabletop presentation applies (slab, plinth, oak table, cyclorama, tilt-shift).
 
 ## 7. Performance budget (target: 60 fps on an integrated Adreno X1-45 at ~1300×930 px)
 
