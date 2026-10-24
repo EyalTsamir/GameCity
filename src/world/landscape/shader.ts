@@ -196,7 +196,7 @@ vec3 landAlbedo() {
       box.x += ixp * wx; box.z = box.x + wx;
       box.y += iyp * wy; box.w = box.y + wy;
       pid = pid * 37 + int(ixp) * 131 + int(iyp) * 977 + 7;
-      ch = lhash(pid, 17);
+      ch = fhmix(pid, 17);
     } else {
       // many parcels are worked as 2–3 strips / paddocks (each its own crop, fenced, no hedge)
       float sub = lhash(pid, 31);
@@ -225,12 +225,12 @@ vec3 landAlbedo() {
     float pB = min(min(pdx0, pdx1), min(pdy0, pdy1));
     longX = step(box.w - box.y, box.z - box.x);
     // rows run along the field's long side (or across, by hash)
-    float flip = step(0.8, lhash(pid, 19));
+    float flip = step(0.8, fhmix(pid, 19));
     float along = mix(longX, 1.0 - longX, flip);
     float tr = mix(q.y, q.x, along);   // coordinate across the rows
     float tl = mix(q.x, q.y, along);   // along the rows
     // headland: the turning strip round the field is drilled parallel to the border
-    float hdW = 7.0 + 3.0 * lhash(pid, 29);
+    float hdW = 7.0 + 3.0 * fhmix(pid, 29);
     float dAcross = along > 0.5 ? min(dy0, dy1) : min(dx0, dx1);
     float dAlong = along > 0.5 ? min(dx0, dx1) : min(dy0, dy1);
     float head = step(dAlong, hdW) * step(dAlong, dAcross);
@@ -243,11 +243,11 @@ vec3 landAlbedo() {
     vec4 nW = texture2D(tLN, q * (1.0 / 95.0) + vec2(float(id.y) * 0.21, 0.4));
     float stri = (nS.g - 0.5) * smoothstep(0.03, 0.25, fp) * (1.0 - smoothstep(3.0, 9.0, fp));
     // tramlines: paired wheel tracks every 18–24 m, kept ≥ ~1 px wide far away
-    float tlP = 18.0 + 6.0 * lhash(pid, 37);
+    float tlP = 18.0 + 6.0 * fhmix(pid, 37);
     float tlW = max(0.05, fp * 0.6 / tlP);
-    float tram = lStripe(tr + lhash(pid, 41) * tlP, tlP, tlW, fpt) * (1.0 - head);
+    float tram = lStripe(tr + fhmix(pid, 41) * tlP, tlP, tlW, fpt) * (1.0 - head);
     vec3 fc;
-    float pv = lhash(pid, 23);   // field tone
+    float pv = fhmix(pid, 23);   // field tone
     if (ck == 0) {
       // ripe wheat: drill rows, tramlines, striation, lodged patches, wind sheen
       fc = cWheat * (0.9 + 0.2 * pv);
@@ -305,9 +305,9 @@ vec3 landAlbedo() {
       fc *= 1.0 - 0.15 * lStripe(tr, 6.0, 0.3, fpt);
     } else if (ck == 9) {
       // market garden: blocks of beds across the rows — cabbages, leeks, lettuces, red chard, bare / mulched soil
-      float bw = 2.4 + 2.6 * lhash(pid, 47);
+      float bw = 2.4 + 2.6 * fhmix(pid, 47);
       float bi = floor(tr / bw);
-      float bh = lhash(pid + int(bi) * 7, 53);
+      float bh = fhmix(pid + int(bi) * 7, 53);
       vec3 vc = bh < 0.24 ? vec3(0.13, 0.25, 0.1) : bh < 0.42 ? vec3(0.19, 0.29, 0.22) : bh < 0.62 ? vec3(0.3, 0.44, 0.13)
         : bh < 0.7 ? vec3(0.17, 0.1, 0.07) : bh < 0.86 ? vec3(0.15, 0.1, 0.06) : vec3(0.42, 0.37, 0.25);
       float rw = lStripe(tl, 0.55, 0.6, fpt);
@@ -324,7 +324,7 @@ vec3 landAlbedo() {
       fc *= 1.0 - 0.35 * tram;
     } else {
       // polytunnels: white plastic hoops in rows (shaded as half cylinders), grass between
-      float tw = 8.5 + 1.5 * lhash(pid, 59);
+      float tw = 8.5 + 1.5 * fhmix(pid, 59);
       float u = fract(tr / tw);
       float inT = step(u, 0.82) * (1.0 - head) * step(4.0, dAcross);
       float ph = (u / 0.82 - 0.5) * 3.14159;
@@ -342,7 +342,7 @@ vec3 landAlbedo() {
     float mW = small ? 1.2 + 1.4 * pv : 2.6 + 2.6 * pv;
     float margin = 1.0 - smoothstep(0.8, mW + 1.5 * nB.r, dB);
     vec3 weeds = meadow * mix(vec3(0.92), vec3(1.06, 0.92, 0.88), smoothstep(0.55, 0.7, nP.a));
-    float fh = lhash(pid, 67);
+    float fh = fhmix(pid, 67);
     vec3 flowerT = fh < 0.35 ? vec3(0.6, 0.2, 0.12) : fh < 0.7 ? vec3(0.78, 0.77, 0.7) : vec3(0.74, 0.62, 0.18);
     weeds = mix(weeds, flowerT, (0.16 + 0.22 * smoothstep(0.5, 0.8, nP.g)) * smoothstep(0.05, 0.6, fp + 0.1));
     fc = mix(fc, weeds, margin * (ck == 3 ? 0.5 : 1.0));
@@ -364,9 +364,15 @@ vec3 landAlbedo() {
       bool xNear = min(dx0, dx1) < min(dy0, dy1);
       float bi = xNear ? (dx0 < dx1 ? ixp : ixp + 1.0) : (dy0 < dy1 ? iyp : iyp + 1.0);
       float bn = xNear ? nxp : nyp;
-      float ph = step(0.5, bi) * step(bi, bn - 0.5) * step(lhash(ppid * 3 + (xNear ? 0 : 1), int(bi) * 7 + 61), 0.5);
+      float ph = step(0.5, bi) * step(bi, bn - 0.5) * step(fhmix(ppid * 3 + (xNear ? 0 : 1), int(bi) * 7 + 61), 0.5);
+      // the farm track through half the smallholdings (fields.ts plotTrack): the middle border
+      int tAxis = nyp > 1.5 ? 1 : 0;
+      float tn = tAxis == 1 ? nyp : nxp;
+      float isT = (tn > 1.5 && fhmix(ppid, 71) < 0.5 && (xNear ? 0 : 1) == tAxis && abs(bi - floor(tn * 0.5)) < 0.5) ? 1.0 : 0.0;
+      ph *= 1.0 - isT;
       float phw = 1.1 + 0.6 * nB.a;
       hedgeM = max(hedgeM, ph * (1.0 - smoothstep(phw - fp * 0.5, phw + fp * 0.5, dB)));
+      trackM = max(trackM, isT * (1.0 - smoothstep(1.3 - fp * 0.5, 1.3 + fp * 0.5, dB)));
     }
     col = mix(col, fc, field);
   }

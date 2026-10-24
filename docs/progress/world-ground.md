@@ -1,8 +1,12 @@
 # world-ground — grass, meadows, flowers, weeds, litter, reeds (world round)
 
 ## Resume here
-* 2026-10-24 16:10 — DONE (forest-floor tune verified, final report updated). Nothing running.
-  If resumed: only follow-ups from the lead's full-city review.
+* 2026-10-24 16:40 — lead: ground flower dots formed a regular lattice at mid distance (riverside POI,
+  shots/world/lead/int2/riverside_speckle.png). Rewritten in ground.ts: rotated jittered cells, varied size,
+  clumped presence (gaps), 1/3 other species, dots fade to the patch tint below ~1.5 px (fwidth outside
+  branches); same for lawn daisies/dandelions. tsc clean.
+* Running: t16 (POIs riverside + park × 11 / 18.2, eye-level bank_meadow 11).
+* Next: judge t16 → update final report → hand back.
 
 ## Brief (from WORLD-PLAN.md + world-briefs.md "### ground")
 Owner of `src/world/terrain/ground.ts` (+ its mask), `src/world/groundcover.ts` + `src/world/groundcover/*`.

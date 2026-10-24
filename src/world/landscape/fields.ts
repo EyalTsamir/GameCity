@@ -21,6 +21,20 @@ export function lhash(a: number, b: number): number {
   return (h >>> 0) / 4294967296;
 }
 
+/** a stronger integer hash (murmur3 finaliser) for structured ids (plot ids are base·37 + ix·131 + iy·977:
+ *  lhash's single round left neighbouring plots with near-equal values, so whole blocks got one crop) —
+ *  GLSL twin: fhmix() */
+export function hmix(a: number, b: number): number {
+  // (all multipliers < 2³¹: the GLSL twin's uint literals stay in the range every compiler handles)
+  let h = Math.imul(a | 0, 0x27d4eb2d) ^ Math.imul(b | 0, 0x165667b1);
+  h ^= h >>> 15;
+  h = Math.imul(h, 0x2c1b3c6d);
+  h ^= h >>> 12;
+  h = Math.imul(h, 0x297a2d39);
+  h ^= h >>> 15;
+  return (h >>> 0) / 4294967296;
+}
+
 export function toField(x: number, z: number, out: { x: number; y: number }): { x: number; y: number } {
   out.x = CR * x + SR * z;
   out.y = -SR * x + CR * z;
@@ -172,7 +186,7 @@ export function fieldAt(qx: number, qy: number, out: Field): Field {
     out.ix = ix;
     out.iy = iy;
     pid = pid * 37 + ix * 131 + iy * 977 + 7;
-    out.crop = lhash(pid, 17);
+    out.crop = hmix(pid, 17);
     out.pid = pid;
     return out;
   }
@@ -226,9 +240,20 @@ export function fieldsOfParcel(cx: number, cy: number): Field[] {
   return out;
 }
 
-/** hedge on the interior plot border (axis 0 = between columns at index i, 1 = between rows) */
-export function plotHedge(ppid: number, axis: number, i: number): boolean {
-  return lhash(ppid * 3 + axis, i * 7 + 61) < 0.5;
+/** hedge on the interior plot border (axis 0 = between columns at index i, 1 = between rows) — not on the
+ *  border that carries the farm track (plotTrack) */
+export function plotHedge(ppid: number, axis: number, i: number, nx: number, ny: number): boolean {
+  const t = plotTrack(ppid, nx, ny);
+  if (t >= 0 && Math.floor(t / 1000) === axis && t % 1000 === i) return false;
+  return hmix(ppid * 3 + axis, i * 7 + 61) < 0.5;
+}
+/** the farm track through half the smallholdings: the middle row border (or column border when there is
+ *  one row), encoded axis·1000 + index, −1 = none — GLSL twin in the shader's plot block */
+export function plotTrack(ppid: number, nx: number, ny: number): number {
+  const axis = ny >= 2 ? 1 : 0;
+  const n = axis ? ny : nx;
+  if (n < 2 || hmix(ppid, 71) >= 0.5) return -1;
+  return axis * 1000 + Math.floor(n * 0.5);
 }
 
 /** crop kinds (the shader switches on the same codes) */
@@ -279,6 +304,16 @@ float fParcel(vec2 q, out ivec2 id, out vec4 box) {
   box = vec4(c0 + off, b0, c1 + off, b1);
   return lhash(k * 13 + j, 17);
 }
+uint fhmixU(int a, int b) {
+  uint h = (uint(a) * 668265261u) ^ (uint(b) * 374761393u);
+  h ^= h >> 15u;
+  h *= 739982445u;
+  h ^= h >> 12u;
+  h *= 695872825u;
+  h ^= h >> 15u;
+  return h;
+}
+float fhmix(int a, int b) { return float(fhmixU(a, b)) * (1.0 / 4294967296.0); }
 // smallholding belt round the town (twin of isSmall)
 bool fSmall(vec4 box) {
   vec2 c = 0.5 * (box.xy + box.zw);

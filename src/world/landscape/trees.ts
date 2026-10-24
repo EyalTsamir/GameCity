@@ -292,12 +292,12 @@ export function placeTrees(model: LandscapeModel, density: number): { list: Tree
             px1 = colB(k, j + 1) + off;
           const { nx, ny } = plots[0];
           for (let i = 1; i < nx; i++)
-            if (plotHedge(ppid, 0, i)) {
+            if (plotHedge(ppid, 0, i, nx, ny)) {
               const x = px0 + ((px1 - px0) * i) / nx;
               hedgeLine(x, y0, x, y1, ppid * 53 + i * 5 + 11);
             }
           for (let i = 1; i < ny; i++)
-            if (plotHedge(ppid, 1, i)) {
+            if (plotHedge(ppid, 1, i, nx, ny)) {
               const y = y0 + ((y1 - y0) * i) / ny;
               hedgeLine(px0, y, px1, y, ppid * 59 + i * 5 + 13);
             }

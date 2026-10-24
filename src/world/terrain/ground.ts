@@ -730,31 +730,46 @@ vec3 groundColor() {
   float gust = thGust( p.xz );
   float press = gust * smoothstep( 0.3, 0.75, len ) * clamp( length( uWind ) * 1.4, 0.0, 1.0 );
   grass = mix( grass, grass * vec3( 1.13, 1.15, 1.06 ) + vec3( 0.012 ), press * 0.55 );
-  // wildflowers: dots where a dot is a few pixels, the patch's average tint where it is sub-pixel
+  // wildflowers on the ground (beyond the blade rings): rotated, jittered cells (no lattice), presence
+  // clumped into patches with gaps, varied size, a third of the dots another species; once a dot is
+  // under ~1.5 px it fades into the patch's soft colour tint (derivatives taken outside any branch)
+  mat2 fRot = mat2( 0.8, -0.6, 0.6, 0.8 );
+  vec2 fq1 = fRot * p.xz * 2.6;
+  vec2 fq2 = fRot * p.xz * 4.0 + 17.3;
+  float pxc1 = fwidth( fq1.x ) + fwidth( fq1.y );
+  float pxc2 = fwidth( fq2.x ) + fwidth( fq2.y );
+  float fClump = smoothstep( 0.35, 0.7, nB.g * 0.55 + nC.b * 0.45 );
   float meadowF = fw.r * uGcOn;
+  int spPatch = int( clamp( fw.g * 6.0, 0.0, 5.0 ) );
   if ( meadowF > 0.004 ) {
-    vec2 fc = p.xz * 2.6;
-    vec2 fi = floor( fc );
+    vec2 fi = floor( fq1 );
     vec2 hh = th_hash22( fi );
-    float pxc = fwidth( fc.x ) + fwidth( fc.y );
-    float rr = length( fract( fc ) - 0.5 - ( hh - 0.5 ) * 0.5 );
-    float dotM = step( hh.x, meadowF * 0.6 ) * ( 1.0 - smoothstep( 0.13, 0.13 + pxc * 0.7, rr ) );
-    float farF = smoothstep( 0.3, 1.1, pxc );
-    int sp = int( clamp( fw.g * 6.0, 0.0, 5.0 ) );
-    vec3 fcol = gFlowerCol[ sp ];
-    grass = mix( grass, fcol, mix( dotM * 0.85, meadowF * 0.12, farF ) );
+    vec2 h2 = th_hash22( fi + 31.7 );
+    float size = 0.08 + 0.1 * h2.x;
+    vec2 off = ( vec2( hh.y, h2.y ) - 0.5 ) * ( 0.9 - 2.0 * size );
+    float rr = length( fract( fq1 ) - 0.5 - off );
+    float present = step( hh.x, meadowF * 0.8 * fClump );
+    float dotM = present * ( 1.0 - smoothstep( size - pxc1 * 0.35, size + pxc1 * 0.35, rr ) );
+    float dotsVis = smoothstep( 0.6, 1.6, size / max( pxc1, 1e-4 ) );
+    int sp = h2.x > 0.66 ? int( h2.y * 5.99 ) : spPatch;
+    vec3 tintC = gFlowerCol[ spPatch ];
+    grass = mix( grass, tintC, meadowF * fClump * 0.13 * ( 1.0 - dotsVis ) );
+    grass = mix( grass, gFlowerCol[ sp ], dotM * 0.85 * dotsVis );
   }
   float lawnF = fw.b * uGcOn;
   if ( lawnF > 0.004 ) {
-    vec2 fc = p.xz * 4.0;
-    vec2 fi = floor( fc );
-    vec2 hh = th_hash22( fi + 17.0 );
-    float pxc = fwidth( fc.x ) + fwidth( fc.y );
-    float rr = length( fract( fc ) - 0.5 - ( hh - 0.5 ) * 0.5 );
-    float dotM = step( hh.x, lawnF * 0.16 ) * ( 1.0 - smoothstep( 0.1, 0.1 + pxc * 0.7, rr ) );
-    float farF = smoothstep( 0.3, 1.1, pxc );
-    vec3 fcol = hh.y < 0.42 ? gFlowerCol[ 6 ] : gFlowerCol[ 7 ];
-    grass = mix( grass, fcol, mix( dotM, lawnF * 0.04, farF ) );
+    vec2 fi = floor( fq2 );
+    vec2 hh = th_hash22( fi );
+    vec2 h2 = th_hash22( fi + 7.1 );
+    float size = 0.07 + 0.08 * h2.x;
+    vec2 off = ( vec2( hh.y, h2.y ) - 0.5 ) * ( 0.9 - 2.0 * size );
+    float rr = length( fract( fq2 ) - 0.5 - off );
+    float present = step( hh.x, lawnF * 0.3 * ( 0.35 + 0.65 * fClump ) );
+    float dotM = present * ( 1.0 - smoothstep( size - pxc2 * 0.35, size + pxc2 * 0.35, rr ) );
+    float dotsVis = smoothstep( 0.6, 1.6, size / max( pxc2, 1e-4 ) );
+    vec3 fcol = h2.y < 0.42 ? gFlowerCol[ 6 ] : gFlowerCol[ 7 ];
+    grass = mix( grass, mix( gFlowerCol[ 7 ], gFlowerCol[ 6 ], 0.4 ), lawnF * 0.035 * ( 1.0 - dotsVis ) );
+    grass = mix( grass, fcol, dotM * dotsVis );
   }
   // fallen leaves under the trees
   float lit = cv.a * uGcOn;
