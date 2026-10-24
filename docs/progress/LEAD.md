@@ -3,6 +3,11 @@
 Read this first when resuming after an interruption (usage limits have cut runs before).
 Per-module logs live next to this file: `docs/progress/<module>.md`.
 
+## Lead state (world round, 2026-10-19 → 10-24) — see docs/progress/WORLD.md (its "Resume here" is the live resume point)
+* "A world, not a model": the tabletop frame was replaced by a landscape to the horizon (`?diorama` keeps the
+  model); 7 workstreams (world, air, ground, foliage, streetlife, life, wear) each with a final report in
+  docs/progress/world-<name>.md; lead integration QA in WORLD.md (int2 captures shots/world/lead/int2).
+
 ## Lead state (graphics overhaul) — keep current; the watchdog resumes from here
 * GRAPHICS OVERHAUL DONE (2026-10-19 07:05 UTC): all 10 audit items + realistic figures implemented, verified and
   pushed; integration QA complete; report in docs/progress/GFX-REPORT.md. Open for the user: real-GPU perf.mjs run
