@@ -40,6 +40,8 @@ Branch: work continues from `claude/tinyhaven-graphics-audit-l089m8` (fast-forwa
 * 09:45 — foliage M1(+M2) judged (ba_m1.png, m1f_sheet.png): leaf-card foliage everywhere, 2+2 draw calls,
   setLeafDistance for the ladder, ?noleafcards. Approved as milestone; notes: street trees = pole + flat hat
   (need taper + scaffold fork + crown depth), conifers read as flat sheets, forest edge lacks understory.
+* 10:40 — wear DONE (it12/sheet.png: apartment balconies = railings/glass/painted concrete, varied streaks;
+  hotel sea facade clean). Foliage→ground relay: forest floor shading under dense trees (litter, moss).
 * 2026-10-24 03:33 UTC — 4th stop = WEEKLY limit: agents resumed 2026-10-20 07:31 hit it at once (no agent
   edits since 02:08 on 10-20; logs' Resume here are from ~02:05). Limit reset 10-24 03:00; container rebooted
   ~03:30. Restored: servers 5173/5174, autocheckpoint 20 min, locks cleared, tree clean at 582500f (pushed);
