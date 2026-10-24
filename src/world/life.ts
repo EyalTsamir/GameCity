@@ -92,7 +92,7 @@ export default function create(ctx: CityContext): CityModule {
       const q = ctx.quality.level;
       drift = new Drift(ctx, trees, {
         leaves: q === 'high' ? 320 : q === 'medium' ? 160 : 0,
-        motes: q === 'high' ? 420 : q === 'medium' ? 220 : 0,
+        motes: q === 'high' ? 1400 : q === 'medium' ? 700 : 0,
         moths: q === 'low' ? 0 : 60,
         butterflies: q === 'high' ? 14 : q === 'medium' ? 8 : 0,
         bees: q === 'high' ? 22 : q === 'medium' ? 10 : 0,

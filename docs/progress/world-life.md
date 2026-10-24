@@ -1,12 +1,10 @@
 # world-life — wind consumers, smoke, birds, small motion (world round)
 
 ## Resume here
-* 2026-10-24 16:30 — DONE pending the last check. Soak 4 min @4× (shots/world/life/soak/soak.json): heap
-  flat 330–336 MB, console clean, failedModules [], no life/ambient invariant hits (only 2 pedestrian
-  overlap hits — streetlife's). Lead's taste note applied: market lines thinned (4 radial lines per mast,
-  wide spread; market court spans festoon-only at 30 %) → 8 mast lines.
-* Running: shots/world/life/m4 (full-city market 11/21.5 + overview; motes_18h6.png subset). When done:
-  judge, then send the final report (below) to the lead via SubagentHandback.
+* 2026-10-24 18:55 — DONE. Final report below. Last checks: market thinned per the lead's note
+  (shots/world/life/m4/s.png), golden-hour motes + night moths visible after an HDR-scale gain fix
+  (shots/world/life/m5/s.png — the scene is HDR, so glints needed ~40× the first gain), soak 4 min @4× clean
+  (shots/world/life/soak/soak.json). No jobs running.
 
 ## Brief (from WORLD-PLAN.md §6 + briefs)
 Wind consumers: flags on poles flap, bunting / festoon strings across old-town streets and the market,
@@ -84,7 +82,7 @@ golden hour), drift ≤ 600 tiny quads (≈ 0.03 ms). Total ≈ 0.3–0.4 ms; +4
    café string lights (MST over parasol tops), lifeguard + hotel flags. Landmark flags on the gust field
    with calm droop (FLAG mode in landmarks/shaders.ts). Shots: shots/world/life/m2a/market_*.png,
    otstreet_*.png, m3b/otsun_18h6.png (backlit), m3b/otsun_21h5.png (festoons at night).
-2. [~] M2 smoke (`sim/ambient/smoke.ts`): `windAt` gusts + power-law shear, HG forward scatter rim (thin
+2. [x] M2 smoke (`sim/ambient/smoke.ts`): `windAt` gusts + power-law shear, HG forward scatter rim (thin
    edges glow), erosion, dither, soft particles from `postfx.softDepth()` (`?nosoftsmoke`), emitter distance
    LOD, `opacity`, prewarm 14 s at start + every time jump, budget 2000. `life/chimneys.ts`: 83 chimneys
    (heat / cook / cold profiles by hour + per-day dice + slow swells), hotel boilers, works vents, 7
@@ -92,13 +90,13 @@ golden hour), drift ≤ 600 tiny quads (≈ 0.03 ms). Total ≈ 0.3–0.4 ms; +4
    were too faint/discrete → rate 3.4–4/s, opacity 0.9 (re-judging in m3c).
 3. [x] M3 laundry: courtyard lines (wear's court spans), balcony lines (wear's `laundry`, static hidden),
    rotary dryers (props.washing, static hidden). Shot: shots/world/life/band/s.png (courtyard).
-4. [~] M4 birds (`sim/ambient/birds.ts`): pigeons hop aside (≤ 1.35 m) / whole group lifts (crowd within
+4. [x] M4 birds (`sim/ambient/birds.ts`): pigeons hop aside (≤ 1.35 m) / whole group lifts (crowd within
    3.2 m or repeated startles) via `pedestrians.near`; swift screaming parties over old town + market at
    dawn/dusk (leader trail ring buffer); gulls perch on waterfront ridges/parapets facing the wind.
-5. [~] M5 drift (`life/drift.ts`): leaves in gusts near the camera (+ 8 s prewarm on view/time jumps),
+5. [x] M5 drift (`life/drift.ts`): leaves in gusts near the camera (+ 8 s prewarm on view/time jumps),
    butterflies (2 wing instances) + bees at groundcover flower patches, dust motes (HG g 0.75 vs. the low
    sun), moths at the 12 nearest lamps.
-6. [ ] Final: full-city set, soak, perf variants (draw calls / tris), final report.
+6. [x] Final: full-city set (full1), soak, draw-call A/B (perf), final report.
 
 ## Requests to other areas
 * wear — DONE: `ctx.services.buildings` (chimneys, balconies, facades, spans, perches, laundry, vents,
@@ -131,26 +129,25 @@ golden hour), drift ≤ 600 tiny quads (≈ 0.03 ms). Total ≈ 0.3–0.4 ms; +4
 
 ## Final report
 **What changed.** The town now breathes with the one wind (`core/wind.ts`). *Cloth*: bunting and prayer
-flags hang across the old-town streets (lines generated from facing facades, zig-zags, ≥ 4.27 m clearance).
-The market gets a star of 14 festoon and bunting lines radiating from two masts between the stall rows.
-Café terraces get string lights between their parasols. Laundry hangs in courtyards, on balconies and on
-garden dryers, and there are lifeguard and hotel flags. Lines swing about their chord in cross-wind, the
-pieces stream out and flutter towards their free edge, and backlit cloth glows in its own colour. Landmark
-flags follow the gust field and droop in calm air. *Smoke*: 83 house chimneys (heat/cook/cold schedules),
-hotel boilers, works vents, bakery/kitchen flues and evening BBQs feed the shared smoke pool, which now has
-gusts with height shear, an HG backlit rim, fbm erosion into wisps, soft depth fade, distance LOD and a 14 s
-prewarm on start and time jumps. *Birds*: pigeons scatter from walkers, swift parties race over the roofs at
-dawn and dusk, gulls perch on waterfront ridges. *Drift*: leaves torn off in gust flurries, butterflies and
-bees at flower patches, golden-hour motes, moths at lamps. Kite lines are now 2 mm and fade near the camera.
-**Files.** `src/world/life.ts`, `life/{glsl,cloth,decor,extras,poles,chimneys,drift}.ts`;
-`sim/ambient/{smoke,birds,kites}.ts` (+ doc in `ambient.ts`); the FLAG mode in `landmarks/shaders.ts` (grant).
+flags hang across the old-town streets (lines from facing facades, zig-zags, ≥ 4.6 m clearance). A market
+star of 8 lines radiates from two masts, café terraces get string lights between their parasols, and laundry
+hangs in courtyards, on balconies and on garden dryers. Lifeguard and hotel flags are new. Lines swing with the
+cross-wind, pieces stream and flutter, and backlit cloth glows in its own colour. Landmark flags follow the gust
+field and droop in a calm. *Smoke*: 83 house chimneys (heat/cook/cold schedules), boilers, works vents,
+bakery/kitchen flues and evening BBQs feed the shared pool. That pool now carries gusts and height shear, an HG
+backlit rim, fbm erosion into wisps, soft depth fade, distance LOD and a 14 s prewarm. *Birds*: pigeons scatter
+from walkers, swifts race over the roofs at dusk, gulls perch on waterfront ridges. *Drift*: leaves blow off in
+gust flurries, butterflies and bees visit flower patches, motes glint in golden light, moths circle the lamps.
+Kite lines are now 2 mm.
+**Files.** `src/world/life.ts` (fault-isolated parts), `life/{glsl,cloth,decor,extras,poles,chimneys,drift}.ts`,
+`sim/ambient/{smoke,birds,kites}.ts`, the FLAG mode in `landmarks/shaders.ts` (grant).
 **Toggles.** `?nocloth ?nobunting ?nolaundry ?noflags ?nochimneys ?nodrift ?nosoftsmoke ?lifedebug`,
-`skip=life`. Harness handle: `services.lifeDebug`.
-**Shots.** Before (diorama): shots/world/critique/a/ot_street_11.png and oldtown_18h2.png. After:
-shots/world/life/full1/s1.png and s2.png, perf/s.png (life vs no life), m3d/s1.png.
-**Cost.** +6–7 draw calls (cloth+shadow, wires, bulbs, poles+shadow, leaves/insects, sparkles), ~+77k
-tris over all passes (cloth 43k = 1002 pieces × 25 verts; wires 13k; bulbs 6.5k). GPU estimate on high:
-≈ 0.3–0.45 ms, mostly smoke overdraw near plumes plus the cloth vertex/shadow work. Medium halves the drift;
-low has no cloth shadows and no drift.
-**Open.** Awnings and parasols are still static (wear's geometry; request logged). Petals fall from every
-tree (no blossom flag yet). The overview shows little of the cloth, by nature.
+`skip=life`; `services.lifeDebug`.
+**Shots.** Before: shots/world/critique/a/ot_street_11.png and oldtown_18h2.png. After: shots/world/life/full1/s1.png
+and s2.png (otsun_18h2 = best frame), m4/s.png, m5/s.png, perf/s.png.
+**Cost.** +6–7 draw calls (cloth+shadow, wires, bulbs, poles+shadow, leaves/insects, sparkles). About +70k
+tris over all passes (cloth 37k = 840 pieces × 25 verts, wires 13k, bulbs 6k). GPU on high ≈ 0.3–0.45 ms,
+mostly smoke overdraw plus the cloth vertex and shadow work. Medium halves the drift; low has no drift and no
+cloth shadows. Soak 4 min @4×: heap flat (330–336 MB), console clean, no life/ambient invariant hits.
+**Open.** Awnings and parasols are still static (wear's geometry). Petals fall from every tree (no blossom flag).
+The overview shows the life mostly through its smoke.
