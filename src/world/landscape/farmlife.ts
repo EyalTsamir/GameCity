@@ -13,45 +13,82 @@ import type { Fleet, FleetTemplate } from './fleet';
 
 /** unit cow (faces +z, length ~2.2 m): body, head, four legs; aPart 0 body, 1 head, 2 legs */
 function animalGeometry(): THREE.BufferGeometry {
-  const parts: [THREE.BufferGeometry, number][] = [];
-  // boxes without bottom faces (never seen): body + head 10 tris each, a front and a rear leg pair 4 each
-  const box = (w: number, h: number, l: number, x: number, y: number, z: number, part: number, sides = true) => {
-    const g0 = new THREE.BoxGeometry(w, h, l).toNonIndexed();
-    // drop the −y face (vertices 18..23 of BoxGeometry's non-indexed order: +x, −x, +y, −y, +z, −z)
-    const src = g0.getAttribute('position'),
-      nsrc = g0.getAttribute('normal');
-    const keep: number[] = [];
-    for (let f = 0; f < 6; f++) {
-      if (f === 3) continue;
-      if (!sides && (f === 0 || f === 1 || f === 2)) continue; // legs: front / back faces only
-      for (let v = 0; v < 6; v++) keep.push(f * 6 + v);
-    }
-    const pos = new Float32Array(keep.length * 3),
-      nor = new Float32Array(keep.length * 3);
-    keep.forEach((v, i) => {
-      pos.set([src.getX(v) + x, src.getY(v) + y, src.getZ(v) + z], i * 3);
-      nor.set([nsrc.getX(v), nsrc.getY(v), nsrc.getZ(v)], i * 3);
-    });
-    const g = new THREE.BufferGeometry();
-    g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-    g.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
-    parts.push([g, part]);
-  };
-  box(0.72, 0.68, 1.55, 0, 1.0, 0, 0);
-  box(0.36, 0.38, 0.55, 0, 1.12, 1.02, 1);
-  // leg pairs as thin slabs (sides only)
-  box(0.6, 0.7, 0.15, 0, 0.35, 0.6, 2, false);
-  box(0.6, 0.7, 0.15, 0, 0.35, -0.6, 2, false);
+  // ~54 tris: a lumpy rounded body (icosahedron with smooth normals = soft, woolly / hide shading), a
+  // narrow tapered head, four thin legs (open triangular prisms). Unit = a cow; sheep scale in the shader.
   const pos: number[] = [],
     nrm: number[] = [],
     part: number[] = [];
-  for (const [g, p] of parts) {
+  // body
+  {
+    const g = new THREE.IcosahedronGeometry(1, 0).toNonIndexed();
+    const a = g.getAttribute('position');
+    for (let i = 0; i < a.count; i++) {
+      const x = a.getX(i),
+        y = a.getY(i),
+        z = a.getZ(i);
+      // lumps (a function of the vertex direction: shared corners stay welded)
+      const k = 1 + 0.1 * Math.sin(x * 5.1 + z * 3.7) * Math.cos(y * 4.3 - z * 2.1);
+      pos.push(x * 0.4 * k, 1.0 + y * 0.36 * k, z * 0.8 * k);
+      const l = Math.hypot(x / 0.4, y / 0.36, z / 0.8) || 1;
+      nrm.push(x / 0.4 / l, y / 0.36 / l, z / 0.8 / l);
+      part.push(0);
+    }
+  }
+  // head: a box tapering to the muzzle (no bottom face), at the front of the body
+  {
+    const g = new THREE.BoxGeometry(0.26, 0.32, 0.5).toNonIndexed();
     const a = g.getAttribute('position'),
       n = g.getAttribute('normal');
-    for (let i = 0; i < a.count; i++) {
-      pos.push(a.getX(i), a.getY(i), a.getZ(i));
-      nrm.push(n.getX(i), n.getY(i), n.getZ(i));
-      part.push(p);
+    for (let f = 0; f < 6; f++) {
+      if (f === 3) continue; // −y
+      for (let v = 0; v < 6; v++) {
+        const i = f * 6 + v;
+        const front = a.getZ(i) > 0;
+        const t = front ? 0.62 : 1;
+        pos.push(a.getX(i) * t, 1.12 + a.getY(i) * (front ? 0.75 : 1) - (front ? 0.05 : 0), 0.95 + a.getZ(i));
+        nrm.push(n.getX(i), n.getY(i), n.getZ(i));
+        part.push(1);
+      }
+    }
+  }
+  // legs: thin open triangular prisms
+  for (const [lx, lz] of [
+    [-0.22, 0.55],
+    [0.22, 0.55],
+    [-0.22, -0.55],
+    [0.22, -0.55],
+  ]) {
+    const r = 0.065;
+    for (let s = 0; s < 3; s++) {
+      const a0 = (s / 3) * Math.PI * 2,
+        a1 = ((s + 1) / 3) * Math.PI * 2;
+      const x0 = lx + Math.cos(a0) * r,
+        z0 = lz + Math.sin(a0) * r,
+        x1 = lx + Math.cos(a1) * r,
+        z1 = lz + Math.sin(a1) * r;
+      const am = (a0 + a1) / 2;
+      const nx = Math.cos(am),
+        nz = Math.sin(am);
+      // two triangles, wound outward (front faces seen from outside)
+      const quad = [
+        [x0, 0, z0],
+        [x1, 0, z1],
+        [x1, 0.78, z1],
+        [x0, 0, z0],
+        [x1, 0.78, z1],
+        [x0, 0.78, z0],
+      ];
+      // outward winding check: (p1 - p0) × (p2 - p0) · n > 0, else flip
+      const e1 = [x1 - x0, 0, z1 - z0],
+        e2 = [x1 - x0, 0.78, z1 - z0];
+      const cr = [e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2], e1[0] * e2[1] - e1[1] * e2[0]];
+      const flip = cr[0] * nx + cr[2] * nz < 0;
+      const order = flip ? [0, 2, 1, 3, 5, 4] : [0, 1, 2, 3, 4, 5];
+      for (const o of order) {
+        pos.push(quad[o][0], quad[o][1], quad[o][2]);
+        nrm.push(nx, 0, nz);
+        part.push(2);
+      }
     }
   }
   const g = new THREE.BufferGeometry();
@@ -196,7 +233,7 @@ export function createFarmLife(model: LandscapeModel, uniforms: Record<string, T
     iB = new Float32Array(nA * 4);
   for (let i = 0; i < nA; i++) {
     iA.set([inst[i * 7], inst[i * 7 + 1], inst[i * 7 + 2], inst[i * 7 + 3]], i * 4);
-    iB.set([inst[i * 7 + 4], inst[i * 7 + 5], inst[i * 7 + 6], 0], i * 4);
+    iB.set([inst[i * 7 + 4], inst[i * 7 + 5], inst[i * 7 + 6], 0.88 + 0.24 * ((inst[i * 7 + 6] * 7.13) % 1)], i * 4);
   }
   const ig = new THREE.InstancedBufferGeometry();
   ig.setAttribute('position', geo.getAttribute('position'));
@@ -224,19 +261,27 @@ varying vec3 vAc;`,
         `vec3 transformed = position;
 {
   bool sheep = iB.x > 0.5;
-  vec3 sc = sheep ? vec3(0.62, 0.62, 0.62) : vec3(1.0);
-  if (sheep && aPart < 0.5) sc = vec3(0.85, 0.72, 0.62);   // a woolly barrel
+  float size = iB.w > 0.0 ? iB.w : 1.0;
+  vec3 sc = (sheep ? vec3(0.6) : vec3(1.0)) * size;
+  // sheep: a fat woolly barrel on short legs; cattle: a longer, deeper body
+  if (aPart < 0.5) sc *= sheep ? vec3(1.45, 1.25, 0.95) : vec3(1.0, 1.05, 1.0);
   vec3 p = position * sc;
+  if (sheep && aPart < 0.5) p.y -= 0.12 * size;   // the wool hangs low over the legs
   // grazing: the head goes down to the grass most of the time, comes up now and then
   float t = uTime * 0.35 + iB.z * 37.0;
   float down = smoothstep(-0.3, 0.3, sin(t) + 0.4 * sin(t * 2.7 + 1.0));
-  if (aPart > 0.5 && aPart < 1.5) { p.y -= 0.55 * down * sc.y; p.z += 0.12 * down; }
+  if (aPart > 0.5 && aPart < 1.5) { p.y -= (sheep ? 0.62 : 0.68) * down * sc.y; p.z += 0.14 * down * sc.z; }
   float c = cos(iA.w), s = sin(iA.w);
-  p = vec3(c * p.x + s * p.z, p.y, -s * p.x + c * p.z);
-  transformed = p + iA.xyz;
-  vec3 cow = iB.y < 0.3 ? vec3(0.13, 0.08, 0.05) : iB.y < 0.55 ? vec3(0.02, 0.02, 0.02) : iB.y < 0.8 ? vec3(0.55, 0.52, 0.47) : vec3(0.22, 0.09, 0.04);
-  vec3 wool = vec3(0.6, 0.57, 0.5) * (0.85 + 0.2 * iB.y);
-  vAc = sheep ? (aPart < 0.5 ? wool : vec3(0.05, 0.045, 0.04)) : (aPart > 1.5 ? cow * 0.7 : cow);
+  vec3 pr = vec3(c * p.x + s * p.z, p.y, -s * p.x + c * p.z);
+  transformed = pr + iA.xyz;
+  // coats: brown / black / white-black piebald / red; patches from the body position
+  float pat = step(0.15, sin(position.x * 9.0 + position.z * 4.0 + iB.z * 20.0) + sin(position.z * 7.0 - position.y * 6.0 + iB.z * 11.0));
+  vec3 cow = iB.y < 0.28 ? vec3(0.13, 0.075, 0.045) : iB.y < 0.5 ? vec3(0.02, 0.02, 0.02)
+    : iB.y < 0.75 ? mix(vec3(0.02), vec3(0.62, 0.6, 0.55), pat) : vec3(0.24, 0.1, 0.045);
+  // wool: off-white with a dirty underside and the lumps catching the light differently
+  vec3 wool = vec3(0.6, 0.57, 0.49) * (0.86 + 0.18 * fract(iB.z * 13.7)) * mix(0.55, 1.0, smoothstep(-0.7, 0.3, normal.y));
+  vec3 dark = vec3(0.04, 0.035, 0.03) * (0.8 + 0.4 * iB.y);
+  vAc = sheep ? (aPart < 0.5 ? wool : dark) : (aPart > 1.5 ? cow * 0.6 : aPart > 0.5 ? cow * 0.8 : cow * mix(0.7, 1.0, smoothstep(-0.7, 0.3, normal.y)));
 }`,
       )
       .replace('#include <beginnormal_vertex>', '#include <beginnormal_vertex>\n{ float c = cos(iA.w), s = sin(iA.w); objectNormal = vec3(c * objectNormal.x + s * objectNormal.z, objectNormal.y, -s * objectNormal.x + c * objectNormal.z); }');
@@ -244,7 +289,7 @@ varying vec3 vAc;`,
       .replace('#include <common>', '#include <common>\nvarying vec3 vAc;')
       .replace('vec4 diffuseColor = vec4( diffuse, opacity );', 'vec4 diffuseColor = vec4( vAc, opacity );');
   };
-  mat.customProgramCacheKey = () => 'th-landherd-v1';
+  mat.customProgramCacheKey = () => 'th-landherd-v2';
   const herd = new THREE.Mesh(ig, mat);
   herd.name = 'land-herds';
   herd.frustumCulled = false;
@@ -258,7 +303,7 @@ varying vec3 vAc;`,
       .replace('#include <common>', '#include <common>\nattribute vec4 iA;\nattribute vec4 iB;')
       .replace(
         '#include <begin_vertex>',
-        `vec3 transformed = position * (iB.x > 0.5 ? 0.62 : 1.0);
+        `vec3 transformed = position * (iB.x > 0.5 ? 0.6 : 1.0) * (iB.w > 0.0 ? iB.w : 1.0);
 { float c = cos(iA.w), s = sin(iA.w); transformed = vec3(c * transformed.x + s * transformed.z, transformed.y, -s * transformed.x + c * transformed.z) + iA.xyz; }`,
       );
   };

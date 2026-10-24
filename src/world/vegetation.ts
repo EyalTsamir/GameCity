@@ -588,6 +588,31 @@ export default function create(ctx: CityContext): CityModule {
     }
   }
 
+  // forest mantle (leaf-card mode): the rim the city looks at steps down in layers — young birches / oaks in
+  // front of the mature edge trees (shrubs follow below), so the wood does not start with a wall of trunks
+  let mantleCount = 0;
+  if (cardsOn) {
+    const rng = ctx.rng('veg-forest-mantle');
+    const edgeNow = forestEdge.slice();
+    for (const t of edgeNow) {
+      if (!rng.chance(0.5)) continue;
+      const x = t.x + rng.range(-2.5, 2.5),
+        z = t.z + t.r * rng.range(0.85, 1.4) + rng.range(0.5, 1.5);
+      const h0 = H(x, z);
+      if (h0 < 0.35) continue;
+      const g = Math.hypot(H(x + 0.7, z) - H(x - 0.7, z), H(x, z + 0.7) - H(x, z - 0.7)) / 1.4;
+      if (g > 0.75) continue;
+      const sp: Species = rng.chance(0.45) ? 'birch' : 'round';
+      const sz = { h: rng.range(3.4, 5.6), r: rng.range(1.15, 1.7) };
+      if (occAny(occ, x, z, sz.r + 0.4, OCC.ROAD | OCC.SIDEWALK | OCC.PAVED | OCC.RAIL | OCC.BUILDING | OCC.SOLID | OCC.WATER | OCC.PATH)) continue;
+      if (rocks.any(x, z, 6, (id, d) => d < rocks.r[id] + 1.0)) continue;
+      if (trees.any(x, z, sz.r + 4.5, (id, d) => d < Math.max(1.4, (sz.r + trees.r[id]) * 0.55))) continue;
+      const p = plant({ sp, x, z, y: h0 - 0.08, h: sz.h, r: sz.r, surround: 'none', syaw: 0, tag: 'forest', detail: 1, tone: 0.62 + rng.range(0, 0.25) });
+      forestEdge.push(p);
+      mantleCount++;
+    }
+  }
+
   // forest band beyond the slab (world mode): the hill forest continues ~45 m into the landscape so the
   // camera never sees where our trees stop; world's landscape trees start further out (z < −225).
   let bandCount = 0;
@@ -978,13 +1003,14 @@ export default function create(ctx: CityContext): CityModule {
     }
   }
 
-  // forest rim undergrowth: low shrubs between the edge trees so the forest sits in its floor
+  // forest rim undergrowth: low shrubs between the edge trees so the forest sits in its floor (leaf-card
+  // mode: a denser mantle on the side facing the city)
   {
     const rng = ctx.rng('veg-forest-under');
     for (const t of forestEdge) {
-      const n = rng.chance(0.6) ? 1 : 0;
+      const n = cardsOn ? 1 + (rng.chance(0.6) ? 1 : 0) + (rng.chance(0.3) ? 1 : 0) : rng.chance(0.6) ? 1 : 0;
       for (let i = 0; i < n; i++) {
-        const a = rng.range(0, 6.28),
+        const a = cardsOn ? Math.PI / 2 + rng.range(-1.3, 1.3) : rng.range(0, 6.28),
           d = t.r * rng.range(0.85, 1.35);
         const rr = rng.range(0.5, 0.95);
         addBush(t.x + Math.cos(a) * d, t.z + Math.sin(a) * d, rr, rr * rng.range(0.85, 1.15), rng.int(0, 1e9), undefined);
@@ -1432,6 +1458,7 @@ export default function create(ctx: CityContext): CityModule {
         trees: planted.length,
         forest: forestCount,
         forestBand: bandCount,
+        forestMantle: mantleCount,
         street: planted.filter((t) => t.tag === 'street').length,
         bushes: bushCount,
         hedgeM: Math.round(hedgeLen),
