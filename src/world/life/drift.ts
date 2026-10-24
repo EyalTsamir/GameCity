@@ -542,7 +542,7 @@ export class Drift {
         uniform vec4 uLamps[12];
         varying float vA;
         varying float vKind;
-        const float BOX = 26.0;
+        const float BOX = 18.0;
         void main() {
           vec3 p;
           float a;
@@ -557,9 +557,9 @@ export class Drift {
             // forward scattering of the sun: only motes between the camera and the sun light up
             float mu = dot( v / max( d, 1e-3 ), uSunDir );
             float hg = 0.4375 / pow( max( 1.5625 - 1.5 * mu, 1e-3 ), 1.5 ); // HG g=0.75 (×4π/…)
-            a = uMoteGain * min( hg, 9.0 ) * smoothstep( 1.2, 3.5, d ) * ( 1.0 - smoothstep( BOX * 0.3, BOX * 0.5, d ) );
+            a = uMoteGain * min( hg, 6.0 ) * smoothstep( 0.8, 2.5, d ) * ( 1.0 - smoothstep( BOX * 0.3, BOX * 0.5, d ) );
             a *= 0.5 + 0.5 * sin( uTime * ( 1.5 + aSeed.y * 3.0 ) + aSeed.z * 20.0 );
-            size = 0.012 + 0.01 * aSeed.y;
+            size = 0.014 + 0.012 * aSeed.y;
             vKind = 0.0;
           } else {
             // moth around a lamp head: erratic orbit, darting in and out
@@ -624,7 +624,7 @@ export class Drift {
     this.su.uSunDir.value.copy(sd);
     const elev = sd.y;
     const low = Math.max(0, Math.min(1, (elev + 0.02) / 0.08)) * (1 - Math.min(1, Math.max(0, (elev - 0.15) / 0.5)) * 0.75);
-    this.su.uMoteGain.value = this.motes ? 0.09 * low * u.uDaylight.value : 0;
+    this.su.uMoteGain.value = this.motes ? 0.22 * low * u.uDaylight.value : 0;
     const sky = ctx.services.sky as { sun?: THREE.DirectionalLight } | undefined;
     if (sky?.sun) this.su.uSunCol.value.copy(sky.sun.color).multiplyScalar(Math.min(3, sky.sun.intensity) * 0.5);
     else this.su.uSunCol.value.setRGB(1, 0.85, 0.6);

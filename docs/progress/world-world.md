@@ -112,7 +112,18 @@
   dune pines / scrub never in fields (cover check); far forest: crisp noisy edges, stands (conifer dark /
   broadleaf light), crown-group texture to 60 m footprint; hill meadows greener with height; hedges keep
   ≥ ~1.5 px width far away; dune hummock normals + marram tussocks.
-* Running: m5a (overview, vista, riverbend, coast, fields2 × 18.2/11).
+* 09:15 — m5a/m5b judged: hills at 11 now green with textured woods + patchwork; leafy trees good;
+  sea at 18.2 still grey-blue — ?noatmo diagnostic (shots/world/world/diag/ov_noatmo_18h2.png) shows the
+  same sea colour without the atmosphere → it is the water (reflection-dominated, body too dark at dusk)
+  → wBodyGlow now = body hue (unit luminance) × sky luminance × 0.3 at dusk. Hills grey-brown at 18.2 are
+  the haze: without atmosphere they are green-olive. Dune "leopard" blotches = field colours showing
+  through my noisy sand edge (not ground's tufts; ?only without groundcover identical) → the noise now
+  moves only the marram / bare-sand boundary; scrub clumps sparser. Riverbank pale band = rock cover from
+  bank slope → model.cover: rock × (1 − 0.9·wet). Water: TH_ATMO define (thHazeColor only when air's
+  chunks are installed — ?noatmo compiled to an error before). Herds (lead): new animal geometry ~54 tris
+  (lumpy icosahedron body with smooth normals, tapered head lowered when grazing, 4 thin prism legs),
+  sheep = fat wool barrel with dirty underside + dark head/legs, cattle coats incl. piebald, size ±12 %.
+* Running: m5c (overview, riverbend, dunes, coast, sheep × 18.2/11).
 * Tools: my capture script copy with 20-min load timeout = scratchpad `cap.mjs` (scratchpad is SHARED with other
   agents — keep my files under scratchpad/world* or land/). Offline map tool: scratchpad `land/map.ts` (bundle:
   `npx rolldown land/map.ts --platform node -o land/map.mjs`; `node land/map.mjs x0 z0 x1 z1 N out.bin &&
