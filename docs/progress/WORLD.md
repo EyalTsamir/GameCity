@@ -40,6 +40,12 @@ Branch: work continues from `claude/tinyhaven-graphics-audit-l089m8` (fast-forwa
   mid-distance milky; world → riverbend landscape trees faceted lime polyhedra + bare tan banks + ghost town
   reflections in the sea; ground → can the blade band reach riverbend/country/coast POIs (price?); wear →
   Seaview hotel balconies = dark blotches at 100 m.
+* 04:20 — wear fixed hotel blotches (sparse "hotel" balconies; premultiplied-black leaf atlas mips → colour
+  bleed; relayed to world's landscape tree atlas). life fixed: boot failure (per-part fault isolation), kite
+  strings, café string lights. Band in int1/ot_street: not vegetation/buildings (shots/world/lead/band/sheet.png)
+  → most likely a kite line from ambient (1.4 cm cord ~1 m from camera) → life (≈2 mm + near-camera fade).
+  ground: roaming 224 m cover window (blades near ANY camera, same vertex budget) in progress; riverbend POI
+  camera 70 → 52 m (plan.ts) so its target lies inside the blade rings.
 * 2026-10-20 07:31 UTC — 3rd usage-limit stop (agents stopped ~02:30, reset 06:30; container rebooted ~07:28).
   Restored, tree clean at 9c3dc05; all 7 agents resumed 07:31. Lead running integration capture
   shots/world/lead/int1 (the 12 critique views at 18.2 h, full city) for a before/after vs critique/a.
