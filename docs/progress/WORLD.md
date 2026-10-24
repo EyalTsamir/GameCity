@@ -28,6 +28,8 @@ Branch: work continues from `claude/tinyhaven-graphics-audit-l089m8` (fast-forwa
   ground: roaming window + forest floor verified → tiers, final report. world m5d/cliff1 judged (sheets
   shots/world/lead/world_m5d.png, world_cliff.png): sea teal ✓, meadow+sheep 18.2 ✓, riverbend leafy ✓, cliffs ✓;
   open: dunes camo blotches, island = smooth cone, re-capture POIs with the new camera.
+* 14:35 — camera fix VERIFIED: riverbend POI camera at (−249, 10, 113.5), frames the bend (shots/world/lead/cam/
+  riverbend.png, clean console). Note to world: continuous white waterline rim.
 * 2026-10-24 08:31 UTC — 5th stop (SESSION limit, all agents ~04:40, reset 08:20; container rebooted 08:29).
   Restored servers/autocheckpoint/locks; tree clean at 9399c3f (pushed). All 7 agents resumed 08:31 with open
   notes repeated (see 03:55 / 04:20 entries). Lead next: wait for milestone notes; then a second full-city
