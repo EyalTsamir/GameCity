@@ -468,13 +468,11 @@ vec3 landAlbedo() {
   // ── sand (dunes, beach) — wet near the waterline; marram grass on the dunes
   // the dune edge is never a line: blowouts of bare sand bite into the grass, grass tongues reach into
   // the dunes (noise only in the transition, the open beach and the inland stay as they are)
-  {
-    float sw = smoothstep(0.0, 0.12, vCov.z) * (1.0 - smoothstep(0.8, 1.0, vCov.z));
-    float sN = (nA.b - 0.5) * 1.1 + (nB.g - 0.5) * 0.7 + (texture2D(tLN, p.xz * (1.0 / 13.0)).r - 0.5) * 0.35 * midF;
-    sand = mix(sand, smoothstep(0.18, 0.82, sand + sN * 0.55), sw);
-  }
+  // (the noise moves the marram / bare-sand boundary only: the cover weight against the fields stays
+  // smooth, else the field colours show through the dunes in blotches)
+  float sN = (nA.b - 0.5) * 1.1 + (nB.g - 0.5) * 0.7 + (texture2D(tLN, p.xz * (1.0 / 13.0)).r - 0.5) * 0.35 * midF;
   vec3 sc = mix(cWetSand, cSand, smoothstep(${(WL + 0.2).toFixed(2)}, ${(WL + 1.0).toFixed(2)}, p.y));
-  float marram = smoothstep(0.2, 0.7, (1.0 - sand) * 1.6 + nB.b * 0.6 - 0.3) * smoothstep(${(WL + 1.6).toFixed(2)}, ${(WL + 2.6).toFixed(2)}, p.y);
+  float marram = smoothstep(0.2, 0.7, (1.0 - sand) * 1.6 + nB.b * 0.6 - 0.3 + sN * 0.7) * smoothstep(${(WL + 1.6).toFixed(2)}, ${(WL + 2.6).toFixed(2)}, p.y);
   // tussocks of marram with sand between them (mid distance), dune hummocks lit and shaded
   if (vCov.z > 0.02 && fp < 4.0) {
     vec4 nT5 = texture2D(tLN, p.xz * (1.0 / 5.3));
@@ -494,9 +492,9 @@ vec3 landAlbedo() {
     vec2 hh = lhash22(floor(cc));
     float rr = length(fract(cc) - 0.5 - (hh - 0.5) * 0.5) * (0.8 + 0.5 * hh.y);
     float near = 1.0 - smoothstep(1.2, 2.6, fp);
-    float clump = step(hh.x, 0.45) * (1.0 - smoothstep(0.2, 0.22 + fp * 0.35, rr));
-    vec3 scr = hh.y < 0.75 ? vec3(0.17, 0.24, 0.13) : vec3(0.48, 0.42, 0.12);
-    sc = mix(sc, scr * (0.85 + 0.3 * nB.r), scrubA * mix(0.3, clump * 0.9, near));
+    float clump = step(hh.x, 0.16) * (1.0 - smoothstep(0.2, 0.22 + fp * 0.35, rr));
+    vec3 scr = hh.y < 0.75 ? vec3(0.2, 0.27, 0.15) : vec3(0.48, 0.42, 0.12);
+    sc = mix(sc, scr * (0.85 + 0.3 * nB.r), scrubA * mix(0.12, clump * 0.8, near));
   }
   // wrack line of dried seaweed along the last high tide
   sc *= 1.0 - 0.18 * (1.0 - smoothstep(0.15, 0.45 + fp, abs(p.y - ${(WL + 0.75).toFixed(2)} - 0.12 * (nB.g - 0.5)))) * (1.0 - smoothstep(0.5, 2.0, fp));
