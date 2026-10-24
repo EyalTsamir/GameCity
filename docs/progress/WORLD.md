@@ -21,20 +21,23 @@ Branch: work continues from `claude/tinyhaven-graphics-audit-l089m8` (fast-forwa
   Life resumed (last open agent: m4 re-capture + final report). Lead next: int2 full-city QA once life reports.
   18:35 — int2 started (background): shots/world/lead/int2/h{18.2,11,21.5} (12 views each, presets above); log
   int2/h*.log, done.txt. If killed: re-run the loop from WORLD.md int2 presets, one hour per capture-set run.
-* 19:00 — life DONE (m4/s.png: market thinned ✓, night festoons ✓; soak flat heap 330–336 MB; +6–7 calls,
+* 18:42 — life DONE (m4/s.png: market thinned ✓, night festoons ✓; soak flat heap 330–336 MB; +6–7 calls,
   ~0.3–0.45 ms; toggles ?nocloth ?nobunting ?nolaundry ?noflags ?nochimneys ?nodrift ?nosoftsmoke).
   ALL 7 AGENTS DONE. Lead: final QA = int2 (running) → judge vs critique/a → typecheck, build + file:// smoke,
   soak, ui-test, ?diorama check → perf toggles/commands for the user → CLAUDE.md/ARCHITECTURE/LEAD updates →
   final Hebrew report → delete watchdog trig_01Dosn8CiDr2iqF7HZGRccm3, stop autocheckpoint → WORLD ROUND DONE.
-* 19:20 — final typecheck clean; build OK (3.15 MB single file). int2 h18.2 judged (sheets shots/world/lead/
+* 18:46 — final typecheck clean; build OK (3.15 MB single file). int2 h18.2 judged (sheets shots/world/lead/
   int2_sheet_a.png / _b.png; console clean, invariants {}, 147–188 dc, 2.4–2.85 M tris): the frame, light, streets
   and park read as a real place (wb_street 18.2, park_low, oldtown superb). Two issues sent back: ground → flower
   dots form a regular lattice at 100–150 m (riverside_speckle.png; visible only since the cover-map fix); world →
   riverside POI foreground = two flat parcels south of the slab. Re-capture riverside/park after their fixes.
-* 19:45 — ground flower-dot lattice FIXED (sheet_flower_dots.png ✓; jitter, clumps, distance tint). ground DONE.
+* 18:52 — ground flower-dot lattice FIXED (sheet_flower_dots.png ✓; jitter, clumps, distance tint). ground DONE.
   Waiting on world (riverside fields). int2 h11/h21.5 running.
-* 19:55 — int2 h11 judged (shots/world/lead/int2_h11.png; console clean, invariants {}): noon reads as a real sunny
+* 18:55 — int2 h11 judged (shots/world/lead/int2_h11.png; console clean, invariants {}): noon reads as a real sunny
   town; only open item = riverside foreground fields (world working). h21.5 running.
+* 18:58 — world riverside fields FIXED (rs4: hash mixer → varied 27 m plots, hedges, tracks) → world DONE again.
+  ALL 7 AGENTS DONE. Remaining lead QA: int2 h21.5 (running) → riverside re-check → file:// smoke, soak, ui-test,
+  ?diorama → perf list → docs → final report → delete watchdog.
 * 2026-10-24 13:31 UTC — 6th stop (session limit ~11:45, reset 13:20; container rebooted 13:29). Restored; tree
   clean at 7a27edf. Resumed the 4 open agents (world, ground, foliage, life). DONE: air, wear, streetlife.
   Lead next: judge milestone notes → int2 full-city capture (presets below) → final QA.
