@@ -31,6 +31,12 @@ Branch: work continues from `claude/tinyhaven-graphics-audit-l089m8` (fast-forwa
   ?nowear ?nopuddles ?noterracelights ?wet). Judged: otfac 18.2 + otst 21.5 = reference-2 feeling ✓. Sent back
   for two fixes before closing: Westbrook apartment balconies (flat saturated violet + barcode streaks) and the
   hotel sea facade (coloured confetti at 150 m).
+* 09:30 — air DONE (Final report in world-air.md; judged t1 dawn/dusk/night, dof, sky8: approved). Est. net GPU
+  ≈ 0…+0.3 ms (tilt-shift removed in world mode); toggles ?noatmo ?atmo ?nomist ?paintsky ?noclouds ?clouds
+  ?noshafts ?tiltshift ?lensN ?gradeold ?weather. Contract: world mode writes the lowered golden-hour "visual
+  sun" into globalUniforms.uSunDir (clock.sunDir stays physical). Lead fixed ui.ts DOF label (mode-aware).
+  Relayed to world: boxy sheep at riverbend eye level. Status report given to the user (weekly-limit
+  implications: ~1 h of team work per 5 h window; risk of another weekly pause → resumes ~10-31 03:00).
 * 2026-10-24 03:33 UTC — 4th stop = WEEKLY limit: agents resumed 2026-10-20 07:31 hit it at once (no agent
   edits since 02:08 on 10-20; logs' Resume here are from ~02:05). Limit reset 10-24 03:00; container rebooted
   ~03:30. Restored: servers 5173/5174, autocheckpoint 20 min, locks cleared, tree clean at 582500f (pushed);
