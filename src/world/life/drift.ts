@@ -257,15 +257,23 @@ export class Drift {
         const gc = ctx.services.groundcover as { flowerPatches?: { x: number; z: number; r: number; density: number }[] } | undefined;
         // the flower patches closest to the camera (insects are only seen within ~20 m)
         const all = gc?.flowerPatches ?? [];
+        ctx.camera.getWorldDirection(_f);
+        const fl = Math.hypot(_f.x, _f.z) || 1;
+        const fwdX = _f.x / fl,
+          fwdZ = _f.z / fl;
         this.patchD.length = 0;
         for (let k = 0; k < all.length; k++) {
           const p = all[k];
           if (p.density < 0.15) continue;
-          const d = Math.hypot(p.x - cp.x, p.z - cp.z) - p.r;
+          const dx = p.x - cp.x,
+            dz = p.z - cp.z;
+          let d = Math.hypot(dx, dz) - p.r;
+          // prefer patches in front of the camera (insects behind it are wasted)
+          if (dx * fwdX + dz * fwdZ < -p.r) d += 20;
           if (d < 28) this.patchD.push(k + Math.max(0, d) / 64);
         }
         this.patchD.sort((a, b) => (a % 1) - (b % 1));
-        for (let k = 0; k < Math.min(6, this.patchD.length); k++) this.patches.push(all[Math.floor(this.patchD[k])]);
+        for (let k = 0; k < Math.min(4, this.patchD.length); k++) this.patches.push(all[Math.floor(this.patchD[k])]);
       }
       if (camH < 90) {
         for (const tr of this.trees) {
