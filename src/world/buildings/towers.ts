@@ -14,6 +14,7 @@ import {
 } from './gen';
 import { WIN, PROF, WALLPAT, ROOFPAT, FRAME, GLASS, LIGHT_MODE } from './materials';
 import { letterSign, helipadMark, boardSign } from './signs';
+import { GREEN } from './green';
 
 interface P {
   x: number;
@@ -319,8 +320,11 @@ export function genTower(g: Gen): void {
         const u = ((k + 0.5) * sg.L) / n;
         setCol(t, col('#8c8a83'));
         sideBox(t, sg, u - 0.9, u + 0.9, -0.5, 0.0, y, y + 0.5, false, true);
-        setCol(t, col(rng.pick(['#4f8a3c', '#5c9a45', '#3f7a35'])));
-        t.sphere(sx(sg, u, -0.25), y + 0.75, sz(sg, u, -0.25), 0.55, 6, 4);
+        // two leaf-card clumps per box (shrubs, ornamental grass, lavender) instead of a smooth ball
+        for (const du of [-0.45, 0.45]) {
+          const kind = rng.weighted([GREEN.SHRUB, GREEN.GRASS, GREEN.LAVENDER], [3, 1.5, 1]);
+          g.green.clump(sx(sg, u + du, -0.25), y + 0.46, sz(sg, u + du, -0.25), 0.45, rng.range(0.6, 1.05), kind, 3);
+        }
       }
     }
     void inner;
