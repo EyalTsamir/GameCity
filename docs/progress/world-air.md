@@ -4,48 +4,13 @@ Owner: **air** agent (world round). Files: `src/render/**` except `src/render/st
 `src/render/atmosphere.ts`. Never git-writes; the lead commits.
 
 ## Resume here
-* 2026-10-24 03:35 — resumed after the weekly stop (tree clean at 582500f). STATE: M1 atmosphere (two
-  media: blue air + aerosol, own in-scatter colours, mist, legacy-fog macros), M2 physical sky (LUT +
-  CPU twin, skylight MS, golden-hour sky remap), M3 clouds (raymarched half-res cumulus volume + 2D
-  cirrus, field cloud shadows), M4 night (Milky Way, town sky glow), optics (lens DOF, sun shafts), grade
-  (AgX + subtle golden CDL), ladder (grass/leaf/landscape-tree steps; tested OK, dbg/ladder.json) — all in.
-  Best judged sheets: shots/world/air/sky5_sheet.png (sky), g1_sheet.png (golden POIs), sky3_night.png.
-* OPEN (lead review): (1) cloud edges must be clean — half-res march grain/streaks → temporal resolve
-  (rotation-reprojected history, neighbourhood clamp) [IN PROGRESS]; (2) golden overview: long raking
-  shadows + warm-sun/cool-shade contrast → wider world shadow coverage at overview distances at low sun,
-  sun stronger/warmer + fill bluer/weaker at 17.5–19 h; (3) sea at 18.2 with world (dome uZenith/uHorizon
-  feed the water; uHorizon = haze 120° from the sun).
-* Tools: `<scratchpad>/air/cap.mjs` (capture-set copy, 900 s load / 600 s shot timeouts),
-  `<scratchpad>/air/skycap.mjs` (free camera "name=camX,Y,Z,tgtX,Y,Z", use only=sky,terrain,landscape,
-  water,postfx), render-only typecheck `npx tsc --noEmit -p <scratchpad>/tsconfig.air.json` (20 s),
-  probes `<scratchpad>/air/physprobe.ts` / `hazeprobe.ts` (rolldown → node).
-* 03:50 lead integration review (int1, code of 10-20 07:30): at 18.2 every city view grey-blue, dim,
-  low-contrast ("overcast evening"), lost the warm sunlit facades. Causes found + fixed (typechecks):
-  big cumulus coverage (~0.4–0.5) throwing strong cool cloud shadows over the town → evening cumulus
-  decay (−0.28·smooth(15.5, 19.2, h)), cloud shadows weaker at a low sun (×0.55…1) + lighter tint;
-  golden key too dim/pale after the sepia fix → sun '#ffc98c'/'#ffa962' at 4.5/4.2, fill cooler AND
-  weaker (hemiI 0.56, env 0.38/0.36), exposure 1.27/1.32/1.3; grade uSat 1.08+0.07·gold, contrast 0.17.
-  Long raking shadows: one VISUAL sun (`_sunVisual` in sky.ts = clock sun lowered by skyElevationDeg at
-  golden hour; drives the light/shadows, disc, lobe, LUT, clouds, env, shafts, and is written to
-  globalUniforms.uSunDir after main.ts so every shader agrees) + world shadow map out to 950 m.
-  Clouds: TEMPORAL RESOLVE in cloudVolume.ts (per-frame jitter, history reprojected by view direction,
-  neighbourhood clamp, α 0.14, reset on camera cuts / timejump).
-* 04:10 g3 (full city) judged → LEAD APPROVED the golden city light (g3_sheet.png: warm facades, long
-  raking shadows, cool shade; riverbend = the reference's mood); noon full city good (g3_noon.png); report
-  clean (0 errors, invariants {}, 102–182 dc, 1.8–2.7 M tris). sky6 → temporal resolve gives clean edges.
-  Then fixed + verified in sky7 (sky7_a.png / sky7_b.png): cloud shapes (dome cross-section per cell,
-  linear height profile ×1.12 so tops never hit the slab ceiling, cells 2 km, thickness 380 + 700·…,
-  mip bias log2(t0/7000) ≤ 2 → the far deck recedes to the horizon) = proper fair-weather cumulus;
-  visual-sun height drives the light weight (no direct sun after the visual sunset); evening cumulus
-  decay gentler (a few clouds catch the sunset); sky brightness × 1.06/exposure (golden sky no longer in
-  AgX's grey shoulder); Belt of Venus arch in the dome; lavender anti-sun haze; golden aerosol 5/6.5/8.5e-5;
-  upper-sky saturation +0.4·golden.
-* g4 judged (g4_sheet.png, FULL city 18.2): overview/vista mid-distance clear, long tree shadows over the
-  fields, warm town, blue ridges ✓. Water horizon (dome uHorizon) now 35 % toward the blue air (sea
-  read lilac). Lead informed (08:35) that the three open items are verified.
-* 08:35 (after the 5th stop; tree clean at 9399c3f) running: sky8 (hz_e/hz_n/up_ne × 18.2/19.5: belt +
-  upper-sky saturation), t1 (FULL CITY overview/riverbend/oldtown/coast × 6.3 dawn mist / 19.6 / 21.5).
-* NEXT: lens-DOF close-focus check, final report (≤ 350 words) + perf summary.
+* 2026-10-24 — **DONE.** All milestones in, lead-approved (g3/g4/sky7); final checks run and judged: sky8
+  (belt + upper-sky saturation), t1 full city dawn mist 6.3 / dusk 19.6 / night 21.5 (0 console errors,
+  invariants {}), dof1 (lens DOF close focus), dio_check (diorama unchanged). `npm run typecheck` clean.
+  No jobs running. Final report below. Only follow-ups: see "Open issues" in the final report.
+* Tools (if resumed): `<scratchpad>/air/cap.mjs` (capture-set copy, 900 s load / 600 s shot timeouts),
+  `<scratchpad>/air/skycap.mjs` (free camera "name=camX,Y,Z,tgtX,Y,Z"), render-only typecheck
+  `npx tsc --noEmit -p <scratchpad>/tsconfig.air.json`.
 
 ## History (condensed)
 * 10-19: survey, design, M1 atmosphere; m1a/m2a/m2b judged (beige veil = Mie peak in an azimuth-only ring
@@ -169,3 +134,30 @@ in far views −0.4…−0.8 ms. Net ≈ 0 … +0.4 ms; 0 extra draw calls (cott
 * Contract nuance (no file change): in world mode the sky module writes `globalUniforms.uSunDir` every
   frame after main.ts with the VISUAL sun (= clock sun, lowered at golden hour by `skyElevationDeg`), so
   every shader's backlight / translucency matches the rendered light. `clock.sunDir` stays the clock's.
+
+## Final report
+**What changed (world mode only; `?diorama` pixel-identical, dio_check.png vs dio_base).** Aerial
+perspective as a global fog-chunk override: two media (Rayleigh-blue air 8 km + grey aerosol 1 km),
+analytic height integral, own in-scatter colours (azimuth ring + warm sun lobe), drifting dawn/dusk mist,
+distance desaturation, reflection fold; legacy inline-fog shaders follow via macros. Physical sky (LUT +
+identical CPU twin) to the horizon feeds haze, water horizon, env and fill — no seam. Raymarched half-res
+cumulus + temporal resolve, 2D cirrus, travelling cloud shadows from the same field, evening decay.
+Light: noon sun ≈ 5–6× fill; golden hour with a lowered "visual sun" (long raking shadows, 950 m shadow
+map), backlit glow, cool shade, Belt of Venus. Night: Milky Way, stars, town sky glow. Optics: thin-lens
+DOF (f/1.6, idle beyond ~40 m), sun shafts at low sun. Grade: AgX + golden CDL. Ladder: grass/leaf/
+landscape-tree steps. `postfx.softDepth()` for life.
+**Files.** New: `src/render/atmosphere.ts`, `sky/{atmoDrive,physical,cloudLayer,cloudVolume}.ts`,
+`postfx/sunShafts.ts`. Edited: `sky.ts`, `sky/{dome,env,palette}.ts`, `postfx.ts`,
+`postfx/{look,adaptive,cloudShadow}.ts`; `core/context.ts` (type only).
+**Toggles.** See "URL toggles (final)".
+**Shots** (shots/world/air/). Before: before/*.png. After: sky7_a/b, sky8_sheet, g3_sheet, g3_noon,
+g4_sheet, t1_dawn_dusk, t1_night, dof_sheet.
+**Cost.** Full city 102–199 draw calls, 1.7–2.7 M tris. Per frame: +1 cloud march, +1 resolve, +2 shafts
+(only near a low sun), LUT rare; −1 cotton puffs, −3 tilt-shift passes when the lens idles → ≈ −1 dc
+typical. GPU estimate (high, 1920×1025): fog 0.2–0.35 ms, clouds 0.25–0.35, dome 0.1, shafts 0.15 when
+active, minus tilt-shift 0.4–0.8 → ≈ 0 … +0.3 ms. Not measured on the Adreno target (perf.mjs there).
+**Trade-offs.** Visual sun deliberately lower than astronomical at golden hour; clouds are screen-space
+(not in the water reflection; slight lag on fast pans, reset on cuts); haze colour is azimuth-only;
+low quality: 7 steps, ⅓ res.
+**Open issues (others).** world: sea body/glitter, white beach block, grey-brown hills; ui: DOF button
+label in world mode; life: diagonal line over the sea; ladder thresholds to confirm with perf.mjs on the target.

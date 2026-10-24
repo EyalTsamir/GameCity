@@ -267,7 +267,7 @@ vec3 wSky(vec3 d) {
   float band = exp(-abs(d.y - max(sd.y, 0.0) * 0.35) * 5.0);
   float glow = (pow(az, 3.0) * 0.85 + pow(max(dot(d, sd), 0.0), 24.0) * 0.6) * band;
   col += uSkyGlow * uSkyGlowI * glow;
-#if defined(TH_WORLD) && defined(USE_FOG)
+#if defined(TH_ATMO) && defined(USE_FOG)
   // world: the low sky in this azimuth is the atmosphere's horizon haze (warm toward the sun, cool and
   // blue away from it) — exactly what the dome shows at the horizon, so the sea mirrors the real sky
   vec3 hz = thHazeColor(normalize(vec3(d.x, max(d.y, 0.0), d.z) + vec3(1e-5, 0.0, 0.0))) * thAtmo[10].y;
@@ -657,8 +657,11 @@ reflectedLight.indirectDiffuse += diffuseColor.rgb * thLampLight(vWW, vec3(0.0, 
   if (dbg === 'refl') defs.TH_WATER_DEBUG = 1;
   if (!WORLD_MODE) defs.TH_DIORAMA = 1;
   else defs.TH_WORLD = 1;
+  // the atmosphere's fog chunks (thHazeColor / thAtmo) exist only when air installed them (not ?noatmo)
+  const atmoActive = (ctx.services.atmosphere as { active?: boolean } | undefined)?.active === true;
+  if (WORLD_MODE && atmoActive) defs.TH_ATMO = 1;
   mat.defines = defs;
-  mat.customProgramCacheKey = () => 'th-water-v3' + (dbg ?? '') + (WORLD_MODE ? 'w' : 'd');
+  mat.customProgramCacheKey = () => 'th-water-v3' + (dbg ?? '') + (WORLD_MODE ? 'w' : 'd') + (atmoActive ? 'a' : '');
   const mesh = new THREE.Mesh(geo, mat);
   mesh.name = 'water-surface';
   mesh.receiveShadow = true;
