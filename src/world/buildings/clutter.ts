@@ -99,15 +99,34 @@ export function balconyLife(g: Gen, sg: SideGeom, uA: number, uB: number, y: num
     const cell = r.weighted(TRAIL, [2, 1.5, 1.2, 1.4]);
     const a = uA + r.range(0, W * 0.3),
       b = uB - r.range(0, W * 0.3);
-    const long = cell === GREEN.BOUGAIN || cell === GREEN.IVY_HANG ? r.range(0.8, 2.6) : r.range(0.5, 1.1);
-    g.green.hang(sg, a, b, D + 0.03, y + o.rail, 0.35, long, cell, 0.1);
-    // planter boxes along the inside of the railing
-    setCol(t, col(r.pick(['#b5653f', '#3a3f44', '#e9e4d8'])));
-    sideBox(t, sg, a + 0.05, b - 0.05, D - 0.32, D - 0.06, y, y + 0.32, true);
+    const top = r.weighted([GREEN.GERANIUM, GREEN.SHRUB, GREEN.JASMINE, GREEN.LAVENDER], [3, 2, 1, 1]);
+    // solid parapets (and some railings) carry balcony boxes hooked over the top rail, so the plants show
+    // above the parapet and spill over its face; otherwise long planters stand inside the railing
+    const hooked = o.solid || r.chance(0.35);
     const n = Math.max(1, Math.round((b - a) / 0.5));
-    for (let k = 0; k < n; k++) {
-      const fu = a + ((b - a) * (k + 0.5)) / n;
-      g.green.clump(sx(sg, fu, D - 0.19), y + 0.28, sz(sg, fu, D - 0.19), 0.24, r.range(0.35, 0.6), r.weighted([GREEN.GERANIUM, GREEN.SHRUB, GREEN.JASMINE, GREEN.LAVENDER], [3, 2, 1, 1]), 2);
+    if (hooked) {
+      const cell2 = o.solid ? r.weighted([GREEN.POTHOS, GREEN.BOUGAIN, GREEN.PETUNIA], [1.4, 1.2, 1.4]) : cell;
+      const yb = y + o.rail - 0.12;
+      setCol(t, col(r.pick(['#b5653f', '#3a3f44', '#e9e4d8', '#7a4b2a'])));
+      sideBox(t, sg, a + 0.05, b - 0.05, D - 0.04, D + 0.2, yb, yb + 0.22, true);
+      setCol(t, col('#4a3424'));
+      sideBox(t, sg, a + 0.08, b - 0.08, D - 0.01, D + 0.17, yb + 0.22, yb + 0.23);
+      for (let k = 0; k < n; k++) {
+        const fu = a + ((b - a) * (k + 0.5)) / n;
+        g.green.clump(sx(sg, fu, D + 0.08), yb + 0.2, sz(sg, fu, D + 0.08), 0.2, r.range(0.32, 0.55), top, 2);
+      }
+      const long = cell2 === GREEN.BOUGAIN ? r.range(0.8, 1.8) : r.range(0.45, 0.9);
+      g.green.hang(sg, a + 0.06, b - 0.06, D + 0.2, yb + 0.2, 0.3, long, cell2, 0.06);
+    } else {
+      const long = cell === GREEN.BOUGAIN || cell === GREEN.IVY_HANG ? r.range(0.8, 2.6) : r.range(0.5, 1.1);
+      g.green.hang(sg, a, b, D + 0.03, y + o.rail, 0.35, long, cell, 0.1);
+      // planter boxes along the inside of the railing
+      setCol(t, col(r.pick(['#b5653f', '#3a3f44', '#e9e4d8'])));
+      sideBox(t, sg, a + 0.05, b - 0.05, D - 0.32, D - 0.06, y, y + 0.32, true);
+      for (let k = 0; k < n; k++) {
+        const fu = a + ((b - a) * (k + 0.5)) / n;
+        g.green.clump(sx(sg, fu, D - 0.19), y + 0.28, sz(sg, fu, D - 0.19), 0.24, r.range(0.35, 0.6), top, 2);
+      }
     }
   }
   // pot plants in the corners and along the wall

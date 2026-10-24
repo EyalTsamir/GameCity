@@ -12,6 +12,11 @@
 // Rendered once per frame by post-processing right before the scene pass (final camera), or by the
 // sky module itself when post-processing is off. Clear-sky rays cost 2 texture taps per step (the
 // placement test), cloudy samples ~7.
+//
+// Clean edges: the march start is jittered per pixel AND per frame, and a half-res resolve pass blends
+// it into a history (reprojected by view direction — at km distances camera rotation dominates — and
+// clamped to the current frame's neighbourhood so moving clouds never ghost). A still view converges to
+// a noise-free image within ~15 frames; the dome then upsamples it with a small filter.
 
 import * as THREE from 'three';
 import { FS_VERT, FullscreenPass } from '../postfx/fullscreen';
@@ -33,6 +38,7 @@ uniform mat4 uVProjInv;
 uniform mat4 uVCamWorld;
 uniform vec3 uVCamPos;
 uniform float uSteps;
+uniform float uFrame;
 varying vec2 vUv;
 const float RE = 6360e3;
 
@@ -54,9 +60,9 @@ void main() {
   // grazing rays cross tens of km of deck: march only its first part (beyond, haze takes over)
   t1 = min(t1, t0 + 11000.0);
   float dt = (t1 - t0) / uSteps;
-  // white-noise start offset (interleaved-gradient noise varies almost only along x: with this few steps it
-  // painted vertical bars); the dome's 5-tap filter turns the grain into smooth cloud
-  vec3 jp = fract(vec3(gl_FragCoord.xyx) * 0.1031);
+  // white-noise start offset, new every frame (interleaved-gradient noise varies almost only along x and
+  // painted vertical bars); the temporal resolve averages it away
+  vec3 jp = fract(vec3(gl_FragCoord.xy, uFrame) * vec3(0.1031, 0.1030, 0.0973));
   jp += dot(jp, jp.yzx + 33.33);
   float j = fract((jp.x + jp.y) * jp.z);
   float lod = clamp(log2(t0 / 2500.0), 0.0, 4.0);
@@ -112,9 +118,54 @@ void main() {
 }
 `;
 
+const RESOLVE_FRAG = /* glsl */ `
+uniform sampler2D tCur;
+uniform sampler2D tHist;
+uniform mat4 uVProjInv;
+uniform mat4 uVCamWorld;
+uniform mat4 uPrevVP;
+uniform float uAlpha;
+uniform vec2 uTexel;
+varying vec2 vUv;
+void main() {
+  vec4 c = texture2D(tCur, vUv);
+  if (uAlpha >= 0.999) { gl_FragColor = c; return; }
+  vec4 n1 = texture2D(tCur, vUv + vec2(uTexel.x, 0.0));
+  vec4 n2 = texture2D(tCur, vUv - vec2(uTexel.x, 0.0));
+  vec4 n3 = texture2D(tCur, vUv + vec2(0.0, uTexel.y));
+  vec4 n4 = texture2D(tCur, vUv - vec2(0.0, uTexel.y));
+  vec4 mn = min(c, min(min(n1, n2), min(n3, n4)));
+  vec4 mx = max(c, max(max(n1, n2), max(n3, n4)));
+  // reproject by direction: where was this sky direction on screen last frame?
+  vec4 vp = uVProjInv * vec4(vUv * 2.0 - 1.0, 1.0, 1.0);
+  vec3 dir = (uVCamWorld * vec4(vp.xyz / vp.w, 0.0)).xyz;
+  vec4 pc = uPrevVP * vec4(dir, 0.0);
+  if (pc.w <= 1e-5) { gl_FragColor = c; return; }
+  vec2 puv = pc.xy / pc.w * 0.5 + 0.5;
+  if (any(lessThan(puv, vec2(0.0))) || any(greaterThan(puv, vec2(1.0)))) { gl_FragColor = c; return; }
+  vec4 h = texture2D(tHist, puv);
+  // the jittered frame under-estimates the true local range a little: widen the box before clamping
+  vec4 ext = (mx - mn) * 0.3;
+  h = clamp(h, mn - ext, mx + ext);
+  gl_FragColor = mix(h, c, uAlpha);
+}
+`;
+
 export class CloudVolume {
+  /** this frame's march (noisy) */
   readonly target: THREE.WebGLRenderTarget;
+  /** resolved history ping-pong: the dome samples `texture` (the latest one) */
+  private hist: [THREE.WebGLRenderTarget, THREE.WebGLRenderTarget];
+  private histIdx = 0;
   private pass: FullscreenPass;
+  private resolve: FullscreenPass;
+  private prevVP = new THREE.Matrix4();
+  private prevPos = new THREE.Vector3();
+  private prevFwd = new THREE.Vector3();
+  private frame = 0;
+  private valid = false;
+  /** blend weight of the current frame (lower = smoother, more history) */
+  blend = 0.14;
   private size = new THREE.Vector2();
   /** full drawing-buffer size the dome divides gl_FragCoord by */
   readonly fullRes = new THREE.Vector2(1, 1);
@@ -129,8 +180,32 @@ export class CloudVolume {
   }
 
   constructor(uniforms: CloudLayerUniforms) {
-    this.target = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, depthBuffer: false, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter });
+    const opts = { type: THREE.HalfFloatType, depthBuffer: false, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter } as const;
+    this.target = new THREE.WebGLRenderTarget(1, 1, opts);
     this.target.texture.name = 'Clouds.Volume';
+    this.hist = [new THREE.WebGLRenderTarget(1, 1, opts), new THREE.WebGLRenderTarget(1, 1, opts)];
+    this.hist[0].texture.name = 'Clouds.HistA';
+    this.hist[1].texture.name = 'Clouds.HistB';
+    this.resolve = new FullscreenPass(
+      new THREE.ShaderMaterial({
+        name: 'CloudResolve',
+        uniforms: {
+          tCur: { value: this.target.texture },
+          tHist: { value: null },
+          uVProjInv: { value: new THREE.Matrix4() },
+          uVCamWorld: { value: new THREE.Matrix4() },
+          uPrevVP: { value: new THREE.Matrix4() },
+          uAlpha: { value: 1 },
+          uTexel: { value: new THREE.Vector2() },
+        },
+        vertexShader: FS_VERT,
+        fragmentShader: RESOLVE_FRAG,
+        depthTest: false,
+        depthWrite: false,
+        blending: THREE.NoBlending,
+        toneMapped: false,
+      }),
+    );
     this.pass = new FullscreenPass(
       new THREE.ShaderMaterial({
         name: 'CloudVolume',
@@ -141,6 +216,7 @@ export class CloudVolume {
           uVCamWorld: { value: new THREE.Matrix4() },
           uVCamPos: { value: new THREE.Vector3() },
           uSteps: { value: STEPS },
+          uFrame: { value: 0 },
         },
         vertexShader: FS_VERT,
         fragmentShader: FRAG,
@@ -152,8 +228,14 @@ export class CloudVolume {
     );
   }
 
+  /** the resolved (clean) cloud image of the latest frame */
   get texture(): THREE.Texture {
-    return this.target.texture;
+    return this.hist[this.histIdx].texture;
+  }
+
+  /** drop the history (time jumps, weather switches): the next frame starts clean */
+  reset(): void {
+    this.valid = false;
   }
 
   /** render the deck for `camera` at half the renderer's drawing-buffer resolution */
@@ -162,20 +244,56 @@ export class CloudVolume {
     this.fullRes.copy(this.size);
     const w = Math.max(1, Math.ceil(this.size.x / this.div)),
       h = Math.max(1, Math.ceil(this.size.y / this.div));
-    if (this.target.width !== w || this.target.height !== h) this.target.setSize(w, h);
+    if (this.target.width !== w || this.target.height !== h) {
+      this.target.setSize(w, h);
+      this.hist[0].setSize(w, h);
+      this.hist[1].setSize(w, h);
+      this.valid = false;
+    }
     const u = this.pass.material.uniforms;
     camera.updateMatrixWorld();
     (u.uVProjInv.value as THREE.Matrix4).copy(camera.projectionMatrixInverse);
     (u.uVCamWorld.value as THREE.Matrix4).copy(camera.matrixWorld);
     (u.uVCamPos.value as THREE.Vector3).setFromMatrixPosition(camera.matrixWorld);
+    this.frame = (this.frame + 1) % 4096;
+    u.uFrame.value = this.frame;
+    // camera cut (big jump in position or view direction): no history
+    _pos.setFromMatrixPosition(camera.matrixWorld);
+    camera.getWorldDirection(_fwd);
+    if (this.valid && (_pos.distanceTo(this.prevPos) > 400 || _fwd.dot(this.prevFwd) < 0.8)) this.valid = false;
     const prev = renderer.getRenderTarget();
     this.pass.render(renderer, this.target);
+    // resolve into the other history target
+    const ru = this.resolve.material.uniforms;
+    const src = this.hist[this.histIdx];
+    const dst = this.hist[1 - this.histIdx];
+    ru.tHist.value = src.texture;
+    (ru.uVProjInv.value as THREE.Matrix4).copy(camera.projectionMatrixInverse);
+    (ru.uVCamWorld.value as THREE.Matrix4).copy(camera.matrixWorld);
+    (ru.uPrevVP.value as THREE.Matrix4).copy(this.prevVP);
+    (ru.uTexel.value as THREE.Vector2).set(1 / w, 1 / h);
+    ru.uAlpha.value = this.valid ? this.blend : 1;
+    this.resolve.render(renderer, dst);
+    this.histIdx = 1 - this.histIdx;
     renderer.setRenderTarget(prev);
+    // this frame's direction → clip transform (rotation only) for the next frame's reprojection
+    _rot.extractRotation(camera.matrixWorld).invert();
+    this.prevVP.multiplyMatrices(camera.projectionMatrix, _rot);
+    this.prevPos.copy(_pos);
+    this.prevFwd.copy(_fwd);
+    this.valid = true;
     this.renders++;
   }
 
   dispose(): void {
     this.target.dispose();
+    this.hist[0].dispose();
+    this.hist[1].dispose();
     this.pass.dispose();
+    this.resolve.dispose();
   }
 }
+
+const _pos = new THREE.Vector3();
+const _fwd = new THREE.Vector3();
+const _rot = new THREE.Matrix4();

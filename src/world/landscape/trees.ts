@@ -579,7 +579,12 @@ if (vCrown > 0.5) {
   // backlit translucency of the foliage
   vec3 V = normalize(cameraPosition - vTW);
   float bt = pow(clamp(dot(-V, normalize(uSunDir)), 0.0, 1.0), 6.0) * vCrown * (1.0 - uNight);
-  reflectedLight.indirectDiffuse += diffuseColor.rgb * vec3(1.0, 0.9, 0.55) * bt * 1.6;
+  // the light through the leaves is the sun's own (colour + intensity: weak and red when low)
+  vec3 sunC = vec3(0.0);
+#if NUM_DIR_LIGHTS > 0
+  sunC = directionalLights[0].color;
+#endif
+  reflectedLight.indirectDiffuse += diffuseColor.rgb * sunC * vec3(1.0, 0.92, 0.6) * bt * 0.32;
 }`,
       );
   };
@@ -785,7 +790,12 @@ vec4 diffuseColor = vec4(treeAlbedo(vKind, vTint, tc.g, tc.b) * (0.6 + 0.6 * tc.
 {
   vec3 V = normalize(cameraPosition - vTW);
   float bt = pow(clamp(dot(-V, normalize(uSunDir)), 0.0, 1.0), 6.0) * tc.g * (1.0 - uNight);
-  reflectedLight.indirectDiffuse += diffuseColor.rgb * vec3(1.0, 0.9, 0.55) * bt * 1.6;
+  // the light through the leaves is the sun's own (colour + intensity: weak and red when low)
+  vec3 sunC = vec3(0.0);
+#if NUM_DIR_LIGHTS > 0
+  sunC = directionalLights[0].color;
+#endif
+  reflectedLight.indirectDiffuse += diffuseColor.rgb * sunC * vec3(1.0, 0.92, 0.6) * bt * 0.32;
 }`,
       );
   };

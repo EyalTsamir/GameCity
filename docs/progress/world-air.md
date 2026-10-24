@@ -4,81 +4,30 @@ Owner: **air** agent (world round). Files: `src/render/**` except `src/render/st
 `src/render/atmosphere.ts`. Never git-writes; the lead commits.
 
 ## Resume here
-* 2026-10-20 01:35 (3rd stop + reboot; all files intact, committed dc885c7). sky2 judged
-  (shots/world/air/sky2_11.png, sky2_gold.png): noon sky properly blue, ridges in blue layers ✓; golden
-  hour = sepia (AgX Golden CDL far too strong, isotropic MS term coloured by the REDDENED sunlight, sun
-  lobe too wide) → fixed: MS = re-scattered blue SKYLIGHT (`msLight`, physical.ts + twin, SKY_MS 0.3),
-  golden CDL gk 0.32→0.14, lobe exp 11 / 0.022+0.055·glowI. Clouds = flat white pebbles (2.5D cannot do
-  flat bases + domed sunlit tops) → NEXT: raymarched cumulus slab at half res (`sky/cloudVolume.ts`,
-  rendered by postfx before the composer, composited by the dome; cirrus stays 2D in the dome).
-* Running: sky3 (skycap hz_n/hz_w/up_ne × 11/18.2/19.3/21.5), m3a (vista/overview/riverbend/coast × 11/18.2).
-* 01:35 sky3 judged (sky3_a.png / sky3_b.png, still with the old 2.5D clouds): noon blue + layered blue
-  ridges ✓; 18.2 warm haze toward the sun with a tight golden glow ✓ but zenith grey-lavender; 19.3 salmon
-  clouds + horizon glow = first real sunset ✓. → MS term made stronger at a low sun (msLight ∝
-  clamp(2·sinEl+0.55), SKY_MS 0.45): probe zenith at 6.7° sun (0.87,0.98,1.53) = blue.
-  Cloud VOLUME written + wired (typechecks): `sky/cloudVolume.ts` (10-step half-res march, light 2 taps,
-  MS floor, dual-lobe phase, haze fade), `cloudLayer.ts` cuField/cuDens (placement × billows × height
-  profile), dome composites `tCloudVol` (gl_FragCoord / full res) over the 2D cirrus, postfx calls
-  `sky.renderClouds(renderer, camera)` at the top of ctx.render (sky renders it itself without postfx).
-* Note for world (via lead): at 19.3 the countryside trees in hz_w read bright lime as if at noon.
-* 01:55 LEAD: golden hour 18.2 = uniform sepia murk (m3b ov15/coast2, captured 01:37 = before most fixes)
-  — "the most important look of the project". Root cause: ONE in-scatter colour for both media → now
-  thAtmoApply = (col·TR + airColor·(1−TR))·TM + haze(V)·(1−TM): blue air cool everywhere (thAtmo[7] =
-  zenith hue at the haze's brightness, 35 % greyed), aerosol = ring + forward lobe; at golden hour the
-  ring turns cool blue-grey away from the sun (`horizonAt`, golden·0.62·smooth(0.25π, π, φ)).
-  Golden key (palette WORLD_OVERRIDES 17.6/18.6/19.3): aerosol 6.5e-5/9e-5/1.1e-4, exposure 1.16/1.2/1.22,
-  bluer hemiSky, less orange hemiGround; env bake lobe ×0.35.
-* sky4 judged (sky4_a/sky4_b.png): VOLUME CLOUDS WORK — 3D cumulus, golden rims when backlit, mauve
-  twilight clouds; fixed since: comb artefacts (5-tap rotated-grid filter in the dome), pyramid tops
-  (cuDens: sqrt field + cubic profile), beige ambient (ambient = zenith-led), thickness by coverage
-  (550 + 1100·min(1, 1.6·cov) m).
-* ?diorama verified unchanged in look (shots/world/air/dio_check.png; baseline set dio_base pending).
-* g1 judged (g1_sheet.png): golden POIs no longer sepia — cool blue-grey distance haze away from the
-  sun, warm-lit city, grey-blue sea; riverbend backlit with glitter. Defects → fixed: vertical stripe
-  artefacts in clouds (IGN jitter varies ~only along x) → white-noise jitter, 12 steps, ≤ 11 km march;
-  low sky still cream → golden remap gentler (sky at ~10° at 18.2: min(7, 0.6·el)), SKY_MS 0.55;
-  LUT/twin refresh thresholds loosened (sun Δsin 1e-3, camera height 15 % / 20 m).
-* sky5 judged (sky5_sheet.png) = BEST SO FAR: noon fair-weather cumulus with cauliflower edges over
-  layered blue ridges; 18.2 backlit golden clouds, sun glow, sun shafts over the fields, cool haze away.
-* Running: g2 (overview/riverbend/country/coast × 18.2/11), ladder test (shots/world/air/dbg/ladder.json).
+* 2026-10-24 03:35 — resumed after the weekly stop (tree clean at 582500f). STATE: M1 atmosphere (two
+  media: blue air + aerosol, own in-scatter colours, mist, legacy-fog macros), M2 physical sky (LUT +
+  CPU twin, skylight MS, golden-hour sky remap), M3 clouds (raymarched half-res cumulus volume + 2D
+  cirrus, field cloud shadows), M4 night (Milky Way, town sky glow), optics (lens DOF, sun shafts), grade
+  (AgX + subtle golden CDL), ladder (grass/leaf/landscape-tree steps; tested OK, dbg/ladder.json) — all in.
+  Best judged sheets: shots/world/air/sky5_sheet.png (sky), g1_sheet.png (golden POIs), sky3_night.png.
+* OPEN (lead review): (1) cloud edges must be clean — half-res march grain/streaks → temporal resolve
+  (rotation-reprojected history, neighbourhood clamp) [IN PROGRESS]; (2) golden overview: long raking
+  shadows + warm-sun/cool-shade contrast → wider world shadow coverage at overview distances at low sun,
+  sun stronger/warmer + fill bluer/weaker at 17.5–19 h; (3) sea at 18.2 with world (dome uZenith/uHorizon
+  feed the water; uHorizon = haze 120° from the sun).
+* Tools: `<scratchpad>/air/cap.mjs` (capture-set copy, 900 s load / 600 s shot timeouts),
+  `<scratchpad>/air/skycap.mjs` (free camera "name=camX,Y,Z,tgtX,Y,Z", use only=sky,terrain,landscape,
+  water,postfx), render-only typecheck `npx tsc --noEmit -p <scratchpad>/tsconfig.air.json` (20 s),
+  probes `<scratchpad>/air/physprobe.ts` / `hazeprobe.ts` (rolldown → node).
+* Running: nothing.
 
-* 2026-10-19 16:30 — M1 code written, render typecheck clean (`npx tsc --noEmit -p <scratch>/air/../tsconfig.air.json`
-  = render-only config in the scratchpad, 20 s; whole project takes 5 min):
-  new `render/atmosphere.ts`, `render/sky/atmoDrive.ts`; edits in `sky.ts` (install + driver + world fitter /
-  fog / hidden cotton puffs), `sky/dome.ts` (TH_WORLD: haze at/below the horizon, real-size sun),
-  `sky/palette.ts` (WORLD_KEYS: haze/mist per hour, deeper zenith), `postfx.ts` (lens DOF, world grade, AO fade
-  from the atmosphere, `softDepth()`), `postfx/look.ts` (thAgX with CDL look), `core/context.ts` (type only).
-* 20:35 (after the usage-limit stop + container reboot; all my files were committed in fe25a85):
-  M2 code in: `sky/physical.ts` (GPU sky-view LUT 64² + identical CPU twin), `atmoDrive.ts` drives LUT +
-  fog ring + lobe, dome TH_PHYS path, env bake from the LUT (`EnvPhysical`).
-  m2a judged (shots/world/air/m2a_sheet.png): golden-hour overview washed beige — the azimuth-only fog
-  ring contained the Mie forward peak (×17) → fixed: LUT/twin Mie isotropic (g 0), the forward peak only
-  in the analytic sun lobe (true scattering angle, dome + fog alike); sky too white → sky aerosol = 0.2×
-  fog haze, MS 0.15, ring sampled 3° up (the true horizon is a reddened long path).
-* Running: m2b (hz/overview/beach_e/ot_eye/river_w × 11/18.2, 960×540) → shots/world/air/m2b
-  (`<scratchpad>/air/cap.mjs` = capture-set copy with 900 s load / 600 s screenshot timeouts);
-  sky1 (free camera, `<scratchpad>/air/skycap.mjs`, views "name=camX,Y,Z,targetX,Y,Z", only=sky,terrain,
-  landscape,water,postfx) → shots/world/air/sky1 — first look at the M3 cloud layer.
-* M3 code in (typechecks): `sky/cloudLayer.ts` (procedural 128² noise, cumulus deck 1.8 km + cirrus 8.5 km,
-  2.5D lighting), dome TH_CLOUDS, `postfx/cloudShadow.ts` field mode (camera-centred 9 km map, haze fade),
-  sky.ts drives coverage by hour/day/weather, light at deck height (pink after sunset), drift with the wind.
-* M5 partly: ladder steps grass-0.7 / leaf-0.65 / detail-low via groundcover.setDensity /
-  vegetation.setLeafDistance (postfx/adaptive.ts + postfx.ts applyDetail).
-* m2b noon judged (m2b_sheet11.png): land haze good (blue-grey layers), sky band still pale/whitish.
-* 21:05 (2nd container restart ~20:49; files intact). Lead/world feedback acted on:
-  (1) noon haze milky grey, ridges don't separate → atmosphere is now TWO components: "blue air"
-  (Rayleigh ×1.8, per channel, 8 km scale height) + aerosol (grey, 1 km scale height, much lower:
-  noon 4.5e-5, golden 1–1.5e-4, dawn 1.6e-4) — slot thAtmo[11] = (aerosol, 1/H, 0, 0);
-  (2) daytime "specks" = tiny cumulus fragments → cumulus = placement per ~1.7 km cell × billows,
-  cirrus = veils with fibres; (3) world POIs (vista/country/coast/riverbend, overview pitch 20) noted;
-  landscape.setTreeDetail joined the ladder's leaf steps.
-* Running: sky2 (skycap, hz_n/hz_w/up_ne/hz_e × 11/18.2/19.3/21.5) and m3a (vista/overview/coast × 11/18.2)
-  — queued behind other agents' captures (3 lock slots full).
-* Since then (typechecks): golden-hour sky elevation remap (`skyElevationDeg` in atmoDrive: the sky model
-  follows the palette's low golden key 17–20 h / rose dawn; disc + glow stay at the true sun);
-  new `postfx/sunShafts.ts` (quarter-res mask + 28-tap radial blur, only while a low sun is on/near the
-  screen; `?noshafts`), wired after tilt / before bloom; Milky Way + city sky glow in the world dome.
-* Before set (5174) incomplete: only overview_11 + ot_eye_11 exist → re-run later when the box is idle.
+## History (condensed)
+* 10-19: survey, design, M1 atmosphere; m1a/m2a/m2b judged (beige veil = Mie peak in an azimuth-only ring
+  → isotropic LUT Mie + analytic sun lobe; white sky → less sky aerosol, ring 3° up).
+* 10-19 21:05: world/lead → two-component haze, cumulus placement, landscape.setTreeDetail in the ladder.
+* 10-20 01:35–02:30: sepia golden hour fixed (skylight MS, CDL 0.14, cool anti-sun ring, blue-air colour,
+  golden key: less aerosol/exposure, bluer fill); raymarched cloud volume (sky4 → sky5 best so far);
+  jitter = white noise, 12 steps; golden sky remap gentler (min(7°, 0.6·el)); SKY_MS 0.55.
 
 ## Brief (WORLD-PLAN scope 2 + lead notes)
 Aerial perspective via a global fog-chunk override (`src/render/atmosphere.ts`: height fog, Rayleigh-blue

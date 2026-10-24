@@ -288,6 +288,8 @@ export const cardKnobs = {
   fx: { value: 1 },
   /** dissolve cards seen edge-on (0 off .. 1 full) */
   edgeFade: { value: 1 },
+  /** fraction of far cards kept (quality tiers: high 1, medium 0.85, low 0.6) */
+  farKeep: { value: 1 },
 };
 
 // ──────────────────────────────────────────────────────────────── GLSL ──
@@ -297,6 +299,7 @@ uniform float uTime;
 uniform vec2 uWind;
 uniform sampler2D uThLod;
 uniform vec4 uThWindK;
+uniform float uThFarKeep;
 ${WIND_GLSL}
 /** near weight of plant #id (LOD texture, 1024 texels per row) */
 float thLodW( float id ) {
@@ -354,6 +357,8 @@ varying vec3 vThWPos;
 void thCard( out vec3 P, out vec3 N ) {
   float nearW = thLodW( iR.w );
   float vis = iN.w > 0.5 ? nearW : iN.w < -0.5 ? 1.0 - nearW : 1.0;
+  // lower quality tiers keep a subset of the far cards
+  if ( iN.w < -0.5 && fract( iB.z * 7.13 + iB.x * 3.1 ) > uThFarKeep ) vis = 0.0;
   vThVis = vis;
   vec3 U = iU.xyz * ${AXIS_SCALE.toFixed(1)};
   vec3 V = iV.xyz * ${AXIS_SCALE.toFixed(1)};
@@ -649,7 +654,7 @@ export interface FoliageMaterials {
 }
 
 function commonUniforms(u: GlobalUniforms, lod: THREE.Texture): Record<string, THREE.IUniform> {
-  return { uTime: u.uTime, uWind: u.uWind, uThLod: { value: lod }, uThWindK: cardKnobs.windK };
+  return { uTime: u.uTime, uWind: u.uWind, uThLod: { value: lod }, uThWindK: cardKnobs.windK, uThFarKeep: cardKnobs.farKeep };
 }
 
 export function cardMaterials(u: GlobalUniforms, atlas: THREE.Texture, lod: THREE.Texture): FoliageMaterials {

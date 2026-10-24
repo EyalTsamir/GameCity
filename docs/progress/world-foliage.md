@@ -13,8 +13,13 @@
   shrubs (42 % of forest trees), lead note → weathered octagonal/box planters (plants.ts stonePlanter: grime,
   algae, worn chipped rim, damp soil, fallen leaves) + trailing ivy / groundcover cards (crowns emitPlanter,
   atlas 'ivy' tile). Typechecks.
-* RUNNING: background b170hxfmr = dumpatlas.sh + capset.sh m1c 11 (queued behind other agents).
-* NEXT: judge m1c → golden hour 18.2 + night 21.5 set, overview stats (cards/wood counts), perf estimate.
+* m1c/m1d (m1d_sheet.png): date palms now full arching crowns ✔, planters weathered ✔, ot street tree reads
+  as a real leafy tree ✔; Washingtonia crowns looked like stacked tufts → fixed (28–36 fans on short petioles,
+  blade ⟂ petiole facing out, petiole wood). Pond reeds/lilies removed (groundcover owns them, lead request).
+* 2026-10-24 03:40 — resumed after the weekly stop. RUNNING: capset m1e (11/18.2/21.5 × palmB, ot, park, parkair,
+  forest, dtp, overview) + stats shots.
+* NEXT: judge golden hour (translucency) + night (lamp light), overview; counts → GPU estimate; wind check;
+  milestone message to lead.
 * Tools: scratchpad/{capset.sh OUT HOURS [q] [views], dumpatlas.sh, vstat.py, bench/}.
 * Views: park=-55,4,15,26,200,6; ot=66,3.5,-13.9,13,25,4; dt=-22,3.5,-68.9,14,35,4; palms=118,5,30,18,90,6;
   forest=10,10,-158,70,10,10; parkair=-55,0,17,90,30,30; overview.

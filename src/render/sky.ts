@@ -22,13 +22,14 @@ import { createStageUniforms, type StageService } from './stage/table';
 import { PLINTH_BOTTOM_Y } from './stage/constants';
 import { WORLD_MODE } from '../core/world';
 import { installAtmosphere, evalRing } from './atmosphere';
-import { AtmosphereDriver } from './sky/atmoDrive';
+import { AtmosphereDriver, skyElevationDeg } from './sky/atmoDrive';
 import { cloudLayerUniforms } from './sky/cloudLayer';
 import { CloudVolume } from './sky/cloudVolume';
 
 const _focus = new THREE.Vector3();
 const _L = new THREE.Vector3();
 const _sunSky = new THREE.Vector3();
+const _sunVisual = new THREE.Vector3();
 const _tmpC = new THREE.Color();
 const _grey = new THREE.Color();
 
@@ -106,6 +107,8 @@ export default async function create(ctx: CityContext): Promise<CityModule> {
   const cloudVol = cloudLayer ? new CloudVolume(cloudLayer) : null;
   cloudVol?.setQuality(ctx.quality.level);
   ctx.events.on('quality', () => cloudVol?.setQuality(ctx.quality.level));
+  // a time jump changes the light on every cloud at once: start the temporal history afresh
+  ctx.events.on('timejump', () => cloudVol?.reset());
   let cloudVolFrame = -1;
   let frameNo = 0;
   const renderClouds = (r: THREE.WebGLRenderer, cam: THREE.PerspectiveCamera) => {
@@ -278,8 +281,20 @@ export default async function create(ctx: CityContext): Promise<CityModule> {
     const sunW = smooth(-0.035, 0.07, sh);
     const moonW = smooth(0.0, -0.12, sh);
     usingMoon = moonW > sunW;
+    // world: the rendered sun follows the authored golden key — the clock's sine path keeps the sun ~17° up
+    // 1.3 h before sunset, a real late-afternoon sun sinks almost linearly (~10–12°) — so light, shadows
+    // (long and raking), disc, glow, sky and clouds all use one lower "visual" sun at golden hour
+    _sunVisual.copy(clock.sunDir);
+    if (world) {
+      const elT = THREE.MathUtils.radToDeg(Math.asin(THREE.MathUtils.clamp(clock.sunDir.y, -1, 1)));
+      const elV = THREE.MathUtils.degToRad(skyElevationDeg(elT, clock.hours));
+      const hz = Math.hypot(clock.sunDir.x, clock.sunDir.z);
+      if (hz > 1e-6) _sunVisual.set((clock.sunDir.x / hz) * Math.cos(elV), Math.sin(elV), (clock.sunDir.z / hz) * Math.cos(elV));
+      // shared with every shader (backlight / translucency): the sun they light by is the one shown
+      ctx.uniforms.uSunDir.value.copy(_sunVisual);
+    }
     if (usingMoon) liftElevation(clock.moonDir, Math.sin(THREE.MathUtils.degToRad(14)), _L);
-    else liftElevation(clock.sunDir, Math.sin(THREE.MathUtils.degToRad(6.5)), _L);
+    else liftElevation(_sunVisual, Math.sin(THREE.MathUtils.degToRad(6.5)), _L);
     lightI = state.sunI * Math.max(sunW, moonW) * (1 - overcast * 0.72) * tune.sun;
     sun.color.copy(state.sun);
     if (overcast > 0) sun.color.lerp(_grey.setRGB(0.85, 0.88, 0.95), overcast * 0.6);
@@ -297,7 +312,7 @@ export default async function create(ctx: CityContext): Promise<CityModule> {
     // ── backdrop
     sunVis = smooth(-0.06, 0.03, sh);
     moonVis = smooth(0.06, -0.1, sh);
-    _sunSky.copy(clock.sunDir);
+    _sunSky.copy(_sunVisual);
     dome.update(state, _sunSky, clock.moonDir, sunVis, moonVis, clock.realTime, overcast);
     if (world) {
       // sky glow of the lit town (and the villages around): warm, low, only with the street lights on
@@ -408,7 +423,9 @@ export default async function create(ctx: CityContext): Promise<CityModule> {
         cloudDay.ci = cloudDayRng.range(0.4, 1.4);
       }
       const h = clock.hours;
-      let cov = (0.16 + 0.26 * smooth(8.5, 14, h) - 0.16 * smooth(18, 21.5, h)) * cloudDay.cu;
+      // fair-weather cumulus build up after the morning and dissolve in the evening (convection stops):
+      // the golden hour is mostly clear, a few clouds left to catch the sunset
+      let cov = (0.16 + 0.26 * smooth(8.5, 14, h) - 0.28 * smooth(15.5, 19.2, h)) * cloudDay.cu;
       if (Number.isFinite(cloudCovParam)) cov = cloudCovParam;
       cov += (0.97 - cov) * overcast;
       cu.uCu.value.x = Math.min(1, Math.max(0, cov));
@@ -434,9 +451,11 @@ export default async function create(ctx: CityContext): Promise<CityModule> {
       cu.uCloudCity.value.setRGB(1.0, 0.62, 0.34).multiplyScalar(0.1 * lights);
       // shadows on the ground from the same field (soft, faded by the haze in front of them)
       cloudShadows.light.copy(_L);
-      cloudShadows.strength = shStrength * smooth(0.0, 0.1, cu.uCu.value.x);
+      // at a low sun the deck's shadows land far away, smeared over long slant paths: weaker
+      const lowSun = smooth(0.1, 0.45, _L.y);
+      cloudShadows.strength = shStrength * smooth(0.0, 0.1, cu.uCu.value.x) * (0.55 + 0.45 * lowSun);
       // under a real cloud only the (blue) sky light remains: darker and cooler than the toy puffs' shade
-      cloudShadows.tint.setRGB(0.44, 0.49, 0.62);
+      cloudShadows.tint.setRGB(0.48, 0.53, 0.65);
       cloudShadows.haze = atmo.params.haze + atmo.params.rayleigh.y;
     }
     _tmpC.copy(state.cloudShade).lerp(state.fog, 0.4).multiplyScalar(1.3);

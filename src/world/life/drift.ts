@@ -134,9 +134,9 @@ export class Drift {
       mesh.setColorAt(i, _c.set('#7d9a3a'));
     }
     mesh.count = total;
-    this.initInsects(n);
     this.leaves = mesh;
     this.group.add(mesh);
+    this.initInsects(n);
   }
 
   private ground(x: number, z: number): number {

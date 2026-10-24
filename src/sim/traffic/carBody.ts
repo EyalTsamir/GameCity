@@ -16,6 +16,8 @@ export interface CarShape {
   /** belt line (bottom of the side windows) and roof height */
   belt: number;
   roof: number;
+  /** the roof falls this much from the windscreen top to the rear window (hatchbacks) */
+  roofDrop?: number;
   /** bonnet height at the nose and at the windscreen base */
   noseH: number;
   hoodH: number;
@@ -61,14 +63,16 @@ export function topAt(s: CarShape, z: number): number {
     const t = (s.wsBase - z) / (s.wsBase - s.wsTop);
     return s.hoodH + (s.roof - s.hoodH) * Math.sin((t * Math.PI) / 2);
   }
+  const drop = s.roofDrop ?? 0;
   if (z >= s.rwTop) {
     // roof, crowned a little
     const t = (z - s.rwTop) / Math.max(0.01, s.wsTop - s.rwTop);
-    return s.roof + 0.015 * Math.sin(t * Math.PI);
+    return s.roof - drop * (1 - t) * (1 - t * 0.5) + 0.015 * Math.sin(t * Math.PI);
   }
   if (z >= s.rwBase) {
     const t = (s.rwTop - z) / Math.max(0.01, s.rwTop - s.rwBase);
-    return s.roof + (s.deckH - s.roof) * (1 - Math.cos((t * Math.PI) / 2));
+    const r0 = s.roof - drop;
+    return r0 + (s.deckH - r0) * (1 - Math.cos((t * Math.PI) / 2));
   }
   // boot to the tail
   const t = (s.rwBase - z) / Math.max(0.01, s.rwBase + h);

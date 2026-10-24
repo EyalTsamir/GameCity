@@ -16,7 +16,7 @@
 
 import type * as THREE from 'three';
 import type { CityContext, CityModule } from '../core/context';
-import { buildCoverMaps, addToGrids, type FlowerPatch } from './groundcover/mask';
+import { buildCoverMaps, type FlowerPatch } from './groundcover/mask';
 import { outerMapsBuilder, type OuterMaps } from './groundcover/outer';
 import { createField, type Field, type QualityLevel } from './groundcover/field';
 import { gcPalette, type GcPalette } from './groundcover/palette';
@@ -37,7 +37,7 @@ export default function create(ctx: CityContext): CityModule {
   const maps = buildCoverMaps(ctx);
   // the landscape band around the slab (world mode): meadows / reeds / dunes continue in blades; built
   // incrementally in frame() (≈ 4 ms per frame) so it never delays the boot
-  let outerGen = prm.has('nogcouter') ? null : outerMapsBuilder(ctx);
+  let outerGen = prm.has('nogcouter') ? null : outerMapsBuilder(ctx, maps.grids);
   let outer: OuterMaps | null = null;
   let outerWork = 0;
   // hand the maps to the ground shader (far field: lengths, flowers, litter, blade presence)
@@ -109,7 +109,6 @@ export default function create(ctx: CityContext): CityModule {
           outer = r.value ?? null;
           if (outer) {
             outer.workMs = outerWork;
-            addToGrids(maps.grids, outer.cover, outer.height, outer.w, outer.h, outer.x0, outer.z0, outer.res);
             field?.setOuter(outer);
           }
         }

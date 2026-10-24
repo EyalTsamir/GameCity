@@ -5,6 +5,9 @@
 //   * variant parts (taxi sign, police bar, cargo) collapsed when not used (aPart vs aInst2.x)
 //   * decal atlas row per variant (bus route sign, van logos)
 //   * emissive lights: head/tail/brake/blinkers/police bar/signs/cabin glow
+//   * per-part finishes (aMeta.w = roughness + 4 × class): 1 clear-coated paint (a sharp, Fresnel-weighted
+//     sky reflection over the base colour — MeshPhysical clearcoat, so it costs one more specular lobe and
+//     no extra pass), 2 glass (the same coat over a near-mirror dark base), 3 chrome (metallic)
 // Per-instance attributes (InstancedBufferAttribute on each model geometry):
 //   aInst  = (brake 0..1, blinker 0 none|1 left|2 right|3 hazard, wheel angle, steer angle)
 //   aInst2 = (variant, siren 0|1, phase 0..1, lights-on factor 0..1)
@@ -23,6 +26,8 @@ uniform float uTime;
 uniform float uLights;
 varying vec4 vEmit;
 varying float vRough;
+varying float vCoat;
+varying float vMetal;
 // variant parts: n = only for variant n - 1; 16 + bits = for the variants whose bit is set
 bool thHidden(float part, float variant) {
   if (part < 0.5) return false;
@@ -79,22 +84,29 @@ if ( thHidden( aPart, aInst2.x ) ) transformed = vec3( 0.0 );
   else if ( lt == 8 ) e = vec3( 0.3 + 2.0 * uLights );
   else if ( lt == 9 ) { e = vec3( 1.0, 0.8, 0.55 ) * ( 0.9 * uLights * aInst2.w ); useD = 0.0; }
   vEmit = vec4( e, useD );
-  vRough = aMeta.w;
+  float fin = floor( aMeta.w * 0.25 );
+  vRough = aMeta.w - fin * 4.0;
+  vCoat = ( fin > 0.5 && fin < 2.5 ) ? 1.0 : 0.0;
+  vMetal = ( fin > 2.5 ) ? 1.0 : 0.0;
 }
 `;
 
 const FRAG_PARS = /* glsl */ `
 varying vec4 vEmit;
 varying float vRough;
+varying float vCoat;
+varying float vMetal;
 `;
 
-export function createVehicleMaterial(uniforms: GlobalUniforms, atlas: THREE.Texture): { material: THREE.MeshStandardMaterial; depth: THREE.MeshDepthMaterial } {
-  const material = new THREE.MeshStandardMaterial({
+export function createVehicleMaterial(uniforms: GlobalUniforms, atlas: THREE.Texture): { material: THREE.MeshPhysicalMaterial; depth: THREE.MeshDepthMaterial } {
+  const material = new THREE.MeshPhysicalMaterial({
     color: 0xffffff,
     vertexColors: true,
     map: atlas,
     roughness: 0.5,
     metalness: 0.0,
+    clearcoat: 1,
+    clearcoatRoughness: 0.03,
   });
   material.name = 'traffic-vehicle';
   material.onBeforeCompile = (shader) => {
@@ -109,9 +121,11 @@ export function createVehicleMaterial(uniforms: GlobalUniforms, atlas: THREE.Tex
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>\n${FRAG_PARS}`)
       .replace('#include <roughnessmap_fragment>', 'float roughnessFactor = clamp( roughness * vRough, 0.04, 1.0 );')
+      .replace('#include <metalnessmap_fragment>', 'float metalnessFactor = vMetal;')
+      .replace('#include <lights_physical_fragment>', '#include <lights_physical_fragment>\n#ifdef USE_CLEARCOAT\n  material.clearcoat = vCoat;\n#endif')
       .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += vEmit.rgb * mix( vec3( 1.0 ), diffuseColor.rgb, vEmit.a );');
   };
-  material.customProgramCacheKey = () => 'traffic-vehicle-v2';
+  material.customProgramCacheKey = () => 'traffic-vehicle-v3';
   patchLampMaterial(material); // night street-light map (night agent)
 
   const depth = new THREE.MeshDepthMaterial();

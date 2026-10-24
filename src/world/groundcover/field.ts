@@ -64,7 +64,7 @@ export function ringSpecs(level: QualityLevel): RingSpec[] {
       { index: 1, tile: 4, levels: 2, blades: 448, in0: 9, in1: 12, out0: 24, out1: 29, width: 2.2, flowers: 0.2, lawnFlowers: 0, litter: 0 },
     ];
   return [
-    { index: 0, tile: 2, levels: 3, blades: 576, in0: -10, in1: -10, out0: 9.5, out1: 12.5, width: 1.06, flowers: 0.2, lawnFlowers: 0.08, litter: 0.55 },
+    { index: 0, tile: 2, levels: 3, blades: 576, in0: -10, in1: -10, out0: 9.5, out1: 12.5, width: 1.06, flowers: 0.24, lawnFlowers: 0.08, litter: 0.55 },
     { index: 1, tile: 4, levels: 2, blades: 448, in0: 9.5, in1: 12.5, out0: 29, out1: 35, width: 2.35, flowers: 0.15, lawnFlowers: 0, litter: 0.12 },
     { index: 2, tile: 8, levels: 1, blades: 512, in0: 29, in1: 35, out0: 56, out1: 66, width: 4.3, flowers: 0.12, lawnFlowers: 0, litter: 0 },
   ];
@@ -300,7 +300,7 @@ vGcRough = 0.85;
         if ( !reed && !marram && rb.z < 1.0 ) {
           // flowers grow in clusters: a third of the clumps carry most of them, one species per clump
           // (the patch's dominant species, a third of the clumps another one)
-          float clusterK = cl.z > 0.64 ? 2.4 : 0.3;
+          float clusterK = cl.z > 0.64 ? 3.0 : 0.25;
           if ( fract( ra.z * 31.7 + rc.x * 3.1 ) < flowerP * clusterK ) {
             fk = fract( cl.y * 7.77 + cl.x * 3.1 ) < 0.34 ? int( fract( cl.y * 9.31 + cl.z * 5.3 ) * 5.99 ) : int( flw.g * 6.0 );
           }
@@ -330,7 +330,7 @@ vGcRough = 0.85;
         vec3 eyeC = vec3( 0.0 );
         if ( fk >= 0 ) {
           // stem + head; the head faces the camera
-          float hsz = fk == 4 ? mix( 0.07, 0.1, rc.y ) : ( fk == 0 ? mix( 0.06, 0.085, rc.y ) : ( fk == 2 ? mix( 0.042, 0.056, rc.y ) : ( fk == 3 ? mix( 0.026, 0.036, rc.y ) : ( fk >= 6 ? mix( 0.016, 0.026, rc.y ) : mix( 0.036, 0.05, rc.y ) ) ) ) );
+          float hsz = ( fk == 4 ? mix( 0.07, 0.1, rc.y ) : ( fk == 0 ? mix( 0.06, 0.085, rc.y ) : ( fk == 2 ? mix( 0.042, 0.056, rc.y ) : ( fk == 3 ? mix( 0.026, 0.036, rc.y ) : ( fk >= 6 ? mix( 0.016, 0.026, rc.y ) : mix( 0.036, 0.05, rc.y ) ) ) ) ) ) * ( fk < 6 ? 1.35 : 1.15 );
           // stems stand a little above the grass, a few well above it
           if ( fk < 6 ) L = max( L * 1.12, ( fk == 4 ? 0.6 : 0.42 ) + 0.32 * rc.y ) * ( len > 0.5 ? 1.0 : 0.6 ) * ( fract( rc.x * 13.3 ) < 0.2 ? 1.3 : 1.0 );
           else L = mix( 0.06, 0.12, rc.y );

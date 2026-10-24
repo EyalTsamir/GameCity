@@ -1,18 +1,21 @@
 # world — streetlife (café terraces, street sitters, vendors, two-wheelers)
 
 ## Resume here
-* 2026-10-20 02:05 UTC — lead notes (1)–(3) applied and typechecked (milder attention: recycle every 2 s,
-  spawn bias 0.3; market bags after buying, vendors packing up until 16:30, no stall stops when closed,
-  evening market strolls, hangouts on the market square). Focus shots judged: invariants {} (dtroad's
-  sky failure was air's mid-edit, not mine); café occupancy 78/92 seats.
-* **M4 started (lead note 4: boxy cars)**: `traffic/carBody.ts` (new) lofts compact / hatch / sedan / SUV
-  bodies (profile-driven sections, tumblehome greenhouse, rounded nose / tail, wheel arches over dark wells,
-  regions paint / glass / trim (belt seal, B / C pillars) / well / SUV cladding); `models.ts loftBody()`
-  replaces rbox body + `cabin()` (removed), adds mirrors on arms, door seams + handles (LOD0).
-  Tris per car L0/L1/L2 ≈ 3.4k/1.15k/0.46k (was 2.1k/0.6k/0.24k). Lineup m4a judged: big lift; hatch
-  reshaped (was estate-like) → m4b running (LOD rows up close). Then eye-level street shots + perf.
-* Queued: `m3d` (21.5 h terrace re-check after wear's terrace lamps), soak1 (4 min @4×).
-* Next: m4b → tune; perf.mjs downtown before/after; busker view; `?diorama`; final report.
+* 2026-10-24 03:50 UTC — resumed after the weekly usage-limit stop (tree clean at 582500f). Judged before the
+  stop: m3d (night terraces with wear's lamps: pass), soak1 (4 min @4×, software GL: invariants 0, heap flat
+  353–358 MB, no errors; only ~14 game min covered at 10 fps), m4b / m4c (lofted cars at all 3 LODs: pass;
+  compact reshaped, hatch still estate-like → roofDrop + raked rear window added).
+* **Lead note 5 (glossy cars)** in progress: `vehicleMaterial.ts` is now a MeshPhysicalMaterial with
+  per-part finishes packed in aMeta.w (= rough + 4 × class): 1 clear-coated paint (sharp Fresnel sky
+  reflection), 2 glass (coat over near-mirror base), 3 chrome (metallic: CHROME / RIM colours); `models.ts`
+  PartOpts.finish (default: paint → coat, GLASS → glass, CHROME/RIM → chrome). Typechecks.
+  Running: `m4d` (lineup + street at 13 h / 18.2 h).
+* M4 so far: `traffic/carBody.ts` lofts compact / hatch / sedan / SUV (tumblehome greenhouse, rounded nose /
+  tail, wheel arches over dark wells, trim B/C pillars + belt seal, SUV cladding); `models.ts loftBody()`
+  (mirrors on arms, door seams + handles at LOD0), 5-spoke alloys on cars; underside faces culled.
+  Tris per car L0/L1/L2 ≈ 3.5k/1.0k/0.45k (was 2.1k/0.6k/0.24k); draw calls unchanged.
+* Next: judge m4d → tune finishes; eye-level + overview finals (12 / 18.2 / 21.5 h); `?diorama`; tri counts
+  at downtown (perf.mjs counts only — this container is software GL); final report.
 
 ## Brief (WORLD-PLAN.md workstream 5 + world-briefs.md notes)
 Gap: at eye level the city is thinly populated compared to reference 2 (sunny Tel-Aviv café street — every

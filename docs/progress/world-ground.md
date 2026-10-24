@@ -1,17 +1,17 @@
 # world-ground — grass, meadows, flowers, weeds, litter, reeds (world round)
 
 ## Resume here
-* 2026-10-20 02:05 — t5 judged (shots/world/ground/t5): pond verified (reed stands, cattails, lily pads,
-  shore meadow) → lead asked to have foliage remove their pond reeds/lilies; golden hour glows (pond_18h2:
-  backlit meadow + reeds warm and luminous — the reference's foreground feeling); landscape band works
-  (edge_s: blades continue into world's meadow beyond z=150); lawn near/far step fixed (park_eye_11).
-  Fixed after t5: pavement weeds = own habitat code 120 (leafy rosettes, 7 % dandelions, more spots along
-  walls 0.5 / kerbs 0.26 / gutters 0.2 per 0.9 m), shaded meadow brighter (root AO 0.46, turf lighter),
-  more/larger meadow flowers (ring A 20 %, species patches wider), meadow tussock heights ±34 %, ring
-  budgets A 576 / B 448 / C 512 (edge_s had 653 k verts). Boot: maps 1.7 s + band 0.9 s (load ~13).
-* Running: t6 (ot_walk weeds, fence tufts, park_eye, bank_band × 11 / 21.5 h night, overview) → t6.
-* Next: judge t6 → perf/stat numbers in the log → gust motion check (2 frames) → M4 far-field polish
-  (overview) → quality tiers (medium/low captures) → final report.
+* 2026-10-24 03:40 — resumed after the weekly limit stop (tree clean at 582500f). t6 + t7 had completed
+  before the stop and are judged: night OK (lamp pools light the lawn blades), weeds now visible tufts at
+  wall bases (t7/ot_walk_11), noon meadow lighter/softer with clustered flowers (t7/bank_meadow_11).
+  Done since: lead notes (1) meadow: low undergrowth layer (38 % of long-grass blades short + lusher),
+  normals more sky-facing (upK 0.42+), tip sheen (roughness 0.5 at tips), root AO 0.46 →; (2) flowers in
+  clusters (clump-carried, one species per clump), heads ×1.35, ring A 24 %, 20 % taller stems; weeds
+  bigger/brighter; landscape band built incrementally in frame() (generator, ~4 ms/frame, incl. tile
+  grids) → no boot cost; foliage removed its pond reeds/lilies (lead).
+* Running: t8 (1600×900: bank_meadow, pond, park_eye, edge_s × 11 / 18.2, overview) → t8.
+* Next: judge t8 → quality tiers check (medium / low captures) + ?nograss A/B numbers → gust motion →
+  M4 far-field (overview / 45 m views) → final report.
 
 ## Brief (from WORLD-PLAN.md + world-briefs.md "### ground")
 Owner of `src/world/terrain/ground.ts` (+ its mask), `src/world/groundcover.ts` + `src/world/groundcover/*`.

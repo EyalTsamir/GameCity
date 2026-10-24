@@ -206,9 +206,9 @@ export class AtmosphereDriver {
     this.nightW = tn * tn * (3 - 2 * tn);
     if (this.lut) {
       const ph = this.phys;
-      const el = THREE.MathUtils.degToRad(skyElevationDeg(THREE.MathUtils.radToDeg(Math.asin(Math.max(-1, Math.min(1, sh)))), hours));
-      ph.sunSin = Math.sin(el);
-      ph.sunCos = Math.cos(el);
+      // (the caller passes the visual sun — already lowered at golden hour, see skyElevationDeg)
+      ph.sunSin = sh;
+      ph.sunCos = Math.sqrt(Math.max(0, 1 - sh * sh));
       ph.camH = Math.min(3000, Math.max(1, camY));
       ph.haze = haze * SKY_HAZE;
       if (this.lut.update(renderer, ph)) {

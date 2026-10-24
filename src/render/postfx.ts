@@ -458,7 +458,7 @@ export default function create(ctx: CityContext): CityModule {
 
     // ── sun shafts: a low sun in or near the frame (fades with elevation, off-screen distance, rain)
     if (shafts) {
-      const sd = ctx.clock.sunDir;
+      const sd = ctx.uniforms.uSunDir.value; // the visual sun (sky module)
       camera.getWorldDirection(_fwd);
       const facing = _fwd.dot(sd);
       let k = 0;

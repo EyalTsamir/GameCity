@@ -1,19 +1,19 @@
 # world-life — wind consumers, smoke, birds, small motion (world round)
 
 ## Resume here
-* 2026-10-20 02:05 (after the 3rd stop/reboot) — all features coded + typechecking. Verified: bunting /
-  festoons / market masts (m2a), factory smoke with soft depth + prewarm (shots/world/life/dbg/a.png,
-  dbg2/s.png). m3a (heavy load) showed no smoke for unknown reasons; single shots + quiet-machine
-  capture-set show it fine → re-running as m3b.
-* New since: smoke prewarm (14 s at start + 'timejump'), leaf prewarm, café terrace string lights
-  (props.cafes parasol tops, MST ≤ 6.5 m, `extras.ts cafeLights`), kite strings thinner/darker and
-  vanishing below ~0.6 px (lead's coast-shot note; `sim/ambient/kites.ts`).
+* 2026-10-24 03:35 (after the weekly stop) — all features coded + typechecking. Fixed the boot failure
+  the lead saw (Drift.initInsects ran before the instanced mesh existed); life.ts now fault-isolates every
+  part (cloth / extras / chimneys / drift) at creation AND at runtime (a failing part is switched off and
+  reported in invariants, the rest keeps running).
+* Verified earlier: bunting / festoons / market masts (m2a), factory smoke with soft depth + prewarm
+  (dbg/a.png, dbg2/s.png). Pending verification (m3b): house chimney smoke, leaves, motes, swifts, moths,
+  pigeons, gull perches, café string lights, butterflies/bees, kite strings.
 * Files: `src/world/life.ts`, `life/{glsl,cloth,decor,poles,extras,chimneys,drift}.ts`,
   `sim/ambient/{smoke,birds,kites}.ts`, `sim/ambient.ts` (doc), landmarks/shaders.ts FLAG mode.
 * Running: capture set m3b → shots/world/life/m3b (roofs, otsun, parkeye, market, square, harbroof ×
-  7.5/18.6/21.5). Private script: scratchpad/life/cap.mjs (capture-set with a 25-min ready timeout).
-  Debug probe: scratchpad/life/smokedbg.js (prints smoke instance data via console.warn).
-* Next: judge m3b; tune; full-city milestone set; message lead.
+  7.5/18.6/21.5; incl. groundcover for flower patches). Private script: scratchpad/life/cap.mjs
+  (= scripts/capture-set.mjs with a 25-min ready timeout); debug probe scratchpad/life/smokedbg.js.
+* Next: judge m3b; tune; full-city milestone set (confirm failedModules empty); message lead.
 
 ## Brief (from WORLD-PLAN.md §6 + briefs)
 Wind consumers: flags on poles flap, bunting / festoon strings across old-town streets and the market,

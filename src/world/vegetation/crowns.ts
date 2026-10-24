@@ -529,15 +529,16 @@ function palmStruct(st: Struct, rng: Rng): void {
   st.lobes.push({ x: T[0], y: T[1] - 0.3, z: T[2], rx: 0.8, ry: 0.9, rz: 0.8, tint: 1, ph: rng.next(), w: 0.5 });
   // crown shaft / boss (wood with leaf-base pattern)
   st.segs.push({ a: T, b: [T[0], T[1] + 0.5, T[2]], ra: rBase * (canary ? 1.25 : 1.15), rb: rBase * 0.6, sa: STILL, sb: STILL, near: false, aoA: 0.8, aoB: 0.85 });
-  const n = fan ? rng.int(18, 24) : canary ? rng.int(36, 46) : rng.int(22, 30);
+  // Washingtonia: a compact ball of fans on short petioles; date / Canary: long arching fronds
+  const n = fan ? rng.int(28, 36) : canary ? rng.int(36, 46) : rng.int(22, 30);
   const a0 = rng.range(0, 6.28);
   for (let i = 0; i < n; i++) {
     const a = a0 + i * 2.39996 + rng.range(-0.1, 0.1);
     // elevation: young fronds up, old ones drooping (spiral by age)
     const ageF = i / n;
-    const el = (fan ? 0.9 : 1.05) - ageF * (fan ? 1.5 : 1.75) + rng.range(-0.12, 0.12);
-    const L = (fan ? rng.range(1.0, 1.4) : rng.range(2.6, 3.6) * (canary ? 1.35 : 1)) * Math.min(1.25, h / 8);
-    const droop = (fan ? 0.2 : 0.55) * (0.6 + ageF) * L;
+    const el = (fan ? 1.25 : 1.05) - ageF * (fan ? 1.75 : 1.75) + rng.range(-0.12, 0.12);
+    const L = (fan ? rng.range(0.55, 0.85) : rng.range(2.6, 3.6) * (canary ? 1.35 : 1)) * Math.min(1.25, h / 8);
+    const droop = (fan ? 0.12 : 0.55) * (0.6 + ageF) * L;
     const pts: V3[] = [];
     const base: V3 = [T[0], T[1] + 0.35, T[2]];
     for (let k = 0; k <= 4; k++) {
@@ -545,7 +546,10 @@ function palmStruct(st: Struct, rng: Rng): void {
       pts.push([base[0] + Math.cos(a) * Math.cos(el) * L * s, base[1] + Math.sin(el) * L * s - droop * s * s, base[2] + Math.sin(a) * Math.cos(el) * L * s]);
     }
     const ph = rng.next();
-    st.fronds.push({ pts, width: fan ? 0.8 : L * 0.24, sway: { ph1: ph, w1: 0.9, ph2: rng.next(), w2: 0.6 }, dry: false, fan });
+    const sw = { ph1: ph, w1: 0.9, ph2: rng.next(), w2: 0.6 };
+    st.fronds.push({ pts, width: fan ? rng.range(0.62, 0.78) : L * 0.24, sway: sw, dry: false, fan });
+    // fan-palm petiole (near LOD wood): the leaf stalk carrying the fan
+    if (fan) st.segs.push({ a: pts[0], b: pts[4], ra: 0.035, rb: 0.022, sa: { ...sw, w1: 0, w2: 0 }, sb: sw, near: true, aoA: 0.6, aoB: 0.85 });
   }
   if (fan) {
     // the Washingtonia petticoat: dry leaves hanging against the trunk
@@ -924,9 +928,11 @@ function emitFronds(st: Struct, ref: PlantRef, cards: InstBuf, rng: Rng, lod: nu
       const side = norm(cross([0, 1, 0], dir));
       const up = norm(cross(dir, side));
       const hs = fr.width * rng.range(0.9, 1.1);
-      const V: V3 = [(dir[0] * 0.5 + up[0] * 0.6) * hs, (dir[1] * 0.5 + up[1] * 0.6) * hs, (dir[2] * 0.5 + up[2] * 0.6) * hs];
+      // the fan opens across the petiole end: blade plane ⟂ petiole, face looking out of the crown
+      const vd = norm(add(add(up, dir, 0.4), randDir(rng), 0.18));
+      const V: V3 = [vd[0] * hs, vd[1] * hs, vd[2] * hs];
       const U: V3 = [side[0] * hs, side[1] * hs, side[2] * hs];
-      const c: V3 = [b[0] + V[0] * 0.6, b[1] + V[1] * 0.6, b[2] + V[2] * 0.6];
+      const c: V3 = [b[0] + V[0] * 0.7, b[1] + V[1] * 0.7, b[2] + V[2] * 0.7];
       const F = norm(cross(U, V));
       card(cards, ref, st, c, U, V, sphereNormal(st, c, null, F, 0.5), 0.9, lod, uvFan, rng.range(0.9, 1.08), fr.sway, 0.8);
       return;

@@ -304,7 +304,14 @@ interface PartOpts {
   decal?: AtlasRect;
   /** UV step per instance variant (rows downwards) */
   decalRows?: boolean;
+  /** surface finish (see FINISH); default: clear-coated for painted parts without a decal, glass for GLASS,
+   *  chrome for CHROME / RIM, plain otherwise */
+  finish?: Finish;
 }
+
+/** surface finishes, packed into aMeta.w as roughness + 4 × class (vehicleMaterial.ts decodes them) */
+type Finish = 'plain' | 'coat' | 'glass' | 'chrome';
+const FINISH: Record<Finish, number> = { plain: 0, coat: 1, glass: 2, chrome: 3 };
 
 const _col = new THREE.Color();
 
@@ -333,6 +340,8 @@ class Builder {
     const uv = new Float32Array(n * 2);
     const srcUv = geo.attributes.uv as THREE.BufferAttribute | undefined;
     const step = o.decal && o.decalRows ? o.decal.h / ATLAS_SIZE : 0;
+    const fin = FINISH[o.finish ?? (o.paint && !o.decal && !o.light ? 'coat' : o.color === GLASS ? 'glass' : o.color === CHROME || o.color === RIM ? 'chrome' : 'plain')];
+    const rough = Math.min(3.9, o.rough ?? 1) + 4 * fin;
     for (let i = 0; i < n; i++) {
       col[i * 3] = _col.r;
       col[i * 3 + 1] = _col.g;
@@ -340,7 +349,7 @@ class Builder {
       meta[i * 4] = o.paint ? 1 : 0;
       meta[i * 4 + 1] = o.light ?? 0;
       meta[i * 4 + 2] = step;
-      meta[i * 4 + 3] = o.rough ?? 1;
+      meta[i * 4 + 3] = rough;
       if (o.wheel) {
         wheel[i * 4] = o.wheel.x;
         wheel[i * 4 + 1] = o.wheel.y;
@@ -671,13 +680,10 @@ function hatch(): THREE.BufferGeometry {
   const b = new Builder();
   const L = 4.0,
     W = 1.74;
-  const c = loftBody(
-    b,
-    { L, W, sill: 0.3, belt: 0.9, roof: 1.44, noseH: 0.76, hoodH: 0.9, wsBase: 0.88, wsTop: 0.0, rwTop: -1.22, rwBase: -1.78, deckH: 1.0, tailH: 0.94, pillarB: -0.45, glassRear: -1.12, tumble: 0.14, axF: 1.22, axR: -1.33, wheelR: 0.31 },
-    true,
-  );
-  // small roof spoiler
-  b.add(rbox(c.topW - 0.12, 0.045, 0.2, 0.02, 0, c.topY - 0.035, -1.22 + 0.04), { color: '#ffffff', paint: true });
+  const shape: CarShape = { L, W, sill: 0.3, belt: 0.9, roof: 1.45, roofDrop: 0.06, noseH: 0.76, hoodH: 0.9, wsBase: 0.88, wsTop: 0.02, rwTop: -1.02, rwBase: -1.76, deckH: 0.98, tailH: 0.93, pillarB: -0.42, glassRear: -0.98, tumble: 0.14, axF: 1.22, axR: -1.33, wheelR: 0.31 };
+  const c = loftBody(b, shape, true);
+  // small roof spoiler over the rear window
+  b.add(rbox(c.topW - 0.12, 0.045, 0.2, 0.02, 0, topAt(shape, shape.rwTop + 0.06) - 0.025, shape.rwTop - 0.02), { color: '#ffffff', paint: true });
   carDetails(b, { L, W, wheelR: 0.31, wheelW: 0.23, axF: 1.22, axR: -1.33, wheelX: W / 2 - 0.09, bodyY: 0.31, bodyH: 0.6, bodyR: 0.2, lightY: 0.68 });
   return b.build();
 }

@@ -11,7 +11,7 @@ import type { CityContext } from '../../core/context';
 import { SLAB } from '../../core/constants';
 import { fbm, vnoise } from '../terrain/noise';
 import { GROUND_DROP } from '../terrain/height';
-import { GRID_PAD } from './mask';
+import { GRID_PAD, addToGrids, type TileGrid } from './mask';
 
 export const OUTER_M = GRID_PAD;
 
@@ -62,13 +62,13 @@ function smooth(e0: number, e1: number, x: number): number {
  * module drives it from frame() with a small time budget; the result arrives a second or two later
  * (the band is only seen from near the slab edge).
  */
-export function outerMapsBuilder(ctx: CityContext): Generator<void, OuterMaps | null, void> | null {
+export function outerMapsBuilder(ctx: CityContext, grids: TileGrid[]): Generator<void, OuterMaps | null, void> | null {
   const land = ctx.services.landscape as LandscapeLike | undefined;
   if (!land || !land.active) return null;
-  return build(land);
+  return build(land, grids);
 }
 
-function* build(land: LandscapeLike): Generator<void, OuterMaps | null, void> {
+function* build(land: LandscapeLike, grids: TileGrid[]): Generator<void, OuterMaps | null, void> {
   const t0 = performance.now();
   const x0 = SLAB.x0 - OUTER_M,
     z0 = SLAB.z0 - OUTER_M;
@@ -226,6 +226,12 @@ function* build(land: LandscapeLike): Generator<void, OuterMaps | null, void> {
       flower[q] = Math.round(clamp01(smooth(0.5, 0.72, fs[best]) * meadowF) * 255);
       flower[q + 1] = Math.round(((best + 0.5) / 6) * 255);
     }
+  }
+  // the ring walker's tile metadata learns about the band (rows of the band, a few per step)
+  for (let j = 0; j < h; j += 16) {
+    yield;
+    const rows = Math.min(16, h - j);
+    addToGrids(grids, cover.subarray(j * w * 4, (j + rows) * w * 4), height.subarray(j * w, (j + rows) * w), w, rows, x0, z0 + j * res, res);
   }
   const mk = (data: Uint8Array, tw: number, th: number) => {
     const t = new THREE.DataTexture(data, tw, th, THREE.RGBAFormat, THREE.UnsignedByteType);
