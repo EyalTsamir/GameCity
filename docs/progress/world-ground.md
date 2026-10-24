@@ -1,17 +1,18 @@
 # world-ground — grass, meadows, flowers, weeds, litter, reeds (world round)
 
 ## Resume here
-* 2026-10-24 03:40 — resumed after the weekly limit stop (tree clean at 582500f). t6 + t7 had completed
-  before the stop and are judged: night OK (lamp pools light the lawn blades), weeds now visible tufts at
-  wall bases (t7/ot_walk_11), noon meadow lighter/softer with clustered flowers (t7/bank_meadow_11).
-  Done since: lead notes (1) meadow: low undergrowth layer (38 % of long-grass blades short + lusher),
-  normals more sky-facing (upK 0.42+), tip sheen (roughness 0.5 at tips), root AO 0.46 →; (2) flowers in
-  clusters (clump-carried, one species per clump), heads ×1.35, ring A 24 %, 20 % taller stems; weeds
-  bigger/brighter; landscape band built incrementally in frame() (generator, ~4 ms/frame, incl. tile
-  grids) → no boot cost; foliage removed its pond reeds/lilies (lead).
-* Running: t8 (1600×900: bank_meadow, pond, park_eye, edge_s × 11 / 18.2, overview) → t8.
-* Next: judge t8 → quality tiers check (medium / low captures) + ?nograss A/B numbers → gust motion →
-  M4 far-field (overview / 45 m views) → final report.
+* 2026-10-24 04:10 — t8 judged (1600×900): bank_meadow 11 = clustered poppies / cornflowers / knapweed /
+  buttercups / daisies, the reference's meadow; pond 18.2 = backlit flower meadow + reeds glowing (best
+  shot). Edge tufts no longer paint a pale rim (palette: edge length keeps lawn colour).
+  NEW (lead approved): the fixed 96 m landscape band is replaced by a ROAMING COVER WINDOW
+  (`groundcover/outer.ts` createCoverWindow: 224 m square around the camera, 0.5 m texels, rebuilt when
+  the camera is > 24 m from its centre, generator stepped in frame() with 4 ms/frame at 60 fps (wall-time
+  proportional on slow frames), double-buffered buffer sets + textures allocated once, own tile grids).
+  Slab tile grids now sit on the global 8 m lattice (GRID_ALIGN) so slab + window tiles coincide; the
+  walker ORs both. Typecheck clean. Lead moved the riverbend POI camera to 52 m.
+* Running: tier captures t9_{high,medium,low,nograss} (pond, park_eye, park_mid, edge_s @11 h).
+* Next: hop test (shots/world/ground/hop.mjs: riverbend view, hop 40 m W → a_before / b_hop_now /
+  c_hop_rebuilt) + riverbend POI at 11 / 18.2 for the lead; judge tiers; final report.
 
 ## Brief (from WORLD-PLAN.md + world-briefs.md "### ground")
 Owner of `src/world/terrain/ground.ts` (+ its mask), `src/world/groundcover.ts` + `src/world/groundcover/*`.

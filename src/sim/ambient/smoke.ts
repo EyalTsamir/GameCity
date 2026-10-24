@@ -250,7 +250,7 @@ void main() {
 
 export function createSmoke(ctx: CityContext): SmokeSystem {
   const rng = ctx.rng('ambient-smoke');
-  const MAX = 1400;
+  const MAX = 2000;
   const budget = () => Math.round(MAX * (0.55 + 0.45 * Math.min(1, Math.max(0.4, ctx.quality.density))));
 
   // ── particle state (SoA)

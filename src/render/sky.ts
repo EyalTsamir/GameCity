@@ -329,6 +329,7 @@ export default async function create(ctx: CityContext): Promise<CityModule> {
         const l = THREE.MathUtils.clamp(lum(atmo.params.ring[0]), 0, 2);
         _belt.setRGB(1.0, 0.6, 0.66).multiplyScalar(0.32 * k * l * (1 - overcast));
         dome.setBelt(_belt);
+        dome.setSkySat(0.4 * atmo.golden);
       }
       if (atmo.lut) dome.setPhysical(atmo.lut.texture, atmo.skyScale, state.zenith, state.horizon, atmo.nightW, atmo.sunColor, atmo.zenith, evalRing(atmo.params.ring, 2.1, _hor));
       if (envPhys) {

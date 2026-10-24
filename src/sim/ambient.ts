@@ -27,7 +27,7 @@
 //     … h?.remove();
 //   Puffs live in sim time (frozen while paused) and drift with the shared wind field
 //   (core/wind.ts windAt: gust fronts, stronger aloft). All emitters share one particle budget
-//   (~1400 puffs, scaled by quality.density); distant emitters emit fewer, larger puffs, and rates
+//   (~2000 puffs, scaled by quality.density); distant emitters emit fewer, larger puffs, and rates
 //   are scaled down together when the city would exceed the budget.
 //
 // ── Events

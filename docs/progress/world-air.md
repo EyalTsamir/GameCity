@@ -30,8 +30,17 @@ Owner: **air** agent (world round). Files: `src/render/**` except `src/render/st
   globalUniforms.uSunDir after main.ts so every shader agrees) + world shadow map out to 950 m.
   Clouds: TEMPORAL RESOLVE in cloudVolume.ts (per-frame jitter, history reprojected by view direction,
   neighbourhood clamp, α 0.14, reset on camera cuts / timejump).
-* Running: g3 (FULL CITY oldtown/park/overview/riverbend × 18.2/11, 1280×720), sky6 (hz_n/hz_w/up_ne ×
-  11/18.2/19.4).
+* 04:10 g3 (full city) judged → LEAD APPROVED the golden city light (g3_sheet.png: warm facades, long
+  raking shadows, cool shade; riverbend = the reference's mood); noon full city good (g3_noon.png); report
+  clean (0 errors, invariants {}, 102–182 dc, 1.8–2.7 M tris). sky6 → temporal resolve gives clean edges.
+  Then fixed + verified in sky7 (sky7_a.png / sky7_b.png): cloud shapes (dome cross-section per cell,
+  linear height profile ×1.12 so tops never hit the slab ceiling, cells 2 km, thickness 380 + 700·…,
+  mip bias log2(t0/7000) ≤ 2 → the far deck recedes to the horizon) = proper fair-weather cumulus;
+  visual-sun height drives the light weight (no direct sun after the visual sunset); evening cumulus
+  decay gentler (a few clouds catch the sunset); sky brightness × 1.06/exposure (golden sky no longer in
+  AgX's grey shoulder); Belt of Venus arch in the dome; lavender anti-sun haze; golden aerosol 5/6.5/8.5e-5;
+  upper-sky saturation +0.4·golden.
+* Running: g4 (FULL CITY overview/vista/oldtown/coast @18.2) — lead note (3): overview milky at 300–1500 m.
 
 ## History (condensed)
 * 10-19: survey, design, M1 atmosphere; m1a/m2a/m2b judged (beige veil = Mie peak in an azimuth-only ring

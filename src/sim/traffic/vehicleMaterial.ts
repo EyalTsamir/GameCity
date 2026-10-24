@@ -89,7 +89,7 @@ if ( thHidden( aPart, aInst2.x ) ) transformed = vec3( 0.0 );
   vRough = aMeta.w - fin * 4.0;
   vCoat = ( fin > 0.5 && fin < 2.5 ) ? 1.0 : 0.0;
   vMetal = ( fin > 2.5 ) ? 1.0 : 0.0;
-  vGain = fin < 0.5 ? 1.0 : fin < 1.5 ? 1.35 : fin < 2.5 ? 2.2 : 1.25;
+  vGain = fin < 0.5 ? 1.0 : fin < 1.5 ? 3.0 : fin < 2.5 ? 4.5 : 1.6;
 }
 `;
 
@@ -119,7 +119,7 @@ export function createVehicleMaterial(uniforms: GlobalUniforms, atlas: THREE.Tex
     roughness: 0.5,
     metalness: 0.0,
     clearcoat: 1,
-    clearcoatRoughness: 0.03,
+    clearcoatRoughness: 0.06,
   });
   material.name = 'traffic-vehicle';
   material.onBeforeCompile = (shader) => {
@@ -148,7 +148,7 @@ export function createVehicleMaterial(uniforms: GlobalUniforms, atlas: THREE.Tex
       )
       .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += vEmit.rgb * mix( vec3( 1.0 ), diffuseColor.rgb, vEmit.a );');
   };
-  material.customProgramCacheKey = () => 'traffic-vehicle-v4';
+  material.customProgramCacheKey = () => 'traffic-vehicle-v5';
   patchLampMaterial(material); // night street-light map (night agent)
 
   const depth = new THREE.MeshDepthMaterial();

@@ -620,6 +620,7 @@ export function createField(ctx: CityContext, maps: CoverMaps, outer: OuterMaps 
   build(level);
 
   // ── per-frame tile walk (no allocations)
+  let win: OuterMaps | null = outer;
   const frustum = new THREE.Frustum();
   const pv = new THREE.Matrix4();
   const box = new THREE.Box3();
@@ -640,17 +641,41 @@ export function createField(ctx: CityContext, maps: CoverMaps, outer: OuterMaps 
       const arr = r.inst.array as Float32Array;
       let n = 0;
       const offs = r.offsets;
+      // the roaming landscape window's grid for this ring (same global 8 m lattice as the slab's)
+      const wg = win ? win.grids[r.spec.index] : null;
+      const wdi = wg ? Math.round((g.x0 - wg.x0) / S) : 0,
+        wdj = wg ? Math.round((g.z0 - wg.z0) / S) : 0;
       for (let k = 0; k < offs.length; k += 2) {
         const ti = ci + offs[k],
           tj = cj + offs[k + 1];
-        if (ti < 0 || tj < 0 || ti >= g.nx || tj >= g.nz) continue;
-        const t = tj * g.nx + ti;
-        const fl = g.flags[t];
+        let fl = 0,
+          y0 = 1e9,
+          y1 = -1e9;
+        if (ti >= 0 && tj >= 0 && ti < g.nx && tj < g.nz) {
+          const t = tj * g.nx + ti;
+          fl = g.flags[t];
+          if (fl) {
+            y0 = g.ymin[t];
+            y1 = g.ymax[t];
+          }
+        }
+        if (wg) {
+          const wi = ti + wdi,
+            wj = tj + wdj;
+          if (wi >= 0 && wj >= 0 && wi < wg.nx && wj < wg.nz) {
+            const t = wj * wg.nx + wi;
+            const wf = wg.flags[t];
+            if (wf) {
+              fl |= wf;
+              y0 = Math.min(y0, wg.ymin[t]);
+              y1 = Math.max(y1, wg.ymax[t]);
+            }
+          }
+        }
         if (fl === 0) continue;
+        y1 += BLADE_UP;
         const x0 = g.x0 + ti * S,
           z0 = g.z0 + tj * S;
-        const y0 = g.ymin[t],
-          y1 = g.ymax[t] + BLADE_UP;
         // distance from the camera to the tile box (3D)
         const dx = Math.max(x0 - BLADE_SIDE - camPos.x, 0, camPos.x - (x0 + S + BLADE_SIDE));
         const dz = Math.max(z0 - BLADE_SIDE - camPos.z, 0, camPos.z - (z0 + S + BLADE_SIDE));
@@ -706,6 +731,7 @@ export function createField(ctx: CityContext, maps: CoverMaps, outer: OuterMaps 
       build(lvl);
     },
     setOuter(o: OuterMaps) {
+      win = o;
       shared.tCoverO.value = o.texCover;
       shared.tFlowerO.value = o.texFlower;
       shared.tGHO.value = o.texHeight;

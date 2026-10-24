@@ -12,12 +12,12 @@
 //   palette            shared colour uniforms (console tuning)
 //
 // URL: ?nograss (no blades; ground shader only) · ?grass=<0.25..1> · ?gcrings=A,B,C · ?gcflowers=0 ·
-//      ?nolitter · ?nolilies · ?nogcouter (no blades beyond the slab)
+//      ?nolitter · ?nolilies · ?nogcouter (no blades beyond the slab: no roaming landscape window)
 
 import type * as THREE from 'three';
 import type { CityContext, CityModule } from '../core/context';
 import { buildCoverMaps, type FlowerPatch } from './groundcover/mask';
-import { outerMapsBuilder, type OuterMaps } from './groundcover/outer';
+import { createCoverWindow } from './groundcover/outer';
 import { createField, type Field, type QualityLevel } from './groundcover/field';
 import { gcPalette, type GcPalette } from './groundcover/palette';
 import { setGroundCover } from './terrain/ground';
@@ -35,14 +35,10 @@ export default function create(ctx: CityContext): CityModule {
   const t0 = performance.now();
   const prm = ctx.debug.params;
   const maps = buildCoverMaps(ctx);
-  // the landscape band around the slab (world mode): meadows / reeds / dunes continue in blades; built
-  // incrementally in frame() (≈ 4 ms per frame at 60 fps) so it never delays the boot
-  let outerGen = prm.has('nogcouter') ? null : outerMapsBuilder(ctx, maps.grids);
-  let outer: OuterMaps | null = null;
-  let outerWork = 0;
+  // blades beyond the slab: a roaming cover window around the camera, built in the background from the
+  // world's landscape (≈ 4 ms per frame at 60 fps), double-buffered — no boot cost, no hitch
+  const cwin = prm.has('nogcouter') ? null : createCoverWindow(ctx);
   let lastFrameT = 0;
-  // hand the maps to the ground shader (far field: lengths, flowers, litter, blade presence)
-  setGroundCover(maps.texCover, maps.texFlower);
 
   let field: Field | null = null;
   let level = ctx.quality.level as QualityLevel;
@@ -100,24 +96,16 @@ export default function create(ctx: CityContext): CityModule {
     name: 'groundcover',
     frame() {
       frameNo++;
-      if (outerGen) {
+      if (cwin && field) {
         // ~4 ms per frame at 60 fps; slow frames (software GL, heavy boot) take a proportional slice
         // (wall time between frames — realDt is clamped to 0.1 s by main.ts)
         const t0 = performance.now();
         const wall = lastFrameT > 0 ? t0 - lastFrameT : 16;
         lastFrameT = t0;
         const budget = Math.min(80, Math.max(4, wall * 0.12));
-        let r = outerGen.next();
-        while (!r.done && performance.now() - t0 < budget) r = outerGen.next();
-        outerWork += performance.now() - t0;
-        if (r.done) {
-          outerGen = null;
-          outer = r.value ?? null;
-          if (outer) {
-            outer.workMs = outerWork;
-            field?.setOuter(outer);
-          }
-        }
+        const p = ctx.camera.position;
+        const ready = cwin.update(p.x, p.z, budget);
+        if (ready) field.setOuter(ready);
       }
       if (ctx.quality.level !== level) onQuality();
     },
@@ -138,8 +126,9 @@ export default function create(ctx: CityContext): CityModule {
         litterCells: maps.stats.litterCells,
         mapsMs: Math.round(maps.buildMs),
         mapsPhases: maps.phases,
-        outerMs: outer ? Math.round(outer.workMs) : outerGen ? 'building' : 'off',
-        outerCells: outer?.cells ?? 0,
+        windowMs: cwin?.active() ? Math.round(cwin.active()!.workMs) : cwin ? 'building' : 'off',
+        windowBuilds: cwin?.builds() ?? 0,
+        windowCells: cwin?.active()?.cells ?? 0,
         buildMs: Math.round(buildMs),
       };
     },

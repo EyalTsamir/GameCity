@@ -80,30 +80,45 @@ target), wires/bulbs ≈ 10k verts (≈ 0.03 ms), smoke overdraw +30 % puffs but
 golden hour), drift ≤ 600 tiny quads (≈ 0.03 ms). Total ≈ 0.3–0.4 ms; +4 draw calls (+1 shadow).
 
 ## Milestones
-1. [ ] M1 cloth system + bunting/festoons across old-town and market streets + new flags + landmark flags
-   on the gust field.
-2. [ ] M2 smoke: shader (rim, erosion, soft fade), wind/gusts/shear, house chimneys + vents + BBQs.
-3. [ ] M3 laundry: courtyard lines, balcony lines, garden rotary dryers.
-4. [ ] M4 birds: pigeons react to people, perches, swifts at dusk, gulls perched.
-5. [ ] M5 drift: leaves/petals in gusts, dust motes at golden hour, moths at lamps.
-6. [ ] Final: soak, perf variants, final report.
+1. [x] M1 cloth system (`life/glsl.ts`, `cloth.ts`): one instanced cloth draw (+ shadow) — hinged pieces on
+   catenary lines that swing about the chord with the cross wind (`thWindAt` at the line middle), pieces
+   stream out (`thWindAt` at the hinge), flutter waves growing to the free edge, per-piece twist, thin-cloth
+   translucency (RE_Direct wrapper: back light × (0.35 + 1.6·forward lobe)), lamp light at night; wires
+   (instanced strip, ≥ 0.9 px up close, vanish beyond ~150 m), festoon bulbs (emissive with the street
+   lights, ≥ 1.2 px at night). `decor.ts`: street lines from facing street facades in old town + market
+   (several per facade pair, zig-zags, tree/lamp avoidance, ≥ 4.27 m clearance), bunting / prayer flags /
+   festoons. `extras.ts`: market "star" (2 masts between the back-to-back stall rows, 14 radiating lines),
+   café string lights (MST over parasol tops), lifeguard + hotel flags. Landmark flags on the gust field
+   with calm droop (FLAG mode in landmarks/shaders.ts). Shots: shots/world/life/m2a/market_*.png,
+   otstreet_*.png, m3b/otsun_18h6.png (backlit), m3b/otsun_21h5.png (festoons at night).
+2. [~] M2 smoke (`sim/ambient/smoke.ts`): `windAt` gusts + power-law shear, HG forward scatter rim (thin
+   edges glow), erosion, dither, soft particles from `postfx.softDepth()` (`?nosoftsmoke`), emitter distance
+   LOD, `opacity`, prewarm 14 s at start + every time jump, budget 2000. `life/chimneys.ts`: 83 chimneys
+   (heat / cook / cold profiles by hour + per-day dice + slow swells), hotel boilers, works vents, 7
+   bakery/kitchen flues, 15 garden BBQs (evening events). Factory plumes verified (dbg/a.png); house plumes
+   were too faint/discrete → rate 3.4–4/s, opacity 0.9 (re-judging in m3c).
+3. [x] M3 laundry: courtyard lines (wear's court spans), balcony lines (wear's `laundry`, static hidden),
+   rotary dryers (props.washing, static hidden). Shot: shots/world/life/band/s.png (courtyard).
+4. [~] M4 birds (`sim/ambient/birds.ts`): pigeons hop aside (≤ 1.35 m) / whole group lifts (crowd within
+   3.2 m or repeated startles) via `pedestrians.near`; swift screaming parties over old town + market at
+   dawn/dusk (leader trail ring buffer); gulls perch on waterfront ridges/parapets facing the wind.
+5. [~] M5 drift (`life/drift.ts`): leaves in gusts near the camera (+ 8 s prewarm on view/time jumps),
+   butterflies (2 wing instances) + bees at groundcover flower patches, dust motes (HG g 0.75 vs. the low
+   sun), moths at the 12 nearest lamps.
+6. [ ] Final: full-city set, soak, perf variants (draw calls / tris), final report.
 
 ## Requests to other areas
-* **wear** (buildings): `ctx.services.buildings` = `src/world/buildings/anchors.ts` as drafted (chimneys,
-  balconies, facades, spans, perches) is exactly what I need — thank you. Additions: (a) for balcony laundry
-  (houses.ts ~l.470) expose the line ends `laundry: {ax,ay,az,bx,by,bz}[]` and drop the static boxes (I hang
-  animated cloth); (b) for shopfront lots a roof vent point (`vents: {x,y,z,lot,kind:'bakery'|'kitchen'}`)
-  or I place vents at chimneys of shopfront lots.
-* **wear** (props): `ctx.services.props` with `bbqs: {x,y,z}[]` (grill top, world) and `washing:
-  {x,y,z,yaw0,R,H}[]` (rotary dryers); drop the static laundry boxes in GK.washing so I hang animated pieces.
-* **streetlife**: a stable query `ctx.services.pedestrians.near(x, z, r, out?)` → count (or forEachNear)
-  for pigeons; until then I read `_crowd.parties[].members[]` (read-only, every 0.3 s).
-* **air**: for soft particles, `ctx.services.postfx.softDepth()` → `{ texture, linear: boolean, near, far }`
-  of the previous frame's scene depth (N8AO's half-res depth is fine) or null. I fall back to an analytic
-  ground/roof fade without it.
+* wear — DONE: `ctx.services.buildings` (chimneys, balconies, facades, spans, perches, laundry, vents,
+  setStaticLaundry) and `ctx.services.props` (cafes, bbqs, washing, setStaticLaundry). Open (optional):
+  shop awning valances / market parasols could ripple with `thWindAt` (vertex offset on the valance strip).
+* streetlife — DONE: `pedestrians.near(x, z, r)`.
+* air — DONE: `postfx.softDepth()`.
+* foliage (optional): a per-tree `blossom` / species flag in `vegetation.trees` would let petals fall only
+  from blossoming trees (today ~8 % of falling leaves are petals everywhere).
 
 ## Changes outside my area
-(none yet)
+* `src/world/landmarks/shaders.ts` — FLAG vertex mode only (grant): local wind from `thWindAt(pivot)`,
+  calm droop, WIND_GLSL include.
 
 ## Toggles
 (see Design)

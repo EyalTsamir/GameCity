@@ -55,6 +55,7 @@ uniform vec3 uNightHor;
 uniform float uNightW;
 uniform vec3 uDiscCol;
 uniform vec3 uBelt;
+uniform float uSkySat;
 ${SKY_LUT_GLSL}
 #endif
 #ifdef TH_CLOUDS
@@ -130,6 +131,10 @@ void main() {
 #ifdef TH_PHYS
   // physical sky (single scattering LUT, earth shadow at twilight) + the authored moonlit night sky
   vec3 col = thSkyLUT(uSkyLUT, d, uSunDir) * uSkyScale;
+  // golden hour: the sky overhead stays a saturated blue (single scattering of the reddened light greys
+  // it; the eye, adapted to the warm light, sees it deeper)
+  float skyL = dot(col, vec3(0.2126, 0.7152, 0.0722));
+  col = max(mix(vec3(skyL), col, 1.0 + uSkySat * smoothstep(0.05, 0.5, y)), vec3(0.0));
   col += mix(uNightHor, uNightZen, smoothstep(0.0, 1.0, pow(up, 0.55))) * uNightW;
   // the glow of sunlit haze around the sun: exactly the fog's sun lobe (continues below the horizon)
   col += thSunLobe(d) * thAtmo[10].y;
@@ -259,6 +264,8 @@ export interface SkyDome {
   setCityGlow(c: THREE.Color): void;
   /** world mode: Belt of Venus colour × strength (0 outside the twilight hours) */
   setBelt(c: THREE.Color): void;
+  /** world mode: extra saturation of the upper sky (golden hour) */
+  setSkySat(k: number): void;
   /** world mode: the raymarched cumulus image and the full-resolution size it maps to */
   setCloudVolume(tex: THREE.Texture, fullRes: THREE.Vector2): void;
   update(state: SkyState, sunDir: THREE.Vector3, moonDir: THREE.Vector3, sunVis: number, moonVis: number, time: number, overcast: number): void;
@@ -300,6 +307,7 @@ export function createSkyDome(world = false, phys = false, clouds: CloudLayerUni
     uNightW: { value: 0 },
     uDiscCol: { value: new THREE.Color(1, 1, 1) },
     uBelt: { value: new THREE.Color(0, 0, 0) },
+    uSkySat: { value: 0 },
     ...(clouds ?? {}),
     tCloudVol: { value: null as THREE.Texture | null },
     uCloudVolRes: { value: new THREE.Vector2(1, 1) },
@@ -366,6 +374,9 @@ export function createSkyDome(world = false, phys = false, clouds: CloudLayerUni
     },
     setBelt(c) {
       uniforms.uBelt.value.copy(c);
+    },
+    setSkySat(k) {
+      uniforms.uSkySat.value = k;
     },
     setCloudVolume(tex, fullRes) {
       uniforms.tCloudVol.value = tex;

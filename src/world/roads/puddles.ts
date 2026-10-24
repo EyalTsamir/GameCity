@@ -171,9 +171,11 @@ vec3 rdPuddleLamps(vec3 wp, vec3 V) {
       vec2 lh = normalize(Ld.xz + vec2(1e-5, 0.0));
       float az = rh.x * lh.y - rh.y * lh.x;
       float el = R.y - Ld.y;
-      float core = exp(-(az * az + el * el) / 0.0007);
-      float streak = exp(-(az * az) / 0.0018 - (el * el) / 0.05) * 0.25;
-      acc += vec3(1.0, 0.78, 0.5) * L.w * (core * 10.0 + streak * 2.6);
+      // crisp lamp head (~0.4 m at 30–50 m) + a narrow vertical glare streak, broken by the water's ripples
+      float core = exp(-(az * az + el * el * 0.6) / 0.00012);
+      float rip = 0.55 + 0.45 * sin(el * 260.0 + wp.x * 3.1 + wp.z * 2.3);
+      float streak = exp(-(az * az) / 0.00035 - (el * el) / 0.018) * rip;
+      acc += vec3(1.0, 0.78, 0.5) * L.w * (core * 7.0 + streak * 0.9);
     }
   }
   return acc * F * uLampGain;

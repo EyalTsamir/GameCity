@@ -136,7 +136,7 @@ export function createChimneySmoke(ctx: CityContext, chimneys: readonly ChimneyL
     else if (c.kind === 'factory' || c.kind === 'warehouse' || c.kind === 'depot') p = 'works';
     else p = seed < 0.42 ? 'heat' : seed < 0.68 ? 'cook' : 'cold';
     const big = Math.max(c.w, c.d) > 0.9;
-    add(c.x, c.y + 0.05, c.z, p, p === 'works' ? 2.6 : p === 'boiler' ? 2.4 : big ? 3.0 : 2.6, seed);
+    add(c.x, c.y + 0.05, c.z, p, p === 'works' ? 2.8 : p === 'boiler' ? 2.8 : big ? 4.0 : 3.4, seed);
   }
   for (const v of vents) add(v.x, v.y + 0.05, v.z, v.kind, v.kind === 'bakery' ? 2.6 : 2.0, hash01(Math.round(v.x * 10), Math.round(v.z * 10), 77));
   for (const b of bbqs) add(b.x, b.y + 0.05, b.z, 'bbq', 3.2, hash01(Math.round(b.x * 10), Math.round(b.z * 10), 91));
@@ -150,7 +150,7 @@ export function createChimneySmoke(ctx: CityContext, chimneys: readonly ChimneyL
         // pale blue-grey wood smoke; a few coal / damp-wood fires are greyer and denser
         const coal = hash01(Math.floor(k * 1e6), 5) < 0.15;
         const col = new THREE.Color(coal ? '#a7a5a1' : '#c4c9d0').offsetHSL(0, 0, (k - 0.5) * 0.06);
-        return { size: 0.34 + 0.1 * k, life: 12 + 4 * k, rise: 1.0 + 0.4 * k, color: col, opacity: coal ? 0.95 : 0.78, glow: 0.25 };
+        return { size: 0.3 + 0.1 * k, life: 11 + 4 * k, rise: 1.0 + 0.4 * k, color: col, opacity: coal ? 1.1 : 0.9, glow: 0.25 };
       }
       case 'boiler':
         return { size: 0.45, life: 9, rise: 1.8, color: new THREE.Color('#ecebe8'), opacity: 0.8, glow: 0.3 };

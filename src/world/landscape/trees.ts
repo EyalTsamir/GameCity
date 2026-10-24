@@ -82,6 +82,16 @@ function leafTexture(): THREE.DataTexture {
       data[o + 3] = 255;
     }
   }
+  // bleed the mean leaf shade into the transparent texels: the mips must not average leaves with black
+  let sum = 0,
+    cnt = 0;
+  for (let o = 0; o < data.length; o += 4)
+    if (data[o + 3] > 0) {
+      sum += data[o];
+      cnt++;
+    }
+  const mean = cnt ? Math.round(sum / cnt) : 160;
+  for (let o = 0; o < data.length; o += 4) if (data[o + 3] === 0) data[o] = mean;
   const tex = new THREE.DataTexture(data, S, S, THREE.RGBAFormat);
   tex.generateMipmaps = true;
   tex.minFilter = THREE.LinearMipmapLinearFilter;
@@ -930,6 +940,22 @@ function buildAtlas(): { col: THREE.DataTexture; nrm: THREE.DataTexture } {
           col[k + 1] = 0;
           col[k + 2] = 0;
           col[k + 3] = 255;
+        } else {
+          // transparent: the crown's mean values (mips must not darken / brown the edges, nor tilt
+          // the normals toward zero)
+          const cy = kind === KIND.conifer ? 0.5 : 0.6;
+          const sx = Math.max(-1, Math.min(1, x * 1.6)),
+            sy = Math.max(-1, Math.min(1, (y - cy) * 1.4));
+          const sz = Math.sqrt(Math.max(0.05, 1 - sx * sx - sy * sy));
+          const l = Math.hypot(sx, sy + 0.1, sz);
+          nrm[k] = Math.round(((sx / l) * 0.5 + 0.5) * 255);
+          nrm[k + 1] = Math.round((((sy + 0.1) / l) * 0.5 + 0.5) * 255);
+          nrm[k + 2] = Math.round(((sz / l) * 0.5 + 0.5) * 255);
+          nrm[k + 3] = 0;
+          col[k] = 150;
+          col[k + 1] = 255;
+          col[k + 2] = Math.round(Math.min(1, Math.max(0, (y - 0.25) / 0.7)) * 255);
+          col[k + 3] = 0;
         }
       }
     }

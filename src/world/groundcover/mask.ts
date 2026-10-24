@@ -38,11 +38,11 @@ export type Species = (typeof SPECIES)[number];
 
 /** tile sizes of the three LOD rings (metres) */
 export const RING_TILE = [2, 4, 8] as const;
-/** tile grids reach this far beyond the slab (= outer.ts OUTER_M) */
-export const GRID_PAD = 96;
+/** tile grids sit on the global 8 m lattice (the roaming window's tiles coincide with the slab's) */
+export const GRID_ALIGN = 8;
 
 export interface TileGrid {
-  /** world origin of tile (0, 0): the slab expanded by GRID_PAD on every side (landscape band) */
+  /** world origin of tile (0, 0) — a multiple of GRID_ALIGN */
   x0: number;
   z0: number;
   size: number;
@@ -116,31 +116,6 @@ function makeNoiseSampler(): (u: number, v: number, out: Float32Array) => void {
       f = (y1 * S + x1) * 4;
     for (let c = 0; c < 4; c++) out[c] = ((d[a + c] + (d[b + c] - d[a + c]) * tx) * (1 - ty) + (d[e + c] + (d[f + c] - d[e + c]) * tx) * ty) / 255;
   };
-}
-
-/** add blade content of another cover map (RGBA8 cover + R32F height, origin, res) to the tile grids */
-export function addToGrids(grids: TileGrid[], cover: Uint8Array, height: Float32Array, w: number, h: number, x0: number, z0: number, res: number): void {
-  for (let j = 0; j < h; j++) {
-    const z = z0 + (j + 0.5) * res;
-    for (let i = 0; i < w; i++) {
-      const p = j * w + i,
-        q = p * 4;
-      if (cover[q] < 6) continue;
-      const x = x0 + (i + 0.5) * res;
-      let fl = 1;
-      if (cover[q + 1] > 70 || cover[q + 2] > 0) fl |= 2 | 4;
-      const y = height[p];
-      for (const g of grids) {
-        const ti = Math.floor((x - g.x0) / g.size),
-          tj = Math.floor((z - g.z0) / g.size);
-        if (ti < 0 || tj < 0 || ti >= g.nx || tj >= g.nz) continue;
-        const t = tj * g.nx + ti;
-        g.flags[t] |= fl;
-        if (y < g.ymin[t]) g.ymin[t] = y;
-        if (y > g.ymax[t]) g.ymax[t] = y;
-      }
-    }
-  }
 }
 
 export function buildCoverMaps(ctx: CityContext): CoverMaps {
@@ -601,12 +576,13 @@ export function buildCoverMaps(ctx: CityContext): CoverMaps {
 
   // ── 11. per-tile metadata for the CPU ring walker
   const grids: TileGrid[] = RING_TILE.map((size) => {
-    const nx = Math.ceil((SLAB.x1 - SLAB.x0 + 2 * GRID_PAD) / size),
-      nz = Math.ceil((SLAB.z1 - SLAB.z0 + 2 * GRID_PAD) / size);
-    return { x0: SLAB.x0 - GRID_PAD, z0: SLAB.z0 - GRID_PAD, size, nx, nz, flags: new Uint8Array(nx * nz), ymin: new Float32Array(nx * nz).fill(1e9), ymax: new Float32Array(nx * nz).fill(-1e9) };
+    const gx0 = Math.floor(SLAB.x0 / GRID_ALIGN) * GRID_ALIGN,
+      gz0 = Math.floor(SLAB.z0 / GRID_ALIGN) * GRID_ALIGN;
+    const nx = Math.ceil((SLAB.x1 - gx0) / size),
+      nz = Math.ceil((SLAB.z1 - gz0) / size);
+    return { x0: gx0, z0: gz0, size, nx, nz, flags: new Uint8Array(nx * nz), ymin: new Float32Array(nx * nz).fill(1e9), ymax: new Float32Array(nx * nz).fill(-1e9) };
   });
-  const tpx = grids.map((g) => g.size / CRES);
-  const pad = GRID_PAD / CRES;
+
   for (let j = 0; j < CH; j++) {
     for (let i = 0; i < CW; i++) {
       const p = j * CW + i,
@@ -622,7 +598,7 @@ export function buildCoverMaps(ctx: CityContext): CoverMaps {
       const y = height[p];
       for (let gi = 0; gi < grids.length; gi++) {
         const g = grids[gi];
-        const t = Math.floor((j + pad) / tpx[gi]) * g.nx + Math.floor((i + pad) / tpx[gi]);
+        const t = Math.floor((SLAB.z0 + (j + 0.5) * CRES - g.z0) / g.size) * g.nx + Math.floor((SLAB.x0 + (i + 0.5) * CRES - g.x0) / g.size);
         g.flags[t] |= fl;
         if (y < g.ymin[t]) g.ymin[t] = y;
         if (y > g.ymax[t]) g.ymax[t] = y;
