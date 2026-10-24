@@ -266,7 +266,7 @@ void main() {
   float fwd = min(phase * thin * uScatter, 3.0);
   float under = clamp(0.55 - 0.45 * n.y, 0.0, 1.0) * vAgeGlow.y;
   vec3 col = vColor.rgb * (uKey * (wrap * wrap * self * 1.15 + fwd) + hemi * 1.25 + uGlow * under);
-  gl_FragColor = vec4(col, a);
+  gl_FragColor = vec4(col, min(a, 0.98));
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
   #include <fog_fragment>
@@ -553,11 +553,12 @@ export function createSmoke(ctx: CityContext): SmokeSystem {
       e.acc -= n;
       if (n > 0) {
         if (n > 40) n = 40;
-        emitOpts.size = e.size * (1 + (1 - Math.min(1, rateScale * dens)) * 0.35) / Math.pow(e.lod, 0.4);
+        // far away: fewer, bigger, a little denser puffs so a plume still reads as a plume
+        emitOpts.size = (e.size * (1 + (1 - Math.min(1, rateScale * dens)) * 0.35)) / Math.pow(e.lod, 0.65);
         emitOpts.life = e.life;
         emitOpts.rise = e.rise;
         emitOpts.glow = e.glow;
-        emitOpts.opacity = e.opacity;
+        emitOpts.opacity = e.opacity * (1 + 0.6 * (1 - e.lod));
         emitOpts.color.copy(e.color);
         for (let k = 0; k < n; k++) {
           const f = (k + rng.next()) / n;

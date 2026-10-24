@@ -270,7 +270,7 @@ export function buildCliffs(
     // ── strata boundaries (global per face, gently dipping + wobbling)
     const base: number[] = [];
     {
-      let y = f.yMin - 0.6 + rng.next() * 0.5;
+      let y = f.yMin - 1.4 + rng.next() * 0.5;
       while (y < 40) {
         base.push(y);
         const r = rng.next();
@@ -279,8 +279,17 @@ export function buildCliffs(
     }
     const ph1 = f.seed * 1.7,
       ph2 = f.seed * 4.1;
-    const dip = (u: number) => 0.32 * Math.sin(u * 0.033 + ph1) + 0.18 * Math.sin(u * 0.081 + ph2) + 0.0022 * u;
-    const layerY = (k: number, u: number) => base[k] + dip(u);
+    const dip = (u: number) => 0.55 * Math.sin(u * 0.033 + ph1) + 0.3 * Math.sin(u * 0.081 + ph2) + 0.0022 * u;
+    // small faults every 12–30 m: the beds step up or down (no endless parallel shelves)
+    const faults: [number, number][] = [];
+    // (alternating throw: the offsets never drift away from the strata grid)
+    for (let u = 6 + rng.next() * 12, sg = rng.chance(0.5) ? 1 : -1; u < f.len; u += 12 + rng.next() * 18, sg = -sg) faults.push([u, sg * (0.3 + rng.next() * 0.4)]);
+    const fault = (u: number) => {
+      let o = 0;
+      for (const [fu, fo] of faults) o += fo * Math.min(1, Math.max(0, (u - fu) / 0.8 + 0.5));
+      return o;
+    };
+    const layerY = (k: number, u: number) => base[k] + dip(u) + fault(u);
     // per (column, boundary) wobble shared by the layer below and the one above: irregular ledges
     const jb = (i: number, k: number) => (vnoise(i * 0.93 + k * 7.7, k * 3.1, f.seed + 11) - 0.5) * 0.6;
     const layerYc = (k: number, i: number) => layerY(k, cols[i].u) + jb(i, k);
@@ -326,7 +335,7 @@ export function buildCliffs(
       const tint = (0.74 + rng.next() * 0.36) * (thin ? 0.78 : 1);
       // some beds overhang: the lip juts out past the face below it (a shadowed underside)
       const over = !recess && rng.chance(0.24) ? 0.12 + rng.next() * 0.22 : 0;
-      const dropTop = rng.chance(0.18) ? 0.12 + rng.next() * 0.2 : 0;
+      const dropTop = rng.chance(0.3) ? 0.15 + rng.next() * 0.35 : 0;
       interface V {
         x: number;
         z: number;

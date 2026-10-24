@@ -493,8 +493,8 @@ vec3 landAlbedo() {
     vec2 hh = lhash22(floor(cc));
     float rr = length(fract(cc) - 0.5 - (hh - 0.5) * 0.5) * (0.8 + 0.5 * hh.y);
     float near = 1.0 - smoothstep(1.2, 2.6, fp);
-    float clump = step(hh.x, 0.16) * (1.0 - smoothstep(0.2, 0.22 + fp * 0.35, rr));
-    vec3 scr = hh.y < 0.75 ? vec3(0.2, 0.27, 0.15) : vec3(0.48, 0.42, 0.12);
+    float clump = step(hh.x, 0.08) * (1.0 - smoothstep(0.2, 0.22 + fp * 0.35, rr));
+    vec3 scr = hh.y < 0.75 ? vec3(0.27, 0.31, 0.19) : vec3(0.5, 0.44, 0.16);
     sc = mix(sc, scr * (0.85 + 0.3 * nB.r), scrubA * mix(0.12, clump * 0.8, near));
   }
   // wrack line of dried seaweed along the last high tide
