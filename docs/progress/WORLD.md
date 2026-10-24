@@ -30,6 +30,10 @@ Branch: work continues from `claude/tinyhaven-graphics-audit-l089m8` (fast-forwa
   open: dunes camo blotches, island = smooth cone, re-capture POIs with the new camera.
 * 14:35 — camera fix VERIFIED: riverbend POI camera at (−249, 10, 113.5), frames the bend (shots/world/lead/cam/
   riverbend.png, clean console). Note to world: continuous white waterline rim.
+* 14:55 — lead fixed tower podium planters (towers.ts: smooth green spheres → leaf-card clumps; verifying
+  shots/world/lead/cam/terrace_planters.png). foliage: scaffold limbs 12-sided Bézier ✓ → stats + final report.
+  life milestone approved (full1: otsun_18h2 = best frame of the round; +6–7 calls, ~0.3–0.45 ms) → soak +
+  final report; optional: market bunting a bit dense.
 * 2026-10-24 08:31 UTC — 5th stop (SESSION limit, all agents ~04:40, reset 08:20; container rebooted 08:29).
   Restored servers/autocheckpoint/locks; tree clean at 9399c3f (pushed). All 7 agents resumed 08:31 with open
   notes repeated (see 03:55 / 04:20 entries). Lead next: wait for milestone notes; then a second full-city
