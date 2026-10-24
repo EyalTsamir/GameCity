@@ -331,7 +331,9 @@ export default async function create(ctx: CityContext): Promise<CityModule> {
         dome.setBelt(_belt);
         dome.setSkySat(0.4 * atmo.golden);
       }
-      if (atmo.lut) dome.setPhysical(atmo.lut.texture, atmo.skyScale, state.zenith, state.horizon, atmo.nightW, atmo.sunColor, atmo.zenith, evalRing(atmo.params.ring, 2.1, _hor));
+      // (35 % toward the blue air: the sea's body reads blue/teal, not lilac, under the earth-shadow band)
+      evalRing(atmo.params.ring, 2.1, _hor).lerp(atmo.params.airColor, 0.35);
+      if (atmo.lut) dome.setPhysical(atmo.lut.texture, atmo.skyScale, state.zenith, state.horizon, atmo.nightW, atmo.sunColor, atmo.zenith, _hor);
       if (envPhys) {
         envPhys.scale = atmo.skyScale;
         envPhys.nightZen.copy(state.zenith);

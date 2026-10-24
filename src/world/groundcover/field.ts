@@ -57,11 +57,11 @@ export type QualityLevel = 'low' | 'medium' | 'high';
 /** Ring layouts per quality tier (distances in metres from the camera, 3D). */
 export function ringSpecs(level: QualityLevel): RingSpec[] {
   if (level === 'low')
-    return [{ index: 0, tile: 2, levels: 3, blades: 300, in0: -10, in1: -10, out0: 7, out1: 9.5, width: 1.25, flowers: 0.16, lawnFlowers: 0.1, litter: 0.45 }];
+    return [{ index: 0, tile: 2, levels: 3, blades: 300, in0: -10, in1: -10, out0: 7, out1: 9.5, width: 1.45, flowers: 0.24, lawnFlowers: 0.1, litter: 0.45 }];
   if (level === 'medium')
     return [
-      { index: 0, tile: 2, levels: 3, blades: 448, in0: -10, in1: -10, out0: 9, out1: 12, width: 1.1, flowers: 0.13, lawnFlowers: 0.09, litter: 0.5 },
-      { index: 1, tile: 4, levels: 2, blades: 448, in0: 9, in1: 12, out0: 24, out1: 29, width: 2.2, flowers: 0.2, lawnFlowers: 0, litter: 0 },
+      { index: 0, tile: 2, levels: 3, blades: 448, in0: -10, in1: -10, out0: 9, out1: 12, width: 1.25, flowers: 0.24, lawnFlowers: 0.09, litter: 0.5 },
+      { index: 1, tile: 4, levels: 2, blades: 384, in0: 9, in1: 12, out0: 24, out1: 29, width: 2.6, flowers: 0.15, lawnFlowers: 0, litter: 0 },
     ];
   return [
     { index: 0, tile: 2, levels: 3, blades: 576, in0: -10, in1: -10, out0: 9.5, out1: 12.5, width: 1.06, flowers: 0.24, lawnFlowers: 0.08, litter: 0.55 },
