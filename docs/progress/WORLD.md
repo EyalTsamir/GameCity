@@ -17,6 +17,8 @@ Branch: work continues from `claude/tinyhaven-graphics-audit-l089m8` (fast-forwa
 `claude/pensive-gates-bim12i` (the session's designated branch).
 
 ## Resume here (keep current)
+* 2026-10-24 18:31 UTC — 7th stop (session limit ~17:00, reset 18:20; reboot 18:29). Restored; tree clean at cc89b83.
+  Life resumed (last open agent: m4 re-capture + final report). Lead next: int2 full-city QA once life reports.
 * 2026-10-24 13:31 UTC — 6th stop (session limit ~11:45, reset 13:20; container rebooted 13:29). Restored; tree
   clean at 7a27edf. Resumed the 4 open agents (world, ground, foliage, life). DONE: air, wear, streetlife.
   Lead next: judge milestone notes → int2 full-city capture (presets below) → final QA.
