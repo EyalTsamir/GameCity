@@ -22,6 +22,12 @@ Branch: work continues from `claude/tinyhaven-graphics-audit-l089m8` (fast-forwa
   Lead next: judge milestone notes → int2 full-city capture (presets below) → final QA.
 * 13:55 — foliage m1h approved (scaffold fork, whorled spruce cones, forest mantle). Notes: faceted scaffold limbs
   at 5 m, round green balls on the terrace (owner?). → world: north rock retaining wall = stacked flat slabs.
+* 14:20 — lead CAMERA FIX (committed): world mode pivot margin 30 → 320 m past the slab; SurfaceField falls back
+  to landscape.height() outside the slab (camera floor on the hills). Found by ground (riverbend POI clamped to
+  x ≈ −179). ?diorama keeps 30 m. Verifying: shots/world/lead/cam/riverbend.png.
+  ground: roaming window + forest floor verified → tiers, final report. world m5d/cliff1 judged (sheets
+  shots/world/lead/world_m5d.png, world_cliff.png): sea teal ✓, meadow+sheep 18.2 ✓, riverbend leafy ✓, cliffs ✓;
+  open: dunes camo blotches, island = smooth cone, re-capture POIs with the new camera.
 * 2026-10-24 08:31 UTC — 5th stop (SESSION limit, all agents ~04:40, reset 08:20; container rebooted 08:29).
   Restored servers/autocheckpoint/locks; tree clean at 9399c3f (pushed). All 7 agents resumed 08:31 with open
   notes repeated (see 03:55 / 04:20 entries). Lead next: wait for milestone notes; then a second full-city
