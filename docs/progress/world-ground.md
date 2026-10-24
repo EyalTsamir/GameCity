@@ -1,12 +1,8 @@
 # world-ground — grass, meadows, flowers, weeds, litter, reeds (world round)
 
 ## Resume here
-* 2026-10-24 16:40 — lead: ground flower dots formed a regular lattice at mid distance (riverside POI,
-  shots/world/lead/int2/riverside_speckle.png). Rewritten in ground.ts: rotated jittered cells, varied size,
-  clumped presence (gaps), 1/3 other species, dots fade to the patch tint below ~1.5 px (fwidth outside
-  branches); same for lawn daisies/dandelions. tsc clean.
-* Running: t16 (POIs riverside + park × 11 / 18.2, eye-level bank_meadow 11).
-* Next: judge t16 → update final report → hand back.
+* 2026-10-24 17:05 — DONE (flower-dot lattice fix verified: shots/world/ground/sheet_flower_dots.png,
+  t16). Final report updated. Nothing running. If resumed: only follow-ups from the lead's review.
 
 ## Brief (from WORLD-PLAN.md + world-briefs.md "### ground")
 Owner of `src/world/terrain/ground.ts` (+ its mask), `src/world/groundcover.ts` + `src/world/groundcover/*`.
@@ -107,15 +103,14 @@ instances if the field can't place them well.
 
 ## Final report
 
-**What changed.** An instanced blade field in three
+**What changed.** A blade field in three
 camera-centred rings (A ≤ 12.5 m 7-vertex blades, B ≤ 35 m, C ≤ 66 m; one instanced draw each; blades
 generated in the vertex shader from tile + blade hashes) draws mown lawns with daisies/dandelions/clover,
 unmown tufts at walls/fences/kerbs/trees/poles, wildflower meadows (clustered poppies, cornflowers, daisies,
 buttercups, cow parsley, knapweed; taller stems), pavement-joint weeds, fallen leaves, forest floor, reed
-stands with cattails and loosestrife, shore meadow, marram on dunes, and lily pads. Everything bends with
-core/wind.ts gust fronts and glows when backlit at golden hour. The ground shader shares the blade palette
-(natural greens, no lime), shades the turf under the rings, adds flower dots/tints, gust sheen, tuft
-bump, a forest floor under closed stands (umber leaf litter ↔ reddish needles, damp hollows, moss, muted
+stands with cattails and loosestrife, shore meadow, marram on dunes, and lily pads. All of it bends with
+core/wind.ts gusts and glows backlit at golden hour. The ground shader shares the blade palette
+(natural greens, no lime), shades the turf under the rings, adds flower dots/tints, gust sheen, a forest floor under closed stands (umber leaf litter ↔ reddish needles, damp hollows, moss, muted
 clustered leaves; no slope-rock under trees) and a 15 m meadow margin at the W/S edges (world seam). A roaming 224 m cover
 window, double-buffered and built in the background from landscape.cover/height, extends blades to any
 landscape meadow, bank or dune near the camera (riverbend).
@@ -125,17 +120,17 @@ landscape meadow, bank or dune near the camera (riverbend).
 **Toggles.** ?nograss ?grass=k ?gcrings ?gcflowers=0 ?nolitter ?nolilies ?nogcouter; service
 groundcover {density, flowerPatches, setDensity, palette}.
 
-**Shots.** sheet_before_after_11.png, sheet_before_after_golden.png (shots/world/ground);
-sheet_forest_floor.png (t15), t8/pond_18h2 (best), t10b/riverbend_*, hop2/*, gust_{1,2}.
+**Shots** (shots/world/ground): sheet_before_after_{11,golden}.png, sheet_forest_floor.png,
+t8/pond_18h2 (best), t10b/riverbend_*, hop2/*, gust_{1,2}.
 
-**Cost** (t12, high vs ?nograss, eye level): +3 draw calls, +0.45 M triangles (incl. degenerate),
+**Cost** (t12, high vs ?nograss, eye level): +3 draw calls, +0.45 M triangles ,
 ≈ 0.5 M blade vertices worst case; medium 0.29 M; low 0.09 M; overview +0. GPU estimate (Adreno X1-45):
-≈ 1.0–1.4 ms at eye level in meadows, ≈ 0.1 ms at POI/overview (ground shader only). Boot ≈ 1.5 s (loaded box);
+≈ 1.0–1.4 ms eye level, ≈ 0.1 ms at POIs (ground shader only). Boot ≈ 1.5 s (loaded box);
 window ≈ 0.3 s over frames.
 
-**Regression caught.** A refactor (04:20) had dropped `setGroundCover()`: the ground ran without cover
-maps until 15:40 (t10–t14 ground only); fixed, plus a groundcover invariant that flags it.
+**Fixes after review.** A refactor had dropped `setGroundCover()` (ground ran without cover maps
+04:20–15:40; t10–t14); restored + invariant. Ground flower dots: rotated jittered cells, clumped, varied,
+fading to a tint below ~1.5 px — no lattice at POI distance (sheet_flower_dots.png).
 
 **Open.** Measure perf.mjs `;nograss;grass=0.5;gcrings=A` on the real GPU. Reeds are not in the water
-reflection. Flower heads are flat cards (crude below ~2 m). Fields beyond the slab get only sparse
-blades. A window rebuild uploads ~1.8 MB in one frame. Medium lawns read lighter (AO off: air).
+reflection. Flower heads are flat cards (crude below ~2 m). Fields beyond the slab: sparse blades. A window rebuild uploads ~1.8 MB in one frame. Medium lawns read lighter (AO off: air).
