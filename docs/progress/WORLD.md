@@ -27,6 +27,10 @@ Branch: work continues from `claude/tinyhaven-graphics-audit-l089m8` (fast-forwa
 * 08:45 — air sky7/g4 APPROVED (cumulus fields with flat bases, blue anti-solar sky, lavender twilight, clear
   golden overview with long shadows). Relayed to world: white blurred block on the overview beach, grey-brown
   hills behind the forest, sea body near shore.
+* 09:05 — wear FINAL REPORT received (world-wear.md; ≈0.35–0.45 ms est., +3 calls; toggles ?noclutter ?nogreen
+  ?nowear ?nopuddles ?noterracelights ?wet). Judged: otfac 18.2 + otst 21.5 = reference-2 feeling ✓. Sent back
+  for two fixes before closing: Westbrook apartment balconies (flat saturated violet + barcode streaks) and the
+  hotel sea facade (coloured confetti at 150 m).
 * 2026-10-24 03:33 UTC — 4th stop = WEEKLY limit: agents resumed 2026-10-20 07:31 hit it at once (no agent
   edits since 02:08 on 10-20; logs' Resume here are from ~02:05). Limit reset 10-24 03:00; container rebooted
   ~03:30. Restored: servers 5173/5174, autocheckpoint 20 min, locks cleared, tree clean at 582500f (pushed);
