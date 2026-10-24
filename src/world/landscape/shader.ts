@@ -482,11 +482,11 @@ vec3 landAlbedo() {
     vec2 tc = p.xz / 0.7;
     vec2 th = lhash22(floor(tc));
     float tuft = step(th.x, marram) * (1.0 - smoothstep(0.25, 0.42, length(fract(tc) - 0.5 - (th - 0.5) * 0.4)));
-    marram = mix(marram, clamp(tuft * 1.6, 0.0, 1.0), (1.0 - smoothstep(0.08, 0.25, fp)) * 0.85);
+    marram = mix(marram, clamp(tuft * 1.3, 0.0, 1.0) * 0.8 + marram * 0.2, (1.0 - smoothstep(0.08, 0.25, fp)) * 0.6);
     // (no fake hummock normals: under the low golden-hour sun any tilt became leopard blotches)
   }
   // marram from above: grey-green over pale sand, straw-tipped (low contrast against the sand)
-  sc = mix(sc, mix(mix(gcMarram, gcMeadowB, 0.3), cSand * 0.92, 0.3) * (0.86 + 0.24 * nB.r), marram * 0.8);
+  sc = mix(sc, mix(mix(gcMarram, gcMeadowB, 0.25), cSand * 0.95, 0.42) * (0.9 + 0.18 * nB.r), marram * 0.75);
   // dune scrub (sea buckthorn, gorse, creeping willow): dark clumps among the marram, a tint far away
   {
     float scrubA = marram * smoothstep(0.45, 0.7, nA.g + 0.3 * (nB.a - 0.5));
