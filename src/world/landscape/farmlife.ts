@@ -20,7 +20,7 @@ function animalGeometry(): THREE.BufferGeometry {
     part: number[] = [];
   // body
   {
-    const g = new THREE.IcosahedronGeometry(1, 0).toNonIndexed();
+    const g = new THREE.IcosahedronGeometry(1, 0); // already non-indexed
     const a = g.getAttribute('position');
     for (let i = 0; i < a.count; i++) {
       const x = a.getX(i),

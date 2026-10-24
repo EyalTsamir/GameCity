@@ -411,7 +411,7 @@ function broadStruct(st: Struct, rng: Rng): void {
       const sr = r0 * rng.range(0.55, 0.68) * (nS > 3 ? 0.9 : 1);
       const ph = rng.next();
       st.segs.push({ a: fork, b: bow, ra: sr, rb: sr * 0.8, sa: sway0, sb: { ph1: ph, w1: 0.12, ph2: 0, w2: 0 }, near: forest, aoA: 0.8, aoB: 0.75 });
-      st.segs.push({ a: bow, b: end, ra: sr * 0.8, rb: sr * 0.55, sa: { ph1: ph, w1: 0.12, ph2: 0, w2: 0 }, sb: { ph1: ph, w1: 0.3, ph2: 0, w2: 0 }, near: true, aoA: 0.75, aoB: 0.65 });
+      st.segs.push({ a: bow, b: end, ra: sr * 0.8, rb: sr * 0.55, sa: { ph1: ph, w1: 0.12, ph2: 0, w2: 0 }, sb: { ph1: ph, w1: 0.3, ph2: 0, w2: 0 }, near: forest, aoA: 0.75, aoB: 0.65 });
       anchors.push({ p: end, r: sr * 0.55, ph, w: 0.3, dirx: Math.cos(az), dirz: Math.sin(az) });
       anchors.push({ p: bow, r: sr * 0.8, ph, w: 0.12, dirx: Math.cos(az), dirz: Math.sin(az) });
     }

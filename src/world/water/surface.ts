@@ -579,7 +579,13 @@ vec4 waterBase() {
 #ifdef TH_WORLD
   // golden hour (world): sky light scattered inside the water keeps the body a readable teal-blue
   // under the weak low sun (without it the sea is only a dim mirror of the pale haze)
-  wBodyGlow = wc * (uSkyZen * 0.7 + vec3(0.004, 0.012, 0.016)) * 0.9 * uDusk * (1.0 - uNight) * (1.0 - foam) * (1.0 - mPond) * wDebug.y;
+  {
+    // radiance tied to the sky's brightness, hue from the body colour (unit luminance, a little greyed)
+    vec3 LW = vec3(0.2126, 0.7152, 0.0722);
+    float skyL = dot(uSkyZen * 0.5 + uSkyHor * 0.5, LW);
+    vec3 wcN = mix(vec3(1.0), wc / max(dot(wc, LW), 1e-4), 0.7);
+    wBodyGlow = wcN * skyL * 0.3 * uDusk * (1.0 - uNight) * (1.0 - foam) * (1.0 - mPond) * wDebug.y;
+  }
 #endif
   return vec4(base, wAlphaB);
 }

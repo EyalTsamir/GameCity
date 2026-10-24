@@ -614,6 +614,9 @@ uniform float uGcOn;
 uniform vec4 uGcPresA;
 uniform vec2 uGcPresL;
 uniform float uGcBump;
+uniform vec3 gForestA;
+uniform vec3 gForestB;
+uniform vec3 gMoss;
 uniform vec3 gFlowerCol[ 8 ];
 uniform vec2 uWind;
 float gGrassTrans = 0.0;
@@ -754,6 +757,16 @@ vec3 groundColor() {
     vec3 lc = mix( vec3( 0.36, 0.22, 0.08 ), vec3( 0.52, 0.36, 0.12 ), nB.b );
     grass = mix( grass, lc, lit * ( 0.18 + 0.5 * sp ) );
   }
+  // forest floor under a closed canopy (cover A ≥ 0.62): leaf / needle litter, moss, shadowed hollows
+  float forestF = smoothstep( 0.62, 0.95, cv.a ) * uGcOn;
+  if ( forestF > 0.001 ) {
+    vec3 floorC = mix( gForestA, gForestB, smoothstep( 0.35, 0.7, nB.g * 0.6 + nC.r * 0.4 ) );
+    float moss = smoothstep( 0.56, 0.72, nA.b * 0.5 + nB.b * 0.5 );
+    floorC = mix( floorC, gMoss * ( 0.85 + 0.3 * nC.b ), moss * 0.65 );
+    float hollow = smoothstep( 0.55, 0.8, nA.a * 0.6 + nB.a * 0.4 );
+    floorC *= ( 1.0 - 0.35 * hollow ) * ( 0.88 + 0.24 * nC.a );
+    grass = mix( grass, floorC, forestF );
+  }
   // under the near blade rings the ground is the shaded thatch between the stems (same fade as the
   // blades shrink, so the hand-over is seamless)
   float bdist = distance( p, cameraPosition );
@@ -819,6 +832,9 @@ export function createGround(ctx: CityContext, model: TerrainModel, feet: readon
     ...gcUniforms,
     ...gcPalette(),
     uWind: ctx.uniforms.uWind,
+    gForestA: C('#3e3122'),
+    gForestB: C('#6a5034'),
+    gMoss: C('#4a5a28'),
     gGrassA: C(PALETTE.grass),
     gGrassB: C(PALETTE.grassDark),
     gLawn: C(PALETTE.lawn),

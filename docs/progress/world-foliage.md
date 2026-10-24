@@ -42,8 +42,11 @@
   (3) forest understory: mantle of young birch/oak in front of edge trees (veg-forest-mantle), 1–3 shrubs
       per edge tree on the city side, fern clumps (atlas 'fern', kind fern, 0–3 per forest tree) + shrubs under
       the canopy. Asked ground (via lead) for a forest-floor shading under the canopy.
-* RUNNING: capset m1g (queued; loads the current code when it gets the lock).
-* NEXT: judge m1g (park, parkair, ot, forest, westbrook, ovw); fix; perf counts; final report.
+* m1g (m1g_sheet.png): spruces now read as real cones (forest view) ✔, parkair crowns fuller (tangent cards) ✔,
+  street trees fork (Y) ✔ but far/crossfading trees showed cut scaffold stubs → scaffolds fully static
+  (non-forest); after a camera jump near detail is generated in one batch (budget 60) and weights snap.
+* RUNNING: capset m1h (11, 18.2: ot, park, wbst, forest, fored, parkair).
+* NEXT: judge m1h → stats (overview + park eye with landscape) → GPU estimate → final report.
 * Tools: scratchpad/{capset.sh OUT HOURS [q] [views], dumpatlas.sh, vstat.py, bench/}.
 * Views: park=-55,4,15,26,200,6; ot=66,3.5,-13.9,13,25,4; dt=-22,3.5,-68.9,14,35,4; palms=118,5,30,18,90,6;
   forest=10,10,-158,70,10,10; parkair=-55,0,17,90,30,30; overview.

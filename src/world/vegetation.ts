@@ -1312,6 +1312,7 @@ export default function create(ctx: CityContext): CityModule {
     nearCards = 0,
     nearWood = 0;
   const camPos = new THREE.Vector3();
+  const lastCam = new THREE.Vector3(1e9, 0, 0);
   const sunLight: { l: THREE.DirectionalLight | null } = { l: ctx.services.sky?.sun ?? null };
   if (!sunLight.l)
     ctx.scene.traverse((o) => {
@@ -1350,8 +1351,11 @@ export default function create(ctx: CityContext): CityModule {
       }
     }
     next.sort(byDist);
-    // 2. generate missing detail (bounded) and apply the capacity budget
-    let budget = 4;
+    // 2. generate missing detail (bounded) and apply the capacity budget; after a camera jump (view change,
+    //    teleport) generate a big batch at once rather than showing far crowns for many frames
+    const jumped = lastCam.distanceToSquared(camPos) > 400;
+    lastCam.copy(camPos);
+    let budget = jumped ? 60 : 4;
     let usedC = 0,
       usedW = 0;
     for (const id of members) target[id] = 0;
@@ -1377,7 +1381,7 @@ export default function create(ctx: CityContext): CityModule {
       want.push(id);
     }
     // 3. ease weights; members = wanted ∪ still fading out (if they still fit)
-    const k = Math.min(1, dt / 0.6);
+    const k = jumped ? 1 : Math.min(1, dt / 0.6);
     let changed = false;
     for (const id of want) if (!memberSet[id]) changed = true;
     const keep = keepA;

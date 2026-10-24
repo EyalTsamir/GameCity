@@ -1,14 +1,9 @@
 # world — streetlife (café terraces, street sitters, vendors, two-wheelers)
 
 ## Resume here
-* 2026-10-24 09:40 UTC — M4 (cars) + lead note 5 (gloss) done and judged: m4h (v7: coat gain 2.4, glass
-  3.6, chrome 1.5, clearcoatRoughness 0.1, skyline / horizon-shaped street reflections) — backlit golden
-  hour now sparkles (roofs, rear glass, boot lids), noon glass reflects the sky, flanks stay deep.
-  Perf counts (downtown 1920×1025, 12:30): vehicles 44.5 k → 63.8 k tris (+19 k), vehicle draw calls 20
-  (unchanged), invariants {} (`perf_m4.json`).
-* Running: `final/` (overview, downtown, tables, street, buskerA/B × 12 / 18.2 / 21.5 h, all modules) and
-  `diorama.png/json`. Next: judge them → milestones / perf / best views / open issues → final report →
-  SubagentHandback.
+* 2026-10-24 10:05 UTC — **done**. All milestones M0–M4 complete; final set `final/` + `final_sheet.png`
+  (6 views × 12 / 18.2 / 21.5 h: no console errors, no failed modules, invariants {}), `diorama.png` OK,
+  typecheck clean. See "## Final report". Nothing running.
 
 ## Brief (WORLD-PLAN.md workstream 5 + world-briefs.md notes)
 Gap: at eye level the city is thinly populated compared to reference 2 (sunny Tel-Aviv café street — every
@@ -22,6 +17,22 @@ may be a separate light layer drawn by the existing figure renderer. Budget (hig
 `traffic/*`. Before finishing: soak 4 min @4×, invariants empty, no per-frame garbage.
 
 ## Design
+
+### As built (supersedes the plan below where they differ)
+* No separate street-actor layer: café patrons, waiters, rim / bench sitters, hangout groups, vendors and
+  the busker are ordinary crowd parties with new goals / states (`crowd.ts`: goal 'cafe', state 'serve',
+  hangouts, stalls, pavement chat / phone stops), so the crowd invariants cover them; drawn by the same
+  figure renderer (0 extra draw calls). Café seats come from wear's `ctx.services.props.cafes/discs`
+  (`pedestrians/cafes.ts`: entry points on walk edges, per-seat paths via a multi-source Dijkstra on a
+  0.25 m grid, waiter paths). Table settings: `pedestrians/tableware.ts` (1 instanced draw, candle glow).
+  Vendors / carts / busker: `pedestrians/vendors.ts` (+ market-stall vendors). Riders:
+  `pedestrians/riders.ts` (pillion on every 4th Vespa). Attention-weighted spawning near the camera focus.
+* Two-wheelers: kinds 'bike' / 'moto' with variants (bicycle, courier bike, e-scooter, Vespa, delivery
+  scooter, motorbike) in `traffic/models.ts`, bit-mask variant parts, crank spin; 27 % of regular traffic.
+  Parked rows in the furniture band (`traffic.ts buildParked2W`).
+* Cars (lead notes 4–5): `traffic/carBody.ts` lofted bodies; vehicle material = MeshPhysical clearcoat with
+  per-part finishes (aMeta.w = rough + 4 × class) and a stylised street reflection (`thStreetRefl`).
+* Toggles: `?nocafe ?nohang ?novendors ?norim ?no2w ?noparked2w ?nofocus`, debug `?tlineup[=lods]`.
 
 ### Architecture
 * **Street actors layer** (`pedestrians/street.ts`, new): Member objects that the crowd does NOT simulate
@@ -86,7 +97,71 @@ may be a separate light layer drawn by the existing figure renderer. Budget (hig
   figures there (`pedestrians/vendors.ts` marketStalls + crowd stepVendor). Imports left untouched.
 
 ## Perf notes
+* Downtown POI, 1920×1025, 12:30 (counts; this container renders with software GL, so timings are not
+  meaningful here): all street life on vs off (M1–M3): 165 vs 161 draw calls, +73 k tris (figures 60.8 k vs
+  39.4 k verts, vehicles 44.5 k vs 28.7 k tris) — `perf_on|off.json`. M4 lofted cars: vehicles 44.5 k →
+  63.8 k tris, vehicle draw calls 20 unchanged (`perf_m4.json`). Per car L0/L1/L2 ≈ 3.5 k / 1.0 k / 0.45 k
+  tris (was 2.1 k / 0.6 k / 0.24 k); the flat underside is not generated.
+* GPU estimate on the Adreno X1-45: ≈ +110 k tris / verts over the pre-round scene (≈ 4 % of 2.4–2.5 M)
+  ≈ 0.25–0.35 ms vertex; clearcoat adds one specular lobe on vehicle pixels only (≈ 0.05 ms); total within
+  the 0.6 ms budget, +4 draw calls.
+* CPU: crowd features ≈ +6 % crowd update, population +27 % (BASE_POP 560); no per-frame allocations
+  (typed-array pose slots, pooled tableware writes). Soak 4 min @4× (software GL): invariants 0, heap flat
+  353–358 MB, no console errors.
 
 ## Best views
+* Café terraces: `tables=-38,0.8,-77.5,5.5,20,28`, `tables2=-16,0.8,-109,6,190,24` (12 h, 21.5 h).
+* Street with two-wheelers / parked e-scooters: `street=-38,1,-65,14,60,6` (12 h, 18.2 h).
+* Busker + fountain rim sitters + gelato cart: `buskerA=40,1.2,21,10,20,16`, `buskerB=40,1.2,21,10,200,16`.
+* Car lineup (debug): `?tlineup` + `a=-9,0.7,22,8,60,12`, backlit gloss `b=-9,0.7,22,8,240,12` at 18.2 h.
 
 ## Open issues
+* Car reflections are stylised (sky PMREM + a procedural street skyline), not true reflections of the
+  neighbours; frontlit cars at noon read satin rather than mirror-glossy (backlit / golden hour sparkles).
+* Pre-existing traffic transient: a bus rear axle briefly at (58.7, −68.6) after a junction (not mine).
+* The night plaza is thin after 21 h (by design of the hourly curves).
+* Delivery-rider stops at doors and scooters filtering past queues were not done.
+
+## Final report
+**Changes.** Café terraces are full (about 90 % of seats). Patrons eat, drink, talk, read and use phones;
+table settings appear once served; waiters take orders and carry trays; terraces are lit at night by wear's
+lamps.
+
+People sit on benches and fountain rims, chat on pavements and squares, and carry takeaway cups. Plaza carts
+and market-stall vendors serve shoppers and pack up at 16:30. A busker plays to an audience. More walkers
+appear near the camera focus.
+
+Six two-wheeler types make up 27 % of traffic, with riders that pedal, lean into turns and put a foot down
+when stopped. Bikes and e-scooters are parked in rows, some fallen over.
+
+Following the lead's notes, the four car types now have rounded bodies with wheel arches, framed glass,
+mirrors and alloys. Their paint, glass and chrome are glossy.
+
+**Files.**
+- `src/sim/pedestrians.ts`, and in `pedestrians/`: `crowd.ts`, `animate.ts`, `render.ts`, `places.ts`; new `cafes.ts`, `tableware.ts`, `riders.ts`, `vendors.ts`.
+- `src/sim/traffic.ts`, and in `traffic/`: `specs.ts`, `sim.ts`, `models.ts`, `render.ts`, `vehicleMaterial.ts`; new `carBody.ts`.
+- Granted: `src/world/landmarks/civic.ts` (old toy vendor removed).
+
+**Toggles.** `?nocafe ?nohang ?novendors ?norim ?no2w ?noparked2w ?nofocus`, debug `?tlineup[=lods]`.
+
+**Before / after.** `perf_off.png` vs `perf_on.png`, `m3b_sheet*.png`, `m3c`/`m3d` (terraces day and night),
+`m4a`–`m4h` (cars), `final_sheet.png`.
+
+**Cost** (downtown, 1920×1025).
+- Street life: +4 draw calls, +73 k triangles.
+- New cars: vehicle triangles 44.5 k → 63.8 k, same draw calls.
+
+Estimated 0.3–0.4 ms on the Adreno, inside the 0.6 ms budget. This container renders in software, so these
+are counts, not timings.
+
+**Checks.** Invariants empty in every capture set; 4-minute soak clean with flat heap; `?diorama` works; no
+per-frame allocations.
+
+**Trade-offs.**
+- Car reflections are stylised (sky plus a generated street skyline); cars sparkle most when backlit.
+- About 27 % more crowd CPU.
+
+**Open.**
+- Delivery riders don't stop at doors; scooters don't filter past queues.
+- The plaza is quiet after 21:00.
+- An older traffic glitch: a bus rear axle briefly at (58.7, −68.6).

@@ -6,7 +6,7 @@
 //   G length    0 mown lawn (5–9 cm) · ~0.3 rough / unmown tuft · ~0.65 meadow · 1 tall meadow
 //   B habitat   0 normal · 1..100 wet shore (reeds, cattails, shore grass; value = strength) ·
 //               120 pavement weed (leafy rosettes, dandelions) · 150..255 dune (marram; (v − 150) / 105)
-//   A litter    fallen leaves under trees (also on paving)
+//   A litter    fallen leaves under trees (also on paving); ≥ 0.62 = forest floor under a closed canopy
 // tFlower  RGBA8, 0.5 m (FW × FH)
 //   R wildflower density (meadows) · G species band (see SPECIES) · B lawn flowers (daisy, dandelion,
 //   clover heads) · A lawn tone (0.5 neutral: mowing stripes ±, darker edges −) copied from the ground mask
@@ -288,6 +288,11 @@ export function buildCoverMaps(ctx: CityContext): CoverMaps {
     const r = Math.max(1.2, t.r * 1.25);
     litter.disc(t.x, t.z, r, Math.round(Math.min(110, 40 + t.r * 12)), 'add', fall);
   }
+  // canopy overlap: where crowns overlap (≥ 2–3 trees) the ground is a forest floor, not grass
+  const canopy = R();
+  for (const t of trees) canopy.disc(t.x, t.z, Math.max(1, t.r * 0.95), 64, 'add');
+  // local stand density (~10 m): a lone park tree fades out, a wood stays (soft sunlit edges)
+  canopy.blur(20);
   mark('litter');
 
   // ── 6. heights on a 0.5 m lattice (bilinear for the 0.25 m texels), sidewalk tops overridden
@@ -361,7 +366,8 @@ export function buildCoverMaps(ctx: CityContext): CoverMaps {
     MD = meadow.data,
     WD = mown.data,
     KD = weed.data,
-    LD = litter.data;
+    LD = litter.data,
+    CD = canopy.data;
   const HARD = OCC.PATH | OCC.SOLID | OCC.BUILDING | OCC.ROAD | OCC.SIDEWALK | OCC.PAVED | OCC.RAIL;
   for (let j = 0; j < CH; j++) {
     const z = SLAB.z0 + (j + 0.5) * CRES;
@@ -385,7 +391,8 @@ export function buildCoverMaps(ctx: CityContext): CoverMaps {
       height[p] = (o & OCC.SIDEWALK) !== 0 && (o & OCC.ROAD) === 0 ? SIDEWALK_Y : h + GROUND_DROP;
       const al = AD[p] / 255,
         wk = KD[p] / 255,
-        lt0 = LD[p] / 255;
+        forest = smooth(0.12, 0.24, CD[p] / 255),
+        lt0 = Math.max(LD[p] / 255, forest > 0.05 ? (0.62 + 0.38 * forest) / 1.6 : 0);
       const wl = model.waterLevel(x, z);
       const above = h - wl;
       const pondish = pond ? ((x - pond.cx) / pond.rx) ** 2 + ((z - pond.cz) / pond.rz) ** 2 < 1.6 : false;
@@ -428,6 +435,11 @@ export function buildCoverMaps(ctx: CityContext): CoverMaps {
       len = len * (1 - mw) + Math.min(len, 0.1) * mw;
       len = Math.max(len, Math.min(0.42, (ED[p] / 255) * 0.55));
       len *= 1 - smooth(0.1, 0.5, wear) * 0.7; // trampled grass stays short
+      // forest floor: only sparse, short grass under the closed canopy (more at sunny edges)
+      if (forest > 0) {
+        dens *= 1 - 0.88 * forest;
+        len = len + (Math.min(len, 0.34) - len) * forest;
+      }
       // the slab's west / south edges hand over to the landscape's meadows: unmown margin
       const dEdge = Math.min(x - SLAB.x0, SLAB.z1 - z);
       if (dEdge < 18) len = Math.max(len, 0.72 * (1 - smooth(4, 15, dEdge + (nag - 0.5) * 6)));
