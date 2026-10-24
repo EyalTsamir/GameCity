@@ -234,7 +234,8 @@ export default function create(ctx: CityContext): CityModule {
     trees = createLandTrees(placed.list, uniforms, fog, ctx.quality.shadows && ctx.quality.level !== 'low');
     root.add(trees.group);
     const t = trees;
-    const tierDetail = (lvl: string) => (lvl === 'low' ? 0 : lvl === 'medium' ? 0.7 : 1);
+    // low keeps a small 3D radius (~44 m): eye-level POIs must not show impostor lollipops up close
+    const tierDetail = (lvl: string) => (lvl === 'low' ? 0.35 : lvl === 'medium' ? 0.7 : 1);
     let tier = tierDetail(ctx.quality.level);
     let adapt = 1;
     t.setDetail(tier * adapt);

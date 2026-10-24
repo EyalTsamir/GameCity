@@ -427,6 +427,8 @@ vec3 landAlbedo() {
     float reedP = smoothstep(0.42, 0.62, nA.b + 0.3 * (nB.r - 0.5));
     vec3 reed = mix(vec3(0.07, 0.1, 0.035), vec3(0.17, 0.16, 0.07), nB.a);
     bc = mix(bc, reed, reedP * smoothstep(0.0, 0.2, hy) * (1.0 - smoothstep(0.9, 1.8, hy)) * 0.85);
+    // dark wet mud right at the water (the waterline reads by value, not as a white outline)
+    bc = mix(bc, cMud * 0.5, (1.0 - smoothstep(0.02, 0.22, hy)) * 0.85);
     col = mix(col, bc, wet * 0.85);
   }
   // ── the river leaving the town: the stone embankment carries on for a stretch, steps down into
@@ -472,16 +474,20 @@ vec3 landAlbedo() {
   // smooth, else the field colours show through the dunes in blotches)
   float sN = (nA.b - 0.5) * 1.1 + (nB.g - 0.5) * 0.7 + (texture2D(tLN, p.xz * (1.0 / 13.0)).r - 0.5) * 0.15 * midF;
   vec3 sc = mix(cWetSand, cSand, smoothstep(${(WL + 0.2).toFixed(2)}, ${(WL + 1.0).toFixed(2)}, p.y));
-  float marram = smoothstep(0.2, 0.7, (1.0 - sand) * 1.6 + nB.b * 0.4 - 0.2 + sN * 0.45) * smoothstep(${(WL + 1.6).toFixed(2)}, ${(WL + 2.6).toFixed(2)}, p.y);
-  // tussocks of marram with sand between them (mid distance), dune hummocks lit and shaded
+  // marram: sparse on the fore-dune, closing into a soft vegetated back-dune (a smooth gradient with
+  // only broad variation — 5–15 m patches read as camouflage blotches against sunlit sand)
+  float marram = smoothstep(0.25, 0.85, (1.0 - sand) * 1.6 - 0.15 + sN * 0.22) * smoothstep(${(WL + 1.6).toFixed(2)}, ${(WL + 2.6).toFixed(2)}, p.y);
+  // close up: single tufts (sub-metre speckle with the same mean), dune hummocks lit and shaded
   if (vCov.z > 0.02 && fp < 4.0) {
-    vec4 nT5 = texture2D(tLN, p.xz * (1.0 / 5.3));
-    marram = clamp(marram * mix(1.0, 0.7 + 0.6 * nT5.b, 1.0 - smoothstep(0.3, 0.9, fp)), 0.0, 1.0);
+    vec2 tc = p.xz / 0.7;
+    vec2 th = lhash22(floor(tc));
+    float tuft = step(th.x, marram) * (1.0 - smoothstep(0.25, 0.42, length(fract(tc) - 0.5 - (th - 0.5) * 0.4)));
+    marram = mix(marram, clamp(tuft * 1.6, 0.0, 1.0), (1.0 - smoothstep(0.08, 0.25, fp)) * 0.85);
     float h0 = texture2D(tLN, p.xz * (1.0 / 29.0)).g;
     float hx = texture2D(tLN, (p.xz + vec2(2.0, 0.0)) * (1.0 / 29.0)).g;
     float hz = texture2D(tLN, (p.xz + vec2(0.0, 2.0)) * (1.0 / 29.0)).g;
     vec2 gr = vec2(hx - h0, hz - h0) * 2.2;
-    float dk = smoothstep(0.02, 0.15, vCov.z) * (1.0 - smoothstep(0.8, 1.0, vCov.z)) * (1.0 - smoothstep(1.5, 4.0, fp)) * step(${(WL + 1.2).toFixed(2)}, p.y);
+    float dk = smoothstep(0.02, 0.15, vCov.z) * (1.0 - smoothstep(0.8, 1.0, vCov.z)) * (1.0 - smoothstep(0.5, 1.2, fp)) * step(${(WL + 1.2).toFixed(2)}, p.y) * 0.7;
     lnN = normalize(mix(lnN, normalize(lnN + vec3(-gr.x, 0.0, -gr.y)), dk));
   }
   // marram from above: grey-green over pale sand, straw-tipped (low contrast against the sand)
@@ -492,7 +498,7 @@ vec3 landAlbedo() {
     vec2 cc = p.xz / 3.4;
     vec2 hh = lhash22(floor(cc));
     float rr = length(fract(cc) - 0.5 - (hh - 0.5) * 0.5) * (0.8 + 0.5 * hh.y);
-    float near = 1.0 - smoothstep(1.2, 2.6, fp);
+    float near = 1.0 - smoothstep(0.5, 1.2, fp);   // (dots at 3.4 m spacing alias into a leopard pattern far away)
     float clump = step(hh.x, 0.08) * (1.0 - smoothstep(0.2, 0.22 + fp * 0.35, rr));
     vec3 scr = hh.y < 0.75 ? vec3(0.27, 0.31, 0.19) : vec3(0.5, 0.44, 0.16);
     sc = mix(sc, scr * (0.85 + 0.3 * nB.r), scrubA * mix(0.12, clump * 0.8, near));
@@ -508,6 +514,14 @@ vec3 landAlbedo() {
   // ── rock (steep slopes, cliffs)
   vec3 rc = mix(cRock, cRock2, smoothstep(0.3, 0.7, nB.r + 0.3 * sin(p.y * 0.9 + nA.g * 6.0)));
   col = mix(col, rc, rock);
+  // ── surf on the open coasts (island, far shores): broken white water at the waterline, kept
+  // ≥ ~1 px far away; the town's shores have the water shader's own foam
+  {
+    float hw = p.y - ${WL.toFixed(2)};
+    float band = (1.0 - smoothstep(0.05, 0.35 + fp * 0.45, hw)) * smoothstep(-0.4, -0.05, hw);
+    float br = smoothstep(0.38, 0.62, nB.g * 0.55 + nG.r * 0.45);
+    col = mix(col, vec3(0.72, 0.75, 0.74), band * br * 0.75 * (1.0 - wet) * smoothstep(400.0, 800.0, vCov3.y));
+  }
   // ── under water: seabed darkens with depth (the water surface tints it further)
   float uw = smoothstep(${(WL - 0.1).toFixed(2)}, ${(WL - 2.5).toFixed(2)}, p.y);
   col = mix(col, mix(sc, cMud, 0.4) * 0.7, uw * (1.0 - rock * 0.5));

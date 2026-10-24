@@ -498,6 +498,8 @@ vec4 waterBase() {
   line *= smoothstep(0.42, 0.68, mB.b);
   float lap = (1.0 - smoothstep(0.2, 0.95, shore)) * (1.0 - beach) * (0.55 + 0.45 * sin(t * 1.6 + (p.x + p.z) * 0.8));
   hFoam *= smoothstep(0.2, 0.62, lace * (0.7 + 0.6 * hFoam) + 0.15 * sin(t * 2.1 + dot(p.xz, vec2(1.3, 0.9))));
+  // river banks: no continuous white outline — the wet edge only flecks where ripples reach
+  edge *= mix(1.0, 0.55 * smoothstep(0.52, 0.78, lace + 0.22 * sin(t * 1.3 + dot(p.xz, vec2(0.7, 1.1)))), mRiv);
   float foam = clamp(max(max(edge, line * 0.8), max(lap * 0.55, hFoam * 0.95)), 0.0, 1.0);
   foam *= mix(0.55, 1.0, smoothstep(0.25, 0.65, lace));
   foam *= 1.0 - 0.85 * mPond;
