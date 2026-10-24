@@ -10,7 +10,7 @@ import {
   col, shade, setCol, lightBox, wallLamp,
 } from './gen';
 import { anchors } from './anchors';
-import { balconyLife, roofClutter } from './clutter';
+import { balconyLife, roofClutter, ironRail } from './clutter';
 import { WIN, PROF, WALLPAT, ROOFPAT, FRAME, GLASS, LIGHT_MODE } from './materials';
 import { partitionSide } from './oldtown';
 
@@ -324,7 +324,10 @@ function jitPick(rng: Gen['rng'], list: string[]): THREE.Color {
 // ───────────────────────────────────────────────────────── apartments ──
 
 const APT_WALLS = ['#e9e1d0', '#d9e2e4', '#efd9b8', '#dcd3e3', '#e2e8d4'];
-const APT_ACCENT = ['#e76f51', '#2a9d8f', '#e9c46a', '#457b9d', '#f4a261', '#8d6cab'];
+/** muted, weathered painted-concrete tones for balcony fronts (one per building, ± per balcony) */
+const APT_BALC = ['#d8cfc0', '#cfd6d2', '#e3d6c3', '#c9c2b6', '#d6dccf', '#e6e1d6', '#c6cdd0', '#dccbb8'];
+/** muted parasol canvases */
+const APT_PARASOL = ['#efe9dc', '#e6e1d6', '#cfd6d2', '#d9c7a8', '#b9c4c8'];
 
 export function genApartment(g: Gen): void {
   const { lot, rng, W, D } = g;
@@ -336,7 +339,11 @@ export function genApartment(g: Gen): void {
   const gH = 3.3;
   const fH = (H - gH - 0.2) / (floors - 1);
   const wallC = col(rng.pick(APT_WALLS));
-  const accent = [col(rng.pick(APT_ACCENT)), col(rng.pick(APT_ACCENT))];
+  // balcony fronts: weathered painted concrete in a muted tone, frosted glass, or slim metal railings (per building)
+  const balTone = col(rng.pick(APT_BALC)).lerp(wallC, 0.3);
+  const accent = [balTone, shade(balTone, 0.94)];
+  const balStyle = rng.weighted(['solid', 'glass', 'bars'] as const, [0.5, 0.25, 0.25]);
+  const railC = col(rng.pick(['#9aa3a8', '#e9e6dd', '#3a3f44']));
   const look = (profile: number = PROF.HOME): WallLook => ({ color: wallC, pattern: WALLPAT.PANELS, frame: FRAME.ALU, glass: GLASS.NEUTRAL, style: WIN.PLAIN, profile, seed: g.seed });
   const plain = { color: wallC, pattern: WALLPAT.PANELS, seed: g.seed };
   const s = g.shell,
@@ -451,21 +458,39 @@ export function genApartment(g: Gen): void {
     const y = yFloor;
     setCol(t, shade(wallC, 0.95));
     sideBox(t, sg, u - w / 2, u + w / 2, 0, dep, y - 0.16, y, true);
-    // solid parapet panel in the accent colour
-    setCol(t, ac);
-    sideBox(t, sg, u - w / 2, u + w / 2, dep - 0.08, dep, y, y + 1.0, true);
-    sideBox(t, sg, u - w / 2, u - w / 2 + 0.08, 0, dep - 0.08, y, y + 1.0, true);
-    sideBox(t, sg, u + w / 2 - 0.08, u + w / 2, 0, dep - 0.08, y, y + 1.0, true);
-    setCol(t, col('#e8e8e4'));
-    sideBox(t, sg, u - w / 2 - 0.02, u + w / 2 + 0.02, dep - 0.1, dep + 0.02, y + 1.0, y + 1.06, true);
+    // dirty drip edge under the slab
+    setCol(t, shade(wallC, 0.62));
+    sideBox(t, sg, u - w / 2 + 0.01, u + w / 2 - 0.01, dep - 0.01, dep + 0.005, y - 0.24, y - 0.16, true);
+    const jitter = 0.95 + rng.next() * 0.08;
+    if (balStyle === 'solid') {
+      // painted concrete parapet: weathered tone, a darker run-off band along its foot
+      setCol(t, shade(ac, jitter));
+      sideBox(t, sg, u - w / 2, u + w / 2, dep - 0.08, dep, y + 0.16, y + 1.0, true);
+      sideBox(t, sg, u - w / 2, u - w / 2 + 0.08, 0, dep - 0.08, y, y + 1.0, true);
+      sideBox(t, sg, u + w / 2 - 0.08, u + w / 2, 0, dep - 0.08, y, y + 1.0, true);
+      setCol(t, shade(ac, jitter * 0.78));
+      sideBox(t, sg, u - w / 2, u + w / 2, dep - 0.08, dep, y, y + 0.16, true);
+      setCol(t, shade(ac, 1.04));
+      sideBox(t, sg, u - w / 2 - 0.02, u + w / 2 + 0.02, dep - 0.1, dep + 0.02, y + 1.0, y + 1.06, true);
+    } else if (balStyle === 'glass') {
+      // frosted glass panels between slim posts, metal handrail
+      setCol(t, col('#b9c6c9').multiplyScalar(jitter));
+      sideBox(t, sg, u - w / 2 + 0.04, u + w / 2 - 0.04, dep - 0.05, dep - 0.03, y + 0.08, y + 0.95, true, true);
+      for (const e of [-1, 1]) sideBox(t, sg, u + e * (w / 2 - 0.04) - 0.02, u + e * (w / 2 - 0.04) + 0.02, 0.02, dep - 0.03, y + 0.08, y + 0.95, true, true);
+      setCol(t, railC);
+      sideBox(t, sg, u - w / 2, u + w / 2, dep - 0.07, dep - 0.01, y + 0.95, y + 1.0, true);
+      for (const e of [-1, 0, 1]) sideBox(t, sg, u + e * (w / 2 - 0.03) - 0.02, u + e * (w / 2 - 0.03) + 0.02, dep - 0.06, dep - 0.02, y, y + 0.96, true);
+    } else {
+      ironRail(g, sg, u - w / 2 + 0.03, u + w / 2 - 0.03, dep - 0.05, y, 1.0, railC, true);
+    }
     anchors.balcony(sx(sg, u, dep / 2), y, sz(sg, u, dep / 2), sg.nx, sg.nz, w - 0.16, dep - 0.08, 1.0);
     // life on the balcony
     const r = rng.next();
     if (r >= 0.22) {
-      balconyLife(g, sg, u - w / 2 + 0.1, u + w / 2 - 0.1, y, { rail: 1.0, depth: dep - 0.1, solid: true, green: back ? 0.75 : 0.95 });
+      balconyLife(g, sg, u - w / 2 + 0.1, u + w / 2 - 0.1, y, { rail: 1.0, depth: dep - 0.1, solid: balStyle !== 'bars', green: back ? 0.75 : 0.95 });
       if (r > 0.9) {
         // parasol
-        setCol(t, col(rng.pick(APT_ACCENT)));
+        setCol(t, col(rng.pick(APT_PARASOL)));
         const px = sx(sg, u, 0.6), pz = sz(sg, u, 0.6);
         t.cone(px, pz, 0.85, y + 1.7, y + 2.05, 8);
         setCol(t, col('#dddddd'));

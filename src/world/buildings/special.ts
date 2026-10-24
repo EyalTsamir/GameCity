@@ -256,7 +256,8 @@ function seaview(g: Gen): void {
             // seafront hotel: mostly clean balconies with sparse personal touches
             if (rng.chance(0.4)) balconyLife(g, sg, u - 1.04, u + 1.04, yb, { rail: 0.95, depth: 0.82, green: 0.7, hotel: true });
             if (rng.chance(0.14)) {
-              setCol(t, col(rng.pick(['#e63946', '#2a9d8f', '#f4a261', '#457b9d'])));
+              // pale canvas parasols (a few personal touches, no confetti from the beach)
+              setCol(t, col(rng.pick(['#f1efe9', '#ece4d4', '#e2e6e4', '#cfdbe0'])));
               const px = sx(sg, u + 0.6, 0.5), pz = sz(sg, u + 0.6, 0.5);
               t.cone(px, pz, 0.6, yb + 1.6, yb + 1.9, 8);
               setCol(t, col('#dddddd'));

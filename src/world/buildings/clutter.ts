@@ -99,16 +99,17 @@ export function balconyLife(g: Gen, sg: SideGeom, uA: number, uB: number, y: num
   const hotel = !!o.hotel;
   // trailing plants over the railing (front) — the strongest Tel-Aviv / Mediterranean cue
   if (r.chance(Math.min(0.9, (hotel ? 0.3 : 0.72) * gp))) {
-    const cell = hotel ? r.weighted([GREEN.PETUNIA, GREEN.BOUGAIN], [1.5, 1]) : r.weighted(TRAIL, [2, 1.5, 1.2, 1.4]);
+    // (hotel: low-contrast at a distance — greens and white flowers, no saturated colour)
+    const cell = hotel ? r.weighted([GREEN.IVY_HANG, GREEN.POTHOS], [1, 1.4]) : r.weighted(TRAIL, [2, 1.5, 1.2, 1.4]);
     const a = uA + r.range(0, W * 0.3),
       b = uB - r.range(0, W * 0.3);
-    const top = r.weighted([GREEN.GERANIUM, GREEN.SHRUB, GREEN.JASMINE, GREEN.LAVENDER], [3, 2, 1, 1]);
+    const top = hotel ? r.weighted([GREEN.SHRUB, GREEN.JASMINE, GREEN.GRASS], [2, 1.2, 1]) : r.weighted([GREEN.GERANIUM, GREEN.SHRUB, GREEN.JASMINE, GREEN.LAVENDER], [3, 2, 1, 1]);
     // solid parapets (and some railings) carry balcony boxes hooked over the top rail, so the plants show
     // above the parapet and spill over its face; otherwise long planters stand inside the railing
     const hooked = o.solid || r.chance(0.35);
     const n = Math.max(1, Math.round((b - a) / 0.5));
     if (hooked) {
-      const cell2 = o.solid ? r.weighted([GREEN.POTHOS, GREEN.BOUGAIN, GREEN.PETUNIA], [1.4, 1.2, 1.4]) : cell;
+      const cell2 = o.solid && !hotel ? r.weighted([GREEN.POTHOS, GREEN.BOUGAIN, GREEN.PETUNIA], [1.4, 1.2, 1.4]) : cell;
       const yb = y + o.rail - 0.12;
       setCol(t, col(r.pick(['#b5653f', '#3a3f44', '#e9e4d8', '#7a4b2a'])));
       sideBox(t, sg, a + 0.05, b - 0.05, D - 0.04, D + 0.2, yb, yb + 0.22, true);
@@ -138,7 +139,7 @@ export function balconyLife(g: Gen, sg: SideGeom, uA: number, uB: number, y: num
     const end = k % 2 === 0;
     const u = end ? uA + 0.25 + r.next() * 0.2 : uB - 0.25 - r.next() * 0.2;
     if (!take(u - 0.2, u + 0.2)) continue;
-    potPlant(g, sg, u, r.range(0.25, Math.max(0.3, D - 0.3)), y, r.range(1.0, 1.9));
+    potPlant(g, sg, u, r.range(0.25, Math.max(0.3, D - 0.3)), y, r.range(1.0, 1.9), hotel ? r.weighted([GREEN.SHRUB, GREEN.PALM, GREEN.GRASS, GREEN.SUCCULENT], [2, 1.5, 1, 0.8]) : undefined);
   }
   // hanging pot on an iron wall bracket
   if (!hotel && r.chance(0.22 * gp) && W > 1.2) {
@@ -164,7 +165,7 @@ export function balconyLife(g: Gen, sg: SideGeom, uA: number, uB: number, y: num
       const cc = col(hotel ? r.pick(['#f1efe9', '#e9e4d8', '#d8e2e6']) : r.pick(CHAIRS));
       for (const du of [-0.42, 0.42]) chair(g, sg, u + du, D * 0.5, y, cc);
       if (r.chance(0.7)) {
-        setCol(t, col(r.pick(['#e9e4d8', '#2c3033', '#9a6a43'])));
+        setCol(t, col(hotel ? '#ece9e2' : r.pick(['#e9e4d8', '#2c3033', '#9a6a43'])));
         const tx = sx(sg, u, D * 0.5),
           tz = sz(sg, u, D * 0.5);
         t.cylinder(tx, tz, 0.025, y, y + 0.68, 4, false);

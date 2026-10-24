@@ -885,14 +885,22 @@ void bhWall(inout vec3 albedo, inout float rough, inout float metal, inout vec3 
     // wall between the windows: per-floor tint drift + rain streaks below the sills
     albedo *= 1.0 + (bhHash12(vec2(cell.y + 0.5, seed * 1.71)) - 0.5) * 0.09 * wStr;
     if (!curtain) {
+      // rain streaks under the sills — not under every window (no barcode): per window a different
+      // amount, length and darkness; some only drip from the sill ends
       float dS = pm.y < wr.z ? wr.z - pm.y : (cell.y + 1.0 < vB.y && pm.y > wr.w ? csz.y + wr.z - pm.y : 1e3);
+      // the window above this wall pixel (the one whose sill drips here)
+      vec2 wcell = vec2(cell.x, pm.y < wr.z ? cell.y : cell.y + 1.0);
+      float hw1 = bhHash13(vec3(wcell, seed + 31.0)), hw2 = bhHash13(vec3(wcell.yx + 5.0, seed + 47.0));
+      float amt = smoothstep(0.25, 0.75, hw1);                  // ~half the windows streak visibly
+      float lenK = 0.35 + 1.4 * hw2;                            // short drips … long runs
+      float drk = 0.35 + 0.6 * fract(hw1 * 7.31);
       float inX = smoothstep(wr.x - 0.1, wr.x + 0.06, pm.x) * (1.0 - smoothstep(wr.y - 0.06, wr.y + 0.1, pm.x));
-      float run = 1.0 - smoothstep(0.0, 0.5 + 2.2 * sn * sn, dS);
+      float run = 1.0 - smoothstep(0.0, (0.5 + 2.2 * sn * sn) * lenK, dS);
       float ew = max(0.09, fq.x * 1.25);
-      float ends = (1.0 - smoothstep(0.0, ew, abs(pm.x - wr.x - 0.05))) + (1.0 - smoothstep(0.0, ew, abs(pm.x - wr.y + 0.05)));
+      float ends = (1.0 - smoothstep(0.0, ew, abs(pm.x - wr.x - 0.05))) * step(0.3, fract(hw2 * 3.7)) + (1.0 - smoothstep(0.0, ew, abs(pm.x - wr.y + 0.05))) * step(0.3, fract(hw2 * 5.3));
       ends *= 0.09 / ew;
-      float rs = inX * run * smoothstep(0.1, 0.8, sn) + ends * (1.0 - smoothstep(0.0, 1.3 + 1.8 * sn, dS));
-      albedo *= mix(vec3(1.0), dirtTint, clamp(rs, 0.0, 1.0) * 0.7 * wStr);
+      float rs = inX * run * smoothstep(0.1, 0.8, sn) * amt + ends * (1.0 - smoothstep(0.0, (1.3 + 1.8 * sn) * lenK, dS)) * (0.4 + 0.6 * amt);
+      albedo *= mix(vec3(1.0), dirtTint, clamp(rs, 0.0, 1.0) * 0.7 * drk * wStr);
     }
     emit += albedo * crown * vec3(0.55, 0.62, 0.75);
     if (detail >= 0.999) return;

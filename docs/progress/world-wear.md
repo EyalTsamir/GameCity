@@ -1,9 +1,12 @@
 # world-wear — weathering and lived-in clutter (world round)
 
 ## Resume here
-* FINISHED (2026-10-24 ~09:00). Final full-city verification shots/world/wear/final (otfac + otst × 11 / 18.2 /
-  21.5, all modules): invariants {}, console clean, no failed modules; wet-night street shots/world/wear/finalw.
-  Final report below; nothing running.
+* Final report written; lead review asked for two more fixes (coded, typecheck clean, being verified):
+  (1) Westbrook apartments: balcony fronts now muted weathered painted concrete / frosted glass / slim metal
+  railings per building (houses.ts APT_BALC, balStyle), drip edge + run-off band; sill rain streaks varied per
+  window (amount, length, darkness, end drips) — no more barcode (materials.ts). (2) Seaview hotel: hotel-mode
+  balconies use greens + white only (ivy / pothos, shrub / jasmine / palm pots), white tables, pale parasols.
+* RUNNING: it12 (apt, oldtown, otfac × 11 / 18.2). Then update the Final report, message the lead, hand back.
 
 ## Brief (from WORLD-PLAN.md scope 7 + briefs "### wear")
 Roads: patches, cracks + sealant, tyre polish, oil stains, faded markings, drains, puddles in low spots (mirror
