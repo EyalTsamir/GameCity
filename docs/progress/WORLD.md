@@ -48,6 +48,8 @@ Branch: work continues from `claude/tinyhaven-graphics-audit-l089m8` (fast-forwa
   DONE: air, wear, streetlife, foliage. Open: world (island, dunes), ground (forest floor tune), life (soak+report).
 * 16:15 — trial `npm run build` OK: single dist/index.html 3.15 MB (was ~2.2 MB; one inlined script, no external
   fetches — only SVG namespaces + a three.js shader comment URL). Final QA todo: update CLAUDE.md size note.
+* 16:40 — world DONE (final3 approved: island = natural massif on its own 14 m patch, ?landisland=0; dunes clean).
+  DONE: air, wear, streetlife, foliage, world. Open: ground (forest floor tune), life (soak + final report).
 * 2026-10-24 08:31 UTC — 5th stop (SESSION limit, all agents ~04:40, reset 08:20; container rebooted 08:29).
   Restored servers/autocheckpoint/locks; tree clean at 9399c3f (pushed). All 7 agents resumed 08:31 with open
   notes repeated (see 03:55 / 04:20 entries). Lead next: wait for milestone notes; then a second full-city
