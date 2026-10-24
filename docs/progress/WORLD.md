@@ -42,6 +42,10 @@ Branch: work continues from `claude/tinyhaven-graphics-audit-l089m8` (fast-forwa
   (need taper + scaffold fork + crown depth), conifers read as flat sheets, forest edge lacks understory.
 * 10:40 — wear DONE (it12/sheet.png: apartment balconies = railings/glass/painted concrete, varied streaks;
   hotel sea facade clean). Foliage→ground relay: forest floor shading under dense trees (litter, moss).
+* 11:05 — streetlife DONE (final_sheet.png + final/*.png judged: busy terraces, busker with audience, plaza
+  sitters, two-wheelers 27 %, rounded glossy cars; noon overview = a real place). Est. 0.3–0.4 ms, +4 calls.
+  Lead final-QA todo: pre-existing bus rear-axle glitch at (58.7, −68.6) (traffic, unowned now).
+  Remaining agents: world, ground, foliage, life.
 * 2026-10-24 03:33 UTC — 4th stop = WEEKLY limit: agents resumed 2026-10-20 07:31 hit it at once (no agent
   edits since 02:08 on 10-20; logs' Resume here are from ~02:05). Limit reset 10-24 03:00; container rebooted
   ~03:30. Restored: servers 5173/5174, autocheckpoint 20 min, locks cleared, tree clean at 582500f (pushed);
