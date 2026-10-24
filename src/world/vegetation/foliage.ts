@@ -290,6 +290,8 @@ export const cardKnobs = {
   edgeFade: { value: 1 },
   /** fraction of far cards kept (quality tiers: high 1, medium 0.85, low 0.6) */
   farKeep: { value: 1 },
+  /** extra skylight on foliage (scattered through the leaves) */
+  skyFill: { value: 0.7 },
 };
 
 // ──────────────────────────────────────────────────────────────── GLSL ──
@@ -382,6 +384,8 @@ void thCard( out vec3 P, out vec3 N ) {
   vec3 fN = normalize( cross( U, V ) );
   vec3 toCam = normalize( cameraPosition - P );
   vThVis *= mix( 1.0, smoothstep( 0.04, 0.22, abs( dot( fN, toCam ) ) ), uThEdgeFade );
+  // cards right at the lens dissolve (a free camera inside a crown would otherwise see huge flat leaves)
+  vThVis *= smoothstep( 0.7, 1.9, length( cameraPosition - iC.xyz ) - length( U + V ) * 0.35 );
   vThK = iK;
   vThF = iF;
   vThAO = iV.w;
@@ -463,6 +467,7 @@ uniform float uThWrapK;
 uniform float uThTilt;
 uniform float uThNightK;
 uniform float uThFx;
+uniform float uThSkyFill;
 uniform float uNight;
 varying vec2 vThUv;
 varying float vThVis;
@@ -512,10 +517,13 @@ const CARD_FRAG_AO = /* glsl */ `
 {
   float ao = vThAO;
   float aoN = mix( ao, 1.0 - ( 1.0 - ao ) * 0.35, uNight );
-  reflectedLight.indirectDiffuse *= aoN;
+  vec3 wN = normalize( ( vec4( normal, 0.0 ) * viewMatrix ).xyz );
+  // sky fill: thin leaves also pass and scatter skylight, so a crown in shade stays dark GREEN, not black;
+  // strongest on the outer, sky-facing leaves
+  float sky = uThSkyFill * ( 0.55 + 0.45 * saturate( wN.y + 0.3 ) ) * ( 0.4 + 0.6 * ao );
+  reflectedLight.indirectDiffuse *= aoN * ( 1.0 + sky );
   reflectedLight.directDiffuse *= mix( 1.0, aoN, 0.25 );
   reflectedLight.indirectSpecular *= aoN * 0.5;
-  vec3 wN = normalize( ( vec4( normal, 0.0 ) * viewMatrix ).xyz );
   if ( uNight > 0.01 ) {
     float top = smoothstep( -0.2, 0.85, wN.y );
     float lift = uNight * uThNightK;
@@ -673,6 +681,7 @@ export function cardMaterials(u: GlobalUniforms, atlas: THREE.Texture, lod: THRE
       uThFx: cardKnobs.fx,
       uThShadowShift: cardKnobs.shadowShift,
       uThEdgeFade: cardKnobs.edgeFade,
+      uThSkyFill: cardKnobs.skyFill,
       uNight: u.uNight,
     });
     sh.vertexShader = sh.vertexShader

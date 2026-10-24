@@ -43,7 +43,7 @@ export interface CarShape {
   clad?: boolean;
 }
 
-export type LoftRegion = 'body' | 'glass' | 'trim' | 'well' | 'clad';
+export type LoftRegion = 'body' | 'glass' | 'trim' | 'seal' | 'well' | 'clad';
 export type LoftParts = Record<LoftRegion, THREE.BufferGeometry | null>;
 
 const smooth = (t: number) => (t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t));
@@ -212,6 +212,7 @@ export function loftCar(s: CarShape, lod: number): LoftParts {
     body: { p: [], n: [] },
     glass: { p: [], n: [] },
     trim: { p: [], n: [] },
+    seal: { p: [], n: [] },
     well: { p: [], n: [] },
     clad: { p: [], n: [] },
   };
@@ -241,7 +242,7 @@ export function loftCar(s: CarShape, lod: number): LoftParts {
       if (a <= 6 && b >= 7) g = sideGlass ? (pillar ? 'trim' : 'glass') : 'body';
       else if (a >= 8) g = screen || rear ? 'glass' : 'body';
       else if (b <= 2) g = 'well';
-      else if (a === 5 && b === 6) g = sideGlass || pillar ? 'trim' : 'body';
+      else if (a === 5 && b === 6) g = pillar ? 'trim' : sideGlass ? 'seal' : 'body';
       else if (s.clad && a >= 1 && b <= 3) g = 'clad';
       // two triangles per quad (wound outwards below)
       vert(g, j, i);
@@ -292,5 +293,5 @@ export function loftCar(s: CarShape, lod: number): LoftParts {
     g.setAttribute('normal', new THREE.Float32BufferAttribute(n, 3));
     return g;
   };
-  return { body: mk(out.body), glass: mk(out.glass), trim: mk(out.trim), well: mk(out.well), clad: mk(out.clad) };
+  return { body: mk(out.body), glass: mk(out.glass), trim: mk(out.trim), seal: mk(out.seal), well: mk(out.well), clad: mk(out.clad) };
 }

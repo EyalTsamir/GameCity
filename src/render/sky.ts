@@ -369,7 +369,9 @@ export default async function create(ctx: CityContext): Promise<CityModule> {
 
     if (sun.castShadow) {
       // world: no tilt-shift blur hides the distance → a wider shadowed region, not trimmed behind the focus
-      const maxR = world ? THREE.MathUtils.clamp(dist * 1.3 + 90, 130, 520) : legacy ? THREE.MathUtils.clamp(dist * 1.55 + 30, 70, 420) : THREE.MathUtils.clamp(dist * 1.2 + 24, 60, 420);
+      // (overview distances: the long golden-hour shadows of trees, hedgerows and towers across the fields
+      // around the town need the map out to ~1 km; texels stay ≈ 1 m there, ≈ 0.3 m at POI distances)
+      const maxR = world ? THREE.MathUtils.clamp(dist * 1.6 + 120, 140, 950) : legacy ? THREE.MathUtils.clamp(dist * 1.55 + 30, 70, 420) : THREE.MathUtils.clamp(dist * 1.2 + 24, 60, 420);
       const minR = legacy ? THREE.MathUtils.clamp(dist * 0.55, 28, 200) : THREE.MathUtils.clamp(dist * 0.45, 22, 200);
       fitter.fit(ctx.camera, sun, _L, _focus, maxR, minR, legacy || world ? 1 : 0.62);
       const cam = sun.shadow.camera;

@@ -36,10 +36,11 @@ export default function create(ctx: CityContext): CityModule {
   const prm = ctx.debug.params;
   const maps = buildCoverMaps(ctx);
   // the landscape band around the slab (world mode): meadows / reeds / dunes continue in blades; built
-  // incrementally in frame() (≈ 4 ms per frame) so it never delays the boot
+  // incrementally in frame() (≈ 4 ms per frame at 60 fps) so it never delays the boot
   let outerGen = prm.has('nogcouter') ? null : outerMapsBuilder(ctx, maps.grids);
   let outer: OuterMaps | null = null;
   let outerWork = 0;
+  let lastFrameT = 0;
   // hand the maps to the ground shader (far field: lengths, flowers, litter, blade presence)
   setGroundCover(maps.texCover, maps.texFlower);
 
@@ -100,9 +101,14 @@ export default function create(ctx: CityContext): CityModule {
     frame() {
       frameNo++;
       if (outerGen) {
+        // ~4 ms per frame at 60 fps; slow frames (software GL, heavy boot) take a proportional slice
+        // (wall time between frames — realDt is clamped to 0.1 s by main.ts)
         const t0 = performance.now();
+        const wall = lastFrameT > 0 ? t0 - lastFrameT : 16;
+        lastFrameT = t0;
+        const budget = Math.min(80, Math.max(4, wall * 0.12));
         let r = outerGen.next();
-        while (!r.done && performance.now() - t0 < 4) r = outerGen.next();
+        while (!r.done && performance.now() - t0 < budget) r = outerGen.next();
         outerWork += performance.now() - t0;
         if (r.done) {
           outerGen = null;

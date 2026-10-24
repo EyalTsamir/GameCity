@@ -177,27 +177,43 @@ vec3 landAlbedo() {
     ivec2 id; vec4 box;
     float ch = fParcel(q, id, box);
     int pid = id.x * 13 + id.y;
+    int ppid = pid;
     vec4 pbox = box;
     float longX = step(box.w - box.y, box.z - box.x);
-    // many parcels are worked as 2–3 strips / paddocks (each its own crop, fenced, no hedge)
-    float sub = lhash(pid, 31);
-    if (sub < 0.5) {
-      float n = sub < 0.2 ? 3.0 : 2.0;
-      if (longX > 0.5) {
-        float w = (box.z - box.x) / n;
-        float si = clamp(floor((q.x - box.x) / w), 0.0, n - 1.0);
-        box.x += si * w; box.z = box.x + w;
-        pid += int(si) * 977;
-      } else {
-        float w = (box.w - box.y) / n;
-        float si = clamp(floor((q.y - box.y) / w), 0.0, n - 1.0);
-        box.y += si * w; box.w = box.y + w;
-        pid += int(si) * 977;
-      }
+    // town-edge smallholdings: the parcel is a grid of ~44 m plots (market gardens, paddocks, orchards …)
+    bool small = fSmall(box);
+    float nxp = 1.0, nyp = 1.0, ixp = 0.0, iyp = 0.0;
+    if (small) {
+      nxp = max(1.0, floor((box.z - box.x) / FPLOT + 0.5));
+      nyp = max(1.0, floor((box.w - box.y) / FPLOT + 0.5));
+      float wx = (box.z - box.x) / nxp, wy = (box.w - box.y) / nyp;
+      ixp = clamp(floor((q.x - box.x) / wx), 0.0, nxp - 1.0);
+      iyp = clamp(floor((q.y - box.y) / wy), 0.0, nyp - 1.0);
+      box.x += ixp * wx; box.z = box.x + wx;
+      box.y += iyp * wy; box.w = box.y + wy;
+      pid = pid * 37 + int(ixp) * 131 + int(iyp) * 977 + 7;
       ch = lhash(pid, 17);
+    } else {
+      // many parcels are worked as 2–3 strips / paddocks (each its own crop, fenced, no hedge)
+      float sub = lhash(pid, 31);
+      if (sub < 0.5) {
+        float n = sub < 0.2 ? 3.0 : 2.0;
+        if (longX > 0.5) {
+          float w = (box.z - box.x) / n;
+          float si = clamp(floor((q.x - box.x) / w), 0.0, n - 1.0);
+          box.x += si * w; box.z = box.x + w;
+          pid += int(si) * 977;
+        } else {
+          float w = (box.w - box.y) / n;
+          float si = clamp(floor((q.y - box.y) / w), 0.0, n - 1.0);
+          box.y += si * w; box.w = box.y + w;
+          pid += int(si) * 977;
+        }
+        ch = lhash(pid, 17);
+      }
     }
-    // grazing land along the southern coast: pastures, hay meadows, fallow (same remap as fields.ts)
-    if (vCov3.w > 0.5) ch = ch < 0.6 ? 0.48 + ch * 0.3 : ch < 0.85 ? 0.66 + (ch - 0.6) * 0.4 : 0.83 + (ch - 0.85) * 0.5;
+    // crop kind (fields.ts cropKind): smallholding mix, coastal grazing land, or the farmland mix
+    int ck = fCropKind(ch, small, vCov3.w);
     float dx0 = q.x - box.x, dx1 = box.z - q.x, dy0 = q.y - box.y, dy1 = box.w - q.y;
     float dB = min(min(dx0, dx1), min(dy0, dy1));
     // distance to the parcel's own (hedged / tracked) borders
@@ -228,69 +244,104 @@ vec3 landAlbedo() {
     float tram = lStripe(tr + lhash(pid, 41) * tlP, tlP, tlW, fpt) * (1.0 - head);
     vec3 fc;
     float pv = lhash(pid, 23);   // field tone
-    if (ch < 0.22) {
+    if (ck == 0) {
       // ripe wheat: drill rows, tramlines, striation, lodged patches, wind sheen
       fc = cWheat * (0.9 + 0.2 * pv);
       fc *= 1.0 - 0.07 * lStripe(tr, 0.6, 0.35, fpt);
-      fc *= 1.0 - 0.45 * tram;
+      fc *= 1.0 - mix(0.42, 0.22, smoothstep(0.5, 2.0, fp)) * tram;   // softer far away (no ruler lines)
       fc *= 1.0 + 0.3 * stri;
       // a gentle tonal drift across the whole field (soil, sowing date) and lodged patches
       fc *= 0.9 + 0.2 * smoothstep(-0.6, 0.6, (dot(q - box.xy, vec2(0.7, 0.7)) / max(10.0, box.z - box.x + box.w - box.y) - 0.35) * 2.0 + (pv - 0.5));
       fc = mix(fc, fc * vec3(1.15, 1.1, 0.93), smoothstep(0.64, 0.78, nP.b) * 0.75);
       fc = mix(fc, fc * vec3(0.9, 0.97, 0.85), smoothstep(0.62, 0.78, nW.r) * 0.5); // greener, later patches
       fc = mix(fc, fc * vec3(1.16, 1.12, 1.0), gust * 0.75);
-    } else if (ch < 0.33) {
+    } else if (ck == 1) {
       // stubble: straw windrows, baler / tractor tracks, burnt-pale and dark bands
       fc = cStubble * (0.9 + 0.16 * pv) * (1.0 + 0.24 * stri);
-      fc = mix(fc, fc * 1.2, lStripe(tr, 6.0, 0.2, fpt));
+      fc = mix(fc, fc * 1.14, lStripe(tr, 6.0, 0.2, fpt) * (0.35 + 0.65 * smoothstep(0.35, 0.65, nP.g)));   // windrows, partly baled
       fc *= 1.0 - 0.12 * lStripe(tr, 0.4, 0.4, fpt);
       fc *= 1.0 - 0.25 * tram;
-    } else if (ch < 0.48) {
+    } else if (ck == 2) {
       // row crop: green rows on soil, the soil showing more where it is drier
       float rw = lStripe(tr, 0.75, 0.55, fpt);
       float cvr = 0.3 + 0.6 * smoothstep(0.25, 0.7, nW.g);
       fc = mix(cSoil, cGreens * (0.88 + 0.24 * pv), cvr + (1.0 - cvr) * rw) * (1.0 + 0.3 * stri);
       fc *= 1.0 - 0.3 * tram;
-    } else if (ch < 0.66) {
+    } else if (ck == 3) {
       // pasture: grazed patchwork, darker rank tufts, worn cattle paths toward the gate
       fc = cPasture * (0.84 + 0.24 * nB.r * midF + 0.12 * pv);
       fc *= 1.0 - 0.1 * smoothstep(0.55, 0.75, nB.b) * midF;
       fc = mix(fc, fc * vec3(1.1, 1.05, 0.85), smoothstep(0.6, 0.8, nW.b) * 0.5);
       float path = 1.0 - smoothstep(0.012, 0.012 + fp * 0.02 + 0.006, abs(nP.g - 0.5));
       fc = mix(fc, cTrack * 0.95, path * 0.55 * (1.0 - smoothstep(1.0, 4.0, fp)));
-    } else if (ch < 0.76) {
+    } else if (ck == 4) {
       // hay meadow, cut: mown swaths alternate light / dark (mower direction), windrows
       fc = mix(cHay, cMeadow, 0.35 * pv);
       float sw = step(0.5, fract(tr / 9.0));
-      fc *= mix(1.0, mix(0.9, 1.12, sw), 1.0 - smoothstep(2.0, 6.0, fp));
+      fc *= mix(1.0, mix(0.94, 1.07, sw), (1.0 - smoothstep(2.0, 6.0, fp)) * (0.5 + 0.5 * nW.g));
       fc = mix(fc, fc * 1.18 + 0.01, lStripe(tr, 4.5, 0.3, fpt));
       fc = mix(fc, fc * vec3(1.1, 1.12, 1.04), gust * 0.4);
-    } else if (ch < 0.83) {
+    } else if (ck == 5) {
       // ploughed: furrows, damp dark hollows, drier pale crowns
       fc = cPlough * (0.88 + 0.24 * pv) * (1.0 + 0.32 * stri);
       fc *= 1.0 - 0.2 * lStripe(tr, 0.9, 0.45, fpt);
       fc *= 0.85 + 0.3 * nW.a;
-    } else if (ch < 0.91) {
+    } else if (ck == 6) {
       // fallow wildflower meadow
       fc = mix(meadow, cFallow, 0.4);
       fc = mix(fc, vec3(0.42, 0.12, 0.08), smoothstep(0.7, 0.85, nP.r) * 0.25 * smoothstep(0.1, 0.6, fp)); // poppy haze
-    } else if (ch < 0.95) {
+    } else if (ck == 7) {
       // sunflowers: yellow heads in rows over green
       float rw = lStripe(tr, 0.75, 0.6, fpt);
       fc = mix(cGreens * 0.8, cSunfl, 0.55 + 0.35 * rw) * (1.0 + 0.2 * stri);
       fc *= 1.0 - 0.3 * tram;
-    } else {
+    } else if (ck == 8) {
       // orchard floor (the trees are instanced): mown grass with darker rows
       fc = cPasture * 1.05;
       fc *= 1.0 - 0.15 * lStripe(tr, 6.0, 0.3, fpt);
+    } else if (ck == 9) {
+      // market garden: blocks of beds across the rows — cabbages, leeks, lettuces, red chard, bare / mulched soil
+      float bw = 4.0 + 4.0 * lhash(pid, 47);
+      float bi = floor(tr / bw);
+      float bh = lhash(pid + int(bi) * 7, 53);
+      vec3 vc = bh < 0.2 ? vec3(0.13, 0.26, 0.11) : bh < 0.38 ? vec3(0.2, 0.31, 0.25) : bh < 0.58 ? vec3(0.34, 0.5, 0.14)
+        : bh < 0.7 ? vec3(0.3, 0.13, 0.15) : bh < 0.85 ? cSoil * 0.85 : vec3(0.52, 0.45, 0.3);
+      float rw = lStripe(tl, 0.55, 0.6, fpt);
+      float vcv = bh < 0.7 ? 0.45 + 0.4 * rw : 0.0;
+      fc = mix(cSoil * (0.8 + 0.2 * nP.g), vc * (0.9 + 0.2 * pv), vcv + 0.25 * smoothstep(0.6, 1.5, fp) * step(bh, 0.7));
+      // the paths between blocks
+      fc = mix(fc, cSoil * 1.12, lStripe(tr + 0.5 * bw, bw, 0.1, fpt) * 0.8);
+    } else if (ck == 10) {
+      // maize: tall dark blue-green stand, tassels catching the light, rows only near
+      float rw = lStripe(tr, 0.75, 0.62, fpt);
+      fc = cGreens * vec3(0.66, 0.8, 0.62) * (0.88 + 0.2 * pv) * (0.86 + 0.14 * rw) * (1.0 + 0.22 * stri);
+      fc = mix(fc, fc * vec3(1.25, 1.18, 0.9), smoothstep(0.55, 0.8, nP.b) * 0.4);
+      fc = mix(fc, fc * vec3(1.18, 1.16, 1.0), gust * 0.6);
+      fc *= 1.0 - 0.35 * tram;
+    } else {
+      // polytunnels: white plastic hoops in rows (shaded as half cylinders), grass between
+      float tw = 8.5 + 1.5 * lhash(pid, 59);
+      float u = fract(tr / tw);
+      float inT = step(u, 0.82) * (1.0 - head) * step(4.0, dAcross);
+      float ph = (u / 0.82 - 0.5) * 3.14159;
+      vec2 aw = mix(vec2(-0.1391731, 0.9902681), vec2(0.9902681, 0.1391731), along);
+      vec3 tn = normalize(vec3(aw.x * sin(ph) * 0.9, cos(ph), aw.y * sin(ph) * 0.9));
+      float tfade = 1.0 - smoothstep(1.5, 5.0, fp);
+      lnN = normalize(mix(lnN, tn, inT * tfade * field));
+      fc = mix(cPasture * 0.9, vec3(0.84, 0.87, 0.86) * (0.94 + 0.06 * lStripe(tl, 2.0, 0.85, fpt)), inT);
+      fc = mix(fc, mix(cPasture * 0.9, vec3(0.84, 0.87, 0.86), 0.8), (1.0 - tfade) * (1.0 - head) * step(4.0, dAcross));
     }
-    // in-field moisture / growth patches (stronger in crops, faint in grass)
-    float patchK = (ch < 0.48 || ch > 0.76) ? 0.24 : 0.12;
+    // in-field moisture / growth patches (stronger in crops, faint in grass and under plastic)
+    float patchK = (ck == 3 || ck == 4) ? 0.12 : ck == 11 ? 0.04 : ck == 9 ? 0.14 : 0.24;
     fc *= 1.0 - patchK * 0.5 + patchK * mix(0.5, nP.r * 0.6 + nB.g * 0.4, midF) + 0.1 * macro;
-    // field edges: weedy margin (rank grass, poppies / cow parsley as a tint far away)
-    float margin = 1.0 - smoothstep(0.8, 2.2 + 2.2 * pv + 1.5 * nB.r, dB);
+    // field edges: wildflower margin (rank grass; poppies / cow parsley / buttercups as a tint far away)
+    float mW = small ? 1.2 + 1.4 * pv : 2.6 + 2.6 * pv;
+    float margin = 1.0 - smoothstep(0.8, mW + 1.5 * nB.r, dB);
     vec3 weeds = meadow * mix(vec3(0.92), vec3(1.06, 0.92, 0.88), smoothstep(0.55, 0.7, nP.a));
-    fc = mix(fc, weeds, margin);
+    float fh = lhash(pid, 67);
+    vec3 flowerT = fh < 0.35 ? vec3(0.6, 0.2, 0.12) : fh < 0.7 ? vec3(0.78, 0.77, 0.7) : vec3(0.74, 0.62, 0.18);
+    weeds = mix(weeds, flowerT, (0.16 + 0.22 * smoothstep(0.5, 0.8, nP.g)) * smoothstep(0.05, 0.6, fp + 0.1));
+    fc = mix(fc, weeds, margin * (ck == 3 ? 0.5 : 1.0));
     // fence / ditch line between the strips of one parcel (no hedge)
     float fence = (1.0 - smoothstep(0.25, 0.25 + fp, dB)) * step(0.6, pB - dB + 0.6) * step(0.01, pB - dB);
     fc = mix(fc, meadow * 0.7, fence * 0.8);
@@ -303,6 +354,15 @@ vec3 landAlbedo() {
     float hw = 1.6 + 0.8 * nB.a;
     hedgeM = hedge * (1.0 - smoothstep(hw - fp * 0.5, hw + fp * 0.5, pB));
     trackM = track * (1.0 - smoothstep(1.4 - fp * 0.5, 1.4 + fp * 0.5, pB));
+    if (small) {
+      // hedges between the plots of a smallholding (fields.ts plotHedge; trees.ts plants them)
+      bool xNear = min(dx0, dx1) < min(dy0, dy1);
+      float bi = xNear ? (dx0 < dx1 ? ixp : ixp + 1.0) : (dy0 < dy1 ? iyp : iyp + 1.0);
+      float bn = xNear ? nxp : nyp;
+      float ph = step(0.5, bi) * step(bi, bn - 0.5) * step(lhash(ppid * 3 + (xNear ? 0 : 1), int(bi) * 7 + 61), 0.5);
+      float phw = 1.1 + 0.6 * nB.a;
+      hedgeM = max(hedgeM, ph * (1.0 - smoothstep(phw - fp * 0.5, phw + fp * 0.5, dB)));
+    }
     col = mix(col, fc, field);
   }
 
@@ -374,9 +434,27 @@ vec3 landAlbedo() {
     }
   }
   // ── sand (dunes, beach) — wet near the waterline; marram grass on the dunes
+  // the dune edge is never a line: blowouts of bare sand bite into the grass, grass tongues reach into
+  // the dunes (noise only in the transition, the open beach and the inland stay as they are)
+  {
+    float sw = smoothstep(0.0, 0.12, vCov.z) * (1.0 - smoothstep(0.8, 1.0, vCov.z));
+    float sN = (nA.b - 0.5) * 1.1 + (nB.g - 0.5) * 0.7 + (texture2D(tLN, p.xz * (1.0 / 13.0)).r - 0.5) * 0.35 * midF;
+    sand = mix(sand, smoothstep(0.18, 0.82, sand + sN * 0.55), sw);
+  }
   vec3 sc = mix(cWetSand, cSand, smoothstep(${(WL + 0.2).toFixed(2)}, ${(WL + 1.0).toFixed(2)}, p.y));
   float marram = smoothstep(0.2, 0.7, (1.0 - sand) * 1.6 + nB.b * 0.6 - 0.3) * smoothstep(${(WL + 1.6).toFixed(2)}, ${(WL + 2.6).toFixed(2)}, p.y);
   sc = mix(sc, mix(gcMarram, gcMeadowB, 0.35) * (0.75 + 0.4 * nB.r), marram * 0.85);
+  // dune scrub (sea buckthorn, gorse, creeping willow): dark clumps among the marram, a tint far away
+  {
+    float scrubA = marram * smoothstep(0.45, 0.7, nA.g + 0.3 * (nB.a - 0.5));
+    vec2 cc = p.xz / 3.4;
+    vec2 hh = lhash22(floor(cc));
+    float rr = length(fract(cc) - 0.5 - (hh - 0.5) * 0.5) * (0.8 + 0.5 * hh.y);
+    float near = 1.0 - smoothstep(1.2, 2.6, fp);
+    float clump = step(hh.x, 0.45) * (1.0 - smoothstep(0.2, 0.22 + fp * 0.35, rr));
+    vec3 scr = hh.y < 0.75 ? vec3(0.17, 0.24, 0.13) : vec3(0.48, 0.42, 0.12);
+    sc = mix(sc, scr * (0.85 + 0.3 * nB.r), scrubA * mix(0.3, clump * 0.9, near));
+  }
   // wrack line of dried seaweed along the last high tide
   sc *= 1.0 - 0.18 * (1.0 - smoothstep(0.15, 0.45 + fp, abs(p.y - ${(WL + 0.75).toFixed(2)} - 0.12 * (nB.g - 0.5)))) * (1.0 - smoothstep(0.5, 2.0, fp));
   sand = max(sand, marram * 0.5 * step(0.05, vCov.z));

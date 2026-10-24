@@ -431,8 +431,9 @@ export default function create(ctx: CityContext): CityModule {
       look.setVec('uLookSlope', 1, 1 - 0.1 * gk, 1 - 0.5 * gk);
       look.set('uLookPower', 1 - 0.2 * gk);
       look.set('uLookSat', 1 + 0.06 * gold - 0.08 * night);
-      look.set('uSat', 1.04);
-      look.set('uContrast', 0.14);
+      // a little punch back (the studio grade ran at 1.2): warm sunlit faces should glow, not grey out
+      look.set('uSat', 1.08 + 0.07 * gold - 0.04 * night);
+      look.set('uContrast', 0.17);
       look.setVec('uLift', 0.006, 0.007, 0.011);
       look.set('uWarm', 0.006 * (1 - night) + 0.008 * dusk - 0.012 * night);
       look.set('uVignette', 0.16 + 0.12 * night);

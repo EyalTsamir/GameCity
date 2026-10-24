@@ -6,7 +6,7 @@
 import * as THREE from 'three';
 import type { LandscapeModel } from './model';
 import { WL, CX, CZ } from './model';
-import { FROW, toField, fromField, rowB, colB, colOff, colW, lhash, fieldsOfParcel, grazeCrop, type Field } from './fields';
+import { FROW, toField, fromField, rowB, colB, colOff, colW, lhash, fieldsOfParcel, cropKind, CK, type Field } from './fields';
 import { hash2i } from './noise';
 import { SLAB } from '../../core/constants';
 import type { Fleet, FleetTemplate } from './fleet';
@@ -154,22 +154,23 @@ export function createFarmLife(model: LandscapeModel, uniforms: Record<string, T
           fy = (F.y0 + F.y1) / 2;
         fromField(fx, fy, w);
         if (!fieldOK(w.x, w.z)) continue;
-        F.crop = grazeCrop(F.crop, model.grazing(w.x, w.z));
+        const ck = cropKind(F.crop, F.small, model.grazing(w.x, w.z));
         const sd = slabD(w.x, w.z);
         // the tractor works a stubble / ploughed field in view of the town (W or S)
-        if ((F.crop >= 0.22 && F.crop < 0.33) || (F.crop >= 0.76 && F.crop < 0.83)) {
+        if (ck === CK.stubble || ck === CK.ploughed) {
           const score = Math.abs(sd - 330) + (w.x > SLAB.x1 ? 1e4 : 0);
           if (score < bestT && (F.x1 - F.x0) > 60 && (F.y1 - F.y0) > 40) {
             bestT = score;
             tractorField = { ...F };
           }
         }
-        if (!(F.crop >= 0.48 && F.crop < 0.66) || lhash(F.pid, 71) > 0.6) continue;
-        const sheep = lhash(F.pid, 72) < 0.35;
-        const n = sheep ? 14 + Math.floor(22 * lhash(F.pid, 73)) : 6 + Math.floor(12 * lhash(F.pid, 74));
+        if (ck !== CK.pasture || lhash(F.pid, 71) > 0.6) continue;
+        const sheep = lhash(F.pid, 72) < (F.small ? 0.5 : 0.35);
+        let n = sheep ? 14 + Math.floor(22 * lhash(F.pid, 73)) : 6 + Math.floor(12 * lhash(F.pid, 74));
+        if (F.small) n = Math.ceil(n * 0.4); // a few animals in a paddock
         const hx = F.x0 + (F.x1 - F.x0) * (0.25 + 0.5 * lhash(F.pid, 75)),
           hy = F.y0 + (F.y1 - F.y0) * (0.25 + 0.5 * lhash(F.pid, 76));
-        const spread = sheep ? 9 : 14;
+        const spread = (sheep ? 9 : 14) * (F.small ? 0.6 : 1);
         const tintBase = lhash(F.pid, 77);
         for (let a = 0; a < n; a++) {
           const r1 = hash2i(F.pid, a, 78),

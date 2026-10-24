@@ -96,4 +96,18 @@ instances if the field can't place them well.
 (pending)
 
 ## Perf notes
-(pending)
+* Draw calls: +3 instanced (rings A/B/C, only when tiles are visible; 0 at the overview) + 1 (lilies).
+  Blades never cast shadows; they receive them (Standard material, sun shadow map).
+* Blade vertices (high, 1600×900 captures, t8): bank_meadow 400 k, pond 506 k, park_eye 481 k,
+  park_mid (45 m) 183 k, overview 0. Rings: A 2 m tiles × 576 blades × 7 verts (≤ 12.5 m), B 4 m × 448
+  × 5 (≤ 35 m), C 8 m × 512 × 3 (≤ 66 m). Dead blades (density < 1) collapse to degenerate triangles
+  after the cover fetch — cheap vertex work, no raster.
+* Vertex shader ≈ 350–450 ALU + 8 fetches (cover, flower, 4 height taps, 2 noise) per vertex.
+  GPU estimate (Adreno X1-45, eye level in a meadow, worst case ≈ 0.5 M verts / 0.35 M tris):
+  vertex ≈ 0.3–0.45 ms, raster/fragment (thin triangles, ~1.5 M fragments incl. overdraw, Standard
+  + PCF shadow) ≈ 0.6–0.9 ms → ≈ 1.0–1.4 ms; POI/overview views: ground shader only, ≈ +0.05–0.1 ms
+  (≈ 60 extra ALU + 2 texture taps per ground pixel). Budget 1.8 ms.
+* Boot: slab cover maps ≈ 1.1–1.5 s on this loaded 4-core box (raster 0.4 s, lattice 0.1 s, combine
+  0.4–0.6 s, flowers 0.15 s); landscape band built incrementally after boot (≈ 1 s CPU spread over
+  frames, 4 ms/frame at 60 fps). GPU memory: tCover 8.7 MB (+mips), tFlower 2.2 MB, tGH 8.7 MB R32F,
+  band 5 + 1.1 + 5 MB.

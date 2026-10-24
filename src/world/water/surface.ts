@@ -400,6 +400,18 @@ vec4 waterBase() {
   sky = mix(sky, uSkyZen * 1.3, 0.4 * bh);
   // night: keep the sea a deep readable indigo (the night zenith alone mirrors to near black)
   sky = mix(sky, uSkyHor * 1.5 + vec3(0.004, 0.006, 0.02), 0.45 * smoothstep(0.75, 1.0, uNight));
+#ifdef TH_WORLD
+  // golden hour (world): the low sky is a pale warm haze, and a sea mirroring it reads pale grey from the
+  // hero views — mirror the deeper sky above the haze band and show more of the teal body, except close
+  // to the sun's azimuth (the warm sky path under the sun stays)
+  {
+    vec2 rh = normalize(R.xz + vec2(1e-5, 0.0));
+    vec2 shz = normalize(uSunDir.xz + vec2(1e-5, 0.0));
+    float gk = uDusk * (1.0 - uNight) * (1.0 - 0.75 * smoothstep(0.55, 0.95, dot(rh, shz)));
+    sky = mix(sky, uSkyZen * vec3(0.9, 1.0, 1.1), 0.38 * gk);
+    F *= 1.0 - 0.3 * gk;
+  }
+#endif
   vec4 rc = vec4(0.0);
   float reflW = uReflInfo.x * (1.0 - mPond);
 #ifdef TH_DIORAMA
@@ -543,6 +555,17 @@ vec4 waterBase() {
   // dark band that thins toward the middle; backlit at golden hour they glow warm
   float pondBank = (1.0 - smoothstep(0.6, 5.5, shore + 1.2 * (lc.g - 0.5))) * mPond;
   vec3 vegR = vec3(0.025, 0.04, 0.018) + uSkySunCol * vec3(0.05, 0.04, 0.012) * uDusk;
+  if (mPond > 0.01) {
+    // beyond the band, the park round the pond (trees ~8–12 m tall, ~30 m away) fills the low part of
+    // its mirror: reflected rays below an irregular tree line see foliage, above it the sky
+    vec3 Rn = normalize(R);
+    float tanE = Rn.y / max(length(Rn.xz), 1e-3);
+    float az = atan(Rn.z, Rn.x);
+    float tline = 0.24 + 0.07 * sin(az * 5.0 + 1.3) + 0.05 * sin(az * 11.0 + 0.7) + 0.03 * sin(az * 23.0 + 2.1);
+    float veg = (1.0 - smoothstep(tline - 0.03, tline + 0.03, tanE)) * mPond;
+    vec3 trees = vec3(0.03, 0.05, 0.026) * (0.8 + 0.4 * lc.b) + uSkySunCol * vec3(0.045, 0.05, 0.016) * (0.5 + 0.8 * uDusk);
+    skyD = mix(skyD, trees * (1.0 - 0.85 * uNight), veg * 0.88);
+  }
   skyD = mix(skyD, vegR, pondBank * 0.85);
   wRefl = skyD * (1.0 - rc.a) + rc.rgb + moon + lampR;
   wGlint = vec3(0.0);

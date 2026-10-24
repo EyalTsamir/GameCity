@@ -14,7 +14,7 @@
 import * as THREE from 'three';
 import type { LandscapeModel } from './model';
 import { WL, CX, CZ } from './model';
-import { FROW, toField, fromField, rowB, colB, colOff, colW, rowHedge, colHedge, lhash, fieldsOfParcel, grazeCrop } from './fields';
+import { FROW, toField, fromField, rowB, colB, colOff, colW, rowHedge, colHedge, lhash, fieldsOfParcel, cropKind, plotHedge, CK } from './fields';
 import { hash2i, vnoise, smooth } from './noise';
 import { WIND_GLSL } from '../../core/wind';
 import { SLAB } from '../../core/constants';
@@ -213,17 +213,36 @@ export function placeTrees(model: LandscapeModel, density: number): { list: Tree
           cy = (y0 + y1) / 2;
         fromField(cx, cy, w);
         if (cityR(w.x, w.z) > R) continue;
-        for (const P of fieldsOfParcel(cx, cy)) {
-        const crop = grazeCrop(P.crop, model.grazing(w.x, w.z));
+        const plots = fieldsOfParcel(cx, cy);
+        // smallholding: hedges / tree lines on (some of) the borders between the plots
+        if (plots.length && plots[0].small) {
+          const ppid = k * 13 + j;
+          const px0 = xb,
+            px1 = colB(k, j + 1) + off;
+          const { nx, ny } = plots[0];
+          for (let i = 1; i < nx; i++)
+            if (plotHedge(ppid, 0, i)) {
+              const x = px0 + ((px1 - px0) * i) / nx;
+              hedgeLine(x, y0, x, y1, ppid * 53 + i * 5 + 11);
+            }
+          for (let i = 1; i < ny; i++)
+            if (plotHedge(ppid, 1, i)) {
+              const y = y0 + ((y1 - y0) * i) / ny;
+              hedgeLine(px0, y, px1, y, ppid * 59 + i * 5 + 13);
+            }
+        }
+        for (const P of plots) {
+        fromField((P.x0 + P.x1) / 2, (P.y0 + P.y1) / 2, w);
+        const ck = cropKind(P.crop, P.small, model.grazing(w.x, w.z));
         const pk = P.pid;
-        if (crop >= 0.48 && crop < 0.66 && lhash(pk, 61) < 0.55) {
+        if (ck === CK.pasture && lhash(pk, 61) < (P.small ? 0.35 : 0.55)) {
           // pasture oak
           const fx = P.x0 + (P.x1 - P.x0) * (0.2 + 0.6 * lhash(pk, 62));
           const fy = P.y0 + (P.y1 - P.y0) * (0.2 + 0.6 * lhash(pk, 63));
           fromField(fx, fy, w);
           const y = H(w.x, w.z);
           if (arable(w.x, w.z, y)) B.add(w.x, y, w.z, 13 + 7 * lhash(pk, 64), 15 + 7 * lhash(pk, 65), KIND.broad, seed++);
-        } else if (crop >= 0.95 && cityR(w.x, w.z) < 1900) {
+        } else if (ck === CK.orchard && cityR(w.x, w.z) < 1900) {
           // orchard rows
           const ox0 = P.x0 + 4,
             ox1 = P.x1 - 4,
@@ -288,6 +307,19 @@ export function placeTrees(model: LandscapeModel, density: number): { list: Tree
       if (vnoise(x / 70, z / 70, 42) < 0.45) continue;
       const s = hash2i(i, 3, 41);
       B.add(x, y, z, 8 + 6 * s, 7 + 4 * s, KIND.conifer, seed++);
+    }
+    // dune scrub: low bushes in clumps on the back dunes (the shader darkens the same ground)
+    for (let i = 0; i < 2600; i++) {
+      const z = 150 + 620 * hash2i(i, 4, 43);
+      const x = 60 + 560 * hash2i(i, 5, 43);
+      const sd = model.coastSD(x, z);
+      if (sd < 26 || sd > 95) continue;
+      if (vnoise(x / 38, z / 38, 44) < 0.5 - 0.15 * smooth(40, 80, sd)) continue;
+      const y = H(x, z);
+      if (!landOK(x, z, y, 3)) continue;
+      const s = hash2i(i, 6, 43);
+      const hh = 1.2 + 1.5 * s;
+      B.add(x, y, z, hh, hh * (1.3 + 0.6 * hash2i(i, 7, 43)), KIND.small, seed++);
     }
   }
 

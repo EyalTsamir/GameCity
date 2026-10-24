@@ -67,7 +67,9 @@ vec3 gcMeadowColor( vec4 nM, vec4 nA ) {
   return c;
 }
 vec3 gcGrassColor( vec4 nM, vec4 nA, float len, float wet, float dune ) {
-  vec3 c = mix( gcLawnColor( nM, nA ), gcMeadowColor( nM, nA ), smoothstep( 0.2, 0.55, len ) );
+  // unmown edge tufts (len ≈ 0.3–0.42) keep the lawn's colour (a touch deeper); meadows proper turn olive
+  vec3 c = mix( gcLawnColor( nM, nA ), gcMeadowColor( nM, nA ), smoothstep( 0.36, 0.62, len ) );
+  c *= 1.0 - 0.08 * smoothstep( 0.2, 0.36, len ) * ( 1.0 - smoothstep( 0.45, 0.6, len ) );
   c = mix( c, gcWet, wet * 0.65 );
   c = mix( c, gcMarram, dune );
   return c;

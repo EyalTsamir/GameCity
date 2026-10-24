@@ -19,7 +19,19 @@ Owner: **air** agent (world round). Files: `src/render/**` except `src/render/st
   `<scratchpad>/air/skycap.mjs` (free camera "name=camX,Y,Z,tgtX,Y,Z", use only=sky,terrain,landscape,
   water,postfx), render-only typecheck `npx tsc --noEmit -p <scratchpad>/tsconfig.air.json` (20 s),
   probes `<scratchpad>/air/physprobe.ts` / `hazeprobe.ts` (rolldown → node).
-* Running: nothing.
+* 03:50 lead integration review (int1, code of 10-20 07:30): at 18.2 every city view grey-blue, dim,
+  low-contrast ("overcast evening"), lost the warm sunlit facades. Causes found + fixed (typechecks):
+  big cumulus coverage (~0.4–0.5) throwing strong cool cloud shadows over the town → evening cumulus
+  decay (−0.28·smooth(15.5, 19.2, h)), cloud shadows weaker at a low sun (×0.55…1) + lighter tint;
+  golden key too dim/pale after the sepia fix → sun '#ffc98c'/'#ffa962' at 4.5/4.2, fill cooler AND
+  weaker (hemiI 0.56, env 0.38/0.36), exposure 1.27/1.32/1.3; grade uSat 1.08+0.07·gold, contrast 0.17.
+  Long raking shadows: one VISUAL sun (`_sunVisual` in sky.ts = clock sun lowered by skyElevationDeg at
+  golden hour; drives the light/shadows, disc, lobe, LUT, clouds, env, shafts, and is written to
+  globalUniforms.uSunDir after main.ts so every shader agrees) + world shadow map out to 950 m.
+  Clouds: TEMPORAL RESOLVE in cloudVolume.ts (per-frame jitter, history reprojected by view direction,
+  neighbourhood clamp, α 0.14, reset on camera cuts / timejump).
+* Running: g3 (FULL CITY oldtown/park/overview/riverbend × 18.2/11, 1280×720), sky6 (hz_n/hz_w/up_ne ×
+  11/18.2/19.4).
 
 ## History (condensed)
 * 10-19: survey, design, M1 atmosphere; m1a/m2a/m2b judged (beige veil = Mie peak in an azimuth-only ring

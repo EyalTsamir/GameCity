@@ -44,6 +44,8 @@ export function createPuddles(ctx: CityContext): PuddleState {
   tex.generateMipmaps = false;
   tex.needsUpdate = true;
   const off = ctx.debug.params.has('nopuddles');
+  // ?wet=0..1 pins the wetness (tests / screenshots of a wet street without waiting for a shower)
+  const wetPin = ctx.debug.params.has('wet') ? Math.min(1, Math.max(0, Number(ctx.debug.params.get('wet')) || 0)) : null;
   const uniforms = {
     uWet: { value: 0 },
     uPdBase: { value: off ? 0 : 1 },
@@ -122,6 +124,7 @@ export function createPuddles(ctx: CityContext): PuddleState {
       const hrs = simDt * ctx.clock.rate;
       if (rain > wet) wet += (rain - wet) * Math.min(1, hrs * 6);
       else wet = Math.max(rain, wet - hrs * 0.45);
+      if (wetPin !== null) wet = wetPin;
       uniforms.uWet.value = off ? 0 : Math.min(1, wet);
     },
     stats() {

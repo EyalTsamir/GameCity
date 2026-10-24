@@ -82,6 +82,21 @@
   stretched. Pond (lead, low prio): peat-dark middle + bank-vegetation reflection band (warm when backlit).
 * Running: m3d (overview, vista, coast, pond × 11/18.2) + stats2/vista2.json (after the cuts).
 * Next: judge m3d (golden-hour sea, pond); full-city check; quality tiers; final report.
+* 02:40 (10-20) — m3d judged: hero overview good; after the cuts vista2 = 131 dc / 2.10 M tris (?noland 110 /
+  1.54 M). Air's notes done: sea "milky tea" → haze-ring sky reflection + glitter + teal body; "lime trees at
+  19.3" → tree translucency scaled by the sun colour (trees.ts, both materials).
+* 03:45 (10-24, after the weekly stop) — lead integration review: the hero foreground farmland (city → beach)
+  reads as flat pale-ochre rectangles, hard pale beach strip, empty pasture with one lone tree; sea at 18.2 pale
+  grey. In code (typecheck clean): town-edge SMALLHOLDING belt (fields.ts isSmall/fSmall: parcel centre < 470 m
+  from the slab, not north of z −150) = parcels cut into ~44 m plots (PLOT) with their own crop mix — market
+  gardens (bed blocks), maize, greens, paddocks, orchards, polytunnels (shaded half-cylinders), plus wheat/
+  plough/hay/fallow/sunflower; crop kinds shared CPU/GPU via fields.ts cropKind/fCropKind (CK codes; grazeCrop
+  removed); hedges on interior plot borders (plotHedge; trees.ts plants bushes + tree lines there); wider
+  wildflower margins (poppy / cow parsley / buttercup tint per field); herds in paddocks smaller; irregular dune
+  edge (shader noise in the sand transition: blowouts, grass tongues) + dune scrub (shader clumps + ~low bushes in
+  trees.ts). Running: m4b (overview, fields_w=180,2,330,260,32,18, coast, bay_w, pond_w × 11/18.2).
+* Next: judge m4b → golden-hour sea (saturate away from the sun, lower F at dusk), pond; full-city check;
+  medium/low; final report.
 * Tools: my capture script copy with 20-min load timeout = scratchpad `cap.mjs` (scratchpad is SHARED with other
   agents — keep my files under scratchpad/world* or land/). Offline map tool: scratchpad `land/map.ts` (bundle:
   `npx rolldown land/map.ts --platform node -o land/map.mjs`; `node land/map.mjs x0 z0 x1 z1 N out.bin &&

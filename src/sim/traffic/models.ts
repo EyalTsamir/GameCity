@@ -632,11 +632,12 @@ const TRIM = '#1b1e22';
 const WELL = '#121315';
 
 /** Lofted body shell (paint, glass, trim, wheel wells, cladding) + mirrors, door seams and handles. Returns the roof top. */
-function loftBody(b: Builder, s: CarShape, doors4: boolean): { topY: number; topZ: number; topW: number; topD: number } {
+function loftBody(b: Builder, s: CarShape, doors4: boolean, chrome = false): { topY: number; topZ: number; topW: number; topD: number } {
   const p = loftCar(s, LOD);
   if (p.body) b.add(p.body, { color: '#ffffff', paint: true, rough: 0.85 });
   if (p.glass) b.add(p.glass, { color: GLASS, rough: 0.22 });
-  if (p.trim) b.add(p.trim, { color: TRIM, rough: 0.9 });
+  if (p.trim) b.add(p.trim, { color: TRIM, rough: 0.9, finish: 'coat' });
+  if (p.seal) b.add(p.seal, chrome ? { color: CHROME, rough: 0.3 } : { color: TRIM, rough: 0.9, finish: 'coat' });
   if (p.well) b.add(p.well, { color: WELL, rough: 1.6 });
   if (p.clad) b.add(p.clad, { color: '#3b3e43', rough: 1.3 });
   const hw = s.W / 2;
@@ -656,7 +657,7 @@ function loftBody(b: Builder, s: CarShape, doors4: boolean): { topY: number; top
         b.add(decalPlane(0.008, y1 - y0, sd * (hw + 0.0075), (y0 + y1) / 2, z, sd > 0 ? 'px' : 'nx'), { color: TRIM, rough: 1.2 });
       }
       const handles = doors4 ? [s.pillarB + 0.14, cuts[2] + 0.14] : [s.pillarB + 0.16];
-      for (const z of handles) b.add(bx(0.016, 0.024, 0.12, sd * (hw + 0.004), s.belt - 0.085, z), { color: '#ffffff', paint: true, rough: 0.5 });
+      for (const z of handles) b.add(bx(0.016, 0.024, 0.12, sd * (hw + 0.004), s.belt - 0.085, z), chrome ? { color: CHROME, rough: 0.3 } : { color: '#ffffff', paint: true, rough: 0.5 });
     }
   }
   const topZ = (s.wsTop + s.rwTop) / 2;
@@ -696,6 +697,7 @@ function sedan(): THREE.BufferGeometry {
     b,
     { L, W, sill: 0.31, belt: 0.9, roof: 1.42, noseH: 0.76, hoodH: 0.88, wsBase: 1.0, wsTop: 0.2, rwTop: -0.85, rwBase: -1.5, deckH: 0.99, tailH: 0.96, pillarB: -0.3, pillarC: -1.0, glassRear: -1.25, tumble: 0.15, axF: 1.375, axR: -1.325, wheelR: 0.32 },
     true,
+    true,
   );
   carDetails(b, { L, W, wheelR: 0.32, wheelW: 0.24, axF: 1.375, axR: -1.325, wheelX: W / 2 - 0.1, bodyY: 0.33, bodyH: 0.58, bodyR: 0.18, lightY: 0.69 });
   // taxi (variant 1 → part 2): roof sign + chequer band
@@ -724,6 +726,7 @@ function suv(): THREE.BufferGeometry {
   const c = loftBody(
     b,
     { L, W, sill: 0.42, belt: 1.1, roof: 1.72, noseH: 0.98, hoodH: 1.08, wsBase: 1.1, wsTop: 0.4, rwTop: -1.95, rwBase: -2.15, deckH: 1.2, tailH: 1.15, pillarB: -0.35, pillarC: -1.3, glassRear: -1.85, tumble: 0.1, axF: 1.425, axR: -1.325, wheelR: 0.37, clad: true },
+    true,
     true,
   );
   // roof rails
