@@ -1883,7 +1883,7 @@ function buildPois(plan: CityPlan): void {
     { id: 'vista', name: 'Tinyhaven & the mountains', target: { x: -10, y: 15, z: -90 }, distance: 720, yaw: 12, pitch: 12 },
     { id: 'country', name: 'Westbrook fields', target: { x: -230, y: 2, z: 30 }, distance: 150, yaw: 70, pitch: 8 },
     { id: 'coast', name: 'Lighthouse & open sea', target: { x: 230, y: 3, z: -40 }, distance: 140, yaw: -40, pitch: 6 },
-    { id: 'riverbend', name: 'River west', target: { x: -300, y: 1, z: 118 }, distance: 70, yaw: 95, pitch: 7 },
+    { id: 'riverbend', name: 'River west', target: { x: -300, y: 1, z: 118 }, distance: 52, yaw: 95, pitch: 7 },
   );
 }
 
