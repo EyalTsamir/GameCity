@@ -20,7 +20,9 @@ const MAX_PITCH = 85 * DEG;
 const MIN_DIST = 12;
 const MAX_DIST = 750;
 const CHASE_MIN_DIST = 5;
-const TARGET_MARGIN = 30;
+/** how far the orbit pivot may leave the slab: the tabletop's edge, or the countryside in world mode */
+const DIORAMA_TARGET_MARGIN = 30;
+const WORLD_TARGET_MARGIN = 320;
 const BASE_FOV = 32;
 const CHASE_FOV = 42;
 // world mode (world agent's grant): the far plane reaches the sea horizon and the mountain layers;
@@ -163,7 +165,10 @@ const AIR_PARAMS = { dist: 70, pitch: 18 * DEG, aim: 0, follow: 115 };
 
 export default function create(ctx: CityContext): CityModule {
   const { plan, canvas, camera } = ctx;
-  const field = new SurfaceField(plan);
+  // world mode: the pivot may roam the countryside around the town, standing on the landscape there
+  const land = WORLD_MODE ? (ctx.services.landscape as { active: boolean; height(x: number, z: number): number } | undefined) : undefined;
+  const field = new SurfaceField(plan, land?.active ? (x, z) => land.height(x, z) : undefined);
+  const TARGET_MARGIN = land?.active ? WORLD_TARGET_MARGIN : DIORAMA_TARGET_MARGIN;
   const scout = new Scout(ctx);
   const raycaster = new THREE.Raycaster();
   const ndc = new THREE.Vector2();

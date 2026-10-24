@@ -1,5 +1,6 @@
 // Coarse height field of the diorama used by the camera:
-//  * ground  = natural terrain, never below the water surface
+//  * ground  = natural terrain, never below the water surface (beyond the slab: the landscape's
+//              height when one is given — world mode — else 0)
 //  * top     = ground + buildings / tall landmarks (roof heights)
 // Used for the camera floor (never inside hills, water or houses), for "what is under the
 // cursor" (wheel zoom towards the cursor, double-click fly-to) and for chase-cam occlusion.
@@ -29,7 +30,11 @@ export class SurfaceField {
   private solidN = 0;
   private iv: number[] = [];
 
-  constructor(private plan: CityPlan) {
+  /** `outsideGround`: ground height beyond the slab (world mode: the landscape), else 0 there */
+  constructor(
+    private plan: CityPlan,
+    private outsideGround?: (x: number, z: number) => number,
+  ) {
     const s = plan.slab;
     this.x0 = s.x0;
     this.z0 = s.z0;
@@ -184,24 +189,29 @@ export class SurfaceField {
     return Math.max(arr[k], arr[k + 1], arr[k + this.w], arr[k + this.w + 1]);
   }
 
+  /** ground beyond the slab (landscape height, never below the water surface) */
+  private outside(x: number, z: number): number {
+    return this.outsideGround ? Math.max(this.outsideGround(x, z), WATER_LEVEL) : 0;
+  }
+
   /** terrain / water surface height (smooth) */
   groundAt(x: number, z: number): number {
-    return this.sample(this.ground, x, z, 0);
+    return this.inside(x, z) ? this.sample(this.ground, x, z, 0) : this.outside(x, z);
   }
 
   /** highest solid surface (terrain, water, roofs) — conservative */
   topAt(x: number, z: number): number {
-    return this.sampleMax(this.top, x, z, 0);
+    return this.inside(x, z) ? this.sampleMax(this.top, x, z, 0) : this.outside(x, z);
   }
 
   /** roofs, bilinear (accurate near facades; for line-of-sight tests) */
   topSmoothAt(x: number, z: number): number {
-    return this.sample(this.top, x, z, 0);
+    return this.inside(x, z) ? this.sample(this.top, x, z, 0) : this.outside(x, z);
   }
 
   /** conservative ground floor (max of neighbouring cells) */
   groundMaxAt(x: number, z: number): number {
-    return this.sampleMax(this.ground, x, z, 0);
+    return this.inside(x, z) ? this.sampleMax(this.ground, x, z, 0) : this.outside(x, z);
   }
 
   /**
