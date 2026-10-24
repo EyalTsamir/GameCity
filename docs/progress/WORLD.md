@@ -21,6 +21,11 @@ Branch: work continues from `claude/tinyhaven-graphics-audit-l089m8` (fast-forwa
   Life resumed (last open agent: m4 re-capture + final report). Lead next: int2 full-city QA once life reports.
   18:35 — int2 started (background): shots/world/lead/int2/h{18.2,11,21.5} (12 views each, presets above); log
   int2/h*.log, done.txt. If killed: re-run the loop from WORLD.md int2 presets, one hour per capture-set run.
+* 19:00 — life DONE (m4/s.png: market thinned ✓, night festoons ✓; soak flat heap 330–336 MB; +6–7 calls,
+  ~0.3–0.45 ms; toggles ?nocloth ?nobunting ?nolaundry ?noflags ?nochimneys ?nodrift ?nosoftsmoke).
+  ALL 7 AGENTS DONE. Lead: final QA = int2 (running) → judge vs critique/a → typecheck, build + file:// smoke,
+  soak, ui-test, ?diorama check → perf toggles/commands for the user → CLAUDE.md/ARCHITECTURE/LEAD updates →
+  final Hebrew report → delete watchdog trig_01Dosn8CiDr2iqF7HZGRccm3, stop autocheckpoint → WORLD ROUND DONE.
 * 2026-10-24 13:31 UTC — 6th stop (session limit ~11:45, reset 13:20; container rebooted 13:29). Restored; tree
   clean at 7a27edf. Resumed the 4 open agents (world, ground, foliage, life). DONE: air, wear, streetlife.
   Lead next: judge milestone notes → int2 full-city capture (presets below) → final QA.
