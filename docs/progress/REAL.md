@@ -11,6 +11,11 @@ Overview must stay at least as impressive as now. Every feature: quality tiers +
 Lead session: session_01XuhAMczW3iK25AAWnf3qog, branch `claude/pensive-gates-bim12i`.
 
 ## Resume here (keep current)
+* 2026-10-28 18:35 UTC — Merged W1 m3 (6c49c11: albedo>1 root cause = stacked multipliers on pale walls → soft
+  headroom; precast panels + joints, render sand/mottle, rivulets, splash zone; window street reflections
+  ?nowinrefl; office mullions/spandrels, clad columns ?nocolumndetail; porch). W1 paused pending the wave-1 judge.
+  W5 street (trees/kerbs/fences/signs/lamps) spawned in its slot. Running: W2(3), W4, W5. Next: when W2(3) reports,
+  run the wave-1 judge (fresh session, all notes at once) over facades + vehicles + furniture.
 * 2026-10-28 18:15 UTC — Merged W3(3) (6273dd3: sculpted bronze statue (landmarks/sculpt.ts), draped market cloth +
   goods variety, turned columns, trailing planter plants, bench fixings, phone-box interior). W3 brief essentially
   done → W3 slot goes to wave 2: W4 people (brief W4 in real-briefs.md). W3 remaining polish (scales, queue) folds
@@ -77,6 +82,7 @@ Wave 1 (launched 2026-10-28 15:17 UTC, sibling cloud sessions, briefs in real-br
 | W3 furniture (3) | session_01XuhAMeApwGfPUjpqKr3AnB | claude/real-w3-furniture | real-w3.md |
 | W2 vehicles (3) | session_01XuhAMe5xExG1WawepdoR9X | claude/real-w2-vehicles | real-w2.md |
 | W4 people (wave 2) | session_01XuhAMeyte9jJ7Urx2TCj88 | claude/real-w4-people | real-w4.md |
+| W5 street (wave 2) | session_01XuhAMfn7zBT6TiYEhJcwgB | claude/real-w5-street | real-w5.md |
 Respawn rule: when a worker stops (milestone note, ~200k context, or a usage stop), create a NEW session on the
 same branch with the same brief + "resume from docs/progress/real-wN.md Resume here"; archive the old one.
 
