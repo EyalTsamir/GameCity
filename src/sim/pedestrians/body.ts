@@ -972,7 +972,9 @@ function buildLeg(b: MeshBuilder, d: Dims, cfg: LodCfg, side: 1 | -1): void {
       const phi = (k / sides) * Math.PI * 2 + (sides === 4 ? Math.PI / 4 : 0);
       const x = f.cx * side + f.w * se(Math.sin(phi), 3) * side;
       const y = yc + hh * se(Math.cos(phi), 3);
-      ids.push(b.v(ft(x, y, f.z), (y - f.y0) / top + (f.y0 - fr[1].y0) / top, 0));
+      // aux: across the last (−1 inner … 1 outer), along it (0 heel … 1 toe) for the shoe paint
+      const zs = (f.z - fr[0].z) / (fr[fr.length - 1].z - fr[0].z);
+      ids.push(b.v(ft(x, y, f.z), (y - f.y0) / top + (f.y0 - fr[1].y0) / top, 0, se(Math.sin(phi), 3), zs));
     }
     rings.push({ ids, c: ft(f.cx * side, yc, f.z) });
   }

@@ -78,7 +78,19 @@ try {
     const f = figs[i];
     for (const s of shots) {
       const o = SH[s];
-      await page.evaluate(([f, o]) => window.__city.view({ target: { x: f.x, y: f.y + f.H * o.ty, z: f.z }, distance: o.d, yaw: f.yaw + o.dy, pitch: o.pitch }), [f, o]);
+      // the free camera stops at 3 m: closer shots keep 3 m and narrow the field of view instead (the
+      // crowd's LOD distances scale with the fov, so the figure gets the level its screen size asks for)
+      await page.evaluate(([f, o]) => {
+        const c = window.__city, cam = c.ctx.camera;
+        if (!cam.__fov0) {
+          cam.__fov0 = cam.fov;
+          let v = cam.fov;
+          Object.defineProperty(cam, 'fov', { get: () => (cam.__zoom ? 2 * Math.atan(Math.tan((v * Math.PI) / 360) * cam.__zoom) * 180 / Math.PI : v), set: (x) => (v = x), configurable: true });
+        }
+        cam.__zoom = o.d < 3 ? o.d / 3 : 0;
+        c.view({ target: { x: f.x, y: f.y + f.H * o.ty, z: f.z }, distance: Math.max(3, o.d), yaw: f.yaw + o.dy, pitch: o.pitch });
+        cam.updateProjectionMatrix();
+      }, [f, o]);
       await page.waitForTimeout(900);
       const file = path.join(outDir, `p${i}_${s}.png`);
       await page.screenshot({ path: file, timeout: 240000 });
@@ -87,7 +99,7 @@ try {
   }
   if (figs.length && args.group !== '0') {
     const f = figs[0];
-    await page.evaluate((f) => window.__city.view({ target: { x: f.x, y: f.y + 1, z: f.z }, distance: 10, yaw: f.yaw + 25, pitch: 12 }), f);
+    await page.evaluate((f) => (window.__city.ctx.camera.__zoom = 0, window.__city.view({ target: { x: f.x, y: f.y + 1, z: f.z }, distance: 10, yaw: f.yaw + 25, pitch: 12 })), f);
     await page.waitForTimeout(1200);
     const file = path.join(outDir, 'group_10m.png');
     await page.screenshot({ path: file, timeout: 240000 });

@@ -239,6 +239,7 @@ void pedPose(inout vec3 p, inout vec3 n) {
   float w = float(aData.y >> 16u) * (1.0 / 65535.0);
   vec2 aux = pedU2(aData.z);
   if (region == ${R.FACE}) vPedFace = vec3(aux, 1.0);
+  else if (region == ${R.FOOT}) vPedFace = vec3(aux, 2.0);
   pedW = vec3(P_w, P_c, P_b);
   // ── morph
   p += pedW.x * vec3(pedM16(aMorph.x & 0xFFFFu), pedM16(aMorph.x >> 16u), pedM16(aMorph.y & 0xFFFFu))
@@ -615,13 +616,42 @@ vec3 pedFabric(vec3 pc, float reg, float h, float sHem) {
   pc = mix(pc, thread, clamp(stitch, 0.0, 1.0) * det * (denim ? 0.7 : 0.35));
   return pc;
 }
+// ── shoes (close range): welt / midsole line above the sole, laces over the instep, toe-cap and heel
+// seams (aux: u across the last −1…1, v heel 0 … toe 1)
+vec3 pedShoe(vec3 pc, vec2 uv, float sHem) {
+  vec3 rn = normalize(vPedRN);
+  float px = max(fwidth(uv.y), 1e-5) * 0.26; // ≈ metres per pixel along a 26 cm last
+  float det = 1.0 - smoothstep(0.004, 0.011, px);
+  if (det <= 0.0 || sHem < 0.0) return pc;
+  float lum = dot(pc, vec3(0.3, 0.55, 0.15));
+  bool light = lum > 0.35;
+  vec3 seamC = pc * (light ? 0.72 : 0.6);
+  float m = 0.0;
+  vec3 c = pc;
+  // welt / midsole line just above the sole
+  float wl = 1.0 - smoothstep(0.04, 0.08, sHem);
+  c = mix(c, light ? pc * 0.86 : pc * 1.35 + 0.02, wl * 0.8);
+  // laces: bars across the instep on the top of the shoe
+  float top = smoothstep(0.35, 0.6, rn.y);
+  float lz = uv.y * 26.0;
+  float lace = top * step(abs(uv.x), 0.38) * step(0.42, uv.y) * step(uv.y, 0.72);
+  float bars = 1.0 - smoothstep(0.18, 0.32, abs(fract(lz) - 0.5));
+  vec3 laceC = light ? vec3(0.82, 0.81, 0.78) : pc * 0.45;
+  c = mix(c, laceC, lace * bars * 0.9);
+  // the tongue gap either side of the laces, toe-cap and heel seams
+  m += top * step(0.42, uv.y) * step(uv.y, 0.74) * (1.0 - smoothstep(0.03, 0.07, abs(abs(uv.x) - 0.42)));
+  m += (1.0 - smoothstep(0.004, 0.012, abs(uv.y - 0.8 + 0.06 * uv.x * uv.x))) * 0.8;
+  m += (1.0 - smoothstep(0.004, 0.012, abs(uv.y - 0.2))) * 0.6;
+  c = mix(c, seamC, clamp(m, 0.0, 1.0) * 0.6);
+  return mix(pc, c, det);
+}
 // ── close-level face paint (face coords in metres of the average man's head: X lateral, Y up from the
 // eye line). Eyes (almond opening, sclera, iris, pupil, lash line, lid crease), brows, lips with the
 // mouth line, nostrils, age lines, stubble. Fades to soft tones where a pixel covers > ~5 mm.
 float pedBand(float d, float hw, float px) { return 1.0 - smoothstep(hw - px * 0.5, hw + px * 0.5, abs(d)); }
 vec3 pedFacePaint(vec3 skin, vec2 F) {
   float px = max(max(fwidth(F.x), fwidth(F.y)), 1e-5);
-  float det = 1.0 - smoothstep(0.0035, 0.009, px);
+  float det = 1.0 - smoothstep(0.006, 0.016, px);
   float w = vPedHairW.w;
   uint age = vPedFB & 3u;
   uint eyeC = (vPedFB >> 2u) & 3u;
@@ -673,7 +703,7 @@ vec3 pedFacePaint(vec3 skin, vec2 F) {
   eyes *= 1.0 - crease - lowL;
   // far: a soft eye shadow instead of aliasing detail
   float socket = exp(-(ex * ex) / 0.00022 - (ey * ey) / 0.00005);
-  pc = mix(pc * (1.0 - 0.32 * socket), eyes, det);
+  pc = mix(pc * (1.0 - 0.5 * socket), eyes, det);
   // brows
   float bx = ax - 0.029;
   float bt = clamp((bx + 0.017) / 0.036, 0.0, 1.0);
@@ -718,7 +748,8 @@ const FRAG_COLOR = /* glsl */ `
       if (vPedPat < 1.5) st *= step(0.0, vPedS);
       pc = mix(pc, vec3(0.78, 0.78, 0.76), st);
     }
-    if (vPedFace.z > 0.5) pc = pedFacePaint(pc, vPedFace.xy);
+    if (vPedFace.z > 1.5) pc = pedShoe(pc, vPedFace.xy, vPedS);
+    else if (vPedFace.z > 0.5) pc = pedFacePaint(pc, vPedFace.xy);
     else if (abs(vPedReg - ${R.HAIR}.0) < 0.5 || abs(vPedReg - ${R.BEARD}.0) < 0.5) pc *= pedStrands(vPedRest);
     else if (vPedReg > 0.5 && vPedReg < 3.5 || abs(vPedReg - ${R.OUTER}.0) < 0.5 || abs(vPedReg - ${R.TAIL}.0) < 0.5) pc = pedFabric(pc, vPedReg, vPedH, vPedS);
     diffuseColor.rgb *= pc;
