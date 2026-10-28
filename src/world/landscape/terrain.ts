@@ -13,8 +13,8 @@ import { smooth, vnoise } from './noise';
 /** the land mesh ends here (m outside the slab); the water extension goes further */
 export const LAND_MAX_D = 45000;
 /** forest canopy is raised into the terrain beyond this slab distance (instanced trees closer in) */
-export const CANOPY_NEAR = 480;
-export const CANOPY_FULL = 720;
+export const CANOPY_NEAR = 840;
+export const CANOPY_FULL = 1100;
 /** floats per vertex in LandHeights.cover: forest, field, sand, rock | wet, meadow, seam, canopy | riverU, slabD, side, - */
 const CW = 12;
 
@@ -227,7 +227,17 @@ export interface FieldMask {
   /** x0, z0, 1/size, 1/size (world → uv) */
   xf: THREE.Vector4;
 }
-export function buildFieldMask(topo: RingTopology, heights: LandHeights, model: LandscapeModel, cx: number, cz: number, half: number, res: number): FieldMask {
+/** one cover channel of the land vertices splatted onto a square grid (holes push-pull filled) */
+export interface CoverGrid {
+  data: Float32Array;
+  N: number;
+  x0: number;
+  z0: number;
+  res: number;
+  /** bilinear sample (0 outside) */
+  at(x: number, z: number): number;
+}
+export function splatCover(topo: RingTopology, heights: LandHeights, channel: number, cx: number, cz: number, half: number, res: number): CoverGrid {
   const N = Math.round((2 * half) / res);
   const x0 = cx - half,
     z0 = cz - half;
@@ -237,7 +247,7 @@ export function buildFieldMask(topo: RingTopology, heights: LandHeights, model: 
     const i = Math.floor((topo.x[v] - x0) / res),
       j = Math.floor((topo.z[v] - z0) / res);
     if (i < 0 || j < 0 || i >= N || j >= N) continue;
-    sum[j * N + i] += heights.cover[v * CW + 1];
+    sum[j * N + i] += heights.cover[v * CW + channel];
     cnt[j * N + i] += 1;
   }
   // push-pull: average pyramid, then fill the empty texels from the coarser levels
@@ -267,15 +277,44 @@ export function buildFieldMask(topo: RingTopology, heights: LandHeights, model: 
         L.c[k] = 1;
       }
   }
+  const data = new Float32Array(N * N);
+  for (let k = 0; k < N * N; k++) data[k] = cnt[k] > 0 ? sum[k] / cnt[k] : 0;
+  return {
+    data,
+    N,
+    x0,
+    z0,
+    res,
+    at(x: number, z: number): number {
+      const fx = (x - x0) / res - 0.5,
+        fz = (z - z0) / res - 0.5;
+      if (fx < 0 || fz < 0 || fx >= N - 1 || fz >= N - 1) return 0;
+      const i = Math.floor(fx),
+        j = Math.floor(fz);
+      const tx = fx - i,
+        tz = fz - j;
+      const a = data[j * N + i],
+        b = data[j * N + i + 1],
+        c = data[(j + 1) * N + i],
+        d = data[(j + 1) * N + i + 1];
+      return (a + (b - a) * tx) * (1 - tz) + (c + (d - c) * tx) * tz;
+    },
+  };
+}
+
+export function buildFieldMask(topo: RingTopology, heights: LandHeights, model: LandscapeModel, cx: number, cz: number, half: number, res: number): FieldMask {
+  const g = splatCover(topo, heights, 1, cx, cz, half, res);
+  const N = g.N,
+    x0 = g.x0,
+    z0 = g.z0;
   const data = new Uint8Array(N * N);
   for (let j = 0; j < N; j++)
     for (let i = 0; i < N; i++) {
       const k = j * N + i;
       const x = x0 + (i + 0.5) * res,
         z = z0 + (j + 0.5) * res;
-      const f = cnt[k] > 0 ? sum[k] / cnt[k] : 0;
       const ramp = smooth(6, 70, model.slabDist(x, z));
-      data[k] = Math.round(Math.min(1, Math.max(0, f * ramp)) * 255);
+      data[k] = Math.round(Math.min(1, Math.max(0, g.data[k] * ramp)) * 255);
     }
   const tex = new THREE.DataTexture(data, N, N, THREE.RedFormat, THREE.UnsignedByteType);
   tex.magFilter = THREE.LinearFilter;

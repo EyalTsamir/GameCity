@@ -150,7 +150,7 @@ class Builder {
 }
 
 /** place every countryside tree (deterministic) */
-export function placeTrees(model: LandscapeModel, density: number): { list: TreeList; ms: number } {
+export function placeTrees(model: LandscapeModel, density: number, forestHint?: (x: number, z: number) => number): { list: TreeList; ms: number } {
   const t0 = performance.now();
   const B = new Builder();
   const H = model.height;
@@ -166,9 +166,9 @@ export function placeTrees(model: LandscapeModel, density: number): { list: Tree
   };
   const rv = { d: 0, halfW: 8, s: 0, tx: 1, tz: 0 };
 
-  // ── forest within reach of the town (beyond CANOPY the woods are terrain)
+  // ── forest within reach of the town and the free camera (beyond CANOPY_NEAR the woods are terrain)
   {
-    const R = 470;
+    const R = 800;
     const cell = 7.2 / Math.sqrt(Math.max(0.5, density));
     for (let gx = Math.floor((SLAB.x0 - R) / cell); gx <= Math.ceil((SLAB.x1 + R) / cell); gx++) {
       for (let gz = Math.floor((SLAB.z0 - R) / cell); gz <= Math.ceil((SLAB.z1 + R) / cell); gz++) {
@@ -176,6 +176,8 @@ export function placeTrees(model: LandscapeModel, density: number): { list: Tree
         const z = (gz + 0.15 + 0.7 * hash2i(gx, gz, 12)) * cell;
         const sd = slabD(x, z);
         if (sd < 2.5 || sd > R) continue;
+        // (cheap pre-test from the land vertices' forest cover: most cells are open land)
+        if (forestHint && forestHint(x, z) < 0.12) continue;
         const y = H(x, z);
         if (!landOK(x, z, y)) continue;
         const f = model.forestAt(x, z, y);
