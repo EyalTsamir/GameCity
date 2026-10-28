@@ -9,7 +9,7 @@ import * as THREE from 'three';
 import { GeoSink, Shaper } from '../vegetation/geo';
 import type { Rng } from '../../core/rng';
 import type { LampStyle } from './layout';
-import { boltY, boltZ, cbox, lathe, poly, ring } from './shapes';
+import { boltY, boltZ, cbox, lathe, pixelText, poly, ring } from './shapes';
 
 export const MAT = {
   paint: [0.5, 0.25],
@@ -615,11 +615,74 @@ export function phonebox(k: Kit, g?: Kit): void {
  * depth (counter with paper stacks, shelves of covers inside, the roll shutter coiled in its box above),
  * wire magazine racks with tilted covers on both sides, an overhanging roof with fascia, a lit sign.
  */
+const MASTHEADS = ['STYLE', 'AUTO', 'GOLF', 'TIME', 'CHEF', 'HOME', 'SPORT', 'KIDS', 'TECH', 'FILM', 'VOGA', 'NEWS', 'BIKE', 'CASA'];
+const SKIN = ['#e9b99a', '#c98f6a', '#8d5a3b', '#f1cdb4'];
+
+/**
+ * Magazine cover (w × h) on the local plane z = 0 facing +Z: paper colour, a cover photo (backdrop + a face /
+ * a car / a dish), the masthead in a contrasting colour across the top, cover lines and a price corner.
+ * plain = a cover behind others (only its colour and masthead band show).
+ */
+function cover(k: Kit, rng: Rng, w: number, h: number, plain = false): void {
+  const sh = k.sh,
+    S = 1 | 2 | 4 | 16 | 32;
+  const paper = rng.pick(['#f4f1ea', '#e63946', '#1d3557', '#f2c230', '#222426', '#e8649a', '#2a9d8f', '#f4a261']);
+  const ink = paper === '#f4f1ea' || paper === '#f2c230' || paper === '#f4a261' ? rng.pick(['#c62828', '#1d1f22', '#1d3557']) : rng.pick(['#ffffff', '#f2c230']);
+  k.m(paper, 'plastic');
+  sh.box(0, 0, 0.004, w, h, 0.008, 0);
+  if (plain) {
+    k.m(ink, 'plastic');
+    sh.box(0, h * 0.4, 0.0085, w * 0.8, h * 0.1, 0.001, S);
+    return;
+  }
+  // photo
+  const ph = h * 0.62,
+    py = -h * 0.08,
+    kind = rng.int(0, 2);
+  k.m(rng.pick(['#9fc3d9', '#d9c3a5', '#5b7c99', '#c7d8b5', '#e7d6c9', '#3a3f55']), 'plastic');
+  sh.box(0, py, 0.0083, w * 0.92, ph, 0.0006, S);
+  if (kind === 0) {
+    // portrait: shoulders, neck, face, hair
+    k.m(rng.pick(['#2b2b2b', '#7a2f35', '#f1faee', '#2a9d8f', '#e9c46a']), 'plastic');
+    sh.box(0, py - ph * 0.32, 0.0087, w * 0.7, ph * 0.36, 0.0006, S);
+    k.m(rng.pick(SKIN), 'plastic');
+    sh.box(0, py - ph * 0.08, 0.0087, w * 0.12, ph * 0.14, 0.0006, S);
+    sh.box(0, py + ph * 0.1, 0.009, w * 0.3, ph * 0.3, 0.0006, S);
+    k.m(rng.pick(['#2a1d14', '#6b4a2b', '#d9b36a', '#111111', '#8a3b1d']), 'plastic');
+    sh.box(0, py + ph * 0.26, 0.0093, w * 0.36, ph * 0.1, 0.0006, S);
+    sh.box(-w * 0.17, py + ph * 0.12, 0.0093, w * 0.05, ph * 0.26, 0.0006, S);
+  } else if (kind === 1) {
+    // car / bike on a road
+    k.m('#4a4e52', 'plastic');
+    sh.box(0, py - ph * 0.35, 0.0087, w * 0.92, ph * 0.3, 0.0006, S);
+    k.m(rng.pick(['#d62f2f', '#f2f0e8', '#1d3557', '#f2c230']), 'plastic');
+    sh.box(0, py - ph * 0.12, 0.009, w * 0.7, ph * 0.16, 0.0006, S);
+    sh.box(w * 0.04, py + ph * 0.0, 0.009, w * 0.4, ph * 0.1, 0.0006, S);
+    k.m('#151515', 'plastic');
+    for (const sx of [-1, 1]) sh.box(sx * w * 0.22, py - ph * 0.22, 0.0093, w * 0.12, ph * 0.09, 0.0006, S);
+  } else {
+    // a dish / a plant: round-ish blob on a table
+    k.m(rng.pick(['#8a5a3b', '#f4f1ea', '#3e6f5a']), 'plastic');
+    sh.box(0, py - ph * 0.3, 0.0087, w * 0.92, ph * 0.38, 0.0006, S);
+    k.m('#f4f1ea', 'plastic');
+    sh.box(0, py - ph * 0.12, 0.009, w * 0.6, ph * 0.12, 0.0006, S);
+    k.m(rng.pick(['#d62f2f', '#4f9a3a', '#f39a1f', '#8d6cab']), 'plastic');
+    sh.box(0, py - ph * 0.02, 0.0093, w * 0.4, ph * 0.16, 0.0006, S);
+  }
+  // masthead across the top, cover lines on the left, price corner
+  k.m(ink, 'plastic');
+  const t = rng.pick(MASTHEADS),
+    px = Math.min(h * 0.045, (w * 0.9) / (t.length * 4 - 1));
+  pixelText(sh, t, 0, h / 2 - px * 3.4, 0.0096, px, 0.0006, true);
+  for (let i = 0; i < 3; i++) sh.box(-w * 0.18, py + ph * 0.3 - i * h * 0.07, 0.0096, w * (0.42 - i * 0.07), h * 0.025, 0.0006, S);
+  k.m(rng.pick(['#f2c230', '#e63946', '#ffffff']), 'plastic');
+  sh.box(w * 0.32, -h * 0.42, 0.0096, w * 0.22, h * 0.07, 0.0006, S);
+}
+
 export function newsstand(k: Kit, rng: Rng): void {
   const sh = k.sh;
   const body = rng.pick(['#2f6b4f', '#2b5d7a', '#7a2f35']);
   const trim = new THREE.Color(body).multiplyScalar(0.7);
-  const cols = ['#e63946', '#f4a261', '#2a9d8f', '#e9c46a', '#457b9d', '#f1faee', '#8d6cab', '#e8649a', '#222', '#d9d4c7'];
   k.m('#4a4e50', 'stone');
   cbox(sh, 0, 0.05, -0.05, 1.86, 0.1, 1.16, 0.02);
   k.m(body, 'paint');
@@ -641,8 +704,9 @@ export function newsstand(k: Kit, rng: Rng): void {
     k.m('#6b5640', 'wood');
     sh.box(0, y, 0.17, 1.5, 0.02, 0.14, 0);
     for (let c = 0; c < 7; c++) {
-      k.m(rng.pick(cols), 'plastic');
-      sh.push().local(-0.62 + c * 0.205 + rng.range(-0.02, 0.02), y + 0.12, 0.14, -0.25).box(0, 0, 0, 0.17, 0.23, 0.01, 0).pop();
+      sh.push().local(-0.62 + c * 0.205 + rng.range(-0.02, 0.02), y + 0.125, 0.14, -0.25);
+      cover(k, rng, 0.17, 0.23);
+      sh.pop();
     }
   }
   // counter board + newspaper stacks
@@ -679,8 +743,9 @@ export function newsstand(k: Kit, rng: Rng): void {
       for (let c = 0; c < 3; c++) {
         const n = rng.int(2, 4);
         for (let j = 0; j < n; j++) {
-          k.m(rng.pick(cols), 'plastic');
-          sh.push().local(-0.33 + c * 0.33 + rng.range(-0.015, 0.015), y + 0.15, 0.05 + j * 0.018, -0.2 + j * 0.03).box(0, 0, 0, 0.24, 0.3, 0.008, 0).pop();
+          sh.push().local(-0.33 + c * 0.33 + rng.range(-0.015, 0.015), y + 0.15, 0.05 + j * 0.018, -0.2 + j * 0.03);
+          cover(k, rng, 0.24, 0.3, j < n - 1);
+          sh.pop();
         }
       }
     }
@@ -722,15 +787,19 @@ export function newsstand(k: Kit, rng: Rng): void {
   for (const sx of [-1, 1]) poly(sh, [sx * rx, ry0, rb, sx * rx, ry0, rf, sx * rx, ry1, 0.07], sx, 0, 0);
   sh.box(0, ry0 - 0.01, rf, 2.2, 0.03, 0.02, 0);
   sh.box(0, ry1 + 0.01, 0.07, 2.2, 0.025, 0.05, 0);
-  // sign board, lit at night
+  // the sheet's underside closes the roof over the slab (no daylight between roof and fascia)
+  k.m(new THREE.Color(trim).multiplyScalar(0.55), 'paint');
+  poly(sh, [-rx, ry0 - 0.001, rb, -rx, ry0 - 0.001, rf, rx, ry0 - 0.001, rf, rx, ry0 - 0.001, rb], 0, -1, 0);
+  // sign board on the fascia under the eaves, lit at night: cream panel, red title, small strap line
   k.m(trim, 'paint');
-  sh.box(0, 2.52, 0.6, 1.36, 0.3, 0.05, 1);
-  k.e('#f2ead6', '#ffe2a8', 1.4);
-  sh.box(0, 2.52, 0.63, 1.28, 0.22, 0.02, 0);
-  k.m('#c43b33', 'paint');
-  sh.box(0, 2.52, 0.643, 0.6, 0.1, 0.006, 0);
-  k.m('#f2ead6', 'paint');
-  for (let i = 0; i < 5; i++) sh.box(-0.2 + i * 0.1, 2.52, 0.647, 0.06, 0.05, 0.003, 0);
+  cbox(sh, 0, 1.99, 0.51, 1.56, 0.3, 0.03, 0.006, 1 | 4);
+  k.e('#f2ead6', '#ffe2a8', 1.2);
+  sh.box(0, 1.99, 0.527, 1.48, 0.24, 0.004, 1 | 4);
+  const title = rng.pick(['NEWS', 'PRESS', 'KIOSK', 'TABAC']);
+  k.e('#b8322c', '#ff6a50', 0.8);
+  pixelText(sh, title, 0, 2.02, 0.529, 0.028, 0.003, true);
+  k.e('#2c2c2c', '#3a3a3a', 0.2);
+  pixelText(sh, rng.pick(['PAPERS & MAGAZINES', 'DAILY PAPERS', 'MAGAZINES & SWEETS']), 0, 1.92, 0.529, 0.008, 0.0012);
 }
 
 /**
@@ -952,6 +1021,40 @@ export function bike(k: Kit, color: string): void {
  * see the bus coming. Local +X = direction of travel: the stop pole (front of the bus) is at x = +2.45.
  * Glass panes go to the `glass` kit.
  */
+/** bus-shelter / kiosk poster themes: background, image ground, image sky, object, headline lines, brand band */
+const POSTERS: { bg: string; ground: string; sky: string; obj: string; text: string[]; ink: string; band: string }[] = [
+  { bg: '#1f3a5f', ground: '#e0b35a', sky: '#7fb8d8', obj: '#f2f0e8', text: ['SUMMER', 'SALE'], ink: '#ffd34d', band: '#d62f2f' },
+  { bg: '#f4efe2', ground: '#4f8a3c', sky: '#a9d3e6', obj: '#d62f2f', text: ['FRESH', 'JUICE'], ink: '#2b2b2b', band: '#f39a1f' },
+  { bg: '#2b2233', ground: '#6b3f8f', sky: '#e8467c', obj: '#f6d33c', text: ['CITY', 'JAZZ'], ink: '#f6f2e8', band: '#2a9d8f' },
+  { bg: '#e63946', ground: '#1d3557', sky: '#f1faee', obj: '#457b9d', text: ['NEW', 'PHONE'], ink: '#ffffff', band: '#1d1f22' },
+  { bg: '#0f5257', ground: '#e9c46a', sky: '#f4a261', obj: '#264653', text: ['ZOO', 'OPEN'], ink: '#f1faee', band: '#e76f51' },
+];
+
+/** printed poster (w × h) on the current local plane z = 0, facing +Z; lit from behind in its own colours */
+function poster(k: Kit, t: (typeof POSTERS)[number], w: number, h: number): void {
+  const sh = k.sh,
+    e = (c: string, z: number) => {
+      k.e(c, c, 0.9);
+      return z;
+    };
+  sh.box(0, 0, e(t.bg, 0.0025), w, h, 0.005, 1 | 4);
+  // photo: sky over ground with a big product / figure in front
+  const iw = w - 0.08,
+    ih = h * 0.5,
+    iy = h * 0.17;
+  sh.box(0, iy + ih * 0.15, e(t.sky, 0.0055), iw, ih * 0.7, 0.001, 1 | 4);
+  sh.box(0, iy - ih * 0.35, e(t.ground, 0.0055), iw, ih * 0.3, 0.001, 1 | 4);
+  sh.box(iw * 0.28, iy + ih * 0.32, e('#fff3c4', 0.0062), 0.08, 0.08, 0.001, 1 | 4);
+  sh.box(-iw * 0.1, iy - ih * 0.05, e(t.obj, 0.0065), iw * 0.28, ih * 0.6, 0.001, 1 | 4);
+  sh.box(-iw * 0.1, iy + ih * 0.3, e(t.obj, 0.0065), iw * 0.12, ih * 0.1, 0.001, 1 | 4);
+  // headline, small print, brand band
+  k.e(t.ink, t.ink, 0.9);
+  const px = Math.min(0.03, (w - 0.08) / (Math.max(...t.text.map((l) => l.length)) * 4));
+  t.text.forEach((l, i) => pixelText(sh, l, 0, -h * 0.17 - i * px * 6.5, 0.006, px, 0.001, true));
+  for (let i = 0; i < 3; i++) sh.box(-w * 0.12, -h * 0.39 + i * 0.022, 0.0065, w * 0.5 - i * 0.06, 0.008, 0.001, 1 | 4);
+  sh.box(0, -h / 2 + 0.035, e(t.band, 0.0055), w, 0.07, 0.001, 1 | 4);
+}
+
 export function busShelter(k: Kit, g: Kit, routeColor: string, rng: Rng): { glows: { x: number; y: number; z: number; size: number }[] } {
   const sh = k.sh;
   const gs = g.sh;
@@ -985,12 +1088,12 @@ export function busShelter(k: Kit, g: Kit, routeColor: string, rng: Rng): { glow
   // advertising panel at the other end (lit at night) — poster on both faces
   k.m(frame, 'paint');
   sh.box(L / 2, 1.25, (zf + 0.12 + zb) / 2, 0.12, 2.0, zb - zf - 0.12, 1);
-  const poster = rng.pick(['#e9c46a', '#2a9d8f', '#e76f51', '#8d6cab', '#f4a261']);
+  // a printed poster behind glass on both faces: lit from behind at night in its own colours (not a white glow)
+  const theme = rng.int(0, POSTERS.length - 1);
   for (const sx of [-1, 1]) {
-    k.e(poster, '#fff3dc', 1.2);
-    sh.box(L / 2 + sx * 0.065, 1.3, (zf + 0.12 + zb) / 2, 0.01, 1.6, zb - zf - 0.3, 0);
-    k.e('#f4efe4', '#fff3dc', 1.2);
-    sh.box(L / 2 + sx * 0.07, 1.62, (zf + 0.12 + zb) / 2, 0.012, 0.5, zb - zf - 0.42, 0);
+    sh.push().local(L / 2 + sx * 0.061, 1.3, (zf + 0.12 + zb) / 2, 0, (sx * Math.PI) / 2, 0);
+    poster(k, POSTERS[(theme + (sx > 0 ? 0 : 1)) % POSTERS.length], zb - zf - 0.3, 1.6);
+    sh.pop();
   }
   // bench along the glass back, facing the road (-Z)
   k.m('#7d868d', 'steel');
@@ -1002,15 +1105,52 @@ export function busShelter(k: Kit, g: Kit, routeColor: string, rng: Rng): { glow
     pz = zf;
   k.m('#7f878d', 'steel');
   sh.cyl(px, 0, pz, 0.045, 0.04, 2.95, 6, 2);
-  k.m(routeColor, 'paint');
-  sh.push().local(px, 2.62, pz, 0, 0, Math.PI / 2);
-  sh.cyl(0, -0.03, 0, 0.27, 0.27, 0.06, 14, 3, false);
+  // the stop flag: a rectangular plate across the footway line (readable along the road), white with a
+  // route-coloured head band, "BUS STOP" lettering and a yellow H roundel — never a coloured disc with a bar
+  k.m('#5d646a', 'steel');
+  sh.box(px, 2.86, pz, 0.05, 0.03, 0.05, 1);
+  for (const y of [2.32, 2.78]) sh.box(px, y, pz + 0.04, 0.06, 0.035, 0.08, 0);
+  sh.push().local(px, 2.55, pz + 0.3, 0, 0, 0);
+  k.m('#3e4448', 'steel');
+  sh.box(0, 0, 0, 0.022, 0.64, 0.5, 0);
+  for (const sx of [-1, 1]) {
+    sh.push().local(sx * 0.012, 0, 0, 0, (sx * Math.PI) / 2, 0);
+    k.m('#f4f2ea', 'paint');
+    sh.box(0, -0.02, 0.001, 0.47, 0.57, 0.002, 1 | 4);
+    k.m(routeColor, 'paint');
+    sh.box(0, 0.235, 0.003, 0.47, 0.13, 0.002, 1 | 4);
+    k.m('#ffffff', 'paint');
+    pixelText(sh, 'BUS', 0, 0.235, 0.004, 0.022, 0.0015, true);
+    k.m('#f2c230', 'paint');
+    sh.push().local(0, 0.035, 0.004, Math.PI / 2, 0, 0);
+    sh.cyl(0, 0, 0, 0.12, 0.12, 0.003, 18, 2, false);
+    sh.pop();
+    k.m('#1f6b3a', 'paint');
+    pixelText(sh, 'H', 0, 0.035, 0.0072, 0.038, 0.0015, true);
+    k.m('#23282c', 'paint');
+    pixelText(sh, 'STOP', 0, -0.19, 0.004, 0.02, 0.0015, true);
+    sh.pop();
+  }
   sh.pop();
-  k.e('#f7f4ec', '#ffffff', 0.5);
-  sh.box(px + 0.032, 2.62, pz, 0.012, 0.12, 0.2, 0);
-  sh.box(px - 0.032, 2.62, pz, 0.012, 0.12, 0.2, 0);
-  k.m('#e8e3d6', 'paint');
-  sh.box(px, 1.9, pz + 0.05, 0.3, 0.42, 0.04, 0);
+  // timetable case on the pole, facing the footway: route-coloured head, printed columns behind a glass cover
+  sh.push().local(px, 1.9, pz + 0.05, 0, 0, 0);
+  k.m('#5d646a', 'steel');
+  sh.box(0, 0, 0, 0.32, 0.44, 0.04, 0);
+  k.m('#f1efe8', 'paint');
+  sh.box(0, -0.01, 0.021, 0.29, 0.38, 0.002, 1 | 4);
+  k.m(routeColor, 'paint');
+  sh.box(0, 0.165, 0.023, 0.29, 0.05, 0.002, 1 | 4);
+  k.m('#ffffff', 'paint');
+  pixelText(sh, rng.pick(['LINE', 'ROUTE']), 0, 0.165, 0.024, 0.008, 0.001);
+  k.m('#2d3236', 'paint');
+  for (let c = 0; c < 3; c++)
+    for (let r = 0; r < 12; r++) {
+      const ww = 0.045 + ((r * 7 + c * 3) % 5) * 0.008;
+      sh.box(-0.09 + c * 0.09 - (0.07 - ww) / 2, 0.115 - r * 0.024, 0.023, ww, 0.007, 0.002, 1 | 4);
+    }
+  sh.pop();
+  g.m('#dbe8ec', 'glass');
+  gs.box(px, 1.89, pz + 0.075, 0.3, 0.4, 0.004, 0);
   return { glows: [{ x: 0, y: 0.17, z: (zf + zb) / 2, size: 2.6 }] };
 }
 

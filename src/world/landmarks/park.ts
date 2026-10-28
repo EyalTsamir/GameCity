@@ -529,45 +529,120 @@ export function genKiosk(env: Env, f: Feature): void {
   const green = M('#2f6b4f', PAT.PLAIN, 0.6, 0.1);
   const kr = 1.05,
     kh = 2.45;
-  // hexagonal kiosk with a serving hatch facing +Z
+  // hexagonal kiosk, flat side (the serving hatch) facing +Z: stone plinth; six wall faces built as boards —
+  // a green skirt with raised fielded panels, cream board-and-batten above, posts on the six corners; the
+  // front face has a real opening (y 1.05 – 1.9) into a lit interior with shelves and a coffee machine
   K.cyl(M('#6d6a64', PAT.STONE, 0.85, 0, 0, 0, 0.2), kr + 0.08, kr + 0.1, 0.12, 0, 0, 0, 6, false, 'box', Math.PI / 6);
-  K.cyl(cream, kr, kr, kh - 0.12, 0, 0.12, 0, 6, false, 'box', Math.PI / 6);
-  K.cyl(green, kr + 0.03, kr + 0.03, 0.85, 0, 0.12, 0, 6, false, 'box', Math.PI / 6);
-  const fz = kr * Math.cos(Math.PI / 6);
-  // corner posts at the six angles, a dado rail over the green skirt, a frieze board under the eave
+  const fz = kr * Math.cos(Math.PI / 6),
+    side = kr,
+    hy0 = 1.05,
+    hy1 = 1.9,
+    hw2 = 0.45;
+  const creamB = M('#efe3c6', PAT.PLAIN, 0.8, 0, 0, FLOOD.SOFT, 0.7);
+  const greenD = M('#24543e', PAT.PLAIN, 0.6, 0.1);
   for (let i = 0; i < 6; i++) {
-    const a = (i / 6) * Math.PI * 2;
-    const px = Math.sin(a) * kr, pz = Math.cos(a) * kr;
-    K.box(green, 0.07, kh - 0.14, 0.07, px, 0.12, pz, a);
-    // plinth block at the foot, a moulded cap under the frieze
-    K.box(green, 0.11, 0.16, 0.11, px, 0.12, pz, a);
-    K.box(green, 0.095, 0.025, 0.095, px, 0.28, pz, a);
-    K.box(green, 0.1, 0.03, 0.1, px, kh - 0.26, pz, a);
+    const a = (i / 6) * Math.PI * 2, sa = Math.sin(a), ca = Math.cos(a);
+    // face-local → kiosk: x along the face, n out of it
+    const at = (u: number, n: number): [number, number] => [sa * (fz + n) + ca * u, ca * (fz + n) - sa * u];
+    const wall = (m: typeof cream, u0: number, u1: number, y0: number, y1: number, n = -0.02, t = 0.04) => {
+      const [x, z] = at((u0 + u1) / 2, n);
+      K.box(m, u1 - u0, y1 - y0, t, x, y0, z, a);
+    };
+    // skirt with two fielded panels
+    wall(green, -side / 2, side / 2, 0.12, 0.95);
+    for (const u of [-side / 4, side / 4]) {
+      wall(greenD, u - side / 4 + 0.06, u + side / 4 - 0.06, 0.24, 0.82, 0.004, 0.012);
+      wall(green, u - side / 4 + 0.09, u + side / 4 - 0.09, 0.28, 0.78, 0.012, 0.012);
+    }
+    // boarded upper wall (the front face around the opening), battens over the board joints
+    if (i === 0) {
+      wall(creamB, -side / 2, -hw2, 0.95, kh - 0.12);
+      wall(creamB, hw2, side / 2, 0.95, kh - 0.12);
+      wall(creamB, -hw2, hw2, 0.95, hy0);
+      wall(creamB, -hw2, hw2, hy1, kh - 0.12);
+    } else wall(creamB, -side / 2, side / 2, 0.95, kh - 0.12);
+    for (let u = -side / 2 + 0.11; u < side / 2 - 0.05; u += 0.11) {
+      if (i === 0 && Math.abs(u) < hw2 + 0.02) {
+        wall(cream, u - 0.012, u + 0.012, 0.95, hy0, 0.006, 0.014);
+        wall(cream, u - 0.012, u + 0.012, hy1 + 0.06, kh - 0.2, 0.006, 0.014);
+      } else wall(cream, u - 0.012, u + 0.012, 0.95, kh - 0.2, 0.006, 0.014);
+    }
+  }
+  // corner posts on the six corners (30° + 60° i): plinth block, shaft, cap under the frieze
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 6) * Math.PI * 2 + Math.PI / 6;
+    const px = Math.sin(a) * (kr + 0.005), pz = Math.cos(a) * (kr + 0.005);
+    K.box(green, 0.08, kh - 0.14, 0.08, px, 0.12, pz, a);
+    K.box(green, 0.12, 0.18, 0.12, px, 0.12, pz, a);
+    K.box(greenD, 0.105, 0.025, 0.105, px, 0.3, pz, a);
+    K.box(green, 0.11, 0.035, 0.11, px, kh - 0.27, pz, a);
   }
   K.cyl(green, kr + 0.05, kr + 0.05, 0.05, 0, 0.95, 0, 6, false, 'box', Math.PI / 6);
   K.cyl(green, kr + 0.04, kr + 0.04, 0.16, 0, kh - 0.2, 0, 6, false, 'box', Math.PI / 6);
-  // serving hatch: a recess with the lit interior, a frame, a top-hung shutter propped open, a counter on brackets
-  K.panel(M('#f6efe0', PAT.WINDOW, 0.3, 0, 0.95, 0, 0.45), 0.9, 0.85, 0, 1.15, fz - 0.06, 0);
-  for (const sx of [-1, 1]) K.box(cream, 0.02, 0.85, 0.08, sx * 0.46, 1.15, fz - 0.03);
-  K.box(green, 1.06, 0.07, 0.06, 0, 2.0, fz + 0.01);
-  for (const sx of [-1, 1]) K.box(green, 0.07, 0.92, 0.06, sx * 0.5, 1.08, fz + 0.01);
-  K.boxC(green, 1.0, 0.04, 0.5, 0, 2.06, fz + 0.24, -1.1, 0, 0);
-  for (const sx of [-1, 1]) K.beam(M('#3b3b3b', PAT.PLAIN, 0.4, 0.6), [sx * 0.42, 1.66, fz + 0.04], [sx * 0.42, 2.02, fz + 0.46], 0.015, 0.015);
-  K.box(M('#b98d60', PAT.PLANKS, 0.7), 1.05, 0.05, 0.34, 0, 1.08, fz + 0.12);
-  for (const sx of [-1, 1]) K.beam(green, [sx * 0.4, 0.82, fz + 0.02], [sx * 0.4, 1.07, fz + 0.26], 0.04, 0.04);
-  // on the counter: a cake stand under a cloche, a napkin box, a tip jar
-  K.cyl(M('#ffffff', PAT.PLAIN, 0.4), 0.11, 0.03, 0.08, -0.3, 1.13, fz + 0.14, 10);
-  K.sphere(M('#dfe8ea', PAT.PLAIN, 0.1, 0.1), 0.1, -0.3, 1.21, fz + 0.14, 10, 6, 1, 0, Math.PI * 2, 0, Math.PI / 2);
-  K.box(M('#c43b33', PAT.PLAIN, 0.6), 0.1, 0.08, 0.08, 0.25, 1.13, fz + 0.16);
-  K.cyl(M('#cfe0e4', PAT.PLAIN, 0.1, 0.1), 0.045, 0.045, 0.1, 0.38, 1.13, fz + 0.2, 8);
-  // striped awning over the hatch
-  K.poly(M('#2f7d57', PAT.STRIPES, 0.8, 0, 0, 0, 0.2), [
-    [-0.62, 2.12, fz + 0.62],
-    [0.62, 2.12, fz + 0.62],
-    [0.62, 2.42, fz],
-    [-0.62, 2.42, fz],
-  ]);
-  K.box(M('#2f7d57', PAT.STRIPES, 0.8), 1.24, 0.14, 0.02, 0, 1.98, fz + 0.63);
+  // interior seen through the hatch: lit back wall, side walls, ceiling, inner counter with a coffee machine,
+  // cups, a shelf of jars and bottles, a chalk menu
+  const ib = fz - 0.62;
+  K.panel(M('#f6efe0', PAT.WINDOW, 0.3, 0, 0.95, 0, 0.45), 0.96, 0.95, 0, (hy0 + hy1) / 2, ib, 0);
+  for (const sx of [-1, 1]) K.box(M('#d9ccb0', PAT.PLAIN, 0.8), 0.03, hy1 - hy0 + 0.2, 0.62, sx * (hw2 + 0.04), hy0 - 0.1, (fz + ib) / 2);
+  K.box(M('#cfc3a8', PAT.PLAIN, 0.8), 0.98, 0.03, 0.62, 0, hy1 + 0.08, (fz + ib) / 2);
+  K.box(M('#8a6a4a', PAT.PLANKS, 0.7), 0.94, 0.04, 0.4, 0, hy0 - 0.02, ib + 0.22);
+  const chrome = M('#cfd5d8', PAT.PLAIN, 0.2, 0.9);
+  K.box(chrome, 0.36, 0.3, 0.22, -0.18, hy0 + 0.02, ib + 0.14);
+  K.box(M('#1d1f22', PAT.PLAIN, 0.4, 0.3), 0.32, 0.04, 0.2, -0.18, hy0 + 0.02, ib + 0.16);
+  for (const gx of [-0.27, -0.09]) {
+    K.cyl(chrome, 0.03, 0.03, 0.05, gx, hy0 + 0.19, ib + 0.26, 8);
+    K.box(M('#1d1f22', PAT.PLAIN, 0.4), 0.012, 0.012, 0.09, gx, hy0 + 0.205, ib + 0.33);
+  }
+  for (let c = 0; c < 6; c++) K.cyl(M('#ffffff', PAT.PLAIN, 0.3), 0.035, 0.03, 0.06, -0.3 + (c % 3) * 0.08, hy0 + 0.32 + Math.floor(c / 3) * 0.06, ib + 0.12, 8);
+  K.box(M('#8a6a4a', PAT.PLANKS, 0.7), 0.9, 0.025, 0.14, 0, hy0 + 0.5, ib + 0.08);
+  const jar = ['#d8a24a', '#b8443c', '#4f7a3a', '#e8e0cc', '#6b3f2a'];
+  for (let j = 0; j < 7; j++) K.cyl(M(jar[j % 5], PAT.PLAIN, 0.2, 0.05), 0.035, 0.035, 0.09 + (j % 3) * 0.04, 0.05 + j * 0.055, hy0 + 0.525, ib + 0.08, 8);
+  K.box(M('#1f2322', PAT.PLAIN, 0.9), 0.4, 0.28, 0.02, 0.22, hy0 + 0.1, ib + 0.02);
+  for (let l = 0; l < 5; l++) K.box(M('#e8e4d8', PAT.PLAIN, 0.9), 0.24 - (l % 2) * 0.06, 0.012, 0.004, 0.2, hy0 + 0.33 - l * 0.045, ib + 0.032);
+  // hatch frame, top-hung shutter propped open on two stays, outer counter on brackets
+  K.box(green, 1.06, 0.07, 0.06, 0, hy1, fz + 0.01);
+  for (const sx of [-1, 1]) K.box(green, 0.07, hy1 - hy0 + 0.07, 0.06, sx * (hw2 + 0.035), hy0 - 0.02, fz + 0.01);
+  K.boxC(green, 1.0, 0.04, 0.5, 0, hy1 + 0.14, fz + 0.22, -1.15, 0, 0);
+  for (const sx of [-1, 1]) K.beam(M('#3b3b3b', PAT.PLAIN, 0.4, 0.6), [sx * 0.42, hy1 - 0.3, fz + 0.04], [sx * 0.42, hy1 + 0.08, fz + 0.43], 0.015, 0.015);
+  K.box(M('#b98d60', PAT.PLANKS, 0.7), 1.05, 0.05, 0.34, 0, hy0, fz + 0.12);
+  for (const sx of [-1, 1]) K.beam(green, [sx * 0.4, hy0 - 0.26, fz + 0.02], [sx * 0.4, hy0 - 0.01, fz + 0.26], 0.04, 0.04);
+  // on the counter: a cake stand under a cloche, a napkin box, a tip jar, a card reader
+  const ct2 = hy0 + 0.05;
+  K.cyl(M('#ffffff', PAT.PLAIN, 0.4), 0.11, 0.03, 0.08, -0.3, ct2, fz + 0.14, 10);
+  K.cyl(M('#c98a45', PAT.PLAIN, 0.7), 0.08, 0.08, 0.05, -0.3, ct2 + 0.08, fz + 0.14, 12);
+  K.sphere(M('#dfe8ea', PAT.PLAIN, 0.1, 0.1), 0.1, -0.3, ct2 + 0.08, fz + 0.14, 10, 6, 1, 0, Math.PI * 2, 0, Math.PI / 2);
+  K.box(M('#c43b33', PAT.PLAIN, 0.6), 0.1, 0.08, 0.08, 0.25, ct2, fz + 0.16);
+  K.cyl(M('#cfe0e4', PAT.PLAIN, 0.1, 0.1), 0.045, 0.045, 0.1, 0.38, ct2, fz + 0.2, 8);
+  K.boxC(M('#2b2b2b', PAT.PLAIN, 0.5), 0.07, 0.11, 0.03, 0.05, ct2 + 0.05, fz + 0.2, -0.5, 0, 0);
+  // canvas awning: stretched from the wall over two arms, sagging between them, scalloped valance in front,
+  // triangular cheeks at the sides; metric uvs keep the stripes running down the slope
+  const awM = M('#2f7d57', PAT.STRIPES, 0.85, 0, 0, 0, 0.2);
+  const awU = M('#e9e3d2', PAT.PLAIN, 0.85);
+  const ax0 = -0.64, ax1 = 0.64, ay0 = 2.4, ay1 = 2.12, ad = 0.62;
+  const AP = (i: number, j: number): [number, number, number] => {
+    const u = i / 8, v = j / 4;
+    const sag = 0.035 * Math.sin(Math.PI * u) * Math.sin(Math.PI * v);
+    return [ax0 + (ax1 - ax0) * u, ay0 + (ay1 - ay0) * v - sag, fz + 0.01 + ad * v];
+  };
+  for (let i = 0; i < 8; i++)
+    for (let j = 0; j < 4; j++) {
+      const q = [AP(i, j), AP(i + 1, j), AP(i + 1, j + 1), AP(i, j + 1)];
+      const uv = q.map((p) => [p[0], p[1] * 0.6 + p[2] * 0.8] as [number, number]);
+      K.poly(awM, q, uv);
+      K.poly(awU, [q[3], q[2], q[1], q[0]], uv);
+    }
+  for (let i = 0; i < 9; i++) {
+    const xa = ax0 + ((ax1 - ax0) * i) / 9, xb = ax0 + ((ax1 - ax0) * (i + 1)) / 9, xm = (xa + xb) / 2, zf2 = fz + 0.01 + ad;
+    const pts: [number, number, number][] = [[xa, ay1, zf2], [xb, ay1, zf2], [xb, ay1 - 0.1, zf2], [xm, ay1 - 0.15, zf2], [xa, ay1 - 0.1, zf2]];
+    K.poly(awM, pts, pts.map((p) => [p[0], p[1]] as [number, number]), true);
+  }
+  for (const sx of [-1, 1]) {
+    const pts: [number, number, number][] = [[sx * 0.64, ay0, fz + 0.01], [sx * 0.64, ay1, fz + 0.01 + ad], [sx * 0.64, ay0 - 0.05, fz + 0.01]];
+    K.poly(awM, [[sx * 0.64, ay0, fz + 0.01], [sx * 0.64, ay1, fz + 0.01 + ad], [sx * 0.64, ay1 - 0.04, fz + 0.01 + ad * 0.4]], pts.map((p) => [p[2], p[1]] as [number, number]), true);
+    K.rod(M('#3b3b3b', PAT.PLAIN, 0.4, 0.6), [sx * 0.62, ay0 - 0.35, fz + 0.01], [sx * 0.62, ay1 - 0.01, fz + ad], 0.012, 5);
+  }
+  K.rod(M('#3b3b3b', PAT.PLAIN, 0.4, 0.6), [ax0, ay1 - 0.005, fz + 0.01 + ad], [ax1, ay1 - 0.005, fz + 0.01 + ad], 0.014, 6);
+  K.box(green, 1.34, 0.06, 0.06, 0, ay0 - 0.02, fz + 0.03);
   // roof: hexagonal pyramid + finial
   K.cyl(green, kr + 0.15, kr + 0.15, 0.12, 0, kh, 0, 6, false, 'box', Math.PI / 6);
   K.spire(M('#2f6b4f', PAT.SEAM, 0.5, 0.3, 0, 0, 0.3), 6, kr + 0.22, kh + 0.1, kh + 1.05, 0, 0, Math.PI / 6);
@@ -667,12 +742,25 @@ export function genPlayground(env: Env, f: Feature): void {
   const tileB = M('#844b3b', PAT.GRAVEL, 0.95, 0, 0, 0, 0.8);
   const scuff = M('#9a6a55', PAT.GRAVEL, 0.97, 0, 0, 0, 0.3);
   const tx0 = sx0 + 0.1, nTx = 8, nTz = 7, tz0 = sz - 1.75;
+  // each tile its own tone (batches, sun-fading, a replaced tile), worn paler and dished along the swing
+  // path where feet drag (a band under each seat, strongest at the bottom of the arc), moss in the joints
+  let ts2 = 7 + f.id * 31;
+  const tr = () => ((ts2 = (ts2 * 16807) % 2147483647) / 2147483647);
+  const tileTone = new THREE.Color();
   for (let i = 0; i < nTx; i++)
     for (let j = 0; j < nTz; j++) {
       const cx = tx0 + i * 0.5 + 0.25, cz = tz0 + j * 0.5 + 0.25;
-      const underSeat = swingXs.some((x) => Math.abs(cx - x) < 0.3) && Math.abs(cz - sz) < 0.55;
-      K.box(underSeat ? scuff : (i * 3 + j * 5) % 7 < 2 ? tileB : tileA, 0.492, underSeat ? 0.032 : 0.04, 0.492, cx, 0, cz);
+      const dxs = Math.min(...swingXs.map((x) => Math.abs(cx - x)));
+      const wear = Math.max(0, 1 - dxs / 0.45) * Math.max(0, 1 - Math.abs(cz - sz) / 1.1);
+      const underSeat = dxs < 0.3 && Math.abs(cz - sz) < 0.55;
+      if (underSeat) {
+        K.box(scuff, 0.492, 0.03, 0.492, cx, 0, cz);
+        continue;
+      }
+      tileTone.set((i * 3 + j * 5) % 7 < 2 ? '#844b3b' : tr() < 0.06 ? '#5f3a30' : '#7a4537').offsetHSL((tr() - 0.5) * 0.02, (tr() - 0.5) * 0.08, (tr() - 0.5) * 0.05 + wear * 0.08);
+      K.box(M(tileTone, PAT.GRAVEL, 0.95, 0, 0, 0, tr()), 0.492, 0.04 - wear * 0.006, 0.492, cx, 0, cz);
     }
+  K.box(M('#3e4a2c', PAT.GRAVEL, 0.98), nTx * 0.5, 0.034, nTz * 0.5, tx0 + nTx * 0.25, 0, tz0 + nTz * 0.25);
   const kerbM = M('#6e3f33', PAT.GRAVEL, 0.95);
   for (const zz of [tz0 - 0.06, tz0 + nTz * 0.5 + 0.06]) K.boxC(kerbM, nTx * 0.5 + 0.24, 0.03, 0.12, tx0 + nTx * 0.25, 0.012, zz, 0, 0, 0);
   for (const xx of [tx0 - 0.06, tx0 + nTx * 0.5 + 0.06]) K.boxC(kerbM, 0.12, 0.03, nTz * 0.5, xx, 0.012, tz0 + nTz * 0.25, 0, 0, 0);
@@ -683,6 +771,7 @@ export function genPlayground(env: Env, f: Feature): void {
     }
     // the A-frame head casting and a tie bar
     K.box(M('#2d5f99', PAT.PLAIN, 0.5, 0.3), 0.12, 0.2, 0.18, x, top - 0.12, sz);
+    for (const by of [top - 0.08, top + 0.02]) for (const bz2 of [-0.05, 0.05]) env.K.cylX(steel, 0.012, 0.15, x, by, sz + bz2, 6);
     K.rod(blue, [x, 0.9, sz - 0.6], [x, 0.9, sz + 0.6], 0.025, 6);
   }
   K.rod(blue, [sx0 - 0.1, top, sz], [sx1 + 0.1, top, sz], 0.06, 12);
@@ -692,6 +781,10 @@ export function genPlayground(env: Env, f: Feature): void {
     // hanger clamps, chains of alternating links, a sagging rubber strap seat
     for (const dx of [-0.2, 0.2]) {
       env.K.cyl(steel, 0.075, 0.075, 0.09, sw.x + dx, top - 0.045, sz, 8);
+      // bearing hanger: a U-bracket under the bar with a swivel eye; the chain's core line reads from afar
+      env.K.box(M('#7f878d', PAT.PLAIN, 0.4, 0.7), 0.05, 0.06, 0.07, sw.x + dx, top - 0.13, sz);
+      env.K.torus(steel, 0.016, 0.006, sw.x + dx, top - 0.16, sz, 4, 8, Math.PI * 2, 0, 0, 0);
+      K.rod(M('#8d969c', PAT.PLAIN, 0.45, 0.6), [sw.x + dx, top - 0.16, sz], [sw.x + dx, 0.56, sz], 0.006, 4);
       // welded oval links, each turned 90° to the last (rings read as a chain at 3 m)
       for (let y = top - 0.12, li = 0; y > 0.58; y -= 0.046, li++) env.K.torus(steel, 0.02, 0.0045, sw.x + dx, y, sz, 3, 8, Math.PI * 2, 0, li % 2 ? Math.PI / 2 : 0, 0);
       // shackle into the seat
@@ -772,21 +865,40 @@ export function genPlayground(env: Env, f: Feature): void {
   kid(ssx + 1.45, 0.59 - 0.45 * 0.62, ssz, -Math.PI / 2, '#2a9d8f', true);
   env.anim(null);
 
-  // ── roundabout (spins slowly)
+  // ── roundabout (spins slowly): a steel deck in painted sectors on a central bearing housing, a rim band and
+  // a skirt down to a concrete ring, six tubular grab rails bent from the hub out to the deck edge and joined by
+  // a ring rail; the paint is worn to bare steel where feet push off and on the rail tops
   const rx = 1.2,
     rz = D - 2.5;
+  K.cyl(M('#9a968c', PAT.CONCRETE, 0.9), 1.32, 1.36, 0.035, rx, 0, rz, 28);
+  K.cyl(M('#5f5a52', PAT.GRAVEL, 0.98), 1.2, 1.2, 0.002, rx, 0.035, rz, 28);
   K.cyl(steel, 0.12, 0.16, 0.25, rx, 0, rz, 10);
   env.anim({ mode: ANIM.SPIN, pivot: new THREE.Vector3(rx, 0, rz), axis: new THREE.Vector3(0, 1, 0), a: 0.9, b: 0, c: 0 });
-  env.K.cyl(M('#e2564a', PAT.PLAIN, 0.6, 0.1), 1.15, 1.15, 0.08, rx, 0.25, rz, 24);
+  const rimM = M('#c43a30', PAT.PLAIN, 0.55, 0.15);
+  env.K.cyl(rimM, 1.15, 1.15, 0.08, rx, 0.25, rz, 32, true);
+  env.K.cyl(M('#3b3f42', PAT.PLAIN, 0.6, 0.4), 1.1, 1.1, 0.12, rx, 0.13, rz, 28, true);
+  env.K.cyl(M('#8d969c', PAT.PLAIN, 0.5, 0.6), 1.14, 1.14, 0.075, rx, 0.25, rz, 28);
   for (let i = 0; i < 6; i++) {
     const a = (i / 6) * Math.PI * 2;
-    env.K.cyl(M('#f2c230', PAT.PLAIN, 0.6, 0.1), 0.52, 0.52, 0.02, rx, 0.335, rz, 2, false, 'box', a, Math.PI / 3);
+    env.K.cyl(M(i % 2 ? '#f2c230' : '#2f78c4', PAT.GRAVEL, 0.7, 0.1, 0, 0, i * 0.17), 1.1, 1.1, 0.008, rx, 0.325, rz, 6, false, 'box', a + 0.03, Math.PI / 3 - 0.06);
+    // worn to grey steel along the outer edge of each sector (feet), and a scuffed patch in the middle
+    env.K.cyl(M('#9aa1a5', PAT.GRAVEL, 0.6, 0.5, 0, 0, i * 0.3), 1.1, 1.1, 0.003, rx, 0.333, rz, 4, false, 'box', a + 0.25, 0.35);
   }
-  for (let i = 0; i < 4; i++) {
-    const a = (i / 4) * Math.PI * 2;
-    env.K.rod(steel, [rx + Math.sin(a) * 1.0, 0.33, rz + Math.cos(a) * 1.0], [rx + Math.sin(a) * 0.3, 0.95, rz + Math.cos(a) * 0.3], 0.025, 4);
+  env.K.cyl(M('#5e666b', PAT.PLAIN, 0.4, 0.6), 0.2, 0.22, 0.05, rx, 0.33, rz, 12);
+  const railM = M('#d9dde0', PAT.PLAIN, 0.35, 0.7);
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 6) * Math.PI * 2 + Math.PI / 6, sa = Math.sin(a), ca = Math.cos(a);
+    const P = (r: number, y: number): [number, number, number] => [rx + sa * r, y, rz + ca * r];
+    env.K.rod(railM, P(0.06, 0.95), P(0.75, 0.88), 0.022, 6);
+    env.K.rod(railM, P(0.75, 0.88), P(0.92, 0.72), 0.022, 6);
+    env.K.rod(railM, P(0.92, 0.72), P(0.98, 0.34), 0.022, 6);
+    env.K.sphere(railM, 0.024, ...P(0.75, 0.88), 6, 4);
+    env.K.sphere(railM, 0.024, ...P(0.92, 0.72), 6, 4);
+    env.K.cyl(M('#5e666b', PAT.PLAIN, 0.4, 0.6), 0.035, 0.035, 0.012, ...P(0.98, 0.333), 8);
   }
-  env.K.cyl(steel, 0.05, 0.05, 0.75, rx, 0.33, rz, 6);
+  env.K.torus(railM, 0.85, 0.018, rx, 0.8, rz, 6, 36, Math.PI * 2, Math.PI / 2, 0, 0);
+  env.K.cyl(railM, 0.05, 0.05, 0.62, rx, 0.33, rz, 8);
+  env.K.sphere(M('#c43a30', PAT.PLAIN, 0.5, 0.2), 0.07, rx, 0.97, rz, 10, 6);
   env.anim(null);
 
   // ── climbing frame (cubic jungle gym)

@@ -85,9 +85,10 @@ void main() {
   float inside = d < 0.0 ? 0.6 + 0.4 * smoothstep(-0.15, 0.0, d) : 1.0;
   // grit: fine dark specks in the band
   float grit = step(0.8, h2(floor(vW * 60.0))) * 0.4;
-  float a = clamp(vK * out_ * inside * (0.85 + 0.45 * n) * 1.9 + vK * out_ * grit, 0.0, 0.92);
+  // gain 3.4: at 1.9 the band only darkened the paving by ~15 % and vanished in its texture (judge-1)
+  float a = clamp(vK * out_ * inside * (0.8 + 0.6 * n) * 3.4 + vK * out_ * grit, 0.0, 0.72);
   // brownish grey grime (multiplied onto the ground colour)
-  vec3 dirt = vec3(0.4, 0.36, 0.3);
+  vec3 dirt = vec3(0.33, 0.3, 0.26);
   gl_FragColor = vec4(mix(vec3(1.0), dirt, a), 1.0);
 }
 `;
