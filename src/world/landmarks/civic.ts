@@ -3,7 +3,7 @@
 
 import * as THREE from 'three';
 import type { Feature } from '../../core/plan';
-import { ANIM, M, PAT } from './builder';
+import { ANIM, M, PAT, type Mat } from './builder';
 import { C, S, flagpole, person } from './parts';
 import type { Env } from './env';
 import { drawText, signQuad } from './signs';
@@ -14,9 +14,22 @@ export function genFlagpole(env: Env, f: Feature, design: number): void {
   const r = Math.max(f.radius, 0.3);
   env.checkRadius(f.x, f.z, r, 'flagpole');
   const K = env.S;
-  K.cyl(M(C.granite, PAT.STONE, 0.8, 0, 0, 0, 0.1), r - 0.02, r, 0.35, 0, 0, 0, 12);
-  K.cyl(M('#d9d2c4', PAT.PLAIN, 0.7), r * 0.55, r * 0.7, 0.3, 0, 0.35, 0, 12);
+  // granite plinth with a chamfered top, a steel base plate with eight bolts, a hinged foot sleeve
+  K.lathe(M(C.granite, PAT.STONE, 0.8, 0, 0, 0, 0.1), [[r, 0], [r, 0.3], [r - 0.05, 0.35], [0, 0.35]], 0, 0, 0, 8, Math.PI / 8);
+  const steelM = M('#8e969b', PAT.PLAIN, 0.4, 0.7);
+  K.cyl(steelM, r * 0.62, r * 0.62, 0.025, 0, 0.35, 0, 16);
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2;
+    K.cyl(M('#5f6569', PAT.PLAIN, 0.5, 0.6), 0.02, 0.018, 0.035, Math.sin(a) * r * 0.5, 0.375, Math.cos(a) * r * 0.5, 6);
+  }
+  K.lathe(steelM, [[0.13, 0.375], [0.13, 0.5], [0.11, 0.6], [0.09, 0.65]], 0, 0, 0, 14);
+  for (const s2 of [-1, 1]) K.box(steelM, 0.02, 0.18, 0.08, s2 * 0.135, 0.4, 0);
   flagpole(env, 0, 0.65, 0, 8.6, 2.4, design, f.id * 1.7, 0.075);
+  // halyard down the pole to a cleat at hand height
+  K.rod(M('#e8e4da', PAT.PLAIN, 0.8), [0.085, 0.65 + 8.5, 0.02], [0.085, 1.55, 0.02], 0.004, 3);
+  K.rod(M('#e8e4da', PAT.PLAIN, 0.8), [0.075, 0.65 + 8.5, -0.02], [0.075, 1.55, -0.02], 0.004, 3);
+  K.box(M('#3b3f42', PAT.PLAIN, 0.5, 0.5), 0.03, 0.18, 0.03, 0.085, 1.42, 0);
+  K.box(M('#3b3f42', PAT.PLAIN, 0.5, 0.5), 0.025, 0.03, 0.03, 0.08, 1.45, 0);
   env.endChecks();
   env.pick(f.id, 'Flagpole', new THREE.Box3(new THREE.Vector3(f.x - 1, 0, f.z - 1), new THREE.Vector3(f.x + 1, 9.5, f.z + 1)), () => ['The Tinyhaven flag', 'Flies whichever way the wind blows']);
   void S;
@@ -24,6 +37,9 @@ export function genFlagpole(env: Env, f: Feature, design: number): void {
 
 // ───────────────────────────────────────────────────────────── market stalls ──
 
+let richStall = true;
+const _mm = new THREE.Matrix4();
+const _sc = new THREE.Vector3();
 const STALL_COLS = ['#d8343f', '#2a9d8f', '#e9873a', '#3f73b0', '#e3b62c', '#8d6cab'];
 type Goods = { name: string; produce: string[]; crate: string };
 const GOODS: Goods[] = [
@@ -37,57 +53,180 @@ const GOODS: Goods[] = [
   { name: 'SPICES', produce: ['#c0392b', '#e67e22', '#f1c40f', '#7d5a3c'], crate: '#a8794d' },
 ];
 
+/** Slatted wooden crate (w × h × d, bottom at y): bottom, two slats per long side with a gap, solid
+ *  ends with a hand hole, corner battens. */
+function slatCrate(K: Env['S'], m: Mat, w: number, h: number, d: number, x: number, y: number, z: number): void {
+  const t = 0.012;
+  K.box(m, w, t, d, x, y, z);
+  const sh = (h - 0.01) / 2 - 0.012;
+  for (const sz of [-1, 1]) for (let i = 0; i < 2; i++) K.box(m, w, sh, t, x, y + 0.01 + i * (sh + 0.024), z + sz * (d / 2 - t / 2));
+  for (const sx of [-1, 1]) {
+    K.box(m, t, h * 0.55, d - 2 * t, x + sx * (w / 2 - t / 2), y, z);
+    K.box(m, t, h * 0.2, d - 2 * t, x + sx * (w / 2 - t / 2), y + h * 0.8, z);
+    for (const sz of [-1, 1]) K.box(m, 0.025, h, 0.025, x + sx * (w / 2 - 0.02), y, z + sz * (d / 2 - 0.02));
+  }
+}
+
+/** a mound of individual produce filling a crate top (w × d) at height y */
+function produce(K: Env['S'], goods: Goods, ci: number, w: number, d: number, x: number, y: number, z: number, seed: number): void {
+  const c0 = new THREE.Color(goods.produce[ci % goods.produce.length]);
+  const kind = goods.name;
+  if (!richStall) {
+    K.box(M(c0, PAT.GRAVEL, 0.7, 0, 0, 0, 0.3 + ci * 0.1), w - 0.04, 0.03, d - 0.04, x, y - 0.03, z);
+    return;
+  }
+  const r = kind === 'BREAD' ? 0.06 : kind === 'CHEESE' ? 0.08 : kind === 'FISH' ? 0.05 : kind === 'HONEY' || kind === 'SPICES' ? 0.05 : kind === 'FLOWERS' ? 0.05 : 0.038;
+  const nx = Math.max(2, Math.floor(w / (r * 2.1))), nz = Math.max(2, Math.floor(d / (r * 2.1)));
+  let s = seed;
+  const rnd = () => ((s = (s * 16807) % 2147483647) / 2147483647);
+  // dark bed under the top layer (the crate is full)
+  K.box(M(c0.clone().multiplyScalar(0.45), PAT.PLAIN, 0.9), w - 0.03, 0.01, d - 0.03, x, y - 0.02, z);
+  const mats = [0.85, 1, 1.12].map((k) => M(c0.clone().multiplyScalar(k), PAT.PLAIN, kind === 'FISH' ? 0.3 : 0.55, 0));
+  for (let i = 0; i < nx; i++)
+    for (let j = 0; j < nz; j++) {
+      const u = (i + 0.5) / nx - 0.5, v = (j + 0.5) / nz - 0.5;
+      const px = x + u * (w - r * 2) * 1.05 + (rnd() - 0.5) * r * 0.5;
+      const pz = z + v * (d - r * 2) * 1.05 + (rnd() - 0.5) * r * 0.5;
+      const mound = 0.03 * (1 - 4 * (u * u + v * v));
+      const py = y + mound + r * 0.7;
+      const m = mats[Math.floor(rnd() * 3)];
+      if (kind === 'CHEESE') {
+        if ((i + j) % 2) continue;
+        K.cyl(m, r, r, r * 0.8, px, y, pz, 10);
+      } else if (kind === 'HONEY') {
+        K.cyl(m, r * 0.7, r * 0.7, r * 1.8, px, y, pz, 8);
+        K.cyl(M('#c9b26a', PAT.PLAIN, 0.4, 0.6), r * 0.72, r * 0.72, r * 0.3, px, y + r * 1.8, pz, 8);
+      } else if (kind === 'FLOWERS') {
+        K.rod(M('#3f7a33', PAT.PLAIN, 0.8), [px, y, pz], [px + (rnd() - 0.5) * 0.06, y + 0.22, pz + (rnd() - 0.5) * 0.06], 0.006, 3);
+        K.sphere(m, r * 0.8, px, y + 0.23, pz, 5, 3);
+      } else if (kind === 'FISH' || kind === 'BREAD') {
+        const a = rnd() * Math.PI;
+        _mm.makeRotationY(a).scale(_sc.set(kind === 'FISH' ? 2.6 : 2.0, 0.7, 1)).setPosition(px, y + r * 0.5, pz);
+        const eg = new THREE.SphereGeometry(r, 7, 4);
+        K.geoM(m, eg, _mm);
+        eg.dispose();
+      } else K.sphere(m, r * (0.85 + rnd() * 0.25), px, py, pz, 6, 4);
+    }
+}
+
 export function genMarketStall(env: Env, f: Feature): void {
   const R = f.radius || 1.3;
   env.begin(f.x, 0, f.z, f.yaw);
   env.checkRadius(f.x, f.z, R, 'marketstall');
   const K = env.S;
+  // individual produce, price cards, scales and ground clutter (off: low tier, ?nomarketdetail)
+  richStall = !env.ctx.debug.params.has('nomarketdetail') && env.ctx.quality.level !== 'low';
   const col = STALL_COLS[Number(f.params?.color ?? f.id) % STALL_COLS.length];
   const goods = GOODS[(f.id * 7 + 3) % GOODS.length];
   const wood = M('#9a6b43', PAT.PLANKS, 0.85, 0, 0, 0, 0.4);
-  const pole = M('#f2efe8', PAT.PLAIN, 0.6, 0.1);
+  const steel = M('#9aa2a6', PAT.PLAIN, 0.45, 0.6);
   const hw = 1.0,
     fz = 0.6,
     bz = -0.6;
-  // posts
-  for (const x of [-hw, hw]) {
-    K.box(pole, 0.06, 2.33, 0.06, x, 0, fz);
-    K.box(pole, 0.06, 2.6, 0.06, x, 0, bz);
+  let seed = 1 + f.id * 7919;
+  const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  // frame: round steel poles in square foot plates, top rails, a ridge pole (the cloth sags between them)
+  const yF = 2.3, yB = 2.62;
+  for (const [x, z, h] of [[-hw, fz, yF], [hw, fz, yF], [-hw, bz, yB], [hw, bz, yB]] as const) {
+    K.box(M('#55595c', PAT.PLAIN, 0.7, 0.4), 0.16, 0.012, 0.16, x, 0, z);
+    K.rod(steel, [x, 0, z], [x, h + 0.02, z], 0.022, 8);
   }
-  // striped canopy sloping to the aisle, with a short valance
+  K.rod(steel, [-hw - 0.05, yF, fz], [hw + 0.05, yF, fz], 0.018, 6);
+  K.rod(steel, [-hw - 0.05, yB, bz], [hw + 0.05, yB, bz], 0.018, 6);
+  for (const x of [-hw, hw]) K.rod(steel, [x, yF, fz], [x, yB, bz], 0.018, 6);
+  // canopy cloth: a grid sagging between the rails, overhanging the front; metric uvs keep the stripes running
   const canopy = M(col, PAT.STRIPES, 0.85, 0, 0, 0, 0.2);
-  K.poly(canopy, [
-    [-hw - 0.1, 2.33, fz + 0.2],
-    [hw + 0.1, 2.33, fz + 0.2],
-    [hw + 0.1, 2.62, bz - 0.12],
-    [-hw - 0.1, 2.62, bz - 0.12],
-  ]);
-  K.poly(M('#efe9de', PAT.PLAIN, 0.8), [
-    [-hw - 0.1, 2.31, fz + 0.2],
-    [-hw - 0.1, 2.6, bz - 0.12],
-    [hw + 0.1, 2.6, bz - 0.12],
-    [hw + 0.1, 2.31, fz + 0.2],
-  ]);
-  K.box(canopy, 2 * hw + 0.2, 0.12, 0.02, 0, 2.21, fz + 0.2);
-  // back cloth
-  K.box(M(col, PAT.PLAIN, 0.9), 2 * hw, 1.5, 0.03, 0, 1.0, bz - 0.02);
-  // counter + goods crates
-  K.box(wood, 2 * hw - 0.1, 0.06, 0.42, 0, 0.82, fz - 0.2);
-  K.box(M('#efe6d2', PAT.PLAIN, 0.9), 2 * hw - 0.1, 0.8, 0.02, 0, 0.02, fz + 0.01);
-  for (const x of [-hw + 0.1, hw - 0.1]) K.box(wood, 0.06, 0.82, 0.4, x, 0, fz - 0.2);
-  K.b.forceDetail = true;
-  for (let i = 0; i < 4; i++) {
-    const x = -hw + 0.32 + i * 0.46;
-    const c = goods.produce[i % goods.produce.length];
-    K.boxC(M(goods.crate, PAT.PLANKS, 0.85), 0.4, 0.14, 0.34, x, 0.95, fz - 0.18, -0.25, 0, 0);
-    K.boxC(M(c, PAT.GRAVEL, 0.7, 0, 0, 0, 0.3 + i * 0.1), 0.36, 0.06, 0.3, x, 1.03, fz - 0.17, -0.25, 0, 0);
-    K.sphere(M(c, PAT.PLAIN, 0.55), 0.07, x + 0.05, 1.08, fz - 0.15, 6, 4);
+  const under = M('#efe9de', PAT.PLAIN, 0.8);
+  const NX = 8, NZ = 4, x0 = -hw - 0.1, x1 = hw + 0.1, z0 = fz + 0.22, z1 = bz - 0.12;
+  const P = (i: number, j: number): [number, number, number] => {
+    const u = i / NX, v = j / NZ;
+    const x = x0 + (x1 - x0) * u, z = z0 + (z1 - z0) * v;
+    const yl = yF + (yB - yF) * ((z - fz) / (bz - fz));
+    const sag = 0.07 * Math.sin(Math.PI * Math.min(1, Math.max(0, (x + hw) / (2 * hw)))) * Math.sin(Math.PI * Math.min(1, Math.max(0, (z - fz) / (bz - fz))));
+    return [x, yl + 0.03 - sag, z];
+  };
+  for (let i = 0; i < NX; i++)
+    for (let j = 0; j < NZ; j++) {
+      const a = P(i, j), b = P(i + 1, j), c = P(i + 1, j + 1), d = P(i, j + 1);
+      const uv: [number, number][] = [[a[0], a[2]], [b[0], b[2]], [c[0], c[2]], [d[0], d[2]]];
+      K.poly(canopy, [a, b, c, d], uv);
+      K.poly(under, [d, c, b, a], uv);
+    }
+  // scalloped valance along the front edge
+  for (let i = 0; i < 10; i++) {
+    const xa = x0 + ((x1 - x0) * i) / 10, xb = x0 + ((x1 - x0) * (i + 1)) / 10, xm = (xa + xb) / 2;
+    const ya = P(0, 0)[1];
+    const pts: [number, number, number][] = [[xa, ya, z0], [xb, ya, z0], [xb, ya - 0.13, z0], [xm, ya - 0.19, z0], [xa, ya - 0.13, z0]];
+    K.poly(canopy, pts, pts.map((p) => [p[0], p[1]] as [number, number]), true);
   }
-  // back shelf with stacked crates
-  K.box(wood, 2 * hw - 0.2, 0.05, 0.32, 0, 0.62, bz + 0.22);
+  // back cloth, hung from the rear rail with a few folds
+  for (let i = 0; i < 6; i++) {
+    const xa = -hw + (2 * hw * i) / 6, xb = -hw + (2 * hw * (i + 1)) / 6;
+    const dz = i % 2 ? 0.03 : 0;
+    K.poly(M(col, PAT.PLAIN, 0.9), [[xa, 0.25, bz - 0.02], [xb, 0.25, bz - 0.02 + (dz ? -0.03 : 0.03)], [xb, yB - 0.02, bz - 0.02 + (dz ? -0.03 : 0.03)], [xa, yB - 0.02, bz - 0.02]], undefined, true);
+  }
+  // trestle table: thick top on two A-frame trestles, a cloth skirt to the ground at the front
+  const top = M('#b88a5c', PAT.PLANKS, 0.8, 0, 0, 0, 0.5);
+  const tz = fz - 0.22, ty = 0.78;
+  K.box(top, 2 * hw - 0.06, 0.035, 0.6, 0, ty, tz);
+  for (const x of [-hw + 0.25, hw - 0.25]) {
+    for (const s of [-1, 1]) K.beam(wood, [x, 0, tz + s * 0.24], [x, ty, tz + s * 0.06], 0.045, 0.035);
+    K.box(wood, 0.05, 0.05, 0.4, x, ty - 0.05, tz);
+    K.beam(wood, [x, 0.3, tz - 0.19], [x, 0.3, tz + 0.19], 0.03, 0.02);
+  }
+  const skirt = M('#efe6d2', PAT.PLAIN, 0.9);
+  for (let i = 0; i < 8; i++) {
+    const xa = -hw + 0.03 + ((2 * hw - 0.06) * i) / 8, xb = -hw + 0.03 + ((2 * hw - 0.06) * (i + 1)) / 8;
+    const za = tz + 0.31 + (i % 2 ? 0.015 : 0), zb = tz + 0.31 + (i % 2 ? 0 : 0.015);
+    K.poly(skirt, [[xa, 0.04, za], [xb, 0.04, zb], [xb, ty + 0.03, tz + 0.305], [xa, ty + 0.03, tz + 0.305]]);
+  }
+  K.b.forceDetail = true;
+  // crates of produce on the table, tilted towards the aisle by a batten under the back edge
+  const crateM = M(goods.crate, PAT.PLANKS, 0.85, 0, 0, 0, 0.6);
+  for (let i = 0; i < 4; i++) {
+    const x = -hw + 0.27 + i * 0.485;
+    slatCrate(K, crateM, 0.42, 0.13, 0.34, x, ty + 0.018, tz - 0.02);
+    produce(K, goods, i, 0.42, 0.34, x, ty + 0.15, tz - 0.02, seed + i * 31);
+    // price card on a stick
+    if (richStall && (i % 2 === 0 || rnd() < 0.5)) {
+      K.rod(M('#d8c9a8', PAT.PLAIN, 0.8), [x + 0.15, ty + 0.12, tz + 0.12], [x + 0.15, ty + 0.27, tz + 0.12], 0.004, 3);
+      K.box(M('#1d1f1e', PAT.PLAIN, 0.9), 0.09, 0.06, 0.004, x + 0.15, ty + 0.25, tz + 0.122);
+      K.box(M('#f2f0ea', PAT.PLAIN, 0.9), 0.05, 0.012, 0.002, x + 0.14, ty + 0.27, tz + 0.125);
+      K.box(M('#f2f0ea', PAT.PLAIN, 0.9), 0.03, 0.01, 0.002, x + 0.16, ty + 0.255, tz + 0.125);
+    }
+  }
+  // scales on the corner of the table: base, dial, pan
+  if (richStall && goods.name !== 'FLOWERS') {
+    const sx = hw - 0.18;
+    K.box(M('#e7e3da', PAT.PLAIN, 0.4), 0.2, 0.06, 0.18, sx, ty + 0.035, tz + 0.18);
+    K.cyl(M('#e7e3da', PAT.PLAIN, 0.4), 0.06, 0.06, 0.02, sx, ty + 0.1, tz + 0.16, 12);
+    K.box(M('#f6f4ee', PAT.PLAIN, 0.3), 0.09, 0.09, 0.02, sx, ty + 0.1, tz + 0.27);
+    K.cyl(steel, 0.11, 0.09, 0.025, sx, ty + 0.12, tz + 0.16, 14);
+  }
+  // back shelf (a board on two crates) with more stock
+  K.box(wood, 2 * hw - 0.2, 0.03, 0.32, 0, 0.62, bz + 0.24);
   for (let i = 0; i < 3; i++) {
-    K.box(M(goods.crate, PAT.PLANKS, 0.85), 0.42, 0.26, 0.3, -0.6 + i * 0.6, 0.67, bz + 0.22);
-    K.box(M(goods.produce[(i + 1) % 4], PAT.GRAVEL, 0.75), 0.38, 0.04, 0.26, -0.6 + i * 0.6, 0.93, bz + 0.22);
+    const x = -0.6 + i * 0.6;
+    slatCrate(K, crateM, 0.42, 0.26, 0.3, x, 0.65, bz + 0.24);
+    produce(K, goods, i + 1, 0.42, 0.3, x, 0.92, bz + 0.24, seed + 97 * i);
+  }
+  for (const x of [-0.75, 0.75]) slatCrate(K, crateM, 0.42, 0.3, 0.3, x, 0.3, bz + 0.24);
+  if (richStall) {
+    // on the ground: stacked empty crates, flattened cardboard, a box with tape, sometimes a hand truck
+    slatCrate(K, crateM, 0.42, 0.3, 0.32, -hw + 0.35, 0, bz + 0.2);
+    for (let i = 0; i < 2; i++) slatCrate(K, crateM, 0.42, 0.13, 0.32, -hw + 0.36 + i * 0.01, 0.3 + i * 0.14, bz + 0.2);
+    const card = M('#b8915f', PAT.PLAIN, 0.95);
+    K.boxC(card, 0.5, 0.008, 0.38, hw - 0.4, 0.005, bz + 0.15, 0, rnd(), 0);
+    K.box(card, 0.4, 0.3, 0.3, hw - 0.35, 0, fz - 0.95);
+    K.box(M('#c9a77a', PAT.PLAIN, 0.6), 0.06, 0.004, 0.302, hw - 0.35, 0.298, fz - 0.95);
+    if (rnd() < 0.5) {
+      const hx = -hw + 0.85, hz = bz + 0.15;
+      K.rod(M('#2d4f7a', PAT.PLAIN, 0.5, 0.3), [hx - 0.18, 0.12, hz + 0.05], [hx - 0.18, 1.15, hz - 0.12], 0.012, 5);
+      K.rod(M('#2d4f7a', PAT.PLAIN, 0.5, 0.3), [hx + 0.18, 0.12, hz + 0.05], [hx + 0.18, 1.15, hz - 0.12], 0.012, 5);
+      K.rod(M('#2d4f7a', PAT.PLAIN, 0.5, 0.3), [hx - 0.18, 1.1, hz - 0.11], [hx + 0.18, 1.1, hz - 0.11], 0.012, 5);
+      K.box(M('#55595c', PAT.PLAIN, 0.6, 0.5), 0.38, 0.01, 0.2, hx, 0.005, hz + 0.12);
+      for (const s of [-1, 1]) K.cylX(M('#1c1c1c', PAT.PLAIN, 0.9), 0.1, 0.05, hx + s * 0.23, 0.1, hz + 0.02, 10);
+    }
   }
   K.b.forceDetail = false;
   // sign board at the canopy front
@@ -99,7 +238,7 @@ export function genMarketStall(env: Env, f: Feature): void {
     g.strokeRect(2, 2, w - 4, h - 4);
     drawText(g, goods.name, w / 2, h / 2 + 1, 'bold 22px Georgia, serif', '#3a2c20', 1);
   }, `stall:${goods.name}:${col}`);
-  signQuad(env.T, sign, 1.1, 0.23, 0, 2.36, fz + 0.23, 0, 0);
+  signQuad(env.T, sign, 1.1, 0.23, 0, yF + 0.08, fz + 0.24, 0, 0);
   // (the vendor behind the counter is a crowd figure: streetlife, src/sim/pedestrians/vendors.ts marketStalls)
   env.endChecks();
   env.pick(f.id, `Market stall · ${goods.name.toLowerCase()}`, new THREE.Box3(new THREE.Vector3(f.x - R, 0, f.z - R), new THREE.Vector3(f.x + R, 2.7, f.z + R)), () => {

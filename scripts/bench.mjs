@@ -3,7 +3,8 @@
 //
 //   node scripts/bench.mjs [--classes house,bench,car,...|all] [--dists 3,10,40] [--hours 11] [--q "extra"]
 //                          [--out shots/bench] [--width 1280 --height 720] [--settle 1500] [--pick 0]
-//                          [--sheet 1] [--cols 3] [--tile 560] [--yaws 0,150]
+//                          [--sheet 1] [--cols 3] [--tile 560] [--yaw 18 (offset from the front)] [--pitch deg]
+//                          [--yaws 0,150 (extra views per distance, added to --yaw)]
 //
 // Each class is located from the plan (lots, street slots, features) or, for moving things (car, bus,
 // pedestrian, train, boat), by ray-picking from a few elevated poses; the sim is paused while it is shot.
@@ -41,6 +42,8 @@ const width = parseInt(args.width ?? '1280', 10);
 const height = parseInt(args.height ?? '720', 10);
 const settle = parseInt(args.settle ?? '1500', 10);
 const pickIdx = parseInt(args.pick ?? '0', 10);
+const yawOff = parseFloat(args.yaw ?? '18');
+const pitchOv = args.pitch !== undefined ? parseFloat(args.pitch) : null;
 let url = args.url ?? 'http://127.0.0.1:5173/';
 url += (url.includes('?') ? '&' : '?') + 'nointro&noidle' + (args.q ? '&' + args.q : '');
 
@@ -88,7 +91,8 @@ try {
           const s = nth(plan.slots.filter((s) => s.kind === cls).sort((a, b) => Math.hypot(a.x, a.z) - Math.hypot(b.x, b.z)));
           if (!s) return null;
           const H = { lamp: 5, tree: 7, bench: 0.9, bin: 1, hydrant: 0.8, busstop: 2.6, bikerack: 0.9, planter: 1, mailbox: 1.3, phonebox: 2.4, newsstand: 2.4 }[cls];
-          return { x: s.x, y: gy(s.x, s.z), z: s.z, yaw: (s.yaw * 180) / Math.PI, h: H, w: 1 };
+          const W = { lamp: 1, tree: 2, busstop: 3.2, bikerack: 2, newsstand: 2.4, phonebox: 1.2, bench: 1.9, planter: 1.6 }[cls] ?? 1;
+          return { x: s.x, y: gy(s.x, s.z), z: s.z, yaw: (s.yaw * 180) / Math.PI, h: H, w: W };
         }
         const featKinds = ['fountain', 'statue', 'gazebo', 'playground', 'kiosk', 'marketstall', 'umbrellas', 'picnic', 'flagpole', 'jetty'];
         if (featKinds.includes(cls)) {
@@ -139,15 +143,47 @@ try {
       // frame the object: target at ~mid height when close, pitch rises with distance
       const ty = loc.y + Math.min(loc.h * 0.5, d < 5 ? 1.4 : d < 20 ? 3 : 6);
       const dist = Math.max(d, d < 5 ? Math.min(loc.h, 6) * 0.9 + 1.5 : d);
-      const pitch = d < 5 ? 8 : d < 20 ? 14 : 24;
-      await page.evaluate(
-        ([l, ty, dist, pitch, yo]) => window.__city.view({ target: { x: l.x, y: ty, z: l.z }, distance: dist, yaw: l.yaw + 18 + yo, pitch }),
-        [loc, ty, dist, pitch, yo],
+      const pitch = pitchOv ?? (d < 5 ? 8 : d < 20 ? 14 : 24);
+      // line of sight: try the default yaw first, then swing around the object (and finally shorten the arm)
+      // until a ray from the object's middle reaches the camera without hitting anything else.
+      const los = await page.evaluate(
+        async ([l, ty, dist, pitch, yo]) => {
+          const c = window.__city, THREE = await import('/@fs' + window.__benchThree);
+          const meshes = [];
+          // glass counts (curtain walls); billboards / sky / water / particles do not
+          const skip = /glow|halo|cloud|sky|water|atmo|spark|smoke|rain|firework|shadow/i;
+          c.ctx.scene.traverseVisible((o) => o.isMesh && !skip.test(o.name) && !skip.test(o.parent?.name ?? '') && meshes.push(o));
+          const rc = new THREE.Raycaster();
+          const from = new THREE.Vector3(l.x, ty, l.z);
+          const near = Math.max(0.6, l.w * 0.5 + 0.4);
+          const clear = () => {
+            const cam = c.ctx.camera, dir = cam.position.clone().sub(from), len = dir.length();
+            // both directions: a one-sided roof or wall is only hit from its front
+            rc.set(from, dir.normalize());
+            rc.near = near;
+            rc.far = len - 0.3;
+            if (rc.intersectObjects(meshes, false).length) return false;
+            rc.set(cam.position, dir.clone().negate());
+            rc.near = 0.3;
+            rc.far = len - near;
+            return rc.intersectObjects(meshes, false).length === 0;
+          };
+          // street canyons: finally look down from higher up
+          for (const [arm, pt] of [[1, pitch], [0.6, pitch], [1, Math.max(pitch, 48)], [1, 72]])
+            for (const dy of [yo, -yo, 55, -55, 95, -95, 140, -140, 180]) {
+              c.view({ target: { x: l.x, y: ty, z: l.z }, distance: dist * arm, yaw: l.yaw + dy, pitch: pt });
+              c.ctx.camera.updateMatrixWorld();
+              if (clear()) return { dy, arm, pitch: pt };
+            }
+          c.view({ target: { x: l.x, y: ty, z: l.z }, distance: dist, yaw: l.yaw + yo, pitch });
+          return { dy: yo, arm: 1, blocked: true };
+        },
+        [loc, ty, dist, pitch, yawOff + yo],
       );
       await page.waitForTimeout(settle);
       const file = path.join(outDir, `${cls}_${d}m${yo ? '_y' + yo : ''}.png`);
       await page.screenshot({ path: file, timeout: 240000 });
-      report.captures.push({ cls, d, file: path.relative(root, file), at: [loc.x, loc.y, loc.z].map((v) => Math.round(v * 10) / 10) });
+      report.captures.push({ cls, d, los, file: path.relative(root, file), at: [loc.x, loc.y, loc.z].map((v) => Math.round(v * 10) / 10) });
     }
     await page.evaluate(() => window.__city.setSpeed(1));
   }
