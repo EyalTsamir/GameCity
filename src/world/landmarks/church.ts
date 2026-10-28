@@ -93,6 +93,32 @@ export function genChurch(env: Env, lot: Lot): void {
     [0, 5.7, tz1 + 0.34],
   ]);
   finial(K, trim, 0, 5.75, tz1 + 0.12, 0.45, 0.08);
+  // portal door: boarded leaves (PAT.DOOR) dressed with wrought-iron strap hinges ending in fleur tips, a
+  // meeting stile, ring pulls on round back plates, a stone threshold; a darker plinth course round the base
+  const iron = M('#1f1d1b', PAT.PLAIN, 0.55, 0.6);
+  const dz = tz1 - 0.45 + 0.013;
+  K.box(M('#3e2516', PAT.PLAIN, 0.7), 0.07, 3.0, 0.03, 0, 0, dz + 0.004);
+  for (const sgn of [-1, 1]) {
+    for (const yy of [0.55, 1.55, 2.55]) {
+      K.box(iron, 0.95, 0.075, 0.022, sgn * 0.6, yy, dz);
+      K.box(iron, 0.07, 0.16, 0.024, sgn * 0.11, yy - 0.042, dz, Math.PI / 4);
+      for (let k = 0; k < 3; k++) K.cyl(iron, 0.018, 0.018, 0.02, sgn * (1.0 - k * 0.28), yy + 0.028, dz + 0.012, 6);
+    }
+    K.cyl(iron, 0.07, 0.07, 0.02, sgn * 0.2, 1.2, dz + 0.004, 12, false, 'cyl', 0, Math.PI * 2, 0);
+    K.torus(iron, 0.075, 0.012, sgn * 0.2, 1.1, dz + 0.03, 6, 16, Math.PI * 2, 0, 0);
+  }
+  K.box(M(C.granite, PAT.STONE, 0.8, 0, 0, 0, 0.1), 2.3, 0.05, 0.44, 0, 0, tz1 - 0.23);
+  const plinth = M('#a39377', PAT.STONE, 0.92, 0, 0, FLOOD.CHURCH, 0.7);
+  const plinthRun = (x: number, z: number, ry: number, len: number) => {
+    moulding(K, plinth, x, z, ry, len, 0, 0.62, 0.08);
+    moulding(K, trim, x, z, ry, len, 0.62, 0.07, 0.05);
+  };
+  for (const sgn of [-1, 1]) {
+    const a = 1.55,
+      b = TW + 0.1;
+    plinthRun(sgn * (a + b) / 2, tz1, 0, b - a);
+    plinthRun(sgn * TW, tzc, (sgn * Math.PI) / 2, tD + 0.16);
+  }
   // string courses
   for (const yy of [4.9, 10.6, 15.0, 18.9]) {
     moulding(K, trim, 0, tz1, 0, TW * 2 + 0.2, yy, 0.22, 0.14);
@@ -179,6 +205,7 @@ export function genChurch(env: Env, lot: Lot): void {
       ops.push({ x: bayW * (i + 0.5), y: 2.4, w: 1.35, h: 5.4, arch: 1.0, pointed: true, fill: 'stained', glow: 0.9, inset: 0.3, surround: trim, surroundW: 0.14, sill: trim, infill: stained(0.1 + i * 0.21 + (s > 0 ? 0.05 : 0)) });
     }
     wall(K, { w: nL, h: eave, depth: 0.6, x: s * NW, y: 0, z: (nz0 + nz1) / 2, ry: (s * Math.PI) / 2, mat: stone, openings: ops });
+    plinthRun(s * NW, (nz0 + nz1) / 2, (s * Math.PI) / 2, nL);
     moulding(K, trim, s * NW, (nz0 + nz1) / 2, (s * Math.PI) / 2, nL, eave - 0.35, 0.35, 0.3);
     moulding(K, M(C.granite, PAT.STONE, 0.8, 0, 0, 0, 0.1), s * NW, (nz0 + nz1) / 2, (s * Math.PI) / 2, nL, 0, 0.6, 0.08);
     // buttresses between bays

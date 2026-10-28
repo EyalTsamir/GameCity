@@ -389,11 +389,13 @@ export function genSchool(g: Gen): void {
         const n = Math.max(1, Math.round((b - a) / 3.4));
         const gr = makeGrid(a, b, 0, gH, 1, { spacing: (b - a) / n, cols: n, winW: Math.min(2.6, (b - a) / n - 0.8), winH: gH - 1.5, sill: 0.95, margin: 0.4 });
         wallGrid(s, sg, a, b, 0, gH, gr, look);
+        dressings(sg, gr);
       }, (a, b, y0) => wallPlain(s, sg, a, b, y0, gH, { color: brick, pattern: WALLPAT.BRICK, seed: g.seed }));
       if (floors > 1) {
         const n = Math.max(1, Math.round((p.b - p.a - 0.8) / 3.4));
         const gr = makeGrid(p.a, p.b, gH, gH, floors - 1, { spacing: 3.4, cols: n, winW: 2.6, winH: gH - 1.4, sill: 0.9, margin: 0.4 });
         wallGrid(s, sg, p.a, p.b, gH, H + 0.8, gr, look);
+        dressings(sg, gr);
       }
       // white bands at each floor + coping
       setCol(t, band);
@@ -415,10 +417,13 @@ export function genSchool(g: Gen): void {
         sideBox(t, sg, u - 2.2, u + 2.2, 0, 1.45, 3.0, 3.3, true);
         lightBox(g, sx(sg, u, 1.0) - 0.15, 2.92, sz(sg, u, 1.0) - 0.15, sx(sg, u, 1.0) + 0.15, 3.0, sz(sg, u, 1.0) + 0.15, '#fff1d6', LIGHT_MODE.STEADY, 3);
         if (sd === FRONT && main) {
-          const r = g.atlas.add('school', 512, 64, boardSign('WESTBROOK SCHOOL', { bg: '#efe9dc', fg: '#7a2e2a', glow: 0.35, weight: 'bold' }));
-          signOnSide(g, sg, u - 4.2, u + 4.2, 0.24, 3.5, 4.2, r);
+          // carved name panel: a dressed-stone tablet with a moulded border, letters cut dark into it
+          const r = g.atlas.add('school-carved', 512, 64, letterSign('WESTBROOK SCHOOL', '#5b4a3a', '#000000', 'Georgia, "Times New Roman", serif', 0, '#e9e1d0'));
+          setCol(t, shade(band, 0.86));
+          sideBox(t, sg, u - 4.45, u + 4.45, 0, 0.06, 3.38, 4.32, true);
           setCol(t, band);
-          sideBox(t, sg, u - 4.4, u + 4.4, 0, 0.2, 3.4, 4.3, true);
+          sideBox(t, sg, u - 4.3, u + 4.3, 0.06, 0.09, 3.48, 4.22, true);
+          signOnSide(g, sg, u - 4.0, u + 4.0, 0.093, 3.55, 4.15, r);
         }
       }
     }
@@ -426,6 +431,21 @@ export function genSchool(g: Gen): void {
   const inner: LRect = { x0: body.x0 + 0.3, x1: body.x1 - 0.3, z0: body.z0 + 0.3, z1: body.z1 - 0.3 };
   flatRoof(s, inner, H + 0.02, col('#8d8a84'), ROOFPAT.FLAT, g.seed);
   innerParapet(g, inner, H, H + 0.8, shade(brick, 0.9));
+
+  /** Stone lintels (with a soldier-course look: a dark joint line under them) and keyed corners per window. */
+  function dressings(sg: SideGeom, gr: Grid): void {
+    const ww = gr.wx1 - gr.wx0;
+    for (let j = 0; j < gr.m; j++) {
+      const yt = gridY1(gr, j);
+      for (let i = 0; i < gr.n; i++) {
+        const u = gridU(gr, i);
+        setCol(t, shade(band, 0.97 - ((g.seed + i * 3 + j * 7) % 4) * 0.02));
+        sideBox(t, sg, u - ww / 2 - 0.18, u + ww / 2 + 0.18, 0, 0.035, yt + 0.02, yt + 0.27, true);
+        setCol(t, shade(band, 0.7));
+        sideBox(t, sg, u - ww / 2 - 0.18, u + ww / 2 + 0.18, 0, 0.012, yt, yt + 0.02, true);
+      }
+    }
+  }
   if (main) {
     // clock over the entrance gable + cupola with a bell + flagpole
     const sgF = sideGeom(body, FRONT);
