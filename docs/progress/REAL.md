@@ -76,6 +76,7 @@ Wave 1 (launched 2026-10-28 15:17 UTC, sibling cloud sessions, briefs in real-br
 | W1 facades (3) | session_01XuhAMcx7gK1B9gZ9EGE9xQ | claude/real-w1-facades | real-w1.md |
 | W3 furniture (3) | session_01XuhAMeApwGfPUjpqKr3AnB | claude/real-w3-furniture | real-w3.md |
 | W2 vehicles (3) | session_01XuhAMe5xExG1WawepdoR9X | claude/real-w2-vehicles | real-w2.md |
+| W4 people (wave 2) | session_01XuhAMeyte9jJ7Urx2TCj88 | claude/real-w4-people | real-w4.md |
 Respawn rule: when a worker stops (milestone note, ~200k context, or a usage stop), create a NEW session on the
 same branch with the same brief + "resume from docs/progress/real-wN.md Resume here"; archive the old one.
 
