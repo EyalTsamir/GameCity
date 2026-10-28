@@ -28,6 +28,7 @@ import { Builder } from './buildings/mesh';
 import { GreenKit, makeGreenTexture, createGreenMaterial } from './buildings/green';
 import { XS, ZS, FURN_OFFSET } from '../core/constants';
 import { addLampLights, type LampLight } from '../core/lampLight';
+import { buildContactMesh, takeQueuedContacts, type ContactSpot } from './props/contact';
 
 interface TerrainSvc {
   height(x: number, z: number): number;
@@ -73,6 +74,15 @@ export default function create(ctx: CityContext): CityModule {
 
   /** local → world for a frame at (x, z) with yaw */
   const toWorld = (x: number, z: number, yaw: number, lx: number, lz: number): [number, number] => [x + lx * Math.cos(yaw) + lz * Math.sin(yaw), z - lx * Math.sin(yaw) + lz * Math.cos(yaw)];
+  // ground grime where furniture meets the paving (props/contact.ts; ?nocontact, off on low)
+  const noContact = ctx.debug.params.has('nocontact') || ctx.quality.level === 'low';
+  const spots: ContactSpot[] = noContact ? [] : takeQueuedContacts(ctx);
+  /** footprint (local offset lx, lz in the frame x, z, yaw; half extents hw × hd, corner radius r) */
+  const spot = (x: number, y: number, z: number, yaw: number, lx: number, lz: number, hw: number, hd: number, r: number, pad: number, kk: number) => {
+    if (noContact) return;
+    const [wx, wz] = toWorld(x, z, yaw, lx, lz);
+    spots.push({ x: wx, y: y + 0.012, z: wz, yaw, hw, hd, r, pad, k: kk });
+  };
 
   // ─────────────────────────────────────────────────────────── lamps ──
   for (const l of layout.lamps) {
@@ -80,6 +90,7 @@ export default function create(ctx: CityContext): CityModule {
     sel(l.x);
     k.sh.frame(l.x, y, l.z, l.yaw);
     const head = lamp(k, l.style, l.street, new Rng(Math.floor(hash01(l.x, l.z, 5) * 1e9)));
+    spot(l.x, y, l.z, 0, 0, 0, 0.14, 0.14, 0.14, 0.22, 0.5);
     const [hx, hz] = toWorld(l.x, l.z, l.yaw, head.x, head.z);
     glows.push({ x: hx, y: y + head.y, z: hz, size: head.halo, halo: true, color: head.color, intensity: 1.0 });
     const gy = l.street ? SIDEWALK_Y + 0.025 : Math.max(H(hx, hz), y) + 0.04;
@@ -94,6 +105,9 @@ export default function create(ctx: CityContext): CityModule {
     sel(b.x);
     kf.sh.frame(b.x, b.y, b.z, b.yaw);
     bench(kf, b.style, brng, Math.max(0, b.y - ground) + 0.02);
+    // grime at the feet, a lighter scuffed patch where feet rest in front
+    for (const lx of [-0.72, 0.72]) spot(b.x, ground, b.z, b.yaw, lx, -0.02, 0.06, 0.24, 0.04, 0.16, 0.55);
+    spot(b.x, ground, b.z, b.yaw, 0, 0.45, 0.75, 0.18, 0.18, 0.3, 0.22);
     inc('bench');
     // a litter bin beside some park benches
     if (!b.sidewalk && brng.chance(0.45)) {
@@ -104,6 +118,7 @@ export default function create(ctx: CityContext): CityModule {
         kf.sh.frame(x, Math.max(H(x, z), b.y), z, b.yaw);
         if (simple) binSimple(kf, b.style === 'modern');
         else bin(kf, b.style === 'modern', brng);
+        spot(x, Math.max(H(x, z), b.y), z, b.yaw, 0, 0, 0.27, 0.27, 0.27, 0.22, 0.6);
         inc('bin');
       }
     }
@@ -120,18 +135,21 @@ export default function create(ctx: CityContext): CityModule {
         kf.sh.frame(s.x, y, s.z, s.yaw);
         if (simple) binSimple(kf, modernD(s.district));
         else bin(kf, modernD(s.district), srng);
+        spot(s.x, y, s.z, s.yaw, 0, 0, 0.27, 0.27, 0.27, 0.24, 0.65);
         inc('bin');
         break;
       case 'hydrant':
         sel(s.x);
         kf.sh.frame(s.x, y, s.z, s.yaw);
         hydrant(kf, s.district === 'industrial' || s.district === 'harbor');
+        spot(s.x, y, s.z, s.yaw, 0, 0, 0.14, 0.14, 0.14, 0.2, 0.55);
         inc('hydrant');
         break;
       case 'bikerack':
         sel(s.x);
         kf.sh.frame(s.x, y, s.z, s.yaw);
         bikeRack(kf, srng);
+        spot(s.x, y, s.z, s.yaw, 0, 0, 0.9, 0.12, 0.1, 0.25, 0.35);
         inc('bikerack');
         break;
       case 'planter': {
@@ -140,6 +158,8 @@ export default function create(ctx: CityContext): CityModule {
         const d = s.district;
         const kind = modernD(d) ? 'concrete' : d === 'oldtown' || d === 'market' ? 'terracotta' : d === 'civic' ? 'steel' : 'wood';
         (simple ? planterBoxSimple : planterBox)(kf, kind, PLANTER.along, PLANTER.across, PLANTER.height);
+        // drainage: soil washed out of the weep holes darkens the paving around the trough
+        spot(s.x, y, s.z, s.yaw, 0, 0, PLANTER.along / 2, PLANTER.across / 2, 0.04, 0.32, 0.75);
         inc('planter');
         break;
       }
@@ -147,6 +167,7 @@ export default function create(ctx: CityContext): CityModule {
         sel(s.x);
         kf.sh.frame(s.x, y, s.z, s.yaw);
         mailbox(kf);
+        spot(s.x, y, s.z, s.yaw, 0, 0, 0.16, 0.16, 0.12, 0.2, 0.5);
         inc('mailbox');
         break;
       case 'phonebox': {
@@ -155,6 +176,7 @@ export default function create(ctx: CityContext): CityModule {
         k.sh.local(0, 0, 0.15);
         if (simple) phoneboxSimple(k);
         else phonebox(k, g);
+        spot(s.x, y, s.z, s.yaw, 0, 0.15, 0.48, 0.48, 0.03, 0.22, 0.6);
         const [x, z] = toWorld(s.x, s.z, s.yaw, 0, 0.15);
         glows.push({ x, y: y + 0.03, z, size: 1.5, halo: false, color: '#ffd59a', intensity: 0.2 });
         inc('phonebox');
@@ -165,6 +187,9 @@ export default function create(ctx: CityContext): CityModule {
         k.sh.frame(s.x, y, s.z, s.yaw);
         k.sh.local(0, 0, 0.25);
         (simple ? newsstandSimple : newsstand)(k, srng);
+        spot(s.x, y, s.z, s.yaw, 0, 0.2, 0.93, 0.58, 0.03, 0.26, 0.6);
+        // trodden patch in front of the counter
+        spot(s.x, y, s.z, s.yaw, 0, 1.05, 0.7, 0.25, 0.25, 0.35, 0.25);
         const [x, z] = toWorld(s.x, s.z, s.yaw, 0, 1.0);
         glows.push({ x, y: y + 0.03, z, size: 1.8, halo: false, color: '#ffe2a8', intensity: 0.16 });
         inc('newsstand');
@@ -177,6 +202,8 @@ export default function create(ctx: CityContext): CityModule {
         k.sh.frame(s.x, y, s.z, s.yaw);
         g.sh.frame(s.x, y, s.z, s.yaw);
         const res = busShelter(k, g, route?.color ?? '#d94a3d', srng);
+        for (const lx of [-1.9, 1.9]) spot(s.x, y, s.z, s.yaw, lx, 0.25, 0.06, 0.55, 0.05, 0.16, 0.5);
+        spot(s.x, y, s.z, s.yaw, 0, 0.25, 1.85, 0.5, 0.3, 0.3, 0.25);
         for (const gl of res.glows) {
           const [x, z] = toWorld(s.x, s.z, s.yaw, gl.x, gl.z);
           glows.push({ x, y: y + gl.y - 0.15 + 0.03, z, size: gl.size, halo: false, color: '#fff1d6', intensity: 0.24, stretch: 1.5, yaw: s.yaw });
@@ -513,6 +540,7 @@ export default function create(ctx: CityContext): CityModule {
           kf.sh.frame(x, H(x, z) + 0.01, z, 0);
           if (simple) bollardSimple(kf, blk.kind === 'civic' ? 'stone' : 'steel');
           else bollard(kf, blk.kind === 'civic' ? 'stone' : blk.kind === 'station' ? 'iron' : 'steel');
+          spot(x, H(x, z), z, 0, 0, 0, 0.1, 0.1, 0.1, 0.18, 0.55);
           inc('bollard');
         }
       }
@@ -722,6 +750,12 @@ export default function create(ctx: CityContext): CityModule {
     gm.frustumCulled = false;
     if (parts.includes('glass')) root.add(gm);
   }
+  const contactMesh = buildContactMesh(spots);
+  if (contactMesh) {
+    contactMesh.updateMatrix();
+    geos.push(contactMesh.geometry);
+    root.add(contactMesh);
+  }
   ctx.services.props = service;
   if (terraceLights.length && !ctx.debug.params.has('noterracelights')) addLampLights(terraceLights);
   const glowMesh = createGlowMesh(ctx.uniforms, glows);
@@ -743,6 +777,7 @@ export default function create(ctx: CityContext): CityModule {
         tris: [...KC, ...KF, KS].reduce((a, c) => a + c.s.tcount, 0) + gsink.tcount,
         casterTris: KS.s.tcount,
         fineTris: KF.reduce((a, c) => a + c.s.tcount, 0),
+        contactSpots: spots.length,
         verts: [...KC, ...KF, KS].reduce((a, c) => a + c.s.vcount, 0) + gsink.vcount,
         buildMs: Math.round(buildMs),
         cafes: service.cafes.length,
@@ -772,6 +807,7 @@ export default function create(ctx: CityContext): CityModule {
       greenMat?.dispose();
       glassGeo?.dispose();
       glassMat?.dispose();
+      (contactMesh?.material as THREE.Material | undefined)?.dispose();
       glowMesh.geometry.dispose();
       (glowMesh.material as THREE.Material).dispose();
     },

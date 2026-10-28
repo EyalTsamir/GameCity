@@ -11,8 +11,13 @@ import { V3 } from './kit';
 import { C, finial, person, railing } from './parts';
 import type { Env } from './env';
 import { drawText, signQuad } from './signs';
+import { queueContactLocal } from '../props/contact';
 
 const _m = new THREE.Matrix4();
+const _e = new THREE.Euler();
+const _v = new THREE.Vector3();
+const _q = new THREE.Quaternion();
+const _up = new THREE.Vector3(0, 1, 0);
 
 /** lathe with flat facets (seg sides; 4 → a square moulding). Profile radii are face distances (apothems). */
 function facetLathe(prof: [number, number][], seg: number, phi0: number): THREE.BufferGeometry {
@@ -58,20 +63,36 @@ export function genStatue(env: Env, f: Feature): void {
   }
   // ── founder: two chamfered octagonal granite steps; a moulded pedestal (plinth, cove, die with the
   // plaques, cornice with a drip, capping) — square lathes with flat facets
-  const steps = facetLathe([[0, 0], [R - 0.05, 0], [R - 0.05, 0.19], [R - 0.08, 0.22], [R - 0.32, 0.22], [R - 0.32, 0.41], [R - 0.35, 0.44], [0, 0.44]], 8, Math.PI / 8);
+  // (facetLathe puts the octagon's corners at r / cos(π/8): keep them inside the feature radius)
+  const Rs = (R - 0.02) * Math.cos(Math.PI / 8);
+  const steps = facetLathe([[0, 0], [Rs, 0], [Rs, 0.19], [Rs - 0.03, 0.22], [Rs - 0.27, 0.22], [Rs - 0.27, 0.41], [Rs - 0.3, 0.44], [0, 0.44]], 8, Math.PI / 8);
   K.geo(granite, steps);
   steps.dispose();
-  const pw = 1.05;
+  queueContactLocal(env, 0, 0, 0, Rs, Rs, Rs * 0.42, 0.25, 0.5, Math.PI / 8);
+  const pw = 1.0;
   const die = M('#b8b1a7', PAT.STONE, 0.75, 0, 0, FLOOD.SOFT, 0.6);
+  // bold mouldings (they must read at 3 m): base block, torus + cavetto stepping in to the die; cornice
+  // with a cyma, a deep corona and a drip; capping block
   const ped = facetLathe([
-    [0, 0.44], [0.66, 0.44], [0.66, 0.6], [0.63, 0.63], [0.6, 0.64], [0.59, 0.68], [0.56, 0.71], [0.545, 0.74], [0.525, 0.76],
-    [0.525, 2.08], [0.54, 2.1], [0.56, 2.13], [0.6, 2.17], [0.645, 2.22], [0.65, 2.3], [0.62, 2.31], [0.6, 2.34], [0.6, 2.46], [0.56, 2.5], [0.45, 2.56], [0, 2.56],
+    [0, 0.44], [0.7, 0.44], [0.7, 0.62], [0.66, 0.635], [0.665, 0.66], [0.655, 0.685], [0.62, 0.7], [0.58, 0.73], [0.555, 0.77], [0.53, 0.8], [0.5, 0.82],
+    [0.5, 2.0], [0.52, 2.02], [0.55, 2.05], [0.6, 2.1], [0.655, 2.16], [0.7, 2.19], [0.7, 2.3], [0.665, 2.31], [0.62, 2.335], [0.62, 2.46], [0.58, 2.5], [0.46, 2.56], [0, 2.56],
   ], 4, Math.PI / 4);
   K.geo(die, ped);
   ped.dispose();
-  // carved recessed panel on the two plain sides
+  // sunk panels on the two plain sides: a raised margin frame round a slightly darker field
   const recess = M('#a39d94', PAT.STONE, 0.8, 0, 0, FLOOD.SOFT, 0.7);
-  for (const sx of [-1, 1]) K.box(recess, 0.01, 0.9, 0.62, sx * 0.526, 0.95, 0);
+  for (const sx of [-1, 1]) {
+    K.box(recess, 0.004, 0.9, 0.62, sx * 0.502, 0.98, 0);
+    for (const dz of [-0.33, 0.33]) K.box(die, 0.03, 0.96, 0.04, sx * 0.51, 0.95, dz);
+    for (const yy of [0.95, 1.89]) K.box(die, 0.03, 0.04, 0.7, sx * 0.51, yy, 0);
+  }
+  // name cut into the die above the plaque (incised Roman capitals)
+  const cut = env.atlas.add(256, 48, (g, w, h) => {
+    g.fillStyle = '#b8b1a7';
+    g.fillRect(0, 0, w, h);
+    drawText(g, 'EDMVND · HAVEN', w / 2, h / 2 + 2, '30px Georgia, serif', '#5a554d', 2);
+  });
+  for (const ry of [0, Math.PI]) signQuad(env.T, cut, 0.8, 0.15, Math.sin(ry) * (pw / 2 + 0.004), 1.72, Math.cos(ry) * (pw / 2 + 0.004), ry, 0.2);
   const plaque = env.atlas.add(192, 120, (g, w, h) => {
     g.fillStyle = '#6b5a35';
     g.fillRect(0, 0, w, h);
@@ -83,47 +104,102 @@ export function genStatue(env: Env, f: Feature): void {
     drawText(g, 'TINYHAVEN · 1801', w / 2, 88, 'bold 16px Georgia, serif', '#f0d68a', 1);
   });
   for (const ry of [0, Math.PI]) signQuad(env.T, plaque, 0.62, 0.39, Math.sin(ry) * (pw / 2 + 0.01), 1.2, Math.cos(ry) * (pw / 2 + 0.01), ry, 0.25);
-  // bronze figure, ~2.3 m, striding forward with a raised hat
-  const bronze = M('#5f8e78', PAT.PLAIN, 0.42, 0.6, 0, FLOOD.SOFT, 0.5);
-  const bronzeD = M('#456b5a', PAT.PLAIN, 0.5, 0.6, 0, FLOOD.SOFT, 0.5);
-  const y0 = 2.56;
-  K.box(bronzeD, 0.7, 0.08, 0.6, 0, y0 - 0.08, 0);
-  // legs (one forward)
-  K.rod(bronzeD, [-0.11, y0, 0.12], [-0.1, y0 + 0.82, 0.02], 0.085, 8);
-  K.rod(bronzeD, [0.11, y0, -0.12], [0.1, y0 + 0.82, -0.02], 0.085, 8);
-  K.box(bronzeD, 0.13, 0.08, 0.28, -0.11, y0, 0.18);
-  K.box(bronzeD, 0.13, 0.08, 0.28, 0.11, y0, -0.06);
-  // frock coat: squashed lathe from hem to chest
+  // bronze figure (heroic scale 1.25: ~2.3 m), striding forward, raising his tricorn: riding boots,
+  // breeches, a frock coat with lapels, buttons, cuffs and split tails, waistcoat, cravat; a face (brow,
+  // nose, chin, ears), tied-back hair; a scroll in the left hand. Verdigris over dark bronze: the rust
+  // pattern's run-down streaks show the brown metal through the green.
+  const bronze = M('#5a8a74', PAT.RUST, 0.5, 0.55, 0, FLOOD.SOFT, 0.5);
+  const bronzeD = M('#4b705f', PAT.RUST, 0.5, 0.55, 0, FLOOD.SOFT, 0.2);
+  const y0 = 2.56, sc = 1.25;
+  const P = (x: number, y: number, z: number): V3 => [x * sc, y0 + y * sc, z * sc];
+  const ell = (m: typeof bronze, rx: number, ry: number, rz: number, x: number, y: number, z: number, yaw = 0, pitch = 0, roll = 0) => {
+    const g = new THREE.SphereGeometry(1, 10, 8);
+    _e.set(pitch, yaw, roll, 'YXZ');
+    _m.makeRotationFromEuler(_e).scale(_v.set(rx * sc, ry * sc, rz * sc));
+    const [px, py, pz] = P(x, y, z);
+    _m.setPosition(px, py, pz);
+    K.geoM(m, g, _m, 'box');
+    g.dispose();
+  };
+  const limb = (m: typeof bronze, a: V3, b: V3, ra: number, rb: number, seg = 10) => {
+    const A = P(a[0], a[1], a[2]), B = P(b[0], b[1], b[2]);
+    _v.set(B[0] - A[0], B[1] - A[1], B[2] - A[2]);
+    const len = _v.length();
+    const g = new THREE.CylinderGeometry(rb * sc, ra * sc, len, seg, 1, false);
+    g.translate(0, len / 2, 0);
+    _q.setFromUnitVectors(_up, _v.normalize());
+    _m.makeRotationFromQuaternion(_q).setPosition(A[0], A[1], A[2]);
+    K.geoM(m, g, _m, 'cyl');
+    g.dispose();
+  };
+  // cast base slab, a little irregular
+  K.cyl(bronzeD, 0.4 * sc, 0.42 * sc, 0.07, 0, y0 - 0.03, 0, 9);
+  // boots (left foot forward), shafts to the knee with a turned-down top, breeches
+  for (const [sx, fz, kz, heel] of [[-1, 0.2, 0.12, 0], [1, -0.2, -0.06, 0.35]] as const) {
+    const x = sx * 0.1;
+    ell(bronzeD, 0.052, 0.045, 0.125, x, 0.045 + heel * 0.06, fz + 0.03, 0, heel * 0.4);
+    limb(bronzeD, [x, 0.07 + heel * 0.06, fz - 0.03 * (1 - heel)], [x, 0.44, kz], 0.06, 0.068);
+    limb(bronze, [x, 0.42, kz], [x, 0.47, kz + 0.005], 0.078, 0.076);
+    limb(bronze, [x, 0.46, kz], [x * 0.9, 0.94, 0.0], 0.07, 0.092);
+  }
+  // frock coat body: lathe from the skirt hem to the shoulders, squashed front-to-back
   const coat = new THREE.LatheGeometry(
-    [
-      [0.0, 0.42],
-      [0.36, 0.42],
-      [0.33, 0.7],
-      [0.26, 1.0],
-      [0.25, 1.2],
-      [0.3, 1.4],
-      [0.27, 1.5],
-      [0.12, 1.58],
-      [0.0, 1.59],
-    ].map(([r, y]) => new THREE.Vector2(r, y)),
-    14,
+    [[0.0, 0.56], [0.27, 0.56], [0.25, 0.7], [0.21, 0.88], [0.175, 1.0], [0.18, 1.12], [0.2, 1.28], [0.215, 1.4], [0.2, 1.46], [0.12, 1.5], [0.0, 1.51]].map(([r, y]) => new THREE.Vector2(r * sc, y * sc)),
+    16,
   );
-  _m.makeScale(1, 1, 0.72).setPosition(0, y0, 0);
+  _m.makeScale(1, 1, 0.68).setPosition(0, y0, 0);
   K.geoM(bronze, coat, _m, 'box');
   coat.dispose();
-  K.torus(bronzeD, 0.11, 0.035, 0, y0 + 1.58, 0, 5, 12);
-  // head, hair
-  K.cyl(bronze, 0.07, 0.08, 0.12, 0, y0 + 1.56, 0, 8);
-  K.sphere(bronze, 0.13, 0, y0 + 1.78, 0.01, 12, 10);
-  K.sphere(bronzeD, 0.135, 0, y0 + 1.8, -0.02, 10, 6, 1, 0, Math.PI * 2, 0, Math.PI * 0.55);
-  // left arm down with a scroll, right arm raised with a tricorn hat
-  K.rod(bronze, [-0.28, y0 + 1.45, 0], [-0.34, y0 + 1.1, 0.06], 0.065, 8);
-  K.rod(bronze, [-0.34, y0 + 1.1, 0.06], [-0.26, y0 + 0.95, 0.24], 0.055, 8);
-  K.rod(bronzeD, [-0.34, y0 + 1.12, 0.2], [-0.2, y0 + 0.74, 0.3], 0.05, 8);
-  K.rod(bronze, [0.3, y0 + 1.46, 0], [0.42, y0 + 1.78, 0.18], 0.065, 8);
-  K.rod(bronze, [0.42, y0 + 1.78, 0.18], [0.46, y0 + 2.12, 0.34], 0.055, 8);
-  K.cyl(bronzeD, 0.18, 0.2, 0.09, 0.47, y0 + 2.18, 0.36, 3, false, 'box', 0.4);
-  K.cyl(bronzeD, 0.1, 0.12, 0.1, 0.47, y0 + 2.26, 0.36, 8);
+  // split tails behind, swinging back with the stride
+  for (const sx of [-1, 1]) {
+    const tail = new THREE.BoxGeometry(0.16 * sc, 0.5 * sc, 0.03 * sc);
+    tail.translate(0, -0.25 * sc, 0);
+    _e.set(-0.18, sx * 0.25, sx * 0.06, 'YXZ');
+    _m.makeRotationFromEuler(_e);
+    const [px, py, pz] = P(sx * 0.09, 1.0, -0.12);
+    _m.setPosition(px, py, pz);
+    K.geoM(bronzeD, tail, _m, 'box');
+    tail.dispose();
+  }
+  // waistcoat panel in the open front, coat buttons, lapels, pocket flaps, belt line
+  K.boxC(bronzeD, 0.17 * sc, 0.36 * sc, 0.02 * sc, 0, y0 + 1.1 * sc, 0.13 * sc);
+  for (let i = 0; i < 5; i++) ell(bronzeD, 0.012, 0.012, 0.008, 0, 0.98 + i * 0.07, 0.14);
+  for (const sx of [-1, 1]) {
+    K.boxC(bronze, 0.07 * sc, 0.3 * sc, 0.02 * sc, sx * 0.1 * sc, y0 + 1.3 * sc, 0.132 * sc, -0.12, 0, sx * 0.3);
+    K.boxC(bronze, 0.13 * sc, 0.04 * sc, 0.03 * sc, sx * 0.17 * sc, y0 + 0.86 * sc, 0.13 * sc, 0.1, sx * 0.35, 0);
+  }
+  // neck, cravat, collar
+  limb(bronze, [0, 1.46, 0], [0, 1.58, 0.01], 0.055, 0.05);
+  ell(bronzeD, 0.055, 0.045, 0.035, 0, 1.47, 0.07);
+  K.torus(bronzeD, 0.075 * sc, 0.022 * sc, 0, y0 + 1.5 * sc, -0.01, 5, 14);
+  // head: skull, jaw/chin, nose, brow, ears; hair swept back into a tied queue with a bow
+  ell(bronze, 0.09, 0.115, 0.1, 0, 1.66, 0.01);
+  ell(bronze, 0.065, 0.05, 0.06, 0, 1.585, 0.04);
+  K.boxC(bronze, 0.022 * sc, 0.045 * sc, 0.03 * sc, 0, y0 + 1.655 * sc, 0.1 * sc, -0.25, 0, 0);
+  K.boxC(bronzeD, 0.13 * sc, 0.018 * sc, 0.03 * sc, 0, y0 + 1.695 * sc, 0.085 * sc, 0.2, 0, 0);
+  for (const sx of [-1, 1]) ell(bronze, 0.015, 0.03, 0.022, sx * 0.09, 1.655, 0.0);
+  ell(bronzeD, 0.097, 0.1, 0.1, 0, 1.69, -0.015, 0, 0.15);
+  limb(bronzeD, [0, 1.64, -0.08], [0, 1.5, -0.1], 0.025, 0.018, 6);
+  for (const sx of [-1, 1]) ell(bronzeD, 0.035, 0.02, 0.012, sx * 0.03, 1.6, -0.095, sx * 0.5);
+  // arms: left down holding a scroll, right raised with the hat; sleeves with turned-back cuffs, hands
+  const shL: V3 = [-0.22, 1.42, 0.0], elL: V3 = [-0.27, 1.13, 0.04], wrL: V3 = [-0.22, 0.9, 0.17];
+  const shR: V3 = [0.22, 1.42, 0.0], elR: V3 = [0.33, 1.62, 0.12], wrR: V3 = [0.37, 1.92, 0.24];
+  for (const [sh2, el, wr] of [[shL, elL, wrL], [shR, elR, wrR]]) {
+    ell(bronze, 0.075, 0.07, 0.07, sh2[0], sh2[1], sh2[2]);
+    limb(bronze, sh2, el, 0.068, 0.058);
+    limb(bronze, el, wr, 0.056, 0.05);
+    const cx = el[0] + (wr[0] - el[0]) * 0.8, cy = el[1] + (wr[1] - el[1]) * 0.8, cz = el[2] + (wr[2] - el[2]) * 0.8;
+    limb(bronzeD, [cx, cy, cz], wr, 0.066, 0.066);
+  }
+  ell(bronze, 0.03, 0.05, 0.042, wrL[0], wrL[1] - 0.05, wrL[2] + 0.02, 0, 0.6);
+  ell(bronze, 0.03, 0.05, 0.042, wrR[0], wrR[1] + 0.05, wrR[2] + 0.02, 0, -0.3);
+  // scroll: a rolled cylinder with a sheet half unrolled
+  limb(bronzeD, [-0.3, 0.85, 0.22], [-0.12, 0.83, 0.25], 0.025, 0.025, 8);
+  K.boxC(bronze, 0.16 * sc, 0.2 * sc, 0.006 * sc, -0.21 * sc, y0 + 0.73 * sc, 0.26 * sc, 0.1, 0, 0);
+  // tricorn: three-cornered brim turned up round a crown, held aloft and tilted
+  const hat = P(0.4, 2.03, 0.3);
+  K.cyl(bronzeD, 0.17 * sc, 0.2 * sc, 0.06 * sc, hat[0], hat[1], hat[2], 3, false, 'box', 0, Math.PI * 2, 0.4);
+  K.cyl(bronzeD, 0.1 * sc, 0.115 * sc, 0.09 * sc, hat[0], hat[1] + 0.04 * sc, hat[2], 10);
   // night: uplights
   for (let i = 0; i < 4; i++) {
     const a = (i / 4) * Math.PI * 2 + Math.PI / 4;
@@ -131,7 +207,7 @@ export function genStatue(env: Env, f: Feature): void {
   }
   env.glow(0, 0.6, R + 0.2, { size: 0.5, kind: 'beam', color: '#ffe0b0', intensity: 0.2, dir: [0, 3.6, -1.0], endSize: 1.4 });
   env.endChecks();
-  env.pick(f.id, 'Statue of Edmund Haven', new THREE.Box3(new THREE.Vector3(f.x - R, 0, f.z - R), new THREE.Vector3(f.x + R, y0 + 2.4, f.z + R)), () => ['Founder of Tinyhaven · bronze, 1901', 'Raised his hat to the first ship in port', 'Favourite perch of the park pigeons']);
+  env.pick(f.id, 'Statue of Edmund Haven', new THREE.Box3(new THREE.Vector3(f.x - R, 0, f.z - R), new THREE.Vector3(f.x + R, y0 + 2.75, f.z + R)), () => ['Founder of Tinyhaven · bronze, 1901', 'Raised his hat to the first ship in port', 'Favourite perch of the park pigeons']);
 }
 
 // ───────────────────────────────────────────────────────────── gazebo ──
@@ -140,6 +216,7 @@ export function genGazebo(env: Env, f: Feature): void {
   const R = Math.min(Number(f.params?.radius ?? 3.5), (f.radius || 3.6) - 0.05);
   env.begin(f.x, 0, f.z, f.yaw);
   env.checkRadius(f.x, f.z, f.radius || R + 0.1, 'gazebo');
+  queueContactLocal(env, 0, 0, 0, R * 0.95, R * 0.95, R * 0.55, 0.3, 0.45);
   const K = env.S;
   const white = M('#f4f1ea', PAT.PLAIN, 0.6, 0, 0, FLOOD.SOFT);
   const stone = M('#c9c1b2', PAT.STONE, 0.85, 0, 0, FLOOD.SOFT, 0.4);
@@ -148,7 +225,26 @@ export function genGazebo(env: Env, f: Feature): void {
   const rot = Math.PI / 8; // a face (not a column) towards +Z for the entrance
   const pr = R - 0.32;
   K.cyl(stone, pr, pr + 0.04, 0.42, 0, 0, 0, 8, false, 'box', rot);
-  K.cyl(floor, pr - 0.05, pr - 0.05, 0.06, 0, 0.42, 0, 8, false, 'box', rot);
+  // plank floor: a dark sub-floor showing through 8 mm gaps between 15 cm boards (running across the
+  // entrance), each board its own tone; a worn strip from the steps to the centre where feet go
+  K.cyl(M('#3b2c20', PAT.PLAIN, 0.9), pr - 0.05, pr - 0.05, 0.05, 0, 0.42, 0, 8, false, 'box', rot);
+  const tones = ['#a97f55', '#b48a5e', '#9c744d', '#b99266'].map((c) => M(c, PAT.PLANKS, 0.82, 0, 0, 0, 0.6));
+  const worn = M('#c7a57c', PAT.PLAIN, 0.75, 0, 0, 0, 0.3);
+  const fa = (pr - 0.06) * Math.cos(Math.PI / 8); // apothem: flat faces towards ±X / ±Z
+  const halfW = (z: number) => Math.min(fa, fa * Math.SQRT2 - Math.abs(z));
+  const bw = 0.155, gap = 0.008;
+  for (let z = -fa + bw / 2, i = 0; z < fa - bw / 2 + 1e-3; z += bw + gap, i++) {
+    const w = Math.min(halfW(z - bw / 2), halfW(z + bw / 2)) - 0.005;
+    if (w <= 0.05) continue;
+    const tm = tones[(i * 7 + (i >> 2)) % 4];
+    const yb = 0.47 + 0.004 * Math.sin(i * 2.3);
+    if (z > -0.6) {
+      // the walking line is worn pale over the middle 1.1 m
+      const wm = 0.55 + 0.08 * Math.sin(i * 1.7);
+      if (w > wm + 0.05) for (const sx of [-1, 1]) K.box(tm, w - wm, 0.025, bw, sx * (w + wm) / 2, yb, z);
+      K.box(worn, 2 * Math.min(wm, w), 0.025, bw, 0, yb - 0.002, z);
+    } else K.box(tm, 2 * w, 0.025, bw, 0, yb, z);
+  }
   // steps on the entrance side
   K.steps(stone, 1.5, 2, 0.21, 0.28, 0, 0, R - 0.02);
   const colR = pr - 0.28;
@@ -330,6 +426,7 @@ export function genBandstand(env: Env, f: Feature): void {
 export function genKiosk(env: Env, f: Feature): void {
   const R = f.radius || 2.2;
   env.begin(f.x, 0, f.z, f.yaw);
+  queueContactLocal(env, 0, 0, 0, 1.15, 1.15, 0.6, 0.3, 0.55);
   env.checkRadius(f.x, f.z, R, 'kiosk');
   const K = env.S;
   const cream = M('#f2e8cf', PAT.PLANKS, 0.8, 0, 0, FLOOD.SOFT, 0.7);
@@ -632,6 +729,8 @@ export function genPicnic(env: Env, f: Feature, i: number): void {
   const R = f.radius || 1.6;
   const ground = Math.max(0, env.ctx.plan.heightAt(f.x, f.z));
   env.begin(f.x, ground, f.z, f.yaw);
+  // worn grass under and round the table
+  queueContactLocal(env, 0, 0, 0, 0.95, 0.75, 0.45, 0.45, 0.4);
   env.checkRadius(f.x, f.z, R, 'picnic');
   const K = env.S;
   const wood = M(i % 2 ? '#9b6d43' : '#a8794d', PAT.PLANKS, 0.85, 0, 0, 0, 0.3);

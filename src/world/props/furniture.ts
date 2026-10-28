@@ -454,32 +454,73 @@ export function newsstand(k: Kit, rng: Rng): void {
     k.m('#3b3b3b', 'plastic');
     sh.push().local(x, 1.0 + h + 0.001, 0.45, 0, rng.range(-0.1, 0.1)).box(0, 0, 0.04, 0.22, 0.002, 0.04, 1).pop();
   }
-  // roll shutter coiled in its box under the fascia
+  // roll shutter: housing box under the fascia, guide channels down the jambs, the curtain pulled
+  // part-way down (slats in relief, bottom rail with a handle)
   k.m('#8f979c', 'steel');
-  sh.push().local(0, 1.75, 0.47, 0, 0, Math.PI / 2).cyl(0, -0.78, 0, 0.065, 0.065, 1.56, 10, 3).pop();
-  // wire magazine racks on both sides: covers tilted back against a rail
+  cbox(sh, 0, 1.75, 0.49, 1.6, 0.16, 0.12, 0.012);
+  for (const sx of [-1, 1]) sh.box(sx * 0.765, 1.4, 0.505, 0.03, 0.7, 0.04, 1);
+  const drop = rng.range(0.08, 0.3);
+  k.m('#a7aeb2', 'steel');
+  for (let y = 1.67; y > 1.67 - drop; y -= 0.045) cbox(sh, 0, y - 0.02, 0.51, 1.5, 0.04, 0.018, 0.006);
+  k.m('#5e666b', 'steel');
+  sh.box(0, 1.65 - drop, 0.515, 1.52, 0.03, 0.03, 0);
+  sh.box(0, 1.62 - drop, 0.535, 0.16, 0.015, 0.015, 0);
+  // wire magazine racks on both sides: tiered trays with a front wire, covers stacked and leaning back
   for (const sx of [-1, 1]) {
-    sh.push().local(sx * 0.95, 0, -0.05, 0, (sx * Math.PI) / 2);
+    sh.push().local(sx * 0.9, 0, -0.05, 0, (sx * Math.PI) / 2);
     for (let r = 0; r < 3; r++) {
-      const y = 0.95 + r * 0.38;
-      for (let c = 0; c < 3; c++) {
-        k.m(rng.pick(cols), 'plastic');
-        sh.push().local(-0.33 + c * 0.33, y + 0.13, 0.04, -0.18).box(0, 0, 0, 0.22, 0.29, 0.012, 0).pop();
-      }
+      const y = 0.9 + r * 0.4;
       k.m('#5e666b', 'steel');
-      sh.box(0, y + 0.05, 0.08, 1.0, 0.012, 0.012, 0);
-      sh.box(0, y - 0.005, 0.04, 1.0, 0.01, 0.08, 0);
+      sh.box(0, y, 0.09, 1.02, 0.012, 0.16, 0);
+      sh.box(0, y + 0.06, 0.17, 1.02, 0.01, 0.01, 0);
+      sh.box(0, y + 0.03, 0.17, 1.02, 0.008, 0.008, 0);
+      for (const x of [-0.5, -0.17, 0.17, 0.5]) sh.box(x, y + 0.03, 0.17, 0.008, 0.06, 0.008, 0);
+      for (let c = 0; c < 3; c++) {
+        const n = rng.int(2, 4);
+        for (let j = 0; j < n; j++) {
+          k.m(rng.pick(cols), 'plastic');
+          sh.push().local(-0.33 + c * 0.33 + rng.range(-0.015, 0.015), y + 0.15, 0.05 + j * 0.018, -0.2 + j * 0.03).box(0, 0, 0, 0.24, 0.3, 0.008, 0).pop();
+        }
+      }
     }
-    for (const x of [-0.5, 0.5]) sh.box(x, 1.5, 0.04, 0.015, 1.2, 0.015, 0);
+    k.m('#5e666b', 'steel');
+    for (const x of [-0.52, 0.52]) {
+      sh.box(x, 1.32, 0.17, 0.016, 0.95, 0.016, 0);
+      sh.box(x, 1.32, 0.02, 0.016, 0.95, 0.016, 0);
+    }
     sh.pop();
   }
-  // roof: overhanging slab with a fascia and a shallow pitch, drip edge
+  // back: three framed panels and a poster case (glazed frame, lit at night); steel kick plate
   k.m(trim, 'paint');
-  cbox(sh, 0, 2.26, 0.05, 2.1, 0.1, 1.5, 0.02);
+  for (const x of [-0.6, 0, 0.6]) {
+    const pw = 0.5;
+    sh.box(x, 0.62, -0.605, pw, 0.03, 0.012, 0);
+    sh.box(x, 1.98, -0.605, pw, 0.03, 0.012, 0);
+    for (const ex of [-1, 1]) sh.box(x + ex * (pw / 2 - 0.015), 1.3, -0.605, 0.03, 1.39, 0.012, 0);
+  }
+  k.m('#2b2e30', 'steel');
+  cbox(sh, 0, 1.32, -0.62, 0.78, 1.08, 0.04, 0.008);
+  k.e('#e8e0cc', '#fff0d0', 0.6);
+  sh.box(0, 1.32, -0.642, 0.7, 1.0, 0.004, 0);
+  k.m(rng.pick(['#c43b33', '#2a9d8f', '#e9c46a', '#457b9d']), 'plastic');
+  sh.box(0, 1.55, -0.645, 0.62, 0.42, 0.003, 0);
+  k.m('#222', 'plastic');
+  sh.box(0, 1.08, -0.645, 0.5, 0.08, 0.003, 0);
+  k.m('#5e666b', 'steel');
+  sh.box(0, 0.18, -0.6, 1.8, 0.16, 0.012, 0);
+  // roof: a deep overhang (30 cm front, 18 cm round), boxed fascia with a bevelled edge, a dark soffit
+  // under the eaves, a shallow ridge and a drip edge
+  k.m(trim, 'paint');
+  cbox(sh, 0, 2.22, 0.07, 2.16, 0.18, 1.6, 0.025);
+  k.m(new THREE.Color(trim).multiplyScalar(0.55), 'paint');
+  sh.box(0, 2.128, 0.07, 2.1, 0.008, 1.54, 0);
   k.m('#3a3d3f', 'steel');
-  poly(sh, [-1.03, 2.31, 0.78, 1.03, 2.31, 0.78, 1.03, 2.4, 0.05, -1.03, 2.4, 0.05], 0, 0.995, 0.1);
-  poly(sh, [-1.03, 2.31, -0.68, 1.03, 2.31, -0.68, 1.03, 2.4, 0.05, -1.03, 2.4, 0.05], 0, 0.99, -0.12);
-  for (const sx of [-1, 1]) poly(sh, [sx * 1.03, 2.31, -0.68, sx * 1.03, 2.31, 0.78, sx * 1.03, 2.4, 0.05], sx, 0, 0);
+  const rf = 0.9, rb = -0.76, rx = 1.1, ry0 = 2.31, ry1 = 2.42;
+  poly(sh, [-rx, ry0, rf, rx, ry0, rf, rx, ry1, 0.07, -rx, ry1, 0.07], 0, 0.995, 0.1);
+  poly(sh, [-rx, ry0, rb, rx, ry0, rb, rx, ry1, 0.07, -rx, ry1, 0.07], 0, 0.99, -0.12);
+  for (const sx of [-1, 1]) poly(sh, [sx * rx, ry0, rb, sx * rx, ry0, rf, sx * rx, ry1, 0.07], sx, 0, 0);
+  sh.box(0, ry0 - 0.01, rf, 2.2, 0.03, 0.02, 0);
+  sh.box(0, ry1 + 0.01, 0.07, 2.2, 0.025, 0.05, 0);
   // sign board, lit at night
   k.m(trim, 'paint');
   sh.box(0, 2.52, 0.6, 1.36, 0.3, 0.05, 1);
@@ -522,7 +563,7 @@ export function planterBox(k: Kit, kind: 'concrete' | 'terracotta' | 'wood' | 's
     k.m('#7a5536', 'wood');
     for (const sx of [-1, 1]) for (const sz of [-1, 1]) cbox(sh, sx * (ax - 0.04), (h + 0.05) / 2, sz * (az - 0.04), 0.08, h - 0.05, 0.08, 0.01);
   } else {
-    cbox(sh, 0, (h + 0.05) / 2, 0, along, h - 0.05, across, kind === 'steel' ? 0.006 : 0.025, 1 | 2);
+    cbox(sh, 0, (h + 0.05) / 2, 0, along, h - 0.05, across, kind === 'steel' ? 0.006 : 0.04, 1 | 2);
     if (kind === 'steel') {
       // pressed vertical ribs on the long sides, a kick band at the foot
       for (let x = -ax + 0.2; x < ax - 0.1; x += 0.25) for (const sz of [-1, 1]) sh.box(x, (h + 0.04) / 2, sz * (az + 0.006), 0.035, h - 0.16, 0.012, 3);
@@ -549,6 +590,36 @@ export function planterBox(k: Kit, kind: 'concrete' | 'terracotta' | 'wood' | 's
   poly(sh, [-ix, h, iz, ix, h, iz, ix, ys, iz, -ix, ys, iz], 0, 0, -1);
   poly(sh, [-ix, h, -iz, -ix, h, iz, -ix, ys, iz, -ix, ys, -iz], 1, 0, 0);
   poly(sh, [ix, h, -iz, ix, h, iz, ix, ys, iz, ix, ys, -iz], -1, 0, 0);
+  if (kind !== 'wood') {
+    // weep holes at the foot of the long sides, each with a dark wash fanning down from it; rain run-off
+    // streaks under the rim (tapered: wide at the top, thinning out towards the foot)
+    const seed = along * 7.31 + across * 3.7 + h;
+    const rnd = (i: number) => {
+      const v = Math.sin(i * 91.17 + seed * 12.9898) * 43758.5453;
+      return v - Math.floor(v);
+    };
+    const stain = new THREE.Color(col).multiplyScalar(kind === 'concrete' ? 0.7 : 0.78);
+    const wash = new THREE.Color(col).lerp(new THREE.Color('#4e3828'), 0.45).multiplyScalar(0.85);
+    const e = 0.004;
+    for (const sz of [-1, 1]) {
+      const zf = sz * (az + e);
+      for (const wx of [-ax * 0.55, ax * 0.55]) {
+        k.m('#151311', 'stone');
+        poly(sh, [wx - 0.02, 0.07, zf, wx + 0.02, 0.07, zf, wx + 0.02, 0.1, zf, wx - 0.02, 0.1, zf], 0, 0, sz);
+        k.m(wash, mat);
+        poly(sh, [wx - 0.015, 0.07, zf, wx + 0.015, 0.07, zf, wx + 0.06, 0.05, zf, wx - 0.06, 0.05, zf], 0, 0, sz);
+      }
+      k.m(stain, mat);
+      for (let i = 0; i < 5; i++) {
+        const r0 = rnd(i + sz * 17);
+        if (r0 < 0.25) continue;
+        const x = -ax + 0.08 + rnd(i * 3 + sz * 5 + 1) * (along - 0.16);
+        const w = 0.03 + 0.07 * rnd(i * 5 + sz + 2);
+        const yb = h - 0.07 - (0.12 + 0.3 * rnd(i * 7 + sz * 3 + 3)) * (h - 0.1);
+        poly(sh, [x - w / 2, h - 0.065, zf, x + w / 2, h - 0.065, zf, x + w * 0.12, yb, zf, x - w * 0.12, yb, zf], 0, 0, sz);
+      }
+    }
+  }
   // soil with a few clods
   k.m('#4e3828', 'stone');
   poly(sh, [-ix, ys, -iz, ix, ys, -iz, ix, ys, iz, -ix, ys, iz], 0, 1, 0);

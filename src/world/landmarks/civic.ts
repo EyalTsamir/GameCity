@@ -7,6 +7,7 @@ import { ANIM, M, PAT, type Mat } from './builder';
 import { C, S, flagpole, person } from './parts';
 import type { Env } from './env';
 import { drawText, signQuad } from './signs';
+import { queueContactLocal } from '../props/contact';
 
 /** Plaza flagpole: stone base, 9 m mast, waving flag. */
 export function genFlagpole(env: Env, f: Feature, design: number): void {
@@ -14,22 +15,38 @@ export function genFlagpole(env: Env, f: Feature, design: number): void {
   const r = Math.max(f.radius, 0.3);
   env.checkRadius(f.x, f.z, r, 'flagpole');
   const K = env.S;
-  // granite plinth with a chamfered top, a steel base plate with eight bolts, a hinged foot sleeve
-  K.lathe(M(C.granite, PAT.STONE, 0.8, 0, 0, 0, 0.1), [[r, 0], [r, 0.3], [r - 0.05, 0.35], [0, 0.35]], 0, 0, 0, 8, Math.PI / 8);
+  // square granite plinth (foot moulding, chamfered top), a square steel base plate with four corner
+  // studs (washer, hex nut, thread end), a cast foot sleeve with a collar and an access door; the
+  // halyard runs down to a horn cleat at hand height, the spare line coiled and hung on the cleat
+  const q = Math.PI / 4;
+  K.lathe(M(C.granite, PAT.STONE, 0.8, 0, 0, 0, 0.1), [[r, 0], [r, 0.05], [r - 0.03, 0.07], [r - 0.03, 0.29], [r - 0.07, 0.33], [0, 0.33]], 0, 0, 0, 4, q);
   const steelM = M('#8e969b', PAT.PLAIN, 0.4, 0.7);
-  K.cyl(steelM, r * 0.62, r * 0.62, 0.025, 0, 0.35, 0, 16);
-  for (let i = 0; i < 8; i++) {
-    const a = (i / 8) * Math.PI * 2;
-    K.cyl(M('#5f6569', PAT.PLAIN, 0.5, 0.6), 0.02, 0.018, 0.035, Math.sin(a) * r * 0.5, 0.375, Math.cos(a) * r * 0.5, 6);
-  }
-  K.lathe(steelM, [[0.13, 0.375], [0.13, 0.5], [0.11, 0.6], [0.09, 0.65]], 0, 0, 0, 14);
-  for (const s2 of [-1, 1]) K.box(steelM, 0.02, 0.18, 0.08, s2 * 0.135, 0.4, 0);
+  const darkM = M('#5f6569', PAT.PLAIN, 0.5, 0.6);
+  const ph = 0.17;
+  K.box(steelM, ph * 2, 0.02, ph * 2, 0, 0.33, 0);
+  for (const sx of [-1, 1])
+    for (const sz of [-1, 1]) {
+      const bx = sx * (ph - 0.035), bz = sz * (ph - 0.035);
+      K.cyl(darkM, 0.026, 0.026, 0.006, bx, 0.35, bz, 10);
+      K.cyl(darkM, 0.02, 0.02, 0.022, bx, 0.356, bz, 6);
+      K.cyl(steelM, 0.008, 0.008, 0.02, bx, 0.378, bz, 6);
+    }
+  K.lathe(steelM, [[0.13, 0.35], [0.13, 0.38], [0.115, 0.4], [0.115, 0.56], [0.125, 0.57], [0.125, 0.6], [0.1, 0.63], [0.085, 0.65]], 0, 0, 0, 16);
+  K.box(darkM, 0.004, 0.11, 0.07, 0.0, 0.47, 0.115);
+  K.box(darkM, 0.008, 0.012, 0.012, 0.025, 0.47, 0.118);
   flagpole(env, 0, 0.65, 0, 8.6, 2.4, design, f.id * 1.7, 0.075);
-  // halyard down the pole to a cleat at hand height
-  K.rod(M('#e8e4da', PAT.PLAIN, 0.8), [0.085, 0.65 + 8.5, 0.02], [0.085, 1.55, 0.02], 0.004, 3);
-  K.rod(M('#e8e4da', PAT.PLAIN, 0.8), [0.075, 0.65 + 8.5, -0.02], [0.075, 1.55, -0.02], 0.004, 3);
-  K.box(M('#3b3f42', PAT.PLAIN, 0.5, 0.5), 0.03, 0.18, 0.03, 0.085, 1.42, 0);
-  K.box(M('#3b3f42', PAT.PLAIN, 0.5, 0.5), 0.025, 0.03, 0.03, 0.08, 1.45, 0);
+  const rope = M('#e8e4da', PAT.PLAIN, 0.8);
+  K.rod(rope, [0.085, 0.65 + 8.5, 0.02], [0.098, 1.36, 0.016], 0.004, 3);
+  K.rod(rope, [0.075, 0.65 + 8.5, -0.02], [0.098, 1.5, -0.012], 0.004, 3);
+  // horn cleat on a riveted saddle strap
+  K.box(darkM, 0.012, 0.06, 0.05, 0.081, 1.43, 0);
+  K.box(darkM, 0.02, 0.025, 0.025, 0.094, 1.43, 0);
+  K.rod(darkM, [0.104, 1.34, 0], [0.104, 1.52, 0], 0.011, 6);
+  // figure-eight turns round the horns and the hanging coil
+  K.torus(rope, 0.05, 0.006, 0.112, 1.43, 0, 4, 10, Math.PI * 2, 0, Math.PI / 2, 0.35);
+  K.torus(rope, 0.06, 0.007, 0.118, 1.27, 0, 4, 14, Math.PI * 2, 0, Math.PI / 2, 0);
+  K.torus(rope, 0.058, 0.007, 0.124, 1.265, 0.004, 4, 14, Math.PI * 2, 0, Math.PI / 2, 0.1);
+  queueContactLocal(env, 0, 0, 0, r * 0.71, r * 0.71, 0.03, 0.22, 0.55);
   env.endChecks();
   env.pick(f.id, 'Flagpole', new THREE.Box3(new THREE.Vector3(f.x - 1, 0, f.z - 1), new THREE.Vector3(f.x + 1, 9.5, f.z + 1)), () => ['The Tinyhaven flag', 'Flies whichever way the wind blows']);
   void S;
@@ -56,13 +73,16 @@ const GOODS: Goods[] = [
 /** Slatted wooden crate (w × h × d, bottom at y): bottom, two slats per long side with a gap, solid
  *  ends with a hand hole, corner battens. */
 function slatCrate(K: Env['S'], m: Mat, w: number, h: number, d: number, x: number, y: number, z: number): void {
-  const t = 0.012;
-  K.box(m, w, t, d, x, y, z);
-  const sh = (h - 0.01) / 2 - 0.012;
-  for (const sz of [-1, 1]) for (let i = 0; i < 2; i++) K.box(m, w, sh, t, x, y + 0.01 + i * (sh + 0.024), z + sz * (d / 2 - t / 2));
+  const t = 0.012,
+    gap = Math.min(0.028, h * 0.14);
+  // bottom: four slats with gaps
+  for (let i = 0; i < 4; i++) K.box(m, w - 0.01, t, d / 4 - 0.012, x, y, z - d / 2 + (d / 4) * (i + 0.5));
+  // long sides: three slats with open gaps; ends: a low board and a top board with a hand slot between
+  const sh = (h - 0.01 - 2 * gap) / 3;
+  for (const sz of [-1, 1]) for (let i = 0; i < 3; i++) K.box(m, w, sh, t, x, y + 0.01 + i * (sh + gap), z + sz * (d / 2 - t / 2));
   for (const sx of [-1, 1]) {
-    K.box(m, t, h * 0.55, d - 2 * t, x + sx * (w / 2 - t / 2), y, z);
-    K.box(m, t, h * 0.2, d - 2 * t, x + sx * (w / 2 - t / 2), y + h * 0.8, z);
+    K.box(m, t, h * 0.5, d - 2 * t, x + sx * (w / 2 - t / 2), y, z);
+    K.box(m, t, h * 0.22, d - 2 * t, x + sx * (w / 2 - t / 2), y + h * 0.78, z);
     for (const sz of [-1, 1]) K.box(m, 0.025, h, 0.025, x + sx * (w / 2 - 0.02), y, z + sz * (d / 2 - 0.02));
   }
 }
@@ -130,6 +150,7 @@ export function genMarketStall(env: Env, f: Feature): void {
   for (const [x, z, h] of [[-hw, fz, yF], [hw, fz, yF], [-hw, bz, yB], [hw, bz, yB]] as const) {
     K.box(M('#55595c', PAT.PLAIN, 0.7, 0.4), 0.16, 0.012, 0.16, x, 0, z);
     K.rod(steel, [x, 0, z], [x, h + 0.02, z], 0.022, 8);
+    queueContactLocal(env, x, 0, z, 0.08, 0.08, 0.02, 0.14, 0.55);
   }
   K.rod(steel, [-hw - 0.05, yF, fz], [hw + 0.05, yF, fz], 0.018, 6);
   K.rod(steel, [-hw - 0.05, yB, bz], [hw + 0.05, yB, bz], 0.018, 6);
@@ -168,17 +189,41 @@ export function genMarketStall(env: Env, f: Feature): void {
   // trestle table: thick top on two A-frame trestles, a cloth skirt to the ground at the front
   const top = M('#b88a5c', PAT.PLANKS, 0.8, 0, 0, 0, 0.5);
   const tz = fz - 0.22, ty = 0.78;
+  // trodden grime under the table and along the customers' side
+  queueContactLocal(env, 0, 0, tz, hw, 0.32, 0.1, 0.45, 0.35);
   K.box(top, 2 * hw - 0.06, 0.035, 0.6, 0, ty, tz);
   for (const x of [-hw + 0.25, hw - 0.25]) {
     for (const s of [-1, 1]) K.beam(wood, [x, 0, tz + s * 0.24], [x, ty, tz + s * 0.06], 0.045, 0.035);
     K.box(wood, 0.05, 0.05, 0.4, x, ty - 0.05, tz);
     K.beam(wood, [x, 0.3, tz - 0.19], [x, 0.3, tz + 0.19], 0.03, 0.02);
   }
-  const skirt = M('#efe6d2', PAT.PLAIN, 0.9);
-  for (let i = 0; i < 8; i++) {
-    const xa = -hw + 0.03 + ((2 * hw - 0.06) * i) / 8, xb = -hw + 0.03 + ((2 * hw - 0.06) * (i + 1)) / 8;
-    const za = tz + 0.31 + (i % 2 ? 0.015 : 0), zb = tz + 0.31 + (i % 2 ? 0 : 0.015);
-    K.poly(skirt, [[xa, 0.04, za], [xb, 0.04, zb], [xb, ty + 0.03, tz + 0.305], [xa, ty + 0.03, tz + 0.305]]);
+  // table cloth: laid over the top and hanging ~40 cm over the front and the ends in soft folds (the
+  // trestles show below it); the hem swings in and out, the folds die out towards the table edge
+  const clothCol = ['#efe6d2', '#e9dfc8', '#f3efe6', '#e7d9bd'][(f.id * 5) % 4];
+  const cloth = M(clothCol, PAT.PLAIN, 0.92);
+  const tw = 2 * hw - 0.02, ct = ty + 0.04, hem = ty - 0.36;
+  K.box(cloth, tw, 0.006, 0.64, 0, ty + 0.036, tz);
+  const NF = 18;
+  const fold = (u: number) => 0.028 * Math.sin(u * NF * Math.PI) + 0.008 * Math.sin(u * 37.0 + f.id);
+  for (let i = 0; i < NF; i++) {
+    const ua = i / NF, ub = (i + 1) / NF;
+    const xa = -tw / 2 + tw * ua, xb = -tw / 2 + tw * ub;
+    const zt = tz + 0.322;
+    const hya = hem + 0.025 * Math.sin(ua * 9.0 + f.id), hyb = hem + 0.025 * Math.sin(ub * 9.0 + f.id);
+    // upper band (folds half out) and lower band (full folds) for a soft drape
+    const ym = ty - 0.12;
+    K.poly(cloth, [[xa, ym, zt + fold(ua) * 0.45], [xb, ym, zt + fold(ub) * 0.45], [xb, ct, zt], [xa, ct, zt]], undefined, true);
+    K.poly(cloth, [[xa, hya, zt + fold(ua)], [xb, hyb, zt + fold(ub)], [xb, ym, zt + fold(ub) * 0.45], [xa, ym, zt + fold(ua) * 0.45]], undefined, true);
+  }
+  // rolled edge over the front of the top
+  K.rod(cloth, [-tw / 2, ct - 0.005, tz + 0.318], [tw / 2, ct - 0.005, tz + 0.318], 0.012, 6);
+  for (const sx of [-1, 1]) {
+    const xe = sx * (tw / 2 + 0.004);
+    for (let j = 0; j < 6; j++) {
+      const za = tz - 0.32 + (0.64 * j) / 6, zb = tz - 0.32 + (0.64 * (j + 1)) / 6;
+      const fa = j % 2 ? 0.02 * sx : 0, fb = (j + 1) % 2 ? 0.02 * sx : 0;
+      K.poly(cloth, [[xe + fa, hem + 0.05, za], [xe + fb, hem + 0.05, zb], [xe, ct, zb], [xe, ct, za]], undefined, true);
+    }
   }
   K.b.forceDetail = true;
   // crates of produce on the table, tilted towards the aisle by a batten under the back edge
