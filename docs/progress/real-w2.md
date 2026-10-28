@@ -64,6 +64,24 @@ Owned: `src/sim/traffic/{models,vehicleMaterial,render}.ts` (+ trains later). Si
   "-10,0.9,22,4,30,6;-8,1.4,35,9,25,8" --hours 11 --out shots/w2/x` (row 1 cars at z 22 from x −17, row 2
   vans/lorries/buses at z 35; yaw 0 ≈ front, 180 ≈ rear). Bench: `--classes car,bus --yaws 0,140` (new option).
 
+## Session 5 — code map
+* `scripts/bench.mjs` train branch: `loc.poses` (fixed {label, target, distance, yaw, pitch}) bypass the LOS swing;
+  poses built from the dwelling train (`ctx.services.rail.sim.trains`, car `k` by `--pick`), platform on +z
+  (`plan.rail.stations[0].platformY` + 1.6 eye). Needs `--q "speed=0"`.
+* `trainMaterial.ts`: `trInterior(o, d, doorZ)` in FRAG_PARS (far wall + window band, floor, ceiling strip, seat
+  backs on 1.9 m bay planes with heads by hash, 3 vestibule poles); vertex writes `vLocDir` (camera ray in the car
+  frame = transpose(mat3(model·instance)) · (world − camera)) and `vDoorZ` (VESTIB: aExtra.x; open leaf window:
+  −1e5 → no saloon). Emission: `trIntE` (daylight 0.1 + vEmit), `trEmK` suppresses the plain glow. Uniform `uTrInt`
+  (`interior`, set per frame in `TrainRenderer.update` from quality). Cache key rail-train-v4.
+* `trainModels.ts` `wheelset`: `ring(x0,r0,x1,r1,side,outward)` surface-of-revolution strips (24 sides; winding by
+  cross product); `C.wheelPolish`. `doors()` vestibule quad = `T.VESTIB` with `g.extra(z,0,0,0)`.
+* `carBody.ts` `flankX(s,z,y)` → flank x + dx/dy along ring points 1–6; `models.ts` `flankDecal(shape, side, z0,
+  z1, y0, y1)` conformal grid (rows split at belt − 0.17/−0.15/−0.08). Police band uses it.
+* `vehicleMaterial.ts` `thStreetRefl`: near (az·4) + far (az·9) facade blocks, tree crowns (az·6 hash), window
+  grid, cumulus (thVN of R.xz/(R.y+.25)), pavement band below the horizon; `thReflDet` (fwidth of the reflected
+  normal; 0 with `?nocarpaint`) fades the fine detail; paint coat × extra factor (vCoat > 1.5).
+* `render.ts` `?novehlod0` (perf only: LOD 0 limit 0).
+
 ## Session 4 (fix round) — done
 * Judged on the showroom (`shots/w2/s4b/*`): SUV rails on 3 feet with daylight under the bar (real); estate (long
   roof) and MPV (one-box, tall) break the parked-row silhouette; bus roof AC reads as a GRP pack with fan grilles and

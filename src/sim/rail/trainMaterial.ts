@@ -136,11 +136,11 @@ vec3 trInterior(vec3 o, vec3 d, float doorZ) {
   vec3 p = o + d * t;
   vec3 col;
   if (t == tF) col = vec3(0.16, 0.17, 0.19) * (0.85 + 0.3 * trH(floor(p.x * 9.0) + floor(p.z * 9.0) * 57.0));
-  else if (t == tC) col = abs(p.x) < 0.16 ? vec3(2.2, 2.15, 2.0) : vec3(0.72, 0.73, 0.72);
+  else if (t == tC) col = abs(p.x) < 0.16 ? vec3(1.5, 1.45, 1.35) : vec3(0.55, 0.56, 0.55);
   else {
     // far side: wall panels, the window band shows the bright outside through the far glass
     bool win = p.y > 2.05 && p.y < 2.95 && fract(p.z / 1.9 + 0.12) < 0.82 && abs(p.z - doorZ) > 0.75;
-    col = win ? vec3(0.62, 0.72, 0.82) * 1.4 : (p.y < 1.25 ? vec3(0.25, 0.26, 0.28) : vec3(0.6, 0.6, 0.58));
+    col = win ? vec3(0.62, 0.72, 0.82) * 2.6 : (p.y < 1.25 ? vec3(0.2, 0.21, 0.23) : vec3(0.46, 0.46, 0.45));
   }
   // seat backs (both sides of the aisle, transverse) at the bay planes ahead of the ray
   if (abs(d.z) > 1e-3) {
@@ -154,12 +154,16 @@ vec3 trInterior(vec3 o, vec3 d, float doorZ) {
       if (abs(q.z - doorZ) < 0.9) continue;
       float h = trH(bay * 7.0 + sign(q.x) * 3.0);
       // a seated passenger's head over the back (by bay + side)
-      if (h > 0.55 && q.y > 2.25 && q.y < 2.52 && abs(ax - 0.95) < 0.11 + 0.04 * step(q.y, 2.32)) {
-        col = q.y > 2.43 ? vec3(0.08, 0.06, 0.05) + 0.2 * h : vec3(0.55, 0.4, 0.32) * (0.6 + 0.5 * h);
+      vec2 hd = vec2((ax - 0.95) / 0.095, (q.y - 2.4) / 0.13);
+      if (h > 0.55 && dot(hd, hd) < 1.0) {
+        // hair over the crown and the back of the head (we mostly see heads from behind / the side)
+        float hair = step(0.35 - 0.5 * fract(h * 13.0), hd.y) + step(0.6, fract(h * 5.3));
+        col = hair > 0.5 ? vec3(0.07, 0.05, 0.04) + 0.25 * vec3(0.9, 0.7, 0.4) * fract(h * 3.7) : vec3(0.55, 0.4, 0.32) * (0.6 + 0.5 * h);
         t = ts;
         break;
       }
-      if (ax > 0.38 && ax < WX && q.y < FL + 1.15 && q.y > FL + 0.05) {
+      // seat back above the cushion (under it only the pedestal at the wall side: the floor shows between)
+      if (ax > 0.38 && ax < WX && q.y < FL + 1.15 && (q.y > FL + 0.42 || (ax > 1.15 && q.y > FL))) {
         float top = smoothstep(FL + 1.08, FL + 1.15, q.y);
         col = mix(vec3(0.12, 0.2, 0.34), vec3(0.06, 0.08, 0.1), top) * (0.9 + 0.2 * trH(floor(q.x * 30.0) + floor(q.y * 30.0) * 31.0));
         if (ax > 0.86 && ax < 0.9) col *= 0.6;
@@ -274,7 +278,7 @@ export function createTrainMaterials(globals: GlobalUniforms, clipX0: number, cl
             if (d.x * vLoc.x < 0.0 && vDoorZ > -1e4) {
               vec3 ic = trInterior(vLoc, d, vDoorZ);
               // daylight inside (dimmer than out), cabin lamps at night; the glass keeps its reflection
-              trIntE = ic * (0.22 * (1.0 - uLights)) + vEmit * (0.2 + 0.8 * ic);
+              trIntE = ic * (0.1 * (1.0 - uLights)) + vEmit * (0.2 + 0.8 * ic);
               trEmK = 0.0;
               diffuseColor.rgb *= tg == ${T.VESTIB} ? 0.0 : 0.45;
             }

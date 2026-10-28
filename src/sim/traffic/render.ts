@@ -253,10 +253,12 @@ export class VehicleRenderer {
     const cam = this.ctx.camera;
     const h = Math.max(200, this.ctx.size.height * this.ctx.renderer.getPixelRatio());
     const k = (h / REF_HEIGHT) * (REF_TAN / Math.tan((cam.fov * Math.PI) / 360));
-    out[0] = (LOD_DIST[0] * k) ** 2;
+    // ?novehlod0: no LOD 0 (measures the close-up geometry's cost with perf.mjs)
+    out[0] = this.noLod0 ? 0 : (LOD_DIST[0] * k) ** 2;
     out[1] = (LOD_DIST[1] * k) ** 2;
   }
   private lim = [0, 0];
+  private noLod0 = typeof location !== 'undefined' && new URLSearchParams(location.search).has('novehlod0');
   /** close-up detail switches (vehicleMaterial.ts uVehDetail: interior, panel lines, wear) */
   private detail: THREE.Vector4;
   private detailOff: boolean[];
