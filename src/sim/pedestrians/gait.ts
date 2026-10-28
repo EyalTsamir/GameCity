@@ -697,7 +697,7 @@ export interface IdleShift {
 }
 
 /** fastest speed the gait poses (m/s) — joggers cruise at 2.75 */
-const GAIT_VMAX = 3.4;
+const GAIT_VMAX = 2.9;
 
 export function gaitPose(m: Member, r: Rig, st: GaitState | null, frame: number, idle: IdleShift, o: GaitOut): GaitOut {
   const t = gaitIn.t,

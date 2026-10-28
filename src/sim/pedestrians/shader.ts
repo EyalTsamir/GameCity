@@ -514,7 +514,9 @@ void pedPose(inout vec3 p, inout vec3 n) {
   vPedH = h;
   vPedPat = pat;
   // material response: skin & hair soften the terminator (wrap), hair and shoes get a faint sheen
-  vPedMat = region == ${R.SKIN} || region == ${R.FACE} || region == ${R.NECK} || region == ${R.LIPS} ? vec2(0.35, 0.0)
+  // (the face less: its sculpt must read in the light)
+  vPedMat = region == ${R.FACE} ? vec2(0.16, 0.0)
+          : region == ${R.SKIN} || region == ${R.NECK} || region == ${R.LIPS} ? vec2(0.35, 0.0)
           : region == ${R.HAIR} || region == ${R.BEARD} ? vec2(0.4, 0.018)
           : region == ${R.FOOT} ? vec2(0.0, 0.09)
           : region == ${R.BAG} || region == ${R.HAT} ? vec2(0.1, 0.04)
@@ -710,8 +712,14 @@ vec3 pedFacePaint(vec3 skin, vec2 F) {
   float open = smoothstep(-px * 0.5, px * 0.5, min(dU, dL)) * step(0.0, q);
   vec3 iris = eyeC == 0u ? vec3(0.07, 0.04, 0.025) : eyeC == 1u ? vec3(0.17, 0.09, 0.04) : eyeC == 2u ? vec3(0.17, 0.16, 0.08) : vec3(0.2, 0.27, 0.33);
   float dI = length(vec2(ex, ey + 0.0003));
-  vec3 eye = vec3(0.6, 0.57, 0.52) * mix(1.0, 0.82, smoothstep(0.004, 0.011, abs(ex)));
-  eye = mix(eye, iris, 1.0 - smoothstep(0.0052 - px * 0.5, 0.0052 + px * 0.5, dI));
+  // sclera: white, greyer and pinker towards the corners (the eyeball turns away from the light)
+  vec3 eye = mix(vec3(0.8, 0.77, 0.72), vec3(0.6, 0.5, 0.47), smoothstep(0.003, 0.0115, abs(ex)));
+  // iris: dark limbal ring, lighter collarette round the pupil, radial fibres
+  float ir = dI / 0.0052;
+  float ia = atan(ey + 0.0003, ex);
+  float fib = 0.5 + 0.25 * sin(ia * 11.0 + float(eyeC)) + 0.25 * sin(ia * 23.0 + 1.7); // periodic: no seam
+  vec3 irisC = iris * mix(1.45, 0.55, smoothstep(0.45, 1.0, ir)) * mix(1.0, 0.75 + 0.5 * fib, det);
+  eye = mix(eye, irisC, 1.0 - smoothstep(0.0052 - px * 0.5, 0.0052 + px * 0.5, dI));
   eye = mix(eye, vec3(0.012), 1.0 - smoothstep(0.0021 - px * 0.5, 0.0021 + px * 0.5, dI));
   eye += 0.35 * (1.0 - smoothstep(0.0, 0.0011 + px * 0.5, length(vec2(ex - 0.0016, ey - 0.0016))));
   eye *= 1.0 - 0.5 * (1.0 - smoothstep(0.0, 0.0032, dU));
@@ -719,11 +727,16 @@ vec3 pedFacePaint(vec3 skin, vec2 F) {
   float lw = (0.0009 + 0.0007 * w) * (1.0 + 0.5 * smoothstep(-0.004, 0.012, ex));
   float qL = step(0.0, 1.0 - (ex * ex) / (ew * ew * 1.15));
   float lash = smoothstep(-px * 0.5, px * 0.5, -dU) * (1.0 - smoothstep(lw - px * 0.5, lw + px * 0.5, -dU)) * qL;
-  float crease = pedBand(-dU - 0.0042, 0.0005, px) * qL * 0.22;
+  float crease = pedBand(-dU - 0.0042, 0.0006, px) * qL * 0.4;
+  // the lid fold between lash line and crease catches the light; above the crease the socket recedes
+  float lid = smoothstep(0.0, 0.0012, -dU) * (1.0 - smoothstep(0.0032, 0.0042, -dU)) * qL;
+  float sock = (1.0 - smoothstep(0.0042, 0.0095, -dU)) * smoothstep(0.0042, 0.0048, -dU) * step(0.0, 1.0 - (ex * ex) / (ew * ew * 1.6));
   float lowL = smoothstep(-px * 0.5, px * 0.5, -dL) * (1.0 - smoothstep(0.0006 - px * 0.5, 0.0006 + px * 0.5, -dL)) * qL * 0.35;
   vec3 eyes = mix(pc, eye, open);
   eyes = mix(eyes, vec3(0.03, 0.025, 0.022), lash * 0.92);
-  eyes *= 1.0 - crease - lowL;
+  eyes *= (1.0 - crease - lowL) * (1.0 + 0.06 * lid) * (1.0 - 0.14 * sock);
+  // inner corner: the hollow between the eye and the bridge of the nose
+  eyes *= 1.0 - 0.2 * exp(-((ax - 0.0165) * (ax - 0.0165)) / 0.000018 - (ey * ey) / 0.00003);
   // far: a soft eye shadow instead of aliasing detail
   float socket = exp(-(ex * ex) / 0.00022 - (ey * ey) / 0.00005);
   pc = mix(pc * (1.0 - 0.5 * socket), eyes, det);
@@ -746,6 +759,11 @@ vec3 pedFacePaint(vec3 skin, vec2 F) {
   lipC *= mix(1.0, 0.86, step(0.0, ly)); // the upper lip faces down: a little darker
   pc = mix(pc, lipC, lip * mix(0.5, 1.0, det));
   pc = mix(pc, skin * 0.28, pedBand(ly, 0.0005, px) * step(0.002, lq) * 0.85 * det);
+  // cavities the ambient light hardly reaches: under the nose, beside the nostril wings, the chin crease
+  float cav = 0.16 * exp(-(F.x * F.x) / 0.00012 - ((F.y + 0.05) * (F.y + 0.05)) / 0.000012)
+            + 0.12 * exp(-((ax - 0.016) * (ax - 0.016)) / 0.000012 - ((F.y + 0.042) * (F.y + 0.042)) / 0.00005)
+            + 0.12 * exp(-(F.x * F.x) / 0.0002 - ((F.y + 0.081) * (F.y + 0.081)) / 0.000012);
+  pc *= 1.0 - cav * mix(0.5, 1.0, det);
   // nostrils
   vec2 nd = vec2((ax - 0.0086) / 0.0031, (F.y + 0.0448) / 0.0017);
   pc = mix(pc, skin * 0.25, (1.0 - smoothstep(0.75, 1.0, length(nd))) * 0.9 * det);
