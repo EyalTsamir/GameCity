@@ -13,7 +13,7 @@ import { HAT_STYLES, POSE_KEYS, POSE_UINTS, makeInvisibleMaterial, makePeopleMat
 import { computePoseA, poseIn } from './animate';
 import { newGaitState, type GaitState } from './gait';
 import { gripPoint, newPose, type Pose } from './pose';
-import { rigOf } from './rig';
+import { rigOf, type Rig } from './rig';
 import { styleFromFlags, type Look, type Style } from './looks';
 import type { Crowd, Member } from './crowd';
 import { patchLampMaterial } from '../../world/lamps/integrate';
@@ -270,6 +270,8 @@ export class CrowdRenderer {
   readonly shadow: Layer;
   /** debug: force every figure to one level (0 close, 1 near, 2 far, 3 tiny, 4 pin), -1 = by distance */
   forceLod = -1;
+  /** debug hook (tests): called with every posed figure — (member, pose, rig, level 0 close / 1 near / 2 other) */
+  probe: ((m: Member, o: Pose, r: Rig, lv: number) => void) | null = null;
   /** cross-fade level switches (tools turn it off for synchronous censuses) */
   xfade = true;
   readonly pram: THREE.InstancedMesh;
@@ -520,6 +522,7 @@ export class CrowdRenderer {
         const gaitOn = m.rideG === null && (layer === this.close || layer === this.near || layer === this.far || out === this.close || out === this.near || out === this.far);
         poseIn.t = t + m.seed * 10;
         computePoseA(m, umbrella, r, pose, gaitOn ? st.gait : null, this.frame);
+        if (this.probe !== null) this.probe(m, pose, r, layer === this.close ? 0 : layer === this.near ? 1 : 2);
         // drawn at the gait's smoothed root when the gait ran this frame (corners: the feet were planned
         // around it), else at the crowd's root
         const gs = gaitOn && st.gait.frame === this.frame;

@@ -4,6 +4,12 @@ Branch `claude/real-w4-people` (from `claude/pensive-gates-bim12i` e517126). Bri
 Photo test "Person" (REAL.md). Owned: `src/sim/pedestrians/**` presentation (not crowd/places logic).
 
 ## Resume here
+* 2026-10-28 session 6 STARTED from pensive-gates ee1619d. Lead's s5 verdict priorities: (1) the 3-person group
+  "deep jog crouch" (s5i p0_body) — reproduce/fix or prove a bench artefact; (2) trousers smooth at 2 m, shorts
+  plastic → knee/seat drag folds + side seams; (3) black long-hair sheet one surface from behind → lock breakup
+  all round; (4) hands at 2 m: finger separation + nail/knuckle hint; (5) seated thighs resting on seats.
+  New: `scripts/ped-crouch.mjs` (renderer `probe` hook in render.ts: every posed upright figure's pelvis drop
+  + knees, histogram + worst cases by state/persona).
 * 2026-10-28 ~22:15 UTC — session 5 ENDED (context ~197k). All pushed. Downtown: console clean, invariants {}
   (shots/w4/dt5b.txt). Sheet docs/progress/real/w4_after_s5.jpg (eyes before|after, dark long hair, trousers +
   knit at 1 m). Next: (a) trousers still fairly smooth at 2 m — stronger drape folds in form (VS) rather than
