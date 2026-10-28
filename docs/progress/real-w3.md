@@ -3,6 +3,11 @@
 Branch `claude/real-w3-furniture` (from `claude/pensive-gates-bim12i`). Brief: docs/progress/real-briefs.md "W3".
 
 ## Resume here
+* 2026-10-28 — **Session 3 started.** Merged lead (9708a9f). Lead order: (1) statue figure silhouette at 10 m
+  (head, shoulders, arm gesture, coat folds) + patina streaks onto plinth + deeper mouldings; (2) market stall cloth
+  folds, higher produce + price cards, crates beside/under, stalls differ (awning colours, goods); (3) gazebo/kiosk
+  column base/capital; (4) planter plants varied + overhanging; (5) bench `bin 10m` framing bug; (6) bench fixings
+  + wear at 3 m; then phone box interior, bike rack with locked bike.
 * 2026-10-28 — **Session 2 status** (see "Session 2 progress" below). Downtown invariants 0, console clean
   (after fixing statue steps + market canopy radius). Sheets: docs/progress/real/w3_after_3.jpg / _4.jpg.
   **Next (session 3), in order:** (1) statue figure: face still mask-like (brow/nose boxes), lapels read as
