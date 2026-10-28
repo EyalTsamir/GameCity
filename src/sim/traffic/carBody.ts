@@ -250,6 +250,21 @@ export function endSurface(s: CarShape, x: number, y: number, sign: number): { z
 }
 
 /** the last ring at an end (sign 1 front, −1 rear): x, y, z of ring points 0 … 9 */
+/** height of the body's outer surface at (x, z) across the top (roof / bonnet), from ring points 9 → 8 → 7 */
+export function topSurfaceY(s: CarShape, x: number, z: number): number {
+  ringAt(s, z, _P);
+  const ax = Math.abs(x);
+  for (const k of [9, 8]) {
+    const x0 = _P[k * 3],
+      x1 = _P[(k - 1) * 3];
+    if (ax <= x1 || k === 8) {
+      const t = clamp01((ax - x0) / Math.max(1e-3, x1 - x0));
+      return _P[k * 3 + 1] + (_P[(k - 1) * 3 + 1] - _P[k * 3 + 1]) * t;
+    }
+  }
+  return _P[28];
+}
+
 export function endRing(s: CarShape, sign: number): Float64Array {
   const P = new Float64Array(RING * 3);
   ringAt(s, (sign * s.L) / 2, P);

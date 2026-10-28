@@ -1,9 +1,9 @@
 // Vehicle classes for the traffic sim: physical size, driving style and how
 // they are drawn. Model index = position in MODEL_KINDS (one InstancedMesh each).
 
-export type ModelKind = 'compact' | 'hatch' | 'sedan' | 'suv' | 'delivery' | 'lorry' | 'bus' | 'icecream' | 'bike' | 'moto';
+export type ModelKind = 'compact' | 'hatch' | 'sedan' | 'suv' | 'estate' | 'mpv' | 'delivery' | 'lorry' | 'bus' | 'icecream' | 'bike' | 'moto';
 
-export const MODEL_KINDS: ModelKind[] = ['compact', 'hatch', 'sedan', 'suv', 'delivery', 'lorry', 'bus', 'icecream', 'bike', 'moto'];
+export const MODEL_KINDS: ModelKind[] = ['compact', 'hatch', 'sedan', 'suv', 'delivery', 'lorry', 'bus', 'icecream', 'bike', 'moto', 'estate', 'mpv'];
 
 /** Variants of the sedan family (instance attribute selects the extra parts). */
 export const SEDAN_PLAIN = 0;
@@ -50,6 +50,9 @@ export const SPECS: Record<ModelKind, VehicleSpec> = {
   lorry: spec('lorry', { len: 7.6, width: 2.35, height: 3.05, wheelbase: 4.4, frontOverhang: 1.3, wheelR: 0.48, accel: 1.0, decel: 2.0, headway: 1.8, speedFactor: 0.85, sweep: 0.85, label: 'Lorry' }),
   bus: spec('bus', { len: 11.0, width: 2.5, height: 3.1, wheelbase: 6.0, frontOverhang: 2.6, wheelR: 0.48, accel: 1.05, decel: 2.0, headway: 1.8, speedFactor: 0.88, sweep: 1.0, label: 'Bus' }),
   icecream: spec('icecream', { len: 5.0, width: 2.0, height: 2.6, wheelbase: 3.0, frontOverhang: 0.9, wheelR: 0.36, accel: 1.3, decel: 2.3, headway: 1.6, speedFactor: 0.75, sweep: 0.5, label: 'Ice-cream van' }),
+  // parked only (silhouette variety in car parks; the traffic mix is unchanged)
+  estate: spec('estate', { len: 4.7, width: 1.8, height: 1.5, wheelbase: 2.82, frontOverhang: 0.93, wheelR: 0.32, accel: 1.8, decel: 2.6, headway: 1.3, speedFactor: 1.0, sweep: 0.35, label: 'Estate' }),
+  mpv: spec('mpv', { len: 4.5, width: 1.84, height: 1.7, wheelbase: 2.85, frontOverhang: 0.82, wheelR: 0.33, accel: 1.7, decel: 2.5, headway: 1.35, speedFactor: 0.98, sweep: 0.36, label: 'People carrier' }),
   bike: spec('bike', { len: 1.75, width: 0.62, height: 1.75, wheelbase: 1.05, frontOverhang: 0.36, wheelR: 0.34, accel: 1.1, decel: 2.2, headway: 1.0, speedFactor: 0.5, sweep: 0.1, label: 'Cyclist', variant: 0, offset: 0.85 }),
   moto: spec('moto', { len: 1.82, width: 0.72, height: 1.7, wheelbase: 1.3, frontOverhang: 0.26, wheelR: 0.24, accel: 2.3, decel: 3.0, headway: 1.05, speedFactor: 0.88, sweep: 0.1, label: 'Moped', variant: 0, offset: 0.45 }),
 };
@@ -96,23 +99,34 @@ export const MIX: { model: ModelKind; variant: number; w: number }[] = [
   { model: 'lorry', variant: 0, w: 4 },
 ];
 
-/** Body colours (instance colour on the painted parts). */
+/**
+ * Body colours (instance colour on the painted parts), weighted like a real fleet by repetition: mostly white,
+ * black, grey and silver (dark paint is where the clear-coat reflections read most), some blue and red, a few
+ * brighter accents. rng.pick draws one number whatever the length, so the sim's sequence is unchanged.
+ */
 export const BODY_COLORS = [
-  '#e63946',
-  '#f4a261',
-  '#2a9d8f',
-  '#e9c46a',
+  '#f2f2ef',
+  '#e9e8e3',
+  '#f6f5f0',
+  '#dcdcd6',
+  '#16171a',
+  '#1d1f23',
+  '#25272b',
+  '#54585e',
+  '#6b7077',
+  '#3f4349',
+  '#a9adb2',
+  '#b9bcc0',
+  '#9ca1a7',
+  '#1f3a5f',
+  '#2f5784',
+  '#8f1d1d',
+  '#b3262a',
+  '#2f4a3a',
+  '#8a7560',
+  '#d9831f',
   '#457b9d',
-  '#f1faee',
-  '#264653',
-  '#8d6cab',
-  '#f4f2ec',
-  '#c8ccd0',
-  '#767c84',
-  '#3a3e45',
-  '#9fd3c4',
-  '#d9839b',
-  '#b5523b',
+  '#e9c46a',
 ];
 
 export const TAXI_COLOR = '#f5c518';

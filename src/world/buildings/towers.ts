@@ -319,6 +319,32 @@ export function genTower(g: Gen): void {
         const cd = arcade ? 0.8 : 1.5;
         setCol(g.trim, col('#2e353c'));
         sideBox(g.trim, sg, u - 2.2, u + 2.2, 0, cd, 3.55, 3.8, true);
+        // brushed-steel fascia lip, hanger rods back to the wall, a lit number on the fascia
+        setCol(g.trim, col('#9aa1a7'));
+        sideBox(g.trim, sg, u - 2.24, u + 2.24, cd - 0.05, cd + 0.02, 3.5, 3.86, true);
+        if (!arcade) {
+          for (const ru of [u - 1.8, u + 1.8]) g.trim.beam(sx(sg, ru, cd - 0.08), 3.84, sz(sg, ru, cd - 0.08), sx(sg, ru, 0.02), gH - 0.3, sz(sg, ru, 0.02), 0.03, 0.03);
+          setCol(g.trim, col('#7d848a'));
+          for (const ru of [u - 1.8, u + 1.8]) sideBox(g.trim, sg, ru - 0.07, ru + 0.07, 0, 0.03, gH - 0.4, gH - 0.18);
+        }
+        const num = 2 + (g.seed % 47) * 2;
+        const nr = g.atlas.add(`tnum:${num}`, 96, 40, boardSign(String(num), { bg: '#9aa1a7', fg: '#1e2328', font: '"Segoe UI", Arial, sans-serif', weight: '600', glow: 0.6, glowColor: '#ffffff' }));
+        signOnSide(g, sg, u - 0.32, u + 0.32, cd + 0.025, 3.56, 3.8, nr);
+        // door furniture beside the entrance: intercom / access panel, tenant board, a letter plate
+        const iu = u + 1.62;
+        setCol(g.trim, col('#b9bfc4'));
+        sideBox(g.trim, sg, iu - 0.11, iu + 0.11, 0, 0.025, 1.18, 1.52);
+        setCol(g.trim, col('#1c2024'));
+        sideBox(g.trim, sg, iu - 0.06, iu + 0.06, 0.025, 0.03, 1.4, 1.48);
+        for (let r = 0; r < 3; r++) for (let c2 = 0; c2 < 2; c2++) sideBox(g.trim, sg, iu - 0.06 + c2 * 0.07, iu - 0.01 + c2 * 0.07, 0.025, 0.033, 1.23 + r * 0.05, 1.265 + r * 0.05);
+        if (sg.L - (u + 1.62) > 1.1) {
+          setCol(g.trim, col('#15191d'));
+          sideBox(g.trim, sg, iu + 0.3, iu + 0.82, 0, 0.03, 1.05, 1.85);
+          setCol(g.trim, col('#c9ced2'));
+          for (let k = 0; k < 7; k++) sideBox(g.trim, sg, iu + 0.36, iu + 0.36 + 0.26 + ((g.seed + k * 5) % 3) * 0.06, 0.03, 0.034, 1.7 - k * 0.085, 1.718 - k * 0.085);
+        }
+        setCol(g.trim, col('#8e959b'));
+        sideBox(g.trim, sg, u - 1.78, u - 1.46, 0, 0.02, 0.95, 1.03);
         for (const lu of [u - 1.4, u, u + 1.4]) {
           const lx = sx(sg, lu, cd * 0.6),
             lz = sz(sg, lu, cd * 0.6);

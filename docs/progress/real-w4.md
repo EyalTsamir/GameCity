@@ -7,6 +7,11 @@ Photo test "Person" (REAL.md). Owned: `src/sim/pedestrians/**` presentation (not
 * s4 addendum (lead, bug hunter finding 1): market/cart vendors spawned as persona 'worker' (hi-vis vest +
   hard hat). Now a 'shopper' look + `dressVendor` (crowd.ts): work-colour trousers + knee apron, no hats/bags/vest,
   some sleeves rolled. Judged shots/w4/vend1 (bench marketstall 4 m): casual stallholders, no hi-vis.
+* 2026-10-28 ~22:10 UTC — session 5 STARTED from pensive-gates b087c4b. Lead's s4 verdict priorities:
+  (1) sclera too bright on dark skin (off-white, lid shadow, smaller), (2) long hair = black plaster sheet (sheen
+  bands, separated locks at the ends, thinning edges), (3) FACE-edge tone line + judge fringe, (4) clothing at 2 m
+  plastic (fabric roughness/micro-texture, collar/placket depth, pockets), (5) idle people (weight shift,
+  gestures, head turns). Baseline: shots/w4/s5a (dark-skin faces), shots/w4/s5h (long hair).
 * 2026-10-28 ~21:50 UTC — session 4 ENDED. All pushed. Downtown shot: console clean, invariants {}
   (shots/w4/dt4.txt). Sheet docs/progress/real/w4_after_s4.jpg (frames predate the last two commits:
   close fringe + clump breaks — judge those first: `node scripts/people-bench.mjs --n 4 --skip 1 --shots

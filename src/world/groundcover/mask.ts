@@ -131,7 +131,7 @@ export function buildCoverMaps(ctx: CityContext): CoverMaps {
   const model = getTerrainModel(plan);
   const H = (ctx.services.terrain as { height?: (x: number, z: number) => number } | undefined)?.height ?? model.height;
   const layout = getLayout(ctx);
-  const trees = ((ctx.services.vegetation as { trees?: { x: number; z: number; r: number; h: number }[] } | undefined)?.trees ?? []).slice();
+  const trees = ((ctx.services.vegetation as { trees?: { x: number; z: number; r: number; h: number; worn?: number }[] } | undefined)?.trees ?? []).slice();
   const occ = ctx.occupancy;
   const noise = makeNoiseSampler();
   const R = () => new Raster(CW, CH, SLAB.x0, SLAB.z0, CRES);
@@ -207,7 +207,11 @@ export function buildCoverMaps(ctx: CityContext): CoverMaps {
   for (const lot of plan.lots) edge.rectStroke(lot.footprint.x0, lot.footprint.z0, lot.footprint.x1, lot.footprint.z1, 0.9, 120, 'max');
   for (const b of plan.blocks) edge.rectStroke(b.rect.x0, b.rect.z0, b.rect.x1, b.rect.z1, 0.55, 80, 'max');
   for (const b of layout.borders) edge.capsule(b.ax, b.az, b.bx, b.bz, b.style === 'hedge' ? 0.75 : 0.55, b.style === 'hedge' ? 110 : 150, 'max');
-  for (const t of trees) edge.disc(t.x, t.z, 0.55 + Math.min(0.5, t.h * 0.03), 130, 'max');
+  for (const t of trees) if (!t.worn) edge.disc(t.x, t.z, 0.55 + Math.min(0.5, t.h * 0.03), 130, 'max');
+  // trodden bare earth at the foot of park / square trees (vegetation trees[].worn, drawn by vegetation/plants.ts
+  // wornPatch): no blades inside, thinning over the last ~30 % of the radius
+  const worn = R();
+  for (const t of trees) if (t.worn) worn.disc(t.x, t.z, t.worn, 255, 'max', (q) => 1 - Math.max(0, (q - 0.7) / 0.3));
   for (const l of layout.lamps) edge.disc(l.x, l.z, 0.42, 150, 'max');
   for (const f of plan.features) {
     if (f.radius <= 0 || f.radius > 8 || f.kind === 'pondisland') continue;
@@ -364,6 +368,7 @@ export function buildCoverMaps(ctx: CityContext): CoverMaps {
   mark('lattice');
   const AD = allow.data,
     ED = edge.data,
+    WN = worn.data,
     MD = meadow.data,
     WD = mown.data,
     KD = weed.data,
@@ -429,6 +434,7 @@ export function buildCoverMaps(ctx: CityContext): CoverMaps {
       // ── density
       let dens = al * (1 - sand) * (1 - rock * 0.95) * (1 - smooth(0.06, 0.8, wear) * 0.92);
       if (above < 0.03) dens = 0;
+      dens *= 1 - WN[p] / 255;
       // ── length
       let len = smooth(0.08, 0.75, wild) * 0.8;
       len = Math.max(len, (MD[p] / 255) * 0.86);

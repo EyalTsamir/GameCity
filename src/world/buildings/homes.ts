@@ -6,7 +6,7 @@
 //   lplan    a front-gabled wing projects on one side, the door sits in the recess beside it
 //            under a porch roof (cross-gable roof: the wing roof runs into the main slope)
 //   garage   a single-storey garage wing on the driveway side (flat / shed / gable roof)
-//            with the door facing the driveway; the main body is narrower
+//            with the door facing the street; the main body is narrower
 //   bay      ground-floor canted bay window beside the door + a hood canopy over the door
 //
 // plus, independently: roof shape (side gable, front gable, hip, half-hip, gambrel), a rear
@@ -52,6 +52,8 @@ interface Op {
   w: number;
   h: number;
   kind: 'door' | 'garage' | 'patio' | 'gap';
+  /** secondary door: no house number / bell */
+  plain?: boolean;
 }
 
 /** House plan statistics (for module stats / tuning). */
@@ -199,7 +201,7 @@ export function genHouse(g: Gen): void {
     );
     for (const op of ops) {
       if (op.kind === 'door') {
-        doorNiche(g, sg, op.u, { w: op.w, h: op.h, depth: 0.12, wallColor: gc, frameColor: trimC, doorColor: doorC, transom: rng.chance(0.3), seed: g.seed, frameOut: 0.08 });
+        doorNiche(g, sg, op.u, { w: op.w, h: op.h, depth: 0.12, wallColor: gc, frameColor: trimC, doorColor: doorC, transom: !op.plain && rng.chance(0.3), seed: g.seed, frameOut: 0.08, plain: op.plain });
       } else if (op.kind === 'garage') garageDoor(sg, op.u, op.w, op.h);
       else if (op.kind === 'patio') patioDoor(sg, op.u, op.w, op.h);
     }
@@ -234,10 +236,9 @@ export function genHouse(g: Gen): void {
     const L = uB - uA;
     const ops: Op[] = [];
     if (garageInSide && drive === sd && L > 5.5) {
-      const gw = 2.7,
-        gh = Math.min(2.25, top - 0.5);
-      // near the front of the house (the driveway runs along the front part of the side)
-      ops.push({ u: frontAtU0 ? uA + 0.7 + gw / 2 : uB - 0.7 - gw / 2, w: gw, h: gh, kind: 'garage' });
+      // a side entrance onto the driveway (a garage door here would stand at right angles to the drive)
+      const u = frontAtU0 ? uA + L * 0.62 : uB - L * 0.62;
+      ops.push({ u, w: 0.95, h: Math.min(2.1, top - 0.3), kind: 'door', plain: true });
     }
     groundRun(sg, uA, uB, ops, true, top);
   };
@@ -447,16 +448,16 @@ export function genHouse(g: Gen): void {
     const gTop = garTop;
     const outerRight = gar.x1 >= F.x1 - 1e-3;
     const gs = sideGeom(gar, outerRight ? RIGHT : LEFT);
-    const gw = 2.65,
-      gh = 2.2;
-    const gu = outerRight ? 0.45 + gw / 2 + 0.25 : gs.L - 0.45 - gw / 2 - 0.25;
     const garLook: PlainLook = gPlain;
-    bandWithOpenings(gs, 0, gs.L, [{ u: gu, w: gw, h: gh }], (a, b) => wallPlain(s, gs, a, b, 0, gTop, garLook), (a, b, y0) => wallPlain(s, gs, a, b, y0, gTop, garLook));
-    garageDoor(gs, gu, gw, gh);
-    // street face: a small window; back face: a side door
+    // street face: the garage door (the drive leads up to it from the street); driveway side: a small window
     const fsg = sideGeom(gar, FRONT);
-    const gr = makeGrid(0, fsg.L, 0, gTop, 1, { spacing: fsg.L, cols: 1, winW: 1.1, winH: 0.75, sill: 1.35, margin: 0.4 });
-    wallGrid(s, fsg, 0, fsg.L, 0, gTop, gr, gLook(WIN.PLAIN));
+    const gw = Math.min(2.65, fsg.L - 0.5),
+      gh = 2.2;
+    const gu = fsg.L / 2;
+    bandWithOpenings(fsg, 0, fsg.L, [{ u: gu, w: gw, h: gh }], (a, b) => wallPlain(s, fsg, a, b, 0, gTop, garLook), (a, b, y0) => wallPlain(s, fsg, a, b, y0, gTop, garLook));
+    garageDoor(fsg, gu, gw, gh, false);
+    const gr = makeGrid(0, gs.L, 0, gTop, 1, { spacing: gs.L, cols: 1, winW: 1.1, winH: 0.75, sill: 1.35, margin: 0.4 });
+    wallGrid(s, gs, 0, gs.L, 0, gTop, gr, gLook(WIN.PLAIN));
     const bsg = sideGeom(gar, BACK);
     wallPlain(s, bsg, 0, bsg.L, 0, gTop, garLook);
     const gRoof = floors === 2 ? rng.int(0, 2) : rng.chance(0.5) ? 0 : 2;
@@ -936,7 +937,7 @@ export function genHouse(g: Gen): void {
     for (const bx of [x - w / 2 + 0.1, x + w / 2 - 0.1]) t.beam(bx, y0 - 0.28, zW + 0.03, bx, y0 - 0.03, zW + 0.4, 0.07, 0.07);
   }
 
-  function garageDoor(sg: SideGeom, u: number, w: number, h: number): void {
+  function garageDoor(sg: SideGeom, u: number, w: number, h: number, lamp = true): void {
     const gcol = col(rng.pick(['#f2efe8', '#d9d4c8', '#8a6a4f', '#7d8790', '#3f4a52']));
     setCol(t, gcol);
     const d = 0.1;
@@ -953,7 +954,7 @@ export function genHouse(g: Gen): void {
     sideBox(t, sg, u - w / 2 - 0.12, u + w / 2 + 0.12, 0, 0.08, h, h + 0.14, true);
     sideBox(t, sg, u - w / 2 - 0.12, u - w / 2, 0, 0.08, 0, h);
     sideBox(t, sg, u + w / 2, u + w / 2 + 0.12, 0, 0.08, 0, h);
-    wallLamp(g, sg, u + w / 2 + 0.4, 2.42, 0);
+    if (lamp) wallLamp(g, sg, u + w / 2 + 0.4, 2.42, 0);
   }
 
   function patioDoor(sg: SideGeom, u: number, w: number, h: number): void {

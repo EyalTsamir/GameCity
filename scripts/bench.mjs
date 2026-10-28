@@ -175,6 +175,17 @@ try {
         h.getPosition(p);
         const yaw = h.getHeading ? (h.getHeading() * 180) / Math.PI : 0;
         const H = { car: 1.5, bus: 3, pedestrian: 1.75, train: 4, boat: 3 }[cls];
+        // a bus is 11 m long: aim at its front end (a camera at 4 m from the middle stands inside the body, and the
+        // line-of-sight search then ends looking down on the roof), from a front three-quarter yaw, low pitch
+        if (cls === 'train') {
+          // a train car is 15 m long and stands at a platform: aim at the leading bogie at axle height, low pitch
+          const hd = h.getHeading ? h.getHeading() : 0;
+          return { x: p.x + Math.sin(hd) * 5.2, y: p.y, z: p.z + Math.cos(hd) * 5.2, yaw: yaw + 60, h: 1.6, w: 2, pitch: 4 };
+        }
+        if (cls === 'bus') {
+          const hd = h.getHeading ? h.getHeading() : 0;
+          return { x: p.x + Math.sin(hd) * 4.6, y: p.y, z: p.z + Math.cos(hd) * 4.6, yaw: yaw + 28, h: 2.4, w: 2, pitch: 5 };
+        }
         return { x: p.x, y: p.y, z: p.z, yaw: yaw + 35, h: H, w: 2 };
       },
       [cls, pickIdx],
@@ -256,7 +267,22 @@ try {
       await page.waitForTimeout(settle);
       const file = path.join(outDir, `${cls}_${d}m${yo ? '_y' + yo : ''}.png`);
       await page.screenshot({ path: file, timeout: 240000 });
-      report.captures.push({ cls, d, los, file: path.relative(root, file), at: [loc.x, loc.y, loc.z].map((v) => Math.round(v * 10) / 10) });
+      // --probe "px,py;px,py": what is drawn at these screen pixels (first raycast hits: mesh name, point, normal)
+      const probe = !args.probe
+        ? undefined
+        : await page.evaluate(async (spec) => {
+            const THREE = await import('/node_modules/.vite/deps/three.js').catch(() => null);
+            if (!THREE) return 'three not importable';
+            const c = window.__city, cam = c.ctx.camera, sz = c.ctx.size;
+            const rc = new THREE.Raycaster();
+            return spec.split(';').map((pp) => {
+              const [px, py] = pp.split(',').map(Number);
+              rc.setFromCamera(new THREE.Vector2((px / sz.width) * 2 - 1, -(py / sz.height) * 2 + 1), cam);
+              return rc.intersectObjects(c.ctx.scene.children, true).filter((h) => h.object.visible).slice(0, 4).map((h) => ({
+                name: h.object.name || h.object.parent?.name, d: +h.distance.toFixed(3), p: h.point.toArray().map((v) => +v.toFixed(3)), n: h.face?.normal.toArray().map((v) => +v.toFixed(2)) }));
+            });
+          }, args.probe);
+      report.captures.push({ cls, d, los, file: path.relative(root, file), probe, at: [loc.x, loc.y, loc.z].map((v) => Math.round(v * 10) / 10) });
     }
     await page.evaluate(() => window.__city.setSpeed(1));
   }
