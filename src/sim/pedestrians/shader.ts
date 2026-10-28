@@ -227,6 +227,9 @@ bool pedVisible(uint d0) {
   return ((d0 >> 16u) & 1u) == 1u ? !has : has;
 }
 
+// shadow-proxy shrink share: hands and fingers are thinner than the 1 cm shrink (their proxy turned inside
+// out and self-shadowed the back of the hand in a dot grid)
+float pedShrink = 1.0;
 void pedPose(inout vec3 p, inout vec3 n) {
   vPedFade = P_fade;
   vPedFace = vec3(0.0);
@@ -410,6 +413,7 @@ void pedPose(inout vec3 p, inout vec3 n) {
   }
 
   // ── hand grip: fingers curl towards the palm about the knuckles
+  if (bone == ${B.HAND_L} || bone == ${B.HAND_R}) pedShrink = 0.15;
   if ((bone == ${B.HAND_L} || bone == ${B.HAND_R}) && aux.x > 0.0) {
     bool left = bone == ${B.HAND_L};
     vec3 wr = pedPivS(${PIV.WRIST}, left);
@@ -639,6 +643,8 @@ vec3 pedLocks(vec3 r, float tip) {
 // ── fabric (close range): seams, stitching, folds where the limb bends (knee / elbow creases deepen with
 // the bend), trouser breaks over the shoe, sleeve gathers, side drape at the waist, weave grain; denim
 // gets the orange twin stitching and back pockets. Fades out where a pixel covers > ~1 cm.
+// a fold: a narrow crest, broad shallow troughs (−0.25 … 0.75)
+float pedRidge(float x) { float t = 1.0 - abs(fract(x) - 0.5) * 2.0; return t * t * t - 0.25; }
 float pedBand2(float d, float hw, float px) { return 1.0 - smoothstep(hw - px * 0.5, hw + px * 0.5, abs(d)); }
 // relief for the normal stage (FABRIC_NORMAL): fold / seam height + weave, and the fabric share (fuzz sheen)
 uniform float uPedFolds;
@@ -689,19 +695,28 @@ vec3 pedFabric(vec3 pc, float reg, float h, float sHem) {
       float L = vPedHgt * 0.47; // ≈ leg length (m) per unit of h
       float aa = abs(ang);
       float back = smoothstep(1.7, 2.4, aa);
-      float hc = exp(-pow((h - 0.51) / 0.065, 2.0)) * back;
-      float hcP = (h - 0.51) * L * 180.0 + pow(aa - 3.1416, 2.0) * 2.2;
-      fold += hc * (0.0012 + 0.0022 * bk) * sin(hcP);
-      float cr = smoothstep(0.66, 0.84, h) * (1.0 - smoothstep(0.9, 0.95, h)) * smoothstep(0.2, -0.6, ang) * smoothstep(-2.4, -1.6, ang);
-      float wd = length(vec2((ang + 1.5) * 0.065, (0.92 - h) * L));
-      fold += cr * 0.0021 * exp(-wd * 9.0) * sin((ang + 1.5) * 9.0 - (0.92 - h) * L * 40.0 + sin(wd * 30.0));
-      float sd = smoothstep(0.76, 0.86, h) * (1.0 - smoothstep(0.92, 0.97, h)) * back;
-      fold += sd * 0.0018 * sin((h - 0.86) * L * 150.0 + pow(aa - 3.1416, 2.0) * 3.0 + bk * 0.0);
-      fold -= sd * 0.0025 * exp(-pow((h - 0.925) / 0.012, 2.0));
-      float hang = (1.0 - kz) * (1.0 - cr) * (1.0 - sd);
-      fold += hang * 0.0014 * 0.76 * sin(ang * 4.0 + sin(h * 9.0 + side) * 0.9 + 0.7 * side) * (0.6 + 0.4 * sin(h * 6.5 - ang));
-      float bg = exp(-pow((h - 0.38) / 0.09, 2.0)) * smoothstep(1.3, 0.4, aa);
-      fold += bg * 0.0016 * sin((h - 0.38) * L * 75.0 + ang * 2.6 * side);
+      // honeycomb behind the knee: 2–3 stacked arcs, deeper with the bend
+      float hc = exp(-pow((h - 0.5) / 0.075, 2.0)) * back;
+      float hcP = (h - 0.5) * L / 0.045 + pow(aa - 3.1416, 2.0) * 1.6 + 0.3 * side;
+      fold += hc * (0.0022 + 0.0035 * bk) * (pedRidge(hcP) * (0.6 + 0.8 * pedN1(floor(hcP) * 3.7 + side)));
+      // crotch whiskers: diagonal ridges fanning from the crotch over the inner front thigh
+      float cr = smoothstep(0.64, 0.82, h) * (1.0 - smoothstep(0.9, 0.95, h)) * smoothstep(0.3, -0.5, ang) * smoothstep(-2.5, -1.7, ang);
+      float wd = length(vec2((ang + 1.5) * 0.07, (0.92 - h) * L));
+      float wP = (ang + 1.5) * 4.2 - (0.92 - h) * L * 26.0 + side;
+      fold += cr * 0.0032 * exp(-wd * 7.0) * pedRidge(wP) * (0.5 + pedN1(floor(wP) * 5.1));
+      // under the seat: curved drag folds pulled from the buttock fold, stronger on the leg behind
+      float sd = smoothstep(0.74, 0.85, h) * (1.0 - smoothstep(0.92, 0.96, h)) * back;
+      float sP = (h - 0.85) * L / 0.04 + pow(aa - 3.1416, 2.0) * 2.4 + aa * 0.8 * side;
+      fold += sd * 0.003 * pedRidge(sP) * (0.4 + pedN1(floor(sP) * 2.3 + side));
+      fold -= sd * 0.003 * exp(-pow((h - 0.925) / 0.014, 2.0));
+      // the leg hangs in a few soft tube folds that wander down its length (loose cloth more)
+      float hang = (1.0 - kz) * (1.0 - cr) * (1.0 - sd) * (1.0 - step(0.88, h));
+      float tP = ang * 0.9 + 0.35 * sin(h * 7.0 + side * 2.0) + 0.15 * sin(h * 19.0 - ang);
+      fold += hang * 0.0045 * (pedN1(tP * 4.0 + side * 7.0) - 0.5) * (0.6 + 0.4 * sin(h * 5.0 + ang + side));
+      // bagging below the knee: diagonal folds down the shin front
+      float bg = exp(-pow((h - 0.37) / 0.1, 2.0)) * smoothstep(1.4, 0.4, aa);
+      float bP = (h - 0.37) * L / 0.06 + ang * 1.1 * side;
+      fold += bg * 0.0025 * pedRidge(bP) * (0.4 + pedN1(floor(bP) * 4.3 - side));
       // pressed side seam: the allowance lifts one side (a step), puckers along the stitch line
       float sn = rn.z * 0.07; // ≈ m across the seam line (7 cm leg radius)
       float sk = 1.0 - step(0.88, h);
@@ -788,10 +803,10 @@ vec3 pedFabric(vec3 pc, float reg, float h, float sHem) {
   // hem's rolled edge catching the light just above it (shorts and short sleeves read as cloth, not paint)
   if (reg > 1.5 && reg < 3.5) {
     float hm = sHem * vPedHgt * (reg > 2.5 ? 0.47 : 0.33); // ≈ m from the hem along the limb
-    pc *= 1.0 - det * uPedFolds * (0.42 * exp(-max(-hm, 0.0) / 0.007) * step(hm, 0.0) - 0.07 * pedBand2(hm - 0.003, 0.0025, px * 2.0));
+    pc *= 1.0 - det * uPedFolds * (0.5 * exp(-max(-hm, 0.0) / 0.012) * step(hm, 0.0) - 0.07 * pedBand2(hm - 0.003, 0.0025, px * 2.0));
   }
   // folds: occlusion in the troughs, a little light on the ridges
-  pc *= mix(1.0, 1.0 - 45.0 * max(-fold, 0.0) + 14.0 * max(fold, 0.0), det * cloth * uPedFolds);
+  pc *= mix(1.0, 1.0 - 70.0 * max(-fold, 0.0) + 22.0 * max(fold, 0.0), det * cloth * uPedFolds);
   pedFabH = ((sh - 1.0) * 0.0065 + wv * wvK * (knit ? 0.00018 : 0.0001) + fold * uPedFolds) * pedFabK;
   pc = mix(pc, thread, clamp(stitch, 0.0, 1.0) * det * (denim ? 0.7 : 0.35));
   return pc;
@@ -956,7 +971,10 @@ const FRAG_COLOR = /* glsl */ `
       pc *= pedStrands(vPedRest);
       // big locks all round (the back read as one black sheet): occluded gaps, a tone per lock
       vec3 lk = pedLocks(vPedRest, vPedFace.x);
-      pc *= mix(1.0, (0.62 + 0.38 * lk.x) * (0.88 + 0.24 * lk.y), lk.z);
+      pc *= mix(1.0, (0.55 + 0.45 * lk.x) * (0.85 + 0.3 * lk.y), lk.z);
+      // sky sheen on each lock's crest: black hair in shade still shows its locks (a grey-blue lift that
+      // the albedo carries into the ambient light — the direct-light sheen alone only shows in the sun)
+      pc += vec3(0.02, 0.022, 0.026) * pow(lk.x, 6.0) * (0.5 + lk.y) * lk.z * (1.0 - smoothstep(0.15, 0.4, dot(pc, vec3(0.33))));
       vec2 hf = pedHairFlow(vPedRest);
       float ca = hf.x * 26.0 + sin(hf.y * 9.0) * 0.8;
       float far = smoothstep(0.35, 0.9, fwidth(ca));
@@ -1143,7 +1161,7 @@ function injectVertex(src: string, normals: boolean): string {
   } else {
     // depth (shadow proxy): shrunk 1 cm along the normal so the coarse proxy never pokes out of the
     // detailed figure it shadows (jagged self-shadow bands on skirts and sleeves)
-    s = s.replace('#include <begin_vertex>', 'vec3 transformed = vec3( position );\n  vec3 pedN = vec3( normal );\n  pedPose( transformed, pedN );\n  transformed -= pedN * 0.01 * P_scale;');
+    s = s.replace('#include <begin_vertex>', 'vec3 transformed = vec3( position );\n  vec3 pedN = vec3( normal );\n  pedPose( transformed, pedN );\n  transformed -= pedN * 0.01 * P_scale * pedShrink;');
   }
   return s;
 }

@@ -699,13 +699,18 @@ export interface IdleShift {
 
 /** fastest speed the gait poses (m/s) — joggers cruise at 2.75 */
 const GAIT_VMAX = 2.9;
+/** fastest speed a non-jogger poses (m/s): just below the run blend's onset (1.95) */
+const GAIT_VWALK = 1.9;
 
 export function gaitPose(m: Member, r: Rig, st: GaitState | null, frame: number, idle: IdleShift, o: GaitOut): GaitOut {
   const t = gaitIn.t,
     gw = gaitIn.gw;
   // capped at a jog: the crowd's speed spikes on position corrections (catch-ups, formation shuffles: 8–9 m/s
   // for a few frames) would plan strides no leg reaches — the pelvis then drops into a frog squat
-  const v = m.speed < GAIT_VMAX ? m.speed : GAIT_VMAX;
+  // only joggers run: everyone else catching up with the party (after a time jump the crowd closes up
+  // at 2–2.8 m/s for a few seconds; formation shuffles) walks briskly — a stroller never breaks into a jog
+  const vMax = m.party.persona === 'jogger' ? GAIT_VMAX : GAIT_VWALK;
+  const v = m.speed < vMax ? m.speed : vMax;
   G.v = v;
   const pram = !!m.look.pram;
   const p = params(r, pram);
