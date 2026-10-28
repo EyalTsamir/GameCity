@@ -27,6 +27,7 @@ const skip = parseInt(args.skip ?? '0', 10);
 const hours = parseFloat(args.hours ?? '11');
 const shots = (args.shots ?? 'face,hand,body').split(',');
 // --persona jogger: only that persona's parties; --lods close,near: each shot once per forced level (same figure, same frame) — '' = by distance
+// --where "m.look.style.tail === 2 && m.speed > 1": JS filter on the member; --carry 1: only people carrying something; --rain 0.8: forced weather (umbrellas up)
 const lods = (args.lods ?? '').split(',');
 let url = args.url ?? 'http://127.0.0.1:5173/';
 url += (url.includes('?') ? '&' : '?') + 'nointro&noidle' + (args.q ? '&' + args.q : '');
@@ -45,17 +46,21 @@ try {
   await page.addStyleTag({ content: '#ui{display:none!important}' });
   report.failedModules = await page.evaluate(() => window.__city.failed);
   await page.evaluate((h) => window.__city.setHours(h), hours);
+  // --rain 0.8: umbrella owners put theirs up
+  if (args.rain) await page.evaluate((r) => window.__city.ctx.services.sky?.setWeather?.(r), parseFloat(args.rain));
   await page.waitForTimeout(2500);
   // standing / slowly walking adults and children on open ground, spread over the crowd
   const figs = await page.evaluate(
-    ([n, skip, persona]) => {
+    ([n, skip, persona, carry, where]) => {
+      const W = where ? new Function('m', 'c', 'return (' + where + ');') : null;
       const c = window.__city;
       c.setSpeed(0);
       const crowd = c.ctx.services.pedestrians._crowd;
       const all = [];
       for (const p of crowd.parties) {
         if (p.state === 'gone' || (persona && p.persona !== persona)) continue;
-        for (const m of p.members) if (m.present && m.fade > 0.99 && m.sit < 0.05 && m.lie < 0.05 && m.rideG === null && !m.look.pram) all.push(m);
+        // --carry: only people carrying something (handbag / shopping / briefcase, cup or phone, umbrella)
+        for (const m of p.members) if ((!W || W(m, c)) && (!carry || (m.look.flags & (128 | 256 | 512)) || m.walkProp > 0 || m.bag || (m.look.umbrellaOwner && c.ctx.uniforms.uRain.value > 0.3)) && m.present && m.fade > 0.99 && m.sit < 0.05 && m.lie < 0.05 && m.rideG === null && !m.look.pram) all.push(m);
       }
       all.sort((a, b) => Math.hypot(a.x, a.z + 40) - Math.hypot(b.x, b.z + 40));
       const out = [];
@@ -70,7 +75,7 @@ try {
       }
       return out;
     },
-    [n, skip, args.persona ?? ''],
+    [n, skip, args.persona ?? '', !!args.carry, args.where ?? ''],
   );
   const SH = {
     face: { ty: 0.925, d: 0.75, dy: 18, pitch: 2 },
@@ -80,6 +85,8 @@ try {
     skirt: { ty: 0.36, d: 1.3, dy: 12, pitch: 4 },
     side: { ty: 0.4, d: 1.6, dy: 80, pitch: 4 },
     face2: { ty: 0.925, d: 2, dy: 25, pitch: 4 },
+    head3q: { ty: 0.93, d: 0.9, dy: 55, pitch: 8 },
+    headback: { ty: 0.93, d: 0.9, dy: 150, pitch: 12 },
   };
   for (let i = 0; i < figs.length; i++) {
     const f = figs[i];

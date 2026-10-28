@@ -1102,12 +1102,13 @@ function buildHair(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
       const t = Math.pow(s, 0.85);
       const y = y0 + (crown - y0) * t;
       const push = vol * ((cfg.close ? 0.08 : 0.25) + (cfg.close ? 0.92 : 0.75) * Math.min(1, s * (cfg.close ? 2.6 : 3.5))) * (1 - 0.35 * t);
-      ids.push(b.v(headSurface(d, phi, Math.min(y, crown - 0.004), push), 2, 0, 0));
+      // aux2 = s: the fragment shader feathers the hairline over the first rings (shader.ts HAIRLINE)
+      ids.push(b.v(headSurface(d, phi, Math.min(y, crown - 0.004), push), 2, 0, 0, s));
     }
     rings.push({ ids, c: [0, chin + (crown - chin) * 0.55, -0.01 * hk] });
   }
   bridge(b, rings);
-  const apex = b.v([0, crown + vol * 0.75, d.headRings[d.headRings.length - 1].cz - 0.006], 2, 0, 0);
+  const apex = b.v([0, crown + vol * 0.75, d.headRings[d.headRings.length - 1].cz - 0.006], 2, 0, 0, 1);
   capFan(b, rings[rings.length - 1], apex, [0, crown - 0.06 * hk, 0]);
 
   if (cfg.hairLong.length === 0) return;
@@ -1779,6 +1780,15 @@ function buildProps(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
       z = r2.cz + r2.f + 0.03 * hk,
       y = r2.y + 0.025 * hk;
     softBox(b, [x, y, z], [0.19 * hk, 0.15 * hk, 0.05 * hk]);
+    if (cfg.close) {
+      // flap over the top two thirds of the front (a shade darker, overhanging the body by a few mm), buckle
+      b.setTint(0.82);
+      softBox(b, [x, y + 0.03 * hk, z + 0.024 * hk], [0.196 * hk, 0.1 * hk, 0.006]);
+      softBox(b, [x, y + 0.075 * hk, z], [0.196 * hk, 0.006, 0.054 * hk]);
+      b.use(BONE.PELVIS, REG.DARK, FB.SHOULDERBAG, 0.9);
+      softBox(b, [x, y - 0.012 * hk, z + 0.028 * hk], [0.022 * hk, 0.016 * hk, 0.004]);
+      b.use(BONE.PELVIS, REG.BAG, FB.SHOULDERBAG, 1);
+    }
     if (all) {
       b.use(BONE.CHEST, REG.STRAP, FB.SHOULDERBAG, 0.75);
       const r9 = d.torso[9],
@@ -1810,7 +1820,17 @@ function buildProps(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
     softBox(b, add(g, [0.008, -0.15 * hk, 0.01]), [0.075 * hk, 0.26 * hk, 0.36 * hk]);
     if (all) {
       b.use(BONE.BAG_L, REG.DARK, FB.BRIEFCASE, 1);
-      stick(b, add(g, [0.008, -0.02 * hk, -0.04 * hk]), add(g, [0.008, -0.02 * hk, 0.05 * hk]), 0.008);
+      if (cfg.close) {
+        // an arched handle on two lugs, a seam round the lid and two catches
+        const yT = -0.02 * hk - 0.03 * hk;
+        stick(b, add(g, [0.008, yT, -0.045 * hk]), add(g, [0.008, -0.012 * hk, -0.035 * hk]), 0.006);
+        stick(b, add(g, [0.008, -0.012 * hk, -0.035 * hk]), add(g, [0.008, -0.004 * hk, 0.0]), 0.006);
+        stick(b, add(g, [0.008, -0.004 * hk, 0.0]), add(g, [0.008, -0.012 * hk, 0.045 * hk]), 0.006);
+        stick(b, add(g, [0.008, -0.012 * hk, 0.045 * hk]), add(g, [0.008, yT, 0.055 * hk]), 0.006);
+        const yl = -0.15 * hk + 0.13 * hk - 0.035 * hk;
+        for (const sx of [1, -1]) softBox(b, add(g, [0.008 + sx * 0.039 * hk, yl, 0.01]), [0.004, 0.006, 0.364 * hk]);
+        for (const zz of [-0.1, 0.12]) for (const sx of [1, -1]) softBox(b, add(g, [0.008 + sx * 0.039 * hk, yl - 0.012, zz * hk]), [0.004, 0.018, 0.022]);
+      } else stick(b, add(g, [0.008, -0.02 * hk, -0.04 * hk]), add(g, [0.008, -0.02 * hk, 0.05 * hk]), 0.008);
     }
   }
   if (all) {
@@ -1837,21 +1857,39 @@ function buildProps(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
     {
       const g = grip(-1);
       const c = add(g, [0.03, 0.015, 0.012]);
-      const rings: Ring[] = [];
-      for (const [dy, r] of [
-        [-0.05, 0.03],
-        [0.06, 0.036],
-      ] as [number, number][]) {
+      const cs = cfg.close ? 14 : 6;
+      const ring = (dy: number, r: number): Ring => {
         const ids: number[] = [];
-        for (let k = 0; k < 6; k++) {
-          const a = (k / 6) * Math.PI * 2;
+        for (let k = 0; k < cs; k++) {
+          const a = (k / cs) * Math.PI * 2;
           ids.push(b.v([c[0] + r * Math.sin(a), c[1] + dy, c[2] + r * Math.cos(a)], 0, 0));
         }
-        rings.push({ ids, c: [c[0], c[1] + dy, c[2]] });
+        return { ids, c: [c[0], c[1] + dy, c[2]] };
+      };
+      if (cfg.close) {
+        // takeaway cup: paper body, a corrugated card sleeve round the middle, a domed lid with a rim
+        const r0 = ring(-0.05, 0.029),
+          s0 = ring(-0.03, 0.0315),
+          s1 = ring(0.025, 0.0345),
+          r1 = ring(0.05, 0.035);
+        bridge(b, [r0, ring(-0.03, 0.0303)]);
+        b.setTint(0.97);
+        bridge(b, [ring(0.025, 0.0333), r1]);
+        b.use(BONE.HAND_R, REG.BAG, FB.CUP, 0.62);
+        bridge(b, [s0, s1]);
+        b.use(BONE.HAND_R, REG.WHITE, FB.CUP, 0.9);
+        const l0 = ring(0.05, 0.0372),
+          l1 = ring(0.06, 0.0372),
+          l2 = ring(0.066, 0.031);
+        bridge(b, [l0, l1, l2]);
+        capFan(b, l2, b.v([c[0], c[1] + 0.07, c[2]], 0, 0), [c[0], c[1], c[2]]);
+        capFan(b, r0, b.v([c[0], c[1] - 0.051, c[2]], 0, 0), [c[0], c[1] + 0.05, c[2]]);
+      } else {
+        bridge(b, [ring(-0.05, 0.03), ring(0.06, 0.036)]);
+        b.use(BONE.HAND_R, REG.DARK, FB.CUP, 1);
+        const top = ring(0.06, 0.036);
+        capFan(b, top, b.v([c[0], c[1] + 0.062, c[2]], 0, 0), [c[0], c[1], c[2]]);
       }
-      bridge(b, rings);
-      b.use(BONE.HAND_R, REG.DARK, FB.CUP, 1);
-      capFan(b, rings[1], b.v([c[0], c[1] + 0.062, c[2]], 0, 0), [c[0], c[1], c[2]]);
     }
   }
   if (!far) {
@@ -1863,10 +1901,23 @@ function buildProps(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
   if (!far) {
     b.use(BONE.UMB, REG.DARK, FB.UMBRELLA, 1);
     const g = grip(-1);
-    stick(b, add(g, [0, -0.06, 0]), add(g, [0, 0.82, 0]), 0.008);
+    stick(b, add(g, [0, -0.06, 0]), add(g, [0, 0.82, 0]), cfg.close ? 0.0055 : 0.008, cfg.close ? 6 : 4);
+    if (cfg.close) {
+      // crook handle below the hand, ferrule on top
+      const hook: P3[] = [
+        [0, -0.06, 0],
+        [0, -0.115, 0],
+        [0, -0.142, 0.018],
+        [0, -0.138, 0.042],
+        [0, -0.112, 0.055],
+      ];
+      for (let i = 0; i < hook.length - 1; i++) stick(b, add(g, hook[i]), add(g, hook[i + 1]), 0.009, 6);
+      stick(b, add(g, [0, 0.98, 0]), add(g, [0, 1.05, 0]), 0.004, 4);
+    }
   }
   b.use(BONE.UMB, REG.EXTRA, FB.UMBRELLA, 1);
-  umbrella(b, d, all ? 8 : cfg.props === 'pin' ? 4 : far ? 5 : 6, all);
+  if (cfg.close) umbrellaClose(b, d);
+  else umbrella(b, d, all ? 8 : cfg.props === 'pin' ? 4 : far ? 5 : 6, all);
   b.use(BONE.GROUND, REG.TOWEL, FB.TOWEL, 1);
   towel(b);
 }
@@ -1888,6 +1939,46 @@ function umbrella(b: MeshBuilder, d: Dims, n: number, under: boolean): void {
     const ua = b.v([g[0], apexY - 0.04, g[2]], 0, 0);
     const rim2 = rim.map((i) => b.v([b.pos[i * 3], b.pos[i * 3 + 1] - 0.004, b.pos[i * 3 + 2]], 0, 0));
     for (let k = 0; k < n; k++) b.triDir(ua, rim2[k], rim2[(k + 1) % n], [0, -1, 0]);
+  }
+}
+
+/** close level: eight ribs, the canopy domed between apex and rim and pulled taut between the ribs (each
+ *  panel's rim edge scallops up between rib tips), a lining underside with the ribs showing */
+function umbrellaClose(b: MeshBuilder, d: Dims): void {
+  const g = lerp3(pv(d.wrist, -1), pv(d.tip, -1), 0.42);
+  const n = 8;
+  const apexY = g[1] + 0.98,
+    rimY = g[1] + 0.74,
+    R = 0.56;
+  const pt = (a: number, rad: number, y: number): P3 => [g[0] + Math.sin(a) * rad, y, g[2] + Math.cos(a) * rad];
+  // rings over 2n directions (rib, panel middle): dome at 0.55 R, rim scalloped
+  const ringPts = (f: number, under: number): P3[] => {
+    const out: P3[] = [];
+    for (let k = 0; k < 2 * n; k++) {
+      const a = (k / (2 * n)) * Math.PI * 2;
+      const mid = k % 2 === 1;
+      const rad = R * f * (mid ? Math.cos(Math.PI / n) * (f > 0.9 ? 0.985 : 1) : 1);
+      const dome = Math.sqrt(Math.max(0, 1 - f * f * 0.82));
+      let y = rimY + (apexY - rimY) * (dome - Math.sqrt(1 - 0.82)) / (1 - Math.sqrt(1 - 0.82));
+      if (mid && f > 0.9) y += 0.035;
+      out.push(pt(a, rad, y - under));
+    }
+    return out;
+  };
+  const top: Ring[] = [0.3, 0.6, 0.85, 1].map((f) => ({ ids: ringPts(f, 0).map((p) => b.v(p, 0, 0)), c: [g[0], apexY - 0.2, g[2]] as P3 }));
+  bridge(b, top);
+  capFan(b, top[0], b.v([g[0], apexY, g[2]], 0, 0), [g[0], rimY - 0.3, g[2]]);
+  b.setTint(0.55);
+  const under: Ring[] = [0.3, 0.6, 0.85, 1].map((f) => ({ ids: ringPts(f, 0.006).map((p) => b.v(p, 0, 0)), c: [g[0], apexY + 3, g[2]] as P3 }));
+  bridge(b, under.slice().reverse());
+  capFan(b, under[0], b.v([g[0], apexY - 0.03, g[2]], 0, 0), [g[0], apexY + 0.5, g[2]]);
+  // ribs under the lining and stretchers down to the runner on the shaft
+  b.use(BONE.UMB, REG.DARK, FB.UMBRELLA, 1);
+  for (let k = 0; k < n; k++) {
+    const a = (k / n) * Math.PI * 2;
+    const ps = [0.3, 0.6, 0.85, 1].map((f) => ringPts(f, 0.012)[2 * k]);
+    for (let i = 0; i < ps.length - 1; i++) stick(b, ps[i], ps[i + 1], 0.003, 3);
+    stick(b, ps[1], pt(a, 0.01, apexY - 0.3), 0.002, 3);
   }
 }
 

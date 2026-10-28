@@ -574,8 +574,8 @@ export class Crowd {
   private nextMember = 1;
   private spawnAcc = 0;
   private time = 0;
-  private sample: RailSample = { x: 0, z: 0, tx: 0, tz: 1, leg: 0, u: 0 };
-  private sample2: RailSample = { x: 0, z: 0, tx: 0, tz: 1, leg: 0, u: 0 };
+  private sample: RailSample = { x: 0, z: 0, tx: 0, tz: 1, leg: 0, u: 0, sx: 0, sz: 1 };
+  private sample2: RailSample = { x: 0, z: 0, tx: 0, tz: 1, leg: 0, u: 0, sx: 0, sz: 1 };
   private claims = new Map<number, Claim[]>();
   /** single-file doorways / garden paths: who is using each door edge (one direction at a time) */
   private doorUse = new Map<number, { out: number; in: number; waitAt: number }>();
@@ -1448,8 +1448,8 @@ export class Crowd {
       let sk = p.s - m.idx * SPACING * p.file;
       if (!p.startDoor) sk = Math.max(sk, 0);
       const S = sampleRail(r, sk, this.sample);
-      const nx = -S.tz,
-        nz = S.tx;
+      const nx = -S.sz,
+        nz = S.sx;
       const lateral = p.delta + p.offs[m.idx] * (1 - p.file);
       let x = S.x + nx * lateral,
         z = S.z + nz * lateral;
@@ -1460,6 +1460,20 @@ export class Crowd {
         const k = Math.max(0, 1 - h * 2.5);
         m.bx = Math.abs(m.bx) < 0.003 ? 0 : m.bx * k;
         m.bz = Math.abs(m.bz) < 0.003 ? 0 : m.bz * k;
+      }
+      if (m.present) {
+        // walk to the slot, never teleport: the slot itself can sweep faster than a walk (offset round a tight
+        // corner, a formation shuffle, joining the rail from a seat/queue); the member lags and catches up at
+        // ≤ 1.3 × the party's pace (+0.3 m/s) instead of sliding at 5–20 m/s (raw slot speeds measured,
+        // scripts/ped-velocity.mjs). Jumps ≥ 6 m are deliberate relocations and pass.
+        const ddx = x - m.x,
+          ddz = z - m.z,
+          dd = Math.hypot(ddx, ddz),
+          lim = Math.max(0.6, p.v * 1.3 + 0.3) * h;
+        if (dd > lim && dd < 6) {
+          x = m.x + (ddx * lim) / dd;
+          z = m.z + (ddz * lim) / dd;
+        }
       }
       const L = r.legs[S.leg];
       let fade = 1;
@@ -1472,7 +1486,7 @@ export class Crowd {
       // face along the walk (turned a little into a sidestep), not sideways while dodging at low speed
       const vf = Math.max(p.v, 0.12);
       const lv = hold ? 0 : p.latV * 0.45;
-      this.moveMember(m, x, z, this.surfaceY(L, S.u, x, z), h, !hold && !m.faceHold, S.tx * vf + nx * lv, S.tz * vf + nz * lv);
+      this.moveMember(m, x, z, this.surfaceY(L, S.u, x, z), h, !hold && !m.faceHold, S.sx * vf + nx * lv, S.sz * vf + nz * lv);
     }
   }
 
@@ -1661,8 +1675,8 @@ export class Crowd {
     for (const m of p.members) {
       const Sm = sampleRail(r, Math.max(0, s - m.idx * SPACING * p.file), this.sample2);
       const lat = delta + p.offs[m.idx] * (1 - p.file);
-      const x = Sm.x - Sm.tz * lat,
-        z = Sm.z + Sm.tx * lat;
+      const x = Sm.x - Sm.sz * lat,
+        z = Sm.z + Sm.sx * lat;
       let taken = false;
       this.grid.each(x, z, 0.9, (k) => {
         if (this.grid.op[k] !== p.id && Math.hypot(this.grid.ox[k] - x, this.grid.oz[k] - z) < BODY_R + this.grid.or[k] + 0.05) taken = true;
@@ -1680,8 +1694,8 @@ export class Crowd {
       const sk = Math.max(0, p.s - m.idx * SPACING * p.file);
       const Sm = sampleRail(r, sk, this.sample2);
       const lat = p.delta + p.offs[m.idx] * (1 - p.file);
-      m.bx = m.x - (Sm.x - Sm.tz * lat);
-      m.bz = m.z - (Sm.z + Sm.tx * lat);
+      m.bx = m.x - (Sm.x - Sm.sz * lat);
+      m.bz = m.z - (Sm.z + Sm.sx * lat);
       m.faceHold = false;
       m.fdone = true;
       m.yieldT = 0;
@@ -1722,8 +1736,8 @@ export class Crowd {
       const sk = Math.max(0, p.s - m.idx * SPACING * p.file);
       const Sm = sampleRail(r2, sk, this.sample2);
       const lat = p.delta + p.offs[m.idx] * (1 - p.file);
-      m.bx = m.x - (Sm.x - Sm.tz * lat);
-      m.bz = m.z - (Sm.z + Sm.tx * lat);
+      m.bx = m.x - (Sm.x - Sm.sz * lat);
+      m.bz = m.z - (Sm.z + Sm.sx * lat);
     }
     this.stats.turnBacks++;
     return true;
@@ -1996,8 +2010,8 @@ export class Crowd {
       this.releaseWait(p);
       p.state = 'fromWait';
       const S = sampleRail(r, p.entryS, this.sample2);
-      const nx = -S.tz,
-        nz = S.tx;
+      const nx = -S.sz,
+        nz = S.sx;
       for (const m of p.members) {
         const lat = p.entryDelta + p.offs[m.idx] * (1 - p.file);
         this.setFree(m, [S.x + nx * lat, S.z + nz * lat, SIDEWALK_Y]);
@@ -2345,8 +2359,8 @@ export class Crowd {
             const Sm = sampleRail(r, sk, this.sample2);
             const lat = p.delta + p.offs[m.idx] * (1 - p.file);
             // ease from where they stand onto the walk (no jump)
-            m.bx = m.x - (Sm.x - Sm.tz * lat);
-            m.bz = m.z - (Sm.z + Sm.tx * lat);
+            m.bx = m.x - (Sm.x - Sm.sz * lat);
+            m.bz = m.z - (Sm.z + Sm.sx * lat);
             m.faceHold = false;
             m.fdone = true;
           }
@@ -2355,8 +2369,8 @@ export class Crowd {
       }
       for (const m of p.members) {
         const S = sampleRail(r, s0, this.sample);
-        const nx = -S.tz,
-          nz = S.tx;
+        const nx = -S.sz,
+          nz = S.sx;
         const lat = p.delta + p.offs[m.idx] * (1 - p.file);
         const pts: number[] = [];
         if (prev?.kind === 'cafe' && prev.spots) {
@@ -3872,8 +3886,8 @@ export class Crowd {
     if (!this.startTrip(p, st.node, false)) return;
     const r = p.rail!;
     const S = sampleRail(r, 0, this.sample);
-    const nx = -S.tz,
-      nz = S.tx;
+    const nx = -S.sz,
+      nz = S.sx;
     for (const m of p.members) {
       const jitter = (m.idx - (p.size - 1) / 2) * 0.55;
       m.x = m.px = st.doorX + st.tx * jitter;

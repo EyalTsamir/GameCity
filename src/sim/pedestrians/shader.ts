@@ -100,6 +100,7 @@ attribute uvec4 iC1;
 attribute uvec4 iC2;
 uniform vec3 uPedPiv[${PIV_COUNT * 4}];
 uniform vec4 uPedHatA[8];
+uniform float uPedHairline;
 uniform vec4 uPedHatB[8];
 varying vec3 vPedA;
 varying vec3 vPedB;
@@ -111,6 +112,7 @@ flat varying vec2 vPedMat; // (wrap, sheen)
 varying vec3 vPedFace; // close-level face coords (X, Y, 1) — 0 elsewhere
 flat varying uint vPedFB; // face bits: age 2 | eye colour 2 | lipstick 1 | stubble 1
 flat varying vec4 vPedHairW; // hair colour, femininity
+flat varying vec3 vPedSkin; // skin colour (hairline feathering)
 varying vec3 vPedRest; // rest-pose position after the morph (figure units): strands, seams
 varying vec3 vPedRN; // rest-pose normal
 flat varying float vPedReg;
@@ -230,6 +232,7 @@ void pedPose(inout vec3 p, inout vec3 n) {
   vPedFace = vec3(0.0);
   vPedFB = (iC2.w >> 9u) & 63u;
   vPedHairW = vec4(pedRGB(iC1.x), P_w);
+  vPedSkin = pedRGB(iC0.x);
   uint d0 = aData.x;
   if (!pedVisible(d0)) { p = vec3(0.0, -50.0, 0.0); n = vec3(0.0, 1.0, 0.0); vPedA = vPedB = vec3(0.0); vPedS = 0.0; vPedH = 0.0; vPedPat = 0.0; vPedMat = vec2(0.0); return; }
   int bone = int(d0 & 31u);
@@ -280,6 +283,14 @@ void pedPose(inout vec3 p, inout vec3 n) {
     } else if (aux.x > 0.0) {
       // long hair: vertices deeper than the hair length are lifted to the hem
       p.y += max(0.0, aux.x - pedP8(iC1.x) * 0.5);
+    } else if (((d0 >> 10u) & 63u) == ${FB.HAIR + 1}u && uPedHairline > 0.5) {
+      // cap: aux.y = s (0 hairline … 1 crown). Hair stands off the scalp in locks, not as a smooth helmet:
+      // lumps in the silhouette grow from the hairline, a little more lift on the crown / back
+      vPedFace = vec3(aux.y, 0.0, 3.0);
+      float a = atan(p.x, p.z + 0.015);
+      float lump = 0.55 * sin(a * 7.0 + p.y * 60.0 + float(iC1.x & 15u)) + 0.45 * sin(a * 13.0 - p.y * 90.0);
+      float grow = smoothstep(0.05, 0.45, aux.y);
+      p += n * grow * (0.0045 * lump + 0.007 * smoothstep(0.3, 1.0, aux.y) * (0.6 + 0.4 * -n.z));
     }
     // volume (curly / full hair): scale about the head centre
     float vol = float((iC1.y >> 27u) & 31u) * (1.0 / 31.0);
@@ -345,6 +356,13 @@ void pedPose(inout vec3 p, inout vec3 n) {
     q.y = mix(q.y, mix(pr.y, pl.y, ext), 0.5 * panel);
     if (!seated) k *= 1.0 - 0.25 * panel * max(u, 0.0);
     p = mix(p, q, k);
+    // high on a long skirt / dress k is small, and a thigh swinging forward (or a heel kicking back) would pass
+    // through the cloth: the front never sits behind the forward leg's posed surface, the back never in front
+    // of the rear one (the sheet stretches across the stride instead of a skin notch showing through)
+    if (!seated) {
+      float cover = smoothstep(0.15, 0.5, abs(rad0.y));
+      p.z = rad0.y >= 0.0 ? max(p.z, mix(p.z, zx + 0.003, cover)) : min(p.z, mix(p.z, zx - 0.003, cover));
+    }
     n = normalize(mix(n, mix(nr, nl, mix(wS, ext, panel)), k));
     if (seated) p.y = max(p.y, P_tailFloor);
     bone = ${B.PELVIS};
@@ -542,6 +560,7 @@ flat varying vec2 vPedMat;
 varying vec3 vPedFace;
 flat varying uint vPedFB;
 flat varying vec4 vPedHairW;
+flat varying vec3 vPedSkin;
 varying vec3 vPedRest;
 varying vec3 vPedRN;
 flat varying float vPedReg;
@@ -789,7 +808,17 @@ const FRAG_COLOR = /* glsl */ `
       if (vPedPat < 1.5) st *= step(0.0, vPedS);
       pc = mix(pc, vec3(0.78, 0.78, 0.76), st);
     }
-    if (vPedFace.z > 1.5) pc = pedShoe(pc, vPedFace.xy, vPedS);
+    if (vPedFace.z > 2.5) {
+      // HAIRLINE: the cap thins out into the skin over its first rings — single strands and gaps broken
+      // along the hairline (two noise octaves round the head), a soft root shadow on the skin side
+      pc *= pedStrands(vPedRest);
+      float a = atan(vPedRest.x, vPedRest.z + 0.015);
+      float e = vPedFace.x + (pedN1(a * 55.0) - 0.5) * 0.14 + (pedN1(a * 170.0 + vPedRest.y * 300.0) - 0.5) * 0.08 * (1.0 - smoothstep(0.3, 0.7, fwidth(a * 170.0)));
+      float cov = smoothstep(0.0, 0.17, e);
+      vec3 skinSide = mix(vPedSkin, vPedSkin * 0.8 + pc * 0.12, 0.6);
+      pc = mix(skinSide, pc, cov);
+    }
+    else if (vPedFace.z > 1.5) pc = pedShoe(pc, vPedFace.xy, vPedS);
     else if (vPedFace.z > 0.5) pc = pedFacePaint(pc, vPedFace.xy);
     else if (abs(vPedReg - ${R.HAIR}.0) < 0.5 || abs(vPedReg - ${R.BEARD}.0) < 0.5) pc *= pedStrands(vPedRest);
     else if (vPedReg > 0.5 && vPedReg < 3.5 || abs(vPedReg - ${R.OUTER}.0) < 0.5 || abs(vPedReg - ${R.TAIL}.0) < 0.5) pc = pedFabric(pc, vPedReg, vPedH, vPedS);
@@ -867,7 +896,13 @@ function uniformsFor(): Record<string, THREE.IUniform> {
     uPedPiv: { value: pivots },
     uPedHatA: { value: HAT_A.map((a) => new THREE.Vector4(...(a as [number, number, number, number]))) },
     uPedHatB: { value: HAT_B.map((a) => new THREE.Vector4(...(a as [number, number, number, number]))) },
+    uPedHairline: { value: 1 },
   };
+}
+
+/** ?nohairline: hard-edged smooth hair cap (no feathered hairline, no locks in the silhouette) */
+export function setPedHairline(on: boolean): void {
+  sharedUniforms().uPedHairline.value = on ? 1 : 0;
 }
 
 let shared: Record<string, THREE.IUniform> | null = null;
