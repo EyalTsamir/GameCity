@@ -113,3 +113,24 @@ Photo test: "Person" in REAL.md. Bench: `--classes pedestrian --pick 0..5 --dist
 7. Variation: no two neighbours identical (build, height, clothing palette, hair).
 Performance: people are many — near-LOD detail only within ~15 m; measure with perf.mjs `;nopeopledetail`.
 Toggles e.g. `?nofaces`, `?nopeopledetail`.
+
+## W5 — Trees, ground contact, kerbs, fences, signs, lamps (wave 2)
+Audit #10, #11 and the street "hardscape" not yet covered. Owned: `src/world/vegetation/**` + `src/world/vegetation.ts`
+(trunks, bases, tree pits only — leave crowns/leaf cards as they are), `src/world/roads/**` + `src/world/roads.ts`
+(kerbs, drains, manholes, road markings wear), `src/world/lamps.ts` + `src/world/lamps/**` (lamp posts as objects —
+not their light), garden fences/hedges/gates in `src/world/props/garden.ts` + `gardenPlan.ts` (coordinate: W3 owned
+props/** in wave 1 and has finished), `src/sim/traffic/signals.ts` (traffic signs/signals as objects; W2 does not
+touch it). Photo tests: "Tree" + "Contact" in REAL.md, plus:
+* **Kerb:** granite/concrete kerb stones in 1 m units with joints, a chamfered arris, dropped kerbs at crossings,
+  gully grates in the channel, wear and dirt in the gutter line.
+* **Fence/gate:** posts set in the ground, rails, pickets with gaps and weathered paint, a gate with hinges and a latch;
+  hedges with gaps and woody bases.
+* **Sign / signal:** pole with base and clamps, sign plate with a back, rim and bolts, legible text, slight tilt or
+  sticker on some; signal heads with visors and back plates.
+* **Lamp post:** base with door and bolts, tapered pole, joints, a lantern with glass and a cap.
+1. Tree bases: root flare into the soil, bark furrows near the ground, street tree pits (grate or soil + leaf
+   litter), guard rails on young trees; park trees with grass worn at the base.
+2. Kerbs and gutters (above), drain grates, manhole covers with legible castings.
+3. Fences/hedges/gates in gardens (above); 4. signs and signals (above); 5. lamp posts (above).
+6. Contact: every object you own sits in the ground (no hovering edge, soil/grime at the base).
+Toggles e.g. `?notreebase`, `?nokerbdetail`, `?nofencedetail`, `?nosigndetail`.
