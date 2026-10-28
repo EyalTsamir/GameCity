@@ -57,3 +57,9 @@
   `platform: rect(-46, RAIL_Z + 2.0, …)`) while the EMU body side is at 1.45 m, so a 0.55 m gap with sleepers shows
   between platform and train at 3 m (real: 0.1–0.25 m; UK/EU platform edges ≈ 1.6–1.7 m from the centre). Suggest
   `RAIL_Z + 1.65` if the platform face / copers and rail clearances allow it (freight wagons are ≤ 1.45 m wide too).
+
+* **W7 → pedestrians owner (src/sim/pedestrians/**):** the station platform (x −46..46, z −153..−149, top y 0.95,
+  benches at x ±8.8/±17.6/±30.5, z ≈ −150.2) has no waiting people between trains; a few standing / seated waiting
+  passengers (some with the luggage W7 placed: wheeled case at x −7.7, holdall x 17.2, rucksack on the bench x −17.2)
+  would complete the "station platform" dense place. Same for the fish quay (x 127..136, z −140..−122): one or two
+  workers (oilskins) at the creels / fish boxes, a man mending nets on the bench at the store (x ≈ 130.8, z −139).

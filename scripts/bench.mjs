@@ -144,8 +144,28 @@ try {
           if (!f) return null;
           return { x: f.x, y: gy(f.x, f.z), z: f.z, yaw: (f.yaw * 180) / Math.PI, h: Math.max(1.5, Math.min(f.radius, 6)), w: f.radius * 2 };
         }
+        // boats by type (W7): aimed at the starboard side a quarter length ahead of midships, sim paused
+        const boatType = { ferry: 'ferry', tug: 'tug', tourboat: 'tour', yacht: 'sail', motorboat: 'motor', scull: 'row', crabber: 'fish', dinghy: 'punt' }[cls];
+        if (boatType) {
+          const b = nth((c.ctx.services.boats?.fleet?.boats ?? []).filter((b) => b.type === boatType));
+          if (!b) return null;
+          c.setSpeed(0);
+          const L = b.dims.L ?? 8, B = b.dims.B ?? 3;
+          const fx = Math.sin(b.yaw), fz = Math.cos(b.yaw);
+          const x = b.x + fx * L * 0.18 + fz * B * 0.5, z = b.z + fz * L * 0.18 - fx * B * 0.5;
+          return { x, y: 0.2, z, yaw: (b.yaw * 180) / Math.PI + 90 - 25, h: 3, w: 0.4, pitch: 6 };
+        }
+        // dense places (W7): fixed eye-level frames {x,y,z,yaw,h,w,pitch}
+        const PLACES = {
+          quay: { x: 132.5, y: 0.12, z: -128.5, yaw: -40, h: 2, w: 0.5, pitch: 10 },
+          quaysea: { x: 135, y: -0.6, z: -127, yaw: 70, h: 2, w: 0.5, pitch: 8 },
+          site: { x: -62.5, y: 0, z: -24, yaw: 70, h: 3, w: 0.5, pitch: 8 },
+          siteyard: { x: -66, y: 0, z: -22, yaw: 120, h: 3, w: 0.5, pitch: 12 },
+          platform: { x: -6, y: 0.95, z: -151, yaw: 80, h: 2, w: 0.5, pitch: 6 },
+        };
+        if (PLACES[cls]) return PLACES[cls];
         // moving things: ray-pick from elevated poses over the city
-        const kind = { car: 'vehicle', bus: 'bus', pedestrian: 'pedestrian', train: 'train', boat: 'boat' }[cls];
+        const kind ={ car: 'vehicle', bus: 'bus', pedestrian: 'pedestrian', train: 'train', boat: 'boat' }[cls];
         if (!kind) return null;
         const THREE = await import('/@fs' + window.__benchThree);
         const cam = c.ctx.camera;

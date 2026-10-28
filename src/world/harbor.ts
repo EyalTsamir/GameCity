@@ -21,6 +21,7 @@ import { QUAY_X, RIVER, WATER_LEVEL } from '../core/constants';
 import { HB, RIG } from './harbor/geo';
 import { createBeamMesh, createHarborMaterials, createGlowMesh, followCraneLamps, NMOB, type GlowPoint } from './harbor/material';
 import { buildBreakwater } from './harbor/breakwater';
+import { buildFishQuay } from './harbor/quay';
 import { buildCarouselRotating, buildCarouselStatic, buildPier, buildWheelRotating, buildWheelStatic, type WheelSpec } from './harbor/pier';
 import { buildFerryDock, lifeguardTower, scatterBeach } from './harbor/beach';
 import { bridgeProfile, buildFootbridge, buildJetty, type BridgeInfo } from './harbor/river';
@@ -127,6 +128,20 @@ export default function create(ctx: CityContext): CityModule {
   const ladderZ = [-131, -97, -58, -31, -2];
   const shipZ: [number, number] = shipF ? [shipF.z - SHIP.half, shipF.z + SHIP.half] : [0, 0];
   const edge = buildQuayEdge(north, QX, -140, -6, ladderZ, shipZ);
+  // the fish quay at the north end (crabber + tender moored by the boats module)
+  if (!ctx.debug.params.has('noquaylife')) {
+    buildFishQuay(north, {
+      ground,
+      rng: ctx.rng('harbor-fishquay'),
+      quayX: QX,
+      low: ctx.quality.level === 'low',
+      lines: [
+        { bollard: new THREE.Vector3(QX - 0.2, 0.12, -138), boat: new THREE.Vector3(QX + 0.05, 0.57, -138) },
+        { bollard: new THREE.Vector3(QX - 0.2, 0.12, -125), boat: new THREE.Vector3(QX + 0.05, 0.57, -125) },
+        { bollard: new THREE.Vector3(QX - 0.2, 0.12, -112), boat: new THREE.Vector3(QX + 0.05, 0.57, -112) },
+      ],
+    });
+  }
   if (ship && shipF) {
     const near = (z: number) => edge.bollards.reduce((best, b) => (Math.abs(b - z) < Math.abs(best - z) ? b : best), edge.bollards[0]);
     // fairleads (local) bow → stern; bollards spread fore and aft of the ship

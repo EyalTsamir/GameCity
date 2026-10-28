@@ -6,9 +6,10 @@
 
 import * as THREE from 'three';
 import { Geo, type V3 } from '../rail/geo';
-import { BT, JIB_HEAD, JIB_TACK } from './material';
+import { BT, HC, HC_STEP, JIB_HEAD, JIB_TACK } from './material';
+import { QUAY_X, WATER_LEVEL } from '../../core/constants';
 
-export type BoatType = 'ferry' | 'tug' | 'tour' | 'sail' | 'motor' | 'row';
+export type BoatType = 'ferry' | 'tug' | 'tour' | 'sail' | 'motor' | 'row' | 'fish' | 'punt';
 
 export interface BoatDims {
   /** overall length / beam / draft (m) */
@@ -101,6 +102,27 @@ export const DIMS: Record<BoatType, BoatDims> = {
     variant: 3,
     lights: [],
   },
+  fish: {
+    L: 10.5,
+    B: 3.7,
+    draft: 1.3,
+    mesh: 'big',
+    variant: 4,
+    lights: [
+      [-1.25, 3.55, 2.4, 0],
+      [1.25, 3.55, 2.4, 1],
+      [0, 6.3, 1.9, 2],
+      [0, 1.9, -5.0, 2],
+    ],
+  },
+  punt: {
+    L: 3.4,
+    B: 1.45,
+    draft: 0.25,
+    mesh: 'small',
+    variant: 4,
+    lights: [],
+  },
 };
 
 // ───────────────────────────────────────────── lofted hull
@@ -125,6 +147,8 @@ interface HullSpec {
   /** optional band (y0, y1 above the waterline) */
   stripe?: { y0: number; y1: number; color: string; tag?: number };
   stations?: number;
+  /** surface detail class in the shader (material.ts HC): welded steel plating or moulded GRP */
+  hc?: number;
 }
 
 function smooth(t: number): number {
@@ -214,15 +238,17 @@ export function hull(g: Geo, s: HullSpec): void {
     }
     nrm.push(nr);
   }
-  // emit bands (both sides)
+  // emit bands (both sides); hull vertices carry the class offset + aExtra.x = sheer height at the station
+  const hc = (s.hc ?? 0) * HC_STEP;
   for (let bi = 0; bi < R - 1; bi++) {
-    g.kind(bands[bi].tag).color(bands[bi].color);
+    g.kind(bands[bi].tag + (s.rub && bi === R - 2 ? 0 : hc)).color(bands[bi].color);
     for (const side of [1, -1]) {
       const base = g.vertexCount;
       for (let i = 0; i < N; i++) {
         for (const r of [bi, bi + 1]) {
           const p = P[i][r],
             q = nrm[i][r];
+          g.extra(st[i].D);
           g.vert(side * p[0], p[1], p[2], side * q[0], q[1], q[2]);
         }
       }
@@ -237,15 +263,16 @@ export function hull(g: Geo, s: HullSpec): void {
       }
     }
   }
+  g.extra(0);
   // deck (flat across the sheer line)
-  g.kind(s.deckTag ?? BT.PLAIN).color(s.deck);
+  g.kind((s.deckTag ?? BT.PLAIN) + (s.hc === HC.STEEL ? HC.DECK * HC_STEP : 0)).color(s.deck);
   for (let i = 0; i < N - 1; i++) {
     const A = P[i][R - 1],
       B2 = P[i + 1][R - 1];
     g.quad([A[0], A[1] - 0.02, A[2]], [-A[0], A[1] - 0.02, A[2]], [-B2[0], B2[1] - 0.02, B2[2]], [B2[0], B2[1] - 0.02, B2[2]]);
   }
   // transom
-  g.kind(bands[R - 2].tag).color(s.side);
+  g.kind(bands[R - 2].tag + hc).color(s.side).extra(st[0].D);
   const tp: V3[] = [];
   for (let r = 0; r < R; r++) tp.push([P[0][r][0], P[0][r][1], P[0][r][2]]);
   for (let r = R - 1; r >= 0; r--) tp.push([-P[0][r][0], P[0][r][1], P[0][r][2]]);
@@ -262,6 +289,7 @@ export function hull(g: Geo, s: HullSpec): void {
   const b0 = g.vertexCount;
   for (const p of tp) g.vert(p[0], p[1], p[2], 0, 0, -1);
   for (let i = 0; i < tp.length - 1; i++) g.I.push(c0, b0 + i + 1, b0 + i);
+  g.extra(0);
 }
 
 /** sheer height & half-width at a local z (for placing deck fittings) */
@@ -273,39 +301,179 @@ export function sheerAt(s: { L: number; B: number; fb: [number, number, number];
 
 // ───────────────────────────────────────────── small helpers
 
-/** box-shaped deckhouse with a window band on all four sides */
+/** window frame: a dark rubber gasket + painted frame around the pane rectangle in the plane x = xx (sd = facing ±x)
+ *  or z = zz (facing ±z); 5 cm wide, standing 2.5 cm proud of the wall */
+function paneFrame(g: Geo, plane: 'x' | 'z', c: number, sd: number, a0: number, a1: number, y0: number, y1: number, frame: string): void {
+  const fw = 0.05,
+    fd = 0.03;
+  const off = c + sd * (fd / 2 - 0.004);
+  g.kind(BT.PLAIN).color(frame);
+  const span = a1 - a0,
+    mid = (a0 + a1) / 2;
+  if (plane === 'x') {
+    g.box(off, y1 + fw / 2, mid, fd, fw, span + fw * 2, 0);
+    g.box(off, y0 - fw / 2, mid, fd, fw, span + fw * 2, 0);
+    g.box(off, (y0 + y1) / 2, a0 - fw / 2, fd, y1 - y0, fw, 0);
+    g.box(off, (y0 + y1) / 2, a1 + fw / 2, fd, y1 - y0, fw, 0);
+  } else {
+    g.box(mid, y1 + fw / 2, off, span + fw * 2, fw, fd, 0);
+    g.box(mid, y0 - fw / 2, off, span + fw * 2, fw, fd, 0);
+    g.box(a0 - fw / 2, (y0 + y1) / 2, off, fw, y1 - y0, fd, 0);
+    g.box(a1 + fw / 2, (y0 + y1) / 2, off, fw, y1 - y0, fd, 0);
+  }
+}
+
+/** box-shaped steel deckhouse: welded walls (shader HC.SUPER, aExtra.x = window sill), framed panes with a
+ *  rain eyebrow over each band; the front of a wheelhouse is split into three panes with wipers */
 function deckhouse(
   g: Geo,
-  o: { x: number; y0: number; y1: number; z0: number; z1: number; wall: string; roof: string; win: [number, number]; winTag: number; winCol: string; pane?: number; frontWin?: boolean; backWin?: boolean },
+  o: { x: number; y0: number; y1: number; z0: number; z1: number; wall: string; roof: string; win: [number, number]; winTag: number; winCol: string; pane?: number; frontWin?: boolean; backWin?: boolean; wipers?: boolean; frame?: string },
 ): void {
   const { x, y0, y1, z0, z1 } = o;
-  g.kind(BT.PLAIN).color(o.wall);
-  g.box(0, (y0 + y1) / 2, (z0 + z1) / 2, x * 2, y1 - y0, z1 - z0, 4 | 8);
-  g.color(o.roof);
-  g.box(0, y1 + 0.04, (z0 + z1) / 2, x * 2 + 0.12, 0.08, z1 - z0 + 0.12, 8);
   const [wy0, wy1] = o.win;
+  const frame = o.frame ?? '#3a3e42';
+  g.kind(BT.PLAIN + HC.SUPER * HC_STEP).color(o.wall).extra(wy0);
+  g.box(0, (y0 + y1) / 2, (z0 + z1) / 2, x * 2, y1 - y0, z1 - z0, 4 | 8);
+  g.extra(0);
+  g.kind(BT.PLAIN).color(o.roof);
+  g.box(0, y1 + 0.04, (z0 + z1) / 2, x * 2 + 0.12, 0.08, z1 - z0 + 0.12, 8);
+  // roof edge coaming + drip rail
+  g.color(o.wall);
+  g.box(0, y1 + 0.1, (z0 + z1) / 2, x * 2 + 0.14, 0.04, z1 - z0 + 0.14, 2 | 8);
   const pane = o.pane ?? 0;
-  g.kind(o.winTag).color(o.winCol);
   for (const sd of [-1, 1]) {
     const xx = sd * (x + 0.012);
+    const panes: [number, number][] = [];
     if (pane > 0) {
       const n = Math.max(1, Math.round((z1 - z0 - 0.3) / pane));
       const w = (z1 - z0 - 0.3) / n;
-      for (let k = 0; k < n; k++) {
-        const za = z0 + 0.15 + k * w + 0.06,
-          zb = z0 + 0.15 + (k + 1) * w - 0.06;
-        if (sd > 0) g.quad([xx, wy0, zb], [xx, wy0, za], [xx, wy1, za], [xx, wy1, zb]);
-        else g.quad([xx, wy0, za], [xx, wy0, zb], [xx, wy1, zb], [xx, wy1, za]);
-      }
-    } else {
-      const za = z0 + 0.2,
-        zb = z1 - 0.2;
+      for (let k = 0; k < n; k++) panes.push([z0 + 0.15 + k * w + 0.08, z0 + 0.15 + (k + 1) * w - 0.08]);
+    } else panes.push([z0 + 0.22, z1 - 0.22]);
+    for (const [za, zb] of panes) {
+      g.kind(o.winTag).color(o.winCol).extra(wy0, wy1);
       if (sd > 0) g.quad([xx, wy0, zb], [xx, wy0, za], [xx, wy1, za], [xx, wy1, zb]);
       else g.quad([xx, wy0, za], [xx, wy0, zb], [xx, wy1, zb], [xx, wy1, za]);
+      g.extra(0);
+      paneFrame(g, 'x', sd * x, sd, za, zb, wy0, wy1, frame);
+    }
+    // rain eyebrow over the band
+    g.kind(BT.PLAIN).color(o.wall);
+    g.box(sd * (x + 0.04), wy1 + 0.11, (z0 + z1) / 2, 0.08, 0.035, z1 - z0 - 0.2, 0);
+  }
+  const ends: [number, number][] = [];
+  if (o.frontWin !== false) ends.push([z1, 1]);
+  if (o.backWin) ends.push([z0, -1]);
+  for (const [zc, sd] of ends) {
+    const zz = zc + sd * 0.012;
+    const n = sd > 0 && o.wipers ? 3 : x > 1.2 ? 2 : 1;
+    const span = 2 * x - 0.36,
+      w = span / n;
+    for (let k = 0; k < n; k++) {
+      const xa = -x + 0.18 + k * w + 0.05,
+        xb = -x + 0.18 + (k + 1) * w - 0.05;
+      g.kind(o.winTag).color(o.winCol);
+      if (sd > 0) g.quad([xa, wy0, zz], [xb, wy0, zz], [xb, wy1, zz], [xa, wy1, zz]);
+      else g.quad([xb, wy0, zz], [xa, wy0, zz], [xa, wy1, zz], [xb, wy1, zz]);
+      paneFrame(g, 'z', zc, sd, xa, xb, wy0, wy1, frame);
+      if (sd > 0 && o.wipers) {
+        // wiper parked at an angle: pivot under the pane, arm + blade
+        const px = (xa + xb) / 2 - (xb - xa) * 0.3,
+          h = (wy1 - wy0) * 0.8;
+        g.kind(BT.PLAIN).color('#151618');
+        g.beam([px, wy0 + 0.04, zz + 0.03], [px + h * 0.5, wy0 + h * 0.85, zz + 0.03], 0.018, 0.012);
+        g.beam([px + h * 0.42, wy0 + h * 0.62, zz + 0.045], [px + h * 0.58, wy0 + h * 1.0, zz + 0.045], 0.022, 0.012);
+        g.cyl(px, wy0 + 0.02, zz + 0.02, 0.025, 0.025, 0.04, 6, 1);
+      }
+    }
+    g.kind(BT.PLAIN).color(o.wall);
+    g.box(0, wy1 + 0.11, zc + sd * 0.04, 2 * x - 0.2, 0.035, 0.08, 0);
+  }
+}
+
+/** torus in the current frame's XZ plane (axis = local Y); colour per segment from colAt(u 0..1) */
+function torus(g: Geo, R: number, r: number, seg: number, tube: number, colAt?: (u: number) => string): void {
+  for (let i = 0; i < seg; i++) {
+    if (colAt) g.color(colAt((i + 0.5) / seg));
+    const base = g.vertexCount;
+    for (const ii of [i, i + 1]) {
+      const a = (ii / seg) * Math.PI * 2,
+        ca = Math.cos(a),
+        sa = Math.sin(a);
+      for (let k = 0; k <= tube; k++) {
+        const b = (k / tube) * Math.PI * 2,
+          cb = Math.cos(b),
+          sb = Math.sin(b);
+        g.vert((R + r * cb) * ca, r * sb, (R + r * cb) * sa, cb * ca, sb, cb * sa);
+      }
+    }
+    for (let k = 0; k < tube; k++) {
+      const a0 = base + k,
+        b0 = base + tube + 1 + k;
+      g.I.push(a0, a0 + 1, b0 + 1, a0, b0 + 1, b0);
     }
   }
-  if (o.frontWin !== false) g.quad([-x + 0.15, wy0, z1 + 0.012], [x - 0.15, wy0, z1 + 0.012], [x - 0.15, wy1, z1 + 0.012], [-x + 0.15, wy1, z1 + 0.012]);
-  if (o.backWin) g.quad([x - 0.15, wy0, z0 - 0.012], [-x + 0.15, wy0, z0 - 0.012], [-x + 0.15, wy1, z0 - 0.012], [x - 0.15, wy1, z0 - 0.012]);
+}
+
+/** flat rope coil lying on a deck (3–4 turns), manila or blue polyprop */
+function ropeCoil(g: Geo, x: number, y: number, z: number, R: number, col: string): void {
+  g.kind(BT.PLAIN).color(col);
+  g.push().at(x, y, z);
+  for (let k = 0; k < 4; k++) {
+    g.push().at(0.01 * k, 0.026 + k * 0.045, 0.012 * k).rotX(0.05 * (k - 1.5));
+    torus(g, R - k * 0.025, 0.026, 14, 4);
+    g.pop();
+  }
+  g.pop();
+}
+
+/** horn cleat on a base plate, along local z */
+function cleat(g: Geo, x: number, y: number, z: number, yaw = 0): void {
+  g.kind(BT.PLAIN).color('#2c2f33');
+  g.push().at(x, y, z, yaw);
+  g.box(0, 0.01, 0, 0.1, 0.02, 0.22, 2);
+  g.box(0, 0.06, 0, 0.05, 0.09, 0.08, 2);
+  g.box(0, 0.11, 0, 0.05, 0.035, 0.36, 0);
+  g.pop();
+}
+
+/** twin bitts (pair of mooring posts with caps) on a base plate, with a figure-eight of rope on some */
+function bitts(g: Geo, x: number, y: number, z: number, rope?: string): void {
+  g.kind(BT.PLAIN).color('#2a2c2e');
+  g.box(x, y + 0.015, z, 0.36, 0.03, 0.82, 2);
+  for (const dz of [-0.24, 0.24]) {
+    g.cyl(x, y, z + dz, 0.11, 0.11, 0.42, 9, 0);
+    g.cyl(x, y + 0.42, z + dz, 0.14, 0.14, 0.05, 9, 1);
+  }
+  if (rope) {
+    g.color(rope);
+    for (const yy of [0.18, 0.26]) {
+      g.beam([x - 0.13, y + yy, z - 0.26], [x + 0.13, y + yy + 0.03, z + 0.26], 0.05, 0.05);
+      g.beam([x + 0.13, y + yy + 0.015, z - 0.26], [x - 0.13, y + yy + 0.045, z + 0.26], 0.05, 0.05);
+    }
+  }
+}
+
+/** gooseneck / mushroom vent */
+function vent(g: Geo, x: number, y: number, z: number, h: number, col: string): void {
+  g.kind(BT.PLAIN).color(col);
+  g.cyl(x, y, z, 0.09, 0.09, h, 8, 0);
+  g.push().at(x, y + h, z).rotX(Math.PI / 2);
+  g.cyl(0, -0.02, 0, 0.11, 0.11, 0.2, 8, 3);
+  g.pop();
+}
+
+/** stowed anchor in a hawse pocket on the bow flank (side sd), z along the hull */
+function anchor(g: Geo, s: HullSpec, z: number, y: number, sd: number): void {
+  const W = sheerAt(s, z).W * 0.93;
+  g.kind(BT.PLAIN).color('#141516');
+  g.push().at(sd * W, y, z).rotY(sd * 0.35);
+  g.box(sd * 0.01, 0, 0, 0.04, 0.38, 0.5, 0);
+  g.color('#23262a');
+  g.box(sd * 0.05, -0.05, 0, 0.06, 0.48, 0.1, 0);
+  g.box(sd * 0.05, -0.3, 0, 0.08, 0.06, 0.44, 0);
+  g.box(sd * 0.06, -0.24, 0.2, 0.06, 0.16, 0.05, 0);
+  g.box(sd * 0.06, -0.24, -0.2, 0.06, 0.16, 0.05, 0);
+  g.pop();
 }
 
 /** railing along a polyline (posts + top rail) */
@@ -322,19 +490,27 @@ function railing(g: Geo, pts: V3[], h: number, color: string, step = 1.1): void 
       const x = a[0] + (b[0] - a[0]) * t,
         y = a[1] + (b[1] - a[1]) * t,
         z = a[2] + (b[2] - a[2]) * t;
-      g.box(x, y + h / 2, z, 0.045, h, 0.045, 0);
+      g.cyl(x, y, z, 0.024, 0.022, h, 6, 0);
+      g.box(x, y + 0.008, z, 0.1, 0.016, 0.1, 2);
     }
-    g.beam([a[0], a[1] + h, a[2]], [b[0], b[1] + h, b[2]], 0.05, 0.05);
-    g.beam([a[0], a[1] + h * 0.5, a[2]], [b[0], b[1] + h * 0.5, b[2]], 0.03, 0.03);
+    g.beam([a[0], a[1] + h, a[2]], [b[0], b[1] + h, b[2]], 0.048, 0.048);
+    g.beam([a[0], a[1] + h * 0.62, a[2]], [b[0], b[1] + h * 0.62, b[2]], 0.026, 0.026);
+    g.beam([a[0], a[1] + h * 0.3, a[2]], [b[0], b[1] + h * 0.3, b[2]], 0.026, 0.026);
+    // toe board along the deck
+    g.beam([a[0], a[1] + 0.05, a[2]], [b[0], b[1] + 0.05, b[2]], 0.012, 0.1);
   }
 }
 
 function lifeRing(g: Geo, x: number, y: number, z: number, faceX: number): void {
-  g.kind(BT.PLAIN).color('#e8672c');
-  g.push().at(x, y, z).rotZ((faceX * Math.PI) / 2);
-  g.cyl(0, -0.04, 0, 0.3, 0.3, 0.08, 10, 0);
-  g.color('#f2efe6');
-  g.cyl(0, -0.041, 0, 0.17, 0.17, 0.082, 10, 0);
+  // bracket on the wall behind
+  g.kind(BT.PLAIN).color('#cfccc4');
+  g.box(x - faceX * 0.01, y + 0.24, z, 0.04, 0.05, 0.12, 0);
+  g.push().at(x + faceX * 0.04, y, z).rotZ((faceX * Math.PI) / 2);
+  // orange ring with four white retro-reflective tape bands
+  torus(g, 0.25, 0.055, 20, 6, (u) => (Math.abs(((u * 4) % 1) - 0.5) < 0.09 ? '#f2f0ea' : '#e8582a'));
+  // grab line in four loops
+  g.color('#e9e2c8');
+  torus(g, 0.315, 0.009, 24, 3);
   g.pop();
 }
 
@@ -394,6 +570,7 @@ function flag(g: Geo, x: number, y: number, z: number, colors: [string, string])
 // ───────────────────────────────────────────── ferry
 
 const FERRY_HULL: HullSpec = {
+  hc: HC.STEEL,
   L: 17,
   B: 5.4,
   draft: 1.1,
@@ -441,7 +618,7 @@ function ferry(g: Geo): void {
     g.color('#3a3d40');
     for (const sx of [-1.4, 1.4]) g.box(sx, uy + 0.12, z, 0.06, 0.24, 0.4, 0);
   }
-  deckhouse(g, { x: 1.45, y0: uy, y1: 4.95, z0: 0.6, z1: 3.6, wall: '#f4f1ea', roof: '#c7c3ba', win: [4.0, 4.75], winTag: BT.GLASS, winCol: '#22303a', pane: 0, backWin: true });
+  deckhouse(g, { x: 1.45, y0: uy, y1: 4.95, z0: 0.6, z1: 3.6, wall: '#f4f1ea', roof: '#c7c3ba', win: [4.0, 4.75], winTag: BT.GLASS, winCol: '#22303a', pane: 0, backWin: true, wipers: true });
   // wheelhouse visor + wings
   g.kind(BT.PLAIN).color('#244a73');
   g.box(0, 4.92, 3.75, 3.1, 0.12, 0.35, 0);
@@ -460,18 +637,19 @@ function ferry(g: Geo): void {
   g.box(0, 6.25, 2.0, 1.1, 0.06, 0.16, 0);
   for (const L of DIMS.ferry.lights) navLamp(g, L[0], L[1], L[2], L[3]);
   // life rings on the saloon ends, bollards fore and aft
-  lifeRing(g, -2.27, 2.0, -2.4, -1);
-  lifeRing(g, 2.27, 2.0, -2.4, 1);
-  lifeRing(g, -2.27, 2.0, 2.4, -1);
-  lifeRing(g, 2.27, 2.0, 2.4, 1);
-  g.kind(BT.PLAIN).color('#2a2c2e');
-  for (const [x, z] of [
-    [-1.6, 5.6],
-    [1.6, 5.6],
-    [-1.8, -7.2],
-    [1.8, -7.2],
-  ])
-    g.cyl(x, D, z, 0.13, 0.13, 0.3, 7, 1);
+  // life rings hung on the outside of the upper-deck railing
+  for (const z of [-4.2, 2.9]) for (const sd of [-1, 1]) lifeRing(g, sd * 2.19, uy + 0.4, z, sd);
+  // mooring gear: twin bitts fore and aft (rope belayed on two), cleats along the deck edge, rope coils, anchors
+  bitts(g, -1.55, D, 5.4, '#d9c9a0');
+  bitts(g, 1.55, D, 5.4);
+  bitts(g, -1.7, D, -7.0);
+  bitts(g, 1.7, D, -7.0, '#d9c9a0');
+  for (const z of [-4.2, 0.2, 3.4]) for (const sd of [-1, 1]) cleat(g, sd * (sheerAt(FERRY_HULL, z).W - 0.18), D - 0.01, z);
+  ropeCoil(g, 0.0, D, 7.2, 0.36, '#d9c9a0');
+  ropeCoil(g, -0.55, D, -7.95, 0.28, '#2f5f9a');
+  for (const sd of [-1, 1]) anchor(g, FERRY_HULL, 6.6, 0.55, sd);
+  vent(g, -1.7, uy, -2.6, 0.55, '#f4f1ea');
+  vent(g, 1.7, uy, -2.6, 0.55, '#f4f1ea');
   // foredeck life-raft canisters + aft bench
   g.color('#f2efe6');
   for (const x of [-0.6, 0.6]) {
@@ -492,6 +670,7 @@ function ferry(g: Geo): void {
 // ───────────────────────────────────────────── tug
 
 const TUG_HULL: HullSpec = {
+  hc: HC.STEEL,
   L: 12,
   B: 4.6,
   draft: 1.5,
@@ -501,7 +680,7 @@ const TUG_HULL: HullSpec = {
   side: '#b83a2c',
   boot: '#1c1c1c',
   anti: '#5d2620',
-  deck: '#7c7a74',
+  deck: '#5d6158',
   rub: '#1b1b1b',
 };
 
@@ -520,17 +699,22 @@ function tug(g: Geo): void {
   g.push().at(0, 1.25, 5.85).rotX(Math.PI / 2);
   g.cyl(0, -0.5, 0, 0.42, 0.42, 1.0, 10, 3);
   g.pop();
+  // old lorry tyres hung on short chains over the bulwark, lying against the hull side
   for (const sd of [-1, 1]) {
     for (let z = -4.4; z <= 3.6; z += 1.6) {
       const W = sheerAt(TUG_HULL, z).W;
-      g.push().at(sd * (W + 0.1), 0.55, z).rotZ(Math.PI / 2);
-      g.cyl(0, -0.12, 0, 0.32, 0.32, 0.24, 10, 3);
+      const yy = 0.62 + 0.06 * Math.sin(z * 3.1 + sd);
+      g.kind(BT.PLAIN).color('#151617');
+      g.push().at(sd * (W + 0.13), yy, z).rotZ(Math.PI / 2).rotY(0.05 * sd);
+      torus(g, 0.25, 0.11, 14, 6);
       g.pop();
+      g.color('#3d3a36');
+      g.beam([sd * (W + 0.1), yy + 0.33, z], [sd * 1.98, D + 0.55, z], 0.025, 0.025);
     }
   }
   // deckhouse + wheelhouse with all-round windows
   deckhouse(g, { x: 1.55, y0: D - 0.02, y1: 2.6, z0: -1.2, z1: 3.0, wall: '#efe9dc', roof: '#d8d1c2', win: [1.85, 2.1], winTag: BT.WINDOW, winCol: '#2a333b', pane: 0.6, frontWin: false });
-  deckhouse(g, { x: 1.3, y0: 2.6, y1: 4.2, z0: 0.0, z1: 2.6, wall: '#efe9dc', roof: '#b83a2c', win: [3.3, 4.0], winTag: BT.WINDOW, winCol: '#26313a', pane: 0, backWin: true });
+  deckhouse(g, { x: 1.3, y0: 2.6, y1: 4.2, z0: 0.0, z1: 2.6, wall: '#efe9dc', roof: '#b83a2c', win: [3.3, 4.0], winTag: BT.WINDOW, winCol: '#26313a', pane: 0, backWin: true, wipers: true });
   // funnel: black with red band
   g.push().at(0, 2.6, -1.4);
   g.kind(BT.PLAIN).color('#1c1d1f');
@@ -557,12 +741,21 @@ function tug(g: Geo): void {
   g.box(0, D + 0.12, -4.9, 1.2, 0.12, 0.2, 0);
   lifeRing(g, -1.57, 1.9, -0.5, -1);
   lifeRing(g, 1.57, 1.9, -0.5, 1);
+  // tow line flaked on the aft deck, bitts and cleats on the bulwark cap, vents, anchors
+  ropeCoil(g, -1.0, D, -3.9, 0.42, '#d6c48e');
+  ropeCoil(g, 1.2, D, -3.5, 0.28, '#2f5f9a');
+  bitts(g, 0, D, 4.1, '#d6c48e');
+  for (const z of [-4.2, 2.4]) for (const sd of [-1, 1]) cleat(g, sd * 1.7, D, z);
+  vent(g, -1.2, D, -1.9, 0.7, '#efe9dc');
+  vent(g, 1.2, D, -1.9, 0.7, '#efe9dc');
+  for (const sd of [-1, 1]) anchor(g, TUG_HULL, 4.5, 0.75, sd);
   figure(g, 0.9, D, -4.4, Math.PI, '#e2a23a', false);
 }
 
 // ───────────────────────────────────────────── river tour boat (glass roof)
 
 const TOUR_HULL: HullSpec = {
+  hc: HC.STEEL,
   L: 13,
   B: 3.0,
   draft: 0.6,
@@ -666,6 +859,7 @@ function tour(g: Geo): void {
 // ───────────────────────────────────────────── sailing yacht
 
 const SAIL_HULL: HullSpec = {
+  hc: HC.GRP,
   L: 7,
   B: 2.4,
   draft: 0.5,
@@ -773,6 +967,7 @@ function sailboat(g: Geo): void {
 // ───────────────────────────────────────────── motorboat
 
 const MOTOR_HULL: HullSpec = {
+  hc: HC.GRP,
   L: 6,
   B: 2.2,
   draft: 0.45,
@@ -807,11 +1002,48 @@ function motorboat(g: Geo): void {
     g.box(sx, 1.1, -1.0, 0.55, 0.45, 0.1, 0);
   }
   g.box(0, 0.86, -2.25, 1.7, 0.14, 0.55, 0);
-  // outboard engine
-  g.kind(BT.PLAIN).color('#22262a');
-  g.box(0, 0.95, -3.2, 0.42, 0.62, 0.55, 0);
-  g.color('#3a3f45');
-  g.box(0, 0.35, -3.25, 0.16, 0.7, 0.18, 0);
+  // outboard engine: rounded cowling with a split line and badge stripe, mid-section, leg with cavitation
+  // plate + skeg, three-blade propeller, transom clamp bracket
+  g.push().at(0, 0, -3.18);
+  g.kind(BT.PLAIN).color('#1f2327');
+  g.box(0, 0.8, 0.05, 0.3, 0.22, 0.34, 0);
+  g.push().at(0, 1.08, -0.02).rotX(Math.PI / 2);
+  g.cyl(0, -0.27, 0, 0.21, 0.19, 0.54, 10, 3);
+  g.pop();
+  g.color('#e4e6e8');
+  g.box(0, 1.0, -0.02, 0.425, 0.035, 0.56, 0);
+  g.color('#c92f2a');
+  g.box(0, 1.12, -0.02, 0.38, 0.05, 0.3, 0);
+  g.color('#2a2e33');
+  g.box(0, 0.36, -0.02, 0.13, 0.62, 0.16, 0);
+  g.box(0, 0.16, -0.04, 0.28, 0.02, 0.36, 0);
+  g.box(0, -0.12, 0.0, 0.03, 0.2, 0.12, 0);
+  g.push().at(0, -0.02, -0.14).rotX(Math.PI / 2);
+  g.cyl(0, -0.03, 0, 0.045, 0.03, 0.12, 6, 1);
+  g.pop();
+  for (let k = 0; k < 3; k++) {
+    const a = (k / 3) * Math.PI * 2;
+    g.push().at(0, -0.02, -0.12).rotZ(a).rotY(0.5);
+    g.box(0, 0.09, 0, 0.012, 0.15, 0.07, 0);
+    g.pop();
+  }
+  g.color('#4a4f55');
+  g.box(0, 0.78, 0.2, 0.32, 0.12, 0.06, 0);
+  g.pop();
+  // steering wheel on the console, bow + quarter cleats, stainless grab rails on the foredeck, stern fenders
+  g.color('#1d1f22');
+  g.push().at(0.45, 1.3, 0.12).rotX(-0.9);
+  torus(g, 0.15, 0.015, 14, 4);
+  g.pop();
+  cleat(g, 0, 0.94, 2.55);
+  cleat(g, -0.82, 0.86, -2.8);
+  cleat(g, 0.82, 0.86, -2.8);
+  g.kind(BT.PLAIN).color('#c9cdd0');
+  for (const sd of [-1, 1]) {
+    g.beam([sd * 0.7, 1.08, 0.75], [sd * 0.52, 1.08, 2.5], 0.022, 0.022);
+    for (const z of [0.85, 2.4]) g.box(sd * (0.7 - (z - 0.75) * 0.1), 1.0, z, 0.02, 0.14, 0.02, 0);
+  }
+  ropeCoil(g, -0.45, 0.8, -1.55, 0.2, '#2f5f9a');
   // stern light pole + bow lights
   g.color('#c9cdd0');
   g.cyl(0, 0.85, -2.6, 0.02, 0.02, 1.05, 5, 1);
@@ -862,6 +1094,294 @@ function rowingShell(g: Geo): void {
 
 // ───────────────────────────────────────────── build
 
+// ───────────────────────────────────────────── moored at the fish quay (north end of the harbour quay)
+
+/** berths (world): the crabber lies starboard-side-to the quay wall bow north, the dinghy at the ladder */
+export const FISH_BERTH = { x: QUAY_X + 2.45, z: -123.4, yaw: Math.PI };
+export const PUNT_BERTH = { x: QUAY_X + 0.95, z: -131.6, yaw: Math.PI };
+/** quay coping above the still water, quay bollards (world z) used by the mooring lines */
+const QUAY_TOP = 0.12 - WATER_LEVEL;
+const QUAY_BOLLARDS = [-138, -125, -112];
+/** world point on the quay → local frame of a boat at a berth with yaw π (local +x = west = toward the quay) */
+const quayLocal = (b: { x: number; z: number }, wx: number, wy: number, wz: number): V3 => [b.x - wx, wy, -(wz - b.z)];
+
+/** a sagging rope between two local points */
+function rope(g: Geo, a: V3, b: V3, sag: number, r: number, col: string): void {
+  g.kind(BT.PLAIN).color(col);
+  const n = 10;
+  let p = a;
+  for (let i = 1; i <= n; i++) {
+    const t = i / n;
+    const q: V3 = [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t - sag * Math.sin(Math.PI * t), a[2] + (b[2] - a[2]) * t];
+    g.beam(p, q, r, r);
+    p = q;
+  }
+}
+
+/** parlour creel: weighted base frame, three hoops with a netting skin (BT.NET), an entrance eye */
+function creel(g: Geo, x: number, y: number, z: number, yaw: number): void {
+  g.push().at(x, y, z, yaw);
+  g.kind(BT.PLAIN).color('#2b2d2f');
+  g.box(0, 0.025, 0, 0.62, 0.05, 0.44, 0);
+  // hoops (half rings over the base, along x) + netting skin
+  g.color('#3c4a3a');
+  for (const hx of [-0.27, 0, 0.27]) {
+    g.push().at(hx, 0.05, 0).rotZ(Math.PI / 2).rotY(Math.PI / 2);
+    for (let k = 0; k < 6; k++) {
+      const a0 = (k / 6) * Math.PI,
+        a1 = ((k + 1) / 6) * Math.PI;
+      g.beam([0, Math.sin(a0) * 0.34, Math.cos(a0) * 0.22], [0, Math.sin(a1) * 0.34, Math.cos(a1) * 0.22], 0.016, 0.016);
+    }
+    g.pop();
+  }
+  g.kind(BT.NET).color('#4f7a5a');
+  const N = 8;
+  for (let k = 0; k < N; k++) {
+    const a0 = (k / N) * Math.PI,
+      a1 = ((k + 1) / N) * Math.PI;
+    const p0: V3 = [-0.29, 0.05 + Math.sin(a0) * 0.34, Math.cos(a0) * 0.22],
+      p1: V3 = [-0.29, 0.05 + Math.sin(a1) * 0.34, Math.cos(a1) * 0.22];
+    g.quad([0.29, p0[1], p0[2]], [0.29, p1[1], p1[2]], p1, p0);
+  }
+  // end walls of netting
+  for (const ex of [-0.29, 0.29]) {
+    for (let k = 0; k < N; k++) {
+      const a0 = (k / N) * Math.PI,
+        a1 = ((k + 1) / N) * Math.PI;
+      g.quad([ex, 0.05, 0], [ex, 0.05 + Math.sin(a0) * 0.34, Math.cos(a0) * 0.22], [ex, 0.05 + Math.sin(a1) * 0.34, Math.cos(a1) * 0.22], [ex, 0.05, 0]);
+    }
+  }
+  g.kind(BT.PLAIN).color('#d9cf9a');
+  g.cyl(0, 0.3, 0.14, 0.05, 0.05, 0.08, 6, 0);
+  g.pop();
+}
+
+/** stack of blue/red plastic fish boxes */
+function fishBoxes(g: Geo, x: number, y: number, z: number, n: number, yaw: number, seed: number): void {
+  g.push().at(x, y, z, yaw);
+  for (let k = 0; k < n; k++) {
+    g.kind(BT.PLAIN).color((seed + k) % 3 === 2 ? '#c44a2c' : '#2f6fb3');
+    const yy = k * 0.27;
+    g.box(0, yy + 0.02, 0, 0.74, 0.04, 0.46, 0);
+    for (const sd of [-1, 1]) {
+      g.box(sd * 0.36, yy + 0.15, 0, 0.025, 0.27, 0.46, 0);
+      g.box(0, yy + 0.15, sd * 0.22, 0.74, 0.27, 0.025, 0);
+      // hand hole
+      g.color('#1a2836');
+      g.box(sd * 0.375, yy + 0.21, 0, 0.012, 0.05, 0.14, 0);
+      g.color((seed + k) % 3 === 2 ? '#c44a2c' : '#2f6fb3');
+    }
+  }
+  g.pop();
+}
+
+/** dan buoy: pole with flag + radar reflector, float collar, ballast weight; leaning when stowed */
+function danBuoy(g: Geo, x: number, y: number, z: number, lean: number, flagCol: string): void {
+  g.push().at(x, y, z).rotX(lean);
+  g.kind(BT.PLAIN).color('#d8d4c8');
+  g.cyl(0, 0, 0, 0.025, 0.02, 3.2, 5, 1);
+  g.color('#e8582a');
+  g.cyl(0, 0.5, 0, 0.17, 0.17, 0.36, 10, 3);
+  g.color('#3a3d40');
+  g.cyl(0, 0.0, 0, 0.05, 0.05, 0.3, 6, 1);
+  g.kind(BT.FLAG).color(flagCol);
+  g.extra(0.5);
+  g.quad([0, 2.75, 0.02], [0, 2.75, 0.4], [0, 3.15, 0.4], [0, 3.15, 0.02]);
+  g.extra(0);
+  g.pop();
+}
+
+/** orange pot buoy */
+function potBuoy(g: Geo, x: number, y: number, z: number): void {
+  g.kind(BT.PLAIN).color('#e8672c');
+  g.sphere(x, y + 0.17, z, 0.18, 8, 5);
+  g.color('#e9e2c8');
+  g.cyl(x, y + 0.32, z, 0.025, 0.025, 0.08, 5, 1);
+}
+
+const FISH_HULL: HullSpec = {
+  hc: HC.STEEL,
+  L: 10.5,
+  B: 3.7,
+  draft: 1.3,
+  fb: [1.2, 1.1, 1.95],
+  transom: 0.8,
+  rake: 0.7,
+  side: '#1f4f7c',
+  boot: '#f2efe6',
+  anti: '#7a2e24',
+  deck: '#8a8d88',
+  rub: '#1b1c1e',
+  stripe: { y0: 0.72, y1: 0.8, color: '#f2efe6' },
+};
+
+/** inshore crabber: forward wheelhouse, pot hauler on a davit, creels stacked aft, dan buoys, fish boxes,
+ *  tyre fenders on the quay side and her mooring lines to the quay bollards */
+function fishingBoat(g: Geo): void {
+  hull(g, FISH_HULL);
+  const D = 1.1;
+  // bulwarks with a capping rail, freeing ports along the foot
+  for (const sd of [-1, 1]) {
+    for (let z = -4.6; z < 3.6; z += 0.9) {
+      const W = sheerAt(FISH_HULL, z).W - 0.05;
+      const W2 = sheerAt(FISH_HULL, z + 0.9).W - 0.05;
+      g.kind(BT.PLAIN + HC.SUPER * HC_STEP).color('#1f4f7c').extra(D + 0.15);
+      g.beam([sd * W, D + 0.36, z], [sd * W2, D + 0.36, z + 0.9], 0.06, 0.5);
+      g.extra(0);
+      g.kind(BT.PLAIN).color('#d9d4c6');
+      g.beam([sd * W, D + 0.64, z], [sd * W2, D + 0.64, z + 0.9], 0.1, 0.05);
+    }
+  }
+  // wheelhouse forward (welded steel, framed windows, wipers), whaleback forward of it
+  deckhouse(g, { x: 1.25, y0: D - 0.02, y1: D + 2.15, z0: 0.7, z1: 3.3, wall: '#efebe2', roof: '#d9d4c6', win: [D + 1.25, D + 1.85], winTag: BT.GLASS, winCol: '#23303a', pane: 0.8, backWin: true, wipers: true });
+  g.kind(BT.PLAIN).color('#efebe2');
+  g.box(0, D + 0.25, 4.0, 1.9, 0.5, 1.2, 0);
+  // door on the port side of the wheelhouse
+  g.color('#d9d4c6');
+  g.box(-1.262, D + 0.85, 1.05, 0.02, 1.6, 0.6, 0);
+  // mast with radar scanner + lights, aerials, searchlight
+  g.color('#efebe2');
+  g.cyl(0, D + 2.2, 1.9, 0.06, 0.045, 3.0, 6, 1);
+  g.box(0, D + 4.2, 1.9, 1.3, 0.05, 0.08, 0);
+  g.color('#e8e6de');
+  g.box(0, D + 2.35, 2.5, 1.2, 0.08, 0.16, 0);
+  g.color('#3a3d40');
+  g.cyl(0, D + 2.2, 2.5, 0.08, 0.08, 0.15, 6, 1);
+  g.color('#cfccc4');
+  for (const sx of [-0.9, 0.9]) g.cyl(sx, D + 2.2, 1.0, 0.012, 0.008, 1.6, 4, 1);
+  for (const L of DIMS.fish.lights) navLamp(g, L[0], L[1], L[2], L[3]);
+  // pot hauler on a davit at the starboard shoulder, behind the wheelhouse
+  g.kind(BT.PLAIN).color('#d6b23a');
+  g.cyl(1.35, D, 0.2, 0.07, 0.06, 1.7, 8, 1);
+  g.beam([1.35, D + 1.7, 0.2], [1.95, D + 1.95, 0.2], 0.08, 0.08);
+  g.color('#2a2c2e');
+  g.push().at(1.95, D + 1.82, 0.2).rotZ(Math.PI / 2);
+  g.cyl(0, -0.04, 0, 0.13, 0.13, 0.08, 10, 3);
+  g.pop();
+  g.color('#3a3d40');
+  g.push().at(1.3, D + 0.95, -0.1).rotX(Math.PI / 2);
+  g.cyl(0, -0.15, 0, 0.2, 0.2, 0.3, 10, 3);
+  g.pop();
+  // creels stacked on the aft deck (fleet of pots), with their back rope
+  let k = 0;
+  for (let row = 0; row < 3; row++)
+    for (let col = 0; col < 2; col++)
+      for (let lev = 0; lev < (row === 2 ? 2 : 3); lev++) {
+        creel(g, -0.42 + col * 0.84 - 0.1, D + lev * 0.4, -1.1 - row * 0.62, ((k++ * 37) % 7) * 0.02);
+      }
+  rope(g, [0.62, D + 1.25, -1.1], [0.62, D + 0.85, -2.4], 0.06, 0.02, '#c9b97a');
+  ropeCoil(g, -1.0, D, -3.6, 0.38, '#c9b97a');
+  ropeCoil(g, 0.9, D, -3.9, 0.3, '#2f5f9a');
+  // fish boxes, buoys, dan buoys leaning in the stern corner, gallows at the stern
+  fishBoxes(g, 0.7, D, -4.55, 3, 0.1, 1);
+  fishBoxes(g, -0.15, D, -4.65, 2, -0.05, 2);
+  for (const [bx, bz] of [
+    [-1.1, -2.7],
+    [-1.25, -3.0],
+    [-0.95, -3.05],
+  ])
+    potBuoy(g, bx, D, bz);
+  danBuoy(g, -1.3, D, -4.6, -0.5, '#1d1f22');
+  danBuoy(g, -1.05, D, -4.8, -0.45, '#e2c22a');
+  g.kind(BT.PLAIN).color('#d6b23a');
+  for (const sd of [-1, 1]) g.beam([sd * 1.3, D, -4.9], [sd * 0.9, D + 2.2, -4.9], 0.1, 0.1);
+  g.beam([-0.9, D + 2.2, -4.9], [0.9, D + 2.2, -4.9], 0.1, 0.1);
+  g.color('#2a2c2e');
+  g.cyl(0, D + 1.95, -4.9, 0.1, 0.1, 0.12, 8, 1);
+  // deck gear: bitts fore and aft, cleats, a hose, a deckhand in oilskins sorting the catch
+  bitts(g, 0.9, D, 4.45, '#c9b97a');
+  bitts(g, -0.9, D, 4.45);
+  for (const z of [-4.4, -0.3]) for (const sd of [-1, 1]) cleat(g, sd * (sheerAt(FISH_HULL, z).W - 0.25), D, z);
+  rope(g, [-1.0, D + 0.05, 0.4], [0.3, D + 0.05, -0.4], 0.0, 0.03, '#d6c43a');
+  lifeRing(g, -1.272, D + 1.0, 2.6, -1);
+  figure(g, 0.2, D, -3.0, Math.PI * 0.8, '#e8a21c', false);
+  // tyre fenders on the quay side (+x) on short lines over the bulwark
+  for (const z of [-3.2, -0.6, 2.0]) {
+    const W = sheerAt(FISH_HULL, z).W;
+    g.kind(BT.PLAIN).color('#151617');
+    g.push().at(W + 0.13, 0.75, z).rotZ(Math.PI / 2);
+    torus(g, 0.26, 0.11, 14, 6);
+    g.pop();
+    rope(g, [W + 0.12, 1.06, z], [W - 0.03, D + 0.66, z], 0.0, 0.016, '#c9b97a');
+  }
+  // mooring lines (bow line, spring, stern line) from the cleats/bitts to the quay bollards
+  const bol = QUAY_BOLLARDS.map((z) => quayLocal(FISH_BERTH, QUAY_X + 0.05, QUAY_TOP + 0.45, z));
+  rope(g, [0.9, D + 0.32, 4.45], bol[0], 0.7, 0.03, '#d6c48e');
+  rope(g, [sheerAt(FISH_HULL, -0.3).W - 0.25, D + 0.12, -0.3], bol[1], 0.25, 0.028, '#d6c48e');
+  rope(g, [sheerAt(FISH_HULL, -4.4).W - 0.25, D + 0.12, -4.4], bol[2], 0.6, 0.03, '#2f5f9a');
+}
+
+const PUNT_HULL: HullSpec = {
+  hc: HC.GRP,
+  L: 3.4,
+  B: 1.45,
+  draft: 0.25,
+  fb: [0.42, 0.4, 0.52],
+  transom: 0.78,
+  rake: 0.25,
+  side: '#e7e2d4',
+  boot: '#5b6b4a',
+  anti: '#5b6b4a',
+  deck: '#b9a27e',
+  stripe: { y0: 0.3, y1: 0.34, color: '#2f6f8a' },
+};
+
+/** open dinghy at the quay ladder: thwarts, oars stowed, a tarp over the bow, a small tilted outboard,
+ *  bilge water, a bucket, the painter up to the ladder */
+function punt(g: Geo): void {
+  hull(g, PUNT_HULL);
+  const D = 0.4;
+  // floor boards inside (the hull deck sits at the sheer — lower floor + inner sides)
+  g.kind(BT.PLAIN).color('#9a8462');
+  for (const z of [-0.9, 0.0, 0.85]) g.box(0, D - 0.02, z, sheerAt(PUNT_HULL, z).W * 1.8, 0.04, 0.22, 0);
+  // gunwale rubbing strip
+  for (const sd of [-1, 1]) {
+    g.color('#6b4a2e');
+    for (let z = -1.6; z < 1.5; z += 0.4) {
+      const a = sheerAt(PUNT_HULL, z),
+        b = sheerAt(PUNT_HULL, z + 0.4);
+      g.beam([sd * a.W, a.D + 0.02, z], [sd * b.W, b.D + 0.02, z + 0.4], 0.05, 0.05);
+    }
+  }
+  // oars along the thwarts (looms + blades), rowlocks
+  g.color('#c9a46a');
+  for (const sd of [-1, 1]) {
+    g.beam([sd * 0.3, D + 0.12, -1.3], [sd * 0.38, D + 0.12, 1.15], 0.04, 0.04);
+    g.box(sd * 0.38, D + 0.12, 1.3, 0.13, 0.015, 0.45, 0);
+    g.color('#3a3d40');
+    g.cyl(sd * 0.62, D + 0.02, -0.15, 0.015, 0.015, 0.1, 5, 1);
+    g.color('#c9a46a');
+  }
+  // tarp lashed over the bow (folds), bucket, bilge water
+  g.kind(BT.PLAIN).color('#4f7fa8');
+  const tz0 = 0.55,
+    tz1 = 1.6;
+  for (let i = 0; i < 4; i++) {
+    const za = tz0 + ((tz1 - tz0) * i) / 4,
+      zb = tz0 + ((tz1 - tz0) * (i + 1)) / 4;
+    const wa = sheerAt(PUNT_HULL, za).W + 0.02,
+      wb = sheerAt(PUNT_HULL, zb).W + 0.02;
+    const ha = D + 0.18 + 0.05 * (i % 2),
+      hb = D + 0.18 + 0.05 * ((i + 1) % 2);
+    g.quad([-wa, D + 0.02, za], [-wb, D + 0.02, zb], [0, hb, zb], [0, ha, za]);
+    g.quad([0, ha, za], [0, hb, zb], [wb, D + 0.02, zb], [wa, D + 0.02, za]);
+  }
+  g.color('#d7d2c6');
+  g.cyl(-0.3, D, -1.0, 0.12, 0.1, 0.25, 8, 1);
+  g.kind(BT.GLASS).color('#4a5a52');
+  g.box(0.1, D + 0.005, -0.4, 0.7, 0.01, 0.6, 0);
+  // small outboard, tilted up out of the water
+  g.push().at(0, D + 0.05, -1.72).rotX(-0.9);
+  g.kind(BT.PLAIN).color('#d8d9d6');
+  g.box(0, 0.2, 0, 0.26, 0.3, 0.32, 0);
+  g.color('#3a3f45');
+  g.box(0, -0.3, 0.02, 0.08, 0.6, 0.1, 0);
+  g.pop();
+  // painter from the bow eye up the quay to the ladder top
+  const top = quayLocal(PUNT_BERTH, QUAY_X - 0.1, QUAY_TOP + 0.05, PUNT_BERTH.z - 0.6);
+  rope(g, [0, D + 0.1, 1.68], top, 0.4, 0.014, '#e9e2c8');
+}
+
 export function buildBigBoats(): THREE.BufferGeometry {
   const g = new Geo();
   g.variant(1);
@@ -870,6 +1390,8 @@ export function buildBigBoats(): THREE.BufferGeometry {
   tug(g);
   g.variant(3);
   tour(g);
+  g.variant(4);
+  fishingBoat(g);
   g.variant(0);
   return g.build({ anim: false, extra: true });
 }
@@ -882,6 +1404,8 @@ export function buildSmallBoats(): THREE.BufferGeometry {
   motorboat(g);
   g.variant(3);
   rowingShell(g);
+  g.variant(4);
+  punt(g);
   g.variant(0);
   return g.build({ anim: false, extra: true });
 }

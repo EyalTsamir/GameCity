@@ -5,6 +5,7 @@
 // Built in the ship's local frame (bow = +z) into the RIGGED builder (rig SHIP = the gentle
 // bob from uShip); mooring lines blend from the quay (weight 0) to the ship (weight 1).
 
+import { castBollard } from './quay';
 import * as THREE from 'three';
 import { smoothstep } from '../../core/geom';
 import type { Rng } from '../../core/rng';
@@ -508,11 +509,7 @@ function tubeRigged(b: HB, pts: V3[], r: number, seg: number): void {
 
 /** Mushroom bollard (static) */
 export function bollard(b: HB, x: number, y: number, z: number): void {
-  b.color('#2c2f33');
-  b.cyl([x, y, z], [x, y + 0.42, z], 0.2, 0.17, 8, 0);
-  b.cyl([x, y + 0.42, z], [x, y + 0.56, z], 0.3, 0.3, 8, 2);
-  b.color('#d9b23a');
-  b.cyl([x, y + 0.1, z], [x, y + 0.2, z], 0.215, 0.21, 8, 0);
+  castBollard(b, x, y, z);
 }
 
 /** Quay furniture: bollards along the edge, hanging fenders on the wall face, floating fenders by the ship. */

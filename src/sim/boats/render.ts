@@ -49,7 +49,7 @@ export class BoatRenderer {
     capSmall: number,
   ) {
     this.group.name = 'boats';
-    const { material, depth } = createBoatMaterials(ctx.uniforms);
+    const { material, depth } = createBoatMaterials(ctx.uniforms, !ctx.debug.params.has('noboatdetail') && ctx.quality.level !== 'low');
     // night: moored / passing boats catch the quay and pier lamps (lamp light map, lamps module)
     import('../../world/lamps/integrate')
       .then((m) => m.patchLampMaterial(material))

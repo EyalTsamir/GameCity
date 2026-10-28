@@ -81,7 +81,7 @@ export function buildStation(g: Geo, st: StationDef): StationBuild {
   g.box(0, Y - 0.045, zN + 0.2, xE - xW + 0.02, 0.13, 0.52, 8);
   g.color(C.coping, 0.86);
   g.quad([xE, Y - 0.12, zN - 0.06], [xW, Y - 0.12, zN - 0.06], [xW, Y - 0.12, zN + 0.4], [xE, Y - 0.12, zN + 0.4]);
-  strip(zN + 0.46, zN + 0.55, Y + 0.009, K.PLAIN, C.white);
+  strip(zN + 0.46, zN + 0.55, Y + 0.009, K.PLAIN, '#e2bf2a');
   strip(zN + 0.55, zN + 0.95, Y + 0.009, K.TACTILE, C.tactile);
   strip(zN + 0.95, zS - 0.3, Y + 0.006, K.PAVING, C.paving);
   g.kind(K.CONCRETE).color(C.coping);
@@ -198,6 +198,17 @@ export function buildStation(g: Geo, st: StationDef): StationBuild {
     g.block(x, Y, colZ, 0.36, 0.32, 0.36);
     g.color(C.ironDark);
     g.block(x, Y + 0.32, colZ, 0.3, 0.06, 0.3);
+    // holding-down bolts at the base plate corners, nuts proud
+    g.color(C.ironDark);
+    g.block(x, Y, colZ, 0.5, 0.025, 0.5);
+    for (const [dx, dz] of [
+      [-0.2, -0.2],
+      [0.2, -0.2],
+      [-0.2, 0.2],
+      [0.2, 0.2],
+    ])
+      g.cyl(x + dx, Y + 0.025, colZ + dz, 0.022, 0.022, 0.035, 6, 1);
+    g.color(C.iron);
     g.color(C.iron);
     g.cyl(x, Y + 0.38, colZ, 0.105, 0.09, eaveY - 0.55 - Y - 0.38, 10, 0);
     // fluted capital
@@ -397,13 +408,110 @@ export function buildStation(g: Geo, st: StationDef): StationBuild {
   g.color(C.frame);
   g.box(4.2, Y + 2.3, zS - 0.45, 0.62, 0.62, 0.06, 0);
   signs.push({ kind: 'number', x: 4.2, y: Y + 2.3, z: zS - 0.45, w: 0.55, h: 0.55, both: true, normal: 1 });
-  // ticket machine near the stairs
-  g.kind(K.PLAIN).color(C.ticket);
-  g.block(-4.6, Y, zS - 0.6, 0.7, 1.6, 0.45);
-  g.color('#d9dde0');
-  g.box(-4.6, Y + 1.2, zS - 0.37, 0.5, 0.32, 0.02, 0);
-  g.kind(K.WINDOW).color('#9fc3d9');
-  g.box(-4.6, Y + 1.22, zS - 0.355, 0.36, 0.2, 0.01, 0);
+  // ticket machine near the stairs: plinth, body, rain hood, screen in a bezel, keypad, card reader, coin slot,
+  // ticket tray, operator band (faces the track, local +z = north here → front at zS − 0.6 − 0.23, normal −z)
+  {
+    const tx = -4.6,
+      tz = zS - 0.6,
+      fz = tz - 0.23;
+    g.kind(K.PLAIN).color('#2a2d30');
+    g.block(tx, Y, tz, 0.74, 0.08, 0.5);
+    g.color(C.ticket);
+    g.block(tx, Y + 0.08, tz, 0.7, 1.62, 0.45);
+    g.color('#1f4a7d');
+    g.box(tx, Y + 1.76, tz - 0.05, 0.78, 0.07, 0.6, 0);
+    g.color('#f2efe6');
+    g.box(tx, Y + 1.6, fz - 0.005, 0.7, 0.1, 0.01, 0);
+    g.color('#1d1f22');
+    g.box(tx, Y + 1.27, fz - 0.01, 0.5, 0.34, 0.02, 0);
+    g.kind(K.WINDOW).color('#9fc3d9');
+    g.box(tx, Y + 1.28, fz - 0.022, 0.38, 0.24, 0.01, 0);
+    g.kind(K.PLAIN).color('#c9cdd0');
+    for (let r = 0; r < 4; r++) for (let c = 0; c < 3; c++) g.box(tx - 0.16 + c * 0.055, Y + 0.98 - r * 0.05, fz - 0.015, 0.04, 0.035, 0.012, 0);
+    g.color('#1d1f22');
+    g.box(tx + 0.12, Y + 0.95, fz - 0.02, 0.12, 0.16, 0.03, 0);
+    g.color('#3fae5a');
+    g.box(tx + 0.12, Y + 1.04, fz - 0.037, 0.03, 0.012, 0.004, 0);
+    g.color('#8a8f93');
+    g.box(tx + 0.24, Y + 0.95, fz - 0.015, 0.02, 0.08, 0.012, 0);
+    g.color('#15171a');
+    g.box(tx, Y + 0.45, fz - 0.03, 0.34, 0.14, 0.05, 0);
+  }
+  // help point / intercom pillar by the ramp, CCTV domes + PA horns on the canopy beam
+  {
+    const hx = 26.5,
+      hz = zS - 0.45;
+    g.kind(K.PLAIN).color('#1d1f22');
+    g.block(hx, Y, hz, 0.22, 1.55, 0.16);
+    g.color('#e8c21c');
+    g.box(hx, Y + 1.2, hz - 0.085, 0.2, 0.22, 0.01, 0);
+    g.color('#2f6fb3');
+    g.box(hx, Y + 1.42, hz - 0.085, 0.2, 0.12, 0.01, 0);
+    g.color('#c9cdd0');
+    g.box(hx, Y + 1.08, hz - 0.09, 0.08, 0.04, 0.01, 0);
+    g.cyl(hx, Y + 1.27, hz - 0.095, 0.03, 0.03, 0.01, 8, 1);
+  }
+  for (const x of [-colStep * 2.5, colStep * 0.5, colStep * 2.5]) {
+    g.kind(K.PLAIN).color('#e9ebe7');
+    g.box(x, eaveY - 0.42, colZ - 0.16, 0.12, 0.08, 0.12, 0);
+    g.color('#22262a');
+    g.sphere(x, eaveY - 0.47, colZ - 0.16, 0.07, 8, 4, 0.8);
+  }
+  for (const x of [-colStep * 1.0, colStep * 1.0]) {
+    g.kind(K.PLAIN).color('#d9dcd8');
+    g.push().at(x, eaveY - 0.5, colZ - 0.2).rotX(-1.25);
+    g.cyl(0, 0, 0, 0.04, 0.13, 0.22, 8, 0);
+    g.pop();
+  }
+  // timetable case on a post at the stairs head: printed sheets (header band, rows of times) behind glass
+  {
+    const px = -1.6,
+      pz = zS - 0.35;
+    g.kind(K.PLAIN).color(C.iron);
+    g.block(px - 0.5, Y, pz, 0.06, 2.0, 0.06);
+    g.block(px + 0.5, Y, pz, 0.06, 2.0, 0.06);
+    g.color(C.frame);
+    g.box(px, Y + 1.35, pz, 1.12, 0.92, 0.07, 0);
+    for (const sd of [-1, 1]) {
+      const fz = pz + sd * 0.036;
+      g.color('#f4f2ec');
+      for (const sx of [-0.26, 0.26]) {
+        g.box(px + sx, Y + 1.35, fz, 0.46, 0.8, 0.004, 0);
+        g.color('#c4352b');
+        g.box(px + sx, Y + 1.7, fz + sd * 0.003, 0.46, 0.08, 0.003, 0);
+        g.color('#4a4d52');
+        for (let r = 0; r < 12; r++) g.box(px + sx - 0.06 + ((r * 7) % 3) * 0.02, Y + 1.6 - r * 0.042, fz + sd * 0.003, 0.3 - ((r * 5) % 4) * 0.04, 0.012, 0.003, 0);
+        g.color('#f4f2ec');
+      }
+      g.kind(K.WINDOW).color('#c9d6dc');
+      g.box(px, Y + 1.35, fz + sd * 0.012, 1.0, 0.82, 0.003, 0);
+      g.kind(K.PLAIN);
+    }
+  }
+  // luggage and things left by the people waiting: a wheeled case with its handle up, a holdall, a rucksack on a
+  // bench, a coffee cup on a bin lid, a dropped newspaper
+  {
+    const bz = zMid + 0.85;
+    g.kind(K.PLAIN).color('#2c3e57');
+    g.block(-8.8 + 1.1, Y, bz - 0.35, 0.4, 0.62, 0.24);
+    g.color('#1d1f22');
+    g.block(-8.8 + 1.1 - 0.12, Y + 0.62, bz - 0.35, 0.02, 0.38, 0.02);
+    g.block(-8.8 + 1.1 + 0.12, Y + 0.62, bz - 0.35, 0.02, 0.38, 0.02);
+    g.box(-8.8 + 1.1, Y + 1.0, bz - 0.35, 0.28, 0.03, 0.03, 0);
+    for (const dx of [-0.15, 0.15]) g.cyl(-8.8 + 1.1 + dx, Y, bz - 0.45, 0.03, 0.03, 0.04, 6, 1);
+    g.color('#7a2e2a');
+    g.push().at(17.6 - 0.4, Y + 0.17, bz - 0.55, 0.3).rotZ(Math.PI / 2);
+    g.cyl(0, -0.28, 0, 0.17, 0.17, 0.56, 10, 3);
+    g.pop();
+    g.color('#3d5a3a');
+    g.box(-17.6 + 0.4, Y + 0.68, bz - 0.05, 0.32, 0.42, 0.2, 0);
+    g.color('#2a3a28');
+    g.box(-17.6 + 0.4, Y + 0.62, bz - 0.17, 0.26, 0.2, 0.06, 0);
+    g.color('#f2efe6');
+    g.cyl(30.5 + 1.35 - 0.06, Y + 0.8, bz + 0.1, 0.035, 0.03, 0.1, 8, 1);
+    g.color('#d9d6cc');
+    g.box(12.2, Y + 0.012, zMid - 0.4, 0.42, 0.006, 0.3, 0);
+  }
 
   return { signs, lamps, clock, canopy: { x0: rx0, x1: rx1, z0: eN, z1: eS, y: ridgeY }, strips };
 }
