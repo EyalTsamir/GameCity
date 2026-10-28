@@ -28,7 +28,28 @@ void pWear(inout vec3 col, inout float rgh, inout float mtl, vec3 pw, vec3 n) {
   float fine = 1.0 - smoothstep(0.01, 0.04, fw);
   float foot = 1.0 - smoothstep(0.05, 0.55, pw.y - 0.12);
   float north = smoothstep(0.2, 0.9, -n.z) * (1.0 - an.y);
-  if (rgh > 0.84 && rgh < 0.9 && mtl < 0.05) {
+  if (rgh > 0.928 && rgh < 0.945 && mtl < 0.05) {
+    // clay brick (W5): stretcher bond 215 × 65 mm + 10 mm mortar on the vertical faces, tone per brick, grime and
+    // algae at the foot; the courses fade to their mean colour with the pixel footprint
+    float bf = 1.0 - smoothstep(0.004, 0.02, fw);
+    if (an.y < 0.65) {
+      vec2 b = vec2(uvp.x / 0.225, uvp.y / 0.075);
+      float row = floor(b.y);
+      b.x += mod(row, 2.0) * 0.5;
+      vec2 cell = floor(b);
+      vec2 f = fract(b);
+      float jx = min(f.x, 1.0 - f.x) * 0.225, jy = min(f.y, 1.0 - f.y) * 0.075;
+      float mortar = 1.0 - smoothstep(0.004, 0.0065, min(jx, jy));
+      float hb = fract(sin(dot(cell, vec2(127.1, 311.7))) * 43758.5453);
+      vec3 bc = col * (0.82 + 0.3 * hb) * mix(vec3(1.0), vec3(1.08, 0.9, 0.82), step(0.85, hb));
+      bc = mix(bc, vec3(0.62, 0.6, 0.55), mortar);
+      col = mix(col * (1.0 - 0.06), bc, bf);
+      rgh = mix(rgh, 0.97, mortar * bf);
+    }
+    col *= 1.0 - 0.25 * foot * (0.6 + 0.4 * nA.g);
+    col = mix(col, col * vec3(0.66, 0.76, 0.52), clamp(north * (0.3 + 0.5 * foot) * smoothstep(0.35, 0.7, nA.r), 0.0, 0.6));
+    col *= 1.0 - 0.15 * smoothstep(0.6, 0.85, nB.b) * (1.0 - an.y);
+  } else if (rgh > 0.84 && rgh < 0.9 && mtl < 0.05) {
     // stone / concrete
     col *= 1.0 - 0.22 * foot * (0.6 + 0.4 * nA.g);
     col *= 1.0 - 0.18 * smoothstep(0.55, 0.85, nB.b) * (1.0 - an.y);
@@ -136,7 +157,7 @@ ${WEAR_GLSL}`,
       .replace('#include <metalnessmap_fragment>', 'float metalnessFactor = pMtl;')
       .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n  totalEmissiveRadiance += vEmit;');
   };
-  mat.customProgramCacheKey = () => 'props-furniture-4' + (wear ? 'w' : '');
+  mat.customProgramCacheKey = () => 'props-furniture-5' + (wear ? 'w' : '');
   return mat;
 }
 

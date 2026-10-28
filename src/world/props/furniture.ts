@@ -17,6 +17,8 @@ export const MAT = {
   steel: [0.32, 0.65],
   wood: [0.82, 0],
   stone: [0.88, 0],
+  /** clay brick in stretcher bond with mortar joints (props/material.ts) */
+  brick: [0.936, 0],
   plastic: [0.45, 0],
   glass: [0.12, 0.1],
   rubber: [0.92, 0],
@@ -1139,16 +1141,25 @@ export function lowWall(k: Kit, L: number, brick: boolean, postA: boolean, postB
   const sh = k.sh;
   const body = brick ? '#a65d43' : '#cdbf9f';
   const cap = brick ? '#d9cfbd' : '#e2d8c3';
-  k.m(body, 'stone');
+  const bm = brick ? 'brick' : 'stone';
+  k.m(body, bm);
   sh.box(L / 2, 0.29, 0, L, 0.58, 0.3, 1);
+  // coping in 60 cm units with mortar joints, a drip overhang each side
   k.m(cap, 'stone');
-  sh.box(L / 2, 0.61, 0, L + 0.04, 0.06, 0.36, 0);
+  const nc = Math.max(1, Math.round(L / 0.6));
+  for (let i = 0; i < nc; i++) {
+    const x0 = (i / nc) * (L + 0.04) - 0.02,
+      x1 = ((i + 1) / nc) * (L + 0.04) - 0.02;
+    cbox(sh, (x0 + x1) / 2, 0.61, 0, x1 - x0 - 0.008, 0.06, 0.36, 0.008, 0);
+  }
+  k.m('#b9b1a1', 'stone');
+  sh.box(L / 2, 0.581, 0, L + 0.03, 0.004, 0.31, 3);
   for (const [x, on] of [
     [0, postA],
     [L, postB],
   ] as [number, boolean][]) {
     if (!on) continue;
-    k.m(body, 'stone');
+    k.m(body, brick ? 'brick' : 'stone');
     sh.box(x, 0.39, 0, 0.42, 0.78, 0.42, 1);
     k.m(cap, 'stone');
     sh.box(x, 0.81, 0, 0.48, 0.06, 0.48, 0);

@@ -418,12 +418,12 @@ export function buildMarkings(ctx: CityContext, atlasGlyphs: Record<string, Glyp
         }
       }
       // gully grates just upstream of the crosswalk, both sides
-      setPaint(IRON_DARK, 1, 0);
+      setPaint(IRON_DARK, 1, -1);
       quad(P(8.3, ROAD_HALF - 0.17), up, 0.34, 0.5, Y.gutter + 0.002, atlasGlyphs.grate);
       stats.decals++;
     }
     if (rng.chance(0.6)) {
-      setPaint(IRON, 1, 0);
+      setPaint(IRON, 1, -1);
       quad({ x: I.x + rng.range(-1.5, 1.5), z: I.z + rng.range(-1.5, 1.5) }, { x: 0, z: -1 }, 0.72, 0.72, yRoad, atlasGlyphs.manhole);
       stats.decals++;
     }
@@ -468,13 +468,13 @@ export function buildMarkings(ctx: CityContext, atlasGlyphs: Record<string, Glyp
     for (let k = 0; k < nm; k++) {
       const s = rng.range(14, L - 14);
       const lat = rng.pick([-1.75, -0.6, 0.6, 1.75]) + rng.range(-0.3, 0.3);
-      setPaint(IRON, 1, 0);
+      setPaint(IRON, 1, -1);
       quad(P(s, lat), d, 0.72, 0.72, yRoad, atlasGlyphs.manhole);
       stats.decals++;
     }
     // gully grates mid-block
     for (const sd of [1, -1]) {
-      setPaint(IRON_DARK, 1, 0);
+      setPaint(IRON_DARK, 1, -1);
       quad(P(L / 2 + rng.range(-6, 6), sd * (ROAD_HALF - 0.17)), d, 0.34, 0.5, Y.gutter + 0.002, atlasGlyphs.grate);
       stats.decals++;
     }
@@ -488,7 +488,7 @@ export function buildMarkings(ctx: CityContext, atlasGlyphs: Record<string, Glyp
     // utility lids on the sidewalks
     if (rng.chance(0.7)) {
       const sd = rng.chance(0.5) ? 1 : -1;
-      setPaint(IRON, 1, 0, C('#b9b3a8'));
+      setPaint(IRON, 1, -1, C('#b9b3a8'));
       quad(P(rng.range(12, L - 12), sd * rng.range(4.6, 6.0)), d, 0.45, 0.45, Y.walk + 0.003, atlasGlyphs.lid);
       stats.decals++;
     }

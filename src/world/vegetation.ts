@@ -24,7 +24,7 @@ import { windMaterials as legacyWindMaterials } from './vegetation/legacy/materi
 import * as NEW from './vegetation/species';
 import * as OLD from './vegetation/legacy/species';
 import { Wind, col, LEAF, type Species, type TreeSpec } from './vegetation/species';
-import { flowerBed, flowerClump, crop, soilRow, surround, treeGuard, GRATE_HOLE, FLOWERS, type Surround } from './vegetation/plants';
+import { flowerBed, flowerClump, crop, soilRow, surround, treeGuard, wornPatch, GRATE_HOLE, FLOWERS, type Surround } from './vegetation/plants';
 import { getLayout, occAny, PLANTER, hrand, MASK_WALK, DistanceLod, ChunkCuller, chunkOf, type Layout } from './props/layout';
 import { getLeafAtlas } from './vegetation/atlas';
 import { FoliageLayer, LodTexture, cardMaterials, woodMaterials, cardKnobs, type InstBuf, type PlantRef } from './vegetation/foliage';
@@ -38,7 +38,8 @@ interface TerrainSvc {
 }
 
 export interface VegetationService {
-  trees: { x: number; z: number; r: number; h: number }[];
+  /** worn: radius of the trodden bare patch at the foot (W5) — ground cover should keep grass off it */
+  trees: { x: number; z: number; r: number; h: number; worn?: number }[];
   /** foliage shading knobs (uniform objects; for tuning from the console / test scripts) */
   knobs: typeof foliageKnobs;
   /** leaf-card shading / wind knobs */
@@ -858,11 +859,19 @@ export default function create(ctx: CityContext): CityModule {
   }
   // build near-to-far for the usual camera direction (south → north) so early-z rejects hidden canopies
   const order = planted.slice().sort((a, b) => b.z - a.z);
+  /** trees with a trodden patch at the foot (radius): published on the service for the ground cover */
+  const worn = new Map<(typeof planted)[number], number>();
   for (const t of order) {
     const srng = new Rng(t.seed ^ 0x5bd1e995);
     let y = t.y;
     selF(t.x);
     if (t.surround !== 'none') y = surround(fsh, fpw, t.surround, t.x, t.y, t.z, t.syaw, srng);
+    // park / square lawn trees: trodden bare earth and surface roots at the foot on ~45 % (W5)
+    if (!noTreeBase && t.surround === 'none' && (t.tag === 'park' || t.tag === 'civic' || t.tag === 'copse') && hash01(t.x * 0.9, t.z * 1.7, 13) < 0.45) {
+      const wr = Math.min(1.1, 0.5 + t.h * 0.04);
+      wornPatch(fsh, fpw, t.x, t.z, wr, H, srng);
+      worn.set(t, wr);
+    }
     // a young street tree keeps its guard for a few years (W5)
     if (!noTreeBase && (t.surround === 'kerbgrate' || t.surround === 'grate') && t.h < 8 && hash01(t.x * 1.3, t.z * 0.7, 11) < 0.3) treeGuard(fsh, fpw, t.x, y, t.z, t.syaw, srng);
     const clear = t.clear !== undefined ? t.clear - (y - t.y) : undefined;
@@ -1451,7 +1460,7 @@ export default function create(ctx: CityContext): CityModule {
   ctx.scene.add(root);
 
   const service: VegetationService = {
-    trees: planted.map((t) => ({ x: t.x, z: t.z, r: t.r, h: t.h })),
+    trees: planted.map((t) => ({ x: t.x, z: t.z, r: t.r, h: t.h, worn: worn.get(t) })),
     knobs: foliageKnobs,
     cardKnobs,
     setLeafDistance(m) {

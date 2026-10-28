@@ -602,6 +602,47 @@ export function treeGuard(sh: Shaper, w: Wind, x: number, y: number, z: number, 
   sh.color('#1a1a1a').box(0, H * 0.62 + 0.017, 0, r * 2, 0.025, 0.03, 0);
 }
 
+/**
+ * Trodden ground at the foot of a park tree (people sit against it, the mower turns round it): a ragged disc of
+ * bare compacted earth following the ground, two or three surface roots running out of the flare, leaf litter.
+ * `gy` = ground height; drawn 1.5 cm above it.
+ */
+export function wornPatch(sh: Shaper, w: Wind, x: number, z: number, r: number, gy: (x: number, z: number) => number, rng: Rng): void {
+  const s = sh.s;
+  w.at(x, gy(x, z), z, 0, 0, 0);
+  sh.frame(0, 0, 0, 0);
+  const n = 14;
+  const earth = rng.pick(['#5a4632', '#4e3e2c', '#625038']);
+  sh.color(earth);
+  const c = sh.v(x, gy(x, z) + 0.016, z, 0, 1, 0);
+  const ring: number[] = [];
+  const edge = new THREE.Color(earth).lerp(new THREE.Color('#6f7a3c'), 0.45);
+  for (let k = 0; k < n; k++) {
+    const a = (k / n) * Math.PI * 2;
+    const rr = r * rng.range(0.7, 1.15);
+    const px = x + Math.cos(a) * rr,
+      pz = z + Math.sin(a) * rr;
+    s.colorObj(edge, 1);
+    ring.push(sh.v(px, gy(px, pz) + 0.014, pz, 0, 1, 0));
+  }
+  for (let k = 0; k < n; k++) s.tri(c, ring[(k + 1) % n], ring[k]);
+  // surface roots: half-buried tapering tubes from the flare out across the patch
+  const nr = rng.int(2, 3);
+  const a0 = rng.range(0, 6.28);
+  sh.color(rng.pick(['#5a4a3c', '#4e4238', '#625040']));
+  for (let i = 0; i < nr; i++) {
+    const a = a0 + (i / nr) * 6.28 + rng.range(-0.4, 0.4);
+    const l = r * rng.range(0.7, 1.05);
+    const ax = x + Math.cos(a) * 0.18,
+      az = z + Math.sin(a) * 0.18,
+      bx = x + Math.cos(a + rng.range(-0.2, 0.2)) * l,
+      bz = z + Math.sin(a + rng.range(-0.2, 0.2)) * l;
+    sh.tube(ax, gy(ax, az) + 0.02, az, bx, gy(bx, bz) + 0.0, bz, 0.05, 0.012, 6);
+  }
+  sh.frame(x, gy(x, z), z, 0);
+  litter(sh, rng, r * 0.9, 6, 0.018);
+}
+
 export function surround(sh: Shaper, w: Wind, kind: Surround, x: number, y: number, z: number, yaw: number, rng: Rng): number {
   w.at(x, y, z, 0, 0, 0);
   sh.frame(x, y, z, yaw);
