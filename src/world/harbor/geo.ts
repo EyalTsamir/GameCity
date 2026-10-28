@@ -16,7 +16,7 @@ export type V3 = [number, number, number];
 /** NET: knotted netting cords over a heap (param = mesh size, m); RUST: painted steel with rust blooms and chips
  *  (param = rust amount 0..1); STAIN: an irregular ground decal (oil / wet / fish-water), edges cut by noise
  *  (param = blotch scale, m) — patterns in material.ts */
-export const PAT = { NONE: 0, CORRUGATED: 1, PLANKS_X: 2, PLANKS_Z: 3, HULL: 4, STONE: 5, GLASS: 6, NET: 7, RUST: 8, STAIN: 9 } as const;
+export const PAT = { NONE: 0, CORRUGATED: 1, PLANKS_X: 2, PLANKS_Z: 3, HULL: 4, STONE: 5, GLASS: 6, NET: 7, RUST: 8, STAIN: 9, WET: 10, GRIME: 11 } as const;
 /** night-light behaviours (aEmit.w integer part) */
 export const EMIT = {
   /** on with the street lights (windows, lamps) */

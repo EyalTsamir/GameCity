@@ -182,7 +182,9 @@ varying vec3 vLocN;
 varying vec3 vHC;
 varying float vExY;
 uniform float uBoatDetail;
+uniform float uDaylight;
 float bH = 0.0;
+vec3 bN = vec3(0.0, 0.0, 1.0); // view-space normal, set in main (vNormal is declared after these pars)
 float bRough = -1.0;
 float bh1(float n) { return fract(sin(n) * 43758.5453); }
 float bh2(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
@@ -225,8 +227,35 @@ vec3 boatWindow(vec3 col) {
   }
   return mix(c, vec3(0.6, 0.7, 0.78), 0.18 * v);
 }
+// glazing seen from outside: the dim interior through the pane (a far window band, the frame of the opposite
+// side) under a reflection of the sky / shore picked by the reflected ray's elevation, Fresnel-weighted, with a
+// faint dirty film toward the bottom edge — never a flat black hole
+vec3 boatGlass(vec3 inside, float v) {
+  vec3 n = normalize(bN);
+  vec3 vd = normalize(vViewPosition);
+  if (dot(n, vd) > 0.0) n = -n;
+  float c = clamp(-dot(n, vd), 0.0, 1.0);
+  float F = 0.06 + 0.94 * pow(1.0 - c, 5.0);
+  vec3 r = reflect(vd, n);
+  float ry = dot(r, normalize((viewMatrix * vec4(0.0, 1.0, 0.0, 0.0)).xyz));
+  vec3 sky = mix(vec3(0.66, 0.74, 0.8), vec3(0.42, 0.58, 0.78), smoothstep(0.05, 0.7, ry));
+  vec3 shore = mix(vec3(0.3, 0.33, 0.32), vec3(0.55, 0.6, 0.62), smoothstep(-0.25, 0.05, ry));
+  vec3 refl = mix(shore, sky, smoothstep(-0.02, 0.06, ry)) * mix(0.08, 1.0, uDaylight);
+  float k = (0.32 + 0.6 * F) * (0.85 + 0.15 * bn2(vLoc.xz * 3.0 + vLoc.y));
+  vec3 g = mix(inside, refl, k);
+  return mix(g, g * 0.8 + vec3(0.04, 0.04, 0.035), smoothstep(0.25, 0.0, v) * 0.5);
+}
 vec3 boatSurface(vec3 col) {
-  if (int(vTagF + 0.5) == ${BT.WINDOW}) return boatWindow(col);
+  if (int(vTagF + 0.5) == ${BT.GLASS} && uBoatDetail > 0.5) {
+    // wheelhouse: console + a figure-less dark interior with the far windows light (v = height on the pane)
+    float h = max(0.05, vExY - vHC.y);
+    float v = clamp((vLoc.y - vHC.y) / h, 0.0, 1.0);
+    vec3 inside = col * 0.9;
+    inside = mix(inside, vec3(0.36, 0.42, 0.46), 0.45 * smoothstep(0.35, 0.45, v) * (1.0 - smoothstep(0.88, 0.95, v)));
+    inside = mix(inside, vec3(0.08, 0.09, 0.1), step(v, 0.22));
+    return boatGlass(inside, vExY > vHC.y ? v : 0.5);
+  }
+  if (int(vTagF + 0.5) == ${BT.WINDOW}) return uBoatDetail > 0.5 ? boatGlass(boatWindow(col), clamp((vLoc.y - vHC.y) / max(0.05, vExY - vHC.y), 0.0, 1.0)) : col;
   if (int(vTagF + 0.5) == ${BT.NET}) {
     // 4 cm netting: knotted cords, the holes cut out near the camera (far: a darker see-through tint)
     vec3 an = abs(vLocN);
@@ -333,6 +362,7 @@ export function createBoatMaterials(globals: GlobalUniforms, detail = true): Boa
     shader.uniforms.uTime = globals.uTime;
     shader.uniforms.uLights = globals.uLights;
     shader.uniforms.uBoatDetail = detailU;
+    shader.uniforms.uDaylight = globals.uDaylight;
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', `#include <common>\n${VERT_PARS}`)
       .replace('#include <color_vertex>', VERT_COLOR)
@@ -350,7 +380,7 @@ export function createBoatMaterials(globals: GlobalUniforms, detail = true): Boa
       .replace('#include <begin_vertex>', `#include <begin_vertex>\n${VERT_BEGIN}`);
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>\n${FRAG_PARS}`)
-      .replace('#include <color_fragment>', '#include <color_fragment>\ndiffuseColor.rgb = boatSurface(diffuseColor.rgb);')
+      .replace('#include <color_fragment>', '#include <color_fragment>\nbN = vNormal;\ndiffuseColor.rgb = boatSurface(diffuseColor.rgb);')
       .replace(
         '#include <normal_fragment_maps>',
         `#include <normal_fragment_maps>
@@ -370,7 +400,7 @@ export function createBoatMaterials(globals: GlobalUniforms, detail = true): Boa
       )
       .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += vEmit;');
   };
-  material.customProgramCacheKey = () => 'boats-v3';
+  material.customProgramCacheKey = () => 'boats-v4';
 
   const depth = new THREE.MeshDepthMaterial({ side: THREE.DoubleSide });
   depth.name = 'boats-depth';

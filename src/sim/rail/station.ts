@@ -245,7 +245,7 @@ export function buildStation(g: Geo, st: StationDef): StationBuild {
     g.kind(K.PLAIN).color(C.roofTop);
     if (zb < za) g.quad([rx0, ya, za], [rx1, ya, za], [rx1, yb, zb], [rx0, yb, zb]);
     else g.quad([rx1, ya, za], [rx0, ya, za], [rx0, yb, zb], [rx1, yb, zb]);
-    g.color(C.roofUnder);
+    g.kind(K.BOARDS).color(C.roofUnder);
     if (zb < za) g.quad([rx0, yb - T, zb], [rx1, yb - T, zb], [rx1, ya - T, za], [rx0, ya - T, za]);
     else g.quad([rx1, yb - T, zb], [rx0, yb - T, zb], [rx0, ya - T, za], [rx1, ya - T, za]);
     // eave edge
@@ -255,6 +255,14 @@ export function buildStation(g: Geo, st: StationDef): StationBuild {
   };
   roofPlane(colZ, eN);
   roofPlane(colZ, eS);
+  // purlins under the boarding between the rafters (three a side), and a wall-plate along each eave
+  g.kind(K.PLAIN).color(C.iron);
+  for (const ez of [eN, eS])
+    for (const f of [0.25, 0.5, 0.75, 0.97]) {
+      const z = colZ + (ez - colZ) * f,
+        y = ridgeY + (eaveY - ridgeY) * f - 0.1 - 0.07;
+      g.box(0, y, z, rx1 - rx0 - 0.3, f > 0.9 ? 0.16 : 0.12, f > 0.9 ? 0.12 : 0.07, 0);
+    }
   // ridge cap
   g.color(C.gutter);
   g.box(0, ridgeY + 0.02, colZ, rx1 - rx0 + 0.04, 0.08, 0.24, 8);

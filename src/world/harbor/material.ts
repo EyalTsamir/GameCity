@@ -108,7 +108,7 @@ const VERT_PAT = /* glsl */ `
   if (pid > 0.5 && pid < 1.5) puv = vec2(position.x * -normal.z + position.z * normal.x, position.y);
   else if (pid > 1.5 && pid < 2.5) puv = position.xz;
   else if ((pid > 2.5 && pid < 3.5)) puv = position.zx;
-  else if (pid > 8.5 && pid < 9.5) puv = position.xz;
+  else if (pid > 8.5 && pid < 10.5) puv = position.xz;
   vPat = vec4(pid, aPat.y, puv);
   vEmit = aEmit;
 }
@@ -197,6 +197,26 @@ float hbRough = -1.0;
     float n = hbN2(p) * 0.55 + hbN2(p * 2.3 + 5.1) * 0.3 + hbN2(p * 6.1) * 0.15;
     if (n < 0.52) discard;
     diffuseColor.rgb *= 1.0 - 0.25 * smoothstep(0.52, 0.75, n);
+  } else if (pid > 9.5 && pid < 10.5) {
+    // wet patch (melt water, hosed concrete): an irregular dark glossy pool with a ragged rim and loose drops
+    // around it, the colour of the quad is the wet tint of the ground
+    vec2 p = vPat.zw / max(vPat.y, 0.1);
+    float n = hbN2(p) * 0.5 + hbN2(p * 2.7 + 3.3) * 0.32 + hbN2(p * 7.9) * 0.18;
+    vec2 dc = vPat.zw / 0.07;
+    vec2 di = floor(dc);
+    float dh = hbHash(di.x * 7.13 + di.y * 3.71);
+    float drop = step(0.86, dh) * (1.0 - step(0.32 + 0.12 * hbHash(dh * 9.0), length(fract(dc) - 0.5)));
+    float pool = smoothstep(0.5, 0.56, n);
+    if (pool + drop * step(0.4, n) < 0.5) discard;
+    diffuseColor.a = 1.0;
+    hbRough = mix(0.22, 0.06, smoothstep(0.56, 0.7, n));
+  } else if (pid > 10.5 && pid < 11.5) {
+    // moulded plastic (fish boxes): handling scuffs and scratches, grime gathering low down, a faded upper rim
+    vec2 p = vPat.zw;
+    float scr = smoothstep(0.92, 1.0, hbN2(vec2(p.x * 40.0, p.y * 3.0) + vPat.y * 17.0));
+    float grime = (1.0 - smoothstep(0.0, 0.12, fract(p.y / 0.255))) * 0.35 + 0.25 * hbN2(p * 6.0 + vPat.y * 5.0);
+    diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.2, 0.19, 0.17), clamp(grime * vPat.y * 2.0, 0.0, 0.6));
+    diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * 1.25 + 0.06, scr * 0.7);
   }
 }
 `;

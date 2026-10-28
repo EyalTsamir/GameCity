@@ -185,19 +185,97 @@ export function genConstruction(env: Env, lot: Lot): CraneTargets {
   }
   // crane pick-up stack of brick pallets
   const pickL = { x: fx0 + 2.0, z: fz1 + 5.0 };
+  // a real pallet: three bearers on nine blocks, five top deck boards; brick packs strapped both ways, some
+  // opened with the top courses taken; an empty pallet stack beside
+  const palletM = [M('#a1774d', PAT.PLANKS, 0.9, 0, 0, 0, 0.6), M('#8e6a44', PAT.PLANKS, 0.92, 0, 0, 0, 0.8), M('#b89062', PAT.PLANKS, 0.88, 0, 0, 0, 0.5)];
+  const pallet = (px: number, py: number, pz: number, ry: number, m: (typeof palletM)[number]) => {
+    if (!env.ctx.debug.params.has('nositedetail') && env.ctx.quality.level !== 'low') {
+      const cs = Math.cos(ry),
+        sn = Math.sin(ry);
+      const at = (lx: number, lz: number): [number, number] => [px + lx * cs + lz * sn, pz - lx * sn + lz * cs];
+      for (const lz of [-0.42, 0, 0.42]) {
+        for (const lx of [-0.45, 0, 0.45]) {
+          const [x, z] = at(lx, lz);
+          K.box(m, 0.14, 0.08, 0.14, x, py, z, ry);
+        }
+        const [x, z] = at(0, lz);
+        K.box(m, 1.1, 0.022, 0.12, x, py + 0.08, z, ry);
+      }
+      for (let k = 0; k < 5; k++) {
+        const [x, z] = at(-0.48 + k * 0.24, 0);
+        K.box(m, 0.13, 0.022, 1.0, x, py + 0.102, z, ry);
+      }
+    } else K.box(m, 1.1, 0.14, 1.0, px, py, pz, ry);
+  };
+  const strap = M('#2a2c2e', PAT.PLAIN, 0.6, 0.3);
   for (let i = 0; i < 3; i++)
     for (let j = 0; j < 2; j++) {
-      const px = pickL.x + (i - 1) * 1.25,
-        pz = pickL.z + (j - 0.5) * 1.15;
-      K.box(M('#a1774d', PAT.PLANKS, 0.9), 1.1, 0.14, 1.0, px, 0, pz);
-      K.box(M('#b5563c', PAT.BRICK, 0.9, 0, 0, 0, 0.9), 1.0, 0.85, 0.9, px, 0.14, pz);
+      const k = i * 2 + j;
+      const px = pickL.x + (i - 1) * 1.25 + ((k * 37) % 7) * 0.012,
+        pz = pickL.z + (j - 0.5) * 1.15 + ((k * 13) % 5) * 0.01;
+      const ry = (((k * 29) % 9) - 4) * 0.012;
+      pallet(px, 0, pz, ry, palletM[k % 3]);
+      const bm = M(k % 3 === 2 ? '#a24c36' : k % 3 === 1 ? '#c06a48' : '#b5563c', PAT.BRICK, 0.9, 0, 0, 0, 0.9);
+      const opened = k === 1 || k === 4;
+      const h = opened ? 0.62 : 0.85;
+      K.box(bm, 1.0, h, 0.9, px, 0.14, pz, ry);
+      if (opened) K.box(bm, 0.5, 0.15, 0.9, px - 0.25, 0.14 + h, pz, ry);
+      else {
+        for (const d of [-0.25, 0.25]) {
+          K.box(strap, 0.02, 0.012, 0.92, px + d, 0.14 + h, pz, ry);
+          K.box(strap, 1.02, 0.012, 0.02, px, 0.14 + h, pz + d, ry);
+        }
+        // polythene hood on the unopened packs
+        K.box(M('#e8ece9', PAT.PLAIN, 0.35, 0, 0, 0, 0.1), 1.02, 0.18, 0.92, px, 0.14 + h - 0.17, pz, ry);
+      }
     }
+  for (let k = 0; k < 6; k++) pallet(pickL.x + 0.2 + (k % 2) * 0.03, k * 0.144, pickL.z + 1.75 - (k % 3) * 0.02, ((k * 5) % 3 - 1) * 0.03, palletM[k % 3]);
   // sand heap, gravel heap
   K.cone(M('#d9c08a', PAT.GRAVEL, 0.95, 0, 0, 0, 0.3), 2.0, 1.3, fx0 + 0.2, 0, SZ - 3.2, 14);
   K.cone(M('#9d978d', PAT.GRAVEL, 0.95, 0, 0, 0, 0.6), 1.5, 1.0, fx0 + 3.4, 0, SZ - 2.0, 12);
   // rebar bundles + pipes + timber
-  for (let i = 0; i < 4; i++) K.box(rust, 5.5, 0.18, 0.32, -1.0 + (i % 2) * 0.1, i * 0.18, fz1 + 2.3 + (i % 2) * 0.1);
-  for (let i = 0; i < 3; i++) K.cylX(M('#bdb8ae', PAT.CONCRETE, 0.9), 0.45, 2.4, SX - 2.2, 0.45, fz1 + 2.2 + i * 1.0, 14, 0, true);
+  const fine = env.ctx.quality.level !== 'low' && !env.ctx.debug.params.has('nositedetail');
+  if (fine) {
+    // rebar: bundles of 16–25 mm bars on timber bearers, the wire ties, a tagged end, a few bars pulled out askew
+    const bearer = M('#8c6a45', PAT.PLANKS, 0.9, 0, 0, 0, 0.8);
+    for (const bx of [-3.2, -1.0, 1.2]) K.box(bearer, 0.1, 0.1, 1.6, bx, 0, fz1 + 2.5);
+    for (let bnd = 0; bnd < 3; bnd++) {
+      const bz = fz1 + 1.95 + bnd * 0.5,
+        L = 5.4 - bnd * 0.6;
+      const rbar = M(bnd === 1 ? '#6b3f2c' : '#7a4a33', PAT.RUST, 0.85, 0.35, 0, 0, 0.4 + bnd * 0.2);
+      for (let k = 0; k < 14; k++) {
+        const row = Math.floor(k / 5),
+          col = k % 5;
+        K.cylX(rbar, 0.011, L + ((k * 7) % 3) * 0.12, -1.0 + ((k * 3) % 4) * 0.04, 0.1 + 0.012 + row * 0.022, bz - 0.05 + col * 0.024 + row * 0.011, 4);
+      }
+      for (const tx of [-2.6, -1.0, 0.6]) K.cyl(M('#3a3a38', PAT.PLAIN, 0.6, 0.6), 0.075, 0.075, 0.012, tx, 0.155, bz + 0.0, 8, true);
+      K.box(M(bnd === 0 ? '#e8c13a' : '#d9d6cc', PAT.PLAIN, 0.8), 0.06, 0.09, 0.005, -1.0 - L / 2 - 0.02, 0.1, bz + 0.07);
+    }
+    K.boxC(M('#7a4a33', PAT.RUST, 0.85, 0.35, 0, 0, 0.5), 4.6, 0.022, 0.022, -0.8, 0.2, fz1 + 3.35, 0, 0.25, 0.03);
+    K.boxC(M('#7a4a33', PAT.RUST, 0.85, 0.35, 0, 0, 0.5), 3.8, 0.022, 0.022, -1.4, 0.012, fz1 + 3.6, 0, -0.12, 0);
+    // concrete drainage pipes: two on chocked bearers and one nested on top, socket (bell) ends alternating
+    const pipeM = M('#a8a49b', PAT.CONCRETE, 0.92, 0, 0, 0, 0.6),
+      pipeD = M('#8f8b82', PAT.CONCRETE, 0.95, 0, 0, 0, 0.8);
+    const px0 = SX - 2.2,
+      pz0 = fz1 + 2.6;
+    for (const dz of [-1.0, 1.0]) K.box(bearer, 2.0, 0.1, 0.12, px0, 0, pz0 + dz);
+    const pipe = (y: number, z: number, flip: number) => {
+      K.cylX(pipeM, 0.42, 2.2, px0, y, z, 16);
+      K.cylX(pipeD, 0.3, 2.21, px0, y, z, 16, 0, true);
+      K.cylX(pipeM, 0.5, 0.3, px0 + flip * 1.0, y, z, 16);
+      K.cylX(pipeD, 0.48, 0.02, px0 + flip * 1.16, y, z, 16);
+    };
+    pipe(0.52, pz0 - 0.46, 1);
+    pipe(0.52, pz0 + 0.46, -1);
+    pipe(0.52 + 0.8, pz0, 1);
+    for (const dz of [-0.95, 0.95]) K.box(bearer, 0.18, 0.16, 0.12, px0 - 0.8, 0.1, pz0 + dz);
+    // orange twin-wall ducting, a bundle strapped together
+    const duct = M('#d9661f', PAT.CORRUGATED, 0.7, 0, 0, 0, 0.3);
+    for (let k = 0; k < 5; k++) K.cylX(duct, 0.075, 5.8, 2.0, 0.075 + (k > 2 ? 0.13 : 0), fz1 + 4.2 + (k % 3) * 0.155 + (k > 2 ? 0.075 : 0), 8);
+  } else {
+    for (let i = 0; i < 4; i++) K.box(rust, 5.5, 0.18, 0.32, -1.0 + (i % 2) * 0.1, i * 0.18, fz1 + 2.3 + (i % 2) * 0.1);
+    for (let i = 0; i < 3; i++) K.cylX(M('#bdb8ae', PAT.CONCRETE, 0.9), 0.45, 2.4, SX - 2.2, 0.45, fz1 + 2.2 + i * 1.0, 14, 0, true);
+  }
   for (let i = 0; i < 5; i++) K.box(M('#c9995c', PAT.PLANKS, 0.85, 0, 0, 0, 0.7), 3.6, 0.16, 0.9, -6.0, i * 0.17, -SZ + 2.4);
   // skip: tapered steel body with ribs, lifting lugs, rubble heaped in it (broken block, timber, plasterboard)
   {
@@ -529,6 +607,50 @@ export function genConstruction(env: Env, lot: Lot): CraneTargets {
   });
   signQuad(env.T, posters, 4.0, 1.5, -SX + 3.4, 0.55, SZ - e + 0.05, 0, 0.15);
   signQuad(env.T, posters, 4.0, 1.5, SX - 3.6, 0.55, -SZ + e - 0.05, Math.PI, 0.15);
+  signQuad(env.T, posters, 4.0, 1.5, SX - e + 0.05, 0.5, -11.0, Math.PI / 2, 0.15);
+  // site safety board by the gate: PPE roundels, a warning triangle, the contractor's name
+  const ppe = env.atlas.add(256, 192, (g, w, h) => {
+    g.fillStyle = '#f7f7f2';
+    g.fillRect(0, 0, w, h);
+    g.fillStyle = '#1d4f9c';
+    g.fillRect(0, 0, w, 34);
+    g.fillStyle = '#ffffff';
+    g.font = 'bold 20px sans-serif';
+    g.textAlign = 'center';
+    g.fillText('SAFETY ON SITE', w / 2, 24);
+    for (let k = 0; k < 4; k++) {
+      const cx = 34 + k * 62;
+      g.fillStyle = '#1d5fb8';
+      g.beginPath();
+      g.arc(cx, 72, 25, 0, Math.PI * 2);
+      g.fill();
+      g.fillStyle = '#ffffff';
+      // pictograms: helmet, boots, hi-vis, gloves (simple silhouettes)
+      g.beginPath();
+      if (k === 0) { g.arc(cx, 76, 14, Math.PI, 0); g.rect(cx - 17, 75, 34, 4); }
+      else if (k === 1) { g.rect(cx - 10, 58, 9, 22); g.rect(cx - 10, 78, 18, 7); g.rect(cx + 3, 62, 8, 18); }
+      else if (k === 2) { g.moveTo(cx - 13, 58); g.lineTo(cx + 13, 58); g.lineTo(cx + 15, 88); g.lineTo(cx - 15, 88); g.closePath(); }
+      else { g.rect(cx - 9, 62, 18, 20); g.rect(cx - 13, 64, 5, 12); }
+      g.fill();
+    }
+    g.fillStyle = '#1d1d1d';
+    g.font = 'bold 13px sans-serif';
+    g.fillText('HARD HATS · BOOTS · HI-VIS · GLOVES', w / 2, 118);
+    g.fillStyle = '#f2c81a';
+    g.beginPath();
+    g.moveTo(40, 132); g.lineTo(62, 172); g.lineTo(18, 172); g.closePath();
+    g.fill();
+    g.fillStyle = '#1d1d1d';
+    g.font = 'bold 22px sans-serif';
+    g.fillText('!', 40, 168);
+    g.textAlign = 'left';
+    g.font = 'bold 13px sans-serif';
+    g.fillText('ALL VISITORS REPORT', 76, 148);
+    g.fillText('TO THE SITE OFFICE', 76, 166);
+    g.font = '11px sans-serif';
+    g.fillText('Tinybuild Ltd · 0800 555 0142', 76, 184);
+  });
+  signQuad(env.T, ppe, 1.2, 0.9, SX - e + 0.05, 1.1, (gateZ1 + SZ - e) / 2, Math.PI / 2, 0.1);
   // security floodlight pole by the gate
   {
     const px = SX - 1.2,
@@ -540,18 +662,47 @@ export function genConstruction(env: Env, lot: Lot): CraneTargets {
     env.glow(px - 0.2, 5.8, pz, { size: 1.0, kind: 'halo', color: '#fff4d6', intensity: 0.8 });
   }
   env.endChecks();
-  // mud carried out of the gate onto the pavement: two tyre tracks fading toward the road, dried splashes
-  if (!env.ctx.debug.params.has('nositedetail')) {
-    const mud = M('#8a7a62', PAT.GRAVEL, 0.95, 0, 0, 0, 0.5);
-    // tread marks: short dashes that thin out and break up toward the kerb
-    for (const tz of [gateZ0 + 1.6, gateZ1 - 1.6]) {
-      for (let k = 0; k < 18; k++) {
-        const t = k / 18;
-        if (((k * 7) % 5) / 5 < t * 0.9) continue;
-        K.box(mud, 0.14, 0.008, 0.3 - t * 0.12, SX + 0.15 + k * 0.36, 0.152, tz + Math.sin(k * 0.9) * 0.05, 0.05 * Math.sin(k));
+  // mud carried out of the gate onto the pavement: a churned wet apron inside the gate with ruts, then the
+  // lorry's dual tyre tracks running out across the pavement, drying lighter and breaking up toward the kerb;
+  // splash dirt along the foot of the hoarding where the wheels throw it
+  if (!env.ctx.debug.params.has('nositedetail') && env.ctx.quality.level !== 'low') {
+    const wetMud = M('#5a4a38', PAT.GRAVEL, 0.45, 0, 0, 0, 0.7);
+    const gz = (gateZ0 + gateZ1) / 2;
+    K.box(wetMud, 4.2, 0.02, gateZ1 - gateZ0 + 0.6, SX - e - 2.2, 0.0, gz);
+    for (const sd of [-1, 1])
+      for (const w of [-0.18, 0.18]) K.box(M('#3e3326', PAT.GRAVEL, 0.35, 0, 0, 0, 0.9), 4.4, 0.012, 0.26, SX - e - 2.2, 0.02, gz + sd * 0.95 + w);
+    // tracks: segments 0.35 m long, colour from wet dark to dry pale, gaps growing with distance
+    const wetC = new THREE.Color('#4f4030'),
+      dryC = new THREE.Color('#9a8c76');
+    for (const sd of [-1, 1])
+      for (const w of [-0.17, 0.17]) {
+        const tz = gz + sd * 0.95 + w;
+        for (let k = 0; k < 16; k++) {
+          const t = k / 16;
+          const hsh = Math.abs(Math.sin(k * 12.9898 + tz * 78.233) * 43758.5453) % 1;
+          if (hsh < t * 0.75) continue;
+          const c = wetC.clone().lerp(dryC, Math.min(1, t * 1.3));
+          // pavement (3 m to the kerb), then on down onto the asphalt; nothing straddles the kerb
+          const tx = SX + 0.1 + k * 0.36;
+          if (Math.abs(tx - (SX + 3.0)) < 0.2) continue;
+          K.box(M(c, PAT.GRAVEL, 0.6 + t * 0.35, 0, 0, 0, 0.5), 0.34, 0.006, 0.2 - t * 0.09, tx, tx < SX + 3.0 ? 0.151 : 0.004, tz + Math.sin(k * 0.7 + sd) * 0.04 * t, 0.02 * Math.sin(k + w * 10));
+        }
       }
-    }
-    for (let k = 0; k < 14; k++) K.box(mud, 0.06 + (k % 3) * 0.05, 0.008, 0.05 + (k % 2) * 0.06, SX + 0.3 + ((k * 1.37) % 4.5), 0.153, gateZ0 + 0.4 + ((k * 2.3) % 5.4), k);
+    // dried clods knocked off the tyres
+    for (let k = 0; k < 18; k++) K.box(M(k % 2 ? '#7d6e58' : '#5e4f3c', PAT.GRAVEL, 0.9), 0.04 + (k % 3) * 0.04, 0.012 + (k % 2) * 0.01, 0.04 + (k % 4) * 0.025, SX + 0.3 + ((k * 1.37) % 5.0), 0.15, gateZ0 + 0.4 + ((k * 2.3) % 5.4), k);
+    // splash dirt along the outer foot of the street hoardings, height varying panel to panel
+    const splash = M('#7a6d5b', PAT.GRAVEL, 0.92, 0, 0, 0, 0.4);
+    const band = (len: number, cx: number, cz: number, ry: number) => {
+      const n = Math.max(1, Math.round(len / 1.22));
+      for (let k = 0; k < n; k++) {
+        const hsh = Math.abs(Math.sin(k * 7.13 + cx * 3.1 + cz * 1.7) * 43758.5453) % 1;
+        const u = -len / 2 + (k + 0.5) * (len / n);
+        K.box(splash, len / n - 0.01, 0.12 + hsh * 0.28, 0.01, cx + Math.cos(ry) * u, 0, cz - Math.sin(ry) * u, ry);
+      }
+    };
+    band(2 * SX - 2 * e, 0, SZ - e + 0.05, 0);
+    band(2 * SX - 2 * e, 0, -SZ + e - 0.05, 0);
+    band(gateZ0 - (-SZ + e), SX - e + 0.05, (gateZ0 + (-SZ + e)) / 2, Math.PI / 2);
   }
 
   env.pick(lot.id, 'Haven Heights (under construction)', new THREE.Box3(new THREE.Vector3(fp.x0, 0, fp.z0), new THREE.Vector3(fp.x1, top + FH + 3, fp.z1)), () => {

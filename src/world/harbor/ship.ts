@@ -5,7 +5,7 @@
 // Built in the ship's local frame (bow = +z) into the RIGGED builder (rig SHIP = the gentle
 // bob from uShip); mooring lines blend from the quay (weight 0) to the ship (weight 1).
 
-import { castBollard } from './quay';
+import { castBollard, ropeEye } from './quay';
 import * as THREE from 'three';
 import { smoothstep } from '../../core/geom';
 import type { Rng } from '../../core/rng';
@@ -460,14 +460,24 @@ export function buildMooring(b: HB, info: ShipInfo, quayX: number, bollards: { z
   for (let k = 0; k < fairleads.length; k++) {
     const [lx, ly, lz] = fairleads[k];
     info.toWorld(lx, ly, lz, f);
-    const q: V3 = [quayX, 0.62, bollards[k].z];
-    const n = 14;
+    // eye over the bollard (static), the hawser leaving it 1.1 m out toward the fairlead
+    const bx = quayX - 0.2,
+      bz = bollards[k].z;
+    const hd = Math.hypot(f.x - bx, f.z - bz) || 1;
+    const q: V3 = [bx + ((f.x - bx) / hd) * 1.15, 0.38, bz + ((f.z - bz) / hd) * 1.15];
+    b.rig(RIG.STATIC);
+    ropeEye(b, bx, 0.12, bz, q[0], q[1], q[2], '#e3d29a', 0.06);
+    b.color('#e3d29a').noEmit().pat(PAT.NONE);
+    const n = 18;
     const pts: V3[] = [];
     const L = Math.hypot(f.x - q[0], f.z - q[2]);
-    const sag = 0.25 + L * 0.02;
+    const sag = 0.35 + L * 0.035;
     for (let i = 0; i <= n; i++) {
       const t = i / n;
-      pts.push([q[0] + (f.x - q[0]) * t, q[1] + (f.y - q[1]) * t - sag * Math.sin(Math.PI * t), q[2] + (f.z - q[2]) * t]);
+      const px = q[0] + (f.x - q[0]) * t;
+      let py = q[1] + (f.y - q[1]) * t - 4 * sag * t * (1 - t);
+      if (px < quayX + 0.08) py = Math.max(py, 0.12 + 0.065); // lies on the quay rather than through it
+      pts.push([px, py, q[2] + (f.z - q[2]) * t]);
     }
     tubeRigged(b, pts, 0.065, 4);
   }

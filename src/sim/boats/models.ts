@@ -210,10 +210,13 @@ export function hull(g: Geo, s: HullSpec): void {
     st.push(S);
     const row: V3[] = [];
     const bow = smooth((t - 0.6) / 0.4);
+    const fl = smooth((t - 0.45) / 0.5);
     for (let r = 0; r < R; r++) {
       const y = rows[r].y(S.D);
       const fh = Math.min(1, Math.max(0, (y + s.draft) / (S.D + s.draft)));
-      row.push([rows[r].xf * S.W, y, S.z - s.rake * (1 - fh) * bow]);
+      // flared bow: the entry at the waterline is finer than the deck above it (concave topsides forward)
+      const flare = 1 - 0.42 * fl * (1 - fh) * (1 - fh * 0.4);
+      row.push([rows[r].xf * S.W * flare, y, S.z - s.rake * (1 - fh) * bow]);
     }
     P.push(row);
   }
@@ -323,23 +326,88 @@ function paneFrame(g: Geo, plane: 'x' | 'z', c: number, sd: number, a0: number, 
   }
 }
 
-/** box-shaped steel deckhouse: welded walls (shader HC.SUPER, aExtra.x = window sill), framed panes with a
- *  rain eyebrow over each band; the front of a wheelhouse is split into three panes with wipers */
+/** rounded-rectangle ring (plan view) of half-size hx × hz around z centre zc, corner radius r, counter-clockwise
+ *  seen from above; each point carries its outward normal */
+function roundRing(hx: number, zc: number, hz: number, r: number, seg = 4): { p: [number, number]; n: [number, number] }[] {
+  const out: { p: [number, number]; n: [number, number] }[] = [];
+  const cs: [number, number, number][] = [
+    [hx - r, zc + hz - r, 0],
+    [-(hx - r), zc + hz - r, Math.PI / 2],
+    [-(hx - r), zc - hz + r, Math.PI],
+    [hx - r, zc - hz + r, (Math.PI * 3) / 2],
+  ];
+  for (const [cx, cz, a0] of cs)
+    for (let k = 0; k <= seg; k++) {
+      const a = a0 + (k / seg) * (Math.PI / 2);
+      const nx = Math.cos(a),
+        nz = Math.sin(a);
+      out.push({ p: [cx + nx * r, cz + nz * r], n: [nx, nz] });
+    }
+  return out;
+}
+
+/** steel / GRP deckhouse: welded walls (shader HC.SUPER, aExtra.x = window sill) on a rounded plan, framed panes with
+ *  a rain eyebrow over each band; the front of a wheelhouse is split into three panes with wipers. The finished
+ *  box is warped: tumblehome (sides lean in by tumble·height), a raked front (rake m at the roof: > 0 leans the
+ *  windscreen forward like a workboat wheelhouse, < 0 sweeps it back like a saloon). Built in the identity frame. */
 function deckhouse(
   g: Geo,
-  o: { x: number; y0: number; y1: number; z0: number; z1: number; wall: string; roof: string; win: [number, number]; winTag: number; winCol: string; pane?: number; frontWin?: boolean; backWin?: boolean; wipers?: boolean; frame?: string },
+  o: { x: number; y0: number; y1: number; z0: number; z1: number; wall: string; roof: string; win: [number, number]; winTag: number; winCol: string; pane?: number; frontWin?: boolean; backWin?: boolean; wipers?: boolean; frame?: string; rake?: number; tumble?: number; radius?: number },
 ): void {
   const { x, y0, y1, z0, z1 } = o;
   const [wy0, wy1] = o.win;
   const frame = o.frame ?? '#3a3e42';
+  const v0 = g.vertexCount;
+  const zc = (z0 + z1) / 2,
+    hz = (z1 - z0) / 2;
+  const rad = Math.min(o.radius ?? 0.2, x * 0.4, hz * 0.4);
+  // walls: one band around the rounded plan, smooth normals
   g.kind(BT.PLAIN + HC.SUPER * HC_STEP).color(o.wall).extra(wy0);
-  g.box(0, (y0 + y1) / 2, (z0 + z1) / 2, x * 2, y1 - y0, z1 - z0, 4 | 8);
+  const ring = roundRing(x, zc, hz, rad);
+  for (let i = 0; i < ring.length; i++) {
+    const A = ring[i],
+      B = ring[(i + 1) % ring.length];
+    if (Math.hypot(B.p[0] - A.p[0], B.p[1] - A.p[1]) < 1e-5) continue;
+    const ia = g.vert(A.p[0], y0, A.p[1], A.n[0], 0, A.n[1]);
+    g.vert(B.p[0], y0, B.p[1], B.n[0], 0, B.n[1]);
+    g.vert(B.p[0], y1, B.p[1], B.n[0], 0, B.n[1]);
+    g.vert(A.p[0], y1, A.p[1], A.n[0], 0, A.n[1]);
+    g.I.push(ia, ia + 2, ia + 1, ia, ia + 3, ia + 2);
+  }
   g.extra(0);
-  g.kind(BT.PLAIN).color(o.roof);
-  g.box(0, y1 + 0.04, (z0 + z1) / 2, x * 2 + 0.12, 0.08, z1 - z0 + 0.12, 8);
-  // roof edge coaming + drip rail
-  g.color(o.wall);
-  g.box(0, y1 + 0.1, (z0 + z1) / 2, x * 2 + 0.14, 0.04, z1 - z0 + 0.14, 2 | 8);
+  // roof: a slab overhanging 6 cm with a rounded edge, then a raised coaming lip
+  const roofSlab = (grow: number, ya: number, yb: number, col: string, top: boolean): void => {
+    const rr = roundRing(x + grow, zc, hz + grow, rad + grow);
+    g.color(col);
+    for (let i = 0; i < rr.length; i++) {
+      const A = rr[i],
+        B = rr[(i + 1) % rr.length];
+      if (Math.hypot(B.p[0] - A.p[0], B.p[1] - A.p[1]) < 1e-5) continue;
+      const ia = g.vert(A.p[0], ya, A.p[1], A.n[0], 0, A.n[1]);
+      g.vert(B.p[0], ya, B.p[1], B.n[0], 0, B.n[1]);
+      g.vert(B.p[0], yb, B.p[1], B.n[0], 0, B.n[1]);
+      g.vert(A.p[0], yb, A.p[1], A.n[0], 0, A.n[1]);
+      g.I.push(ia, ia + 2, ia + 1, ia, ia + 3, ia + 2);
+    }
+    if (top) {
+      const c = g.vert(0, yb, zc, 0, 1, 0);
+      for (const q of rr) g.vert(q.p[0], yb, q.p[1], 0, 1, 0);
+      for (let i = 0; i < rr.length; i++) g.I.push(c, c + 1 + ((i + 1) % rr.length), c + 1 + i);
+      const d = g.vert(0, ya, zc, 0, -1, 0);
+      for (const q of rr) g.vert(q.p[0], ya, q.p[1], 0, -1, 0);
+      for (let i = 0; i < rr.length; i++) g.I.push(d, d + 1 + i, d + 1 + ((i + 1) % rr.length));
+    }
+  };
+  g.kind(BT.PLAIN);
+  roofSlab(0.06, y1, y1 + 0.08, o.roof, true);
+  roofSlab(0.07, y1 + 0.08, y1 + 0.12, o.wall, false);
+  // wheelhouse: a sun visor carried forward over the windscreen on two brackets
+  if (o.wipers) {
+    g.color(o.roof);
+    g.box(0, y1 + 0.03, z1 + 0.2, x * 2 - 0.1, 0.035, 0.36, 0);
+    g.color(o.wall);
+    for (const sd of [-1, 1]) g.beam([sd * (x - 0.15), y1 - 0.12, z1 + 0.01], [sd * (x - 0.15), y1 + 0.02, z1 + 0.34], 0.03, 0.03);
+  }
   const pane = o.pane ?? 0;
   for (const sd of [-1, 1]) {
     const xx = sd * (x + 0.012);
@@ -371,9 +439,10 @@ function deckhouse(
     for (let k = 0; k < n; k++) {
       const xa = -x + 0.18 + k * w + 0.05,
         xb = -x + 0.18 + (k + 1) * w - 0.05;
-      g.kind(o.winTag).color(o.winCol);
+      g.kind(o.winTag).color(o.winCol).extra(wy0, wy1);
       if (sd > 0) g.quad([xa, wy0, zz], [xb, wy0, zz], [xb, wy1, zz], [xa, wy1, zz]);
       else g.quad([xb, wy0, zz], [xa, wy0, zz], [xa, wy1, zz], [xb, wy1, zz]);
+      g.extra(0);
       paneFrame(g, 'z', zc, sd, xa, xb, wy0, wy1, frame);
       if (sd > 0 && o.wipers) {
         // wiper parked at an angle: pivot under the pane, arm + blade
@@ -387,6 +456,40 @@ function deckhouse(
     }
     g.kind(BT.PLAIN).color(o.wall);
     g.box(0, wy1 + 0.11, zc + sd * 0.04, 2 * x - 0.2, 0.035, 0.08, 0);
+  }
+  // warp: tumblehome + raked front, positions and normals (inverse-transpose of the Jacobian)
+  const rake = o.rake ?? 0,
+    tb = o.tumble ?? 0.035;
+  if (rake === 0 && tb === 0) return;
+  const h = y1 - y0,
+    P = g.P,
+    Nn = g.N;
+  for (let v = v0; v < g.vertexCount; v++) {
+    const px = P[v * 3],
+      py = P[v * 3 + 1],
+      pz = P[v * 3 + 2];
+    const tu = (py - y0) / h,
+      t = Math.min(1.08, Math.max(0, tu)),
+      inY = tu > 0 && tu < 1.08 ? 1 : 0;
+    const zu = (pz - zc) / hz,
+      zf = Math.min(1, Math.max(0, zu)),
+      inZ = zu > 0 && zu < 1 ? 1 : 0;
+    const a = 1 - tb * t,
+      c = 1 + (rake * t * inZ) / hz,
+      bxy = (-px * tb * inY) / h,
+      bzy = (rake * zf * inY) / h;
+    P[v * 3] = px * a;
+    P[v * 3 + 2] = pz + rake * t * zf;
+    const n0 = Nn[v * 3],
+      n1 = Nn[v * 3 + 1],
+      n2 = Nn[v * 3 + 2];
+    const m0 = n0 / a,
+      m2 = n2 / c,
+      m1 = n1 - bxy * m0 - bzy * m2;
+    const l = Math.hypot(m0, m1, m2) || 1;
+    Nn[v * 3] = m0 / l;
+    Nn[v * 3 + 1] = m1 / l;
+    Nn[v * 3 + 2] = m2 / l;
   }
 }
 
@@ -589,7 +692,7 @@ function ferry(g: Geo): void {
   hull(g, FERRY_HULL);
   const D = 1.0;
   // main saloon
-  deckhouse(g, { x: 2.25, y0: D - 0.02, y1: 3.05, z0: -6.0, z1: 4.2, wall: '#f4f1ea', roof: '#d9d5cc', win: [1.65, 2.6], winTag: BT.WINDOW, winCol: '#2f3d48', pane: 1.15, backWin: true });
+  deckhouse(g, { x: 2.25, y0: D - 0.02, y1: 3.05, z0: -6.0, z1: 4.2, wall: '#f4f1ea', roof: '#d9d5cc', win: [1.65, 2.6], winTag: BT.WINDOW, winCol: '#2f3d48', pane: 1.15, backWin: true, rake: -0.35, radius: 0.3 });
   // dark skirting band + doors on both sides aft
   g.kind(BT.PLAIN).color('#244a73');
   g.box(0, D + 0.18, -0.9, 4.52, 0.36, 10.22, 4 | 8 | 16 | 32);
@@ -618,7 +721,7 @@ function ferry(g: Geo): void {
     g.color('#3a3d40');
     for (const sx of [-1.4, 1.4]) g.box(sx, uy + 0.12, z, 0.06, 0.24, 0.4, 0);
   }
-  deckhouse(g, { x: 1.45, y0: uy, y1: 4.95, z0: 0.6, z1: 3.6, wall: '#f4f1ea', roof: '#c7c3ba', win: [4.0, 4.75], winTag: BT.GLASS, winCol: '#22303a', pane: 0, backWin: true, wipers: true });
+  deckhouse(g, { x: 1.45, y0: uy, y1: 4.95, z0: 0.6, z1: 3.6, wall: '#f4f1ea', roof: '#c7c3ba', win: [4.0, 4.75], winTag: BT.GLASS, winCol: '#22303a', pane: 0, backWin: true, wipers: true, rake: 0.3 });
   // wheelhouse visor + wings
   g.kind(BT.PLAIN).color('#244a73');
   g.box(0, 4.92, 3.75, 3.1, 0.12, 0.35, 0);
@@ -713,8 +816,8 @@ function tug(g: Geo): void {
     }
   }
   // deckhouse + wheelhouse with all-round windows
-  deckhouse(g, { x: 1.55, y0: D - 0.02, y1: 2.6, z0: -1.2, z1: 3.0, wall: '#efe9dc', roof: '#d8d1c2', win: [1.85, 2.1], winTag: BT.WINDOW, winCol: '#2a333b', pane: 0.6, frontWin: false });
-  deckhouse(g, { x: 1.3, y0: 2.6, y1: 4.2, z0: 0.0, z1: 2.6, wall: '#efe9dc', roof: '#b83a2c', win: [3.3, 4.0], winTag: BT.WINDOW, winCol: '#26313a', pane: 0, backWin: true, wipers: true });
+  deckhouse(g, { x: 1.55, y0: D - 0.02, y1: 2.6, z0: -1.2, z1: 3.0, wall: '#efe9dc', roof: '#d8d1c2', win: [1.85, 2.1], winTag: BT.WINDOW, winCol: '#2a333b', pane: 0.6, frontWin: false, radius: 0.25 });
+  deckhouse(g, { x: 1.3, y0: 2.6, y1: 4.2, z0: 0.0, z1: 2.6, wall: '#efe9dc', roof: '#b83a2c', win: [3.3, 4.0], winTag: BT.WINDOW, winCol: '#26313a', pane: 0, backWin: true, wipers: true, rake: 0.34 });
   // funnel: black with red band
   g.push().at(0, 2.6, -1.4);
   g.kind(BT.PLAIN).color('#1c1d1f');
@@ -1105,18 +1208,47 @@ const QUAY_BOLLARDS = [-138, -125, -112];
 /** world point on the quay → local frame of a boat at a berth with yaw π (local +x = west = toward the quay) */
 const quayLocal = (b: { x: number; z: number }, wx: number, wy: number, wz: number): V3 => [b.x - wx, wy, -(wz - b.z)];
 
-/** a sagging rope between two local points */
+/** a rope hanging between two local points: a round 3-strand-looking tube (lay ridges from the colour band) on a
+ *  catenary-like curve whose dip is at least 5 % of the span (an unloaded line never runs straight); the low point
+ *  shifts toward the lower end as on a real line */
 function rope(g: Geo, a: V3, b: V3, sag: number, r: number, col: string): void {
   g.kind(BT.PLAIN).color(col);
-  const n = 10;
-  let p = a;
-  for (let i = 1; i <= n; i++) {
+  const L = Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]);
+  const s = Math.max(sag, L * 0.05);
+  const n = Math.max(8, Math.min(20, Math.ceil(L / 0.35))),
+    seg = 6;
+  const pts: V3[] = [];
+  for (let i = 0; i <= n; i++) {
     const t = i / n;
-    const q: V3 = [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t - sag * Math.sin(Math.PI * t), a[2] + (b[2] - a[2]) * t];
-    g.beam(p, q, r, r);
-    p = q;
+    pts.push([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t - 4 * s * t * (1 - t), a[2] + (b[2] - a[2]) * t]);
   }
+  const T = new THREE.Vector3(),
+    S = new THREE.Vector3(),
+    U = new THREE.Vector3(),
+    up = new THREE.Vector3(0, 1, 0);
+  const base = g.vertexCount;
+  for (let i = 0; i <= n; i++) {
+    const p0 = pts[Math.max(0, i - 1)],
+      p1 = pts[Math.min(n, i + 1)];
+    T.set(p1[0] - p0[0], p1[1] - p0[1], p1[2] - p0[2]).normalize();
+    S.crossVectors(T, Math.abs(T.y) > 0.95 ? _X : up).normalize();
+    U.crossVectors(S, T);
+    for (let k = 0; k <= seg; k++) {
+      const an = (k / seg) * Math.PI * 2 + i * 0.9; // the twist reads as the lay of the strands
+      const nx = S.x * Math.cos(an) + U.x * Math.sin(an),
+        ny = S.y * Math.cos(an) + U.y * Math.sin(an),
+        nz = S.z * Math.cos(an) + U.z * Math.sin(an);
+      g.vert(pts[i][0] + nx * r, pts[i][1] + ny * r, pts[i][2] + nz * r, nx, ny, nz);
+    }
+  }
+  for (let i = 0; i < n; i++)
+    for (let k = 0; k < seg; k++) {
+      const q = base + i * (seg + 1) + k,
+        w = q + seg + 1;
+      g.I.push(q, w, w + 1, q, w + 1, q + 1);
+    }
 }
+const _X = new THREE.Vector3(1, 0, 0);
 
 /** parlour creel: weighted base frame, three hoops with a netting skin (BT.NET), an entrance eye */
 function creel(g: Geo, x: number, y: number, z: number, yaw: number): void {
@@ -1233,7 +1365,7 @@ function fishingBoat(g: Geo): void {
     }
   }
   // wheelhouse forward (welded steel, framed windows, wipers), whaleback forward of it
-  deckhouse(g, { x: 1.25, y0: D - 0.02, y1: D + 2.15, z0: 0.7, z1: 3.3, wall: '#efebe2', roof: '#d9d4c6', win: [D + 1.25, D + 1.85], winTag: BT.GLASS, winCol: '#23303a', pane: 0.8, backWin: true, wipers: true });
+  deckhouse(g, { x: 1.25, y0: D - 0.02, y1: D + 2.15, z0: 0.7, z1: 3.3, wall: '#efebe2', roof: '#d9d4c6', win: [D + 1.25, D + 1.85], winTag: BT.GLASS, winCol: '#23303a', pane: 0.8, backWin: true, wipers: true, rake: 0.32 });
   g.kind(BT.PLAIN).color('#efebe2');
   g.box(0, D + 0.25, 4.0, 1.9, 0.5, 1.2, 0);
   // door on the port side of the wheelhouse
@@ -1305,7 +1437,7 @@ function fishingBoat(g: Geo): void {
     rope(g, [W + 0.12, 1.06, z], [W - 0.03, D + 0.66, z], 0.0, 0.016, '#c9b97a');
   }
   // mooring lines (bow line, spring, stern line) from the cleats/bitts to the quay bollards
-  const bol = QUAY_BOLLARDS.map((z) => quayLocal(FISH_BERTH, QUAY_X + 0.05, QUAY_TOP + 0.45, z));
+  const bol = QUAY_BOLLARDS.map((z) => quayLocal(FISH_BERTH, QUAY_X + 0.06, QUAY_TOP + 0.035, z));
   rope(g, [0.9, D + 0.32, 4.45], bol[0], 0.7, 0.03, '#d6c48e');
   rope(g, [sheerAt(FISH_HULL, -0.3).W - 0.25, D + 0.12, -0.3], bol[1], 0.25, 0.028, '#d6c48e');
   rope(g, [sheerAt(FISH_HULL, -4.4).W - 0.25, D + 0.12, -4.4], bol[2], 0.6, 0.03, '#2f5f9a');
