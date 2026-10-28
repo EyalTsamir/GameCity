@@ -11,6 +11,11 @@ Overview must stay at least as impressive as now. Every feature: quality tiers +
 Lead session: session_01XuhAMczW3iK25AAWnf3qog, branch `claude/pensive-gates-bim12i`.
 
 ## Resume here (keep current)
+* 2026-10-28 16:10 UTC — All 3 wave-1 workers hit the account 5-h usage limit at ~15:50 (35 min in; 255–280k
+  context each, mostly code reading; W1/W2 had pushed nothing). Sent each: write log, commit WIP, push, stop.
+  Next: when their notes arrive, respawn fresh sessions from the logs (briefs now say: log early, commit every
+  ~30 min, ≤120k for reading). Lesson: 3 parallel heavy sessions burn the shared 5-h limit in ~35 min — the
+  account limit, not CPU, is the binding constraint; keep contexts small so each call is cheap.
 * 2026-10-28 15:18 UTC — Audit written (below; sheets docs/progress/real/audit_*.jpg). Wave 1 launched: W1 facades,
   W2 vehicles, W3 furniture as sibling sessions (table "Workers"). Lead now waits for milestone notes; on each:
   fetch the branch, look at its sheets, merge into claude/pensive-gates-bim12i when sound, respawn per the rule.
