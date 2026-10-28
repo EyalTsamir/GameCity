@@ -17,6 +17,15 @@ Branch: work continues from `claude/tinyhaven-graphics-audit-l089m8` (fast-forwa
 `claude/pensive-gates-bim12i` (the session's designated branch).
 
 ## Resume here (keep current)
+* 2026-10-28 13:40 UTC — QA report in (shots/qa/REPORT.md, local only: shots/ is ignored; 11 findings). Triage:
+  lead fixes 1 street-tree bases rotated 90° (vegetation.ts yaw = s.yaw, 'kerbgrate' r 0.48, tree 6–14 cm behind band
+  centre), 2 lamps in driveways (plan.ts buildStreetSlots: driveway "cuts" along the kerb, a lamp steps to the nearer
+  end, RNG order kept), 4 town-hall plinth across the arches (gaps), 7 river band in the sea (water/field.ts soft
+  widening plume), 9 STOP sign lettering (signals.ts block letters), 10 harbour lawn (plan.ts genQuayApron: concrete
+  block, generated last so block ids don't shift) — verifying in shots/qa/leadfix/. Fix agent (a32c937b907556e5e,
+  log docs/progress/qa-fixes.md): 3 car park access, 5 portal wing slopes, 8 shop interiors vs signs, 11 gate paths.
+  World agent got 6 (south slab edge seam) on top of its sweep. When all are verified: final report to the user,
+  then (user request) create the next-round cloud session with docs/progress/NEXT-PROMPT.md as its prompt.
 * 2026-10-28 12:04 UTC — POST-ROUND BUG FIXING (user found embarrassing bugs in free-camera views our POI reviews missed).
   Fixed by lead: bus shelters faced the road with their back wall (furniture.ts busShelter mirrored; places.ts waiting
   spots) — verified shots/world/lead/bug3/sheet.png. Launch Tinyhaven.cmd now rebuilds before serving.

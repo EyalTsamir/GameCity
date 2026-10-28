@@ -259,7 +259,7 @@ export default function create(ctx: CityContext): CityModule {
         case 'market':
         case 'civic':
           sp = rng.chance(0.16) ? 'blossom' : 'round';
-          sur = 'roundgrate';
+          sur = 'kerbgrate';
           maxR = 2.1;
           break;
         case 'industrial':
@@ -271,7 +271,7 @@ export default function create(ctx: CityContext): CityModule {
           break;
         case 'beach':
           sp = 'palm';
-          sur = 'roundgrate';
+          sur = 'kerbgrate';
           break;
         case 'park':
         case 'riverside':
@@ -286,7 +286,12 @@ export default function create(ctx: CityContext): CityModule {
       let R = Math.max(1.3, Math.min(maxR, dB - 0.9));
       if (sp === 'column') R = Math.min(R, rng.range(1.15, 1.4));
       if (sp === 'birch') R = Math.min(R, 1.9);
-      const yaw = s.yaw + Math.PI / 2;
+      // surrounds are long along local x: the slot yaw faces away from the road, so x runs along the kerb.
+      // The tree sits a little behind the band centre so its pit keeps a strip of kerb stone in front.
+      const yaw = s.yaw;
+      const back = sur === 'kerbgrate' ? 0.14 : 0.06;
+      const tx = s.x + Math.sin(yaw) * back,
+        tz = s.z + Math.cos(yaw) * back;
       const clear = 3.4 + rng.range(0, 0.4);
       let h: number;
       if (sp === 'palm') h = rng.range(7.5, 9.5);
@@ -294,7 +299,7 @@ export default function create(ctx: CityContext): CityModule {
       else if (sp === 'blossom') h = clear + R * 1.55;
       else h = clear + R * rng.range(1.75, 2.0);
       if (sp === 'palm') R = 3.0;
-      plant({ sp, x: s.x, z: s.z, y: SIDEWALK_Y, h, r: R, clear: sp === 'palm' ? undefined : clear, surround: sur, syaw: yaw, tag: 'street' });
+      plant({ sp, x: tx, z: tz, y: SIDEWALK_Y, h, r: R, clear: sp === 'palm' ? undefined : clear, surround: sur, syaw: yaw, tag: 'street' });
     }
   }
 

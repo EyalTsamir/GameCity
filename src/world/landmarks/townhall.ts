@@ -310,7 +310,15 @@ export function genTownHall(env: Env, lot: Lot): void {
   ] as [number, number, number][]) {
     const xc = (x0 + x1) / 2,
       w = x1 - x0;
-    moulding(K, granite, xc, z, 0, w, 0, 0.6, 0.06);
+    if (z === zR) {
+      // the plinth stops at the three loggia arches (the way in)
+      let a = x0;
+      for (const ax of [-3.3, 0, 3.3, Infinity]) {
+        const b = Math.min(x1, ax - 1.25);
+        if (b > a) moulding(K, granite, (a + b) / 2, z, 0, b - a, 0, 0.6, 0.06);
+        a = ax + 1.25;
+      }
+    } else moulding(K, granite, xc, z, 0, w, 0, 0.6, 0.06);
     moulding(K, trim, xc, z, 0, w, y1 - 0.06, 0.26, 0.17);
     moulding(K, trim, xc, z, 0, w, y2 - 0.08, 0.24, 0.15);
     moulding(K, trim, xc, z, 0, w + 0.2, y3 - 0.1, 0.5, 0.5);

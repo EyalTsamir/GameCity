@@ -411,7 +411,7 @@ function stonePlanter(sh: Shaper, rng: Rng, pts: [number, number][], hgt: number
   return soilY;
 }
 
-export type Surround = 'grate' | 'roundgrate' | 'verge' | 'planter' | 'roundplanter' | 'none';
+export type Surround = 'grate' | 'roundgrate' | 'kerbgrate' | 'verge' | 'planter' | 'roundplanter' | 'none';
 
 /**
  * Ground treatment at the foot of a tree. (x,z) trunk, y ground (sidewalk top for street trees),
@@ -431,6 +431,12 @@ export function surround(sh: Shaper, w: Wind, kind: Surround, x: number, y: numb
     case 'roundgrate': {
       sh.color('#33302c').cyl(0, -0.01, 0, 0.62, 0.62, 0.035, 10, 2, false);
       sh.color('#4a3426').cyl(0, 0, 0, 0.3, 0.3, 0.032, 8, 2, false);
+      return y + 0.02;
+    }
+    case 'kerbgrate': {
+      // the round grate sized for the 0.8 m furniture band of a street (plazas keep the wide one)
+      sh.color('#33302c').cyl(0, -0.01, 0, 0.48, 0.48, 0.035, 10, 2, false);
+      sh.color('#4a3426').cyl(0, 0, 0, 0.24, 0.24, 0.032, 8, 2, false);
       return y + 0.02;
     }
     case 'verge': {

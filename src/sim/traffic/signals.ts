@@ -253,7 +253,23 @@ export class SignalRenderer {
     place(oct(0.47, 0.055), head, y0, '#f4f1ea');
     place(oct(0.42, 0.062), head, y0, '#c8232c');
     place(oct(0.47, 0.045, true), head, y0, '#8d949a');
-    place(box(0.5, 0.11, 0.012, 0, sy, 0.068), head, y0, '#f4f1ea');
+    // "STOP" in white block letters (a plain bar reads as the round No Entry sign)
+    const lw = 0.098,
+      lh = 0.17,
+      t = 0.03,
+      hw = lw / 2,
+      hh = lh / 2;
+    const bar = (cx: number, x: number, y: number, w: number, h: number) =>
+      place(box(w, h, 0.012, cx + x, sy + y, 0.068), head, y0, '#f4f1ea');
+    const top = (cx: number) => bar(cx, 0, hh - t / 2, lw, t);
+    const mid = (cx: number) => bar(cx, 0, 0, lw, t);
+    const bot = (cx: number) => bar(cx, 0, -hh + t / 2, lw, t);
+    const side = (cx: number, right: boolean, y: number, h: number) => bar(cx, right ? hw - t / 2 : -hw + t / 2, y, t, h);
+    const [cS, cT, cO, cP] = [-0.192, -0.064, 0.064, 0.192];
+    top(cS); mid(cS); bot(cS); side(cS, false, hh / 2, hh); side(cS, true, -hh / 2, hh);
+    top(cT); bar(cT, 0, -t / 2, t, lh - t);
+    top(cO); bot(cO); side(cO, false, 0, lh); side(cO, true, 0, lh);
+    top(cP); mid(cP); side(cP, false, 0, lh); side(cP, true, hh / 2, hh);
     place(box(0.12, 0.2, 0.04, 0, sy, 0.025), head, y0, '#9aa1a7');
   }
 
