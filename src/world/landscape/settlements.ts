@@ -125,7 +125,11 @@ function placeSite(site: Site, model: LandscapeModel, out: Bld[], towers: { x: n
 type Put = (lx: number, lz: number, b: Omit<Bld, 'x' | 'z' | 'y' | 'yaw'>, yawOff: number) => void;
 function placeFarm(put: Put, rnd: (i: number, k: number) => number): void {
   put(0, 0, { w: 11 + 3 * rnd(1, 2), d: 8 + 1.5 * rnd(1, 3), h: 5.6 + 1.2 * rnd(1, 4), roof: 4.2, wall: Math.floor(rnd(1, 5) * 5), roofC: Math.floor(rnd(1, 6) * 3), kind: 0 }, 0);
-  put(4 + 6 * rnd(2, 1), 17 + 4 * rnd(2, 2), { w: 20 + 6 * rnd(2, 3), d: 12 + 3 * rnd(2, 4), h: 6 + rnd(2, 5) * 1.5, roof: 5.5, wall: 5 + Math.floor(rnd(2, 6) * 3), roofC: Math.floor(rnd(2, 7) * 6), kind: 1 }, rnd(2, 8) > 0.5 ? 0 : Math.PI / 2);
+  // the barn behind the house; turned across, it moves out by its extra half-length (no walls touching)
+  const bw = 20 + 6 * rnd(2, 3),
+    bd = 12 + 3 * rnd(2, 4),
+    turned = rnd(2, 8) <= 0.5;
+  put(4 + 6 * rnd(2, 1), 17 + 4 * rnd(2, 2) + (turned ? (bw - bd) / 2 : 0), { w: bw, d: bd, h: 6 + rnd(2, 5) * 1.5, roof: 5.5, wall: 5 + Math.floor(rnd(2, 6) * 3), roofC: Math.floor(rnd(2, 7) * 6), kind: 1 }, turned ? Math.PI / 2 : 0);
   if (rnd(3, 1) > 0.25) put(-15 - 4 * rnd(3, 2), 8 + 6 * rnd(3, 3), { w: 12, d: 6, h: 3.4, roof: 2.0, wall: 5 + Math.floor(rnd(3, 4) * 3), roofC: 3 + Math.floor(rnd(3, 5) * 3), kind: 2 }, Math.PI / 2);
 }
 

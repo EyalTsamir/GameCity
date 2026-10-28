@@ -39,8 +39,179 @@ function mound(s: GeoSink, x: number, y: number, z: number, r: number, h: number
   for (let i = 0; i < 6; i++) s.tri(base, base + 1 + ((i + 1) % 6), base + 1 + i);
 }
 
+// ── flower heads (W8): species by petal colour, built as real heads — ray petals round a raised disc, a
+// pompom of frilled petals, an umbel of five-petalled florets, a five-lobed trumpet, a tulip cup — on stems,
+// nodding, over a rosette of leaves. ?noflowerdetail = the old star-petal clumps.
+const FLOWER_DETAIL = typeof location === 'undefined' || !new URLSearchParams(location.search).has('noflowerdetail');
+type Species = 'daisy' | 'marigold' | 'geranium' | 'petunia';
+const _hsl = { h: 0, s: 0, l: 0 };
+function speciesOf(c: THREE.Color): Species {
+  c.getHSL(_hsl);
+  if (_hsl.s < 0.3 && _hsl.l > 0.6) return 'daisy';
+  if (_hsl.h > 0.06 && _hsl.h < 0.2) return 'marigold';
+  if (_hsl.h < 0.03 || _hsl.h > 0.97) return 'geranium';
+  return 'petunia';
+}
+const _q = new THREE.Quaternion();
+const _f = new THREE.Vector3();
+const _e1 = new THREE.Vector3();
+const _e2 = new THREE.Vector3();
+const _up = new THREE.Vector3(0, 1, 0);
+const _hc = new THREE.Color();
+/** head frame: facing _f (tilted `tilt` toward azimuth `az`), petal plane _e1/_e2 (same handedness as x/z) */
+function frame(tilt: number, az: number): void {
+  _f.set(Math.sin(tilt) * Math.cos(az), Math.cos(tilt), Math.sin(tilt) * Math.sin(az));
+  _q.setFromUnitVectors(_up, _f);
+  _e1.set(1, 0, 0).applyQuaternion(_q);
+  _e2.set(0, 0, 1).applyQuaternion(_q);
+}
+/** point on the head: p + e1*(cos a·r) + e2*(sin a·r) + f*h */
+function hv(s: GeoSink, x: number, y: number, z: number, a: number, r: number, h: number, nk = 0.4): number {
+  const ca = Math.cos(a) * r,
+    sa = Math.sin(a) * r;
+  const px = x + _e1.x * ca + _e2.x * sa + _f.x * h,
+    py = y + _e1.y * ca + _e2.y * sa + _f.y * h,
+    pz = z + _e1.z * ca + _e2.z * sa + _f.z * h;
+  const nx = _f.x + (_e1.x * Math.cos(a) + _e2.x * Math.sin(a)) * nk,
+    ny = _f.y + (_e1.y * Math.cos(a) + _e2.y * Math.sin(a)) * nk,
+    nz = _f.z + (_e1.z * Math.cos(a) + _e2.z * Math.sin(a)) * nk;
+  const l = Math.hypot(nx, ny, nz) || 1;
+  return s.vert(px, py, pz, nx / l, ny / l, nz / l);
+}
+/** ring of n pointed / rounded petals from r0 to r1, tips lifted by cup·r1 (2 tris each) */
+function petalRing(s: GeoSink, x: number, y: number, z: number, n: number, r0: number, r1: number, wid: number, cup: number, lift: number, c: THREE.Color, rng: Rng, rot: number): void {
+  for (let i = 0; i < n; i++) {
+    const a = rot + (i / n) * Math.PI * 2 + rng.range(-0.12, 0.12);
+    const L = r1 * rng.range(0.85, 1.1);
+    const hw = (wid / Math.max(r1, 1e-3)) * 0.5;
+    s.colorObj(c, 0.78);
+    const b0 = hv(s, x, y, z, a, r0, lift);
+    s.colorObj(c, rng.range(0.95, 1.1));
+    const l = hv(s, x, y, z, a - hw / 0.6, L * 0.6, lift + cup * L * 0.45);
+    const r = hv(s, x, y, z, a + hw / 0.6, L * 0.6, lift + cup * L * 0.45);
+    const t = hv(s, x, y, z, a, L, lift + cup * L);
+    s.tri(b0, t, l);
+    s.tri(b0, r, t);
+  }
+}
+/** low dome (disc florets, pompom centre): n tris */
+function dome(s: GeoSink, x: number, y: number, z: number, r: number, h: number, n: number, c: THREE.Color, k = 1): void {
+  s.colorObj(c, k * 1.1);
+  const top = hv(s, x, y, z, 0, 0, h, 0);
+  s.colorObj(c, k * 0.8);
+  const ring: number[] = [];
+  for (let i = 0; i < n; i++) ring.push(hv(s, x, y, z, (i / n) * Math.PI * 2, r, h * 0.2, 0.8));
+  for (let i = 0; i < n; i++) s.tri(top, ring[(i + 1) % n], ring[i]);
+}
+const DISC = col('#d9a516');
+const THROAT = col('#3a1430');
+function flowerHead(s: GeoSink, sp: Species, x: number, y: number, z: number, r: number, c: THREE.Color, rng: Rng): void {
+  frame(rng.range(0.05, 0.55), rng.range(0, 6.28));
+  const rot = rng.range(0, 6.28);
+  if (sp === 'daisy') {
+    petalRing(s, x, y, z, rng.int(11, 14), r * 0.16, r, r * 0.22, rng.range(0.05, 0.25), 0.004, c, rng, rot);
+    dome(s, x, y, z, r * 0.24, r * 0.16, 6, DISC);
+  } else if (sp === 'marigold') {
+    _hc.copy(c);
+    const edge = rng.chance(0.5);
+    petalRing(s, x, y, z, 7, r * 0.2, r, r * 0.55, 0.15, 0, edge ? _hc.clone().lerp(col('#8a2a0c'), 0.45) : _hc, rng, rot);
+    petalRing(s, x, y, z, 6, r * 0.12, r * 0.68, r * 0.5, 0.5, r * 0.12, c, rng, rot + 0.5);
+    dome(s, x, y, z, r * 0.25, r * 0.32, 4, c, 0.85);
+  } else if (sp === 'geranium') {
+    // umbel: four florets round a top one, each a five-petalled disc
+    for (let k = 0; k < 5; k++) {
+      const a = rot + (k / 4) * Math.PI * 2;
+      const d = k === 4 ? 0 : r * 0.48;
+      const ox = Math.cos(a) * d,
+        oz = Math.sin(a) * d;
+      const px = x + _e1.x * ox + _e2.x * oz + _f.x * (k === 4 ? r * 0.3 : 0),
+        py = y + _e1.y * ox + _e2.y * oz + _f.y * (k === 4 ? r * 0.3 : 0),
+        pz = z + _e1.z * ox + _e2.z * oz + _f.z * (k === 4 ? r * 0.3 : 0);
+      const fr = r * 0.42;
+      s.colorObj(c, 1.15);
+      const cc = hv(s, px, py, pz, 0, 0, fr * 0.1, 0);
+      s.colorObj(c, rng.range(0.85, 1.0));
+      const ring: number[] = [];
+      for (let i = 0; i < 5; i++) ring.push(hv(s, px, py, pz, a + (i / 5) * Math.PI * 2, fr * rng.range(0.9, 1.1), fr * 0.15, 0.3));
+      for (let i = 0; i < 5; i++) s.tri(cc, ring[(i + 1) % 5], ring[i]);
+    }
+  } else {
+    // petunia: a funnel with five rounded lobes and a dark veined throat
+    s.colorObj(THROAT, 1);
+    const th = hv(s, x, y, z, 0, 0, -r * 0.35, 0);
+    const ring: number[] = [];
+    for (let i = 0; i < 10; i++) {
+      const lobe = i % 2 === 0;
+      s.colorObj(c, lobe ? rng.range(0.95, 1.1) : 0.8);
+      ring.push(hv(s, x, y, z, rot + (i / 10) * Math.PI * 2, r * (lobe ? 1 : 0.78), lobe ? r * 0.08 : 0, 0.5));
+    }
+    for (let i = 0; i < 10; i++) s.tri(th, ring[(i + 1) % 10], ring[i]);
+  }
+}
+/** a stem: one thin blade from (x,y,z) to the head */
+function stem(s: GeoSink, x: number, y: number, z: number, hx: number, hy: number, hz: number, w: number, c: THREE.Color): void {
+  const dx = hz - z,
+    dz = -(hx - x);
+  const l = Math.hypot(dx, dz) || 1;
+  const ox = (dx / l) * w,
+    oz = (dz / l) * w;
+  s.colorObj(c, 0.7);
+  const a = s.vert(x - ox, y, z - oz, 0, 0.3, 1),
+    b = s.vert(x + ox, y, z + oz, 0, 0.3, 1);
+  s.colorObj(c, 1);
+  const t = s.vert(hx, hy, hz, 0, 0.6, 1);
+  s.tri(a, b, t);
+  s.tri(a, t, b);
+}
+/** rosette of n arching leaves (2 tris each) */
+function rosette(s: GeoSink, x: number, y: number, z: number, n: number, L: number, wid: number, c: THREE.Color, rng: Rng): void {
+  const rot = rng.range(0, 6.28);
+  for (let i = 0; i < n; i++) {
+    const a = rot + (i / n) * Math.PI * 2 + rng.range(-0.3, 0.3);
+    const ll = L * rng.range(0.75, 1.15);
+    const ca = Math.cos(a),
+      sa = Math.sin(a);
+    const hw = wid * rng.range(0.8, 1.2);
+    s.colorObj(c, 0.6);
+    const b0 = s.vert(x + ca * ll * 0.05, y + ll * 0.15, z + sa * ll * 0.05, ca * 0.2, 1, sa * 0.2);
+    s.colorObj(c, rng.range(0.9, 1.15));
+    const m1 = s.vert(x + ca * ll * 0.5 - sa * hw, y + ll * 0.38, z + sa * ll * 0.5 + ca * hw, ca * 0.3, 1, sa * 0.3);
+    const m2 = s.vert(x + ca * ll * 0.5 + sa * hw, y + ll * 0.38, z + sa * ll * 0.5 - ca * hw, ca * 0.3, 1, sa * 0.3);
+    s.colorObj(c, 0.85);
+    const t = s.vert(x + ca * ll, y + ll * 0.12, z + sa * ll, ca * 0.6, 0.8, sa * 0.6);
+    s.tri(b0, m1, t);
+    s.tri(b0, t, m2);
+  }
+}
+
 /** A clump of flowers: leafy mound with a few blossoms on top. */
 export function flowerClump(s: GeoSink, w: Wind, x: number, y: number, z: number, size: number, petalCol: THREE.Color, rng: Rng, leaf = '#4f8f3c'): void {
+  if (!FLOWER_DETAIL) return flowerClumpOld(s, w, x, y, z, size, petalCol, rng, leaf);
+  w.at(x, y, z, 0.3, 0.9, 0);
+  const sp = speciesOf(petalCol);
+  const lc = col(sp === 'marigold' ? '#3e6f2c' : sp === 'geranium' ? '#4d7f36' : leaf);
+  _c.copy(lc);
+  mound(s, x, y, z, size * 0.8, size * 0.45, _c, rng);
+  rosette(s, x, y, z, 5, size * 1.05, size * 0.28, _c, rng);
+  // heads: daisies and petunias many and small, marigolds and geraniums few and big
+  const n = sp === 'petunia' ? rng.int(4, 6) : sp === 'daisy' ? rng.int(3, 5) : rng.int(2, 3);
+  const hr = size * (sp === 'petunia' ? 0.26 : sp === 'daisy' ? 0.3 : sp === 'marigold' ? 0.3 : 0.36);
+  const stemC = col('#4a7d33');
+  for (let i = 0; i < n; i++) {
+    const a = rng.range(0, 6.28),
+      d = rng.range(0.1, 0.7) * size;
+    const hx = x + Math.cos(a) * d,
+      hz = z + Math.sin(a) * d;
+    const hy = y + size * (sp === 'geranium' ? rng.range(1.0, 1.35) : sp === 'petunia' ? rng.range(0.45, 0.65) : rng.range(0.6, 0.95)) - d * 0.25;
+    _hc.copy(petalCol).multiplyScalar(rng.range(0.88, 1.08));
+    // small hue shifts between heads (sun-faded, younger / older blooms)
+    _hc.offsetHSL(rng.range(-0.015, 0.015), rng.range(-0.08, 0.02), rng.range(-0.04, 0.03));
+    if (sp !== 'petunia') stem(s, x + Math.cos(a) * d * 0.3, y + size * 0.3, z + Math.sin(a) * d * 0.3, hx, hy, hz, 0.0035, stemC);
+    flowerHead(s, sp, hx, hy, hz, hr, _hc.clone(), rng);
+  }
+}
+
+function flowerClumpOld(s: GeoSink, w: Wind, x: number, y: number, z: number, size: number, petalCol: THREE.Color, rng: Rng, leaf = '#4f8f3c'): void {
   w.at(x, y, z, 0.3, 0.9, 0);
   _c.copy(col(leaf));
   mound(s, x, y, z, size, size * 0.7, _c, rng);
@@ -53,13 +224,61 @@ export function flowerClump(s: GeoSink, w: Wind, x: number, y: number, z: number
   }
 }
 
-/** taller flower (tulip / lupin / hollyhock style): stalk + coloured head */
+/** taller flower (tulip): stalk with two broad leaves, a cup of six petals */
 export function tallFlower(s: GeoSink, w: Wind, sh: Shaper, x: number, y: number, z: number, h: number, c: THREE.Color, rng: Rng): void {
   w.at(x, y, z, 0.45, 1.0, 0);
-  sh.frame(x, y, z, rng.range(0, 6.28));
-  sh.color('#4f8a3a').cyl(0, 0, 0, 0.025, 0.018, h, 3, 0, true);
-  s.colorObj(c, 1);
-  sh.cyl(0, h * 0.72, 0, 0.07, 0.03, h * 0.32, 4, 2, false);
+  if (!FLOWER_DETAIL) {
+    sh.frame(x, y, z, rng.range(0, 6.28));
+    sh.color('#4f8a3a').cyl(0, 0, 0, 0.025, 0.018, h, 3, 0, true);
+    s.colorObj(c, 1);
+    sh.cyl(0, h * 0.72, 0, 0.07, 0.03, h * 0.32, 4, 2, false);
+    return;
+  }
+  const lean = rng.range(0, 0.12),
+    az = rng.range(0, 6.28);
+  const hx = x + Math.cos(az) * lean * h,
+    hz = z + Math.sin(az) * lean * h,
+    hy = y + h * 0.82;
+  const g = col('#4f8a3a');
+  stem(s, x, y, z, hx, hy, hz, 0.006, g);
+  // two broad lance leaves clasping the stem
+  for (let k = 0; k < 2; k++) {
+    const a = az + k * Math.PI + rng.range(-0.4, 0.4);
+    const ca = Math.cos(a),
+      sa = Math.sin(a),
+      L = h * rng.range(0.45, 0.6),
+      wd = 0.035;
+    s.colorObj(g, 0.7);
+    const b0 = s.vert(x, y + 0.02, z, ca, 0.3, sa);
+    s.colorObj(g, 1.05);
+    const m1 = s.vert(x + ca * L * 0.25 - sa * wd, y + L * 0.5, z + sa * L * 0.25 + ca * wd, ca, 0.4, sa);
+    const m2 = s.vert(x + ca * L * 0.25 + sa * wd, y + L * 0.5, z + sa * L * 0.25 - ca * wd, ca, 0.4, sa);
+    const t = s.vert(x + ca * L * 0.5, y + L * 0.8, z + sa * L * 0.5, ca, 0.6, sa);
+    s.tri(b0, m1, t);
+    s.tri(b0, t, m1);
+    s.tri(b0, m2, t);
+    s.tri(b0, t, m2);
+  }
+  // the cup: three outer + three inner petals, each a curved strip bulging out and closing at the tips
+  const r = 0.035 * (0.9 + 0.2 * rng.next()),
+    ph = 0.085;
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 6) * Math.PI * 2 + (i % 2 ? 0.1 : 0);
+    const ro = i % 2 ? 0.88 : 1;
+    const ca = Math.cos(a),
+      sa = Math.sin(a),
+      wd = r * 0.85;
+    s.colorObj(c, 0.75);
+    const b0 = s.vert(hx + ca * r * 0.3, hy, hz + sa * r * 0.3, ca, -0.3, sa);
+    s.colorObj(c, rng.range(0.95, 1.1));
+    const m1 = s.vert(hx + ca * r * ro - sa * wd, hy + ph * 0.45, hz + sa * r * ro + ca * wd, ca, 0, sa);
+    const m2 = s.vert(hx + ca * r * ro + sa * wd, hy + ph * 0.45, hz + sa * r * ro - ca * wd, ca, 0, sa);
+    s.colorObj(c, 1.12);
+    const t = s.vert(hx + ca * r * 0.75 * ro, hy + ph, hz + sa * r * 0.75 * ro, ca, 0.4, sa);
+    // outward faces (seen from outside the cup)
+    s.tri(b0, m2, t);
+    s.tri(b0, t, m1);
+  }
 }
 
 export interface BedOpts {

@@ -175,7 +175,7 @@ export function createFarmLife(model: LandscapeModel, uniforms: Record<string, T
   const k0 = Math.floor(qy0 / FROW) - 1,
     k1 = Math.ceil(qy1 / FROW) + 1;
   const maxN = Math.round(720 * Math.max(0.4, density));
-  for (let k = k0; k <= k1 && inst.length / 7 < maxN; k++) {
+  for (let k = k0; k <= k1; k++) {
     const y0 = rowB(k),
       y1 = rowB(k + 1);
     const cw = colW(k),
@@ -199,12 +199,13 @@ export function createFarmLife(model: LandscapeModel, uniforms: Record<string, T
         // (targets stop at slab + 320 m): ~140 m out, so it can be walked up to
         if (ck === CK.stubble || ck === CK.ploughed) {
           const score = Math.abs(sd - 140) + (w.x > SLAB.x1 ? 1e4 : 0);
-          if (score < bestT && (F.x1 - F.x0) > 60 && (F.y1 - F.y0) > 40) {
+          if (score < bestT && (F.x1 - F.x0) > 38 && (F.y1 - F.y0) > 34) {
             bestT = score;
             tractorField = { ...F };
           }
         }
-        if (ck !== CK.pasture || lhash(F.pid, 71) > 0.6) continue;
+        // (the scan runs on after the herds are full: the tractor's field search needs every row)
+        if (ck !== CK.pasture || lhash(F.pid, 71) > 0.6 || inst.length / 7 >= maxN) continue;
         const sheep = lhash(F.pid, 72) < (F.small ? 0.5 : 0.35);
         let n = sheep ? 14 + Math.floor(22 * lhash(F.pid, 73)) : 6 + Math.floor(12 * lhash(F.pid, 74));
         if (F.small) n = Math.ceil(n * 0.4); // a few animals in a paddock

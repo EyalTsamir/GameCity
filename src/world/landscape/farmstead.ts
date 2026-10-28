@@ -282,6 +282,7 @@ export function buildFarmstead(site: FarmSite, H: (x: number, z: number) => numb
     // round bales: a straw pyramid beside the barn, a row of wrapped silage bales along its wall
     const rb = (lx: number, lz: number, up: number, yawB: number, surf: number, c: RGB, rough: number) => {
       const y0 = gy(lx, lz);
+      if (y0 + site.y < -1.0) return; // not on the river bank / in the water
       s.base = y0;
       s.surf = surf;
       const g = new THREE.CylinderGeometry(0.68, 0.68, 1.2, 18, 1, false);
@@ -307,16 +308,43 @@ export function buildFarmstead(site: FarmSite, H: (x: number, z: number) => numb
     }
     // paddock: post-and-rail fence round a rectangle off the barn's far end, five-bar gate in its near side
     {
-      const px0 = b.w / 2 + 6,
-        px1 = px0 + 34,
-        pz0 = -b.d / 2 - 4,
-        pz1 = b.d / 2 + 18;
-      const corners: [number, number][] = [
-        [px0, pz0],
-        [px1, pz0],
-        [px1, pz1],
-        [px0, pz1],
-      ];
+      // try the barn's two ends (and both flanks): the first rectangle clear of the other buildings
+      const others = site.blds.filter((o) => o !== b);
+      const clear = (cs: [number, number][]) => {
+        for (let e = 0; e < 4; e++)
+          for (let t = 0; t <= 1; t += 0.05) {
+            const [ux, uz] = L(cs[e][0] + (cs[(e + 1) % 4][0] - cs[e][0]) * t, cs[e][1] + (cs[(e + 1) % 4][1] - cs[e][1]) * t);
+            for (const o of others) {
+              const dx = ux - o.lx,
+                dz = uz - o.lz;
+              const c = Math.cos(o.yawOff),
+                s2 = Math.sin(o.yawOff);
+              const ox = dx * c - dz * s2,
+                oz = dx * s2 + dz * c;
+              if (Math.abs(ox) < o.w / 2 + 2 && Math.abs(oz) < o.d / 2 + 2) return false;
+            }
+          }
+        return true;
+      };
+      const opts: [number, number][][] = [];
+      for (const side of [1, -1]) {
+        const px0 = side * (b.w / 2 + 6),
+          px1 = px0 + side * 34;
+        opts.push([
+          [px0, -b.d / 2 - 4],
+          [px1, -b.d / 2 - 4],
+          [px1, b.d / 2 + 18],
+          [px0, b.d / 2 + 18],
+        ]);
+      }
+      opts.push([
+        [-b.w / 2, -b.d / 2 - 6],
+        [b.w / 2, -b.d / 2 - 6],
+        [b.w / 2, -b.d / 2 - 36],
+        [-b.w / 2, -b.d / 2 - 36],
+      ]);
+      const corners = opts.find(clear) ?? null;
+      if (corners) {
       const post: RGB = [0.27, 0.22, 0.16],
         rail: RGB = [0.33, 0.27, 0.2];
       for (let e = 0; e < 4; e++) {
@@ -329,6 +357,7 @@ export function buildFarmstead(site: FarmSite, H: (x: number, z: number) => numb
           const t = i / n;
           const [ux, uz] = L(ax + (bx2 - ax) * t, az + (bz2 - az) * t);
           const yy = gy(ux, uz);
+          if (yy + site.y < -1.0) continue;
           s.base = yy;
           const tilt = (rnd(site.seed, 100 + e * 50 + i) - 0.5) * 0.06;
           s.add(new THREE.BoxGeometry(0.13, 1.35, 0.13), new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(tilt, ry, tilt * 0.7)).setPosition(ux, yy + 0.55, uz), post, 0.95, 0, 0.6);
@@ -344,6 +373,7 @@ export function buildFarmstead(site: FarmSite, H: (x: number, z: number) => numb
           const vy = gy(vx, vz);
           for (const h2 of [0.45, 0.85, 1.15]) s.rod([ux, yy + h2, uz], [vx, vy + h2, vz], 0.045, 0.045, 4, rail, 0.95, 0, 0.3);
         }
+      }
       }
     }
   }
@@ -417,7 +447,7 @@ float gFsRough;`,
     float lip = smoothstep(0.0, 0.25, fr);
     float side = smoothstep(0.0, 0.08, fract(u / 0.22 + row * 0.5)) ;
     diffuseColor.rgb *= tile * mix(1.0, mix(0.55, 1.0, lip) * mix(0.8, 1.0, side), aa);
-    diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.2, 0.22, 0.14), smoothstep(0.62, 0.9, fsN(p * 1.3)) * 0.4); // moss / lichen
+    diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(0.72, 0.78, 0.6), smoothstep(0.6, 0.85, fsN(p * 2.1)) * 0.5); // moss / lichen
     gFsBump = (fr * 0.012 + side * 0.003) * aa;
   } else if (sf == 4) {
     // render: trowel unevenness, faint staining under the eaves

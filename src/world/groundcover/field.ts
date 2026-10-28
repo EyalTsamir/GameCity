@@ -106,11 +106,15 @@ uniform vec4 uFade;
 uniform vec4 uBlade;
 uniform vec4 uKind;
 uniform vec3 gcFl[ 10 ];
+uniform float uFlDetail;
 varying vec3 vGcCol;
 varying vec3 vGcW;
 varying vec3 vGcN;
 varying float vGcTrans;
 varying float vGcRough;
+varying vec4 vGcHead;
+varying vec3 vGcPet;
+varying vec3 vGcEye;
 ${WIND_GLSL}
 ${HASH_GLSL}
 ${GC_PALETTE_GLSL}
@@ -151,11 +155,44 @@ vec4 gcClump( vec2 p, float size, out vec2 centre ) {
 }
 `;
 
+/** W8: petal rosette on a flower head (count and shape per species), a centre eye, shadowed gaps between petals */
+const FLOWER_FRAG = /* glsl */ `
+if ( vGcHead.w > 0.5 && vGcHead.y > -1.0 ) {
+  vec2 q = vGcHead.xy;
+  float r = length( q ) * 1.35;
+  float np = vGcHead.z;
+  float th = atan( q.y, q.x ) + vGcHead.w * 6.2831;
+  float aa = fwidth( r ) * 1.2 + 1e-3;
+  vec3 gap = vGcPet * 0.3 + vec3( 0.03, 0.06, 0.02 );
+  vec3 c;
+  if ( np < 0.5 ) {
+    // umbel: a dome of tiny florets
+    float fl = fract( sin( dot( floor( q * 7.0 ), vec2( 12.9898, 78.233 ) ) ) * 43758.5453 );
+    c = mix( gap, vGcPet, ( 1.0 - smoothstep( 1.0 - aa, 1.0 + aa, r ) ) * ( 0.55 + 0.45 * step( 0.3, fl ) ) );
+  } else {
+    // petals: lobes round the centre; many narrow rays (daisies) or a few broad ones (poppy, buttercup)
+    float lobe = abs( cos( th * np * 0.5 ) );
+    float R = np > 10.0 ? mix( 0.45, 1.0, pow( lobe, 0.35 ) ) : mix( 0.62, 1.0, pow( lobe, 1.6 ) );
+    float inP = 1.0 - smoothstep( R - aa, R + aa, r );
+    // veins / shading toward the centre, the poppy's cup shading
+    vec3 pc = vGcPet * ( 0.72 + 0.38 * r ) * ( 0.92 + 0.08 * lobe );
+    c = mix( gap, pc, inP );
+    float er = np < 6.0 ? 0.3 : np > 13.0 ? 0.32 : 0.22;
+    float inE = 1.0 - smoothstep( er - aa, er + aa, r );
+    c = mix( c, vGcEye * ( 0.8 + 0.4 * ( 1.0 - r / er ) ), inE );
+  }
+  diffuseColor.rgb = c;
+}
+`;
+
 /** vertex main: replaces <beginnormal_vertex>; <begin_vertex> then takes gcPos */
 const VERT_MAIN = /* glsl */ `
 vec3 objectNormal = vec3( 0.0, 1.0, 0.0 );
 vec3 gcPos = vec3( cameraPosition.x, -500.0, cameraPosition.z );
 vGcCol = vec3( 0.0 );
+vGcHead = vec4( 0.0 );
+vGcPet = vec3( 0.0 );
+vGcEye = vec3( 0.0 );
 vGcTrans = 0.0;
 vGcRough = 0.85;
 {
@@ -401,6 +438,16 @@ vGcRough = 0.85;
           if ( hm > 0.5 ) col = headC * ( 0.85 + 0.25 * fract( rc.y * 9.1 ) );
           else if ( hm > -0.5 ) col = mix( eyeC, base * 0.8, fk == 0 ? 0.0 : 0.55 );
           else col = mix( base * aoRoot, base * 0.9, smoothstep( 0.0, 0.5, lv ) );
+          // W8: head-local coordinates for the petal rosette drawn in the fragment (rings A and B):
+          // u across (−1..1 at the rim), v −1 at the head's foot, 0 at the rim, +1 at the top; stem below −1
+          if ( fk >= 0 && uKind.w < 1.5 && uFlDetail > 0.5 ) {
+            bool isHead = uKind.w < 0.5 ? ( lv >= 0.5 && lv < 0.9 ) : ( lv > 0.2 && lv < 0.9 );
+            float v = uKind.w < 0.5 ? ( lv < 0.2 ? -3.0 : ( lv < 0.5 ? -1.0 : ( lv < 0.9 ? 0.0 : 1.0 ) ) ) : ( lv < 0.2 ? -1.0 : ( lv < 0.9 ? 0.0 : 1.0 ) );
+            float np = fk == 0 ? 4.0 : fk == 1 ? 9.0 : fk == 2 ? 14.0 : fk == 3 ? 5.0 : fk == 4 ? 0.0 : fk == 5 ? 12.0 : fk == 6 ? 18.0 : fk == 7 ? 12.0 : 15.0;
+            vGcHead = vec4( isHead ? side : 0.0, v, np, 1.0 + fract( rc.x * 17.3 ) );
+            vGcPet = headC * ( 0.85 + 0.25 * fract( rc.y * 9.1 ) );
+            vGcEye = eyeC;
+          }
         }
         vGcCol = col;
         vGcTrans = smoothstep( 0.25, 0.85, hf ) * ( headW > 0.0 ? 1.0 : 0.85 );
@@ -415,6 +462,9 @@ vGcRough = 0.85;
 `;
 
 const FRAG_PARS = /* glsl */ `
+varying vec4 vGcHead;
+varying vec3 vGcPet;
+varying vec3 vGcEye;
 varying vec3 vGcCol;
 varying vec3 vGcW;
 varying vec3 vGcN;
@@ -527,6 +577,8 @@ export function createField(ctx: CityContext, maps: CoverMaps, outer: OuterMaps 
     uWind: ctx.uniforms.uWind,
     uGcTrans: { value: 1 },
     gcFl: { value: flowerCols },
+    // W8 petal rosettes on flower heads (?noflowerdetail: plain diamonds)
+    uFlDetail: { value: new URLSearchParams(location.search).has('noflowerdetail') ? 0 : 1 },
     ...pal,
     ...lampUniforms(),
   };
@@ -582,7 +634,7 @@ export function createField(ctx: CityContext, maps: CoverMaps, outer: OuterMaps 
           .replace('#include <begin_vertex>', 'vec3 transformed = gcPos;');
         shader.fragmentShader = shader.fragmentShader
           .replace('#include <common>', '#include <common>\n' + FRAG_PARS)
-          .replace('vec4 diffuseColor = vec4( diffuse, opacity );', 'vec4 diffuseColor = vec4( vGcCol, 1.0 );')
+          .replace('vec4 diffuseColor = vec4( diffuse, opacity );', 'vec4 diffuseColor = vec4( vGcCol, 1.0 );\n' + FLOWER_FRAG)
           .replace('#include <normal_fragment_begin>', 'float faceDirection = 1.0;\nvec3 normal = normalize( ( viewMatrix * vec4( vGcN, 0.0 ) ).xyz );\nvec3 nonPerturbedNormal = normal;')
           .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = vGcRough;')
           .replace('#include <lights_physical_pars_fragment>', '#include <lights_physical_pars_fragment>\n' + RE_GRASS)

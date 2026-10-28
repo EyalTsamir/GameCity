@@ -14,6 +14,8 @@ interface Ring {
   ry: number;
   /** bend weight at this ring */
   b?: number;
+  /** section squareness: 1 = ellipse, < 1 boxier (superellipse) */
+  e?: number;
 }
 
 class Builder {
@@ -43,8 +45,11 @@ class Builder {
       const r = rings[i];
       for (let s = 0; s < seg; s++) {
         const ang = (s / seg) * Math.PI * 2;
-        const ca = Math.cos(ang),
-          sa = Math.sin(ang);
+        const e = r.e ?? 1;
+        const c0 = Math.cos(ang),
+          s0 = Math.sin(ang);
+        const ca = Math.sign(c0) * Math.abs(c0) ** e,
+          sa = Math.sign(s0) * Math.abs(s0) ** e;
         let nx = u.x * ca * r.ry + v.x * sa * r.rx,
           ny = u.y * ca * r.ry + v.y * sa * r.rx,
           nz = u.z * ca * r.ry + v.z * sa * r.rx;
@@ -253,8 +258,9 @@ export function cowGeometry(): THREE.BufferGeometry {
   // skeleton under the hide: hook (hip) bones, pin bones, spine, shoulder blades, ribs
   const bumps: [number, number, number, number, number][] = [];
   sym((sx) => {
-    bumps.push([sx * 0.27, 1.33, -0.58, 0.09, 0.05]); // hooks
-    bumps.push([sx * 0.13, 1.3, -0.98, 0.06, 0.04]); // pins
+    bumps.push([sx * 0.28, 1.36, -0.58, 0.09, 0.08]); // hooks
+    bumps.push([sx * 0.14, 1.32, -0.98, 0.06, 0.06]); // pins
+    bumps.push([sx * 0.3, 0.86, -0.75, 0.16, 0.035]); // thigh
     bumps.push([sx * 0.24, 1.22, 0.5, 0.16, 0.025]); // shoulder blade
     bumps.push([sx * 0.33, 0.95, 0.0, 0.25, -0.02]); // flank hollow
   });
@@ -265,6 +271,8 @@ export function cowGeometry(): THREE.BufferGeometry {
       const d2 = (x - bx) ** 2 + (y - by) ** 2 + (z - bz) ** 2;
       s += a * Math.exp(-d2 / (r * r));
     }
+    // spine: a narrow ridge along the top line, the loin a little dipped between the hooks
+    if (y > 1.3 && Math.abs(x) < 0.12) s += 0.018 * Math.exp(-(x * x) / 0.002) - (z > -0.5 && z < 0.2 ? 0.01 : 0);
     // ribs: faint ridges on the barrel
     if (z > -0.35 && z < 0.35 && Math.abs(x) > 0.2) s += 0.004 * Math.sin(z * 55);
     return s;
@@ -276,37 +284,38 @@ export function cowGeometry(): THREE.BufferGeometry {
     [-0.99, 1.12, 0.19, 0.24],
     [-0.88, 1.1, 0.25, 0.3],
     [-0.7, 1.06, 0.29, 0.34],
-    [-0.45, 1.02, 0.33, 0.39],
-    [-0.15, 0.99, 0.37, 0.43],
-    [0.15, 1.0, 0.36, 0.43],
-    [0.4, 1.04, 0.31, 0.42],
+    [-0.45, 1.04, 0.33, 0.37],
+    [-0.15, 1.02, 0.36, 0.4],
+    [0.15, 1.03, 0.35, 0.4],
+    [0.4, 1.06, 0.3, 0.4],
     [0.58, 1.1, 0.24, 0.37],
     [0.7, 1.15, 0.18, 0.31],
   ];
-  for (const [z, y, rx, ry] of prof) body.push({ p: [0, y, z], rx, ry, b: 0 });
-  B.tube(body, 26, MAT.coat, [true, false], bones);
+  // rump and loin boxy (a dairy cow's flat, angular back end), the barrel rounder
+  prof.forEach(([z, y, rx, ry]) => body.push({ p: [0, y, z], rx, ry, b: 0, e: z < -0.5 ? 0.62 : z < 0.3 ? 0.8 : 0.9 }));
+  B.tube(body, 28, MAT.coat, [true, false], bones);
   // neck with the dewlap below, bending at the shoulder
   B.tube(
     [
       { p: [0, 1.16, 0.62], rx: 0.2, ry: 0.32, b: 0 },
-      { p: [0, 1.2, 0.8], rx: 0.15, ry: 0.27, b: 0.4 },
-      { p: [0, 1.24, 0.95], rx: 0.12, ry: 0.2, b: 0.85 },
-      { p: [0, 1.27, 1.04], rx: 0.11, ry: 0.15, b: 1 },
+      { p: [0, 1.22, 0.84], rx: 0.15, ry: 0.27, b: 0.4 },
+      { p: [0, 1.28, 1.02], rx: 0.12, ry: 0.2, b: 0.85 },
+      { p: [0, 1.32, 1.14], rx: 0.11, ry: 0.16, b: 1 },
     ],
     18,
     MAT.coat,
     [false, false],
-    (x, y, z) => (y < 1.05 ? 0.02 * Math.max(0, 1 - Math.abs(z - 0.85) / 0.3) : 0),
+    (x, y, z) => (y < 1.08 ? 0.025 * Math.max(0, 1 - Math.abs(z - 0.86) / 0.3) : 0),
   );
-  // head: poll (wide, with the forehead flat) → face → muzzle
+  // head (~0.55 m): wide poll with a flat forehead → long face → deep muzzle
   B.tube(
     [
-      { p: [0, 1.34, 1.02], rx: 0.1, ry: 0.07 },
-      { p: [0, 1.3, 1.07], rx: 0.13, ry: 0.13 },
-      { p: [0, 1.2, 1.2], rx: 0.115, ry: 0.13 },
-      { p: [0, 1.08, 1.33], rx: 0.085, ry: 0.1 },
-      { p: [0, 1.0, 1.42], rx: 0.085, ry: 0.085 },
-      { p: [0, 0.96, 1.47], rx: 0.07, ry: 0.06 },
+      { p: [0, 1.42, 1.1], rx: 0.1, ry: 0.07 },
+      { p: [0, 1.38, 1.15], rx: 0.14, ry: 0.15 },
+      { p: [0, 1.27, 1.3], rx: 0.12, ry: 0.15 },
+      { p: [0, 1.13, 1.46], rx: 0.09, ry: 0.12 },
+      { p: [0, 1.04, 1.57], rx: 0.095, ry: 0.1 },
+      { p: [0, 0.99, 1.63], rx: 0.08, ry: 0.07 },
     ],
     16,
     MAT.coat,
@@ -314,11 +323,11 @@ export function cowGeometry(): THREE.BufferGeometry {
     undefined,
     1,
   );
-  B.blob([0, 0.965, 1.48], [0.075, 0.05, 0.03], MAT.pink, 10, [0, 0.5], 1); // muzzle pad
+  B.blob([0, 0.995, 1.645], [0.085, 0.06, 0.03], MAT.pink, 10, [0, 0.6], 1); // muzzle pad
   sym((sx) => {
-    B.blob([sx * 0.2, 1.3, 1.06], [0.1, 0.025, 0.05], MAT.coat, 8, [sx * 1.4, -0.25], 1); // ear
-    B.blob([sx * 0.115, 1.25, 1.14], [0.022, 0.026, 0.022], MAT.dark, 6, [0, 0], 1); // eye
-    B.blob([sx * 0.1, 1.38, 1.05], [0.025, 0.018, 0.018], MAT.horn, 6, [sx * 1.2, 0.3], 1); // horn buds
+    B.blob([sx * 0.22, 1.38, 1.14], [0.11, 0.028, 0.055], MAT.coat, 8, [sx * 1.4, -0.25], 1); // ear
+    B.blob([sx * 0.125, 1.32, 1.22], [0.024, 0.028, 0.024], MAT.dark, 6, [0, 0], 1); // eye
+    B.blob([sx * 0.11, 1.46, 1.13], [0.028, 0.02, 0.02], MAT.horn, 6, [sx * 1.2, 0.3], 1); // horn buds
   });
   // legs: foreleg straight (knee), hind leg angled (stifle → hock → cannon); hooves split in two claws
   sym((sx) => {
@@ -492,7 +501,7 @@ float hRough = 0.9;
     float n1 = hnNoise(o * 34.0 + ph * 50.0), n2 = hnNoise(o * 95.0 + ph * 20.0);
     float fl = n1 * 0.65 + n2 * 0.35;
     gHerdBump = m == 0 ? fl * 0.012 : 0.0;
-    vec3 wool = vec3(0.74, 0.7, 0.6) * (0.9 + 0.16 * fract(ph * 13.7));
+    vec3 wool = vec3(0.66, 0.61, 0.5) * (0.88 + 0.18 * fract(ph * 13.7));
     wool = mix(wool, vec3(0.42, 0.38, 0.31), smoothstep(0.62, 0.34, y) * 0.75 + smoothstep(-0.5, -0.64, o.z) * 0.4);
     wool *= 0.72 + 0.4 * fl;
     bool blackSheep = tint > 0.95;
@@ -514,7 +523,7 @@ float hRough = 0.9;
     gHerdBump = m == 0 ? hair * 0.0012 : 0.0;
     bool dark = tint >= 0.28 && tint < 0.5;
     hc = m == 0 ? coat : m == 2 ? vec3(0.05, 0.04, 0.035) : m == 3 ? vec3(0.008) : m == 4 ? (dark ? vec3(0.09, 0.07, 0.07) : vec3(0.55, 0.36, 0.33)) : m == 5 ? vec3(0.55, 0.5, 0.42) : coat * (tint < 0.75 && tint >= 0.5 ? 1.0 : 0.6);
-    hRough = m == 3 ? 0.3 : m == 4 ? 0.55 : m == 5 ? 0.5 : 0.85;
+    hRough = m == 3 ? 0.3 : m == 4 ? 0.55 : m == 5 ? 0.5 : 0.62 + 0.25 * hair;
   }
   hc = mix(hc, vec3(0.13, 0.1, 0.07), grime * 0.75);
 }
