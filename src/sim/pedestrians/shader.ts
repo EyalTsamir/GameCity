@@ -238,7 +238,20 @@ void pedPose(inout vec3 p, inout vec3 n) {
   float h = float(aData.y & 0xFFFFu) * (4.0 / 65535.0) - 2.0;
   float w = float(aData.y >> 16u) * (1.0 / 65535.0);
   vec2 aux = pedU2(aData.z);
-  if (region == ${R.FACE}) vPedFace = vec3(aux, 1.0);
+  if (region == ${R.FACE}) {
+    vPedFace = vec3(aux, 1.0);
+    // per-person face shape: nose length / bridge, chin, cheeks, lip fullness (stable hash of the look)
+    uint fh = (iC0.x * 2654435761u) ^ (iC1.x * 40503u) ^ (iC0.y * 2246822519u);
+    fh ^= fh >> 15u; fh *= 2246822519u; fh ^= fh >> 13u;
+    vec4 fv = vec4(float(fh & 255u), float((fh >> 8u) & 255u), float((fh >> 16u) & 255u), float(fh >> 24u)) / 127.5 - 1.0;
+    float X = aux.x, Y = aux.y;
+    float nose = exp(-X * X / 0.00008) * smoothstep(0.012, -0.01, Y) * smoothstep(-0.052, -0.036, Y);
+    float chin = exp(-X * X / 0.0004 - (Y + 0.095) * (Y + 0.095) / 0.00015);
+    float cheek = exp(-(abs(X) - 0.045) * (abs(X) - 0.045) / 0.0003 - (Y + 0.025) * (Y + 0.025) / 0.0003);
+    float lips = exp(-X * X / 0.0004 - (Y + 0.066) * (Y + 0.066) / 0.00006);
+    float dn = 0.0055 * fv.x * nose + 0.005 * fv.y * chin + 0.003 * fv.z * cheek + 0.0018 * fv.w * lips;
+    p += n * dn * (1.0 - 0.4 * P_c);
+  }
   else if (region == ${R.FOOT}) vPedFace = vec3(aux, 2.0);
   pedW = vec3(P_w, P_c, P_b);
   // ── morph
