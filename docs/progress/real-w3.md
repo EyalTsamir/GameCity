@@ -3,6 +3,28 @@
 Branch `claude/real-w3-furniture` (from `claude/pensive-gates-bim12i`). Brief: docs/progress/real-briefs.md "W3".
 
 ## Resume here
+* Session 3 progress (WIP pushed): new **src/world/landmarks/sculpt.ts** — `surface` (param grid, smooth
+  normals), `shell` (thin solid: outer/inner skins + rims), `body` (lathe-like superellipse with a bump fn),
+  `blob` (deformed ellipsoid), `capsule` (tapered, a→b), `paint` (vertex colours from pos/normal), `hash1`.
+  Landmark builder multiplies vertex `color` by the Mat colour (M('#ffffff') + paint = per-vertex albedo;
+  paint values are LINEAR unless `setRGB(..., THREE.SRGBColorSpace)`). **Statue** (park.ts genStatue): figure
+  rebuilt from sculpt parts — capsule legs/boots (left foot forward, right heel up), open coat-skirt shell with
+  folds + back vent, superellipse torso with lapel ridges, face carved into a blob (nose/brow/sockets/mouth/
+  chin), hair cap + queue, right arm pointing to sea, left hand holding the tricorn; patina in vertex colours
+  (dark bronze, verdigris on up-faces + streaks, dark undersides, brass-rubbed toe). Plinth: deeper cornice
+  (undercut soffit, corona 0.745) + torus base; die faces carry 56×14 vertex-colour grids of green-grey run-off
+  streaks; capping tinted. Close-up script: scratchpad stat.sh = capture-set views a..e around (-45, 3.7, 17.5).
+  **Market** (civic.ts): tablecloth = `shell` drape (top + rolled edge + folded front drop, end drops), 6 cloth
+  colours; produce in 2–3 layers, goods-specific (fish rows on crushed ice + lemon, flowers in zinc buckets,
+  loaves heaped + baguettes, spice cones in bowls, carrots, aubergines, big cabbages, stacked cheese wheels with
+  rind band); chalk price cards (`priceCard`, atlas text); crates + stock under the table; plain vs striped
+  awning by id. **Columns**: gazebo turned profile (torus, scotia, vase swell, astragal, echinus; 16 seg),
+  bandstand cast-iron lathe columns, kiosk post plinths + caps. **Planters** (props.ts slot case): trailing
+  ivy/petunia leaf cards over 1–3 sides + tall grass/lavender accent (GreenKit; `?nogreen` off).
+  **Benches**: foot plates + anchor bolts, centre bearers, screws (all 3 styles). **Bike rack**: flanges +
+  bolts, D-lock / cable lock per bike. **Phone box**: cord, coin box, card, directories, flyer, stickers.
+  **bench.mjs LOS**: meshes collected with traverse() (culled chunks were invisible to traverseVisible → bin
+  10 m ended inside a culled bus shelter). Requests: docs/progress/real-requests.md (vendor faces backwards).
 * 2026-10-28 — **Session 3 started.** Merged lead (9708a9f). Lead order: (1) statue figure silhouette at 10 m
   (head, shoulders, arm gesture, coat folds) + patina streaks onto plinth + deeper mouldings; (2) market stall cloth
   folds, higher produce + price cards, crates beside/under, stalls differ (awning colours, goods); (3) gazebo/kiosk

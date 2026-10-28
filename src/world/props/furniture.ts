@@ -455,8 +455,31 @@ export function phonebox(k: Kit, g?: Kit): void {
   sh.box(0, 1.25, -0.265, 0.12, 0.08, 0.01, 0);
   k.m('#111', 'plastic');
   sh.box(-0.08, 1.4, -0.26, 0.05, 0.2, 0.05, 0);
+  // coiled cord sagging from the handset, a coin box under the phone, an instructions card
+  k.m('#111', 'plastic');
+  for (let i = 0; i < 6; i++) {
+    const t0 = i / 6, t1 = (i + 1) / 6;
+    const cy = (t: number) => 1.32 - Math.sin(t * Math.PI) * 0.16;
+    sh.tube(-0.08 + t0 * 0.1, cy(t0), -0.255 + t0 * 0.02, -0.08 + t1 * 0.1, cy(t1), -0.255 + t1 * 0.02, 0.009, 0.009, 4);
+  }
+  k.m('#7d8589', 'steel');
+  cbox(sh, 0, 1.08, -0.34, 0.2, 0.14, 0.09, 0.01);
+  sh.box(0.05, 1.12, -0.294, 0.04, 0.006, 0.004, 0);
+  k.m('#ecebe4', 'paint');
+  sh.box(0, 1.62, -0.36, 0.2, 0.14, 0.004, 0);
   k.m('#5a4a3a', 'wood');
   sh.box(0, 0.95, -0.3, 0.6, 0.03, 0.22, 0);
+  // directories on the shelf, a crumpled flyer on the floor, cards stuck to the side wall bars
+  k.m('#d8bd5a', 'paint');
+  sh.box(-0.17, 0.98, -0.31, 0.2, 0.05, 0.15, 0);
+  k.m('#3a5f8a', 'paint');
+  sh.box(-0.16, 1.03, -0.31, 0.18, 0.04, 0.14, 0);
+  k.m('#f1efe8', 'paint');
+  sh.ellipsoid(0.18, 0.2, 0.12, 0.05, 0.025, 0.04, 0);
+  for (const [cz, cy, c] of [[-0.2, 1.7, '#e84a7a'], [-0.05, 1.55, '#f6d33c'], [0.1, 1.74, '#ffffff']] as const) {
+    k.m(c, 'paint');
+    sh.box(0.405, cy, cz, 0.003, 0.09, 0.06, 0);
+  }
   k.e('#f6f0e0', '#ffe6b8', 1.2);
   sh.box(0, 2.0, 0, 0.3, 0.02, 0.3, 0);
   // square dome, crown
@@ -742,7 +765,31 @@ export function bikeRack(k: Kit, rng: Rng): void {
     sh.push().local(hoops[h], 0, side * 0.2, rng.range(-0.05, 0.05) * side, rng.chance(0.5) ? 0 : Math.PI, 0.08 * side);
     bike(k, rng.pick(BIKE_COLS));
     sh.pop();
+    // locked to the hoop: a D-lock round the upright and the down tube (shackle + lock body), or a cable
+    const ux = hoops[h] + (rng.chance(0.5) ? 0.32 : -0.32);
+    if (rng.chance(0.7)) {
+      k.m('#2b2d2f', 'steel');
+      const z0 = -side * 0.035, z1 = side * 0.23;
+      for (const y of [0.5, 0.62]) sh.tube(ux, y, z0, ux, y, z1, 0.009, 0.009, 5);
+      sh.tube(ux, 0.5, z0, ux, 0.62, z0, 0.009, 0.009, 5);
+      k.m(rng.chance(0.5) ? '#e0b21c' : '#1c1d1f', 'plastic');
+      sh.box(ux, 0.48, z1, 0.035, 0.17, 0.035, 1);
+    } else {
+      k.m(rng.pick(['#c0392b', '#1f5fa8', '#1c1d1f']), 'plastic');
+      sh.tube(ux, 0.35, 0, ux + 0.05, 0.3, side * 0.2, 0.008, 0.008, 4);
+      sh.tube(ux + 0.05, 0.3, side * 0.2, ux + 0.02, 0.45, side * 0.21, 0.008, 0.008, 4);
+      sh.tube(ux + 0.02, 0.45, side * 0.21, ux, 0.42, 0, 0.008, 0.008, 4);
+      k.m('#1c1d1f', 'plastic');
+      sh.box(ux + 0.03, 0.28, side * 0.2, 0.04, 0.06, 0.03, 1);
+    }
   }
+  // the hoops sit in welded flanges bolted to the paving
+  k.m('#8d969b', 'steel');
+  for (const x of hoops)
+    for (const sx of [-1, 1]) {
+      sh.cyl(x + sx * 0.32, 0, 0, 0.06, 0.06, 0.008, 10, 2);
+      for (const a of [0.6, 2.2, 3.8, 5.4]) boltY(sh, x + sx * 0.32 + Math.cos(a) * 0.042, 0.008, Math.sin(a) * 0.042, 0.007);
+    }
 }
 
 /** Bicycle along local x (front wheel at +x), wheels touching y = 0. */
