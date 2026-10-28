@@ -24,7 +24,7 @@ import { windMaterials as legacyWindMaterials } from './vegetation/legacy/materi
 import * as NEW from './vegetation/species';
 import * as OLD from './vegetation/legacy/species';
 import { Wind, col, LEAF, type Species, type TreeSpec } from './vegetation/species';
-import { flowerBed, flowerClump, crop, soilRow, surround, FLOWERS, type Surround } from './vegetation/plants';
+import { flowerBed, flowerClump, crop, soilRow, surround, treeGuard, GRATE_HOLE, FLOWERS, type Surround } from './vegetation/plants';
 import { getLayout, occAny, PLANTER, hrand, MASK_WALK, DistanceLod, ChunkCuller, chunkOf, type Layout } from './props/layout';
 import { getLeafAtlas } from './vegetation/atlas';
 import { FoliageLayer, LodTexture, cardMaterials, woodMaterials, cardKnobs, type InstBuf, type PlantRef } from './vegetation/foliage';
@@ -121,6 +121,8 @@ export default function create(ctx: CityContext): CityModule {
   const legacy = ctx.debug.params.has('legacyveg') && ctx.debug.params.get('legacyveg') !== '0';
   // leaf-card trees (default) vs the lobed-hull trees (?noleafcards — A/B + fallback)
   const cardsOn = !legacy && !ctx.debug.params.has('noleafcards');
+  // W5 tree bases: bark relief + soil-stained trunk foot (shader), real tree-pit surrounds (geometry)
+  const noTreeBase = ctx.debug.params.has('notreebase');
   const buildTree: (s: GeoSink, w: Wind, t: TreeSpec) => unknown = legacy ? OLD.buildTree : NEW.buildTree;
   const bush = legacy ? OLD.bush : NEW.bush;
   const hedge = legacy ? OLD.hedge : NEW.hedge;
@@ -850,6 +852,7 @@ export default function create(ctx: CityContext): CityModule {
       // street trees spread along the street (the gap between facades), not into them
       stretch: street ? [Math.cos(t.syaw), -Math.sin(t.syaw), 1.4] : undefined,
       planter: t.surround === 'planter' || t.surround === 'roundplanter' ? { round: t.surround === 'roundplanter', yaw: t.syaw } : undefined,
+      paved: noTreeBase ? undefined : GRATE_HOLE[t.surround],
     });
   }
   // build near-to-far for the usual camera direction (south → north) so early-z rejects hidden canopies
@@ -859,6 +862,8 @@ export default function create(ctx: CityContext): CityModule {
     let y = t.y;
     selF(t.x);
     if (t.surround !== 'none') y = surround(fsh, fpw, t.surround, t.x, t.y, t.z, t.syaw, srng);
+    // a young street tree keeps its guard for a few years (W5)
+    if (!noTreeBase && (t.surround === 'kerbgrate' || t.surround === 'grate') && t.h < 8 && hash01(t.x * 1.3, t.z * 0.7, 11) < 0.3) treeGuard(fsh, fpw, t.x, y, t.z, t.syaw, srng);
     const clear = t.clear !== undefined ? t.clear - (y - t.y) : undefined;
     if (cardsOn) addPlant(t, y, clear);
     else if (t.tag === 'forest') buildTree(forestSink, fw, { ...t, y, h: t.h - (y - t.y), clear });
@@ -1475,6 +1480,7 @@ export default function create(ctx: CityContext): CityModule {
         qLevel = ctx.quality.level;
         foliageKnobs.cheap.value = cellsParam === '8' ? 1 : cellsParam === '27' ? 0 : qLevel === 'high' ? 0 : 1;
         cardKnobs.farKeep.value = qLevel === 'high' ? 1 : qLevel === 'medium' ? 0.85 : 0.6;
+        cardKnobs.base.value = noTreeBase || qLevel === 'low' ? 0 : 1;
       }
       near = lod.near();
       farMesh.visible = !near;

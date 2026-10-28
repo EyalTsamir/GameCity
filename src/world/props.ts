@@ -72,6 +72,7 @@ export default function create(ctx: CityContext): CityModule {
   const rng = ctx.rng('props');
   // real-object furniture (bins, planters, phone boxes, newsstands, bollards) or the old primitives (low tier, ?nopropdetail)
   const simple = ctx.debug.params.has('nopropdetail') || ctx.quality.level === 'low';
+  const noLampDetail = ctx.debug.params.has('nolampdetail') || ctx.quality.level === 'low';
 
   /** local → world for a frame at (x, z) with yaw */
   const toWorld = (x: number, z: number, yaw: number, lx: number, lz: number): [number, number] => [x + lx * Math.cos(yaw) + lz * Math.sin(yaw), z - lx * Math.sin(yaw) + lz * Math.cos(yaw)];
@@ -90,7 +91,9 @@ export default function create(ctx: CityContext): CityModule {
     const y = l.street ? l.y : Math.max(l.y, H(l.x, l.z));
     sel(l.x);
     k.sh.frame(l.x, y, l.z, l.yaw);
-    const head = lamp(k, l.style, l.street, new Rng(Math.floor(hash01(l.x, l.z, 5) * 1e9)));
+    kf.sh.frame(l.x, y, l.z, l.yaw);
+    // near-only lamp-post detail (W5: mouldings, flanges, bolts, hatches, lantern frames; ?nolampdetail, off on low)
+    const head = lamp(k, l.style, l.street, new Rng(Math.floor(hash01(l.x, l.z, 5) * 1e9)), noLampDetail ? undefined : kf);
     spot(l.x, y, l.z, 0, 0, 0, 0.14, 0.14, 0.14, 0.22, 0.5);
     const [hx, hz] = toWorld(l.x, l.z, l.yaw, head.x, head.z);
     glows.push({ x: hx, y: y + head.y, z: hz, size: head.halo, halo: true, color: head.color, intensity: 1.0 });

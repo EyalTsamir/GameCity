@@ -287,6 +287,8 @@ export const cardKnobs = {
   night: { value: 2.0 },
   /** 0 = plain (A/B of the leaf shading) */
   fx: { value: 1 },
+  /** bark relief (normal bump from the furrow pattern) + soil-stained trunk foot (W5; ?notreebase / low tier → 0) */
+  base: { value: 1 },
   /** dissolve cards seen edge-on (0 off .. 1 full) */
   edgeFade: { value: 1 },
   /** fraction of far cards kept (quality tiers: high 1, medium 0.85, low 0.6) */
@@ -417,6 +419,7 @@ varying vec3 vThWPos;
 varying float vThPat;
 varying vec3 vThWN;
 varying float vThAng;
+varying float vThFoot;
 #endif
 void thWood( out vec3 P, out vec3 N ) {
   float nearW = thLodW( iR.w );
@@ -448,6 +451,7 @@ void thWood( out vec3 P, out vec3 N ) {
   vThPat = iW2.z;
   vThWN = N;
   vThAng = atan( position.z, position.x );
+  vThFoot = P.y - iR.y;
 #endif
   if ( hide ) {
     P = iR.xyz;
@@ -547,6 +551,7 @@ const CARD_FRAG_AO = /* glsl */ `
 const WOOD_FRAG_PARS = /* glsl */ `
 uniform float uNight;
 uniform float uThFx;
+uniform float uThBase;
 varying vec4 vThK;
 varying float vThAO;
 varying vec3 vThRest;
@@ -554,7 +559,10 @@ varying vec3 vThWPos;
 varying float vThPat;
 varying vec3 vThWN;
 varying float vThAng;
+varying float vThFoot;
 float thWrap;
+// world-space gradient of the bark height field (furrows), applied as a bump in the normal stage
+vec3 thBarkG;
 ${NOISE_GLSL}
 ${LAMP_GLSL}
 `;
@@ -562,6 +570,7 @@ ${LAMP_GLSL}
 /** bark painted in-shader, faded to its mean by the pixel footprint */
 const WOOD_FRAG_MAP = /* glsl */ `
 thWrap = 0.0;
+thBarkG = vec3( 0.0 );
 {
   vec3 bc = vThK.rgb * vThK.rgb;
   float foot = length( fwidth( vThRest ) );
@@ -599,20 +608,46 @@ thWrap = 0.0;
     } else if ( pat > 0.2 ) {
       // smooth grey bark (ficus, olive): fine fissures
       float fade = 1.0 - smoothstep( 0.025, 0.09, foot );
-      float n = thNoised( vThRest * vec3( 6.0, 2.2, 6.0 ) ).x;
+      vec4 nd = thNoised( vThRest * vec3( 6.0, 2.2, 6.0 ) );
+      float n = nd.x;
       bc *= 1.0 - 0.28 * mix( 0.35, smoothstep( -0.05, 0.25, abs( n ) * 2.0 ), fade );
+      // fine fissures: shallow grooves along the zero lines of n
+      thBarkG = -sign( n ) * 2.0 * nd.yzw * vec3( 6.0, 2.2, 6.0 ) * ( 1.0 - smoothstep( 0.0, 0.14, abs( n ) ) ) * 0.01 * fade;
     } else {
       // furrowed bark
       float fade = 1.0 - smoothstep( 0.025, 0.09, foot );
-      float n = thNoised( vThRest * vec3( 9.0, 1.4, 9.0 ) ).x;
-      bc *= 1.0 - 0.34 * mix( 0.45, smoothstep( -0.08, 0.22, n ), fade );
+      // ridges and furrows: the furrow (high n) is sunken and darker; a second, finer octave breaks the plates
+      vec4 nd = thNoised( vThRest * vec3( 9.0, 1.4, 9.0 ) );
+      vec4 nf = thNoised( vThRest * vec3( 23.0, 4.0, 23.0 ) + 3.7 );
+      float n = nd.x + 0.3 * nf.x;
+      vec3 g = nd.yzw * vec3( 9.0, 1.4, 9.0 ) + 0.3 * nf.yzw * vec3( 23.0, 4.0, 23.0 );
+      float s = smoothstep( -0.08, 0.22, n );
+      bc *= 1.0 - 0.34 * mix( 0.45, s, fade );
+      float ds = 6.0 * s * ( 1.0 - s ) / 0.3;
+      thBarkG = -ds * g * 0.012 * fade;
     }
     // moss / green algae on the shaded north side
     vec3 wNm = normalize( vThWN );
     float moss = vThK.a * smoothstep( 0.1, -0.7, wNm.z ) * ( 0.6 + 0.4 * thNoised( vThRest * 2.3 ).x );
     bc = mix( bc, vec3( 0.075, 0.1, 0.035 ), saturate( moss ) * 0.7 );
+    if ( uThBase > 0.5 ) {
+      // trunk foot: soil splash and damp in the first ~40 cm (darker, earthier), ragged upper edge
+      float rag = 0.08 * thNoised( vThRest * vec3( 7.0, 2.0, 7.0 ) ).x;
+      float st = 1.0 - smoothstep( 0.04, 0.42 + rag, vThFoot );
+      bc = mix( bc, bc * vec3( 0.62, 0.56, 0.5 ) + vec3( 0.012, 0.009, 0.006 ), st * 0.85 );
+    } else thBarkG = vec3( 0.0 );
   }
   diffuseColor.rgb = bc;
+}
+`;
+
+/** bark relief: tilt the shading normal by the tangential part of the bark height gradient */
+const WOOD_FRAG_NORMAL = /* glsl */ `
+#include <normal_fragment_maps>
+{
+  vec3 wn = normalize( vThWN );
+  vec3 gt = thBarkG - wn * dot( thBarkG, wn );
+  normal = normalize( normal - ( viewMatrix * vec4( gt, 0.0 ) ).xyz );
 }
 `;
 
@@ -726,7 +761,7 @@ export function woodMaterials(u: GlobalUniforms, lod: THREE.Texture): FoliageMat
   const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.92, metalness: 0 });
   mat.name = 'veg-wood';
   mat.onBeforeCompile = (sh) => {
-    Object.assign(sh.uniforms, commonUniforms(u, lod), lampUniforms(), { uNight: u.uNight, uThFx: cardKnobs.fx });
+    Object.assign(sh.uniforms, commonUniforms(u, lod), lampUniforms(), { uNight: u.uNight, uThFx: cardKnobs.fx, uThBase: cardKnobs.base });
     sh.vertexShader = sh.vertexShader
       .replace('#include <common>', `#include <common>\n${WOOD_VERT_PARS}\nvec3 thP; vec3 thN;`)
       .replace('#include <beginnormal_vertex>', 'thWood( thP, thN );\nvec3 objectNormal = thN;')
@@ -735,9 +770,10 @@ export function woodMaterials(u: GlobalUniforms, lod: THREE.Texture): FoliageMat
       .replace('#include <common>', `#include <common>\n${WOOD_FRAG_PARS}`)
       .replace('#include <lights_physical_pars_fragment>', wrappedPhysicalPars())
       .replace('#include <map_fragment>', WOOD_FRAG_MAP)
+      .replace('#include <normal_fragment_maps>', WOOD_FRAG_NORMAL)
       .replace('#include <aomap_fragment>', `#include <aomap_fragment>\n${WOOD_FRAG_AO}`);
   };
-  mat.customProgramCacheKey = () => 'veg-wood-1';
+  mat.customProgramCacheKey = () => 'veg-wood-2';
   const depth = new THREE.MeshDepthMaterial();
   depth.name = 'veg-wood-depth';
   depth.onBeforeCompile = (sh) => {

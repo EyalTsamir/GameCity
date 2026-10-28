@@ -71,92 +71,213 @@ export const LAMP_COL = {
   sodium: '#ffb35c',
 };
 
-/** Build a lamp of the given style at the current frame; returns the light head (local). */
-export function lamp(k: Kit, style: LampStyle, street: boolean, rng: Rng): LampHead {
+/**
+ * Base flange of a steel column: a square plate on the paving, four anchor bolts with nuts and washers (near kit).
+ * r = column radius at the foot.
+ */
+function flange(kf: Kit, r: number, col: string): void {
+  const sh = kf.sh,
+    w = r * 2 + 0.11;
+  kf.m(col, 'steel');
+  cbox(sh, 0, 0.009, 0, w, 0.018, w, 0.004);
+  kf.m('#6d7175', 'steel');
+  const o = w / 2 - 0.028;
+  for (const sx of [-1, 1])
+    for (const sz of [-1, 1]) {
+      sh.cyl(sx * o, 0.018, sz * o, 0.016, 0.016, 0.004, 8, 2, false);
+      boltY(sh, sx * o, 0.022, sz * o, 0.011);
+      sh.cyl(sx * o, 0.03, sz * o, 0.005, 0.005, 0.016, 5, 2, false);
+    }
+}
+
+/** service hatch on a round pole (radius r at its height), facing local +Z (the footway): frame, lock, a sticker sometimes */
+function hatch(kf: Kit, y: number, r: number, h: number, col: string, rng: Rng): void {
+  const sh = kf.sh;
+  kf.m(col, 'paint');
+  sh.box(0, y, r + 0.002, r * 0.95, h, 0.008, 1);
+  kf.m('#1b1d1f', 'paint');
+  sh.box(0, y + h / 2 + 0.003, r + 0.002, r * 0.95, 0.006, 0.01, 1);
+  sh.box(0, y - h / 2 - 0.003, r + 0.002, r * 0.95, 0.006, 0.01, 1);
+  kf.m('#8c9095', 'steel');
+  sh.cyl(0, y + h * 0.28, r + 0.006, 0.009, 0.009, 0.004, 8, 2, false, 0);
+  // the pole number plate / a sticker
+  if (rng.chance(0.6)) {
+    kf.m(rng.chance(0.5) ? '#e9e4d6' : '#f2c230', 'plastic');
+    sh.box(0, y + h / 2 + 0.17, r + 0.002, r * 0.9, 0.09, 0.004, 1);
+    kf.m('#1c1c1c', 'plastic');
+    sh.box(0, y + h / 2 + 0.17, r + 0.0045, r * 0.55, 0.035, 0.002, 1);
+  }
+}
+
+/**
+ * Build a lamp of the given style at the current frame; returns the light head (local).
+ * `kf` (optional, framed like k) takes the near-only detail: base mouldings, flanges and bolts, hatches, lantern frames.
+ */
+export function lamp(k: Kit, style: LampStyle, street: boolean, rng: Rng, kf?: Kit): LampHead {
   const sh = k.sh;
   switch (style) {
     case 'modern': {
+      // tapered galvanised-and-painted column on a bolted flange, a cast base shroud, outreach arm to a flat luminaire
       k.m('#3b4046', 'paint');
-      sh.box(0, 0.06, 0, 0.36, 0.12, 0.36, 1);
+      sh.cyl(0, 0, 0, 0.16, 0.14, 0.32, 10, 2);
+      sh.cyl(0, 0.32, 0, 0.14, 0.09, 0.06, 10, 0);
       k.m('#4c535b', 'paint');
-      sh.cyl(0, 0.12, 0, 0.085, 0.06, 6.9, 6, 0);
+      sh.cyl(0, 0.38, 0, 0.088, 0.06, 6.62, 10, 0);
       const reach = street ? 1.75 : 0.6;
       sh.beam(0, 6.94, 0.02, 0, 7.06, -reach, 0.09, 0.08);
       k.m('#3a3f45', 'paint');
-      sh.box(0, 7.05, -reach - 0.3, 0.34, 0.13, 0.95, 0);
+      cbox(sh, 0, 7.05, -reach - 0.3, 0.34, 0.13, 0.95, 0.02, 0);
       k.e('#e9eef2', LAMP_COL.white, 3.2);
       sh.box(0, 6.975, -reach - 0.3, 0.26, 0.02, 0.8, 2);
+      if (kf) {
+        flange(kf, 0.16, '#33383d');
+        hatch(kf, 0.62, 0.0865, 0.3, '#4c535b', rng);
+        kf.m('#2c3035', 'paint');
+        kf.sh.cyl(0, 6.9, 0, 0.075, 0.075, 0.08, 10, 2);
+      }
       return { x: 0, y: 6.9, z: -reach - 0.3, color: LAMP_COL.white, pool: 5.6, halo: 0.95 };
     }
     case 'simple': {
+      // galvanised swan-neck column on a bolted flange
       k.m('#9aa3a8', 'steel');
-      sh.cyl(0, 0, 0, 0.11, 0.07, 6.35, 6, 0);
-      sh.tube(0, 6.3, 0, 0, 6.58, -0.55, 0.05, 0.045, 5);
-      sh.tube(0, 6.58, -0.55, 0, 6.66, -1.3, 0.045, 0.04, 5);
+      sh.cyl(0, 0, 0, 0.11, 0.07, 6.35, 10, 0);
+      sh.tube(0, 6.3, 0, 0, 6.58, -0.55, 0.05, 0.045, 8);
+      sh.tube(0, 6.58, -0.55, 0, 6.66, -1.3, 0.045, 0.04, 8);
       k.m('#8a9399', 'paint');
       sh.ellipsoid(0, 6.64, -1.58, 0.21, 0.11, 0.4, 0);
       k.e('#ffe3b8', LAMP_COL.sodium, 3.4);
       sh.ellipsoid(0, 6.56, -1.6, 0.15, 0.045, 0.29, 0);
+      if (kf) {
+        flange(kf, 0.11, '#8f989d');
+        hatch(kf, 0.7, 0.107, 0.3, '#9aa3a8', rng);
+        // zinc bloom / grime at the foot of the galvanised column
+        kf.m('#7d8378', 'steel');
+        kf.sh.cyl(0, 0.018, 0, 0.1135, 0.1125, 0.2, 10, 0);
+      }
       return { x: 0, y: 6.5, z: -1.6, color: LAMP_COL.sodium, pool: 5.4, halo: 0.95 };
     }
     case 'suburb': {
       k.m('#3e4448', 'paint');
-      sh.cyl(0, 0, 0, 0.13, 0.11, 0.35, 6, 2);
-      sh.cyl(0, 0.35, 0, 0.075, 0.055, 4.75, 6, 0);
-      sh.tube(0, 5.0, 0, 0, 5.22, -0.32, 0.04, 0.035, 5);
-      sh.tube(0, 5.22, -0.32, 0, 5.2, -0.72, 0.035, 0.035, 5);
+      sh.cyl(0, 0, 0, 0.13, 0.11, 0.35, 10, 2);
+      sh.cyl(0, 0.35, 0, 0.075, 0.055, 4.75, 10, 0);
+      sh.tube(0, 5.0, 0, 0, 5.22, -0.32, 0.04, 0.035, 8);
+      sh.tube(0, 5.22, -0.32, 0, 5.2, -0.72, 0.035, 0.035, 8);
       k.m('#2f3437', 'paint');
-      sh.cone(0, 5.0, -0.78, 0.33, 0.3, 8, true);
+      sh.cone(0, 5.0, -0.78, 0.33, 0.3, 12, true);
       k.e('#fff1d6', LAMP_COL.warm, 3.0);
       sh.ellipsoid(0, 4.95, -0.78, 0.15, 0.12, 0.15, 0);
+      if (kf) {
+        // cast base: plinth step, bead and a collar into the column
+        kf.m('#3e4448', 'paint');
+        lathe(kf.sh, 0, 0, [[0, 0], [0.142, 0], [0.142, 0.03], [0.134, 0.04], [0.124, 0.33], [0.112, 0.345], [0.09, 0.37], [0.082, 0.42], [0, 0.42]], 12);
+        hatch(kf, 0.2, 0.123, 0.18, '#3e4448', rng);
+        kf.m('#2f3437', 'paint');
+        kf.sh.cyl(0, 4.95, 0, 0.062, 0.062, 0.06, 10, 2);
+      }
       return { x: 0, y: 4.9, z: -0.78, color: LAMP_COL.warm, pool: 4.6, halo: 0.85 };
     }
     case 'beach': {
       k.m('#f1efe8', 'paint');
-      sh.cyl(0, 0, 0, 0.11, 0.09, 0.3, 6, 2);
-      sh.cyl(0, 0.3, 0, 0.075, 0.06, 3.65, 6, 0);
+      sh.cyl(0, 0, 0, 0.11, 0.09, 0.3, 10, 2);
+      sh.cyl(0, 0.3, 0, 0.075, 0.06, 3.65, 10, 0);
       k.m('#2f6fa8', 'paint');
-      sh.cyl(0, 1.0, 0, 0.082, 0.08, 0.16, 6, 0);
-      sh.cyl(0, 3.2, 0, 0.068, 0.066, 0.12, 6, 0);
+      sh.cyl(0, 1.0, 0, 0.082, 0.08, 0.16, 10, 0);
+      sh.cyl(0, 3.2, 0, 0.068, 0.066, 0.12, 10, 0);
       k.m('#24476b', 'paint');
-      sh.cyl(0, 3.95, 0, 0.18, 0.18, 0.06, 6, 2);
+      sh.cyl(0, 3.95, 0, 0.18, 0.18, 0.06, 10, 2);
       k.e('#fff4dc', LAMP_COL.warm, 2.8);
-      sh.cyl(0, 4.0, 0, 0.15, 0.15, 0.4, 6, 0);
+      sh.cyl(0, 4.0, 0, 0.15, 0.15, 0.4, 10, 0);
       k.m('#24476b', 'paint');
-      sh.cone(0, 4.4, 0, 0.25, 0.22, 6, true);
-      sh.cone(0, 4.62, 0, 0.03, 0.1, 4, false);
+      sh.cone(0, 4.4, 0, 0.25, 0.22, 10, true);
+      sh.cone(0, 4.62, 0, 0.03, 0.1, 6, false);
+      if (kf) {
+        flange(kf, 0.11, '#d9d6cc');
+        // lantern cage: four bars over the glass
+        kf.m('#24476b', 'paint');
+        for (let i = 0; i < 4; i++) {
+          const a = (i / 4) * Math.PI * 2 + Math.PI / 4;
+          kf.sh.box(Math.cos(a) * 0.153, 4.2, Math.sin(a) * 0.153, 0.02, 0.4, 0.02, 3);
+        }
+        // salt rust weeping from the foot of the white column
+        kf.m('#a8876a', 'paint');
+        kf.sh.cyl(0, 0.0, 0, 0.1125, 0.1105, 0.06, 10, 0);
+      }
       return { x: 0, y: 4.2, z: 0, color: LAMP_COL.warm, pool: 4.0, halo: 0.8 };
     }
     case 'plaza': {
       k.m('#4a5058', 'paint');
-      sh.cyl(0, 0, 0, 0.1, 0.08, 0.2, 6, 2);
-      sh.cyl(0, 0.2, 0, 0.065, 0.055, 3.85, 6, 0);
+      sh.cyl(0, 0, 0, 0.1, 0.08, 0.2, 10, 2);
+      sh.cyl(0, 0.2, 0, 0.065, 0.055, 3.85, 10, 0);
       k.m('#3a3f45', 'paint');
-      sh.cyl(0, 4.02, 0, 0.3, 0.34, 0.1, 10, 2);
+      sh.cyl(0, 4.02, 0, 0.3, 0.34, 0.1, 14, 2);
       k.e('#eef2f4', LAMP_COL.white, 2.8);
-      sh.disc(0, 4.0, 0, 0.28, 10, -1);
+      sh.disc(0, 4.0, 0, 0.28, 14, -1);
+      if (kf) {
+        flange(kf, 0.1, '#3f454c');
+        hatch(kf, 0.55, 0.0635, 0.26, '#4a5058', rng);
+      }
       return { x: 0, y: 3.95, z: 0, color: LAMP_COL.white, pool: 4.2, halo: 0.75 };
     }
     default: {
-      // classic cast-iron post with a lantern ('classic' streets, 'park' paths)
+      // classic cast-iron post with a lantern ('classic' streets, 'park' paths): moulded base with a door,
+      // fluted shaft with collars, ladder bar under the lantern, framed glass, crowned roof with a finial
       const park = style === 'park';
       const s = park ? 0.86 : 1;
       const iron = rng.chance(0.5) ? '#2f4a3e' : '#2a2f33';
       k.m(iron, 'iron');
-      sh.cyl(0, 0, 0, 0.24 * s, 0.2 * s, 0.5 * s, 6, 2);
-      sh.cyl(0, 0.5 * s, 0, 0.15 * s, 0.11 * s, 0.14 * s, 6, 0);
+      sh.cyl(0, 0, 0, 0.22 * s, 0.19 * s, 0.5 * s, 8, 2, true, Math.PI / 8);
+      sh.cyl(0, 0.5 * s, 0, 0.15 * s, 0.11 * s, 0.14 * s, 10, 0);
       const postH = park ? 2.75 : 3.15;
-      sh.cyl(0, 0.64 * s, 0, 0.075, 0.058, postH, 6, 0);
-      if (!park) sh.cyl(0, 0.64 * s + postH * 0.45, 0, 0.095, 0.095, 0.07, 6, 0);
+      sh.cyl(0, 0.64 * s, 0, 0.075, 0.058, postH, 10, 0);
+      if (!park) sh.cyl(0, 0.64 * s + postH * 0.45, 0, 0.095, 0.095, 0.07, 10, 0);
       const ty = 0.64 * s + postH;
-      sh.cyl(0, ty - 0.06, 0, 0.06, 0.13, 0.2, 6, 0);
+      sh.cyl(0, ty - 0.06, 0, 0.06, 0.13, 0.2, 10, 0);
+      // ladder bar
+      if (!park) {
+        sh.beam(-0.32, ty - 0.32, 0, 0.32, ty - 0.32, 0, 0.035, 0.035);
+        sh.ellipsoid(-0.34, ty - 0.32, 0, 0.035, 0.035, 0.035, 0);
+        sh.ellipsoid(0.34, ty - 0.32, 0, 0.035, 0.035, 0.035, 0);
+      }
       // lantern: glass frustum + corner frames + pyramid roof + finial
       k.e('#fff1d2', LAMP_COL.warm, 3.0);
       sh.cyl(0, ty + 0.14, 0, 0.16, 0.24, 0.5, 4, 0, false, Math.PI / 4);
       k.m(iron, 'iron');
       sh.cyl(0, ty + 0.64, 0, 0.3, 0.3, 0.04, 4, 0, false, Math.PI / 4);
       sh.cone(0, ty + 0.68, 0, 0.3, 0.26, 4, false, Math.PI / 4);
-      sh.cone(0, ty + 0.94, 0, 0.03, 0.16, 4, false);
+      sh.cone(0, ty + 0.94, 0, 0.03, 0.16, 6, false);
+      if (kf) {
+        const f = kf.sh;
+        kf.m(iron, 'iron');
+        // base: plinth, torus, a waisted drum with panels, cornice, then the bell into the shaft
+        const b = [[0, 0], [0.252, 0], [0.252, 0.05], [0.235, 0.065], [0.238, 0.09], [0.222, 0.11], [0.212, 0.42], [0.228, 0.44], [0.228, 0.47], [0.2, 0.5], [0.158, 0.52], [0.152, 0.58], [0.118, 0.62], [0.09, 0.66], [0, 0.66]].map(([r, y]) => [r * s, y * s]);
+        lathe(f, 0, 0, b, 16);
+        // the access door in the base (+Z, the footway side) with a keyhole
+        f.box(0, 0.27 * s, 0.214 * s, 0.17 * s, 0.24 * s, 0.012, 1);
+        kf.m('#151515', 'iron');
+        f.box(0, 0.3 * s, 0.221 * s, 0.012, 0.022, 0.004, 1);
+        kf.m(iron, 'iron');
+        // fluting: six raised ribs on the lower shaft
+        for (let i = 0; i < 6; i++) {
+          const a = (i / 6) * Math.PI * 2;
+          f.push().local(0, 0, 0, 0, -a, 0);
+          f.box(0.073, 0.64 * s + 0.55, 0, 0.012, 1.0, 0.016, 3);
+          f.pop();
+        }
+        // collars: a bead above the base, a ring under the capital
+        ring(f, 0, 0.64 * s + 0.06, 0, 0.078, 0.014, 10);
+        ring(f, 0, ty - 0.09, 0, 0.066, 0.014, 10);
+        // lantern frame: corner bars, bottom and top rails, a little crown on the roof
+        const lr = (y: number) => 0.16 + ((y - ty - 0.14) / 0.5) * 0.08;
+        for (let i = 0; i < 4; i++) {
+          const a = (i / 4) * Math.PI * 2;
+          const ca = Math.cos(a),
+            sa = Math.sin(a);
+          f.beam(ca * lr(ty + 0.14), ty + 0.14, sa * lr(ty + 0.14), ca * lr(ty + 0.64), ty + 0.64, sa * lr(ty + 0.64), 0.022, 0.022, false);
+        }
+        f.cyl(0, ty + 0.12, 0, 0.175, 0.175, 0.04, 4, 2, false, Math.PI / 4);
+        f.cyl(0, ty + 0.6, 0, 0.255, 0.255, 0.04, 4, 0, false, Math.PI / 4);
+        ring(f, 0, ty + 0.86, 0, 0.07, 0.012, 8);
+      }
       return { x: 0, y: ty + 0.4, z: 0, color: LAMP_COL.warm, pool: park ? 3.4 : 4.4, halo: park ? 0.72 : 0.85 };
     }
   }
