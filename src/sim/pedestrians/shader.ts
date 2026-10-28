@@ -769,6 +769,17 @@ const FRAG_COLOR = /* glsl */ `
   }
 `;
 
+/** hair: strand ridges tilt the normal across the strands (view space; fades where it would alias) */
+const HAIR_NORMAL = /* glsl */ `
+  if (abs(vPedReg - ${R.HAIR}.0) < 0.5) {
+    float ha = atan(vPedRest.x, vPedRest.z + 0.015);
+    float hq = ha * 70.0 + sin(vPedRest.y * 40.0 + ha * 3.0) * 1.5;
+    float hk = 1.0 - smoothstep(0.3, 0.7, fwidth(hq));
+    vec3 ht = normalize(cross(normal, vec3(0.0, 1.0, 0.0)) + vec3(1e-4));
+    float hg = 0.55 * sin(hq * 6.2832) + (pedN1(ha * 26.0) - 0.5);
+    normal = normalize(normal + ht * hg * 0.4 * hk);
+  }
+`;
 /** Lambert direct light with per-region wrap (skin, hair) and a faint Blinn sheen (hair, shoes). */
 const LAMBERT_PEOPLE = /* glsl */ `
 varying vec3 vViewPosition;
@@ -860,6 +871,7 @@ export function makePeopleMaterials(): PersonMaterials {
       .replace('#include <common>', `#include <common>\n${FRAG_PARS}\nuniform float uPedNight;`)
       .replace(/void main\(\)\s*\{/, (m) => `${m}\n${FRAG_FADE}`)
       .replace('#include <color_fragment>', `#include <color_fragment>\n${FRAG_COLOR}`)
+      .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>\n${HAIR_NORMAL}`)
       .replace('#include <lights_lambert_pars_fragment>', LAMBERT_PEOPLE)
       .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n  totalEmissiveRadiance += diffuseColor.rgb * 0.07 * uPedNight;');
   };
