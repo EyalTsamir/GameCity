@@ -51,7 +51,13 @@ export function landUniforms(globals: { uTime: { value: number }; uWind: { value
     cRock2: C('#6d665d'),
     cMud: C('#5a5040'),
     cStone: C('#b3a68f'),
+    // the slab's sea bed colours (terrain/ground.ts gBedA / gBedB)
+    cBedA: C('#d3bf8e'),
+    cBedB: C('#6b6a58'),
     uLandDbg: { value: 0 },
+    // per-plot field / meadow decisions (terrain.ts buildFieldMask); xf.z = 0 → mask off (per-pixel cover)
+    tFieldMask: { value: null as THREE.Texture | null },
+    uFieldXf: { value: new THREE.Vector4(0, 0, 0, 0) },
   };
 }
 
@@ -84,12 +90,15 @@ uniform vec3 cWheat, cStubble, cGreens, cSoil, cPasture, cHay, cPlough, cFallow,
 uniform vec3 cMeadow, cMeadowDry, cForestB, cForestC, cGap, cHedge, cTrack;
 uniform vec3 cSand, cWetSand, cRock, cRock2, cMud;
 uniform float uLandDbg;
+uniform sampler2D tFieldMask;
+uniform vec4 uFieldXf;
 varying vec3 vLW;
 varying vec3 vLN;
 varying vec4 vCov;
 varying vec4 vCov2;
 varying vec4 vCov3;
 uniform vec3 cStone;
+uniform vec3 cBedA, cBedB;
 ${FIELDS_GLSL}
 ${WIND_GLSL}
 ${LAMP_GLSL}
@@ -97,6 +106,7 @@ ${GC_PALETTE_GLSL}
 
 vec3 lnN = vec3(0.0, 1.0, 0.0);
 
+float nP2r(vec2 xz) { return texture2D(tLN, xz * (1.0 / 6.3)).r; }
 float lhash2(vec2 p) {
   vec3 p3 = fract(vec3(p.xyx) * 0.1031);
   p3 += dot(p3, p3.yzx + 33.33);
@@ -173,10 +183,11 @@ vec3 landAlbedo() {
   vec3 col = meadow;
 
   // ── field patchwork
-  float hedgeM = 0.0, trackM = 0.0;
-  if (field > 0.01) {
-    // borders wander a little (hedges and ditches are never ruler-straight)
-    vec2 q = FROT * p.xz + (texture2D(tLN, p.xz * (1.0 / 160.0)).ba - 0.5) * 3.6;
+  float hedgeM = 0.0, trackM = 0.0, fieldW = 0.0;
+  if (field > 0.0) {
+    // borders wander a little (hedges and ditches are never ruler-straight); the crop rows do not
+    vec2 qr = FROT * p.xz;
+    vec2 q = qr + (texture2D(tLN, p.xz * (1.0 / 160.0)).ba - 0.5) * 3.6;
     ivec2 id; vec4 box;
     float ch = fParcel(q, id, box);
     int pid = id.x * 13 + id.y;
@@ -217,6 +228,18 @@ vec3 landAlbedo() {
         ch = lhash(pid, 17);
       }
     }
+    // field or meadow is decided PER FIELD, at its centre (the cover mask there), so a field always ends
+    // at its own border — never on a cover contour running diagonally through it; outside the mask the
+    // per-pixel cover is used (far away, where it cannot be told apart)
+    {
+      vec2 bc = 0.5 * (box.xy + box.zw);
+      vec2 wc = vec2(FROT[0][0] * bc.x + FROT[0][1] * bc.y, FROT[1][0] * bc.x + FROT[1][1] * bc.y);
+      vec2 muv = (wc - uFieldXf.xy) * uFieldXf.zw;
+      if (uFieldXf.z > 0.0 && all(greaterThan(muv, vec2(0.002))) && all(lessThan(muv, vec2(0.998)))) {
+        float mv = textureLod(tFieldMask, muv, 0.0).r;
+        fieldW = step(0.35 + 0.3 * fhmix(pid, 83), mv) * smoothstep(0.0, 0.04, field);
+      } else fieldW = field;
+    }
     // crop kind (fields.ts cropKind): smallholding mix, coastal grazing land, or the farmland mix
     int ck = fCropKind(ch, small, vCov3.w, tun);
     float dx0 = q.x - box.x, dx1 = box.z - q.x, dy0 = q.y - box.y, dy1 = box.w - q.y;
@@ -228,8 +251,8 @@ vec3 landAlbedo() {
     // rows run along the field's long side (or across, by hash)
     float flip = step(0.8, fhmix(pid, 19));
     float along = mix(longX, 1.0 - longX, flip);
-    float tr = mix(q.y, q.x, along);   // coordinate across the rows
-    float tl = mix(q.x, q.y, along);   // along the rows
+    float tr = mix(qr.y, qr.x, along);   // coordinate across the rows (straight, unwarped)
+    float tl = mix(qr.x, qr.y, along);   // along the rows
     // headland: the turning strip round the field is drilled parallel to the border
     float hdW = 7.0 + 3.0 * fhmix(pid, 29);
     float dAcross = along > 0.5 ? min(dy0, dy1) : min(dx0, dx1);
@@ -332,7 +355,7 @@ vec3 landAlbedo() {
       vec2 aw = mix(vec2(-0.1391731, 0.9902681), vec2(0.9902681, 0.1391731), along);
       vec3 tn = normalize(vec3(aw.x * sin(ph) * 0.9, cos(ph), aw.y * sin(ph) * 0.9));
       float tfade = 1.0 - smoothstep(1.5, 5.0, fp);
-      lnN = normalize(mix(lnN, tn, inT * tfade * field));
+      lnN = normalize(mix(lnN, tn, inT * tfade * fieldW));
       fc = mix(cPasture * 0.9, vec3(0.74, 0.77, 0.76) * (0.94 + 0.06 * lStripe(tl, 2.0, 0.85, fpt)), inT);
       fc = mix(fc, mix(cPasture * 0.9, vec3(0.74, 0.77, 0.76), 0.75), (1.0 - tfade) * (1.0 - head) * step(4.0, dAcross));
     }
@@ -344,8 +367,9 @@ vec3 landAlbedo() {
     float margin = 1.0 - smoothstep(0.8, mW + 1.5 * nB.r, dB);
     vec3 weeds = meadow * mix(vec3(0.92), vec3(1.06, 0.92, 0.88), smoothstep(0.55, 0.7, nP.a));
     float fh = fhmix(pid, 67);
-    vec3 flowerT = fh < 0.35 ? vec3(0.6, 0.2, 0.12) : fh < 0.7 ? vec3(0.78, 0.77, 0.7) : vec3(0.74, 0.62, 0.18);
-    weeds = mix(weeds, flowerT, (0.16 + 0.22 * smoothstep(0.5, 0.8, nP.g)) * smoothstep(0.05, 0.6, fp + 0.1));
+    // (a tint, not a pale bevel round every field)
+    vec3 flowerT = fh < 0.35 ? vec3(0.6, 0.2, 0.12) : fh < 0.7 ? vec3(0.6, 0.6, 0.52) : vec3(0.7, 0.6, 0.18);
+    weeds = mix(weeds, flowerT, (0.08 + 0.14 * smoothstep(0.5, 0.8, nP.g)) * smoothstep(0.05, 0.6, fp + 0.1));
     fc = mix(fc, weeds, margin * (ck == 3 ? 0.5 : 1.0));
     // fence / ditch line between the strips of one parcel (no hedge)
     float fence = (1.0 - smoothstep(0.25, 0.25 + fp, dB)) * step(0.6, pB - dB + 0.6) * step(0.01, pB - dB);
@@ -375,7 +399,7 @@ vec3 landAlbedo() {
       hedgeM = max(hedgeM, ph * (1.0 - smoothstep(phw - fp * 0.5, phw + fp * 0.5, dB)));
       trackM = max(trackM, isT * (1.0 - smoothstep(1.3 - fp * 0.5, 1.3 + fp * 0.5, dB)));
     }
-    col = mix(col, fc, field);
+    col = mix(col, fc, fieldW);
   }
 
   // ── forest canopy: crowns as sun-lit domes (fake normals), dark gaps
@@ -394,36 +418,51 @@ vec3 landAlbedo() {
     fcol = mix(fcol, fcol * vec3(0.72, 0.86, 1.0) * 0.82, smoothstep(0.55, 0.7, nS2.g) * 0.85);   // conifer stands
     fcol = mix(fcol, fcol * vec3(1.14, 1.1, 0.88), smoothstep(0.6, 0.75, nS2.b) * 0.6);           // ash / birch, lighter
     vec3 Nf = Ng;
-    if (fp < 2.5) {
-      vec2 cc = p.xz / 5.5;
+    // within ~470 m of the town the woods are instanced trees (trees.ts): the ground under them is the
+    // forest floor (litter, moss, shade), never a painted canopy — the crown domes there read as an egg
+    // carton between the real trunks. Beyond, the canopy is the terrain: crowns of varied size (two
+    // lattices), broken gaps, domes only where the wood is closed, gentle relief (the low sun exaggerates it)
+    float treeBand = 1.0 - smoothstep(430.0, 500.0, vCov3.y);
+    if (treeBand > 0.01) {
+      vec3 floorC = mix(vec3(0.045, 0.04, 0.028), vec3(0.05, 0.075, 0.03), smoothstep(0.4, 0.65, nB.g));
+      floorC = mix(floorC, vec3(0.08, 0.06, 0.035), smoothstep(0.62, 0.8, nP2r(p.xz)) * 0.6);   // needle / leaf litter
+      floorC *= 0.8 + 0.35 * nB.r * midF;
+      // far off, the gaps between the instanced crowns average out to the canopy tone
+      floorC = mix(floorC, fcol * 0.8, smoothstep(2.0, 10.0, fp));
+      fcol = mix(fcol, floorC, treeBand);
+    }
+    float closed = smoothstep(0.55, 0.9, forest) * (1.0 - treeBand);
+    if (fp < 2.5 && closed > 0.01) {
+      float big = step(0.5, nB.a);
+      vec2 cc = p.xz / mix(5.0, 8.5, big);
       vec2 ci = floor(cc);
       float best = 9.0; vec2 bo = vec2(0.0); float bh = 0.0;
       for (int j = -1; j <= 1; j++) for (int i = -1; i <= 1; i++) {
         vec2 c = ci + vec2(float(i), float(j));
-        vec2 o = lhash22(c) * 0.8 + 0.1;
+        vec2 o = lhash22(c + big * 17.0) * 0.9 + 0.05;
         vec2 dv = cc - (c + o);
-        float r = 0.55 + 0.3 * lhash2(c + 3.7);
-        float dd = length(dv) / r;
+        float r = 0.45 + 0.45 * lhash2(c + 3.7 + big * 5.0);
+        float dd = length(dv) / r * (0.9 + 0.2 * lhash2(c + 7.3));
         if (dd < best) { best = dd; bo = dv / r; bh = lhash2(c + 9.1); }
       }
-      float inC = 1.0 - smoothstep(0.85, 1.0, best);
-      vec3 dome = normalize(vec3(bo.x * 1.4, max(0.05, sqrt(max(0.0, 1.0 - best * best))), bo.y * 1.4));
-      float fade = 1.0 - smoothstep(1.0, 2.5, fp);
-      Nf = normalize(mix(Ng, dome, inC * fade * 0.85));
-      fcol *= mix(1.0, 0.82 + 0.36 * bh, fade);
-      fcol = mix(fcol, cGap, (1.0 - inC) * fade * 0.8);
-    } else {
+      float inC = 1.0 - smoothstep(0.8, 1.0, best + 0.15 * (nB.b - 0.5));
+      vec3 dome = normalize(vec3(bo.x * 0.9, max(0.05, sqrt(max(0.0, 1.0 - best * best))), bo.y * 0.9));
+      float fade = (1.0 - smoothstep(1.0, 2.5, fp)) * closed;
+      Nf = normalize(mix(Ng, dome, inC * fade * 0.5));
+      fcol *= mix(1.0, 0.8 + 0.4 * bh, fade);
+      fcol = mix(fcol, cGap, (1.0 - inC) * fade * 0.7);
+    } else if (fp >= 2.5) {
       // average of crowns + gaps (matches the impostor forest's lit tops) + crown groups / gaps
-      float grp = 1.0 - smoothstep(14.0, 60.0, fp);
-      fcol *= 0.93 * mix(1.0, 0.68 + 0.56 * nG.r, grp * 0.85);
+      float grp = (1.0 - smoothstep(14.0, 60.0, fp)) * (1.0 - treeBand);
+      fcol *= mix(1.0, 0.93 * mix(1.0, 0.68 + 0.56 * nG.r, grp * 0.85), 1.0 - treeBand);
     }
     col = mix(col, fcol, forest);
     lnN = normalize(mix(lnN, Nf, forest));
   }
 
   // hedgerows / tracks above fields
-  col = mix(col, cHedge * (0.85 + 0.3 * nB.r), hedgeM * field * (1.0 - forest));
-  col = mix(col, cTrack * (0.9 + 0.2 * nB.g), trackM * field * (1.0 - forest));
+  col = mix(col, cHedge * (0.85 + 0.3 * nB.r), hedgeM * fieldW * (1.0 - forest));
+  col = mix(col, cTrack * (0.9 + 0.2 * nB.g), trackM * fieldW * (1.0 - forest));
 
   // ── river banks: a narrow strip of mud at the waterline, reed beds in patches, then lush bank grass
   // (the meadow's own colour and variation, greener) — never a bare tan band
@@ -524,10 +563,23 @@ vec3 landAlbedo() {
     float br = smoothstep(0.38, 0.62, nB.g * 0.55 + nG.r * 0.45);
     col = mix(col, vec3(0.72, 0.75, 0.74), band * br * 0.75 * (1.0 - wet) * smoothstep(400.0, 800.0, vCov3.y));
   }
-  // ── under water: seabed darkens with depth (the water surface tints it further)
-  float uw = smoothstep(${(WL - 0.1).toFixed(2)}, ${(WL - 2.5).toFixed(2)}, p.y);
-  col = mix(col, mix(sc, cMud, 0.4) * 0.7, uw * (1.0 - rock * 0.5));
-  if (uLandDbg > 0.5) col = vec3(forest, field, sand);
+  // ── under water: the slab's own bed (terrain/ground.ts GROUND_BEDS: sandy shallows → darker silt, the
+  // same colours + caustics), so the sea floor seen through the water has no step at the slab edge
+  {
+    float depth = ${WL.toFixed(2)} - p.y;
+    if (depth > 0.0) {
+      vec3 bed = mix(cBedA, cBedB, smoothstep(0.2, 6.0, depth));
+      bed *= 0.9 + 0.16 * nB.b;
+      vec2 cp = p.xz * 0.23;
+      float c1 = texture2D(tLN, cp + vec2(uTime * 0.011, uTime * 0.007)).g;
+      float c2 = texture2D(tLN, cp * 1.37 + vec2(-uTime * 0.009, uTime * 0.012)).g;
+      float caus = (1.0 - smoothstep(0.0, 0.07, abs(c1 - c2))) * smoothstep(0.05, 0.45, depth) * (1.0 - smoothstep(0.8, 3.8, depth)) * (1.0 - uNight);
+      bed += vec3(0.85, 1.0, 0.95) * caus * 0.3 * (1.0 - smoothstep(0.5, 2.0, fp));
+      bed = mix(bed, rc * 0.7, rock * 0.5);
+      col = mix(col, bed, smoothstep(0.0, 0.3, depth));
+    }
+  }
+  if (uLandDbg > 0.5) col = vec3(forest, fieldW, sand);
   return col;
 }
 `;

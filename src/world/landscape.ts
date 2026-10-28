@@ -12,9 +12,9 @@ import type { CityContext, CityModule } from '../core/context';
 import { WORLD_MODE } from '../core/world';
 import { getTerrainModel } from './terrain/height';
 import { groundBands, slabEdges } from './terrain/layout';
-import { createLandscapeModel, type Cover, type LandscapeModel } from './landscape/model';
+import { createLandscapeModel, CX, CZ, type Cover, type LandscapeModel } from './landscape/model';
 import { buildRings, type RingTopology } from './landscape/rings';
-import { buildLand, buildIslandPatch, makeSlabNormal, LAND_MAX_D, GROUND_DROP, type LandHeights, type LandHole } from './landscape/terrain';
+import { buildLand, buildIslandPatch, buildFieldMask, makeSlabNormal, LAND_MAX_D, GROUND_DROP, type LandHeights, type LandHole } from './landscape/terrain';
 import { landUniforms, landMaterial } from './landscape/shader';
 import { buildMountains } from './landscape/mountains';
 import { placeTrees, createLandTrees, type LandTrees } from './landscape/trees';
@@ -97,6 +97,15 @@ export default function create(ctx: CityContext): CityModule {
   // ── ground mesh
   const uniforms = landUniforms(ctx.uniforms) as unknown as Record<string, THREE.IUniform>;
   if (params.has('landdbg')) (uniforms.uLandDbg as { value: number }).value = 1;
+  // per-plot field / meadow decisions round the town (?landfieldmask=0: per-pixel cover, the old cut)
+  let maskMs = 0;
+  if (params.get('landfieldmask') !== '0') {
+    const tm0 = performance.now();
+    const fm = buildFieldMask(topo, heights, model, CX, CZ, 3200, 16);
+    uniforms.tFieldMask.value = fm.tex;
+    (uniforms.uFieldXf.value as THREE.Vector4).copy(fm.xf);
+    maskMs = performance.now() - tm0;
+  }
   const land = new THREE.Mesh(geo, landMaterial(uniforms, fog));
   land.name = 'land-ground';
   land.position.y = GROUND_DROP;
@@ -312,6 +321,7 @@ export default function create(ctx: CityContext): CityModule {
         heightMs: Math.round(heights.ms),
         ringMs: Math.round(ringMs),
         buildMs: Math.round(buildMs),
+        fieldMaskMs: Math.round(maskMs),
       };
     },
     invariants() {

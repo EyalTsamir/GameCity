@@ -13,8 +13,8 @@ import { smooth, vnoise } from './noise';
 /** the land mesh ends here (m outside the slab); the water extension goes further */
 export const LAND_MAX_D = 45000;
 /** forest canopy is raised into the terrain beyond this slab distance (instanced trees closer in) */
-export const CANOPY_NEAR = 150;
-export const CANOPY_FULL = 420;
+export const CANOPY_NEAR = 480;
+export const CANOPY_FULL = 720;
 /** floats per vertex in LandHeights.cover: forest, field, sand, rock | wet, meadow, seam, canopy | riverU, slabD, side, - */
 const CW = 12;
 
@@ -213,6 +213,77 @@ export function buildIslandPatch(model: LandscapeModel, box: LandHole, step: num
   geo.computeBoundingBox();
   geo.computeBoundingSphere();
   return geo;
+}
+
+/**
+ * Field mask for per-plot field / meadow decisions: the land vertices' field cover splatted onto a
+ * square grid round the town (holes filled from coarser levels), × a ramp away from the slab edge (the
+ * plots next to the town are meadow, so the town's lawn never meets a crop along the slab's ruler-
+ * straight edge). The shader samples it at each plot's CENTRE, so a field ends at a plot border (a
+ * hedge / margin), never on a cover contour diagonally through a plot.
+ */
+export interface FieldMask {
+  tex: THREE.DataTexture;
+  /** x0, z0, 1/size, 1/size (world → uv) */
+  xf: THREE.Vector4;
+}
+export function buildFieldMask(topo: RingTopology, heights: LandHeights, model: LandscapeModel, cx: number, cz: number, half: number, res: number): FieldMask {
+  const N = Math.round((2 * half) / res);
+  const x0 = cx - half,
+    z0 = cz - half;
+  const sum = new Float32Array(N * N),
+    cnt = new Float32Array(N * N);
+  for (let v = 0; v < heights.landVerts; v++) {
+    const i = Math.floor((topo.x[v] - x0) / res),
+      j = Math.floor((topo.z[v] - z0) / res);
+    if (i < 0 || j < 0 || i >= N || j >= N) continue;
+    sum[j * N + i] += heights.cover[v * CW + 1];
+    cnt[j * N + i] += 1;
+  }
+  // push-pull: average pyramid, then fill the empty texels from the coarser levels
+  const levels: { s: Float32Array; c: Float32Array; n: number }[] = [{ s: sum, c: cnt, n: N }];
+  while (levels[levels.length - 1].n > 1) {
+    const L = levels[levels.length - 1];
+    const n2 = Math.ceil(L.n / 2);
+    const s2 = new Float32Array(n2 * n2),
+      c2 = new Float32Array(n2 * n2);
+    for (let j = 0; j < L.n; j++)
+      for (let i = 0; i < L.n; i++) {
+        const k = (j >> 1) * n2 + (i >> 1);
+        s2[k] += L.s[j * L.n + i];
+        c2[k] += L.c[j * L.n + i];
+      }
+    levels.push({ s: s2, c: c2, n: n2 });
+  }
+  for (let l = levels.length - 2; l >= 0; l--) {
+    const L = levels[l],
+      U = levels[l + 1];
+    for (let j = 0; j < L.n; j++)
+      for (let i = 0; i < L.n; i++) {
+        const k = j * L.n + i;
+        if (L.c[k] > 0) continue;
+        const ku = (j >> 1) * U.n + (i >> 1);
+        L.s[k] = U.c[ku] > 0 ? U.s[ku] / U.c[ku] : 0;
+        L.c[k] = 1;
+      }
+  }
+  const data = new Uint8Array(N * N);
+  for (let j = 0; j < N; j++)
+    for (let i = 0; i < N; i++) {
+      const k = j * N + i;
+      const x = x0 + (i + 0.5) * res,
+        z = z0 + (j + 0.5) * res;
+      const f = cnt[k] > 0 ? sum[k] / cnt[k] : 0;
+      const ramp = smooth(6, 70, model.slabDist(x, z));
+      data[k] = Math.round(Math.min(1, Math.max(0, f * ramp)) * 255);
+    }
+  const tex = new THREE.DataTexture(data, N, N, THREE.RedFormat, THREE.UnsignedByteType);
+  tex.magFilter = THREE.LinearFilter;
+  tex.minFilter = THREE.LinearFilter;
+  tex.generateMipmaps = false;
+  tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
+  tex.needsUpdate = true;
+  return { tex, xf: new THREE.Vector4(x0, z0, 1 / (2 * half), 1 / (2 * half)) };
 }
 
 /** slab ground normal at an edge vertex (terrain/ground.ts slopePick formula) */
