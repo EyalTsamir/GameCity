@@ -16,6 +16,18 @@ Owned: `src/sim/traffic/{models,vehicleMaterial,render}.ts` (+ trains later). Si
   "-10,0.9,22,4,30,6;-8,1.4,35,9,25,8" --hours 11 --out shots/w2/x` (row 1 cars at z 22 from x −17, row 2
   vans/lorries/buses at z 35; yaw 0 ≈ front, 180 ≈ rear). Bench: `--classes car,bus --yaws 0,140` (new option).
 
+## Code map (file:line at d420fe9+)
+* `src/sim/traffic/vehicleMaterial.ts`: `VERT_BEGIN` :88 (tyre flatten, object-space varyings, camera in the
+  object frame; detail class = floor(aPart/100)); `FRAG_DETAIL` :136 (interior, panel gaps, crease, dent,
+  wear, night cabin); `thInterior` :297 (cabin ray-trace, styles 2 car / 4 bus / 5 van); per-vehicle plate
+  cell in the `uv_vertex` patch :423; `thHidden` part 90 = roof box by phase (vertex + depth material).
+* `src/sim/traffic/models.ts`: atlas regions after `R_TARP` (~:66), `drawDetailAtlas` :84; `Builder` :632
+  (`det`, `plate` options → aDetA/aDetB, aMeta.z = −1); `wheel` :895; `carDetails` :1026; `loftBody` :1088
+  (panel/cabin data); `roofBox` :1132; `rakedScreen`/`cabSide`/`archLiner` :1222+; `delivery` :1262;
+  `lorry` :1342; `archedSlab`/`roundPane` :1427; `bus` :1490; `icecream` :1593.
+* `src/sim/traffic/render.ts`: detail uniform + URL toggles :109, set per frame from `ctx.quality.level`.
+* Limit: 16 vertex attributes are all used (hence the class packed into aPart).
+
 ## Done (milestone 1)
 * **Shader layer** (`vehicleMaterial.ts`, one shared material, no extra draw calls): per-part detail class in
   `aPart` (+100 × class; the 16-attribute limit forbids a separate attribute), data in `aDetA/aDetB`;
