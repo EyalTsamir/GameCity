@@ -166,7 +166,7 @@ export default function create(ctx: CityContext): CityModule {
         if (greenKit && !simple) {
           const hk = (k: number) => hash01(s.x + k * 3.1, s.z - k * 1.7, 41 + k);
           greenB.frame(s.yaw, s.x, y, s.z);
-          const hx = PLANTER.along / 2 - 0.04, hz = PLANTER.across / 2 - 0.04;
+          const hx = PLANTER.along / 2, hz = PLANTER.across / 2;
           const trail = hk(1) < 0.5 ? GREEN.IVY_HANG : GREEN.PETUNIA;
           for (const side of [0, 1, 2, 3] as const) {
             if (hk(2 + side) < (side % 2 ? 0.65 : 0.25)) continue;
@@ -174,7 +174,7 @@ export default function create(ctx: CityContext): CityModule {
             const a0 = sg.L * 0.5 * hk(9 + side);
             greenKit.hang(sg, a0, sg.L - 0.04, 0.03, PLANTER.height + 0.03, 0.14, 0.22 + 0.25 * hk(14 + side), trail, 0.06, 1, 0.06);
           }
-          if (hk(20) < 0.55) greenKit.clump((hk(21) < 0.5 ? -1 : 1) * hx * 0.7, PLANTER.soil - 0.02, 0, 0.17, 0.45 + 0.3 * hk(22), hk(23) < 0.5 ? GREEN.GRASS : GREEN.LAVENDER, 3);
+          if (hk(20) < 0.55) greenKit.clump((hk(21) < 0.5 ? -1 : 1) * hx * 0.62, PLANTER.soil - 0.02, 0, 0.17, 0.45 + 0.3 * hk(22), hk(23) < 0.5 ? GREEN.GRASS : GREEN.LAVENDER, 3);
         }
         inc('planter');
         break;

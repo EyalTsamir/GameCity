@@ -187,6 +187,13 @@ try {
                 hit = rc.intersectObjects(meshes, false).length > 0;
               }
               if (hit) hits++;
+              // a wall / panel right at the lens (shelter ad panels, kiosk sides) fills the frame
+              if (pd.y === 0) {
+                rc.set(cam.position, pd);
+                rc.near = 0;
+                rc.far = 0.9;
+                if (rc.intersectObjects(meshes, false).length) return false;
+              }
             }
             return hits < 3;
           };
