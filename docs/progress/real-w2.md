@@ -4,6 +4,30 @@ Branch `claude/real-w2-vehicles` (from `claude/pensive-gates-bim12i`). Brief: `d
 Owned: `src/sim/traffic/{models,vehicleMaterial,render}.ts` (+ trains later). Sim untouched.
 
 ## Resume here
+* 2026-10-28 session 6 — **train body pass (lead items 1–4).** Judged on the bench (`--classes train --q
+  speed=0`; new poses `door_3m` + `cab_6m`, commit "bench: train poses…"). Done: (1) windows = rounded openings
+  pierced in the cream band with a rubber gasket (lip, crown, 2.4 cm reveal) and glass set back (`piercedSide`);
+  door leaves in the livery colour (contrast with the cream band, as PRM rules ask), lit green open-door push button
+  on the leaf (T.DOORBTN, glows while the doors are released); livery atlas (`decalTexture`): "TINYHAVEN regional"
+  wordmark + emblem, fleet number "442 nnn" + technical data panel at the car end, wheelchair / bicycle pictograms,
+  emergency-release stickers, no-leaning stickers on the leaf glass, HV triangles, unit number on the cab nose;
+  grime: dark brown-grey roof dust in blotches + transverse roof-sheet seams, dirt gradient up the side to 2.3 m,
+  rain streaks from the gutter and some sills; roof: gutters + drain spouts, breaker housing + arrester insulators +
+  HV cables + brake-resistor box (mid), cab HVAC + blade antennas + whip + horn pod (cab); cab: wipers parked
+  along the screen bottom (arm + blade + spine), grab handles + kick steps on the nose sides, seals round the cab
+  side windows; lacquered body (roughness 0.26, rougher where dirty) with hoop waviness of the skin (normal tilt,
+  ~0.78 m pitch, fades with distance) so the sky reflection swims like on sheet metal. (2) Paint: the clear coat was
+  already Fresnel-weighted and independent of albedo (three's clearcoat), but the ×4 radiance boost added light
+  without taking the matching share from the colour underneath — so on white/beige only bright reflections showed
+  and clipped. Now the coat is stronger instead (`clearcoatF0` 0.09, boost 1.8): base × (1 − F) + F × street, so
+  dark facades/trees/asphalt show as grey on white too (`docs/progress/real/w2_s6_paint.jpg`, left before).
+  (3) Platform gap: not in my files (plan.ts `platform: rect(-46, RAIL_Z + 2.0 …)` / station.ts → W7); request
+  stays in real-requests.md. (4) novehlod0: see "Toggles + tiers" (re-measured). Sheet `docs/progress/real/w2_s6.jpg`.
+  Judged after (sheet row 2 = door at 3 m, row 3 right = cab at 6 m): door, button, stickers, gaskets read; cab
+  reads as a regional cab (unit number, handrail), but the windscreen is a plain dark plane (no cab interior, the
+  parked wipers vanish against it) and the lamp boxes are flat. The lacquer waviness is invisible on the shaded
+  platform side (needs sun on the flank to judge). Next: door-leaf windows still square-cornered;
+  the loco/wagons get no lettering yet (trLivery is EMU-only: `vCar.x`); the hazard-stripe atlas cell is unused.
 * 2026-10-28 session 5 — **trains judged + fixed, police band, paint reflection; perf measured.** Bench framing
   for trains fixed first (commit 332e99d): `bench.mjs --classes train --q "speed=0"` → fixed poses `platform_3m`,
   `platform_10m`, `track_3m`, `roof_6m` (the opening regional dwells at the platform). Judged (s5a): silhouette right
@@ -71,6 +95,25 @@ Owned: `src/sim/traffic/{models,vehicleMaterial,render}.ts` (+ trains later). Si
 * Judge with the showroom: `node scripts/capture-set.mjs --q "tlineup&nointro&noidle" --hideui 1 --views
   "-10,0.9,22,4,30,6;-8,1.4,35,9,25,8" --hours 11 --out shots/w2/x` (row 1 cars at z 22 from x −17, row 2
   vans/lorries/buses at z 35; yaw 0 ≈ front, 180 ≈ rear). Bench: `--classes car,bus --yaws 0,140` (new option).
+
+## Session 6 — code map
+* `trainModels.ts`: `windowRow` replaced by `piercedSide(g, z0, z1, y0, y1, wins, wy0, wy1, color)` — the cream
+  window band (EMU band 2, skipped in `shell` via a band with tag −1, `bandsNoWin`) is built per variant with
+  rounded openings (R 0.13, `rrect` contour + corner fillets via `sideTri`), a 3-contour rubber gasket (lip on the
+  panel → crown proud 7 mm → reveal 2.4 cm in) and glass (T.WINDOW) set back at |x| 1.426. Variant 0 builds
+  zr..zA (zA = doorZ[1] + dw + 0.1), variant 2 zA..zF (winsM), variant 1 zA..zJ (winsC).
+  Doors: stainless grab handles each side of the portal. Roof: gutters at y 3.36 + drain spouts (all), breaker
+  housing + arrester insulators + HV cables + brake-resistor box (mid), cab HVAC + 2 blade antennas + whip + horn
+  pod (cab).
+* `trainMaterial.ts`: `DECAL` atlas cells (px) + `decalTexture()` (1024×512 canvas, premultiplied, sRGB, mips):
+  wordmark "TINYHAVEN regional" + emblem, digits, wheelchair, bicycle, no-leaning, HV triangle, door release, data
+  panel, hazard stripe (unused). GLSL `trDec` (textureGrad with the side-plane derivatives → mip-correct inside
+  branches), `trLivery(q, unit)` places decals in the car frame (u = −z·sign(x)); called once in uniform flow at
+  the top of the color_fragment block; EMU only (`vCar.x` = aInst2.y). `vCar` = aInst2.yzw; aInst2.w = fleet unit
+  number (trainRender: 100 + ((id+17)·37 mod 900)). Doors (T.DOOR) now wear the livery colour (instanceColor).
+  Grime: roof darker brown-grey, a soft dirt gradient up to 2.3 m on the sides, rain streaks from the gutter and
+  some window sills. `?notraindecals` (uTrDec). Cache key rail-train-v5.
+* `vehicleMaterial.ts` paint: body lacquer `clearcoatF0` 0.09 (was 0.04) and the street-reflection boost 4 → 1.8.
 
 ## Session 5 — code map
 * `scripts/bench.mjs` train branch: `loc.poses` (fixed {label, target, distance, yaw, pitch}) bypass the LOS swing;
@@ -206,11 +249,21 @@ Owned: `src/sim/traffic/{models,vehicleMaterial,render}.ts` (+ trains later). Si
   coordinate views work; `?tlineup` items get different phases (plates/wear vary).
 
 ## Toggles + tiers
+* **novehlod0 re-measured (session 6)**: street view with parked/moving cars close by ("-6,0.9,22,9,30,6", 11 h,
+  speed 0, 6 s per variant, variants alternated): baseline 1388 / 1367 ms, `novehlod0` 1430 / 1278 ms, a third
+  baseline-equivalent row 1403 ms → identical-config spread ±6 %, so LOD 0 cost is below the noise floor of
+  software GL. What LOD 0 does cost, measured exactly: 40.2k triangles (4.267 M → 4.227 M, −0.9 %) and 4 draw
+  calls (196 → 192) in that view. The s5 "−10 %" at `station` was noise: its triangle count did not change because
+  no car was within the 62 m LOD 0 range there. Adreno number still to be taken on the user's machine.
 * Perf session 5 (software GL, `perf.mjs --view station --hours 11 --q speed=0`, one run, ms/frame): baseline 638.7;
   `nocarpaint` 622.0 (−2.6 %); `notraingrime` 657.3 and `notraininterior` 650.4 (above baseline → within noise,
   ±3 %); `novehlod0` 573.1 (−10 %), but triangles were identical (3.636 M) in all rows, so the LOD 0 number is
   doubtful (the renderer.info count may include all LOD layers, or no car was within 62 m) — re-measure at
   `downtown` on the Adreno. Draw calls 168 in every row.
+* Session 6: `?notraindecals` (livery lettering/pictograms; texture 1024×512 = 2 MB + mips, one textureGrad chain of
+  ~14 lookups on train fragments at the side band only). Lacquer/waviness/roof grime have no toggle of their own
+  (`?notraingrime` drops the grime). New geometry is train-only (gasket rings 3 × 20 verts per window, ~+3k tris
+  per EMU car, buttons, roof boxes) — trains are few.
 * Session 5: `?notraininterior` (saloon ray-trace; off on quality low), `?novehlod0` (perf only). `?nocarpaint`
   now also drops the street reflection detail and the 4× coat contrast.
 * `?nocarinterior` (cabin ray-trace; also off on quality **low**), `?nopanelgaps`, `?novehiclewear`.
@@ -243,6 +296,9 @@ Owned: `src/sim/traffic/{models,vehicleMaterial,render}.ts` (+ trains later). Si
   `w2_lineup_14m.jpg`, `w2_night_after.jpg`. Raw: `shots/w2/` (not committed).
 
 ## Tokens
+* Session 6 (tokens.py): 86 calls, 2.1M weighted, ctx median 190k / max 233k (get_session again reported
+  used_tokens 0; hand estimate ran ~100k low — next session: assume system+brief ≈ 75k at start). Checks: downtown
+  console clean, invariants 0; typecheck clean; overview captured (shots/w2/s6_overview.png), not diffed.
 * Session 5 (tokens.py): 109 calls, 2.3M weighted, ctx median 175k / max 233k (get_session reported used_tokens 0,
   so the 170k cap was estimated by hand and overshot). Checks: downtown console clean, invariants 0; overview unchanged;
   typecheck clean.

@@ -209,6 +209,11 @@ try {
           const rz = c.ctx.plan.rail.z, eye = (c.ctx.plan.rail.stations?.[0]?.platformY ?? 0.95) + 1.6;
           // target on the bogie end of the car (half - 2.6 m from its centre), on the platform-side flank
           const bx = car.x + (car.half - 2.6) * (tr.dir > 0 ? 1 : -1);
+          // the car's second door (local z 3.125 in the EMU frame) and the leading car's cab front
+          const cs = tr.dir * (car.flip ? -1 : 1);
+          const dzx = car.x + 3.125 * cs;
+          const c0 = tr.cars[0];
+          const fx = c0.x + c0.half * tr.dir;
           const pose = (label, tx, ty, tz, camX, camY, camZ) => {
             const dx = camX - tx, dy = camY - ty, dz = camZ - tz, hd = Math.hypot(dx, dz);
             return { label, target: { x: tx, y: ty, z: tz }, distance: Math.hypot(hd, dy), yaw: (Math.atan2(dx, dz) * 180) / Math.PI, pitch: (Math.atan2(dy, hd) * 180) / Math.PI };
@@ -224,6 +229,10 @@ try {
               pose('track_3m', bx, 0.9, rz - 1.45, bx + 1.2, 1.4, rz - 1.45 - 3),
               // roof from the station footbridge height: pantograph, roof pack
               pose('roof_6m', car.x, 3.7, rz, car.x + 2.5, 8.5, rz + 4.5),
+              // a door at 3 m from the platform, eye height (W2 s6): leaves, button, lettering, window gaskets
+              pose('door_3m', dzx, 2.0, rz + 1.45, dzx + 1.2, eye, rz + 1.45 + 2.8),
+              // the leading cab from the platform end, front three-quarter at 6 m
+              pose('cab_6m', fx, 2.0, rz, fx + tr.dir * 5.0, eye, rz + 3.4),
             ],
           };
         }
