@@ -11,6 +11,11 @@ Overview must stay at least as impressive as now. Every feature: quality tiers +
 Lead session: session_01XuhAMczW3iK25AAWnf3qog, branch `claude/pensive-gates-bim12i`.
 
 ## Resume here (keep current)
+* 2026-10-28 22:00 UTC — Merged W3 s4 (f80a675: bus-stop flag/timetable/posters, newsstand fascia + covers, stall
+  goods no-repeat, market heap jitter + scale + backdrop folds + clutter, kiosk hatch + interior, playground tiles,
+  contact grime ×1.8; console clean, invariants {}). W4 vendor fix merged (2749347). W3 brief done → wave 3 starts:
+  W6 dense places I (market/terrace/back yard + wind mechanics; also W3 leftovers) launched. W7 (quay+boats, site,
+  platform) waits for the next free slot. Running: W1(5), W2(5), W4(5), W6.
 * 2026-10-28 21:36 UTC — Merged W4 s4 (108bd6a: rounded jaw/cheeks/nose/lips in form, 40-side hair cap with whorl
   strands, long hair/ponytail/bun/fringe, gait by build/sex, crowd variety, forearm stripes fixed). W4(5) spawned:
   glowing sclera, plaster long hair, face-edge line, fabric micro-texture, idle people.
@@ -134,6 +139,7 @@ Wave 1 (launched 2026-10-28 15:17 UTC, sibling cloud sessions, briefs in real-br
 | W1 facades (5) | session_01XuhAMfq46wtUdASmLq8DJE | claude/real-w1-facades | real-w1.md |
 | W3 furniture (4) fix | session_01XuhAMd9YGYmQMvVwVAtFgj | claude/real-w3-furniture | real-w3.md |
 | W4 people (5) | session_01XuhAMdn2ycTg2UuHNd4iQo | claude/real-w4-people | real-w4.md |
+| W6 dense places I (wave 3) | session_01XuhAMghDM8g45i46Lja4QH | claude/real-w6-places | real-w6.md |
 Respawn rule: when a worker stops (milestone note, ~200k context, or a usage stop), create a NEW session on the
 same branch with the same brief + "resume from docs/progress/real-wN.md Resume here"; archive the old one.
 
