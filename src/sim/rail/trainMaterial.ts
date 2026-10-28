@@ -61,6 +61,8 @@ varying float vTagF;
 varying vec3 vLocDir;
 varying float vDoorZ;
 varying vec3 vCar;
+varying vec3 vAxY;
+varying vec3 vAxZ;
 vec3 trWheel(vec3 p) {
   float c = cos(aInst.x), s = sin(aInst.x);
   vec2 q = p.yz - aExtra.xy;
@@ -139,6 +141,9 @@ varying float vTagF;
 varying vec3 vLocDir;
 varying float vDoorZ;
 varying vec3 vCar;
+varying vec3 vAxY;
+varying vec3 vAxZ;
+float trPaint = 0.0;
 uniform sampler2D uTrDecal;
 uniform float uTrDec;
 vec3 trIntE = vec3(0.0);
@@ -189,6 +194,7 @@ vec4 trLivery(vec3 q, float unit) {
   return o;
 }
 float trEmK = 1.0;
+float trVN(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f); float a = fract(sin(dot(i, vec2(12.9898, 78.233))) * 43758.5453), b = fract(sin(dot(i + vec2(1.0, 0.0), vec2(12.9898, 78.233))) * 43758.5453), c = fract(sin(dot(i + vec2(0.0, 1.0), vec2(12.9898, 78.233))) * 43758.5453), d = fract(sin(dot(i + 1.0, vec2(12.9898, 78.233))) * 43758.5453); return mix(mix(a, b, f.x), mix(c, d, f.x), f.y); }
 float trH(float n) { n = fract(n * 0.1031); n *= n + 33.33; n *= n + n; return fract(n); }
 // Saloon behind the glass, ray-traced in the car frame (interior mapping; no geometry): far wall with its
 // window band, floor, ceiling with the light strip, seat backs in 1.9 m bays with a few seated heads, yellow
@@ -499,6 +505,10 @@ export function createTrainMaterials(globals: GlobalUniforms, clipX0: number, cl
           mm = mm * mat3(instanceMatrix);
           #endif
           vLocDir = transpose(mm) * ((modelMatrix * wp).xyz - cameraPosition);
+          // the car's y and z axes in view space (body panel waviness tilts the normal along them)
+          mat3 mv = mat3(viewMatrix) * mm;
+          vAxY = normalize(mv * vec3(0.0, 1.0, 0.0));
+          vAxZ = normalize(mv * vec3(0.0, 0.0, 1.0));
         }`,
       );
     shader.fragmentShader = shader.fragmentShader
@@ -519,6 +529,12 @@ export function createTrainMaterials(globals: GlobalUniforms, clipX0: number, cl
             diffuseColor.rgb = diffuseColor.rgb * (1.0 - dec.a) + dec.rgb;
             trDecA = dec.a;
           }
+          // lacquered body paint: livery, door leaves, the cream side band (not the dark gaskets / seals)
+          {
+            float lum = dot(diffuseColor.rgb, vec3(0.3, 0.5, 0.2));
+            bool side = abs(vLoc.x) > 1.4 && vLoc.y > 1.1 && vLoc.y < 3.4;
+            if (vCar.x > 0.5 && lum > 0.12 && (tg == ${T.LIVERY} || (tg == ${T.DOOR} && side) || (tg == ${T.PLAIN} && side))) trPaint = 1.0;
+          }
           if (tg == ${T.CONT40} || tg == ${T.CONT20A} || tg == ${T.CONT20B}) {
             // corrugated container walls: ribs every 0.28 m along the side, 0.2 m across the ends
             float along = abs(vLoc.x) > 1.18 ? vLoc.z : vLoc.x;
@@ -536,7 +552,12 @@ export function createTrainMaterials(globals: GlobalUniforms, clipX0: number, cl
             float n = fract(sin(dot(floor(q * vec3(3.0, 9.0, 1.3)), vec3(12.9898, 78.233, 37.719))) * 43758.5453);
             float gear = (1.0 - smoothstep(0.9, 1.05, q.y)) * step(abs(q.x), 1.3);
             float low = (1.0 - smoothstep(0.95, 1.55 + 0.15 * n, q.y)) * (1.0 - gear);
-            float roof = smoothstep(3.3, 3.7, q.y) * (0.55 + 0.3 * smoothstep(0.3, 0.9, fract(sin(dot(floor(q.xz * vec2(1.7, 0.6)), vec2(12.9898, 78.233))) * 43758.5453)));
+            // roof: brake / catenary dust in soft blotches (strong colours — insulators, lamps — keep theirs)
+            vec3 bc = diffuseColor.rgb;
+            float sat = max(bc.r, max(bc.g, bc.b)) - min(bc.r, min(bc.g, bc.b));
+            float bl = trVN(q.xz * vec2(1.3, 0.45)) * 0.6 + trVN(q.xz * vec2(4.0, 1.6) + 7.0) * 0.4;
+            float roof = smoothstep(3.3, 3.7, q.y) * (0.5 + 0.45 * bl) * (1.0 - smoothstep(0.12, 0.3, sat));
+            diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.25, 0.235, 0.215), roof);
             // roof sheets: transverse seams every 1.55 m (welded strips over the hoops), fading with distance
             if (q.y > 3.5 && abs(q.x) < 1.4) {
               float fz = abs(fract(q.z / 1.55) - 0.5) * 1.55;
@@ -547,7 +568,6 @@ export function createTrainMaterials(globals: GlobalUniforms, clipX0: number, cl
             vec3 dust = vec3(0.33, 0.26, 0.2);
             diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * 0.55 + dust * 0.35, gear * (0.55 + 0.25 * n));
             diffuseColor.rgb = mix(diffuseColor.rgb, dust * 0.9, low * (0.32 + 0.12 * n));
-            diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.34, 0.31, 0.27), roof * (0.75 + 0.5 * n));
             // a long soft gradient of track dirt up the side, and rain streaks: run-off from the gutter over the
             // cant rail and from window sills, thin vertical runs that fade downwards (EMU / loco sides only)
             if (abs(q.x) > 1.38 && q.y < 3.4 && q.y > 1.0) {
@@ -578,11 +598,25 @@ export function createTrainMaterials(globals: GlobalUniforms, clipX0: number, cl
       .replace(
         '#include <roughnessmap_fragment>',
         `#include <roughnessmap_fragment>
-        { int tg = int(vTagF + 0.5); tg -= (tg / 100) * 100; if (tg == ${T.GLASS} || tg == ${T.WINDOW} || tg == ${T.DOORWIN}) roughnessFactor = 0.18; if (tg == ${T.VESTIB}) roughnessFactor = 1.0; if (tg == ${T.WHEEL}) roughnessFactor = 0.62; }`,
+        { int tg = int(vTagF + 0.5); tg -= (tg / 100) * 100; if (tg == ${T.GLASS} || tg == ${T.WINDOW} || tg == ${T.DOORWIN}) roughnessFactor = 0.18; if (tg == ${T.VESTIB}) roughnessFactor = 1.0; if (tg == ${T.WHEEL}) roughnessFactor = 0.62; if (trPaint > 0.5) roughnessFactor = 0.26 + 0.3 * (1.0 - smoothstep(1.0, 2.0, vLoc.y)) * uGrime; }`,
+      )
+      .replace(
+        '#include <normal_fragment_maps>',
+        `#include <normal_fragment_maps>
+        {
+          // sheet-metal side: the skin bows a little between the body hoops (~0.78 m) and the reflection of the
+          // sky swims over it — the cue that tells a painted car body from a plastic tube; fades with distance
+          float pz = fwidth(vLoc.z);
+          float P = 0.78;
+          float k = trH(floor(vLoc.z / P) + 3.0 * sign(vLoc.x)) * 0.8 + 0.6;
+          float sz = 0.016 * k * sin(6.2832 * vLoc.z / P) * (1.0 - smoothstep(0.03, 0.12, pz));
+          float sy = 0.008 * sin(6.2832 * (vLoc.y - 1.15) / 1.1) * (1.0 - smoothstep(0.03, 0.12, pz));
+          if (trPaint > 0.5) normal = normalize(normal + vAxZ * sz + vAxY * sy);
+        }`,
       )
       .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += vEmit * trEmK + trIntE;');
   };
-  material.customProgramCacheKey = () => 'rail-train-v6';
+  material.customProgramCacheKey = () => 'rail-train-v7';
   patchLampMaterial(material); // night street-light map (night agent)
 
   const depth = new THREE.MeshDepthMaterial();
