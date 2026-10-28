@@ -11,6 +11,10 @@ Overview must stay at least as impressive as now. Every feature: quality tiers +
 Lead session: session_01XuhAMczW3iK25AAWnf3qog, branch `claude/pensive-gates-bim12i`.
 
 ## Resume here (keep current)
+* 2026-10-28 22:29 UTC — Merged W2 s5 (c0cdb24: train bench poses, saloon interior ?notraininterior, turned wheels,
+  conformal police band, curvature-bent street reflection in car paint). W2(6) spawned: train body realism (window
+  seals, plug doors, livery/lettering, grime, roof kit, cab), Fresnel on pale paint, perf re-measure.
+  .gitattributes: real-requests.md merges as union (it conflicted on every merge).
 * 2026-10-28 22:25 UTC — Merged W6 s1 (9dcad08: props/places.ts market life + bunting + pigeons, terrace bistro
   chairs/waiter station, back yard + animated laundry; ?nomarketlife ?noterracelife ?nobackyard; W3 leftovers OK).
   W6(2) spawned: back-yard floating door/planks (bug if default), wall-mounted set, parasol/awning wind sway, market
@@ -158,6 +162,7 @@ Wave 1 (launched 2026-10-28 15:17 UTC, sibling cloud sessions, briefs in real-br
 | W4 people (6) | session_01XuhAMghSjS3RWFqyHibd7f | claude/real-w4-people | real-w4.md |
 | W7 dense places II (wave 3) | session_01XuhAMe8MqhfeVaXdzcfB9U | claude/real-w7-quay | real-w7.md |
 | W6 dense places I (2) | session_01XuhAMdo2WChq7WcNcuJPxV | claude/real-w6-places | real-w6.md |
+| W2 vehicles (6) trains | session_01XuhAMhTqxMzNfQqVnLRdFs | claude/real-w2-vehicles | real-w2.md |
 Respawn rule: when a worker stops (milestone note, ~200k context, or a usage stop), create a NEW session on the
 same branch with the same brief + "resume from docs/progress/real-wN.md Resume here"; archive the old one.
 
