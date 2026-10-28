@@ -18,6 +18,19 @@ Branch `claude/real-w1-facades` (from `claude/pensive-gates-bim12i`). Brief: doc
   downpipe shoes / door steps meet the ground; (f) bench framing for back sides (`--yaw 150` lands inside lots).
 * Debug: `?bdbg=reveal` colours reveal hits (red jamb, green head, blue inner sill, yellow sill box).
 
+## Code map (file:line at 18be1ae+)
+* `buildings/materials.ts`: `bhBrick` / `bhBrickH` 328 (brick bonds), `bhWallSlope` 369 (relief per pattern),
+  `uSign` 874 (window-cell u vs tangent T), plinth 895, window-depth block `depthK` 1022 (sill box + reveal trace,
+  `dSurf`, `sunShade`, reveal shading + `?bdbg=reveal` debug), roof cotangent frame 1420 + tile relief in the tile
+  branch, normal override injection (`bhNW` → `normal`) 1709. Uniforms uWinDepth / uWallRelief / uPlinth set from
+  URL in `buildings.ts` createMaterials call.
+* `buildings/gen.ts`: `eaveGutter` 538 (called from `gableRoof`, `hipRoof`; `g.roofPipes = false` in homes /
+  oldtown), `houseNumber` 651, `doorNiche` 690 (joinery, ironmongery, bell, number).
+* `buildings/industry.ts` `rollupDoor` 148; `buildings/houses.ts` genApartment life 387 + core intercom / letter boxes.
+* Design: everything flat-wall is shader (one chunk lifts all buildings, near-only fade by pixel size); things that
+  stick out at eye level (doors, gutters, pipes, bollards, boxes) are trim geometry, kept inside the footprint
+  below 2.4 m (validate checks it).
+
 ## Done
 * **Window depth (shader parallax, `?nowinreveal`, medium/high: needs uDetail ≥ 0.5)** — in `bhWall`, per window
   cell: the view ray is traced into a reveal (14 cm houses, 10 cm industrial, 9 cm shop, 7 cm doors, 6 cm ribbon,
