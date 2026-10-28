@@ -4,6 +4,10 @@ Branch `claude/real-w2-vehicles` (from `claude/pensive-gates-bim12i`). Brief: `d
 Owned: `src/sim/traffic/{models,vehicleMaterial,render}.ts` (+ trains later). Sim untouched.
 
 ## Resume here
+* 2026-10-28 session 4 (fix round after judge-1 + bugs-1): order = (1) SUV roof rails on feet [done, `topSurfaceY` in
+  carBody.ts]; (2) clear-coat paint; (3) silhouette variety in parked rows; (4) mirror housing on a stalk; (5) dirt on
+  lower body/sills/tyre sidewalls; (6) bus roof units + front bumper; (7) lorry crates (slats/straps/pallets);
+  bench framing bus 3 m; then trains. Status per item below as it lands.
 * 2026-10-28 session 3 — **Milestone 3 pushed** (lead items 1–4 done; context cap reached). Next session:
   (a) trains (audit #7) — not started: begin with `bench.mjs --classes train --dists 3,10` and judge; code in
   `src/sim/rail/trainModels.ts` (743 lines: `shell`/`bogie`/`wheelset`/`pantograph`/`gangway`/`buildEmu`/`buildLoco`/

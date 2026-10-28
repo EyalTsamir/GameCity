@@ -26,7 +26,7 @@ import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeom
 import { mergeGeometries, mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { ModelKind } from './specs';
 import { busEndSurface, loftBus, type BusShape } from './busBody';
-import { endRing, endSurface, loftCar, topAt, type CarShape } from './carBody';
+import { endRing, endSurface, loftCar, topAt, topSurfaceY, type CarShape } from './carBody';
 
 /** number of detail levels buildModel() can produce */
 export const MODEL_LODS = 3;
@@ -1291,9 +1291,22 @@ function suv(): THREE.BufferGeometry {
     W = 1.86;
   const shape: CarShape = { L, W, sill: 0.42, belt: 1.1, roof: 1.72, noseH: 0.98, hoodH: 1.08, wsBase: 1.1, wsTop: 0.4, rwTop: -1.95, rwBase: -2.15, deckH: 1.2, tailH: 1.15, pillarB: -0.35, pillarC: -1.3, glassRear: -1.85, tumble: 0.13, axF: 1.425, axR: -1.325, wheelR: 0.37, clad: true };
   const c = loftBody(b, shape, true, true, 'dark');
-  // roof rails
-  for (const s of [1, -1]) b.add(bx(0.05, 0.06, c.topD - 0.3, s * (c.topW / 2 - 0.08), c.topY - 0.01, c.topZ), { color: '#2e3136' });
-  roofBox(b, c.topY + 0.05, c.topZ, c.topW);
+  // roof rails: a rounded bar 5 cm clear of the roof on three feet that stand on the crowned roof surface
+  const rx = c.topW / 2 - 0.12,
+    rl = c.topD - 0.5,
+    ry = topSurfaceY(shape, rx, c.topZ) + 0.065;
+  for (const sd of [1, -1]) {
+    b.add(rbox(0.042, 0.032, rl, 0.014, sd * rx, ry - 0.016, c.topZ), { color: '#2e3136', rough: 0.7, finish: 'coat' });
+    for (const [dz, len] of [[rl / 2 - 0.06, 0.16], [0, 0.07], [-rl / 2 + 0.06, 0.16]]) {
+      const z = c.topZ + dz,
+        y0 = topSurfaceY(shape, rx, z) - 0.012;
+      const f = rbox(0.05, ry - y0, len, 0.012, sd * rx, y0, z);
+      // the end feet slope down outwards
+      if (dz !== 0) taper(f, y0, ry, z, 0, dz > 0 ? 0.08 : 0, dz > 0 ? 0 : 0.08);
+      b.add(f, { color: '#25282c', rough: 1.1 });
+    }
+  }
+  roofBox(b, ry + 0.02, c.topZ, c.topW);
   // spare wheel on the tailgate
   const sp = new THREE.CylinderGeometry(0.31, 0.31, 0.2, sg(14));
   sp.rotateX(Math.PI / 2);
