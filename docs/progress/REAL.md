@@ -11,6 +11,11 @@ Overview must stay at least as impressive as now. Every feature: quality tiers +
 Lead session: session_01XuhAMczW3iK25AAWnf3qog, branch `claude/pensive-gates-bim12i`.
 
 ## Resume here (keep current)
+* 2026-10-28 20:00 UTC — Judge 1 merged (docs/progress/real-judge-1.md: only bench/bike rack "real"; repetition is
+  now the main tell; school/church/industrial doors/newsstand/kiosk/playground "not yet"; lawn/wall bright rim;
+  car paint/flat sides; bus roof pillows). Lead fixed the drift motes (backlit only; verified shots/lead/motes).
+  W4 m1+s2 merged (c294282: squat = crowd speed spikes 8.8 m/s, gait capped; skirts, hats, eyes). W4(3) spawned
+  (root-cause the speed spikes in the crowd sim, hairline, carried things). Waiting: bug hunter, W5.
 * 2026-10-28 19:20 UTC — W4 m1 (4214304: close LOD < 15 m with sculpted faces, fingers, seams, laces; ?nopeopledetail,
   ?pedlod=close) NOT merged: after sheets show frog-squat/bow-legged close-LOD stances, split skirts, hats over the
   eyes — W4(2) spawned to rule out/fix these first. Briefs: workers must measure their context (get_session).
@@ -92,6 +97,7 @@ Wave 1 (launched 2026-10-28 15:17 UTC, sibling cloud sessions, briefs in real-br
 | Judge wave 1 | session_01XuhAMgGczMy7sfzCU6RcAu | claude/real-judge-1 | real-judge-1.md |
 | Bug hunter wave 1 | session_01XuhAMcksFRcEEAyiC8Nzad | claude/real-bugs-1 | real-bugs-1.md |
 | W4 people (2) | session_01XuhAMgJdXw8Zhx235CcTVt | claude/real-w4-people | real-w4.md |
+| W4 people (3) | session_01XuhAMdkF4v6CvZSXJCtb2b | claude/real-w4-people | real-w4.md |
 Respawn rule: when a worker stops (milestone note, ~200k context, or a usage stop), create a NEW session on the
 same branch with the same brief + "resume from docs/progress/real-wN.md Resume here"; archive the old one.
 
