@@ -523,6 +523,16 @@ export function planterBox(k: Kit, kind: 'concrete' | 'terracotta' | 'wood' | 's
     for (const sx of [-1, 1]) for (const sz of [-1, 1]) cbox(sh, sx * (ax - 0.04), (h + 0.05) / 2, sz * (az - 0.04), 0.08, h - 0.05, 0.08, 0.01);
   } else {
     cbox(sh, 0, (h + 0.05) / 2, 0, along, h - 0.05, across, kind === 'steel' ? 0.006 : 0.025, 1 | 2);
+    if (kind === 'steel') {
+      // pressed vertical ribs on the long sides, a kick band at the foot
+      for (let x = -ax + 0.2; x < ax - 0.1; x += 0.25) for (const sz of [-1, 1]) sh.box(x, (h + 0.04) / 2, sz * (az + 0.006), 0.035, h - 0.16, 0.012, 3);
+      k.m('#2f3a34', 'paint');
+      sh.box(0, 0.08, 0, along + 0.01, 0.06, across + 0.01, 3);
+    } else if (kind === 'concrete') {
+      // cast drip groove under the rim
+      k.m('#a9a398', 'stone');
+      sh.box(0, h - 0.06, 0, along + 0.004, 0.012, across + 0.004, 3);
+    }
   }
   // rim (a frame) + inner walls
   k.m(rimCol, mat);

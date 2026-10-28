@@ -86,7 +86,8 @@ try {
           const s = nth(plan.slots.filter((s) => s.kind === cls).sort((a, b) => Math.hypot(a.x, a.z) - Math.hypot(b.x, b.z)));
           if (!s) return null;
           const H = { lamp: 5, tree: 7, bench: 0.9, bin: 1, hydrant: 0.8, busstop: 2.6, bikerack: 0.9, planter: 1, mailbox: 1.3, phonebox: 2.4, newsstand: 2.4 }[cls];
-          return { x: s.x, y: gy(s.x, s.z), z: s.z, yaw: (s.yaw * 180) / Math.PI, h: H, w: 1 };
+          const W = { lamp: 1, tree: 2, busstop: 3.2, bikerack: 2, newsstand: 2.4, phonebox: 1.2, bench: 1.9, planter: 1.6 }[cls] ?? 1;
+          return { x: s.x, y: gy(s.x, s.z), z: s.z, yaw: (s.yaw * 180) / Math.PI, h: H, w: W };
         }
         const featKinds = ['fountain', 'statue', 'gazebo', 'playground', 'kiosk', 'marketstall', 'umbrellas', 'picnic', 'flagpole', 'jetty'];
         if (featKinds.includes(cls)) {
