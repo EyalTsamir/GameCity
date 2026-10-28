@@ -4,6 +4,14 @@ Branch `claude/real-w4-people` (from `claude/pensive-gates-bim12i` e517126). Bri
 Photo test "Person" (REAL.md). Owned: `src/sim/pedestrians/**` presentation (not crowd/places logic).
 
 ## Resume here
+* 2026-10-28 ~21:50 UTC — session 4 ENDED. All pushed. Downtown shot: console clean, invariants {}
+  (shots/w4/dt4.txt). Sheet docs/progress/real/w4_after_s4.jpg (frames predate the last two commits:
+  close fringe + clump breaks — judge those first: `node scripts/people-bench.mjs --n 4 --skip 1 --shots
+  face,head3q,profile --where "m.look.style.fringe"`). Next: fringe judge; faint FACE/SKIN boundary still
+  visible as a faint tone line on some 3/4 views (face paint / per-person face displacement stop at the
+  region edge — fade them by vPedFace.x near the boundary); walk weight judged only on 2 side frames
+  (s4e) — a heavy-build walker side-by-side with a slim one would show the new terms; perf of the denser
+  close head on the target.
 * 2026-10-28 ~21:35 UTC — session 4. Lead's s3 verdict priorities and what was done (judged on people-bench
   shots/w4/s4a (before) → s4b/s4c/s4d/s4e; new bench shots `profile` (side of the head) and `headlow`):
   (1) Head form (close level, body.ts buildCloseHead/closeHeadPoint/faceRelief):
@@ -201,3 +209,15 @@ WHAT THE COST BOUGHT (lifetime cost of each kind of content in context, all agen
 ## Tokens (session 3, tokens.py)
 TOTAL weighted 1.9M (cache read 76 %, write 11 %, output 13 %); 89 calls, ctx median 167k / max 223k. get_session's
 context_usage read 0 this session (not usable) — estimate from tokens.py instead.
+
+## Tokens (session 4, tokens.py)
+```
+TOTAL weighted 2.8M  (cache read 79%, cache write 8%, output 12%)
+
+agent               calls   w(M)    %  ctxMed  ctxMax cold coldW%  idle>5min: warm/cold
+LEAD                  122    2.8100.0    196k    253k    0     0%  0/0
+
+WHAT THE COST BOUGHT (lifetime cost of each kind of content in context, all agents):
+  system+brief                                    1.1M  37.6%
+  Bash:read/grep                                  0.4M  13.8%
+```
