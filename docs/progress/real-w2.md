@@ -4,6 +4,30 @@ Branch `claude/real-w2-vehicles` (from `claude/pensive-gates-bim12i`). Brief: `d
 Owned: `src/sim/traffic/{models,vehicleMaterial,render}.ts` (+ trains later). Sim untouched.
 
 ## Resume here
+* 2026-10-28 session 4 — **fix round + trains pushed; wrapping at the context cap.** Next session, in order:
+  (a) **train bench framing still fails**: the camera ends at window height against the car side (platform blocks
+  the line of sight → arm shortened). Try `--q` with a free view from the track side (e.g. find a train with
+  `__city.ctx.pickers`, place the camera on the far side of the tracks at y 0.8, pitch 0) and judge bogies, door
+  seals, gangway, coupler, pantograph, roof pack, grime (none of the train work has been judged in a capture yet
+  except the roof pack louvres and door portal at 3 m); (b) paint: two-layer + metallic is a modest gain (sheet
+  row 1: left `?nocarpaint`, right on) — without real environment reflections the gloss stays limited; (c) tyre
+  sidewall dust barely visible; (d) police livery decal is a flat plane at W/2 + 0.014 (floats off the tuck like
+  the taxi band did); (e) perf not measured (estate/MPV = 2 new model kinds; train bogie/roof geometry +~1.5k tris
+  per car). Sheet: `docs/progress/real/w2_s4_fix.jpg` (paint off/on; SUV rails; parked row with estate + MPV;
+  bus roof AC; lorry pallets/crates/straps; bus front; mirror on its stalk).
+* 2026-10-28 session 4 (fix round after judge-1 + bugs-1). Done in code (see "Session 4" below): (1) SUV roof rails
+  on feet (`topSurfaceY` in carBody.ts, `roofRails()` in models.ts); (2) paint = two layers (`thBaseSpec` 0.22 under
+  the coat, ~45 % metallic by phase hash, `?nocarpaint` → uVehDetail.w) + realistic fleet palette (BODY_COLORS);
+  (3) parked-only body types `estate` + `mpv` (new ModelKinds, MOVING_CAP 0, pickParkedModel mix); (4) mirror shell
+  (squircle, flat glass back) on a stalk; (5) tyre sidewall dust + sill spray band, min dirt 0.3; (6) bus roof AC
+  pack (shroud, fan grilles, louvres) + framed hatches; (7) lorry loads on pallets: slat crates / cartons + ratchet
+  straps; taxi chequer band sunk into the flank; bench bus framing (front end, yaw +28, pitch 5).
+  Trains (started): bogie rebuilt (frames, axle boxes, coil springs, air/coil secondary, dampers, brakes, sand
+  pipes), door seals + portal + button, gangway folds + drawbar + hoses, underframe lids/reservoirs/trunking, cab
+  Scharfenberg coupler, pantograph insulator sheds + raising cylinder + shunts.
+  Lineup now (yaw 0.35): row z 22 — compact −16.17/−12.91, hatch −9.61, sedans −6.25/−2.87/0.51, SUV 3.93,
+  estate 7.36, MPV 10.78, van v0 14.35; row z 35 — vans −15.95/−12.25/−8.55, lorry crates −4.73, tarp −0.78,
+  buses 3.25/7.35, ice-cream 11.2.
 * 2026-10-28 session 3 — **Milestone 3 pushed** (lead items 1–4 done; context cap reached). Next session:
   (a) trains (audit #7) — not started: begin with `bench.mjs --classes train --dists 3,10` and judge; code in
   `src/sim/rail/trainModels.ts` (743 lines: `shell`/`bogie`/`wheelset`/`pantograph`/`gangway`/`buildEmu`/`buildLoco`/
@@ -32,6 +56,37 @@ Owned: `src/sim/traffic/{models,vehicleMaterial,render}.ts` (+ trains later). Si
 * Judge with the showroom: `node scripts/capture-set.mjs --q "tlineup&nointro&noidle" --hideui 1 --views
   "-10,0.9,22,4,30,6;-8,1.4,35,9,25,8" --hours 11 --out shots/w2/x` (row 1 cars at z 22 from x −17, row 2
   vans/lorries/buses at z 35; yaw 0 ≈ front, 180 ≈ rear). Bench: `--classes car,bus --yaws 0,140` (new option).
+
+## Session 4 (fix round) — done
+* Judged on the showroom (`shots/w2/s4b/*`): SUV rails on 3 feet with daylight under the bar (real); estate (long
+  roof) and MPV (one-box, tall) break the parked-row silhouette; bus roof AC reads as a GRP pack with fan grilles and
+  louvres, hatches framed with domes; lorry load = pallets + slatted crates + taped cartons + orange ratchet straps;
+  bus front = route band, dark bumper, grille, twin lamps, wipers, destination display (bench framing fixed).
+* Mirror: the first ellipsoid read as a ball at 1.6 m → squircle (|x|^0.55, |y|^0.6), wider and flatter.
+* Toggles: `?nocarpaint` (paint layers + metallic), `?notraingrime`; existing `?nocarinterior`, `?nopanelgaps`,
+  `?novehiclewear`. New geometry is LOD 0 only (crate slats, carton tape, AC fans, rails' feet, mirror shell 14×8)
+  except the estate/MPV bodies (all LODs, parked only → +2 InstancedMesh kinds × 3 LODs, drawn only when present).
+
+## Trains (session 4) — done in code
+* `bogie(g, z, r, wb, heavy, bodyY, coil)`: side frames as 5 beams (high over axle boxes, dropped centre), round axle
+  boxes + covers, twin primary coils (3 coil rings each), brake units, sand pipes, air springs (EMU) or coil nests
+  (loco, wagon), vertical + yaw dampers, transom + bolster. `doors`: leaf gaskets, nosing + edge seals, sill seal,
+  grab recess (all move with the leaf), static portal surround + green door button (`sideQuad` helper).
+  `gangway`: frame plate, 7 alternating folds, face plate + rubber, drawbar + head + air hoses. `emuUnderframe`:
+  case shut lines, ribs, converter louvres, air reservoirs, cable trunking. Cab: Scharfenberg-type coupler
+  (housing, shank, head, contact box, cover, hoses). `pantograph`: insulator sheds, raising cylinder, shunts.
+  `boxRoofUnit`: chamfered prism shroud, 2 fan guards, side louvres. Material: grime (`uGrime`, `?notraingrime`):
+  running gear brake-dust brown, lower-body film with noisy edge, roof dust.
+* Bench framing for trains: target the leading bogie (5.2 m ahead along the heading), h 1.6, yaw +60, pitch 4.
+
+## Code map, trains (session 4 reading)
+* `src/sim/rail/trainModels.ts` uses `Geo` (`src/sim/rail/geo.ts`: `color/kind/variant/extra/box(cx,cy,cz,sx,sy,sz,skip)/
+  block/beam/cyl(cx,y0,cz,r0,r1,h,seg,caps)/rod(a,b,r,seg)/sphere/prism/quad/tri/vert`). Tags `T.*` from trainMaterial.ts
+  (PLAIN, WHEEL, WINDOW, DOOR, DOORWIN…); `g.extra(r,z,…)` = wheel pivot; doors use extra(0,0,leaf,side).
+  `wheelset` :138 (12-seg tread + sector face), `bogie` :192 (side frame box, axle boxes, springs, bolster),
+  `boxRoofUnit` :217, `pantograph` :225, `emuUnderframe` :277 (3 boxes), `windowRow` :290 (flat quads in a rubber
+  quad), `doors` :307 (flat leaves + leaf window + step), `gangway` :340 (box + 4 rings), `buildEmu` :352,
+  `buildLoco` :542, `container`/`buildWagon` :683+. EMU_PROF :260 (side x 1.45, floor 0.95 … roof 3.55+).
 
 ## Code map, session 3 additions
 * `busBody.ts`: `BusShape` takes optional `nose`/`tail: EndProfile` (sb/ix/dy/r per ring point + `zone` + `sweep`),
@@ -148,6 +203,9 @@ Owned: `src/sim/traffic/{models,vehicleMaterial,render}.ts` (+ trains later). Si
   `w2_lineup_14m.jpg`, `w2_night_after.jpg`. Raw: `shots/w2/` (not committed).
 
 ## Tokens
+* Session 4 (tokens.py): 145 calls, 3.4M weighted, ctx median 194k / max 274k (over the cap again: image reads + long
+  waits on software-GL captures; next session: one bench run per judgment, fewer screenshots). Checks: downtown console
+  clean, invariants 0, typecheck clean.
 * Session 3 (tokens.py): 79 calls, 2.0M weighted, ctx median 188k / max 239k (system + brief ≈ 37 % — the
   floor is high; keep sessions to one milestone). Checks: downtown console clean, invariants 0; overview unchanged.
 * Session 2: golden m2 vs ref (merged base) mean diff 0.0–0.1 on all five views; downtown console clean, invariants 0.
