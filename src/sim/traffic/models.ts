@@ -1208,67 +1208,178 @@ function suv(): THREE.BufferGeometry {
   return b.build();
 }
 
+/** windscreen raked back by `rake` (m over its height h): a seal and a pane with the cabin behind it */
+function rakedScreen(b: Builder, w: number, h: number, yc: number, zc: number, rake: number, glass: PartOpts): void {
+  const ang = -Math.atan2(rake, h);
+  const len = Math.hypot(rake, h);
+  for (const [dw, dz, o] of [
+    [0.07, 0.004, { color: '#1a1c1f', rough: 1.1 } as PartOpts],
+    [0, 0.01, glass],
+  ] as const) {
+    const g = roundPane(w + dw, len + dw, 0.08, 0, 0, 0, 'pz');
+    g.rotateX(ang);
+    g.translate(0, yc, zc + dz);
+    b.add(g, o);
+  }
+}
+
+/** cab side window in a seal, door seam behind it and a handle (cab side at |x| = x) */
+function cabSide(b: Builder, x: number, w: number, h: number, yc: number, zc: number, doorZ: number, doorY0: number, glass: PartOpts): void {
+  for (const s of [1, -1]) {
+    const f = s > 0 ? 'px' : 'nx';
+    b.add(roundPane(w + 0.06, h + 0.06, 0.07, s * (x + 0.006), yc, zc, f), { color: '#1a1c1f', rough: 1.1 });
+    b.add(roundPane(w, h, 0.06, s * (x + 0.011), yc, zc, f), glass);
+    if (LOD === 0) {
+      b.add(decalPlane(0.008, yc + h / 2 - doorY0, s * (x + 0.004), (yc + h / 2 + doorY0) / 2, doorZ, f), { color: '#121315', rough: 1.3 });
+      b.add(rbox(0.024, 0.03, 0.15, 0.01, s * (x + 0.012), yc - h / 2 - 0.12, doorZ + 0.16), { color: '#2a2c30', rough: 1 });
+    }
+  }
+}
+
+/** a wheel-arch liner (inward half cylinder) across the body at axle z */
+function archLiner(b: Builder, z: number, y: number, r: number, w: number): void {
+  const lin = inward(new THREE.CylinderGeometry(r, r, w, LOD === 0 ? 12 : 6, 1, true, -Math.PI / 2, Math.PI));
+  lin.rotateZ(Math.PI / 2);
+  lin.translate(0, y, z);
+  b.add(lin, { color: WELL, rough: 1.6 });
+}
+
+/**
+ * Box van (Luton style): cab with a front wheel arch, raked windscreen and side windows in seals over a cabin,
+ * door seams and handles, grille and lamp lenses; an aluminium-framed cargo box (corner posts, roof rails, rear
+ * doors with hinges and locking bars, marker lamps, side guard), logo decals per variant.
+ */
 function delivery(): THREE.BufferGeometry {
   const b = new Builder();
   const L = 6.1,
     W = 2.1;
   const zCab = L / 2 - 0.9;
+  const axF = L / 2 - 1.0,
+    axR = axF - 3.6;
+  const ALU = '#b9bec4';
   // chassis
   b.add(bx(1.5, 0.28, L - 0.5, 0, 0.42, -0.1), { color: '#2e3135', rough: 1.4 });
-  // cab
-  b.add(rbox(2.04, 0.92, 1.8, 0.18, 0, 0.42, zCab, 2), { color: '#ffffff', paint: true, rough: 0.85 });
+  // cab: lower body with the front arch, upper body tapering into the roof
+  b.add(archedSlab(1.8, 0.42, 1.34, 2.04, [axF - zCab], 0.42, 0.5, 0.12, 0.05, 0.05).translate(0, 0, zCab), { color: '#ffffff', paint: true, rough: 0.85 });
+  archLiner(b, axF, 0.42, 0.49, 1.9);
   const cg = rbox(1.98, 0.78, 1.5, 0.12, 0, 1.3, zCab - 0.1, 1);
   taper(cg, 1.3, 2.08, zCab - 0.1, 0.04, 0.42, 0);
-  b.add(cg, { color: GLASS, rough: 0.22 });
+  b.add(cg, { color: '#ffffff', paint: true, rough: 0.85 });
   b.add(rbox(1.94, 0.1, 1.12, 0.04, 0, 2.03, zCab - 0.27), { color: '#ffffff', paint: true, rough: 0.85 });
-  // cargo box
+  const glass: PartOpts = { color: GLASS, rough: 0.2, det: { c: 5, a: [0.92, 1.32, 2.0, zCab + 0.5], b: [zCab - 0.85, zCab - 0.25, -9, 0] } };
+  rakedScreen(b, 1.74, 0.66, 1.68, zCab + 0.44, 0.38, glass);
+  cabSide(b, 0.975, 0.78, 0.56, 1.66, zCab - 0.02, zCab - 0.55, 0.5, glass);
+  // cargo box with aluminium corner posts and roof rails
   const boxD = 4.25,
     boxZ = -L / 2 + boxD / 2 + 0.02;
   b.add(rbox(2.14, 2.22, boxD, 0.08, 0, 0.6, boxZ, 1), { color: '#f3f1ec', rough: 0.9 });
   b.add(decalPlane(3.7, 1.4, W / 2 + 0.035, 1.72, boxZ, 'px'), { color: '#ffffff', decal: R_DELIVERY, decalRows: true });
   b.add(decalPlane(3.7, 1.4, -W / 2 - 0.035, 1.72, boxZ, 'nx'), { color: '#ffffff', decal: R_DELIVERY, decalRows: true });
-  // rear door seam + handles + roof marker lights
-  b.add(bx(0.03, 2.0, 0.02, 0, 0.7, -L / 2 + 0.01), { color: '#9aa0a6' });
-  for (const s of [1, -1]) b.add(bx(0.05, 0.24, 0.04, s * 0.12, 1.4, -L / 2 + 0.01), { color: '#6f757b' });
-  // bumpers, lights
+  for (const sx of [1, -1]) {
+    for (const ez of [1, -1]) b.add(rbox(0.07, 2.24, 0.07, 0.015, sx * 1.055, 0.59, boxZ + ez * (boxD / 2 - 0.02)), { color: ALU, rough: 0.6, finish: 'chrome' });
+    b.add(bx(0.06, 0.06, boxD, sx * 1.055, 2.77, boxZ), { color: ALU, rough: 0.6, finish: 'chrome' });
+    b.add(bx(0.05, 0.08, boxD, sx * 1.06, 0.58, boxZ), { color: ALU, rough: 0.6, finish: 'chrome' });
+    // side guard between the axles, amber marker lamps along the bottom rail
+    b.add(bx(0.03, 0.08, 2.2, sx * 1.0, 0.5, (axF + axR) / 2 - 0.25), { color: '#3b3f44', rough: 1 });
+    if (LOD === 0) for (const z of [boxZ - 1.6, boxZ, boxZ + 1.6]) b.add(bx(0.02, 0.04, 0.07, sx * 1.085, 0.6, z), { color: AMBER, rough: 0.3 });
+  }
+  // rear doors: two leaves, seam, hinges, locking bars with handles, plate, under-run bar
+  const zb = -L / 2 + 0.01;
+  b.add(bx(0.03, 2.0, 0.02, 0, 0.7, zb), { color: '#9aa0a6' });
+  for (const s of [1, -1]) {
+    for (const x of [0.25, 0.75]) b.add(tube(s * x, 0.8, zb - 0.025, s * x, 2.55, zb - 0.025, 0.012), { color: '#8a9096', rough: 0.5 });
+    if (LOD === 0) {
+      for (const y of [0.85, 1.65, 2.45]) b.add(bx(0.12, 0.08, 0.025, s * 0.99, y, zb - 0.012), { color: '#7c8287', rough: 0.6 });
+      b.add(bx(0.06, 0.18, 0.035, s * 0.25, 1.4, zb - 0.03), { color: '#5d6267', rough: 0.6 });
+    }
+  }
+  // front: bumper, grille, lamp lenses, flush blinkers; plates; mirrors on arms
   b.add(rbox(W, 0.2, 0.22, 0.07, 0, 0.36, L / 2 - 0.07), { color: DARK, rough: 1.2 });
   b.add(rbox(W, 0.2, 0.22, 0.07, 0, 0.36, -L / 2 + 0.06), { color: DARK, rough: 1.2 });
   b.add(rbox(W * 0.5, 0.2, 0.05, 0.03, 0, 0.62, L / 2 + 0.005), { color: '#25282c' });
+  b.add(decalPlane(W * 0.5 - 0.03, 0.17, 0, 0.72, L / 2 + 0.032, 'pz'), { color: '#ffffff', rough: 0.8, decal: R_GRILLE });
+  for (const e of [1, -1]) {
+    b.add(bx(0.49, 0.12, 0.012, 0, 0.4, e * (L / 2 + 0.05)), { color: '#16171a', rough: 1.2 });
+    b.add(decalPlane(0.46, 0.1, 0, 0.46, e * (L / 2 + 0.0565), e > 0 ? 'pz' : 'nz'), { color: '#ffffff', rough: 0.6, decal: R_PLATE, plate: true });
+  }
   for (const s of [1, -1]) {
     b.add(rbox(0.32, 0.16, 0.07, 0.04, s * 0.72, 0.64, L / 2 - 0.01), { color: HEAD, light: LIGHT_HEAD, rough: 0.4 });
-    b.add(bx(0.1, 0.09, 0.06, s * 0.98, 0.64, L / 2 - 0.04), { color: AMBER, light: s > 0 ? LIGHT_BLINK_L : LIGHT_BLINK_R });
+    const hl = decalPlane(0.3, 0.14, s * 0.72, 0.72, L / 2 + 0.027, 'pz');
+    if (s < 0) flipU(hl);
+    b.add(hl, { color: '#ffffff', light: LIGHT_HEAD, rough: 0.15, decal: R_HEAD });
+    b.add(rbox(0.1, 0.07, 0.04, 0.015, s * 0.94, 0.68, L / 2 + 0.0), { color: AMBER, light: s > 0 ? LIGHT_BLINK_L : LIGHT_BLINK_R, rough: 0.3 });
     b.add(bx(0.2, 0.3, 0.05, s * 0.9, 0.62, -L / 2 - 0.01), { color: TAIL, light: LIGHT_TAIL, rough: 0.5 });
+    const tl = decalPlane(0.19, 0.28, s * 0.9, 0.77, -L / 2 - 0.037, 'nz');
+    if (s > 0) flipU(tl);
+    b.add(tl, { color: '#ffffff', light: LIGHT_TAIL, rough: 0.2, decal: R_TAIL });
     b.add(bx(0.2, 0.1, 0.05, s * 0.9, 0.94, -L / 2 - 0.01), { color: AMBER, light: s > 0 ? LIGHT_BLINK_L : LIGHT_BLINK_R });
-    b.add(rbox(0.1, 0.22, 0.16, 0.03, s * 1.1, 1.38, zCab + 0.5), { color: DARK });
+    b.add(tube(s * 0.98, 1.45, zCab + 0.42, s * 1.14, 1.45, zCab + 0.48, 0.018), { color: DARK });
+    b.add(rbox(0.1, 0.3, 0.17, 0.03, s * 1.16, 1.32, zCab + 0.5), { color: DARK });
+    if (LOD === 0) b.add(decalPlane(0.08, 0.26, s * 1.16, 1.47, zCab + 0.414, 'nz'), { color: '#8c9aa6', rough: 0.15, finish: 'chrome' });
   }
-  const axF = L / 2 - 1.0,
-    axR = axF - 3.6;
   for (const s of [1, -1]) {
     wheel(b, s * 0.93, 0.42, axF, 0.42, 0.3, true);
-    wheel(b, s * 0.93, 0.42, axR, 0.42, 0.34, false);
+    wheel(b, s * 0.93, 0.42, axR, 0.42, 0.34, false, '#c9ccd0', 'steel');
   }
   return b.build();
 }
 
+/**
+ * Cab-over lorry with a flatbed (crates, or a strapped tarp): windscreen and side windows in seals over a cabin,
+ * slatted grille with a badge, lamp lenses, door seams, handles and boarding steps, mirrors on arms, fuel tank,
+ * side guards, mud flaps; steered front axle + tandem rear on steel wheels.
+ */
 function lorry(): THREE.BufferGeometry {
   const b = new Builder();
   const L = 7.6,
     W = 2.35;
   const zCab = L / 2 - 0.95;
+  const axF = L / 2 - 1.3;
   b.add(bx(1.4, 0.32, L - 0.4, 0, 0.5, -0.1), { color: '#2b2e33', rough: 1.4 });
-  // cab-over
-  b.add(rbox(2.3, 2.02, 1.88, 0.2, 0, 0.6, zCab, 2), { color: '#ffffff', paint: true, rough: 0.85 });
-  b.add(rbox(2.02, 0.78, 0.08, 0.03, 0, 1.6, L / 2 - 0.02), { color: GLASS, rough: 0.22 });
-  for (const s of [1, -1]) b.add(bx(0.04, 0.62, 0.86, s * 1.152, 1.68, zCab + 0.32), { color: GLASS, rough: 0.22 });
+  // cab-over, with the front arch cut into its lower half
+  b.add(archedSlab(1.88, 0.6, 2.62, 2.3, [axF - zCab], 0.48, 0.58, 0.14, 0.2, 0.07).translate(0, 0, zCab), { color: '#ffffff', paint: true, rough: 0.85 });
+  archLiner(b, axF, 0.48, 0.57, 2.16);
+  const glass: PartOpts = { color: GLASS, rough: 0.2, det: { c: 5, a: [1.05, 1.58, 2.5, L / 2 - 0.25], b: [zCab - 0.9, zCab - 0.2, -9, 0] } };
+  b.add(roundPane(2.1, 0.86, 0.1, 0, 1.99, L / 2 + 0.004, 'pz'), { color: '#1a1c1f', rough: 1.1 });
+  b.add(roundPane(2.02, 0.78, 0.08, 0, 1.99, L / 2 + 0.009, 'pz'), glass);
+  if (LOD === 0) for (const x of [-0.5, 0.48]) b.add(tube(x - 0.05, 1.63, L / 2 + 0.03, x + 0.3, 2.2, L / 2 + 0.03, 0.012), { color: '#141518', rough: 1.4 });
+  cabSide(b, 1.15, 0.86, 0.62, 1.99, zCab + 0.32, zCab - 0.2, 0.75, glass);
   b.add(bx(2.12, 0.07, 0.3, 0, 2.43, L / 2 - 0.08), { color: '#ffffff', paint: true });
+  // grille + badge, bumper, steps, lamps, mirrors
   b.add(rbox(1.5, 0.5, 0.05, 0.03, 0, 0.82, L / 2 + 0.005), { color: '#3a3d42', rough: 1.2 });
+  b.add(decalPlane(1.46, 0.46, 0, 1.07, L / 2 + 0.032, 'pz'), { color: '#ffffff', rough: 1, decal: R_BUS_GRILLE });
+  if (LOD === 0) b.add(decalPlane(0.16, 0.08, 0, 1.4, L / 2 + 0.012, 'pz'), { color: '#d5dade', rough: 0.25, finish: 'chrome' });
   b.add(rbox(W + 0.02, 0.24, 0.24, 0.08, 0, 0.5, L / 2 - 0.08), { color: DARK, rough: 1.2 });
+  b.add(bx(0.49, 0.12, 0.012, 0, 0.55, L / 2 + 0.046), { color: '#16171a', rough: 1.2 });
+  b.add(decalPlane(0.46, 0.1, 0, 0.61, L / 2 + 0.0525, 'pz'), { color: '#ffffff', rough: 0.6, decal: R_PLATE, plate: true });
   for (const s of [1, -1]) {
     b.add(rbox(0.32, 0.18, 0.07, 0.04, s * 0.82, 0.72, L / 2 - 0.0), { color: HEAD, light: LIGHT_HEAD, rough: 0.4 });
-    b.add(bx(0.1, 0.1, 0.06, s * 1.08, 0.72, L / 2 - 0.03), { color: AMBER, light: s > 0 ? LIGHT_BLINK_L : LIGHT_BLINK_R });
+    const hl = decalPlane(0.3, 0.16, s * 0.82, 0.81, L / 2 + 0.037, 'pz');
+    if (s < 0) flipU(hl);
+    b.add(hl, { color: '#ffffff', light: LIGHT_HEAD, rough: 0.15, decal: R_HEAD });
+    b.add(rbox(0.1, 0.08, 0.04, 0.015, s * 1.06, 0.76, L / 2 + 0.0), { color: AMBER, light: s > 0 ? LIGHT_BLINK_L : LIGHT_BLINK_R, rough: 0.3 });
     b.add(bx(0.24, 0.16, 0.05, s * 0.95, 0.8, -L / 2 - 0.01), { color: TAIL, light: LIGHT_TAIL, rough: 0.5 });
+    const tl = decalPlane(0.22, 0.14, s * 0.95, 0.88, -L / 2 - 0.037, 'nz');
+    if (s > 0) flipU(tl);
+    b.add(tl, { color: '#ffffff', light: LIGHT_TAIL, rough: 0.2, decal: R_TAIL });
     b.add(bx(0.12, 0.16, 0.05, s * 0.72, 0.8, -L / 2 - 0.01), { color: AMBER, light: s > 0 ? LIGHT_BLINK_L : LIGHT_BLINK_R });
-    b.add(rbox(0.1, 0.26, 0.18, 0.03, s * 1.25, 1.62, zCab + 0.75), { color: DARK });
+    b.add(tube(s * 1.15, 2.3, zCab + 0.75, s * 1.32, 2.3, zCab + 0.82, 0.02), { color: DARK });
+    b.add(rbox(0.1, 0.34, 0.18, 0.03, s * 1.34, 1.85, zCab + 0.84), { color: DARK });
+    if (LOD === 0) {
+      b.add(decalPlane(0.08, 0.3, s * 1.34, 2.02, zCab + 0.749, 'nz'), { color: '#8c9aa6', rough: 0.15, finish: 'chrome' });
+      // boarding steps under the door
+      for (const y of [0.42, 0.78]) b.add(bx(0.24, 0.035, 0.4, s * 1.08, y, zCab - 0.45), { color: '#4a4e53', rough: 0.9 });
+    }
+    // fuel tank (driver side) / battery box, side guards, mud flaps behind the rear axles
+    if (s > 0) {
+      const tk = new THREE.CylinderGeometry(0.26, 0.26, 1.1, sg(14), 1);
+      tk.rotateX(Math.PI / 2);
+      tk.translate(0.92, 0.66, axF - 1.5);
+      b.add(tk, { color: '#b7bcc1', rough: 0.5, finish: 'chrome' });
+    } else b.add(rbox(0.4, 0.4, 0.7, 0.03, -0.92, 0.46, axF - 1.4), { color: '#26282b', rough: 1.2 });
+    b.add(bx(0.03, 0.1, 1.6, s * 1.12, 0.55, axF - 3.1), { color: '#c0c4c8', rough: 0.7 });
+    b.add(bx(0.03, 0.1, 1.6, s * 1.12, 0.78, axF - 3.1), { color: '#c0c4c8', rough: 0.7 });
+    b.add(bx(0.4, 0.42, 0.02, s * 1.0, 0.18, axF - 6.1), { color: '#18191b', rough: 1.4 });
   }
   // flatbed + headboard
   const bedZ = -0.95,
@@ -1286,12 +1397,12 @@ function lorry(): THREE.BufferGeometry {
     [0.8, 0.6, 0.9, 0.5, 2.06, 0.95, '#d98c6a'],
   ];
   for (const [w, h, d, x, y, z, c] of crates) b.add(rbox(w - 0.06, h, d - 0.06, 0.04, x, y, z), { color: c, part: 1, rough: 1.1 });
-  // variant 1: tarp with lettering
+  // variant 1: tarp with lettering, ratchet straps over it
   b.add(rbox(W - 0.02, 1.7, bedD - 0.2, 0.14, 0, 1.06, bedZ - 0.05, 2), { color: '#6d8768', part: 2, rough: 1.2 });
   b.add(decalPlane(4.6, 1.15, W / 2 + 0.002, 1.9, bedZ - 0.1, 'px'), { color: '#ffffff', decal: R_TARP, part: 2 });
   b.add(decalPlane(4.6, 1.15, -W / 2 - 0.002, 1.9, bedZ - 0.1, 'nx'), { color: '#ffffff', decal: R_TARP, part: 2 });
+  for (const z of [bedZ + 2.3, bedZ - 2.4]) b.add(rbox(W + 0.01, 1.71, 0.05, 0.14, 0, 1.065, z), { color: '#d9a326', part: 2, rough: 1.1 });
   // wheels: steered front axle + tandem rear
-  const axF = L / 2 - 1.3;
   for (const s of [1, -1]) {
     wheel(b, s * 1.0, 0.48, axF, 0.48, 0.34, true, '#c9ccd0', 'steel');
     wheel(b, s * 1.0, 0.48, axF - 4.4, 0.48, 0.38, false, '#c9ccd0', 'steel');
@@ -1473,16 +1584,26 @@ function icecream(): THREE.BufferGeometry {
   const b = new Builder();
   const L = 5.0,
     W = 2.0;
-  b.add(rbox(W, 1.92, L, 0.4, 0, 0.38, 0, 2), { color: '#ffffff', paint: true, rough: 0.8 });
-  b.add(rbox(W + 0.03, 0.34, L - 0.06, 0.15, 0, 0.36, 0), { color: '#f7f4ee', rough: 0.9 });
-  // windscreen + cab side windows
-  b.add(rbox(1.78, 0.62, 0.08, 0.05, 0, 1.38, L / 2 - 0.02), { color: GLASS, rough: 0.2 });
-  for (const s of [1, -1]) b.add(bx(0.03, 0.56, 0.86, s * (W / 2 + 0.003), 1.42, L / 2 - 0.72), { color: GLASS, rough: 0.2 });
+  const axF = L / 2 - 0.9,
+    axR = axF - 3.0;
+  b.add(archedSlab(L, 0.38, 2.3, W, [axF, axR], 0.36, 0.45, 0.3, 0.4, 0.08), { color: '#ffffff', paint: true, rough: 0.8 });
+  b.add(archedSlab(L + 0.02, 0.36, 0.7, W + 0.03, [axF, axR], 0.36, 0.45, 0.2, 0.05, 0.04), { color: '#f7f4ee', rough: 0.9 });
+  for (const az of [axF, axR]) archLiner(b, az, 0.36, 0.44, W - 0.12);
+  // windscreen + cab side windows in seals, over a cab interior
+  const glass: PartOpts = { color: GLASS, rough: 0.2, det: { c: 5, a: [0.88, 1.36, 2.1, L / 2 - 0.3], b: [L / 2 - 1.6, L / 2 - 1.0, -9, 0] } };
+  b.add(roundPane(1.84, 0.68, 0.1, 0, 1.69, L / 2 + 0.004, 'pz'), { color: '#1a1c1f', rough: 1.1 });
+  b.add(roundPane(1.76, 0.6, 0.08, 0, 1.69, L / 2 + 0.009, 'pz'), glass);
+  if (LOD === 0) for (const x of [-0.45, 0.4]) b.add(tube(x - 0.05, 1.42, L / 2 + 0.025, x + 0.25, 1.85, L / 2 + 0.025, 0.011), { color: '#141518', rough: 1.4 });
+  cabSide(b, W / 2, 0.82, 0.5, 1.7, L / 2 - 0.72, L / 2 - 1.2, 0.75, glass);
   // serving hatch (kerb side) with striped awning
   b.add(bx(0.03, 0.74, 1.95, -W / 2 - 0.005, 1.18, -0.55), { color: '#3a2a22', light: LIGHT_CABIN, rough: 0.3 });
   for (let i = 0; i < 6; i++) b.add(bx(0.62, 0.05, 0.36, -W / 2 - 0.27, 1.98 - 0.0, -1.45 + i * 0.36), { color: i % 2 === 0 ? '#e9547e' : '#ffffff' });
   b.add(decalPlane(2.1, 0.42, -W / 2 - 0.012, 0.86, -0.55, 'nx'), { color: '#ffffff', decal: R_ICECREAM });
   b.add(decalPlane(3.2, 1.0, W / 2 + 0.012, 1.42, -0.5, 'px'), { color: '#ffffff', decal: R_ICECREAM });
+  for (const e of [1, -1]) {
+    b.add(bx(0.49, 0.12, 0.012, 0, 0.44, e * (L / 2 + 0.05)), { color: '#16171a', rough: 1.2 });
+    b.add(decalPlane(0.46, 0.1, 0, 0.5, e * (L / 2 + 0.0565), e > 0 ? 'pz' : 'nz'), { color: '#ffffff', rough: 0.6, decal: R_PLATE, plate: true });
+  }
   // the giant cone on the roof
   const cone = new THREE.ConeGeometry(0.42, 0.95, sg(14), 1);
   cone.rotateX(Math.PI);
@@ -1499,12 +1620,11 @@ function icecream(): THREE.BufferGeometry {
   b.add(rbox(W + 0.03, 0.2, 0.22, 0.07, 0, 0.36, -L / 2 + 0.07), { color: CHROME, rough: 0.5 });
   for (const s of [1, -1]) {
     b.add(rbox(0.3, 0.26, 0.08, 0.12, s * 0.66, 0.66, L / 2 - 0.0), { color: HEAD, light: LIGHT_HEAD, rough: 0.4 });
+    b.add(decalPlane(0.24, 0.22, s * 0.66, 0.79, L / 2 + 0.042, 'pz'), { color: '#ffffff', light: LIGHT_HEAD, rough: 0.15, decal: R_HEAD_ROUND });
     b.add(bx(0.1, 0.09, 0.06, s * 0.92, 0.62, L / 2 - 0.04), { color: AMBER, light: s > 0 ? LIGHT_BLINK_L : LIGHT_BLINK_R });
     b.add(rbox(0.2, 0.26, 0.06, 0.06, s * 0.75, 0.7, -L / 2 + 0.0), { color: TAIL, light: LIGHT_TAIL, rough: 0.5 });
     b.add(bx(0.1, 0.09, 0.06, s * 0.92, 1.02, -L / 2 + 0.02), { color: AMBER, light: s > 0 ? LIGHT_BLINK_L : LIGHT_BLINK_R });
   }
-  const axF = L / 2 - 0.9,
-    axR = axF - 3.0;
   for (const s of [1, -1]) {
     wheel(b, s * 0.88, 0.36, axF, 0.36, 0.26, true);
     wheel(b, s * 0.88, 0.36, axR, 0.36, 0.26, false);
