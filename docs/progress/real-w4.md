@@ -4,6 +4,43 @@ Branch `claude/real-w4-people` (from `claude/pensive-gates-bim12i` e517126). Bri
 Photo test "Person" (REAL.md). Owned: `src/sim/pedestrians/**` presentation (not crowd/places logic).
 
 ## Resume here
+* 2026-10-28 ~23:00 UTC — session 6 ENDED (tokens.py ctx max 231k; get_session context_usage reads 0). All
+  pushed. Downtown: console clean, invariants {} (shots/w4/dt6.txt); overview unchanged (ov6). Sheet
+  docs/progress/real/w4_after_s6.jpg (before|after: long hair from behind, shorts at 2 m, hand at 2 m, child
+  on an adult chair). Crouch fix verified (crouch3: same catch-up speeds, pelvis drop ≤ 4 cm, was 6–8).
+  Next: (a) seat folds on light shorts still read a little like wood-grain arcs (s6b predates the last
+  seat-fold change: judge `people-bench --shots legsback --where "m.look.style.trouserEnd > 0.45 &&
+  m.look.style.trouserEnd < 0.9"` first); (b) folds on dark cloth only via the sky lift (unjudged after the
+  change); (c) hair lock crests a little stripy at 1.6 m; (d) children dangling feet: ankle angle (toes
+  point down?) unjudged; (e) s5 items (d) hat crown from behind and (e) sitter gestures still open;
+  (f) gaitCycleOf (rig.ts, crowd phase for non-gait LODs) still uses the uncapped speed — harmless.
+* 2026-10-28 session 6 STARTED from pensive-gates ee1619d. Lead's s5 verdict priorities: (1) the 3-person group
+  "deep jog crouch" (s5i p0_body) — reproduce/fix or prove a bench artefact; (2) trousers smooth at 2 m, shorts
+  plastic → knee/seat drag folds + side seams; (3) black long-hair sheet one surface from behind → lock breakup
+  all round; (4) hands at 2 m: finger separation + nail/knuckle hint; (5) seated thighs resting on seats.
+  New: `scripts/ped-crouch.mjs` (renderer `probe` hook in render.ts: every posed upright figure's pelvis drop
+  + knees, histogram + worst cases by state/persona).
+  (1) CROUCH — cause found, fixed. Live sim (crouch1: 4 POIs × 30 s, 6332 upright figure-frames): pelvis drop
+      max 8 cm (a 1.85 m/s stride), no crouch in play. Bench sequence (`--bench 1`, crouch2): right after
+      setHours ~30 NON-joggers (strollers pv 0.85, families, beachgoers in pairs/threes) close up on their party
+      at 2.1–2.8 m/s → above the run blend onset (1.95) the gait poses a JOG (pelvis −6…8 cm, knees bent); the
+      bench's pause freezes that frame = the s5i "deep jog crouch" of a 3-person group. Also visible to a user
+      after a time scrub (strollers jogging for a few s). Fix gait.ts: only persona 'jogger' may pose above
+      GAIT_VWALK 1.9 m/s (just below the run onset); everyone else walks briskly while catching up.
+  (2) Trousers (shader.ts pedFabric, reg 3): fold relief in metres (`fold`, into pedFabH + trough occlusion):
+      knee honeycomb arcs (deeper with bend), crotch whiskers, seat drag folds + buttock-fold crease, wandering
+      tube folds, shin bagging, pressed side-seam step + puckers; `pedRidge` = narrow crest/broad trough with
+      per-fold amplitude noise (the first pass read as even stripes). Hem shadow on skin/sock below every
+      trouser/sleeve hem + lit rolled edge (shorts/short sleeves). Toggle `?nofolds` (uniform uPedFolds).
+  (3) Long hair sheet: `pedLocks` big locks (~1.5–2 cm, waving, per-lock tone, occluded gaps) in colour and
+      as a 3.5 mm bump in HAIR_NORMAL (sheen breaks per lock) + an albedo "sky sheen" lift on lock crests for
+      dark hair in shade.
+  (4) Hands (body.ts buildFingers): fingers thinner (r 0.18/0.19/0.18/0.155 × pw) and splayed 0.15 → visible
+      gaps; tint: knuckle highlight over the joints + palm crease, darker sides facing the neighbour finger.
+      Found: back of the hand showed a dot grid = shadow acne — the shadow proxy shrinks 1 cm along the
+      normal, more than half the hand's thickness (turned inside out) → hand bones shrink 15 % of that.
+  (5) Seated: bench `--sit 1` (shots seat/seat2/seatc): s6s — benches and café chairs, thighs on the seats,
+      no clipping seen in 8 frames.
 * 2026-10-28 ~22:15 UTC — session 5 ENDED (context ~197k). All pushed. Downtown: console clean, invariants {}
   (shots/w4/dt5b.txt). Sheet docs/progress/real/w4_after_s5.jpg (eyes before|after, dark long hair, trousers +
   knit at 1 m). Next: (a) trousers still fairly smooth at 2 m — stronger drape folds in form (VS) rather than
@@ -197,6 +234,9 @@ Photo test "Person" (REAL.md). Owned: `src/sim/pedestrians/**` presentation (not
 * Face detail fade at px 3.5–9 mm: eyes vanished at 3–4 m (where real eyes still read) → 6–16 mm.
 
 ## Toggles / tiers / costs
+* (s6) `?nofolds` — no trouser fold relief / hem shadow / dark-cloth lift (uniform uPedFolds; close level only,
+  inside pedFabric's det fade; FS ALU only). Hair locks + lock sheen: unconditional (sheet only, fade by
+  fwidth). Hands out of the shadow proxy: saves a few verts in the shadow pass. GAIT_VWALK, seat dangle: free.
 * (s5) All s5 work is shader-only/free CPU: eyes, face fade (close level); hair sheen (all levels with HAIR_NORMAL —
   a few ALU); lock-end discards (sheet, fades by fwidth); fabric bump + fuzz (close level: inside pedFabric's
   det fade, i.e. off beyond ~1 cm/px). No new toggles: `?nopeopledetail` removes the close level (fabric/face);
@@ -218,6 +258,7 @@ Photo test "Person" (REAL.md). Owned: `src/sim/pedestrians/**` presentation (not
   figures < 15 m. Needs an Adreno measurement; the medium/low tiers shrink the radius to 11 / 7 m.
 
 ## Sheets
+* docs/progress/real/w4_after_s6.jpg — session 6: hair from behind, shorts 2 m, hand 2 m (acne fixed), child seated.
 * docs/progress/real/w4_after_s5.jpg — session 5: sclera before|after, dark long hair (sheen, lock ends, cap fix), clothing at ~1 m.
 * docs/progress/real/w4_after_s4.jpg — session 4: head form, hair flow/volume, forearm stripes, walk, group 10 m.
 * docs/progress/real/w4_after_s3.jpg — session 3: hairline, dress stride, umbrella / briefcase / bag flap.
@@ -266,3 +307,6 @@ WHAT THE COST BOUGHT (lifetime cost of each kind of content in context, all agen
 
 ## Tokens (session 5, tokens.py)
 TOTAL weighted 1.7M (cache read 77 %, write 10 %, output 13 %); 90 calls, ctx median 151k / max 197k.
+
+## Tokens (session 6, tokens.py)
+TOTAL weighted 2.3M (cache read 79 %, write 9 %, output 11 %); 107 calls, ctx median 178k / max 231k.

@@ -51,7 +51,7 @@ try {
   await page.waitForTimeout(2500);
   // standing / slowly walking adults and children on open ground, spread over the crowd
   const figs = await page.evaluate(
-    ([n, skip, persona, carry, where]) => {
+    ([n, skip, persona, carry, where, sit]) => {
       const W = where ? new Function('m', 'c', 'return (' + where + ');') : null;
       const c = window.__city;
       c.setSpeed(0);
@@ -60,7 +60,7 @@ try {
       for (const p of crowd.parties) {
         if (p.state === 'gone' || (persona && p.persona !== persona)) continue;
         // --carry: only people carrying something (handbag / shopping / briefcase, cup or phone, umbrella)
-        for (const m of p.members) if ((!W || W(m, c)) && (!carry || (m.look.flags & (128 | 256 | 512)) || m.walkProp > 0 || m.bag || (m.look.umbrellaOwner && c.ctx.uniforms.uRain.value > 0.3)) && m.present && m.fade > 0.99 && m.sit < 0.05 && m.lie < 0.05 && m.rideG === null && !m.look.pram) all.push(m);
+        for (const m of p.members) if ((!W || W(m, c)) && (!carry || (m.look.flags & (128 | 256 | 512)) || m.walkProp > 0 || m.bag || (m.look.umbrellaOwner && c.ctx.uniforms.uRain.value > 0.3)) && m.present && m.fade > 0.99 && (sit ? m.sit > 0.95 : m.sit < 0.05) && m.lie < 0.05 && m.rideG === null && !m.look.pram) all.push(m);
       }
       all.sort((a, b) => Math.hypot(a.x, a.z + 40) - Math.hypot(b.x, b.z + 40));
       const out = [];
@@ -75,7 +75,7 @@ try {
       }
       return out;
     },
-    [n, skip, args.persona ?? '', !!args.carry, args.where ?? ''],
+    [n, skip, args.persona ?? '', !!args.carry, args.where ?? '', !!args.sit],
   );
   const SH = {
     face: { ty: 0.925, d: 0.75, dy: 18, pitch: 2 },
@@ -89,6 +89,13 @@ try {
     headback: { ty: 0.93, d: 0.9, dy: 150, pitch: 12 },
     profile: { ty: 0.925, d: 0.8, dy: 90, pitch: 2 },
     headlow: { ty: 0.91, d: 0.8, dy: 30, pitch: -10 },
+    legs2: { ty: 0.3, d: 2, dy: 25, pitch: 3 },
+    legsback: { ty: 0.33, d: 2, dy: 165, pitch: 3 },
+    hand2: { ty: 0.47, d: 2, dy: 60, pitch: 6 },
+    seat: { ty: 0.3, d: 1.6, dy: 75, pitch: 8 },
+    seatc: { ty: 0.28, d: 1.0, dy: 90, pitch: 10 },
+    seat2: { ty: 0.3, d: 1.8, dy: 30, pitch: 18 },
+    hairback: { ty: 0.82, d: 1.6, dy: 175, pitch: 6 },
   };
   for (let i = 0; i < figs.length; i++) {
     const f = figs[i];

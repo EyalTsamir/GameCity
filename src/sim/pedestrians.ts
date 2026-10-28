@@ -16,7 +16,7 @@ import type { CityContext, CityModule } from '../core/context';
 import { buildPlaces } from './pedestrians/places';
 import { Crowd, type BusEvent } from './pedestrians/crowd';
 import { CrowdRenderer } from './pedestrians/render';
-import { setPedHairline } from './pedestrians/shader';
+import { setPedHairline, setPedFolds } from './pedestrians/shader';
 import { CrowdRenderer as LegacyRenderer } from './pedestrians/legacy/render';
 import { gaitConfig } from './pedestrians/rig';
 import { Riders } from './pedestrians/riders';
@@ -40,6 +40,7 @@ export default function create(ctx: CityContext): CityModule {
   // close level (sculpted face, fingers, fabric detail): 15 m on high, 11 on medium, 7 on low;
   // ?nopeopledetail turns it off
   if (ctx.debug.params.has('nohairline')) setPedHairline(false);
+  if (ctx.debug.params.has('nofolds')) setPedFolds(false);
   if (!legacy) (renderer as CrowdRenderer).closeDist = ctx.debug.params.has('nopeopledetail') ? 0 : ctx.quality.level === 'low' ? 7 : ctx.quality.level === 'medium' ? 11 : 15;
   crowd.warmStart();
   // street vendors' carts (one static mesh)
