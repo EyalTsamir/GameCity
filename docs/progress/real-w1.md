@@ -3,6 +3,11 @@
 Branch `claude/real-w1-facades` (from `claude/pensive-gates-bim12i`). Brief: docs/progress/real-briefs.md "W1".
 
 ## Resume here
+* **Session 5 (10-28):** order = bug 4 → window reveal oblique → lawn-rim probe → apartment glass → roller door → sheet.
+  - **Bug 4 FIXED:** lot 23 is the SLANT crown (H 82.1, walls to 89.6 at the back), not stepped. slantTop used
+    edgeGrid (m = floors − 1) so everything above H was outside the grid (plain dark wall + a speckled row).
+    towers.ts slantTop: `gr.m = ceil((highY − v0) / ch)` → the curtain wall runs up to the slope (shots/w1/s5/tw_fix.png).
+    Probe tip: the shell mesh is ONE indexed geometry `buildings-shell` (iterate index.count, not position.count).
 * **Session 4 stopped by the lead at the context cap (WIP pushed, nothing judged as final).** Next session, in order:
   1. **Bug 4 tower crown (lot 23 twin towers, stepped crown, scheme 1 wall #3d4854):** `?bdbg=ret` (shots/w1/tw/f_ret.png)
      paints the crown band GREEN = pixels with `cell` outside the grid (`cell.y >= vB.y` etc., materials.ts ~l.1140),
