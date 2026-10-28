@@ -4,11 +4,40 @@ Branch `claude/real-w4-people` (from `claude/pensive-gates-bim12i` e517126). Bri
 Photo test "Person" (REAL.md). Owned: `src/sim/pedestrians/**` presentation (not crowd/places logic).
 
 ## Resume here
+* 2026-10-28 ~22:15 UTC — session 5 ENDED (context ~197k). All pushed. Downtown: console clean, invariants {}
+  (shots/w4/dt5b.txt). Sheet docs/progress/real/w4_after_s5.jpg (eyes before|after, dark long hair, trousers +
+  knit at 1 m). Next: (a) trousers still fairly smooth at 2 m — stronger drape folds in form (VS) rather than
+  shade; collar band (8-side flat ring) needs points + roll; (b) long hair mid-sheet still dark-flat in shade:
+  sheen shows only in direct light — consider a faint sky-lit sheen lobe; (c) check the jog-crouch group
+  (below); (d) hat crown reads pointy/pentagonal from behind (s5h p0_headback); (e) idle: café/bench sitters'
+  gestures + glances at passers-by (head turns are random, not targeted).
 * 2026-10-28 ~22:10 UTC — session 5 STARTED from pensive-gates b087c4b. Lead's s4 verdict priorities:
   (1) sclera too bright on dark skin (off-white, lid shadow, smaller), (2) long hair = black plaster sheet (sheen
   bands, separated locks at the ends, thinning edges), (3) FACE-edge tone line + judge fringe, (4) clothing at 2 m
   plastic (fabric roughness/micro-texture, collar/placket depth, pockets), (5) idle people (weight shift,
   gestures, head turns). Baseline: shots/w4/s5a (dark-skin faces), shots/w4/s5h (long hair).
+  Done (all shader.ts unless noted; judged s5b faces, s5i/s5j long hair, s5k clothes):
+  (1) Eyes (pedFacePaint): opening 5.4/3.4 → 4.7/3.0 mm, iris r 5.2 → 5.7 mm (upper lid covers its top),
+      sclera off-white (0.66,0.62,0.56) mixed 22 % with the skin tone, × 0.82 recess, upper-lid shadow (−60 %
+      over 4.8 mm), lower-lid shade, glint 0.35 → 0.22. Compare shots/w4/s5_eyecmp.png (before | after).
+  (2) Hair: Kajiya-Kay two-lobe sheen in LAMBERT_PEOPLE (pedHairT = strand tangent from the gradient of the
+      flow's along-strand coord in HAIR_NORMAL, pedHairSh = per-lock shift) replacing the Blinn hair sheen;
+      primary 0.035 white, secondary 0.05 hair-tinted. Long sheet: VS passes vPedFace = (tip dist, |angle|, 5)
+      (z 5 = sheet; |a| — signed a gave a discard strip down the ±π back seam); FS "LONG HAIR ENDS" discards per
+      lock: triangular lock profile + own length per lock + fine straggle over the last 6 cm, front edges thin
+      out (|a| < 1.45), tips a little lighter; fades out with fwidth. Hair-cap lumps/crown lift off under hats
+      (they poked through caps as black blotches).
+  (3) FACE-edge: face paint now fades across the boundary triangle row (F = vPedFace.xy / z, mix by z);
+      stubble ends above the under-chin boundary. Not seen as a line in s5b/s5i 3/4 views.
+  (4) Fabric: pedFabric writes pedFabH (fold/seam shade → height, + weave: denim twill, rib knit on ~1/3 of
+      tops by a per-person hash, jersey courses elsewhere) and pedFabK; FABRIC_NORMAL = derivative bump;
+      LAMBERT fuzz rim (Lambert × (1−N·V)³ × 0.9) on cloth. Front pocket openings on every trouser cut, back
+      welt pockets + button on non-denim, shirt placket + buttons + collar shadow (vPedFB bit 64 = collar
+      from col[11] bit 8), jacket flap pockets (vPedFB bit 128 = jacket, set in the VS colour block).
+  (5) Idle (animate.ts): weight shift = tanh-saturated wave (holds on one leg, shifts over in ~1 s), rate per
+      person. Head turns (crowd.ts headGoal) and TALK gestures already existed.
+  Open: s5i p0_body shows a 3-person group in a deep jog crouch where the baseline s5h p0_body walked —
+  s5 touched no gait code (bench timing / catch-up speed spike?) — worth a `--vel` check.
 * 2026-10-28 ~21:50 UTC — session 4 ENDED. All pushed. Downtown shot: console clean, invariants {}
   (shots/w4/dt4.txt). Sheet docs/progress/real/w4_after_s4.jpg (frames predate the last two commits:
   close fringe + clump breaks — judge those first: `node scripts/people-bench.mjs --n 4 --skip 1 --shots
@@ -165,6 +194,10 @@ Photo test "Person" (REAL.md). Owned: `src/sim/pedestrians/**` presentation (not
 * Face detail fade at px 3.5–9 mm: eyes vanished at 3–4 m (where real eyes still read) → 6–16 mm.
 
 ## Toggles / tiers / costs
+* (s5) All s5 work is shader-only/free CPU: eyes, face fade (close level); hair sheen (all levels with HAIR_NORMAL —
+  a few ALU); lock-end discards (sheet, fades by fwidth); fabric bump + fuzz (close level: inside pedFabric's
+  det fade, i.e. off beyond ~1 cm/px). No new toggles: `?nopeopledetail` removes the close level (fabric/face);
+  hair sheen/locks follow `?nohairline`? — NO, they are unconditional (add a toggle if the lead wants one).
 * (s4) Close head ~56 × 80 rows ≈ +2.5 k verts, hair cap 40 × 14 + 8-deep sheet ≈ +0.8 k, fringe/bun/pony
   ≈ +0.4 k per close figure (close level only, < 15 m high tier). Not measured on the target; the old
   +9 k tris/close figure figure (s1) is now ≈ +13 k. All s4 work is inside the existing `?nopeopledetail`
@@ -182,6 +215,7 @@ Photo test "Person" (REAL.md). Owned: `src/sim/pedestrians/**` presentation (not
   figures < 15 m. Needs an Adreno measurement; the medium/low tiers shrink the radius to 11 / 7 m.
 
 ## Sheets
+* docs/progress/real/w4_after_s5.jpg — session 5: sclera before|after, dark long hair (sheen, lock ends, cap fix), clothing at ~1 m.
 * docs/progress/real/w4_after_s4.jpg — session 4: head form, hair flow/volume, forearm stripes, walk, group 10 m.
 * docs/progress/real/w4_after_s3.jpg — session 3: hairline, dress stride, umbrella / briefcase / bag flap.
 
@@ -226,3 +260,6 @@ WHAT THE COST BOUGHT (lifetime cost of each kind of content in context, all agen
   system+brief                                    1.1M  37.6%
   Bash:read/grep                                  0.4M  13.8%
 ```
+
+## Tokens (session 5, tokens.py)
+TOTAL weighted 1.7M (cache read 77 %, write 10 %, output 13 %); 90 calls, ctx median 151k / max 197k.

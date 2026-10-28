@@ -309,7 +309,8 @@ void pedPose(inout vec3 p, inout vec3 n) {
       vPedFace = vec3(aux.y, 0.0, 3.0);
       float a = atan(p.x, p.z + 0.015);
       float lump = 0.55 * sin(a * 7.0 + p.y * 60.0 + float(iC1.x & 15u)) + 0.45 * sin(a * 13.0 - p.y * 90.0);
-      float grow = smoothstep(0.05, 0.45, aux.y);
+      // (not under a hat: the lumps and crown lift poked through caps as dark blotches)
+      float grow = smoothstep(0.05, 0.45, aux.y) * (((iC1.y >> 24u) & 7u) != 0u ? 0.0 : 1.0);
       p += n * grow * (0.0045 * lump + 0.007 * smoothstep(0.3, 1.0, aux.y) * (0.6 + 0.4 * -n.z));
     }
     // volume (curly / full hair): scale about the head centre
@@ -744,7 +745,7 @@ vec3 pedFabric(vec3 pc, float reg, float h, float sHem) {
   float cloth = reg > 1.5 && reg < 3.5 ? clamp(sHem / max(fwidth(sHem), 1e-4) + 0.5, 0.0, 1.0) : 1.0;
   pc *= mix(1.0, sh, det * cloth);
   pedFabK = det * cloth;
-  pedFabH = ((sh - 1.0) * 0.004 + wv * wvK * (knit ? 0.00018 : 0.0001)) * pedFabK;
+  pedFabH = ((sh - 1.0) * 0.0065 + wv * wvK * (knit ? 0.00018 : 0.0001)) * pedFabK;
   pc = mix(pc, thread, clamp(stitch, 0.0, 1.0) * det * (denim ? 0.7 : 0.35));
   return pc;
 }
@@ -997,7 +998,7 @@ void RE_Direct_Lambert( const in IncidentLight directLight, const in vec3 geomet
     // cloth: fibres standing off the surface catch the light at grazing view angles (soft rim, tinted by
     // the cloth) — what separates woven / knitted fabric from smooth plastic
     float fnv = 1.0 - saturate( dot( geometryNormal, geometryViewDir ) );
-    reflectedLight.directDiffuse += directLight.color * BRDF_Lambert( material.diffuseColor ) * pedFabK * 0.9 * fnv * fnv * fnv * saturate( dot( geometryNormal, directLight.direction ) + 0.3 );
+    reflectedLight.directDiffuse += directLight.color * BRDF_Lambert( material.diffuseColor ) * pedFabK * 1.2 * fnv * fnv * fnv * saturate( dot( geometryNormal, directLight.direction ) + 0.3 );
   }
   if ( dot( pedHairT, pedHairT ) > 0.5 ) {
     // hair: anisotropic sheen (Kajiya-Kay) — a band across the strands, broken per lock by the shift;
