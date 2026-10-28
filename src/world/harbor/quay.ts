@@ -46,28 +46,52 @@ export function castBollard(b: HB, x: number, y: number, z: number): void {
   b.pat(PAT.NONE);
 }
 
-/** rope eye dropped over a bollard, the line leaving toward (tx, ty, tz) (the boat's rope takes over there) */
-export function ropeEye(b: HB, x: number, y: number, z: number, tx: number, ty: number, tz: number, col: string): void {
+/** rope eye dropped over a bollard: the loop rides on the neck, dipping on the side away from the line and drawn
+ *  up on the side it leaves, its two legs run together into the splice and on toward (tx, ty, tz) (the boat's rope
+ *  takes over there); r = rope radius */
+export function ropeEye(b: HB, x: number, y: number, z: number, tx: number, ty: number, tz: number, col: string, r = 0.032): void {
   b.color(col).pat(PAT.NONE);
   const pts: V3[] = [];
   const dx = tx - x,
     dz = tz - z,
     L = Math.hypot(dx, dz) || 1;
   const ux = dx / L,
-    uz = dz / L;
-  for (let k = 0; k <= 12; k++) {
-    const a = (k / 12) * Math.PI * 2;
-    pts.push([x + Math.cos(a) * 0.2, y + 0.33 + 0.03 * Math.cos(a - Math.atan2(uz, ux)), z + Math.sin(a) * 0.2]);
+    uz = dz / L,
+    ha = Math.atan2(uz, ux);
+  const R = 0.17 + r;
+  for (let k = 0; k <= 14; k++) {
+    const a = (k / 14) * Math.PI * 2;
+    pts.push([x + Math.cos(a) * R, y + 0.3 - 0.07 * Math.cos(a - ha), z + Math.sin(a) * R]);
   }
-  b.tube(pts, 0.032, 5, true);
-  // the two legs of the eye splice running out to the bollard face
+  b.tube(pts, r, 5, true);
+  // the legs leave the loop on either side of the line and close into the splice
+  const sx = -uz,
+    sz = ux;
+  for (const sd of [-1, 1])
+    b.tube(
+      [
+        [x + ux * R * 0.7 + sx * sd * R * 0.7, y + 0.24, z + uz * R * 0.7 + sz * sd * R * 0.7],
+        [x + ux * (R + 0.18) + sx * sd * r, y + 0.25, z + uz * (R + 0.18) + sz * sd * r],
+        [x + ux * (R + 0.55), y + 0.26, z + uz * (R + 0.55)],
+      ],
+      r * 0.85,
+      5,
+    );
+  // splice (whipped thicker section) then the single line on to the target
   b.tube(
     [
-      [x + ux * 0.2, y + 0.34, z + uz * 0.2],
-      [x + ux * 0.45, y + 0.36, z + uz * 0.45],
+      [x + ux * (R + 0.4), y + 0.255, z + uz * (R + 0.4)],
+      [x + ux * (R + 0.75), y + 0.26, z + uz * (R + 0.75)],
+    ],
+    r * 1.35,
+    5,
+  );
+  b.tube(
+    [
+      [x + ux * (R + 0.7), y + 0.26, z + uz * (R + 0.7)],
       [tx, ty, tz],
     ],
-    0.032,
+    r,
     5,
   );
 }
@@ -97,21 +121,44 @@ function pallet(b: HB, x: number, y: number, z: number, yaw: number, col = '#b08
 }
 
 /** stack of plastic fish boxes; the top one iced with fish when `catch` */
+/** fish-box colours of different owners / ages: harbour blue, faded blue, red, orange, grey-white, green */
+const BOX_COLS = ['#2f6fb3', '#4a7fae', '#5b89a8', '#c44a2c', '#b5583c', '#d9822b', '#dcd9cf', '#bfc3bd', '#3f7f5a'];
+
 function fishBoxStack(b: HB, x: number, y: number, z: number, n: number, yaw: number, rng: Rng, fish: boolean): void {
   b.pushT(x, y, z, yaw);
+  // a stack is mostly one owner's colour, with strays from other boats mixed in
+  const own = BOX_COLS[Math.floor(rng.next() * BOX_COLS.length)];
   for (let k = 0; k < n; k++) {
-    const col = rng.next() < 0.25 ? '#c44a2c' : rng.next() < 0.3 ? '#e2e0d8' : '#2f6fb3';
+    const stray = rng.next() < 0.3;
+    const base = new THREE.Color(stray ? BOX_COLS[Math.floor(rng.next() * BOX_COLS.length)] : own);
+    // sun-faded / dirty: lighten-desaturate or darken a little per box
+    const age = rng.next();
+    base.lerp(new THREE.Color('#c9c7bf'), age * 0.22).multiplyScalar(0.86 + 0.2 * rng.next());
     const yy = k * 0.255;
-    const off = (rng.next() - 0.5) * 0.04;
-    b.color(col).pat(PAT.NONE);
-    b.box(off, yy + 0.015, 0, 0.72, 0.03, 0.44, 0, 0);
+    const off = (rng.next() - 0.5) * 0.06,
+      offz = (rng.next() - 0.5) * 0.04;
+    // the odd box turned across the stack or skewed where it was dropped
+    const turn = k > 0 && rng.next() < 0.18 ? Math.PI / 2 : (rng.next() - 0.5) * 0.12;
+    b.pushT(off, yy, offz, turn);
+    b.color(base).pat(PAT.GRIME, 0.25 + age * 0.4);
+    b.box(0, 0.015, 0, 0.72, 0.03, 0.44, 0, 0);
     for (const sd of [-1, 1]) {
-      b.box(off + sd * 0.35, yy + 0.14, 0, 0.025, 0.25, 0.44, 0, 0);
-      b.box(off, yy + 0.14, sd * 0.21, 0.72, 0.25, 0.025, 0, 0);
-      b.color('#15202b');
-      b.box(off + sd * 0.364, yy + 0.2, 0, 0.004, 0.045, 0.13, 0, 0);
-      b.color(col);
+      b.box(sd * 0.35, 0.14, 0, 0.025, 0.25, 0.44, 0, 0);
+      b.box(0, 0.14, sd * 0.21, 0.72, 0.25, 0.025, 0, 0);
+      // rolled top rim + stacking lugs
+      b.box(0, 0.255, sd * 0.222, 0.74, 0.022, 0.022, 0, 0);
+      b.box(sd * 0.362, 0.255, 0, 0.022, 0.022, 0.46, 0, 0);
+      b.color('#15202b').pat(PAT.NONE);
+      b.box(sd * 0.364, 0.2, 0, 0.004, 0.045, 0.13, 0, 0);
+      // the owner's mark: a white or black stencilled band on the long side
+      if (age > 0.35) {
+        b.color(age > 0.7 ? '#efece2' : '#1d1f22');
+        b.box(0.12 * sd, 0.13, sd * 0.224, 0.2, 0.05, 0.003, 0, 0);
+      }
+      b.color(base).pat(PAT.GRIME, 0.25 + age * 0.4);
     }
+    b.pat(PAT.NONE);
+    b.pop();
   }
   if (fish) {
     const yt = (n - 1) * 0.255 + 0.2;
@@ -136,28 +183,42 @@ function fishBoxStack(b: HB, x: number, y: number, z: number, n: number, yaw: nu
   b.pop();
 }
 
-/** parlour creel (lobster / crab pot): weighted base, three hoops, netting skin, entrance eye */
+/** parlour creel (lobster / crab pot): weighted base, three hoops, netting skin, entrance eye. Each pot is a little
+ *  different (hashed from its position): netting colour and fade, hoop height (bent by use), a buoy rope tail,
+ *  weed and dried bait caught in the bottom */
+const CREEL_NETS = ['#5c8a62', '#4f7a5a', '#2f5f9a', '#3b6f8f', '#c0622f', '#2a2c2a', '#7d8a5a'];
 function creel(b: HB, x: number, y: number, z: number, yaw: number): void {
-  b.pushT(x, y, z, yaw);
-  b.color('#2b2d2f').pat(PAT.RUST, 0.25);
+  const hsh = (k: number) => {
+    const v = Math.sin(x * 12.9898 + z * 78.233 + k * 37.719) * 43758.5453;
+    return v - Math.floor(v);
+  };
+  b.pushT(x, y, z, yaw, (hsh(5) - 0.5) * 0.05, (hsh(6) - 0.5) * 0.04);
+  b.color(hsh(7) < 0.5 ? '#2b2d2f' : '#4a3a2c').pat(PAT.RUST, 0.25 + hsh(8) * 0.4);
   b.box(0, 0.03, 0, 0.64, 0.06, 0.46, 0, 0);
+  const H = 0.31 * (0.9 + 0.1 * hsh(1));
+  const bent = (hsh(2) - 0.5) * 0.06;
   b.color('#3c4a3a').pat(PAT.NONE);
   for (const hx of [-0.28, 0, 0.28]) {
     const pts: V3[] = [];
+    const hh = H + 0.01 + (hx === 0 ? bent : 0);
     for (let k = 0; k <= 8; k++) {
       const a = (k / 8) * Math.PI;
-      pts.push([hx, 0.06 + Math.sin(a) * 0.32, Math.cos(a) * 0.22]);
+      pts.push([hx, 0.06 + Math.sin(a) * hh, Math.cos(a) * 0.22]);
     }
     b.tube(pts, 0.012, 4);
   }
   // netting skin over the hoops and the two ends
-  b.color('#5c8a62').pat(PAT.NET, 0.045);
+  const net = new THREE.Color(CREEL_NETS[Math.floor(hsh(3) * CREEL_NETS.length)]);
+  net.lerp(new THREE.Color('#b9b6a2'), hsh(4) * 0.35).multiplyScalar(0.85 + 0.25 * hsh(9));
+  b.color(net).pat(PAT.NET, 0.04 + hsh(10) * 0.012);
   const N = 8;
   for (let k = 0; k < N; k++) {
     const a0 = (k / N) * Math.PI,
       a1 = ((k + 1) / N) * Math.PI;
-    const y0 = 0.06 + Math.sin(a0) * 0.31,
-      y1 = 0.06 + Math.sin(a1) * 0.31,
+    const sag0 = 1 - 0.06 * Math.sin(a0 * 2) * hsh(11),
+      sag1 = 1 - 0.06 * Math.sin(a1 * 2) * hsh(11);
+    const y0 = 0.06 + Math.sin(a0) * H * sag0,
+      y1 = 0.06 + Math.sin(a1) * H * sag1,
       z0 = Math.cos(a0) * 0.21,
       z1 = Math.cos(a1) * 0.21;
     b.quad([0.29, y0, z0], [0.29, y1, z1], [-0.29, y1, z1], [-0.29, y0, z0]);
@@ -165,7 +226,26 @@ function creel(b: HB, x: number, y: number, z: number, yaw: number): void {
     b.triangle([0.29, 0.06, 0], [0.29, y1, z1], [0.29, y0, z0]);
   }
   b.color('#d9cf9a').pat(PAT.NONE);
-  torusTube(b, 0, 0.26, 0.2, 0.06, 0.012, 'z', 8);
+  torusTube(b, 0, H * 0.84, 0.2, 0.06, 0.012, 'z', 8);
+  // weed / old bait caught on the bottom bars
+  if (hsh(12) < 0.6) {
+    b.color(hsh(13) < 0.5 ? '#4b5a2a' : '#6b5a3a');
+    b.box((hsh(14) - 0.5) * 0.3, 0.075, (hsh(15) - 0.5) * 0.2, 0.12, 0.025, 0.08, 0, 0);
+  }
+  // a tail of the back rope hanging off one end
+  if (hsh(16) < 0.45) {
+    b.color(hsh(17) < 0.5 ? '#d6c48e' : '#c0622f');
+    b.tube(
+      [
+        [0.3, 0.07, 0.05],
+        [0.42, 0.04, 0.1 + hsh(18) * 0.1],
+        [0.55 + hsh(19) * 0.2, 0.012, 0.0],
+        [0.7 + hsh(20) * 0.3, 0.012, -0.15 - hsh(21) * 0.2],
+      ],
+      0.009,
+      4,
+    );
+  }
   b.pop();
 }
 
@@ -354,6 +434,13 @@ function hose(b: HB, x: number, y: number, z: number, toX: number, toZ: number):
 }
 
 /** ground stain decal (oil, wet, fish-water) 1.5 cm above the quay */
+/** wet concrete (melt water from the iced boxes, the hose, a landed catch): glossy dark pool with loose drops */
+function wet(b: HB, x: number, y: number, z: number, w: number, d: number, scale: number): void {
+  b.color('#4a4e4d').pat(PAT.WET, scale);
+  b.quad([x - w / 2, y + 0.018, z - d / 2], [x - w / 2, y + 0.018, z + d / 2], [x + w / 2, y + 0.018, z + d / 2], [x + w / 2, y + 0.018, z - d / 2]);
+  b.pat(PAT.NONE);
+}
+
 function stain(b: HB, x: number, y: number, z: number, w: number, d: number, col: string, scale: number): void {
   b.color(col).pat(PAT.STAIN, scale);
   b.quad([x - w / 2, y + 0.015, z - d / 2], [x - w / 2, y + 0.015, z + d / 2], [x + w / 2, y + 0.015, z + d / 2], [x + w / 2, y + 0.015, z - d / 2]);
@@ -469,6 +556,13 @@ export function buildFishQuay(b: HB, o: FishQuayOpts): void {
   stain(b, 129.7, y(129.7, -123.0), -123.0, 1.6, 1.4, '#3b3a36', 0.35);
   stain(b, 133.6, y(133.6, -128.5), -128.5, 2.4, 2.8, '#6a6658', 0.6);
   stain(b, 128.9, y(128.9, -133.0), -133.0, 2.0, 1.6, '#615f58', 0.5);
+  // wet: melt water under the iced boxes running off toward the edge, the hose end, the creel stack, the landing
+  wet(b, 131.4, y(131.4, -124.6), -124.6, 1.6, 1.4, 0.35);
+  wet(b, 133.2, y(133.2, -124.2), -124.2, 2.2, 1.1, 0.4);
+  wet(b, 134.9, y(134.9, -126.0), -126.0, 1.4, 2.6, 0.45);
+  wet(b, 134.6, y(134.6, -128.6), -128.6, 1.2, 1.6, 0.3);
+  wet(b, 130.4, y(130.4, -127.2), -127.2, 1.2, 1.0, 0.25);
+  wet(b, 132.2, y(132.2, -122.9), -122.9, 0.9, 0.8, 0.22);
   // a few spilled bits: a dropped glove, rope ends, a crushed can, a gull feather — the life between jobs
   b.color('#e3622a');
   b.box(132.7, y(132.7, -126.1) + 0.012, -126.1, 0.11, 0.024, 0.22, 0.5, 0);

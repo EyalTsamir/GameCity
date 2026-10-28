@@ -30,6 +30,8 @@ export const K = {
   BRICK: 24,
   WOOD: 25,
   TACTILE: 26,
+  /** tongue-and-groove soffit boards running along x (canopy underside) */
+  BOARDS: 27,
 } as const;
 
 /** aAnim codes: ±1 / ±2 barrier boom of crossing 0 / 1 (sign = boom direction along x), ±3 hour, ±4 minute hand (sign = face normal along z) */
@@ -92,6 +94,7 @@ float rlNoise(vec2 p) {
 `;
 
 const FRAG_COLOR = /* glsl */ `
+vec2 rlG = vec2(0.0);
 {
   int rk = int(vKind + 0.5);
   vec2 wp = vWPos.xz;
@@ -126,11 +129,29 @@ const FRAG_COLOR = /* glsl */ `
     diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.78, 0.74, 0.68), mortar * amp * 0.8);
   } else if (rk == ${K.WOOD}) {
     diffuseColor.rgb *= 0.86 + 0.24 * rlNoise(vec2(wp.x * 30.0, wp.y * 1.5));
+  } else if (rk == ${K.BOARDS}) {
+    float v = wp.y / 0.105;
+    float fv = fract(v);
+    float j = 1.0 - smoothstep(0.0, fwidth(v) * 1.5 + 0.04, min(fv, 1.0 - fv));
+    float amp = 1.0 - smoothstep(0.3, 0.8, fwidth(v));
+    float bh = rlHash(vec2(floor(v), floor(wp.x / 3.1 + rlHash(vec2(floor(v), 1.0)))));
+    diffuseColor.rgb *= mix(1.0, (0.92 + 0.12 * bh) * (1.0 - 0.32 * j), amp) * (0.94 + 0.08 * rlNoise(vec2(wp.x * 0.7, v)));
   } else if (rk == ${K.TACTILE}) {
-    vec2 t = fract(wp / 0.1) - 0.5;
-    float dot1 = 1.0 - smoothstep(0.18, 0.28, length(t));
-    float amp = 1.0 - smoothstep(0.01, 0.03, fw);
-    diffuseColor.rgb *= 1.0 - 0.18 * dot1 * amp;
+    // offset blister paving (platform-edge warning): 25 mm domes on a 66.5 mm grid, alternate rows offset by half,
+    // 400 mm slabs with joints; the domes bump the normal (rlG) and gather grime in the valleys
+    float P = 0.0665;
+    float row = floor(wp.y / P);
+    vec2 c = vec2(fract(wp.x / P + 0.5 * mod(row, 2.0)) - 0.5, fract(wp.y / P) - 0.5) * P;
+    float r = length(c), R = 0.0135;
+    float dome = 1.0 - smoothstep(R * 0.85, R, r);
+    float amp = 1.0 - smoothstep(0.012, 0.05, fw);
+    rlG = r < R ? -c / R * 1.6 * amp : vec2(0.0);
+    vec2 st = fract(wp / 0.4);
+    vec2 se = min(st, 1.0 - st) * 0.4;
+    float joint = 1.0 - smoothstep(0.003, 0.008, min(se.x, se.y));
+    float slab = rlHash(floor(wp / 0.4));
+    diffuseColor.rgb *= (0.9 + 0.12 * slab) * (1.0 - 0.14 * (1.0 - dome) * amp) * (1.0 - 0.35 * joint * amp);
+    diffuseColor.rgb *= 0.88 + 0.14 * rlNoise(wp * 3.0);
   }
 }
 `;
@@ -204,6 +225,11 @@ export function createRailStaticMaterial(
       .replace('#include <color_fragment>', `#include <color_fragment>\n${FRAG_COLOR}`)
       .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>\n${FRAG_EMIT}`)
       .replace(
+        '#include <normal_fragment_maps>',
+        `#include <normal_fragment_maps>
+        if (rlG.x != 0.0 || rlG.y != 0.0) normal = normalize(normal + (viewMatrix * vec4(rlG.x, 0.0, rlG.y, 0.0)).xyz);`,
+      )
+      .replace(
         '#include <roughnessmap_fragment>',
         `#include <roughnessmap_fragment>
         { int rk = int(vKind + 0.5); if (rk == ${K.RAILHEAD}) roughnessFactor = 0.32; }`,
@@ -214,7 +240,7 @@ export function createRailStaticMaterial(
         { int rk = int(vKind + 0.5); if (rk == ${K.RAILHEAD}) metalnessFactor = 0.65; }`,
       );
   };
-  material.customProgramCacheKey = () => 'rail-static-v1';
+  material.customProgramCacheKey = () => 'rail-static-v2';
 
   const depth = new THREE.MeshDepthMaterial();
   depth.name = 'rail-static-depth';
