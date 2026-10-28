@@ -11,6 +11,9 @@ Overview must stay at least as impressive as now. Every feature: quality tiers +
 Lead session: session_01XuhAMczW3iK25AAWnf3qog, branch `claude/pensive-gates-bim12i`.
 
 ## Resume here (keep current)
+* 2026-10-28 19:20 UTC — W4 m1 (4214304: close LOD < 15 m with sculpted faces, fingers, seams, laces; ?nopeopledetail,
+  ?pedlod=close) NOT merged: after sheets show frog-squat/bow-legged close-LOD stances, split skirts, hats over the
+  eyes — W4(2) spawned to rule out/fix these first. Briefs: workers must measure their context (get_session).
 * 2026-10-28 18:37 UTC — Merged W2 m3 (adcbf66: van/lorry lofted cabs + cargo bodies, bus rear, car flank, parked
   hash). Wave 1 complete → fresh judge + fresh bug hunter launched on the merged tree. When both report: one fix
   round per owner (W1(4), W2(4) incl. trains, W3(4)) with the judge's notes + the bugs, then wave 3.
@@ -88,6 +91,7 @@ Wave 1 (launched 2026-10-28 15:17 UTC, sibling cloud sessions, briefs in real-br
 | W5 street (wave 2) | session_01XuhAMfn7zBT6TiYEhJcwgB | claude/real-w5-street | real-w5.md |
 | Judge wave 1 | session_01XuhAMgGczMy7sfzCU6RcAu | claude/real-judge-1 | real-judge-1.md |
 | Bug hunter wave 1 | session_01XuhAMcksFRcEEAyiC8Nzad | claude/real-bugs-1 | real-bugs-1.md |
+| W4 people (2) | session_01XuhAMgJdXw8Zhx235CcTVt | claude/real-w4-people | real-w4.md |
 Respawn rule: when a worker stops (milestone note, ~200k context, or a usage stop), create a NEW session on the
 same branch with the same brief + "resume from docs/progress/real-wN.md Resume here"; archive the old one.
 
