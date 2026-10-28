@@ -4,6 +4,15 @@ Branch `claude/real-w2-vehicles` (from `claude/pensive-gates-bim12i`). Brief: `d
 Owned: `src/sim/traffic/{models,vehicleMaterial,render}.ts` (+ trains later). Sim untouched.
 
 ## Resume here
+* 2026-10-28 session 3 — **Milestone 3 pushed** (lead items 1–4 done; context cap reached). Next session:
+  (a) trains (audit #7) — not started: begin with `bench.mjs --classes train --dists 3,10` and judge; code in
+  `src/sim/rail/trainModels.ts` (743 lines: `shell`/`bogie`/`wheelset`/`pantograph`/`gangway`/`buildEmu`/`buildLoco`/
+  `buildWagon`, grep -n the section comments); (b) small leftovers: tarp end caps are flat (tucked folds would help),
+  lorry headlamps a bit large, Luton peak still reads slightly pillowy, van has no step, crates have no pallets;
+  (c) perf not measured (LOD0-only geometry: tarp ≈ 4k tris per near lorry; cab lofts replace the old boxes).
+  Lineup coordinates (`?tlineup`, yaw 0.35): row z 22 — compact −16.2/−12.9, hatch −9.6, sedans −6.25/−2.9/0.5,
+  SUV 3.9, vans v0–v2 7.5/11.2/14.9; row z 35 — van v3 −15.95, lorry v0 (crates) −12.1, v1 (tarp) −8.2, buses
+  −4.15/−0.05, ice-cream 3.8. View = "x,y,z,dist-from-centre,yaw,pitch" (long vehicles: dist ≥ L/2 + 3).
 * 2026-10-28 session 2 — **Milestone 2 pushed** (car form + bus ends/doors + grime). Stopped at the context cap.
   Next session, in order: (a) judge `docs/progress/real/w2_m2_*.jpg` with fresh eyes (left = before, right = after);
   (b) car polish: front badge still reads as a blue chip (chrome reflecting sky), horizon-reflection line on the
@@ -23,6 +32,21 @@ Owned: `src/sim/traffic/{models,vehicleMaterial,render}.ts` (+ trains later). Si
 * Judge with the showroom: `node scripts/capture-set.mjs --q "tlineup&nointro&noidle" --hideui 1 --views
   "-10,0.9,22,4,30,6;-8,1.4,35,9,25,8" --hours 11 --out shots/w2/x` (row 1 cars at z 22 from x −17, row 2
   vans/lorries/buses at z 35; yaw 0 ≈ front, 180 ≈ rear). Bench: `--classes car,bus --yaws 0,140` (new option).
+
+## Code map, session 3 additions
+* `busBody.ts`: `BusShape` takes optional `nose`/`tail: EndProfile` (sb/ix/dy/r per ring point + `zone` + `sweep`),
+  `tumble` (ring point 7 inset), `roofIn`/`roofDrop`, `glassD` (nose depth whose band 6–7 is glass). Flank faces get
+  their own face normal (works with tumble). Windscreen seal strips now run 5 cm along the surface (raked screens),
+  also across the end cap and down the glass side edges (bus too).
+* `models.ts`: `cabShell(b, shape, zc, glass)` → EndFn (lofted cab, regions painted / bumper / well / glass / seal);
+  `flankPane(b, shape, [z,y][], glass)` (side glass on the leaning flank, in a seal); `flankSeam`; `endLamp`
+  (conformal lens in a dark housing); `paneOnEnd` (rounded pane conformed to an end, grid); `tarpLoad` (lofted
+  tarp with bulges between straps, lumps, folds; straps + ratchets + hooks). `delivery()` = Luton: cab loft 2.5 m
+  (rear 0.6 m inside the box), peak over the cab, joint strips, doors on VB(0,2) / roller shutter on VB(1,3).
+  `lorry()` cab loft 1.9 m, visor, steps ahead of the front wheel, two mirrors, bed rails + hooks, ladder headboard.
+* `carBody.ts` ringAt: flank points 2–6 reshaped (tuck-under, shoulder widest at belt − 0.15, roll-in to the belt);
+  tumble +0.03 on every car.
+* `render.ts`: parked phase = position hash (was linear → twins along E-W rows).
 
 ## Code map, milestone 2 additions
 * `src/sim/traffic/carBody.ts`: `ringAt` (10 ring points incl. arch flare, bumper line, crowned bonnet/roof) +
@@ -114,6 +138,9 @@ Owned: `src/sim/traffic/{models,vehicleMaterial,render}.ts` (+ trains later). Si
   `?novehiclewear` — not the wear shader (close-range DOF / shadow?).
 
 ## Sheets
+* Milestone 3: `docs/progress/real/w2_m3_vans.jpg` (row 1 before: van front, van side, lorry front; row 2 after),
+  `w2_m3_more.jpg` (van rear doors before → roller-shutter variant, tarp + straps, bus rear conformed, taxi
+  shoulder/tumblehome, parked row variation).
 * Milestone 2: `docs/progress/real/w2_m2_car.jpg` (row 1 before, row 2 after: front 4 m, rear 3/4),
   `w2_m2_bus.jpg` (front / rear before → after), `w2_m2_more.jpg` (sedan/taxi/police, compact, bus doors, 12 m).
 * `docs/progress/real/w2_car_before.jpg`, `w2_bus_before.jpg` (bench 3 m, base commit) →
@@ -121,6 +148,8 @@ Owned: `src/sim/traffic/{models,vehicleMaterial,render}.ts` (+ trains later). Si
   `w2_lineup_14m.jpg`, `w2_night_after.jpg`. Raw: `shots/w2/` (not committed).
 
 ## Tokens
+* Session 3 (tokens.py): 79 calls, 2.0M weighted, ctx median 188k / max 239k (system + brief ≈ 37 % — the
+  floor is high; keep sessions to one milestone). Checks: downtown console clean, invariants 0; overview unchanged.
 * Session 2: golden m2 vs ref (merged base) mean diff 0.0–0.1 on all five views; downtown console clean, invariants 0.
 
 ## Tokens (session 1, tokens.py)

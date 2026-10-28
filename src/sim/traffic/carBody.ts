@@ -167,11 +167,13 @@ function ringAt(s: CarShape, z: number, P: Float64Array): number {
   const lerp = (a: number, b: number) => a + (b - a) * c;
   set(0, 0, yb);
   set(1, w - 0.27, yb);
-  set(2, w - 0.03 + fl, Math.min(y0 + 0.05 - 0.02 * bz, belt - 0.2));
-  set(3, w + fl * 0.85, Math.min(by, belt - 0.17));
-  set(4, w + 0.005 + fl * 0.3, belt - 0.15);
-  set(5, w - 0.012, belt);
-  set(6, lerp(w - 0.045, w - 0.035), lerp(T - 0.008, belt + 0.03));
+  // the flank is a curved surface, not a slab: the lower door tucks under towards the sill, the shoulder (4) is
+  // the widest line and rolls in over the top to the belt, where the side glass starts leaning in (tumblehome)
+  set(2, w - 0.062 + fl, Math.min(y0 + 0.05 - 0.02 * bz, belt - 0.2));
+  set(3, w - 0.02 + fl * 0.85, Math.min(by, belt - 0.17));
+  set(4, w + 0.008 + fl * 0.3, belt - 0.15);
+  set(5, w - 0.026, belt);
+  set(6, lerp(w - 0.05, w - 0.046), lerp(T - 0.008, belt + 0.03));
   set(7, lerp(w - 0.09, wt + 0.015), lerp(T, Math.max(belt + 0.035, T - 0.05)));
   // crowned bonnet / boot lid / roof
   set(8, lerp(w - 0.3, wt - 0.09), T + lerp(0.018, 0.004));

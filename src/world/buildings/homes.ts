@@ -259,11 +259,22 @@ export function genHouse(g: Gen): void {
     porchDeck(pa, pb, zP, M.z1, 0.16, col(['#a87f58', '#9a8f80', '#8d6e52'][Math.abs(Math.floor(g.seed)) % 3]));
     setCol(t, trimC);
     const postH = gH;
-    for (const px of [pa + 0.12, pb - 0.12]) t.box(px - 0.1, 0.16, M.z1 - 0.22, px + 0.1, postH, M.z1 - 0.02, 0b111111);
-    porchRail(pa + 0.22, pa + Math.max(0.3, pw * 0.5 - 0.7), M.z1 - 0.12, 0.16, 0.8, trimC);
-    porchRail(pb - Math.max(0.3, pw * 0.5 - 0.7), pb - 0.22, M.z1 - 0.12, 0.16, 0.8, trimC);
+    // posts 15 cm square on a 22 cm plinth block, moulded cap under a 26 cm header beam with a drip board;
+    // a stone step in front of the opening between the two rail runs
+    const zc = M.z1 - 0.12;
+    for (const px of [pa + 0.13, pb - 0.13]) porchPost(px, zc, 0.16, postH - 0.3);
+    t.box(pa, postH - 0.3, M.z1 - 0.24, pb, postH, M.z1 - 0.01, 0b111111);
+    setCol(t, shade(trimC, 0.82));
+    t.box(pa, postH - 0.32, M.z1 - 0.03, pb, postH - 0.3, M.z1 - 0.0, 0b111111);
+    porchRail(pa + 0.24, pa + Math.max(0.3, pw * 0.5 - 0.7), zc, 0.16, 0.8, trimC);
+    porchRail(pb - Math.max(0.3, pw * 0.5 - 0.7), pb - 0.24, zc, 0.16, 0.8, trimC);
+    if (F.z1 - M.z1 >= 0.34) {
+      const sa = pa + Math.max(0.3, pw * 0.5 - 0.7) + 0.05, sb = pb - Math.max(0.3, pw * 0.5 - 0.7) - 0.05;
+      setCol(t, col('#9c9890'));
+      t.box(sa, 0, M.z1 - 0.02, sb, 0.085, M.z1 + 0.3, 0b111111);
+    }
     setCol(t, shade(trimC, 0.92));
-    t.hrect(pa, zP, pb, M.z1, postH - 0.01, false);
+    t.hrect(pa, zP, pb, M.z1, postH - 0.31, false);
     if (rng.chance(0.6)) porchBench(pa + 0.5, zP + 0.25);
   } else {
     // door in the main front wall (veranda / L-plan recess / garage plan / bay plan)
@@ -420,7 +431,7 @@ export function genHouse(g: Gen): void {
     const zp = F.z1 - 0.2;
     for (let k = 0; k <= n; k++) {
       const px = va + 0.12 + ((vb - va - 0.24) * k) / n;
-      t.box(px - 0.08, 0.22, zp - 0.08, px + 0.08, 2.52, zp + 0.08, 0b110111);
+      porchPost(px, zp, 0.22, 2.52);
     }
     const sa = doorX - 0.75,
       sb = doorX + 0.75;
@@ -592,6 +603,16 @@ export function genHouse(g: Gen): void {
 
   function porchLamp(x: number, z: number, y: number): void {
     lightBox(g, x - 0.08, y, z, x + 0.08, y + 0.28, z + 0.14, '#ffc979', LIGHT_MODE.STEADY, 3);
+  }
+
+  /** Turned-look porch post at (x, z) from the deck y0 to y1: plinth block + chamfer step, 15 cm shaft, a
+   *  moulded cap (wide fillet over a neck). Inside ±0.12 m of (x, z). */
+  function porchPost(x: number, z: number, y0: number, y1: number): void {
+    t.box(x - 0.11, y0, z - 0.11, x + 0.11, y0 + 0.26, z + 0.11, 0b110111);
+    t.box(x - 0.12, y0 + 0.26, z - 0.12, x + 0.12, y0 + 0.29, z + 0.12, 0b110111);
+    t.box(x - 0.075, y0 + 0.29, z - 0.075, x + 0.075, y1 - 0.12, z + 0.075, 0b110011);
+    t.box(x - 0.1, y1 - 0.12, z - 0.1, x + 0.1, y1 - 0.06, z + 0.1, 0b111111);
+    t.box(x - 0.085, y1 - 0.06, z - 0.085, x + 0.085, y1, z + 0.085, 0b110011);
   }
 
   /** Porch balustrade along x at z: newel posts with caps, moulded handrail, bottom rail clear of the deck,
