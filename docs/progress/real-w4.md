@@ -4,7 +4,12 @@ Branch `claude/real-w4-people` (from `claude/pensive-gates-bim12i` e517126). Bri
 Photo test "Person" (REAL.md). Owned: `src/sim/pedestrians/**` presentation (not crowd/places logic).
 
 ## Resume here
-* 2026-10-28 — session 1 started; log skeleton; baseline bench `shots/w4/base` (pedestrian, picks 0..2, dists 2,4,10).
+* 2026-10-28 — session 1. Close level (Lod 4, < 15 m high / 11 med / 7 low) built: sculpted head + ears,
+  shader-painted face (`pedFacePaint`), fingers (`buildFingers`), hair strands (`pedStrands`), fabric
+  (`pedFabric`: seams, knee/elbow creases from the pose bend, trouser break, denim stitching/pockets).
+  Judging with `node scripts/people-bench.mjs --n 3 --out shots/w4/pbN` (face 0.75 m / hand / body 2.6 m /
+  group 10 m; bench.mjs pedestrian frames ≥ 3 m so it can't judge faces). Base tree for before/after:
+  worktree `../base` (e517126) on port 5174 (`--url http://127.0.0.1:5174/`).
 
 ## Code pointers (so the next session needn't re-read)
 * body.ts: `LODS` per level (0 near <40 m, 1 lo, 2 tiny, 3 pin, **4 close** <15 m, new); `REG` regions (+FACE 21),

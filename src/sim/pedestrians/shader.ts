@@ -111,6 +111,11 @@ flat varying vec2 vPedMat; // (wrap, sheen)
 varying vec3 vPedFace; // close-level face coords (X, Y, 1) — 0 elsewhere
 flat varying uint vPedFB; // face bits: age 2 | eye colour 2 | lipstick 1 | stubble 1
 flat varying vec4 vPedHairW; // hair colour, femininity
+varying vec3 vPedRest; // rest-pose position after the morph (figure units): strands, seams
+varying vec3 vPedRN; // rest-pose normal
+flat varying float vPedReg;
+varying float vPedBend; // knee / elbow bend of the vertex's limb (fold depth)
+flat varying float vPedHgt; // stature (figure units)
 vec2 pedU2(uint v) { return vec2(float(v & 0xFFFFu), float(v >> 16u)) * (1.0 / 4096.0) - 8.0; }
 float pedM16(uint v) { return float(v) * (1.0 / 32768.0) - 1.0; }
 vec3 pedRGB(uint v) {
@@ -241,6 +246,14 @@ void pedPose(inout vec3 p, inout vec3 n) {
      + pedW.z * vec3(pedM16(aMorph.w & 0xFFFFu), 0.0, pedM16(aMorph.w >> 16u));
   uint nd = aData.w;
   n = normalize(n + pedW.x * (vec3(float(nd & 1023u), float((nd >> 10u) & 1023u), float((nd >> 20u) & 1023u)) * (2.0 / 1023.0) - 1.0));
+  vPedRest = p;
+  vPedRN = n;
+  vPedReg = float(region);
+  vPedHgt = 1.76 - 0.12 * P_w - 0.54 * P_c;
+  vPedBend = bone == ${B.THIGH_L} || bone == ${B.SHIN_L} || bone == ${B.FOOT_L} ? abs(P_kneeL)
+           : bone == ${B.THIGH_R} || bone == ${B.SHIN_R} || bone == ${B.FOOT_R} ? abs(P_kneeR)
+           : bone == ${B.UPPER_L} || bone == ${B.FORE_L} || bone == ${B.HAND_L} ? abs(P_elbowL)
+           : bone == ${B.UPPER_R} || bone == ${B.FORE_R} || bone == ${B.HAND_R} ? abs(P_elbowR) : 0.0;
 
   // ── parametric garments
   if (region == ${R.HAIR}) {
@@ -503,9 +516,105 @@ flat varying vec2 vPedMat;
 varying vec3 vPedFace;
 flat varying uint vPedFB;
 flat varying vec4 vPedHairW;
+varying vec3 vPedRest;
+varying vec3 vPedRN;
+flat varying float vPedReg;
+varying float vPedBend;
+flat varying float vPedHgt;
 float pedBayer2(vec2 a) { a = floor(a); return fract(dot(a, vec2(0.5, a.y * 0.75))); }
 float pedBayer4(vec2 a) { return pedBayer2(0.5 * a) * 0.25 + pedBayer2(a); }
 
+// ── hair: strands as clumps and fine fibres running from the crown down (rest-pose angle about the
+// head axis), darker between clumps; the fine octave fades out where it would alias
+float pedN1(float x) { float i = floor(x), f = fract(x); f = f * f * (3.0 - 2.0 * f); return mix(fract(sin(i * 127.1) * 43758.5453), fract(sin((i + 1.0) * 127.1) * 43758.5453), f); }
+float pedStrands(vec3 r) {
+  float a = atan(r.x, r.z + 0.015);
+  float wob = sin(r.y * 41.0 + a * 3.0) * 0.6;
+  float c = mix(pedN1(a * 26.0 + wob), 0.5, smoothstep(0.4, 0.9, fwidth(a * 26.0)));
+  float fA = a * 85.0 + wob * 2.0;
+  float fw = fwidth(fA);
+  float f = mix(pedN1(fA) - 0.5, 0.0, smoothstep(0.35, 0.8, fw));
+  float ff = mix(pedN1(a * 240.0 + wob * 4.0) - 0.5, 0.0, smoothstep(0.25, 0.6, fwidth(a * 240.0)));
+  return 0.8 + 0.34 * c + 0.22 * f + 0.14 * ff;
+}
+// ── fabric (close range): seams, stitching, folds where the limb bends (knee / elbow creases deepen with
+// the bend), trouser breaks over the shoe, sleeve gathers, side drape at the waist, weave grain; denim
+// gets the orange twin stitching and back pockets. Fades out where a pixel covers > ~1 cm.
+float pedBand2(float d, float hw, float px) { return 1.0 - smoothstep(hw - px * 0.5, hw + px * 0.5, abs(d)); }
+vec3 pedFabric(vec3 pc, float reg, float h, float sHem) {
+  vec3 r = vPedRest, rn = normalize(vPedRN);
+  float px = max(fwidth(r.y), 1e-5);
+  float det = 1.0 - smoothstep(0.004, 0.011, px);
+  if (det <= 0.0) return pc;
+  float side = r.x >= 0.0 ? 1.0 : -1.0;
+  float inner = -rn.x * side; // > 0 towards the body's midline
+  float ang = atan(rn.x * side, rn.z); // 0 front … ±π back (outer side positive)
+  bool denim = pc.b > pc.r * 1.18 && pc.b > 0.05 && reg > 2.5 && reg < 3.5;
+  vec3 thread = denim ? vec3(0.55, 0.36, 0.14) : pc * 0.62;
+  float sh = 1.0;
+  float stitch = 0.0;
+  // weave grain: a fine diagonal twill on denim, a soft knit / cotton grain elsewhere
+  float gA = denim ? (r.y * 1.0 + r.x * 0.7 + r.z * 0.7) * 1400.0 : (r.y * 900.0 + sin(r.x * 700.0 + r.z * 700.0) * 1.2);
+  sh *= 1.0 + (denim ? 0.07 : 0.035) * (pedN1(gA) - 0.5) * (1.0 - smoothstep(0.25, 0.6, fwidth(gA)));
+  float bend = vPedBend;
+  if (reg > 2.5 && reg < 3.5) {
+    // trousers: outer and inner leg seams
+    float seam = pedBand2(rn.z, 0.035, px * 12.0) * (1.0 - step(0.88, h));
+    sh *= 1.0 - 0.18 * seam;
+    stitch += denim ? pedBand2(abs(rn.z) - 0.075, 0.012, px * 12.0) * step(0.0, -inner) * (1.0 - step(0.88, h)) : 0.0;
+    // knee: creases behind it deepen with the bend; the front pulls smooth and a little lighter
+    float kz = exp(-pow((h - 0.5) / 0.07, 2.0));
+    float bk = clamp(bend / 1.6, 0.0, 1.0);
+    float cre = sin((h - 0.5) * 210.0 + rn.x * side * 4.0) * kz * step(rn.z, -0.2);
+    sh *= 1.0 - (0.06 + 0.2 * bk) * max(cre, 0.0) + (0.03 + 0.1 * bk) * max(-cre, 0.0);
+    // the fabric drapes in shallow diagonal folds down the shin / thigh fronts
+    float dr = sin(h * 46.0 + ang * 1.3) * (0.5 + 0.5 * sin(h * 13.0 - ang * 2.0));
+    sh *= 1.0 + 0.045 * dr;
+    // the break: trousers stack in rings over the shoe
+    float br = 1.0 - smoothstep(0.1, 0.17, h);
+    sh *= 1.0 - 0.13 * br * max(sin(h * 260.0 + sin(ang * 2.0) * 1.6), 0.0);
+    // hem stitching just above the hem boundary
+    stitch += pedBand2(sHem - 0.012, 0.0028, px * 6.0) * step(0.0, sHem) * step(h, 0.3);
+    if (denim) {
+      // back pockets (outline + stitching), the yoke seam above them; front pocket openings
+      float py = r.y / max(vPedHgt, 0.5);
+      vec2 q = vec2(abs(r.x) - 0.078 * vPedHgt / 1.76, py - 0.505);
+      float pocket = step(r.z, 0.0) * step(rn.z, -0.25);
+      float box = max(abs(q.x) - 0.042 * vPedHgt / 1.76, abs(q.y) - 0.04);
+      stitch += pedBand2(box, 0.0011, px) * pocket;
+      sh *= 1.0 - 0.15 * pedBand2(box + 0.004, 0.0012, px) * pocket;
+      sh *= 1.0 - 0.15 * pedBand2(py - 0.555 + abs(r.x) * 0.15, 0.0012, px) * step(rn.z, -0.2);
+      float fp = step(0.25, rn.z) * step(0.5, -inner + 0.9);
+      sh *= 1.0 - 0.25 * pedBand2(py - 0.5 - (abs(r.x) - 0.06) * 1.3, 0.0015, px) * fp * step(0.045, abs(r.x)) * step(abs(r.x), 0.11);
+    }
+  } else if (reg > 1.5 && reg < 2.5) {
+    // sleeves: elbow creases on the inside of the bend, gathers at a long cuff, the under-arm seam
+    float ez = exp(-pow((h - 0.5) / 0.08, 2.0));
+    float be = clamp(bend / 1.8, 0.0, 1.0);
+    float cre = sin((h - 0.5) * 170.0 + rn.y * 3.0) * ez * step(0.0, rn.z + 0.3);
+    sh *= 1.0 - (0.05 + 0.22 * be) * max(cre, 0.0);
+    float cuff = 1.0 - smoothstep(0.05, 0.12, h);
+    sh *= 1.0 - 0.1 * cuff * max(sin(h * 300.0 + ang * 2.0), 0.0);
+    sh *= 1.0 - 0.14 * pedBand2(inner - 0.97, 0.025, px * 10.0);
+    sh *= 1.0 + 0.04 * sin(h * 38.0 + ang * 1.5);
+    stitch += pedBand2(sHem - 0.01, 0.0025, px * 6.0) * step(0.0, sHem);
+  } else if (reg > 0.5 && reg < 1.5) {
+    // torso: side seams, folds gathering at the waist sides, a pull from the chest, the hem stitching
+    sh *= 1.0 - 0.14 * pedBand2(rn.z, 0.03, px * 12.0) * step(0.2, h);
+    float wz = exp(-pow((h - 0.36) / 0.12, 2.0));
+    float sideK = smoothstep(0.3, 0.9, abs(rn.x));
+    sh *= 1.0 - 0.1 * wz * sideK * max(sin(h * 120.0 + rn.z * 5.0), 0.0);
+    float chest = exp(-pow((h - 0.62) / 0.1, 2.0)) * step(0.3, rn.z);
+    sh *= 1.0 + 0.04 * chest * sin(r.x * 160.0 - h * 30.0);
+    stitch += pedBand2(sHem - 0.012, 0.0025, px * 6.0) * step(0.0, sHem) * step(h, 0.6);
+  } else {
+    // coats / skirts: long vertical drape folds
+    sh *= 1.0 + 0.07 * sin(ang * 7.0 + h * 3.0) * (0.6 + 0.4 * sin(ang * 3.0));
+  }
+  pc *= mix(1.0, sh, det);
+  pc = mix(pc, thread, clamp(stitch, 0.0, 1.0) * det * (denim ? 0.7 : 0.35));
+  return pc;
+}
 // ── close-level face paint (face coords in metres of the average man's head: X lateral, Y up from the
 // eye line). Eyes (almond opening, sclera, iris, pupil, lash line, lid crease), brows, lips with the
 // mouth line, nostrils, age lines, stubble. Fades to soft tones where a pixel covers > ~5 mm.
@@ -610,6 +719,8 @@ const FRAG_COLOR = /* glsl */ `
       pc = mix(pc, vec3(0.78, 0.78, 0.76), st);
     }
     if (vPedFace.z > 0.5) pc = pedFacePaint(pc, vPedFace.xy);
+    else if (abs(vPedReg - ${R.HAIR}.0) < 0.5 || abs(vPedReg - ${R.BEARD}.0) < 0.5) pc *= pedStrands(vPedRest);
+    else if (vPedReg > 0.5 && vPedReg < 3.5 || abs(vPedReg - ${R.OUTER}.0) < 0.5 || abs(vPedReg - ${R.TAIL}.0) < 0.5) pc = pedFabric(pc, vPedReg, vPedH, vPedS);
     diffuseColor.rgb *= pc;
   }
 `;
