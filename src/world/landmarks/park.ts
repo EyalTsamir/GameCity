@@ -361,7 +361,21 @@ export function genGazebo(env: Env, f: Feature): void {
         K.beam(white, [px, 0.59, pz], [px, 1.28, pz], 0.035, 0.035);
       }
       // built-in bench inside
-      K.beam(M('#b48a5e', PAT.PLANKS, 0.8), [a[0] * 0.85, 0.92, a[2] * 0.85], [b[0] * 0.85, 0.92, b[2] * 0.85], 0.32, 0.06);
+      // (three seat boards with gaps on two bearers with legs; a box, not a beam: the beam's cross-section
+      // turned on end on some sides)
+      const ry = Math.atan2(-uz, ux), sl = len * 0.85 - 0.06;
+      const nx = -uz, nz = ux; // inward normal (towards the centre)
+      const sgn = nx * -mid[0] + nz * -mid[2] > 0 ? 1 : -1;
+      const seatM = M('#b48a5e', PAT.PLANKS, 0.8);
+      for (let k = 0; k < 3; k++) {
+        const o = 0.17 + k * 0.105;
+        K.boxC(seatM, sl, 0.035, 0.09, mid[0] * 0.98 + nx * sgn * o, 0.92, mid[2] * 0.98 + nz * sgn * o, 0, ry, 0);
+      }
+      for (const t of [-0.38, 0.38]) {
+        const bx = mid[0] * 0.98 + ux * t * sl + nx * sgn * 0.27, bz = mid[2] * 0.98 + uz * t * sl + nz * sgn * 0.27;
+        K.boxC(seatM, 0.05, 0.05, 0.34, bx, 0.88, bz, 0, ry, 0);
+        K.boxC(seatM, 0.05, 0.38, 0.05, bx + nx * sgn * 0.1, 0.67, bz + nz * sgn * 0.1, 0, ry, 0);
+      }
     }
   }
   // roof: eave ring, octagonal pyramid, cupola, finial
