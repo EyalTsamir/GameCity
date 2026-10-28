@@ -3,26 +3,26 @@
 Branch `claude/real-w1-facades` (from `claude/pensive-gates-bim12i`). Brief: docs/progress/real-briefs.md "W1".
 
 ## Resume here
-* Session 2 (start 16:40 UTC 10-28): merged pensive-gates (bench framing). Lead verdict M1 → plan: (1) glass
-  specks, (2) real-geometry sill + reveal frame per window near LOD, (3) plaster walls: render texture, slab lines,
-  sills everywhere, streaks, dirty foot, (4) daylight curtains/blinds/nets per window, (5) porch rails/floor,
-  (6) neighbour variation. Golden ref captured at ecef462 (shots/golden/ref).
-* 16:45 UTC — Milestone 1 (priorities 1–4 + part of 5) coded, judged on the bench, committed. Running: night
-  regression (shots/w1/night_dt.png), perf A/B (shots/w1-perf.log), final after-bench → docs/progress/real/w1_*.jpg.
-* **OPEN REGRESSION (fix first):** 1–3 small bright specks (4×4 bloom blocks = an Inf/NaN or very hot pixel) on
-  some glass panes since the window-depth change (after sheet: apartment 3 m, office 3 m, townhouse 10 m; base had
-  none). Suspects in `bhWall`'s window-depth block: glass pixels at the reveal corner where `sEx.x ≈ sEx.y`, `f`
-  rewritten from the shifted `pm` (feeds `Np` / bhRoom / bhShop), or the jamb normal when `kd.x → 0`. Bisect with
-  `?nowinreveal` / `?nowallrelief` and clamp `emit` / guard NaN.
-* Next (fresh session): (a) reveal still subtle head-on/in shade — consider a painted/rendered reveal on some brick
-  houses and a frame with real thickness (shadow line on the glass along the frame); (b) shader sill speckle on the
-  top face is a bit salty; (c) the old "salt tide line" now sits on the plinth top and reads as a white smear on
-  some walls (materials.ts `salt`) — tone it down or tie it to the plinth ledge; (d) priority 5/6 for townhouses,
-  towers and offices (intercoms, AC on office backs, curtain-wall mullions in relief); (e) contact: dirt where
-  downpipe shoes / door steps meet the ground; (f) bench framing for back sides (`--yaw 150` lands inside lots).
-* Debug: `?bdbg=reveal` colours reveal hits (red jamb, green head, blue inner sill, yellow sill box).
+* Session 2 (10-28, from 16:40 UTC). Merged pensive-gates; golden ref = shots/golden/ref (ecef462).
+* **Specks fixed (root cause):** not NaN — the three.js GGX sun highlight on glass at roughness 0.14 (a pin-point
+  on a flat pane → bloom). Glass roughness now 0.5; the mirror image + sun glint stay in the shader emit. Found
+  with the new `?bdbg=nan` (magenta = NaN / Inf / emit > 6 / albedo > 1.2; zeroes emit so lighting-only
+  artefacts remain visible).
+* Done this session (commit after 'W1 facades: near-LOD sill…'): winGeo near-LOD sills + surrounds, rendered-wall
+  repairs / hairline cracks / string course, richer daylight curtains, porch balustrades + plank decks,
+  trim / frame variety. Bench iterations shots/w1/s8 (sills), s10 (all), s12 (after rough fix).
+* Next: judge s12; string course only on PLASTER/SMOOTH (apartment fronts in the bench are PANELS → none
+  there: consider adding panel-joint slab lines); stronger daylight glass variety (reflection still dominates
+  on apartments); offices (curtain-wall mullion relief); dirtier foot on apartments; golden.sh before push.
 
-## Code map (file:line at 18be1ae+)
+## Code map (file:line at 18be1ae+; session 2 additions)
+* `buildings/winGeo.ts` (new): window records from `Builder.wall()` (`Builder.winRec`, mesh.ts `recordWindows`),
+  16 m bins, 2 InstancedMeshes (sill profile with drip groove; unit box for surround jambs/head), refilled when the
+  camera moves > 3 m; writes `uGeoWin` (centre, range); the shader skips its sill box on wall() quads (vD.w>0)
+  inside it (keeps the sill's sun shadow). Range low 22 / medium 32 / high 42 m. `?nowingeo`.
+* homes.ts `porchRail` / `porchDeck` helpers (balusters, newels, moulded handrail; boards + joist frame + nosing).
+* materials.ts: rendered-wall block (repairs, cracks, string course) after the rain streaks in the `edge < 0`
+  branch; curtain variety in the `homey` branch; `?bdbg=nan` after bhWall/bhRoof in the main chunk.
 * `buildings/materials.ts`: `bhBrick` / `bhBrickH` 328 (brick bonds), `bhWallSlope` 369 (relief per pattern),
   `uSign` 874 (window-cell u vs tangent T), plinth 895, window-depth block `depthK` 1022 (sill box + reveal trace,
   `dSurf`, `sunShade`, reveal shading + `?bdbg=reveal` debug), roof cotangent frame 1420 + tile relief in the tile
@@ -74,6 +74,7 @@ Branch `claude/real-w1-facades` (from `claude/pensive-gates-bim12i`). Brief: doc
   read → pattern turned 90° on the returns + depth AO, frame contact line, pale worn arris.
 
 ## Toggles / tiers / costs
+* `?nowingeo` (sill + surround geometry; range by tier). Rendered-wall details ride on `?nowallrelief`.
 * `?nowinreveal` (uWinDepth), `?nowallrelief` (uWallRelief, also roof tile relief), `?noplinth` (uPlinth); shader
   features off on `quality=low` (uDetail 0.4).
 * Cost (SwiftShader, downtown 12 h, 1280×720, one run): baseline 666 ms vs all three shader features off 702 ms
