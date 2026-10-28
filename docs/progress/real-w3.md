@@ -3,6 +3,24 @@
 Branch `claude/real-w3-furniture` (from `claude/pensive-gates-bim12i`). Brief: docs/progress/real-briefs.md "W3".
 
 ## Resume here
+* 2026-10-28 — **Session 3 ends (context cap).** All pushed. Sheets: docs/progress/real/w3_after_5.jpg (market,
+  gazebo, bench, bin, planter, bike rack at 3/10 m), w3_after_6.jpg (2.5 m, pedestrians hidden),
+  w3_statue_2.jpg (bronze figure side view), w3_planter.jpg (trailing petunias). Downtown shot: console clean,
+  invariants {} (0). Judged: statue now a clear human silhouette (head, shoulders, pointing arm, coat skirt,
+  stride) in dark bronze + verdigris + brass toe; market cloth drapes in folds, produce heaped, chalk prices,
+  crates under; stalls differ (goods/awning/cloth); gazebo columns turned; planters spill over the rim.
+  **Next (session 4), in order:** (1) plinth streaks: check at 3 m after the strength bump (shade hides them at
+  9 m); (2) statue: queue still a small bump at the back of the head; tricorn in the left hand reads as a pot
+  from behind — give it a real three-cornered brim (`shell` with the brim turned up); leg/boot cuffs read as
+  bands; (3) market scales still white blocks (dial face, pan, weights); produce pyramids too regular (jitter
+  layer heights, drop a few, one item on the cloth); (4) gazebo inner bench rebuilt (boards on bearers) —
+  verify at 3 m; (5) bench framing: pedestrians block close captures — run classes without people via
+  `--q hide=pedestrians` (works); bin 10 m now outside the shelter but near a panel → new 0.9 m lens probe
+  added (unverified); (6) bench fixings / bike locks / phone-box interior added but not yet judged at 2 m
+  (bench 2.5 m sheet shows a modern bench from too far to see bolts — use `--dists 1.5 --pitch 25`);
+  (7) perf: measure `?nopropdetail` / `?nomarketdetail` (market produce grew ~3×: forceDetail = near only).
+  Session 3 tokens.py: TOTAL weighted 3.1M (cache read 81 %, write 8 %, output 11 %), 133 calls, ctx median
+  195k / max 255k; system+brief 37 %, Bash read/grep 14.5 %, images 5.3 %.
 * Session 3 progress (WIP pushed): new **src/world/landmarks/sculpt.ts** — `surface` (param grid, smooth
   normals), `shell` (thin solid: outer/inner skins + rims), `body` (lathe-like superellipse with a bump fn),
   `blob` (deformed ellipsoid), `capsule` (tapered, a→b), `paint` (vertex colours from pos/normal), `hash1`.
@@ -124,6 +142,10 @@ Branch `claude/real-w3-furniture` (from `claude/pensive-gates-bim12i`). Brief: d
   wheels, fish, jars, flowers), price cards, scales, back shelf, stacked crates, cardboard, hand truck.
 
 ## Tried and rejected
+* Statue vertex colours given as plain numbers: they are LINEAR → the bronze read light salmon. Use
+  `setRGB(r, g, b, THREE.SRGBColorSpace)` for albedo; multipliers (streaks) stay linear.
+* Planter trailing cards at hx = along/2 − 0.04: hidden inside the trough wall. Cards start at the outer face.
+* Gazebo inner bench as `K.beam(w 0.32, h 0.06)`: the beam cross-section turned on end on some sides.
 * Contact band at strength ×1.25 / squared fall-off: invisible at 3 m in bench shots (looked like no decal at
   all; verified by switching to normal blending: the quads were there). Now ×1.9, linear-ish fall-off.
 * Enclosure probe (camera inside a bus shelter) with one-way rays: missed single-sided glass from inside.
@@ -131,6 +153,8 @@ Branch `claude/real-w3-furniture` (from `claude/pensive-gates-bim12i`). Brief: d
 * LOS ray from the object only: misses roofs seen from below (playground 40 m ended inside a shed roof).
 
 ## Toggles / tiers / costs
+* Planter trailing plants: props-green leaf cards (`?nogreen` off; near-only mesh); off with `?nopropdetail`/low.
+* Statue sculpt figure, plinth streak grids (4 × 56 × 14 quads), tablecloth shells: always on (boot geometry).
 * `?nopropdetail` — old primitive bins/planters/phone boxes/newsstands/bollards (props/legacy.ts). Also the
   **low** quality tier (boot-time `ctx.quality.level === 'low'`).
 * `?nomarketdetail` — market stalls without individual produce, price cards, scales, ground clutter (crates
