@@ -177,6 +177,7 @@ export function buildCoverMaps(ctx: CityContext): CoverMaps {
   const soft = new Set(['pots', 'toys', 'washing', 'swing', 'trampoline', 'loungers', 'parasol', 'birdbath']);
   for (const gp of layout.gardens) {
     if (gp.patio) allow.rect(gp.patio.x0 - 0.05, gp.patio.z0 - 0.05, gp.patio.x1 + 0.05, gp.patio.z1 + 0.05, 0);
+    if (gp.front) allow.rect(gp.front.x0 - 0.05, gp.front.z0 - 0.05, gp.front.x1 + 0.05, gp.front.z1 + 0.05, 0);
     for (const s of gp.stones) allow.disc(s.x, s.z, s.r + 0.03, 0);
     for (const it of gp.items) if (!soft.has(it.kind)) allow.rotRect(it.x, it.z, it.w + 0.16, it.d + 0.16, it.yaw, 0);
   }

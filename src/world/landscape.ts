@@ -116,6 +116,10 @@ export default function create(ctx: CityContext): CityModule {
   // ── ground mesh
   const uniforms = landUniforms(ctx.uniforms) as unknown as Record<string, THREE.IUniform>;
   if (params.has('landdbg')) (uniforms.uLandDbg as { value: number }).value = 1;
+  // groundcover's long-grass ring per quality tier (groundcover/field.ts ring specs)
+  const bladeFade = (lvl: string) => (lvl === 'low' ? [7, 9.5] : lvl === 'medium' ? [24, 29] : [56, 66]);
+  (uniforms.uBladeFade.value as THREE.Vector2).fromArray(bladeFade(ctx.quality.level));
+  ctx.events.on('quality', (q: { level: string }) => (uniforms.uBladeFade.value as THREE.Vector2).fromArray(bladeFade(q.level)));
   // per-plot field / meadow decisions round the town (?landfieldmask=0: per-pixel cover, the old cut)
   let maskMs = 0;
   if (params.get('landfieldmask') !== '0') {

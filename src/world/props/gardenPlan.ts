@@ -59,6 +59,8 @@ export interface GardenPlan {
   patio: Rect | null;
   /** 0 sandstone slabs · 1 grey pavers · 2 timber decking · 3 brick */
   patioMat: number;
+  /** front walk from the street edge (the gate in the front fence) to the door (drawn by roads), or null */
+  front: Rect | null;
   /** stepping stones (flat discs) */
   stones: { x: number; z: number; r: number }[];
   items: GardenItem[];
@@ -410,7 +412,25 @@ function planOne(lot: Lot, inp: GardenInputs, drives: Rect[], occ: OccupancyGrid
       stones.push({ x, z, r: 0.2 + rnd() * 0.05 });
     }
   }
-  return { lot: lot.id, patio, patioMat, stones, items, back };
+  // ── front walk: a paved path along the door walk, from the gate gap in the front border to the door
+  let front: Rect | null = null;
+  const door = lot.doors.find((d) => d.dir === lot.front);
+  if (door) {
+    const fp = lot.footprint,
+      hw = 0.5;
+    const fr: Rect =
+      door.dir === 'N'
+        ? { x0: door.x - hw, z0: r.z0, x1: door.x + hw, z1: fp.z0 }
+        : door.dir === 'S'
+          ? { x0: door.x - hw, z0: fp.z1, x1: door.x + hw, z1: r.z1 }
+          : door.dir === 'W'
+            ? { x0: r.x0, z0: door.z - hw, x1: fp.x0, z1: door.z + hw }
+            : { x0: fp.x1, z0: door.z - hw, x1: r.x1, z1: door.z + hw };
+    const len = Math.max(fr.x1 - fr.x0, fr.z1 - fr.z0);
+    const hitsDrive = drives.some((d) => d.x0 < fr.x1 && d.x1 > fr.x0 && d.z0 < fr.z1 && d.z1 > fr.z0);
+    if (len > 1 && !hitsDrive) front = fr;
+  }
+  return { lot: lot.id, patio, patioMat, front, stones, items, back };
 }
 
 function onPatioPath(items: GardenItem[], x: number, z: number): boolean {

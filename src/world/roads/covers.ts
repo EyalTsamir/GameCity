@@ -34,6 +34,7 @@ export interface CoverStats {
   pathRibbons: number;
   plots: number;
   patios: number;
+  frontWalks: number;
 }
 
 export interface CoverInfo {
@@ -117,7 +118,7 @@ function coverForBlock(b: Block): Cover | null {
 export function buildCovers(ctx: CityContext, A: MeshBuilder, H: MeshBuilder): { stats: CoverStats; info: CoverInfo } {
   const plan = ctx.plan;
   const occ = ctx.occupancy;
-  const stats: CoverStats = { coverRects: 0, pathRibbons: 0, plots: 0, patios: 0 };
+  const stats: CoverStats = { coverRects: 0, pathRibbons: 0, plots: 0, patios: 0, frontWalks: 0 };
   const info: CoverInfo = { radial: [], field: null, court: null };
   const terrainH = (ctx.services.terrain as { height?: (x: number, z: number) => number } | undefined)?.height ?? plan.heightAt;
   const deckArea = plan.areas.find((a) => a.kind === 'boardwalk');
@@ -524,6 +525,20 @@ export function buildCovers(ctx: CityContext, A: MeshBuilder, H: MeshBuilder): {
     H.wall(p.x0, p.z1, p.x0, p.z0, Y.ground, y, -1, 0);
     H.wall(p.x1, p.z0, p.x1, p.z1, Y.ground, y, 1, 0);
     stats.patios++;
+  }
+  // front walks (gate → door) in the patio's slabs / pavers / brick (decking houses get slabs)
+  for (const gp of getLayout(ctx).gardens) {
+    const p = gp.front;
+    if (!p) continue;
+    const y = 0.045;
+    surf(H, HM.patio, gp.patioMat === 2 ? 0 : gp.patioMat, 9, 0, p.x1 - p.x0 >= p.z1 - p.z0 ? 0 : 1);
+    H.rect(p.x0, p.z0, p.x1, p.z1, y);
+    surf(H, HM.side, 0, 9, 0);
+    H.wall(p.x0, p.z0, p.x1, p.z0, Y.ground, y, 0, -1);
+    H.wall(p.x1, p.z1, p.x0, p.z1, Y.ground, y, 0, 1);
+    H.wall(p.x0, p.z1, p.x0, p.z0, Y.ground, y, -1, 0);
+    H.wall(p.x1, p.z0, p.x1, p.z1, Y.ground, y, 1, 0);
+    stats.frontWalks++;
   }
 
   return { stats, info };

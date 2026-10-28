@@ -60,6 +60,8 @@ export function landUniforms(globals: { uTime: { value: number }; uWind: { value
     uLandDbg: { value: 0 },
     // per-plot field / meadow decisions (terrain.ts buildFieldMask); xf.z = 0 → mask off (per-pixel cover)
     tFieldMask: { value: null as THREE.Texture | null },
+    /** groundcover's outermost (long-grass) blade ring fade (out0, out1, m from the camera) */
+    uBladeFade: { value: new THREE.Vector2(56, 66) },
     uFieldXf: { value: new THREE.Vector4(0, 0, 0, 0) },
   };
 }
@@ -94,6 +96,7 @@ uniform vec3 cMeadow, cMeadowDry, cForestB, cForestC, cGap, cHedge, cTrack;
 uniform vec3 cSand, cWetSand, cRock, cRock2, cMud;
 uniform float uLandDbg;
 uniform sampler2D tFieldMask;
+uniform vec2 uBladeFade;
 uniform vec4 uFieldXf;
 varying vec3 vLW;
 varying vec3 vLN;
@@ -169,6 +172,15 @@ vec3 landAlbedo() {
     meadow = mix(meadow, meadow * vec3(0.86, 1.04, 0.9), smoothstep(0.6, 0.75, nT3.r) * 0.6);
   }
   meadow = mix(meadow, meadow * vec3(1.12, 1.13, 1.05), gust * 0.5);
+  // under the near blade rings (groundcover's roaming window) the ground is the shaded thatch between
+  // the stems — exactly what the town ground does (terrain/ground.ts), so the lawn / meadow keeps its tone
+  // across the slab edge instead of turning into a lighter lawn outside
+  {
+    float bdist = distance(p, cameraPosition);
+    float vz = (cameraPosition.y - p.y) / max(bdist, 1.0);
+    float presM = (1.0 - smoothstep(uBladeFade.x - 1.5, uBladeFade.y, bdist)) * (1.0 - smoothstep(0.12, 0.5, vz) * 0.85);
+    meadow = mix(meadow, mix(gBase * 0.58, gcThatch, 0.3), presM * 0.62);
+  }
   // wildflower specks: tiny and sparse up close, an average tint further away (the ground agent's
   // blades carry the near meadow)
   {
@@ -567,7 +579,8 @@ vec3 landAlbedo() {
   // inland of it (that read as camouflage blotches); its inland edge wanders with the noise
   sand = max(sand, smoothstep(0.04, 0.3, vCov.z + sN * 0.12));
   sc *= 0.94 + 0.08 * nB.g * midF;
-  if (fp < 0.4) sc *= 1.0 - 0.05 * lStripe(p.x * 0.8 + p.z * 0.6 + nB.r * 3.0, 0.7, 0.4, fp);
+  // wind ripples — not next to the town beach (its sand is smooth)
+  if (fp < 0.4) sc *= 1.0 - 0.05 * lStripe(p.x * 0.8 + p.z * 0.6 + nB.r * 3.0, 0.7, 0.4, fp) * smoothstep(20.0, 70.0, vCov3.y);
   // a field (decided per plot) runs to its own border over the dune fringe: the back-dune ends at the
   // field's hedge / margin, not in a pale haze over the crop (the open beach stays sand)
   sand *= 1.0 - fieldW * (1.0 - smoothstep(0.55, 0.85, vCov.z));
