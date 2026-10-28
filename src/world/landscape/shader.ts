@@ -420,11 +420,11 @@ vec3 landAlbedo() {
     fcol = mix(fcol, fcol * vec3(0.72, 0.86, 1.0) * 0.82, smoothstep(0.55, 0.7, nS2.g) * 0.85);   // conifer stands
     fcol = mix(fcol, fcol * vec3(1.14, 1.1, 0.88), smoothstep(0.6, 0.75, nS2.b) * 0.6);           // ash / birch, lighter
     vec3 Nf = Ng;
-    // within ~470 m of the town the woods are instanced trees (trees.ts): the ground under them is the
+    // within ~800 m of the town (all the free camera reaches low) the woods are instanced trees (trees.ts): the ground under them is the
     // forest floor (litter, moss, shade), never a painted canopy — the crown domes there read as an egg
     // carton between the real trunks. Beyond, the canopy is the terrain: crowns of varied size (two
     // lattices), broken gaps, domes only where the wood is closed, gentle relief (the low sun exaggerates it)
-    float treeBand = 1.0 - smoothstep(430.0, 500.0, vCov3.y);
+    float treeBand = 1.0 - smoothstep(760.0, 830.0, vCov3.y);
     if (treeBand > 0.01) {
       vec3 floorC = mix(vec3(0.07, 0.058, 0.038), vec3(0.065, 0.095, 0.035), smoothstep(0.4, 0.65, nB.g));
       floorC = mix(floorC, vec3(0.11, 0.08, 0.045), smoothstep(0.62, 0.8, nP2r(p.xz)) * 0.6);   // needle / leaf litter

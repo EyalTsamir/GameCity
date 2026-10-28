@@ -14,7 +14,7 @@ import { getTerrainModel } from './terrain/height';
 import { groundBands, slabEdges } from './terrain/layout';
 import { createLandscapeModel, CX, CZ, type Cover, type LandscapeModel } from './landscape/model';
 import { buildRings, type RingTopology } from './landscape/rings';
-import { buildLand, buildIslandPatch, buildFieldMask, makeSlabNormal, LAND_MAX_D, GROUND_DROP, type LandHeights, type LandHole } from './landscape/terrain';
+import { buildLand, buildIslandPatch, buildFieldMask, splatCover, makeSlabNormal, LAND_MAX_D, GROUND_DROP, type LandHeights, type LandHole } from './landscape/terrain';
 import { landUniforms, landMaterial } from './landscape/shader';
 import { buildMountains } from './landscape/mountains';
 import { placeTrees, createLandTrees, type LandTrees } from './landscape/trees';
@@ -264,7 +264,8 @@ export default function create(ctx: CityContext): CityModule {
   let trees: LandTrees | null = null;
   let treeMs = 0;
   if (params.get('landtrees') !== '0') {
-    const placed = placeTrees(model, ctx.quality.density);
+    const fg = splatCover(topo, heights, 0, CX, CZ, 1300, 12);
+    const placed = placeTrees(model, ctx.quality.density, (x, z) => fg.at(x, z));
     treeMs = placed.ms;
     trees = createLandTrees(placed.list, uniforms, fog, ctx.quality.shadows && ctx.quality.level !== 'low');
     root.add(trees.group);
