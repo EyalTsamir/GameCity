@@ -10,6 +10,7 @@
 import * as THREE from 'three';
 import type { Rng } from '../../core/rng';
 import { Kit } from './furniture';
+import { lathe } from './shapes';
 import { parasol, wheelieBins, CANVAS } from './garden';
 import type { ChairOut } from './service';
 import { GREEN, type GreenKit } from '../buildings/green';
@@ -22,6 +23,55 @@ const TAU = Math.PI * 2;
 const FLOWERS = ['#e8649a', '#f2c84b', '#e8574f', '#b46ad6', '#f5f0e6', '#f08a3c', '#8f9ee8'];
 const BIKE_COLS = ['#e63946', '#2a9d8f', '#457b9d', '#e9c46a', '#264653', '#f1faee', '#8d6cab', '#f4a261', '#3d5a80', '#1d1f22'];
 
+
+/** Bistro chair (bent steel tube frame, round slatted seat, hoop back with two rails); seat front +Z. */
+function bistroChair(k: Kit, col: string, rng: Rng, woven: boolean): void {
+  const sh = k.sh;
+  k.m(col, 'iron');
+  // front legs splay a little, back legs run up into the hoop
+  for (const x of [-0.17, 0.17]) {
+    sh.tube(x * 1.08, 0, 0.19, x, 0.44, 0.15, 0.011, 0.011, 6);
+    sh.tube(x * 1.08, 0, -0.2, x, 0.44, -0.15, 0.011, 0.011, 6);
+    sh.tube(x, 0.44, -0.15, x * 0.95, 0.86, -0.22, 0.011, 0.011, 6);
+  }
+  // hoop over the top
+  for (let i = 0; i < 6; i++) {
+    const a0 = (i / 6) * Math.PI,
+      a1 = ((i + 1) / 6) * Math.PI;
+    sh.tube(Math.cos(a0) * 0.1615, 0.86 + Math.sin(a0) * 0.05, -0.22, Math.cos(a1) * 0.1615, 0.86 + Math.sin(a1) * 0.05, -0.22, 0.011, 0.011, 5);
+  }
+  sh.tube(-0.165, 0.7, -0.19, 0.165, 0.7, -0.19, 0.008, 0.008, 5);
+  sh.tube(-0.165, 0.58, -0.17, 0.165, 0.58, -0.17, 0.008, 0.008, 5);
+  // leg ring
+  sh.tube(-0.18, 0.16, 0.17, 0.18, 0.16, 0.17, 0.006, 0.006, 4);
+  sh.tube(-0.18, 0.16, -0.18, 0.18, 0.16, -0.18, 0.006, 0.006, 4);
+  // seat: rim + rattan weave or slats
+  sh.cyl(0, 0.425, 0, 0.215, 0.215, 0.022, 14, 2);
+  if (woven) {
+    k.m(rng.pick(['#c8a46a', '#b8945a', '#d8c08a']), 'wood');
+    sh.cyl(0, 0.447, 0, 0.2, 0.2, 0.006, 14, 2);
+    k.m('#8a6a3a', 'wood');
+    for (let i = -3; i <= 3; i++) sh.box(i * 0.05, 0.4535, 0, 0.006, 0.002, Math.sqrt(0.04 - (i * 0.05) ** 2) * 2 - 0.02, 0);
+  } else {
+    for (let i = -3; i <= 3; i++) sh.box(i * 0.055, 0.452, 0, 0.042, 0.008, Math.sqrt(0.0441 - (i * 0.055) ** 2) * 2 - 0.02, 0);
+  }
+}
+
+/** Pedestal bistro table: cast foot with four splayed feet, column with collar, top with a rim. */
+function bistroTable(k: Kit, rng: Rng, R: number, metal: string): void {
+  const sh = k.sh;
+  k.m(metal, 'iron');
+  for (let i = 0; i < 4; i++) {
+    const a = (i / 4) * TAU + Math.PI / 4;
+    sh.tube(0, 0.08, 0, Math.cos(a) * 0.26, 0.012, Math.sin(a) * 0.26, 0.022, 0.014, 6);
+    sh.cyl(Math.cos(a) * 0.26, 0, Math.sin(a) * 0.26, 0.03, 0.025, 0.014, 8, 2);
+  }
+  lathe(sh, 0, 0, [[0.05, 0.06], [0.035, 0.12], [0.028, 0.2], [0.026, 0.62], [0.04, 0.66], [0.04, 0.68], [0.12, 0.7], [0.12, 0.715]], 10);
+  const top = rng.pick(['#e9e4d8', '#c9b48a', '#2c3033', '#9a6a43', '#d8d4cc']);
+  k.m(top, top === '#9a6a43' || top === '#c9b48a' ? 'wood' : 'stone');
+  lathe(sh, 0, 0, [[0, 0.715], [R - 0.012, 0.715], [R, 0.725], [R, 0.745], [R - 0.008, 0.752], [0, 0.752]], 20);
+}
+
 // ──────────────────────────────────────────────────────────── plazas ──
 
 /**
@@ -31,28 +81,38 @@ const BIKE_COLS = ['#e63946', '#2a9d8f', '#457b9d', '#e9c46a', '#264653', '#f1fa
 export function cafe(k: Kit, ks: Kit, rng: Rng, canvas?: [string, string], chairs?: ChairOut[]): boolean {
   const sh = k.sh;
   const metal = rng.pick(['#2c3033', '#3b4a40', '#5a3a2a', '#d8d4ca']);
-  k.m(metal, 'iron');
-  sh.cyl(0, 0, 0, 0.2, 0.04, 0.72, 6, 0);
-  k.m(rng.pick(['#e9e4d8', '#c9b48a', '#2c3033', '#9a6a43']), rng.chance(0.5) ? 'wood' : 'stone');
-  sh.cyl(0, 0.72, 0, 0.36, 0.36, 0.035, 10, 3);
+  bistroTable(k, rng, 0.36, metal);
   const n = rng.int(2, 4);
   const chairCol = rng.pick(['#2c3033', '#c9473f', '#3f7a8f', '#d8d4ca', '#8a5b3a', '#4f7a4a']);
+  const woven = rng.chance(0.5);
   for (let i = 0; i < n; i++) {
-    const a = (i / n) * TAU + rng.range(-0.3, 0.3) + 0.4;
-    sh.push().local(Math.sin(a) * 0.62, 0, Math.cos(a) * 0.62, 0, a + Math.PI + rng.range(-0.25, 0.25));
-    k.m(chairCol, 'iron');
-    for (const x of [-0.18, 0.18]) {
-      sh.box(x, 0.21, 0.16, 0.03, 0.42, 0.03, 1);
-      sh.box(x, 0.43, -0.18, 0.03, 0.86, 0.03, 1);
-    }
-    sh.box(0, 0.44, 0, 0.42, 0.035, 0.4, 0);
-    sh.push().local(0, 0.68, -0.19, -0.1).box(0, 0, 0, 0.4, 0.26, 0.025, 0).pop();
+    const a = (i / n) * TAU + rng.range(-0.35, 0.35) + 0.4;
+    // chairs left where people got up: pulled out, turned, one swung right round
+    const dist = rng.range(0.58, 0.78);
+    const turn = rng.chance(0.15) ? rng.range(0.8, 1.4) * (rng.chance(0.5) ? 1 : -1) : rng.range(-0.35, 0.35);
+    sh.push().local(Math.sin(a) * dist, 0, Math.cos(a) * dist, 0, a + Math.PI + turn);
+    bistroChair(k, chairCol, rng, woven);
     if (chairs) {
       sh.world(0, 0.4575, 0.02, _seat);
       sh.world(0, 0.4575, 1.02, _fwd);
       chairs.push({ sx: _seat.x, sy: _seat.y, sz: _seat.z, fx: _fwd.x, fz: _fwd.z });
     }
     sh.pop();
+  }
+  // what lives on an empty table: a menu in a stand, sugar pot, salt + pepper, an ashtray on some
+  k.m('#2a3a2a', 'plastic');
+  sh.push().local(0.04, 0.752, -0.1, 0, rng.range(0, TAU));
+  sh.push().local(0, 0, 0.012, 0.25).box(0, 0.06, 0, 0.1, 0.13, 0.004, 0).pop();
+  sh.push().local(0, 0, -0.012, -0.25).box(0, 0.06, 0, 0.1, 0.13, 0.004, 0).pop();
+  sh.pop();
+  k.m('#f2efe6', 'ceramic');
+  sh.cyl(-0.09, 0.752, 0.02, 0.03, 0.028, 0.05, 8, 2);
+  sh.cyl(0.06, 0.752, 0.06, 0.012, 0.012, 0.06, 6, 2);
+  k.m('#3a3430', 'ceramic');
+  sh.cyl(0.085, 0.752, 0.06, 0.012, 0.012, 0.06, 6, 2);
+  if (rng.chance(0.4)) {
+    k.m('#cfd8dc', 'glass');
+    sh.cyl(-0.05, 0.752, -0.16, 0.05, 0.045, 0.018, 10, 2);
   }
   // cups
   k.m('#f2efe6', 'ceramic');

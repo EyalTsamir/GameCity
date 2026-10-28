@@ -5,6 +5,31 @@ Owned: src/world/props/** + props.ts, src/world/life/**, src/sim/pedestrians/caf
 and (inherited from W3) the market stall in src/world/landmarks/civic.ts.
 
 ## Resume here
+* 2026-10-28 23:05 — **Session 1 ends (context cap).** All pushed. Judged (sheets docs/progress/real/w6_s1_places.jpg
+  = market eye ×2 / market 16 m / terrace / back yard eye ×2 / back yard 12 m / terrace 2;
+  w6_s1_terrace_chairs.jpg). Console clean, invariants {} (terrace view, hide=pedestrians).
+  - **Market:** reads alive at eye level: crate stacks behind stalls, sack trucks, boxes, pigeon flocks, litter,
+    bunting (life). Still missing vs brief: delivery van being unloaded (needs a W2 vehicle body → request),
+    string lights between stalls exist (life/extras); only 22 items placed — many stall backs fail `free()`
+    (likely the stall row backs touch OCC.SIDEWALK/PATH or the 1.3 m feature discs of the back-to-back row;
+    log rejects and try local z −1.5…−2.2 / sideways).
+  - **Terrace:** SK.cafe now = pedestal table (4 splayed feet, lathe column, rimmed top) + bent-tube bistro chairs
+    (hoop back, 2 rails, woven or slatted seat), chairs pulled out / turned (15 % swung right round; seats follow),
+    menu stand, sugar, cruets, ashtray. Judged real at 6 m. kerbCafe() still has the old box chairs → switch it
+    to bistroChair/bistroTable. Terrace extras (hedge planters, waiter station, chair stack, dog bowl, stubs,
+    A-board) placed (6 items) but not yet seen in a frame — capture from the plaza side (yaw 180–210, 8 m).
+  - **Back yard:** washing line on two T-posts with animated laundry (life/extras.ts, service.lines) reads well;
+    bins/recycling/bike/pallets/chair placed. **BUG found + disabled:** the courtyard rect edge is not the building
+    face (back door stood free in the yard, apron "cracks" read as floating tan bars). Wall-mounted set (apron,
+    door + step + mat + lamp, herbs, broom, meter box, downpipe + butt, AC) is now behind `?w6wall` until fixed:
+    find the real wall line by stepping out from the yard until `occ.has(BUILDING)` per sample (not from the
+    rect edge), or use buildings service footprints; re-check the crack decal sizes.
+  **Next (session 2), in order:** (1) back-yard wall line fix → enable the wall set; (2) market placement rejects;
+  (3) kerbCafe upgrade; (4) mechanics: parasol / awning sway — furnitureMaterial(u, wear, sway) option: attribute
+  aSway (pivot xyz + flex), WIND_GLSL thWindAt(pivot.xz) lean ∝ h², canopy flutter; parasols into a props-sway
+  kit (SK.cafe's `ks` and GK.parasol callers); market stall canopies live in landmarks/civic.ts (W3 inherited);
+  (5) perf.mjs `;nomarketlife,noterracelife,nobackyard` and W3's `;nopropdetail` / `;nomarketdetail`;
+  (6) bench views of the three places + golden overview (scripts/agent-tools/golden.sh).
 * 2026-10-28 22:30 — Session 1 WIP. W3 leftovers judged (shots/w6/w3left/sheet_1.png): kiosk, playground,
   gazebo, statue, planter read real at 3/10 m; remaining nits: kiosk dark box sticking out at the bottom corner of
   the plinth; `bin 10m` bench framing still ends inside a glass box (newsstand/shelter) — bench fault, not the bin.
@@ -36,9 +61,22 @@ and (inherited from W3) the market stall in src/world/landmarks/civic.ts.
 * Wind GLSL: core/wind.ts WIND_GLSL (`thWindAt(xz)`, needs uTime + uWind); props material = material.ts:114.
 
 ## Done
+* places.ts builders: woodCrate, plasticCrate, cardBox (closed/open), flatCardboard, sackTruck, platformTrolley,
+  pallet (EUR), sack, pigeon (3 morphs, pecking pose), litter (leaves, paper, tomato, peel, sticks, cups),
+  marketBin (1100 l, lid propped on bags), dogBowl, stubs, hedgePlanter, waiterStation, chairStack, bicycle,
+  backDoor, meterBox, acUnit, downpipeButt, herbPots (rosemary/basil/chives/geranium), wheelieBin, recycleBox,
+  weeds, broom, linePost. kit.ts: bistroChair, bistroTable.
 
 ## Tried and rejected
+* Back-yard wall line from the courtyard rect edge (+ `occ BUILDING` 0.6 m behind): occupancy passes but the
+  visible wall is elsewhere → door free-standing. Disabled (`?w6wall`).
 
 ## Toggles / tiers / costs
+* `?nomarketlife`, `?noterracelife`, `?nobackyard` (all off on **low**); `?w6wall` (debug: wall-mounted back-yard set).
+  Big items in KF (fine < 300 m), small ones in KD near cells (< 30 m). Cost not measured yet.
+* Café table/chair upgrade has no toggle yet (always on) — add one with the perf run.
 
 ## Sheets
+* shots/w6/w3left/sheet_1.png (W3 leftovers), shots/w6/p1 (capture-set views: market "27.5,1.3,76,9,0|180,6",
+  "27.5,1,78.5,16,200,28"; terrace "-38.3,1.1,-78.6,7,30|210,7"; back yard "76.5,1.2,17.5,6,90|270,8",
+  "76.5,1,17.5,12,250,30"), shots/w6/terrace2.png.

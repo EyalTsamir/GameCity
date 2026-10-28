@@ -690,7 +690,7 @@ function herbPots(k: Kit, rng: Rng, n: number): void {
 function wheelieBin(k: Kit, rng: Rng, col: string, lidOpen = false): void {
   const sh = k.sh;
   k.m(col, 'plastic');
-  lathe(sh, 0, 0, [[0, 0.05], [0.24, 0.05], [0.3, 1.0], [0, 1.0]], 4, Math.PI / 4);
+  lathe(sh, 0, 0, [[0, 0.05], [0.33, 0.05], [0.41, 1.0], [0, 1.0]], 4, Math.PI / 4);
   k.m(col, 'plastic');
   sh.box(0, 1.0, -0.33, 0.56, 0.06, 0.08, 0);
   k.m('#1e2022', 'plastic');
@@ -1152,70 +1152,75 @@ function backyard(e: PlacesEnv, info: PlacesInfo): void {
   // local x along the wall = (cos yaw, -sin yaw); edges run (ux, uz) — keep builders in the wall frame
   const L = ed.L;
   const s0 = -L / 2 + 1.0;
-  // a concrete apron along the wall (1.4 m), cracked, weeds at the wall foot and in the joints
-  {
-    const [x, z] = at(0, 0.7);
-    const y = e.H(x, z) + 0.02;
-    const k = e.fine(x),
-      kd = e.near(x, z);
-    k.sh.frame(x, y, z, yaw);
-    kd.sh.frame(x, y, z, yaw);
-    k.m('#a8a49a', 'stone');
-    const segs = Math.max(2, Math.floor((L - 0.4) / 1.5));
-    const sl = (L - 0.4) / segs;
-    for (let i = 0; i < segs; i++) {
-      k.m(['#a8a49a', '#9e9a90', '#b0aca2'][i % 3], 'stone');
-      k.sh.box(-L / 2 + 0.2 + sl * (i + 0.5), 0.015, 0, sl - 0.02, 0.03, 1.4, 1);
-    }
-    // cracks: thin dark lines across a few slabs
-    kd.m('#3a3834', 'stone');
-    for (let i = 0; i < 6; i++) {
-      const cx2 = rng.range(-L / 2 + 0.5, L / 2 - 0.5);
-      kd.sh.push().local(cx2, 0.031, rng.range(-0.4, 0.4), 0, rng.range(-0.8, 0.8)).box(0, 0, 0, 0.006, 0.002, rng.range(0.3, 0.8), 0).pop();
-    }
-    // weeds along the wall foot and in the slab joints
-    kd.sh.push().local(0, 0.03, -0.66);
-    weeds(kd, rng, L - 0.4, Math.floor(L * 2.2));
-    kd.sh.pop();
-    for (let i = 1; i < segs; i++) {
-      kd.sh.push().local(-L / 2 + 0.2 + sl * i, 0.03, 0, 0, Math.PI / 2);
-      weeds(kd, rng, 1.2, 3);
-      kd.sh.pop();
-    }
-    // the apron's front edge into the grass: damp dark line
-    e.spot(x, y, z, yaw, 0, 0.7, L / 2 - 0.2, 0.05, 0.02, 0.1, 0.4);
-  }
-  const top = 0.03;
-  // back door near the middle, with herb pots by the step and a broom
   const sDoor = rng.range(-0.8, 0.8);
-  place(sDoor, 0.0, 0, 0, (k, kd) => {
-    k.sh.local(0, top, 0);
-    kd.sh.local(0, top, 0);
-    backDoor(k, kd, rng);
-    k.sh.push().local(0.75, 0, 0.18);
-    herbPots(k, rng, 3);
-    k.sh.pop();
-    k.sh.push().local(-0.6, 0.2, 0.32);
-    herbPots(k, rng, 1);
-    k.sh.pop();
-  });
-  e.claim(...at(sDoor, 0.6), 0.8);
-  place(sDoor - 1.0, 0.0, 0, 0, (k) => {
-    k.sh.local(0, top, 0);
-    broom(k);
-  });
-  // gas meter + downpipe/water butt on one side, AC unit high on the wall
   const side = rng.chance(0.5) ? 1 : -1;
-  place(sDoor + side * 1.6, 0.0, 0, 0, (k) => {
-    k.sh.local(0, top, 0);
-    meterBox(k);
-  });
-  place(sDoor - side * 2.0, 0.0, 0, 0.45, (k, kd) => {
-    k.sh.local(0, top, 0);
-    kd.sh.local(0, top, 0);
-    downpipeButt(k, rng, 6.5);
-    acUnit(kd, kd);
-  });
+  // wall-mounted things (apron, back door, meter, downpipe + butt, AC) — OFF until the wall line is right:
+  // session-1 capture showed the courtyard rect edge is NOT the building face here (the door stood free
+  // in the yard). Debug with ?w6wall (see real-w6.md).
+  if (e.ctx.debug.params.has('w6wall')) {
+    // a concrete apron along the wall (1.4 m), cracked, weeds at the wall foot and in the joints
+    {
+      const [x, z] = at(0, 0.7);
+      const y = e.H(x, z) + 0.02;
+      const k = e.fine(x),
+        kd = e.near(x, z);
+      k.sh.frame(x, y, z, yaw);
+      kd.sh.frame(x, y, z, yaw);
+      k.m('#a8a49a', 'stone');
+      const segs = Math.max(2, Math.floor((L - 0.4) / 1.5));
+      const sl = (L - 0.4) / segs;
+      for (let i = 0; i < segs; i++) {
+        k.m(['#a8a49a', '#9e9a90', '#b0aca2'][i % 3], 'stone');
+        k.sh.box(-L / 2 + 0.2 + sl * (i + 0.5), 0.015, 0, sl - 0.02, 0.03, 1.4, 1);
+      }
+      // cracks: thin dark lines across a few slabs
+      kd.m('#3a3834', 'stone');
+      for (let i = 0; i < 6; i++) {
+        const cx2 = rng.range(-L / 2 + 0.5, L / 2 - 0.5);
+        kd.sh.push().local(cx2, 0.031, rng.range(-0.4, 0.4), 0, rng.range(-0.8, 0.8)).box(0, 0, 0, 0.006, 0.002, rng.range(0.3, 0.8), 0).pop();
+      }
+      // weeds along the wall foot and in the slab joints
+      kd.sh.push().local(0, 0.03, -0.66);
+      weeds(kd, rng, L - 0.4, Math.floor(L * 2.2));
+      kd.sh.pop();
+      for (let i = 1; i < segs; i++) {
+        kd.sh.push().local(-L / 2 + 0.2 + sl * i, 0.03, 0, 0, Math.PI / 2);
+        weeds(kd, rng, 1.2, 3);
+        kd.sh.pop();
+      }
+      // the apron's front edge into the grass: damp dark line
+      e.spot(x, y, z, yaw, 0, 0.7, L / 2 - 0.2, 0.05, 0.02, 0.1, 0.4);
+    }
+    const top = 0.03;
+    // back door near the middle, with herb pots by the step and a broom
+    place(sDoor, 0.0, 0, 0, (k, kd) => {
+      k.sh.local(0, top, 0);
+      kd.sh.local(0, top, 0);
+      backDoor(k, kd, rng);
+      k.sh.push().local(0.75, 0, 0.18);
+      herbPots(k, rng, 3);
+      k.sh.pop();
+      k.sh.push().local(-0.6, 0.2, 0.32);
+      herbPots(k, rng, 1);
+      k.sh.pop();
+    });
+    e.claim(...at(sDoor, 0.6), 0.8);
+    place(sDoor - 1.0, 0.0, 0, 0, (k) => {
+      k.sh.local(0, top, 0);
+      broom(k);
+    });
+    // gas meter + downpipe/water butt on one side, AC unit high on the wall
+    place(sDoor + side * 1.6, 0.0, 0, 0, (k) => {
+      k.sh.local(0, top, 0);
+      meterBox(k);
+    });
+    place(sDoor - side * 2.0, 0.0, 0, 0.45, (k, kd) => {
+      k.sh.local(0, top, 0);
+      kd.sh.local(0, top, 0);
+      downpipeButt(k, rng, 6.5);
+      acUnit(kd, kd);
+    });
+  }
   // bins + recycling boxes in a row along the wall at one end, a bike leaning beyond them
   const sBins = side > 0 ? s0 + 0.5 : -s0 - 0.5 - 2.2;
   place(sBins + 1.1, 0.45, 0, 1.2, (k, kd, x, y, z) => {
