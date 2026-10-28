@@ -1172,7 +1172,7 @@ void bhWall(inout vec3 albedo, inout float rough, inout float metal, inout vec3 
   float dDepth = 0.0;  // where along the reveal / sill the hit lands (0 = wall plane … 1 = glass / sill nose)
   vec3 dN = N;
   vec2 dQ = q;
-  float sunShade = 1.0;
+  float sunShade = 1.0, sunShadeG = 1.0; // G: the glass, 4.5 cm behind the frame face (the frame shades it too)
   vec2 dbgSun = vec2(-1.0);
   if (revD > 0.001) {
     vec2 k = vec2(dot(V, Tu), V.y) / max(-dot(V, N), 0.06); // lateral metres per metre into the wall
@@ -1203,7 +1203,7 @@ void bhWall(inout vec3 albedo, inout float rough, inout float metal, inout vec3 
         vec2 l1 = (bLo - pm) / dL, l2 = (bHi - pm) / dL;
         vec2 lf = max(l1, l2), ln = min(l1, l2);
         float sh = smoothstep(0.0, 0.006, min(min(lf.x, lf.y), sp) - max(max(ln.x, ln.y), 0.0));
-        sunShade = 1.0 - 0.5 * sh * sunOn;
+        sunShade = 1.0 - 0.68 * sh * sunOn;
       }
     }
     if (dSurf == 0 && all(greaterThan(pm, wr.xz)) && all(lessThan(pm, wr.yw))) {
@@ -1226,7 +1226,10 @@ void bhWall(inout vec3 albedo, inout float rough, inout float metal, inout vec3 
       vec2 ex = hp + ks * revD * sHit;
       vec2 ed = abs(ex - wc) - wh;
       float inS = 1.0 - smoothstep(-0.006, 0.006, max(ed.x, ed.y));
-      sunShade = 1.0 - 0.62 * (1.0 - inS) * sunOn;
+      // in shadow a sunlit facade keeps only its sky light (~1/4): the set-in frame reads by this edge
+      sunShade = 1.0 - 0.78 * (1.0 - inS) * sunOn;
+      vec2 eg = abs(hp + ks * (revD * sHit + 0.045) - wc) - wh + 0.05;
+      sunShadeG = 1.0 - 0.78 * smoothstep(-0.006, 0.006, max(eg.x, eg.y)) * sunOn;
       dbgSun = vec2(step(0.03, st.z) * step(0.0, uSunDir.y), uDaylight * (1.0 - inS));
     }
   }
@@ -1656,7 +1659,7 @@ void bhWall(inout vec3 albedo, inout float rough, inout float metal, inout vec3 
   // interior: per window a different balance (dark room / bright net curtain / sun on the glass across)
   float roomK = mix(0.62, 1.0, fract(r1 * 3.71));
   float reflK = (curtain || ribbon) ? mix(0.82, 1.18, fract(r2 * 2.93)) : mix(0.75, 1.9, fract(r2 * 2.93)) * (1.15 - 0.3 * roomK);
-  vec3 glass = interior * (1.0 - Fs) * transTint + refl * Fs * mix(0.65, 1.0, recess) * paneGrad * reflK * ((curtain || ribbon) ? 1.0 : 1.6);
+  vec3 glass = interior * (1.0 - Fs) * transTint + refl * Fs * mix(0.65, 1.0, recess) * paneGrad * reflK * ((curtain || ribbon) ? 1.0 : (homey ? 1.1 : 1.6));
   vec3 glassAlb = dayA * (1.0 - Fs) * transTint * (curtain ? 0.4 : (ribbon ? 0.7 : (homey ? 0.62 * roomK : roomK))); // a room seen through glass by day is far darker than the facade around it
   // open sash: the swung pane shows a strip of darker, skewed reflection at the hinge side
   glass = mix(glass, env * 0.35 * reflTint, openW * (1.0 - smoothstep(0.62, 0.66, wx)));
@@ -1666,7 +1669,7 @@ void bhWall(inout vec3 albedo, inout float rough, inout float metal, inout vec3 
     glassAlb = mix(avgAlb, glassAlb, detail);
     frame *= detail;
   }
-  albedo = mix(glassAlb, fcol, frame) * sunShade;
+  albedo = mix(glassAlb * min(sunShade, sunShadeG), fcol * sunShade, frame);
   rough = mix(0.5, (curtain || ribbon) ? 0.34 : 0.7, frame);
   // metallic mullions on curtain walls pick up the environment (sheen lines between panels)
   metal = (curtain || ribbon) ? frame * 0.7 : 0.0;

@@ -3,11 +3,36 @@
 Branch `claude/real-w1-facades` (from `claude/pensive-gates-bim12i`). Brief: docs/progress/real-briefs.md "W1".
 
 ## Resume here
-* **Session 5 (10-28):** order = bug 4 → window reveal oblique → lawn-rim probe → apartment glass → roller door → sheet.
+* **Session 5 (10-28) — DONE, next session starts here:** sheet docs/progress/real/w1_s5.jpg (tower crown, house window
+  3 m / 45° in sun, warehouse sectional door, apartment). Checks: downtown console clean, invariants {}; overview OK.
+  **Open, in order:** (a) apartment glass still uniform grey at 3 m — the glassAlb × 0.62 / homey reflection × 1.1
+  changes are visible on houses but NOT on apartments (bench apartment pick 0, shaded front) → the grey comes from
+  another term: probe the pane terms one at a time (`interior`, `refl`/`bhOpp`, the pale blind/net layer in the homey
+  branch ~l.1557, far-path `avgAlb` if detail < 1) with a debug view before changing anything; (b) bench window shots need a
+  sunlit facade — bench house pick 0 faces N; use the scratch `__city.view` framing above (or add `--front S` to bench);
+  (c) `?bdbg=reveal` / `?bdbg=ret` debug views still in the code (cheap; remove when the round ends);
+  (d) roller-shutter variant (50 %) unchanged from s4 and reads well; sectional glazed openings could take a reflection.
   - **Bug 4 FIXED:** lot 23 is the SLANT crown (H 82.1, walls to 89.6 at the back), not stepped. slantTop used
     edgeGrid (m = floors − 1) so everything above H was outside the grid (plain dark wall + a speckled row).
     towers.ts slantTop: `gr.m = ceil((highY − v0) / ch)` → the curtain wall runs up to the slope (shots/w1/s5/tw_fix.png).
     Probe tip: the shell mesh is ONE indexed geometry `buildings-shell` (iterate index.count, not position.count).
+  - **Window reveal (item 2):** the parallax was right all along (`?bdbg=reveal` now paints, inside the opening,
+    R = sunOn, G = sun-shadow mask). The bench house pick 0 faces N (never sunlit; at 16 h the sun grazes it and lights
+    the far jamb return — physically right); judge on a S-facing house: scratch script shots via
+    `__city.view({target: front + 2.2 m, distance 3.2, yaw 40, pitch 6})` (shots/w1/s5/sunS_norev / sunS / sunS2).
+    Fix: reveal sun shade 0.62 → 0.78 (shadow keeps only the sky light), sill shadow 0.5 → 0.68, and the glass gets its
+    own mask `sunShadeG` 4.5 cm behind the frame face (the frame's own return shadow on the pane). Result: head + jamb
+    shadow on the frame reads at 3 m / 45°.
+  - **Lawn rim (item 3):** probe done → lighting (not ours). normalBias 0/1/3 no change; `?noao` reveals a ~0.5 m
+    sunlit band along the wall foot with a sharp edge (`tune.pcf` 0.3) → the building's ground shadow starts ~0.5 m
+    out. Cause + one-line fix proposal in real-requests.md (depth bias `sun.shadow.bias`, render/sky.ts l.404).
+  - **Apartment glass (item 4):** homey `glassAlb` × 0.95 → × 0.62 (a room by day is far darker than the facade);
+    homey reflection boost × 1.6 → × 1.1 (offices/shops keep 1.6).
+  - **Roller door (item 5):** industry.ts sectional branch rebuilt: profiled sections (shaded foot bevel, lit nose,
+    dark joint), two pressed ribs per section as sloped faces, glazed section with real openings (posts between,
+    reveal sill, glass 2 cm back with sky-lit upper half, black gasket frames), galvanised tracks with a dark slot
+    and bolt heads, aluminium bottom bar + flared rubber lip, scuffs, lift handle + lock; the dock bumpers that
+    floated on the leaf at ground-level doors removed.
 * **Session 4 stopped by the lead at the context cap (WIP pushed, nothing judged as final).** Next session, in order:
   1. **Bug 4 tower crown (lot 23 twin towers, stepped crown, scheme 1 wall #3d4854):** `?bdbg=ret` (shots/w1/tw/f_ret.png)
      paints the crown band GREEN = pixels with `cell` outside the grid (`cell.y >= vB.y` etc., materials.ts ~l.1140),
@@ -204,3 +229,7 @@ TOTAL weighted 3.4M (cache read 79%, write 8%, output 12%). Stopped at milestone
 ## Tokens (session 4, `tokens.py`)
 TOTAL weighted 4.9M (cache read 84%, write 7%, output 9%). Stopped by the lead at ~317k context (over the cap: too many
 waits on the slow shot lock inside one session).
+
+## Tokens (session 5, `tokens.py`)
+TOTAL weighted 2.5M (cache read 80%, write 9%, output 12%); 123 calls, ctx median 171k / max 236k — over the 170k cap:
+get_session's context_usage reads 0 in this container, so run tokens.py for the real figure instead.

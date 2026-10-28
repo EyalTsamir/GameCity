@@ -269,11 +269,11 @@ export function genIndustrial(g: Gen): void {
               w1 = ua + (i + 1) * wpitch - wpitch * 0.18;
             // window reveal sills (the panel's thickness), glass 2 cm back: dark room, sky in the upper part
             setCol(t, shade(c0, 0.62));
-            strip(w0, w1, wy0, oF, wy0, oK - 0.004, 0.4);
+            strip(w0, w1, wy0, oF, wy0, oK + 0.003, 0.4);
             setCol(t, col('#2b3238'));
-            strip(w0, w1, wy0, oK - 0.004, (wy0 + wy1) / 2, oK - 0.004);
+            strip(w0, w1, wy0, oK + 0.003, (wy0 + wy1) / 2, oK + 0.003);
             setCol(t, col('#56646f'));
-            strip(w0, w1, (wy0 + wy1) / 2, oK - 0.004, wy1, oK - 0.004);
+            strip(w0, w1, (wy0 + wy1) / 2, oK + 0.003, wy1, oK + 0.003);
             // black gasket frame, proud of the face
             setCol(t, col('#151719'));
             sideBox(t, sg, w0 - 0.025, w1 + 0.025, oF, oF + 0.009, wy0 - 0.025, wy0 + 0.006, true);
