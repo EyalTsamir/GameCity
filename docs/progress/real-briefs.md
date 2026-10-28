@@ -174,3 +174,18 @@ Audit #8 (boats), #12 (jetty/beach gear) and plan item 8. Owned: `src/world/harb
 4. **Station platform:** platform edge with tactile strip and yellow line, benches, a timetable board, a clock,
    ticket machine, bins, canopy columns with fixings, signage with legible station names, luggage, waiting people.
 Toggles e.g. `?noquaylife`, `?nositedetail`, `?noplatformdetail`, `?noboatdetail`; quality tiers; measure cost.
+
+## W8 — Countryside and small nature: animals, tractor, farm buildings, flowers (wave 3)
+The objects outside the town that nobody owned yet (open items in NEXT-ROUND.md: "sheep look faceted under 5 m",
+"flower heads are crude under 2 m"). Owned: `src/world/landscape/farmlife.ts` (herds, tractor),
+`src/world/landscape/settlements.ts` + `fleet.ts` (far farms/villages as objects near the slab edge), the flower-head
+geometry/shading in `src/world/groundcover/**` (blades/flowers only — no density/mask changes beyond what an object
+needs), `src/world/vegetation/plants.ts` flower/shrub cards if flower beds live there. Not crowns, not terrain.
+Photo test (write it into your log first): a sheep at 3 m (wool volume and fleece breakup, face and legs darker,
+ears, legs with knees and hooves, weight on the ground, grazing pose variety); a cow (bone structure at hips and
+shoulders, udder, tail with switch, patches with soft edges); a tractor (big rear tyres with lugs, cab with glass and
+frame, exhaust stack, hitch and implement, mud); flowers at 1–2 m (petals with count/shape per species, centres,
+stems with leaves, droop, colour variation); a farm building at 10–40 m (barn with boarding, doors, roof sheeting,
+silo, fences, gates, hay bales). Contact: hooves and tyres sit in the grass, tracks in the field.
+Bench: add `sheep`, `cow`, `tractor`, `flowerbed` classes to scripts/bench.mjs (commit that first).
+Toggles e.g. `?noanimaldetail`, `?noflowerdetail`, `?nofarmdetail`; tiers; measure cost (herds can be many).
