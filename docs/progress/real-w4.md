@@ -35,6 +35,12 @@ Photo test "Person" (REAL.md). Owned: `src/sim/pedestrians/**` presentation (not
 * Hair strands (all levels, octaves fade by fwidth); hair sheen 0.07→0.03 (read as a bald spot on top).
 * Fabric (close): seams, denim twin stitching + back/front pockets + yoke, knee/elbow creases ∝ pose bend,
   trouser break, sleeve cuff gathers, torso side seams / waist folds, coat/skirt drape, weave grain.
+* Close level also: rounded shoulder line (Catmull-Rom torso rings ≥ 8), straps as webbing ribbons hugging the
+  torso (`strapPath`), 24-side hats with brim underside, beard + moustache on the sculpted face
+  (`buildCloseBeard`, `closeHeadPoint`), per-person face shape in the VS (nose / chin / cheeks / lips from a
+  hash of the colour words), hair strand relief in the normal (`HAIR_NORMAL`).
+* Market vendor (W3 request): faces the aisle again when the clock is not in the packing window
+  (crowd.ts stepVendor; it kept the packing "toBack" yaw after a clock jump — bench sets 11 h after load).
 * Shoes (close): welt / midsole line, laces, tongue gap, toe-cap and heel seams (aux u/v on the foot loft).
 
 ## Tried and rejected (why)
@@ -55,3 +61,10 @@ Photo test "Person" (REAL.md). Owned: `src/sim/pedestrians/**` presentation (not
 ## Sheets
 
 ## Next
+* Skirts/dresses in a long stride split into a pointed diamond at the front hem (thigh-carried skirt rings;
+  pre-existing at LOD0, more visible at close) — blend front/back vertices towards the mean of both thighs.
+* T-shirt neckline zig-zags at the close level (neck rings 3 × 16; the hem boundary crosses the torso top cap).
+* Carried things at close: shopping bag is a soft box (paper bag with handles / plastic bag), phone, cup.
+* Moustache still a bar: taper ends, strand paint.
+* Dark-skin faces: sclera could read a touch bright; check at 11 h and 18 h.
+* Perf: measure `;nopeopledetail` on the target (software GL here).

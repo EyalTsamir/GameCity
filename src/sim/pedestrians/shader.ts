@@ -333,7 +333,11 @@ void pedPose(inout vec3 p, inout vec3 n) {
     pedJoint(pl, nl, pedHipR(true), pedPivS(${PIV.HIP}, true), z0); z0 = 0.0;
     pedJoint(pr, nr, pedHipR(false), pedPivS(${PIV.HIP}, false), z0);
     float ext = smoothstep(-0.015, 0.015, (pl.z - pr.z) * (rad0.y < 0.0 ? -1.0 : 1.0));
-    float wL = mix(clamp(0.5 + 0.75 * side, 0.0, 1.0), ext, (1.0 - abs(side)) * smoothstep(0.1, 0.5, abs(rad0.y)));
+    // the front / back panels drape as one broad sheet over the forward / rear thigh (no pointed split at
+    // the hem in a long stride): a wider share follows the panel's thigh, and their hem follows a little less
+    float panel = sqrt(1.0 - abs(side)) * smoothstep(0.1, 0.5, abs(rad0.y));
+    float wL = mix(clamp(0.5 + 0.75 * side, 0.0, 1.0), ext, panel);
+    if (!seated) k *= 1.0 - 0.25 * panel * max(u, 0.0);
     p = mix(p, mix(pr, pl, wL), k);
     n = normalize(mix(n, mix(nr, nl, wL), k));
     if (seated) p.y = max(p.y, P_tailFloor);
