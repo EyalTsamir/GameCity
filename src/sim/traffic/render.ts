@@ -155,7 +155,10 @@ export class VehicleRenderer {
       this.pCol[i * 3 + 1] = c.g;
       this.pCol[i * 3 + 2] = c.b;
       this.pA1.set([0, 0, (p.x * 7.13) % 6.28, 0], i * 4);
-      this.pA2.set([p.variant, 0, Math.abs(p.x * 0.37 + p.z * 0.11) % 1, 0], i * 4);
+      // phase (plates, wear, dents, roof box) from a hash of the position: the old linear mix of x and z gave
+      // neighbours along an east-west row nearly the same phase (5.5 m × 0.37 ≈ 2.03 → +0.03), hence twin cars
+      const hp = Math.sin(p.x * 12.9898 + p.z * 78.233) * 43758.5453;
+      this.pA2.set([p.variant, 0, hp - Math.floor(hp), 0], i * 4);
     });
 
     // headlight pools + tail glows on the road (night only)

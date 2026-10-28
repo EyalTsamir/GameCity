@@ -1240,7 +1240,7 @@ function compact(): THREE.BufferGeometry {
   const b = new Builder();
   const L = 3.55,
     W = 1.66;
-  const shape: CarShape = { L, W, sill: 0.28, belt: 0.93, roof: 1.46, noseH: 0.78, hoodH: 0.9, wsBase: 0.92, wsTop: 0.12, rwTop: -1.18, rwBase: -1.6, deckH: 1.0, tailH: 0.93, pillarB: -0.36, glassRear: -1.12, tumble: 0.15, axF: 1.155, axR: -1.145, wheelR: 0.29 };
+  const shape: CarShape = { L, W, sill: 0.28, belt: 0.93, roof: 1.46, noseH: 0.78, hoodH: 0.9, wsBase: 0.92, wsTop: 0.12, rwTop: -1.18, rwBase: -1.6, deckH: 1.0, tailH: 0.93, pillarB: -0.36, glassRear: -1.12, tumble: 0.18, axF: 1.155, axR: -1.145, wheelR: 0.29 };
   loftBody(b, shape, false, false, 'chrome');
   carDetails(b, { L, W, wheelR: 0.29, wheelW: 0.22, axF: 1.155, axR: -1.145, wheelX: W / 2 - 0.08, bodyY: 0.3, bodyH: 0.62, bodyR: 0.26, lightY: 0.66, roundLights: true, wheel: 'cap', bumper: 'chrome' }, shape);
   return b.build();
@@ -1250,7 +1250,7 @@ function hatch(): THREE.BufferGeometry {
   const b = new Builder();
   const L = 4.0,
     W = 1.74;
-  const shape: CarShape = { L, W, sill: 0.3, belt: 0.9, roof: 1.45, roofDrop: 0.06, noseH: 0.76, hoodH: 0.9, wsBase: 0.88, wsTop: 0.02, rwTop: -1.02, rwBase: -1.76, deckH: 0.98, tailH: 0.93, pillarB: -0.42, glassRear: -0.98, tumble: 0.14, axF: 1.22, axR: -1.33, wheelR: 0.31 };
+  const shape: CarShape = { L, W, sill: 0.3, belt: 0.9, roof: 1.45, roofDrop: 0.06, noseH: 0.76, hoodH: 0.9, wsBase: 0.88, wsTop: 0.02, rwTop: -1.02, rwBase: -1.76, deckH: 0.98, tailH: 0.93, pillarB: -0.42, glassRear: -0.98, tumble: 0.17, axF: 1.22, axR: -1.33, wheelR: 0.31 };
   const c = loftBody(b, shape, true, false, 'paint');
   // small roof spoiler over the rear window
   b.add(rbox(c.topW - 0.12, 0.045, 0.2, 0.02, 0, topAt(shape, shape.rwTop + 0.06) - 0.025, shape.rwTop - 0.02), { color: '#ffffff', paint: true });
@@ -1263,7 +1263,7 @@ function sedan(): THREE.BufferGeometry {
   const b = new Builder();
   const L = 4.45,
     W = 1.78;
-  const shape: CarShape = { L, W, sill: 0.31, belt: 0.9, roof: 1.42, noseH: 0.76, hoodH: 0.88, wsBase: 1.0, wsTop: 0.2, rwTop: -0.85, rwBase: -1.5, deckH: 0.99, tailH: 0.96, pillarB: -0.3, pillarC: -1.0, glassRear: -1.25, tumble: 0.15, axF: 1.375, axR: -1.325, wheelR: 0.32 };
+  const shape: CarShape = { L, W, sill: 0.31, belt: 0.9, roof: 1.42, noseH: 0.76, hoodH: 0.88, wsBase: 1.0, wsTop: 0.2, rwTop: -0.85, rwBase: -1.5, deckH: 0.99, tailH: 0.96, pillarB: -0.3, pillarC: -1.0, glassRear: -1.25, tumble: 0.18, axF: 1.375, axR: -1.325, wheelR: 0.32 };
   const c = loftBody(b, shape, true, true, 'paint');
   carDetails(b, { L, W, wheelR: 0.32, wheelW: 0.24, axF: 1.375, axR: -1.325, wheelX: W / 2 - 0.1, bodyY: 0.33, bodyH: 0.58, bodyR: 0.18, lightY: 0.69, bumper: 'paint' }, shape);
   // taxi (variant 1 → part 2): roof sign + chequer band
@@ -1289,7 +1289,7 @@ function suv(): THREE.BufferGeometry {
   const b = new Builder();
   const L = 4.55,
     W = 1.86;
-  const shape: CarShape = { L, W, sill: 0.42, belt: 1.1, roof: 1.72, noseH: 0.98, hoodH: 1.08, wsBase: 1.1, wsTop: 0.4, rwTop: -1.95, rwBase: -2.15, deckH: 1.2, tailH: 1.15, pillarB: -0.35, pillarC: -1.3, glassRear: -1.85, tumble: 0.1, axF: 1.425, axR: -1.325, wheelR: 0.37, clad: true };
+  const shape: CarShape = { L, W, sill: 0.42, belt: 1.1, roof: 1.72, noseH: 0.98, hoodH: 1.08, wsBase: 1.1, wsTop: 0.4, rwTop: -1.95, rwBase: -2.15, deckH: 1.2, tailH: 1.15, pillarB: -0.35, pillarC: -1.3, glassRear: -1.85, tumble: 0.13, axF: 1.425, axR: -1.325, wheelR: 0.37, clad: true };
   const c = loftBody(b, shape, true, true, 'dark');
   // roof rails
   for (const s of [1, -1]) b.add(bx(0.05, 0.06, c.topD - 0.3, s * (c.topW / 2 - 0.08), c.topY - 0.01, c.topZ), { color: '#2e3136' });
@@ -1591,11 +1591,11 @@ function tarpLoad(b: Builder, w: number, y0: number, h: number, z0: number, z1: 
     let dz = 9;
     for (const sz of straps) dz = Math.min(dz, Math.abs(z - sz));
     const pull = Math.min(1, dz / 0.5);
-    const bulge = 0.035 * pull * pull * (3 - 2 * pull);
-    const lump = 0.03 * Math.sin(z * 1.7 + 1.3) * Math.sin(t * 9.0 + z * 0.6) + 0.02 * Math.sin(z * 4.1 + t * 13.0);
+    const bulge = 0.06 * pull * pull * (3 - 2 * pull);
+    const lump = 0.05 * Math.sin(z * 1.7 + 1.3) * Math.sin(t * 9.0 + z * 0.6) + 0.025 * Math.sin(z * 4.1 + t * 13.0);
     const low = Math.max(0, 1 - (y - y0) / 0.6);
     const fold = (0.012 + 0.02 * low) * Math.sin(z * 9.0 + hsh(Math.floor(z * 1.4)) * 6.0) * (Math.abs(x) > hw - 0.02 ? 1 : 0.3);
-    return bulge + lump * (1 - low * 0.5) + fold - 0.015;
+    return bulge + lump * (1 - low * 0.5) + fold - 0.03;
   };
   const nT = LOD === 0 ? 28 : LOD === 1 ? 10 : 4,
     nZ = LOD === 0 ? Math.round((z1 - z0) / 0.08) : LOD === 1 ? 16 : 4;

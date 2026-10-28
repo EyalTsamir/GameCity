@@ -28,6 +28,21 @@ Owned: `src/sim/traffic/{models,vehicleMaterial,render}.ts` (+ trains later). Si
   "-10,0.9,22,4,30,6;-8,1.4,35,9,25,8" --hours 11 --out shots/w2/x` (row 1 cars at z 22 from x −17, row 2
   vans/lorries/buses at z 35; yaw 0 ≈ front, 180 ≈ rear). Bench: `--classes car,bus --yaws 0,140` (new option).
 
+## Code map, session 3 additions
+* `busBody.ts`: `BusShape` takes optional `nose`/`tail: EndProfile` (sb/ix/dy/r per ring point + `zone` + `sweep`),
+  `tumble` (ring point 7 inset), `roofIn`/`roofDrop`, `glassD` (nose depth whose band 6–7 is glass). Flank faces get
+  their own face normal (works with tumble). Windscreen seal strips now run 5 cm along the surface (raked screens),
+  also across the end cap and down the glass side edges (bus too).
+* `models.ts`: `cabShell(b, shape, zc, glass)` → EndFn (lofted cab, regions painted / bumper / well / glass / seal);
+  `flankPane(b, shape, [z,y][], glass)` (side glass on the leaning flank, in a seal); `flankSeam`; `endLamp`
+  (conformal lens in a dark housing); `paneOnEnd` (rounded pane conformed to an end, grid); `tarpLoad` (lofted
+  tarp with bulges between straps, lumps, folds; straps + ratchets + hooks). `delivery()` = Luton: cab loft 2.5 m
+  (rear 0.6 m inside the box), peak over the cab, joint strips, doors on VB(0,2) / roller shutter on VB(1,3).
+  `lorry()` cab loft 1.9 m, visor, steps ahead of the front wheel, two mirrors, bed rails + hooks, ladder headboard.
+* `carBody.ts` ringAt: flank points 2–6 reshaped (tuck-under, shoulder widest at belt − 0.15, roll-in to the belt);
+  tumble +0.03 on every car.
+* `render.ts`: parked phase = position hash (was linear → twins along E-W rows).
+
 ## Code map, milestone 2 additions
 * `src/sim/traffic/carBody.ts`: `ringAt` (10 ring points incl. arch flare, bumper line, crowned bonnet/roof) +
   end zones (`NOSE`/`TAIL` tables: per-point set-back `sb`, plan inset `ix`, roll `dy`, length `r`; quarter-ellipse;
