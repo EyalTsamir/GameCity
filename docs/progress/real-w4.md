@@ -64,7 +64,10 @@ Photo test "Person" (REAL.md). Owned: `src/sim/pedestrians/**` presentation (not
   11 m (medium), 7 m (low) — `CrowdRenderer.closeDist` set in pedestrians.ts.
 * `?pedlod=close` forces every figure to the close level (`?pedlod=0..3` = near/lo/tiny/pin as before).
 * Stats: `pedestrians.closeLod` = figures drawn at the close level. Capacity 48 (overflow → near).
-* Cost: TODO perf.mjs `;nopeopledetail` at a people-dense view (square `27,0,17,20,30,18`).
+* Cost (software GL, one run, view `27,0,17,20,30,18`, 12 h): by distance 886 ms/frame, 3.59 M tris; every
+  figure forced to near (`pedlod=0`) 941 ms, 3.73 M; forced to close (`pedlod=close`, capacity 48, rest near)
+  1054 ms, 4.16 M → ≈ +9 k tris per close figure (worst case 48 → +0.43 M tris). Real views have a handful of
+  figures < 15 m. Needs an Adreno measurement; the medium/low tiers shrink the radius to 11 / 7 m.
 
 ## Sheets
 
