@@ -11,6 +11,9 @@ Overview must stay at least as impressive as now. Every feature: quality tiers +
 Lead session: session_01XuhAMczW3iK25AAWnf3qog, branch `claude/pensive-gates-bim12i`.
 
 ## Resume here (keep current)
+* 2026-10-28 15:18 UTC — Audit written (below; sheets docs/progress/real/audit_*.jpg). Wave 1 launched: W1 facades,
+  W2 vehicles, W3 furniture as sibling sessions (table "Workers"). Lead now waits for milestone notes; on each:
+  fetch the branch, look at its sheets, merge into claude/pensive-gates-bim12i when sound, respawn per the rule.
 * 2026-10-28 14:10 UTC — Lead: object bench `scripts/bench.mjs` built and committed (one page load, classes ×
   distances, sheets of 6 classes). Full audit capture running → shots/audit/all (≈45 min software GL).
   Next: write the audit (ranked table + photo tests) below, then launch wave 1 as sibling cloud sessions.
@@ -33,7 +36,14 @@ Capture cost here (4 CPUs, SwiftShader): page load ≈ 100 s, then ≈ 25 s per 
   — the object bench. Moving classes are ray-picked and the sim paused. `--pick n` = n-th instance (variation).
 
 ## Workers
-(none yet)
+Wave 1 (launched 2026-10-28 15:17 UTC, sibling cloud sessions, briefs in real-briefs.md):
+| worker | session | branch | log |
+|---|---|---|---|
+| W1 facades | session_01XuhAMgUxQGzZU9Z87GpQzS | claude/real-w1-facades | real-w1.md |
+| W2 vehicles | session_01XuhAMfjoLtHnvYp6xNGDNE | claude/real-w2-vehicles | real-w2.md |
+| W3 furniture | session_01XuhAMfy5Z4Xrnt2757Pifp | claude/real-w3-furniture | real-w3.md |
+Respawn rule: when a worker stops (milestone note, ~200k context, or a usage stop), create a NEW session on the
+same branch with the same brief + "resume from docs/progress/real-wN.md Resume here"; archive the old one.
 
 ## Audit (2026-10-28, lead; sheets shots/audit/all/sheet_1..6.png = the "before" of the round)
 Object bench, 11 h, 1280×720, 36 classes × 3 / 10 / 40 m, console clean, invariants 0. Score = screen presence
