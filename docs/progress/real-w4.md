@@ -26,7 +26,10 @@ Photo test "Person" (REAL.md). Owned: `src/sim/pedestrians/**` presentation (not
       Hairline softening NOT done (needs a look at where the hair cap meets the FACE region).
   Bench additions (people-bench.mjs): `--lods close,near` (same figure + frame per forced level, '' = by
   distance), `--persona jogger`, `--vel <m/s>` (pose a figure at a forced speed), shots skirt/side/face2.
-  Next: judge sk1 → fix skirt slit / hat crown if still wrong → hairline → re-run the 4-figure people-bench
+  sk1 judged (docs/progress/real/w4_after_s2.jpg; cause sheet w4_squat_cause.jpg): skirts/dress closed in a
+  walk at 1.3–1.6 m, small hem notch on a dress at 5 m; eyes show sclera + iris; hat brim above the eyes.
+  Downtown shot: console clean, invariants {} (shots/w4/dt2.txt).
+  Next: fix skirt slit / hat crown if still wrong → hairline → re-run the 4-figure people-bench
   (face,hand,body) and copy as docs/progress/real/w4_after_s2.jpg → then brief priorities 5 (carried things)
   and 4/7 (weight, variation).
 * 2026-10-28 19:15 UTC — session 1 ENDED (context cap). Branch `claude/real-w4-people`, all committed + pushed.
