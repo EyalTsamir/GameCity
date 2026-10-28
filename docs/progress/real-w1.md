@@ -4,13 +4,22 @@ Branch `claude/real-w1-facades` (from `claude/pensive-gates-bim12i`). Brief: doc
 
 ## Resume here
 * Session 2 (10-28, from 16:40 UTC). Merged pensive-gates; golden ref = shots/golden/ref (ecef462).
-* **Specks fixed (root cause):** not NaN — the three.js GGX sun highlight on glass at roughness 0.14 (a pin-point
-  on a flat pane → bloom). Glass roughness now 0.5; the mirror image + sun glint stay in the shader emit. Found
-  with the new `?bdbg=nan` (magenta = NaN / Inf / emit > 6 / albedo > 1.2; zeroes emit so lighting-only
-  artefacts remain visible).
+* **Specks fixed:** NOT the GGX sun highlight (glass roughness → 0.5 alone did not cure it) and not life's
+  dust motes (`skip=life` kept them). `?bdbg=nan` (colour flags: red NaN albedo, green NaN/Inf emit, blue emit
+  > 6, yellow albedo ≥ 1, cyan NaN normal; emit zeroed otherwise) shows isolated single pixels with albedo ≫ 1
+  inside the glass (random spots, not only corners). Fix: clamp facade albedo to [0, 1], emit ≤ 16, NaN → 0 in
+  the main chunk after bhWall/bhRoof — no specks in shots/w1/s15. The source term is still unidentified
+  (suspect: the reveal-return ratio `albedo / max(baseAlb * pattern(q), 1e-3)` or a glass branch); harmless now.
 * Done this session (commit after 'W1 facades: near-LOD sill…'): winGeo near-LOD sills + surrounds, rendered-wall
   repairs / hairline cracks / string course, richer daylight curtains, porch balustrades + plank decks,
-  trim / frame variety. Bench iterations shots/w1/s8 (sills), s10 (all), s12 (after rough fix).
+  trim / frame variety. Bench iterations shots/w1/s8 (sills), s10 (all), s12, s15 (speck fix), milestone sheet shots/w1/m2.
+  Also: apartments 55 % rendered (PLASTER) / 45 % panels; punched-window reflection × 0.78, home glass albedo
+  × 1.18; plinth ledge highlight and salt line toned down; grimier wall foot.
+* Milestone 2 checks: golden.sh m2 vs ref = downtown 0.6 / harbor 0.2 / oldtown 0.6 / overview 0.1 / westbrook 2.2
+  (all ≪ 8: overview unchanged); downtown shot console clean; invariants: only `landmarks` (statue founder
+  vertices 0.07 m outside r — W3's, from the merged base, not buildings). Sheet docs/progress/real/w1_m2.jpg.
+* Lead's open points not yet real: apartment glass still reads greyish (reflection vs room), panel-walled
+  apartments have no string course / cracks (the block runs on PLASTER/SMOOTH only), office upper floors flat.
 * Next: judge s12; string course only on PLASTER/SMOOTH (apartment fronts in the bench are PANELS → none
   there: consider adding panel-joint slab lines); stronger daylight glass variety (reflection still dominates
   on apartments); offices (curtain-wall mullion relief); dirtier foot on apartments; golden.sh before push.
@@ -92,3 +101,7 @@ Branch `claude/real-w1-facades` (from `claude/pensive-gates-bim12i`). Brief: doc
 TOTAL weighted 4.4M (cache read 80%, cache write 8%, output 11%); 148 calls, ctx median 248k / max 338k, 0 cold
 calls, idle>5 min warm 1 / cold 0 (the main-session 1 h cache holds). Over the ~200k context target: the next
 milestone should start fresh from this log.
+
+## Tokens (session 2, `tokens.py`)
+TOTAL weighted 2.5M (cache read 78%, write 9%, output 13%); 115 calls, ctx median 176k / max 235k (over the
+200k cap → stopped at milestone 2). Next session starts fresh from this log.

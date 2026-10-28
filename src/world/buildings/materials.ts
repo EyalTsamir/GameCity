@@ -922,9 +922,9 @@ void bhWall(inout vec3 albedo, inout float rough, inout float metal, inout vec3 
       pc *= (1.0 - 0.35 * spl * (1.0 - smoothstep(0.005, 0.02, fq.y))) * mix(0.72, 1.0, smoothstep(0.0, 0.18 + 0.1 * nm.g, y));
       // the ledge on top catches the sky; a thin shadow line just under it
       float led = smoothstep(pH - 0.03 - aaP, pH - 0.012, y) * (1.0 - smoothstep(pH - 0.012, pH, y));
-      pc *= 1.0 + 0.25 * led;
+      pc *= 1.0 + 0.08 * led;
       albedo = mix(albedo, pc, plinthF);
-      if (led > 0.3 && uWallRelief > 0.5) bhNW = normalize(N + vec3(0.0, 1.1, 0.0));
+      if (led > 0.3 && uWallRelief > 0.5) bhNW = normalize(N + vec3(0.0, 0.55, 0.0));
       else if (plinthF > 0.5) bhNW = vec3(0.0);
     }
     // the wall right above the ledge: a little splash-back from the ledge
@@ -966,12 +966,12 @@ void bhWall(inout vec3 albedo, inout float rough, inout float metal, inout vec3 
     albedo *= 1.0 - 0.08 * smoothstep(0.2, 0.9, -sunF) * oldness;
     float eaveG = info * (1.0 - smoothstep(0.0, 2.6 + 2.0 * nm.r, dTop)) * (0.55 + 0.45 * smoothstep(0.2, 0.7, stv));
     albedo *= 1.0 - 0.22 * eaveG * oldness * wStr;
-    albedo *= 1.0 - 0.16 * (1.0 - smoothstep(0.2, 1.3 + 0.5 * nm.g, y)) * oldness * wStr;
+    albedo *= 1.0 - 0.24 * (1.0 - smoothstep(0.2, 1.3 + 0.5 * nm.g, y)) * (0.75 + 0.5 * nm.r) * oldness * wStr; // grimy foot: splash, bikes, hands
     float tide = 0.35 + 0.6 * oldness + 0.35 * (nm.g - 0.5) + 0.1 * (grain - 0.5) + 0.2 * (np.r - 0.5);
     float damp = 1.0 - smoothstep(tide - 0.14, tide + 0.03, y);
     float salt = smoothstep(tide - 0.08, tide + 0.0, y) * (1.0 - smoothstep(tide + 0.0, tide + 0.07, y));
     albedo *= mix(vec3(1.0), vec3(0.74, 0.73, 0.67), damp * 0.75 * oldness * wStr);
-    albedo = mix(albedo, vec3(0.86, 0.85, 0.8) * (0.9 + 0.2 * grain), salt * 0.3 * oldness * wStr);
+    albedo = mix(albedo, vec3(0.86, 0.85, 0.8) * (0.9 + 0.2 * grain), salt * 0.14 * smoothstep(0.35, 0.65, nm.b) * oldness * wStr);
     float north = smoothstep(0.15, 0.85, -N.z);
     float algae = north * oldness * (damp * 0.9 + 0.55 * smoothstep(0.35, 0.9, stv) * (1.0 - smoothstep(0.0, 7.0, y)));
     albedo = mix(albedo, albedo * vec3(0.6, 0.72, 0.46), clamp(algae * wStr, 0.0, 0.75));
@@ -1433,8 +1433,10 @@ void bhWall(inout vec3 albedo, inout float rough, inout float metal, inout vec3 
   float Fs = mix(F, min(1.0, F * 1.15 + 0.08), spandrel) * (1.0 - openW);
   // reflection: brighter toward the top of each punched pane (sky above, street below)
   float paneGrad = curtain ? 1.0 : mix(0.75, 1.2, wy);
-  vec3 glass = interior * (1.0 - Fs) * transTint + refl * Fs * mix(0.65, 1.0, recess) * paneGrad;
-  vec3 glassAlb = dayA * (1.0 - Fs) * transTint * (curtain ? 0.4 : (ribbon ? 0.7 : 1.0));
+  // punched windows: the reveal and the street canyon cut the reflected sky down, so the curtains / room read
+  float reflK = (curtain || ribbon) ? 1.0 : 0.78;
+  vec3 glass = interior * (1.0 - Fs) * transTint + refl * Fs * mix(0.65, 1.0, recess) * paneGrad * reflK;
+  vec3 glassAlb = dayA * (1.0 - Fs) * transTint * (curtain ? 0.4 : (ribbon ? 0.7 : (homey ? 1.18 : 1.0)));
   // open sash: the swung pane shows a strip of darker, skewed reflection at the hinge side
   glass = mix(glass, env * 0.35 * reflTint, openW * (1.0 - smoothstep(0.62, 0.66, wx)));
   glass += gt * crown * mix(0.55, 0.18, spandrel);
@@ -1638,11 +1640,17 @@ vec3 bhEmit = vec3(0.0);
   float mtl = -1.0;
   if (vB.w < 63.5) bhWall(alb, rgh, mtl, bhEmit, bN, bV);
   else bhRoof(alb, rgh, bhEmit, bN, bV);
+  // guard: a handful of reveal / glass pixels produced albedo far above 1 (bloomed into specks at 3–10 m)
+  alb = clamp(alb, 0.0, 1.0);
+  if (any(isnan(bhEmit))) bhEmit = vec3(0.0);
+  bhEmit = min(bhEmit, vec3(16.0));
   if (uBhDebug > 3.5) {
-    // debug 4 (?bdbg=nan): magenta where the facade outputs NaN / Inf / very hot emission or albedo > 1.2
-    bool bad = any(isnan(alb)) || any(isnan(bhEmit)) || any(isinf(bhEmit)) || any(isnan(bhNW)) || max(max(bhEmit.r, bhEmit.g), bhEmit.b) > 6.0 || max(max(alb.r, alb.g), alb.b) > 1.2;
-    alb = bad ? vec3(1.0, 0.0, 1.0) : alb * 0.4;
-    bhEmit = bad ? vec3(4.0, 0.0, 4.0) : vec3(0.0);
+    // red NaN albedo, green NaN / Inf emit, blue emit > 6, yellow albedo > 1.2, cyan NaN normal override
+    vec3 flag = any(isnan(alb)) ? vec3(1, 0, 0) : (any(isnan(bhEmit)) || any(isinf(bhEmit)) ? vec3(0, 1, 0) : (max(max(bhEmit.r, bhEmit.g), bhEmit.b) > 6.0 ? vec3(0, 0, 1) : (max(max(alb.r, alb.g), alb.b) > 0.999 ? vec3(1, 1, 0) : (any(isnan(bhNW)) ? vec3(0, 1, 1) : vec3(-1.0)))));
+    bool bad = flag.x >= 0.0;
+    alb = bad ? flag : alb * 0.4;
+    bhEmit = bad ? flag * 3.0 : vec3(0.0);
+    if (bad) bhNW = vec3(0.0);
   }
   diffuseColor.rgb = alb;
   bhRough = rgh;
