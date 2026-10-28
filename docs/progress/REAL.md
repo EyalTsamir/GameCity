@@ -11,6 +11,10 @@ Overview must stay at least as impressive as now. Every feature: quality tiers +
 Lead session: session_01XuhAMczW3iK25AAWnf3qog, branch `claude/pensive-gates-bim12i`.
 
 ## Resume here (keep current)
+* 2026-10-28 22:16 UTC — Merged W4 s5 (4148b82: lidded off-white eyes, anisotropic hair sheen + tapered locks,
+  face-edge fade, fabric relief (rib/jersey/twill), pockets/placket/buttons, idle weight shift). W4(6) spawned: the
+  "deep jog crouch" seen in a group (possible live bug — root-cause first), trouser folds, hair from behind, hands,
+  seated people. W7 still waiting for a slot.
 * 2026-10-28 22:00 UTC — Merged W3 s4 (f80a675: bus-stop flag/timetable/posters, newsstand fascia + covers, stall
   goods no-repeat, market heap jitter + scale + backdrop folds + clutter, kiosk hatch + interior, playground tiles,
   contact grime ×1.8; console clean, invariants {}). W4 vendor fix merged (2749347). W3 brief done → wave 3 starts:
@@ -140,6 +144,7 @@ Wave 1 (launched 2026-10-28 15:17 UTC, sibling cloud sessions, briefs in real-br
 | W3 furniture (4) fix | session_01XuhAMd9YGYmQMvVwVAtFgj | claude/real-w3-furniture | real-w3.md |
 | W4 people (5) | session_01XuhAMdn2ycTg2UuHNd4iQo | claude/real-w4-people | real-w4.md |
 | W6 dense places I (wave 3) | session_01XuhAMghDM8g45i46Lja4QH | claude/real-w6-places | real-w6.md |
+| W4 people (6) | session_01XuhAMghSjS3RWFqyHibd7f | claude/real-w4-people | real-w4.md |
 Respawn rule: when a worker stops (milestone note, ~200k context, or a usage stop), create a NEW session on the
 same branch with the same brief + "resume from docs/progress/real-wN.md Resume here"; archive the old one.
 
