@@ -3,6 +3,10 @@
 Branch `claude/real-w1-facades` (from `claude/pensive-gates-bim12i`). Brief: docs/progress/real-briefs.md "W1".
 
 ## Resume here
+* Session 2 (start 16:40 UTC 10-28): merged pensive-gates (bench framing). Lead verdict M1 → plan: (1) glass
+  specks, (2) real-geometry sill + reveal frame per window near LOD, (3) plaster walls: render texture, slab lines,
+  sills everywhere, streaks, dirty foot, (4) daylight curtains/blinds/nets per window, (5) porch rails/floor,
+  (6) neighbour variation. Golden ref captured at ecef462 (shots/golden/ref).
 * 16:45 UTC — Milestone 1 (priorities 1–4 + part of 5) coded, judged on the bench, committed. Running: night
   regression (shots/w1/night_dt.png), perf A/B (shots/w1-perf.log), final after-bench → docs/progress/real/w1_*.jpg.
 * **OPEN REGRESSION (fix first):** 1–3 small bright specks (4×4 bloom blocks = an Inf/NaN or very hot pixel) on
