@@ -208,7 +208,7 @@ export default async function create(ctx: CityContext): Promise<CityModule> {
   const _shTint = new THREE.Color();
 
   /** live multipliers on top of the palette (debug / tuning sessions only) */
-  const tune = { sun: 1, hemi: 1, env: 1, exposure: 1, pcf: 1, bias: 1 };
+  const tune = { sun: 1, hemi: 1, env: 1, exposure: 1, pcf: 1, bias: 1, dbias: ctx.debug.params.has('sdbias') ? Number(ctx.debug.params.get('sdbias')) : 1 };
   const skyService = {
     sun,
     hemi,
@@ -401,7 +401,7 @@ export default async function create(ctx: CityContext): Promise<CityModule> {
         // normal offset scaled with the texel (acne) but smaller than before: it shortens small
         // casters' shadows by bias·cot(elevation) at low sun
         sun.shadow.normalBias = texel * 0.8 * tune.bias;
-        sun.shadow.bias = -(texel * 0.3 + 0.02) / range;
+        sun.shadow.bias = (-(texel * 0.3 + 0.02) / range) * tune.dbias;
       }
       lastShadowHs = fitter.halfSize;
     } else {
