@@ -3,23 +3,18 @@
 Branch `claude/real-w5-street` (from claude/pensive-gates-bim12i @ 6c29a46). Brief: real-briefs.md "W5".
 
 ## Resume here
-* m1–m3 pushed (last: "W5 m3"). All six brief priorities have a first pass; perf A/B in shots/w5_perf.log
-  (see Toggles). Next session, in order:
-  1. Judge the new things at 3 m that were NOT yet seen sharp: brick garden wall (bench `wall --pick 2..5` until
-     a brick one; check rubber props did not pick up brick courses — MAT.rubber 0.92 vs brick 0.936), worn
-     patches at park trees (no bench class yet: add `parktree` = plan trees tagged park; groundcover still grows
-     blades through it until the request in real-requests.md is done), tree guards (treebase --pick 4..8),
-     signal detail (bench framing is poor for `signal`: target h 5.6 → use --pitch 5 or a `signalbase` class).
-  2. Bark at 3 m reads only as faint vertical texture; consider stronger furrow contrast for pattern 0.1 in sun
-     (foliage.ts WOOD_FRAG_MAP) and a lighter plate colour (lighting is out of scope; albedo is not).
-  3. Kerbs: dropped-kerb flares and gullies are decals only; a geometry gully grate in the channel would read
-     better at 2 m (markings.ts places them: `gully grates mid-block`, `just upstream of the crosswalk`).
-  4. Fence: hinges are on the street face of the gate; posts are behind the pickets (z −0.035) and can cut a
-     picket at middle posts. Low render walls: no texture beyond props stone weathering.
-  5. Lamp heads (lanterns/luminaires) untouched except the classic frame; 'modern' flange plate reads black.
-* Bench tips: classes treebase, lampbase, kerb, fence, hedge, wall, sign, signal, junction; `--nodof 1` for sharp
-  close-ups; crop the 1280×720 PNGs with PIL to judge (the sheet is too small). The sim is not paused for static
-  classes: pedestrians sometimes block the shot → use another --pick.
+* Session 2 (lead priorities 1–6). Progress:
+  1. Cost — measured per toggle (shots/w5/perf_s2a.log, eye level "0,0,-40,12,30,12"): lamp kit +70k,
+     fence detail −2k (cheaper than the old boxes), sign/signal detail +86k, treebase +14k. Fix: fine
+     fixings now live in 48 m world cells drawn only within ~30 m (src/world/lamps/nearCells.ts;
+     props.ts `KD`, signals.ts `fine` arg of place()). Re-measure pending.
+  2. Gate-frame dark rectangle = the footway utility-lid decal (markings.ts atlas 'lid': dark #8a square with
+     diagonal stripes, aliasing at grazing angles). Redrawn as an embossed galvanised chequer-plate lid.
+  3. Kerb: shader branch special 6 (kerb) / 7 (gutter) in roads/glsl.ts rdHard, profile coordinate in aS.x
+     (streets.ts extrudeCurb), per-stone normal tilt via `rdN` (materials.ts `nrm` hook). ?nokerbdetail.
+  4. Signs: rimmed STOP plate + back rails; street-name blades (signals.ts nameBlades, canvas atlas, 1 draw
+     call); repeater back plates.
+  5./6. in progress.
 
 ## Code pointers (learned; do not re-read)
 * bench: scripts/bench.mjs — slot classes from `plan.slots` (lamp, tree, …), features from `plan.features`.

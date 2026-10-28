@@ -217,7 +217,7 @@ vec2 rdStreet(vec2 p) {
 }
 `;
 
-function inject(mat: THREE.MeshStandardMaterial, opts: { attrs: string; varyings: string; assign: string; pars: string; color: string; key: string; uniforms: Record<string, THREE.IUniform>; after?: string; emit?: string }): void {
+function inject(mat: THREE.MeshStandardMaterial, opts: { attrs: string; varyings: string; assign: string; pars: string; color: string; key: string; uniforms: Record<string, THREE.IUniform>; after?: string; emit?: string; nrm?: string }): void {
   mat.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, opts.uniforms, lampUniforms());
     shader.vertexShader = shader.vertexShader
@@ -232,6 +232,7 @@ function inject(mat: THREE.MeshStandardMaterial, opts: { attrs: string; varyings
         .replace('vec4 diffuseColor = vec4( diffuse, opacity );', `float rdRough = 0.9;\nvec4 diffuseColor = vec4( ${opts.color}, opacity );`)
         .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = rdRough;');
     }
+    if (opts.nrm) fs = fs.replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>\n${opts.nrm}`);
     if (opts.after) fs = fs.replace('#include <alphatest_fragment>', `#include <alphatest_fragment>\n${opts.after}`);
     if (opts.emit) fs = fs.replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>\ntotalEmissiveRadiance += ${opts.emit};`);
     shader.fragmentShader = fs;
@@ -427,7 +428,7 @@ export function createMaterials(ctx: CityContext, info: SurfaceInfo, atlas: THRE
   const flat = flatQ === '1' || flatQ.includes('h');
   const Std = (p: THREE.MeshStandardMaterialParameters) => (ctx.debug.params.get('roadsLambert') === '1' ? (new THREE.MeshLambertMaterial(p as THREE.MeshLambertMaterialParameters) as unknown as THREE.MeshStandardMaterial) : new THREE.MeshStandardMaterial(p));
   const asphaltColor = new THREE.Color('#4a4d52');
-  const shared = { tRN: { value: noise }, uRain: ctx.uniforms.uRain, uRdWear: { value: ctx.debug.params.has('nowear') ? 0 : 1 } };
+  const shared = { tRN: { value: noise }, uRain: ctx.uniforms.uRain, uRdWear: { value: ctx.debug.params.has('nowear') ? 0 : 1 }, uKerbD: { value: ctx.debug.params.has('nokerbdetail') || ctx.quality.level === 'low' ? 0 : 1 } };
 
   const lin = (h: string) => new THREE.Color(h);
   const court = info.court ? new THREE.Vector4(info.court.x0, info.court.z0, info.court.x1, info.court.z1) : new THREE.Vector4(0, 0, 0, 0);
@@ -463,7 +464,8 @@ export function createMaterials(ctx: CityContext, info: SurfaceInfo, atlas: THRE
     assign: 'vS = aS; vP = aP; vV = aV; vC = aC; vX = aX; vR = aR; vB = aB;',
     pars: legacy ? HARD : COMMON2 + HARD2,
     color: flat ? 'vec3(0.5)' : 'rdHard(rdRough)',
-    key: 'roads-hard-v5' + (flat ? 'f' : '') + (legacy ? 'L' : ''),
+    nrm: flat || legacy ? undefined : 'normal = normalize(normal + (viewMatrix * vec4(rdN, 0.0)).xyz);',
+    key: 'roads-hard-v6' + (flat ? 'f' : '') + (legacy ? 'L' : ''),
     uniforms: { ...shared, tRC: { value: cracks }, uRad: { value: rad }, uTactile: { value: new THREE.Color('#c09c4e') }, uBandCol: { value: new THREE.Color(0.16, 0.165, 0.175) }, uWetH: puddles.uWet },
   });
 

@@ -26,10 +26,13 @@ const JBOX = (CORRIDOR_HALF + 1.4).toFixed(2);
 /** shared by v2 asphalt + hardscape (needs COMMON from materials.ts) */
 export const COMMON2 = /* glsl */ `
 uniform sampler2D tRC;
+// world-space normal tilt written by rdHard (kerb stones rocking in their bed), added after the normal maps
+vec3 rdN = vec3(0.0);
 // small litter / leaves / gum on the ground at p: returns (colour, coverage) — dens = items per 0.36 m² cell
 // probability; kinds: leaves (browns, ochres), cigarette butts, paper bits, gum. Fades out (cov → 0) once the
 // pixel footprint fw exceeds ~1.5 cm, so it never sparkles in the distance.
 uniform float uRdWear;
+uniform float uKerbD;
 vec4 rdLitter(vec2 p, float fw, float dens, float leafy) {
   float near = 1.0 - smoothstep(0.008, 0.02, fw);
   if (near <= 0.0 || dens <= 0.0 || uRdWear < 0.5) return vec4(0.0);
@@ -438,6 +441,42 @@ vec3 rdHard(inout float rough) {
     // grass creeping into gravel
     float g = smoothstep(0.5, 0.75, nM.g * 0.5 + nS.r * 0.5);
     c = mix(c, vec3(0.3, 0.45, 0.17) * (0.85 + 0.3 * nS.b), g * 0.7);
+  } else if (sp > 5.5) {
+   if (uRdWear < 0.5 || uKerbD < 0.5) {
+   } else if (sp < 6.5) {
+    // kerb stones (W5): vS.x = profile coordinate (−down the face, 0 at the arris, + across the top), 1 m units.
+    // Each unit settled a little differently (tilted normal + tone), the arris worn bright with dark chips, joints
+    // open and dirty, a damp grime band at the foot of the face, black tyre scuffs on some stones.
+    float s = vS.x;
+    float hk = rdHash(cell + 9.1);
+    float kd = 1.0 - smoothstep(0.004, 0.02, fwm);
+    rdN = vec3(hk - 0.5, 0.0, rdHash(cell + 5.3) - 0.5) * 0.09 * kd * step(-1.0, s) * (1.0 - step(1.0, s));
+    c *= 1.0 + (rdHash(cell + 2.9) - 0.5) * 0.12 * kd;
+    if (s > -1.0 && s < 1.0) {
+      float ar = 1.0 - smoothstep(0.0, 0.035, abs(s));
+      float chip = step(0.8, nS.r * 0.7 + rdHash(floor(vec2(vS.y * 45.0, s * 90.0))) * 0.3);
+      c *= 1.0 + 0.16 * ar * kd;
+      c *= 1.0 - 0.45 * ar * chip * kd;
+      c *= 1.0 - 0.08 * joint;
+      float foot = 1.0 - smoothstep(-0.15, -0.075, s + 0.03 * (nM.g - 0.5));
+      c *= 1.0 - 0.32 * foot * (0.6 + 0.4 * nM.r);
+      float scuff = step(rdHash(vec2(floor(vS.y / 2.6), 7.1)), 0.22) * (1.0 - smoothstep(0.012, 0.03, abs(s + 0.06 + 0.02 * nS.g)));
+      c *= 1.0 - 0.35 * scuff * kd * smoothstep(0.3, 0.6, nM.b);
+      c *= 1.0 - 0.14 * smoothstep(0.14, 0.2, s);
+      rough -= 0.12 * ar;
+    }
+   } else {
+    // gutter channel (W5): vS.x = distance from the kerb face. Wet grime line at the kerb foot, silt and grit
+    // washed along the channel, leaves and litter where it collects.
+    float d = vS.x + 0.05 * (nM.g - 0.5);
+    float line = 1.0 - smoothstep(0.0, 0.045, d);
+    float silt = (1.0 - smoothstep(0.04, 0.22, d)) * smoothstep(0.35, 0.7, nM.r * 0.6 + nS.g * 0.4);
+    c *= 1.0 - 0.38 * line;
+    c = mix(c, c * vec3(0.86, 0.79, 0.67), silt * 0.55);
+    rough -= 0.25 * line;
+    vec4 lt = rdLitter(p, sqrt(fwp.x * fwp.y) + 1e-5, 0.45 * (1.0 - smoothstep(0.05, 0.25, d)), 0.8);
+    c = mix(c, lt.rgb, lt.a * 0.9);
+   }
   } else if (sp > 3.5) {
     // working surfaces: oil blobs + tyre streaks along the long axis (quays, yards)
     vec4 v = texture2D(tRC, p / 26.0);

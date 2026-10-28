@@ -244,24 +244,40 @@ export function buildAtlas(): { tex: THREE.CanvasTexture; g: Record<string, Glyp
     emboss(g, x0, y0, 80, 60);
     reg('grate', x0 - 1, y0 - 1, x0 + 81, y0 + 61);
   }
-  // utility lid
+  // utility lid (footway access cover): galvanised frame, chequer-plate lid with a raised border, two keyholes and a
+  // small cast legend, embossed like the manhole. Height field in greys; the paint tint makes it galvanised grey — a
+  // flat dark square with stripes read as a stain at grazing angles (judge W5 m3 "fence+gate").
   {
     const x0 = 456,
       y0 = 426;
     g.save();
-    g.fillStyle = '#d0d0d0';
+    g.fillStyle = '#d8d8d8';
     g.fillRect(x0, y0, 48, 48);
-    g.fillStyle = '#8a8a8a';
+    g.fillStyle = '#7a7a7a';
+    g.fillRect(x0 + 4, y0 + 4, 40, 40);
+    g.fillStyle = '#a6a6a6';
     g.fillRect(x0 + 5, y0 + 5, 38, 38);
-    g.strokeStyle = '#c4c4c4';
-    g.lineWidth = 2;
-    for (let k = -38; k < 48; k += 8) {
-      g.beginPath();
-      g.moveTo(x0 + 5 + Math.max(0, k), y0 + 5 + Math.max(0, -k));
-      g.lineTo(x0 + 5 + Math.min(38, k + 38), y0 + 5 + Math.min(38, 38 - k));
-      g.stroke();
-    }
+    g.fillStyle = '#c8c8c8';
+    for (let y = 9; y <= 40; y += 5)
+      for (let x = 9; x <= 40; x += 5) {
+        g.save();
+        g.translate(x0 + x, y0 + y);
+        g.rotate(((x + y) / 5) % 2 ? Math.PI / 4 : -Math.PI / 4);
+        g.fillRect(-2.2, -0.8, 4.4, 1.6);
+        g.restore();
+      }
+    // legend plate + keyholes
+    g.fillStyle = '#a6a6a6';
+    g.fillRect(x0 + 15, y0 + 20, 18, 8);
+    g.fillStyle = '#d0d0d0';
+    g.font = 'bold 7px sans-serif';
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    g.fillText('GAS', x0 + 24, y0 + 24.5);
+    g.fillStyle = '#141414';
+    for (const sx of [11, 37]) g.fillRect(x0 + sx - 1.5, y0 + 22, 3, 5);
     g.restore();
+    emboss(g, x0, y0, 48, 48);
     reg('lid', x0 - 1, y0 - 1, x0 + 49, y0 + 49);
   }
   // hopscotch digits
@@ -488,7 +504,7 @@ export function buildMarkings(ctx: CityContext, atlasGlyphs: Record<string, Glyp
     // utility lids on the sidewalks
     if (rng.chance(0.7)) {
       const sd = rng.chance(0.5) ? 1 : -1;
-      setPaint(IRON, 1, -1, C('#b9b3a8'));
+      setPaint(IRON, 1, -1, C('#c9c6c0'));
       quad(P(rng.range(12, L - 12), sd * rng.range(4.6, 6.0)), d, 0.45, 0.45, Y.walk + 0.003, atlasGlyphs.lid);
       stats.decals++;
     }
