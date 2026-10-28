@@ -696,10 +696,15 @@ export interface IdleShift {
   drop: number;
 }
 
+/** fastest speed the gait poses (m/s) — joggers cruise at 2.75 */
+const GAIT_VMAX = 3.4;
+
 export function gaitPose(m: Member, r: Rig, st: GaitState | null, frame: number, idle: IdleShift, o: GaitOut): GaitOut {
   const t = gaitIn.t,
     gw = gaitIn.gw;
-  const v = m.speed;
+  // capped at a jog: the crowd's speed spikes on position corrections (catch-ups, formation shuffles: 8–9 m/s
+  // for a few frames) would plan strides no leg reaches — the pelvis then drops into a frog squat
+  const v = m.speed < GAIT_VMAX ? m.speed : GAIT_VMAX;
   G.v = v;
   const pram = !!m.look.pram;
   const p = params(r, pram);

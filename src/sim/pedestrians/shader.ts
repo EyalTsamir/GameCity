@@ -333,13 +333,19 @@ void pedPose(inout vec3 p, inout vec3 n) {
     pedJoint(pl, nl, pedHipR(true), pedPivS(${PIV.HIP}, true), z0); z0 = 0.0;
     pedJoint(pr, nr, pedHipR(false), pedPivS(${PIV.HIP}, false), z0);
     float ext = smoothstep(-0.015, 0.015, (pl.z - pr.z) * (rad0.y < 0.0 ? -1.0 : 1.0));
-    // the front / back panels drape as one broad sheet over the forward / rear thigh (no pointed split at
-    // the hem in a long stride): a wider share follows the panel's thigh, and their hem follows a little less
+    // the front / back panels hang as one sheet stretched across both thighs (a stride pulls an A-line
+    // hem into a trapezoid): sideways and in height they blend the two legs by side, but the front panel
+    // stays in front of the forward thigh and the back panel behind the rear one — never a flap that one
+    // leg swings through; their hem lifts a little with the forward knee
     float panel = sqrt(1.0 - abs(side)) * smoothstep(0.1, 0.5, abs(rad0.y));
-    float wL = mix(clamp(0.5 + 0.75 * side, 0.0, 1.0), ext, panel);
+    float wS = clamp(0.5 + 0.75 * side, 0.0, 1.0);
+    vec3 q = mix(pr, pl, wS);
+    float zx = rad0.y >= 0.0 ? max(pl.z, pr.z) : min(pl.z, pr.z);
+    q.z = mix(q.z, zx, panel);
+    q.y = mix(q.y, mix(pr.y, pl.y, ext), 0.5 * panel);
     if (!seated) k *= 1.0 - 0.25 * panel * max(u, 0.0);
-    p = mix(p, mix(pr, pl, wL), k);
-    n = normalize(mix(n, mix(nr, nl, wL), k));
+    p = mix(p, q, k);
+    n = normalize(mix(n, mix(nr, nl, mix(wS, ext, panel)), k));
     if (seated) p.y = max(p.y, P_tailFloor);
     bone = ${B.PELVIS};
   }

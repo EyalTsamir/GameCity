@@ -669,11 +669,16 @@ function buildCloseBeard(b: MeshBuilder, d: Dims): void {
   for (let c = 0; c < phis.length - 1; c++) b.triOut(grid[0][c], grid[0][c + 1], under, [0, R0.y + 0.03, R0.cz - 0.01]);
   // moustache: over the upper lip from under the nose to the lip line, ends drooping a little
   b.use(BONE.HEAD, REG.BEARD, FB.MOUSTACHE, 1);
-  const mp = [-0.5, -0.36, -0.22, -0.1, 0, 0.1, 0.22, 0.36, 0.5];
-  const rows = [-0.046, -0.054, -0.0615].map((Y, ri) =>
+  // (tapers to the corners of the mouth in height and thickness, a notch under the philtrum: never a bar)
+  const mp = [-0.52, -0.44, -0.34, -0.22, -0.1, 0, 0.1, 0.22, 0.34, 0.44, 0.52];
+  const rows = [1, 0, -1].map((ri) =>
     mp.map((phi) => {
-      const droop = Math.max(0, Math.abs(phi) - 0.3) * 0.03;
-      return b.v(closeHeadPoint(d, phi, Y - droop, (ri === 1 ? 0.0042 : 0.0022) * k).p, 2, 0);
+      const t = Math.min(1, Math.abs(phi) / 0.52);
+      const droop = Math.max(0, Math.abs(phi) - 0.26) * 0.045;
+      const hf = 1 - 0.8 * t * t;
+      const notch = 0.0022 * Math.exp(-((phi / 0.09) ** 2));
+      const Y = -0.0535 - droop + ri * 0.0072 * hf - (ri > 0 ? notch : 0);
+      return b.v(closeHeadPoint(d, phi, Y, (ri === 0 ? 0.0044 * (1 - 0.55 * t * t) : 0.0018) * k).p, 2, 0);
     }),
   );
   for (let r = 0; r < 2; r++) for (let c = 0; c < mp.length - 1; c++) b.quadOut(rows[r][c], rows[r][c + 1], rows[r + 1][c + 1], rows[r + 1][c], [0, d.headRings[3].y, d.headRings[3].cz - 0.03]);
@@ -1310,10 +1315,12 @@ function buildHat(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
   const pin = cfg.props === 'pin';
   const n = cfg.close ? 24 : cfg === LODS[0] ? 10 : pin ? 4 : 6;
   const hk = d.H / 1.76;
-  const rimU = 0.64; // hat band height (fraction chin→crown)
+  // hat band (fraction chin→crown): across the forehead ~2.5 cm above the brows at the front, lower over the
+  // back of the skull — as a hat is worn (a level band at brow height put the brim over the eyes)
   const chin = d.headRings[0].y - 0.006;
   const crown = d.crown;
-  const rimY = chin + (crown - chin) * rimU;
+  const rimY = chin + (crown - chin) * 0.665;
+  const rimAt = (phi: number): number => chin + (crown - chin) * (0.665 + 0.045 * Math.cos(phi));
   const ss = cfg.close ? [0, 0.2, 0.4, 0.6, 0.8, 1] : cfg === LODS[0] ? [0, 0.35, 0.7, 1] : pin ? [0, 1] : [0, 0.55, 0.85, 1];
   const hatK = cfg.details ? 1 : 1.45;
   const rings: Ring[] = [];
@@ -1323,7 +1330,8 @@ function buildHat(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
     const ids: number[] = [];
     for (let k = 0; k < n; k++) {
       const phi = (k / n) * Math.PI * 2;
-      const y = rimY + (crown - rimY) * Math.pow(s, 0.8);
+      const r0 = rimAt(phi);
+      const y = r0 + (crown - r0) * Math.pow(s, 0.8);
       ids.push(b.v(headSurface(d, phi, Math.min(y, crown - 0.003), 0.0145 * hk * hatK), 2, 0, s, phi));
     }
     rings.push({ ids, c: [0, rimY, -0.01 * hk] });
@@ -1340,7 +1348,7 @@ function buildHat(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
     bo2: number[] = [];
   for (let k = 0; k < n; k++) {
     const phi = (k / n) * Math.PI * 2;
-    const p = headSurface(d, phi, rimY, 0.012 * hk);
+    const p = headSurface(d, phi, rimAt(phi), 0.012 * hk);
     bi.push(b.v(p, 2, 0, 0, phi));
     bo.push(b.v(p, 2, 0, 1, phi));
   }
@@ -1349,7 +1357,7 @@ function buildHat(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
   if (under)
     for (let k = 0; k < n; k++) {
       const phi = (k / n) * Math.PI * 2;
-      const p = headSurface(d, phi, rimY - 0.002, 0.012 * hk);
+      const p = headSurface(d, phi, rimAt(phi) - 0.002, 0.012 * hk);
       bi2.push(b.v(p, 2, 0, 0, phi));
       bo2.push(b.v(p, 2, 0, 1, phi));
     }
@@ -1383,7 +1391,7 @@ function buildHat(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
       inner2: number[] = [],
       outer2: number[] = [];
     for (const phi of phis) {
-      const p = headSurface(d, phi, rimY + 0.004 * hk, 0.012 * hk);
+      const p = headSurface(d, phi, rimAt(phi) + 0.004 * hk, 0.012 * hk);
       const q: P3 = [p[0] * 1.02 + Math.sin(phi) * 0.02 * hk, p[1] - 0.012 * hk, p[2] + Math.cos(phi) * 0.075 * hk * (0.55 + 0.45 * Math.cos(phi))];
       inner.push(b.v(p, 2, 0, 0, phi));
       outer.push(b.v(q, 2, 0, 1, phi));

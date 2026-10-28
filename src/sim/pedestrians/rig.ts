@@ -540,7 +540,7 @@ export function gaitCycleOf(m: { look: Look; speed: number }): void {
 /** Step length (m) for a rig at speed v (≥ a small minimum so the phase never races). */
 export function stepLength(r: Rig, v: number): number {
   const k = Math.sqrt(0.93 / Math.max(0.3, r.legLen));
-  const vv = Math.max(0.12, Math.min(v, 4));
+  const vv = Math.max(0.12, Math.min(v, 3.4)); // = gait.ts GAIT_VMAX
   const fWalk = (1.15 + 0.55 * vv * k) * k * (1 + 0.08 * r.old);
   const fRun = (2.6 + 0.12 * (vv - 2.1)) * k;
   const t = clamp((vv - 1.9) / 0.4, 0, 1);
