@@ -4,6 +4,8 @@ Branch `claude/real-w4-people` (from `claude/pensive-gates-bim12i` e517126). Bri
 Photo test "Person" (REAL.md). Owned: `src/sim/pedestrians/**` presentation (not crowd/places logic).
 
 ## Resume here
+* 2026-10-28 ~21:00 UTC — session 3 ENDED (context 223k). All pushed. Next: (5) walk-weight judging pass, (6) crowd
+  variation at 10 m (fix the bench's group framing first), hair volume on long-hair sheets + ear poking through.
 * 2026-10-28 ~20:30 UTC — session 3. Lead's priorities: (1) speed-spike root cause, (2) hairline/volume, (3) dress
   hem notch, (4) carried things, (5) walk weight, (6) crowd variation at 10 m.
   (1) ROOT CAUSE found + fixed at the source (new `scripts/ped-velocity.mjs`: drives `crowd.update` at a fixed
@@ -158,3 +160,7 @@ WHAT THE COST BOUGHT (lifetime cost of each kind of content in context, all agen
   system+brief                                    0.9M  46.6%
   Bash:read/grep                                  0.4M  21.2%
 ```
+
+## Tokens (session 3, tokens.py)
+TOTAL weighted 1.9M (cache read 76 %, write 11 %, output 13 %); 89 calls, ctx median 167k / max 223k. get_session's
+context_usage read 0 this session (not usable) — estimate from tokens.py instead.
