@@ -227,8 +227,8 @@ bool pedVisible(uint d0) {
   return ((d0 >> 16u) & 1u) == 1u ? !has : has;
 }
 
-// shadow-proxy shrink share: hands and fingers are thinner than the 1 cm shrink (their proxy turned inside
-// out and self-shadowed the back of the hand in a dot grid)
+// hands drop out of the shadow proxy: the coarse proxy's paddle hand lies right on the detailed hand's
+// surface (thinner than the 1 cm shrink) and shadow-acned the back of the hand in a dot grid
 float pedShrink = 1.0;
 void pedPose(inout vec3 p, inout vec3 n) {
   vPedFade = P_fade;
@@ -632,7 +632,8 @@ float pedStrands(vec3 r) {
 // lock profile (0 in the gap between two locks … 1 on its crest), y = per-lock random, z = fade (1 near)
 vec3 pedLocks(vec3 r, float tip) {
   float a = atan(r.x, r.z + 0.015);
-  float la = a * 7.5 + sin(r.y * 22.0 + a * 3.0) * 0.35 + sin(r.y * 51.0 - a * 5.0) * 0.12;
+  // (uneven widths: a low-frequency warp bunches some locks and spreads others)
+  float la = a * 7.5 + 1.1 * pedN1(a * 2.3 + 4.0) + sin(r.y * 22.0 + a * 3.0) * 0.35 + sin(r.y * 51.0 - a * 5.0) * 0.12;
   float id = floor(la);
   float rnd = fract(sin(id * 57.31 + 1.3) * 43758.5453);
   // locks overlap: one side of each lock sits a little proud of its neighbour
@@ -706,8 +707,8 @@ vec3 pedFabric(vec3 pc, float reg, float h, float sHem) {
       fold += cr * 0.0032 * exp(-wd * 7.0) * pedRidge(wP) * (0.5 + pedN1(floor(wP) * 5.1));
       // under the seat: curved drag folds pulled from the buttock fold, stronger on the leg behind
       float sd = smoothstep(0.74, 0.85, h) * (1.0 - smoothstep(0.92, 0.96, h)) * back;
-      float sP = (h - 0.85) * L / 0.04 + pow(aa - 3.1416, 2.0) * 2.4 + aa * 0.8 * side;
-      fold += sd * 0.003 * pedRidge(sP) * (0.4 + pedN1(floor(sP) * 2.3 + side));
+      float sP = (h - 0.85) * L / 0.065 + pow(aa - 3.1416, 2.0) * 1.6 + (aa - 3.1416) * 0.9 * side;
+      fold += sd * 0.003 * pedRidge(sP) * smoothstep(0.35, 0.8, pedN1(floor(sP) * 2.3 + side * 1.7)) * 1.6;
       fold -= sd * 0.003 * exp(-pow((h - 0.925) / 0.014, 2.0));
       // the leg hangs in a few soft tube folds that wander down its length (loose cloth more)
       float hang = (1.0 - kz) * (1.0 - cr) * (1.0 - sd) * (1.0 - step(0.88, h));
@@ -807,6 +808,9 @@ vec3 pedFabric(vec3 pc, float reg, float h, float sHem) {
   }
   // folds: occlusion in the troughs, a little light on the ridges
   pc *= mix(1.0, 1.0 - 70.0 * max(-fold, 0.0) + 22.0 * max(fold, 0.0), det * cloth * uPedFolds);
+  // dark cloth in shade: the crests catch the sky (a grey lift), so navy / black / olive trousers show folds too
+  float darkC = 1.0 - smoothstep(0.08, 0.3, dot(pc, vec3(0.33)));
+  pc += vec3(0.03, 0.032, 0.036) * clamp(fold / 0.0025, 0.0, 1.0) * darkC * det * cloth * uPedFolds;
   pedFabH = ((sh - 1.0) * 0.0065 + wv * wvK * (knit ? 0.00018 : 0.0001) + fold * uPedFolds) * pedFabK;
   pc = mix(pc, thread, clamp(stitch, 0.0, 1.0) * det * (denim ? 0.7 : 0.35));
   return pc;
@@ -974,7 +978,7 @@ const FRAG_COLOR = /* glsl */ `
       pc *= mix(1.0, (0.55 + 0.45 * lk.x) * (0.85 + 0.3 * lk.y), lk.z);
       // sky sheen on each lock's crest: black hair in shade still shows its locks (a grey-blue lift that
       // the albedo carries into the ambient light — the direct-light sheen alone only shows in the sun)
-      pc += vec3(0.02, 0.022, 0.026) * pow(lk.x, 6.0) * (0.5 + lk.y) * lk.z * (1.0 - smoothstep(0.15, 0.4, dot(pc, vec3(0.33))));
+      pc += vec3(0.022, 0.021, 0.021) * pow(lk.x, 6.0) * (0.5 + lk.y) * lk.z * (1.0 - smoothstep(0.15, 0.4, dot(pc, vec3(0.33))));
       vec2 hf = pedHairFlow(vPedRest);
       float ca = hf.x * 26.0 + sin(hf.y * 9.0) * 0.8;
       float far = smoothstep(0.35, 0.9, fwidth(ca));
@@ -1161,7 +1165,7 @@ function injectVertex(src: string, normals: boolean): string {
   } else {
     // depth (shadow proxy): shrunk 1 cm along the normal so the coarse proxy never pokes out of the
     // detailed figure it shadows (jagged self-shadow bands on skirts and sleeves)
-    s = s.replace('#include <begin_vertex>', 'vec3 transformed = vec3( position );\n  vec3 pedN = vec3( normal );\n  pedPose( transformed, pedN );\n  transformed -= pedN * 0.01 * P_scale * pedShrink;');
+    s = s.replace('#include <begin_vertex>', 'vec3 transformed = vec3( position );\n  vec3 pedN = vec3( normal );\n  pedPose( transformed, pedN );\n  transformed -= pedN * 0.01 * P_scale;\n  if (pedShrink < 0.5) transformed = vec3(0.0, -50.0, 0.0);');
   }
   return s;
 }
