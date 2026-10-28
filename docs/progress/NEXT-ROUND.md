@@ -246,3 +246,11 @@ Work each class through this ladder, most visible first:
 - Shader hedges between plots have no gaps.
 - The free camera can enter buildings (guided mode keeps out).
 - The 10-28 bug-fix pass is recorded in WORLD.md under "Resume here".
+- From the 10-28 pass:
+  - The instanced forest now reaches 800 m (31.4k trees, was 21k). It was not measured on the Adreno; check it
+    in `perf-results.txt` or with `?quality=`.
+  - A < 1 m earth sliver remains at the rock foot beside each road-tunnel wing wall. Fix: end the front dig at
+    reach + 0.8 (terrain/height.ts applyPortal).
+  - The landscape copies the grass-blade fade radii per tier from groundcover/field.ts. An exported getter in
+    terrain/ground.ts would make them exact.
+  - Lamps that had no room beside a driveway were dropped (1 in Westbrook).

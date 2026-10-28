@@ -17,6 +17,13 @@ Branch: work continues from `claude/tinyhaven-graphics-audit-l089m8` (fast-forwa
 `claude/pensive-gates-bim12i` (the session's designated branch).
 
 ## Resume here (keep current)
+* 2026-10-28 16:40 UTC — **BUG FIXING DONE.** All 11 QA findings fixed and verified (lead: 1, 2, 4, 7, 9, 10 →
+  shots/qa/leadfix_before_after.png; fix agent: 3, 5, 8, 11 → shots/qa/fixagent_before_after.png, log
+  docs/progress/qa-fixes.md; world agent: 6 + the three user bugs + 8 issues from its own 37-view free-camera sweep →
+  shots/world/world/userbugs/before_after.png, log world-world.md). Integration: typecheck ✓, build ✓ (3.16 MB),
+  capture set overview/downtown/SE corner/car park × 11/18.2 (shots/qa/final_sheet.png) console clean, invariants 0;
+  soak 3 min @4× inv 0, heap flat ~370 MB. Watchdog deleted, autocheckpoint stopped. Open: see NEXT-ROUND.md
+  "Open items". Next round: docs/progress/NEXT-PROMPT.md (session created by the lead at the user's request).
 * 2026-10-28 13:40 UTC — QA report in (shots/qa/REPORT.md, local only: shots/ is ignored; 11 findings). Triage:
   lead fixes 1 street-tree bases rotated 90° (vegetation.ts yaw = s.yaw, 'kerbgrate' r 0.48, tree 6–14 cm behind band
   centre), 2 lamps in driveways (plan.ts buildStreetSlots: driveway "cuts" along the kerb, a lamp steps to the nearer
