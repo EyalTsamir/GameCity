@@ -11,6 +11,9 @@ Overview must stay at least as impressive as now. Every feature: quality tiers +
 Lead session: session_01XuhAMczW3iK25AAWnf3qog, branch `claude/pensive-gates-bim12i`.
 
 ## Resume here (keep current)
+* 2026-10-28 20:42 UTC — Merged W4 s3 (bf2b7f2: speed spikes fixed at the source in rail.ts placeOnRail — smoothed
+  tangent + slot clamp, scripts/ped-velocity.mjs; hairline ?nohairline; dress notch; umbrella/cup/briefcase/bag).
+  W4(4) spawned: head form, hair volume, walk weight, crowd variation, arm banding.
 * 2026-10-28 20:10 UTC — Merged W5 s1 (003e799: bark/soil trunk foot, tree grates/guards/verge pits, lamp posts,
   kerb joints, legible manholes, picket fences + gates, brick walls, hedge foot, sign/signal fixings; ?notreebase
   ?nolampdetail ?nofencedetail ?nosigndetail; +214k tris eye level). W5(2) spawned: cost per toggle, dark patch
@@ -103,6 +106,7 @@ Wave 1 (launched 2026-10-28 15:17 UTC, sibling cloud sessions, briefs in real-br
 | W4 people (2) | session_01XuhAMgJdXw8Zhx235CcTVt | claude/real-w4-people | real-w4.md |
 | W4 people (3) | session_01XuhAMdkF4v6CvZSXJCtb2b | claude/real-w4-people | real-w4.md |
 | W5 street (2) | session_01XuhAMfzqigKeecGnEpbAX9 | claude/real-w5-street | real-w5.md |
+| W4 people (4) | session_01XuhAMfbva5MB3tKtm4gmaJ | claude/real-w4-people | real-w4.md |
 Respawn rule: when a worker stops (milestone note, ~200k context, or a usage stop), create a NEW session on the
 same branch with the same brief + "resume from docs/progress/real-wN.md Resume here"; archive the old one.
 
