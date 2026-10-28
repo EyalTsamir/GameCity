@@ -1,7 +1,8 @@
 # Next round: method notes (lead, 2026-10-28)
 
-Written after the "world" round (see WORLD.md) for whoever leads the next one. The goal is a much stronger
-"wow" from **detail**: things must stop reading as geometric primitives. It should cost **far fewer tokens**,
+Written after the "world" round (see WORLD.md) for whoever leads the next one. The goal is a world that is
+**physically real**: every thing must stop reading as a geometric primitive and become a convincing object.
+Light, shadow, reflections and atmosphere are deliberately out of scope this round (user, 2026-10-28). It should cost **far fewer tokens**,
 and it must lose **nothing** in quality or frame rate. The savings come from how the work is organised, never
 from doing less, judging less or accepting worse.
 
@@ -167,41 +168,66 @@ The first version, written before measuring, got the direction right but the wei
     - Targets: median context ≤ 150k; cold rewrites ≤ 10% of cost; no agent blocked > 5 min.
     - The user's Adreno numbers (`perf-results.txt`) are the frame budget.
 
-## Getting "wow" from detail: principles to give the agents
+## Making the world physically real: principles to give the agents
 
 The world round fixed the frame, light, atmosphere and organic cover. What still breaks the illusion is the
-**object level at street distance**:
-- boxes and cylinders;
-- flat colours;
+**things themselves at street distance**:
+- boxes and cylinders instead of objects;
+- wrong proportions;
+- flat colour instead of material;
 - perfect repeats;
-- things that don't touch the ground.
+- things that hover or sink.
 
-Work each class through this ladder, cheapest and most visible first:
+**Scope (user, 2026-10-28): physical detail first.**
+- Out of scope this round, to be handled in a later one:
+  - lighting;
+  - shadows;
+  - reflections;
+  - fog/atmosphere;
+  - the sky;
+  - post-processing and grading.
+- Touch them only when an object change needs it, e.g. a new material that must respond correctly to the
+  existing light.
+- Judge objects in plain daylight. Night is a regression check only.
 
-1. **Silhouette.** Break boxes with sub-parts (sills, cornices, frames with depth, gutters, wheel arches),
-   and bevel every visible edge so it catches light (baked into merged geometry, nearly free).
-2. **Material.** For each material family (plaster, brick, stone, wood, painted metal, glass, rubber, fabric,
-   asphalt), one shared shader chunk with boot-time procedural detail (normal and roughness), an edge-wear
-   term and a near-only fade. A single chunk lifts hundreds of objects.
-3. **Grounding.** Contact darkening and vertex AO where things meet the ground and each other; damp and dirt
-   at the base. Nothing hovers.
-4. **Human-scale parts, near LOD only.**
-   - On buildings: handles, hinges, house numbers, letterboxes, curtains, plants on sills, drainpipes,
-     cables, legible signage.
-   - On vehicles: tyre tread, hubs, number plates, mirrors.
-   - On people: faces, hands, clothing folds.
-5. **Variation.** No two neighbours identical: tint, wear, small geometric variants, state (open / closed,
-   lit / unlit).
-6. **Motion.** Whatever moves in reality moves here:
-   - wheels turn, and cars pitch when they brake;
-   - doors, windows and shutters open;
-   - awnings, parasols and signs sway with the shared wind;
-   - people turn their heads and gesture.
-7. **Hero moments.** A few scenes worth stopping for, each a place and time verified like a POI:
-   - a rainy night street with reflections;
-   - the morning market setting up;
-   - sunset over the harbour;
-   - a train crossing the bridge at dusk.
+Work each class through this ladder, most visible first:
+
+1. **Form and proportion.**
+   - Real dimensions, checked against the real thing.
+   - Break the silhouette into its parts.
+   - Bevel visible edges: baked into merged geometry, nearly free.
+2. **Construction.** How the thing is really built and held together:
+   - frames with depth, joints, fixings, hinges;
+   - sills, cornices, gutters and downpipes;
+   - kerb stones, wheel arches, bolts on a lamp base.
+3. **Material as a physical surface.**
+   - Per family (plaster, brick, stone, wood, painted metal, rust, glass, rubber, fabric, asphalt), one shared
+     shader chunk with boot-time procedural relief (normal, roughness), courses and grain, and wear where use
+     and weather put it (edges, handles, the foot of a wall).
+   - A near-only fade, so a single chunk lifts hundreds of objects.
+4. **Contact.** Everything rests, leans, is anchored or settles a little:
+   - dirt and damp at the base;
+   - contact darkening where things meet the ground and each other.
+   - Nothing hovers or clips.
+5. **Signs of life, near LOD only.** The small things people use and leave:
+   - On buildings: handles, letterboxes, house numbers, curtains, pots on sills, cables, legible signage.
+   - On streets: bikes, bins, crates, bollards, manholes.
+   - On vehicles: tread, hubs, plates, mirrors.
+   - On people: faces, hands, clothing folds, carried things.
+6. **Variation.** No two neighbours identical: tint, wear, small geometric variants, state (open / closed).
+7. **Mechanics.** Whatever moves in reality moves correctly:
+   - wheels turn; cars pitch when braking;
+   - doors and shutters open;
+   - awnings and parasols move with the shared wind;
+   - people walk with weight and gesture.
+8. **Dense real places.** A few spots where the density of real things makes people stop, each verified like
+   a POI:
+   - the market;
+   - the harbour quay (ropes, bollards, nets, crates);
+   - a café terrace;
+   - a back yard or alley;
+   - a building site;
+   - the station platform.
 
 **Performance shape:**
 - detail lives near the camera (instancing, merged geometry, distance LOD);
