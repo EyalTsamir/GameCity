@@ -270,13 +270,13 @@ export function plotTrack(ppid: number, nx: number, ny: number): number {
 export const CK = { wheat: 0, stubble: 1, greens: 2, pasture: 3, hay: 4, ploughed: 5, fallow: 6, sunflower: 7, orchard: 8, veg: 9, maize: 10, tunnels: 11 } as const;
 const CUM_N = [0.22, 0.33, 0.48, 0.66, 0.76, 0.83, 0.91, 0.95, 1.01];
 const KIND_N = [0, 1, 2, 3, 4, 5, 6, 7, 8];
-const CUM_S = [0.16, 0.26, 0.36, 0.48, 0.56, 0.66, 0.74, 0.82, 0.9, 0.95, 1.01];
+const CUM_S = [0.11, 0.22, 0.34, 0.47, 0.55, 0.66, 0.74, 0.82, 0.9, 0.95, 1.01];
 const KIND_S = [9, 10, 2, 3, 8, 0, 5, 4, 6, 7, 11];
 /** crop kind of a field: smallholding mix, grazing land (pasture / hay / fallow) or the farmland mix */
 export function cropKind(ch: number, small: boolean, graze: number, tun = false): number {
   if (small) {
-    for (let i = 0; i < CUM_S.length; i++) if (ch < CUM_S[i]) return KIND_S[i] === 11 && !tun ? 9 : KIND_S[i];
-    return tun ? 11 : 9;
+    for (let i = 0; i < CUM_S.length; i++) if (ch < CUM_S[i]) return KIND_S[i] === 11 && !tun ? 4 : KIND_S[i];
+    return tun ? 11 : 4;
   }
   if (graze >= 0.5) return ch < 0.6 ? 3 : ch < 0.85 ? 4 : 6;
   for (let i = 0; i < CUM_N.length; i++) if (ch < CUM_N[i]) return KIND_N[i];
@@ -347,7 +347,7 @@ bool fTun(vec4 box) {
 int fCropKind(float ch, bool small, float graze, bool tun) {
   if (small) {
     return ch < ${CUM_S[0]} ? 9 : ch < ${CUM_S[1]} ? 10 : ch < ${CUM_S[2]} ? 2 : ch < ${CUM_S[3]} ? 3 : ch < ${CUM_S[4]} ? 8 :
-      ch < ${CUM_S[5]} ? 0 : ch < ${CUM_S[6]} ? 5 : ch < ${CUM_S[7]} ? 4 : ch < ${CUM_S[8]} ? 6 : ch < ${CUM_S[9]} ? 7 : (tun ? 11 : 9);
+      ch < ${CUM_S[5]} ? 0 : ch < ${CUM_S[6]} ? 5 : ch < ${CUM_S[7]} ? 4 : ch < ${CUM_S[8]} ? 6 : ch < ${CUM_S[9]} ? 7 : (tun ? 11 : 4);
   }
   if (graze >= 0.5) return ch < 0.6 ? 3 : ch < 0.85 ? 4 : 6;
   return ch < ${CUM_N[0]} ? 0 : ch < ${CUM_N[1]} ? 1 : ch < ${CUM_N[2]} ? 2 : ch < ${CUM_N[3]} ? 3 : ch < ${CUM_N[4]} ? 4 :

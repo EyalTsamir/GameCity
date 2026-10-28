@@ -222,6 +222,8 @@ export function buildIslandPatch(model: LandscapeModel, box: LandHole, step: num
  * straight edge). The shader samples it at each plot's CENTRE, so a field ends at a plot border (a
  * hedge / margin), never on a cover contour diagonally through a plot.
  */
+/** the settlement distance channel spans ±SITE_SDF m (GLSL decodes it the same way) */
+export const SITE_SDF = 64;
 export interface FieldMask {
   tex: THREE.DataTexture;
   /** x0, z0, 1/size, 1/size (world → uv) */
@@ -307,16 +309,27 @@ export function buildFieldMask(topo: RingTopology, heights: LandHeights, model: 
   const N = g.N,
     x0 = g.x0,
     z0 = g.z0;
-  const data = new Uint8Array(N * N);
+  // R: field cover × slab ramp (sampled at each plot's centre); G: signed distance to the nearest
+  // settlement's edge (sampled per pixel: farms / hamlets / villages cut a field along their round edge)
+  const data = new Uint8Array(N * N * 2);
+  const sites = model.sites;
   for (let j = 0; j < N; j++)
     for (let i = 0; i < N; i++) {
       const k = j * N + i;
       const x = x0 + (i + 0.5) * res,
         z = z0 + (j + 0.5) * res;
       const ramp = smooth(6, 70, model.slabDist(x, z));
-      data[k] = Math.round(Math.min(1, Math.max(0, g.data[k] * ramp)) * 255);
+      data[k * 2] = Math.round(Math.min(1, Math.max(0, g.data[k] * ramp)) * 255);
+      let sd = SITE_SDF;
+      for (const st of sites) {
+        const dx = x - st.x,
+          dz = z - st.z;
+        if (Math.abs(dx) > st.r + SITE_SDF || Math.abs(dz) > st.r + SITE_SDF) continue;
+        sd = Math.min(sd, Math.hypot(dx, dz) - st.r);
+      }
+      data[k * 2 + 1] = Math.round(Math.min(1, Math.max(0, (sd + SITE_SDF) / (2 * SITE_SDF))) * 255);
     }
-  const tex = new THREE.DataTexture(data, N, N, THREE.RedFormat, THREE.UnsignedByteType);
+  const tex = new THREE.DataTexture(data, N, N, THREE.RGFormat, THREE.UnsignedByteType);
   tex.magFilter = THREE.LinearFilter;
   tex.minFilter = THREE.LinearFilter;
   tex.generateMipmaps = false;

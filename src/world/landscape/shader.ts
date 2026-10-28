@@ -9,6 +9,7 @@
 
 import * as THREE from 'three';
 import { FIELDS_GLSL } from './fields';
+import { SITE_SDF } from './terrain';
 import { WIND_GLSL } from '../../core/wind';
 import { LAMP_GLSL, lampUniforms } from '../../core/lampLight';
 import { noiseTexture } from '../terrain/noise';
@@ -186,7 +187,11 @@ vec3 landAlbedo() {
 
   // ── field patchwork
   float hedgeM = 0.0, trackM = 0.0, fieldW = 0.0;
-  if (field > 0.0) {
+  // inside the field mask the patchwork is evaluated wherever it may show (the per-plot decision below
+  // rules); outside, where the per-vertex cover says so
+  vec2 pmuv = (p.xz - uFieldXf.xy) * uFieldXf.zw;
+  bool inMask = uFieldXf.z > 0.0 && all(greaterThan(pmuv, vec2(0.002))) && all(lessThan(pmuv, vec2(0.998)));
+  if (field > 0.0 || (inMask && forest < 0.97)) {
     // borders wander a little (hedges and ditches are never ruler-straight); the crop rows do not
     vec2 qr = FROT * p.xz;
     vec2 q = qr + (texture2D(tLN, p.xz * (1.0 / 160.0)).ba - 0.5) * 3.6;
@@ -237,9 +242,11 @@ vec3 landAlbedo() {
       vec2 bc = 0.5 * (box.xy + box.zw);
       vec2 wc = vec2(FROT[0][0] * bc.x + FROT[0][1] * bc.y, FROT[1][0] * bc.x + FROT[1][1] * bc.y);
       vec2 muv = (wc - uFieldXf.xy) * uFieldXf.zw;
-      if (uFieldXf.z > 0.0 && all(greaterThan(muv, vec2(0.002))) && all(lessThan(muv, vec2(0.998)))) {
+      if (inMask && all(greaterThan(muv, vec2(0.002))) && all(lessThan(muv, vec2(0.998)))) {
         float mv = textureLod(tFieldMask, muv, 0.0).r;
-        fieldW = step(0.35 + 0.3 * fhmix(pid, 83), mv) * smoothstep(0.0, 0.04, field);
+        // settlements cut fields along their own round edge (signed distance, per pixel)
+        float sdf = (textureLod(tFieldMask, pmuv, 0.0).g * 2.0 - 1.0) * ${SITE_SDF.toFixed(1)};
+        fieldW = step(0.35 + 0.3 * fhmix(pid, 83), mv) * smoothstep(-0.5 * fp - 0.3, 0.5 * fp + 0.3, sdf - 1.0);
       } else fieldW = field;
     }
     // crop kind (fields.ts cropKind): smallholding mix, coastal grazing land, or the farmland mix
@@ -303,7 +310,8 @@ vec3 landAlbedo() {
       fc *= 1.0 - 0.1 * smoothstep(0.55, 0.75, nB.b) * midF;
       fc = mix(fc, fc * vec3(1.1, 1.05, 0.85), smoothstep(0.6, 0.8, nW.b) * 0.5);
       float path = 1.0 - smoothstep(0.012, 0.012 + fp * 0.02 + 0.006, abs(nP.g - 0.5));
-      fc = mix(fc, cTrack * 0.95, path * 0.55 * (1.0 - smoothstep(1.0, 4.0, fp)));
+      // (a few worn paths, not a worm pattern of noise contours over the whole pasture)
+      fc = mix(fc, mix(cTrack, fc, 0.35), path * 0.4 * smoothstep(0.58, 0.72, nW.r) * (1.0 - smoothstep(1.0, 4.0, fp)));
     } else if (ck == 4) {
       // hay meadow, cut: mown swaths alternate light / dark (mower direction), windrows
       fc = mix(cHay, cMeadow, 0.35 * pv);
@@ -334,8 +342,8 @@ vec3 landAlbedo() {
       float bw = 2.4 + 2.6 * fhmix(pid, 47);
       float bi = floor(tr / bw);
       float bh = fhmix(pid + int(bi) * 7, 53);
-      vec3 vc = bh < 0.24 ? vec3(0.13, 0.25, 0.1) : bh < 0.42 ? vec3(0.19, 0.29, 0.22) : bh < 0.62 ? vec3(0.3, 0.44, 0.13)
-        : bh < 0.7 ? vec3(0.17, 0.1, 0.07) : bh < 0.86 ? vec3(0.15, 0.1, 0.06) : vec3(0.42, 0.37, 0.25);
+      vec3 vc = bh < 0.26 ? vec3(0.13, 0.24, 0.1) : bh < 0.44 ? vec3(0.17, 0.26, 0.19) : bh < 0.64 ? vec3(0.24, 0.36, 0.12)
+        : bh < 0.7 ? vec3(0.16, 0.11, 0.08) : bh < 0.88 ? vec3(0.15, 0.1, 0.06) : vec3(0.3, 0.27, 0.18);
       float rw = lStripe(tl, 0.55, 0.6, fpt);
       float vcv = bh < 0.7 ? 0.45 + 0.4 * rw : 0.0;
       fc = mix(cSoil * (0.8 + 0.2 * nP.g), vc * (0.9 + 0.2 * pv), vcv + 0.25 * smoothstep(0.6, 1.5, fp) * step(bh, 0.7));
