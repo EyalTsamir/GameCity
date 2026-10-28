@@ -288,7 +288,10 @@ void pedPose(inout vec3 p, inout vec3 n) {
       float a = atan(p.x, p.z);
       float sd = float(iC1.x & 15u);
       float L2 = len * (1.0 + 0.09 * sin(a * 7.0 + sd) + 0.06 * sin(a * 15.0 + 1.7 + sd * 0.5) - 0.12 * (1.0 - abs(sin(a * 0.5))));
-      p.y += max(0.0, aux.x - L2);
+      float lift = max(0.0, aux.x - L2);
+      p.y += lift;
+      // rows lifted to the hem tuck in under it (into the hair / body) instead of rolling out as a shelf
+      p.xz = mix(p.xz, vec2(0.0, -0.01), 0.3 * smoothstep(0.0, 0.03, lift));
       float dep = min(aux.x, L2);
       float g = smoothstep(0.0, 0.1, dep) * (0.6 + 0.4 * smoothstep(0.1, 0.35, dep));
       float ph = a * 9.0 + sd + dep * 6.0;
@@ -548,7 +551,11 @@ void pedPose(inout vec3 p, inout vec3 n) {
   vPedPat = pat;
   // material response: skin & hair soften the terminator (wrap), hair and shoes get a faint sheen
   // (the face less: its sculpt must read in the light)
-  vPedMat = region == ${R.FACE} ? vec2(0.16, 0.0)
+  // On the head the wrap blends from the face to the sides by the rest normal: a step at the FACE / SKIN
+  // boundary drew a crease from the temple down to the jaw in three-quarter views
+  float headWrap = mix(0.35, 0.16, smoothstep(-0.1, 0.75, vPedRN.z));
+  vPedMat = (region == ${R.FACE} || region == ${R.SKIN}) && bone == ${B.HEAD} ? vec2(headWrap, 0.0)
+          : region == ${R.FACE} ? vec2(0.16, 0.0)
           : region == ${R.SKIN} || region == ${R.NECK} || region == ${R.LIPS} ? vec2(0.35, 0.0)
           : region == ${R.HAIR} || region == ${R.BEARD} ? vec2(0.4, 0.018)
           : region == ${R.FOOT} ? vec2(0.0, 0.09)
@@ -867,7 +874,10 @@ const HAIR_NORMAL = /* glsl */ `
     float ha = hf.x;
     float hq = ha * 70.0 + sin(hf.y * 13.0 + ha * 2.0) * 0.6;
     float hk = 1.0 - smoothstep(0.3, 0.7, fwidth(hq));
-    float hH = (0.55 * sin(hq * 6.2832) + 1.6 * (pedN1(ha * 26.0) - 0.5)) * 0.00009 * hk;
+    // fine strands (fade below ~2 px per ridge) + clumps of strands, which break the sheen into locks at 1–3 m
+    float hc2 = ha * 26.0 + sin(hf.y * 9.0) * 0.8;
+    float hk2 = 1.0 - smoothstep(0.35, 0.8, fwidth(hc2));
+    float hH = 0.55 * sin(hq * 6.2832) * 0.00009 * hk + (pedN1(hc2) + 0.5 * pedN1(hc2 * 2.3 + 7.0) - 0.75) * 0.0011 * hk2;
     vec3 hsx = dFdx(-vViewPosition), hsy = dFdy(-vViewPosition);
     vec3 hr1 = cross(hsy, normal), hr2 = cross(normal, hsx);
     float hdet = dot(hsx, hr1);

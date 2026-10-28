@@ -666,7 +666,7 @@ function closeHeadPoint(d: Dims, phi: number, Y: number, push = 0, ring?: BodyRi
   const gonion = gs(Math.abs(phi) - 1.45, (Y + 0.086) * 9, 0.36, 0.24);
   p[0] *= 1 - 0.15 * lo * arch + 0.05 * gonion - 0.05 * sstep(0.01, 0.05, Y) * cf;
   const X = p[0] / kx;
-  const front = sstep(0.05, 0.45, Math.cos(phi));
+  const front = sstep(-0.1, 0.45, Math.cos(phi));
   const rel = (front > 0 ? faceRelief(X, Y, d.nose / k) * front * k : 0) + push;
   const dx = p[0],
     dz = p[2] - r.cz;
@@ -765,8 +765,13 @@ function buildCloseHead(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
     for (let i = 0; i < n; i++) {
       const t = (i / n) * Math.PI * 2;
       const phi = t - 0.74 * Math.sin(t);
-      const q = torsoPoint(neckIn, 0, phi, 2);
       const j = jaw[i];
+      // the front tucks into the neck; the back (inside the neck / skull) closes into a bowl as the old cap did
+      // — an open under-surface there showed the sky through the top of the neck behind the jaw angle
+      const qn = torsoPoint(neckIn, 0, phi, 2);
+      const fr = sstep(-0.25, 0.35, Math.cos(phi));
+      const qb: P3 = [j[0] * 0.25, R[0].y - 0.006, R[0].cz + (j[2] - R[0].cz) * 0.25];
+      const q: P3 = [qb[0] + (qn[0] - qb[0]) * fr, qb[1] + (qn[1] - qb[1]) * fr, qb[2] + (qn[2] - qb[2]) * fr];
       // quarter-round: first down round the edge, then back along the under-jaw towards the neck
       const e = 1 - (1 - u) ** 2;
       const drop = 0.006 * k * Math.sin(Math.PI * Math.min(1, u * 1.4));
@@ -1197,7 +1202,10 @@ function buildHair(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
   for (const k of cols) {
     const phi = (k / n) * Math.PI * 2;
     const y0 = chin + (crown - chin) * hairlineU(phi);
-    const edge = headSurface(d, phi, y0 + 0.012 * hk, vol * 0.9);
+    // close: the sheet starts up on the cap (over it, a little proud) so the hair flows out of the cap
+    // instead of hanging from a ledge at its edge
+    const yS = cfg.close ? y0 + (crown - y0) * 0.3 : y0 + 0.012 * hk;
+    const edge = headSurface(d, phi, yS, cfg.close ? vol * 1.05 + 0.004 : vol * 0.9);
     // widest outline of the head at this angle (hair falls from there)
     const wide = headSurface(d, phi, d.headRings[5].y, vol * 1.2);
     const col: number[] = [];
