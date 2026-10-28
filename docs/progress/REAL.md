@@ -11,6 +11,11 @@ Overview must stay at least as impressive as now. Every feature: quality tiers +
 Lead session: session_01XuhAMczW3iK25AAWnf3qog, branch `claude/pensive-gates-bim12i`.
 
 ## Resume here (keep current)
+* 2026-10-28 21:26 UTC — Merged W1 s4 (c9f9035: garage doors face the street, hotel flags, frame AO/reveal returns,
+  per-pane glass, louvred shutters, scalloped awnings, roller shutters, box cladding, school + church portal, tower
+  entrance). Lead-verified: bench docs/progress/real/w1_s4_lead.jpg, golden overview 0.3 / westbrook 5.3 (garages),
+  invariants {}, console clean. W1(5) spawned: tower-crown speckle, reveal shadow, lawn-rim probe, apartment glass,
+  roller door relief. Running: W1(5), W2(5), W4(4), W5(2). Waiting for a slot: W3(4) furniture fix round.
 * 2026-10-28 21:12 UTC — Merged W2 s4 (1db2f0e: SUV rails, two-layer paint + fleet palette ?nocarpaint, estate/MPV
   parked bodies, mirror stalks, sill/tyre dust, bus AC packs + hatches, pallet loads; trains coded, unjudged
   ?notraingrime). W2(5) spawned: trains (framing + judgment), police livery, paint reflection, perf.
@@ -118,6 +123,7 @@ Wave 1 (launched 2026-10-28 15:17 UTC, sibling cloud sessions, briefs in real-br
 | W1 facades (4) fix | session_01XuhAMdcvHbn3H1SbqTowe7 | claude/real-w1-facades | real-w1.md |
 | W2 vehicles (4) fix+trains | session_01XuhAMcn3h3epGYAH3YGANo | claude/real-w2-vehicles | real-w2.md |
 | W2 vehicles (5) trains | session_01XuhAMgyB2W9jUZxdx3Xczd | claude/real-w2-vehicles | real-w2.md |
+| W1 facades (5) | session_01XuhAMfq46wtUdASmLq8DJE | claude/real-w1-facades | real-w1.md |
 Respawn rule: when a worker stops (milestone note, ~200k context, or a usage stop), create a NEW session on the
 same branch with the same brief + "resume from docs/progress/real-wN.md Resume here"; archive the old one.
 
