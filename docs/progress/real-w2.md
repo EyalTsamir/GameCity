@@ -243,6 +243,9 @@ Owned: `src/sim/traffic/{models,vehicleMaterial,render}.ts` (+ trains later). Si
   `w2_lineup_14m.jpg`, `w2_night_after.jpg`. Raw: `shots/w2/` (not committed).
 
 ## Tokens
+* Session 5 (tokens.py): 109 calls, 2.3M weighted, ctx median 175k / max 233k (get_session reported used_tokens 0,
+  so the 170k cap was estimated by hand and overshot). Checks: downtown console clean, invariants 0; overview unchanged;
+  typecheck clean.
 * Session 4 (tokens.py): 145 calls, 3.4M weighted, ctx median 194k / max 274k (over the cap again: image reads + long
   waits on software-GL captures; next session: one bench run per judgment, fewer screenshots). Checks: downtown console
   clean, invariants 0, typecheck clean.
