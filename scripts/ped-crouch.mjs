@@ -34,8 +34,26 @@ try {
       }
     };
   }, [dropT]);
+  // --bench 1: the people-bench sequence (setHours after load, 2.5 s, pause) — what does the pause freeze?
+  if (args.bench) {
+    await page.evaluate((h) => window.__city.setHours(h), parseFloat(args.hours ?? '11'));
+    await page.waitForTimeout(2500);
+    const sp = await page.evaluate(() => {
+      const c = window.__city; c.setSpeed(0);
+      const out = { hist: new Array(12).fill(0), fast: [] };
+      for (const p of c.ctx.services.pedestrians._crowd.parties) for (const m of p.members) {
+        if (!m.present || m.sit > 0.05) continue;
+        out.hist[Math.min(11, Math.floor(m.speed * 2))]++;
+        if (m.speed > 1.95 && p.persona !== 'jogger' && out.fast.length < 30) out.fast.push({ sp: +m.speed.toFixed(2), pv: +(p.v ?? 0).toFixed(2), state: p.state, persona: p.persona, size: p.size, x: +m.x.toFixed(1), z: +m.z.toFixed(1) });
+      }
+      return out;
+    });
+    console.log('member speed at the pause (0.5 m/s bins):', sp.hist.join(' '));
+    await page.evaluate(() => (window.__crouchPaused = true));
+    console.log('non-joggers > 1.95 m/s (jog gait) at the pause:', sp.fast.length, JSON.stringify(sp.fast.slice(0, 12)));
+  }
   for (const v of views) {
-    await page.evaluate(([v, speed]) => { window.__city.view(v); window.__city.setSpeed(speed); }, [v, speed]);
+    await page.evaluate(([v, speed]) => { window.__city.view(v); if (!window.__crouchPaused) window.__city.setSpeed(speed); }, [v, speed]);
     await page.waitForTimeout(seconds * 1000);
   }
   const S = await page.evaluate(() => window.__crouch);

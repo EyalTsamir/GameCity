@@ -977,10 +977,10 @@ function buildFingers(
   const bend = (v: P3, a: number): P3 => norm(add(mul(v, Math.cos(a)), mul(palm, Math.sin(a))));
   const FING: [number, number, number][] = [
     // z offset (× pw), length (× hand length), radius (× pw)
-    [0.66, 0.44, 0.205],
-    [0.22, 0.5, 0.22],
-    [-0.22, 0.47, 0.21],
-    [-0.62, 0.37, 0.18],
+    [0.66, 0.44, 0.18],
+    [0.22, 0.5, 0.19],
+    [-0.22, 0.47, 0.18],
+    [-0.62, 0.37, 0.155],
   ];
   const SIDES = 6;
   for (let f = 0; f < 4; f++) {
@@ -989,7 +989,7 @@ function buildFingers(
     const rz = pw * fr,
       rx = Math.min(pt * 0.66, rz * 0.95);
     // splay a little: index forward, little finger back
-    const dir0 = norm(add(hd, mul(across, zo * 0.09)));
+    const dir0 = norm(add(hd, mul(across, zo * 0.15)));
     const segs: [number, number][] = [
       [0.46, 0.14 + 0.03 * f],
       [0.3, 0.3 + 0.04 * f],
@@ -999,19 +999,23 @@ function buildFingers(
     let dir = dir0;
     let ang = 0;
     const rings: Ring[] = [];
-    const ring = (cc: P3, dd: P3, sx: number, sz: number, curl: number, h: number, nail: boolean) => {
+    // tint: pale nail on the back of the tip, a lit knuckle over each joint with a crease on the palm side,
+    // and the sides facing the neighbouring fingers darker near the base (the gaps read at 2 m)
+    const ring = (cc: P3, dd: P3, sx: number, sz: number, curl: number, h: number, nail: boolean, crev = 0, knuckle = false) => {
       const { U, V } = limbFrame(dd);
       const ids: number[] = [];
       for (let k = 0; k < SIDES; k++) {
         const phi = (k / SIDES) * Math.PI * 2;
         const q = add(cc, add(mul(U, sx * Math.sin(phi)), mul(V, sz * Math.cos(phi))));
         const back = Math.sin(phi) * side * Math.sign(U[0] || 1);
-        b.use(HA, REG.SKIN, -1, nail && back > 0.4 ? 1.12 : back < -0.4 ? 0.97 : 1);
+        const facing = Math.abs(Math.cos(phi)) > 0.8 && !((f === 0 && Math.cos(phi) * Math.sign(V[2] || 1) > 0) || (f === 3 && Math.cos(phi) * Math.sign(V[2] || 1) < 0));
+        const tk = (nail && back > 0.4 ? 1.12 : knuckle && back > 0.4 ? 1.06 : back < -0.4 ? (knuckle ? 0.9 : 0.97) : 1) * (facing ? 1 - 0.14 * crev : 1);
+        b.use(HA, REG.SKIN, -1, tk);
         ids.push(b.v(q, -0.5 - h * 0.5, 0, curl));
       }
       rings.push({ ids, c: cc });
     };
-    ring(c, dir, rx, rz, 0.2, 0, false);
+    ring(c, dir, rx, rz, 0.2, 0, false, 1);
     for (let s = 0; s < 3; s++) {
       const [lf, a] = segs[s];
       ang += a;
@@ -1019,7 +1023,7 @@ function buildFingers(
       c = add(c, mul(dir, len * lf));
       const t = (s + 1) / 3;
       const taper = 1 - 0.2 * t;
-      if (s < 2) ring(c, dir, rx * taper * 1.04, rz * taper * 1.04, 0.35 + 0.3 * s, t, false);
+      if (s < 2) ring(c, dir, rx * taper * 1.04, rz * taper * 1.04, 0.35 + 0.3 * s, t, false, s === 0 ? 0.6 : 0.2, true);
       else ring(sub(c, mul(dir, len * lf * 0.25)), dir, rx * taper, rz * taper, 1, t, true);
     }
     bridge(b, rings);
