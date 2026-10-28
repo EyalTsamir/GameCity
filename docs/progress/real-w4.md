@@ -112,3 +112,15 @@ Photo test "Person" (REAL.md). Owned: `src/sim/pedestrians/**` presentation (not
 TOTAL weighted 5.1M (cache read 82 %, write 7 %, output 11 %); 183 calls, ctx median 229k / max 332k (over the
 200k cap — the hidden system+brief is 31 % and per-call reminders 11 %); 0 cold calls, idle>5 min warm 2/cold 0.
 Bash reads 20.5 %. Next session: stop at ~150k.
+
+## Tokens (session 2, tokens.py)
+```
+TOTAL weighted 1.9M  (cache read 81%, cache write 9%, output 10%)
+
+agent               calls   w(M)    %  ctxMed  ctxMax cold coldW%  idle>5min: warm/cold
+LEAD                  104    1.9100.0    151k    205k    0     0%  0/0
+
+WHAT THE COST BOUGHT (lifetime cost of each kind of content in context, all agents):
+  system+brief                                    0.9M  46.6%
+  Bash:read/grep                                  0.4M  21.2%
+```
