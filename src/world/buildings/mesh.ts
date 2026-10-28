@@ -330,6 +330,9 @@ export class Builder {
    * (u - gu)/gw, (v - gv)/gh for window-grid cell coordinates.
    */
   wall(x0: number, z0: number, x1: number, z1: number, y0: number, y1: number, u0 = 0, gu = 0, gw = 1, gv = 0, gh = 1): void {
+    // shell walls standing on the ground run 10 cm below it: lawns lie a few cm under y 0, and an open gap under
+    // the wall leaked sun through the shadow map (a lit rim along the wall foot)
+    if (this.fd && Math.abs(y0) < 0.02) y0 -= 0.1;
     const L = Math.hypot(x1 - x0, z1 - z0);
     const ua = (u0 - gu) / gw,
       ub = (u0 + L - gu) / gw;

@@ -5,6 +5,9 @@ Branch `claude/real-w1-facades` (from `claude/pensive-gates-bim12i`). Brief: doc
 ## Resume here
 * **Session 5 (10-28) — DONE, next session starts here:** sheet docs/progress/real/w1_s5.jpg (tower crown, house window
   3 m / 45° in sun, warehouse sectional door, apartment). Checks: downtown console clean, invariants {}; overview OK.
+  - **Lawn rim FIXED (lead's request, W5's trace):** mesh.ts `wall()` lowers ground-standing shell walls (|y0| < 2 cm,
+    facade builder only) by 10 cm, so the shadow map has no gap under the wall (lawn at −0.04). shots/w1/s5/rim_after.png
+    vs rim_b1.png: the bright line is gone (a faint blade fringe remains). Downtown clean, invariants {}, validate [].
   **Open, in order:** (a) apartment glass still uniform grey at 3 m — the glassAlb × 0.62 / homey reflection × 1.1
   changes are visible on houses but NOT on apartments (bench apartment pick 0, shaded front) → the grey comes from
   another term: probe the pane terms one at a time (`interior`, `refl`/`bhOpp`, the pale blind/net layer in the homey
