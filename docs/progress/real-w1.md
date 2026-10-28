@@ -195,3 +195,7 @@ TOTAL weighted 2.5M (cache read 78%, write 9%, output 13%); 115 calls, ctx media
 
 ## Tokens (session 3, `tokens.py`)
 TOTAL weighted 3.4M (cache read 79%, write 8%, output 12%). Stopped at milestone 3 (~150k context).
+
+## Tokens (session 4, `tokens.py`)
+TOTAL weighted 4.9M (cache read 84%, write 7%, output 9%). Stopped by the lead at ~317k context (over the cap: too many
+waits on the slow shot lock inside one session).
