@@ -120,7 +120,10 @@ Owned: `src/sim/traffic/{models,vehicleMaterial,render}.ts` (+ trains later). Si
   `w2_car_front_after.jpg`, `w2_car_side_after.jpg`, `w2_bus_after.jpg`, `w2_vans_after.jpg`,
   `w2_lineup_14m.jpg`, `w2_night_after.jpg`. Raw: `shots/w2/` (not committed).
 
-## Tokens (this session, tokens.py)
+## Tokens
+* Session 2: golden m2 vs ref (merged base) mean diff 0.0–0.1 on all five views; downtown console clean, invariants 0.
+
+## Tokens (session 1, tokens.py)
 * 101 calls, 3.2M weighted; median context 229k, max 313k (over the 150k target: the first milestone was
   too big for one session — split the next into cars-polish / trains); cache reads 71 %, no cold rewrites
   (idle>5 min: 1 warm / 0 cold).
