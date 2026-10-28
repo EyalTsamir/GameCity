@@ -11,6 +11,11 @@ Overview must stay at least as impressive as now. Every feature: quality tiers +
 Lead session: session_01XuhAMczW3iK25AAWnf3qog, branch `claude/pensive-gates-bim12i`.
 
 ## Resume here (keep current)
+* 2026-10-28 20:44 UTC — Bug hunter 1 merged (docs/progress/real-bugs-1.md, ~230 views: HIGH vendors dressed as
+  workers → W4(4); garage doors side-on to driveways, tower-crown speckle, hotel flags → W1; SUV roof rails → W2;
+  bus-stop flag reads No Entry, blank ads/timetable, newsstand placeholder sign, duplicate HONEY stalls → W3 fix).
+  Fix round launched: W1(4) facades, W2(4) vehicles + trains. W3(4) furniture fix waits for a free slot (after W5(2)).
+  Running: W1(4), W2(4), W4(4), W5(2).
 * 2026-10-28 20:42 UTC — Merged W4 s3 (bf2b7f2: speed spikes fixed at the source in rail.ts placeOnRail — smoothed
   tangent + slot clamp, scripts/ped-velocity.mjs; hairline ?nohairline; dress notch; umbrella/cup/briefcase/bag).
   W4(4) spawned: head form, hair volume, walk weight, crowd variation, arm banding.
@@ -107,6 +112,8 @@ Wave 1 (launched 2026-10-28 15:17 UTC, sibling cloud sessions, briefs in real-br
 | W4 people (3) | session_01XuhAMdkF4v6CvZSXJCtb2b | claude/real-w4-people | real-w4.md |
 | W5 street (2) | session_01XuhAMfzqigKeecGnEpbAX9 | claude/real-w5-street | real-w5.md |
 | W4 people (4) | session_01XuhAMfbva5MB3tKtm4gmaJ | claude/real-w4-people | real-w4.md |
+| W1 facades (4) fix | session_01XuhAMdcvHbn3H1SbqTowe7 | claude/real-w1-facades | real-w1.md |
+| W2 vehicles (4) fix+trains | session_01XuhAMcn3h3epGYAH3YGANo | claude/real-w2-vehicles | real-w2.md |
 Respawn rule: when a worker stops (milestone note, ~200k context, or a usage stop), create a NEW session on the
 same branch with the same brief + "resume from docs/progress/real-wN.md Resume here"; archive the old one.
 
