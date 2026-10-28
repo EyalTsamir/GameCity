@@ -4,6 +4,10 @@ Branch `claude/real-w4-people` (from `claude/pensive-gates-bim12i` e517126). Bri
 Photo test "Person" (REAL.md). Owned: `src/sim/pedestrians/**` presentation (not crowd/places logic).
 
 ## Resume here
+* 2026-10-28 ~21:10 UTC — session 4 STARTED. Lead's s3 verdict priorities: (1) head form (faceted jaw/cheeks,
+  hexagonal skull → rounded skull, soft jaw–neck, cheekbones, nose with nostrils in form, lips in form, smooth
+  normals), (2) hair volume/silhouette breakup + flow-following strands, (3) walk weight, (4) crowd variation at
+  10 m, (5) stripe banding on hands/forearms (seam/crease shader?).
 * 2026-10-28 ~21:00 UTC — session 3 ENDED (context 223k). All pushed. Next: (5) walk-weight judging pass, (6) crowd
   variation at 10 m (fix the bench's group framing first), hair volume on long-hair sheets + ear poking through.
 * 2026-10-28 ~20:30 UTC — session 3. Lead's priorities: (1) speed-spike root cause, (2) hairline/volume, (3) dress
