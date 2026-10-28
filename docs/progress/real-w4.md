@@ -4,12 +4,20 @@ Branch `claude/real-w4-people` (from `claude/pensive-gates-bim12i` e517126). Bri
 Photo test "Person" (REAL.md). Owned: `src/sim/pedestrians/**` presentation (not crowd/places logic).
 
 ## Resume here
-* 2026-10-28 — session 1. Close level (Lod 4, < 15 m high / 11 med / 7 low) built: sculpted head + ears,
-  shader-painted face (`pedFacePaint`), fingers (`buildFingers`), hair strands (`pedStrands`), fabric
-  (`pedFabric`: seams, knee/elbow creases from the pose bend, trouser break, denim stitching/pockets).
-  Judging with `node scripts/people-bench.mjs --n 3 --out shots/w4/pbN` (face 0.75 m / hand / body 2.6 m /
-  group 10 m; bench.mjs pedestrian frames ≥ 3 m so it can't judge faces). Base tree for before/after:
-  worktree `../base` (e517126) on port 5174 (`--url http://127.0.0.1:5174/`).
+* 2026-10-28 19:15 UTC — session 1 ENDED (context cap). Branch `claude/real-w4-people`, all committed + pushed.
+  Brief priorities 1 (faces/hair), 2 (fingers), 3 (fabric, shoes), 6 (vendor request) done at a new **close
+  level** (Lod 4, < 15 m); 4 (walk weight) was already strong (gfx-people) — not touched; 5 (carried things):
+  straps + paper shopping bag at close; 7 (variation): per-person face shape, eye colour, lipstick, stubble,
+  age lines.
+* Not yet verified on the bench: the last three commits — skirt panel drape (shader.ts TAIL block), paper
+  shopping bag (`shoppingBag`), vendor facing (crowd.ts stepVendor). First thing next session:
+  `node scripts/people-bench.mjs --n 4 --skip 1 --out shots/w4/pb8` and `node scripts/bench.mjs --classes
+  marketstall --dists 3 --out shots/w4/market2`.
+* Perf: `shots/w4/perf2.log` (view `27,0,17,20,30,18`, variants `;pedlod=0;pedlod=close` = every figure
+  forced to near vs close: upper bound). Result: see "Toggles / tiers / costs" (filled if the run finished).
+* Sheets: docs/progress/real/w4_before.jpg (bench.mjs, ≥ 3 m), w4_after_faces.jpg, w4_after_bodies.jpg
+  (people-bench), w4_market_vendor_before_fix.jpg. Overview untouched (close level only < 15 m; hair strands
+  fade by fwidth) — downtown shot: console clean, invariants 0 (shots/w4/dt.json).
 
 ## Code pointers (so the next session needn't re-read)
 * body.ts: `LODS` per level (0 near <40 m, 1 lo, 2 tiny, 3 pin, **4 close** <15 m, new); `REG` regions (+FACE 21),
