@@ -4,6 +4,18 @@ Branch `claude/real-w4-people` (from `claude/pensive-gates-bim12i` e517126). Bri
 Photo test "Person" (REAL.md). Owned: `src/sim/pedestrians/**` presentation (not crowd/places logic).
 
 ## Resume here
+* 2026-10-28 ~20:30 UTC — session 3. Lead's priorities: (1) speed-spike root cause, (2) hairline/volume, (3) dress
+  hem notch, (4) carried things, (5) walk weight, (6) crowd variation at 10 m.
+  (1) ROOT CAUSE found + fixed at the source (new `scripts/ped-velocity.mjs`: drives `crowd.update` at a fixed
+      step with the clock paused, patches `moveMember` → raw d/h + smoothed m.speed histograms, spikes grouped by
+      cause with call site). Baseline 60 s @ speed 4: 100 % of spikes in `placeOnRail` (walk): (a) lateral offsets
+      used the rail polyline's per-segment tangent → at every vertex of a rounded corner an abreast member jumped by
+      lateral × turn angle (4–11 m/s); (b) offset slots sweeping round tight corners / formation (file) shuffles /
+      joining the rail from a seat or queue snapped up to 0.7 m per step (10–22 m/s).
+      Fix: rail.ts `RailSample.sx/sz` = tangent smoothed across vertices (TAN_BLEND 0.6 m), used by every
+      member-lateral normal in crowd.ts; placeOnRail clamps a present member's step to ≤ (1.3·p.v + 0.3) m/s
+      (≥ 0.6) — it lags and catches up instead of teleporting (jumps ≥ 3 m = deliberate relocations, pass).
+      Result (velC, 60 s): smoothed m.speed > 3 m/s 24 → 7 per ~2.2 M member-steps; > 2.5 m/s 1700+ → 20.
 * 2026-10-28 ~20:00 UTC — session 2 ENDED (context 194k at the first get_session: the hidden system+brief is
   most of it — next session: get_session after the FIRST bench). All committed + pushed.
   Lead's m1 blockers, status:
