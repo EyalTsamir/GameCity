@@ -37,6 +37,8 @@ const CHAMFER = 0.025;
 const CURB_TOP = 0.2;
 /** dropped kerb: along-arm window (flare start, core start, core end, flare end), ramp length, drop */
 const RAMP = { a0: 3.9, a1: 4.3, a2: 6.0, a3: 6.4, len: 1.5, drop: 0.115 };
+/** vehicle crossover at a driveway mouth: kerb lowered to ~2.5 cm, ramp within the first row, flares */
+const DRIVE = { flare: 0.5, len: 0.86, drop: 0.11 };
 const ROWS_JUNCTION = [CURB_TOP, 0.86, 1.5, 1.7];
 const ROWS_SEGMENT = [CURB_TOP, 0.86, 1.5, 1.7, CORRIDOR_HALF - ROAD_HALF];
 
@@ -66,6 +68,8 @@ export interface StreetStats {
   junctions: number;
   segments: number;
   rampEnds: number;
+  /** dropped kerbs at driveway mouths */
+  driveKerbs: number;
 }
 
 /** paving style of a sidewalk by the district it borders */
@@ -268,7 +272,7 @@ function extrudeCurb(H: MeshBuilder, pts: CurbPt[], rows: number[], height: Heig
 export function buildStreets(ctx: CityContext, A: MeshBuilder, H: MeshBuilder): StreetStats {
   const plan = ctx.plan;
   const net = ctx.roads;
-  const stats: StreetStats = { junctions: 0, segments: 0, rampEnds: 0 };
+  const stats: StreetStats = { junctions: 0, segments: 0, rampEnds: 0, driveKerbs: 0 };
   const B = CORRIDOR_HALF;
   const promenade = plan.areas.find((a) => a.kind === 'promenade');
   const inRaised = (x: number, z: number) => !!promenade && x > promenade.rect.x0 && x < promenade.rect.x1 && z > promenade.rect.z0 && z < promenade.rect.z1;
@@ -372,6 +376,7 @@ export function buildStreets(ctx: CityContext, A: MeshBuilder, H: MeshBuilder): 
   }
 
   // ── segments
+  const drives = plan.areas.filter((a) => a.kind === 'driveway');
   for (const seg of plan.roadSegments) {
     const Na = plan.roadNodes[seg.a],
       Nb = plan.roadNodes[seg.b];
@@ -397,14 +402,54 @@ export function buildStreets(ctx: CityContext, A: MeshBuilder, H: MeshBuilder): 
           nz = rz * sd;
         const a = P(s0, ROAD_HALF * sd),
           b = P(s1, ROAD_HALF * sd);
-        const pts: CurbPt[] = [
-          { x: a.x, z: a.z, nx, nz, u: s0 },
-          { x: b.x, z: b.z, nx, nz, u: s1 },
-        ];
+        // driveways opening onto this sidewalk get a dropped kerb (along-segment window [u0, u1])
+        const xo: [number, number][] = [];
+        for (const d of drives) {
+          let l0 = Infinity,
+            u0 = Infinity,
+            u1 = -Infinity;
+          for (const cx of [d.rect.x0, d.rect.x1])
+            for (const cz of [d.rect.z0, d.rect.z1]) {
+              const ox = cx - Na.x,
+                oz = cz - Na.z;
+              l0 = Math.min(l0, ox * nx + oz * nz);
+              const u = ox * dx + oz * dz;
+              u0 = Math.min(u0, u);
+              u1 = Math.max(u1, u);
+            }
+          const f = DRIVE.flare;
+          if (Math.abs(l0 - CORRIDOR_HALF) > 0.3 || u1 < s0 + 2 * f || u0 > s1 - 2 * f) continue;
+          xo.push([Math.max(u0, s0 + f), Math.min(u1, s1 - f)]);
+        }
+        const us = [s0, s1];
+        for (const [u0, u1] of xo) us.push(u0 - DRIVE.flare, u0, u1, u1 + DRIVE.flare);
+        us.sort((p, q) => p - q);
+        const pts: CurbPt[] = [];
+        for (const u of us) {
+          if (pts.length && u - pts[pts.length - 1].u < 1e-3) continue;
+          const p = P(u, ROAD_HALF * sd);
+          pts.push({ x: p.x, z: p.z, nx, nz, u });
+        }
+        const drop: HeightFn = (x, z, d, hx, hz) => {
+          if (d >= DRIVE.len) return FLAT(x, z, d, hx, hz);
+          const u = (x - Na.x) * dx + (z - Na.z) * dz;
+          let w = 0,
+            wp = 0;
+          for (const [u0, u1] of xo) {
+            const f = DRIVE.flare;
+            const [ww, wwp] = u <= u0 - f || u >= u1 + f ? [0, 0] : u < u0 ? [(u - u0 + f) / f, 1 / f] : u > u1 ? [(u1 + f - u) / f, -1 / f] : [1, 0];
+            if (ww > w) [w, wp] = [ww, wwp];
+          }
+          if (w <= 0) return FLAT(x, z, d, hx, hz);
+          const r = 1 - d / DRIVE.len,
+            rp = -1 / DRIVE.len;
+          return { y: SIDEWALK_Y - DRIVE.drop * w * r, gx: -DRIVE.drop * (wp * r * dx + w * rp * hx), gz: -DRIVE.drop * (wp * r * dz + w * rp * hz) };
+        };
+        stats.driveKerbs += xo.length;
         const mx = (a.x + b.x) / 2 + nx * 5,
           mz = (a.z + b.z) / 2 + nz * 5;
         const style = styleAt(mx, mz);
-        extrudeCurb(H, pts, ROWS_SEGMENT, FLAT, style, null);
+        extrudeCurb(H, pts, ROWS_SEGMENT, xo.length ? drop : FLAT, style, null);
         // back face towards the block (unless it borders the raised promenade)
         const W = CORRIDOR_HALF - ROAD_HALF;
         if (!inRaised(mx - nx * 1.7, mz - nz * 1.7)) {

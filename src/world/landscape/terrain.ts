@@ -24,6 +24,9 @@ export interface LandHeights {
   /** canopy height added on top (forest) */
   canopy: Float32Array;
   cover: Float32Array; // CW floats per vertex
+  /** vertex positions (the ring topology's, plus the waterline refinement's) */
+  x: Float32Array;
+  z: Float32Array;
   landVerts: number;
   ms: number;
 }
@@ -42,48 +45,64 @@ export function buildLand(
   hole?: LandHole,
 ): { geo: THREE.BufferGeometry; heights: LandHeights } {
   const t0 = performance.now();
-  let nv = 0,
+  let nv0 = 0,
     lastRing = 0;
   for (let k = 0; k < topo.rings.length; k++) {
     if (topo.rings[k].d > landMaxD) break;
     lastRing = k;
-    nv = topo.rings[k].start + topo.rings[k].n;
+    nv0 = topo.rings[k].start + topo.rings[k].n;
   }
-  const h = new Float32Array(topo.count).fill(NaN);
-  const canopy = new Float32Array(topo.count);
-  const cover = new Float32Array(topo.count * CW);
-  const ringD = new Float32Array(nv);
+  // growable per-vertex arrays (the waterline refinement appends vertices)
+  const X: number[] = [],
+    Z: number[] = [],
+    Hs: number[] = [],
+    D: number[] = [];
   for (let k = 0; k <= lastRing; k++) {
     const ring = topo.rings[k];
     for (let i = 0; i < ring.n; i++) {
       const v = ring.start + i;
-      ringD[v] = ring.d;
-      h[v] = ring.d === 0 ? slabH(topo.x[v], topo.z[v]) : model.height(topo.x[v], topo.z[v]);
+      X[v] = topo.x[v];
+      Z[v] = topo.z[v];
+      D[v] = ring.d;
+      Hs[v] = ring.d === 0 ? slabH(topo.x[v], topo.z[v]) : model.height(topo.x[v], topo.z[v]);
     }
   }
+  const triEnd = topo.triStart[lastRing];
+  let tris: number[] = Array.from(topo.tris.subarray(0, triEnd * 3));
+  // ── waterline refinement: beyond ~150 m the rings are 6–15 m apart and a coast / river bank cut by the
+  // flat water reads as a saw-tooth; triangles straddling the water level (within reach of the free camera)
+  // are split twice (red-green, conforming: no T-junction cracks), new vertices on the true heights
+  const refined = refineWaterline(tris, X, Z, Hs, D, model, 2);
+  tris = refined;
+  const nv = X.length;
+  const h = Float32Array.from(Hs);
+  const canopy = new Float32Array(nv);
+  const cover = new Float32Array(nv * CW);
+  const ringD = Float32Array.from(D);
+  const vx = Float32Array.from(X),
+    vz = Float32Array.from(Z);
   const pos = new Float32Array(nv * 3);
   for (let v = 0; v < nv; v++) {
-    pos[v * 3] = topo.x[v];
+    pos[v * 3] = vx[v];
     pos[v * 3 + 1] = h[v];
-    pos[v * 3 + 2] = topo.z[v];
+    pos[v * 3 + 2] = vz[v];
   }
-  const triEnd = topo.triStart[lastRing];
   const geo = new THREE.BufferGeometry();
   const pa = new THREE.BufferAttribute(pos, 3);
   geo.setAttribute('position', pa);
-  geo.setIndex(new THREE.BufferAttribute(new Uint32Array(topo.tris.subarray(0, triEnd * 3)), 1));
+  geo.setIndex(new THREE.BufferAttribute(new Uint32Array(tris), 1));
   geo.computeVertexNormals();
   const nor0 = (geo.getAttribute('normal') as THREE.BufferAttribute).array as Float32Array;
   // ── cover
   for (let v = 0; v < nv; v++) {
     const ny = Math.max(0.05, nor0[v * 3 + 1]);
-    coverAt(model, topo.x[v], topo.z[v], h[v], ringD[v], Math.sqrt(Math.max(0, 1 - ny * ny)) / ny, cover, canopy, v);
+    coverAt(model, vx[v], vz[v], h[v], ringD[v], Math.sqrt(Math.max(0, 1 - ny * ny)) / ny, cover, canopy, v);
   }
   // ── raise the canopy, final normals; inside the hole the rings sink under the sea (a finer patch
   // draws that land; heights.h keeps the true values for the water's depth field)
   for (let v = 0; v < nv; v++) {
     let y = h[v] + canopy[v];
-    if (hole && topo.x[v] > hole.x0 && topo.x[v] < hole.x1 && topo.z[v] > hole.z0 && topo.z[v] < hole.z1) y = Math.min(y, WL - 8);
+    if (hole && vx[v] > hole.x0 && vx[v] < hole.x1 && vz[v] > hole.z0 && vz[v] < hole.z1) y = Math.min(y, WL - 8);
     pos[v * 3 + 1] = y;
   }
   geo.computeVertexNormals();
@@ -98,7 +117,7 @@ export function buildLand(
   setCoverAttributes(geo, cover, nv);
   geo.computeBoundingBox();
   geo.computeBoundingSphere();
-  return { geo, heights: { h, canopy, cover, landVerts: nv, ms: performance.now() - t0 } };
+  return { geo, heights: { h, canopy, cover, x: vx, z: vz, landVerts: nv, ms: performance.now() - t0 } };
 }
 
 const _c: Cover = { water: 0, sand: 0, rock: 0, forest: 0, field: 0, meadow: 0, wet: 0 };
@@ -151,6 +170,101 @@ function setCoverAttributes(geo: THREE.BufferGeometry, cover: Float32Array, nv: 
   geo.setAttribute('aCov', new THREE.BufferAttribute(cov, 4));
   geo.setAttribute('aCov2', new THREE.BufferAttribute(cov2, 4));
   geo.setAttribute('aCov3', new THREE.BufferAttribute(cov3, 4));
+}
+
+/** red-green refinement of the triangles that straddle the water level (see buildLand) */
+function refineWaterline(tris: number[], X: number[], Z: number[], H: number[], D: number[], model: LandscapeModel, levels: number): number[] {
+  const KEY = 4194304;
+  for (let level = 0; level < levels; level++) {
+    const nt = tris.length / 3;
+    const red = new Uint8Array(nt);
+    const marked = new Map<number, number>();
+    const ek = (a: number, b: number) => (a < b ? a * KEY + b : b * KEY + a);
+    const minLen = level === 0 ? 4 : 2.2;
+    for (let t = 0; t < nt; t++) {
+      const a = tris[t * 3],
+        b = tris[t * 3 + 1],
+        c = tris[t * 3 + 2];
+      const mn = Math.min(H[a], H[b], H[c]),
+        mx = Math.max(H[a], H[b], H[c]);
+      if (!(mn < WL + 0.6 && mx > WL - 1.5)) continue;
+      if (D[a] === 0 || D[b] === 0 || D[c] === 0) continue; // the slab seam stays as it is
+      const l = Math.max(Math.hypot(X[a] - X[b], Z[a] - Z[b]), Math.hypot(X[b] - X[c], Z[b] - Z[c]), Math.hypot(X[c] - X[a], Z[c] - Z[a]));
+      if (l < minLen) continue;
+      const cx = (X[a] + X[b] + X[c]) / 3,
+        cz = (Z[a] + Z[b] + Z[c]) / 3;
+      if (model.slabDist(cx, cz) > 1100) continue;
+      red[t] = 1;
+    }
+    const markTri = (t: number) => {
+      const a = tris[t * 3],
+        b = tris[t * 3 + 1],
+        c = tris[t * 3 + 2];
+      marked.set(ek(a, b), -1);
+      marked.set(ek(b, c), -1);
+      marked.set(ek(c, a), -1);
+    };
+    for (let t = 0; t < nt; t++) if (red[t]) markTri(t);
+    // closure: a triangle with two or three split edges becomes red too
+    for (let changed = true; changed; ) {
+      changed = false;
+      for (let t = 0; t < nt; t++) {
+        if (red[t]) continue;
+        const a = tris[t * 3],
+          b = tris[t * 3 + 1],
+          c = tris[t * 3 + 2];
+        const m = (marked.has(ek(a, b)) ? 1 : 0) + (marked.has(ek(b, c)) ? 1 : 0) + (marked.has(ek(c, a)) ? 1 : 0);
+        if (m >= 2) {
+          red[t] = 1;
+          markTri(t);
+          changed = true;
+        }
+      }
+    }
+    if (marked.size === 0) break;
+    const mid = (a: number, b: number): number => {
+      const k = ek(a, b);
+      let v = marked.get(k)!;
+      if (v >= 0) return v;
+      v = X.length;
+      const x = (X[a] + X[b]) / 2,
+        z = (Z[a] + Z[b]) / 2;
+      X.push(x);
+      Z.push(z);
+      H.push(model.height(x, z));
+      D.push((D[a] + D[b]) / 2);
+      marked.set(k, v);
+      return v;
+    };
+    const out: number[] = [];
+    for (let t = 0; t < nt; t++) {
+      const a = tris[t * 3],
+        b = tris[t * 3 + 1],
+        c = tris[t * 3 + 2];
+      if (red[t]) {
+        const ab = mid(a, b),
+          bc = mid(b, c),
+          ca = mid(c, a);
+        out.push(a, ab, ca, ab, b, bc, ca, bc, c, ab, bc, ca);
+        continue;
+      }
+      const mAB = marked.has(ek(a, b)),
+        mBC = marked.has(ek(b, c)),
+        mCA = marked.has(ek(c, a));
+      if (mAB) {
+        const ab = mid(a, b);
+        out.push(a, ab, c, ab, b, c);
+      } else if (mBC) {
+        const bc = mid(b, c);
+        out.push(a, b, bc, a, bc, c);
+      } else if (mCA) {
+        const ca = mid(c, a);
+        out.push(a, b, ca, ca, b, c);
+      } else out.push(a, b, c);
+    }
+    tris = out;
+  }
+  return tris;
 }
 
 /** a rectangle the ring mesh leaves to a finer patch (its vertices sink under the sea there) */
@@ -246,8 +360,8 @@ export function splatCover(topo: RingTopology, heights: LandHeights, channel: nu
   const sum = new Float32Array(N * N),
     cnt = new Float32Array(N * N);
   for (let v = 0; v < heights.landVerts; v++) {
-    const i = Math.floor((topo.x[v] - x0) / res),
-      j = Math.floor((topo.z[v] - z0) / res);
+    const i = Math.floor((heights.x[v] - x0) / res),
+      j = Math.floor((heights.z[v] - z0) / res);
     if (i < 0 || j < 0 || i >= N || j >= N) continue;
     sum[j * N + i] += heights.cover[v * CW + channel];
     cnt[j * N + i] += 1;

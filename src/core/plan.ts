@@ -708,6 +708,7 @@ function buildBlocks(plan: CityPlan, rng: Rng): void {
   genNorthStrip(c);
   genQuay(c);
   genRiverside(c);
+  genQuayApron(c);
 }
 
 // ── district generators ────────────────────────────────────────────────
@@ -1175,7 +1176,11 @@ function genApartments(c: Ctx, blk: Block): void {
   });
   addArea(c, blk, { kind: 'lawn', surface: 'grass', rect: r, greenery: 0.7 });
   const pk = rect(r.x0 + 4, r.z0 + 16, r.x1 - 4, r.z1 - 16);
-  addArea(c, blk, { kind: 'parking', surface: 'asphalt', rect: pk, greenery: 0, layer: 1, stalls: makeStalls(rng, pk, 'EW', 0.6) });
+  // one row of stalls along the north edge (noses south), the aisle along the south edge, and an
+  // asphalt access from the aisle across the lawn to the east street (dropped kerb: roads/streets.ts)
+  const row = rect(pk.x0, pk.z0, pk.x1, pk.z0 + 5.2);
+  addArea(c, blk, { kind: 'parking', surface: 'asphalt', rect: pk, greenery: 0, layer: 1, stalls: makeStalls(rng, row, 'EW', 0.6) });
+  addArea(c, blk, { kind: 'driveway', surface: 'asphalt', rect: rect(pk.x1 - 0.5, pk.z1 - 5, r.x1, pk.z1), greenery: 0, layer: 1 });
 }
 
 function makeStalls(rng: Rng, area: Rect, orient: 'EW' | 'NS', fill: number): Stall[] {
@@ -1541,6 +1546,15 @@ function genNorthStrip(c: Ctx): void {
   }
 }
 
+/** Concrete apron between the container yard, the quay and the harbour cliff (was left as town lawn). Generated
+ *  last so the ids of all other blocks stay as they were. */
+function genQuayApron(c: Ctx): void {
+  const yard = c.plan.areas.find((a) => a.kind === 'containeryard');
+  if (!yard) return;
+  const r = rect(yard.rect.x1, -137, QUAY_X, yard.rect.z1);
+  addBlock(c.plan, { col: -1, row: -7, rect: r, districtId: 'harbor', kind: 'harbor', surface: 'concrete' });
+}
+
 function genQuay(c: Ctx): void {
   const plan = c.plan;
   const xA = XS[NX - 1] + CORRIDOR_HALF; // 116.5
@@ -1814,17 +1828,46 @@ function buildStreetSlots(plan: CityPlan, rng: Rng): void {
       const spacing = 11;
       const n = Math.floor((end - start) / spacing) + 1;
       const offset = (end - start - (n - 1) * spacing) / 2;
+      // stretches of kerb where a driveway meets this pavement (+ a car's clearance): cars cross the furniture band there
+      const cuts: [number, number][] = [];
+      for (const d of driveways) {
+        const r = d.rect;
+        let u0 = Infinity,
+          u1 = -Infinity,
+          v0 = Infinity,
+          v1 = -Infinity;
+        for (const [px, pz] of [[r.x0, r.z0], [r.x1, r.z0], [r.x0, r.z1], [r.x1, r.z1]]) {
+          const u = (px - A.x) * tx + (pz - A.z) * tz,
+            v = (px - A.x) * rx + (pz - A.z) * rz;
+          u0 = Math.min(u0, u);
+          u1 = Math.max(u1, u);
+          v0 = Math.min(v0, v);
+          v1 = Math.max(v1, v);
+        }
+        if (v0 > CORRIDOR_HALF + 1.5 || v1 < CORRIDOR_HALF || u1 < 0 || u0 > L) continue;
+        cuts.push([u0 - 1.1, u1 + 1.1]);
+      }
+      const cutAt = (u: number) => cuts.find(([a, b]) => u > a && u < b);
       for (let k = 0; k < n; k++) {
-        const u = start + offset + k * spacing;
-        const x = A.x + tx * u + rx * FURN_OFFSET;
-        const z = A.z + tz * u + rz * FURN_OFFSET;
+        let u = start + offset + k * spacing;
+        const at = (u: number) => ({ x: A.x + tx * u + rx * FURN_OFFSET, z: A.z + tz * u + rz * FURN_OFFSET });
+        const nearStop = (p: { x: number; z: number }) => plan.busStops.some((b) => Math.hypot(b.x - p.x, b.z - p.z) < 7);
         const probe = { x: A.x + tx * u + rx * (CORRIDOR_HALF + 2), z: A.z + tz * u + rz * (CORRIDOR_HALF + 2) };
         const dk: DistrictKind = plan.districtAt(probe.x, probe.z)?.kind ?? 'riverside';
-        if (plan.busStops.some((b) => Math.hypot(b.x - x, b.z - z) < 7)) continue;
-        const dw = driveways.some((d) => rectContains(d.rect, x + rx * 3.2, z + rz * 3.2, 1.6));
+        if (nearStop(at(u))) continue;
         const lampTurn = (k + (side === 'L' ? 1 : 0)) % 2 === 0;
         let kind: SlotKind = lampTurn ? 'lamp' : pickFurniture(rng, dk);
-        if (dw && kind !== 'lamp') kind = 'empty';
+        const cut = cutAt(u);
+        if (cut) {
+          // a lamp steps aside to the nearer end of the driveway; anything else gives way
+          const alt =
+            kind === 'lamp'
+              ? [cut[0], cut[1]].sort((a, b) => Math.abs(a - u) - Math.abs(b - u)).find((c) => c >= 9 && c <= L - 9 && !cutAt(c) && !nearStop(at(c)))
+              : undefined;
+          if (alt !== undefined) u = alt;
+          else kind = 'empty';
+        }
+        const { x, z } = at(u);
         plan.slots.push({ x, z, yaw: Math.atan2(rx, rz), kind, segment: seg.id, side, district: dk });
       }
     }

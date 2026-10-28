@@ -80,6 +80,8 @@ function coverForArea(a: Area, plan: CityPlan): Cover | null {
     case 'schoolyard':
       return { key: 'school', mesh: 'A', mat: 0, variant: 2 };
     case 'driveway':
+      // house driveways are pavers; a car park access (surface asphalt) continues the car park's asphalt
+      if (a.surface === 'asphalt') return { key: 'parking', mesh: 'A', mat: 0, variant: 1 };
       return { key: 'drive', mesh: 'H', mat: HM.pavers, variant: 0 };
     case 'playground':
       return { key: 'sand', mesh: 'H', mat: HM.sand, variant: 0 };

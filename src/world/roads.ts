@@ -66,6 +66,7 @@ export default function create(ctx: CityContext): CityModule {
         junctions: streets.junctions,
         segments: streets.segments,
         dropKerbs: streets.rampEnds,
+        driveKerbs: streets.driveKerbs,
         covers: covers.stats.coverRects,
         paths: covers.stats.pathRibbons,
         zebras: marks.stats.zebras,

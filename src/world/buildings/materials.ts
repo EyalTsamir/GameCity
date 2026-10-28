@@ -70,6 +70,20 @@ export const WALLPAT = {
   SMOOTH: 6,
 } as const;
 
+/** Shop interior type for the facade shader (bhShop), from the name on the sign; wall pattern + 16 × type
+ *  on WIN.SHOP windows. 1 café/bar, 2 bakery/deli, 3 books, 4 florist/grocer, 5 fashion, 6 pharmacy/
+ *  hardware/optician, 7 gallery/antiques/toys, 8 office lobby (banks). Type 0 = a random one. */
+export function shopType(name: string): number {
+  if (/Bank/.test(name)) return 8;
+  if (/Café|Bistro|Wine|Tea|Pizzeria|Fish|Anchor|Pub|Gelato|Ice|Espresso|Coffee/.test(name)) return 1;
+  if (/Bakery|Pâtisserie|Chocolates|Cheese|Deli|Butcher/.test(name)) return 2;
+  if (/Books|Records|Stationery|Bookbinder/.test(name)) return 3;
+  if (/Florist|Greengrocer/.test(name)) return 4;
+  if (/Shoes|Hat|Tailor|Barber|Boutique/.test(name)) return 5;
+  if (/Pharmacy|Hardware|Post|Bike|Optic/.test(name)) return 6;
+  return 7;
+}
+
 export const ROOFPAT = {
   FLAT: 0,
   TILES: 1,

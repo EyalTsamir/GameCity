@@ -12,7 +12,7 @@ import {
   flatRoof, roofLook, roofPoly, doorNiche, bandWithOpenings, railing, signOnSide,
   col, shade, setCol, lightBox, aviationLight,
 } from './gen';
-import { WIN, PROF, WALLPAT, ROOFPAT, FRAME, GLASS, LIGHT_MODE } from './materials';
+import { WIN, PROF, WALLPAT, ROOFPAT, FRAME, GLASS, LIGHT_MODE, shopType } from './materials';
 import { letterSign, helipadMark, boardSign } from './signs';
 import { GREEN } from './green';
 
@@ -248,7 +248,10 @@ export function genTower(g: Gen): void {
 
   function buildLobby(r: LRect, arcade: boolean): void {
     const ar = arcade ? insetRect(r, 1.6) : r;
-    const lookL: WallLook = { color: shade(wallC, 0.75), pattern: WALLPAT.SMOOTH, frame: FRAME.DARK, glass: sc.glass, style: lot.shopfront ? WIN.SHOP : WIN.DOOR, profile: lot.shopfront ? PROF.SHOP : PROF.ALWAYS, seed: g.seed + 11 };
+    // the shop named on the front board fills the whole ground floor: its windows show that interior
+    const shopName = lot.shopfront && !haven ? SHOP_NAMES[shopIdx++ % SHOP_NAMES.length] : '';
+    const shopT = shopName ? shopType(shopName) : 0;
+    const lookL: WallLook = { color: shade(wallC, 0.75), pattern: WALLPAT.SMOOTH + 16 * shopT, frame: FRAME.DARK, glass: sc.glass, style: lot.shopfront ? WIN.SHOP : WIN.DOOR, profile: lot.shopfront ? PROF.SHOP : PROF.ALWAYS, seed: g.seed + 11 };
     for (const s of [FRONT, RIGHT, BACK, LEFT] as Side[]) {
       const sg = sideGeom(ar, s);
       // doors: plan door u is along the footprint side; map to this rect
@@ -280,8 +283,8 @@ export function genTower(g: Gen): void {
       // signage band above the lobby
       setCol(g.trim, shade(wallC, 0.55));
       sideBox(g.trim, sg, 0, sg.L, 0, arcade ? 0.05 : 0.1, gH - 0.55, gH, true);
-      if (s === FRONT && lot.shopfront && !haven) {
-        const nm = SHOP_NAMES[shopIdx++ % SHOP_NAMES.length];
+      if (s === FRONT && shopName) {
+        const nm = shopName;
         const rr = g.atlas.add(`dshop:${nm}`, 256, 40, boardSign(nm.toUpperCase(), { bg: '#20262c', fg: '#f4f1ea', font: '"Segoe UI", Arial, sans-serif', weight: '600', glow: 0.9, glowColor: '#ffffff' }));
         const w = Math.min(6, sg.L * 0.4);
         signOnSide(g, sg, sg.L * 0.25 - w / 2, sg.L * 0.25 + w / 2, arcade ? 0.085 : 0.135, gH - 0.5, gH - 0.05, rr);

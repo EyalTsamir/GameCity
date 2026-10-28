@@ -181,8 +181,23 @@
   the water at z = 150; the land shader now uses the slab bed colours + caustics; the landscape beach
   takes the town beach's sand colours within ~80 m of the slab; the coast starts to curve right after
   the slab corner (COAST_CTRL) instead of running ruler-straight for another 100 m.
-* Running: sweepA / sweepB (22 low free-camera views × 11 / 18.5: N forest + hills, W river + fields,
-  S fields + villages, E dunes / coast / cliffs, island, villages, hamlet).
+* Sweep A–D (shots/world/world/sweep{A,B,C,D}: 37 low views × 11 / 18.5 round all sides, 0.1–2 km
+  out, forest, hills, river W, fields, villages, hamlet, coast looking landward). Found + fixed:
+  - polytunnels read as white terrace stripes from above (painted, no volume) → off (fTun/tunnelsOK
+    false; their share → hay); market gardens fewer and calmer (red beds out).
+  - river bed seen through the water was pale sea sand → silty dark river bed (aCov3.x river coord).
+  - free camera (pivot roams 320 m) over woods 470–800 m out saw the raised canopy dome texture again
+    → instanced forest band 800 m (31.4k trees; cheap pre-test from a 12 m forest-cover splat), tree band
+    = forest floor to 800 m, canopy raise from 840 m.
+  - settlements: a field ran straight through a farmstead's round yard → site SDF in the field mask (G):
+    fields cut along the settlement's round edge (per pixel).
+  - pasture worm pattern (path noise contours over the whole pasture) → a few worn paths only.
+  - fields next to dunes faded under a pale sand haze → a field plot runs to its border over the dune
+    fringe (open beach keeps sand).
+  - cliffs / steep coast: saw-tooth waterline (coarse rings 6–15 m beyond 150 m) → red-green refinement of
+    the land triangles straddling the water level within 1.1 km (2 levels, conforming, verified 0 extra
+    boundary edges): +9.5k verts / +19k tris; rock on steep faces sampled on a vertical plane (strata,
+    joints, water streaks) instead of the smeared ground-plane noise.
 
 ## Brief (from WORLD-PLAN.md scope 1 + briefs "### world")
 Remove the frame in world mode (soil faces, plinth, nameplate, table, cyclorama, sea cut-away, slab shadow) and

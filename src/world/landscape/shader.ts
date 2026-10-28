@@ -568,9 +568,28 @@ vec3 landAlbedo() {
   sand = max(sand, smoothstep(0.04, 0.3, vCov.z + sN * 0.12));
   sc *= 0.94 + 0.08 * nB.g * midF;
   if (fp < 0.4) sc *= 1.0 - 0.05 * lStripe(p.x * 0.8 + p.z * 0.6 + nB.r * 3.0, 0.7, 0.4, fp);
+  // a field (decided per plot) runs to its own border over the dune fringe: the back-dune ends at the
+  // field's hedge / margin, not in a pale haze over the crop (the open beach stays sand)
+  sand *= 1.0 - fieldW * (1.0 - smoothstep(0.55, 0.85, vCov.z));
   col = mix(col, sc, sand);
   // ── rock (steep slopes, cliffs)
-  vec3 rc = mix(cRock, cRock2, smoothstep(0.3, 0.7, nB.r + 0.3 * sin(p.y * 0.9 + nA.g * 6.0)));
+  // (steep faces sample the noise on a vertical plane — the ground plane's noise smears down a cliff —
+  // with strata, joints and dark water streaks; ledges and gentle parts keep a grassy / scree tone)
+  vec3 rc;
+  {
+    float steepR = smoothstep(0.45, 0.8, 1.0 - Ng.y);
+    vec2 hz = normalize(Ng.xz + vec2(1e-4));
+    vec2 vp = vec2(dot(p.xz, vec2(-hz.y, hz.x)), p.y);
+    vec4 nv1 = texture2D(tLN, vp * vec2(1.0 / 23.0, 1.0 / 9.0));
+    vec4 nv2 = texture2D(tLN, vp * vec2(1.0 / 6.0, 1.0 / 2.5));
+    float rn = mix(nB.r, nv1.r * 0.6 + nv2.g * 0.4, steepR);
+    rc = mix(cRock, cRock2, smoothstep(0.3, 0.7, rn + 0.3 * sin(p.y * 0.9 + nA.g * 6.0)));
+    float strata = 1.0 - smoothstep(0.0, 0.08 + fp * 0.1, abs(fract(p.y / 1.7 + nv1.b * 0.6) - 0.5) - 0.38);
+    rc *= 1.0 - 0.18 * strata * steepR * (1.0 - smoothstep(0.5, 2.0, fp));
+    float streak = smoothstep(0.55, 0.8, texture2D(tLN, vp * vec2(1.0 / 4.0, 1.0 / 40.0)).a);
+    rc *= 1.0 - 0.3 * streak * steepR;
+    rc = mix(rc, meadow * 0.7, (1.0 - steepR) * smoothstep(0.45, 0.7, nB.g) * 0.6);   // grass on ledges
+  }
   col = mix(col, rc, rock);
   // ── surf on the open coasts (island, far shores): broken white water at the waterline, kept
   // ≥ ~1 px far away; the town's shores have the water shader's own foam

@@ -15,7 +15,7 @@ import {
 import { anchors } from './anchors';
 import { balconyLife, potPlant, roofClutter } from './clutter';
 import { GREEN } from './green';
-import { WIN, PROF, WALLPAT, ROOFPAT, FRAME, GLASS, LIGHT_MODE } from './materials';
+import { WIN, PROF, WALLPAT, ROOFPAT, FRAME, GLASS, LIGHT_MODE, shopType } from './materials';
 import { letterSign, boardSign, clockFace } from './signs';
 import { partitionSide } from './oldtown';
 
@@ -531,7 +531,7 @@ export function genKiosk(g: Gen): void {
   const trimC = ice ? col('#a8e6cf') : col('#e6dbc2');
   const s = g.shell,
     t = g.trim;
-  const look: WallLook = { color: wallC, pattern: ice ? WALLPAT.SIDING : WALLPAT.PLASTER, frame: FRAME.WHITE, glass: GLASS.NEUTRAL, style: WIN.SHOP, profile: PROF.SHOP, seed: g.seed };
+  const look: WallLook = { color: wallC, pattern: (ice ? WALLPAT.SIDING : WALLPAT.PLASTER) + 16 * shopType(ice ? 'Ice Cream' : 'Coffee'), frame: FRAME.WHITE, glass: GLASS.NEUTRAL, style: WIN.SHOP, profile: PROF.SHOP, seed: g.seed };
   const wallTop = H - 0.5;
   for (const sd of [FRONT, RIGHT, BACK, LEFT] as Side[]) {
     const sg = sideGeom(body, sd);

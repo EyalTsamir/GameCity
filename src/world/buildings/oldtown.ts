@@ -10,7 +10,7 @@ import {
   gableRoof, roofLook, roofPoly, flatRoof, chimney, doorNiche, bandWithOpenings, railing,
   signOnSide, col, shade, setCol, mixCol, lightBox,
 } from './gen';
-import { WIN, PROF, WALLPAT, ROOFPAT, FRAME, GLASS, LIGHT_MODE } from './materials';
+import { WIN, PROF, WALLPAT, ROOFPAT, FRAME, GLASS, LIGHT_MODE, shopType } from './materials';
 import { boardSign, bladeSign } from './signs';
 import { PALETTE } from '../../core/gfx';
 import { anchors } from './anchors';
@@ -112,17 +112,6 @@ function ghostPainter(ad: GhostAd) {
 
 let shopCounter = 0;
 
-/** shop interior type for the facade shader (materials.ts bhShop): 1 café/bar, 2 bakery/deli, 3 books,
- *  4 florist/grocer, 5 fashion, 6 pharmacy/hardware, 7 gallery/antiques/toys */
-function shopType(name: string): number {
-  if (/Café|Bistro|Wine|Tea|Pizzeria|Fish|Anchor|Pub|Gelato|Ice/.test(name)) return 1;
-  if (/Bakery|Pâtisserie|Chocolates|Cheese|Delicatessen|Butcher/.test(name)) return 2;
-  if (/Books|Records|Stationery|Bookbinder/.test(name)) return 3;
-  if (/Florist|Greengrocer/.test(name)) return 4;
-  if (/Shoes|Hat|Tailor|Optician|Barber/.test(name)) return 5;
-  if (/Pharmacy|Hardware|Post|Bike/.test(name)) return 6;
-  return 7;
-}
 export function resetOldtown(): void {
   shopCounter = 0;
 }
