@@ -10,6 +10,27 @@ Branch `claude/real-w1-facades` (from `claude/pensive-gates-bim12i`). Brief: doc
     small window on the drive side. Driveway still runs beside the wing (plan.ts placeHouse, not ours) → request.
   - bug 9 (hotel flag boards): special.ts `hotelFlag` — wall bracket, raked pole ≤ 1.16 m out, finial, banded
     double-sided cloth hanging from the pole with ripples (3 designs).
+  - bug 4 (tower crown noise): NOT shadows (castShadow off: same), NOT the wall relief / reveal / plinth / refl /
+    trim / other modules; it is in bhWall after the `?bdbg=wallinfo` return (l.~1117) → suspect the early
+    returns at `cell.y >= vB.y` (rows above the grid on crown walls). Debug `?bdbg=ret` (uBhDebug 7: red = no grid,
+    green = outside the grid) added for that. towers.ts: `slantTop` walls use edgeGrid (m = floors−1) up to
+    yTop+7.5; stepped tiers also reuse edgeGrid.
+  - lawn rim: groundcover/mask.ts §2 "unmown edge tufts" stroke the lot footprints (0.9 m, length 120) and the
+    tip colour (palette.ts gcTipColor ×1.16–1.3) lights them — suspected source (not ours); bench `?nograss` to confirm.
+  - reveal: materials.ts frame AO (`aoF`, after the recess block): frame darker under the head / beside the
+    jambs, scaled by revD; reveal sun shadow 0.55 → 0.62.
+  - glass variety: far path (`detail < 1`) per pane / per block `pv`: dark room / pale blinds / tinted curtains /
+    plain → avgAlb × factor, `paneRefl` on the far reflection; curtain/ribbon reflK per pane 0.82–1.18.
+  - render relief (PLASTER) in bhWallSlope: 5 cm term 0.009 → 0.0035, grit 0.5 → 0.22, trowel 0.06 → 0.075; speckle 0.2 → 0.12.
+  - clutter.ts `louvredLeaf` (stiles, rails, raked louvres over a dark back) for open + closed shutters.
+  - oldtown.ts `awning`: 4 slope segments with sag between the arms, scalloped valance (4 quads per stripe, both
+    faces), front roller bar.
+  - industry.ts roller shutter variant (50 %): 77 mm slats (lit roll + shaded underside), dents, bottom bar +
+    rubber + lock, U guide channels, coil hood.
+  - special.ts school: `dressings` (stone lintels with a joint line), carved name tablet (letterSign on a moulded
+    stone panel). landmarks/church.ts (not in the brief's files; the lead assigned church): portal door strap
+    hinges + nails, meeting stile, ring pulls, threshold; plinth course (`plinthRun`) on tower + nave.
+  - towers.ts lobby doors: canopy fascia lip, hanger rods, lit number, intercom, tenant board, letter plate.
 * **Milestone 3 (session 3) done** — sheet docs/progress/real/w1_m3.jpg (shots/w1/m3). golden m3 vs ref:
   downtown 1.2 / harbor 0.4 / oldtown 0.7 / overview 0.1 / westbrook 0.6; downtown console clean; invariants:
   only the W3 statue (landmarks). Next (open): apartment punched glass still reads light where nets/blinds
