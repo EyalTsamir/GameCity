@@ -4,10 +4,14 @@ Branch `claude/real-w2-vehicles` (from `claude/pensive-gates-bim12i`). Brief: `d
 Owned: `src/sim/traffic/{models,vehicleMaterial,render}.ts` (+ trains later). Sim untouched.
 
 ## Resume here
-* 2026-10-28 — Milestone 1 done (cars, vans, lorry, bus, ice-cream van: priorities 1–5 + wear/variation).
-  Next: (a) ice-cream van close look (body now extruded with arches + framed cab glass, unchecked at 3 m);
-  (b) SUV: cladding/arch flares, roof rails detail; (c) taxi/police roof parts check; (d) night regression check
-  (21.5 h: cabin emission, bus cabin glow, lamp lenses); (e) perf numbers below; (f) then trains (audit #7).
+* 2026-10-28 — Milestone 1 done and pushed (cars, vans, lorry, bus, ice-cream van: brief priorities 1–6;
+  7 "mechanics" (pitch/roll) already existed in render.ts). Session stopped at ~310k context.
+  Next session, in order: (a) verify the roof box (part 90, ~1 vehicle in 5 by phase) on parked cars
+  (`bench.mjs --classes car --pick 1..4`) — not yet seen in a capture; (b) remaining car items: bonnet front
+  shut line, exhaust tip, third brake light, SUV arch flares; bus: rear dirt spray, roof gutter ridge;
+  (c) a fresh-eyes review of the sheets below against the photo tests; (d) Adreno cost of the cabin ray-trace
+  (only measurable on the user's machine; tier off on low already); (e) trains (audit #7: trainModels.ts
+  already has bogies/pantograph/gangway — start with a bench `--classes train --dists 3,10` and judge).
 * Judge with the showroom: `node scripts/capture-set.mjs --q "tlineup&nointro&noidle" --hideui 1 --views
   "-10,0.9,22,4,30,6;-8,1.4,35,9,25,8" --hours 11 --out shots/w2/x` (row 1 cars at z 22 from x −17, row 2
   vans/lorries/buses at z 35; yaw 0 ≈ front, 180 ≈ rear). Bench: `--classes car,bus --yaws 0,140` (new option).
@@ -45,7 +49,12 @@ Owned: `src/sim/traffic/{models,vehicleMaterial,render}.ts` (+ trains later). Si
   guard, mirrors on arms, lamp lenses, plates.
 * **Lorry**: cab with arch, windscreen/side windows in seals + interior, wipers, slatted grille + badge,
   steps, mirrors on arms, fuel tank / battery box, side guards, mud flaps, tarp straps.
-* **Ice-cream van**: extruded body with arches, framed cab glass + interior, wipers, round lamp lenses, plates.
+* **Ice-cream van**: extruded body with arches, framed cab glass + interior, wipers, round lamp lenses, grille,
+  plates.
+* **Night**: lit bus cabins now show seats/poles/passengers lit by the cabin lamps (the flat LIGHT_CABIN glow
+  on the glass is cut to 18 %); car lamp lenses glow with their reflector pattern. Checked at 21.5 h.
+* **Variation**: roof box on two cross bars (hatch, SUV), shown for ~1 vehicle in 5 (part 90, by phase;
+  depth material too). Bus passengers are ellipsoids now.
 * Tools: `bench.mjs --yaws 0,140` (extra yaw offsets per capture); `capture-set.mjs` views split on `;` so
   coordinate views work; `?tlineup` items get different phases (plates/wear vary).
 
@@ -53,7 +62,9 @@ Owned: `src/sim/traffic/{models,vehicleMaterial,render}.ts` (+ trains later). Si
 * `?nocarinterior` (cabin ray-trace; also off on quality **low**), `?nopanelgaps`, `?novehiclewear`.
   Geometry detail (wheels, wipers, seals, handles) lives in LOD 0 (< 62 m scaled), LOD 1 keeps textured
   wheel faces, LOD 2 unchanged.
-* Cost: see "Perf" (software GL, compare within one run only).
+* Perf (software GL, downtown 12 h, one run): baseline 766 ms/frame vs all three toggles off 753 ms (≈ +1.7 %,
+  within noise), 167 draw calls both, triangles +0.04 % in that view (LOD 0 geometry is near-only).
+  Not measured on the Adreno.
 
 ## Tried and rejected
 * Interior as diffuse colour lit by the pane normal: side windows in shade went black and sunny ones glowed
@@ -66,4 +77,11 @@ Owned: `src/sim/traffic/{models,vehicleMaterial,render}.ts` (+ trains later). Si
   `?novehiclewear` — not the wear shader (close-range DOF / shadow?).
 
 ## Sheets
-* before: `shots/w2/before/` (bench car/bus 3/8/25 m); after: `shots/w2/l2`, `l4` (showroom), `b1` (bus).
+* `docs/progress/real/w2_car_before.jpg`, `w2_bus_before.jpg` (bench 3 m, base commit) →
+  `w2_car_front_after.jpg`, `w2_car_side_after.jpg`, `w2_bus_after.jpg`, `w2_vans_after.jpg`,
+  `w2_lineup_14m.jpg`, `w2_night_after.jpg`. Raw: `shots/w2/` (not committed).
+
+## Tokens (this session, tokens.py)
+* 101 calls, 3.2M weighted; median context 229k, max 313k (over the 150k target: the first milestone was
+  too big for one session — split the next into cars-polish / trains); cache reads 71 %, no cold rewrites
+  (idle>5 min: 1 warm / 0 cold).

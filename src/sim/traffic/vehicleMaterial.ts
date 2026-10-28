@@ -50,9 +50,11 @@ varying float vCoat;
 varying float vMetal;
 varying float vGain;
 // variant parts: n = only for variant n - 1; 16 + bits = for the variants whose bit is set
-bool thHidden(float part, float variant) {
+bool thHidden(float part, float variant, float phase) {
   part -= 100.0 * floor( part * 0.01 + 0.001 );
   if (part < 0.5) return false;
+  // 90: an accessory a few vehicles carry (roof box), picked by the phase
+  if (part > 89.5) return fract( phase * 7.31 ) < 0.8;
   if (part > 15.5) return mod(floor((part - 16.0) / exp2(floor(variant + 0.5))), 2.0) < 0.5;
   return abs(part - variant - 1.0) > 0.25;
 }
@@ -88,7 +90,7 @@ float aDetC = floor( aPart * 0.01 + 0.001 );
 if ( aWheel.w > 0.5 ) transformed = aWheel.xyz + thWheel( transformed - aWheel.xyz );
 // tyre contact patch: the rubber flattens where it meets the road (after the spin, so it stays at the bottom)
 if ( aDetC > 2.5 && aDetC < 3.5 ) transformed.y = max( transformed.y, aWheel.y - aDetA.x );
-if ( thHidden( aPart, aInst2.x ) ) transformed = vec3( 0.0 );
+if ( thHidden( aPart, aInst2.x, aInst2.z ) ) transformed = vec3( 0.0 );
 vObj = vec4( transformed, aDetC );
 vObjN = vec4( objectNormal, aInst2.z );
 vDetA = aDetA;
@@ -135,6 +137,7 @@ const FRAG_DETAIL = /* glsl */ `
 float thCoatK = 1.0;
 float thRoughAdd = 0.0;
 vec3 thGlassEmit = vec3( 0.0 );
+float thCabinK = 1.0;
 vec3 thTiltN = vec3( 0.0 );
 {
   float cls = floor( vObj.w + 0.5 );
@@ -151,6 +154,11 @@ vec3 thTiltN = vec3( 0.0 );
     // glass reflection (the diffuse base goes almost black)
     vec3 inside = thInterior( p, rd, cls, vCamObj.w, ph );
     thGlassEmit = inside * vec3( 0.8, 0.88, 0.9 ) * ( 1.0 - 0.92 * uLights ) * 0.32;
+    // lit cabins at night (bus, LIGHT_CABIN): the lamps light the seats and passengers, not a flat panel
+    if ( vEmit.a < 0.5 ) {
+      thGlassEmit += inside * vec3( 1.0, 0.82, 0.6 ) * ( 3.6 * uLights * vCamObj.w );
+      thCabinK = 0.18;
+    }
     diffuseColor.rgb *= 0.25;
   }
   if ( abs( cls - 1.0 ) < 0.5 ) {
@@ -315,8 +323,8 @@ vec3 thInterior( vec3 ro, vec3 rd, float style, float occupied, float ph ) {
       if ( hp > 0.55 ) {
         float px = hp > 0.78 ? hw * 0.62 : -hw * 0.62;
         vec3 cl = vec3( thH1( hp * 9.1 ), thH1( hp * 5.3 ), thH1( hp * 3.7 ) ) * 0.35 + 0.05;
-        thBox( ro, rd, ird, vec3( px - 0.2, cy, z + 0.02 ), vec3( px + 0.2, ty - 0.04, z + 0.28 ), cl, tb, nb, cb );
-        thBox( ro, rd, ird, vec3( px - 0.09, ty, z + 0.08 ), vec3( px + 0.09, ty + 0.22, z + 0.26 ), vec3( 0.55, 0.4, 0.3 ) * ( 0.5 + 0.6 * thH1( hp * 2.3 ) ), tb, nb, cb );
+        thEll( ro, rd, vec3( px, cy + 0.28, z + 0.15 ), vec3( 0.19, 0.27, 0.12 ), cl, tb, nb, cb );
+        thEll( ro, rd, vec3( px, cy + 0.69, z + 0.16 ), vec3( 0.08, 0.1, 0.09 ), vec3( 0.55, 0.4, 0.3 ) * ( 0.5 + 0.6 * thH1( hp * 2.3 ) ), tb, nb, cb );
       }
     }
     if ( occupied > 0.5 ) {
@@ -437,7 +445,7 @@ export function createVehicleMaterial(
   if ( vMetal > 0.5 ) radiance *= vGain * thStreetRefl( geometryViewDir, geometryNormal, material.roughness * 0.3 );
 #endif`,
       )
-      .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += vEmit.rgb * mix( vec3( 1.0 ), diffuseColor.rgb, vEmit.a ) + thGlassEmit;');
+      .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += vEmit.rgb * mix( vec3( 1.0 ), diffuseColor.rgb, vEmit.a ) * thCabinK + thGlassEmit;');
   };
   material.customProgramCacheKey = () => 'traffic-vehicle-v8';
   patchLampMaterial(material); // night street-light map (night agent)
@@ -448,10 +456,10 @@ export function createVehicleMaterial(
     shader.vertexShader = shader.vertexShader
       .replace(
         '#include <common>',
-        '#include <common>\nattribute float aPart;\nattribute vec4 aInst2;\nbool thHidden(float part, float variant) {\n  part -= 100.0 * floor( part * 0.01 + 0.001 );\n  if (part < 0.5) return false;\n  if (part > 15.5) return mod(floor((part - 16.0) / exp2(floor(variant + 0.5))), 2.0) < 0.5;\n  return abs(part - variant - 1.0) > 0.25;\n}',
+        '#include <common>\nattribute float aPart;\nattribute vec4 aInst2;\nbool thHidden(float part, float variant, float phase) {\n  part -= 100.0 * floor( part * 0.01 + 0.001 );\n  if (part < 0.5) return false;\n  if (part > 89.5) return fract( phase * 7.31 ) < 0.8;\n  if (part > 15.5) return mod(floor((part - 16.0) / exp2(floor(variant + 0.5))), 2.0) < 0.5;\n  return abs(part - variant - 1.0) > 0.25;\n}',
       )
-      .replace('#include <begin_vertex>', '#include <begin_vertex>\nif ( thHidden( aPart, aInst2.x ) ) transformed = vec3( 0.0 );');
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nif ( thHidden( aPart, aInst2.x, aInst2.z ) ) transformed = vec3( 0.0 );');
   };
-  depth.customProgramCacheKey = () => 'traffic-vehicle-depth-v3';
+  depth.customProgramCacheKey = () => 'traffic-vehicle-depth-v4';
   return { material, depth, detail };
 }

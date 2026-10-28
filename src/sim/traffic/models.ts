@@ -1128,6 +1128,14 @@ function loftBody(b: Builder, s: CarShape, doors4: boolean, chrome = false): { t
   return { topY: topAt(s, topZ) + 0.012, topZ, topW: 2 * (s.W / 2 - s.tumble - 0.07), topD: s.wsTop - s.rwTop };
 }
 
+/** a roof box on two cross bars, carried by one vehicle in five (part 90, picked by the phase in the shader) */
+function roofBox(b: Builder, y: number, z: number, w: number): void {
+  for (const dz of [0.45, -0.45]) b.add(bx(w - 0.1, 0.04, 0.05, 0, y - 0.005, z + dz), { color: '#1d1f22', part: 90, rough: 1 });
+  const g = rbox(0.82, 0.36, 1.75, 0.16, 0, y + 0.03, z - 0.1, 2);
+  taper(g, y + 0.03, y + 0.39, z - 0.1, 0.12, 0.18, 0.08);
+  b.add(g, { color: '#26292d', part: 90, rough: 0.5, finish: 'coat' });
+}
+
 function compact(): THREE.BufferGeometry {
   const b = new Builder();
   const L = 3.55,
@@ -1149,6 +1157,7 @@ function hatch(): THREE.BufferGeometry {
   const c = loftBody(b, shape, true);
   // small roof spoiler over the rear window
   b.add(rbox(c.topW - 0.12, 0.045, 0.2, 0.02, 0, topAt(shape, shape.rwTop + 0.06) - 0.025, shape.rwTop - 0.02), { color: '#ffffff', paint: true });
+  roofBox(b, c.topY, c.topZ, c.topW);
   carDetails(b, { L, W, wheelR: 0.31, wheelW: 0.23, axF: 1.22, axR: -1.33, wheelX: W / 2 - 0.09, bodyY: 0.31, bodyH: 0.6, bodyR: 0.2, lightY: 0.68, bumper: 'paint', rim: '#6d737a' });
   return b.build();
 }
@@ -1195,6 +1204,7 @@ function suv(): THREE.BufferGeometry {
   );
   // roof rails
   for (const s of [1, -1]) b.add(bx(0.05, 0.06, c.topD - 0.3, s * (c.topW / 2 - 0.08), c.topY - 0.01, c.topZ), { color: '#2e3136' });
+  roofBox(b, c.topY + 0.05, c.topZ, c.topW);
   // spare wheel on the tailgate
   const sp = new THREE.CylinderGeometry(0.31, 0.31, 0.2, sg(14));
   sp.rotateX(Math.PI / 2);
@@ -1604,6 +1614,8 @@ function icecream(): THREE.BufferGeometry {
     b.add(bx(0.49, 0.12, 0.012, 0, 0.44, e * (L / 2 + 0.05)), { color: '#16171a', rough: 1.2 });
     b.add(decalPlane(0.46, 0.1, 0, 0.5, e * (L / 2 + 0.0565), e > 0 ? 'pz' : 'nz'), { color: '#ffffff', rough: 0.6, decal: R_PLATE, plate: true });
   }
+  b.add(rbox(0.9, 0.3, 0.04, 0.03, 0, 0.74, L / 2 - 0.0), { color: '#25282c', rough: 1.2 });
+  b.add(decalPlane(0.86, 0.26, 0, 0.89, L / 2 + 0.022, 'pz'), { color: '#ffffff', rough: 0.8, decal: R_GRILLE });
   // the giant cone on the roof
   const cone = new THREE.ConeGeometry(0.42, 0.95, sg(14), 1);
   cone.rotateX(Math.PI);
