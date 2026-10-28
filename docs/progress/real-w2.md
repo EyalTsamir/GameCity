@@ -46,6 +46,28 @@ Owned: `src/sim/traffic/{models,vehicleMaterial,render}.ts` (+ trains later). Si
   "-10,0.9,22,4,30,6;-8,1.4,35,9,25,8" --hours 11 --out shots/w2/x` (row 1 cars at z 22 from x −17, row 2
   vans/lorries/buses at z 35; yaw 0 ≈ front, 180 ≈ rear). Bench: `--classes car,bus --yaws 0,140` (new option).
 
+## Session 4 (fix round) — done
+* Judged on the showroom (`shots/w2/s4b/*`): SUV rails on 3 feet with daylight under the bar (real); estate (long
+  roof) and MPV (one-box, tall) break the parked-row silhouette; bus roof AC reads as a GRP pack with fan grilles and
+  louvres, hatches framed with domes; lorry load = pallets + slatted crates + taped cartons + orange ratchet straps;
+  bus front = route band, dark bumper, grille, twin lamps, wipers, destination display (bench framing fixed).
+* Mirror: the first ellipsoid read as a ball at 1.6 m → squircle (|x|^0.55, |y|^0.6), wider and flatter.
+* Toggles: `?nocarpaint` (paint layers + metallic), `?notraingrime`; existing `?nocarinterior`, `?nopanelgaps`,
+  `?novehiclewear`. New geometry is LOD 0 only (crate slats, carton tape, AC fans, rails' feet, mirror shell 14×8)
+  except the estate/MPV bodies (all LODs, parked only → +2 InstancedMesh kinds × 3 LODs, drawn only when present).
+
+## Trains (session 4) — done in code
+* `bogie(g, z, r, wb, heavy, bodyY, coil)`: side frames as 5 beams (high over axle boxes, dropped centre), round axle
+  boxes + covers, twin primary coils (3 coil rings each), brake units, sand pipes, air springs (EMU) or coil nests
+  (loco, wagon), vertical + yaw dampers, transom + bolster. `doors`: leaf gaskets, nosing + edge seals, sill seal,
+  grab recess (all move with the leaf), static portal surround + green door button (`sideQuad` helper).
+  `gangway`: frame plate, 7 alternating folds, face plate + rubber, drawbar + head + air hoses. `emuUnderframe`:
+  case shut lines, ribs, converter louvres, air reservoirs, cable trunking. Cab: Scharfenberg-type coupler
+  (housing, shank, head, contact box, cover, hoses). `pantograph`: insulator sheds, raising cylinder, shunts.
+  `boxRoofUnit`: chamfered prism shroud, 2 fan guards, side louvres. Material: grime (`uGrime`, `?notraingrime`):
+  running gear brake-dust brown, lower-body film with noisy edge, roof dust.
+* Bench framing for trains: target the leading bogie (5.2 m ahead along the heading), h 1.6, yaw +60, pitch 4.
+
 ## Code map, trains (session 4 reading)
 * `src/sim/rail/trainModels.ts` uses `Geo` (`src/sim/rail/geo.ts`: `color/kind/variant/extra/box(cx,cy,cz,sx,sy,sz,skip)/
   block/beam/cyl(cx,y0,cz,r0,r1,h,seg,caps)/rod(a,b,r,seg)/sphere/prism/quad/tri/vert`). Tags `T.*` from trainMaterial.ts

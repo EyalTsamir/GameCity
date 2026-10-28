@@ -263,11 +263,41 @@ function bogie(g: Geo, z: number, r: number, wheelbase: number, heavy = false, b
   }
 }
 
+/** roof air-conditioning pack: chamfered shroud, two condenser fans under round guards, louvred side intakes */
 function boxRoofUnit(g: Geo, z: number, y: number, len: number, w = 1.5): void {
-  g.kind(T.PLAIN).color(C.roofDark);
-  g.box(0, y + 0.13, z, w, 0.26, len, 8);
-  g.color('#6c7174');
-  for (let k = -1; k <= 1; k++) g.box(0, y + 0.265, z + (k * len) / 3, w * 0.7, 0.01, 0.12, 8);
+  const h = 0.28,
+    c = 0.09;
+  g.kind(T.PLAIN).color('#2b2e31');
+  g.box(0, y + 0.02, z, w - 0.06, 0.04, len - 0.06, 0);
+  g.color(C.roofDark);
+  g.prism(
+    [
+      [-w / 2, y + 0.03],
+      [w / 2, y + 0.03],
+      [w / 2, y + h - c],
+      [w / 2 - c, y + h],
+      [-w / 2 + c, y + h],
+      [-w / 2, y + h - c],
+    ],
+    z - len / 2,
+    z + len / 2,
+  );
+  for (const dz of [-len / 4, len / 4]) {
+    g.color('#16181a');
+    g.cyl(0, y + h - 0.005, z + dz, 0.3, 0.3, 0.012, 16, 1);
+    g.color('#8a8f93');
+    g.cyl(0, y + h, z + dz, 0.33, 0.33, 0.03, 16, 0);
+    g.color('#5c6164');
+    for (const r of [0.1, 0.18, 0.26]) for (let k = 0; k < 8; k++) {
+      const a0 = (k / 8) * Math.PI * 2,
+        a1 = ((k + 1) / 8) * Math.PI * 2;
+      g.rod([Math.cos(a0) * r, y + h + 0.02, z + dz + Math.sin(a0) * r], [Math.cos(a1) * r, y + h + 0.02, z + dz + Math.sin(a1) * r], 0.006, 3);
+    }
+    g.rod([-0.3, y + h + 0.02, z + dz], [0.3, y + h + 0.02, z + dz], 0.008, 3);
+    g.rod([0, y + h + 0.02, z + dz - 0.3], [0, y + h + 0.02, z + dz + 0.3], 0.008, 3);
+  }
+  g.color('#202325');
+  for (const s of [-1, 1]) for (let k = 0; k < 5; k++) g.box(s * (w / 2 + 0.004), y + 0.07 + k * 0.03, z, 0.008, 0.012, len * 0.6, 0);
 }
 
 /** single-arm pantograph standing on the roof at (0, roofY, z); raised to the contact wire height */

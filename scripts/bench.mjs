@@ -177,6 +177,11 @@ try {
         const H = { car: 1.5, bus: 3, pedestrian: 1.75, train: 4, boat: 3 }[cls];
         // a bus is 11 m long: aim at its front end (a camera at 4 m from the middle stands inside the body, and the
         // line-of-sight search then ends looking down on the roof), from a front three-quarter yaw, low pitch
+        if (cls === 'train') {
+          // a train car is 15 m long and stands at a platform: aim at the leading bogie at axle height, low pitch
+          const hd = h.getHeading ? h.getHeading() : 0;
+          return { x: p.x + Math.sin(hd) * 5.2, y: p.y, z: p.z + Math.cos(hd) * 5.2, yaw: yaw + 60, h: 1.6, w: 2, pitch: 4 };
+        }
         if (cls === 'bus') {
           const hd = h.getHeading ? h.getHeading() : 0;
           return { x: p.x + Math.sin(hd) * 4.6, y: p.y, z: p.z + Math.cos(hd) * 4.6, yaw: yaw + 28, h: 2.4, w: 2, pitch: 5 };
