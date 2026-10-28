@@ -793,8 +793,9 @@ export default function create(ctx: CityContext): CityModule {
     if (tour.active) stopTour();
     if (follow) releaseFollow();
     const to = poiPose(view, goal);
-    to.pitch = clamp(to.pitch, MIN_PITCH, MAX_PITCH);
-    to.dist = clamp(to.dist, MIN_DIST, MAX_DIST * 1.5);
+    // a snap (automation: __city.view, the object bench) may use the free camera's close limits
+    to.pitch = clamp(to.pitch, seconds === 0 ? FREE_MIN_PITCH : MIN_PITCH, MAX_PITCH);
+    to.dist = clamp(to.dist, seconds === 0 ? FREE_MIN_DIST : MIN_DIST, MAX_DIST * 1.5);
     to.tx = clamp(to.tx, bounds.x0, bounds.x1);
     to.tz = clamp(to.tz, bounds.z0, bounds.z1);
     if (seconds === 0) {
