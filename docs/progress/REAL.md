@@ -11,6 +11,11 @@ Overview must stay at least as impressive as now. Every feature: quality tiers +
 Lead session: session_01XuhAMczW3iK25AAWnf3qog, branch `claude/pensive-gates-bim12i`.
 
 ## Resume here (keep current)
+* 2026-10-28 23:20 UTC — Merged W2 s6 (da7a583: train window gaskets/recess, livery doors + green button, lettering
+  atlas ?notraindecals, roof kit, dirt/rain streaks, cab wipers/rails/steps; car paint F0 0.09 → dark reflections on
+  white; novehlod0 cost within noise). W2 brief done (open: cab windscreen plain, lamp boxes flat, loco unlettered).
+  W8 countryside + small nature spawned (sheep/cows/tractor/flowers/farms). W6(2) traced the floating beige back-yard
+  planks to buildings-sills instances (W1 winGeo) — await its note. Running: W1(6), W6(2), W7(2), W8.
 * 2026-10-28 23:00 UTC — Merged W7 s1 (bc46ee6: boat plating/welds/rust/fittings ?noboatdetail, new fish quay
   harbor/quay.ts with moored crabber + dinghy ?noquaylife, building site kit ?nositedetail, platform kit; golden
   overview 0.03). W7(2) spawned: boat form, rope sag, quay wear, site, platform canopy/people, perf.
@@ -173,6 +178,7 @@ Wave 1 (launched 2026-10-28 15:17 UTC, sibling cloud sessions, briefs in real-br
 | W2 vehicles (6) trains | session_01XuhAMhTqxMzNfQqVnLRdFs | claude/real-w2-vehicles | real-w2.md |
 | W1 facades (6) | session_01XuhAMevUWbiYT7AVmkzbyB | claude/real-w1-facades | real-w1.md |
 | W7 dense places II (2) | session_01XuhAMgnc3LjfR6ehMUGwBc | claude/real-w7-quay | real-w7.md |
+| W8 countryside (wave 3) | session_01XuhAMgEAANGwU4gDyorawb | claude/real-w8-country | real-w8.md |
 Respawn rule: when a worker stops (milestone note, ~200k context, or a usage stop), create a NEW session on the
 same branch with the same brief + "resume from docs/progress/real-wN.md Resume here"; archive the old one.
 
