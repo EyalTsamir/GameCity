@@ -31,7 +31,7 @@ const ALL = [
   'fountain', 'statue', 'gazebo', 'playground', 'kiosk', 'marketstall', 'umbrellas', 'picnic', 'flagpole', 'jetty',
   'car', 'bus', 'pedestrian', 'train', 'boat',
   // close-ups of street hardscape (W5): trunk / post foot, kerb line, garden borders, signs and signals
-  'treebase', 'lampbase', 'kerb', 'fence', 'hedge', 'wall', 'sign', 'signal', 'junction',
+  'treebase', 'lampbase', 'kerb', 'fence', 'hedge', 'wall', 'sign', 'signal', 'junction', 'parktree',
 ];
 const classes = !args.classes || args.classes === 'all' ? ALL : args.classes.split(',');
 const dists = (args.dists ?? '3,10,40').split(',').map(Number);
@@ -110,6 +110,12 @@ try {
           // both normals are tried by the line-of-sight swing; start 35° off the perpendicular
           const yaw = (Math.atan2(b.bz - b.az, -(b.bx - b.ax)) * 180) / Math.PI;
           return { x, y: gy(x, z), z, yaw: yaw + 35, h: 1, w: 1.2 };
+        }
+        if (cls === 'parktree') {
+          // a lawn tree with a trodden patch at its foot (vegetation service trees[].worn)
+          const t = nth((c.ctx.services.vegetation?.trees ?? []).filter((t) => t.worn).sort((a, b) => Math.hypot(a.x, a.z) - Math.hypot(b.x, b.z)));
+          if (!t) return null;
+          return { x: t.x, y: gy(t.x, t.z), z: t.z, yaw: 20, h: 1, w: 1, pitch: 24 };
         }
         if (cls === 'junction') {
           // the centre manhole and the road surface of a signalised junction, looked down at

@@ -490,21 +490,21 @@ function roundGrate(sh: Shaper, rng: Rng, R: number): void {
   litter(sh, rng, hole * 0.9, 5 + Math.floor(rng.range(0, 5)), 0.018);
   // frame ring flush with the paving (its outer face hides the pit wall), collar round the hole
   ironCol(sh, iron, rng, 0);
-  annulus(sh, R - 0.035, R, 0.032, 20, 0);
-  annulus(sh, hole, hole + 0.03, 0.03, 12, 0.012);
+  annulus(sh, R - 0.035, R, 0.032, 16, 0);
+  annulus(sh, hole, hole + 0.03, 0.03, 10);
   // concentric rings + radial ribs: slots ≈ 2 cm wide
   const rings = Math.max(2, Math.round((R - hole) / 0.075));
   for (let i = 1; i < rings; i++) {
     ironCol(sh, iron, rng, rustK);
     const r = hole + ((R - hole) * i) / rings;
-    annulus(sh, r - 0.012, r + 0.012, 0.028, 16 + i * 2, 0.014);
+    annulus(sh, r - 0.012, r + 0.012, 0.028, 12 + i * 2);
   }
-  const ribs = R > 0.55 ? 20 : 16;
+  const ribs = R > 0.55 ? 16 : 12;
   for (let i = 0; i < ribs; i++) {
     const a = (i / ribs) * Math.PI * 2;
     ironCol(sh, iron, rng, rustK);
     sh.push().local(0, 0, 0, 0, -a, 0);
-    sh.box((hole + R) / 2, 0.021, 0, R - hole - 0.02, 0.016, 0.016, 1);
+    sh.box((hole + R) / 2, 0.021, 0, R - hole - 0.02, 0.016, 0.016, 1 | 16 | 32);
     sh.pop();
   }
   litter(sh, rng, R, 3 + Math.floor(rng.range(0, 4)), 0.031);

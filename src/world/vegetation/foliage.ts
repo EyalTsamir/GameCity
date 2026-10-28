@@ -622,7 +622,8 @@ thBarkG = vec3( 0.0 );
       float n = nd.x + 0.3 * nf.x;
       vec3 g = nd.yzw * vec3( 9.0, 1.4, 9.0 ) + 0.3 * nf.yzw * vec3( 23.0, 4.0, 23.0 );
       float s = smoothstep( -0.08, 0.22, n );
-      bc *= 1.0 - 0.34 * mix( 0.45, s, fade );
+      // (near: lighter plates, deeper furrows — the same mean as the far tone)
+      bc *= ( 1.0 + 0.08 * fade ) * ( 1.0 - mix( 0.34, 0.42, fade ) * mix( 0.45, s, fade ) );
       float ds = 6.0 * s * ( 1.0 - s ) / 0.3;
       thBarkG = -ds * g * 0.012 * fade;
     }

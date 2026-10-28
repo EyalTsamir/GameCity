@@ -252,7 +252,7 @@ export function lamp(k: Kit, style: LampStyle, street: boolean, rng: Rng, kf?: K
         kf.m(iron, 'iron');
         // base: plinth, torus, a waisted drum with panels, cornice, then the bell into the shaft
         const b = [[0, 0], [0.252, 0], [0.252, 0.05], [0.235, 0.065], [0.238, 0.09], [0.222, 0.11], [0.212, 0.42], [0.228, 0.44], [0.228, 0.47], [0.2, 0.5], [0.158, 0.52], [0.152, 0.58], [0.118, 0.62], [0.09, 0.66], [0, 0.66]].map(([r, y]) => [r * s, y * s]);
-        lathe(f, 0, 0, b, 16);
+        lathe(f, 0, 0, b, 12);
         // the access door in the base (+Z, the footway side) with a keyhole
         f.box(0, 0.27 * s, 0.214 * s, 0.17 * s, 0.24 * s, 0.012, 1);
         kf.m('#151515', 'iron');
@@ -1049,7 +1049,8 @@ export function picketFence(k: Kit, L: number, paint: string, postA: boolean, po
   for (let i = 0; i <= nPosts; i++) {
     const x = (i / nPosts) * L;
     const gate = (i === 0 && postA) || (i === nPosts && postB);
-    if (rng) fencePost(k, x, -0.035, gate ? 0.11 : 0.085, gate ? 1.12 : 0.98, paint);
+    // posts stand behind the rails (rails nailed to their face, pickets to the rails)
+    if (rng) fencePost(k, x, gate ? -0.093 : -0.08, gate ? 0.11 : 0.085, gate ? 1.12 : 0.98, paint);
     else {
       k.m(paint, 'paint');
       sh.box(x, (gate ? 1.12 : 1.0) / 2, 0, gate ? 0.11 : 0.08, gate ? 1.12 : 1.0, gate ? 0.11 : 0.08, 1);

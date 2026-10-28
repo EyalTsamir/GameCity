@@ -3,11 +3,23 @@
 Branch `claude/real-w5-street` (from claude/pensive-gates-bim12i @ 6c29a46). Brief: real-briefs.md "W5".
 
 ## Resume here
-* Step 1 (tree bases) + step 5 (lamp posts) first pass done, commit "W5 m1". Next: judge bark relief at 3 m in
-  sun (bench treebase --pick 1..3, crop the PNG — the 1280×720 sheet is too small to judge a trunk foot), park-tree
-  worn-grass ring, then priority 2 kerbs (kerb class), 3 fences/hedges (hedge end = flat slab!), 4 signs.
-* Bench: new classes treebase, lampbase, kerb, fence, hedge, wall, sign, signal (scripts/bench.mjs, committed
-  separately). Close classes use h=1 so the 2 m capture is really ~2.4 m. Crop PNGs with PIL to judge.
+* m1–m3 pushed (last: "W5 m3"). All six brief priorities have a first pass; perf A/B in shots/w5_perf.log
+  (see Toggles). Next session, in order:
+  1. Judge the new things at 3 m that were NOT yet seen sharp: brick garden wall (bench `wall --pick 2..5` until
+     a brick one; check rubber props did not pick up brick courses — MAT.rubber 0.92 vs brick 0.936), worn
+     patches at park trees (no bench class yet: add `parktree` = plan trees tagged park; groundcover still grows
+     blades through it until the request in real-requests.md is done), tree guards (treebase --pick 4..8),
+     signal detail (bench framing is poor for `signal`: target h 5.6 → use --pitch 5 or a `signalbase` class).
+  2. Bark at 3 m reads only as faint vertical texture; consider stronger furrow contrast for pattern 0.1 in sun
+     (foliage.ts WOOD_FRAG_MAP) and a lighter plate colour (lighting is out of scope; albedo is not).
+  3. Kerbs: dropped-kerb flares and gullies are decals only; a geometry gully grate in the channel would read
+     better at 2 m (markings.ts places them: `gully grates mid-block`, `just upstream of the crosswalk`).
+  4. Fence: hinges are on the street face of the gate; posts are behind the pickets (z −0.035) and can cut a
+     picket at middle posts. Low render walls: no texture beyond props stone weathering.
+  5. Lamp heads (lanterns/luminaires) untouched except the classic frame; 'modern' flange plate reads black.
+* Bench tips: classes treebase, lampbase, kerb, fence, hedge, wall, sign, signal, junction; `--nodof 1` for sharp
+  close-ups; crop the 1280×720 PNGs with PIL to judge (the sheet is too small). The sim is not paused for static
+  classes: pedestrians sometimes block the shot → use another --pick.
 
 ## Code pointers (learned; do not re-read)
 * bench: scripts/bench.mjs — slot classes from `plan.slots` (lamp, tree, …), features from `plan.features`.
@@ -63,8 +75,16 @@ Branch `claude/real-w5-street` (from claude/pensive-gates-bim12i @ 6c29a46). Bri
 * ?notreebase — bark relief + foot stain off, trunks not fitted to grates, no tree guards (grates stay new).
   Low tier: shader part off.
 * ?nolampdetail — no near lamp-post kit (low tier: off).
-* ?nosigndetail — stop signs as before.
+* ?nosigndetail — stop signs and signal poles as before.
+* Cost (perf.mjs, software GL, eye-level downtown view "0,0,-40,12,30,12", 2 runs): all W5 toggles on vs off =
+  +225–241k triangles (+6.5 %), draw calls equal (175); ms/frame within SwiftShader noise. After m3 the grates
+  (16/12 ribs, fewer ring segments, no hidden rib faces) and the classic lamp lathe (12 sides) were trimmed;
+  re-measure in shots/w5_perf2.log. Biggest remaining: grates + verge setts (~450 tris per street tree, fine
+  plant sink = near chunks), classic lamp near kit (~600 tris each). Unmeasured on the Adreno.
 * ?nofencedetail — old pickets/posts, no gates, no hedge foot stems (low tier: off). Hedge core rounding + verge
   pits are geometry replacements (always on).
 
 ## Sheets
+* Before: docs/progress/real/w5_before.jpg (treebase, lampbase, kerb, fence, hedge at 2/6 m, base commit).
+* After m3: docs/progress/real/w5_m3_after.jpg (grate tree, verge tree, classic lamp base, kerb, fence + gate,
+  hedge, manhole, stop sign, signal). Working shots: shots/w5/s*/ (not committed).
