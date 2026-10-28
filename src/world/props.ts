@@ -30,6 +30,7 @@ import { GREEN, GreenKit, makeGreenTexture, createGreenMaterial } from './buildi
 import { sideGeom } from './buildings/gen';
 import { XS, ZS, FURN_OFFSET } from '../core/constants';
 import { addLampLights, type LampLight } from '../core/lampLight';
+import { buildPlaces } from './props/places';
 import { buildContactMesh, takeQueuedContacts, type ContactSpot } from './props/contact';
 
 interface TerrainSvc {
@@ -295,6 +296,7 @@ export default function create(ctx: CityContext): CityModule {
     discs: layout.furniture,
     bbqs: [],
     washing: [],
+    lines: [],
     setStaticLaundry(on: boolean) {
       staticLaundry = on;
     },
@@ -735,6 +737,35 @@ export default function create(ctx: CityContext): CityModule {
     }
   }
 
+  // ───────────────────────────────────────── W6 dense real places ──
+  // market square, café terrace, back yard (props/places.ts; ?nomarketlife ?noterracelife ?nobackyard, off on low)
+  const placed: { x: number; z: number }[] = [];
+  {
+    const features = plan.features;
+    service.places = buildPlaces({
+      ctx,
+      plan,
+      H,
+      fine: (x) => KF[chunkOf(x)],
+      near: (x, z) => KD.at(x, z),
+      free: (x, z, r) => {
+        const badCell = OCC.BUILDING | OCC.ROAD | OCC.WATER | OCC.RAIL | OCC.SIDEWALK | OCC.SOLID | OCC.PATH;
+        for (const [dx, dz] of [[0, 0], [r, 0], [-r, 0], [0, r], [0, -r]]) if (occ.has(x + dx, z + dz, badCell)) return false;
+        if (layout.walk.anyInCircle(x, z, r, MASK_WALK)) return false;
+        for (const f of features) if (Math.hypot(f.x - x, f.z - z) < (f.radius ?? 1) + r) return false;
+        for (const d of layout.furniture) if (Math.hypot(d.x - x, d.z - z) < d.r + r) return false;
+        return true;
+      },
+      claim: (x, z, r) => {
+        layout.furniture.push({ x, z, r });
+        placed.push({ x, z });
+      },
+      spot,
+      service,
+      inc,
+    });
+  }
+
   // ─────────────────────────────────────────────────────────── meshes ──
   const root = new THREE.Group();
   root.name = 'props';
@@ -864,6 +895,7 @@ export default function create(ctx: CityContext): CityModule {
       };
       for (const it of scatter) check(it.kind, it.x, it.z);
       for (const gp of layout.gardens) for (const it of gp.items) check(it.kind, it.x, it.z);
+      for (const it of placed) check('place item', it.x, it.z);
       return out.slice(0, 20);
     },
     dispose() {
