@@ -5,6 +5,12 @@ Owned: src/world/harbor/** + harbor.ts, src/sim/boats/** + boats.ts, src/world/l
 src/sim/rail/station.ts + staticMaterial.ts. Order: boats → quay → site → platform.
 
 ## Resume here
+* s2 END: (1)–(5) coded and seen once at 4 / 12 m (docs/progress/real/w7_s2.jpg); (6) perf below. Downtown console
+  clean, invariants {}. Open, in order: crabber line from bollard still reads fairly straight at 4 m (the cleat is
+  higher than the coping — lower the cleat end or add slack); wheelhouse side doors + more side panes on tug /
+  crabber; tour boat + motorboat superstructure still boxy (not deckhouse()); quay people + platform passengers
+  (needs pedNetwork platform benches — core/pedestrians owner); site posters/PPE board not yet seen at 3 m; wet
+  patches only read if the harbor north mesh is not the lambert variant (check at 3 m).
 * s2 START (session_01XuhAMgnc3LjfR6ehMUGwBc): lead verdict s1 → priorities (1) boat FORM (raked wheelhouse fronts,
   rounded deckhouse corners, sheer, flared bow, glazed not black windows), (2) catenary mooring ropes + bollard loop,
   (3) fish box / creel variation + wet patches, (4) site posters/mud/tracks/rebar/pallets+bricks, (5) platform canopy
@@ -69,6 +75,32 @@ src/sim/rail/station.ts + staticMaterial.ts. Order: boats → quay → site → 
   CCTV domes, PA horns, timetable case (printed sheets behind glass), luggage (wheeled case, holdall, rucksack),
   coffee cup, newspaper.
 
+## Done s2
+* Boat form (models.ts): deckhouse() now a rounded-plan loft (roundRing, radius default 0.2) + roof slab/coaming on
+  the same plan, then warped (tumblehome 3.5 %, `rake` m at roof: workboat wheelhouses lean forward +0.3, ferry
+  saloon swept back −0.35) with inverse-transpose normals; wheelhouses get a sun visor on brackets. hull(): flared
+  bow (waterline entry 0.42·fl finer than the deck forward of t 0.45).
+* Glass (material.ts boatGlass): Fresnel sky/shore reflection by reflected-ray elevation (× uDaylight) over the
+  dim interior; GLASS wheelhouse panes get a console band + far-window light; WINDOW saloon keeps the seat interior
+  under it. bN = vNormal set in main (vNormal is declared after FRAG_PARS). Front panes now carry aExtra (sill/top).
+* Ropes: models.ts rope() = round twisted tube, parabolic dip ≥ 5 % span; crabber lines now end at the coping edge
+  (QUAY_TOP + 0.035, harbor.ts lines.boat y 0.155) instead of 0.45 m in the air. quay.ts ropeEye(): loop dipping on
+  the far side, two legs + whipped splice, radius param. ship.ts buildMooring: eye on each bollard + hawser from
+  1.15 m out, sag 0.35 + 3.5 % L, clamped onto the quay top.
+* Quay (quay.ts): fishBoxStack owner colour + strays (BOX_COLS), fade/dirt, rim + lugs, stencil band, skew / turned
+  boxes, PAT.GRIME (11, harbor material.ts: scuffs + low grime); creel() hashed variation (net colour/fade, hoop
+  height, sag, weed, rope tail, base rust); wet() PAT.WET (10: glossy pool + drops) ×6 by boxes/creels/edge.
+* Site (construction.ts): rebar bundles of bars on bearers + ties + tags + strays, concrete pipe pyramid with
+  sockets on chocked bearers, orange ducting, real pallets (blocks/bearers/deck) with strapped + hooded brick packs
+  (two opened), empty pallet stack, wet mud apron + ruts inside the gate, dual tyre tracks wet→dry onto the
+  pavement and road (kerb at SX+3 assumed), clods, splash band on the hoarding feet, poster set on the east
+  hoarding (z −11), PPE board by the gate. All `fine` = !nositedetail && quality ≠ low.
+* Platform: staticMaterial K.TACTILE = offset blister domes (66.5 mm grid, normal bump rlG via
+  normal_fragment_maps) + 400 mm slab joints; K.BOARDS (27) soffit boards on the canopy underside; station.ts
+  purlins (3 + wall plate a side).
+* People request: NOT done — platform benches are not on the pedestrian graph (places.ts takes peds.benches from
+  core pedNetwork), so seated passengers mean core + pedestrians changes, not small. Static box figures rejected.
+
 ## Tried and rejected
 * Bench aiming a boat at its centre (camera inside the hull / on the sails) → aim at the starboard side ¼ L ahead.
 
@@ -77,13 +109,21 @@ src/sim/rail/station.ts + staticMaterial.ts. Order: boats → quay → site → 
 * `?noquaylife`: no fish quay (harbor/quay.ts) and no moored crabber / dinghy; quality low: fish quay without the
   small things (stains, litter).
 * `?nositedetail` (and quality low): construction site keeps the old cutout scaffold planes, no clutter / mud.
-* Costs: not measured yet (perf.mjs --view harbor --variants ";noquaylife;noboatdetail").
+* Costs (s2, perf.mjs --view harbor 1280×720, SwiftShader, one run — noise ≈ ±80 ms/frame, see nositedetail
+  which is off-screen): baseline 558 ms, noquaylife 504 (−172 k tris, −4 %), noboatdetail 523 (shader only),
+  nositedetail 476 (noise). Draw calls unchanged (180). Needs a real-GPU run to price quaylife / boatdetail.
 
 ## Sheets
 
 ## Sheets
 * docs/progress/real/w7_places_s1.jpg (quay 5 m, quay from the water 14 m, site gate 5 m, site yard 14 m,
   platform 5 / 14 m), docs/progress/real/w7_boats_s1.jpg (crabber 3/10 m, dinghy, ferry 3 m).
+
+## tokens.py (s2)
+tool:mcp__claude-code-remote__get_session       0.0M   0.3%
+  messages in                                     0.0M   0.0%
+  Bash:other                                      0.0M   0.0%
+  Bash:typecheck/build                            0.0M   0.0%
 
 ## tokens.py (s1)
 TOTAL weighted 5.0M (cache read 79%, write 8%, output 13%); 166 calls, ctx median 238k, max 358k, cold 0.
