@@ -324,14 +324,36 @@ export function genTownhouse(g: Gen): void {
       const signRect = g.atlas.add(`shop:${shopDef.name}:${shopC.getHexString()}`, 256, 48, boardSign(shopDef.name, { bg: `#${shopC.getHexString()}`, fg: gold, border: gold, glow: 0.75, glowColor: '#ffd9a0' }));
       const sLen = Math.min(uB - uA - 0.9, (fasciaY1 - fasciaY0 - 0.1) * 5.3);
       const sc = (uA + uB) / 2;
-      signOnSide(g, sg, sc - sLen / 2, sc + sLen / 2, 0.195, fasciaY0 + 0.05, fasciaY1 - 0.05, signRect);
-      // small lamps over the sign
+      // the signboard: a panel standing proud of the fascia in a moulded frame (gilt or trim colour), the
+      // lettered face recessed 2.5 cm behind the frame — a board with depth and shadow lines, not a painted plane
+      const fy0 = fasciaY0 + 0.06,
+        fy1 = fasciaY1 - 0.06,
+        sA = sc - sLen / 2,
+        sB = sc + sLen / 2,
+        fw = 0.045;
+      setCol(t, shade(shopC, 0.85));
+      sideBox(t, sg, sA, sB, 0.16, 0.205, fy0, fy1);
+      signOnSide(g, sg, sA, sB, 0.21, fy0, fy1, signRect);
+      setCol(t, gold === '#f2d27a' ? shade(col(gold), 0.8) : trimC);
+      sideBox(t, sg, sA - fw, sB + fw, 0.16, 0.235, fy1, fy1 + fw);
+      sideBox(t, sg, sA - fw, sB + fw, 0.16, 0.235, fy0 - fw, fy0, true);
+      sideBox(t, sg, sA - fw, sA, 0.16, 0.235, fy0, fy1);
+      sideBox(t, sg, sB, sB + fw, 0.16, 0.235, fy0, fy1);
+      // drip moulding along the fascia's lower edge
+      setCol(t, trimC);
+      sideBox(t, sg, uA + 0.3, uB - 0.3, 0.16, 0.2, fasciaY0 - 0.035, fasciaY0, true);
+      // two swan-neck lamps over the board: wall plate, riser, arm, a cone shade lit underneath
       for (const lu of [sc - sLen * 0.3, sc + sLen * 0.3]) {
         setCol(t, col('#2b2b2b'));
-        sideBox(t, sg, lu - 0.03, lu + 0.03, 0.16, 0.42, fasciaY1 + 0.05, fasciaY1 + 0.1);
-        const lx = sx(sg, lu, 0.45),
-          lz = sz(sg, lu, 0.45);
-        lightBox(g, lx - 0.06, fasciaY1 - 0.02, lz - 0.06, lx + 0.06, fasciaY1 + 0.08, lz + 0.06, '#ffd59a', LIGHT_MODE.STEADY, 3.0);
+        sideBox(t, sg, lu - 0.04, lu + 0.04, 0.22, 0.24, fasciaY1 + 0.02, fasciaY1 + 0.14);
+        sideBox(t, sg, lu - 0.012, lu + 0.012, 0.24, 0.27, fasciaY1 + 0.06, fasciaY1 + 0.2);
+        sideBox(t, sg, lu - 0.012, lu + 0.012, 0.24, 0.5, fasciaY1 + 0.17, fasciaY1 + 0.195, true);
+        sideBox(t, sg, lu - 0.012, lu + 0.012, 0.48, 0.505, fasciaY1 + 0.12, fasciaY1 + 0.19);
+        sideBox(t, sg, lu - 0.085, lu + 0.085, 0.42, 0.58, fasciaY1 + 0.05, fasciaY1 + 0.13, true);
+        sideBox(t, sg, lu - 0.05, lu + 0.05, 0.46, 0.54, fasciaY1 + 0.13, fasciaY1 + 0.16);
+        const lx = sx(sg, lu, 0.5),
+          lz = sz(sg, lu, 0.5);
+        lightBox(g, lx - 0.06, fasciaY1 + 0.035, lz - 0.06, lx + 0.06, fasciaY1 + 0.055, lz + 0.06, '#ffd59a', LIGHT_MODE.STEADY, 3.0);
       }
       // awning
       if (rng.chance(0.78)) awning(sg, uA + 0.38, uB - 0.38, fasciaY0 - 0.04);
