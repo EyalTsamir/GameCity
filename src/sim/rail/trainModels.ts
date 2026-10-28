@@ -576,6 +576,24 @@ function doors(g: Geo, z: number, color: string): void {
       // a grab-handle recess and the passenger button on the leading edge
       g.color('#2b2f33');
       sideQuad(g, side, xs + side * 0.001, 1.75, 2.0, leaf < 0 ? zb - 0.09 : za + 0.05, leaf < 0 ? zb - 0.05 : za + 0.09);
+      // the illuminated open-door push button (ring lit green once the doors are released) on the right leaf
+      if (leaf > 0) {
+        g.kind(T.DOORBTN).color('#1c1e20');
+        const bz = za + 0.16;
+        const ring = (r: number, off: number) => {
+          const pts: V3[] = [];
+          for (let k = 0; k < 14; k++) {
+            const a = (k / 14) * Math.PI * 2 * -side;
+            pts.push([x + side * off, 2.05 + r * Math.sin(a), bz + r * Math.cos(a)]);
+          }
+          g.fan(pts, [side, 0, 0]);
+        };
+        ring(0.052, 0.012);
+        g.color('#2fa84f');
+        ring(0.04, 0.0135);
+        g.color('#cfd3d6');
+        ring(0.026, 0.0145);
+      }
       g.extra(0, 0, 0, 0);
     }
     // the door portal: a dark surround round the opening (static), and the open-door button by the frame
@@ -585,13 +603,6 @@ function doors(g: Geo, z: number, color: string): void {
     sideQuad(g, side, x + side * 0.003, y1, y1 + 0.05, z - w, z + w);
     g.color('#2fa84f');
     sideQuad(g, side, x + side * 0.004, 1.95, 2.03, z + w + 0.012, z + w + 0.05);
-    // stainless grab handles either side of the portal on stand-off brackets
-    g.kind(T.PLAIN).color('#b9bdc0');
-    for (const e of [-1, 1]) {
-      const hz = z + e * (w + 0.15);
-      g.rod([side * 1.505, 1.3, hz], [side * 1.505, 2.2, hz], 0.016, 6, 1);
-      for (const hy of [1.36, 2.14]) g.rod([side * 1.45, hy, hz], [side * 1.505, hy, hz], 0.012, 4);
-    }
     // door step
     g.kind(T.PLAIN).color('#9a9ea1');
     g.box(side * 1.4, 1.0, z, 0.16, 0.06, w * 2 + 0.1, 0);

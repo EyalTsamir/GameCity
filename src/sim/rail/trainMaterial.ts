@@ -28,6 +28,8 @@ export const T = {
   GLASS: 12,
   /** the open doorway's back (vestibule seen through it): ray-traced like the windows, aExtra.x = door centre z */
   VESTIB: 13,
+  /** the open-door push button on a leaf: slides with it, its ring lit green while the doors are released */
+  DOORBTN: 14,
   /** container corrugated faces (same visibility as CONT*, plus ribs) handled via CONT tags */
 } as const;
 
@@ -92,7 +94,7 @@ const VERT_COLOR = /* glsl */ `
 {
   int tg = trTagOf(aKind);
   #ifdef USE_INSTANCING_COLOR
-  if (tg == ${T.LIVERY} || tg == ${T.CONT40} || tg == ${T.CONT20A} || tg == ${T.DOOR}) vColor.rgb *= instanceColor.rgb;
+  if (tg == ${T.LIVERY} || tg == ${T.CONT40} || tg == ${T.CONT20A} || (tg == ${T.DOOR} && color.r > 0.6)) vColor.rgb *= instanceColor.rgb;
   #endif
   if (tg == ${T.CONT20B}) vColor.rgb *= aCol2;
 }
@@ -102,7 +104,7 @@ const VERT_BEGIN = /* glsl */ `
 {
   int tg = trTagOf(aKind);
   if (tg == ${T.WHEEL}) transformed = trWheel(transformed);
-  if ((tg == ${T.DOOR} || tg == ${T.DOORWIN}) && abs(aExtra.w - aInst.w) < 0.5) {
+  if ((tg == ${T.DOOR} || tg == ${T.DOORWIN} || tg == ${T.DOORBTN}) && abs(aExtra.w - aInst.w) < 0.5) {
     float o = clamp(aInst.z, 0.0, 1.0);
     transformed.z += aExtra.z * 0.64 * smoothstep(0.15, 1.0, o);
     transformed.x += aExtra.w * 0.035 * smoothstep(0.0, 0.2, o);
@@ -119,6 +121,7 @@ const VERT_BEGIN = /* glsl */ `
   if (tg == ${T.WINDOW} || tg == ${T.DOORWIN} || tg == ${T.VESTIB}) e = vec3(1.0, 0.8, 0.52) * (1.7 * lit) * aInst2.y;
   else if (tg == ${T.HEAD} && role == 1) e = vec3(1.0, 0.95, 0.85) * (0.9 + 4.0 * lit);
   else if (tg == ${T.TAIL} && role == 2) e = vec3(1.0, 0.07, 0.03) * (0.7 + 2.6 * lit);
+  else if (tg == ${T.DOORBTN} && color.g > color.r * 2.0) e = vec3(0.15, 1.0, 0.3) * (aInst.z > 0.05 ? 1.6 + 2.0 * lit : 0.0);
   else if (tg == ${T.DEST} && role == 1) e = vec3(1.0, 0.62, 0.16) * (0.9 + 0.6 * lit);
   vEmit = e;
 }
@@ -159,7 +162,7 @@ vec4 trLivery(vec3 q, float unit) {
   #define TR_G(w, h) gx / vec2(w, h), gy / vec2(w, h)
   if (abs(q.x) < 1.44 || abs(q.x) > 1.52) return o;
   // operator name between the doors on the lower band
-  o = trOver(o, trDec(vec4(${DECAL.logo.join('.0, ')}.0), TR_L(-0.425, 1.6, 2.7, 0.3), TR_G(2.7, 0.3)));
+  o = trOver(o, trDec(vec4(${DECAL.logo.join('.0, ')}.0), TR_L(-0.425, 1.6, 3.24, 0.36), TR_G(3.24, 0.36)));
   // fleet number "442 nnn" + technical data at the rear end
   {
     vec2 l = TR_L(-6.0, 1.74, 0.95, 0.2);
@@ -533,7 +536,14 @@ export function createTrainMaterials(globals: GlobalUniforms, clipX0: number, cl
             float n = fract(sin(dot(floor(q * vec3(3.0, 9.0, 1.3)), vec3(12.9898, 78.233, 37.719))) * 43758.5453);
             float gear = (1.0 - smoothstep(0.9, 1.05, q.y)) * step(abs(q.x), 1.3);
             float low = (1.0 - smoothstep(0.95, 1.55 + 0.15 * n, q.y)) * (1.0 - gear);
-            float roof = smoothstep(3.3, 3.7, q.y) * 0.35;
+            float roof = smoothstep(3.3, 3.7, q.y) * (0.55 + 0.3 * smoothstep(0.3, 0.9, fract(sin(dot(floor(q.xz * vec2(1.7, 0.6)), vec2(12.9898, 78.233))) * 43758.5453)));
+            // roof sheets: transverse seams every 1.55 m (welded strips over the hoops), fading with distance
+            if (q.y > 3.5 && abs(q.x) < 1.4) {
+              float fz = abs(fract(q.z / 1.55) - 0.5) * 1.55;
+              float pw = fwidth(q.z);
+              float seam = (1.0 - smoothstep(0.012, 0.012 + pw, 0.775 - fz)) * (1.0 - smoothstep(0.05, 0.12, pw));
+              diffuseColor.rgb *= 1.0 - 0.35 * seam;
+            }
             vec3 dust = vec3(0.33, 0.26, 0.2);
             diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * 0.55 + dust * 0.35, gear * (0.55 + 0.25 * n));
             diffuseColor.rgb = mix(diffuseColor.rgb, dust * 0.9, low * (0.32 + 0.12 * n));
@@ -572,7 +582,7 @@ export function createTrainMaterials(globals: GlobalUniforms, clipX0: number, cl
       )
       .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += vEmit * trEmK + trIntE;');
   };
-  material.customProgramCacheKey = () => 'rail-train-v5';
+  material.customProgramCacheKey = () => 'rail-train-v6';
   patchLampMaterial(material); // night street-light map (night agent)
 
   const depth = new THREE.MeshDepthMaterial();
