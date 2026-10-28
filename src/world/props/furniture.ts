@@ -268,7 +268,7 @@ export function bin(k: Kit, modern: boolean, rng?: Rng): void {
     poly(sh, [0.235, 0.91, 0.235, -0.235, 0.91, 0.235, 0.0, 0.95, 0.0], 0, 0.99, 0.15);
     poly(sh, [-0.235, 0.91, 0.235, -0.235, 0.91, -0.235, 0.0, 0.95, 0.0], -0.15, 0.99, 0);
     k.m('#26292b', 'steel');
-    sh.box(0.1, 0.928, 0.1, 0.09, 0.008, 0.09, 0);
+    sh.box(0, 0.952, 0, 0.09, 0.008, 0.09, 0);
     // door seams + keyhole + hinges on the front face (the middle flutes are left off there)
     k.m('#23282b', 'steel');
     const z = 0.211;

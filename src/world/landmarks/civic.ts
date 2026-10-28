@@ -158,7 +158,7 @@ export function genMarketStall(env: Env, f: Feature): void {
   // canopy cloth: a grid sagging between the rails, overhanging the front; metric uvs keep the stripes running
   const canopy = M(col, PAT.STRIPES, 0.85, 0, 0, 0, 0.2);
   const under = M('#efe9de', PAT.PLAIN, 0.8);
-  const NX = 8, NZ = 4, x0 = -hw - 0.1, x1 = hw + 0.1, z0 = fz + 0.22, z1 = bz - 0.12;
+  const NX = 8, NZ = 4, x0 = -hw - 0.03, x1 = hw + 0.03, z0 = fz + 0.16, z1 = bz - 0.12; // corners stay inside r = 1.3
   const P = (i: number, j: number): [number, number, number] => {
     const u = i / NX, v = j / NZ;
     const x = x0 + (x1 - x0) * u, z = z0 + (z1 - z0) * v;

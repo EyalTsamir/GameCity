@@ -167,10 +167,18 @@ try {
             // but frames it with glass and roof — reject when 3 of 5 short probes hit something
             let hits = 0;
             for (const pd of enclosure) {
+              // both ways (single-sided glass / roofs are only hit from their front)
               rc.set(cam.position, pd);
               rc.near = 0.05;
               rc.far = 2.2;
-              if (rc.intersectObjects(meshes, false).length) hits++;
+              let hit = rc.intersectObjects(meshes, false).length > 0;
+              if (!hit) {
+                rc.set(cam.position.clone().addScaledVector(pd, 2.2), pd.clone().negate());
+                rc.near = 0;
+                rc.far = 2.15;
+                hit = rc.intersectObjects(meshes, false).length > 0;
+              }
+              if (hit) hits++;
             }
             return hits < 3;
           };

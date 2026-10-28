@@ -108,8 +108,8 @@ export function genStatue(env: Env, f: Feature): void {
   // breeches, a frock coat with lapels, buttons, cuffs and split tails, waistcoat, cravat; a face (brow,
   // nose, chin, ears), tied-back hair; a scroll in the left hand. Verdigris over dark bronze: the rust
   // pattern's run-down streaks show the brown metal through the green.
-  const bronze = M('#5a8a74', PAT.RUST, 0.5, 0.55, 0, FLOOD.SOFT, 0.5);
-  const bronzeD = M('#4b705f', PAT.RUST, 0.5, 0.55, 0, FLOOD.SOFT, 0.2);
+  const bronze = M('#4a7462', PAT.PLAIN, 0.55, 0.5, 0, FLOOD.SOFT, 0.5);
+  const bronzeD = M('#3a5c4e', PAT.RUST, 0.5, 0.55, 0, FLOOD.SOFT, 0.2);
   const y0 = 2.56, sc = 1.25;
   const P = (x: number, y: number, z: number): V3 => [x * sc, y0 + y * sc, z * sc];
   const ell = (m: typeof bronze, rx: number, ry: number, rz: number, x: number, y: number, z: number, yaw = 0, pitch = 0, roll = 0) => {
@@ -176,7 +176,7 @@ export function genStatue(env: Env, f: Feature): void {
   ell(bronze, 0.09, 0.115, 0.1, 0, 1.66, 0.01);
   ell(bronze, 0.065, 0.05, 0.06, 0, 1.585, 0.04);
   K.boxC(bronze, 0.022 * sc, 0.045 * sc, 0.03 * sc, 0, y0 + 1.655 * sc, 0.1 * sc, -0.25, 0, 0);
-  K.boxC(bronzeD, 0.13 * sc, 0.018 * sc, 0.03 * sc, 0, y0 + 1.695 * sc, 0.085 * sc, 0.2, 0, 0);
+  K.boxC(bronze, 0.1 * sc, 0.012 * sc, 0.02 * sc, 0, y0 + 1.69 * sc, 0.09 * sc, 0.2, 0, 0);
   for (const sx of [-1, 1]) ell(bronze, 0.015, 0.03, 0.022, sx * 0.09, 1.655, 0.0);
   ell(bronzeD, 0.097, 0.1, 0.1, 0, 1.69, -0.015, 0, 0.15);
   limb(bronzeD, [0, 1.64, -0.08], [0, 1.5, -0.1], 0.025, 0.018, 6);
@@ -197,7 +197,7 @@ export function genStatue(env: Env, f: Feature): void {
   limb(bronzeD, [-0.3, 0.85, 0.22], [-0.12, 0.83, 0.25], 0.025, 0.025, 8);
   K.boxC(bronze, 0.16 * sc, 0.2 * sc, 0.006 * sc, -0.21 * sc, y0 + 0.73 * sc, 0.26 * sc, 0.1, 0, 0);
   // tricorn: three-cornered brim turned up round a crown, held aloft and tilted
-  const hat = P(0.4, 2.03, 0.3);
+  const hat = P(0.39, 1.985, 0.28);
   K.cyl(bronzeD, 0.17 * sc, 0.2 * sc, 0.06 * sc, hat[0], hat[1], hat[2], 3, false, 'box', 0, Math.PI * 2, 0.4);
   K.cyl(bronzeD, 0.1 * sc, 0.115 * sc, 0.09 * sc, hat[0], hat[1] + 0.04 * sc, hat[2], 10);
   // night: uplights
