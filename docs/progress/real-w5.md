@@ -3,18 +3,37 @@
 Branch `claude/real-w5-street` (from claude/pensive-gates-bim12i @ 6c29a46). Brief: real-briefs.md "W5".
 
 ## Resume here
-* Session 2 (lead priorities 1–6). Progress:
-  1. Cost — measured per toggle (shots/w5/perf_s2a.log, eye level "0,0,-40,12,30,12"): lamp kit +70k,
-     fence detail −2k (cheaper than the old boxes), sign/signal detail +86k, treebase +14k. Fix: fine
-     fixings now live in 48 m world cells drawn only within ~30 m (src/world/lamps/nearCells.ts;
-     props.ts `KD`, signals.ts `fine` arg of place()). Re-measure pending.
-  2. Gate-frame dark rectangle = the footway utility-lid decal (markings.ts atlas 'lid': dark #8a square with
-     diagonal stripes, aliasing at grazing angles). Redrawn as an embossed galvanised chequer-plate lid.
-  3. Kerb: shader branch special 6 (kerb) / 7 (gutter) in roads/glsl.ts rdHard, profile coordinate in aS.x
-     (streets.ts extrudeCurb), per-stone normal tilt via `rdN` (materials.ts `nrm` hook). ?nokerbdetail.
-  4. Signs: rimmed STOP plate + back rails; street-name blades (signals.ts nameBlades, canvas atlas, 1 draw
-     call); repeater back plates.
-  5./6. in progress.
+* Session 2 pushed (lead priorities 1–6, all addressed; stopped at 252k context — over the cap). Next session:
+  1. VERIFY the utility-lid fix (priority 2) at 3 m: bench `fence --pick 1..5` until a garden gate frame with a lid
+     (markings.ts 'lid' decal, footway lat 4.6–6.0). Not yet seen after the redraw.
+  2. Static perf A/B without sim noise: `perf.mjs --q "hide=traffic,pedestrians" --view "0,0,-40,12,30,12"
+     --variants ";nonearcut;nolampdetail&nofencedetail&nosigndetail&notreebase&nokerbdetail"` (perf_s2c had
+     ±30k noise from traffic/peds). Check the overview (`shot.mjs --view overview`) — not re-checked in s2.
+  3. Draw calls: near cells add ~7 (≤ 4 lamp cells, 2 signal cells, +1 street-name mesh, + vegetation grate
+     cells). If too many: NEAR_CELL 48 → 64 with NEAR_CUT 25, or share one cell grid/material across owners.
+  4. Name blades: flag blades on signal poles (offset 0.4 + r) not yet seen after the offset change; add a
+     bracket. STOP letters are thin/low contrast at 3 m.
+  5. Kerb: shader-only height jitter (normal tilt per stone); real geometric steps would cost ~+400k tris.
+* s2 done: see "Done (s2)" below.
+
+## Done (s2)
+* Near cut (src/world/lamps/nearCells.ts): 48 m cells, drawn within 30 m of the camera. Users: props.ts `KD` (lamp
+  near kit), signals.ts `place(.., fine)` (bolts, clamps, hatch, button, visor cheeks, arm cap/collar, STOP
+  fixings + sticker), vegetation.ts `NC` (grate rings/ribs/bars + litter; plants.ts surround(.., near)).
+  Base shafts 16 → 12 segments, round arm 8 segments. ?nonearcut = A/B.
+* Gate-frame dark rectangle = footway utility-lid decal (dark #8a square + diagonal stripes aliasing at grazing
+  angles). Redrawn as embossed galvanised chequer-plate lid with frame, legend "GAS", keyholes; lighter tint.
+* Kerb (roads/glsl.ts rdHard special 6 kerb / 7 gutter, profile coord in aS.x from streets.ts extrudeCurb;
+  normal tilt `rdN` via materials.ts `nrm` hook, key roads-hard-v6): per-stone settle (normal tilt + tone),
+  arris worn bright with chips, 12 mm joints, damp foot band, tyre scuffs; gutter wet grime line, silt, litter.
+  Dropped kerbs at crossings already existed in geometry (streets.ts RAMP). ?nokerbdetail (off on low).
+* Signs: STOP blank as 8-sided prism + rolled rim + grey back + 2 channel rails; street-name blades
+  (signals.ts nameBlades + nameAtlas canvas, names by XS/ZS grid index; on every other signal pole and
+  ~50 % of stop poles, pole extended to 3.02 m); repeater heads get a black back plate with white border.
+* Lawn-wall seam: NOT groundcover/contact (persists with ?nograss, skip=groundcover, ?nocontact) — a shadow
+  leak at the wall foot; cause + fix written to real-requests.md (sky.ts normalBias / W1 shell starting at y 0
+  over lawn at −0.04). bench.mjs `--probe "px,py;…"` added (raycast at screen pixels → report.json).
+* Groundcover request done: mask.ts `worn` raster clears blades in trees[].worn, no edge tufts there.
 
 ## Code pointers (learned; do not re-read)
 * bench: scripts/bench.mjs — slot classes from `plan.slots` (lamp, tree, …), features from `plan.features`.
@@ -89,6 +108,7 @@ Branch `claude/real-w5-street` (from claude/pensive-gates-bim12i @ 6c29a46). Bri
   pits are geometry replacements (always on).
 
 ## Sheets
+* After s2: docs/progress/real/w5_s2_after.jpg (kerb ×2, signal back plate + name blade, STOP plate, grate, seam probe).
 * Before: docs/progress/real/w5_before.jpg (treebase, lampbase, kerb, fence, hedge at 2/6 m, base commit).
 * After m3: docs/progress/real/w5_m3_after.jpg (grate tree, verge tree, classic lamp base, kerb, fence + gate,
   hedge, manhole, stop sign, signal). Working shots: shots/w5/s*/ (not committed).
@@ -96,3 +116,7 @@ Branch `claude/real-w5-street` (from claude/pensive-gates-bim12i @ 6c29a46). Bri
 ## Tokens (session 1, tokens.py)
 203 calls, 5.4 M weighted, ctx median 222k / max 332k (over the 200k cap — next session: stop earlier),
 0 cold rewrites, idle>5min 0/0. Content: system+brief 32 %, Bash reads 22 %, reminders 13 %, own output 11 %.
+
+## Tokens (session 2, tokens.py)
+130 calls, 3.0 M weighted, ctx median 195k / max 262k (over the 170k cap again: perf runs + image reads), 0 cold,
+idle>5min 5/0. Content: system+brief 37.5 %, Bash reads 25 %.
