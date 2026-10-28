@@ -3,6 +3,16 @@
 Branch `claude/real-w1-facades` (from `claude/pensive-gates-bim12i`). Brief: docs/progress/real-briefs.md "W1".
 
 ## Resume here
+* Session 3 (10-28, from ~17:35 UTC). Merged pensive-gates (2d94d84); golden ref recaptured = shots/golden/ref
+  (this container). Lead's m2 verdict, priorities: (1) albedo>1 root cause, (2) apartment/office walls visible
+  texture at 3 m (render/cracks/string course contrast, streaks, splash zone), (3) apartment glass variety
+  (street reflection, curtains, depth), (4) office upper floors (mullion relief, spandrels, slab lines) + ground
+  columns (base, capital shadow gap, cladding joints), (5) house porch thin at 3 m. Industrial door: leave.
+* Probe `?bdbg=src` (uBhDebug 5, before the clamp): pixels with albedo > 1 / < 0 / NaN (saturated colour) or emit
+  > 6 / NaN / < 0 (pastel) coloured by the code path that wrote them (`bhSrc`: white 0 early wall returns, red 1
+  reveal/sill, green 2 wall branch, blue 3 far wall, yellow 4 far window, cyan 5 shutter, magenta 6 glass,
+  orange 7 roof). Runs p1 (apartment/office/house pick 0, 3/10 m) and p2 (pick 1, + tower): **no flagged
+  pixel** — the faint grey single-pixel dots left are not facade pixels (also on trim canopies/soffits).
 * Session 2 (10-28, from 16:40 UTC). Merged pensive-gates; golden ref = shots/golden/ref (ecef462).
 * **Specks fixed:** NOT the GGX sun highlight (glass roughness → 0.5 alone did not cure it) and not life's
   dust motes (`skip=life` kept them). `?bdbg=nan` (colour flags: red NaN albedo, green NaN/Inf emit, blue emit

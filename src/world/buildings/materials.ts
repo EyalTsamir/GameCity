@@ -309,6 +309,7 @@ uniform vec4 uGeoWin;
 // world-space normal override from bhWall (window reveals, sills, wall relief); zero = keep the geometric normal
 vec3 bhNW = vec3(0.0);
 float plinthF = 0.0;
+float bhSrc = 0.0;
 ${LAMP_GLSL}
 
 // box-filtered square wave: fraction of [x - w/2, x + w/2] where fract(x) > 0.5
@@ -1109,7 +1110,7 @@ void bhWall(inout vec3 albedo, inout float rough, inout float metal, inout vec3 
     albedo = c * sunShade;
     bhNW = dN;
     rough = 0.85;
-    return;
+    bhSrc = 1.0; return;
   }
   vec2 d = abs(pm - wc) - wh;
   float edge = -max(d.x, d.y);
@@ -1187,7 +1188,7 @@ void bhWall(inout vec3 albedo, inout float rough, inout float metal, inout vec3 
       }
     }
     emit += albedo * crown * vec3(0.55, 0.62, 0.75);
-    if (detail >= 0.999) return;
+    if (detail >= 0.999) { bhSrc = 2.0; return; }
   }
 
   // per-room random values
@@ -1275,14 +1276,14 @@ void bhWall(inout vec3 albedo, inout float rough, inout float metal, inout vec3 
     // wall pixel far away: fold in the average window look
     albedo = mix(mix(albedo, avgAlb, winFrac * 0.85), albedo, detail);
     emit += (1.0 - detail) * winFrac * avgGlass;
-    return;
+    bhSrc = 3.0; return;
   }
   if (detail <= 0.0) {
     // window far too small to resolve: exactly the faded result below (glass = avgGlass, frame = 0)
     albedo = avgAlb;
     rough = 0.5; // the glass mirror image is in emit (bhEnv + glint); a low roughness here put a pin-point GGX sun highlight on every pane (bloomed specks)
     emit += avgGlass;
-    return;
+    bhSrc = 4.0; return;
   }
 
   // inside the window opening
@@ -1473,9 +1474,10 @@ void bhWall(inout vec3 albedo, inout float rough, inout float metal, inout vec3 
       rough = 0.55;
       metal = 0.35;
       emit = vec3(0.0);
-      return;
+      bhSrc = 5.0; return;
     }
   }
+  bhSrc = 6.0;
   emit += glass * (1.0 - frame) + fcol * crown * 0.4 * frame;
 }
 
@@ -1639,12 +1641,23 @@ vec3 bhEmit = vec3(0.0);
   float rgh = -1.0;
   float mtl = -1.0;
   if (vB.w < 63.5) bhWall(alb, rgh, mtl, bhEmit, bN, bV);
-  else bhRoof(alb, rgh, bhEmit, bN, bV);
+  else { bhSrc = 7.0; bhRoof(alb, rgh, bhEmit, bN, bV); }
+  if (uBhDebug > 4.5) {
+    float s = bhSrc;
+    vec3 pc = s < 0.5 ? vec3(1,1,1) : s < 1.5 ? vec3(1,0,0) : s < 2.5 ? vec3(0,1,0) : s < 3.5 ? vec3(0,0,1) : s < 4.5 ? vec3(1,1,0) : s < 5.5 ? vec3(0,1,1) : s < 6.5 ? vec3(1,0,1) : vec3(1,0.5,0);
+    bool badA = max(max(alb.r, alb.g), alb.b) > 1.0 || any(isnan(alb)) || min(min(alb.r, alb.g), alb.b) < 0.0;
+    bool badE = any(isnan(bhEmit)) || any(isinf(bhEmit)) || max(max(bhEmit.r, bhEmit.g), bhEmit.b) > 6.0 || min(min(bhEmit.r, bhEmit.g), bhEmit.b) < 0.0;
+    bool bad = badA || badE;
+    if (!badA) pc = pc * 0.5 + 0.5;
+    alb = bad ? pc : alb * 0.3;
+    bhEmit = bad ? pc * 4.0 : vec3(0.0);
+    if (bad) bhNW = vec3(0.0);
+  }
   // guard: a handful of reveal / glass pixels produced albedo far above 1 (bloomed into specks at 3–10 m)
   alb = clamp(alb, 0.0, 1.0);
   if (any(isnan(bhEmit))) bhEmit = vec3(0.0);
   bhEmit = min(bhEmit, vec3(16.0));
-  if (uBhDebug > 3.5) {
+  if (uBhDebug > 3.5 && uBhDebug < 4.5) {
     // red NaN albedo, green NaN / Inf emit, blue emit > 6, yellow albedo > 1.2, cyan NaN normal override
     vec3 flag = any(isnan(alb)) ? vec3(1, 0, 0) : (any(isnan(bhEmit)) || any(isinf(bhEmit)) ? vec3(0, 1, 0) : (max(max(bhEmit.r, bhEmit.g), bhEmit.b) > 6.0 ? vec3(0, 0, 1) : (max(max(alb.r, alb.g), alb.b) > 0.999 ? vec3(1, 1, 0) : (any(isnan(bhNW)) ? vec3(0, 1, 1) : vec3(-1.0)))));
     bool bad = flag.x >= 0.0;
