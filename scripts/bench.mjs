@@ -267,7 +267,22 @@ try {
       await page.waitForTimeout(settle);
       const file = path.join(outDir, `${cls}_${d}m${yo ? '_y' + yo : ''}.png`);
       await page.screenshot({ path: file, timeout: 240000 });
-      report.captures.push({ cls, d, los, file: path.relative(root, file), at: [loc.x, loc.y, loc.z].map((v) => Math.round(v * 10) / 10) });
+      // --probe "px,py;px,py": what is drawn at these screen pixels (first raycast hits: mesh name, point, normal)
+      const probe = !args.probe
+        ? undefined
+        : await page.evaluate(async (spec) => {
+            const THREE = await import('/node_modules/.vite/deps/three.js').catch(() => null);
+            if (!THREE) return 'three not importable';
+            const c = window.__city, cam = c.ctx.camera, sz = c.ctx.size;
+            const rc = new THREE.Raycaster();
+            return spec.split(';').map((pp) => {
+              const [px, py] = pp.split(',').map(Number);
+              rc.setFromCamera(new THREE.Vector2((px / sz.width) * 2 - 1, -(py / sz.height) * 2 + 1), cam);
+              return rc.intersectObjects(c.ctx.scene.children, true).filter((h) => h.object.visible).slice(0, 4).map((h) => ({
+                name: h.object.name || h.object.parent?.name, d: +h.distance.toFixed(3), p: h.point.toArray().map((v) => +v.toFixed(3)), n: h.face?.normal.toArray().map((v) => +v.toFixed(2)) }));
+            });
+          }, args.probe);
+      report.captures.push({ cls, d, los, file: path.relative(root, file), probe, at: [loc.x, loc.y, loc.z].map((v) => Math.round(v * 10) / 10) });
     }
     await page.evaluate(() => window.__city.setSpeed(1));
   }

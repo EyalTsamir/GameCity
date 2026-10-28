@@ -15,6 +15,7 @@ import { SIDEWALK_Y } from '../core/constants';
 import { Rng, hash01 } from '../core/rng';
 import type { DistrictKind } from '../core/plan';
 import { GeoSink, staticMesh } from './vegetation/geo';
+import { NearCells, nearCell } from './lamps/nearCells';
 import { getLayout, occAny, PLANTER, hrand, MASK_WALK, DistanceLod, ChunkCuller, chunkOf } from './props/layout';
 import { furnitureMaterial, glassMaterial } from './props/material';
 import { createGlowMesh, type Glow } from './props/glow';
@@ -49,6 +50,8 @@ export default function create(ctx: CityContext): CityModule {
   // coarse furniture (lamps, shelters, kiosks, sheds) + fine furniture (benches, bins, fences...: hidden far away)
   const KC = [new Kit(new GeoSink(extras)), new Kit(new GeoSink(extras))];
   const KF = [new Kit(new GeoSink(extras)), new Kit(new GeoSink(extras))];
+  // W5 near detail (lamp-post kit): coarse world cells with a camera-distance cut
+  const KD = new NearCells(() => new Kit(new GeoSink(extras)));
   let k = KC[0],
     kf = KF[0];
   /** select the west / east chunk for world x */
@@ -93,9 +96,11 @@ export default function create(ctx: CityContext): CityModule {
     const y = l.street ? l.y : Math.max(l.y, H(l.x, l.z));
     sel(l.x);
     k.sh.frame(l.x, y, l.z, l.yaw);
-    kf.sh.frame(l.x, y, l.z, l.yaw);
-    // near-only lamp-post detail (W5: mouldings, flanges, bolts, hatches, lantern frames; ?nolampdetail, off on low)
-    const head = lamp(k, l.style, l.street, new Rng(Math.floor(hash01(l.x, l.z, 5) * 1e9)), noLampDetail ? undefined : kf);
+    // near-only lamp-post detail (W5: mouldings, flanges, bolts, hatches, lantern frames; ?nolampdetail, off on low),
+    // in 48 m cells drawn only within ~30 m of the camera (lamps/nearCells.ts)
+    const kd = KD.at(l.x, l.z);
+    kd.sh.frame(l.x, y, l.z, l.yaw);
+    const head = lamp(k, l.style, l.street, new Rng(Math.floor(hash01(l.x, l.z, 5) * 1e9)), noLampDetail ? undefined : kd);
     spot(l.x, y, l.z, 0, 0, 0, 0.14, 0.14, 0.14, 0.22, 0.5);
     const [hx, hz] = toWorld(l.x, l.z, l.yaw, head.x, head.z);
     glows.push({ x: hx, y: y + head.y, z: hz, size: head.halo, halo: true, color: head.color, intensity: 1.0 });
@@ -763,6 +768,17 @@ export default function create(ctx: CityContext): CityModule {
     culler.add(m, () => true, 8);
   }
   KF.forEach((kit, i) => addFurniture(kit, `props-furniture-fine-${i ? 'e' : 'w'}`, true));
+  for (const c of KD.list()) {
+    if (c.item.s.vcount === 0) continue;
+    const geo = c.item.s.build();
+    geos.push(geo);
+    const m = staticMesh(geo, mat, 'props-near-detail');
+    m.castShadow = false;
+    m.receiveShadow = true;
+    m.renderOrder = -1;
+    if (parts.includes('furniture')) root.add(m);
+    culler.add(m, () => nearCell(ctx.camera, c), 2);
+  }
   let greenMat: THREE.Material | null = null;
   if (greenB.vertexCount > 0) {
     const geo = greenB.toGeometry();
@@ -825,6 +841,7 @@ export default function create(ctx: CityContext): CityModule {
         tris: [...KC, ...KF, KS].reduce((a, c) => a + c.s.tcount, 0) + gsink.tcount,
         casterTris: KS.s.tcount,
         fineTris: KF.reduce((a, c) => a + c.s.tcount, 0),
+        nearDetailTris: KD.list().reduce((a, c) => a + c.item.s.tcount, 0),
         contactSpots: spots.length,
         verts: [...KC, ...KF, KS].reduce((a, c) => a + c.s.vcount, 0) + gsink.vcount,
         buildMs: Math.round(buildMs),

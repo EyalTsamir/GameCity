@@ -480,44 +480,44 @@ function litter(sh: Shaper, rng: Rng, R: number, n: number, y: number): void {
 export const GRATE_HOLE: Partial<Record<Surround, number>> = { kerbgrate: 0.24, roundgrate: 0.31, grate: 0.24 };
 
 /** round cast-iron grate of outer radius R (trunk hole = R / 2) */
-function roundGrate(sh: Shaper, rng: Rng, R: number): void {
+function roundGrate(sh: Shaper, rng: Rng, R: number, nsh: Shaper = sh): void {
   const iron = new THREE.Color(rng.pick(IRON));
   const rustK = rng.range(0, 0.35);
   const hole = R * 0.5;
   // dark soil seen through the slots, a little sunken; mulch + leaves in the trunk hole
   sh.color('#251b13').disc(0, 0.012, 0, R, 14, 1);
   sh.color(rng.pick(['#3e2c1e', '#4a3422', '#33261a'])).disc(0, 0.016, 0, hole, 10, 1);
-  litter(sh, rng, hole * 0.9, 5 + Math.floor(rng.range(0, 5)), 0.018);
+  litter(nsh, rng, hole * 0.9, 5 + Math.floor(rng.range(0, 5)), 0.018);
   // frame ring flush with the paving (its outer face hides the pit wall), collar round the hole
   ironCol(sh, iron, rng, 0);
   annulus(sh, R - 0.035, R, 0.032, 16, 0);
   annulus(sh, hole, hole + 0.03, 0.03, 10);
-  // concentric rings + radial ribs: slots ≈ 2 cm wide
+  // concentric rings + radial ribs: slots ≈ 2 cm wide (near-only: nsh)
   const rings = Math.max(2, Math.round((R - hole) / 0.075));
   for (let i = 1; i < rings; i++) {
-    ironCol(sh, iron, rng, rustK);
+    ironCol(nsh, iron, rng, rustK);
     const r = hole + ((R - hole) * i) / rings;
-    annulus(sh, r - 0.012, r + 0.012, 0.028, 12 + i * 2);
+    annulus(nsh, r - 0.012, r + 0.012, 0.028, 12 + i * 2);
   }
   const ribs = R > 0.55 ? 16 : 12;
   for (let i = 0; i < ribs; i++) {
     const a = (i / ribs) * Math.PI * 2;
-    ironCol(sh, iron, rng, rustK);
-    sh.push().local(0, 0, 0, 0, -a, 0);
-    sh.box((hole + R) / 2, 0.021, 0, R - hole - 0.02, 0.016, 0.016, 1 | 16 | 32);
-    sh.pop();
+    ironCol(nsh, iron, rng, rustK);
+    nsh.push().local(0, 0, 0, 0, -a, 0);
+    nsh.box((hole + R) / 2, 0.021, 0, R - hole - 0.02, 0.016, 0.016, 1 | 16 | 32);
+    nsh.pop();
   }
-  litter(sh, rng, R, 3 + Math.floor(rng.range(0, 4)), 0.031);
+  litter(nsh, rng, R, 3 + Math.floor(rng.range(0, 4)), 0.031);
 }
 
 /** rectangular grate 2hx × 2hz: frame, transverse bars, the trunk hole in a square collar */
-function rectGrate(sh: Shaper, rng: Rng, hx: number, hz: number): void {
+function rectGrate(sh: Shaper, rng: Rng, hx: number, hz: number, nsh: Shaper = sh): void {
   const iron = new THREE.Color(rng.pick(IRON));
   const rustK = rng.range(0, 0.35);
   const hole = 0.24;
   sh.color('#251b13').box(0, 0.012, 0, hx * 2, 0.002, hz * 2, 1);
   sh.color(rng.pick(['#3e2c1e', '#4a3422', '#33261a'])).box(0, 0.016, 0, hole * 2, 0.002, hole * 2, 1);
-  litter(sh, rng, hole * 0.9, 5, 0.018);
+  litter(nsh, rng, hole * 0.9, 5, 0.018);
   ironCol(sh, iron, rng, 0);
   sh.box(0, 0.016, -hz + 0.02, hx * 2, 0.032, 0.04, 0);
   sh.box(0, 0.016, hz - 0.02, hx * 2, 0.032, 0.04, 0);
@@ -528,16 +528,16 @@ function rectGrate(sh: Shaper, rng: Rng, hx: number, hz: number): void {
   sh.box(0, 0.021, hole, hole * 2 + 0.06, 0.018, 0.03, 1);
   sh.box(-hole, 0.021, 0, 0.03, 0.018, hole * 2, 1);
   sh.box(hole, 0.021, 0, 0.03, 0.018, hole * 2, 1);
-  // bars across the short side, 4.5 cm pitch, interrupted by the hole
+  // bars across the short side, 4.5 cm pitch, interrupted by the hole (near-only: nsh)
   for (let x = -hx + 0.06; x < hx - 0.04; x += 0.045) {
-    ironCol(sh, iron, rng, rustK);
+    ironCol(nsh, iron, rng, rustK);
     if (Math.abs(x) < hole + 0.01) {
       const l = hz - hole - 0.04;
-      sh.box(x, 0.021, -(hole + hz) / 2, 0.016, 0.016, l, 1);
-      sh.box(x, 0.021, (hole + hz) / 2, 0.016, 0.016, l, 1);
-    } else sh.box(x, 0.021, 0, 0.016, 0.016, hz * 2 - 0.06, 1);
+      nsh.box(x, 0.021, -(hole + hz) / 2, 0.016, 0.016, l, 1);
+      nsh.box(x, 0.021, (hole + hz) / 2, 0.016, 0.016, l, 1);
+    } else nsh.box(x, 0.021, 0, 0.016, 0.016, hz * 2 - 0.06, 1);
   }
-  litter(sh, rng, Math.min(hx, hz), 4, 0.031);
+  litter(nsh, rng, Math.min(hx, hz), 4, 0.031);
 }
 
 /**
@@ -643,19 +643,25 @@ export function wornPatch(sh: Shaper, w: Wind, x: number, z: number, r: number, 
   litter(sh, rng, r * 0.9, 6, 0.018);
 }
 
-export function surround(sh: Shaper, w: Wind, kind: Surround, x: number, y: number, z: number, yaw: number, rng: Rng): number {
+export function surround(sh: Shaper, w: Wind, kind: Surround, x: number, y: number, z: number, yaw: number, rng: Rng, near?: { sh: Shaper; w: Wind }): number {
   w.at(x, y, z, 0, 0, 0);
   sh.frame(x, y, z, yaw);
+  // grate bars / rings / ribs and litter go to the near-only cells when given (frame, collar and soil stay)
+  if (near) {
+    near.w.at(x, y, z, 0, 0, 0);
+    near.sh.frame(x, y, z, yaw);
+  }
+  const nsh = near?.sh ?? sh;
   switch (kind) {
     case 'grate':
-      rectGrate(sh, rng, 0.68, 0.38);
+      rectGrate(sh, rng, 0.68, 0.38, nsh);
       return y + 0.012;
     case 'roundgrate':
-      roundGrate(sh, rng, 0.62);
+      roundGrate(sh, rng, 0.62, nsh);
       return y + 0.012;
     case 'kerbgrate':
       // the round grate sized for the 0.8 m furniture band of a street (plazas keep the wide one)
-      roundGrate(sh, rng, 0.48);
+      roundGrate(sh, rng, 0.48, nsh);
       return y + 0.012;
     case 'verge':
       vergePit(sh, rng, 0.75, 0.33);

@@ -214,19 +214,23 @@ function extrudeCurb(H: MeshBuilder, pts: CurbPt[], rows: number[], height: Heig
     const h0 = height(p.x, p.z, 0, p.nx, p.nz);
     const yTop0 = h0.y;
     const yFace = Math.max(Y.gutter, yTop0 - CHAMFER);
-    // gutter
-    surf(H, HM.gutter, 0, 9, p.u);
+    // gutter (d = distance from the kerb face: channel grime line, silt)
+    surf(H, HM.gutter, 0, GUTTER, p.u);
     col.push(H.v(p.x - p.nx * GUTTER, Y.gutter, p.z - p.nz * GUTTER));
+    surf(H, HM.gutter, 0, 0, p.u);
     col.push(H.v(p.x, Y.gutter, p.z));
-    // curb face (normal towards the road)
-    surf(H, HM.curbFace, 0, 9, p.u);
+    // curb face (normal towards the road); kerb d = profile coordinate: −height down the face, 0 at the arris,
+    // + across the top (the shader's arris wear, foot grime and tyre scuffs)
+    surf(H, HM.curbFace, 0, -(yFace - Y.gutter) - CHAMFER, p.u);
     col.push(H.v(p.x, Y.gutter - 0.004, p.z, -p.nx, 0, -p.nz));
+    surf(H, HM.curbFace, 0, -CHAMFER, p.u);
     col.push(H.v(p.x, yFace, p.z, -p.nx, 0, -p.nz));
     // chamfer
-    surf(H, HM.curb, 0, 9, p.u);
+    surf(H, HM.curb, 0, -CHAMFER, p.u);
     const cn = Math.SQRT1_2;
     const hc = height(p.x + p.nx * CHAMFER, p.z + p.nz * CHAMFER, CHAMFER, p.nx, p.nz);
     col.push(H.v(p.x, yFace, p.z, -p.nx * cn, cn, -p.nz * cn));
+    surf(H, HM.curb, 0, CHAMFER, p.u);
     col.push(H.v(p.x + p.nx * CHAMFER, hc.y, p.z + p.nz * CHAMFER, -p.nx * cn, cn, -p.nz * cn));
     // curb top
     const pushTop = (d: number, mat: number) => {
@@ -237,7 +241,7 @@ function extrudeCurb(H: MeshBuilder, pts: CurbPt[], rows: number[], height: Heig
       if (mat === HM.walk) {
         const a = tactile ? tactile(x, z) : -1;
         surf(H, mat, style, a >= 0 ? d : 9, a >= 0 ? a : 0);
-      } else surf(H, mat, 0, 9, p.u);
+      } else surf(H, mat, 0, mat === HM.curb ? d : 9, p.u);
       return H.v(x, h.y, z, -h.gx / l, 1 / l, -h.gz / l);
     };
     col.push(pushTop(CHAMFER, HM.curb));
