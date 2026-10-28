@@ -15,7 +15,26 @@ Photo test "Person" (REAL.md). Owned: `src/sim/pedestrians/**` presentation (not
       Fix: rail.ts `RailSample.sx/sz` = tangent smoothed across vertices (TAN_BLEND 0.6 m), used by every
       member-lateral normal in crowd.ts; placeOnRail clamps a present member's step to ≤ (1.3·p.v + 0.3) m/s
       (≥ 0.6) — it lags and catches up instead of teleporting (jumps ≥ 3 m = deliberate relocations, pass).
-      Result (velC, 60 s): smoothed m.speed > 3 m/s 24 → 7 per ~2.2 M member-steps; > 2.5 m/s 1700+ → 20.
+      Result, 240 s @ speed 4 (shots/w4/velD60.txt / velD8.txt; baseline velA 60 s): smoothed m.speed (what the
+      gait sees) > 3.5 m/s: baseline ~0.3 ‰ of member-steps, 7.6 m/s max in 60 s → after: 5 steps in 240 s at 60 fps
+      steps (2 rare ≥ 3 m relocations, threshold since raised to 6 m), 0 at 8 fps steps (max 2.84 = jogger pace).
+      Raw slot spikes left: only members not yet present (fading in) — invisible. GAIT_VMAX cap kept as a backstop.
+  (2) Hairline: cap vertices carry s (aux2: 0 hairline … 1 crown) → VS lumps (locks) in the silhouette + crown lift,
+      FS `HAIRLINE` feathers the first ~17 % of the cap into the skin with two strand-noise octaves and a root
+      shadow (new flat varying vPedSkin). Toggle `?nohairline` (uniform uPedHairline). Judged hl2 (shots/w4/hl2):
+      forehead edge breaks into strands; still somewhat cap-like at 0.8 m — next: more volume on long hair sheets,
+      the ear poking through the long-hair side band (woman 67 hl2).
+  (3) Dress notch = the forward thigh passing through the upper front of long dresses (skin wedge mid-thigh,
+      shots/w4/cr1 man 64 body): skirt k is small high up. Fix in the TAIL block: front panel z ≥ forward leg's
+      posed z, back ≤ rear leg's (cover by |rad0.y|). Judged shots/w4/dr1: grey/blue dresses + long skirts closed in a stride.
+  (4) Carried things (close level): umbrella with 8 ribs, domed + scalloped canopy, lining with ribs and stretchers,
+      crook handle, ferrule (`umbrellaClose`); takeaway cup with sleeve + lid rim (14 sides); briefcase arched
+      handle, lid seam, catches; cross-body bag flap + buckle. Judged shots/w4/cr1: crook + briefcase read.
+  Downtown shot after all changes: console clean, invariants {} (shots/w4/dt3.txt).
+  Bench: people-bench `--carry 1`, `--rain 0.8`, `--where "<js on m>"`, shots head3q / headback.
+  Not done this session: (5) walk weight (gait.ts already has heel strike / pelvis list+sway / chest counter-twist /
+  age terms — needs a judging pass, not code), (6) crowd variation at 10 m (the bench's "group 10 m" framing hit a
+  shop window in hl1 — fix framing first).
 * 2026-10-28 ~20:00 UTC — session 2 ENDED (context 194k at the first get_session: the hidden system+brief is
   most of it — next session: get_session after the FIRST bench). All committed + pushed.
   Lead's m1 blockers, status:
@@ -100,6 +119,8 @@ Photo test "Person" (REAL.md). Owned: `src/sim/pedestrians/**` presentation (not
 * Face detail fade at px 3.5–9 mm: eyes vanished at 3–4 m (where real eyes still read) → 6–16 mm.
 
 ## Toggles / tiers / costs
+* `?nohairline` — smooth hard-edged hair cap (no feathering, no locks). Close + near levels; FS cost tiny.
+* Close-level carried items cost vertices only on figures < 15 m that carry them (umbrella ~+700 verts).
 * `?nopeopledetail` — no close level (figures < 15 m use the old LOD0). Tier: close level to 15 m (high),
   11 m (medium), 7 m (low) — `CrowdRenderer.closeDist` set in pedestrians.ts.
 * `?pedlod=close` forces every figure to the close level (`?pedlod=0..3` = near/lo/tiny/pin as before).
@@ -110,6 +131,7 @@ Photo test "Person" (REAL.md). Owned: `src/sim/pedestrians/**` presentation (not
   figures < 15 m. Needs an Adreno measurement; the medium/low tiers shrink the radius to 11 / 7 m.
 
 ## Sheets
+* docs/progress/real/w4_after_s3.jpg — session 3: hairline, dress stride, umbrella / briefcase / bag flap.
 
 ## Next
 * Skirts/dresses in a long stride split into a pointed diamond at the front hem (thigh-carried skirt rings;

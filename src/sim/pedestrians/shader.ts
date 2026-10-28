@@ -356,6 +356,13 @@ void pedPose(inout vec3 p, inout vec3 n) {
     q.y = mix(q.y, mix(pr.y, pl.y, ext), 0.5 * panel);
     if (!seated) k *= 1.0 - 0.25 * panel * max(u, 0.0);
     p = mix(p, q, k);
+    // high on a long skirt / dress k is small, and a thigh swinging forward (or a heel kicking back) would pass
+    // through the cloth: the front never sits behind the forward leg's posed surface, the back never in front
+    // of the rear one (the sheet stretches across the stride instead of a skin notch showing through)
+    if (!seated) {
+      float cover = smoothstep(0.15, 0.5, abs(rad0.y));
+      p.z = rad0.y >= 0.0 ? max(p.z, mix(p.z, zx + 0.003, cover)) : min(p.z, mix(p.z, zx - 0.003, cover));
+    }
     n = normalize(mix(n, mix(nr, nl, mix(wS, ext, panel)), k));
     if (seated) p.y = max(p.y, P_tailFloor);
     bone = ${B.PELVIS};
