@@ -4,6 +4,10 @@ Branch `claude/real-w2-vehicles` (from `claude/pensive-gates-bim12i`). Brief: `d
 Owned: `src/sim/traffic/{models,vehicleMaterial,render}.ts` (+ trains later). Sim untouched.
 
 ## Resume here
+* 2026-10-28 session 6 — STARTED. Lead s5 verdict: from the platform the train still reads as a smooth red
+  tube. Plan: (1) train body detail (window corners + seals + recess, plug-door seams/handles/button, livery
+  lettering, grime gradient, roof silhouette, cab front); (2) paint Fresnel independent of albedo; (3) platform gap
+  → W7/plan owner (not in my files); (4) re-measure novehlod0.
 * 2026-10-28 session 5 — **trains judged + fixed, police band, paint reflection; perf measured.** Bench framing
   for trains fixed first (commit 332e99d): `bench.mjs --classes train --q "speed=0"` → fixed poses `platform_3m`,
   `platform_10m`, `track_3m`, `roof_6m` (the opening regional dwells at the platform). Judged (s5a): silhouette right
