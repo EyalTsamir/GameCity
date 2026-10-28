@@ -4,6 +4,17 @@ Branch `claude/real-w2-vehicles` (from `claude/pensive-gates-bim12i`). Brief: `d
 Owned: `src/sim/traffic/{models,vehicleMaterial,render}.ts` (+ trains later). Sim untouched.
 
 ## Resume here
+* 2026-10-28 session 4 — **fix round + trains pushed; wrapping at the context cap.** Next session, in order:
+  (a) **train bench framing still fails**: the camera ends at window height against the car side (platform blocks
+  the line of sight → arm shortened). Try `--q` with a free view from the track side (e.g. find a train with
+  `__city.ctx.pickers`, place the camera on the far side of the tracks at y 0.8, pitch 0) and judge bogies, door
+  seals, gangway, coupler, pantograph, roof pack, grime (none of the train work has been judged in a capture yet
+  except the roof pack louvres and door portal at 3 m); (b) paint: two-layer + metallic is a modest gain (sheet
+  row 1: left `?nocarpaint`, right on) — without real environment reflections the gloss stays limited; (c) tyre
+  sidewall dust barely visible; (d) police livery decal is a flat plane at W/2 + 0.014 (floats off the tuck like
+  the taxi band did); (e) perf not measured (estate/MPV = 2 new model kinds; train bogie/roof geometry +~1.5k tris
+  per car). Sheet: `docs/progress/real/w2_s4_fix.jpg` (paint off/on; SUV rails; parked row with estate + MPV;
+  bus roof AC; lorry pallets/crates/straps; bus front; mirror on its stalk).
 * 2026-10-28 session 4 (fix round after judge-1 + bugs-1). Done in code (see "Session 4" below): (1) SUV roof rails
   on feet (`topSurfaceY` in carBody.ts, `roofRails()` in models.ts); (2) paint = two layers (`thBaseSpec` 0.22 under
   the coat, ~45 % metallic by phase hash, `?nocarpaint` → uVehDetail.w) + realistic fleet palette (BODY_COLORS);
@@ -192,6 +203,9 @@ Owned: `src/sim/traffic/{models,vehicleMaterial,render}.ts` (+ trains later). Si
   `w2_lineup_14m.jpg`, `w2_night_after.jpg`. Raw: `shots/w2/` (not committed).
 
 ## Tokens
+* Session 4 (tokens.py): 145 calls, 3.4M weighted, ctx median 194k / max 274k (over the cap again: image reads + long
+  waits on software-GL captures; next session: one bench run per judgment, fewer screenshots). Checks: downtown console
+  clean, invariants 0, typecheck clean.
 * Session 3 (tokens.py): 79 calls, 2.0M weighted, ctx median 188k / max 239k (system + brief ≈ 37 % — the
   floor is high; keep sessions to one milestone). Checks: downtown console clean, invariants 0; overview unchanged.
 * Session 2: golden m2 vs ref (merged base) mean diff 0.0–0.1 on all five views; downtown console clean, invariants 0.
