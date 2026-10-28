@@ -17,6 +17,13 @@ Branch: work continues from `claude/tinyhaven-graphics-audit-l089m8` (fast-forwa
 `claude/pensive-gates-bim12i` (the session's designated branch).
 
 ## Resume here (keep current)
+* 2026-10-28 12:04 UTC — POST-ROUND BUG FIXING (user found embarrassing bugs in free-camera views our POI reviews missed).
+  Fixed by lead: bus shelters faced the road with their back wall (furniture.ts busShelter mirrored; places.ts waiting
+  spots) — verified shots/world/lead/bug3/sheet.png. Launch Tinyhaven.cmd now rebuilds before serving.
+  World agent resumed (a1ae2952c87afea00): field band cut diagonally at the slab S edge (userbugs/2.png), forest-floor
+  egg-carton domes (crown bumps near camera), sea rectangle seam at the slab SE corner (bug1/seam/see_11.png), then its
+  own low-altitude landscape sweep. Independent QA bug-hunt agent (aad60ffcfbb282c30) sweeping the TOWN at eye level /
+  low flights → shots/qa/REPORT.md. Lead: triage QA findings, route/fix, re-verify, report to user.
 * **WORLD ROUND DONE** (2026-10-24 19:19 UTC). All 7 workstreams have final reports; lead integration QA complete (see
   "Final report (lead)" at the end). ui-test 35/36 (the 1 failure is pre-existing in the ?camdebug stand-in city).
   Watchdog scheduled task deleted, autocheckpoint stopped. Open for the user: real-GPU perf.mjs runs (commands in
