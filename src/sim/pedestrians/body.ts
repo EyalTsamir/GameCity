@@ -372,7 +372,7 @@ const LODS: Record<Lod, LodCfg> = {
     shin: [0, 1, 2, 3, 4, 5, 6],
     footSides: 12,
     foot: [0, 1, 2, 3, 4, 5, 6, 7],
-    hairCap: [0, 0.18, 0.4, 0.62, 0.82, 1],
+    hairCap: [0, 0.18, 0.4, 0.62, 0.8, 0.92, 0.98, 1],
     hairLong: [0.08, 0.2, 0.3, 0.42],
     tailSides: 16,
     tailRings: 4,
@@ -1627,12 +1627,34 @@ function strapPath(b: MeshBuilder, d: Dims, cfg: LodCfg, p0: P3, p1: P3, wdt: nu
     const k = rs / rp;
     return [p[0] * k, p[1], r.cz + (p[2] - r.cz) * k];
   };
-  const N = 6;
-  let prev = out(p0);
-  for (let i = 1; i <= N; i++) {
-    const q = out(lerp3(p0, p1, i / N));
-    stick(b, prev, q, wdt);
-    prev = q;
+  // a flat webbing ribbon (outer face + edges) along the surface
+  const N = 8;
+  const pts: P3[] = [];
+  for (let i = 0; i <= N; i++) pts.push(out(lerp3(p0, p1, i / N)));
+  const cz = T[8].cz;
+  const half = wdt * 1.6,
+    th = wdt * 0.35;
+  const rowO: number[] = [],
+    rowI: number[] = [],
+    edgeA: number[] = [],
+    edgeB: number[] = [];
+  for (let i = 0; i <= N; i++) {
+    const p = pts[i];
+    const dir = norm(sub(pts[Math.min(N, i + 1)], pts[Math.max(0, i - 1)]));
+    let o = norm([p[0], 0, p[2] - cz]);
+    if (p[1] > T[T.length - 1].y - 0.01) o = norm(add(o, [0, 1.5, 0]));
+    const sd = norm(cross(dir, o));
+    const oo = mul(o, th);
+    rowO.push(b.v(add(add(p, mul(sd, half)), oo), 0, 0));
+    rowI.push(b.v(add(add(p, mul(sd, -half)), oo), 0, 0));
+    edgeA.push(b.v(add(p, mul(sd, half)), 0, 0));
+    edgeB.push(b.v(add(p, mul(sd, -half)), 0, 0));
+  }
+  const mid = (i: number): P3 => [0, pts[i][1], cz];
+  for (let i = 0; i < N; i++) {
+    b.quadOut(rowO[i], rowO[i + 1], rowI[i + 1], rowI[i], mid(i));
+    b.quadOut(edgeA[i], edgeA[i + 1], rowO[i + 1], rowO[i], pts[i]);
+    b.quadOut(edgeB[i], edgeB[i + 1], rowI[i + 1], rowI[i], pts[i]);
   }
 }
 
