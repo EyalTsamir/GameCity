@@ -578,6 +578,8 @@ vec3 landAlbedo() {
     float depth = ${WL.toFixed(2)} - p.y;
     if (depth > 0.0) {
       vec3 bed = mix(cBedA, cBedB, smoothstep(0.2, 6.0, depth));
+      // the river (and its banks) has a silty, dark bed — the sand shelf is the sea's
+      bed = mix(bed, mix(cMud * 0.8, cBedB * 0.7, smoothstep(0.3, 2.5, depth)), 1.0 - smoothstep(30.0, 55.0, vCov3.x));
       bed *= 0.9 + 0.16 * nB.b;
       vec2 cp = p.xz * 0.23;
       float c1 = texture2D(tLN, cp + vec2(uTime * 0.011, uTime * 0.007)).g;

@@ -163,9 +163,10 @@ export function plotSizeOf(x0: number, y0: number, x1: number, y1: number): numb
   return slabDistXZ(_w.x, _w.z) < PLOT_NEAR_D ? PLOT_NEAR : PLOT;
 }
 /** polytunnels only west of the town (twin: fTun) */
-export function tunnelsOK(x0: number, y0: number, x1: number, y1: number): boolean {
-  fromField((x0 + x1) / 2, (y0 + y1) / 2, _w);
-  return _w.x < -40;
+export function tunnelsOK(_x0: number, _y0: number, _x1: number, _y1: number): boolean {
+  // (off: painted on the ground, polytunnels read as white terraces from the free camera; their plots
+  // are market gardens — the GLSL twin fTun returns false too)
+  return false;
 }
 
 /** the field at a field-frame point — parcel, its 2–3 strips, or (town edge) its grid of small plots */
@@ -339,8 +340,7 @@ float fPlot(vec4 box) {
 }
 // polytunnels only west of the town (twin of tunnelsOK)
 bool fTun(vec4 box) {
-  vec2 c = 0.5 * (box.xy + box.zw);
-  return FROT[0][0] * c.x + FROT[0][1] * c.y < -40.0;
+  return false;
 }
 // crop kind (twin of cropKind): 0 wheat 1 stubble 2 greens 3 pasture 4 hay 5 ploughed 6 fallow
 // 7 sunflower 8 orchard 9 market garden 10 maize 11 polytunnels
