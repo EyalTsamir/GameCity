@@ -305,7 +305,7 @@ export class SignalRenderer {
       // its two band clamps round the pole
       for (const dy of [-0.3, 0.3]) place(cyl(0.085, 0.085, 0.04, 0, ry + dy - 0.02, 0, 12), head, y0, '#3a3f42', true);
       // street-name blades above the repeater on every other pole
-      if ((this.poleCount & 1) === 0) this.nameBlades(I, head, y0, 3.55);
+      if ((this.poleCount & 1) === 0) this.nameBlades(I, head, y0, 3.55, 0.09);
     }
     for (let i = 0; i < 3; i++) {
       const ly = ry + 0.27 - i * 0.27;
@@ -354,7 +354,7 @@ export class SignalRenderer {
     const blades = detail && hs > 0.3 && hs < 0.8;
     const poleH = blades ? 3.02 : 2.62;
     placeT(cyl(0.05, 0.05, poleH, 0, 0, 0, detail ? 10 : 8), head, y0, '#9aa1a7');
-    if (blades) this.nameBlades(I, head, y0, 2.9, tx, tz);
+    if (blades) this.nameBlades(I, head, y0, poleH + 0.09, 0, tx, tz);
     const sy = 2.32;
     const oct = (r: number, z: number, back = false) => {
       const g = new THREE.CircleGeometry(r, 8);
@@ -419,10 +419,11 @@ export class SignalRenderer {
   }
 
   /**
-   * Two crossed street-name blades centred on a pole at local height `yl`: the lower one runs along the N–S street
+   * Two crossed street-name blades on a pole at local height `yl` (poleR 0: centred on the pole top; else flag
+   * blades clamped to the side of a taller pole, sticking out by poleR + half their length): the lower one runs along the N–S street
    * (named by the junction x), the upper one along the E–W street (junction z). Text on both faces.
    */
-  private nameBlades(I: Intersection, head: SignalHead, y0: number, yl: number, tx = 0, tz = 0): void {
+  private nameBlades(I: Intersection, head: SignalHead, y0: number, yl: number, poleR: number, tx = 0, tz = 0): void {
     const names: [number, number][] = [
       [STREET_ROWS.ns(I.x), -Math.PI / 2],
       [STREET_ROWS.ew(I.z), 0],
@@ -437,6 +438,7 @@ export class SignalRenderer {
         if (face >= 4) uv.setY(i, v0 + uv.getY(i) * (v1 - v0));
         else uv.setXY(i, 0.004, v0 + 0.004);
       }
+      if (poleR > 0) g.translate(0.4 + poleR, 0, 0);
       g.rotateY(ang - head.yaw);
       g.translate(0, yl + k * 0.17, 0);
       if (tx || tz) g.rotateX(tx).rotateZ(tz);

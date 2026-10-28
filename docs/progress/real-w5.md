@@ -79,6 +79,12 @@ Branch `claude/real-w5-street` (from claude/pensive-gates-bim12i @ 6c29a46). Bri
   (−~25k est.). Next: measure per toggle (`;nolampdetail`, `;nofencedetail`, `;nosigndetail`, `;notreebase`)
   and give the grates a toggle/tier if they show. Biggest remaining: grates + verge setts (~450 tris per street tree, fine
   plant sink = near chunks), classic lamp near kit (~600 tris each). Unmeasured on the Adreno.
+* Session 2 (perf_s2a/b, same view): per toggle BEFORE the near cut: lamp kit +70k, fence detail −2k, sign/signal
+  +86k, treebase +14k (= +181k). After the cut (props KD, signals `fine`, 12-seg base shafts): all W5 toggles
+  on vs off = +59k tris (3.501 M vs 3.442 M), but +7 draw calls (184 vs 177: ≤ 4 lamp cells, 2 signal cells,
+  1 street-name mesh). Grate bars/ribs/litter moved to vegetation near cells afterwards (perf_s2c).
+* ?nonearcut — draw every near cell (A/B of the distance cut). ?nokerbdetail — kerb stone/gutter shader branch
+  off (also on low).
 * ?nofencedetail — old pickets/posts, no gates, no hedge foot stems (low tier: off). Hedge core rounding + verge
   pits are geometry replacements (always on).
 
