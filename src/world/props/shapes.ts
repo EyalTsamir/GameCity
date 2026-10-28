@@ -158,3 +158,46 @@ export function ring(sh: Shaper, cx: number, y: number, cz: number, R: number, r
     [R - r, y + r * 0.7],
   ], sides);
 }
+
+// 3 × 5 pixel font (rows top → bottom, '#' = ink) for lettering built from boxes: props carry no textures
+const FONT: Record<string, string> = {
+  A: '.#.#.#####.##.#', B: '##.#.###.#.###.', C: '.###..#..#...##', D: '##.#.##.##.###.', E: '####..##.#..###',
+  F: '####..##.#..#..', G: '.###..#.##.#.##', H: '#.##.#####.##.#', I: '###.#..#..#.###', J: '..#..#..##.#.#.',
+  K: '#.##.###.#.##.#', L: '#..#..#..#..###', M: '#.########.##.#', N: '##.#.##.##.##.#', O: '.#.#.##.##.#.#.',
+  P: '##.#.###.#..#..', Q: '.#.#.##.###..##', R: '##.#.###.#.##.#', S: '.###...#...###.', T: '###.#..#..#..#.',
+  U: '#.##.##.##.####', V: '#.##.##.##.#.#.', W: '#.##.########.#', X: '#.##.#.#.#.##.#', Y: '#.##.#.#..#..#.',
+  Z: '###..#.#.#..###', '0': '####.##.##.####', '1': '.#.##..#..#.###', '2': '##...#.#.#..###', '3': '##...#.#...###.',
+  '4': '#.##.####..#..#', '5': '####..##...###.', '6': '.###..####.####', '7': '###..#.#..#..#.', '8': '####.#####.####',
+  '9': '####.####..###.', ':': '....#.....#....', '.': '.............#.', '-': '......###......', '&': '.#.#.#.#.#.#.##',
+  "'": '.#..#..........', ' ': '...............', '/': '..#..#.#.#..#..',
+};
+
+/**
+ * Text in the 3 × 5 pixel font on the local plane z (facing +Z), centred on (cx, cy); px = pixel size,
+ * d = relief (only the front face and sides). Horizontal runs merge into one box. Returns the text width.
+ */
+export function pixelText(sh: Shaper, text: string, cx: number, cy: number, z: number, px: number, d = 0.002, bold = false): number {
+  const adv = 4 * px,
+    w = text.length * adv - px;
+  let x0 = cx - w / 2;
+  for (const ch of text.toUpperCase()) {
+    const g = FONT[ch] ?? FONT[' '];
+    for (let r = 0; r < 5; r++) {
+      const y = cy + (2 - r) * px;
+      let c = 0;
+      while (c < 3) {
+        if (g[r * 3 + c] !== '#') {
+          c++;
+          continue;
+        }
+        let e = c;
+        while (e < 3 && g[r * 3 + e] === '#') e++;
+        // thin print: the front face only; raised letters: sides and top too
+        sh.box(x0 + ((c + e) / 2) * px, y, z + d / 2, (e - c) * px + (bold ? px * 0.15 : 0), px * (bold ? 1.08 : 1), d, d <= 0.0015 ? 55 : 1 | 4);
+        c = e;
+      }
+    }
+    x0 += adv;
+  }
+  return w;
+}
