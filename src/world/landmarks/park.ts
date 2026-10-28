@@ -105,8 +105,8 @@ export function genStatue(env: Env, f: Feature): void {
       const corner = Math.max(0, (Math.abs(p.x) - 0.38) / 0.12);
       const len = 0.25 + 0.55 * hash1(Math.floor(x * 18)) + 0.4 * corner;
       const t = Math.min(1, Math.max(0, (p.y - (yTop - len)) / len));
-      const k = Math.min(1, runs * t * t * 1.4 + corner * t * 0.5);
-      o.setRGB(1 - 0.42 * k, 1 - 0.22 * k, 1 - 0.3 * k);
+      const k = Math.min(1, runs * t * t * 1.8 + corner * t * 0.6);
+      o.setRGB(1 - 0.6 * k, 1 - 0.36 * k, 1 - 0.46 * k);
     });
     _m.makeRotationY(ry).setPosition(Math.sin(ry) * 0.5025, 0, Math.cos(ry) * 0.5025);
     K.geoM(die, sg, _m);

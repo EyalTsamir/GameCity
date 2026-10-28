@@ -169,10 +169,10 @@ export default function create(ctx: CityContext): CityModule {
           const hx = PLANTER.along / 2, hz = PLANTER.across / 2;
           const trail = hk(1) < 0.5 ? GREEN.IVY_HANG : GREEN.PETUNIA;
           for (const side of [0, 1, 2, 3] as const) {
-            if (hk(2 + side) < (side % 2 ? 0.65 : 0.25)) continue;
+            if (hk(2 + side) < (side % 2 ? 0.5 : 0.12)) continue;
             const sg = sideGeom({ x0: -hx, x1: hx, z0: -hz, z1: hz }, side);
-            const a0 = sg.L * 0.5 * hk(9 + side);
-            greenKit.hang(sg, a0, sg.L - 0.04, 0.03, PLANTER.height + 0.03, 0.14, 0.22 + 0.25 * hk(14 + side), trail, 0.06, 1, 0.06);
+            const a0 = sg.L * 0.35 * hk(9 + side);
+            greenKit.hang(sg, a0, sg.L - 0.04, 0.03, PLANTER.height + 0.03, 0.2, 0.3 + 0.2 * hk(14 + side), trail, 0.06, 1, 0.06);
           }
           if (hk(20) < 0.55) greenKit.clump((hk(21) < 0.5 ? -1 : 1) * hx * 0.62, PLANTER.soil - 0.02, 0, 0.17, 0.45 + 0.3 * hk(22), hk(23) < 0.5 ? GREEN.GRASS : GREEN.LAVENDER, 3);
         }
