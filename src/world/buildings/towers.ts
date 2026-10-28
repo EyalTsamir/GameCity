@@ -67,6 +67,51 @@ const OFFICE_SCHEMES = [2, 3, 6, 7, 6, 2, 3, 7];
 const SHOP_NAMES = ['Café Nord', 'Haven Bank', 'Books & Co', 'Boutique', 'Deli Market', 'Pharmacy', 'Bistro 22', 'Gallery', 'Optics', 'Espresso'];
 
 let shopIdx = 0;
+let columnDetail = true;
+/** ?nocolumndetail: arcade columns as plain boxes (no base, cladding joints, shadow gap, cap). */
+export function setColumnDetail(on: boolean): void {
+  columnDetail = on;
+}
+
+/**
+ * Clad arcade column at u on side sg, inward from the outer line (o ∈ [-0.74, 0]): a dark granite base with a
+ * chamfer step, stone / concrete cladding in ~1 m courses with 12 mm recessed joints, a 6 cm shadow gap under
+ * a slightly wider cap plate that meets the soffit. Clipped to [0, L] like the plain column (corners are shared).
+ */
+function arcadeColumn(t: Gen['trim'], sg: ReturnType<typeof sideGeom>, u: number, gH: number, c: THREE.Color, seed: number): void {
+  const L = sg.L;
+  const box = (h: number, o0: number, o1: number, y0: number, y1: number) =>
+    sideBox(t, sg, Math.max(0, u - h), Math.min(L, u + h), o0, o1, y0, y1, false, true);
+  if (!columnDetail) {
+    setCol(t, shade(c, 0.95));
+    box(0.35, -0.7, 0, 0, gH);
+    return;
+  }
+  const baseH = 0.3;
+  setCol(t, col(seed % 3 === 0 ? '#4c4a48' : '#5f5c58'));
+  box(0.39, -0.74, 0, 0, baseH);
+  setCol(t, col('#6c6964'));
+  box(0.37, -0.72, -0.01, baseH, baseH + 0.04); // chamfer step
+  const capY = gH - 0.22;
+  const gapY = capY - 0.06;
+  const y0 = baseH + 0.04;
+  const n = Math.max(2, Math.round((gapY - y0) / 1.05));
+  const ch = (gapY - y0) / n;
+  for (let k = 0; k < n; k++) {
+    const a = y0 + k * ch;
+    setCol(t, shade(c, 0.9 + 0.1 * (((seed * 7 + k * 13 + Math.round(u * 3)) % 5) / 4)));
+    box(0.35, -0.7, -0.02, a + (k ? 0.006 : 0), a + ch - (k < n - 1 ? 0.006 : 0));
+    if (k < n - 1) {
+      setCol(t, shade(c, 0.45));
+      box(0.335, -0.685, -0.035, a + ch - 0.006, a + ch + 0.006); // recessed joint
+    }
+  }
+  setCol(t, col('#1f2226'));
+  box(0.31, -0.66, -0.06, gapY, capY); // shadow gap
+  setCol(t, shade(c, 1.02));
+  box(0.37, -0.72, -0.0, capY, gH);
+}
+
 export function resetTowers(): void {
   shopIdx = 0;
 }
@@ -293,14 +338,12 @@ export function genTower(g: Gen): void {
     if (arcade) {
       // columns on the outer line + soffit
       const t = g.trim;
-      setCol(t, shade(wallC, 0.95));
       for (const s of [FRONT, RIGHT, BACK, LEFT] as Side[]) {
         const sg = sideGeom(r, s);
         const n = Math.max(2, Math.round(sg.L / 4.5));
         for (let k = 0; k <= n; k++) {
           if (k === n) continue; // corners are shared with the next side
-          const u = (sg.L * k) / n;
-          sideBox(t, sg, Math.max(0, u - 0.35), Math.min(sg.L, u + 0.35), -0.7, 0, 0, gH, false, true);
+          arcadeColumn(t, sg, (sg.L * k) / n, gH, wallC, g.seed + k);
         }
       }
       setCol(t, shade(wallC, 0.6));
