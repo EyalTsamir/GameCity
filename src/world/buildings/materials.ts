@@ -901,7 +901,7 @@ vec4 bhOpp(vec3 P, vec3 R, vec3 N, vec3 T, float seed, float fp, float nightF) {
     float pave = 1.0 - smoothstep(3.0 - gw, 3.0 + gw, dn) + smoothstep(D - 3.0 - gw, D - 3.0 + gw, dn);
     float kerb = (1.0 - smoothstep(0.0, 0.12 + gw, abs(dn - 3.0))) + (1.0 - smoothstep(0.0, 0.12 + gw, abs(dn - D + 3.0)));
     float dash = (1.0 - smoothstep(0.06, 0.06 + gw, abs(dn - D * 0.5))) * step(0.5, fract(dot(G, T) / 6.0)) * (1.0 - smoothstep(0.3, 1.2, gw));
-    vec3 gc = uGround * mix(0.85, 1.35, pave) * (1.0 + 0.35 * kerb) + uCityCol * 0.6 * dash;
+    vec3 gc = uGround * mix(0.5, 0.8, pave) * (1.0 + 0.3 * kerb) + uCityCol * 0.4 * dash;
     return vec4(gc, 1.0);
   }
   vec3 Hp = P + R * tF;
@@ -914,7 +914,10 @@ vec4 bhOpp(vec3 P, vec3 R, vec3 N, vec3 T, float seed, float fp, float nightF) {
   float cov = 1.0 - smoothstep(Hop - fw, Hop + fw, Hp.y);
   if (cov <= 0.0) return vec4(0.0);
   vec3 tint = bh < 0.3 ? vec3(1.12, 1.02, 0.86) : (bh < 0.55 ? vec3(0.95, 0.62, 0.5) : (bh < 0.8 ? vec3(0.92, 0.94, 0.96) : vec3(1.2, 1.15, 1.05)));
-  vec3 wallR = uCityCol * tint * (0.9 + 0.25 * fract(bh * 9.1));
+  // the row across faces back at us: when the sun lights this wall it is in shade (dark reflections in a sunny
+  // facade), when this wall is in shade it is sunlit
+  float oppSun = smoothstep(-0.05, 0.35, -dot(N, uSunDir)) * step(0.0, uSunDir.y);
+  vec3 wallR = uCityCol * tint * (0.9 + 0.25 * fract(bh * 9.1)) * mix(0.42, 1.3, oppSun);
   float lu = fract(hu / bw) * bw;
   // window grid: bays of 2.6 m, storeys of 3 m above a 3.6 m shop / entrance floor
   float bayU = abs(fract(lu / 2.6) - 0.5) * 2.6;
@@ -925,11 +928,26 @@ vec4 bhOpp(vec3 P, vec3 R, vec3 N, vec3 T, float seed, float fp, float nightF) {
   float win = wx * wy;
   float shop = (1.0 - smoothstep(3.0 - fw, 3.0 + fw, Hp.y)) * smoothstep(0.35 - fw, 0.35 + fw, Hp.y) * (1.0 - smoothstep(0.0, fw + 0.15, abs(fract(lu / 4.5) - 0.5) * 4.5 - 2.0));
   float gridK = 1.0 - smoothstep(0.08, 0.3, fw);
-  vec3 winR = wallR * 0.28 + uSkyHor * 0.12 + vec3(1.0, 0.62, 0.3) * 0.25 * nightF * step(0.55, bhHash12(floor(vec2(lu / 2.6, yU / 3.0)) + bid));
+  vec3 winR = wallR * 0.14 + uSkyHor * 0.1 + vec3(1.0, 0.62, 0.3) * 0.25 * nightF * step(0.55, bhHash12(floor(vec2(lu / 2.6, yU / 3.0)) + bid));
   vec3 c = mix(wallR, winR, max(win, shop * 0.8) * gridK);
   // the joints between buildings, a darker band under the cornice
   c *= 1.0 - 0.3 * (1.0 - smoothstep(0.0, 0.12 + fw, min(lu, bw - lu))) * gridK;
   c *= 1.0 - 0.18 * (1.0 - smoothstep(0.0, 0.5 + fw, Hop - Hp.y));
+  // street trees in front of the opposite row (dark crowns with a ragged edge, a trunk)
+  float tsp = 13.0 + 4.0 * fract(hs * 7.7);
+  float tid = floor((hu + 5.0) / tsp);
+  float th = bhHash12(vec2(tid, seed * 0.07 + 5.0));
+  if (th > 0.35) {
+    float tx = (fract((hu + 5.0) / tsp) - 0.5) * tsp + (th - 0.5) * 3.0;
+    float tr = 2.0 + 1.2 * fract(th * 5.3);
+    float ty = 2.6 + tr;
+    float wob = texture2D(uBhNoise, vec2(hu * 0.09, Hp.y * 0.09) + th).g - 0.5;
+    float crown = 1.0 - smoothstep(tr - fw - 0.2, tr + fw + 0.2, length(vec2(tx, (Hp.y - ty) * 1.15)) + wob * 1.6);
+    float trunk = (1.0 - smoothstep(0.14, 0.14 + fw, abs(tx))) * step(Hp.y, ty);
+    vec3 tc = uCityCol * mix(vec3(0.3, 0.4, 0.22), vec3(0.45, 0.52, 0.3), fract(th * 9.1)) * (0.8 + 0.4 * (wob + 0.5));
+    c = mix(c, tc, max(crown, trunk * 0.9) * (1.0 - smoothstep(0.3, 1.0, fw)));
+    cov = max(cov, crown * (1.0 - smoothstep(0.3, 1.0, fw)));
+  }
   return vec4(c, cov);
 }
 
@@ -1059,7 +1077,7 @@ void bhWall(inout vec3 albedo, inout float rough, inout float metal, inout vec3 
     // gradient plus soil specks that read near the camera
     float spz = 1.0 - smoothstep(0.03, 0.34 + 0.2 * nm.g, y);
     float spd = smoothstep(0.58, 0.8, texture2D(uBhNoise, q * 1.7 + so.yx).a) * (1.0 - smoothstep(0.003, 0.01, fq.y)) * (1.0 - smoothstep(0.05, 0.45, y));
-    albedo *= mix(vec3(1.0), vec3(0.6, 0.56, 0.5), clamp(spz * 0.55 + spd * 0.45, 0.0, 0.75) * min(wStr, 1.0));
+    albedo *= mix(vec3(1.0), vec3(0.5, 0.47, 0.42), clamp(spz * 0.6 + spd * 0.5, 0.0, 0.8) * min(wStr, 1.0));
     float tide = 0.35 + 0.6 * oldness + 0.35 * (nm.g - 0.5) + 0.1 * (grain - 0.5) + 0.2 * (np.r - 0.5);
     float damp = 1.0 - smoothstep(tide - 0.14, tide + 0.03, y);
     float salt = smoothstep(tide - 0.08, tide + 0.0, y) * (1.0 - smoothstep(tide + 0.0, tide + 0.07, y));
@@ -1408,6 +1426,7 @@ void bhWall(inout vec3 albedo, inout float rough, inout float metal, inout vec3 
   float fw = ribbon ? 0.045 : 0.075;
   float frame = 1.0 - smoothstep(fw * 0.7, fw, edge);
   float spandrel = 0.0;
+  float mAx = 1e3, mSg = 0.0; // distance / side to the nearest vertical mullion (frame relief below)
   if (curtain) {
     float ex = min(pm.x, csz.x - pm.x);
     float ey = min(pm.y, csz.y - pm.y);
@@ -1418,6 +1437,16 @@ void bhWall(inout vec3 albedo, inout float rough, inout float metal, inout vec3 
   } else if (style > 0.5 && style < 1.5 || style > 4.5 && style < 5.5) {
     float mv = 1.0 - smoothstep(0.022, 0.034, abs(pm.x - wc.x));
     float mh = 1.0 - smoothstep(0.022, 0.034, abs(pm.y - (wr.z + (wr.w - wr.z) * 0.62)));
+    frame = max(frame, max(mv, mh) * detail);
+    mAx = abs(pm.x - wc.x); mSg = sign(pm.x - wc.x);
+  } else if (style < 0.5 && prof > 0.5 && prof < 1.5 && wr.y - wr.x > 1.3) {
+    // office punched windows: aluminium mullions at ~0.85 m and a transom with top-hung vents
+    float np = max(2.0, floor((wr.y - wr.x) / 0.85 + 0.5));
+    float pw = (wr.y - wr.x) / np;
+    float lx = fract((pm.x - wr.x) / pw + 0.5) - 0.5;
+    mAx = abs(lx) * pw; mSg = sign(lx);
+    float mv = 1.0 - smoothstep(0.022, 0.034, mAx);
+    float mh = 1.0 - smoothstep(0.02, 0.032, abs(pm.y - (wr.w - 0.42)));
     frame = max(frame, max(mv, mh) * detail);
   } else if (style > 3.5 && style < 4.5) {
     vec2 gq = (pm - wr.xz) / vec2(0.62, 0.5);
@@ -1441,12 +1470,9 @@ void bhWall(inout vec3 albedo, inout float rough, inout float metal, inout vec3 
     vec2 dd = abs(pm - wc) - wh;
     float bev = smoothstep(fw * 0.45, fw * 0.7, edge) * (1.0 - smoothstep(fw * 0.7, fw * 0.95, edge));
     vec2 toC = dd.x > dd.y ? vec2(-sign(pm.x - wc.x), 0.0) : vec2(0.0, -sign(pm.y - wc.y));
-    float mvB = 0.0;
-    if (style > 0.5 && style < 1.5 || style > 4.5 && style < 5.5 || style > 6.5) {
-      float ax = abs(pm.x - wc.x);
-      mvB = smoothstep(0.012, 0.022, ax) * (1.0 - smoothstep(0.024, 0.036, ax)) * (1.0 - bev);
-    }
-    vec3 nOff = (Tu * toC.x + vec3(0.0, toC.y, 0.0)) * 0.8 * bev + Tu * sign(pm.x - wc.x) * 0.8 * mvB;
+    if (style > 6.5) { mAx = abs(pm.x - wc.x); mSg = sign(pm.x - wc.x); }
+    float mvB = smoothstep(0.012, 0.022, mAx) * (1.0 - smoothstep(0.024, 0.036, mAx)) * (1.0 - bev);
+    vec3 nOff = (Tu * toC.x + vec3(0.0, toC.y, 0.0)) * 0.8 * bev + Tu * mSg * 0.8 * mvB;
     if (bev + mvB > 0.02) bhNW = normalize(N + nOff);
   }
   if (curtain || ribbon) fcol = albedo * 0.85;
@@ -1465,7 +1491,10 @@ void bhWall(inout vec3 albedo, inout float rough, inout float metal, inout vec3 
   if (lobbyWin) litI = lit * mix(0.55 + 0.2 * r2, 0.85 + 0.2 * r2, nightF);
   if (uDetail > 0.5 && shopWin) interior = bhShop(pm, csz, normalize(rd), seed * 1.37 + shopT * 11.0, shopT, litI, lcol, dayA);
   else if (uDetail > 0.5 && lobbyWin) interior = bhShop(pm, csz, normalize(rd), seed * 1.37 + cell.x * 3.1, 8.0, litI, vec3(1.0, 0.82, 0.6), dayA);
-  else if (uDetail > 0.5) interior = bhRoom(pm, csz, normalize(rd), r1 * 31.0 + seed, litI, lcol, prof, style, dayA);
+  else if (uDetail > 0.5) {
+    interior = bhRoom(pm, csz, normalize(rd), r1 * 31.0 + seed, litI, lcol, prof, style, dayA);
+    dayA *= 0.5; // a room by day is several times darker than the street it looks onto (curtains near the glass keep their light)
+  }
   else {
     interior = lcol * 0.8 * litI;
     dayA = vec3(0.14, 0.13, 0.12);
@@ -1494,16 +1523,16 @@ void bhWall(inout vec3 albedo, inout float rough, inout float metal, inout vec3 
       float cov = r3 > 0.86 ? 0.5 : (r3 > 0.72 ? 0.3 : 0.2);
       float oneSide = step(0.85, fract(r1 * 3.3));
       float side = clamp(step(wx, cov) * (1.0 - oneSide) + step(1.0 - cov * (1.0 + oneSide), wx), 0.0, 1.0);
-      float folds = 0.82 + 0.18 * sin(wx * 60.0 + r1 * 6.0) * fa;
+      float folds = 0.84 + 0.16 * sin(wx * 60.0 + r1 * 6.0 + 2.2 * sin(wx * 17.0 + r2 * 9.0)) * (0.6 + 0.4 * sin(wx * 23.0 + r3 * 5.0)) * fa; // irregular hanging folds
       float tie = step(0.5, fract(r2 * 4.1)) * (1.0 - smoothstep(0.0, 0.05, abs(wy - 0.45))) * 0.25 * fa;
       vec3 c2 = cc * folds * (1.0 - tie);
       // pelmet / curtain rail shadow along the top
       float pel = step(0.92, wy) * step(0.6, fract(r3 * 17.0));
       c2 = mix(c2, cc * 0.7, pel);
       side = max(side, pel);
-      float netB = step(0.55, fract(r1 * 2.71)) * (1.0 - side);
+      float netB = step(0.75, fract(r1 * 2.71)) * (1.0 - side);
       interior = mix(interior, vec3(0.95, 0.92, 0.86) * lcol * litI * 0.5, netB * 0.7);
-      dayA = mix(dayA, vec3(0.72, 0.72, 0.7) * (0.92 + 0.08 * bhStripe(wx * (wr.y - wr.x) * 30.0, fpx * 30.0)), netB * 0.7);
+      dayA = mix(dayA, vec3(0.56, 0.56, 0.54) * (0.92 + 0.08 * bhStripe(wx * (wr.y - wr.x) * 30.0, fpx * 30.0)), netB * 0.7);
       interior = mix(interior, c2 * lcol * litI * 0.75, side);
       dayA = mix(dayA, c2 * 0.7, side);
     } else if (r3 > 0.36) {
@@ -1513,7 +1542,7 @@ void bhWall(inout vec3 albedo, inout float rough, inout float metal, inout vec3 
       float lace = 0.9 + 0.1 * bhStripe(wx * (wr.y - wr.x) * 24.0, fpx * 24.0) * fa;
       float net = step(wy, netTop) * (0.72 + 0.15 * hem);
       interior = mix(interior, vec3(0.95, 0.9, 0.8) * lcol * litI * 0.55, net);
-      dayA = mix(dayA, vec3(0.74, 0.74, 0.72) * lace, net);
+      dayA = mix(dayA, vec3(0.56, 0.56, 0.54) * lace, net);
     } else if (r3 > 0.2) {
       // roller blind partly down, or a venetian blind (slats, box-filtered)
       float blindTo = 1.0 - (0.15 + 0.6 * cr);
@@ -1524,11 +1553,11 @@ void bhWall(inout vec3 albedo, inout float rough, inout float metal, inout vec3 
       // the blind's bottom bar
       rb *= 1.0 - 0.35 * (1.0 - smoothstep(0.0, 0.025, wy - blindTo)) * fa;
       interior = mix(interior, rb * lcol * litI * 0.6, bl);
-      dayA = mix(dayA, rb * 0.62, bl);
+      dayA = mix(dayA, rb * 0.5, bl);
     } else if (r3 > 0.12) {
       // curtains fully drawn (a bedroom in the daytime): a fabric wall with a gap in the middle
       float gap = 1.0 - smoothstep(0.0, 0.02, abs(wx - 0.5 - (cr - 0.5) * 0.1) - 0.012);
-      float folds = 0.84 + 0.16 * sin(wx * 70.0) * fa;
+      float folds = 0.86 + 0.14 * sin(wx * 70.0 + 2.4 * sin(wx * 19.0 + r1 * 7.0)) * (0.55 + 0.45 * sin(wx * 29.0 + r2 * 4.0)) * fa;
       vec3 c2 = cc * folds * (1.0 - 0.5 * gap);
       interior = mix(interior, c2 * lcol * litI * 0.8, 1.0 - gap * 0.6);
       dayA = mix(dayA, c2 * 0.72, 1.0 - gap * 0.6);
@@ -1569,8 +1598,8 @@ void bhWall(inout vec3 albedo, inout float rough, inout float metal, inout vec3 
   // … but a room is far darker than the street it faces, so by day the pane mirrors the street over a dim
   // interior: per window a different balance (dark room / bright net curtain / sun on the glass across)
   float roomK = mix(0.62, 1.0, fract(r1 * 3.71));
-  float reflK = (curtain || ribbon) ? 1.0 : mix(1.0, 1.6, fract(r2 * 2.93)) * (1.15 - 0.3 * roomK);
-  vec3 glass = interior * (1.0 - Fs) * transTint + refl * Fs * mix(0.65, 1.0, recess) * paneGrad * reflK;
+  float reflK = (curtain || ribbon) ? 1.0 : mix(0.75, 1.9, fract(r2 * 2.93)) * (1.15 - 0.3 * roomK);
+  vec3 glass = interior * (1.0 - Fs) * transTint + refl * Fs * mix(0.65, 1.0, recess) * paneGrad * reflK * ((curtain || ribbon) ? 1.0 : 1.6);
   vec3 glassAlb = dayA * (1.0 - Fs) * transTint * (curtain ? 0.4 : (ribbon ? 0.7 : (homey ? 0.95 * roomK : roomK)));
   // open sash: the swung pane shows a strip of darker, skewed reflection at the hinge side
   glass = mix(glass, env * 0.35 * reflTint, openW * (1.0 - smoothstep(0.62, 0.66, wx)));

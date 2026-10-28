@@ -102,6 +102,8 @@ Branch `claude/real-w1-facades` (from `claude/pensive-gates-bim12i`). Brief: doc
   read → pattern turned 90° on the returns + depth AO, frame contact line, pale worn arris.
 
 ## Toggles / tiers / costs
+* `?nowinrefl` (uWinRefl: street / opposite-row reflection in punched windows, near path only, medium/high),
+  `?nocolumndetail` (clad arcade columns → plain boxes). `?bdbg=src` / `?bdbg=refl` debug views (see Resume).
 * `?nowingeo` (sill + surround geometry; range by tier). Rendered-wall details ride on `?nowallrelief`.
 * `?nowinreveal` (uWinDepth), `?nowallrelief` (uWallRelief, also roof tile relief), `?noplinth` (uPlinth); shader
   features off on `quality=low` (uDetail 0.4).

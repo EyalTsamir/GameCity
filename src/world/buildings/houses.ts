@@ -382,9 +382,8 @@ export function genApartment(g: Gen): void {
         const u = gridU(gr, i);
         for (let j = 0; j < gr.m; j++) balcony(sg, u, gr.v0 + j * gr.ch, accent[(i + j) % 2], sd === BACK);
       }
-      // ground floor plinth band
-      setCol(t, shade(wallC, 0.78));
-      sideBox(t, sg, a, b, 0, 0.12, 0, 0.5);
+      // (the plinth course is the facade shader's: render / stone band with ledge, splash dirt and damp — a flat
+      // trim box here hid all of that)
       // signs of life on the back: AC condensers on brackets beside windows without a balcony, a few dishes
       if (sd === BACK) {
         for (let i = 0; i < gr.n; i++) {
