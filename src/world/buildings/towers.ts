@@ -430,7 +430,9 @@ export function genTower(g: Gen): void {
       const a = poly[i],
         b = poly[(i + 1) % poly.length];
       const L = Math.hypot(b.x - a.x, b.z - a.z);
+      // the walls rise past H to the roof slope: the curtain wall runs on up to it (cells cut by the slope)
       const gr = edgeGrid(L);
+      gr.m = Math.ceil((highY - gr.v0) / gr.ch);
       setWallAttrs(g.shell, gr, look(PROF.OFFICE));
       const ya = yAt(a.z),
         yb = yAt(b.z);

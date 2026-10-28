@@ -36,3 +36,20 @@
   and/or the shell starts at y ≈ 0 while the lawn lies at −0.04 (4 cm open gap under the wall in the shadow map).
   Suggested fixes: extend the shell walls ~10 cm below ground (W1, free) and test a smaller normalBias with slope
   bias on the ground only (sky owner); the contact band W1 wants at wall feet (darker/damp) then reads.
+
+* **W1 s5 → lead / sky owner — lawn rim RESULT (probe run; lighting, not ours, nothing changed by W1):**
+  bench apartment at 3 m, 11 h (shots/w1/s5/rim_*.png on claude/real-w1-facades):
+  - `sky.tune.bias` (normalBias) 0 / 1 / 3 → rim unchanged ⇒ **normalBias is NOT the cause** (hypothesis rejected).
+  - `?noao` → the rim widens into a ~0.4–0.6 m **sun-lit lawn band** along the wall foot; the rest of the lawn is in
+    the building's shadow. With AO on, AO darkens most of that band and leaves the thin bright line at the contact.
+  - `?noao` + `tune.pcf = 0.3` → the band stays, with a **sharp** outer edge ⇒ not PCF blur either.
+  - Cause established: the building's cast shadow on the ground begins ~0.5 m out from its own wall foot. The
+    buildings use the default shadow side (BackSide), so the shaded facade itself is the caster — the remaining
+    offset term is the depth bias `sun.shadow.bias = -(texel * 0.3 + 0.02) / range` (render/sky.ts l.404): a
+    NEGATIVE bias pulls the receiver toward the light (peter-panning), and the shadow is offset along the ground by
+    bias / tan(sun elevation) — with the fitted texel at 3 m framing this can reach decimetres.
+  - Proposed one-line fix (unverified — I have no hook to change it at runtime): l.404
+    `sun.shadow.bias = -(texel * 0.05 + 0.004) / range;` and check acne on roofs / lawns at 11 h and 17 h; if acne
+    returns, keep the bias and instead set `shadowSide = THREE.DoubleSide` on the buildings shell material (the
+    contact then has a caster at the wall plane from both sides). Falsifying probe: add `tune.dbias` (multiplier on
+    that line) and run `--eval "__city.ctx.services.sky.tune.dbias=0"` at the same view.
