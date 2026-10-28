@@ -53,3 +53,7 @@
     returns, keep the bias and instead set `shadowSide = THREE.DoubleSide` on the buildings shell material (the
     contact then has a caster at the wall plane from both sides). Falsifying probe: add `tune.dbias` (multiplier on
     that line) and run `--eval "__city.ctx.services.sky.tune.dbias=0"` at the same view.
+* **W2 → plan / station owner:** the platform edge stands 2.0 m from the track centre (`plan.ts` station
+  `platform: rect(-46, RAIL_Z + 2.0, …)`) while the EMU body side is at 1.45 m, so a 0.55 m gap with sleepers shows
+  between platform and train at 3 m (real: 0.1–0.25 m; UK/EU platform edges ≈ 1.6–1.7 m from the centre). Suggest
+  `RAIL_Z + 1.65` if the platform face / copers and rail clearances allow it (freight wagons are ≤ 1.45 m wide too).

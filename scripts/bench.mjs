@@ -178,9 +178,34 @@ try {
         // a bus is 11 m long: aim at its front end (a camera at 4 m from the middle stands inside the body, and the
         // line-of-sight search then ends looking down on the roof), from a front three-quarter yaw, low pitch
         if (cls === 'train') {
-          // a train car is 15 m long and stands at a platform: aim at the leading bogie at axle height, low pitch
-          const hd = h.getHeading ? h.getHeading() : 0;
-          return { x: p.x + Math.sin(hd) * 5.2, y: p.y, z: p.z + Math.cos(hd) * 5.2, yaw: yaw + 60, h: 1.6, w: 2, pitch: 4 };
+          // fixed poses (no line-of-sight swing: the platform canopy and edge made it end against the car side).
+          // Use with --q "speed=0" so the opening regional keeps dwelling at the platform. The platform lies on
+          // the +z side of the track (yaw 0 looks north at the train from it); eye 1.6 m above the platform top.
+          const sim = c.ctx.services.rail?.sim;
+          const tr = sim?.trains.find((t) => t.phase === 'dwell') ?? sim?.trains.find((t) => t.cars.some((q) => q.visible));
+          if (!tr) return null;
+          c.setSpeed(0);
+          const car = tr.cars[Math.min(tr.cars.length - 1, 1 + (k % Math.max(1, tr.cars.length - 1)))] ?? tr.cars[0];
+          const rz = c.ctx.plan.rail.z, eye = (c.ctx.plan.rail.stations?.[0]?.platformY ?? 0.95) + 1.6;
+          // target on the bogie end of the car (half - 2.6 m from its centre), on the platform-side flank
+          const bx = car.x + (car.half - 2.6) * (tr.dir > 0 ? 1 : -1);
+          const pose = (label, tx, ty, tz, camX, camY, camZ) => {
+            const dx = camX - tx, dy = camY - ty, dz = camZ - tz, hd = Math.hypot(dx, dz);
+            return { label, target: { x: tx, y: ty, z: tz }, distance: Math.hypot(hd, dy), yaw: (Math.atan2(dx, dz) * 180) / Math.PI, pitch: (Math.atan2(dy, hd) * 180) / Math.PI };
+          };
+          return {
+            x: bx, y: 0, z: rz, h: 4, w: 3,
+            poses: [
+              // 3 m from the flank, standing on the platform, looking at the bogie / door end
+              pose('platform_3m', bx, 1.15, rz + 1.45, bx + 1.6, eye, rz + 1.45 + 3),
+              // 10 m along the platform, diagonal: the car's silhouette, gangway and roof line
+              pose('platform_10m', car.x, 2.0, rz + 1.45, car.x + 8.2, eye, rz + 1.45 + 3.4),
+              // open-track side (no platform), low: bogie, underframe, skirt
+              pose('track_3m', bx, 0.9, rz - 1.45, bx + 1.2, 1.4, rz - 1.45 - 3),
+              // roof from the station footbridge height: pantograph, roof pack
+              pose('roof_6m', car.x, 3.7, rz, car.x + 2.5, 8.5, rz + 4.5),
+            ],
+          };
         }
         if (cls === 'bus') {
           const hd = h.getHeading ? h.getHeading() : 0;
@@ -192,6 +217,17 @@ try {
     );
     if (!loc) {
       report.missing.push(cls);
+      continue;
+    }
+    if (loc.poses) {
+      for (const ps of loc.poses) {
+        await page.evaluate((ps) => window.__city.view({ target: ps.target, distance: ps.distance, yaw: ps.yaw, pitch: ps.pitch }), ps);
+        await page.waitForTimeout(settle);
+        const file = path.join(outDir, `${cls}_${ps.label}.png`);
+        await page.screenshot({ path: file, timeout: 240000 });
+        report.captures.push({ cls, d: ps.label, los: { fixed: true }, file: path.relative(root, file), at: [ps.target.x, ps.target.y, ps.target.z].map((v) => Math.round(v * 10) / 10) });
+      }
+      await page.evaluate(() => window.__city.setSpeed(1));
       continue;
     }
     for (const d of dists) for (const yo of yaws) {

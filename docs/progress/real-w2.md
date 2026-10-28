@@ -4,6 +4,21 @@ Branch `claude/real-w2-vehicles` (from `claude/pensive-gates-bim12i`). Brief: `d
 Owned: `src/sim/traffic/{models,vehicleMaterial,render}.ts` (+ trains later). Sim untouched.
 
 ## Resume here
+* 2026-10-28 session 5 — **trains judged + fixed, police band, paint reflection; perf measured.** Bench framing
+  for trains fixed first (commit 332e99d): `bench.mjs --classes train --q "speed=0"` → fixed poses `platform_3m`,
+  `platform_10m`, `track_3m`, `roof_6m` (the opening regional dwells at the platform). Judged (s5a): silhouette right
+  at 10 m; failed at 3 m: the open doorway was a flat grey card, windows flat black, wheels 12-sided dark discs with
+  fake spoke sectors, running gear unreadable (deep shade under the car — physical), plain body side.
+  Done: (1) **saloon interior ray-traced** behind every window and the open doorway (vestibule floor, yellow poles,
+  seat backs in bays with seated heads, ceiling light strip, bright far-side window band; `?notraininterior`, off on
+  low); (2) **turned wheels** (24 sides, rail-polished tread, flange, rim face, dished web, hub boss); (3) **police
+  band** now a conformal grid on the curved flank (`flankDecal`), no floating edge; (4) **paint**: the coat reflects a
+  street (facade blocks with storeys/columns, trees, cumulus, pavement band, dark asphalt), bent by the body curvature,
+  at 4× contrast on body paint — reads on mid/dark colours (SUV shoulder, mint compact bonnet); on light colours
+  (white, beige) still faint. Sheet `docs/progress/real/w2_s5.jpg`. Next: (a) body-side lettering (car number,
+  operator logo, door warning stickers — needs a decal atlas in trainMaterial); window corners are square;
+  (b) platform gap 0.55 m (request filed, plan.ts); (c) paint: windscreen looks uniformly dark when seen from above —
+  check the glass branch of thStreetRefl at steep R.y; (d) train LOD0 geometry has no LOD (trains are few).
 * 2026-10-28 session 4 — **fix round + trains pushed; wrapping at the context cap.** Next session, in order:
   (a) **train bench framing still fails**: the camera ends at window height against the car side (platform blocks
   the line of sight → arm shortened). Try `--q` with a free view from the track side (e.g. find a train with
@@ -56,6 +71,24 @@ Owned: `src/sim/traffic/{models,vehicleMaterial,render}.ts` (+ trains later). Si
 * Judge with the showroom: `node scripts/capture-set.mjs --q "tlineup&nointro&noidle" --hideui 1 --views
   "-10,0.9,22,4,30,6;-8,1.4,35,9,25,8" --hours 11 --out shots/w2/x` (row 1 cars at z 22 from x −17, row 2
   vans/lorries/buses at z 35; yaw 0 ≈ front, 180 ≈ rear). Bench: `--classes car,bus --yaws 0,140` (new option).
+
+## Session 5 — code map
+* `scripts/bench.mjs` train branch: `loc.poses` (fixed {label, target, distance, yaw, pitch}) bypass the LOS swing;
+  poses built from the dwelling train (`ctx.services.rail.sim.trains`, car `k` by `--pick`), platform on +z
+  (`plan.rail.stations[0].platformY` + 1.6 eye). Needs `--q "speed=0"`.
+* `trainMaterial.ts`: `trInterior(o, d, doorZ)` in FRAG_PARS (far wall + window band, floor, ceiling strip, seat
+  backs on 1.9 m bay planes with heads by hash, 3 vestibule poles); vertex writes `vLocDir` (camera ray in the car
+  frame = transpose(mat3(model·instance)) · (world − camera)) and `vDoorZ` (VESTIB: aExtra.x; open leaf window:
+  −1e5 → no saloon). Emission: `trIntE` (daylight 0.1 + vEmit), `trEmK` suppresses the plain glow. Uniform `uTrInt`
+  (`interior`, set per frame in `TrainRenderer.update` from quality). Cache key rail-train-v4.
+* `trainModels.ts` `wheelset`: `ring(x0,r0,x1,r1,side,outward)` surface-of-revolution strips (24 sides; winding by
+  cross product); `C.wheelPolish`. `doors()` vestibule quad = `T.VESTIB` with `g.extra(z,0,0,0)`.
+* `carBody.ts` `flankX(s,z,y)` → flank x + dx/dy along ring points 1–6; `models.ts` `flankDecal(shape, side, z0,
+  z1, y0, y1)` conformal grid (rows split at belt − 0.17/−0.15/−0.08). Police band uses it.
+* `vehicleMaterial.ts` `thStreetRefl`: near (az·4) + far (az·9) facade blocks, tree crowns (az·6 hash), window
+  grid, cumulus (thVN of R.xz/(R.y+.25)), pavement band below the horizon; `thReflDet` (fwidth of the reflected
+  normal; 0 with `?nocarpaint`) fades the fine detail; paint coat × extra factor (vCoat > 1.5).
+* `render.ts` `?novehlod0` (perf only: LOD 0 limit 0).
 
 ## Session 4 (fix round) — done
 * Judged on the showroom (`shots/w2/s4b/*`): SUV rails on 3 feet with daylight under the bar (real); estate (long
@@ -173,6 +206,13 @@ Owned: `src/sim/traffic/{models,vehicleMaterial,render}.ts` (+ trains later). Si
   coordinate views work; `?tlineup` items get different phases (plates/wear vary).
 
 ## Toggles + tiers
+* Perf session 5 (software GL, `perf.mjs --view station --hours 11 --q speed=0`, one run, ms/frame): baseline 638.7;
+  `nocarpaint` 622.0 (−2.6 %); `notraingrime` 657.3 and `notraininterior` 650.4 (above baseline → within noise,
+  ±3 %); `novehlod0` 573.1 (−10 %), but triangles were identical (3.636 M) in all rows, so the LOD 0 number is
+  doubtful (the renderer.info count may include all LOD layers, or no car was within 62 m) — re-measure at
+  `downtown` on the Adreno. Draw calls 168 in every row.
+* Session 5: `?notraininterior` (saloon ray-trace; off on quality low), `?novehlod0` (perf only). `?nocarpaint`
+  now also drops the street reflection detail and the 4× coat contrast.
 * `?nocarinterior` (cabin ray-trace; also off on quality **low**), `?nopanelgaps`, `?novehiclewear`.
   Geometry detail (wheels, wipers, seals, handles) lives in LOD 0 (< 62 m scaled), LOD 1 keeps textured
   wheel faces, LOD 2 unchanged.
@@ -203,6 +243,9 @@ Owned: `src/sim/traffic/{models,vehicleMaterial,render}.ts` (+ trains later). Si
   `w2_lineup_14m.jpg`, `w2_night_after.jpg`. Raw: `shots/w2/` (not committed).
 
 ## Tokens
+* Session 5 (tokens.py): 109 calls, 2.3M weighted, ctx median 175k / max 233k (get_session reported used_tokens 0,
+  so the 170k cap was estimated by hand and overshot). Checks: downtown console clean, invariants 0; overview unchanged;
+  typecheck clean.
 * Session 4 (tokens.py): 145 calls, 3.4M weighted, ctx median 194k / max 274k (over the cap again: image reads + long
   waits on software-GL captures; next session: one bench run per judgment, fewer screenshots). Checks: downtown console
   clean, invariants 0, typecheck clean.

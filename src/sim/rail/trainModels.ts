@@ -34,6 +34,7 @@ const C = {
   bogie: '#33373a',
   bogieLight: '#4a4f53',
   wheelTread: '#2f2c29',
+  wheelPolish: '#8e8b86',
   wheelFace: '#5e564f',
   wheelDark: '#2b2724',
   spring: '#6b6f72',
@@ -136,51 +137,59 @@ function endWall(g: Geo, prof: Prof, z: number, facing: 1 | -1, color: string, t
 
 /** wheelset pair (both wheels of one axle) with sector-painted faces so rotation reads */
 function wheelset(g: Geo, z: number, r: number, gaugeHalf = 0.717): void {
-  const seg = 12;
+  // 24 sides: 12 read as a polygon at 3 m. A solid wheel as a real one is turned: rail-polished tread, the
+  // flange on the inner side standing proud of it, a rim face, a dished web down to the hub boss.
+  const seg = 24;
   g.extra(r, z, 0, 0);
+  const ring = (x0: number, r0: number, x1: number, r1: number, side: number, outward: boolean) => {
+    // a surface of revolution strip between (x0, r0) and (x1, r1); normal from the strip's meridian
+    const dx = x1 - x0,
+      dr = r1 - r0;
+    const len = Math.hypot(dx, dr) || 1;
+    // meridian normal: (dr, -dx) rotated so it points away from the axle (outward) or towards the face
+    let nx = dr / len,
+      nr = -dx / len;
+    if ((outward && nr < 0) || (!outward && nx * side < 0)) {
+      nx = -nx;
+      nr = -nr;
+    }
+    for (let i = 0; i < seg; i++) {
+      const a0 = (i / seg) * Math.PI * 2,
+        a1 = ((i + 1) / seg) * Math.PI * 2;
+      const c0 = Math.cos(a0),
+        s0 = Math.sin(a0),
+        c1 = Math.cos(a1),
+        s1 = Math.sin(a1);
+      const A: V3 = [x0, r + c0 * r0, z + s0 * r0],
+        B: V3 = [x1, r + c0 * r1, z + s0 * r1],
+        Cc: V3 = [x1, r + c1 * r1, z + s1 * r1],
+        D: V3 = [x0, r + c1 * r0, z + s1 * r0];
+      const n0: V3 = [nx, c0 * nr, s0 * nr],
+        n1: V3 = [nx, c1 * nr, s1 * nr];
+      // winding: the triangle A B C must face along the normal (else the other way round)
+      const ux = B[0] - A[0], uy = B[1] - A[1], uz = B[2] - A[2];
+      const vx = Cc[0] - A[0], vy = Cc[1] - A[1], vz = Cc[2] - A[2];
+      const gx = uy * vz - uz * vy, gy = uz * vx - ux * vz, gz = ux * vy - uy * vx;
+      if (gx * n0[0] + gy * (n0[1] + n1[1]) + gz * (n0[2] + n1[2]) >= 0) withNormals(g, A, B, Cc, D, n0, n0, n1, n1);
+      else withNormals(g, A, D, Cc, B, n0, n1, n1, n0);
+    }
+  };
   for (const side of [-1, 1]) {
     const xo = side * (gaugeHalf + 0.065),
       xi = side * (gaugeHalf - 0.065);
-    // tread
-    g.kind(T.WHEEL).color(C.wheelTread);
-    for (let i = 0; i < seg; i++) {
-      const a0 = (i / seg) * Math.PI * 2,
-        a1 = ((i + 1) / seg) * Math.PI * 2;
-      const y0 = r + Math.cos(a0) * r,
-        z0 = z + Math.sin(a0) * r;
-      const y1 = r + Math.cos(a1) * r,
-        z1 = z + Math.sin(a1) * r;
-      const n0: V3 = [0, Math.cos(a0), Math.sin(a0)],
-        n1: V3 = [0, Math.cos(a1), Math.sin(a1)];
-      if (side > 0) withNormals(g, [xo, y0, z0], [xi, y0, z0], [xi, y1, z1], [xo, y1, z1], n0, n0, n1, n1);
-      else withNormals(g, [xi, y0, z0], [xo, y0, z0], [xo, y1, z1], [xi, y1, z1], n0, n0, n1, n1);
-    }
-    // outer face: alternating sectors (spoke-like) + hub
-    for (let i = 0; i < seg; i++) {
-      const a0 = (i / seg) * Math.PI * 2,
-        a1 = ((i + 1) / seg) * Math.PI * 2;
-      g.color(i % 3 === 0 ? C.wheelDark : C.wheelFace);
-      const p0: V3 = [xo, r, z],
-        p1: V3 = [xo, r + Math.cos(a0) * r * 0.93, z + Math.sin(a0) * r * 0.93],
-        p2: V3 = [xo, r + Math.cos(a1) * r * 0.93, z + Math.sin(a1) * r * 0.93];
-      const i0 = g.vert(p0[0], p0[1], p0[2], side, 0, 0);
-      g.vert(p1[0], p1[1], p1[2], side, 0, 0);
-      g.vert(p2[0], p2[1], p2[2], side, 0, 0);
-      if (side > 0) g.I.push(i0, i0 + 1, i0 + 2);
-      else g.I.push(i0, i0 + 2, i0 + 1);
-    }
-    // rim ring on the outer face
+    // tread (polished where it runs on the rail), its chamfer to the rim face, the flange inside
+    g.kind(T.WHEEL).color(C.wheelPolish);
+    ring(xo, r * 0.985, xi + side * 0.02, r, side, true);
     g.color(C.wheelTread);
-    for (let i = 0; i < seg; i++) {
-      const a0 = (i / seg) * Math.PI * 2,
-        a1 = ((i + 1) / seg) * Math.PI * 2;
-      const q0: V3 = [xo + side * 0.002, r + Math.cos(a0) * r * 0.93, z + Math.sin(a0) * r * 0.93];
-      const q1: V3 = [xo + side * 0.002, r + Math.cos(a1) * r * 0.93, z + Math.sin(a1) * r * 0.93];
-      const q2: V3 = [xo + side * 0.002, r + Math.cos(a1) * r, z + Math.sin(a1) * r];
-      const q3: V3 = [xo + side * 0.002, r + Math.cos(a0) * r, z + Math.sin(a0) * r];
-      if (side > 0) withNormals(g, q0, q3, q2, q1, [1, 0, 0], [1, 0, 0], [1, 0, 0], [1, 0, 0]);
-      else withNormals(g, q0, q1, q2, q3, [-1, 0, 0], [-1, 0, 0], [-1, 0, 0], [-1, 0, 0]);
-    }
+    ring(xo, r * 0.93, xo, r * 0.985, side, false);
+    ring(xi + side * 0.02, r, xi, r + 0.028, side, true);
+    ring(xi, r + 0.028, xi - side * 0.012, r * 0.93, side, true);
+    // web: dished from the rim in to the hub (brake dust on it), hub boss, axle end
+    g.color(C.wheelFace);
+    ring(xo, r * 0.93, xo - side * 0.035, r * 0.42, side, false);
+    g.color(C.wheelDark);
+    ring(xo - side * 0.035, r * 0.42, xo + side * 0.01, r * 0.3, side, false);
+    ring(xo + side * 0.01, r * 0.3, xo + side * 0.01, 0.001, side, false);
   }
   // axle
   g.kind(T.WHEEL).color(C.wheelDark);
@@ -423,10 +432,12 @@ function doors(g: Geo, z: number, color: string): void {
     y1 = 3.12;
   for (const side of [-1, 1] as const) {
     const x = side * 1.468;
-    // vestibule behind the leaves (visible when open, lit at night)
-    g.kind(T.WINDOW).color('#6b645c');
+    // vestibule behind the leaves (visible when open, lit at night): ray-traced floor / poles / far door (VESTIB)
+    g.extra(z, 0, 0, 0);
+    g.kind(T.VESTIB).color('#6b645c');
     if (side > 0) g.quad([x - 0.01, y0, z + w + 0.02], [x - 0.01, y0, z - w - 0.02], [x - 0.01, y1, z - w - 0.02], [x - 0.01, y1, z + w + 0.02]);
     else g.quad([x + 0.01, y0, z - w - 0.02], [x + 0.01, y0, z + w + 0.02], [x + 0.01, y1, z + w + 0.02], [x + 0.01, y1, z - w - 0.02]);
+    g.extra(0, 0, 0, 0);
     for (const leaf of [-1, 1] as const) {
       const za = leaf < 0 ? z - w : z + 0.005,
         zb = leaf < 0 ? z - 0.005 : z + w;

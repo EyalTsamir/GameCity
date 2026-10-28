@@ -121,6 +121,7 @@ export class TrainRenderer {
   }
 
   update(): void {
+    this.mats.interior.value = this.mats.interiorUrlOff || this.ctx.quality.level === 'low' ? 0 : 1;
     for (const p of this.pools.values()) p.n = 0;
     let gi = 0;
     for (const tr of this.sim.trains) {

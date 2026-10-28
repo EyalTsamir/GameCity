@@ -265,6 +265,23 @@ export function topSurfaceY(s: CarShape, x: number, z: number): number {
   return _P[28];
 }
 
+/** x of the body's outer flank at (z, y) along ring points 1 → 6 (the loft is linear between them), and the
+ *  flank's outward normal slope dx/dy there — for decals that must lie on the curved side */
+export function flankX(s: CarShape, z: number, y: number): { x: number; dxdy: number } {
+  ringAt(s, z, _P);
+  for (let k = 1; k < 6; k++) {
+    const y0 = _P[k * 3 + 1],
+      y1 = _P[(k + 1) * 3 + 1];
+    if (y <= y1 || k === 5) {
+      const x0 = _P[k * 3],
+        x1 = _P[(k + 1) * 3];
+      const t = clamp01((y - y0) / Math.max(1e-3, y1 - y0));
+      return { x: x0 + (x1 - x0) * t, dxdy: (x1 - x0) / Math.max(1e-3, y1 - y0) };
+    }
+  }
+  return { x: _P[18], dxdy: 0 };
+}
+
 export function endRing(s: CarShape, sign: number): Float64Array {
   const P = new Float64Array(RING * 3);
   ringAt(s, (sign * s.L) / 2, P);

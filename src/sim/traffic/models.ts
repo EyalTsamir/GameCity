@@ -26,7 +26,7 @@ import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeom
 import { mergeGeometries, mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { ModelKind } from './specs';
 import { busEndSurface, loftBus, type BusShape } from './busBody';
-import { endRing, endSurface, loftCar, topAt, topSurfaceY, type CarShape } from './carBody';
+import { endRing, endSurface, flankX, loftCar, topAt, topSurfaceY, type CarShape } from './carBody';
 
 /** number of detail levels buildModel() can produce */
 export const MODEL_LODS = 3;
@@ -853,6 +853,45 @@ function decalPlane(w: number, h: number, x: number, y: number, z: number, face:
   return g;
 }
 
+/** a decal grid laid on the curved car flank (side 1 = +x): columns along z, rows split at the flank's ring
+ *  heights so every facet follows the loft; uv as decalPlane's px / nx faces (u runs nose → tail on +x) */
+function flankDecal(shape: CarShape, side: 1 | -1, z0: number, z1: number, y0: number, y1: number, off = 0.0035): THREE.BufferGeometry {
+  const ys = [y0];
+  for (const yk of [shape.belt - 0.17, shape.belt - 0.15, shape.belt - 0.08]) if (yk > y0 + 0.01 && yk < y1 - 0.01) ys.push(yk);
+  ys.push(y1);
+  const nz = 14;
+  const pos: number[] = [],
+    nor: number[] = [],
+    uv: number[] = [],
+    idx: number[] = [];
+  for (let i = 0; i <= nz; i++) {
+    const z = z0 + ((z1 - z0) * i) / nz;
+    for (const y of ys) {
+      const f = flankX(shape, z, y);
+      const n = new THREE.Vector3(1, -f.dxdy, 0).normalize();
+      pos.push(side * (f.x + n.x * off), y + n.y * off, z);
+      nor.push(side * n.x, n.y, 0);
+      const u = (z - z0) / (z1 - z0);
+      uv.push(side > 0 ? 1 - u : u, (y - y0) / (y1 - y0));
+    }
+  }
+  const R = ys.length;
+  for (let i = 0; i < nz; i++)
+    for (let j = 0; j < R - 1; j++) {
+      const a = i * R + j,
+        b = a + R;
+      // outward winding on either side
+      if (side > 0) idx.push(a, a + 1, b, b, a + 1, b + 1);
+      else idx.push(a, b, a + 1, b, b + 1, a + 1);
+    }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  g.setIndex(idx);
+  return g;
+}
+
 const TYRE = '#26292d';
 const RIM = '#cfd3d7';
 const GLASS = '#2c3c4b';
@@ -1303,8 +1342,9 @@ function sedan(): THREE.BufferGeometry {
   b.add(rbox(1.18, 0.08, 0.32, 0.03, 0, c.topY - 0.01, c.topZ), { color: '#2b2e33', part: 3 });
   b.add(rbox(0.52, 0.13, 0.26, 0.05, 0.29, c.topY + 0.06, c.topZ), { color: '#ff3b30', light: LIGHT_POLICE_RED, part: 3, rough: 0.4 });
   b.add(rbox(0.52, 0.13, 0.26, 0.05, -0.29, c.topY + 0.06, c.topZ), { color: '#3d6dff', light: LIGHT_POLICE_BLUE, part: 3, rough: 0.4 });
-  b.add(decalPlane(1.8, 0.28, W / 2 + 0.014, 0.72, -0.05, 'px'), { color: '#ffffff', decal: R_POLICE, part: 3 });
-  b.add(decalPlane(1.8, 0.28, -W / 2 - 0.014, 0.72, -0.05, 'nx'), { color: '#ffffff', decal: R_POLICE, part: 3 });
+  // the band follows the curved flank (tuck, shoulder, roll-in) instead of a flat plane that floated off it
+  b.add(flankDecal(shape, 1, -0.95, 0.85, 0.58, 0.86), { color: '#ffffff', decal: R_POLICE, part: 3 });
+  b.add(flankDecal(shape, -1, -0.95, 0.85, 0.58, 0.86), { color: '#ffffff', decal: R_POLICE, part: 3 });
   return b.build();
 }
 
