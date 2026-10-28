@@ -11,6 +11,9 @@ Overview must stay at least as impressive as now. Every feature: quality tiers +
 Lead session: session_01XuhAMczW3iK25AAWnf3qog, branch `claude/pensive-gates-bim12i`.
 
 ## Resume here (keep current)
+* 2026-10-28 17:20 UTC — Merged tree (W1 m1 + W2 m1 + W3 s1) checked: golden diffs overview 0.1 / downtown 0.8 /
+  harbor 0.5 / oldtown 1.9 / westbrook 1.8 — only window detail and eave/gutter lines change, overview intact
+  (shots/golden/m1/diff.png); console clean; only invariant = the W3 statue plinth (sent to W3(2)).
 * 2026-10-28 16:47 UTC — Merged W2 milestone 1 (d420fe9; bench conflict: LOS + --yaw/--pitch + --yaws) and W1's
   final log (64bb54f). Respawned W2(2) (verdict: car body FORM still blocky → loft rework first; mirrors, handles,
   visible gaps, bus ends, grime; then trains). All three wave-1 workers now on session 2. Golden + invariant
