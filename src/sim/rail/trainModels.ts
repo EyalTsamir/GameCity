@@ -812,13 +812,35 @@ export function buildEmu(): THREE.BufferGeometry {
     g.kind(T.HEAD).color(C.headOff);
     g.quad(onPlane(-0.08, 3.58, 0.02), onPlane(0.08, 3.58, 0.02), onPlane(0.08, 3.67, 0.02), onPlane(-0.08, 3.67, 0.02));
     // wipers
+    // parked along the bottom of the screen: pivot outboard, arm, blade with its spine
     g.kind(T.PLAIN).color('#111315');
-    for (const sx of [-0.55, 0.55]) g.quad(onPlane(sx - 0.02, 2.28, 0.024), onPlane(sx + 0.02, 2.28, 0.024), onPlane(sx + 0.25, 2.95, 0.024), onPlane(sx + 0.21, 2.95, 0.024));
+    for (const s of [-1, 1]) {
+      const px = s * 1.05;
+      g.quad(onPlane(px - 0.03, 2.27, 0.024), onPlane(px + 0.03, 2.27, 0.024), onPlane(px + 0.03, 2.3, 0.024), onPlane(px - 0.03, 2.3, 0.024));
+      const [a, b] = s < 0 ? [px, -0.12] : [0.12, px];
+      g.quad(onPlane(a, 2.285, 0.026), onPlane(b, 2.285, 0.026), onPlane(b, 2.305, 0.026), onPlane(a, 2.305, 0.026));
+      g.color('#26292c');
+      g.quad(onPlane(px, 2.3, 0.032), onPlane((a + b) / 2, 2.31, 0.032), onPlane((a + b) / 2, 2.325, 0.032), onPlane(px, 2.316, 0.032));
+      g.color('#111315');
+    }
+    // staff grab handles and a kick step on the nose sides
+    g.color('#b9bdc0');
+    for (const s of [-1, 1]) {
+      const hz = zF - ch - 0.14;
+      g.rod([s * 1.5, 1.3, hz], [s * 1.5, 1.95, hz], 0.016, 6, 1);
+      for (const hy of [1.36, 1.89]) g.rod([s * 1.45, hy, hz], [s * 1.5, hy, hz], 0.012, 4);
+      g.color('#3a3d40');
+      g.box(s * 1.42, 0.86, hz, 0.22, 0.03, 0.3, 0);
+      g.color('#b9bdc0');
+    }
     // cab side windows (dark, trapezoids following the slope)
     for (const side of [-1, 1]) {
       const x = side * 1.462;
       const zb0 = zFront(2.32) - 0.18,
         zb1 = zFront(3.0) - 0.15;
+      g.kind(T.PLAIN).color('#16191b');
+      if (side > 0) g.quad([x - 0.004, 2.28, zb0 + 0.05], [x - 0.004, 2.28, zJ + 0.11], [x - 0.004, 3.04, zJ + 0.11], [x - 0.004, 3.04, zb1 + 0.05]);
+      else g.quad([x + 0.004, 2.28, zJ + 0.11], [x + 0.004, 2.28, zb0 + 0.05], [x + 0.004, 3.04, zb1 + 0.05], [x + 0.004, 3.04, zJ + 0.11]);
       g.kind(T.GLASS).color(C.glass);
       if (side > 0) g.quad([x, 2.32, zb0], [x, 2.32, zJ + 0.15], [x, 3.0, zJ + 0.15], [x, 3.0, zb1]);
       else g.quad([x, 2.32, zJ + 0.15], [x, 2.32, zb0], [x, 3.0, zb1], [x, 3.0, zJ + 0.15]);

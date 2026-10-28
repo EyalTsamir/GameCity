@@ -161,7 +161,17 @@ vec4 trLivery(vec3 q, float unit) {
   float sd = sign(q.x);
   vec2 sp = vec2(-q.z * sd, q.y);
   vec2 gx = dFdx(sp), gy = dFdy(sp);
+  vec2 fx = dFdx(q.xy), fy = dFdy(q.xy);
   vec4 o = vec4(0.0);
+  // cab front: the unit number under the windscreen on the nose face (z = 7.75, cab cars only)
+  if (vCar.y > 0.5 && q.z > 7.74 && abs(q.x) < 1.2) {
+    vec2 l = vec2(q.x / 0.62 + 0.5, (q.y - 1.93) / 0.13 + 0.5);
+    float ci = floor(l.x * 3.0);
+    float d = mod(floor(unit / pow(10.0, 2.0 - ci)), 10.0);
+    vec2 sc = vec2(3.0 * 64.0 / 60.0 / 0.62, 1.0 / 0.13);
+    if (l.x >= 0.0 && l.x < 1.0) o = trDec(vec4(${DECAL.digit0[0]}.0 + d * 64.0, ${DECAL.digit0[1]}.0, 60.0, 104.0), vec2(fract(l.x * 3.0) * 64.0 / 60.0, l.y), fx * sc, fy * sc);
+    return o;
+  }
   // a decal of height h centred at (zc, yc): local coords from the side position
   #define TR_L(zc, yc, w, h) (vec2((-(q.z - (zc)) * sd) / (w) + 0.5, (q.y - (yc)) / (h) + 0.5))
   #define TR_G(w, h) gx / vec2(w, h), gy / vec2(w, h)
