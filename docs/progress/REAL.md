@@ -11,6 +11,9 @@ Overview must stay at least as impressive as now. Every feature: quality tiers +
 Lead session: session_01XuhAMczW3iK25AAWnf3qog, branch `claude/pensive-gates-bim12i`.
 
 ## Resume here (keep current)
+* 2026-10-28 17:26 UTC — Merged W1 m2 (ad780c1: specks clamped, near-LOD sill/surround geometry winGeo.ts, render
+  cracks/string courses, curtains, porch). Respawned W1(3): find the albedo>1 root cause, make wall texture visible
+  at 3 m, glass, office upper floors/columns. W2(2), W3(2) running.
 * 2026-10-28 17:20 UTC — Merged tree (W1 m1 + W2 m1 + W3 s1) checked: golden diffs overview 0.1 / downtown 0.8 /
   harbor 0.5 / oldtown 1.9 / westbrook 1.8 — only window detail and eave/gutter lines change, overview intact
   (shots/golden/m1/diff.png); console clean; only invariant = the W3 statue plinth (sent to W3(2)).
@@ -61,6 +64,7 @@ Wave 1 (launched 2026-10-28 15:17 UTC, sibling cloud sessions, briefs in real-br
 | W3 furniture (2) | session_01XuhAMfeZKD1WY6snNxJEiK | claude/real-w3-furniture | real-w3.md |
 | W1 facades (2) | session_01XuhAMdw5hH6dJAf2ubL3JX | claude/real-w1-facades | real-w1.md |
 | W2 vehicles (2) | session_01XuhAMhDfBCdfsCA6CmBeaq | claude/real-w2-vehicles | real-w2.md |
+| W1 facades (3) | session_01XuhAMcx7gK1B9gZ9EGE9xQ | claude/real-w1-facades | real-w1.md |
 Respawn rule: when a worker stops (milestone note, ~200k context, or a usage stop), create a NEW session on the
 same branch with the same brief + "resume from docs/progress/real-wN.md Resume here"; archive the old one.
 
