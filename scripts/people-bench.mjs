@@ -77,6 +77,9 @@ try {
     hand: { ty: 0.47, d: 0.85, dy: 55, pitch: 10 },
     body: { ty: 0.52, d: 2.6, dy: 22, pitch: 5 },
     back: { ty: 0.52, d: 2.6, dy: 170, pitch: 5 },
+    skirt: { ty: 0.36, d: 1.3, dy: 12, pitch: 4 },
+    side: { ty: 0.4, d: 1.6, dy: 80, pitch: 4 },
+    face2: { ty: 0.925, d: 2, dy: 25, pitch: 4 },
   };
   for (let i = 0; i < figs.length; i++) {
     const f = figs[i];

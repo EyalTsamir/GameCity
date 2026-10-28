@@ -4,10 +4,31 @@ Branch `claude/real-w4-people` (from `claude/pensive-gates-bim12i` e517126). Bri
 Photo test "Person" (REAL.md). Owned: `src/sim/pedestrians/**` presentation (not crowd/places logic).
 
 ## Resume here
-* 2026-10-28 session 2 STARTED — merged origin/claude/pensive-gates-bim12i. Lead held m1 for: (1) close-LOD
-  frog-squat stances, (2) skirts split into flaps, (3) hat brim over eyes / floating crown, moustache bar,
-  (4) eyes flat paint (need sclera/iris/lid crease), flat-lit faces, hard hairline. people-bench.mjs gained
-  `--lods close,near` (same figure + frame per forced level) — first run: shots/w4/cmp1.
+* 2026-10-28 ~20:00 UTC — session 2 ENDED (context 194k at the first get_session: the hidden system+brief is
+  most of it — next session: get_session after the FIRST bench). All committed + pushed.
+  Lead's m1 blockers, status:
+  (1) FROG SQUAT — root cause found and FIXED, not a close-LOD bug: close and near pose identically on the same
+      figure + frame (shots/w4/cmp1). The crowd's member speed spikes on position corrections (catch-ups after a
+      time jump / formation shuffles: m.speed 8.78 m/s seen on a 2.55 m/s party) fed the run gait, which drops
+      the pelvis into a knees-out squat above ~3 m/s; the bench pauses the sim right after setHours, freezing
+      that spike. Reproduced with `people-bench --vel 8.5` (shots/w4/vel1), fixed by capping the gait's speed
+      input at GAIT_VMAX 2.9 m/s (gait.ts; rig.ts stepLength cap matches) → shots/w4/vel4 natural jog stances;
+      2.75 m/s jog unchanged (vel3). Pre-existing at every level, also in normal play for a few frames.
+  (2) Skirts: shader.ts TAIL — front/back panels now span both thighs (front panel at the forward-most z, back
+      at the rear-most; sideways/height blended by side) instead of snapping to one thigh. A slit by the
+      forward thigh may remain — judge shots/w4/sk1 (skirt/side framings) first thing.
+  (3) Hats: band tilted (0.665 + 0.045·cos φ of chin→crown: mid-forehead at the front, lower at the back;
+      was a level 0.64 ≈ 1 cm above the brows). Crown lift (HAT_A[.].y) untouched — check "floating" in sk1.
+      Moustache: tapered in height + thickness to the mouth corners, philtrum notch, drooping ends.
+  (4) Eyes/face: sclera brighter with corner shading, iris with limbal ring + collarette + periodic fibres,
+      stronger lid crease + lit lid fold + socket shade, inner-corner hollow, cavity occlusion under the nose /
+      beside the wings / chin crease, FACE wrap 0.35 → 0.16. NOT yet judged on the bench (sk1 face/face2).
+      Hairline softening NOT done (needs a look at where the hair cap meets the FACE region).
+  Bench additions (people-bench.mjs): `--lods close,near` (same figure + frame per forced level, '' = by
+  distance), `--persona jogger`, `--vel <m/s>` (pose a figure at a forced speed), shots skirt/side/face2.
+  Next: judge sk1 → fix skirt slit / hat crown if still wrong → hairline → re-run the 4-figure people-bench
+  (face,hand,body) and copy as docs/progress/real/w4_after_s2.jpg → then brief priorities 5 (carried things)
+  and 4/7 (weight, variation).
 * 2026-10-28 19:15 UTC — session 1 ENDED (context cap). Branch `claude/real-w4-people`, all committed + pushed.
   Brief priorities 1 (faces/hair), 2 (fingers), 3 (fabric, shoes), 6 (vendor request) done at a new **close
   level** (Lod 4, < 15 m); 4 (walk weight) was already strong (gfx-people) — not touched; 5 (carried things):
