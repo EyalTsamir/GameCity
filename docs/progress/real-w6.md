@@ -30,6 +30,8 @@ and (inherited from W3) the market stall in src/world/landmarks/civic.ts.
   kit (SK.cafe's `ks` and GK.parasol callers); market stall canopies live in landmarks/civic.ts (W3 inherited);
   (5) perf.mjs `;nomarketlife,noterracelife,nobackyard` and W3's `;nopropdetail` / `;nomarketdetail`;
   (6) bench views of the three places + golden overview (scripts/agent-tools/golden.sh).
+  Session 1 tokens.py: TOTAL weighted 2.1M (cache read 72 %, write 12 %, output 16 %), 88 calls, ctx median 166k /
+  max 246k (over the 170k cap: get_session reported used_tokens 0 again — use tokens.py ctxMax instead), 0 cold.
 * 2026-10-28 22:30 — Session 1 WIP. W3 leftovers judged (shots/w6/w3left/sheet_1.png): kiosk, playground,
   gazebo, statue, planter read real at 3/10 m; remaining nits: kiosk dark box sticking out at the bottom corner of
   the plinth; `bin 10m` bench framing still ends inside a glass box (newsstand/shelter) — bench fault, not the bin.
