@@ -568,9 +568,10 @@ export function newsstand(k: Kit, rng: Rng): void {
  */
 export function planterBox(k: Kit, kind: 'concrete' | 'terracotta' | 'wood' | 'steel', along: number, across: number, h: number): void {
   const sh = k.sh;
-  const mat = kind === 'terracotta' ? 'ceramic' : kind === 'wood' ? 'wood' : kind === 'steel' ? 'paint' : 'stone';
-  const col = kind === 'terracotta' ? '#b8643f' : kind === 'wood' ? '#8a6240' : kind === 'steel' ? '#4b5a52' : '#c4beb3';
-  const rimCol = kind === 'terracotta' ? '#a9583a' : kind === 'wood' ? '#9d7149' : kind === 'steel' ? '#3c4a43' : '#cfc9be';
+  // steel = weathering (corten) steel: the iron wear branch adds the rust bloom and run-down streaks
+  const mat = kind === 'terracotta' ? 'ceramic' : kind === 'wood' ? 'wood' : kind === 'steel' ? 'iron' : 'stone';
+  const col = kind === 'terracotta' ? '#b8643f' : kind === 'wood' ? '#8a6240' : kind === 'steel' ? '#7a4a2e' : '#c4beb3';
+  const rimCol = kind === 'terracotta' ? '#a9583a' : kind === 'wood' ? '#9d7149' : kind === 'steel' ? '#6a3f27' : '#cfc9be';
   const t = kind === 'steel' ? 0.03 : 0.07;
   const ax = along / 2, az = across / 2;
   // shadow-gap foot
@@ -596,7 +597,7 @@ export function planterBox(k: Kit, kind: 'concrete' | 'terracotta' | 'wood' | 's
     if (kind === 'steel') {
       // pressed vertical ribs on the long sides, a kick band at the foot
       for (let x = -ax + 0.2; x < ax - 0.1; x += 0.25) for (const sz of [-1, 1]) sh.box(x, (h + 0.04) / 2, sz * (az + 0.006), 0.035, h - 0.16, 0.012, 3);
-      k.m('#2f3a34', 'paint');
+      k.m('#4a2e1e', 'iron');
       sh.box(0, 0.08, 0, along + 0.01, 0.06, across + 0.01, 3);
     } else if (kind === 'concrete') {
       // cast drip groove under the rim

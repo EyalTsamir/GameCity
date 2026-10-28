@@ -3,6 +3,19 @@
 Branch `claude/real-w3-furniture` (from `claude/pensive-gates-bim12i`). Brief: docs/progress/real-briefs.md "W3".
 
 ## Resume here
+* 2026-10-28 — **Session 2 status** (see "Session 2 progress" below). Downtown invariants 0, console clean
+  (after fixing statue steps + market canopy radius). Sheets: docs/progress/real/w3_after_3.jpg / _4.jpg.
+  **Next (session 3), in order:** (1) statue figure: face still mask-like (brow/nose boxes), lapels read as
+  straps — sculpt with lathed/ellipsoid parts; (2) planter plants are cone mounds — use leaf cards
+  (GreenKit) or bushier clumps; (3) kiosk + picnic + mailbox/hydrant/bike rack: contact + wear pass;
+  (4) contact decal: tune per surface (lawn vs paving) — on lawn it should be worn grass/soil, not grime;
+  coordinate with the wave-2 ground-contact worker (props/contact.ts can be shared: `queueContact`);
+  (5) gazebo worn strip tone check at 3 m; (6) bench `bin 10m` STILL frames from inside a bus shelter even
+  with the 5-probe enclosure test (both ray directions) — debug: log the probe hits for that capture.
+  Steel planters are now corten (weathering steel, `iron` wear: rust bloom + streaks) — reads real at 3 m.
+  Statue figure close-up: docs/progress/real/w3_statue_figure.jpg.
+  Session 2 tokens.py: TOTAL weighted 2.8M (cache read 79 %, write 8 %, output 13 %), 126 calls, ctx median
+  176k / max 246k; system+brief 39 %, Bash read/grep 16 %, output 13 %, images 3.5 %.
 * 2026-10-28 — **Session 2 started.** Merged lead branch (a907524). Lead verdict on session 1: progress, not yet
   "real" at 3 m. Session-2 order: (0) downtown invariants check; (1) ground dirt ring at prop bases (every class);
   (2) planter bevel/frame + soil + drainage stains; (3) newsstand roof overhang depth, shutter, racks; (4) market
@@ -84,6 +97,9 @@ Branch `claude/real-w3-furniture` (from `claude/pensive-gates-bim12i`). Brief: d
   wheels, fish, jars, flowers), price cards, scales, back shelf, stacked crates, cardboard, hand truck.
 
 ## Tried and rejected
+* Contact band at strength ×1.25 / squared fall-off: invisible at 3 m in bench shots (looked like no decal at
+  all; verified by switching to normal blending: the quads were there). Now ×1.9, linear-ish fall-off.
+* Enclosure probe (camera inside a bus shelter) with one-way rays: missed single-sided glass from inside.
 * LOS with transparent meshes excluded: the camera ended inside curtain-wall glass (phonebox/newsstand 40 m).
 * LOS ray from the object only: misses roofs seen from below (playground 40 m ended inside a shed roof).
 
@@ -94,7 +110,11 @@ Branch `claude/real-w3-furniture` (from `claude/pensive-gates-bim12i`). Brief: d
   become gravel slabs). Also the **low** tier.
 * Landmark small parts route to the landmarks detail LOD automatically (< 25 cm / thin rods) or via forceDetail.
 * Props detail lives in the fine (near-only, < 300 m) furniture meshes except phone box / newsstand (coarse).
-* Cost: not measured yet (see Resume step 6).
+* `?nocontact` — ground grime decals at prop bases (props/contact.ts; also off on **low**). 648 spots in the
+  city, one draw call, 4 verts each, multiply blend, collapsed beyond 70 m.
+* Cost (perf.mjs downtown 12 h, software GL, one run): baseline 802 / 780 ms, `nopropdetail` 763 ms
+  (−38 k tris, ≈ −3 %, at the noise level), `nocontact` 839 ms (noise; −1 draw call, −1.3 k tris).
+  Real GPU numbers still needed on the target.
 * Shader: props wear gained galvanised-steel mottling + foot grime, concrete aggregate specks, terracotta salt
   bloom; painted-metal stickers made ~5× rarer (were confetti on large panels). `?nowear` still disables all.
 
