@@ -7,6 +7,14 @@ Branch `claude/real-w3-furniture` (from `claude/pensive-gates-bim12i`). Brief: d
   (bin, planter, phonebox, newsstand, bench, statue) and w3_after_2.jpg (gazebo, kiosk, playground, picnic,
   market stall, flagpole) — before = audit_3..5.jpg. Judged at 3 m: phone box, statue pedestal, gazebo
   roof/balustrade, picnic table, market produce and kiosk chairs now read as real objects.
+  **Not yet verified:** the `shot.mjs --view downtown --invariants --stats` check did not run (the dev server
+  died with the worker restart: ERR_CONNECTION_REFUSED). The two bench runs were clean (no console/page/frame
+  errors, no failed modules) but invariants are unchecked → run it first in session 2.
+  Code: furniture.ts bench :168, bin :233, phonebox :337, newsstand :417, planterBox :499, bollard :565;
+  props/shapes.ts (cbox, lathe, poly, bolts, ring); props/legacy.ts (old builders); props.ts `simple` flag;
+  park.ts facetLathe :18, genStatue :29, genGazebo :139, genKiosk :330, genPlayground :432, genPicnic :631;
+  civic.ts genFlagpole :12, slatCrate :58, produce :71, genMarketStall :112 (`richStall`); props/material.ts
+  WEAR_GLSL (new steel / ceramic branches, aggregate specks). Bench LOS: scripts/bench.mjs (`los` block).
   **Next (session 2), in order:**
   1. Re-bench the 10 m newsstand (front not yet seen: LOS had to swing to its back; per-class widths now fixed)
      and the modern bin (reads as a dark box — consider a brighter stainless default + visible liner).
