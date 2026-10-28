@@ -469,10 +469,10 @@ export function buildPlaces(ctx: CityContext, rng: Rng): Places {
     const facing = Math.atan2(rx, rz);
     const spots: Spot[] = [];
     // Waiting spots stay off the walking band so passers-by never have to push through
-    // the queue: under the shelter roof (in front of its bench), along its open front at
-    // the kerb-side edge of the band, and beside it in the furniture band. Shelter frame
-    // (props/furniture.ts busShelter): local +Z away from the road, glass back at z −0.28,
-    // open front at z 0.78, 3.8 m long, bench along the back, stop pole at x +2.45.
+    // the queue: under the shelter roof (in front of its bench) and beside it in the furniture
+    // band. Shelter frame (props/furniture.ts busShelter): local +Z away from the road, open
+    // front at z −0.28 (road side), glass back at z 0.78, 3.8 m long, bench along the back,
+    // stop pole at x +2.45.
     const slot = plan.slots.find((s) => s.kind === 'busstop' && s.busStop === bs.id);
     const syaw = slot ? slot.yaw : Math.atan2(-rx, -rz);
     const sx = slot ? slot.x : bs.x,
@@ -483,18 +483,18 @@ export function buildPlaces(ctx: CityContext, rng: Rng): Places {
       Zz = Math.cos(syaw);
     // (nobody in the middle of the open side: people inside must be able to walk out)
     const local: [number, number][] = [
-      [-1.25, 0.45],
-      [-0.4, 0.45],
-      [0.45, 0.45],
-      [1.3, 0.45],
-      [-2.5, 0.3],
-      [2.65, 0.3],
-      [-3.3, 0.3],
-      [3.4, 0.3],
-      [-1.75, 0.98],
-      [1.75, 0.98],
-      [-4.1, 0.3],
-      [4.2, 0.3],
+      [-1.25, 0.05],
+      [-0.4, 0.05],
+      [0.45, 0.05],
+      [1.3, 0.05],
+      [-2.5, 0.2],
+      [2.65, 0.2],
+      [-3.3, 0.2],
+      [3.4, 0.2],
+      [-4.1, 0.2],
+      [4.2, 0.2],
+      [-4.9, 0.2],
+      [5.0, 0.2],
     ];
     for (const [lx, lz] of local) {
       const x = sx + Xx * lx + Zx * lz,

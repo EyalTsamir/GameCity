@@ -433,57 +433,59 @@ export function bike(k: Kit, color: string): void {
 // ─────────────────────────────────────────────────────────── bus shelter ──
 
 /**
- * Glass bus shelter. Local +Z away from the road; back panel faces the road (z = -0.3),
- * open towards the waiting pedestrians. Glass panes go to the `glass` kit.
+ * Glass bus shelter. Local +Z away from the road: the glass back panel stands on the pavement side
+ * (z = +0.78) and the shelter opens towards the road (z = -0.28), so people on the bench face the kerb and
+ * see the bus coming. Local +X = direction of travel: the stop pole (front of the bus) is at x = +2.45.
+ * Glass panes go to the `glass` kit.
  */
 export function busShelter(k: Kit, g: Kit, routeColor: string, rng: Rng): { glows: { x: number; y: number; z: number; size: number }[] } {
   const sh = k.sh;
   const gs = g.sh;
   const L = 3.8,
-    z0 = -0.28,
-    z1 = 0.78,
+    zf = -0.28, // open front (road side)
+    zb = 0.78, // glass back (pavement side)
     H = 2.45;
   const frame = '#3c4247';
   k.m(frame, 'paint');
   for (const x of [-L / 2, L / 2]) {
-    sh.box(x, H / 2, z0, 0.08, H, 0.08, 1);
-    sh.box(x, H / 2, z1 - 0.12, 0.07, H, 0.07, 1);
+    sh.box(x, H / 2, zb, 0.08, H, 0.08, 1);
+    sh.box(x, H / 2, zf + 0.12, 0.07, H, 0.07, 1);
   }
-  sh.box(0, H - 0.04, z0, L, 0.08, 0.08, 0);
-  sh.box(0, 0.12, z0, L, 0.06, 0.06, 0);
-  // roof (slight slope towards the road) + lit strip under the front edge
-  sh.push().local(0, H + 0.06, (z0 + z1) / 2 + 0.05, -0.05);
+  sh.box(0, H - 0.04, zb, L, 0.08, 0.08, 0);
+  sh.box(0, 0.12, zb, L, 0.06, 0.06, 0);
+  // roof (slight slope down towards the road) + route-coloured fascia and lit strip along the open front
+  sh.push().local(0, H + 0.06, (zf + zb) / 2 - 0.05, -0.05);
   k.m('#d4dce0', 'paint');
-  sh.box(0, 0, 0, L + 0.3, 0.07, z1 - z0 + 0.45, 0);
+  sh.box(0, 0, 0, L + 0.3, 0.07, zb - zf + 0.45, 0);
   k.m('#4a5157', 'steel');
-  sh.box(0, -0.055, 0, L + 0.34, 0.05, z1 - z0 + 0.49, 2);
+  sh.box(0, -0.055, 0, L + 0.34, 0.05, zb - zf + 0.49, 2);
   k.m(routeColor, 'paint');
-  sh.box(0, 0.0, (z1 - z0 + 0.45) / 2 + 0.005, L + 0.3, 0.09, 0.01, 0);
+  sh.box(0, 0.0, -(zb - zf + 0.45) / 2 - 0.005, L + 0.3, 0.09, 0.01, 0);
   k.e('#f6f2e8', '#fff1d6', 1.6);
-  sh.box(0, -0.055, (z1 - z0) / 2 - 0.05, L - 0.2, 0.02, 0.08, 2);
+  sh.box(0, -0.055, -(zb - zf) / 2 + 0.05, L - 0.2, 0.02, 0.08, 2);
   sh.pop();
   // glass back panel + one glass end
   g.m('#cfe3ea', 'glass');
-  gs.box(0, 1.3, z0, L - 0.1, 2.15, 0.03, 0);
-  gs.box(-L / 2, 1.3, (z0 + z1 - 0.12) / 2, 0.03, 2.15, z1 - z0 - 0.15, 0);
+  gs.box(0, 1.3, zb, L - 0.1, 2.15, 0.03, 0);
+  gs.box(-L / 2, 1.3, (zf + 0.12 + zb) / 2, 0.03, 2.15, zb - zf - 0.15, 0);
   // advertising panel at the other end (lit at night) — poster on both faces
   k.m(frame, 'paint');
-  sh.box(L / 2, 1.25, (z0 + z1 - 0.12) / 2, 0.12, 2.0, z1 - z0 - 0.12, 1);
+  sh.box(L / 2, 1.25, (zf + 0.12 + zb) / 2, 0.12, 2.0, zb - zf - 0.12, 1);
   const poster = rng.pick(['#e9c46a', '#2a9d8f', '#e76f51', '#8d6cab', '#f4a261']);
   for (const sx of [-1, 1]) {
     k.e(poster, '#fff3dc', 1.2);
-    sh.box(L / 2 + sx * 0.065, 1.3, (z0 + z1 - 0.12) / 2, 0.01, 1.6, z1 - z0 - 0.3, 0);
+    sh.box(L / 2 + sx * 0.065, 1.3, (zf + 0.12 + zb) / 2, 0.01, 1.6, zb - zf - 0.3, 0);
     k.e('#f4efe4', '#fff3dc', 1.2);
-    sh.box(L / 2 + sx * 0.07, 1.62, (z0 + z1 - 0.12) / 2, 0.012, 0.5, z1 - z0 - 0.42, 0);
+    sh.box(L / 2 + sx * 0.07, 1.62, (zf + 0.12 + zb) / 2, 0.012, 0.5, zb - zf - 0.42, 0);
   }
-  // bench inside (facing +Z)
+  // bench along the glass back, facing the road (-Z)
   k.m('#7d868d', 'steel');
-  for (const x of [-1.2, 1.2]) sh.box(x, 0.22, z0 + 0.25, 0.06, 0.44, 0.06, 1);
+  for (const x of [-1.2, 1.2]) sh.box(x, 0.22, zb - 0.25, 0.06, 0.44, 0.06, 1);
   k.m('#9a6a43', 'wood');
-  sh.box(0, 0.46, z0 + 0.25, 2.6, 0.04, 0.34, 0);
-  // stop pole with the route-coloured sign
+  sh.box(0, 0.46, zb - 0.25, 2.6, 0.04, 0.34, 0);
+  // stop pole with the route-coloured sign, at the kerb in front of the advertising end
   const px = L / 2 + 0.55,
-    pz = z0;
+    pz = zf;
   k.m('#7f878d', 'steel');
   sh.cyl(px, 0, pz, 0.045, 0.04, 2.95, 6, 2);
   k.m(routeColor, 'paint');
@@ -495,7 +497,7 @@ export function busShelter(k: Kit, g: Kit, routeColor: string, rng: Rng): { glow
   sh.box(px - 0.032, 2.62, pz, 0.012, 0.12, 0.2, 0);
   k.m('#e8e3d6', 'paint');
   sh.box(px, 1.9, pz + 0.05, 0.3, 0.42, 0.04, 0);
-  return { glows: [{ x: 0, y: 0.17, z: (z0 + z1) / 2, size: 2.6 }] };
+  return { glows: [{ x: 0, y: 0.17, z: (zf + zb) / 2, size: 2.6 }] };
 }
 
 // ─────────────────────────────────────────────────────── fences & walls ──
