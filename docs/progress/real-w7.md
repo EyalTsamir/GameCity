@@ -5,6 +5,10 @@ Owned: src/world/harbor/** + harbor.ts, src/sim/boats/** + boats.ts, src/world/l
 src/sim/rail/station.ts + staticMaterial.ts. Order: boats → quay → site → platform.
 
 ## Resume here
+* s2 START (session_01XuhAMgnc3LjfR6ehMUGwBc): lead verdict s1 → priorities (1) boat FORM (raked wheelhouse fronts,
+  rounded deckhouse corners, sheer, flared bow, glazed not black windows), (2) catenary mooring ropes + bollard loop,
+  (3) fish box / creel variation + wet patches, (4) site posters/mud/tracks/rebar/pallets+bricks, (5) platform canopy
+  form + tactile texture + seated people, (6) one perf.mjs run.
 * s1 END (23:00 UTC): all four places coded and seen once at 5 / 14 m (docs/progress/real/w7_places_s1.jpg,
   w7_boats_s1.jpg). Golden: overview 0.03, harbor 0.47 (new quay items) vs base; downtown console clean,
   invariants {}. NOT yet seen: the mud-track redraw at the site gate (dashes), ferry deck pits after toning down,
