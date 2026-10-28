@@ -3,9 +3,21 @@
 Branch `claude/real-w3-furniture` (from `claude/pensive-gates-bim12i`). Brief: docs/progress/real-briefs.md "W3".
 
 ## Resume here
-* 2026-10-28 — Session 1. Bench framing fix committed first (line-of-sight). First pass of real-object builders
-  written for every class in the brief (see Done); typecheck clean. Next: bench all W3 classes at 3/10 m, judge,
-  fix, commit; then materials (brief #4) and variation.
+* 2026-10-28 — Session 1 ends (context). Committed + pushed. Bench after-sheets: docs/progress/real/w3_after_1.jpg
+  (bin, planter, phonebox, newsstand, bench, statue) and w3_after_2.jpg (gazebo, kiosk, playground, picnic,
+  market stall, flagpole) — before = audit_3..5.jpg. Judged at 3 m: phone box, statue pedestal, gazebo
+  roof/balustrade, picnic table, market produce and kiosk chairs now read as real objects.
+  **Next (session 2), in order:**
+  1. Re-bench the 10 m newsstand (front not yet seen: LOS had to swing to its back; per-class widths now fixed)
+     and the modern bin (reads as a dark box — consider a brighter stainless default + visible liner).
+  2. Gazebo floor reads flat brown (PLANKS not visible on the cyl top: give the floor a plank uv / radial boards).
+  3. Statue figure itself (still a lathe "frock coat"; bronze flat teal — darker bronze with verdigris streaks).
+  4. Contact: ground dirt ring around prop bases needs a decal layer (transparent) — not done; foot grime on
+     the props themselves exists (wear shader). Coordinate with the wave-2 ground-contact worker.
+  5. Mailbox / hydrant / bike rack untouched (audit: good/fair). Bus shelter untouched (good).
+  6. Measure cost: `node scripts/perf.mjs --view downtown --variants ";nopropdetail"` and
+     `--view oldtown --variants ";nomarketdetail"` (software GL: compare within one run).
+  7. tokens.py summary.
 
 ## Done
 * **scripts/bench.mjs — line of sight** (REAL.md "bench framing faults"): before each capture the camera swings
@@ -14,6 +26,7 @@ Branch `claude/real-w3-furniture` (from `claude/pensive-gates-bim12i`). Brief: d
   their front; glass counts, billboards/sky/water don't). `report.json` captures carry `los: {dy, arm, blocked?}`.
   Not fixed: tree crowns whose instances are placed in the shader are invisible to the raycaster (picnic 10 m),
   moving objects are not yet restricted to open road (W2's classes).
+* Playground safety tiles: tried bright green → read as astroturf; now red EPDM with CONCRETE pattern.
 * `src/world/props/shapes.ts` (new): `cbox` (45° chamfered box, 26 faces), `lathe` (profile revolve with crisp
   mouldings), `poly`, `boltY/boltZ`, `ring`.
 * furniture.ts: **bin** (classic: cast-iron slatted round bin — base moulding, 18 slats over a dark core, hoop
@@ -46,7 +59,15 @@ Branch `claude/real-w3-furniture` (from `claude/pensive-gates-bim12i`). Brief: d
 * LOS ray from the object only: misses roofs seen from below (playground 40 m ended inside a shed roof).
 
 ## Toggles / tiers / costs
-(to measure)
+* `?nopropdetail` — old primitive bins/planters/phone boxes/newsstands/bollards (props/legacy.ts). Also the
+  **low** quality tier (boot-time `ctx.quality.level === 'low'`).
+* `?nomarketdetail` — market stalls without individual produce, price cards, scales, ground clutter (crates
+  become gravel slabs). Also the **low** tier.
+* Landmark small parts route to the landmarks detail LOD automatically (< 25 cm / thin rods) or via forceDetail.
+* Props detail lives in the fine (near-only, < 300 m) furniture meshes except phone box / newsstand (coarse).
+* Cost: not measured yet (see Resume step 6).
+* Shader: props wear gained galvanised-steel mottling + foot grime, concrete aggregate specks, terracotta salt
+  bloom; painted-metal stickers made ~5× rarer (were confetti on large panels). `?nowear` still disables all.
 
 ## Sheets
 * shots/w3/los/sheet_1.png — framing check.

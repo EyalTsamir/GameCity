@@ -458,7 +458,7 @@ export function genPlayground(env: Env, f: Feature): void {
     sz = -D + 2.4,
     top = 2.5;
   // rubber safety tiles under the swings
-  const mat = M('#3f5e3a', PAT.PLAIN, 0.95);
+  const mat = M('#7a4537', PAT.CONCRETE, 0.95, 0, 0, 0, 0.5); // red EPDM rubber tiles
   for (let i = 0; i < 8; i++) for (let j = 0; j < 4; j++) K.box(mat, 0.49, 0.025, 0.49, sx0 + 0.6 + i * 0.5 - 0.25 + 0.25, 0, sz - 1.0 + j * 0.5 + 0.25);
   for (const x of [sx0, sx1]) {
     for (const dz of [-0.95, 0.95]) {
