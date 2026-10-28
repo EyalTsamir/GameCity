@@ -282,7 +282,8 @@ export function makeLook(rng0: Rng, o: LookOptions): Look {
   }
   const scale =
     ageClass === 'child' ? rng.range(0.6, 0.74) : ageClass === 'teen' ? rng.range(0.88, 0.98) : female ? rng.range(0.92, 1.0) : rng.range(0.97, 1.07);
-  const girth = ageClass === 'child' ? rng.range(0.92, 1.02) : rng.range(0.94, 1.14) + (ageClass === 'elderly' ? 0.04 : 0);
+  // builds: a slim-to-solid spread plus a heavy tail (about one adult in six), so a crowd never reads as one body
+  const girth = ageClass === 'child' ? rng.range(0.92, 1.02) : rng.range(0.93, 1.12) + (ageClass === 'elderly' ? 0.04 : 0) + (ageClass !== 'teen' && rng.chance(0.17) ? rng.range(0.07, 0.2) : 0);
 
   let top = rng.pick(TOPS);
   let bottom = rng.pick(BOTTOMS);
@@ -435,7 +436,27 @@ export function makeLook(rng0: Rng, o: LookOptions): Look {
   if (o.persona === 'parent' && ageClass === 'adult') look.pram = { fabric: rng.pick(PRAMS) };
   // ── everything below uses a private generator (the main stream is untouched from here on)
   dressUp(look, new Rng(hash() ^ 0x5bd1e995), o.persona, ageClass, warm);
+  // per-person shade of every palette colour (dye lots, fading, wear): two people who drew the same
+  // swatch never wear the identical colour; a suit's jacket and trousers keep matching
+  const jr = new Rng(hash() ^ 0x2545f491);
+  const suitMatch = look.bottom === look.top;
+  look.top = shade(look.top, jr, 0.13, 0.05);
+  look.bottom = suitMatch ? look.top : shade(look.bottom, jr, 0.13, 0.05);
+  look.shoes = shade(look.shoes, jr, 0.1, 0.03);
+  look.hair = shade(look.hair, jr, 0.1, 0.03);
+  look.skin = shade(look.skin, jr, 0.05, 0.015);
   return look;
+}
+
+/** a colour scaled in value by ±v and tinted per channel by ±t (deterministic per generator) */
+function shade(c: number, r: Rng, v: number, t: number): number {
+  const k = 1 + (r.next() * 2 - 1) * v;
+  let out = 0;
+  for (let i = 16; i >= 0; i -= 8) {
+    const ch = (c >> i) & 255;
+    out = (out << 8) | Math.max(0, Math.min(255, Math.round(ch * (k + (r.next() * 2 - 1) * t))));
+  }
+  return out;
 }
 
 export function describeAge(l: Look): string {

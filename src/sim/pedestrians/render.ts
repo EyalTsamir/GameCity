@@ -89,7 +89,8 @@ export function lookData(L: Look): LookCache {
   const fl = L.flags;
   let f = 0;
   if (s.hair !== 'bald') f |= bit(FB.HAIR);
-  if (s.hairLen > 0.01) f |= bit(FB.HAIRLONG);
+  // (a ponytail's 2 cm would hang the sheet as a ledge beside the ears: only real lengths get one)
+  if (s.hairLen > 0.03) f |= bit(FB.HAIRLONG);
   if (s.hair === 'ponytail') f |= bit(FB.PONY);
   if (s.hair === 'bun' || s.hair === 'manbun') f |= bit(FB.BUN);
   if (s.fringe) f |= bit(FB.FRINGE);

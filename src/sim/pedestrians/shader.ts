@@ -281,8 +281,26 @@ void pedPose(inout vec3 p, inout vec3 n) {
       p = root + sw * (p - root);
       n = sw * n;
     } else if (aux.x > 0.0) {
-      // long hair: vertices deeper than the hair length are lifted to the hem
-      p.y += max(0.0, aux.x - pedP8(iC1.x) * 0.5);
+      // long hair: vertices deeper than the hair length are lifted to the hem. The tips are uneven (clumps of
+      // different length, longest at the middle of the back) and the sheet ripples in and out across its
+      // width into locks that gain volume as they fall, so neither the hem nor the outline is a ruled line
+      float len = pedP8(iC1.x) * 0.5;
+      float a = atan(p.x, p.z);
+      float sd = float(iC1.x & 15u);
+      float L2 = len * (1.0 + 0.09 * sin(a * 7.0 + sd) + 0.06 * sin(a * 15.0 + 1.7 + sd * 0.5) - 0.12 * (1.0 - abs(sin(a * 0.5))));
+      float lift = max(0.0, aux.x - L2);
+      p.y += lift;
+      // rows lifted to the hem tuck in under it (into the hair / body) instead of rolling out as a shelf
+      p.xz = mix(p.xz, vec2(0.0, -0.01), 0.3 * smoothstep(0.0, 0.03, lift));
+      float dep = min(aux.x, L2);
+      float g = smoothstep(0.0, 0.1, dep) * (0.6 + 0.4 * smoothstep(0.1, 0.35, dep));
+      float ph = a * 9.0 + sd + dep * 6.0;
+      float rip = 0.6 * sin(ph) + 0.4 * sin(a * 17.0 - sd);
+      float drip = (0.6 * 9.0 * cos(ph) + 0.4 * 17.0 * cos(a * 17.0 - sd)) * 0.0045 * g / 0.09;
+      vec2 rad = normalize(p.xz + vec2(1e-5));
+      p.xz += rad * (0.0045 * rip + 0.006) * g;
+      n.xz -= vec2(rad.y, -rad.x) * drip * 0.5;
+      n = normalize(n);
     } else if (((d0 >> 10u) & 63u) == ${FB.HAIR + 1}u && uPedHairline > 0.5) {
       // cap: aux.y = s (0 hairline … 1 crown). Hair stands off the scalp in locks, not as a smooth helmet:
       // lumps in the silhouette grow from the hairline, a little more lift on the crown / back
@@ -533,7 +551,11 @@ void pedPose(inout vec3 p, inout vec3 n) {
   vPedPat = pat;
   // material response: skin & hair soften the terminator (wrap), hair and shoes get a faint sheen
   // (the face less: its sculpt must read in the light)
-  vPedMat = region == ${R.FACE} ? vec2(0.16, 0.0)
+  // On the head the wrap blends from the face to the sides by the rest normal: a step at the FACE / SKIN
+  // boundary drew a crease from the temple down to the jaw in three-quarter views
+  float headWrap = mix(0.35, 0.16, smoothstep(-0.1, 0.75, vPedRN.z));
+  vPedMat = (region == ${R.FACE} || region == ${R.SKIN}) && bone == ${B.HEAD} ? vec2(headWrap, 0.0)
+          : region == ${R.FACE} ? vec2(0.16, 0.0)
           : region == ${R.SKIN} || region == ${R.NECK} || region == ${R.LIPS} ? vec2(0.35, 0.0)
           : region == ${R.HAIR} || region == ${R.BEARD} ? vec2(0.4, 0.018)
           : region == ${R.FOOT} ? vec2(0.0, 0.09)
@@ -572,15 +594,31 @@ float pedBayer4(vec2 a) { return pedBayer2(0.5 * a) * 0.25 + pedBayer2(a); }
 // ── hair: strands as clumps and fine fibres running from the crown down (rest-pose angle about the
 // head axis), darker between clumps; the fine octave fades out where it would alias
 float pedN1(float x) { float i = floor(x), f = fract(x); f = f * f * (3.0 - 2.0 * f); return mix(fract(sin(i * 127.1) * 43758.5453), fract(sin((i + 1.0) * 127.1) * 43758.5453), f); }
+// hair flow on the cap: strands radiate from a crown whorl (back of the top, a little to one side per person)
+// and are combed down / forward from it, swirling round the whorl itself; x = angle about the whorl axis
+// (seam at the nape), y = angular distance from the whorl. Elsewhere (sheets, tails, beards) strands hang.
+vec2 pedHairFlow(vec3 r) {
+  if (vPedFace.z < 2.5) return vec2(atan(r.x, r.z + 0.015), r.y * 1.4);
+  float hs = fract(sin(dot(vPedHairW.rgb, vec3(12.9898, 78.233, 37.719))) * 43758.5453);
+  vec3 ax = normalize(vec3((hs - 0.5) * 0.8, 0.8, -0.55));
+  vec3 d = normalize(r - vec3(0.0, vPedHgt * 0.943, 0.0));
+  vec3 u = normalize(cross(ax, vec3(0.0, 0.0, 1.0)));
+  vec3 v = cross(ax, u);
+  float c = acos(clamp(dot(d, ax), -1.0, 1.0));
+  return vec2(atan(dot(d, u), -dot(d, v)) + 1.4 * (1.0 - smoothstep(0.0, 0.7, c)), c);
+}
 float pedStrands(vec3 r) {
-  float a = atan(r.x, r.z + 0.015);
-  float wob = sin(r.y * 41.0 + a * 3.0) * 0.6;
+  vec2 fl = pedHairFlow(r);
+  float a = fl.x;
+  float wob = sin(fl.y * 13.0 + a * 2.0) * 0.3 + (pedN1(fl.y * 9.0 + a * 4.0) - 0.5) * 0.5;
   float c = mix(pedN1(a * 26.0 + wob), 0.5, smoothstep(0.4, 0.9, fwidth(a * 26.0)));
   float fA = a * 85.0 + wob * 2.0;
   float fw = fwidth(fA);
   float f = mix(pedN1(fA) - 0.5, 0.0, smoothstep(0.35, 0.8, fw));
   float ff = mix(pedN1(a * 240.0 + wob * 4.0) - 0.5, 0.0, smoothstep(0.25, 0.6, fwidth(a * 240.0)));
-  return 0.72 + 0.48 * c + 0.3 * f + 0.2 * ff;
+  // (clumps break along their length: no continuous corrugation round the cap)
+  float brk = 0.6 + 0.4 * pedN1(fl.y * 15.0 + a * 4.0 + 3.0);
+  return 0.8 + 0.32 * c * brk + 0.3 * f + 0.2 * ff;
 }
 // ── fabric (close range): seams, stitching, folds where the limb bends (knee / elbow creases deepen with
 // the bend), trouser breaks over the shoe, sleeve gathers, side drape at the waist, weave grain; denim
@@ -656,7 +694,10 @@ vec3 pedFabric(vec3 pc, float reg, float h, float sHem) {
     // coats / skirts: long vertical drape folds
     sh *= 1.0 + 0.07 * sin(ang * 7.0 + h * 3.0) * (0.6 + 0.4 * sin(ang * 3.0));
   }
-  pc *= mix(1.0, sh, det);
+  // sleeves and trouser legs: folds only on the garment side of the hem (s > 0) — on bare forearms and
+  // shins below a short sleeve / shorts the cuff gathers and crease rings read as stripes on the skin
+  float cloth = reg > 1.5 && reg < 3.5 ? clamp(sHem / max(fwidth(sHem), 1e-4) + 0.5, 0.0, 1.0) : 1.0;
+  pc *= mix(1.0, sh, det * cloth);
   pc = mix(pc, thread, clamp(stitch, 0.0, 1.0) * det * (denim ? 0.7 : 0.35));
   return pc;
 }
@@ -829,12 +870,22 @@ const FRAG_COLOR = /* glsl */ `
 /** hair: strand ridges tilt the normal across the strands (view space; fades where it would alias) */
 const HAIR_NORMAL = /* glsl */ `
   if (abs(vPedReg - ${R.HAIR}.0) < 0.5) {
-    float ha = atan(vPedRest.x, vPedRest.z + 0.015);
-    float hq = ha * 70.0 + sin(vPedRest.y * 40.0 + ha * 3.0) * 1.5;
+    // strand ridges across the flow as a derivative bump (screen-space height gradient), so the shading
+    // follows the strands wherever they run (combed from the whorl on the cap, hanging on sheets)
+    vec2 hf = pedHairFlow(vPedRest);
+    float ha = hf.x;
+    float hq = ha * 70.0 + sin(hf.y * 13.0 + ha * 2.0) * 0.6;
     float hk = 1.0 - smoothstep(0.3, 0.7, fwidth(hq));
-    vec3 ht = normalize(cross(normal, vec3(0.0, 1.0, 0.0)) + vec3(1e-4));
-    float hg = 0.55 * sin(hq * 6.2832) + (pedN1(ha * 26.0) - 0.5);
-    normal = normalize(normal + ht * hg * 0.4 * hk);
+    // fine strands (fade below ~2 px per ridge) + clumps of strands, which break the sheen into locks at 1–3 m
+    float hc2 = ha * 26.0 + sin(hf.y * 9.0) * 0.8;
+    float hk2 = 1.0 - smoothstep(0.35, 0.8, fwidth(hc2));
+    float hbrk = 0.55 + 0.45 * pedN1(hf.y * 16.0 + ha * 5.0);
+    float hH = 0.55 * sin(hq * 6.2832) * 0.00009 * hk + (pedN1(hc2) + 0.5 * pedN1(hc2 * 2.3 + 7.0) - 0.75) * 0.0006 * hk2 * hbrk;
+    vec3 hsx = dFdx(-vViewPosition), hsy = dFdy(-vViewPosition);
+    vec3 hr1 = cross(hsy, normal), hr2 = cross(normal, hsx);
+    float hdet = dot(hsx, hr1);
+    vec3 hgrad = sign(hdet) * (dFdx(hH) * hr1 + dFdy(hH) * hr2);
+    normal = normalize(abs(hdet) * normal - hgrad);
   }
 `;
 /** Lambert direct light with per-region wrap (skin, hair) and a faint Blinn sheen (hair, shoes). */

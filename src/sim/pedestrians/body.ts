@@ -360,7 +360,7 @@ const LODS: Record<Lod, LodCfg> = {
   4: {
     torsoSides: 20,
     torsoRings: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
-    headSides: 44,
+    headSides: 56,
     headRings: [0, 1, 2, 3, 4, 5, 6, 7],
     neck: [0, 1, 2],
     neckSides: 16,
@@ -372,14 +372,14 @@ const LODS: Record<Lod, LodCfg> = {
     shin: [0, 1, 2, 3, 4, 5, 6],
     footSides: 12,
     foot: [0, 1, 2, 3, 4, 5, 6, 7],
-    hairCap: [0, 0.18, 0.4, 0.62, 0.8, 0.92, 0.98, 1],
-    hairLong: [0.08, 0.2, 0.3, 0.42],
+    hairCap: [0, 0.09, 0.18, 0.29, 0.4, 0.51, 0.62, 0.72, 0.8, 0.87, 0.92, 0.96, 0.985, 1],
+    hairLong: [0.04, 0.08, 0.14, 0.2, 0.25, 0.3, 0.36, 0.42],
     tailSides: 16,
     tailRings: 4,
     details: true,
     props: 'all',
     close: true,
-    hairSides: 24,
+    hairSides: 40,
   },
 };
 
@@ -464,9 +464,18 @@ function buildTorso(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
   capFan(b, rings[rings.length - 1], top, [0, rt.y - 0.05, rt.cz]);
 }
 
+/** close level: hair and hats follow the smooth (Catmull-Rom) head profile of buildCloseHead, not the ring polygon */
+let smoothHead = false;
+
 function headSurface(d: Dims, phi: number, y: number, push = 0): P3 {
   // interpolate the head rings at height y (clamped to the ring range)
   const R = d.headRings;
+  if (smoothHead && y >= R[0].y) {
+    const p = torsoPoint(headRingAt(d, Math.min(y, d.crown)), 0, phi, 2.1);
+    p[0] += Math.sin(phi) * push;
+    p[2] += Math.cos(phi) * push;
+    return p;
+  }
   let i = 0;
   while (i < R.length - 2 && R[i + 1].y < y) i++;
   const a = R[i],
@@ -603,9 +612,13 @@ function faceRelief(X: number, Y: number, nose: number): number {
   r += 0.0034 * gs(ax - 0.031, Y + 0.0005, 0.0115, 0.0062);
   r += 0.0036 * gs(ax - 0.027, Y - 0.0165, 0.021, 0.0062);
   r += 0.0018 * gs(X, Y - 0.014, 0.012, 0.008);
-  // cheekbones, the soft hollow below them, the muzzle around the mouth
-  r += 0.0042 * gs(ax - 0.046, Y + 0.024, 0.017, 0.014);
-  r -= 0.0018 * gs(ax - 0.048, Y + 0.058, 0.012, 0.014);
+  // cheekbones running back into the zygomatic arch, the soft hollow below them, the muzzle round the mouth
+  r += 0.0052 * gs(ax - 0.045, Y + 0.022, 0.016, 0.012);
+  r += 0.0024 * gs(ax - 0.064, Y + 0.016, 0.014, 0.007);
+  // (the hollow under the cheekbone is shallow; the cheek fills out again round the mouth: no flat plane
+  // from the cheekbone to the jaw)
+  r -= 0.0012 * gs(ax - 0.052, Y + 0.05, 0.011, 0.012);
+  r += 0.0034 * gs(ax - 0.042, Y + 0.068, 0.016, 0.018);
   r += 0.0046 * gs(X, Y + 0.066, 0.03, 0.022);
   // nose: bridge rising to the tip, wings, the underside back to the lip
   const nk = nose / 0.024;
@@ -614,13 +627,24 @@ function faceRelief(X: number, Y: number, nose: number): number {
   const wN = 0.0052 + 0.0062 * sstep(0.004, tipY, Y);
   r += prof * Math.exp(-(X * X) / (wN * wN));
   r += 0.0058 * nk * gs(ax - 0.0125, Y + 0.0405, 0.0062, 0.0062);
-  r -= 0.0012 * gs(ax - 0.019, Y + 0.044, 0.003, 0.004);
-  // philtrum, lips with the mouth line between them, the groove under the lower lip, chin
+  // the crease round each wing (alar groove), the nostrils opening under the tip either side of the columella
+  r -= 0.0016 * gs(Math.hypot(ax - 0.0118, (Y + 0.041) * 1.15) - 0.0074, 0, 0.0016, 1) * sstep(-0.034, -0.042, Y + 0.3 * (ax - 0.012));
+  r -= 0.0034 * nk * gs(ax - 0.0072, Y + 0.0462, 0.0032, 0.0019);
+  // nasolabial fold: a soft groove from the wing to beside the mouth corner, cheek fullness outside it
+  const nl = ax - (0.02 + 0.32 * Math.max(0, -0.045 - Y));
+  const nlY = sstep(-0.04, -0.05, Y) * sstep(-0.078, -0.068, Y);
+  r -= 0.0011 * gs(nl, 0, 0.0028, 1) * nlY;
+  r += 0.0012 * gs(nl - 0.006, 0, 0.005, 1) * nlY;
+  // philtrum ridges, upper lip with a cupid's bow at the vermilion border, the mouth line (a groove), the
+  // recessed corners, a fuller lower lip, the groove under it, chin
   r += 0.0009 * gs(ax - 0.0035, Y + 0.054, 0.0018, 0.004);
-  r += 0.0036 * gs(X, Y + 0.0615, 0.021, 0.0046) * (1 - 0.25 * sstep(0.006, 0.02, ax));
-  r += 0.0042 * gs(X, Y + 0.0715, 0.018, 0.0052);
-  r -= 0.0022 * gs(X, Y + 0.0665, 0.023, 0.0013);
-  r -= 0.0024 * gs(X, Y + 0.0815, 0.017, 0.0036);
+  const bow = 0.0012 * (gs(ax - 0.0055, 0, 0.0035, 1) - 0.6 * gs(X, 0, 0.0025, 1));
+  r += 0.0034 * gs(X, Y + 0.0615, 0.02, 0.0042) * (1 - 0.25 * sstep(0.006, 0.02, ax));
+  r += 0.0009 * gs(X, Y + 0.0572 - bow, 0.016, 0.0011);
+  r += 0.0046 * gs(X, Y + 0.0718, 0.017, 0.0048);
+  r -= 0.0028 * gs(X, Y + 0.0665, 0.024, 0.0014);
+  r -= 0.0022 * gs(ax - 0.025, Y + 0.0665, 0.0035, 0.0035);
+  r -= 0.0026 * gs(X, Y + 0.0815, 0.017, 0.0034);
   r += 0.0046 * gs(X, Y + 0.0955, 0.017, 0.0105);
   return r;
 }
@@ -633,11 +657,16 @@ function closeHeadPoint(d: Dims, phi: number, Y: number, push = 0, ring?: BodyRi
   const kx = R[4].hw / 0.0775;
   const r = ring ?? headRingAt(d, ye + Y * k);
   const p = torsoPoint(r, 0, phi, 2.1);
-  // the lower face narrows into the chin (a jaw line instead of a block), the temples a little
+  // the lower face narrows into the chin along a smooth bell round the front (the dental arch and chin:
+  // no crease where the narrowing ends), the jaw angle below the ear stays broad and slightly flared,
+  // the temples narrow a little
   const cf = Math.max(0, Math.cos(phi));
-  p[0] *= 1 - 0.3 * sstep(-0.035, -0.105, Y) * Math.pow(cf, 1.4) - 0.05 * sstep(0.01, 0.05, Y) * cf;
+  const arch = Math.exp(-((phi / 0.85) ** 2));
+  const lo = sstep(-0.04, -0.115, Y);
+  const gonion = gs(Math.abs(phi) - 1.45, (Y + 0.086) * 9, 0.36, 0.24);
+  p[0] *= 1 - 0.15 * lo * arch + 0.05 * gonion - 0.05 * sstep(0.01, 0.05, Y) * cf;
   const X = p[0] / kx;
-  const front = sstep(0.05, 0.45, Math.cos(phi));
+  const front = sstep(-0.1, 0.45, Math.cos(phi));
   const rel = (front > 0 ? faceRelief(X, Y, d.nose / k) * front * k : 0) + push;
   const dx = p[0],
     dz = p[2] - r.cz;
@@ -694,8 +723,12 @@ function buildCloseHead(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
   const Ys: number[] = [];
   const yb = (R[0].y - ye) / k,
     yt = (R[R.length - 1].y - ye) / k;
-  Ys.push(yb, yb + 0.008);
-  for (let y = -0.1; y < 0.03; y += 0.0034) Ys.push(y);
+  Ys.push(yb, yb + 0.006);
+  // rows: 1.8 mm through the nose base and the lips (nostrils, vermilion borders, mouth line in form), 3 mm elsewhere
+  for (let y = -0.104; y < 0.03; ) {
+    Ys.push(y);
+    y += y > -0.082 && y < -0.032 ? 0.0018 : 0.003;
+  }
   for (let y = 0.038; y < yt - 0.004; y += 0.0105) Ys.push(y);
   Ys.push(yt);
   const yc = (d.crown - ye) / k;
@@ -708,11 +741,11 @@ function buildCloseHead(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
     const ids: number[] = [];
     for (let i = 0; i < n; i++) {
       const t = (i / n) * Math.PI * 2;
-      const phi = t - 0.68 * Math.sin(t); // vertices bunch at the face
+      const phi = t - 0.74 * Math.sin(t); // vertices bunch at the face
       const { p, X } = closeHeadPoint(d, phi, Y, 0, r);
       // jaw / under-chin shade and the face proper
       const reg = Math.cos(phi) > 0.2 && Y > -0.112 && Y < 0.06 ? REG.FACE : REG.SKIN;
-      b.use(BONE.HEAD, reg, -1, Y < -0.1 ? 0.88 : 1);
+      b.use(BONE.HEAD, reg, -1, 1 - 0.08 * sstep(-0.095, -0.115, Y));
       ids.push(b.v(p, 2, 0, X, Y));
     }
     rings.push({ ids, c: [0, y, r.cz] });
@@ -721,9 +754,35 @@ function buildCloseHead(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
   b.use(BONE.HEAD, REG.SKIN, -1, 1);
   const crown = b.v([0, d.crown, R[R.length - 1].cz - 0.005], 2, 0);
   capFan(b, rings[rings.length - 1], crown, [0, d.crown - 0.05, R[R.length - 1].cz]);
-  b.use(BONE.HEAD, REG.SKIN, -1, 0.8);
-  const chin = b.v([0, R[0].y - 0.006, R[0].cz + 0.01], 2, 0);
-  capFan(b, rings[0], chin, [0, R[0].y + 0.05, R[0].cz]);
+  // under the jaw: the jaw edge rolls round (no flat cap, no hard line) and tucks back into the neck
+  const N = d.neckRings[2];
+  const neckIn: BodyRing = { y: R[0].y - 0.004 * k, hw: N.hw * 0.96, f: N.f * 0.96, b: N.b * 0.96, cz: N.cz };
+  const jaw = rings[0].ids.map((id) => [b.pos[id * 3], b.pos[id * 3 + 1], b.pos[id * 3 + 2]] as P3);
+  const under: Ring[] = [rings[0]];
+  for (const u of [0.18, 0.4, 0.68, 1]) {
+    b.use(BONE.HEAD, REG.SKIN, -1, 0.92 - 0.06 * u);
+    const ids: number[] = [];
+    for (let i = 0; i < n; i++) {
+      const t = (i / n) * Math.PI * 2;
+      const phi = t - 0.74 * Math.sin(t);
+      const j = jaw[i];
+      // the front tucks into the neck; the back (inside the neck / skull) closes into a bowl as the old cap did
+      // — an open under-surface there showed the sky through the top of the neck behind the jaw angle
+      const qn = torsoPoint(neckIn, 0, phi, 2);
+      const fr = sstep(-0.25, 0.35, Math.cos(phi));
+      const qb: P3 = [j[0] * 0.25, R[0].y - 0.006, R[0].cz + (j[2] - R[0].cz) * 0.25];
+      const q: P3 = [qb[0] + (qn[0] - qb[0]) * fr, qb[1] + (qn[1] - qb[1]) * fr, qb[2] + (qn[2] - qb[2]) * fr];
+      // quarter-round: first down round the edge, then back along the under-jaw towards the neck
+      const e = 1 - (1 - u) ** 2;
+      const drop = 0.006 * k * Math.sin(Math.PI * Math.min(1, u * 1.4));
+      ids.push(b.v([j[0] + (q[0] - j[0]) * e, j[1] + (q[1] - j[1]) * u - drop, j[2] + (q[2] - j[2]) * e], 2, 0));
+    }
+    under.push({ ids, c: [0, R[0].y + 0.04, R[0].cz] });
+  }
+  bridge(b, under);
+  b.use(BONE.HEAD, REG.SKIN, -1, 0.84);
+  const chin = b.v([0, neckIn.y + 0.01, neckIn.cz], 2, 0);
+  capFan(b, under[under.length - 1], chin, [0, R[0].y + 0.05, R[0].cz]);
   // ears: a shell (helix rim standing off the head, hollow concha) between the brow and the nose base
   for (const side of [1, -1]) {
     b.use(BONE.HEAD, REG.SKIN, -1, 0.93);
@@ -1143,7 +1202,10 @@ function buildHair(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
   for (const k of cols) {
     const phi = (k / n) * Math.PI * 2;
     const y0 = chin + (crown - chin) * hairlineU(phi);
-    const edge = headSurface(d, phi, y0 + 0.012 * hk, vol * 0.9);
+    // close: the sheet starts up on the cap (over it, a little proud) so the hair flows out of the cap
+    // instead of hanging from a ledge at its edge
+    const yS = cfg.close ? y0 + (crown - y0) * 0.3 : y0 + 0.012 * hk;
+    const edge = headSurface(d, phi, yS, cfg.close ? vol * 1.05 + 0.004 : vol * 0.9);
     // widest outline of the head at this angle (hair falls from there)
     const wide = headSurface(d, phi, d.headRings[5].y, vol * 1.2);
     const col: number[] = [];
@@ -1212,18 +1274,34 @@ function buildHair(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
   {
     const r5 = d.headRings[5];
     const root: P3 = [0, r5.y + 0.005 * hk, r5.cz - r5.b - 0.006 * hk];
-    const pts: [P3, number, number][] = [
-      [root, 0.026 * hk, 0],
-      [add(root, [0, -0.08 * hk, -0.034 * hk]), 0.03 * hk, 0.4],
-      [add(root, [0, -0.22 * hk, -0.03 * hk]), 0.016 * hk, 0.8],
-    ];
+    // close: a gathered root, a band, a full body of locks (lobed section) tapering to an uneven tip
+    const pts: [P3, number, number][] = cfg.close
+      ? [
+          [add(root, [0, 0.004 * hk, 0.008 * hk]), 0.03 * hk, 0],
+          [root, 0.0175 * hk, 0],
+          [add(root, [0, -0.008 * hk, -0.006 * hk]), 0.0175 * hk, 0.05],
+          [add(root, [0, -0.03 * hk, -0.024 * hk]), 0.03 * hk, 0.18],
+          [add(root, [0, -0.08 * hk, -0.036 * hk]), 0.032 * hk, 0.4],
+          [add(root, [0, -0.15 * hk, -0.034 * hk]), 0.025 * hk, 0.62],
+          [add(root, [0, -0.21 * hk, -0.03 * hk]), 0.014 * hk, 0.82],
+        ]
+      : [
+          [root, 0.026 * hk, 0],
+          [add(root, [0, -0.08 * hk, -0.034 * hk]), 0.03 * hk, 0.4],
+          [add(root, [0, -0.22 * hk, -0.03 * hk]), 0.016 * hk, 0.8],
+        ];
     const rings2: Ring[] = [];
+    const ns = cfg.close ? 14 : 6;
     // aux: swing share (0 at the root … 1 at the tip) and the drop below the root (the swing pivot)
-    for (const [c, r, w] of pts) {
+    for (let j = 0; j < pts.length; j++) {
+      const [c, r, w] = pts[j];
       const ids: number[] = [];
-      for (let k = 0; k < 6; k++) {
-        const phi = (k / 6) * Math.PI * 2;
-        ids.push(b.v(add(c, [r * Math.sin(phi), 0, r * 0.8 * Math.cos(phi)]), 2, w * 0.7, w * 1.2, root[1] - c[1]));
+      if (cfg.close) b.setTint(j === 1 || j === 2 ? 0.55 : 0.95); // the band (hair tie)
+      for (let k = 0; k < ns; k++) {
+        const phi = (k / ns) * Math.PI * 2;
+        const lobe = cfg.close && j > 2 ? 1 + 0.13 * Math.sin(phi * 5 + j * 0.9) + 0.06 * Math.sin(phi * 9 - j) : 1;
+        const tip = cfg.close && j === pts.length - 1 ? [0, (0.012 * Math.sin(phi * 3 + 1) + 0.008 * Math.sin(phi * 7)) * hk, 0] : [0, 0, 0];
+        ids.push(b.v(add(add(c, [r * lobe * Math.sin(phi), 0, r * lobe * 0.8 * Math.cos(phi)]), tip as P3), 2, w * 0.7, w * 1.2, root[1] - c[1]));
       }
       rings2.push({ ids, c });
     }
@@ -1235,21 +1313,46 @@ function buildHair(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
   b.use(BONE.HEAD, REG.HAIR, FB.BUN, 0.95);
   {
     const r5 = d.headRings[5];
-    blob(b, [0, r5.y + 0.028 * hk, r5.cz - r5.b - 0.02 * hk], [0.038 * hk, 0.035 * hk, 0.032 * hk], 6, 4);
+    if (cfg.close) coilBun(b, [0, r5.y + 0.028 * hk, r5.cz - r5.b - 0.02 * hk], [0.04 * hk, 0.036 * hk, 0.034 * hk]);
+    else blob(b, [0, r5.y + 0.028 * hk, r5.cz - r5.b - 0.02 * hk], [0.038 * hk, 0.035 * hk, 0.032 * hk], 6, 4);
   }
   // fringe (a short visor of hair over the forehead)
   b.use(BONE.HEAD, REG.HAIR, FB.FRINGE, 0.93);
   {
     const ids: number[][] = [];
-    for (const [y, push] of [
-      [d.headRings[6].y + 0.012 * hk, vol * 1.1],
-      [d.headRings[5].y + 0.004 * hk, vol * 0.7],
-    ] as [number, number][]) {
-      const row: number[] = [];
-      for (const phi of [-0.95, -0.5, 0, 0.5, 0.95]) row.push(b.v(headSurface(d, phi, y, push), 2, 0));
-      ids.push(row);
+    if (cfg.close) {
+      // close: grows out from under the cap, curves forward over the brow and ends in uneven strand tips
+      // (longer towards the temples), thinning to the edge — not a visor block
+      const phis: number[] = [];
+      for (let k = 0; k <= 16; k++) phis.push(-1.0 + (2 * k) / 16);
+      const y6 = d.headRings[6].y,
+        y5 = d.headRings[5].y;
+      const rowsF: [number, number][] = [
+        [y6 + 0.022 * hk, vol * 0.75],
+        [y6 + 0.004 * hk, vol * 1.2],
+        [(y6 + y5) / 2, vol * 1.05],
+        [y5 + 0.004 * hk, vol * 0.8],
+      ];
+      rowsF.forEach(([y, push], ri) => {
+        const row: number[] = [];
+        phis.forEach((phi, k) => {
+          const jag = ri === 3 ? (((k * 7919) % 5) / 4 - 0.5) * 0.008 * hk - 0.006 * Math.abs(phi) * hk : 0;
+          row.push(b.v(headSurface(d, phi, y + jag + (ri === 2 ? jag * 0.4 : 0), push), 2, 0));
+        });
+        ids.push(row);
+      });
+      for (let r = 0; r < rowsF.length - 1; r++) for (let k = 0; k < phis.length - 1; k++) b.quadDir(ids[r][k], ids[r][k + 1], ids[r + 1][k + 1], ids[r + 1][k], [0, 0, 1]);
+    } else {
+      for (const [y, push] of [
+        [d.headRings[6].y + 0.012 * hk, vol * 1.1],
+        [d.headRings[5].y + 0.004 * hk, vol * 0.7],
+      ] as [number, number][]) {
+        const row: number[] = [];
+        for (const phi of [-0.95, -0.5, 0, 0.5, 0.95]) row.push(b.v(headSurface(d, phi, y, push), 2, 0));
+        ids.push(row);
+      }
+      for (let k = 0; k < 4; k++) b.quadDir(ids[0][k], ids[0][k + 1], ids[1][k + 1], ids[1][k], [0, 0, 1]);
     }
-    for (let k = 0; k < 4; k++) b.quadDir(ids[0][k], ids[0][k + 1], ids[1][k + 1], ids[1][k], [0, 0, 1]);
   }
   // beard: a shell over jaw and chin (+ moustache)
   if (cfg.close) {
@@ -1290,6 +1393,32 @@ function buildHair(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
 }
 
 /** smooth ellipsoid blob (shared vertices) */
+/** close level: a bun wound as a coil — a spiral ridge of twisted hair round its axis, a lumpy outline,
+ *  tucked ends, a flattened side against the head (the axis points back and up from the skull) */
+function coilBun(b: MeshBuilder, c: P3, r: P3): void {
+  const seg = 18,
+    rings = 9;
+  const top = b.v([c[0], c[1] + r[1] * 0.9, c[2]], 2, 0);
+  const rows: Ring[] = [];
+  for (let j = 1; j < rings; j++) {
+    const ph = (j / rings) * Math.PI;
+    const ids: number[] = [];
+    for (let k = 0; k < seg; k++) {
+      const a = (k / seg) * Math.PI * 2;
+      // the coil: a ridge spiralling twice round the bun, finer twists inside it, flat against the head (+z)
+      const coil = 1 + 0.12 * Math.max(0, Math.sin(a * 2 + ph * 5)) ** 1.5 - 0.05 + 0.035 * Math.sin(a * 7 - ph * 9);
+      const flat = Math.cos(a) > 0 ? 1 - 0.3 * Math.cos(a) ** 2 * Math.sin(ph) : 1;
+      const sr = Math.sin(ph) * coil;
+      ids.push(b.v([c[0] + r[0] * sr * Math.sin(a), c[1] + r[1] * Math.cos(ph) * (1 + 0.04 * Math.sin(a * 3)), c[2] + r[2] * sr * Math.cos(a) * flat], 2, 0));
+    }
+    rows.push({ ids, c });
+  }
+  const bot = b.v([c[0], c[1] - r[1] * 0.92, c[2]], 2, 0);
+  capFan(b, rows[0], top, c);
+  bridge(b, rows);
+  capFan(b, rows[rows.length - 1], bot, c);
+}
+
 function blob(b: MeshBuilder, c: P3, r: P3, seg: number, rings: number): void {
   const top = b.v([c[0], c[1] + r[1], c[2]], 2, 0);
   const rows: Ring[] = [];
@@ -1994,6 +2123,7 @@ function towel(b: MeshBuilder): void {
 function buildTarget(d: Dims, lod: Lod): MeshBuilder {
   const cfg = LODS[lod];
   const b = new MeshBuilder();
+  smoothHead = !!cfg.close;
   buildTorso(b, d, cfg);
   buildNeckHead(b, d, cfg);
   for (const s of [1, -1] as const) buildArm(b, d, cfg, s);

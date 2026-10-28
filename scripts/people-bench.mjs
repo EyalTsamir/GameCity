@@ -87,6 +87,8 @@ try {
     face2: { ty: 0.925, d: 2, dy: 25, pitch: 4 },
     head3q: { ty: 0.93, d: 0.9, dy: 55, pitch: 8 },
     headback: { ty: 0.93, d: 0.9, dy: 150, pitch: 12 },
+    profile: { ty: 0.925, d: 0.8, dy: 90, pitch: 2 },
+    headlow: { ty: 0.91, d: 0.8, dy: 30, pitch: -10 },
   };
   for (let i = 0; i < figs.length; i++) {
     const f = figs[i];
@@ -117,8 +119,39 @@ try {
     }
   }
   if (figs.length && args.group !== '0') {
-    const f = figs[0];
-    await page.evaluate((f) => (window.__city.ctx.camera.__zoom = 0, window.__city.ctx.services.pedestrians._renderer.forceLod = -1, window.__city.view({ target: { x: f.x, y: f.y + 1, z: f.z }, distance: 10, yaw: f.yaw + 25, pitch: 12 })), f);
+    // the densest cluster of walkers, seen from the yaw whose 10 m sight line crosses no building / solid
+    // cell and holds the most people in a 50° cone (it used to frame figure 0 and hit shop windows)
+    await page.evaluate(() => {
+      const c = window.__city;
+      const occ = c.ctx.occupancy;
+      const crowd = c.ctx.services.pedestrians._crowd;
+      const ms = [];
+      for (const p of crowd.parties) for (const m of p.members) if (m.present && m.fade > 0.99 && m.rideG === null) ms.push(m);
+      let best = null, bn = -1;
+      for (const m of ms) {
+        let k = 0;
+        for (const o of ms) if (Math.hypot(o.x - m.x, o.z - m.z) < 7) k++;
+        if (k > bn) (bn = k), (best = m);
+      }
+      let by = 0, bs = -1;
+      for (let i = 0; i < 16; i++) {
+        const yaw = (i / 16) * Math.PI * 2;
+        const dx = Math.sin(yaw), dz = Math.cos(yaw);
+        let clear = true;
+        for (let t = 1; t <= 10 && clear; t += 0.5) if (occ.has(best.x + dx * t, best.z + dz * t, 4 | 16)) clear = false;
+        if (!clear) continue;
+        let k = 0;
+        for (const o of ms) {
+          const ox = o.x - (best.x + dx * 10), oz = o.z - (best.z + dz * 10);
+          const d = Math.hypot(ox, oz);
+          if (d > 2 && d < 22 && (-ox * dx - oz * dz) / d > Math.cos(0.45)) k++;
+        }
+        if (k > bs) (bs = k), (by = yaw);
+      }
+      c.ctx.camera.__zoom = 0;
+      c.ctx.services.pedestrians._renderer.forceLod = -1;
+      c.view({ target: { x: best.x, y: best.y + 1, z: best.z }, distance: 10, yaw: (by * 180) / Math.PI, pitch: 10 });
+    });
     await page.waitForTimeout(1200);
     const file = path.join(outDir, 'group_10m.png');
     await page.screenshot({ path: file, timeout: 240000 });

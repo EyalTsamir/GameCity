@@ -4,6 +4,43 @@ Branch `claude/real-w4-people` (from `claude/pensive-gates-bim12i` e517126). Bri
 Photo test "Person" (REAL.md). Owned: `src/sim/pedestrians/**` presentation (not crowd/places logic).
 
 ## Resume here
+* 2026-10-28 ~21:50 UTC — session 4 ENDED. All pushed. Downtown shot: console clean, invariants {}
+  (shots/w4/dt4.txt). Sheet docs/progress/real/w4_after_s4.jpg (frames predate the last two commits:
+  close fringe + clump breaks — judge those first: `node scripts/people-bench.mjs --n 4 --skip 1 --shots
+  face,head3q,profile --where "m.look.style.fringe"`). Next: fringe judge; faint FACE/SKIN boundary still
+  visible as a faint tone line on some 3/4 views (face paint / per-person face displacement stop at the
+  region edge — fade them by vPedFace.x near the boundary); walk weight judged only on 2 side frames
+  (s4e) — a heavy-build walker side-by-side with a slim one would show the new terms; perf of the denser
+  close head on the target.
+* 2026-10-28 ~21:35 UTC — session 4. Lead's s3 verdict priorities and what was done (judged on people-bench
+  shots/w4/s4a (before) → s4b/s4c/s4d/s4e; new bench shots `profile` (side of the head) and `headlow`):
+  (1) Head form (close level, body.ts buildCloseHead/closeHeadPoint/faceRelief):
+      - jaw: the old flat chin cap fan + 0.88/0.8 tint band made a hard jaw line → 4 under-jaw rings roll the
+        jaw edge round and tuck it into the neck at the front (closes into a bowl at the back — an open
+        under-surface there showed the sky through the neck top behind the jaw angle); tint gradient.
+      - lower-face narrowing: cos^1.4 × 0.3 → smooth bell exp(-(φ/0.85)²) × 0.15 + a gonion flare at the
+        jaw angle; cheek fullness round the mouth, shallower hollow under the cheekbone, zygomatic arch.
+      - 56 sides (bunching 0.74), rows 1.8 mm through nose base + lips (3 mm elsewhere): nostrils, alar
+        groove, nasolabial fold, cupid's bow / vermilion ridge, recessed mouth corners now exist in form.
+      - LIGHTING CREASE root cause: FACE region wrap 0.16 vs head SKIN 0.35 → a step line temple→jaw in
+        3/4 views. Now the head's wrap blends by rest normal z (shader.ts vPedMat headWrap).
+      - relief fade round the head wider (sstep(-0.1, 0.45, cos φ)); neck rings deeper at the throat (rig.ts).
+  (2) Hair: close cap 24 → 40 sides, 14 rings, smooth Catmull head profile for hair + hats (body.ts
+      `smoothHead` flag in headSurface) — the hexagonal block was the 24-side cap on the linear ring polygon.
+      Strands follow a flow field on the cap: radiate from a crown whorl (per-person side offset), swirl
+      round it (shader.ts pedHairFlow); strand normal = screen-space derivative bump (fine strands + clumps
+      that break along their length). Long-hair sheet: starts up on the cap (no ledge at the cap edge),
+      uneven tips, locks rippling in/out with volume as they fall (normals follow), lifted rows tuck in
+      under the hem. Ponytail sheet ledge beside the ear = a 2 cm hairLen sheet → sheet only for > 3 cm
+      (render.ts). Close ponytail (band, lobed locks, uneven tip), coiled bun (`coilBun`), close fringe
+      (16 columns, curved, jagged tips).
+  (3) Walk weight (gait.ts): build/sex terms — heavy: wider base, more sway (waddle), less pelvic yaw,
+      less arm swing, arms abducted; women: more pelvic yaw + list, narrower line; men more chest twist.
+  (4) Variation (looks.ts): per-person shade of top/bottom/shoes/hair/skin (`shade`, suits stay matched);
+      girth spread + a heavy tail (~1 in 6 adults). people-bench group shot now frames the densest cluster
+      from a yaw with a clear 10 m sight line (was a shop window).
+  (5) Forearm/shin stripes = pedFabric sleeve cuff-gathers / crease rings / knee + break rings applied on
+      the bare-skin side of the sleeve / trouser hem. Masked to the garment side (s > 0). Judged s4d hand: clean.
 * 2026-10-28 ~21:00 UTC — session 3 ENDED (context 223k). All pushed. Next: (5) walk-weight judging pass, (6) crowd
   variation at 10 m (fix the bench's group framing first), hair volume on long-hair sheets + ear poking through.
 * 2026-10-28 ~20:30 UTC — session 3. Lead's priorities: (1) speed-spike root cause, (2) hairline/volume, (3) dress
@@ -113,6 +150,8 @@ Photo test "Person" (REAL.md). Owned: `src/sim/pedestrians/**` presentation (not
 * Shoes (close): welt / midsole line, laces, tongue gap, toe-cap and heel seams (aux u/v on the foot loft).
 
 ## Tried and rejected (why)
+* (s4) Hair clump bump at 0.0011 m along continuous strand lines: corrugated "shower cap" ribs → 0.0006 m with
+  breaks along the strand length. Narrowing the lower face by 0.24 × bell: still a V chin → 0.15 + cheek fill.
 * bench.mjs `pedestrian` for faces: its arm is ≥ 3 m and it frames the body middle → faces 25 px. Replaced by
   people-bench.mjs. The free camera stops at 3 m (camera.ts FREE_MIN_DIST): the bench narrows the fov instead
   (LOD distances scale with the fov, so the close level is chosen as for a real 0.75 m view).
@@ -121,6 +160,11 @@ Photo test "Person" (REAL.md). Owned: `src/sim/pedestrians/**` presentation (not
 * Face detail fade at px 3.5–9 mm: eyes vanished at 3–4 m (where real eyes still read) → 6–16 mm.
 
 ## Toggles / tiers / costs
+* (s4) Close head ~56 × 80 rows ≈ +2.5 k verts, hair cap 40 × 14 + 8-deep sheet ≈ +0.8 k, fringe/bun/pony
+  ≈ +0.4 k per close figure (close level only, < 15 m high tier). Not measured on the target; the old
+  +9 k tris/close figure figure (s1) is now ≈ +13 k. All s4 work is inside the existing `?nopeopledetail`
+  (close level off) except: colour shades + build spread (looks, free), gait build terms (free),
+  fabric-on-skin mask and head wrap blend (shader, free), sheet locks/tips (VS, all levels with long hair).
 * `?nohairline` — smooth hard-edged hair cap (no feathering, no locks). Close + near levels; FS cost tiny.
 * Close-level carried items cost vertices only on figures < 15 m that carry them (umbrella ~+700 verts).
 * `?nopeopledetail` — no close level (figures < 15 m use the old LOD0). Tier: close level to 15 m (high),
@@ -133,6 +177,7 @@ Photo test "Person" (REAL.md). Owned: `src/sim/pedestrians/**` presentation (not
   figures < 15 m. Needs an Adreno measurement; the medium/low tiers shrink the radius to 11 / 7 m.
 
 ## Sheets
+* docs/progress/real/w4_after_s4.jpg — session 4: head form, hair flow/volume, forearm stripes, walk, group 10 m.
 * docs/progress/real/w4_after_s3.jpg — session 3: hairline, dress stride, umbrella / briefcase / bag flap.
 
 ## Next
@@ -164,3 +209,15 @@ WHAT THE COST BOUGHT (lifetime cost of each kind of content in context, all agen
 ## Tokens (session 3, tokens.py)
 TOTAL weighted 1.9M (cache read 76 %, write 11 %, output 13 %); 89 calls, ctx median 167k / max 223k. get_session's
 context_usage read 0 this session (not usable) — estimate from tokens.py instead.
+
+## Tokens (session 4, tokens.py)
+```
+TOTAL weighted 2.8M  (cache read 79%, cache write 8%, output 12%)
+
+agent               calls   w(M)    %  ctxMed  ctxMax cold coldW%  idle>5min: warm/cold
+LEAD                  122    2.8100.0    196k    253k    0     0%  0/0
+
+WHAT THE COST BOUGHT (lifetime cost of each kind of content in context, all agents):
+  system+brief                                    1.1M  37.6%
+  Bash:read/grep                                  0.4M  13.8%
+```
