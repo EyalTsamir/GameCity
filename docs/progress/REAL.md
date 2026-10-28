@@ -11,6 +11,9 @@ Overview must stay at least as impressive as now. Every feature: quality tiers +
 Lead session: session_01XuhAMczW3iK25AAWnf3qog, branch `claude/pensive-gates-bim12i`.
 
 ## Resume here (keep current)
+* 2026-10-28 22:30 UTC — Lawn rim FIXED at the source by W1 s5 addendum (2936151: shell walls start 10 cm below
+  ground → no shadow-map gap; rim gone at the bench apartment 3 m). Lead's sdbias probe dropped (sky.ts unchanged).
+  W1 lineage paused (open: apartment glass uniform grey → next judge decides).
 * 2026-10-28 22:20 UTC — Merged W1 s5 (7c4d9eb: slant-crown grid bug 4 fixed, stronger reveal shadow + glass mask,
   sectional door in relief; apartment glass still open). Lawn rim: normalBias rejected by W1; next suspect the depth
   bias (peter-panning) — lead added `?sdbias=<mult>` (sky.ts tune.dbias) and is probing 1 / 0.15 / 0 at apartment +
