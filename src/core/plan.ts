@@ -1845,7 +1845,7 @@ function buildStreetSlots(plan: CityPlan, rng: Rng): void {
           v1 = Math.max(v1, v);
         }
         if (v0 > CORRIDOR_HALF + 1.5 || v1 < CORRIDOR_HALF || u1 < 0 || u0 > L) continue;
-        cuts.push([u0 - 1.1, u1 + 1.1]);
+        cuts.push([u0 - 1.6, u1 + 1.6]);
       }
       const cutAt = (u: number) => cuts.find(([a, b]) => u > a && u < b);
       for (let k = 0; k < n; k++) {
