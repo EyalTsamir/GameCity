@@ -616,7 +616,9 @@ float pedStrands(vec3 r) {
   float fw = fwidth(fA);
   float f = mix(pedN1(fA) - 0.5, 0.0, smoothstep(0.35, 0.8, fw));
   float ff = mix(pedN1(a * 240.0 + wob * 4.0) - 0.5, 0.0, smoothstep(0.25, 0.6, fwidth(a * 240.0)));
-  return 0.72 + 0.48 * c + 0.3 * f + 0.2 * ff;
+  // (clumps break along their length: no continuous corrugation round the cap)
+  float brk = 0.6 + 0.4 * pedN1(fl.y * 15.0 + a * 4.0 + 3.0);
+  return 0.8 + 0.32 * c * brk + 0.3 * f + 0.2 * ff;
 }
 // ── fabric (close range): seams, stitching, folds where the limb bends (knee / elbow creases deepen with
 // the bend), trouser breaks over the shoe, sleeve gathers, side drape at the waist, weave grain; denim
@@ -877,7 +879,8 @@ const HAIR_NORMAL = /* glsl */ `
     // fine strands (fade below ~2 px per ridge) + clumps of strands, which break the sheen into locks at 1–3 m
     float hc2 = ha * 26.0 + sin(hf.y * 9.0) * 0.8;
     float hk2 = 1.0 - smoothstep(0.35, 0.8, fwidth(hc2));
-    float hH = 0.55 * sin(hq * 6.2832) * 0.00009 * hk + (pedN1(hc2) + 0.5 * pedN1(hc2 * 2.3 + 7.0) - 0.75) * 0.0011 * hk2;
+    float hbrk = 0.55 + 0.45 * pedN1(hf.y * 16.0 + ha * 5.0);
+    float hH = 0.55 * sin(hq * 6.2832) * 0.00009 * hk + (pedN1(hc2) + 0.5 * pedN1(hc2 * 2.3 + 7.0) - 0.75) * 0.0006 * hk2 * hbrk;
     vec3 hsx = dFdx(-vViewPosition), hsy = dFdy(-vViewPosition);
     vec3 hr1 = cross(hsy, normal), hr2 = cross(normal, hsx);
     float hdet = dot(hsx, hr1);

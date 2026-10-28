@@ -1320,15 +1320,39 @@ function buildHair(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
   b.use(BONE.HEAD, REG.HAIR, FB.FRINGE, 0.93);
   {
     const ids: number[][] = [];
-    for (const [y, push] of [
-      [d.headRings[6].y + 0.012 * hk, vol * 1.1],
-      [d.headRings[5].y + 0.004 * hk, vol * 0.7],
-    ] as [number, number][]) {
-      const row: number[] = [];
-      for (const phi of [-0.95, -0.5, 0, 0.5, 0.95]) row.push(b.v(headSurface(d, phi, y, push), 2, 0));
-      ids.push(row);
+    if (cfg.close) {
+      // close: grows out from under the cap, curves forward over the brow and ends in uneven strand tips
+      // (longer towards the temples), thinning to the edge — not a visor block
+      const phis: number[] = [];
+      for (let k = 0; k <= 16; k++) phis.push(-1.0 + (2 * k) / 16);
+      const y6 = d.headRings[6].y,
+        y5 = d.headRings[5].y;
+      const rowsF: [number, number][] = [
+        [y6 + 0.022 * hk, vol * 0.75],
+        [y6 + 0.004 * hk, vol * 1.2],
+        [(y6 + y5) / 2, vol * 1.05],
+        [y5 + 0.004 * hk, vol * 0.8],
+      ];
+      rowsF.forEach(([y, push], ri) => {
+        const row: number[] = [];
+        phis.forEach((phi, k) => {
+          const jag = ri === 3 ? (((k * 7919) % 5) / 4 - 0.5) * 0.008 * hk - 0.006 * Math.abs(phi) * hk : 0;
+          row.push(b.v(headSurface(d, phi, y + jag + (ri === 2 ? jag * 0.4 : 0), push), 2, 0));
+        });
+        ids.push(row);
+      });
+      for (let r = 0; r < rowsF.length - 1; r++) for (let k = 0; k < phis.length - 1; k++) b.quadDir(ids[r][k], ids[r][k + 1], ids[r + 1][k + 1], ids[r + 1][k], [0, 0, 1]);
+    } else {
+      for (const [y, push] of [
+        [d.headRings[6].y + 0.012 * hk, vol * 1.1],
+        [d.headRings[5].y + 0.004 * hk, vol * 0.7],
+      ] as [number, number][]) {
+        const row: number[] = [];
+        for (const phi of [-0.95, -0.5, 0, 0.5, 0.95]) row.push(b.v(headSurface(d, phi, y, push), 2, 0));
+        ids.push(row);
+      }
+      for (let k = 0; k < 4; k++) b.quadDir(ids[0][k], ids[0][k + 1], ids[1][k + 1], ids[1][k], [0, 0, 1]);
     }
-    for (let k = 0; k < 4; k++) b.quadDir(ids[0][k], ids[0][k + 1], ids[1][k + 1], ids[1][k], [0, 0, 1]);
   }
   // beard: a shell over jaw and chin (+ moustache)
   if (cfg.close) {
