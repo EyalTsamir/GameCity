@@ -11,6 +11,10 @@ Overview must stay at least as impressive as now. Every feature: quality tiers +
 Lead session: session_01XuhAMczW3iK25AAWnf3qog, branch `claude/pensive-gates-bim12i`.
 
 ## Resume here (keep current)
+* 2026-10-28 16:47 UTC — Merged W2 milestone 1 (d420fe9; bench conflict: LOS + --yaw/--pitch + --yaws) and W1's
+  final log (64bb54f). Respawned W2(2) (verdict: car body FORM still blocky → loft rework first; mirrors, handles,
+  visible gaps, bus ends, grime; then trains). All three wave-1 workers now on session 2. Golden + invariant
+  check of the merged tree pending (shots/golden/w1, then rerun after W2 merge).
 * 2026-10-28 16:37 UTC — Merged W3 milestone (10067eb; golden views unchanged, console clean, 1 invariant: statue
   plinth 7 cm outside r=1.5 → sent to W3(2)) and W1 milestone 1 (18be1ae; bench.mjs conflict resolved: W3 LOS +
   W1 --yaw/--pitch). Respawned W3(2) and W1(2) with the lead's verdicts. W2 has not answered yet (still on its
@@ -53,6 +57,7 @@ Wave 1 (launched 2026-10-28 15:17 UTC, sibling cloud sessions, briefs in real-br
 | W3 furniture | session_01XuhAMfy5Z4Xrnt2757Pifp | claude/real-w3-furniture | real-w3.md |
 | W3 furniture (2) | session_01XuhAMfeZKD1WY6snNxJEiK | claude/real-w3-furniture | real-w3.md |
 | W1 facades (2) | session_01XuhAMdw5hH6dJAf2ubL3JX | claude/real-w1-facades | real-w1.md |
+| W2 vehicles (2) | session_01XuhAMhDfBCdfsCA6CmBeaq | claude/real-w2-vehicles | real-w2.md |
 Respawn rule: when a worker stops (milestone note, ~200k context, or a usage stop), create a NEW session on the
 same branch with the same brief + "resume from docs/progress/real-wN.md Resume here"; archive the old one.
 
