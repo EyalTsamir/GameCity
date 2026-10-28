@@ -8,6 +8,7 @@ set -e
 cd "$(dirname "$0")/../.."
 TAG=${1:-cur}
 OUT=shots/golden/$TAG
+mkdir -p "$OUT"
 node scripts/capture-set.mjs --out "$OUT" --views overview,downtown,oldtown,harbor,westbrook --hours 11 \
   --width 1280 --height 720 --hideui 1 --q "nointro&noidle&speed=0" > "$OUT.log" 2>&1 || true
 grep -E '"consoleErrors"|harnessError' -A2 "$OUT.log" | head -6
