@@ -11,6 +11,8 @@ Overview must stay at least as impressive as now. Every feature: quality tiers +
 Lead session: session_01XuhAMczW3iK25AAWnf3qog, branch `claude/pensive-gates-bim12i`.
 
 ## Resume here (keep current)
+* 2026-10-28 17:55 UTC — Merged W2 m2 (942cf5e: car nose/tail loft, wrap bumper, mirrors, gaps; busBody.ts).
+  Respawned W2(3): van/lorry cabs + cargo bodies, bus rear, car tumblehome, variation, then trains.
 * 2026-10-28 17:30 UTC — Merged W3(2) (992ef14: invariants 0, contact grime props/contact.ts ?nocontact, planter,
   newsstand, bin, market cloth/crates, flagpole, gazebo planks, statue, EPDM). Respawned W3(3): statue figure,
   market variety + cloth, columns, planter plants, bench framing bug.
@@ -69,6 +71,7 @@ Wave 1 (launched 2026-10-28 15:17 UTC, sibling cloud sessions, briefs in real-br
 | W2 vehicles (2) | session_01XuhAMhDfBCdfsCA6CmBeaq | claude/real-w2-vehicles | real-w2.md |
 | W1 facades (3) | session_01XuhAMcx7gK1B9gZ9EGE9xQ | claude/real-w1-facades | real-w1.md |
 | W3 furniture (3) | session_01XuhAMeApwGfPUjpqKr3AnB | claude/real-w3-furniture | real-w3.md |
+| W2 vehicles (3) | session_01XuhAMe5xExG1WawepdoR9X | claude/real-w2-vehicles | real-w2.md |
 Respawn rule: when a worker stops (milestone note, ~200k context, or a usage stop), create a NEW session on the
 same branch with the same brief + "resume from docs/progress/real-wN.md Resume here"; archive the old one.
 
