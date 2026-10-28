@@ -98,10 +98,14 @@ export interface PlantDef {
   color?: string;
   /** hedge segment: ax, az, bx, bz, width */
   seg?: [number, number, number, number, number];
+  /** hedge: no bare stems in the foot (?nofencedetail) */
+  noStems?: boolean;
   /** crown stretched along a horizontal axis (street trees grow along the street gap): ax, az, factor */
   stretch?: [number, number, number];
   /** raised planter at the foot (y = its soil): trailing ivy over the rim + groundcover (near LOD) */
   planter?: { round: boolean; yaw: number };
+  /** trunk stands in a tree grate with this hole radius: the trunk foot fits the hole, no buttress roots over the iron */
+  paved?: number;
 }
 
 type V3 = [number, number, number];
@@ -324,7 +328,7 @@ function makeLobes(form: Form, r: number, Rv: number, rng: Rng, bx: number, bz: 
  * Near-LOD trunk from `base` to `top`: a quadratic arc with a small sweep (no two trunks perfectly straight),
  * 4 tapering segments flaring into the ground, plus 3–5 buttress roots.
  */
-function nearTrunk(st: Struct, rng: Rng, base: V3, top: V3, r0: number, h: number, roots = 4): void {
+function nearTrunk(st: Struct, rng: Rng, base: V3, top: V3, r0: number, h: number, roots = 4, flare = 1.32): void {
   const sa = rng.range(0, 6.28),
     sweep = rng.range(0.012, 0.035) * h;
   const ctl: V3 = [(base[0] + top[0]) / 2 + Math.cos(sa) * sweep, (base[1] + top[1]) / 2, (base[2] + top[2]) / 2 + Math.sin(sa) * sweep];
@@ -333,11 +337,11 @@ function nearTrunk(st: Struct, rng: Rng, base: V3, top: V3, r0: number, h: numbe
     return [u * u * base[0] + 2 * u * t * ctl[0] + t * t * top[0], u * u * base[1] + 2 * u * t * ctl[1] + t * t * top[1], u * u * base[2] + 2 * u * t * ctl[2] + t * t * top[2]];
   };
   const T = [0, 0.1, 0.4, 0.72, 1];
-  const R = [r0 * 1.32, r0 * 1.04, r0 * 0.95, r0 * 0.87, r0 * 0.8];
+  const R = [r0 * flare, r0 * 1.04, r0 * 0.95, r0 * 0.87, r0 * 0.8];
   const P = T.map((t) => bez(t));
   P[0] = [P[0][0], P[0][1] - 0.15, P[0][2]];
   for (let k = 0; k < 4; k++) st.segs.push({ a: P[k], b: P[k + 1], ra: R[k], rb: R[k + 1], sa: STILL, sb: STILL, near: true, aoA: k === 0 ? 0.5 : 0.75 + 0.05 * k, aoB: 0.78 + 0.04 * k });
-  buttress(st, rng, base, r0, roots);
+  if (roots > 0) buttress(st, rng, base, r0, roots);
 }
 
 /** buttress roots: short tapering lobes spreading from the trunk foot into the ground (near LOD) */
@@ -393,7 +397,10 @@ function broadStruct(st: Struct, rng: Rng): void {
   st.cardHalf = kind.card * Math.min(1.3, Math.max(0.72, r / 2.5));
   // trunk(s)
   const age = def.age ?? 0.5;
-  const r0 = Math.max(0.06, Math.min(0.42, (0.016 * h + 0.022 * r) * kind.girth * (0.8 + 0.45 * age)));
+  let r0 = Math.max(0.06, Math.min(0.42, (0.016 * h + 0.022 * r) * kind.girth * (0.8 + 0.45 * age)));
+  // in a grate the foot (r0 × 1.12) keeps ~3 cm clear of the collar
+  const paved = def.paved;
+  if (paved) r0 = Math.min(r0, (paved - 0.03) / 1.12);
   const sway0 = STILL;
   const forest = !!def.forest;
   /** where limbs start: scaffold ends (or stem tops) with their radius and the leaf-mass phase they carry */
@@ -414,7 +421,7 @@ function broadStruct(st: Struct, rng: Rng): void {
       mid[2] += rng.range(-wob, wob);
       st.segs.push({ a: [base[0], base[1] - 0.2, base[2]], b: mid, ra: sr * 1.38, rb: sr * 0.88, sa: sway0, sb: sway0, near: false, farOnly: true, aoA: 0.5, aoB: 0.9 });
       st.segs.push({ a: mid, b: top, ra: sr * 0.88, rb: sr * 0.64, sa: sway0, sb: sway0, near: false, farOnly: true, aoA: 0.9, aoB: 0.72 });
-      nearTrunk(st, rng, base, top, sr * 0.8, h, multi > 1 ? 3 : 4);
+      nearTrunk(st, rng, base, top, sr * 0.8, h, paved ? 0 : multi > 1 ? 3 : 4, paved ? 1.12 : 1.32);
       const lead: V3 = [top[0] + (c[0] - top[0]) * 0.5, c[1] + Rv * (form === 'column' ? 0.75 : 0.35), top[2] + (c[2] - top[2]) * 0.5];
       st.segs.push({ a: top, b: lead, ra: sr * 0.64, rb: Math.max(0.012, sr * 0.12), sa: sway0, sb: { ph1: 0, w1: 0.3, ph2: 0, w2: 0 }, near: false, aoA: 0.72, aoB: 0.6 });
       anchors.push({ p: top, r: sr * 0.64, ph: rng.next(), w: 0, dirx: Math.cos(a), dirz: Math.sin(a) });
@@ -429,7 +436,7 @@ function broadStruct(st: Struct, rng: Rng): void {
     st.segs.push({ a: [x, y - 0.2, z], b: mid, ra: r0 * 1.38, rb: r0 * 0.96, sa: sway0, sb: sway0, near: false, farOnly: true, aoA: 0.5, aoB: 0.88 });
     st.segs.push({ a: mid, b: fork, ra: r0 * 0.96, rb: r0 * 0.82, sa: sway0, sb: sway0, near: false, farOnly: true, aoA: 0.88, aoB: 0.8 });
     // near layer: a gently swept trunk (quadratic arc, 4 segments, flaring at the foot) + buttress roots
-    nearTrunk(st, rng, [x, y, z], fork, r0, h);
+    nearTrunk(st, rng, [x, y, z], fork, r0, h, paved ? 0 : 4, paved ? 1.12 : 1.32);
     const nS = form === 'vase' || form === 'spread' || form === 'umbrella' ? rng.int(3, 4) : form === 'weep' ? 3 : rng.int(2, 3);
     // elevation of the scaffolds (from horizontal)
     const e0 = form === 'vase' ? 1.15 : form === 'umbrella' ? 0.78 : form === 'spread' ? 0.9 : 1.05;
@@ -751,6 +758,29 @@ function hedgeStruct(st: Struct, rng: Rng): void {
     const p: V3 = [cx + vx * rng.range(-hw, hw) * 0.8, y + hh + 0.01, cz + vz * rng.range(-hw, hw) * 0.8];
     st.tips.push({ p, d: [0, 1, 0], sway: { ph1: ph, w1: 0.1, ph2: rng.next(), w2: 0.25 }, lobe: li, s: rng.range(0.9, 1.2) });
   }
+  // the rounded clipped ends get their own leaf clusters (species.ts hedge() rounds the core ~15 cm past each end)
+  for (const [e, sg] of [
+    [0, -1],
+    [L, 1],
+  ] as [number, number][]) {
+    for (let k = 0; k < 10; k++) {
+      const vo = rng.range(-hw, hw) * 0.8;
+      const p: V3 = [ax + ux * (e + sg * 0.12) + vx * vo, y + rng.range(0.28, hh * 0.95), az + uz * (e + sg * 0.12) + vz * vo];
+      st.tips.push({ p, d: [ux * sg, 0, uz * sg], sway: { ph1: ph, w1: 0.08, ph2: rng.next(), w2: 0.2 }, lobe: e === 0 ? 0 : nl - 1, s: rng.range(0.85, 1.1) });
+    }
+  }
+  // bare stems in the undercut foot (near LOD): a few leaning woody stems per side, every ~30 cm
+  if (!def.noStems)
+    for (let u = 0.12; u < L - 0.05; u += rng.range(0.22, 0.4)) {
+      const side = rng.chance(0.5) ? -1 : 1;
+      const vo = side * hw * rng.range(0.5, 0.7);
+      const gx = ax + ux * u + vx * vo,
+        gz = az + uz * u + vz * vo;
+      const lean = rng.range(0.03, 0.08) * side;
+      const top: V3 = [gx + vx * lean + ux * rng.range(-0.04, 0.04), y + Math.min(0.26, hh * 0.24), gz + vz * lean + uz * rng.range(-0.04, 0.04)];
+      const r = rng.range(0.008, 0.016);
+      st.segs.push({ a: [gx, y - 0.03, gz], b: top, ra: r, rb: r * 0.75, sa: STILL, sb: STILL, near: true, aoA: 0.3, aoB: 0.4 });
+    }
 }
 
 // ─────────────────────────────────────────────────────────────── emission ──

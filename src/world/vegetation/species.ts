@@ -1109,6 +1109,8 @@ function palm(s: GeoSink, w: Wind, t: TreeSpec, rng: Rng): number {
 }
 
 const _tmpC = new THREE.Color();
+/** bare stems and shade under a clipped hedge */
+const HEDGE_WOOD = new THREE.Color('#3a3226');
 const HEDGE_FRESH = new THREE.Color('#8dbb4f');
 
 /** small closed ellipsoid (fruit, nuts, buds…) */
@@ -1208,13 +1210,19 @@ export function hedge(s: GeoSink, w: Wind, ax: number, az: number, bx: number, b
     vz = ux;
   const segs = Math.max(1, Math.round(L / 0.6));
   const hw = width / 2;
-  // face = { pts: [v offset, height][], n: [normal v, normal y], shade, ao per point }
-  const faces: { pts: [number, number][]; n: [number, number]; sh: number; ao: number[] }[] = [
-    { pts: [[-hw * 0.97, -0.04], [-hw, height * 0.86]], n: [-1, 0.05], sh: 0.84, ao: [0.42, 0.95] },
+  // a clipped hedge is bare and woody in its lowest ~20 cm (shaded stems, an undercut), leafy above
+  const foot = Math.min(0.22, height * 0.2);
+  // face = { pts: [v offset, height][], n: [normal v, normal y], shade, ao per point, wood }
+  const faces: { pts: [number, number][]; n: [number, number]; sh: number; ao: number[]; wood?: boolean }[] = [
+    { pts: [[-hw * 0.7, -0.04], [-hw * 0.72, foot * 0.75]], n: [-1, 0], sh: 0.5, ao: [0.25, 0.32], wood: true },
+    { pts: [[-hw * 0.72, foot * 0.75], [-hw * 0.97, foot]], n: [-0.4, -0.9], sh: 0.55, ao: [0.32, 0.4] },
+    { pts: [[-hw * 0.97, foot], [-hw, height * 0.86]], n: [-1, 0.05], sh: 0.84, ao: [0.45, 0.95] },
     { pts: [[-hw, height * 0.86], [-hw * 0.8, height]], n: [-0.6, 0.8], sh: 0.98, ao: [0.95, 1] },
     { pts: [[-hw * 0.8, height], [hw * 0.8, height]], n: [0, 1], sh: 1.07, ao: [1, 1] },
     { pts: [[hw * 0.8, height], [hw, height * 0.86]], n: [0.6, 0.8], sh: 0.98, ao: [1, 0.95] },
-    { pts: [[hw, height * 0.86], [hw * 0.97, -0.04]], n: [1, 0.05], sh: 0.84, ao: [0.95, 0.42] },
+    { pts: [[hw, height * 0.86], [hw * 0.97, foot]], n: [1, 0.05], sh: 0.84, ao: [0.95, 0.45] },
+    { pts: [[hw * 0.97, foot], [hw * 0.72, foot * 0.75]], n: [0.4, -0.9], sh: 0.55, ao: [0.4, 0.32] },
+    { pts: [[hw * 0.72, foot * 0.75], [hw * 0.7, -0.04]], n: [1, 0], sh: 0.5, ao: [0.32, 0.25], wood: true },
   ];
   const ph = (seed % 1000) * 0.37;
   w.at(ax, y, az, 0.06, 0.32, 0);
@@ -1223,12 +1231,17 @@ export function hedge(s: GeoSink, w: Wind, ax: number, az: number, bx: number, b
   const counts = faces.map((f) => f.pts.length);
   const ringSize = counts.reduce((a2, b2) => a2 + b2, 0);
   const base = s.vcount;
-  for (let k = 0; k <= segs; k++) {
-    const f = k / segs;
-    const cx = ax + ux * L * f,
-      cz = az + uz * L * f;
+  // rings along the hedge; two extra rings past each end round the clipped end off (no flat slab)
+  const rings: [number, number, number][] = [
+    [-0.15, 0.5, 0.8],
+    [-0.08, 0.84, 0.94],
+  ];
+  for (let k = 0; k <= segs; k++) rings.push([(L * k) / segs, k === 0 || k === segs ? 0.97 : 1, k === 0 || k === segs ? 0.99 : 1]);
+  rings.push([L + 0.08, 0.84, 0.94], [L + 0.15, 0.5, 0.8]);
+  for (const [u, sw, sy] of rings) {
+    const cx = ax + ux * u,
+      cz = az + uz * u;
     const gy = yAt ? yAt(cx, cz) : y;
-    const end = k === 0 || k === segs;
     w.ax = cx;
     w.az = cz;
     w.ay = gy;
@@ -1239,16 +1252,20 @@ export function hedge(s: GeoSink, w: Wind, ax: number, az: number, bx: number, b
     for (const face of faces) {
       for (let pi = 0; pi < face.pts.length; pi++) {
         const [ov, oy] = face.pts[pi];
-        const ground = oy < 0;
-        const vv = ov * (end ? 0.93 : 1) + (ground ? 0 : Math.sign(ov) * bulge);
-        const yy = gy + (ground ? oy : oy * (end ? 0.97 : 1) + (oy > height * 0.8 ? topB : 0));
-        const lo = ground ? 0.72 : 1;
+        const low = oy <= foot + 1e-6;
+        const vv = (ov + (low ? 0 : Math.sign(ov) * bulge)) * sw;
+        const yy = gy + (oy < 0 ? oy : (oy + (oy > height * 0.8 ? topB : 0)) * sy);
         // clipped top: fresh, lighter and a touch yellower new growth (reads at POI distance)
-        if (oy >= height * 0.99) s.colorObj(_tmpC.copy(leaf).lerp(HEDGE_FRESH, 0.14), face.sh * mott * 1.06);
-        else s.colorObj(leaf, face.sh * mott * lo);
+        if (face.wood) s.colorObj(HEDGE_WOOD, mott);
+        else if (oy >= height * 0.99) s.colorObj(_tmpC.copy(leaf).lerp(HEDGE_FRESH, 0.14), face.sh * mott * 1.06);
+        else s.colorObj(leaf, face.sh * mott * (low ? 0.72 : 1));
         leafAttr(s, face.ao[pi], leafTone(0.9, true), 0.62, clump);
-        const nl = Math.hypot(face.n[0], face.n[1]);
-        s.vert(cx + vx * vv, yy, cz + vz * vv, (vx * face.n[0]) / nl, face.n[1] / nl, (vz * face.n[0]) / nl);
+        // the end rings lean their normals outwards along the hedge
+        const ea = u < 0 ? -(1 - sw) * 1.6 : u > L ? (1 - sw) * 1.6 : 0;
+        const nx = (vx * face.n[0]) + ux * ea,
+          nz = (vz * face.n[0]) + uz * ea;
+        const nl = Math.hypot(nx, face.n[1], nz);
+        s.vert(cx + vx * vv, yy, cz + vz * vv, nx / nl, face.n[1] / nl, nz / nl);
       }
     }
   }
@@ -1257,7 +1274,7 @@ export function hedge(s: GeoSink, w: Wind, ax: number, az: number, bx: number, b
     starts.push(off);
     off += c;
   }
-  for (let k = 0; k < segs; k++) {
+  for (let k = 0; k < rings.length - 1; k++) {
     const a0 = base + k * ringSize,
       b0 = base + (k + 1) * ringSize;
     faces.forEach((fc, fi) => {
@@ -1265,28 +1282,30 @@ export function hedge(s: GeoSink, w: Wind, ax: number, az: number, bx: number, b
       for (let p = 0; p < fc.pts.length - 1; p++) s.quad(a0 + st + p, a0 + st + p + 1, b0 + st + p + 1, b0 + st + p);
     });
   }
-  // end caps (flat, slightly darker)
-  for (const [k, sgn] of [
+  // end caps: close the last (small) ring
+  for (const [ri, sgn] of [
     [0, -1],
-    [segs, 1],
+    [rings.length - 1, 1],
   ] as [number, number][]) {
-    const f = k / segs;
-    const cx = ax + ux * L * f,
-      cz = az + uz * L * f;
+    const [u, sw, sy] = rings[ri];
+    const cx = ax + ux * u,
+      cz = az + uz * u;
     const gy = yAt ? yAt(cx, cz) : y;
     const outline: [number, number][] = [
-      [-hw * 0.9, -0.04],
+      [-hw * 0.7, -0.04],
+      [-hw * 0.93, foot],
       [-hw * 0.93, height * 0.86],
       [-hw * 0.75, height * 0.97],
       [hw * 0.75, height * 0.97],
       [hw * 0.93, height * 0.86],
-      [hw * 0.9, -0.04],
+      [hw * 0.93, foot],
+      [hw * 0.7, -0.04],
     ];
     const cb = s.vcount;
     s.colorObj(leaf, 0.84);
     for (const [ov, oy] of outline) {
-      leafAttr(s, oy < 0 ? 0.45 : 0.9, leafTone(0.9, true), 0.62, clump);
-      s.vert(cx + vx * ov, gy + oy, cz + vz * ov, ux * sgn, 0.1, uz * sgn);
+      leafAttr(s, oy < foot ? 0.45 : 0.9, leafTone(0.9, true), 0.62, clump);
+      s.vert(cx + vx * ov * sw, gy + oy * sy, cz + vz * ov * sw, ux * sgn, 0.1, uz * sgn);
     }
     for (let p = 1; p < outline.length - 1; p++) {
       if (sgn > 0) s.tri(cb, cb + p, cb + p + 1);

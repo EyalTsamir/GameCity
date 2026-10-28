@@ -389,7 +389,8 @@ const PAINT_AFTER = /* glsl */ `
   // (detail fade from the geometric-mean pixel footprint: at eye level the paint is seen at grazing angles)
   vec2 fwq = fwidth(vWP.xz);
   float detq = 1.0 - smoothstep(0.1, 0.35, sqrt(fwq.x * fwq.y) / 0.1);
-  float worn = smoothstep(0.7 - 0.5 * wearAmt, 0.76 - 0.5 * wearAmt, nw) * detq;
+  // (wear < 0 flags cast iron — manholes, gullies, lids: no paint to wear off; dirt sits in the recesses instead)
+  float worn = smoothstep(0.7 - 0.5 * wearAmt, 0.76 - 0.5 * wearAmt, nw) * detq * step(-0.5, vM.y);
   diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * 0.82 + vB * 0.18, 0.6);   // dirty, sun-faded paint
   diffuseColor.rgb = mix(diffuseColor.rgb, vB, worn * 0.9);
   float fw = length(fwidth(vWP.xz));
@@ -484,7 +485,7 @@ export function createMaterials(ctx: CityContext, info: SurfaceInfo, atlas: THRE
     pars: '',
     color: '',
     after: PAINT_AFTER,
-    key: 'roads-paint-v4',
+    key: 'roads-paint-v5',
     uniforms: shared,
   });
   return { asphalt, hard, paint, asphaltColor };

@@ -69,8 +69,9 @@ const TABLE: Record<string, Surf> = {
   [`${HM.walk}:2`]: S({ size: [0.9, 0.9], jw: 0.016, jd: 0.3, tint: 0.07, color: lin(0.5, 0.48, 0.445), stain: 0.12, special: 1 }),
   [`${HM.walk}:3`]: S({ size: [2, 2], jw: 0.03, jd: 0.38, tint: 0.06, speck: 0.14, color: lin(0.43, 0.415, 0.39), stain: 0.2, special: 1 }),
   // curb stone, curb face, gutter channel (curb coordinates: joints every metre along the curb)
-  [`${HM.curb}:0`]: S({ size: [1, 1], jw: 0.012, jd: 0.45, tint: 0.06, speck: 0.2, color: lin(0.66, 0.645, 0.61), rough: 0.8, frame: 2 }),
-  [`${HM.curbFace}:0`]: S({ size: [1, 1], jw: 0.012, jd: 0.4, tint: 0.06, speck: 0.16, color: lin(0.5, 0.485, 0.455), rough: 0.85, frame: 2 }),
+  // (W5: granite units with dark open joints, a clear tone step from stone to stone, tyre / grime stains)
+  [`${HM.curb}:0`]: S({ size: [1, 1], jw: 0.009, jd: 0.75, tint: 0.15, bevel: 0.14, speck: 0.3, color: lin(0.55, 0.54, 0.515), stain: 0.22, rough: 0.8, frame: 2 }),
+  [`${HM.curbFace}:0`]: S({ size: [1, 1], jw: 0.009, jd: 0.7, tint: 0.15, bevel: 0.14, speck: 0.26, color: lin(0.42, 0.41, 0.39), stain: 0.4, rough: 0.85, frame: 2 }),
   [`${HM.gutter}:0`]: S({ size: [2, 1], jw: 0.015, jd: 0.3, speck: 0.16, color: lin(0.3, 0.295, 0.285), stain: 0.12, frame: 2 }),
   // plazas: warm sandstone bond (+ radial rings near fountains), block forecourt granite (rotated grid)
   [`${HM.plaza}:0`]: S({ size: [0.8, 0.4], jw: 0.02, jd: 0.42, tint: 0.16, bevel: 0.04, bond: 0.5, speck: 0.1, color: lin(0.56, 0.46, 0.34), stain: 0.06, special: 2 }),

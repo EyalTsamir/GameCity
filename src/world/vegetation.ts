@@ -24,7 +24,7 @@ import { windMaterials as legacyWindMaterials } from './vegetation/legacy/materi
 import * as NEW from './vegetation/species';
 import * as OLD from './vegetation/legacy/species';
 import { Wind, col, LEAF, type Species, type TreeSpec } from './vegetation/species';
-import { flowerBed, flowerClump, crop, soilRow, surround, FLOWERS, type Surround } from './vegetation/plants';
+import { flowerBed, flowerClump, crop, soilRow, surround, treeGuard, wornPatch, GRATE_HOLE, FLOWERS, type Surround } from './vegetation/plants';
 import { getLayout, occAny, PLANTER, hrand, MASK_WALK, DistanceLod, ChunkCuller, chunkOf, type Layout } from './props/layout';
 import { getLeafAtlas } from './vegetation/atlas';
 import { FoliageLayer, LodTexture, cardMaterials, woodMaterials, cardKnobs, type InstBuf, type PlantRef } from './vegetation/foliage';
@@ -38,7 +38,8 @@ interface TerrainSvc {
 }
 
 export interface VegetationService {
-  trees: { x: number; z: number; r: number; h: number }[];
+  /** worn: radius of the trodden bare patch at the foot (W5) — ground cover should keep grass off it */
+  trees: { x: number; z: number; r: number; h: number; worn?: number }[];
   /** foliage shading knobs (uniform objects; for tuning from the console / test scripts) */
   knobs: typeof foliageKnobs;
   /** leaf-card shading / wind knobs */
@@ -121,6 +122,9 @@ export default function create(ctx: CityContext): CityModule {
   const legacy = ctx.debug.params.has('legacyveg') && ctx.debug.params.get('legacyveg') !== '0';
   // leaf-card trees (default) vs the lobed-hull trees (?noleafcards — A/B + fallback)
   const cardsOn = !legacy && !ctx.debug.params.has('noleafcards');
+  // W5 tree bases: bark relief + soil-stained trunk foot (shader), real tree-pit surrounds (geometry)
+  const noTreeBase = ctx.debug.params.has('notreebase');
+  const noFenceDetail = ctx.debug.params.has('nofencedetail') || ctx.quality.level === 'low';
   const buildTree: (s: GeoSink, w: Wind, t: TreeSpec) => unknown = legacy ? OLD.buildTree : NEW.buildTree;
   const bush = legacy ? OLD.bush : NEW.bush;
   const hedge = legacy ? OLD.hedge : NEW.hedge;
@@ -850,15 +854,26 @@ export default function create(ctx: CityContext): CityModule {
       // street trees spread along the street (the gap between facades), not into them
       stretch: street ? [Math.cos(t.syaw), -Math.sin(t.syaw), 1.4] : undefined,
       planter: t.surround === 'planter' || t.surround === 'roundplanter' ? { round: t.surround === 'roundplanter', yaw: t.syaw } : undefined,
+      paved: noTreeBase ? undefined : GRATE_HOLE[t.surround],
     });
   }
   // build near-to-far for the usual camera direction (south → north) so early-z rejects hidden canopies
   const order = planted.slice().sort((a, b) => b.z - a.z);
+  /** trees with a trodden patch at the foot (radius): published on the service for the ground cover */
+  const worn = new Map<(typeof planted)[number], number>();
   for (const t of order) {
     const srng = new Rng(t.seed ^ 0x5bd1e995);
     let y = t.y;
     selF(t.x);
     if (t.surround !== 'none') y = surround(fsh, fpw, t.surround, t.x, t.y, t.z, t.syaw, srng);
+    // park / square lawn trees: trodden bare earth and surface roots at the foot on ~45 % (W5)
+    if (!noTreeBase && t.surround === 'none' && (t.tag === 'park' || t.tag === 'civic' || t.tag === 'copse') && hash01(t.x * 0.9, t.z * 1.7, 13) < 0.45) {
+      const wr = Math.min(1.1, 0.5 + t.h * 0.04);
+      wornPatch(fsh, fpw, t.x, t.z, wr, H, srng);
+      worn.set(t, wr);
+    }
+    // a young street tree keeps its guard for a few years (W5)
+    if (!noTreeBase && (t.surround === 'kerbgrate' || t.surround === 'grate') && t.h < 8 && hash01(t.x * 1.3, t.z * 0.7, 11) < 0.3) treeGuard(fsh, fpw, t.x, y, t.z, t.syaw, srng);
     const clear = t.clear !== undefined ? t.clear - (y - t.y) : undefined;
     if (cardsOn) addPlant(t, y, clear);
     else if (t.tag === 'forest') buildTree(forestSink, fw, { ...t, y, h: t.h - (y - t.y), clear });
@@ -1075,6 +1090,7 @@ export default function create(ctx: CityContext): CityModule {
         seed: b.lot * 7919 + Math.round(b.ax * 13 + b.az * 7),
         color: '#' + leaf.getHexString(),
         seg: [b.ax, b.az, b.bx, b.bz, b.street ? 0.6 : 0.66],
+        noStems: noFenceDetail,
       });
   }
 
@@ -1444,7 +1460,7 @@ export default function create(ctx: CityContext): CityModule {
   ctx.scene.add(root);
 
   const service: VegetationService = {
-    trees: planted.map((t) => ({ x: t.x, z: t.z, r: t.r, h: t.h })),
+    trees: planted.map((t) => ({ x: t.x, z: t.z, r: t.r, h: t.h, worn: worn.get(t) })),
     knobs: foliageKnobs,
     cardKnobs,
     setLeafDistance(m) {
@@ -1475,6 +1491,7 @@ export default function create(ctx: CityContext): CityModule {
         qLevel = ctx.quality.level;
         foliageKnobs.cheap.value = cellsParam === '8' ? 1 : cellsParam === '27' ? 0 : qLevel === 'high' ? 0 : 1;
         cardKnobs.farKeep.value = qLevel === 'high' ? 1 : qLevel === 'medium' ? 0.85 : 0.6;
+        cardKnobs.base.value = noTreeBase || qLevel === 'low' ? 0 : 1;
       }
       near = lod.near();
       farMesh.visible = !near;

@@ -177,13 +177,34 @@ export class SignalRenderer {
     const y0 = this.baseY(I, head.arm);
     const ns = head.arm === 'N' || head.arm === 'S';
     this.poleCount++;
+    // W5 (?nosigndetail): round tapered mast arm, bolted plinth, hatch, push button, visors with cheeks, clamps
+    const detail = !this.ctx.debug.params.has('nosigndetail');
     // pole, plinth, cap
-    place(cyl(0.17, 0.19, 0.32, 0, -0.12, 0, 10), head, y0, '#4a4f52');
-    place(cyl(0.07, 0.085, 5.62, 0, 0.0, 0, 10), head, y0, POLE);
-    place(cyl(0.1, 0.1, 0.08, 0, 5.62, 0, 10), head, y0, POLE);
+    place(cyl(0.17, 0.19, 0.32, 0, -0.12, 0, detail ? 16 : 10), head, y0, '#4a4f52');
+    place(cyl(0.07, 0.085, 5.62, 0, 0.0, 0, detail ? 16 : 10), head, y0, POLE);
+    place(cyl(0.1, 0.1, 0.08, 0, 5.62, 0, detail ? 16 : 10), head, y0, POLE);
     // mast arm over the lane (the road lies towards local -X)
     const armL = 2.55;
-    place(box(armL, 0.1, 0.1, -armL / 2, 5.5, 0), head, y0, POLE);
+    if (detail) {
+      const arm = new THREE.CylinderGeometry(0.042, 0.06, armL, 12);
+      arm.rotateZ(Math.PI / 2);
+      arm.translate(-armL / 2, 5.5, 0);
+      place(arm, head, y0, POLE);
+      // arm end cap, the clamp collar where it meets the pole
+      place(cyl(0.05, 0.05, 0.03, 0, 0, 0, 12).rotateZ(Math.PI / 2).translate(-armL - 0.01, 5.5, 0), head, y0, '#3a3f42');
+      place(cyl(0.09, 0.09, 0.16, 0, 5.42, 0, 16), head, y0, POLE);
+      // plinth: bolt heads round the top, a service hatch on the pole (footway side, local +X)
+      for (let i = 0; i < 6; i++) {
+        const a = (i / 6) * Math.PI * 2;
+        place(cyl(0.014, 0.014, 0.018, Math.cos(a) * 0.14, 0.2, Math.sin(a) * 0.14, 6), head, y0, '#2c3033');
+      }
+      place(box(0.012, 0.32, 0.075, 0.084, 0.75, 0), head, y0, POLE);
+      place(box(0.004, 0.012, 0.012, 0.091, 0.82, 0), head, y0, '#a0a5aa');
+      // pedestrian push button on the footway side, facing the waiting walker (local +X), with its arrow
+      place(box(0.09, 0.16, 0.08, 0.11, 1.12, 0), head, y0, '#e9c21b');
+      place(box(0.006, 0.05, 0.05, 0.158, 1.14, 0), head, y0, '#1d1d1d');
+      place(box(0.007, 0.012, 0.04, 0.159, 1.08, 0), head, y0, '#f4f1ea');
+    } else place(box(armL, 0.1, 0.1, -armL / 2, 5.5, 0), head, y0, POLE);
     {
       const br = new THREE.BoxGeometry(1.15, 0.055, 0.055);
       br.rotateZ(-0.5);
@@ -206,14 +227,19 @@ export class SignalRenderer {
     for (let i = 0; i < 3; i++) {
       const ly = hy + 0.32 - i * 0.32;
       place(box(0.32, 0.035, 0.18, hx, ly + 0.15, 0.2), head, y0, HOUSING);
+      // visor cheeks: the hood wraps down the sides of the lens
+      if (detail) for (const sx of [-1, 1]) place(box(0.012, 0.16, 0.16, hx + sx * 0.155, ly + 0.06, 0.21), head, y0, HOUSING);
       lamp(head, y0, hx, ly, 0.13, 0, 0.12, { node, ns, kind: kinds[i] });
     }
     // pole-mounted repeater facing traffic
     const ry = 2.72;
     place(box(0.3, 0.86, 0.22, 0, ry, 0.17), head, y0, HOUSING);
+    // its two band clamps round the pole
+    if (detail) for (const dy of [-0.3, 0.3]) place(cyl(0.085, 0.085, 0.04, 0, ry + dy - 0.02, 0, 16), head, y0, '#3a3f42');
     for (let i = 0; i < 3; i++) {
       const ly = ry + 0.27 - i * 0.27;
       place(box(0.26, 0.03, 0.14, 0, ly + 0.125, 0.33), head, y0, HOUSING);
+      if (detail) for (const sx of [-1, 1]) place(box(0.01, 0.13, 0.13, sx * 0.125, ly + 0.055, 0.335), head, y0, HOUSING);
       lamp(head, y0, 0, ly, 0.28, 0, 0.095, { node, ns, kind: kinds[i] });
     }
     // pedestrian head on this pole, facing across the crosswalk (local -X)
@@ -241,7 +267,19 @@ export class SignalRenderer {
   ): void {
     const y0 = this.baseY(I, head.arm);
     this.stopSignCount++;
-    place(cyl(0.05, 0.05, 2.62, 0, 0, 0, 8), head, y0, '#9aa1a7');
+    // W5 (?nosigndetail): some poles knocked a little off plumb; a grout collar, a cap, band clamps and bolts,
+    // a sticker on some poles
+    const detail = !this.ctx.debug.params.has('nosigndetail');
+    const hs = Math.abs(Math.sin(head.x * 12.9898 + head.z * 78.233) * 43758.5453) % 1;
+    const tx = detail && hs < 0.35 ? (hs - 0.17) * 0.12 : 0,
+      tz = detail && hs < 0.35 ? (0.2 - hs) * 0.08 : 0;
+    const place0 = place;
+    const placeT = (g: THREE.BufferGeometry, h: SignalHead, by: number, color: string) => {
+      if (tx || tz) g.rotateX(tx).rotateZ(tz);
+      place0(g, h, by, color);
+    };
+    place = placeT;
+    placeT(cyl(0.05, 0.05, 2.62, 0, 0, 0, detail ? 12 : 8), head, y0, '#9aa1a7');
     const sy = 2.32;
     const oct = (r: number, z: number, back = false) => {
       const g = new THREE.CircleGeometry(r, 8);
@@ -271,6 +309,25 @@ export class SignalRenderer {
     top(cO); bot(cO); side(cO, false, 0, lh); side(cO, true, 0, lh);
     top(cP); mid(cP); side(cP, false, 0, lh); side(cP, true, hh / 2, hh);
     place(box(0.12, 0.2, 0.04, 0, sy, 0.025), head, y0, '#9aa1a7');
+    if (detail) {
+      // pole cap, grout collar at the foot
+      place(cyl(0.056, 0.052, 0.03, 0, 2.62, 0, 12), head, y0, '#4d5257');
+      place(cyl(0.085, 0.095, 0.025, 0, -0.005, 0, 12), head, y0, '#6f6b64');
+      // two band clamps behind the plate (band round the pole + a bracket to the plate back) and their bolts
+      for (const dy of [-0.26, 0.26]) {
+        place(cyl(0.058, 0.058, 0.04, 0, sy + dy - 0.02, 0, 12), head, y0, '#7d848a');
+        place(box(0.09, 0.04, 0.02, 0, sy + dy, 0.04), head, y0, '#7d848a');
+        place(box(0.02, 0.012, 0.03, -0.068, sy + dy, -0.0), head, y0, '#5e6368');
+        place(box(0.02, 0.012, 0.03, 0.068, sy + dy, -0.0), head, y0, '#5e6368');
+        // the carriage-bolt heads on the face
+        place(cyl(0.012, 0.012, 0.006, 0, 0, 0, 8).rotateX(Math.PI / 2).translate(0, sy + dy + 0.06, 0.068), head, y0, '#d9d4cc');
+      }
+      // a sticker / faded tag on some poles
+      if (hs > 0.55) {
+        const sc = ['#f2e64a', '#3a9ad9', '#f4f1ea', '#e85d9e'][Math.floor(hs * 97) % 4];
+        place(box(0.07, 0.09, 0.004, 0, 1.45 + hs * 0.3, 0.05), head, y0, sc);
+      }
+    }
   }
 
   /** lens culling + level per lamp; only when the camera moved */

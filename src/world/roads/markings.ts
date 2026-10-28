@@ -23,11 +23,34 @@ export interface Glyph {
 const AW = 1024,
   AH = 512;
 
+/**
+ * Emboss a canvas region in place: its grey levels are a height field; the output is lit from the top-left
+ * (relief shading baked into the glyph) and darkened in the recesses. Alpha is kept.
+ */
+function emboss(g: CanvasRenderingContext2D, x: number, y: number, w: number, h: number): void {
+  const im = g.getImageData(x, y, w, h);
+  const d = im.data;
+  const H = new Float32Array(w * h);
+  for (let i = 0; i < w * h; i++) H[i] = d[i * 4] / 255;
+  const at = (i: number, j: number) => H[Math.min(h - 1, Math.max(0, j)) * w + Math.min(w - 1, Math.max(0, i))];
+  for (let j = 0; j < h; j++)
+    for (let i = 0; i < w; i++) {
+      const k = (j * w + i) * 4;
+      if (d[k + 3] === 0) continue;
+      const hv = at(i, j);
+      const slope = at(i - 1, j - 1) - at(i + 1, j + 1);
+      const v = Math.max(0, Math.min(1, 0.42 + 0.5 * hv - 0.9 * slope));
+      d[k] = d[k + 1] = d[k + 2] = Math.round(v * 255);
+    }
+  g.putImageData(im, x, y);
+}
+
 export function buildAtlas(): { tex: THREE.CanvasTexture; g: Record<string, Glyph> } {
   const cv = document.createElement('canvas');
   cv.width = AW;
   cv.height = AH;
-  const g = cv.getContext('2d')!;
+  // (CPU-backed: the castings are embossed with getImageData once at boot)
+  const g = cv.getContext('2d', { willReadFrequently: true })!;
   g.clearRect(0, 0, AW, AH);
   const glyphs: Record<string, Glyph> = {};
   const reg = (name: string, x0: number, y0: number, x1: number, y1: number) => {
@@ -134,45 +157,91 @@ export function buildAtlas(): { tex: THREE.CanvasTexture; g: Record<string, Glyp
     g.restore();
     reg('bike', ox + 4, oy + 4, ox + 124, oy + 244);
   }
-  // manhole cover
+  // manhole cover: a legible casting (raised frame ring, text ring, chequer plate, pick holes), embossed from a
+  // height field (light from the glyph's top-left: reads as relief on the flat decal)
   {
     const cx = 304,
       cy = 464;
     g.save();
+    // height field in greys: 0.3 base plate, raised parts lighter
     g.beginPath();
-    g.arc(cx, cy, 44, 0, Math.PI * 2);
-    g.fillStyle = '#d8d8d8';
+    g.arc(cx, cy, 45, 0, Math.PI * 2);
+    g.fillStyle = '#e0e0e0';
     g.fill();
     g.beginPath();
-    g.arc(cx, cy, 38, 0, Math.PI * 2);
-    g.fillStyle = '#9a9a9a';
+    g.arc(cx, cy, 40, 0, Math.PI * 2);
+    g.fillStyle = '#3c3c3c';
     g.fill();
-    g.strokeStyle = '#d0d0d0';
-    g.lineWidth = 3;
-    for (let r = 10; r < 38; r += 9) {
+    g.beginPath();
+    g.arc(cx, cy, 37.5, 0, Math.PI * 2);
+    g.fillStyle = '#5a5a5a';
+    g.fill();
+    // text ring between r 28..36
+    g.fillStyle = '#d4d4d4';
+    g.font = 'bold 8px sans-serif';
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    const arcText = (txt: string, mid: number, top: boolean) => {
+      const step = 0.205;
+      for (let i = 0; i < txt.length; i++) {
+        const a = mid + (top ? 1 : -1) * (i - (txt.length - 1) / 2) * step;
+        g.save();
+        g.translate(cx + Math.cos(a) * 32, cy + Math.sin(a) * 32);
+        g.rotate(top ? a + Math.PI / 2 : a - Math.PI / 2);
+        g.fillText(txt[i], 0, 0);
+        g.restore();
+      }
+    };
+    arcText('TINYHAVEN', -Math.PI / 2, true);
+    arcText('SEWER', Math.PI / 2, false);
+    g.strokeStyle = '#cfcfcf';
+    g.lineWidth = 1.6;
+    g.beginPath();
+    g.arc(cx, cy, 26.5, 0, Math.PI * 2);
+    g.stroke();
+    // chequer plate: raised lozenges on a grid inside r 25
+    g.save();
+    g.beginPath();
+    g.arc(cx, cy, 25, 0, Math.PI * 2);
+    g.clip();
+    g.fillStyle = '#c4c4c4';
+    for (let y = -28; y <= 28; y += 7)
+      for (let x = -28; x <= 28; x += 7) {
+        g.save();
+        g.translate(cx + x + ((y / 7) % 2 ? 3.5 : 0), cy + y);
+        g.rotate(((x + y) / 7) % 2 ? Math.PI / 4 : -Math.PI / 4);
+        g.fillRect(-3.2, -1.1, 6.4, 2.2);
+        g.restore();
+      }
+    g.restore();
+    // pick holes (dark, recessed)
+    g.fillStyle = '#101010';
+    for (const sx of [-1, 1]) {
       g.beginPath();
-      g.arc(cx, cy, r, 0, Math.PI * 2);
-      g.stroke();
-    }
-    for (let a = 0; a < 8; a++) {
-      g.beginPath();
-      g.moveTo(cx + Math.cos((a * Math.PI) / 4) * 10, cy + Math.sin((a * Math.PI) / 4) * 10);
-      g.lineTo(cx + Math.cos((a * Math.PI) / 4) * 37, cy + Math.sin((a * Math.PI) / 4) * 37);
-      g.stroke();
+      g.ellipse(cx + sx * 17, cy, 3.4, 1.8, 0, 0, Math.PI * 2);
+      g.fill();
     }
     g.restore();
+    emboss(g, cx - 46, cy - 46, 92, 92);
     reg('manhole', cx - 46, cy - 46, cx + 46, cy + 46);
   }
-  // gully grate (long side across the gutter)
+  // gully grate (long side across the gutter): raised frame and bars over black slots, two hinge lugs, embossed
   {
     const x0 = 360,
       y0 = 432;
     g.save();
-    g.fillStyle = '#c8c8c8';
+    g.fillStyle = '#d6d6d6';
     g.fillRect(x0, y0, 80, 60);
-    g.fillStyle = '#2a2a2a';
-    for (let k = 0; k < 6; k++) g.fillRect(x0 + 7 + k * 12, y0 + 7, 7, 46);
+    g.fillStyle = '#0c0c0c';
+    for (let k = 0; k < 7; k++) g.fillRect(x0 + 8 + k * 9.6, y0 + 8, 5.6, 44);
+    // a cross rib
+    g.fillStyle = '#c8c8c8';
+    g.fillRect(x0 + 6, y0 + 28, 68, 4);
+    g.fillStyle = '#8a8a8a';
+    g.fillRect(x0 + 2, y0 + 2, 10, 4);
+    g.fillRect(x0 + 68, y0 + 2, 10, 4);
     g.restore();
+    emboss(g, x0, y0, 80, 60);
     reg('grate', x0 - 1, y0 - 1, x0 + 81, y0 + 61);
   }
   // utility lid
@@ -349,12 +418,12 @@ export function buildMarkings(ctx: CityContext, atlasGlyphs: Record<string, Glyp
         }
       }
       // gully grates just upstream of the crosswalk, both sides
-      setPaint(IRON_DARK, 1, 0);
+      setPaint(IRON_DARK, 1, -1);
       quad(P(8.3, ROAD_HALF - 0.17), up, 0.34, 0.5, Y.gutter + 0.002, atlasGlyphs.grate);
       stats.decals++;
     }
     if (rng.chance(0.6)) {
-      setPaint(IRON, 1, 0);
+      setPaint(IRON, 1, -1);
       quad({ x: I.x + rng.range(-1.5, 1.5), z: I.z + rng.range(-1.5, 1.5) }, { x: 0, z: -1 }, 0.72, 0.72, yRoad, atlasGlyphs.manhole);
       stats.decals++;
     }
@@ -399,13 +468,13 @@ export function buildMarkings(ctx: CityContext, atlasGlyphs: Record<string, Glyp
     for (let k = 0; k < nm; k++) {
       const s = rng.range(14, L - 14);
       const lat = rng.pick([-1.75, -0.6, 0.6, 1.75]) + rng.range(-0.3, 0.3);
-      setPaint(IRON, 1, 0);
+      setPaint(IRON, 1, -1);
       quad(P(s, lat), d, 0.72, 0.72, yRoad, atlasGlyphs.manhole);
       stats.decals++;
     }
     // gully grates mid-block
     for (const sd of [1, -1]) {
-      setPaint(IRON_DARK, 1, 0);
+      setPaint(IRON_DARK, 1, -1);
       quad(P(L / 2 + rng.range(-6, 6), sd * (ROAD_HALF - 0.17)), d, 0.34, 0.5, Y.gutter + 0.002, atlasGlyphs.grate);
       stats.decals++;
     }
@@ -419,7 +488,7 @@ export function buildMarkings(ctx: CityContext, atlasGlyphs: Record<string, Glyp
     // utility lids on the sidewalks
     if (rng.chance(0.7)) {
       const sd = rng.chance(0.5) ? 1 : -1;
-      setPaint(IRON, 1, 0, C('#b9b3a8'));
+      setPaint(IRON, 1, -1, C('#b9b3a8'));
       quad(P(rng.range(12, L - 12), sd * rng.range(4.6, 6.0)), d, 0.45, 0.45, Y.walk + 0.003, atlasGlyphs.lid);
       stats.decals++;
     }
