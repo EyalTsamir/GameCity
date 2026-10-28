@@ -406,7 +406,13 @@ vec2 bhWallSlope(float pat, vec2 q, float seed, vec2 fq, vec2 so) {
     float bn = bhHash12(id + seed * 1.7);
     s = (vec2(hx - h0, hy - h0) / e * 0.006 + (vec2(bn, fract(bn * 7.7)) - 0.5) * 0.06 * h0) * (1.0 - smoothstep(0.003, 0.008, fp));
   } else if (pat < 2.5) { // corrugated sheet: 32 mm deep ribs every 0.32 m
-    s = vec2(0.016 * 6.2832 / 0.32 * cos(q.x * 6.2832 / 0.32), 0.0) * (1.0 - smoothstep(0.03, 0.09, fp));
+    // trapezoidal (box) profile: flat crowns and pans joined by steep webs — crisp light / shade bands at
+    // 3 m instead of a soft sine; web edges widened by the pixel footprint (no aliasing)
+    float ph = fract(q.x / 0.32);
+    float aw = 0.02 + fq.x / 0.32;
+    float up = smoothstep(0.1 - aw, 0.1 + aw, ph) * (1.0 - smoothstep(0.24 - aw, 0.24 + aw, ph));
+    float dn = smoothstep(0.6 - aw, 0.6 + aw, ph) * (1.0 - smoothstep(0.74 - aw, 0.74 + aw, ph));
+    s = vec2(0.75 * (up - dn), 0.0) * (1.0 - smoothstep(0.03, 0.09, fp));
   } else if (pat < 3.5) { // lap boards: each board leans out toward its lower edge
     float fy = fract(q.y / 0.3);
     s = vec2(0.0, -0.08 + 0.9 * (1.0 - smoothstep(0.0, 0.05, fy)) * step(fy, 0.05)) * (1.0 - smoothstep(0.01, 0.04, fp));
@@ -450,7 +456,9 @@ vec3 bhWallPattern(float pat, vec2 q, float seed, vec2 fq, vec4 nm, float grain)
     res = mix(brick, vec3(1.03), aa) * (0.89 + 0.22 * nm.g);
   } else if (pat < 2.5) { // corrugated metal: vertical ribs
     float aa = clamp(fq.x / 0.32 * 2.0, 0.0, 1.0);
-    float rib = 0.84 + 0.18 * sin(q.x * 6.2832 / 0.32);
+    float phr = fract(q.x / 0.32);
+    float pan = smoothstep(0.72, 0.8, phr) + 1.0 - smoothstep(0.02, 0.1, phr);
+    float rib = 0.97 - 0.12 * clamp(pan, 0.0, 1.0); // the pans sit 32 mm back in the crowns' shade
     res = vec3(mix(rib, 0.93, aa) * (0.9 + 0.2 * nm.g));
   } else if (pat < 3.5) { // timber siding: horizontal boards with shadow lines
     float bh = 0.3;
@@ -1102,6 +1110,12 @@ void bhWall(inout vec3 albedo, inout float rough, inout float metal, inout vec3 
     float algae = north * oldness * (damp * 0.9 + 0.55 * smoothstep(0.35, 0.9, stv) * (1.0 - smoothstep(0.0, 7.0, y)));
     albedo = mix(albedo, albedo * vec3(0.6, 0.72, 0.46), clamp(algae * wStr, 0.0, 0.75));
     if (pat < 0.5) {
+      // painted render ages unevenly: chalky, sun-faded patches (desaturated, a touch lighter) and darker
+      // weathered drifts, so a pastel wall reads as paint on lime render instead of a plastic sheet
+      float lumP = dot(albedo, vec3(0.299, 0.587, 0.114));
+      float chalk = smoothstep(0.38, 0.82, np.r * 0.55 + nm.g * 0.3 + grain * 0.15);
+      albedo = mix(albedo, vec3(lumP) * 1.06, chalk * (0.12 + 0.2 * oldness));
+      albedo *= 1.0 + 0.07 * (np.g - 0.5) * (0.6 + oldness);
       // peeling paint / spalled render: lower storeys, under the copings and around the corners
       // irregular patches: two noise scales + grain → ragged outlines; mostly at the foot of the wall, under
       // the copings and at the corners, almost none on the open wall
@@ -1229,8 +1243,10 @@ void bhWall(inout vec3 albedo, inout float rough, inout float metal, inout vec3 
     // depth AO toward the frame, a dark contact line where the reveal meets the frame, a worn pale arris
     float arris = (1.0 - smoothstep(0.0, 0.08, dDepth)) * 0.18;
     float contact = smoothstep(0.82, 0.97, dDepth) * 0.35;
-    if (dSurf == 1) c = bhHeadroom(c * (1.0 - 0.45 * dDepth) * (1.0 - contact) * (1.0 + arris), baseAlb);
-    else if (dSurf == 2) c = bhHeadroom(c * (0.72 - 0.3 * dDepth) * (1.0 - contact), baseAlb);
+    // sky exposure: a jamb return sees half the sky, the soffit of the head only the ground — in daylight
+    // they read clearly darker than the wall face (the cue that the window is set in)
+    if (dSurf == 1) c = bhHeadroom(c * 0.74 * (1.0 - 0.45 * dDepth) * (1.0 - contact) * (1.0 + arris), baseAlb);
+    else if (dSurf == 2) c = bhHeadroom(c * 0.6 * (0.72 - 0.3 * dDepth) * (1.0 - contact), baseAlb);
     else if (dSurf == 3) c = (sillW ? sillC : c) * (1.0 - 0.15 * dDepth);
     else if (dSurf == 5) c = sillC * mix(0.78, 1.0, smoothstep(0.0, 0.7, dDepth)) * (0.9 + 0.1 * nm.g);
     else if (dSurf == 6) c = sillC * mix(0.7, 0.35, step(0.62, dDepth) * step(dDepth, 0.8)); // drip groove
