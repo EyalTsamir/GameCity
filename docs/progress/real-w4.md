@@ -4,6 +4,16 @@ Branch `claude/real-w4-people` (from `claude/pensive-gates-bim12i` e517126). Bri
 Photo test "Person" (REAL.md). Owned: `src/sim/pedestrians/**` presentation (not crowd/places logic).
 
 ## Resume here
+* 2026-10-28 ~23:00 UTC — session 6 ENDED (tokens.py ctx max 231k; get_session context_usage reads 0). All
+  pushed. Downtown: console clean, invariants {} (shots/w4/dt6.txt); overview unchanged (ov6). Sheet
+  docs/progress/real/w4_after_s6.jpg (before|after: long hair from behind, shorts at 2 m, hand at 2 m, child
+  on an adult chair). Crouch fix verified (crouch3: same catch-up speeds, pelvis drop ≤ 4 cm, was 6–8).
+  Next: (a) seat folds on light shorts still read a little like wood-grain arcs (s6b predates the last
+  seat-fold change: judge `people-bench --shots legsback --where "m.look.style.trouserEnd > 0.45 &&
+  m.look.style.trouserEnd < 0.9"` first); (b) folds on dark cloth only via the sky lift (unjudged after the
+  change); (c) hair lock crests a little stripy at 1.6 m; (d) children dangling feet: ankle angle (toes
+  point down?) unjudged; (e) s5 items (d) hat crown from behind and (e) sitter gestures still open;
+  (f) gaitCycleOf (rig.ts, crowd phase for non-gait LODs) still uses the uncapped speed — harmless.
 * 2026-10-28 session 6 STARTED from pensive-gates ee1619d. Lead's s5 verdict priorities: (1) the 3-person group
   "deep jog crouch" (s5i p0_body) — reproduce/fix or prove a bench artefact; (2) trousers smooth at 2 m, shorts
   plastic → knee/seat drag folds + side seams; (3) black long-hair sheet one surface from behind → lock breakup
@@ -224,6 +234,9 @@ Photo test "Person" (REAL.md). Owned: `src/sim/pedestrians/**` presentation (not
 * Face detail fade at px 3.5–9 mm: eyes vanished at 3–4 m (where real eyes still read) → 6–16 mm.
 
 ## Toggles / tiers / costs
+* (s6) `?nofolds` — no trouser fold relief / hem shadow / dark-cloth lift (uniform uPedFolds; close level only,
+  inside pedFabric's det fade; FS ALU only). Hair locks + lock sheen: unconditional (sheet only, fade by
+  fwidth). Hands out of the shadow proxy: saves a few verts in the shadow pass. GAIT_VWALK, seat dangle: free.
 * (s5) All s5 work is shader-only/free CPU: eyes, face fade (close level); hair sheen (all levels with HAIR_NORMAL —
   a few ALU); lock-end discards (sheet, fades by fwidth); fabric bump + fuzz (close level: inside pedFabric's
   det fade, i.e. off beyond ~1 cm/px). No new toggles: `?nopeopledetail` removes the close level (fabric/face);
@@ -245,6 +258,7 @@ Photo test "Person" (REAL.md). Owned: `src/sim/pedestrians/**` presentation (not
   figures < 15 m. Needs an Adreno measurement; the medium/low tiers shrink the radius to 11 / 7 m.
 
 ## Sheets
+* docs/progress/real/w4_after_s6.jpg — session 6: hair from behind, shorts 2 m, hand 2 m (acne fixed), child seated.
 * docs/progress/real/w4_after_s5.jpg — session 5: sclera before|after, dark long hair (sheen, lock ends, cap fix), clothing at ~1 m.
 * docs/progress/real/w4_after_s4.jpg — session 4: head form, hair flow/volume, forearm stripes, walk, group 10 m.
 * docs/progress/real/w4_after_s3.jpg — session 3: hairline, dress stride, umbrella / briefcase / bag flap.
@@ -293,3 +307,6 @@ WHAT THE COST BOUGHT (lifetime cost of each kind of content in context, all agen
 
 ## Tokens (session 5, tokens.py)
 TOTAL weighted 1.7M (cache read 77 %, write 10 %, output 13 %); 90 calls, ctx median 151k / max 197k.
+
+## Tokens (session 6, tokens.py)
+TOTAL weighted 2.3M (cache read 79 %, write 9 %, output 11 %); 107 calls, ctx median 178k / max 231k.
