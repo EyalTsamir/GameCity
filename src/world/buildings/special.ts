@@ -172,15 +172,49 @@ function grand(g: Gen): void {
       void px;
       void pz;
     }
-    // three flags
-    const flagC = ['#d94a3d', '#f4f1ea', '#2f6fd0'];
-    for (let k = 0; k < 3; k++) {
-      const fu = u - 2.2 + k * 2.2;
-      setCol(t, col('#d8d8d8'));
-      t.beam(sx(sg, fu, 0.1), gH + 0.6, sz(sg, fu, 0.1), sx(sg, fu, 1.15), gH + 1.5, sz(sg, fu, 1.15), 0.05, 0.05);
-      setCol(t, col(flagC[k]));
-      const fx = sx(sg, fu, 0.95), fz = sz(sg, fu, 0.95);
-      t.box(fx - 0.02 - Math.abs(sg.tx) * 0.5, gH + 0.45, fz - 0.02 - Math.abs(sg.tz) * 0.5, fx + 0.02, gH + 1.35, fz + 0.02, 0b111111);
+    // three flags on raked poles over the canopy: bracket, pole, finial, cloth hanging from the pole
+    const designs = [
+      ['#d94a3d', '#f4f1ea', '#2f6fd0'],
+      ['#1f3a5f', '#c9a24a', '#1f3a5f'],
+      ['#2e7d4f', '#f4f1ea', '#d94a3d'],
+    ];
+    for (let k = 0; k < 3; k++) hotelFlag(sg, u - 2.2 + k * 2.2, designs[k], k);
+  }
+
+  function hotelFlag(sg: SideGeom, fu: number, bands: string[], k: number): void {
+    const o0 = 0.1,
+      y0 = gH + 0.35,
+      o1 = 1.16,
+      y1 = gH + 1.45;
+    const yAt = (o: number) => y0 + ((o - o0) / (o1 - o0)) * (y1 - y0);
+    setCol(t, col('#2c3035'));
+    sideBox(t, sg, fu - 0.07, fu + 0.07, 0, 0.12, y0 - 0.12, y0 + 0.12);
+    setCol(t, col('#d8d8d8'));
+    t.beam(sx(sg, fu, o0), y0, sz(sg, fu, o0), sx(sg, fu, o1), y1, sz(sg, fu, o1), 0.035, 0.035);
+    setCol(t, col('#c9a24a'));
+    const fx = sx(sg, fu, o1 - 0.01), fz = sz(sg, fu, o1 - 0.01);
+    t.box(fx - 0.04, y1 - 0.02, fz - 0.04, fx + 0.04, y1 + 0.06, fz + 0.04, 0b111111);
+    // cloth: hoist along the pole, hanging straight down; ripples run from hoist to fly
+    const h0 = 0.3,
+      h1 = 1.1,
+      drop = 0.62;
+    const NU = 6,
+      NV = bands.length;
+    const ph = k * 1.7;
+    const P = (i: number, j: number): [number, number, number] => {
+      const f = i / NU;
+      const o = h0 + (h1 - h0) * f;
+      const side = 0.07 * f * Math.sin(f * 7.5 + ph) + 0.02 * (j / NV) * f;
+      const y = yAt(o) - 0.03 - drop * (j / NV) - 0.04 * f * f;
+      return [sx(sg, fu + side, o), y, sz(sg, fu + side, o)];
+    };
+    for (let j = 0; j < NV; j++) {
+      setCol(t, col(bands[j]));
+      for (let i = 0; i < NU; i++) {
+        const a = P(i, j), b = P(i + 1, j), c = P(i + 1, j + 1), d = P(i, j + 1);
+        t.quad(a[0], a[1], a[2], b[0], b[1], b[2], c[0], c[1], c[2], d[0], d[1], d[2]);
+        t.quad(b[0], b[1], b[2], a[0], a[1], a[2], d[0], d[1], d[2], c[0], c[1], c[2]);
+      }
     }
   }
 }
@@ -355,11 +389,13 @@ export function genSchool(g: Gen): void {
         const n = Math.max(1, Math.round((b - a) / 3.4));
         const gr = makeGrid(a, b, 0, gH, 1, { spacing: (b - a) / n, cols: n, winW: Math.min(2.6, (b - a) / n - 0.8), winH: gH - 1.5, sill: 0.95, margin: 0.4 });
         wallGrid(s, sg, a, b, 0, gH, gr, look);
+        dressings(sg, gr);
       }, (a, b, y0) => wallPlain(s, sg, a, b, y0, gH, { color: brick, pattern: WALLPAT.BRICK, seed: g.seed }));
       if (floors > 1) {
         const n = Math.max(1, Math.round((p.b - p.a - 0.8) / 3.4));
         const gr = makeGrid(p.a, p.b, gH, gH, floors - 1, { spacing: 3.4, cols: n, winW: 2.6, winH: gH - 1.4, sill: 0.9, margin: 0.4 });
         wallGrid(s, sg, p.a, p.b, gH, H + 0.8, gr, look);
+        dressings(sg, gr);
       }
       // white bands at each floor + coping
       setCol(t, band);
@@ -381,10 +417,13 @@ export function genSchool(g: Gen): void {
         sideBox(t, sg, u - 2.2, u + 2.2, 0, 1.45, 3.0, 3.3, true);
         lightBox(g, sx(sg, u, 1.0) - 0.15, 2.92, sz(sg, u, 1.0) - 0.15, sx(sg, u, 1.0) + 0.15, 3.0, sz(sg, u, 1.0) + 0.15, '#fff1d6', LIGHT_MODE.STEADY, 3);
         if (sd === FRONT && main) {
-          const r = g.atlas.add('school', 512, 64, boardSign('WESTBROOK SCHOOL', { bg: '#efe9dc', fg: '#7a2e2a', glow: 0.35, weight: 'bold' }));
-          signOnSide(g, sg, u - 4.2, u + 4.2, 0.24, 3.5, 4.2, r);
+          // carved name panel: a dressed-stone tablet with a moulded border, letters cut dark into it
+          const r = g.atlas.add('school-carved', 512, 64, letterSign('WESTBROOK SCHOOL', '#5b4a3a', '#000000', 'Georgia, "Times New Roman", serif', 0, '#e9e1d0'));
+          setCol(t, shade(band, 0.86));
+          sideBox(t, sg, u - 4.45, u + 4.45, 0, 0.06, 3.38, 4.32, true);
           setCol(t, band);
-          sideBox(t, sg, u - 4.4, u + 4.4, 0, 0.2, 3.4, 4.3, true);
+          sideBox(t, sg, u - 4.3, u + 4.3, 0.06, 0.09, 3.48, 4.22, true);
+          signOnSide(g, sg, u - 4.0, u + 4.0, 0.093, 3.55, 4.15, r);
         }
       }
     }
@@ -392,6 +431,21 @@ export function genSchool(g: Gen): void {
   const inner: LRect = { x0: body.x0 + 0.3, x1: body.x1 - 0.3, z0: body.z0 + 0.3, z1: body.z1 - 0.3 };
   flatRoof(s, inner, H + 0.02, col('#8d8a84'), ROOFPAT.FLAT, g.seed);
   innerParapet(g, inner, H, H + 0.8, shade(brick, 0.9));
+
+  /** Stone lintels (with a soldier-course look: a dark joint line under them) and keyed corners per window. */
+  function dressings(sg: SideGeom, gr: Grid): void {
+    const ww = gr.wx1 - gr.wx0;
+    for (let j = 0; j < gr.m; j++) {
+      const yt = gridY1(gr, j);
+      for (let i = 0; i < gr.n; i++) {
+        const u = gridU(gr, i);
+        setCol(t, shade(band, 0.97 - ((g.seed + i * 3 + j * 7) % 4) * 0.02));
+        sideBox(t, sg, u - ww / 2 - 0.18, u + ww / 2 + 0.18, 0, 0.035, yt + 0.02, yt + 0.27, true);
+        setCol(t, shade(band, 0.7));
+        sideBox(t, sg, u - ww / 2 - 0.18, u + ww / 2 + 0.18, 0, 0.012, yt, yt + 0.02, true);
+      }
+    }
+  }
   if (main) {
     // clock over the entrance gable + cupola with a bell + flagpole
     const sgF = sideGeom(body, FRONT);

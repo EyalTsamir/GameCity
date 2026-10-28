@@ -376,27 +376,45 @@ export function shutterPair(g: Gen, sg: SideGeom, u: number, ww: number, y0: num
   const t = g.trim;
   const sw = ww * 0.5;
   const yt = y1 - archTop;
-  const slats = shade(c, 0.7);
+  // a louvred leaf: two stiles, top / middle / bottom rails and raked louvres (outer edge lower, sheds rain)
+  // over a dark back (the gaps between the blades); geometry, so it reads as a shutter, not a painted board
+  const louvredLeaf = (a: number, b: number, o0: number, ya: number, yb: number) => {
+    const st = 0.045,
+      fd = 0.045;
+    setCol(t, shade(c, 0.32));
+    sideBox(t, sg, a + st, b - st, o0, o0 + 0.01, ya, yb);
+    setCol(t, c);
+    sideBox(t, sg, a, a + st, o0, o0 + fd, ya, yb);
+    sideBox(t, sg, b - st, b, o0, o0 + fd, ya, yb);
+    const rails: [number, number][] = [[ya, ya + 0.09], [yb - 0.07, yb]];
+    if (yb - ya > 1.0) rails.push([(ya + yb) / 2 - 0.035, (ya + yb) / 2 + 0.035]);
+    for (const [r0, r1] of rails) sideBox(t, sg, a + st, b - st, o0, o0 + fd - 0.005, r0, r1);
+    rails.sort((p, q) => p[0] - q[0]);
+    const lc = shade(c, 0.94);
+    for (let i = 0; i + 1 < rails.length; i++) {
+      const p0 = rails[i][1],
+        p1 = rails[i + 1][0];
+      const n = Math.max(2, Math.round((p1 - p0) / 0.05));
+      const pitch = (p1 - p0) / n;
+      for (let k = 0; k < n; k++) {
+        const yy = p0 + pitch * (k + 0.5);
+        const hi = yy + pitch * 0.42,
+          lo = yy - pitch * 0.38;
+        const oi = o0 + 0.01,
+          oo = o0 + fd - 0.008;
+        setCol(t, lc);
+        t.quadAway(
+          sx(sg, a + st, oo), lo, sz(sg, a + st, oo), sx(sg, b - st, oo), lo, sz(sg, b - st, oo),
+          sx(sg, b - st, oi), hi, sz(sg, b - st, oi), sx(sg, a + st, oi), hi, sz(sg, a + st, oi),
+          sx(sg, (a + b) / 2, o0 - 0.5), yy - 0.6, sz(sg, (a + b) / 2, o0 - 0.5),
+        );
+      }
+    }
+  };
   const leaf = (side: -1 | 1, mode: 'open' | 'closed' | 'ajar') => {
-    if (mode === 'open') {
-      const a = side < 0 ? u - ww / 2 - sw - 0.05 : u + ww / 2 + 0.05;
-      setCol(t, c);
-      sideBox(t, sg, a, a + sw, 0, 0.05, y0 + 0.02, yt - 0.02);
-      setCol(t, slats);
-      for (let k = 1; k <= 3; k++) {
-        const yy = y0 + ((yt - y0) * k) / 4;
-        sideBox(t, sg, a + 0.02, a + sw - 0.02, 0.05, 0.065, yy - 0.025, yy + 0.025);
-      }
-    } else if (mode === 'closed') {
-      const a = side < 0 ? u - ww / 2 : u;
-      setCol(t, c);
-      sideBox(t, sg, a, a + sw, 0.02, 0.07, y0 + 0.01, yt);
-      setCol(t, slats);
-      const n = Math.max(4, Math.round((yt - y0) / 0.09));
-      for (let k = 1; k < n; k++) {
-        const yy = y0 + ((yt - y0) * k) / n;
-        sideBox(t, sg, a + 0.04, a + sw - 0.04, 0.07, 0.085, yy - 0.012, yy + 0.012);
-      }
+    if (mode === 'open' || mode === 'closed') {
+      const a = mode === 'open' ? (side < 0 ? u - ww / 2 - sw - 0.05 : u + ww / 2 + 0.05) : side < 0 ? u - ww / 2 : u;
+      louvredLeaf(a, a + sw, mode === 'open' ? 0.0 : 0.02, y0 + (mode === 'open' ? 0.02 : 0.01), mode === 'open' ? yt - 0.02 : yt);
     } else {
       // ajar: hinged at the window edge, swung out by ~35–60°
       const ang = g.rng.range(0.6, 1.05);

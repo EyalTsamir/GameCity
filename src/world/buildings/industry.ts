@@ -164,6 +164,59 @@ export function genIndustrial(g: Gen): void {
     if (customs) {
       sideBox(t, sg, u - 0.04, u + 0.04, -d + 0.02, -d + 0.06, 0, doorH);
       for (const yy of [0.6, doorH * 0.5, doorH - 0.5]) sideBox(t, sg, a + 0.1, b - 0.1, -d + 0.02, -d + 0.05, yy - 0.06, yy + 0.06);
+    } else if (rng.chance(0.5)) {
+      // roller shutter: 77 mm curved steel slats (each a raised roll: lit top, shaded underside) running in deep
+      // guide channels, an aluminium bottom bar with a rubber lip, the coil hood under the lintel; the lower
+      // slats scuffed and a few dented by fork-lift tines
+      const hood = 0.34;
+      const top = doorH - hood;
+      const n = Math.max(8, Math.round((top - 0.1) / 0.077));
+      const sh = (top - 0.1) / n;
+      const ua = a + 0.09,
+        ub = b - 0.09;
+      const P = (uu: number, o: number, y: number): [number, number, number] => [sx(sg, uu, o), y, sz(sg, uu, o)];
+      const rx = sx(sg, u, -d - 1), rz = sz(sg, u, -d - 1);
+      for (let k = 0; k < n; k++) {
+        const y0 = 0.1 + k * sh,
+          ym = y0 + sh * 0.55,
+          y1 = y0 + sh;
+        const dent = k < 9 && (g.seed * 7 + k * 13) % 11 === 0 ? 0.012 : 0;
+        const c0 = shade(dc, (k < 6 ? 0.8 : 0.94) + ((g.seed + k * 3) % 5) * 0.012);
+        const oB = -d + 0.022,
+          oT = -d + 0.042 - dent;
+        const nseg = dent ? 3 : 1;
+        for (let j = 0; j < nseg; j++) {
+          const u0 = ua + ((ub - ua) * j) / nseg,
+            u1 = ua + ((ub - ua) * (j + 1)) / nseg;
+          const oT2 = j === 1 ? oT - dent : oT;
+          setCol(t, c0);
+          const p0 = P(u0, oT2, ym), p1 = P(u1, oT2, ym), q0 = P(u0, oB, y1), q1 = P(u1, oB, y1);
+          t.quadAway(p0[0], p0[1], p0[2], p1[0], p1[1], p1[2], q1[0], q1[1], q1[2], q0[0], q0[1], q0[2], rx, ym - 0.4, rz);
+          setCol(t, shade(c0, 0.78));
+          const b0 = P(u0, oB, y0), b1 = P(u1, oB, y0);
+          t.quadAway(b0[0], b0[1], b0[2], b1[0], b1[1], b1[2], p1[0], p1[1], p1[2], p0[0], p0[1], p0[2], rx, ym + 0.4, rz);
+        }
+      }
+      // bottom bar + rubber lip, lock in the bar
+      setCol(t, col('#a9afb3'));
+      sideBox(t, sg, ua, ub, -d + 0.02, -d + 0.07, 0.025, 0.1, true);
+      setCol(t, col('#151617'));
+      sideBox(t, sg, ua, ub, -d + 0.025, -d + 0.06, 0, 0.025, true);
+      setCol(t, col('#3a3d40'));
+      sideBox(t, sg, u - 0.05, u + 0.05, -d + 0.07, -d + 0.078, 0.04, 0.085, true);
+      // guide channels (U section: two cheeks and a dark slot)
+      for (const [u0, u1] of [[a + 0.005, a + 0.1], [b - 0.1, b - 0.005]]) {
+        setCol(t, col('#1d1f21'));
+        sideBox(t, sg, u0 + 0.02, u1 - 0.02, -d, -d + 0.06, 0, top, false);
+        setCol(t, col('#9aa1a6'));
+        sideBox(t, sg, u0, u0 + 0.022, -d, -d + 0.1, 0, top + 0.02, false);
+        sideBox(t, sg, u1 - 0.022, u1, -d, -d + 0.1, 0, top + 0.02, false);
+      }
+      // coil hood (folded sheet box) under the lintel
+      setCol(t, shade(dc, 0.72));
+      sideBox(t, sg, a, b, -d, -d + 0.2, top, doorH, false, true);
+      setCol(t, shade(dc, 0.6));
+      sideBox(t, sg, a, b, -d + 0.2, -d + 0.215, top - 0.02, top + 0.05, true);
     } else {
       // sectional door: ~0.55 m insulated sections with a dark joint between them and a pressed mid rib;
       // guide rails at both jambs, a rubber seal at the foot, the lowest section scuffed darker

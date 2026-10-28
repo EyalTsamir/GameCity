@@ -432,23 +432,49 @@ export function genTownhouse(g: Gen): void {
     const yF = Math.max(2.72, yTop - 0.55);
     const stripes = Math.max(3, Math.round((uB - uA) / 0.34));
     const sw = (uB - uA) / stripes;
+    // the canvas sags between the arms (most in the middle of the span and of the slope), the front roller bar
+    // keeps the front edge straight; a scalloped valance hangs from the bar
+    const NS = 4;
+    const sag = Math.min(0.07, 0.025 + (uB - uA) * 0.008);
+    const P = (u: number, sl: number, dy = 0): [number, number, number] => {
+      const o = 0.02 + (out - 0.02) * sl;
+      const lat = Math.sin((Math.PI * (u - uA)) / (uB - uA));
+      return [sx(sg, u, o), yTop + (yF - yTop) * sl - sag * lat * Math.sin(Math.PI * sl) + dy, sz(sg, u, o)];
+    };
     for (let k = 0; k < stripes; k++) {
       const a = uA + k * sw,
         b = a + sw;
-      setCol(t, k % 2 === 0 ? ac : white);
-      const p0x = sx(sg, a, 0.02), p0z = sz(sg, a, 0.02);
-      const p1x = sx(sg, b, 0.02), p1z = sz(sg, b, 0.02);
-      const q0x = sx(sg, a, out), q0z = sz(sg, a, out);
-      const q1x = sx(sg, b, out), q1z = sz(sg, b, out);
-      // sloped canvas (faces up/out) + underside
-      t.quadAway(q0x, yF, q0z, q1x, yF, q1z, p1x, yTop, p1z, p0x, yTop, p0z, sx(sg, (a + b) / 2, 0.2), yF - 1, sz(sg, (a + b) / 2, 0.2));
-      setCol(t, k % 2 === 0 ? shade(ac, 0.6) : shade(white, 0.62));
-      t.quadAway(q0x, yF - 0.005, q0z, q1x, yF - 0.005, q1z, p1x, yTop - 0.005, p1z, p0x, yTop - 0.005, p0z, sx(sg, (a + b) / 2, 0.8), yTop + 1, sz(sg, (a + b) / 2, 0.8));
-      // valance (scalloped look via alternating heights)
-      setCol(t, k % 2 === 0 ? ac : white);
-      const vh = 0.2 + (k % 2) * 0.04;
-      t.quadAway(q0x, yF - vh, q0z, q1x, yF - vh, q1z, q1x, yF, q1z, q0x, yF, q0z, sx(sg, (a + b) / 2, 0), yF, sz(sg, (a + b) / 2, 0));
+      const top = k % 2 === 0 ? ac : white;
+      for (let i = 0; i < NS; i++) {
+        const s0 = i / NS,
+          s1 = (i + 1) / NS;
+        const p0 = P(a, s0), p1 = P(b, s0), q0 = P(a, s1), q1 = P(b, s1);
+        // sloped canvas (faces up/out) + underside (darker: light through the cloth)
+        setCol(t, shade(top, 1 - 0.04 * Math.sin(Math.PI * s0)));
+        t.quadAway(q0[0], q0[1], q0[2], q1[0], q1[1], q1[2], p1[0], p1[1], p1[2], p0[0], p0[1], p0[2], sx(sg, (a + b) / 2, 0.2), yF - 1, sz(sg, (a + b) / 2, 0.2));
+        setCol(t, shade(top, k % 2 === 0 ? 0.6 : 0.62));
+        t.quadAway(q0[0], q0[1] - 0.005, q0[2], q1[0], q1[1] - 0.005, q1[2], p1[0], p1[1] - 0.005, p1[2], p0[0], p0[1] - 0.005, p0[2], sx(sg, (a + b) / 2, 0.8), yTop + 1, sz(sg, (a + b) / 2, 0.8));
+      }
+      // valance: one scallop per stripe (half-round lobe), both faces
+      setCol(t, top);
+      const NV = 4;
+      for (let j = 0; j < NV; j++) {
+        const f0 = j / NV,
+          f1 = (j + 1) / NV;
+        const lobe = (f: number) => 0.17 + 0.07 * Math.sqrt(Math.max(0, 1 - (2 * f - 1) * (2 * f - 1)));
+        const u0 = a + sw * f0,
+          u1 = a + sw * f1;
+        const ox = out + 0.01;
+        const x0 = sx(sg, u0, ox), z0 = sz(sg, u0, ox), x1 = sx(sg, u1, ox), z1 = sz(sg, u1, ox);
+        t.quadAway(x0, yF - lobe(f0), z0, x1, yF - lobe(f1), z1, x1, yF, z1, x0, yF, z0, sx(sg, (u0 + u1) / 2, 0), yF, sz(sg, (u0 + u1) / 2, 0));
+        setCol(t, shade(top, 0.7));
+        t.quadAway(x0, yF - lobe(f0), z0, x1, yF - lobe(f1), z1, x1, yF, z1, x0, yF, z0, sx(sg, (u0 + u1) / 2, out + 1), yF, sz(sg, (u0 + u1) / 2, out + 1));
+        setCol(t, top);
+      }
     }
+    // front roller bar
+    setCol(t, col('#4a4a48'));
+    t.beam(sx(sg, uA, out), yF + 0.01, sz(sg, uA, out), sx(sg, uB, out), yF + 0.01, sz(sg, uB, out), 0.045, 0.045);
     // side cheeks
     setCol(t, ac);
     for (const [u, sgn] of [

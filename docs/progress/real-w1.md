@@ -3,6 +3,57 @@
 Branch `claude/real-w1-facades` (from `claude/pensive-gates-bim12i`). Brief: docs/progress/real-briefs.md "W1".
 
 ## Resume here
+* **Session 4 stopped by the lead at the context cap (WIP pushed, nothing judged as final).** Next session, in order:
+  1. **Bug 4 tower crown (lot 23 twin towers, stepped crown, scheme 1 wall #3d4854):** `?bdbg=ret` (shots/w1/tw/f_ret.png)
+     paints the crown band GREEN = pixels with `cell` outside the grid (`cell.y >= vB.y` etc., materials.ts ~l.1140),
+     speckled with in-grid pixels → the band (≈ last storey + parapet, y ≈ 81.7–83.1) flips per pixel between
+     glass and the plain-wall return. Probe queued but killed: dump shell vertices (uv.y, aB.x/y, aD.w) of the tower
+     top (scratchpad script idea: traverse `buildings-shell`, x −52…−27, z −110…−85, y > 70; console.warn). Suspects:
+     uv v ≈ m at the top tier wall (v0 = gH, m = floors − 1 → v = m exactly at H), or a coplanar second wall quad
+     (tierRoof parapet / tier walls) overlapping. Fix candidates: clamp cell.y to m − 1 when v − m < 0.02, or give the
+     parapet its own solid look; don't extend slantTop grids (not this tower).
+  2. **Lawn rim:** persists with `?nograss` (shots/w1/rim_nograss/apartment_3m.png) → NOT groundcover blades.
+     terrain/ground.ts already DARKENS grass along walls (edge canvas, `edge` l.706). Current hypothesis: a sun-lit
+     leak strip at the wall foot from the shadow normal offset (render/sky.ts `sun.shadow.normalBias = texel·0.8·tune.bias`,
+     the wall's shadow lifted off the contact line; the rim shows on walls in their own shade). Probe (scripted, not
+     run): `shot.mjs --eval` setting `__city.ctx.services.sky.tune.bias = 0` vs 1 at the bench apartment
+     (target −137.5,0.6,−56.5, yaw = front + 18, 4 m, pitch 10) — if the rim vanishes it is lighting (sky owner),
+     else terrain ground shader. Written to real-requests.md.
+  3. Judge on the bench (not yet seen): s2 classes tower, warehouse, factory, church, school (`--dists 3,10`);
+     re-run s1 (house, townhouse, apartment, office) for the darker reveal returns + paint patina + box cladding.
+  4. Then remaining from judge-1: tower upper curtain wall still flat blue; window reveal at an oblique 3 m view
+     (returns now ×0.74 jamb / ×0.6 head — verify); old-town render at 3 m (relief reduced — verify).
+  - s1 bench (shots/w1/s1/sheet_1.png): awnings read (scallops, bar, sag), shutters ribbed at 10 m, glass variety
+    better at 10 m; house window still flush-looking frontal (before the return darkening).
+  - Temporary debug kept: `?bdbg=ret` (uBhDebug 7) in materials.ts / buildings.ts.
+* **Session 4 (10-28, fix round after judge-1 / bugs-1)** — order: bugs 3/4/9 → lawn rim → reveal shadow →
+  per-pane glass variety → townhouse walls/shutters/awnings → roller doors → church/school → tower ground floor.
+  - bug 3 (garage at 90° to the drive): homes.ts `sideRun` puts a plain side entrance (Op.plain, no number/bell:
+    `DoorOpts.plain`) on the driveway side instead of a garage door; 'garage' plan: door on the wing's street face,
+    small window on the drive side. Driveway still runs beside the wing (plan.ts placeHouse, not ours) → request.
+  - bug 9 (hotel flag boards): special.ts `hotelFlag` — wall bracket, raked pole ≤ 1.16 m out, finial, banded
+    double-sided cloth hanging from the pole with ripples (3 designs).
+  - bug 4 (tower crown noise): NOT shadows (castShadow off: same), NOT the wall relief / reveal / plinth / refl /
+    trim / other modules; it is in bhWall after the `?bdbg=wallinfo` return (l.~1117) → suspect the early
+    returns at `cell.y >= vB.y` (rows above the grid on crown walls). Debug `?bdbg=ret` (uBhDebug 7: red = no grid,
+    green = outside the grid) added for that. towers.ts: `slantTop` walls use edgeGrid (m = floors−1) up to
+    yTop+7.5; stepped tiers also reuse edgeGrid.
+  - lawn rim: groundcover/mask.ts §2 "unmown edge tufts" stroke the lot footprints (0.9 m, length 120) and the
+    tip colour (palette.ts gcTipColor ×1.16–1.3) lights them — suspected source (not ours); bench `?nograss` to confirm.
+  - reveal: materials.ts frame AO (`aoF`, after the recess block): frame darker under the head / beside the
+    jambs, scaled by revD; reveal sun shadow 0.55 → 0.62.
+  - glass variety: far path (`detail < 1`) per pane / per block `pv`: dark room / pale blinds / tinted curtains /
+    plain → avgAlb × factor, `paneRefl` on the far reflection; curtain/ribbon reflK per pane 0.82–1.18.
+  - render relief (PLASTER) in bhWallSlope: 5 cm term 0.009 → 0.0035, grit 0.5 → 0.22, trowel 0.06 → 0.075; speckle 0.2 → 0.12.
+  - clutter.ts `louvredLeaf` (stiles, rails, raked louvres over a dark back) for open + closed shutters.
+  - oldtown.ts `awning`: 4 slope segments with sag between the arms, scalloped valance (4 quads per stripe, both
+    faces), front roller bar.
+  - industry.ts roller shutter variant (50 %): 77 mm slats (lit roll + shaded underside), dents, bottom bar +
+    rubber + lock, U guide channels, coil hood.
+  - special.ts school: `dressings` (stone lintels with a joint line), carved name tablet (letterSign on a moulded
+    stone panel). landmarks/church.ts (not in the brief's files; the lead assigned church): portal door strap
+    hinges + nails, meeting stile, ring pulls, threshold; plinth course (`plinthRun`) on tower + nave.
+  - towers.ts lobby doors: canopy fascia lip, hanger rods, lit number, intercom, tenant board, letter plate.
 * **Milestone 3 (session 3) done** — sheet docs/progress/real/w1_m3.jpg (shots/w1/m3). golden m3 vs ref:
   downtown 1.2 / harbor 0.4 / oldtown 0.7 / overview 0.1 / westbrook 0.6; downtown console clean; invariants:
   only the W3 statue (landmarks). Next (open): apartment punched glass still reads light where nets/blinds
@@ -144,3 +195,7 @@ TOTAL weighted 2.5M (cache read 78%, write 9%, output 13%); 115 calls, ctx media
 
 ## Tokens (session 3, `tokens.py`)
 TOTAL weighted 3.4M (cache read 79%, write 8%, output 12%). Stopped at milestone 3 (~150k context).
+
+## Tokens (session 4, `tokens.py`)
+TOTAL weighted 4.9M (cache read 84%, write 7%, output 9%). Stopped by the lead at ~317k context (over the cap: too many
+waits on the slow shot lock inside one session).

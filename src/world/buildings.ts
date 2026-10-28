@@ -256,6 +256,7 @@ export default function create(ctx: CityContext): CityModule {
   if (bdbg.includes('wallinfo')) mats.uniforms.uBhDebug.value = 2;
   if (bdbg.includes('reveal')) mats.uniforms.uBhDebug.value = 3;
   if (bdbg.includes('nan')) mats.uniforms.uBhDebug.value = 4;
+  if (bdbg.includes('ret')) mats.uniforms.uBhDebug.value = 7;
   if (bdbg.includes('src')) mats.uniforms.uBhDebug.value = 5;
   if (bdbg.includes('refl')) mats.uniforms.uBhDebug.value = 6;
   // anchors for other modules (life: smoke, laundry, bunting, birds; streetlife) + diagnostics for the
