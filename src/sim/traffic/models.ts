@@ -25,7 +25,8 @@ import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { mergeGeometries, mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { ModelKind } from './specs';
-import { loftCar, topAt, type CarShape } from './carBody';
+import { busEndSurface, loftBus, type BusShape } from './busBody';
+import { endRing, endSurface, loftCar, topAt, type CarShape } from './carBody';
 
 /** number of detail levels buildModel() can produce */
 export const MODEL_LODS = 3;
@@ -112,8 +113,15 @@ function drawDetailAtlas(g: CanvasRenderingContext2D, font: (px: number, w?: str
   // headlamp cluster: dark housing, two reflector bowls with chrome rings, an LED strip along the bottom
   {
     const r = R_HEAD;
-    g.fillStyle = '#2b2e33';
+    // a clear lens over a silver reflector housing (dark only at the frame), so the lamp reads as glass
+    const hg = g.createLinearGradient(0, r.y, 0, r.y + r.h);
+    hg.addColorStop(0, '#a3abb3');
+    hg.addColorStop(0.55, '#737b84');
+    hg.addColorStop(1, '#474d55');
+    g.fillStyle = '#1e2124';
     g.fillRect(r.x, r.y, r.w, r.h);
+    g.fillStyle = hg;
+    g.fillRect(r.x + 3, r.y + 3, r.w - 6, r.h - 6);
     const bowl = (cx: number, cy: number, rad: number) => {
       const gr = g.createRadialGradient(cx - rad * 0.2, cy - rad * 0.25, rad * 0.1, cx, cy, rad);
       gr.addColorStop(0, '#ffffff');
@@ -1022,54 +1030,109 @@ interface CarDims {
   bumper?: 'dark' | 'paint' | 'chrome';
 }
 
-/** Wheels, bumpers, lights, plates, mirrors common to the cars. */
-function carDetails(b: Builder, d: CarDims): void {
-  const { L, W } = d;
+/** a decal / panel conformed to a car end (sign 1 front, −1 rear, seen from outside): a grid on the surface, `off` proud */
+type EndFn = (x: number, y: number, sign: number) => { z: number; n: THREE.Vector3 };
+function onEnd(s: CarShape | EndFn, sign: number, x0: number, x1: number, y0: number, y1: number, off: number, nu = 1): THREE.BufferGeometry {
+  const surf: EndFn = typeof s === 'function' ? s : (x, y, sg) => endSurface(s, x, y, sg);
+  const g = new THREE.PlaneGeometry(1, 1, LOD === 0 ? nu : Math.min(nu, 2), LOD === 0 ? 3 : 1);
+  const pos = g.attributes.position,
+    nor = g.attributes.normal,
+    uv = g.attributes.uv;
+  for (let i = 0; i < pos.count; i++) {
+    const u = uv.getX(i),
+      v = uv.getY(i);
+    // front: u runs along +x; rear (seen from behind): along −x
+    const x = sign > 0 ? x0 + (x1 - x0) * u : x1 - (x1 - x0) * u;
+    const y = y0 + (y1 - y0) * v;
+    const e = surf(x, y, sign);
+    pos.setXYZ(i, x + e.n.x * off, y + e.n.y * off, e.z + e.n.z * off);
+    nor.setXYZ(i, e.n.x, e.n.y, e.n.z);
+  }
+  return g;
+}
+
+/** a flat plane (w × h) standing on a car end at (x, y), tilted to the surface there, `off` proud */
+function flatOnEnd(s: CarShape | EndFn, sign: number, w: number, h: number, x: number, y: number, off: number, depth = 0, geo?: THREE.BufferGeometry): THREE.BufferGeometry {
+  const e = typeof s === 'function' ? s(x, y, sign) : endSurface(s, x, y, sign);
+  const g = geo ?? (depth > 0 ? new THREE.BoxGeometry(w, h, depth) : new THREE.PlaneGeometry(w, h));
+  if (sign < 0) g.rotateY(Math.PI);
+  g.applyQuaternion(_q.setFromUnitVectors(_v.set(0, 0, sign), e.n));
+  g.translate(x + e.n.x * off, y + e.n.y * off, e.z + e.n.z * off);
+  return g;
+}
+const _q = new THREE.Quaternion();
+const _v = new THREE.Vector3();
+
+/** Wheels, lights, grilles, plates and badges common to the cars, placed on the lofted ends. */
+function carDetails(b: Builder, d: CarDims, s: CarShape): void {
+  const { W } = d;
   const ws = d.wheel ?? 'alloy';
   const rc = d.rim ?? RIM;
   wheel(b, d.wheelX, d.wheelR, d.axF, d.wheelR, d.wheelW, true, rc, ws);
   wheel(b, -d.wheelX, d.wheelR, d.axF, d.wheelR, d.wheelW, true, rc, ws);
   wheel(b, d.wheelX, d.wheelR, d.axR, d.wheelR, d.wheelW, false, rc, ws);
   wheel(b, -d.wheelX, d.wheelR, d.axR, d.wheelR, d.wheelW, false, rc, ws);
-  // bumpers: dark plastic, body colour with a dark lower insert, or chrome
-  const bum = d.bumper ?? 'dark';
-  const bo: PartOpts = bum === 'paint' ? { color: '#ffffff', paint: true, rough: 0.85 } : bum === 'chrome' ? { color: CHROME, rough: 0.3 } : { color: DARK, rough: 1.2 };
-  for (const e of [1, -1]) {
-    b.add(rbox(W - 0.05, 0.17, 0.2, 0.08, 0, d.bodyY - 0.02, e * (L / 2 - 0.08)), bo);
-    if (bum === 'paint') b.add(bx(W * 0.62, 0.05, 0.02, 0, d.bodyY - 0.01, e * (L / 2 + 0.018)), { color: '#1d1f22', rough: 1.3 });
-  }
-  // headlights (lens decal with reflector bowls on the emissive housing), tail lights, blinkers
-  const hw = d.roundLights ? 0.26 : 0.36,
-    hh = d.roundLights ? 0.22 : 0.13;
-  for (const s of [1, -1]) {
-    b.add(rbox(hw, hh, 0.08, d.roundLights ? 0.1 : 0.04, s * (W / 2 - 0.3), d.lightY - hh / 2, L / 2 - 0.02), { color: HEAD, light: LIGHT_HEAD, rough: 0.4 });
-    b.add(rbox(0.3, 0.13, 0.07, 0.04, s * (W / 2 - 0.26), d.lightY - 0.04, -L / 2 + 0.015), { color: TAIL, light: LIGHT_TAIL, rough: 0.5 });
-    const hl = decalPlane(hw - (d.roundLights ? 0.04 : 0.02), hh - (d.roundLights ? 0.04 : 0.02), s * (W / 2 - 0.3), d.lightY, L / 2 + 0.022, 'pz');
-    if (s < 0) flipU(hl);
-    b.add(hl, { color: '#ffffff', light: LIGHT_HEAD, rough: 0.15, decal: d.roundLights ? R_HEAD_ROUND : R_HEAD });
-    const tl = decalPlane(0.28, 0.11, s * (W / 2 - 0.26), d.lightY + 0.025, -L / 2 - 0.022, 'nz');
-    if (s > 0) flipU(tl);
-    b.add(tl, { color: '#ffffff', light: LIGHT_TAIL, rough: 0.2, decal: R_TAIL });
-    // blinkers (front corners + beside the tail lights)
-    // (flush lenses under the lamps, inside the rounded corners of the nose and tail)
-    b.add(rbox(0.16, 0.05, 0.05, 0.015, s * (W / 2 - 0.3), d.lightY - hh / 2 - 0.065, L / 2 - 0.012), { color: AMBER, light: s > 0 ? LIGHT_BLINK_L : LIGHT_BLINK_R, rough: 0.3 });
-    b.add(rbox(0.12, 0.05, 0.05, 0.015, s * (W / 2 - 0.26), d.lightY - 0.1, -L / 2 + 0.01), { color: AMBER, light: s > 0 ? LIGHT_BLINK_L : LIGHT_BLINK_R, rough: 0.3 });
-  }
-  // grille (honeycomb in a chrome surround) with a badge, number plates on holders front and rear
-  b.add(rbox(W * 0.36, 0.11, 0.05, 0.03, 0, d.lightY - 0.12, L / 2 + 0.005), { color: '#25282c', rough: 1.2 });
-  b.add(decalPlane(W * 0.36 - 0.02, 0.095, 0, d.lightY - 0.065, L / 2 + 0.032, 'pz'), { color: '#ffffff', rough: 0.8, decal: R_GRILLE });
-  if (LOD === 0) {
-    for (const [zb, yb, f] of [
-      [L / 2 + 0.034, d.lightY - 0.065, 'pz'],
-      [-L / 2 - 0.006, d.lightY + 0.1, 'nz'],
-    ] as const) {
-      const bg = decalPlane(0.08, 0.05, 0, yb, zb, f);
-      b.add(bg, { color: '#d5dade', rough: 0.25, finish: 'chrome' });
+  const hw = W / 2;
+  const dark: PartOpts = { color: '#16171a', rough: 1.3 };
+  for (const sign of [1, -1]) {
+    const P = endRing(s, sign);
+    const y2 = P[7],
+      y3 = P[10],
+      y4 = P[13],
+      y5 = P[16];
+    // lamp clusters wrap round the corners under the shoulder: a dark housing rim, the lens (emissive) on top
+    // (above the bumper's top ledge, ring points 3 → 4)
+    const top = y5 - 0.018;
+    const low = y4 + 0.016;
+    if (sign > 0) {
+      const round = !!d.roundLights;
+      const lh = round ? Math.min(0.19, top - low) : Math.min(0.12, top - low),
+        lw = round ? 0.22 : 0.4;
+      const xo = hw - (round ? 0.16 : 0.07);
+      for (const sd of [1, -1]) {
+        const a = sd > 0 ? xo - lw : -xo,
+          c = sd > 0 ? xo : -xo + lw;
+        b.add(onEnd(s, 1, a - 0.012, c + 0.012, top - lh - 0.012, top + 0.006, 0.003, 6), { color: TRIM, rough: 0.8, finish: 'coat' });
+        const lens = onEnd(s, 1, a, c, top - lh, top, 0.007, 6);
+        if (sd < 0) flipU(lens);
+        b.add(lens, { color: '#ffffff', light: LIGHT_HEAD, rough: 0.15, decal: round ? R_HEAD_ROUND : R_HEAD });
+        // blinkers in the bumper corners
+        const bx0 = sd > 0 ? hw - 0.36 : -hw + 0.13,
+          bx1 = sd > 0 ? hw - 0.13 : -hw + 0.36;
+        b.add(onEnd(s, 1, bx0, bx1, y3 - 0.065, y3 - 0.03, 0.005, 4), { color: AMBER, light: sd > 0 ? LIGHT_BLINK_L : LIGHT_BLINK_R, rough: 0.3 });
+      }
+      // upper grille between the lamps (honeycomb in a dark surround) + badge; lower intake under the plate
+      const gx = round ? 0.3 : hw - 0.07 - lw - 0.08;
+      const gy0 = Math.max(low, top - 0.075);
+      b.add(onEnd(s, 1, -gx - 0.015, gx + 0.015, gy0 - 0.012, top - 0.005, 0.003, 4), d.bumper === 'chrome' ? { color: CHROME, rough: 0.3 } : { color: '#1a1c1f', rough: 1.2 });
+      b.add(onEnd(s, 1, -gx, gx, gy0, top - 0.017, 0.006, 4), { color: '#8a8f95', rough: 0.9, decal: R_GRILLE });
+      b.add(onEnd(s, 1, -hw + 0.3, hw - 0.3, y2 + 0.002, y2 + 0.07, 0.003, 6), { color: '#1a1c1f', rough: 1.2 });
+      b.add(onEnd(s, 1, -hw + 0.31, hw - 0.31, y2 + 0.01, y2 + 0.062, 0.006, 6), { color: '#6a6f75', rough: 0.9, decal: R_GRILLE });
+      if (LOD === 0) b.add(flatOnEnd(s, 1, 0.07, 0.04, 0, (gy0 + top) / 2 - 0.008, 0.011), { color: '#b4b8bc', rough: 0.45, finish: 'chrome' });
+    } else {
+      const lh = Math.min(0.13, top - low),
+        lw = 0.4;
+      for (const sd of [1, -1]) {
+        const xo = hw - 0.05;
+        const a = sd > 0 ? xo - lw : -xo,
+          c = sd > 0 ? xo : -xo + lw;
+        b.add(onEnd(s, -1, a - 0.012, c + 0.012, top - lh - 0.012, top + 0.006, 0.003, 6), { color: TRIM, rough: 0.8, finish: 'coat' });
+        const lens = onEnd(s, -1, a, c, top - lh, top, 0.007, 6);
+        if (sd > 0) flipU(lens);
+        b.add(lens, { color: '#ffffff', light: LIGHT_TAIL, rough: 0.2, decal: R_TAIL });
+        const bx0 = sd > 0 ? hw - 0.32 : -hw + 0.1,
+          bx1 = sd > 0 ? hw - 0.1 : -hw + 0.32;
+        b.add(onEnd(s, -1, bx0, bx1, y3 - 0.06, y3 - 0.03, 0.005, 3), { color: AMBER, light: sd > 0 ? LIGHT_BLINK_L : LIGHT_BLINK_R, rough: 0.3 });
+        // red reflectors low on the bumper corners
+        b.add(onEnd(s, -1, sd > 0 ? hw - 0.3 : -hw + 0.12, sd > 0 ? hw - 0.12 : -hw + 0.3, y2 + 0.03, y2 + 0.055, 0.004, 3), { color: '#8c1c18', rough: 0.3 });
+      }
+      if (LOD === 0) b.add(flatOnEnd(s, -1, 0.08, 0.05, 0, Math.min(top - 0.04, y4 + 0.09), 0.006), { color: '#d5dade', rough: 0.25, finish: 'chrome' });
     }
-  }
-  for (const e of [1, -1]) {
-    b.add(bx(0.49, 0.12, 0.012, 0, d.bodyY + 0.01, e * (L / 2 + 0.026)), { color: '#16171a', rough: 1.2 });
-    b.add(decalPlane(0.46, 0.1, 0, d.bodyY + 0.07, e * (L / 2 + 0.0335), e > 0 ? 'pz' : 'nz'), { color: '#ffffff', rough: 0.6, decal: R_PLATE, plate: true });
+    // number plate on a holder in the middle of the bumper face
+    const py = Math.min(y3 - 0.065, y2 + 0.12);
+    b.add(flatOnEnd(s, sign, 0.5, 0.12, 0, py, 0.008, 0.012), dark);
+    b.add(flatOnEnd(s, sign, 0.46, 0.1, 0, py, 0.0145), { color: '#ffffff', rough: 0.6, decal: R_PLATE, plate: true });
+    void y4;
   }
 }
 
@@ -1083,9 +1146,10 @@ function flipU(g: THREE.BufferGeometry): void {
 
 const TRIM = '#1b1e22';
 const WELL = '#121315';
+type BumperFinish = 'dark' | 'paint' | 'chrome';
 
-/** Lofted body shell (paint, glass, trim, wheel wells, cladding) + mirrors, door seams and handles. Returns the roof top. */
-function loftBody(b: Builder, s: CarShape, doors4: boolean, chrome = false): { topY: number; topZ: number; topW: number; topD: number } {
+/** Lofted body shell (paint, glass, trim, wheel wells, bumpers, cladding) + mirrors, handles, wipers. Returns the roof top. */
+function loftBody(b: Builder, s: CarShape, doors4: boolean, chrome = false, bumper: BumperFinish = 'dark'): { topY: number; topZ: number; topW: number; topD: number } {
   const p = loftCar(s, LOD);
   const hw = s.W / 2;
   const ra = s.wheelR + 0.075;
@@ -1100,24 +1164,30 @@ function loftBody(b: Builder, s: CarShape, doors4: boolean, chrome = false): { t
   if (p.seal) b.add(p.seal, chrome ? { color: CHROME, rough: 0.3 } : { color: TRIM, rough: 0.9, finish: 'coat' });
   if (p.well) b.add(p.well, { color: WELL, rough: 1.6 });
   if (p.clad) b.add(p.clad, { color: '#3b3e43', rough: 1.3 });
+  if (p.bumper)
+    b.add(p.bumper, bumper === 'paint' ? { color: '#ffffff', paint: true, rough: 0.8 } : bumper === 'chrome' ? { color: CHROME, rough: 0.3 } : { color: '#3a3d42', rough: 1.25 });
+  if (p.gap) b.add(p.gap, { color: '#0b0c0e', rough: 1.8 });
   for (const sd of [1, -1]) {
-    // mirror on a short arm at the base of the A pillar (dropped at the far level): painted cap, dark base, glass
-    const mz = s.wsBase - 0.13;
-    b.add(rbox(0.1, 0.085, 0.14, 0.035, sd * (hw + 0.045), s.belt + 0.015, mz), { color: '#ffffff', paint: true, rough: 0.85 });
-    b.add(bx(0.06, 0.03, 0.05, sd * (hw - 0.01), s.belt + 0.03, mz + 0.02), { color: TRIM });
+    // door mirror at the base of the A pillar: a dark sail and arm, a painted housing, the glass facing back
+    const mz = s.wsBase - 0.12;
+    b.add(bx(0.035, 0.08, 0.13, sd * (hw - 0.03), s.belt - 0.005, mz + 0.02), { color: TRIM });
+    b.add(bx(0.06, 0.03, 0.055, sd * (hw + 0.02), s.belt + 0.01, mz + 0.01), { color: TRIM });
+    const hs = rbox(0.17, 0.11, 0.1, 0.04, sd * (hw + 0.1), s.belt - 0.005, mz);
+    taper(hs, s.belt - 0.005, s.belt + 0.105, mz, 0.0, 0.05, 0.0);
+    b.add(hs, { color: '#ffffff', paint: true, rough: 0.85 });
     if (LOD === 0) {
-      b.add(decalPlane(0.075, 0.06, sd * (hw + 0.05), s.belt + 0.057, mz - 0.071, 'nz'), { color: '#8c9aa6', rough: 0.15, finish: 'chrome' });
+      b.add(decalPlane(0.14, 0.08, sd * (hw + 0.105), s.belt + 0.05, mz - 0.052, 'nz'), { color: '#8c9aa6', rough: 0.15, finish: 'chrome' });
       const handles = doors4 ? [s.pillarB + 0.14, cuts[2] + 0.14] : [s.pillarB + 0.16];
       for (const z of handles) {
-        // pull handle in a dark recess
-        b.add(decalPlane(0.15, 0.045, sd * (hw + 0.0035), s.belt - 0.085, z, sd > 0 ? 'px' : 'nx'), { color: '#2a2c30', rough: 1.2 });
-        b.add(rbox(0.022, 0.026, 0.13, 0.008, sd * (hw + 0.008), s.belt - 0.097, z), chrome ? { color: CHROME, rough: 0.3 } : { color: '#ffffff', paint: true, rough: 0.5 });
+        // pull handle proud of a dark recess
+        b.add(decalPlane(0.2, 0.06, sd * (hw + 0.0035), s.belt - 0.09, z, sd > 0 ? 'px' : 'nx'), { color: '#121316', rough: 1.4 });
+        b.add(rbox(0.026, 0.032, 0.17, 0.012, sd * (hw + 0.01), s.belt - 0.105, z), chrome ? { color: CHROME, rough: 0.3 } : { color: '#ffffff', paint: true, rough: 0.5 });
       }
     }
   }
   if (LOD === 0) {
-    // wipers parked along the base of the windscreen
-    const yb = topAt(s, s.wsBase - 0.04);
+    // wipers parked along the base of the windscreen (over the crowned cowl)
+    const yb = topAt(s, s.wsBase - 0.04) + 0.03;
     for (const x of [0.32, -0.18]) {
       const w = bx(0.62, 0.018, 0.022, x, yb + 0.004, s.wsBase - 0.05);
       w.rotateY(0.07);
@@ -1125,7 +1195,7 @@ function loftBody(b: Builder, s: CarShape, doors4: boolean, chrome = false): { t
     }
   }
   const topZ = (s.wsTop + s.rwTop) / 2;
-  return { topY: topAt(s, topZ) + 0.012, topZ, topW: 2 * (s.W / 2 - s.tumble - 0.07), topD: s.wsTop - s.rwTop };
+  return { topY: topAt(s, topZ) + 0.033, topZ, topW: 2 * (s.W / 2 - s.tumble - 0.07), topD: s.wsTop - s.rwTop };
 }
 
 /** a roof box on two cross bars, carried by one vehicle in five (part 90, picked by the phase in the shader) */
@@ -1140,12 +1210,9 @@ function compact(): THREE.BufferGeometry {
   const b = new Builder();
   const L = 3.55,
     W = 1.66;
-  loftBody(
-    b,
-    { L, W, sill: 0.28, belt: 0.93, roof: 1.46, noseH: 0.78, hoodH: 0.9, wsBase: 0.92, wsTop: 0.12, rwTop: -1.18, rwBase: -1.6, deckH: 1.0, tailH: 0.93, pillarB: -0.36, glassRear: -1.12, tumble: 0.15, axF: 1.155, axR: -1.145, wheelR: 0.29 },
-    false,
-  );
-  carDetails(b, { L, W, wheelR: 0.29, wheelW: 0.22, axF: 1.155, axR: -1.145, wheelX: W / 2 - 0.08, bodyY: 0.3, bodyH: 0.62, bodyR: 0.26, lightY: 0.66, roundLights: true, wheel: 'cap', bumper: 'chrome' });
+  const shape: CarShape = { L, W, sill: 0.28, belt: 0.93, roof: 1.46, noseH: 0.78, hoodH: 0.9, wsBase: 0.92, wsTop: 0.12, rwTop: -1.18, rwBase: -1.6, deckH: 1.0, tailH: 0.93, pillarB: -0.36, glassRear: -1.12, tumble: 0.15, axF: 1.155, axR: -1.145, wheelR: 0.29 };
+  loftBody(b, shape, false, false, 'chrome');
+  carDetails(b, { L, W, wheelR: 0.29, wheelW: 0.22, axF: 1.155, axR: -1.145, wheelX: W / 2 - 0.08, bodyY: 0.3, bodyH: 0.62, bodyR: 0.26, lightY: 0.66, roundLights: true, wheel: 'cap', bumper: 'chrome' }, shape);
   return b.build();
 }
 
@@ -1154,11 +1221,11 @@ function hatch(): THREE.BufferGeometry {
   const L = 4.0,
     W = 1.74;
   const shape: CarShape = { L, W, sill: 0.3, belt: 0.9, roof: 1.45, roofDrop: 0.06, noseH: 0.76, hoodH: 0.9, wsBase: 0.88, wsTop: 0.02, rwTop: -1.02, rwBase: -1.76, deckH: 0.98, tailH: 0.93, pillarB: -0.42, glassRear: -0.98, tumble: 0.14, axF: 1.22, axR: -1.33, wheelR: 0.31 };
-  const c = loftBody(b, shape, true);
+  const c = loftBody(b, shape, true, false, 'paint');
   // small roof spoiler over the rear window
   b.add(rbox(c.topW - 0.12, 0.045, 0.2, 0.02, 0, topAt(shape, shape.rwTop + 0.06) - 0.025, shape.rwTop - 0.02), { color: '#ffffff', paint: true });
   roofBox(b, c.topY, c.topZ, c.topW);
-  carDetails(b, { L, W, wheelR: 0.31, wheelW: 0.23, axF: 1.22, axR: -1.33, wheelX: W / 2 - 0.09, bodyY: 0.31, bodyH: 0.6, bodyR: 0.2, lightY: 0.68, bumper: 'paint', rim: '#6d737a' });
+  carDetails(b, { L, W, wheelR: 0.31, wheelW: 0.23, axF: 1.22, axR: -1.33, wheelX: W / 2 - 0.09, bodyY: 0.31, bodyH: 0.6, bodyR: 0.2, lightY: 0.68, bumper: 'paint', rim: '#6d737a' }, shape);
   return b.build();
 }
 
@@ -1166,13 +1233,9 @@ function sedan(): THREE.BufferGeometry {
   const b = new Builder();
   const L = 4.45,
     W = 1.78;
-  const c = loftBody(
-    b,
-    { L, W, sill: 0.31, belt: 0.9, roof: 1.42, noseH: 0.76, hoodH: 0.88, wsBase: 1.0, wsTop: 0.2, rwTop: -0.85, rwBase: -1.5, deckH: 0.99, tailH: 0.96, pillarB: -0.3, pillarC: -1.0, glassRear: -1.25, tumble: 0.15, axF: 1.375, axR: -1.325, wheelR: 0.32 },
-    true,
-    true,
-  );
-  carDetails(b, { L, W, wheelR: 0.32, wheelW: 0.24, axF: 1.375, axR: -1.325, wheelX: W / 2 - 0.1, bodyY: 0.33, bodyH: 0.58, bodyR: 0.18, lightY: 0.69, bumper: 'paint' });
+  const shape: CarShape = { L, W, sill: 0.31, belt: 0.9, roof: 1.42, noseH: 0.76, hoodH: 0.88, wsBase: 1.0, wsTop: 0.2, rwTop: -0.85, rwBase: -1.5, deckH: 0.99, tailH: 0.96, pillarB: -0.3, pillarC: -1.0, glassRear: -1.25, tumble: 0.15, axF: 1.375, axR: -1.325, wheelR: 0.32 };
+  const c = loftBody(b, shape, true, true, 'paint');
+  carDetails(b, { L, W, wheelR: 0.32, wheelW: 0.24, axF: 1.375, axR: -1.325, wheelX: W / 2 - 0.1, bodyY: 0.33, bodyH: 0.58, bodyR: 0.18, lightY: 0.69, bumper: 'paint' }, shape);
   // taxi (variant 1 → part 2): roof sign + chequer band
   b.add(rbox(0.6, 0.18, 0.28, 0.05, 0, c.topY - 0.01, c.topZ), { color: '#fff3b8', light: LIGHT_TAXI, part: 2, rough: 0.6 });
   b.add(decalPlane(0.54, 0.15, 0, c.topY + 0.08, c.topZ + 0.142, 'pz'), { color: '#ffffff', decal: R_TAXI, light: LIGHT_TAXI, part: 2 });
@@ -1196,12 +1259,8 @@ function suv(): THREE.BufferGeometry {
   const b = new Builder();
   const L = 4.55,
     W = 1.86;
-  const c = loftBody(
-    b,
-    { L, W, sill: 0.42, belt: 1.1, roof: 1.72, noseH: 0.98, hoodH: 1.08, wsBase: 1.1, wsTop: 0.4, rwTop: -1.95, rwBase: -2.15, deckH: 1.2, tailH: 1.15, pillarB: -0.35, pillarC: -1.3, glassRear: -1.85, tumble: 0.1, axF: 1.425, axR: -1.325, wheelR: 0.37, clad: true },
-    true,
-    true,
-  );
+  const shape: CarShape = { L, W, sill: 0.42, belt: 1.1, roof: 1.72, noseH: 0.98, hoodH: 1.08, wsBase: 1.1, wsTop: 0.4, rwTop: -1.95, rwBase: -2.15, deckH: 1.2, tailH: 1.15, pillarB: -0.35, pillarC: -1.3, glassRear: -1.85, tumble: 0.1, axF: 1.425, axR: -1.325, wheelR: 0.37, clad: true };
+  const c = loftBody(b, shape, true, true, 'dark');
   // roof rails
   for (const s of [1, -1]) b.add(bx(0.05, 0.06, c.topD - 0.3, s * (c.topW / 2 - 0.08), c.topY - 0.01, c.topZ), { color: '#2e3136' });
   roofBox(b, c.topY + 0.05, c.topZ, c.topW);
@@ -1214,7 +1273,7 @@ function suv(): THREE.BufferGeometry {
   cov.rotateX(Math.PI / 2);
   cov.translate(0, 0.84, -L / 2 - 0.2);
   b.add(cov, { color: '#ffffff', paint: true });
-  carDetails(b, { L, W, wheelR: 0.37, wheelW: 0.27, axF: 1.425, axR: -1.325, wheelX: W / 2 - 0.1, bodyY: 0.4, bodyH: 0.74, bodyR: 0.18, lightY: 0.9 });
+  carDetails(b, { L, W, wheelR: 0.37, wheelW: 0.27, axF: 1.425, axR: -1.325, wheelX: W / 2 - 0.1, bodyY: 0.4, bodyH: 0.74, bodyR: 0.18, lightY: 0.9 }, shape);
   return b.build();
 }
 
@@ -1496,9 +1555,17 @@ function bus(): THREE.BufferGeometry {
   const axF = L / 2 - 2.6,
     axR = axF - 6.0;
   const ra = 0.6;
-  b.add(archedSlab(L, 0.35, 3.05, W, [axF, axR], 0.48, ra, 0.18, 0.3, 0.07), { color: CREAM, rough: 0.85 });
-  // route-coloured skirt (follows the arches) + window-top stripes
-  b.add(archedSlab(L + 0.02, 0.33, 0.95, W + 0.03, [axF, axR], 0.48, ra, 0.16, 0.05, 0.04), { color: '#ffffff', paint: true, rough: 0.8 });
+  const shape: BusShape = { L, W, y0: 0.35, bump: 0.62, skirt: 0.95, ws0: 1.12, ws1: 2.62, roof: 3.05, axles: [axF, axR], ra, ay: 0.48 };
+  const surf: EndFn = (x, y, sg) => busEndSurface(shape, x, y, sg);
+  const sh = loftBus(shape, LOD);
+  const cabin: Det = { c: 4, a: [W / 2 - 0.1, 1.3, 2.86, L / 2 - 0.35], b: [-L / 2 + 0.3, L / 2 - 2.55, 0, 0] };
+  if (sh.body) b.add(sh.body, { color: CREAM, rough: 0.85 });
+  // route-coloured skirt (follows the arches), dark bumpers wrapping the corners
+  if (sh.skirt) b.add(sh.skirt, { color: '#ffffff', paint: true, rough: 0.8 });
+  if (sh.bumper) b.add(sh.bumper, { color: '#2a2d31', rough: 1.2 });
+  if (sh.well) b.add(sh.well, { color: WELL, rough: 1.6 });
+  if (sh.glass) b.add(sh.glass, { color: GLASS, light: LIGHT_CABIN, rough: 0.2, det: cabin });
+  if (sh.seal) b.add(sh.seal, { color: '#1a1c1f', rough: 1.1 });
   for (const s of [1, -1]) b.add(bx(0.02, 0.12, L - 0.9, s * (W / 2 + 0.006), 2.46, -0.1), { color: '#ffffff', paint: true });
   // wheel-arch liners
   for (const az of [axF, axR]) {
@@ -1507,7 +1574,6 @@ function bus(): THREE.BufferGeometry {
     lin.translate(0, 0.48, az);
     b.add(lin, { color: WELL, rough: 1.6 });
   }
-  const cabin: Det = { c: 4, a: [W / 2 - 0.1, 1.3, 2.86, L / 2 - 0.35], b: [-L / 2 + 0.3, L / 2 - 2.55, 0, 0] };
   const glass: PartOpts = { color: GLASS, light: LIGHT_CABIN, rough: 0.2, det: cabin };
   const yw0 = 1.3,
     yw1 = 2.38;
@@ -1539,46 +1605,58 @@ function bus(): THREE.BufferGeometry {
       b.add(roundPane(0.44, 0.62, 0.05, x - 0.006, 0.84, lz, 'nx'), glass);
     }
     b.add(bx(0.02, 2.06, 0.03, x - 0.008, 0.37, z), { color: SEAL });
+    if (LOD === 0) {
+      // aluminium leaf frames with a rail between the panes, a yellow step nosing, rubber edges top and bottom
+      const alu: PartOpts = { color: '#a3a9ae', rough: 0.45, finish: 'chrome' };
+      for (const lz of [z - 0.28, z + 0.28]) {
+        for (const dz of [-0.235, 0.235]) b.add(bx(0.014, 2.0, 0.03, x - 0.01, 0.4, lz + dz), alu);
+        b.add(bx(0.014, 0.05, 0.47, x - 0.01, 1.16, lz), alu);
+        b.add(bx(0.014, 0.035, 0.47, x - 0.01, 2.37, lz), alu);
+        b.add(bx(0.014, 0.035, 0.47, x - 0.01, 0.4, lz), alu);
+      }
+      b.add(bx(0.03, 0.03, 1.12, x + 0.005, 0.34, z), { color: '#e3bd24', rough: 0.8 });
+    }
     b.add(bx(0.06, 0.04, 1.12, -W / 2 + 0.01, 0.32, z), { color: '#7d8287', rough: 0.7, finish: 'chrome' });
   }
-  // front: windscreen in a black surround, wipers, destination display
+  // front: the windscreen is part of the shell (wrapping the corners); wipers, destination display above it
   const zf = L / 2;
-  b.add(roundPane(2.36, 1.62, 0.14, 0, 1.92, zf + 0.004, 'pz'), { color: SEAL, rough: 1.1 });
-  b.add(roundPane(2.26, 1.5, 0.12, 0, 1.9, zf + 0.009, 'pz'), { color: GLASS, light: LIGHT_CABIN, rough: 0.2, det: cabin });
   if (LOD === 0)
     for (const x of [-0.55, 0.5]) {
-      b.add(tube(x - 0.05, 1.2, zf + 0.025, x + 0.25, 1.95, zf + 0.025, 0.012), { color: '#141518', rough: 1.4 });
+      const e0 = surf(x - 0.05, 1.2, 1),
+        e1 = surf(x + 0.25, 1.95, 1);
+      b.add(tube(x - 0.05, 1.2, e0.z + 0.03, x + 0.25, 1.95, e1.z + 0.03, 0.012), { color: '#141518', rough: 1.4 });
     }
-  b.add(bx(2.02, 0.36, 0.03, 0, 2.62, zf + 0.012), { color: '#16181b' });
-  b.add(decalPlane(1.93, 0.28, 0, 2.8, zf + 0.03, 'pz'), { color: '#ffffff', decal: R_BUS_SIGN, decalRows: true, light: LIGHT_SIGN });
-  // rear window, rear sign, engine louvres
-  b.add(roundPane(1.9, 0.72, 0.1, 0, 2.31, -zf - 0.009, 'nz'), { color: GLASS, light: LIGHT_CABIN, rough: 0.2, det: cabin });
-  b.add(decalPlane(0.9, 0.22, 0, 2.86, -zf - 0.012, 'nz'), { color: '#ffffff', decal: R_BUS_SIGN, decalRows: true, light: LIGHT_SIGN });
-  b.add(decalPlane(1.5, 0.5, 0, 0.87, -zf - 0.012, 'nz'), { color: '#ffffff', rough: 1, decal: R_BUS_GRILLE });
+  b.add(onEnd(surf, 1, -1.01, 1.01, 2.64, 2.9, 0.006, 6), { color: '#16181b' });
+  b.add(onEnd(surf, 1, -0.965, 0.965, 2.66, 2.88, 0.012, 6), { color: '#ffffff', decal: R_BUS_SIGN, decalRows: true, light: LIGHT_SIGN });
+  // rear window in a seal, rear sign, engine louvres
+  b.add(flatOnEnd(surf, -1, 0, 0, 0, 2.31, 0.004, 0, roundPane(1.98, 0.8, 0.12, 0, 0, 0, 'pz')), { color: '#1a1c1f', rough: 1.1 });
+  b.add(flatOnEnd(surf, -1, 0, 0, 0, 2.31, 0.009, 0, roundPane(1.9, 0.72, 0.1, 0, 0, 0, 'pz')), { color: GLASS, light: LIGHT_CABIN, rough: 0.2, det: cabin });
+  b.add(onEnd(surf, -1, -0.45, 0.45, 2.75, 2.97, 0.008, 2), { color: '#ffffff', decal: R_BUS_SIGN, decalRows: true, light: LIGHT_SIGN });
+  b.add(flatOnEnd(surf, -1, 1.5, 0.5, 0, 0.87, 0.006), { color: '#ffffff', rough: 1, decal: R_BUS_GRILLE });
   // side lettering under the windows
   b.add(decalPlane(3.0, 0.32, W / 2 + 0.022, 1.13, -1.6, 'px'), { color: '#ffffff', decal: R_BUS_SIDE });
   b.add(decalPlane(3.0, 0.32, -W / 2 - 0.022, 1.13, -1.9, 'nx'), { color: '#ffffff', decal: R_BUS_SIDE });
   // roof: AC unit, two hatches
   b.add(rbox(1.7, 0.3, 2.7, 0.09, 0, 3.02, -1.7), { color: '#d4d7da', rough: 0.9 });
   if (LOD < 2) for (const z of [2.6, 0.6]) b.add(rbox(0.78, 0.07, 0.78, 0.03, 0, 3.03, z), { color: '#c3c6c9', rough: 0.9 });
-  // bumpers, grille, lamps (twin round lamps in a bezel), plates
-  b.add(rbox(W + 0.03, 0.26, 0.24, 0.09, 0, 0.32, zf - 0.08), { color: DARK, rough: 1.2 });
-  b.add(rbox(W + 0.03, 0.26, 0.24, 0.09, 0, 0.32, -zf + 0.08), { color: DARK, rough: 1.2 });
-  b.add(decalPlane(1.1, 0.3, 0, 0.78, zf + 0.008, 'pz'), { color: '#ffffff', rough: 1, decal: R_BUS_GRILLE });
+  // grille, lamps (twin round lamps in a bezel), blinkers round the corners, plates on the bumpers
+  b.add(flatOnEnd(surf, 1, 1.1, 0.3, 0, 0.8, 0.006), { color: '#ffffff', rough: 1, decal: R_BUS_GRILLE });
   for (const e of [1, -1]) {
-    b.add(bx(0.49, 0.12, 0.012, 0, e > 0 ? 0.36 : 0.36, e * (zf + 0.04)), { color: '#16171a', rough: 1.2 });
-    b.add(decalPlane(0.46, 0.1, 0, 0.42, e * (zf + 0.0475), e > 0 ? 'pz' : 'nz'), { color: '#ffffff', rough: 0.6, decal: R_PLATE, plate: true });
+    b.add(flatOnEnd(surf, e, 0.5, 0.12, 0, 0.45, 0.008, 0.012), { color: '#16171a', rough: 1.2 });
+    b.add(flatOnEnd(surf, e, 0.46, 0.1, 0, 0.45, 0.0145), { color: '#ffffff', rough: 0.6, decal: R_PLATE, plate: true });
   }
   for (const s of [1, -1]) {
-    b.add(rbox(0.36, 0.17, 0.07, 0.05, s * 0.85, 0.72, zf + 0.005), { color: HEAD, light: LIGHT_HEAD, rough: 0.4 });
-    b.add(decalPlane(0.34, 0.16, s * 0.85, 0.805, zf + 0.042, 'pz'), { color: '#ffffff', light: LIGHT_HEAD, rough: 0.15, decal: R_BUS_HEAD });
-    b.add(bx(0.11, 0.11, 0.06, s * 1.12, 0.74, zf - 0.01), { color: AMBER, light: s > 0 ? LIGHT_BLINK_L : LIGHT_BLINK_R });
-    b.add(bx(0.16, 0.42, 0.05, s * 1.06, 0.8, -zf - 0.02), { color: TAIL, light: LIGHT_TAIL, rough: 0.5 });
-    b.add(bx(0.16, 0.12, 0.05, s * 1.06, 1.26, -zf - 0.02), { color: AMBER, light: s > 0 ? LIGHT_BLINK_L : LIGHT_BLINK_R });
+    const a = s > 0 ? 0.62 : -0.98,
+      c = s > 0 ? 0.98 : -0.62;
+    b.add(onEnd(surf, 1, a - 0.015, c + 0.015, 0.71, 0.895, 0.004, 3), { color: '#16181b', rough: 0.9 });
+    b.add(onEnd(surf, 1, a, c, 0.725, 0.88, 0.009, 3), { color: '#ffffff', light: LIGHT_HEAD, rough: 0.15, decal: R_BUS_HEAD });
+    b.add(onEnd(surf, 1, s > 0 ? 1.02 : -1.2, s > 0 ? 1.2 : -1.02, 0.74, 0.85, 0.006, 3), { color: AMBER, light: s > 0 ? LIGHT_BLINK_L : LIGHT_BLINK_R });
+    b.add(onEnd(surf, -1, s > 0 ? 0.98 : -1.18, s > 0 ? 1.18 : -0.98, 0.62, 1.06, 0.006, 3), { color: TAIL, light: LIGHT_TAIL, rough: 0.5 });
+    b.add(onEnd(surf, -1, s > 0 ? 0.98 : -1.18, s > 0 ? 1.18 : -0.98, 1.1, 1.24, 0.006, 3), { color: AMBER, light: s > 0 ? LIGHT_BLINK_L : LIGHT_BLINK_R });
     // mirrors on curved arms ("ram's horns") from the roof corners, heads hanging ahead of the windscreen
     const xa = s * 1.18,
       xb = s * 1.36;
-    b.add(tube(xa, 2.78, zf - 0.04, xb, 2.82, zf + 0.22, 0.025), { color: DARK });
+    b.add(tube(xa, 2.76, zf - 0.3, xb, 2.82, zf + 0.22, 0.025), { color: DARK });
     b.add(tube(xb, 2.82, zf + 0.22, xb, 2.5, zf + 0.36, 0.025), { color: DARK });
     b.add(rbox(0.1, 0.38, 0.2, 0.04, xb, 2.12, zf + 0.38), { color: DARK });
     if (LOD === 0) b.add(decalPlane(0.08, 0.34, xb, 2.31, zf + 0.277, 'nz'), { color: '#8c9aa6', rough: 0.15, finish: 'chrome' });
