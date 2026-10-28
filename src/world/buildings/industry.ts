@@ -218,33 +218,115 @@ export function genIndustrial(g: Gen): void {
       setCol(t, shade(dc, 0.6));
       sideBox(t, sg, a, b, -d + 0.2, -d + 0.215, top - 0.02, top + 0.05, true);
     } else {
-      // sectional door: ~0.55 m insulated sections with a dark joint between them and a pressed mid rib;
-      // guide rails at both jambs, a rubber seal at the foot, the lowest section scuffed darker
+      // sectional door: ~0.55 m insulated steel sections, each a profiled panel — a rounded nose at the top
+      // joint (lit), a bevel at the foot (shaded), two pressed ribs as sloped faces so they catch the light —
+      // running between galvanised guide tracks; one section glazed with real openings (gasket frame, glass
+      // 2 cm behind the face); an aluminium bottom bar with a flared rubber lip; the lowest section scuffed
       const n = Math.max(5, Math.round(doorH / 0.55));
       const sh = doorH / n;
+      const ua = a + 0.09,
+        ub = b - 0.09;
+      const oF = -d + 0.045, // panel face
+        oK = -d + 0.03; // panel core behind the bevels
+      const P = (uu: number, o: number, y: number): [number, number, number] => [sx(sg, uu, o), y, sz(sg, uu, o)];
+      const rx = sx(sg, u, -d - 1), rz = sz(sg, u, -d - 1);
+      // quad across u0..u1 from (yA, oA) to (yB, oB), facing out (and up / down by `tilt`)
+      const strip = (u0: number, u1: number, yA: number, oA: number, yB: number, oB: number, tilt = 0): void => {
+        const p0 = P(u0, oA, yA), p1 = P(u1, oA, yA), q1 = P(u1, oB, yB), q0 = P(u0, oB, yB);
+        t.quadAway(p0[0], p0[1], p0[2], p1[0], p1[1], p1[2], q1[0], q1[1], q1[2], q0[0], q0[1], q0[2], rx, (yA + yB) / 2 - tilt, rz);
+      };
+      const kw = Math.min(n - 2, Math.max(1, Math.round(n * 0.62))); // glazed section
+      const nw = Math.max(2, Math.round((ub - ua) / 0.95));
+      const wpitch = (ub - ua) / nw;
       for (let k = 0; k < n; k++) {
-        const y0 = k * sh,
-          y1 = (k + 1) * sh;
-        setCol(t, shade(dc, k === 0 ? 0.78 : 0.93 + ((g.seed + k * 5) % 4) * 0.025));
-        sideBox(t, sg, a + 0.1, b - 0.1, -d + 0.02, -d + 0.045, y0 + 0.012, y1 - 0.012, true);
-        setCol(t, shade(dc, 1.05));
-        sideBox(t, sg, a + 0.14, b - 0.14, -d + 0.045, -d + 0.052, (y0 + y1) / 2 - 0.012, (y0 + y1) / 2 + 0.012, true);
+        const y0 = k * sh + 0.008,
+          y1 = (k + 1) * sh - 0.008;
+        const c0 = shade(dc, k === 0 ? 0.8 : 0.93 + ((g.seed + k * 5) % 4) * 0.025);
+        // core (fills the joints' depth) + foot bevel (faces down) + nose (faces up)
+        setCol(t, shade(c0, 0.55));
+        sideBox(t, sg, ua, ub, -d + 0.02, oK, y0, y1, true);
+        setCol(t, shade(c0, 0.7));
+        strip(ua, ub, y0, oK, y0 + 0.022, oF, -0.4);
+        setCol(t, shade(c0, 1.12));
+        strip(ua, ub, y1 - 0.03, oF, y1, oK, 0.4);
+        // face, cut around the windows on the glazed section; ribs on the others
+        setCol(t, c0);
+        const fy0 = y0 + 0.022,
+          fy1 = y1 - 0.03;
+        if (k === kw) {
+          const wy0 = fy0 + 0.07,
+            wy1 = fy1 - 0.07;
+          strip(ua, ub, fy0, oF, wy0, oF);
+          strip(ua, ub, wy1, oF, fy1, oF);
+          for (let i = 0; i <= nw; i++) {
+            const e0 = i === 0 ? ua : ua + i * wpitch - wpitch * 0.18,
+              e1 = i === nw ? ub : ua + i * wpitch + wpitch * 0.18;
+            setCol(t, c0);
+            sideBox(t, sg, e0, e1, oK, oF, wy0, wy1, false);
+          }
+          for (let i = 0; i < nw; i++) {
+            const w0 = ua + i * wpitch + wpitch * 0.18,
+              w1 = ua + (i + 1) * wpitch - wpitch * 0.18;
+            // window reveal sills (the panel's thickness), glass 2 cm back: dark room, sky in the upper part
+            setCol(t, shade(c0, 0.62));
+            strip(w0, w1, wy0, oF, wy0, oK - 0.004, 0.4);
+            setCol(t, col('#2b3238'));
+            strip(w0, w1, wy0, oK - 0.004, (wy0 + wy1) / 2, oK - 0.004);
+            setCol(t, col('#56646f'));
+            strip(w0, w1, (wy0 + wy1) / 2, oK - 0.004, wy1, oK - 0.004);
+            // black gasket frame, proud of the face
+            setCol(t, col('#151719'));
+            sideBox(t, sg, w0 - 0.025, w1 + 0.025, oF, oF + 0.009, wy0 - 0.025, wy0 + 0.006, true);
+            sideBox(t, sg, w0 - 0.025, w1 + 0.025, oF, oF + 0.009, wy1 - 0.006, wy1 + 0.025, true);
+            sideBox(t, sg, w0 - 0.025, w0 + 0.006, oF, oF + 0.009, wy0, wy1);
+            sideBox(t, sg, w1 - 0.006, w1 + 0.025, oF, oF + 0.009, wy0, wy1);
+          }
+        } else {
+          const r0 = fy0 + (fy1 - fy0) / 3,
+            r1 = fy0 + ((fy1 - fy0) * 2) / 3;
+          strip(ua, ub, fy0, oF, r0 - 0.016, oF);
+          strip(ua, ub, r0 + 0.016, oF, r1 - 0.016, oF);
+          strip(ua, ub, r1 + 0.016, oF, fy1, oF);
+          for (const r of [r0, r1]) {
+            // pressed rib: 9 mm proud, lit upper slope, shaded lower slope
+            setCol(t, shade(c0, 1.14));
+            strip(ua, ub, r + 0.005, oF + 0.009, r + 0.016, oF, 0.4);
+            setCol(t, shade(c0, 1.02));
+            strip(ua, ub, r - 0.005, oF + 0.009, r + 0.005, oF + 0.009);
+            setCol(t, shade(c0, 0.68));
+            strip(ua, ub, r - 0.016, oF, r - 0.005, oF + 0.009, -0.4);
+          }
+        }
       }
-      setCol(t, col('#8c9296'));
-      for (const [u0, u1] of [[a + 0.01, a + 0.1], [b - 0.1, b - 0.01]]) sideBox(t, sg, u0, u1, -d + 0.02, -d + 0.075, 0, doorH, false);
-      setCol(t, col('#1a1b1c'));
-      sideBox(t, sg, a + 0.1, b - 0.1, -d + 0.02, -d + 0.05, 0, 0.035);
-      // lift handle on the bottom section
+      // scuffs on the lowest section (pallets, boots): darker rubbed patches
+      setCol(t, shade(dc, 0.6));
+      for (let i = 0; i < 3; i++) {
+        const su = ua + 0.3 + ((g.seed * (i + 3) * 37) % 100) / 100 * (ub - ua - 0.9);
+        sideBox(t, sg, su, su + 0.25 + i * 0.12, oF, oF + 0.001, 0.12 + i * 0.05, 0.16 + i * 0.06);
+      }
+      // guide tracks: galvanised angle with a dark slot, bolt heads every ~0.45 m
+      for (const [u0, u1, s] of [[a + 0.005, ua, 1], [ub, b - 0.005, -1]] as const) {
+        setCol(t, col('#202224'));
+        sideBox(t, sg, u0, u1, -d, -d + 0.05, 0, doorH, false);
+        setCol(t, col('#a4abb0'));
+        const ce = s > 0 ? u0 : u1 - 0.035;
+        sideBox(t, sg, ce, ce + 0.035, -d, -d + 0.085, 0, doorH, false);
+        setCol(t, col('#6d7378'));
+        for (let y = 0.25; y < doorH - 0.1; y += 0.45) sideBox(t, sg, ce + 0.01, ce + 0.025, -d + 0.085, -d + 0.092, y, y + 0.015);
+      }
+      // aluminium bottom bar + flared rubber lip on the ground
+      setCol(t, col('#b3b8bb'));
+      sideBox(t, sg, ua, ub, oK, oF + 0.006, 0.03, 0.075, true);
+      setCol(t, col('#141516'));
+      sideBox(t, sg, ua, ub, oK, oF + 0.006, 0.0, 0.03, false);
+      strip(ua, ub, 0.0, oF + 0.022, 0.012, oF + 0.006, 0.4);
+      // lift handle + lock on the bottom section
       setCol(t, col('#2a2c2e'));
-      sideBox(t, sg, u - 0.12, u + 0.12, -d + 0.045, -d + 0.08, 0.32, 0.36, true);
-      setCol(t, shade(dc, 0.8));
-      // a row of small windows in the door
-      setCol(t, col('#37434d'));
-      const wy = doorH * 0.62;
-      for (let k = 0; k < 4; k++) {
-        const wu = a + 0.35 + ((b - a - 0.7) * (k + 0.5)) / 4;
-        sideBox(t, sg, wu - 0.3, wu + 0.3, -d + 0.045, -d + 0.056, wy, wy + 0.32);
-      }
+      sideBox(t, sg, u - 0.12, u + 0.12, oF, oF + 0.035, 0.32, 0.35, true);
+      sideBox(t, sg, u - 0.12, u - 0.1, oF, oF + 0.035, 0.29, 0.35, true);
+      sideBox(t, sg, u + 0.1, u + 0.12, oF, oF + 0.035, 0.29, 0.35, true);
+      setCol(t, col('#b9a46a'));
+      sideBox(t, sg, u + 0.3, u + 0.34, oF, oF + 0.012, 0.3, 0.36, true);
     }
     // frame (safety yellow posts on modern sheds), bumpers, canopy + dock light
     setCol(t, brick ? trimC : col('#e0b33c'));
@@ -252,9 +334,6 @@ export function genIndustrial(g: Gen): void {
     sideBox(t, sg, b, b + 0.16, 0, INS - 0.03, 0, doorH + 0.15);
     sideBox(t, sg, a - 0.16, b + 0.16, 0, INS - 0.03, doorH, doorH + 0.18);
     if (!customs) {
-      setCol(t, col('#22262a'));
-      sideBox(t, sg, a + 0.25, a + 0.6, 0, INS - 0.03, 0.75, 1.15);
-      sideBox(t, sg, b - 0.6, b - 0.25, 0, INS - 0.03, 0.75, 1.15);
       // steel bollards guarding the door posts (yellow, black bands, domed cap) — within the wall inset
       if (INS > 0.2) {
         for (const bu of [a - 0.42, b + 0.42]) {

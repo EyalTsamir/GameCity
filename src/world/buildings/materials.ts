@@ -1173,6 +1173,7 @@ void bhWall(inout vec3 albedo, inout float rough, inout float metal, inout vec3 
   vec3 dN = N;
   vec2 dQ = q;
   float sunShade = 1.0;
+  vec2 dbgSun = vec2(-1.0);
   if (revD > 0.001) {
     vec2 k = vec2(dot(V, Tu), V.y) / max(-dot(V, N), 0.06); // lateral metres per metre into the wall
     vec3 st = vec3(dot(uSunDir, Tu), uSunDir.y, dot(uSunDir, N));
@@ -1226,10 +1227,11 @@ void bhWall(inout vec3 albedo, inout float rough, inout float metal, inout vec3 
       vec2 ed = abs(ex - wc) - wh;
       float inS = 1.0 - smoothstep(-0.006, 0.006, max(ed.x, ed.y));
       sunShade = 1.0 - 0.62 * (1.0 - inS) * sunOn;
+      dbgSun = vec2(step(0.03, st.z) * step(0.0, uSunDir.y), uDaylight * (1.0 - inS));
     }
   }
   if (uBhDebug > 2.5 && uBhDebug < 3.5 && revD > 0.001) {
-    albedo = dSurf == 0 ? albedo * vec3(0.6, 1.0, 1.0) : (dSurf == 1 ? vec3(1, 0, 0) : (dSurf == 2 ? vec3(0, 1, 0) : (dSurf == 3 ? vec3(0, 0, 1) : vec3(1, 1, 0))));
+    albedo = dSurf == 0 ? (dbgSun.x >= 0.0 ? vec3(dbgSun, 0.0) : albedo * vec3(0.6, 1.0, 1.0)) : (dSurf == 1 ? vec3(1, 0, 0) : (dSurf == 2 ? vec3(0, 1, 0) : (dSurf == 3 ? vec3(0, 0, 1) : vec3(1, 1, 0))));
     return;
   }
   if (dSurf > 0) {
@@ -1655,7 +1657,7 @@ void bhWall(inout vec3 albedo, inout float rough, inout float metal, inout vec3 
   float roomK = mix(0.62, 1.0, fract(r1 * 3.71));
   float reflK = (curtain || ribbon) ? mix(0.82, 1.18, fract(r2 * 2.93)) : mix(0.75, 1.9, fract(r2 * 2.93)) * (1.15 - 0.3 * roomK);
   vec3 glass = interior * (1.0 - Fs) * transTint + refl * Fs * mix(0.65, 1.0, recess) * paneGrad * reflK * ((curtain || ribbon) ? 1.0 : 1.6);
-  vec3 glassAlb = dayA * (1.0 - Fs) * transTint * (curtain ? 0.4 : (ribbon ? 0.7 : (homey ? 0.95 * roomK : roomK)));
+  vec3 glassAlb = dayA * (1.0 - Fs) * transTint * (curtain ? 0.4 : (ribbon ? 0.7 : (homey ? 0.62 * roomK : roomK))); // a room seen through glass by day is far darker than the facade around it
   // open sash: the swung pane shows a strip of darker, skewed reflection at the hinge side
   glass = mix(glass, env * 0.35 * reflTint, openW * (1.0 - smoothstep(0.62, 0.66, wx)));
   glass += gt * crown * mix(0.55, 0.18, spandrel);
