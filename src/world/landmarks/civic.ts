@@ -479,15 +479,15 @@ export function genMarketStall(env: Env, f: Feature): void {
     K.boxC(card, 0.5, 0.008, 0.38, hw - 0.4, 0.005, bz + 0.15, 0, rnd(), 0);
     // flattened boxes leaning on the table end, a box with open flaps on the ground at the front corner
     const ex = (f.id % 2 ? 1 : -1) * (hw + 0.07);
-    for (let i = 0; i < 3; i++) K.boxC(i % 2 ? card2 : card, 0.008, 0.62 - i * 0.07, 0.5 - i * 0.04, ex + Math.sign(ex) * i * 0.012, 0.3 - i * 0.03, tz + 0.02 + i * 0.03, 0, 0, Math.sign(ex) * (0.2 + i * 0.03));
-    const bx = -ex * 0.82, bzz = fz + 0.12, bw = 0.38, bh = 0.26, bd = 0.28;
+    for (let i = 0; i < 3; i++) K.boxC(i % 2 ? card2 : card, 0.008, 0.62 - i * 0.07, 0.5 - i * 0.04, ex + Math.sign(ex) * i * 0.012, 0.3 - i * 0.03, tz - 0.2 + i * 0.03, 0, 0, Math.sign(ex) * (0.2 + i * 0.03));
+    const bx = -ex * 0.66, bzz = fz + 0.02, bw = 0.38, bh = 0.26, bd = 0.28;
     K.box(card, bw, bh, bd, bx, 0, bzz, 0.15);
     K.box(M('#d9c9a0', PAT.PLAIN, 0.4), 0.05, 0.003, bd + 0.002, bx, bh - 0.002, bzz, 0.15);
     for (const s2 of [-1, 1]) K.boxC(card2, bw * 0.96, 0.004, bd * 0.45, bx + Math.sin(0.15) * s2 * bd * 0.55, bh + 0.06, bzz + Math.cos(0.15) * s2 * bd * 0.55, s2 * 1.0, 0.15, 0);
     K.box(M('#7a1f1f', PAT.PLAIN, 0.6), 0.08, 0.05, 0.002, bx, bh * 0.45, bzz + bd / 2 + 0.001, 0.15);
     // hand truck (sack barrow) leaning back against the other table end, wheels on the ground
     {
-      const hx = -ex - Math.sign(ex) * 0.12, hz = tz - 0.02, lean = 0.32;
+      const hx = -ex - Math.sign(ex) * 0.02, hz = tz - 0.32, lean = 0.32;
       const blue = M(['#2d4f7a', '#b8322c', '#3a3d3f'][f.id % 3], PAT.PLAIN, 0.5, 0.3);
       const top = (h: number): [number, number, number] => [hx + Math.sign(ex) * Math.sin(lean) * h, Math.cos(lean) * h + 0.1, hz];
       for (const s2 of [-1, 1]) {

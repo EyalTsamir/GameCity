@@ -39,6 +39,8 @@ Branch `claude/real-w3-furniture` (from `claude/pensive-gates-bim12i`). Brief: d
     wear (grey timber on hand-rail tops, algae on bottom rails); statue steps with nosing + shadow line,
     vertex-colour damp/algae at riser feet, worn front treads, dirt in the step joint, block joints, lichen.
   - New `shapes.ts pixelText()` (3 × 5 box font, runs merged, thin print = front face only).
+  Downtown shot after the last fix: console clean, invariants {} (market clutter pulled inside r = 1.3).
+  Sheets: docs/progress/real/w3_s4_busstop.jpg, w3_s4_newsstand.jpg, w3_s4_market.jpg, w3_s4_kiosk.jpg (pre-fix kiosk).
   **Not yet judged on the bench (next session first):** kiosk after the shutter/coffee-machine fix, playground
   10 m + roundabout close-up, marketstall pick 1, bin/bench grime at 3 m, planter, gazebo soffit, statue steps
   (bench `--classes kiosk,playground,planter,gazebo,statue,bin --dists 3,10 --q hide=pedestrians`).
