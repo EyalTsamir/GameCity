@@ -53,3 +53,9 @@
     returns, keep the bias and instead set `shadowSide = THREE.DoubleSide` on the buildings shell material (the
     contact then has a caster at the wall plane from both sides). Falsifying probe: add `tune.dbias` (multiplier on
     that line) and run `--eval "__city.ctx.services.sky.tune.dbias=0"` at the same view.
+
+* **W7 → pedestrians owner (src/sim/pedestrians/**):** the station platform (x −46..46, z −153..−149, top y 0.95,
+  benches at x ±8.8/±17.6/±30.5, z ≈ −150.2) has no waiting people between trains; a few standing / seated waiting
+  passengers (some with the luggage W7 placed: wheeled case at x −7.7, holdall x 17.2, rucksack on the bench x −17.2)
+  would complete the "station platform" dense place. Same for the fish quay (x 127..136, z −140..−122): one or two
+  workers (oilskins) at the creels / fish boxes, a man mending nets on the bench at the store (x ≈ 130.8, z −139).

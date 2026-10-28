@@ -542,16 +542,16 @@ export function genConstruction(env: Env, lot: Lot): CraneTargets {
   env.endChecks();
   // mud carried out of the gate onto the pavement: two tyre tracks fading toward the road, dried splashes
   if (!env.ctx.debug.params.has('nositedetail')) {
-    const mud = M('#6b5a44', PAT.GRAVEL, 0.95, 0, 0, 0, 0.5);
+    const mud = M('#8a7a62', PAT.GRAVEL, 0.95, 0, 0, 0, 0.5);
+    // tread marks: short dashes that thin out and break up toward the kerb
     for (const tz of [gateZ0 + 1.6, gateZ1 - 1.6]) {
-      for (let k = 0; k < 7; k++) {
-        const x0 = SX + 0.05 + k * 1.0,
-          w = 0.36 - k * 0.035;
-        if (w <= 0.05) break;
-        K.box(mud, 0.9, 0.012, w, x0 + 0.45, 0.155, tz + Math.sin(k * 1.7) * 0.06);
+      for (let k = 0; k < 18; k++) {
+        const t = k / 18;
+        if (((k * 7) % 5) / 5 < t * 0.9) continue;
+        K.box(mud, 0.14, 0.008, 0.3 - t * 0.12, SX + 0.15 + k * 0.36, 0.152, tz + Math.sin(k * 0.9) * 0.05, 0.05 * Math.sin(k));
       }
     }
-    for (let k = 0; k < 9; k++) K.box(mud, 0.18 + (k % 3) * 0.1, 0.012, 0.12 + (k % 2) * 0.1, SX + 0.4 + ((k * 1.37) % 5), 0.156, gateZ0 + 0.5 + ((k * 2.3) % 5.2), k);
+    for (let k = 0; k < 14; k++) K.box(mud, 0.06 + (k % 3) * 0.05, 0.008, 0.05 + (k % 2) * 0.06, SX + 0.3 + ((k * 1.37) % 4.5), 0.153, gateZ0 + 0.4 + ((k * 2.3) % 5.4), k);
   }
 
   env.pick(lot.id, 'Haven Heights (under construction)', new THREE.Box3(new THREE.Vector3(fp.x0, 0, fp.z0), new THREE.Vector3(fp.x1, top + FH + 3, fp.z1)), () => {

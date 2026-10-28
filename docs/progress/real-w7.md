@@ -5,15 +5,22 @@ Owned: src/world/harbor/** + harbor.ts, src/sim/boats/** + boats.ts, src/world/l
 src/sim/rail/station.ts + staticMaterial.ts. Order: boats → quay → site → platform.
 
 ## Resume here
-* s1 (23:05): all four places coded, quay + boats seen once, site + platform not yet seen.
-  Bench: `node scripts/bench.mjs --classes quay,quaysea,site,siteyard,platform,crabber,dinghy,ferry,tug --dists 5,14`
-  (PLACES table in bench.mjs). Golden ref of the base commit: shots/golden/ref (captured from the base worktree
-  ../gc-base on port 5174); compare with `scripts/agent-tools/golden.sh w7` style capture + diff.
-  Note: the dinghy hides under the quay edge from land views (it is drawn — checked: small mesh count 9, no NaN);
-  judge it from the water (`quaysea`).
-* Next: judge shots/w7/p1 (site/platform first look), fix, golden + downtown invariants, commit, note to lead.
-  Then (next session): site excavator/cabins detail, platform people (request to pedestrians owner), boats
-  tour/sail/motor round 2, quay rail end-stops (yellow boxes) and crane rail buffers.
+* s1 END (23:00 UTC): all four places coded and seen once at 5 / 14 m (docs/progress/real/w7_places_s1.jpg,
+  w7_boats_s1.jpg). Golden: overview 0.03, harbor 0.47 (new quay items) vs base; downtown console clean,
+  invariants {}. NOT yet seen: the mud-track redraw at the site gate (dashes), ferry deck pits after toning down,
+  site skip / mixer / toilet / posters close up (only 14 m), motorboat round 2.
+* Verdict s1: fish quay from the water (quaysea) reads real — crabber with tyres + lines, dinghy at the ladder
+  with its painter, creels, boxes, store, forklift. Quay from land: creels/hose real; the concrete apron west of
+  x 127 still empty (props scatter zone, W6). Site: tube scaffold reads; first mud was dark rectangles (fixed,
+  unseen). Platform: ticket machine, yellow line + tactile, column bolts, timetable case read; no people (request).
+* Next session, in order: (1) bench `--classes quay,quaysea,site,siteyard,platform --dists 3,8` + `crabber,ferry,
+  tug,motorboat,tourboat --dists 3,10` and judge; (2) site: skip/mixer/toilet/poster close-ups, excavator form
+  (boxy), cabins (doors, steps, windows); (3) boats round 2: motorboat foredeck/windscreen (toy-like), tour boat,
+  yacht deck fittings, crabber name/registration on the bow (needs a canvas decal), ferry name; (4) quay: crane
+  rail end-stops (crude yellow boxes, harbor), store detail; (5) perf.mjs harbor/station/downtown with
+  `;noquaylife;noboatdetail;nositedetail`.
+* Token note: this session ran at a median 238k / max 358k context (system prompt + brief are large):
+  get_session's used_tokens read 0 — use tokens.py ctxMax instead, and wrap up earlier.
 
 ## Code pointers
 * boats: sim/boats/models.ts (lofted hulls, big = ferry/tug/tour, small = yacht/motorboat/scull), material.ts
@@ -69,3 +76,10 @@ src/sim/rail/station.ts + staticMaterial.ts. Order: boats → quay → site → 
 * Costs: not measured yet (perf.mjs --view harbor --variants ";noquaylife;noboatdetail").
 
 ## Sheets
+
+## Sheets
+* docs/progress/real/w7_places_s1.jpg (quay 5 m, quay from the water 14 m, site gate 5 m, site yard 14 m,
+  platform 5 / 14 m), docs/progress/real/w7_boats_s1.jpg (crabber 3/10 m, dinghy, ferry 3 m).
+
+## tokens.py (s1)
+TOTAL weighted 5.0M (cache read 79%, write 8%, output 13%); 166 calls, ctx median 238k, max 358k, cold 0.
