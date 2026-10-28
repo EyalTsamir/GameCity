@@ -96,3 +96,20 @@ lives there. Photo tests: "Bin … Bollard", "Market stall", contact.
 5. Contact: base plates bolted, dirt ring where props meet paving, nothing floating.
 6. Variation: paint/wear per instance; states (bin lid ajar, bag beside, sticker).
 Toggles e.g. `?nopropdetail`, `?nomarketdetail`.
+
+## W4 — People (wave 2)
+Audit #4. Owned: `src/sim/pedestrians/**` (body.ts, shader.ts, looks.ts, animate.ts, gait.ts, pose.ts, rig.ts,
+render.ts, vendors.ts, cafes.ts, riders.ts, tableware.ts) — not crowd.ts/places.ts logic beyond presentation.
+History: docs/progress/gfx-people.md, docs/progress/people-review.md (§4 spec) — read only their summaries/"next".
+Photo test: "Person" in REAL.md. Bench: `--classes pedestrian --pick 0..5 --dists 2,4,10` (sim paused).
+1. Faces at the near LOD: eye sockets/brows/nose/mouth/ears by shader shading on the head (no texture files), skin
+   tone variation, age cues; hair with volume and strand shading, hairline.
+2. Hands: fingers readable at ≤ 3 m (near LOD), relaxed curl; mitten hands only at far LODs.
+3. Clothing as fabric: seams, collars, pockets, hems, buttons/zips, folds at elbows/knees/waist that move with
+   the pose; fabric-specific shading (denim, knit, cotton, leather shoes with soles).
+4. Weight in the walk: heel strike, hip sway, shoulder counter-swing, head bob; idle weight shift; age differences.
+5. Carried things & life: bags with straps, phones, umbrellas, dogs on leads (if present), shopping.
+6. Vendors face the aisle (request from W3, real-requests.md); café sitters hold cups.
+7. Variation: no two neighbours identical (build, height, clothing palette, hair).
+Performance: people are many — near-LOD detail only within ~15 m; measure with perf.mjs `;nopeopledetail`.
+Toggles e.g. `?nofaces`, `?nopeopledetail`.

@@ -11,6 +11,10 @@ Overview must stay at least as impressive as now. Every feature: quality tiers +
 Lead session: session_01XuhAMczW3iK25AAWnf3qog, branch `claude/pensive-gates-bim12i`.
 
 ## Resume here (keep current)
+* 2026-10-28 18:15 UTC — Merged W3(3) (6273dd3: sculpted bronze statue (landmarks/sculpt.ts), draped market cloth +
+  goods variety, turned columns, trailing planter plants, bench fixings, phone-box interior). W3 brief essentially
+  done → W3 slot goes to wave 2: W4 people (brief W4 in real-briefs.md). W3 remaining polish (scales, queue) folds
+  into the wave-1 judge's notes.
 * 2026-10-28 17:55 UTC — Merged W2 m2 (942cf5e: car nose/tail loft, wrap bumper, mirrors, gaps; busBody.ts).
   Respawned W2(3): van/lorry cabs + cargo bodies, bus rear, car tumblehome, variation, then trains.
 * 2026-10-28 17:30 UTC — Merged W3(2) (992ef14: invariants 0, contact grime props/contact.ts ?nocontact, planter,
