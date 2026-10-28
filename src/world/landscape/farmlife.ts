@@ -10,6 +10,8 @@ import { FROW, toField, fromField, rowB, colB, colOff, colW, lhash, fieldsOfParc
 import { hash2i } from './noise';
 import { SLAB } from '../../core/constants';
 import type { Fleet, FleetTemplate } from './fleet';
+import { createTractor, FRONT_Z, REAR_Z } from './tractor';
+import { sheepGeometry, cowGeometry, createNearHerd, POSE_GLSL } from './animals';
 
 /** unit cow (faces +z, length ~2.2 m): body, head, four legs; aPart 0 body, 1 head, 2 legs */
 function animalGeometry(): THREE.BufferGeometry {
@@ -193,9 +195,10 @@ export function createFarmLife(model: LandscapeModel, uniforms: Record<string, T
         if (!fieldOK(w.x, w.z)) continue;
         const ck = cropKind(F.crop, F.small, model.grazing(w.x, w.z), F.tun);
         const sd = slabD(w.x, w.z);
-        // the tractor works a stubble / ploughed field in view of the town (W or S)
+        // the tractor works a stubble / ploughed field in view of the town (W or S), within the free camera's reach
+        // (targets stop at slab + 320 m): ~140 m out, so it can be walked up to
         if (ck === CK.stubble || ck === CK.ploughed) {
-          const score = Math.abs(sd - 330) + (w.x > SLAB.x1 ? 1e4 : 0);
+          const score = Math.abs(sd - 140) + (w.x > SLAB.x1 ? 1e4 : 0);
           if (score < bestT && (F.x1 - F.x0) > 60 && (F.y1 - F.y0) > 40) {
             bestT = score;
             tractorField = { ...F };
@@ -237,12 +240,19 @@ export function createFarmLife(model: LandscapeModel, uniforms: Record<string, T
     iA.set([inst[i * 7], inst[i * 7 + 1], inst[i * 7 + 2], inst[i * 7 + 3]], i * 4);
     iB.set([inst[i * 7 + 4], inst[i * 7 + 5], inst[i * 7 + 6], 0.88 + 0.24 * ((inst[i * 7 + 6] * 7.13) % 1)], i * 4);
   }
+  // near detail (W8): the animals closest to the camera are drawn by the full sheep / cow models
+  // (animals.ts) and hidden in the coarse mesh (iN = 1). ?noanimaldetail = coarse mesh only.
+  const detail = !new URLSearchParams(location.search).has('noanimaldetail');
+  const iN = new Float32Array(nA);
   const ig = new THREE.InstancedBufferGeometry();
   ig.setAttribute('position', geo.getAttribute('position'));
   ig.setAttribute('normal', geo.getAttribute('normal'));
   ig.setAttribute('aPart', geo.getAttribute('aPart'));
   ig.setAttribute('iA', new THREE.InstancedBufferAttribute(iA, 4));
   ig.setAttribute('iB', new THREE.InstancedBufferAttribute(iB, 4));
+  const iNAttr = new THREE.InstancedBufferAttribute(iN, 1);
+  iNAttr.setUsage(THREE.DynamicDrawUsage);
+  ig.setAttribute('iN', iNAttr);
   ig.instanceCount = nA;
   ig.boundingSphere = new THREE.Sphere(new THREE.Vector3(CX, 0, CZ), R + 600);
   const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9, metalness: 0, fog });
@@ -254,9 +264,11 @@ export function createFarmLife(model: LandscapeModel, uniforms: Record<string, T
         `#include <common>
 attribute vec4 iA;
 attribute vec4 iB;
+attribute float iN;
 attribute float aPart;
 uniform float uTime;
-varying vec3 vAc;`,
+varying vec3 vAc;
+${POSE_GLSL}`,
       )
       .replace(
         '#include <begin_vertex>',
@@ -269,10 +281,11 @@ varying vec3 vAc;`,
   if (aPart < 0.5) sc *= sheep ? vec3(1.45, 1.25, 0.95) : vec3(1.0, 1.05, 1.0);
   vec3 p = position * sc;
   if (sheep && aPart < 0.5) p.y -= 0.12 * size;   // the wool hangs low over the legs
-  // grazing: the head goes down to the grass most of the time, comes up now and then
-  float t = uTime * 0.35 + iB.z * 37.0;
-  float down = smoothstep(-0.3, 0.3, sin(t) + 0.4 * sin(t * 2.7 + 1.0));
+  float lie = herdLying(iB);
+  float down = lie > 0.5 ? 0.0 : herdGraze(iB);
   if (aPart > 0.5 && aPart < 1.5) { p.y -= (sheep ? 0.62 : 0.68) * down * sc.y; p.z += 0.14 * down * sc.z; }
+  if (lie > 0.5) p.y = herdLie(p.y, (sheep ? 0.17 : 0.5) * size, 0.04 * size);
+  p *= 1.0 - iN;                                   // drawn by the near model
   float c = cos(iA.w), s = sin(iA.w);
   vec3 pr = vec3(c * p.x + s * p.z, p.y, -s * p.x + c * p.z);
   transformed = pr + iA.xyz;
@@ -291,25 +304,73 @@ varying vec3 vAc;`,
       .replace('#include <common>', '#include <common>\nvarying vec3 vAc;')
       .replace('vec4 diffuseColor = vec4( diffuse, opacity );', 'vec4 diffuseColor = vec4( vAc, opacity );');
   };
-  mat.customProgramCacheKey = () => 'th-landherd-v2';
+  mat.customProgramCacheKey = () => 'th-landherd-v3';
   const herd = new THREE.Mesh(ig, mat);
   herd.name = 'land-herds';
   herd.frustumCulled = false;
   // tiny at the distances they are seen from: no shadow pass (saves a full extra draw of every animal)
   herd.castShadow = false;
   herd.receiveShadow = true;
-  // three's default depth material ignores the custom vertex code: give the shadow pass the same placement
-  herd.customDepthMaterial = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking });
-  herd.customDepthMaterial.onBeforeCompile = (shader) => {
-    shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', '#include <common>\nattribute vec4 iA;\nattribute vec4 iB;')
-      .replace(
-        '#include <begin_vertex>',
-        `vec3 transformed = position * (iB.x > 0.5 ? 0.6 : 1.0) * (iB.w > 0.0 ? iB.w : 1.0);
-{ float c = cos(iA.w), s = sin(iA.w); transformed = vec3(c * transformed.x + s * transformed.z, transformed.y, -s * transformed.x + c * transformed.z) + iA.xyz; }`,
-      );
-  };
   group.add(herd);
+  if (detail && nA > 0) {
+    const cap = density >= 0.95 ? [24, 12] : density >= 0.7 ? [14, 8] : [6, 4];
+    const nearR = density >= 0.95 ? 55 : density >= 0.7 ? 42 : 30;
+    const near = [createNearHerd(sheepGeometry(), cap[0], 1, uniforms, fog), createNearHerd(cowGeometry(), cap[1], 0, uniforms, fog)];
+    for (const n of near) group.add(n.mesh);
+    // selection: the nearest animals of each species within nearR, refreshed when the camera moves (one
+    // frame late: the attributes upload with the next render, the same frame for both meshes)
+    const last = new THREE.Vector3(1e9, 0, 0);
+    const best = [new Float32Array(cap[0]), new Float32Array(cap[1])];
+    const bestD = [new Float32Array(cap[0]), new Float32Array(cap[1])];
+    let tick = 0;
+    herd.onBeforeRender = (_r, _s, camera) => {
+      const cp = camera.position;
+      if (++tick < 20 && cp.distanceToSquared(last) < 0.25) return;
+      tick = 0;
+      last.copy(cp);
+      const cnt = [0, 0];
+      const r2 = nearR * nearR;
+      iN.fill(0);
+      for (let i = 0; i < nA; i++) {
+        const dx = iA[i * 4] - cp.x,
+          dy = iA[i * 4 + 1] - cp.y,
+          dz = iA[i * 4 + 2] - cp.z;
+        const d = dx * dx + dy * dy + dz * dz;
+        if (d > r2) continue;
+        const sp = iB[i * 4] > 0.5 ? 0 : 1; // near[0] = sheep
+        const b = best[sp],
+          bd = bestD[sp];
+        let k = cnt[sp];
+        if (k === b.length) {
+          if (d >= bd[k - 1]) continue;
+          k--;
+        } else cnt[sp]++;
+        // insertion into the sorted list
+        while (k > 0 && bd[k - 1] > d) {
+          bd[k] = bd[k - 1];
+          b[k] = b[k - 1];
+          k--;
+        }
+        bd[k] = d;
+        b[k] = i;
+      }
+      for (let sp = 0; sp < 2; sp++) {
+        const n = near[sp];
+        for (let k = 0; k < n.cap; k++) {
+          if (k < cnt[sp]) {
+            const i = best[sp][k];
+            iN[i] = 1;
+            n.a.set(iA.subarray(i * 4, i * 4 + 4), k * 4);
+            n.b.set(iB.subarray(i * 4, i * 4 + 4), k * 4);
+          } else n.b[k * 4 + 3] = 0; // size 0: collapsed
+        }
+        n.aAttr.needsUpdate = true;
+        n.bAttr.needsUpdate = true;
+        n.mesh.visible = cnt[sp] > 0;
+      }
+      iNAttr.needsUpdate = true;
+    };
+  }
 
   // ── the tractor
   let update = (_dt: number) => {};
@@ -317,7 +378,10 @@ varying vec3 vAc;`,
   let working = false;
   if (tractorField) {
     const F = tractorField;
-    const tid = fleet.add(tractorGeometry());
+    // the near-real model (tractor.ts) or, with ?notractordetail, the old box template in the fleet
+    const model3 = new URLSearchParams(location.search).has('notractordetail') ? null : createTractor(fog);
+    const tid = model3 ? -1 : fleet.add(tractorGeometry());
+    if (model3) group.add(model3.group);
     const longX = F.x1 - F.x0 >= F.y1 - F.y0;
     const len = longX ? F.x1 - F.x0 - 16 : F.y1 - F.y0 - 16;
     const across = longX ? F.y1 - F.y0 - 16 : F.x1 - F.x0 - 16;
@@ -365,12 +429,17 @@ varying vec3 vAc;`,
         hy = longX ? Math.sin(heading) : Math.cos(heading);
       const dx = hx * 0.990268 - hy * 0.139173,
         dz = hx * 0.139173 + hy * 0.990268;
-      fleet.set(tid, P.x, y, P.z, Math.atan2(dx, dz));
+      const yaw = Math.atan2(dx, dz);
+      if (model3) {
+        // pitch from the ground under the front and rear axles; the wheels roll with the distance driven
+        const fy = H(P.x + dx * (FRONT_Z - REAR_Z), P.z + dz * (FRONT_Z - REAR_Z));
+        model3.set(P.x - dx * REAR_Z, y, P.z - dz * REAR_Z, yaw, Math.atan2(fy - y, FRONT_Z - REAR_Z), s);
+      } else fleet.set(tid, P.x, y, P.z, yaw);
       tractorState.x = P.x;
       tractorState.y = y;
       tractorState.z = P.z;
-      tractorState.yaw = Math.atan2(dx, dz);
-      tractorPos!.set(P.x - dx * 3.5, y + 0.6, P.z - dz * 3.5);
+      tractorState.yaw = yaw;
+      tractorPos!.set(P.x - dx * 3.9, y + 0.5, P.z - dz * 3.9);
     };
     update(0);
   }

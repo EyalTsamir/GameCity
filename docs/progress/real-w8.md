@@ -5,7 +5,10 @@ Branch `claude/real-w8-country` (from claude/pensive-gates-bim12i @ 5137562). Br
 ## Resume here
 * s0 (2026-10-28): bench classes `sheep, cow, tractor, flowerbed, wildflower, farm` added to scripts/bench.mjs
   (herd + tractor read from `scene.getObjectByName('land-farmlife').userData.herd / .tractor`, set in farmlife.ts).
-  Before sheet: shots/w8/s0. Next: herds (near-LOD animal meshes).
+  Before sheet: shots/w8/s0 (sheet_1.png).
+* s1 (WIP, coded, judging): near-LOD sheep + cow models (animals.ts), real tractor (tractor.ts, field moved to
+  ~140 m from the slab so the camera can reach it), real farmsteads for farms < 420 m from the slab (farmstead.ts
+  via settlements.ts). Probe script scripts/agent-tools/w8probe.mjs (load once, eval async snippets).
 
 ## Photo tests (acceptance at 3 m; silhouette at 10 m; overview at least as good)
 * **Sheep 3 m:** wool volume with fleece breakup (lumpy, not a smooth blob), face and legs darker (black/brown
@@ -41,6 +44,20 @@ Branch `claude/real-w8-country` (from claude/pensive-gates-bim12i @ 5137562). Br
   1125, 1150, 1176. Merged fine plant mesh (`fineSink`), wind via `Wind.at`.
 * `src/world/groundcover/field.ts` — blade shader; flowers L301–366: head = camera-facing diamond on the stem,
   colours `flowerCols` L512 (gcFl), ring A 7-vertex blades (levels 0,1/3,2/3,tip).
+
+* `src/world/landscape/animals.ts` (new) — `Builder.tube/blob` (indexed, sections ⟂ path, disp callback), `sheepGeometry`,
+  `cowGeometry` (aMat: coat/skin/hoof/dark/pink/horn/switch, aBend neck weight), `POSE_GLSL` (herdLying/herdGraze/herdLie
+  shared with the coarse mesh), `createNearHerd` (instanced, cap N, iA/iB copied by the selector in farmlife.ts;
+  fleece/hide in the fragment: hnNoise, bump via dFdx; shadow via customDepthMaterial).
+* Camera targets are clamped to slab ± 320 m (`src/ui/camera.ts` WORLD_TARGET_MARGIN): anything farther can never be
+  seen at 3 m.
+* Selection runs in `herd.onBeforeRender` (camera from the call; the water reflection also renders the scene — the
+  check is by camera movement, harmless).
+* `src/world/landscape/tractor.ts` (new) — `Sink` (merged non-indexed builder: col, aRM rough/metal, aSurf, mud by
+  height `base/mudTop/mudSpan`), body + lugged wheels (2 InstancedMesh, roll by distance), `createTractor`.
+* `src/world/landscape/farmstead.ts` (new) — house/barn/shed/silo/bales/fence/gate builders, `farmMaterial` (aSurf
+  procedural: 1 boards, 2 corrugated, 3 tiles, 4 render, 5 brick, 6 galvanised, 7 wrap, 8 straw, 9 concrete).
+  settlements.ts `placeSite(..., farms)`: near farms skip the instanced boxes, `placeFarm()` holds the old layout.
 
 ## Done
 * s0: bench classes.
