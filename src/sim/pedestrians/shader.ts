@@ -108,6 +108,9 @@ varying float vPedH;
 flat varying float vPedFade;
 flat varying float vPedPat;
 flat varying vec2 vPedMat; // (wrap, sheen)
+varying vec3 vPedFace; // close-level face coords (X, Y, 1) — 0 elsewhere
+flat varying uint vPedFB; // face bits: age 2 | eye colour 2 | lipstick 1 | stubble 1
+flat varying vec4 vPedHairW; // hair colour, femininity
 vec2 pedU2(uint v) { return vec2(float(v & 0xFFFFu), float(v >> 16u)) * (1.0 / 4096.0) - 8.0; }
 float pedM16(uint v) { return float(v) * (1.0 / 32768.0) - 1.0; }
 vec3 pedRGB(uint v) {
@@ -219,6 +222,9 @@ bool pedVisible(uint d0) {
 
 void pedPose(inout vec3 p, inout vec3 n) {
   vPedFade = P_fade;
+  vPedFace = vec3(0.0);
+  vPedFB = (iC2.w >> 9u) & 63u;
+  vPedHairW = vec4(pedRGB(iC1.x), P_w);
   uint d0 = aData.x;
   if (!pedVisible(d0)) { p = vec3(0.0, -50.0, 0.0); n = vec3(0.0, 1.0, 0.0); vPedA = vPedB = vec3(0.0); vPedS = 0.0; vPedH = 0.0; vPedPat = 0.0; vPedMat = vec2(0.0); return; }
   int bone = int(d0 & 31u);
@@ -227,6 +233,7 @@ void pedPose(inout vec3 p, inout vec3 n) {
   float h = float(aData.y & 0xFFFFu) * (4.0 / 65535.0) - 2.0;
   float w = float(aData.y >> 16u) * (1.0 / 65535.0);
   vec2 aux = pedU2(aData.z);
+  if (region == ${R.FACE}) vPedFace = vec3(aux, 1.0);
   pedW = vec3(P_w, P_c, P_b);
   // ── morph
   p += pedW.x * vec3(pedM16(aMorph.x & 0xFFFFu), pedM16(aMorph.x >> 16u), pedM16(aMorph.y & 0xFFFFu))
@@ -463,14 +470,14 @@ void pedPose(inout vec3 p, inout vec3 n) {
   float ramp = 1.0 + 0.07 * max(n.y, 0.0) - 0.11 * max(-n.y, 0.0);
   if (region == ${R.LEG}) ramp *= mix(0.88, 1.0, smoothstep(0.08, 0.55, h));
   if (fabric) ramp *= 0.96 + 0.08 * jit;
-  if (region == ${R.SKIN} || region == ${R.LIPS}) { A *= vec3(1.05, 1.02, 1.0); Bc *= vec3(1.05, 1.02, 1.0); }
+  if (region == ${R.SKIN} || region == ${R.FACE} || region == ${R.LIPS}) { A *= vec3(1.05, 1.02, 1.0); Bc *= vec3(1.05, 1.02, 1.0); }
   vPedA = A * tint * ramp;
   vPedB = Bc * tint * ramp;
   vPedS = s;
   vPedH = h;
   vPedPat = pat;
   // material response: skin & hair soften the terminator (wrap), hair and shoes get a faint sheen
-  vPedMat = region == ${R.SKIN} || region == ${R.NECK} || region == ${R.LIPS} ? vec2(0.35, 0.0)
+  vPedMat = region == ${R.SKIN} || region == ${R.FACE} || region == ${R.NECK} || region == ${R.LIPS} ? vec2(0.35, 0.0)
           : region == ${R.HAIR} || region == ${R.BEARD} ? vec2(0.4, 0.07)
           : region == ${R.FOOT} ? vec2(0.0, 0.09)
           : region == ${R.BAG} || region == ${R.HAT} ? vec2(0.1, 0.04)
@@ -493,8 +500,95 @@ varying float vPedH;
 flat varying float vPedFade;
 flat varying float vPedPat;
 flat varying vec2 vPedMat;
+varying vec3 vPedFace;
+flat varying uint vPedFB;
+flat varying vec4 vPedHairW;
 float pedBayer2(vec2 a) { a = floor(a); return fract(dot(a, vec2(0.5, a.y * 0.75))); }
 float pedBayer4(vec2 a) { return pedBayer2(0.5 * a) * 0.25 + pedBayer2(a); }
+
+// ── close-level face paint (face coords in metres of the average man's head: X lateral, Y up from the
+// eye line). Eyes (almond opening, sclera, iris, pupil, lash line, lid crease), brows, lips with the
+// mouth line, nostrils, age lines, stubble. Fades to soft tones where a pixel covers > ~5 mm.
+float pedBand(float d, float hw, float px) { return 1.0 - smoothstep(hw - px * 0.5, hw + px * 0.5, abs(d)); }
+vec3 pedFacePaint(vec3 skin, vec2 F) {
+  float px = max(max(fwidth(F.x), fwidth(F.y)), 1e-5);
+  float det = 1.0 - smoothstep(0.0035, 0.009, px);
+  float w = vPedHairW.w;
+  uint age = vPedFB & 3u;
+  uint eyeC = (vPedFB >> 2u) & 3u;
+  vec3 hair = vPedHairW.rgb;
+  float ax = abs(F.x);
+  vec3 pc = skin;
+  // cheeks a touch warmer
+  pc *= mix(vec3(1.0), vec3(1.05, 0.97, 0.95), exp(-dot(vec2(ax - 0.043, F.y + 0.03), vec2(ax - 0.043, F.y + 0.03)) / 0.00025));
+  // stubble shadow on the jaw / upper lip (some men)
+  if ((vPedFB & 32u) != 0u) {
+    float jaw = smoothstep(-0.045, -0.06, F.y) * (1.0 - smoothstep(0.05, 0.066, ax));
+    pc = mix(pc, pc * 0.72 + hair * 0.08, jaw * 0.6);
+  }
+  // age: nasolabial folds, forehead lines, crow's feet
+  if (age > 0u) {
+    float k = float(age) / 3.0;
+    vec2 a = vec2(0.016, -0.038), b = vec2(0.03, -0.074);
+    vec2 pa = vec2(ax, F.y) - a, ba = b - a;
+    float dn = length(pa - ba * clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0));
+    float lines = pedBand(dn, 0.0007 + 0.0005 * k, px) * (0.25 + 0.3 * k);
+    lines += (pedBand(F.y - 0.034, 0.0004, px) + pedBand(F.y - 0.043, 0.0004, px)) * step(ax, 0.035) * 0.3 * k;
+    lines += pedBand(F.y + 0.002 - (ax - 0.047) * 0.0, 0.0003, px) * step(0.046, ax) * step(ax, 0.054) * 0.3 * k;
+    pc *= 1.0 - lines * det;
+  }
+  // eyes
+  float ex = ax - 0.031, ey = F.y - 0.0004;
+  float ew = 0.0128;
+  float q = 1.0 - (ex * ex) / (ew * ew);
+  float qa = pow(max(q, 0.0), 0.75);
+  float upper = 0.0054 * qa + 0.0007 * ex / ew;
+  float lower = -0.0034 * pow(max(q, 0.0), 0.9) + 0.0005 * ex / ew;
+  float dU = upper - ey, dL = ey - lower;
+  float open = smoothstep(-px * 0.5, px * 0.5, min(dU, dL)) * step(0.0, q);
+  vec3 iris = eyeC == 0u ? vec3(0.07, 0.04, 0.025) : eyeC == 1u ? vec3(0.17, 0.09, 0.04) : eyeC == 2u ? vec3(0.17, 0.16, 0.08) : vec3(0.2, 0.27, 0.33);
+  float dI = length(vec2(ex, ey + 0.0003));
+  vec3 eye = vec3(0.7, 0.66, 0.6) * mix(1.0, 0.82, smoothstep(0.004, 0.011, abs(ex)));
+  eye = mix(eye, iris, 1.0 - smoothstep(0.0052 - px * 0.5, 0.0052 + px * 0.5, dI));
+  eye = mix(eye, vec3(0.012), 1.0 - smoothstep(0.0021 - px * 0.5, 0.0021 + px * 0.5, dI));
+  eye += 0.35 * (1.0 - smoothstep(0.0, 0.0011 + px * 0.5, length(vec2(ex - 0.0016, ey - 0.0016))));
+  eye *= 1.0 - 0.4 * (1.0 - smoothstep(0.0, 0.0028, dU));
+  // lash line (thicker on women and at the outer corner), lid crease, lower lid
+  float lw = (0.0009 + 0.0007 * w) * (1.0 + 0.5 * smoothstep(-0.004, 0.012, ex));
+  float qL = step(0.0, 1.0 - (ex * ex) / (ew * ew * 1.15));
+  float lash = smoothstep(-px * 0.5, px * 0.5, -dU) * (1.0 - smoothstep(lw - px * 0.5, lw + px * 0.5, -dU)) * qL;
+  float crease = pedBand(-dU - 0.0042, 0.0005, px) * qL * 0.22;
+  float lowL = smoothstep(-px * 0.5, px * 0.5, -dL) * (1.0 - smoothstep(0.0006 - px * 0.5, 0.0006 + px * 0.5, -dL)) * qL * 0.35;
+  vec3 eyes = mix(pc, eye, open);
+  eyes = mix(eyes, vec3(0.03, 0.025, 0.022), lash * 0.92);
+  eyes *= 1.0 - crease - lowL;
+  // far: a soft eye shadow instead of aliasing detail
+  float socket = exp(-(ex * ex) / 0.00022 - (ey * ey) / 0.00005);
+  pc = mix(pc * (1.0 - 0.32 * socket), eyes, det);
+  // brows
+  float bx = ax - 0.029;
+  float bt = clamp((bx + 0.017) / 0.036, 0.0, 1.0);
+  float bcy = 0.0128 + 0.0036 * sin(bt * 2.7) - 0.0018 * bt;
+  float bth = mix(0.0033, 0.0014, bt) * mix(1.0, 0.68, w);
+  float brow = pedBand(F.y - bcy, bth, px) * smoothstep(-0.019, -0.0165, bx) * (1.0 - smoothstep(0.016, 0.0195, bx));
+  pc = mix(pc, mix(pc, hair * 0.75, 0.85), brow * mix(0.5, 1.0, det));
+  // lips: upper (cupid's bow) and lower, the mouth line between them
+  float ly = F.y + 0.0665;
+  float lhw = 0.0215 * (1.0 - 0.08 * w) * (1.0 - 0.12 * float(age) / 3.0);
+  float lq = max(1.0 - (F.x * F.x) / (lhw * lhw), 0.0);
+  float upT = 0.0054 * pow(lq, 0.55) - 0.0011 * exp(-(F.x * F.x) / 0.000012);
+  float loB = -0.0064 * pow(lq, 0.7);
+  float lip = smoothstep(-px * 0.5, px * 0.5, min(upT - ly, ly - loB)) * step(0.0005, lq);
+  vec3 lipC = skin * mix(vec3(0.88, 0.66, 0.63), vec3(0.84, 0.55, 0.55), w);
+  if ((vPedFB & 16u) != 0u) lipC = vec3(0.32, 0.05, 0.07);
+  lipC *= mix(1.0, 0.86, step(0.0, ly)); // the upper lip faces down: a little darker
+  pc = mix(pc, lipC, lip * mix(0.5, 1.0, det));
+  pc = mix(pc, skin * 0.28, pedBand(ly, 0.0005, px) * step(0.002, lq) * 0.85 * det);
+  // nostrils
+  vec2 nd = vec2((ax - 0.0086) / 0.0031, (F.y + 0.0448) / 0.0017);
+  pc = mix(pc, skin * 0.25, (1.0 - smoothstep(0.75, 1.0, length(nd))) * 0.9 * det);
+  return pc;
+}
 `;
 // fade ≥ 0: keep the dither cells below fade (spawn / despawn, incoming level of a cross-fade);
 // fade < 0: keep the complementary cells (outgoing level of a cross-fade)
@@ -515,6 +609,7 @@ const FRAG_COLOR = /* glsl */ `
       if (vPedPat < 1.5) st *= step(0.0, vPedS);
       pc = mix(pc, vec3(0.78, 0.78, 0.76), st);
     }
+    if (vPedFace.z > 0.5) pc = pedFacePaint(pc, vPedFace.xy);
     diffuseColor.rgb *= pc;
   }
 `;
@@ -613,7 +708,7 @@ export function makePeopleMaterials(): PersonMaterials {
       .replace('#include <lights_lambert_pars_fragment>', LAMBERT_PEOPLE)
       .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n  totalEmissiveRadiance += diffuseColor.rgb * 0.07 * uPedNight;');
   };
-  material.customProgramCacheKey = () => 'tinyhaven-people-2';
+  material.customProgramCacheKey = () => 'tinyhaven-people-3';
   const depth = new THREE.MeshDepthMaterial();
   depth.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, sharedUniforms());

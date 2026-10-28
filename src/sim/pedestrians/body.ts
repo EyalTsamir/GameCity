@@ -70,6 +70,8 @@ export const REG = {
   STRAP: 18,
   LIPS: 19,
   TOWEL: 20,
+  /** close-level face skin: painted eyes / brows / lips in the fragment shader from face coords (aux) */
+  FACE: 21,
 } as const;
 
 /** Render feature bits (per-instance mask; a vertex with a feature shows only when its bit is set). */
@@ -105,7 +107,8 @@ export const FB = {
   NOHAT: 27,
 } as const;
 
-export type Lod = 0 | 1 | 2 | 3;
+/** 0 near (< 40 m), 1 lo, 2 tiny, 3 pin, 4 close (< ~15 m: sculpted face, fingers, fabric detail) */
+export type Lod = 0 | 1 | 2 | 3 | 4;
 
 // ─────────────────────────────────────────────────────────── builder ──
 
@@ -248,7 +251,7 @@ interface LodCfg {
   limbSides: number;
   upper: number[];
   fore: number[];
-  hand: 'full' | 'paddle' | 'none';
+  hand: 'fingers' | 'full' | 'paddle' | 'none';
   thigh: number[];
   shin: number[];
   footSides: number;
@@ -259,6 +262,9 @@ interface LodCfg {
   tailRings: number;
   details: boolean;
   props: 'all' | 'mid' | 'far' | 'pin';
+  /** close level: sculpted head with a face, fingers */
+  close?: boolean;
+  hairSides?: number;
 }
 
 const LODS: Record<Lod, LodCfg> = {
@@ -350,6 +356,30 @@ const LODS: Record<Lod, LodCfg> = {
     tailRings: 2,
     details: false,
     props: 'pin',
+  },
+  4: {
+    torsoSides: 20,
+    torsoRings: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
+    headSides: 44,
+    headRings: [0, 1, 2, 3, 4, 5, 6, 7],
+    neck: [0, 1, 2],
+    neckSides: 16,
+    limbSides: 12,
+    upper: [0, 1, 2, 3, 4, 5],
+    fore: [0, 1, 2, 3, 4],
+    hand: 'fingers',
+    thigh: [0, 1, 2, 3, 4, 5],
+    shin: [0, 1, 2, 3, 4, 5, 6],
+    footSides: 12,
+    foot: [0, 1, 2, 3, 4, 5, 6, 7],
+    hairCap: [0, 0.18, 0.4, 0.62, 0.82, 1],
+    hairLong: [0.08, 0.2, 0.3, 0.42],
+    tailSides: 16,
+    tailRings: 4,
+    details: true,
+    props: 'all',
+    close: true,
+    hairSides: 24,
   },
 };
 
@@ -456,6 +486,10 @@ function buildNeckHead(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
     }
     bridge(b, rings);
   }
+  if (cfg.close) {
+    buildCloseHead(b, d, cfg);
+    return;
+  }
   // head: egg loft from under the jaw to the crown; nose wedge, ears, eye band
   const n = cfg.headSides;
   const rings: Ring[] = [];
@@ -502,6 +536,152 @@ function buildNeckHead(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
   b.use(BONE.HEAD, REG.SKIN, -1, 0.8);
   const chin = b.v([0, bot.y - 0.006, bot.cz + 0.01], 2, 0);
   capFan(b, rings[0], chin, [0, bot.y + 0.05, bot.cz]);
+}
+
+// ───────────────────────────────────────────────────────── close head ──
+// The close level (< ~15 m) sculpts a real face into a dense head loft: brow ridge, eye sockets with lids,
+// nose (bridge, tip, wings), cheekbones, lips, chin, jaw, ears. Face coordinates (X lateral, Y up from the
+// eye line, in metres of the average man's head) ride in aux so the fragment shader paints eyes, brows,
+// lips and nostrils crisply (shader.ts FACE_PAINT). Every target runs the same sampling (same topology).
+
+const gs = (x: number, y: number, sx: number, sy: number) => Math.exp(-((x * x) / (sx * sx) + (y * y) / (sy * sy)));
+const sstep = (a: number, b: number, x: number) => {
+  const t = clamp((x - a) / (b - a), 0, 1);
+  return t * t * (3 - 2 * t);
+};
+
+/** head ring at height y: Catmull-Rom through the head rings (smooth profile), spherical above the top */
+function headRingAt(d: Dims, y: number): BodyRing {
+  const R = d.headRings;
+  const top = R[R.length - 1];
+  if (y > top.y) {
+    const u = clamp((y - top.y) / (d.crown - top.y), 0, 1);
+    const k = Math.sqrt(Math.max(0, 1 - u * u));
+    return { y, hw: top.hw * k, f: top.f * k, b: top.b * k, cz: top.cz };
+  }
+  let i = 0;
+  while (i < R.length - 2 && R[i + 1].y < y) i++;
+  const p0 = R[Math.max(0, i - 1)],
+    p1 = R[i],
+    p2 = R[i + 1],
+    p3 = R[Math.min(R.length - 1, i + 2)];
+  const t = clamp((y - p1.y) / (p2.y - p1.y), 0, 1);
+  const cr = (a: number, b0: number, c0: number, e: number) =>
+    0.5 * (2 * b0 + (-a + c0) * t + (2 * a - 5 * b0 + 4 * c0 - e) * t * t + (-a + 3 * b0 - 3 * c0 + e) * t * t * t);
+  return { y, hw: cr(p0.hw, p1.hw, p2.hw, p3.hw), f: cr(p0.f, p1.f, p2.f, p3.f), b: cr(p0.b, p1.b, p2.b, p3.b), cz: cr(p0.cz, p1.cz, p2.cz, p3.cz) };
+}
+
+/** face relief (m, average-man units) at face coords X (lateral), Y (up from the eye line) */
+function faceRelief(X: number, Y: number, nose: number): number {
+  const ax = Math.abs(X);
+  let r = 0;
+  // eye sockets, lids over the eyeball, brow ridge, temples
+  r -= 0.0062 * gs(ax - 0.031, Y + 0.001, 0.015, 0.011);
+  r += 0.0034 * gs(ax - 0.031, Y + 0.0005, 0.0115, 0.0062);
+  r += 0.0036 * gs(ax - 0.027, Y - 0.0165, 0.021, 0.0062);
+  r += 0.0018 * gs(X, Y - 0.014, 0.012, 0.008);
+  // cheekbones, the soft hollow below them, the muzzle around the mouth
+  r += 0.0042 * gs(ax - 0.046, Y + 0.024, 0.017, 0.014);
+  r -= 0.0018 * gs(ax - 0.048, Y + 0.058, 0.012, 0.014);
+  r += 0.0046 * gs(X, Y + 0.066, 0.03, 0.022);
+  // nose: bridge rising to the tip, wings, the underside back to the lip
+  const nk = nose / 0.024;
+  const tipY = -0.037;
+  const prof = Y > tipY ? 0.003 + (0.019 * nk - 0.003) * Math.pow(sstep(0.012, tipY, Y), 1.4) : 0.019 * nk * (1 - sstep(tipY, -0.049, Y));
+  const wN = 0.0052 + 0.0062 * sstep(0.004, tipY, Y);
+  r += prof * Math.exp(-(X * X) / (wN * wN));
+  r += 0.0058 * nk * gs(ax - 0.0125, Y + 0.0405, 0.0062, 0.0062);
+  r -= 0.0012 * gs(ax - 0.019, Y + 0.044, 0.003, 0.004);
+  // philtrum, lips with the mouth line between them, the groove under the lower lip, chin
+  r += 0.0009 * gs(ax - 0.0035, Y + 0.054, 0.0018, 0.004);
+  r += 0.0036 * gs(X, Y + 0.0615, 0.021, 0.0046) * (1 - 0.25 * sstep(0.006, 0.02, ax));
+  r += 0.0042 * gs(X, Y + 0.0715, 0.018, 0.0052);
+  r -= 0.0022 * gs(X, Y + 0.0665, 0.023, 0.0013);
+  r -= 0.0024 * gs(X, Y + 0.0815, 0.017, 0.0036);
+  r += 0.0046 * gs(X, Y + 0.0955, 0.017, 0.0105);
+  return r;
+}
+
+function buildCloseHead(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
+  const R = d.headRings;
+  const ye = R[4].y;
+  const k = (d.crown - R[0].y) / 0.232;
+  const kx = R[4].hw / 0.0775;
+  const n = cfg.headSides;
+  // dense through the face, coarser over the skull
+  const Ys: number[] = [];
+  const yb = (R[0].y - ye) / k,
+    yt = (R[R.length - 1].y - ye) / k;
+  Ys.push(yb, yb + 0.008);
+  for (let y = -0.1; y < 0.03; y += 0.0034) Ys.push(y);
+  for (let y = 0.038; y < yt - 0.004; y += 0.0105) Ys.push(y);
+  Ys.push(yt);
+  const yc = (d.crown - ye) / k;
+  for (const f of [0.3, 0.55, 0.75, 0.9]) Ys.push(yt + (yc - yt) * f);
+  const rings: Ring[] = [];
+  for (let j = 0; j < Ys.length; j++) {
+    const Y = Ys[j];
+    const y = ye + Y * k;
+    const r = headRingAt(d, y);
+    const ids: number[] = [];
+    for (let i = 0; i < n; i++) {
+      const t = (i / n) * Math.PI * 2;
+      const phi = t - 0.68 * Math.sin(t); // vertices bunch at the face
+      const p = torsoPoint(r, 0, phi, 2.1);
+      const X = p[0] / kx;
+      const front = sstep(0.05, 0.45, Math.cos(phi));
+      const rel = front > 0 ? faceRelief(X, Y, d.nose / k) * front * k : 0;
+      const dx = p[0],
+        dz = p[2] - r.cz;
+      const dl = Math.hypot(dx * 0.6, dz) || 1;
+      p[0] += ((dx * 0.6) / dl) * rel;
+      p[2] += (dz / dl) * rel;
+      // jaw / under-chin shade and the face proper
+      const reg = Math.cos(phi) > 0.2 && Y > -0.112 && Y < 0.06 ? REG.FACE : REG.SKIN;
+      b.use(BONE.HEAD, reg, -1, Y < -0.1 ? 0.88 : 1);
+      ids.push(b.v(p, 2, 0, X, Y));
+    }
+    rings.push({ ids, c: [0, y, r.cz] });
+  }
+  bridge(b, rings);
+  b.use(BONE.HEAD, REG.SKIN, -1, 1);
+  const crown = b.v([0, d.crown, R[R.length - 1].cz - 0.005], 2, 0);
+  capFan(b, rings[rings.length - 1], crown, [0, d.crown - 0.05, R[R.length - 1].cz]);
+  b.use(BONE.HEAD, REG.SKIN, -1, 0.8);
+  const chin = b.v([0, R[0].y - 0.006, R[0].cz + 0.01], 2, 0);
+  capFan(b, rings[0], chin, [0, R[0].y + 0.05, R[0].cz]);
+  // ears: a shell (helix rim standing off the head, hollow concha) between the brow and the nose base
+  for (const side of [1, -1]) {
+    b.use(BONE.HEAD, REG.SKIN, -1, 0.93);
+    const phi0 = side * (Math.PI / 2 + 0.22);
+    const yE = ye - 0.017 * k;
+    const base = torsoPoint(headRingAt(d, yE), 0, phi0, 2.1);
+    const out: P3 = norm([Math.sin(phi0), 0, Math.cos(phi0) * 0.5]);
+    const back: P3 = norm([0, 0, -1]);
+    const up: P3 = norm(add([0, 1, 0], mul(back, 0.28)));
+    const hgt = 0.031 * k,
+      wid = 0.0165 * k;
+    const rim: number[] = [],
+      root: number[] = [];
+    const NE = 12;
+    for (let i = 0; i < NE; i++) {
+      const a = (i / NE) * Math.PI * 2;
+      const lz = Math.cos(a),
+        ly = Math.sin(a);
+      // the helix stands off most at the back and top; the lobe hangs a little forward
+      const stand = (0.006 + 0.009 * Math.max(0, lz) + 0.003 * Math.max(0, ly)) * k;
+      const c = add(add(base, mul(back, lz * wid + 0.004 * k)), mul(up, ly * hgt * (ly < 0 ? 0.92 : 1)));
+      rim.push(b.v(add(c, mul(out, stand)), 2, 0));
+      root.push(b.v(add(add(base, mul(back, lz * wid * 0.55 + 0.002 * k)), add(mul(up, ly * hgt * 0.6), mul(out, -0.003 * k))), 2, 0));
+    }
+    b.setTint(0.78);
+    const concha = b.v(add(add(base, mul(back, 0.002 * k)), add(mul(up, -0.004 * k), mul(out, 0.0015 * k))), 2, 0);
+    for (let i = 0; i < NE; i++) {
+      const i1 = (i + 1) % NE;
+      b.triDir(rim[i], rim[i1], concha, out);
+      b.quadOut(rim[i], rim[i1], root[i1], root[i], sub(base, mul(out, 0.03)));
+    }
+  }
 }
 
 /** orthonormal frame for a limb axis (dir) with U ≈ +x and V ≈ +z */
@@ -605,6 +785,10 @@ function buildArm(b: MeshBuilder, d: Dims, cfg: LodCfg, side: 1 | -1): void {
     buildLimb(b, specs, cfg.limbSides, side, true, 1);
     return;
   }
+  if (cfg.hand === 'fingers') {
+    buildFingers(b, specs, cfg, side, HA, wr, hd, hlen, pw, pt, handRing);
+    return;
+  }
   specs.push(handRing(0.22, pt, pw * 0.93, -0.001, 0.12, 0));
   specs.push(handRing(0.52, pt * 0.92, pw, -0.002, 0, 0.1));
   specs.push(handRing(0.84, pt * 0.68, pw * 0.84, -0.01, 0, 1));
@@ -633,6 +817,115 @@ function buildArm(b: MeshBuilder, d: Dims, cfg: LodCfg, side: 1 | -1): void {
   bridge(b, rings);
   const tc = rings[2].c;
   capFan(b, rings[2], b.v(add(tc, mul(tdir, tr * 0.8)), -0.4, 0), sub(tc, mul(tdir, 0.01)));
+}
+
+/** close level: palm to the knuckles, four jointed fingers in a relaxed curl (aux1 = grip curl share,
+ *  growing to the tip so the shader's grip bends them progressively), a jointed thumb, pale nails */
+function buildFingers(
+  b: MeshBuilder,
+  specs: LimbSpec[],
+  cfg: LodCfg,
+  side: 1 | -1,
+  HA: number,
+  wr: P3,
+  hd: P3,
+  hlen: number,
+  pw: number,
+  pt: number,
+  handRing: (t: number, rx: number, rz: number, cx: number, w: number, curl: number) => LimbSpec,
+): void {
+  specs.push(handRing(0.2, pt, pw * 0.92, -0.001, 0.12, 0));
+  specs.push(handRing(0.36, pt * 0.95, pw * 0.99, -0.002, 0, 0));
+  specs.push(handRing(0.5, pt * 0.82, pw * 0.97, -0.003, 0, 0.12));
+  buildLimb(b, specs, cfg.limbSides, side, true, 1);
+  // towards the palm (−x on the left hand, +x on the right) and across it (+z = index side)
+  const palm: P3 = [-side, 0, 0];
+  const across: P3 = [0, 0, 1];
+  const bend = (v: P3, a: number): P3 => norm(add(mul(v, Math.cos(a)), mul(palm, Math.sin(a))));
+  const FING: [number, number, number][] = [
+    // z offset (× pw), length (× hand length), radius (× pw)
+    [0.66, 0.44, 0.205],
+    [0.22, 0.5, 0.22],
+    [-0.22, 0.47, 0.21],
+    [-0.62, 0.37, 0.18],
+  ];
+  const SIDES = 6;
+  for (let f = 0; f < 4; f++) {
+    const [zo, fl, fr] = FING[f];
+    const len = hlen * fl;
+    const rz = pw * fr,
+      rx = Math.min(pt * 0.66, rz * 0.95);
+    // splay a little: index forward, little finger back
+    const dir0 = norm(add(hd, mul(across, zo * 0.09)));
+    const segs: [number, number][] = [
+      [0.46, 0.14 + 0.03 * f],
+      [0.3, 0.3 + 0.04 * f],
+      [0.24, 0.26],
+    ];
+    let c = add(add(wr, mul(hd, hlen * 0.47)), add(mul(across, pw * zo), [-0.002 * side, 0, 0]));
+    let dir = dir0;
+    let ang = 0;
+    const rings: Ring[] = [];
+    const ring = (cc: P3, dd: P3, sx: number, sz: number, curl: number, h: number, nail: boolean) => {
+      const { U, V } = limbFrame(dd);
+      const ids: number[] = [];
+      for (let k = 0; k < SIDES; k++) {
+        const phi = (k / SIDES) * Math.PI * 2;
+        const q = add(cc, add(mul(U, sx * Math.sin(phi)), mul(V, sz * Math.cos(phi))));
+        const back = Math.sin(phi) * side * Math.sign(U[0] || 1);
+        b.use(HA, REG.SKIN, -1, nail && back > 0.4 ? 1.12 : back < -0.4 ? 0.97 : 1);
+        ids.push(b.v(q, -0.5 - h * 0.5, 0, curl));
+      }
+      rings.push({ ids, c: cc });
+    };
+    ring(c, dir, rx, rz, 0.2, 0, false);
+    for (let s = 0; s < 3; s++) {
+      const [lf, a] = segs[s];
+      ang += a;
+      dir = bend(dir0, ang);
+      c = add(c, mul(dir, len * lf));
+      const t = (s + 1) / 3;
+      const taper = 1 - 0.2 * t;
+      if (s < 2) ring(c, dir, rx * taper * 1.04, rz * taper * 1.04, 0.35 + 0.3 * s, t, false);
+      else ring(sub(c, mul(dir, len * lf * 0.25)), dir, rx * taper, rz * taper, 1, t, true);
+    }
+    bridge(b, rings);
+    const last = rings[rings.length - 1];
+    b.use(HA, REG.SKIN, -1, 1);
+    capFan(b, last, b.v(add(c, mul(dir, rz * 0.2)), -1, 0, 1), sub(last.c, mul(dir, 0.01)));
+    // the first ring sits inside the palm: no cap needed
+  }
+  // thumb: from the index edge of the palm, down-forward, two joints bending across the palm
+  const base = add(add(wr, mul(hd, hlen * 0.14)), [-0.007 * side * (pw / 0.043), 0, pw * 0.7]);
+  const t0 = norm([-0.28 * side, -0.8, 0.4]);
+  const tl = hlen * 0.4;
+  const tr = pt * 0.78;
+  const rings: Ring[] = [];
+  let c = base;
+  let dir = t0;
+  const TS = 7;
+  const tseg: [number, number, number][] = [
+    [0, 1, 0],
+    [0.42, 0.95, 0.12],
+    [0.33, 0.86, 0.22],
+    [0.2, 0.74, 0.1],
+  ];
+  for (let s = 0; s < tseg.length; s++) {
+    const [lf, rr, a] = tseg[s];
+    dir = norm(add(mul(dir, Math.cos(a)), mul(palm, Math.sin(a))));
+    c = add(c, mul(dir, tl * lf));
+    const { U, V } = limbFrame(dir);
+    const ids: number[] = [];
+    for (let k = 0; k < TS; k++) {
+      const phi = (k / TS) * Math.PI * 2;
+      b.use(HA, REG.SKIN, -1, s === 3 && Math.sin(phi) * side > 0.4 ? 1.1 : 0.97);
+      ids.push(b.v(add(c, add(mul(U, tr * rr * Math.sin(phi)), mul(V, tr * rr * 0.9 * Math.cos(phi)))), -0.3, 0));
+    }
+    rings.push({ ids, c });
+  }
+  bridge(b, rings);
+  const tc = rings[rings.length - 1].c;
+  capFan(b, rings[rings.length - 1], b.v(add(tc, mul(dir, tr * 0.7)), -0.4, 0), sub(tc, mul(dir, 0.01)));
 }
 
 function buildLeg(b: MeshBuilder, d: Dims, cfg: LodCfg, side: 1 | -1): void {
@@ -716,7 +1009,7 @@ function hairlineU(phi: number): number {
 }
 
 function buildHair(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
-  const n = cfg.headSides;
+  const n = cfg.hairSides ?? cfg.headSides;
   const chin = d.headRings[0].y - 0.006;
   const crown = d.crown;
   const hk = d.H / 1.76;

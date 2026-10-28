@@ -30,7 +30,15 @@ export default function create(ctx: CityContext): CityModule {
   const renderer = legacy ? new LegacyRenderer(ctx.scene, 720, ctx.quality.shadows) : new CrowdRenderer(ctx.scene, 720, ctx.quality.shadows);
   // ?hide=pedestrians: simulate but draw nothing (isolates the rendering cost in perf runs)
   if ((ctx.debug.params.get('hide') ?? '').split(',').includes('pedestrians')) renderer.group.visible = false;
-  if (ctx.debug.params.has('pedlod')) renderer.forceLod = Math.max(0, Math.min(legacy ? 2 : 3, Number(ctx.debug.params.get('pedlod')) || 0));
+  if (ctx.debug.params.has('pedlod')) {
+    // ?pedlod=0..3 near / lo / tiny / pin as before; ?pedlod=close the close level (new figures only)
+    const v = ctx.debug.params.get('pedlod');
+    const n = Math.max(0, Math.min(legacy ? 2 : 3, Number(v) || 0));
+    renderer.forceLod = legacy ? n : v === 'close' ? 0 : n + 1;
+  }
+  // close level (sculpted face, fingers, fabric detail): 15 m on high, 11 on medium, 7 on low;
+  // ?nopeopledetail turns it off
+  if (!legacy) (renderer as CrowdRenderer).closeDist = ctx.debug.params.has('nopeopledetail') ? 0 : ctx.quality.level === 'low' ? 7 : ctx.quality.level === 'medium' ? 11 : 15;
   crowd.warmStart();
   // street vendors' carts (one static mesh)
   const stallMesh = buildStallMesh(places.vendors, rng.fork('stalls'));
