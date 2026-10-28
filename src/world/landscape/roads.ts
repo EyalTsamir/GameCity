@@ -46,7 +46,7 @@ vec3 roadAlbedo(vec3 wp) {
     return mix(grav, grass, max(crown * 0.85, edge));
   }
   // asphalt: patched, darker wheel paths, crumbling edge, dashed centre line
-  vec3 asp = vec3(0.13, 0.13, 0.13) * (0.85 + 0.25 * n2.g + 0.12 * n1.r);
+  vec3 asp = vec3(0.14, 0.132, 0.12) * (0.85 + 0.25 * n2.g + 0.12 * n1.r);   // (warm grey: no blue cast in shade)
   asp *= 1.0 - 0.08 * smoothstep(0.35, 0.5, abs(a - 0.5) < 0.12 ? 1.0 : 0.0);
   float dash = step(fract(vRS.x / 9.0), 0.45) * (1.0 - smoothstep(0.02, 0.05, a)) * (1.0 - smoothstep(0.4, 1.2, fp));
   asp = mix(asp, vec3(0.62, 0.6, 0.55), dash * 0.8);

@@ -164,6 +164,26 @@
   `npx rolldown land/map.ts --platform node -o land/map.mjs`; `node land/map.mjs x0 z0 x1 z1 N out.bin &&
   python3 -I land/map.py out.bin out.png`).
 
+* 10-28 — USER BUGS (free camera; lead relay). Root causes + fixes:
+  (1) field band cut diagonally near the slab south edge: the field cover is per vertex, interpolated over
+  the ring triangles and blended per pixel → plots were cut on cover contours (slab blend slope, river
+  wet, slab edge). Now field vs meadow is decided PER FIELD at its centre from a field mask (terrain.ts
+  buildFieldMask: ring-vertex field cover splatted to a 16 m grid ±3.2 km round the town, holes push-pull
+  filled, × a ramp 6–70 m from the slab so the plots next to the town are meadow — no ruler seam between
+  the town lawn and crops; per-field threshold 0.35–0.65 → irregular edge). Crop rows / tramlines use the
+  unwarped field frame (the warped one made wavy "ploughed" stripes); margins a tint, not a pale bevel.
+  ?landfieldmask=0 → old per-pixel cover. (2) forest egg carton: the canopy dome normals were painted on
+  the ground under the instanced trees (≤ 470 m from the slab) and on half-forest (maquis) cover → tree
+  band = dark forest floor (litter / moss / shade), domes only beyond it, only on closed canopy, two
+  lattices, gentler; canopy raise moved beyond the tree band (CANOPY_NEAR 480 / FULL 720) so no tree
+  stands inside a raised canopy. Warm asphalt (no blue cast in shade). (3) sea seam at the SE corner:
+  the slab's bed is sand → silt with caustics, the landscape's sea floor was darker mud → step through
+  the water at z = 150; the land shader now uses the slab bed colours + caustics; the landscape beach
+  takes the town beach's sand colours within ~80 m of the slab; the coast starts to curve right after
+  the slab corner (COAST_CTRL) instead of running ruler-straight for another 100 m.
+* Running: sweepA / sweepB (22 low free-camera views × 11 / 18.5: N forest + hills, W river + fields,
+  S fields + villages, E dunes / coast / cliffs, island, villages, hamlet).
+
 ## Brief (from WORLD-PLAN.md scope 1 + briefs "### world")
 Remove the frame in world mode (soil faces, plinth, nameplate, table, cyclorama, sea cut-away, slab shadow) and
 continue the land seamlessly beyond the slab edge to the horizon: countryside W and S (fields patchwork, hedgerows,

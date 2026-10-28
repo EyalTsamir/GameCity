@@ -53,6 +53,8 @@ export function landUniforms(globals: { uTime: { value: number }; uWind: { value
     cStone: C('#b3a68f'),
     // the slab's sea bed colours (terrain/ground.ts gBedA / gBedB)
     cBedA: C('#d3bf8e'),
+    cSlabSand: C('#ead9a7'),
+    cSlabSandWet: C('#c4af7e'),
     cBedB: C('#6b6a58'),
     uLandDbg: { value: 0 },
     // per-plot field / meadow decisions (terrain.ts buildFieldMask); xf.z = 0 → mask off (per-pixel cover)
@@ -98,7 +100,7 @@ varying vec4 vCov;
 varying vec4 vCov2;
 varying vec4 vCov3;
 uniform vec3 cStone;
-uniform vec3 cBedA, cBedB;
+uniform vec3 cBedA, cBedB, cSlabSand, cSlabSandWet;
 ${FIELDS_GLSL}
 ${WIND_GLSL}
 ${LAMP_GLSL}
@@ -424,8 +426,8 @@ vec3 landAlbedo() {
     // lattices), broken gaps, domes only where the wood is closed, gentle relief (the low sun exaggerates it)
     float treeBand = 1.0 - smoothstep(430.0, 500.0, vCov3.y);
     if (treeBand > 0.01) {
-      vec3 floorC = mix(vec3(0.045, 0.04, 0.028), vec3(0.05, 0.075, 0.03), smoothstep(0.4, 0.65, nB.g));
-      floorC = mix(floorC, vec3(0.08, 0.06, 0.035), smoothstep(0.62, 0.8, nP2r(p.xz)) * 0.6);   // needle / leaf litter
+      vec3 floorC = mix(vec3(0.07, 0.058, 0.038), vec3(0.065, 0.095, 0.035), smoothstep(0.4, 0.65, nB.g));
+      floorC = mix(floorC, vec3(0.11, 0.08, 0.045), smoothstep(0.62, 0.8, nP2r(p.xz)) * 0.6);   // needle / leaf litter
       floorC *= 0.8 + 0.35 * nB.r * midF;
       // far off, the gaps between the instanced crowns average out to the canopy tone
       floorC = mix(floorC, fcol * 0.8, smoothstep(2.0, 10.0, fp));
@@ -520,6 +522,13 @@ vec3 landAlbedo() {
   // smooth, else the field colours show through the dunes in blotches)
   float sN = (nA.b - 0.5) * 1.1 + (nB.g - 0.5) * 0.7 + (texture2D(tLN, p.xz * (1.0 / 13.0)).r - 0.5) * 0.15 * midF;
   vec3 sc = mix(cWetSand, cSand, smoothstep(${(WL + 0.2).toFixed(2)}, ${(WL + 1.0).toFixed(2)}, p.y));
+  // next to the slab the beach is the town beach's own sand (terrain/ground.ts gSand / gSandWet): no colour
+  // step along the slab edge; the landscape's quieter tone takes over within ~80 m
+  {
+    float nearSlab = 1.0 - smoothstep(8.0, 80.0, vCov3.y);
+    vec3 scSlab = mix(cSlabSandWet, cSlabSand * (0.93 + 0.12 * nB.g), smoothstep(${(WL + 0.04).toFixed(2)}, ${(WL + 0.6).toFixed(2)}, p.y));
+    sc = mix(sc, scSlab, nearSlab);
+  }
   // marram: sparse on the fore-dune, closing into a soft vegetated back-dune (a smooth gradient with
   // only broad variation — 5–15 m patches read as camouflage blotches against sunlit sand)
   float marram = smoothstep(0.25, 0.85, (1.0 - sand) * 1.6 - 0.15 + sN * 0.22) * smoothstep(${(WL + 1.6).toFixed(2)}, ${(WL + 2.6).toFixed(2)}, p.y);
