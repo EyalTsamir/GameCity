@@ -137,3 +137,40 @@ touch it). Photo tests: "Tree" + "Contact" in REAL.md, plus:
 3. Fences/hedges/gates in gardens (above); 4. signs and signals (above); 5. lamp posts (above).
 6. Contact: every object you own sits in the ground (no hovering edge, soil/grime at the base).
 Toggles e.g. `?notreebase`, `?nokerbdetail`, `?nofencedetail`, `?nosigndetail`.
+
+## W6 — Dense real places I: market square, café terrace, back yard (wave 3)
+Plan item 8 of NEXT-ROUND.md ("Dense real places"). Owned: `src/world/props/**` + `props.ts` (scatter, kit, layout,
+gardenPlan — keep W5's fence/lamp changes), `src/world/life/**` (decor, cloth, extras), `src/sim/pedestrians/cafes.ts`
++ `tableware.ts` (presentation only). First finish W3's leftovers from docs/progress/real-w3.md "Resume here"
+(re-bench kiosk/playground/gazebo/statue/planter after its last edits; measure the cost of magazine covers and
+produce with perf.mjs). Then make three places so dense with real things that a visitor stops to look — each
+verified like a POI (a fixed camera at eye level + a 10 m view + the overview unchanged):
+1. **Market square:** stalls packed with goods and life — crates stacked behind, empty boxes and cardboard, a
+   hand truck, a delivery van being unloaded, bunting/string lights between stalls, chalk boards, bins overflowing a
+   little, dropped leaves and paper, pigeons; vary stall types (fish on ice, flowers in buckets, bread, cheese).
+2. **Café terrace:** tables with real tableware (cups, saucers, glasses, menus, a newspaper, a bag on a chair),
+   chairs at angles not a grid, a chalk A-board, planters dividing the terrace, an awning or parasols, a waiter
+   station, cigarette stubs near the kerb; people mid-gesture.
+3. **Back yard / alley:** bins and recycling crates, a washing line with clothes (the shared wind), a bicycle
+   leaning, stacked pallets, a drainpipe with a water butt, weeds in cracks, a back door with step and mat, an AC
+   unit, a gas meter box, a small herb pot garden.
+Mechanics in these places: awnings, parasols, bunting and washing move with core/wind.ts (open item "awnings and
+parasols are static"). Toggles e.g. `?nomarketlife`, `?noterracelife`, `?nobackyard`; quality tiers; measure cost.
+
+## W7 — Dense real places II: harbour quay + boats, building site, station platform (wave 3)
+Audit #8 (boats), #12 (jetty/beach gear) and plan item 8. Owned: `src/world/harbor/**` + `harbor.ts`,
+`src/sim/boats/**` + `boats.ts`, `src/world/landmarks/construction.ts`, `src/sim/rail/station.ts` +
+`staticMaterial.ts` (platform furniture; W2 owns trainModels/trainMaterial/trainRender). Photo test "Train / boat"
+(boat part) in REAL.md. Bench classes boat, jetty (add quay/site/platform views to bench.mjs if useful).
+1. **Boats:** hull plating seams and weld lines, rubbing strakes and fenders, deck fittings (cleats, bollards,
+   winches), railings with stanchions, wheelhouse with framed windows and wipers, life rings, ropes, rust streaks
+   from scuppers, waterline grime; small craft with oars, tarps, outboards.
+2. **Harbour quay:** cast-iron bollards with ropes to moored boats, coiled ropes, fishing nets, lobster pots, fish
+   boxes, pallets, a forklift, rusted ladders down the quay wall, tyre fenders, weed and wet line on the wall,
+   puddles and stains.
+3. **Building site:** hoarding with posters and a gate, scaffolding with boards and toe-boards, stacked materials
+   (bricks on pallets, rebar, sand heap, timber), a skip, a portable toilet, a mixer, cones and barriers, mud on the
+   pavement at the gate.
+4. **Station platform:** platform edge with tactile strip and yellow line, benches, a timetable board, a clock,
+   ticket machine, bins, canopy columns with fixings, signage with legible station names, luggage, waiting people.
+Toggles e.g. `?noquaylife`, `?nositedetail`, `?noplatformdetail`, `?noboatdetail`; quality tiers; measure cost.
