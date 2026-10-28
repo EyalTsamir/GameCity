@@ -156,6 +156,7 @@ try {
           const rc = new THREE.Raycaster();
           const from = new THREE.Vector3(l.x, ty, l.z);
           const near = Math.max(0.6, l.w * 0.5 + 0.4);
+          const enclosure = [[1, 0, 0], [-1, 0, 0], [0, 0, 1], [0, 0, -1], [0, 1, 0]].map(([x, y, z]) => new THREE.Vector3(x, y, z));
           const clear = () => {
             const cam = c.ctx.camera, dir = cam.position.clone().sub(from), len = dir.length();
             // both directions: a one-sided roof or wall is only hit from its front
@@ -166,7 +167,25 @@ try {
             rc.set(cam.position, dir.clone().negate());
             rc.near = 0.3;
             rc.far = len - near;
-            return rc.intersectObjects(meshes, false).length === 0;
+            if (rc.intersectObjects(meshes, false).length) return false;
+            // not enclosed: a camera inside a bus shelter / kiosk sees the object through the open side
+            // but frames it with glass and roof — reject when 3 of 5 short probes hit something
+            let hits = 0;
+            for (const pd of enclosure) {
+              // both ways (single-sided glass / roofs are only hit from their front)
+              rc.set(cam.position, pd);
+              rc.near = 0.05;
+              rc.far = 2.2;
+              let hit = rc.intersectObjects(meshes, false).length > 0;
+              if (!hit) {
+                rc.set(cam.position.clone().addScaledVector(pd, 2.2), pd.clone().negate());
+                rc.near = 0;
+                rc.far = 2.15;
+                hit = rc.intersectObjects(meshes, false).length > 0;
+              }
+              if (hit) hits++;
+            }
+            return hits < 3;
           };
           // street canyons: finally look down from higher up
           for (const [arm, pt] of [[1, pitch], [0.6, pitch], [1, Math.max(pitch, 48)], [1, 72]])
