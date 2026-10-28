@@ -60,8 +60,10 @@ try {
       all.sort((a, b) => Math.hypot(a.x, a.z + 40) - Math.hypot(b.x, b.z + 40));
       const out = [];
       const step = Math.max(1, Math.floor(all.length / (n * 3)));
+      window.__benchFigs = [];
       for (let i = skip * step; i < all.length && out.length < n; i += step) {
         const m = all[i];
+        window.__benchFigs.push(m);
         const L = m.look;
         const H = L.kind === 'boy' || L.kind === 'girl' ? 1.25 : L.kind === 'woman' ? 1.64 : 1.76;
         out.push({ x: m.x, y: m.y, z: m.z, yaw: (m.yaw * 180) / Math.PI, H: H * (L.scale ?? 1) * (L.age < 13 ? 1 : 1), kind: L.kind, age: L.age });
@@ -78,6 +80,8 @@ try {
   };
   for (let i = 0; i < figs.length; i++) {
     const f = figs[i];
+    // --vel 8: pose the figure as if moving at that speed (gait input only; the sim is paused)
+    if (args.vel) await page.evaluate(([i, v]) => { const m = window.__benchFigs[i]; const k = v / Math.max(1e-3, Math.hypot(m.vx, m.vz)); m.vx = m.vx * k || Math.sin(m.yaw) * v; m.vz = m.vz * k || Math.cos(m.yaw) * v; m.speed = v; m.amp = 1.8; }, [i, parseFloat(args.vel)]);
     for (const s of shots) {
       const o = SH[s];
       // the free camera stops at 3 m: closer shots keep 3 m and narrow the field of view instead (the
