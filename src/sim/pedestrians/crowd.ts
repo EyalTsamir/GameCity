@@ -3213,7 +3213,9 @@ export class Crowd {
       for (const p of this.parties) if (p.stall === st && p.state === 'serve') have = p;
       if (open && !have) {
         if (this.busyAt(st.vx, st.vz, 0.6)) continue;
-        let p = this.makeParty(this.rng.chance(0.5) ? 'worker' : 'shopper', 1);
+        // (a casual look turned stallholder: the 'worker' persona put them in hi-vis vests and hard hats)
+        let p = this.makeParty('shopper', 1);
+        dressVendor(p.members[0].look, this.rng);
         if (st.kind === 'busker') {
           // the guitar is modelled for an average man: the musician is one
           p = new Party(this.nextParty++, 'stroller');
@@ -4332,6 +4334,32 @@ function segDist(ax: number, az: number, bx: number, bz: number, px: number, pz:
   let t = l2 > 0 ? ((px - ax) * dx + (pz - az) * dz) / l2 : 0;
   t = clamp(t, 0, 1);
   return Math.hypot(px - (ax + t * dx), pz - (az + t * dz));
+}
+
+/** a stallholder: own everyday clothes, trousers in a work colour with a knee-length apron (the apron
+ *  garment takes the trouser colour), no bags, hats or hi-vis; a few roll their sleeves up */
+function dressVendor(L: Look, rng: Rng): void {
+  L.flags &= F.HAIR | F.LONGHAIR | F.BUN | F.BEARD | F.SHORTSLEEVE;
+  L.bottom = rng.pick([0x2b3a55, 0x1f2a24, 0x3a2a20, 0x2e4a3a, 0x5a2a28, 0x34466a, 0x26272b, 0x6a5a3e]);
+  L.umbrellaOwner = false;
+  L.dog = null;
+  L.pram = null;
+  const s = L.style;
+  if (s) {
+    s.hat = 0;
+    s.vest = false;
+    s.tie = false;
+    s.hood = false;
+    s.jacketHem = -1;
+    s.lapels = false;
+    s.legwear = 0;
+    s.trouserEnd = 0.08;
+    s.trouserFit = 0.75;
+    if (rng.chance(0.3)) s.sleeve = 0.42;
+    s.tail = 1;
+    s.tailHem = 0.4;
+    s.tailFlare = 0.03;
+  }
 }
 
 /** a waiter: white shirt, black trousers, a long black bistro apron, no bags or hats */

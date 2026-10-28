@@ -11,6 +11,9 @@ Photo test "Person" (REAL.md). Owned: `src/sim/pedestrians/**` presentation (not
   sheen shows only in direct light — consider a faint sky-lit sheen lobe; (c) check the jog-crouch group
   (below); (d) hat crown reads pointy/pentagonal from behind (s5h p0_headback); (e) idle: café/bench sitters'
   gestures + glances at passers-by (head turns are random, not targeted).
+* s4 addendum (lead, bug hunter finding 1): market/cart vendors spawned as persona 'worker' (hi-vis vest +
+  hard hat). Now a 'shopper' look + `dressVendor` (crowd.ts): work-colour trousers + knee apron, no hats/bags/vest,
+  some sleeves rolled. Judged shots/w4/vend1 (bench marketstall 4 m): casual stallholders, no hi-vis.
 * 2026-10-28 ~22:10 UTC — session 5 STARTED from pensive-gates b087c4b. Lead's s4 verdict priorities:
   (1) sclera too bright on dark skin (off-white, lid shadow, smaller), (2) long hair = black plaster sheet (sheen
   bands, separated locks at the ends, thinning edges), (3) FACE-edge tone line + judge fringe, (4) clothing at 2 m
