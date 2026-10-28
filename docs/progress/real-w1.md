@@ -3,6 +3,13 @@
 Branch `claude/real-w1-facades` (from `claude/pensive-gates-bim12i`). Brief: docs/progress/real-briefs.md "W1".
 
 ## Resume here
+* **Session 4 (10-28, fix round after judge-1 / bugs-1)** — order: bugs 3/4/9 → lawn rim → reveal shadow →
+  per-pane glass variety → townhouse walls/shutters/awnings → roller doors → church/school → tower ground floor.
+  - bug 3 (garage at 90° to the drive): homes.ts `sideRun` puts a plain side entrance (Op.plain, no number/bell:
+    `DoorOpts.plain`) on the driveway side instead of a garage door; 'garage' plan: door on the wing's street face,
+    small window on the drive side. Driveway still runs beside the wing (plan.ts placeHouse, not ours) → request.
+  - bug 9 (hotel flag boards): special.ts `hotelFlag` — wall bracket, raked pole ≤ 1.16 m out, finial, banded
+    double-sided cloth hanging from the pole with ripples (3 designs).
 * **Milestone 3 (session 3) done** — sheet docs/progress/real/w1_m3.jpg (shots/w1/m3). golden m3 vs ref:
   downtown 1.2 / harbor 0.4 / oldtown 0.7 / overview 0.1 / westbrook 0.6; downtown console clean; invariants:
   only the W3 statue (landmarks). Next (open): apartment punched glass still reads light where nets/blinds

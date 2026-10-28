@@ -172,15 +172,49 @@ function grand(g: Gen): void {
       void px;
       void pz;
     }
-    // three flags
-    const flagC = ['#d94a3d', '#f4f1ea', '#2f6fd0'];
-    for (let k = 0; k < 3; k++) {
-      const fu = u - 2.2 + k * 2.2;
-      setCol(t, col('#d8d8d8'));
-      t.beam(sx(sg, fu, 0.1), gH + 0.6, sz(sg, fu, 0.1), sx(sg, fu, 1.15), gH + 1.5, sz(sg, fu, 1.15), 0.05, 0.05);
-      setCol(t, col(flagC[k]));
-      const fx = sx(sg, fu, 0.95), fz = sz(sg, fu, 0.95);
-      t.box(fx - 0.02 - Math.abs(sg.tx) * 0.5, gH + 0.45, fz - 0.02 - Math.abs(sg.tz) * 0.5, fx + 0.02, gH + 1.35, fz + 0.02, 0b111111);
+    // three flags on raked poles over the canopy: bracket, pole, finial, cloth hanging from the pole
+    const designs = [
+      ['#d94a3d', '#f4f1ea', '#2f6fd0'],
+      ['#1f3a5f', '#c9a24a', '#1f3a5f'],
+      ['#2e7d4f', '#f4f1ea', '#d94a3d'],
+    ];
+    for (let k = 0; k < 3; k++) hotelFlag(sg, u - 2.2 + k * 2.2, designs[k], k);
+  }
+
+  function hotelFlag(sg: SideGeom, fu: number, bands: string[], k: number): void {
+    const o0 = 0.1,
+      y0 = gH + 0.35,
+      o1 = 1.16,
+      y1 = gH + 1.45;
+    const yAt = (o: number) => y0 + ((o - o0) / (o1 - o0)) * (y1 - y0);
+    setCol(t, col('#2c3035'));
+    sideBox(t, sg, fu - 0.07, fu + 0.07, 0, 0.12, y0 - 0.12, y0 + 0.12);
+    setCol(t, col('#d8d8d8'));
+    t.beam(sx(sg, fu, o0), y0, sz(sg, fu, o0), sx(sg, fu, o1), y1, sz(sg, fu, o1), 0.035, 0.035);
+    setCol(t, col('#c9a24a'));
+    const fx = sx(sg, fu, o1 - 0.01), fz = sz(sg, fu, o1 - 0.01);
+    t.box(fx - 0.04, y1 - 0.02, fz - 0.04, fx + 0.04, y1 + 0.06, fz + 0.04, 0b111111);
+    // cloth: hoist along the pole, hanging straight down; ripples run from hoist to fly
+    const h0 = 0.3,
+      h1 = 1.1,
+      drop = 0.62;
+    const NU = 6,
+      NV = bands.length;
+    const ph = k * 1.7;
+    const P = (i: number, j: number): [number, number, number] => {
+      const f = i / NU;
+      const o = h0 + (h1 - h0) * f;
+      const side = 0.07 * f * Math.sin(f * 7.5 + ph) + 0.02 * (j / NV) * f;
+      const y = yAt(o) - 0.03 - drop * (j / NV) - 0.04 * f * f;
+      return [sx(sg, fu + side, o), y, sz(sg, fu + side, o)];
+    };
+    for (let j = 0; j < NV; j++) {
+      setCol(t, col(bands[j]));
+      for (let i = 0; i < NU; i++) {
+        const a = P(i, j), b = P(i + 1, j), c = P(i + 1, j + 1), d = P(i, j + 1);
+        t.quad(a[0], a[1], a[2], b[0], b[1], b[2], c[0], c[1], c[2], d[0], d[1], d[2]);
+        t.quad(b[0], b[1], b[2], a[0], a[1], a[2], d[0], d[1], d[2], c[0], c[1], c[2]);
+      }
     }
   }
 }

@@ -636,6 +636,8 @@ export interface DoorOpts {
   /** fanlight / transom window above the door */
   transom?: boolean;
   lamp?: boolean;
+  /** secondary door (side / back entrance): no house number or bell */
+  plain?: boolean;
   /** outward protrusion of the frame (must stay within the footprint below 2.4 m) */
   frameOut?: number;
   seed: number;
@@ -834,7 +836,7 @@ export function doorNiche(g: Gen, sg: SideGeom, u: number, o: DoorOpts): void {
   sideBox(t, sg, ub, ub + 0.14, -0.02, fo, 0, o.h + 0.14);
   sideBox(t, sg, ua - 0.14, ub + 0.14, -0.02, fo, o.h, o.h + 0.16);
   if (o.lamp) wallLamp(g, sg, ub + 0.45, Math.min(o.h - 0.2, 2.05), 0);
-  if (!o.glass && doorLife) {
+  if (!o.glass && !o.plain && doorLife) {
     // bell push on the architrave, and a legible house number above the door
     setCol(t, col('#e8e4da'));
     sideBox(t, sg, ub + 0.045, ub + 0.095, fo, fo + 0.018, 1.22, 1.3);
