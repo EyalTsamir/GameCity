@@ -254,10 +254,14 @@ export function computePoseA(m: Member, umbrella: boolean, r: Rig, o: Pose, gs: 
     const sc = r.s;
     const hipY = (SEAT_TOP + m.seatH + 0.088 * hk * sc) / sc; // hip joint above the root (figure units)
     const hipZ = (BACKREST_Z + 0.125 * hk * sc) / sc;
-    const az = hipZ + r.thighL * 0.98 + 0.03;
+    // feet on the ground; a child on an adult seat can't reach: thighs level on the seat, shins hang
+    // (the IK used to pull the thighs down through the seat front to plant the feet)
+    const hang = hipY - r.shinL * 0.97 - 0.035;
+    const dangle = hang > r.ankle.y;
+    const az = dangle ? hipZ + r.thighL * 0.97 + 0.01 : hipZ + r.thighL * 0.98 + 0.03;
     LIK[0] = hipY;
     LIK[1] = hipZ;
-    LIK[2] = r.ankle.y;
+    LIK[2] = dangle ? hang : r.ankle.y;
     LIK[3] = az;
     LIK[4] = 0;
     legIKa(r, leg);
