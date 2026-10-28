@@ -14,6 +14,16 @@ import { drawText, signQuad } from './signs';
 
 const _m = new THREE.Matrix4();
 
+/** lathe with flat facets (seg sides; 4 → a square moulding). Profile radii are face distances (apothems). */
+function facetLathe(prof: [number, number][], seg: number, phi0: number): THREE.BufferGeometry {
+  const k = 1 / Math.cos(Math.PI / seg);
+  const g = new THREE.LatheGeometry(prof.map(([r, y]) => new THREE.Vector2(r * k, y)), seg, phi0);
+  const f = g.toNonIndexed();
+  g.dispose();
+  f.computeVertexNormals();
+  return f;
+}
+
 // ───────────────────────────────────────────────────────────── statues ──
 
 export function genStatue(env: Env, f: Feature): void {
@@ -46,14 +56,22 @@ export function genStatue(env: Env, f: Feature): void {
     env.pick(f.id, 'Infinite Haven (sculpture)', new THREE.Box3(new THREE.Vector3(f.x - R, 0, f.z - R), new THREE.Vector3(f.x + R, 2.8, f.z + R)), () => ['Painted steel · 1999', 'Locals call it “the pretzel”', 'Lit from below at night']);
     return;
   }
-  // ── founder: stepped octagonal base, pedestal with plaques, bronze figure
-  K.cyl(granite, R - 0.05, R - 0.05, 0.22, 0, 0, 0, 8, false, 'box', Math.PI / 8);
-  K.cyl(granite, R - 0.32, R - 0.32, 0.22, 0, 0.22, 0, 8, false, 'box', Math.PI / 8);
+  // ── founder: two chamfered octagonal granite steps; a moulded pedestal (plinth, cove, die with the
+  // plaques, cornice with a drip, capping) — square lathes with flat facets
+  const steps = facetLathe([[0, 0], [R - 0.05, 0], [R - 0.05, 0.19], [R - 0.08, 0.22], [R - 0.32, 0.22], [R - 0.32, 0.41], [R - 0.35, 0.44], [0, 0.44]], 8, Math.PI / 8);
+  K.geo(granite, steps);
+  steps.dispose();
   const pw = 1.05;
-  K.box(M('#a9a39b', PAT.STONE, 0.75, 0, 0, FLOOD.SOFT, 0.6), pw + 0.25, 0.25, pw + 0.25, 0, 0.44, 0);
-  K.box(M('#b8b1a7', PAT.PLAIN, 0.75, 0, 0, FLOOD.SOFT), pw, 1.55, pw, 0, 0.69, 0);
-  K.box(M('#a9a39b', PAT.PLAIN, 0.75, 0, 0, FLOOD.SOFT), pw + 0.22, 0.2, pw + 0.22, 0, 2.24, 0);
-  K.box(M('#a9a39b', PAT.PLAIN, 0.75, 0, 0, FLOOD.SOFT), pw + 0.1, 0.12, pw + 0.1, 0, 2.44, 0);
+  const die = M('#b8b1a7', PAT.STONE, 0.75, 0, 0, FLOOD.SOFT, 0.6);
+  const ped = facetLathe([
+    [0, 0.44], [0.66, 0.44], [0.66, 0.6], [0.63, 0.63], [0.6, 0.64], [0.59, 0.68], [0.56, 0.71], [0.545, 0.74], [0.525, 0.76],
+    [0.525, 2.08], [0.54, 2.1], [0.56, 2.13], [0.6, 2.17], [0.645, 2.22], [0.65, 2.3], [0.62, 2.31], [0.6, 2.34], [0.6, 2.46], [0.56, 2.5], [0.45, 2.56], [0, 2.56],
+  ], 4, Math.PI / 4);
+  K.geo(die, ped);
+  ped.dispose();
+  // carved recessed panel on the two plain sides
+  const recess = M('#a39d94', PAT.STONE, 0.8, 0, 0, FLOOD.SOFT, 0.7);
+  for (const sx of [-1, 1]) K.box(recess, 0.01, 0.9, 0.62, sx * 0.526, 0.95, 0);
   const plaque = env.atlas.add(192, 120, (g, w, h) => {
     g.fillStyle = '#6b5a35';
     g.fillRect(0, 0, w, h);
@@ -140,10 +158,12 @@ export function genGazebo(env: Env, f: Feature): void {
     const a = rot + (i / 8) * Math.PI * 2;
     corners.push([Math.sin(a) * colR, 0.48, Math.cos(a) * colR]);
   }
+  // turned columns: square plinth block, base mouldings, a slightly tapered shaft, necking, capital, abacus
+  K.cyl(white, pr - 0.02, pr - 0.02, 0.05, 0, 0.42, 0, 8, true, 'box', rot);
   for (const c of corners) {
-    K.cyl(white, 0.075, 0.09, colH, c[0], 0.48, c[2], 8);
     K.box(white, 0.22, 0.12, 0.22, c[0], 0.48, c[2]);
-    K.box(white, 0.2, 0.1, 0.2, c[0], 0.48 + colH - 0.1, c[2]);
+    K.lathe(white, [[0.1, 0], [0.1, 0.035], [0.088, 0.06], [0.092, 0.085], [0.08, 0.12], [0.072, colH - 0.42], [0.078, colH - 0.38], [0.072, colH - 0.35], [0.075, colH - 0.3], [0.1, colH - 0.2], [0.1, colH - 0.17], [0, colH - 0.17]], c[0], 0.6, c[2], 12);
+    K.box(white, 0.22, 0.1, 0.22, c[0], 0.48 + colH - 0.1, c[2]);
   }
   for (let i = 0; i < 8; i++) {
     const a = corners[i],
@@ -155,14 +175,32 @@ export function genGazebo(env: Env, f: Feature): void {
     K.beam(white, [a[0] * 0.98, 0.48 + colH - 0.5, a[2] * 0.98], [mid[0] * 0.98, 0.48 + colH - 0.15, mid[2] * 0.98], 0.05, 0.05);
     K.beam(white, [b[0] * 0.98, 0.48 + colH - 0.5, b[2] * 0.98], [mid[0] * 0.98, 0.48 + colH - 0.15, mid[2] * 0.98], 0.05, 0.05);
     if (!facingEntrance) {
-      railing(env, [a[0], 0.48, a[2]], [b[0], 0.48, b[2]], 0.85, '#f4f1ea');
+      // balustrade: bottom rail, square balusters, moulded hand rail
+      const len = Math.hypot(b[0] - a[0], b[2] - a[2]);
+      const ux = (b[0] - a[0]) / len, uz = (b[2] - a[2]) / len;
+      K.beam(white, [a[0] + ux * 0.1, 0.56, a[2] + uz * 0.1], [b[0] - ux * 0.1, 0.56, b[2] - uz * 0.1], 0.07, 0.06);
+      K.beam(white, [a[0] + ux * 0.1, 1.3, a[2] + uz * 0.1], [b[0] - ux * 0.1, 1.3, b[2] - uz * 0.1], 0.1, 0.05);
+      const nb = Math.max(3, Math.floor((len - 0.2) / 0.12));
+      for (let k = 1; k < nb; k++) {
+        const t = 0.1 + ((len - 0.2) * k) / nb;
+        const px = a[0] + ux * t, pz = a[2] + uz * t;
+        K.beam(white, [px, 0.59, pz], [px, 1.28, pz], 0.035, 0.035);
+      }
       // built-in bench inside
       K.beam(M('#b48a5e', PAT.PLANKS, 0.8), [a[0] * 0.85, 0.92, a[2] * 0.85], [b[0] * 0.85, 0.92, b[2] * 0.85], 0.32, 0.06);
     }
   }
   // roof: eave ring, octagonal pyramid, cupola, finial
   const eaveY = 0.48 + colH;
-  K.cyl(white, R - 0.05, R - 0.05, 0.18, 0, eaveY, 0, 8, false, 'box', rot);
+  // eave: a fascia ring (open, so the boarded roof is seen from inside), boards + rafters under the roof
+  K.cyl(white, R - 0.05, R - 0.05, 0.18, 0, eaveY, 0, 8, true, 'box', rot);
+  K.cyl(white, colR + 0.12, colR + 0.12, 0.16, 0, eaveY - 0.02, 0, 8, true, 'box', rot);
+  K.lathe(M('#e9e2d2', PAT.PLANKS, 0.8, 0, 0, FLOOD.SOFT, 0.2), [[0.3, eaveY + 1.5], [(R - 0.06) / Math.cos(Math.PI / 8), eaveY + 0.17]], 0, 0, 0, 8, rot);
+  for (let i = 0; i < 16; i++) {
+    const a = rot + (i / 16) * Math.PI * 2;
+    const rr = i % 2 ? (R - 0.1) * Math.cos(Math.PI / 8) : R - 0.1;
+    K.beam(white, [Math.sin(a) * rr, eaveY + 0.12, Math.cos(a) * rr], [Math.sin(a) * 0.32, eaveY + 1.42, Math.cos(a) * 0.32], 0.05, 0.09);
+  }
   K.spire(roof, 8, R + 0.02, eaveY + 0.16, eaveY + 1.75, 0, 0, rot);
   K.cyl(white, 0.42, 0.42, 0.42, 0, eaveY + 1.28, 0, 8, false, 'box', rot);
   K.spire(roof, 8, 0.52, eaveY + 1.7, eaveY + 2.25, 0, 0, rot);
@@ -303,8 +341,27 @@ export function genKiosk(env: Env, f: Feature): void {
   K.cyl(cream, kr, kr, kh - 0.12, 0, 0.12, 0, 6, false, 'box', Math.PI / 6);
   K.cyl(green, kr + 0.03, kr + 0.03, 0.85, 0, 0.12, 0, 6, false, 'box', Math.PI / 6);
   const fz = kr * Math.cos(Math.PI / 6);
-  K.panel(M('#f6efe0', PAT.WINDOW, 0.3, 0, 0.95, 0, 0.45), 0.9, 0.85, 0, 1.15, fz + 0.012, 0);
-  K.box(M('#b98d60', PAT.PLANKS, 0.7), 1.05, 0.06, 0.32, 0, 1.08, fz + 0.12);
+  // corner posts at the six angles, a dado rail over the green skirt, a frieze board under the eave
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 6) * Math.PI * 2;
+    K.box(green, 0.07, kh - 0.14, 0.07, Math.sin(a) * (kr + 0.0), 0.12, Math.cos(a) * (kr + 0.0), a);
+  }
+  K.cyl(green, kr + 0.05, kr + 0.05, 0.05, 0, 0.95, 0, 6, false, 'box', Math.PI / 6);
+  K.cyl(green, kr + 0.04, kr + 0.04, 0.16, 0, kh - 0.2, 0, 6, false, 'box', Math.PI / 6);
+  // serving hatch: a recess with the lit interior, a frame, a top-hung shutter propped open, a counter on brackets
+  K.panel(M('#f6efe0', PAT.WINDOW, 0.3, 0, 0.95, 0, 0.45), 0.9, 0.85, 0, 1.15, fz - 0.06, 0);
+  for (const sx of [-1, 1]) K.box(cream, 0.02, 0.85, 0.08, sx * 0.46, 1.15, fz - 0.03);
+  K.box(green, 1.06, 0.07, 0.06, 0, 2.0, fz + 0.01);
+  for (const sx of [-1, 1]) K.box(green, 0.07, 0.92, 0.06, sx * 0.5, 1.08, fz + 0.01);
+  K.boxC(green, 1.0, 0.04, 0.5, 0, 2.06, fz + 0.24, -1.1, 0, 0);
+  for (const sx of [-1, 1]) K.beam(M('#3b3b3b', PAT.PLAIN, 0.4, 0.6), [sx * 0.42, 1.66, fz + 0.04], [sx * 0.42, 2.02, fz + 0.46], 0.015, 0.015);
+  K.box(M('#b98d60', PAT.PLANKS, 0.7), 1.05, 0.05, 0.34, 0, 1.08, fz + 0.12);
+  for (const sx of [-1, 1]) K.beam(green, [sx * 0.4, 0.82, fz + 0.02], [sx * 0.4, 1.07, fz + 0.26], 0.04, 0.04);
+  // on the counter: a cake stand under a cloche, a napkin box, a tip jar
+  K.cyl(M('#ffffff', PAT.PLAIN, 0.4), 0.11, 0.03, 0.08, -0.3, 1.13, fz + 0.14, 10);
+  K.sphere(M('#dfe8ea', PAT.PLAIN, 0.1, 0.1), 0.1, -0.3, 1.21, fz + 0.14, 10, 6, 1, 0, Math.PI * 2, 0, Math.PI / 2);
+  K.box(M('#c43b33', PAT.PLAIN, 0.6), 0.1, 0.08, 0.08, 0.25, 1.13, fz + 0.16);
+  K.cyl(M('#cfe0e4', PAT.PLAIN, 0.1, 0.1), 0.045, 0.045, 0.1, 0.38, 1.13, fz + 0.2, 8);
   // striped awning over the hatch
   K.poly(M('#2f7d57', PAT.STRIPES, 0.8, 0, 0, 0, 0.2), [
     [-0.62, 2.12, fz + 0.62],
@@ -333,15 +390,22 @@ export function genKiosk(env: Env, f: Feature): void {
   for (const s of [-1, 1]) {
     const tx = s * 1.42,
       tz = -0.15;
-    K.cyl(M('#3b3b3b', PAT.PLAIN, 0.4, 0.6), 0.03, 0.03, 0.72, tx, 0, tz, 6);
-    K.cyl(M('#ece7dc', PAT.PLAIN, 0.4), 0.32, 0.32, 0.03, tx, 0.72, tz, 14);
+    K.cyl(M('#3b3b3b', PAT.PLAIN, 0.4, 0.6), 0.2, 0.22, 0.03, tx, 0, tz, 12);
+    K.cyl(M('#3b3b3b', PAT.PLAIN, 0.4, 0.6), 0.025, 0.03, 0.72, tx, 0.03, tz, 8);
+    K.cyl(M('#ece7dc', PAT.PLAIN, 0.4), 0.32, 0.32, 0.025, tx, 0.72, tz, 18);
+    K.torus(M('#9aa0a4', PAT.PLAIN, 0.3, 0.7), 0.32, 0.012, tx, 0.732, tz, 4, 18);
     for (const [cx2, cz2] of [
       [0, 0.52],
       [0, -0.52],
     ]) {
-      K.box(M('#3e6f5a', PAT.PLAIN, 0.6, 0.3), 0.36, 0.04, 0.34, tx + cx2, 0.44, tz + cz2);
-      K.box(M('#3e6f5a', PAT.PLAIN, 0.6, 0.3), 0.36, 0.4, 0.03, tx + cx2, 0.46, tz + cz2 + Math.sign(cz2) * 0.17);
-      for (const lx of [-0.15, 0.15]) K.box(M('#3b3b3b', PAT.PLAIN, 0.4, 0.6), 0.025, 0.44, 0.025, tx + cx2 + lx, 0, tz + cz2);
+      // bistro chair: round tube legs splayed out, a round slatted seat, a hooped back
+      const cxx = tx + cx2, czz = tz + cz2, bs = Math.sign(cz2);
+      const chair = M('#3e6f5a', PAT.PLAIN, 0.55, 0.35);
+      for (const [lx, lz] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) K.rod(chair, [cxx + lx * 0.15, 0, czz + lz * 0.15], [cxx + lx * 0.12, 0.44, czz + lz * 0.12], 0.012, 5);
+      K.cyl(chair, 0.2, 0.2, 0.025, cxx, 0.44, czz, 12);
+      K.torus(chair, 0.2, 0.012, cxx, 0.455, czz, 4, 14);
+      K.torus(chair, 0.17, 0.012, cxx, 0.75, czz + bs * 0.17, 4, 10, Math.PI, 0.2 * bs, 0, 0);
+      for (const lx of [-0.17, 0.17]) K.rod(chair, [cxx + lx, 0.46, czz + bs * 0.12], [cxx + lx, 0.76, czz + bs * 0.17], 0.011, 5);
     }
     // parasol (kinetic flutter not needed): pole + striped cone canopy above head height
     K.cyl(M('#ffffff', PAT.PLAIN, 0.5), 0.025, 0.025, 2.35, tx, 0.72, tz, 6);
@@ -393,19 +457,37 @@ export function genPlayground(env: Env, f: Feature): void {
     sx1 = -W + 5.0,
     sz = -D + 2.4,
     top = 2.5;
+  // rubber safety tiles under the swings
+  const mat = M('#3f5e3a', PAT.PLAIN, 0.95);
+  for (let i = 0; i < 8; i++) for (let j = 0; j < 4; j++) K.box(mat, 0.49, 0.025, 0.49, sx0 + 0.6 + i * 0.5 - 0.25 + 0.25, 0, sz - 1.0 + j * 0.5 + 0.25);
   for (const x of [sx0, sx1]) {
-    K.rod(blue, [x, 0, sz - 0.95], [x, top, sz], 0.06, 6);
-    K.rod(blue, [x, 0, sz + 0.95], [x, top, sz], 0.06, 6);
+    for (const dz of [-0.95, 0.95]) {
+      K.rod(blue, [x, 0, sz + dz], [x, top, sz], 0.05, 10);
+      K.cyl(M('#9a968c', PAT.CONCRETE, 0.9), 0.12, 0.13, 0.04, x, 0, sz + dz, 10);
+    }
+    // the A-frame head casting and a tie bar
+    K.box(M('#2d5f99', PAT.PLAIN, 0.5, 0.3), 0.12, 0.2, 0.18, x, top - 0.12, sz);
+    K.rod(blue, [x, 0.9, sz - 0.6], [x, 0.9, sz + 0.6], 0.025, 6);
   }
-  K.rod(blue, [sx0 - 0.1, top, sz], [sx1 + 0.1, top, sz], 0.07, 8);
+  K.rod(blue, [sx0 - 0.1, top, sz], [sx1 + 0.1, top, sz], 0.06, 12);
+  for (const x of [sx0 - 0.1, sx1 + 0.1]) K.sphere(M('#2d5f99', PAT.PLAIN, 0.5, 0.3), 0.062, x, top, sz, 8, 6);
   const swings = [
     { x: sx0 + 1.0, amp: 0.42, ph: 0.0, kidOn: true },
     { x: sx1 - 1.0, amp: 0.18, ph: 2.1, kidOn: false },
   ];
   for (const sw of swings) {
     env.anim({ mode: ANIM.SWING, pivot: new THREE.Vector3(sw.x, top, sz), axis: new THREE.Vector3(1, 0, 0), a: sw.amp, b: 2.2, c: sw.ph });
-    for (const dx of [-0.2, 0.2]) env.K.rod(steel, [sw.x + dx, top, sz], [sw.x + dx, 0.5, sz], 0.012, 4);
-    env.K.box(M('#222222', PAT.PLAIN, 0.7), 0.48, 0.05, 0.2, sw.x, 0.46, sz);
+    // hanger clamps, chains of alternating links, a sagging rubber strap seat
+    for (const dx of [-0.2, 0.2]) {
+      env.K.cyl(steel, 0.075, 0.075, 0.09, sw.x + dx, top - 0.045, sz, 8);
+      for (let y = top - 0.08, li = 0; y > 0.56; y -= 0.055, li++) env.K.box(steel, li % 2 ? 0.008 : 0.022, 0.05, li % 2 ? 0.022 : 0.008, sw.x + dx, y - 0.05, sz);
+    }
+    const strap = M('#1d1d1d', PAT.PLAIN, 0.9);
+    for (let i = 0; i < 6; i++) {
+      const u0 = -0.24 + i * 0.08, u1 = u0 + 0.08;
+      const y0s = 0.5 - 0.05 * Math.cos((u0 / 0.24) * Math.PI * 0.5), y1s = 0.5 - 0.05 * Math.cos((u1 / 0.24) * Math.PI * 0.5);
+      env.K.beam(strap, [sw.x + u0, y0s, sz], [sw.x + u1, y1s, sz], 0.18, 0.025);
+    }
     if (sw.kidOn) {
       env.anim({ mode: ANIM.VIS, pivot: new THREE.Vector3(sw.x, top, sz), axis: new THREE.Vector3(1, 0, 0), a: 3, b: sw.amp, c: sw.ph });
       kid(sw.x, 0.51 - 0.45 * 0.62, sz - 0.06, 0, '#e85d75', true);
@@ -418,7 +500,13 @@ export function genPlayground(env: Env, f: Feature): void {
     lz = -D + 2.2;
   const ph = 1.6;
   for (const dz of [-0.35, 0.35]) K.box(yellow, 0.07, ph + 1.2, 0.07, lx, 0, lz + dz);
-  for (let y = 0.3; y < ph; y += 0.3) K.box(yellow, 0.06, 0.04, 0.7, lx, y, lz);
+  for (let y = 0.3; y < ph; y += 0.3) K.rod(steel, [lx, y, lz - 0.35], [lx, y, lz + 0.35], 0.018, 8);
+  for (const dz of [-0.4, 0.4]) {
+    K.rod(steel, [lx + 0.05, ph + 0.08, lz + dz], [lx + 0.05, ph + 0.75, lz + dz], 0.02, 6);
+    K.rod(steel, [lx + 0.05, ph + 0.75, lz + dz], [lx + 0.95, ph + 0.75, lz + dz], 0.02, 6);
+  }
+  K.cyl(M('#9a968c', PAT.CONCRETE, 0.9), 0.1, 0.11, 0.04, lx, 0, lz - 0.35, 8);
+  K.cyl(M('#9a968c', PAT.CONCRETE, 0.9), 0.1, 0.11, 0.04, lx, 0, lz + 0.35, 8);
   for (const [dx, dz] of [
     [1.0, -0.4],
     [1.0, 0.4],
@@ -426,11 +514,22 @@ export function genPlayground(env: Env, f: Feature): void {
     K.box(yellow, 0.07, ph + 1.2, 0.07, lx + dx, 0, lz + dz);
   K.box(wood, 1.1, 0.08, 0.9, lx + 0.5, ph, lz);
   K.pyramid(red, lx - 0.05, lx + 1.05, lz - 0.48, lz + 0.48, ph + 1.2, ph + 1.75, 0.08);
-  const chute = (W - 0.8) - (lx + 1.05);
-  const ang = Math.atan2(ph - 0.25, chute);
-  K.boxC(red, Math.hypot(chute, ph - 0.25), 0.06, 0.6, lx + 1.05 + chute / 2, (ph + 0.25) / 2 + 0.03, lz, 0, 0, -ang);
-  for (const dz of [-0.31, 0.31]) K.boxC(red, Math.hypot(chute, ph - 0.25), 0.18, 0.04, lx + 1.05 + chute / 2, (ph + 0.25) / 2 + 0.12, lz + dz, 0, 0, -ang);
-  K.box(red, 0.5, 0.06, 0.6, W - 0.55, 0.22, lz);
+  // chute: a stainless trough down an S-curve (steep start, flattening run-out) with raised sides
+  const cx0 = lx + 1.05, cx1 = W - 0.4;
+  const chuteM = M('#d4d8db', PAT.PLAIN, 0.25, 0.7);
+  const sideM = red;
+  const yAt = (t: number) => 0.28 + (ph - 0.28) * (1 - (3 * t * t - 2 * t * t * t));
+  const NS = 10;
+  for (let k2 = 0; k2 < NS; k2++) {
+    const t0 = k2 / NS, t1 = (k2 + 1) / NS;
+    const xa = cx0 + (cx1 - cx0) * t0, xb = cx0 + (cx1 - cx0) * t1;
+    const ya = yAt(t0) + 0.03, yb = yAt(t1) + 0.03;
+    K.beam(chuteM, [xa, ya, lz], [xb, yb, lz], 0.52, 0.03);
+    for (const dz of [-0.28, 0.28]) K.beam(sideM, [xa, ya + 0.08, lz + dz], [xb, yb + 0.08, lz + dz], 0.04, 0.18);
+  }
+  for (const dz of [-0.25, 0.25]) K.rod(yellow, [cx1 - 0.15, 0, lz + dz], [cx1 - 0.15, yAt(0.92), lz + dz], 0.03, 6);
+  // rubber tiles at the run-out
+  for (let j2 = 0; j2 < 2; j2++) for (let i2 = 0; i2 < 3; i2++) K.box(mat, 0.49, 0.025, 0.49, cx1 + 0.05 - i2 * 0.5, 0, lz - 0.25 + j2 * 0.5);
   env.anim({ mode: ANIM.VIS, pivot: new THREE.Vector3(lx + 0.5, ph, lz), axis: new THREE.Vector3(0, 1, 0), a: 3, b: 0.15, c: 1.3 });
   kid(lx + 0.5, ph + 0.08, lz, Math.PI / 2, '#3fa7d6', false);
   env.anim(null);
@@ -438,11 +537,19 @@ export function genPlayground(env: Env, f: Feature): void {
   // ── see-saw (swings about its pivot; two kids ride it by day)
   const ssx = -W + 3.2,
     ssz = D - 2.4;
-  K.box(yellow, 0.35, 0.45, 0.4, ssx, 0, ssz);
+  for (const s2 of [-1, 1]) {
+    K.beam(yellow, [ssx - 0.2, 0, ssz + s2 * 0.2], [ssx, 0.5, ssz + s2 * 0.2], 0.06, 0.06);
+    K.beam(yellow, [ssx + 0.2, 0, ssz + s2 * 0.2], [ssx, 0.5, ssz + s2 * 0.2], 0.06, 0.06);
+  }
+  K.rod(steel, [ssx, 0.5, ssz - 0.24], [ssx, 0.5, ssz + 0.24], 0.03, 8);
+  K.box(M('#9a968c', PAT.CONCRETE, 0.9), 0.5, 0.04, 0.5, ssx, 0, ssz);
+  for (const s2 of [-1, 1]) K.cyl(M('#1d1d1d', PAT.PLAIN, 0.9), 0.12, 0.13, 0.12, ssx + s2 * 1.45, 0, ssz, 10);
   env.anim({ mode: ANIM.SWING, pivot: new THREE.Vector3(ssx, 0.5, ssz), axis: new THREE.Vector3(0, 0, 1), a: 0.24, b: 2.2, c: 0.7 });
   env.K.box(red, 3.2, 0.07, 0.28, ssx, 0.47, ssz);
   for (const s of [-1, 1]) {
-    env.K.box(M('#222222', PAT.PLAIN, 0.7), 0.04, 0.35, 0.3, ssx + s * 1.25, 0.54, ssz);
+    env.K.rod(steel, [ssx + s * 1.25, 0.5, ssz - 0.13], [ssx + s * 1.25, 0.82, ssz - 0.13], 0.016, 6);
+    env.K.rod(steel, [ssx + s * 1.25, 0.5, ssz + 0.13], [ssx + s * 1.25, 0.82, ssz + 0.13], 0.016, 6);
+    env.K.rod(M('#1d1d1d', PAT.PLAIN, 0.8), [ssx + s * 1.25, 0.82, ssz - 0.17], [ssx + s * 1.25, 0.82, ssz + 0.17], 0.02, 6);
     env.K.box(blue, 0.3, 0.05, 0.3, ssx + s * 1.45, 0.54, ssz);
   }
   env.anim({ mode: ANIM.VIS, pivot: new THREE.Vector3(ssx, 0.5, ssz), axis: new THREE.Vector3(0, 0, 1), a: 3, b: 0.24, c: 0.7 });
@@ -475,7 +582,9 @@ export function genPlayground(env: Env, f: Feature): void {
   for (let i = 0; i <= n; i++)
     for (let j = 0; j <= 2; j++) {
       K.rod(i % 2 ? blue : yellow, [gx0 + i * sp, 0, gz0 + j * sp * 1.1], [gx0 + i * sp, 1.8, gz0 + j * sp * 1.1], 0.03, 5);
+      K.cyl(M('#9a968c', PAT.CONCRETE, 0.9), 0.07, 0.08, 0.03, gx0 + i * sp, 0, gz0 + j * sp * 1.1, 8);
       for (const y of [0.6, 1.2, 1.8]) {
+        K.sphere(M('#c9cfd3', PAT.PLAIN, 0.4, 0.6), 0.045, gx0 + i * sp, y, gz0 + j * sp * 1.1, 6, 4);
         if (i < n) K.rod(steel, [gx0 + i * sp, y, gz0 + j * sp * 1.1], [gx0 + (i + 1) * sp, y, gz0 + j * sp * 1.1], 0.022, 4);
         if (j < 2) K.rod(steel, [gx0 + i * sp, y, gz0 + j * sp * 1.1], [gx0 + i * sp, y, gz0 + (j + 1) * sp * 1.1], 0.022, 4);
       }
@@ -486,11 +595,22 @@ export function genPlayground(env: Env, f: Feature): void {
     [W - 1.4, D - 1.6, '#f2c230', 0.0],
     [W - 2.8, D - 1.4, '#d63c34', 1.7],
   ] as [number, number, string, number][]) {
-    K.cyl(steel, 0.1, 0.1, 0.38, x, 0, z, 8);
+    K.box(M('#9a968c', PAT.CONCRETE, 0.9), 0.4, 0.03, 0.4, x, 0, z);
+    for (let t = 0; t < 7 * 8; t++) {
+      const a0 = (t / 8) * Math.PI * 2, a1 = ((t + 1) / 8) * Math.PI * 2;
+      K.rod(steel, [x + Math.cos(a0) * 0.09, 0.03 + (t / 56) * 0.36, z + Math.sin(a0) * 0.09], [x + Math.cos(a1) * 0.09, 0.03 + ((t + 1) / 56) * 0.36, z + Math.sin(a1) * 0.09], 0.014, 4);
+    }
     env.anim({ mode: ANIM.SWING, pivot: new THREE.Vector3(x, 0.15, z), axis: new THREE.Vector3(1, 0, 0), a: 0.12, b: 2.6, c: ph2 });
-    env.K.box(M(col, PAT.PLAIN, 0.5, 0.1), 0.25, 0.32, 0.7, x, 0.38, z);
-    env.K.box(M(col, PAT.PLAIN, 0.5, 0.1), 0.2, 0.3, 0.22, x, 0.68, z + 0.3);
-    env.K.box(M('#222222', PAT.PLAIN, 0.6), 0.34, 0.05, 0.05, x, 0.82, z + 0.2);
+    env.K.box(M('#55595c', PAT.PLAIN, 0.5, 0.5), 0.2, 0.02, 0.2, x, 0.39, z);
+    const body = new THREE.SphereGeometry(0.16, 12, 8);
+    _m.makeScale(0.9, 0.85, 2.0).setPosition(x, 0.56, z);
+    env.K.geoM(M(col, PAT.PLAIN, 0.45, 0.05), body, _m);
+    body.dispose();
+    env.K.sphere(M(col, PAT.PLAIN, 0.45, 0.05), 0.12, x, 0.84, z + 0.27, 10, 8);
+    env.K.sphere(M('#151515', PAT.PLAIN, 0.3), 0.02, x + 0.09, 0.88, z + 0.34, 6, 4);
+    env.K.sphere(M('#151515', PAT.PLAIN, 0.3), 0.02, x - 0.09, 0.88, z + 0.34, 6, 4);
+    env.K.cylX(M('#2b2b2b', PAT.PLAIN, 0.8), 0.022, 0.4, x, 0.74, z + 0.15, 8);
+    env.K.cylX(M('#2b2b2b', PAT.PLAIN, 0.8), 0.02, 0.44, x, 0.42, z + 0.1, 8);
     env.anim(null);
   }
   // ── benches for parents along the far edge
@@ -516,20 +636,31 @@ export function genPicnic(env: Env, f: Feature, i: number): void {
   const K = env.S;
   const wood = M(i % 2 ? '#9b6d43' : '#a8794d', PAT.PLANKS, 0.85, 0, 0, 0, 0.3);
   const L = 1.7;
-  K.box(wood, L, 0.06, 0.74, 0, 0.72, 0);
-  for (const s of [-1, 1]) {
-    K.box(wood, L, 0.05, 0.27, 0, 0.42, s * 0.6);
-    // A-frame legs at both ends
-    for (const lx of [-L / 2 + 0.2, L / 2 - 0.2]) {
-      K.beam(wood, [lx, 0, s * 0.62], [lx, 0.72, s * 0.08], 0.07, 0.12);
+  const end = M(i % 2 ? '#8a5f3a' : '#94683f', PAT.PLANKS, 0.85, 0, 0, 0, 0.5);
+  const bolt = M('#6a6d6e', PAT.PLAIN, 0.5, 0.6);
+  // top: five boards with 1 cm gaps, ends slightly uneven
+  for (let b = 0; b < 5; b++) K.box(b % 2 ? wood : end, L - (b % 3) * 0.01, 0.04, 0.138, 0, 0.7, -0.296 + b * 0.148);
+  for (const s2 of [-1, 1]) {
+    // seats: two boards each
+    for (let b = 0; b < 2; b++) K.box(b ? wood : end, L, 0.04, 0.125, 0, 0.42, s2 * (0.5 + b * 0.135));
+    // A-frame legs at both ends (2 × 4 in, bolted to the top and the seat bearer)
+    for (const lx of [-L / 2 + 0.22, L / 2 - 0.22]) {
+      K.beam(end, [lx, 0, s2 * 0.66], [lx, 0.7, s2 * 0.12], 0.045, 0.09);
+      K.cylX(bolt, 0.016, 0.012, lx - 0.03, 0.43, s2 * 0.42, 6);
+      K.cylX(bolt, 0.016, 0.012, lx - 0.03, 0.64, s2 * 0.19, 6);
     }
   }
-  for (const lx of [-L / 2 + 0.2, L / 2 - 0.2]) K.box(wood, 0.07, 0.07, 1.3, lx, 0.38, 0);
+  for (const lx of [-L / 2 + 0.22, L / 2 - 0.22]) {
+    K.box(end, 0.045, 0.09, 1.42, lx + 0.045, 0.33, 0);
+    K.box(end, 0.045, 0.07, 0.7, lx + 0.045, 0.63, 0);
+    // diagonal brace from the seat bearer to the middle of the top
+    K.beam(end, [lx + 0.05, 0.38, 0], [lx * 0.35, 0.68, 0], 0.04, 0.07);
+  }
   // a tablecloth with a basket on some tables
   if (i % 2 === 0) {
-    K.box(M('#c8382f', PAT.STRIPES, 0.9, 0, 0, 0, 0.1), 0.7, 0.01, 0.74, 0.2, 0.781, 0);
-    K.box(M('#c99a5b', PAT.PLANKS, 0.9), 0.32, 0.18, 0.22, 0.25, 0.79, 0);
-    K.torus(M('#a8794d', PAT.PLAIN, 0.8), 0.13, 0.015, 0.25, 0.98, 0, 3, 10, Math.PI, 0, 0, 0);
+    K.box(M('#c8382f', PAT.STRIPES, 0.9, 0, 0, 0, 0.1), 0.7, 0.008, 0.74, 0.2, 0.741, 0);
+    K.box(M('#c99a5b', PAT.PLANKS, 0.9), 0.32, 0.18, 0.22, 0.25, 0.749, 0);
+    K.torus(M('#a8794d', PAT.PLAIN, 0.8), 0.13, 0.015, 0.25, 0.94, 0, 3, 10, Math.PI, 0, 0, 0);
   }
   env.endChecks();
   env.pick(f.id, 'Picnic table', new THREE.Box3(new THREE.Vector3(f.x - R, ground, f.z - R), new THREE.Vector3(f.x + R, ground + 1.2, f.z + R)), () => ['Riverside picnic spot', 'Bring your own sandwiches']);

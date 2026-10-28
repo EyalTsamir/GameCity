@@ -36,6 +36,22 @@ void pWear(inout vec3 col, inout float rgh, inout float mtl, vec3 pw, vec3 n) {
     float lich = smoothstep(0.74, 0.8, nA.a * 0.6 + nA.b * 0.4) * fine;
     col = mix(col, vec3(0.78, 0.76, 0.62), lich * 0.45);
     col *= 0.92 + 0.14 * nA.g;
+    // exposed aggregate / pores: fine light and dark specks, near only
+    vec4 nF = texture2D(tPN, uvp * 5.3);
+    col *= 1.0 + fine * (0.16 * smoothstep(0.72, 0.8, nF.a) - 0.2 * smoothstep(0.74, 0.82, nF.r));
+  } else if (mtl > 0.5) {
+    // galvanised / stainless steel: dull mottling, a grime band at the foot, rougher where handled
+    float mot = smoothstep(0.3, 0.8, nA.r);
+    col *= 0.9 + 0.16 * mot;
+    rgh = clamp(rgh + 0.22 * (1.0 - mot) + 0.15 * foot, 0.0, 1.0);
+    col *= 1.0 - 0.3 * foot * (0.5 + 0.5 * nA.g);
+    col = mix(col, col * vec3(0.95, 0.9, 0.82), 0.25 * smoothstep(0.6, 0.9, nB.b) * (1.0 - an.y));
+  } else if (rgh > 0.3 && rgh < 0.4 && mtl < 0.05) {
+    // fired clay / glaze: white salt bloom and a damp band at the foot, dark run-down streaks
+    float bloom = foot * smoothstep(0.45, 0.75, nA.g);
+    col = mix(col, vec3(0.82, 0.8, 0.74), bloom * 0.45);
+    col *= 1.0 - 0.15 * smoothstep(0.6, 0.85, nB.b) * (1.0 - an.y);
+    rgh = mix(rgh, 0.85, bloom);
   } else if (mtl > 0.3 && mtl < 0.5) {
     // wrought / cast iron: rust spots, run-down streaks
     float rs = smoothstep(0.68, 0.76, nA.a * 0.55 + nA.r * 0.45);
@@ -120,7 +136,7 @@ ${WEAR_GLSL}`,
       .replace('#include <metalnessmap_fragment>', 'float metalnessFactor = pMtl;')
       .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n  totalEmissiveRadiance += vEmit;');
   };
-  mat.customProgramCacheKey = () => 'props-furniture-3' + (wear ? 'w' : '');
+  mat.customProgramCacheKey = () => 'props-furniture-4' + (wear ? 'w' : '');
   return mat;
 }
 

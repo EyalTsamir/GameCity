@@ -9,6 +9,7 @@ import * as THREE from 'three';
 import { GeoSink, Shaper } from '../vegetation/geo';
 import type { Rng } from '../../core/rng';
 import type { LampStyle } from './layout';
+import { boltY, boltZ, cbox, lathe, poly, ring } from './shapes';
 
 export const MAT = {
   paint: [0.5, 0.25],
@@ -174,7 +175,7 @@ export function bench(k: Kit, style: 'classic' | 'modern' | 'wood', rng: Rng, le
       sh.beam(x, 0.42, -0.2, x, 0.86, -0.3, 0.07, 0.06);
     }
     k.m(rng.chance(0.5) ? '#b07a4c' : '#9a6a43', 'wood');
-    for (let i = 0; i < 5; i++) sh.box(0, 0.445, -0.2 + i * 0.105, L, 0.04, 0.085, 0);
+    for (let i = 0; i < 5; i++) cbox(sh, 0, 0.445, -0.2 + i * 0.105, L, 0.04, 0.085, 0.008, 0);
     for (let i = 0; i < 3; i++) {
       const t = i / 2;
       sh.push().local(0, 0.6 + t * 0.22, -0.25 - t * 0.05, -0.2).box(0, 0, 0, L, 0.075, 0.03, 0).pop();
@@ -189,7 +190,7 @@ export function bench(k: Kit, style: 'classic' | 'modern' | 'wood', rng: Rng, le
       sh.beam(x, 0.4, -0.22, x, 0.88, -0.34, 0.09, 0.08);
     }
     k.m('#a87f58', 'wood');
-    for (let i = 0; i < 4; i++) sh.box(0, 0.445, -0.18 + i * 0.12, L, 0.045, 0.1, 0);
+    for (let i = 0; i < 4; i++) cbox(sh, 0, 0.445, -0.18 + i * 0.12, L, 0.045, 0.1, 0.009, 0);
     for (let i = 0; i < 2; i++) sh.push().local(0, 0.66 + i * 0.16, -0.28 - i * 0.035, -0.22).box(0, 0, 0, L, 0.1, 0.035, 0).pop();
     return;
   }
@@ -203,35 +204,95 @@ export function bench(k: Kit, style: 'classic' | 'modern' | 'wood', rng: Rng, le
     sh.box(x, 0.64, 0.03, 0.07, 0.04, 0.42, 0);
     sh.beam(x, 0.42, 0.2, x, 0.64, 0.2, 0.05, 0.05, false);
   }
+  // scrolled armrests on the ends
+  for (const x of [-0.84, 0.84]) {
+    sh.beam(x, 0.64, 0.2, x, 0.66, -0.12, 0.05, 0.035);
+    sh.cyl(x, 0.6, 0.22, 0.03, 0.03, 0.05, 8, 2);
+  }
   const slat = rng.chance(0.45) ? '#3f6b4b' : rng.chance(0.5) ? '#a0704a' : '#8f5f3d';
   k.m(slat, slat === '#3f6b4b' ? 'paint' : 'wood');
-  for (let i = 0; i < 4; i++) sh.box(0, 0.45, -0.17 + i * 0.12, L - 0.06, 0.035, 0.095, 0);
+  for (let i = 0; i < 4; i++) cbox(sh, 0, 0.45, -0.17 + i * 0.12, L - 0.06, 0.035, 0.095, 0.008, 0);
   for (let i = 0; i < 3; i++) {
     const t = i / 2;
-    sh.push().local(0, 0.58 + t * 0.24, -0.25 - t * 0.055, -0.22).box(0, 0, 0, L - 0.06, 0.08, 0.03, 0).pop();
+    sh.push().local(0, 0.58 + t * 0.24, -0.25 - t * 0.055, -0.22);
+    cbox(sh, 0, 0, 0, L - 0.06, 0.08, 0.03, 0.007, 0);
+    sh.pop();
   }
+  // carriage bolts where the slats sit on the iron ends
+  k.m('#2a2d2e', 'iron');
+  for (const x of [-0.84, 0.84]) for (let i = 0; i < 4; i++) sh.cyl(x, 0.467, -0.17 + i * 0.12, 0.011, 0.008, 0.006, 6, 2);
 }
 
 // ─────────────────────────────────────────────────────────────── small props ──
 
-export function bin(k: Kit, modern: boolean): void {
+/**
+ * Litter bin. modern: a stainless square bin on a bolted base plate, posting slot under an overhanging
+ * cap, door seams, keyhole and hinges. classic: a cast-iron slatted round bin (base moulding, vertical
+ * slats over a dark core, two hoop bands, rolled rim) with a liner bag folded over the rim, a crest.
+ */
+export function bin(k: Kit, modern: boolean, rng?: Rng): void {
   const sh = k.sh;
+  const r01 = () => (rng ? rng.next() : 0.5);
   if (modern) {
-    k.m('#8d969c', 'steel');
-    sh.box(0, 0.45, 0, 0.42, 0.9, 0.42, 1);
+    k.m('#596066', 'steel');
+    cbox(sh, 0, 0.008, 0, 0.5, 0.016, 0.5, 0.006);
+    for (const [x, z] of [[-0.205, -0.205], [0.205, -0.205], [0.205, 0.205], [-0.205, 0.205]]) boltY(sh, x, 0.016, z, 0.014);
+    k.m(r01() < 0.3 ? '#5f6b62' : '#99a2a8', 'steel');
+    cbox(sh, 0, 0.46, 0, 0.42, 0.86, 0.42, 0.025);
+    // posting slot in a dark throat under the cap
+    k.m('#121314', 'rubber');
+    sh.box(0, 0.83, 0.205, 0.3, 0.1, 0.02, 0);
     k.m('#2b2f33', 'paint');
-    sh.box(0, 0.78, 0.212, 0.26, 0.08, 0.01, 0);
-    k.m('#5a646b', 'steel');
-    sh.box(0, 0.915, 0, 0.46, 0.03, 0.46, 0);
+    cbox(sh, 0, 0.905, 0.025, 0.45, 0.035, 0.49, 0.012);
+    // door seams + keyhole + hinges on the front face
+    k.m('#3a3f43', 'steel');
+    const z = 0.211;
+    sh.box(0, 0.12, z, 0.34, 0.006, 0.004, 0);
+    sh.box(0, 0.74, z, 0.34, 0.006, 0.004, 0);
+    sh.box(-0.17, 0.43, z, 0.006, 0.62, 0.004, 0);
+    sh.box(0.17, 0.43, z, 0.006, 0.62, 0.004, 0);
+    k.m('#1a1b1c', 'steel');
+    sh.box(0.13, 0.68, z + 0.002, 0.012, 0.022, 0.004, 0);
+    k.m('#7c858b', 'steel');
+    for (const y of [0.22, 0.64]) sh.cyl(-0.172, y - 0.03, z + 0.004, 0.009, 0.009, 0.06, 6, 2);
+    // a recycling / council sticker on some
+    if (r01() < 0.55) {
+      k.m(r01() < 0.5 ? '#2e7d4f' : '#e9e4d6', 'plastic');
+      sh.box(-0.04, 0.55, z + 0.001, 0.12, 0.09, 0.003, 0);
+    }
     return;
   }
-  k.m('#2f5240', 'paint');
-  sh.cyl(0, 0, 0, 0.23, 0.25, 0.82, 10, 0);
-  k.m('#24402f', 'paint');
-  sh.cyl(0, 0.82, 0, 0.27, 0.27, 0.05, 10, 0);
-  sh.cone(0, 0.87, 0, 0.27, 0.12, 10, false);
+  const body = rng ? rng.pick(['#2f5240', '#2f5240', '#1f2a24', '#3c3f42', '#5b2a2a']) : '#2f5240';
+  const dark = new THREE.Color(body).multiplyScalar(0.45);
+  k.m(body, 'iron');
+  lathe(sh, 0, 0, [[0.272, 0], [0.272, 0.035], [0.255, 0.05], [0.25, 0.075], [0.24, 0.085]], 16);
+  k.m(dark, 'iron');
+  sh.cyl(0, 0.08, 0, 0.222, 0.222, 0.72, 14, 0);
+  k.m(body, 'iron');
+  const N = 18;
+  for (let i = 0; i < N; i++) sh.push().local(0, 0, 0, 0, ((i + 0.5) / N) * Math.PI * 2).box(0, 0.44, 0.229, 0.052, 0.7, 0.016, 3).pop();
+  for (const y of [0.1, 0.7]) lathe(sh, 0, 0, [[0.236, y], [0.25, y + 0.006], [0.25, y + 0.064], [0.236, y + 0.07]], 16);
+  // rolled rim and the inside wall
+  lathe(sh, 0, 0, [[0.236, 0.78], [0.258, 0.79], [0.262, 0.82], [0.25, 0.838], [0.226, 0.835], [0.218, 0.8], [0.216, 0.6]], 16);
+  k.m('#0e0f10', 'rubber');
+  sh.disc(0, 0.62, 0, 0.217, 12);
+  // liner bag folded over the rim (most bins), its hem hanging unevenly
+  if (r01() < 0.8) {
+    k.m(r01() < 0.6 ? '#1c1e20' : r01() < 0.5 ? '#5a6a52' : '#9aa0a4', 'rubber');
+    const sides = 16, top: number[] = [], bot: number[] = [];
+    const ph = r01() * 6.28;
+    for (let i = 0; i <= sides; i++) {
+      const a = (i / sides) * Math.PI * 2, c = Math.cos(a), s = Math.sin(a);
+      const hang = 0.05 + 0.03 * Math.sin(a * 3 + ph) + 0.015 * Math.sin(a * 7 + ph * 2);
+      top.push(sh.v(c * 0.266, 0.832, s * 0.266, c, 0.2, s));
+      bot.push(sh.v(c * 0.268, 0.832 - hang, s * 0.268, c, -0.1, s));
+    }
+    for (let i = 0; i < sides; i++) sh.s.quad(bot[i], top[i], top[i + 1], bot[i + 1]);
+    lathe(sh, 0, 0, [[0.266, 0.832], [0.25, 0.846], [0.214, 0.842], [0.205, 0.78]], 16);
+  }
+  // crest plate
   k.m('#c9b26a', 'iron');
-  sh.cyl(0, 0.5, 0, 0.255, 0.255, 0.04, 10, 0);
+  sh.push().local(0, 0.46, 0.247).box(0, 0, 0, 0.09, 0.11, 0.012, 0).pop();
 }
 
 export function hydrant(k: Kit, yellow: boolean): void {
@@ -267,105 +328,251 @@ export function mailbox(k: Kit): void {
   sh.box(0, 1.08, 0.22, 0.1, 0.05, 0.01, 0);
 }
 
-export function phonebox(k: Kit): void {
+/**
+ * K6-style telephone kiosk (0.96 m square, 2.55 m): concrete plinth, chamfered corner posts, raised kick
+ * panels, glazing bars in relief (3 × 8 panes, the middle column wider) over recessed glass (g = the glass
+ * kit; without it the panes are opaque), sign bands, a square dome with the crown, a door handle and the
+ * telephone + shelf + ceiling light inside.
+ */
+export function phonebox(k: Kit, g?: Kit): void {
   const sh = k.sh;
-  const red = '#c4282d';
+  const red = '#bd2328';
+  k.m('#b9b4aa', 'stone');
+  cbox(sh, 0, 0.04, 0, 1.08, 0.08, 1.08, 0.02);
   k.m(red, 'paint');
-  sh.box(0, 0.07, 0, 1.0, 0.14, 1.0, 1);
-  for (const [x, z] of [
-    [-0.43, -0.43],
-    [0.43, -0.43],
-    [0.43, 0.43],
-    [-0.43, 0.43],
-  ]) sh.box(x, 1.25, z, 0.11, 2.2, 0.11, 1);
-  // four sides: kick panel, glazing with glazing bars, sign band
+  cbox(sh, 0, 0.13, 0, 0.98, 0.1, 0.98, 0.015);
+  for (const [x, z] of [[-0.43, -0.43], [0.43, -0.43], [0.43, 0.43], [-0.43, 0.43]]) cbox(sh, x, 1.24, z, 0.12, 2.1, 0.12, 0.018);
+  // floor + interior
+  k.m('#2a2624', 'stone');
+  sh.box(0, 0.185, 0, 0.8, 0.01, 0.8, 1);
   for (let side = 0; side < 4; side++) {
     sh.push().local(0, 0, 0, 0, (side * Math.PI) / 2);
+    const z = 0.43;
+    // kick panel: frame + raised field
     k.m(red, 'paint');
-    sh.box(0, 0.32, 0.43, 0.76, 0.36, 0.06, 1);
-    k.e('#cfdde0', '#ffd9a0', 0.55);
-    sh.box(0, 1.33, 0.425, 0.76, 1.66, 0.03, 0);
+    sh.box(0, 0.36, z - 0.01, 0.76, 0.34, 0.05, 1);
+    cbox(sh, 0, 0.36, z + 0.02, 0.6, 0.22, 0.03, 0.01, 1 | 4);
+    // glazing: recessed glass + bars in relief
+    const y0 = 0.56, y1 = 1.98, H = y1 - y0;
     k.m(red, 'paint');
-    for (const y of [0.92, 1.33, 1.74]) sh.box(0, y, 0.445, 0.76, 0.035, 0.03, 0);
-    sh.box(0, 1.33, 0.445, 0.035, 1.66, 0.03, 0);
+    sh.box(0, y0 - 0.02, z, 0.76, 0.04, 0.07, 1);
+    sh.box(0, y1 + 0.02, z, 0.76, 0.04, 0.07, 1);
+    for (const x of [-0.13, 0.13]) sh.box(x, (y0 + y1) / 2, z + 0.012, 0.03, H, 0.04, 3);
+    for (let r = 1; r < 8; r++) sh.box(0, y0 + (H * r) / 8, z + 0.012, 0.76, 0.022, 0.035, 0);
+    // sign band (lit at night) under the dome
     k.m(red, 'paint');
-    sh.box(0, 2.08, 0.44, 0.84, 0.08, 0.06, 0);
+    sh.box(0, 2.13, z + 0.01, 0.86, 0.26, 0.06, 1);
     k.e('#f4f1e8', '#fff1d6', 1.6);
-    sh.box(0, 2.21, 0.45, 0.64, 0.12, 0.02, 0);
+    sh.box(0, 2.15, z + 0.045, 0.6, 0.11, 0.012, 0);
+    k.m('#1c1c1c', 'paint');
+    for (let i = 0; i < 9; i++) sh.box(-0.24 + i * 0.06, 2.15, z + 0.052, 0.035, 0.05, 0.004, 0);
+    if (side === 0) {
+      // door handle (the front is the door)
+      k.m('#2a2a2a', 'iron');
+      sh.box(0.33, 1.15, z + 0.05, 0.025, 0.3, 0.025, 0);
+      sh.box(0.33, 1.02, z + 0.035, 0.02, 0.02, 0.03, 0);
+      sh.box(0.33, 1.28, z + 0.035, 0.02, 0.02, 0.03, 0);
+    }
     sh.pop();
   }
+  // panes (one per side, behind the bars)
+  if (g) {
+    g.m('#c3d3da', 'glass');
+    g.sh.m.copy(sh.m);
+    g.sh.local(0, 0, 0);
+    for (let side = 0; side < 4; side++) {
+      g.sh.push().local(0, 0, 0, 0, (side * Math.PI) / 2);
+      g.sh.box(0, 1.27, 0.425, 0.74, 1.42, 0.006, 3);
+      g.sh.pop();
+    }
+  } else {
+    k.e('#cfdde0', '#ffd9a0', 0.55);
+    for (let side = 0; side < 4; side++) sh.push().local(0, 0, 0, 0, (side * Math.PI) / 2).box(0, 1.27, 0.42, 0.74, 1.42, 0.01, 3).pop();
+  }
+  // telephone on the back wall, directory shelf, ceiling light
+  k.m('#1b1c1d', 'plastic');
+  cbox(sh, 0, 1.35, -0.33, 0.24, 0.32, 0.12, 0.02);
+  k.m('#9aa0a4', 'steel');
+  sh.box(0, 1.25, -0.265, 0.12, 0.08, 0.01, 0);
+  k.m('#111', 'plastic');
+  sh.box(-0.08, 1.4, -0.26, 0.05, 0.2, 0.05, 0);
+  k.m('#5a4a3a', 'wood');
+  sh.box(0, 0.95, -0.3, 0.6, 0.03, 0.22, 0);
+  k.e('#f6f0e0', '#ffe6b8', 1.2);
+  sh.box(0, 2.0, 0, 0.3, 0.02, 0.3, 0);
+  // square dome, crown
   k.m(red, 'paint');
-  sh.box(0, 2.34, 0, 1.06, 0.12, 1.06, 0);
-  sh.ellipsoid(0, 2.4, 0, 0.53, 0.16, 0.53, 1);
+  cbox(sh, 0, 2.3, 0, 1.0, 0.08, 1.0, 0.02);
+  lathe(sh, 0, 0, [[0.7, 2.34], [0.66, 2.42], [0.52, 2.5], [0.3, 2.55], [0, 2.56]], 4, Math.PI / 4);
   k.m('#d6b24e', 'iron');
-  sh.box(0, 2.58, 0, 0.12, 0.07, 0.12, 0);
+  sh.ellipsoid(0, 2.6, 0, 0.07, 0.06, 0.04, 1);
+  cbox(sh, 0, 2.565, 0, 0.14, 0.02, 0.06, 0.005);
 }
 
+/**
+ * Newspaper kiosk (1.8 × 1.1 m, 2.6 m to the sign): plinth, panelled walls, a real front opening with
+ * depth (counter with paper stacks, shelves of covers inside, the roll shutter coiled in its box above),
+ * wire magazine racks with tilted covers on both sides, an overhanging roof with fascia, a lit sign.
+ */
 export function newsstand(k: Kit, rng: Rng): void {
   const sh = k.sh;
   const body = rng.pick(['#2f6b4f', '#2b5d7a', '#7a2f35']);
+  const trim = new THREE.Color(body).multiplyScalar(0.7);
+  const cols = ['#e63946', '#f4a261', '#2a9d8f', '#e9c46a', '#457b9d', '#f1faee', '#8d6cab', '#e8649a', '#222', '#d9d4c7'];
+  k.m('#4a4e50', 'stone');
+  cbox(sh, 0, 0.05, -0.05, 1.86, 0.1, 1.16, 0.02);
   k.m(body, 'paint');
-  sh.box(0, 1.1, -0.05, 1.8, 2.2, 1.1, 1);
-  sh.box(0, 2.27, 0.08, 2.15, 0.12, 1.55, 0);
-  k.m('#3b2f28', 'wood');
-  sh.box(0, 1.35, 0.5, 1.4, 0.75, 0.02, 0);
-  k.m('#d8cfbd', 'wood');
-  sh.box(0, 0.94, 0.62, 1.6, 0.06, 0.28, 0);
-  // magazine racks on both sides and the counter
-  const cols = ['#e63946', '#f4a261', '#2a9d8f', '#e9c46a', '#457b9d', '#f1faee', '#8d6cab', '#e8649a'];
-  for (const sx of [-1, 1]) {
-    for (let r = 0; r < 3; r++) {
-      for (let c = 0; c < 3; c++) {
-        k.m(rng.pick(cols), 'plastic');
-        sh.box(sx * 0.915, 0.6 + r * 0.42, -0.4 + c * 0.32, 0.02, 0.3, 0.22, 0);
-      }
+  // back block, side jambs, counter front, fascia above the opening (front face at z = 0.5)
+  cbox(sh, 0, 1.15, -0.25, 1.8, 2.1, 0.7, 0.02);
+  for (const x of [-0.83, 0.83]) cbox(sh, x, 1.15, 0.3, 0.14, 2.1, 0.4, 0.015);
+  cbox(sh, 0, 0.53, 0.3, 1.6, 0.86, 0.4, 0.015);
+  cbox(sh, 0, 2.0, 0.3, 1.6, 0.4, 0.4, 0.015);
+  // raised panels on the counter front and the sides
+  k.m(trim, 'paint');
+  for (const x of [-0.4, 0.4]) cbox(sh, x, 0.52, 0.505, 0.62, 0.56, 0.02, 0.006, 1 | 4);
+  for (const sx of [-1, 1])
+    for (const z of [-0.33, 0.18]) sh.push().local(sx * 0.9, 0.45, z, 0, (sx * Math.PI) / 2).box(0, 0, 0, 0.4, 0.5, 0.02, 1).pop();
+  // inside: dark recess, shelves with covers leaning back
+  k.m('#2a2522', 'wood');
+  sh.box(0, 1.37, 0.1, 1.52, 0.86, 0.01, 0);
+  sh.box(0, 1.8, 0.3, 1.52, 0.01, 0.4, 0);
+  for (const y of [1.0, 1.3, 1.58]) {
+    k.m('#6b5640', 'wood');
+    sh.box(0, y, 0.17, 1.5, 0.02, 0.14, 0);
+    for (let c = 0; c < 7; c++) {
+      k.m(rng.pick(cols), 'plastic');
+      sh.push().local(-0.62 + c * 0.205 + rng.range(-0.02, 0.02), y + 0.12, 0.14, -0.25).box(0, 0, 0, 0.17, 0.23, 0.01, 0).pop();
     }
   }
-  for (let c = 0; c < 6; c++) {
-    k.m(rng.pick(cols), 'plastic');
-    sh.push().local(-0.62 + c * 0.25, 0.99, 0.62, -1.2).box(0, 0, 0, 0.2, 0.26, 0.015, 0).pop();
+  // counter board + newspaper stacks
+  k.m('#c9b48e', 'wood');
+  cbox(sh, 0, 0.98, 0.42, 1.64, 0.04, 0.3, 0.01);
+  for (let i = 0; i < 4; i++) {
+    const x = -0.6 + i * 0.36 + rng.range(-0.03, 0.03), h = rng.range(0.04, 0.12);
+    k.m('#e4e0d6', 'plastic');
+    sh.push().local(x, 1.0 + h / 2, 0.45, 0, rng.range(-0.15, 0.15)).box(0, 0, 0, 0.3, h, 0.22, 1).pop();
+    k.m('#3b3b3b', 'plastic');
+    sh.push().local(x, 1.0 + h + 0.001, 0.45, 0, rng.range(-0.1, 0.1)).box(0, 0, 0.04, 0.22, 0.002, 0.04, 1).pop();
   }
+  // roll shutter coiled in its box under the fascia
+  k.m('#8f979c', 'steel');
+  sh.push().local(0, 1.75, 0.47, 0, 0, Math.PI / 2).cyl(0, -0.78, 0, 0.065, 0.065, 1.56, 10, 3).pop();
+  // wire magazine racks on both sides: covers tilted back against a rail
+  for (const sx of [-1, 1]) {
+    sh.push().local(sx * 0.95, 0, -0.05, 0, (sx * Math.PI) / 2);
+    for (let r = 0; r < 3; r++) {
+      const y = 0.95 + r * 0.38;
+      for (let c = 0; c < 3; c++) {
+        k.m(rng.pick(cols), 'plastic');
+        sh.push().local(-0.33 + c * 0.33, y + 0.13, 0.04, -0.18).box(0, 0, 0, 0.22, 0.29, 0.012, 0).pop();
+      }
+      k.m('#5e666b', 'steel');
+      sh.box(0, y + 0.05, 0.08, 1.0, 0.012, 0.012, 0);
+      sh.box(0, y - 0.005, 0.04, 1.0, 0.01, 0.08, 0);
+    }
+    for (const x of [-0.5, 0.5]) sh.box(x, 1.5, 0.04, 0.015, 1.2, 0.015, 0);
+    sh.pop();
+  }
+  // roof: overhanging slab with a fascia and a shallow pitch, drip edge
+  k.m(trim, 'paint');
+  cbox(sh, 0, 2.26, 0.05, 2.1, 0.1, 1.5, 0.02);
+  k.m('#3a3d3f', 'steel');
+  poly(sh, [-1.03, 2.31, 0.78, 1.03, 2.31, 0.78, 1.03, 2.4, 0.05, -1.03, 2.4, 0.05], 0, 0.995, 0.1);
+  poly(sh, [-1.03, 2.31, -0.68, 1.03, 2.31, -0.68, 1.03, 2.4, 0.05, -1.03, 2.4, 0.05], 0, 0.99, -0.12);
+  for (const sx of [-1, 1]) poly(sh, [sx * 1.03, 2.31, -0.68, sx * 1.03, 2.31, 0.78, sx * 1.03, 2.4, 0.05], sx, 0, 0);
   // sign board, lit at night
+  k.m(trim, 'paint');
+  sh.box(0, 2.52, 0.6, 1.36, 0.3, 0.05, 1);
   k.e('#f2ead6', '#ffe2a8', 1.4);
-  sh.box(0, 2.48, 0.58, 1.3, 0.24, 0.05, 0);
+  sh.box(0, 2.52, 0.63, 1.28, 0.22, 0.02, 0);
   k.m('#c43b33', 'paint');
-  sh.box(0, 2.48, 0.61, 0.5, 0.1, 0.01, 0);
+  sh.box(0, 2.52, 0.643, 0.6, 0.1, 0.006, 0);
+  k.m('#f2ead6', 'paint');
+  for (let i = 0; i < 5; i++) sh.box(-0.2 + i * 0.1, 2.52, 0.647, 0.06, 0.05, 0.003, 0);
 }
 
+/**
+ * Street planter (along × across × h): a hollow trough with chamfered edges and a shadow-gap foot, the
+ * rim, inner walls and a soil surface 8 cm down with clods. concrete: precast with arrises; terracotta:
+ * rolled lip band; wood: horizontal boards with gaps between corner posts; steel: folded lip.
+ */
 export function planterBox(k: Kit, kind: 'concrete' | 'terracotta' | 'wood' | 'steel', along: number, across: number, h: number): void {
   const sh = k.sh;
-  switch (kind) {
-    case 'terracotta':
-      k.m('#b8643f', 'ceramic');
-      break;
-    case 'wood':
-      k.m('#8a6240', 'wood');
-      break;
-    case 'steel':
-      k.m('#4b5a52', 'paint');
-      break;
-    default:
-      k.m('#c4beb3', 'stone');
+  const mat = kind === 'terracotta' ? 'ceramic' : kind === 'wood' ? 'wood' : kind === 'steel' ? 'paint' : 'stone';
+  const col = kind === 'terracotta' ? '#b8643f' : kind === 'wood' ? '#8a6240' : kind === 'steel' ? '#4b5a52' : '#c4beb3';
+  const rimCol = kind === 'terracotta' ? '#a9583a' : kind === 'wood' ? '#9d7149' : kind === 'steel' ? '#3c4a43' : '#cfc9be';
+  const t = kind === 'steel' ? 0.03 : 0.07;
+  const ax = along / 2, az = across / 2;
+  // shadow-gap foot
+  k.m('#2e2c29', 'stone');
+  sh.box(0, 0.025, 0, along - 0.08, 0.05, across - 0.08, 1);
+  k.m(col, mat);
+  if (kind === 'wood') {
+    k.m('#5a4330', 'wood');
+    sh.box(0, (h + 0.05) / 2, 0, along - 0.06, h - 0.05, across - 0.06, 1);
+    k.m(col, 'wood');
+    const nb = 3, bh = (h - 0.06) / nb;
+    for (let i = 0; i < nb; i++) {
+      const y = 0.05 + bh * (i + 0.5);
+      for (const s of [-1, 1]) {
+        cbox(sh, 0, y, s * (az - 0.012), along - 0.12, bh - 0.012, 0.024, 0.006);
+        cbox(sh, s * (ax - 0.012), y, 0, 0.024, bh - 0.012, across - 0.12, 0.006);
+      }
+    }
+    k.m('#7a5536', 'wood');
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) cbox(sh, sx * (ax - 0.04), (h + 0.05) / 2, sz * (az - 0.04), 0.08, h - 0.05, 0.08, 0.01);
+  } else {
+    cbox(sh, 0, (h + 0.05) / 2, 0, along, h - 0.05, across, kind === 'steel' ? 0.006 : 0.025, 1 | 2);
   }
-  sh.box(0, h / 2, 0, along, h, across, 1);
-  k.m(kind === 'terracotta' ? '#a2553a' : kind === 'wood' ? '#9d7149' : kind === 'steel' ? '#3c4a43' : '#d5cfc4', kind === 'terracotta' ? 'ceramic' : kind === 'wood' ? 'wood' : 'stone');
-  sh.box(0, h + 0.015, 0, along + 0.06, 0.03, across + 0.06, 3);
+  // rim (a frame) + inner walls
+  k.m(rimCol, mat);
+  const lip = kind === 'terracotta' ? 0.025 : kind === 'steel' ? 0.012 : kind === 'wood' ? 0.015 : 0;
+  if (lip > 0) cbox(sh, 0, h - 0.03, 0, along + lip * 2, 0.06, across + lip * 2, 0.012, 1 | 2);
+  const ox = ax + lip, oz = az + lip, ix = ax - t, iz = az - t;
+  poly(sh, [-ox, h, -oz, ox, h, -oz, ix, h, -iz, -ix, h, -iz], 0, 1, 0);
+  poly(sh, [ox, h, -oz, ox, h, oz, ix, h, iz, ix, h, -iz], 0, 1, 0);
+  poly(sh, [ox, h, oz, -ox, h, oz, -ix, h, iz, ix, h, iz], 0, 1, 0);
+  poly(sh, [-ox, h, oz, -ox, h, -oz, -ix, h, -iz, -ix, h, iz], 0, 1, 0);
+  const ys = h - 0.08;
+  k.m(new THREE.Color(rimCol).multiplyScalar(0.6), mat);
+  poly(sh, [-ix, h, -iz, ix, h, -iz, ix, ys, -iz, -ix, ys, -iz], 0, 0, 1);
+  poly(sh, [-ix, h, iz, ix, h, iz, ix, ys, iz, -ix, ys, iz], 0, 0, -1);
+  poly(sh, [-ix, h, -iz, -ix, h, iz, -ix, ys, iz, -ix, ys, -iz], 1, 0, 0);
+  poly(sh, [ix, h, -iz, ix, h, iz, ix, ys, iz, ix, ys, -iz], -1, 0, 0);
+  // soil with a few clods
   k.m('#4e3828', 'stone');
-  sh.box(0, h - 0.07, 0, along - 0.1, 0.02, across - 0.1, 3);
+  poly(sh, [-ix, ys, -iz, ix, ys, -iz, ix, ys, iz, -ix, ys, iz], 0, 1, 0);
+  k.m('#3f2d20', 'stone');
+  for (let i = 0; i < 6; i++) {
+    const u = Math.sin(i * 12.9898 + along) * 0.5, v = Math.sin(i * 78.233 + across) * 0.5;
+    sh.ellipsoid(u * (ix * 1.6), ys + 0.004, v * (iz * 1.6), 0.035, 0.018, 0.03, 0);
+  }
 }
 
-export function bollard(k: Kit, style: 'steel' | 'stone'): void {
+/** Bollards. steel: a tapered painted tube on a ground collar with a domed cap and a reflective band;
+ *  stone: a granite post with a chamfered square foot and a dished cap; iron: a cast-iron cannon bollard
+ *  (base collar, waisted body, bead and ring, ball top). */
+export function bollard(k: Kit, style: 'steel' | 'stone' | 'iron'): void {
   const sh = k.sh;
   if (style === 'stone') {
     k.m('#cfc6b4', 'stone');
-    sh.cyl(0, 0, 0, 0.16, 0.13, 0.6, 8, 0);
-    sh.ellipsoid(0, 0.6, 0, 0.13, 0.08, 0.13, 0);
+    cbox(sh, 0, 0.06, 0, 0.3, 0.12, 0.3, 0.025);
+    lathe(sh, 0, 0, [[0.14, 0.11], [0.125, 0.55], [0.13, 0.57], [0.13, 0.6], [0.1, 0.66], [0.04, 0.68], [0, 0.685]], 10);
+    return;
+  }
+  if (style === 'iron') {
+    k.m('#24282a', 'iron');
+    lathe(sh, 0, 0, [[0.15, 0], [0.15, 0.04], [0.12, 0.07], [0.105, 0.12], [0.095, 0.5], [0.105, 0.6], [0.12, 0.62], [0.12, 0.66], [0.1, 0.68], [0.105, 0.72], [0.11, 0.76], [0.09, 0.8], [0.05, 0.83], [0, 0.835]], 12);
+    k.m('#b89a4e', 'iron');
+    ring(sh, 0, 0.64, 0, 0.122, 0.012, 12);
     return;
   }
   k.m('#3a3f44', 'paint');
-  sh.cyl(0, 0, 0, 0.09, 0.085, 0.86, 8, 2);
-  k.m('#e8e6df', 'paint');
-  sh.cyl(0, 0.68, 0, 0.092, 0.092, 0.07, 8, 0);
+  lathe(sh, 0, 0, [[0.13, 0], [0.13, 0.02], [0.1, 0.035], [0.095, 0.05]], 10);
+  lathe(sh, 0, 0, [[0.09, 0.04], [0.082, 0.82], [0.075, 0.86], [0.045, 0.885], [0, 0.89]], 10);
+  k.m('#e8e6df', 'plastic');
+  sh.cyl(0, 0.66, 0, 0.087, 0.086, 0.035, 10, 0);
+  sh.cyl(0, 0.72, 0, 0.086, 0.085, 0.035, 10, 0);
 }
 
 // ───────────────────────────────────────────────────────── bike rack ──
