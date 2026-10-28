@@ -1,9 +1,9 @@
 // Vehicle classes for the traffic sim: physical size, driving style and how
 // they are drawn. Model index = position in MODEL_KINDS (one InstancedMesh each).
 
-export type ModelKind = 'compact' | 'hatch' | 'sedan' | 'suv' | 'delivery' | 'lorry' | 'bus' | 'icecream' | 'bike' | 'moto';
+export type ModelKind = 'compact' | 'hatch' | 'sedan' | 'suv' | 'estate' | 'mpv' | 'delivery' | 'lorry' | 'bus' | 'icecream' | 'bike' | 'moto';
 
-export const MODEL_KINDS: ModelKind[] = ['compact', 'hatch', 'sedan', 'suv', 'delivery', 'lorry', 'bus', 'icecream', 'bike', 'moto'];
+export const MODEL_KINDS: ModelKind[] = ['compact', 'hatch', 'sedan', 'suv', 'delivery', 'lorry', 'bus', 'icecream', 'bike', 'moto', 'estate', 'mpv'];
 
 /** Variants of the sedan family (instance attribute selects the extra parts). */
 export const SEDAN_PLAIN = 0;
@@ -50,6 +50,9 @@ export const SPECS: Record<ModelKind, VehicleSpec> = {
   lorry: spec('lorry', { len: 7.6, width: 2.35, height: 3.05, wheelbase: 4.4, frontOverhang: 1.3, wheelR: 0.48, accel: 1.0, decel: 2.0, headway: 1.8, speedFactor: 0.85, sweep: 0.85, label: 'Lorry' }),
   bus: spec('bus', { len: 11.0, width: 2.5, height: 3.1, wheelbase: 6.0, frontOverhang: 2.6, wheelR: 0.48, accel: 1.05, decel: 2.0, headway: 1.8, speedFactor: 0.88, sweep: 1.0, label: 'Bus' }),
   icecream: spec('icecream', { len: 5.0, width: 2.0, height: 2.6, wheelbase: 3.0, frontOverhang: 0.9, wheelR: 0.36, accel: 1.3, decel: 2.3, headway: 1.6, speedFactor: 0.75, sweep: 0.5, label: 'Ice-cream van' }),
+  // parked only (silhouette variety in car parks; the traffic mix is unchanged)
+  estate: spec('estate', { len: 4.7, width: 1.8, height: 1.5, wheelbase: 2.82, frontOverhang: 0.93, wheelR: 0.32, accel: 1.8, decel: 2.6, headway: 1.3, speedFactor: 1.0, sweep: 0.35, label: 'Estate' }),
+  mpv: spec('mpv', { len: 4.5, width: 1.84, height: 1.7, wheelbase: 2.85, frontOverhang: 0.82, wheelR: 0.33, accel: 1.7, decel: 2.5, headway: 1.35, speedFactor: 0.98, sweep: 0.36, label: 'People carrier' }),
   bike: spec('bike', { len: 1.75, width: 0.62, height: 1.75, wheelbase: 1.05, frontOverhang: 0.36, wheelR: 0.34, accel: 1.1, decel: 2.2, headway: 1.0, speedFactor: 0.5, sweep: 0.1, label: 'Cyclist', variant: 0, offset: 0.85 }),
   moto: spec('moto', { len: 1.82, width: 0.72, height: 1.7, wheelbase: 1.3, frontOverhang: 0.26, wheelR: 0.24, accel: 2.3, decel: 3.0, headway: 1.05, speedFactor: 0.88, sweep: 0.1, label: 'Moped', variant: 0, offset: 0.45 }),
 };

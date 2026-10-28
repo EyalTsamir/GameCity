@@ -32,7 +32,7 @@ export interface ParkedCar {
   label?: string;
 }
 
-const MOVING_CAP: Record<ModelKind, number> = { compact: 70, hatch: 80, sedan: 90, suv: 60, delivery: 40, lorry: 30, bus: 10, icecream: 4, bike: 70, moto: 70 };
+const MOVING_CAP: Record<ModelKind, number> = { compact: 70, hatch: 80, sedan: 90, suv: 60, delivery: 40, lorry: 30, bus: 10, icecream: 4, bike: 70, moto: 70, estate: 0, mpv: 0 };
 const ROAD_Y = 0.012;
 /** beyond this camera distance a car popping in/out is a sub-4-pixel event */
 const POP_DIST = 290;
@@ -106,7 +106,7 @@ export class VehicleRenderer {
     const { material, depth, detail } = createVehicleMaterial(ctx.uniforms, atlas);
     this.detail = detail.value;
     const q = ctx.debug.params;
-    this.detailOff = [q.has('nocarinterior'), q.has('nopanelgaps'), q.has('novehiclewear')];
+    this.detailOff = [q.has('nocarinterior'), q.has('nopanelgaps'), q.has('novehiclewear'), q.has('nocarpaint')];
 
     MODEL_KINDS.forEach((kind) => {
       const cap = parked.filter((p) => p.model === kind).length + MOVING_CAP[kind];
@@ -276,7 +276,7 @@ export class VehicleRenderer {
     this.lodLimits(this.lim);
     // tiers: the ray-traced cabin is skipped on low; panel lines and wear are a few ALU everywhere
     const off = this.detailOff;
-    this.detail.set(off[0] || this.ctx.quality.level === 'low' ? 0 : 1, off[1] ? 0 : 1, off[2] ? 0 : 1, 0);
+    this.detail.set(off[0] || this.ctx.quality.level === 'low' ? 0 : 1, off[1] ? 0 : 1, off[2] ? 0 : 1, off[3] ? 0 : 1);
     const sim = this.sim;
     const night = this.ctx.uniforms.uLights.value;
     const k = 1 - Math.exp(-Math.min(realDt, 0.1) * 7);
@@ -493,6 +493,8 @@ export class VehicleRenderer {
       { kind: 'sedan', variant: 1, color: '#f5c518' },
       { kind: 'sedan', variant: 2, color: '#f7f7f4', siren: 1 },
       { kind: 'suv', variant: 0, color: '#2a9d8f' },
+      { kind: 'estate', variant: 0, color: '#6b7078' },
+      { kind: 'mpv', variant: 0, color: '#8c1c13' },
       { kind: 'delivery', variant: 0, color: '#f4f2ec' },
       { kind: 'delivery', variant: 1, color: '#e63946' },
       { kind: 'delivery', variant: 2, color: '#457b9d' },
@@ -581,9 +583,11 @@ function poolTexture(): THREE.Texture {
 }
 
 export function pickParkedModel(r: number): ModelKind {
-  if (r < 0.22) return 'compact';
-  if (r < 0.5) return 'hatch';
-  if (r < 0.78) return 'sedan';
+  if (r < 0.17) return 'compact';
+  if (r < 0.37) return 'hatch';
+  if (r < 0.55) return 'sedan';
+  if (r < 0.68) return 'estate';
+  if (r < 0.8) return 'mpv';
   return 'suv';
 }
 

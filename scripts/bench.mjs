@@ -175,6 +175,12 @@ try {
         h.getPosition(p);
         const yaw = h.getHeading ? (h.getHeading() * 180) / Math.PI : 0;
         const H = { car: 1.5, bus: 3, pedestrian: 1.75, train: 4, boat: 3 }[cls];
+        // a bus is 11 m long: aim at its front end (a camera at 4 m from the middle stands inside the body, and the
+        // line-of-sight search then ends looking down on the roof), from a front three-quarter yaw, low pitch
+        if (cls === 'bus') {
+          const hd = h.getHeading ? h.getHeading() : 0;
+          return { x: p.x + Math.sin(hd) * 4.6, y: p.y, z: p.z + Math.cos(hd) * 4.6, yaw: yaw + 28, h: H, w: 2, pitch: 5 };
+        }
         return { x: p.x, y: p.y, z: p.z, yaw: yaw + 35, h: H, w: 2 };
       },
       [cls, pickIdx],

@@ -12,8 +12,8 @@
 //   aInst  = (brake 0..1, blinker 0 none|1 left|2 right|3 hazard, wheel angle, steer angle)
 //   aInst2 = (variant, siren 0|1, phase 0..1, lights-on factor 0..1)
 // Close-up detail ("real things" round, W2), per part through aDetA / aDetB / aDetC (class) and uVehDetail
-// (x interior, y panel lines, z wear; 0 = off, set per quality tier and ?nocarinterior / ?nopanelgaps /
-// ?novehiclewear):
+// (x interior, y panel lines, z wear, w paint layers; 0 = off, set per quality tier and ?nocarinterior / ?nopanelgaps /
+// ?novehiclewear / ?nocarpaint):
 //   class 1 lofted car paint: panel gaps (door cuts, bonnet, boot) + shoulder crease, drawn in object space
 //            A = (door cut z ×3, cowl z), B = (boot z, sill y, fender seam |x|, belt y)
 //   class 2 car glass, 4 bus glass, 5 van cab glass: interior mapping (ray-traced seats, dash, headrests,
@@ -126,7 +126,7 @@ vDetB = aDetB;
   vEmit = vec4( e, useD );
   float fin = floor( aMeta.w * 0.25 );
   vRough = aMeta.w - fin * 4.0;
-  vCoat = ( fin > 0.5 && fin < 2.5 ) ? 1.0 : 0.0;
+  vCoat = ( fin > 0.5 && fin < 2.5 ) ? 1.0 + aMeta.x : 0.0; // > 1.5: body-coloured paint
   vMetal = ( fin > 2.5 ) ? 1.0 : 0.0;
   vGain = fin < 0.5 ? 1.0 : fin < 1.5 ? 2.4 : fin < 2.5 ? 3.6 : 1.5;
 }
@@ -139,6 +139,8 @@ float thRoughAdd = 0.0;
 vec3 thGlassEmit = vec3( 0.0 );
 float thCabinK = 1.0;
 vec3 thTiltN = vec3( 0.0 );
+float thMetal = 0.0;
+float thBaseSpec = 1.0;
 {
   float cls = floor( vObj.w + 0.5 );
   vec3 p = vObj.xyz;
@@ -211,19 +213,35 @@ vec3 thTiltN = vec3( 0.0 );
       }
     }
   }
+  if ( vCoat > 1.5 && vGain < 3.0 && uVehDetail.w > 0.5 ) {
+    // two-layer car paint: under the lacquer the colour coat hardly reflects (the index step between them is
+    // tiny), so the satin sheen of a single-layer plastic goes and the sharp clear-coat reflection carries the
+    // gloss; about half the cars wear metallic paint (aluminium flake: a tinted, tighter base reflection)
+    thBaseSpec = 0.22;
+    if ( thH1( ph * 57.3 + 0.4 ) > 0.55 ) {
+      thMetal = 0.45;
+      thRoughAdd -= 0.12;
+    }
+  }
   if ( !glass && uVehDetail.z > 0.5 ) {
     // road grime: every vehicle carries a film of road dust low down, some a lot; it fades up the body with a
     // noisy edge, darkest along the sills and bumper bottoms (spray off the wheels), streaked vertically
     float h = thH1( ph * 91.3 );
-    float dirt = 0.22 + 0.78 * h * h;
+    float dirt = 0.3 + 0.7 * h * h;
     float low = 1.0 - smoothstep( 0.1, 0.38 + 0.5 * dirt, p.y + 0.12 * thVN( p * vec3( 3.0, 1.0, 3.0 ) ) );
     float n = thVN( p * vec3( 5.0, 16.0, 5.0 ) );
     float film = 1.0 - smoothstep( 0.06, 0.2 + 0.12 * dirt, p.y );
     float m = dirt * low * ( 0.45 + 0.55 * n ) + film * ( 0.25 + 0.5 * dirt ) + 0.07 * dirt * thVN( p * 9.0 );
+    // tyres: the sidewalls go grey-brown with dried road dust (never showroom black), most towards the rim edge
+    if ( cls > 2.5 && cls < 3.5 ) m = max( m, ( 0.28 + 0.4 * dirt ) * ( 0.55 + 0.45 * thVN( p * 14.0 ) ) );
+    // the sills catch spray off the wheels: a darker band along the bottom edge of the doors
+    m += dirt * 0.35 * side * ( 1.0 - smoothstep( 0.3, 0.5, p.y ) ) * smoothstep( 0.15, 0.25, p.y ) * ( 0.6 + 0.4 * n );
     vec3 mud = mix( vec3( 0.36, 0.33, 0.28 ), vec3( 0.2, 0.19, 0.17 ), film );
     diffuseColor.rgb = mix( diffuseColor.rgb, mud, clamp( m, 0.0, 1.0 ) * 0.82 );
     thCoatK *= 1.0 - clamp( m * 1.2, 0.0, 1.0 );
     thRoughAdd += m * 0.6;
+    thMetal *= 1.0 - clamp( m * 1.5, 0.0, 1.0 );
+    thBaseSpec = mix( thBaseSpec, 1.0, clamp( m * 1.5, 0.0, 1.0 ) );
   }
 }
 `;
@@ -450,8 +468,8 @@ export function createVehicleMaterial(
       .replace('#include <roughnessmap_fragment>', 'float roughnessFactor = clamp( roughness * vRough + thRoughAdd, 0.04, 1.0 );')
       .replace('#include <normal_fragment_maps>', '#include <normal_fragment_maps>\nnormal = normalize( normal + thTiltN );')
       .replace('#include <clearcoat_normal_fragment_begin>', '#include <clearcoat_normal_fragment_begin>\n#ifdef USE_CLEARCOAT\n  clearcoatNormal = normalize( clearcoatNormal + thTiltN );\n#endif')
-      .replace('#include <metalnessmap_fragment>', 'float metalnessFactor = vMetal;')
-      .replace('#include <lights_physical_fragment>', '#include <lights_physical_fragment>\n#ifdef USE_CLEARCOAT\n  material.clearcoat = vCoat * thCoatK;\n#endif')
+      .replace('#include <metalnessmap_fragment>', 'float metalnessFactor = max( vMetal, thMetal );')
+      .replace('#include <lights_physical_fragment>', '#include <lights_physical_fragment>\n{ float thK = mix( thBaseSpec, 1.0, thMetal * 2.0 ); material.specularColor *= thK; material.specularColorBlended *= thK; }\n#ifdef USE_CLEARCOAT\n  material.clearcoat = min( vCoat, 1.0 ) * thCoatK;\n#endif')
       .replace(
         '#include <lights_fragment_maps>',
         `#include <lights_fragment_maps>
@@ -464,7 +482,7 @@ export function createVehicleMaterial(
       )
       .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += vEmit.rgb * mix( vec3( 1.0 ), diffuseColor.rgb, vEmit.a ) * thCabinK + thGlassEmit;');
   };
-  material.customProgramCacheKey = () => 'traffic-vehicle-v8';
+  material.customProgramCacheKey = () => 'traffic-vehicle-v9';
   patchLampMaterial(material); // night street-light map (night agent)
 
   const depth = new THREE.MeshDepthMaterial();

@@ -1198,15 +1198,33 @@ function loftBody(b: Builder, s: CarShape, doors4: boolean, chrome = false, bump
     b.add(p.bumper, bumper === 'paint' ? { color: '#ffffff', paint: true, rough: 0.8 } : bumper === 'chrome' ? { color: CHROME, rough: 0.3 } : { color: '#3a3d42', rough: 1.25 });
   if (p.gap) b.add(p.gap, { color: '#0b0c0e', rough: 1.8 });
   for (const sd of [1, -1]) {
-    // door mirror at the base of the A pillar: a dark sail and arm, a painted housing, the glass facing back
+    // door mirror at the base of the A pillar: a dark sail on the door, a stalk out and up, a painted shell
+    // rounded at the front and open at the back, where the glass sits in a black rim
     const mz = s.wsBase - 0.12;
-    b.add(bx(0.035, 0.08, 0.13, sd * (hw - 0.03), s.belt - 0.005, mz + 0.02), { color: TRIM });
-    b.add(bx(0.06, 0.03, 0.055, sd * (hw + 0.02), s.belt + 0.01, mz + 0.01), { color: TRIM });
-    const hs = rbox(0.17, 0.11, 0.1, 0.04, sd * (hw + 0.1), s.belt - 0.005, mz);
-    taper(hs, s.belt - 0.005, s.belt + 0.105, mz, 0.0, 0.05, 0.0);
+    b.add(bx(0.03, 0.07, 0.12, sd * (hw - 0.028), s.belt - 0.01, mz + 0.03), { color: TRIM });
+    const hx = sd * (hw + 0.115),
+      hy = s.belt + 0.055;
+    const st = new THREE.CylinderGeometry(0.013, 0.018, 0.085, sg(8));
+    st.rotateZ(Math.PI / 2 + sd * 0.35);
+    st.translate(sd * (hw + 0.03), s.belt + 0.03, mz + 0.03);
+    b.add(st, { color: TRIM, rough: 0.9, finish: 'coat' });
+    const hs = new THREE.SphereGeometry(1, sg(14), sg(8));
+    {
+      const hp = hs.attributes.position as THREE.BufferAttribute;
+      for (let i = 0; i < hp.count; i++) {
+        // shell: flattened at the back (z < 0) into the glass plane, a little fuller at the outer end
+        const z = hp.getZ(i);
+        hp.setZ(i, z < 0 ? z * 0.18 : z);
+        hp.setX(i, hp.getX(i) * (1 + 0.12 * sd * hp.getX(i)));
+      }
+      hs.computeVertexNormals();
+      hs.scale(0.098, 0.062, 0.07);
+      hs.translate(hx, hy, mz + 0.0);
+    }
     b.add(hs, { color: '#ffffff', paint: true, rough: 0.85 });
     if (LOD === 0) {
-      b.add(decalPlane(0.14, 0.08, sd * (hw + 0.105), s.belt + 0.05, mz - 0.052, 'nz'), { color: '#8c9aa6', rough: 0.15, finish: 'chrome' });
+      b.add(decalPlane(0.19, 0.118, hx, hy, mz - 0.0135, 'nz'), { color: '#141518', rough: 1.2 });
+      b.add(decalPlane(0.17, 0.098, hx, hy, mz - 0.016, 'nz'), { color: '#8c9aa6', rough: 0.15, finish: 'chrome' });
       const handles = doors4 ? [s.pillarB + 0.14, cuts[2] + 0.14] : [s.pillarB + 0.16];
       for (const z of handles) {
         // pull handle proud of a dark recess
@@ -1272,8 +1290,9 @@ function sedan(): THREE.BufferGeometry {
   b.add(decalPlane(0.54, 0.15, 0, c.topY + 0.08, c.topZ - 0.142, 'nz'), { color: '#ffffff', decal: R_TAXI, light: LIGHT_TAXI, part: 2 });
   for (const s of [1, -1]) {
     for (let i = 0; i < 8; i++) {
-      b.add(bx(0.012, 0.07, 0.17, s * (W / 2 + 0.01), 0.66 + (i % 2) * 0.07, -0.88 + i * 0.22), { color: '#1d1d1d', part: 2 });
-      b.add(bx(0.012, 0.07, 0.17, s * (W / 2 + 0.01), 0.66 + ((i + 1) % 2) * 0.07, -0.88 + i * 0.22), { color: '#ffffff', part: 2 });
+      // chequer band on the shoulder (its widest line, belt − 0.15), sunk into the curved flank so no edge floats
+      b.add(bx(0.05, 0.06, 0.17, s * (W / 2 - 0.013), 0.69 + (i % 2) * 0.06, -0.88 + i * 0.22), { color: '#1d1d1d', part: 2 });
+      b.add(bx(0.05, 0.06, 0.17, s * (W / 2 - 0.013), 0.69 + ((i + 1) % 2) * 0.06, -0.88 + i * 0.22), { color: '#ffffff', part: 2 });
     }
   }
   // police (variant 2 → part 3): light bar + livery band
@@ -1285,27 +1304,58 @@ function sedan(): THREE.BufferGeometry {
   return b.build();
 }
 
+/** roof rails: a rounded bar `clear` above the roof on three feet standing on the crowned roof; returns the bar top */
+function roofRails(b: Builder, shape: CarShape, c: { topZ: number; topW: number; topD: number }, clear: number): number {
+  const rx = c.topW / 2 - 0.12,
+    rl = c.topD - 0.5,
+    ry = topSurfaceY(shape, rx, c.topZ) + clear;
+  for (const sd of [1, -1]) {
+    b.add(rbox(0.042, 0.032, rl, 0.014, sd * rx, ry - 0.032, c.topZ), { color: '#2e3136', rough: 0.7, finish: 'coat' });
+    for (const [dz, len] of [[rl / 2 - 0.06, 0.16], [0, 0.07], [-rl / 2 + 0.06, 0.16]]) {
+      const z = c.topZ + dz,
+        y0 = topSurfaceY(shape, rx, z) - 0.012;
+      const f = rbox(0.05, ry - 0.016 - y0, len, 0.012, sd * rx, y0, z);
+      // the end feet slope down outwards
+      if (dz !== 0) taper(f, y0, ry, z, 0, dz > 0 ? 0.08 : 0, dz > 0 ? 0 : 0.08);
+      b.add(f, { color: '#25282c', rough: 1.1 });
+    }
+  }
+  return ry;
+}
+
+function estate(): THREE.BufferGeometry {
+  const b = new Builder();
+  const L = 4.7,
+    W = 1.8;
+  // a long-roof wagon: the roof runs on to a near-upright tailgate, D pillar behind the rear door
+  const shape: CarShape = { L, W, sill: 0.31, belt: 0.92, roof: 1.48, roofDrop: 0.03, noseH: 0.76, hoodH: 0.89, wsBase: 1.05, wsTop: 0.25, rwTop: -2.0, rwBase: -2.24, deckH: 1.02, tailH: 0.98, pillarB: -0.3, pillarC: -1.18, glassRear: -1.95, tumble: 0.17, axF: 1.42, axR: -1.4, wheelR: 0.32 };
+  const c = loftBody(b, shape, true, false, 'paint');
+  const ry = roofRails(b, shape, c, 0.045);
+  roofBox(b, ry + 0.02, c.topZ, c.topW);
+  carDetails(b, { L, W, wheelR: 0.32, wheelW: 0.24, axF: 1.42, axR: -1.4, wheelX: W / 2 - 0.1, bodyY: 0.33, bodyH: 0.6, bodyR: 0.18, lightY: 0.7, bumper: 'paint', rim: '#8b9097' }, shape);
+  return b.build();
+}
+
+function mpv(): THREE.BufferGeometry {
+  const b = new Builder();
+  const L = 4.5,
+    W = 1.84;
+  // a one-box people carrier: short steep bonnet, long raked windscreen, tall flat roof, sliding-door cut
+  const shape: CarShape = { L, W, sill: 0.34, belt: 0.99, roof: 1.69, noseH: 0.84, hoodH: 1.0, wsBase: 1.42, wsTop: 0.38, rwTop: -2.02, rwBase: -2.2, deckH: 1.1, tailH: 1.04, pillarB: -0.28, pillarC: -1.25, glassRear: -1.98, tumble: 0.14, axF: 1.43, axR: -1.42, wheelR: 0.33 };
+  loftBody(b, shape, true, false, 'dark');
+  // the sliding door's rail along the rear quarter, under the side glass
+  for (const sd of [1, -1]) b.add(bx(0.012, 0.018, 0.9, sd * (W / 2 - 0.035), shape.belt + 0.01, -1.55), { color: '#17191c', rough: 1.2 });
+  carDetails(b, { L, W, wheelR: 0.33, wheelW: 0.24, axF: 1.43, axR: -1.42, wheelX: W / 2 - 0.1, bodyY: 0.35, bodyH: 0.66, bodyR: 0.2, lightY: 0.78, rim: '#5e636a' }, shape);
+  return b.build();
+}
+
 function suv(): THREE.BufferGeometry {
   const b = new Builder();
   const L = 4.55,
     W = 1.86;
   const shape: CarShape = { L, W, sill: 0.42, belt: 1.1, roof: 1.72, noseH: 0.98, hoodH: 1.08, wsBase: 1.1, wsTop: 0.4, rwTop: -1.95, rwBase: -2.15, deckH: 1.2, tailH: 1.15, pillarB: -0.35, pillarC: -1.3, glassRear: -1.85, tumble: 0.13, axF: 1.425, axR: -1.325, wheelR: 0.37, clad: true };
   const c = loftBody(b, shape, true, true, 'dark');
-  // roof rails: a rounded bar 5 cm clear of the roof on three feet that stand on the crowned roof surface
-  const rx = c.topW / 2 - 0.12,
-    rl = c.topD - 0.5,
-    ry = topSurfaceY(shape, rx, c.topZ) + 0.065;
-  for (const sd of [1, -1]) {
-    b.add(rbox(0.042, 0.032, rl, 0.014, sd * rx, ry - 0.016, c.topZ), { color: '#2e3136', rough: 0.7, finish: 'coat' });
-    for (const [dz, len] of [[rl / 2 - 0.06, 0.16], [0, 0.07], [-rl / 2 + 0.06, 0.16]]) {
-      const z = c.topZ + dz,
-        y0 = topSurfaceY(shape, rx, z) - 0.012;
-      const f = rbox(0.05, ry - y0, len, 0.012, sd * rx, y0, z);
-      // the end feet slope down outwards
-      if (dz !== 0) taper(f, y0, ry, z, 0, dz > 0 ? 0.08 : 0, dz > 0 ? 0 : 0.08);
-      b.add(f, { color: '#25282c', rough: 1.1 });
-    }
-  }
+  const ry = roofRails(b, shape, c, 0.065);
   roofBox(b, ry + 0.02, c.topZ, c.topW);
   // spare wheel on the tailgate
   const sp = new THREE.CylinderGeometry(0.31, 0.31, 0.2, sg(14));
@@ -1574,6 +1624,82 @@ function delivery(): THREE.BufferGeometry {
  * and is pulled in under them, with lumps from the load and vertical folds hanging down the sides; the straps
  * follow it over the top down to ratchets and hooks on the bed rail.
  */
+/** a jittered tone of a hex colour (timber boards, cartons) */
+function tone(c: string, k: number): string {
+  const col = new THREE.Color(c);
+  const h = (Math.sin(k * 12.9898) * 43758.5453) % 1;
+  const f = 0.86 + 0.24 * (h < 0 ? h + 1 : h);
+  return '#' + col.multiplyScalar(f).getHexString();
+}
+
+/** a timber pallet (w across, d along) on the deck at y: top boards with gaps, stringers, blocks; returns its height */
+function pallet(b: Builder, w: number, d: number, x: number, y: number, z: number, part: number): number {
+  const H = 0.144;
+  const WOOD = '#c2a27a';
+  if (LOD > 0) {
+    b.add(bx(w, H, d, x, y, z), { color: '#a88c68', part, rough: 1.3 });
+    return H;
+  }
+  for (let i = 0; i < 5; i++) b.add(bx(0.1, 0.022, d, x - w / 2 + 0.05 + (i * (w - 0.1)) / 4, y + H - 0.022, z), { color: tone(WOOD, i + x * 7), part, rough: 1.3 });
+  for (const f of [-1, 0, 1]) {
+    b.add(bx(w, 0.022, 0.1, x, y + 0.1, z + f * (d / 2 - 0.05)), { color: tone(WOOD, f + 9), part, rough: 1.3 });
+    for (const g of [-1, 0, 1]) b.add(bx(0.1, 0.078, 0.12, x + g * (w / 2 - 0.05), y + 0.022, z + f * (d / 2 - 0.06)), { color: tone('#a98a62', f * 3 + g), part, rough: 1.4 });
+    b.add(bx(0.1, 0.022, d, x + f * (w / 2 - 0.05), y, z), { color: tone(WOOD, f + 4), part, rough: 1.3 });
+  }
+  return H;
+}
+
+/** a slatted timber crate: corner posts, horizontal slats with dark gaps between, a boarded lid */
+function slatCrate(b: Builder, w: number, h: number, d: number, x: number, y: number, z: number, c: string, part: number, seed: number): void {
+  if (LOD > 0) {
+    b.add(rbox(w, h, d, 0.02, x, y, z), { color: c, part, rough: 1.1 });
+    return;
+  }
+  b.add(bx(w - 0.05, h - 0.03, d - 0.05, x, y, z), { color: '#2e241a', part, rough: 1.6 });
+  for (const sx of [1, -1]) for (const sz of [1, -1]) b.add(bx(0.07, h, 0.07, x + sx * (w / 2 - 0.035), y, z + sz * (d / 2 - 0.035)), { color: tone(c, seed + sx + sz * 2), part, rough: 1.2 });
+  const n = Math.max(3, Math.round(h / 0.15));
+  const sh = (h - 0.02) / n - 0.035;
+  for (let i = 0; i < n; i++) {
+    const yy = y + 0.01 + (i * (h - 0.02)) / n;
+    for (const sd of [1, -1]) {
+      b.add(bx(0.022, sh, d - 0.12, x + sd * (w / 2 - 0.011), yy, z), { color: tone(c, seed * 5 + i * 2 + sd), part, rough: 1.2 });
+      b.add(bx(w - 0.12, sh, 0.022, x, yy, z + sd * (d / 2 - 0.011)), { color: tone(c, seed * 7 + i * 3 + sd), part, rough: 1.2 });
+    }
+  }
+  const m = Math.max(4, Math.round(w / 0.16));
+  for (let i = 0; i < m; i++) b.add(bx(w / m - 0.025, 0.022, d, x - w / 2 + (w / m) * (i + 0.5), y + h - 0.022, z), { color: tone(c, seed * 11 + i), part, rough: 1.2 });
+  // a stencilled side label
+  b.add(bx(0.3, 0.16, 0.004, x - w * 0.15, y + h * 0.5, z + d / 2 + 0.001), { color: '#e8e1d0', part, rough: 1.2 });
+}
+
+/** a stack of taped cardboard cartons (2 × 2 × layers) */
+function cartons(b: Builder, w: number, h: number, d: number, x: number, y: number, z: number, c: string, part: number, seed: number): void {
+  const ny = Math.max(1, Math.round(h / 0.34));
+  const ch = h / ny;
+  for (let k = 0; k < ny; k++)
+    for (const sx of [-1, 1])
+      for (const sz of [-1, 1]) {
+        const j = 0.012 * Math.sin(seed * 3 + k * 5 + sx * 2 + sz);
+        const cx = x + sx * (w / 4) + j,
+          cz = z + sz * (d / 4) - j;
+        b.add(LOD === 0 ? rbox(w / 2 - 0.015, ch - 0.008, d / 2 - 0.015, 0.008, cx, y + k * ch, cz) : bx(w / 2 - 0.015, ch - 0.008, d / 2 - 0.015, cx, y + k * ch, cz), {
+          color: tone(c, seed * 13 + k * 4 + sx + sz * 2),
+          part,
+          rough: 1.3,
+        });
+        // parcel tape over the lid seam and down the ends
+        if (LOD === 0 && k === ny - 1) b.add(bx(0.05, 0.003, d / 2 - 0.01, cx, y + h - 0.006, cz), { color: '#d9c7a0', part, rough: 0.6 });
+      }
+}
+
+/** a ratchet strap over a load: across the top and down both sides to the deck, a ratchet on one side */
+function cargoStrap(b: Builder, w: number, top: number, _d: number, x: number, z: number, deck: number, part: number): void {
+  const S = { color: '#d9731f', part, rough: 1.0 } as PartOpts;
+  b.add(bx(w + 0.02, 0.006, 0.045, x, top, z), S);
+  for (const sd of [1, -1]) b.add(bx(0.006, top - deck, 0.045, x + sd * (w / 2 + 0.008), deck, z), S);
+  if (LOD === 0) b.add(rbox(0.04, 0.12, 0.07, 0.01, x + w / 2 + 0.02, deck + (top - deck) * 0.35, z), { color: '#43474c', part, rough: 0.7, finish: 'chrome' });
+}
+
 function tarpLoad(b: Builder, w: number, y0: number, h: number, z0: number, z1: number, straps: number[], part: number): void {
   const hw = w / 2,
     rc = 0.2;
@@ -1805,16 +1931,22 @@ function lorry(): THREE.BufferGeometry {
   for (const x of [-1.1, -0.55, 0, 0.55, 1.1]) b.add(bx(0.07, 1.22, 0.07, x, 1.06, hz), { color: '#8b98a3', rough: 0.7 });
   if (LOD === 0) for (const y of [1.78]) b.add(bx(W - 0.05, 0.05, 0.05, 0, y, hz), { color: '#8b98a3', rough: 0.7 });
   b.add(bx(W + 0.04, 0.16, 0.12, 0, 0.76, -L / 2 + 0.06), { color: '#3a3d42' });
-  // variant 0: crates
-  const crates: [number, number, number, number, number, number, string][] = [
-    [1.05, 1.0, 1.35, 0.56, 1.06, 0.95, '#c8955a'],
-    [1.05, 0.86, 1.35, -0.56, 1.06, 0.95, '#457b9d'],
-    [2.2, 1.12, 1.5, 0, 1.06, -0.65, '#e9c46a'],
-    [1.05, 0.8, 1.3, 0.56, 1.06, -2.35, '#2a9d8f'],
-    [1.05, 1.08, 1.3, -0.56, 1.06, -2.35, '#c8955a'],
-    [0.8, 0.6, 0.9, 0.5, 2.06, 0.95, '#d98c6a'],
+  // variant 0: palletised goods, each strapped down: slatted timber crates and stacks of taped cartons
+  const loads: [number, number, number, number, number, 'crate' | 'cartons', string][] = [
+    [1.05, 0.95, 1.3, 0.56, 0.95, 'crate', '#b88a57'],
+    [1.05, 0.85, 1.3, -0.56, 0.95, 'cartons', '#b8916a'],
+    [1.05, 1.0, 1.4, 0.56, -0.65, 'cartons', '#a9825d'],
+    [1.05, 0.9, 1.4, -0.56, -0.65, 'crate', '#4f7f9b'],
+    [1.05, 0.75, 1.3, 0.56, -2.35, 'crate', '#3f8f84'],
+    [1.05, 1.02, 1.3, -0.56, -2.35, 'cartons', '#c09a72'],
   ];
-  for (const [w, h, d, x, y, z, c] of crates) b.add(rbox(w - 0.06, h, d - 0.06, 0.04, x, y, z), { color: c, part: 1, rough: 1.1 });
+  loads.forEach(([w, h, d, x, z, kind, c], i) => {
+    const y = 1.06 + pallet(b, w - 0.04, d - 0.06, x, 1.06, z, 1);
+    if (kind === 'crate') slatCrate(b, w - 0.06, h, d - 0.08, x, y, z, c, 1, i);
+    else cartons(b, w - 0.06, h, d - 0.08, x, y, z, c, 1, i);
+    cargoStrap(b, w - 0.06, y + h, d, x, z + (i % 2 ? 0.18 : -0.18), 1.06, 1);
+  });
+  slatCrate(b, 0.8, 0.55, 0.9, 0.5, 1.06 + 0.144 + 0.95, 0.95, '#c49a64', 1, 7);
   // variant 1: load under a strapped tarp, lettering on its sides
   const t0 = bedZ - bedD / 2 + 0.2,
     t1 = bedZ + bedD / 2 - 0.2;
@@ -1995,9 +2127,71 @@ function bus(): THREE.BufferGeometry {
   // side lettering under the windows
   b.add(decalPlane(3.0, 0.32, W / 2 + 0.022, 1.13, -1.6, 'px'), { color: '#ffffff', decal: R_BUS_SIDE });
   b.add(decalPlane(3.0, 0.32, -W / 2 - 0.022, 1.13, -1.9, 'nx'), { color: '#ffffff', decal: R_BUS_SIDE });
-  // roof: AC unit, two hatches
-  b.add(rbox(1.7, 0.3, 2.7, 0.09, 0, 3.02, -1.7), { color: '#d4d7da', rough: 0.9 });
-  if (LOD < 2) for (const z of [2.6, 0.6]) b.add(rbox(0.78, 0.07, 0.78, 0.03, 0, 3.03, z), { color: '#c3c6c9', rough: 0.9 });
+  // roof: the air-conditioning pack (a low GRP shroud with chamfered edges on a dark base seam, two condenser fans
+  // under round grilles on top, louvred intakes in the sides), two escape hatches in frames
+  {
+    const y0 = 3.0,
+      h = 0.24,
+      zc = -1.7;
+    b.add(bx(1.62, 0.04, 2.62, 0, y0 - 0.01, zc), { color: '#2a2c30', rough: 1.2 });
+    const sh = rbox(1.7, h, 2.7, 0.035, 0, y0 + 0.02, zc, 2);
+    taper(sh, y0 + 0.02 + h * 0.55, y0 + 0.02 + h, zc, 0.07, 0.1, 0.1);
+    b.add(sh, { color: '#d9dcde', rough: 0.8, finish: 'coat' });
+    const top = y0 + 0.02 + h;
+    if (LOD < 2)
+      for (const dz of [0.62, -0.62]) {
+        const ring = new THREE.CylinderGeometry(0.34, 0.36, 0.035, sg(20), 1, true);
+        ring.translate(0, top + 0.012, zc + dz);
+        b.add(ring, { color: '#c9ccce', rough: 0.8 });
+        const well = new THREE.CircleGeometry(0.34, sg(20));
+        well.rotateX(-Math.PI / 2);
+        well.translate(0, top + 0.004, zc + dz);
+        b.add(well, { color: '#15161a', rough: 1.4 });
+        if (LOD === 0) {
+          // fan blades under a wire guard: concentric rings and four spokes
+          const hub = new THREE.CylinderGeometry(0.07, 0.07, 0.03, 10);
+          hub.translate(0, top + 0.012, zc + dz);
+          b.add(hub, { color: '#3a3d42', rough: 1 });
+          for (const r of [0.12, 0.2, 0.28]) {
+            const t = new THREE.TorusGeometry(r, 0.005, 3, 24);
+            t.rotateX(Math.PI / 2);
+            t.translate(0, top + 0.028, zc + dz);
+            b.add(t, { color: '#8e9296', rough: 0.7, finish: 'chrome' });
+          }
+          for (const a of [0, Math.PI / 2]) {
+            const sp = bx(0.68, 0.008, 0.012, 0, top + 0.024, 0);
+            sp.rotateY(a + 0.4);
+            sp.translate(0, 0, zc + dz);
+            b.add(sp, { color: '#8e9296', rough: 0.7, finish: 'chrome' });
+          }
+          for (let k = 0; k < 5; k++) {
+            const bl = bx(0.26, 0.006, 0.07, 0.15, top + 0.012, 0);
+            bl.rotateY((k * Math.PI * 2) / 5 + dz);
+            bl.translate(0, 0, zc + dz);
+            b.add(bl, { color: '#2c2f33', rough: 1 });
+          }
+        }
+      }
+    // side intakes: louvre decals in a dark frame, and the end faces' shut line
+    for (const sd of [1, -1]) {
+      b.add(decalPlane(1.5, 0.13, sd * 0.852, y0 + 0.11, zc, sd > 0 ? 'px' : 'nx'), { color: '#5b5f64', rough: 1, decal: R_BUS_GRILLE });
+      if (LOD === 0) b.add(bx(0.006, 0.008, 2.6, sd * 0.853, y0 + 0.045, zc), { color: '#2a2c30', rough: 1.2 });
+    }
+  }
+  if (LOD < 2)
+    for (const z of [2.6, 0.6]) {
+      // hatch: a dark rubber frame, the lid raised a little with a smoked dome in it
+      b.add(bx(0.84, 0.02, 0.84, 0, 3.035, z), { color: '#1f2124', rough: 1.2 });
+      const lid = rbox(0.76, 0.05, 0.76, 0.02, 0, 3.045, z);
+      taper(lid, 3.045, 3.095, z, 0.06, 0.04, 0.04);
+      b.add(lid, { color: '#c3c6c9', rough: 0.8 });
+      if (LOD === 0) {
+        const dome = new THREE.SphereGeometry(1, 12, 4, 0, Math.PI * 2, 0, Math.PI / 2);
+        dome.scale(0.24, 0.04, 0.24);
+        dome.translate(0, 3.09, z);
+        b.add(dome, { color: GLASS, rough: 0.2 });
+      }
+    }
   // grille, lamps (twin round lamps in a bezel), blinkers round the corners, plates on the bumpers
   b.add(flatOnEnd(surf, 1, 1.1, 0.3, 0, 0.8, 0.006), { color: '#ffffff', rough: 1, decal: R_BUS_GRILLE });
   for (const e of [1, -1]) {
@@ -2103,6 +2297,10 @@ function buildKind(kind: ModelKind): THREE.BufferGeometry {
       return sedan();
     case 'suv':
       return suv();
+    case 'estate':
+      return estate();
+    case 'mpv':
+      return mpv();
     case 'delivery':
       return delivery();
     case 'lorry':
