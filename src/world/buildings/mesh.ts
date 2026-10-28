@@ -84,6 +84,8 @@ export class Builder {
   readonly X = [0, 0, 0, 0];
 
   check: VertexCheck | null = null;
+  /** when set, wall() appends one record per window cell it fully contains (see winGeo.ts WIN_REC) */
+  winRec: number[] | null = null;
 
   constructor(opts: BuilderOptions) {
     this.opts = opts;
@@ -334,6 +336,7 @@ export class Builder {
     const va = (y0 - gv) / gh,
       vb = (y1 - gv) / gh;
     this.quad(x0, y0, z0, x1, y0, z1, x1, y1, z1, x0, y1, z0, ua, va, ub, va, ub, vb, ua, vb);
+    if (this.winRec && this.B[0] > 0 && this.B[1] > 0 && L > 1e-3) this.recordWindows(x0, z0, x1, z1, L, ua, ub, va, vb, u0, gu, gw, gv, gh);
     const fd = this.fd;
     if (fd) {
       // aD of the 4 vertices just emitted: metres from the left end, length, world top, flags
@@ -346,6 +349,34 @@ export class Builder {
         fd.a[o + 1] = L;
         fd.a[o + 2] = top;
         fd.a[o + 3] = flags;
+      }
+    }
+  }
+
+  /** Window records for the near-LOD sill / surround geometry: windows whose rect lies inside this quad. */
+  private recordWindows(x0: number, z0: number, x1: number, z1: number, L: number, ua: number, ub: number, va: number, vb: number, u0: number, gu: number, gw: number, gv: number, gh: number): void {
+    const A = this.A;
+    const rec = this.winRec!;
+    const ldx = (x1 - x0) / L,
+      ldz = (z1 - z0) / L;
+    // world: along the wall (left → right seen from outside) and the outward normal (-dz, dx)
+    const dx = this.cs * ldx + this.sn * ldz,
+      dz = -this.sn * ldx + this.cs * ldz;
+    const n = this.B[0],
+      m = this.B[1];
+    const i0 = Math.max(0, Math.ceil(ua - A[0] / gw - 1e-4)),
+      i1 = Math.min(n - 1, Math.floor(ub - A[1] / gw + 1e-4));
+    const j0 = Math.max(0, Math.ceil(va - A[2] / gh - 1e-4)),
+      j1 = Math.min(m - 1, Math.floor(vb - A[3] / gh + 1e-4));
+    for (let i = i0; i <= i1; i++) {
+      const um = i * gw + gu - u0 + A[0]; // metres from p0 to the window's left edge
+      const lx = x0 + ldx * um,
+        lz = z0 + ldz * um;
+      const wx = this.cs * lx + this.sn * lz + this.tx,
+        wz = -this.sn * lx + this.cs * lz + this.tz;
+      for (let j = j0; j <= j1; j++) {
+        const wy = j * gh + gv + A[2] + this.ty;
+        rec.push(wx, wy, wz, dx, dz, A[1] - A[0], A[3] - A[2], A[2], this.B[2], this.B[3], this.C[2], this.r, this.g, this.b, i, j);
       }
     }
   }
