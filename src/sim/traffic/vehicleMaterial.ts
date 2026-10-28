@@ -495,7 +495,7 @@ export function createVehicleMaterial(
       .replace('#include <normal_fragment_maps>', '#include <normal_fragment_maps>\nnormal = normalize( normal + thTiltN );')
       .replace('#include <clearcoat_normal_fragment_begin>', '#include <clearcoat_normal_fragment_begin>\n#ifdef USE_CLEARCOAT\n  clearcoatNormal = normalize( clearcoatNormal + thTiltN );\n#endif')
       .replace('#include <metalnessmap_fragment>', 'float metalnessFactor = max( vMetal, thMetal );')
-      .replace('#include <lights_physical_fragment>', '#include <lights_physical_fragment>\n{ float thK = mix( thBaseSpec, 1.0, thMetal * 2.0 ); material.specularColor *= thK; material.specularColorBlended *= thK; }\n#ifdef USE_CLEARCOAT\n  material.clearcoat = min( vCoat, 1.0 ) * thCoatK;\n#endif')
+      .replace('#include <lights_physical_fragment>', '#include <lights_physical_fragment>\n{ float thK = mix( thBaseSpec, 1.0, thMetal * 2.0 ); material.specularColor *= thK; material.specularColorBlended *= thK; }\n#ifdef USE_CLEARCOAT\n  material.clearcoat = min( vCoat, 1.0 ) * thCoatK;\n  // body lacquer: a stronger Fresnel coat (F0 0.09) instead of a brighter reflection — the coat both adds the\n  // reflected street and takes the same share from the colour under it, so dark reflections show on white too\n  if ( vCoat > 1.5 && uVehDetail.w > 0.5 ) material.clearcoatF0 = vec3( 0.09 );\n#endif')
       .replace(
         '#include <lights_fragment_maps>',
         `#include <lights_fragment_maps>
@@ -503,14 +503,14 @@ export function createVehicleMaterial(
   { vec3 thRw = reflect( -geometryViewDir, geometryNormal ); thReflDet = clamp( 1.6 - length( fwidth( thRw ) ) * 9.0, 0.0, 1.0 ) * step( 0.5, uVehDetail.w ); }
   #ifdef USE_CLEARCOAT
     // body paint (vCoat > 1.5) gets the street at more contrast: a lacquered panel mirrors it clearly
-    clearcoatRadiance *= vGain * thStreetRefl( geometryViewDir, geometryClearcoatNormal, 0.0 ) * ( vCoat > 1.5 && uVehDetail.w > 0.5 ? 4.0 : 1.0 );
+    clearcoatRadiance *= vGain * thStreetRefl( geometryViewDir, geometryClearcoatNormal, 0.0 ) * ( vCoat > 1.5 && uVehDetail.w > 0.5 ? 1.8 : 1.0 );
   #endif
   if ( vMetal > 0.5 ) radiance *= vGain * thStreetRefl( geometryViewDir, geometryNormal, material.roughness * 0.3 );
 #endif`,
       )
       .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += vEmit.rgb * mix( vec3( 1.0 ), diffuseColor.rgb, vEmit.a ) * thCabinK + thGlassEmit;');
   };
-  material.customProgramCacheKey = () => 'traffic-vehicle-v9';
+  material.customProgramCacheKey = () => 'traffic-vehicle-v10';
   patchLampMaterial(material); // night street-light map (night agent)
 
   const depth = new THREE.MeshDepthMaterial();

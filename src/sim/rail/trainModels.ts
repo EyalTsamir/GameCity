@@ -100,6 +100,7 @@ function shell(g: Geo, prof: Prof, bands: Band[], z0: number, z1: number, smooth
   for (let i = 0; i < n - 1; i++) {
     const p = prof[i],
       q = prof[i + 1];
+    if (bands[i].tag < 0) continue;
     const np = vn(i, i),
       nq = vn(i + 1, i);
     g.kind(bands[i].tag).color(bands[i].color);
@@ -403,19 +404,126 @@ function emuUnderframe(g: Geo, z0: number, z1: number): void {
   }
 }
 
-function windowRow(g: Geo, zs: [number, number][], y0: number, y1: number): void {
-  for (const side of [-1, 1]) {
-    const x = side * 1.462;
-    for (const [za, zb] of zs) {
-      // rubber frame
-      g.kind(T.PLAIN).color('#1d2226');
-      if (side > 0) g.quad([x, y0 - 0.04, zb + 0.04], [x, y0 - 0.04, za - 0.04], [x, y1 + 0.04, za - 0.04], [x, y1 + 0.04, zb + 0.04]);
-      else g.quad([x, y0 - 0.04, za - 0.04], [x, y0 - 0.04, zb + 0.04], [x, y1 + 0.04, zb + 0.04], [x, y1 + 0.04, za - 0.04]);
-      g.kind(T.WINDOW).color(C.glass);
-      const xx = x + side * 0.004;
-      if (side > 0) g.quad([xx, y0, zb], [xx, y0, za], [xx, y1, za], [xx, y1, zb]);
-      else g.quad([xx, y0, za], [xx, y0, zb], [xx, y1, zb], [xx, y1, za]);
+/** rounded rectangle contour in the side plane (z, y), counter-clockwise in (z, y); n segments per corner.
+ *  Also returns each point's outward direction (for offset contours and gasket normals). */
+function rrect(za: number, zb: number, ya: number, yb: number, r: number, n: number): { p: [number, number][]; d: [number, number][] } {
+  const p: [number, number][] = [],
+    d: [number, number][] = [];
+  const cs: [number, number, number][] = [
+    [zb - r, yb - r, 0],
+    [za + r, yb - r, Math.PI / 2],
+    [za + r, ya + r, Math.PI],
+    [zb - r, ya + r, Math.PI * 1.5],
+  ];
+  for (const [cz, cy, a0] of cs)
+    for (let i = 0; i <= n; i++) {
+      const a = a0 + (i / n) * (Math.PI / 2);
+      d.push([Math.cos(a), Math.sin(a)]);
+      p.push([cz + r * Math.cos(a), cy + r * Math.sin(a)]);
     }
+  return { p, d };
+}
+
+/** triangle in the side plane facing outwards (side ±1) whatever the point order */
+function sideTri(g: Geo, side: number, a: V3, b: V3, c: V3): void {
+  const cx = (b[1] - a[1]) * (c[2] - a[2]) - (b[2] - a[2]) * (c[1] - a[1]);
+  if (cx * side >= 0) g.tri(a, b, c);
+  else g.tri(a, c, b);
+}
+
+/**
+ * Body side band (flat, |x| = 1.45, y0..y1 over z0..z1) pierced by rounded window openings: the panel around each
+ * opening (strips + corner fillets), a rubber gasket with a lip proud of the panel and a reveal sloping in, and the
+ * glass set 2.5 cm back in it (ray-traced saloon behind). `wins` = glass [za, zb] spans, glass y wy0..wy1.
+ */
+function piercedSide(g: Geo, z0: number, z1: number, y0: number, y1: number, wins: [number, number][], wy0: number, wy1: number, color: string): void {
+  const X = 1.45,
+    m = 0.045, // gasket width round the glass
+    R = 0.13, // opening corner radius
+    N = 4;
+  for (const side of [-1, 1]) {
+    // panel: columns between openings, strips above / below each, fillets in its corners
+    g.kind(T.PLAIN).color(color);
+    let z = z0;
+    const sorted = wins.slice().sort((u, v) => u[0] - v[0]);
+    for (const [wa, wb] of sorted) {
+      const ha = wa - m,
+        hb = wb + m,
+        ya = wy0 - m,
+        yb = wy1 + m;
+      if (ha > z + 1e-4) sideQuad(g, side, side * X, y0, y1, z, ha);
+      sideQuad(g, side, side * X, yb, y1, ha, hb);
+      sideQuad(g, side, side * X, y0, ya, ha, hb);
+      const o = rrect(ha, hb, ya, yb, R, N);
+      const corners: [number, number][] = [
+        [hb, yb],
+        [ha, yb],
+        [ha, ya],
+        [hb, ya],
+      ];
+      for (let c = 0; c < 4; c++)
+        for (let i = 0; i < N; i++) {
+          const p = o.p[c * (N + 1) + i],
+            q = o.p[c * (N + 1) + i + 1];
+          sideTri(g, side, [side * X, corners[c][1], corners[c][0]], [side * X, p[1], p[0]], [side * X, q[1], q[0]]);
+        }
+      z = hb;
+      // gasket: three contours (lip edge on the panel, lip crown, reveal bottom at the glass) as strips
+      g.color('#16191b');
+      const sec: [number, number][] = [
+        [0.018, X + 0.001],
+        [0.0, X + 0.007],
+        [-m, X - 0.024],
+      ];
+      const cont = sec.map(([off]) => rrect(ha - off, hb + off, ya - off, yb + off, Math.max(0.02, R + off), N));
+      for (let k = 0; k < 2; k++) {
+        const [d0, x0] = sec[k],
+          [d1, x1] = sec[k + 1];
+        // section normal (radial, x) pointing out of the body
+        let nr = x1 - x0,
+          nx = -(d1 - d0);
+        if (nx < 0) {
+          nr = -nr;
+          nx = -nx;
+        }
+        const l = Math.hypot(nr, nx);
+        nr /= l;
+        nx /= l;
+        const A = cont[k],
+          B = cont[k + 1];
+        const cnt = A.p.length;
+        const base = g.vertexCount;
+        for (let i = 0; i < cnt; i++) {
+          const [dz, dy] = A.d[i];
+          g.vert(side * x0, A.p[i][1], A.p[i][0], side * nx, dy * nr, dz * nr);
+          g.vert(side * x1, B.p[i][1], B.p[i][0], side * nx, dy * nr, dz * nr);
+        }
+        for (let i = 0; i < cnt; i++) {
+          const j = (i + 1) % cnt;
+          const a0 = base + i * 2,
+            a1 = a0 + 1,
+            b0 = base + j * 2,
+            b1 = b0 + 1;
+          // contours run counter-clockwise in (z, y), outer → inner: (a0, b0, b1) faces −x
+          if (side > 0) g.I.push(a0, b1, b0, a0, a1, b1);
+          else g.I.push(a0, b0, b1, a0, b1, a1);
+        }
+      }
+      // glass, set back in the gasket
+      g.kind(T.WINDOW).color(C.glass);
+      const gl = cont[2].p;
+      const gx = side * (X - 0.024);
+      const c0 = g.vert(gx, (wy0 + wy1) / 2, (wa + wb) / 2, side, 0, 0);
+      const gb = g.vertexCount;
+      for (const [pz, py] of gl) g.vert(gx, py, pz, side, 0, 0);
+      for (let i = 0; i < gl.length; i++) {
+        const j = (i + 1) % gl.length;
+        if (side > 0) g.I.push(c0, gb + j, gb + i);
+        else g.I.push(c0, gb + i, gb + j);
+      }
+      g.kind(T.PLAIN).color(color);
+    }
+    if (z1 > z + 1e-4) sideQuad(g, side, side * X, y0, y1, z, z1);
   }
 }
 
@@ -477,6 +585,13 @@ function doors(g: Geo, z: number, color: string): void {
     sideQuad(g, side, x + side * 0.003, y1, y1 + 0.05, z - w, z + w);
     g.color('#2fa84f');
     sideQuad(g, side, x + side * 0.004, 1.95, 2.03, z + w + 0.012, z + w + 0.05);
+    // stainless grab handles either side of the portal on stand-off brackets
+    g.kind(T.PLAIN).color('#b9bdc0');
+    for (const e of [-1, 1]) {
+      const hz = z + e * (w + 0.15);
+      g.rod([side * 1.505, 1.3, hz], [side * 1.505, 2.2, hz], 0.016, 6, 1);
+      for (const hy of [1.36, 2.14]) g.rod([side * 1.45, hy, hz], [side * 1.505, hy, hz], 0.012, 4);
+    }
     // door step
     g.kind(T.PLAIN).color('#9a9ea1');
     g.box(side * 1.4, 1.0, z, 0.16, 0.06, w * 2 + 0.1, 0);
@@ -518,7 +633,9 @@ export function buildEmu(): THREE.BufferGeometry {
   const zF = L / 2;
   const zJ = zF - 1.3;
   g.variant(0);
-  shell(g, EMU_PROF, EMU_BANDS, zr, zJ, 5);
+  // the window band (band 2) is built per variant by piercedSide (rounded openings in rubber, glass set back)
+  const bandsNoWin = EMU_BANDS.map((b, i) => (i === 2 ? { ...b, tag: -1 } : b));
+  shell(g, EMU_PROF, bandsNoWin, zr, zJ, 5);
   emuUnderframe(g, zr, zF - 0.25);
   endWall(g, EMU_PROF, zr, -1, C.endWall);
   gangway(g, zr, -1);
@@ -538,28 +655,67 @@ export function buildEmu(): THREE.BufferGeometry {
   const wins: [number, number][] = [];
   span(wins, doorZ[0] + dw + 0.22, doorZ[1] - dw - 0.22, 3);
   span(wins, zr + 0.45, doorZ[0] - dw - 0.22, 2);
-  windowRow(g, wins, 2.2, 2.98);
+  const zA = doorZ[1] + dw + 0.1;
+  piercedSide(g, zr, zA, 2.05, 3.15, wins, 2.2, 2.98, C.cream);
   boxRoofUnit(g, -3.2, ROOF_Y - 0.04, 2.4);
+  // rain gutters along the cant rail (a lip that catches the roof's run-off), roof drain spouts at the ends
+  g.kind(T.PLAIN).color('#6e7375');
+  for (const sx of [-1, 1]) {
+    g.box(sx * 1.452, 3.36, (zr + zF) / 2, 0.024, 0.035, L - 0.1, 0);
+    for (const ez of [zr + 0.25, zF - 0.25]) g.box(sx * 1.455, 3.2, ez, 0.03, 0.3, 0.04, 0);
+  }
 
   // ── middle car only: body up to the front end, front gangway, front windows, pantograph
   g.variant(2);
-  shell(g, EMU_PROF, EMU_BANDS, zJ, zF, 5);
+  shell(g, EMU_PROF, bandsNoWin, zJ, zF, 5);
   endWall(g, EMU_PROF, zF, 1, C.endWall);
   gangway(g, zF, 1);
   const winsM: [number, number][] = [];
   span(winsM, doorZ[1] + dw + 0.22, zF - 0.45, 2);
-  windowRow(g, winsM, 2.2, 2.98);
+  piercedSide(g, zA, zF, 2.05, 3.15, winsM, 2.2, 2.98, C.cream);
   pantograph(g, 2.9, ROOF_Y - 0.03, true);
   g.kind(T.PLAIN).color(C.insulator);
   g.cyl(0, ROOF_Y - 0.03, 0.8, 0.07, 0.06, 0.3, 6, 1);
   g.color('#3a3d3f');
   g.rod([0, ROOF_Y + 0.25, 0.8], [0, ROOF_Y + 0.28, 2.4], 0.025, 4);
+  // main breaker + earthing switch housing, surge arrester, HV cable down to the roof bushing
+  g.kind(T.PLAIN).color('#5b6064');
+  g.box(0, ROOF_Y + 0.12, -0.55, 0.9, 0.32, 1.1, 8);
+  g.color('#43474a');
+  g.box(0, ROOF_Y + 0.29, -0.55, 0.7, 0.03, 0.9, 8);
+  g.color(C.insulator);
+  for (const iz of [-0.85, -0.25]) g.cyl(0.3, ROOF_Y + 0.27, iz, 0.05, 0.04, 0.22, 6, 1);
+  g.color('#202224');
+  g.rod([0.3, ROOF_Y + 0.48, -0.25], [0, ROOF_Y + 0.27, 0.8], 0.022, 4);
+  g.rod([-0.35, ROOF_Y + 0.12, -1.1], [-0.6, ROOF_Y - 0.08, -2.0], 0.03, 4);
+  // brake resistor grid box with louvred sides at the far end
+  boxRoofUnit(g, 5.6, ROOF_Y - 0.04, 1.7, 1.3);
 
   // ── cab car only
   g.variant(1);
   const winsC: [number, number][] = [];
   span(winsC, doorZ[1] + dw + 0.22, zJ - 0.25, 1);
-  windowRow(g, winsC, 2.2, 2.98);
+  piercedSide(g, zA, zJ, 2.05, 3.15, winsC, 2.2, 2.98, C.cream);
+  boxRoofUnit(g, 3.4, ROOF_Y - 0.04, 1.3, 1.1);
+  g.kind(T.PLAIN).color('#2a2d30');
+  for (const [az, ax, ah] of [[1.2, 0.35, 0.26], [1.9, -0.3, 0.2], [0.4, 0.0, 0.42]] as const) {
+    if (ah > 0.4) {
+      g.rod([ax, ROOF_Y, az], [ax, ROOF_Y + ah, az], 0.012, 5); // whip
+      g.box(ax, ROOF_Y + 0.01, az, 0.1, 0.03, 0.1, 8);
+    } else {
+      g.push().at(ax, ROOF_Y - 0.01, az).rotY(Math.PI / 2);
+      g.prism([[-0.09, 0], [0.09, 0], [0.05, ah], [-0.02, ah]], -0.01, 0.01, 3); // blade
+      g.pop();
+    }
+  }
+  g.color('#3b3f42');
+  g.box(0.55, ROOF_Y - 0.05, 4.9, 0.3, 0.16, 0.4, 8);
+  g.color('#161819');
+  for (const hx of [0.47, 0.63]) {
+    g.push().at(hx, ROOF_Y - 0.05, 5.1).rotX(Math.PI / 2);
+    g.cyl(0, 0, 0, 0.05, 0.05, 0.02, 8, 1); // horn bells facing forward
+    g.pop();
+  }
     // ── cab: lower nose block (with chamfered front corners) + wedge windshield above
     const yTop = 2.05;
     const ch = 0.24;

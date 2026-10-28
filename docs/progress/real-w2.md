@@ -76,6 +76,25 @@ Owned: `src/sim/traffic/{models,vehicleMaterial,render}.ts` (+ trains later). Si
   "-10,0.9,22,4,30,6;-8,1.4,35,9,25,8" --hours 11 --out shots/w2/x` (row 1 cars at z 22 from x −17, row 2
   vans/lorries/buses at z 35; yaw 0 ≈ front, 180 ≈ rear). Bench: `--classes car,bus --yaws 0,140` (new option).
 
+## Session 6 — code map
+* `trainModels.ts`: `windowRow` replaced by `piercedSide(g, z0, z1, y0, y1, wins, wy0, wy1, color)` — the cream
+  window band (EMU band 2, skipped in `shell` via a band with tag −1, `bandsNoWin`) is built per variant with
+  rounded openings (R 0.13, `rrect` contour + corner fillets via `sideTri`), a 3-contour rubber gasket (lip on the
+  panel → crown proud 7 mm → reveal 2.4 cm in) and glass (T.WINDOW) set back at |x| 1.426. Variant 0 builds
+  zr..zA (zA = doorZ[1] + dw + 0.1), variant 2 zA..zF (winsM), variant 1 zA..zJ (winsC).
+  Doors: stainless grab handles each side of the portal. Roof: gutters at y 3.36 + drain spouts (all), breaker
+  housing + arrester insulators + HV cables + brake-resistor box (mid), cab HVAC + 2 blade antennas + whip + horn
+  pod (cab).
+* `trainMaterial.ts`: `DECAL` atlas cells (px) + `decalTexture()` (1024×512 canvas, premultiplied, sRGB, mips):
+  wordmark "TINYHAVEN regional" + emblem, digits, wheelchair, bicycle, no-leaning, HV triangle, door release, data
+  panel, hazard stripe (unused). GLSL `trDec` (textureGrad with the side-plane derivatives → mip-correct inside
+  branches), `trLivery(q, unit)` places decals in the car frame (u = −z·sign(x)); called once in uniform flow at
+  the top of the color_fragment block; EMU only (`vCar.x` = aInst2.y). `vCar` = aInst2.yzw; aInst2.w = fleet unit
+  number (trainRender: 100 + ((id+17)·37 mod 900)). Doors (T.DOOR) now wear the livery colour (instanceColor).
+  Grime: roof darker brown-grey, a soft dirt gradient up to 2.3 m on the sides, rain streaks from the gutter and
+  some window sills. `?notraindecals` (uTrDec). Cache key rail-train-v5.
+* `vehicleMaterial.ts` paint: body lacquer `clearcoatF0` 0.09 (was 0.04) and the street-reflection boost 4 → 1.8.
+
 ## Session 5 — code map
 * `scripts/bench.mjs` train branch: `loc.poses` (fixed {label, target, distance, yaw, pitch}) bypass the LOS swing;
   poses built from the dwelling train (`ctx.services.rail.sim.trains`, car `k` by `--pick`), platform on +z

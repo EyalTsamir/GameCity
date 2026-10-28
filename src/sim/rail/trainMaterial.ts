@@ -31,6 +31,19 @@ export const T = {
   /** container corrugated faces (same visibility as CONT*, plus ribs) handled via CONT tags */
 } as const;
 
+// livery decal atlas cells (px; drawn by decalTexture below)
+export const DECAL = {
+  logo: [8, 8, 1008, 112],
+  digit0: [8, 136], // 10 cells of 60 × 104, pitch 64
+  wheel: [8, 264, 112, 112],
+  bike: [136, 264, 112, 112],
+  lean: [264, 264, 112, 112],
+  hv: [392, 264, 112, 112],
+  release: [520, 264, 112, 112],
+  data: [8, 392, 496, 112],
+  stripe: [520, 392, 496, 112],
+} as const;
+
 const VERT_PARS = /* glsl */ `
 attribute float aKind;
 attribute vec4 aExtra;
@@ -45,6 +58,7 @@ varying vec3 vLoc;
 varying float vTagF;
 varying vec3 vLocDir;
 varying float vDoorZ;
+varying vec3 vCar;
 vec3 trWheel(vec3 p) {
   float c = cos(aInst.x), s = sin(aInst.x);
   vec2 q = p.yz - aExtra.xy;
@@ -78,7 +92,7 @@ const VERT_COLOR = /* glsl */ `
 {
   int tg = trTagOf(aKind);
   #ifdef USE_INSTANCING_COLOR
-  if (tg == ${T.LIVERY} || tg == ${T.CONT40} || tg == ${T.CONT20A}) vColor.rgb *= instanceColor.rgb;
+  if (tg == ${T.LIVERY} || tg == ${T.CONT40} || tg == ${T.CONT20A} || tg == ${T.DOOR}) vColor.rgb *= instanceColor.rgb;
   #endif
   if (tg == ${T.CONT20B}) vColor.rgb *= aCol2;
 }
@@ -96,6 +110,7 @@ const VERT_BEGIN = /* glsl */ `
   if (trHidden(tg) || trVariantHidden(aKind)) transformed = vec3(0.0);
   vLoc = position;
   vTagF = aKind;
+  vCar = vec3(aInst2.y, aInst2.z, aInst2.w);
   int role = int(aInst.y + 0.5);
   float lit = uLights;
   vec3 e = vec3(0.0);
@@ -120,7 +135,56 @@ varying vec3 vLoc;
 varying float vTagF;
 varying vec3 vLocDir;
 varying float vDoorZ;
+varying vec3 vCar;
+uniform sampler2D uTrDecal;
+uniform float uTrDec;
 vec3 trIntE = vec3(0.0);
+float trDecA = 0.0;
+// atlas cell r (px x, y, w, h; y down) at local l (0..1, y up) with the gradients of l; premultiplied rgba, 0 outside
+vec4 trDec(vec4 r, vec2 l, vec2 dx, vec2 dy) {
+  vec2 sc = r.zw / vec2(1024.0, -512.0);
+  vec2 uv = vec2(r.x / 1024.0, 1.0 - (r.y + r.w) / 512.0) + l * abs(sc);
+  vec4 c = textureGrad(uTrDecal, uv, dx * abs(sc), dy * abs(sc));
+  return c * (step(0.0, l.x) * step(l.x, 1.0) * step(0.0, l.y) * step(l.y, 1.0));
+}
+vec4 trOver(vec4 a, vec4 b) { return b + a * (1.0 - b.a); }
+// EMU side lettering in the car frame: u runs left → right as seen from the side, y up
+vec4 trLivery(vec3 q, float unit) {
+  float sd = sign(q.x);
+  vec2 sp = vec2(-q.z * sd, q.y);
+  vec2 gx = dFdx(sp), gy = dFdy(sp);
+  vec4 o = vec4(0.0);
+  // a decal of height h centred at (zc, yc): local coords from the side position
+  #define TR_L(zc, yc, w, h) (vec2((-(q.z - (zc)) * sd) / (w) + 0.5, (q.y - (yc)) / (h) + 0.5))
+  #define TR_G(w, h) gx / vec2(w, h), gy / vec2(w, h)
+  if (abs(q.x) < 1.44 || abs(q.x) > 1.52) return o;
+  // operator name between the doors on the lower band
+  o = trOver(o, trDec(vec4(${DECAL.logo.join('.0, ')}.0), TR_L(-0.425, 1.6, 2.7, 0.3), TR_G(2.7, 0.3)));
+  // fleet number "442 nnn" + technical data at the rear end
+  {
+    vec2 l = TR_L(-6.0, 1.74, 0.95, 0.2);
+    float ci = floor(l.x * 7.0);
+    float d = ci < 0.5 ? 4.0 : ci < 1.5 ? 4.0 : ci < 2.5 ? 2.0 : ci < 3.5 ? -1.0 : mod(floor(unit / pow(10.0, 6.0 - ci)), 10.0);
+    if (d >= 0.0 && l.x >= 0.0 && l.x < 1.0)
+      o = trOver(o, trDec(vec4(${DECAL.digit0[0]}.0 + d * 64.0, ${DECAL.digit0[1]}.0, 60.0, 104.0), vec2(fract(l.x * 7.0) * 64.0 / 60.0, l.y), gx * vec2(7.0 * 64.0 / 60.0 / 0.95, 1.0 / 0.2), gy * vec2(7.0 * 64.0 / 60.0 / 0.95, 1.0 / 0.2)));
+  }
+  o = trOver(o, trDec(vec4(${DECAL.data.join('.0, ')}.0), TR_L(-6.0, 1.33, 0.71, 0.16), TR_G(0.71, 0.16)));
+  // pictograms by the doors, the emergency release beside each portal, the HV triangle at the car ends
+  o = trOver(o, trDec(vec4(${DECAL.wheel.join('.0, ')}.0), TR_L(-3.0, 1.86, 0.22, 0.22), TR_G(0.22, 0.22)));
+  o = trOver(o, trDec(vec4(${DECAL.bike.join('.0, ')}.0), TR_L(2.15, 1.86, 0.22, 0.22), TR_G(0.22, 0.22)));
+  for (int k = 0; k < 2; k++) {
+    float dz = k == 0 ? -3.975 : 3.125;
+    o = trOver(o, trDec(vec4(${DECAL.release.join('.0, ')}.0), TR_L(dz - 0.9, 1.62, 0.12, 0.12), TR_G(0.12, 0.12)));
+    // no-leaning stickers on both leaves (the leaf frame moves with the leaf: q is pre-slide)
+    for (int j = 0; j < 2; j++)
+      o = trOver(o, trDec(vec4(${DECAL.lean.join('.0, ')}.0), TR_L(dz + (j == 0 ? -0.33 : 0.33), 2.33, 0.14, 0.14), TR_G(0.14, 0.14)));
+  }
+  for (int k = 0; k < 2; k++)
+    o = trOver(o, trDec(vec4(${DECAL.hv.join('.0, ')}.0), TR_L(k == 0 ? -7.35 : 7.35, 3.03, 0.16, 0.16), TR_G(0.16, 0.16)));
+  #undef TR_L
+  #undef TR_G
+  return o;
+}
 float trEmK = 1.0;
 float trH(float n) { n = fract(n * 0.1031); n *= n + 33.33; n *= n + n; return fract(n); }
 // Saloon behind the glass, ray-traced in the car frame (interior mapping; no geometry): far wall with its
@@ -189,6 +253,198 @@ vec3 trInterior(vec3 o, vec3 d, float doorZ) {
 }
 `;
 
+// ───────────────────────────────────────────── livery decals (W2 s6)
+// One 1024×512 canvas atlas, sampled in the car frame (no UVs): operator name + emblem, fleet-number digits,
+// pictograms (wheelchair, bicycle, no-leaning, HV warning, door-release), technical data panel. Cells (px):
+
+let decalTex: THREE.CanvasTexture | null = null;
+function decalTexture(): THREE.Texture {
+  if (decalTex) return decalTex;
+  const cv = document.createElement('canvas');
+  cv.width = 1024;
+  cv.height = 512;
+  const x = cv.getContext('2d')!;
+  x.clearRect(0, 0, 1024, 512);
+  // operator: emblem (a ring with a wave) + "TINYHAVEN" wordmark + a small "regional" tag
+  {
+    const [lx, ly, , lh] = DECAL.logo;
+    const cy = ly + lh / 2;
+    x.fillStyle = '#fff';
+    x.strokeStyle = '#fff';
+    x.lineWidth = 9;
+    x.beginPath();
+    x.arc(lx + 56, cy, 44, 0, Math.PI * 2);
+    x.stroke();
+    x.lineWidth = 8;
+    x.beginPath();
+    for (let i = 0; i <= 20; i++) {
+      const t = i / 20;
+      const px = lx + 22 + t * 68,
+        py = cy + 6 + Math.sin(t * Math.PI * 2) * 10;
+      if (i) x.lineTo(px, py);
+      else x.moveTo(px, py);
+    }
+    x.stroke();
+    x.fillRect(lx + 38, cy - 26, 36, 8);
+    x.textBaseline = 'middle';
+    x.font = 'bold 84px Arial, Helvetica, sans-serif';
+    x.fillText('TINYHAVEN', lx + 124, cy + 4);
+    const w = x.measureText('TINYHAVEN').width;
+    x.font = 'italic 40px Arial, Helvetica, sans-serif';
+    x.fillText('regional', lx + 140 + w, cy + 18);
+  }
+  // fleet-number digits (white, condensed)
+  x.font = 'bold 100px "Arial Narrow", Arial, Helvetica, sans-serif';
+  x.textAlign = 'center';
+  x.textBaseline = 'middle';
+  for (let d = 0; d < 10; d++) {
+    x.save();
+    x.translate(DECAL.digit0[0] + d * 64 + 30, DECAL.digit0[1] + 54);
+    x.scale(0.62, 1);
+    x.fillText(String(d), 0, 0);
+    x.restore();
+  }
+  const cell = (c: readonly number[], draw: (cx: number, cy: number, r: number) => void) => draw(c[0] + c[2] / 2, c[1] + c[3] / 2, c[2] / 2);
+  // wheelchair: blue square, white symbol
+  cell(DECAL.wheel, (cx, cy, r) => {
+    x.fillStyle = '#1f5fbf';
+    x.fillRect(cx - r, cy - r, r * 2, r * 2);
+    x.strokeStyle = '#fff';
+    x.fillStyle = '#fff';
+    x.lineWidth = 9;
+    x.beginPath();
+    x.arc(cx - 4, cy + 14, 26, 0.2, Math.PI * 1.8);
+    x.stroke();
+    x.beginPath();
+    x.arc(cx - 6, cy - 34, 9, 0, Math.PI * 2);
+    x.fill();
+    x.beginPath();
+    x.moveTo(cx - 8, cy - 20);
+    x.lineTo(cx - 6, cy + 8);
+    x.lineTo(cx + 22, cy + 8);
+    x.lineTo(cx + 30, cy + 32);
+    x.stroke();
+  });
+  // bicycle
+  cell(DECAL.bike, (cx, cy, r) => {
+    x.fillStyle = '#1f5fbf';
+    x.fillRect(cx - r, cy - r, r * 2, r * 2);
+    x.strokeStyle = '#fff';
+    x.lineWidth = 7;
+    for (const s of [-1, 1]) {
+      x.beginPath();
+      x.arc(cx + s * 26, cy + 14, 18, 0, Math.PI * 2);
+      x.stroke();
+    }
+    x.beginPath();
+    x.moveTo(cx - 26, cy + 14);
+    x.lineTo(cx - 6, cy - 14);
+    x.lineTo(cx + 18, cy - 14);
+    x.lineTo(cx + 26, cy + 14);
+    x.moveTo(cx - 6, cy - 14);
+    x.lineTo(cx + 2, cy + 14);
+    x.lineTo(cx + 18, cy - 14);
+    x.moveTo(cx - 10, cy - 24);
+    x.lineTo(cx, cy - 24);
+    x.moveTo(cx + 16, cy - 26);
+    x.lineTo(cx + 26, cy - 22);
+    x.stroke();
+  });
+  // no leaning on the doors: white disc, red ring + bar over a hand
+  cell(DECAL.lean, (cx, cy, r) => {
+    x.fillStyle = '#fff';
+    x.beginPath();
+    x.arc(cx, cy, r - 2, 0, Math.PI * 2);
+    x.fill();
+    x.fillStyle = '#222';
+    x.fillRect(cx - 14, cy - 22, 28, 40);
+    for (let i = 0; i < 4; i++) x.fillRect(cx - 14 + i * 7.5, cy - 38, 5, 18);
+    x.fillRect(cx + 14, cy - 10, 10, 6);
+    x.strokeStyle = '#d0201c';
+    x.lineWidth = 11;
+    x.beginPath();
+    x.arc(cx, cy, r - 9, 0, Math.PI * 2);
+    x.moveTo(cx - 34, cy - 34);
+    x.lineTo(cx + 34, cy + 34);
+    x.stroke();
+  });
+  // high-voltage warning triangle
+  cell(DECAL.hv, (cx, cy, r) => {
+    x.fillStyle = '#111';
+    x.beginPath();
+    x.moveTo(cx, cy - r + 2);
+    x.lineTo(cx + r - 2, cy + r - 10);
+    x.lineTo(cx - r + 2, cy + r - 10);
+    x.closePath();
+    x.fill();
+    x.fillStyle = '#f2c230';
+    x.beginPath();
+    x.moveTo(cx, cy - r + 18);
+    x.lineTo(cx + r - 16, cy + r - 18);
+    x.lineTo(cx - r + 16, cy + r - 18);
+    x.closePath();
+    x.fill();
+    x.fillStyle = '#111';
+    x.beginPath();
+    x.moveTo(cx + 6, cy - 22);
+    x.lineTo(cx - 12, cy + 8);
+    x.lineTo(cx + 2, cy + 8);
+    x.lineTo(cx - 6, cy + 34);
+    x.lineTo(cx + 14, cy);
+    x.lineTo(cx, cy);
+    x.closePath();
+    x.fill();
+  });
+  // emergency door release: red square, white handle mark
+  cell(DECAL.release, (cx, cy, r) => {
+    x.fillStyle = '#c8211b';
+    x.fillRect(cx - r * 0.7, cy - r, r * 1.4, r * 2);
+    x.fillStyle = '#fff';
+    x.fillRect(cx - 10, cy - 30, 20, 44);
+    x.beginPath();
+    x.moveTo(cx - 22, cy + 18);
+    x.lineTo(cx + 22, cy + 18);
+    x.lineTo(cx, cy + 40);
+    x.closePath();
+    x.fill();
+  });
+  // technical data panel (small white lettering on the solebar end)
+  {
+    const [dx, dy] = DECAL.data;
+    x.textAlign = 'left';
+    x.textBaseline = 'top';
+    x.fillStyle = '#fff';
+    x.font = 'bold 24px Arial, Helvetica, sans-serif';
+    x.fillText('94 80 0442 1 - 3   D-TH', dx + 6, dy + 4);
+    x.font = '20px Arial, Helvetica, sans-serif';
+    x.fillText('Tara 47,2 t    Vmax 160 km/h', dx + 6, dy + 36);
+    x.fillText('Rev  TH 14.03.26   Bremse  R+Mg', dx + 6, dy + 62);
+    x.fillRect(dx + 4, dy + 92, 300, 3);
+  }
+  // door edge stripe: yellow / black hazard bands
+  {
+    const [sx, sy, sw, sh] = DECAL.stripe;
+    x.fillStyle = '#f2c230';
+    x.fillRect(sx, sy, sw, sh);
+    x.fillStyle = '#151515';
+    for (let i = -4; i < 20; i++) {
+      x.beginPath();
+      x.moveTo(sx + i * 40, sy + sh);
+      x.lineTo(sx + i * 40 + 20, sy + sh);
+      x.lineTo(sx + i * 40 + 20 + sh, sy);
+      x.lineTo(sx + i * 40 + sh, sy);
+      x.closePath();
+      x.fill();
+    }
+  }
+  decalTex = new THREE.CanvasTexture(cv);
+  decalTex.colorSpace = THREE.SRGBColorSpace;
+  decalTex.anisotropy = 4;
+  decalTex.premultiplyAlpha = true;
+  decalTex.name = 'rail-decals';
+  return decalTex;
+}
+
 export interface TrainMaterials {
   material: THREE.MeshStandardMaterial;
   depth: THREE.MeshDepthMaterial;
@@ -204,6 +460,8 @@ export function createTrainMaterials(globals: GlobalUniforms, clipX0: number, cl
   const grime = { value: typeof location !== 'undefined' && new URLSearchParams(location.search).has('notraingrime') ? 0 : 1 };
   // ?notraininterior: plain dark glass (the ray-traced saloon is also off on quality low — trainRender)
   const interior = { value: typeof location !== 'undefined' && new URLSearchParams(location.search).has('notraininterior') ? 0 : 1 };
+  // ?notraindecals: no livery lettering / pictograms (W2 s6)
+  const decals = { value: typeof location !== 'undefined' && new URLSearchParams(location.search).has('notraindecals') ? 0 : 1 };
   const material = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.48, metalness: 0.08 });
   material.name = 'rail-train';
   material.onBeforeCompile = (shader) => {
@@ -212,6 +470,8 @@ export function createTrainMaterials(globals: GlobalUniforms, clipX0: number, cl
     shader.uniforms.uClip = clip;
     shader.uniforms.uGrime = grime;
     shader.uniforms.uTrInt = interior;
+    shader.uniforms.uTrDecal = { value: decalTexture() };
+    shader.uniforms.uTrDec = decals;
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', `#include <common>\n${VERT_PARS}`)
       .replace('#include <color_vertex>', VERT_COLOR)
@@ -250,6 +510,12 @@ export function createTrainMaterials(globals: GlobalUniforms, clipX0: number, cl
         `#include <color_fragment>
         {
           int tg = int(vTagF + 0.5); tg -= (tg / 100) * 100;
+          // livery lettering (uniform control flow: the decal lookup takes screen derivatives)
+          vec4 dec = trLivery(vLoc, vCar.z);
+          if (vCar.x > 0.5 && uTrDec > 0.5 && (tg == ${T.LIVERY} || tg == ${T.PLAIN} || tg == ${T.DOOR} || tg == ${T.DOORWIN})) {
+            diffuseColor.rgb = diffuseColor.rgb * (1.0 - dec.a) + dec.rgb;
+            trDecA = dec.a;
+          }
           if (tg == ${T.CONT40} || tg == ${T.CONT20A} || tg == ${T.CONT20B}) {
             // corrugated container walls: ribs every 0.28 m along the side, 0.2 m across the ends
             float along = abs(vLoc.x) > 1.18 ? vLoc.z : vLoc.x;
@@ -271,16 +537,30 @@ export function createTrainMaterials(globals: GlobalUniforms, clipX0: number, cl
             vec3 dust = vec3(0.33, 0.26, 0.2);
             diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * 0.55 + dust * 0.35, gear * (0.55 + 0.25 * n));
             diffuseColor.rgb = mix(diffuseColor.rgb, dust * 0.9, low * (0.32 + 0.12 * n));
-            diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.42, 0.4, 0.36), roof * (0.6 + 0.4 * n));
+            diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.34, 0.31, 0.27), roof * (0.75 + 0.5 * n));
+            // a long soft gradient of track dirt up the side, and rain streaks: run-off from the gutter over the
+            // cant rail and from window sills, thin vertical runs that fade downwards (EMU / loco sides only)
+            if (abs(q.x) > 1.38 && q.y < 3.4 && q.y > 1.0) {
+              float up = 1.0 - smoothstep(1.0, 2.3, q.y);
+              diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * 0.82 + dust * 0.12, up * 0.55);
+              float zc = q.z * 14.0 + sign(q.x) * 31.0;
+              float sa = trH(floor(zc)), sb = trH(floor(zc) + 1.0);
+              float sn = mix(sa, sb, smoothstep(0.2, 0.8, fract(zc)));
+              float gut = (1.0 - smoothstep(0.0, 0.12 + 0.55 * sn * sn, 3.34 - q.y)) * step(q.y, 3.34);
+              float sl = trH(floor(q.z * 2.3) + 7.0);
+              float sill = (1.0 - smoothstep(0.0, 0.1 + 0.6 * sn, 2.15 - q.y)) * step(q.y, 2.15) * step(0.45, sl) * step(0.35, sn);
+              float st = clamp(gut * (0.5 + 0.5 * sn) + sill * 0.8, 0.0, 1.0);
+              diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * 0.62 + vec3(0.05, 0.045, 0.04), st * 0.45);
+            }
           }
           if ((tg == ${T.WINDOW} || tg == ${T.DOORWIN} || tg == ${T.VESTIB}) && uTrInt > 0.5) {
             vec3 d = normalize(vLocDir);
             if (d.x * vLoc.x < 0.0 && vDoorZ > -1e4) {
               vec3 ic = trInterior(vLoc, d, vDoorZ);
               // daylight inside (dimmer than out), cabin lamps at night; the glass keeps its reflection
-              trIntE = ic * (0.1 * (1.0 - uLights)) + vEmit * (0.2 + 0.8 * ic);
+              trIntE = (ic * (0.1 * (1.0 - uLights)) + vEmit * (0.2 + 0.8 * ic)) * (1.0 - trDecA);
               trEmK = 0.0;
-              diffuseColor.rgb *= tg == ${T.VESTIB} ? 0.0 : 0.45;
+              diffuseColor.rgb *= tg == ${T.VESTIB} ? 0.0 : mix(0.45, 1.0, trDecA);
             }
           }
         }`,
@@ -292,7 +572,7 @@ export function createTrainMaterials(globals: GlobalUniforms, clipX0: number, cl
       )
       .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += vEmit * trEmK + trIntE;');
   };
-  material.customProgramCacheKey = () => 'rail-train-v4';
+  material.customProgramCacheKey = () => 'rail-train-v5';
   patchLampMaterial(material); // night street-light map (night agent)
 
   const depth = new THREE.MeshDepthMaterial();
