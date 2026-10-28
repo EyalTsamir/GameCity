@@ -4,6 +4,13 @@ Branch `claude/real-w2-vehicles` (from `claude/pensive-gates-bim12i`). Brief: `d
 Owned: `src/sim/traffic/{models,vehicleMaterial,render}.ts` (+ trains later). Sim untouched.
 
 ## Resume here
+* 2026-10-28 session 5 — WIP. Bench framing for trains fixed (commit 332e99d): `bench.mjs --classes train --q
+  "speed=0"` → fixed poses `platform_3m`, `platform_10m`, `track_3m`, `roof_6m` (train dwelling at the platform,
+  no LOS swing). In progress: train interior ray-trace behind windows + open doorway (`trInterior` in
+  trainMaterial.ts, tag `T.VESTIB` 13, `?notraininterior`, off on low), 24-side turned wheels with polished
+  tread + flange (`wheelset`), police livery as a conformal flank grid (`flankDecal` in models.ts, `flankX` in
+  carBody.ts), street reflection with facade blocks/windows/trees/clouds/pavement (`thStreetRefl`, detail fades
+  with fwidth of the reflected vector, `?nocarpaint` drops the detail).
 * 2026-10-28 session 4 — **fix round + trains pushed; wrapping at the context cap.** Next session, in order:
   (a) **train bench framing still fails**: the camera ends at window height against the car side (platform blocks
   the line of sight → arm shortened). Try `--q` with a free view from the track side (e.g. find a train with

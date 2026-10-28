@@ -267,19 +267,6 @@ varying float vGain;
 // sharp reflections are shaped by the reflected direction: crisp horizon / skyline lines run along the
 // flanks and shoulders, windscreens mirror the roofline. The horizon is lifted a little because the diorama
 // camera looks down. A few ALU; no extra pass or texture.
-float thStreetRefl( vec3 viewDir, vec3 n, float soft ) {
-  vec3 R = inverseTransformDirection( reflect( -viewDir, n ), viewMatrix );
-  float e = R.y + 0.12;
-  float w = 0.018 + soft;
-  float b = floor( atan( R.x, R.z ) * 5.0 );
-  float hb = fract( sin( b * 91.7 + 3.1 ) * 43758.55 );
-  float hs = 0.05 + 0.24 * hb * hb;
-  float sky = smoothstep( hs - w, hs + w, e );
-  float gnd = smoothstep( -w, w, e );
-  // the band between horizon and skyline alternates darker (trees, shadowed walls) and lighter (lit facades)
-  float fac = 0.22 + 0.28 * fract( hb * 7.13 );
-  return mix( 0.14, mix( fac, 1.0 + 0.8 * exp( -max( e - hs, 0.0 ) * 8.0 ), sky ), gnd );
-}
 // sin-free hash (stable on mobile GPUs for large arguments)
 float thH1( float n ) {
   n = fract( n * 0.1031 );
@@ -293,6 +280,41 @@ float thVN( vec3 p ) {
   float n = dot( i, vec3( 1.0, 57.0, 113.0 ) );
   return mix( mix( mix( thH1( n ), thH1( n + 1.0 ), f.x ), mix( thH1( n + 57.0 ), thH1( n + 58.0 ), f.x ), f.y ),
               mix( mix( thH1( n + 113.0 ), thH1( n + 114.0 ), f.x ), mix( thH1( n + 170.0 ), thH1( n + 171.0 ), f.x ), f.y ), f.z );
+}
+float thRH( float n ) { return fract( fract( n * 0.1031 ) * ( n * 0.1031 + 33.33 ) * 7.31 ); }
+// detail fade: 1 where the reflected direction changes slowly across a pixel, 0 where it swings fast
+// (tight curvature or far away) — set once per fragment in uniform control flow (fwidth)
+float thReflDet = 1.0;
+float thStreetRefl( vec3 viewDir, vec3 n, float soft ) {
+  vec3 R = inverseTransformDirection( reflect( -viewDir, n ), viewMatrix );
+  float e = R.y + 0.12;
+  float w = 0.022 + soft;
+  float az = atan( R.x, R.z );
+  // two rows of facades: near blocks (~25 around) with their roof lines over far, lower ones; soft block edges
+  float a1 = az * 4.0, b1 = floor( a1 ), f1 = fract( a1 );
+  float h1 = thRH( b1 + 17.0 ), h1n = thRH( b1 + 18.0 );
+  float hs = 0.05 + 0.24 * mix( h1 * h1, h1n * h1n, smoothstep( 0.9, 1.0, f1 ) );
+  float a2 = az * 9.0, h2 = thRH( floor( a2 ) + 51.0 );
+  float hf = 0.03 + 0.1 * h2;
+  // trees in front of some blocks: lumpy crowns that break the roof line
+  float tr = step( 0.62, thRH( floor( az * 6.0 ) + 7.0 ) );
+  float crown = 0.07 + 0.06 * thVN( vec3( az * 22.0, 0.0, 3.0 ) );
+  float sky = smoothstep( hs - w, hs + w, e ) * smoothstep( hf - w, hf + w, e ) * ( 1.0 - tr * smoothstep( crown + w, crown - w, e ) );
+  float gnd = smoothstep( -w, w, e );
+  // facade: per-block tone, window rows / columns (darker glass) fading with the pixel footprint
+  float fac = 0.2 + 0.32 * fract( h1 * 7.13 );
+  float win = smoothstep( 0.25, 0.45, fract( e * 34.0 ) ) * smoothstep( 0.2, 0.4, fract( f1 * 7.0 ) );
+  fac *= 1.0 - 0.45 * win * thReflDet;
+  fac = mix( fac, 0.1 + 0.08 * thVN( vec3( az * 40.0, e * 40.0, 1.0 ) ), tr * smoothstep( crown + w, crown - w, e ) );
+  // sky: hazy bright band over the roofs, darker blue zenith, soft cumulus lumps
+  float up = max( e - hs, 0.0 );
+  vec2 cp = R.xz / ( R.y + 0.25 ) * 2.2;
+  float cl = smoothstep( 0.45, 0.8, thVN( vec3( cp, 5.0 ) ) * 0.65 + thVN( vec3( cp * 2.3, 9.0 ) ) * 0.35 );
+  float skyL = 0.85 + 0.9 * exp( -up * 7.0 ) + 0.5 * cl * thReflDet;
+  // ground: asphalt, a lighter pavement / kerb band just below the horizon
+  float pav = smoothstep( -0.09, -0.06, e ) * ( 1.0 - smoothstep( -0.012, 0.0, e ) );
+  float road = 0.11 + 0.16 * pav;
+  return mix( road, mix( fac, skyL, sky ), gnd );
 }
 // anti-aliased line of half width w at signed distance d (pix = metres per pixel); thins to its coverage far away
 float thLine( float d, float w, float pix ) {
@@ -476,6 +498,7 @@ export function createVehicleMaterial(
         '#include <lights_fragment_maps>',
         `#include <lights_fragment_maps>
 #if defined( RE_IndirectSpecular )
+  { vec3 thRw = reflect( -geometryViewDir, geometryNormal ); thReflDet = clamp( 1.6 - length( fwidth( thRw ) ) * 9.0, 0.0, 1.0 ) * step( 0.5, uVehDetail.w ); }
   #ifdef USE_CLEARCOAT
     clearcoatRadiance *= vGain * thStreetRefl( geometryViewDir, geometryClearcoatNormal, 0.0 );
   #endif
