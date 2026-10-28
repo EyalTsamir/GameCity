@@ -53,3 +53,12 @@
     returns, keep the bias and instead set `shadowSide = THREE.DoubleSide` on the buildings shell material (the
     contact then has a caster at the wall plane from both sides). Falsifying probe: add `tune.dbias` (multiplier on
     that line) and run `--eval "__city.ctx.services.sky.tune.dbias=0"` at the same view.
+
+## W6 → W1 (buildings): export rear ground-floor window spans (2026-10-29)
+* The W6 back yard hangs a door, gas meter, downpipe + butt and an AC on the old-town rear walls. Without the window
+  layout they land on windows; places.ts now uses a rule probed on lots 64/65 (bay = L/3.4, windows at
+  a0 + bay·(0.48 + i), 1.1 m + 0.11 surrounds) — fragile if the facade grid changes.
+* Ask: `services.buildings.windows(lot)` (or a `ground` list on FacadeSpan incl. rear walls) → [{s0, s1, y0, y1}] for
+  ground-floor openings, from Builder.winRec before it is released (buildings.ts:245).
+* FYI (no bug): "beige planks at ~1 m" in the lead's s1 back-yard frames = buildings-sills / -surrounds seen with the
+  camera INSIDE lot 64 (its rear wall culled); from the yard they sit correctly on the wall.
