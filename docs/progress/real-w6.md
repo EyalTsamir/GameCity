@@ -5,6 +5,16 @@ Owned: src/world/props/** + props.ts, src/world/life/**, src/sim/pedestrians/caf
 and (inherited from W3) the market stall in src/world/landmarks/civic.ts.
 
 ## Resume here
+* 2026-10-28 23:55 — **Session 2 WIP.** Lead's s1 back-yard frames: (a) "free-standing door" = s1 camera at
+  `76.5,…,yaw 90|250` sits INSIDE lot 64 (camera = target − dir·d; yaw 270 looks −X from the yard) → its rear wall
+  is culled, the door seemed to stand free. (b) "beige planks at ~1 m" (visible WITHOUT ?w6wall, also with
+  ?nobackyard / skip=life / skip=props; gone only with skip=buildings) = W1's **buildings-sills / -surrounds**
+  (winGeo.ts near-LOD instances) on the rear walls at y 0.95: probe scratchpad probe.mjs + inst.js (instances at
+  x 73.84 / z 26 = footprint − 0.16, oriented right). Not my file → request to W1 if they really float.
+  Wall line now from **lot footprints** (townhouses of the block whose yard side lies on the court edge; wall face
+  = footprint − 0.16, `walls[]` spans in edge coords, `wallItem()`); `?w6wall` gate removed. Parasol sway:
+  furnitureMaterial(u, wear, sway) + aSway (pivot xyz, flex) on the KS casters sink, set in garden.ts parasol();
+  `?nosway`, off on low. Shadows stay static (depth material not swayed: ~4 cm, invisible).
 * 2026-10-28 23:05 — **Session 1 ends (context cap).** All pushed. Judged (sheets docs/progress/real/w6_s1_places.jpg
   = market eye ×2 / market 16 m / terrace / back yard eye ×2 / back yard 12 m / terrace 2;
   w6_s1_terrace_chairs.jpg). Console clean, invariants {} (terrace view, hide=pedestrians).

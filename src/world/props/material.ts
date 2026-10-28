@@ -8,6 +8,7 @@ import * as THREE from 'three';
 import type { GlobalUniforms } from '../../core/uniforms';
 import { LAMP_GLSL, lampUniforms } from '../../core/lampLight';
 import { roadNoise } from '../roads/materials';
+import { WIND_GLSL } from '../../core/wind';
 
 // Weathering by material class (recognised from the per-vertex roughness / metalness of furniture.ts MAT):
 // stone / concrete — grime at the foot, rain streaks, lichen spots, green algae on the north side;
@@ -111,7 +112,24 @@ void pWear(inout vec3 col, inout float rgh, inout float mtl, vec3 pw, vec3 n) {
 }
 `;
 
-export function furnitureMaterial(u: GlobalUniforms, wear = true): THREE.MeshStandardMaterial {
+/**
+ * Wind sway (sway = true): geometry carrying `aSway` = (pivot x, y, z, flex) leans downwind with the shared wind
+ * (core/wind.ts thWindAt at the pivot) by flex · h² (h = height above the pivot) and its canopy (≥ 1.5 m up,
+ * away from the axis) flutters; flex 0 = static. Parasols: flex ≈ 0.006 → ~4 cm at the top in a moderate wind.
+ */
+const SWAY_GLSL = `
+if (aSway.w > 0.0) {
+  vec2 sgw = thWindAt(aSway.xz);
+  float sh = max(transformed.y - aSway.y, 0.0);
+  float sph = aSway.x * 0.71 + aSway.z * 0.37;
+  float sosc = 0.65 * sin(uTime * 1.25 + sph) + 0.35 * sin(uTime * 2.6 + sph * 1.9);
+  transformed.xz += sgw * (0.7 + 0.45 * sosc) * aSway.w * sh * sh;
+  float srr = length(transformed.xz - aSway.xz);
+  transformed.y += sin(uTime * 6.3 + srr * 4.0 + sph * 3.0 + atan(transformed.z - aSway.z, transformed.x - aSway.x) * 3.0)
+    * 0.018 * min(srr, 1.6) * (0.25 + length(sgw)) * smoothstep(1.5, 2.0, sh);
+}`;
+
+export function furnitureMaterial(u: GlobalUniforms, wear = true, sway = false): THREE.MeshStandardMaterial {
   const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.6, metalness: 0.1 });
   mat.name = 'props-furniture';
   mat.onBeforeCompile = (shader) => {
@@ -119,6 +137,10 @@ export function furnitureMaterial(u: GlobalUniforms, wear = true): THREE.MeshSta
     shader.uniforms.tPN = { value: roadNoise() };
     shader.uniforms.uPWear = { value: wear ? 1 : 0 };
     Object.assign(shader.uniforms, lampUniforms());
+    if (sway) {
+      shader.uniforms.uTime = u.uTime;
+      shader.uniforms.uWind = u.uWind;
+    }
     shader.vertexShader = shader.vertexShader
       .replace(
         '#include <common>',
@@ -129,11 +151,11 @@ uniform float uLights;
 varying vec2 vRM;
 varying vec3 vEmit;
 varying vec3 vPW;
-varying vec3 vPN;`,
+varying vec3 vPN;${sway ? `\nattribute vec4 aSway;\nuniform float uTime;\nuniform vec2 uWind;\n${WIND_GLSL}` : ''}`,
       )
       .replace(
         '#include <begin_vertex>',
-        `#include <begin_vertex>
+        `#include <begin_vertex>${sway ? SWAY_GLSL : ''}
 vRM = aRM;
 vEmit = aEmit.rgb * mix( uLights, 1.0, aEmit.a );
 vPW = ( modelMatrix * vec4( transformed, 1.0 ) ).xyz;
@@ -157,7 +179,7 @@ ${WEAR_GLSL}`,
       .replace('#include <metalnessmap_fragment>', 'float metalnessFactor = pMtl;')
       .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n  totalEmissiveRadiance += vEmit;');
   };
-  mat.customProgramCacheKey = () => 'props-furniture-5' + (wear ? 'w' : '');
+  mat.customProgramCacheKey = () => 'props-furniture-5' + (wear ? 'w' : '') + (sway ? 's' : '');
   return mat;
 }
 

@@ -61,7 +61,9 @@ export default function create(ctx: CityContext): CityModule {
     kf = KF[chunkOf(x)];
   };
   // big silhouettes of the hardscape / garden kits (sheds, parasols, trampolines, kiosks, skips…): cast shadows
-  const KS = new Kit(new GeoSink(extras));
+  // (+ aSway: parasols lean and flutter in the shared wind — furnitureMaterial sway; ?nosway = static)
+  const sway = !ctx.debug.params.has('nosway') && ctx.quality.level !== 'low';
+  const KS = new Kit(new GeoSink(sway ? [...extras, { name: 'aSway', size: 4 }] : extras));
   const gsink = new GeoSink(extras);
   const g = new Kit(gsink);
   // static laundry on the garden rotary dryers (own small mesh: life may replace it with animated cloth)
@@ -748,11 +750,11 @@ export default function create(ctx: CityContext): CityModule {
       H,
       fine: (x) => KF[chunkOf(x)],
       near: (x, z) => KD.at(x, z),
-      free: (x, z, r) => {
+      free: (x, z, r, ignore) => {
         const badCell = OCC.BUILDING | OCC.ROAD | OCC.WATER | OCC.RAIL | OCC.SIDEWALK | OCC.SOLID | OCC.PATH;
         for (const [dx, dz] of [[0, 0], [r, 0], [-r, 0], [0, r], [0, -r]]) if (occ.has(x + dx, z + dz, badCell)) return false;
         if (layout.walk.anyInCircle(x, z, r, MASK_WALK)) return false;
-        for (const f of features) if (Math.hypot(f.x - x, f.z - z) < (f.radius ?? 1) + r) return false;
+        for (const f of features) if (f !== ignore && !(ignore && f.x === ignore.x && f.z === ignore.z) && Math.hypot(f.x - x, f.z - z) < (f.radius ?? 1) + r) return false;
         for (const d of layout.furniture) if (Math.hypot(d.x - x, d.z - z) < d.r + r) return false;
         return true;
       },
@@ -791,7 +793,7 @@ export default function create(ctx: CityContext): CityModule {
     // shadow-casting silhouettes (one extra draw call + its shadow pass); ?propscast=0 disables the shadows
     const geo = KS.s.build();
     geos.push(geo);
-    const m = staticMesh(geo, mat, 'props-casters');
+    const m = staticMesh(geo, sway && mat instanceof THREE.MeshStandardMaterial ? furnitureMaterial(ctx.uniforms, !ctx.debug.params.has('nowear'), true) : mat, 'props-casters');
     m.castShadow = ctx.debug.params.get('propscast') !== '0';
     m.receiveShadow = true;
     m.renderOrder = -1;

@@ -125,6 +125,12 @@ export function parasol(k: Kit, rng: Rng, r = 1.3, h = 2.35, colors?: [string, s
   const sh = k.sh;
   const c0 = colors?.[0] ?? rng.pick(CANVAS);
   const c1 = colors?.[1] ?? (rng.chance(0.5) ? '#f4efe4' : c0);
+  // wind sway pivot = the foot of the pole (only kits whose sink carries aSway — the props casters)
+  const sway = k.s.ex.length > 2;
+  if (sway) {
+    const me = sh.m.elements;
+    k.s.setEx(2, me[12], me[13], me[14], 0.0065);
+  }
   k.m('#3b3f42', 'iron');
   sh.cyl(0, 0, 0, 0.22, 0.2, 0.06, 8, 2);
   sh.cyl(0, 0.06, 0, 0.025, 0.025, h - 0.06, 5, 0);
@@ -168,6 +174,7 @@ export function parasol(k: Kit, rng: Rng, r = 1.3, h = 2.35, colors?: [string, s
   }
   k.m('#3b3f42', 'iron');
   sh.cyl(0, top - 0.02, 0, 0.04, 0.02, 0.1, 5, 2);
+  if (sway) k.s.setEx(2, 0, 0, 0, 0);
 }
 
 /** Kettle BBQ or a small gas grill. */

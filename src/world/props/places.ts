@@ -33,7 +33,7 @@ export interface PlacesEnv {
   /** near-detail kit of the cell at (x, z) (drawn < ~30 m) */
   near(x: number, z: number): Kit;
   /** is the disc (x, z, r) free of walkways, roads, buildings, water, features and furniture? */
-  free(x: number, z: number, r: number): boolean;
+  free(x: number, z: number, r: number, ignore?: { x: number; z: number }): boolean;
   /** claim a keep-clear disc */
   claim(x: number, z: number, r: number): void;
   /** contact grime under a footprint (frame x, z, yaw; local offset lx, lz; half extents hw × hd) */
@@ -850,8 +850,9 @@ function market(e: PlacesEnv, info: PlacesInfo): void {
   if (!stalls.length) return;
   const rng = new Rng('w6:market');
   let items = 0;
+  let own: { x: number; z: number } | undefined;
   const put = (x: number, z: number, rad: number, yaw: number, build: (k: Kit, kd: Kit, y: number) => void, claim = true): boolean => {
-    if (!e.free(x, z, rad)) return false;
+    if (!e.free(x, z, rad, own)) return false;
     const y = e.H(x, z) + 0.02;
     const k = e.fine(x),
       kd = e.near(x, z);
@@ -862,85 +863,140 @@ function market(e: PlacesEnv, info: PlacesInfo): void {
     items++;
     return true;
   };
+  // stock builders (local frame at the item's foot)
+  const crateStack = (sr: Rng) => (k: Kit, kd: Kit, y: number, x: number, z: number, yaw: number) => {
+    // two or three columns of 1–4 crates, the top ones skewed, a plastic crate among them
+    const cols = sr.int(2, 3);
+    for (let c = 0; c < cols; c++) {
+      const n = sr.int(1, 4);
+      let h = 0;
+      for (let i = 0; i < n; i++) {
+        k.sh.push().local((c - (cols - 1) / 2) * 0.52, h, sr.range(-0.04, 0.04), 0, sr.range(-0.12, 0.12));
+        if (sr.chance(0.3)) {
+          plasticCrate(k, sr, 0.5, 0.24, 0.36);
+          h += 0.235;
+        } else {
+          woodCrate(k, sr, 0.5, 0.3, 0.36, sr.chance(0.25) ? sr.pick(['#d84a2a', '#e8a83a', '#7fa85a']) : undefined);
+          h += 0.29;
+        }
+        k.sh.pop();
+      }
+    }
+    e.spot(x, y, z, yaw, 0, 0, cols * 0.27, 0.2, 0.05, 0.12, 0.45);
+    litter(kd, sr, 3, 0.5);
+  };
+  const boxPile = (sr: Rng) => (k: Kit, kd: Kit) => {
+    // stock boxes: closed cartons stacked two or three high, an open one on top, flattened card leaning
+    let h = 0;
+    for (let i = 0; i < sr.int(2, 3); i++) {
+      const w = sr.range(0.4, 0.6);
+      k.sh.push().local(sr.range(-0.05, 0.05), h, sr.range(-0.04, 0.04), 0, sr.range(-0.2, 0.2));
+      cardBox(k, sr, w, sr.range(0.26, 0.36), sr.range(0.3, 0.4), false);
+      k.sh.pop();
+      h += 0.3;
+    }
+    k.sh.push().local(0.05, h, 0, 0, sr.range(-0.5, 0.5));
+    cardBox(k, sr, 0.42, 0.26, 0.32, true);
+    k.sh.pop();
+    if (sr.chance(0.6)) {
+      k.sh.push().local(0.55, 0, 0.05, 0, sr.range(-0.4, 0.4));
+      cardBox(k, sr, 0.5, 0.32, 0.36, sr.chance(0.5));
+      k.sh.pop();
+    }
+    litter(kd, sr, 2, 0.4);
+  };
+  const cardboard = (sr: Rng) => (k: Kit, kd: Kit) => {
+    flatCardboard(k, sr);
+    k.sh.push().local(0.55, 0, 0.1, 0, 0.5);
+    cardBox(k, sr, 0.45, 0.3, 0.34, true);
+    k.sh.pop();
+    litter(kd, sr, 3, 0.4);
+  };
+  const sacks = (sr: Rng) => (k: Kit) => {
+    const dy = pallet(k, sr, sr.int(0, 3));
+    for (const [x, z] of [[-0.3, -0.18], [0.3, -0.18], [-0.3, 0.2], [0.3, 0.2]]) {
+      k.sh.push().local(x, dy, z, 0, sr.range(-0.4, 0.4));
+      sack(k, sr);
+      k.sh.pop();
+    }
+    k.sh.push().local(0, dy + 0.4, 0, 0, sr.range(0, 3));
+    sack(k, sr, true);
+    k.sh.pop();
+  };
+  const trolley = (sr: Rng) => (k: Kit) => {
+    const dy = platformTrolley(k, sr);
+    for (let i = 0; i < 2; i++) {
+      k.sh.push().local(0, dy + i * 0.29, (i ? 0.05 : 0) + 0.15, 0, sr.range(-0.1, 0.1));
+      woodCrate(k, sr, 0.5, 0.3, 0.36, sr.pick(['#e8a83a', '#7fa85a', '#c83a2a']));
+      k.sh.pop();
+    }
+    k.sh.push().local(0, dy, -0.25, 0, Math.PI / 2);
+    cardBox(k, sr, 0.36, 0.3, 0.3);
+    k.sh.pop();
+  };
+  const emptyCrates = (sr: Rng) => (k: Kit) => {
+    // empties: plastic crates nested in a leaning tower, a couple tipped on their side
+    const col = sr.pick(['#2f7a45', '#c8452f', '#2b5f9a', '#3a3d40']);
+    for (let i = 0; i < sr.int(3, 6); i++) {
+      k.sh.push().local(sr.range(-0.02, 0.02) + i * 0.01, i * 0.12, sr.range(-0.02, 0.02), 0, sr.range(-0.05, 0.05));
+      plasticCrate(k, sr, 0.5, 0.24, 0.36, col);
+      k.sh.pop();
+    }
+    k.sh.push().local(0.6, 0.18, 0, Math.PI / 2, sr.range(-0.4, 0.4));
+    plasticCrate(k, sr, 0.5, 0.24, 0.36, col);
+    k.sh.pop();
+  };
   for (const f of stalls) {
     const sr = new Rng(`w6:stall:${f.id}`);
-    // behind the stall (local -Z beyond its radius): a crate stack, flattened cardboard, sacks or a trolley
-    const back = sr.next();
-    const [bx, bz] = W(f.x, f.z, f.yaw, sr.range(-0.5, 0.5), -1.75);
-    if (back < 0.45) {
-      put(bx, bz, 0.5, f.yaw + sr.range(-0.3, 0.3), (k, kd, y) => {
-        // two or three columns of 2–4 crates, the top ones skewed, a plastic crate among them
-        const cols = sr.int(2, 3);
-        for (let c = 0; c < cols; c++) {
-          const n = sr.int(1, 4);
-          let h = 0;
-          for (let i = 0; i < n; i++) {
-            k.sh.push().local((c - (cols - 1) / 2) * 0.52, h, sr.range(-0.04, 0.04), 0, sr.range(-0.12, 0.12));
-            if (sr.chance(0.3)) {
-              plasticCrate(k, sr, 0.5, 0.24, 0.36);
-              h += 0.235;
-            } else {
-              woodCrate(k, sr, 0.5, 0.3, 0.36, sr.chance(0.25) ? sr.pick(['#d84a2a', '#e8a83a', '#7fa85a']) : undefined);
-              h += 0.29;
-            }
-            k.sh.pop();
-          }
-        }
-        e.spot(bx, y, bz, f.yaw, 0, 0, cols * 0.27, 0.2, 0.05, 0.12, 0.45);
-        litter(kd, sr, 4, 0.5);
-      });
-    } else if (back < 0.65) {
-      put(bx, bz, 0.5, f.yaw + sr.range(-0.6, 0.6), (k, kd) => {
-        flatCardboard(k, sr);
-        k.sh.push().local(0.55, 0, 0.1, 0, 0.5);
-        cardBox(k, sr, 0.45, 0.3, 0.34, true);
-        k.sh.pop();
-        litter(kd, sr, 3, 0.4);
-      });
-    } else if (back < 0.82) {
-      put(bx, bz, 0.55, f.yaw + sr.range(-0.4, 0.4), (k) => {
-        const dy = pallet(k, sr, sr.int(0, 3));
-        for (const [x, z] of [[-0.3, -0.18], [0.3, -0.18], [-0.3, 0.2], [0.3, 0.2]]) {
-          k.sh.push().local(x, dy, z, 0, sr.range(-0.4, 0.4));
-          sack(k, sr);
-          k.sh.pop();
-        }
-        k.sh.push().local(0, dy + 0.4, 0, 0, sr.range(0, 3));
-        sack(k, sr, true);
-        k.sh.pop();
-      });
-    } else {
-      put(bx, bz, 0.55, f.yaw + Math.PI / 2 + sr.range(-0.3, 0.3), (k) => {
-        const dy = platformTrolley(k, sr);
-        for (let i = 0; i < 2; i++) {
-          k.sh.push().local(0, dy + i * 0.29, (i ? 0.05 : 0) + 0.15, 0, sr.range(-0.1, 0.1));
-          woodCrate(k, sr, 0.5, 0.3, 0.36, sr.pick(['#e8a83a', '#7fa85a', '#c83a2a']));
-          k.sh.pop();
-        }
-        k.sh.push().local(0, dy, -0.25, 0, Math.PI / 2);
-        cardBox(k, sr, 0.36, 0.3, 0.3);
-        k.sh.pop();
-      });
+    own = { x: f.x, z: f.z };
+    // under the trestle table (local z ≈ 0.38, between the trestles): the day's stock in boxes and crates
+    for (const lx of [-0.42, 0.42]) {
+      if (!sr.chance(0.75)) continue;
+      const [ux, uz] = W(f.x, f.z, f.yaw, lx + sr.range(-0.08, 0.08), 0.3);
+      const kk = e.fine(ux);
+      const y = e.H(ux, uz) + 0.02;
+      kk.sh.frame(ux, y, uz, f.yaw + sr.range(-0.15, 0.15));
+      if (sr.chance(0.5)) cardBox(kk, sr, 0.46, 0.3, 0.34, sr.chance(0.4));
+      else woodCrate(kk, sr, 0.46, 0.28, 0.34, sr.chance(0.5) ? sr.pick(['#d84a2a', '#e8a83a', '#7fa85a']) : undefined);
+      if (sr.chance(0.4)) {
+        kk.sh.local(0.02, 0.3, 0, 0, sr.range(-0.3, 0.3));
+        cardBox(kk, sr, 0.38, 0.22, 0.3, true);
+      }
+      items++;
+    }
+    // behind the stall (between its back drape at local z −0.64 and the next row): two or three stock groups
+    const kinds = [crateStack, boxPile, cardboard, sacks, trolley, emptyCrates];
+    const nBack = sr.int(2, 3);
+    const slots = [-0.62, 0.62, 0];
+    for (let i = 0; i < nBack; i++) {
+      const kb = kinds[sr.int(0, kinds.length - 1)];
+      const b = kb(sr);
+      const rad = kb === sacks || kb === trolley ? 0.5 : 0.42;
+      for (const dz of [-1.05, -1.3, -1.6, -1.9]) {
+        const lx = slots[i] + sr.range(-0.12, 0.12);
+        const [bx, bz] = W(f.x, f.z, f.yaw, lx, dz);
+        const yaw = f.yaw + sr.range(-0.3, 0.3) + (kb === trolley ? Math.PI / 2 : 0);
+        if (put(bx, bz, rad, yaw, (k, kd, y) => b(k, kd, y, bx, bz, yaw))) break;
+      }
     }
     // in front, at the aisle edge (just outside the stall radius, not on the walkway): dropped leaves / paper
     const [fx, fz] = W(f.x, f.z, f.yaw, sr.range(-0.6, 0.6), 1.45);
     const kd = e.near(fx, fz);
     kd.sh.frame(fx, e.H(fx, fz) + 0.02, fz, sr.range(0, TAU));
     litter(kd, sr, sr.int(3, 6), 0.35);
-    // beside the stall, between neighbours: a sack truck or a stack of open boxes (half the stalls)
-    if (sr.chance(0.5)) {
+    // beside the stall, between neighbours: a sack truck or a stack of boxes (most stalls)
+    if (sr.chance(0.75)) {
       const side = sr.chance(0.5) ? 1 : -1;
-      const [sx, sz] = W(f.x, f.z, f.yaw, side * 1.6, -0.6);
-      if (sr.chance(0.5)) put(sx, sz, 0.35, f.yaw + sr.range(-0.5, 0.5), (k) => sackTruck(k, sr, sr.chance(0.6)));
-      else
-        put(sx, sz, 0.35, f.yaw + sr.range(-0.5, 0.5), (k) => {
-          cardBox(k, sr, 0.5, 0.32, 0.36, false);
-          k.sh.push().local(0.05, 0.32, 0, 0, sr.range(-0.3, 0.3));
-          cardBox(k, sr, 0.42, 0.26, 0.32, sr.chance(0.5));
-          k.sh.pop();
-        });
+      for (const dz of [-0.6, -0.9, -0.3]) {
+        const [sx, sz] = W(f.x, f.z, f.yaw, side * 1.45, dz);
+        const ok = sr.chance(0.45)
+          ? put(sx, sz, 0.3, f.yaw + sr.range(-0.5, 0.5), (k) => sackTruck(k, sr, sr.chance(0.6)))
+          : put(sx, sz, 0.3, f.yaw + sr.range(-0.5, 0.5), (k, kd) => boxPile(sr)(k, kd));
+        if (ok) break;
+      }
     }
   }
+  own = undefined;
   // the square's own furniture: market bins at the two aisle heads, chalk boards, pigeons
   const cx = (r.x0 + r.x1) / 2;
   const heads: [number, number][] = [
@@ -1135,7 +1191,33 @@ function backyard(e: PlacesEnv, info: PlacesInfo): void {
   let items = 0;
   /** local frame on the wall: s along it (local x = wall direction), d out into the yard */
   const at = (s: number, d: number): [number, number] => [ed.x + ed.ux * s + nx * d, ed.z + ed.uz * s + nz * d];
-  const wallAt = (s: number) => occ.has(at(s, -0.6)[0], at(s, -0.6)[1], OCC.BUILDING);
+  // the real back walls: townhouse footprints of this block whose yard-facing side lies on the edge line
+  // (the rendered wall stands 0.16 m inside the footprint — buildings/anchors.ts). Spans in edge coordinates s.
+  const nLine = ed.x * nx + ed.z * nz;
+  const sOf = (x: number, z: number) => (x - ed.x) * ed.ux + (z - ed.z) * ed.uz;
+  const walls: { s0: number; s1: number; a0: number; a1: number; eave: number }[] = [];
+  for (const l of plan.lots) {
+    if (l.blockId !== court.blockId || l.kind !== 'townhouse') continue;
+    const f = l.footprint;
+    if (Math.abs(Math.max(f.x0 * nx + f.z0 * nz, f.x1 * nx + f.z1 * nz) - nLine) > 0.3) continue;
+    const a = sOf(f.x0, f.z0),
+      b = sOf(f.x1, f.z1);
+    const s0 = Math.max(Math.min(a, b) + 0.35, -ed.L / 2 + 0.3),
+      s1 = Math.min(Math.max(a, b) - 0.35, ed.L / 2 - 0.3);
+    if (s1 - s0 > 1.5) walls.push({ s0, s1, a0: Math.min(a, b), a1: Math.max(a, b), eave: l.floors * 3.3 + 0.2 });
+  }
+  // the rear ground-floor windows (facade grid, probed on these walls — the buildings service does not export
+  // windows yet, see real-requests.md): bay = L / 3.4, three windows at a0 + bay·(0.48 + i), 1.1 m wide + 0.11
+  // surrounds. Wall things go in the gaps between them (gap i) or the wide corner gap after the last one.
+  const bay = (w: (typeof walls)[number]) => (w.a1 - w.a0) / 3.4;
+  const gapAt = (w: (typeof walls)[number], i: number) => w.a0 + bay(w) * (0.98 + i);
+  const cornerGap = (w: (typeof walls)[number]): [number, number] => {
+    const e0 = w.a0 + bay(w) * 2.48 + 0.66;
+    return [(e0 + w.a1) / 2, w.a1 - e0];
+  };
+  const wallOf = (s: number) => walls.find((w) => s >= w.s0 && s <= w.s1);
+  const wallAt = (s: number) => !!wallOf(s) && occ.has(at(s, -0.6)[0], at(s, -0.6)[1], OCC.BUILDING);
+  const WALL = -0.16;
   const place = (s: number, d: number, ry: number, rad: number, build: (k: Kit, kd: Kit, x: number, y: number, z: number) => void, check = true): boolean => {
     const [x, z] = at(s, d);
     if (check && (!wallAt(s) || !e.free(x, z, rad))) return false;
@@ -1152,74 +1234,86 @@ function backyard(e: PlacesEnv, info: PlacesInfo): void {
   // local x along the wall = (cos yaw, -sin yaw); edges run (ux, uz) — keep builders in the wall frame
   const L = ed.L;
   const s0 = -L / 2 + 1.0;
-  const sDoor = rng.range(-0.8, 0.8);
   const side = rng.chance(0.5) ? 1 : -1;
-  // wall-mounted things (apron, back door, meter, downpipe + butt, AC) — OFF until the wall line is right:
-  // session-1 capture showed the courtyard rect edge is NOT the building face here (the door stood free
-  // in the yard). Debug with ?w6wall (see real-w6.md).
-  if (e.ctx.debug.params.has('w6wall')) {
-    // a concrete apron along the wall (1.4 m), cracked, weeds at the wall foot and in the joints
+  // the door goes on the longest stretch of real back wall; meter, downpipe + butt and AC beside it
+  const main = walls.reduce<(typeof walls)[number] | undefined>((m, w) => (!m || w.s1 - w.s0 > m.s1 - m.s0 ? w : m), undefined);
+  const [sCorner, wCorner] = main ? cornerGap(main) : [0, 0];
+  const sDoor = !main ? 0 : wCorner > 1.35 ? sCorner + 0.12 : gapAt(main, 1);
+  /** a wall-mounted item at s: real wall behind it and room in front of it */
+  const onWall = (s: number, r = 0.3): boolean => {
+    if (!wallAt(s)) return false;
+    const [x, z] = at(s, r + 0.1);
+    return e.free(x, z, r);
+  };
+  if (main) {
+    // a concrete apron along the back walls (1.4 m), cracked, weeds at the wall foot and in the joints
     {
-      const [x, z] = at(0, 0.7);
+      const aS0 = Math.max(-L / 2 + 0.2, Math.min(...walls.map((w) => w.s0)) - 0.35),
+        aS1 = Math.min(L / 2 - 0.2, Math.max(...walls.map((w) => w.s1)) + 0.35);
+      const La = aS1 - aS0;
+      const [x, z] = at((aS0 + aS1) / 2, WALL + 0.7);
       const y = e.H(x, z) + 0.02;
       const k = e.fine(x),
         kd = e.near(x, z);
       k.sh.frame(x, y, z, yaw);
       kd.sh.frame(x, y, z, yaw);
-      k.m('#a8a49a', 'stone');
-      const segs = Math.max(2, Math.floor((L - 0.4) / 1.5));
-      const sl = (L - 0.4) / segs;
+      const segs = Math.max(2, Math.round(La / 1.4));
+      const sl = La / segs;
       for (let i = 0; i < segs; i++) {
         k.m(['#a8a49a', '#9e9a90', '#b0aca2'][i % 3], 'stone');
-        k.sh.box(-L / 2 + 0.2 + sl * (i + 0.5), 0.015, 0, sl - 0.02, 0.03, 1.4, 1);
+        k.sh.box(-La / 2 + sl * (i + 0.5), 0.015, 0, sl - 0.02, 0.03, 1.4, 1);
       }
-      // cracks: thin dark lines across a few slabs
-      kd.m('#3a3834', 'stone');
-      for (let i = 0; i < 6; i++) {
-        const cx2 = rng.range(-L / 2 + 0.5, L / 2 - 0.5);
-        kd.sh.push().local(cx2, 0.031, rng.range(-0.4, 0.4), 0, rng.range(-0.8, 0.8)).box(0, 0, 0, 0.006, 0.002, rng.range(0.3, 0.8), 0).pop();
+      // hairline cracks: thin dark lines lying on a few slabs
+      kd.m('#4a4740', 'stone');
+      for (let i = 0; i < Math.floor(La / 2); i++) {
+        const cx2 = rng.range(-La / 2 + 0.4, La / 2 - 0.4);
+        kd.sh.push().local(cx2, 0.031, rng.range(-0.4, 0.4), 0, rng.range(-0.8, 0.8)).box(0, 0, 0, 0.005, 0.002, rng.range(0.25, 0.6), 0).pop();
       }
       // weeds along the wall foot and in the slab joints
-      kd.sh.push().local(0, 0.03, -0.66);
-      weeds(kd, rng, L - 0.4, Math.floor(L * 2.2));
+      kd.sh.push().local(0, 0.03, -0.64);
+      weeds(kd, rng, La - 0.3, Math.floor(La * 2.2));
       kd.sh.pop();
       for (let i = 1; i < segs; i++) {
-        kd.sh.push().local(-L / 2 + 0.2 + sl * i, 0.03, 0, 0, Math.PI / 2);
+        kd.sh.push().local(-La / 2 + sl * i, 0.03, 0, 0, Math.PI / 2);
         weeds(kd, rng, 1.2, 3);
         kd.sh.pop();
       }
-      // the apron's front edge into the grass: damp dark line
-      e.spot(x, y, z, yaw, 0, 0.7, L / 2 - 0.2, 0.05, 0.02, 0.1, 0.4);
+      // the apron's front edge into the grass: damp dark line; splash dirt at the wall foot
+      e.spot(x, y, z, yaw, 0, 0.7, La / 2, 0.05, 0.02, 0.1, 0.4);
+      e.spot(x, y, z, yaw, 0, -0.62, La / 2, 0.08, 0.02, 0.12, 0.45);
+      items++;
     }
     const top = 0.03;
-    // back door near the middle, with herb pots by the step and a broom
-    place(sDoor, 0.0, 0, 0, (k, kd) => {
-      k.sh.local(0, top, 0);
-      kd.sh.local(0, top, 0);
+    const wallItem = (s: number, build: (k: Kit, kd: Kit, x: number, y: number, z: number) => void, r = 0.3): boolean => {
+      if (!onWall(s, r)) return false;
+      place(s, WALL, 0, 0, (k, kd, x, y, z) => {
+        k.sh.local(0, top, 0);
+        kd.sh.local(0, top, 0);
+        build(k, kd, x, y, z);
+      }, false);
+      e.claim(...at(s, r + 0.1), r);
+      return true;
+    };
+    // back door with step + mat in the corner gap, herb pots on the window side of the step
+    wallItem(sDoor, (k, kd) => {
       backDoor(k, kd, rng);
-      k.sh.push().local(0.75, 0, 0.18);
+      k.sh.push().local(-0.85, 0, 0.2);
       herbPots(k, rng, 3);
       k.sh.pop();
-      k.sh.push().local(-0.6, 0.2, 0.32);
+      k.sh.push().local(0.38, 0.2, 0.34);
       herbPots(k, rng, 1);
       k.sh.pop();
-    });
-    e.claim(...at(sDoor, 0.6), 0.8);
-    place(sDoor - 1.0, 0.0, 0, 0, (k) => {
-      k.sh.local(0, top, 0);
-      broom(k);
-    });
-    // gas meter + downpipe/water butt on one side, AC unit high on the wall
-    place(sDoor + side * 1.6, 0.0, 0, 0, (k) => {
-      k.sh.local(0, top, 0);
-      meterBox(k);
-    });
-    place(sDoor - side * 2.0, 0.0, 0, 0.45, (k, kd) => {
-      k.sh.local(0, top, 0);
-      kd.sh.local(0, top, 0);
-      downpipeButt(k, rng, 6.5);
-      acUnit(kd, kd);
-    });
+    }, 0.6);
+    // gas meter box below the sills between two windows, a broom in the other gap, the downpipe + water butt at
+    // the far end of the house (small margin before the party wall), the AC unit high between two windows
+    wallItem(gapAt(main, 1), (k) => meterBox(k), 0.3);
+    wallItem(gapAt(main, 0) + 0.1, (k) => broom(k), 0.2);
+    if (!wallItem(Math.max(main.s0, main.a0 + 0.3), (k) => downpipeButt(k, rng, main.eave), 0.4)) wallItem(gapAt(main, 0) - 0.3, (k) => downpipeButt(k, rng, main.eave), 0.4);
+    const other = walls.find((w) => w !== main);
+    wallItem(other ? gapAt(other, 1) : gapAt(main, 0), (k, kd) => {
+      k.sh.local(0, 0.5, 0);
+      acUnit(k, kd);
+    }, 0.2);
   }
   // bins + recycling boxes in a row along the wall at one end, a bike leaning beyond them
   const sBins = side > 0 ? s0 + 0.5 : -s0 - 0.5 - 2.2;
