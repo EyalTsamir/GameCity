@@ -505,7 +505,7 @@ void pedPose(inout vec3 p, inout vec3 n) {
   vPedPat = pat;
   // material response: skin & hair soften the terminator (wrap), hair and shoes get a faint sheen
   vPedMat = region == ${R.SKIN} || region == ${R.FACE} || region == ${R.NECK} || region == ${R.LIPS} ? vec2(0.35, 0.0)
-          : region == ${R.HAIR} || region == ${R.BEARD} ? vec2(0.4, 0.03)
+          : region == ${R.HAIR} || region == ${R.BEARD} ? vec2(0.4, 0.018)
           : region == ${R.FOOT} ? vec2(0.0, 0.09)
           : region == ${R.BAG} || region == ${R.HAT} ? vec2(0.1, 0.04)
           : vec2(0.12, 0.0);

@@ -625,6 +625,60 @@ function faceRelief(X: number, Y: number, nose: number): number {
   return r;
 }
 
+/** a point of the close head at angle phi and face height Y (m above the eye line, man units), pushed out by push */
+function closeHeadPoint(d: Dims, phi: number, Y: number, push = 0, ring?: BodyRing): { p: P3; X: number } {
+  const R = d.headRings;
+  const ye = R[4].y;
+  const k = (d.crown - R[0].y) / 0.232;
+  const kx = R[4].hw / 0.0775;
+  const r = ring ?? headRingAt(d, ye + Y * k);
+  const p = torsoPoint(r, 0, phi, 2.1);
+  // the lower face narrows into the chin (a jaw line instead of a block), the temples a little
+  const cf = Math.max(0, Math.cos(phi));
+  p[0] *= 1 - 0.3 * sstep(-0.035, -0.105, Y) * Math.pow(cf, 1.4) - 0.05 * sstep(0.01, 0.05, Y) * cf;
+  const X = p[0] / kx;
+  const front = sstep(0.05, 0.45, Math.cos(phi));
+  const rel = (front > 0 ? faceRelief(X, Y, d.nose / k) * front * k : 0) + push;
+  const dx = p[0],
+    dz = p[2] - r.cz;
+  const dl = Math.hypot(dx * 0.6, dz) || 1;
+  p[0] += ((dx * 0.6) / dl) * rel;
+  p[2] += (dz / dl) * rel;
+  return { p, X };
+}
+
+/** close level: beard over the jaw and chin (mouth left free) and a moustache on the sculpted upper lip */
+function buildCloseBeard(b: MeshBuilder, d: Dims): void {
+  const k = (d.crown - d.headRings[0].y) / 0.232;
+  b.use(BONE.HEAD, REG.BEARD, FB.BEARD, 1);
+  const phis: number[] = [];
+  for (let i = 0; i <= 14; i++) phis.push(-1.95 + (3.9 * i) / 14);
+  const Ys = [-0.112, -0.1, -0.088, -0.076, -0.062, -0.046, -0.03];
+  const grid = Ys.map((Y, ri) => phis.map((phi) => b.v(closeHeadPoint(d, phi, Y, (ri === 0 ? 0.007 : 0.0055) * k).p, 2, ri === 0 ? 0.1 : 0)));
+  const mouthFree = (phi: number, Y: number) => Math.abs(Math.sin(phi)) < 0.42 && Y > -0.084;
+  for (let r = 0; r < Ys.length - 1; r++)
+    for (let c = 0; c < phis.length - 1; c++) {
+      const pm = (phis[c] + phis[c + 1]) / 2,
+        ym = (Ys[r] + Ys[r + 1]) / 2;
+      // cheeks only at the sides; below the lip the whole chin
+      if (mouthFree(pm, ym) || (Ys[r + 1] > -0.05 && Math.abs(Math.sin(pm)) < 0.75)) continue;
+      b.quadOut(grid[r][c], grid[r][c + 1], grid[r + 1][c + 1], grid[r + 1][c], [0, d.headRings[2].y, d.headRings[2].cz - 0.02]);
+    }
+  const R0 = d.headRings[0];
+  const under = b.v([0, R0.y - 0.012 * k, R0.cz + 0.01 * k], 2, 0.15);
+  for (let c = 0; c < phis.length - 1; c++) b.triOut(grid[0][c], grid[0][c + 1], under, [0, R0.y + 0.03, R0.cz - 0.01]);
+  // moustache: over the upper lip from under the nose to the lip line, ends drooping a little
+  b.use(BONE.HEAD, REG.BEARD, FB.MOUSTACHE, 1);
+  const mp = [-0.5, -0.36, -0.22, -0.1, 0, 0.1, 0.22, 0.36, 0.5];
+  const rows = [-0.046, -0.054, -0.0615].map((Y, ri) =>
+    mp.map((phi) => {
+      const droop = Math.max(0, Math.abs(phi) - 0.3) * 0.03;
+      return b.v(closeHeadPoint(d, phi, Y - droop, (ri === 1 ? 0.0042 : 0.0022) * k).p, 2, 0);
+    }),
+  );
+  for (let r = 0; r < 2; r++) for (let c = 0; c < mp.length - 1; c++) b.quadOut(rows[r][c], rows[r][c + 1], rows[r + 1][c + 1], rows[r + 1][c], [0, d.headRings[3].y, d.headRings[3].cz - 0.03]);
+}
+
 function buildCloseHead(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
   const R = d.headRings;
   const ye = R[4].y;
@@ -650,18 +704,7 @@ function buildCloseHead(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
     for (let i = 0; i < n; i++) {
       const t = (i / n) * Math.PI * 2;
       const phi = t - 0.68 * Math.sin(t); // vertices bunch at the face
-      const p = torsoPoint(r, 0, phi, 2.1);
-      // the lower face narrows into the chin (a jaw line instead of a block), the temples a little
-      const cf = Math.max(0, Math.cos(phi));
-      p[0] *= 1 - 0.3 * sstep(-0.035, -0.105, Y) * Math.pow(cf, 1.4) - 0.05 * sstep(0.01, 0.05, Y) * cf;
-      const X = p[0] / kx;
-      const front = sstep(0.05, 0.45, Math.cos(phi));
-      const rel = front > 0 ? faceRelief(X, Y, d.nose / k) * front * k : 0;
-      const dx = p[0],
-        dz = p[2] - r.cz;
-      const dl = Math.hypot(dx * 0.6, dz) || 1;
-      p[0] += ((dx * 0.6) / dl) * rel;
-      p[2] += (dz / dl) * rel;
+      const { p, X } = closeHeadPoint(d, phi, Y, 0, r);
       // jaw / under-chin shade and the face proper
       const reg = Math.cos(phi) > 0.2 && Y > -0.112 && Y < 0.06 ? REG.FACE : REG.SKIN;
       b.use(BONE.HEAD, reg, -1, Y < -0.1 ? 0.88 : 1);
@@ -1203,6 +1246,10 @@ function buildHair(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
     for (let k = 0; k < 4; k++) b.quadDir(ids[0][k], ids[0][k + 1], ids[1][k + 1], ids[1][k], [0, 0, 1]);
   }
   // beard: a shell over jaw and chin (+ moustache)
+  if (cfg.close) {
+    buildCloseBeard(b, d);
+    return;
+  }
   b.use(BONE.HEAD, REG.BEARD, FB.BEARD, 1);
   {
     const rows: number[][] = [];
