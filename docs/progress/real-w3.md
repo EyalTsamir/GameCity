@@ -3,6 +3,12 @@
 Branch `claude/real-w3-furniture` (from `claude/pensive-gates-bim12i`). Brief: docs/progress/real-briefs.md "W3".
 
 ## Resume here
+* 2026-10-28 — **Session 2 started.** Merged lead branch (a907524). Lead verdict on session 1: progress, not yet
+  "real" at 3 m. Session-2 order: (0) downtown invariants check; (1) ground dirt ring at prop bases (every class);
+  (2) planter bevel/frame + soil + drainage stains; (3) newsstand roof overhang depth, shutter, racks; (4) market
+  counter: trestle legs, cloth folds, slatted crates; (5) gazebo plank floor + worn path; (6) flagpole base plate,
+  bolts, halyard, cleat (session 1 claimed done — verify visibility); (7) playground safety surface + swing chains;
+  (8) statue figure + plinth; (9) bench LOS: `bin 10m` ended inside a bus shelter; (10) perf ?nopropdetail.
 * 2026-10-28 — Session 1 ends (context). Committed + pushed. Bench after-sheets: docs/progress/real/w3_after_1.jpg
   (bin, planter, phonebox, newsstand, bench, statue) and w3_after_2.jpg (gazebo, kiosk, playground, picnic,
   market stall, flagpole) — before = audit_3..5.jpg. Judged at 3 m: phone box, statue pedestal, gazebo
