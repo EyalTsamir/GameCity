@@ -30,6 +30,8 @@ const ALL = [
   'lamp', 'tree', 'bench', 'bin', 'hydrant', 'busstop', 'bikerack', 'planter', 'mailbox', 'phonebox', 'newsstand',
   'fountain', 'statue', 'gazebo', 'playground', 'kiosk', 'marketstall', 'umbrellas', 'picnic', 'flagpole', 'jetty',
   'car', 'bus', 'pedestrian', 'train', 'boat',
+  // close-ups of street hardscape (W5): trunk / post foot, kerb line, garden borders, signs and signals
+  'treebase', 'lampbase', 'kerb', 'fence', 'hedge', 'wall', 'sign', 'signal',
 ];
 const classes = !args.classes || args.classes === 'all' ? ALL : args.classes.split(',');
 const dists = (args.dists ?? '3,10,40').split(',').map(Number);
@@ -84,6 +86,34 @@ try {
           const hx = (f.x1 - f.x0) / 2, hz = (f.z1 - f.z0) / 2;
           const x = cx + vx * hx, z = cz + vz * hz;
           return { x, y: gy(x, z), z, yaw: YAW[l.front], h: l.height, w: Math.max(hx, hz) * 2 };
+        }
+        if (cls === 'treebase' || cls === 'lampbase' || cls === 'kerb') {
+          const kind = cls === 'treebase' ? 'tree' : 'lamp';
+          const s = nth(plan.slots.filter((s) => s.kind === kind).sort((a, b) => Math.hypot(a.x, a.z) - Math.hypot(b.x, b.z)));
+          if (!s) return null;
+          const yaw = (s.yaw * 180) / Math.PI;
+          if (cls !== 'kerb') return { x: s.x, y: gy(s.x, s.z), z: s.z, yaw: yaw + 25, h: 1, w: 1, pitch: 22 };
+          // the kerb line in front of the slot (the slot's local -Z faces the road), seen from the road
+          const x = s.x - Math.sin(s.yaw) * 0.45, z = s.z - Math.cos(s.yaw) * 0.45;
+          return { x, y: gy(x, z), z, yaw: yaw + 180 + 40, h: 0.3, w: 0.6, pitch: 26 };
+        }
+        if (cls === 'fence' || cls === 'hedge' || cls === 'wall') {
+          const style = cls === 'fence' ? 'picket' : cls;
+          const { getLayout } = await import('/src/world/props/layout.ts');
+          const bs = getLayout(c.ctx).borders.filter((b) => b.style === style && b.street && Math.hypot(b.bx - b.ax, b.bz - b.az) > 3);
+          const b = nth(bs.sort((p, q) => Math.hypot(p.ax, p.az) - Math.hypot(q.ax, q.az)));
+          if (!b) return null;
+          const t = b.gateA ? 0.15 : b.gateB ? 0.85 : 0.5;
+          const x = b.ax + (b.bx - b.ax) * t, z = b.az + (b.bz - b.az) * t;
+          // both normals are tried by the line-of-sight swing; start 35° off the perpendicular
+          const yaw = (Math.atan2(b.bz - b.az, -(b.bx - b.ax)) * 180) / Math.PI;
+          return { x, y: gy(x, z), z, yaw: yaw + 35, h: 1, w: 1.2 };
+        }
+        if (cls === 'sign' || cls === 'signal') {
+          const heads = c.ctx.roads.intersections.flatMap((I) => (cls === 'sign' ? I.stopSigns : I.signals));
+          const s = nth(heads.slice().sort((a, b) => Math.hypot(a.x, a.z) - Math.hypot(b.x, b.z)));
+          if (!s) return null;
+          return { x: s.x, y: gy(s.x, s.z), z: s.z, yaw: (s.yaw * 180) / Math.PI + 30, h: cls === 'sign' ? 2.6 : 5.6, w: 0.8 };
         }
         const slotKinds = ['lamp', 'tree', 'bench', 'bin', 'hydrant', 'busstop', 'bikerack', 'planter', 'mailbox', 'phonebox', 'newsstand'];
         if (slotKinds.includes(cls)) {
@@ -143,7 +173,7 @@ try {
       // frame the object: target at ~mid height when close, pitch rises with distance
       const ty = loc.y + Math.min(loc.h * 0.5, d < 5 ? 1.4 : d < 20 ? 3 : 6);
       const dist = Math.max(d, d < 5 ? Math.min(loc.h, 6) * 0.9 + 1.5 : d);
-      const pitch = pitchOv ?? (d < 5 ? 8 : d < 20 ? 14 : 24);
+      const pitch = pitchOv ?? loc.pitch ?? (d < 5 ? 8 : d < 20 ? 14 : 24);
       // line of sight: try the default yaw first, then swing around the object (and finally shorten the arm)
       // until a ray from the object's middle reaches the camera without hitting anything else.
       const los = await page.evaluate(
