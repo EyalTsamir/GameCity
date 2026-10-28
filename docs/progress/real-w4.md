@@ -41,9 +41,16 @@ Photo test "Person" (REAL.md). Owned: `src/sim/pedestrians/**` presentation (not
 * bench.mjs `pedestrian` for faces: its arm is ≥ 3 m and it frames the body middle → faces 25 px. Replaced by
   people-bench.mjs. The free camera stops at 3 m (camera.ts FREE_MIN_DIST): the bench narrows the fov instead
   (LOD distances scale with the fov, so the close level is chosen as for a real 0.75 m view).
+* Hats at the close level fell to the 6-side lo hat (head poked through, black holes) → 24 sides.
+* Straight strap sticks vanished into the rounder 20-side torso → `strapPath` hugs the surface.
 * Face detail fade at px 3.5–9 mm: eyes vanished at 3–4 m (where real eyes still read) → 6–16 mm.
 
 ## Toggles / tiers / costs
+* `?nopeopledetail` — no close level (figures < 15 m use the old LOD0). Tier: close level to 15 m (high),
+  11 m (medium), 7 m (low) — `CrowdRenderer.closeDist` set in pedestrians.ts.
+* `?pedlod=close` forces every figure to the close level (`?pedlod=0..3` = near/lo/tiny/pin as before).
+* Stats: `pedestrians.closeLod` = figures drawn at the close level. Capacity 48 (overflow → near).
+* Cost: TODO perf.mjs `;nopeopledetail` at a people-dense view (square `27,0,17,20,30,18`).
 
 ## Sheets
 

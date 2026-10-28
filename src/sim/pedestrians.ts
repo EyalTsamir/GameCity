@@ -102,7 +102,7 @@ export default function create(ctx: CityContext): CityModule {
     },
     stats() {
       const extra: Record<string, number> = renderer instanceof CrowdRenderer ? { pinLod: renderer.pin.n, figureVerts: renderer.vertices, shadowVerts: renderer.shadowVertices } : {};
-      return { ...crowd.statsSummary(), riders: riders ? riders.n : 0, drawn: renderer.visible, nearLod: renderer.near.n, tinyLod: renderer.tiny.n, ...extra, figureTris: renderer.triangles, simMs: Math.round(ms * 100) / 100 };
+      return { ...crowd.statsSummary(), riders: riders ? riders.n : 0, drawn: renderer.visible, ...(renderer instanceof CrowdRenderer ? { closeLod: renderer.close.n } : {}), nearLod: renderer.near.n, tinyLod: renderer.tiny.n, ...extra, figureTris: renderer.triangles, simMs: Math.round(ms * 100) / 100 };
     },
     invariants() {
       return crowd.invariants();
