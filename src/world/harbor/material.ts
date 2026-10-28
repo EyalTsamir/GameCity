@@ -107,7 +107,8 @@ const VERT_PAT = /* glsl */ `
   vec2 puv = vec2(position.x + position.z, position.y);
   if (pid > 0.5 && pid < 1.5) puv = vec2(position.x * -normal.z + position.z * normal.x, position.y);
   else if (pid > 1.5 && pid < 2.5) puv = position.xz;
-  else if (pid > 2.5 && pid < 3.5) puv = position.zx;
+  else if ((pid > 2.5 && pid < 3.5)) puv = position.zx;
+  else if (pid > 8.5 && pid < 9.5) puv = position.xz;
   vPat = vec4(pid, aPat.y, puv);
   vEmit = aEmit;
 }
@@ -121,6 +122,12 @@ uniform float uNight;
 uniform float uRealTime;
 uniform vec4 uFx;
 float hbHash(float n) { return fract(sin(n * 12.9898) * 43758.5453); }
+float hbN2(vec2 p) {
+  vec2 i = floor(p), f = fract(p);
+  f = f * f * (3.0 - 2.0 * f);
+  float a = hbHash(i.x + i.y * 57.0), b = hbHash(i.x + 1.0 + i.y * 57.0), c = hbHash(i.x + (i.y + 1.0) * 57.0), d = hbHash(i.x + 1.0 + (i.y + 1.0) * 57.0);
+  return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+}
 vec3 hbHue(float h) { return clamp(abs(mod(h * 6.0 + vec3(0.0, 4.0, 2.0), 6.0) - 3.0) - 1.0, 0.0, 1.0); }
 `;
 
@@ -170,6 +177,26 @@ float hbRough = -1.0;
     diffuseColor.rgb *= mix(1.0, tone * (1.0 - 0.3 * j), fade);
   } else if (pid > 5.5 && pid < 6.5) {
     hbRough = 0.12;
+  } else if (pid > 6.5 && pid < 7.5) {
+    // netting: diagonal knotted mesh, cords lighter than the gaps, a little tonal drift
+    vec2 q = vec2(vPat.z + vPat.w, vPat.z - vPat.w) / max(vPat.y, 0.02);
+    vec2 f = abs(fract(q) - 0.5);
+    float fw = fwidth(q.x);
+    float fade = 1.0 - smoothstep(0.25, 0.7, fw);
+    float cord = smoothstep(0.32, 0.42, max(f.x, f.y));
+    diffuseColor.rgb *= mix(0.78, mix(0.45, 1.12, cord), fade) * (0.85 + 0.3 * hbN2(vPat.zw * 1.7));
+  } else if (pid > 7.5 && pid < 8.5) {
+    // painted steel: rust blooms at the bottom and along edges, chipped paint
+    vec2 p = vPat.zw;
+    float n = hbN2(p * 3.1) * 0.6 + hbN2(p * 9.3) * 0.4;
+    float r = smoothstep(1.0 - vPat.y, 1.05 - vPat.y * 0.6, n + (0.35 - p.y * 0.25));
+    diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.33, 0.16, 0.07) * (0.8 + 0.4 * hbN2(p * 31.0)), clamp(r, 0.0, 1.0) * 0.85);
+  } else if (pid > 8.5 && pid < 9.5) {
+    // ground stain: irregular blotch cut from the quad, darker centre
+    vec2 p = vPat.zw / max(vPat.y, 0.1);
+    float n = hbN2(p) * 0.55 + hbN2(p * 2.3 + 5.1) * 0.3 + hbN2(p * 6.1) * 0.15;
+    if (n < 0.52) discard;
+    diffuseColor.rgb *= 1.0 - 0.25 * smoothstep(0.52, 0.75, n);
   }
 }
 `;
