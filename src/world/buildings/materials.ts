@@ -880,6 +880,19 @@ vec3 bhEnv(vec3 R, float yW, float seed, float fR, float lodC, float nightF) {
   return c;
 }
 
+// Texture headroom. The wall albedo is the base colour times a stack of independent modulations (pattern,
+// grain / speckle, macro tone, sun bleaching, string course, worn arris …), each ≈ 1 on average. On a pale base
+// (white render / panels ≈ 0.8) the rare pixels where several peaks coincide went above 1 — the isolated
+// "albedo ≫ 1" specks that bloomed at 3–10 m (they came from the stacking, not from one bad term). Real paint
+// and render stop near 0.9, so the upside of the stack is soft-compressed into the base colour's headroom
+// (x / (1 + x / h), h = 0.92 / base − 1); darkening and mid-tone walls are untouched.
+vec3 bhHeadroom(vec3 a, vec3 b) {
+  vec3 bb = max(b, vec3(0.02));
+  vec3 x = max(a / bb - 1.0, 0.0);
+  vec3 h = max(0.92 / bb - 1.0, vec3(0.01));
+  return min(a, bb * (1.0 + x / (1.0 + x / h)));
+}
+
 // The street in front of a punched window, as its glass mirrors it: a ray from the pane P along R crosses the
 // pavement / road (ground plane) or hits a virtual opposite row of buildings D m away (parallel to this wall),
 // with its own facades (tint per building), window grid, shop band and roofline. Each pane therefore mirrors a
@@ -1119,6 +1132,7 @@ void bhWall(inout vec3 albedo, inout float rough, inout float metal, inout vec3 
     return;
   }
 
+  albedo = bhHeadroom(albedo, baseAlb);
   if (vB.x < 0.5 || vB.y < 0.5) return;
   vec2 cell = floor(vFac);
   if (cell.x < 0.0 || cell.y < 0.0 || cell.x >= vB.x || cell.y >= vB.y) return;
@@ -1211,8 +1225,8 @@ void bhWall(inout vec3 albedo, inout float rough, inout float metal, inout vec3 
     // depth AO toward the frame, a dark contact line where the reveal meets the frame, a worn pale arris
     float arris = (1.0 - smoothstep(0.0, 0.08, dDepth)) * 0.18;
     float contact = smoothstep(0.82, 0.97, dDepth) * 0.35;
-    if (dSurf == 1) c *= (1.0 - 0.45 * dDepth) * (1.0 - contact) * (1.0 + arris);
-    else if (dSurf == 2) c *= (0.72 - 0.3 * dDepth) * (1.0 - contact);
+    if (dSurf == 1) c = bhHeadroom(c * (1.0 - 0.45 * dDepth) * (1.0 - contact) * (1.0 + arris), baseAlb);
+    else if (dSurf == 2) c = bhHeadroom(c * (0.72 - 0.3 * dDepth) * (1.0 - contact), baseAlb);
     else if (dSurf == 3) c = (sillW ? sillC : c) * (1.0 - 0.15 * dDepth);
     else if (dSurf == 5) c = sillC * mix(0.78, 1.0, smoothstep(0.0, 0.7, dDepth)) * (0.9 + 0.1 * nm.g);
     else if (dSurf == 6) c = sillC * mix(0.7, 0.35, step(0.62, dDepth) * step(dDepth, 0.8)); // drip groove
@@ -1316,6 +1330,7 @@ void bhWall(inout vec3 albedo, inout float rough, inout float metal, inout vec3 
         }
       }
     }
+    albedo = bhHeadroom(albedo, baseAlb);
     emit += albedo * crown * vec3(0.55, 0.62, 0.75);
     if (detail >= 0.999) { bhSrc = 2.0; return; }
   }

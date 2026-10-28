@@ -3,6 +3,13 @@
 Branch `claude/real-w1-facades` (from `claude/pensive-gates-bim12i`). Brief: docs/progress/real-briefs.md "W1".
 
 ## Resume here
+* **Milestone 3 (session 3) done** — sheet docs/progress/real/w1_m3.jpg (shots/w1/m3). golden m3 vs ref:
+  downtown 1.2 / harbor 0.4 / oldtown 0.7 / overview 0.1 / westbrook 0.6; downtown console clean; invariants:
+  only the W3 statue (landmarks). Next (open): apartment punched glass still reads light where nets/blinds
+  cover it (street reflection reads on offices/shops, weakly on apartments — more sky/trees in the image or
+  fewer pale nets); render walls (PLASTER) could take map cracks; columns: trim material is flat (no grain);
+  porch step only where the footprint has ≥ 34 cm in front (not on the bench house); perf on Adreno for
+  `;nowinrefl&nocolumndetail`.
 * Session 3 (10-28, from ~17:35 UTC). Merged pensive-gates (2d94d84); golden ref recaptured = shots/golden/ref
   (this container). Lead's m2 verdict, priorities: (1) albedo>1 root cause, (2) apartment/office walls visible
   texture at 3 m (render/cracks/string course contrast, streaks, splash zone), (3) apartment glass variety
@@ -13,7 +20,15 @@ Branch `claude/real-w1-facades` (from `claude/pensive-gates-bim12i`). Brief: doc
   reveal/sill, green 2 wall branch, blue 3 far wall, yellow 4 far window, cyan 5 shutter, magenta 6 glass,
   orange 7 roof). Runs p1 (apartment/office/house pick 0, 3/10 m) and p2 (pick 1, + tower): **no flagged
   pixel** — the faint grey single-pixel dots left are not facade pixels (also on trim canopies/soffits).
-* Session 3 work (WIP, uncommitted until bench s1 judged): panel grid `bhPG` (one bay × one storey on gridded
+* **Albedo > 1 (lead item 1):** probe runs p1/p2/p4 (`?bdbg=src`, BEFORE the clamp; 20 captures over
+  apartment/office/house/tower/shop/townhouse/school, picks 0/1/2, 3–10 m) show **zero** out-of-range pixels
+  on this base — the m2 specks do not reproduce. Analysis: the only way to exceed 1 is multiplicative stacking
+  on pale bases (white render / panels ≈ 0.8 × pattern ≤ 1.36 × macro ≤ 1.22 × sun bleach 1.08 × arris 1.18 …):
+  rare coincident peaks → isolated pixels, exactly the m2 symptom (reveal arrises / walls around glass). Root
+  fix: `bhHeadroom(a, base)` soft-compresses the upside of the modulation stack into the base colour's headroom
+  (h = 0.92/base − 1) at the wall exits (after weathering, reveal returns, wall branch). The [0,1] clamp stays
+  only as a NaN/Inf guard. Mid/dark walls unchanged.
+* Session 3 work (benches s1–s4, s4b pick 1): panel grid `bhPG` (one bay × one storey on gridded
   walls, from vFac/csz/uSign) used by bhPanelH + the PANELS pattern (sealant joints + chamfers, energy-kept AA,
   per-panel tone/tint, aggregate speckle, blow holes, drip line under each joint); render near detail in the
   PLASTER pattern (sand speckle, patchy tone) + stronger trowel/grit slope; sill streaks split into rivulets +
@@ -126,3 +141,6 @@ milestone should start fresh from this log.
 ## Tokens (session 2, `tokens.py`)
 TOTAL weighted 2.5M (cache read 78%, write 9%, output 13%); 115 calls, ctx median 176k / max 235k (over the
 200k cap → stopped at milestone 2). Next session starts fresh from this log.
+
+## Tokens (session 3, `tokens.py`)
+TOTAL weighted 3.4M (cache read 79%, write 8%, output 12%). Stopped at milestone 3 (~150k context).
