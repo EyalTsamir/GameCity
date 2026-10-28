@@ -212,13 +212,16 @@ vec3 thTiltN = vec3( 0.0 );
     }
   }
   if ( !glass && uVehDetail.z > 0.5 ) {
-    // road grime: the lower body, sills and wheels collect dust and spray; some vehicles are clean
-    float dirt = thH1( ph * 91.3 );
-    dirt *= dirt;
-    float low = 1.0 - smoothstep( 0.08, 0.45 + 0.45 * dirt, p.y );
+    // road grime: every vehicle carries a film of road dust low down, some a lot; it fades up the body with a
+    // noisy edge, darkest along the sills and bumper bottoms (spray off the wheels), streaked vertically
+    float h = thH1( ph * 91.3 );
+    float dirt = 0.22 + 0.78 * h * h;
+    float low = 1.0 - smoothstep( 0.1, 0.38 + 0.5 * dirt, p.y + 0.12 * thVN( p * vec3( 3.0, 1.0, 3.0 ) ) );
     float n = thVN( p * vec3( 5.0, 16.0, 5.0 ) );
-    float m = dirt * low * ( 0.4 + 0.6 * n ) + 0.08 * dirt * thVN( p * 9.0 );
-    diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 0.33, 0.3, 0.26 ), clamp( m, 0.0, 1.0 ) * 0.8 );
+    float film = 1.0 - smoothstep( 0.06, 0.2 + 0.12 * dirt, p.y );
+    float m = dirt * low * ( 0.45 + 0.55 * n ) + film * ( 0.25 + 0.5 * dirt ) + 0.07 * dirt * thVN( p * 9.0 );
+    vec3 mud = mix( vec3( 0.36, 0.33, 0.28 ), vec3( 0.2, 0.19, 0.17 ), film );
+    diffuseColor.rgb = mix( diffuseColor.rgb, mud, clamp( m, 0.0, 1.0 ) * 0.82 );
     thCoatK *= 1.0 - clamp( m * 1.2, 0.0, 1.0 );
     thRoughAdd += m * 0.6;
   }
