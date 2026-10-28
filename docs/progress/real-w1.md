@@ -3,8 +3,12 @@
 Branch `claude/real-w1-facades` (from `claude/pensive-gates-bim12i`). Brief: docs/progress/real-briefs.md "W1".
 
 ## Resume here
-* Step 1 (window depth) + step 2a (wall relief) coded in `buildings/materials.ts` (shell shader); bench running.
-  Base sheet: shots/w1/base/sheet_1.png (house, townhouse, apartment, office, warehouse × 3/10 m).
+* 16:10 UTC — WIP committed (a worker restart killed the dev server; restart it per real-briefs). Coded so far in
+  `buildings/materials.ts` + `gen.ts`: window reveal/sill parallax, wall relief, plinth, roof tile relief, doors
+  (4 joinery types, lever + escutcheon, letter plate, kick plate, bell, legible house number above the door),
+  eave gutters + downpipes from `gableRoof`/`hipRoof`. Bench s5 (house/townhouse front, 2.5/12 m) running to judge
+  doors + gutters. Then: `?validate` (downpipe footprint check), overview shot, night regression, perf variants.
+* Debug: `?bdbg=reveal` colours reveal hits (red jamb, green head, blue inner sill, yellow sill box).
 
 ## Done
 * **Window depth (shader parallax, `?nowinreveal`, medium/high: needs uDetail ≥ 0.5)** — in `bhWall`, per window
@@ -22,10 +26,15 @@ Branch `claude/real-w1-facades` (from `claude/pensive-gates-bim12i`). Brief: doc
   render trowel undulation + grit. Each fades out where unresolved.
 
 ## Tried and rejected
-(none yet)
+* Assuming window-cell u runs along the shader tangent T: wrong for some walls → u direction now from screen
+  derivatives (`uSign`). (The first "jamb on the wrong side" reading was the bench camera standing to the right.)
+* Reveal returns using the wall pattern at the wall coordinates: the bricks ran on across the arris, no corner
+  read → pattern turned 90° on the returns + depth AO, frame contact line, pale worn arris.
 
 ## Toggles / tiers / costs
-* `?nowinreveal` (uWinDepth), `?nowallrelief` (uWallRelief); both off on `quality=low` (uDetail 0.4).
+* `?nowinreveal` (uWinDepth), `?nowallrelief` (uWallRelief, also roof tile relief), `?noplinth` (uPlinth); shader
+  features off on `quality=low` (uDetail 0.4).
+* `?nodoorlife` (house numbers + bells), `?nogutters` (eave gutters + roof-builder downpipes). Geometry, all tiers.
 
 ## Sheets
 * base: shots/w1/base/sheet_1.png

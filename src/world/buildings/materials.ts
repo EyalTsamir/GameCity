@@ -1092,8 +1092,11 @@ void bhWall(inout vec3 albedo, inout float rough, inout float metal, inout vec3 
     // arris reads as a corner instead of the pattern running on across it
     vec2 rq = dSurf == 1 ? vec2(dDepth * revD + 0.37, dQ.y) : vec2(dQ.x, dDepth * revD + 0.21);
     vec3 c = baseAlb * bhWallPattern(pat, rq, seed + 3.0, fq, nm, grain) * (albedo / max(baseAlb * bhWallPattern(pat, q, seed, fq, nm, grain), vec3(1e-3)));
-    if (dSurf == 1) c *= 1.0 - 0.35 * dDepth;
-    else if (dSurf == 2) c *= 0.8 - 0.3 * dDepth;
+    // depth AO toward the frame, a dark contact line where the reveal meets the frame, a worn pale arris
+    float arris = (1.0 - smoothstep(0.0, 0.08, dDepth)) * 0.18;
+    float contact = smoothstep(0.82, 0.97, dDepth) * 0.35;
+    if (dSurf == 1) c *= (1.0 - 0.45 * dDepth) * (1.0 - contact) * (1.0 + arris);
+    else if (dSurf == 2) c *= (0.72 - 0.3 * dDepth) * (1.0 - contact);
     else if (dSurf == 3) c = (sillW ? sillC : c) * (1.0 - 0.15 * dDepth);
     else if (dSurf == 5) c = sillC * mix(0.78, 1.0, smoothstep(0.0, 0.7, dDepth)) * (0.9 + 0.1 * nm.g);
     else if (dSurf == 6) c = sillC * mix(0.7, 0.35, step(0.62, dDepth) * step(dDepth, 0.8)); // drip groove
