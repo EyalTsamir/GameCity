@@ -20,7 +20,7 @@ import { PALETTE } from '../core/gfx';
 import { Builder } from './buildings/mesh';
 import { createMaterials } from './buildings/materials';
 import { SignAtlas } from './buildings/signs';
-import { Gen, Interval, LocalDoor, Side, col, jit } from './buildings/gen';
+import { Gen, Interval, LocalDoor, Side, col, jit, setDoorLife, setGutters } from './buildings/gen';
 import { genTownhouse, resetOldtown } from './buildings/oldtown';
 import { genFallback } from './buildings/fallback';
 import { genTower, resetTowers } from './buildings/towers';
@@ -84,7 +84,7 @@ export default function create(ctx: CityContext): CityModule {
   const t0 = performance.now();
   const plan = ctx.plan;
   // A/B switches: ?legacyfacade = original shell shader
-  const mats = createMaterials(ctx.uniforms, { legacy: ctx.debug.params.has('legacyfacade'), wear: !ctx.debug.params.has('nowear') });
+  const mats = createMaterials(ctx.uniforms, { legacy: ctx.debug.params.has('legacyfacade'), wear: !ctx.debug.params.has('nowear'), winDepth: !ctx.debug.params.has('nowinreveal'), wallRelief: !ctx.debug.params.has('nowallrelief'), plinth: !ctx.debug.params.has('noplinth') });
   const shell = new Builder({ normal: true, color: true, uv: true, facade: true });
   const trimChunks = new Map<number, Builder>();
   const trimOf = (x: number, z: number): Builder => {
@@ -111,6 +111,8 @@ export default function create(ctx: CityContext): CityModule {
   resetHomes();
   anchors.reset();
   setClutter(!ctx.debug.params.has('noclutter'));
+  setDoorLife(!ctx.debug.params.has('nodoorlife'));
+  setGutters(!ctx.debug.params.has('nogutters'));
   // ?legacyhouses = original single house massing (A/B)
   setLegacyHouses(ctx.debug.params.has('legacyhouses'));
 
@@ -244,6 +246,7 @@ export default function create(ctx: CityContext): CityModule {
   if (bdbg.includes('nodetail')) mats.uniforms.uDetail.value = 0;
   if (bdbg.includes('weather')) mats.uniforms.uBhDebug.value = 1;
   if (bdbg.includes('wallinfo')) mats.uniforms.uBhDebug.value = 2;
+  if (bdbg.includes('reveal')) mats.uniforms.uBhDebug.value = 3;
   // anchors for other modules (life: smoke, laundry, bunting, birds; streetlife) + diagnostics for the
   // harness: __city.ctx.services.buildings.setDebug(0 | 1 | 2). Types: src/world/buildings/anchors.ts
   const facades = collectFacades(lots);

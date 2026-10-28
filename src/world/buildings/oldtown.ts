@@ -146,6 +146,7 @@ const PREV: Side[] = [LEFT, FRONT, RIGHT, BACK];
 const NEXT: Side[] = [RIGHT, BACK, LEFT, FRONT];
 
 export function genTownhouse(g: Gen): void {
+  g.roofPipes = false;
   const { lot, rng, W, D } = g;
   const shop = lot.shopfront;
   const floors = Math.max(2, lot.floors);

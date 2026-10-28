@@ -3,7 +3,7 @@
 //
 //   node scripts/bench.mjs [--classes house,bench,car,...|all] [--dists 3,10,40] [--hours 11] [--q "extra"]
 //                          [--out shots/bench] [--width 1280 --height 720] [--settle 1500] [--pick 0]
-//                          [--sheet 1] [--cols 3] [--tile 560]
+//                          [--sheet 1] [--cols 3] [--tile 560] [--yaw 18 (offset from the front)] [--pitch deg]
 //
 // Each class is located from the plan (lots, street slots, features) or, for moving things (car, bus,
 // pedestrian, train, boat), by ray-picking from a few elevated poses; the sim is paused while it is shot.
@@ -39,6 +39,8 @@ const width = parseInt(args.width ?? '1280', 10);
 const height = parseInt(args.height ?? '720', 10);
 const settle = parseInt(args.settle ?? '1500', 10);
 const pickIdx = parseInt(args.pick ?? '0', 10);
+const yawOff = parseFloat(args.yaw ?? '18');
+const pitchOv = args.pitch !== undefined ? parseFloat(args.pitch) : null;
 let url = args.url ?? 'http://127.0.0.1:5173/';
 url += (url.includes('?') ? '&' : '?') + 'nointro&noidle' + (args.q ? '&' + args.q : '');
 
@@ -137,10 +139,10 @@ try {
       // frame the object: target at ~mid height when close, pitch rises with distance
       const ty = loc.y + Math.min(loc.h * 0.5, d < 5 ? 1.4 : d < 20 ? 3 : 6);
       const dist = Math.max(d, d < 5 ? Math.min(loc.h, 6) * 0.9 + 1.5 : d);
-      const pitch = d < 5 ? 8 : d < 20 ? 14 : 24;
+      const pitch = pitchOv ?? (d < 5 ? 8 : d < 20 ? 14 : 24);
       await page.evaluate(
-        ([l, ty, dist, pitch]) => window.__city.view({ target: { x: l.x, y: ty, z: l.z }, distance: dist, yaw: l.yaw + 18, pitch }),
-        [loc, ty, dist, pitch],
+        ([l, ty, dist, pitch, yo]) => window.__city.view({ target: { x: l.x, y: ty, z: l.z }, distance: dist, yaw: l.yaw + yo, pitch }),
+        [loc, ty, dist, pitch, yawOff],
       );
       await page.waitForTimeout(settle);
       const file = path.join(outDir, `${cls}_${d}m.png`);

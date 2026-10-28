@@ -64,6 +64,7 @@ export function resetHomes(): void {
 }
 
 export function genHouse(g: Gen): void {
+  g.roofPipes = false;
   if (legacyHouses) {
     genHouseLegacy(g);
     return;

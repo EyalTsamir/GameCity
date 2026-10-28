@@ -77,6 +77,8 @@ export interface Gen {
   notes: string[];
   /** houses: side of the footprint that faces the driveway (if any) */
   driveSide?: Side;
+  /** false: the generator places its own downpipes (the roof builders' gutters then stay without) */
+  roofPipes?: boolean;
 }
 
 // ─────────────────────────────────────────────────────────── colours ──
@@ -407,6 +409,9 @@ export function gableRoof(g: Gen, r: LRect, alongX: boolean, ye: number, yr: num
       t.quad(x0, yb, zb, x1, yb, zb, x1, yb, r.z0, x0, yb, r.z0);
       t.box(x0, yb - 0.16, zb - 0.03, x1, yb + 0.02, zb + 0.03, 0b100111 | 8);
     }
+    // side 0 runs +x from r.x0, side 2 runs -x from r.x1
+    if (oeA > 0.05) eaveGutter(g, r, 0, x0 - r.x0, x1 - r.x0, oeA, yf - 0.005, ye < 9);
+    if (oeB > 0.05) eaveGutter(g, r, 2, r.x1 - x1, r.x1 - x0, oeB, yb - 0.005, ye < 9);
     // barge boards along the gable edges
     if (ogA > 0.05 || ogB > 0.05) {
       for (const x of [x0 + 0.06, x1 - 0.06]) {
@@ -442,6 +447,9 @@ export function gableRoof(g: Gen, r: LRect, alongX: boolean, ye: number, yr: num
       t.quad(xl, yL, z0, r.x0, yL, z0, r.x0, yL, z1, xl, yL, z1);
       t.box(xl - 0.03, yL - 0.16, z0, xl + 0.03, yL + 0.02, z1, 0b111110 | 8);
     }
+    // side 1 (+x) runs -z from r.z1, side 3 (-x) runs +z from r.z0
+    if (oeA > 0.05) eaveGutter(g, r, 1, r.z1 - z1, r.z1 - z0, oeA, yR - 0.005, ye < 9);
+    if (oeB > 0.05) eaveGutter(g, r, 3, z0 - r.z0, z1 - r.z0, oeB, yL - 0.005, ye < 9);
     if (ogA > 0.05 || ogB > 0.05) {
       for (const z of [z0 + 0.06, z1 - 0.06]) {
         t.beam(xr, yR - 0.06, z, xc, yr - 0.06, z, 0.12, 0.2);
@@ -506,6 +514,68 @@ export function hipRoof(g: Gen, r: LRect, ye: number, yr: number, oh: number, co
     t.box(x0, yb - 0.15, z1 - 0.05, x1, yb + 0.01, z1, 0b010011 | 8);
     t.box(x0, yb - 0.15, z0, x0 + 0.05, yb + 0.01, z1, 0b000010 | 8);
     t.box(x1 - 0.05, yb - 0.15, z0, x1, yb + 0.01, z1, 0b000001 | 8);
+    for (const sd of [0, 1, 2, 3] as Side[]) {
+      const L = sd === 0 || sd === 2 ? r.x1 - r.x0 : r.z1 - r.z0;
+      eaveGutter(g, r, sd, -oh + 0.02 - (sd & 1 ? 0.14 : 0), L + oh - 0.02 + (sd & 1 ? 0.14 : 0), oh - 0.02, yb - 0.005, ye < 9 && (sd === 0 || sd === 2));
+    }
+  }
+}
+
+
+let gutterOn = true;
+/** ?nogutters: no eave gutters / downpipes from the roof builders (A/B). */
+export function setGutters(on: boolean): void {
+  gutterOn = on;
+}
+const GUTTER_COLS = ['#ece9e1', '#3a3f44', '#5a5f62', '#22252a', '#7b4f33', '#8d9497'];
+
+/**
+ * Eave gutter along side `s` of the wall rect r, hung on the fascia (outer face at r + oe + 0.03) over
+ * [uA, uB] with its top at y: a box body with a rounded-off belly, a bead along the front lip and the dark
+ * water channel seen from above; optionally a downpipe at one or both ends where the footprint leaves room
+ * (a swan neck back to the wall, brackets, a shoe at the foot).
+ */
+export function eaveGutter(g: Gen, r: LRect, s: Side, uA: number, uB: number, oe: number, y: number, pipes: boolean): void {
+  if (!gutterOn || uB - uA < 0.5) return;
+  const t = g.trim;
+  const sg = sideGeom(r, s);
+  const c = col(GUTTER_COLS[(g.seed * 7 + 3) % GUTTER_COLS.length]);
+  const o0 = oe + 0.03,
+    o1 = oe + 0.15;
+  setCol(t, c);
+  sideBox(t, sg, uA, uB, o0, o1, y - 0.1, y, true, true);
+  sideBox(t, sg, uA + 0.005, uB - 0.005, o0 + 0.025, o1 - 0.025, y - 0.125, y - 0.1, true, true);
+  setCol(t, shade(c, 1.08));
+  sideBox(t, sg, uA, uB, o1 - 0.012, o1 + 0.006, y - 0.02, y + 0.008, true, true);
+  setCol(t, shade(c, 0.3));
+  sideBox(t, sg, uA + 0.01, uB - 0.01, o0 + 0.012, o1 - 0.014, y - 0.004, y + 0.001, false, true);
+  if (!pipes || g.roofPipes === false) return;
+  // downpipes: the pipe stands 6 cm off the wall; below 2.4 m the footprint must have room for it
+  const room = (): number => {
+    const hw = g.W / 2,
+      hd = g.D / 2;
+    return s === 0 ? hd - r.z1 : s === 2 ? r.z0 + hd : s === 1 ? hw - r.x1 : r.x0 + hw;
+  };
+  if (room() < 0.13) return;
+  const ends = g.seed % 3 === 0 ? [0.16, sg.L - 0.16] : [g.seed % 2 ? 0.16 : sg.L - 0.16];
+  for (const u of ends) {
+    const yTop = y - 0.12;
+    const po = 0.065;
+    // swan neck: from under the gutter back to the wall
+    setCol(t, c);
+    t.beam(sx(sg, u, oe + 0.09), yTop, sz(sg, u, oe + 0.09), sx(sg, u, po), yTop - Math.max(0.25, oe * 0.9), sz(sg, u, po), 0.07, 0.07);
+    const yb = yTop - Math.max(0.25, oe * 0.9);
+    const px = sx(sg, u, po),
+      pz = sz(sg, u, po);
+    t.cylinder(px, pz, 0.038, 0.22, yb, 8, false);
+    // shoe at the foot, kicking out over the gully
+    t.beam(px, 0.3, pz, sx(sg, u, Math.min(0.12, room() - 0.01)), 0.06, sz(sg, u, Math.min(0.12, room() - 0.01)), 0.08, 0.08);
+    // brackets every ~1.8 m
+    setCol(t, shade(c, 0.7));
+    for (let yy = 1.2; yy < yb - 0.3; yy += 1.8) sideBox(t, sg, u - 0.05, u + 0.05, 0, 0.11, yy, yy + 0.035, true);
+    // a gully grate / dark damp patch at the foot
+    setCol(t, col('#2b2b29'));
+    sideBox(t, sg, u - 0.13, u + 0.13, 0, Math.min(0.2, room() - 0.01), 0.0, 0.015, false);
   }
 }
 
@@ -571,6 +641,47 @@ export interface DoorOpts {
   seed: number;
 }
 
+let doorLife = true;
+/** ?nodoorlife: no house numbers / bells (A/B). */
+export function setDoorLife(on: boolean): void {
+  doorLife = on;
+}
+
+/** House number plate: 0 blue enamel, white digits; 1 white ceramic, black serif digits; 2 cut brass digits. */
+function houseNumber(n: number, style: number): (g: CanvasRenderingContext2D, w: number, h: number, glow: boolean) => void {
+  return (g, w, h, glow) => {
+    if (glow) {
+      g.fillStyle = '#000';
+      g.fillRect(0, 0, w, h);
+      return;
+    }
+    const txt = String(n);
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    if (style === 2) {
+      g.font = `bold ${Math.round(h * 0.95)}px Georgia, "Times New Roman", serif`;
+      g.fillStyle = '#3a2a10';
+      g.fillText(txt, w / 2 + 2, h / 2 + 3);
+      g.fillStyle = '#c9a54e';
+      g.fillText(txt, w / 2, h / 2 + 1);
+      return;
+    }
+    const r = h * 0.18;
+    g.fillStyle = style === 0 ? '#1d3f8a' : '#f2efe6';
+    g.beginPath();
+    g.roundRect(1, 1, w - 2, h - 2, r);
+    g.fill();
+    g.strokeStyle = style === 0 ? '#f4f4f4' : '#2a2a2a';
+    g.lineWidth = Math.max(2, h * 0.05);
+    g.beginPath();
+    g.roundRect(h * 0.1, h * 0.1, w - h * 0.2, h - h * 0.2, r * 0.6);
+    g.stroke();
+    g.fillStyle = style === 0 ? '#f4f4f4' : '#161616';
+    g.font = style === 0 ? `bold ${Math.round(h * 0.62)}px Arial, sans-serif` : `${Math.round(h * 0.66)}px Georgia, "Times New Roman", serif`;
+    g.fillText(txt, w / 2, h / 2 + 1);
+  };
+}
+
 /**
  * Recessed door at u on side sg: reveals, door leaf (wood panels or glazing),
  * frame, step, optional lamp. The caller must leave the opening [u-w/2, u+w/2] ×
@@ -602,6 +713,7 @@ export function doorNiche(g: Gen, sg: SideGeom, u: number, o: DoorOpts): void {
   sideBox(t, sg, ua, ub, -d, Math.min(0.0, (o.frameOut ?? 0.1) - 0.02), 0, 0.14);
   // door leaf
   const leafH = o.transom ? o.h - 0.5 : o.h;
+  const metal = col(['#c9a54e', '#26282b', '#b7bbbe'][(o.seed >>> 3) % 3]);
   if (o.glass) {
     const s = g.shell;
     setCol(s, o.frameColor);
@@ -621,17 +733,82 @@ export function doorNiche(g: Gen, sg: SideGeom, u: number, o: DoorOpts): void {
   } else {
     setCol(t, o.doorColor);
     sideQuad(t, sg, ua, ub, -d, 0.14, leafH);
-    // raised panels
-    setCol(t, shade(o.doorColor, 0.85));
-    const pw = (o.w - 0.3) / 2;
-    for (let i = 0; i < 2; i++) {
-      const pu = ua + 0.1 + i * (pw + 0.1);
-      sideBox(t, sg, pu, pu + pw, -d, -d + 0.03, 0.35, leafH * 0.45);
-      sideBox(t, sg, pu, pu + pw, -d, -d + 0.03, leafH * 0.52, leafH - 0.15);
+    // leaf: one of four joinery types per house, each panel a raised field inside a moulded frame
+    const h0 = 0.14;
+    const v = o.seed % 4;
+    const lw = o.w - 0.04;
+    const pnl = (u0: number, u1: number, y0: number, y1: number): void => {
+      setCol(t, shade(o.doorColor, 0.9));
+      sideBox(t, sg, u0, u1, -d, -d + 0.012, y0, y1);
+      setCol(t, shade(o.doorColor, 1.06));
+      sideBox(t, sg, u0 + 0.035, u1 - 0.035, -d, -d + 0.022, y0 + 0.035, y1 - 0.035);
+    };
+    const st = 0.1; // stile width
+    const pw = (lw - 3 * st) / 2;
+    const c0 = ua + 0.02 + st,
+      c1 = c0 + pw + st;
+    const H = leafH - h0;
+    if (v === 0) {
+      pnl(c0, c0 + pw, h0 + 0.2, h0 + H * 0.42);
+      pnl(c1, c1 + pw, h0 + 0.2, h0 + H * 0.42);
+      pnl(c0, c0 + pw, h0 + H * 0.5, leafH - 0.12);
+      pnl(c1, c1 + pw, h0 + H * 0.5, leafH - 0.12);
+    } else if (v === 1) {
+      for (const [a, b] of [[0.18, 0.36], [0.43, 0.7], [0.76, 0.93]]) {
+        pnl(c0, c0 + pw, h0 + H * a, h0 + H * b);
+        pnl(c1, c1 + pw, h0 + H * a, h0 + H * b);
+      }
+    } else if (v === 2) {
+      // half-glazed: two lower panels, glazed upper half with glazing bars
+      pnl(c0, c0 + pw, h0 + 0.2, h0 + H * 0.44);
+      pnl(c1, c1 + pw, h0 + 0.2, h0 + H * 0.44);
+      const s = g.shell;
+      setCol(s, o.doorColor);
+      const gu0 = ua + 0.02 + st,
+        gu1 = ub - 0.02 - st,
+        gy0 = h0 + H * 0.52,
+        gy1 = leafH - 0.12;
+      s.A[0] = 0.0;
+      s.A[1] = gu1 - gu0;
+      s.A[2] = 0.0;
+      s.A[3] = gy1 - gy0;
+      s.B[0] = 1;
+      s.B[1] = 1;
+      s.B[2] = o.seed;
+      s.B[3] = WIN.MUNTIN * 8 + (o.profile ?? 0);
+      s.C[0] = gu1 - gu0;
+      s.C[1] = gy1 - gy0;
+      s.C[2] = 6;
+      s.C[3] = 0;
+      sideQuad(s, sg, gu0, gu1, -d + 0.008, gy0, gy1, 0, gu0, gu1 - gu0, gy0, gy1 - gy0);
+    } else {
+      // ledged boarded door (vertical boards with V-joints) — cottages and back doors
+      const nB = Math.max(4, Math.round(lw / 0.13));
+      for (let i = 0; i < nB; i++) {
+        const b0 = ua + 0.02 + (i * lw) / nB;
+        setCol(t, shade(o.doorColor, 0.94 + ((o.seed * 7 + i * 13) % 9) * 0.015));
+        sideBox(t, sg, b0 + 0.006, b0 + lw / nB - 0.006, -d, -d + 0.016, h0 + 0.01, leafH - 0.01);
+      }
     }
-    // knob
-    setCol(t, col('#d9b45a'));
-    sideBox(t, sg, ub - 0.16, ub - 0.1, -d, -d + 0.06, 1.0, 1.06);
+    // ironmongery: lever on a back plate (brass / black iron / satin chrome), letter plate on the middle
+    // rail, a kick plate on some
+    const hu = ub - 0.1;
+    setCol(t, metal);
+    sideBox(t, sg, hu - 0.022, hu + 0.022, -d, -d + 0.014, 0.93, 1.15);
+    sideBox(t, sg, hu - 0.13, hu + 0.012, -d + 0.045, -d + 0.065, 1.03, 1.05);
+    sideBox(t, sg, hu - 0.007, hu + 0.007, -d + 0.01, -d + 0.05, 1.03, 1.05);
+    sideBox(t, sg, hu - 0.012, hu + 0.012, -d, -d + 0.016, 0.86, 0.9); // key escutcheon
+    if (v !== 3) {
+      const ly = v === 1 ? h0 + H * 0.395 : h0 + H * 0.46;
+      const lu = (ua + ub) / 2;
+      sideBox(t, sg, lu - 0.15, lu + 0.15, -d, -d + 0.012, ly - 0.035, ly + 0.035);
+      setCol(t, col('#141414'));
+      sideBox(t, sg, lu - 0.12, lu + 0.12, -d, -d + 0.014, ly - 0.012, ly + 0.012);
+    }
+    if ((o.seed >>> 5) % 3 === 0) {
+      setCol(t, metal);
+      sideBox(t, sg, ua + 0.04, ub - 0.04, -d, -d + 0.006, h0 + 0.01, h0 + 0.2);
+    }
     if (o.transom) {
       const s = g.shell;
       setCol(s, o.frameColor);
@@ -657,6 +834,18 @@ export function doorNiche(g: Gen, sg: SideGeom, u: number, o: DoorOpts): void {
   sideBox(t, sg, ub, ub + 0.14, -0.02, fo, 0, o.h + 0.14);
   sideBox(t, sg, ua - 0.14, ub + 0.14, -0.02, fo, o.h, o.h + 0.16);
   if (o.lamp) wallLamp(g, sg, ub + 0.45, Math.min(o.h - 0.2, 2.05), 0);
+  if (!o.glass && doorLife) {
+    // bell push on the architrave, and a legible house number above the door
+    setCol(t, col('#e8e4da'));
+    sideBox(t, sg, ub + 0.045, ub + 0.095, fo, fo + 0.018, 1.22, 1.3);
+    setCol(t, metal);
+    sideBox(t, sg, ub + 0.06, ub + 0.08, fo + 0.018, fo + 0.026, 1.25, 1.27);
+    const num = 1 + (o.seed % 58);
+    const sty = (o.seed >>> 7) % 3;
+    const r = g.atlas.add(`hn:${sty}:${num}`, 72, 48, houseNumber(num, sty));
+    const nw = sty === 2 ? 0.2 : 0.22;
+    signOnSide(g, sg, u - nw / 2, u + nw / 2, 0.012, o.h + 0.24, o.h + 0.24 + nw * (48 / 72), r);
+  }
   g.doorsBuilt++;
 }
 

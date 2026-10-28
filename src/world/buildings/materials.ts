@@ -135,6 +135,9 @@ export interface BuildingMaterials {
     uBhDebug: { value: number };
     /** 1 = eye-level wear masks on (damp, algae, peeling render, roof age / moss); ?nowear sets 0 */
     uWear: { value: number };
+    uWinDepth: { value: number };
+    uWallRelief: { value: number };
+    uPlinth: { value: number };
   };
 }
 
@@ -297,6 +300,12 @@ uniform vec3 uSunDir;
 uniform float uReflLift;
 uniform float uBhDebug;
 uniform float uWear;
+uniform float uWinDepth;
+uniform float uWallRelief;
+uniform float uPlinth;
+// world-space normal override from bhWall (window reveals, sills, wall relief); zero = keep the geometric normal
+vec3 bhNW = vec3(0.0);
+float plinthF = 0.0;
 ${LAMP_GLSL}
 
 // box-filtered square wave: fraction of [x - w/2, x + w/2] where fract(x) > 0.5
@@ -313,6 +322,88 @@ float bhLine(float x, float hw, float w) {
   return mix(max(hi - lo, 0.0) / ww, 2.0 * hw, smoothstep(0.5, 1.0, ww));
 }
 
+// brick layout per building bond: stretcher (running) bond, Flemish (stretcher + header in every course) or
+// English (alternate header / stretcher courses). Returns (x in brick, y in course, brick length, course) in
+// metres; id = brick id.
+vec4 bhBrick(vec2 q, float seed, out vec2 id) {
+  float ch = 0.075;
+  float row = floor(q.y / ch);
+  float bond = fract(seed * 0.4371);
+  float odd = mod(row, 2.0);
+  float len = 0.235;
+  float off = odd * 0.5;
+  if (bond > 0.75) { len = odd > 0.5 ? 0.1175 : 0.235; off = odd * 0.25; }
+  else if (bond > 0.5) { len = 0.3525; off = odd * 0.5 + 0.16; }
+  float bx = q.x / len + off;
+  float col = floor(bx);
+  float fx = fract(bx) * len;
+  float lb = len;
+  if (bond > 0.5 && bond <= 0.75) {
+    if (fx > 0.235) { fx -= 0.235; lb = 0.1175; col += 0.5; } else lb = 0.235;
+  }
+  id = vec2(col, row);
+  return vec4(fx, fract(q.y / ch) * ch, lb, ch);
+}
+// brick face height (1) vs the recessed joint (0), arrises rounded over ~4 mm
+float bhBrickH(vec4 bl) {
+  float d = min(min(bl.x, bl.z - bl.x), min(bl.y, bl.w - bl.y));
+  return smoothstep(0.004, 0.0085, d);
+}
+float bhStoneH(vec2 q) {
+  float ch = 0.62;
+  float row = floor(q.y / ch);
+  float fy = fract(q.y / ch) * ch;
+  float fx = fract(q.x / 1.25 + mod(row, 2.0) * 0.5) * 1.25;
+  float d = min(min(fx, 1.25 - fx), min(fy, ch - fy));
+  // chamfered joint, then a slightly pillowed (hand-dressed) face
+  return smoothstep(0.006, 0.022, d) * (0.85 + 0.15 * smoothstep(0.02, 0.2, d));
+}
+float bhPanelH(vec2 q) {
+  vec2 fg = fract(q / vec2(3.0, 1.6)) * vec2(3.0, 1.6);
+  float d = min(min(fg.x, 3.0 - fg.x), min(fg.y, 1.6 - fg.y));
+  return smoothstep(0.012, 0.028, d);
+}
+// surface relief of the wall as a slope (dh/du, dh/dy) of the outward displacement, faded to 0 where the
+// structure is unresolved. Brick joints, ashlar chamfers, panel joints, lap boards, corrugation ribs and
+// render trowel marks — they catch the light instead of being painted on.
+vec2 bhWallSlope(float pat, vec2 q, float seed, vec2 fq, vec2 so) {
+  float fp = max(fq.x, fq.y);
+  vec2 s = vec2(0.0);
+  if (pat < 0.5) { // render: trowel undulation + grit
+    float e = 0.02;
+    vec2 uq = q * 0.3 + so.yx;
+    float h0 = texture2D(uBhNoise, uq).a;
+    float hx = texture2D(uBhNoise, uq + vec2(e * 0.3, 0.0)).a, hy = texture2D(uBhNoise, uq + vec2(0.0, e * 0.3)).a;
+    vec2 tq = q * vec2(0.045, 0.07) + so;
+    float t0 = texture2D(uBhNoise, tq).g;
+    float tx = texture2D(uBhNoise, tq + vec2(0.0045, 0.0)).g, ty = texture2D(uBhNoise, tq + vec2(0.0, 0.007)).g;
+    s = vec2(hx - h0, hy - h0) / e * 0.004 * (1.0 - smoothstep(0.004, 0.012, fp))
+      + vec2(tx - t0, ty - t0) / 0.1 * 0.03 * (1.0 - smoothstep(0.02, 0.06, fp));
+  } else if (pat < 1.5) {
+    float e = 0.0022;
+    vec2 id;
+    float h0 = bhBrickH(bhBrick(q, seed, id));
+    float hx = bhBrickH(bhBrick(q + vec2(e, 0.0), seed, id)), hy = bhBrickH(bhBrick(q + vec2(0.0, e), seed, id));
+    bhBrick(q, seed, id);
+    float bn = bhHash12(id + seed * 1.7);
+    s = (vec2(hx - h0, hy - h0) / e * 0.006 + (vec2(bn, fract(bn * 7.7)) - 0.5) * 0.06 * h0) * (1.0 - smoothstep(0.003, 0.008, fp));
+  } else if (pat < 2.5) { // corrugated sheet: 32 mm deep ribs every 0.32 m
+    s = vec2(0.016 * 6.2832 / 0.32 * cos(q.x * 6.2832 / 0.32), 0.0) * (1.0 - smoothstep(0.03, 0.09, fp));
+  } else if (pat < 3.5) { // lap boards: each board leans out toward its lower edge
+    float fy = fract(q.y / 0.3);
+    s = vec2(0.0, -0.08 + 0.9 * (1.0 - smoothstep(0.0, 0.05, fy)) * step(fy, 0.05)) * (1.0 - smoothstep(0.01, 0.04, fp));
+  } else if (pat < 4.5) {
+    float e = 0.004;
+    float h0 = bhStoneH(q);
+    s = vec2(bhStoneH(q + vec2(e, 0.0)) - h0, bhStoneH(q + vec2(0.0, e)) - h0) / e * 0.012 * (1.0 - smoothstep(0.006, 0.02, fp));
+  } else if (pat < 5.5) {
+    float e = 0.004;
+    float h0 = bhPanelH(q);
+    s = vec2(bhPanelH(q + vec2(e, 0.0)) - h0, bhPanelH(q + vec2(0.0, e)) - h0) / e * 0.012 * (1.0 - smoothstep(0.008, 0.025, fp));
+  }
+  return s;
+}
+
 // albedo multiplier of the wall surface pattern; q = (along wall, height) in metres, fq = fwidth(q).
 // Fine structure fades to its own mean when unresolved; a mid-scale tonal variation (±8–12 %) stays
 // so walls don't flatten out at 100–300 m.
@@ -320,19 +411,20 @@ vec3 bhWallPattern(float pat, vec2 q, float seed, vec2 fq, vec4 nm, float grain)
   vec3 res = vec3(0.985 + 0.03 * nm.g); // smooth metal / glass spandrel
   if (pat < 0.5) { // plaster / render: soft blotches + stucco grain (grain is mip-filtered)
     res = vec3((0.9 + 0.2 * nm.g) * (0.955 + 0.09 * grain));
-  } else if (pat < 1.5) { // brick
-    float ch = 0.26;
-    float row = floor(q.y / ch);
-    float fy = fract(q.y / ch);
-    float bx = q.x / 0.58 + mod(row, 2.0) * 0.5;
-    float bcol = floor(bx);
-    float fx = fract(bx);
-    float aa = clamp(fq.y / ch * 2.0, 0.0, 1.0);
-    float mortar = max(1.0 - smoothstep(0.0, 0.11, fy), 1.0 - smoothstep(0.0, 0.05, min(fx, 1.0 - fx)));
-    float bn = bhHash12(vec2(bcol, row) + seed);
+  } else if (pat < 1.5) { // brick: real 215 × 65 mm bricks in 10 mm joints, bond per building
+    vec2 bid;
+    vec4 bl = bhBrick(q, seed, bid);
+    float aa = clamp(fq.y / 0.075 * 2.0, 0.0, 1.0);
+    float mortar = 1.0 - bhBrickH(bl);
+    float bn = bhHash12(bid + seed);
     vec3 brick = vec3(0.8 + 0.34 * bn) * mix(vec3(1.0), vec3(0.9, 0.92, 0.98), step(0.82, fract(bn * 7.31)));
-    brick = mix(brick, vec3(1.36, 1.33, 1.28), mortar);
-    res = mix(brick, vec3(1.02), aa) * (0.89 + 0.22 * nm.g);
+    // Flemish bond: some buildings use dark burnt headers
+    if (bl.z < 0.12 && fract(seed * 0.4371) > 0.5 && fract(seed * 0.4371) <= 0.75 && fract(seed * 0.913) > 0.5) brick *= vec3(0.62, 0.6, 0.66);
+    // chipped arrises: small pale-mortar-coloured bites at some brick corners
+    float chip = step(0.86, fract(bn * 13.7)) * (1.0 - smoothstep(0.012, 0.02, min(bl.x, bl.z - bl.x) + bl.y));
+    brick = mix(brick, vec3(1.1), chip * 0.6);
+    brick = mix(brick, vec3(1.3, 1.27, 1.22) * (0.94 + 0.12 * grain), mortar);
+    res = mix(brick, vec3(1.03), aa) * (0.89 + 0.22 * nm.g);
   } else if (pat < 2.5) { // corrugated metal: vertical ribs
     float aa = clamp(fq.x / 0.32 * 2.0, 0.0, 1.0);
     float rib = 0.84 + 0.18 * sin(q.x * 6.2832 / 0.32);
@@ -778,6 +870,9 @@ void bhWall(inout vec3 albedo, inout float rough, inout float metal, inout vec3 
   // ── derivatives + texture fetches first (uniform control flow)
   vec2 fq = fwidth(q);
   vec2 fFac = fwidth(vFac);
+  // window cells may run along T or against it (depends on how the wall quad was emitted): +u in world space
+  float uSign = dot(vec2(dFdx(vFac.x), dFdy(vFac.x)), vec2(dFdx(q.x), dFdy(q.x))) < 0.0 ? -1.0 : 1.0;
+  vec3 Tu = T * uSign;
   vec3 R0 = reflect(V, N);
   float fR = fwidth(R0.y);
   float lodC = clamp(log2(max(fwidth(R0.x) + fwidth(R0.z), 1e-5) * 256.0 * 0.4) , 0.0, 8.0);
@@ -790,11 +885,51 @@ void bhWall(inout vec3 albedo, inout float rough, inout float metal, inout vec3 
   vec4 np = texture2D(uBhNoise, q * 0.105 + so * 1.31);                       // g ~0.6 m blobs (peeling), r ~2.4 m
 
   // ── 1. surface pattern
+  float y = vWPos.y;
+  vec3 baseAlb = albedo;
   albedo *= bhWallPattern(pat, q, seed, fq, nm, grain);
+  if (uWallRelief > 0.5 && uDetail > 0.5) {
+    vec2 rs = bhWallSlope(pat, q, seed, fq, so);
+    if (dot(rs, rs) > 1e-6) bhNW = normalize(N - T * rs.x - vec3(0.0, rs.y, 0.0));
+  }
+  // plinth course: the foot of the wall is a 30–60 cm band of a harder, darker material (rendered / stone /
+  // engineering brick; a concrete upstand under corrugated sheds), 2–3 cm proud with a weathered top ledge,
+  // splash speckles and damp at the bottom. Drawn on wall pixels only (glass and doors keep their own look).
+  plinthF = 0.0;
+  if (!curtain && uPlinth > 0.5) {
+    float hp = fract(seed * 0.5317 + 0.11);
+    float pH = pat > 1.5 && pat < 2.5 ? 0.7 + 0.5 * hp : 0.3 + 0.32 * hp;
+    float aaP = max(fq.y, 0.004);
+    plinthF = 1.0 - smoothstep(pH - aaP, pH + aaP, y);
+    if (plinthF > 0.0) {
+      float kindP = fract(seed * 0.271 + 0.6);
+      float lw = dot(albedo, vec3(0.3, 0.59, 0.11));
+      vec3 pc = kindP < 0.4 ? vec3(0.44, 0.43, 0.41) * (0.9 + 0.2 * nm.g)                 // grey render
+              : (kindP < 0.75 ? vec3(0.58, 0.56, 0.52) * (0.88 + 0.16 * np.g)            // stone
+              : mix(albedo, vec3(lw), 0.5) * 0.62);                                     // darker same material
+      if (pat > 1.5 && pat < 2.5) pc = vec3(0.6, 0.6, 0.58) * (0.9 + 0.15 * nm.g);      // concrete upstand
+      if (kindP >= 0.4 && kindP < 0.75 && pat != 2.0) {
+        // stone plinth: long blocks with fine joints
+        float jx = abs(fract(q.x / 0.9 + fract(seed * 0.7)) - 0.5) * 0.9;
+        pc *= 1.0 - 0.3 * (1.0 - smoothstep(0.004, 0.008 + fq.x, jx)) * (1.0 - smoothstep(0.004, 0.012, fq.x));
+      }
+      pc *= 0.85 + 0.15 * grain;
+      // splash speckles + damp toward the ground
+      float spl = smoothstep(0.55, 0.75, texture2D(uBhNoise, q * 1.3 + so).a) * (1.0 - smoothstep(0.0, 0.25, y));
+      pc *= (1.0 - 0.35 * spl * (1.0 - smoothstep(0.005, 0.02, fq.y))) * mix(0.72, 1.0, smoothstep(0.0, 0.18 + 0.1 * nm.g, y));
+      // the ledge on top catches the sky; a thin shadow line just under it
+      float led = smoothstep(pH - 0.03 - aaP, pH - 0.012, y) * (1.0 - smoothstep(pH - 0.012, pH, y));
+      pc *= 1.0 + 0.25 * led;
+      albedo = mix(albedo, pc, plinthF);
+      if (led > 0.3 && uWallRelief > 0.5) bhNW = normalize(N + vec3(0.0, 1.1, 0.0));
+      else if (plinthF > 0.5) bhNW = vec3(0.0);
+    }
+    // the wall right above the ledge: a little splash-back from the ledge
+    albedo *= 1.0 - 0.1 * (1.0 - smoothstep(pH, pH + 0.12, y)) * (1.0 - plinthF);
+  }
 
   // ── 2. macro weathering (reads at 100–300 m): dirt under the coping / cornice washing down in
   //       ragged streaks, splash zone + darker base, soft corner darkening, large blotches
-  float y = vWPos.y;
   float wStr = curtain ? 0.25 : (pat > 5.5 ? 0.4 : (pat > 1.5 && pat < 2.5 ? 1.2 : 1.0));
   float info = step(0.5, vD.w);
   float dTop = mix(1e3, vD.z - y, info);
@@ -852,7 +987,7 @@ void bhWall(inout vec3 albedo, inout float rough, inout float metal, inout vec3 
       albedo *= 1.0 - 0.1 * rim * step(0.3, oldness);
     }
   }
-  if (uBhDebug > 0.5) {
+  if (uBhDebug > 0.5 && uBhDebug < 2.5) {
     // debug 1: weathering mask on white; debug 2: wall-quad info (red = corner, green = under top)
     albedo = uBhDebug < 1.5 ? vec3(macro) * mix(vec3(1.0), dirtTint, clamp(dirt, 0.0, 0.9))
                             : vec3(1.0 - corner, 1.0 - underTop, info);
@@ -878,6 +1013,96 @@ void bhWall(inout vec3 albedo, inout float rough, inout float metal, inout vec3 
   vec4 wr = vA;
   vec2 wc = vec2(wr.x + wr.y, wr.z + wr.w) * 0.5;
   vec2 wh = vec2(wr.y - wr.x, wr.w - wr.z) * 0.5;
+  float px = max(fFac.x, fFac.y);
+
+  // ── window depth: the opening is a reveal revD deep with frame + glass at its back, and a stone sill
+  //    projects below it. Parallax in the cell's (u, y) metres: the view ray is traced into the hole (jambs,
+  //    head and the sill's inner part seen in the reveal) and out against the sill box; reveal and sill also
+  //    shade the glass / the wall below from the sun. Fades out with the cell's pixel size (no popping).
+  float depthK = uWinDepth * step(0.5, uDetail) * (1.0 - smoothstep(0.05, 0.2, px));
+  bool sillW = (style < 1.5 || (style > 3.5 && style < 5.5)) && !(pat > 1.5 && pat < 2.5);
+  float revD = (curtain ? 0.0 : (style > 6.5 ? 0.07 : (style > 5.5 ? 0.09 : (ribbon ? 0.06 : (style > 3.5 && style < 4.5 ? 0.1 : 0.14))))) * depthK;
+  int dSurf = 0;       // 1 jamb, 2 head, 3 inner sill (in the reveal), 4 sill front, 5 sill top, 6 sill underside, 7 sill end
+  float dDepth = 0.0;  // where along the reveal / sill the hit lands (0 = wall plane … 1 = glass / sill nose)
+  vec3 dN = N;
+  vec2 dQ = q;
+  float sunShade = 1.0;
+  if (revD > 0.001) {
+    vec2 k = vec2(dot(V, Tu), V.y) / max(-dot(V, N), 0.06); // lateral metres per metre into the wall
+    vec3 st = vec3(dot(uSunDir, Tu), uSunDir.y, dot(uSunDir, N));
+    vec2 ks = st.xy / max(st.z, 0.03);                     // … per metre out toward the sun
+    float sunOn = step(0.03, st.z) * step(0.0, uSunDir.y) * uDaylight;
+    float sp = 0.06 * depthK;
+    vec2 bLo = vec2(wr.x - 0.05, wr.z - 0.065), bHi = vec2(wr.y + 0.05, wr.z);
+    if (sillW && wr.z > 0.2) {
+      // sill box in front of the wall; the ray from the wall point out toward the camera is (pm - k z, z)
+      vec2 dir = -k;
+      vec2 dS = mix(vec2(1e-4), sign(dir) * max(abs(dir), vec2(1e-4)), abs(sign(dir)));
+      vec2 t1 = (bLo - pm) / dS, t2 = (bHi - pm) / dS;
+      vec2 tf = max(t1, t2);
+      vec2 tn = min(t1, t2);
+      float tIn = max(max(tn.x, tn.y), 0.0);
+      float tOut = min(min(tf.x, tf.y), sp);
+      if (tIn < tOut) {
+        // the face seen = where the camera ray enters = where this outward ray leaves
+        dSurf = tOut >= sp - 1e-5 ? 4 : (tf.y < tf.x ? (dir.y > 0.0 ? 5 : 6) : 7);
+        dDepth = tOut / sp;
+        dN = dSurf == 4 ? N : (dSurf == 5 ? vec3(0.0, 1.0, 0.0) : (dSurf == 6 ? vec3(0.0, -1.0, 0.0) : Tu * sign(dir.x)));
+      } else if (sunOn > 0.0) {
+        // the sill's shadow on the wall below
+        vec2 dL = mix(vec2(1e-4), sign(ks) * max(abs(ks), vec2(1e-4)), abs(sign(ks)));
+        vec2 l1 = (bLo - pm) / dL, l2 = (bHi - pm) / dL;
+        vec2 lf = max(l1, l2), ln = min(l1, l2);
+        float sh = smoothstep(0.0, 0.006, min(min(lf.x, lf.y), sp) - max(max(ln.x, ln.y), 0.0));
+        sunShade = 1.0 - 0.5 * sh * sunOn;
+      }
+    }
+    if (dSurf == 0 && all(greaterThan(pm, wr.xz)) && all(lessThan(pm, wr.yw))) {
+      vec2 kd = k * revD;
+      vec2 kdS = mix(vec2(1e-5), sign(kd) * max(abs(kd), vec2(1e-5)), abs(sign(kd)));
+      // fraction of the depth at which the ray leaves the opening through a side
+      vec2 sEx = vec2(kd.x > 0.0 ? (wr.y - pm.x) : (wr.x - pm.x), kd.y > 0.0 ? (wr.w - pm.y) : (wr.z - pm.y)) / kdS;
+      float sHit = min(min(sEx.x, sEx.y), 1.0);
+      vec2 hp = pm + kd * sHit;
+      dQ = q + (hp - pm) * vec2(uSign, 1.0);
+      if (sHit < 1.0) {
+        dSurf = sEx.x < sEx.y ? 1 : (kd.y > 0.0 ? 2 : 3);
+        dDepth = sHit;
+        dN = dSurf == 1 ? -Tu * sign(kd.x) : vec3(0.0, dSurf == 2 ? -1.0 : 1.0, 0.0);
+      } else {
+        pm = hp; // the glass plane: frame, panes, curtains and the room shift with the view
+        f = pm / csz;
+      }
+      // sun through the opening: the point (hp, depth) moved out toward the sun must leave through the hole
+      vec2 ex = hp + ks * revD * sHit;
+      vec2 ed = abs(ex - wc) - wh;
+      float inS = 1.0 - smoothstep(-0.006, 0.006, max(ed.x, ed.y));
+      sunShade = 1.0 - 0.55 * (1.0 - inS) * sunOn;
+    }
+  }
+  if (uBhDebug > 2.5 && revD > 0.001) {
+    albedo = dSurf == 0 ? albedo * vec3(0.6, 1.0, 1.0) : (dSurf == 1 ? vec3(1, 0, 0) : (dSurf == 2 ? vec3(0, 1, 0) : (dSurf == 3 ? vec3(0, 0, 1) : vec3(1, 1, 0))));
+    return;
+  }
+  if (dSurf > 0) {
+    // reveal returns take the wall's own surface; the sill is pale stone / concrete with grime on top
+    vec3 sillC = vec3(0.8, 0.78, 0.73) * (0.86 + 0.18 * fract(seed * 0.731)) * (0.94 + 0.08 * grain);
+    if (pat > 4.5) sillC = mix(sillC, uFrameCols[frameIdx], 0.6) * 0.95; // panel / smooth walls: metal sill
+    // the returns carry the wall's surface turned through 90° (brick headers / render on the reveal), so the
+    // arris reads as a corner instead of the pattern running on across it
+    vec2 rq = dSurf == 1 ? vec2(dDepth * revD + 0.37, dQ.y) : vec2(dQ.x, dDepth * revD + 0.21);
+    vec3 c = baseAlb * bhWallPattern(pat, rq, seed + 3.0, fq, nm, grain) * (albedo / max(baseAlb * bhWallPattern(pat, q, seed, fq, nm, grain), vec3(1e-3)));
+    if (dSurf == 1) c *= 1.0 - 0.35 * dDepth;
+    else if (dSurf == 2) c *= 0.8 - 0.3 * dDepth;
+    else if (dSurf == 3) c = (sillW ? sillC : c) * (1.0 - 0.15 * dDepth);
+    else if (dSurf == 5) c = sillC * mix(0.78, 1.0, smoothstep(0.0, 0.7, dDepth)) * (0.9 + 0.1 * nm.g);
+    else if (dSurf == 6) c = sillC * mix(0.7, 0.35, step(0.62, dDepth) * step(dDepth, 0.8)); // drip groove
+    else c = sillC * (dSurf == 4 ? 0.95 : 0.9);
+    albedo = c * sunShade;
+    bhNW = dN;
+    rough = 0.85;
+    return;
+  }
   vec2 d = abs(pm - wc) - wh;
   float edge = -max(d.x, d.y);
   if (style > 4.5 && style < 5.5) {
@@ -887,7 +1112,6 @@ void bhWall(inout vec3 albedo, inout float rough, inout float metal, inout vec3 
   }
   if (curtain) edge = 1.0; // the whole cell is glazing (vision + spandrel glass)
   // level of detail: cells smaller than a few pixels fade to an average look
-  float px = max(fFac.x, fFac.y);
   float geoDetail = 1.0 - smoothstep(0.3, 0.8, px);
   float detail = geoDetail * uDetail;
   float winFrac = curtain ? 1.0 : clamp((4.0 * wh.x * wh.y) / max(csz.x * csz.y, 1e-3), 0.0, 1.0);
@@ -897,6 +1121,7 @@ void bhWall(inout vec3 albedo, inout float rough, inout float metal, inout vec3 
 
   if (edge < 0.0) {
     // wall between the windows: per-floor tint drift + rain streaks below the sills
+    albedo *= sunShade;
     albedo *= 1.0 + (bhHash12(vec2(cell.y + 0.5, seed * 1.71)) - 0.5) * 0.09 * wStr;
     if (!curtain) {
       // rain streaks under the sills — not under every window (no barcode): per window a different
@@ -1016,6 +1241,7 @@ void bhWall(inout vec3 albedo, inout float rough, inout float metal, inout vec3 
   }
 
   // inside the window opening
+  bhNW = vec3(0.0);
   float fw = ribbon ? 0.045 : 0.075;
   float frame = 1.0 - smoothstep(fw * 0.7, fw, edge);
   float spandrel = 0.0;
@@ -1143,7 +1369,7 @@ void bhWall(inout vec3 albedo, inout float rough, inout float metal, inout vec3 
     glassAlb = mix(avgAlb, glassAlb, detail);
     frame *= detail;
   }
-  albedo = mix(glassAlb, fcol, frame);
+  albedo = mix(glassAlb, fcol, frame) * sunShade;
   rough = mix(0.14, (curtain || ribbon) ? 0.34 : 0.7, frame);
   // metallic mullions on curtain walls pick up the environment (sheen lines between panels)
   metal = (curtain || ribbon) ? frame * 0.7 : 0.0;
@@ -1182,6 +1408,14 @@ void bhRoof(inout vec3 albedo, inout float rough, inout vec3 emit, vec3 N, vec3 
   float seed = floor(vA.y + 0.5);
   vec2 p = vFac;
   vec2 fp = fwidth(p);
+  // world directions of +p.x (along the ridge) and +p.y (up the slope): cotangent frame from derivatives
+  vec3 dpx = dFdx(vWPos), dpy = dFdy(vWPos);
+  vec2 dux = dFdx(p), duy = dFdy(p);
+  vec3 c1 = cross(dpy, N), c2 = cross(N, dpx);
+  vec3 rT = c1 * dux.x + c2 * duy.x, rB = c1 * dux.y + c2 * duy.y;
+  float rIm = inversesqrt(max(max(dot(rT, rT), dot(rB, rB)), 1e-12));
+  rT *= rIm;
+  rB *= rIm;
   vec2 so = vec2(fract(seed * 0.1373), fract(seed * 0.3119)) * 17.0;
   vec4 nM = texture2D(uBhNoise, p * 0.035 + so);                          // r ~7 m, g ~1.8 m, b 0.45 m × 14 m streaks
   vec4 nF = texture2D(uBhNoise, p * 0.12 + so.yx);                        // r ~2 m, g ~0.5 m
@@ -1257,6 +1491,16 @@ void bhRoof(inout vec3 albedo, inout float rough, inout vec3 emit, vec3 N, vec3 
     moss = max(moss, northR * (1.0 - smoothstep(0.0, 1.4, p.y)) * 0.55 * age); // damp eaves
     albedo = mix(albedo, mix(vec3(0.17, 0.21, 0.09), vec3(0.3, 0.32, 0.14), grain), clamp(moss * (slate ? 0.6 : 0.85), 0.0, 0.85));
     rough = slate ? 0.7 : 0.88;
+    if (uWallRelief > 0.5 && uDetail > 0.5) {
+      // each course leans out toward its butt (the visible thickness of the overlap), clay pantiles roll
+      // across their width; a per-tile tilt so no two tiles catch the light alike
+      float fade = 1.0 - smoothstep(0.012, 0.035, max(fp.x, fp.y));
+      float th = slate ? 0.012 : 0.022;
+      float sy = -th / course * 1.4 + (1.0 - smoothstep(0.0, 0.07, fy)) * (slate ? 0.5 : 0.8);
+      float sxr = slate ? 0.0 : 0.03 * 3.14159 / tw * cos(fx * 3.14159);
+      vec2 sl = (vec2(sxr, sy) + (vec2(tn, fract(tn * 5.3)) - 0.5) * 0.08) * fade;
+      bhNW = normalize(N - rT * sl.x - rB * sl.y);
+    }
     return;
   }
   if (pat < 3.5) { // standing seam metal
@@ -1385,7 +1629,7 @@ ${LAMP_GLSL}
 
 // ───────────────────────────────────────────────────────── factory ──
 
-export function createMaterials(g: GlobalUniforms, opts: { legacy?: boolean; wear?: boolean } = {}): BuildingMaterials {
+export function createMaterials(g: GlobalUniforms, opts: { legacy?: boolean; wear?: boolean; winDepth?: boolean; wallRelief?: boolean; plinth?: boolean } = {}): BuildingMaterials {
   const legacy = !!opts.legacy;
   const uniforms = {
     uHours: { value: 12 },
@@ -1400,6 +1644,9 @@ export function createMaterials(g: GlobalUniforms, opts: { legacy?: boolean; wea
     uReflLift: { value: 0.3 },
     uBhDebug: { value: 0 },
     uWear: { value: opts.wear === false ? 0 : 1 },
+    uWinDepth: { value: opts.winDepth === false ? 0 : 1 },
+    uWallRelief: { value: opts.wallRelief === false ? 0 : 1 },
+    uPlinth: { value: opts.plinth === false ? 0 : 1 },
   };
   const frameCols = { value: FRAME_COLS.map((c) => new THREE.Color(c)) };
   const glassCols = { value: GLASS_COLS.map((c) => new THREE.Color(c)) };
@@ -1433,6 +1680,9 @@ export function createMaterials(g: GlobalUniforms, opts: { legacy?: boolean; wea
         uReflLift: uniforms.uReflLift,
         uBhDebug: uniforms.uBhDebug,
         uWear: uniforms.uWear,
+        uWinDepth: uniforms.uWinDepth,
+        uWallRelief: uniforms.uWallRelief,
+        uPlinth: uniforms.uPlinth,
         uSunDir: g.uSunDir,
         ...lampUniforms(),
       });
@@ -1453,6 +1703,7 @@ export function createMaterials(g: GlobalUniforms, opts: { legacy?: boolean; wea
         .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>\nif (bhRough >= 0.0) roughnessFactor = bhRough;`)
         .replace('#include <metalnessmap_fragment>', `#include <metalnessmap_fragment>\nif (bhMetal >= 0.0) metalnessFactor = bhMetal;`)
         .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>\ntotalEmissiveRadiance += bhEmit;`)
+        .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>\nif (dot(bhNW, bhNW) > 0.5) normal = normalize((viewMatrix * vec4(bhNW, 0.0)).xyz);`)
         .replace(
           '#include <lights_fragment_end>',
           `#include <lights_fragment_end>\nreflectedLight.indirectDiffuse += diffuseColor.rgb * thLampLight(vWPos, normalize(vWNrm));`,
