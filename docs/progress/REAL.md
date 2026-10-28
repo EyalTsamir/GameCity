@@ -11,6 +11,10 @@ Overview must stay at least as impressive as now. Every feature: quality tiers +
 Lead session: session_01XuhAMczW3iK25AAWnf3qog, branch `claude/pensive-gates-bim12i`.
 
 ## Resume here (keep current)
+* 2026-10-28 22:25 UTC — Merged W6 s1 (9dcad08: props/places.ts market life + bunting + pigeons, terrace bistro
+  chairs/waiter station, back yard + animated laundry; ?nomarketlife ?noterracelife ?nobackyard; W3 leftovers OK).
+  W6(2) spawned: back-yard floating door/planks (bug if default), wall-mounted set, parasol/awning wind sway, market
+  density, perf. Running: W2(5), W4(6), W6(2), W7.
 * 2026-10-28 22:30 UTC — Lawn rim FIXED at the source by W1 s5 addendum (2936151: shell walls start 10 cm below
   ground → no shadow-map gap; rim gone at the bench apartment 3 m). Lead's sdbias probe dropped (sky.ts unchanged).
   W1 lineage paused (open: apartment glass uniform grey → next judge decides).
@@ -153,6 +157,7 @@ Wave 1 (launched 2026-10-28 15:17 UTC, sibling cloud sessions, briefs in real-br
 | W6 dense places I (wave 3) | session_01XuhAMghDM8g45i46Lja4QH | claude/real-w6-places | real-w6.md |
 | W4 people (6) | session_01XuhAMghSjS3RWFqyHibd7f | claude/real-w4-people | real-w4.md |
 | W7 dense places II (wave 3) | session_01XuhAMe8MqhfeVaXdzcfB9U | claude/real-w7-quay | real-w7.md |
+| W6 dense places I (2) | session_01XuhAMdo2WChq7WcNcuJPxV | claude/real-w6-places | real-w6.md |
 Respawn rule: when a worker stops (milestone note, ~200k context, or a usage stop), create a NEW session on the
 same branch with the same brief + "resume from docs/progress/real-wN.md Resume here"; archive the old one.
 
