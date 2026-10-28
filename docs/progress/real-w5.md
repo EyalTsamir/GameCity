@@ -79,7 +79,10 @@ Branch `claude/real-w5-street` (from claude/pensive-gates-bim12i @ 6c29a46). Bri
 * Cost (perf.mjs, software GL, eye-level downtown view "0,0,-40,12,30,12", 2 runs): all W5 toggles on vs off =
   +225–241k triangles (+6.5 %), draw calls equal (175); ms/frame within SwiftShader noise. After m3 the grates
   (16/12 ribs, fewer ring segments, no hidden rib faces) and the classic lamp lathe (12 sides) were trimmed;
-  re-measure in shots/w5_perf2.log. Biggest remaining: grates + verge setts (~450 tris per street tree, fine
+  perf2 (after the trim): +214k tris (3.453 M → 3.667 M) — the grates are NOT in that delta (always on), so
+  the delta is lamp near kit + fences/gates + signals + guards/worn patches; flange washers/studs then dropped
+  (−~25k est.). Next: measure per toggle (`;nolampdetail`, `;nofencedetail`, `;nosigndetail`, `;notreebase`)
+  and give the grates a toggle/tier if they show. Biggest remaining: grates + verge setts (~450 tris per street tree, fine
   plant sink = near chunks), classic lamp near kit (~600 tris each). Unmeasured on the Adreno.
 * ?nofencedetail — old pickets/posts, no gates, no hedge foot stems (low tier: off). Hedge core rounding + verge
   pits are geometry replacements (always on).
@@ -88,3 +91,7 @@ Branch `claude/real-w5-street` (from claude/pensive-gates-bim12i @ 6c29a46). Bri
 * Before: docs/progress/real/w5_before.jpg (treebase, lampbase, kerb, fence, hedge at 2/6 m, base commit).
 * After m3: docs/progress/real/w5_m3_after.jpg (grate tree, verge tree, classic lamp base, kerb, fence + gate,
   hedge, manhole, stop sign, signal). Working shots: shots/w5/s*/ (not committed).
+
+## Tokens (session 1, tokens.py)
+203 calls, 5.4 M weighted, ctx median 222k / max 332k (over the 200k cap — next session: stop earlier),
+0 cold rewrites, idle>5min 0/0. Content: system+brief 32 %, Bash reads 22 %, reminders 13 %, own output 11 %.

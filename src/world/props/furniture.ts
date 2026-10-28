@@ -74,22 +74,18 @@ export const LAMP_COL = {
 };
 
 /**
- * Base flange of a steel column: a square plate on the paving, four anchor bolts with nuts and washers (near kit).
+ * Base flange of a steel column: a square plate on the paving, four anchor nuts (near kit).
  * r = column radius at the foot.
  */
 function flange(kf: Kit, r: number, col: string): void {
   const sh = kf.sh,
     w = r * 2 + 0.11;
   kf.m(col, 'steel');
-  cbox(sh, 0, 0.009, 0, w, 0.018, w, 0.004);
+  sh.box(0, 0.009, 0, w, 0.018, w, 1);
+  // anchor nuts (the washers / stud ends cost more triangles than they show)
   kf.m('#6d7175', 'steel');
   const o = w / 2 - 0.028;
-  for (const sx of [-1, 1])
-    for (const sz of [-1, 1]) {
-      sh.cyl(sx * o, 0.018, sz * o, 0.016, 0.016, 0.004, 8, 2, false);
-      boltY(sh, sx * o, 0.022, sz * o, 0.011);
-      sh.cyl(sx * o, 0.03, sz * o, 0.005, 0.005, 0.016, 5, 2, false);
-    }
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) boltY(sh, sx * o, 0.018, sz * o, 0.012);
 }
 
 /** service hatch on a round pole (radius r at its height), facing local +Z (the footway): frame, lock, a sticker sometimes */
