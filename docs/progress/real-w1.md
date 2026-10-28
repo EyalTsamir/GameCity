@@ -69,3 +69,8 @@ Branch `claude/real-w1-facades` (from `claude/pensive-gates-bim12i`). Brief: doc
 * Overview after: shots/w1/ov_after.png (console clean, invariants {}, validate []). Night: shots/w1/night_dt.png
   (21.5 h downtown, clean, invariants {}).
 * Before / after (yaw 18, 3 / 10 m): docs/progress/real/w1_before.jpg, w1_after.jpg; close-ups w1_details.jpg.
+
+## Tokens (session 1, `tokens.py`)
+TOTAL weighted 4.4M (cache read 80%, cache write 8%, output 11%); 148 calls, ctx median 248k / max 338k, 0 cold
+calls, idle>5 min warm 1 / cold 0 (the main-session 1 h cache holds). Over the ~200k context target: the next
+milestone should start fresh from this log.
