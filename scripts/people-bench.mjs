@@ -26,6 +26,8 @@ const n = parseInt(args.n ?? '4', 10);
 const skip = parseInt(args.skip ?? '0', 10);
 const hours = parseFloat(args.hours ?? '11');
 const shots = (args.shots ?? 'face,hand,body').split(',');
+// --lods close,near: each shot once per forced level (same figure, same frame) — '' = by distance
+const lods = (args.lods ?? '').split(',');
 let url = args.url ?? 'http://127.0.0.1:5173/';
 url += (url.includes('?') ? '&' : '?') + 'nointro&noidle' + (args.q ? '&' + args.q : '');
 
@@ -91,15 +93,18 @@ try {
         c.view({ target: { x: f.x, y: f.y + f.H * o.ty, z: f.z }, distance: Math.max(3, o.d), yaw: f.yaw + o.dy, pitch: o.pitch });
         cam.updateProjectionMatrix();
       }, [f, o]);
-      await page.waitForTimeout(900);
-      const file = path.join(outDir, `p${i}_${s}.png`);
-      await page.screenshot({ path: file, timeout: 240000 });
-      report.captures.push({ label: `${f.kind} ${f.age} ${s}`, file });
+      for (const lod of lods) {
+        await page.evaluate((lod) => (window.__city.ctx.services.pedestrians._renderer.forceLod = lod === 'close' ? 0 : lod === 'near' ? 1 : -1), lod);
+        await page.waitForTimeout(900);
+        const file = path.join(outDir, `p${i}_${s}${lod ? '_' + lod : ''}.png`);
+        await page.screenshot({ path: file, timeout: 240000 });
+        report.captures.push({ label: `${f.kind} ${f.age} ${s}${lod ? ' ' + lod : ''}`, file });
+      }
     }
   }
   if (figs.length && args.group !== '0') {
     const f = figs[0];
-    await page.evaluate((f) => (window.__city.ctx.camera.__zoom = 0, window.__city.view({ target: { x: f.x, y: f.y + 1, z: f.z }, distance: 10, yaw: f.yaw + 25, pitch: 12 })), f);
+    await page.evaluate((f) => (window.__city.ctx.camera.__zoom = 0, window.__city.ctx.services.pedestrians._renderer.forceLod = -1, window.__city.view({ target: { x: f.x, y: f.y + 1, z: f.z }, distance: 10, yaw: f.yaw + 25, pitch: 12 })), f);
     await page.waitForTimeout(1200);
     const file = path.join(outDir, 'group_10m.png');
     await page.screenshot({ path: file, timeout: 240000 });
@@ -117,7 +122,7 @@ fs.writeFileSync(path.join(outDir, 'report.json'), JSON.stringify(report, null, 
 if (report.captures.length) {
   const sheet = path.join(outDir, 'sheet.png');
   try {
-    execFileSync('python3', ['-I', path.join(here, 'agent-tools/sheet.py'), sheet, String(args.cols ?? shots.length), String(args.tile ?? 480), ...report.captures.map((c) => `${c.label}|${c.file}`)]);
+    execFileSync('python3', ['-I', path.join(here, 'agent-tools/sheet.py'), sheet, String(args.cols ?? shots.length * lods.length), String(args.tile ?? 480), ...report.captures.map((c) => `${c.label}|${c.file}`)]);
     report.sheet = path.relative(root, sheet);
   } catch (e) {
     report.sheetError = String(e.message ?? e).slice(0, 200);

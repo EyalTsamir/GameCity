@@ -4,6 +4,10 @@ Branch `claude/real-w4-people` (from `claude/pensive-gates-bim12i` e517126). Bri
 Photo test "Person" (REAL.md). Owned: `src/sim/pedestrians/**` presentation (not crowd/places logic).
 
 ## Resume here
+* 2026-10-28 session 2 STARTED — merged origin/claude/pensive-gates-bim12i. Lead held m1 for: (1) close-LOD
+  frog-squat stances, (2) skirts split into flaps, (3) hat brim over eyes / floating crown, moustache bar,
+  (4) eyes flat paint (need sclera/iris/lid crease), flat-lit faces, hard hairline. people-bench.mjs gained
+  `--lods close,near` (same figure + frame per forced level) — first run: shots/w4/cmp1.
 * 2026-10-28 19:15 UTC — session 1 ENDED (context cap). Branch `claude/real-w4-people`, all committed + pushed.
   Brief priorities 1 (faces/hair), 2 (fingers), 3 (fabric, shoes), 6 (vendor request) done at a new **close
   level** (Lod 4, < 15 m); 4 (walk weight) was already strong (gfx-people) — not touched; 5 (carried things):
