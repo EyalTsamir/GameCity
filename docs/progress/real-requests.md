@@ -13,3 +13,7 @@
 * **W5 → W3 / props owner (FYI, done in your files):** `lamp()` in props/furniture.ts takes an optional near kit
   `kf` (W5 lamp-post detail); `picketFence(.., rng?)`, `gateLeaf`, `lowWall` coping, MAT.brick (+ props/material.ts
   brick branch) and the gate placement in the props.ts fence loop are W5 changes.
+* **W2 → plan / station owner:** the platform edge stands 2.0 m from the track centre (`plan.ts` station
+  `platform: rect(-46, RAIL_Z + 2.0, …)`) while the EMU body side is at 1.45 m, so a 0.55 m gap with sleepers shows
+  between platform and train at 3 m (real: 0.1–0.25 m; UK/EU platform edges ≈ 1.6–1.7 m from the centre). Suggest
+  `RAIL_Z + 1.65` if the platform face / copers and rail clearances allow it (freight wagons are ≤ 1.45 m wide too).

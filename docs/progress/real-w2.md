@@ -4,13 +4,21 @@ Branch `claude/real-w2-vehicles` (from `claude/pensive-gates-bim12i`). Brief: `d
 Owned: `src/sim/traffic/{models,vehicleMaterial,render}.ts` (+ trains later). Sim untouched.
 
 ## Resume here
-* 2026-10-28 session 5 — WIP. Bench framing for trains fixed (commit 332e99d): `bench.mjs --classes train --q
-  "speed=0"` → fixed poses `platform_3m`, `platform_10m`, `track_3m`, `roof_6m` (train dwelling at the platform,
-  no LOS swing). In progress: train interior ray-trace behind windows + open doorway (`trInterior` in
-  trainMaterial.ts, tag `T.VESTIB` 13, `?notraininterior`, off on low), 24-side turned wheels with polished
-  tread + flange (`wheelset`), police livery as a conformal flank grid (`flankDecal` in models.ts, `flankX` in
-  carBody.ts), street reflection with facade blocks/windows/trees/clouds/pavement (`thStreetRefl`, detail fades
-  with fwidth of the reflected vector, `?nocarpaint` drops the detail).
+* 2026-10-28 session 5 — **trains judged + fixed, police band, paint reflection; perf measured.** Bench framing
+  for trains fixed first (commit 332e99d): `bench.mjs --classes train --q "speed=0"` → fixed poses `platform_3m`,
+  `platform_10m`, `track_3m`, `roof_6m` (the opening regional dwells at the platform). Judged (s5a): silhouette right
+  at 10 m; failed at 3 m: the open doorway was a flat grey card, windows flat black, wheels 12-sided dark discs with
+  fake spoke sectors, running gear unreadable (deep shade under the car — physical), plain body side.
+  Done: (1) **saloon interior ray-traced** behind every window and the open doorway (vestibule floor, yellow poles,
+  seat backs in bays with seated heads, ceiling light strip, bright far-side window band; `?notraininterior`, off on
+  low); (2) **turned wheels** (24 sides, rail-polished tread, flange, rim face, dished web, hub boss); (3) **police
+  band** now a conformal grid on the curved flank (`flankDecal`), no floating edge; (4) **paint**: the coat reflects a
+  street (facade blocks with storeys/columns, trees, cumulus, pavement band, dark asphalt), bent by the body curvature,
+  at 4× contrast on body paint — reads on mid/dark colours (SUV shoulder, mint compact bonnet); on light colours
+  (white, beige) still faint. Sheet `docs/progress/real/w2_s5.jpg`. Next: (a) body-side lettering (car number,
+  operator logo, door warning stickers — needs a decal atlas in trainMaterial); window corners are square;
+  (b) platform gap 0.55 m (request filed, plan.ts); (c) paint: windscreen looks uniformly dark when seen from above —
+  check the glass branch of thStreetRefl at steep R.y; (d) train LOD0 geometry has no LOD (trains are few).
 * 2026-10-28 session 4 — **fix round + trains pushed; wrapping at the context cap.** Next session, in order:
   (a) **train bench framing still fails**: the camera ends at window height against the car side (platform blocks
   the line of sight → arm shortened). Try `--q` with a free view from the track side (e.g. find a train with
@@ -198,6 +206,13 @@ Owned: `src/sim/traffic/{models,vehicleMaterial,render}.ts` (+ trains later). Si
   coordinate views work; `?tlineup` items get different phases (plates/wear vary).
 
 ## Toggles + tiers
+* Perf session 5 (software GL, `perf.mjs --view station --hours 11 --q speed=0`, one run, ms/frame): baseline 638.7;
+  `nocarpaint` 622.0 (−2.6 %); `notraingrime` 657.3 and `notraininterior` 650.4 (above baseline → within noise,
+  ±3 %); `novehlod0` 573.1 (−10 %), but triangles were identical (3.636 M) in all rows, so the LOD 0 number is
+  doubtful (the renderer.info count may include all LOD layers, or no car was within 62 m) — re-measure at
+  `downtown` on the Adreno. Draw calls 168 in every row.
+* Session 5: `?notraininterior` (saloon ray-trace; off on quality low), `?novehlod0` (perf only). `?nocarpaint`
+  now also drops the street reflection detail and the 4× coat contrast.
 * `?nocarinterior` (cabin ray-trace; also off on quality **low**), `?nopanelgaps`, `?novehiclewear`.
   Geometry detail (wheels, wipers, seals, handles) lives in LOD 0 (< 62 m scaled), LOD 1 keeps textured
   wheel faces, LOD 2 unchanged.
