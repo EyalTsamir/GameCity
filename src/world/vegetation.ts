@@ -123,6 +123,7 @@ export default function create(ctx: CityContext): CityModule {
   const cardsOn = !legacy && !ctx.debug.params.has('noleafcards');
   // W5 tree bases: bark relief + soil-stained trunk foot (shader), real tree-pit surrounds (geometry)
   const noTreeBase = ctx.debug.params.has('notreebase');
+  const noFenceDetail = ctx.debug.params.has('nofencedetail') || ctx.quality.level === 'low';
   const buildTree: (s: GeoSink, w: Wind, t: TreeSpec) => unknown = legacy ? OLD.buildTree : NEW.buildTree;
   const bush = legacy ? OLD.bush : NEW.bush;
   const hedge = legacy ? OLD.hedge : NEW.hedge;
@@ -1080,6 +1081,7 @@ export default function create(ctx: CityContext): CityModule {
         seed: b.lot * 7919 + Math.round(b.ax * 13 + b.az * 7),
         color: '#' + leaf.getHexString(),
         seg: [b.ax, b.az, b.bx, b.bz, b.street ? 0.6 : 0.66],
+        noStems: noFenceDetail,
       });
   }
 

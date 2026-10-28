@@ -241,7 +241,19 @@ export class SignalRenderer {
   ): void {
     const y0 = this.baseY(I, head.arm);
     this.stopSignCount++;
-    place(cyl(0.05, 0.05, 2.62, 0, 0, 0, 8), head, y0, '#9aa1a7');
+    // W5 (?nosigndetail): some poles knocked a little off plumb; a grout collar, a cap, band clamps and bolts,
+    // a sticker on some poles
+    const detail = !this.ctx.debug.params.has('nosigndetail');
+    const hs = Math.abs(Math.sin(head.x * 12.9898 + head.z * 78.233) * 43758.5453) % 1;
+    const tx = detail && hs < 0.35 ? (hs - 0.17) * 0.12 : 0,
+      tz = detail && hs < 0.35 ? (0.2 - hs) * 0.08 : 0;
+    const place0 = place;
+    const placeT = (g: THREE.BufferGeometry, h: SignalHead, by: number, color: string) => {
+      if (tx || tz) g.rotateX(tx).rotateZ(tz);
+      place0(g, h, by, color);
+    };
+    place = placeT;
+    placeT(cyl(0.05, 0.05, 2.62, 0, 0, 0, detail ? 12 : 8), head, y0, '#9aa1a7');
     const sy = 2.32;
     const oct = (r: number, z: number, back = false) => {
       const g = new THREE.CircleGeometry(r, 8);
@@ -271,6 +283,25 @@ export class SignalRenderer {
     top(cO); bot(cO); side(cO, false, 0, lh); side(cO, true, 0, lh);
     top(cP); mid(cP); side(cP, false, 0, lh); side(cP, true, hh / 2, hh);
     place(box(0.12, 0.2, 0.04, 0, sy, 0.025), head, y0, '#9aa1a7');
+    if (detail) {
+      // pole cap, grout collar at the foot
+      place(cyl(0.056, 0.052, 0.03, 0, 2.62, 0, 12), head, y0, '#4d5257');
+      place(cyl(0.085, 0.095, 0.025, 0, -0.005, 0, 12), head, y0, '#6f6b64');
+      // two band clamps behind the plate (band round the pole + a bracket to the plate back) and their bolts
+      for (const dy of [-0.26, 0.26]) {
+        place(cyl(0.058, 0.058, 0.04, 0, sy + dy - 0.02, 0, 12), head, y0, '#7d848a');
+        place(box(0.09, 0.04, 0.02, 0, sy + dy, 0.04), head, y0, '#7d848a');
+        place(box(0.02, 0.012, 0.03, -0.068, sy + dy, -0.0), head, y0, '#5e6368');
+        place(box(0.02, 0.012, 0.03, 0.068, sy + dy, -0.0), head, y0, '#5e6368');
+        // the carriage-bolt heads on the face
+        place(cyl(0.012, 0.012, 0.006, 0, 0, 0, 8).rotateX(Math.PI / 2).translate(0, sy + dy + 0.06, 0.068), head, y0, '#d9d4cc');
+      }
+      // a sticker / faded tag on some poles
+      if (hs > 0.55) {
+        const sc = ['#f2e64a', '#3a9ad9', '#f4f1ea', '#e85d9e'][Math.floor(hs * 97) % 4];
+        place(box(0.07, 0.09, 0.004, 0, 1.45 + hs * 0.3, 0.05), head, y0, sc);
+      }
+    }
   }
 
   /** lens culling + level per lamp; only when the camera moved */

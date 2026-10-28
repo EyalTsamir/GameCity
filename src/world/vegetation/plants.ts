@@ -540,6 +540,49 @@ function rectGrate(sh: Shaper, rng: Rng, hx: number, hz: number): void {
   litter(sh, rng, Math.min(hx, hz), 4, 0.031);
 }
 
+/**
+ * Open tree pit in the footway (2hx × 2hz): a granite sett edging, trodden soil with patchy grass (greener at the
+ * edges, worn bare round the trunk), mulch and leaves. ≤ 4 cm proud of the paving.
+ */
+function vergePit(sh: Shaper, rng: Rng, hx: number, hz: number): void {
+  const s = sh.s;
+  // soil bed
+  sh.color(rng.pick(['#4a3a2a', '#45372a', '#3f3326'])).box(0, 0.012, 0, hx * 2 - 0.08, 0.004, hz * 2 - 0.08, 1);
+  // grass patches: irregular flat blobs, none within ~22 cm of the trunk
+  const greens = ['#5b7f38', '#62873c', '#557634', '#6d8a40'];
+  for (let i = 0; i < 9; i++) {
+    let px = 0,
+      pz = 0;
+    for (let t = 0; t < 6; t++) {
+      px = rng.range(-hx + 0.12, hx - 0.12);
+      pz = rng.range(-hz + 0.1, hz - 0.1);
+      if (Math.hypot(px, pz) > 0.3) break;
+    }
+    if (Math.hypot(px, pz) <= 0.3) continue;
+    const r = rng.range(0.07, 0.15);
+    sh.color(rng.pick(greens));
+    const c = sh.v(px, 0.017, pz, 0, 1, 0);
+    const ring: number[] = [];
+    const n = 7;
+    for (let k = 0; k < n; k++) {
+      const a = (k / n) * Math.PI * 2;
+      const rr = r * rng.range(0.6, 1.25);
+      ring.push(sh.v(Math.max(-hx + 0.05, Math.min(hx - 0.05, px + Math.cos(a) * rr)), 0.016, Math.max(-hz + 0.05, Math.min(hz - 0.05, pz + Math.sin(a) * rr)), 0, 1, 0));
+    }
+    for (let k = 0; k < n; k++) s.tri(c, ring[(k + 1) % n], ring[k]);
+  }
+  litter(sh, rng, Math.min(hx, hz) * 0.9, 8, 0.018);
+  // sett edging: 10 cm granite setts with joints, slightly irregular heights and tones
+  const sett = (x: number, z: number, w: number, d: number) => {
+    const k = rng.range(0.85, 1.08);
+    s.rgb(0.42 * k, 0.41 * k, 0.4 * k);
+    sh.box(x, 0.02 + rng.range(-0.004, 0.004), z, w, 0.04, d, 1);
+  };
+  const pitch = 0.105;
+  for (const sz of [-1, 1]) for (let x = -hx + pitch / 2; x < hx - 0.01; x += pitch) sett(x, sz * (hz - 0.05), pitch - 0.012, 0.09);
+  for (const sx of [-1, 1]) for (let z = -hz + 0.1 + pitch / 2; z < hz - 0.1; z += pitch) sett(sx * (hx - 0.05), z, 0.09, pitch - 0.012);
+}
+
 /** tree guard round a young street tree: 4 flat steel uprights set in the pit, 3 hoops, a rubber tie to the trunk */
 export function treeGuard(sh: Shaper, w: Wind, x: number, y: number, z: number, yaw: number, rng: Rng): void {
   w.at(x, y, z, 0, 0, 0);
@@ -573,10 +616,9 @@ export function surround(sh: Shaper, w: Wind, kind: Surround, x: number, y: numb
       // the round grate sized for the 0.8 m furniture band of a street (plazas keep the wide one)
       roundGrate(sh, rng, 0.48);
       return y + 0.012;
-    case 'verge': {
-      sh.color('#7fae4e').box(0, 0.004, 0, 1.5, 0.03, 0.66, 1);
+    case 'verge':
+      vergePit(sh, rng, 0.75, 0.33);
       return y + 0.02;
-    }
     case 'planter': {
       const pts: [number, number][] = [
         [-0.75, -0.35],

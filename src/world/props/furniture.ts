@@ -1020,33 +1020,68 @@ export function busShelter(k: Kit, g: Kit, routeColor: string, rng: Rng): { glow
 
 export const FENCE_PAINT = ['#f3efe6', '#f3efe6', '#ece4d2', '#c9dae2', '#d6e2c4', '#efdcc4'];
 
-/** Picket fence from local (0,0,0) to (L,0,0) along +x. Optional end posts (gates). */
-export function picketFence(k: Kit, L: number, paint: string, postA: boolean, postB: boolean): void {
+const _pc = new THREE.Color(),
+  _wc = new THREE.Color();
+const WEATHERED = new THREE.Color('#8f8a7c');
+const ALGAE = new THREE.Color('#5d6a46');
+
+/** fence post set in the ground: chamfered square section, pyramid cap, a ring of trodden soil at the foot */
+function fencePost(k: Kit, x: number, z: number, w: number, h: number, paint: string): void {
   const sh = k.sh;
   k.m(paint, 'paint');
+  cbox(sh, x, (h - 0.12) / 2, z, w, h + 0.12, w, 0.008);
+  sh.cone(x, h, z, w * 0.72, w * 0.45, 4, false, Math.PI / 4);
+  k.m('#5b5142', 'stone');
+  sh.cyl(x, -0.02, z, w * 0.95, w * 1.15, 0.04, 6, 2);
+}
+
+/**
+ * Picket fence from local (0,0,0) to (L,0,0) along +x, pickets on the +z (street) face of two rails, posts set in the
+ * ground. With an rng (near detail): weathered paint (grey timber showing at the foot, algae, splash), slight
+ * unevenness per picket. Optional end posts (gates).
+ */
+export function picketFence(k: Kit, L: number, paint: string, postA: boolean, postB: boolean, rng?: Rng): void {
+  const sh = k.sh;
   const H = 0.92;
   const nPosts = Math.max(1, Math.round(L / 1.9));
   for (let i = 0; i <= nPosts; i++) {
     const x = (i / nPosts) * L;
     const gate = (i === 0 && postA) || (i === nPosts && postB);
-    sh.box(x, (gate ? 1.12 : 1.0) / 2, 0, gate ? 0.11 : 0.08, gate ? 1.12 : 1.0, gate ? 0.11 : 0.08, 1);
-    if (gate) sh.box(x, 1.16, 0, 0.14, 0.04, 0.14, 0);
+    if (rng) fencePost(k, x, -0.035, gate ? 0.11 : 0.085, gate ? 1.12 : 0.98, paint);
+    else {
+      k.m(paint, 'paint');
+      sh.box(x, (gate ? 1.12 : 1.0) / 2, 0, gate ? 0.11 : 0.08, gate ? 1.12 : 1.0, gate ? 0.11 : 0.08, 1);
+      if (gate) sh.box(x, 1.16, 0, 0.14, 0.04, 0.14, 0);
+    }
   }
-  sh.box(L / 2, 0.3, -0.035, L, 0.06, 0.03, 0);
-  sh.box(L / 2, 0.72, -0.035, L, 0.06, 0.03, 0);
+  k.m(paint, 'paint');
+  // rails behind the pickets (their front face touches the boards)
+  const rz = rng ? -0.023 : -0.035;
+  sh.box(L / 2, 0.3, rz, L, 0.06, 0.03, 0);
+  sh.box(L / 2, 0.72, rz, L, 0.06, 0.03, 0);
   const n = Math.floor(L / 0.19);
   const off = (L - (n - 1) * 0.19) / 2;
   const sk = k.s;
+  _pc.set(paint);
   for (let i = 0; i < n; i++) {
     const x = off + i * 0.19;
+    const dh = rng ? rng.range(-0.015, 0.012) : 0,
+      lean = rng ? rng.range(-0.012, 0.012) : 0;
+    // paint: worn at the foot (grey timber + algae + splash), some boards repainted brighter / gone chalky
+    const tone = rng ? rng.range(0.9, 1.04) : 1;
+    const wear = rng ? rng.range(0.25, 0.75) : 0;
+    _wc.copy(_pc).lerp(WEATHERED, wear * 0.7).lerp(ALGAE, wear * 0.25);
+    const top = H - 0.02 + dh;
     // flat pointed board, front and back faces (5 + 5 verts, 3 + 3 tris)
     for (const side of [1, -1]) {
       const z = side * 0.012;
-      const a = sh.v(x - 0.0425, 0.04, z, 0, 0, side),
-        b = sh.v(x + 0.0425, 0.04, z, 0, 0, side),
-        c = sh.v(x + 0.0425, H - 0.02, z, 0, 0, side),
-        d = sh.v(x, H + 0.055, z, 0, 0, side),
-        e = sh.v(x - 0.0425, H - 0.02, z, 0, 0, side);
+      sk.rgb(_wc.r * tone, _wc.g * tone, _wc.b * tone);
+      const a = sh.v(x - 0.0425, 0.05, z, 0, 0, side),
+        b = sh.v(x + 0.0425, 0.05, z, 0, 0, side);
+      sk.rgb(_pc.r * tone, _pc.g * tone, _pc.b * tone);
+      const c = sh.v(x + 0.0425 + lean, top, z, 0, 0, side),
+        d = sh.v(x + lean, top + 0.075, z, 0, 0, side),
+        e = sh.v(x - 0.0425 + lean, top, z, 0, 0, side);
       if (side > 0) {
         sk.tri(a, b, c);
         sk.tri(a, c, e);
@@ -1058,6 +1093,45 @@ export function picketFence(k: Kit, L: number, paint: string, postA: boolean, po
       }
     }
   }
+}
+
+/**
+ * Garden gate leaf hinged at local (0,0,0), closing along +x to width w, opened by `open` rad (towards local -z, the
+ * garden): ledged-and-braced frame, pickets, two black strap hinges on the hinge stile, a thumb latch at the far stile.
+ */
+export function gateLeaf(k: Kit, w: number, paint: string, open: number, rng: Rng, side = 1): void {
+  const sh = k.sh;
+  // side: +1 street on local +z (garden −z), −1 the other way round; the leaf swings into the garden
+  const f = side;
+  sh.push().local(0.06, 0, -0.035 * f, 0, open * f, 0);
+  k.m(paint, 'paint');
+  const W = w - 0.1;
+  // stiles, ledges and the diagonal brace (on the garden face)
+  cbox(sh, 0.025, 0.52, -0.02 * f, 0.05, 0.9, 0.035, 0.006);
+  cbox(sh, W - 0.025, 0.52, -0.02 * f, 0.05, 0.9, 0.035, 0.006);
+  for (const y of [0.22, 0.82]) cbox(sh, W / 2, y, -0.02 * f, W, 0.07, 0.03, 0.006);
+  const bl = Math.hypot(W - 0.1, 0.6);
+  sh.push().local(W / 2, 0.52, -0.02 * f, 0, 0, Math.atan2(0.6, W - 0.1));
+  sh.box(0, 0, 0, bl, 0.06, 0.028, 0);
+  sh.pop();
+  // pickets on the street face
+  const n = Math.max(3, Math.round(W / 0.15));
+  for (let i = 0; i < n; i++) {
+    const x = 0.04 + ((W - 0.08) * (i + 0.5)) / n;
+    sh.box(x, 0.5, 0.004 * f, 0.08, 0.86, 0.022, 1);
+    sh.cone(x, 0.93, 0.004 * f, 0.04, 0.06, 4, false, Math.PI / 4);
+  }
+  // strap hinges (black) on the hinge stile, latch + thumb lever at the far stile
+  k.m('#1e1f21', 'iron');
+  for (const y of [0.22, 0.82]) {
+    sh.box(0.16, y, 0.018 * f, 0.3, 0.035, 0.006, 1);
+    sh.cyl(-0.015, y - 0.04, 0.0, 0.012, 0.012, 0.08, 6, 2);
+  }
+  sh.box(W - 0.02, 0.78, 0.018 * f, 0.1, 0.02, 0.008, 1);
+  sh.box(W + 0.035, 0.76, 0.005 * f, 0.02, 0.09, 0.02, 1);
+  sh.box(W - 0.06, 0.74, 0.026 * f, 0.018, 0.12, 0.01, 1);
+  sh.pop();
+  void rng;
 }
 
 /** Low garden wall along +x with coping and end pillars. */

@@ -98,6 +98,8 @@ export interface PlantDef {
   color?: string;
   /** hedge segment: ax, az, bx, bz, width */
   seg?: [number, number, number, number, number];
+  /** hedge: no bare stems in the foot (?nofencedetail) */
+  noStems?: boolean;
   /** crown stretched along a horizontal axis (street trees grow along the street gap): ax, az, factor */
   stretch?: [number, number, number];
   /** raised planter at the foot (y = its soil): trailing ivy over the rim + groundcover (near LOD) */
@@ -756,6 +758,29 @@ function hedgeStruct(st: Struct, rng: Rng): void {
     const p: V3 = [cx + vx * rng.range(-hw, hw) * 0.8, y + hh + 0.01, cz + vz * rng.range(-hw, hw) * 0.8];
     st.tips.push({ p, d: [0, 1, 0], sway: { ph1: ph, w1: 0.1, ph2: rng.next(), w2: 0.25 }, lobe: li, s: rng.range(0.9, 1.2) });
   }
+  // the rounded clipped ends get their own leaf clusters (species.ts hedge() rounds the core ~15 cm past each end)
+  for (const [e, sg] of [
+    [0, -1],
+    [L, 1],
+  ] as [number, number][]) {
+    for (let k = 0; k < 10; k++) {
+      const vo = rng.range(-hw, hw) * 0.8;
+      const p: V3 = [ax + ux * (e + sg * 0.12) + vx * vo, y + rng.range(0.28, hh * 0.95), az + uz * (e + sg * 0.12) + vz * vo];
+      st.tips.push({ p, d: [ux * sg, 0, uz * sg], sway: { ph1: ph, w1: 0.08, ph2: rng.next(), w2: 0.2 }, lobe: e === 0 ? 0 : nl - 1, s: rng.range(0.85, 1.1) });
+    }
+  }
+  // bare stems in the undercut foot (near LOD): a few leaning woody stems per side, every ~30 cm
+  if (!def.noStems)
+    for (let u = 0.12; u < L - 0.05; u += rng.range(0.22, 0.4)) {
+      const side = rng.chance(0.5) ? -1 : 1;
+      const vo = side * hw * rng.range(0.5, 0.7);
+      const gx = ax + ux * u + vx * vo,
+        gz = az + uz * u + vz * vo;
+      const lean = rng.range(0.03, 0.08) * side;
+      const top: V3 = [gx + vx * lean + ux * rng.range(-0.04, 0.04), y + Math.min(0.26, hh * 0.24), gz + vz * lean + uz * rng.range(-0.04, 0.04)];
+      const r = rng.range(0.008, 0.016);
+      st.segs.push({ a: [gx, y - 0.03, gz], b: top, ra: r, rb: r * 0.75, sa: STILL, sb: STILL, near: true, aoA: 0.3, aoB: 0.4 });
+    }
 }
 
 // ─────────────────────────────────────────────────────────────── emission ──

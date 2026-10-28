@@ -36,11 +36,35 @@ Branch `claude/real-w5-street` (from claude/pensive-gates-bim12i @ 6c29a46). Bri
   modern/simple/plaza/beach: bolted base flange (plate, 4 nuts+washers+studs), service hatch with lock and a pole
   number plate/sticker; suburb lathe base. Toggle ?nolampdetail (off on low).
 
+* Hedges (vegetation/species.ts `hedge()` core + crowns.ts `hedgeStruct`): woody undercut foot (bottom ~20 cm
+  inset to 70 % width, dark stems colour HEDGE_WOOD), ends rounded by 2 extra tapering rings past each end (was a
+  flat slab), 10 leaf-card tips on each end, bare woody stems (near wood segs, every 22–40 cm) in the foot.
+* Street tree 'verge' pits (plants.ts `vergePit`): granite sett edging, soil bed, patchy grass blobs (none within
+  30 cm of the trunk), leaf litter — was a flat bright-green box.
+* Bark fissure scale for the smooth pattern (0.3) more vertical (8, 1.5, 8) — at (6, 2.2, 6) it drew arcs.
+* Picket fences (props/furniture.ts `picketFence(.., rng?)`, `fencePost`, `gateLeaf`): chamfered posts set 12 cm
+  into the ground with pyramid caps and a soil collar, rails touching the boards (were 8 mm off = floating
+  pickets), per-picket height/lean jitter, weathered paint at the foot (grey timber + algae). Garden gates in the
+  front-walk gap (props.ts fence loop, from `layout.gardens[].front`): ledged-and-braced leaf with pickets, strap
+  hinges, thumb latch; 45 % open into the garden.
+
+* Kerbs (roads/surfaces.ts HM.curb/curbFace): granite units with dark 9 mm joints, per-stone tone 0.15, rounded
+  arris darkening (bevel 0.14), stains; face darker. Manhole + gully-grate decals (roads/markings.ts atlas):
+  legible casting ("TINYHAVEN" / "SEWER" text ring, chequer plate, pick holes; grate frame/bars/rib/lugs) embossed
+  from a height field (`emboss()`, baked top-left light) — atlas context is willReadFrequently (console clean).
+* Stop signs (sim/traffic/signals.ts buildStopSign, ?nosigndetail): 12-sided pole, cap, grout collar, two band
+  clamps + brackets + bolts, carriage-bolt heads on the face, 35 % lean 1–2°, sticker on 45 %.
+
 ## Tried and rejected
+* Gate gap found by walking `layout.walk` MASK_WALK from the fence end: front walks are not in that mask → no
+  gates. Use `gardens[].front` instead.
 
 ## Toggles / tiers / costs
 * ?notreebase — bark relief + foot stain off, trunks not fitted to grates, no tree guards (grates stay new).
   Low tier: shader part off.
 * ?nolampdetail — no near lamp-post kit (low tier: off).
+* ?nosigndetail — stop signs as before.
+* ?nofencedetail — old pickets/posts, no gates, no hedge foot stems (low tier: off). Hedge core rounding + verge
+  pits are geometry replacements (always on).
 
 ## Sheets

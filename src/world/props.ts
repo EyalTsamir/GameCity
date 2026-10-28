@@ -18,7 +18,7 @@ import { GeoSink, staticMesh } from './vegetation/geo';
 import { getLayout, occAny, PLANTER, hrand, MASK_WALK, DistanceLod, ChunkCuller, chunkOf } from './props/layout';
 import { furnitureMaterial, glassMaterial } from './props/material';
 import { createGlowMesh, type Glow } from './props/glow';
-import { Kit, lamp, bench, bin, hydrant, mailbox, phonebox, newsstand, planterBox, bollard, bikeRack, busShelter, picketFence, lowWall, shed, waterButt, FENCE_PAINT } from './props/furniture';
+import { Kit, lamp, bench, bin, hydrant, mailbox, phonebox, newsstand, planterBox, bollard, bikeRack, busShelter, picketFence, gateLeaf, lowWall, shed, waterButt, FENCE_PAINT } from './props/furniture';
 import * as GK from './props/garden';
 import * as SK from './props/kit';
 import { planScatter, scatterDisc, type ScatterItem } from './props/scatter';
@@ -73,6 +73,8 @@ export default function create(ctx: CityContext): CityModule {
   // real-object furniture (bins, planters, phone boxes, newsstands, bollards) or the old primitives (low tier, ?nopropdetail)
   const simple = ctx.debug.params.has('nopropdetail') || ctx.quality.level === 'low';
   const noLampDetail = ctx.debug.params.has('nolampdetail') || ctx.quality.level === 'low';
+  // W5: weathered pickets, posts set in the ground, garden gates (?nofencedetail, off on low)
+  const noFenceDetail = ctx.debug.params.has('nofencedetail') || ctx.quality.level === 'low';
 
   /** local → world for a frame at (x, z) with yaw */
   const toWorld = (x: number, z: number, yaw: number, lx: number, lz: number): [number, number] => [x + lx * Math.cos(yaw) + lz * Math.sin(yaw), z - lx * Math.sin(yaw) + lz * Math.cos(yaw)];
@@ -246,8 +248,35 @@ export default function create(ctx: CityContext): CityModule {
     const yaw = Math.atan2(-dz, dx);
     sel(b.ax);
     kf.sh.frame(b.ax, H(b.ax, b.az), b.az, yaw);
-    if (b.style === 'picket') picketFence(kf, L, FENCE_PAINT[b.paint % FENCE_PAINT.length], b.gateA, b.gateB);
-    else lowWall(kf, L, hrand(`wall:${b.lot}`) < 0.55, b.gateA, b.gateB);
+    const paint = FENCE_PAINT[b.paint % FENCE_PAINT.length];
+    if (b.style === 'picket') {
+      const frng = noFenceDetail ? undefined : new Rng(Math.floor(hash01(b.ax, b.az, 17) * 1e9));
+      picketFence(kf, L, paint, b.gateA, b.gateB, frng);
+      // a gate in the gap after a street fence when that gap is the front walk to the door (gardens[].front)
+      if (frng && b.street && b.gateB) {
+        const ux = dx / L,
+          uz = dz / L;
+        const fw = layout.gardens.find((q) => q.lot === b.lot)?.front;
+        const px = b.bx + ux * 0.3,
+          pz = b.bz + uz * 0.3;
+        const inWalk = !!fw && px > fw.x0 - 0.4 && px < fw.x1 + 0.4 && pz > fw.z0 - 0.4 && pz < fw.z1 + 0.4;
+        const far = !fw ? 0 : Math.abs(ux) > Math.abs(uz) ? (ux > 0 ? fw.x1 - b.bx : b.bx - fw.x0) : uz > 0 ? fw.z1 - b.bz : b.bz - fw.z0;
+        const gw = far + 0.12;
+        if (inWalk && gw >= 0.7 && gw <= 1.9) {
+          // open towards the garden: the lot centre side of the fence line (local -z)
+          const lot = ctx.plan.lots.find((l) => l.id === b.lot);
+          const f = lot?.footprint;
+          const cx = f ? (f.x0 + f.x1) / 2 : b.bx,
+            cz = f ? (f.z0 + f.z1) / 2 : b.bz;
+          // local +z of the frame is world (sin yaw, cos yaw): side −1 when the garden lies on +z
+          const inward = -(Math.sin(yaw) * (cx - b.bx) + Math.cos(yaw) * (cz - b.bz)) > 0 ? 1 : -1;
+          const open = frng.chance(0.55) ? 0 : frng.range(0.4, 1.5);
+          kf.sh.frame(b.bx, H(b.bx, b.bz), b.bz, yaw);
+          gateLeaf(kf, Math.min(gw, 1.2), paint, open, frng, inward);
+          inc('gate');
+        }
+      }
+    } else lowWall(kf, L, hrand(`wall:${b.lot}`) < 0.55, b.gateA, b.gateB);
     fenceM += L;
     inc(b.style);
   }

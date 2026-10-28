@@ -608,11 +608,11 @@ thBarkG = vec3( 0.0 );
     } else if ( pat > 0.2 ) {
       // smooth grey bark (ficus, olive): fine fissures
       float fade = 1.0 - smoothstep( 0.025, 0.09, foot );
-      vec4 nd = thNoised( vThRest * vec3( 6.0, 2.2, 6.0 ) );
+      vec4 nd = thNoised( vThRest * vec3( 8.0, 1.5, 8.0 ) );
       float n = nd.x;
       bc *= 1.0 - 0.28 * mix( 0.35, smoothstep( -0.05, 0.25, abs( n ) * 2.0 ), fade );
       // fine fissures: shallow grooves along the zero lines of n
-      thBarkG = -sign( n ) * 2.0 * nd.yzw * vec3( 6.0, 2.2, 6.0 ) * ( 1.0 - smoothstep( 0.0, 0.14, abs( n ) ) ) * 0.01 * fade;
+      thBarkG = -sign( n ) * 2.0 * nd.yzw * vec3( 8.0, 1.5, 8.0 ) * ( 1.0 - smoothstep( 0.0, 0.14, abs( n ) ) ) * 0.01 * fade;
     } else {
       // furrowed bark
       float fade = 1.0 - smoothstep( 0.025, 0.09, foot );

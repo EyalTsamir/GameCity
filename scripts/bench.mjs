@@ -2,7 +2,7 @@
 // The object bench: close-up captures of object classes at several distances in ONE page load.
 //
 //   node scripts/bench.mjs [--classes house,bench,car,...|all] [--dists 3,10,40] [--hours 11] [--q "extra"]
-//                          [--out shots/bench] [--width 1280 --height 720] [--settle 1500] [--pick 0]
+//                          [--out shots/bench] [--width 1280 --height 720] [--settle 1500] [--pick 0] [--nodof 1]
 //                          [--sheet 1] [--cols 3] [--tile 560] [--yaw 18 (offset from the front)] [--pitch deg]
 //                          [--yaws 0,150 (extra views per distance, added to --yaw)]
 //
@@ -31,7 +31,7 @@ const ALL = [
   'fountain', 'statue', 'gazebo', 'playground', 'kiosk', 'marketstall', 'umbrellas', 'picnic', 'flagpole', 'jetty',
   'car', 'bus', 'pedestrian', 'train', 'boat',
   // close-ups of street hardscape (W5): trunk / post foot, kerb line, garden borders, signs and signals
-  'treebase', 'lampbase', 'kerb', 'fence', 'hedge', 'wall', 'sign', 'signal',
+  'treebase', 'lampbase', 'kerb', 'fence', 'hedge', 'wall', 'sign', 'signal', 'junction',
 ];
 const classes = !args.classes || args.classes === 'all' ? ALL : args.classes.split(',');
 const dists = (args.dists ?? '3,10,40').split(',').map(Number);
@@ -64,6 +64,8 @@ try {
   await page.waitForFunction(() => window.__city && window.__city.ready && window.__city.frames() > 3, null, { timeout: 300000, polling: 250 });
   await page.addStyleTag({ content: '#ui{display:none!important}' });
   report.failedModules = await page.evaluate(() => window.__city.failed);
+  // --nodof: judge surfaces sharp at 2 m (the world-mode lens blurs close-ups)
+  if (args.nodof) await page.evaluate(() => window.__city.ctx.services.postfx?.setEnabled?.('dof', false));
   await page.evaluate((h) => window.__city.setHours(h), hours);
   await page.waitForTimeout(2500);
 
@@ -108,6 +110,12 @@ try {
           // both normals are tried by the line-of-sight swing; start 35° off the perpendicular
           const yaw = (Math.atan2(b.bz - b.az, -(b.bx - b.ax)) * 180) / Math.PI;
           return { x, y: gy(x, z), z, yaw: yaw + 35, h: 1, w: 1.2 };
+        }
+        if (cls === 'junction') {
+          // the centre manhole and the road surface of a signalised junction, looked down at
+          const I = nth(c.ctx.roads.intersections.filter((I) => I.control === 'signal').sort((a, b) => Math.hypot(a.x, a.z) - Math.hypot(b.x, b.z)));
+          if (!I) return null;
+          return { x: I.x, y: gy(I.x, I.z), z: I.z, yaw: 30, h: 0.2, w: 1.5, pitch: 50 };
         }
         if (cls === 'sign' || cls === 'signal') {
           const heads = c.ctx.roads.intersections.flatMap((I) => (cls === 'sign' ? I.stopSigns : I.signals));
