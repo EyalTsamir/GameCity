@@ -174,8 +174,17 @@ export function bench(k: Kit, style: 'classic' | 'modern' | 'wood', rng: Rng, le
       sh.box(x, 0.21 - legDrop / 2, 0.0, 0.08, 0.42 + legDrop, 0.46, 1);
       sh.beam(x, 0.42, -0.2, x, 0.86, -0.3, 0.07, 0.06);
     }
+    // fixings: a base plate under each leg with four anchor bolts, a box-section rail under the slats
+    for (const x of [-0.72, 0.72]) {
+      sh.box(x, 0.004 - legDrop, 0.0, 0.16, 0.008, 0.52, 1);
+      for (const sx of [-1, 1]) for (const sz of [-1, 1]) boltY(sh, x + sx * 0.055, 0.008 - legDrop, sz * 0.22, 0.011);
+    }
+    sh.box(0, 0.39, -0.03, 1.5, 0.04, 0.04, 1);
     k.m(rng.chance(0.5) ? '#b07a4c' : '#9a6a43', 'wood');
     for (let i = 0; i < 5; i++) cbox(sh, 0, 0.445, -0.2 + i * 0.105, L, 0.04, 0.085, 0.008, 0);
+    // countersunk screws into the frame
+    k.m('#55595c', 'steel');
+    for (const x of [-0.72, 0.72]) for (let i = 0; i < 5; i++) sh.cyl(x, 0.485, -0.2 + i * 0.105, 0.007, 0.007, 0.002, 6, 2);
     for (let i = 0; i < 3; i++) {
       const t = i / 2;
       sh.push().local(0, 0.6 + t * 0.22, -0.25 - t * 0.05, -0.2).box(0, 0, 0, L, 0.075, 0.03, 0).pop();
@@ -189,8 +198,21 @@ export function bench(k: Kit, style: 'classic' | 'modern' | 'wood', rng: Rng, le
       sh.box(x, 0.21 - legDrop / 2, -0.18, 0.1, 0.42 + legDrop, 0.1, 1);
       sh.beam(x, 0.4, -0.22, x, 0.88, -0.34, 0.09, 0.08);
     }
+    // bearers across the leg pairs, a centre bearer and leg, galvanised angle brackets bolted to the paving
+    for (const x of [-0.75, 0, 0.75]) sh.box(x, 0.37, -0.01, 0.08, 0.07, 0.48, 1);
+    sh.box(0, 0.185 - legDrop / 2, -0.01, 0.09, 0.37 + legDrop, 0.09, 1);
+    k.m('#9aa1a5', 'steel');
+    for (const x of [-0.75, 0.75])
+      for (const z of [0.16, -0.18]) {
+        sh.box(x, 0.004 - legDrop, z + 0.075, 0.1, 0.008, 0.05, 1);
+        sh.box(x, 0.04 - legDrop, z + 0.052, 0.1, 0.08, 0.006, 1);
+        boltY(sh, x, 0.008 - legDrop, z + 0.085, 0.012);
+        boltZ(sh, x, 0.045 - legDrop, z + 0.056, 0.01);
+      }
     k.m('#a87f58', 'wood');
     for (let i = 0; i < 4; i++) cbox(sh, 0, 0.445, -0.18 + i * 0.12, L, 0.045, 0.1, 0.009, 0);
+    k.m('#3a3a38', 'iron');
+    for (const x of [-0.75, 0, 0.75]) for (let i = 0; i < 4; i++) sh.cyl(x, 0.49, -0.18 + i * 0.12, 0.008, 0.008, 0.003, 6, 2);
     for (let i = 0; i < 2; i++) sh.push().local(0, 0.66 + i * 0.16, -0.28 - i * 0.035, -0.22).box(0, 0, 0, L, 0.1, 0.035, 0).pop();
     return;
   }
@@ -204,6 +226,14 @@ export function bench(k: Kit, style: 'classic' | 'modern' | 'wood', rng: Rng, le
     sh.box(x, 0.64, 0.03, 0.07, 0.04, 0.42, 0);
     sh.beam(x, 0.42, 0.2, x, 0.64, 0.2, 0.05, 0.05, false);
   }
+  // feet: cast pads with an anchor bolt each; a flat-iron centre bearer under the slats
+  for (const x of [-0.84, 0.84])
+    for (const z of [0.19, -0.17]) {
+      sh.box(x, 0.006 - legDrop, z, 0.1, 0.012, 0.09, 1);
+      boltY(sh, x + 0.032, 0.012 - legDrop, z, 0.01);
+    }
+  sh.box(0, 0.415, 0.0, 0.03, 0.035, 0.44, 0);
+  sh.beam(0, 0.42, -0.2, 0, 0.82, -0.31, 0.03, 0.02, false);
   // scrolled armrests on the ends
   for (const x of [-0.84, 0.84]) {
     sh.beam(x, 0.64, 0.2, x, 0.66, -0.12, 0.05, 0.035);
@@ -425,8 +455,31 @@ export function phonebox(k: Kit, g?: Kit): void {
   sh.box(0, 1.25, -0.265, 0.12, 0.08, 0.01, 0);
   k.m('#111', 'plastic');
   sh.box(-0.08, 1.4, -0.26, 0.05, 0.2, 0.05, 0);
+  // coiled cord sagging from the handset, a coin box under the phone, an instructions card
+  k.m('#111', 'plastic');
+  for (let i = 0; i < 6; i++) {
+    const t0 = i / 6, t1 = (i + 1) / 6;
+    const cy = (t: number) => 1.32 - Math.sin(t * Math.PI) * 0.16;
+    sh.tube(-0.08 + t0 * 0.1, cy(t0), -0.255 + t0 * 0.02, -0.08 + t1 * 0.1, cy(t1), -0.255 + t1 * 0.02, 0.009, 0.009, 4);
+  }
+  k.m('#7d8589', 'steel');
+  cbox(sh, 0, 1.08, -0.34, 0.2, 0.14, 0.09, 0.01);
+  sh.box(0.05, 1.12, -0.294, 0.04, 0.006, 0.004, 0);
+  k.m('#ecebe4', 'paint');
+  sh.box(0, 1.62, -0.36, 0.2, 0.14, 0.004, 0);
   k.m('#5a4a3a', 'wood');
   sh.box(0, 0.95, -0.3, 0.6, 0.03, 0.22, 0);
+  // directories on the shelf, a crumpled flyer on the floor, cards stuck to the side wall bars
+  k.m('#d8bd5a', 'paint');
+  sh.box(-0.17, 0.98, -0.31, 0.2, 0.05, 0.15, 0);
+  k.m('#3a5f8a', 'paint');
+  sh.box(-0.16, 1.03, -0.31, 0.18, 0.04, 0.14, 0);
+  k.m('#f1efe8', 'paint');
+  sh.ellipsoid(0.18, 0.2, 0.12, 0.05, 0.025, 0.04, 0);
+  for (const [cz, cy, c] of [[-0.2, 1.7, '#e84a7a'], [-0.05, 1.55, '#f6d33c'], [0.1, 1.74, '#ffffff']] as const) {
+    k.m(c, 'paint');
+    sh.box(0.405, cy, cz, 0.003, 0.09, 0.06, 0);
+  }
   k.e('#f6f0e0', '#ffe6b8', 1.2);
   sh.box(0, 2.0, 0, 0.3, 0.02, 0.3, 0);
   // square dome, crown
@@ -712,7 +765,31 @@ export function bikeRack(k: Kit, rng: Rng): void {
     sh.push().local(hoops[h], 0, side * 0.2, rng.range(-0.05, 0.05) * side, rng.chance(0.5) ? 0 : Math.PI, 0.08 * side);
     bike(k, rng.pick(BIKE_COLS));
     sh.pop();
+    // locked to the hoop: a D-lock round the upright and the down tube (shackle + lock body), or a cable
+    const ux = hoops[h] + (rng.chance(0.5) ? 0.32 : -0.32);
+    if (rng.chance(0.7)) {
+      k.m('#2b2d2f', 'steel');
+      const z0 = -side * 0.035, z1 = side * 0.23;
+      for (const y of [0.5, 0.62]) sh.tube(ux, y, z0, ux, y, z1, 0.009, 0.009, 5);
+      sh.tube(ux, 0.5, z0, ux, 0.62, z0, 0.009, 0.009, 5);
+      k.m(rng.chance(0.5) ? '#e0b21c' : '#1c1d1f', 'plastic');
+      sh.box(ux, 0.48, z1, 0.035, 0.17, 0.035, 1);
+    } else {
+      k.m(rng.pick(['#c0392b', '#1f5fa8', '#1c1d1f']), 'plastic');
+      sh.tube(ux, 0.35, 0, ux + 0.05, 0.3, side * 0.2, 0.008, 0.008, 4);
+      sh.tube(ux + 0.05, 0.3, side * 0.2, ux + 0.02, 0.45, side * 0.21, 0.008, 0.008, 4);
+      sh.tube(ux + 0.02, 0.45, side * 0.21, ux, 0.42, 0, 0.008, 0.008, 4);
+      k.m('#1c1d1f', 'plastic');
+      sh.box(ux + 0.03, 0.28, side * 0.2, 0.04, 0.06, 0.03, 1);
+    }
   }
+  // the hoops sit in welded flanges bolted to the paving
+  k.m('#8d969b', 'steel');
+  for (const x of hoops)
+    for (const sx of [-1, 1]) {
+      sh.cyl(x + sx * 0.32, 0, 0, 0.06, 0.06, 0.008, 10, 2);
+      for (const a of [0.6, 2.2, 3.8, 5.4]) boltY(sh, x + sx * 0.32 + Math.cos(a) * 0.042, 0.008, Math.sin(a) * 0.042, 0.007);
+    }
 }
 
 /** Bicycle along local x (front wheel at +x), wheels touching y = 0. */

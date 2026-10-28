@@ -152,7 +152,10 @@ try {
           const meshes = [];
           // glass counts (curtain walls); billboards / sky / water / particles do not
           const skip = /glow|halo|cloud|sky|water|atmo|spark|smoke|rain|firework|shadow/i;
-          c.ctx.scene.traverseVisible((o) => o.isMesh && !skip.test(o.name) && !skip.test(o.parent?.name ?? '') && meshes.push(o));
+          // traverse(), not traverseVisible(): chunk / frustum culling and near-only LODs hide meshes that are
+          // invisible from the CURRENT camera but in view from the candidate one (the bin 10 m capture ended
+          // inside a culled bus shelter). Coarse + fine LOD twins both block, which is harmless.
+          c.ctx.scene.traverse((o) => o.isMesh && o.material?.visible !== false && !skip.test(o.name) && !skip.test(o.parent?.name ?? '') && meshes.push(o));
           const rc = new THREE.Raycaster();
           const from = new THREE.Vector3(l.x, ty, l.z);
           const near = Math.max(0.6, l.w * 0.5 + 0.4);
@@ -184,6 +187,13 @@ try {
                 hit = rc.intersectObjects(meshes, false).length > 0;
               }
               if (hit) hits++;
+              // a wall / panel right at the lens (shelter ad panels, kiosk sides) fills the frame
+              if (pd.y === 0) {
+                rc.set(cam.position, pd);
+                rc.near = 0;
+                rc.far = 0.9;
+                if (rc.intersectObjects(meshes, false).length) return false;
+              }
             }
             return hits < 3;
           };
