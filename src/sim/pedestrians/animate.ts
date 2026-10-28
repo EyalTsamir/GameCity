@@ -190,8 +190,10 @@ export function computePoseA(m: Member, umbrella: boolean, r: Rig, o: Pose, gs: 
   let hv = 0.5; // hash scratch
 
   // ── idle weight shift (contrapposto: pelvis list + sway onto one leg), passed into the gait
-  const ph = t * 0.32 + m.seed * 40;
-  const w = Math.sin(ph) * 0.85 + 0.15 * Math.sin(ph * 2.3);
+  // people stand on one leg for a while and then shift over in a second or so (a held, saturated wave,
+  // not a constant rocking); the hold length drifts per person
+  const ph = t * (0.22 + 0.12 * m.seed) + m.seed * 40 + 0.6 * Math.sin(t * 0.07 + m.seed * 9);
+  const w = Math.tanh(2.6 * Math.sin(ph)) * 0.88 + 0.12 * Math.sin(ph * 2.3);
   idle.sway = 0.02 * hk * w;
   idle.roll = 0.055 * w;
   idle.yaw = 0.035 * Math.sin(ph * 0.7);
