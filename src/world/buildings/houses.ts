@@ -344,8 +344,9 @@ export function genApartment(g: Gen): void {
   const accent = [balTone, shade(balTone, 0.94)];
   const balStyle = rng.weighted(['solid', 'glass', 'bars'] as const, [0.5, 0.25, 0.25]);
   const railC = col(rng.pick(['#9aa3a8', '#e9e6dd', '#3a3f44']));
-  const look = (profile: number = PROF.HOME): WallLook => ({ color: wallC, pattern: WALLPAT.PANELS, frame: FRAME.ALU, glass: GLASS.NEUTRAL, style: WIN.PLAIN, profile, seed: g.seed });
-  const plain = { color: wallC, pattern: WALLPAT.PANELS, seed: g.seed };
+  const aptPat = Math.abs(Math.sin(g.seed * 7.31) * 1e4) % 1 < 0.55 ? WALLPAT.PLASTER : WALLPAT.PANELS; // rendered (ETICS) or precast panels
+  const look = (profile: number = PROF.HOME): WallLook => ({ color: wallC, pattern: aptPat, frame: FRAME.ALU, glass: GLASS.NEUTRAL, style: WIN.PLAIN, profile, seed: g.seed });
+  const plain = { color: wallC, pattern: aptPat, seed: g.seed };
   const s = g.shell,
     t = g.trim;
   const coreW = 3.2;

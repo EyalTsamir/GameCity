@@ -32,6 +32,7 @@ import { samplePalette, SkyState } from '../render/sky/palette';
 import { anchors, collectFacades, collectSpans, type BuildingsService } from './buildings/anchors';
 import { GreenKit, makeGreenTexture, createGreenMaterial } from './buildings/green';
 import { setClutter } from './buildings/clutter';
+import { createWinGeo } from './buildings/winGeo';
 
 /** edge (m) of the square trim chunks (≈ two city blocks), grid origin at the slab's NW corner */
 const TRIM_CHUNK = 110;
@@ -86,6 +87,9 @@ export default function create(ctx: CityContext): CityModule {
   // A/B switches: ?legacyfacade = original shell shader
   const mats = createMaterials(ctx.uniforms, { legacy: ctx.debug.params.has('legacyfacade'), wear: !ctx.debug.params.has('nowear'), winDepth: !ctx.debug.params.has('nowinreveal'), wallRelief: !ctx.debug.params.has('nowallrelief'), plinth: !ctx.debug.params.has('noplinth') });
   const shell = new Builder({ normal: true, color: true, uv: true, facade: true });
+  // ?nowingeo = no near-LOD sill / surround geometry (the shader sill everywhere)
+  const winGeoOn = !ctx.debug.params.has('nowingeo');
+  if (winGeoOn) shell.winRec = [];
   const trimChunks = new Map<number, Builder>();
   const trimOf = (x: number, z: number): Builder => {
     const kx = Math.max(0, Math.min(3, Math.floor((x + 220) / TRIM_CHUNK)));
@@ -236,6 +240,9 @@ export default function create(ctx: CityContext): CityModule {
   ctx.scene.add(group);
 
   if (ctx.quality.level === 'low') mats.uniforms.uDetail.value = 0.4;
+  const winGeo = shell.winRec ? createWinGeo(shell.winRec, ctx.quality.level === 'low' ? 22 : ctx.quality.level === 'medium' ? 32 : 42) : null;
+  shell.winRec = null;
+  if (winGeo) group.add(winGeo.group);
   // debug (perf analysis): ?bdbg=noshell,notrim,nocast,nodetail
   const bdbg = (ctx.debug.params.get('bdbg') ?? '').split(',');
   for (const m of meshes) {
@@ -247,6 +254,7 @@ export default function create(ctx: CityContext): CityModule {
   if (bdbg.includes('weather')) mats.uniforms.uBhDebug.value = 1;
   if (bdbg.includes('wallinfo')) mats.uniforms.uBhDebug.value = 2;
   if (bdbg.includes('reveal')) mats.uniforms.uBhDebug.value = 3;
+  if (bdbg.includes('nan')) mats.uniforms.uBhDebug.value = 4;
   // anchors for other modules (life: smoke, laundry, bunting, birds; streetlife) + diagnostics for the
   // harness: __city.ctx.services.buildings.setDebug(0 | 1 | 2). Types: src/world/buildings/anchors.ts
   const facades = collectFacades(lots);
@@ -331,6 +339,7 @@ export default function create(ctx: CityContext): CityModule {
       mats.uniforms.uHours.value = c.clock.hours;
     },
     frame(_realDt, c) {
+      if (winGeo) winGeo.frame(c.camera.position, mats.uniforms.uGeoWin.value);
       const u = c.uniforms;
       const day = u.uDaylight.value;
       const dusk = u.uDusk.value;
@@ -394,6 +403,7 @@ export default function create(ctx: CityContext): CityModule {
         laundryLines: service.laundry.length,
         vents: service.vents.length,
         shops: service.shops.length,
+        ...(winGeo ? winGeo.stats() : {}),
         ...Object.fromEntries(Object.entries(kindCounts).map(([k, v]) => [`n_${k}`, v])),
         ...Object.fromEntries(Object.entries(houseStats).map(([k, v]) => [`house_${k}`, v])),
       };

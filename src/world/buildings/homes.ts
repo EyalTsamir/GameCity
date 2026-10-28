@@ -18,7 +18,7 @@ import * as THREE from 'three';
 import {
   Gen, LRect, Side, FRONT, RIGHT, BACK, LEFT, Grid, WallLook, SideGeom,
   sideGeom, sideBox, sx, sz, makeGrid, gridU, gridY0, wallGrid, wallPlain, wallSeg, wallTri, setWallAttrs,
-  gableRoof, hipRoof, flatRoof, roofLook, roofPoly, chimney, doorNiche, bandWithOpenings, railing,
+  gableRoof, hipRoof, flatRoof, roofLook, roofPoly, chimney, doorNiche, bandWithOpenings,
   col, shade, setCol, lightBox, wallLamp,
 } from './gen';
 import { WIN, PROF, WALLPAT, ROOFPAT, FRAME, GLASS, LIGHT_MODE } from './materials';
@@ -89,12 +89,12 @@ export function genHouse(g: Gen): void {
   const twoTone = floors === 2 && !brick && rng.chance(0.32);
   const gc = twoTone ? (rng.chance(0.75) ? col(rng.pick(BRICKS)) : col('#c9bfae')) : wc;
   const gPat = twoTone ? (gc.r > gc.b * 1.3 ? WALLPAT.BRICK : WALLPAT.STONE) : pattern;
-  const trimC = col(rng.chance(0.85) ? '#f6f3ec' : rng.pick(['#e9dfc8', '#3b3f44', '#5a3d2b']));
+  const trimC = col(rng.chance(0.62) ? '#f6f3ec' : rng.pick(['#e9dfc8', '#3b3f44', '#5a3d2b', '#c9d3cf', '#d8c7a4', '#8a9a8b', '#efe6d2']));
   const doorC = col(rng.pick(DOORS));
   const shutters = rng.chance(0.38);
   const shutterC = col(rng.pick(SHUTTERS));
   const boxes = rng.chance(0.42);
-  const frameIdx = trimC.r < 0.3 ? FRAME.BLACK : rng.chance(0.85) ? FRAME.WHITE : rng.pick([FRAME.WOOD, FRAME.GREEN, FRAME.CREAM]);
+  const frameIdx = trimC.r < 0.3 ? FRAME.BLACK : rng.chance(0.66) ? FRAME.WHITE : rng.pick([FRAME.WOOD, FRAME.GREEN, FRAME.CREAM, FRAME.DARK, FRAME.TEAL, FRAME.CREAM]);
   const roofC = col(rng.pick(HOUSE_ROOFS));
   const rPat = roofC.r > roofC.b * 1.25 ? ROOFPAT.TILES : ROOFPAT.SLATE;
   const upLook = (style: number = WIN.MUNTIN): WallLook => ({ color: wc, pattern, frame: frameIdx, glass: GLASS.NEUTRAL, style, profile: PROF.HOME, seed: g.seed });
@@ -256,13 +256,12 @@ export function genHouse(g: Gen): void {
     groundRun(psg, 0, pw, [{ u: du, w: 1.05, h: 2.2, kind: 'door' }], true);
     porchLamp(pa + du + 0.85, zP + 0.06, 2.0);
     // deck, posts, railing, ceiling
-    setCol(t, col('#a87f58'));
-    t.box(pa, 0, zP, pb, 0.16, M.z1, 0b110111);
+    porchDeck(pa, pb, zP, M.z1, 0.16, col(['#a87f58', '#9a8f80', '#8d6e52'][Math.abs(Math.floor(g.seed)) % 3]));
     setCol(t, trimC);
     const postH = gH;
     for (const px of [pa + 0.12, pb - 0.12]) t.box(px - 0.1, 0.16, M.z1 - 0.22, px + 0.1, postH, M.z1 - 0.02, 0b111111);
-    railing(t, pa + 0.2, M.z1 - 0.12, pa + Math.max(0.3, pw * 0.5 - 0.7), M.z1 - 0.12, 0.16, 0.8, trimC, 0.25, 1);
-    railing(t, pb - Math.max(0.3, pw * 0.5 - 0.7), M.z1 - 0.12, pb - 0.2, M.z1 - 0.12, 0.16, 0.8, trimC, 0.25, 1);
+    porchRail(pa + 0.22, pa + Math.max(0.3, pw * 0.5 - 0.7), M.z1 - 0.12, 0.16, 0.8, trimC);
+    porchRail(pb - Math.max(0.3, pw * 0.5 - 0.7), pb - 0.22, M.z1 - 0.12, 0.16, 0.8, trimC);
     setCol(t, shade(trimC, 0.92));
     t.hrect(pa, zP, pb, M.z1, postH - 0.01, false);
     if (rng.chance(0.6)) porchBench(pa + 0.5, zP + 0.25);
@@ -415,8 +414,7 @@ export function genHouse(g: Gen): void {
     const yA = floors === 2 ? gH - 0.12 : eave - 0.5;
     leanTo(va, vb, M.z1, F.z1 - 0.05, yA, 2.55, false);
     // deck, posts, railing with an opening at the steps
-    setCol(t, col(rng.pick(['#a87f58', '#9a8f80', '#8d6e52'])));
-    t.box(va, 0, M.z1, vb, 0.22, F.z1 - 0.02, 0b111111 & ~8);
+    porchDeck(va, vb, M.z1, F.z1 - 0.02, 0.22, col(rng.pick(['#a87f58', '#9a8f80', '#8d6e52'])));
     setCol(t, trimC);
     const n = Math.max(2, Math.round((vb - va) / 2.3));
     const zp = F.z1 - 0.2;
@@ -426,8 +424,8 @@ export function genHouse(g: Gen): void {
     }
     const sa = doorX - 0.75,
       sb = doorX + 0.75;
-    if (sa - va > 0.4) railing(t, va + 0.2, zp, sa, zp, 0.22, 0.85, trimC, 0.22, 1);
-    if (vb - sb > 0.4) railing(t, sb, zp, vb - 0.2, zp, 0.22, 0.85, trimC, 0.22, 1);
+    if (sa - va > 0.4) porchRail(va + 0.2, sa, zp, 0.22, 0.85, trimC);
+    if (vb - sb > 0.4) porchRail(sb, vb - 0.2, zp, 0.22, 0.85, trimC);
     setCol(t, col('#b9b2a6'));
     t.box(sa, 0, F.z1 - 0.12, sb, 0.11, F.z1 - 0.01, 0b110111);
     if (rng.chance(0.7)) porchBench(va + 0.4, M.z1 + 0.25);
@@ -594,6 +592,46 @@ export function genHouse(g: Gen): void {
 
   function porchLamp(x: number, z: number, y: number): void {
     lightBox(g, x - 0.08, y, z, x + 0.08, y + 0.28, z + 0.14, '#ffc979', LIGHT_MODE.STEADY, 3);
+  }
+
+  /** Porch balustrade along x at z: newel posts with caps, moulded handrail, bottom rail clear of the deck,
+   *  square balusters at ~11 cm centres (real porch joinery instead of flat planks). */
+  function porchRail(x0: number, x1: number, z: number, y: number, h: number, c: THREE.Color): void {
+    if (x1 - x0 < 0.25) return;
+    setCol(t, c);
+    const nw = 0.045;
+    for (const nx of [x0, x1]) {
+      t.box(nx - nw, y, z - nw, nx + nw, y + h + 0.06, z + nw, 0b110111);
+      t.box(nx - nw - 0.015, y + h + 0.06, z - nw - 0.015, nx + nw + 0.015, y + h + 0.1, z + nw + 0.015, 0b111111);
+    }
+    const a = x0 + nw,
+      b = x1 - nw;
+    // handrail: a wider cap over a narrower rail (a moulded profile in two boxes)
+    t.box(a, y + h - 0.07, z - 0.025, b, y + h - 0.02, z + 0.025, 0b111111);
+    t.box(a, y + h - 0.02, z - 0.042, b, y + h + 0.012, z + 0.042, 0b111111);
+    // bottom rail 6 cm above the deck
+    t.box(a, y + 0.06, z - 0.03, b, y + 0.11, z + 0.03, 0b111111);
+    const n = Math.max(1, Math.round((b - a) / 0.11));
+    for (let k = 0; k < n; k++) {
+      const bx = a + ((b - a) * (k + 0.5)) / n;
+      t.box(bx - 0.019, y + 0.11, z - 0.019, bx + 0.019, y + h - 0.07, z + 0.019, 0b110011);
+    }
+  }
+
+  /** Porch deck x0..x1 × z0..z1, top at y: a dark joist frame under boards 14 cm wide with 6 mm gaps running
+   *  out from the house, a nosing board along the front, per-board tone. */
+  function porchDeck(x0: number, x1: number, z0: number, z1: number, y: number, c: THREE.Color): void {
+    setCol(t, shade(c, 0.45));
+    t.box(x0, 0, z0, x1, y - 0.012, z1, 0b110111 & ~8);
+    const n = Math.max(2, Math.round((x1 - x0) / 0.146));
+    const w = (x1 - x0) / n;
+    for (let k = 0; k < n; k++) {
+      const hk = Math.sin((k + 1) * 12.9898 + g.seed * 0.7311) * 43758.5453;
+      setCol(t, shade(c, 0.86 + 0.22 * (hk - Math.floor(hk))));
+      t.box(x0 + k * w + 0.003, y - 0.03, z0, x0 + (k + 1) * w - 0.003, y, z1 - 0.03, 0b110100);
+    }
+    setCol(t, shade(c, 0.9));
+    t.box(x0, y - 0.05, z1 - 0.03, x1, y + 0.004, z1, 0b111111);
   }
 
   function porchBench(x: number, z: number): void {

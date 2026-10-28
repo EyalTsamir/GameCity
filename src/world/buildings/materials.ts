@@ -138,6 +138,8 @@ export interface BuildingMaterials {
     uWinDepth: { value: number };
     uWallRelief: { value: number };
     uPlinth: { value: number };
+    /** near-LOD sill geometry: (centre of its range, range m); the shader drops its own sill box inside */
+    uGeoWin: { value: THREE.Vector4 };
   };
 }
 
@@ -303,6 +305,7 @@ uniform float uWear;
 uniform float uWinDepth;
 uniform float uWallRelief;
 uniform float uPlinth;
+uniform vec4 uGeoWin;
 // world-space normal override from bhWall (window reveals, sills, wall relief); zero = keep the geometric normal
 vec3 bhNW = vec3(0.0);
 float plinthF = 0.0;
@@ -919,9 +922,9 @@ void bhWall(inout vec3 albedo, inout float rough, inout float metal, inout vec3 
       pc *= (1.0 - 0.35 * spl * (1.0 - smoothstep(0.005, 0.02, fq.y))) * mix(0.72, 1.0, smoothstep(0.0, 0.18 + 0.1 * nm.g, y));
       // the ledge on top catches the sky; a thin shadow line just under it
       float led = smoothstep(pH - 0.03 - aaP, pH - 0.012, y) * (1.0 - smoothstep(pH - 0.012, pH, y));
-      pc *= 1.0 + 0.25 * led;
+      pc *= 1.0 + 0.08 * led;
       albedo = mix(albedo, pc, plinthF);
-      if (led > 0.3 && uWallRelief > 0.5) bhNW = normalize(N + vec3(0.0, 1.1, 0.0));
+      if (led > 0.3 && uWallRelief > 0.5) bhNW = normalize(N + vec3(0.0, 0.55, 0.0));
       else if (plinthF > 0.5) bhNW = vec3(0.0);
     }
     // the wall right above the ledge: a little splash-back from the ledge
@@ -963,12 +966,12 @@ void bhWall(inout vec3 albedo, inout float rough, inout float metal, inout vec3 
     albedo *= 1.0 - 0.08 * smoothstep(0.2, 0.9, -sunF) * oldness;
     float eaveG = info * (1.0 - smoothstep(0.0, 2.6 + 2.0 * nm.r, dTop)) * (0.55 + 0.45 * smoothstep(0.2, 0.7, stv));
     albedo *= 1.0 - 0.22 * eaveG * oldness * wStr;
-    albedo *= 1.0 - 0.16 * (1.0 - smoothstep(0.2, 1.3 + 0.5 * nm.g, y)) * oldness * wStr;
+    albedo *= 1.0 - 0.24 * (1.0 - smoothstep(0.2, 1.3 + 0.5 * nm.g, y)) * (0.75 + 0.5 * nm.r) * oldness * wStr; // grimy foot: splash, bikes, hands
     float tide = 0.35 + 0.6 * oldness + 0.35 * (nm.g - 0.5) + 0.1 * (grain - 0.5) + 0.2 * (np.r - 0.5);
     float damp = 1.0 - smoothstep(tide - 0.14, tide + 0.03, y);
     float salt = smoothstep(tide - 0.08, tide + 0.0, y) * (1.0 - smoothstep(tide + 0.0, tide + 0.07, y));
     albedo *= mix(vec3(1.0), vec3(0.74, 0.73, 0.67), damp * 0.75 * oldness * wStr);
-    albedo = mix(albedo, vec3(0.86, 0.85, 0.8) * (0.9 + 0.2 * grain), salt * 0.3 * oldness * wStr);
+    albedo = mix(albedo, vec3(0.86, 0.85, 0.8) * (0.9 + 0.2 * grain), salt * 0.14 * smoothstep(0.35, 0.65, nm.b) * oldness * wStr);
     float north = smoothstep(0.15, 0.85, -N.z);
     float algae = north * oldness * (damp * 0.9 + 0.55 * smoothstep(0.35, 0.9, stv) * (1.0 - smoothstep(0.0, 7.0, y)));
     albedo = mix(albedo, albedo * vec3(0.6, 0.72, 0.46), clamp(algae * wStr, 0.0, 0.75));
@@ -1034,6 +1037,8 @@ void bhWall(inout vec3 albedo, inout float rough, inout float metal, inout vec3 
     float sunOn = step(0.03, st.z) * step(0.0, uSunDir.y) * uDaylight;
     float sp = 0.06 * depthK;
     vec2 bLo = vec2(wr.x - 0.05, wr.z - 0.065), bHi = vec2(wr.y + 0.05, wr.z);
+    // inside the near-LOD range, wall() quads (vD.w > 0) have real sill geometry: keep only its sun shadow
+    bool geoSill = vD.w > 0.5 && distance(vWPos, uGeoWin.xyz) < uGeoWin.w;
     if (sillW && wr.z > 0.2) {
       // sill box in front of the wall; the ray from the wall point out toward the camera is (pm - k z, z)
       vec2 dir = -k;
@@ -1043,7 +1048,7 @@ void bhWall(inout vec3 albedo, inout float rough, inout float metal, inout vec3 
       vec2 tn = min(t1, t2);
       float tIn = max(max(tn.x, tn.y), 0.0);
       float tOut = min(min(tf.x, tf.y), sp);
-      if (tIn < tOut) {
+      if (tIn < tOut && !geoSill) {
         // the face seen = where the camera ray enters = where this outward ray leaves
         dSurf = tOut >= sp - 1e-5 ? 4 : (tf.y < tf.x ? (dir.y > 0.0 ? 5 : 6) : 7);
         dDepth = tOut / sp;
@@ -1080,7 +1085,7 @@ void bhWall(inout vec3 albedo, inout float rough, inout float metal, inout vec3 
       sunShade = 1.0 - 0.55 * (1.0 - inS) * sunOn;
     }
   }
-  if (uBhDebug > 2.5 && revD > 0.001) {
+  if (uBhDebug > 2.5 && uBhDebug < 3.5 && revD > 0.001) {
     albedo = dSurf == 0 ? albedo * vec3(0.6, 1.0, 1.0) : (dSurf == 1 ? vec3(1, 0, 0) : (dSurf == 2 ? vec3(0, 1, 0) : (dSurf == 3 ? vec3(0, 0, 1) : vec3(1, 1, 0))));
     return;
   }
@@ -1143,6 +1148,43 @@ void bhWall(inout vec3 albedo, inout float rough, inout float metal, inout vec3 
       ends *= 0.09 / ew;
       float rs = inX * run * smoothstep(0.1, 0.8, sn) * amt + ends * (1.0 - smoothstep(0.0, (1.3 + 1.8 * sn) * lenK, dS)) * (0.4 + 0.6 * amt);
       albedo *= mix(vec3(1.0), dirtTint, clamp(rs, 0.0, 1.0) * 0.7 * drk * wStr);
+      if ((pat < 0.5 || (pat > 5.5 && pat < 6.5)) && uWallRelief > 0.5) {
+        // rendered walls: patched repairs (a slightly different tone in soft rectangles), hairline cracks
+        // running off the window head corners, and a string course / slab band at each floor line
+        vec2 pq = floor(q / vec2(0.9, 0.7) + vec2(seed * 0.13, 0.0));
+        float ph = bhHash12(pq + seed);
+        vec2 pf = abs(fract(q / vec2(0.9, 0.7) + vec2(seed * 0.13, 0.0)) - 0.5);
+        float rpatch = step(0.9, ph) * (1.0 - smoothstep(0.38, 0.47, max(pf.x, pf.y)));
+        albedo *= 1.0 + rpatch * (fract(ph * 17.3) - 0.35) * 0.12;
+        float hc = bhHash13(vec3(cell, seed + 71.0));
+        if (hc > 0.6 && fq.x < 0.006) {
+          // crack from the nearer top corner of this cell's window, up and outward, wandering
+          float side = pm.x < wc.x ? -1.0 : 1.0;
+          vec2 c0 = vec2(side < 0.0 ? wr.x : wr.y, wr.w);
+          vec2 cq = pm - c0;
+          float along = cq.y;
+          float len = 0.25 + 0.6 * fract(hc * 9.7);
+          float wob = (texture2D(uBhNoise, vec2(along * 0.9, seed * 0.07 + cell.x * 0.31)).g - 0.5) * 0.09;
+          float off = cq.x * side - along * (0.45 + 0.4 * fract(hc * 5.1)) - wob;
+          float cw = max(0.0016, fq.x * 0.7);
+          float crack = (1.0 - smoothstep(cw * 0.5, cw * 1.5, abs(off))) * step(0.0, along) * (1.0 - smoothstep(len * 0.7, len, along));
+          albedo *= 1.0 - crack * 0.55 * (0.0016 / cw);
+        }
+        float sc = fract(seed * 0.3917);
+        if (sc > 0.35) {
+          // band 14–20 cm at the floor line (bottom of the cell), 2–3 cm proud: lit top bevel, shadow under
+          float bh = 0.14 + 0.06 * fract(seed * 0.77);
+          float yb = pm.y;
+          float inB = step(yb, bh) * step(0.5, cell.y);
+          vec3 bt = sc > 0.75 ? vec3(0.86, 0.84, 0.8) / max(baseAlb, vec3(0.2)) : vec3(1.06);
+          float aaB = clamp(fq.y / 0.04, 0.0, 1.0);
+          float topL = (1.0 - smoothstep(0.0, 0.015, abs(yb - bh))) * (1.0 - aaB) * step(0.5, cell.y);
+          float shad = (1.0 - smoothstep(0.0, 0.05, csz.y - yb)) * (1.0 - aaB) * step(cell.y + 1.5, vB.y);
+          albedo = mix(albedo, albedo * bt, inB * (1.0 - aaB * 0.5));
+          albedo *= 1.0 + 0.18 * topL * uDaylight - 0.35 * shad;
+          if (inB > 0.5 && uWallRelief > 0.5 && aaB < 0.5) bhNW = vec3(0.0);
+        }
+      }
     }
     emit += albedo * crown * vec3(0.55, 0.62, 0.75);
     if (detail >= 0.999) return;
@@ -1238,7 +1280,7 @@ void bhWall(inout vec3 albedo, inout float rough, inout float metal, inout vec3 
   if (detail <= 0.0) {
     // window far too small to resolve: exactly the faded result below (glass = avgGlass, frame = 0)
     albedo = avgAlb;
-    rough = 0.14;
+    rough = 0.5; // the glass mirror image is in emit (bhEnv + glint); a low roughness here put a pin-point GGX sun highlight on every pane (bloomed specks)
     emit += avgGlass;
     return;
   }
@@ -1307,28 +1349,57 @@ void bhWall(inout vec3 albedo, inout float rough, inout float metal, inout vec3 
     float cr = fract(r3 * 7.13 + r1 * 0.37);
     vec3 cc = mix(vec3(0.86, 0.8, 0.68), vec3(0.76, 0.42, 0.38), step(0.7, r2));
     cc = mix(cc, vec3(0.42, 0.55, 0.66), step(0.9, r2));
-    if (r3 > 0.45) {
-      // side curtains (drawn / half drawn), folds fade out when unresolved
-      float cov = r3 > 0.85 ? 0.5 : 0.24;
-      float side = clamp(step(wx, cov) + step(1.0 - cov, wx), 0.0, 1.0);
-      float fa = 1.0 - smoothstep(0.15, 0.6, fpx * 60.0 / max(wr.y - wr.x, 0.3) / 6.2832);
-      float folds = 0.86 + 0.14 * sin(wx * 60.0) * fa;
-      vec3 c2 = cc * folds;
+    // fabric colour per window: mostly off-whites / creams, some warm reds, greens, blues, greys
+    float hcf = fract(r2 * 5.77 + r1 * 0.31);
+    cc = hcf < 0.4 ? cc : (hcf < 0.55 ? vec3(0.62, 0.66, 0.58) : (hcf < 0.68 ? vec3(0.55, 0.6, 0.72) : (hcf < 0.8 ? vec3(0.8, 0.72, 0.62) : (hcf < 0.9 ? vec3(0.6, 0.3, 0.28) : vec3(0.7, 0.7, 0.68)))));
+    // a printed / striped fabric on some (band-limited)
+    float fpat = fract(r1 * 9.13);
+    float fstr = bhStripe(wx * (wr.y - wr.x) * 9.0, fpx * 9.0);
+    if (fpat > 0.8) cc *= 0.88 + 0.16 * fstr;
+    float fa = 1.0 - smoothstep(0.15, 0.6, fpx * 60.0 / max(wr.y - wr.x, 0.3) / 6.2832);
+    if (r3 > 0.58) {
+      // side curtains (drawn / half drawn / one side only), folds; a net between them on some
+      float cov = r3 > 0.86 ? 0.5 : (r3 > 0.72 ? 0.3 : 0.2);
+      float oneSide = step(0.85, fract(r1 * 3.3));
+      float side = clamp(step(wx, cov) * (1.0 - oneSide) + step(1.0 - cov * (1.0 + oneSide), wx), 0.0, 1.0);
+      float folds = 0.82 + 0.18 * sin(wx * 60.0 + r1 * 6.0) * fa;
+      float tie = step(0.5, fract(r2 * 4.1)) * (1.0 - smoothstep(0.0, 0.05, abs(wy - 0.45))) * 0.25 * fa;
+      vec3 c2 = cc * folds * (1.0 - tie);
+      // pelmet / curtain rail shadow along the top
+      float pel = step(0.92, wy) * step(0.6, fract(r3 * 17.0));
+      c2 = mix(c2, cc * 0.7, pel);
+      side = max(side, pel);
+      float netB = step(0.55, fract(r1 * 2.71)) * (1.0 - side);
+      interior = mix(interior, vec3(0.95, 0.92, 0.86) * lcol * litI * 0.5, netB * 0.7);
+      dayA = mix(dayA, vec3(0.72, 0.72, 0.7) * (0.92 + 0.08 * bhStripe(wx * (wr.y - wr.x) * 30.0, fpx * 30.0)), netB * 0.7);
       interior = mix(interior, c2 * lcol * litI * 0.75, side);
-      dayA = mix(dayA, c2 * 0.62, side);
-    } else if (r3 > 0.22) {
-      // net curtain over the lower part: translucent, glows softly when the room is lit
-      float netTop = cr > 0.5 ? 1.0 : 0.55;
-      float net = step(wy, netTop) * 0.6;
+      dayA = mix(dayA, c2 * 0.7, side);
+    } else if (r3 > 0.36) {
+      // net curtain (full height or café-style lower half): translucent white with a lace hem, glows when lit
+      float netTop = cr > 0.45 ? 1.0 : 0.55;
+      float hem = (1.0 - smoothstep(0.0, 0.03, abs(wy - netTop + 0.04))) * fa;
+      float lace = 0.9 + 0.1 * bhStripe(wx * (wr.y - wr.x) * 24.0, fpx * 24.0) * fa;
+      float net = step(wy, netTop) * (0.72 + 0.15 * hem);
       interior = mix(interior, vec3(0.95, 0.9, 0.8) * lcol * litI * 0.55, net);
-      dayA = mix(dayA, vec3(0.62, 0.62, 0.6), net);
-    } else if (r3 > 0.1) {
-      // roller blind partly down
-      float blindTo = 1.0 - (0.2 + 0.55 * cr);
+      dayA = mix(dayA, vec3(0.74, 0.74, 0.72) * lace, net);
+    } else if (r3 > 0.2) {
+      // roller blind partly down, or a venetian blind (slats, box-filtered)
+      float blindTo = 1.0 - (0.15 + 0.6 * cr);
       vec3 rb = mix(vec3(0.88, 0.84, 0.74), cc, step(0.6, cr));
+      float ven = step(0.5, fract(r2 * 7.9));
+      if (ven > 0.5) rb = mix(vec3(0.85, 0.84, 0.8), vec3(0.62, 0.46, 0.3), step(0.7, cr)) * (0.72 + 0.28 * bhStripe(pm.y * 22.0, fpy * 22.0));
       float bl = step(blindTo, wy);
+      // the blind's bottom bar
+      rb *= 1.0 - 0.35 * (1.0 - smoothstep(0.0, 0.025, wy - blindTo)) * fa;
       interior = mix(interior, rb * lcol * litI * 0.6, bl);
-      dayA = mix(dayA, rb * 0.6, bl);
+      dayA = mix(dayA, rb * 0.62, bl);
+    } else if (r3 > 0.12) {
+      // curtains fully drawn (a bedroom in the daytime): a fabric wall with a gap in the middle
+      float gap = 1.0 - smoothstep(0.0, 0.02, abs(wx - 0.5 - (cr - 0.5) * 0.1) - 0.012);
+      float folds = 0.84 + 0.16 * sin(wx * 70.0) * fa;
+      vec3 c2 = cc * folds * (1.0 - 0.5 * gap);
+      interior = mix(interior, c2 * lcol * litI * 0.8, 1.0 - gap * 0.6);
+      dayA = mix(dayA, c2 * 0.72, 1.0 - gap * 0.6);
     }
     // a pot plant on some sills
     if (fract(r1 * 5.31) > 0.78) {
@@ -1362,8 +1433,10 @@ void bhWall(inout vec3 albedo, inout float rough, inout float metal, inout vec3 
   float Fs = mix(F, min(1.0, F * 1.15 + 0.08), spandrel) * (1.0 - openW);
   // reflection: brighter toward the top of each punched pane (sky above, street below)
   float paneGrad = curtain ? 1.0 : mix(0.75, 1.2, wy);
-  vec3 glass = interior * (1.0 - Fs) * transTint + refl * Fs * mix(0.65, 1.0, recess) * paneGrad;
-  vec3 glassAlb = dayA * (1.0 - Fs) * transTint * (curtain ? 0.4 : (ribbon ? 0.7 : 1.0));
+  // punched windows: the reveal and the street canyon cut the reflected sky down, so the curtains / room read
+  float reflK = (curtain || ribbon) ? 1.0 : 0.78;
+  vec3 glass = interior * (1.0 - Fs) * transTint + refl * Fs * mix(0.65, 1.0, recess) * paneGrad * reflK;
+  vec3 glassAlb = dayA * (1.0 - Fs) * transTint * (curtain ? 0.4 : (ribbon ? 0.7 : (homey ? 1.18 : 1.0)));
   // open sash: the swung pane shows a strip of darker, skewed reflection at the hinge side
   glass = mix(glass, env * 0.35 * reflTint, openW * (1.0 - smoothstep(0.62, 0.66, wx)));
   glass += gt * crown * mix(0.55, 0.18, spandrel);
@@ -1373,7 +1446,7 @@ void bhWall(inout vec3 albedo, inout float rough, inout float metal, inout vec3 
     frame *= detail;
   }
   albedo = mix(glassAlb, fcol, frame) * sunShade;
-  rough = mix(0.14, (curtain || ribbon) ? 0.34 : 0.7, frame);
+  rough = mix(0.5, (curtain || ribbon) ? 0.34 : 0.7, frame);
   // metallic mullions on curtain walls pick up the environment (sheen lines between panels)
   metal = (curtain || ribbon) ? frame * 0.7 : 0.0;
   // closed shops: many pull down a ribbed steel roller shutter (tagged with graffiti on some), a few leave
@@ -1567,6 +1640,18 @@ vec3 bhEmit = vec3(0.0);
   float mtl = -1.0;
   if (vB.w < 63.5) bhWall(alb, rgh, mtl, bhEmit, bN, bV);
   else bhRoof(alb, rgh, bhEmit, bN, bV);
+  // guard: a handful of reveal / glass pixels produced albedo far above 1 (bloomed into specks at 3–10 m)
+  alb = clamp(alb, 0.0, 1.0);
+  if (any(isnan(bhEmit))) bhEmit = vec3(0.0);
+  bhEmit = min(bhEmit, vec3(16.0));
+  if (uBhDebug > 3.5) {
+    // red NaN albedo, green NaN / Inf emit, blue emit > 6, yellow albedo > 1.2, cyan NaN normal override
+    vec3 flag = any(isnan(alb)) ? vec3(1, 0, 0) : (any(isnan(bhEmit)) || any(isinf(bhEmit)) ? vec3(0, 1, 0) : (max(max(bhEmit.r, bhEmit.g), bhEmit.b) > 6.0 ? vec3(0, 0, 1) : (max(max(alb.r, alb.g), alb.b) > 0.999 ? vec3(1, 1, 0) : (any(isnan(bhNW)) ? vec3(0, 1, 1) : vec3(-1.0)))));
+    bool bad = flag.x >= 0.0;
+    alb = bad ? flag : alb * 0.4;
+    bhEmit = bad ? flag * 3.0 : vec3(0.0);
+    if (bad) bhNW = vec3(0.0);
+  }
   diffuseColor.rgb = alb;
   bhRough = rgh;
   bhMetal = mtl;
@@ -1650,6 +1735,7 @@ export function createMaterials(g: GlobalUniforms, opts: { legacy?: boolean; wea
     uWinDepth: { value: opts.winDepth === false ? 0 : 1 },
     uWallRelief: { value: opts.wallRelief === false ? 0 : 1 },
     uPlinth: { value: opts.plinth === false ? 0 : 1 },
+    uGeoWin: { value: new THREE.Vector4(0, -1e5, 0, 0) },
   };
   const frameCols = { value: FRAME_COLS.map((c) => new THREE.Color(c)) };
   const glassCols = { value: GLASS_COLS.map((c) => new THREE.Color(c)) };
@@ -1686,6 +1772,7 @@ export function createMaterials(g: GlobalUniforms, opts: { legacy?: boolean; wea
         uWinDepth: uniforms.uWinDepth,
         uWallRelief: uniforms.uWallRelief,
         uPlinth: uniforms.uPlinth,
+        uGeoWin: uniforms.uGeoWin,
         uSunDir: g.uSunDir,
         ...lampUniforms(),
       });
