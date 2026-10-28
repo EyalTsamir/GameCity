@@ -1465,12 +1465,12 @@ export class Crowd {
         // walk to the slot, never teleport: the slot itself can sweep faster than a walk (offset round a tight
         // corner, a formation shuffle, joining the rail from a seat/queue); the member lags and catches up at
         // ≤ 1.3 × the party's pace (+0.3 m/s) instead of sliding at 5–20 m/s (raw slot speeds measured,
-        // scripts/ped-velocity.mjs). Jumps ≥ 3 m are deliberate relocations and pass.
+        // scripts/ped-velocity.mjs). Jumps ≥ 6 m are deliberate relocations and pass.
         const ddx = x - m.x,
           ddz = z - m.z,
           dd = Math.hypot(ddx, ddz),
           lim = Math.max(0.6, p.v * 1.3 + 0.3) * h;
-        if (dd > lim && dd < 3) {
+        if (dd > lim && dd < 6) {
           x = m.x + (ddx * lim) / dd;
           z = m.z + (ddz * lim) / dd;
         }
