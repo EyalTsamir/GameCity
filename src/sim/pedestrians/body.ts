@@ -1261,13 +1261,13 @@ function blob(b: MeshBuilder, c: P3, r: P3, seg: number, rings: number): void {
 
 function buildHat(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
   const pin = cfg.props === 'pin';
-  const n = cfg === LODS[0] ? 10 : pin ? 4 : 6;
+  const n = cfg.close ? 24 : cfg === LODS[0] ? 10 : pin ? 4 : 6;
   const hk = d.H / 1.76;
   const rimU = 0.64; // hat band height (fraction chin→crown)
   const chin = d.headRings[0].y - 0.006;
   const crown = d.crown;
   const rimY = chin + (crown - chin) * rimU;
-  const ss = cfg === LODS[0] ? [0, 0.35, 0.7, 1] : pin ? [0, 1] : [0, 0.55, 0.85, 1];
+  const ss = cfg.close ? [0, 0.2, 0.4, 0.6, 0.8, 1] : cfg === LODS[0] ? [0, 0.35, 0.7, 1] : pin ? [0, 1] : [0, 0.55, 0.85, 1];
   const hatK = cfg.details ? 1 : 1.45;
   const rings: Ring[] = [];
   b.use(BONE.HEAD, REG.HAT, FB.HAT, 1);
@@ -1297,7 +1297,7 @@ function buildHat(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
     bi.push(b.v(p, 2, 0, 0, phi));
     bo.push(b.v(p, 2, 0, 1, phi));
   }
-  const under = cfg === LODS[0]; // brim underside only at LOD0 (lo and below are seen from above)
+  const under = cfg === LODS[0] || !!cfg.close; // brim underside only at LOD0 (lo and below are seen from above)
   b.setTint(0.7);
   if (under)
     for (let k = 0; k < n; k++) {
@@ -1410,7 +1410,7 @@ function buildTail(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
       P[i * 3 + 2] = rest[j][k][2];
     }),
   );
-  if (cfg !== LODS[0]) return; // lo and below are seen from above: no lining
+  if (cfg !== LODS[0] && !cfg.close) return; // lo and below are seen from above: no lining
   // hem lining: a flat darker ring 10 % inside the hem (u = 1: same height), facing down, so the skirt
   // never reads as an open tube from below / when seated
   b.setTint(0.45);
