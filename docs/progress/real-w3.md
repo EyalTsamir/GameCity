@@ -3,6 +3,12 @@
 Branch `claude/real-w3-furniture` (from `claude/pensive-gates-bim12i`). Brief: docs/progress/real-briefs.md "W3".
 
 ## Resume here
+* 2026-10-28 — **Session 4 started** (fix round after judge-1 / bugs-1). Base claude/pensive-gates-bim12i @ b10714f.
+  Order: (1) bugs 2/6/7/8 (bus-stop flag = No Entry, blank ad + timetable, newsstand placeholder sign, duplicate
+  HONEY stalls); (2) newsstand covers + attached roof; (3) kiosk + playground; (4) market jitter, scale, backdrop
+  folds, cardboard + hand truck; (5) ground grime around prop bases; (6) statue plinth, bin lid rim, planter soil,
+  gazebo soffit + wear. Props have no texture path (vertex colour + aRM/aEmit only) -> text and covers are built from
+  boxes (shapes.ts pixel font).
 * 2026-10-28 — **Session 3 ends (context cap).** All pushed. Sheets: docs/progress/real/w3_after_5.jpg (market,
   gazebo, bench, bin, planter, bike rack at 3/10 m), w3_after_6.jpg (2.5 m, pedestrians hidden),
   w3_statue_2.jpg (bronze figure side view), w3_planter.jpg (trailing petunias). Downtown shot: console clean,
