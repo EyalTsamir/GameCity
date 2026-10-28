@@ -4,13 +4,14 @@ Branch `claude/real-w2-vehicles` (from `claude/pensive-gates-bim12i`). Brief: `d
 Owned: `src/sim/traffic/{models,vehicleMaterial,render}.ts` (+ trains later). Sim untouched.
 
 ## Resume here
-* 2026-10-28 session 2 (milestone 2, lead verdict: car FORM still blocky). Plan, in order: (1) carBody.ts end
-  zones — per-ring-point setback / plan inset / vertical roll (NOSE/TAIL tables) so nose and tail round in plan and
-  elevation, bumper = lower band of the loft (region 'bumper', finish per model) with a seam strip, strip caps
-  (no flat full-section cap), crowned bonnet/roof, flared arches; lamps/grille/plates placed on the surface with
-  `endSurface()` (numeric, carBody.ts); (2) bigger mirrors + handle recesses; (3) panel gaps that read at 3 m
-  (wider core + edge shading); (4) bus ends + doors; (5) grime gradient; (6) trains. Golden ref:
-  shots/golden/ref (merged base 2a6ca11).
+* 2026-10-28 session 2 — **Milestone 2 pushed** (car form + bus ends/doors + grime). Stopped at the context cap.
+  Next session, in order: (a) judge `docs/progress/real/w2_m2_*.jpg` with fresh eyes (left = before, right = after);
+  (b) car polish: front badge still reads as a blue chip (chrome reflecting sky), horizon-reflection line on the
+  bonnet roll is jaggy, rear bumper corners still slab-like at the bottom (cap bands 1–3), SUV/compact lamp
+  proportions, bonnet front shut line; (c) bus rear window shows only grey (sky reflection over the cabin);
+  bus arch skirt tongue is jagged; (d) van/lorry/ice-cream still box ends (could reuse busBody.ts' loft);
+  (e) trains (audit #7) — not started. Perf of this milestone not measured (only build-time cost + a few hundred
+  extra LOD0 triangles per car; same draw calls).
 * 2026-10-28 — Milestone 1 done and pushed (cars, vans, lorry, bus, ice-cream van: brief priorities 1–6;
   7 "mechanics" (pitch/roll) already existed in render.ts). Session stopped at ~310k context.
   Next session, in order: (a) verify the roof box (part 90, ~1 vehicle in 5 by phase) on parked cars
@@ -22,6 +23,21 @@ Owned: `src/sim/traffic/{models,vehicleMaterial,render}.ts` (+ trains later). Si
 * Judge with the showroom: `node scripts/capture-set.mjs --q "tlineup&nointro&noidle" --hideui 1 --views
   "-10,0.9,22,4,30,6;-8,1.4,35,9,25,8" --hours 11 --out shots/w2/x` (row 1 cars at z 22 from x −17, row 2
   vans/lorries/buses at z 35; yaw 0 ≈ front, 180 ≈ rear). Bench: `--classes car,bus --yaws 0,140` (new option).
+
+## Code map, milestone 2 additions
+* `src/sim/traffic/carBody.ts`: `ringAt` (10 ring points incl. arch flare, bumper line, crowned bonnet/roof) +
+  end zones (`NOSE`/`TAIL` tables: per-point set-back `sb`, plan inset `ix`, roll `dy`, length `r`; quarter-ellipse;
+  `SWEEP_*` plan curve); caps are horizontal bands × 8 columns; regions + `bumper`, `gap` (shut-line strip along
+  ring point 3); `endSurface(s,x,y,sign)` (numeric surface z + normal, verified against a raycast to < 1 mm);
+  `endRing`; `bumperTop`.
+* `src/sim/traffic/busBody.ts` (new): same scheme for the bus (`loftBus`, `busEndSurface`), regions body / skirt /
+  bumper / glass (windscreen = bands 6–7 in the nose zone) / seal / well; flanks get flat normals.
+* `models.ts`: `onEnd(surf|shape, sign, x0,x1,y0,y1, off, nu)` conformal decal grid (3 rows at LOD0 — one row cut
+  through the bumper ledge and hid the lenses behind the housing rim), `flatOnEnd(..., geo?)` tilted flat parts;
+  `carDetails(b, d, shape)` places lamps / blinkers / grille / intake / plates / badges from `endRing` heights
+  (lamps above the bumper ledge `y4`); `loftBody(..., bumper)` finish per model; mirrors on a sail + arm.
+* `vehicleMaterial.ts`: `TH_GAP` macro (dark core + rolled panel edges via normal tilt, fades with `pix`), door
+  bottom line; grime = road film low + noisy fade (every vehicle has some, `0.22 + 0.78 h²`).
 
 ## Code map (file:line at d420fe9+)
 * `src/sim/traffic/vehicleMaterial.ts`: `VERT_BEGIN` :88 (tyre flatten, object-space varyings, camera in the
@@ -86,6 +102,8 @@ Owned: `src/sim/traffic/{models,vehicleMaterial,render}.ts` (+ trains later). Si
   Not measured on the Adreno.
 
 ## Tried and rejected
+* Single-row conformal decals on the car front: a quad spanning the bumper's top ledge cut in front of the lens.
+* Flat end caps (milestone 1): the nose read as a box whatever the plan rounding; replaced by banded caps.
 * Interior as diffuse colour lit by the pane normal: side windows in shade went black and sunny ones glowed
   grey — emitted "daylight" (× 0.32 under AgX) reads right.
 * Arms as one axis-aligned ellipsoid: a blob. Three spheres along the arm instead.
@@ -96,6 +114,8 @@ Owned: `src/sim/traffic/{models,vehicleMaterial,render}.ts` (+ trains later). Si
   `?novehiclewear` — not the wear shader (close-range DOF / shadow?).
 
 ## Sheets
+* Milestone 2: `docs/progress/real/w2_m2_car.jpg` (row 1 before, row 2 after: front 4 m, rear 3/4),
+  `w2_m2_bus.jpg` (front / rear before → after), `w2_m2_more.jpg` (sedan/taxi/police, compact, bus doors, 12 m).
 * `docs/progress/real/w2_car_before.jpg`, `w2_bus_before.jpg` (bench 3 m, base commit) →
   `w2_car_front_after.jpg`, `w2_car_side_after.jpg`, `w2_bus_after.jpg`, `w2_vans_after.jpg`,
   `w2_lineup_14m.jpg`, `w2_night_after.jpg`. Raw: `shots/w2/` (not committed).
