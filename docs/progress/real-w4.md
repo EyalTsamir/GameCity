@@ -10,6 +10,27 @@ Photo test "Person" (REAL.md). Owned: `src/sim/pedestrians/**` presentation (not
   all round; (4) hands at 2 m: finger separation + nail/knuckle hint; (5) seated thighs resting on seats.
   New: `scripts/ped-crouch.mjs` (renderer `probe` hook in render.ts: every posed upright figure's pelvis drop
   + knees, histogram + worst cases by state/persona).
+  (1) CROUCH — cause found, fixed. Live sim (crouch1: 4 POIs × 30 s, 6332 upright figure-frames): pelvis drop
+      max 8 cm (a 1.85 m/s stride), no crouch in play. Bench sequence (`--bench 1`, crouch2): right after
+      setHours ~30 NON-joggers (strollers pv 0.85, families, beachgoers in pairs/threes) close up on their party
+      at 2.1–2.8 m/s → above the run blend onset (1.95) the gait poses a JOG (pelvis −6…8 cm, knees bent); the
+      bench's pause freezes that frame = the s5i "deep jog crouch" of a 3-person group. Also visible to a user
+      after a time scrub (strollers jogging for a few s). Fix gait.ts: only persona 'jogger' may pose above
+      GAIT_VWALK 1.9 m/s (just below the run onset); everyone else walks briskly while catching up.
+  (2) Trousers (shader.ts pedFabric, reg 3): fold relief in metres (`fold`, into pedFabH + trough occlusion):
+      knee honeycomb arcs (deeper with bend), crotch whiskers, seat drag folds + buttock-fold crease, wandering
+      tube folds, shin bagging, pressed side-seam step + puckers; `pedRidge` = narrow crest/broad trough with
+      per-fold amplitude noise (the first pass read as even stripes). Hem shadow on skin/sock below every
+      trouser/sleeve hem + lit rolled edge (shorts/short sleeves). Toggle `?nofolds` (uniform uPedFolds).
+  (3) Long hair sheet: `pedLocks` big locks (~1.5–2 cm, waving, per-lock tone, occluded gaps) in colour and
+      as a 3.5 mm bump in HAIR_NORMAL (sheen breaks per lock) + an albedo "sky sheen" lift on lock crests for
+      dark hair in shade.
+  (4) Hands (body.ts buildFingers): fingers thinner (r 0.18/0.19/0.18/0.155 × pw) and splayed 0.15 → visible
+      gaps; tint: knuckle highlight over the joints + palm crease, darker sides facing the neighbour finger.
+      Found: back of the hand showed a dot grid = shadow acne — the shadow proxy shrinks 1 cm along the
+      normal, more than half the hand's thickness (turned inside out) → hand bones shrink 15 % of that.
+  (5) Seated: bench `--sit 1` (shots seat/seat2/seatc): s6s — benches and café chairs, thighs on the seats,
+      no clipping seen in 8 frames.
 * 2026-10-28 ~22:15 UTC — session 5 ENDED (context ~197k). All pushed. Downtown: console clean, invariants {}
   (shots/w4/dt5b.txt). Sheet docs/progress/real/w4_after_s5.jpg (eyes before|after, dark long hair, trousers +
   knit at 1 m). Next: (a) trousers still fairly smooth at 2 m — stronger drape folds in form (VS) rather than
