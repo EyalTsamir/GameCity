@@ -12,6 +12,7 @@ import { C, finial, person, railing } from './parts';
 import type { Env } from './env';
 import { drawText, signQuad } from './signs';
 import { queueContactLocal } from '../props/contact';
+import { blob, body, capsule, hash1, paint, shell, surface } from './sculpt';
 
 const _m = new THREE.Matrix4();
 const _e = new THREE.Euler();
@@ -74,9 +75,15 @@ export function genStatue(env: Env, f: Feature): void {
   // bold mouldings (they must read at 3 m): base block, torus + cavetto stepping in to the die; cornice
   // with a cyma, a deep corona and a drip; capping block
   const ped = facetLathe([
-    [0, 0.44], [0.7, 0.44], [0.7, 0.62], [0.66, 0.635], [0.665, 0.66], [0.655, 0.685], [0.62, 0.7], [0.58, 0.73], [0.555, 0.77], [0.53, 0.8], [0.5, 0.82],
-    [0.5, 2.0], [0.52, 2.02], [0.55, 2.05], [0.6, 2.1], [0.655, 2.16], [0.7, 2.19], [0.7, 2.3], [0.665, 2.31], [0.62, 2.335], [0.62, 2.46], [0.58, 2.5], [0.46, 2.56], [0, 2.56],
+    [0, 0.44], [0.72, 0.44], [0.72, 0.6], [0.69, 0.615], [0.705, 0.64], [0.712, 0.665], [0.7, 0.69], [0.66, 0.7], [0.6, 0.705], [0.6, 0.72],
+    [0.57, 0.745], [0.54, 0.78], [0.515, 0.805], [0.5, 0.82],
+    [0.5, 2.0], [0.52, 2.015], [0.545, 2.04], [0.575, 2.08], [0.6, 2.1], [0.6, 2.12], [0.575, 2.125], [0.575, 2.14], [0.745, 2.145],
+    [0.745, 2.27], [0.72, 2.29], [0.66, 2.295], [0.64, 2.31], [0.64, 2.44], [0.61, 2.47], [0.47, 2.545], [0, 2.56],
   ], 4, Math.PI / 4);
+  // verdigris washed off the bronze base tints the capping and the cornice top
+  paint(ped, (p, n, o) => {
+    if (p.y > 2.28 || (p.y > 2.26 && n.y > 0.5)) o.setRGB(0.78, 0.9, 0.84);
+  });
   K.geo(die, ped);
   ped.dispose();
   // sunk panels on the two plain sides: a raised margin frame round a slightly darker field
@@ -85,6 +92,25 @@ export function genStatue(env: Env, f: Feature): void {
     K.box(recess, 0.004, 0.9, 0.62, sx * 0.502, 0.98, 0);
     for (const dz of [-0.33, 0.33]) K.box(die, 0.03, 0.96, 0.04, sx * 0.51, 0.95, dz);
     for (const yy of [0.95, 1.89]) K.box(die, 0.03, 0.04, 0.7, sx * 0.51, yy, 0);
+  }
+  // patina run-off: green-grey streaks down the four die faces from under the cornice, longest at the
+  // corners and below the drip (vertex colours on a fine grid just proud of the die)
+  for (let face = 0; face < 4; face++) {
+    const ry = (face * Math.PI) / 2;
+    const NX = 56, NY = 14, yTop = 2.0, yBot = 0.84;
+    const sg = surface(NX, NY, (u, v, o) => o.set(-0.5 + u, yBot + (yTop - yBot) * v, 0));
+    paint(sg, (p, _n, o) => {
+      const x = p.x + face * 1.7;
+      const runs = Math.pow(0.5 + 0.5 * Math.sin(x * 41 + Math.sin(x * 9.3) * 2.2), 5) + 0.6 * Math.pow(0.5 + 0.5 * Math.sin(x * 97 + 1.3), 9);
+      const corner = Math.max(0, (Math.abs(p.x) - 0.38) / 0.12);
+      const len = 0.25 + 0.55 * hash1(Math.floor(x * 18)) + 0.4 * corner;
+      const t = Math.min(1, Math.max(0, (p.y - (yTop - len)) / len));
+      const k = Math.min(1, runs * t * t * 1.4 + corner * t * 0.5);
+      o.setRGB(1 - 0.42 * k, 1 - 0.22 * k, 1 - 0.3 * k);
+    });
+    _m.makeRotationY(ry).setPosition(Math.sin(ry) * 0.5025, 0, Math.cos(ry) * 0.5025);
+    K.geoM(die, sg, _m);
+    sg.dispose();
   }
   // name cut into the die above the plaque (incised Roman capitals)
   const cut = env.atlas.add(256, 48, (g, w, h) => {
@@ -104,102 +130,147 @@ export function genStatue(env: Env, f: Feature): void {
     drawText(g, 'TINYHAVEN · 1801', w / 2, 88, 'bold 16px Georgia, serif', '#f0d68a', 1);
   });
   for (const ry of [0, Math.PI]) signQuad(env.T, plaque, 0.62, 0.39, Math.sin(ry) * (pw / 2 + 0.01), 1.2, Math.cos(ry) * (pw / 2 + 0.01), ry, 0.25);
-  // bronze figure (heroic scale 1.25: ~2.3 m), striding forward, raising his tricorn: riding boots,
-  // breeches, a frock coat with lapels, buttons, cuffs and split tails, waistcoat, cravat; a face (brow,
-  // nose, chin, ears), tied-back hair; a scroll in the left hand. Verdigris over dark bronze: the rust
-  // pattern's run-down streaks show the brown metal through the green.
-  const bronze = M('#4a7462', PAT.PLAIN, 0.55, 0.5, 0, FLOOD.SOFT, 0.5);
-  const bronzeD = M('#3a5c4e', PAT.RUST, 0.5, 0.55, 0, FLOOD.SOFT, 0.2);
+  // bronze figure (heroic scale 1.25: ~2.3 m), smooth sculpted parts (sculpt.ts): striding forward, the
+  // right arm pointing out to sea, the left hand holding his tricorn at his side. Frock coat whose skirt
+  // opens at the front over breeches and riding boots, folds and a back vent; lapels and a waistcoat;
+  // bare head with a face (brow, eye sockets, nose, mouth, chin), hair swept back into a queue.
+  // Patina in vertex colours: dark brown bronze, verdigris where rain sits (upward faces) and runs (streaks),
+  // undersides dark, the toe of the forward boot rubbed to bright brass by passers-by.
+  const bronze = M('#ffffff', PAT.PLAIN, 0.5, 0.35, 0, FLOOD.SOFT, 0.5);
   const y0 = 2.56, sc = 1.25;
-  const P = (x: number, y: number, z: number): V3 => [x * sc, y0 + y * sc, z * sc];
-  const ell = (m: typeof bronze, rx: number, ry: number, rz: number, x: number, y: number, z: number, yaw = 0, pitch = 0, roll = 0) => {
-    const g = new THREE.SphereGeometry(1, 10, 8);
+  const DARK = [0.25, 0.17, 0.11], VERD = [0.33, 0.52, 0.43], VERD2 = [0.44, 0.62, 0.53];
+  const patina = (p: THREE.Vector3, n: THREE.Vector3, o: THREE.Color) => {
+    const up = Math.max(0, n.y);
+    const side = 1 - Math.abs(n.y);
+    const st = Math.pow(0.5 + 0.5 * Math.sin(p.x * 61 + p.z * 47 + Math.sin(p.x * 13 + p.z * 7 + p.y * 2) * 2), 6);
+    let g = THREE.MathUtils.smoothstep(up, 0.2, 0.75) * 0.9 + st * side * (0.45 + 0.4 * hash1(Math.floor(p.y * 6) + p.x * 3));
+    if (n.y < -0.25) g *= 0.25;
+    g = Math.min(1, g);
+    const v = hash1(p.x * 17 + p.y * 31 + p.z * 13);
+    const V = v > 0.5 ? VERD2 : VERD;
+    const k = 0.9 + 0.2 * v;
+    o.setRGB((DARK[0] + (V[0] - DARK[0]) * g) * k, (DARK[1] + (V[1] - DARK[1]) * g) * k, (DARK[2] + (V[2] - DARK[2]) * g) * k, THREE.SRGBColorSpace);
+  };
+  const toLocal = new THREE.Matrix4().makeScale(sc, sc, sc).setPosition(0, y0, 0);
+  const put = (g: THREE.BufferGeometry, fn = patina) => {
+    g.applyMatrix4(toLocal);
+    paint(g, fn);
+    K.geo(bronze, g);
+    g.dispose();
+  };
+  const at = (g: THREE.BufferGeometry, x: number, y: number, z: number, yaw = 0, pitch = 0, roll = 0) => {
     _e.set(pitch, yaw, roll, 'YXZ');
-    _m.makeRotationFromEuler(_e).scale(_v.set(rx * sc, ry * sc, rz * sc));
-    const [px, py, pz] = P(x, y, z);
-    _m.setPosition(px, py, pz);
-    K.geoM(m, g, _m, 'box');
-    g.dispose();
+    g.applyMatrix4(_m.makeRotationFromEuler(_e).setPosition(x, y, z));
+    return g;
   };
-  const limb = (m: typeof bronze, a: V3, b: V3, ra: number, rb: number, seg = 10) => {
-    const A = P(a[0], a[1], a[2]), B = P(b[0], b[1], b[2]);
-    _v.set(B[0] - A[0], B[1] - A[1], B[2] - A[2]);
-    const len = _v.length();
-    const g = new THREE.CylinderGeometry(rb * sc, ra * sc, len, seg, 1, false);
-    g.translate(0, len / 2, 0);
-    _q.setFromUnitVectors(_up, _v.normalize());
-    _m.makeRotationFromQuaternion(_q).setPosition(A[0], A[1], A[2]);
-    K.geoM(m, g, _m, 'cyl');
-    g.dispose();
-  };
+  const p3 = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
   // cast base slab, a little irregular
-  K.cyl(bronzeD, 0.4 * sc, 0.42 * sc, 0.07, 0, y0 - 0.03, 0, 9);
-  // boots (left foot forward), shafts to the knee with a turned-down top, breeches
-  for (const [sx, fz, kz, heel] of [[-1, 0.2, 0.12, 0], [1, -0.2, -0.06, 0.35]] as const) {
-    const x = sx * 0.1;
-    ell(bronzeD, 0.052, 0.045, 0.125, x, 0.045 + heel * 0.06, fz + 0.03, 0, heel * 0.4);
-    limb(bronzeD, [x, 0.07 + heel * 0.06, fz - 0.03 * (1 - heel)], [x, 0.44, kz], 0.06, 0.068);
-    limb(bronze, [x, 0.42, kz], [x, 0.47, kz + 0.005], 0.078, 0.076);
-    limb(bronze, [x, 0.46, kz], [x * 0.9, 0.94, 0.0], 0.07, 0.092);
+  put(at(new THREE.CylinderGeometry(0.31, 0.33, 0.05, 9), 0, -0.01, 0));
+  // legs: breeches to the knee, boots with a turned-down top; left foot forward, right heel lifted
+  for (const [sx, hipZ, knee, ankle, foot, pitch] of [
+    [-1, 0.02, p3(-0.1, 0.5, 0.1), p3(-0.1, 0.09, 0.13), p3(-0.1, 0.045, 0.19), 0],
+    [1, -0.01, p3(0.1, 0.5, -0.05), p3(0.1, 0.12, -0.17), p3(0.1, 0.055, -0.11), 0.45],
+  ] as const) {
+    const hip = p3(sx * 0.1, 0.95, hipZ);
+    put(capsule(hip, knee, 0.088, 0.066, 14));
+    put(capsule(knee, ankle, 0.064, 0.054, 14));
+    const top = knee.clone().lerp(ankle, 0.08);
+    put(at(new THREE.CylinderGeometry(0.074, 0.069, 0.08, 14), top.x, top.y, top.z));
+    // boot: toe, instep, heel block
+    const fg = blob(0.052, 0.045, 0.125, 14, 10, (p) => {
+      if (p.y < -0.3) p.y = -0.3 - (p.y + 0.3) * 0.3;
+      if (p.z > 0) p.y *= 1 - 0.35 * p.z;
+    });
+    const toeLit = sx < 0;
+    at(fg, foot.x, foot.y, foot.z, 0, pitch);
+    fg.applyMatrix4(toLocal);
+    paint(fg, (p, n, o) => {
+      patina(p, n, o);
+      if (toeLit && p.z > (foot.z + 0.04) * sc) o.setRGB(0.78, 0.56, 0.3, THREE.SRGBColorSpace);
+    });
+    K.geo(bronze, fg);
+    fg.dispose();
+    put(at(new THREE.BoxGeometry(0.07, 0.04, 0.06), foot.x, foot.y - 0.02 + pitch * 0.06, foot.z - 0.08, 0, pitch));
   }
-  // frock coat body: lathe from the skirt hem to the shoulders, squashed front-to-back
-  const coat = new THREE.LatheGeometry(
-    [[0.0, 0.56], [0.27, 0.56], [0.25, 0.7], [0.21, 0.88], [0.175, 1.0], [0.18, 1.12], [0.2, 1.28], [0.215, 1.4], [0.2, 1.46], [0.12, 1.5], [0.0, 1.51]].map(([r, y]) => new THREE.Vector2(r * sc, y * sc)),
-    16,
-  );
-  _m.makeScale(1, 1, 0.68).setPosition(0, y0, 0);
-  K.geoM(bronze, coat, _m, 'box');
-  coat.dispose();
-  // split tails behind, swinging back with the stride
-  for (const sx of [-1, 1]) {
-    const tail = new THREE.BoxGeometry(0.16 * sc, 0.5 * sc, 0.03 * sc);
-    tail.translate(0, -0.25 * sc, 0);
-    _e.set(-0.18, sx * 0.25, sx * 0.06, 'YXZ');
-    _m.makeRotationFromEuler(_e);
-    const [px, py, pz] = P(sx * 0.09, 1.0, -0.12);
-    _m.setPosition(px, py, pz);
-    K.geoM(bronzeD, tail, _m, 'box');
-    tail.dispose();
+  // coat skirt: an open shell (front opening widening to the hem, folds, back vent), thickness 1.5 cm
+  const skirtR = (y: number) => 0.178 + (0.27 - 0.178) * Math.pow(Math.min(1, Math.max(0, (1.0 - y) / 0.45)), 1.3);
+  for (const part of shell(40, 10, (u, v, o) => {
+    const y = 0.55 + v * 0.47;
+    const open = 0.32 + 0.3 * (1 - v);
+    const th = open + u * (Math.PI * 2 - 2 * open);
+    const fall = Math.pow(1 - v, 1.2);
+    let r = skirtR(y) * (1 + 0.075 * Math.sin(th * 8 + 0.7) * fall);
+    const back = Math.max(0, -Math.cos(th));
+    r += 0.03 * fall * back;
+    // the vent: the two back halves part a little at the hem
+    const vent = Math.exp(-Math.pow((th - Math.PI) / 0.12, 2)) * fall;
+    r -= 0.035 * vent;
+    o.set(Math.sin(th) * r, y, Math.cos(th) * r * 0.72 - 0.035 * fall * back);
+  }, 0.015)) put(part);
+  // torso: chest, shoulders (squarish section), lapel ridges framing the waistcoat V, buttons
+  const lapel = (th: number, y: number) => {
+    if (y < 0.98 || y > 1.43) return 0;
+    const a = Math.abs(((th + Math.PI) % (Math.PI * 2)) - Math.PI);
+    const l = 0.16 + (y - 0.98) * 0.75;
+    if (a < l) return -0.006;
+    if (a < l + 0.22) return 0.012 * Math.min(1, (y - 0.98) / 0.1);
+    return 0;
+  };
+  put(body([[0.17, 0.92], [0.175, 1.0], [0.185, 1.1], [0.2, 1.22], [0.215, 1.32], [0.228, 1.4], [0.205, 1.45], [0.14, 1.49], [0.07, 1.52], [0.0, 1.53]], 0.66, 40, 22, 2.6, lapel));
+  for (let i = 0; i < 4; i++) for (const sx of [-1, 1]) put(at(blob(0.011, 0.011, 0.008, 8, 6), sx * (0.06 + i * 0.012), 1.02 + i * 0.07, 0.124));
+  // neck, cravat, standing collar
+  put(capsule(p3(0, 1.48, 0), p3(0, 1.6, 0.012), 0.05, 0.047, 12));
+  put(at(blob(0.05, 0.045, 0.035, 12, 8), 0, 1.47, 0.08));
+  put(at(new THREE.TorusGeometry(0.068, 0.02, 6, 16, Math.PI * 1.4), 0, 1.51, -0.005, -Math.PI * 0.2 + Math.PI, Math.PI / 2));
+  // head: face carved into a deformed ellipsoid, turned toward the pointing hand
+  const headYaw = 0.35;
+  put(at(blob(0.088, 0.112, 0.1, 30, 22, (p) => {
+    const front = Math.max(0, p.z);
+    const ax = Math.abs(p.x);
+    p.z += front * (0.36 * Math.exp(-((p.x / 0.13) ** 2) - ((p.y + 0.08) / 0.2) ** 2));
+    p.z += front * 0.13 * Math.exp(-(((p.y - 0.25) / 0.08) ** 2)) * (ax < 0.7 ? 1 : 0.4);
+    p.z -= front * 0.12 * Math.exp(-(((ax - 0.36) / 0.15) ** 2) - ((p.y - 0.1) / 0.1) ** 2);
+    p.z -= front * 0.06 * Math.exp(-((p.x / 0.28) ** 2) - ((p.y + 0.42) / 0.035) ** 2);
+    if (p.y < -0.45) p.x *= 1 - 0.25 * Math.min(1, (-0.45 - p.y) / 0.5);
+    p.z += front * 0.1 * Math.exp(-((p.x / 0.3) ** 2) - ((p.y + 0.72) / 0.12) ** 2);
+  }), 0, 1.66, 0.01, headYaw));
+  // ears
+  for (const sx of [-1, 1]) put(at(blob(0.013, 0.028, 0.02, 8, 6), sx * 0.086, 1.655, -0.005, headYaw));
+  // hair: a cap over the crown and back, grooves combed back, tied into a queue with a bow
+  put(at(blob(0.095, 0.118, 0.105, 28, 18, (p) => {
+    if (p.z > 0.25 && p.y < 0.5) {
+      const k = 0.88;
+      p.multiplyScalar(k);
+    }
+    if (p.y < -0.25 && p.z > -0.6) p.multiplyScalar(0.86);
+    const gr = 1 + 0.025 * Math.sin(p.x * 34);
+    p.x *= gr;
+    p.y *= gr;
+  }), 0, 1.68, -0.008, headYaw, 0.1));
+  put(capsule(p3(0, 1.6, -0.098), p3(0, 1.52, -0.112), 0.02, 0.014, 8));
+  for (const sx of [-1, 1]) put(at(blob(0.032, 0.018, 0.012, 8, 6), sx * 0.028, 1.6, -0.105, sx * 0.5));
+  // arms: shoulder caps, sleeves, turned-back cuffs, hands
+  const shR = p3(0.21, 1.4, 0.0), elR = p3(0.3, 1.43, 0.24), wrR = p3(0.36, 1.53, 0.47);
+  const shL = p3(-0.21, 1.4, 0.0), elL = p3(-0.27, 1.14, -0.03), wrL = p3(-0.27, 0.93, 0.06);
+  for (const [sh, el, wr] of [[shR, elR, wrR], [shL, elL, wrL]]) {
+    put(at(blob(0.082, 0.075, 0.078, 14, 10), sh.x, sh.y, sh.z));
+    put(capsule(sh, el, 0.07, 0.06, 14));
+    put(capsule(el, wr, 0.06, 0.052, 14));
+    const c0 = el.clone().lerp(wr, 0.72);
+    put(capsule(c0, wr, 0.068, 0.068, 14));
   }
-  // waistcoat panel in the open front, coat buttons, lapels, pocket flaps, belt line
-  K.boxC(bronzeD, 0.17 * sc, 0.36 * sc, 0.02 * sc, 0, y0 + 1.1 * sc, 0.13 * sc);
-  for (let i = 0; i < 5; i++) ell(bronzeD, 0.012, 0.012, 0.008, 0, 0.98 + i * 0.07, 0.14);
-  for (const sx of [-1, 1]) {
-    K.boxC(bronze, 0.07 * sc, 0.3 * sc, 0.02 * sc, sx * 0.1 * sc, y0 + 1.3 * sc, 0.132 * sc, -0.12, 0, sx * 0.3);
-    K.boxC(bronze, 0.13 * sc, 0.04 * sc, 0.03 * sc, sx * 0.17 * sc, y0 + 0.86 * sc, 0.13 * sc, 0.1, sx * 0.35, 0);
-  }
-  // neck, cravat, collar
-  limb(bronze, [0, 1.46, 0], [0, 1.58, 0.01], 0.055, 0.05);
-  ell(bronzeD, 0.055, 0.045, 0.035, 0, 1.47, 0.07);
-  K.torus(bronzeD, 0.075 * sc, 0.022 * sc, 0, y0 + 1.5 * sc, -0.01, 5, 14);
-  // head: skull, jaw/chin, nose, brow, ears; hair swept back into a tied queue with a bow
-  ell(bronze, 0.09, 0.115, 0.1, 0, 1.66, 0.01);
-  ell(bronze, 0.065, 0.05, 0.06, 0, 1.585, 0.04);
-  K.boxC(bronze, 0.022 * sc, 0.045 * sc, 0.03 * sc, 0, y0 + 1.655 * sc, 0.1 * sc, -0.25, 0, 0);
-  K.boxC(bronze, 0.1 * sc, 0.012 * sc, 0.02 * sc, 0, y0 + 1.69 * sc, 0.09 * sc, 0.2, 0, 0);
-  for (const sx of [-1, 1]) ell(bronze, 0.015, 0.03, 0.022, sx * 0.09, 1.655, 0.0);
-  ell(bronzeD, 0.097, 0.1, 0.1, 0, 1.69, -0.015, 0, 0.15);
-  limb(bronzeD, [0, 1.64, -0.08], [0, 1.5, -0.1], 0.025, 0.018, 6);
-  for (const sx of [-1, 1]) ell(bronzeD, 0.035, 0.02, 0.012, sx * 0.03, 1.6, -0.095, sx * 0.5);
-  // arms: left down holding a scroll, right raised with the hat; sleeves with turned-back cuffs, hands
-  const shL: V3 = [-0.22, 1.42, 0.0], elL: V3 = [-0.27, 1.13, 0.04], wrL: V3 = [-0.22, 0.9, 0.17];
-  const shR: V3 = [0.22, 1.42, 0.0], elR: V3 = [0.33, 1.62, 0.12], wrR: V3 = [0.37, 1.92, 0.24];
-  for (const [sh2, el, wr] of [[shL, elL, wrL], [shR, elR, wrR]]) {
-    ell(bronze, 0.075, 0.07, 0.07, sh2[0], sh2[1], sh2[2]);
-    limb(bronze, sh2, el, 0.068, 0.058);
-    limb(bronze, el, wr, 0.056, 0.05);
-    const cx = el[0] + (wr[0] - el[0]) * 0.8, cy = el[1] + (wr[1] - el[1]) * 0.8, cz = el[2] + (wr[2] - el[2]) * 0.8;
-    limb(bronzeD, [cx, cy, cz], wr, 0.066, 0.066);
-  }
-  ell(bronze, 0.03, 0.05, 0.042, wrL[0], wrL[1] - 0.05, wrL[2] + 0.02, 0, 0.6);
-  ell(bronze, 0.03, 0.05, 0.042, wrR[0], wrR[1] + 0.05, wrR[2] + 0.02, 0, -0.3);
-  // scroll: a rolled cylinder with a sheet half unrolled
-  limb(bronzeD, [-0.3, 0.85, 0.22], [-0.12, 0.83, 0.25], 0.025, 0.025, 8);
-  K.boxC(bronze, 0.16 * sc, 0.2 * sc, 0.006 * sc, -0.21 * sc, y0 + 0.73 * sc, 0.26 * sc, 0.1, 0, 0);
-  // tricorn: three-cornered brim turned up round a crown, held aloft and tilted
-  const hat = P(0.39, 1.985, 0.28);
-  K.cyl(bronzeD, 0.17 * sc, 0.2 * sc, 0.06 * sc, hat[0], hat[1], hat[2], 3, false, 'box', 0, Math.PI * 2, 0.4);
-  K.cyl(bronzeD, 0.1 * sc, 0.115 * sc, 0.09 * sc, hat[0], hat[1] + 0.04 * sc, hat[2], 10);
+  // right hand: palm along the arm, index finger pointing on, thumb
+  const dir = wrR.clone().sub(elR).normalize();
+  const hand = wrR.clone().addScaledVector(dir, 0.06);
+  put(capsule(wrR, hand, 0.034, 0.03, 10));
+  put(capsule(hand, hand.clone().addScaledVector(dir, 0.075), 0.011, 0.009, 6));
+  for (const k of [0, 1, 2]) put(capsule(hand.clone().add(p3(0, -0.012 - k * 0.011, 0)), hand.clone().addScaledVector(dir, 0.025).add(p3(0, -0.03 - k * 0.011, -0.012)), 0.011, 0.01, 6));
+  put(capsule(wrR.clone().add(p3(-0.02, 0.012, 0.02)), hand.clone().add(p3(-0.025, 0.02, 0.01)), 0.012, 0.01, 6));
+  // left hand gripping the tricorn's brim at his side (crown out, brim upright)
+  put(capsule(wrL, wrL.clone().add(p3(-0.01, -0.07, 0.015)), 0.034, 0.03, 10));
+  const hat = new THREE.CylinderGeometry(0.16, 0.185, 0.045, 3);
+  put(at(hat, -0.31, 0.86, 0.1, 0.3, 0, Math.PI / 2));
+  put(at(new THREE.CylinderGeometry(0.09, 0.105, 0.08, 12), -0.36, 0.86, 0.1, 0.3, 0, Math.PI / 2));
   // night: uplights
   for (let i = 0; i < 4; i++) {
     const a = (i / 4) * Math.PI * 2 + Math.PI / 4;
@@ -258,7 +329,14 @@ export function genGazebo(env: Env, f: Feature): void {
   K.cyl(white, pr - 0.02, pr - 0.02, 0.05, 0, 0.42, 0, 8, true, 'box', rot);
   for (const c of corners) {
     K.box(white, 0.22, 0.12, 0.22, c[0], 0.48, c[2]);
-    K.lathe(white, [[0.1, 0], [0.1, 0.035], [0.088, 0.06], [0.092, 0.085], [0.08, 0.12], [0.072, colH - 0.42], [0.078, colH - 0.38], [0.072, colH - 0.35], [0.075, colH - 0.3], [0.1, colH - 0.2], [0.1, colH - 0.17], [0, colH - 0.17]], c[0], 0.6, c[2], 12);
+    // bold turnings so they read at 10 m: base torus over a fillet, scotia, a vase swell low on the shaft,
+    // entasis, an astragal bead, necking, an echinus flaring out under the abacus block
+    K.lathe(white, [
+      [0.108, 0], [0.108, 0.035], [0.1, 0.042], [0.112, 0.06], [0.114, 0.075], [0.104, 0.092], [0.086, 0.1], [0.084, 0.118], [0.094, 0.13], [0.09, 0.145],
+      [0.076, 0.17], [0.072, 0.22], [0.088, 0.33], [0.09, 0.38], [0.074, 0.48], [0.07, 0.52], [0.08, 0.54], [0.08, 0.565], [0.07, 0.585],
+      [0.074, colH - 0.6], [0.068, colH - 0.46], [0.068, colH - 0.445], [0.084, colH - 0.432], [0.086, colH - 0.415], [0.07, colH - 0.4], [0.067, colH - 0.33],
+      [0.074, colH - 0.31], [0.074, colH - 0.29], [0.09, colH - 0.25], [0.108, colH - 0.215], [0.116, colH - 0.19], [0.116, colH - 0.17], [0, colH - 0.17],
+    ], c[0], 0.6, c[2], 16);
     K.box(white, 0.22, 0.1, 0.22, c[0], 0.48 + colH - 0.1, c[2]);
   }
   for (let i = 0; i < 8; i++) {
@@ -345,8 +423,12 @@ export function genBandstand(env: Env, f: Feature): void {
     corners.push([Math.sin(a) * colR, stageH, Math.cos(a) * colR]);
   }
   for (const c of corners) {
-    K.cyl(iron, 0.06, 0.08, colH, c[0], stageH, c[2], 8);
-    K.cyl(iron, 0.13, 0.13, 0.1, c[0], stageH + colH - 0.1, c[2], 8);
+    // cast-iron column: square-ish moulded base, slim shaft with a collar ring, bell capital under a plate
+    K.lathe(iron, [
+      [0.12, 0], [0.12, 0.08], [0.1, 0.095], [0.104, 0.13], [0.085, 0.16], [0.08, 0.2], [0.068, 0.26], [0.062, 0.32],
+      [0.058, colH * 0.45], [0.074, colH * 0.45 + 0.02], [0.074, colH * 0.45 + 0.05], [0.058, colH * 0.45 + 0.07],
+      [0.055, colH - 0.36], [0.072, colH - 0.34], [0.072, colH - 0.31], [0.058, colH - 0.29], [0.07, colH - 0.2], [0.1, colH - 0.13], [0.13, colH - 0.1], [0.13, colH], [0, colH],
+    ], c[0], stageH, c[2], 12);
   }
   for (let i = 0; i < 8; i++) {
     const a = corners[i],
@@ -441,7 +523,12 @@ export function genKiosk(env: Env, f: Feature): void {
   // corner posts at the six angles, a dado rail over the green skirt, a frieze board under the eave
   for (let i = 0; i < 6; i++) {
     const a = (i / 6) * Math.PI * 2;
-    K.box(green, 0.07, kh - 0.14, 0.07, Math.sin(a) * (kr + 0.0), 0.12, Math.cos(a) * (kr + 0.0), a);
+    const px = Math.sin(a) * kr, pz = Math.cos(a) * kr;
+    K.box(green, 0.07, kh - 0.14, 0.07, px, 0.12, pz, a);
+    // plinth block at the foot, a moulded cap under the frieze
+    K.box(green, 0.11, 0.16, 0.11, px, 0.12, pz, a);
+    K.box(green, 0.095, 0.025, 0.095, px, 0.28, pz, a);
+    K.box(green, 0.1, 0.03, 0.1, px, kh - 0.26, pz, a);
   }
   K.cyl(green, kr + 0.05, kr + 0.05, 0.05, 0, 0.95, 0, 6, false, 'box', Math.PI / 6);
   K.cyl(green, kr + 0.04, kr + 0.04, 0.16, 0, kh - 0.2, 0, 6, false, 'box', Math.PI / 6);

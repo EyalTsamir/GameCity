@@ -25,7 +25,8 @@ import { planScatter, scatterDisc, type ScatterItem } from './props/scatter';
 import type { PropsService, ChairOut, Cafe } from './props/service';
 import type { BuildingsService } from './buildings/anchors';
 import { Builder } from './buildings/mesh';
-import { GreenKit, makeGreenTexture, createGreenMaterial } from './buildings/green';
+import { GREEN, GreenKit, makeGreenTexture, createGreenMaterial } from './buildings/green';
+import { sideGeom } from './buildings/gen';
 import { XS, ZS, FURN_OFFSET } from '../core/constants';
 import { addLampLights, type LampLight } from '../core/lampLight';
 import { buildContactMesh, takeQueuedContacts, type ContactSpot } from './props/contact';
@@ -160,6 +161,21 @@ export default function create(ctx: CityContext): CityModule {
         (simple ? planterBoxSimple : planterBox)(kf, kind, PLANTER.along, PLANTER.across, PLANTER.height);
         // drainage: soil washed out of the weep holes darkens the paving around the trough
         spot(s.x, y, s.z, s.yaw, 0, 0, PLANTER.along / 2, PLANTER.across / 2, 0.04, 0.32, 0.75);
+        // planting spilling over the rim (vegetation fills the soil): trailing ivy / petunias over one to
+        // three sides, sometimes a tall grass or lavender accent at one end — no two troughs alike
+        if (greenKit && !simple) {
+          const hk = (k: number) => hash01(s.x + k * 3.1, s.z - k * 1.7, 41 + k);
+          greenB.frame(s.yaw, s.x, y, s.z);
+          const hx = PLANTER.along / 2 - 0.04, hz = PLANTER.across / 2 - 0.04;
+          const trail = hk(1) < 0.5 ? GREEN.IVY_HANG : GREEN.PETUNIA;
+          for (const side of [0, 1, 2, 3] as const) {
+            if (hk(2 + side) < (side % 2 ? 0.65 : 0.25)) continue;
+            const sg = sideGeom({ x0: -hx, x1: hx, z0: -hz, z1: hz }, side);
+            const a0 = sg.L * 0.5 * hk(9 + side);
+            greenKit.hang(sg, a0, sg.L - 0.04, 0.03, PLANTER.height + 0.03, 0.14, 0.22 + 0.25 * hk(14 + side), trail, 0.06, 1, 0.06);
+          }
+          if (hk(20) < 0.55) greenKit.clump((hk(21) < 0.5 ? -1 : 1) * hx * 0.7, PLANTER.soil - 0.02, 0, 0.17, 0.45 + 0.3 * hk(22), hk(23) < 0.5 ? GREEN.GRASS : GREEN.LAVENDER, 3);
+        }
         inc('planter');
         break;
       }

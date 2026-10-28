@@ -7,6 +7,7 @@ import { ANIM, M, PAT, type Mat } from './builder';
 import { C, S, flagpole, person } from './parts';
 import type { Env } from './env';
 import { drawText, signQuad } from './signs';
+import { shell } from './sculpt';
 import { queueContactLocal } from '../props/contact';
 
 /** Plaza flagpole: stone base, 9 m mast, waving flag. */
@@ -102,31 +103,118 @@ function produce(K: Env['S'], goods: Goods, ci: number, w: number, d: number, x:
   // dark bed under the top layer (the crate is full)
   K.box(M(c0.clone().multiplyScalar(0.45), PAT.PLAIN, 0.9), w - 0.03, 0.01, d - 0.03, x, y - 0.02, z);
   const mats = [0.85, 1, 1.12].map((k) => M(c0.clone().multiplyScalar(k), PAT.PLAIN, kind === 'FISH' ? 0.3 : 0.55, 0));
-  for (let i = 0; i < nx; i++)
-    for (let j = 0; j < nz; j++) {
-      const u = (i + 0.5) / nx - 0.5, v = (j + 0.5) / nz - 0.5;
-      const px = x + u * (w - r * 2) * 1.05 + (rnd() - 0.5) * r * 0.5;
-      const pz = z + v * (d - r * 2) * 1.05 + (rnd() - 0.5) * r * 0.5;
-      const mound = 0.03 * (1 - 4 * (u * u + v * v));
-      const py = y + mound + r * 0.7;
-      const m = mats[Math.floor(rnd() * 3)];
-      if (kind === 'CHEESE') {
-        if ((i + j) % 2) continue;
-        K.cyl(m, r, r, r * 0.8, px, y, pz, 10);
-      } else if (kind === 'HONEY') {
-        K.cyl(m, r * 0.7, r * 0.7, r * 1.8, px, y, pz, 8);
-        K.cyl(M('#c9b26a', PAT.PLAIN, 0.4, 0.6), r * 0.72, r * 0.72, r * 0.3, px, y + r * 1.8, pz, 8);
-      } else if (kind === 'FLOWERS') {
-        K.rod(M('#3f7a33', PAT.PLAIN, 0.8), [px, y, pz], [px + (rnd() - 0.5) * 0.06, y + 0.22, pz + (rnd() - 0.5) * 0.06], 0.006, 3);
-        K.sphere(m, r * 0.8, px, y + 0.23, pz, 5, 3);
-      } else if (kind === 'FISH' || kind === 'BREAD') {
-        const a = rnd() * Math.PI;
-        _mm.makeRotationY(a).scale(_sc.set(kind === 'FISH' ? 2.6 : 2.0, 0.7, 1)).setPosition(px, y + r * 0.5, pz);
-        const eg = new THREE.SphereGeometry(r, 7, 4);
-        K.geoM(m, eg, _mm);
+  const pick = () => mats[Math.floor(rnd() * 3)];
+  if (kind === 'FISH') {
+    // crushed ice heaped in the box, fish laid in overlapping rows, heads to the aisle, a lemon or two
+    K.box(M('#e8f0f2', PAT.GRAVEL, 0.25, 0, 0, 0, 0.7), w - 0.03, 0.035, d - 0.03, x, y - 0.03, z);
+    const rows = 3, per = Math.max(3, Math.floor(w / 0.09));
+    for (let j = 0; j < rows; j++)
+      for (let i = 0; i < per; i++) {
+        const px = x + ((i + 0.5) / per - 0.5) * (w - 0.08), pz = z + ((j + 0.5) / rows - 0.5) * (d - 0.1);
+        _mm.makeRotationY(Math.PI / 2 + 0.35 + (rnd() - 0.5) * 0.3).multiply(new THREE.Matrix4().makeRotationZ(0.25)).scale(_sc.set(0.11, 0.024, 0.035)).setPosition(px, y + 0.012 + j * 0.012, pz);
+        const eg = new THREE.SphereGeometry(1, 9, 5);
+        K.geoM(pick(), eg, _mm);
         eg.dispose();
-      } else K.sphere(m, r * (0.85 + rnd() * 0.25), px, py, pz, 6, 4);
+      }
+    K.sphere(M('#f1d934', PAT.PLAIN, 0.6), 0.028, x + w * 0.3, y + 0.04, z + d * 0.3, 7, 5);
+    return;
+  }
+  if (kind === 'FLOWERS') {
+    // galvanised buckets with bunches: stems fanning out, heads at different heights, some wrapped in paper
+    const nb = 2;
+    for (let b2 = 0; b2 < nb; b2++) {
+      const bx = x + (b2 - 0.5) * w * 0.5;
+      K.cyl(M('#a9b1b5', PAT.PLAIN, 0.4, 0.7), 0.1, 0.085, 0.2, bx, y - 0.12, z, 12);
+      const m = mats[(b2 + ci) % 3];
+      const n = 9;
+      for (let k = 0; k < n; k++) {
+        const a = (k / n) * Math.PI * 2 + rnd(), rr = k === 0 ? 0 : 0.05 + rnd() * 0.05;
+        const hx = bx + Math.sin(a) * rr * 1.4, hz = z + Math.cos(a) * rr * 1.2, hy = y + 0.28 + rnd() * 0.12 - rr;
+        K.rod(M('#3f7a33', PAT.PLAIN, 0.8), [bx + Math.sin(a) * 0.02, y - 0.02, z + Math.cos(a) * 0.02], [hx, hy, hz], 0.005, 3);
+        K.sphere(m, 0.032 + rnd() * 0.012, hx, hy, hz, 7, 5);
+        if (k % 3 === 0) K.sphere(M('#4f8a3c', PAT.PLAIN, 0.8), 0.025, hx - 0.03, hy - 0.06, hz, 5, 3);
+      }
     }
+    return;
+  }
+  if (kind === 'BREAD') {
+    // loaves in a heap two deep, a few baguettes standing at the back
+    for (let L = 0; L < 2; L++)
+      for (let i = 0; i < nx - L; i++)
+        for (let j = 0; j < nz - L; j++) {
+          const px = x + ((i + 0.5 + L * 0.5) / nx - 0.5) * (w - r * 2) * 1.05, pz = z + ((j + 0.5 + L * 0.5) / nz - 0.5) * (d - r * 2) * 1.05;
+          _mm.makeRotationY(rnd() * Math.PI).scale(_sc.set(r * 1.7, r * 0.75, r)).setPosition(px, y + r * 0.45 + L * r * 1.1, pz);
+          const eg = new THREE.SphereGeometry(1, 9, 6);
+          K.geoM(pick(), eg, _mm);
+          eg.dispose();
+        }
+    for (let k = 0; k < 4; k++) K.rod(mats[1], [x - w * 0.3 + k * 0.07, y, z - d * 0.38], [x - w * 0.3 + k * 0.075 + 0.02, y + 0.42, z - d * 0.42], 0.022, 6);
+    return;
+  }
+  if (kind === 'SPICES') {
+    // a heaped cone of powder in each of four bowls
+    for (let k = 0; k < 4; k++) {
+      const px = x + ((k % 2) - 0.5) * w * 0.5, pz = z + (Math.floor(k / 2) - 0.5) * d * 0.5;
+      const m = M(new THREE.Color(goods.produce[(ci + k) % goods.produce.length]), PAT.GRAVEL, 0.95, 0, 0, 0, 0.2 + k * 0.1);
+      K.cyl(M('#e8e0d0', PAT.PLAIN, 0.4), 0.075, 0.05, 0.04, px, y - 0.04, pz, 12);
+      K.cyl(m, 0.01, 0.075, 0.07, px, y, pz, 12);
+    }
+    return;
+  }
+  // fruit, vegetables, cheese, honey: heaped in up to three layers (each layer sits in the hollows of
+  // the one below), higher in the middle
+  const layers = kind === 'CHEESE' || kind === 'HONEY' ? 2 : 3;
+  for (let L = 0; L < layers; L++) {
+    const lx = nx - L, lz = nz - L;
+    if (lx < 1 || lz < 1) break;
+    for (let i = 0; i < lx; i++)
+      for (let j = 0; j < lz; j++) {
+        const u = (i + 0.5 + L * 0.5) / nx - 0.5, v = (j + 0.5 + L * 0.5) / nz - 0.5;
+        const px = x + u * (w - r * 2) * 1.05 + (rnd() - 0.5) * r * 0.4;
+        const pz = z + v * (d - r * 2) * 1.05 + (rnd() - 0.5) * r * 0.4;
+        const m = pick();
+        if (kind === 'CHEESE') {
+          if ((i + j + L) % 2) continue;
+          K.cyl(m, r, r, r * 0.8, px, y + L * r * 0.8, pz, 14);
+          K.cyl(M(c0.clone().multiplyScalar(0.7), PAT.PLAIN, 0.7), r * 1.005, r * 1.005, r * 0.12, px, y + L * r * 0.8 + r * 0.34, pz, 14);
+        } else if (kind === 'HONEY') {
+          const hy = y + L * r * 2.3;
+          K.cyl(m, r * 0.7, r * 0.7, r * 1.8, px, hy, pz, 10);
+          K.cyl(M('#c9b26a', PAT.PLAIN, 0.4, 0.6), r * 0.72, r * 0.72, r * 0.3, px, hy + r * 1.8, pz, 10);
+        } else if (kind === 'VEGETABLES' && ci % 4 === 1) {
+          // carrots: tapered roots with leafy tops, laid across the crate
+          const a = (rnd() - 0.5) * 0.5;
+          const ex = Math.cos(a) * 0.07, ez = Math.sin(a) * 0.07;
+          K.rod(m, [px - ex, y + L * 0.03 + 0.02, pz - ez], [px + ex, y + L * 0.03 + 0.02, pz + ez], 0.014, 6);
+          K.sphere(M('#4f8a3c', PAT.PLAIN, 0.8), 0.022, px - ex * 1.3, y + L * 0.03 + 0.03, pz - ez * 1.3, 5, 3);
+        } else {
+          const k = kind === 'VEGETABLES' && ci % 4 === 0 ? 1.7 : kind === 'VEGETABLES' && ci % 4 === 3 ? 1.3 : 1;
+          const rr = r * k * (0.88 + rnd() * 0.22);
+          const py = y + rr * 0.85 + L * r * k * 1.35;
+          if (kind === 'VEGETABLES' && ci % 4 === 3) {
+            _mm.makeRotationY(rnd() * Math.PI).multiply(new THREE.Matrix4().makeRotationZ(Math.PI / 2)).scale(_sc.set(rr * 0.75, rr * 1.4, rr * 0.75)).setPosition(px, py - rr * 0.2, pz);
+            const eg = new THREE.SphereGeometry(1, 9, 6);
+            K.geoM(m, eg, _mm);
+            eg.dispose();
+          } else K.sphere(m, rr, px, py, pz, 9, 6);
+          if (kind === 'FRUIT' && rnd() < 0.3) K.rod(M('#5a4028', PAT.PLAIN, 0.9), [px, py + rr * 0.9, pz], [px + 0.005, py + rr * 1.2, pz], 0.003, 3);
+        }
+      }
+  }
+}
+
+/** chalk price card on a stick (w = 9 cm) */
+function priceCard(env: Env, x: number, y: number, z: number, price: string): void {
+  const K = env.S;
+  K.rod(M('#d8c9a8', PAT.PLAIN, 0.8), [x, y - 0.14, z], [x, y + 0.02, z], 0.004, 3);
+  K.box(M('#3a2c20', PAT.PLAIN, 0.9), 0.1, 0.07, 0.006, x, y - 0.005, z - 0.004);
+  const card = env.atlas.add(80, 52, (g, w, h) => {
+    g.fillStyle = '#1d211f';
+    g.fillRect(0, 0, w, h);
+    drawText(g, price, w / 2, h * 0.42, 'bold 20px Georgia, serif', '#f2efe6', 0);
+    drawText(g, 'per kg', w / 2, h * 0.8, 'italic 12px Georgia, serif', '#d9d4c4', 0);
+  }, `price:${price}`);
+  signQuad(env.T, card, 0.09, 0.06, x, y, z + 0.0005, 0, 0);
 }
 
 export function genMarketStall(env: Env, f: Feature): void {
@@ -156,7 +244,7 @@ export function genMarketStall(env: Env, f: Feature): void {
   K.rod(steel, [-hw - 0.05, yB, bz], [hw + 0.05, yB, bz], 0.018, 6);
   for (const x of [-hw, hw]) K.rod(steel, [x, yF, fz], [x, yB, bz], 0.018, 6);
   // canopy cloth: a grid sagging between the rails, overhanging the front; metric uvs keep the stripes running
-  const canopy = M(col, PAT.STRIPES, 0.85, 0, 0, 0, 0.2);
+  const canopy = M(col, f.id % 3 === 1 ? PAT.PLAIN : PAT.STRIPES, 0.85, 0, 0, 0, 0.2);
   const under = M('#efe9de', PAT.PLAIN, 0.8);
   const NX = 8, NZ = 4, x0 = -hw - 0.03, x1 = hw + 0.03, z0 = fz + 0.16, z1 = bz - 0.12; // corners stay inside r = 1.3
   const P = (i: number, j: number): [number, number, number] => {
@@ -197,32 +285,44 @@ export function genMarketStall(env: Env, f: Feature): void {
     K.box(wood, 0.05, 0.05, 0.4, x, ty - 0.05, tz);
     K.beam(wood, [x, 0.3, tz - 0.19], [x, 0.3, tz + 0.19], 0.03, 0.02);
   }
-  // table cloth: laid over the top and hanging ~40 cm over the front and the ends in soft folds (the
-  // trestles show below it); the hem swings in and out, the folds die out towards the table edge
-  const clothCol = ['#efe6d2', '#e9dfc8', '#f3efe6', '#e7d9bd'][(f.id * 5) % 4];
-  const cloth = M(clothCol, PAT.PLAIN, 0.92);
-  const tw = 2 * hw - 0.02, ct = ty + 0.04, hem = ty - 0.36;
-  K.box(cloth, tw, 0.006, 0.64, 0, ty + 0.036, tz);
-  const NF = 18;
-  const fold = (u: number) => 0.028 * Math.sin(u * NF * Math.PI) + 0.008 * Math.sin(u * 37.0 + f.id);
-  for (let i = 0; i < NF; i++) {
-    const ua = i / NF, ub = (i + 1) / NF;
-    const xa = -tw / 2 + tw * ua, xb = -tw / 2 + tw * ub;
-    const zt = tz + 0.322;
-    const hya = hem + 0.025 * Math.sin(ua * 9.0 + f.id), hyb = hem + 0.025 * Math.sin(ub * 9.0 + f.id);
-    // upper band (folds half out) and lower band (full folds) for a soft drape
-    const ym = ty - 0.12;
-    K.poly(cloth, [[xa, ym, zt + fold(ua) * 0.45], [xb, ym, zt + fold(ub) * 0.45], [xb, ct, zt], [xa, ct, zt]], undefined, true);
-    K.poly(cloth, [[xa, hya, zt + fold(ua)], [xb, hyb, zt + fold(ub)], [xb, ym, zt + fold(ub) * 0.45], [xa, ym, zt + fold(ua) * 0.45]], undefined, true);
+  // table cloth (a 4 mm shell, sculpt.ts): laid flat over the top, rolling over the front edge and hanging
+  // ~40 cm in soft folds that grow towards the hem (the trestles show below it); separate drops over the
+  // two ends meet the front drop at the corners. Cloth differs per stall: linen, gingham-red, oilcloth
+  // green, hessian.
+  const clothCol = ['#efe6d2', '#b8443c', '#4f7a5a', '#a88b62', '#e9dfc8', '#3e5577'][(f.id * 5) % 6];
+  const cloth = M(clothCol, PAT.PLAIN, 0.92, 0, 0, 0, 0.3);
+  const tw = 2 * hw - 0.02, ct = ty + 0.037, drop = 0.36 + 0.06 * rnd(), td = 0.64;
+  const ph = f.id * 1.7;
+  const folds = (x: number, a: number) => a * (0.6 * Math.sin(x * 17 + ph) + 0.3 * Math.sin(x * 31 + ph * 2.3) + 0.15 * Math.sin(x * 53));
+  // top + front: v runs from the back edge over the top, round the edge, down to the hem
+  const L0 = td, L1 = 0.03, L2 = drop;
+  for (const part of shell(64, 16, (u, v, o) => {
+    const x = tw / 2 + 0.01 - (tw + 0.02) * u;
+    const s2 = v * (L0 + L1 + L2);
+    if (s2 <= L0) o.set(x, ct, tz - td / 2 + s2);
+    else if (s2 <= L0 + L1) {
+      const a = ((s2 - L0) / L1) * Math.PI / 2;
+      o.set(x, ct - 0.02 + Math.cos(a) * 0.02, tz + td / 2 - 0.02 + Math.sin(a) * 0.02 + 0.02);
+    } else {
+      const d = (s2 - L0 - L1) / L2;
+      const amp = 0.045 * Math.pow(d, 1.3);
+      const hemLift = d > 0.9 ? 0.012 * Math.sin(x * 23 + ph) * (d - 0.9) * 10 : 0;
+      o.set(x, ct - 0.02 - d * L2 + hemLift, tz + td / 2 + 0.02 + amp * 0.5 + folds(x, amp));
+    }
+  }, 0.004)) {
+    K.geo(cloth, part);
+    part.dispose();
   }
-  // rolled edge over the front of the top
-  K.rod(cloth, [-tw / 2, ct - 0.005, tz + 0.318], [tw / 2, ct - 0.005, tz + 0.318], 0.012, 6);
+  // end drops
   for (const sx of [-1, 1]) {
-    const xe = sx * (tw / 2 + 0.004);
-    for (let j = 0; j < 6; j++) {
-      const za = tz - 0.32 + (0.64 * j) / 6, zb = tz - 0.32 + (0.64 * (j + 1)) / 6;
-      const fa = j % 2 ? 0.02 * sx : 0, fb = (j + 1) % 2 ? 0.02 * sx : 0;
-      K.poly(cloth, [[xe + fa, hem + 0.05, za], [xe + fb, hem + 0.05, zb], [xe, ct, zb], [xe, ct, za]], undefined, true);
+    for (const part of shell(12, 10, (u, v, o) => {
+      const z = tz - td / 2 + td * (sx > 0 ? 1 - u : u);
+      const d = 1 - v;
+      const amp = 0.035 * Math.pow(d, 1.3);
+      o.set(sx * (tw / 2 + 0.01 + amp * 0.4 + folds(z + sx, amp)), ct - 0.01 - d * (drop - 0.04), z);
+    }, 0.004)) {
+      K.geo(cloth, part);
+      part.dispose();
     }
   }
   K.b.forceDetail = true;
@@ -230,15 +330,10 @@ export function genMarketStall(env: Env, f: Feature): void {
   const crateM = M(goods.crate, PAT.PLANKS, 0.85, 0, 0, 0, 0.6);
   for (let i = 0; i < 4; i++) {
     const x = -hw + 0.27 + i * 0.485;
-    slatCrate(K, crateM, 0.42, 0.13, 0.34, x, ty + 0.018, tz - 0.02);
+    if (goods.name !== 'FLOWERS') slatCrate(K, crateM, 0.42, 0.13, 0.34, x, ty + 0.018, tz - 0.02);
     produce(K, goods, i, 0.42, 0.34, x, ty + 0.15, tz - 0.02, seed + i * 31);
-    // price card on a stick
-    if (richStall && (i % 2 === 0 || rnd() < 0.5)) {
-      K.rod(M('#d8c9a8', PAT.PLAIN, 0.8), [x + 0.15, ty + 0.12, tz + 0.12], [x + 0.15, ty + 0.27, tz + 0.12], 0.004, 3);
-      K.box(M('#1d1f1e', PAT.PLAIN, 0.9), 0.09, 0.06, 0.004, x + 0.15, ty + 0.25, tz + 0.122);
-      K.box(M('#f2f0ea', PAT.PLAIN, 0.9), 0.05, 0.012, 0.002, x + 0.14, ty + 0.27, tz + 0.125);
-      K.box(M('#f2f0ea', PAT.PLAIN, 0.9), 0.03, 0.01, 0.002, x + 0.16, ty + 0.255, tz + 0.125);
-    }
+    // price card on a stick, chalked
+    if (richStall && goods.name !== 'FISH' && (i % 2 === 0 || rnd() < 0.6)) priceCard(env, x + 0.14, ty + 0.3, tz + 0.12, `${1 + Math.floor(rnd() * 5)}.${['20', '50', '80', '95', '40'][Math.floor(rnd() * 5)]}`);
   }
   // scales on the corner of the table: base, dial, pan
   if (richStall && goods.name !== 'FLOWERS') {
@@ -260,6 +355,11 @@ export function genMarketStall(env: Env, f: Feature): void {
     // on the ground: stacked empty crates, flattened cardboard, a box with tape, sometimes a hand truck
     slatCrate(K, crateM, 0.42, 0.3, 0.32, -hw + 0.35, 0, bz + 0.2);
     for (let i = 0; i < 2; i++) slatCrate(K, crateM, 0.42, 0.13, 0.32, -hw + 0.36 + i * 0.01, 0.3 + i * 0.14, bz + 0.2);
+    // under the table: reserve stock in crates (one stacked), a lidded cardboard box
+    slatCrate(K, crateM, 0.42, 0.26, 0.32, -0.3, 0, tz - 0.04);
+    if (goods.name !== 'FLOWERS') produce(K, goods, 2, 0.42, 0.32, -0.3, 0.25, tz - 0.04, seed + 501);
+    slatCrate(K, crateM, 0.42, 0.18, 0.32, 0.25, 0, tz - 0.02);
+    slatCrate(K, crateM, 0.42, 0.18, 0.32, 0.27, 0.185, tz - 0.03);
     const card = M('#b8915f', PAT.PLAIN, 0.95);
     K.boxC(card, 0.5, 0.008, 0.38, hw - 0.4, 0.005, bz + 0.15, 0, rnd(), 0);
     K.box(card, 0.4, 0.3, 0.3, hw - 0.35, 0, fz - 0.95);

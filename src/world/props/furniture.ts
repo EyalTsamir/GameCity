@@ -174,8 +174,17 @@ export function bench(k: Kit, style: 'classic' | 'modern' | 'wood', rng: Rng, le
       sh.box(x, 0.21 - legDrop / 2, 0.0, 0.08, 0.42 + legDrop, 0.46, 1);
       sh.beam(x, 0.42, -0.2, x, 0.86, -0.3, 0.07, 0.06);
     }
+    // fixings: a base plate under each leg with four anchor bolts, a box-section rail under the slats
+    for (const x of [-0.72, 0.72]) {
+      sh.box(x, 0.004 - legDrop, 0.0, 0.16, 0.008, 0.52, 1);
+      for (const sx of [-1, 1]) for (const sz of [-1, 1]) boltY(sh, x + sx * 0.055, 0.008 - legDrop, sz * 0.22, 0.011);
+    }
+    sh.box(0, 0.39, -0.03, 1.5, 0.04, 0.04, 1);
     k.m(rng.chance(0.5) ? '#b07a4c' : '#9a6a43', 'wood');
     for (let i = 0; i < 5; i++) cbox(sh, 0, 0.445, -0.2 + i * 0.105, L, 0.04, 0.085, 0.008, 0);
+    // countersunk screws into the frame
+    k.m('#55595c', 'steel');
+    for (const x of [-0.72, 0.72]) for (let i = 0; i < 5; i++) sh.cyl(x, 0.485, -0.2 + i * 0.105, 0.007, 0.007, 0.002, 6, 2);
     for (let i = 0; i < 3; i++) {
       const t = i / 2;
       sh.push().local(0, 0.6 + t * 0.22, -0.25 - t * 0.05, -0.2).box(0, 0, 0, L, 0.075, 0.03, 0).pop();
@@ -189,8 +198,21 @@ export function bench(k: Kit, style: 'classic' | 'modern' | 'wood', rng: Rng, le
       sh.box(x, 0.21 - legDrop / 2, -0.18, 0.1, 0.42 + legDrop, 0.1, 1);
       sh.beam(x, 0.4, -0.22, x, 0.88, -0.34, 0.09, 0.08);
     }
+    // bearers across the leg pairs, a centre bearer and leg, galvanised angle brackets bolted to the paving
+    for (const x of [-0.75, 0, 0.75]) sh.box(x, 0.37, -0.01, 0.08, 0.07, 0.48, 1);
+    sh.box(0, 0.185 - legDrop / 2, -0.01, 0.09, 0.37 + legDrop, 0.09, 1);
+    k.m('#9aa1a5', 'steel');
+    for (const x of [-0.75, 0.75])
+      for (const z of [0.16, -0.18]) {
+        sh.box(x, 0.004 - legDrop, z + 0.075, 0.1, 0.008, 0.05, 1);
+        sh.box(x, 0.04 - legDrop, z + 0.052, 0.1, 0.08, 0.006, 1);
+        boltY(sh, x, 0.008 - legDrop, z + 0.085, 0.012);
+        boltZ(sh, x, 0.045 - legDrop, z + 0.056, 0.01);
+      }
     k.m('#a87f58', 'wood');
     for (let i = 0; i < 4; i++) cbox(sh, 0, 0.445, -0.18 + i * 0.12, L, 0.045, 0.1, 0.009, 0);
+    k.m('#3a3a38', 'iron');
+    for (const x of [-0.75, 0, 0.75]) for (let i = 0; i < 4; i++) sh.cyl(x, 0.49, -0.18 + i * 0.12, 0.008, 0.008, 0.003, 6, 2);
     for (let i = 0; i < 2; i++) sh.push().local(0, 0.66 + i * 0.16, -0.28 - i * 0.035, -0.22).box(0, 0, 0, L, 0.1, 0.035, 0).pop();
     return;
   }
@@ -204,6 +226,14 @@ export function bench(k: Kit, style: 'classic' | 'modern' | 'wood', rng: Rng, le
     sh.box(x, 0.64, 0.03, 0.07, 0.04, 0.42, 0);
     sh.beam(x, 0.42, 0.2, x, 0.64, 0.2, 0.05, 0.05, false);
   }
+  // feet: cast pads with an anchor bolt each; a flat-iron centre bearer under the slats
+  for (const x of [-0.84, 0.84])
+    for (const z of [0.19, -0.17]) {
+      sh.box(x, 0.006 - legDrop, z, 0.1, 0.012, 0.09, 1);
+      boltY(sh, x + 0.032, 0.012 - legDrop, z, 0.01);
+    }
+  sh.box(0, 0.415, 0.0, 0.03, 0.035, 0.44, 0);
+  sh.beam(0, 0.42, -0.2, 0, 0.82, -0.31, 0.03, 0.02, false);
   // scrolled armrests on the ends
   for (const x of [-0.84, 0.84]) {
     sh.beam(x, 0.64, 0.2, x, 0.66, -0.12, 0.05, 0.035);
