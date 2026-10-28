@@ -10,7 +10,7 @@ import {
   col, shade, setCol, lightBox, wallLamp,
 } from './gen';
 import { anchors } from './anchors';
-import { balconyLife, roofClutter, ironRail } from './clutter';
+import { balconyLife, roofClutter, ironRail, acUnit, dish, downpipe } from './clutter';
 import { WIN, PROF, WALLPAT, ROOFPAT, FRAME, GLASS, LIGHT_MODE } from './materials';
 import { partitionSide } from './oldtown';
 
@@ -356,6 +356,10 @@ export function genApartment(g: Gen): void {
     const sg = sideGeom(body, sd);
     const long = sd === FRONT || sd === BACK;
     if (!long) {
+      // rainwater from the roof scuppers: downpipes near both corners of the gable ends (side inset INS)
+      const pc = col(rng.pick(['#8d9497', '#5a5f62', '#e9e6dd']));
+      downpipe(g, sg, 0.3, H + 0.3, pc, INS);
+      if (rng.chance(0.5)) downpipe(g, sg, sg.L - 0.3, H + 0.3, pc, INS);
       // gable ends: a column of small windows
       const gr = makeGrid(0, sg.L, gH, fH, floors - 1, { spacing: 3.0, cols: 2, winW: 0.9, winH: 1.3, sill: 0.95, margin: 1.6 });
       wallGrid(s, sg, 0, sg.L, gH, H, gr, look());
@@ -380,6 +384,17 @@ export function genApartment(g: Gen): void {
       // ground floor plinth band
       setCol(t, shade(wallC, 0.78));
       sideBox(t, sg, a, b, 0, 0.12, 0, 0.5);
+      // signs of life on the back: AC condensers on brackets beside windows without a balcony, a few dishes
+      if (sd === BACK) {
+        for (let i = 0; i < gr.n; i++) {
+          if ((i + 1) % 2 === 1) continue; // balcony column
+          for (let j = 0; j < gr.m; j++) {
+            const y = gr.v0 + j * gr.ch + 0.35;
+            if (rng.chance(0.22)) acUnit(g, sg, gridU(gr, i) + (rng.chance(0.5) ? 1.25 : -1.25), y, 0);
+            else if (rng.chance(0.08)) dish(g, sg, gridU(gr, i) + 1.1, y + 1.6, 0);
+          }
+        }
+      }
     }, () => {});
     if (sd === FRONT) for (const u of cores) stairCore(sg, u);
     // floor bands
@@ -439,11 +454,30 @@ export function genApartment(g: Gen): void {
         // entrance with canopy
         bandWithOpenings(cg, 0, cg.L, [{ u: cg.L / 2, w: 1.6, h: 2.4 }], (aa, bb) => wallPlain(s, cg, aa, bb, 0, gH, { color: coreC, pattern: WALLPAT.PANELS, seed: g.seed }), (aa, bb, y0) => wallPlain(s, cg, aa, bb, y0, gH, { color: coreC, pattern: WALLPAT.PANELS, seed: g.seed }));
         doorNiche(g, cg, cg.L / 2, { w: 1.6, h: 2.4, depth: 0.25, wallColor: coreC, frameColor: col('#5a6066'), doorColor: col('#5a6066'), glass: true, profile: PROF.ALWAYS, seed: g.seed + 3, frameOut: 0.0 });
+        // intercom / bell panel beside the entrance (flush: the core front sits on the footprint line)
+        setCol(t, col('#9aa0a4'));
+        sideBox(t, cg, cg.L / 2 + 1.0, cg.L / 2 + 1.2, 0, 0.018, 1.15, 1.5, true);
+        setCol(t, col('#26292c'));
+        for (let k = 0; k < 6; k++) sideBox(t, cg, cg.L / 2 + 1.03, cg.L / 2 + 1.17, 0.018, 0.024, 1.19 + k * 0.045, 1.215 + k * 0.045);
+        sideBox(t, cg, cg.L / 2 + 1.05, cg.L / 2 + 1.15, 0.018, 0.026, 1.45, 1.48);
         setCol(t, col('#5a6066'));
         sideBox(t, cg, -0.3, cg.L + 0.3, 0, 1.1, 2.75, 2.95, true);
         lightBox(g, sx(cg, cg.L / 2, 0.6) - 0.15, 2.7, sz(cg, cg.L / 2, 0.6) - 0.15, sx(cg, cg.L / 2, 0.6) + 0.15, 2.75, sz(cg, cg.L / 2, 0.6) + 0.15, '#fff1d6', LIGHT_MODE.STEADY, 3.5);
       } else {
         wallPlain(s, cg, 0, cg.L, 0, H + 1.6, { color: coreC, pattern: WALLPAT.PANELS, seed: g.seed });
+        if (sd === RIGHT) {
+          // a bank of letter boxes on the side of the stair core, near the entrance
+          const mc = col(rng.pick(['#3f4a52', '#8c949a', '#6b4a32']));
+          for (let r = 0; r < 3; r++)
+            for (let c2 = 0; c2 < 2; c2++) {
+              const u0 = 0.06 + c2 * 0.31,
+                y0 = 0.95 + r * 0.3;
+              setCol(t, mc);
+              sideBox(t, cg, u0, u0 + 0.3, 0, 0.22, y0, y0 + 0.28, true);
+              setCol(t, col('#141618'));
+              sideBox(t, cg, u0 + 0.05, u0 + 0.25, 0.22, 0.226, y0 + 0.2, y0 + 0.225);
+            }
+        }
       }
     }
     // core roof (lift motor room)

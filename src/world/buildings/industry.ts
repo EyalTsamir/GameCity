@@ -158,21 +158,39 @@ export function genIndustrial(g: Gen): void {
     t.quad(bxi, 0, bzi, bx, 0, bz, bx, doorH, bz, bxi, doorH, bzi);
     t.quad(axi, doorH, azi, bxi, doorH, bzi, bx, doorH, bz, ax, doorH, az);
     // door leaf with ribs (or wooden double doors for the customs house)
-    setCol(t, dc);
+    setCol(t, customs ? dc : shade(dc, 0.5)); // sectional doors: seen only in the joints between sections
     sideBox(t, sg, a, b, -d, -d + 0.02, 0, doorH, false, true);
     setCol(t, shade(dc, 0.8));
     if (customs) {
       sideBox(t, sg, u - 0.04, u + 0.04, -d + 0.02, -d + 0.06, 0, doorH);
       for (const yy of [0.6, doorH * 0.5, doorH - 0.5]) sideBox(t, sg, a + 0.1, b - 0.1, -d + 0.02, -d + 0.05, yy - 0.06, yy + 0.06);
     } else {
-      const n = Math.round(doorH / 0.32);
-      for (let k = 1; k < n; k++) sideBox(t, sg, a + 0.04, b - 0.04, -d + 0.02, -d + 0.04, (doorH * k) / n - 0.02, (doorH * k) / n + 0.02);
+      // sectional door: ~0.55 m insulated sections with a dark joint between them and a pressed mid rib;
+      // guide rails at both jambs, a rubber seal at the foot, the lowest section scuffed darker
+      const n = Math.max(5, Math.round(doorH / 0.55));
+      const sh = doorH / n;
+      for (let k = 0; k < n; k++) {
+        const y0 = k * sh,
+          y1 = (k + 1) * sh;
+        setCol(t, shade(dc, k === 0 ? 0.78 : 0.93 + ((g.seed + k * 5) % 4) * 0.025));
+        sideBox(t, sg, a + 0.1, b - 0.1, -d + 0.02, -d + 0.045, y0 + 0.012, y1 - 0.012, true);
+        setCol(t, shade(dc, 1.05));
+        sideBox(t, sg, a + 0.14, b - 0.14, -d + 0.045, -d + 0.052, (y0 + y1) / 2 - 0.012, (y0 + y1) / 2 + 0.012, true);
+      }
+      setCol(t, col('#8c9296'));
+      for (const [u0, u1] of [[a + 0.01, a + 0.1], [b - 0.1, b - 0.01]]) sideBox(t, sg, u0, u1, -d + 0.02, -d + 0.075, 0, doorH, false);
+      setCol(t, col('#1a1b1c'));
+      sideBox(t, sg, a + 0.1, b - 0.1, -d + 0.02, -d + 0.05, 0, 0.035);
+      // lift handle on the bottom section
+      setCol(t, col('#2a2c2e'));
+      sideBox(t, sg, u - 0.12, u + 0.12, -d + 0.045, -d + 0.08, 0.32, 0.36, true);
+      setCol(t, shade(dc, 0.8));
       // a row of small windows in the door
       setCol(t, col('#37434d'));
       const wy = doorH * 0.62;
       for (let k = 0; k < 4; k++) {
         const wu = a + 0.35 + ((b - a - 0.7) * (k + 0.5)) / 4;
-        sideBox(t, sg, wu - 0.3, wu + 0.3, -d + 0.02, -d + 0.045, wy, wy + 0.32);
+        sideBox(t, sg, wu - 0.3, wu + 0.3, -d + 0.045, -d + 0.056, wy, wy + 0.32);
       }
     }
     // frame (safety yellow posts on modern sheds), bumpers, canopy + dock light
@@ -184,6 +202,20 @@ export function genIndustrial(g: Gen): void {
       setCol(t, col('#22262a'));
       sideBox(t, sg, a + 0.25, a + 0.6, 0, INS - 0.03, 0.75, 1.15);
       sideBox(t, sg, b - 0.6, b - 0.25, 0, INS - 0.03, 0.75, 1.15);
+      // steel bollards guarding the door posts (yellow, black bands, domed cap) — within the wall inset
+      if (INS > 0.2) {
+        for (const bu of [a - 0.42, b + 0.42]) {
+          const bx = sx(sg, bu, 0.12),
+            bz = sz(sg, bu, 0.12);
+          setCol(t, col('#d9a92a'));
+          t.cylinder(bx, bz, 0.07, 0.0, 1.0, 10, false);
+          setCol(t, col('#1d1f21'));
+          t.cylinder(bx, bz, 0.073, 0.62, 0.72, 10, false);
+          t.cylinder(bx, bz, 0.073, 0.84, 0.94, 10, false);
+          setCol(t, col('#d9a92a'));
+          t.cone(bx, bz, 0.07, 1.0, 1.06, 10);
+        }
+      }
       setCol(t, col('#4a5056'));
       sideBox(t, sg, a - 0.4, b + 0.4, 0, 1.15, doorH + 0.35, doorH + 0.5, true);
       lightBox(g, sx(sg, u, 0.7) - 0.15, doorH + 0.28, sz(sg, u, 0.7) - 0.15, sx(sg, u, 0.7) + 0.15, doorH + 0.35, sz(sg, u, 0.7) + 0.15, '#fff1d6', LIGHT_MODE.STEADY, 3);

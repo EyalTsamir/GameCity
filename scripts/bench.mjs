@@ -3,7 +3,7 @@
 //
 //   node scripts/bench.mjs [--classes house,bench,car,...|all] [--dists 3,10,40] [--hours 11] [--q "extra"]
 //                          [--out shots/bench] [--width 1280 --height 720] [--settle 1500] [--pick 0]
-//                          [--sheet 1] [--cols 3] [--tile 560]
+//                          [--sheet 1] [--cols 3] [--tile 560] [--yaw 18 (offset from the front)] [--pitch deg]
 //
 // Each class is located from the plan (lots, street slots, features) or, for moving things (car, bus,
 // pedestrian, train, boat), by ray-picking from a few elevated poses; the sim is paused while it is shot.
@@ -39,6 +39,8 @@ const width = parseInt(args.width ?? '1280', 10);
 const height = parseInt(args.height ?? '720', 10);
 const settle = parseInt(args.settle ?? '1500', 10);
 const pickIdx = parseInt(args.pick ?? '0', 10);
+const yawOff = parseFloat(args.yaw ?? '18');
+const pitchOv = args.pitch !== undefined ? parseFloat(args.pitch) : null;
 let url = args.url ?? 'http://127.0.0.1:5173/';
 url += (url.includes('?') ? '&' : '?') + 'nointro&noidle' + (args.q ? '&' + args.q : '');
 
@@ -138,11 +140,11 @@ try {
       // frame the object: target at ~mid height when close, pitch rises with distance
       const ty = loc.y + Math.min(loc.h * 0.5, d < 5 ? 1.4 : d < 20 ? 3 : 6);
       const dist = Math.max(d, d < 5 ? Math.min(loc.h, 6) * 0.9 + 1.5 : d);
-      const pitch = d < 5 ? 8 : d < 20 ? 14 : 24;
+      const pitch = pitchOv ?? (d < 5 ? 8 : d < 20 ? 14 : 24);
       // line of sight: try the default yaw first, then swing around the object (and finally shorten the arm)
       // until a ray from the object's middle reaches the camera without hitting anything else.
       const los = await page.evaluate(
-        async ([l, ty, dist, pitch]) => {
+        async ([l, ty, dist, pitch, yo]) => {
           const c = window.__city, THREE = await import('/@fs' + window.__benchThree);
           const meshes = [];
           // glass counts (curtain walls); billboards / sky / water / particles do not
@@ -165,15 +167,15 @@ try {
           };
           // street canyons: finally look down from higher up
           for (const [arm, pt] of [[1, pitch], [0.6, pitch], [1, Math.max(pitch, 48)], [1, 72]])
-            for (const dy of [18, -18, 55, -55, 95, -95, 140, -140, 180]) {
+            for (const dy of [yo, -yo, 55, -55, 95, -95, 140, -140, 180]) {
               c.view({ target: { x: l.x, y: ty, z: l.z }, distance: dist * arm, yaw: l.yaw + dy, pitch: pt });
               c.ctx.camera.updateMatrixWorld();
               if (clear()) return { dy, arm, pitch: pt };
             }
-          c.view({ target: { x: l.x, y: ty, z: l.z }, distance: dist, yaw: l.yaw + 18, pitch });
-          return { dy: 18, arm: 1, blocked: true };
+          c.view({ target: { x: l.x, y: ty, z: l.z }, distance: dist, yaw: l.yaw + yo, pitch });
+          return { dy: yo, arm: 1, blocked: true };
         },
-        [loc, ty, dist, pitch],
+        [loc, ty, dist, pitch, yawOff],
       );
       await page.waitForTimeout(settle);
       const file = path.join(outDir, `${cls}_${d}m.png`);
