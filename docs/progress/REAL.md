@@ -11,6 +11,9 @@ Overview must stay at least as impressive as now. Every feature: quality tiers +
 Lead session: session_01XuhAMczW3iK25AAWnf3qog, branch `claude/pensive-gates-bim12i`.
 
 ## Resume here (keep current)
+* 2026-10-28 23:00 UTC — Merged W7 s1 (bc46ee6: boat plating/welds/rust/fittings ?noboatdetail, new fish quay
+  harbor/quay.ts with moored crabber + dinghy ?noquaylife, building site kit ?nositedetail, platform kit; golden
+  overview 0.03). W7(2) spawned: boat form, rope sag, quay wear, site, platform canopy/people, perf.
 * 2026-10-28 22:58 UTC — Merged W4 s6 (a5d6417: the crouch was a real bug — after a time scrub non-joggers caught up
   at 2.1–2.8 m/s in the jog gait; gait.ts now poses only joggers above 1.9 m/s (scripts/ped-crouch.mjs); trouser
   folds ?nofolds; hair locks all round; separated fingers, hands out of the shadow proxy (dot-grid acne); children on
@@ -169,6 +172,7 @@ Wave 1 (launched 2026-10-28 15:17 UTC, sibling cloud sessions, briefs in real-br
 | W6 dense places I (2) | session_01XuhAMdo2WChq7WcNcuJPxV | claude/real-w6-places | real-w6.md |
 | W2 vehicles (6) trains | session_01XuhAMhTqxMzNfQqVnLRdFs | claude/real-w2-vehicles | real-w2.md |
 | W1 facades (6) | session_01XuhAMevUWbiYT7AVmkzbyB | claude/real-w1-facades | real-w1.md |
+| W7 dense places II (2) | session_01XuhAMgnc3LjfR6ehMUGwBc | claude/real-w7-quay | real-w7.md |
 Respawn rule: when a worker stops (milestone note, ~200k context, or a usage stop), create a NEW session on the
 same branch with the same brief + "resume from docs/progress/real-wN.md Resume here"; archive the old one.
 
