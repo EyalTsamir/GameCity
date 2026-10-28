@@ -3,6 +3,29 @@
 Branch `claude/real-w1-facades` (from `claude/pensive-gates-bim12i`). Brief: docs/progress/real-briefs.md "W1".
 
 ## Resume here
+* **Session 4 stopped by the lead at the context cap (WIP pushed, nothing judged as final).** Next session, in order:
+  1. **Bug 4 tower crown (lot 23 twin towers, stepped crown, scheme 1 wall #3d4854):** `?bdbg=ret` (shots/w1/tw/f_ret.png)
+     paints the crown band GREEN = pixels with `cell` outside the grid (`cell.y >= vB.y` etc., materials.ts ~l.1140),
+     speckled with in-grid pixels → the band (≈ last storey + parapet, y ≈ 81.7–83.1) flips per pixel between
+     glass and the plain-wall return. Probe queued but killed: dump shell vertices (uv.y, aB.x/y, aD.w) of the tower
+     top (scratchpad script idea: traverse `buildings-shell`, x −52…−27, z −110…−85, y > 70; console.warn). Suspects:
+     uv v ≈ m at the top tier wall (v0 = gH, m = floors − 1 → v = m exactly at H), or a coplanar second wall quad
+     (tierRoof parapet / tier walls) overlapping. Fix candidates: clamp cell.y to m − 1 when v − m < 0.02, or give the
+     parapet its own solid look; don't extend slantTop grids (not this tower).
+  2. **Lawn rim:** persists with `?nograss` (shots/w1/rim_nograss/apartment_3m.png) → NOT groundcover blades.
+     terrain/ground.ts already DARKENS grass along walls (edge canvas, `edge` l.706). Current hypothesis: a sun-lit
+     leak strip at the wall foot from the shadow normal offset (render/sky.ts `sun.shadow.normalBias = texel·0.8·tune.bias`,
+     the wall's shadow lifted off the contact line; the rim shows on walls in their own shade). Probe (scripted, not
+     run): `shot.mjs --eval` setting `__city.ctx.services.sky.tune.bias = 0` vs 1 at the bench apartment
+     (target −137.5,0.6,−56.5, yaw = front + 18, 4 m, pitch 10) — if the rim vanishes it is lighting (sky owner),
+     else terrain ground shader. Written to real-requests.md.
+  3. Judge on the bench (not yet seen): s2 classes tower, warehouse, factory, church, school (`--dists 3,10`);
+     re-run s1 (house, townhouse, apartment, office) for the darker reveal returns + paint patina + box cladding.
+  4. Then remaining from judge-1: tower upper curtain wall still flat blue; window reveal at an oblique 3 m view
+     (returns now ×0.74 jamb / ×0.6 head — verify); old-town render at 3 m (relief reduced — verify).
+  - s1 bench (shots/w1/s1/sheet_1.png): awnings read (scallops, bar, sag), shutters ribbed at 10 m, glass variety
+    better at 10 m; house window still flush-looking frontal (before the return darkening).
+  - Temporary debug kept: `?bdbg=ret` (uBhDebug 7) in materials.ts / buildings.ts.
 * **Session 4 (10-28, fix round after judge-1 / bugs-1)** — order: bugs 3/4/9 → lawn rim → reveal shadow →
   per-pane glass variety → townhouse walls/shutters/awnings → roller doors → church/school → tower ground floor.
   - bug 3 (garage at 90° to the drive): homes.ts `sideRun` puts a plain side entrance (Op.plain, no number/bell:
