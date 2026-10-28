@@ -138,14 +138,46 @@ try {
       const ty = loc.y + Math.min(loc.h * 0.5, d < 5 ? 1.4 : d < 20 ? 3 : 6);
       const dist = Math.max(d, d < 5 ? Math.min(loc.h, 6) * 0.9 + 1.5 : d);
       const pitch = d < 5 ? 8 : d < 20 ? 14 : 24;
-      await page.evaluate(
-        ([l, ty, dist, pitch]) => window.__city.view({ target: { x: l.x, y: ty, z: l.z }, distance: dist, yaw: l.yaw + 18, pitch }),
+      // line of sight: try the default yaw first, then swing around the object (and finally shorten the arm)
+      // until a ray from the object's middle reaches the camera without hitting anything else.
+      const los = await page.evaluate(
+        async ([l, ty, dist, pitch]) => {
+          const c = window.__city, THREE = await import('/@fs' + window.__benchThree);
+          const meshes = [];
+          // glass counts (curtain walls); billboards / sky / water / particles do not
+          const skip = /glow|halo|cloud|sky|water|atmo|spark|smoke|rain|firework|shadow/i;
+          c.ctx.scene.traverseVisible((o) => o.isMesh && !skip.test(o.name) && !skip.test(o.parent?.name ?? '') && meshes.push(o));
+          const rc = new THREE.Raycaster();
+          const from = new THREE.Vector3(l.x, ty, l.z);
+          const near = Math.max(0.6, l.w * 0.5 + 0.4);
+          const clear = () => {
+            const cam = c.ctx.camera, dir = cam.position.clone().sub(from), len = dir.length();
+            // both directions: a one-sided roof or wall is only hit from its front
+            rc.set(from, dir.normalize());
+            rc.near = near;
+            rc.far = len - 0.3;
+            if (rc.intersectObjects(meshes, false).length) return false;
+            rc.set(cam.position, dir.clone().negate());
+            rc.near = 0.3;
+            rc.far = len - near;
+            return rc.intersectObjects(meshes, false).length === 0;
+          };
+          // street canyons: finally look down from higher up
+          for (const [arm, pt] of [[1, pitch], [0.6, pitch], [1, Math.max(pitch, 48)], [1, 72]])
+            for (const dy of [18, -18, 55, -55, 95, -95, 140, -140, 180]) {
+              c.view({ target: { x: l.x, y: ty, z: l.z }, distance: dist * arm, yaw: l.yaw + dy, pitch: pt });
+              c.ctx.camera.updateMatrixWorld();
+              if (clear()) return { dy, arm, pitch: pt };
+            }
+          c.view({ target: { x: l.x, y: ty, z: l.z }, distance: dist, yaw: l.yaw + 18, pitch });
+          return { dy: 18, arm: 1, blocked: true };
+        },
         [loc, ty, dist, pitch],
       );
       await page.waitForTimeout(settle);
       const file = path.join(outDir, `${cls}_${d}m.png`);
       await page.screenshot({ path: file, timeout: 240000 });
-      report.captures.push({ cls, d, file: path.relative(root, file), at: [loc.x, loc.y, loc.z].map((v) => Math.round(v * 10) / 10) });
+      report.captures.push({ cls, d, los, file: path.relative(root, file), at: [loc.x, loc.y, loc.z].map((v) => Math.round(v * 10) / 10) });
     }
     await page.evaluate(() => window.__city.setSpeed(1));
   }
