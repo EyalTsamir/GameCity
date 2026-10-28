@@ -162,7 +162,8 @@ const _n = new THREE.Vector3();
 
 function faces(model: TerrainModel): CliffFace[] {
   const roadPortals = model.portals.filter((p) => p.kind === 'road');
-  const nearRoadPortal = (x: number) => roadPortals.some((p) => Math.abs(x - p.x) < Math.max(p.reach[0], p.reach[1]) + 0.8);
+  // (up to just inside the wing-wall end piers: the rock meets the masonry, no bare slope between)
+  const nearRoadPortal = (x: number) => roadPortals.some((p) => Math.abs(x - p.x) < Math.max(p.reach[0], p.reach[1]) - 0.25);
   const out: CliffFace[] = [];
   // ridge escarpment (faces south), between the spurs, minus the road-portal headwalls + wings
   out.push({
@@ -257,7 +258,25 @@ export function buildCliffs(
         c.ok = c.yTop - c.yBot > 1.2;
       }
       cols.push(c);
-      u += 1.25 + rng.next() * 0.5;
+      let next = u + 1.25 + rng.next() * 0.5;
+      if (f.skip && next < f.len) {
+        // a column exactly where a skipped stretch starts or ends (rock flush with the wall ends)
+        const at = (v: number) => f.skip!(f.ax + tx * v, f.az + tz * v);
+        const s0 = at(u);
+        if (at(next) !== s0) {
+          let lo = u,
+            hi = next;
+          for (let it = 0; it < 12; it++) {
+            const mid = (lo + hi) / 2;
+            if (at(mid) === s0) lo = mid;
+            else hi = mid;
+          }
+          // land on the rock side of the boundary (the last / first column that is not skipped)
+          next = s0 ? hi : lo;
+          if (next - u < 0.3) next = s0 ? hi : u + 0.3;
+        }
+      }
+      u = next;
     }
     res.columns += cols.length;
     // smooth yTop / yBot a little along the face (no saw-tooth silhouettes)

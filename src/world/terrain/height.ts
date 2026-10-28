@@ -176,7 +176,10 @@ function buildModel(plan: CityPlan): TerrainModel {
     const core = p.width / 2 + 1.6;
     if (lz >= ramp) {
       // in front of the wall line: dig the approach down to track / road level
-      let w = 1 - smoothstep(Math.max(core, reach - 6), reach, ax);
+      // (road portals: the whole length of the wing walls, so no bare earth wedge climbs the wall's
+      // end; the ridge rock starts at the wall end — cliffs.ts)
+      const f0 = p.kind === 'road' ? reach - 0.4 : Math.max(core, reach - 6);
+      let w = 1 - smoothstep(f0, p.kind === 'road' ? reach + 1.4 : reach, ax);
       w *= 1 - smoothstep(1.6, 3.8, lz);
       return h * (1 - w);
     }

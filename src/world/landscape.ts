@@ -11,6 +11,8 @@ import * as THREE from 'three';
 import type { CityContext, CityModule } from '../core/context';
 import { WORLD_MODE } from '../core/world';
 import { getTerrainModel } from './terrain/height';
+import { groundMaskInfo } from './terrain/ground';
+import { SLAB } from '../core/constants';
 import { groundBands, slabEdges } from './terrain/layout';
 import { createLandscapeModel, CX, CZ, type Cover, type LandscapeModel } from './landscape/model';
 import { buildRings, type RingTopology } from './landscape/rings';
@@ -51,6 +53,23 @@ export default function create(ctx: CityContext): CityModule {
   const tmodel = getTerrainModel(ctx.plan);
   const slabH = tmodel.height;
   const model = createLandscapeModel(slabH);
+  // the town ground's sand at the slab edge (terrain/ground.ts mask, R; the shader's smoothstep): the cover
+  // outside continues the town beach boundary instead of starting its own along the edge
+  if (groundMaskInfo) {
+    const gm = groundMaskInfo;
+    model.setSlabSand((x, z) => {
+      const fx = Math.min(gm.w - 1.001, Math.max(0, ((x - SLAB.x0) / (SLAB.x1 - SLAB.x0)) * gm.w - 0.5)),
+        fz = Math.min(gm.h - 1.001, Math.max(0, ((z - SLAB.z0) / (SLAB.z1 - SLAB.z0)) * gm.h - 0.5));
+      const i = Math.floor(fx),
+        j = Math.floor(fz);
+      const tx = fx - i,
+        tz = fz - j;
+      const r = (ii: number, jj: number) => gm.data[(jj * gm.w + ii) * 4] / 255;
+      const v = (r(i, j) * (1 - tx) + r(i + 1, j) * tx) * (1 - tz) + (r(i, j + 1) * (1 - tx) + r(i + 1, j + 1) * tx) * tz;
+      const t = Math.min(1, Math.max(0, (v - 0.25) / 0.5));
+      return t * t * (3 - 2 * t);
+    });
+  }
   const coverTmp: Cover = { water: 0, sand: 0, rock: 0, forest: 0, field: 0, meadow: 0, wet: 0 };
   const build = WORLD_MODE && !params.has('noland');
   const service: LandscapeService = {

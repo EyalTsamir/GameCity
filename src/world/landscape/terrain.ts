@@ -127,8 +127,9 @@ function coverAt(model: LandscapeModel, x: number, z: number, y: number, d: numb
   const c = _c,
     rq = _rq;
   const k = v * CW;
-  if (d === 0 || y < WL - 6) {
-    cover[k + 5] = d === 0 ? 1 : 0;
+  // (ring 0 — the slab's edge vertices — gets real cover too: forcing meadow there drew a thin green line
+  // along the whole seam, e.g. across the town beach)
+  if (y < WL - 6) {
     cover[k + 6] = 1;
     cover[k + 8] = 60;
     return;

@@ -65,6 +65,9 @@ export interface LandscapeModel {
   insideSlab(x: number, z: number): boolean;
   /** distance outside the slab rectangle (0 inside) */
   slabDist(x: number, z: number): number;
+  /** the town ground's sand (0..1) at a point on the slab's edge — set once the slab mask exists, so the
+   *  cover outside continues the town beach / lawn boundary across the edge (no ruler seam) */
+  setSlabSand(fn: ((x: number, z: number) => number) | null): void;
   /** signed distance to the coast (>0 land, <0 sea), exact within ~900 m */
   coastSD(x: number, z: number): number;
   /** distance to the river centreline (≤ maxD) and its local half width */
@@ -591,6 +594,7 @@ export function createLandscapeModel(slabHeight: SlabHeight): LandscapeModel {
   const waterLevel = (_x: number, _z: number): number => WL;
   const isWater = (x: number, z: number): boolean => height(x, z) < WL - 0.02;
 
+  let slabSandFn: ((x: number, z: number) => number) | null = null;
   const cover = (x: number, z: number, out: Cover, h0?: number, slope0?: number): Cover => {
     const h = h0 ?? height(x, z);
     let slope = slope0 ?? -1;
@@ -605,6 +609,15 @@ export function createLandscapeModel(slabHeight: SlabHeight): LandscapeModel {
     const cl = cliffness(z, x);
     // beach (~40 m), then dunes with marram grass (half sand) out to ~95 m
     out.sand = out.water ? 0 : (1 - smooth(14, 24, sd) * 0.6 - smooth(30, 46, sd) * 0.4) * (1 - cl) * (1 - smooth(4, 7, h));
+    // next to the slab the sand continues the town ground's own sand boundary (blended out over 50 m)
+    if (slabSandFn && !out.water) {
+      const dS = slabDist(x, z);
+      if (dS < 50) {
+        const ex = Math.max(SLAB.x0, Math.min(SLAB.x1, x)),
+          ez = Math.max(SLAB.z0, Math.min(SLAB.z1, z));
+        out.sand = lerp(slabSandFn(ex, ez) * (1 - smooth(4, 7, h)), out.sand, smooth(0, 50, dS));
+      }
+    }
     // the island: shingle / sand where its shore is low and flat (the cove, a few pockets between rocks)
     const onIsland = !out.water && Math.abs(x - ISLAND.x) < 900 && Math.abs(z - ISLAND.z) < 1400;
     if (onIsland) out.sand = Math.max(out.sand, (1 - smooth(WL + 1.2, WL + 3.5, h)) * (1 - smooth(0.12, 0.35, slope)));
@@ -668,6 +681,9 @@ export function createLandscapeModel(slabHeight: SlabHeight): LandscapeModel {
   };
 
   return {
+    setSlabSand: (fn) => {
+      slabSandFn = fn;
+    },
     height,
     world,
     forestAt: (x, z, h) => (siteAt(x, z, 25) >= 0 || (roadQ(x, z, roadHit, 12) && roadHit.d < roadsRef[roadHit.i].halfW + 5) ? 0 : forestAt(x, z, h)),
