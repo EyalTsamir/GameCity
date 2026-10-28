@@ -22,7 +22,9 @@ Branch: work continues from `claude/tinyhaven-graphics-audit-l089m8` (fast-forwa
   centre), 2 lamps in driveways (plan.ts buildStreetSlots: driveway "cuts" along the kerb, a lamp steps to the nearer
   end, RNG order kept), 4 town-hall plinth across the arches (gaps), 7 river band in the sea (water/field.ts soft
   widening plume), 9 STOP sign lettering (signals.ts block letters), 10 harbour lawn (plan.ts genQuayApron: concrete
-  block, generated last so block ids don't shift) — verifying in shots/qa/leadfix/. Fix agent (a32c937b907556e5e,
+  block) — VERIFIED (shots/qa/leadfix_before_after.png; console clean, invariants 0). 7 needed a second cause: the
+  terrain's river-mouth trench ran straight to the slab edge (terrain/height.ts riverBand now widens and shoals into
+  the sea floor by x ≈ 165). Slot diff for 2: only 10 lamps moved + 1 dropped, all other furniture unchanged. Fix agent (a32c937b907556e5e,
   log docs/progress/qa-fixes.md): 3 car park access, 5 portal wing slopes, 8 shop interiors vs signs, 11 gate paths.
   World agent got 6 (south slab edge seam) on top of its sweep. When all are verified: final report to the user,
   then (user request) create the next-round cloud session with docs/progress/NEXT-PROMPT.md as its prompt.
