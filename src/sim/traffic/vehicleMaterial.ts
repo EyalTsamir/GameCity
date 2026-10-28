@@ -128,7 +128,7 @@ vDetB = aDetB;
   vRough = aMeta.w - fin * 4.0;
   vCoat = ( fin > 0.5 && fin < 2.5 ) ? 1.0 + aMeta.x : 0.0; // > 1.5: body-coloured paint
   vMetal = ( fin > 2.5 ) ? 1.0 : 0.0;
-  vGain = fin < 0.5 ? 1.0 : fin < 1.5 ? 2.4 : fin < 2.5 ? 3.6 : 1.5;
+  vGain = fin < 0.5 ? 1.0 : fin < 1.5 ? 2.9 : fin < 2.5 ? 3.6 : 1.5;
 }
 `;
 
@@ -276,7 +276,9 @@ float thStreetRefl( vec3 viewDir, vec3 n, float soft ) {
   float hs = 0.05 + 0.24 * hb * hb;
   float sky = smoothstep( hs - w, hs + w, e );
   float gnd = smoothstep( -w, w, e );
-  return mix( 0.16, mix( 0.36, 1.0 + 0.8 * exp( -max( e - hs, 0.0 ) * 8.0 ), sky ), gnd );
+  // the band between horizon and skyline alternates darker (trees, shadowed walls) and lighter (lit facades)
+  float fac = 0.22 + 0.28 * fract( hb * 7.13 );
+  return mix( 0.14, mix( fac, 1.0 + 0.8 * exp( -max( e - hs, 0.0 ) * 8.0 ), sky ), gnd );
 }
 // sin-free hash (stable on mobile GPUs for large arguments)
 float thH1( float n ) {

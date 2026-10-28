@@ -105,6 +105,7 @@ const VERT_BEGIN = /* glsl */ `
 
 const FRAG_PARS = /* glsl */ `
 uniform vec2 uClip;
+uniform float uGrime;
 varying vec3 vEmit;
 varying float vWX;
 varying vec3 vLoc;
@@ -119,12 +120,15 @@ export interface TrainMaterials {
 
 export function createTrainMaterials(globals: GlobalUniforms, clipX0: number, clipX1: number): TrainMaterials {
   const clip = { value: new THREE.Vector2(clipX0, clipX1) };
+  // ?notraingrime: clean rolling stock (W2 real-things toggle)
+  const grime = { value: typeof location !== 'undefined' && new URLSearchParams(location.search).has('notraingrime') ? 0 : 1 };
   const material = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.48, metalness: 0.08 });
   material.name = 'rail-train';
   material.onBeforeCompile = (shader) => {
     shader.uniforms.uLights = globals.uLights;
     shader.uniforms.uTime = globals.uTime;
     shader.uniforms.uClip = clip;
+    shader.uniforms.uGrime = grime;
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', `#include <common>\n${VERT_PARS}`)
       .replace('#include <color_vertex>', VERT_COLOR)
@@ -167,6 +171,19 @@ export function createTrainMaterials(globals: GlobalUniforms, clipX0: number, cl
             float top = step(2.6, vLoc.y - 1.2) * step(abs(vLoc.x), 1.18);
             diffuseColor.rgb *= 1.0 - (0.16 * rib * amp) * (1.0 - top);
           }
+          if (uGrime > 0.5 && tg != ${T.WINDOW} && tg != ${T.DOORWIN} && tg != ${T.GLASS}) {
+            // brake dust and track dirt: running gear rust-brown, a film up the lower body that fades with a noisy
+            // edge, dust on the roof; weathering ages the rolling stock with the street around it
+            vec3 q = vLoc;
+            float n = fract(sin(dot(floor(q * vec3(3.0, 9.0, 1.3)), vec3(12.9898, 78.233, 37.719))) * 43758.5453);
+            float gear = (1.0 - smoothstep(0.9, 1.05, q.y)) * step(abs(q.x), 1.3);
+            float low = (1.0 - smoothstep(0.95, 1.55 + 0.15 * n, q.y)) * (1.0 - gear);
+            float roof = smoothstep(3.3, 3.7, q.y) * 0.35;
+            vec3 dust = vec3(0.33, 0.26, 0.2);
+            diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * 0.55 + dust * 0.35, gear * (0.55 + 0.25 * n));
+            diffuseColor.rgb = mix(diffuseColor.rgb, dust * 0.9, low * (0.32 + 0.12 * n));
+            diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.42, 0.4, 0.36), roof * (0.6 + 0.4 * n));
+          }
         }`,
       )
       .replace(
@@ -176,13 +193,14 @@ export function createTrainMaterials(globals: GlobalUniforms, clipX0: number, cl
       )
       .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += vEmit;');
   };
-  material.customProgramCacheKey = () => 'rail-train-v2';
+  material.customProgramCacheKey = () => 'rail-train-v3';
   patchLampMaterial(material); // night street-light map (night agent)
 
   const depth = new THREE.MeshDepthMaterial();
   depth.name = 'rail-train-depth';
   depth.onBeforeCompile = (shader) => {
     shader.uniforms.uClip = clip;
+    shader.uniforms.uGrime = grime;
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', `#include <common>\nattribute float aKind;\nattribute vec4 aInst2;\nvarying float vWX;\nbool trHidden(int tg) { int load = int(aInst2.x + 0.5); if (tg == ${T.CONT40}) return load != 0; if (tg == ${T.CONT20A}) return !(load == 1 || load == 2); if (tg == ${T.CONT20B}) return load != 1; return false; }
 bool trVariantHidden(float k) { int vm = int(k + 0.5) / 100; if (vm == 1) return aInst2.z < 0.5; if (vm == 2) return aInst2.z > 0.5; return false; }`)
