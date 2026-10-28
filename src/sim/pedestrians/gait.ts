@@ -232,7 +232,8 @@ function params(r: Rig, pram: boolean): Params {
   P.thTO = -((0.85 * Math.min(Math.max(vRel / 1.3, 0.45), 1.05) * (1 - 0.35 * r.old)) + (0.75 - (0.85 * Math.min(Math.max(vRel / 1.3, 0.45), 1.05) * (1 - 0.35 * r.old))) * run);
   P.uFlat = P.beta * (0.19 + (0.22 - 0.19) * run);
   P.uRise = P.beta * (0.6 + (0.45 - 0.6) * run);
-  P.width = (0.048 + (0.03 - 0.048) * run) * hk + 0.012 * r.old * hk;
+  // heavy builds walk on a wider base, women on a narrower line (near cross-over)
+  P.width = (0.048 + (0.03 - 0.048) * run) * hk + 0.012 * r.old * hk + (0.022 * Math.max(0, r.b) - 0.008 * r.w) * hk * (1 - run);
   P.lift = ((0.1 + (0.2 - 0.1) * run) + 0.02 * Math.min(Math.max(vRel - 1, 0), 1)) * hk * (1 - 0.45 * r.old) * Math.min(Math.max(vRel / 0.9, 0.5), 1);
   P.hStand = r.hip.y - 0.004 * hk - 0.02 * r.old * hk;
   P.bob = ((0.023 * Math.min(Math.max(vRel / 1.3, 0.3), 1.3)) + (0.03 - (0.023 * Math.min(Math.max(vRel / 1.3, 0.3), 1.3))) * run) * hk;
@@ -765,9 +766,12 @@ export function gaitPose(m: Member, r: Rig, st: GaitState | null, frame: number,
   const kWalk = Math.min(Math.max(vRel / 1.3, 0), 1.4) * gw;
   // pelvis motion (rotation forward with the swing leg, list towards the swing side, sway to the stance side)
   const ig = 1 - gw;
-  const pelvisYaw = -(0.075 + (0.12 - 0.075) * run) * kWalk * Math.cos(TAU * uL) * (1 - 0.4 * r.old) + idle.yaw * ig;
-  const pelvisRoll = (0.05 + (0.03 - 0.05) * run) * Math.min(Math.max(kWalk, 0), 1) * Math.sin(TAU * uL) + idle.roll * ig;
-  const sway = ((0.018 + (0.008 - 0.018) * run) * (r.legLen / r.s / 0.93) * Math.min(Math.max(kWalk, 0), 1) + 0.006 * r.old * gw) * Math.sin(TAU * uL) + idle.sway * ig;
+  // build and sex: women rotate and list the pelvis more; heavy builds rotate it less and shift their weight
+  // from foot to foot (a waddle: more sideways sway, a little more list)
+  const hb = Math.max(0, r.b);
+  const pelvisYaw = -(0.075 + (0.12 - 0.075) * run) * kWalk * Math.cos(TAU * uL) * (1 - 0.4 * r.old) * (1 + 0.3 * r.w - 0.2 * hb) + idle.yaw * ig;
+  const pelvisRoll = (0.05 + (0.03 - 0.05) * run) * Math.min(Math.max(kWalk, 0), 1) * Math.sin(TAU * uL) * (1 + 0.35 * r.w + 0.2 * hb) + idle.roll * ig;
+  const sway = ((0.018 + (0.008 - 0.018) * run) * (r.legLen / r.s / 0.93) * Math.min(Math.max(kWalk, 0), 1) * (1 + 0.6 * hb) + 0.006 * r.old * gw) * Math.sin(TAU * uL) + idle.sway * ig;
   G.uL = uL;
   G.uR = uR;
   G.pyaw = pelvisYaw;
@@ -1072,14 +1076,14 @@ export function gaitPose(m: Member, r: Rig, st: GaitState | null, frame: number,
   o.pelvisYaw = pelvisYaw;
   o.pelvisRoll = pelvisRoll;
   o.waistBend = ((0.04 + (0.13 - 0.04) * run) + 0.012 * Math.min(Math.max(vRel / 1.3, 0), 1.4)) * gw;
-  const chestTwist = (0.06 + (0.12 - 0.06) * run) * Math.min(Math.max(kWalk, 0), 1.2) * Math.cos(TAU * uL) * (1 - 0.5 * r.old);
+  const chestTwist = (0.06 + (0.12 - 0.06) * run) * Math.min(Math.max(kWalk, 0), 1.2) * Math.cos(TAU * uL) * (1 - 0.5 * r.old) * (1.2 - 0.35 * r.w);
   o.waistTwist = -pelvisYaw;
   o.chestTwist = chestTwist;
   o.headYawCorr = -chestTwist;
   o.headPitch = (-0.3 * (rootY - (p.hStand - p.bob * 0.5 - r.hip.y)) - 0.02 * run) * gw;
   // arms: opposite to the legs, slightly lagging, more forward than back; elbows bend in front
   const kidK = r.c > 0.4 ? 1.15 : 1;
-  const A = (((0.17 + 0.12 * Math.min(vRel, 2)) * kidK * (1 - 0.55 * r.old)) + (0.5 - ((0.17 + 0.12 * Math.min(vRel, 2)) * kidK * (1 - 0.55 * r.old))) * run) * Math.min(Math.max(kWalk * 1.2, 0), 1);
+  const A = (((0.17 + 0.12 * Math.min(vRel, 2)) * kidK * (1 - 0.55 * r.old) * (1 - 0.22 * hb)) + (0.5 - ((0.17 + 0.12 * Math.min(vRel, 2)) * kidK * (1 - 0.55 * r.old) * (1 - 0.22 * hb))) * run) * Math.min(Math.max(kWalk * 1.2, 0), 1);
   const fL = -Math.cos(TAU * (uL - 0.05));
   const fR = -fL;
   const bias = (0.05 + (0.12 - 0.05) * run) * gw;
@@ -1089,7 +1093,8 @@ export function gaitPose(m: Member, r: Rig, st: GaitState | null, frame: number,
   const eSw = ((0.4 * Math.min(Math.max(A / 0.33, 0), 1.2)) + (0.25 - (0.4 * Math.min(Math.max(A / 0.33, 0), 1.2))) * run);
   o.elbowL = eBase + eSw * Math.max(0, fL) * (1 - 0.3 * run) - 0.1 * run * fL;
   o.elbowR = eBase + eSw * Math.max(0, fR) * (1 - 0.3 * run) - 0.1 * run * fR;
-  o.shAbdL = (0.05 + (0.12 - 0.05) * run);
+  // heavy builds carry the arms a little away from the body
+  o.shAbdL = (0.05 + (0.12 - 0.05) * run) + 0.07 * hb;
   o.shAbdR = o.shAbdL;
   // cane (right hand): planted with the left foot's stance, swung forward with its swing
   o.caneX = -(r.hip.x * 2.3 + 0.05);
