@@ -1213,18 +1213,22 @@ function loftBody(b: Builder, s: CarShape, doors4: boolean, chrome = false, bump
       const hp = hs.attributes.position as THREE.BufferAttribute;
       for (let i = 0; i < hp.count; i++) {
         // shell: flattened at the back (z < 0) into the glass plane, a little fuller at the outer end
-        const z = hp.getZ(i);
-        hp.setZ(i, z < 0 ? z * 0.18 : z);
-        hp.setX(i, hp.getX(i) * (1 + 0.12 * sd * hp.getX(i)));
+        // a squircle outline seen from the front (a housing, not a ball), flat glass plane at the back
+        const z = hp.getZ(i),
+          x = hp.getX(i),
+          y = hp.getY(i);
+        hp.setZ(i, z < 0 ? z * 0.15 : z);
+        hp.setX(i, Math.sign(x) * Math.abs(x) ** 0.55 * (1 + 0.1 * sd * x));
+        hp.setY(i, Math.sign(y) * Math.abs(y) ** 0.6 * (y > 0 ? 1 : 0.9));
       }
       hs.computeVertexNormals();
-      hs.scale(0.098, 0.062, 0.07);
+      hs.scale(0.108, 0.064, 0.072);
       hs.translate(hx, hy, mz + 0.0);
     }
     b.add(hs, { color: '#ffffff', paint: true, rough: 0.85 });
     if (LOD === 0) {
-      b.add(decalPlane(0.19, 0.118, hx, hy, mz - 0.0135, 'nz'), { color: '#141518', rough: 1.2 });
-      b.add(decalPlane(0.17, 0.098, hx, hy, mz - 0.016, 'nz'), { color: '#8c9aa6', rough: 0.15, finish: 'chrome' });
+      b.add(decalPlane(0.21, 0.118, hx, hy, mz - 0.0115, 'nz'), { color: '#141518', rough: 1.2 });
+      b.add(decalPlane(0.19, 0.1, hx, hy, mz - 0.0135, 'nz'), { color: '#8c9aa6', rough: 0.15, finish: 'chrome' });
       const handles = doors4 ? [s.pillarB + 0.14, cuts[2] + 0.14] : [s.pillarB + 0.16];
       for (const z of handles) {
         // pull handle proud of a dark recess

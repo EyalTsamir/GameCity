@@ -4,10 +4,19 @@ Branch `claude/real-w2-vehicles` (from `claude/pensive-gates-bim12i`). Brief: `d
 Owned: `src/sim/traffic/{models,vehicleMaterial,render}.ts` (+ trains later). Sim untouched.
 
 ## Resume here
-* 2026-10-28 session 4 (fix round after judge-1 + bugs-1): order = (1) SUV roof rails on feet [done, `topSurfaceY` in
-  carBody.ts]; (2) clear-coat paint; (3) silhouette variety in parked rows; (4) mirror housing on a stalk; (5) dirt on
-  lower body/sills/tyre sidewalls; (6) bus roof units + front bumper; (7) lorry crates (slats/straps/pallets);
-  bench framing bus 3 m; then trains. Status per item below as it lands.
+* 2026-10-28 session 4 (fix round after judge-1 + bugs-1). Done in code (see "Session 4" below): (1) SUV roof rails
+  on feet (`topSurfaceY` in carBody.ts, `roofRails()` in models.ts); (2) paint = two layers (`thBaseSpec` 0.22 under
+  the coat, ~45 % metallic by phase hash, `?nocarpaint` → uVehDetail.w) + realistic fleet palette (BODY_COLORS);
+  (3) parked-only body types `estate` + `mpv` (new ModelKinds, MOVING_CAP 0, pickParkedModel mix); (4) mirror shell
+  (squircle, flat glass back) on a stalk; (5) tyre sidewall dust + sill spray band, min dirt 0.3; (6) bus roof AC
+  pack (shroud, fan grilles, louvres) + framed hatches; (7) lorry loads on pallets: slat crates / cartons + ratchet
+  straps; taxi chequer band sunk into the flank; bench bus framing (front end, yaw +28, pitch 5).
+  Trains (started): bogie rebuilt (frames, axle boxes, coil springs, air/coil secondary, dampers, brakes, sand
+  pipes), door seals + portal + button, gangway folds + drawbar + hoses, underframe lids/reservoirs/trunking, cab
+  Scharfenberg coupler, pantograph insulator sheds + raising cylinder + shunts.
+  Lineup now (yaw 0.35): row z 22 — compact −16.17/−12.91, hatch −9.61, sedans −6.25/−2.87/0.51, SUV 3.93,
+  estate 7.36, MPV 10.78, van v0 14.35; row z 35 — vans −15.95/−12.25/−8.55, lorry crates −4.73, tarp −0.78,
+  buses 3.25/7.35, ice-cream 11.2.
 * 2026-10-28 session 3 — **Milestone 3 pushed** (lead items 1–4 done; context cap reached). Next session:
   (a) trains (audit #7) — not started: begin with `bench.mjs --classes train --dists 3,10` and judge; code in
   `src/sim/rail/trainModels.ts` (743 lines: `shell`/`bogie`/`wheelset`/`pantograph`/`gangway`/`buildEmu`/`buildLoco`/
@@ -36,6 +45,15 @@ Owned: `src/sim/traffic/{models,vehicleMaterial,render}.ts` (+ trains later). Si
 * Judge with the showroom: `node scripts/capture-set.mjs --q "tlineup&nointro&noidle" --hideui 1 --views
   "-10,0.9,22,4,30,6;-8,1.4,35,9,25,8" --hours 11 --out shots/w2/x` (row 1 cars at z 22 from x −17, row 2
   vans/lorries/buses at z 35; yaw 0 ≈ front, 180 ≈ rear). Bench: `--classes car,bus --yaws 0,140` (new option).
+
+## Code map, trains (session 4 reading)
+* `src/sim/rail/trainModels.ts` uses `Geo` (`src/sim/rail/geo.ts`: `color/kind/variant/extra/box(cx,cy,cz,sx,sy,sz,skip)/
+  block/beam/cyl(cx,y0,cz,r0,r1,h,seg,caps)/rod(a,b,r,seg)/sphere/prism/quad/tri/vert`). Tags `T.*` from trainMaterial.ts
+  (PLAIN, WHEEL, WINDOW, DOOR, DOORWIN…); `g.extra(r,z,…)` = wheel pivot; doors use extra(0,0,leaf,side).
+  `wheelset` :138 (12-seg tread + sector face), `bogie` :192 (side frame box, axle boxes, springs, bolster),
+  `boxRoofUnit` :217, `pantograph` :225, `emuUnderframe` :277 (3 boxes), `windowRow` :290 (flat quads in a rubber
+  quad), `doors` :307 (flat leaves + leaf window + step), `gangway` :340 (box + 4 rings), `buildEmu` :352,
+  `buildLoco` :542, `container`/`buildWagon` :683+. EMU_PROF :260 (side x 1.45, floor 0.95 … roof 3.55+).
 
 ## Code map, session 3 additions
 * `busBody.ts`: `BusShape` takes optional `nose`/`tail: EndProfile` (sb/ix/dy/r per ring point + `zone` + `sweep`),

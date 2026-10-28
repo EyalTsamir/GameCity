@@ -179,7 +179,7 @@ try {
         // line-of-sight search then ends looking down on the roof), from a front three-quarter yaw, low pitch
         if (cls === 'bus') {
           const hd = h.getHeading ? h.getHeading() : 0;
-          return { x: p.x + Math.sin(hd) * 4.6, y: p.y, z: p.z + Math.cos(hd) * 4.6, yaw: yaw + 28, h: H, w: 2, pitch: 5 };
+          return { x: p.x + Math.sin(hd) * 4.6, y: p.y, z: p.z + Math.cos(hd) * 4.6, yaw: yaw + 28, h: 2.4, w: 2, pitch: 5 };
         }
         return { x: p.x, y: p.y, z: p.z, yaw: yaw + 35, h: H, w: 2 };
       },

@@ -99,23 +99,34 @@ export const MIX: { model: ModelKind; variant: number; w: number }[] = [
   { model: 'lorry', variant: 0, w: 4 },
 ];
 
-/** Body colours (instance colour on the painted parts). */
+/**
+ * Body colours (instance colour on the painted parts), weighted like a real fleet by repetition: mostly white,
+ * black, grey and silver (dark paint is where the clear-coat reflections read most), some blue and red, a few
+ * brighter accents. rng.pick draws one number whatever the length, so the sim's sequence is unchanged.
+ */
 export const BODY_COLORS = [
-  '#e63946',
-  '#f4a261',
-  '#2a9d8f',
-  '#e9c46a',
+  '#f2f2ef',
+  '#e9e8e3',
+  '#f6f5f0',
+  '#dcdcd6',
+  '#16171a',
+  '#1d1f23',
+  '#25272b',
+  '#54585e',
+  '#6b7077',
+  '#3f4349',
+  '#a9adb2',
+  '#b9bcc0',
+  '#9ca1a7',
+  '#1f3a5f',
+  '#2f5784',
+  '#8f1d1d',
+  '#b3262a',
+  '#2f4a3a',
+  '#8a7560',
+  '#d9831f',
   '#457b9d',
-  '#f1faee',
-  '#264653',
-  '#8d6cab',
-  '#f4f2ec',
-  '#c8ccd0',
-  '#767c84',
-  '#3a3e45',
-  '#9fd3c4',
-  '#d9839b',
-  '#b5523b',
+  '#e9c46a',
 ];
 
 export const TAXI_COLOR = '#f5c518';
