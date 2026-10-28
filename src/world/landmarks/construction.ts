@@ -111,10 +111,54 @@ export function genConstruction(env: Env, lot: Lot): CraneTargets {
   const scafM = M('#9aa2a8', PAT.SCAFFOLD, 0.5, 0.5, 0, 0, 0.2);
   const ex = fx1 + 0.85,
     sz = fz1 + 0.85;
-  // east
-  env.K.quad(scafM, [ex, 0, fz1 + 0.85], [ex, 0, fz0 - 0.3], [ex, scH, fz0 - 0.3], [ex, scH, fz1 + 0.85], fz1 - fz0 + 1.15, scH);
-  // south
-  env.K.quad(scafM, [fx0 - 0.3, 0, sz], [ex, 0, sz], [ex, scH, sz], [fx0 - 0.3, scH, sz], ex - fx0 + 0.3, scH);
+  // tube-and-fitting scaffold (?nositedetail / quality low: the old cutout planes): standards on sole boards and
+  // base plates, ledgers + transoms at every 2 m lift, guard rails and toe boards on the outer line, a zig-zag of
+  // façade braces; the plank decks below lie on the transoms
+  const tubes = !env.ctx.debug.params.has('nositedetail') && env.ctx.quality.level !== 'low';
+  if (!tubes) {
+    env.K.quad(scafM, [ex, 0, fz1 + 0.85], [ex, 0, fz0 - 0.3], [ex, scH, fz0 - 0.3], [ex, scH, fz1 + 0.85], fz1 - fz0 + 1.15, scH);
+    env.K.quad(scafM, [fx0 - 0.3, 0, sz], [ex, 0, sz], [ex, scH, sz], [fx0 - 0.3, scH, sz], ex - fx0 + 0.3, scH);
+  } else {
+    const tube = M('#a7aeb3', PAT.PLAIN, 0.42, 0.65, 0, 0, 0.35);
+    const toe = M('#c79a5e', PAT.PLANKS, 0.85, 0, 0, 0, 0.6);
+    const sole = M('#9a7a52', PAT.PLANKS, 0.9, 0, 0, 0, 0.8);
+    const R = 0.024;
+    // one face: outer line at `o`, inner at `o - inward`, running along `a0..a1`; axis 'z' (east) or 'x' (south)
+    const face = (axis: 'x' | 'z', o: number, inward: number, a0: number, a1: number) => {
+      const P = (a: number, y: number, inner: boolean): V3 => {
+        const c = inner ? o - inward : o;
+        return axis === 'z' ? [c, y, a] : [a, y, c];
+      };
+      const n = Math.max(1, Math.round((a1 - a0) / 2.1));
+      const as = Array.from({ length: n + 1 }, (_, i) => a0 + ((a1 - a0) * i) / n);
+      for (const a of as)
+        for (const inner of [false, true]) {
+          K.rod(tube, P(a, 0.06, inner), P(a, scH + (inner ? 0 : 1.1), inner), R, 6);
+          const b = P(a, 0, inner);
+          K.box(M('#7d8489', PAT.PLAIN, 0.5, 0.6), 0.15, 0.012, 0.15, b[0], 0.045, b[2]);
+          // sole boards run across both standards, kept inside the footprint
+          if (!inner) K.box(sole, axis === 'z' ? 1.0 : 0.22, 0.04, axis === 'z' ? 0.22 : 1.0, b[0] - (axis === 'z' ? 0.42 : 0), 0.0, b[2] - (axis === 'x' ? 0.42 : 0));
+        }
+      for (let y = 2; y < scH + 0.1; y += 2) {
+        for (const inner of [false, true]) K.rod(tube, P(a0 - 0.15, y - 0.06, inner), P(a1 + 0.15, y - 0.06, inner), R, 6);
+        for (const a of as) K.rod(tube, P(a, y - 0.02, true), P(a, y - 0.02, false), R, 6);
+        // guard rails + toe board on the outer line
+        K.rod(tube, P(a0, y + 0.5, false), P(a1, y + 0.5, false), R, 6);
+        K.rod(tube, P(a0, y + 1.0, false), P(a1, y + 1.0, false), R, 6);
+        const t0 = P(a0, y, false),
+          t1 = P(a1, y, false);
+        K.box(toe, axis === 'z' ? 0.03 : a1 - a0, 0.15, axis === 'z' ? a1 - a0 : 0.03, (t0[0] + t1[0]) / 2 - (axis === 'z' ? 0.04 : 0), y + 0.04, (t0[2] + t1[2]) / 2 - (axis === 'x' ? 0.04 : 0));
+      }
+      // façade braces: zig-zag over two bays on the outer line, every lift
+      for (let i = 0; i + 2 <= n; i += 3)
+        for (let y = 0; y < scH - 1; y += 2) {
+          const up = ((y / 2) | 0) % 2 === 0;
+          K.rod(tube, P(as[i], y + (up ? 0.1 : 2.0), false), P(as[i + 2], y + (up ? 2.0 : 0.1), false), R * 0.9, 5);
+        }
+    };
+    face('z', ex, 0.75, fz0 - 0.3, fz1 + 0.85);
+    face('x', sz, 0.75, fx0 - 0.3, ex - 0.75);
+  }
   for (let y = 2; y < scH; y += 2) {
     K.box(M('#b9894f', PAT.PLANKS, 0.85, 0, 0, 0, 0.7), 0.72, 0.05, fz1 - fz0 + 1.1, ex - 0.37, y, (fz0 + fz1) / 2 + 0.25);
     K.box(M('#b9894f', PAT.PLANKS, 0.85), ex - fx0 + 0.25, 0.05, 0.72, (fx0 + ex) / 2 - 0.1, y, sz - 0.37);
@@ -155,12 +199,112 @@ export function genConstruction(env: Env, lot: Lot): CraneTargets {
   for (let i = 0; i < 4; i++) K.box(rust, 5.5, 0.18, 0.32, -1.0 + (i % 2) * 0.1, i * 0.18, fz1 + 2.3 + (i % 2) * 0.1);
   for (let i = 0; i < 3; i++) K.cylX(M('#bdb8ae', PAT.CONCRETE, 0.9), 0.45, 2.4, SX - 2.2, 0.45, fz1 + 2.2 + i * 1.0, 14, 0, true);
   for (let i = 0; i < 5; i++) K.box(M('#c9995c', PAT.PLANKS, 0.85, 0, 0, 0, 0.7), 3.6, 0.16, 0.9, -6.0, i * 0.17, -SZ + 2.4);
-  // skip container with rubble
+  // skip: tapered steel body with ribs, lifting lugs, rubble heaped in it (broken block, timber, plasterboard)
   {
     const kx = -SX + 2.2,
       kz = SZ - 6.6;
-    K.box(M('#e0a21b', PAT.PLAIN, 0.6, 0.3), 3.4, 1.3, 1.8, kx, 0.1, kz);
-    K.box(M('#7d7a73', PAT.GRAVEL, 0.95), 3.0, 0.12, 1.5, kx, 1.25, kz);
+    const skipM = M('#e0a21b', PAT.RUST, 0.7, 0.3, 0, 0, 0.55);
+    const h = 1.25;
+    // sloped ends (wider at the top), straight sides
+    K.poly(skipM, [[kx - 1.45, 0.12, kz - 0.9], [kx + 1.45, 0.12, kz - 0.9], [kx + 1.75, 0.12 + h, kz - 0.9], [kx - 1.75, 0.12 + h, kz - 0.9]], undefined, true);
+    K.poly(skipM, [[kx - 1.45, 0.12, kz + 0.9], [kx + 1.45, 0.12, kz + 0.9], [kx + 1.75, 0.12 + h, kz + 0.9], [kx - 1.75, 0.12 + h, kz + 0.9]], undefined, true);
+    K.poly(skipM, [[kx - 1.45, 0.12, kz - 0.9], [kx - 1.75, 0.12 + h, kz - 0.9], [kx - 1.75, 0.12 + h, kz + 0.9], [kx - 1.45, 0.12, kz + 0.9]], undefined, true);
+    K.poly(skipM, [[kx + 1.45, 0.12, kz - 0.9], [kx + 1.75, 0.12 + h, kz - 0.9], [kx + 1.75, 0.12 + h, kz + 0.9], [kx + 1.45, 0.12, kz + 0.9]], undefined, true);
+    K.box(skipM, 2.9, 0.06, 1.8, kx, 0.1, kz);
+    for (const sd of [-1, 1]) {
+      for (const dx of [-1.0, 0, 1.0]) K.box(skipM, 0.08, h - 0.05, 0.06, kx + dx, 0.15, kz + sd * 0.93);
+      K.box(skipM, 3.5, 0.08, 0.07, kx, 0.12 + h - 0.06, kz + sd * 0.93);
+      K.box(M('#3a3d40', PAT.PLAIN, 0.5, 0.5), 0.12, 0.25, 0.1, kx + sd * 1.25, 0.6, kz + 0.97 * sd);
+      K.box(M('#3a3d40', PAT.PLAIN, 0.5, 0.5), 0.5, 0.12, 1.85, kx + sd * 1.0, 0.0, kz);
+    }
+    K.cone(M('#86827a', PAT.GRAVEL, 0.95, 0, 0, 0, 0.6), 1.25, 0.55, kx, 1.05, kz, 10);
+    K.box(M('#7a776f', PAT.CONCRETE, 0.9), 0.44, 0.22, 0.3, kx - 0.6, 1.25, kz + 0.2, 0.4);
+    K.box(M('#c9a46a', PAT.PLANKS, 0.85), 2.2, 0.06, 0.12, kx + 0.2, 1.4, kz - 0.25, 0.3);
+    K.boxC(M('#e9e6df', PAT.PLAIN, 0.9), 1.1, 0.02, 0.8, kx + 0.7, 1.45, kz + 0.1, 0.5, 0.2, 0.0);
+  }
+  // site clutter the crews use: cement mixer, wheelbarrows, cement bags on a pallet, block pallets, a cable drum,
+  // cones and a barrier at the gate, a dumpy bag of sand
+  if (env.ctx.quality.level !== 'low' && !env.ctx.debug.params.has('nositedetail')) {
+    const orange = M('#e2622a', PAT.PLAIN, 0.6, 0.2, 0, 0, 0.4);
+    const steel = M('#3a3d40', PAT.PLAIN, 0.5, 0.5, 0, 0, 0.4);
+    // cement mixer: tilted drum on a stand with wheels and a tow bar
+    {
+      const mx = fx0 + 4.4,
+        mz = SZ - 3.0;
+      K.box(steel, 0.08, 0.7, 0.08, mx - 0.35, 0, mz - 0.3);
+      K.box(steel, 0.08, 0.7, 0.08, mx + 0.35, 0, mz - 0.3);
+      K.box(steel, 0.9, 0.08, 0.7, mx, 0.62, mz);
+      K.cylX(M('#202224', PAT.PLAIN, 0.8), 0.2, 0.12, mx - 0.45, 0.2, mz + 0.3, 12);
+      K.cylX(M('#202224', PAT.PLAIN, 0.8), 0.2, 0.12, mx + 0.45, 0.2, mz + 0.3, 12);
+      K.rod(steel, [mx, 0.3, mz + 0.3], [mx, 0.3, mz + 1.2], 0.025);
+      K.lathe(orange, [[0.0, 0.0], [0.32, 0.02], [0.4, 0.25], [0.38, 0.5], [0.22, 0.75], [0.2, 0.78]], mx, 0.7, mz, 14);
+      K.box(steel, 0.06, 0.5, 0.06, mx + 0.42, 0.7, mz - 0.1);
+      K.cyl(M('#1d1f21', PAT.PLAIN, 0.7), 0.06, 0.06, 0.3, mx + 0.42, 1.0, mz + 0.05, 8);
+    }
+    // wheelbarrows (one tipped against the cabin)
+    const barrow = (x: number, z: number, ry: number) => {
+      const tray = M('#2f6f3a', PAT.PLAIN, 0.6, 0.3, 0, 0, 0.5);
+      const c = Math.cos(ry),
+        sn = Math.sin(ry);
+      const P = (lx: number, ly: number, lz: number): V3 => [x + lx * c + lz * sn, ly, z - lx * sn + lz * c];
+      K.poly(tray, [P(-0.32, 0.3, -0.3), P(0.32, 0.3, -0.3), P(0.42, 0.62, -0.55), P(-0.42, 0.62, -0.55)], undefined, true);
+      K.poly(tray, [P(-0.32, 0.3, 0.35), P(-0.32, 0.3, -0.3), P(-0.42, 0.62, -0.55), P(-0.45, 0.62, 0.55)], undefined, true);
+      K.poly(tray, [P(0.32, 0.3, -0.3), P(0.32, 0.3, 0.35), P(0.45, 0.62, 0.55), P(0.42, 0.62, -0.55)], undefined, true);
+      K.poly(tray, [P(-0.32, 0.3, 0.35), P(0.32, 0.3, 0.35), P(0.45, 0.62, 0.55), P(-0.45, 0.62, 0.55)], undefined, true);
+      K.poly(tray, [P(-0.32, 0.3, -0.3), P(0.32, 0.3, -0.3), P(0.32, 0.3, 0.35), P(-0.32, 0.3, 0.35)], undefined, true);
+      for (const sd of [-1, 1]) {
+        K.rod(steel, P(sd * 0.25, 0.25, 0.85), P(sd * 0.28, 0.55, -1.05), 0.018);
+        K.rod(steel, P(sd * 0.25, 0.3, -0.25), P(sd * 0.27, 0.0, -0.3), 0.015);
+      }
+      const w = P(0, 0.2, 0.75);
+      K.cylX(M('#1d1f21', PAT.PLAIN, 0.8), 0.2, 0.09, w[0], 0.2, w[2], 12, ry);
+      K.cone(M('#8f8a7f', PAT.GRAVEL, 0.95), 0.32, 0.12, x, 0.55, z, 8);
+    };
+    barrow(fx0 + 2.6, SZ - 4.6, 0.6);
+    barrow(SX - 3.2, -2.4, -2.1);
+    // cement bags on a pallet, concrete blocks on pallets
+    const pal = M('#a1774d', PAT.PLANKS, 0.9);
+    const bagM = M('#c9c2b0', PAT.PLAIN, 0.9, 0, 0, 0, 0.3);
+    K.box(pal, 1.2, 0.14, 1.0, fx0 + 7.0, 0, fz1 + 5.3);
+    for (let i = 0; i < 4; i++)
+      for (let j = 0; j < 2; j++) K.boxC(bagM, 0.55, 0.13, 0.42, fx0 + 6.72 + j * 0.56, 0.21 + i * 0.13, fz1 + 5.08 + (i % 2) * 0.44, 0, (i % 2) * 0.06, 0.02 * (j - 0.5));
+    for (let k = 0; k < 2; k++) {
+      K.box(pal, 1.2, 0.14, 1.0, fx0 + 8.6, 0, fz1 + 4.6 + k * 1.2);
+      K.box(M('#8e8a80', PAT.CONCRETE, 0.9, 0, 0, 0, 0.5), 1.1, 0.72, 0.9, fx0 + 8.6, 0.14, fz1 + 4.6 + k * 1.2);
+    }
+    // cable drum
+    K.cylX(M('#9a7448', PAT.PLANKS, 0.9), 0.55, 0.08, SX - 2.4, 0.55, fz1 + 3.6, 16, Math.PI / 2);
+    K.cylX(M('#9a7448', PAT.PLANKS, 0.9), 0.55, 0.08, SX - 2.4, 0.55, fz1 + 4.3, 16, Math.PI / 2);
+    K.cylX(M('#1d1f21', PAT.PLAIN, 0.7), 0.4, 0.62, SX - 2.4, 0.55, fz1 + 3.95, 14, Math.PI / 2);
+    // dumpy bag of sand (white woven bag with loops) by the mixer
+    K.box(M('#e9e6dc', PAT.PLAIN, 0.95, 0, 0, 0, 0.4), 0.9, 0.8, 0.9, fx0 + 5.6, 0, SZ - 3.0);
+    K.cone(M('#d9c08a', PAT.GRAVEL, 0.95), 0.44, 0.22, fx0 + 5.6, 0.8, SZ - 3.0, 10);
+    for (const [dx, dz] of [
+      [-0.4, -0.4],
+      [0.4, -0.4],
+      [-0.4, 0.4],
+      [0.4, 0.4],
+    ])
+      K.torus(M('#e9e6dc', PAT.PLAIN, 0.95), 0.08, 0.015, fx0 + 5.6 + dx, 0.85, SZ - 3.0 + dz, 4, 8);
+    // traffic cones + a red/white barrier inside the gate
+    const gateZ0 = SZ - 9.5;
+    for (let k = 0; k < 4; k++) {
+      const cz = gateZ0 + 0.8 + k * 1.3,
+        cx = SX - 2.0 - (k % 2) * 0.3;
+      K.box(M('#1d1f21', PAT.PLAIN, 0.8), 0.36, 0.04, 0.36, cx, 0, cz);
+      K.cone(M('#e8582a', PAT.PLAIN, 0.6, 0, 0, 0, 0.3), 0.15, 0.7, cx, 0.04, cz, 12);
+      K.cyl(M('#f2f0ea', PAT.PLAIN, 0.4), 0.075, 0.095, 0.12, cx, 0.36, cz, 12);
+    }
+    const bar = (x: number, z: number, ry: number) => {
+      K.box(M('#d33a2e', PAT.PLAIN, 0.6), 1.8, 0.2, 0.05, x, 0.75, z, ry);
+      for (const d of [-0.8, 0.8]) {
+        const c = Math.cos(ry),
+          sn = Math.sin(ry);
+        K.box(M('#f2f0ea', PAT.PLAIN, 0.6), 0.06, 1.0, 0.06, x + d * c, 0, z - d * sn, ry);
+        K.box(M('#2a2c2e', PAT.PLAIN, 0.8), 0.25, 0.08, 0.6, x + d * c, 0, z - d * sn, ry);
+      }
+    };
+    bar(SX - 3.4, gateZ0 - 0.6, 0.2);
   }
   // site cabins (two stacked containers + stair) along the west fence
   {
@@ -181,7 +325,21 @@ export function genConstruction(env: Env, lot: Lot): CraneTargets {
     });
     signQuad(env.T, sign, 1.6, 0.3, cx + 1.215, 4.5, cz, Math.PI / 2, 0.4);
     // portable toilet
-    K.box(M('#2f74c0', PAT.PANELS, 0.6, 0.1), 1.1, 2.3, 1.1, -SX + 1.0, 0, cz + 4.6);
+    {
+      // moulded plastic cabin: skid base, ribbed walls, translucent rounded roof, door with vent slots, handle and
+      // the red/green 'engaged' indicator
+      const tx = -SX + 1.0,
+        tz = cz + 4.6;
+      const blue = M('#2f74c0', PAT.PANELS, 0.55, 0.1, 0, 0, 0.35);
+      K.box(M('#1f4f86', PAT.PLAIN, 0.6), 1.16, 0.12, 1.2, tx, 0, tz);
+      K.box(blue, 1.1, 2.1, 1.1, tx, 0.12, tz);
+      K.lathe(M('#dfe6ea', PAT.PLAIN, 0.4, 0, 0, 0, 0.2), [[0.0, 0.18], [0.62, 0.0], [0.6, 0.04], [0.4, 0.14], [0.0, 0.2]], tx, 2.2, tz, 10, Math.PI / 4);
+      K.box(M('#25609f', PAT.PLAIN, 0.6), 0.04, 1.95, 0.84, tx + 0.57, 0.17, tz);
+      for (let k = 0; k < 4; k++) K.box(M('#173f6b', PAT.PLAIN, 0.6), 0.02, 0.025, 0.5, tx + 0.595, 1.75 + k * 0.06, tz);
+      K.box(M('#c9cdd0', PAT.PLAIN, 0.4, 0.6), 0.05, 0.12, 0.04, tx + 0.6, 1.0, tz - 0.3);
+      K.box(M('#2fa34a', PAT.PLAIN, 0.4), 0.02, 0.05, 0.1, tx + 0.6, 1.15, tz - 0.3);
+      for (const dz of [-0.5, 0.5]) for (let k = 0; k < 3; k++) K.box(blue, 1.12, 0.04, 0.04, tx, 0.5 + k * 0.6, tz + dz);
+    }
   }
   // parked excavator (north strip)
   {
@@ -303,6 +461,74 @@ export function genConstruction(env: Env, lot: Lot): CraneTargets {
     drawText(g, 'TINYBUILD', w * 0.62, h / 2 + 2, 'bold 38px "Arial Black", Arial, sans-serif', '#1d1d1d', 2);
   });
   signQuad(env.T, logo, 4.2, 0.7, 3.6, 1.2, SZ - e + 0.05, 0, 0.3);
+  // fly-posting on the street sides: overlapping gig / circus / lost-cat posters, older ones torn and faded,
+  // a 'POST NO BILLS' stencil, a tag — the hoarding is a city surface people use
+  const posters = env.atlas.add(512, 192, (g, w, h) => {
+    g.fillStyle = '#eef1f3';
+    g.fillRect(0, 0, w, h);
+    const poster = (x: number, y: number, pw: number, ph: number, bg: string, draw: () => void, tear = 0) => {
+      g.save();
+      g.beginPath();
+      g.moveTo(x, y);
+      g.lineTo(x + pw, y);
+      // torn lower edge on old ones
+      for (let k = 0; k <= 8; k++) g.lineTo(x + pw - (pw * k) / 8, y + ph - (k % 2) * tear * 9 - tear * ((k * 7) % 5) * 3);
+      g.closePath();
+      g.clip();
+      g.fillStyle = bg;
+      g.fillRect(x, y, pw, ph);
+      g.translate(x, y);
+      draw();
+      g.restore();
+    };
+    // old faded layer
+    poster(4, 10, 150, 172, '#d9c9a0', () => {
+      drawText(g, 'SUMMER', 75, 40, 'bold 30px Georgia, serif', '#8a6a4a', 0);
+      drawText(g, 'REGATTA', 75, 72, 'bold 26px Georgia, serif', '#8a6a4a', 0);
+    }, 3);
+    poster(120, 4, 132, 180, '#1d2a44', () => {
+      g.fillStyle = '#e8c22e';
+      g.beginPath();
+      g.arc(66, 70, 40, 0, Math.PI * 2);
+      g.fill();
+      drawText(g, 'THE GULLS', 66, 132, 'bold 22px "Arial Black", Arial, sans-serif', '#f2efe6', 0);
+      drawText(g, 'live · Sat 9pm', 66, 156, '15px Arial, sans-serif', '#e8c22e', 0);
+    });
+    poster(258, 14, 122, 160, '#c4352b', () => {
+      drawText(g, 'CIRCUS', 61, 38, 'bold 26px Georgia, serif', '#f6e7c1', 0);
+      g.fillStyle = '#f6e7c1';
+      g.fillRect(16, 56, 90, 54);
+      g.fillStyle = '#c4352b';
+      g.beginPath();
+      g.moveTo(61, 60);
+      g.lineTo(100, 106);
+      g.lineTo(22, 106);
+      g.fill();
+      drawText(g, 'Harbour Field', 61, 132, '15px Arial, sans-serif', '#f6e7c1', 0);
+    }, 2);
+    poster(386, 26, 84, 110, '#f4f1e8', () => {
+      drawText(g, 'LOST CAT', 42, 20, 'bold 15px Arial, sans-serif', '#1d1d1d', 0);
+      g.fillStyle = '#5a5048';
+      g.fillRect(16, 30, 52, 40);
+      drawText(g, '"Biscuit"', 42, 84, '12px Arial, sans-serif', '#1d1d1d', 0);
+      g.strokeStyle = '#1d1d1d';
+      for (let k = 0; k < 6; k++) {
+        g.beginPath();
+        g.moveTo(6 + k * 13, 96);
+        g.lineTo(6 + k * 13, 110);
+        g.stroke();
+      }
+    });
+    drawText(g, 'POST NO BILLS', 440, 168, 'bold 16px Arial, sans-serif', 'rgba(30,30,30,0.75)', 0);
+    g.strokeStyle = '#2b62b8';
+    g.lineWidth = 5;
+    g.beginPath();
+    g.moveTo(474, 150);
+    g.bezierCurveTo(490, 120, 500, 160, 506, 128);
+    g.stroke();
+  });
+  signQuad(env.T, posters, 4.0, 1.5, -SX + 3.4, 0.55, SZ - e + 0.05, 0, 0.15);
+  signQuad(env.T, posters, 4.0, 1.5, SX - 3.6, 0.55, -SZ + e - 0.05, Math.PI, 0.15);
   // security floodlight pole by the gate
   {
     const px = SX - 1.2,
@@ -314,6 +540,19 @@ export function genConstruction(env: Env, lot: Lot): CraneTargets {
     env.glow(px - 0.2, 5.8, pz, { size: 1.0, kind: 'halo', color: '#fff4d6', intensity: 0.8 });
   }
   env.endChecks();
+  // mud carried out of the gate onto the pavement: two tyre tracks fading toward the road, dried splashes
+  if (!env.ctx.debug.params.has('nositedetail')) {
+    const mud = M('#6b5a44', PAT.GRAVEL, 0.95, 0, 0, 0, 0.5);
+    for (const tz of [gateZ0 + 1.6, gateZ1 - 1.6]) {
+      for (let k = 0; k < 7; k++) {
+        const x0 = SX + 0.05 + k * 1.0,
+          w = 0.36 - k * 0.035;
+        if (w <= 0.05) break;
+        K.box(mud, 0.9, 0.012, w, x0 + 0.45, 0.155, tz + Math.sin(k * 1.7) * 0.06);
+      }
+    }
+    for (let k = 0; k < 9; k++) K.box(mud, 0.18 + (k % 3) * 0.1, 0.012, 0.12 + (k % 2) * 0.1, SX + 0.4 + ((k * 1.37) % 5), 0.156, gateZ0 + 0.5 + ((k * 2.3) % 5.2), k);
+  }
 
   env.pick(lot.id, 'Haven Heights (under construction)', new THREE.Box3(new THREE.Vector3(fp.x0, 0, fp.z0), new THREE.Vector3(fp.x1, top + FH + 3, fp.z1)), () => {
     const h = env.hours();

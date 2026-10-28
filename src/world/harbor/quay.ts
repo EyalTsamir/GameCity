@@ -414,7 +414,55 @@ export function buildFishQuay(b: HB, o: FishQuayOpts): void {
   for (const l of o.lines) ropeEye(b, l.bollard.x, l.bollard.y, l.bollard.z, l.boat.x, l.boat.y, l.boat.z, '#d6c48e');
   // tyres hung on the wall face along the berth
   for (const z of [-127.5, -124.8, -122.1, -119.4]) wallTyre(b, QX, y(QX - 0.3, z), z);
+  // a second net (blue monofilament, orange floats) on a pallet, a chilled fish container with its reefer unit,
+  // oil drums, a hawser coil on a pallet, empty boxes waiting
+  pallet(b, 129.6, y(129.6, -130.4), -130.4, 0.2, '#a58456');
+  b.color('#2f5f9a').pat(PAT.NET, 0.05);
+  b.rock(129.6, y(129.6, -130.4) + 0.38, -130.4, 0.62, 0.32, 0.5, rng, 0.4, 1);
+  b.rock(129.85, y(129.6, -130.4) + 0.55, -130.25, 0.4, 0.22, 0.35, rng, 1.3, 1);
+  b.color('#e8672c').pat(PAT.NONE);
+  for (let k = 0; k < 5; k++) b.sphere(129.2 + k * 0.2, y(129.6, -130.4) + 0.5 + Math.sin(k * 1.3) * 0.12, -130.85 + k * 0.1, 0.06, 6, 4, 0.8);
+  {
+    const cx = 128.55,
+      cz = -127.6,
+      cy = y(cx, cz);
+    b.color('#e9ebe7').pat(PAT.CORRUGATED, 0.1);
+    b.box(cx, cy + 1.3, cz, 2.44, 2.6, 3.0, 0, 0);
+    b.pat(PAT.NONE).color('#c9ccc8');
+    b.box(cx, cy + 0.06, cz, 2.5, 0.12, 3.06, 0, 0);
+    b.box(cx, cy + 2.62, cz, 2.5, 0.08, 3.06, 0, 0);
+    // doors on the quay side (+x) with locking bars, reefer unit on the south end
+    b.color('#d9dcd8');
+    b.box(cx + 1.23, cy + 1.3, cz, 0.04, 2.4, 2.8, 0, 0);
+    b.color('#5b6064');
+    for (const dz of [-1.0, -0.4, 0.4, 1.0]) b.box(cx + 1.27, cy + 1.3, cz + dz, 0.04, 2.3, 0.04, 0, 0);
+    b.color('#3a3f44');
+    b.box(cx, cy + 1.3, cz + 1.55, 2.2, 2.3, 0.12, 0, 0);
+    b.color('#1d2125');
+    for (const dx of [-0.5, 0.5]) b.cyl([cx + dx, cy + 1.65, cz + 1.6], [cx + dx, cy + 1.65, cz + 1.63], 0.33, 0.33, 12, 3);
+    b.color('#b8bcbe');
+    b.box(cx + 0.7, cy + 0.6, cz + 1.62, 0.5, 0.4, 0.03, 0, 0);
+    // drip stain + a hose from the reefer drain
+    stain(b, cx + 0.2, cy, cz + 2.0, 1.4, 1.0, '#575c5b', 0.4);
+  }
+  b.color('#2f5f8a').pat(PAT.RUST, 0.45);
+  for (const [dx, dz] of [
+    [0, 0],
+    [0.62, 0.1],
+    [0.3, 0.6],
+  ])
+    b.vcyl(130.4 + dx, y(130.4, -136.2), -136.2 + dz, 0.29, 0.88, 12, 2);
+  b.color('#6b3a24').pat(PAT.RUST, 0.8);
+  b.cyl([131.3, y(131, -135.5) + 0.29, -135.5], [131.3, y(131, -135.5) + 0.29, -134.62], 0.29, 0.29, 12, 3);
+  b.pat(PAT.NONE);
+  pallet(b, 134.3, y(134.3, -134.4), -134.4, 0.1);
+  b.color('#d6c48e');
+  for (let k = 0; k < 4; k++) torusTube(b, 134.3, y(134.3, -134.4) + 0.2 + k * 0.08, -134.4, 0.48 - k * 0.07, 0.04, 'y', 18);
+  fishBoxStack(b, 130.3, y(130.3, -127.4), -127.4, 6, 0.15, rng, false);
+  fishBoxStack(b, 130.9, y(130.9, -127.0), -127.0, 4, -0.1, rng, false);
   if (o.low) return;
+  stain(b, 130.6, y(130.6, -135.8), -135.8, 1.8, 1.6, '#3b3a36', 0.3);
+  stain(b, 133.0, y(133.0, -132.0), -132.0, 3.5, 2.5, '#626660', 0.7);
   // stains: wet patch round the boxes and the hose end, oil under the forklift, fish-water by the creels
   stain(b, 131.6, y(131.6, -124.2), -124.2, 3.0, 2.4, '#5d625f', 0.55);
   stain(b, 134.9, y(134.9, -128.3), -128.3, 1.6, 2.2, '#585d5c', 0.45);
