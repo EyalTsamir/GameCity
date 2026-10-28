@@ -26,7 +26,7 @@ const n = parseInt(args.n ?? '4', 10);
 const skip = parseInt(args.skip ?? '0', 10);
 const hours = parseFloat(args.hours ?? '11');
 const shots = (args.shots ?? 'face,hand,body').split(',');
-// --lods close,near: each shot once per forced level (same figure, same frame) — '' = by distance
+// --persona jogger: only that persona's parties; --lods close,near: each shot once per forced level (same figure, same frame) — '' = by distance
 const lods = (args.lods ?? '').split(',');
 let url = args.url ?? 'http://127.0.0.1:5173/';
 url += (url.includes('?') ? '&' : '?') + 'nointro&noidle' + (args.q ? '&' + args.q : '');
@@ -48,13 +48,13 @@ try {
   await page.waitForTimeout(2500);
   // standing / slowly walking adults and children on open ground, spread over the crowd
   const figs = await page.evaluate(
-    ([n, skip]) => {
+    ([n, skip, persona]) => {
       const c = window.__city;
       c.setSpeed(0);
       const crowd = c.ctx.services.pedestrians._crowd;
       const all = [];
       for (const p of crowd.parties) {
-        if (p.state === 'gone') continue;
+        if (p.state === 'gone' || (persona && p.persona !== persona)) continue;
         for (const m of p.members) if (m.present && m.fade > 0.99 && m.sit < 0.05 && m.lie < 0.05 && m.rideG === null && !m.look.pram) all.push(m);
       }
       all.sort((a, b) => Math.hypot(a.x, a.z + 40) - Math.hypot(b.x, b.z + 40));
@@ -68,7 +68,7 @@ try {
       }
       return out;
     },
-    [n, skip],
+    [n, skip, args.persona ?? ''],
   );
   const SH = {
     face: { ty: 0.925, d: 0.75, dy: 18, pitch: 2 },
