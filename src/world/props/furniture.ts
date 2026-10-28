@@ -418,6 +418,21 @@ export function bin(k: Kit, modern: boolean, rng?: Rng): void {
     poly(sh, [-0.235, 0.91, 0.235, -0.235, 0.91, -0.235, 0.0, 0.95, 0.0], -0.15, 0.99, 0);
     k.m('#26292b', 'steel');
     sh.box(0, 0.952, 0, 0.09, 0.008, 0.09, 0);
+    // the hood's turned-down skirt (a 4 cm hemmed lip with a rolled bead) and its shadowed underside, so the
+    // lid reads as a pressed cap rather than a slab; a polished hand-worn strip on the front edge
+    k.m('#b3babf', 'steel');
+    for (let f = 0; f < 4; f++) {
+      sh.push().local(0, 0, 0, 0, (f * Math.PI) / 2);
+      sh.box(0, 0.872, 0.241, 0.494, 0.042, 0.012, 1);
+      k.m('#d4d9dc', 'steel');
+      sh.box(0, 0.852, 0.247, 0.5, 0.01, 0.01, 0);
+      k.m('#b3babf', 'steel');
+      sh.pop();
+    }
+    k.m('#3a3d40', 'steel');
+    sh.box(0, 0.851, 0, 0.47, 0.002, 0.47, 2);
+    k.m('#d8dde0', 'steel');
+    sh.box(0, 0.9, 0.236, 0.18, 0.02, 0.002, 1);
     // door seams + keyhole + hinges on the front face (the middle flutes are left off there)
     k.m('#23282b', 'steel');
     const z = 0.211;
@@ -433,7 +448,8 @@ export function bin(k: Kit, modern: boolean, rng?: Rng): void {
     k.m('#e9e4d6', 'plastic');
     sh.box(0, 0.45, z + 0.001, 0.16, 0.07, 0.003, 0);
     k.m('#2b2f33', 'plastic');
-    sh.box(0, 0.45, z + 0.003, 0.12, 0.018, 0.002, 0);
+    pixelText(sh, 'LITTER', 0, 0.455, z + 0.003, 0.0055, 0.001);
+    sh.box(0, 0.428, z + 0.003, 0.12, 0.004, 0.001, 55);
     if (r01() < 0.4) {
       k.m(r01() < 0.5 ? '#2e7d4f' : '#2b6ca3', 'plastic');
       sh.box(-0.02, 0.3, z + 0.001, 0.08, 0.08, 0.003, 0);
@@ -855,7 +871,7 @@ export function planterBox(k: Kit, kind: 'concrete' | 'terracotta' | 'wood' | 's
   poly(sh, [ox, h, -oz, ox, h, oz, ix, h, iz, ix, h, -iz], 0, 1, 0);
   poly(sh, [ox, h, oz, -ox, h, oz, -ix, h, iz, ix, h, iz], 0, 1, 0);
   poly(sh, [-ox, h, oz, -ox, h, -oz, -ix, h, -iz, -ix, h, iz], 0, 1, 0);
-  const ys = h - 0.08;
+  const ys = h - 0.05;
   k.m(new THREE.Color(rimCol).multiplyScalar(0.6), mat);
   poly(sh, [-ix, h, -iz, ix, h, -iz, ix, ys, -iz, -ix, ys, -iz], 0, 0, 1);
   poly(sh, [-ix, h, iz, ix, h, iz, ix, ys, iz, -ix, ys, iz], 0, 0, -1);
@@ -869,7 +885,7 @@ export function planterBox(k: Kit, kind: 'concrete' | 'terracotta' | 'wood' | 's
       const v = Math.sin(i * 91.17 + seed * 12.9898) * 43758.5453;
       return v - Math.floor(v);
     };
-    const stain = new THREE.Color(col).multiplyScalar(kind === 'concrete' ? 0.7 : 0.78);
+    const stain = new THREE.Color(col).lerp(new THREE.Color('#3a3226'), 0.25).multiplyScalar(kind === 'concrete' ? 0.62 : 0.72);
     const wash = new THREE.Color(col).lerp(new THREE.Color('#4e3828'), 0.45).multiplyScalar(0.85);
     const e = 0.004;
     for (const sz of [-1, 1]) {
@@ -891,13 +907,31 @@ export function planterBox(k: Kit, kind: 'concrete' | 'terracotta' | 'wood' | 's
       }
     }
   }
-  // soil with a few clods
-  k.m('#4e3828', 'stone');
+  // soil 5 cm below the rim: dark damp band along the walls, lighter dry middle, clods, bark-mulch chips, a
+  // dropped leaf or cigarette end, soil splashed on the rim top (watering)
+  k.m('#3a2a1e', 'stone');
   poly(sh, [-ix, ys, -iz, ix, ys, -iz, ix, ys, iz, -ix, ys, iz], 0, 1, 0);
+  k.m('#5a4330', 'stone');
+  poly(sh, [-ix + 0.06, ys + 0.002, -iz + 0.06, ix - 0.06, ys + 0.002, -iz + 0.06, ix - 0.06, ys + 0.002, iz - 0.06, -ix + 0.06, ys + 0.002, iz - 0.06], 0, 1, 0);
+  const hr = (i: number) => Math.abs(Math.sin(i * 12.9898 + along * 7.1 + across * 3.3) * 43758.5453) % 1;
   k.m('#3f2d20', 'stone');
+  for (let i = 0; i < 8; i++) sh.ellipsoid((hr(i) - 0.5) * ix * 1.6, ys + 0.006, (hr(i + 40) - 0.5) * iz * 1.6, 0.035, 0.018, 0.03, 0);
+  k.m('#8a5a36', 'wood');
+  for (let i = 0; i < 14; i++) {
+    sh.push().local((hr(i + 7) - 0.5) * ix * 1.7, ys + 0.004, (hr(i + 19) - 0.5) * iz * 1.7, 0, hr(i + 3) * 3, 0);
+    sh.box(0, 0, 0, 0.045, 0.006, 0.022, 1);
+    sh.pop();
+  }
+  if (hr(77) < 0.5) {
+    k.m('#e9e4d6', 'plastic');
+    sh.push().local(ix * 0.4, ys + 0.007, -iz * 0.3, 0, hr(5) * 3, 0).box(0, 0, 0, 0.03, 0.006, 0.006, 1).pop();
+  }
+  k.m('#4e3828', 'stone');
   for (let i = 0; i < 6; i++) {
-    const u = Math.sin(i * 12.9898 + along) * 0.5, v = Math.sin(i * 78.233 + across) * 0.5;
-    sh.ellipsoid(u * (ix * 1.6), ys + 0.004, v * (iz * 1.6), 0.035, 0.018, 0.03, 0);
+    const onX = i % 2 === 0, sgn = hr(i + 50) < 0.5 ? -1 : 1;
+    const u = (hr(i + 60) - 0.5) * (onX ? along : across) * 0.8;
+    const rx2 = onX ? u : sgn * (ax - t / 2), rz2 = onX ? sgn * (az - t / 2) : u;
+    sh.box(rx2, h + 0.001, rz2, 0.05 + hr(i) * 0.06, 0.002, 0.03, 1);
   }
 }
 

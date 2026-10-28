@@ -3,12 +3,48 @@
 Branch `claude/real-w3-furniture` (from `claude/pensive-gates-bim12i`). Brief: docs/progress/real-briefs.md "W3".
 
 ## Resume here
-* 2026-10-28 — **Session 4 started** (fix round after judge-1 / bugs-1). Base claude/pensive-gates-bim12i @ b10714f.
-  Order: (1) bugs 2/6/7/8 (bus-stop flag = No Entry, blank ad + timetable, newsstand placeholder sign, duplicate
-  HONEY stalls); (2) newsstand covers + attached roof; (3) kiosk + playground; (4) market jitter, scale, backdrop
-  folds, cardboard + hand truck; (5) ground grime around prop bases; (6) statue plinth, bin lid rim, planter soil,
-  gazebo soffit + wear. Props have no texture path (vertex colour + aRM/aEmit only) -> text and covers are built from
-  boxes (shapes.ts pixel font).
+* 2026-10-28 — **Session 4 ends (context ~250k, over the 170k rule: the session API reported used_tokens 0,
+  counted from the token budget instead).** Base claude/pensive-gates-bim12i @ b10714f. All pushed.
+  Judged on the bench (shots/w3/s4a = busstop, newsstand, marketstall 2.5/6 m; shots/w3/s4b = kiosk, playground,
+  marketstall, bin, bench 3/10 m; pedestrians hidden). Done this session:
+  - **Bugs 2/6 (bus stop):** the disc + white bar (= No Entry on red routes) is now a rectangular white flag
+    across the footway line with a route-coloured head band, "BUS" / "STOP" lettering and a yellow H roundel
+    (furniture.ts busShelter). Timetable = steel case, route-coloured head ("LINE"/"ROUTE"), 3 printed columns,
+    glass cover. Ad panel = `poster()` (5 themes in POSTERS: photo with sky/ground/product/sun, headline in the
+    pixel font, small print, brand band), emissive in its own colours (night = lit image, not a white glow).
+  - **Bug 7 + newsstand:** fascia sign under the eaves (NEWS / PRESS / KIOSK / TABAC + strap line, lit), the
+    roof-top placeholder board removed, the roof sheet's underside closed (no daylight between roof and slab).
+    Every rack/shelf cover = `cover()`: paper colour, photo (portrait / car / dish), masthead in the pixel font,
+    cover lines, price corner; covers behind the front one are plain (colour + masthead band).
+  - **Bug 8:** civic.ts `stallGoods()` — greedy per plan, never the goods of a stall within 14 m, then the
+    least-used kind; GOODS + EGGS (pulp trays) + OLIVES (glazed bowls).
+  - **Market:** heap = per-item tint (HSL jitter, 18 % from the next colour), size 0.78–1.18, squash, random
+    tip/turn (shared unit sphere `_ball` via geoM), patchy upper layers (holes rising to the rim), layer height
+    jitter; honey jars two sizes, two lid colours. Dial scale (enamel base, dial with 20 ticks + needle + bezel,
+    dished pan, brass weights, paper bag). Back cloth = `shell` drape (pleats at the rail opening into deep
+    folds, uneven hem, tucked corner) + curtain rings. Ground: flattened boxes leaning on one table end, a box
+    with open flaps at the front corner, sack truck leaning on the other end (always, rich tier).
+  - **Kiosk (park.ts genKiosk) rebuilt:** six wall faces as boards (green skirt with fielded panels, cream
+    board-and-batten), corner posts on the real corners (they stood on the face centres, one in front of the
+    hatch), a real opening into a lit interior (side walls, ceiling, shelf of jars, cups, espresso machine,
+    chalk menu), roller-shutter box + guides, canvas awning sagging on arms with valance and cheeks.
+  - **Playground:** tiles each their own tone + replaced dark tile + wear band along the swing path; bearing
+    hangers, swivel eyes and a chain core line (reads at 10 m); head-casting bolts; roundabout = deck in
+    painted sectors worn to steel, rim + skirt, concrete ring, 6 bent grab rails + ring rail + hub knob.
+  - **Contact grime:** contact.ts gain 1.9 → 3.4, dirt colour darker, cap 0.72 (it only darkened ~15 % and
+    vanished in the paving; verified by forcing NormalBlending: quads render, alpha was tiny).
+  - **Step 6:** bin hood skirt (hemmed lip, bead, dark underside, worn strip) + "LITTER" label; planter soil
+    5 cm under the rim with damp edge, dry middle, clods, bark chips, splash on the rim, stronger stains;
+    gazebo soffit (16 boarded panels per rafter bay, own tones, water marks, purlin rings, ceiling boss) + rail
+    wear (grey timber on hand-rail tops, algae on bottom rails); statue steps with nosing + shadow line,
+    vertex-colour damp/algae at riser feet, worn front treads, dirt in the step joint, block joints, lichen.
+  - New `shapes.ts pixelText()` (3 × 5 box font, runs merged, thin print = front face only).
+  **Not yet judged on the bench (next session first):** kiosk after the shutter/coffee-machine fix, playground
+  10 m + roundabout close-up, marketstall pick 1, bin/bench grime at 3 m, planter, gazebo soffit, statue steps
+  (bench `--classes kiosk,playground,planter,gazebo,statue,bin --dists 3,10 --q hide=pedestrians`).
+  **Next:** (1) judge the above; (2) phone box (uniform panes, paint chips), picnic wood grain, flagpole halyard
+  at 3 m; (3) perf: newsstand covers (~20 quads per cover, ~75 covers per stand, coarse kit) and market produce
+  — `perf.mjs --variants ";nopropdetail"` / `";nomarketdetail"`.
 * 2026-10-28 — **Session 3 ends (context cap).** All pushed. Sheets: docs/progress/real/w3_after_5.jpg (market,
   gazebo, bench, bin, planter, bike rack at 3/10 m), w3_after_6.jpg (2.5 m, pedestrians hidden),
   w3_statue_2.jpg (bronze figure side view), w3_planter.jpg (trailing petunias). Downtown shot: console clean,

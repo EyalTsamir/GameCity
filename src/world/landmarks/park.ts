@@ -66,9 +66,44 @@ export function genStatue(env: Env, f: Feature): void {
   // plaques, cornice with a drip, capping) — square lathes with flat facets
   // (facetLathe puts the octagon's corners at r / cos(π/8): keep them inside the feature radius)
   const Rs = (R - 0.02) * Math.cos(Math.PI / 8);
-  const steps = facetLathe([[0, 0], [Rs, 0], [Rs, 0.19], [Rs - 0.03, 0.22], [Rs - 0.27, 0.22], [Rs - 0.27, 0.41], [Rs - 0.3, 0.44], [0, 0.44]], 8, Math.PI / 8);
+  // each step: a riser with a shadow-line undercut under a rounded nosing; extra rings on the risers carry the
+  // weathering gradient (vertex colours): damp dark foot with green algae, splash band, treads worn paler at
+  // the front (feet), dirt lodged where riser meets tread
+  const stepProf = (r: number, y: number): [number, number][] => [
+    [r, y], [r, y + 0.05], [r, y + 0.12], [r, y + 0.165], [r - 0.016, y + 0.172], [r - 0.012, y + 0.186], [r - 0.002, y + 0.196], [r - 0.01, y + 0.212], [r - 0.03, y + 0.22],
+  ];
+  const steps = facetLathe([[0, 0], ...stepProf(Rs, 0), [Rs - 0.25, 0.22], ...stepProf(Rs - 0.27, 0.222), [Rs - 0.52, 0.442], [0, 0.442]], 8, Math.PI / 8);
+  paint(steps, (p, n, o) => {
+    const r = Math.hypot(p.x, p.z) * Math.cos(Math.PI / 8);
+    let k = 1, g = 0;
+    if (n.y < 0.5) {
+      const yl = p.y < 0.21 ? p.y : p.y - 0.222;
+      k = yl < 0.01 ? 0.62 : yl < 0.06 ? 0.8 : 0.95;
+      g = yl < 0.06 ? 0.12 : 0;
+    } else {
+      const front = Math.max(0, p.z / Math.max(0.01, r));
+      const edge = r > Rs - 0.06 || (r > Rs - 0.33 && r < Rs - 0.255) ? 1 : 0;
+      k = 1 + 0.12 * front * edge - (r < Rs - 0.24 && r > Rs - 0.27 ? 0.25 : 0);
+    }
+    o.setRGB(k * (1 - g), k * (1 - g * 0.3), k * (1 - g));
+  });
   K.geo(granite, steps);
   steps.dispose();
+  // block joints on the risers, lichen spots on the treads
+  const jointM = M('#5e5a54', PAT.PLAIN, 0.95);
+  for (let i = 0; i < 8; i++) {
+    const a = Math.PI / 8 + (i / 8) * Math.PI * 2 + Math.PI / 8;
+    for (const [r, y0] of [[Rs, 0], [Rs - 0.27, 0.222]] as [number, number][]) {
+      const rr = r + 0.002;
+      K.box(jointM, 0.006, 0.165, 0.004, Math.sin(a) * rr, y0, Math.cos(a) * rr, a + Math.PI / 2);
+    }
+  }
+  for (let i = 0; i < 14; i++) {
+    const a = hash1(i * 3.1 + f.id) * Math.PI * 2, onTop = i % 2 === 0;
+    const r = onTop ? Rs - 0.15 + hash1(i + 9) * 0.1 : Rs - 0.45 + hash1(i + 5) * 0.12;
+    const col = hash1(i + 2) < 0.6 ? '#b9bea4' : hash1(i + 2) < 0.85 ? '#d8b86a' : '#8e9a7a';
+    K.cyl(M(col, PAT.STONE, 0.95, 0, 0, FLOOD.SOFT, i * 0.2), 0.02 + 0.03 * hash1(i + 4), 0.02 + 0.03 * hash1(i + 4), 0.002, Math.sin(a) * r, onTop ? 0.222 : 0.442, Math.cos(a) * r, 7);
+  }
   queueContactLocal(env, 0, 0, 0, Rs, Rs, Rs * 0.42, 0.25, 0.5, Math.PI / 8);
   const pw = 1.0;
   const die = M('#b8b1a7', PAT.STONE, 0.75, 0, 0, FLOOD.SOFT, 0.6);
@@ -354,6 +389,9 @@ export function genGazebo(env: Env, f: Feature): void {
       const ux = (b[0] - a[0]) / len, uz = (b[2] - a[2]) / len;
       K.beam(white, [a[0] + ux * 0.1, 0.56, a[2] + uz * 0.1], [b[0] - ux * 0.1, 0.56, b[2] - uz * 0.1], 0.07, 0.06);
       K.beam(white, [a[0] + ux * 0.1, 1.3, a[2] + uz * 0.1], [b[0] - ux * 0.1, 1.3, b[2] - uz * 0.1], 0.1, 0.05);
+      // hands have worn the paint off the rail top (grey timber), algae and splash on the bottom rail
+      K.beam(M('#b5aa96', PAT.PLANKS, 0.85, 0, 0, FLOOD.SOFT, i * 0.3), [a[0] + ux * 0.3, 1.327, a[2] + uz * 0.3], [b[0] - ux * 0.3, 1.327, b[2] - uz * 0.3], 0.055, 0.004);
+      K.beam(M('#9fa58c', PAT.PLAIN, 0.9, 0, 0, FLOOD.SOFT), [a[0] + ux * 0.1, 0.533, a[2] + uz * 0.1], [b[0] - ux * 0.1, 0.533, b[2] - uz * 0.1], 0.074, 0.018);
       const nb = Math.max(3, Math.floor((len - 0.2) / 0.12));
       for (let k = 1; k < nb; k++) {
         const t = 0.1 + ((len - 0.2) * k) / nb;
@@ -389,6 +427,26 @@ export function genGazebo(env: Env, f: Feature): void {
     const rr = i % 2 ? (R - 0.1) * Math.cos(Math.PI / 8) : R - 0.1;
     K.beam(white, [Math.sin(a) * rr, eaveY + 0.12, Math.cos(a) * rr], [Math.sin(a) * 0.32, eaveY + 1.42, Math.cos(a) * 0.32], 0.05, 0.09);
   }
+  // soffit seen from inside: a boarded panel between each pair of rafters, 2 cm under the roof boards, each
+  // its own weathered tone (grey-brown, water marks towards the eave); two purlin rings, a ceiling boss
+  const soffitY = (r: number) => eaveY + 0.15 + ((R - 0.06 - r) / (R - 0.36)) * 1.33;
+  for (let i = 0; i < 16; i++) {
+    const a0 = rot + (i / 16) * Math.PI * 2, a1 = rot + ((i + 1) / 16) * Math.PI * 2;
+    const r0 = (i % 2 ? (R - 0.1) * Math.cos(Math.PI / 8) : R - 0.1) - 0.04, r1 = ((i + 1) % 2 ? (R - 0.1) * Math.cos(Math.PI / 8) : R - 0.1) - 0.04;
+    const tone = new THREE.Color('#d9cdb4').offsetHSL(0, -0.05 + 0.04 * Math.sin(i * 2.7), -0.06 + 0.05 * Math.sin(i * 1.9 + f.id));
+    const P = (a: number, r: number): V3 => [Math.sin(a) * r, soffitY(r) - 0.02, Math.cos(a) * r];
+    const q: V3[] = [P(a0, r0), P(a1, r1), P(a1, 0.34), P(a0, 0.34)];
+    K.poly(M(tone, PAT.PLANKS, 0.85, 0, 0, FLOOD.SOFT, 0.13 * i), q, q.map((p) => [Math.atan2(p[0], p[2]) * Math.hypot(p[0], p[2]), p[1] * 1.4] as [number, number]), true);
+    // a water mark near the eave on some panels
+    if ((i * 5 + f.id) % 3 === 0) {
+      const w2: V3[] = [P(a0 + 0.04, r0 - 0.05), P(a1 - 0.04, r1 - 0.05), P(a1 - 0.08, r1 - 0.45), P(a0 + 0.08, r0 - 0.35)];
+      for (const p of w2) p[1] -= 0.004;
+      K.poly(M(tone.clone().multiplyScalar(0.78), PAT.PLANKS, 0.9, 0, 0, FLOOD.SOFT, 0.5), w2, undefined, true);
+    }
+  }
+  for (const rr of [R * 0.62, R * 0.32]) K.cyl(white, rr, rr, 0.07, 0, soffitY(rr) - 0.1, 0, 8, true, 'box', rot);
+  K.cyl(white, 0.36, 0.3, 0.1, 0, soffitY(0.36) - 0.12, 0, 16);
+  K.sphere(white, 0.09, 0, soffitY(0.36) - 0.14, 0, 10, 6);
   K.spire(roof, 8, R + 0.02, eaveY + 0.16, eaveY + 1.75, 0, 0, rot);
   K.cyl(white, 0.42, 0.42, 0.42, 0, eaveY + 1.28, 0, 8, false, 'box', rot);
   K.spire(roof, 8, 0.52, eaveY + 1.7, eaveY + 2.25, 0, 0, rot);
@@ -587,13 +645,17 @@ export function genKiosk(env: Env, f: Feature): void {
   K.box(M('#cfc3a8', PAT.PLAIN, 0.8), 0.98, 0.03, 0.62, 0, hy1 + 0.08, (fz + ib) / 2);
   K.box(M('#8a6a4a', PAT.PLANKS, 0.7), 0.94, 0.04, 0.4, 0, hy0 - 0.02, ib + 0.22);
   const chrome = M('#cfd5d8', PAT.PLAIN, 0.2, 0.9);
-  K.box(chrome, 0.36, 0.3, 0.22, -0.18, hy0 + 0.02, ib + 0.14);
-  K.box(M('#1d1f22', PAT.PLAIN, 0.4, 0.3), 0.32, 0.04, 0.2, -0.18, hy0 + 0.02, ib + 0.16);
+  // espresso machine: red body, chrome top rail, two group heads low over a drip tray, a steam wand, gauge
+  K.box(M('#9b2b25', PAT.PLAIN, 0.3, 0.2), 0.38, 0.32, 0.24, -0.18, hy0 + 0.02, ib + 0.14);
+  K.box(chrome, 0.4, 0.02, 0.26, -0.18, hy0 + 0.34, ib + 0.14);
+  K.box(chrome, 0.36, 0.015, 0.1, -0.18, hy0 + 0.035, ib + 0.31);
   for (const gx of [-0.27, -0.09]) {
-    K.cyl(chrome, 0.03, 0.03, 0.05, gx, hy0 + 0.19, ib + 0.26, 8);
-    K.box(M('#1d1f22', PAT.PLAIN, 0.4), 0.012, 0.012, 0.09, gx, hy0 + 0.205, ib + 0.33);
+    K.cyl(chrome, 0.032, 0.026, 0.05, gx, hy0 + 0.12, ib + 0.29, 10);
+    K.box(M('#1d1f22', PAT.PLAIN, 0.4), 0.014, 0.014, 0.1, gx, hy0 + 0.13, ib + 0.37, 0.4);
   }
-  for (let c = 0; c < 6; c++) K.cyl(M('#ffffff', PAT.PLAIN, 0.3), 0.035, 0.03, 0.06, -0.3 + (c % 3) * 0.08, hy0 + 0.32 + Math.floor(c / 3) * 0.06, ib + 0.12, 8);
+  K.rod(chrome, [-0.01, hy0 + 0.26, ib + 0.27], [0.0, hy0 + 0.1, ib + 0.33], 0.006, 5);
+  K.cylX(M('#f2efe6', PAT.PLAIN, 0.3), 0.025, 0.01, -0.18, hy0 + 0.25, ib + 0.265, 10, Math.PI / 2);
+  for (let c = 0; c < 6; c++) K.cyl(M('#ffffff', PAT.PLAIN, 0.3), 0.035, 0.03, 0.06, -0.3 + (c % 3) * 0.08, hy0 + 0.36 + Math.floor(c / 3) * 0.06, ib + 0.12, 8);
   K.box(M('#8a6a4a', PAT.PLANKS, 0.7), 0.9, 0.025, 0.14, 0, hy0 + 0.5, ib + 0.08);
   const jar = ['#d8a24a', '#b8443c', '#4f7a3a', '#e8e0cc', '#6b3f2a'];
   for (let j = 0; j < 7; j++) K.cyl(M(jar[j % 5], PAT.PLAIN, 0.2, 0.05), 0.035, 0.035, 0.09 + (j % 3) * 0.04, 0.05 + j * 0.055, hy0 + 0.525, ib + 0.08, 8);
@@ -602,8 +664,10 @@ export function genKiosk(env: Env, f: Feature): void {
   // hatch frame, top-hung shutter propped open on two stays, outer counter on brackets
   K.box(green, 1.06, 0.07, 0.06, 0, hy1, fz + 0.01);
   for (const sx of [-1, 1]) K.box(green, 0.07, hy1 - hy0 + 0.07, 0.06, sx * (hw2 + 0.035), hy0 - 0.02, fz + 0.01);
-  K.boxC(green, 1.0, 0.04, 0.5, 0, hy1 + 0.14, fz + 0.22, -1.15, 0, 0);
-  for (const sx of [-1, 1]) K.beam(M('#3b3b3b', PAT.PLAIN, 0.4, 0.6), [sx * 0.42, hy1 - 0.3, fz + 0.04], [sx * 0.42, hy1 + 0.08, fz + 0.43], 0.015, 0.015);
+  // roller-shutter box over the opening (the shutter rolled up), guide channels down the frame
+  K.box(green, 1.0, 0.13, 0.12, 0, hy1 + 0.04, fz + 0.06);
+  for (const sx of [-1, 1]) K.box(M('#5e666b', PAT.PLAIN, 0.4, 0.6), 0.025, hy1 - hy0, 0.03, sx * 0.44, hy0, fz + 0.05);
+  K.box(M('#9aa2a6', PAT.PLAIN, 0.4, 0.6), 0.9, 0.035, 0.03, 0, hy1 - 0.03, fz + 0.055);
   K.box(M('#b98d60', PAT.PLANKS, 0.7), 1.05, 0.05, 0.34, 0, hy0, fz + 0.12);
   for (const sx of [-1, 1]) K.beam(green, [sx * 0.4, hy0 - 0.26, fz + 0.02], [sx * 0.4, hy0 - 0.01, fz + 0.26], 0.04, 0.04);
   // on the counter: a cake stand under a cloche, a napkin box, a tip jar, a card reader
@@ -760,7 +824,7 @@ export function genPlayground(env: Env, f: Feature): void {
       tileTone.set((i * 3 + j * 5) % 7 < 2 ? '#844b3b' : tr() < 0.06 ? '#5f3a30' : '#7a4537').offsetHSL((tr() - 0.5) * 0.02, (tr() - 0.5) * 0.08, (tr() - 0.5) * 0.05 + wear * 0.08);
       K.box(M(tileTone, PAT.GRAVEL, 0.95, 0, 0, 0, tr()), 0.492, 0.04 - wear * 0.006, 0.492, cx, 0, cz);
     }
-  K.box(M('#3e4a2c', PAT.GRAVEL, 0.98), nTx * 0.5, 0.034, nTz * 0.5, tx0 + nTx * 0.25, 0, tz0 + nTz * 0.25);
+  K.box(M('#3e4a2c', PAT.GRAVEL, 0.98), nTx * 0.5, 0.022, nTz * 0.5, tx0 + nTx * 0.25, 0, tz0 + nTz * 0.25);
   const kerbM = M('#6e3f33', PAT.GRAVEL, 0.95);
   for (const zz of [tz0 - 0.06, tz0 + nTz * 0.5 + 0.06]) K.boxC(kerbM, nTx * 0.5 + 0.24, 0.03, 0.12, tx0 + nTx * 0.25, 0.012, zz, 0, 0, 0);
   for (const xx of [tx0 - 0.06, tx0 + nTx * 0.5 + 0.06]) K.boxC(kerbM, 0.12, 0.03, nTz * 0.5, xx, 0.012, tz0 + nTz * 0.25, 0, 0, 0);
