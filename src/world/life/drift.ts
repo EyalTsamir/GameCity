@@ -569,6 +569,8 @@ export class Drift {
             float mu = dot( v / max( d, 1e-3 ), uSunDir );
             float hg = 0.4375 / pow( max( 1.5625 - 1.5 * mu, 1e-3 ), 1.5 ); // HG g=0.75 (×4π/…)
             a = uMoteGain * min( hg, 6.0 ) * smoothstep( 0.8, 2.5, d ) * ( 1.0 - smoothstep( BOX * 0.3, BOX * 0.5, d ) );
+            // real motes only show backlit, close to the sun's direction — elsewhere they read as dead pixels
+            a *= smoothstep( 0.6, 0.92, mu );
             a *= 0.5 + 0.5 * sin( uTime * ( 1.5 + aSeed.y * 3.0 ) + aSeed.z * 20.0 );
             size = 0.008 + 0.008 * aSeed.y;
             vKind = 0.0;
@@ -587,7 +589,8 @@ export class Drift {
           gl_Position = projectionMatrix * mv;
           float px = size / max( -mv.z * uPxK, 1e-4 );
           // keep ≥ 1.5 px (fade the energy instead of shrinking below a pixel: no crawling)
-          a *= clamp( px / 1.5, 0.0, 1.0 );
+          float fk = clamp( px / 1.5, 0.0, 1.0 );
+          a *= vKind < 0.5 ? fk * fk : fk;
           gl_PointSize = max( px, 1.5 );
           vA = a;
           if ( a < 0.004 ) gl_Position = vec4( 2.0, 2.0, 2.0, 1.0 );
