@@ -3263,6 +3263,12 @@ export class Crowd {
       }
       return;
     }
+    // back from packing (or the clock jumped back): face the aisle again at once, crates down
+    if (st.kind === 'market' && Math.abs(angleDiff(m.faceYaw, st.yaw)) > 1.6) {
+      m.faceYaw = st.yaw;
+      m.carry = 0;
+      p.timer = 0;
+    }
     if (st.kind === 'market' && p.timer <= 0) {
       // shoppers stopped at this stall on their walk (crowd rail stops)
       const ps = this.parties;

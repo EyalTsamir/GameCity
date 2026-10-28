@@ -119,6 +119,22 @@ export function lookData(L: Look): LookCache {
   return c;
 }
 
+/** close-level face bits: age lines 2 | eye colour 2 | lipstick 1 | stubble 1 (deterministic per look) */
+function faceBits(L: Look, s: Style): number {
+  let h = (L.skin * 2654435761) ^ (L.hair * 40503) ^ (L.top * 2246822519) ^ (L.age * 3266489917);
+  h = Math.imul(h ^ (h >>> 15), 2246822519) >>> 0;
+  const r = (k: number) => ((h >>> k) & 255) / 255;
+  const age = L.age >= 72 ? 3 : L.age >= 58 ? 2 : L.age >= 44 ? 1 : 0;
+  // darker skin: dark brown eyes; lighter: brown / hazel / blue-grey
+  const sk = ((L.skin >> 16) & 255) + ((L.skin >> 8) & 255) + (L.skin & 255);
+  const light = sk > 420;
+  const eye = !light ? (r(0) < 0.8 ? 0 : 1) : r(0) < 0.3 ? 1 : r(0) < 0.55 ? 2 : r(0) < 0.85 ? 3 : 0;
+  const female = L.kind === 'woman' || L.kind === 'girl';
+  const lip = female && L.age >= 17 && L.age < 75 && r(8) < 0.3 ? 1 : 0;
+  const stub = !female && L.age >= 19 && s.beard === 0 && r(16) < 0.4 ? 1 : 0;
+  return age | (eye << 2) | (lip << 4) | (stub << 5);
+}
+
 function writeColours(col: Uint32Array, L: Look, s: Style, top: number, bottom: number): void {
   const tailSrc = s.tail === 2 ? 1 : s.tail === 3 ? 2 : 0;
   col[0] = w(L.skin, q8(s.sleeve));
@@ -132,7 +148,7 @@ function writeColours(col: Uint32Array, L: Look, s: Style, top: number, bottom: 
   col[8] = w(L.accent, (s.legwear & 3) | (Math.round(clamp(s.trouserFit ?? 0, 0, 1) * 15) << 2));
   col[9] = w(L.towel, s.jacketHem < -0.05 ? 0 : q8(s.jacketHem));
   col[10] = 0;
-  col[11] = ((q8((s.neckTop - 0.95) / 0.4 * 1.275 - 0.1) << 24) | (q8(-0.1) << 16) | ((s.collar === 1 ? 1 : 0) << 8) | Math.round(clamp(s.tailFlare * 1000, 0, 255))) >>> 0;
+  col[11] = ((q8((s.neckTop - 0.95) / 0.4 * 1.275 - 0.1) << 24) | (q8(-0.1) << 16) | ((s.collar === 1 ? 1 : 0) << 8) | (faceBits(L, s) << 9) | Math.round(clamp(s.tailFlare * 1000, 0, 255))) >>> 0;
 }
 
 function makeAttr(geo: THREE.BufferGeometry, name: string, arr: Float32Array | Uint32Array, size: number): THREE.InstancedBufferAttribute {
@@ -230,6 +246,8 @@ const states = new WeakMap<Member, RenderState>();
  * LOD0 closer than LOD_NEAR, tiny beyond LOD_TINY; both scale with the drawing-buffer height and the
  * field of view; ±HYST m hysteresis so figures do not flicker between levels.
  */
+/** close level (sculpted face, fingers); 0 turns it off (`?nopeopledetail`) */
+const LOD_CLOSE = 15;
 const LOD_NEAR = 40;
 const LOD_TINY = 110;
 const LOD_PIN = 300;
@@ -241,6 +259,7 @@ const REF_HEIGHT = 930;
 const REF_TAN = Math.tan((32 * Math.PI) / 360);
 
 export class CrowdRenderer {
+  readonly close: Layer;
   readonly near: Layer;
   readonly far: Layer;
   readonly tiny: Layer;
@@ -248,7 +267,7 @@ export class CrowdRenderer {
   readonly pin: Layer;
   /** shadow-only proxy: every figure near the camera, drawn with the tiny mesh into the shadow map */
   readonly shadow: Layer;
-  /** debug: force every figure to one level (0 near, 1 far, 2 tiny, 3 pin), -1 = by distance */
+  /** debug: force every figure to one level (0 close, 1 near, 2 far, 3 tiny, 4 pin), -1 = by distance */
   forceLod = -1;
   /** cross-fade level switches (tools turn it off for synchronous censuses) */
   xfade = true;
@@ -286,13 +305,16 @@ export class CrowdRenderer {
   private levels: Layer[] = [];
   /** members drawn this frame (reused, no garbage) */
   private list: Member[] = [];
-  private edges = [0, 0, 0];
+  private edges = [0, 0, 0, 0];
+  /** close-level distance (m at the reference view); 0 = off */
+  closeDist = LOD_CLOSE;
   private camRef: THREE.PerspectiveCamera | null = null;
 
   constructor(scene: THREE.Scene, capacity: number, castShadow: boolean) {
     this.capacity = capacity;
     const pm = makePeopleMaterials();
     patchLampMaterial(pm.material);
+    this.close = new Layer(4, pm.material, null, Math.min(capacity, 48));
     this.near = new Layer(0, pm.material, null, Math.min(capacity, 96));
     this.far = new Layer(1, pm.material, null, capacity);
     this.tiny = new Layer(2, pm.material, null, capacity);
@@ -300,8 +322,8 @@ export class CrowdRenderer {
     this.shadow = new Layer(2, makeInvisibleMaterial(), pm.depth, capacity);
     this.shadow.mesh.castShadow = true;
     this.shadow.mesh.receiveShadow = false;
-    this.levels = [this.near, this.far, this.tiny, this.pin];
-    this.layers = [this.near, this.far, this.tiny, this.pin, this.shadow];
+    this.levels = [this.close, this.near, this.far, this.tiny, this.pin];
+    this.layers = [this.close, this.near, this.far, this.tiny, this.pin, this.shadow];
     // the proxy only draws into shadow maps: decline the main camera's frustum (same planes as the
     // culling frustum computed in write()), accept every other (shadow cameras)
     const mainFr = new THREE.Frustum(),
@@ -348,14 +370,14 @@ export class CrowdRenderer {
     this.blob.renderOrder = 2;
     this.group.add(this.tableware.mesh);
 
-    for (const mesh of [this.near.mesh, this.far.mesh, this.tiny.mesh, this.pin.mesh, this.shadow.mesh, this.pram, this.dog, this.blob]) {
+    for (const mesh of [this.close.mesh, this.near.mesh, this.far.mesh, this.tiny.mesh, this.pin.mesh, this.shadow.mesh, this.pram, this.dog, this.blob]) {
       mesh.frustumCulled = mesh === this.shadow.mesh;
       if ((mesh as THREE.InstancedMesh).isInstancedMesh) (mesh as THREE.InstancedMesh).count = 0;
       mesh.matrixAutoUpdate = false;
       mesh.updateMatrix();
       this.group.add(mesh);
     }
-    for (const l of [this.near, this.far, this.tiny, this.pin]) {
+    for (const l of [this.close, this.near, this.far, this.tiny, this.pin]) {
       l.mesh.castShadow = false;
       l.mesh.receiveShadow = true;
     }
@@ -412,9 +434,11 @@ export class CrowdRenderer {
     // table settings only where a 5–15 cm object still covers a few pixels
     const tableD = 70 * ls;
     this.tableware.begin();
-    edges[0] = nearD;
-    edges[1] = tinyD;
-    edges[2] = pinD;
+    const closeD = this.closeDist * ls;
+    edges[0] = closeD;
+    edges[1] = nearD;
+    edges[2] = tinyD;
+    edges[3] = pinD;
     const bcap = this.blob.instanceMatrix.count;
     const now = performance.now() * 0.001;
     const xfStep = clamp((now - this.lastNow) / XFADE, 0, 1);
@@ -470,10 +494,10 @@ export class CrowdRenderer {
           states.set(m, st);
         }
         // level with hysteresis around each switch distance
-        let lv = d < nearD ? 0 : d < tinyD ? 1 : d < pinD ? 2 : 3;
+        let lv = d < closeD ? 0 : d < nearD ? 1 : d < tinyD ? 2 : d < pinD ? 3 : 4;
         if (st.lod >= 0 && Math.abs(lv - st.lod) === 1) {
           const edge = edges[Math.min(lv, st.lod)];
-          if (Math.abs(d - edge) < HYST * (1 + Math.min(lv, st.lod))) lv = st.lod;
+          if (Math.abs(d - edge) < HYST * Math.max(0.5, Math.min(lv, st.lod))) lv = st.lod;
         }
         // level switches cross-fade (complementary dither, XFADE s) unless the figure is fading anyway
         if (st.lod >= 0 && lv !== st.lod && xfOn && m.fade > 0.99) {
@@ -486,12 +510,13 @@ export class CrowdRenderer {
           if (st.xf >= 1 || !xfOn || m.fade <= 0.99) st.prev = -1;
         }
         let layer = this.forceLod >= 0 ? levels[this.forceLod] : levels[lv];
+        if (layer.n >= layer.capacity) layer = layer === this.close ? this.near : this.far;
         if (layer.n >= layer.capacity) layer = this.far;
         if (layer.n >= layer.capacity) continue;
         const out = st.prev >= 0 ? levels[st.prev] : null;
         const r = rigOf(L);
         const umbrella = raining && L.umbrellaOwner && m.sit < 0.3 && m.lie < 0.1 && m.ground < 0.1 && !L.pram;
-        const gaitOn = m.rideG === null && (layer === this.near || layer === this.far || out === this.near || out === this.far);
+        const gaitOn = m.rideG === null && (layer === this.close || layer === this.near || layer === this.far || out === this.close || out === this.near || out === this.far);
         poseIn.t = t + m.seed * 10;
         computePoseA(m, umbrella, r, pose, gaitOn ? st.gait : null, this.frame);
         // drawn at the gait's smoothed root when the gait ran this frame (corners: the feet were planned
@@ -634,9 +659,9 @@ export class CrowdRenderer {
     }
     for (let i = 0; i < all.length; i++) all[i].finish();
     this.tableware.finish();
-    this.visible = this.near.n + this.far.n + this.tiny.n + this.pin.n;
-    this.triangles = this.near.n * this.near.tris + this.far.n * this.far.tris + this.tiny.n * this.tiny.tris + this.pin.n * this.pin.tris;
-    this.vertices = this.near.n * this.near.verts + this.far.n * this.far.verts + this.tiny.n * this.tiny.verts + this.pin.n * this.pin.verts;
+    this.visible = this.close.n + this.near.n + this.far.n + this.tiny.n + this.pin.n;
+    this.triangles = this.close.n * this.close.tris + this.near.n * this.near.tris + this.far.n * this.far.tris + this.tiny.n * this.tiny.tris + this.pin.n * this.pin.tris;
+    this.vertices = this.close.n * this.close.verts + this.near.n * this.near.verts + this.far.n * this.far.verts + this.tiny.n * this.tiny.verts + this.pin.n * this.pin.verts;
     this.shadowVertices = this.shadow.n * this.shadow.verts;
     this.pram.count = np;
     this.dog.count = nd;
@@ -656,7 +681,7 @@ export class CrowdRenderer {
 
   dispose(): void {
     const mats = new Set<THREE.Material>();
-    for (const l of [this.near, this.far, this.tiny, this.pin, this.shadow]) {
+    for (const l of [this.close, this.near, this.far, this.tiny, this.pin, this.shadow]) {
       l.geo.dispose();
       mats.add(l.mesh.material as THREE.Material);
       if (l.mesh.customDepthMaterial) mats.add(l.mesh.customDepthMaterial);
