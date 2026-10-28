@@ -32,6 +32,8 @@ const ALL = [
   'car', 'bus', 'pedestrian', 'train', 'boat',
   // close-ups of street hardscape (W5): trunk / post foot, kerb line, garden borders, signs and signals
   'treebase', 'lampbase', 'kerb', 'fence', 'hedge', 'wall', 'sign', 'signal', 'junction', 'parktree',
+  // countryside and small nature (W8): herd animals, the field tractor, park flower beds, wildflowers, a farmstead
+  'sheep', 'cow', 'tractor', 'flowerbed', 'wildflower', 'farm',
 ];
 const classes = !args.classes || args.classes === 'all' ? ALL : args.classes.split(',');
 const dists = (args.dists ?? '3,10,40').split(',').map(Number);
@@ -154,6 +156,49 @@ try {
           const fx = Math.sin(b.yaw), fz = Math.cos(b.yaw);
           const x = b.x + fx * L * 0.18 + fz * B * 0.5, z = b.z + fz * L * 0.18 - fx * B * 0.5;
           return { x, y: 0.2, z, yaw: (b.yaw * 180) / Math.PI + 90 - 25, h: 3, w: 0.4, pitch: 6 };
+        }
+        // countryside (W8): herds and the tractor from the farm-life group (userData), sim paused
+        if (cls === 'sheep' || cls === 'cow') {
+          const herd = c.ctx.scene.getObjectByName('land-farmlife')?.userData.herd;
+          if (!herd) return null;
+          const sp = cls === 'sheep' ? 1 : 0, all = [];
+          for (let i = 0; i < herd.length; i += 7) if (herd[i + 4] === sp) all.push(i);
+          // nearest to the slab centre first (the animals a visitor walks to)
+          all.sort((a, b) => Math.hypot(herd[a], herd[a + 2]) - Math.hypot(herd[b], herd[b + 2]));
+          const i = nth(all);
+          if (i === null) return null;
+          c.setSpeed(0);
+          const x = herd[i], z = herd[i + 2], yaw = (herd[i + 3] * 180) / Math.PI;
+          // 3/4 front-side view: the animal faces +z rotated by yaw
+          return { x, y: herd[i + 1], z, yaw: yaw + 55, h: cls === 'sheep' ? 0.9 : 1.4, w: cls === 'sheep' ? 1.2 : 2.2, pitch: 10 };
+        }
+        if (cls === 'tractor') {
+          const t = c.ctx.scene.getObjectByName('land-farmlife')?.userData.tractor;
+          if (!t) return null;
+          c.setSpeed(0);
+          return { x: t.x, y: t.y, z: t.z, yaw: (t.yaw * 180) / Math.PI + 40, h: 2.9, w: 3, pitch: 10 };
+        }
+        if (cls === 'flowerbed') {
+          // the park-hub flower beds (vegetation.ts: 4 beds 7.4 m around the founder statue), looked down at
+          const hub = plan.features.find((f) => f.kind === 'statue' && f.params?.style === 'founder');
+          if (!hub) return null;
+          const a = Math.PI / 4 + ((k % 4) * Math.PI) / 2;
+          const x = hub.x + Math.cos(a) * 7.4, z = hub.z + Math.sin(a) * 7.4;
+          return { x, y: gy(x, z), z, yaw: (Math.atan2(Math.cos(a), Math.sin(a)) * 180) / Math.PI, h: 0.6, w: 1.2, pitch: 32 };
+        }
+        if (cls === 'wildflower') {
+          const ps = (c.ctx.services.groundcover?.flowerPatches ?? []).slice().sort((a, b) => b.density - a.density || Math.hypot(a.x, a.z) - Math.hypot(b.x, b.z));
+          const fp = nth(ps);
+          if (!fp) return null;
+          return { x: fp.x, y: gy(fp.x, fp.z), z: fp.z, yaw: 30, h: 0.5, w: 0.6, pitch: 30 };
+        }
+        if (cls === 'farm') {
+          const sites = (c.ctx.services.landscape?.model?.sites ?? []).filter((s) => s.kind === 'farm');
+          sites.sort((a, b) => Math.hypot(a.x, a.z) - Math.hypot(b.x, b.z));
+          const s = nth(sites);
+          if (!s) return null;
+          // aim at the yard, looking back from the town side
+          return { x: s.x, y: gy(s.x, s.z), z: s.z, yaw: (Math.atan2(-s.x, -s.z) * 180) / Math.PI, h: 7, w: 14, pitch: 12 };
         }
         // dense places (W7): fixed eye-level frames {x,y,z,yaw,h,w,pitch}
         const PLACES = {

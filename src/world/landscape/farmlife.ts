@@ -228,6 +228,8 @@ export function createFarmLife(model: LandscapeModel, uniforms: Record<string, T
     }
   }
   const nA = inst.length / 7;
+  // read by scripts/bench.mjs (sheep / cow classes): x, y, z, yaw, species, tint, phase per animal
+  group.userData.herd = inst;
   const geo = animalGeometry();
   const iA = new Float32Array(nA * 4),
     iB = new Float32Array(nA * 4);
@@ -325,6 +327,8 @@ varying vec3 vAc;`,
     const speed = 2.6;
     tractorPos = new THREE.Vector3();
     const P = { x: 0, z: 0 };
+    const tractorState = { x: 0, y: 0, z: 0, yaw: 0 };
+    group.userData.tractor = tractorState; // scripts/bench.mjs (tractor class)
     update = (dt) => {
       s += dt * speed;
       const turnLen = (Math.PI * passW) / 2;
@@ -362,6 +366,10 @@ varying vec3 vAc;`,
       const dx = hx * 0.990268 - hy * 0.139173,
         dz = hx * 0.139173 + hy * 0.990268;
       fleet.set(tid, P.x, y, P.z, Math.atan2(dx, dz));
+      tractorState.x = P.x;
+      tractorState.y = y;
+      tractorState.z = P.z;
+      tractorState.yaw = Math.atan2(dx, dz);
       tractorPos!.set(P.x - dx * 3.5, y + 0.6, P.z - dz * 3.5);
     };
     update(0);
