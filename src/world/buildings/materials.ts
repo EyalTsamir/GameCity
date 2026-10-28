@@ -1149,10 +1149,10 @@ void bhWall(inout vec3 albedo, inout float rough, inout float metal, inout vec3 
   }
 
   albedo = bhHeadroom(albedo, baseAlb);
-  if (uBhDebug > 6.5 && (vB.x < 0.5 || vB.y < 0.5)) { albedo = vec3(0.0); emit = vec3(4.0, 0.0, 0.0); return; }
+  if (uBhDebug > 6.5 && uBhDebug < 7.5 && (vB.x < 0.5 || vB.y < 0.5)) { albedo = vec3(0.0); emit = vec3(4.0, 0.0, 0.0); return; }
   if (vB.x < 0.5 || vB.y < 0.5) return;
   vec2 cell = floor(vFac);
-  if (uBhDebug > 6.5 && (cell.x < 0.0 || cell.y < 0.0 || cell.x >= vB.x || cell.y >= vB.y)) { albedo = vec3(0.0); emit = vec3(0.0, 4.0, 0.0); return; }
+  if (uBhDebug > 6.5 && uBhDebug < 7.5 && (cell.x < 0.0 || cell.y < 0.0 || cell.x >= vB.x || cell.y >= vB.y)) { albedo = vec3(0.0); emit = vec3(0.0, 4.0, 0.0); return; }
   if (cell.x < 0.0 || cell.y < 0.0 || cell.x >= vB.x || cell.y >= vB.y) return;
   vec2 f = vFac - cell;
   vec2 pm = f * csz;
@@ -1403,7 +1403,7 @@ void bhWall(inout vec3 albedo, inout float rough, inout float metal, inout vec3 
     vec4 op = bhOpp(vWPos, R, N, Tu, seed, fq.x, nightF);
     env = mix(env, op.rgb, op.a * (1.0 - smoothstep(0.08, 0.25, fq.x)));
   }
-  if (uBhDebug > 5.5) { albedo = vec3(0.0); emit = env; return; } // ?bdbg=refl: the reflected scene alone
+  if (uBhDebug > 5.5 && uBhDebug < 6.5) { albedo = vec3(0.0); emit = env; return; } // ?bdbg=refl: the reflected scene alone
   // sun glint: panels whose reflected azimuth lines up with the sun flash in a vertical streak
   vec2 sh = normalize(uSunDir.xz + vec2(1e-5, 0.0));
   float hAl = dot(normalize(R.xz + vec2(1e-5, 0.0)), sh);
@@ -1669,6 +1669,8 @@ void bhWall(inout vec3 albedo, inout float rough, inout float metal, inout vec3 
     glassAlb = mix(avgAlb, glassAlb, detail);
     frame *= detail;
   }
+  // ?bdbg=galb (8): the pane's daylight albedo alone (frame black); ?bdbg=gem (9): the pane's emission alone
+  if (uBhDebug > 7.5 && uBhDebug < 9.5) { albedo = uBhDebug < 8.5 ? glassAlb * (1.0 - frame) : vec3(0.0); emit = uBhDebug < 8.5 ? vec3(0.0) : glass * (1.0 - frame); return; }
   albedo = mix(glassAlb * min(sunShade, sunShadeG), fcol * sunShade, frame);
   rough = mix(0.5, (curtain || ribbon) ? 0.34 : 0.7, frame);
   // metallic mullions on curtain walls pick up the environment (sheen lines between panels)

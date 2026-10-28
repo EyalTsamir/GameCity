@@ -3,6 +3,10 @@
 Branch `claude/real-w1-facades` (from `claude/pensive-gates-bim12i`). Brief: docs/progress/real-briefs.md "W1".
 
 ## Resume here
+* **Session 6 (10-28) — IN PROGRESS.** Priorities from the lead: (1) apartment glass grey at 3 m, (2) per-window
+  variety across a 60-window office at 10–20 m, (3) old-town render popcorn at 3 m, (4) tower curtain wall flat blue,
+  (5) townhouse shop fascias flat. Baseline bench shots/w1/s6/base (apartment, office, tower, townhouse @ 3/10 m).
+  New debug views: `?bdbg=galb` (pane daylight albedo alone, frame black) / `?bdbg=gem` (pane emission alone).
 * **Session 5 (10-28) — DONE, next session starts here:** sheet docs/progress/real/w1_s5.jpg (tower crown, house window
   3 m / 45° in sun, warehouse sectional door, apartment). Checks: downtown console clean, invariants {}; overview OK.
   - **Lawn rim FIXED (lead's request, W5's trace):** mesh.ts `wall()` lowers ground-standing shell walls (|y0| < 2 cm,
