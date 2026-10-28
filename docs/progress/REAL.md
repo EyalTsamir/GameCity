@@ -11,6 +11,11 @@ Overview must stay at least as impressive as now. Every feature: quality tiers +
 Lead session: session_01XuhAMczW3iK25AAWnf3qog, branch `claude/pensive-gates-bim12i`.
 
 ## Resume here (keep current)
+* 2026-10-28 23:32 UTC — Merged W7 s2 (21e8f3d: rounded/raked deckhouses + flared bows + glass, sagging mooring ropes
+  with spliced eyes, varied/worn fish boxes + wet patches, site pipes/rebar/pallets/mud/tyre tracks, tactile blisters,
+  canopy soffit; noquaylife −172k tris). W7 brief done (open: platform people need benches on the ped graph).
+  Next: when W1(6) and W6(2) report → judge 2 + bug hunter 2 over the whole merged tree, then a final fix round.
+  Running: W1(6), W6(2), W8.
 * 2026-10-28 23:20 UTC — Merged W2 s6 (da7a583: train window gaskets/recess, livery doors + green button, lettering
   atlas ?notraindecals, roof kit, dirt/rain streaks, cab wipers/rails/steps; car paint F0 0.09 → dark reflections on
   white; novehlod0 cost within noise). W2 brief done (open: cab windscreen plain, lamp boxes flat, loco unlettered).
