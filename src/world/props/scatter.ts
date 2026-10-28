@@ -587,6 +587,13 @@ export function planScatter(inp: ScatterInputs): ScatterItem[] {
     if (a.kind !== 'parking') continue;
     const r = a.rect;
     const Z = zone(r, { paved: true, edge: 0.5, walkPad: 0.5 });
+    // keep the access drive and the aisle it feeds clear (band across the car park in the drive's width)
+    for (const d of plan.areas) {
+      if (d.kind !== 'driveway' || d.surface !== 'asphalt' || d.rect.x1 < r.x0 || d.rect.x0 > r.x1 || d.rect.z1 < r.z0 || d.rect.z0 > r.z1) continue;
+      const side = d.rect.x1 >= r.x1 || d.rect.x0 <= r.x0;
+      if (side) Z.grid.block(r.x0 - 1, d.rect.z0 - 0.3, r.x1 + 1, d.rect.z1 + 0.3);
+      else Z.grid.block(d.rect.x0 - 0.3, r.z0 - 1, d.rect.x1 + 0.3, r.z1 + 1);
+    }
     const ctr = { x: (r.x0 + r.x1) / 2, z: (r.z0 + r.z1) / 2 };
     // ticket machine near the middle of a long edge, bottle banks in a far corner, chargers at a row end
     const long = r.x1 - r.x0 > r.z1 - r.z0;

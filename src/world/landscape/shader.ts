@@ -544,8 +544,9 @@ vec3 landAlbedo() {
   vec3 sc = mix(cWetSand, cSand, smoothstep(${(WL + 0.2).toFixed(2)}, ${(WL + 1.0).toFixed(2)}, p.y));
   // next to the slab the beach is the town beach's own sand (terrain/ground.ts gSand / gSandWet): no colour
   // step along the slab edge; the landscape's quieter tone takes over within ~80 m
+  float nearSlabS = 1.0 - smoothstep(8.0, 80.0, vCov3.y);
   {
-    float nearSlab = 1.0 - smoothstep(8.0, 80.0, vCov3.y);
+    float nearSlab = nearSlabS;
     vec3 scSlab = mix(cSlabSandWet, cSlabSand * (0.93 + 0.12 * nB.g), smoothstep(${(WL + 0.04).toFixed(2)}, ${(WL + 0.6).toFixed(2)}, p.y));
     sc = mix(sc, scSlab, nearSlab);
   }
@@ -578,7 +579,7 @@ vec3 landAlbedo() {
   // the dune band is dune all through (marram over sand), never a half-mix with the meadow / fields
   // inland of it (that read as camouflage blotches); its inland edge wanders with the noise
   sand = max(sand, smoothstep(0.04, 0.3, vCov.z + sN * 0.12));
-  sc *= 0.94 + 0.08 * nB.g * midF;
+  sc *= mix(0.94 + 0.08 * nB.g * midF, 1.0, nearSlabS);
   // wind ripples — not next to the town beach (its sand is smooth)
   if (fp < 0.4) sc *= 1.0 - 0.05 * lStripe(p.x * 0.8 + p.z * 0.6 + nB.r * 3.0, 0.7, 0.4, fp) * smoothstep(20.0, 70.0, vCov3.y);
   // a field (decided per plot) runs to its own border over the dune fringe: the back-dune ends at the

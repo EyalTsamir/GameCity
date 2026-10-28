@@ -212,10 +212,13 @@ function buildModel(plan: CityPlan): TerrainModel {
     let walled = h;
     if (z > RIVER_N_RAMP && z < RIVER_S_RAMP) walled = Math.min(RIVER.bedY, heightAt(x, RIVER_ZC));
     if (x <= RIVER_WALL_END_X) return walled;
-    // river mouth: sandy banks sloping into the channel
+    // river mouth: sandy banks sloping into the channel, which widens, flattens and shoals into the sea floor
+    // by x ≈ 165 (a constant trench drew a straight dark band through the surf all the way to the slab edge)
     const r = Math.abs(z - RIVER_ZC);
-    const bank = RIVER.bedY + Math.max(0, r - 5) * 0.9;
-    const mouth = Math.min(beachH(x), Math.max(heightAt(x, RIVER_ZC), bank));
+    const t = x - RIVER_WALL_END_X;
+    const floor = RIVER.bedY + (beachH(x) - RIVER.bedY) * smoothstep(RIVER_WALL_END_X, 165, x);
+    const bank = floor + Math.max(0, r - 5 - t * 0.12) * (0.9 / (1 + t * 0.06));
+    const mouth = Math.min(beachH(x), Math.max(floor, bank));
     const s = smoothstep(RIVER_WALL_END_X, RIVER_WALL_END_X + 4, x);
     return walled + (mouth - walled) * s;
   }

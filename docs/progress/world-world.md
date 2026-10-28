@@ -198,6 +198,14 @@
     the land triangles straddling the water level within 1.1 km (2 levels, conforming, verified 0 extra
     boundary edges): +9.5k verts / +19k tris; rock on steep faces sampled on a vertical plane (strata,
     joints, water streaks) instead of the smeared ground-plane noise.
+* QA 06 (south slab edge seam, z = 150): (a) beach — ring-0 vertices (the slab's edge) were forced to
+  meadow cover → a thin green line along the whole seam; the landscape's sand reached ~20 m further inland
+  than the town beach. Now ring 0 gets real cover, and within 50 m of the slab model.cover continues the
+  town ground's own sand mask (terrain/ground.ts groundMaskInfo R, same smoothstep; model.setSlabSand),
+  sand tone = the town's sand, no wind ripples near the edge. (b) riverside lawn — the town ground darkens
+  under the near blade rings (thatch between stems), the land did not → a lighter lawn outside; the land
+  shader now applies the same under-blade darkening (long-grass ring fade per quality: 56/66, 24/29,
+  7/9.5 m — values from groundcover/field.ts; an exported getter in ground.ts would make it exact).
 
 ## Brief (from WORLD-PLAN.md scope 1 + briefs "### world")
 Remove the frame in world mode (soil faces, plinth, nameplate, table, cyclorama, sea cut-away, slab shadow) and
