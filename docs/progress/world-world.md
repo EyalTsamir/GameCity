@@ -309,3 +309,22 @@ island 36k, mountains 65k, reflection proxy 48k, 20.9k trees, 750 animals × 54 
 **Trade-offs / open.** At 18.2 the hills read grey-brown mostly through air's haze (the ?noatmo A/B shows them
 green). Sheep keep a 20-face body (faceted under 5 m). The island reads warm rock-brown at 18.2.
 Shader plot hedges have no gaps, unlike the CPU hedge trees; cliffs.ts rng changes moved the scree.
+
+## Final report — addendum (10-28, user bugs + free-camera sweep)
+**Root causes / fixes.** (1) Field band cut diagonally: field cover is per vertex and was blended per pixel, so
+plots were cut along cover contours. Field vs meadow is now decided per plot at its centre (terrain.ts
+buildFieldMask, 16 m grid ±3.2 km); plots by the slab are meadow; settlements cut fields along their round edge;
+rows/tramlines use the unwarped frame. (2) Forest egg carton: canopy dome normals were painted on the ground
+under the instanced trees. The ground under them is now forest floor; the instanced forest reaches 800 m (canopy
+raised from 840 m); domes only on closed far canopy. (3) Sea seam: the landscape sea floor was dark mud against
+the slab's sand bed. It now uses the slab's bed colours and caustics, town-beach sand near the slab, and a coast
+that curves right after the corner. QA 06 seam: ring-0 cover was forced to meadow (green line); the cover now
+continues the town's sand mask (model.setSlabSand), and the land shader darkens under blades like ground.ts.
+**Sweep** (shots/world/world/sweepA–D, 37 views × 11/18.5) also fixed: painted polytunnels (off), pale river bed,
+pasture worm pattern, fields fading under dune sand, saw-tooth cliff waterline (red-green refinement within
+1.1 km: +9.5k verts / +19k tris, conforming), smeared cliff rock (vertical-plane noise, strata, streaks), and
+warm asphalt.
+**Before/after:** shots/world/world/userbugs/before_after.png (before = ad1fc48 on a side server; views ub, nf,
+nf2, cop, see, qa1, qa3). Full city vista 185 dc / 2.65 M tris; trees 31.4k; build ≈2.6 s; console clean,
+invariants {}. Toggles: ?landfieldmask=0, ?landisland=0. Open: the blade-fade radii are mirrored per quality
+tier from groundcover/field.ts; an exported getter in terrain/ground.ts would make them exact.
