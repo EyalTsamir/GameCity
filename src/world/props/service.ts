@@ -61,6 +61,10 @@ export interface PropsService {
   discs: { x: number; z: number; r: number }[];
   bbqs: Bbq[];
   washing: RotaryDryer[];
+  /** straight washing lines between two posts (W6 back yard): life hangs animated laundry on them */
+  lines: { ax: number; ay: number; az: number; bx: number; by: number; bz: number }[];
+  /** W6 dense places (centres, for views / stats) */
+  places?: import('./places').PlacesInfo;
   /**
    * Show / hide the static laundry on the rotary dryers (a separate small mesh). Life calls
    * setStaticLaundry(false) once its animated cloth hangs on `washing`, so there is never a bare state.

@@ -217,7 +217,33 @@ interface DryerLike {
 const DRY_COLS = ['#f2efe8', '#a8c4dc', '#e8a8b0', '#f0d890', '#2f3a52', '#6a9a6a', '#d8c8a8', '#ffffff', '#c84a3a', '#4a6a90'];
 
 function dryers(ctx: CityContext, cloth: ClothSystem, st: ExtraStats): void {
-  const ps = ctx.services.props as { washing?: DryerLike[]; setStaticLaundry?(on: boolean): void } | undefined;
+  const ps = ctx.services.props as { washing?: DryerLike[]; lines?: { ax: number; ay: number; az: number; bx: number; by: number; bz: number }[]; setStaticLaundry?(on: boolean): void } | undefined;
+  // W6 back-yard washing lines between two posts: shirts, trousers, towels, socks, a sheet
+  for (const l of ps?.lines ?? []) {
+    const rng = new Rng((Math.floor(l.ax * 100) * 17 + Math.floor(l.bz * 100)) >>> 0 || 13);
+    const line = cloth.addLine({ ax: l.ax, ay: l.ay, az: l.az, bx: l.bx, by: l.by, bz: l.bz, sag: 0.09, seed: rng.next() });
+    const L = Math.hypot(l.bx - l.ax, l.bz - l.az);
+    let x = rng.range(0.15, 0.4);
+    while (x < L - 0.25) {
+      const kind = rng.next();
+      const shape = kind < 0.12 ? SHAPE.SHEET : kind < 0.42 ? SHAPE.SHIRT : kind < 0.62 ? SHAPE.TROUSERS : SHAPE.RECT;
+      const w = shape === SHAPE.SHEET ? rng.range(0.9, 1.3) : shape === SHAPE.SHIRT ? rng.range(0.4, 0.5) : shape === SHAPE.TROUSERS ? rng.range(0.32, 0.4) : kind < 0.85 ? rng.range(0.3, 0.55) : rng.range(0.07, 0.1);
+      if (x + w > L - 0.1) break;
+      cloth.addPiece(line, (x + w / 2) / L, {
+        w,
+        len: shape === SHAPE.SHEET ? rng.range(0.9, 1.1) : shape === SHAPE.TROUSERS ? rng.range(0.75, 0.95) : shape === SHAPE.SHIRT ? w * 1.25 : w < 0.12 ? 0.22 : rng.range(0.45, 0.7),
+        shape,
+        col: rng.pick(DRY_COLS),
+        col2: '#f4efe4',
+        pattern: shape === SHAPE.SHEET && rng.chance(0.5) ? PAT.STRIPES : shape === SHAPE.RECT && rng.chance(0.3) ? PAT.BORDER : PAT.PLAIN,
+        weight: shape === SHAPE.SHEET ? 2.0 : 1.4,
+        flutter: 0.8,
+        phase: rng.range(0, 6.283),
+      });
+      st.dryerItems++;
+      x += w + rng.range(0.04, 0.2);
+    }
+  }
   const list = ps?.washing ?? [];
   if (!list.length) return;
   for (const d of list) {
