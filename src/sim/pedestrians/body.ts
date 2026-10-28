@@ -1574,6 +1574,65 @@ function softBox(b: MeshBuilder, c: P3, size: P3, h = 0, w = 0, a1 = 0, a2 = 0):
   for (const [a, bb, cc, dd] of F) b.quadOut(ids[a], ids[bb], ids[cc], ids[dd], c);
 }
 
+/** close level: a paper shopping bag (bulging sides, open top with a rolled rim and an inside, goods
+ *  showing, two rope handles up to the grip) hanging from the grip point g (BAG_R bone) */
+function shoppingBag(b: MeshBuilder, g: P3, hk: number): void {
+  const c: P3 = add(g, [-0.012, -0.16 * hk, 0.005]);
+  const hx = 0.05 * hk,
+    hy = 0.13 * hk,
+    hz = 0.11 * hk;
+  const S = 16;
+  const ringAt = (y: number, bulge: number, inset: number): P3[] => {
+    const out: P3[] = [];
+    for (let k = 0; k < S; k++) {
+      const a = (k / S) * Math.PI * 2;
+      // rounded rectangle (superellipse), the long sides bulging with the contents
+      const sx = se(Math.sin(a), 6),
+        sz = se(Math.cos(a), 6);
+      out.push([c[0] + sx * (hx + bulge * Math.abs(Math.cos(a)) * 0.6 - inset), c[1] + y, c[2] + sz * (hz + bulge * Math.abs(Math.sin(a)) - inset)]);
+    }
+    return out;
+  };
+  const rows: [number, number][] = [
+    [-hy, 0],
+    [-hy * 0.6, 0.008 * hk],
+    [0, 0.012 * hk],
+    [hy * 0.7, 0.006 * hk],
+    [hy, 0],
+  ];
+  b.use(BONE.BAG_R, REG.BAG, FB.SHOPBAG, 1);
+  const rings: Ring[] = rows.map(([y, bu], j) => {
+    b.setTint(j === 0 ? 0.8 : 1);
+    return { ids: ringAt(y, bu, 0).map((p) => b.v(p, 0, 0)), c: [c[0], c[1] + y, c[2]] };
+  });
+  bridge(b, rings);
+  capFan(b, rings[0], b.v([c[0], c[1] - hy - 0.002, c[2]], 0, 0), [c[0], c[1], c[2]]);
+  // the inside: an inset wall down from the rim (darker), so the open top has depth
+  b.setTint(0.5);
+  const inner: Ring = { ids: ringAt(hy, 0, 0.004 * hk).map((p) => b.v(p, 0, 0)), c: [c[0], c[1] + hy, c[2]] };
+  const deep: Ring = { ids: ringAt(hy * 0.2, 0, 0.004 * hk).map((p) => b.v(p, 0, 0)), c: [c[0], c[1] + hy * 0.2, c[2]] };
+  const top = rings[rings.length - 1];
+  for (let k = 0; k < S; k++) {
+    const k1 = (k + 1) % S;
+    b.quadDir(top.ids[k], top.ids[k1], inner.ids[k1], inner.ids[k], [0, 1, 0]);
+    b.quadOut(inner.ids[k], inner.ids[k1], deep.ids[k1], deep.ids[k], [c[0] + 1, c[1] + hy * 2, c[2]]);
+  }
+  // goods showing above the rim: a wrapped parcel and something in the accent colour
+  b.use(BONE.BAG_R, REG.WHITE, FB.SHOPBAG, 0.95);
+  blob(b, [c[0], c[1] + hy * 0.95, c[2] - hz * 0.4], [hx * 0.7, 0.04 * hk, hz * 0.35], 8, 4);
+  b.use(BONE.BAG_R, REG.ACCENT, FB.SHOPBAG, 1);
+  blob(b, [c[0] + 0.004, c[1] + hy * 0.9, c[2] + hz * 0.35], [hx * 0.75, 0.045 * hk, hz * 0.4], 8, 4);
+  // rope handles from the middle of each long rim edge to the grip
+  b.use(BONE.BAG_R, REG.STRAP, FB.SHOPBAG, 0.8);
+  for (const s of [1, -1]) {
+    const a0: P3 = [c[0], c[1] + hy, c[2] + s * hz * 0.35],
+      a1: P3 = [c[0], c[1] + hy, c[2] - s * hz * 0.05];
+    const tip: P3 = add(g, [-0.012, -0.004, s * 0.006]);
+    stick(b, a0, tip, 0.0035, 4);
+    stick(b, tip, a1, 0.0035, 4);
+  }
+}
+
 /** thin strip/box between two points (straps, rods) */
 function stick(b: MeshBuilder, p0: P3, p1: P3, wdt: number, sides = 4, a1 = 0, a2 = 0, h = 0, w = 0): void {
   const D = norm(sub(p1, p0));
@@ -1730,8 +1789,9 @@ function buildProps(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
   if (cfg.props !== 'pin') b.use(BONE.BAG_R, REG.BAG, FB.SHOPBAG, 1);
   if (cfg.props !== 'pin') {
     const g = grip(-1);
-    softBox(b, add(g, [-0.012, -0.16 * hk, 0.005]), [0.1 * hk, 0.26 * hk, 0.22 * hk]);
-    if (all) {
+    if (cfg.close) shoppingBag(b, g, hk);
+    else softBox(b, add(g, [-0.012, -0.16 * hk, 0.005]), [0.1 * hk, 0.26 * hk, 0.22 * hk]);
+    if (all && !cfg.close) {
       b.setTint(0.7);
       stick(b, add(g, [-0.012, -0.03 * hk, 0.0]), add(g, [-0.012, 0.004, 0.0]), 0.006);
     }
