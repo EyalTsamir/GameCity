@@ -48,7 +48,7 @@ export const LIGHT_CABIN = 9;
 
 // ───────────────────────────────────────────────────────────── atlas ──
 
-export const ATLAS_SIZE = 512;
+export const ATLAS_SIZE = 1024;
 export interface AtlasRect {
   x: number;
   y: number;
@@ -63,6 +63,308 @@ const R_DELIVERY: AtlasRect = { x: 256, y: 96, w: 256, h: 96 }; // 4 rows downwa
 const R_ICECREAM: AtlasRect = { x: 0, y: 144, w: 256, h: 96 };
 const R_BUS_SIDE: AtlasRect = { x: 0, y: 240, w: 256, h: 48 };
 const R_TARP: AtlasRect = { x: 0, y: 288, w: 256, h: 96 };
+// close-up detail (W2): number plates (4 × 4 cells, one per vehicle by its phase), lamp lenses, tyre strip,
+// wheel faces for the middle level, grilles
+const R_PLATE: AtlasRect = { x: 512, y: 0, w: 128, h: 28 };
+const PLATE_GRID = 4;
+export const PLATE_CELLS = { n: PLATE_GRID, du: R_PLATE.w / ATLAS_SIZE, dv: R_PLATE.h / ATLAS_SIZE };
+const R_HEAD: AtlasRect = { x: 512, y: 112, w: 128, h: 64 };
+const R_HEAD_ROUND: AtlasRect = { x: 640, y: 112, w: 64, h: 64 };
+const R_TAIL: AtlasRect = { x: 704, y: 112, w: 128, h: 64 };
+const R_BUS_HEAD: AtlasRect = { x: 832, y: 112, w: 128, h: 64 };
+const R_TYRE: AtlasRect = { x: 512, y: 176, w: 512, h: 64 };
+const R_FACE_ALLOY: AtlasRect = { x: 512, y: 240, w: 128, h: 128 };
+const R_FACE_CAP: AtlasRect = { x: 640, y: 240, w: 128, h: 128 };
+const R_FACE_STEEL: AtlasRect = { x: 768, y: 240, w: 128, h: 128 };
+const R_HUBCAP: AtlasRect = { x: 896, y: 240, w: 128, h: 128 };
+const R_GRILLE: AtlasRect = { x: 512, y: 368, w: 128, h: 48 };
+const R_BUS_GRILLE: AtlasRect = { x: 640, y: 368, w: 128, h: 48 };
+
+/** close-up detail textures (plates, lamps, tyres, wheel faces, grilles) */
+function drawDetailAtlas(g: CanvasRenderingContext2D, font: (px: number, w?: string) => string): void {
+  // number plates: white reflective, blue band with "TH", black letters; 16 different registrations
+  let seed = 7;
+  const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  const L = 'ABCDEFGHJKLMNPRSTUVWXYZ';
+  for (let k = 0; k < PLATE_GRID * PLATE_GRID; k++) {
+    const x = R_PLATE.x + (k % PLATE_GRID) * R_PLATE.w,
+      y = R_PLATE.y + Math.floor(k / PLATE_GRID) * R_PLATE.h;
+    g.fillStyle = '#1b1c1e';
+    g.fillRect(x, y, R_PLATE.w, R_PLATE.h);
+    g.fillStyle = '#f2f0ea';
+    g.fillRect(x + 2, y + 2, R_PLATE.w - 4, R_PLATE.h - 4);
+    g.fillStyle = '#1f4fb4';
+    g.fillRect(x + 2, y + 2, 14, R_PLATE.h - 4);
+    g.fillStyle = '#ffd23f';
+    g.beginPath();
+    g.arc(x + 9, y + 9, 3.2, 0, Math.PI * 2);
+    g.fill();
+    g.fillStyle = '#ffffff';
+    g.font = font(7);
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    g.fillText('TH', x + 9, y + R_PLATE.h - 8);
+    const reg = `${L[(rnd() * L.length) | 0]}${L[(rnd() * L.length) | 0]}-${100 + ((rnd() * 900) | 0)}-${L[(rnd() * L.length) | 0]}${L[(rnd() * L.length) | 0]}`;
+    g.fillStyle = '#141414';
+    g.font = font(19);
+    g.fillText(reg, x + 18 + (R_PLATE.w - 20) / 2, y + R_PLATE.h / 2 + 1, R_PLATE.w - 24);
+  }
+  // headlamp cluster: dark housing, two reflector bowls with chrome rings, an LED strip along the bottom
+  {
+    const r = R_HEAD;
+    g.fillStyle = '#2b2e33';
+    g.fillRect(r.x, r.y, r.w, r.h);
+    const bowl = (cx: number, cy: number, rad: number) => {
+      const gr = g.createRadialGradient(cx - rad * 0.2, cy - rad * 0.25, rad * 0.1, cx, cy, rad);
+      gr.addColorStop(0, '#ffffff');
+      gr.addColorStop(0.35, '#d7dde3');
+      gr.addColorStop(0.8, '#8d959e');
+      gr.addColorStop(1, '#4a5058');
+      g.fillStyle = gr;
+      g.beginPath();
+      g.arc(cx, cy, rad, 0, Math.PI * 2);
+      g.fill();
+      g.strokeStyle = '#c9ced4';
+      g.lineWidth = 2;
+      g.stroke();
+      g.fillStyle = '#fbfbf6';
+      g.beginPath();
+      g.arc(cx, cy, rad * 0.32, 0, Math.PI * 2);
+      g.fill();
+    };
+    bowl(r.x + 34, r.y + 28, 20);
+    bowl(r.x + 86, r.y + 30, 15);
+    g.fillStyle = '#f4f8ff';
+    g.fillRect(r.x + 10, r.y + r.h - 12, r.w - 30, 5);
+    g.fillStyle = '#e8a640';
+    g.fillRect(r.x + r.w - 18, r.y + 10, 12, r.h - 22);
+  }
+  {
+    const r = R_HEAD_ROUND;
+    g.fillStyle = '#3a3d42';
+    g.fillRect(r.x, r.y, r.w, r.h);
+    const cx = r.x + r.w / 2,
+      cy = r.y + r.h / 2;
+    const gr = g.createRadialGradient(cx - 6, cy - 7, 3, cx, cy, 30);
+    gr.addColorStop(0, '#ffffff');
+    gr.addColorStop(0.5, '#cfd5db');
+    gr.addColorStop(1, '#69717a');
+    g.fillStyle = gr;
+    g.beginPath();
+    g.arc(cx, cy, 29, 0, Math.PI * 2);
+    g.fill();
+    g.strokeStyle = 'rgba(255,255,255,0.35)';
+    g.lineWidth = 1;
+    for (let i = -24; i <= 24; i += 6) {
+      g.beginPath();
+      g.moveTo(cx + i, cy - 26);
+      g.lineTo(cx + i, cy + 26);
+      g.stroke();
+    }
+    g.strokeStyle = '#d9dde2';
+    g.lineWidth = 3;
+    g.beginPath();
+    g.arc(cx, cy, 29.5, 0, Math.PI * 2);
+    g.stroke();
+  }
+  // tail lamp: ribbed red lens, brighter inner bars, a white reversing lamp
+  {
+    const r = R_TAIL;
+    g.fillStyle = '#7a1414';
+    g.fillRect(r.x, r.y, r.w, r.h);
+    g.fillStyle = '#d43a2e';
+    g.fillRect(r.x + 4, r.y + 4, r.w - 8, r.h - 8);
+    g.fillStyle = '#ff7a62';
+    for (let i = 0; i < 3; i++) g.fillRect(r.x + 10, r.y + 10 + i * 15, 70, 6);
+    g.fillStyle = '#efe9e4';
+    g.fillRect(r.x + 88, r.y + 10, 30, 22);
+    g.fillStyle = '#e8902f';
+    g.fillRect(r.x + 88, r.y + 38, 30, 16);
+    g.strokeStyle = 'rgba(0,0,0,0.25)';
+    g.lineWidth = 1;
+    for (let x = r.x + 6; x < r.x + r.w - 4; x += 5) {
+      g.beginPath();
+      g.moveTo(x, r.y + 4);
+      g.lineTo(x, r.y + r.h - 4);
+      g.stroke();
+    }
+  }
+  // bus headlamps: twin round lamps in a black bezel
+  {
+    const r = R_BUS_HEAD;
+    g.fillStyle = '#18191b';
+    g.fillRect(r.x, r.y, r.w, r.h);
+    for (const cx of [r.x + 34, r.x + 94]) {
+      const gr = g.createRadialGradient(cx - 5, r.y + 26, 3, cx, r.y + 32, 24);
+      gr.addColorStop(0, '#ffffff');
+      gr.addColorStop(0.5, '#d2d8de');
+      gr.addColorStop(1, '#5e666e');
+      g.fillStyle = gr;
+      g.beginPath();
+      g.arc(cx, r.y + 32, 23, 0, Math.PI * 2);
+      g.fill();
+    }
+  }
+  // tyre strip (u around the wheel, v across the profile: inner sidewall → tread → outer sidewall; matches
+  // the lathe in tyre()): rubber with lettering on both walls, tread blocks with grooves
+  {
+    const r = R_TYRE;
+    g.fillStyle = '#2a2c2f';
+    g.fillRect(r.x, r.y, r.w, r.h);
+    const vy = (v: number) => r.y + r.h - v * r.h;
+    // tread band (v 0.36..0.64)
+    const t0 = vy(0.64),
+      t1 = vy(0.36);
+    g.fillStyle = '#2f3134';
+    g.fillRect(r.x, t0, r.w, t1 - t0);
+    g.fillStyle = '#151618';
+    for (let x = 0; x < r.w; x += 8) {
+      g.fillRect(r.x + x, t0, 2, (t1 - t0) * 0.42);
+      g.fillRect(r.x + x + 4, t0 + (t1 - t0) * 0.58, 2, (t1 - t0) * 0.42);
+    }
+    g.fillRect(r.x, t0 + (t1 - t0) * 0.3, r.w, 2);
+    g.fillRect(r.x, t0 + (t1 - t0) * 0.68, r.w, 2);
+    // lettering (twice around) on both sidewalls, upside-down on the inner one is invisible anyway
+    g.fillStyle = '#5a5d61';
+    g.font = font(9);
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    for (const v of [0.14, 0.86])
+      for (const u of [0.25, 0.75]) {
+        g.fillText('TINYHAVEN  ALLGRIP', r.x + u * r.w - 60, vy(v));
+        g.fillText('205/55 R16  91V', r.x + u * r.w + 60, vy(v));
+      }
+  }
+  // wheel faces (middle level: one textured disc): tyre ring, rim lip, spokes / cap / steel disc
+  const face = (r: AtlasRect, kind: 'alloy' | 'cap' | 'steel') => {
+    const cx = r.x + r.w / 2,
+      cy = r.y + r.h / 2,
+      R = r.w / 2 - 1;
+    g.fillStyle = '#2a2c2f';
+    g.fillRect(r.x, r.y, r.w, r.h);
+    g.fillStyle = '#323438';
+    g.beginPath();
+    g.arc(cx, cy, R, 0, Math.PI * 2);
+    g.fill();
+    const rr = R * 0.64;
+    g.fillStyle = kind === 'steel' ? '#d8dadc' : '#1a1c1f';
+    g.beginPath();
+    g.arc(cx, cy, rr, 0, Math.PI * 2);
+    g.fill();
+    g.strokeStyle = '#c8cdd2';
+    g.lineWidth = 3;
+    g.stroke();
+    if (kind === 'alloy') {
+      g.fillStyle = '#c6cbd0';
+      for (let k = 0; k < 5; k++) {
+        const a = (k * Math.PI * 2) / 5;
+        g.save();
+        g.translate(cx, cy);
+        g.rotate(a);
+        g.beginPath();
+        g.moveTo(-3, 0);
+        g.lineTo(3, 0);
+        g.lineTo(7, -rr + 2);
+        g.lineTo(-7, -rr + 2);
+        g.closePath();
+        g.fill();
+        g.restore();
+      }
+      g.fillStyle = '#9aa0a6';
+      g.beginPath();
+      g.arc(cx, cy, 8, 0, Math.PI * 2);
+      g.fill();
+    } else if (kind === 'cap') {
+      const gr = g.createRadialGradient(cx - 6, cy - 8, 2, cx, cy, rr);
+      gr.addColorStop(0, '#eef1f3');
+      gr.addColorStop(1, '#9ca3aa');
+      g.fillStyle = gr;
+      g.beginPath();
+      g.arc(cx, cy, rr - 3, 0, Math.PI * 2);
+      g.fill();
+      g.fillStyle = '#4b5056';
+      for (let k = 0; k < 10; k++) {
+        const a = (k * Math.PI * 2) / 10;
+        g.beginPath();
+        g.arc(cx + Math.cos(a) * rr * 0.68, cy + Math.sin(a) * rr * 0.68, 3.2, 0, Math.PI * 2);
+        g.fill();
+      }
+    } else {
+      g.fillStyle = '#8e9398';
+      g.beginPath();
+      g.arc(cx, cy, rr * 0.45, 0, Math.PI * 2);
+      g.fill();
+      g.fillStyle = '#2e3135';
+      for (let k = 0; k < 10; k++) {
+        const a = (k * Math.PI * 2) / 10;
+        g.beginPath();
+        g.arc(cx + Math.cos(a) * rr * 0.32, cy + Math.sin(a) * rr * 0.32, 2.4, 0, Math.PI * 2);
+        g.fill();
+        g.beginPath();
+        g.ellipse(cx + Math.cos(a + 0.31) * rr * 0.72, cy + Math.sin(a + 0.31) * rr * 0.72, 4, 7, a + 0.31, 0, Math.PI * 2);
+        g.fill();
+      }
+    }
+  };
+  face(R_FACE_ALLOY, 'alloy');
+  face(R_FACE_CAP, 'cap');
+  face(R_FACE_STEEL, 'steel');
+  // plastic hub cap (close level, on a domed disc): radial vents, centre badge
+  {
+    const r = R_HUBCAP;
+    const cx = r.x + r.w / 2,
+      cy = r.y + r.h / 2;
+    const gr = g.createRadialGradient(cx - 10, cy - 14, 4, cx, cy, r.w / 2);
+    gr.addColorStop(0, '#f3f5f7');
+    gr.addColorStop(1, '#9aa1a8');
+    g.fillStyle = gr;
+    g.fillRect(r.x, r.y, r.w, r.h);
+    g.fillStyle = '#2c3034';
+    for (let k = 0; k < 12; k++) {
+      const a = (k * Math.PI * 2) / 12;
+      g.save();
+      g.translate(cx, cy);
+      g.rotate(a);
+      g.fillRect(-3, -54, 6, 24);
+      g.restore();
+    }
+    g.strokeStyle = '#7f868d';
+    g.lineWidth = 2;
+    g.beginPath();
+    g.arc(cx, cy, 26, 0, Math.PI * 2);
+    g.stroke();
+    g.fillStyle = '#5b6168';
+    g.beginPath();
+    g.arc(cx, cy, 11, 0, Math.PI * 2);
+    g.fill();
+  }
+  // grilles: car honeycomb, bus horizontal slats
+  {
+    const r = R_GRILLE;
+    g.fillStyle = '#0f1012';
+    g.fillRect(r.x, r.y, r.w, r.h);
+    g.fillStyle = '#34373c';
+    for (let y = 2; y < r.h - 2; y += 6)
+      for (let x = (y / 6) % 2 ? 4 : 1; x < r.w - 2; x += 7) {
+        g.beginPath();
+        g.moveTo(r.x + x, r.y + y + 2);
+        g.lineTo(r.x + x + 3, r.y + y);
+        g.lineTo(r.x + x + 6, r.y + y + 2);
+        g.lineTo(r.x + x + 3, r.y + y + 4);
+        g.fill();
+      }
+    g.strokeStyle = '#8a9096';
+    g.lineWidth = 2;
+    g.strokeRect(r.x + 1, r.y + 1, r.w - 2, r.h - 2);
+  }
+  {
+    const r = R_BUS_GRILLE;
+    g.fillStyle = '#141517';
+    g.fillRect(r.x, r.y, r.w, r.h);
+    g.fillStyle = '#4a4e54';
+    for (let y = 4; y < r.h - 3; y += 6) g.fillRect(r.x + 3, r.y + y, r.w - 6, 2);
+  }
+}
 
 const WHITE_U = (R_WHITE.x + R_WHITE.w / 2) / ATLAS_SIZE;
 const WHITE_V = 1 - (R_WHITE.y + R_WHITE.h / 2) / ATLAS_SIZE;
@@ -283,6 +585,8 @@ export function makeAtlas(routes: BusRouteSign[]): THREE.CanvasTexture {
     g.fillText('HAVEN HAULAGE', r.x + r.w / 2, r.y + r.h / 2 + 1, r.w - 16);
   }
 
+  drawDetailAtlas(g, font);
+
   const tex = new THREE.CanvasTexture(cv);
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.anisotropy = 4;
@@ -293,7 +597,7 @@ export function makeAtlas(routes: BusRouteSign[]): THREE.CanvasTexture {
 
 // ─────────────────────────────────────────────────────────── builder ──
 
-interface PartOpts {
+export interface PartOpts {
   color: THREE.ColorRepresentation;
   paint?: boolean;
   light?: number;
@@ -304,6 +608,10 @@ interface PartOpts {
   decal?: AtlasRect;
   /** UV step per instance variant (rows downwards) */
   decalRows?: boolean;
+  /** a number plate: the decal cell is picked per vehicle (PLATE_CELLS) */
+  plate?: boolean;
+  /** close-up detail class + data for the shader (vehicleMaterial.ts header: 1 car paint, 2/4/5 glass, 3 tyre) */
+  det?: Det;
   /** surface finish (see FINISH); default: clear-coated for painted parts without a decal, glass for GLASS,
    *  chrome for CHROME / RIM, plain otherwise */
   finish?: Finish;
@@ -312,6 +620,12 @@ interface PartOpts {
 /** surface finishes, packed into aMeta.w as roughness + 4 × class (vehicleMaterial.ts decodes them) */
 type Finish = 'plain' | 'coat' | 'glass' | 'chrome';
 const FINISH: Record<Finish, number> = { plain: 0, coat: 1, glass: 2, chrome: 3 };
+
+export interface Det {
+  c: number;
+  a?: readonly number[];
+  b?: readonly number[];
+}
 
 const _col = new THREE.Color();
 
@@ -337,9 +651,12 @@ class Builder {
     const meta = new Float32Array(n * 4);
     const wheel = new Float32Array(n * 4);
     const part = new Float32Array(n);
+    const detA = new Float32Array(n * 4);
+    const detB = new Float32Array(n * 4);
+    const dt = o.det;
     const uv = new Float32Array(n * 2);
     const srcUv = geo.attributes.uv as THREE.BufferAttribute | undefined;
-    const step = o.decal && o.decalRows ? o.decal.h / ATLAS_SIZE : 0;
+    const step = o.plate ? -1 : o.decal && o.decalRows ? o.decal.h / ATLAS_SIZE : 0;
     const fin = FINISH[o.finish ?? (o.paint && !o.decal && !o.light ? 'coat' : o.color === GLASS ? 'glass' : o.color === CHROME || o.color === RIM ? 'chrome' : 'plain')];
     const rough = Math.min(3.9, o.rough ?? 1) + 4 * fin;
     for (let i = 0; i < n; i++) {
@@ -356,7 +673,14 @@ class Builder {
         wheel[i * 4 + 2] = o.wheel.z;
         wheel[i * 4 + 3] = o.wheel.crank ? 3 : o.wheel.front ? 2 : 1;
       }
-      part[i] = o.part ?? 0;
+      // the detail class rides in aPart (+100 per class; vehicleMaterial.ts splits it): 16 attributes max
+      part[i] = (o.part ?? 0) + 100 * (dt?.c ?? 0);
+      if (dt) {
+        for (let k = 0; k < 4; k++) {
+          detA[i * 4 + k] = dt.a?.[k] ?? 0;
+          detB[i * 4 + k] = dt.b?.[k] ?? 0;
+        }
+      }
       if (o.decal && srcUv) {
         const r = o.decal;
         const pu = srcUv.getX(i),
@@ -373,6 +697,8 @@ class Builder {
     geo.setAttribute('aMeta', new THREE.BufferAttribute(meta, 4));
     geo.setAttribute('aWheel', new THREE.BufferAttribute(wheel, 4));
     geo.setAttribute('aPart', new THREE.BufferAttribute(part, 1));
+    geo.setAttribute('aDetA', new THREE.BufferAttribute(detA, 4));
+    geo.setAttribute('aDetB', new THREE.BufferAttribute(detB, 4));
     geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
     this.geos.push(geo);
     return this;
@@ -529,58 +855,150 @@ const TAIL = '#d8352c';
 const AMBER = '#ffad3d';
 const PLATE = '#f3f0e7';
 
-function wheel(b: Builder, x: number, y: number, z: number, r: number, w: number, front: boolean, rim = RIM, alloy = false): void {
+type WheelStyle = 'alloy' | 'cap' | 'steel';
+const FACE: Record<WheelStyle, AtlasRect> = { alloy: R_FACE_ALLOY, cap: R_FACE_CAP, steel: R_FACE_STEEL };
+
+/** flip a geometry inside out (seen from within: rim barrels) */
+function inward(g: THREE.BufferGeometry): THREE.BufferGeometry {
+  const idx = g.index!;
+  for (let i = 0; i < idx.count; i += 3) {
+    const t = idx.getX(i + 1);
+    idx.setX(i + 1, idx.getX(i + 2));
+    idx.setX(i + 2, t);
+  }
+  const n = g.attributes.normal;
+  for (let i = 0; i < n.count; i++) n.setXYZ(i, -n.getX(i), -n.getY(i), -n.getZ(i));
+  return g;
+}
+
+/** a disc facing ±x (side), centred at (x, y, z); `dome` pushes the centre out (hub caps) */
+function sideDisc(r: number, n: number, side: number, x: number, y: number, z: number, dome = 0): THREE.BufferGeometry {
+  const g = new THREE.CircleGeometry(r, n);
+  if (dome) {
+    const p = g.attributes.position;
+    for (let i = 0; i < p.count; i++) {
+      const q = Math.hypot(p.getX(i), p.getY(i)) / r;
+      p.setZ(i, dome * (1 - q * q));
+    }
+    g.computeVertexNormals();
+  }
+  g.rotateY((side * Math.PI) / 2);
+  g.translate(x, y, z);
+  return g;
+}
+
+/**
+ * Wheel: a lathed tyre (rounded shoulders, sidewall lettering, tread blocks; it flattens at the contact patch in
+ * the shader) on an alloy (five tapered spokes, lip, nuts, cap, brake disc behind), a steel wheel with a domed hub
+ * cap, or a steel truck / bus wheel (boss + ten nuts). Middle level: tread + one textured face; far: plain discs.
+ */
+function wheel(b: Builder, x: number, y: number, z: number, r: number, w: number, front: boolean, rim = RIM, style: WheelStyle = 'cap'): void {
   const side = Math.sign(x) || 1;
   const wh = { x, y, z, front };
+  const hw = w / 2;
   if (LOD > 0) {
-    // tyre tread + outer sidewall only (the inner one faces the chassis), hub as a disc, no spokes
-    const n = LOD === 1 ? 10 : 6;
+    // tyre tread + outer sidewall only (the inner one faces the chassis); level 1: the face is textured
+    const n = LOD === 1 ? 12 : 6;
     const tread = new THREE.CylinderGeometry(r, r, w, n, 1, true);
     tread.rotateZ(Math.PI / 2);
     tread.translate(x, y, z);
     b.add(tread, { color: TYRE, rough: 1.8, wheel: wh });
-    const wall = new THREE.CircleGeometry(r, n);
-    wall.rotateY((side * Math.PI) / 2);
-    wall.translate(x + (side * w) / 2, y, z);
-    b.add(wall, { color: TYRE, rough: 1.8, wheel: wh });
-    const hub = new THREE.CircleGeometry(r * 0.58, LOD === 1 ? 8 : 6);
-    hub.rotateY((side * Math.PI) / 2);
-    hub.translate(x + side * (w / 2 + 0.019), y, z);
-    b.add(hub, { color: rim, rough: 0.7, wheel: wh });
-    return;
-  }
-  const tyre = new THREE.CylinderGeometry(r, r, w, 16, 1);
-  tyre.rotateZ(Math.PI / 2);
-  tyre.translate(x, y, z);
-  b.add(tyre, { color: TYRE, rough: 1.8, wheel: wh });
-  const hub = new THREE.CylinderGeometry(r * 0.58, r * 0.58, 0.03, 12, 1);
-  hub.rotateZ(Math.PI / 2);
-  hub.translate(x + side * (w / 2 + 0.004), y, z);
-  if (alloy) {
-    // car alloy: dark dished disc, five spokes and a centre cap (the spokes carry the spin up close)
-    hub.translate(-side * 0.008, 0, 0);
-    b.add(hub, { color: '#3d4247', rough: 1.1, wheel: wh });
-    for (let k = 0; k < 5; k++) {
-      const sp = new THREE.BoxGeometry(0.022, r * 0.5, r * 0.15);
-      sp.translate(0, r * 0.29, 0);
-      sp.rotateX((k * 2 * Math.PI) / 5);
-      sp.translate(x + side * (w / 2 + 0.012), y, z);
-      b.add(sp, { color: rim, rough: 0.55, wheel: wh });
+    if (LOD === 1) {
+      b.add(sideDisc(r, n, side, x + side * hw, y, z), { color: style === 'steel' ? rim : '#ffffff', rough: 0.9, wheel: wh, decal: FACE[style] });
+      return;
     }
-    const cap = new THREE.CylinderGeometry(r * 0.15, r * 0.15, 0.03, 10, 1);
-    cap.rotateZ(Math.PI / 2);
-    cap.translate(x + side * (w / 2 + 0.018), y, z);
-    b.add(cap, { color: rim, rough: 0.5, wheel: wh });
+    b.add(sideDisc(r, n, side, x + side * hw, y, z), { color: TYRE, rough: 1.8, wheel: wh });
+    b.add(sideDisc(r * 0.58, 6, side, x + side * (hw + 0.019), y, z), { color: rim, rough: 0.7, wheel: wh });
     return;
   }
-  b.add(hub, { color: rim, rough: 0.7, wheel: wh });
-  // two crossing spokes so the spin reads up close
-  const s1 = new THREE.BoxGeometry(0.02, r * 1.05, r * 0.16);
-  s1.translate(x + side * (w / 2 + 0.02), y, z);
-  b.add(s1, { color: '#6a7077', wheel: wh });
-  const s2 = new THREE.BoxGeometry(0.02, r * 0.16, r * 1.05);
-  s2.translate(x + side * (w / 2 + 0.02), y, z);
-  b.add(s2, { color: '#6a7077', wheel: wh });
+  const R = r * 1.025,
+    rr = r * 0.64;
+  // tyre profile (radius, axial): inner bead → inner wall → tread → outer wall → outer bead (uv v 0..1 → R_TYRE)
+  const prof: [number, number][] = [
+    [rr, -0.9],
+    [rr + 0.3 * (R - rr), -1.0],
+    [rr + 0.65 * (R - rr), -1.03],
+    [R - 0.035, -0.97],
+    [R - 0.01, -0.84],
+    [R, -0.6],
+    [R, 0.6],
+    [R - 0.01, 0.84],
+    [R - 0.035, 0.97],
+    [rr + 0.65 * (R - rr), 1.03],
+    [rr + 0.3 * (R - rr), 1.0],
+    [rr, 0.9],
+  ];
+  const ty = new THREE.LatheGeometry(
+    prof.map(([a, h]) => new THREE.Vector2(a, h * hw)),
+    28,
+  );
+  ty.rotateZ(-Math.PI / 2);
+  ty.translate(x, y, z);
+  b.add(ty, { color: '#ffffff', rough: 1.7, wheel: wh, decal: R_TYRE, det: { c: 3, a: [r] } });
+  // rim barrel (seen from outside through the spokes) and the dark inner dish
+  const bar = inward(new THREE.CylinderGeometry(rr, rr, w * 0.9, 20, 1, true));
+  bar.rotateZ(Math.PI / 2);
+  bar.translate(x, y, z);
+  b.add(bar, { color: '#2a2d31', rough: 1.1, wheel: wh });
+  b.add(sideDisc(rr, 20, side, x - side * hw * 0.5, y, z), { color: '#141518', rough: 1.4, wheel: wh });
+  const face = x + side * hw * 0.9;
+  if (style === 'alloy') {
+    // brake disc + hat behind the spokes
+    b.add(sideDisc(rr * 0.8, 20, side, x + side * hw * 0.15, y, z), { color: '#75797e', rough: 0.9, finish: 'chrome', wheel: wh });
+    b.add(sideDisc(r * 0.24, 12, side, x + side * hw * 0.2, y, z), { color: '#4a4e53', rough: 1, wheel: wh });
+    for (let k = 0; k < 5; k++) {
+      // tapered spoke, dished: the hub end stands proud of the rim lip
+      const sp = new THREE.BoxGeometry(0.026, rr - r * 0.12, 1, 1, 1, 1);
+      const p = sp.attributes.position;
+      const len = rr - r * 0.12;
+      for (let i = 0; i < p.count; i++) {
+        const t = (p.getY(i) + len / 2) / len; // 0 hub → 1 lip
+        p.setZ(i, p.getZ(i) * r * (0.1 + 0.09 * t));
+        p.setX(i, p.getX(i) + side * 0.014 * (1 - t));
+      }
+      sp.computeVertexNormals();
+      sp.translate(0, r * 0.12 + len / 2, 0);
+      sp.rotateX((k * 2 * Math.PI) / 5);
+      sp.translate(face - side * 0.012, y, z);
+      b.add(sp, { color: rim, rough: 0.5, wheel: wh });
+      const nut = new THREE.CylinderGeometry(0.011, 0.011, 0.02, 6);
+      nut.rotateZ(Math.PI / 2);
+      const a = ((k + 0.5) * 2 * Math.PI) / 5;
+      nut.translate(face + side * 0.004, y + Math.cos(a) * r * 0.2, z + Math.sin(a) * r * 0.2);
+      b.add(nut, { color: '#8d939a', rough: 0.6, finish: 'chrome', wheel: wh });
+    }
+    const lip = new THREE.TorusGeometry(rr - 0.004, 0.011, 5, 28);
+    lip.rotateY(Math.PI / 2);
+    lip.translate(face - side * 0.006, y, z);
+    b.add(lip, { color: rim, rough: 0.45, wheel: wh });
+    const cap = new THREE.CylinderGeometry(r * 0.12, r * 0.14, 0.03, 14, 1);
+    cap.rotateZ((-side * Math.PI) / 2);
+    cap.translate(face + side * 0.008, y, z);
+    b.add(cap, { color: '#9aa1a8', rough: 0.4, finish: 'chrome', wheel: wh });
+    return;
+  }
+  if (style === 'cap') {
+    // pressed steel wheel under a domed plastic hub cap
+    b.add(sideDisc(rr, 20, side, face - side * 0.012, y, z), { color: '#3a3d41', rough: 1, wheel: wh });
+    b.add(sideDisc(rr * 0.96, 24, side, face - side * 0.004, y, z, 0.03), { color: '#ffffff', rough: 0.55, wheel: wh, decal: R_HUBCAP });
+    return;
+  }
+  // truck / bus steel wheel: painted disc with hand holes, a hub boss and ten nuts
+  const fx = R_FACE_STEEL.x + R_FACE_STEEL.w / 2,
+    fy = R_FACE_STEEL.y + R_FACE_STEEL.h / 2,
+    fr = (R_FACE_STEEL.w / 2 - 1) * 0.64;
+  b.add(sideDisc(rr, 20, side, face - side * 0.03, y, z), { color: rim, rough: 0.9, wheel: wh, decal: { x: fx - fr, y: fy - fr, w: 2 * fr, h: 2 * fr } });
+  const boss = new THREE.CylinderGeometry(r * 0.2, r * 0.26, 0.07, 14, 1);
+  boss.rotateZ((-side * Math.PI) / 2);
+  boss.translate(face, y, z);
+  b.add(boss, { color: '#6f757b', rough: 0.8, finish: 'chrome', wheel: wh });
+  for (let k = 0; k < 10; k++) {
+    const a = (k * 2 * Math.PI) / 10;
+    const nut = new THREE.CylinderGeometry(0.014, 0.014, 0.03, 6);
+    nut.rotateZ(Math.PI / 2);
+    nut.translate(face - side * 0.012, y + Math.cos(a) * r * 0.32, z + Math.sin(a) * r * 0.32);
+    b.add(nut, { color: '#9aa0a6', rough: 0.6, finish: 'chrome', wheel: wh });
+  }
 }
 
 interface CarDims {
@@ -598,32 +1016,67 @@ interface CarDims {
   /** headlight / taillight heights (centre) */
   lightY: number;
   roundLights?: boolean;
+  wheel?: WheelStyle;
+  rim?: string;
+  /** bumper finish: dark plastic (default), body colour with a dark insert, or chrome */
+  bumper?: 'dark' | 'paint' | 'chrome';
 }
 
 /** Wheels, bumpers, lights, plates, mirrors common to the cars. */
 function carDetails(b: Builder, d: CarDims): void {
   const { L, W } = d;
-  wheel(b, d.wheelX, d.wheelR, d.axF, d.wheelR, d.wheelW, true, RIM, true);
-  wheel(b, -d.wheelX, d.wheelR, d.axF, d.wheelR, d.wheelW, true, RIM, true);
-  wheel(b, d.wheelX, d.wheelR, d.axR, d.wheelR, d.wheelW, false, RIM, true);
-  wheel(b, -d.wheelX, d.wheelR, d.axR, d.wheelR, d.wheelW, false, RIM, true);
-  // bumpers
-  b.add(rbox(W - 0.05, 0.17, 0.2, 0.08, 0, d.bodyY - 0.02, L / 2 - 0.08), { color: DARK, rough: 1.2 });
-  b.add(rbox(W - 0.05, 0.17, 0.2, 0.08, 0, d.bodyY - 0.02, -L / 2 + 0.08), { color: DARK, rough: 1.2 });
-  // headlights
+  const ws = d.wheel ?? 'alloy';
+  const rc = d.rim ?? RIM;
+  wheel(b, d.wheelX, d.wheelR, d.axF, d.wheelR, d.wheelW, true, rc, ws);
+  wheel(b, -d.wheelX, d.wheelR, d.axF, d.wheelR, d.wheelW, true, rc, ws);
+  wheel(b, d.wheelX, d.wheelR, d.axR, d.wheelR, d.wheelW, false, rc, ws);
+  wheel(b, -d.wheelX, d.wheelR, d.axR, d.wheelR, d.wheelW, false, rc, ws);
+  // bumpers: dark plastic, body colour with a dark lower insert, or chrome
+  const bum = d.bumper ?? 'dark';
+  const bo: PartOpts = bum === 'paint' ? { color: '#ffffff', paint: true, rough: 0.85 } : bum === 'chrome' ? { color: CHROME, rough: 0.3 } : { color: DARK, rough: 1.2 };
+  for (const e of [1, -1]) {
+    b.add(rbox(W - 0.05, 0.17, 0.2, 0.08, 0, d.bodyY - 0.02, e * (L / 2 - 0.08)), bo);
+    if (bum === 'paint') b.add(bx(W * 0.62, 0.05, 0.02, 0, d.bodyY - 0.01, e * (L / 2 + 0.018)), { color: '#1d1f22', rough: 1.3 });
+  }
+  // headlights (lens decal with reflector bowls on the emissive housing), tail lights, blinkers
   const hw = d.roundLights ? 0.26 : 0.36,
     hh = d.roundLights ? 0.22 : 0.13;
   for (const s of [1, -1]) {
     b.add(rbox(hw, hh, 0.08, d.roundLights ? 0.1 : 0.04, s * (W / 2 - 0.3), d.lightY - hh / 2, L / 2 - 0.02), { color: HEAD, light: LIGHT_HEAD, rough: 0.4 });
     b.add(rbox(0.3, 0.13, 0.07, 0.04, s * (W / 2 - 0.26), d.lightY - 0.04, -L / 2 + 0.015), { color: TAIL, light: LIGHT_TAIL, rough: 0.5 });
+    const hl = decalPlane(hw - (d.roundLights ? 0.04 : 0.02), hh - (d.roundLights ? 0.04 : 0.02), s * (W / 2 - 0.3), d.lightY, L / 2 + 0.022, 'pz');
+    if (s < 0) flipU(hl);
+    b.add(hl, { color: '#ffffff', light: LIGHT_HEAD, rough: 0.15, decal: d.roundLights ? R_HEAD_ROUND : R_HEAD });
+    const tl = decalPlane(0.28, 0.11, s * (W / 2 - 0.26), d.lightY + 0.025, -L / 2 - 0.022, 'nz');
+    if (s > 0) flipU(tl);
+    b.add(tl, { color: '#ffffff', light: LIGHT_TAIL, rough: 0.2, decal: R_TAIL });
     // blinkers (front corners + beside the tail lights)
-    b.add(bx(0.09, 0.08, 0.06, s * (W / 2 - 0.06), d.lightY - 0.15, L / 2 - 0.05), { color: AMBER, light: s > 0 ? LIGHT_BLINK_L : LIGHT_BLINK_R });
-    b.add(bx(0.09, 0.08, 0.06, s * (W / 2 - 0.07), d.lightY - 0.17, -L / 2 + 0.03), { color: AMBER, light: s > 0 ? LIGHT_BLINK_L : LIGHT_BLINK_R });
+    // (flush lenses under the lamps, inside the rounded corners of the nose and tail)
+    b.add(rbox(0.16, 0.05, 0.05, 0.015, s * (W / 2 - 0.3), d.lightY - hh / 2 - 0.065, L / 2 - 0.012), { color: AMBER, light: s > 0 ? LIGHT_BLINK_L : LIGHT_BLINK_R, rough: 0.3 });
+    b.add(rbox(0.12, 0.05, 0.05, 0.015, s * (W / 2 - 0.26), d.lightY - 0.1, -L / 2 + 0.01), { color: AMBER, light: s > 0 ? LIGHT_BLINK_L : LIGHT_BLINK_R, rough: 0.3 });
   }
-  // grille + plates
+  // grille (honeycomb in a chrome surround) with a badge, number plates on holders front and rear
   b.add(rbox(W * 0.36, 0.11, 0.05, 0.03, 0, d.lightY - 0.12, L / 2 + 0.005), { color: '#25282c', rough: 1.2 });
-  b.add(bx(0.38, 0.1, 0.02, 0, d.bodyY + 0.02, L / 2 + 0.02), { color: PLATE });
-  b.add(bx(0.38, 0.1, 0.02, 0, d.bodyY + 0.02, -L / 2 - 0.02), { color: '#f4d35e' });
+  b.add(decalPlane(W * 0.36 - 0.02, 0.095, 0, d.lightY - 0.065, L / 2 + 0.032, 'pz'), { color: '#ffffff', rough: 0.8, decal: R_GRILLE });
+  if (LOD === 0) {
+    for (const [zb, yb, f] of [
+      [L / 2 + 0.034, d.lightY - 0.065, 'pz'],
+      [-L / 2 - 0.006, d.lightY + 0.1, 'nz'],
+    ] as const) {
+      const bg = decalPlane(0.08, 0.05, 0, yb, zb, f);
+      b.add(bg, { color: '#d5dade', rough: 0.25, finish: 'chrome' });
+    }
+  }
+  for (const e of [1, -1]) {
+    b.add(bx(0.49, 0.12, 0.012, 0, d.bodyY + 0.01, e * (L / 2 + 0.026)), { color: '#16171a', rough: 1.2 });
+    b.add(decalPlane(0.46, 0.1, 0, d.bodyY + 0.07, e * (L / 2 + 0.0335), e > 0 ? 'pz' : 'nz'), { color: '#ffffff', rough: 0.6, decal: R_PLATE, plate: true });
+  }
+}
+
+/** mirror a plane's texture left ↔ right */
+function flipU(g: THREE.BufferGeometry): void {
+  const uv = g.attributes.uv;
+  for (let i = 0; i < uv.count; i++) uv.setX(i, 1 - uv.getX(i));
 }
 
 // ─────────────────────────────────────────────────────────── models ──
@@ -634,30 +1087,41 @@ const WELL = '#121315';
 /** Lofted body shell (paint, glass, trim, wheel wells, cladding) + mirrors, door seams and handles. Returns the roof top. */
 function loftBody(b: Builder, s: CarShape, doors4: boolean, chrome = false): { topY: number; topZ: number; topW: number; topD: number } {
   const p = loftCar(s, LOD);
-  if (p.body) b.add(p.body, { color: '#ffffff', paint: true, rough: 0.85 });
-  if (p.glass) b.add(p.glass, { color: GLASS, rough: 0.22 });
+  const hw = s.W / 2;
+  const ra = s.wheelR + 0.075;
+  // panel lines and the cabin are drawn by the shader (vehicleMaterial.ts, classes 1 and 2)
+  const cuts = [s.axF - ra - 0.05, s.pillarB, doors4 ? Math.max(s.axR + ra + 0.04, s.glassRear - 0.02) : -99];
+  const paint: Det = { c: 1, a: [cuts[0], cuts[1], cuts[2], s.wsBase + 0.035], b: [s.rwBase - 0.04, s.sill, hw - 0.14, s.belt] };
+  const rearSeat = (s.pillarC ?? s.glassRear + 0.1) - 0.22;
+  const cabin: Det = { c: 2, a: [hw - 0.13, s.belt, topAt(s, (s.wsTop + s.rwTop) / 2) - 0.07, s.wsBase - 0.04], b: [s.rwBase + 0.04, s.pillarB - 0.02, rearSeat, 0] };
+  if (p.body) b.add(p.body, { color: '#ffffff', paint: true, rough: 0.85, det: paint });
+  if (p.glass) b.add(p.glass, { color: GLASS, rough: 0.22, det: cabin });
   if (p.trim) b.add(p.trim, { color: TRIM, rough: 0.9, finish: 'coat' });
   if (p.seal) b.add(p.seal, chrome ? { color: CHROME, rough: 0.3 } : { color: TRIM, rough: 0.9, finish: 'coat' });
   if (p.well) b.add(p.well, { color: WELL, rough: 1.6 });
   if (p.clad) b.add(p.clad, { color: '#3b3e43', rough: 1.3 });
-  const hw = s.W / 2;
   for (const sd of [1, -1]) {
-    // mirror on a short arm at the base of the A pillar (dropped at the far level)
+    // mirror on a short arm at the base of the A pillar (dropped at the far level): painted cap, dark base, glass
     const mz = s.wsBase - 0.13;
     b.add(rbox(0.1, 0.085, 0.14, 0.035, sd * (hw + 0.045), s.belt + 0.015, mz), { color: '#ffffff', paint: true, rough: 0.85 });
     b.add(bx(0.06, 0.03, 0.05, sd * (hw - 0.01), s.belt + 0.03, mz + 0.02), { color: TRIM });
-    // door seams + handles (fine detail: close level only)
     if (LOD === 0) {
-      const ra = s.wheelR + 0.075;
-      const cuts = [s.axF - ra - 0.05, s.pillarB];
-      if (doors4) cuts.push(Math.max(s.axR + ra + 0.04, s.glassRear - 0.02));
-      for (const z of cuts) {
-        const y0 = s.sill + 0.13,
-          y1 = s.belt - 0.012;
-        b.add(decalPlane(0.008, y1 - y0, sd * (hw + 0.0075), (y0 + y1) / 2, z, sd > 0 ? 'px' : 'nx'), { color: TRIM, rough: 1.2 });
-      }
+      b.add(decalPlane(0.075, 0.06, sd * (hw + 0.05), s.belt + 0.057, mz - 0.071, 'nz'), { color: '#8c9aa6', rough: 0.15, finish: 'chrome' });
       const handles = doors4 ? [s.pillarB + 0.14, cuts[2] + 0.14] : [s.pillarB + 0.16];
-      for (const z of handles) b.add(bx(0.016, 0.024, 0.12, sd * (hw + 0.004), s.belt - 0.085, z), chrome ? { color: CHROME, rough: 0.3 } : { color: '#ffffff', paint: true, rough: 0.5 });
+      for (const z of handles) {
+        // pull handle in a dark recess
+        b.add(decalPlane(0.15, 0.045, sd * (hw + 0.0035), s.belt - 0.085, z, sd > 0 ? 'px' : 'nx'), { color: '#2a2c30', rough: 1.2 });
+        b.add(rbox(0.022, 0.026, 0.13, 0.008, sd * (hw + 0.008), s.belt - 0.097, z), chrome ? { color: CHROME, rough: 0.3 } : { color: '#ffffff', paint: true, rough: 0.5 });
+      }
+    }
+  }
+  if (LOD === 0) {
+    // wipers parked along the base of the windscreen
+    const yb = topAt(s, s.wsBase - 0.04);
+    for (const x of [0.32, -0.18]) {
+      const w = bx(0.62, 0.018, 0.022, x, yb + 0.004, s.wsBase - 0.05);
+      w.rotateY(0.07);
+      b.add(w, { color: '#17191c', rough: 1.4 });
     }
   }
   const topZ = (s.wsTop + s.rwTop) / 2;
@@ -673,7 +1137,7 @@ function compact(): THREE.BufferGeometry {
     { L, W, sill: 0.28, belt: 0.93, roof: 1.46, noseH: 0.78, hoodH: 0.9, wsBase: 0.92, wsTop: 0.12, rwTop: -1.18, rwBase: -1.6, deckH: 1.0, tailH: 0.93, pillarB: -0.36, glassRear: -1.12, tumble: 0.15, axF: 1.155, axR: -1.145, wheelR: 0.29 },
     false,
   );
-  carDetails(b, { L, W, wheelR: 0.29, wheelW: 0.22, axF: 1.155, axR: -1.145, wheelX: W / 2 - 0.08, bodyY: 0.3, bodyH: 0.62, bodyR: 0.26, lightY: 0.66, roundLights: true });
+  carDetails(b, { L, W, wheelR: 0.29, wheelW: 0.22, axF: 1.155, axR: -1.145, wheelX: W / 2 - 0.08, bodyY: 0.3, bodyH: 0.62, bodyR: 0.26, lightY: 0.66, roundLights: true, wheel: 'cap', bumper: 'chrome' });
   return b.build();
 }
 
@@ -685,7 +1149,7 @@ function hatch(): THREE.BufferGeometry {
   const c = loftBody(b, shape, true);
   // small roof spoiler over the rear window
   b.add(rbox(c.topW - 0.12, 0.045, 0.2, 0.02, 0, topAt(shape, shape.rwTop + 0.06) - 0.025, shape.rwTop - 0.02), { color: '#ffffff', paint: true });
-  carDetails(b, { L, W, wheelR: 0.31, wheelW: 0.23, axF: 1.22, axR: -1.33, wheelX: W / 2 - 0.09, bodyY: 0.31, bodyH: 0.6, bodyR: 0.2, lightY: 0.68 });
+  carDetails(b, { L, W, wheelR: 0.31, wheelW: 0.23, axF: 1.22, axR: -1.33, wheelX: W / 2 - 0.09, bodyY: 0.31, bodyH: 0.6, bodyR: 0.2, lightY: 0.68, bumper: 'paint', rim: '#6d737a' });
   return b.build();
 }
 
@@ -699,7 +1163,7 @@ function sedan(): THREE.BufferGeometry {
     true,
     true,
   );
-  carDetails(b, { L, W, wheelR: 0.32, wheelW: 0.24, axF: 1.375, axR: -1.325, wheelX: W / 2 - 0.1, bodyY: 0.33, bodyH: 0.58, bodyR: 0.18, lightY: 0.69 });
+  carDetails(b, { L, W, wheelR: 0.32, wheelW: 0.24, axF: 1.375, axR: -1.325, wheelX: W / 2 - 0.1, bodyY: 0.33, bodyH: 0.58, bodyR: 0.18, lightY: 0.69, bumper: 'paint' });
   // taxi (variant 1 → part 2): roof sign + chequer band
   b.add(rbox(0.6, 0.18, 0.28, 0.05, 0, c.topY - 0.01, c.topZ), { color: '#fff3b8', light: LIGHT_TAXI, part: 2, rough: 0.6 });
   b.add(decalPlane(0.54, 0.15, 0, c.topY + 0.08, c.topZ + 0.142, 'pz'), { color: '#ffffff', decal: R_TAXI, light: LIGHT_TAXI, part: 2 });
@@ -829,62 +1293,178 @@ function lorry(): THREE.BufferGeometry {
   // wheels: steered front axle + tandem rear
   const axF = L / 2 - 1.3;
   for (const s of [1, -1]) {
-    wheel(b, s * 1.0, 0.48, axF, 0.48, 0.34, true);
-    wheel(b, s * 1.0, 0.48, axF - 4.4, 0.48, 0.38, false);
-    wheel(b, s * 1.0, 0.48, axF - 5.5, 0.48, 0.38, false);
+    wheel(b, s * 1.0, 0.48, axF, 0.48, 0.34, true, '#c9ccd0', 'steel');
+    wheel(b, s * 1.0, 0.48, axF - 4.4, 0.48, 0.38, false, '#c9ccd0', 'steel');
+    wheel(b, s * 1.0, 0.48, axF - 5.5, 0.48, 0.38, false, '#c9ccd0', 'steel');
     b.add(bx(0.42, 0.06, 2.2, s * 1.0, 1.0, axF - 4.95), { color: '#2b2e33' });
   }
   return b.build();
 }
 
+/** side profile (z, y) with wheel arches cut into the bottom edge (axle height ay, radius ra), rounded ends,
+ *  extruded across x to width w (centred) with bevelled edges */
+function archedSlab(L: number, y0: number, y1: number, w: number, arches: number[], ay: number, ra: number, rBot: number, rTop: number, bevel: number): THREE.BufferGeometry {
+  const h = L / 2 - bevel;
+  const b0 = y0 + bevel,
+    b1 = y1 - bevel;
+  const sh = new THREE.Shape();
+  sh.moveTo(-h + rBot, b0);
+  const da = Math.asin(Math.max(-1, Math.min(1, (b0 - ay) / (ra + bevel))));
+  for (const az of [...arches].sort((p, q) => p - q)) {
+    const dz = Math.cos(da) * (ra + bevel);
+    sh.lineTo(az - dz, b0);
+    sh.absarc(az, ay, ra + bevel, Math.PI - da, da, true);
+  }
+  sh.lineTo(h - rBot, b0);
+  sh.quadraticCurveTo(h, b0, h, b0 + rBot);
+  sh.lineTo(h, b1 - rTop);
+  sh.quadraticCurveTo(h, b1, h - rTop, b1);
+  sh.lineTo(-h + rTop, b1);
+  sh.quadraticCurveTo(-h, b1, -h, b1 - rTop);
+  sh.lineTo(-h, b0 + rBot);
+  sh.quadraticCurveTo(-h, b0, -h + rBot, b0);
+  const depth = w - 2 * bevel;
+  const g = new THREE.ExtrudeGeometry(sh, {
+    depth,
+    bevelEnabled: LOD < 2,
+    bevelThickness: bevel,
+    bevelSize: bevel,
+    bevelSegments: LOD === 0 ? 3 : 1,
+    curveSegments: LOD === 0 ? 10 : LOD === 1 ? 5 : 3,
+  });
+  g.rotateY(-Math.PI / 2);
+  g.translate(depth / 2, 0, 0);
+  return g;
+}
+
+/** flat rounded rectangle facing ±x (side) or ±z, centred at (x, y, z); u along the face width */
+function roundPane(w: number, h: number, r: number, x: number, y: number, z: number, face: 'px' | 'nx' | 'pz' | 'nz'): THREE.BufferGeometry {
+  const sh = new THREE.Shape();
+  const a = w / 2,
+    c = h / 2,
+    q = Math.min(r, a - 0.001, c - 0.001);
+  sh.moveTo(-a + q, -c);
+  sh.lineTo(a - q, -c);
+  sh.quadraticCurveTo(a, -c, a, -c + q);
+  sh.lineTo(a, c - q);
+  sh.quadraticCurveTo(a, c, a - q, c);
+  sh.lineTo(-a + q, c);
+  sh.quadraticCurveTo(-a, c, -a, c - q);
+  sh.lineTo(-a, -c + q);
+  sh.quadraticCurveTo(-a, -c, -a + q, -c);
+  const g = new THREE.ShapeGeometry(sh, LOD === 0 ? 4 : 1);
+  if (face === 'px') g.rotateY(Math.PI / 2);
+  else if (face === 'nx') g.rotateY(-Math.PI / 2);
+  else if (face === 'nz') g.rotateY(Math.PI);
+  g.translate(x, y, z);
+  return g;
+}
+
+/**
+ * City bus (11 m, low floor): an extruded body with real wheel arches, a route-coloured skirt, rounded windows in
+ * black rubber seals (some with a top hopper), glazed two-leaf folding doors on the kerb (−X) side, a tall
+ * windscreen in a black surround with wipers, destination display, grille, twin lamps, mirrors on arms, roof
+ * units; seats, poles and passengers through the glass (vehicleMaterial.ts class 4).
+ */
 function bus(): THREE.BufferGeometry {
   const b = new Builder();
   const L = 11.0,
     W = 2.5;
   const CREAM = '#f4f0e6';
-  b.add(rbox(W, 2.7, L, 0.24, 0, 0.35, 0, 2), { color: CREAM, rough: 0.85 });
-  // route-coloured skirt + window-top stripes
-  b.add(rbox(W + 0.03, 0.62, L - 0.04, 0.2, 0, 0.33, 0, 1), { color: '#ffffff', paint: true, rough: 0.8 });
-  for (const s of [1, -1]) b.add(bx(0.02, 0.12, L - 0.9, s * (W / 2 + 0.012), 2.42, -0.1), { color: '#ffffff', paint: true });
-  // window bands (lit inside at night)
-  for (const s of [1, -1]) {
-    b.add(bx(0.02, 0.98, 9.25, s * (W / 2 + 0.006), 1.36, -0.45), { color: GLASS, light: LIGHT_CABIN, rough: 0.22 });
-    for (let k = 0; k < 8; k++) b.add(bx(0.03, 0.98, 0.13, s * (W / 2 + 0.014), 1.36, -4.95 + k * 1.28), { color: CREAM });
-  }
-  // doors on the kerb (right, -X) side
-  for (const z of [4.35, 0.25]) {
-    b.add(bx(0.03, 2.08, 1.12, -W / 2 - 0.016, 0.36, z), { color: '#1e2a33', light: LIGHT_CABIN, rough: 0.25 });
-    b.add(bx(0.035, 2.08, 0.05, -W / 2 - 0.02, 0.36, z), { color: '#9aa0a6' });
-  }
-  // windscreen, rear window, destination signs
-  b.add(rbox(2.32, 1.42, 0.05, 0.05, 0, 1.12, L / 2 + 0.0), { color: GLASS, light: LIGHT_CABIN, rough: 0.2 });
-  b.add(bx(2.02, 0.36, 0.03, 0, 2.59, L / 2 + 0.015), { color: '#16181b' });
-  b.add(decalPlane(1.93, 0.28, 0, 2.77, L / 2 + 0.033, 'pz'), { color: '#ffffff', decal: R_BUS_SIGN, decalRows: true, light: LIGHT_SIGN });
-  b.add(rbox(1.9, 0.72, 0.05, 0.04, 0, 1.95, -L / 2 - 0.0), { color: GLASS, light: LIGHT_CABIN, rough: 0.2 });
-  b.add(decalPlane(0.9, 0.22, 0, 2.86, -L / 2 - 0.03, 'nz'), { color: '#ffffff', decal: R_BUS_SIGN, decalRows: true, light: LIGHT_SIGN });
-  b.add(bx(1.5, 0.5, 0.03, 0, 0.62, -L / 2 - 0.02), { color: '#3a3d42' });
-  // side lettering under the windows
-  b.add(decalPlane(3.0, 0.32, W / 2 + 0.018, 1.13, -1.6, 'px'), { color: '#ffffff', decal: R_BUS_SIDE });
-  b.add(decalPlane(3.0, 0.32, -W / 2 - 0.018, 1.13, -1.9, 'nx'), { color: '#ffffff', decal: R_BUS_SIDE });
-  // roof AC unit
-  b.add(rbox(1.7, 0.3, 2.7, 0.09, 0, 3.0, -1.7), { color: '#d4d7da', rough: 0.9 });
-  // front details
-  b.add(rbox(W + 0.03, 0.26, 0.24, 0.09, 0, 0.32, L / 2 - 0.08), { color: DARK, rough: 1.2 });
-  b.add(rbox(W + 0.03, 0.26, 0.24, 0.09, 0, 0.32, -L / 2 + 0.08), { color: DARK, rough: 1.2 });
-  for (const s of [1, -1]) {
-    b.add(rbox(0.36, 0.17, 0.07, 0.05, s * 0.85, 0.72, L / 2 + 0.005), { color: HEAD, light: LIGHT_HEAD, rough: 0.4 });
-    b.add(bx(0.11, 0.11, 0.06, s * 1.17, 0.74, L / 2 - 0.02), { color: AMBER, light: s > 0 ? LIGHT_BLINK_L : LIGHT_BLINK_R });
-    b.add(bx(0.16, 0.42, 0.05, s * 1.1, 0.8, -L / 2 - 0.02), { color: TAIL, light: LIGHT_TAIL, rough: 0.5 });
-    b.add(bx(0.16, 0.12, 0.05, s * 1.1, 1.26, -L / 2 - 0.02), { color: AMBER, light: s > 0 ? LIGHT_BLINK_L : LIGHT_BLINK_R });
-    // mirror stalks
-    b.add(bx(0.08, 0.05, 0.42, s * 1.32, 2.35, L / 2 - 0.05), { color: DARK });
-    b.add(rbox(0.08, 0.34, 0.18, 0.03, s * 1.42, 2.02, L / 2 + 0.12), { color: DARK });
-  }
+  const SEAL = '#1a1c1f';
   const axF = L / 2 - 2.6,
     axR = axF - 6.0;
+  const ra = 0.6;
+  b.add(archedSlab(L, 0.35, 3.05, W, [axF, axR], 0.48, ra, 0.18, 0.3, 0.07), { color: CREAM, rough: 0.85 });
+  // route-coloured skirt (follows the arches) + window-top stripes
+  b.add(archedSlab(L + 0.02, 0.33, 0.95, W + 0.03, [axF, axR], 0.48, ra, 0.16, 0.05, 0.04), { color: '#ffffff', paint: true, rough: 0.8 });
+  for (const s of [1, -1]) b.add(bx(0.02, 0.12, L - 0.9, s * (W / 2 + 0.006), 2.46, -0.1), { color: '#ffffff', paint: true });
+  // wheel-arch liners
+  for (const az of [axF, axR]) {
+    const lin = inward(new THREE.CylinderGeometry(ra - 0.01, ra - 0.01, W - 0.12, LOD === 0 ? 14 : 6, 1, true, -Math.PI / 2, Math.PI));
+    lin.rotateZ(Math.PI / 2);
+    lin.translate(0, 0.48, az);
+    b.add(lin, { color: WELL, rough: 1.6 });
+  }
+  const cabin: Det = { c: 4, a: [W / 2 - 0.1, 1.3, 2.86, L / 2 - 0.35], b: [-L / 2 + 0.3, L / 2 - 2.55, 0, 0] };
+  const glass: PartOpts = { color: GLASS, light: LIGHT_CABIN, rough: 0.2, det: cabin };
+  const yw0 = 1.3,
+    yw1 = 2.38;
+  const pane = (s: number, z0: number, z1: number, hopper: boolean) => {
+    const x = s * (W / 2);
+    const w = z1 - z0,
+      zc = (z0 + z1) / 2,
+      yc = (yw0 + yw1) / 2;
+    b.add(roundPane(w + 0.07, yw1 - yw0 + 0.07, 0.1, x + s * 0.004, yc, zc, s > 0 ? 'px' : 'nx'), { color: SEAL, rough: 1.1 });
+    b.add(roundPane(w, yw1 - yw0, 0.08, x + s * 0.009, yc, zc, s > 0 ? 'px' : 'nx'), glass);
+    if (hopper && LOD === 0) b.add(bx(0.012, 0.03, w, x + s * 0.012, yw1 - 0.3, zc), { color: SEAL, rough: 1.1 });
+  };
+  const run = (s: number, z0: number, z1: number, n: number, k0: number) => {
+    const step = (z1 - z0) / n;
+    for (let k = 0; k < n; k++) pane(s, z0 + k * step + 0.07, z0 + (k + 1) * step - 0.07, (k + k0) % 2 === 0);
+  };
+  // driver side (+X): seven panes and the driver's window
+  run(1, -4.95, 4.0, 7, 0);
+  pane(1, 4.12, 5.12, false);
+  // kerb side (−X): panes round the doors
+  run(-1, -4.95, -0.42, 3, 1);
+  run(-1, 0.92, 3.7, 2, 0);
+  // folding doors: two glazed leaves each in a dark frame, a seal down the middle, a step plate
+  for (const z of [4.35, 0.25]) {
+    const x = -W / 2 - 0.004;
+    b.add(decalPlane(1.16, 2.1, x, 0.36 + 1.05, z, 'nx'), { color: '#2b2f33', rough: 0.8 });
+    for (const lz of [z - 0.28, z + 0.28]) {
+      b.add(roundPane(0.44, 1.12, 0.05, x - 0.006, 1.78, lz, 'nx'), glass);
+      b.add(roundPane(0.44, 0.62, 0.05, x - 0.006, 0.84, lz, 'nx'), glass);
+    }
+    b.add(bx(0.02, 2.06, 0.03, x - 0.008, 0.37, z), { color: SEAL });
+    b.add(bx(0.06, 0.04, 1.12, -W / 2 + 0.01, 0.32, z), { color: '#7d8287', rough: 0.7, finish: 'chrome' });
+  }
+  // front: windscreen in a black surround, wipers, destination display
+  const zf = L / 2;
+  b.add(roundPane(2.36, 1.62, 0.14, 0, 1.92, zf + 0.004, 'pz'), { color: SEAL, rough: 1.1 });
+  b.add(roundPane(2.26, 1.5, 0.12, 0, 1.9, zf + 0.009, 'pz'), { color: GLASS, light: LIGHT_CABIN, rough: 0.2, det: cabin });
+  if (LOD === 0)
+    for (const x of [-0.55, 0.5]) {
+      b.add(tube(x - 0.05, 1.2, zf + 0.025, x + 0.25, 1.95, zf + 0.025, 0.012), { color: '#141518', rough: 1.4 });
+    }
+  b.add(bx(2.02, 0.36, 0.03, 0, 2.62, zf + 0.012), { color: '#16181b' });
+  b.add(decalPlane(1.93, 0.28, 0, 2.8, zf + 0.03, 'pz'), { color: '#ffffff', decal: R_BUS_SIGN, decalRows: true, light: LIGHT_SIGN });
+  // rear window, rear sign, engine louvres
+  b.add(roundPane(1.9, 0.72, 0.1, 0, 2.31, -zf - 0.009, 'nz'), { color: GLASS, light: LIGHT_CABIN, rough: 0.2, det: cabin });
+  b.add(decalPlane(0.9, 0.22, 0, 2.86, -zf - 0.012, 'nz'), { color: '#ffffff', decal: R_BUS_SIGN, decalRows: true, light: LIGHT_SIGN });
+  b.add(decalPlane(1.5, 0.5, 0, 0.87, -zf - 0.012, 'nz'), { color: '#ffffff', rough: 1, decal: R_BUS_GRILLE });
+  // side lettering under the windows
+  b.add(decalPlane(3.0, 0.32, W / 2 + 0.022, 1.13, -1.6, 'px'), { color: '#ffffff', decal: R_BUS_SIDE });
+  b.add(decalPlane(3.0, 0.32, -W / 2 - 0.022, 1.13, -1.9, 'nx'), { color: '#ffffff', decal: R_BUS_SIDE });
+  // roof: AC unit, two hatches
+  b.add(rbox(1.7, 0.3, 2.7, 0.09, 0, 3.02, -1.7), { color: '#d4d7da', rough: 0.9 });
+  if (LOD < 2) for (const z of [2.6, 0.6]) b.add(rbox(0.78, 0.07, 0.78, 0.03, 0, 3.03, z), { color: '#c3c6c9', rough: 0.9 });
+  // bumpers, grille, lamps (twin round lamps in a bezel), plates
+  b.add(rbox(W + 0.03, 0.26, 0.24, 0.09, 0, 0.32, zf - 0.08), { color: DARK, rough: 1.2 });
+  b.add(rbox(W + 0.03, 0.26, 0.24, 0.09, 0, 0.32, -zf + 0.08), { color: DARK, rough: 1.2 });
+  b.add(decalPlane(1.1, 0.3, 0, 0.78, zf + 0.008, 'pz'), { color: '#ffffff', rough: 1, decal: R_BUS_GRILLE });
+  for (const e of [1, -1]) {
+    b.add(bx(0.49, 0.12, 0.012, 0, e > 0 ? 0.36 : 0.36, e * (zf + 0.04)), { color: '#16171a', rough: 1.2 });
+    b.add(decalPlane(0.46, 0.1, 0, 0.42, e * (zf + 0.0475), e > 0 ? 'pz' : 'nz'), { color: '#ffffff', rough: 0.6, decal: R_PLATE, plate: true });
+  }
   for (const s of [1, -1]) {
-    wheel(b, s * 1.07, 0.48, axF, 0.48, 0.32, true, '#d9dcdf');
-    wheel(b, s * 1.07, 0.48, axR, 0.48, 0.36, false, '#d9dcdf');
+    b.add(rbox(0.36, 0.17, 0.07, 0.05, s * 0.85, 0.72, zf + 0.005), { color: HEAD, light: LIGHT_HEAD, rough: 0.4 });
+    b.add(decalPlane(0.34, 0.16, s * 0.85, 0.805, zf + 0.042, 'pz'), { color: '#ffffff', light: LIGHT_HEAD, rough: 0.15, decal: R_BUS_HEAD });
+    b.add(bx(0.11, 0.11, 0.06, s * 1.12, 0.74, zf - 0.01), { color: AMBER, light: s > 0 ? LIGHT_BLINK_L : LIGHT_BLINK_R });
+    b.add(bx(0.16, 0.42, 0.05, s * 1.06, 0.8, -zf - 0.02), { color: TAIL, light: LIGHT_TAIL, rough: 0.5 });
+    b.add(bx(0.16, 0.12, 0.05, s * 1.06, 1.26, -zf - 0.02), { color: AMBER, light: s > 0 ? LIGHT_BLINK_L : LIGHT_BLINK_R });
+    // mirrors on curved arms ("ram's horns") from the roof corners, heads hanging ahead of the windscreen
+    const xa = s * 1.18,
+      xb = s * 1.36;
+    b.add(tube(xa, 2.78, zf - 0.04, xb, 2.82, zf + 0.22, 0.025), { color: DARK });
+    b.add(tube(xb, 2.82, zf + 0.22, xb, 2.5, zf + 0.36, 0.025), { color: DARK });
+    b.add(rbox(0.1, 0.38, 0.2, 0.04, xb, 2.12, zf + 0.38), { color: DARK });
+    if (LOD === 0) b.add(decalPlane(0.08, 0.34, xb, 2.31, zf + 0.277, 'nz'), { color: '#8c9aa6', rough: 0.15, finish: 'chrome' });
+  }
+  for (const s of [1, -1]) {
+    wheel(b, s * 1.07, 0.48, axF, 0.48, 0.32, true, '#d9dcdf', 'steel');
+    wheel(b, s * 1.07, 0.48, axR, 0.48, 0.36, false, '#d9dcdf', 'steel');
   }
   return b.build();
 }

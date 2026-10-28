@@ -103,7 +103,10 @@ export class VehicleRenderer {
       color: r.color,
     }));
     const atlas = makeAtlas(signs);
-    const { material, depth } = createVehicleMaterial(ctx.uniforms, atlas);
+    const { material, depth, detail } = createVehicleMaterial(ctx.uniforms, atlas);
+    this.detail = detail.value;
+    const q = ctx.debug.params;
+    this.detailOff = [q.has('nocarinterior'), q.has('nopanelgaps'), q.has('novehiclewear')];
 
     MODEL_KINDS.forEach((kind) => {
       const cap = parked.filter((p) => p.model === kind).length + MOVING_CAP[kind];
@@ -251,6 +254,9 @@ export class VehicleRenderer {
     out[1] = (LOD_DIST[1] * k) ** 2;
   }
   private lim = [0, 0];
+  /** close-up detail switches (vehicleMaterial.ts uVehDetail: interior, panel lines, wear) */
+  private detail: THREE.Vector4;
+  private detailOff: boolean[];
 
   /** the layer (model mi, level for squared camera distance d2) a new instance goes to; null when full */
   private slot(mi: number, d2: number): Layer | null {
@@ -265,6 +271,9 @@ export class VehicleRenderer {
   frame(realDt: number): void {
     this.updateFrustum();
     this.lodLimits(this.lim);
+    // tiers: the ray-traced cabin is skipped on low; panel lines and wear are a few ALU everywhere
+    const off = this.detailOff;
+    this.detail.set(off[0] || this.ctx.quality.level === 'low' ? 0 : 1, off[1] ? 0 : 1, off[2] ? 0 : 1, 0);
     const sim = this.sim;
     const night = this.ctx.uniforms.uLights.value;
     const k = 1 - Math.exp(-Math.min(realDt, 0.1) * 7);
@@ -494,11 +503,11 @@ export class VehicleRenderer {
     for (let lod = 0; lod < (allLods ? MODEL_LODS : 1); lod++) {
       let x = x0;
       let z = z0 + lod * 28;
-      for (const it of items) {
+      items.forEach((it, i) => {
         const src = this.layers[MODEL_KINDS.indexOf(it.kind)][lod].mesh;
         const geo = src.geometry.clone();
         const a1 = new THREE.InstancedBufferAttribute(new Float32Array([it.brake ?? 0, it.blink ?? 0, 0.3, 0]), 4);
-        const a2 = new THREE.InstancedBufferAttribute(new Float32Array([it.variant, it.siren ?? 0, 0.2, 1]), 4);
+        const a2 = new THREE.InstancedBufferAttribute(new Float32Array([it.variant, it.siren ?? 0, (0.07 + i * 0.381) % 1, 1]), 4);
         geo.setAttribute('aInst', a1);
         geo.setAttribute('aInst2', a2);
         const mesh = new THREE.InstancedMesh(geo, src.material, 1);
@@ -518,7 +527,7 @@ export class VehicleRenderer {
         mesh.frustumCulled = false;
         this.group.add(mesh);
         x += sp.width + 1.6;
-      }
+      });
     }
   }
 

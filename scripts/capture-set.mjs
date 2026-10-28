@@ -29,7 +29,7 @@ let url = args.url ?? 'http://127.0.0.1:5173/';
 if (args.q) url += (url.includes('?') ? '&' : '?') + args.q;
 const hoursList = (args.hours ?? '11,18.2,21.5').split(',').map(Number);
 const viewSpecs = (args.views ?? 'overview,downtown,oldtown,harbor,beach,park,station,riverside,stadium,westbrook,industry')
-  .split(/[;,](?=[a-z])/i)
+  .split(/;|,(?=[a-z])/i)
   .map((s) => s.trim())
   .filter(Boolean)
   .map((s) => {

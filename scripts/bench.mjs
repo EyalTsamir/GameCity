@@ -3,7 +3,7 @@
 //
 //   node scripts/bench.mjs [--classes house,bench,car,...|all] [--dists 3,10,40] [--hours 11] [--q "extra"]
 //                          [--out shots/bench] [--width 1280 --height 720] [--settle 1500] [--pick 0]
-//                          [--sheet 1] [--cols 3] [--tile 560]
+//                          [--sheet 1] [--cols 3] [--tile 560] [--yaws 0,150]
 //
 // Each class is located from the plan (lots, street slots, features) or, for moving things (car, bus,
 // pedestrian, train, boat), by ray-picking from a few elevated poses; the sim is paused while it is shot.
@@ -33,6 +33,8 @@ const ALL = [
 const classes = !args.classes || args.classes === 'all' ? ALL : args.classes.split(',');
 const dists = (args.dists ?? '3,10,40').split(',').map(Number);
 const hours = Number(args.hours ?? 11);
+// extra yaw offsets (deg) per capture, e.g. --yaws 0,120,200 to see the front / the other side
+const yaws = (args.yaws ?? '0').split(',').map(Number);
 const outDir = path.resolve(root, args.out ?? 'shots/bench');
 fs.mkdirSync(outDir, { recursive: true });
 const width = parseInt(args.width ?? '1280', 10);
@@ -133,17 +135,17 @@ try {
       report.missing.push(cls);
       continue;
     }
-    for (const d of dists) {
+    for (const d of dists) for (const yo of yaws) {
       // frame the object: target at ~mid height when close, pitch rises with distance
       const ty = loc.y + Math.min(loc.h * 0.5, d < 5 ? 1.4 : d < 20 ? 3 : 6);
       const dist = Math.max(d, d < 5 ? Math.min(loc.h, 6) * 0.9 + 1.5 : d);
       const pitch = d < 5 ? 8 : d < 20 ? 14 : 24;
       await page.evaluate(
-        ([l, ty, dist, pitch]) => window.__city.view({ target: { x: l.x, y: ty, z: l.z }, distance: dist, yaw: l.yaw + 18, pitch }),
-        [loc, ty, dist, pitch],
+        ([l, ty, dist, pitch, yo]) => window.__city.view({ target: { x: l.x, y: ty, z: l.z }, distance: dist, yaw: l.yaw + 18 + yo, pitch }),
+        [loc, ty, dist, pitch, yo],
       );
       await page.waitForTimeout(settle);
-      const file = path.join(outDir, `${cls}_${d}m.png`);
+      const file = path.join(outDir, `${cls}_${d}m${yo ? '_y' + yo : ''}.png`);
       await page.screenshot({ path: file, timeout: 240000 });
       report.captures.push({ cls, d, file: path.relative(root, file), at: [loc.x, loc.y, loc.z].map((v) => Math.round(v * 10) / 10) });
     }
