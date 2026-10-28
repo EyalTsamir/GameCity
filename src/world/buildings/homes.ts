@@ -259,11 +259,28 @@ export function genHouse(g: Gen): void {
     porchDeck(pa, pb, zP, M.z1, 0.16, col(['#a87f58', '#9a8f80', '#8d6e52'][Math.abs(Math.floor(g.seed)) % 3]));
     setCol(t, trimC);
     const postH = gH;
-    for (const px of [pa + 0.12, pb - 0.12]) t.box(px - 0.1, 0.16, M.z1 - 0.22, px + 0.1, postH, M.z1 - 0.02, 0b111111);
-    porchRail(pa + 0.22, pa + Math.max(0.3, pw * 0.5 - 0.7), M.z1 - 0.12, 0.16, 0.8, trimC);
-    porchRail(pb - Math.max(0.3, pw * 0.5 - 0.7), pb - 0.22, M.z1 - 0.12, 0.16, 0.8, trimC);
+    // posts 15 cm square on a 22 cm plinth block, moulded cap under a 26 cm header beam with a drip board;
+    // a stone step in front of the opening between the two rail runs
+    const zc = M.z1 - 0.12;
+    for (const px of [pa + 0.13, pb - 0.13]) {
+      t.box(px - 0.11, 0.16, zc - 0.11, px + 0.11, 0.42, zc + 0.11, 0b110111);
+      t.box(px - 0.12, 0.42, zc - 0.12, px + 0.12, 0.45, zc + 0.12, 0b110111);
+      t.box(px - 0.075, 0.45, zc - 0.075, px + 0.075, postH - 0.42, zc + 0.075, 0b110011);
+      t.box(px - 0.1, postH - 0.42, zc - 0.1, px + 0.1, postH - 0.36, zc + 0.1, 0b111111);
+      t.box(px - 0.085, postH - 0.36, zc - 0.085, px + 0.085, postH - 0.3, zc + 0.085, 0b110011);
+    }
+    t.box(pa, postH - 0.3, M.z1 - 0.24, pb, postH, M.z1 - 0.01, 0b111111);
+    setCol(t, shade(trimC, 0.82));
+    t.box(pa, postH - 0.32, M.z1 - 0.03, pb, postH - 0.3, M.z1 - 0.0, 0b111111);
+    porchRail(pa + 0.24, pa + Math.max(0.3, pw * 0.5 - 0.7), zc, 0.16, 0.8, trimC);
+    porchRail(pb - Math.max(0.3, pw * 0.5 - 0.7), pb - 0.24, zc, 0.16, 0.8, trimC);
+    if (F.z1 - M.z1 >= 0.34) {
+      const sa = pa + Math.max(0.3, pw * 0.5 - 0.7) + 0.05, sb = pb - Math.max(0.3, pw * 0.5 - 0.7) - 0.05;
+      setCol(t, col('#9c9890'));
+      t.box(sa, 0, M.z1 - 0.02, sb, 0.085, M.z1 + 0.3, 0b111111);
+    }
     setCol(t, shade(trimC, 0.92));
-    t.hrect(pa, zP, pb, M.z1, postH - 0.01, false);
+    t.hrect(pa, zP, pb, M.z1, postH - 0.31, false);
     if (rng.chance(0.6)) porchBench(pa + 0.5, zP + 0.25);
   } else {
     // door in the main front wall (veranda / L-plan recess / garage plan / bay plan)

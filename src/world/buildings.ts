@@ -23,7 +23,7 @@ import { SignAtlas } from './buildings/signs';
 import { Gen, Interval, LocalDoor, Side, col, jit, setDoorLife, setGutters } from './buildings/gen';
 import { genTownhouse, resetOldtown } from './buildings/oldtown';
 import { genFallback } from './buildings/fallback';
-import { genTower, resetTowers } from './buildings/towers';
+import { genTower, resetTowers, setColumnDetail } from './buildings/towers';
 import { genApartment } from './buildings/houses';
 import { genHouse, setLegacyHouses, resetHomes, houseStats, houseLog } from './buildings/homes';
 import { genIndustrial } from './buildings/industry';
@@ -85,7 +85,7 @@ export default function create(ctx: CityContext): CityModule {
   const t0 = performance.now();
   const plan = ctx.plan;
   // A/B switches: ?legacyfacade = original shell shader
-  const mats = createMaterials(ctx.uniforms, { legacy: ctx.debug.params.has('legacyfacade'), wear: !ctx.debug.params.has('nowear'), winDepth: !ctx.debug.params.has('nowinreveal'), wallRelief: !ctx.debug.params.has('nowallrelief'), plinth: !ctx.debug.params.has('noplinth') });
+  const mats = createMaterials(ctx.uniforms, { legacy: ctx.debug.params.has('legacyfacade'), wear: !ctx.debug.params.has('nowear'), winDepth: !ctx.debug.params.has('nowinreveal'), winRefl: !ctx.debug.params.has('nowinrefl'), wallRelief: !ctx.debug.params.has('nowallrelief'), plinth: !ctx.debug.params.has('noplinth') });
   const shell = new Builder({ normal: true, color: true, uv: true, facade: true });
   // ?nowingeo = no near-LOD sill / surround geometry (the shader sill everywhere)
   const winGeoOn = !ctx.debug.params.has('nowingeo');
@@ -117,6 +117,7 @@ export default function create(ctx: CityContext): CityModule {
   setClutter(!ctx.debug.params.has('noclutter'));
   setDoorLife(!ctx.debug.params.has('nodoorlife'));
   setGutters(!ctx.debug.params.has('nogutters'));
+  setColumnDetail(!ctx.debug.params.has('nocolumndetail'));
   // ?legacyhouses = original single house massing (A/B)
   setLegacyHouses(ctx.debug.params.has('legacyhouses'));
 
@@ -256,6 +257,7 @@ export default function create(ctx: CityContext): CityModule {
   if (bdbg.includes('reveal')) mats.uniforms.uBhDebug.value = 3;
   if (bdbg.includes('nan')) mats.uniforms.uBhDebug.value = 4;
   if (bdbg.includes('src')) mats.uniforms.uBhDebug.value = 5;
+  if (bdbg.includes('refl')) mats.uniforms.uBhDebug.value = 6;
   // anchors for other modules (life: smoke, laundry, bunting, birds; streetlife) + diagnostics for the
   // harness: __city.ctx.services.buildings.setDebug(0 | 1 | 2). Types: src/world/buildings/anchors.ts
   const facades = collectFacades(lots);
