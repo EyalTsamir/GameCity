@@ -234,31 +234,60 @@ export function bin(k: Kit, modern: boolean, rng?: Rng): void {
   const sh = k.sh;
   const r01 = () => (rng ? rng.next() : 0.5);
   if (modern) {
+    // contemporary square litter bin: bolted base plate, painted fluted body, an all-round posting
+    // aperture with the black liner bag folded over the inner rim, a brushed stainless hood with a
+    // shallow pyramid top and a cigarette stub plate; front door seams, keyhole, label
     k.m('#596066', 'steel');
     cbox(sh, 0, 0.008, 0, 0.5, 0.016, 0.5, 0.006);
     for (const [x, z] of [[-0.205, -0.205], [0.205, -0.205], [0.205, 0.205], [-0.205, 0.205]]) boltY(sh, x, 0.016, z, 0.014);
-    k.m(r01() < 0.3 ? '#5f6b62' : '#99a2a8', 'steel');
-    cbox(sh, 0, 0.46, 0, 0.42, 0.86, 0.42, 0.025);
-    // posting slot in a dark throat under the cap
-    k.m('#121314', 'rubber');
-    sh.box(0, 0.83, 0.205, 0.3, 0.1, 0.02, 0);
-    k.m('#2b2f33', 'paint');
-    cbox(sh, 0, 0.905, 0.025, 0.45, 0.035, 0.49, 0.012);
-    // door seams + keyhole + hinges on the front face
-    k.m('#3a3f43', 'steel');
+    const bodyC = rng ? rng.pick(['#3d4a52', '#2f5a43', '#6b6f72', '#3d4a52', '#7a2f33']) : '#3d4a52';
+    k.m(bodyC, 'paint');
+    cbox(sh, 0, 0.375, 0, 0.42, 0.7, 0.42, 0.03);
+    // flutes: raised vertical ribs on the four faces
+    for (let f = 0; f < 4; f++) {
+      sh.push().local(0, 0, 0, 0, (f * Math.PI) / 2);
+      for (let i = -2; i <= 2; i++) if (f !== 0 || Math.abs(i) === 2) sh.box(i * 0.075, 0.4, 0.212, 0.022, 0.52, 0.008, 3);
+      sh.pop();
+    }
+    // aperture: dark interior, liner bag lip over the inner rim (uneven), four corner pillars
+    k.m('#0e0f10', 'rubber');
+    sh.box(0, 0.78, 0, 0.38, 0.16, 0.38, 0);
+    k.m('#1c1d1f', 'rubber');
+    for (let f = 0; f < 4; f++) {
+      sh.push().local(0, 0, 0, 0, (f * Math.PI) / 2);
+      for (let i = 0; i < 3; i++) sh.box(-0.12 + i * 0.12, 0.738 + 0.008 * Math.sin(i * 2.1 + f), 0.196, 0.12, 0.03 + 0.012 * ((i + f) % 2), 0.012, 0);
+      sh.pop();
+    }
+    k.m(bodyC, 'paint');
+    for (const [x, z] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) cbox(sh, x * 0.19, 0.79, z * 0.19, 0.045, 0.16, 0.045, 0.008);
+    // hood: stainless, overhanging 2.5 cm, low pyramid top
+    k.m('#c3c9cd', 'steel');
+    cbox(sh, 0, 0.885, 0, 0.47, 0.05, 0.47, 0.01);
+    poly(sh, [-0.235, 0.91, -0.235, 0.235, 0.91, -0.235, 0.0, 0.95, 0.0], 0, 0.99, -0.15);
+    poly(sh, [0.235, 0.91, -0.235, 0.235, 0.91, 0.235, 0.0, 0.95, 0.0], 0.15, 0.99, 0);
+    poly(sh, [0.235, 0.91, 0.235, -0.235, 0.91, 0.235, 0.0, 0.95, 0.0], 0, 0.99, 0.15);
+    poly(sh, [-0.235, 0.91, 0.235, -0.235, 0.91, -0.235, 0.0, 0.95, 0.0], -0.15, 0.99, 0);
+    k.m('#26292b', 'steel');
+    sh.box(0.1, 0.928, 0.1, 0.09, 0.008, 0.09, 0);
+    // door seams + keyhole + hinges on the front face (the middle flutes are left off there)
+    k.m('#23282b', 'steel');
     const z = 0.211;
-    sh.box(0, 0.12, z, 0.34, 0.006, 0.004, 0);
-    sh.box(0, 0.74, z, 0.34, 0.006, 0.004, 0);
-    sh.box(-0.17, 0.43, z, 0.006, 0.62, 0.004, 0);
-    sh.box(0.17, 0.43, z, 0.006, 0.62, 0.004, 0);
+    sh.box(0, 0.1, z, 0.26, 0.006, 0.004, 0);
+    sh.box(0, 0.62, z, 0.26, 0.006, 0.004, 0);
+    sh.box(-0.13, 0.36, z, 0.006, 0.52, 0.004, 0);
+    sh.box(0.13, 0.36, z, 0.006, 0.52, 0.004, 0);
     k.m('#1a1b1c', 'steel');
-    sh.box(0.13, 0.68, z + 0.002, 0.012, 0.022, 0.004, 0);
+    sh.box(0.1, 0.56, z + 0.002, 0.012, 0.022, 0.004, 0);
     k.m('#7c858b', 'steel');
-    for (const y of [0.22, 0.64]) sh.cyl(-0.172, y - 0.03, z + 0.004, 0.009, 0.009, 0.06, 6, 2);
-    // a recycling / council sticker on some
-    if (r01() < 0.55) {
-      k.m(r01() < 0.5 ? '#2e7d4f' : '#e9e4d6', 'plastic');
-      sh.box(-0.04, 0.55, z + 0.001, 0.12, 0.09, 0.003, 0);
+    for (const y of [0.18, 0.52]) sh.cyl(-0.132, y - 0.03, z + 0.004, 0.009, 0.009, 0.06, 6, 2);
+    // label plate (white with a dark band) and, on some, a recycling sticker
+    k.m('#e9e4d6', 'plastic');
+    sh.box(0, 0.45, z + 0.001, 0.16, 0.07, 0.003, 0);
+    k.m('#2b2f33', 'plastic');
+    sh.box(0, 0.45, z + 0.003, 0.12, 0.018, 0.002, 0);
+    if (r01() < 0.4) {
+      k.m(r01() < 0.5 ? '#2e7d4f' : '#2b6ca3', 'plastic');
+      sh.box(-0.02, 0.3, z + 0.001, 0.08, 0.08, 0.003, 0);
     }
     return;
   }
@@ -572,12 +601,12 @@ export function planterBox(k: Kit, kind: 'concrete' | 'terracotta' | 'wood' | 's
     } else if (kind === 'concrete') {
       // cast drip groove under the rim
       k.m('#a9a398', 'stone');
-      sh.box(0, h - 0.06, 0, along + 0.004, 0.012, across + 0.004, 3);
+      sh.box(0, h - 0.07, 0, along + 0.004, 0.008, across + 0.004, 3);
     }
   }
   // rim (a frame) + inner walls
   k.m(rimCol, mat);
-  const lip = kind === 'terracotta' ? 0.025 : kind === 'steel' ? 0.012 : kind === 'wood' ? 0.015 : 0;
+  const lip = kind === 'terracotta' ? 0.025 : kind === 'steel' ? 0.012 : kind === 'wood' ? 0.015 : 0.02;
   if (lip > 0) cbox(sh, 0, h - 0.03, 0, along + lip * 2, 0.06, across + lip * 2, 0.012, 1 | 2);
   const ox = ax + lip, oz = az + lip, ix = ax - t, iz = az - t;
   poly(sh, [-ox, h, -oz, ox, h, -oz, ix, h, -iz, -ix, h, -iz], 0, 1, 0);

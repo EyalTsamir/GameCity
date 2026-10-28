@@ -79,15 +79,15 @@ void main() {
   float pad = vBox.w;
   // blotchy edge: the band's reach wanders along the footprint
   float n = vn(vW * 3.1) * 0.65 + vn(vW * 9.0) * 0.35;
-  float reach = pad * (0.55 + 0.75 * n);
+  float reach = pad * (0.75 + 0.6 * n);
   float out_ = 1.0 - smoothstep(0.0, reach, d);
-  out_ *= out_;
-  float inside = d < 0.0 ? 0.55 + 0.45 * smoothstep(-0.12, 0.0, d) : 1.0;
+  out_ = out_ * (0.6 + 0.4 * out_);
+  float inside = d < 0.0 ? 0.6 + 0.4 * smoothstep(-0.15, 0.0, d) : 1.0;
   // grit: fine dark specks in the band
-  float grit = step(0.83, h2(floor(vW * 60.0))) * 0.35;
-  float a = clamp(vK * out_ * inside * (0.75 + 0.5 * n) + vK * out_ * grit, 0.0, 0.85);
+  float grit = step(0.8, h2(floor(vW * 60.0))) * 0.4;
+  float a = clamp(vK * out_ * inside * (0.85 + 0.45 * n) * 1.9 + vK * out_ * grit, 0.0, 0.92);
   // brownish grey grime (multiplied onto the ground colour)
-  vec3 dirt = vec3(0.50, 0.46, 0.40);
+  vec3 dirt = vec3(0.4, 0.36, 0.3);
   gl_FragColor = vec4(mix(vec3(1.0), dirt, a), 1.0);
 }
 `;

@@ -9,6 +9,21 @@ Branch `claude/real-w3-furniture` (from `claude/pensive-gates-bim12i`). Brief: d
   counter: trestle legs, cloth folds, slatted crates; (5) gazebo plank floor + worn path; (6) flagpole base plate,
   bolts, halyard, cleat (session 1 claimed done — verify visibility); (7) playground safety surface + swing chains;
   (8) statue figure + plinth; (9) bench LOS: `bin 10m` ended inside a bus shelter; (10) perf ?nopropdetail.
+* Session 2 progress (WIP commits pushed): **downtown invariants** run → 1 fault (statue steps' octagon corners
+  7 cm outside r = 1.5: facetLathe puts corners at r / cos(π/8)) → fixed (`Rs` in genStatue). Console clean.
+  New `src/world/props/contact.ts` (ground grime decals: rounded-rect SDF band, multiply blend, fades 45–70 m;
+  `queueContact`/`queueContactLocal` for landmarks, built by props.ts `spot()` → mesh `props-contact`;
+  `?nocontact`, off on low). Spots: lamps, benches (feet + scuff), bins, hydrant, bike rack, planter, mailbox,
+  phone box, newsstand (+ trodden patch), bus shelter, bollards; statue, gazebo, kiosk, picnic, flagpole,
+  market stall poles + table. Planter: 4 cm chamfer, weep holes + wash, tapered run-off streaks (furniture.ts
+  planterBox). Newsstand: deep roof (fascia, soffit, drip), shutter housing + rails + part-lowered slatted
+  curtain, tiered rack trays with stacked covers, back panels + lit poster case + kick plate. Market: cloth
+  with folds over the front/ends (trestles show), 3-slat crates with gaps and slatted bottoms. Flagpole:
+  square plinth, square plate, 4 studs (washer/nut/thread), sleeve with door, horn cleat + coiled halyard.
+  Gazebo: plank boards with gaps over a dark sub-floor + worn strip. Statue: new figure (boots, breeches,
+  coat with tails/lapels/buttons, face, queue, hands, scroll, tricorn; PAT.RUST on verdigris = brown streaks),
+  bold mouldings, sunk side panels, incised name. Playground: EPDM crumb tiles (PAT.GRAVEL) over the swing
+  arc, kerb, scuffed tiles under seats; torus chain links.
 * 2026-10-28 — Session 1 ends (context). Committed + pushed. Bench after-sheets: docs/progress/real/w3_after_1.jpg
   (bin, planter, phonebox, newsstand, bench, statue) and w3_after_2.jpg (gazebo, kiosk, playground, picnic,
   market stall, flagpole) — before = audit_3..5.jpg. Judged at 3 m: phone box, statue pedestal, gazebo

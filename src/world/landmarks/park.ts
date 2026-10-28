@@ -90,7 +90,7 @@ export function genStatue(env: Env, f: Feature): void {
   const cut = env.atlas.add(256, 48, (g, w, h) => {
     g.fillStyle = '#b8b1a7';
     g.fillRect(0, 0, w, h);
-    drawText(g, 'EDMVND · HAVEN', w / 2, h / 2 + 2, '30px Georgia, serif', '#5a554d', 2);
+    drawText(g, 'EDMVND · HAVEN', w / 2, h / 2 + 2, '24px Georgia, serif', '#5a554d', 1);
   });
   for (const ry of [0, Math.PI]) signQuad(env.T, cut, 0.8, 0.15, Math.sin(ry) * (pw / 2 + 0.004), 1.72, Math.cos(ry) * (pw / 2 + 0.004), ry, 0.2);
   const plaque = env.atlas.add(192, 120, (g, w, h) => {
@@ -229,7 +229,7 @@ export function genGazebo(env: Env, f: Feature): void {
   // entrance), each board its own tone; a worn strip from the steps to the centre where feet go
   K.cyl(M('#3b2c20', PAT.PLAIN, 0.9), pr - 0.05, pr - 0.05, 0.05, 0, 0.42, 0, 8, false, 'box', rot);
   const tones = ['#a97f55', '#b48a5e', '#9c744d', '#b99266'].map((c) => M(c, PAT.PLANKS, 0.82, 0, 0, 0, 0.6));
-  const worn = M('#c7a57c', PAT.PLAIN, 0.75, 0, 0, 0, 0.3);
+  const worn = M('#bb9670', PAT.PLANKS, 0.78, 0, 0, 0, 0.3);
   const fa = (pr - 0.06) * Math.cos(Math.PI / 8); // apothem: flat faces towards ±X / ±Z
   const halfW = (z: number) => Math.min(fa, fa * Math.SQRT2 - Math.abs(z));
   const bw = 0.155, gap = 0.008;
@@ -555,8 +555,26 @@ export function genPlayground(env: Env, f: Feature): void {
     sz = -D + 2.4,
     top = 2.5;
   // rubber safety tiles under the swings
-  const mat = M('#7a4537', PAT.CONCRETE, 0.95, 0, 0, 0, 0.5); // red EPDM rubber tiles
-  for (let i = 0; i < 8; i++) for (let j = 0; j < 4; j++) K.box(mat, 0.49, 0.025, 0.49, sx0 + 0.6 + i * 0.5 - 0.25 + 0.25, 0, sz - 1.0 + j * 0.5 + 0.25);
+  const swings = [
+    { x: sx0 + 1.0, amp: 0.42, ph: 0.0, kidOn: true },
+    { x: sx1 - 1.0, amp: 0.18, ph: 2.1, kidOn: false },
+  ];
+  const swingXs = swings.map((w) => w.x);
+  // red EPDM rubber-crumb tiles (two batches of colour), 4 cm thick with a bevelled edge kerb, laid over
+  // the whole swing arc; worn pale and dished under each seat where feet drag
+  const tileA = M('#7a4537', PAT.GRAVEL, 0.95, 0, 0, 0, 0.5);
+  const tileB = M('#844b3b', PAT.GRAVEL, 0.95, 0, 0, 0, 0.8);
+  const scuff = M('#9a6a55', PAT.GRAVEL, 0.97, 0, 0, 0, 0.3);
+  const tx0 = sx0 + 0.1, nTx = 8, nTz = 7, tz0 = sz - 1.75;
+  for (let i = 0; i < nTx; i++)
+    for (let j = 0; j < nTz; j++) {
+      const cx = tx0 + i * 0.5 + 0.25, cz = tz0 + j * 0.5 + 0.25;
+      const underSeat = swingXs.some((x) => Math.abs(cx - x) < 0.3) && Math.abs(cz - sz) < 0.55;
+      K.box(underSeat ? scuff : (i * 3 + j * 5) % 7 < 2 ? tileB : tileA, 0.492, underSeat ? 0.032 : 0.04, 0.492, cx, 0, cz);
+    }
+  const kerbM = M('#6e3f33', PAT.GRAVEL, 0.95);
+  for (const zz of [tz0 - 0.06, tz0 + nTz * 0.5 + 0.06]) K.boxC(kerbM, nTx * 0.5 + 0.24, 0.03, 0.12, tx0 + nTx * 0.25, 0.012, zz, 0, 0, 0);
+  for (const xx of [tx0 - 0.06, tx0 + nTx * 0.5 + 0.06]) K.boxC(kerbM, 0.12, 0.03, nTz * 0.5, xx, 0.012, tz0 + nTz * 0.25, 0, 0, 0);
   for (const x of [sx0, sx1]) {
     for (const dz of [-0.95, 0.95]) {
       K.rod(blue, [x, 0, sz + dz], [x, top, sz], 0.05, 10);
@@ -568,16 +586,15 @@ export function genPlayground(env: Env, f: Feature): void {
   }
   K.rod(blue, [sx0 - 0.1, top, sz], [sx1 + 0.1, top, sz], 0.06, 12);
   for (const x of [sx0 - 0.1, sx1 + 0.1]) K.sphere(M('#2d5f99', PAT.PLAIN, 0.5, 0.3), 0.062, x, top, sz, 8, 6);
-  const swings = [
-    { x: sx0 + 1.0, amp: 0.42, ph: 0.0, kidOn: true },
-    { x: sx1 - 1.0, amp: 0.18, ph: 2.1, kidOn: false },
-  ];
   for (const sw of swings) {
     env.anim({ mode: ANIM.SWING, pivot: new THREE.Vector3(sw.x, top, sz), axis: new THREE.Vector3(1, 0, 0), a: sw.amp, b: 2.2, c: sw.ph });
     // hanger clamps, chains of alternating links, a sagging rubber strap seat
     for (const dx of [-0.2, 0.2]) {
       env.K.cyl(steel, 0.075, 0.075, 0.09, sw.x + dx, top - 0.045, sz, 8);
-      for (let y = top - 0.08, li = 0; y > 0.56; y -= 0.055, li++) env.K.box(steel, li % 2 ? 0.008 : 0.022, 0.05, li % 2 ? 0.022 : 0.008, sw.x + dx, y - 0.05, sz);
+      // welded oval links, each turned 90° to the last (rings read as a chain at 3 m)
+      for (let y = top - 0.12, li = 0; y > 0.58; y -= 0.046, li++) env.K.torus(steel, 0.02, 0.0045, sw.x + dx, y, sz, 3, 8, Math.PI * 2, 0, li % 2 ? Math.PI / 2 : 0, 0);
+      // shackle into the seat
+      env.K.torus(steel, 0.018, 0.006, sw.x + dx, 0.55, sz, 4, 8, Math.PI * 2, 0, 0, 0);
     }
     const strap = M('#1d1d1d', PAT.PLAIN, 0.9);
     for (let i = 0; i < 6; i++) {
@@ -626,7 +643,7 @@ export function genPlayground(env: Env, f: Feature): void {
   }
   for (const dz of [-0.25, 0.25]) K.rod(yellow, [cx1 - 0.15, 0, lz + dz], [cx1 - 0.15, yAt(0.92), lz + dz], 0.03, 6);
   // rubber tiles at the run-out
-  for (let j2 = 0; j2 < 2; j2++) for (let i2 = 0; i2 < 3; i2++) K.box(mat, 0.49, 0.025, 0.49, cx1 + 0.05 - i2 * 0.5, 0, lz - 0.25 + j2 * 0.5);
+  for (let j2 = 0; j2 < 2; j2++) for (let i2 = 0; i2 < 3; i2++) K.box((i2 + j2) % 2 ? tileB : tileA, 0.492, 0.04, 0.492, cx1 + 0.05 - i2 * 0.5, 0, lz - 0.25 + j2 * 0.5);
   env.anim({ mode: ANIM.VIS, pivot: new THREE.Vector3(lx + 0.5, ph, lz), axis: new THREE.Vector3(0, 1, 0), a: 3, b: 0.15, c: 1.3 });
   kid(lx + 0.5, ph + 0.08, lz, Math.PI / 2, '#3fa7d6', false);
   env.anim(null);
