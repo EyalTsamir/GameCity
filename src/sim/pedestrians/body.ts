@@ -628,6 +628,9 @@ function buildCloseHead(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
       const t = (i / n) * Math.PI * 2;
       const phi = t - 0.68 * Math.sin(t); // vertices bunch at the face
       const p = torsoPoint(r, 0, phi, 2.1);
+      // the lower face narrows into the chin (a jaw line instead of a block), the temples a little
+      const cf = Math.max(0, Math.cos(phi));
+      p[0] *= 1 - 0.3 * sstep(-0.035, -0.105, Y) * Math.pow(cf, 1.4) - 0.05 * sstep(0.01, 0.05, Y) * cf;
       const X = p[0] / kx;
       const front = sstep(0.05, 0.45, Math.cos(phi));
       const rel = front > 0 ? faceRelief(X, Y, d.nose / k) * front * k : 0;
@@ -1027,7 +1030,7 @@ function buildHair(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
       const y0 = chin + (crown - chin) * hairlineU(phi);
       const t = Math.pow(s, 0.85);
       const y = y0 + (crown - y0) * t;
-      const push = vol * (0.25 + 0.75 * Math.min(1, s * 3.5)) * (1 - 0.35 * t);
+      const push = vol * ((cfg.close ? 0.08 : 0.25) + (cfg.close ? 0.92 : 0.75) * Math.min(1, s * (cfg.close ? 2.6 : 3.5))) * (1 - 0.35 * t);
       ids.push(b.v(headSurface(d, phi, Math.min(y, crown - 0.004), push), 2, 0, 0));
     }
     rings.push({ ids, c: [0, chin + (crown - chin) * 0.55, -0.01 * hk] });

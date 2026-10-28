@@ -27,8 +27,21 @@ Photo test "Person" (REAL.md). Owned: `src/sim/pedestrians/**` presentation (not
 * rig.ts: `Dims` per target (man/woman/child/heavy), `bodyParams()` → w,c,b,s,old.
 
 ## Done
+* Close level (Lod 4): 44-side head with a sculpted face (`faceRelief`: sockets, lids, brow ridge, nose with
+  bridge/tip/wings, cheekbones, lips, chin) + jaw taper + shell ears; painted eyes (almond, sclera, iris by face
+  bits, pupil, glint, lash line, crease), brows (hair colour), lips (lipstick bit), nostrils, age lines (age bits),
+  stubble (bit). Fingers: 4 jointed fingers with a relaxed curl + grip curl share, jointed thumb, pale nails.
+  pb2 (shots/w4/pb2/sheet.png): eyes, brows, nostrils, ears, fingers read at 0.75–1 m equivalent.
+* Hair strands (all levels, octaves fade by fwidth); hair sheen 0.07→0.03 (read as a bald spot on top).
+* Fabric (close): seams, denim twin stitching + back/front pockets + yoke, knee/elbow creases ∝ pose bend,
+  trouser break, sleeve cuff gathers, torso side seams / waist folds, coat/skirt drape, weave grain.
+* Shoes (close): welt / midsole line, laces, tongue gap, toe-cap and heel seams (aux u/v on the foot loft).
 
 ## Tried and rejected (why)
+* bench.mjs `pedestrian` for faces: its arm is ≥ 3 m and it frames the body middle → faces 25 px. Replaced by
+  people-bench.mjs. The free camera stops at 3 m (camera.ts FREE_MIN_DIST): the bench narrows the fov instead
+  (LOD distances scale with the fov, so the close level is chosen as for a real 0.75 m view).
+* Face detail fade at px 3.5–9 mm: eyes vanished at 3–4 m (where real eyes still read) → 6–16 mm.
 
 ## Toggles / tiers / costs
 

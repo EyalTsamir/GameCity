@@ -492,7 +492,7 @@ void pedPose(inout vec3 p, inout vec3 n) {
   vPedPat = pat;
   // material response: skin & hair soften the terminator (wrap), hair and shoes get a faint sheen
   vPedMat = region == ${R.SKIN} || region == ${R.FACE} || region == ${R.NECK} || region == ${R.LIPS} ? vec2(0.35, 0.0)
-          : region == ${R.HAIR} || region == ${R.BEARD} ? vec2(0.4, 0.07)
+          : region == ${R.HAIR} || region == ${R.BEARD} ? vec2(0.4, 0.03)
           : region == ${R.FOOT} ? vec2(0.0, 0.09)
           : region == ${R.BAG} || region == ${R.HAT} ? vec2(0.1, 0.04)
           : vec2(0.12, 0.0);
@@ -536,7 +536,7 @@ float pedStrands(vec3 r) {
   float fw = fwidth(fA);
   float f = mix(pedN1(fA) - 0.5, 0.0, smoothstep(0.35, 0.8, fw));
   float ff = mix(pedN1(a * 240.0 + wob * 4.0) - 0.5, 0.0, smoothstep(0.25, 0.6, fwidth(a * 240.0)));
-  return 0.8 + 0.34 * c + 0.22 * f + 0.14 * ff;
+  return 0.72 + 0.48 * c + 0.3 * f + 0.2 * ff;
 }
 // ── fabric (close range): seams, stitching, folds where the limb bends (knee / elbow creases deepen with
 // the bend), trouser breaks over the shoe, sleeve gathers, side drape at the waist, weave grain; denim
@@ -566,11 +566,11 @@ vec3 pedFabric(vec3 pc, float reg, float h, float sHem) {
     // knee: creases behind it deepen with the bend; the front pulls smooth and a little lighter
     float kz = exp(-pow((h - 0.5) / 0.07, 2.0));
     float bk = clamp(bend / 1.6, 0.0, 1.0);
-    float cre = sin((h - 0.5) * 210.0 + rn.x * side * 4.0) * kz * step(rn.z, -0.2);
-    sh *= 1.0 - (0.06 + 0.2 * bk) * max(cre, 0.0) + (0.03 + 0.1 * bk) * max(-cre, 0.0);
+    float cre = sin((h - 0.5) * 210.0 + rn.x * side * 4.0) * kz * mix(0.45, 1.0, step(rn.z, -0.2));
+    sh *= 1.0 - (0.12 + 0.3 * bk) * max(cre, 0.0) + (0.04 + 0.1 * bk) * max(-cre, 0.0);
     // the fabric drapes in shallow diagonal folds down the shin / thigh fronts
     float dr = sin(h * 46.0 + ang * 1.3) * (0.5 + 0.5 * sin(h * 13.0 - ang * 2.0));
-    sh *= 1.0 + 0.045 * dr;
+    sh *= 1.0 + 0.07 * dr;
     // the break: trousers stack in rings over the shoe
     float br = 1.0 - smoothstep(0.1, 0.17, h);
     sh *= 1.0 - 0.13 * br * max(sin(h * 260.0 + sin(ang * 2.0) * 1.6), 0.0);
@@ -593,7 +593,7 @@ vec3 pedFabric(vec3 pc, float reg, float h, float sHem) {
     float ez = exp(-pow((h - 0.5) / 0.08, 2.0));
     float be = clamp(bend / 1.8, 0.0, 1.0);
     float cre = sin((h - 0.5) * 170.0 + rn.y * 3.0) * ez * step(0.0, rn.z + 0.3);
-    sh *= 1.0 - (0.05 + 0.22 * be) * max(cre, 0.0);
+    sh *= 1.0 - (0.1 + 0.3 * be) * max(cre, 0.0);
     float cuff = 1.0 - smoothstep(0.05, 0.12, h);
     sh *= 1.0 - 0.1 * cuff * max(sin(h * 300.0 + ang * 2.0), 0.0);
     sh *= 1.0 - 0.14 * pedBand2(inner - 0.97, 0.025, px * 10.0);
@@ -678,7 +678,7 @@ vec3 pedFacePaint(vec3 skin, vec2 F) {
   }
   // eyes
   float ex = ax - 0.031, ey = F.y - 0.0004;
-  float ew = 0.0128;
+  float ew = 0.0122;
   float q = 1.0 - (ex * ex) / (ew * ew);
   float qa = pow(max(q, 0.0), 0.75);
   float upper = 0.0054 * qa + 0.0007 * ex / ew;
@@ -687,11 +687,11 @@ vec3 pedFacePaint(vec3 skin, vec2 F) {
   float open = smoothstep(-px * 0.5, px * 0.5, min(dU, dL)) * step(0.0, q);
   vec3 iris = eyeC == 0u ? vec3(0.07, 0.04, 0.025) : eyeC == 1u ? vec3(0.17, 0.09, 0.04) : eyeC == 2u ? vec3(0.17, 0.16, 0.08) : vec3(0.2, 0.27, 0.33);
   float dI = length(vec2(ex, ey + 0.0003));
-  vec3 eye = vec3(0.7, 0.66, 0.6) * mix(1.0, 0.82, smoothstep(0.004, 0.011, abs(ex)));
+  vec3 eye = vec3(0.6, 0.57, 0.52) * mix(1.0, 0.82, smoothstep(0.004, 0.011, abs(ex)));
   eye = mix(eye, iris, 1.0 - smoothstep(0.0052 - px * 0.5, 0.0052 + px * 0.5, dI));
   eye = mix(eye, vec3(0.012), 1.0 - smoothstep(0.0021 - px * 0.5, 0.0021 + px * 0.5, dI));
   eye += 0.35 * (1.0 - smoothstep(0.0, 0.0011 + px * 0.5, length(vec2(ex - 0.0016, ey - 0.0016))));
-  eye *= 1.0 - 0.4 * (1.0 - smoothstep(0.0, 0.0028, dU));
+  eye *= 1.0 - 0.5 * (1.0 - smoothstep(0.0, 0.0032, dU));
   // lash line (thicker on women and at the outer corner), lid crease, lower lid
   float lw = (0.0009 + 0.0007 * w) * (1.0 + 0.5 * smoothstep(-0.004, 0.012, ex));
   float qL = step(0.0, 1.0 - (ex * ex) / (ew * ew * 1.15));
@@ -718,7 +718,7 @@ vec3 pedFacePaint(vec3 skin, vec2 F) {
   float upT = 0.0054 * pow(lq, 0.55) - 0.0011 * exp(-(F.x * F.x) / 0.000012);
   float loB = -0.0064 * pow(lq, 0.7);
   float lip = smoothstep(-px * 0.5, px * 0.5, min(upT - ly, ly - loB)) * step(0.0005, lq);
-  vec3 lipC = skin * mix(vec3(0.88, 0.66, 0.63), vec3(0.84, 0.55, 0.55), w);
+  vec3 lipC = skin * mix(vec3(0.84, 0.58, 0.56), vec3(0.8, 0.48, 0.49), w);
   if ((vPedFB & 16u) != 0u) lipC = vec3(0.32, 0.05, 0.07);
   lipC *= mix(1.0, 0.86, step(0.0, ly)); // the upper lip faces down: a little darker
   pc = mix(pc, lipC, lip * mix(0.5, 1.0, det));
