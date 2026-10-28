@@ -36,6 +36,11 @@ Read first: `CLAUDE.md`, `docs/progress/NEXT-ROUND.md` (token rules + principles
   lead (`send_message` to session `session_01XuhAMczW3iK25AAWnf3qog`) a ≤ 120-word milestone note: branch, commit,
   what changed, sheet path, toggles, open items, "continue" or "done". Then stop — the lead spawns a fresh session
   from your log. Read code with `grep -n` + targeted ranges; small Edit hunks; batch independent tool calls.
+* **Log early, commit early.** Wave 1 workers read ~250k tokens of code in 35 min and hit the account usage
+  limit with nothing pushed. Rules: write your log skeleton + push within your first ~15 tool calls; after each
+  reading burst, write the code pointers you learned into the log (so the next session never re-reads them);
+  commit + push WIP that typechecks at least every ~30 min. Read with `grep -n` and ≤ 80-line ranges — never whole
+  files over 300 lines. Budget: ~120k context for reading + design, the rest for edits and bench judgments.
 * At the end of your session run `python3 scripts/agent-tools/tokens.py` (no args → this session) and paste the
   summary into your log.
 

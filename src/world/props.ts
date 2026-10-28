@@ -7,6 +7,7 @@
 // Draw calls: furniture (1, merged, per-vertex roughness/metalness + night emission),
 // glass (1, transparent), light pools + halos (1, additive). No shadow casters.
 
+import { binSimple, bollardSimple, newsstandSimple, phoneboxSimple, planterBoxSimple } from './props/legacy';
 import * as THREE from 'three';
 import type { CityContext, CityModule } from './../core/context';
 import { OCC } from '../core/occupancy';
@@ -67,6 +68,8 @@ export default function create(ctx: CityContext): CityModule {
   const count: Record<string, number> = {};
   const inc = (key: string) => (count[key] = (count[key] ?? 0) + 1);
   const rng = ctx.rng('props');
+  // real-object furniture (bins, planters, phone boxes, newsstands, bollards) or the old primitives (low tier, ?nopropdetail)
+  const simple = ctx.debug.params.has('nopropdetail') || ctx.quality.level === 'low';
 
   /** local → world for a frame at (x, z) with yaw */
   const toWorld = (x: number, z: number, yaw: number, lx: number, lz: number): [number, number] => [x + lx * Math.cos(yaw) + lz * Math.sin(yaw), z - lx * Math.sin(yaw) + lz * Math.cos(yaw)];
@@ -99,7 +102,8 @@ export default function create(ctx: CityContext): CityModule {
       if (!occAny(occ, x, z, 0.3, OCC.PATH | OCC.SOLID | OCC.BUILDING | OCC.WATER | OCC.ROAD | OCC.SIDEWALK) && !(layout.walk.get(x, z) & MASK_WALK)) {
         sel(x);
         kf.sh.frame(x, Math.max(H(x, z), b.y), z, b.yaw);
-        bin(kf, b.style === 'modern');
+        if (simple) binSimple(kf, b.style === 'modern');
+        else bin(kf, b.style === 'modern', brng);
         inc('bin');
       }
     }
@@ -114,7 +118,8 @@ export default function create(ctx: CityContext): CityModule {
       case 'bin':
         sel(s.x);
         kf.sh.frame(s.x, y, s.z, s.yaw);
-        bin(kf, modernD(s.district));
+        if (simple) binSimple(kf, modernD(s.district));
+        else bin(kf, modernD(s.district), srng);
         inc('bin');
         break;
       case 'hydrant':
@@ -134,7 +139,7 @@ export default function create(ctx: CityContext): CityModule {
         kf.sh.frame(s.x, y, s.z, s.yaw);
         const d = s.district;
         const kind = modernD(d) ? 'concrete' : d === 'oldtown' || d === 'market' ? 'terracotta' : d === 'civic' ? 'steel' : 'wood';
-        planterBox(kf, kind, PLANTER.along, PLANTER.across, PLANTER.height);
+        (simple ? planterBoxSimple : planterBox)(kf, kind, PLANTER.along, PLANTER.across, PLANTER.height);
         inc('planter');
         break;
       }
@@ -148,7 +153,8 @@ export default function create(ctx: CityContext): CityModule {
         sel(s.x);
         k.sh.frame(s.x, y, s.z, s.yaw);
         k.sh.local(0, 0, 0.15);
-        phonebox(k);
+        if (simple) phoneboxSimple(k);
+        else phonebox(k, g);
         const [x, z] = toWorld(s.x, s.z, s.yaw, 0, 0.15);
         glows.push({ x, y: y + 0.03, z, size: 1.5, halo: false, color: '#ffd59a', intensity: 0.2 });
         inc('phonebox');
@@ -158,7 +164,7 @@ export default function create(ctx: CityContext): CityModule {
         sel(s.x);
         k.sh.frame(s.x, y, s.z, s.yaw);
         k.sh.local(0, 0, 0.25);
-        newsstand(k, srng);
+        (simple ? newsstandSimple : newsstand)(k, srng);
         const [x, z] = toWorld(s.x, s.z, s.yaw, 0, 1.0);
         glows.push({ x, y: y + 0.03, z, size: 1.8, halo: false, color: '#ffe2a8', intensity: 0.16 });
         inc('newsstand');
@@ -505,7 +511,8 @@ export default function create(ctx: CityContext): CityModule {
           if (!occAny(occ, x - nx * 1.0, z - nz * 1.0, 0.2, OCC.SIDEWALK)) continue;
           sel(x);
           kf.sh.frame(x, H(x, z) + 0.01, z, 0);
-          bollard(kf, blk.kind === 'civic' ? 'stone' : 'steel');
+          if (simple) bollardSimple(kf, blk.kind === 'civic' ? 'stone' : 'steel');
+          else bollard(kf, blk.kind === 'civic' ? 'stone' : blk.kind === 'station' ? 'iron' : 'steel');
           inc('bollard');
         }
       }
