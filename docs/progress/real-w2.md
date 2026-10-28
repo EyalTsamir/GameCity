@@ -4,6 +4,13 @@ Branch `claude/real-w2-vehicles` (from `claude/pensive-gates-bim12i`). Brief: `d
 Owned: `src/sim/traffic/{models,vehicleMaterial,render}.ts` (+ trains later). Sim untouched.
 
 ## Resume here
+* 2026-10-28 session 2 (milestone 2, lead verdict: car FORM still blocky). Plan, in order: (1) carBody.ts end
+  zones — per-ring-point setback / plan inset / vertical roll (NOSE/TAIL tables) so nose and tail round in plan and
+  elevation, bumper = lower band of the loft (region 'bumper', finish per model) with a seam strip, strip caps
+  (no flat full-section cap), crowned bonnet/roof, flared arches; lamps/grille/plates placed on the surface with
+  `endSurface()` (numeric, carBody.ts); (2) bigger mirrors + handle recesses; (3) panel gaps that read at 3 m
+  (wider core + edge shading); (4) bus ends + doors; (5) grime gradient; (6) trains. Golden ref:
+  shots/golden/ref (merged base 2a6ca11).
 * 2026-10-28 — Milestone 1 done and pushed (cars, vans, lorry, bus, ice-cream van: brief priorities 1–6;
   7 "mechanics" (pitch/roll) already existed in render.ts). Session stopped at ~310k context.
   Next session, in order: (a) verify the roof box (part 90, ~1 vehicle in 5 by phase) on parked cars
