@@ -4,6 +4,10 @@ Branch `claude/real-w2-vehicles` (from `claude/pensive-gates-bim12i`). Brief: `d
 Owned: `src/sim/traffic/{models,vehicleMaterial,render}.ts` (+ trains later). Sim untouched.
 
 ## Resume here
+* 2026-10-28 session 3 — started from a3b6216 (m2 merged). Lead's order: (1) van + lorry cabs (rolled
+  edges, raked screen + seal, conformal lamps, bumper, steps, mirrors on arms) + cargo bodies (box-van ribs, roller
+  shutter, lorry tarp + straps); (2) bus rear (glass, engine grille, lamps conformed); (3) car shoulder line +
+  tumblehome; (4) variation across parked rows; (5) trains (#7). Progress below as it lands.
 * 2026-10-28 session 2 — **Milestone 2 pushed** (car form + bus ends/doors + grime). Stopped at the context cap.
   Next session, in order: (a) judge `docs/progress/real/w2_m2_*.jpg` with fresh eyes (left = before, right = after);
   (b) car polish: front badge still reads as a blue chip (chrome reflecting sky), horizon-reflection line on the
