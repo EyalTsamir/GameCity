@@ -20,6 +20,7 @@ import { setPedHairline, setPedFolds } from './pedestrians/shader';
 import { CrowdRenderer as LegacyRenderer } from './pedestrians/legacy/render';
 import { gaitConfig } from './pedestrians/rig';
 import { Riders } from './pedestrians/riders';
+import { Actors } from './pedestrians/actors';
 import { buildStallMesh } from './pedestrians/vendors';
 
 export default function create(ctx: CityContext): CityModule {
@@ -51,11 +52,18 @@ export default function create(ctx: CityContext): CityModule {
   }
   // riders of the traffic's two-wheelers (drawn with the crowd)
   const riders = legacy ? null : new Riders(ctx);
+  // people placed by other modules (site workers, band, kids, boat crews): real posed figures (actors.ts)
+  const actors = legacy ? null : new Actors(ctx);
+  let nExtra = 0;
 
   const offs: (() => void)[] = [];
   offs.push(ctx.events.on('bus:stop', (e: BusEvent) => crowd.onBus(e)));
   offs.push(ctx.events.on('train:arrive', (e: { station: number; trainId: number }) => crowd.onTrain(e)));
   offs.push(ctx.events.on('timejump', () => crowd.onTimeJump()));
+  if (actors) {
+    offs.push(ctx.events.on('train:arrive', () => actors.onTrain(true)));
+    offs.push(ctx.events.on('train:depart', () => actors.onTrain(false)));
+  }
   offs.push(
     ctx.events.on('quality', () => {
       crowd.onQuality();
@@ -94,18 +102,22 @@ export default function create(ctx: CityContext): CityModule {
     update(dt) {
       const t0 = performance.now();
       crowd.update(dt);
+      if (actors) actors.update(dt);
       ms = ms * 0.9 + (performance.now() - t0) * 0.1;
     },
     frame() {
-      if (riders) riders.sync();
+      if (riders) {
+        riders.sync();
+        nExtra = actors ? actors.sync(riders.list, riders.n) : riders.n;
+      }
       if (renderer instanceof CrowdRenderer) renderer.tableware.lights.value = ctx.uniforms.uLights.value;
       if (renderer instanceof CrowdRenderer)
-        renderer.write(crowd, ctx.camera, ctx.uniforms.uTime.value, ctx.uniforms.uRain.value, ctx.uniforms.uNight.value, ctx.size.height * ctx.renderer.getPixelRatio(), riders ? riders.list : null, riders ? riders.n : 0);
+        renderer.write(crowd, ctx.camera, ctx.uniforms.uTime.value, ctx.uniforms.uRain.value, ctx.uniforms.uNight.value, ctx.size.height * ctx.renderer.getPixelRatio(), riders ? riders.list : null, nExtra);
       else renderer.write(crowd, ctx.camera, ctx.uniforms.uTime.value, ctx.uniforms.uRain.value, ctx.uniforms.uNight.value, ctx.size.height * ctx.renderer.getPixelRatio());
     },
     stats() {
       const extra: Record<string, number> = renderer instanceof CrowdRenderer ? { pinLod: renderer.pin.n, figureVerts: renderer.vertices, shadowVerts: renderer.shadowVertices } : {};
-      return { ...crowd.statsSummary(), riders: riders ? riders.n : 0, drawn: renderer.visible, ...(renderer instanceof CrowdRenderer ? { closeLod: renderer.close.n } : {}), nearLod: renderer.near.n, tinyLod: renderer.tiny.n, ...extra, figureTris: renderer.triangles, simMs: Math.round(ms * 100) / 100 };
+      return { ...crowd.statsSummary(), riders: riders ? riders.n : 0, actors: actors ? actors.n : 0, drawn: renderer.visible, ...(renderer instanceof CrowdRenderer ? { closeLod: renderer.close.n } : {}), nearLod: renderer.near.n, tinyLod: renderer.tiny.n, ...extra, figureTris: renderer.triangles, simMs: Math.round(ms * 100) / 100 };
     },
     invariants() {
       return crowd.invariants();
