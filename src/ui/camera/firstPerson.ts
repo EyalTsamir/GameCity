@@ -139,6 +139,8 @@ export class FirstPerson {
   private drag: LookDrag | null = null;
   private stick: { id: number; ox: number; oy: number; dx: number; dy: number } | null = null;
   private inspectCheck = 0;
+  /** the diorama's tilt-shift was switched off for the walk (restored on leaving) */
+  private dofOff = false;
   /** stats */
   private walked = 0;
   private blocked = 0;
@@ -204,6 +206,20 @@ export class FirstPerson {
       near0: cam.near,
     };
     this.active = true;
+    // ?diorama: the tilt-shift look (miniature blur) is for the tabletop view, not for standing in the street
+    // (world mode's natural lens stays idle at FOCUS anyway)
+    const fx = this.ctx.services.postfx;
+    this.dofOff = false;
+    if (DIORAMA && fx) {
+      try {
+        if (fx.isEnabled('dof')) {
+          fx.setEnabled('dof', false);
+          this.dofOff = true;
+        }
+      } catch {
+        /* ignore */
+      }
+    }
     const hud = this.overlay();
     hud.show(true);
     hud.setHint('enter', 10);
@@ -235,6 +251,14 @@ export class FirstPerson {
     this.host.pointer.dragging = false;
     this.setInspected(null);
     this.hud?.show(false);
+    if (this.dofOff) {
+      this.dofOff = false;
+      try {
+        this.ctx.services.postfx?.setEnabled('dof', true);
+      } catch {
+        /* ignore */
+      }
+    }
     this.host.release(cam.position.clone(), viewYaw, viewPitch, rise);
     this.host.emit('camera:walk', false);
   }
