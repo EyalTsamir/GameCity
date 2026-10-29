@@ -2,6 +2,7 @@
 # Golden-view regression check: capture fixed views in one session and diff them against a reference set.
 #   scripts/agent-tools/golden.sh ref            # (re)capture the reference into shots/golden/ref
 #   scripts/agent-tools/golden.sh <tag>          # capture shots/golden/<tag>, diff vs ref → shots/golden/<tag>/diff.png + scores
+#   GOLDEN_URL=http://127.0.0.1:5175/ scripts/agent-tools/golden.sh <tag>   # capture from another dev server (frozen copy)
 # Views: overview, downtown, oldtown, harbor, westbrook @ 11 h, 1280×720, ?seed default, sim paused after load.
 # Mean abs diff per view (0–255) is printed; moving traffic/people make ~2–4 normal, > 8 means look at diff.png.
 set -e
@@ -10,7 +11,7 @@ TAG=${1:-cur}
 OUT=shots/golden/$TAG
 mkdir -p "$OUT"
 [ -x shots/servers.sh ] && shots/servers.sh >/dev/null   # (re)start the dev server if it died
-node scripts/capture-set.mjs --out "$OUT" --views overview,downtown,oldtown,harbor,westbrook --hours 11 \
+node scripts/capture-set.mjs ${GOLDEN_URL:+--url $GOLDEN_URL} --out "$OUT" --views overview,downtown,oldtown,harbor,westbrook --hours 11 \
   --width 1280 --height 720 --hideui 1 --q "nointro&noidle&speed=0" > "$OUT.log" 2>&1 || true
 grep -E '"consoleErrors"|harnessError' -A2 "$OUT.log" | head -6
 [ "$TAG" = ref ] && exit 0

@@ -86,15 +86,26 @@ export default function create(ctx: CityContext): CityModule {
   const plan = ctx.plan;
   // A/B switches: ?legacyfacade = original shell shader
   const mats = createMaterials(ctx.uniforms, { legacy: ctx.debug.params.has('legacyfacade'), wear: !ctx.debug.params.has('nowear'), winDepth: !ctx.debug.params.has('nowinreveal'), winRefl: !ctx.debug.params.has('nowinrefl'), wallRelief: !ctx.debug.params.has('nowallrelief'), plinth: !ctx.debug.params.has('noplinth'), glassVar: !ctx.debug.params.has('noglassvar') });
-  const shell = new Builder({ normal: true, color: true, uv: true, facade: true });
   // ?nowingeo = no near-LOD sill / surround geometry (the shader sill everywhere)
   const winGeoOn = !ctx.debug.params.has('nowingeo');
-  if (winGeoOn) shell.winRec = [];
+  const winRec: number[] | null = winGeoOn ? [] : null;
+  const chunkKey = (x: number, z: number) => Math.max(0, Math.min(3, Math.floor((x + 220) / TRIM_CHUNK))) * 4 + Math.max(0, Math.min(3, Math.floor((z + 200) / TRIM_CHUNK)));
+  // the facade shell is chunked on the trim grid as well: culled per chunk, and drawn nearest chunk first (frame())
+  // so the near facades' depth rejects the (expensive) facade pixels of the buildings behind them
+  const shellChunks = new Map<number, Builder>();
+  const shellOf = (x: number, z: number): Builder => {
+    const key = chunkKey(x, z);
+    let b = shellChunks.get(key);
+    if (!b) {
+      b = new Builder({ normal: true, color: true, uv: true, facade: true });
+      b.winRec = winRec;
+      shellChunks.set(key, b);
+    }
+    return b;
+  };
   const trimChunks = new Map<number, Builder>();
   const trimOf = (x: number, z: number): Builder => {
-    const kx = Math.max(0, Math.min(3, Math.floor((x + 220) / TRIM_CHUNK)));
-    const kz = Math.max(0, Math.min(3, Math.floor((z + 200) / TRIM_CHUNK)));
-    const key = kx * 4 + kz;
+    const key = chunkKey(x, z);
     let b = trimChunks.get(key);
     if (!b) {
       b = new Builder({ normal: true, color: true });
@@ -141,6 +152,7 @@ export default function create(ctx: CityContext): CityModule {
     const W = ns ? fp.x1 - fp.x0 : fp.z1 - fp.z0;
     const D = ns ? fp.z1 - fp.z0 : fp.x1 - fp.x0;
     const trim = trimOf(cx, cz);
+    const shell = shellOf(cx, cz);
     for (const b of [shell, trim, lights, signs, cloth, greenB]) b.frame(yaw, cx, 0, cz);
     const g: Gen = {
       lot,
@@ -223,10 +235,17 @@ export default function create(ctx: CityContext): CityModule {
     group.add(mesh);
     meshes.push(mesh);
   };
-  let trimTris = 0;
+  let trimTris = 0,
+    shellTris = 0;
   for (const b of trimChunks.values()) trimTris += b.triangleCount;
-  const triCounts = { shell: shell.triangleCount, trim: trimTris, lights: lights.triangleCount, signs: signs.triangleCount, green: greenB.triangleCount };
-  add(shell, mats.shell, 'buildings-shell', true, true);
+  for (const b of shellChunks.values()) shellTris += b.triangleCount;
+  const triCounts = { shell: shellTris, trim: trimTris, lights: lights.triangleCount, signs: signs.triangleCount, green: greenB.triangleCount };
+  for (const b of shellChunks.values()) add(b, mats.shell, 'buildings-shell', true, true);
+  const shellMeshes = meshes.filter((m) => m.name === 'buildings-shell');
+  const shellBoxes = shellMeshes.map((m) => {
+    m.geometry.computeBoundingBox();
+    return m.geometry.boundingBox!;
+  });
   for (const b of trimChunks.values()) add(b, mats.trim, 'buildings-trim', true, true);
   add(lights, mats.lights, 'buildings-lights', false, false);
   add(signs, mats.signs, 'buildings-signs', false, true);
@@ -242,8 +261,7 @@ export default function create(ctx: CityContext): CityModule {
   ctx.scene.add(group);
 
   if (ctx.quality.level === 'low') mats.uniforms.uDetail.value = 0.4;
-  const winGeo = shell.winRec ? createWinGeo(shell.winRec, ctx.quality.level === 'low' ? 22 : ctx.quality.level === 'medium' ? 32 : 42) : null;
-  shell.winRec = null;
+  const winGeo = winRec ? createWinGeo(winRec, ctx.quality.level === 'low' ? 22 : ctx.quality.level === 'medium' ? 32 : 42) : null;
   if (winGeo) group.add(winGeo.group);
   // debug (perf analysis): ?bdbg=noshell,notrim,nocast,nodetail
   const bdbg = (ctx.debug.params.get('bdbg') ?? '').split(',');
@@ -349,6 +367,11 @@ export default function create(ctx: CityContext): CityModule {
     },
     frame(_realDt, c) {
       if (winGeo) winGeo.frame(c.camera.position, mats.uniforms.uGeoWin.value);
+      // facade chunks nearest first inside their late-draw slot (main.ts lateDraws: renderOrder 1; 0 = ?drawsort=0)
+      if (shellMeshes.length > 1 && shellMeshes[0].renderOrder >= 1) {
+        const cp = c.camera.position;
+        for (let i = 0; i < shellMeshes.length; i++) shellMeshes[i].renderOrder = 1 + Math.min(0.9, shellBoxes[i].distanceToPoint(cp) * 1e-4);
+      }
       const u = c.uniforms;
       const day = u.uDaylight.value;
       const dusk = u.uDusk.value;
@@ -421,7 +444,7 @@ export default function create(ctx: CityContext): CityModule {
       const out = [...problems];
       if (built.length !== lots.length) out.push(`built ${built.length} of ${lots.length} building lots`);
       if (doorsBuilt < doorsWanted) out.push(`${doorsWanted - doorsBuilt} of ${doorsWanted} doors missing`);
-      if (meshes.length > 6 + MAX_TRIM_CHUNKS) out.push(`too many building meshes (${meshes.length})`);
+      if (meshes.length > 5 + 2 * MAX_TRIM_CHUNKS) out.push(`too many building meshes (${meshes.length})`);
       if (violations > 0) out.push(`${violations} building(s) violate the footprint rule`);
       if (atlas.full) out.push('sign atlas overflowed');
       return out;

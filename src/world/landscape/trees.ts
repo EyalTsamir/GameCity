@@ -29,6 +29,8 @@ const NEAR_STEP = 18;
 /** per-kind cap of 3D instances */
 const NEAR_CAP = [1100, 1500, 500, 3000];
 const TILE = 64;
+/** camera travel (m) after which the far impostors are re-sorted near → far */
+const FAR_SORT = 90;
 /** typical crown width / height per kind: leaf cards are pre-squashed so they stay square in the world */
 const KIND_ASPECT = [0.85, 0.55, 0.35, 1.25];
 /** leaf cards use uv 0..LEAF_U of the leaf texture; bark / core cones sample the solid corner */
@@ -1154,9 +1156,49 @@ export function createLandTrees(list: TreeList, uniforms: Record<string, THREE.I
     id[t * 4 + 2] = list.tint[t];
     id[t * 4 + 3] = list.yaw[t];
   }
-  quad.setAttribute('iPos', new THREE.InstancedBufferAttribute(ip, 4));
-  quad.setAttribute('iDat', new THREE.InstancedBufferAttribute(id, 4));
+  const ipA = new THREE.InstancedBufferAttribute(ip, 4);
+  const idA = new THREE.InstancedBufferAttribute(id, 4);
+  quad.setAttribute('iPos', ipA);
+  quad.setAttribute('iDat', idA);
   quad.instanceCount = list.n;
+  // the impostors are drawn in tile order, nearest tile first (re-sorted when the camera has moved FAR_SORT m):
+  // in the generation order a forest belt seen from afar was shaded several times over before the depth test
+  // could reject the hidden quads (alpha-tested, opaque: the order does not change the picture). ?treesort=0: off
+  const sortOn = typeof location === 'undefined' || new URLSearchParams(location.search).get('treesort') !== '0';
+  const tileList = [...tiles.values()];
+  const tileD = new Float64Array(tileList.length);
+  const tileOrder = tileList.map((_, i) => i);
+  const tileC = tileList.map((a) => {
+    let sx = 0,
+      sz = 0;
+    for (const t of a) {
+      sx += list.x[t];
+      sz += list.z[t];
+    }
+    return [sx / a.length, sz / a.length];
+  });
+  let sortX = 1e9,
+    sortZ = 1e9;
+  const sortFar = (cx: number, cz: number) => {
+    for (let i = 0; i < tileList.length; i++) tileD[i] = (tileC[i][0] - cx) ** 2 + (tileC[i][1] - cz) ** 2;
+    tileOrder.sort((a, b) => tileD[a] - tileD[b]);
+    let o = 0;
+    for (const ti of tileOrder) {
+      for (const t of tileList[ti]) {
+        ip[o] = list.x[t];
+        ip[o + 1] = list.y[t];
+        ip[o + 2] = list.z[t];
+        ip[o + 3] = list.h[t];
+        id[o] = list.w[t];
+        id[o + 1] = list.kind[t];
+        id[o + 2] = list.tint[t];
+        id[o + 3] = list.yaw[t];
+        o += 4;
+      }
+    }
+    ipA.needsUpdate = true;
+    idA.needsUpdate = true;
+  };
   quad.boundingSphere = new THREE.Sphere(new THREE.Vector3(CX, 0, CZ), 6000);
   const nearC = new THREE.Vector4(1e9, 0, 1e9, NEAR_R);
   const impU = { ...uniforms, uNearC: { value: nearC } };
@@ -1239,6 +1281,11 @@ export function createLandTrees(list: TreeList, uniforms: Record<string, THREE.I
       lastY = p.y;
       lastZ = p.z;
       rebuild(p.x, p.y, p.z);
+      if (sortOn && (p.x - sortX) ** 2 + (p.z - sortZ) ** 2 > FAR_SORT * FAR_SORT) {
+        sortX = p.x;
+        sortZ = p.z;
+        sortFar(p.x, p.z);
+      }
     },
     setDetail(k: number) {
       const d = Math.min(1, Math.max(0, k));
