@@ -15,7 +15,8 @@ import * as THREE from 'three';
 import type { CityContext } from '../../core/context';
 import { glowTexture } from '../../core/gfx';
 import { MODEL_KINDS, ModelKind, SPECS } from './specs';
-import { buildModel, makeAtlas, BusRouteSign, MODEL_LODS } from './models';
+import { buildModel, makeAtlas, BusRouteSign, MODEL_LODS, setTwoWheelDetail } from './models';
+import { boxHunt } from '../../core/boxhunt';
 import { createVehicleMaterial } from './vehicleMaterial';
 import { TrafficSim, Vehicle, St } from './sim';
 
@@ -108,6 +109,7 @@ export class VehicleRenderer {
     const q = ctx.debug.params;
     this.detailOff = [q.has('nocarinterior'), q.has('nopanelgaps'), q.has('novehiclewear'), q.has('nocarpaint')];
 
+    setTwoWheelDetail(boxHunt(ctx, '2wdetail'));
     MODEL_KINDS.forEach((kind) => {
       const cap = parked.filter((p) => p.model === kind).length + MOVING_CAP[kind];
       const row: Layer[] = [];

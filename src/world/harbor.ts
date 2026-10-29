@@ -21,7 +21,7 @@ import { QUAY_X, RIVER, WATER_LEVEL } from '../core/constants';
 import { HB, RIG } from './harbor/geo';
 import { createBeamMesh, createHarborMaterials, createGlowMesh, followCraneLamps, NMOB, type GlowPoint } from './harbor/material';
 import { buildBreakwater } from './harbor/breakwater';
-import { buildFishQuay } from './harbor/quay';
+import { buildFishQuay, setQuayDetail } from './harbor/quay';
 import { buildCarouselRotating, buildCarouselStatic, buildPier, buildWheelRotating, buildWheelStatic, type WheelSpec } from './harbor/pier';
 import { buildFerryDock, lifeguardTower, scatterBeach, setBeachDetail } from './harbor/beach';
 import { boxHunt } from '../core/boxhunt';
@@ -131,6 +131,7 @@ export default function create(ctx: CityContext): CityModule {
   const edge = buildQuayEdge(north, QX, -140, -6, ladderZ, shipZ);
   // the fish quay at the north end (crabber + tender moored by the boats module)
   if (!ctx.debug.params.has('noquaylife')) {
+    setQuayDetail(boxHunt(ctx, 'quaykit'));
     buildFishQuay(north, {
       ground,
       rng: ctx.rng('harbor-fishquay'),

@@ -429,6 +429,12 @@ function forklift(b: HB, x: number, y: number, z: number, yaw: number): void {
 
 /** fishermen's store: tarred timber shed with a lean-to roof, a door, a small window, oilskins on pegs, buoys
  *  and dan buoys against the wall, a bench in front */
+/** box hunt (?noquaykit): the chilled fish container built as a real container */
+let REEFER = true;
+export function setQuayDetail(on: boolean): void {
+  REEFER = on;
+}
+
 function store(b: HB, x0: number, z0: number, x1: number, z1: number, y: number): void {
   const H = 2.5,
     H2 = 2.9;
@@ -631,6 +637,30 @@ export function buildFishQuay(b: HB, o: FishQuayOpts): void {
     b.box(cx + 0.7, cy + 0.6, cz + 1.62, 0.5, 0.4, 0.03, 0, 0);
     // drip stain + a hose from the reefer drain
     stain(b, cx + 0.2, cy, cz + 2.0, 1.4, 1.0, '#575c5b', 0.4);
+    if (REEFER) {
+      // box hunt (?noquaykit): a real container — corner posts and castings, pressed vertical ribs on the blank
+      // side and end, the operator's blue band, a data plate, a grimy roof, drain streaks under the unit
+      b.color('#d3d6d2');
+      for (const sx of [-1, 1])
+        for (const sz of [-1, 1]) {
+          b.box(cx + sx * 1.17, cy + 1.3, cz + sz * 1.45, 0.14, 2.5, 0.14, 0, 0);
+          b.color('#7a7f83');
+          for (const yy of [0.07, 2.53]) b.box(cx + sx * 1.18, cy + yy, cz + sz * 1.46, 0.17, 0.13, 0.17, 0, 0);
+          b.color('#d3d6d2');
+        }
+      b.color('#dcdfdb');
+      for (let k = 0; k < 9; k++) b.box(cx - 1.235, cy + 1.32, cz - 1.2 + k * 0.3, 0.035, 2.3, 0.1, 0, 0);
+      for (let k = 0; k < 7; k++) b.box(cx - 0.9 + k * 0.3, cy + 1.32, cz - 1.515, 0.1, 2.3, 0.035, 0, 0);
+      b.color('#2f5f9a');
+      b.box(cx - 1.255, cy + 2.05, cz, 0.01, 0.26, 2.7, 0, 0);
+      b.box(cx, cy + 2.05, cz - 1.535, 2.1, 0.26, 0.01, 0, 0);
+      b.color('#9aa0a2');
+      b.box(cx - 1.26, cy + 1.25, cz + 0.9, 0.01, 0.18, 0.26, 0, 0);
+      b.color('#9d9f99').pat(PAT.CORRUGATED, 0.1);
+      b.box(cx, cy + 2.66, cz, 2.3, 0.01, 2.86, 0, 1);
+      b.pat(PAT.NONE).color('#a6aaa6');
+      for (const dx of [-0.6, 0.3]) b.box(cx + dx, cy + 0.75, cz + 1.625, 0.05, 1.0, 0.006, 0, 0);
+    }
   }
   b.color('#2f5f8a').pat(PAT.RUST, 0.45);
   for (const [dx, dz] of [

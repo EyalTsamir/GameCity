@@ -4,7 +4,8 @@
 import * as THREE from 'three';
 import type { Feature } from '../../core/plan';
 import { ANIM, M, PAT, type Mat } from './builder';
-import { C, S, flagpole, person } from './parts';
+import { C, S, flagpole, person, railing } from './parts';
+import { boxHunt } from '../../core/boxhunt';
 import type { Env } from './env';
 import { drawText, signQuad } from './signs';
 import { shell } from './sculpt';
@@ -593,4 +594,111 @@ export function genCourtHoops(env: Env, f: Feature): void {
   }
   env.endChecks();
   env.pick(f.id, 'School basketball court', new THREE.Box3(new THREE.Vector3(c.x0, 0, c.z0), new THREE.Vector3(c.x1, 3.6, c.z1)), () => ['Westbrook School court', 'Hoops at both ends', 'Lines painted by the city']);
+  if (boxHunt(env.ctx, 'schoolrail')) schoolBounds(env);
+}
+
+/**
+ * Box hunt (?noschoolrail): the school grounds fenced like a real school — 1.6 m steel bar railings with posts and
+ * ball finials round the open sides of the block (yard, lawns), a double gate into the yard on the east side and
+ * pedestrian gates (front lawn, between the two buildings), a row of Sheffield bike stands inside the yard gate.
+ */
+function schoolBounds(env: Env): void {
+  const plan = env.ctx.plan;
+  const yard = plan.areas.find((a) => a.kind === 'schoolyard');
+  const lots = plan.lots.filter((l) => l.kind === 'school' && l.footprint);
+  if (!yard || lots.length < 2) return;
+  const blk = plan.blocks[yard.blockId].rect;
+  const [fpA, fpB] = lots.map((l) => l.footprint!);
+  const H = 1.6,
+    ins = 0.3;
+  const x0 = blk.x0 + ins,
+    x1 = blk.x1 - ins,
+    z0 = blk.z0 + ins,
+    z1 = blk.z1 - ins;
+  env.begin(0, 0, 0, 0);
+  env.checkRect(blk, 'school railings', 0.05);
+  const green = '#2b4a3b';
+  const steel = M(green, PAT.PLAIN, 0.5, 0.45);
+  const D = env.D;
+  /** a straight run from a to b (y 0) with posts every ≤ 2.5 m; gaps [t0, t1] (m along the run) left open */
+  const run = (ax: number, az: number, bx: number, bz: number, gaps: [number, number][] = []): void => {
+    const L = Math.hypot(bx - ax, bz - az);
+    if (L < 0.5) return;
+    const ux = (bx - ax) / L,
+      uz = (bz - az) / L;
+    const cuts = [0, ...gaps.flat(), L];
+    for (let i = 0; i < cuts.length; i += 2) {
+      const s0 = cuts[i],
+        s1 = cuts[i + 1];
+      if (s1 - s0 < 0.2) continue;
+      railing(env, [ax + ux * s0, 0, az + uz * s0], [ax + ux * s1, 0, az + uz * s1], H, green, false, true);
+      const n = Math.max(1, Math.ceil((s1 - s0) / 2.5));
+      for (let k = 0; k <= n; k++) {
+        const s = s0 + ((s1 - s0) * k) / n;
+        const px = ax + ux * s,
+          pz = az + uz * s;
+        D.box(steel, 0.07, H + 0.06, 0.07, px, 0, pz, Math.atan2(ux, uz));
+        D.sphere(steel, 0.045, px, H + 0.1, pz, 6, 4);
+      }
+    }
+  };
+  /** a gate leaf hung at (hx, hz) running w along (ux, uz): frame, bar infill, a latch */
+  const leaf = (hx: number, hz: number, ux: number, uz: number, w: number): void => {
+    const ex = hx + ux * w,
+      ez = hz + uz * w;
+    railing(env, [hx, 0.05, hz], [ex, 0.05, ez], H - 0.05, green, false, true);
+    const ry = Math.atan2(ux, uz) + Math.PI / 2;
+    for (const y of [0.08, H - 0.02, H * 0.5]) env.S.box(steel, 0.05, 0.05, w, (hx + ex) / 2, y - 0.025, (hz + ez) / 2, ry);
+    for (const [x, z] of [
+      [hx + ux * 0.03, hz + uz * 0.03],
+      [ex - ux * 0.03, ez - uz * 0.03],
+    ])
+      env.S.box(steel, 0.05, H, 0.05, x, 0.03, z);
+    D.box(M('#9aa0a4', PAT.PLAIN, 0.4, 0.7), 0.04, 0.1, 0.12, ex - ux * 0.06, 1.0, ez - uz * 0.06, ry);
+  };
+  /** gate posts (0.14 m, capped) either side of an opening from s0 to s1 along a run */
+  const gatePosts = (ax: number, az: number, ux: number, uz: number, s0: number, s1: number): void => {
+    for (const s of [s0, s1]) {
+      const px = ax + ux * s,
+        pz = az + uz * s;
+      env.S.box(steel, 0.14, H + 0.2, 0.14, px, 0, pz);
+      env.S.box(steel, 0.18, 0.04, 0.18, px, H + 0.2, pz);
+      D.sphere(steel, 0.06, px, H + 0.3, pz, 8, 6);
+    }
+  };
+  // north side: the front lawn east of the main building, with a pedestrian gate
+  const nA = Math.max(fpA.x1, fpB.x1) + 0.3;
+  const nMid = (nA + x1) / 2 - nA;
+  run(nA, z0, x1, z0, [[nMid - 0.6, nMid + 0.6]]);
+  gatePosts(nA, z0, 1, 0, nMid - 0.6, nMid + 0.6);
+  leaf(nA + nMid - 0.55, z0, 1, 0, 1.08);
+  // east side: double gate into the yard (open inwards a little), bike stands just inside
+  const gz = yard.rect.z0 + 3.2;
+  const g0 = gz - z0,
+    g1 = gz + 4 - z0;
+  run(x1, z0, x1, z1, [[g0, g1]]);
+  gatePosts(x1, z0, 0, 1, g0, g1);
+  const open = 0.5;
+  leaf(x1, gz + 0.07, -Math.sin(open), Math.cos(open), 1.9);
+  leaf(x1, gz + 4 - 0.07, -Math.sin(open), -Math.cos(open), 1.9);
+  // south side and the west lawn
+  run(x0, z1, x1, z1);
+  const wA = Math.max(fpA.z1, fpB.z1) + 0.3;
+  run(x0, wA, x0, z1);
+  // the gap between the two buildings on the west side: a pedestrian gate
+  const lo = Math.min(fpA.z1, fpB.z1),
+    hi = Math.max(fpA.z0, fpB.z0);
+  if (hi - lo > 1.6) {
+    gatePosts(x0, lo, 0, 1, 0.1, hi - lo - 0.1);
+    leaf(x0, lo + 0.17, 0, 1, hi - lo - 0.34);
+  }
+  // Sheffield bike stands: inverted U hoops in a row inside the yard gate
+  const hoop = M('#7d8489', PAT.PLAIN, 0.35, 0.8);
+  for (let i = 0; i < 5; i++) {
+    const sz = gz + 5.4 + i * 0.9,
+      sx = x1 - 1.6;
+    for (const dx of [-0.3, 0.3]) env.S.rod(hoop, [sx + dx, 0, sz], [sx + dx, 0.55, sz], 0.025, 6);
+    env.S.torus(hoop, 0.3, 0.025, sx, 0.55, sz, 4, 10, Math.PI, 0, 0, 0);
+  }
+  env.endChecks();
 }

@@ -2496,6 +2496,87 @@ export const RIDE: Record<'bike' | 'moto', RideGeom[]> = {
 /** a passenger on the back of a Vespa: hands round the rider's waist, feet on the floorboard's rear */
 export const RIDE_PILLION: RideGeom = { mode: 2, seatY: 0.8, seatZ: -0.6, barY: 0.98, barZ: -0.38, barX: 0.15, footY: 0.31, footZ: -0.3, footX: 0.15, crank: 0, lean: 0.06 };
 
+/** box hunt (?no2wdetail): sculpted e-moped / e-scooter / motorbike bodies instead of rounded boxes */
+let TW = true;
+export function setTwoWheelDetail(on: boolean): void {
+  TW = on;
+}
+
+/**
+ * Smooth body lofted along z: sections [z, yc, half width, half height] in increasing z, superellipse rings of
+ * squareness p (2 = ellipse, larger = boxier), flat end caps. Indexed, smooth normals.
+ */
+function loftZ(sec: readonly (readonly number[])[], p = 2.5): THREE.BufferGeometry {
+  const n = LOD === 0 ? 16 : LOD === 1 ? 10 : 6;
+  const e = 2 / p;
+  const pos: number[] = [];
+  const idx: number[] = [];
+  const ring = (z: number, yc: number, hw: number, hh: number): void => {
+    for (let k = 0; k < n; k++) {
+      const t = (k / n) * Math.PI * 2;
+      const c = Math.cos(t),
+        s = Math.sin(t);
+      pos.push(Math.sign(c) * Math.pow(Math.abs(c), e) * hw, yc + Math.sign(s) * Math.pow(Math.abs(s), e) * hh, z);
+    }
+  };
+  for (const [z, yc, hw, hh] of sec) ring(z, yc, hw, hh);
+  const m = sec.length;
+  for (let i = 0; i < m - 1; i++)
+    for (let k = 0; k < n; k++) {
+      const a = i * n + k,
+        b = i * n + ((k + 1) % n);
+      idx.push(a, b, a + n, b, b + n, a + n);
+    }
+  // end caps on their own vertices (flat)
+  for (const [end, dir] of [
+    [0, -1],
+    [m - 1, 1],
+  ] as const) {
+    const [z, yc, hw, hh] = sec[end];
+    const c0 = pos.length / 3;
+    pos.push(0, yc, z);
+    ring(z, yc, hw, hh);
+    for (let k = 0; k < n; k++) {
+      const a = c0 + 1 + k,
+        b = c0 + 1 + ((k + 1) % n);
+      if (dir > 0) idx.push(c0, a, b);
+      else idx.push(c0, b, a);
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setIndex(idx);
+  g.computeVertexNormals();
+  return g;
+}
+
+/** an open shell (partial cylinder / sphere) seen from both sides: the shape plus its flipped copy */
+function shell(b: Builder, g: THREE.BufferGeometry, o: PartOpts): void {
+  b.add(inward(g.clone()), o);
+  b.add(g, o);
+}
+
+/** a round part facing +z (lamp lens, gauge, mirror) of radius r and depth d centred at (x, y, z) */
+function disc(r: number, d: number, x: number, y: number, z: number, n = LOD === 0 ? 14 : 8): THREE.BufferGeometry {
+  const g = new THREE.CylinderGeometry(r, r, d, n);
+  g.rotateX(Math.PI / 2);
+  g.translate(x, y, z);
+  return g;
+}
+
+/** cast-wheel spokes on both faces of a fat wheel (dark bars over the light hub discs); turn with the wheel */
+function castSpokes(b: Builder, z: number, r: number, w: number, front: boolean, part: number, k = 5): void {
+  if (LOD > 0) return;
+  const wh = { x: 0, y: r, z, front };
+  for (const sd of [1, -1])
+    for (let i = 0; i < k; i++) {
+      const a = (i / k) * Math.PI * 2;
+      const r0 = r * 0.16,
+        r1 = r * 0.6;
+      b.add(tube(sd * (w / 2 + 0.005), r + Math.cos(a) * r0, z + Math.sin(a) * r0, sd * (w / 2 + 0.005), r + Math.cos(a) * r1, z + Math.sin(a) * r1, 0.011), { color: '#2a2d31', rough: 0.7, wheel: wh, part });
+    }
+}
+
 function bikes(): THREE.BufferGeometry {
   const b = new Builder();
   // ── bicycles (v0 city / sport, v2 Dutch): frame painted, black parts
@@ -2574,18 +2655,68 @@ function bikes(): THREE.BufferGeometry {
   {
     const part = VB(1);
     const r = 0.11;
-    thinWheel(b, 0.4, r, true, part, 0.03, false);
-    thinWheel(b, -0.4, r, false, part, 0.03, false);
-    b.add(rbox(0.15, 0.05, 0.66, 0.02, 0, 0.07, -0.02), { color: '#ffffff', paint: true, rough: 0.8, part });
-    b.add(bx(0.13, 0.008, 0.5, 0, 0.12, -0.04), { color: '#1d1f22', rough: 1.6, part });
-    b.add(tube(0, 0.12, 0.33, 0, 1.0, 0.4, 0.022), { color: '#ffffff', paint: true, rough: 0.8, part });
-    b.add(tube(0.23, 1.02, 0.4, -0.23, 1.02, 0.4, 0.014), { color: '#2a2c30', rough: 0.9, part });
-    for (const sd of [1, -1]) b.add(tube(sd * 0.17, 1.02, 0.4, sd * 0.24, 1.02, 0.4, 0.019), { color: '#1d1f22', rough: 1.2, part });
-    b.add(tube(0, 0.2, 0.4, 0, 0.11, 0.4, 0.012), { color: '#2a2c30', rough: 0.9, part });
-    b.add(rbox(0.06, 0.05, 0.03, 0.015, 0, 0.92, 0.43), { color: HEAD, light: LIGHT_HEAD, rough: 0.4, part });
-    b.add(rbox(0.06, 0.02, 0.02, 0.008, 0, 0.17, -0.38), { color: TAIL, light: LIGHT_TAIL, rough: 0.5, part });
-    // rear mudguard
-    b.add(bx(0.08, 0.012, 0.18, 0, 0.23, -0.38), { color: '#2a2c30', rough: 1.0, part });
+    if (TW) {
+      // box hunt: a lofted deck with a rounded nose and grip tape, a neck up to the folding stem (hinge collar),
+      // a fork round the hub-motor front wheel, a display, bell and brake lever on the bar, the operator's QR
+      // plate on the stem, a curved rear guard carrying the tail lamp, a kickstand
+      const paint = { color: '#ffffff', paint: true, rough: 0.8, part };
+      const dark = { color: '#2a2c30', rough: 0.9, part };
+      thinWheel(b, 0.43, r, true, part, 0.03, false);
+      thinWheel(b, -0.42, r, false, part, 0.03, false);
+      b.add(
+        loftZ(
+          [
+            [-0.4, 0.105, 0.035, 0.02],
+            [-0.37, 0.1, 0.075, 0.032],
+            [-0.28, 0.098, 0.088, 0.036],
+            [0.16, 0.098, 0.088, 0.036],
+            [0.25, 0.105, 0.074, 0.034],
+            [0.31, 0.13, 0.045, 0.034],
+          ],
+          3,
+        ),
+        paint,
+      );
+      b.add(bx(0.13, 0.006, 0.47, 0, 0.133, -0.06), { color: '#18191b', rough: 1.8, part });
+      b.add(tube(0, 0.12, 0.27, 0, 0.3, 0.355, 0.032), paint);
+      b.add(tube(0, 0.29, 0.352, 0, 1.0, 0.405, 0.023), paint);
+      b.add(tube(0, 0.3, 0.353, 0, 0.37, 0.358, 0.032), dark);
+      for (const sd of [1, -1]) b.add(tube(sd * 0.028, 0.3, 0.36, sd * 0.032, r, 0.43, 0.011), dark);
+      const hub = new THREE.CylinderGeometry(0.052, 0.052, 0.06, LOD === 0 ? 12 : 6);
+      hub.rotateZ(Math.PI / 2);
+      hub.translate(0, r, 0.43);
+      b.add(hub, { color: '#3c4046', rough: 0.7, wheel: { x: 0, y: r, z: 0.43, front: true }, part });
+      b.add(tube(0.23, 1.02, 0.405, -0.23, 1.02, 0.405, 0.013), dark);
+      for (const sd of [1, -1]) {
+        b.add(tube(sd * 0.17, 1.02, 0.405, sd * 0.245, 1.02, 0.405, 0.019), { color: '#1d1f22', rough: 1.2, part });
+        b.add(tube(sd * 0.1, 1.035, 0.43, sd * 0.2, 1.03, 0.45, 0.006), dark);
+      }
+      b.add(rbox(0.085, 0.03, 0.065, 0.012, 0, 1.015, 0.4), { color: '#1d1f22', rough: 0.6, part });
+      b.add(bx(0.06, 0.004, 0.04, 0, 1.045, 0.4), { color: '#7fe0cf', rough: 0.3, part });
+      b.add(disc(0.018, 0.02, -0.12, 1.045, 0.405), { color: CHROME, rough: 0.4, part });
+      b.add(rbox(0.075, 0.1, 0.006, 0.01, 0, 0.55, 0.385), { color: '#f2f2f0', rough: 0.8, part });
+      b.add(bx(0.04, 0.04, 0.003, 0, 0.58, 0.389), { color: '#1d1f22', rough: 1.0, part });
+      b.add(rbox(0.06, 0.05, 0.03, 0.015, 0, 0.92, 0.43), { color: HEAD, light: LIGHT_HEAD, rough: 0.4, part });
+      const guard = new THREE.CylinderGeometry(r + 0.024, r + 0.024, 0.07, LOD === 0 ? 10 : 6, 1, true, Math.PI * 0.42, Math.PI * 0.6);
+      guard.rotateZ(Math.PI / 2);
+      guard.translate(0, r, -0.42);
+      shell(b, guard, paint);
+      b.add(rbox(0.05, 0.02, 0.02, 0.008, 0, 0.12, -0.565), { color: TAIL, light: LIGHT_TAIL, rough: 0.5, part });
+      b.add(tube(-0.07, 0.07, -0.08, -0.12, 0.005, -0.15, 0.008), dark);
+    } else {
+      thinWheel(b, 0.4, r, true, part, 0.03, false);
+      thinWheel(b, -0.4, r, false, part, 0.03, false);
+      b.add(rbox(0.15, 0.05, 0.66, 0.02, 0, 0.07, -0.02), { color: '#ffffff', paint: true, rough: 0.8, part });
+      b.add(bx(0.13, 0.008, 0.5, 0, 0.12, -0.04), { color: '#1d1f22', rough: 1.6, part });
+      b.add(tube(0, 0.12, 0.33, 0, 1.0, 0.4, 0.022), { color: '#ffffff', paint: true, rough: 0.8, part });
+      b.add(tube(0.23, 1.02, 0.4, -0.23, 1.02, 0.4, 0.014), { color: '#2a2c30', rough: 0.9, part });
+      for (const sd of [1, -1]) b.add(tube(sd * 0.17, 1.02, 0.4, sd * 0.24, 1.02, 0.4, 0.019), { color: '#1d1f22', rough: 1.2, part });
+      b.add(tube(0, 0.2, 0.4, 0, 0.11, 0.4, 0.012), { color: '#2a2c30', rough: 0.9, part });
+      b.add(rbox(0.06, 0.05, 0.03, 0.015, 0, 0.92, 0.43), { color: HEAD, light: LIGHT_HEAD, rough: 0.4, part });
+      b.add(rbox(0.06, 0.02, 0.02, 0.008, 0, 0.17, -0.38), { color: TAIL, light: LIGHT_TAIL, rough: 0.5, part });
+      // rear mudguard
+      b.add(bx(0.08, 0.012, 0.18, 0, 0.23, -0.38), { color: '#2a2c30', rough: 1.0, part });
+    }
   }
   return b.build();
 }
@@ -2600,31 +2731,140 @@ function motos(): THREE.BufferGeometry {
       R = 0.24;
     fatWheel(b, zf, R, 0.1, true, SC);
     fatWheel(b, zr, R, 0.11, false, SC);
-    // rear cowl (body colour), tapering towards the top
-    const cowl = rbox(0.5, 0.42, 0.78, 0.16, 0, 0.26, -0.42, 2);
-    taper(cowl, 0.26, 0.68, -0.42, 0.18, 0.1, 0.12);
-    b.add(cowl, { color: '#ffffff', paint: true, rough: 0.7, part: SC });
-    // floorboard + leg shield + front fender + headset
-    b.add(rbox(0.36, 0.07, 0.56, 0.03, 0, 0.24, 0.1), { color: '#2c2f33', rough: 1.4, part: SC });
-    const shield = rbox(0.48, 0.62, 0.07, 0.03, 0, 0.27, 0.44);
-    taper(shield, 0.27, 0.89, 0.44, 0.35, 0.0, 0.0);
-    b.add(shield, { color: '#ffffff', paint: true, rough: 0.7, part: SC });
-    b.add(rbox(0.16, 0.12, 0.42, 0.05, 0, 0.42, 0.66), { color: '#ffffff', paint: true, rough: 0.7, part: SC });
-    b.add(tube(0, 0.5, 0.6, 0, 0.98, 0.5, 0.03), { color: '#2c2f33', rough: 0.9, part: SC });
-    b.add(rbox(0.3, 0.12, 0.16, 0.05, 0, 0.94, 0.5), { color: '#ffffff', paint: true, rough: 0.7, part: SC });
-    b.add(tube(0.3, 1.03, 0.45, -0.3, 1.03, 0.45, 0.014), { color: CHROME, rough: 0.5, part: SC });
-    for (const sd of [1, -1]) {
-      b.add(tube(sd * 0.24, 1.03, 0.45, sd * 0.32, 1.03, 0.45, 0.02), { color: '#1d1f22', rough: 1.2, part: SC });
-      b.add(tube(sd * 0.2, 1.03, 0.47, sd * 0.25, 1.2, 0.47, 0.006), { color: CHROME, rough: 0.5, part: SC });
-      b.add(rbox(0.08, 0.05, 0.02, 0.015, sd * 0.26, 1.19, 0.47), { color: '#7d8a94', rough: 0.3, part: SC });
-    }
-    b.add(rbox(0.13, 0.1, 0.06, 0.04, 0, 0.92, 0.6), { color: HEAD, light: LIGHT_HEAD, rough: 0.4, part: SC });
-    // seat + tail light + blinkers
-    b.add(rbox(0.3, 0.1, 0.62, 0.05, 0, 0.66, -0.32), { color: '#2a241f', rough: 1.1, part: SC });
-    b.add(rbox(0.14, 0.06, 0.04, 0.02, 0, 0.52, -0.83), { color: TAIL, light: LIGHT_TAIL, rough: 0.5, part: SC });
-    for (const sd of [1, -1]) {
-      b.add(bx(0.05, 0.04, 0.04, sd * 0.17, 0.86, 0.56), { color: AMBER, light: sd > 0 ? LIGHT_BLINK_L : LIGHT_BLINK_R, part: SC });
-      b.add(bx(0.05, 0.04, 0.04, sd * 0.13, 0.5, -0.83), { color: AMBER, light: sd > 0 ? LIGHT_BLINK_L : LIGHT_BLINK_R, part: SC });
+    if (TW) {
+      // box hunt: the body sculpted — a lofted rear cowl bulging over the engine and narrowing under the saddle,
+      // a curved leg shield with the horn grille, a domed front mudguard, a lofted headset with a round lamp in
+      // a chrome bezel and the speedo on top, round mirrors, a stitched saddle, alloy floor trims with rubber
+      // strips, the engine case and silencer under the cowl, a chrome grab rail, plate and lamps on the tail
+      const paint = { color: '#ffffff', paint: true, rough: 0.7, part: SC };
+      const dark = { color: '#2c2f33', rough: 0.9, part: SC };
+      const cowl = loftZ(
+        [
+          [-0.99, 0.6, 0.035, 0.03],
+          [-0.96, 0.58, 0.11, 0.09],
+          [-0.89, 0.54, 0.19, 0.16],
+          [-0.77, 0.5, 0.24, 0.21],
+          [-0.6, 0.48, 0.26, 0.225],
+          [-0.42, 0.475, 0.255, 0.22],
+          [-0.24, 0.485, 0.22, 0.2],
+          [-0.08, 0.5, 0.17, 0.19],
+          [-0.02, 0.505, 0.12, 0.17],
+        ],
+        2.6,
+      );
+      taper(cowl, 0.3, 0.72, 0, 0.3, 0, 0);
+      cowl.computeVertexNormals();
+      b.add(cowl, paint);
+      b.add(rbox(0.36, 0.07, 0.56, 0.03, 0, 0.24, 0.1), { color: '#2c2f33', rough: 1.4, part: SC });
+      for (let i = -1.5; i <= 1.5; i++) b.add(bx(0.014, 0.006, 0.44, i * 0.07, 0.31, 0.12), { color: '#18191b', rough: 1.8, part: SC });
+      for (const sd of [1, -1]) b.add(tube(sd * 0.178, 0.3, -0.12, sd * 0.178, 0.3, 0.37, 0.008), { color: CHROME, rough: 0.4, part: SC });
+      // leg shield: a raked, curved shell (front face + inside), horn grille on the front
+      // (raked back: the shield and its grille sheared toward the rider with height)
+      const rake = (g: THREE.BufferGeometry): THREE.BufferGeometry => {
+        const lp = g.attributes.position as THREE.BufferAttribute;
+        for (let i = 0; i < lp.count; i++) lp.setZ(i, lp.getZ(i) + 0.04 - (lp.getY(i) - 0.27) * 0.16);
+        g.computeVertexNormals();
+        return g;
+      };
+      shell(b, rake(new THREE.CylinderGeometry(0.235, 0.3, 0.66, LOD === 0 ? 14 : 8, 1, true, -0.92, 1.84).translate(0, 0.6, 0.2)), paint);
+      b.add(rake(rbox(0.075, 0.2, 0.03, 0.012, 0, 0.62, 0.462)), { color: '#3a3d42', rough: 0.8, part: SC });
+      for (let i = 0; i < 4; i++) b.add(rake(bx(0.056, 0.007, 0.006, 0, 0.66 + i * 0.035, 0.478)), { color: CHROME, rough: 0.4, part: SC });
+      // steering column, single-sided front link, domed mudguard
+      b.add(tube(0, 0.93, 0.45, 0, 0.45, 0.6, 0.028), dark);
+      b.add(tube(0.075, 0.5, 0.6, 0.075, R, zf, 0.02), dark);
+      // mudguard: a deep-sided band hugging the wheel from just below the front round to the back
+      const band = new THREE.CylinderGeometry(R + 0.055, R + 0.055, 0.17, LOD === 0 ? 14 : 8, 1, true, -0.2, Math.PI * 0.86 + 0.2);
+      band.rotateZ(Math.PI / 2);
+      band.translate(0, R, zf);
+      shell(b, band, paint);
+      for (const sd of [1, -1]) {
+        const skirt = new THREE.RingGeometry(R - 0.05, R + 0.055, LOD === 0 ? 14 : 8, 1, -0.2, Math.PI * 0.86 + 0.2);
+        skirt.rotateY(-Math.PI / 2);
+        skirt.translate(sd * 0.085, R, zf);
+        shell(b, skirt, paint);
+      }
+      // headset: lofted cowl round the bars, lamp + bezel, speedo, bars, grips, round mirrors
+      b.add(
+        loftZ(
+          [
+            [0.36, 0.975, 0.04, 0.04],
+            [0.4, 0.98, 0.15, 0.065],
+            [0.5, 0.985, 0.165, 0.075],
+            [0.58, 0.985, 0.13, 0.07],
+            [0.62, 0.985, 0.07, 0.055],
+          ],
+          2.4,
+        ),
+        paint,
+      );
+      b.add(disc(0.058, 0.03, 0, 0.985, 0.615), { color: HEAD, light: LIGHT_HEAD, rough: 0.4, part: SC });
+      const bezel = new THREE.TorusGeometry(0.06, 0.008, 4, LOD === 0 ? 16 : 8);
+      bezel.translate(0, 0.985, 0.632);
+      b.add(bezel, { color: CHROME, rough: 0.35, part: SC });
+      const speedo = new THREE.CylinderGeometry(0.042, 0.045, 0.012, LOD === 0 ? 14 : 8);
+      speedo.translate(0, 1.062, 0.47);
+      b.add(speedo, { color: '#1d1f22', rough: 0.3, part: SC });
+      b.add(tube(0.3, 1.03, 0.45, -0.3, 1.03, 0.45, 0.014), { color: CHROME, rough: 0.5, part: SC });
+      for (const sd of [1, -1]) {
+        b.add(tube(sd * 0.24, 1.03, 0.45, sd * 0.32, 1.03, 0.45, 0.02), { color: '#1d1f22', rough: 1.2, part: SC });
+        b.add(tube(sd * 0.2, 1.03, 0.47, sd * 0.25, 1.19, 0.47, 0.006), { color: CHROME, rough: 0.5, part: SC });
+        b.add(disc(0.045, 0.014, sd * 0.255, 1.215, 0.47), { color: '#7d8a94', rough: 0.3, part: SC });
+        b.add(bx(0.04, 0.035, 0.05, sd * 0.165, 0.955, 0.5), { color: AMBER, light: sd > 0 ? LIGHT_BLINK_L : LIGHT_BLINK_R, part: SC });
+        b.add(bx(0.04, 0.03, 0.04, sd * 0.11, 0.6, -0.95), { color: AMBER, light: sd > 0 ? LIGHT_BLINK_L : LIGHT_BLINK_R, part: SC });
+      }
+      // saddle (lofted) and the tail: lamp, plate on its holder
+      b.add(
+        loftZ(
+          [
+            [-0.79, 0.715, 0.02, 0.02],
+            [-0.77, 0.72, 0.1, 0.045],
+            [-0.67, 0.725, 0.14, 0.058],
+            [-0.42, 0.728, 0.155, 0.062],
+            [-0.16, 0.735, 0.158, 0.06],
+            [-0.03, 0.742, 0.13, 0.052],
+            [0.01, 0.745, 0.06, 0.035],
+          ],
+          3,
+        ),
+        { color: '#2a241f', rough: 1.1, part: SC },
+      );
+      b.add(rbox(0.13, 0.06, 0.04, 0.02, 0, 0.545, -0.995), { color: TAIL, light: LIGHT_TAIL, rough: 0.5, part: SC });
+      b.add(bx(0.19, 0.07, 0.012, 0, 0.42, -0.94), dark);
+      b.add(decalPlane(0.17, 0.04, 0, 0.455, -0.9475, 'nz'), { color: '#ffffff', rough: 0.6, decal: R_PLATE, plate: true, part: SC });
+      // engine case (left) and silencer (right) under the cowl; grab rail on the plain Vespa
+      b.add(rbox(0.11, 0.17, 0.42, 0.04, -0.135, 0.12, -0.52), { color: '#8f949a', rough: 0.6, part: SC });
+      b.add(tube(0.16, 0.3, -0.45, 0.17, 0.28, -0.88, 0.055), { color: '#2e3135', rough: 0.8, part: SC });
+      b.add(tube(0.17, 0.28, -0.88, 0.17, 0.28, -0.92, 0.03), { color: CHROME, rough: 0.35, part: SC });
+      const V0 = VB(0);
+      for (const sd of [1, -1]) b.add(tube(sd * 0.13, 0.69, -0.62, sd * 0.12, 0.78, -0.86, 0.009), { color: CHROME, rough: 0.4, part: V0 });
+      b.add(tube(0.12, 0.78, -0.86, -0.12, 0.78, -0.86, 0.009), { color: CHROME, rough: 0.4, part: V0 });
+    } else {
+      // rear cowl (body colour), tapering towards the top
+      const cowl = rbox(0.5, 0.42, 0.78, 0.16, 0, 0.26, -0.42, 2);
+      taper(cowl, 0.26, 0.68, -0.42, 0.18, 0.1, 0.12);
+      b.add(cowl, { color: '#ffffff', paint: true, rough: 0.7, part: SC });
+      // floorboard + leg shield + front fender + headset
+      b.add(rbox(0.36, 0.07, 0.56, 0.03, 0, 0.24, 0.1), { color: '#2c2f33', rough: 1.4, part: SC });
+      const shield = rbox(0.48, 0.62, 0.07, 0.03, 0, 0.27, 0.44);
+      taper(shield, 0.27, 0.89, 0.44, 0.35, 0.0, 0.0);
+      b.add(shield, { color: '#ffffff', paint: true, rough: 0.7, part: SC });
+      b.add(rbox(0.16, 0.12, 0.42, 0.05, 0, 0.42, 0.66), { color: '#ffffff', paint: true, rough: 0.7, part: SC });
+      b.add(tube(0, 0.5, 0.6, 0, 0.98, 0.5, 0.03), { color: '#2c2f33', rough: 0.9, part: SC });
+      b.add(rbox(0.3, 0.12, 0.16, 0.05, 0, 0.94, 0.5), { color: '#ffffff', paint: true, rough: 0.7, part: SC });
+      b.add(tube(0.3, 1.03, 0.45, -0.3, 1.03, 0.45, 0.014), { color: CHROME, rough: 0.5, part: SC });
+      for (const sd of [1, -1]) {
+        b.add(tube(sd * 0.24, 1.03, 0.45, sd * 0.32, 1.03, 0.45, 0.02), { color: '#1d1f22', rough: 1.2, part: SC });
+        b.add(tube(sd * 0.2, 1.03, 0.47, sd * 0.25, 1.2, 0.47, 0.006), { color: CHROME, rough: 0.5, part: SC });
+        b.add(rbox(0.08, 0.05, 0.02, 0.015, sd * 0.26, 1.19, 0.47), { color: '#7d8a94', rough: 0.3, part: SC });
+      }
+      b.add(rbox(0.13, 0.1, 0.06, 0.04, 0, 0.92, 0.6), { color: HEAD, light: LIGHT_HEAD, rough: 0.4, part: SC });
+      // seat + tail light + blinkers
+      b.add(rbox(0.3, 0.1, 0.62, 0.05, 0, 0.66, -0.32), { color: '#2a241f', rough: 1.1, part: SC });
+      b.add(rbox(0.14, 0.06, 0.04, 0.02, 0, 0.52, -0.83), { color: TAIL, light: LIGHT_TAIL, rough: 0.5, part: SC });
+      for (const sd of [1, -1]) {
+        b.add(bx(0.05, 0.04, 0.04, sd * 0.17, 0.86, 0.56), { color: AMBER, light: sd > 0 ? LIGHT_BLINK_L : LIGHT_BLINK_R, part: SC });
+        b.add(bx(0.05, 0.04, 0.04, sd * 0.13, 0.5, -0.83), { color: AMBER, light: sd > 0 ? LIGHT_BLINK_L : LIGHT_BLINK_R, part: SC });
+      }
     }
     // delivery: rack + insulated top box (light grey with a coloured lid)
     const DV = VB(1);
@@ -2640,38 +2880,162 @@ function motos(): THREE.BufferGeometry {
       R = 0.3;
     fatWheel(b, zf, R, 0.11, true, MB);
     fatWheel(b, zr, R, 0.15, false, MB);
-    b.add(rbox(0.3, 0.32, 0.5, 0.06, 0, 0.24, 0.05), { color: '#3a3d42', rough: 0.9, part: MB });
-    b.add(rbox(0.22, 0.12, 0.4, 0.04, 0, 0.56, 0.1), { color: '#2c2f33', rough: 0.9, part: MB });
-    const tank = rbox(0.32, 0.22, 0.5, 0.1, 0, 0.66, 0.2, 2);
-    taper(tank, 0.66, 0.88, 0.2, 0.25, 0.05, 0.12);
-    b.add(tank, { color: '#ffffff', paint: true, rough: 0.6, part: MB });
-    b.add(rbox(0.27, 0.09, 0.55, 0.04, 0, 0.76, -0.3), { color: '#1d1f22', rough: 1.2, part: MB });
-    // side covers under the seat (body colour) and the frame between tank and engine
-    b.add(rbox(0.25, 0.22, 0.42, 0.05, 0, 0.53, -0.24), { color: '#ffffff', paint: true, rough: 0.6, part: MB });
-    b.add(rbox(0.16, 0.2, 0.3, 0.03, 0, 0.5, 0.36), { color: '#2c2f33', rough: 0.9, part: MB });
-    const tail = rbox(0.22, 0.12, 0.38, 0.05, 0, 0.74, -0.66);
-    taper(tail, 0.74, 0.86, -0.66, 0.3, 0.0, 0.1);
-    b.add(tail, { color: '#ffffff', paint: true, rough: 0.6, part: MB });
-    for (const sd of [1, -1]) {
-      b.add(tube(sd * 0.08, R, zf, sd * 0.08, 0.98, 0.52, 0.022), { color: CHROME, rough: 0.4, part: MB });
-      // swing arm to the engine, a shock absorber up to the seat frame
-      b.add(tube(sd * 0.1, R, zr, sd * 0.11, 0.36, -0.12, 0.022), { color: '#2c2f33', rough: 0.9, part: MB });
-      b.add(tube(sd * 0.1, 0.4, -0.52, sd * 0.1, 0.72, -0.36, 0.018), { color: '#c99a2e', rough: 0.5, part: MB });
-      // foot pegs
-      b.add(tube(sd * 0.12, 0.36, -0.12, sd * 0.2, 0.36, -0.12, 0.012), { color: '#2c2f33', rough: 0.9, part: MB });
+    if (TW) {
+      // box hunt: cast wheels with brake discs, a crankcase with side covers and a finned cylinder block, header
+      // pipes into a chrome silencer, chain and sprocket, a lofted tank (filler cap), seat and tail, a round
+      // headlamp in a chrome bezel with twin clocks, mirrors, a hugger and the plate on its holder
+      const paint = { color: '#ffffff', paint: true, rough: 0.6, part: MB };
+      const dark = { color: '#2c2f33', rough: 0.9, part: MB };
+      const alloy = { color: '#8a8f95', rough: 0.5, part: MB };
+      castSpokes(b, zf, R, 0.11, true, MB);
+      castSpokes(b, zr, R, 0.15, false, MB);
+      const fw = { x: 0, y: R, z: zf, front: true },
+        rw = { x: 0, y: R, z: zr, front: false };
+      const dsc = new THREE.CylinderGeometry(0.135, 0.135, 0.008, LOD === 0 ? 18 : 8);
+      dsc.rotateZ(Math.PI / 2);
+      dsc.translate(0.068, R, zf);
+      b.add(dsc, { color: '#a9aeb3', rough: 0.4, wheel: fw, part: MB });
+      const dsc2 = new THREE.CylinderGeometry(0.1, 0.1, 0.008, LOD === 0 ? 14 : 8);
+      dsc2.rotateZ(Math.PI / 2);
+      dsc2.translate(-0.088, R, zr);
+      b.add(dsc2, { color: '#a9aeb3', rough: 0.4, wheel: rw, part: MB });
+      b.add(rbox(0.03, 0.07, 0.08, 0.01, 0.085, R + 0.06, zf - 0.08), { color: '#b0302a', rough: 0.6, part: MB });
+      // crankcase + covers, finned cylinders leaning forward, head
+      b.add(rbox(0.28, 0.2, 0.46, 0.07, 0, 0.22, -0.02), { color: '#4a4e54', rough: 0.7, part: MB });
+      for (const sd of [1, -1]) {
+        const cover = new THREE.CylinderGeometry(0.1, 0.1, 0.03, LOD === 0 ? 14 : 8);
+        cover.rotateZ(Math.PI / 2);
+        cover.translate(sd * 0.15, 0.32, 0.0);
+        b.add(cover, alloy);
+      }
+      for (let k = 0; k < 7; k++) b.add(rbox(0.3 - k * 0.004, 0.012, 0.2, 0.005, 0, 0.42 + k * 0.026, 0.17 + k * 0.012), { color: '#6a6f75', rough: 0.6, part: MB });
+      b.add(rbox(0.22, 0.17, 0.16, 0.03, 0, 0.42, 0.17), { color: '#3a3d42', rough: 0.8, part: MB });
+      b.add(rbox(0.26, 0.06, 0.18, 0.025, 0, 0.6, 0.255), alloy);
+      // frame spine under the tank, swing arm, shocks, pegs (as before)
+      b.add(tube(0, 0.62, 0.44, 0, 0.7, -0.3, 0.025), dark);
+      for (const sd of [1, -1]) {
+        b.add(tube(sd * 0.08, R, zf, sd * 0.08, 0.98, 0.52, 0.022), { color: CHROME, rough: 0.4, part: MB });
+        b.add(tube(sd * 0.1, R, zr, sd * 0.11, 0.36, -0.12, 0.022), dark);
+        b.add(tube(sd * 0.1, 0.4, -0.52, sd * 0.1, 0.72, -0.36, 0.018), { color: '#c99a2e', rough: 0.5, part: MB });
+        b.add(tube(sd * 0.12, 0.36, -0.12, sd * 0.2, 0.36, -0.12, 0.012), dark);
+      }
+      // header pipes from the head down round the crankcase into the silencer
+      b.add(tube(-0.05, 0.5, 0.29, -0.09, 0.2, 0.3, 0.02), { color: '#9c9387', rough: 0.5, part: MB });
+      b.add(tube(0.05, 0.5, 0.29, -0.06, 0.18, 0.31, 0.02), { color: '#9c9387', rough: 0.5, part: MB });
+      b.add(tube(-0.08, 0.19, 0.3, -0.16, 0.22, -0.2, 0.024), { color: '#8a8378', rough: 0.5, part: MB });
+      b.add(tube(-0.16, 0.22, -0.2, -0.19, 0.42, -0.74, 0.045), { color: CHROME, rough: 0.3, part: MB });
+      b.add(tube(-0.19, 0.42, -0.74, -0.193, 0.43, -0.78, 0.03), dark);
+      // chain run and rear sprocket (right side)
+      const spr = new THREE.CylinderGeometry(0.085, 0.085, 0.01, LOD === 0 ? 14 : 6);
+      spr.rotateZ(Math.PI / 2);
+      spr.translate(0.1, R, zr);
+      b.add(spr, { color: '#3a3d42', rough: 0.6, wheel: rw, part: MB });
+      b.add(tube(0.1, 0.33, -0.05, 0.1, R + 0.085, zr, 0.008), { color: '#24262a', rough: 0.8, part: MB });
+      b.add(tube(0.1, 0.25, -0.05, 0.1, R - 0.085, zr, 0.008), { color: '#24262a', rough: 0.8, part: MB });
+      // tank, seat, side covers, tail
+      b.add(
+        loftZ(
+          [
+            [-0.06, 0.76, 0.09, 0.07],
+            [0.0, 0.775, 0.14, 0.1],
+            [0.12, 0.78, 0.165, 0.115],
+            [0.28, 0.79, 0.155, 0.11],
+            [0.4, 0.8, 0.12, 0.09],
+            [0.46, 0.81, 0.07, 0.06],
+          ],
+          2.3,
+        ),
+        paint,
+      );
+      b.add(new THREE.CylinderGeometry(0.03, 0.03, 0.02, 10).translate(0, 0.9, 0.2), { color: CHROME, rough: 0.35, part: MB });
+      b.add(
+        loftZ(
+          [
+            [-0.66, 0.825, 0.03, 0.02],
+            [-0.6, 0.815, 0.1, 0.04],
+            [-0.4, 0.8, 0.13, 0.045],
+            [-0.15, 0.79, 0.14, 0.05],
+            [-0.03, 0.785, 0.11, 0.045],
+            [0.0, 0.785, 0.06, 0.03],
+          ],
+          3,
+        ),
+        { color: '#1d1f22', rough: 1.2, part: MB },
+      );
+      b.add(rbox(0.25, 0.2, 0.36, 0.05, 0, 0.53, -0.24), paint);
+      b.add(
+        loftZ(
+          [
+            [-0.88, 0.85, 0.03, 0.022],
+            [-0.82, 0.835, 0.065, 0.04],
+            [-0.66, 0.79, 0.095, 0.055],
+            [-0.5, 0.76, 0.105, 0.06],
+          ],
+          2.6,
+        ),
+        paint,
+      );
+      // headlamp with bezel, clocks, bars, mirrors
+      b.add(disc(0.085, 0.09, 0, 0.92, 0.6), dark);
+      b.add(disc(0.075, 0.02, 0, 0.92, 0.65), { color: HEAD, light: LIGHT_HEAD, rough: 0.4, part: MB });
+      const ring = new THREE.TorusGeometry(0.08, 0.01, 4, LOD === 0 ? 18 : 8);
+      ring.translate(0, 0.92, 0.66);
+      b.add(ring, { color: CHROME, rough: 0.3, part: MB });
+      for (const sd of [1, -1]) b.add(new THREE.CylinderGeometry(0.038, 0.038, 0.04, 12).rotateX(-0.6).translate(sd * 0.05, 1.04, 0.49), { color: '#1d1f22', rough: 0.3, part: MB });
+      b.add(tube(0.34, 1.0, 0.42, -0.34, 1.0, 0.42, 0.013), { color: '#2a2c30', rough: 0.8, part: MB });
+      for (const sd of [1, -1]) {
+        b.add(tube(sd * 0.27, 1.0, 0.42, sd * 0.35, 1.0, 0.42, 0.02), { color: '#1d1f22', rough: 1.2, part: MB });
+        b.add(tube(sd * 0.22, 1.0, 0.43, sd * 0.28, 1.2, 0.4, 0.006), { color: CHROME, rough: 0.5, part: MB });
+        b.add(disc(0.042, 0.014, sd * 0.285, 1.225, 0.4), { color: '#7d8a94', rough: 0.3, part: MB });
+        b.add(bx(0.04, 0.035, 0.045, sd * 0.13, 0.9, 0.58), { color: AMBER, light: sd > 0 ? LIGHT_BLINK_L : LIGHT_BLINK_R, part: MB });
+        b.add(bx(0.04, 0.03, 0.04, sd * 0.1, 0.78, -0.84), { color: AMBER, light: sd > 0 ? LIGHT_BLINK_L : LIGHT_BLINK_R, part: MB });
+      }
+      b.add(rbox(0.12, 0.045, 0.04, 0.02, 0, 0.82, -0.88), { color: TAIL, light: LIGHT_TAIL, rough: 0.5, part: MB });
+      b.add(bx(0.22, 0.07, 0.012, 0, 0.66, -0.88), dark);
+      b.add(decalPlane(0.2, 0.045, 0, 0.695, -0.8875, 'nz'), { color: '#ffffff', rough: 0.6, decal: R_PLATE, plate: true, part: MB });
+      b.add(tube(0, 0.76, -0.8, 0, 0.66, -0.88, 0.012), dark);
+      const fender = new THREE.CylinderGeometry(R + 0.03, R + 0.03, 0.13, LOD === 0 ? 12 : 6, 1, true, -0.4, Math.PI * 0.6);
+      fender.rotateZ(Math.PI / 2);
+      fender.translate(0, R, zf);
+      shell(b, fender, paint);
+      const hugger = new THREE.CylinderGeometry(R + 0.03, R + 0.03, 0.16, LOD === 0 ? 10 : 6, 1, true, Math.PI * 0.35, Math.PI * 0.45);
+      hugger.rotateZ(Math.PI / 2);
+      hugger.translate(0, R, zr);
+      shell(b, hugger, dark);
+    } else {
+      b.add(rbox(0.3, 0.32, 0.5, 0.06, 0, 0.24, 0.05), { color: '#3a3d42', rough: 0.9, part: MB });
+      b.add(rbox(0.22, 0.12, 0.4, 0.04, 0, 0.56, 0.1), { color: '#2c2f33', rough: 0.9, part: MB });
+      const tank = rbox(0.32, 0.22, 0.5, 0.1, 0, 0.66, 0.2, 2);
+      taper(tank, 0.66, 0.88, 0.2, 0.25, 0.05, 0.12);
+      b.add(tank, { color: '#ffffff', paint: true, rough: 0.6, part: MB });
+      b.add(rbox(0.27, 0.09, 0.55, 0.04, 0, 0.76, -0.3), { color: '#1d1f22', rough: 1.2, part: MB });
+      // side covers under the seat (body colour) and the frame between tank and engine
+      b.add(rbox(0.25, 0.22, 0.42, 0.05, 0, 0.53, -0.24), { color: '#ffffff', paint: true, rough: 0.6, part: MB });
+      b.add(rbox(0.16, 0.2, 0.3, 0.03, 0, 0.5, 0.36), { color: '#2c2f33', rough: 0.9, part: MB });
+      const tail = rbox(0.22, 0.12, 0.38, 0.05, 0, 0.74, -0.66);
+      taper(tail, 0.74, 0.86, -0.66, 0.3, 0.0, 0.1);
+      b.add(tail, { color: '#ffffff', paint: true, rough: 0.6, part: MB });
+      for (const sd of [1, -1]) {
+        b.add(tube(sd * 0.08, R, zf, sd * 0.08, 0.98, 0.52, 0.022), { color: CHROME, rough: 0.4, part: MB });
+        // swing arm to the engine, a shock absorber up to the seat frame
+        b.add(tube(sd * 0.1, R, zr, sd * 0.11, 0.36, -0.12, 0.022), { color: '#2c2f33', rough: 0.9, part: MB });
+        b.add(tube(sd * 0.1, 0.4, -0.52, sd * 0.1, 0.72, -0.36, 0.018), { color: '#c99a2e', rough: 0.5, part: MB });
+        // foot pegs
+        b.add(tube(sd * 0.12, 0.36, -0.12, sd * 0.2, 0.36, -0.12, 0.012), { color: '#2c2f33', rough: 0.9, part: MB });
+      }
+      b.add(tube(0.34, 1.0, 0.42, -0.34, 1.0, 0.42, 0.013), { color: '#2a2c30', rough: 0.8, part: MB });
+      for (const sd of [1, -1]) b.add(tube(sd * 0.27, 1.0, 0.42, sd * 0.35, 1.0, 0.42, 0.02), { color: '#1d1f22', rough: 1.2, part: MB });
+      const lamp = new THREE.CylinderGeometry(0.09, 0.08, 0.08, LOD === 0 ? 12 : 6);
+      lamp.rotateX(Math.PI / 2);
+      lamp.translate(0, 0.92, 0.62);
+      b.add(lamp, { color: HEAD, light: LIGHT_HEAD, rough: 0.4, part: MB });
+      b.add(tube(-0.15, 0.26, 0.1, -0.18, 0.44, -0.78, 0.035), { color: CHROME, rough: 0.35, part: MB });
+      b.add(rbox(0.12, 0.05, 0.04, 0.02, 0, 0.8, -0.86), { color: TAIL, light: LIGHT_TAIL, rough: 0.5, part: MB });
+      const fender = new THREE.CylinderGeometry(R + 0.03, R + 0.03, 0.13, LOD === 0 ? 10 : 6, 1, true, -0.4, Math.PI * 0.6);
+      fender.rotateZ(Math.PI / 2);
+      fender.translate(0, R, zf);
+      b.add(fender, { color: '#ffffff', paint: true, rough: 0.6, part: MB });
     }
-    b.add(tube(0.34, 1.0, 0.42, -0.34, 1.0, 0.42, 0.013), { color: '#2a2c30', rough: 0.8, part: MB });
-    for (const sd of [1, -1]) b.add(tube(sd * 0.27, 1.0, 0.42, sd * 0.35, 1.0, 0.42, 0.02), { color: '#1d1f22', rough: 1.2, part: MB });
-    const lamp = new THREE.CylinderGeometry(0.09, 0.08, 0.08, LOD === 0 ? 12 : 6);
-    lamp.rotateX(Math.PI / 2);
-    lamp.translate(0, 0.92, 0.62);
-    b.add(lamp, { color: HEAD, light: LIGHT_HEAD, rough: 0.4, part: MB });
-    b.add(tube(-0.15, 0.26, 0.1, -0.18, 0.44, -0.78, 0.035), { color: CHROME, rough: 0.35, part: MB });
-    b.add(rbox(0.12, 0.05, 0.04, 0.02, 0, 0.8, -0.86), { color: TAIL, light: LIGHT_TAIL, rough: 0.5, part: MB });
-    const fender = new THREE.CylinderGeometry(R + 0.03, R + 0.03, 0.13, LOD === 0 ? 10 : 6, 1, true, -0.4, Math.PI * 0.6);
-    fender.rotateZ(Math.PI / 2);
-    fender.translate(0, R, zf);
-    b.add(fender, { color: '#ffffff', paint: true, rough: 0.6, part: MB });
   }
   return b.build();
 }
