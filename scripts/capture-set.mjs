@@ -12,6 +12,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+// Headless Chromium only renders while a screenshot is taken (frames() stays constant through waitForTimeout), so a
+// capture right after a camera jump is the FIRST frame — anything selected a frame late (near herds, near cells, LOD)
+// looks wrong. Pump a few throw-away frames before every real capture.
+async function pumpFrames(page, n = 4) {
+  for (let i = 0; i < n; i++) await page.screenshot({ type: 'jpeg', quality: 1, clip: { x: 0, y: 0, width: 8, height: 8 } }).catch(() => {});
+}
+
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, '..');
 const args = {};
@@ -70,6 +77,7 @@ try {
         [v.spec, h],
       );
       await page.waitForTimeout(settle);
+      await pumpFrames(page);
       const file = path.join(outDir, `${v.name}_${String(h).replace('.', 'h')}.png`);
       await page.screenshot({ path: file, timeout: 240000 });
       const stats = await page.evaluate(() => window.__city.stats());

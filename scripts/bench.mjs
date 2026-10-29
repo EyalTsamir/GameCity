@@ -18,6 +18,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+// Headless Chromium only renders while a screenshot is taken (frames() stays constant through waitForTimeout), so a
+// capture right after a camera jump is the FIRST frame — anything selected a frame late (near herds, near cells, LOD)
+// looks wrong. Pump a few throw-away frames before every real capture.
+async function pumpFrames(page, n = 4) {
+  for (let i = 0; i < n; i++) await page.screenshot({ type: 'jpeg', quality: 1, clip: { x: 0, y: 0, width: 8, height: 8 } }).catch(() => {});
+}
+
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, '..');
 const args = {};
@@ -304,6 +311,7 @@ try {
       for (const ps of loc.poses) {
         await page.evaluate((ps) => window.__city.view({ target: ps.target, distance: ps.distance, yaw: ps.yaw, pitch: ps.pitch }), ps);
         await page.waitForTimeout(settle);
+      await pumpFrames(page);
         const file = path.join(outDir, `${cls}_${ps.label}.png`);
         await page.screenshot({ path: file, timeout: 240000 });
         report.captures.push({ cls, d: ps.label, los: { fixed: true }, file: path.relative(root, file), at: [ps.target.x, ps.target.y, ps.target.z].map((v) => Math.round(v * 10) / 10) });
@@ -382,6 +390,7 @@ try {
         [loc, ty, dist, pitch, yawOff + yo],
       );
       await page.waitForTimeout(settle);
+      await pumpFrames(page);
       const file = path.join(outDir, `${cls}_${d}m${yo ? '_y' + yo : ''}.png`);
       await page.screenshot({ path: file, timeout: 240000 });
       // --probe "px,py;px,py": what is drawn at these screen pixels (first raycast hits: mesh name, point, normal)
