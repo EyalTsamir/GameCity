@@ -11,6 +11,10 @@ Overview must stay at least as impressive as now. Every feature: quality tiers +
 Lead session: session_01XuhAMczW3iK25AAWnf3qog, branch `claude/pensive-gates-bim12i`.
 
 ## Resume here (keep current)
+* 2026-10-29 01:20 UTC — Merged W8 s5 (084f5db: Holstein-proportioned cows, 5 breeds, herd spacing fixed, sheep
+  fleece locks/dirty belly/knees, tractor bonnet/grille/lamps, lacy umbels; animal cost +337k tris → caps 28/12 @ 40 m
+  (re-measure open); golden 0.0, invariants {}). Golden of W6 s2 merge: overview 0.5 / downtown 4.4. Waiting on
+  judge 2 + bug hunter 2 → final fix round.
 * 2026-10-29 00:13 UTC — Merged W6 s2 (8f826b9: back-yard "floating" door/sills were a camera-inside-lot culling
   artefact — not a bug; wall set (door/step/mat, meter, downpipe + butt, AC, apron) placed from footprints; parasols +
   stall canopies sway with the shared wind ?nosway ?nostallwind; market stock 22 → 73 (stalls rejected their own
@@ -197,6 +201,7 @@ Wave 1 (launched 2026-10-28 15:17 UTC, sibling cloud sessions, briefs in real-br
 | W8 countryside (wave 3) | session_01XuhAMgEAANGwU4gDyorawb | claude/real-w8-country | real-w8.md |
 | Judge 2 | session_01XuhAMhWPFfC36vewCePr9j | claude/real-judge-2 | real-judge-2.md |
 | Bug hunter 2 | session_01XuhAMerLUHGUUS7BTCdeQe | claude/real-bugs-2 | real-bugs-2.md |
+| W8 countryside (2) | session_01XuhAMfNhLR1sNFxZPZJ7Yq | claude/real-w8-country | real-w8.md |
 Respawn rule: when a worker stops (milestone note, ~200k context, or a usage stop), create a NEW session on the
 same branch with the same brief + "resume from docs/progress/real-wN.md Resume here"; archive the old one.
 
