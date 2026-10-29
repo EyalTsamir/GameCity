@@ -195,9 +195,13 @@ export class WalkSurface {
     return -Infinity;
   }
 
-  /** highest walkway deck / raised slab at (x, z) (-Infinity if none); `deck` → only those spanning water */
+  /**
+   * Walkway deck / raised slab height at (x, z) (-Infinity if none); `deck` → only those spanning water. A walk
+   * is a chain of capsules: the nearest segment gives the height, so it stays continuous where a ramp meets an arch.
+   */
   private deckY(x: number, z: number, deckOnly: boolean): number {
     let y = -Infinity;
+    let best = Infinity;
     const k = this.cellIdx(x, z);
     if (k >= 0) {
       for (const s of this.segCells[k]) {
@@ -205,13 +209,12 @@ export class WalkSurface {
         const px = x - s.ax,
           pz = z - s.az;
         const along = px * s.ux + pz * s.uz;
-        if (along < -s.half * 0.5 || along > s.len + s.half * 0.5) continue;
-        const lat = Math.abs(px * s.uz - pz * s.ux);
-        if (lat > s.half) continue;
         const t = Math.min(1, Math.max(0, along / s.len));
-        let h = s.yA + (s.yB - s.yA) * t;
-        if (s.yMid === s.yMid) h += (s.yMid - (s.yA + s.yB) / 2) * Math.sin(Math.PI * t);
-        if (h > y) y = h;
+        const d = Math.hypot(px - s.ux * s.len * t, pz - s.uz * s.len * t);
+        if (d > s.half || d >= best) continue;
+        best = d;
+        y = s.yA + (s.yB - s.yA) * t;
+        if (s.yMid === s.yMid) y += (s.yMid - (s.yA + s.yB) / 2) * Math.sin(Math.PI * t);
       }
     }
     for (const sl of this.slabs) {
