@@ -33,8 +33,13 @@ Fixes 1–3 coded + typechecked; verification shots in progress (shots/g3/shot.m
    caps (rear 0.14 / front 0.12 m), basket. Toggle `?nopramdetail` (old mesh). ~4× the old triangles on a few
    instanced prams.
 
+8. **Street-tree bark** (judge 3 #10, time-boxed) — `vegetation/material.ts` furrow branch of the in-shader bark:
+   ridges of the existing furrow noise now tilt the normal (gradient × 0.045, near-only fade) and ridge plates
+   lighten / furrows darken. Knob `foliageKnobs.bark` (uThBark): `?nobarkrelief`, quality low off. Not done: the
+   flat shard branch cards seen from inside a crown.
+
 ### Toggles
-`?noplatformstay`, `?noboardmap`, `?nobikespokes` (quality low = no spokes), `?nogroupgap`, `?nopramdetail`.
+`?noplatformstay`, `?noboardmap`, `?nobikespokes` (quality low = no spokes), `?nogroupgap`, `?nopramdetail`, `?nobarkrelief` (quality low = off).
 
 ### Code pointers
 * platform actors: `sim/pedestrians/actors.ts placeCrowds()` (group 1 = platform), `sync()` visibility, events in

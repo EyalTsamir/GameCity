@@ -1496,6 +1496,7 @@ export default function create(ctx: CityContext): CityModule {
         foliageKnobs.cheap.value = cellsParam === '8' ? 1 : cellsParam === '27' ? 0 : qLevel === 'high' ? 0 : 1;
         cardKnobs.farKeep.value = qLevel === 'high' ? 1 : qLevel === 'medium' ? 0.85 : 0.6;
         cardKnobs.base.value = noTreeBase || qLevel === 'low' ? 0 : 1;
+        foliageKnobs.bark.value = ctx.debug.params.has('nobarkrelief') || qLevel === 'low' ? 0 : 1;
       }
       near = lod.near();
       farMesh.visible = !near;
