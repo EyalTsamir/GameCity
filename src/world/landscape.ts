@@ -21,6 +21,7 @@ import { landUniforms, landMaterial } from './landscape/shader';
 import { buildMountains } from './landscape/mountains';
 import { placeTrees, createLandTrees, type LandTrees } from './landscape/trees';
 import { buildSettlements } from './landscape/settlements';
+import { boxHunt } from '../core/boxhunt';
 import { createShips, type Ships } from './landscape/ships';
 import { LAYERS } from '../core/layers';
 import { buildLandLights, type LandLights } from './landscape/lights';
@@ -225,7 +226,7 @@ export default function create(ctx: CityContext): CityModule {
   let beacon: { x: number; y: number; z: number } | null = null;
   let bldBlocked: ((x: number, z: number, r: number) => boolean) | undefined;
   if (params.get('landbld') !== '0') {
-    const st = buildSettlements(model, uniforms, ctx.uniforms.uLights, ctx.uniforms.uNight, fog);
+    const st = buildSettlements(model, uniforms, ctx.uniforms.uLights, ctx.uniforms.uNight, fog, boxHunt(ctx, 'landvariants'));
     root.add(st.group);
     bldCount = st.count;
     beacon = st.beacon;

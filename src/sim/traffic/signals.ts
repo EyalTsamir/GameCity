@@ -14,10 +14,40 @@ import { DIR_VEC } from '../../core/geom';
 import { paint, merge } from '../../core/gfx';
 import { SIDEWALK_Y, XS, ZS } from '../../core/constants';
 import { NearCells, nearCell, type NearCell } from '../../world/lamps/nearCells';
+import { boxHunt } from '../../core/boxhunt';
 
 const POLE = '#3c4844';
 const HOUSING = '#2b3330';
 const PLATE = '#16191b';
+
+/**
+ * Box hunt (?nosigvisor): a tunnel visor round a signal lens — a deep open hood (outer + inner shell) wrapping the
+ * top and the sides, as on real signal heads. Built along local +Z from z = 0 (the housing face), then turned by
+ * `face` about Y and moved to (x, y, z).
+ */
+function tunnelVisor(r: number, depth: number, x: number, y: number, z: number, face: number): THREE.BufferGeometry {
+  const arc = Math.PI * 1.2; // top + sides, open underneath
+  const shell = (rr: number, flip: boolean): THREE.BufferGeometry => {
+    const g = new THREE.CylinderGeometry(rr, rr, depth, 8, 1, true, Math.PI - arc / 2, arc);
+    g.rotateX(Math.PI / 2); // axis along Z, the arc centred on +Y
+    if (flip) {
+      const ix = g.index!;
+      for (let i = 0; i < ix.count; i += 3) {
+        const b = ix.getX(i + 1);
+        ix.setX(i + 1, ix.getX(i + 2));
+        ix.setX(i + 2, b);
+      }
+      const n = g.getAttribute('normal') as THREE.BufferAttribute;
+      for (let i = 0; i < n.count; i++) n.setXYZ(i, -n.getX(i), -n.getY(i), -n.getZ(i));
+    }
+    return g;
+  };
+  const g = merge([shell(r, false), shell(r - 0.012, true)]);
+  g.translate(0, 0, depth / 2);
+  g.rotateY(face);
+  g.translate(x, y, z);
+  return g;
+}
 
 const enum Lamp {
   Red,
@@ -287,11 +317,15 @@ export class SignalRenderer {
     place(box(0.38, 1.02, 0.26, hx, hy, 0), head, y0, HOUSING);
     const kinds = [Lamp.Red, Lamp.Yellow, Lamp.Green];
     const node = this.nodes.length - 1;
+    const visor = boxHunt(this.ctx, 'sigvisor');
     for (let i = 0; i < 3; i++) {
       const ly = hy + 0.32 - i * 0.32;
-      place(box(0.32, 0.035, 0.18, hx, ly + 0.15, 0.2), head, y0, HOUSING);
-      // visor cheeks: the hood wraps down the sides of the lens
-      if (detail) for (const sx of [-1, 1]) place(box(0.012, 0.16, 0.16, hx + sx * 0.155, ly + 0.06, 0.21), head, y0, HOUSING, true);
+      if (visor) place(tunnelVisor(0.148, 0.24, hx, ly, 0.13, 0), head, y0, HOUSING);
+      else {
+        place(box(0.32, 0.035, 0.18, hx, ly + 0.15, 0.2), head, y0, HOUSING);
+        // visor cheeks: the hood wraps down the sides of the lens
+        if (detail) for (const sx of [-1, 1]) place(box(0.012, 0.16, 0.16, hx + sx * 0.155, ly + 0.06, 0.21), head, y0, HOUSING, true);
+      }
       lamp(head, y0, hx, ly, 0.13, 0, 0.12, { node, ns, kind: kinds[i] });
     }
     // pole-mounted repeater facing traffic
@@ -309,13 +343,17 @@ export class SignalRenderer {
     }
     for (let i = 0; i < 3; i++) {
       const ly = ry + 0.27 - i * 0.27;
-      place(box(0.26, 0.03, 0.14, 0, ly + 0.125, 0.33), head, y0, HOUSING);
-      if (detail) for (const sx of [-1, 1]) place(box(0.01, 0.13, 0.13, sx * 0.125, ly + 0.055, 0.335), head, y0, HOUSING, true);
+      if (visor) place(tunnelVisor(0.118, 0.19, 0, ly, 0.28, 0), head, y0, HOUSING);
+      else {
+        place(box(0.26, 0.03, 0.14, 0, ly + 0.125, 0.33), head, y0, HOUSING);
+        if (detail) for (const sx of [-1, 1]) place(box(0.01, 0.13, 0.13, sx * 0.125, ly + 0.055, 0.335), head, y0, HOUSING, true);
+      }
       lamp(head, y0, 0, ly, 0.28, 0, 0.095, { node, ns, kind: kinds[i] });
     }
     // pedestrian head on this pole, facing across the crosswalk (local -X)
     const py = 2.0;
     place(box(0.24, 0.56, 0.3, -0.19, py, 0), head, y0, HOUSING);
+    if (visor) for (const dy of [0.13, -0.13]) place(tunnelVisor(0.108, 0.15, -0.31, py + dy, 0, -Math.PI / 2), head, y0, HOUSING, true);
     lamp(head, y0, -0.31, py + 0.13, 0, -Math.PI / 2, 0.085, { node, ns, kind: Lamp.PedDont });
     lamp(head, y0, -0.31, py - 0.13, 0, -Math.PI / 2, 0.085, { node, ns, kind: Lamp.PedWalk });
     // post at the other end of the crosswalk, head facing back across (local +X)
@@ -324,6 +362,7 @@ export class SignalRenderer {
     place(cyl(0.11, 0.12, 0.22, px, -0.1, pz, 8), head, y0, '#4a4f52');
     place(cyl(0.05, 0.055, 2.55, px, 0, pz, 8), head, y0, POLE);
     place(box(0.24, 0.56, 0.3, px + 0.15, py, pz), head, y0, HOUSING);
+    if (visor) for (const dy of [0.13, -0.13]) place(tunnelVisor(0.108, 0.15, px + 0.27, py + dy, pz, Math.PI / 2), head, y0, HOUSING, true);
     lamp(head, y0, px + 0.27, py + 0.13, pz, Math.PI / 2, 0.085, { node, ns, kind: Lamp.PedDont });
     lamp(head, y0, px + 0.27, py - 0.13, pz, Math.PI / 2, 0.085, { node, ns, kind: Lamp.PedWalk });
     void DIR_VEC;

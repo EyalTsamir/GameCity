@@ -9,6 +9,7 @@
 
 import type { Rng } from '../../core/rng';
 import { Kit } from './furniture';
+import { cbox, lathe } from './shapes';
 
 const TAU = Math.PI * 2;
 
@@ -704,6 +705,46 @@ export function compost(k: Kit, rng: Rng): void {
   sh.ellipsoid(0.1, 0.62, 0.05, 0.25, 0.08, 0.2, 0);
 }
 
+/** box hunt (?nowheeliebin): garden / courtyard wheelie bins built as real 240 l bins instead of a box + lid */
+let BIN_DETAIL = true;
+export function setBinDetail(on: boolean): void {
+  BIN_DETAIL = on;
+}
+
+/**
+ * A 240 l wheelie bin, origin bottom centre, front +Z: tapered moulded body with a stiffening rim, a lid hinged
+ * on a rear handle bar (overhang + front grip lip, a few left ajar), axle and two wheels under the handle,
+ * the front lifting comb, a house-number label.
+ */
+function wheelieBin(k: Kit, rng: Rng, c: string): void {
+  const sh = k.sh;
+  k.m(c, 'plastic');
+  lathe(sh, 0, 0, [[0, 0.06], [0.33, 0.06], [0.41, 0.95], [0, 0.95]], 4, Math.PI / 4);
+  cbox(sh, 0, 0.965, 0, 0.6, 0.045, 0.6, 0.012);
+  // lid: hinged at the back, ajar on some (a bag pokes out)
+  const ajar = rng.chance(0.25) ? rng.range(0.08, 0.22) : 0;
+  sh.push().local(0, 0.99, -0.3, -ajar);
+  cbox(sh, 0, 0.017, 0.31, 0.63, 0.034, 0.66, 0.01);
+  cbox(sh, 0, -0.012, 0.635, 0.28, 0.04, 0.03, 0.008);
+  sh.pop();
+  if (ajar) {
+    k.m('#1e2022', 'plastic');
+    sh.ellipsoid(0, 0.96, 0.05, 0.2, 0.08, 0.2, 1);
+  }
+  // rear handle bar between two moulded brackets, axle + wheels below it
+  k.m(c, 'plastic');
+  for (const x of [-0.25, 0.25]) cbox(sh, x, 0.9, -0.31, 0.05, 0.1, 0.07, 0.01);
+  sh.tube(-0.27, 0.95, -0.35, 0.27, 0.95, -0.35, 0.017, 0.017, 6);
+  k.m('#1e2022', 'rubber');
+  for (const x of [-0.25, 0.25]) sh.push().local(x, 0.11, -0.3, 0, 0, Math.PI / 2).cyl(0, -0.03, 0, 0.11, 0.11, 0.06, 10, 3).pop();
+  sh.tube(-0.25, 0.11, -0.3, 0.25, 0.11, -0.3, 0.012, 0.012, 4);
+  // front lifting comb (a dark moulded bar under the rim) and the number label
+  k.m(c, 'plastic');
+  cbox(sh, 0, 0.84, 0.275, 0.42, 0.06, 0.04, 0.01);
+  k.m('#f0f0e8', 'plastic');
+  sh.box(0, 0.66, 0.262, 0.14, 0.09, 0.004, 0);
+}
+
 /** Two or three wheelie bins side by side along local x, lids / handles at the back (-Z). */
 export function wheelieBins(k: Kit, rng: Rng, n = 2): void {
   const sh = k.sh;
@@ -712,6 +753,11 @@ export function wheelieBins(k: Kit, rng: Rng, n = 2): void {
     const x = (i - (n - 1) / 2) * 0.68;
     const c = cols[(rng.int(0, cols.length - 1) + i) % cols.length];
     sh.push().local(x, 0, rng.range(-0.04, 0.04), 0, rng.range(-0.08, 0.08));
+    if (BIN_DETAIL) {
+      wheelieBin(k, rng, c);
+      sh.pop();
+      continue;
+    }
     k.m(c, 'plastic');
     sh.box(0, 0.5, 0, 0.58, 1.0, 0.6, 1);
     sh.box(0, 1.02, 0.02, 0.62, 0.05, 0.66, 0);

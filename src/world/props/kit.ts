@@ -10,7 +10,7 @@
 import * as THREE from 'three';
 import type { Rng } from '../../core/rng';
 import { Kit, spokedWheel } from './furniture';
-import { lathe } from './shapes';
+import { cbox, lathe } from './shapes';
 import { parasol, wheelieBins, CANVAS } from './garden';
 import type { ChairOut } from './service';
 import { GREEN, type GreenKit } from '../buildings/green';
@@ -388,14 +388,65 @@ export function infoBoard(k: Kit, rng: Rng): void {
   }
 }
 
-/** Public art: a big ring, stacked cubes or a stylised figure on a plinth (colourful accent). */
-export function sculpture(ks: Kit, rng: Rng): void {
+/**
+ * Public art: a big ring, stacked cubes or a stylised figure on a plinth (colourful accent).
+ * Box hunt (`detail`, ?nosculpt): a moulded plinth (base step, chamfered die, capping, bronze plaque); the ring
+ * stands in a cast shoe; the cubes become three balanced polished stones; the box stack a double-helix spiral.
+ */
+export function sculpture(ks: Kit, rng: Rng, detail = false): void {
   const sh = ks.sh;
   ks.m('#cfc8ba', 'stone');
-  sh.box(0, 0.25, 0, 1.6, 0.5, 1.6, 1);
+  if (detail) {
+    cbox(sh, 0, 0.04, 0, 1.72, 0.08, 1.72, 0.015);
+    cbox(sh, 0, 0.26, 0, 1.5, 0.38, 1.5, 0.03);
+    cbox(sh, 0, 0.475, 0, 1.64, 0.06, 1.64, 0.02);
+    ks.m('#5a4a2e', 'steel');
+    sh.box(0, 0.27, 0.752, 0.42, 0.13, 0.008, 0);
+  } else sh.box(0, 0.25, 0, 1.6, 0.5, 1.6, 1);
   const kind = rng.int(0, 2);
   const col = rng.pick(['#d9473f', '#e8a33c', '#2f7fb8', '#e86a8a', '#3f8f5a']);
+  if (detail && kind === 1) {
+    // balanced stones: polished granite / marble boulders stacked off-centre, a slim steel pin between them
+    const stones: [string, number][] = [['#3c3d40', 0.62], ['#d9d4ca', 0.46], ['#9a4a3a', 0.33]];
+    let y = 0.505,
+      x = 0;
+    for (const [c, r] of stones) {
+      const ry = r * 0.72;
+      ks.m(c, 'stone');
+      sh.ellipsoid(x, y + ry, 0, r, ry, r * 0.86, 2);
+      y += ry * 1.86;
+      x = rng.range(-0.1, 0.1);
+    }
+    return;
+  }
+  if (detail && kind === 2) {
+    // double helix of painted steel tube rising from a turned foot, capped with a polished ball
+    ks.m('#3a3d40', 'steel');
+    sh.cyl(0, 0.5, 0, 0.2, 0.26, 0.12, 12, 0);
+    ks.m(col, 'paint');
+    const n = 26,
+      H = 2.6;
+    for (const ph of [0, Math.PI]) {
+      for (let i = 0; i < n; i++) {
+        const t0 = i / n,
+          t1 = (i + 1) / n;
+        const r0 = 0.42 - 0.18 * t0,
+          r1 = 0.42 - 0.18 * t1;
+        const a0 = ph + t0 * TAU * 1.25,
+          a1 = ph + t1 * TAU * 1.25;
+        sh.tube(Math.cos(a0) * r0, 0.62 + t0 * H, Math.sin(a0) * r0, Math.cos(a1) * r1, 0.62 + t1 * H, Math.sin(a1) * r1, 0.055, 0.055, 6);
+      }
+    }
+    ks.m('#c9ccd0', 'steel');
+    sh.ellipsoid(0, 0.62 + H + 0.12, 0, 0.13, 0.13, 0.13, 1);
+    return;
+  }
   if (kind === 0) {
+    if (detail) {
+      // the ring stands in a cast shoe bolted to the capping
+      ks.m('#3a3d40', 'steel');
+      cbox(sh, 0, 0.56, 0, 0.5, 0.12, 0.34, 0.03);
+    }
     // ring on edge
     ks.m(col, 'paint');
     const n = 18,

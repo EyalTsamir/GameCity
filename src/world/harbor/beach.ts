@@ -22,6 +22,13 @@ const TOWELS = ['#e63946', '#2a9d8f', '#e9c46a', '#457b9d', '#f4a261', '#8d6cab'
 
 type Ground = (x: number, z: number) => number;
 
+/** box hunt (?nobeachkit): real parasols (domed panels, ribs, runner, scalloped valance) and a hipped,
+ *  cross-braced lifeguard hut; off = the earlier flat cones / slab roof */
+let DETAIL = true;
+export function setBeachDetail(on: boolean): void {
+  DETAIL = on;
+}
+
 export function lifeguardTower(b: HB, x: number, z: number, yaw: number, ground: Ground): void {
   // built facing +z locally (yaw turns it to face the sea)
   const gy = ground(x, z);
@@ -40,7 +47,15 @@ export function lifeguardTower(b: HB, x: number, z: number, yaw: number, ground:
       b.box(lx, (g + deck) / 2, lz, 0.14, deck - g, 0.14, 0, 3);
     }
   b.color('#d9d3c6');
-  for (const sz of [-1, 1]) b.beam([-0.85, deck - 1.2, sz * 0.85], [0.85, deck - 0.3, sz * 0.85], 0.06, 0.06);
+  if (DETAIL) {
+    // X-braced on all four sides, a tie at mid height
+    for (const sz of [-1, 1]) {
+      b.beam([-0.85, deck - 2.0, sz * 0.85], [0.85, deck - 0.3, sz * 0.85], 0.06, 0.06);
+      b.beam([0.85, deck - 2.0, sz * 0.85], [-0.85, deck - 0.3, sz * 0.85], 0.06, 0.06);
+      b.beam([sz * 0.85, deck - 2.0, -0.85], [sz * 0.85, deck - 0.3, 0.85], 0.06, 0.06);
+      b.beam([sz * 0.85, deck - 2.0, 0.85], [sz * 0.85, deck - 0.3, -0.85], 0.06, 0.06);
+    }
+  } else for (const sz of [-1, 1]) b.beam([-0.85, deck - 1.2, sz * 0.85], [0.85, deck - 0.3, sz * 0.85], 0.06, 0.06);
   // platform + hut
   b.color('#c8a476').pat(PAT.PLANKS_X, 0.2);
   b.box(0, deck - 0.06, 0.25, 2.3, 0.12, 2.6, 0, 0);
@@ -55,7 +70,27 @@ export function lifeguardTower(b: HB, x: number, z: number, yaw: number, ground:
   b.box(-0.96, deck + 1.1, -0.25, 0.04, 0.6, 1.0, 0, 3);
   // roof with overhang
   b.color('#e63946');
-  b.box(0, deck + 1.97, -0.15, 2.4, 0.12, 2.2, 0, 0);
+  if (DETAIL) {
+    // hipped roof: fascia band, four sloping planes to a short ridge, a lookout's flag finial
+    const y0 = deck + 1.92,
+      y1 = deck + 2.42,
+      cz = -0.15,
+      hx = 1.22,
+      hz = 1.12;
+    b.box(0, y0 - 0.04, cz, hx * 2, 0.1, hz * 2, 0, 2);
+    const A: V3 = [-hx, y0, cz - hz],
+      B: V3 = [hx, y0, cz - hz],
+      C: V3 = [hx, y0, cz + hz],
+      D: V3 = [-hx, y0, cz + hz],
+      r0: V3 = [-0.3, y1, cz],
+      r1: V3 = [0.3, y1, cz];
+    b.quad(D, C, r1, r0);
+    b.quad(B, A, r0, r1);
+    b.triangle(C, B, r1);
+    b.triangle(A, D, r0);
+    b.color('#f6f1e6');
+    b.beam([-0.3, y1 + 0.02, cz], [0.3, y1 + 0.02, cz], 0.08, 0.05);
+  } else b.box(0, deck + 1.97, -0.15, 2.4, 0.12, 2.2, 0, 0);
   // railing on the front platform
   b.color('#f2efe6');
   for (const sx of [-1, 1]) b.box(sx * 1.1, deck + 0.45, 0.95, 0.06, 0.9, 0.06, 0, 3);
@@ -204,6 +239,10 @@ export function scatterBeach(b: HB, spec: BeachSpec, ground: Ground, rng: Rng, e
 }
 
 function parasol(b: HB, x: number, gy: number, z: number, c1: string, c2: string, rot: number, tilt: number, R: number): void {
+  if (DETAIL) {
+    parasolReal(b, x, gy, z, c1, c2, rot, tilt, R * 0.8);
+    return;
+  }
   const h = 2.15;
   const tx = Math.sin(tilt) * h,
     ty = Math.cos(tilt) * h;
@@ -227,6 +266,92 @@ function parasol(b: HB, x: number, gy: number, z: number, c1: string, c2: string
   }
   b.color(c1);
   b.sphere(apex[0], apex[1] + 0.04, apex[2], 0.06, 5, 3);
+}
+
+/**
+ * A beach parasol as built: a two-part pole (tilt collar), the runner and its stretchers, eight ribs under a
+ * domed canopy whose panels sag between the ribs, a scalloped valance and a finial. Pole axis tilted by `tilt`
+ * about Z; the canopy stays square to the pole.
+ */
+function parasolReal(b: HB, x: number, gy: number, z: number, c1: string, c2: string, rot: number, tilt: number, R: number): void {
+  const h = 2.1;
+  const ux = Math.sin(tilt),
+    uy = Math.cos(tilt); // pole direction (x, y)
+  // a point at height t up the pole, pushed out r along the canopy direction a (perpendicular to the pole)
+  const P = (t: number, r: number, a: number, dy = 0): V3 => {
+    const ca = Math.cos(a),
+      sa = Math.sin(a);
+    // canopy plane basis: e1 = (uy, -ux, 0) (in the tilt plane), e2 = (0, 0, 1)
+    return [x + ux * t + uy * ca * r + ux * dy, gy + uy * t - ux * ca * r + uy * dy, z + sa * r];
+  };
+  b.noEmit().pat(PAT.NONE);
+  b.color('#e8e2d4');
+  b.cyl([x, gy - 0.35, z], [x, gy + 1.15, z], 0.032, 0.03, 6, 0);
+  b.cyl([x, gy + 1.15, z], P(h + 0.05, 0, 0), 0.026, 0.024, 6, 0);
+  b.color('#9aa0a6');
+  b.cyl([x, gy + 1.08, z], [x, gy + 1.22, z], 0.045, 0.045, 6, 3);
+  // runner collar and the hub under the canopy
+  const tRun = h - 0.5;
+  b.cyl(P(tRun - 0.06, 0, 0), P(tRun + 0.06, 0, 0), 0.042, 0.042, 6, 3);
+  b.cyl(P(h - 0.05, 0, 0), P(h + 0.03, 0, 0), 0.05, 0.04, 6, 3);
+  // canopy: panels between ribs, rings at t 0 / 0.55 / 1 (domed), sag at the panel middles
+  const n = 8,
+    rise = 0.34;
+  const ringY = (f: number) => rise * (1 - Math.pow(f, 1.35)) - 0.02;
+  const pt = (f: number, a: number, sag: number): V3 => P(h, R * f, a, ringY(f) - sag);
+  for (let k = 0; k < n; k++) {
+    const a0 = rot + (k / n) * Math.PI * 2,
+      a1 = rot + ((k + 1) / n) * Math.PI * 2,
+      am = (a0 + a1) / 2;
+    const apex = pt(0, 0, 0),
+      m0 = pt(0.55, a0, 0),
+      mm = pt(0.55, am, 0.03),
+      m1 = pt(0.55, a1, 0),
+      e0 = pt(1, a0, 0),
+      em = pt(1, am, 0.06),
+      e1 = pt(1, a1, 0);
+    b.color(k % 2 === 0 ? c1 : c2);
+    for (const [p, q, r] of [
+      [m1, m0, apex],
+      [mm, m0, m1],
+      [e0, m0, mm],
+      [e0, mm, em],
+      [em, mm, m1],
+      [em, m1, e1],
+    ] as V3[][]) {
+      b.triangle(p, q, r);
+      b.triangle(q, p, r);
+    }
+    // scalloped valance: three drops per panel, deepest in the middle of each scallop
+    const drop = [0.06, 0.15, 0.06];
+    const edge = (u: number): V3 => {
+      const a = a0 + (a1 - a0) * u;
+      const sag = 0.06 * Math.sin(u * Math.PI);
+      return pt(1, a, sag);
+    };
+    for (let j = 0; j < 3; j++) {
+      const pa = edge(j / 3),
+        pb = edge((j + 1) / 3),
+        pc = edge((j + 0.5) / 3);
+      const d = drop[1] - (j === 1 ? 0 : 0.03);
+      b.quad2(pa, pb, [pb[0], pb[1] - drop[0], pb[2]], [pa[0], pa[1] - drop[0], pa[2]]);
+      b.triangle(pa, [pa[0], pa[1] - drop[0], pa[2]], [pc[0], pc[1] - d, pc[2]]);
+      b.triangle([pa[0], pa[1] - drop[0], pa[2]], pa, [pc[0], pc[1] - d, pc[2]]);
+      b.triangle([pb[0], pb[1] - drop[0], pb[2]], [pc[0], pc[1] - d, pc[2]], [pa[0], pa[1] - drop[0], pa[2]]);
+      b.triangle([pc[0], pc[1] - d, pc[2]], [pb[0], pb[1] - drop[0], pb[2]], [pa[0], pa[1] - drop[0], pa[2]]);
+    }
+    // rib under the canopy (hub → tip) and its stretcher from the runner
+    b.color('#d8d2c4');
+    const tip = pt(1, a0, 0.025);
+    b.beam(pt(0, 0, 0.04), pt(0.55, a0, 0.03), 0.014, 0.014);
+    b.beam(pt(0.55, a0, 0.03), tip, 0.012, 0.012);
+    b.beam(P(tRun, 0.03, a0), pt(0.5, a0, 0.035), 0.01, 0.01);
+    b.color(k % 2 === 0 ? c1 : c2);
+  }
+  b.color('#d8d2c4');
+  const top = pt(0, 0, 0);
+  b.cyl(top, [top[0] + ux * 0.12, top[1] + uy * 0.12, top[2]], 0.012, 0.012, 5, 0);
+  b.sphere(top[0] + ux * 0.14, top[1] + uy * 0.14, top[2], 0.035, 6, 4);
 }
 
 function towel(b: HB, x: number, z: number, yaw: number, ground: Ground, c1: string, c2: string): void {

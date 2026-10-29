@@ -22,6 +22,10 @@ interface Bld {
   wall: number; // palette index
   roofC: number;
   kind: number; // 0 house, 1 barn, 2 shed
+  /** box hunt variants: hip (0 gable … 1 full 45° hip), chimney side (0 none, ±1), L-wing side (0 none, ±1) */
+  hip?: number;
+  chim?: number;
+  wing?: number;
 }
 
 const WALLS = ['#e9e1cf', '#d9ccb0', '#c9b79a', '#b5aa98', '#e4d6bd', '#9c5b44', '#7a4a36', '#5b4535'];
@@ -109,6 +113,7 @@ function placeSite(site: Site, model: LandscapeModel, out: Bld[], towers: { x: n
         wall: Math.floor(rnd(i, 19) * 5),
         roofC: Math.floor(rnd(i, 20) * (site.kind === 'village' ? 6 : 3)),
         kind: 0,
+        ...houseVariant(rnd, i, big),
       },
       -street + (rnd(i, 21) - 0.5) * 0.12,
     );
@@ -125,19 +130,35 @@ function placeSite(site: Site, model: LandscapeModel, out: Bld[], towers: { x: n
   }
 }
 
+/** box hunt: a hipped or gabled roof, a chimney and on some an L-wing at the back (houses) */
+function houseVariant(rnd: (i: number, k: number) => number, i: number, big: boolean): Pick<Bld, 'hip' | 'chim' | 'wing'> {
+  const r = rnd(i, 40);
+  const hip = r < 0.3 ? 1 : r < 0.42 ? 0.55 : 0;
+  const chim = rnd(i, 41) < 0.75 ? (rnd(i, 42) < 0.5 ? -1 : 1) : 0;
+  const wing = rnd(i, 43) < (big ? 0.55 : 0.32) ? (rnd(i, 44) < 0.5 ? -1 : 1) : 0;
+  return { hip, chim, wing };
+}
+
 type Put = (lx: number, lz: number, b: Omit<Bld, 'x' | 'z' | 'y' | 'yaw'>, yawOff: number) => void;
 function placeFarm(put: Put, rnd: (i: number, k: number) => number): void {
-  put(0, 0, { w: 11 + 3 * rnd(1, 2), d: 8 + 1.5 * rnd(1, 3), h: 5.6 + 1.2 * rnd(1, 4), roof: 4.2, wall: Math.floor(rnd(1, 5) * 5), roofC: Math.floor(rnd(1, 6) * 3), kind: 0 }, 0);
+  put(0, 0, { w: 11 + 3 * rnd(1, 2), d: 8 + 1.5 * rnd(1, 3), h: 5.6 + 1.2 * rnd(1, 4), roof: 4.2, wall: Math.floor(rnd(1, 5) * 5), roofC: Math.floor(rnd(1, 6) * 3), kind: 0, ...houseVariant(rnd, 101, false) }, 0);
   // the barn behind the house; turned across, it moves out by its extra half-length (no walls touching)
   const bw = 20 + 6 * rnd(2, 3),
     bd = 12 + 3 * rnd(2, 4),
     turned = rnd(2, 8) <= 0.5;
-  put(4 + 6 * rnd(2, 1), 17 + 4 * rnd(2, 2) + (turned ? (bw - bd) / 2 : 0), { w: bw, d: bd, h: 6 + rnd(2, 5) * 1.5, roof: 5.5, wall: 5 + Math.floor(rnd(2, 6) * 3), roofC: Math.floor(rnd(2, 7) * 6), kind: 1 }, turned ? Math.PI / 2 : 0);
+  put(4 + 6 * rnd(2, 1), 17 + 4 * rnd(2, 2) + (turned ? (bw - bd) / 2 : 0), { w: bw, d: bd, h: 6 + rnd(2, 5) * 1.5, roof: 5.5, wall: 5 + Math.floor(rnd(2, 6) * 3), roofC: Math.floor(rnd(2, 7) * 6), kind: 1, hip: rnd(2, 9) < 0.3 ? 0.35 : 0, wing: rnd(2, 10) < 0.3 ? (rnd(2, 11) < 0.5 ? -1 : 1) : 0 }, turned ? Math.PI / 2 : 0);
   if (rnd(3, 1) > 0.25) put(-15 - 4 * rnd(3, 2), 8 + 6 * rnd(3, 3), { w: 12, d: 6, h: 3.4, roof: 2.0, wall: 5 + Math.floor(rnd(3, 4) * 3), roofC: 3 + Math.floor(rnd(3, 5) * 3), kind: 2 }, Math.PI / 2);
 }
 
-/** unit gabled building: body 1×1×1 (y 0..1) + roof prism (y 1..2, flagged), ridge along x */
-function gableGeometry(): THREE.BufferGeometry {
+/** unit-geometry parts (aRoof): the shader moves / collapses them per instance (hip, chimney, L-wing) */
+const PART = { WALL: 0, ROOF: 1, HIPEND: 3, CHIMNEY: 4, WING: 5, WINGROOF: 6 } as const;
+
+/**
+ * unit gabled building: body 1×1×1 (y 0..1) + roof prism (y 1..2, flagged), ridge along x. Box hunt (`variants`):
+ * also hip ends (folded flat on gabled roofs), a chimney stack (unit box round its own centre, sized in metres by
+ * the shader) and an L-wing in its own unit frame (x −0.5..0.5 across, z 0..1 out from the back wall, roof y 1..2).
+ */
+function gableGeometry(variants: boolean): THREE.BufferGeometry {
   const pos: number[] = [];
   const roof: number[] = [];
   const nrm: number[] = [];
@@ -161,7 +182,7 @@ function gableGeometry(): THREE.BufferGeometry {
       roof.push(r);
     }
   };
-  const tri = (a: number[], b: number[], c: number[]) => {
+  const tri = (a: number[], b: number[], c: number[], r = 0) => {
     const ux = b[0] - a[0],
       uy = b[1] - a[1],
       uz = b[2] - a[2];
@@ -178,7 +199,7 @@ function gableGeometry(): THREE.BufferGeometry {
     for (const p of [a, b, c]) {
       pos.push(p[0], p[1], p[2]);
       nrm.push(nx, ny, nz);
-      roof.push(0);
+      roof.push(r);
     }
   };
   const h = 0.5;
@@ -194,12 +215,76 @@ function gableGeometry(): THREE.BufferGeometry {
   const o = 0.06;
   quad([-h - o, 1 - o * 0.8, h + o], [h + o, 1 - o * 0.8, h + o], [h + o, 2, 0], [-h - o, 2, 0], 1);
   quad([h + o, 1 - o * 0.8, -h - o], [-h - o, 1 - o * 0.8, -h - o], [-h - o, 2, 0], [h + o, 2, 0], 1);
+  if (variants) {
+    const e = 1 - o * 0.8;
+    // hip ends from the eaves corners (apex pulled in by the shader; folded flat on gabled roofs)
+    tri([h + o, e, h + o], [h + o, e, -h - o], [h + o, 2, 0], PART.HIPEND);
+    tri([-h - o, e, -h - o], [-h - o, e, h + o], [-h - o, 2, 0], PART.HIPEND);
+    // chimney: unit box ±1 round its centre, y from inside the roof to over the ridge (the shader sizes it)
+    const C = PART.CHIMNEY;
+    quad([-1, 1.3, 1], [1, 1.3, 1], [1, 2.3, 1], [-1, 2.3, 1], C);
+    quad([1, 1.3, -1], [-1, 1.3, -1], [-1, 2.3, -1], [1, 2.3, -1], C);
+    quad([1, 1.3, 1], [1, 1.3, -1], [1, 2.3, -1], [1, 2.3, 1], C);
+    quad([-1, 1.3, -1], [-1, 1.3, 1], [-1, 2.3, 1], [-1, 2.3, -1], C);
+    quad([-1, 2.3, 1], [1, 2.3, 1], [1, 2.3, -1], [-1, 2.3, -1], C);
+    // L-wing (own unit frame): side walls, end wall, its gable and two roof planes with eaves
+    const W = PART.WING,
+      WR = PART.WINGROOF;
+    quad([h, 0, 0], [h, 0, 1], [h, 1, 1], [h, 1, 0], W);
+    quad([-h, 0, 1], [-h, 0, 0], [-h, 1, 0], [-h, 1, 1], W);
+    quad([-h, 0, 1], [h, 0, 1], [h, 1, 1], [-h, 1, 1], W);
+    tri([-h, 1, 1], [h, 1, 1], [0, 2, 1], W);
+    quad([h + o, e, 1 + o], [h + o, e, 0], [0, 2, 0], [0, 2, 1 + o], WR);
+    quad([-h - o, e, 0], [-h - o, e, 1 + o], [0, 2, 1 + o], [0, 2, 0], WR);
+  }
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
   g.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3));
   g.setAttribute('aRoof', new THREE.Float32BufferAttribute(roof, 1));
   return g;
 }
+
+/** unit → building shape per instance (hip ends, chimney, L-wing, roof rise, tower spire); shared by the colour
+ *  and the shadow-depth material so shadows match the drawn shape */
+const SHAPE_GLSL = /* glsl */ `
+vec3 bS = vec3(length(instanceMatrix[0].xyz), length(instanceMatrix[1].xyz), length(instanceMatrix[2].xyz));
+float bPart = aRoof;
+// box hunt variants (unit space, before the roof rise): hip ends, chimney stack, L-wing
+float hipW = aV.x * 0.56 * bS.z / max(bS.x, 0.01); // ridge-end inset for a 45° hip, in unit x
+bool roofPlane = bPart > 0.5 && bPart < 1.5;
+bool hipEnd = bPart > 2.5 && bPart < 3.5;
+if ((roofPlane || hipEnd) && transformed.y > 1.5) {
+  if (hipEnd && aV.x < 0.01) transformed.y = 0.952; // gabled: the hip end folds flat (degenerate)
+  else transformed.x = sign(transformed.x) * max(0.0, abs(transformed.x) - hipW);
+}
+if (bPart < 0.5 && transformed.y > 1.5 && aV.x > 0.01) transformed.y = 1.0; // gable wall hidden under the hip
+if (bPart > 3.5 && bPart < 4.5) {
+  // chimney: 0.6 x 0.6 m stack on one slope near the ridge, top ~0.9 m over the ridge; none = collapsed
+  float on = abs(aV.y);
+  transformed.x = 0.3 * aV.y + transformed.x * on * 0.3 / max(bS.x, 0.01);
+  transformed.z = 0.16 + transformed.z * on * 0.3 / max(bS.z, 0.01);
+  float top = 2.0 + 0.9 / max(0.01, aB.x * bS.y);
+  transformed.y = mix(1.3, transformed.y > 2.0 ? top : 1.3, on);
+}
+bool wing = bPart > 4.5;
+if (wing) {
+  // L-wing: 0.4 of the main length at one gable end, out 0.7 of the depth behind the back wall, eaves at
+  // 0.86 of the main eaves, roof at the main pitch; none = collapsed onto the back wall
+  float on = abs(aV.z);
+  float ww = 0.4, wh = 0.86;
+  float pitch = aB.x * bS.y / max(0.01, 0.5 * bS.z);
+  float wr = pitch * 0.5 * ww * bS.x / max(0.01, bS.y); // wing roof rise in unit y (final)
+  vec3 q = transformed;
+  transformed.x = aV.z * (0.5 - 0.5 * ww) + q.x * ww * on;
+  transformed.z = 0.5 + q.z * 0.7 * on;
+  transformed.y = q.y <= 1.0 ? q.y * wh : wh + (q.y - 1.0) * wr;
+}
+// roof rise relative to the eaves height; towers (kind 3): the ridge collapses to a point → a spire
+if (transformed.y > 1.0 && !wing) {
+  transformed.y = 1.0 + (transformed.y - 1.0) * aB.x;
+  if (aB.w > 2.5) transformed.x = 0.0;
+}
+`;
 
 function buildingMaterial(uniforms: Record<string, THREE.IUniform>, fog: boolean): THREE.MeshStandardMaterial {
   const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.85, metalness: 0, fog });
@@ -210,7 +295,8 @@ function buildingMaterial(uniforms: Record<string, THREE.IUniform>, fog: boolean
         '#include <common>',
         `#include <common>
 attribute float aRoof;
-attribute vec4 aB; // wall rgb packed? no: (roof rise / eaves height, wall idx, roof idx, kind)
+attribute vec4 aB; // (roof rise / eaves height, wall idx, roof idx, kind)
+attribute vec4 aV; // box hunt: (hip 0..1, chimney side ±1 / 0, L-wing side ±1 / 0, -)
 varying float vRoof;
 varying vec3 vBW;
 varying vec3 vBL;
@@ -218,17 +304,23 @@ varying vec4 vB;
 varying vec3 vBS;`,
       )
       .replace(
+        '#include <beginnormal_vertex>',
+        `#include <beginnormal_vertex>
+// hip ends slope in: their normal from rise over run in unit space (the instancing normal transform scales it)
+if (aRoof > 2.5 && aRoof < 3.5 && aV.x > 0.01) {
+  vec3 sc = vec3(length(instanceMatrix[0].xyz), length(instanceMatrix[1].xyz), length(instanceMatrix[2].xyz));
+  float run = min(0.56, aV.x * 0.56 * sc.z / max(sc.x, 0.01));
+  objectNormal = normalize(vec3(sign(position.x) * (aB.x + 0.048), run, 0.0));
+}`,
+      )
+      .replace(
         '#include <begin_vertex>',
         `#include <begin_vertex>
-// roof rise relative to the eaves height; towers (kind 3): the ridge collapses to a point → a spire
-if (transformed.y > 1.0) {
-  transformed.y = 1.0 + (transformed.y - 1.0) * aB.x;
-  if (aB.w > 2.5) transformed.x = 0.0;
-}
+${SHAPE_GLSL}
+vBS = bS;
 vRoof = aRoof;
 vB = aB;
-vBL = transformed;
-vBS = vec3(length(instanceMatrix[0].xyz), length(instanceMatrix[1].xyz), length(instanceMatrix[2].xyz));`,
+vBL = transformed;`,
       )
       .replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvBW = (modelMatrix * instanceMatrix * vec4(transformed, 1.0)).xyz;');
     shader.fragmentShader = shader.fragmentShader
@@ -251,7 +343,8 @@ vec3 bAlbedo() {
   int wi = int(vB.y + 0.5), ri = int(vB.z + 0.5);
   vec3 wall = uWalls[wi];
   vec3 roof = uRoofs[ri];
-  if (vRoof > 0.75 || (vB.w > 2.5 && vBL.y > 1.001)) {
+  if (vRoof > 3.5 && vRoof < 4.5) return vec3(0.42, 0.22, 0.17) * (0.85 + 0.15 * bHash(floor(vBW.xz * 3.0 + vBW.y * 4.0))); // chimney brick
+  if ((vRoof > 0.75 && vRoof < 1.5) || (vRoof > 2.5 && vRoof < 3.5) || vRoof > 5.5 || (vB.w > 2.5 && vBL.y > 1.001)) {
     // tile / slate courses
     float c = fract(vBL.y * vBS.y * 2.2);
     return roof * (0.85 + 0.15 * smoothstep(0.1, 0.4, c)) * (0.9 + 0.2 * bHash(floor(vBW.xz * 0.5)));
@@ -266,7 +359,7 @@ vec3 bAlbedo() {
     float op = step(0.8, y) * step(y, 0.93) * step(abs(u), 0.17);
     col = mix(col, vec3(0.05), op * (1.0 - smoothstep(0.4, 1.2, fp)));
   }
-  if (vB.w < 0.5 && fp < 1.6) {
+  if (vB.w < 0.5 && fp < 1.6 && vRoof < 4.5) {
     float along = abs(vBL.z) > 0.499 ? vBL.x * vBS.x : vBL.z * vBS.z;
     float y = vBL.y * vBS.y;
     float storey = floor((y - 0.9) / 2.8);
@@ -287,11 +380,23 @@ vec3 bAlbedo() {
         '#include <emissivemap_fragment>\ntotalEmissiveRadiance += vec3(1.0, 0.68, 0.34) * bWin * uLights * 2.2;',
       );
   };
-  mat.customProgramCacheKey = () => 'th-landbld-v2';
+  mat.customProgramCacheKey = () => 'th-landbld-v3';
   return mat;
 }
 
-export function buildSettlements(model: LandscapeModel, uniforms: Record<string, THREE.IUniform>, lights: { value: number }, night: { value: number }, fog: boolean): Settlements {
+/** shadow depth with the same per-instance shape as the drawn buildings */
+function buildingDepthMaterial(): THREE.MeshDepthMaterial {
+  const mat = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking });
+  mat.onBeforeCompile = (shader) => {
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nattribute float aRoof;\nattribute vec4 aB;\nattribute vec4 aV;')
+      .replace('#include <begin_vertex>', `#include <begin_vertex>\n${SHAPE_GLSL}`);
+  };
+  mat.customProgramCacheKey = () => 'th-landbld-depth-v1';
+  return mat;
+}
+
+export function buildSettlements(model: LandscapeModel, uniforms: Record<string, THREE.IUniform>, lights: { value: number }, night: { value: number }, fog: boolean, variants = true): Settlements {
   const blds: Bld[] = [];
   const towers: { x: number; z: number; y: number; h: number; yaw: number; light?: boolean }[] = [];
   const farms: FarmSite[] | null = new URLSearchParams(location.search).has('nofarmdetail') ? null : [];
@@ -326,15 +431,22 @@ export function buildSettlements(model: LandscapeModel, uniforms: Record<string,
     blds.push({ x: t.x, z: t.z, y: t.y, w, d: w, h: t.h * 0.66, roof: t.h * 0.34, yaw: t.yaw, wall: lh ? 0 : 3, roofC: lh ? 1 : 4, kind: 3 });
   }
   // all buildings: one instanced mesh
-  const geo = gableGeometry();
+  const geo = gableGeometry(variants);
   const ab = new Float32Array(blds.length * 4);
+  const av = new Float32Array(blds.length * 4);
   blds.forEach((b, i) => {
     ab[i * 4] = b.roof / b.h;
     ab[i * 4 + 1] = b.wall;
     ab[i * 4 + 2] = b.roofC;
     ab[i * 4 + 3] = b.kind;
+    if (variants && b.kind < 3) {
+      av[i * 4] = b.hip ?? 0;
+      av[i * 4 + 1] = b.chim ?? 0;
+      av[i * 4 + 2] = b.wing ?? 0;
+    }
   });
   geo.setAttribute('aB', new THREE.InstancedBufferAttribute(ab, 4));
+  geo.setAttribute('aV', new THREE.InstancedBufferAttribute(av, 4));
   const mesh = new THREE.InstancedMesh(geo, buildingMaterial(u, fog), Math.max(1, blds.length));
   blds.forEach((b, i) => {
     p.set(b.x, b.y, b.z);
@@ -346,10 +458,11 @@ export function buildSettlements(model: LandscapeModel, uniforms: Record<string,
   mesh.count = blds.length;
   mesh.name = 'land-buildings';
   mesh.castShadow = true;
+  if (variants) mesh.customDepthMaterial = buildingDepthMaterial();
   mesh.receiveShadow = true;
   mesh.computeBoundingSphere();
   group.add(mesh);
-  let triangles = blds.length * 14;
+  let triangles = (blds.length * geo.getAttribute('position').count) / 3;
   if (farms?.length) {
     const fm = farmMaterial(fog);
     for (const f of farms) {
@@ -381,7 +494,7 @@ export function buildSettlements(model: LandscapeModel, uniforms: Record<string,
         sn = Math.sin(b.yaw);
       const lx = Math.abs(dx * c - dz * sn),
         lz = Math.abs(dx * sn + dz * c);
-      const hd = b.d / 2 + (b.kind === 1 ? 6 : 1);
+      const hd = b.d / 2 + (b.kind === 1 ? 6 : 1) + (b.wing ? b.d * 0.7 : 0);
       const ox = Math.max(0, lx - b.w / 2 - 1),
         oz = Math.max(0, lz - hd);
       if (ox * ox + oz * oz < r * r) return true;
