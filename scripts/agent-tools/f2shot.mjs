@@ -27,13 +27,19 @@ try {
   await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 300000 });
   await page.waitForFunction(() => window.__city && window.__city.ready && window.__city.frames() > 3, null, { timeout: 300000, polling: 500 });
   await page.addStyleTag({ content: '#ui{display:none!important}' });
-  const pump = async (n) => { for (let i = 0; i < n; i++) await page.screenshot({ type: 'jpeg', quality: 1, clip: { x: 0, y: 0, width: 8, height: 8 } }).catch(() => {}); };
+  const pump = async (n) => { for (let i = 0; i < n; i++) await page.screenshot({ type: 'jpeg', quality: 1 }).catch(() => {}); };
   await pump(2);
   console.log('loaded', ((Date.now() - t0) / 1000).toFixed(0), 's');
   for (const spec of shots) {
     // 'ao0' / 'ao1' / 'dof0' / 'dof1': switch a post effect for the following shots
     const fx = /^(ao|dof)([01])$/.exec(spec);
     if (fx) { await page.evaluate(([e, on]) => window.__city.ctx.services.postfx?.setEnabled?.(e, on === '1'), [fx[1], fx[2]]); continue; }
+    if (spec === 'waittrain') {
+      // run the sim until an EMU car is in view of the station (the platform)
+      await page.evaluate(() => window.__city.setSpeed(4));
+      await page.waitForFunction(() => (window.__city.ctx.services.rail?.sim?.trains ?? []).some((t) => t.cars.some((k) => k.visible && k.type === 'mid') && t.phase === 'dwell'), null, { timeout: 200000, polling: 1000 }).catch(() => console.log('no train'));
+      continue;
+    }
     const res = await page.evaluate((spec) => {
       const c = window.__city, p = spec.split(':');
       const kind = p[0];
@@ -50,6 +56,16 @@ try {
         if (!V) return null;
         x = V.x; z = V.z; yaw = V.yaw; h = kind === 'bus' ? 1.9 : 1.15;
         if (kind === 'bus') { x += Math.sin(V.yaw) * 3.5; z += Math.cos(V.yaw) * 3.5; }
+      } else if (kind === 'train') {
+        const cars = [];
+        for (const tr of c.ctx.services.rail?.sim?.trains ?? []) for (const k of tr.cars) if (k.visible && (k.type === 'cab' || k.type === 'mid')) cars.push(k);
+        const k = cars[pick];
+        if (!k) return null;
+        x = k.x; y = k.y; z = c.ctx.plan.rail.z; yaw = Math.PI / 2; h = 2.3;
+      } else if (kind === 'tractor') {
+        const t = c.ctx.scene.getObjectByName('land-tractor');
+        if (!t) return null;
+        x = t.position.x; y = t.position.y; z = t.position.z; yaw = t.rotation.y; h = 2.2;
       } else if (kind === 'boat') {
         const b = c.ctx.services.boats.fleet.boats.filter((b) => b.type === sub)[pick];
         if (!b) return null;

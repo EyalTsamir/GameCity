@@ -120,7 +120,7 @@ const VERT_BEGIN = /* glsl */ `
   vec3 e = vec3(0.0);
   // door centre for the vestibule; −1e5 flags an open leaf (its window then lies over the body, no saloon behind)
   vDoorZ = tg == ${T.VESTIB} ? aExtra.x : tg == ${T.DOORWIN} && aInst.z > 0.1 && abs(aExtra.w - aInst.w) < 0.5 ? -1e5 : 1e4;
-  if (tg == ${T.WINDOW} || tg == ${T.DOORWIN} || tg == ${T.VESTIB}) e = vec3(1.0, 0.8, 0.52) * (1.7 * lit) * aInst2.y;
+  if (tg == ${T.WINDOW} || tg == ${T.DOORWIN} || tg == ${T.VESTIB}) e = vec3(1.0, 0.8, 0.52) * (1.7 * lit) * min(aInst2.y, 1.0);
   else if (tg == ${T.HEAD} && role == 1) e = vec3(1.0, 0.95, 0.85) * (0.9 + 4.0 * lit);
   else if (tg == ${T.TAIL} && role == 2) e = vec3(1.0, 0.07, 0.03) * (0.7 + 2.6 * lit);
   else if (tg == ${T.DOORBTN} && color.g > color.r * 2.0) e = vec3(0.15, 1.0, 0.3) * (aInst.z > 0.05 ? 1.6 + 2.0 * lit : 0.0);
@@ -209,6 +209,9 @@ float trH(float n) { n = fract(n * 0.1031); n *= n + 33.33; n *= n + n; return f
 // Saloon behind the glass, ray-traced in the car frame (interior mapping; no geometry): far wall with its
 // window band, floor, ceiling with the light strip, seat backs in 1.9 m bays with a few seated heads, yellow
 // grab poles in the vestibule. Returns the colour lit as daylight / cabin light, darkened with depth.
+// distance to the interior surface the window shows (cars with real seated passengers write its depth: F2)
+float trHitT = -1.0;
+uniform mat4 projectionMatrix;
 vec3 trInterior(vec3 o, vec3 d, float doorZ) {
   const float FL = 1.13, CE = 3.2, WX = 1.36;
   float sx = -sign(o.x);
@@ -238,7 +241,7 @@ vec3 trInterior(vec3 o, vec3 d, float doorZ) {
       float h = trH(bay * 7.0 + sign(q.x) * 3.0);
       // a seated passenger's head over the back (by bay + side)
       vec2 hd = vec2((ax - 0.95) / 0.095, (q.y - 2.4) / 0.13);
-      if (h > 0.55 && dot(hd, hd) < 1.0) {
+      if (h > 0.55 && vCar.x < 1.5 && dot(hd, hd) < 1.0) {
         // hair over the crown and the back of the head (we mostly see heads from behind / the side)
         float hair = step(0.35 - 0.5 * fract(h * 13.0), hd.y) + step(0.6, fract(h * 5.3));
         col = hair > 0.5 ? vec3(0.07, 0.05, 0.04) + 0.25 * vec3(0.9, 0.7, 0.4) * fract(h * 3.7) : vec3(0.55, 0.4, 0.32) * (0.6 + 0.5 * h);
@@ -268,6 +271,7 @@ vec3 trInterior(vec3 o, vec3 d, float doorZ) {
       }
     }
   }
+  trHitT = t;
   return col * (1.0 - 0.45 * clamp((t - 0.5) / 3.0, 0.0, 1.0));
 }
 `;
@@ -624,9 +628,21 @@ export function createTrainMaterials(globals: GlobalUniforms, clipX0: number, cl
           if (trPaint > 0.5) normal = normalize(normal + vAxZ * sz + vAxY * sy);
         }`,
       )
-      .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += vEmit * trEmK + trIntE;');
+      .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += vEmit * trEmK + trIntE;')
+      // cars with real seated passengers (aInst2.y = 2, pedestrians/occupants.ts): the window takes the depth of the
+      // saloon surface behind it, so the figures inside show through the glass; every other fragment keeps its own
+      .replace(
+        '#include <dithering_fragment>',
+        `#include <dithering_fragment>
+gl_FragDepth = gl_FragCoord.z;
+if (vCar.x > 1.5 && trHitT > 0.0) {
+  vec3 trMv = -vViewPosition;
+  vec4 trCp = projectionMatrix * vec4(trMv * (1.0 + trHitT / length(trMv)), 1.0);
+  gl_FragDepth = clamp(0.5 * trCp.z / trCp.w + 0.5, 0.0, 1.0);
+}`,
+      );
   };
-  material.customProgramCacheKey = () => 'rail-train-v7';
+  material.customProgramCacheKey = () => 'rail-train-v8';
   patchLampMaterial(material); // night street-light map (night agent)
 
   const depth = new THREE.MeshDepthMaterial();

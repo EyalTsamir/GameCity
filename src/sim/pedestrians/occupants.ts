@@ -10,6 +10,9 @@ import type { CityContext } from '../../core/context';
 import { Rng } from '../../core/rng';
 import { CABIN, type RideGeom } from '../traffic/models';
 import type { Vehicle } from '../traffic/sim';
+import type { Car, Train } from '../rail/trains';
+import { EMU } from '../rail/trainModels';
+import { composeMatrix } from '../rail/geo';
 import { Member, Party } from './crowd';
 import { makeLook, type Persona } from './looks';
 import { HAT_STYLES } from './shader';
@@ -19,11 +22,18 @@ interface TrafficSvc {
   vehicles(): Vehicle[];
 }
 
+/** the rail module loads after pedestrians: looked up lazily */
+interface RailSvc {
+  sim: { trains: Train[]; place(tr: Train): void };
+}
+
 /** one seat: the figure's root (vehicle frame, on the road plane under the hips) and its seated pose */
 interface Seat {
   x: number;
   z: number;
   g: RideGeom;
+  /** train seats: facing +z (1) or −z (−1) in the car frame */
+  f: number;
 }
 
 interface Occ {
@@ -100,8 +110,92 @@ export class Occupants {
         list[n++] = m;
       }
     }
+    n = this.syncTrains(list, n, n0);
     this.n = n - n0;
     return n;
+  }
+
+  /** passengers in the saloons of the EMU cars near the camera (the shader's heads are skipped for those cars) */
+  private syncTrains(list: Member[], n: number, n0: number): number {
+    const rail = this.ctx.services.rail as RailSvc | undefined;
+    if (!rail?.sim?.trains) return n;
+    const cam = this.ctx.camera.position;
+    const rz = this.ctx.plan.rail.z;
+    for (const tr of rail.sim.trains) {
+      if (tr.kind === 'freight') continue;
+      rail.sim.place(tr);
+      for (const c of tr.cars) {
+        if (c.type !== 'cab' && c.type !== 'mid') continue;
+        // nearest point of the car body to the camera
+        const dx = Math.max(0, Math.abs(c.x - cam.x) - c.half);
+        const near = c.visible && dx * dx + (rz - cam.z) ** 2 + (c.y + 2 - cam.y) ** 2 < NEAR * NEAR;
+        let o = c.occupants as Occ | undefined;
+        if (near && !o) {
+          o = this.seatCar(c, tr.id);
+          c.occupants = o;
+        }
+        if (!near || !o || o.ms.length === 0 || n - n0 + o.ms.length > MAX) {
+          c.seated = false;
+          continue;
+        }
+        c.seated = true;
+        // the same frame as trainRender (model +Z along the direction of travel)
+        const sd = tr.dir * (c.flip ? -1 : 1);
+        const yaw = sd > 0 ? Math.PI / 2 : -Math.PI / 2;
+        composeMatrix(_m4, c.x, c.y, rz, yaw, -sd * c.pitch, c.roll);
+        for (let k = 0; k < o.ms.length; k++) {
+          const s = o.seats[k],
+            m = o.ms[k];
+          _v.set(s.x, 0, s.z).applyMatrix4(_m4);
+          m.px = m.x;
+          m.pz = m.z;
+          m.x = _v.x;
+          m.y = _v.y;
+          m.z = _v.z;
+          // seats face both ways (back-to-back pairs on the seat-back planes)
+          m.yaw = yaw + (s.f < 0 ? Math.PI : 0);
+          m.lean = 0;
+          m.pedal = 0;
+          m.stopped = false;
+          m.speed = 0;
+          m.vx = 0;
+          m.vz = 0;
+          m.amp = 0;
+          m.fade = 1;
+          m.present = true;
+          list[n++] = m;
+        }
+      }
+    }
+    return n;
+  }
+
+  /** saloon seats (trainMaterial.ts trInterior: floor 1.13, transverse seat backs on the z = k·1.9 planes,
+   *  aisle |x| < 0.38): passengers sit back to back on both faces of each plane, outside the door vestibules */
+  private seatCar(c: Car, trainId: number): Occ {
+    const o: Occ = { seats: [], ms: [] };
+    const rng = new Rng(trainId * 7919 + Math.round(c.offset * 10) * 13 + 5);
+    const L = EMU.len;
+    const doors = [-L / 4 - 0.1, L / 4 - 0.75];
+    const z0 = -L / 2 + 0.45,
+      z1 = c.type === 'cab' ? L / 2 - 1.55 : L / 2 - 0.45;
+    const h = this.ctx.clock.hours;
+    const busy = h > 7 && h < 9.5 ? 0.28 : h > 16 && h < 19 ? 0.26 : h > 6 && h < 22 ? 0.2 : 0.06;
+    const FL = 1.13;
+    for (let k = -5; k <= 5; k++) {
+      const zn = k * 1.9;
+      if (doors.some((d) => Math.abs(zn - d) < 0.9)) continue;
+      for (const f of [1, -1]) {
+        const hz = zn + f * 0.3;
+        if (hz < z0 || hz > z1) continue;
+        for (const x of [-1.06, -0.62, 0.62, 1.06]) {
+          if (!rng.chance(busy)) continue;
+          this.add(o, null, rng, x, hz, sit(FL + 0.45, 0, FL), false);
+          o.seats[o.seats.length - 1].f = f;
+        }
+      }
+    }
+    return o;
   }
 
   /** who sits where in this vehicle (fixed per vehicle id) */
@@ -125,7 +219,7 @@ export class Occupants {
           if (!rng.chance(busy)) continue;
           // window or aisle place of the double seat
           const x = e * (rng.chance(0.6) ? hw * 0.62 : 0.52);
-          this.add(o, V, rng, x, z + 0.17, sit(cy, z + 0.17, belt - 1.0));
+          this.add(o, V, rng, x, z + 0.17, sit(cy, z + 0.17, belt - 1.0), false);
         }
       }
       return o;
@@ -144,8 +238,8 @@ export class Occupants {
     return o;
   }
 
-  private add(o: Occ, V: Vehicle, rng: Rng, x: number, z: number, g: RideGeom): void {
-    o.seats.push({ x, z, g });
+  private add(o: Occ, V: Vehicle | null, rng: Rng, x: number, z: number, g: RideGeom, shade = true): void {
+    o.seats.push({ x, z, g, f: 1 });
     const persona = PERSONA[rng.int(0, PERSONA.length - 1)];
     const p = new Party(-2000 - (this.nextUid - 980000), persona);
     const h = this.ctx.clock.hours;
@@ -160,19 +254,22 @@ export class Occupants {
       if (st.hat !== HAT_STYLES.BEANIE && st.hat !== HAT_STYLES.CAP) st.hat = HAT_STYLES.NONE;
       if (st.tail === 3) st.tail = 0;
     }
-    if (V.isBus && o.ms.length === 0) {
+    if (V?.isBus && o.ms.length === 0) {
       // the bus driver in the operator's shirt
       look.top = 0x9fb8d6;
       look.bottom = 0x2a3140;
       if (st) st.hat = HAT_STYLES.NONE;
     }
-    // in the cabin's shade and seen through tinted glass (the pane's own reflection is not drawn over them)
-    look.skin = dim(look.skin);
-    look.top = dim(look.top);
-    look.bottom = dim(look.bottom);
-    look.hair = dim(look.hair);
-    look.hat = dim(look.hat);
-    look.accent = dim(look.accent);
+    // in the cabin's shade and seen through tinted glass (the pane's own reflection is not drawn over them); a train
+    // saloon is daylit through both window bands (only a light tint)
+    if (shade) {
+      look.skin = dim(look.skin);
+      look.top = dim(look.top);
+      look.bottom = dim(look.bottom);
+      look.hair = dim(look.hair);
+      look.hat = dim(look.hat);
+      look.accent = dim(look.accent);
+    }
     const m = new Member(this.nextUid++, p, 0, look, rng.next());
     p.members.push(m);
     m.rideG = g;

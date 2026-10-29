@@ -3,6 +3,16 @@
 Branch `claude/real-f2-people` (from `claude/pensive-gates-bim12i` e1c9780). Brief: real-briefs.md "F2".
 
 ## Resume here
+* 2026-10-29 SESSION 3 (session_01XuhAMh8vfAev7DpzP7VknF) STARTED: merged origin/claude/pensive-gates-bim12i (b713343).
+  Tasks: sail crew into F4 cockpit + tractor driver; train occupants; band drum detail; bus black side windows;
+  re-judge swing/see-saw hands; cost note ;nooccupants/;noactors.
+  2284ad0: sail crew perched on the F4 cockpit coamings (CrewSeat.seatH; figure() arg), JUDGED GOOD s3a 5/7 m;
+  tractor driver = `RIDES` (actorDefs: a seat on a moving Object3D; tractor.ts registers its group; role farmer,
+  flat cap) JUDGED GOOD s3a; band side drum rebuilt in landmarks/park.ts (shell, navy hoops, 8 brass rods+lugs,
+  worn head, 3-leg stand; moved to z −0.12 off the drummer's knees); train occupants coded (occupants.ts
+  syncTrains/seatCar: back-to-back on the k·1.9 seat-back planes, x ±0.62/±1.06, skip doors; car.seated →
+  aInst2.y = 2; trainMaterial: heads skipped, trHitT → gl_FragDepth, cache key v8). f2shot: kinds train /
+  tractor, spec `waittrain`.
 * 2026-10-29 ~05:00 UTC — SESSION 2 ENDED (tokens.py ctxMax 264k > rule). Pushed. Typecheck clean; console
   clean and invariants {} in every f2shot run (q2–q4 reports).
   DONE s2: vehicle occupants for cars / vans / lorries / buses (`?nooccupants`, see "Vehicle occupants");
@@ -13,6 +23,11 @@ Branch `claude/real-f2-people` (from `claude/pensive-gates-bim12i` e1c9780). Bri
   green: q4) — not camera placement. f2shot.mjs now loads with `adaptive=0` (suspect: adaptive quality
   resizing targets); unconfirmed. Use scripts/agent-tools/f2shot.mjs (≈ 2 min per capture here), not bench.mjs
   (≈ 3–5 min per capture; 25-min background limit). Kill helper must not match its own command line.
+  LEAD (after s2 ended): flat captures = pumpFrames' 8×8 clipped screenshots (Chromium tiles the patch) — clip
+  removed in bench.mjs + f2shot.mjs (lead pushes the same to pensive-gates). F4 (pensive-gates 96a271a) rebuilt
+  the tractor glass cab (seat/wheel/levers) and the sailboat cabin/cockpit: MERGE claude/pensive-gates-bim12i
+  FIRST, then seat a tractor driver and move the sail crew into the new cockpit (positions: real-f4.md,
+  real-requests.md) — do this before the train occupants.
   NEXT, in order: (1) bus side windows render as opaque black panes (q5 01_bus) — check on ?nooccupants whether
   pre-existing (side panes not ray-traced?) — if so the side passengers are hidden: give the flank panes the
   cabin Det / ask W2; (2) train occupants (plan in "Vehicle occupants"); (3) perf.mjs `;nooccupants` and

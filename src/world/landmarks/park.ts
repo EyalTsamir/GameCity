@@ -560,8 +560,33 @@ export function genBandstand(env: Env, f: Feature): void {
   env.anim({ mode: ANIM.VIS, pivot: new THREE.Vector3(0, stageH, 0), axis: new THREE.Vector3(1, 0, 0), a: 1, b: 0.0, c: 0 });
   env.K.torus(S_gold(), 0.26, 0.07, -1.0, stageH + 1.05, -0.15, 6, 14, Math.PI * 2, 0, 0.5, 0);
   env.K.cone(S_gold(), 0.25, 0.4, -0.85, stageH + 1.25, -0.2, 10);
-  env.K.cyl(M('#f1ede4', PAT.PLAIN, 0.6), 0.32, 0.32, 0.4, 0.4, stageH + 0.45, -0.25, 14);
-  env.K.cyl(M('#b02a2a', PAT.PLAIN, 0.6), 0.33, 0.33, 0.08, 0.4, stageH + 0.85, -0.25, 14);
+  // (F2, judge: "the drum is a plain white cylinder") a side drum on its stand: lacquered shell, painted hoops
+  // top and bottom, eight brass tension rods with their lugs, a calfskin head worn darker where it is played
+  {
+    const dx = 0.4,
+      dz = -0.12,
+      y0 = stageH + 0.5,
+      dh = 0.3,
+      r = 0.3;
+    const hoop = M('#1f2a4a', PAT.PLAIN, 0.5);
+    for (let k = 0; k < 3; k++) {
+      const a = (k / 3) * Math.PI * 2 + 0.4;
+      env.K.rod(M('#2a2b2e', PAT.PLAIN, 0.4), [dx + Math.sin(a) * 0.32, stageH, dz + Math.cos(a) * 0.32], [dx, y0 - 0.12, dz], 0.012, 4);
+      env.K.rod(M('#2a2b2e', PAT.PLAIN, 0.4), [dx, y0 - 0.12, dz], [dx + Math.sin(a) * 0.2, y0 + 0.02, dz + Math.cos(a) * 0.2], 0.01, 4);
+    }
+    env.K.cyl(M('#8b2232', PAT.PLAIN, 0.35), r, r, dh, dx, y0, dz, 18);
+    env.K.torus(hoop, r + 0.012, 0.02, dx, y0 + 0.012, dz, 4, 22);
+    env.K.torus(hoop, r + 0.012, 0.022, dx, y0 + dh - 0.006, dz, 4, 22);
+    env.K.cyl(M('#ece5d2', PAT.PLAIN, 0.7), r - 0.004, r - 0.004, 0.012, dx, y0 + dh - 0.006, dz, 18);
+    env.K.cyl(M('#d3c7aa', PAT.PLAIN, 0.75), 0.11, 0.11, 0.004, dx + 0.04, y0 + dh + 0.004, dz - 0.05, 12);
+    for (let k = 0; k < 8; k++) {
+      const a = (k / 8) * Math.PI * 2;
+      const lx = dx + Math.sin(a) * (r + 0.018),
+        lz = dz + Math.cos(a) * (r + 0.018);
+      env.K.rod(S_gold(), [lx, y0 + 0.03, lz], [lx, y0 + dh - 0.025, lz], 0.006, 4);
+      env.K.box(S_gold(), 0.03, 0.06, 0.03, lx, y0 + dh * 0.5 - 0.03, lz, a);
+    }
+  }
   for (const sx of [-0.4, 1.1]) env.K.rod(S_gold(), [sx + 0.05, stageH + 1.3, -0.35], [sx + 0.05, stageH + 1.25, 0.15], 0.04, 6);
   // conductor at the front, facing the band
   env.anim({ mode: ANIM.VIS, pivot: new THREE.Vector3(0, stageH, 1.3), axis: new THREE.Vector3(1, 0, 0), a: 1, b: 0.05, c: 1.0 });

@@ -6,6 +6,7 @@
 
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
+import { actorsOff, RIDES } from '../../sim/pedestrians/actorDefs';
 
 export const REAR_R = 0.85;
 export const FRONT_R = 0.55;
@@ -414,6 +415,8 @@ export interface TractorModel {
 export function createTractor(fog: boolean): TractorModel {
   const group = new THREE.Group();
   group.name = 'land-tractor';
+  // F2: the driver on the suspension seat, hands on the wheel (a real figure, drawn by the pedestrians module)
+  if (!actorsOff) RIDES.splice(0, RIDES.length, { obj: group, role: 'farmer', x: 0, y: 2.06, z: -0.72, floorY: 1.7, wheel: [0, 2.28, -0.12] });
   const mat = material(fog);
   const glassSink = new Sink();
   const body = new THREE.Mesh(bodyGeometry(glassSink), mat);

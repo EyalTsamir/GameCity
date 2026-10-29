@@ -46,6 +46,9 @@ export interface Car {
   pitch: number;
   roll: number;
   visible: boolean;
+  /** real seated passengers drawn inside (pedestrians/occupants.ts; presentation only) */
+  seated?: boolean;
+  occupants?: unknown;
 }
 
 export interface Train {
