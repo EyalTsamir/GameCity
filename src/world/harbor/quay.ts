@@ -9,6 +9,7 @@
 import * as THREE from 'three';
 import { HB, PAT, type V3 } from './geo';
 import type { Rng } from '../../core/rng';
+import { addActor } from '../../sim/pedestrians/actorDefs';
 
 type Ground = (x: number, z: number) => number;
 
@@ -493,6 +494,13 @@ export function buildFishQuay(b: HB, o: FishQuayOpts): void {
   pallet(b, 128.4, y(128.4, -126.5), -126.5, 0.0, '#a58456');
   pallet(b, 128.45, y(128.4, -126.5) + 0.144, -126.45, 0.04, '#9b7b52');
   pallet(b, 128.4, y(128.4, -126.5) + 0.288, -126.55, -0.03, '#b29062');
+  // F2: the people working it (real figures drawn by the pedestrians module, sim/pedestrians/actorDefs.ts):
+  // stacking creels, sorting the catch at the boxes, mending on the store bench, talking to the boat
+  const H = Math.PI / 2;
+  addActor({ x: 132.75, y: y(132.75, -128.6), z: -128.6, yaw: H, role: 'fisher', work: 1, h0: 5, h1: 15, p: 0.85 });
+  addActor({ x: 130.45, y: y(130.45, -124.55), z: -124.55, yaw: H, role: 'fisher', work: 2, h0: 5.5, h1: 14, p: 0.9 });
+  addActor({ x: 130.6, y: y(130.6, -139.1), z: -139.1, yaw: H, role: 'fisher', seated: true, seatY: 0.465, h0: 7, h1: 17, p: 0.7 });
+  addActor({ x: 135.1, y: y(135.1, -126.2), z: -126.2, yaw: H + 0.3, role: 'fisher', idle: 7, h0: 5, h1: 13, p: 0.6 });
   // forklift waiting with its forks toward the fish-box pallet
   forklift(b, 129.6, y(129.6, -123.2), -123.2, Math.PI / 2 - 0.25);
   // hose from the standpipe at the store across to the boat's side

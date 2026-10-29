@@ -234,6 +234,8 @@ export class Member {
   /** standing about with friends (talking with the hands in turns), or a forced idle pose (-1 none, 5 phone) */
   chat = 0;
   forceIdle = -1;
+  /** working in place (actors.ts): 0 no, 1 stooped over a low task (creels, crates, kerbs), 2 at a bench / counter */
+  work = 0;
   /** riding a two-wheeler (riders.ts): the vehicle's anchor points, crank angle, lean, foot down */
   rideG: RideGeom | null = null;
   pedal = 0;

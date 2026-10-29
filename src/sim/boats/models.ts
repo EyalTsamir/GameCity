@@ -8,6 +8,9 @@ import * as THREE from 'three';
 import { Geo, type V3 } from '../rail/geo';
 import { BT, HC, HC_STEP, JIB_HEAD, JIB_TACK } from './material';
 import { QUAY_X, WATER_LEVEL } from '../../core/constants';
+import { actorsOff, CREW, crewBuild } from '../pedestrians/actorDefs';
+
+const _fp = new THREE.Vector3();
 
 export type BoatType = 'ferry' | 'tug' | 'tour' | 'sail' | 'motor' | 'row' | 'fish' | 'punt';
 
@@ -626,6 +629,14 @@ function navLamp(g: Geo, x: number, y: number, z: number, kind: number): void {
 
 /** seated / standing figure (simple: legs, torso, head); torso colour via ACCENT when shirt = null */
 function figure(g: Geo, x: number, y: number, z: number, facing: number, shirt: string | null, seated = true, tag = BT.PLAIN, hip: [number, number] | null = null): void {
+  if (!actorsOff) {
+    // F2: a seat / spot for a real posed figure (sim/pedestrians/actors.ts draws the crew on the moving boat)
+    const variant = ((g as unknown as { vo: number }).vo / 100) | 0;
+    _fp.set(x, y, z).applyMatrix4(g.frame);
+    const list = (CREW[crewBuild.pool][variant] ??= []);
+    list.push({ x: _fp.x, y: _fp.y, z: _fp.z, facing, shirt: shirt ? new THREE.Color(shirt).getHex() : -1, seated, rower: hip !== null });
+    return;
+  }
   g.push().at(x, y, z, facing);
   if (hip) g.extra(hip[0], hip[1], 0, 0);
   g.kind(BT.PLAIN).color('#2f3a4c');
@@ -1516,6 +1527,8 @@ function punt(g: Geo): void {
 
 export function buildBigBoats(): THREE.BufferGeometry {
   const g = new Geo();
+  crewBuild.pool = 'big';
+  CREW.big.length = 0;
   g.variant(1);
   ferry(g);
   g.variant(2);
@@ -1530,6 +1543,8 @@ export function buildBigBoats(): THREE.BufferGeometry {
 
 export function buildSmallBoats(): THREE.BufferGeometry {
   const g = new Geo();
+  crewBuild.pool = 'small';
+  CREW.small.length = 0;
   g.variant(1);
   sailboat(g);
   g.variant(2);

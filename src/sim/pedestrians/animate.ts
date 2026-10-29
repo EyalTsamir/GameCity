@@ -228,6 +228,23 @@ export function computePoseA(m: Member, umbrella: boolean, r: Rig, o: Pose, gs: 
   let headPitch = -0.2 * old + G.headPitch;
   let headYaw = m.headYaw + G.headYawCorr;
   const headRoll = -0.25 * chestRoll;
+  // working in place (actors.ts): stooped over a low task, or leaning a little over a bench / counter
+  const wk = m.rideG === null && m.sit < 0.05 ? m.work : 0;
+  const wkK = wk > 0 ? (1 - gw) * upright : 0;
+  const wkT = t * (wk === 1 ? 0.8 : 1.3) + m.seed * 7;
+  if (wkK > 0) {
+    const bob = Math.sin(wkT);
+    if (wk === 1) {
+      waistBend += (0.6 + 0.08 * bob) * wkK;
+      chestBend += 0.25 * wkK;
+      headPitch -= 0.12 * wkK;
+      rootZ -= 0.06 * hk * wkK;
+    } else {
+      waistBend += (0.2 + 0.03 * bob) * wkK;
+      chestBend += 0.08 * wkK;
+      headPitch += 0.3 * wkK;
+    }
+  }
   // arms: walking swing from the gait, relaxed (soft elbows, slightly forward) when standing
   armL.flex = ((0.08 + 0.06 * old + 0.03 * Math.sin(t * 0.6 + m.seed * 3)) + (G.shFlexL - (0.08 + 0.06 * old + 0.03 * Math.sin(t * 0.6 + m.seed * 3))) * gw);
   armR.flex = ((0.08 + 0.06 * old + 0.03 * Math.sin(t * 0.52 + m.seed * 5)) + (G.shFlexR - (0.08 + 0.06 * old + 0.03 * Math.sin(t * 0.52 + m.seed * 5))) * gw);
@@ -625,6 +642,23 @@ export function computePoseA(m: Member, umbrella: boolean, r: Rig, o: Pose, gs: 
     RT[2] = (RG.barZ - RG.seatZ) / sc;
     RT[3] = 1;
     reachFig(r, o, armR, false, -0.6, -0.8, -0.3, 1);
+  }
+  // working hands: down into the crate / creel / kerb in front, or busy at bench height (sorting, mending,
+  // tying), the two hands taking turns
+  if (wkK > 0.01) {
+    const low = wk === 1;
+    const s1 = Math.sin(wkT * 2.0),
+      s2 = Math.sin(wkT * 2.0 + 2.1);
+    RT[0] = (0.16 + 0.03 * s1) * hk;
+    RT[1] = (low ? 0.5 + 0.06 * s1 : 0.98 + 0.04 * s1) * hk;
+    RT[2] = (low ? 0.5 : 0.4 + 0.04 * s2) * hk;
+    RT[3] = wkK;
+    reachFig(r, o, armL, true, 0.6, -0.8, -0.3, 0.7);
+    RT[0] = -(0.13 + 0.03 * s2) * hk;
+    RT[1] = (low ? 0.48 + 0.07 * s2 : 0.96 + 0.05 * s2) * hk;
+    RT[2] = (low ? 0.47 : 0.38 + 0.05 * s1) * hk;
+    RT[3] = wkK;
+    reachFig(r, o, armR, false, -0.6, -0.8, -0.3, 0.7);
   }
   // waiter: order pad at the chest (writing), or an order carried forward on the right hand
   if (m.carry > 0 && handR && upright > 0.5) {
