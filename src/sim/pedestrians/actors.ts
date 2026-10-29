@@ -9,7 +9,7 @@ import { Rng } from '../../core/rng';
 import { composeMatrix } from '../rail/geo';
 import type { RideGeom } from '../traffic/models';
 import type { Boat } from '../boats/fleet';
-import { ACTORS, CREW, addActor, type ActorDef, type ActorRole, type CrewSeat } from './actorDefs';
+import { ACTORS, CREW, RIDES, addActor, type ActorDef, type ActorRole, type CrewSeat } from './actorDefs';
 import { Member, Party } from './crowd';
 import { makeLook, type Persona } from './looks';
 import { HAT_STYLES } from './shader';
@@ -33,6 +33,7 @@ const PERSONA: Record<ActorRole, Persona> = {
   fisher: 'angler',
   shopper: 'shopper',
   traveller: 'commuter',
+  farmer: 'worker',
 };
 
 /** cull distance (m): beyond this nobody is drawn (the pin LOD reads as a dot well before) */
@@ -59,6 +60,7 @@ export class Actors {
   private ctx: CityContext;
   private statics: Static[] = [];
   private crews = new Map<number, Crew>();
+  private rides: { m: Member; g: RideGeom }[] = [];
   private nextUid = 950000;
   /** drawn this frame (stats) */
   n = 0;
@@ -203,6 +205,14 @@ export class Actors {
       } else if (role === 'crew' || role === 'helm' || role === 'fisher') {
         if (st.hat === HAT_STYLES.SUNHAT || st.hat === HAT_STYLES.FEDORA) st.hat = HAT_STYLES.BEANIE;
         st.tail = 0;
+      } else if (role === 'farmer') {
+        // overalls-blue or a work shirt, a flat cap
+        st.hat = HAT_STYLES.CAP;
+        look.hat = rng.pick([0x3b3a34, 0x4a5a3c, 0x2b3a55]);
+        look.top = rng.pick([0x2f4f7a, 0x6a2e2a, 0x55603d, 0x8a8577]);
+        look.bottom = rng.pick([0x2b3a55, 0x3a3a33]);
+        st.vest = false;
+        st.tail = 0;
       } else if (role === 'rower') {
         st.hat = HAT_STYLES.NONE;
         st.tail = 0;
@@ -272,7 +282,7 @@ export class Actors {
             const sk = seats[k];
             const role: ActorRole = sk.rower ? 'rower' : b.dims.mesh === 'big' && b.type !== 'fish' && b.type !== 'tug' ? 'passenger' : k === 0 ? 'helm' : 'crew';
             const m = this.make(role, b.id * 131 + k * 17, sk.shirt, false);
-            const g = sk.seated ? seatGeom(role, 0.42, false) : standGeom();
+            const g = sk.seated ? seatGeom(role, sk.seatH, false) : standGeom();
             m.rideG = g;
             c.ms.push(m);
             c.gs.push(g);
@@ -292,10 +302,31 @@ export class Actors {
             g.barZ = 0.2 + 0.24 * Math.cos(a);
             g.lean = 0.12 + 0.3 * Math.cos(a);
           }
-          place(m, _v.x, _v.y - (sk.seated ? 0.42 : 0), _v.z, b.yaw + sk.facing, b.v);
+          place(m, _v.x, _v.y - (sk.seated ? sk.seatH : 0), _v.z, b.yaw + sk.facing, b.v);
           list[n++] = m;
         }
       }
+    }
+    // drivers carried by moving models (the field tractor's cab)
+    for (let i = 0; i < RIDES.length; i++) {
+      const r = RIDES[i];
+      if (!r.obj.visible) continue;
+      r.obj.updateMatrixWorld();
+      const e = r.obj.matrixWorld.elements;
+      const fx = e[0] * r.x + e[4] * r.floorY + e[8] * r.z + e[12],
+        fy = e[1] * r.x + e[5] * r.floorY + e[9] * r.z + e[13],
+        fz = e[2] * r.x + e[6] * r.floorY + e[10] * r.z + e[14];
+      if ((fx - cam.x) ** 2 + (fz - cam.z) ** 2 > far2) continue;
+      let k = this.rides[i];
+      if (!k) {
+        // hands on the wheel rim (the root is the floor under the hips; +z = forward)
+        const g: RideGeom = { mode: 2, seatY: r.y - r.floorY, seatZ: 0, barY: r.wheel[1] - r.floorY - 0.06, barZ: r.wheel[2] - r.z - 0.08, barX: 0.15, footY: 0, footZ: 0.42, footX: 0.12, crank: 0, lean: 0.06 };
+        const m = this.make(r.role, 4517 + i * 31, -1, false);
+        m.rideG = g;
+        k = this.rides[i] = { m, g };
+      }
+      place(k.m, fx, fy, fz, Math.atan2(e[8], e[10]), 1);
+      list[n++] = k.m;
     }
     this.n = n - n0;
     return n;

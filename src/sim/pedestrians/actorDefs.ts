@@ -5,7 +5,7 @@
 // world modules that load before pedestrians can fill it at build time.
 
 /** what the person is doing (decides persona, dress and pose in actors.ts) */
-export type ActorRole = 'worker' | 'band' | 'conductor' | 'kid' | 'crew' | 'passenger' | 'rower' | 'helm' | 'fisher' | 'shopper' | 'traveller';
+export type ActorRole = 'worker' | 'band' | 'conductor' | 'kid' | 'crew' | 'passenger' | 'rower' | 'helm' | 'fisher' | 'shopper' | 'traveller' | 'farmer';
 
 /** a person standing / sitting at a fixed world spot (optionally carried round by a landmark animation) */
 export interface ActorDef {
@@ -69,7 +69,25 @@ export interface CrewSeat {
   seated: boolean;
   /** rowing (the shell's sweep rowers) */
   rower: boolean;
+  /** seated: seat top above the feet (m) — 0.42 a bench over a floor; less when perched on a coaming */
+  seatH: number;
 }
+
+/** a seated driver carried by a moving model (the field tractor): seat / floor / wheel in the object's frame */
+export interface RideDef {
+  /** the moving object (a THREE.Object3D: its matrixWorld is refreshed before reading) */
+  obj: { updateMatrixWorld(force?: boolean): void; matrixWorld: { elements: ArrayLike<number> }; visible: boolean };
+  role: ActorRole;
+  /** hips: seat-top centre */
+  x: number;
+  y: number;
+  z: number;
+  /** the cab floor under the feet */
+  floorY: number;
+  /** hands: the steering wheel centre */
+  wheel: [number, number, number];
+}
+export const RIDES: RideDef[] = [];
 
 /** crew per boat mesh pool and model variant: CREW.big[variant] */
 export const CREW: { big: CrewSeat[][]; small: CrewSeat[][] } = { big: [], small: [] };

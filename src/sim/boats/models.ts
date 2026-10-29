@@ -628,13 +628,13 @@ function navLamp(g: Geo, x: number, y: number, z: number, kind: number): void {
 }
 
 /** seated / standing figure (simple: legs, torso, head); torso colour via ACCENT when shirt = null */
-function figure(g: Geo, x: number, y: number, z: number, facing: number, shirt: string | null, seated = true, tag = BT.PLAIN, hip: [number, number] | null = null): void {
+function figure(g: Geo, x: number, y: number, z: number, facing: number, shirt: string | null, seated = true, tag = BT.PLAIN, hip: [number, number] | null = null, seatH = 0.42): void {
   if (!actorsOff) {
     // F2: a seat / spot for a real posed figure (sim/pedestrians/actors.ts draws the crew on the moving boat)
     const variant = ((g as unknown as { vo: number }).vo / 100) | 0;
     _fp.set(x, y, z).applyMatrix4(g.frame);
     const list = (CREW[crewBuild.pool][variant] ??= []);
-    list.push({ x: _fp.x, y: _fp.y, z: _fp.z, facing, shirt: shirt ? new THREE.Color(shirt).getHex() : -1, seated, rower: hip !== null });
+    list.push({ x: _fp.x, y: _fp.y, z: _fp.z, facing, shirt: shirt ? new THREE.Color(shirt).getHex() : -1, seated, rower: hip !== null, seatH });
     return;
   }
   g.push().at(x, y, z, facing);
@@ -1164,8 +1164,10 @@ function sailboat(g: Geo): void {
     6,
   );
   // crew in the cockpit
-  figure(g, -0.4, 0.62, -1.6, Math.PI * 0.5, null);
-  figure(g, 0.45, 0.62, -2.5, Math.PI * 1.1, '#f2efe6');
+  // (F2) the cockpit sole is at deck level: the helm perches on the starboard coaming capping by the tiller, feet on
+  // the teak seat; the crew on the port coaming forward, facing inboard
+  figure(g, 0.84, D(-2.35) + 0.295, -2.35, -Math.PI * 0.5, null, true, BT.PLAIN, null, 0.245);
+  figure(g, -0.84, D(-1.5) + 0.295, -1.5, Math.PI * 0.5, '#f2efe6', true, BT.PLAIN, null, 0.245);
   for (const L of DIMS.sail.lights) navLamp(g, L[0], L[1] - 0.04, L[2], L[3]);
 }
 

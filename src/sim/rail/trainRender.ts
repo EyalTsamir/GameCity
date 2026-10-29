@@ -148,7 +148,7 @@ export class TrainRenderer {
         p.inst.setXYZW(i, wheel % (Math.PI * 2), c.role, tr.doorOpen, platformSide);
         // w: fleet unit number (3 digits, stable per service) for the livery lettering
         const unit = 100 + ((((tr.id + 17) * 37) % 900) + 900) % 900;
-        p.inst2.setXYZW(i, c.load, c.type === 'cab' || c.type === 'mid' ? 1 : 0, c.type === 'cab' ? 1 : 0, unit);
+        p.inst2.setXYZW(i, c.load, c.type === 'cab' || c.type === 'mid' ? (c.seated ? 2 : 1) : 0, c.type === 'cab' ? 1 : 0, unit);
         p.mesh.instanceColor!.setXYZ(i, c.color.r, c.color.g, c.color.b);
         p.col2.setXYZ(i, c.color2.r, c.color2.g, c.color2.b);
         // lamps → glows
