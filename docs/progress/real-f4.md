@@ -5,6 +5,15 @@ Owned: src/world/props/**, life/**, harbor/** + boats/** (except figure()), land
 sim/rail/station.ts.
 
 ## Resume here
+* 2026-10-29 s2 (session 2) — merged pensive-gates (harness pump fix). Re-captured: newsstand 3 m / 10 m and phone
+  box 3 m render fine now (shots/f4/s2b1, s2b2). Fixed: newsstand pixel mastheads → printed covers
+  (props/print.ts canvas atlas, one issue per title, `?noprint`), kiosk fascia + phone-box "TELEPHONE" printed (lit
+  at night via aGlow·uLights); phone-box glass tint #c3d3da → #4d5a60 (two light panes read as milk glass; phone now
+  visible). Poplar floating clumps (bug 2b): cause = leaf cards squashed in y by KIND_ASPECT 0.35 → top masses only
+  ±0.02 tall at a 0.075 step; step now 1.5·0.35·r (11 masses). Back yard eye level (shots/f4/s2/yard1.png) reads.
+  Captures here are slow (~2–3 min each incl. pumps; page load ~100 s): keep batches ≤ 3 captures.
+  Next: s2c1 (yard reverse, forklift, poplar fs1), night market 21.5, perf note. Not mine: the parked e-moped next to
+  the phone box (sim/traffic models) still reads as boxes.
 * 2026-10-29 03:55 — **Session 1 ends (context cap).** All pushed. Console clean, invariants {} (shots/f4/b4/report.json:
   by_shed 1, by_fence 16 panels; cloth 113k tris; 163 draws in the b4 overview session). Overview unchanged
   (shots/f4/b4/overview_11.png).

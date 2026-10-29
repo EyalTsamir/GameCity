@@ -659,7 +659,7 @@ function cover(k: Kit, rng: Rng, w: number, h: number, plain = false, title?: st
     for (let i = 0; i < t.length; i++) hh = (hh * 31 + t.charCodeAt(i)) >>> 0;
     const paper = ['#f4f1ea', '#e63946', '#1d3557', '#f2c230', '#222426', '#e8649a', '#2a9d8f', '#f4a261'][hh % 8];
     const light = paper === '#f4f1ea' || paper === '#f2c230' || paper === '#f4a261';
-    const ink = light ? ['#c62828', '#1d1f22', '#1d3557'][(hh >>> 3) % 3] : ['#ffffff', '#f2c230'][(hh >>> 3) % 2];
+    const ink = light ? ['#c62828', '#1d1f22', '#1d3557'][(hh >>> 3) % 3] : paper === '#1d3557' || paper === '#222426' ? ['#ffffff', '#f2c230'][(hh >>> 3) % 2] : '#ffffff';
     const photo = ['#9fc3d9', '#d9c3a5', '#5b7c99', '#c7d8b5', '#e7d6c9', '#3a3f55'][(hh >>> 5) % 6];
     k.m(paper, 'plastic');
     sh.box(0, 0, 0.004, w, h, 0.008, 8);
