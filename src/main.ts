@@ -175,6 +175,17 @@ async function boot(): Promise<void> {
       renderer.setRenderTarget(prev);
     }
   };
+  // the facade program compiles longest (≈ 12–20 s on a fresh shader cache: the boot's long pole) — it starts right
+  // after the sky (lights / environment final) on a stand-in mesh instead of after the six modules before
+  // buildings; the buildings module's material then gets the same program from three's cache
+  let facadeStandIn: THREE.Mesh | null = null;
+  const dropStandIn = () => {
+    if (!facadeStandIn) return;
+    scene.remove(facadeStandIn);
+    facadeStandIn.geometry.dispose();
+    (facadeStandIn.material as THREE.Material).dispose();
+    facadeStandIn = null;
+  };
   let k = 0;
   for (const [name, loader] of wanted) {
     setLoading(`Building ${name}…`, 0.05 + (0.9 * k++) / wanted.length);
@@ -184,7 +195,9 @@ async function boot(): Promise<void> {
       const t0 = performance.now();
       const inst = await mod.default(ctx);
       if (inst) modules.push(inst);
+      if (name === 'sky' && preRT && wanted.some(([n]) => n === 'buildings')) facadeStandIn = await facadeStandInMesh(ctx);
       precompile();
+      if (name === 'buildings') dropStandIn();
       const ms = performance.now() - t0;
       if (debug.enabled) console.info(`[boot] ${name} ready in ${ms.toFixed(0)} ms`);
     } catch (err) {
@@ -193,6 +206,7 @@ async function boot(): Promise<void> {
       console.error(`[boot] module "${name}" failed to load`, err);
     }
   }
+  dropStandIn();
   if (ctx.services.sky) scene.remove(fallback);
   ctx.events.emit('modules:ready', modules.map((m) => m.name));
   // street lights follow the clock with a short ease, but a clock jump (time slider, setHours) snaps them
@@ -440,6 +454,22 @@ async function warmUp(ctx: CityContext): Promise<void> {
       o.frustumCulled = f;
     }
   }
+}
+
+/**
+ * A never-drawn mesh with the facade material, for the early compile: one degenerate triangle with the attributes
+ * the shell's program parameters depend on (normals, rgb vertex colours) and its shadow receiving.
+ */
+async function facadeStandInMesh(ctx: CityContext): Promise<THREE.Mesh> {
+  const { createMaterials } = await import('./world/buildings/materials');
+  const geo = new THREE.BufferGeometry();
+  for (const a of ['position', 'normal', 'color']) geo.setAttribute(a, new THREE.Float32BufferAttribute(new Float32Array(9), 3));
+  const mesh = new THREE.Mesh(geo, createMaterials(ctx.uniforms, { legacy: ctx.debug.params.has('legacyfacade') }).shell);
+  mesh.name = 'buildings-shell-standin';
+  mesh.receiveShadow = true;
+  mesh.frustumCulled = false;
+  ctx.scene.add(mesh);
+  return mesh;
 }
 
 /** Place the camera directly (used before the camera module takes over). */
