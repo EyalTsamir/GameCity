@@ -53,7 +53,7 @@ export default function create(ctx: CityContext): CityModule {
   // riders of the traffic's two-wheelers (drawn with the crowd)
   const riders = legacy ? null : new Riders(ctx);
   // people placed by other modules (site workers, band, kids, boat crews): real posed figures (actors.ts)
-  const actors = legacy ? null : new Actors(ctx);
+  const actors = legacy || ctx.debug.params.has('noactors') ? null : new Actors(ctx);
   let nExtra = 0;
 
   const offs: (() => void)[] = [];

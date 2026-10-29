@@ -3,9 +3,21 @@
 Branch `claude/real-f2-people` (from `claude/pensive-gates-bim12i` e1c9780). Brief: real-briefs.md "F2".
 
 ## Resume here
-* 2026-10-29 session 1 STARTED. Reading done: riders.ts is the pattern (extra Members posed by animate.ts, passed
-  to `CrowdRenderer.write(.., extra, nExtra)`). Plan: `pedestrians/actors.ts` = a module-level registry other
-  modules feed (person() / figure() / vehicles), drawn as extra posed Members.
+* 2026-10-29 ~03:10 UTC — session 1 ENDED at the context rule (tokens.py ctxMax > 170k; get_session reads 0).
+  Pushed. Code done (below) and typechecks; console clean in every run (0 errors / warnings / frame errors).
+  JUDGED ONLY ONE VIEW: shots/f2/a2/quay_11.png — a real figure in oilskins working at the creel stack (was
+  nobody). NOT YET JUDGED: site workers' work poses (bs2), market shoppers (mkt), platform passengers (plat),
+  playground kids on swing/seesaw (pg1), crabber / ferry / sail / rowing crews (mb1, fe1), band (16–21 h).
+  HARNESS PROBLEM (not caused by F2 — reproduced with `?legacypeople&noactors`): in this container the first
+  capture after `setHours` is a blank page colour (shot.mjs `--hours 11` → always blank, capture-set → first
+  view blank), and some capture-set views came out a flat fog colour (mkt, plat at 11 h). Use `?time=11` in
+  `--q` and no `--hours` with shot.mjs (bs2.png rendered that way); with capture-set put a throw-away first view.
+  Next, in order: (1) judge every place above at eye level + 10 m, fix poses (stoop depth, hands; kids' seat
+  heights on swing/seesaw; boat seat floor = seat − 0.42 m guess; standing crew use rider mode 3 = hands on a
+  rail); (2) perf.mjs `--variants ";noactors"` at harbor / downtown; golden.sh overview; (3) vehicle occupants
+  (judge 2 #3) — NOT STARTED, see "Vehicle occupants plan"; (4) walkers clip through the static market
+  shoppers? (they stand in the aisle; crowd has no obstacle for them) — check, else add them as occupancy /
+  avoid discs; (5) judge 2 pedestrian notes (lockstep groups, flat clothes) last.
 
 ## Code pointers
 * riders.ts: `Riders.sync()` per frame → `list`/`n` → render.write extra. Member fields: rideG (RideGeom seated
@@ -31,8 +43,22 @@ Branch `claude/real-f2-people` (from `claude/pensive-gates-bim12i` e1c9780). Bri
   Fish quay (call site in harbor/quay.ts): creel stacker, box sorter, net mender on the store bench, one
   talking to the boat (5–15 h).
 
+## Vehicle occupants plan (judge 2 #3, not started)
+* Cars / buses: occupants are ray-traced in the glass shader (traffic/vehicleMaterial.ts `thInterior`, called
+  from FRAG_DETAIL ~l.157 with `occupied` = aInst2.w (the lights-on factor!)). Train: rail/trainMaterial.ts ~l.239.
+* Plan: real figures as extra Members (like riders.ts: car driver = rider pose mode 2, seat + wheel as bar, feet
+  forward; bus passengers mode 2 hands on the knees), only within ~40 m of the camera; the glass shader returns
+  the interior hit distance and writes gl_FragDepth of that hit (write gl_FragCoord.z for every other fragment),
+  so a figure inside the cabin depth-tests against the ray-traced seats/dash; the shader's own driver /
+  passengers are skipped for vehicles that have real ones (a flag per instance). Open: figures show without the
+  glass reflection over them (consider a cabin-shade factor in the people shader), early-z loss on the vehicle
+  material (measure).
+
 ## Tried and rejected (why)
 
 ## Toggles / tiers / costs
+* `?noactors` — the old box figures (person() / figure() build their boxes again) and no Actors class at all
+  (no market / platform / quay crowds). Cost: not measured yet (≈ 60 extra figures in a downtown frame stats,
+  mostly pin/tiny LOD beyond 40 m; capacity shared with the crowd's 720).
 
 ## Next

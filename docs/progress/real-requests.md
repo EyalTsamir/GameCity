@@ -72,3 +72,11 @@
   ground-floor openings, from Builder.winRec before it is released (buildings.ts:245).
 * FYI (no bug): "beige planks at ~1 m" in the lead's s1 back-yard frames = buildings-sills / -surrounds seen with the
   camera INSIDE lot 64 (its rear wall culled); from the yard they sit correctly on the wall.
+
+## F2 (people everywhere) — call-site touches in other owners' files (2026-10-29)
+* `src/sim/boats/models.ts`: figure() (F2-owned) records crew seats; `buildBigBoats` / `buildSmallBoats` got two
+  lines each (`crewBuild.pool = …; CREW.<pool>.length = 0`) so the seats know their mesh pool.
+* `src/world/harbor/quay.ts` buildFishQuay: four `addActor()` calls (fish-quay workers) + the import.
+* `src/world/landmarks/parts.ts` person() (F2-owned) now registers a real figure; its callers are unchanged.
+* For F4 / harbor: the crabber deckhand and the quay people are now pedestrians-module figures; if the quay
+  layout moves, move the `addActor` spots with it.
