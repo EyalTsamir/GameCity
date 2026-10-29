@@ -6,6 +6,11 @@ Branch `claude/box-hunt-af5a80` (based on `claude/pensive-gates-bim12i` a200754)
 before/after crops kept for the log live in `docs/progress/boxhunt/`.
 
 ## Resume here
+**DONE (2026-10-29 23:20)** — audit, ranked list, 10 fixes with switches, before/after sheet
+(`docs/progress/boxhunt/before_after.jpg`), perf A/B, typecheck, build, invariants. Remaining ideas under
+"Still open". The notes below are the history of the round.
+
+### History
 - Step 1 (audit) DONE: 59 noon views (15 POIs, 30 eye-level, 14 mid-height) + 12 night views + object bench
   (24 classes × 5/15 m) in `shots/bh/{noon,night,bench}`; 5 sonnet judges + own verification on crops.
   Crops of the top 16: `docs/progress/boxhunt/audit_top16.jpg`.
@@ -53,7 +58,7 @@ Score = V (how often / how large it is seen, 1–5) × P (how primitive it reads
 | 13 ≈ | construction site cabin + portaloo | e_midtown | 2 | 5 | 10 | white box on a translucent blue box, no door/window/steps | `world/landmarks/construction.ts` |
 | 14 | harbour pontoons, small barge | harbor, night harbor | 2 | 4 | 8 | plank slab + cube hut, no floats/cleats/fenders | `world/harbor` |
 | 15 | breakwater armour stones | e_lighthouse | 3 | 3 | 9 | flat-shaded low-poly blobs, one size, no wet line | `world/harbor/breakwater.ts` |
-| 16 | factory chimneys | m_industry, e_industry | 3 | 3 | 9 | straight shafts, no cap / corbel / rod | `world/landmarks/industry.ts` |
+| 16 ≈ | factory chimneys | m_industry, e_industry | 3 | 3 | 9 | straight shafts, no cap / corbel / rod | `world/landmarks/industry.ts` |
 | 17 ≈ | church nave "buttresses" | e_church_e | 3 | 3 | 9 | pale flat quads between the windows read as stray slabs | `world/landmarks/church.ts` |
 | 18 | stadium street front | e_stadium, m_stadium | 3 | 3 | 9 | flat grey placeholder plaques, black gate arches, floating roof trusses | `world/landmarks/stadium*.ts` |
 | 19 | orchard / hedge trees in the fields | country | 3 | 3 | 9 | identical flat-topped pillows on sticks | `world/landscape/trees.ts` |
@@ -84,6 +89,7 @@ parked bicycles, the classic street lamp, planters, wind turbines (real towers a
 | 10 | gantry cranes | box-girder legs and boom are what real STS cranes have; P 3 → 2 |
 | 13 | site cabin / portaloo | stacked cabins with a stair and a moulded, ribbed portaloo with a vented door (`landmarks/construction.ts`); the audit camera stood in an alley |
 | 17 | church "slabs" | real buttresses (body + sloped weathering cap in pale trim); P 3 → 2 |
+| 16 | factory chimneys | octagonal pedestal with a stone cap, tapered segments with proud bands, corbelled top with soot (`genChimney`) |
 | 21 | storage tanks | caged ladder, catwalk bridges with railings, pipe rack, valves, bund wall (`landmarks/industry.ts genTanks`) |
 
 ## Fixes
@@ -105,10 +111,46 @@ All switches: `src/core/boxhunt.ts` — on at medium/high, off on `?quality=low`
 
 Verified in captures (`shots/bh/fix1..3`): promenade lantern, parasols, lifeguard roof, kite flyer, signal visors
 (subtle — the old flat hoods already gave a cap silhouette at 4 m), bridge lanterns. The countryside variants are
-real but small on screen: the units sit 0.5–2 km out, mostly behind trees, from every standard view.
+real but small on screen: the units sit 0.5–2 km out, mostly behind trees, from every standard view. The TV-tower
+shaft is stouter but still reads as a plain concrete tube from the street (real ones do too) — a modest change.
 
-## Perf
-(pending)
+## Perf (Adreno X1-45, 1920×1025, `perf.mjs --gpu 1 --seconds 3 --repeat 2`, noon, A/B in one run)
+`node scripts/perf.mjs --url http://127.0.0.1:5187/ --q "nointro&noidle" --views "overview;street=5,1.5,-65,9,0,6" --hours 12 --width 1920 --height 1025 --variants ";noboxhunt" --repeat 2 --gpu 1 --seconds 3`
+
+| view | ms/frame on (2 runs) | ms/frame `?noboxhunt` | GPU total on / off | draw calls on / off | triangles on / off |
+|---|---|---|---|---|---|
+| overview | 49.0, 48.2 (48.6) | 48.3, 48.8 (48.6) | 48.4 / 48.3 | 250 / 250 | 4.33 M / 4.24 M (+89 k, +2.1 %) |
+| street `5,1.5,-65,9,0,6` | 45.0, 45.1 (45.0) | 45.3, 45.1 (45.2) | 41.6 / 41.9 | 232 / 232 | 3.81 M / 3.73 M (+76 k, +2.0 %) |
+
+No measurable frame cost (differences are inside the run-to-run noise), no extra draw calls (every feature lives in
+an existing merged / instanced mesh; the countryside variants are per-instance shader work in the same instanced mesh
+plus a matching shadow-depth material). The triangle growth is mostly the parasols (~30 × ~600), the signal visors
+(statics, ~13 k) and the countryside unit (~370 instances × ~40). No per-frame allocations were added (all build-time).
+
+## Checks (final)
+- `npm run typecheck` clean; `npm run build` OK (`dist/index.html` 3.76 MB).
+- `shot.mjs --invariants --validate` overview at 11:00 and 21:30: invariants `{}`, validate `[]`, console errors 0,
+  frame errors 0. Capture reports: 0 errors; the 7 console warnings are pre-existing D3D shader-compiler notes
+  (`f_trLivery`, `f_boatSurface`, `f_fCropKind` …) — identical with `?noboxhunt`.
+- Overview not worse: same draw calls, same frame time; the overview A/B differs only in tiny far details.
+- Night (21:30): the new lanterns glow with their halos centred on the glass (`shots/bh/night_after`).
+
+## Files touched (for the merge)
+`src/core/boxhunt.ts` (new) · `src/sim/traffic/signals.ts` · `src/sim/ambient/kites.ts` · `src/world/terrain/railings.ts`
+· `src/world/terrain/masonry.ts` (1 line: switch) · `src/world/harbor.ts` (switch setters) · `src/world/harbor/beach.ts`
+· `src/world/harbor/river.ts` · `src/world/props.ts` (2 lines) · `src/world/props/garden.ts` · `src/world/props/kit.ts`
+· `src/world/landscape.ts` (1 line) · `src/world/landscape/settlements.ts` · `src/world/landmarks/tvtower.ts` ·
+`docs/progress/box-hunt.md`, `docs/progress/boxhunt/*.jpg`. Nothing in `src/world/buildings/*`, `src/core/plan.ts`,
+`src/main.ts`, camera / HUD.
+
+## Still open (mine, not done this round)
+- Breakwater armour stones (#15): flat-shaded low-poly blobs of one size — mix sizes, a darker wet band.
+- Stadium street front (#18): flat grey plaques, black gate arches — posters, gates with turnstiles.
+- Pier substructure / kiosks / carousel horses (#26), ferris-wheel gondolas (#27), tunnel-portal voussoirs (#28),
+  orchard "pillow" trees (#19), poppies (#30), harbour pontoons (#14).
+- Signal heads seen from behind / at night are black silhouettes (the visors help from the front only).
+- The countryside variants are hard to see from the standard views (units 0.5–2 km out behind trees); a nearer
+  view of a village would show them — or they can be dropped from the cost list if not wanted.
 
 ## Handoff (sibling-owned findings, not fixed here)
 **massing** (`src/world/buildings/*`):
