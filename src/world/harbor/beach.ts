@@ -2,6 +2,7 @@
 // of the walking paths and the sunbathing spots around beach-path ends), beach balls, kayaks,
 // sandcastles; plus the ferry dock (floating pontoon, hinged gangway, shelter, lights).
 
+import * as THREE from 'three';
 import { WATER_LEVEL } from '../../core/constants';
 import { distToSegment, type P2, type Rect } from '../../core/geom';
 import type { Rng } from '../../core/rng';
@@ -477,6 +478,129 @@ export function sandcastle(b: HB, x: number, z: number, ground: Ground, rng: Rng
 }
 
 // ──────────────────────────────────────────────────────────── ferry dock
+/** box hunt (?noferrydock): the ferry pontoon fitted out — guide piles in hoops, tyre fenders, cleats, a ladder,
+ *  a lifebuoy cabinet, a weed line, a barrel-roofed shelter with a timetable and a slatted gangway on rollers */
+let FERRY = true;
+export function setFerryDockDetail(on: boolean): void {
+  FERRY = on;
+}
+
+interface DockBox {
+  px0: number;
+  px1: number;
+  pz0: number;
+  pz1: number;
+  top: number;
+}
+
+function ferryDockKit(b: HB, d: DockBox): void {
+  const { px0, px1, pz0, pz1, top } = d;
+  b.noEmit().pat(PAT.NONE);
+  // weed / algae line a hand above the water all round the floating body
+  b.color('#3d4a3a');
+  const wl0 = WATER_LEVEL - 0.05,
+    wl1 = WATER_LEVEL + 0.14;
+  b.boxMM(px0 - 0.02, wl0, pz0 - 0.02, px1 + 0.02, wl1, pz0, 3);
+  b.boxMM(px0 - 0.02, wl0, pz1, px1 + 0.02, wl1, pz1 + 0.02, 3);
+  b.boxMM(px1, wl0, pz0, px1 + 0.02, wl1, pz1, 3);
+  // guide piles: steel tubes through hoops on the long sides, yellow caps
+  for (const z of [pz0 - 0.38, pz1 + 0.38])
+    for (const x of [px0 + 1.6, px1 - 1.6]) {
+      b.color('#3c4248');
+      b.cyl([x, WATER_LEVEL - 2.5, z], [x, top + 3.0, z], 0.24, 0.24, 10, 2);
+      b.color('#f2c94c');
+      b.cyl([x, top + 3.0, z], [x, top + 3.12, z], 0.26, 0.2, 10, 2);
+      b.color('#2a2c2f');
+      b.box(x, top - 0.2, z, 0.66, 0.16, 0.66, 0, 0);
+      b.box(x, top - 0.2, (z + (z < pz0 ? pz0 : pz1)) / 2, 0.3, 0.14, 0.4, 0, 0);
+      b.color('#5a4a3a');
+      b.cyl([x, WATER_LEVEL - 0.1, z], [x, WATER_LEVEL + 0.3, z], 0.25, 0.25, 10, 0);
+    }
+  // tyre fenders on lanyards along the berth face
+  const nT = Math.max(2, Math.floor((pz1 - pz0 - 1.2) / 1.4));
+  for (let i = 0; i <= nT; i++) {
+    const z = pz0 + 0.6 + ((pz1 - pz0 - 1.2) * i) / nT;
+    const t = new THREE.TorusGeometry(0.3, 0.11, 6, 10);
+    t.rotateY(Math.PI / 2);
+    b.color('#1b1d20');
+    b.geo(t, new THREE.Matrix4().makeTranslation(px1 + 0.3, top - 0.42, z));
+    t.dispose();
+    b.color('#c9b48a');
+    b.beam([px1 + 0.3, top - 0.13, z], [px1 - 0.05, top + 0.03, z], 0.03, 0.03);
+  }
+  // cast cleats between the bollards
+  b.color('#2c2f33');
+  for (const z of [pz0 + 2.4, pz1 - 2.4, (pz0 + pz1) / 2]) {
+    b.box(px1 - 0.4, top + 0.05, z, 0.12, 0.1, 0.16, 0, 1);
+    b.box(px1 - 0.4, top + 0.12, z, 0.1, 0.05, 0.5, 0, 0);
+  }
+  // ladder down the side into the water
+  const lx = px1 - 2.6;
+  b.color('#c8ccd0');
+  for (const e of [-0.22, 0.22]) b.cyl([lx + e, WATER_LEVEL - 0.8, pz0 - 0.1], [lx + e, top + 0.6, pz0 - 0.1], 0.025, 0.025, 6, 0);
+  for (let y = WATER_LEVEL - 0.6; y < top; y += 0.3) b.box(lx, y, pz0 - 0.1, 0.44, 0.03, 0.03, 0, 0);
+  // lifebuoy cabinet on a post
+  const bx = px0 + 4.6;
+  b.color('#2f5d5a');
+  b.cyl([bx, top, pz0 + 0.35], [bx, top + 1.0, pz0 + 0.35], 0.05, 0.05, 6, 0);
+  b.box(bx, top + 1.25, pz0 + 0.35, 0.8, 0.8, 0.14, 0, 0);
+  const buoy = new THREE.TorusGeometry(0.27, 0.07, 6, 14);
+  b.color('#e8622c');
+  b.geo(buoy, new THREE.Matrix4().makeTranslation(bx, top + 1.25, pz0 + 0.27));
+  buoy.dispose();
+  b.color('#f4f1ea');
+  for (const a of [0, Math.PI / 2, Math.PI, 1.5 * Math.PI])
+    b.box(bx + Math.cos(a) * 0.27, top + 1.25 + Math.sin(a) * 0.27, pz0 + 0.27, 0.09, 0.09, 0.15, a, 0);
+}
+
+/** barrel roof over the shelter (axis along x), both faces, with fascia boards */
+function ferryRoof(b: HB, sx0: number, sx1: number, sz0: number, sz1: number, yb: number): void {
+  const x0 = sx0 - 0.3,
+    x1 = sx1 + 0.3,
+    c = sz1 - sz0 + 0.6,
+    zc = (sz0 + sz1) / 2,
+    rise = 0.35;
+  const R = (c * c) / 4 / (2 * rise) + rise / 2;
+  const h = Math.asin(c / 2 / R);
+  const pts: [number, number][] = [];
+  for (let i = 0; i <= 6; i++) {
+    const t = -h + (2 * h * i) / 6;
+    pts.push([zc + R * Math.sin(t), yb + R * Math.cos(t) - R * Math.cos(h)]);
+  }
+  b.color('#2a9d8f');
+  for (let i = 0; i < 6; i++) {
+    const [za, ya] = pts[i],
+      [zb, yb2] = pts[i + 1];
+    b.quad2([x0, ya, za], [x1, ya, za], [x1, yb2, zb], [x0, yb2, zb]);
+  }
+  b.color('#24806f');
+  for (const [z, y] of [pts[0], pts[6]]) b.box((x0 + x1) / 2, y - 0.06, z, x1 - x0, 0.14, 0.06, 0, 0);
+  // ribs under the barrel on the posts' lines
+  b.color('#2f5d5a');
+  for (const x of [sx0, sx1]) for (let i = 0; i < 6; i++) b.beam([x, pts[i][1] - 0.05, pts[i][0]], [x, pts[i + 1][1] - 0.05, pts[i + 1][0]], 0.07, 0.07);
+  // timetable panel on the open end
+  b.color('#22303a');
+  b.box(sx1 + 0.02, yb - 1.0, sz0 + 0.5, 0.06, 0.9, 0.7, 0, 0);
+  b.color('#e8e4da');
+  b.box(sx1 + 0.06, yb - 0.95, sz0 + 0.5, 0.02, 0.7, 0.56, 0, 0);
+}
+
+/** anti-slip slats across the gangway, rollers at its foot, a hinge plate at the quay */
+function gangwayKit(b: HB, A: V3, B: V3, gz: number): void {
+  const L = Math.hypot(B[0] - A[0], B[1] - A[1]);
+  const n = Math.floor(L / 0.45);
+  b.color('#6c7680');
+  for (let i = 1; i < n; i++) {
+    const t = i / n;
+    const x = A[0] + (B[0] - A[0]) * t,
+      y = A[1] + (B[1] - A[1]) * t;
+    b.beam([x, y + 0.005, gz - 0.68], [x, y + 0.005, gz + 0.68], 0.05, 0.03);
+  }
+  b.color('#2a2c2f');
+  b.cyl([B[0] - 0.15, B[1] - 0.12, gz - 0.7], [B[0] - 0.15, B[1] - 0.12, gz + 0.7], 0.08, 0.08, 8, 3);
+  b.color('#8b98a3');
+  b.box(A[0] - 0.35, A[1] - 0.03, gz, 0.6, 0.05, 1.6, 0, 0);
+}
 
 export interface FerryDockInfo {
   berth: { x: number; z: number; yaw: number };
@@ -521,13 +645,17 @@ export function buildFerryDock(b: HB, r: Rect, quayX: number, glows: GlowPoint[]
     [sx1, sz1],
   ] as [number, number][])
     b.box(x, top + 1.2, z, 0.08, 2.4, 0.08, 0, 1);
-  b.color('#2a9d8f');
-  b.boxMM(sx0 - 0.25, top + 2.4, sz0 - 0.25, sx1 + 0.25, top + 2.55, sz1 + 0.25, 0);
+  if (FERRY) ferryRoof(b, sx0, sx1, sz0, sz1, top + 2.4);
+  else {
+    b.color('#2a9d8f');
+    b.boxMM(sx0 - 0.25, top + 2.4, sz0 - 0.25, sx1 + 0.25, top + 2.55, sz1 + 0.25, 0);
+  }
   b.color('#a9c7d1').pat(PAT.GLASS);
   b.boxMM(sx0, top + 0.3, sz1 - 0.03, sx1, top + 2.3, sz1 + 0.01, 1 | 2);
   b.pat(PAT.NONE);
   b.color('#8a6a4a');
   b.boxMM(sx0 + 0.2, top + 0.42, sz1 - 0.5, sx1 - 0.2, top + 0.5, sz1 - 0.1, 0);
+  if (FERRY) ferryDockKit(b, { px0, px1, pz0, pz1, top });
   // gangway from the quay coping down onto the pontoon, with handrails
   const gz = (pz0 + pz1) / 2 - 1.2;
   const A: V3 = [quayX - 0.6, 0.14, gz],
@@ -543,6 +671,7 @@ export function buildFerryDock(b: HB, r: Rect, quayX: number, glows: GlowPoint[]
       b.box(x, y + 0.5, gz + s * 0.72, 0.05, 1.0, 0.05, 0, 3);
     }
   }
+  if (FERRY) gangwayKit(b, A, B, gz);
   // lamp post + green light on the seaward corner
   b.color('#2f5d5a');
   b.cyl([px1 - 0.5, top, pz1 - 0.5], [px1 - 0.5, top + 3.4, pz1 - 0.5], 0.06, 0.045, 6, 0);

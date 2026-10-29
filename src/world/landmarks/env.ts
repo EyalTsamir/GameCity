@@ -81,6 +81,7 @@ export class Env {
       // shader compiles the full pattern set anyway — keeps the static program lean, no extra draw
       b.ornament = this.K.b;
       const d = new MeshBuilder(true);
+      d.autoPivot = true;
       this.details.set(key, d);
       b.detail = d;
       this.regions.set(key, b);

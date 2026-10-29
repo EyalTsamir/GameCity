@@ -65,6 +65,15 @@ class VB {
     ];
     for (const q of f) this.quad(P[q[0]], P[q[1]], P[q[2]], P[q[3]]);
   }
+  /** append a three.js geometry (position + normal), flat colour c and the current model / glow */
+  geo(g: THREE.BufferGeometry): void {
+    const ng = g.index ? g.toNonIndexed() : g;
+    if (!ng.getAttribute('normal')) ng.computeVertexNormals();
+    const P = ng.getAttribute('position'),
+      N = ng.getAttribute('normal');
+    for (let i = 0; i < P.count; i++) this.push(new THREE.Vector3().fromBufferAttribute(P, i), new THREE.Vector3().fromBufferAttribute(N, i));
+    if (ng !== g) ng.dispose();
+  }
   /** thin beam between two points */
   beam(a: THREE.Vector3, b: THREE.Vector3, w: number) {
     const d = new THREE.Vector3().subVectors(b, a);
@@ -369,12 +378,183 @@ function barge(b: VB): void {
   b.quad(V(0, 4.85, -5.2), V(0, 4.6, -3.9), V(0, 5.1, -3.9), V(0, 4.85, -5.2));
 }
 
-export function buildVehicleGeometry(): THREE.BufferGeometry {
+/**
+ * Box hunt (?nobarge): the barge as a working pontoon barge — a raked hull with a sheer stripe, tyre fenders on
+ * lanyards, bitts at the corners, a guard rail on stanchions, mortar tubes standing in timber racks, a firing
+ * desk with its cable drum, a foredeck hatch and windlass with the mooring chain running into the water, and a
+ * wheelhouse with a window band all round, a door, an overhanging roof, a searchlight, a lifebuoy and a ladder.
+ * The deck lamp the night glow belongs to stands on the foredeck (1.6, 1.2, 4.6).
+ */
+function bargeKit(b: VB): void {
+  b.m = MODEL.BARGE;
+  // hull: side profile (z, y) with a raked bow, extruded across the beam
+  const prof = new THREE.Shape();
+  prof.moveTo(-5.0, -0.9);
+  prof.lineTo(3.5, -0.9);
+  prof.lineTo(5.1, -0.05);
+  prof.lineTo(5.22, 0.42);
+  prof.lineTo(-5.0, 0.42);
+  prof.closePath();
+  const hull = new THREE.ExtrudeGeometry(prof, { depth: 4.6, bevelEnabled: false, curveSegments: 1 });
+  hull.rotateY(-Math.PI / 2).translate(2.3, 0, 0);
+  b.c.set('#3f4c5c');
+  b.geo(hull);
+  hull.dispose();
+  // sheer stripe, rubbing strakes, transom strake
+  b.c.set('#e8e4da');
+  for (const s of [-1, 1]) b.box(s * 2.31, 0.33, -0.7, 0.02, 0.07, 8.5);
+  b.c.set('#1f2328');
+  for (const s of [-1, 1]) b.box(s * 2.36, 0.16, -0.75, 0.12, 0.2, 8.5);
+  b.box(0, 0.16, -5.06, 4.5, 0.2, 0.12);
+  // timber deck, steel toe rail
+  b.c.set('#8a6c4c');
+  b.box(0, 0.45, -0.05, 4.4, 0.06, 9.8);
+  b.c.set('#4a5560');
+  for (const s of [-1, 1]) b.box(s * 2.25, 0.54, 0, 0.08, 0.14, 10.0);
+  b.box(0, 0.54, -4.98, 4.5, 0.14, 0.08);
+  // tyre fenders hung on lanyards from the rail
+  for (const s of [-1, 1])
+    for (const z of [-3.5, -0.2, 3.0]) {
+      const t = new THREE.TorusGeometry(0.27, 0.1, 6, 10);
+      t.rotateY(Math.PI / 2).translate(s * 2.47, -0.06, z);
+      b.c.set('#1b1d20');
+      b.geo(t);
+      t.dispose();
+      b.c.set('#c9b48a');
+      b.beam(V(s * 2.46, 0.22, z), V(s * 2.3, 0.58, z), 0.025);
+    }
+  // bitts at the four corners
+  b.c.set('#2c3036');
+  for (const s of [-1, 1])
+    for (const z of [-4.55, 4.5]) {
+      for (const e of [-0.17, 0.17]) cylY(b, s * 1.8 + e, 0.48, z, 0.08, 0.34, 8);
+      b.box(s * 1.8, 0.72, z, 0.5, 0.05, 0.05);
+    }
+  // guard rail: stanchions with two wires along both sides of the working deck
+  b.c.set('#c8ccd0');
+  for (const s of [-1, 1]) {
+    for (let z = -2.8; z <= 4.61; z += 1.06) b.beam(V(s * 2.2, 0.5, z), V(s * 2.2, 1.45, z), 0.04);
+    for (const y of [0.98, 1.45]) b.beam(V(s * 2.2, y, -2.8), V(s * 2.2, y, 4.62), 0.022);
+  }
+  // mortar racks: tubes in timber frames on a plywood base, a dark bore in each
+  b.c.set('#7a5a3a');
+  b.box(0, 0.53, 0.5, 3.6, 0.1, 4.0);
+  for (let r = 0; r < 3; r++) {
+    const z = -0.8 + r * 1.3;
+    b.c.set('#9a7650');
+    for (const dz of [-0.2, 0.2]) {
+      b.box(0, 0.75, z + dz, 3.5, 0.08, 0.06);
+      b.box(0, 1.08, z + dz, 3.5, 0.08, 0.06);
+    }
+    for (const x of [-1.72, 1.72]) b.box(x, 0.85, z, 0.08, 0.6, 0.46);
+    for (let k = 0; k < 6; k++) {
+      const x = -1.4 + k * 0.56;
+      const tube = new THREE.CylinderGeometry(0.13, 0.13, 0.75, 9, 1, true);
+      tube.translate(x, 0.95, z);
+      b.c.set(k % 2 ? '#2b3a2e' : '#27302a');
+      b.geo(tube);
+      tube.dispose();
+      const bore = new THREE.CircleGeometry(0.12, 9);
+      bore.rotateX(-Math.PI / 2).translate(x, 1.26, z);
+      b.c.set('#0c0d0e');
+      b.geo(bore);
+      bore.dispose();
+    }
+  }
+  // firing desk with its cable drum, cables to the racks
+  b.c.set('#9aa3a8');
+  b.box(-1.25, 0.78, -2.35, 0.9, 0.55, 0.5);
+  b.c.set('#2a2d30');
+  b.box(-1.25, 1.08, -2.38, 0.86, 0.04, 0.42);
+  b.c.set('#c0392b');
+  cylX(b, 1.0, 0.75, -2.35, 0.28, 0.32, 10);
+  b.c.set('#1e1f22');
+  b.beam(V(1.0, 0.55, -2.15), V(0.9, 0.6, -1.0), 0.03);
+  b.beam(V(-1.25, 0.55, -2.1), V(-1.2, 0.6, -1.0), 0.03);
+  // foredeck: hatch with coaming, windlass, the mooring chain down into the water, the deck lamp
+  b.c.set('#4a5560');
+  b.box(0, 0.55, 3.55, 1.6, 0.16, 1.1);
+  b.c.set('#5f6b76');
+  b.box(0, 0.65, 3.55, 1.5, 0.05, 1.0);
+  b.c.set('#2c3036');
+  cylX(b, 0, 0.75, 4.55, 0.18, 0.7, 10);
+  for (const s of [-1, 1]) b.box(s * 0.42, 0.66, 4.55, 0.08, 0.36, 0.3);
+  b.c.set('#3a3530');
+  b.beam(V(0, 0.75, 4.75), V(0, 0.3, 5.25), 0.06);
+  b.beam(V(0, 0.3, 5.25), V(0.2, -0.9, 7.2), 0.06);
+  b.c.set('#2f3a44');
+  cylY(b, 1.6, 0.48, 4.6, 0.04, 0.6, 6);
+  b.c.set('#fff1c9');
+  b.g = 2;
+  b.box(1.6, 1.16, 4.6, 0.16, 0.2, 0.16);
+  b.g = 0;
+  b.c.set('#2f3a44');
+  b.box(1.6, 1.3, 4.6, 0.22, 0.05, 0.22);
+  // wheelhouse: lower body, lit window band with mullions, overhanging roof, door, searchlight, lifebuoy, ladder
+  const wz = -3.9;
+  b.c.set('#e8e4da');
+  b.box(0, 0.95, wz, 2.2, 0.98, 1.8);
+  b.c.set('#27313b');
+  b.g = 2;
+  b.box(0, 1.68, wz, 2.16, 0.5, 1.76);
+  b.g = 0;
+  b.c.set('#e8e4da');
+  for (const x of [-1.09, -0.36, 0.36, 1.09]) b.box(x, 1.68, wz + 0.89, 0.06, 0.5, 0.04);
+  for (const s of [-1, 1]) for (const z of [wz - 0.89, wz, wz + 0.89]) b.box(s * 1.09, 1.68, z, 0.04, 0.5, 0.06);
+  b.box(0, 1.98, wz, 2.22, 0.1, 1.82);
+  b.c.set('#c0392b');
+  b.box(0, 2.1, wz + 0.05, 2.5, 0.12, 2.1);
+  b.box(0, 2.19, wz + 0.05, 2.3, 0.06, 1.9);
+  b.c.set('#3d4650');
+  b.box(1.11, 0.98, wz - 0.3, 0.04, 1.0, 0.6);
+  b.c.set('#c9a227');
+  b.box(1.14, 1.0, wz - 0.08, 0.03, 0.04, 0.1);
+  b.c.set('#d8d8d8');
+  cylY(b, 0.75, 2.22, wz + 0.6, 0.05, 0.18, 6);
+  const lamp = new THREE.CylinderGeometry(0.12, 0.1, 0.18, 10, 1);
+  lamp.rotateX(Math.PI / 2).translate(0.75, 2.48, wz + 0.66);
+  b.geo(lamp);
+  lamp.dispose();
+  const buoy = new THREE.TorusGeometry(0.24, 0.06, 6, 12);
+  buoy.translate(-0.55, 1.05, wz + 0.93);
+  b.c.set('#e8622c');
+  b.geo(buoy);
+  buoy.dispose();
+  b.c.set('#c8ccd0');
+  for (const x of [-0.25, 0.25]) b.beam(V(x, 0.48, wz - 0.94), V(x, 2.2, wz - 0.94), 0.04);
+  for (let y = 0.75; y < 2.1; y += 0.3) b.box(0, y, wz - 0.94, 0.5, 0.03, 0.03);
+  // mast + pennant
+  b.c.set('#d8d8d8');
+  b.beam(V(0, 2.2, wz), V(0, 5.2, wz), 0.1);
+  b.box(0, 4.3, wz, 0.9, 0.05, 0.05);
+  b.c.set('#e63946');
+  b.quad(V(0, 5.1, wz), V(0, 4.6, wz), V(0, 4.85, wz - 1.3), V(0, 4.85, wz - 1.3));
+  b.quad(V(0, 4.85, wz - 1.3), V(0, 4.6, wz), V(0, 5.1, wz), V(0, 4.85, wz - 1.3));
+}
+
+/** vertical cylinder standing on (x, y0, z) */
+function cylY(b: VB, x: number, y0: number, z: number, r: number, h: number, seg: number): void {
+  const g = new THREE.CylinderGeometry(r, r, h, seg, 1);
+  g.translate(x, y0 + h / 2, z);
+  b.geo(g);
+  g.dispose();
+}
+
+/** cylinder along x centred on (x, y, z) */
+function cylX(b: VB, x: number, y: number, z: number, r: number, len: number, seg: number): void {
+  const g = new THREE.CylinderGeometry(r, r, len, seg, 1);
+  g.rotateZ(Math.PI / 2).translate(x, y, z);
+  b.geo(g);
+  g.dispose();
+}
+
+export function buildVehicleGeometry(bargeDetail = true): THREE.BufferGeometry {
   const b = new VB();
   balloon(b);
   plane(b);
   blimp(b);
-  barge(b);
+  if (bargeDetail) bargeKit(b);
+  else barge(b);
   return b.build();
 }
 

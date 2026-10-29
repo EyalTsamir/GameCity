@@ -16,6 +16,7 @@ import { buildVehicleGeometry, makeBlimpTexture, MODEL } from './vehicleModels';
 import type { SparkSystem } from './sparks';
 import { absHours, clamp, smooth, type SkylineGrid } from './shared';
 import { SECONDS_PER_GAME_HOUR } from '../../core/constants';
+import { boxHunt } from '../../core/boxhunt';
 
 const VEH_GLSL_V = /* glsl */ `
 attribute float aModel;
@@ -178,7 +179,7 @@ export interface VehicleSystem {
 
 export function createVehicles(ctx: CityContext, sparks: SparkSystem, skyline: SkylineGrid, bargeSite: { x: number; z: number }): VehicleSystem {
   const { plan } = ctx;
-  const geo = buildVehicleGeometry();
+  const geo = buildVehicleGeometry(boxHunt(ctx, 'barge'));
   const N = 4;
   const iModel = new THREE.InstancedBufferAttribute(new Float32Array([MODEL.BALLOON, MODEL.PLANE, MODEL.BLIMP, MODEL.BARGE]), 1);
   const iGlow = new THREE.InstancedBufferAttribute(new Float32Array(N * 4), 4).setUsage(THREE.DynamicDrawUsage);

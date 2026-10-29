@@ -13,6 +13,7 @@ import { C, S, finial } from './parts';
 import type { Env } from './env';
 import { LM, LMODE } from './builder';
 import { boxHunt } from '../../core/boxhunt';
+import { signQuad } from './signs';
 
 export function genChurch(env: Env, lot: Lot): void {
   const fp = lot.footprint;
@@ -493,19 +494,61 @@ function churchInterior(env: Env, d: { NW: number; nz0: number; nz1: number; eav
   D.box(marble, (CW - 0.32) * 2, 0.2, cz1 - az, 0, 0, (az + cz1) / 2);
   D.cyl(marble, 2.25, 2.25, 0.2, 0, 0, az, 6, false, 'cyl', 0, Math.PI * 2, Math.PI / 6);
   D.box(marble, (CW - 0.32) * 2, 0.1, 0.42, 0, 0, cz1 + 0.21);
-  // altar: stone table, linen with a front drape and a red frontal, candles, a gilt cross
-  const ax = az - 0.7;
-  D.box(M('#cfc6b4', PAT.STONE, 0.8, 0, 0, 0, 0.4), 2.0, 0.92, 0.8, 0, 0.2, ax);
-  D.box(linen, 2.1, 0.03, 0.9, 0, 1.12, ax);
-  D.box(linen, 2.1, 0.4, 0.02, 0, 0.74, ax + 0.45);
-  D.box(red, 0.9, 0.62, 0.025, 0, 0.42, ax + 0.455);
-  for (const sx of [-0.7, 0.7]) {
-    D.cyl(gilt, 0.05, 0.07, 0.42, sx, 1.15, ax - 0.1, 8);
-    D.cyl(linen, 0.025, 0.025, 0.26, sx, 1.57, ax - 0.1, 6);
-    env.L.sphere(LM('#ffd38a', LMODE.ALWAYS, 2.4, sx), 0.022, sx, 1.86, ax - 0.1, 5, 4);
+  // sanctuary at the nave's east wall (the chancel behind it is closed off): a two-step marble dais with a
+  // communion rail, the altar on it and a gilt-framed painted reredos on the wall
+  const ay = 0.3;
+  D.box(marble, 4.6, 0.15, 1.9, 0, 0, nz0 + 0.95);
+  D.box(marble, 4.2, 0.15, 1.6, 0, 0.15, nz0 + 0.8);
+  for (const sx of [-1, 1]) {
+    D.box(oakDark, 1.5, 0.06, 0.1, sx * 1.4, 0.82, nz0 + 2.05);
+    for (let k = 0; k < 6; k++) D.cyl(gilt, 0.025, 0.025, 0.76, sx * (0.75 + k * 0.26), 0.03, nz0 + 2.05, 6);
   }
-  D.box(gilt, 0.05, 0.62, 0.05, 0, 1.15, ax - 0.2);
-  D.box(gilt, 0.34, 0.05, 0.05, 0, 1.6, ax - 0.2);
+  const reredos = env.atlas.add(96, 120, (g, w, h) => {
+    const gr = g.createLinearGradient(0, 0, 0, h);
+    gr.addColorStop(0, '#d9b04a');
+    gr.addColorStop(1, '#9c7424');
+    g.fillStyle = gr;
+    g.fillRect(0, 0, w, h);
+    const panel = (x0: number, pw: number, robe: string, top: number) => {
+      g.fillStyle = '#2d4f7c';
+      g.fillRect(x0, top, pw, h - top - 8);
+      g.fillStyle = '#f0d27a';
+      g.beginPath();
+      g.arc(x0 + pw / 2, top + 16, 9, 0, Math.PI * 2);
+      g.fill();
+      g.fillStyle = '#e2bf9c';
+      g.beginPath();
+      g.arc(x0 + pw / 2, top + 16, 5, 0, Math.PI * 2);
+      g.fill();
+      g.fillStyle = robe;
+      g.beginPath();
+      g.moveTo(x0 + pw / 2 - 4, top + 22);
+      g.lineTo(x0 + pw / 2 + 4, top + 22);
+      g.lineTo(x0 + pw / 2 + pw * 0.34, h - 10);
+      g.lineTo(x0 + pw / 2 - pw * 0.34, h - 10);
+      g.fill();
+    };
+    panel(6, 24, '#7d1f24', 30);
+    panel(36, 24, '#efeae0', 14);
+    panel(66, 24, '#3f6b35', 30);
+  });
+  D.box(gilt, 2.5, 3.1, 0.08, 0, ay + 1.2, nz0 + 0.04);
+  D.boxC(gilt, 1.5, 0.12, 0.1, -0.62, ay + 4.48, nz0 + 0.05, 0, 0, 0.5);
+  D.boxC(gilt, 1.5, 0.12, 0.1, 0.62, ay + 4.48, nz0 + 0.05, 0, 0, -0.5);
+  signQuad(env.T, reredos, 2.2, 2.75, 0, ay + 2.75, nz0 + 0.09, 0, 0);
+  // altar: stone table, linen with a front drape and a red frontal, candles, a gilt cross
+  const ax = nz0 + 0.75;
+  D.box(M('#cfc6b4', PAT.STONE, 0.8, 0, 0, 0, 0.4), 2.0, 0.92, 0.8, 0, ay, ax);
+  D.box(linen, 2.1, 0.03, 0.9, 0, ay + 0.92, ax);
+  D.box(linen, 2.1, 0.4, 0.02, 0, ay + 0.54, ax + 0.45);
+  D.box(red, 0.9, 0.62, 0.025, 0, ay + 0.22, ax + 0.455);
+  for (const sx of [-0.7, 0.7]) {
+    D.cyl(gilt, 0.05, 0.07, 0.42, sx, ay + 0.95, ax - 0.1, 8);
+    D.cyl(linen, 0.025, 0.025, 0.26, sx, ay + 1.37, ax - 0.1, 6);
+    env.L.sphere(LM('#ffd38a', LMODE.ALWAYS, 2.4, sx), 0.022, sx, ay + 1.66, ax - 0.1, 5, 4);
+  }
+  D.box(gilt, 0.05, 0.62, 0.05, 0, ay + 0.95, ax - 0.2);
+  D.box(gilt, 0.34, 0.05, 0.05, 0, ay + 1.4, ax - 0.2);
   // pulpit (octagonal drum on a stem, stairs) on the north side of the chancel arch, lectern opposite
   const px = -(iw - 1.0),
     pz = nz0 + 1.1;

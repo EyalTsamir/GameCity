@@ -202,6 +202,8 @@ export class MeshBuilder {
   ornament: MeshBuilder | null = null;
   /** detail sink (distance-LOD mesh): small trims are forwarded here with their centre as pivot */
   detail: MeshBuilder | null = null;
+  /** a detail sink filled directly (env.D): each primitive without an anim gets its own centre as the LOD pivot */
+  autoPivot = false;
   /** force every primitive into the detail sink (window surrounds, quoins, goods…) */
   forceDetail = false;
   /** never route to the detail sink (statues, people: must stay visible from afar) */
@@ -244,6 +246,15 @@ export class MeshBuilder {
    *     'world' (planar by dominant normal in landmark space).
    */
   add(geo: THREE.BufferGeometry, m: Mat, local?: THREE.Matrix4 | null, uv: UvMode = 'box', su = 1, sv = 1): void {
+    if (this.autoPivot && !this.anim) {
+      if (!geo.boundingBox) geo.computeBoundingBox();
+      const c = geo.boundingBox!.getCenter(new THREE.Vector3());
+      if (local) c.applyMatrix4(local);
+      this.anim = { mode: 0, pivot: c, axis: _up1, a: 0, b: 0, c: 0 };
+      this.add(geo, m, local, uv, su, sv);
+      this.anim = null;
+      return;
+    }
     if (this.ornament && !m.raw && ORNAMENT_PATS.has(m.pat)) {
       // forward as a static (non-animated) primitive with the same frame
       const keepAnim = this.ornament.anim;

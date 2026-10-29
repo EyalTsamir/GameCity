@@ -22,8 +22,8 @@ import { HB, RIG } from './harbor/geo';
 import { createBeamMesh, createHarborMaterials, createGlowMesh, followCraneLamps, NMOB, type GlowPoint } from './harbor/material';
 import { buildBreakwater, setArmourStones } from './harbor/breakwater';
 import { buildFishQuay, setQuayDetail } from './harbor/quay';
-import { buildCarouselRotating, buildCarouselStatic, buildPier, buildWheelRotating, buildWheelStatic, setGondolaDetail, type WheelSpec } from './harbor/pier';
-import { buildFerryDock, lifeguardTower, scatterBeach, setBeachDetail } from './harbor/beach';
+import { buildCarouselRotating, buildCarouselStatic, buildPier, buildWheelRotating, buildWheelStatic, setGondolaDetail, setCarouselDetail, type WheelSpec } from './harbor/pier';
+import { buildFerryDock, lifeguardTower, scatterBeach, setBeachDetail, setFerryDockDetail } from './harbor/beach';
 import { boxHunt } from '../core/boxhunt';
 import { bridgeProfile, buildFootbridge, buildJetty, type BridgeInfo, setRiverLanterns } from './harbor/river';
 import { buildCrane, buildCraneRails, CraneSim, type MobileBox } from './harbor/cranes';
@@ -180,6 +180,7 @@ export default function create(ctx: CityContext): CityModule {
   let ferryBerth: HarborService['ferryBerth'] = null;
   const fdF = feats('ferrydock')[0];
   if (fdF?.rect) {
+    setFerryDockDetail(boxHunt(ctx, 'ferrydock'));
     const fd = buildFerryDock(north, fdF.rect, QUAY_X, glows);
     ferryBerth = fd.berth;
     obstacles.push(fd.rect);
@@ -205,6 +206,7 @@ export default function create(ctx: CityContext): CityModule {
       wheel = { x: wf.x, z: wf.z, radius: Number(wf.params?.radius ?? 15), hubY: deckY + Number(wf.params?.hub ?? 17.5), rect: wf.rect, deckY };
       buildWheelStatic(beach, wheel, glows);
       setGondolaDetail(boxHunt(ctx, 'gondola'));
+      setCarouselDetail(boxHunt(ctx, 'carousel'));
       gondolas = buildWheelRotating(rides, wheel);
     }
     const cf = feats('carousel')[0];

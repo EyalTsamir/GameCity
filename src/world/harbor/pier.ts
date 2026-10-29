@@ -586,12 +586,78 @@ export function buildCarouselRotating(b: HB, x: number, z: number, r: number, de
       b.color('#d4a84a');
       b.cyl([hx, pf, hz], [hx, ceil, hz], 0.035, 0.035, 5, 0);
       b.rig(RIG.HORSE, 0, (k / n + (n === 8 ? 0.5 : 0)) % 1);
-      horse(b, hx, pf + 1.0, hz, a + Math.PI / 2, rng.pick(bodies), rng.pick(saddles));
+      (CARVED ? horseCarved : horse)(b, hx, pf + 1.0, hz, a + Math.PI / 2, rng.pick(bodies), rng.pick(saddles));
       horses++;
     }
   }
   b.rig(RIG.STATIC);
   return horses;
+}
+
+/** box hunt (?nocarousel): carved carousel horses instead of stacked boxes */
+let CARVED = true;
+export function setCarouselDetail(on: boolean): void {
+  CARVED = on;
+}
+
+/** an ellipsoid (radii rx, ry, rz) at (x, y, z) in the builder's current frame */
+function ellipsoid(b: HB, x: number, y: number, z: number, rx: number, ry: number, rz: number, ws = 12, hs = 8): void {
+  const g = new THREE.SphereGeometry(1, ws, hs);
+  g.scale(rx, ry, rz);
+  g.translate(x, y, z);
+  b.geo(g);
+  g.dispose();
+}
+
+/**
+ * Carved carousel horse (local +z = head): a barrel body with a rounded chest and haunch, a tapered neck, the head
+ * pitched down with a muzzle and ears, a flowing mane and tail, prancing front legs and hind legs with hooves,
+ * a saddle on its blanket with stirrups, gilt reins and breastplate.
+ */
+function horseCarved(b: HB, x: number, y: number, z: number, yaw: number, body: string, saddle: string): void {
+  b.pushT(x, y, z, yaw);
+  const hair = body === '#3b3330' ? '#d9cfc0' : body === '#8a5a3c' ? '#2e221a' : '#6b5440';
+  b.color(body);
+  ellipsoid(b, 0, 0, 0, 0.16, 0.19, 0.44);
+  ellipsoid(b, 0, 0.03, 0.3, 0.155, 0.18, 0.17, 10, 7);
+  ellipsoid(b, 0, 0.02, -0.3, 0.165, 0.18, 0.18, 10, 7);
+  b.cyl([0, 0.08, 0.36], [0, 0.5, 0.58], 0.12, 0.075, 10, 0);
+  b.pushT(0, 0.56, 0.66, 0, 0.55);
+  ellipsoid(b, 0, 0, 0.06, 0.07, 0.085, 0.19, 10, 7);
+  ellipsoid(b, 0, -0.01, 0.22, 0.06, 0.065, 0.07, 8, 6);
+  b.pop();
+  for (const s of [-1, 1]) b.cyl([s * 0.035, 0.64, 0.6], [s * 0.05, 0.75, 0.57], 0.025, 0.004, 5, 1);
+  // legs: front pair prancing (forearm forward, cannon folded back), hind pair reaching back to the hooves
+  const leg = (pts: V3[], r0: number, r1: number): void => {
+    for (let i = 0; i + 1 < pts.length; i++) b.cyl(pts[i], pts[i + 1], i === 0 ? r0 : r1, r1, 7, i + 2 === pts.length ? 2 : 0);
+  };
+  for (const s of [-1, 1]) {
+    b.color(body);
+    leg([[s * 0.08, -0.06, 0.3], [s * 0.08, -0.3, 0.46], [s * 0.08, -0.46, 0.35]], 0.07, 0.04);
+    leg([[s * 0.09, -0.05, -0.32], [s * 0.09, -0.36, -0.42], [s * 0.09, -0.62, -0.35]], 0.085, 0.042);
+    b.color('#2a2522');
+    b.cyl([s * 0.08, -0.46, 0.35], [s * 0.08, -0.49, 0.38], 0.05, 0.05, 7, 3);
+    b.cyl([s * 0.09, -0.62, -0.35], [s * 0.09, -0.67, -0.34], 0.05, 0.055, 7, 3);
+  }
+  // mane down the neck and the forelock, a flowing tail
+  b.color(hair);
+  b.tube([[0, 0.66, 0.6], [0.02, 0.56, 0.5], [-0.01, 0.42, 0.43], [0.02, 0.28, 0.36], [0, 0.18, 0.3]], 0.045, 6);
+  b.tube([[0, 0.12, -0.46], [0, 0.04, -0.6], [0.03, -0.14, -0.68], [0, -0.36, -0.66]], 0.045, 6);
+  // saddle: blanket, seat with pommel and cantle, stirrups; gilt reins and breastplate
+  b.color(saddle);
+  b.box(0, 0.12, -0.05, 0.36, 0.2, 0.44, 0, 0);
+  b.color('#5a3a26');
+  b.box(0, 0.2, -0.05, 0.22, 0.05, 0.32, 0, 0);
+  b.box(0, 0.25, 0.1, 0.16, 0.08, 0.06, 0, 0);
+  b.box(0, 0.26, -0.2, 0.2, 0.1, 0.05, 0, 0);
+  b.color('#d4a84a');
+  for (const s of [-1, 1]) {
+    b.cyl([s * 0.18, 0.2, -0.04], [s * 0.19, -0.12, -0.04], 0.008, 0.008, 4, 0);
+    b.box(s * 0.19, -0.13, -0.04, 0.03, 0.03, 0.09, 0, 0);
+    b.tube([[s * 0.05, 0.52, 0.86], [s * 0.1, 0.35, 0.58], [s * 0.1, 0.25, 0.14]], 0.008, 4);
+  }
+  b.cyl([0.16, 0.06, 0.4], [-0.16, 0.06, 0.4], 0.02, 0.02, 6, 0);
+  b.pop();
 }
 
 function horse(b: HB, x: number, y: number, z: number, yaw: number, body: string, saddle: string): void {
