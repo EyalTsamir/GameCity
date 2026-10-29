@@ -78,7 +78,7 @@ try {
     out.windows.push(w);
     process.stderr.write(
       `${name.padEnd(24)} mean ${String(w.meanMs).padStart(6)} p99 ${String(w.p99).padStart(6)} max ${String(w.max).padStart(7)} ` +
-        `jank ${String(w.jank25).padStart(3)} hitch ${String(w.hitch50).padStart(3)} freeze ${String(w.freeze100).padStart(2)} ` +
+        `jank ${String(w.jank25).padStart(3)} out ${String(w.outliers).padStart(3)} hitch ${String(w.hitch50).padStart(3)} freeze ${String(w.freeze100).padStart(2)} ` +
         `lt ${w.longTasks}/${w.longTaskMax}ms gc ${w.gcDrops} alloc ${w.allocMBs}MB/s prog+${w.newPrograms} geo+${w.newGeometries} ` +
         `tex+${w.newTextures} ${w.step ?? ''} gpu ${w.gpuMs ?? '-'} cpu ${w.cpuMs}${w.newProgramKeys.length ? ' new: ' + w.newProgramKeys.join(' | ') : ''}\n`,
     );

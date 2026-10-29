@@ -2,7 +2,8 @@
 //
 //   installRecorder(page)      — before page.goto: records every rAF timestamp, JS heap per frame, long tasks
 //   readFrames(page, from)     — the recorded slice since index `from` (use recMark(page) to get an index)
-//   frameStats(slice)          — mean / p50 / p95 / p99 / max frame interval, jank (> 25 ms), hitch (> 50 ms),
+//   frameStats(slice)          — mean / p50 / p95 / p99 / max frame interval, jank (> 25 ms), outliers (> 2x median),
+//                                hitch (> 50 ms),
 //                                freeze (> 100 ms), GC drops, allocation rate, long tasks
 //   installGpuProfiler(page)   — after the city is ready, with ?adaptive=0 (postfx's own timer query must be off):
 //                                wraps renderer.render / shadowMap.render in TIME_ELAPSED queries labelled
@@ -78,6 +79,8 @@ export function frameStats(slice) {
     p99: r2(pct(s, 0.99)),
     max: r2(s[s.length - 1] ?? 0),
     jank25: d.filter((v) => v > 25).length,
+    // outlier = a frame at least twice as long as the window's median (and a missed vsync): a visible jump
+    outliers: d.filter((v) => v > Math.max(25, 2 * pct(s, 0.5))).length,
     hitch50: d.filter((v) => v > 50).length,
     freeze100: d.filter((v) => v > 100).length,
     gcDrops: gc,

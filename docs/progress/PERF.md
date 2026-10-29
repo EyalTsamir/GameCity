@@ -126,6 +126,10 @@ Same-run A/B (original 5174 / cand1 5175 / cand2 5176), ms/frame uncapped:
 - Land sections after it (exp copy, uLandCut A/B): fields 2.2, banks/sand/rock 2.0, meadow detail 0.1, forest ≈ 0 ms
   in the overview — the 14 ms of the baseline were mostly the sea floor (now an exact early return) and hidden pixels.
 
+- Attribution of batch 2 (cand2 with one switch reverted, 12 h, ms/frame): `drawsort=0` +4.2 overview, +3.4 street,
+  +6.2 market, +8.0 harbour, +1.0 platform; `vehfd=1` (gl_FragDepth on every vehicle LOD) +0.8 / +1.3 / ±noise /
+  +1.5 / +0.2 → the known suspect was worth ~1 ms; the rest of the batch is the sea-bed early return.
+
 ### 5. Batch 3 — a200a65 / 0726126 / 237a97c (pushed): far trees near→far, facade chunks, warm-up visibility pin
 Same run, cand2 → cand3 (ms/frame): overview 52.4 → 48.6 (12 h), 55.7 → 52.6 (21.5 h) = the tree sort; street −0.3 /
 −1.1, market −0.5 / −1.0, harbour / platform ±0.2. The facade chunks drawn nearest first gain little: the shell's cost

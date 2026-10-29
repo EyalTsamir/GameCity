@@ -43,7 +43,7 @@ try {
   const n = Math.max(1, Math.round((minutes * 60) / every));
   let mark = await recMark(page);
   let progs = (await readFrames(page, mark)).programs;
-  out.total = { frames: 0, jank25: 0, hitch50: 0, freeze100: 0, gcDrops: 0, longTasks: 0, newPrograms: 0, max: 0 };
+  out.total = { frames: 0, jank25: 0, outliers: 0, hitch50: 0, freeze100: 0, gcDrops: 0, longTasks: 0, newPrograms: 0, max: 0 };
   for (let i = 0; i < n; i++) {
     await page.waitForTimeout(every * 1000);
     const sl = await readFrames(page, mark);
@@ -69,7 +69,7 @@ try {
     out.samples.push(brief);
     process.stderr.write(
       `t=${brief.t}s fps=${brief.fps} heap=${brief.heapMB}MB inv=${brief.invariantCount} ${brief.time} | mean ${frame.meanMs} p99 ${frame.p99} max ${frame.max} ` +
-        `jank ${frame.jank25} hitch ${frame.hitch50} freeze ${frame.freeze100} gc ${frame.gcDrops} alloc ${frame.allocMBs}MB/s lt ${frame.longTasks}/${frame.longTaskMax}ms prog+${frame.newPrograms} ${brief.step ?? ''}\n`,
+        `jank ${frame.jank25} out ${frame.outliers} hitch ${frame.hitch50} freeze ${frame.freeze100} gc ${frame.gcDrops} alloc ${frame.allocMBs}MB/s lt ${frame.longTasks}/${frame.longTaskMax}ms prog+${frame.newPrograms} ${brief.step ?? ''}\n`,
     );
   }
   out.frameErrors = await page.evaluate(() => window.__city.frameErrors);
