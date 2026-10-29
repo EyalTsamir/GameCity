@@ -66,3 +66,61 @@ Measured 2026-10-29. Tools: scripts/perf.mjs --gpu 1 (uncapped), scripts/hitch.m
    harbor:   buildings-shell 9.1 · pedestrians 6.9 · terrain-ground 4.6 · water 3.7 · hardscape 3.2 · landmarks 5.4
    platform: hardscape 3.4 · landmarks 5.5 · veg-cards 2.7 · terrain 3.1 · props-fine 1.4
    switch checks: ;nooccupants no measurable change (the gl_FragDepth write stays without it); quality=low -15..-17 ms
+
+==============================================================================================================
+AFTER THE LOCAL-GPU ROUND — the new budget (same-run A/B: original 8718d0f vs final 729b6a7; boot from 5a39100)
+Measured 2026-10-29 ~19:40, same machine / settings as above. Log: docs/progress/PERF.md, report: docs/progress/PERF-REPORT.md
+
+1. FRAME COST (perf.mjs --gpu 1, vsync off, adaptive off, 'high', 4 s windows)
+   view@hour         before   after  GPU tot   scene  shadow   refl   post  draws    tris
+   overview@12        82.33   47.77     47.4   36.76    2.18   2.73   5.58    252   4.24M
+   street@12          54.92   43.31    39.68   28.41    2.74   2.25   6.13    234   3.74M
+   market@12          57.76   49.03    46.74   37.53     2.3   1.49   5.26    187   4.20M
+   harbor@12          62.64   45.88     42.4   31.86    2.11   3.08    5.2    247   4.19M
+   platform@12        37.92   30.22    30.84   20.97    2.95   0.72   6.05    200   4.02M
+   overview@21.5      70.96   50.35    50.02    39.7    2.14   2.95   5.08    262   4.17M
+   street@21.5        56.59    41.9    39.69   28.76    2.49   2.46   5.83    241   3.63M
+   market@21.5        59.74   47.19    45.16   35.92    2.53   1.54      5    206   4.12M
+   harbor@21.5        66.34   51.49    48.72   37.57    2.17   3.72   5.09    263   4.35M
+   platform@21.5      49.04   39.75    38.57    28.9    3.27   0.79   5.46    225   4.57M
+   (the original's overview@12 measured 67.6–69.7 in three earlier runs; 82.3 in this one)
+
+2. STUTTER (hitch.mjs, vsync + adaptive on): steady / arrival windows of the final build
+   window                   mean     p99     max  outl  frz prog
+   boot                    47.99    66.8    83.3     0    0    0
+   overview@12 arrive      48.63    66.7    66.7     0    0    0
+   overview@12              48.3    66.8    66.8     0    0    0
+   street@12 arrive        44.53    99.8    99.8     0    0    0
+   street@12               43.71    66.6    66.7     0    0    0
+   market@12 arrive        49.72    66.7    66.7     0    0    0
+   market@12                49.5    66.7    66.8     0    0    0
+   harbor@12 arrive        46.62    66.8    66.8     0    0    0
+   harbor@12               46.22    66.7    66.9     0    0    0
+   platform@12 arrive       31.9    83.3    83.3     2    0    0
+   platform@12             32.84    66.7    66.8    10    0    0
+   overview@21.5 arrive    51.75    83.4    83.4     0    0    0
+   overview@21.5           50.94    66.7    83.4     0    0    0
+   street@21.5 arrive      47.35    83.4    83.4     0    0    0
+   street@21.5             45.02    50.3    66.8     0    0    0
+   market@21.5 arrive      47.09    66.7    66.7     0    0    0
+   market@21.5             47.08    66.7    66.7     0    0    0
+   harbor@21.5 arrive      52.04    66.8    66.8     0    0    0
+   harbor@21.5             51.82    66.8    66.8     0    0    0
+   platform@21.5 arrive    35.74    99.9    99.9     3    0    0
+   platform@21.5           35.47    66.7    83.4     9    0    0
+   fly to street            46.7    83.6     100     1    0    0
+   fly to market           47.62    66.8    83.4     0    0    0
+   fly to harbor           49.01    66.7    66.8     0    0    0
+   fly to platform         40.05    66.8    83.4     1    0    0
+   fly to overview         43.04    66.9    83.3     0    0    0
+   whole run: outliers 74 → 26 (24 on the platform, at the 33 ms vsync edge; 2 in flights), freezes 63 → 0, mid-run compiles 23 → 0,
+   worst frame 1800 → 100 ms; console 0 errors, frame errors 0, invariants {}
+
+3. SOAK (4 min x4 = one game day)
+   frames 3492 → 4920 · outliers 7 → 0 · freezes 9 → 0 · long tasks 7 → 0 · compiles 12 → 0 · worst 1017 → 83.5 ms · GC drops 467 → 261
+   garbage per frame 1.48 → 1.02 MB (street, allocprof); heap flat ~750–780 MB
+
+4. BOOT (fresh profile, no shader cache): first frame 52–64 s → 26–27 s (dev server and dist/index.html alike)
+
+5. IMAGE: golden mean diff 0.0 in all five views; street level 0.00–0.93 by day, 0.27–4.45 at night (night-market cloth
+   sway, window flicker = motion). Visible change by design: the departure board keeps its last state beyond 45 m.

@@ -3,41 +3,18 @@
 Branch `claude/pensive-gates-bim12i`. Budget file: `perf-results.txt` (repo root). Earlier perf rounds are kept below
 ("Earlier round: render-performance pass").
 
-## Resume here (updated 2026-10-29 ~19:00 — written so a context reset loses nothing)
-**Task (user, Hebrew prompt docs/progress/NEXT-PROMPT-PERF.md):** smooth city on the Adreno, no freezes, zero/minimal
-quality loss; measure first; perf-results.txt = budget; fix by impact; prove each fix (same-run A/B, golden.sh +
-street-level shots, clean console, invariants {}, typecheck); commit+push after each improvement; this log; final report
-IN HEBREW: before/after table per view (mean frame time, outlier frames, freezes), what was fixed, what cost quality,
-what is open. Visible trade-offs only behind a switch, with their measured price.
-
-**Pushed (measured):** everything up to a5f8488 (batches 1–5 + report draft). **Local, not pushed yet:** comment fix,
-4befe3b (compile kick-off per module — boot test running), log commits.
-**Final verification RUNNING** (shots/perf2/final.sh 5181, final copy = 729b6a7 at :5181, original at :5174):
-final_perf_{base,new}.txt, final_hitch_{base,new}.json, final_soak_{base,new}.json, final_golden.txt (shots/golden/final),
-final_street.txt (shots/street/final vs base), final_boot_new.txt; then final2.sh: dist build boot (vite preview :4173)
-vs the user's original C:/Users/eyalt/Downloads/Tinyhaven.html (read-only). Boot test of 4befe3b at :5182:
-boot_early.txt, compile_early.txt, hitch_early.json. Report: docs/progress/PERF-REPORT.md (draft; fill the tables with
-`python3 -I scripts/agent-tools/perftable.py --perf-before final_perf_base.txt --perf-after final_perf_new.txt
---hitch-before final_hitch_base.json --hitch-after final_hitch_new.json --soak-before … --soak-after …`), append an
-"after" section to perf-results.txt, push, final Hebrew summary in chat.
-
-**Current numbers (ms/frame uncapped, 12 h; orig → cand3):** overview 69.7 → 48.6, street 54.2 → 46.8, market 58.8 →
-51.5, harbour 65.0 → 48.3, platform 38.4 → 31.6 (21.5 h similar: 72.7→52.6, 55.6→47.2, 60.9→48.5, 69.3→52.9, 44.6→35.6).
-Stutter: no shader compiles mid-run any more (hitch_new1); boot was 59 s = 9 s modules + 50 s serial compile.
-
-**Next, in order:**
-1. Read ab4_c4 / boot_c5 / hitch_c5 / alloc_c5 / retained_c5 / progprobe_c5; push what is proven.
-2. Market crowd 10.7 ms + landmarks 10 ms (cand3 hide A/B): measure cand6 with `--targets "peds-near;peds-close;
-   peds-far;..."` and perf variant `pednear=far` (upper bound of a leaner near program; that variant itself is NOT
-   shippable — near faces are ~20 px). Landmarks are vertex-bound (half-res ratio 1.3) → culling, not shading.
-3. Facades: remaining cost is visible detail (interiors 4–5 ms, bhOpp 3.7, reveal 2.0, glassvar 1.9 at street) →
-   price the LOD option (uDetailPx 0.15/0.4 and 0.1/0.25: hideprof js: targets, shots/perf2/lod_targets.txt) and
-   offer it as a switch (+ maybe an adaptive-ladder step before the resolution drops), not as a default.
-4. Remaining garbage (poses / crowd step paths: V8 boxing, lower yield), JS heap size.
-5. Final verification on the last candidate: golden.sh (GOLDEN_URL), streetset.sh <url> <tag> base, hitch.mjs
-   (vsync, adaptive on), soak.mjs 4 min x4, console/invariants (note: base also reports intermittent pedestrian
-   'overlapping' invariants — pre-existing), typecheck, `npm run build` + boot of dist/index.html; perf-results.txt
-   "after" section; final Hebrew report (docs/progress/PERF-REPORT.md + chat).
+## Resume here (round closed 2026-10-29 ~20:00)
+**Done:** final same-run verification (original 8718d0f vs final 729b6a7) → docs/progress/PERF-REPORT.md (Hebrew) and
+the "AFTER" section of perf-results.txt (= the new budget). Everything pushed to claude/pensive-gates-bim12i.
+Results: 30–51 ms/frame (was 38–82), 0 freezes (was 63 in the run), 0 mid-run shader compiles (was 23), soak worst frame
+84 ms (was 1017), boot 26–27 s (was 52–67 s), golden diff 0.0, console 0 errors, invariants {}.
+**Not reached:** 16.7 ms. Next, in order of measured gain (see the report's "open" list):
+1. slimmer program for the near crowd (upper bound −4.9 ms at the market; keep what reads at 16–44 m);
+2. split / slim the facade shader (≈ 9 ms at street level; also its 20 s compile dominates boot);
+3. market landmark detail (vertex-bound, ~8 ms) — finer LOD for stall goods;
+4. countryside ground base lighting in the overview (~9 ms), water 3.9 ms, far crowd vertex 3.4 ms;
+5. garbage in the pose / crowd step paths; the adaptive ladder could use the priced switches before resolution drops.
+Frozen copies used this round (scratchpad worktrees) can be removed: `git worktree prune` after deleting the folders.
 
 ## Tools (new this round, all in scripts/, all lock-serialised)
 - `perf.mjs --views "a;name=x,y,z,d,yaw,pitch" --hours 12,21.5 --gpu 1` — uncapped ms/frame for several views in ONE
