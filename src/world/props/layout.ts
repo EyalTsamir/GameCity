@@ -664,6 +664,37 @@ export class ChunkCuller {
   }
 }
 
+/**
+ * Split a merged static geometry into square world cells by triangle centroid (shared vertex buffers, one index
+ * per cell), so each cell is culled on its own. The west/east split above never culled from the aerial views, but
+ * at street level a city-wide mesh of fine furniture drew every bench of the town each frame.
+ */
+export function splitByCells(geo: THREE.BufferGeometry, cell: number): THREE.BufferGeometry[] {
+  const pos = geo.getAttribute('position');
+  const index = geo.index;
+  const n = index ? index.count : pos.count;
+  const buckets = new Map<number, number[]>();
+  for (let t = 0; t + 2 < n; t += 3) {
+    const a = index ? index.getX(t) : t,
+      b = index ? index.getX(t + 1) : t + 1,
+      c = index ? index.getX(t + 2) : t + 2;
+    const cx = (pos.getX(a) + pos.getX(b) + pos.getX(c)) / 3,
+      cz = (pos.getZ(a) + pos.getZ(b) + pos.getZ(c)) / 3;
+    const key = (Math.floor(cx / cell) + 512) * 1024 + (Math.floor(cz / cell) + 512);
+    let list = buckets.get(key);
+    if (!list) buckets.set(key, (list = []));
+    list.push(a, b, c);
+  }
+  return [...buckets.values()].map((ids) => {
+    const g = new THREE.BufferGeometry();
+    for (const [name, attr] of Object.entries(geo.attributes)) g.setAttribute(name, attr);
+    g.setIndex(ids);
+    g.computeBoundingBox();
+    g.computeBoundingSphere();
+    return g;
+  });
+}
+
 // ─────────────────────────────────────────────────────────────── misc ──
 
 /** Point in the walking band behind a slot (useful for "facing the pedestrians"). */

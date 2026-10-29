@@ -16,7 +16,7 @@ import { Rng, hash01 } from '../core/rng';
 import type { DistrictKind } from '../core/plan';
 import { GeoSink, staticMesh } from './vegetation/geo';
 import { NearCells, nearCell } from './lamps/nearCells';
-import { getLayout, occAny, PLANTER, hrand, MASK_WALK, DistanceLod, ChunkCuller, chunkOf } from './props/layout';
+import { getLayout, occAny, PLANTER, hrand, MASK_WALK, DistanceLod, ChunkCuller, chunkOf, splitByCells } from './props/layout';
 import { furnitureMaterial, glassMaterial } from './props/material';
 import { createGlowMesh, type Glow } from './props/glow';
 import { Kit, lamp, bench, bin, hydrant, mailbox, phonebox, newsstand, planterBox, bollard, bikeRack, busShelter, picketFence, gateLeaf, lowWall, shed, waterButt, FENCE_PAINT, setPrinter, setBikeSpokes } from './props/furniture';
@@ -781,6 +781,7 @@ export default function create(ctx: CityContext): CityModule {
   const mat: THREE.Material = ctx.debug.params.get('propsmat') === 'basic' ? new THREE.MeshBasicMaterial({ vertexColors: true }) : furnitureMaterial(ctx.uniforms, !ctx.debug.params.has('nowear'));
   const lod = new DistanceLod(ctx);
   const culler = new ChunkCuller(ctx);
+  const FINE_CELL = 120;
   let near = true;
   const geos: THREE.BufferGeometry[] = [];
   const addFurniture = (kit: Kit, name: string, fine: boolean) => {
@@ -805,7 +806,20 @@ export default function create(ctx: CityContext): CityModule {
     if (parts.includes('furniture') && KS.s.vcount > 0) root.add(m);
     culler.add(m, () => true, 8);
   }
-  KF.forEach((kit, i) => addFurniture(kit, `props-furniture-fine-${i ? 'e' : 'w'}`, true));
+  // fine furniture in 120 m cells (frustum-culled each; shown only while the camera is near, as before)
+  for (const [i, kit] of KF.entries()) {
+    if (kit.s.vcount === 0) continue;
+    const whole = kit.s.build();
+    geos.push(whole);
+    for (const geo of splitByCells(whole, FINE_CELL)) {
+      const m = staticMesh(geo, mat, `props-furniture-fine-${i ? 'e' : 'w'}`);
+      m.castShadow = false;
+      m.receiveShadow = true;
+      m.renderOrder = -1;
+      if (parts.includes('furniture')) root.add(m);
+      culler.add(m, () => near, 8);
+    }
+  }
   for (const c of KD.list()) {
     if (c.item.s.vcount === 0) continue;
     const geo = c.item.s.build();
