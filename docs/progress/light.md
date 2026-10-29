@@ -8,13 +8,18 @@
 - Judge notes (sonnet ×3, per image): scratchpad `judge_day.md`, `judge_dusk.md`, `judge_night.md` (summarised below).
 - DONE: resize warnings fixed (postfx.ts, verified: 0 new warnings, no incomplete blits after 4 resizes).
 - Committed: 53d507d (AO, light key, glass, sky visibility, dusk sea, shadow fit, grade, headlights), 31f7738 (lamp
-  specular, exposure metering, asphalt sheen, GLSL name fix). Perf A/B done (table below). Round 2 captured
-  (`shots/light/r2`) and judged (scratchpad judge2_day / judge2_dusk / judge2_night.md, summary below).
-  Round 3 (uncommitted while being verified): lamp specular widened + soft-capped (fixes the aerial night bloom balls),
-  env specular ×1.7 with diffuse IBL ÷1.7 (`?envold`), night fill 0.36 → 0.42, 7.8 h fill 0.58 → 0.64, grade
-  contrast 0.23 → 0.21 / lift back up / vignette 0.2 → 0.19, canyon sun bounce kept alive at a low sun.
-  NEXT: verify r3 (scratchpad r3a / r3b_envold / r3c_nolampspec) → commit → final capture `shots/light/final` →
-  ui-test + console + invariants → sheets → report. Lab script: scratchpad lab.mjs; sheets: scratchpad sheet.py.
+  specular, exposure metering, asphalt sheen, GLSL name fix), a129da4 (uMirror moved off box-hunt's lines), 71ea293
+  (round 3: lamp specular widened + soft-capped — fixes the aerial night bloom balls of round 2 —, env specular ×1.7
+  with diffuse IBL ÷1.7 `?envold`, night fill 0.36 → 0.42, 7.8 h fill 0.58 → 0.64, grade contrast 0.21 / lift back
+  up, canyon sun bounce alive at a low sun).
+- STATUS: round complete. Final captures `shots/light/final` (same 35 as base), before/after sheets per hour
+  `shots/light/sheets/before_after_<hour>.jpg`. Verified: console 0 errors (7 pre-existing ANGLE warnings, same as
+  base), invariants {} in every capture run, full-city `ui-test --q noidle` 54/54 (incl. the 3 resize-layout steps,
+  no blit warnings), stand-in ui-test, typecheck. In the long ui-test run the PEDESTRIAN invariant flagged a paused
+  family group overlapping (parent vs family, 23 s at (48.9, 63)) — sim, untouched by this round → follow-up for
+  pedestrians. Judges: rounds 1–2 below; round 3 checked by eye on lab sets (scratchpad r3a / r3b_envold / r3c).
+- Possible next steps (not started): sun-side warm haze in overviews, softer water reflections at golden hour,
+  canopy translucency (vegetation), wet-street variant at night, lamp switch-on a little before sunset.
 
 ## Judgement (baseline) — what gives it away as CG
 Day (7.5 / 12 h): objects float (no contact darkening under bikes, benches, stalls, cars, people, wall bases); glass towers
@@ -43,15 +48,15 @@ water; halos identical hard discs; the 19 → 21.5 h switch-on is abrupt.
 | # | fix | where | est. cost | status |
 |---|---|---|---|---|
 | 1 | Light balance by time of day: lower / cooler sky fill in shade, warmer golden key, deep-blue darker blue hour, darker night ambient, weaker softer moon | sky/palette.ts, sky.ts | 0 ms | done (?lightold) |
-| 2 | Overview haze: clear near, steeper ramp, less mid-range veil | render/atmosphere.ts, sky/atmoDrive.ts | 0 ms | |
+| 2 | Overview haze: clear near, steeper ramp, less mid-range veil | render/atmosphere.ts, sky/atmoDrive.ts | 0 ms | not done: judged acceptable on re-look (morning haze reads natural); the world round's sky/fog seam calibration was not worth the risk |
 | 3 | Night pools: soft radial falloff, no hard-edged quads (lamps + headlights) | core/lampLight, traffic lights | ~0 ms | done: moon 0.5 → 0.2 (it made the hard patches), gaussian headlight pools |
 | 4 | Contact shadows at eye level (screen-space, sun direction) + tighter AO near the camera | postfx/aoApply.ts | 0.5–1 ms | done differently: N8AO retuned (?aoold) + street-canyon sky visibility (?noskyvis) + metering |
-| 5 | Glass: curtain walls / car glass mirror sky + opposite facades | buildings/materials.ts (minimal), vehicle glass | 0.2–0.5 ms | curtain walls done (?glassold); car glass open |
+| 5 | Glass: curtain walls / car glass mirror sky + opposite facades | buildings/materials.ts (minimal), vehicle glass | 0.2–0.5 ms | curtain walls done (?glassold); car glass already mirrors a street model (vehicleMaterial thStreetRefl) — unchanged |
 | 6 | Water: sky-tinted Fresnel at dusk, broken reflections, sun glitter | water | ~0.1 ms | dusk sea done (?waterold) |
-| 7 | Blue hour: lights on earlier, string lights / lamps glow, window spill | lamps, uLights ramp, bloom | 0 ms | lamp specular sheen (?nolampspec); switch-on unchanged (19.0 h = sun still 2.7° up) |
+| 7 | Blue hour: lights on earlier, string lights / lamps glow, window spill | lamps, uLights ramp, bloom | 0 ms | lamp specular sheen (?nolampspec, widened + capped in r3); switch-on unchanged (core/time.ts: sun < 2.9°; at 19 h the lamps are on but invisible against daylight, as in photographs) |
 | 8 | Shadow edges: stipple / smudges, penumbra | sky/shadowFit, shadow chunk | small | eye-level fit 14 → 10 cm texels (?shadowold) |
-| 9 | Grazing-sun sheen on asphalt / stone | ground shaders | 0.1–0.3 ms | asphalt roughness 0.8–0.95 → 0.72–0.92 |
-| 10 | Grade: contrast, vignette, highlight bloom | postfx | 0 ms | done (?lookold) |
+| 9 | Grazing-sun sheen on asphalt / stone | ground shaders | 0.1–0.3 ms | asphalt roughness 0.8–0.95 → 0.72–0.92; env specular ×1.7 (?envold) gives grazing sky sheen on all paving |
+| 10 | Grade: contrast, vignette, highlight bloom | postfx | 0 ms | done (?lookold; r3: contrast 0.21, lift halfway back) |
 
 ## Perf (perf.mjs, 1920×1025, 12 h, high, adaptive off, 2 repeats in one run — ms per frame, headless on the Adreno)
 | variant | street (eye level) | overview | market |
@@ -63,6 +68,9 @@ water; halos identical hard discs; the 19 → 21.5 h switch-on is abrupt.
 → sky visibility ≈ 0.9–1.4 ms (one dependent texture fetch + a matrix per lit fragment; the only feature with a real
 cost — off on the low tier), retuned AO / glass / shadow fit ≈ 0 (within noise). The run-2 baseline row (33 / 47 / 47 ms,
 1 console error) is discarded: a file was being edited mid-run and Vite served a half-saved materials.ts.
+Round 3: `?envold` changes only uniform values (0 ms by construction). Lamp specular (night, Standard materials only):
+a night A/B (`perf.mjs --views street;oldtown --hours 21.5 --variants ";nolampspec;envold" --repeat 2`) was queued
+when the session hit its usage limit — output in the scratchpad `perf2.log`, NOT recorded here. Re-run it to close this.
 
 ## Log
 - Resize warnings (`ui-test --steps resize`, ~120 × `glBlitFramebuffer … not all the same size`): traced with a
@@ -99,3 +107,18 @@ cost — off on the low tier), retuned AO / glass / shadow fit ≈ 0 (within noi
 - Eye-level shadow fit (`sky.ts`, `?shadowold`): radius clamp(d·1.75 + 90, 105, 950) (was d·1.6 + 120, ≥ 140) →
   texels ≈ 10 cm instead of 14 at street level; aerial distances unchanged.
 - Grade (`postfx.ts`, `?lookold`): S-curve 0.17 → 0.23, lift halved, vignette 0.16 → 0.2.
+- Lamp specular (`core/lampLight.ts` patchLampSpecular, `?nolampspec`): GGX from the lamp map's virtual lamp, added
+  after the integrations' thLampLight call. Round 2 showed the trap: right under every head, seen from above, H ≈ N and
+  a smooth surface (or the lamp's own glass) gave a mirror-sharp peak that the night bloom turned into 80–250 px balls
+  over park / oldtown / market / harbor. Round 3: the lamp lobe uses roughness ≥ 0.5 (the virtual lamp is heads half a
+  metre wide smeared over metres) and a soft knee at 0.45 × the lamp light's luminance. Eye level keeps a soft streak
+  along the asphalt toward the camera; aerial nights are clean again.
+- Env specular (`sky/iblPatch.ts` ENV_SPEC 1.7, `?envold`): the PMREM is in the dome's own units, so environment
+  intensity ~0.5 mirrored the sky at half its brightness. Specular × 1.7, diffuse IBL ÷ 1.7 (unchanged ambient; for
+  Lambert / Phong the scene env is cube-UV, so only their diffuse IBL reads it and the factors cancel). Visible as a
+  cool grazing sheen on shaded paving (platform shade +11 % in the distance), otherwise within ±1 grey level.
+- Round 3 balance (judges: shade crushes to navy): night fill 0.36 → 0.42, 7.8 h fill 0.58 → 0.64, grade contrast
+  0.23 → 0.21 with the lift halfway back, vignette 0.2 → 0.19 (+0.12·night), canyon sun bounce
+  0.07 · (0.4 + 0.6 · sun height) instead of 0.06 · sun height (a low sun lights the facades that face it).
+- Not mine / follow-ups seen on the way: the platform rock cutting's material is speckled under grazing sun (terrain
+  rock detail, visible at 18.2 h when no train stands in front); water reflections stay fairly sharp at golden hour.
