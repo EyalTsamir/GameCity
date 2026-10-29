@@ -533,9 +533,9 @@ function wet(b: HB, x: number, y: number, z: number, w: number, d: number, scale
   b.pat(PAT.NONE);
 }
 
-function stain(b: HB, x: number, y: number, z: number, w: number, d: number, col: string, scale: number): void {
+function stain(b: HB, x: number, y: number, z: number, w: number, d: number, col: string, scale: number, lift = 0.015): void {
   b.color(col).pat(PAT.STAIN, scale);
-  b.quad([x - w / 2, y + 0.015, z - d / 2], [x - w / 2, y + 0.015, z + d / 2], [x + w / 2, y + 0.015, z + d / 2], [x + w / 2, y + 0.015, z - d / 2]);
+  b.quad([x - w / 2, y + lift, z - d / 2], [x - w / 2, y + lift, z + d / 2], [x + w / 2, y + lift, z + d / 2], [x + w / 2, y + lift, z - d / 2]);
   b.pat(PAT.NONE);
 }
 
@@ -655,6 +655,38 @@ export function buildFishQuay(b: HB, o: FishQuayOpts): void {
   wet(b, 134.6, y(134.6, -128.6), -128.6, 1.2, 1.6, 0.3);
   wet(b, 130.4, y(130.4, -127.2), -127.2, 1.2, 1.0, 0.25);
   wet(b, 132.2, y(132.2, -122.9), -122.9, 0.9, 0.8, 0.22);
+  // F4 (judge 2 #8 "the quay apron is clean concrete"): age along the whole working quay, not just the fish end —
+  // oil drips and rust blooms, two lanes of tyre-darkened concrete where the straddle carriers and lorries run,
+  // pale patch repairs, rusty bleed round the bollards, guano under the lamp heads, damp along the edge
+  {
+    let sd = 4242;
+    const rr = () => ((sd = (sd * 16807) % 2147483647) / 2147483647);
+    const clearRail = (x: number, w: number) => Math.abs(x - 128) > w / 2 + 0.3 && Math.abs(x - 135) > w / 2 + 0.3;
+    for (let z = -120; z < -12; z += 2.2 + rr() * 2.5) {
+      // traffic lanes: long faint dark smears with lighter scuffs between
+      for (const lx of [126.4, 131.5]) {
+        const w = 1.0 + rr() * 0.6;
+        if (clearRail(lx, w)) stain(b, lx + (rr() - 0.5) * 0.4, y(lx, z), z + 1.2, w, 1.8 + rr() * 0.35, rr() < 0.5 ? '#5b5d5a' : '#666761', 0.35 + rr() * 0.3, 0.011);
+      }
+      const k = rr();
+      const x = 126 + rr() * 9.5,
+        w = 0.5 + rr() * 1.4,
+        d = 0.5 + rr() * 1.6;
+      if (!clearRail(x, w)) continue;
+      if (k < 0.35) stain(b, x, y(x, z), z, w, d, '#2f2e2b', 0.3 + rr() * 0.3, 0.022); // oil
+      else if (k < 0.55) stain(b, x, y(x, z), z, w * 0.7, d * 0.7, '#6b4a30', 0.4, 0.022); // rust bloom
+      else if (k < 0.7) {
+        b.color(rr() < 0.5 ? '#a7a59c' : '#9b998f').pat(PAT.NONE); // cement patch repair, slightly proud, square
+        b.box(x, y(x, z) + 0.008, z, w, 0.016, d * 0.8, 0, 0);
+      } else if (k < 0.8) wet(b, x, y(x, z), z, w, d, 0.3);
+    }
+    // the edge: bollard rust bleed, guano, a damp band along the coping
+    for (let z = -138; z < -10; z += 13) {
+      stain(b, 135.3, y(135.3, z), z, 0.9, 1.2, '#6a4a2e', 0.5, 0.024);
+      if (rr() < 0.6) stain(b, 134.4, y(134.4, z + 3), z + 3, 0.6, 0.6, '#d8d6cc', 0.5, 0.026);
+    }
+    for (let z = -118; z < -24; z += 6) stain(b, 135.6, y(135.6, z), z + 3, 0.5, 5.8, '#55605c', 0.4, 0.013);
+  }
   // a few spilled bits: a dropped glove, rope ends, a crushed can, a gull feather — the life between jobs
   b.color('#e3622a');
   b.box(132.7, y(132.7, -126.1) + 0.012, -126.1, 0.11, 0.024, 0.22, 0.5, 0);

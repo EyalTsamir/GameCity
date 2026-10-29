@@ -60,6 +60,8 @@ export class ClothSystem {
   private bulbs: { line: number; s: number; drop: number; r: number; col: string }[] = [];
   readonly uniforms = { uLifeFarFlutter: { value: 220 }, uClothTrans: { value: 1.1 }, uLifePxK: { value: 0.001 }, uBulbGain: { value: 0 }, uBulbNight: { value: 0 } };
   clothMesh: THREE.Mesh | null = null;
+  /** plain pieces (4 × 4 grid) and draped laundry (8 × 5) */
+  clothMeshes: THREE.Mesh[] = [];
   wireMesh: THREE.Mesh | null = null;
   bulbMesh: THREE.Mesh | null = null;
   tris = 0;
@@ -133,49 +135,54 @@ export class ClothSystem {
 
   // ───────────────────────────────────────────────────────────── cloth ──
   private buildCloth(shared: Record<string, { value: unknown }>, sphere: THREE.Sphere): void {
-    // 8 × 5: enough columns for the vertical drape folds of laundry (4 × 4 before F4)
-    const NU = 8,
-      NV = 5;
-    const base = new THREE.PlaneGeometry(1, 1, NU, NV);
-    // remap the plane to (u, v) ∈ [0,1]² with v growing away from the hinge
-    const pos = base.getAttribute('position') as THREE.BufferAttribute;
-    for (let i = 0; i < pos.count; i++) pos.setXYZ(i, pos.getX(i) + 0.5, 0.5 - pos.getY(i), 0);
-    const geo = new THREE.InstancedBufferGeometry();
-    geo.index = base.index;
-    geo.setAttribute('position', pos);
-    geo.setAttribute('normal', base.getAttribute('normal'));
-    const n = this.pieces.length;
-    const P0 = new Float32Array(n * 4),
-      P1 = new Float32Array(n * 4),
-      PC = new Float32Array(n * 4),
-      MI = new Float32Array(n * 4),
-      C1 = new Float32Array(n * 4),
-      C2 = new Float32Array(n * 4);
-    this.pieces.forEach((p, i) => {
-      const o = p.o;
-      if (p.pole) {
-        P0.set([p.pole.top.x, p.pole.top.y, p.pole.top.z, 0], i * 4);
-        P1.set([p.pole.bottom.x, p.pole.bottom.y, p.pole.bottom.z, 0], i * 4);
-      } else {
-        const l = this.lines[p.line];
-        P0.set([l.ax, l.ay, l.az, l.sag], i * 4);
-        P1.set([l.bx, l.by, l.bz, l.seed], i * 4);
-      }
-      PC.set([p.s, o.w, o.len, o.shape], i * 4);
-      MI.set([o.phase ?? (i * 2.399) % 6.283, o.weight ?? 1, p.pole ? 1 : 0, o.flutter ?? 1], i * 4);
-      _c.set(o.col);
-      C1.set([_c.r, _c.g, _c.b, o.pattern ?? 0], i * 4);
-      _c.set(o.col2 ?? o.col);
-      C2.set([_c.r, _c.g, _c.b, o.drape ?? 0], i * 4);
-    });
-    geo.setAttribute('aP0', new THREE.InstancedBufferAttribute(P0, 4));
-    geo.setAttribute('aP1', new THREE.InstancedBufferAttribute(P1, 4));
-    geo.setAttribute('aPiece', new THREE.InstancedBufferAttribute(PC, 4));
-    geo.setAttribute('aMisc', new THREE.InstancedBufferAttribute(MI, 4));
-    geo.setAttribute('aCol', new THREE.InstancedBufferAttribute(C1, 4));
-    geo.setAttribute('aCol2', new THREE.InstancedBufferAttribute(C2, 4));
-    geo.instanceCount = n;
-    geo.boundingSphere = sphere.clone();
+    // two grids: draped laundry needs columns for its folds (8 × 5); pennants, flags and pegs stay 4 × 4
+    const makeGeo = (list: typeof this.pieces, NU: number, NV: number): THREE.InstancedBufferGeometry => {
+      const base = new THREE.PlaneGeometry(1, 1, NU, NV);
+      // remap the plane to (u, v) ∈ [0,1]² with v growing away from the hinge
+      const pos = base.getAttribute('position') as THREE.BufferAttribute;
+      for (let i = 0; i < pos.count; i++) pos.setXYZ(i, pos.getX(i) + 0.5, 0.5 - pos.getY(i), 0);
+      const geo = new THREE.InstancedBufferGeometry();
+      geo.index = base.index;
+      geo.setAttribute('position', pos);
+      geo.setAttribute('normal', base.getAttribute('normal'));
+      const n = list.length;
+      const P0 = new Float32Array(n * 4),
+        P1 = new Float32Array(n * 4),
+        PC = new Float32Array(n * 4),
+        MI = new Float32Array(n * 4),
+        C1 = new Float32Array(n * 4),
+        C2 = new Float32Array(n * 4);
+      list.forEach((p, i) => {
+        const o = p.o;
+        if (p.pole) {
+          P0.set([p.pole.top.x, p.pole.top.y, p.pole.top.z, 0], i * 4);
+          P1.set([p.pole.bottom.x, p.pole.bottom.y, p.pole.bottom.z, 0], i * 4);
+        } else {
+          const l = this.lines[p.line];
+          P0.set([l.ax, l.ay, l.az, l.sag], i * 4);
+          P1.set([l.bx, l.by, l.bz, l.seed], i * 4);
+        }
+        PC.set([p.s, o.w, o.len, o.shape], i * 4);
+        MI.set([o.phase ?? (i * 2.399) % 6.283, o.weight ?? 1, p.pole ? 1 : 0, o.flutter ?? 1], i * 4);
+        _c.set(o.col);
+        C1.set([_c.r, _c.g, _c.b, o.pattern ?? 0], i * 4);
+        _c.set(o.col2 ?? o.col);
+        C2.set([_c.r, _c.g, _c.b, o.drape ?? 0], i * 4);
+      });
+      geo.setAttribute('aP0', new THREE.InstancedBufferAttribute(P0, 4));
+      geo.setAttribute('aP1', new THREE.InstancedBufferAttribute(P1, 4));
+      geo.setAttribute('aPiece', new THREE.InstancedBufferAttribute(PC, 4));
+      geo.setAttribute('aMisc', new THREE.InstancedBufferAttribute(MI, 4));
+      geo.setAttribute('aCol', new THREE.InstancedBufferAttribute(C1, 4));
+      geo.setAttribute('aCol2', new THREE.InstancedBufferAttribute(C2, 4));
+      geo.instanceCount = n;
+      geo.boundingSphere = sphere.clone();
+      this.tris += n * NU * NV * 2;
+      this.verts += n * (NU + 1) * (NV + 1);
+      return geo;
+    };
+    const draped = this.pieces.filter((p) => p.o.drape && p.o.shape !== SHAPE.PEG);
+    const plain = this.pieces.filter((p) => !(p.o.drape && p.o.shape !== SHAPE.PEG));
 
     const vertexMain = /* glsl */ `
       vec3 lifeP, lifeN;
@@ -232,17 +239,19 @@ void RE_Direct_Cloth( const in IncidentLight directLight, const in vec3 geometry
     };
     depth.customProgramCacheKey = () => 'life-cloth-depth-1';
 
-    const mesh = new THREE.Mesh(geo, mat);
-    mesh.name = 'life-cloth';
-    mesh.customDepthMaterial = depth;
-    mesh.castShadow = true;
-    mesh.receiveShadow = true;
-    mesh.frustumCulled = true;
-    mesh.matrixAutoUpdate = false;
-    this.group.add(mesh);
-    this.clothMesh = mesh;
-    this.tris += n * NU * NV * 2;
-    this.verts += n * (NU + 1) * (NV + 1);
+    for (const [list, NU, NV] of [[plain, 4, 4], [draped, 8, 5]] as const) {
+      if (!list.length) continue;
+      const mesh = new THREE.Mesh(makeGeo(list, NU, NV), mat);
+      mesh.name = 'life-cloth';
+      mesh.customDepthMaterial = depth;
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      mesh.frustumCulled = true;
+      mesh.matrixAutoUpdate = false;
+      this.group.add(mesh);
+      this.clothMeshes.push(mesh);
+      this.clothMesh ??= mesh;
+    }
   }
 
   // ───────────────────────────────────────────────────────────── wires ──

@@ -8,7 +8,12 @@ sim/rail/station.ts.
 * Session 1 WIP (code written, judging in progress — shots/f4/b1 = first batch, mostly pre-change code).
   Written: all bugs 2–6, 8, 9; cloth (awning, laundry drape + pegs, bunting); sailboat cabin/cockpit/rails + sail
   seams/battens; tractor see-through cab + interior; forklift rebuilt; painted-metal age; night-market shroud.
-  Not yet: back yard as a place; quay apron stains; site mud/ruts (construction.ts); newsstand font/titles.
+  Then added: back yard (fence, patio, shed, pots, sandpit, ball, kid's bike), quay apron age, site mud/ruts/puddles
+  (construction.ts), newsstand one-title-per-stack (24 mastheads), corrugated rust as streaks, cloth split into
+  two meshes (plain 4×4 / draped laundry 8×5). Verified (shots/f4/b2): bug 9 board clear of columns, bug 4 wheels,
+  bug 5 tails to the ground, bug 2 no tree in the barn, herd near LOD; console clean, invariants {} (camera only).
+  Open: bug 2 "floating poplar clumps" persist at fs1 (not crown spacing — check ?nodrift / far impostor);
+  views by1/mk1/fk put the camera inside geometry → use shots/f4/b3 views. Judge b3 + bench1 next.
 
 ## Done
 * Bug 2 (tree through barn roof): settlements.ts now returns `blocked(x,z,r)` (building rects + 1 m, barns + 6 m
@@ -47,6 +52,10 @@ sim/rail/station.ts.
 ## Tried and rejected
 
 ## Toggles / tiers / costs
+* Cloth cost: pieces 2207 (incl. ~1000 pegs). Before F4 one 4×4 mesh ≈ 70k tris; single 8×5 mesh was 188k →
+  split into plain 4×4 + draped 8×5 (+1 draw, +1 shadow draw) ≈ 50k + 52k.
+* Market stall canopy 8×4 → 16×6 + hem: ≈ +0.45k tris/stall (20 stalls ≈ +9k).
+* Rack bikes (bikeLite) tube tyres: +~160 tris per bike.
 * `?nonightmarket` (off on low). Others ride existing toggles (`?nostallwind` keeps the cloth static).
 
 ## Code pointers (learned this session)

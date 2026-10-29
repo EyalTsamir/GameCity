@@ -63,7 +63,7 @@ export default function create(ctx: CityContext): CityModule {
       if (decor.balcony > 0) buildings?.setStaticLaundry?.(false);
       if (extras && extras.dryerItems > 0) (ctx.services.props as { setStaticLaundry?(on: boolean): void } | undefined)?.setStaticLaundry?.(false);
       const setShadows = () => {
-        if (cloth.clothMesh) cloth.clothMesh.castShadow = ctx.quality.shadows && ctx.quality.level !== 'low';
+        for (const m of cloth.clothMeshes) m.castShadow = ctx.quality.shadows && ctx.quality.level !== 'low';
       };
       setShadows();
       ctx.events.on('quality', setShadows);

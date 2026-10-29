@@ -631,7 +631,7 @@ export function phonebox(k: Kit, g?: Kit): void {
  * depth (counter with paper stacks, shelves of covers inside, the roll shutter coiled in its box above),
  * wire magazine racks with tilted covers on both sides, an overhanging roof with fascia, a lit sign.
  */
-const MASTHEADS = ['STYLE', 'AUTO', 'GOLF', 'TIME', 'CHEF', 'HOME', 'SPORT', 'KIDS', 'TECH', 'FILM', 'VOGA', 'NEWS', 'BIKE', 'CASA'];
+const MASTHEADS = ['STYLE', 'AUTO', 'GOLF', 'TIME', 'CHEF', 'HOME', 'SPORT', 'KIDS', 'TECH', 'FILM', 'VOGA', 'NEWS', 'BIKE', 'CASA', 'GARDEN', 'YACHT', 'MOTOR', 'WOMAN', 'PUZZLE', 'TRAVEL', 'MUSIC', 'HEALTH', 'GAMES', 'FARM'];
 const SKIN = ['#e9b99a', '#c98f6a', '#8d5a3b', '#f1cdb4'];
 
 /**
@@ -639,7 +639,7 @@ const SKIN = ['#e9b99a', '#c98f6a', '#8d5a3b', '#f1cdb4'];
  * a car / a dish), the masthead in a contrasting colour across the top, cover lines and a price corner.
  * plain = a cover behind others (only its colour and masthead band show).
  */
-function cover(k: Kit, rng: Rng, w: number, h: number, plain = false): void {
+function cover(k: Kit, rng: Rng, w: number, h: number, plain = false, title?: string): void {
   const sh = k.sh,
     S = 1 | 2 | 4 | 16 | 32;
   const paper = rng.pick(['#f4f1ea', '#e63946', '#1d3557', '#f2c230', '#222426', '#e8649a', '#2a9d8f', '#f4a261']);
@@ -687,7 +687,7 @@ function cover(k: Kit, rng: Rng, w: number, h: number, plain = false): void {
   }
   // masthead across the top, cover lines on the left, price corner
   k.m(ink, 'plastic');
-  const t = rng.pick(MASTHEADS),
+  const t = title ?? rng.pick(MASTHEADS),
     px = Math.min(h * 0.045, (w * 0.9) / (t.length * 4 - 1));
   pixelText(sh, t, 0, h / 2 - px * 3.4, 0.0096, px, 0.0006, true);
   for (let i = 0; i < 3; i++) sh.box(-w * 0.18, py + ph * 0.3 - i * h * 0.07, 0.0096, w * (0.42 - i * 0.07), h * 0.025, 0.0006, S);
@@ -747,6 +747,13 @@ export function newsstand(k: Kit, rng: Rng): void {
   sh.box(0, 1.65 - drop, 0.515, 1.52, 0.03, 0.03, 0);
   sh.box(0, 1.62 - drop, 0.535, 0.16, 0.015, 0.015, 0);
   // wire magazine racks on both sides: tiered trays with a front wire, covers stacked and leaning back
+  // each stack is one title (as on a real rack); no title twice on the stand (F4, judge 2 "repeated titles")
+  const titles = MASTHEADS.slice();
+  for (let i = titles.length - 1; i > 0; i--) {
+    const j = rng.int(0, i);
+    [titles[i], titles[j]] = [titles[j], titles[i]];
+  }
+  let ti = 0;
   for (const sx of [-1, 1]) {
     sh.push().local(sx * 0.9, 0, -0.05, 0, (sx * Math.PI) / 2);
     for (let r = 0; r < 3; r++) {
@@ -758,9 +765,10 @@ export function newsstand(k: Kit, rng: Rng): void {
       for (const x of [-0.5, -0.17, 0.17, 0.5]) sh.box(x, y + 0.03, 0.17, 0.008, 0.06, 0.008, 0);
       for (let c = 0; c < 3; c++) {
         const n = rng.int(2, 4);
+        const tt = titles[ti++ % titles.length];
         for (let j = 0; j < n; j++) {
           sh.push().local(-0.33 + c * 0.33 + rng.range(-0.015, 0.015), y + 0.15, 0.05 + j * 0.018, -0.2 + j * 0.03);
-          cover(k, rng, 0.24, 0.3, j < n - 1);
+          cover(k, rng, 0.24, 0.3, j < n - 1, tt);
           sh.pop();
         }
       }

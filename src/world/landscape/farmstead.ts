@@ -437,8 +437,9 @@ float gFsRough;`,
     float aw = clamp(1.6 - fu * 82.7, 0.0, 1.0);
     float w = sin(u * 82.7) * aw;
     float lap = smoothstep(0.02, 0.0, abs(fract(u / 0.9) - 0.5) - 0.48) * clamp(1.5 - fu * 40.0, 0.0, 1.0);
-    float rust = smoothstep(0.55, 0.8, fsN(vec3(u * 2.0, p.y * 0.6, 0.0)) + 0.3 * fsN(vec3(u * 9.0, p.y * 0.2, 4.0)));
-    diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.28, 0.12, 0.05), rust * 0.55);
+    // rust runs down the sheets in narrow streaks along the fall line (broad blobs read as camouflage at 30 m)
+    float rust = smoothstep(0.62, 0.85, fsN(vec3(u * 4.0, p.y * 0.35, 0.0)) + 0.3 * fsN(vec3(u * 11.0, p.y * 0.2, 4.0)));
+    diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.28, 0.12, 0.05), rust * 0.42);
     diffuseColor.rgb *= 0.9 + 0.12 * w * aa - 0.25 * lap * aa;
     gFsBump = w * 0.006 * aa;
     gFsRough = mix(vRM.x, 0.85, rust);
