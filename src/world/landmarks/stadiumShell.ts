@@ -186,33 +186,36 @@ export function stadiumShell(env: Env, sp: ShellSpec): void {
     for (const u of gates) {
       const [ax, az] = L(u - 1.68, W - 0.3);
       const [bx, bz] = L(u + 1.68, W - 0.3);
-      railing(env, [ax, 0, az], [bx, 0, bz], 3.2, vest ? '#2c5a44' : '#2a3230');
-      if (vest) {
+      if (!vest) railing(env, [ax, 0, az], [bx, 0, bz], 3.2, '#2a3230');
+      else {
+        // the stand's stepped mass starts right behind the 0.5 m wall: a shallow lit lobby at the back of the
+        // reveal — concrete panel, a dark tunnel up into the stand, a pay sign, two turnstile cabinets with
+        // tri-arms — and the green gate leaves folded back against the reveal sides
         const D = env.D;
         const dbox = (m: Mat, w: number, h: number, d: number, uu: number, y: number, dep: number) => {
           const [x, z] = L(uu, dep);
           D.box(m, w, h, d, x, y, z, ry);
         };
-        dbox(concrete, 3.9, 3.9, 0.12, u, 0, W - 2.7);
-        for (const e of [-1, 1]) dbox(concrete, 0.12, 3.9, 2.3, u + e * 1.9, 0, W - 1.6);
-        dbox(concrete, 3.9, 0.12, 2.3, u, 3.8, W - 1.6);
-        dbox(conFloor, 3.9, 0.03, 2.3, u, 0, W - 1.6);
-        for (const cu of [-1.6, -0.55, 0.55, 1.6]) {
-          dbox(steel, 0.3, 1.0, 0.85, u + cu, 0, W - 1.7);
-          dbox(M('#2b2e31', PAT.PLAIN, 0.4), 0.32, 0.04, 0.87, u + cu, 1.0, W - 1.7);
-          if (cu > 1) continue;
-          // tri-arm on the cabinet's right side, one arm barring the lane
-          const [hx, hz] = L(u + cu + 0.17, W - 1.7);
+        dbox(concrete, 3.8, 4.4, 0.04, u, 0, W - 0.47);
+        dbox(M('#202326', PAT.PLAIN, 0.9), 1.3, 2.2, 0.02, u, 0, W - 0.445);
+        dbox(conFloor, 3.6, 0.03, 0.5, u, 0, W - 0.24);
+        for (const e of [-1, 1]) {
+          dbox(steel, 0.3, 1.0, 0.32, u + e * 1.05, 0, W - 0.28);
+          dbox(M('#2b2e31', PAT.PLAIN, 0.4), 0.32, 0.04, 0.34, u + e * 1.05, 1.0, W - 0.28);
+          const [hx, hz] = L(u + e * 0.88, W - 0.28);
           for (let a = 0; a < 3; a++) {
-            const t = a * 2.094 + 0.3;
-            const [tx, tz] = L(u + cu + 0.17 + Math.cos(t) * 0.42, W - 1.7 + Math.sin(t) * 0.12);
-            D.rod(steel, [hx, 0.92, hz], [tx, 0.92 - Math.sin(t) * 0.3, tz], 0.018, 5);
+            const t = a * 2.094 + 0.4;
+            const [tx, tz] = L(u + e * (0.88 - Math.abs(Math.cos(t)) * 0.4), W - 0.28 + Math.sin(t) * 0.1);
+            D.rod(steel, [hx, 0.92, hz], [tx, 0.92 - Math.sin(t) * 0.25, tz], 0.018, 5);
           }
+          const [ga, gaz] = L(u + e * 1.62, W - 0.02);
+          const [gb, gbz] = L(u + e * 1.62, W - 0.42);
+          railing(env, [ga, 0, gaz], [gb, 0, gbz], 3.0, '#2c5a44');
         }
-        const [px, pz] = L(u, W - 2.62);
-        signQuad(env.T, payHere, 2.4, 0.4, px, 2.8, pz, ry, 0.7);
-        const [lx, lz] = L(u, W - 1.6);
-        env.L.box(LM('#fff2d6', LMODE.ALWAYS, 1.6, u), 1.4, 0.04, 0.2, lx, 3.74, lz, ry);
+        const [px, pz] = L(u, W - 0.44);
+        signQuad(env.T, payHere, 2.4, 0.4, px, 2.45, pz, ry, 0.7);
+        const [lx, lz] = L(u, W - 0.42);
+        env.L.box(LM('#fff2d6', LMODE.ALWAYS, 1.6, u), 1.2, 0.05, 0.06, lx, 2.72, lz, ry);
       }
       const letter = String.fromCharCode(65 + gateNo++);
       const [sx, sz] = L(u, W + 0.05);

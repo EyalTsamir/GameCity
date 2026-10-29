@@ -497,11 +497,11 @@ function churchInterior(env: Env, d: { NW: number; nz0: number; nz1: number; eav
   // sanctuary at the nave's east wall (the chancel behind it is closed off): a two-step marble dais with a
   // communion rail, the altar on it and a gilt-framed painted reredos on the wall
   const ay = 0.3;
-  D.box(marble, 4.6, 0.15, 1.9, 0, 0, nz0 + 0.95);
-  D.box(marble, 4.2, 0.15, 1.6, 0, 0.15, nz0 + 0.8);
+  D.box(marble, 4.6, 0.15, 1.6, 0, 0, nz0 + 1.25);
+  D.box(marble, 4.2, 0.15, 1.35, 0, 0.15, nz0 + 1.25);
   for (const sx of [-1, 1]) {
-    D.box(oakDark, 1.5, 0.06, 0.1, sx * 1.4, 0.82, nz0 + 2.05);
-    for (let k = 0; k < 6; k++) D.cyl(gilt, 0.025, 0.025, 0.76, sx * (0.75 + k * 0.26), 0.03, nz0 + 2.05, 6);
+    D.box(oakDark, 1.5, 0.06, 0.1, sx * 1.4, 0.82, nz0 + 2.12);
+    for (let k = 0; k < 6; k++) D.cyl(gilt, 0.025, 0.025, 0.76, sx * (0.75 + k * 0.26), 0.03, nz0 + 2.12, 6);
   }
   const reredos = env.atlas.add(96, 120, (g, w, h) => {
     const gr = g.createLinearGradient(0, 0, 0, h);
@@ -532,12 +532,12 @@ function churchInterior(env: Env, d: { NW: number; nz0: number; nz1: number; eav
     panel(36, 24, '#efeae0', 14);
     panel(66, 24, '#3f6b35', 30);
   });
-  D.box(gilt, 2.5, 3.1, 0.08, 0, ay + 1.2, nz0 + 0.36);
-  D.boxC(gilt, 1.5, 0.12, 0.1, -0.62, ay + 4.48, nz0 + 0.37, 0, 0, 0.5);
-  D.boxC(gilt, 1.5, 0.12, 0.1, 0.62, ay + 4.48, nz0 + 0.37, 0, 0, -0.5);
-  signQuad(env.T, reredos, 2.2, 2.75, 0, ay + 2.75, nz0 + 0.41, 0, 0);
+  D.box(gilt, 2.5, 3.1, 0.08, 0, ay + 1.2, nz0 + 0.64);
+  D.boxC(gilt, 1.5, 0.12, 0.1, -0.62, ay + 4.48, nz0 + 0.65, 0, 0, 0.5);
+  D.boxC(gilt, 1.5, 0.12, 0.1, 0.62, ay + 4.48, nz0 + 0.65, 0, 0, -0.5);
+  signQuad(env.T, reredos, 2.2, 2.75, 0, ay + 2.75, nz0 + 0.69, 0, 0);
   // altar: stone table, linen with a front drape and a red frontal, candles, a gilt cross
-  const ax = nz0 + 0.95;
+  const ax = nz0 + 1.15;
   D.box(M('#cfc6b4', PAT.STONE, 0.8, 0, 0, 0, 0.4), 2.0, 0.92, 0.8, 0, ay, ax);
   D.box(linen, 2.1, 0.03, 0.9, 0, ay + 0.92, ax);
   D.box(linen, 2.1, 0.4, 0.02, 0, ay + 0.54, ax + 0.45);
