@@ -6,7 +6,7 @@
 All 8 items pushed. Verified: platform with a standing train keeps ~6–8 people (`real/g3_platform_train_in.jpg`,
 forced `train:arrive`), rack bike spoked wheels + drive side (`real/g3_bikerack_3m.jpg`), downtown console clean +
 invariants {} (11:10 code). Not verified by capture (software GL ≈ 8–12 min per warmed view here): info-board
-faces, pram, shirt V, group gap, bark, Northgate vent (c.png run may land after the deadline). Next: capture those
+faces, pram, shirt V, group gap, bark. Northgate smoke: NOT fixed for that roof (see item 4). Next: capture those
 (shots/g3/shot.mjs `out.png "x,y,z,d,yaw,pitch|…" hours q mode`, mode 2 = force a standing train) and tune.
 
 ### Done
@@ -24,6 +24,11 @@ faces, pram, shirt V, group gap, bark, Northgate vent (c.png run may land after 
    `anchors.chimney` → `life/chimneys.ts` 'works'). Vents were placed at one height anywhere on a gable/barrel
    roof, so near the ridge the vent was inside the roof and only the smoke showed. Now `vents()` takes the roof
    height at the vent spot (slope / barrel profile). NB: buildings/** is G1's area — one-function change.
+   **Still OPEN:** the after-capture (`real/g3_northgate_smoke_open.jpg`, view −120,2,−110,55,35,28 at 11 h) still
+   shows puffs over the low-pitch grey roof on the right with no vent visible, so that plume has another source
+   (or the vent geometry is missing there). Trim chunks are frustum-culled only (no distance LOD), and
+   `gen.ts chimney()` always builds its stack, so next: ray-pick / log `ctx.services.buildings.chimneys` near
+   (−93.3, −105.5) (lot kind + which call site) and compare with the roof generator of that lot.
 
 5. **Shirt "bib / jagged star"** (judge 3 #7) — `sim/pedestrians/shader.ts` torso: with a jacket the shirt V was
    chosen per vertex (`up = top` when aux.x < vw; the neck-cap apex counts as front) → colour interpolation drew a
