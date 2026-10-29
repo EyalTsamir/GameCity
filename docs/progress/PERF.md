@@ -3,6 +3,34 @@
 Branch `claude/pensive-gates-bim12i`. Budget file: `perf-results.txt` (repo root). Earlier perf rounds are kept below
 ("Earlier round: render-performance pass").
 
+## Quick-wins round (2026-10-29 evening, branch claude/perf-wins-a4bce3, from 024d901)
+Parallel to the explore-camera and walk-mode sessions (they own src/ui/camera*, HUD); merged later by the lead.
+Method: frozen baseline worktree of 024d901 on :5184 vs this worktree on :5181; runtime A/B in ONE page load with a
+scratch tool that alternates base / variant windows (frame intervals with vsync + GPU timer queries, uncapped for GPU
+ms) and can patch a mesh's shader at runtime (string substitutions + new program cache key); shader compile time
+measured standalone (dumped GLSL, fresh profile, variants interleaved). Sibling sessions share the GPU: numbers are
+compared within one run only.
+
+### Findings
+- **Departure board = the platform's stutter.** Freezing its texture uploads: outliers 7.7 → 0.5 per 8 s window, p99
+  83 → 58 ms, GPU −3.1 ms. Cause: copying a GPU-backed 2D canvas into an sRGB texture is Chrome's slow path (read
+  back + re-upload) — the same uploads into a linear texture cost nothing (outliers 0, GPU = no uploads). Mipmaps
+  are not the problem (sRGB without mipmaps still stutters).
+- **Facade compile** (≈ 20 s of the 26 s fresh boot): stubbing bhShop (shop / lobby interiors) cuts the program's
+  compile 21 → 8.4 s; bhRoom −2.6, bhOpp 0, bhRoof −0.6; without bhWall 0.95 s. The D3D compiler inlines every
+  call: bhShop had 2 call sites, bhShelves 9 (inside bhShop).
+- Land (overview, base 49.2 ms GPU): albedo 8.5 ms in total, field crops 2.8, sand 1.1, rock 0.4, banks 0.25;
+  IBL 1.5, fog 1.6, sun + shadow 2.8 (cycle-2 numbers of a noisy run). Early-outs for sand/rock/banks ≤ 1.7 ms.
+- hideprof's "harbor-river 3.6 ms at the market" was noise: alternating A/B shows 0.
+
+### Changes
+1. `src/sim/rail/signs.ts`: the sign atlas canvas is CPU-backed (`willReadFrequently`) — the upload is a plain
+   CPU→GPU copy. Platform 12 h (vsync, A/B in one page): outliers 0 (was 8 per 8 s), p99 56 ms (83), max 67 (100–117),
+   GPU = the no-upload number.
+2. `src/world/buildings/materials.ts`: one bhShop call site (shop / lobby arguments selected first) and one bhShelves
+   call site (per-wall parameters first) — same maths, fewer inlined copies. Facade program compile, interleaved
+   ×3: 14.0 s avg (13.2 / 14.0 / 14.9) vs 18.5 s (14.4 / 18.5 / 22.7).
+
 ## Resume here (round closed 2026-10-29 ~20:00)
 **Done:** final same-run verification (original 8718d0f vs final 729b6a7) → docs/progress/PERF-REPORT.md (Hebrew) and
 the "AFTER" section of perf-results.txt (= the new budget). Everything pushed to claude/pensive-gates-bim12i.

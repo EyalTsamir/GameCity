@@ -604,11 +604,31 @@ vec3 bhShop(vec2 pm, vec2 csz, vec3 rd, float rs, float shopT, float litI, vec3 
   vec3 c;
   float lf = 0.85;
   float self = 0.0; // self-lit (lamp bulbs)
+  // shelving: its parameters per wall and type first, then ONE call (the D3D compiler inlines every call site,
+  // and nine copies of bhShelves made this function the slowest part of the facade program to compile)
+  float shK = -1.0, shRs = rs, shY0 = 0.0, shY1 = 0.0, shRow = 1.0;
+  if (onBack) {
+    if (T < 1.5) { if (h.y >= 1.1) { shK = 2.0; shY0 = 1.25; shY1 = min(Hc - 0.5, 2.6); shRow = 0.42; } }
+    else if (T < 2.5) { shK = deli > 0.5 ? 0.0 : 3.0; shY0 = 0.9; shY1 = min(Hc - 0.4, 2.5); shRow = 0.36; }
+    else if (T < 3.5) { shK = 1.0; shY0 = 0.15; shY1 = Hc - 0.25; shRow = 0.34; }
+    else if (T < 4.5) {}
+    else if (T < 5.5) { shK = 0.0; shY0 = 0.4; shY1 = min(Hc - 0.5, 2.4); shRow = 0.45; }
+    else if (T < 6.5) { shK = 0.0; shY0 = 0.2; shY1 = min(Hc - 0.4, 2.4); shRow = 0.36; }
+  } else if (!onFlat) {
+    shRs = rs + 5.0;
+    if (T > 2.5 && T < 3.5) { shK = 1.0; shY0 = 0.15; shY1 = Hc - 0.25; shRow = 0.34; }
+    else if (T > 5.5 && T < 6.5) { shK = 0.0; shY0 = 0.2; shY1 = min(Hc - 0.4, 2.4); shRow = 0.36; }
+    else if (T < 1.5) {}
+    else if (T < 2.5) { shK = deli > 0.5 ? 0.0 : 3.0; shY0 = 0.9; shY1 = min(Hc - 0.4, 2.3); shRow = 0.36; }
+    else if (T < 5.5 && T > 4.5) { shK = 0.0; shY0 = 0.5; shY1 = min(Hc - 0.5, 2.3); shRow = 0.5; }
+  }
+  vec3 shC = wallC;
+  if (shK >= 0.0) shC = bhShelves(onBack ? h.xy : vec2(h.z, h.y), wallC, shK, shRs, shY0, shY1, shRow);
   if (onBack) {
     vec2 q = h.xy;
     c = wallC;
     if (T < 1.5) {
-      c = h.y < 1.1 ? wallC * 0.6 : bhShelves(vec2(q.x, q.y), wallC, 2.0, rs, 1.25, min(Hc - 0.5, 2.6), 0.42);
+      c = h.y < 1.1 ? wallC * 0.6 : shC;
       // menu board
       c = mix(c, vec3(0.12, 0.13, 0.12), bhBox2(q, vec2(W * 0.5, Hc - 0.75), vec2(min(0.6, W * 0.25), 0.3)));
       if (uGlassVar > 0.5) {
@@ -623,8 +643,8 @@ vec3 bhShop(vec2 pm, vec2 csz, vec3 rd, float rs, float shopT, float litI, vec3 
         float cups = bhBox2(vec2(fract((q.x - mxp) / 0.11) * 0.11, q.y), vec2(0.055, 1.6), vec2(0.032, 0.04)) * step(abs(q.x - mxp), 0.27);
         c = mix(c, vec3(0.93, 0.92, 0.9), cups);
       }
-    } else if (T < 2.5) c = bhShelves(q, wallC, deli > 0.5 ? 0.0 : 3.0, rs, 0.9, min(Hc - 0.4, 2.5), 0.36);
-    else if (T < 3.5) c = bhShelves(q, wallC, 1.0, rs, 0.15, Hc - 0.25, 0.34);
+    } else if (T < 2.5) c = shC;
+    else if (T < 3.5) c = shC;
     else if (T < 4.5) {
       // greenery / produce wall
       float n = bhHash12(floor(q * 6.0) + rs);
@@ -634,8 +654,8 @@ vec3 bhShop(vec2 pm, vec2 csz, vec3 rd, float rs, float shopT, float litI, vec3 
       c = mix(c, wallC, step(Hc - 0.6, q.y));
     } else if (T < 5.5) {
       // shelves of folded clothes / shoe boxes on the back wall
-      c = bhShelves(q, wallC, 0.0, rs, 0.4, min(Hc - 0.5, 2.4), 0.45) * mix(1.0, 0.95, step(q.y, 0.4));
-    } else if (T < 6.5) c = bhShelves(q, wallC, 0.0, rs, 0.2, min(Hc - 0.4, 2.4), 0.36);
+      c = shC * mix(1.0, 0.95, step(q.y, 0.4));
+    } else if (T < 6.5) c = shC;
     else if (T > 7.5) {
       // lobby: timber feature wall with a lit logo, stone elsewhere
       // (each bay differs: timber or stone, the logo only on some, artwork on others)
@@ -673,12 +693,12 @@ vec3 bhShop(vec2 pm, vec2 csz, vec3 rd, float rs, float shopT, float litI, vec3 
     // side walls
     vec2 q = vec2(h.z, h.y);
     c = wallC * 0.9;
-    if (T > 2.5 && T < 3.5) c = bhShelves(q, wallC, 1.0, rs + 5.0, 0.15, Hc - 0.25, 0.34) * 0.9;
-    else if (T > 5.5 && T < 6.5) c = bhShelves(q, wallC, 0.0, rs + 5.0, 0.2, min(Hc - 0.4, 2.4), 0.36) * 0.9;
+    if (T > 2.5 && T < 3.5) c = shC * 0.9;
+    else if (T > 5.5 && T < 6.5) c = shC * 0.9;
     // café side walls: dark wainscot + framed prints (bottle shelving on every wall read as a bookshop)
     else if (T < 1.5) c = h.y < 1.1 ? wallC * 0.55 : mix(wallC * 0.95, bhPal(bhHash12(floor(q / vec2(1.6, 1.0)) + rs)) * 0.7, bhBox2(vec2(fract(q.x / 1.6) * 1.6, q.y), vec2(0.8, 1.8), vec2(0.3, 0.24)));
-    else if (T < 2.5) c = bhShelves(q, wallC, deli > 0.5 ? 0.0 : 3.0, rs + 5.0, 0.9, min(Hc - 0.4, 2.3), 0.36) * 0.9;
-    else if (T < 5.5 && T > 4.5) c = bhShelves(q, wallC, 0.0, rs + 5.0, 0.5, min(Hc - 0.5, 2.3), 0.5) * 0.9;
+    else if (T < 2.5) c = shC * 0.9;
+    else if (T < 5.5 && T > 4.5) c = shC * 0.9;
     else if (T > 6.5) c = mix(wallC, bhPal(bhHash12(floor(q / vec2(1.1, 0.9)) + rs)) * 0.8, bhBox2(vec2(fract(q.x / 1.1) * 1.1, q.y), vec2(0.55, 1.6), vec2(0.32, 0.26)));
     lf = 0.65;
   }
@@ -1743,8 +1763,8 @@ void bhWall(inout vec3 albedo, inout float rough, inout float metal, inout vec3 
     rsShop += floor(bayH * 97.0) * 1.913;
     rsLobby = mod(seed, 613.0) * 1.37 + floor(bayH * 97.0) * 1.913;
   }
-  if (uDetail > 0.5 && shopWin) interior = bhShop(pm, csz, normalize(rd), rsShop, shopTR, litI, lcol, dayA);
-  else if (uDetail > 0.5 && lobbyWin) interior = bhShop(pm, csz, normalize(rd), rsLobby, 8.0, litI, vec3(1.0, 0.82, 0.6), dayA);
+  // (one bhShop call site for shops and lobbies: the D3D compiler inlines each one — it is the biggest function)
+  if (uDetail > 0.5 && (shopWin || lobbyWin)) interior = bhShop(pm, csz, normalize(rd), shopWin ? rsShop : rsLobby, shopWin ? shopTR : 8.0, litI, shopWin ? lcol : vec3(1.0, 0.82, 0.6), dayA);
   else if (uDetail > 0.5) {
     interior = bhRoom(pm, csz, normalize(rd), r1 * 31.0 + seed, litI, lcol, prof, style, dayA);
     dayA *= 0.5; // a room by day is several times darker than the street it looks onto (curtains near the glass keep their light)
