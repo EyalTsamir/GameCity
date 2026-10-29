@@ -3,7 +3,7 @@
 ## Resume here
 
 - **Round 2 (overnight backlog from the coordinator)**, branch merged with `claude/pensive-gates-bim12i` at 083a507.
-  Backlog order: 1 station ✔ · 2 river slipway/steps + harbour water stairs · 3 tunnel-portal cuttings · 4 old town
+  Backlog order: 1 station ✔ · 2 river slipway/steps + harbour water stairs ✔ · 3 tunnel-portal cuttings · 4 old town
   (back-yard gate + path, church close (4,3), reeds off the island landing) · 5 town↔countryside edge · 6 REAL-REPORT
   ground items (colonnade dots, cut ledges, gravel relief) · 7 walk audit → fix the 10 weakest spots.
 - Dev server `npx vite --port 5186 --strictPort`; harness from the main checkout with `--url http://127.0.0.1:5186/`.
@@ -19,6 +19,7 @@
 | Pond-island footbridge (Central Park): humped timber bridge (planks, stringers, posts, handrails, stone abutment) from the pond loop to the island; plank landing on piles with a bench | top `-74,0,11,30,120,35`, eye `-74,0.8,9,10,160,8` | `?noislandbridge` |
 | Station front: facade set back 2.5 m (station lot footprint z1 −127.5 → −130, doors moved), granite forecourt flush with the sidewalk, 2-step perron across the three doors (x ±16.5) with cheek blocks + lamp standards, a walk per door | eye `0,2,-128,22,0,6`, side `-12,1.5,-129,12,-55,10` | `?nostationfront` |
 | Rock-cut retaining wall behind the tracks: ashlar wall x −88..33, face z −161.8, 2.7 m, 1.7 m thick, coping, pilasters every ~7.5 m, weep holes; scree suppressed in front of it | track `-20,1.8,-162,9,20,8`, air `-30,2,-162,30,30,35` | `?nocutwall` |
+| Water stairs (`?nowaterstairs`): south river wall by the rowing-club jetty (top landing x 87.7..89.3 on the coping, 11 risers west along the wall face, wet landing at the waterline, handrail); harbour sea wall south of the cargo ship (z −24.6..−31.6, 12 risers north, ladder at z −31 dropped); boat slipway x 99..103 cut through the south river wall (wall-body hole + parapet gap; setts, kerbs, timber skid rails) | slip `95,-0.5,124.5,22,160,15`, harbour `137.2,-0.5,-29,10,-60,25` | `?nowaterstairs` |
 | Old-town lane, block (4,1): archway passage under a gatehouse (stone arch ring, barrel vault, window, lanterns, tiled roof) from the avenue z=−10 into a paved pocket square (y 0.15); raised garden terrace (y 1.05) behind an ashlar retaining wall with coping + balustrade and a recessed 6-riser flight on the archway axis; stepped lane (2×3 risers + landing) down through the north row to the street z=−65 | top `82,1,-37,45,20,55`, square `83.7,1.2,-39,9,0,4`, arch `83.7,2.5,-22,13,0,3`, lane `80,1.5,-50,12,180,3` | `?nooldlane` |
 
 All: `?noplaces`. Detail tier: `quality=low` or `?noplacedetail` → solid parapets instead of balusters, no arch ring / gatehouse windows.
@@ -66,6 +67,10 @@ a few boxes + glow sprites.
 - `src/world/terrain.ts` (service height), `src/world/terrain/masonry.ts` (call + ladders + gaps), `src/world/terrain/railings.ts` (extra callback)
 
 ## Log
+
+- 2026-10-30 — round 2 item 2: water stairs (river + harbour), slipway. masonry.ts `buildWall` got `holes` (wall-body
+  openings, end faces at both hole sides, coping skipped); south parapet takes `places.southParapetGaps`; south and sea
+  ladders filtered by `places.dropLadder`. Boats: stairs/slipway are dry above the waterline only (nav grid).
 
 - 2026-10-30 — round 2 item 1: station forecourt + perron, cutting retaining wall (first try at z −162.6 had cliff-skin
   slabs and scree poking through the face → moved 1.2 m in front of the ridge foot, scree callback in masonry.ts skips

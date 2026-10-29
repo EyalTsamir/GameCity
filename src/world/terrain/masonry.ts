@@ -322,6 +322,8 @@ interface WallSpec {
   pillarA?: boolean;
   pillarB?: boolean;
   course: number;
+  /** openings through the whole wall (arc-length ranges): a slipway (core/places.ts) */
+  holes?: [number, number][];
 }
 
 function buildWall(b: GeoBuilder, w: WallSpec): void {
@@ -339,19 +341,26 @@ function buildWall(b: GeoBuilder, w: WallSpec): void {
     s += Math.abs(t1 - t0) > 0.05 ? 0.5 : 2;
   }
   st.push(L);
+  const holes = w.holes ?? [];
+  for (const [h0, h1] of holes) st.push(h0, h1);
+  st.sort((a, c) => a - c);
+  const inHole = (s0: number, s1: number) => holes.some(([h0, h1]) => (s0 + s1) / 2 > h0 && (s0 + s1) / 2 < h1);
   const back = -thick;
   // water face (ashlar)
   b.color(w.stone).set('aMas', KIND.ashlar, w.course, tx, tz);
   for (let i = 0; i < st.length - 1; i++) {
     const s0 = st[i],
       s1 = st[i + 1];
+    if (s1 - s0 < 1e-4 || inHole(s0, s1)) continue;
     b.quadFacing(P(s0, 0, w.bottom(s0)), P(s1, 0, w.bottom(s1)), P(s1, 0, w.top(s1)), P(s0, 0, w.top(s0)), nx, 0, nz);
   }
   // end cross-sections (at slab edges / free ends)
-  for (const [s, sign] of [
+  const ends: [number, number][] = [
     [0, -1],
     [L, 1],
-  ] as [number, number][]) {
+  ];
+  for (const [h0, h1] of holes) ends.push([h0, 1], [h1, -1]);
+  for (const [s, sign] of ends) {
     const t = w.top(s),
       bt = w.bottom(s);
     b.quadFacing(P(s, 0, bt), P(s, back, bt), P(s, back, t), P(s, 0, t), tx * sign, 0, tz * sign);
@@ -363,6 +372,7 @@ function buildWall(b: GeoBuilder, w: WallSpec): void {
   for (let i = 0; i < st.length - 1; i++) {
     const s0 = st[i],
       s1 = st[i + 1];
+    if (s1 - s0 < 1e-4 || inHole(s0, s1)) continue;
     const y0 = w.top(s0),
       y1 = w.top(s1);
     const h = w.capH;
@@ -371,10 +381,7 @@ function buildWall(b: GeoBuilder, w: WallSpec): void {
     b.quadFacing(P(s0, c1, y0), P(s1, c1, y1), P(s1, c1, y1 + h), P(s0, c1, y0 + h), -nx, 0, -nz);
     b.quadFacing(P(s0, 0, y0), P(s1, 0, y1), P(s1, c0, y1), P(s0, c0, y0), 0, -1, 0);
   }
-  for (const [s, sign] of [
-    [0, -1],
-    [L, 1],
-  ] as [number, number][]) {
+  for (const [s, sign] of ends) {
     const y = w.top(s);
     b.quadFacing(P(s, c0, y), P(s, c1, y), P(s, c1, y + w.capH), P(s, c0, y + w.capH), tx * sign, 0, tz * sign);
   }
@@ -963,7 +970,8 @@ export function createMasonry(ctx: CityContext, model: TerrainModel): MasonryRes
     capOut: 0.12,
     top: () => 0,
     bottom: (s) => bed(SLAB.x0 + s, RIVER.z1 - 0.4),
-    parapet: { h: 0.42, w: 0.34, gaps: sGaps },
+    parapet: { h: 0.42, w: 0.34, gaps: [...sGaps, ...(plan.places?.southParapetGaps ?? []).map(([a, c]) => [a - SLAB.x0, c - SLAB.x0] as [number, number])] },
+    holes: (plan.places?.southWallHoles ?? []).map(([a, c]) => [a - SLAB.x0, c - SLAB.x0] as [number, number]),
     pillarB: true,
     course: 0.52,
   });
@@ -983,8 +991,8 @@ export function createMasonry(ctx: CityContext, model: TerrainModel): MasonryRes
   // ladders (positions shared with the railings module)
   const ladders: LadderSpot[] = [];
   for (const x of [-144, -48, 48, 104]) if (!plan.places?.dropLadder(x, RIVER.z0)) ladders.push({ x, z: RIVER.z0, nx: 0, nz: 1, top: SIDEWALK_Y + 0.2 });
-  for (const x of [-168, -112, -20, 62]) ladders.push({ x, z: RIVER.z1, nx: 0, nz: -1, top: 0.2 });
-  for (const z of [-131, -97, -58, -31, -2]) ladders.push({ x: QUAY_X, z, nx: 1, nz: 0, top: 0.12 });
+  for (const x of [-168, -112, -20, 62]) if (!plan.places?.dropLadder(x, RIVER.z1)) ladders.push({ x, z: RIVER.z1, nx: 0, nz: -1, top: 0.2 });
+  for (const z of [-131, -97, -58, -31, -2]) if (!plan.places?.dropLadder(QUAY_X, z)) ladders.push({ x: QUAY_X, z, nx: 1, nz: 0, top: 0.12 });
 
   // portals
   const boreSamples: { x: number; z: number; roof: number }[] = [];

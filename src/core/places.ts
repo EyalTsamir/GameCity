@@ -19,18 +19,20 @@
 //   station  (?nostationfront)  Central Station: facade set back 2.5 m for a granite forecourt; a two-step perron
 //                          across the three doors with cheek blocks and lamp standards
 //   cutting  (?nocutwall)  a masonry retaining wall with pilasters at the toe of the rock cut behind the tracks
+//   waterstairs (?nowaterstairs)  water stairs down the south river wall by the rowing club and down the harbour
+//                          sea wall (south of the cargo ship), a boat slipway through the south river wall
 //   islandbridge (?noislandbridge)  Central Park: a humped timber footbridge from the pond loop to the island,
 //                          ending on a little landing deck with a bench
 
 import type { CityPlan, Lot, WalkPath, Bench } from './plan';
-import { RIVER, SIDEWALK_Y } from './constants';
+import { QUAY_X, RIVER, SIDEWALK_Y, WATER_LEVEL } from './constants';
 import { RIDGE_FOOT_Z } from './plan';
 import { P2, Rect, rect } from './geom';
 import { hashString } from './rng';
 
 const params = typeof location !== 'undefined' ? new URLSearchParams(location.search) : new URLSearchParams();
 
-export type PlaceId = 'lowquay' | 'oldlane' | 'islandbridge' | 'station' | 'cutting';
+export type PlaceId = 'lowquay' | 'oldlane' | 'islandbridge' | 'station' | 'cutting' | 'waterstairs';
 
 /** a straight flight: `n` risers between yBot and yTop, rising along `axis` in direction `up` */
 export interface PlaceStair {
@@ -132,6 +134,28 @@ export interface CuttingPlace {
   top: number;
 }
 
+/** a flight down a quay wall into the water: top landing flush with the coping, steps, a wet landing at the waterline */
+export interface WaterStairs {
+  id: string;
+  /** wall line + outward (water) normal; the flight runs along the wall */
+  stair: PlaceStair;
+  top: Rect;
+  topY: number;
+  bottom: Rect;
+  bottomY: number;
+  /** footprint of the whole thing in front of the wall (body from the bed) */
+  body: Rect;
+  /** outer edge (handrail line) — side facing the water */
+  railSide: 'x0' | 'x1' | 'z0' | 'z1';
+}
+
+/** a boat slipway cut through the south river wall */
+export interface Slipway {
+  ramp: PlaceRamp;
+  /** under-water toe */
+  toeY: number;
+}
+
 export interface PlacesDef {
   on: Record<PlaceId, boolean>;
   quay: QuayPlace | null;
@@ -139,6 +163,11 @@ export interface PlacesDef {
   island: IslandBridgePlace | null;
   station: StationPlace | null;
   cutting: CuttingPlace | null;
+  waterStairs: WaterStairs[];
+  slipway: Slipway | null;
+  /** parapet gaps on the south river wall (x ranges) and holes through its body (slipway) */
+  southParapetGaps: [number, number][];
+  southWallHoles: [number, number][];
   /** solid thin boxes for the first-person walk (balustrades, handrails, cheek walls) */
   walls: Rect[];
   /** promenade railing gaps on the north river wall (stair landings) */
@@ -488,6 +517,73 @@ function buildCutting(): CuttingPlace {
   return { x0: -88, x1: 33, z: RIDGE_FOOT_Z + 1.2, t: 1.7, top: 2.7 };
 }
 
+// ────────────────────────────────────────── river + harbour water stairs ──
+
+function buildWaterWorks(plan: CityPlan, floors: Floor[], stairs: PlaceStair[], ramps: PlaceRamp[], walls: Rect[], boxes: Rect[], dry: Rect[], drops: Rect[]): { ws: WaterStairs[]; slip: Slipway; pGaps: [number, number][]; holes: [number, number][] } {
+  const ws: WaterStairs[] = [];
+  const wet = WATER_LEVEL + 0.15; // bottom landing just clear of the water
+  // 1. south river wall, west of the rowing-club jetty: top landing on the coping (y 0.2) at x 87.7..89.3, flight down
+  //    westwards along the wall face, wet landing at the waterline
+  {
+    const zF = RIVER.z1 - 0.25; // water face of the south wall
+    const zO = zF - 1.6;
+    const topY = 0.19,
+      n = 11;
+    const top = rect(87.7, zO, 89.3, RIVER.z1 + 0.4);
+    const stair: PlaceStair = { rect: rect(87.7 - n * 0.3, zO, 87.7, zF), axis: 'x', up: 1, yBot: wet, yTop: topY, n };
+    const bottom = rect(stair.rect.x0 - 1.6, zO, stair.rect.x0, zF);
+    ws.push({ id: 'river-s', stair, top, topY, bottom, bottomY: wet, body: rect(bottom.x0, zO, top.x1, zF), railSide: 'z0' });
+    walls.push(rect(bottom.x0 + 1.2, zO - 0.08, top.x1, zO + 0.04));
+    const zL = (zO + zF) / 2;
+    addPath(plan, {
+      kind: 'riverbank',
+      pts: [{ x: 88.5, z: RIVER.z1 + 5 }, { x: 88.5, z: RIVER.z1 + 0.6 }, { x: 88.5, z: zL }, { x: stair.rect.x1, z: zL }, { x: stair.rect.x0, z: zL }, { x: bottom.x0 + 0.5, z: zL }],
+      ys: [0.03, 0.03, topY, topY, wet, wet],
+      width: 1.5,
+      surface: 'stone',
+      draw: false,
+    });
+  }
+  // 2. harbour quay, between the cargo ship's stern and the ferry dock: flight north along the sea wall
+  {
+    const xF = QUAY_X + 0.3; // water face of the sea wall
+    const xO = xF + 1.7;
+    const topY = 0.11,
+      n = 12;
+    const top = rect(QUAY_X - 0.6, -26.2, xO, -24.6);
+    const stair: PlaceStair = { rect: rect(xF, -26.2 - n * 0.3, xO, -26.2), axis: 'z', up: 1, yBot: wet, yTop: topY, n };
+    const bottom = rect(xF, stair.rect.z0 - 1.8, xO, stair.rect.z0);
+    ws.push({ id: 'harbour', stair, top, topY, bottom, bottomY: wet, body: rect(xF, bottom.z0, xO, top.z1), railSide: 'x1' });
+    walls.push(rect(xO - 0.04, bottom.z1 - 1.0, xO + 0.08, top.z1));
+    drops.push(rect(QUAY_X - 1, bottom.z0 - 1, QUAY_X + 1, top.z1 + 1));
+  }
+  for (const w of ws) {
+    stairs.push(w.stair);
+    floors.push({ r: w.top, y: w.topY }, { r: w.bottom, y: w.bottomY });
+    boxes.push(rect(w.body.x0 - 0.7, w.body.z0, w.body.x1, w.body.z1 + 0.5));
+    dry.push(w.body);
+  }
+  // 3. slipway east of the rowing club: a ramp from the bank (flush) down through a gap in the south wall into the river
+  const ramp: PlaceRamp = { rect: rect(99, RIVER.z1 - 6.5, 103, RIVER.z1 + 0.5), axis: 'z', up: 1, yBot: -1.95, yTop: 0.0 };
+  ramps.push(ramp);
+  boxes.push(ramp.rect);
+  const zDry = ramp.rect.z0 + ((WATER_LEVEL + 0.08 - ramp.yBot) / (ramp.yTop - ramp.yBot)) * (ramp.rect.z1 - ramp.rect.z0);
+  dry.push(rect(ramp.rect.x0, zDry, ramp.rect.x1, ramp.rect.z1));
+  addPath(plan, {
+    kind: 'riverbank',
+    pts: [{ x: 101, z: RIVER.z1 + 5 }, { x: 101, z: RIVER.z1 + 0.5 }, { x: 101, z: zDry + 0.8 }],
+    ys: [0.03, 0.0, ramp.yBot + ((zDry + 0.8 - ramp.rect.z0) / (ramp.rect.z1 - ramp.rect.z0)) * (ramp.yTop - ramp.yBot)],
+    width: 2.0,
+    surface: 'stone',
+    draw: false,
+  });
+  const pGaps: [number, number][] = [
+    [ws[0].top.x0 - 0.05, ws[0].top.x1 + 0.05],
+    [ramp.rect.x0 - 0.2, ramp.rect.x1 + 0.2],
+  ];
+  return { ws, slip: { ramp, toeY: ramp.yBot }, pGaps, holes: [[ramp.rect.x0, ramp.rect.x1]] };
+}
+
 // ───────────────────────────────────────────────────────────── build ──
 
 export function buildPlaces(plan: CityPlan): PlacesDef {
@@ -498,6 +594,7 @@ export function buildPlaces(plan: CityPlan): PlacesDef {
     islandbridge: all && !params.has('noislandbridge'),
     station: all && !params.has('nostationfront'),
     cutting: all && !params.has('nocutwall'),
+    waterstairs: all && !params.has('nowaterstairs'),
   };
   const floors: Floor[] = [];
   const stairs: PlaceStair[] = [];
@@ -511,6 +608,9 @@ export function buildPlaces(plan: CityPlan): PlacesDef {
   const boxes: Rect[] = [];
   const station = on.station ? buildStation(plan, floors, stairs, walls, boxes) : null;
   const cutting = on.cutting ? buildCutting() : null;
+  const dryRects: Rect[] = [];
+  const drops: Rect[] = [];
+  const works = on.waterstairs ? buildWaterWorks(plan, floors, stairs, ramps, walls, boxes, dryRects, drops) : null;
   if (quay) boxes.push(rect(quay.x0, RIVER.z0 - 0.4, quay.x1, quay.zEdge));
   if (lane) boxes.push(rect(lane.block.x0, lane.block.z0, lane.block.x1, lane.block.z1));
   const bridgeR = island ? rect(island.x - island.w / 2, island.z0, island.x + island.w / 2, island.z1) : null;
@@ -536,10 +636,14 @@ export function buildPlaces(plan: CityPlan): PlacesDef {
     island,
     station,
     cutting,
+    waterStairs: works?.ws ?? [],
+    slipway: works?.slip ?? null,
+    southParapetGaps: works?.pGaps ?? [],
+    southWallHoles: works?.holes ?? [],
     walls,
     railGaps,
-    dropLadder: (x, z) => !!dryR && x > dryR.x0 - 0.6 && x < dryR.x1 + 0.6 && Math.abs(z - RIVER.z0) < 0.5,
+    dropLadder: (x, z) => (!!dryR && x > dryR.x0 - 0.6 && x < dryR.x1 + 0.6 && Math.abs(z - RIVER.z0) < 0.5) || drops.some((r) => inR(r, x, z)),
     height,
-    dry: (x, z) => (!!dryR && inR(dryR, x, z)) || (!!bridgeR && (inR(bridgeR, x, z) || inR(island!.deck, x, z))),
+    dry: (x, z) => (!!dryR && inR(dryR, x, z)) || (!!bridgeR && (inR(bridgeR, x, z) || inR(island!.deck, x, z))) || dryRects.some((r) => inR(r, x, z)),
   };
 }

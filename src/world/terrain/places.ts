@@ -15,7 +15,7 @@
 import * as THREE from 'three';
 import type { CityContext } from '../../core/context';
 import type { Rect } from '../../core/geom';
-import { stairY, islandBridgeY, type CuttingPlace, type IslandBridgePlace, type LanePlace, type PlaceStair, type QuayPlace, type StationPlace } from '../../core/places';
+import { stairY, islandBridgeY, type CuttingPlace, type IslandBridgePlace, type LanePlace, type PlaceStair, type QuayPlace, type StationPlace, type WaterStairs, type Slipway } from '../../core/places';
 import type { GeoBuilder, V3 } from './builder';
 import type { TerrainModel } from './height';
 import { KIND } from './kinds';
@@ -592,6 +592,103 @@ function cuttingStone(b: GeoBuilder, K: CuttingPlace, hi: boolean): void {
   }
 }
 
+// ───────────────────────────────────────────── water stairs and slipway ──
+
+const isect = (a: Rect, c: Rect): Rect | null => {
+  const r = { x0: Math.max(a.x0, c.x0), z0: Math.max(a.z0, c.z0), x1: Math.min(a.x1, c.x1), z1: Math.min(a.z1, c.z1) };
+  return r.x1 - r.x0 > 0.01 && r.z1 - r.z0 > 0.01 ? r : null;
+};
+
+function waterStairsStone(b: GeoBuilder, W: WaterStairs, model: TerrainModel): void {
+  const cx = (W.body.x0 + W.body.x1) / 2,
+    cz = (W.body.z0 + W.body.z1) / 2;
+  const bed = model.height(cx, cz) - 0.3;
+  const stone = W.id === 'harbour' ? C('#aaa498') : COL.quayStone;
+  b.color(stone).set('aMas', KIND.ashlar, 0.45, 1, 0);
+  slab(b, W.bottom, bed, W.bottomY - 0.08, 4 | 8);
+  b.color(COL.step).set('aMas', KIND.coping, 0, 1, 0);
+  slab(b, W.bottom, W.bottomY - 0.08, W.bottomY, 4);
+  flight(b, W.stair, bed, stone);
+  const wetTop = isect(W.top, W.body);
+  if (wetTop) {
+    b.color(stone).set('aMas', KIND.ashlar, 0.45, 1, 0);
+    slab(b, wetTop, bed, W.topY - 0.1, 4 | 8);
+  }
+  b.color(COL.coping).set('aMas', KIND.coping, 0, W.stair.axis === 'x' ? 1 : 0, W.stair.axis === 'x' ? 0 : 1);
+  slab(b, W.top, W.topY - 0.1, W.topY, 4);
+}
+
+function waterStairsIron(b: GeoBuilder, W: WaterStairs): void {
+  const s = W.stair;
+  const ax = s.axis;
+  // rail line along the outer (water) edge: over the top landing, down the nosings, over the bottom landing
+  const off = W.railSide === 'x0' ? W.body.x0 + 0.06 : W.railSide === 'x1' ? W.body.x1 - 0.06 : W.railSide === 'z0' ? W.body.z0 + 0.06 : W.body.z1 - 0.06;
+  const P = (u: number, y: number): [number, number, number] => (ax === 'x' ? [u, y, off] : [off, y, u]);
+  const lo = ax === 'x' ? s.rect.x0 : s.rect.z0,
+    hi = ax === 'x' ? s.rect.x1 : s.rect.z1;
+  const uTop = s.up > 0 ? hi : lo,
+    uBot = s.up > 0 ? lo : hi;
+  const dir = s.up > 0 ? 1 : -1;
+  const pts: [number, number][] = [
+    [uTop + dir * 1.1, W.topY],
+    [uTop, W.topY],
+    [uBot, W.bottomY],
+    [uBot - dir * 1.0, W.bottomY],
+  ];
+  b.color(IRON_HI);
+  for (let i = 0; i < pts.length - 1; i++) b.beam(...P(pts[i][0], pts[i][1] + 0.95), ...P(pts[i + 1][0], pts[i + 1][1] + 0.95), 0.06, 0.05);
+  b.color(IRON);
+  for (let i = 0; i < pts.length - 1; i++) b.beam(...P(pts[i][0], pts[i][1] + 0.5), ...P(pts[i + 1][0], pts[i + 1][1] + 0.5), 0.035, 0.035);
+  for (const [u, y] of pts) {
+    const yb = u === uTop || u === uTop + dir * 1.1 ? W.topY : W.bottomY;
+    void y;
+    const [x, , z] = P(u, 0);
+    b.box(x, yb + 0.475, z, 0.035, 0.475, 0.035, 0, 4);
+  }
+}
+
+function slipwayStone(b: GeoBuilder, S: Slipway, model: TerrainModel, hi: boolean): void {
+  const r = S.ramp.rect;
+  const yT = S.ramp.yTop,
+    yB = S.ramp.yBot;
+  const bed = model.height((r.x0 + r.x1) / 2, r.z0 + 1) - 0.3;
+  const CONC = C('#a7a196');
+  // inclined deck (setts at the top, concrete below), side walls down to the bed, a toe
+  b.color(CONC).set('aMas', KIND.ashlar, 0.32, 1, 0);
+  b.quadFacing([r.x0, yB, r.z0], [r.x1, yB, r.z0], [r.x1, yT, r.z1], [r.x0, yT, r.z1], 0, 1, 0);
+  b.color(COL.quayStone).set('aMas', KIND.ashlar, 0.52, 0, 1);
+  for (const [x, sx] of [
+    [r.x0, -1],
+    [r.x1, 1],
+  ] as [number, number][])
+    b.polygonFacing(
+      [
+        [x, bed, r.z0],
+        [x, bed, r.z1],
+        [x, yT, r.z1],
+        [x, yB, r.z0],
+      ],
+      [
+        [r.z0, bed],
+        [r.z1, bed],
+        [r.z1, yT],
+        [r.z0, yB],
+      ],
+      sx,
+      0,
+      0,
+    );
+  b.quadFacing([r.x0, bed, r.z0], [r.x1, bed, r.z0], [r.x1, yB, r.z0], [r.x0, yB, r.z0], 0, 0, -1);
+  // kerbs along both edges
+  b.color(COL.coping).set('aMas', KIND.coping, 0, 0, 1);
+  for (const x of [r.x0 + 0.12, r.x1 - 0.12]) b.beam(x, yB + 0.06, r.z0, x, yT + 0.06, r.z1, 0.24, 0.12);
+  if (hi) {
+    // two timber skid rails for the boat trolleys
+    b.color(WOOD_DK).set('aMas', KIND.plain, 0, 0, 1);
+    for (const x of [(r.x0 + r.x1) / 2 - 0.6, (r.x0 + r.x1) / 2 + 0.6]) b.beam(x, yB + 0.05, r.z0 + 0.3, x, yT + 0.035, r.z1 - 0.2, 0.14, 0.07);
+  }
+}
+
 // ─────────────────────────────────────────────────────────────── API ──
 
 function detail(ctx: CityContext): boolean {
@@ -607,6 +704,8 @@ export function buildPlacesStone(b: GeoBuilder, ctx: CityContext, model: Terrain
   if (pl.island) islandStone(b, pl.island, detail(ctx));
   if (pl.station) stationStone(b, pl.station, lights);
   if (pl.cutting) cuttingStone(b, pl.cutting, detail(ctx));
+  for (const w of pl.waterStairs) waterStairsStone(b, w, model);
+  if (pl.slipway) slipwayStone(b, pl.slipway, model, detail(ctx));
 }
 
 /** ironwork (handrails, bollards) into the railing builder */
@@ -615,4 +714,5 @@ export function buildPlacesIron(b: GeoBuilder, ctx: CityContext): void {
   if (!pl) return;
   if (pl.quay) quayIron(b, pl.quay);
   if (pl.lane) laneIron(b, pl.lane);
+  for (const w of pl.waterStairs) waterStairsIron(b, w);
 }
