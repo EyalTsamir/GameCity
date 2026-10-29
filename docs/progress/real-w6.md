@@ -106,7 +106,12 @@ and (inherited from W3) the market stall in src/world/landmarks/civic.ts.
 * `?nomarketlife`, `?noterracelife`, `?nobackyard` (all off on **low**); `?nosway` (parasols), `?nostallwind`
   (stall canopies) — both off on low. (`?w6wall` removed: the wall set is always on with the back yard.)
   Big items in KF (fine < 300 m), small ones in KD near cells (< 30 m). Cost not measured yet.
-* Café table/chair upgrade has no toggle yet (always on) — add one with the perf run.
+* Café table/chair upgrade has no toggle yet (always on).
+* **perf.mjs s2** (market view `27.5,1,78.5,16,200,28`, 12 h, 1280×720, software GL — ms are noise ±15 %, judge
+  tris/draws): draw calls 148 in every variant (no new draws: all in existing kits; sway = 1 extra program on the
+  casters mesh, canopy in the landmarks kinetic mesh). Triangles in view: market life +42 k, terrace life +15 k,
+  back yard +33 k (of 3.67 M). ms: base 1183, nomarketlife 1035, noterracelife 1208, nobackyard 1370, all off 1208
+  → no measurable cost in software GL; measure on the target GPU.
 
 ## Sheets
 * shots/w6/w3left/sheet_1.png (W3 leftovers), shots/w6/p1 (capture-set views: market "27.5,1.3,76,9,0|180,6",
