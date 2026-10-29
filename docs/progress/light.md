@@ -7,9 +7,9 @@
   Views: overview; street `5,1.5,-65,9,0,6`; market `27.5,1,78.5,16,200,28`; harbor; platform `-10,1.4,-146.3,6,60,8`; park; oldtown.
 - Judge notes (sonnet ×3, per image): scratchpad `judge_day.md`, `judge_dusk.md`, `judge_night.md` (summarised below).
 - DONE: resize warnings fixed (postfx.ts, verified: 0 new warnings, no incomplete blits after 4 resizes).
-- IN PROGRESS (uncommitted until verified): AO tuning (postfx.ts `strong`, ?aoold, ?aork/?aoik, near fade in
-  aoApply.ts), world light key (palette.ts LIGHT_OVERRIDES, ?lightold), curtain-wall mirror (buildings/materials.ts
-  uMirror, ?glassold), street-canyon sky visibility (sky/skyVis.ts, ?noskyvis). Lab script: scratchpad lab.mjs
+- Committed: 53d507d (AO, light key, glass, sky visibility, dusk sea, shadow fit, grade, headlights), 31f7738 (lamp
+  specular, exposure metering, asphalt sheen, GLSL name fix). NEXT: perf A/B (scratchpad perf1.log) → round-2 full
+  capture `shots/light/r2` (same views / hours as base) → judge round 2 → next fixes. Lab script: scratchpad lab.mjs
   (one page load, list of {name, view, hours, js}); sheets: scratchpad sheet.py.
 
 ## Judgement (baseline) — what gives it away as CG
@@ -27,16 +27,16 @@ water; halos identical hard discs; the 19 → 21.5 h switch-on is abrupt.
 ## Ranked fixes (wow per millisecond)
 | # | fix | where | est. cost | status |
 |---|---|---|---|---|
-| 1 | Light balance by time of day: lower / cooler sky fill in shade, warmer golden key, deep-blue darker blue hour, darker night ambient, weaker softer moon | sky/palette.ts, sky.ts | 0 ms | |
+| 1 | Light balance by time of day: lower / cooler sky fill in shade, warmer golden key, deep-blue darker blue hour, darker night ambient, weaker softer moon | sky/palette.ts, sky.ts | 0 ms | done (?lightold) |
 | 2 | Overview haze: clear near, steeper ramp, less mid-range veil | render/atmosphere.ts, sky/atmoDrive.ts | 0 ms | |
-| 3 | Night pools: soft radial falloff, no hard-edged quads (lamps + headlights) | core/lampLight, traffic lights | ~0 ms | |
-| 4 | Contact shadows at eye level (screen-space, sun direction) + tighter AO near the camera | postfx/aoApply.ts | 0.5–1 ms | |
-| 5 | Glass: curtain walls / car glass mirror sky + opposite facades | buildings/materials.ts (minimal), vehicle glass | 0.2–0.5 ms | |
-| 6 | Water: sky-tinted Fresnel at dusk, broken reflections, sun glitter | water | ~0.1 ms | |
-| 7 | Blue hour: lights on earlier, string lights / lamps glow, window spill | lamps, uLights ramp, bloom | 0 ms | |
-| 8 | Shadow edges: stipple / smudges, penumbra | sky/shadowFit, shadow chunk | small | |
-| 9 | Grazing-sun sheen on asphalt / stone | ground shaders | 0.1–0.3 ms | |
-| 10 | Grade: contrast, vignette, highlight bloom | postfx | 0 ms | |
+| 3 | Night pools: soft radial falloff, no hard-edged quads (lamps + headlights) | core/lampLight, traffic lights | ~0 ms | done: moon 0.5 → 0.2 (it made the hard patches), gaussian headlight pools |
+| 4 | Contact shadows at eye level (screen-space, sun direction) + tighter AO near the camera | postfx/aoApply.ts | 0.5–1 ms | done differently: N8AO retuned (?aoold) + street-canyon sky visibility (?noskyvis) + metering |
+| 5 | Glass: curtain walls / car glass mirror sky + opposite facades | buildings/materials.ts (minimal), vehicle glass | 0.2–0.5 ms | curtain walls done (?glassold); car glass open |
+| 6 | Water: sky-tinted Fresnel at dusk, broken reflections, sun glitter | water | ~0.1 ms | dusk sea done (?waterold) |
+| 7 | Blue hour: lights on earlier, string lights / lamps glow, window spill | lamps, uLights ramp, bloom | 0 ms | lamp specular sheen (?nolampspec); switch-on unchanged (19.0 h = sun still 2.7° up) |
+| 8 | Shadow edges: stipple / smudges, penumbra | sky/shadowFit, shadow chunk | small | eye-level fit 14 → 10 cm texels (?shadowold) |
+| 9 | Grazing-sun sheen on asphalt / stone | ground shaders | 0.1–0.3 ms | asphalt roughness 0.8–0.95 → 0.72–0.92 |
+| 10 | Grade: contrast, vignette, highlight bloom | postfx | 0 ms | done (?lookold) |
 
 ## Log
 - Resize warnings (`ui-test --steps resize`, ~120 × `glBlitFramebuffer … not all the same size`): traced with a
