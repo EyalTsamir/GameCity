@@ -14,6 +14,7 @@ import { type TerrainModel, type PortalDef, RIVER_WALL_END_X, SEA_WALL_Z0, SEA_W
 import { noiseTexture, GLSL_HASH, vnoise } from './noise';
 import { LAMP_GLSL, lampUniforms } from '../../core/lampLight';
 import { KIND, type LadderSpot } from './kinds';
+import { boxHunt } from '../../core/boxhunt';
 import { createRailings, type RailingResult } from './railings';
 import { buildCliffs, type CliffResult } from './cliffs';
 import type { GlowPoint } from './glow';
@@ -1011,7 +1012,7 @@ export function createMasonry(ctx: CityContext, model: TerrainModel): MasonryRes
   buildPlacesStone(b, ctx, model, lights);
 
   // iron railings / ladders (their lamp globes are emissive masonry); the places' stair landings are railing gaps
-  const railings = createRailings(ladders, plan.places ? [...gaps, ...plan.places.railGaps] : gaps, b, (ib) => buildPlacesIron(ib, ctx));
+  const railings = createRailings(ladders, plan.places ? [...gaps, ...plan.places.railGaps] : gaps, b, (ib) => buildPlacesIron(ib, ctx), boxHunt(ctx, 'promlamp'));
 
   const geo = b.build(true);
   const mesh = new THREE.Mesh(geo, masonryMaterial(ctx, flatMasonry));

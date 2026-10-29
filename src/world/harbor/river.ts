@@ -11,6 +11,32 @@ import type { GlowPoint } from './material';
 
 const IRON = '#2f4a3e';
 const IRON_HI = '#3d5d4f';
+
+/** box hunt (?nopromlamp, shared with the promenade lamps): bridge / landing lamps as iron lanterns, not cubes */
+let LANTERN = true;
+export function setRiverLanterns(on: boolean): void {
+  LANTERN = on;
+}
+
+/**
+ * Cast-iron lantern on a post top at (x, y, z): collar, base plate, four-pane glass widening upwards (emissive),
+ * corner frames, top band, pyramid roof and finial. Returns the light centre height.
+ */
+function ironLantern(b: HB, x: number, y: number, z: number): number {
+  b.color(IRON);
+  b.cyl([x, y - 0.06, z], [x, y + 0.1, z], 0.06, 0.1, 8, 0);
+  b.box(x, y + 0.12, z, 0.24, 0.04, 0.24, 0, 0);
+  b.color('#ffe2a8').emit('#ffd59a', 2.4, EMIT.LIGHTS);
+  b.cyl([x, y + 0.14, z], [x, y + 0.58, z], 0.12, 0.175, 4, 0, Math.PI / 4);
+  b.noEmit();
+  b.color(IRON_HI);
+  for (const [sx, sz] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) b.beam([x + sx * 0.087, y + 0.14, z + sz * 0.087], [x + sx * 0.127, y + 0.58, z + sz * 0.127], 0.02, 0.02);
+  b.box(x, y + 0.6, z, 0.27, 0.04, 0.27, 0, 0);
+  b.color(IRON);
+  b.cyl([x, y + 0.62, z], [x, y + 0.86, z], 0.215, 0.02, 4, 1, Math.PI / 4);
+  b.cyl([x, y + 0.86, z], [x, y + 1.0, z], 0.028, 0.004, 6, 0);
+  return y + 0.36;
+}
 const STONE = '#b8ab95';
 const ARCH = '#f0ebe0';
 
@@ -216,6 +242,16 @@ export function buildFootbridge(b: HB, s: BridgeSpec, ground: (x: number, z: num
       const lx = x + sd * (ha - 0.2);
       const by = Y(lz) + 0.32;
       b.color(IRON);
+      if (LANTERN) {
+        // moulded foot, tapering post with a collar, lantern
+        b.cyl([lx, by, lz], [lx, by + 0.3, lz], 0.14, 0.12, 8, 2);
+        b.cyl([lx, by + 0.3, lz], [lx, by + 0.42, lz], 0.1, 0.06, 8, 0);
+        b.cyl([lx, by + 0.42, lz], [lx, by + 3.3, lz], 0.05, 0.038, 8, 0);
+        b.cyl([lx, by + 1.2, lz], [lx, by + 1.25, lz], 0.065, 0.065, 8, 3);
+        const ly = ironLantern(b, lx, by + 3.3, lz);
+        glows.push({ x: lx, y: ly, z: lz, size: 1.1, color: '#ffd08c', intensity: 1.0 });
+        continue;
+      }
       b.box(lx, by + 0.18, lz, 0.18, 0.36, 0.18, 0, 1);
       b.cyl([lx, by + 0.36, lz], [lx, by + 3.3, lz], 0.05, 0.04, 6, 0);
       b.box(lx, by + 3.32, lz, 0.22, 0.04, 0.22, 0, 0);
@@ -334,11 +370,20 @@ export function buildJetty(b: HB, x: number, zBank: number, zTip: number, rng: R
   }
   // lamp at the landing
   b.color(IRON);
-  b.cyl([x + 1.1, bankY, zBank + dir * 0.1], [x + 1.1, bankY + 3.0, zBank + dir * 0.1], 0.05, 0.04, 6, 0);
-  b.color('#ffe2a8').emit('#ffd59a', 2.2, EMIT.LIGHTS);
-  b.box(x + 1.1, bankY + 3.1, zBank + dir * 0.1, 0.18, 0.26, 0.18, Math.PI / 4, 0);
-  b.noEmit();
-  glows.push({ x: x + 1.1, y: bankY + 3.1, z: zBank + dir * 0.1, size: 1.0, color: '#ffd08c', intensity: 0.95 });
+  if (LANTERN) {
+    const lx = x + 1.1,
+      lz = zBank + dir * 0.1;
+    b.cyl([lx, bankY, lz], [lx, bankY + 0.28, lz], 0.13, 0.11, 8, 2);
+    b.cyl([lx, bankY + 0.28, lz], [lx, bankY + 3.0, lz], 0.05, 0.038, 8, 0);
+    const ly = ironLantern(b, lx, bankY + 3.0, lz);
+    glows.push({ x: lx, y: ly, z: lz, size: 1.0, color: '#ffd08c', intensity: 0.95 });
+  } else {
+    b.cyl([x + 1.1, bankY, zBank + dir * 0.1], [x + 1.1, bankY + 3.0, zBank + dir * 0.1], 0.05, 0.04, 6, 0);
+    b.color('#ffe2a8').emit('#ffd59a', 2.2, EMIT.LIGHTS);
+    b.box(x + 1.1, bankY + 3.1, zBank + dir * 0.1, 0.18, 0.26, 0.18, Math.PI / 4, 0);
+    b.noEmit();
+    glows.push({ x: x + 1.1, y: bankY + 3.1, z: zBank + dir * 0.1, size: 1.0, color: '#ffd08c', intensity: 0.95 });
+  }
   glows.push({ x, y: top + 0.03, z: (za + zb) / 2, size: 3.0, pool: true, color: '#ffbe72', intensity: 0.22 });
   return { rect: { x0: x - pw - 1.8, z0: za - 0.3, x1: x + pw + 1.8, z1: Math.max(zBank, zb) }, boats };
 }

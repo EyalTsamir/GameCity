@@ -32,6 +32,7 @@ import { sideGeom } from './buildings/gen';
 import { XS, ZS, FURN_OFFSET } from '../core/constants';
 import { addLampLights, type LampLight } from '../core/lampLight';
 import { buildPlaces } from './props/places';
+import { boxHunt } from '../core/boxhunt';
 import { buildContactMesh, takeQueuedContacts, type ContactSpot } from './props/contact';
 
 interface TerrainSvc {
@@ -86,6 +87,7 @@ export default function create(ctx: CityContext): CityModule {
   const printer = simple || ctx.debug.params.has('noprint') ? null : new Printer();
   setPrinter(printer);
   setBikeSpokes(!ctx.debug.params.has('nobikespokes') && ctx.quality.level !== 'low');
+  GK.setBinDetail(boxHunt(ctx, 'wheeliebin'));
 
   /** local → world for a frame at (x, z) with yaw */
   const toWorld = (x: number, z: number, yaw: number, lx: number, lz: number): [number, number] => [x + lx * Math.cos(yaw) + lz * Math.sin(yaw), z - lx * Math.sin(yaw) + lz * Math.cos(yaw)];
@@ -370,7 +372,7 @@ export default function create(ctx: CityContext): CityModule {
           break;
         case 'sculpture':
           at(KS);
-          SK.sculpture(KS, srng);
+          SK.sculpture(KS, srng, boxHunt(ctx, 'sculpt'));
           break;
         case 'clock':
           at(KS);

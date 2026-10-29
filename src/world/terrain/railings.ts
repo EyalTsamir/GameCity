@@ -18,7 +18,57 @@ const IRON = new THREE.Color('#2f4a3e');
 const IRON_HI = new THREE.Color('#3d5d4f');
 const LADDER = new THREE.Color('#3a3b38');
 
-export function createRailings(ladders: LadderSpot[], gaps: { x: number; half: number }[], lampGlobes: GeoBuilder, extra?: (b: GeoBuilder) => void): RailingResult {
+/** box hunt: a cast-iron promenade lamp — moulded plinth, tapering post with collars, ladder arm, a four-pane
+ *  lantern (glass in the emissive masonry mesh) under a pyramid cap and finial. Returns the light centre height. */
+function promenadeLamp(b: GeoBuilder, glass: GeoBuilder, px: number, y0: number, zR: number): number {
+  const m = new THREE.Matrix4();
+  const part = (g: THREE.BufferGeometry, y: number, square = false, to: GeoBuilder = b) => {
+    if (square) {
+      g.rotateY(Math.PI / 4);
+      g = g.toNonIndexed();
+      g.computeVertexNormals();
+    }
+    to.geometry(g, m.makeTranslation(px, y0 + y, zR));
+    g.dispose();
+  };
+  b.color(IRON);
+  part(new THREE.CylinderGeometry(0.14, 0.17, 0.3, 8), 0.15);
+  part(new THREE.CylinderGeometry(0.1, 0.14, 0.12, 8), 0.36);
+  part(new THREE.CylinderGeometry(0.045, 0.064, 3.3, 8, 1, true), 2.07);
+  for (const y of [0.95, 3.6]) part(new THREE.CylinderGeometry(0.078, 0.078, 0.05, 8), y);
+  part(new THREE.CylinderGeometry(0.09, 0.05, 0.16, 8), 3.78);
+  // ladder arm across the post, ball ends
+  b.color(IRON_HI);
+  b.beam(px - 0.3, y0 + 3.5, zR, px + 0.3, y0 + 3.5, zR, 0.028, 0.028);
+  for (const dx of [-0.3, 0.3]) {
+    const g = new THREE.SphereGeometry(0.034, 6, 4);
+    b.geometry(g, m.makeTranslation(px + dx, y0 + 3.5, zR));
+    g.dispose();
+  }
+  // lantern: base plate, glass (wider at the top), corner frame, top band, pyramid cap, finial
+  b.color(IRON);
+  part(new THREE.CylinderGeometry(0.13, 0.1, 0.06, 4), 3.9, true);
+  glass.color('#ffd59a').set('aMas', KIND.lamp, 0, 1, 0);
+  part(new THREE.CylinderGeometry(0.185, 0.12, 0.5, 4, 1, true), 4.18, true, glass);
+  b.color(IRON_HI);
+  for (const [sx, sz] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) b.beam(px + sx * 0.088, y0 + 3.93, zR + sz * 0.088, px + sx * 0.134, y0 + 4.43, zR + sz * 0.134, 0.022, 0.022);
+  part(new THREE.CylinderGeometry(0.205, 0.205, 0.045, 4), 4.45, true);
+  b.color(IRON);
+  part(new THREE.CylinderGeometry(0.02, 0.245, 0.26, 4), 4.6, true);
+  part(new THREE.CylinderGeometry(0.0, 0.032, 0.16, 6), 4.8);
+  const g = new THREE.SphereGeometry(0.03, 6, 4);
+  b.geometry(g, m.makeTranslation(px, y0 + 4.74, zR));
+  g.dispose();
+  return y0 + 4.18;
+}
+
+export function createRailings(
+  ladders: LadderSpot[],
+  gaps: { x: number; half: number }[],
+  lampGlobes: GeoBuilder,
+  extra?: (b: GeoBuilder) => void,
+  lampDetail = true,
+): RailingResult {
   const b = new GeoBuilder();
   const zR = RIVER.z0 - RIVER_WALL_T / 2; // centre of the north wall coping
   const y0 = 0.15 + 0.2; // coping top
@@ -51,6 +101,10 @@ export function createRailings(ladders: LadderSpot[], gaps: { x: number; half: n
       // ornamental lamp post every ~22 m
       if (px >= nextLamp && i > 0 && i < n) {
         nextLamp = px + 22;
+        if (lampDetail) {
+          lampPosts.push({ x: px, z: zR, y: promenadeLamp(b, lampGlobes, px, y0, zR) });
+          continue;
+        }
         b.color(IRON);
         b.box(px, y0 + 2.0, zR, 0.07, 2.0, 0.07, 0, 4);
         b.box(px, y0 + 0.2, zR, 0.13, 0.2, 0.13, 0, 4);

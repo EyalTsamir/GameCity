@@ -11,6 +11,7 @@ import { ANIM, FLOOD, LM, LMODE, M, PAT } from './builder';
 import { C, S, railing } from './parts';
 import type { Env } from './env';
 import { drawText, signQuad } from './signs';
+import { boxHunt } from '../../core/boxhunt';
 
 export function genTvTower(env: Env, lot: Lot): void {
   const fp = lot.footprint;
@@ -53,17 +54,24 @@ export function genTvTower(env: Env, lot: Lot): void {
 
   // ── shaft (smooth tapering lathe) with lift rails
   const yPod = H * 0.635; // ~95 m
-  const rB = 2.9,
-    rT = 1.75;
+  // box hunt (?notvshaft): a real tower's proportions — a much stouter foot flaring out like a trumpet onto the
+  // pavilion roof and a stronger taper; the old 5.8 m shaft read as a pipe from every high view
+  const stout = boxHunt(env.ctx, 'tvshaft');
+  const rB = stout ? Math.min(3.85, R0 - 1.4) : 2.9,
+    rT = stout ? 2.3 : 1.75,
+    ex = stout ? 0.6 : 0.75,
+    flare = stout ? 0.9 : 0;
+  const rAt = (t: number) => rB + (rT - rB) * Math.pow(t, ex) + flare * Math.pow(1 - t, 10);
+  const ns = stout ? 14 : 8;
   const prof: [number, number][] = [];
-  for (let i = 0; i <= 8; i++) {
-    const t = i / 8;
-    prof.push([rB + (rT - rB) * Math.pow(t, 0.75), 4.6 + t * (yPod - 4.6)]);
+  for (let i = 0; i <= ns; i++) {
+    const t = stout ? Math.pow(i / ns, 1.6) : i / ns; // denser rings near the foot (the flare)
+    prof.push([rAt(t), 4.6 + t * (yPod - 4.6)]);
   }
-  K.lathe(concrete, prof, 0, 0, 0, 28);
+  K.lathe(concrete, prof, 0, 0, 0, stout ? 36 : 28);
   for (const a of [0, Math.PI]) {
     // two lift rails as slim vertical strips following the taper
-    for (let i = 0; i < 8; i++) {
+    for (let i = 0; i < ns; i++) {
       const [r0, y0] = prof[i],
         [r1, y1] = prof[i + 1];
       env.S.beam(M('#a9aeb2', PAT.PLAIN, 0.5, 0.5), [Math.sin(a + 0.3) * (r0 + 0.08), y0, Math.cos(a + 0.3) * (r0 + 0.08)], [Math.sin(a + 0.3) * (r1 + 0.08), y1, Math.cos(a + 0.3) * (r1 + 0.08)], 0.22, 0.12);
@@ -72,7 +80,7 @@ export function genTvTower(env: Env, lot: Lot): void {
   // service rings on the shaft
   for (const yy of [32, 64]) {
     const t = (yy - 4.6) / (yPod - 4.6);
-    const r = rB + (rT - rB) * Math.pow(t, 0.75);
+    const r = rAt(t);
     K.cyl(white, r + 0.35, r + 0.35, 0.5, 0, yy, 0, 28);
     env.L.cyl(LM('#ff2a1a', LMODE.BLINK, 4.0, yy * 0.013, 0.25), r + 0.38, r + 0.38, 0.12, 0, yy + 0.19, 0, 16, true);
   }

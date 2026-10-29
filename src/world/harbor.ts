@@ -23,8 +23,9 @@ import { createBeamMesh, createHarborMaterials, createGlowMesh, followCraneLamps
 import { buildBreakwater } from './harbor/breakwater';
 import { buildFishQuay } from './harbor/quay';
 import { buildCarouselRotating, buildCarouselStatic, buildPier, buildWheelRotating, buildWheelStatic, type WheelSpec } from './harbor/pier';
-import { buildFerryDock, lifeguardTower, scatterBeach } from './harbor/beach';
-import { bridgeProfile, buildFootbridge, buildJetty, type BridgeInfo } from './harbor/river';
+import { buildFerryDock, lifeguardTower, scatterBeach, setBeachDetail } from './harbor/beach';
+import { boxHunt } from '../core/boxhunt';
+import { bridgeProfile, buildFootbridge, buildJetty, type BridgeInfo, setRiverLanterns } from './harbor/river';
 import { buildCrane, buildCraneRails, CraneSim, type MobileBox } from './harbor/cranes';
 import { buildMooring, buildQuayEdge, buildShip, mobileShipPos, SHIP, type MobileSlot } from './harbor/ship';
 import { addContainer, CH, CW, fillYard, L20, pickLook, yardRows } from './harbor/containers';
@@ -215,6 +216,7 @@ export default function create(ctx: CityContext): CityModule {
   }
 
   // ───────────────────────────────────────────── beach
+  setBeachDetail(boxHunt(ctx, 'beachkit'));
   for (const f of feats('lifeguard')) lifeguardTower(beach, f.x, f.z, f.yaw, ground);
   const beachPaths = plan.paths.filter((p) => p.kind === 'beach' || p.kind === 'boardwalk' || p.kind === 'pier');
   const spots: P2[] = plan.paths.filter((p) => p.kind === 'beach').map((p) => p.pts[p.pts.length - 1]);
@@ -247,6 +249,7 @@ export default function create(ctx: CityContext): CityModule {
     },
   );
 
+  setRiverLanterns(boxHunt(ctx, 'promlamp'));
   // ───────────────────────────────────────────── river: footbridges + jetty
   const bridges: { x: number; info: BridgeInfo; profileFromGraph: boolean; profile: (z: number) => number; zN: number; zS: number }[] = [];
   for (const f of feats('footbridge')) {
