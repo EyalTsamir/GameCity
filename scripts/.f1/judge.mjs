@@ -37,7 +37,7 @@ try {
       window.__city.view({ target: { x, y: +ty, z }, distance: +dist, yaw: YAW[l.front] + +yawOff, pitch: 4 });
       return { id: l.id, kind: l.kind, name: l.name, x, z, front: l.front };
     }, [kind, pick, dist, yawOff, ty, along]);
-    for (let i = 0; i < 4; i++) await page.screenshot({ type: 'jpeg', quality: 1, clip: { x: 0, y: 0, width: 8, height: 8 }, timeout: 240000 }).catch(() => {});
+    for (let i = 0; i < 4; i++) await page.screenshot({ type: 'jpeg', quality: 1, timeout: 240000 }).catch(() => {});
     await page.waitForTimeout(800);
     const file = path.join(out, it.replace(/[:.]/g, '_') + '.png');
     await page.screenshot({ path: file, timeout: 240000 });
