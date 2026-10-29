@@ -310,6 +310,21 @@ export default function create(ctx: CityContext): CityModule {
   const resize = (w: number, h: number) => {
     renderer.setPixelRatio(quality.pixelRatio * quality.renderScale);
     composer.setSize(w, h, false);
+    // RenderTarget.setSize resizes its colour textures but not its depth texture's image. The stable depth
+    // texture is sampled (soft particles, softDepth) in the next scene pass BEFORE its target re-attaches it,
+    // so three would allocate its immutable storage at the OLD size and the per-frame depth blit would then
+    // fail for good (FRAMEBUFFER_INCOMPLETE_DIMENSIONS: ~120 "glBlitFramebuffer … not all the same size"
+    // warnings, stale depth for DOF / shafts / soft particles after any resize or adaptive scale step)
+    const bw = composer.inputBuffer.width,
+      bh = composer.inputBuffer.height;
+    const c = composer as unknown as { stableDepthTexture: THREE.Texture | null };
+    for (const t of [c.stableDepthTexture, composer.inputBuffer.depthTexture, composer.outputBuffer.depthTexture]) {
+      if (t) {
+        const img = t.image as { width: number; height: number };
+        img.width = bw;
+        img.height = bh;
+      }
+    }
   };
 
 
