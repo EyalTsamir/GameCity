@@ -3,8 +3,11 @@
 ## G3 — Places, people, small props (branch claude/real-g3-places)
 
 ### Resume here
-Fixes 1–3 coded + typechecked; verification shots in progress (shots/g3/shot.mjs = warm-up harness: 30 frames at
-320×180 per view, optional wait for a standing train).
+All 8 items pushed. Verified: platform with a standing train keeps ~6–8 people (`real/g3_platform_train_in.jpg`,
+forced `train:arrive`), rack bike spoked wheels + drive side (`real/g3_bikerack_3m.jpg`), downtown console clean +
+invariants {} (11:10 code). Not verified by capture (software GL ≈ 8–12 min per warmed view here): info-board
+faces, pram, shirt V, group gap, bark, Northgate vent (c.png run may land after the deadline). Next: capture those
+(shots/g3/shot.mjs `out.png "x,y,z,d,yaw,pitch|…" hours q mode`, mode 2 = force a standing train) and tune.
 
 ### Done
 1. **Platform no longer empties when a train stands** (judge 3 #4) — `sim/pedestrians/actors.ts` `onPlatform()`:
@@ -37,6 +40,14 @@ Fixes 1–3 coded + typechecked; verification shots in progress (shots/g3/shot.m
    ridges of the existing furrow noise now tilt the normal (gradient × 0.045, near-only fade) and ridge plates
    lighten / furrows darken. Knob `foliageKnobs.bark` (uThBark): `?nobarkrelief`, quality low off. Not done: the
    flat shard branch cards seen from inside a crown.
+
+9. **Rack bike drive side** — `bike()`: chainring, chain runs, crank arms + pedals (with the spokes; off on low).
+
+### Harness notes
+* `shots/g3/shot.mjs`: warm-up = 26 screenshots at 320×180 per view; mode 1 waits for `train:arrive` (never came
+  within 150 s at 4× — even with `railx=-90&raildir=1`), mode 2 emits `train:arrive` itself (works).
+* The initial dwell at load emits no `train:arrive`, so platform actors are all there then (unchanged).
+* Resizing the viewport logs a `glBlitFramebuffer … not all the same size` WebGL warning (harness only).
 
 ### Toggles
 `?noplatformstay`, `?noboardmap`, `?nobikespokes` (quality low = no spokes), `?nogroupgap`, `?nopramdetail`, `?nobarkrelief` (quality low = off).
