@@ -4,3 +4,6 @@ shots/
 .playwright-mcp/
 scripts/.shotlock*/
 scripts/.shotqueue/
+
+# Local Netlify folder
+.netlify
