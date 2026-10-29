@@ -4,6 +4,9 @@ Branch `claude/pensive-gates-bim12i`. Budget file: `perf-results.txt` (repo root
 ("Earlier round: render-performance pass").
 
 ## Quick-wins round (2026-10-29 evening, branch claude/perf-wins-a4bce3, from 024d901)
+**Resume here (round DONE 2026-10-29 ~22:20):** all work committed (a5e584c, 32dcf7c, e5136ae), verified (see
+"Final verification"), not pushed — the lead merges. Nothing in progress. If resumed, start from "Next" at the end
+of this section; scratch tools used here (runtime A/B, standalone compile timing) were not added to scripts/.
 Parallel to the explore-camera and walk-mode sessions (they own src/ui/camera*, HUD); merged later by the lead.
 Method: frozen baseline worktree of 024d901 on :5184 vs this worktree on :5181; runtime A/B in ONE page load with a
 scratch tool that alternates base / variant windows (frame intervals with vsync + GPU timer queries, uncapped for GPU
