@@ -178,7 +178,7 @@ export function genTownhouse(g: Gen): void {
   const mr = massRng(g);
   // corner turret on a corner house: front corner on an exposed side, from the first floor up
   const turretSide: Side | -1 =
-    MASS.turrets && floors >= 3 && W >= 6.5 && (exposed[LEFT] || exposed[RIGHT]) && mr.chance(0.55) ? (exposed[LEFT] && exposed[RIGHT] ? (mr.chance(0.5) ? LEFT : RIGHT) : exposed[LEFT] ? LEFT : RIGHT) : -1;
+    MASS.turrets && floors >= 3 && W >= 6.5 && (exposed[LEFT] || exposed[RIGHT]) && mr.chance(0.7) ? (exposed[LEFT] && exposed[RIGHT] ? (mr.chance(0.5) ? LEFT : RIGHT) : exposed[LEFT] ? LEFT : RIGHT) : -1;
   const turretR = Math.min(1.3, Math.max(1.05, W * 0.14));
   /** window-free span (m) at the start / end of each side's upper floors (turret) */
   const clear: [number, number][] = [[0, 0], [0, 0], [0, 0], [0, 0]];
@@ -186,7 +186,7 @@ export function genTownhouse(g: Gen): void {
   if (turretSide === LEFT) (clear[FRONT][0] = turretR + 0.15), (clear[LEFT][1] = turretR + 0.15);
   // an oriel (box or canted bay) on the front: shops keep their fascia clear and start it a floor higher
   const orielRow0 = shop ? 1 : 0;
-  const wantOriel = MASS.oriels && floors - 1 - orielRow0 >= (lot.roof === 'flat' ? 1 : 2) && mr.chance(turretSide >= 0 ? 0.2 : 0.42);
+  const wantOriel = MASS.oriels && floors - 1 - orielRow0 >= (lot.roof === 'flat' ? 1 : 2) && mr.chance(turretSide >= 0 ? 0.25 : 0.6);
   /** front window cells (row:col) covered by the oriel, and its centre (local x) for a cross gable above it */
   const orielCells = new Set<string>();
   let orielX: number | null = null,
@@ -792,6 +792,7 @@ export function genTownhouse(g: Gen): void {
       const ogR = exposed[RIGHT] ? 0.25 : 0,
         ogL = exposed[LEFT] ? 0.25 : 0;
       gableRoof(g, body, true, eave, yr, 0.38, 0, roofC, pat, trimC, 0.38, 0.38, ogL, ogR);
+      if (MASS.crowns && mr.chance(0.7)) eaveBrackets(eave - 0.38 * (rise / half), 0.34);
       for (const s of [RIGHT, LEFT] as Side[]) {
         const sg = sideGeom(body, s);
         if (exposed[s]) {
@@ -802,7 +803,7 @@ export function genTownhouse(g: Gen): void {
       // dormers on the front slope, aligned with the window columns — or a cross gable (over the oriel if any)
       const gr = upperGrid(clear[FRONT][0], body.x1 - body.x0 - clear[FRONT][1]);
       const pitch = rise / half;
-      const cg = MASS.crossGables && body.x1 - body.x0 >= 6 && mr.chance(orielX !== null ? 0.75 : 0.42) && buildCrossGable(pitch, yr, roofC, pat);
+      const cg = MASS.crossGables && body.x1 - body.x0 >= 6 && mr.chance(orielX !== null ? 0.8 : 0.55) && buildCrossGable(pitch, yr, roofC, pat);
       if (rng.chance(0.65)) {
         const nD = gr.n >= 3 ? (rng.chance(0.5) ? 2 : 1) : 1;
         const cols = nD === 1 ? [Math.floor((gr.n - 1) / 2) + (gr.n % 2 === 0 ? 0.5 : 0)] : [0.0 + (gr.n > 3 ? 0.5 : 0), gr.n - 1 - (gr.n > 3 ? 0.5 : 0)];
@@ -813,6 +814,22 @@ export function genTownhouse(g: Gen): void {
       }
       if (rng.chance(0.9)) chimney(g, rng.chance(0.5) ? body.x0 + 0.6 : body.x1 - 0.6, (body.z0 + body.z1) / 2 + rng.range(-0.8, 0.8), yr - 1.0, yr + rng.range(0.6, 1.2));
       if (rng.chance(0.35)) chimney(g, (body.x0 + body.x1) / 2 + rng.range(-1.5, 1.5), body.z0 + 1.5, eave + 0.8, yr + 0.3);
+    }
+  }
+
+  /** ?nocrowns: carved brackets (modillions) under the front eave / cornice, top at y, projecting `dep` */
+  function eaveBrackets(y: number, dep: number): void {
+    const t = g.trim;
+    const sg = sideGeom(body, FRONT);
+    const u0 = 0.3 + clear[FRONT][0],
+      u1 = sg.L - 0.3 - clear[FRONT][1];
+    const n = Math.max(2, Math.round((u1 - u0) / 0.7));
+    setCol(t, shade(trimC, 0.94));
+    const yb = y - 0.34;
+    for (let k = 0; k <= n; k++) {
+      const u = u0 + ((u1 - u0) * k) / n;
+      const P = (du: number, yy: number, o: number) => [sx(sg, u + du, o), yy, sz(sg, u + du, o)];
+      t.hexa([P(-0.05, yb, 0), P(0.05, yb, 0), P(0.05, yb, 0.07), P(-0.05, yb, 0.07), P(-0.05, y, 0), P(0.05, y, 0), P(0.05, y, dep), P(-0.05, y, dep)], 2);
     }
   }
 
@@ -929,6 +946,7 @@ export function genTownhouse(g: Gen): void {
     setCol(g.trim, trimC);
     const sgF = sideGeom(body, FRONT);
     sideBox(g.trim, sgF, 0, sgF.L, 0, 0.3, eave - 0.3, eave + 0.02, true);
+    if (MASS.crowns && mr.chance(0.7)) eaveBrackets(eave - 0.3, 0.28);
     // steep front/back slopes
     roofLook(s, roofC, pat, g.seed);
     const z1i = body.z1 - inset,
