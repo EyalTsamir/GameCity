@@ -99,6 +99,25 @@ export function genChurch(env: Env, lot: Lot): void {
     [0, 5.7, tz1 + 0.34],
   ]);
   finial(K, trim, 0, 5.75, tz1 + 0.12, 0.45, 0.08);
+  if (mould) {
+    // gablet dressing: a moulded base course, a trefoil oculus in the tympanum, crockets up both slopes
+    const prev = K.b.forceDetail;
+    K.b.forceDetail = true;
+    K.box(trim, 3.3, 0.13, 0.1, 0, 4.25, tz1 + 0.38);
+    K.box(trim, 3.1, 0.06, 0.05, 0, 4.38, tz1 + 0.36);
+    const oz = tz1 + 0.36;
+    K.torus(trim, 0.27, 0.04, 0, 4.88, oz, 4, 24, Math.PI * 2, 0);
+    for (let k = 0; k < 3; k++) {
+      const a = Math.PI / 2 + (k * Math.PI * 2) / 3;
+      K.torus(trim, 0.085, 0.022, Math.cos(a) * 0.12, 4.88 + Math.sin(a) * 0.12, oz, 4, 12, Math.PI * 2, 0);
+    }
+    const disc = new THREE.CircleGeometry(0.25, 16);
+    K.geo(dark, disc, 0, 4.88, oz - 0.012, 0);
+    disc.dispose();
+    for (const sg of [-1, 1])
+      for (const t of [0.3, 0.55, 0.8]) K.sphere(trim, 0.065, sg * 1.75 * (1 - t), 4.25 + 1.5 * t + 0.14, tz1 + 0.14, 6, 4);
+    K.b.forceDetail = prev;
+  }
   // portal door: boarded leaves (PAT.DOOR) dressed with wrought-iron strap hinges ending in fleur tips, a
   // meeting stile, ring pulls on round back plates, a stone threshold; a darker plinth course round the base
   const iron = M('#1f1d1b', PAT.PLAIN, 0.55, 0.6);
@@ -382,7 +401,7 @@ function ringAt(K: Kit, m: Mat, wm: THREE.Matrix4, x: number, y: number, z: numb
 /**
  * Stone dressing of one opening (near-detail mesh): pointed stained/door openings get a hood mould over the arch
  * (a back fillet + a proud roll) ending in label stops; the portal also gets two archivolt rolls stepping into
- * the reveal. Round rose windows get an outer roll and plate tracery: rim, hub, 12 spokes, cusped foils.
+ * the reveal. Round rose windows get an outer roll and plate tracery: rim, hub, 12 spokes, cusped foils, matched to the painted glass.
  */
 function dressOpening(K: Kit, s: WallSpec, o: Opening): void {
   const sur = o.surround;
@@ -421,13 +440,14 @@ function dressOpening(K: Kit, s: WallSpec, o: Opening): void {
     ringAt(K, sur, wm, cx, cy, 0.09, R + sw + 0.05, 0.065, 6, 40);
     const z = -(o.inset ?? 0.3) + 0.045;
     ringAt(K, sur, wm, cx, cy, z, R - 0.05, 0.055, 4, 40);
-    ringAt(K, sur, wm, cx, cy, z, R * 0.23, 0.05, 4, 20);
-    const hub = new THREE.CircleGeometry(R * 0.2, 16);
+    // tracery radii follow the painted glass (landmarks/shaders.ts pat 19): hub ring 0.31, foils at 0.62 (r 0.19)
+    ringAt(K, sur, wm, cx, cy, z, R * 0.31, 0.05, 4, 20);
+    const hub = new THREE.CircleGeometry(R * 0.28, 16);
     hub.translate(cx, cy, z + 0.02);
     K.geoM(sur, hub, wm, 'box');
     hub.dispose();
     const n = 12;
-    const r0 = R * 0.23,
+    const r0 = R * 0.31,
       r1 = R - 0.05;
     for (let i = 0; i < n; i++) {
       const a = (i / n) * Math.PI * 2;
@@ -438,10 +458,8 @@ function dressOpening(K: Kit, s: WallSpec, o: Opening): void {
       K.geoM(sur, sp, wm, 'box');
       sp.dispose();
       const ah = a + Math.PI / n;
-      const rf = R * 0.68,
-        rs = R * 0.4;
-      ringAt(K, sur, wm, cx + Math.sin(ah) * rf, cy + Math.cos(ah) * rf, z, Math.min(0.19, rf * Math.sin(Math.PI / n) - 0.06), 0.028, 4, 16);
-      ringAt(K, sur, wm, cx + Math.sin(ah) * rs, cy + Math.cos(ah) * rs, z, Math.min(0.1, rs * Math.sin(Math.PI / n) - 0.04), 0.022, 4, 12);
+      const rf = R * 0.62;
+      ringAt(K, sur, wm, cx + Math.sin(ah) * rf, cy + Math.cos(ah) * rf, z, R * 0.19, 0.03, 4, 16);
     }
   }
   K.b.forceDetail = prev;

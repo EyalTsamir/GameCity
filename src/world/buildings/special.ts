@@ -466,6 +466,12 @@ export function genSchool(g: Gen): void {
       setCol(t, shade(steel, 0.92));
       sideBox(t, sg, sgn < 0 ? u - 1.08 : u + 0.03, sgn < 0 ? u - 0.03 : u + 1.08, -d, -d + 0.006, 0.15, 0.44);
     }
+    // the cantilevered canopy gets steel knee braces back to the wall, with wall plates
+    for (const bu of [u - 2.0, u + 2.0]) {
+      setCol(t, col('#5d6266'));
+      t.beam(sx(sg, bu, 1.15), 3.0, sz(sg, bu, 1.15), sx(sg, bu, 0.03), 2.35, sz(sg, bu, 0.03), 0.05, 0.05);
+      sideBox(t, sg, bu - 0.06, bu + 0.06, 0, 0.02, 2.26, 2.5, true);
+    }
     if (!bays) return;
     // noticeboard: green aluminium case, papers recessed 4 cm behind the lip, a pale glazing edge, header plaque
     const a = u - 2.6,
@@ -498,10 +504,13 @@ export function genSchool(g: Gen): void {
     sideBox(t, sg, iu - 0.012, iu + 0.012, 0.03, 0.036, 1.47, 1.494);
     setCol(t, col('#4f86c6'));
     sideBox(t, sg, iu - 0.03, iu + 0.03, 0.03, 0.04, 1.28, 1.34);
-    const vr = g.atlas.add('school-visitors', 256, 96, boardSign('ALL VISITORS PLEASE REPORT TO RECEPTION', { bg: '#f4f1ea', fg: '#2f5d50', border: '#2f5d50', glow: 0, font: 'Arial, sans-serif' }));
+    // visitors plaque: two lines on a steel-edged board (one line was unreadable at 3 m)
+    const v1 = g.atlas.add('school-visitors1', 256, 64, boardSign('ALL VISITORS', { bg: '#2f5d50', fg: '#f4f1ea', glow: 0, font: 'Arial, sans-serif' }));
+    const v2 = g.atlas.add('school-visitors2', 320, 64, boardSign('PLEASE REPORT TO RECEPTION', { bg: '#f4f1ea', fg: '#2f5d50', glow: 0, font: 'Arial, sans-serif' }));
     setCol(t, col('#c8ccce'));
-    sideBox(t, sg, u + 1.72, u + 2.58, 0, 0.012, 1.34, 1.66, true);
-    signOnSide(g, sg, u + 1.73, u + 2.57, 0.014, 1.35, 1.65, vr);
+    sideBox(t, sg, u + 1.74, u + 2.6, 0, 0.012, 1.28, 1.74, true);
+    signOnSide(g, sg, u + 1.76, u + 2.58, 0.014, 1.53, 1.72, v1);
+    signOnSide(g, sg, u + 1.76, u + 2.58, 0.014, 1.3, 1.5, v2);
   }
 
   /** Stone lintels (with a soldier-course look: a dark joint line under them) and keyed corners per window. */

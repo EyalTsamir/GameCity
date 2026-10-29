@@ -5,6 +5,22 @@ Branch `claude/real-w1-facades` (from `claude/pensive-gates-bim12i`). Brief: doc
 ## F1 session 2 (2026-10-29) — in progress
 * Tasks: (1) bench-judge session-1 changes (shots/f1s2/b*), fix fails; (2) school entrance kit; (3) church mouldings +
   rose tracery. Lawn rim out of scope.
+* **School entrance kit (special.ts genSchool, `?noschoolkit`, all tiers — a few hundred trim tris):** main FRONT
+  door opening passed to bandWithOpenings as 5.4 m (lintel callback fills the two 1.6 m wall bays), plinth segs now
+  use the door width. `entranceKit()`: stainless D-pull bars at the meeting stiles, kick plates, seal line, steel knee
+  braces under the canopy; main door: green aluminium noticeboard (cork + pinned papers drawn by signs.ts
+  `noticeBoard(seed)`, recessed behind a 5 cm lip, glazing edge, lock, "NOTICES" header), intercom, two-line
+  visitors plaque. GYM board: dark backing + 4 bolt heads. Railings/gate/bike stands = outside the footprint →
+  request in real-requests.md. Bench shots/f1s2/b2/school_{3,7}m.png: reads.
+* **Church (church.ts, `?nochurchmould`, off on low):** local `wall` wrapper → `dressOpening()` per opening:
+  pointed stained/door openings get a two-step hood mould over the arch + label stops (`archBand` = ExtrudeGeometry
+  band along pointedPoints grown g0..g1); the portal gets two archivolt rolls in the reveal; round openings
+  (w > 1.2: tower rose, gable rose) get an outer roll + plate tracery (rim, hub, 12 spokes, 12 foils) at the radii
+  of the painted glass (shaders.ts pat 19). Gablet: base course, trefoil oculus, crockets. shots/f1s2/rose.png.
+* Bench notes: church class at 3 m = camera in the door (brown frame); school/church at 10 m = inside a facade
+  across the street → use `shot.mjs --view "70,7.0,92.4,6,12,4"` (rose) / `"70,5.6,92.4,6,15,6"` (portal). A
+  capture costs ~2 min here (load ~4 min).
+* The diagonal "rod" over the church gablet in church_7m = the gablet finial's shadow (not geometry).
 
 ## F1 — Facades final (2026-10-29, branch `claude/real-f1-facades`, session 1 — stopped at the context cap)
 ### Resume here
