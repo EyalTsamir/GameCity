@@ -151,9 +151,12 @@ vec3 landAlbedo() {
   vec4 nB = texture2D(tLN, p.xz * (1.0 / 47.0));
   // sea / river bed ≥ 0.3 m under water (no wood, no rock): the bed block at the end replaces the whole albedo
   // (its mix weight is 1 there) — compute just that (the open sea floor is ~a third of the overview's land pixels)
-  {
-    float depth = ${WL.toFixed(2)} - p.y;
-    if (depth >= 0.3 && forest <= 0.0 && rock <= 0.0 && uLandDbg < 0.5) {
+  // (one exit for the whole function: ANGLE's HLSL backend warns X4000 on an early return here)
+  vec3 lnRes;
+  float bedD = ${WL.toFixed(2)} - p.y;
+  if (bedD >= 0.3 && forest <= 0.0 && rock <= 0.0 && uLandDbg < 0.5) {
+    float depth = bedD;
+    {
       vec3 bed = mix(cBedA, cBedB, smoothstep(0.2, 6.0, depth));
       bed = mix(bed, mix(cMud * 0.8, cBedB * 0.7, smoothstep(0.3, 2.5, depth)), 1.0 - smoothstep(30.0, 55.0, vCov3.x));
       bed *= 0.9 + 0.16 * nB.b;
@@ -162,9 +165,9 @@ vec3 landAlbedo() {
       float c2 = texture2D(tLN, cp * 1.37 + vec2(-uTime * 0.009, uTime * 0.012)).g;
       float caus = (1.0 - smoothstep(0.0, 0.07, abs(c1 - c2))) * smoothstep(0.05, 0.45, depth) * (1.0 - smoothstep(0.8, 3.8, depth)) * (1.0 - uNight);
       bed += vec3(0.85, 1.0, 0.95) * caus * 0.3 * (1.0 - smoothstep(0.5, 2.0, fp));
-      return bed;
+      lnRes = bed;
     }
-  }
+  } else {
   float macro = (nM.g - 0.5) * 0.9 + (nA.r - 0.5) * 0.6;
   float midF = 1.0 - smoothstep(1.5, 6.0, fp);
   float gust = thGust(p.xz) * clamp(length(uWind) * 1.3, 0.0, 1.0);
@@ -668,7 +671,9 @@ vec3 landAlbedo() {
     }
   }
   if (uLandDbg > 0.5) col = vec3(forest, fieldW, sand);
-  return col;
+  lnRes = col;
+  }
+  return lnRes;
 }
 `;
 
