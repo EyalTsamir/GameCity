@@ -11,6 +11,11 @@ Overview must stay at least as impressive as now. Every feature: quality tiers +
 Lead session: session_01XuhAMczW3iK25AAWnf3qog, branch `claude/pensive-gates-bim12i`.
 
 ## Resume here (keep current)
+* 2026-10-29 04:00 UTC — F4 s1 merged (96a271a/6a14a9a: awnings sag, laundry folds+pegs (+1 draw), bunting, sailboat
+  cabin/cockpit/rails/sail seams, tractor glass cab, forklift, aged props/quay/site, ?nonightmarket tarps, back yard
+  fence/patio/shed/pots/toys; trees through buildings fixed; poplar clumps open; cloth 70k→113k tris, cost
+  unmeasured). tsc OK, golden f4 running. F4b session_01XuhAMehKEmHEj5fmKgEJ3K (re-capture blank views, poplars, cost).
+  Tractor driver + sail crew forwarded to F2b. E-scooter (W2) → open list.
 * 2026-10-29 03:35 UTC — HARNESS FIX: the pumpFrames 8×8 clipped jpeg screenshots made Chromium tile an 8×8 patch over
   later captures (grey stipple; golden harbor 39.7 / oldtown 58.8, F2's "blank views", F3's harbor/westbrook 39/37).
   Pumps are now full-viewport. Golden after F1+F2 (shots/golden/f1b): overview 0.6, harbor 2.0, oldtown 4.1,
