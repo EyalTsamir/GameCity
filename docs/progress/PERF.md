@@ -3,17 +3,44 @@
 Branch `claude/pensive-gates-bim12i`. Budget file: `perf-results.txt` (repo root). Earlier perf rounds are kept below
 ("Earlier round: render-performance pass").
 
-## Resume here
-- Pushed: c45a8c9 (warm-up, landmark cells, far peds), b52144b (draw order, vehicle far LODs, early-outs), 237a97c.
-- Local, being measured: a200a65 (tree sort, facade chunks), 0726126 (warm-up pins visibility), 237a97c (uDetailPx),
-  fd69368 (trees slot 2.5, big landmarks own meshes), c0399b9 (fine furniture cells). Push each after its A/B.
-- Frozen copies (scratchpad worktrees, own vite servers): base 8718d0f :5174, cand1 c45a8c9 :5175, cand2 b52144b :5176,
-  cand3 237a97c :5177 (exp), cand4 c0399b9 :5178. Measurement queues: shots/perf2/queue*.sh (outputs next to them).
-- Open: market crowd near layer (7.3 ms), allocations (6–40 MB/s → GC), facade near detail (LOD option uDetailPx
-  measured in lod_ab.txt — a visible trade-off: switch, not default), boot time with the warm-up (bootprobe.mjs).
-- A frozen copy of any commit for same-run before/after: `git worktree add --detach <dir> <commit>`, junction its
-  `node_modules` to this repo's, write vite.base.config.mjs (own port + cacheDir), `node node_modules/vite/bin/vite.js
-  --config vite.base.config.mjs`, pass `--url http://127.0.0.1:<port>/` to perf/hitch/drawprof/hideprof/golden.
+## Resume here (updated 2026-10-29 ~19:00 — written so a context reset loses nothing)
+**Task (user, Hebrew prompt docs/progress/NEXT-PROMPT-PERF.md):** smooth city on the Adreno, no freezes, zero/minimal
+quality loss; measure first; perf-results.txt = budget; fix by impact; prove each fix (same-run A/B, golden.sh +
+street-level shots, clean console, invariants {}, typecheck); commit+push after each improvement; this log; final report
+IN HEBREW: before/after table per view (mean frame time, outlier frames, freezes), what was fixed, what cost quality,
+what is open. Visible trade-offs only behind a switch, with their measured price.
+
+**Pushed (measured):** c45a8c9 batch 1, b52144b batch 2, 237a97c batch 3 (see Log 3–5).
+**Committed locally, not yet measured/pushed:** fd69368 (trees slot 2.5, big landmarks own meshes), c0399b9 (fine
+furniture cells), f594b6a (parallel warm-up compileAsync + garbage fixes: wind, shadowFit, crowd director loops),
+f3b0b78 (census skips crowd picker), cf30424 (departure board refresh only < 45 m — a minimal visible change: the
+board keeps its last state beyond 45 m where its text is unreadable; ?fps=30 optional cap), 5274c61 (ped layer names,
+?pednear=far A/B). Push each once its A/B shows no regression: `git push origin <sha>:claude/pensive-gates-bim12i`.
+
+**Frozen copies** (scratchpad worktrees, each `node node_modules/vite/bin/vite.js --config vite.base.config.mjs`):
+base 8718d0f :5174 · cand2 b52144b :5176 · cand4 c0399b9 :5178 · cand5 f594b6a :5179 · cand6 5274c61 :5180
+(cand1 :5175 and cand3 :5177 retired). Scratchpad = C:/Users/eyalt/AppData/Local/Temp/claude/C--Users-eyalt--claude-
+spares-spare-Iu4xkp/edff2af5-8a31-4305-8fd4-d223bad6e749/scratchpad. Outputs: shots/perf2/*.txt|json (gitignored).
+**Queued when written:** ab2_sw (cand2 drawsort=0 / vehfd=1), ab4_c4 (cand4 perf), boot_c5 + hitch_c5 + alloc_c5
+(queue9), retained_c5 (JS heap after boot ~730 MB: who holds it), progprobe_c5 (materials re-deriving programs/frame).
+
+**Current numbers (ms/frame uncapped, 12 h; orig → cand3):** overview 69.7 → 48.6, street 54.2 → 46.8, market 58.8 →
+51.5, harbour 65.0 → 48.3, platform 38.4 → 31.6 (21.5 h similar: 72.7→52.6, 55.6→47.2, 60.9→48.5, 69.3→52.9, 44.6→35.6).
+Stutter: no shader compiles mid-run any more (hitch_new1); boot was 59 s = 9 s modules + 50 s serial compile.
+
+**Next, in order:**
+1. Read ab4_c4 / boot_c5 / hitch_c5 / alloc_c5 / retained_c5 / progprobe_c5; push what is proven.
+2. Market crowd 10.7 ms + landmarks 10 ms (cand3 hide A/B): measure cand6 with `--targets "peds-near;peds-close;
+   peds-far;..."` and perf variant `pednear=far` (upper bound of a leaner near program; that variant itself is NOT
+   shippable — near faces are ~20 px). Landmarks are vertex-bound (half-res ratio 1.3) → culling, not shading.
+3. Facades: remaining cost is visible detail (interiors 4–5 ms, bhOpp 3.7, reveal 2.0, glassvar 1.9 at street) →
+   price the LOD option (uDetailPx 0.15/0.4 and 0.1/0.25: hideprof js: targets, shots/perf2/lod_targets.txt) and
+   offer it as a switch (+ maybe an adaptive-ladder step before the resolution drops), not as a default.
+4. Remaining garbage (poses / crowd step paths: V8 boxing, lower yield), JS heap size.
+5. Final verification on the last candidate: golden.sh (GOLDEN_URL), streetset.sh <url> <tag> base, hitch.mjs
+   (vsync, adaptive on), soak.mjs 4 min x4, console/invariants (note: base also reports intermittent pedestrian
+   'overlapping' invariants — pre-existing), typecheck, `npm run build` + boot of dist/index.html; perf-results.txt
+   "after" section; final Hebrew report (docs/progress/PERF-REPORT.md + chat).
 
 ## Tools (new this round, all in scripts/, all lock-serialised)
 - `perf.mjs --views "a;name=x,y,z,d,yaw,pitch" --hours 12,21.5 --gpu 1` — uncapped ms/frame for several views in ONE
