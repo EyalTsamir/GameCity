@@ -153,6 +153,8 @@ export interface BuildingsService {
   houses(): unknown;
   /** facade shader uniforms (perf harness: runtime A/B of uWinRefl, uWinDepth, uWallRelief …) */
   uniforms: Record<string, { value: unknown }>;
+  /** setbacks per lot id: from height y0 up the volume is the world rect (sorted by y0) — explore rooms */
+  massTiers: Map<number, { y0: number; x0: number; z0: number; x1: number; z1: number }[]>;
 }
 
 /** Module-level collector (reset per module creation). */

@@ -15,6 +15,7 @@ import {
 import { WIN, PROF, WALLPAT, ROOFPAT, FRAME, GLASS, LIGHT_MODE, shopType } from './materials';
 import { letterSign, helipadMark, boardSign } from './signs';
 import { GREEN } from './green';
+import { MASS, massRng, recordTier, notchPoly, notchCap, crownCornice, roofKit } from './massing';
 
 interface P {
   x: number;
@@ -206,9 +207,10 @@ export function genTower(g: Gen): void {
       }
     }
   };
-  const tierRoof = (poly: P[], y: number, parapet: number, roofCol = col('#8b8a86')) => {
+  const tierRoof = (poly: P[], y: number, parapet: number, roofCol = col('#8b8a86'), notched: LRect | null = null) => {
     roofLook(g.shell, roofCol, ROOFPAT.FLAT, g.seed);
-    polyCap(g.shell, poly, y + 0.02);
+    if (notched) notchCap(g.shell, notched, notch, y + 0.02);
+    else polyCap(g.shell, poly, y + 0.02);
     if (parapet > 0) {
       // parapet: outer wall continues (no windows) + coping
       for (let i = 0; i < poly.length; i++) {
@@ -266,21 +268,71 @@ export function genTower(g: Gen): void {
   } else {
     tiers.push({ r: shaft, y0: startY, y1: H, c: chamfer });
   }
+  // massing variants (own RNG stream): wedding-cake setbacks on masonry, an asymmetric setback, notched
+  // (re-entrant) corners, or a set-back top storey with a terrace
+  const mr = massRng(g);
+  const masonry = sc.style !== WIN.CURTAIN && (sc.pattern === WALLPAT.BRICK || sc.pattern === WALLPAT.STONE || sc.pattern === WALLPAT.PANELS);
+  let notch = 0;
+  if (MASS.setbacks && !twin && tiers.length === 1 && (sc.crown === 'flat' || sc.crown === 'screen') && H > 12) {
+    const fl = (y: number) => gH + fH * Math.max(1, Math.round((y - gH) / fH));
+    const r0 = shaft;
+    const w = r0.x1 - r0.x0,
+      d = r0.z1 - r0.z0;
+    const cOf = (r: LRect) => Math.min(chamfer, Math.min(r.x1 - r.x0, r.z1 - r.z0) * 0.2);
+    const kind = masonry ? (H > 30 ? 'cake' : 'penthouse') : H > 34 ? mr.weighted(['setback', 'notch', 'penthouse'] as const, [0.45, 0.35, 0.2]) : 'penthouse';
+    if (kind === 'cake') {
+      const y1 = fl(H * 0.68),
+        y2 = fl(H * 0.85);
+      const s1 = Math.min(1.8, Math.min(w, d) * 0.1);
+      if (y1 > startY && y1 < y2 && y2 < H - 1) {
+        tiers.length = 0;
+        tiers.push({ r: r0, y0: startY, y1, c: chamfer }, { r: insetRect(r0, s1), y0: y1, y1: y2, c: cOf(insetRect(r0, s1)) }, { r: insetRect(r0, 2 * s1), y0: y2, y1: H, c: cOf(insetRect(r0, 2 * s1)) });
+      }
+    } else if (kind === 'setback') {
+      const y1 = fl(H * mr.range(0.6, 0.78));
+      const up = { ...r0 };
+      up.z0 += d * mr.range(0.28, 0.42);
+      if (mr.chance(0.5)) {
+        if (mr.chance(0.5)) up.x0 += w * 0.22;
+        else up.x1 -= w * 0.22;
+      }
+      if (y1 > startY && y1 < H - fH) {
+        tiers.length = 0;
+        tiers.push({ r: r0, y0: startY, y1, c: chamfer }, { r: up, y0: y1, y1: H, c: cOf(up) });
+      }
+    } else if (kind === 'notch') {
+      notch = Math.min(2.4, Math.min(w, d) * 0.12);
+    } else {
+      const y1 = H - fH;
+      const up = { x0: r0.x0 + 1.6, x1: r0.x1 - 1.6, z0: r0.z0 + 0.6, z1: r0.z1 - 2.3 };
+      if (y1 > startY + 1 && up.x1 - up.x0 > 4 && up.z1 - up.z0 > 4) {
+        tiers.length = 0;
+        tiers.push({ r: r0, y0: startY, y1, c: chamfer }, { r: up, y0: y1, y1: H, c: cOf(up) });
+      }
+    }
+  }
+  // the explore camera's rooms follow the tiers
+  recordTier(g, 0, podiumTop > 0 ? base : shaft);
+  for (const t of tiers) recordTier(g, t.y0, t.r);
   for (let i = 0; i < tiers.length; i++) {
     const t = tiers[i];
-    const poly = rectPoly(t.r, t.c);
+    const poly = notch > 0 ? notchPoly(t.r, notch) : rectPoly(t.r, t.c);
     const last = i === tiers.length - 1;
     if (last && sc.crown === 'slant') {
       slantTop(poly, t.r, t.y0, H);
       continue;
     }
     tierWalls(poly, t.y0, t.y1);
-    tierRoof(poly, t.y1, last ? 1.1 : 0.9);
+    tierRoof(poly, t.y1, last ? 1.1 : 0.9, undefined, notch > 0 ? t.r : null);
+    // ?nocrowns: masonry tiers end in a deep cornice on brackets below the parapet
+    if (MASS.crowns && masonry) crownCornice(g, poly, t.y1 + (last ? 0.62 : 0.5), last ? 0.62 : 0.42, shade(wallC, 1.1), true);
     if (sc.accent && H > 45) accentEdge(poly, t.y1 + (last ? 1.15 : 0.95), sc.accent, last ? 2.6 : 1.8);
+    // the roof a setback leaves: terrace with planters / a garden, plant
+    if (!last && MASS.setbacks) setbackRoof(t.r, tiers[i + 1].r, t.y1);
   }
   shaft = tiers[tiers.length - 1].r;
   if (sc.crown !== 'slant') {
-    if (sc.crown === 'screen') crownScreen(rectPoly(shaft, chamfer), H);
+    if (sc.crown === 'screen') crownScreen(notch > 0 ? notchPoly(shaft, notch) : rectPoly(shaft, chamfer), H);
     rooftop(insetRect(shaft, 0.6), H, sc.crown !== 'screen');
   }
   if (H >= 60) {
@@ -290,6 +342,20 @@ export function genTower(g: Gen): void {
   }
 
   // ───────────────────────────────────────────────────── pieces ──
+
+  /** furniture on the strips of a lower tier's roof left open by the tier above */
+  function setbackRoof(lo: LRect, up: LRect, y: number): void {
+    const strips: LRect[] = [
+      { x0: lo.x0, x1: lo.x1, z0: up.z1, z1: lo.z1 },
+      { x0: lo.x0, x1: lo.x1, z0: lo.z0, z1: up.z0 },
+      { x0: lo.x0, x1: up.x0, z0: up.z0, z1: up.z1 },
+      { x0: up.x1, x1: lo.x1, z0: up.z0, z1: up.z1 },
+    ];
+    for (const st of strips) {
+      if (st.x1 - st.x0 < 2.6 || st.z1 - st.z0 < 2.6) continue;
+      roofKit(g, insetRect(st, 0.35), y + 0.02, { rng: mr, garden: 0.65, tank: masonry ? 0.35 : 0.1, solar: 0.25, plant: 0.3, wall: shade(wallC, 0.95) });
+    }
+  }
 
   function buildLobby(r: LRect, arcade: boolean): void {
     const ar = arcade ? insetRect(r, 1.6) : r;

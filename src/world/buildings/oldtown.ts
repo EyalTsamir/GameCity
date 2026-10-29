@@ -16,6 +16,7 @@ import { PALETTE } from '../../core/gfx';
 import { anchors } from './anchors';
 import { windowBox, balconyLife, shutterPair, shutterState, julietBalcony, acUnit, dish, downpipe, potPlant, ironRail, climber, facadeCable, roofClutter as clutterRoof } from './clutter';
 import { GREEN } from './green';
+import { MASS, massRng, oriel, turret, crossGable, roofKit } from './massing';
 
 const SHOPS: { name: string; blade: string }[] = [
   { name: 'Bakery', blade: 'B' },
@@ -173,6 +174,26 @@ export function genTownhouse(g: Gen): void {
   if (gH + fH * (floors - 1) > eave - 0.3) fH = (eave - gH - 0.3) / (floors - 1);
   const topOfWindows = gH + fH * (floors - 1);
 
+  // ── massing (own RNG stream: the ?no… switches leave the rest of the house as it was)
+  const mr = massRng(g);
+  // corner turret on a corner house: front corner on an exposed side, from the first floor up
+  const turretSide: Side | -1 =
+    MASS.turrets && floors >= 3 && W >= 6.5 && (exposed[LEFT] || exposed[RIGHT]) && mr.chance(0.55) ? (exposed[LEFT] && exposed[RIGHT] ? (mr.chance(0.5) ? LEFT : RIGHT) : exposed[LEFT] ? LEFT : RIGHT) : -1;
+  const turretR = Math.min(1.3, Math.max(1.05, W * 0.14));
+  /** window-free span (m) at the start / end of each side's upper floors (turret) */
+  const clear: [number, number][] = [[0, 0], [0, 0], [0, 0], [0, 0]];
+  if (turretSide === RIGHT) (clear[FRONT][1] = turretR + 0.15), (clear[RIGHT][0] = turretR + 0.15);
+  if (turretSide === LEFT) (clear[FRONT][0] = turretR + 0.15), (clear[LEFT][1] = turretR + 0.15);
+  // an oriel (box or canted bay) on the front: shops keep their fascia clear and start it a floor higher
+  const orielRow0 = shop ? 1 : 0;
+  const wantOriel = MASS.oriels && floors - 1 - orielRow0 >= (lot.roof === 'flat' ? 1 : 2) && mr.chance(turretSide >= 0 ? 0.2 : 0.42);
+  /** front window cells (row:col) covered by the oriel, and its centre (local x) for a cross gable above it */
+  const orielCells = new Set<string>();
+  let orielX: number | null = null,
+    orielW = 0;
+  let orielGrid: Grid | null = null;
+  const orielCols = new Set<number>();
+
   // ── look
   const wallC = g.wallColor;
   const trimC = rng.chance(0.7) ? col(rng.pick(['#f4efe4', '#efe6d2', '#f7f3ea'])) : shade(wallC, rng.chance(0.5) ? 0.78 : 1.12);
@@ -227,10 +248,24 @@ export function genTownhouse(g: Gen): void {
       const len = p.b - p.a;
       if (s === FRONT) buildFront(sg, p.a, p.b);
       else if (len < 2.2) wallPlain(g.shell, sg, p.a, p.b, 0, eave, wallLook);
-      else buildSecondary(sg, p.a, p.b, s === BACK, exposed[s]);
+      else buildSecondary(sg, p.a, p.b, s === BACK, exposed[s], clear[s]);
     }
   }
   g.shell.cornerMask = 3;
+
+  if (turretSide >= 0) {
+    const right = turretSide === RIGHT;
+    const capKind = mr.weighted(['cone', 'bell', 'dome'] as const, [0.5, 0.3, 0.2]);
+    const top = lot.roof === 'flat' ? eave + 1.35 : lot.roof === 'hip' ? eave + 0.9 : eave + 0.55;
+    turret(g, right ? body.x1 - 0.1 : body.x0 + 0.1, body.z1 - 0.1, {
+      R: turretR, n: 8, y0: gH, yTop: top, v0: gH, ch: fH, rows: floors - 1,
+      winW: 0.8, winH: Math.min(fH * 0.58, 1.75), sill: Math.min(0.92, fH * 0.3),
+      look: look(PROF.HOME), plain: wallLook, trimC,
+      capC: col(capKind === 'cone' ? mr.pick(['#4f5a66', '#5b6470', '#3f4a55']) : mr.pick(['#6fa596', '#5f9686', '#7bb09f'])),
+      cap: capKind, capH: capKind === 'cone' ? mr.range(2.6, 3.6) : capKind === 'bell' ? mr.range(2.0, 2.6) : mr.range(1.4, 1.8),
+      body, corbel: shop ? 0.55 : 1.0,
+    });
+  }
 
   function ghostSign(sg: SideGeom, uA: number, uB: number, yLow: number, yTop: number): void {
     const ad = GHOST[(lot.seed >>> 4) % GHOST.length];
@@ -247,6 +282,7 @@ export function genTownhouse(g: Gen): void {
     const t = g.trim;
     for (let j = 0; j < gr.m; j++) {
       for (let i = 0; i < gr.n; i++) {
+        if (gr === orielGrid && orielCells.has(`${j}:${i}`)) continue;
         const u = gridU(gr, i);
         const ww = gr.wx1 - gr.wx0;
         const y0 = gridY0(gr, j),
@@ -397,8 +433,9 @@ export function genTownhouse(g: Gen): void {
     if (doorU + dw / 2 + 0.14 < uB) sideBox(t, sg, doorU + dw / 2 + 0.14, uB, 0, 0.06, 0, shop ? 0.3 : 0.45);
 
     // ── upper floors
-    const gr = upperGrid(uA, uB);
+    const gr = upperGrid(uA + clear[FRONT][0], uB - clear[FRONT][1]);
     wallGrid(g.shell, sg, uA, uB, gH, eave, gr, look(PROF.HOME));
+    if (wantOriel) planOriel(sg, gr, doorU);
     skipBox = planBalconies(gr);
     windowTrim(sg, gr, true);
     skipBox = new Set();
@@ -426,6 +463,7 @@ export function genTownhouse(g: Gen): void {
         } else {
           i = i2 = rng.int(0, grd.n - 1);
         }
+        if (orielCols.has(i) || orielCols.has(i2)) continue;
         const u0 = gridU(grd, i) - (grd.wx1 - grd.wx0) / 2 - 0.4,
           u1 = gridU(grd, i2) + (grd.wx1 - grd.wx0) / 2 + 0.4;
         const yb = gridY0(grd, j) - 0.1;
@@ -453,8 +491,44 @@ export function genTownhouse(g: Gen): void {
     // cable run above the shop fascias / ground floor
     if (rng.chance(0.55) && uB - uA > 2) facadeCable(g, sg, uA + 0.05, uB - 0.05, gH + 0.22);
     // services on the front: a downpipe at one end of the gutter, maybe an AC unit or a dish up top
-    if (lot.roof !== 'flat' && ins[FRONT] > 0.1 && rng.chance(0.75)) downpipe(g, sg, rng.chance(0.5) ? uA + 0.18 : uB - 0.18, eave - 0.15, undefined, ins[FRONT]);
+    if (lot.roof !== 'flat' && ins[FRONT] > 0.1 && rng.chance(0.75)) {
+      // (not down the turret's corner)
+      const left = rng.chance(0.5) ? clear[FRONT][0] === 0 : clear[FRONT][1] > 0;
+      downpipe(g, sg, left ? uA + 0.18 : uB - 0.18, eave - 0.15, undefined, ins[FRONT]);
+    }
     if (gr.n > 0 && gr.m > 1 && rng.chance(0.22)) dish(g, sg, rng.chance(0.5) ? uA + 0.5 : uB - 0.5, eave - 1.2, 0.02);
+  }
+
+  /** oriel over one or two window columns of the front's upper floors */
+  function planOriel(sg: SideGeom, gr: Grid, doorU: number): void {
+    if (gr.n < 1 || gr.m < 1) return;
+    const two = gr.n >= 4 && mr.chance(0.35);
+    let i = gr.n % 2 === 1 ? (gr.n - 1) / 2 : mr.chance(0.5) ? gr.n / 2 - 1 : gr.n / 2;
+    if (two) i = Math.min(gr.n - 2, i);
+    const i2 = two ? i + 1 : i;
+    const ww = gr.wx1 - gr.wx0;
+    const half = Math.min(gr.cw * 0.46, ww / 2 + 0.5);
+    const u0 = two ? gridU(gr, i) - gr.cw / 2 + 0.12 : gridU(gr, i) - half,
+      u1 = two ? gridU(gr, i2) + gr.cw / 2 - 0.12 : gridU(gr, i) + half;
+    const w = u1 - u0;
+    const j0 = orielRow0;
+    const rowsN = (lot.roof === 'flat' ? gr.m : gr.m - 1) - j0;
+    const rows = rowsN > 2 && mr.chance(0.35) ? 2 : rowsN;
+    if (rows < 1 || w < 1.2) return;
+    const canted = w >= 1.9 && mr.chance(0.5);
+    const cap = j0 + rows >= gr.m ? 'flat' : mr.weighted(['hip', 'lean', 'flat'] as const, [0.5, 0.3, 0.2]);
+    const capC = cap === 'hip' ? col(mr.pick(['#4f5a66', '#5b6470', '#6fa596'])) : col('#7d858b');
+    const uc = (u0 + u1) / 2;
+    oriel(g, sg, uc, w, {
+      canted, dep: canted ? 0.72 : 0.6, o0: 0, v0: gH + j0 * fH, ch: fH, rows,
+      winW: ww, winH: gr.wy1 - gr.wy0, sill: gr.wy0, look: look(PROF.HOME), trimC, capC, cap,
+      corbel: j0 === 0 && Math.abs(uc - doorU) < w / 2 + 0.7 ? 0.25 : 0.5,
+    });
+    for (let j = j0; j < j0 + rows; j++) for (let k = i; k <= i2; k++) orielCells.add(`${j}:${k}`);
+    for (let k = i; k <= i2; k++) orielCols.add(k);
+    orielGrid = gr;
+    orielX = sg.x0 + sg.tx * uc;
+    orielW = w;
   }
 
   function awning(sg: SideGeom, uA: number, uB: number, yTop: number): void {
@@ -553,7 +627,7 @@ export function genTownhouse(g: Gen): void {
     sideBox(t, sg, u - 0.03, u + 0.03, o0 + 0.05, o1 - 0.05, yb + 0.26, yb + 0.34, true);
   }
 
-  function buildSecondary(sg: SideGeom, uA: number, uB: number, isBack: boolean, fullSide: boolean): void {
+  function buildSecondary(sg: SideGeom, uA: number, uB: number, isBack: boolean, fullSide: boolean, cl: [number, number]): void {
     const t = g.trim;
     const len = uB - uA;
     // old ivy on exposed side / back walls
@@ -567,7 +641,7 @@ export function genTownhouse(g: Gen): void {
     wallGrid(g.shell, sg, uA, uB, 0, gH, gr0, look(isBack ? PROF.HOME : PROF.HOME));
     if (fullSide) windowTrim(sg, gr0, false);
     // upper floors
-    const gr = upperGrid(uA, uB, Math.max(1, Math.min(4, Math.round((len - 0.9) / (isBack ? 2.9 : 2.6)))));
+    const gr = upperGrid(uA + cl[0], uB - cl[1], Math.max(1, Math.min(4, Math.round((len - cl[0] - cl[1] - 0.9) / (isBack ? 2.9 : 2.6)))));
     wallGrid(g.shell, sg, uA, uB, gH, eave, gr, look(PROF.HOME));
     windowTrim(sg, gr, !isBack);
     // the back of the house: AC condensers under windows, a dish, a downpipe
@@ -653,7 +727,7 @@ export function genTownhouse(g: Gen): void {
       g.trim.box(body.x1 - 0.27, yTop, body.z0 + 0.27, body.x1, yTop + 0.08, body.z1 - 0.27, 0b110111);
       flatRoof(g.shell, inner, eave + 0.02, col('#8d8a84'), ROOFPAT.FLAT, g.seed);
       const keep: LRect[] = [];
-      if (rng.chance(0.5)) keep.push(roofTerrace(inner, eave + 0.02));
+      if (rng.chance(0.5) && turretSide < 0) keep.push(roofTerrace(inner, eave + 0.02));
       else {
         // roof hatch / stair hut
         const hx = (inner.x0 + inner.x1) / 2 + rng.range(-1, 1),
@@ -667,7 +741,9 @@ export function genTownhouse(g: Gen): void {
       }
       // chimney stack position stays clear too
       keep.push({ x0: body.x0, x1: body.x0 + 1.2, z0: body.z0, z1: body.z1 });
-      clutterRoof(g, inner.x0, inner.z0, inner.x1, inner.z1, eave + 0.02, { keep, density: 1.1 });
+      if (turretSide >= 0) keep.push(turretSide === RIGHT ? { x0: body.x1 - 2.7, x1: body.x1, z0: body.z1 - 2.7, z1: body.z1 } : { x0: body.x0, x1: body.x0 + 2.7, z0: body.z1 - 2.7, z1: body.z1 });
+      const kept = roofKit(g, inner, eave + 0.02, { keep, garden: 0.12, tank: 0.3, solar: 0.3, plant: 0, wall: shade(wallC, 0.92) });
+      clutterRoof(g, inner.x0, inner.z0, inner.x1, inner.z1, eave + 0.02, { keep: kept, density: 1.1 });
       chimney(g, body.x0 + 0.5, (body.z0 + body.z1) / 2 + rng.range(-2, 2), eave, yTop + rng.range(1.0, 1.8));
       return;
     }
@@ -723,13 +799,14 @@ export function genTownhouse(g: Gen): void {
           wallTri(g.shell, sg, 0, sg.L, sg.L / 2, eave, yr, wallLook, attic, WIN.MUNTIN, PROF.HOME, frameIdx, GLASS.NEUTRAL);
         } else wallTri(g.shell, sg, 0, sg.L, sg.L / 2, eave, yr, wallLook);
       }
-      // dormers on the front slope, aligned with the window columns
-      const gr = upperGrid(0, body.x1 - body.x0);
+      // dormers on the front slope, aligned with the window columns — or a cross gable (over the oriel if any)
+      const gr = upperGrid(clear[FRONT][0], body.x1 - body.x0 - clear[FRONT][1]);
       const pitch = rise / half;
+      const cg = MASS.crossGables && body.x1 - body.x0 >= 6 && mr.chance(orielX !== null ? 0.75 : 0.42) && buildCrossGable(pitch, yr, roofC, pat);
       if (rng.chance(0.65)) {
         const nD = gr.n >= 3 ? (rng.chance(0.5) ? 2 : 1) : 1;
         const cols = nD === 1 ? [Math.floor((gr.n - 1) / 2) + (gr.n % 2 === 0 ? 0.5 : 0)] : [0.0 + (gr.n > 3 ? 0.5 : 0), gr.n - 1 - (gr.n > 3 ? 0.5 : 0)];
-        for (const ci of cols) {
+        if (!cg) for (const ci of cols) {
           const u = gr.u0 + (ci + 0.5) * gr.cw;
           dormer(body.x0 + u, body.z1 - 1.25, eave + 1.25 * pitch, pitch, roofC, pat);
         }
@@ -737,6 +814,18 @@ export function genTownhouse(g: Gen): void {
       if (rng.chance(0.9)) chimney(g, rng.chance(0.5) ? body.x0 + 0.6 : body.x1 - 0.6, (body.z0 + body.z1) / 2 + rng.range(-0.8, 0.8), yr - 1.0, yr + rng.range(0.6, 1.2));
       if (rng.chance(0.35)) chimney(g, (body.x0 + body.x1) / 2 + rng.range(-1.5, 1.5), body.z0 + 1.5, eave + 0.8, yr + 0.3);
     }
+  }
+
+  /** cross gable on the front slope of a side-gabled roof: centred on the oriel, clear of the turret */
+  function buildCrossGable(pitch: number, yr: number, roofC: THREE.Color, pat: number): boolean {
+    const bw = body.x1 - body.x0;
+    let w = orielX !== null ? Math.max(orielW + 0.9, 2.6) : Math.min(5.2, Math.max(3.0, bw * mr.range(0.38, 0.5)));
+    const lo = body.x0 + 0.5 + clear[FRONT][0],
+      hi = body.x1 - 0.5 - clear[FRONT][1];
+    w = Math.min(w, hi - lo);
+    if (w < 2.4) return false;
+    const cx = Math.min(hi - w / 2, Math.max(lo + w / 2, orielX ?? (body.x0 + body.x1) / 2));
+    return crossGable(g, { r: body, cx, w, eave, pitch, yRidge: yr, knee: mr.range(0.6, 1.4), look: look(PROF.HOME), plain: wallLook, roofC, pat, trimC, style: arched ? WIN.ARCHED : WIN.MUNTIN });
   }
 
   /** Front gable as a Dutch stepped gable rising above the roof line. */
@@ -870,7 +959,7 @@ export function genTownhouse(g: Gen): void {
     g.trim.box(body.x0, yTop - 0.02, z1i - 0.08, body.x1, yTop + 0.1, z1i + 0.06, 0b111111);
     g.trim.box(body.x0, yTop - 0.02, z0i - 0.06, body.x1, yTop + 0.1, z0i + 0.08, 0b111111);
     // dormers in the steep slope
-    const gr = upperGrid(0, body.x1 - body.x0);
+    const gr = upperGrid(clear[FRONT][0], body.x1 - body.x0 - clear[FRONT][1]);
     for (let i = 0; i < gr.n; i++) {
       const cx = body.x0 + gridU(gr, i);
       const w = 1.2,

@@ -11,6 +11,7 @@ import {
 } from './gen';
 import { anchors } from './anchors';
 import { balconyLife, roofClutter, ironRail, acUnit, dish, downpipe } from './clutter';
+import { roofKit } from './massing';
 import { WIN, PROF, WALLPAT, ROOFPAT, FRAME, GLASS, LIGHT_MODE } from './materials';
 import { partitionSide } from './oldtown';
 
@@ -425,7 +426,9 @@ export function genApartment(g: Gen): void {
   const keep = cores.map((u) => ({ x0: body.x0 + u - coreW / 2 - 0.4, x1: body.x0 + u + coreW / 2 + 0.4, z0: body.z1 - 1.2, z1: body.z1 + 1 }));
   const pv = rng.chance(0.3);
   if (pv) keep.push({ x0: inner.x0, x1: inner.x1, z0: inner.z0, z1: inner.z0 + 2.7 });
-  roofClutter(g, inner.x0, inner.z0, inner.x1, inner.z1 - 0.3, H + 0.02, { keep, density: 1.3 });
+  // roof furniture of a real slab: a lift / plant room, a tank, maybe a residents' garden (?noroofkit)
+  const kept = roofKit(g, { x0: inner.x0, z0: inner.z0, x1: inner.x1, z1: inner.z1 - 0.3 }, H + 0.02, { keep, plant: 0.9, tank: 0.45, garden: 0.3, solar: pv ? 0 : 0.35, wall: shade(wallC, 0.9) });
+  roofClutter(g, inner.x0, inner.z0, inner.x1, inner.z1 - 0.3, H + 0.02, { keep: kept, density: 1.3 });
   // solar panels
   if (pv) {
     for (let k = 0; k < 3; k++) {

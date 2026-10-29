@@ -33,6 +33,7 @@ import { anchors, collectFacades, collectSpans, type BuildingsService } from './
 import { GreenKit, makeGreenTexture, createGreenMaterial } from './buildings/green';
 import { setClutter } from './buildings/clutter';
 import { createWinGeo } from './buildings/winGeo';
+import { setMassing, resetMassing, massTiers } from './buildings/massing';
 
 /** edge (m) of the square trim chunks (≈ two city blocks), grid origin at the slab's NW corner */
 const TRIM_CHUNK = 110;
@@ -126,6 +127,9 @@ export default function create(ctx: CityContext): CityModule {
   resetHomes();
   anchors.reset();
   setClutter(!ctx.debug.params.has('noclutter'));
+  // massing: ?nomassing / ?nooriels ?noturrets ?nocrossgables ?nosetbacks ?nocrowns ?noroofkit (buildings/massing.ts)
+  setMassing(ctx.debug.params, ctx.quality.level);
+  resetMassing();
   setDoorLife(!ctx.debug.params.has('nodoorlife'));
   setGutters(!ctx.debug.params.has('nogutters'));
   setSchoolKit(!ctx.debug.params.has('noschoolkit'));
@@ -305,6 +309,7 @@ export default function create(ctx: CityContext): CityModule {
     },
     houses: () => houseLog,
     uniforms: mats.uniforms,
+    massTiers,
   };
   ctx.services.buildings = service;
 

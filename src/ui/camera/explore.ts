@@ -147,12 +147,21 @@ export class ExploreAid {
     return this.cells.get(this.key(Math.floor(x / CELL), Math.floor(z / CELL)));
   }
 
+  /** the lot's plan rect at height y: the footprint, or the setback tier the buildings module recorded */
+  private volumeAt(lot: Lot, y: number): { x0: number; z0: number; x1: number; z1: number } {
+    const tiers = (this.ctx.services.buildings as { massTiers?: Map<number, { y0: number; x0: number; z0: number; x1: number; z1: number }[]> } | undefined)?.massTiers?.get(lot.id);
+    if (!tiers) return lot.footprint;
+    let r: { x0: number; z0: number; x1: number; z1: number } = lot.footprint;
+    for (const t of tiers) if (t.y0 <= y + 0.05) r = t;
+    return r;
+  }
+
   /** the building / landmark lot whose volume (footprint grown by `pad`, ground to roof) contains the point */
   lotAt(x: number, y: number, z: number, pad = 0): Lot | null {
     const list = this.near(x, z);
     if (!list) return null;
     for (const lot of list) {
-      const f = lot.footprint;
+      const f = this.volumeAt(lot, y);
       if (x > f.x0 - pad && x < f.x1 + pad && z > f.z0 - pad && z < f.z1 + pad && y > -0.5 && y < lot.height) return lot;
     }
     return null;
@@ -186,10 +195,11 @@ export class ExploreAid {
   private place(lot: Lot, k: number, sh: number): void {
     this.roomLot = lot;
     this.storey = k;
-    const f = lot.footprint;
+    const y0 = k === 0 ? PLINTH : k * sh;
+    // (setbacks: the storey's own tier rect)
+    const f = this.volumeAt(lot, Math.max(y0, k * sh + 0.5 * sh));
     const ix = Math.min(WALL_INSET, (f.x1 - f.x0) / 4),
       iz = Math.min(WALL_INSET, (f.z1 - f.z0) / 4);
-    const y0 = k === 0 ? PLINTH : k * sh;
     const y1 = k >= lot.floors - 1 ? lot.height : (k + 1) * sh;
     this.min.set(f.x0 + ix, y0, f.z0 + iz);
     this.max.set(f.x1 - ix, Math.max(y0 + 2.2, y1 - 0.05), f.z1 - iz);
