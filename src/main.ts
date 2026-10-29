@@ -156,6 +156,21 @@ async function boot(): Promise<void> {
   const wanted: typeof MODULES = params.has('planview')
     ? [['planview', () => import('./debug/planView')]]
     : MODULES.filter(([name]) => (debug.only.length === 0 || debug.only.includes(name)) && !debug.skip.includes(name));
+  // shader compiles are kicked off as each module is built (KHR_parallel_shader_compile runs them on the GPU process'
+  // threads while the next modules build): the facade program alone compiles ~29 s on a fresh cache (warmUp waits)
+  const preRT = params.has('nowarmup') ? null : new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType });
+  const precompile = () => {
+    if (!preRT) return;
+    const prev = renderer.getRenderTarget();
+    renderer.setRenderTarget(preRT);
+    try {
+      renderer.compile(scene, camera);
+    } catch {
+      /* warmUp compiles it again and reports */
+    } finally {
+      renderer.setRenderTarget(prev);
+    }
+  };
   let k = 0;
   for (const [name, loader] of wanted) {
     setLoading(`Building ${name}…`, 0.05 + (0.9 * k++) / wanted.length);
@@ -165,6 +180,7 @@ async function boot(): Promise<void> {
       const t0 = performance.now();
       const inst = await mod.default(ctx);
       if (inst) modules.push(inst);
+      precompile();
       const ms = performance.now() - t0;
       if (debug.enabled) console.info(`[boot] ${name} ready in ${ms.toFixed(0)} ms`);
     } catch (err) {
@@ -264,6 +280,7 @@ async function boot(): Promise<void> {
     await nextFrame();
     const t0 = performance.now();
     await warmUp(ctx);
+    preRT?.dispose();
     if (debug.enabled) console.info(`[boot] warm-up ${(performance.now() - t0).toFixed(0)} ms, ${renderer.info.programs?.length ?? 0} programs`);
   }
   renderer.setAnimationLoop(loop);
