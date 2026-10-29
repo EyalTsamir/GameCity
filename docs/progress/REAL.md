@@ -11,6 +11,11 @@ Overview must stay at least as impressive as now. Every feature: quality tiers +
 Lead session: session_01XuhAMczW3iK25AAWnf3qog, branch `claude/pensive-gates-bim12i`.
 
 ## Resume here (keep current)
+* 2026-10-29 05:10 UTC — F4 CLOSED (3e30dab merged: night-market tarps rebuilt (ridge, back face, rolled top, festoon
+  spill), yacht/forklift/back yard judged real; shots/f4/pick.mjs ray-picks an on-screen object. Costs counted:
+  night market ≈1.05k tris/stall +1 draw +1 shadow draw (night only); props-print 2 tris/cover +1 draw near +1024²
+  canvas ≈5.3 MB; cloth 70k→113k tris). Open (final report): quay oil stains, site mud/ruts, school railings/gate/
+  bike stands, e-moped + e-scooter (traffic models), timing ;noprint;nonightmarket on the Adreno.
 * 2026-10-29 04:50 UTC — merged F4 s2 (print.ts printed newsstand/kiosk/phonebox, ?noprint; phonebox glass; poplar
   clumps fixed) and F2 s2 (9ec2ae1: occupants.ts real seated drivers/passengers within 38 m, ?nooccupants; sheet
   real/f2_s2_people.jpg). tsc OK, pushed. Golden f4 (before these two): overview 0.6, others 2–6 (facade edits).
