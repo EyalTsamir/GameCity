@@ -273,7 +273,7 @@ export function genTower(g: Gen): void {
   const mr = massRng(g);
   const masonry = sc.style !== WIN.CURTAIN && (sc.pattern === WALLPAT.BRICK || sc.pattern === WALLPAT.STONE || sc.pattern === WALLPAT.PANELS);
   let notch = 0;
-  if (MASS.setbacks && !twin && tiers.length === 1 && (sc.crown === 'flat' || sc.crown === 'screen') && H > 12) {
+  if (MASS.setbacks && !twin && tiers.length === 1 && (sc.crown === 'flat' || sc.crown === 'screen' || sc.crown === 'stepped') && H > 12) {
     const fl = (y: number) => gH + fH * Math.max(1, Math.round((y - gH) / fH));
     const r0 = shaft;
     const w = r0.x1 - r0.x0,

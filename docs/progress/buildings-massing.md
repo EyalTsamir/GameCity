@@ -1,36 +1,65 @@
 # Buildings massing round — log
 
-Branch `claude/buildings-massing-f65621` (based on `claude/pensive-gates-bim12i` @ a200754). Goal: ordinary buildings
-read as architecture, not "a box with a triangle on top" — break the volume (oriels, turrets, cross gables, setbacks,
-crowns, roof furniture). Landmarks are not in scope (boxhunt session); plan.ts layout untouched (places session).
+Branch `claude/buildings-massing-f65621` (based on `claude/pensive-gates-bim12i`; merged it again at 6150b5f to pick
+up perf-wins). Goal: ordinary buildings read as architecture, not "a box with a triangle on top" — break the volume.
+Landmarks are not in scope (boxhunt session); plan.ts layout untouched (places session); materials.ts untouched.
 
 ## Resume here
-- Done (code, typecheck clean, NOT yet visually verified): `src/world/buildings/massing.ts` kit + townhouse oriels /
-  corner turrets / cross gables, tower setbacks / notches / crown cornices, roof kit on flat roofs (townhouse flat,
-  tower setback strips, apartment slabs), explore rooms follow tiers.
-- Next: review shots (`shots/t1`: oldtown, ot_w, ot_n, ot_air, mkt) → fix → downtown/tower shots → perf
-  (`perf.mjs --views "overview;street=5,1.5,-65,9,0,6"` with `;nomassing` variant) → before/after sheets → build.
-- Baseline shots: `shots/before/*_11.png` (overview, downtown, oldtown, westbrook, industry, harbor, street).
-- Dev server for this worktree: `npx vite --port 5185 --strictPort`; harness from `C:/Projects/GameCity/scripts`.
+- DONE. Verified: typecheck clean, `npm run build` OK (3.77 MB), console clean (0 errors in every capture),
+  `invariants()` `{}` (incl. the footprint rule for every lot), perf measured. ui-test freecam/explore/building: see
+  "Checks" below.
+- Possible follow-ups (not done): industrial halls (office annex / roof monitors — needs an L-shaped hall),
+  loggias on apartment slabs, a set-back roof storey on apartments, glass-tower crowns (fins / lanterns).
+
+## What changed
+- `src/world/buildings/massing.ts` (new) — the kit: `oriel` (box / canted bay, storey-aligned windows on every face,
+  corbel, string bands, hip / lean / flat cap), `turret` (octagonal, corbelled, windowed faces, frieze cornice,
+  cone / bell / dome cap + finial), `crossGable` (knee wall + gable + its own roof meeting the main slope),
+  `notchPoly` / `notchCap` (re-entrant tower corners), `crownCornice` (frieze, bed moulding, corona on modillions),
+  roof furniture (`roofKit`: plant room, timber water tank on a stand, vents, PV rows facing south, roof garden with
+  pergola, ridge skylight), `massTiers` (setbacks for the explore rooms), `massRng` (own RNG stream).
+- Townhouses (oldtown.ts): corner turret on ~70 % of corner houses; oriel on ~60 % of fronts (25 % next to a turret;
+  shops from the 2nd floor); cross gable on ~55 % of side-gabled roofs (80 % with an oriel — centred on it) instead of
+  dormers; carved eave brackets under the front eave / mansard cornice on ~70 %; flat roofs get the roof kit.
+  Window grids, trims, balconies and downpipes keep clear of turrets / oriels.
+- Towers & offices (towers.ts): flat / screen / low stepped crowns get a massing variant — masonry: wedding-cake
+  setbacks (H > 30) or a set-back top storey; glass: asymmetric setback / notched corners / set-back top storey.
+  Masonry tiers end in a deep bracketed cornice. Setback roofs get terraces / gardens / plant (roof kit).
+  Twin towers, Haven Tower and the slant / tall stepped schemes keep their own crowns.
+- Grand Hotel (special.ts): domed corner pavilions on the exposed front corners.
+- Apartment slabs (houses.ts): roof kit (lift / plant room, tank, garden, PV) before the roof clutter.
+- Explore (src/ui/camera/explore.ts): `volumeAt(lot, y)` — rooms and `lotAt` use the storey's tier rect from
+  `services.buildings.massTiers` (also fits the pre-existing stepped crowns).
 
 ## Toggles (all on by default)
-`?nomassing` (all off) · `?nooriels` · `?noturrets` · `?nocrossgables` · `?nosetbacks` · `?nocrowns` · `?noroofkit`.
-Quality: low keeps the massing (it carries the skyline, few triangles) and drops the roof kit; cornice brackets
-only from medium.
+`?nomassing` (all off = the old massing, same build) · `?nooriels` · `?noturrets` · `?nocrossgables` ·
+`?nosetbacks` · `?nocrowns` (tower cornices + townhouse eave brackets) · `?noroofkit`.
+Quality: low keeps the massing (it carries the skyline, few triangles) and drops the roof kit; cornice brackets only
+from medium. Massing decisions use `massRng(g)`, so a toggle never reshuffles the rest of a building.
 
-## Design notes
-- Massing decisions use `massRng(g)` (a separate per-lot stream) so a toggle never reshuffles the rest of a lot.
-- Townhouses (oldtown.ts): turret on ~55 % of corner houses (front corner on an exposed side, ≥3 floors), octagonal,
-  corbelled from the first floor, cone / bell / dome cap, R ≤ 1.3 m (footprint overhang ≤ 1.2 m); front / side window
-  grids leave the turret span clear. Oriel on ~42 % of fronts (box or canted, one or two window columns, shops from
-  the second floor up), front window trims / balconies skip its cells. Cross gable (knee wall + gable + own roof meeting
-  the main slope) on ~42 % of side-gabled houses (75 % when there is an oriel — it is centred on it), replacing dormers.
-- Towers (towers.ts): masonry schemes → wedding-cake setbacks (H > 30) or a set-back top storey; glass → asymmetric
-  setback / notched corners / set-back top storey (flat & screen crowns only; stepped & slant schemes keep theirs).
-  Masonry tiers get `crownCornice` (frieze, bed moulding, corona on modillions). Setback roofs get `roofKit`.
-- Explore (src/ui/camera/explore.ts): `services.buildings.massTiers` (lot id → world rects from y0) — rooms and
-  `lotAt` use the storey's tier rect.
+## Cost (perf.mjs, Adreno X1-45, 1920×1025, high, 12:00, `--variants ";nomassing" --repeat 2 --gpu 1`)
+Full table: `docs/progress/massing/perf-results.txt`.
 
-## Files touched
-src/world/buildings/massing.ts (new), oldtown.ts, towers.ts, houses.ts, anchors.ts (service type), buildings.ts,
-src/ui/camera/explore.ts.
+| view | ms/frame massing | ms/frame ?nomassing | Δ (pass 1) | triangles Δ | draw calls Δ |
+|---|---|---|---|---|---|
+| overview | 48.8 | 47.5 | +1.4 | +3.5k | 0 |
+| street 5,1.5,-65 | 43.2 | 42.6 | +0.5 | +24k | +2 |
+| old-town row | 59.4 | 59.0 | +0.5 | ±0 | 0 |
+| skyline (dsky) | 44.4 | 44.7 | −0.3 | +10k | 0 |
+
+Pass 2 was inverted by thermal noise (?nomassing 2–8 ms slower), so the real cost is ≲ 1.5 ms and mostly inside the
+noise; triangles +0.1–0.6 %. No shader changes, no new materials, no per-frame work (all geometry is built once into
+the existing chunked shell / trim meshes).
+
+## Sheets
+`docs/progress/massing/street_before_after.jpg` (eye level: old-town rows, market row, downtown street),
+`docs/progress/massing/overview_before_after.jpg` (overview, old town, downtown, skyline, downtown avenue).
+Earlier round: `v1_street.jpg`, `v1_overview.jpg`. Before = `?nomassing` on the same build.
+
+## Checks
+- typecheck clean; build OK; captures: 0 console errors / page errors; invariants `{}`.
+
+## Files touched (for the merge)
+src/world/buildings/massing.ts (new), src/world/buildings/oldtown.ts, towers.ts, houses.ts, special.ts,
+anchors.ts (service type: `massTiers`), src/world/buildings.ts (setMassing / resetMassing / service),
+src/ui/camera/explore.ts (`volumeAt`), docs/progress/buildings-massing.md, docs/progress/massing/*.
