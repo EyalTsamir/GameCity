@@ -9,17 +9,21 @@ before/after crops kept for the log live in `docs/progress/boxhunt/`.
 **Round 2 (overnight, 2026-10-30) IN PROGRESS** — merged `claude/pensive-gates-bim12i` (083a507) first. Backlog in
 order: (1) ranked list #14–30 minus hand-offs, (2) REAL-REPORT objects, (3) interiors through glass, (4) re-audit
 with walk mode / free camera and fix the next 10, repeat. Every feature: `boxHunt(ctx, name)` switch.
-- Done + committed (f3945ad, e96153a): e-moped / e-scooter / motorbike sculpted (`?no2wdetail`, traffic
-  models.ts `loftZ`), school railings + gates + Sheffield stands (`?noschoolrail`, landmarks/civic.ts),
+- Done + committed (f3945ad … 6fe85cf): e-moped / e-scooter / motorbike sculpted (`?no2wdetail`, traffic
+  models.ts `loftZ`), school railings + gates + Sheffield stands (`?noschoolrail`, civic.ts `schoolBounds`),
   fish-quay reefer as a real container (`?noquaykit`), sail draft + finer cloth + tiller extension (`?nosailkit`),
   band instruments (`?nobandbrass`, park.ts `bandInstruments`), deli goods / chilled counter / hanging sausages
-  (`?nointeriors`, buildings/materials.ts `uBhInt`, one line in buildings.ts).
-- Verified visually: two-wheelers, school, reefer, sails. Pending: deli + band A/B shots (`shots/bh2/deli_*`,
-  `shots/bh/band/*`).
+  (`?nointeriors`, buildings/materials.ts `uBhInt`, one line in buildings.ts), bus-shelter barrel roof
+  (`?noshelterroof`), breakwater quarried armour + wet line (`?noarmour`, geo.ts `HB.stone`), round ferris
+  gondolas (`?nogondola`), church nave / station booking hall / town hall furnished (`?nointeriors`:
+  `churchInterior`, `stationInterior`, `townhallInterior`, all in the detail kit `env.D`).
+- Verified visually (A/B): two-wheelers, school, reefer, sails, band, deli, shelters, armour. Pending A/B:
+  church / station / gondolas (`shots/bh2/int`), town hall.
 - Already done by earlier rounds (F4, checked in code): building-site mud / ruts / mixer / excavator, quay oil
   stains. Car glass `?novehglass` (real-g) — still to re-check visually.
-- Next: car glass check; station hall, town hall, church interiors; ranked #14 pontoons, #15 armour rocks,
-  #19 orchard trees, #24 bus shelters, #27 gondolas, #29 water tower; then the walk-mode re-audit.
+- Next: car glass check; ranked #29 water tower, #19 orchard trees, #28 tunnel portals, #25 van body, #26 pier;
+  then the walk-mode re-audit; perf A/B + build at the end. Scratch tools: `evalshots.mjs` (eval-driven views,
+  before/after variants under one lock) + `v_*.js` view scripts in the session scratchpad.
 - Never run `npx prettier` here (no project config: it reformats whole files).
 
 Round 1: **DONE (2026-10-29 23:20)** — audit, ranked list, 10 fixes with switches, before/after sheet
