@@ -6,7 +6,7 @@ Branch `claude/box-hunt-af5a80` (based on `claude/pensive-gates-bim12i` a200754)
 before/after crops kept for the log live in `docs/progress/boxhunt/`.
 
 ## Resume here
-**Round 2 (overnight, 2026-10-30) IN PROGRESS** — merged `claude/pensive-gates-bim12i` (083a507) first. Backlog in
+**Round 2 (overnight, 2026-10-30) DONE** (see "Round 2" at the end: fixes, perf, smoothness, checks, hand-offs; sheet `docs/progress/boxhunt/round2_before_after.jpg`) — merged `claude/pensive-gates-bim12i` (083a507) first. Backlog in
 order: (1) ranked list #14–30 minus hand-offs, (2) REAL-REPORT objects, (3) interiors through glass, (4) re-audit
 with walk mode / free camera and fix the next 10, repeat. Every feature: `boxHunt(ctx, name)` switch.
 - **Latest (7033144)**: walk re-audit 2 (16 views `shots/bh2/walk2`, 2 judges) → picket board edges in the near
@@ -226,3 +226,97 @@ plus a matching shadow-depth material). The triangle growth is mostly the paraso
 
 **other**: a seated pedestrian rendered as a pure black silhouette on the bench in e_street (people/shadow);
 bandstand / gazebo, phone box, newsstand, kiosk, market stalls, tractor, cars, bus read well.
+
+## Round 2 (overnight 2026-10-30) — fixes, perf, checks, hand-offs
+Base `083a507` (pensive-gates merged). Backlog done in order: ranked list #14–30 (minus hand-offs), REAL-REPORT
+objects, interiors through glass, then two walk-mode re-audits (eye-level views at pedestrian-network nodes, 2 sonnet
+judges each, own verification on crops). Every feature has a `boxHunt(ctx, name)` switch (off on low, `?no<name>`,
+`?noboxhunt` = rounds 1 + 2 off).
+
+| object | change | switch | files |
+|---|---|---|---|
+| e-moped / e-scooter / motorbike | lofted, sculpted bodies (`loftZ`): seat, fairings, forks, mudguards, lamps | `?no2wdetail` | `sim/traffic/models.ts`, `render.ts` |
+| school frontage | railings with gates along the run, Sheffield bike stands | `?noschoolrail` | `landmarks/civic.ts` |
+| fish-quay reefer | a real reefer container (machinery end, ribs, doors) instead of a box | `?noquaykit` | `harbor/quay.ts` |
+| sailing dinghies | sail draft (camber), finer cloth, tiller extension to the helm's hand | `?nosailkit` | `sim/boats/{material,models,render}.ts` |
+| bandstand band | brass instruments at the players' hands | `?nobandbrass` | `landmarks/park.ts` |
+| shop interiors | deli goods, chilled counter, hanging sausages; printed packaging on shelves (label band, logo, shading) | `?nointeriors` | `buildings/materials.ts` (`uBhInt`), 1 line in `buildings.ts` |
+| bus shelter | barrel roof on ribs | `?noshelterroof` | `props/furniture.ts` |
+| breakwater | quarried armour blocks of mixed size with a wet line | `?noarmour` | `harbor/geo.ts`, `breakwater.ts` |
+| ferris wheel | round domed gondolas | `?nogondola` | `harbor/pier.ts` |
+| church / station / town hall | furnished interiors seen through the glass: pews, aisle runner, pulpit, chandeliers, sanctuary dais + communion rail + painted reredos; booking hall with board, benches, posters, ticket machines, WAY OUT; town hall entrance hall (columns, portraits, desk, draped flags) + council chamber | `?nointeriors` | `landmarks/{church,station,townhall}.ts` |
+| **bug** | primitives added straight to the detail kit `env.D` had their LOD pivot at the world origin → collapsed whenever the camera was > 100 m from (0,0,0) (all interiors, school rails): `MeshBuilder.autoPivot` | — | `landmarks/builder.ts`, `env.ts` |
+| carousel | carved horses (ellipsoid body, neck, head, legs in gallop, saddle, pole) | `?nocarousel` | `harbor/pier.ts` |
+| fireworks barge | raked hull, strakes, fenders, bitts, rail, mortar racks, firing desk, wheelhouse, mast | `?nobarge` | `sim/ambient/vehicleModels.ts`, `vehicles.ts` |
+| ferry pontoon | guide piles in hoops, tyre fenders, cleats, ladder, lifebuoy cabinet, weed line, barrel-roofed shelter + timetable, slatted gangway on rollers | `?noferrydock` | `harbor/beach.ts` |
+| quay walls | mooring rings, drain outfalls with stains, sea-wall timber fender baulks | `?noquaywall` | `terrain/masonry.ts` |
+| stadium gate arches | a lit lobby in the 0.5 m reveal: pay sign, dark tunnel, two turnstiles, folded gate leaves | `?nostadiumgate` | `landmarks/stadiumShell.ts` |
+| shipping containers | corner castings, door seam, hinges, handles, data plate; trapezoidal corrugation in the harbour shader (`HB_TRAP`) | `?nocontainerkit` | `harbor/containers.ts`, `material.ts` |
+| pier ticket booth | Victorian booth: plinth, panels, pilasters, cornice, lit window, price board, flared roof, finial | `?nopierbooth` | `harbor/pier.ts` |
+| yard props | EUR pallets (blocks, stringers, boards), drums (chime, hoops, bungs), forklift (mast channels, chain, rams, LPG bottle, tyres with rims), rounder rack-bike tyres | `?noyardkit` | `props/kit.ts`, `furniture.ts` |
+| picket fences | the boards' sawn edges (24 mm) in the near-only prop cells | `?nopicketedge` | `props/furniture.ts`, `props.ts` |
+| beach toys | smooth six-gore ball with valve caps; moulded sandcastle (ribbed bucket towers, crenellations, slits, curtain walls, keep + door, wet moat + rim, shells, flag, bucket with handle, spade); towels rumpled with hem, pinstripes, tassels | `?nobeachtoys` | `harbor/beach.ts` |
+
+Checked, no change (judges over-scored, or already detailed in code): car glass, fountain, STOP sign back, hedges,
+pier deck kiosks, flatbed cargo (taped cartons, crates, straps exist), modern street lamps (tapered column, flange,
+shroud), bandstand roof (bell lathe), lifeguard tower, parasols.
+
+Walk re-audit 2 also logged one pedestrian invariant hit (two promenade walkers overlapping 13.7 s at (−160, 109)
+while the capture paused the sim) — pedestrian sim, not this round's code; not seen in the other runs.
+
+### Efficiency trims (7033144, after the per-toggle attribution)
+- Scooter + motorbike: the sculpted bodies only on LOD 0–1; LOD 2 (> 150 m) is the light old body again (LOD 1/2
+  were 2306 / 1508 triangles vs 708 / 432 before — counted with a tsc build of `models.ts`).
+- Yard kit: the small parts (drum chimes / hoops / bung + vent caps; forklift chain, tilt rams, valve, steering
+  column + wheel, rims, hubs, guard lamps) moved from the always-drawn / shadow-casting kits into the near-only prop
+  cells (`KD`, 48 m cells, 30 m cut, no shadow pass), the same mechanism as the lamp detail and the picket edges.
+  Pallets lose the hidden centre block and the ground-side faces; forklift tyres 16 → 14 sides.
+- Containers: corner castings draw only their outer faces, hinges no top face (−~60 triangles per container).
+- Barge kit counted (2.9 k triangles × 4 instances): left as is (splitting the instanced mesh would add a draw call).
+
+### Perf (Adreno X1-45, 1920×1025, noon, `perf.mjs --variants ";noboxhunt" --repeat 2`, rounds 1 + 2 together)
+| view | ms/frame on (2 runs) | ms/frame `?noboxhunt` | Δ ms | draw calls on / off | triangles on / off |
+|---|---|---|---|---|---|
+| downtown@12 | 55.6, 55.7 (55.6) | 54.4, 55.0 (54.7) | +0.9 | 238 / 238 | 4.64 M / 4.33 M (+302 k, +7.0 %) |
+| harbor@12 | 49.2, 49.0 (49.1) | 47.6, 47.6 (47.6) | +1.5 | 248 / 248 | 4.74 M / 4.40 M (+347 k, +7.9 %) |
+| beach@12 | 52.1, 51.8 (52.0) | 50.4, 50.3 (50.3) | +1.6 | 249 / 249 | 4.75 M / 4.35 M (+399 k, +9.2 %) |
+| street@12 | 47.7, 46.7 (47.2) | 45.9, 46.3 (46.1) | +1.1 | 236 / 234 | 4.11 M / 3.81 M (+296 k, +7.8 %) |
+
+Before the trims (`perf2`, same views): +1.2–1.6 ms, +305–436 k triangles (+8–10 %).
+
+### Smoothness (`hitch.mjs`, overview / harbor / beach / stadium / station / downtown × 12:00 + 21:30, 6 s each)
+25 windows (boot + arrive + steady): **0 mid-run shader compiles** (140 programs, all compiled by the boot warm-up),
+0 freezes > 100 ms, 0 long tasks, console / page errors none, invariants `{}`, boot 20.6 s. Longest frame 100 ms =
+the night camera cut to the overview (arrive window, no compile, no long task).
+
+### Checks
+- `npm run typecheck` clean; `npm run build` OK (`dist/index.html` 3.86 MB).
+- Every evalshots / hitch run: invariants `{}`, console errors 0, frame errors 0 (one exception: walk2 logged a
+  13.7 s overlap of two promenade walkers at (−160, 109) — pedestrian sim, unrelated, not reproduced).
+
+### Files touched in round 2 (for the merge)
+`src/sim/traffic/{models,render}.ts` · `src/sim/boats/{material,models,render}.ts` ·
+`src/sim/ambient/{vehicleModels,vehicles}.ts` · `src/world/landmarks/{builder,env,church,station,townhall,civic,park,stadiumShell}.ts`
+· `src/world/harbor.ts` + `harbor/{beach,breakwater,geo,material,pier,quay,containers}.ts` · `src/world/props.ts` +
+`props/{furniture,kit}.ts` · `src/world/terrain/masonry.ts` · `src/world/buildings.ts` (1 line) +
+`src/world/buildings/materials.ts` (`uBhInt` shop-interior goods — perf-wins also touched one `bhShop` /
+`bhShelves` call site there: merge by hand) · docs. Nothing in `plan.ts`, `main.ts`, camera / HUD.
+
+### Still open (mine)
+- Lifeguard tower: no deck railing / shutters; bandstand reads as a plain cone from 30 m up (the bell lathe is
+  there; ribs / a scalloped fascia would carry it); signal heads from behind are black silhouettes.
+- The fine prop cells (benches, bins, fences, pallets…) draw to any distance while the camera is low; a distance
+  cut (~250 m) would save more triangles than any single kit, but needs a no-pop check (fences read far away).
+
+### Handoff (round 2, sibling-owned)
+- **places** (`src/world/terrain/places.ts` `quayIron` + the bollard lights along the lower river quay): the mooring
+  bollards are octagonal boxes with a slab cap and the bollard lights square posts with a lamp box — judged the
+  crudest objects at the river (v08). A lathed cast-iron bollard like `harbor/quay.ts castBollard` and round
+  bollard lights with a louvred head would fix both.
+- **massing** (`src/world/buildings/*`): shopfront glazing reads as blank reflective panels at some angles (bank,
+  v02); flat roller shutters and entrance canopy wedges on industrial units (v10); flat recessed warehouse doors on
+  the harbour street (v00); awnings as flat planes (v05); window boxes as pink blobs from the air (m05); the beach
+  ice-cream kiosk.
+- **people**: close-up pedestrians (capsule limbs, mitten hands, flat hair) and the boat passengers (v08) were the
+  judges' #1 in both walk rounds.
+- **groundcover**: poppy heads need a discard in the shared grass shader (early-Z risk).
