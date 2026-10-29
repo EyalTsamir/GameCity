@@ -1,8 +1,17 @@
 # F3 — Ground, track and rock (final fix round)
 
 ## Resume here
-* 2026-10-29 (session 2) — fresh container restored (npm ci, base worktree /home/user/gc-base on 5174). Re-capturing
-  golden ref (base e1c9780) + m3 to settle the harbor/westbrook diff.
+* 2026-10-29 session 2 — golden m3 (fresh ref from base e1c9780, both 1280×720 pumped): ALL ≈0 (harbor 0.4 =
+  cliff skin behind the quay, westbrook 0.1) → m2's 39.7/37.2 was a stale/broken ref, NOT a regression.
+  Bench judgments (960×540, `/tmp/claude-0/run.sh <out> <classes> <dists>` wrapper; ~2.5 min/capture here):
+  - rock bump (session 1) = per-pixel SPECKLE at 10 m (octaves of 3–6 mm texels) → fixed: octaves resized, fine
+    ones faded by footprint; then pitted "lunar" look at 2 m → terraced fracture planes + bedding laminae + per-plane
+    weathering tone (mTerr). Cliff pose fixed: bench class `cliff` (old `cutting` 10 m = inside the parked train).
+  - ballast = crazy paving (uniform grout lines) → faceted crushed stones (3–5 faces), voids only where a
+    packing noise opens them; bed raised (BALLAST_DROP 0.15→0.125) so sleepers sit 2.5 cm proud, not on top.
+  - lawn felt: (a) the track verge north of the bed was a bladeless "mown" strip (groundcover allow cut at
+    RAIL_Z−3.5) → allow/meadow now reach the shoulder toe (−2.45); (b) sward texture in ground.ts (uGcSward,
+    ?nosward): 3 layers of blade-tip dashes oriented along the view direction, fade to mean coverage.
 * 2026-10-29 03:20 — session 1 wrapped up (context cap). ALL CODE BELOW IS UNJUDGED: no clean after-bench yet
   (the first after-captures were black because of a hardscape compile error, fixed in the last commit). FIRST STEP
   for F3b: `scripts/agent-tools/golden.sh m3` (ref = base e1c9780 already in shots/golden/ref — but shots/ is not

@@ -819,25 +819,34 @@ vec3 groundColor() {
   // ground shows dense blade tips: two layers of randomly oriented 2–3 cm dashes, lit tips over dark gaps,
   // some yellowed. Faded (to the same mean) once a 2 cm cell is under ~4 px, so it never shimmers.
   if ( kept * uGcSward > 0.01 ) {
-    float sw = 0.0;
+    float sw = 1.0, swB = 0.0;
+    vec2 vdir = p.xz - cameraPosition.xz;
+    float vAn = atan( vdir.y, vdir.x + 1e-5 );
     vec3 swt = vec3( 1.0 );
-    for ( int L = 0; L < 2; L++ ) {
-      vec2 q = L == 0 ? p.xz * 46.0 : mat2( 0.6, -0.8, 0.8, 0.6 ) * p.xz * 37.0 + 5.3;
-      float pc = fpx * ( L == 0 ? 46.0 : 37.0 );   // (fpx: derivatives taken outside this branch)
+    for ( int L = 0; L < 3; L++ ) {
+      // 2.2 cm and 2.7 cm blade-tip cells + 6 cm tufts (the tufts carry the texture out to ~8 m)
+      float sc = L == 0 ? 46.0 : ( L == 1 ? 37.0 : 16.0 );
+      vec2 q = L == 1 ? mat2( 0.6, -0.8, 0.8, 0.6 ) * p.xz * sc + 5.3 : p.xz * sc + float( L ) * 2.1;
+      float pc = fpx * sc;   // (fpx: derivatives taken outside this branch)
       vec2 ci = floor( q );
       vec2 h = th_hash22( ci + float( L ) * 13.1 );
-      float an = h.x * 6.2832;
+      // standing blades project onto the ground along the view direction (random from straight above)
+      float an = mix( vAn + ( h.x - 0.5 ) * 1.1, h.x * 6.2832, smoothstep( 0.5, 0.9, vz ) );
       vec2 ax = vec2( cos( an ), sin( an ) );
       vec2 f = fract( q ) - 0.5 - ( h.yx - 0.5 ) * 0.25;
-      float d = length( vec2( dot( f, ax ) * 0.36, dot( f, vec2( -ax.y, ax.x ) ) ) );
-      float aa = 0.06 + pc * 0.5;
-      float b = ( 1.0 - smoothstep( 0.13 - aa, 0.13 + aa, d ) ) * ( 1.0 - smoothstep( 0.25, 0.6, pc ) );
-      if ( b > sw ) { sw = b; swt = h.y < 0.12 ? vec3( 1.2, 1.12, 0.72 ) : vec3( 0.85 + 0.35 * fract( h.x * 7.3 ) ); }
+      float d = length( vec2( dot( f, ax ) * 0.24, dot( f, vec2( -ax.y, ax.x ) ) ) );
+      float aa = 0.04 + pc * 0.5;
+      float b = 1.0 - smoothstep( 0.1 - aa, 0.1 + aa, d );
+      // once a cell is under ~4 px it fades to its mean coverage (0.13), so the average tone never shifts
+      b = mix( b, 0.13, smoothstep( 0.25, 0.6, pc ) );
+      sw *= 1.0 - b;
+      if ( b > swB ) { swB = b; swt = h.y < 0.12 ? vec3( 1.2, 1.12, 0.72 ) : vec3( 0.85 + 0.35 * fract( h.x * 7.3 ) ); }
     }
-    float swVis = 1.0 - smoothstep( 0.25, 0.6, fpx * 46.0 );
-    vec3 tipC = mix( grass * 1.32, gt * 1.1, 0.35 ) * swt;
+    sw = 1.0 - sw;                                   // union coverage; mean 1 − 0.87³ ≈ 0.34
+    float swVis = 1.0 - smoothstep( 0.25, 0.6, fpx * 16.0 );
+    vec3 tipC = mix( grass * 1.32, gt * 1.1, 0.35 ) * mix( vec3( 1.0 ), swt, swVis );
     vec3 swC = mix( grass * 0.62, tipC, sw );
-    grass = mix( grass, swC / 0.79, swVis * kept * 0.85 );
+    grass = mix( grass, swC / 0.86, swVis * kept * 0.85 * uGcSward );
   }
   gGrassTrans = smoothstep( 0.35, 0.8, len ) * ( 1.0 - pres ) * 0.6;
 

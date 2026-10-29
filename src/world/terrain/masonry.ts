@@ -111,6 +111,7 @@ vec3 th_ashlar(vec2 uv, float ch, vec3 base) {
 vec3 mN = vec3(0.0, 1.0, 0.0);
 // bump-perturbed world normal for rock (cliff skin, boulders) — replaces the flat facet normal for lighting
 vec3 mNb = vec3(0.0);
+float mTerr = -1.0;
 uniform float uNight;
 uniform vec3 uMoonDir;
 // Moonlit stone: the dark night key barely reaches the steep, mostly south-facing faces, so rock
@@ -154,9 +155,15 @@ vec3 masonryColor(vec3 base) {
     vec4 b1 = texture2D(tNoise, bq * vec2(0.33, 0.47) + vMas.y * 1.7);
     vec4 b2 = texture2D(tNoise, bq * vec2(0.9, 1.05) + 0.37);
     vec4 b3 = texture2D(tNoise, bq * 0.35 + 0.71);
-    float rg = 1.0 - abs(2.0 * b1.r - 1.0);
-    float rg2 = 1.0 - abs(2.0 * b2.g - 1.0);
-    float hb = 0.14 * rg * rg + (0.035 * rg2 * rg2 + 0.012 * b3.b) * (1.0 - smoothstep(0.006, 0.016, fp));
+    // chipped, not pitted: the fracture field is terraced (flat broken planes, steep risers = sharp edges), with
+    // thin bedding laminae stepping along the strata on the cliff (cuv.y = height)
+    float t1 = (b1.r * 0.8 + b2.b * 0.2) * 5.0;
+    float ft = fract(t1);
+    float hterr = (floor(t1) + smoothstep(0.72, 1.0, ft) + 0.12 * ft) * 0.2;
+    float lam = kind > 5.5 ? fract(bq.y * 5.5 + b2.r * 1.6) : 0.0;
+    float fine = 1.0 - smoothstep(0.006, 0.016, fp);
+    float hb = 0.16 * hterr + (0.018 * lam * lam + 0.02 * b2.g + 0.008 * b3.b) * fine;
+    mTerr = floor(t1);
     // soften the facets: lean the flat normal toward the shared-vertex normal (rounded boulders, no flat triangles)
     vec3 sn = normalize(vMN);
     if (dot(sn, n) > 0.15) n = normalize(mix(n, sn, 0.7));
@@ -222,6 +229,8 @@ vec3 masonryColor(vec3 base) {
     col *= mix(1.0, 0.64 + 0.44 * smoothstep(0.15, 0.85, streak), side);
     col = mix(col, col * vec3(0.5, 0.53, 0.55), smoothstep(0.6, 0.78, st4.a) * side * 0.75);
     col *= 0.86 + 0.26 * nv.g;
+    // each broken plane of the fracture terraces its own weathering: fresher (paler, warmer) or older (greyer)
+    if (mTerr >= 0.0) { float ht = th_hash12(vec2(mTerr, floor(cuv.x * 0.7 + mTerr * 0.37))); col *= mix(vec3(0.88, 0.9, 0.92), vec3(1.1, 1.06, 0.98), ht); }
     col = mix(col, col * vec3(1.1, 1.04, 0.86) + vec3(0.035, 0.028, 0.0), smoothstep(0.6, 0.8, nu.a) * 0.55 * side);
     col = mix(col, vec3(0.5, 0.52, 0.44) * (0.85 + 0.3 * nv.b), smoothstep(0.64, 0.8, nv.a) * 0.22 * side);
     // hairline cracks across the strata + vertical joints that split the beds into blocks
