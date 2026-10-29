@@ -166,7 +166,13 @@ function hash3(x: number, y: number, s: number): number {
   return (n >>> 0) / 4294967296;
 }
 
+// one per page: main.ts creates a stand-in facade material early in the boot (its program starts compiling
+// then), the buildings module the real one
+let noiseTex: THREE.DataTexture | null = null;
 function makeNoiseTexture(): THREE.DataTexture {
+  return (noiseTex ??= buildNoiseTexture());
+}
+function buildNoiseTexture(): THREE.DataTexture {
   const N = 256;
   const data = new Uint8Array(N * N * 4);
   const chan = new Float32Array(N * N);

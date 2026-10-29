@@ -30,6 +30,25 @@ compared within one run only.
 2. `src/world/buildings/materials.ts`: one bhShop call site (shop / lobby arguments selected first) and one bhShelves
    call site (per-wall parameters first) — same maths, fewer inlined copies. Facade program compile, interleaved
    ×3: 14.0 s avg (13.2 / 14.0 / 14.9) vs 18.5 s (14.4 / 18.5 / 22.7).
+   Golden (1+2 vs 024d901): aerial 0.01–0.04, street by day ≤ 0.01; night 1.2–1.6 = a global bloom / exposure
+   shift between page loads (edges everywhere in the diff; the board text itself is identical by day).
+   hitch.mjs on 1+2 (vsync, adaptive on, 5 views × 2 h + 5 flights): 0 outliers, 0 freezes in every window (the
+   platform had 24 outliers in the old budget), platform p99 50 ms, flights max 67 ms (was ≤ 100).
+3. `src/world/water/reflection.ts`: the water mirror draws the facades at the shader's 'low' tier (uDetail 0.4:
+   averaged windows, weathering kept) — interiors / frames / the mirrored street are sub-pixel in a blurred 1/3-res
+   reflection. Priced at uDetail 0: refl pass 2.69 → 2.26 ms (overview), 2.99 → 2.29 (harbour). ?reflfacade = old.
+4. `src/main.ts` (+ memoised noise texture in buildings/materials.ts): the facade program starts compiling right
+   after the sky module, on a never-drawn stand-in mesh (same program key), instead of after six more modules;
+   the buildings module's material gets it from three's cache. compileprobe: starts at 1.1 s (was 5.5 s).
+   bootprobe (fresh profile, interleaved ×2, 2+4 vs 024d901): first frame 27.8 / 25.7 s → 20.0 / 20.1 s, warm-up
+   wait 13.3 / 11.5 → 5.2 / 5.5 s. The rest of the boot is now the warm-up frame (shadow-depth + post programs,
+   compiled only when the real pipeline first renders) and the ~9 s of module builds.
+5. `src/world/landscape/shader.ts`: exact early-outs for the river-bank, dune and rock blocks (skipped where their
+   mix weight is exactly 0; the dune weight is now computed first; the rock block's 3 fetches use explicit
+   gradients so the branch is well-defined).
+- Tried, not kept: near-crowd features one by one at the market (long-hair ends, hairline, face, strands, hair
+  normal, Kajiya-Kay, fabric, shoes) — each ≤ ~1 ms (inside the noise); the near program's ~7 ms is spread over
+  everything (the far program's −4.9 ms only comes from dropping all of it). Footbridge "3.6 ms": noise.
 
 ## Resume here (round closed 2026-10-29 ~20:00)
 **Done:** final same-run verification (original 8718d0f vs final 729b6a7) → docs/progress/PERF-REPORT.md (Hebrew) and

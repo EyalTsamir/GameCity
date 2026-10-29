@@ -99,6 +99,8 @@ export class PlanarReflection {
   private pm = new THREE.Matrix4();
   private dbg: boolean;
   private dbgList: THREE.Object3D[] = [];
+  /** ?reflfacade: facades at full detail in the pass (A/B) */
+  private facadeDetail: boolean;
   // stats
   calls = 0;
   tris = 0;
@@ -113,6 +115,7 @@ export class PlanarReflection {
   ) {
     this.level = initial;
     this.dbg = ctx.debug.params.has('refldbg');
+    this.facadeDetail = ctx.debug.params.has('reflfacade');
     this.rt = new THREE.WebGLRenderTarget(4, 4, {
       type: THREE.HalfFloatType,
       format: THREE.RGBAFormat,
@@ -339,6 +342,12 @@ export class PlanarReflection {
     // three's non-premultiplied AdditiveBlending adds the source alpha too (ONE, ONE): a glow quad would
     // mark its whole footprint as covered and erase the mirrored sky under it (dark squares) → same colour
     // blending, alpha untouched
+    // the facades' window interiors, frames and mirrored street are sub-pixel in this 1/3-res, blurred mirror: the
+    // facade shader's 'low' tier (averaged windows, wall weathering kept) for the pass, −0.4…0.7 ms in the overview /
+    // harbour (?reflfacade keeps full detail)
+    const fd = this.facadeDetail ? null : ((this.ctx.services.buildings as { uniforms?: Record<string, { value: unknown }> } | undefined)?.uniforms?.uDetail ?? null);
+    const prevDetail = fd ? (fd.value as number) : 1;
+    if (fd) fd.value = Math.min(prevDetail, 0.4);
     const bs = this.blendSave;
     let bi = 0;
     for (const m of this.additive) {
@@ -369,6 +378,7 @@ export class PlanarReflection {
       this.calls = renderer.info.render.calls - c0;
       this.tris = renderer.info.render.triangles - t0;
       // ── state restore
+      if (fd) fd.value = prevDetail;
       bi = 0;
       for (const m of this.additive) {
         m.blending = bs[bi++] as THREE.Blending;
