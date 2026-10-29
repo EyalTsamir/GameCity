@@ -18,6 +18,7 @@ import { GREEN } from './green';
 import { WIN, PROF, WALLPAT, ROOFPAT, FRAME, GLASS, LIGHT_MODE, shopType } from './materials';
 import { letterSign, boardSign, clockFace, noticeBoard } from './signs';
 import { partitionSide } from './oldtown';
+import { MASS, massRng, turret } from './massing';
 
 const PREV: Side[] = [LEFT, FRONT, RIGHT, BACK];
 
@@ -72,10 +73,17 @@ function grand(g: Gen): void {
   const s = g.shell,
     t = g.trim;
   const look = (style: number, color = stone, pattern: number = WALLPAT.STONE): WallLook => ({ color, pattern, frame: FRAME.WOOD, glass: GLASS.NEUTRAL, style, profile: PROF.HOTEL, seed: g.seed });
+  // ?noturrets: domed corner pavilions on the exposed front corners (window grids keep clear of them)
+  const tR = 1.45;
+  const domeL = MASS.turrets && floors >= 4 && f.exposed[LEFT] && massRng(g).chance(0.9),
+    domeR = MASS.turrets && floors >= 4 && f.exposed[RIGHT] && massRng(g).chance(0.9);
+  const tc = tR + 0.45;
+  const clr = (sd: Side): [number, number] => (sd === FRONT ? [domeL ? tc : 0, domeR ? tc : 0] : sd === RIGHT ? [domeR ? tc : 0, 0] : sd === LEFT ? [0, domeL ? tc : 0] : [0, 0]);
   for (const sd of [FRONT, RIGHT, BACK, LEFT] as Side[]) {
     const sg = sideGeom(body, sd);
     const parts = partitionSide(g, sd, sg.L, f.ins[PREV[sd]]);
     const doors = doorsOn(g, f, sd, sg.L);
+    const [cA, cB] = clr(sd);
     for (const p of parts) {
       if (p.covered) {
         wallPlain(s, sg, p.a, p.b, 0, H + 1.2, { color: stone, pattern: WALLPAT.STONE, seed: g.seed });
@@ -87,8 +95,10 @@ function grand(g: Gen): void {
         const gr = makeGrid(a, b, 0, gH, 1, { spacing: (b - a) / n, cols: n, winW: 1.7, winH: 3.0, sill: 0.8, margin: 0.4 });
         wallGrid(s, sg, a, b, 0, gH, gr, { ...look(WIN.ARCHED, base), profile: PROF.HOTEL });
       }, (a, b, y0) => wallPlain(s, sg, a, b, y0, gH, { color: base, pattern: WALLPAT.STONE, seed: g.seed }));
-      const n = Math.max(1, Math.round((p.b - p.a - 1.0) / 3.0));
-      const gr = makeGrid(p.a, p.b, gH, fH, floors - 1, { spacing: 3.0, cols: n, winW: 1.3, winH: fH * 0.6, sill: 0.8, margin: 0.8 });
+      const ga = p.a + (p.a < 0.05 ? cA : 0),
+        gb = p.b - (p.b > sg.L - 0.05 ? cB : 0);
+      const n = Math.max(1, Math.round((gb - ga - 1.0) / 3.0));
+      const gr = makeGrid(ga, gb, gH, fH, floors - 1, { spacing: 3.0, cols: n, winW: 1.3, winH: fH * 0.6, sill: 0.8, margin: 0.8 });
       wallGrid(s, sg, p.a, p.b, gH, H + 1.2, gr, look(WIN.MUNTIN));
       // window trims + iron balconies on the first floor and every third
       for (let j = 0; j < gr.m; j++) {
@@ -127,6 +137,14 @@ function grand(g: Gen): void {
         }
       }
     }
+  }
+  for (const [on, x] of [[domeL, body.x0 + 0.1], [domeR, body.x1 - 0.1]] as [boolean, number][]) {
+    if (!on) continue;
+    turret(g, x, body.z1 - 0.1, {
+      R: tR, n: 8, y0: gH, yTop: H + 1.75, v0: gH, ch: fH, rows: floors - 1, winW: 0.95, winH: fH * 0.58, sill: 0.8,
+      look: look(WIN.MUNTIN), plain: { color: stone, pattern: WALLPAT.STONE, seed: g.seed }, trimC: col('#efe4cc'),
+      capC: col('#6fa596'), cap: 'dome', capH: 2.5, body, corbel: 1.1,
+    });
   }
   // flat roof + penthouse + rooftop sign
   const inner: LRect = { x0: body.x0 + 0.3, x1: body.x1 - 0.3, z0: body.z0 + 0.3, z1: body.z1 - 0.3 };
