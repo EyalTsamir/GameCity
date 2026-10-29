@@ -80,8 +80,28 @@ export function setColumnDetail(on: boolean): void {
  * chamfer step, stone / concrete cladding in ~1 m courses with 12 mm recessed joints, a 6 cm shadow gap under
  * a slightly wider cap plate that meets the soffit. Clipped to [0, L] like the plain column (corners are shared).
  */
-function arcadeColumn(t: Gen['trim'], sg: ReturnType<typeof sideGeom>, u: number, gH: number, c: THREE.Color, seed: number): void {
+function arcadeColumn(t: Gen['trim'], sg: ReturnType<typeof sideGeom>, u: number, gH: number, c: THREE.Color, seed: number, classical = false): void {
   const L = sg.L;
+  if (classical && columnDetail) {
+    // ?nocolonnade: a classical column — square plinth, torus, tapering 12-sided shaft, echinus + abacus
+    const cx = sx(sg, Math.min(L - 0.4, Math.max(0.4, u)), -0.37),
+      cz = sz(sg, Math.min(L - 0.4, Math.max(0.4, u)), -0.37);
+    setCol(t, shade(c, 0.86));
+    t.box(cx - 0.36, 0, cz - 0.36, cx + 0.36, 0.28, cz + 0.36);
+    setCol(t, shade(c, 0.95));
+    t.cylinder(cx, cz, 0.33, 0.28, 0.36, 12, false, 0.31);
+    t.cylinder(cx, cz, 0.31, 0.36, 0.42, 12, false, 0.27);
+    setCol(t, c);
+    t.cylinder(cx, cz, 0.27, 0.42, gH - 0.62, 12, false, 0.23);
+    setCol(t, shade(c, 0.95));
+    t.cylinder(cx, cz, 0.24, gH - 0.62, gH - 0.56, 12, false, 0.24);
+    t.cylinder(cx, cz, 0.24, gH - 0.56, gH - 0.4, 12, false, 0.34);
+    setCol(t, shade(c, 1.04));
+    t.box(cx - 0.38, gH - 0.4, cz - 0.38, cx + 0.38, gH - 0.22, cz + 0.38);
+    // entablature block above the capital up to the soffit
+    t.box(cx - 0.36, gH - 0.22, cz - 0.36, cx + 0.36, gH, cz + 0.36);
+    return;
+  }
   const box = (h: number, o0: number, o1: number, y0: number, y1: number) =>
     sideBox(t, sg, Math.max(0, u - h), Math.min(L, u + h), o0, o1, y0, y1, false, true);
   if (!columnDetail) {
@@ -363,7 +383,10 @@ export function genTower(g: Gen): void {
     // the shop named on the front board fills the whole ground floor: its windows show that interior
     const shopName = lot.shopfront && !haven ? SHOP_NAMES[shopIdx++ % SHOP_NAMES.length] : '';
     const shopT = shopName ? shopType(shopName) : 0;
-    const lookL: WallLook = { color: shade(wallC, 0.75), pattern: WALLPAT.SMOOTH + 16 * shopT, frame: FRAME.DARK, glass: sc.glass, style: lot.shopfront ? WIN.SHOP : WIN.DOOR, profile: lot.shopfront ? PROF.SHOP : PROF.ALWAYS, seed: g.seed + 11 };
+    // ?nocolonnade: behind an arcade the ground floor is always shopfronts (a lobby wall there read as blank)
+    const arcadeShops = arcade && !lot.shopfront && MASS.colonnade;
+    const shopT2 = arcadeShops ? shopType(SHOP_NAMES[(g.seed * 7) % SHOP_NAMES.length]) : shopT;
+    const lookL: WallLook = { color: shade(wallC, 0.75), pattern: WALLPAT.SMOOTH + 16 * shopT2, frame: FRAME.DARK, glass: sc.glass, style: lot.shopfront || arcadeShops ? WIN.SHOP : WIN.DOOR, profile: lot.shopfront || arcadeShops ? PROF.SHOP : PROF.ALWAYS, seed: g.seed + 11 };
     for (const s of [FRONT, RIGHT, BACK, LEFT] as Side[]) {
       const sg = sideGeom(ar, s);
       // doors: plan door u is along the footprint side; map to this rect
@@ -455,7 +478,7 @@ export function genTower(g: Gen): void {
         const n = Math.max(2, Math.round(sg.L / 4.5));
         for (let k = 0; k <= n; k++) {
           if (k === n) continue; // corners are shared with the next side
-          arcadeColumn(t, sg, (sg.L * k) / n, gH, wallC, g.seed + k);
+          arcadeColumn(t, sg, (sg.L * k) / n, gH, wallC, g.seed + k, MASS.colonnade && masonry);
         }
       }
       setCol(t, shade(wallC, 0.6));

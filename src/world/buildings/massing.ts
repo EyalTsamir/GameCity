@@ -33,15 +33,17 @@ export interface MassingFlags {
   monitor: boolean;
   /** porches: harbour master's recessed porch, Westbrook house porches */
   porches: boolean;
+  /** classical arcade columns on masonry offices, shopfronts behind every arcade */
+  colonnade: boolean;
   /** 0 low, 1 medium, 2 high — fine roof furniture only from medium */
   q: number;
 }
 
-export const MASS: MassingFlags = { oriels: true, turrets: true, crossGables: true, setbacks: true, crowns: true, roofKit: true, annex: true, monitor: true, porches: true, q: 2 };
+export const MASS: MassingFlags = { oriels: true, turrets: true, crossGables: true, setbacks: true, crowns: true, roofKit: true, annex: true, monitor: true, porches: true, colonnade: true, q: 2 };
 
 /**
  * URL switches: ?nomassing (all off) or one by one ?nooriels ?noturrets ?nocrossgables ?nosetbacks ?nocrowns
- * ?noroofkit ?noannex ?nomonitor ?noporch. Quality: low keeps the massing (cheap, it carries the skyline) but drops the roof furniture.
+ * ?noroofkit ?noannex ?nomonitor ?noporch ?nocolonnade. Quality: low keeps the massing (cheap, it carries the skyline) but drops the roof furniture.
  */
 export function setMassing(p: { has(k: string): boolean }, level: 'low' | 'medium' | 'high'): void {
   const all = !p.has('nomassing');
@@ -53,6 +55,7 @@ export function setMassing(p: { has(k: string): boolean }, level: 'low' | 'mediu
   MASS.annex = all && !p.has('noannex');
   MASS.monitor = all && !p.has('nomonitor');
   MASS.porches = all && !p.has('noporch');
+  MASS.colonnade = all && !p.has('nocolonnade');
   MASS.q = level === 'low' ? 0 : level === 'medium' ? 1 : 2;
   MASS.roofKit = all && !p.has('noroofkit') && MASS.q > 0;
 }

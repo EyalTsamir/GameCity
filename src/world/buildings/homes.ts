@@ -24,6 +24,7 @@ import {
 import { WIN, PROF, WALLPAT, ROOFPAT, FRAME, GLASS, LIGHT_MODE } from './materials';
 import { genHouseLegacy } from './houses';
 import { windowBox, shutterPair, shutterState, downpipe, acUnit, climber } from './clutter';
+import { MASS } from './massing';
 import { GREEN } from './green';
 
 const HOUSE_WALLS = ['#f4efe4', '#efe3c8', '#dfe4e2', '#c9dcea', '#cfdcbf', '#f2dfa0', '#efcfc4', '#d8c4a6', '#e8e8e8', '#bfd3d6', '#e3d6ee', '#f0d9b5'];
@@ -686,17 +687,33 @@ export function genHouse(g: Gen): void {
     roofLook(s, roofC, rPat, g.seed + 5);
     const sl = Math.hypot(zO - zW, yW - yO);
     roofPoly(s, [[a, yO, zO], [b, yO, zO], [b, yW, zW], [a, yW, zW]], [1, 0, 0], [0, (yW - yO) / sl, (zW - zO) / sl]);
-    // ceiling (seen from below) + fascia
+    // ceiling (seen from below) + fascia; ?noporch: a real roof edge — deep fascia, drip board, header beam,
+    // a gutter, turned posts (the old thin plate on two slab posts)
+    const deep = MASS.porches;
+    const yc = deep ? yO - 0.14 : yO - 0.06;
     setCol(t, shade(trimC, 0.92));
-    t.quad(a, yO - 0.06, zW, b, yO - 0.06, zW, b, yO - 0.06, zO, a, yO - 0.06, zO);
+    t.quad(a, yc, zW, b, yc, zW, b, yc, zO, a, yc, zO);
     setCol(t, trimC);
-    t.box(a, yO - 0.2, zO - 0.05, b, yO + 0.01, zO, 0b111111 & ~8);
+    t.box(a, yO - (deep ? 0.3 : 0.2), zO - 0.05, b, yO + (deep ? 0.04 : 0.01), zO, 0b111111 & ~8);
+    if (deep) {
+      setCol(t, shade(trimC, 0.8));
+      t.box(a - 0.02, yO + 0.02, zO - 0.07, b + 0.02, yO + 0.06, zO + 0.02, 0b111111);
+      setCol(t, trimC);
+      t.box(a, yO - 0.4, zO - 0.26, b, yO - 0.14, zO - 0.08, 0b111111);
+      if (yO - 0.12 > 2.4) {
+        setCol(t, col('#ece9e1'));
+        t.box(a - 0.03, yO - 0.11, zO, b + 0.03, yO + 0.01, zO + 0.11, 0b111111);
+      }
+    }
     // side cheeks (triangular boards closing the lean-to)
     for (const x of [a, b]) {
-      t.quadAway(x, yO - 0.2, zO, x, yO, zO, x, yW, zW, x, yO - 0.06, zW, x + (x === a ? 1 : -1), yO, (zW + zO) / 2);
+      t.quadAway(x, yO - (deep ? 0.3 : 0.2), zO, x, yO, zO, x, yW, zW, x, yc, zW, x + (x === a ? 1 : -1), yO, (zW + zO) / 2);
     }
     if (posts) {
-      for (const x of [a + 0.12, b - 0.12]) t.box(x - 0.08, 0, zO - 0.2, x + 0.08, yO - 0.18, zO - 0.04, 0b110111);
+      if (deep) {
+        setCol(t, trimC);
+        for (const x of [a + 0.14, b - 0.14]) porchPost(x, zO - 0.17, 0, yO - 0.4);
+      } else for (const x of [a + 0.12, b - 0.12]) t.box(x - 0.08, 0, zO - 0.2, x + 0.08, yO - 0.18, zO - 0.04, 0b110111);
     }
   }
 
