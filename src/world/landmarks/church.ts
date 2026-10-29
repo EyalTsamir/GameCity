@@ -6,9 +6,9 @@
 import * as THREE from 'three';
 import type { Lot } from '../../core/plan';
 import { DIR_YAW } from '../../core/geom';
-import { FLOOD, M, PAT } from './builder';
-import { V3 } from './kit';
-import { wall, moulding, Opening } from './facade';
+import { FLOOD, M, PAT, Mat } from './builder';
+import { V3, Kit, pointedPoints } from './kit';
+import { wall as wallBase, moulding, Opening, WallSpec } from './facade';
 import { C, S, finial } from './parts';
 import type { Env } from './env';
 
@@ -20,6 +20,12 @@ export function genChurch(env: Env, lot: Lot): void {
   env.begin(cx, 0, cz, yaw);
   env.checkLot(fp, 'church');
   const K = env.S;
+  // ?nochurchmould: no hood moulds / archivolts / rose tracery / gablet dressing (A/B); off on low quality
+  const mould = !env.ctx.debug.params.has('nochurchmould') && env.ctx.quality.level !== 'low';
+  const wall = (k: Kit, spec: WallSpec): void => {
+    wallBase(k, spec);
+    if (mould) for (const o of spec.openings ?? []) dressOpening(k, spec, o);
+  };
   const ns = lot.front === 'N' || lot.front === 'S';
   const HW = (ns ? fp.x1 - fp.x0 : fp.z1 - fp.z0) / 2; // 7
   const HD = (ns ? fp.z1 - fp.z0 : fp.x1 - fp.x0) / 2; // 13
@@ -93,6 +99,25 @@ export function genChurch(env: Env, lot: Lot): void {
     [0, 5.7, tz1 + 0.34],
   ]);
   finial(K, trim, 0, 5.75, tz1 + 0.12, 0.45, 0.08);
+  if (mould) {
+    // gablet dressing: a moulded base course, a trefoil oculus in the tympanum, crockets up both slopes
+    const prev = K.b.forceDetail;
+    K.b.forceDetail = true;
+    K.box(trim, 3.3, 0.13, 0.1, 0, 4.25, tz1 + 0.38);
+    K.box(trim, 3.1, 0.06, 0.05, 0, 4.38, tz1 + 0.36);
+    const oz = tz1 + 0.36;
+    K.torus(trim, 0.27, 0.04, 0, 4.88, oz, 4, 24, Math.PI * 2, 0);
+    for (let k = 0; k < 3; k++) {
+      const a = Math.PI / 2 + (k * Math.PI * 2) / 3;
+      K.torus(trim, 0.085, 0.022, Math.cos(a) * 0.12, 4.88 + Math.sin(a) * 0.12, oz, 4, 12, Math.PI * 2, 0);
+    }
+    const disc = new THREE.CircleGeometry(0.25, 16);
+    K.geo(dark, disc, 0, 4.88, oz - 0.012, 0);
+    disc.dispose();
+    for (const sg of [-1, 1])
+      for (const t of [0.3, 0.55, 0.8]) K.sphere(trim, 0.08, sg * 1.75 * (1 - t), 4.25 + 1.5 * t + 0.07, tz1 + 0.2, 6, 4);
+    K.b.forceDetail = prev;
+  }
   // portal door: boarded leaves (PAT.DOOR) dressed with wrought-iron strap hinges ending in fleur tips, a
   // meeting stile, ring pulls on round back plates, a stone threshold; a darker plinth course round the base
   const iron = M('#1f1d1b', PAT.PLAIN, 0.55, 0.6);
@@ -334,4 +359,109 @@ export function genChurch(env: Env, lot: Lot): void {
     const service = (h >= 9.5 && h < 11) || (h >= 18 && h < 19);
     return ['Gothic-revival parish church · 1868', service ? 'Service in progress' : 'Open for visitors 9:00–18:00', `Spire ${Math.round(apex + 2)} m · the bells ring on the hour`];
   });
+}
+
+const _wm = new THREE.Matrix4();
+const _rm = new THREE.Matrix4();
+
+/** Wall-local (u along from the left end seen outside, v up, z out) → landmark-local, as facade.ts wallMatrix. */
+function wallMat(s: WallSpec): THREE.Matrix4 {
+  _wm.makeRotationY(s.ry);
+  _wm.setPosition(s.x - (s.w / 2) * Math.cos(s.ry), s.y, s.z + (s.w / 2) * Math.sin(s.ry));
+  return _wm;
+}
+
+/**
+ * Band following a pointed opening's outline, grown outward by g0..g1 (negative = into the opening), extruded
+ * z0..z1 (wall-local, + = out). `jambs`: run down the jambs to the sill; else the arch only (from the springing).
+ */
+function archBand(K: Kit, m: Mat, wm: THREE.Matrix4, o: Opening, g0: number, g1: number, z0: number, z1: number, jambs: boolean): void {
+  const ring = (g: number): [number, number][] => {
+    const p = pointedPoints(o.w + 2 * g, o.h + g, (o.arch ?? 0) + g, 7);
+    const arc = p.slice(jambs ? 1 : 2);
+    if (jambs) arc.push([p[0][0], p[0][1]]);
+    return arc.map(([x, y]) => [x + o.x, y + o.y]);
+  };
+  const outer = ring(g1),
+    inner = ring(g0).reverse();
+  const sh = new THREE.Shape([...outer, ...inner].map(([x, y]) => new THREE.Vector2(x, y)));
+  const geo = new THREE.ExtrudeGeometry(sh, { depth: z1 - z0, bevelEnabled: false, curveSegments: 2 });
+  geo.translate(0, 0, z0);
+  K.geoM(m, geo, wm, 'box');
+  geo.dispose();
+}
+
+function ringAt(K: Kit, m: Mat, wm: THREE.Matrix4, x: number, y: number, z: number, R: number, r: number, rs: number, ts: number): void {
+  const geo = new THREE.TorusGeometry(R, r, rs, ts);
+  geo.translate(x, y, z);
+  K.geoM(m, geo, wm, 'box');
+  geo.dispose();
+}
+
+/**
+ * Stone dressing of one opening (near-detail mesh): pointed stained/door openings get a hood mould over the arch
+ * (a back fillet + a proud roll) ending in label stops; the portal also gets two archivolt rolls stepping into
+ * the reveal. Round rose windows get an outer roll and plate tracery: rim, hub, 12 spokes, cusped foils, matched to the painted glass.
+ */
+function dressOpening(K: Kit, s: WallSpec, o: Opening): void {
+  const sur = o.surround;
+  if (!sur || (o.fill !== 'stained' && o.fill !== 'door')) return;
+  const sw = o.surroundW ?? 0.18;
+  const wm = wallMat(s);
+  const prev = K.b.forceDetail;
+  K.b.forceDetail = true;
+  if (o.pointed && o.arch) {
+    const big = o.fill === 'door';
+    const bw = big ? 0.16 : 0.1;
+    archBand(K, sur, wm, o, sw - 0.01, sw + bw, 0, big ? 0.1 : 0.08, false);
+    archBand(K, sur, wm, o, sw + bw * 0.25, sw + bw * 0.8, 0, big ? 0.16 : 0.12, false);
+    // label stops: short blocks under the hood ends, chamfered by a smaller block below
+    const spring = o.y + o.h - o.arch;
+    const ux = o.w / 2 + sw + bw / 2;
+    for (const sg of [-1, 1]) {
+      // (≤ 0.12 out: the stops reach below 2.4 m, where nothing may leave the footprint)
+      const b1 = new THREE.BoxGeometry(bw + 0.04, 0.22, 0.12);
+      b1.translate(o.x + sg * ux, spring - 0.11, 0.06);
+      K.geoM(sur, b1, wm, 'box');
+      b1.dispose();
+      const b2 = new THREE.BoxGeometry(bw - 0.02, 0.1, big ? 0.1 : 0.07);
+      b2.translate(o.x + sg * ux, spring - 0.27, (big ? 0.1 : 0.07) / 2);
+      K.geoM(sur, b2, wm, 'box');
+      b2.dispose();
+    }
+    if (big) {
+      const ins = o.inset ?? 0.3;
+      archBand(K, sur, wm, o, -0.07, 0, -0.16, -0.06, true);
+      archBand(K, sur, wm, o, -0.13, -0.06, -ins + 0.1, -ins + 0.18, true);
+    }
+  } else if (o.round && o.w > 1.2) {
+    const R = o.w / 2,
+      cx = o.x,
+      cy = o.y + R;
+    ringAt(K, sur, wm, cx, cy, 0.09, R + sw + 0.05, 0.065, 6, 40);
+    const z = -(o.inset ?? 0.3) + 0.045;
+    ringAt(K, sur, wm, cx, cy, z, R - 0.05, 0.055, 4, 40);
+    // tracery radii follow the painted glass (landmarks/shaders.ts pat 19): hub ring 0.31, foils at 0.62 (r 0.19)
+    ringAt(K, sur, wm, cx, cy, z, R * 0.31, 0.05, 4, 20);
+    const hub = new THREE.CircleGeometry(R * 0.28, 16);
+    hub.translate(cx, cy, z + 0.02);
+    K.geoM(sur, hub, wm, 'box');
+    hub.dispose();
+    const n = 12;
+    const r0 = R * 0.31,
+      r1 = R - 0.05;
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2;
+      const sp = new THREE.BoxGeometry(0.065, r1 - r0, 0.07);
+      sp.translate(0, (r0 + r1) / 2, 0);
+      sp.applyMatrix4(_rm.makeRotationZ(a));
+      sp.translate(cx, cy, z);
+      K.geoM(sur, sp, wm, 'box');
+      sp.dispose();
+      const ah = a + Math.PI / n;
+      const rf = R * 0.62;
+      ringAt(K, sur, wm, cx + Math.sin(ah) * rf, cy + Math.cos(ah) * rf, z, R * 0.19, 0.03, 4, 16);
+    }
+  }
+  K.b.forceDetail = prev;
 }

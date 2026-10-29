@@ -76,7 +76,10 @@ export const WALLPAT = {
 export function shopType(name: string): number {
   if (/Bank/.test(name)) return 8;
   if (/Café|Bistro|Wine|Tea|Pizzeria|Fish|Anchor|Pub|Gelato|Ice|Espresso|Coffee/.test(name)) return 1;
-  if (/Bakery|Pâtisserie|Chocolates|Cheese|Deli|Butcher/.test(name)) return 2;
+  if (/Bakery|Pâtisserie/.test(name)) return 2;
+  // 9 = deli / cheese / butcher / chocolates: the bakery's room with white tiles and jar shelves (was the
+  // bakery's loaves, so a Delicatessen next to a Bakery showed the same bread)
+  if (/Chocolates|Cheese|Deli|Butcher/.test(name)) return 9;
   if (/Books|Records|Stationery/.test(name)) return 3;
   if (/Florist|Greengrocer/.test(name)) return 4;
   if (/Shoes|Hat|Tailor|Barber|Boutique/.test(name)) return 5;
@@ -566,6 +569,8 @@ vec3 bhShop(vec2 pm, vec2 csz, vec3 rd, float rs, float shopT, float litI, vec3 
   float t = min(tt.x, min(tt.y, tt.z));
   vec3 h = ro + rd * t;
   float T = shopT;
+  float deli = step(8.5, T);
+  if (deli > 0.5) T = 2.0;
   if (T < 0.5) T = 1.0 + floor(bhHash12(vec2(rs, 3.3)) * 6.99);
   float eps = 1e-3;
   bool onBack = tt.z <= t + eps;
@@ -589,6 +594,7 @@ vec3 bhShop(vec2 pm, vec2 csz, vec3 rd, float rs, float shopT, float litI, vec3 
   else if (T < 6.5) { wallC = vec3(0.74, 0.76, 0.76); floorC = vec3(0.5, 0.5, 0.48); shelfKind = 0.0; }    // pharmacy / hardware
   else if (T < 7.5) { wallC = vec3(0.66, 0.64, 0.6); floorC = vec3(0.3, 0.22, 0.16); }                    // gallery / antiques
   else { wallC = vec3(0.56, 0.54, 0.5); floorC = vec3(0.16, 0.16, 0.17); }                                   // office lobby
+  if (deli > 0.5) { wallC = vec3(0.8, 0.8, 0.76); floorC = vec3(0.24, 0.24, 0.26); }
   vec3 c;
   float lf = 0.85;
   float self = 0.0; // self-lit (lamp bulbs)
@@ -599,7 +605,7 @@ vec3 bhShop(vec2 pm, vec2 csz, vec3 rd, float rs, float shopT, float litI, vec3 
       c = h.y < 1.1 ? wallC * 0.6 : bhShelves(vec2(q.x, q.y), wallC, 2.0, rs, 1.25, min(Hc - 0.5, 2.6), 0.42);
       // menu board
       c = mix(c, vec3(0.12, 0.13, 0.12), bhBox2(q, vec2(W * 0.5, Hc - 0.75), vec2(min(0.6, W * 0.25), 0.3)));
-    } else if (T < 2.5) c = bhShelves(q, wallC, 3.0, rs, 0.9, min(Hc - 0.4, 2.5), 0.36);
+    } else if (T < 2.5) c = bhShelves(q, wallC, deli > 0.5 ? 0.0 : 3.0, rs, 0.9, min(Hc - 0.4, 2.5), 0.36);
     else if (T < 3.5) c = bhShelves(q, wallC, 1.0, rs, 0.15, Hc - 0.25, 0.34);
     else if (T < 4.5) {
       // greenery / produce wall
@@ -651,8 +657,9 @@ vec3 bhShop(vec2 pm, vec2 csz, vec3 rd, float rs, float shopT, float litI, vec3 
     c = wallC * 0.9;
     if (T > 2.5 && T < 3.5) c = bhShelves(q, wallC, 1.0, rs + 5.0, 0.15, Hc - 0.25, 0.34) * 0.9;
     else if (T > 5.5 && T < 6.5) c = bhShelves(q, wallC, 0.0, rs + 5.0, 0.2, min(Hc - 0.4, 2.4), 0.36) * 0.9;
-    else if (T < 1.5) c = h.y < 1.1 ? wallC * 0.55 : bhShelves(q, wallC, 2.0, rs + 5.0, 1.3, min(Hc - 0.5, 2.5), 0.42) * 0.85;
-    else if (T < 2.5) c = bhShelves(q, wallC, 3.0, rs + 5.0, 0.9, min(Hc - 0.4, 2.3), 0.36) * 0.9;
+    // café side walls: dark wainscot + framed prints (bottle shelving on every wall read as a bookshop)
+    else if (T < 1.5) c = h.y < 1.1 ? wallC * 0.55 : mix(wallC * 0.95, bhPal(bhHash12(floor(q / vec2(1.6, 1.0)) + rs)) * 0.7, bhBox2(vec2(fract(q.x / 1.6) * 1.6, q.y), vec2(0.8, 1.8), vec2(0.3, 0.24)));
+    else if (T < 2.5) c = bhShelves(q, wallC, deli > 0.5 ? 0.0 : 3.0, rs + 5.0, 0.9, min(Hc - 0.4, 2.3), 0.36) * 0.9;
     else if (T < 5.5 && T > 4.5) c = bhShelves(q, wallC, 0.0, rs + 5.0, 0.5, min(Hc - 0.5, 2.3), 0.5) * 0.9;
     else if (T > 6.5) c = mix(wallC, bhPal(bhHash12(floor(q / vec2(1.1, 0.9)) + rs)) * 0.8, bhBox2(vec2(fract(q.x / 1.1) * 1.1, q.y), vec2(0.55, 1.6), vec2(0.32, 0.26)));
     lf = 0.65;

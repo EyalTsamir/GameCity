@@ -27,7 +27,7 @@ import { genTower, resetTowers, setColumnDetail } from './buildings/towers';
 import { genApartment } from './buildings/houses';
 import { genHouse, setLegacyHouses, resetHomes, houseStats, houseLog } from './buildings/homes';
 import { genIndustrial } from './buildings/industry';
-import { genHotel, genSchool, genHarbormaster, genKiosk, genBoathouse } from './buildings/special';
+import { genHotel, genSchool, genHarbormaster, genKiosk, genBoathouse, setSchoolKit } from './buildings/special';
 import { samplePalette, SkyState } from '../render/sky/palette';
 import { anchors, collectFacades, collectSpans, type BuildingsService } from './buildings/anchors';
 import { GreenKit, makeGreenTexture, createGreenMaterial } from './buildings/green';
@@ -117,6 +117,7 @@ export default function create(ctx: CityContext): CityModule {
   setClutter(!ctx.debug.params.has('noclutter'));
   setDoorLife(!ctx.debug.params.has('nodoorlife'));
   setGutters(!ctx.debug.params.has('nogutters'));
+  setSchoolKit(!ctx.debug.params.has('noschoolkit'));
   setColumnDetail(!ctx.debug.params.has('nocolumndetail'));
   // ?legacyhouses = original single house massing (A/B)
   setLegacyHouses(ctx.debug.params.has('legacyhouses'));

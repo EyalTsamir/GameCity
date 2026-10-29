@@ -301,7 +301,15 @@ export function genTower(g: Gen): void {
       const sg = sideGeom(ar, s);
       // doors: plan door u is along the footprint side; map to this rect
       const shift = s === FRONT ? ar.x0 - fp.x0 : s === RIGHT ? fp.z1 - ar.z1 : s === BACK ? fp.x1 - ar.x1 : ar.z0 - fp.z0;
-      const doors = g.doors.filter((d) => d.side === s).map((d) => Math.min(sg.L - 1.6, Math.max(1.6, d.u - shift)));
+      let doors = g.doors.filter((d) => d.side === s).map((d) => Math.min(sg.L - 1.6, Math.max(1.6, d.u - shift)));
+      if (arcade) {
+        // centre each door in its arcade bay (columns stand at L·k/n on the outer line, 1.6 m out) — a door
+        // behind a column read as blocked
+        const Lr = sg.L + 3.2,
+          n = Math.max(2, Math.round(Lr / 4.5)),
+          bw = Lr / n;
+        doors = doors.map((u) => Math.min(sg.L - 1.6, Math.max(1.6, (Math.min(n - 1, Math.max(0, Math.floor((u + 1.6) / bw))) + 0.5) * bw - 1.6)));
+      }
       const ops = doors.map((u) => ({ u, w: 2.4, h: 3.0 }));
       bandWithOpenings(
         sg, 0, sg.L, ops,

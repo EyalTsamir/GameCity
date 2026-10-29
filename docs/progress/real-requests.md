@@ -86,3 +86,10 @@
   crew (models.ts sailboat(): figure() calls at (−0.4, 0.62, −1.6) and (0.45, 0.62, −2.5), cockpit seats at x ±0.6).
 * **Props kit** — the newsstand fascia ("NEWS"/"PRESS") is pixelText geometry; a real serif sign needs a canvas-texture
   sign mesh in the props module (none exists; landmarks has signQuad). Not done: price ≈ 1 draw + 1 texture.
+## F1 (facades) → props / F4: school forecourt (2026-10-29)
+* Judge 2 asks for school railings + a gate and bike stands. Both sit OUTSIDE the school footprint (the building
+  fills its lot to 0.3 m), so they belong to street furniture: please add along the school front (lot kind
+  `school`, `lot.front` side) a 1.2 m painted steel railing (green #2f5d50, round-top bars at 0.12 m, posts 2 m)
+  with a double gate on the door axis, and 4–6 Sheffield stands (with 2–3 children's bikes) beside it. The
+  main entrance door is at `doorsOn(FRONT)[0]`; the facade now keeps 1.6 m wall bays each side of it (noticeboard
+  left, intercom + visitors plaque right) — leave ±2.7 m in front of the door clear for the gate swing.
