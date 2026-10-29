@@ -143,7 +143,7 @@ vec3 rdAsphalt(inout float rough) {
   float spk = nS.a * 0.6 + nS.b * 0.4;
   c *= 1.0 + (spk - 0.5) * mix(0.1, 0.26, ag);
   c += vec3(0.024, 0.023, 0.021) * smoothstep(0.78, 0.95, nS.a) * ag * (1.0 - smoothstep(0.1, 0.35, fw / 0.06));
-  rough = mix(0.8, 0.95, ag);
+  rough = mix(0.72, 0.92, ag); // (light round: binder sheen — low sun and lamps glaze the road; was 0.8–0.95)
   if (vA.x > 0.5) {
     float alat = abs(lat);
     float fadeJ = smoothstep(6.0, 13.0, dj);

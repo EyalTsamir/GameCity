@@ -25,6 +25,8 @@ const DIST = [2, 3.5, 5.5, 8, 11, 15, 20, 27, 36, 48, 64];
 export interface SkyVisStats {
   cells: number;
   ms: number;
+  /** CPU copy of the factor (no strength applied): sky visibility of a horizontal patch at (x, y, z) — for metering */
+  at(x: number, y: number, z: number): number;
 }
 
 let patched = false;
@@ -90,7 +92,19 @@ export function installSkyVis(plan: CityPlan): SkyVisStats | null {
   const box = new THREE.Vector4(x0, z0, 1 / (nx * CELL), 1 / (nz * CELL));
   if (!patchChunks(tex, box)) return null;
   patched = true;
-  return { cells: nx * nz, ms: Math.round((performance.now() - t0) * 10) / 10 };
+  const at = (x: number, y: number, z: number): number => {
+    const i = Math.floor((x - x0) / CELL),
+      j = Math.floor((z - z0) / CELL);
+    if (i < 0 || j < 0 || i >= nx || j >= nz) return 1;
+    const o = (j * nx + i) * 4;
+    const v = (k: number) => data[o + k] / 255;
+    if (y < 6) return v(0) + (v(1) - v(0)) * Math.max(0, y / 6);
+    if (y < 15) return v(1) + (v(2) - v(1)) * ((y - 6) / 9);
+    if (y < 30) return v(2) + (v(3) - v(2)) * ((y - 15) / 15);
+    const t = Math.min(1, (y - 30) / 30);
+    return v(3) + (1 - v(3)) * t * t * (3 - 2 * t);
+  };
+  return { cells: nx * nz, ms: Math.round((performance.now() - t0) * 10) / 10, at };
 }
 
 const PARS = /* glsl */ `
@@ -110,10 +124,10 @@ float thSkyVis(vec3 wp, vec3 wn) {
 `;
 
 const BEGIN = /* glsl */ `
-mat3 thVR = mat3(viewMatrix);
-vec3 thWP = transpose(thVR) * (geometryPosition - viewMatrix[3].xyz);
-vec3 thWN = transpose(thVR) * geometryNormal;
-float thSV = thSkyVis(thWP, thWN);
+mat3 thSvM = mat3(viewMatrix);
+vec3 thSvP = transpose(thSvM) * (geometryPosition - viewMatrix[3].xyz);
+vec3 thSvN = transpose(thSvM) * geometryNormal;
+float thSV = thSkyVis(thSvP, thSvN);
 `;
 
 function patchChunks(tex: THREE.Texture, box: THREE.Vector4): boolean {
@@ -131,7 +145,7 @@ function patchChunks(tex: THREE.Texture, box: THREE.Vector4): boolean {
   // the sun bounce: sunlit ground / facades (albedo ~0.2) light what the sky cannot reach, warm
   const bounce =
     '#if ( NUM_DIR_LIGHTS > 0 )\n' +
-    '\t{ float thUp = max(dot(directionalLights[ 0 ].direction, thVR[ 1 ]), 0.0);\n' +
+    '\t{ float thUp = max(dot(directionalLights[ 0 ].direction, thSvM[ 1 ]), 0.0);\n' +
     '\t  irradiance += directionalLights[ 0 ].color * (0.06 * thUp * (1.0 - thSV)); }\n' +
     '#endif\n';
   chunks.lights_fragment_begin = begin

@@ -52,3 +52,24 @@ water; halos identical hard discs; the 19 → 21.5 h switch-on is abrupt.
   depth (0.5 r → 1.4 r) because a wide radius right in front of the camera is blotchy N8AO noise (inside the tower lobby).
 - Palette alone (bluer sky fill, warmer morning, deep-blue blue hour, darker night): subtle at eye level — the flat
   street-canyon shade is structural (no sky occlusion), hence skyVis.
+- Sky visibility (`src/render/sky/skyVis.ts`, `?noskyvis`, off on low): lot heights rasterised on a 2 m grid (slab + 40 m),
+  12-azimuth horizon march to 64 m at 0 / 6 / 15 / 30 m → RGBA8 texture; three's `lights_fragment_begin` /
+  `lights_fragment_maps` patched once (sky module, before any material compiles) so the hemisphere light and the
+  diffuse IBL of every built-in lit material are × the factor (sampled 1.5 m out along the normal; 0.85 strength),
+  plus a warm sun bounce ∝ (1 − V). Uniforms go into ShaderLib.{lambert,phong,standard,physical,toon} and
+  UniformsLib.lights (cloned per material at its first compile — static values only). First look (downtown 18.2,
+  park 12, street 18.2): the streets between the towers fall into shade the way a photo's do; the open park and
+  roofs unchanged.
+- Glass (`buildings/materials.ts` uMirror, `?glassold`): curtain walls F0 0.26 → 0.32, coating tint of the
+  reflection 0.72 → 0.42, ×0.8 → ×0.92; ribbon glass 0.2 → 0.24 / 0.5 → 0.36; curtain walls up to 32 m now also
+  run bhOpp (the street + facades across, per pane with parallax) like punched windows. Towers stop reading as flat
+  mint/teal; at 18.2 they carry the warm sky.
+- Night: the "hard-edged pools with straight terminators" were mostly MOONLIGHT (sunI 0.5, crisp building shadows)
+  painting bright patches across the lamp-lit town — moon 0.5 → 0.2, night fill 0.5 → 0.36 (palette LIGHT_OVERRIDES).
+  Headlight pools (traffic/render.ts poolTexture): gaussian across, peak a few metres ahead, long fade (was a sine
+  plateau that read as a lit quad); scooters' pool car-width (was a torch streak).
+- Dusk sea (`water/surface.ts` TH_DUSKSEA, `?waterold`): golden hour → blue hour the body darkens toward deep blue
+  (was boosted to a bright teal), the sea mirrors the dusk sky (F cut 0.38·gk → 0.1·gk), body glow 0.3 → 0.1.
+- Eye-level shadow fit (`sky.ts`, `?shadowold`): radius clamp(d·1.75 + 90, 105, 950) (was d·1.6 + 120, ≥ 140) →
+  texels ≈ 10 cm instead of 14 at street level; aerial distances unchanged.
+- Grade (`postfx.ts`, `?lookold`): S-curve 0.17 → 0.23, lift halved, vignette 0.16 → 0.2.

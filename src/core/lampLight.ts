@@ -33,6 +33,7 @@
 // Scheduled / moving lights (stadium floodlights, crane work lights) are evaluated analytically:
 // up to TH_LAMP_SPOTS spot lights whose gain follows a named channel (bindLampChannel).
 
+import * as THREE from 'three';
 import { globalUniforms } from './uniforms';
 
 export type LampKind = 'street' | 'path' | 'plaza' | 'flood' | 'spill' | 'portal';
@@ -183,6 +184,10 @@ uniform vec4 uLampSpotD[TH_LAMP_SPOTS];
 uniform vec4 uLampSpotBox;
 uniform vec4 uLampSpotBox2;
 uniform int uLampSpotSplit;
+// (light round) the lamp-map light of the FIRST thLampLight call of this fragment and its virtual lamp direction
+// (world) — read by the specular hook patched into aomap_fragment (patchLampSpecular): a lamp's sheen on the street
+vec3 thLampSE = vec3(0.0);
+vec3 thLampSL = vec3(0.0, 1.0, 0.0);
 vec3 thLampLight(vec3 wp, vec3 wn) {
   vec3 acc = vec3(0.0);
   wn = normalize(wn);
@@ -220,6 +225,10 @@ vec3 thLampLight(vec3 wp, vec3 wn) {
         float r = Gp / max(Gg, 1e-5);
         r = r * 1.3 / (1.0 + 0.3 * r); // = 1 on the baked ground, bounded near the heads
         acc = E0 * (4.0 * r) * uLampGain;
+        if (thLampSE.r + thLampSE.g + thLampSE.b <= 0.0) {
+          thLampSE = acc;
+          thLampSL = L;
+        }
       }
     }
   }
@@ -263,6 +272,33 @@ vec3 thLampLight(vec3 wp, vec3 wn) {
 }
 #endif
 `;
+
+let specPatched = false;
+
+/**
+ * Light round: the lamps' specular sheen (the glossy streak a lit street shows toward the viewer, a highlight on
+ * car paint and stone; a material can opt out with the define TH_NO_LAMP_SPEC — the water has its own lamp
+ * reflections). One-time patch of three's aomap_fragment (included by every lit material right after the
+ * lights — and after the integrations' `thLampLight(…)` call): Standard / Physical materials that integrate the lamp
+ * light add GGX specular from the lamp map's virtual lamp with the material's own roughness. Call before any
+ * material compiles (the sky module does). Returns true when patched.
+ */
+export function patchLampSpecular(): boolean {
+  if (specPatched) return true;
+  const chunks = THREE.ShaderChunk as unknown as Record<string, string>;
+  const src = chunks.aomap_fragment;
+  if (typeof src !== 'string') return false;
+  chunks.aomap_fragment = /* glsl */ `
+#if defined( TH_LAMP_GLSL ) && defined( STANDARD ) && !defined( TH_NO_LAMP_SPEC )
+if ( thLampSE.r + thLampSE.g + thLampSE.b > 1e-5 ) {
+  vec3 thLampV = normalize( ( viewMatrix * vec4( thLampSL, 0.0 ) ).xyz );
+  reflectedLight.directSpecular += ( PI * thLampSE ) * BRDF_GGX( thLampV, geometryViewDir, geometryNormal, material );
+}
+#endif
+${src}`;
+  specPatched = true;
+  return true;
+}
 
 /**
  * Drop-in for Lambert / Phong / Standard / Physical shaders (after `#include <lights_fragment_end>`):

@@ -14,6 +14,7 @@ import { EnvironmentBaker, type EnvPhysical } from './sky/env';
 import { patchShadowChunk } from './sky/shadowPatch';
 import { patchIBLChunk } from './sky/iblPatch';
 import { installSkyVis, type SkyVisStats } from './sky/skyVis';
+import { patchLampSpecular } from '../core/lampLight';
 import { createRain } from './sky/rain';
 import { cameraFocus } from './focus';
 import { TONE_MAPPING } from './look';
@@ -73,12 +74,16 @@ export default async function create(ctx: CityContext): Promise<CityModule> {
   // ?legacylight = the original light rig (palette, shadow filtering, IBL) for A/B runs
   const legacyParam = ctx.debug.params.has('legacylight');
   const shadowOld = ctx.debug.params.has('shadowold');
+  const noMeter = ctx.debug.params.has('noexpmeter');
+  let meterEV = 1;
   let legacy = legacyParam;
   patchShadowChunk();
   if (!legacyParam) patchIBLChunk();
   // light round: street-canyon sky visibility for the ambient light (?noskyvis; off on the low tier)
   let skyVis: SkyVisStats | null = null;
   if (world && !legacyParam && !ctx.debug.params.has('noskyvis') && ctx.quality.level !== 'low') skyVis = installSkyVis(ctx.plan);
+  // light round: street lamps' specular sheen (?nolampspec)
+  if (!legacyParam && !ctx.debug.params.has('nolampspec')) patchLampSpecular();
   renderer.toneMapping = TONE_MAPPING;
   renderer.shadowMap.enabled = ctx.quality.shadows;
   renderer.shadowMap.type = THREE.PCFShadowMap;
@@ -381,7 +386,14 @@ export default async function create(ctx: CityContext): Promise<CityModule> {
       fog.far = (dist * 3.2 + 1700 + camH * 1.5) * (1 - overcast * 0.5);
     }
 
-    renderer.toneMappingExposure = state.exposure * (1 + overcast * 0.12) * tune.exposure;
+    // light round: metering — a camera down in a street canyon (little sky around it) exposes up to ~+0.3 EV more,
+    // as a photographer / auto-exposure would; eased, so walking past a gap never pumps (?noexpmeter)
+    if (skyVis && !noMeter) {
+      const v = skyVis.at(camPos.x, camPos.y, camPos.z);
+      const target = Math.min(1.22, Math.pow(1 / (0.5 + 0.5 * v), 0.55));
+      meterEV += (target - meterEV) * (lastJump ? 1 : Math.min(1, realDt * 1.5));
+    }
+    renderer.toneMappingExposure = state.exposure * (1 + overcast * 0.12) * tune.exposure * meterEV;
     scene.environmentIntensity = state.env * (1 - overcast * 0.2) * tune.env;
 
     if (sun.castShadow) {
@@ -520,6 +532,7 @@ export default async function create(ctx: CityContext): Promise<CityModule> {
         envI: Math.round(scene.environmentIntensity * 100) / 100,
         key: legacy ? 'legacy' : world ? 'world' : 'studio',
         skyVisMs: skyVis ? skyVis.ms : -1,
+        meterEV: Math.round(meterEV * 100) / 100,
         hazeKm: world ? Math.round(3.912 / Math.max(1e-6, atmo.params.haze + atmo.params.rayleigh.y) / 100) / 10 : -1,
         mist: world ? Math.round(atmo.params.mist * 1e4) / 1e4 : 0,
         clouds: cloudLayer ? Math.round(cloudLayer.uCu.value.x * 100) / 100 : clouds.count,
