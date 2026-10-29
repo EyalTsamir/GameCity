@@ -119,7 +119,7 @@ try {
         },
         [v.spec, fly],
       );
-      await measure(`fly→${v.name}`, fly + 1, { view: v.name, phase: 'fly' });
+      await measure(`fly to ${v.name}`, fly + 1, { view: v.name, phase: 'fly' });
     }
   }
   out.frameErrors = await page.evaluate(() => window.__city.frameErrors);

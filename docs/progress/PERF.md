@@ -29,6 +29,21 @@ harbor (POI) · platform = `-10,1.4,-146.3,6,60,8` (station platform, eye level)
 
 ## Log
 
+### 1. Baseline (8718d0f, AC power, other apps closed) → perf-results.txt
+- 37–73 ms/frame uncapped (14–27 fps) in the five views; GPU-bound everywhere (JS 5–9 ms with vsync).
+- Scene pass 29–76 ms of it; post 5–6, shadow 2–3, water reflection 0.7–4.2. Half resolution halves the scene pass
+  → ~70 % per-pixel (huge uber-shaders over big screen areas), ~30 % geometry (2.7–3.0 M main-view tris).
+- Per-draw ranking (drawprof): land-ground 14 ms (overview), buildings-shell 5–13 ms (all views, 3.9 k tris → pure
+  fragment), pedestrians 5–7 ms (overview pins = vertex; market near figures), land-trees-far 6 ms, landmarks static
+  + detail 5.5 ms in EVERY view (685 k tris in two city-wide meshes: never culled), hardscape 2–8 ms, water 4 ms.
+- `;nooccupants` changes nothing measurable — but it does not remove the unconditional `gl_FragDepth` write either.
+- Stutter: shaders compile on first draw (no warm-up): 1.87 s freeze arriving at street level (8 programs incl. DOF
+  passes, grass blades), 0.78 s at night (night market, glows, beam), 0.42 s market, 0.98 s boot, 0.46 s / 0.26 s in
+  flights; at dusk in the soak 0.3 / 0.49 s. JS allocates 6.5–20 MB/s (≈1.4 MB/frame) → 245 GC drops per game day.
+- Adaptive quality cannot help: it walks to refl-low / grass-0.7 and stays (each step itself a hitch).
+- hideprof (hiding at runtime) turned out too noisy here (±4 ms: GPU clocks follow the load) — use it only for
+  the big items or runtime uniform A/B with long samples; confirm every fix with perf.mjs A/B on frozen copies.
+
 
 ---
 

@@ -1,0 +1,68 @@
+TINYHAVEN PERFORMANCE BUDGET — baseline (start of the local-GPU round, commit 8718d0f)
+Machine: Snapdragon laptop, Qualcomm Adreno X1-45 (ANGLE/D3D11), Chrome headless, AC power, 1920x1025 device px
+(= the 1536x820 CSS viewport at 125 % scaling; quality 'high', pixel ratio 1.25 → same drawing buffer). Target: 16.7 ms.
+Measured 2026-10-29. Tools: scripts/perf.mjs --gpu 1 (uncapped), scripts/hitch.mjs (vsync), scripts/soak.mjs.
+
+1. FRAME COST (perf.mjs, vsync off, adaptive quality off, 'high')
+   ms/frame = wall time per frame uncapped; GPU passes from timer queries (scene = main view, refl = water reflection)
+   view@hour        ms/frame    fps  GPU tot   scene  shadow   refl   post  draws    tris
+   overview@12         67.63   14.8    78.56   67.91    2.13   2.86   5.52    197   4.64M
+   street@12           52.24   19.1    58.16   47.09    2.73   2.13   6.06    195   4.40M
+   market@12           58.36   17.1    56.42   47.29    2.35   1.48   5.16    162   4.34M
+   harbor@12           62.88   15.9    66.82   55.73    2.18   3.65   5.11    195   4.76M
+   platform@12         37.12   26.9    38.85   28.81    3.29   0.68   5.92    169   4.95M
+   overview@21.5       72.67   13.8    86.52   75.99    2.27   3.06   5.04    209   4.59M
+   street@21.5          59.3   16.9    58.91   47.74    2.87   2.33   5.83    206   4.40M
+   market@21.5         62.41     16    64.82   55.55    2.57   1.55      5    173   4.25M
+   harbor@21.5         69.92   14.3    74.37   62.88    2.21    4.2   4.92    208   4.74M
+   platform@21.5       43.94   22.8    40.91   31.25    3.23   0.76   5.52    185   5.16M
+   CPU (JS loop incl. render submit, measured with vsync where it is not blocked): 5–9 ms/frame — GPU-bound everywhere.
+   Half resolution (960x513): scene 68→32 ms (overview), 46→22 (street), 49→24 (market): ~70 % per-pixel, ~30 % geometry.
+
+2. STUTTER (hitch.mjs: vsync on, adaptive quality on = what a viewer sees; one page load, camera cuts + 4 s flights)
+   jank = frame > 25 ms (missed vsync) · hitch > 50 ms · freeze > 100 ms · lt = longest main-thread task · prog = shaders compiled in the window
+   window                   mean     p99     max  jank hitch  frz  lt ms prog  step
+   boot                    73.27     280   983.3   158   138    4    980    4  full
+   overview@12 arrive      69.84    85.3    85.3    42    41    0      0    0  full
+   overview@12             69.69    83.5    85.3   143   140    0      0    0  full
+   street@12 arrive       134.09  1866.6  1866.6    18    11    2   1855    8  full
+   street@12               57.51   133.3   133.4   159    91   14      0    0  full
+   market@12 arrive        67.05   416.7   416.7    42    32    1    422    2  full
+   market@12               59.48    83.4    83.4   167   112    0      0    0  full
+   harbor@12 arrive        64.44    83.4    83.4    45    36    0      0    0  full
+   harbor@12               63.78    83.4    83.5   156   130    0      0    0  full
+   platform@12 arrive      42.62   116.7   116.7    64    11    2      0    0  full
+   platform@12             43.78     100   100.2   212    45    2      0    0  refl-low
+   overview@21.5 arrive    96.23   783.2   783.2    29    29    2    776    7  full
+   overview@21.5           72.75    83.5    99.9   137   137    0      0    0  full
+   street@21.5 arrive      61.45     150     150    44    30    4      0    0  full
+   street@21.5              60.1   116.9   133.3   149    99   16      0    0  full
+   market@21.5 arrive      60.07    70.4    70.4    48    31    0      0    0  full
+   market@21.5             61.04    83.4    83.5   163   121    0      0    0  full
+   harbor@21.5 arrive      70.63    83.5    83.5    42    42    0      0    0  full
+   harbor@21.5             71.43   116.6   133.5   139   136    2      0    0  full
+   platform@21.5 arrive    48.36   133.4   133.4    57    21    1      0    0  full
+   platform@21.5           46.35     100   100.6   200    49    1      0    0  full
+   fly to street            71.01     450     450    62    51    5    458    1  full
+   fly to market            66.66   266.7   266.7    71    46    3    259    1  full
+   fly to harbor            63.89   166.6   166.6    77    58    1      0    0  full
+   fly to platform          62.23   166.7   166.7    76    52    1     69    0  full
+   fly to overview          63.08   133.3   133.3    76    53    2     67    0  full
+   boot (dev server, fresh profile): 52 s to the first frame
+   compiled mid-run (programs): people/pram/dog shadow depth, grass blades 0-2, tableware, farmstead, countryside trees +
+   their depth, rail signs, DOF prefilter + blur, ambient sparks depth, harbour glow, lighthouse beam, night market
+
+3. SOAK (soak.mjs --minutes 4 --speed 4 ≈ one game day, overview, vsync, adaptive on)
+   frames 3422 in 240 s (14.3 fps) · jank 3407 · hitch 3248 · freeze 11 · worst frame 1283.4 ms
+   GC drops 245 · long tasks 7 · shaders compiled mid-run 12 (at load, dusk 19–20 h)
+   JS allocation 6.56–20.52 MB/s (busier by day); heap 728–758 MB, flat (no leak)
+   adaptive quality walked full → grass-0.7 → refl-low and stayed (never reached 49 fps)
+   console errors 0, frame errors 0; invariants: pedestrians 'overlapping' (pre-existing crowd-sim reports)
+
+4. WHERE THE GPU TIME GOES (drawprof.mjs per-draw ranking, 12 h; ms are indicative on this tiler)
+   overview: land-ground 14.4 · pedestrians(pin) 6.8 · land-trees-far 5.9 · buildings-shell 5.2 · water 3.8 · landmarks-detail 3.2 + static 2.3
+   street:   buildings-shell 12.2 · landmarks 5.5 · roads-hardscape 2.4 · roads-asphalt 2.1 · pedestrians 3.0 · terrain 1.9
+   market:   buildings-shell 8.1 · pedestrians(near) 7.4 + 2.9 · roads-hardscape 6.2 · landmarks 9.9 (static+detail+kinetic)
+   harbor:   buildings-shell 9.1 · pedestrians 6.9 · terrain-ground 4.6 · water 3.7 · hardscape 3.2 · landmarks 5.4
+   platform: hardscape 3.4 · landmarks 5.5 · veg-cards 2.7 · terrain 3.1 · props-fine 1.4
+   switch checks: ;nooccupants no measurable change (the gl_FragDepth write stays without it); quality=low -15..-17 ms
