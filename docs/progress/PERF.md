@@ -10,19 +10,16 @@ street-level shots, clean console, invariants {}, typecheck); commit+push after 
 IN HEBREW: before/after table per view (mean frame time, outlier frames, freezes), what was fixed, what cost quality,
 what is open. Visible trade-offs only behind a switch, with their measured price.
 
-**Pushed (measured):** c45a8c9 batch 1, b52144b batch 2, 237a97c batch 3 (see Log 3–5).
-**Committed locally, not yet measured/pushed:** fd69368 (trees slot 2.5, big landmarks own meshes), c0399b9 (fine
-furniture cells), f594b6a (parallel warm-up compileAsync + garbage fixes: wind, shadowFit, crowd director loops),
-f3b0b78 (census skips crowd picker), cf30424 (departure board refresh only < 45 m — a minimal visible change: the
-board keeps its last state beyond 45 m where its text is unreadable; ?fps=30 optional cap), 5274c61 (ped layer names,
-?pednear=far A/B). Push each once its A/B shows no regression: `git push origin <sha>:claude/pensive-gates-bim12i`.
-
-**Frozen copies** (scratchpad worktrees, each `node node_modules/vite/bin/vite.js --config vite.base.config.mjs`):
-base 8718d0f :5174 · cand2 b52144b :5176 · cand4 c0399b9 :5178 · cand5 f594b6a :5179 · cand6 5274c61 :5180
-(cand1 :5175 and cand3 :5177 retired). Scratchpad = C:/Users/eyalt/AppData/Local/Temp/claude/C--Users-eyalt--claude-
-spares-spare-Iu4xkp/edff2af5-8a31-4305-8fd4-d223bad6e749/scratchpad. Outputs: shots/perf2/*.txt|json (gitignored).
-**Queued when written:** ab2_sw (cand2 drawsort=0 / vehfd=1), ab4_c4 (cand4 perf), boot_c5 + hitch_c5 + alloc_c5
-(queue9), retained_c5 (JS heap after boot ~730 MB: who holds it), progprobe_c5 (materials re-deriving programs/frame).
+**Pushed (measured):** everything up to a5f8488 (batches 1–5 + report draft). **Local, not pushed yet:** comment fix,
+4befe3b (compile kick-off per module — boot test running), log commits.
+**Final verification RUNNING** (shots/perf2/final.sh 5181, final copy = 729b6a7 at :5181, original at :5174):
+final_perf_{base,new}.txt, final_hitch_{base,new}.json, final_soak_{base,new}.json, final_golden.txt (shots/golden/final),
+final_street.txt (shots/street/final vs base), final_boot_new.txt; then final2.sh: dist build boot (vite preview :4173)
+vs the user's original C:/Users/eyalt/Downloads/Tinyhaven.html (read-only). Boot test of 4befe3b at :5182:
+boot_early.txt, compile_early.txt, hitch_early.json. Report: docs/progress/PERF-REPORT.md (draft; fill the tables with
+`python3 -I scripts/agent-tools/perftable.py --perf-before final_perf_base.txt --perf-after final_perf_new.txt
+--hitch-before final_hitch_base.json --hitch-after final_hitch_new.json --soak-before … --soak-after …`), append an
+"after" section to perf-results.txt, push, final Hebrew summary in chat.
 
 **Current numbers (ms/frame uncapped, 12 h; orig → cand3):** overview 69.7 → 48.6, street 54.2 → 46.8, market 58.8 →
 51.5, harbour 65.0 → 48.3, platform 38.4 → 31.6 (21.5 h similar: 72.7→52.6, 55.6→47.2, 60.9→48.5, 69.3→52.9, 44.6→35.6).
