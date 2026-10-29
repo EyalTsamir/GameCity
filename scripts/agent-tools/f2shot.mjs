@@ -13,7 +13,7 @@ for (let i = 2; i < process.argv.length; i++) if (process.argv[i].startsWith('--
 const out = path.resolve(args.out ?? 'shots/f2/q');
 fs.mkdirSync(out, { recursive: true });
 const W = Number(args.w ?? 960), H = Number(args.h ?? 540), PUMP = Number(args.pump ?? 3);
-const url = `http://127.0.0.1:5173/?nointro&noidle&time=${args.time ?? 11}${args.q ? '&' + args.q : ''}`;
+const url = `http://127.0.0.1:5173/?nointro&noidle&adaptive=0&time=${args.time ?? 11}${args.q ? '&' + args.q : ''}`;
 const shots = (args.shots ?? '').split(',').filter(Boolean);
 const report = { url, consoleErrors: [], pageErrors: [], caps: [] };
 await acquireLock();
@@ -31,6 +31,9 @@ try {
   await pump(2);
   console.log('loaded', ((Date.now() - t0) / 1000).toFixed(0), 's');
   for (const spec of shots) {
+    // 'ao0' / 'ao1' / 'dof0' / 'dof1': switch a post effect for the following shots
+    const fx = /^(ao|dof)([01])$/.exec(spec);
+    if (fx) { await page.evaluate(([e, on]) => window.__city.ctx.services.postfx?.setEnabled?.(e, on === '1'), [fx[1], fx[2]]); continue; }
     const res = await page.evaluate((spec) => {
       const c = window.__city, p = spec.split(':');
       const kind = p[0];
@@ -62,7 +65,7 @@ try {
     }, spec);
     if (!res) { console.log('missing', spec); continue; }
     await pump(PUMP);
-    const file = path.join(out, spec.replace(/:/g, '_') + '.png');
+    const file = path.join(out, String(report.caps.length).padStart(2, '0') + '_' + spec.replace(/:/g, '_') + '.png');
     await page.screenshot({ path: file, timeout: 240000 });
     report.caps.push({ spec, file, ...res });
     console.log('shot', spec, ((Date.now() - t0) / 1000).toFixed(0), 's');

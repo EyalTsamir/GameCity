@@ -54,7 +54,26 @@ Branch `claude/real-f2-people` (from `claude/pensive-gates-bim12i` e1c9780). Bri
   Fish quay (call site in harbor/quay.ts): creel stacker, box sorter, net mender on the store bench, one
   talking to the boat (5–15 h).
 
-## Vehicle occupants plan (judge 2 #3, not started)
+## Vehicle occupants (s2: cars / vans / lorries / buses DONE; trains TODO)
+* occupants.ts `Occupants.sync(list, n)` after actors in pedestrians.ts frame(); per Vehicle (not twoWheel) within
+  NEAR 38 m and onScreen, ≤ MAX 64 figures: seats from `CABIN[spec.model]` (models.ts, the glass Det: c 2 car
+  a=[hw, belt, roof, zd] b=[zr, fz(front seat back z), rz(rear seat back)], c 4 bus, c 5 van/lorry cab); driver
+  at x = +hw/2 (+X = the car's LEFT), hips fz + 0.2, hands on the wheel (barY belt+0.04, barZ zd−0.6, barX 0.16);
+  front passenger 35 %, rear 20 %; bus driver (hw−0.62, zd−0.95) in operator shirt, passengers on the 0.82 m
+  rows at ±hw·0.62 / ±0.52 (32 % by day). Colours dimmed (`dim()`: cabin shade, glass not drawn over them).
+  NEVER set m.stopped (rider pose puts the left foot on the road).
+* traffic: `Vehicle.occupants/seated`, render a2.w = 2 when seated (all shader uses of aInst2.w / vCamObj.w are
+  min(…,1)); vehicleMaterial: `vSeated` skips the shader's own driver / bus passengers; glass writes
+  gl_FragDepth of the traced hit (`thHitT`, fragment declares `uniform mat4 projectionMatrix`), every other
+  fragment gl_FragCoord.z. Judged q2/q3/q4: car driver + passengers through windscreen and side glass GOOD;
+  bus front (driver, passengers) GOOD. Open: bus rear-¾ side windows came out black once (q3 bus_0_8_155) —
+  check (AO on pushed-back depth?) — q5 bus side view.
+* Trains TODO (plan): rail/trainRender.ts update() composes each car (c.x, c.y, rail.z, yaw ±π/2 by tr.dir·flip,
+  pitch −s·c.pitch, roll); passenger cars have aInst2.y = 1 (used as an emissive multiplier → use min()); saloon
+  in trainMaterial.ts trInterior(): floor FL 1.13, seat backs on z = bay·1.9 planes, heads at |x| 0.95, y 2.4
+  (skip those heads when seated, aInst2.y = 2); same gl_FragDepth trick on T.WINDOW / DOORWIN glass.
+
+## (old) Vehicle occupants plan
 * Cars / buses: occupants are ray-traced in the glass shader (traffic/vehicleMaterial.ts `thInterior`, called
   from FRAG_DETAIL ~l.157 with `occupied` = aInst2.w (the lights-on factor!)). Train: rail/trainMaterial.ts ~l.239.
 * Plan: real figures as extra Members (like riders.ts: car driver = rider pose mode 2, seat + wheel as bar, feet
@@ -68,6 +87,8 @@ Branch `claude/real-f2-people` (from `claude/pensive-gates-bim12i` e1c9780). Bri
 ## Tried and rejected (why)
 
 ## Toggles / tiers / costs
+* `?nooccupants` — no real vehicle occupants (the glass shader's ray-traced ones everywhere). Cost not measured
+  (≤ 64 extra figures, only within 38 m; gl_FragDepth disables early-z on the vehicle material — measure).
 * `?noactors` — the old box figures (person() / figure() build their boxes again) and no Actors class at all
   (no market / platform / quay crowds). Cost: not measured yet (≈ 60 extra figures in a downtown frame stats,
   mostly pin/tiny LOD beyond 40 m; capacity shared with the crowd's 720).

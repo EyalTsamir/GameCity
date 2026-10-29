@@ -166,6 +166,13 @@ export class Occupants {
       look.bottom = 0x2a3140;
       if (st) st.hat = HAT_STYLES.NONE;
     }
+    // in the cabin's shade and seen through tinted glass (the pane's own reflection is not drawn over them)
+    look.skin = dim(look.skin);
+    look.top = dim(look.top);
+    look.bottom = dim(look.bottom);
+    look.hair = dim(look.hair);
+    look.hat = dim(look.hat);
+    look.accent = dim(look.accent);
     const m = new Member(this.nextUid++, p, 0, look, rng.next());
     p.members.push(m);
     m.rideG = g;
@@ -183,4 +190,12 @@ function drive(seatY: number, hipZ: number, wheelY: number, wheelZ: number, whee
 /** a passenger: hands on the thighs, feet on the floor in front */
 function sit(seatY: number, hipZ: number, floor: number): RideGeom {
   return { mode: 2, seatY, seatZ: hipZ, barY: seatY + 0.13, barZ: hipZ + 0.3, barX: 0.13, footY: floor + 0.05, footZ: hipZ + 0.5, footX: 0.12, crank: 0, lean: 0.02 };
+}
+
+/** a colour as seen inside the cabin (≈ 0.6 × with a cool cast of the glass) */
+function dim(c: number): number {
+  const r = (c >> 16) & 255,
+    g = (c >> 8) & 255,
+    b = c & 255;
+  return (Math.round(r * 0.56) << 16) | (Math.round(g * 0.6) << 8) | Math.round(b * 0.64);
 }
