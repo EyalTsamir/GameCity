@@ -9,6 +9,14 @@ before/after crops kept for the log live in `docs/progress/boxhunt/`.
 **Round 2 (overnight, 2026-10-30) IN PROGRESS** — merged `claude/pensive-gates-bim12i` (083a507) first. Backlog in
 order: (1) ranked list #14–30 minus hand-offs, (2) REAL-REPORT objects, (3) interiors through glass, (4) re-audit
 with walk mode / free camera and fix the next 10, repeat. Every feature: `boxHunt(ctx, name)` switch.
+- **Latest (7033144)**: walk re-audit 2 (16 views `shots/bh2/walk2`, 2 judges) → picket board edges in the near
+  cells (`?nopicketedge`, verified `shots/bh2/picket`), beach toys (`?nobeachtoys`, verify `shots/bh2/toys`); reredos
+  + stadium lobby verified (`ver5`). Perf A/B (`perf2`, 4 views × 2, `;noboxhunt` = rounds 1+2): +1.2–1.6 ms,
+  +8–10 % triangles, same draw calls → per-toggle attribution (`perf3`): container kit −54 k, yard kit −54 k, quay
+  wall −24 k, barge −20 k, two-wheelers −16/−49 k, carousel −20 k (harbour) → trims in 7033144 (motorbike/scooter
+  LOD 2 back to the light body, yard small parts near-only, castings outer faces). Pending: `perf4` (same A/B after
+  the trims), `hitch.mjs` (mid-run compiles must be 0), toys check, round-2 sheet (`sheet_r2.py`), final log
+  section (draft in scratch `r2_log.md`), build. Judge items owned elsewhere → hand-offs (see Round 2 section).
 - Done + committed (f3945ad … 6fe85cf): e-moped / e-scooter / motorbike sculpted (`?no2wdetail`, traffic
   models.ts `loftZ`), school railings + gates + Sheffield stands (`?noschoolrail`, civic.ts `schoolBounds`),
   fish-quay reefer as a real container (`?noquaykit`), sail draft + finer cloth + tiller extension (`?nosailkit`),
