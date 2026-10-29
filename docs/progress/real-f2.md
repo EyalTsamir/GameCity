@@ -3,6 +3,20 @@
 Branch `claude/real-f2-people` (from `claude/pensive-gates-bim12i` e1c9780). Brief: real-briefs.md "F2".
 
 ## Resume here
+* 2026-10-29 ~05:00 UTC — SESSION 2 ENDED (tokens.py ctxMax 264k > rule). Pushed. Typecheck clean; console
+  clean and invariants {} in every f2shot run (q2–q4 reports).
+  DONE s2: vehicle occupants for cars / vans / lorries / buses (`?nooccupants`, see "Vehicle occupants");
+  judged GOOD: car driver + passengers (q3), bus driver + passengers through the windscreen (q4), band at 17 h
+  (q5), market, fish quay, site worker, sailboat crew (real seated figures; hull/sails are F4's).
+  Fixed: swing kids' hands on the chains / see-saw on the handle (not re-judged).
+  HARNESS: flat single-colour captures are an intermittent pipeline glitch (the SAME view once fine, once flat
+  green: q4) — not camera placement. f2shot.mjs now loads with `adaptive=0` (suspect: adaptive quality
+  resizing targets); unconfirmed. Use scripts/agent-tools/f2shot.mjs (≈ 2 min per capture here), not bench.mjs
+  (≈ 3–5 min per capture; 25-min background limit). Kill helper must not match its own command line.
+  NEXT, in order: (1) bus side windows render as opaque black panes (q5 01_bus) — check on ?nooccupants whether
+  pre-existing (side panes not ray-traced?) — if so the side passengers are hidden: give the flank panes the
+  cabin Det / ask W2; (2) train occupants (plan in "Vehicle occupants"); (3) perf.mjs `;nooccupants` and
+  `;noactors` (gl_FragDepth = no early-z on vehicles); (4) re-judge swing kid at 3 m; (5) judge-2 walker notes.
 * 2026-10-29 ~03:25 UTC — SESSION 2 (session_01XuhAMgh2gQQLc7zRmcxRjR). 57286e8: vehicle occupants coded
   (pedestrians/occupants.ts, `?nooccupants`; traffic Vehicle.occupants/seated, render aInst2.w = 2 when seated,
   vehicleMaterial: vSeated skips shader occupants + glass writes gl_FragDepth of the traced cabin hit; models.ts
@@ -95,6 +109,12 @@ Branch `claude/real-f2-people` (from `claude/pensive-gates-bim12i` e1c9780). Bri
 
 ## Next
 
+## Tokens (session 2, tokens.py)
+```
+agent               calls   w(M)    %  ctxMed  ctxMax
+LEAD                  166    3.6100.0    185k    268k
+```
+
 ## Tokens (session 1, tokens.py)
 ```
 agent               calls   w(M)    %  ctxMed  ctxMax cold coldW%  idle>5min: warm/cold
@@ -103,5 +123,6 @@ LEAD                  121    2.8100.0    195k    257k    0     0%  2/0
 ```
 
 ## Sheets
+* docs/progress/real/f2_s2_people.jpg — s2: car occupants, bus driver + passengers, band 17 h, market, quay, sailboat crew.
 * docs/progress/real/f2_quay_s1.jpg — fish quay 11 h: a fisher in oilskins at the creel stack (real figure).
 * capture-set report shots/f2/a2/report.json: console clean, invariants {}, frameErrors [].
