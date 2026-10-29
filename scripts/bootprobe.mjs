@@ -9,7 +9,8 @@ import { installRecorder, recMark, readFrames, frameStats } from './framerec.mjs
 
 const args = {};
 for (let i = 2; i < process.argv.length; i++) if (process.argv[i].startsWith('--')) args[process.argv[i].slice(2)] = process.argv[++i];
-const baseUrl = (args.url ?? 'http://127.0.0.1:5173/').replace(/\/?$/, '/');
+// a page URL (…/index.html, file:///…/Tinyhaven.html) is used as is, a server root gets its trailing slash
+const baseUrl = /\.html?$/i.test(args.url ?? '') ? args.url : (args.url ?? 'http://127.0.0.1:5173/').replace(/\/?$/, '/');
 const variants = (args.variants ?? '').split(';');
 const after = parseFloat(args.after ?? '8');
 
