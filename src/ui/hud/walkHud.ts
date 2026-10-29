@@ -52,7 +52,7 @@ export class WalkHud {
       ? ['<span><em>Left thumb</em> walk</span>', '<span><em>Drag</em> to look</span>', '<span><em>Tap</em> what you see</span>', '<span>Walk button to stop</span>']
       : kind === 'enter'
         ? ['<span><em>W A S D</em> walk</span>', '<span><em>Shift</em> jog</span>', '<span><em>Mouse</em> look</span>', '<span><em>Esc</em> frees the mouse</span>', '<span><em>V</em> stop walking</span>']
-        : ['<span><em>Drag</em> or <em>click</em> to look around</span>', '<span><em>Click</em> people &amp; things</span>', '<span><em>Esc</em> / <em>V</em> stop walking</span>'];
+        : ['<span><em>W A S D</em> walk</span>', '<span><em>Drag</em> to look</span>', '<span><em>Click</em> people &amp; things</span>', '<span><em>Esc</em> / <em>V</em> stop walking</span>'];
     this.hint.innerHTML = parts.join(sep);
     this.hint.classList.add('show');
     this.hintTimer = setTimeout(() => this.hint.classList.remove('show'), secs * 1000);

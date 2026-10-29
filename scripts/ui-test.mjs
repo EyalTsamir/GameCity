@@ -1054,10 +1054,10 @@ try {
         const sx = Math.sin(a),
           sz = Math.cos(a);
         let free = 0;
-        for (let s = 0.5; s <= 12; s += 0.5) {
+        for (let s = 1; s <= 12; s += 0.5) {
           const x = d.x + sx * s,
             z = d.z + sz * s;
-          if (plan.isWater(x, z) || plan.lots.some((l) => x > l.footprint.x0 - 1.2 && x < l.footprint.x1 + 1.2 && z > l.footprint.z0 - 1.2 && z < l.footprint.z1 + 1.2)) break;
+          if (plan.isWater(x, z) || plan.lots.some((l) => x > l.footprint.x0 - 0.6 && x < l.footprint.x1 + 0.6 && z > l.footprint.z0 - 0.6 && z < l.footprint.z1 + 0.6)) break;
           free = s;
         }
         if (free > best.free) best = { free, yaw: a };
@@ -1128,6 +1128,33 @@ try {
       await settle(400);
       const after = { shown: await page.evaluate(() => !!document.querySelector('.th-info.show')), mode: await mode() };
       step('click while walking shows the info card; Esc closes it and keeps walking', card.shown && /^Looking at/.test(card.kicker ?? '') && !after.shown && after.mode === 'walk', { picked: thing.label, card, after });
+    }
+
+    // touch (real touch events through the DevTools protocol): the left-third thumb stick walks (pulled back:
+    // away from the wall just touched), a one-finger drag on the right turns the view
+    {
+      const cdp = await page.context().newCDPSession(page);
+      const touch = (type, pts) => cdp.send('Input.dispatchTouchEvent', { type, touchPoints: pts.map(([x, y], id) => ({ x, y, id, radiusX: 4, radiusY: 4, force: 1 })) });
+      const a = await wd();
+      await touch('touchStart', [[150, height - 220]]);
+      await page.waitForTimeout(40);
+      await touch('touchMove', [[150, height - 180]]);
+      await page.waitForTimeout(2000);
+      await touch('touchEnd', []);
+      await settle(400);
+      const b = await wd();
+      await touch('touchStart', [[cx + 220, cy]]);
+      for (let i = 1; i <= 10; i++) {
+        await page.waitForTimeout(16);
+        await touch('touchMove', [[cx + 220 - i * 20, cy]]);
+      }
+      await touch('touchEnd', []);
+      await settle(300);
+      const c = await wd();
+      const back = Math.hypot(b.x - a.x, b.z - a.z);
+      const turn = wrap(c.yaw - b.yaw);
+      step('touch: the left thumb stick walks, a drag on the right looks', back > 1 && turn < -0.2, { walked: Math.round(back * 100) / 100, turnDeg: Math.round((turn * 180) / Math.PI) });
+      await cdp.detach().catch(() => {});
     }
 
     // the station: from the concourse up the steps onto the platform (0.95 m) — the HUD button walks from the focus

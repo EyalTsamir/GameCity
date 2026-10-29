@@ -222,8 +222,9 @@ export class FirstPerson {
     }
     const hud = this.overlay();
     hud.show(true);
-    hud.setHint('enter', 10);
-    if (capture) this.requestLock();
+    const lock = capture && !this.automated;
+    hud.setHint(lock ? 'enter' : 'free', 10);
+    if (lock) this.requestLock();
     this.host.emit('camera:walk', true);
     return true;
   }
