@@ -506,15 +506,15 @@ function ferryDockKit(b: HB, d: DockBox): void {
   // guide piles: steel tubes through hoops on the long sides, yellow caps
   for (const z of [pz0 - 0.38, pz1 + 0.38])
     for (const x of [px0 + 1.6, px1 - 1.6]) {
-      b.color('#3c4248');
-      b.cyl([x, WATER_LEVEL - 2.5, z], [x, top + 3.0, z], 0.24, 0.24, 10, 2);
+      b.color('#8a9298');
+      b.cyl([x, WATER_LEVEL - 2.5, z], [x, top + 2.1, z], 0.16, 0.16, 10, 2);
       b.color('#f2c94c');
-      b.cyl([x, top + 3.0, z], [x, top + 3.12, z], 0.26, 0.2, 10, 2);
+      b.cyl([x, top + 1.85, z], [x, top + 2.12, z], 0.165, 0.165, 10, 2);
       b.color('#2a2c2f');
-      b.box(x, top - 0.2, z, 0.66, 0.16, 0.66, 0, 0);
-      b.box(x, top - 0.2, (z + (z < pz0 ? pz0 : pz1)) / 2, 0.3, 0.14, 0.4, 0, 0);
-      b.color('#5a4a3a');
-      b.cyl([x, WATER_LEVEL - 0.1, z], [x, WATER_LEVEL + 0.3, z], 0.25, 0.25, 10, 0);
+      b.box(x, top - 0.2, z, 0.48, 0.14, 0.48, 0, 0);
+      b.box(x, top - 0.2, (z + (z < pz0 ? pz0 : pz1)) / 2, 0.24, 0.12, 0.4, 0, 0);
+      b.color('#4f4a3a');
+      b.cyl([x, WATER_LEVEL - 0.1, z], [x, WATER_LEVEL + 0.35, z], 0.17, 0.17, 10, 0);
     }
   // tyre fenders on lanyards along the berth face
   const nT = Math.max(2, Math.floor((pz1 - pz0 - 1.2) / 1.4));

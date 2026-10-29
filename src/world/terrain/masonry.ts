@@ -6,7 +6,7 @@
 import * as THREE from 'three';
 import { mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { CityContext } from '../../core/context';
-import { RIVER, QUAY_X, SLAB, SIDEWALK_Y } from '../../core/constants';
+import { RIVER, QUAY_X, SLAB, SIDEWALK_Y, WATER_LEVEL as WATER_LEVEL_M } from '../../core/constants';
 import { RIDGE_FOOT_Z } from '../../core/plan';
 import type { Rng } from '../../core/rng';
 import { GeoBuilder, type V3 } from './builder';
@@ -432,6 +432,69 @@ function buildWall(b: GeoBuilder, w: WallSpec): void {
   };
   if (w.pillarA) pillar(0);
   if (w.pillarB) pillar(L);
+}
+
+/**
+ * Box hunt (?noquaywall): furniture on the water faces of the quay walls — iron mooring rings hanging from
+ * staple plates under the coping, drain outfalls with a rust stain down to the water, and (sea wall) timber
+ * fender baulks — kept clear of the ladders, footbridges and the jetty.
+ */
+function wallFurniture(b: GeoBuilder, info: WallInfo, top: (s: number) => number, avoid: number[], sea: boolean): void {
+  const { ax, az, bx, bz, nx, nz } = info;
+  const L = Math.hypot(bx - ax, bz - az);
+  const tx = (bx - ax) / L,
+    tz = (bz - az) / L;
+  const P = (s: number, off: number, y: number): V3 => [ax + tx * s + nx * off, y, az + tz * s + nz * off];
+  const yaw = Math.atan2(nx, nz);
+  const clear = (s: number, r: number) => s > r && s < L - r && avoid.every((a) => Math.abs(a - s) > r);
+  const m = new THREE.Matrix4();
+  const ring = new THREE.TorusGeometry(0.11, 0.018, 4, 10);
+  const pipe = new THREE.CylinderGeometry(0.13, 0.13, 0.14, 8, 1, true);
+  pipe.rotateX(Math.PI / 2);
+  const bore = new THREE.CircleGeometry(0.115, 8);
+  b.set('aMas', KIND.plain, 0, tx, tz);
+  // mooring rings every 12 m
+  for (let s = 6; s < L; s += 12) {
+    if (!clear(s, 1.8)) continue;
+    const y = top(s);
+    const [px, , pz] = P(s, 0.02, 0);
+    b.color('#2b2724');
+    b.box(px, y - 0.28, pz, 0.07, 0.07, 0.02, yaw);
+    const [rx, , rz] = P(s, 0.05, 0);
+    m.makeRotationY(yaw).setPosition(rx, y - 0.42, rz);
+    b.color('#3a302a');
+    b.geometry(ring, m);
+  }
+  // drain outfalls every 30 m with a stain down the face
+  for (let s = 15; s < L; s += 30) {
+    if (!clear(s, 2.5)) continue;
+    const y = WATER_LEVEL_M + 0.75;
+    const [px, , pz] = P(s, 0.06, 0);
+    m.makeRotationY(yaw).setPosition(px, y, pz);
+    b.color('#3d3630');
+    b.geometry(pipe, m);
+    const [qx, , qz] = P(s, 0.1, 0);
+    m.makeRotationY(yaw).setPosition(qx, y, qz);
+    b.color('#0e0d0c');
+    b.geometry(bore, m);
+    b.color('#4a4034');
+    b.quadFacing(P(s - 0.16, 0.012, WATER_LEVEL_M - 0.1), P(s + 0.16, 0.012, WATER_LEVEL_M - 0.1), P(s + 0.11, 0.012, y - 0.05), P(s - 0.11, 0.012, y - 0.05), nx, 0, nz);
+  }
+  // sea wall: timber fender baulks every 7 m from below the water to the coping
+  if (sea)
+    for (let s = 3.5; s < L; s += 7) {
+      if (!clear(s, 1.2)) continue;
+      const y1 = top(s) - 0.05,
+        y0 = WATER_LEVEL_M - 0.8;
+      const [px, , pz] = P(s, 0.1, 0);
+      b.color('#4a3b2c');
+      b.box(px, (y0 + y1) / 2, pz, 0.12, (y1 - y0) / 2, 0.1, yaw);
+      b.color('#2b2724');
+      for (const y of [y1 - 0.35, WATER_LEVEL_M + 0.5]) b.box(px, y, pz, 0.135, 0.03, 0.115, yaw);
+    }
+  ring.dispose();
+  pipe.dispose();
+  bore.dispose();
 }
 
 // ───────────────────────────────────────────────────────── portals ──
@@ -985,6 +1048,13 @@ export function createMasonry(ctx: CityContext, model: TerrainModel): MasonryRes
   for (const x of [-144, -48, 48, 104]) if (!plan.places?.dropLadder(x, RIVER.z0)) ladders.push({ x, z: RIVER.z0, nx: 0, nz: 1, top: SIDEWALK_Y + 0.2 });
   for (const x of [-168, -112, -20, 62]) ladders.push({ x, z: RIVER.z1, nx: 0, nz: -1, top: 0.2 });
   for (const z of [-131, -97, -58, -31, -2]) ladders.push({ x: QUAY_X, z, nx: 1, nz: 0, top: 0.12 });
+  if (boxHunt(ctx, 'quaywall')) {
+    const gx = gaps.map((g) => g.x - SLAB.x0);
+    const lad = (z: number) => ladders.filter((l) => l.z === z).map((l) => l.x - SLAB.x0);
+    wallFurniture(b, walls[0], () => SIDEWALK_Y, [...gx, ...lad(RIVER.z0)], false);
+    wallFurniture(b, walls[1], () => 0, [...gx, ...lad(RIVER.z1)], false);
+    wallFurniture(b, walls[2], (s) => Math.max(0, model.natural(QUAY_X - 0.9, SEA_WALL_Z0 + s) - 0.1), ladders.filter((l) => l.x === QUAY_X).map((l) => l.z - SEA_WALL_Z0), true);
+  }
 
   // portals
   const boreSamples: { x: number; z: number; roof: number }[] = [];
