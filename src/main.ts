@@ -159,15 +159,19 @@ async function boot(): Promise<void> {
   // shader compiles are kicked off as each module is built (KHR_parallel_shader_compile runs them on the GPU process'
   // threads while the next modules build): the facade program alone compiles ~29 s on a fresh cache (warmUp waits)
   const preRT = params.has('nowarmup') ? null : new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType });
+  // (only once the sky module has put up the real lights: the light count is part of every program, and the
+  // fallback lights still in the scene until the end of the boot made each early compile a throwaway variant)
   const precompile = () => {
-    if (!preRT) return;
+    if (!preRT || !ctx.services.sky) return;
     const prev = renderer.getRenderTarget();
     renderer.setRenderTarget(preRT);
+    fallback.visible = false;
     try {
       renderer.compile(scene, camera);
     } catch {
       /* warmUp compiles it again and reports */
     } finally {
+      fallback.visible = true;
       renderer.setRenderTarget(prev);
     }
   };
