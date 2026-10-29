@@ -1695,7 +1695,7 @@ void bhWall(inout vec3 albedo, inout float rough, inout float metal, inout vec3 
   // G1: glazed doors get pull handles — a steel bar either side of the meeting stiles (two pale slabs without them
   // read as panels, not doors)
   float hdl = 0.0;
-  if (uGlassVar > 0.5 && style > 6.5 && detail > 0.5) {
+  if (uGlassVar > 0.5 && style > 6.5 && detail > 0.5 && wr.y - wr.x < 2.3) { // (door-width openings only: not the lobby panes)
     float hx = abs(abs(pm.x - wc.x) - 0.11);
     hdl = (1.0 - smoothstep(0.011, 0.019, hx)) * (1.0 - smoothstep(0.2, 0.215, abs(pm.y - wr.z - 1.05)));
     frame = max(frame, hdl);
