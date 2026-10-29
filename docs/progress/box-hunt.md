@@ -11,7 +11,15 @@ before/after crops kept for the log live in `docs/progress/boxhunt/`.
   Crops of the top 16: `docs/progress/boxhunt/audit_top16.jpg`.
 - Step 2 (fixes) in progress — order = ranked list. Switch helper `src/core/boxhunt.ts` (`boxHunt(ctx, name)`:
   on at medium/high, off on low, `?no<name>`, `?noboxhunt` = all off).
-- #2 promenade lamp: code written (`terrain/railings.ts promenadeLamp`, `?nopromlamp`), not yet verified.
+- Code-verified that several judge items are already detailed (no change): modern street bin, back-yard close-board
+  fence, platform canopy, portaloo/site cabins, storage tanks (caged ladder, catwalks, pipes). See "Re-scored".
+- Written + committed (cf89e10 and later): signals `?nosigvisor`, promenade + footbridge/landing lanterns
+  `?nopromlamp`, garden wheelie bins `?nowheeliebin`, plaza sculptures `?nosculpt`, parasols + lifeguard hut
+  `?nobeachkit`, kite flyer `?nokiteflyer`, countryside house variants `?nolandvariants`, TV-tower shaft
+  `?notvshaft`. Verified visually: promenade lamp, signal visors (fix1). Pending: fix2 A/B (beach, villages,
+  sculpture, bins), footbridge lanterns, kite flyer, TV tower, then perf + build.
+- A/B capture helper: scratch `run_ab.sh <name> "<views>" [hour]` → `shots/bh/<name>/{before,after}` (before =
+  `?noboxhunt`).
 
 ## How the audit views were made
 `"name=tx,ty,tz,dist,yaw,pitch"` specs generated from eye→target pairs (scratch `views.mjs`; camera eye =
