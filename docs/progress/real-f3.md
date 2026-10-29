@@ -1,7 +1,16 @@
 # F3 — Ground, track and rock (final fix round)
 
 ## Resume here
-* 2026-10-29 — started. Branch claude/real-f3-ground (from e1c9780). Reading code; nothing changed yet.
+* 2026-10-29 03:20 — session 1 wrapped up (context cap). ALL CODE BELOW IS UNJUDGED: no clean after-bench yet
+  (the first after-captures were black because of a hardscape compile error, fixed in the last commit). FIRST STEP
+  for F3b: `scripts/agent-tools/golden.sh m3` (ref = base e1c9780 already in shots/golden/ref — but shots/ is not
+  in git; if missing, recapture ref from a base worktree, see pointers) then
+  `node scripts/bench.mjs --classes ballast,cutting,quay,apartment,sheep,townhouse,marketstall --dists 3,10
+  --out shots/f3/a2` and compare with shots/f3/before (base; also not in git — recapture from a base worktree on
+  5174 if gone). Base cutting_3m was black (pose inside the hill) → pose fixed since; base parklawn was inside
+  something → judge lawns via apartment/sheep instead.
+* Then: lawn felt at 3 m (not started), pasture (landscape/shader.ts ck==3, ~l.320: unowned file — lime plane),
+  cliff geometry (ledge shape / boulders) if the shader pass is not enough, perf.mjs cost of fixings + bump.
 
 ## Brief
 Judge 2 #4 (pixel ballast, bare sleepers, low-poly rock cutting beside platform + behind quay), #5 (felt lawns,
@@ -23,10 +32,34 @@ staticMaterial.ts (track bed), src/world/terrain/**, src/world/groundcover/**, s
 * Bench: F3 PLACES added in scripts/bench.mjs (ballast, cutting, parklawn). Base worktree /home/user/gc-base on 5174
   (node_modules = `cp -al` hard links; a symlink 403s in vite).
 
-## Done
+## Done (unjudged, all typecheck)
+* Ballast/gravel (staticMaterial.ts): jittered Voronoi stones (4.8 cm ballast / 2.6 cm gravel), elongated + rotated,
+  per-stone grey (some warm / blue), dark voids, rounded-top normal bump (rlG), fade to mean once a stone < ~2–4 px,
+  brake-dust brown crib between the rails (RAIL_Z).
+* Sleepers: new K.SLEEPER (28) — grain along z, drying checks, ballast dust on top (vWNy = world normal y varying
+  added), oily dark under the rails; geometry jitter (spacing ±2.5 cm, yaw ±0.6°, length/width), 18 % greyer old ones.
+* Rail fastenings: track.ts buildTrackFixings() (baseplate, 2 chair jaws, 3-bar spring clip, 2 screw heads per rail
+  per sleeper) in 24 m chunks; rail.ts shows chunks within 38 m (high) / 22 m (medium) / none (low). ?notrackfix.
+* Rock (masonry.ts, TH_FLATN only, kinds rock 3 + cliff 6): flat normal leaned 70 % to the shared-vertex normal
+  (rounder boulders, softer facets) + ridged-noise fracture bump (Mikkelsen surface gradient, fades by footprint),
+  applied as the lighting normal in normal_fragment_maps (mNb); NaN guard. Cliff: worm-crack contour lines 0.3→0.1,
+  pale lichen specks 0.4→0.22, moss only on n.y > 0.6, patchy with soil/grit between cushions, olive not lime.
+* Paving (roads/glsl.ts rdHard + materials.ts uRdHand; ?nohandlaid): for units < 1.3 m (not kerbs): wandering
+  courses, jittered joint positions (stone lengths vary), drifting bond offset, per-stone joint width, sanded joints
+  (grit colour), per-stone warm/cool tone + settled edge darkening, per-stone tilt (rdN); worn walking line on
+  sidewalks (vS.x ≈ 1.9 m from the kerb, polished, darker, desaturated).
+* Lawn tone (ground.ts stripes()): strips < 14 m across get 0.12–0.35 of the mowing-stripe amplitude (pale centre
+  band, judge 2 #5) — unjudged; the dark rim may instead be the E canvas edge darkening (strokeRect at kerbs).
+* bench.mjs: PLACES ballast / cutting / parklawn (parklawn pose bad), LOS skip regex ignores `fixings`.
 
 ## Tried and rejected
+* (none judged yet.) Harness lessons: `pkill -f`/`pgrep -f` with a pattern that appears in your own command kills
+  your own shell (exit 144) — kill by PID from `ps`. Two browsers at once in this container ≈ 3× slower each.
+* Not done: litter under market stalls (stall positions are F4's props) — request if wanted.
 
 ## Toggles / tiers / costs
+* ?notrackfix (fixings; off on low, 22 m medium, 38 m high), ?nohandlaid (paving). Rock bump / ballast: no toggle
+  yet (?legacyterrain disables the masonry flat path). Costs NOT measured yet (perf.mjs to do: station view with
+  ;notrackfix and downtown with ;nohandlaid).
 
 ## Next
