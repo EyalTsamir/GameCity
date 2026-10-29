@@ -44,6 +44,8 @@ export class Env {
   readonly O: Kit;
   /** detail builder of the current region: small trims of the static kits, collapsed beyond ~100 m (distance LOD) */
   D: Kit;
+  /** region of the landmark being generated (big landmarks: their own), null = by REGION_CELL cell */
+  regionTag: string | null = null;
   /** per-region detail builders (same keys as `regions`) */
   readonly details = new Map<string, MeshBuilder>();
   readonly glows: GlowPoint[] = [];
@@ -88,7 +90,7 @@ export class Env {
 
   /** Start a landmark: local origin at world (x, y, z), local +Z facing yaw. */
   begin(x: number, y: number, z: number, yaw = 0): void {
-    this.S = this.region(regionOf(x, z));
+    this.S = this.region(this.regionTag ?? regionOf(x, z));
     this.D = new Kit(this.S.b.detail!);
     for (const k of [this.S, this.K, this.L, this.T, this.O, this.D]) {
       k.b.setFrame(x, y, z, yaw);

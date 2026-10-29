@@ -49,9 +49,13 @@ export default function create(ctx: CityContext): CityModule {
   };
   // perf diagnostics: ?lmnokinds=stadium,townhall,… skips those generators
   const noKinds = new Set((ctx.debug.params.get('lmnokinds') ?? '').split(',').filter(Boolean));
+  // the big landmarks get static + detail meshes of their own (culled as one): in a shared cell the stadium's
+  // seating detail was drawn whenever the market next to it was in view
+  const OWN_REGION = new Set(['station', 'townhall', 'church', 'tvtower', 'construction', 'stadium']);
   const run = (label: string, fn: () => void) => {
     if (noKinds.has(label.split(' ')[0])) return;
     const t0 = totalTris();
+    env.regionTag = OWN_REGION.has(label.split(' ')[0]) ? label.replace(' ', '-') : null;
     try {
       fn();
       const k = label.split(' ')[0];
@@ -61,6 +65,7 @@ export default function create(ctx: CityContext): CityModule {
       if (ctx.debug.enabled) console.error('[landmarks]', label, err);
     }
     env.endChecks();
+    env.regionTag = null;
   };
 
   for (const lot of plan.lots) {
