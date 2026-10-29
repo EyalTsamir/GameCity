@@ -146,6 +146,13 @@ cand3 → cand4 (ms/frame, 12 h / 21.5 h): overview +0.7 / −1.9, street −2.2
 furniture / landmark cells behind the buildings are still inside the view frustum — the missing piece is occlusion,
 which three does not do (a home-made ray test against the lot boxes would pop: rejected). +10…19 draw calls.
 
+### 7. Boot / heap (cand5 f594b6a)
+- bootprobe (fresh profile): first frame 36.9 s with the parallel warm-up (warm-up 27.1 s, 138 programs) vs 59.2 s
+  serial (cand2) and 54.2 s without a warm-up (then a 943 ms freeze in the first seconds). Modules build in ~9 s.
+- allocprof --retained: the sampler attributes 58 MB of the 743 MB JS heap (builder arrays kept after building:
+  roads 10.8, harbour 3.7, night market 3.4, winRec 1.7 MB…); the rest is outside its view — left as is (not a
+  frame-time problem).
+
 ---
 
 # Earlier round: render-performance pass
