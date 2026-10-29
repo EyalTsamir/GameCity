@@ -1692,7 +1692,15 @@ void bhWall(inout vec3 albedo, inout float rough, inout float metal, inout vec3 
     float mv = 1.0 - smoothstep(0.03, 0.045, abs(pm.x - wc.x));
     frame = max(frame, mv);
   }
-  vec3 fcol = uFrameCols[frameIdx];
+  // G1: glazed doors get pull handles — a steel bar either side of the meeting stiles (two pale slabs without them
+  // read as panels, not doors)
+  float hdl = 0.0;
+  if (uGlassVar > 0.5 && style > 6.5 && detail > 0.5) {
+    float hx = abs(abs(pm.x - wc.x) - 0.11);
+    hdl = (1.0 - smoothstep(0.011, 0.019, hx)) * (1.0 - smoothstep(0.2, 0.215, abs(pm.y - wr.z - 1.05)));
+    frame = max(frame, hdl);
+  }
+  vec3 fcol = mix(uFrameCols[frameIdx], vec3(0.74, 0.74, 0.72), hdl);
   // frames and mullions stand proud of the glass: their inner arrises bevel down toward the pane (catch the
   // light on one side, shade on the other) — the frame reads as a section, not a painted line
   if (!curtain && uWallRelief > 0.5 && detail > 0.5) {
