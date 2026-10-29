@@ -47,6 +47,8 @@ export interface ActorDef {
 export type ActorIn = Pick<ActorDef, 'x' | 'y' | 'z' | 'yaw' | 'role'> & Partial<ActorDef>;
 
 export const ACTORS: ActorDef[] = [];
+// the bench ('actor-<role>' classes) locates them here
+if (typeof window !== 'undefined') (window as unknown as { __actors: ActorDef[] }).__actors = ACTORS;
 const keys = new Set<string>();
 
 /** register (deduplicated by position: builders may run more than once) */
