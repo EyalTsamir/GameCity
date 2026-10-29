@@ -154,6 +154,9 @@ vec3 masonryColor(vec3 base) {
     float rg = 1.0 - abs(2.0 * b1.r - 1.0);
     float rg2 = 1.0 - abs(2.0 * b2.a - 1.0);
     float hb = 0.14 * rg * rg + 0.05 * rg2 * rg2 + 0.022 * b2.g + 0.008 * b3.b;
+    // soften the facets: lean the flat normal toward the shared-vertex normal (rounded boulders, no flat triangles)
+    vec3 sn = normalize(vMN);
+    if (dot(sn, n) > 0.15) n = normalize(mix(n, sn, 0.7));
     vec3 dpx = dFdx(p), dpy = dFdy(p);
     float fade = 1.0 - smoothstep(0.03, 0.1, max(length(dpx), length(dpy)));
     vec3 r1 = cross(dpy, n), r2 = cross(n, dpx);
@@ -216,21 +219,23 @@ vec3 masonryColor(vec3 base) {
     col = mix(col, col * vec3(0.5, 0.53, 0.55), smoothstep(0.6, 0.78, st4.a) * side * 0.75);
     col *= 0.86 + 0.26 * nv.g;
     col = mix(col, col * vec3(1.1, 1.04, 0.86) + vec3(0.035, 0.028, 0.0), smoothstep(0.6, 0.8, nu.a) * 0.55 * side);
-    col = mix(col, vec3(0.5, 0.52, 0.44) * (0.85 + 0.3 * nv.b), smoothstep(0.64, 0.8, nv.a) * 0.4 * side);
+    col = mix(col, vec3(0.5, 0.52, 0.44) * (0.85 + 0.3 * nv.b), smoothstep(0.64, 0.8, nv.a) * 0.22 * side);
     // hairline cracks across the strata + vertical joints that split the beds into blocks
     float ck = 1.0 - smoothstep(0.0, 0.03 + fw * 0.2, abs(nv.r - 0.5));
-    col *= 1.0 - 0.3 * ck * side * (1.0 - smoothstep(0.15, 0.5, fw));
+    col *= 1.0 - 0.1 * ck * side * (1.0 - smoothstep(0.15, 0.5, fw));
     float fwu = length(vec2(cdx.x, cdy.x)) * 0.37 + 1e-4;
     float ju = abs(fract(cuv.x * 0.37 + nu.b * 0.9 + vMas.y * 2.3) - 0.5);
     float joint = (1.0 - smoothstep(0.012, 0.03 + fwu, 0.5 - ju)) * (1.0 - smoothstep(0.08, 0.3, fwu));
     col *= 1.0 - 0.45 * joint * side;
     // ledges: moss and grass tufts on everything facing up, the edge broken by noise
-    float up = smoothstep(0.45, 0.85, n.y);
+    float up = smoothstep(0.6, 0.92, n.y);
     vec2 mp = p.xz * 0.55;
     float mossN = textureGrad(tNoise, mp, pdx * 0.55, pdy * 0.55).g * 0.6 + nv.b * 0.4;
-    float moss = up * smoothstep(0.2, 0.42, mossN);
-    vec3 mossC = mix(mMoss, mGrass, smoothstep(0.35, 0.7, nu.g)) * (0.85 + 0.3 * nv.r);
-    col = mix(col, mossC, moss * 0.94);
+    // patchy: soil, grit and bare rock show between the cushions on a ledge
+    float moss = up * smoothstep(0.32, 0.55, mossN + 0.25 * (nf.r - 0.5));
+    col = mix(col, vec3(0.3, 0.26, 0.2) * (0.8 + 0.4 * nf.g), up * (1.0 - moss) * 0.45);
+    vec3 mossC = mix(mMoss, mGrass, smoothstep(0.35, 0.7, nu.g)) * (0.85 + 0.3 * nv.r) * vec3(0.8, 0.82, 0.72);
+    col = mix(col, mossC, moss * 0.88);
     // shrubs and tufts rooting in the ledges (darker clumps in the moss)
     col = mix(col, mGrass * vec3(0.42, 0.48, 0.36), up * smoothstep(0.6, 0.74, nv.r * 0.6 + mossN * 0.4) * 0.85);
     // a little green creeping over the lip of each ledge
