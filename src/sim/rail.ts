@@ -189,6 +189,7 @@ export default function create(ctx: CityContext): CityModule {
     return `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
   };
   let boardT = 0;
+  let boardNear = false;
   const refreshBoard = () => {
     const rows = sim.boardRows().map((r) => ({ time: fmt(r.time), dest: r.dest, info: r.info, hot: r.hot }));
     const h = ctx.clock.hours;
@@ -241,14 +242,18 @@ export default function create(ctx: CityContext): CityModule {
       glows.commit();
       // sign faces are unreadable (sub-pixel text) from far away: skip their draw call
       const cam = ctx.camera.position;
-      signs.mesh.visible = Math.hypot(cam.x - signCentre.x, cam.y, cam.z - signCentre.z) < 260;
+      const signD = Math.hypot(cam.x - signCentre.x, cam.y, cam.z - signCentre.z);
+      signs.mesh.visible = signD < 260;
       // the glow batch only matters at night or while a crossing flashes
       glows.mesh.visible = ctx.uniforms.uLights.value > 0.01 || !!c0?.flash || !!c1?.flash;
+      // the departure board re-uploads its whole 1024x512 sign texture (+ mipmaps) when its text changes — the clock
+      // minute changes every refresh: only while it is legible (≲ 45 m; beyond, its rows are a few pixels tall)
       boardT -= realDt;
-      if (boardT <= 0) {
+      if (signD < 45 && (boardT <= 0 || !boardNear)) {
         boardT = 0.5;
         refreshBoard();
       }
+      boardNear = signD < 45;
       cpuMs = cpuMs * 0.95 + (performance.now() - a) * 0.05;
     },
     stats() {

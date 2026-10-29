@@ -188,7 +188,16 @@ async function boot(): Promise<void> {
     frameMs = 16.7;
   const moduleTimes = new Map<string, number>();
   let frameCount = 0;
+  // ?fps=30: draw every other display refresh (an even 33 ms cadence instead of 33/50 ms alternation when a frame
+  // does not fit in one refresh); off by default
+  const fpsCap = Number(params.get('fps')) || 0;
+  const minInterval = fpsCap > 0 ? 1000 / fpsCap - 4 : 0;
+  let lastDraw = -1e9;
   const loop = (timestamp: number) => {
+    if (minInterval > 0) {
+      if (timestamp - lastDraw < minInterval) return;
+      lastDraw = timestamp;
+    }
     timer.update(timestamp);
     // never negative (out-of-order timestamps would ease uniforms away from their targets)
     const realDt = Math.max(0, Math.min(timer.getDelta(), 0.1));
