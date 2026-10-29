@@ -22,8 +22,19 @@ Fixes 1–3 coded + typechecked; verification shots in progress (shots/g3/shot.m
    roof, so near the ridge the vent was inside the roof and only the smoke showed. Now `vents()` takes the roof
    height at the vent spot (slope / barrel profile). NB: buildings/** is G1's area — one-function change.
 
+5. **Shirt "bib / jagged star"** (judge 3 #7) — `sim/pedestrians/shader.ts` torso: with a jacket the shirt V was
+   chosen per vertex (`up = top` when aux.x < vw; the neck-cap apex counts as front) → colour interpolation drew a
+   jagged white star. Now the V is the signed boundary `s = |angle| − (h − 0.5)·1.6` (A = jacket, B = shirt),
+   which FRAG_COLOR resolves per pixel (fwidth). Only for rings > 0.12 above the jacket hem. No toggle (bug fix).
+6. **Groups interpenetrate** (judge 3 #7) — `crowd.ts` party offsets: +0.03 per adult, +0.05 per bag / rucksack /
+   briefcase carrier (pairs 0.6 → 0.66–0.76 m, trios 1.1 → up to 1.26 m). Toggle `?nogroupgap`.
+7. **Pram** (judge 3 #7) — `figure.ts buildPramGeometry()`: rounded 5-ring bassinet (16 sides), piped rim, apron +
+   blanket edge, ribbed 10-segment hood, chrome chassis with folding joints, black tyres with hub discs and axle
+   caps (rear 0.14 / front 0.12 m), basket. Toggle `?nopramdetail` (old mesh). ~4× the old triangles on a few
+   instanced prams.
+
 ### Toggles
-`?noplatformstay`, `?noboardmap`, `?nobikespokes` (quality low = no spokes).
+`?noplatformstay`, `?noboardmap`, `?nobikespokes` (quality low = no spokes), `?nogroupgap`, `?nopramdetail`.
 
 ### Code pointers
 * platform actors: `sim/pedestrians/actors.ts placeCrowds()` (group 1 = platform), `sync()` visibility, events in

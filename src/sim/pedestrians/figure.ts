@@ -304,9 +304,114 @@ class Builder {
 
 // ──────────────────────────────────────────────────────── pram mesh ──
 
+const PRAM_DETAIL = typeof location === 'undefined' || !new URLSearchParams(location.search).has('nopramdetail');
+
 /** Pram in the pusher's frame (pusher at origin facing +Z). aInfo.y: 0 fabric (instance colour), 1 as painted. */
 export function buildPramGeometry(): THREE.BufferGeometry {
   const b = new Builder();
+  if (!PRAM_DETAIL) return buildPramLite(b);
+  // handle with a foam grip, push bars down to the folding joint, chassis to the axles (judge 3 #7: the pram was
+  // a faceted beige lump — now a rounded bassinet on a chrome chassis with spoked wheels, ribbed hood, apron)
+  b.use(0, 1, 0, 0.1);
+  b.box(0, 1.0, 0.42, 0.36, 0.045, 0.045);
+  b.use(0, 1, 0, 0.55);
+  b.boxBetween({ x: 0.2, y: 1.0, z: 0.42 }, { x: 0.19, y: 0.56, z: 0.64 }, 0.02, 0.02);
+  b.boxBetween({ x: -0.2, y: 1.0, z: 0.42 }, { x: -0.19, y: 0.56, z: 0.64 }, 0.02, 0.02);
+  b.boxBetween({ x: 0.19, y: 0.56, z: 0.64 }, { x: 0.2, y: 0.14, z: 0.6 }, 0.018, 0.018);
+  b.boxBetween({ x: -0.19, y: 0.56, z: 0.64 }, { x: -0.2, y: 0.14, z: 0.6 }, 0.018, 0.018);
+  b.boxBetween({ x: 0.19, y: 0.4, z: 0.66 }, { x: 0.19, y: 0.12, z: 1.16 }, 0.018, 0.018);
+  b.boxBetween({ x: -0.19, y: 0.4, z: 0.66 }, { x: -0.19, y: 0.12, z: 1.16 }, 0.018, 0.018);
+  b.box(0, 0.14, 0.6, 0.44, 0.02, 0.02);
+  b.box(0, 0.12, 1.16, 0.44, 0.02, 0.02);
+  // folding joints (dark bosses)
+  b.use(0, 1, 0, 0.12);
+  for (const x of [0.2, -0.2]) b.wheelX(x, 0.56, 0.64, 0.035, 0.03, 8);
+  // wheels: black tyres, a pale hub disc (reads as spokes at walking distance), axle caps; rear bigger
+  for (const [z, r] of [
+    [0.6, 0.14],
+    [1.16, 0.12],
+  ] as [number, number][])
+    for (const x of [0.23, -0.23]) {
+      b.use(0, 1, 0, 0.08);
+      b.wheelX(x, r, z, r, 0.035, 14);
+      b.use(0, 1, 0, 0.5);
+      b.wheelX(x, r, z, r * 0.7, 0.04, 10);
+      b.use(0, 1, 0, 0.3);
+      b.wheelX(x, r, z, r * 0.2, 0.05, 6);
+    }
+  // basket under the bassinet
+  b.use(0, 1, 0, 0.15);
+  b.box(0, 0.24, 0.88, 0.3, 0.1, 0.42);
+  // bassinet: rounded tub, fuller at the top
+  b.use(0, 0, 0, 1);
+  b.loft(
+    [
+      { y: 0.34, rx: 0.1, rz: 0.2, cz: 0.9 },
+      { y: 0.37, rx: 0.16, rz: 0.27, cz: 0.9 },
+      { y: 0.43, rx: 0.19, rz: 0.315, cz: 0.9 },
+      { y: 0.53, rx: 0.2, rz: 0.33, cz: 0.9 },
+      { y: 0.62, rx: 0.195, rz: 0.325, cz: 0.9 },
+    ],
+    16,
+    true,
+    true,
+  );
+  // piped rim
+  b.use(0, 1, 0, 0.92);
+  b.loft(
+    [
+      { y: 0.615, rx: 0.2, rz: 0.33, cz: 0.9 },
+      { y: 0.64, rx: 0.2, rz: 0.33, cz: 0.9 },
+    ],
+    16,
+    false,
+    false,
+  );
+  // apron over the foot end and a pale blanket edge where the baby lies
+  b.use(0, 0, 0, 0.85);
+  b.boxBetween({ x: 0, y: 0.645, z: 0.96 }, { x: 0, y: 0.63, z: 1.2 }, 0.38, 0.02);
+  b.use(0, 1, 0, 0.95);
+  b.box(0, 0.645, 0.93, 0.34, 0.03, 0.06);
+  // hood over the pusher end, with the folding ribs as darker bands
+  b.use(0, 0, 0, 0.78);
+  hood(b, 0.2, 0.63, 0.8, 10);
+  b.use(0, 0, 0, 0.6);
+  for (const t of [0.35, 0.7]) {
+    const a = t * Math.PI;
+    b.boxBetween({ x: -0.205, y: 0.63 + Math.sin(a) * 0.205, z: 0.8 - Math.cos(a) * 0.205 }, { x: 0.205, y: 0.63 + Math.sin(a) * 0.205, z: 0.8 - Math.cos(a) * 0.205 }, 0.025, 0.012);
+  }
+  return b.build();
+}
+
+/** half-drum hood (radius R, axis along x at (cy, cz)) with closed side fans */
+function hood(b: Builder, R: number, cy: number, cz: number, n: number): void {
+  const base = b.pos.length / 3;
+  for (const x of [-R + 0.005, R - 0.005]) {
+    for (let k = 0; k <= n; k++) {
+      const a = (k / n) * Math.PI;
+      b.v(x, cy + Math.sin(a) * R, cz - Math.cos(a) * R, 0, Math.sin(a), -Math.cos(a));
+    }
+  }
+  for (let k = 0; k < n; k++) b.quad(base + k, base + k + 1, base + n + 2 + k, base + n + 1 + k);
+  for (const [x, nx] of [
+    [-R + 0.005, -1],
+    [R - 0.005, 1],
+  ] as [number, number][]) {
+    const c = b.v(x, cy, cz, nx, 0, 0);
+    const ids: number[] = [];
+    for (let k = 0; k <= n; k++) {
+      const a = (k / n) * Math.PI;
+      ids.push(b.v(x, cy + Math.sin(a) * R, cz - Math.cos(a) * R, nx, 0, 0));
+    }
+    for (let k = 0; k < n; k++) {
+      if (nx > 0) b.tri(c, ids[k], ids[k + 1]);
+      else b.tri(c, ids[k + 1], ids[k]);
+    }
+  }
+}
+
+/** ?nopramdetail: the previous low pram */
+function buildPramLite(b: Builder): THREE.BufferGeometry {
   // handle + push bars
   b.use(0, 1, 0, 0.12);
   b.box(0, 1.0, 0.42, 0.42, 0.03, 0.03);

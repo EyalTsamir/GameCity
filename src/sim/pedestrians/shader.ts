@@ -475,9 +475,6 @@ void pedPose(inout vec3 p, inout vec3 n) {
     if (jacket) {
       up = outer;
       bd = jacketHem;
-      // open front: the shirt shows in a V between the lapels
-      float vw = (h - 0.5) * 1.6;
-      if (h > 0.5 && aux.x < vw) up = top;
     }
     uint tailSrc = (iC1.w >> 29u) & 3u;
     A = up;
@@ -488,6 +485,10 @@ void pedPose(inout vec3 p, inout vec3 n) {
       if (abs(h - midTop) < abs(h - bd)) { A = up; Bc = skin; s = h - midTop; }
       else { A = skin; s = h - bd; }
     }
+    // open front: the shirt shows in a V between the lapels. The V edge is the signed boundary s (|angle from
+    // the front| − width), resolved per pixel — picking the colour per vertex drew a jagged white star / bib
+    // (judge 3 #7); well above the hem only, so the hem boundary keeps its own s
+    if (jacket && h > bd + 0.12) { A = outer; Bc = top; s = aux.x - (h - 0.5) * 1.6; }
     if ((iC2.z & ${1 << FB.VEST}u) != 0u) { A = pedRGB(iC2.x); pat = 1.0; }
   } else if (region == ${R.ARM}) {
     float sl = pedP8(iC0.x) * 1.275 - 0.1;
