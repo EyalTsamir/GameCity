@@ -335,7 +335,7 @@ try {
           const c = window.__city, THREE = await import('/@fs' + window.__benchThree);
           const meshes = [];
           // glass counts (curtain walls); billboards / sky / water / particles do not
-          const skip = /glow|halo|cloud|sky|water|atmo|spark|smoke|rain|firework|shadow/i;
+          const skip = /glow|halo|cloud|sky|water|atmo|spark|smoke|rain|firework|shadow|fixings/i;
           // traverse(), not traverseVisible(): chunk / frustum culling and near-only LODs hide meshes that are
           // invisible from the CURRENT camera but in view from the candidate one (the bin 10 m capture ended
           // inside a culled bus shelter). Coarse + fine LOD twins both block, which is harmless.

@@ -162,8 +162,9 @@ vec3 masonryColor(vec3 base) {
     vec3 r1 = cross(dpy, n), r2 = cross(n, dpx);
     float det = dot(dpx, r1);
     vec3 grad = sign(det) * (dFdx(hb) * r1 + dFdy(hb) * r2);
-    mNb = normalize(abs(det) * n - grad * fade);
-    n = mNb;
+    vec3 bn = abs(det) * n - grad * fade;
+    if (dot(bn, bn) > 1e-20) n = normalize(bn);
+    mNb = n;
     mN = n;
   }
 #endif
