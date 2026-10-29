@@ -11,6 +11,11 @@ Overview must stay at least as impressive as now. Every feature: quality tiers +
 Lead session: session_01XuhAMczW3iK25AAWnf3qog, branch `claude/pensive-gates-bim12i`.
 
 ## Resume here (keep current)
+* 2026-10-29 00:13 UTC — Merged W6 s2 (8f826b9: back-yard "floating" door/sills were a camera-inside-lot culling
+  artefact — not a bug; wall set (door/step/mat, meter, downpipe + butt, AC, apron) placed from footprints; parasols +
+  stall canopies sway with the shared wind ?nosway ?nostallwind; market stock 22 → 73 (stalls rejected their own
+  stock); kerb cafés use the bistro set). Golden of this merge running (shots/golden/w6). W6 paused for judge 2.
+  Running: W8 (needs respawn), judge 2, bug hunter 2.
 * 2026-10-29 00:04 UTC — Merged W8 s1–4 (8fe65bf: near-LOD sheep/cows animals.ts ?noanimaldetail, real tractor
   + cultivator + tracks ?notractordetail (field moved to ~230 m), farmsteads farmstead.ts ?nofarmdetail, flower heads
   by species ?noflowerdetail; lead golden check: overview 0.5 / downtown 3.1 / oldtown 3.8 / harbor 1.8 (boat forms) / westbrook 5.6 (garages), console clean, invariants {}) and W1 s6 (c72dfe1: apartment glass
