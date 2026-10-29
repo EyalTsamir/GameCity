@@ -1119,6 +1119,32 @@ export function bike(k: Kit, color: string): void {
   sh.beam(Hd[0], Hd[1] + 0.1, -0.24, Hd[0], Hd[1] + 0.1, 0.24, 0.03, 0.03);
   k.m(color, 'paint');
   sh.beam(Hd[0], Hd[1], 0, Hd[0], Hd[1] + 0.1, 0, 0.035, 0.035, false);
+  if (!BIKE_SPOKES) return;
+  // drive side: chainring, crank arms with pedals, the chain to the rear sprocket
+  k.m('#8e959a', 'steel');
+  const cr = 0.095,
+    zc = 0.045;
+  for (let i = 0; i < 12; i++) {
+    const a0 = (i / 12) * TAU,
+      a1 = ((i + 1) / 12) * TAU;
+    sh.tube(C[0] + Math.cos(a0) * cr, C[1] + Math.sin(a0) * cr, zc, C[0] + Math.cos(a1) * cr, C[1] + Math.sin(a1) * cr, zc, 0.007, 0.007, 3);
+  }
+  sh.tube(R[0], R[1], zc, R[0], R[1], zc + 0.01, 0.04, 0.04, 8);
+  k.m('#2a2b2d', 'steel');
+  sh.tube(C[0], C[1] + cr, zc, R[0], R[1] + 0.04, zc, 0.004, 0.004, 3);
+  sh.tube(C[0], C[1] - cr, zc, R[0], R[1] - 0.04, zc, 0.004, 0.004, 3);
+  const ca = 1.1;
+  for (const [sgn, z] of [
+    [1, zc + 0.015],
+    [-1, -zc - 0.015],
+  ] as [number, number][]) {
+    const px = C[0] + Math.cos(ca) * 0.17 * sgn,
+      py = C[1] + Math.sin(ca) * 0.17 * sgn;
+    k.m('#b8bec2', 'steel');
+    sh.tube(C[0], C[1], z, px, py, z, 0.012, 0.01, 5);
+    k.m('#1e1f21', 'plastic');
+    sh.box(px, py, z + Math.sign(z) * 0.05, 0.09, 0.02, 0.08, 0);
+  }
 }
 
 // ─────────────────────────────────────────────────────────── bus shelter ──
