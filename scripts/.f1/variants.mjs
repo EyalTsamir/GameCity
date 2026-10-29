@@ -18,7 +18,7 @@ try {
   console.log('view', JSON.stringify(vr));
   for (const v of variants) {
     const r = await page.evaluate((c) => { try { return (0, eval)(c) ?? null; } catch (e) { return String(e); } }, v.js || 'null');
-    for (let i = 0; i < 4; i++) await page.screenshot({ type: 'jpeg', quality: 1, clip: { x: 0, y: 0, width: 8, height: 8 } }).catch(() => {});
+    for (let i = 0; i < 4; i++) await page.screenshot({ type: 'jpeg', quality: 1 }).catch(() => {});
     await page.screenshot({ path: `${out}/${v.name}.png`, timeout: 240000 });
     console.log(v.name, JSON.stringify(r));
   }

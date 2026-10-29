@@ -22,7 +22,7 @@ import { fileURLToPath } from 'node:url';
 // capture right after a camera jump is the FIRST frame — anything selected a frame late (near herds, near cells, LOD)
 // looks wrong. Pump a few throw-away frames before every real capture.
 async function pumpFrames(page, n = 4) {
-  for (let i = 0; i < n; i++) await page.screenshot({ type: 'jpeg', quality: 1, clip: { x: 0, y: 0, width: 8, height: 8 } }).catch(() => {});
+  for (let i = 0; i < n; i++) await page.screenshot({ type: 'jpeg', quality: 1 }).catch(() => {});
 }
 
 const here = path.dirname(fileURLToPath(import.meta.url));

@@ -105,7 +105,7 @@ try {
   }
   await page.waitForTimeout(wait);
   // headless Chromium renders only during screenshots: pump a few frames so the capture is not the first frame
-  for (let i = 0; i < 4; i++) await page.screenshot({ type: 'jpeg', quality: 1, clip: { x: 0, y: 0, width: 8, height: 8 } }).catch(() => {});
+  for (let i = 0; i < 4; i++) await page.screenshot({ type: 'jpeg', quality: 1 }).catch(() => {});
   for (let i = 0; i < shots; i++) {
     const file = shots === 1 ? out : out.replace(/\.png$/i, `_${i + 1}.png`);
     await page.screenshot({ path: file, type: 'png', timeout: 240000 });
