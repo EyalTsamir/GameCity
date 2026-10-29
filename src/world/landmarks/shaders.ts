@@ -550,6 +550,31 @@ void lmSurface(inout vec3 albedo, inout float rough, inout float metal, inout ve
     albedo *= 1.0 - 0.18 * lmLines(q.y, 0.09, 0.012, FQ.y);
   }
 
+  // ── church weathering (flood CHURCH = only the church's stone + dressings): a century of town air on
+  // sandstone — blotchy soot that settles where rain does not wash, pale rain-washed runs and dark drip
+  // streaks down the walls, green algae + damp in the splash zone at the foot. Walls only (not caps / sills).
+  if (flood > 2.5 && flood < 3.5 && (pat == 2.0 || pat < 0.5) && abs(yn.y) < 0.5) {
+    float y = yn.x;
+    float n1 = lmNoise(q * vec2(0.35, 0.22) + 11.0), n2 = lmNoise(q * vec2(1.3, 0.9) + 4.0);
+    // soot: patches grow with height (less rain-wash under the eaves / buttress offsets)
+    float soot = smoothstep(0.42, 0.78, n1 * 0.75 + n2 * 0.35 + 0.12 * smoothstep(3.0, 14.0, y));
+    // vertical run streaks: dark drips and pale washed lanes (column noise stretched along y)
+    float sx = lmNoise(vec2(q.x * 2.6, q.y * 0.07 + 3.0));
+    float drip = smoothstep(0.62, 0.86, sx) * (0.6 + 0.4 * n2);
+    float wash = smoothstep(0.66, 0.9, lmNoise(vec2(q.x * 1.9 + 5.0, q.y * 0.05)));
+    vec3 sootC = vec3(0.24, 0.22, 0.2);
+    albedo = mix(albedo, albedo * 0.45 + sootC * 0.25, soot * 0.55);
+    albedo = mix(albedo, albedo * 0.62, drip * 0.45);
+    albedo = mix(albedo, min(albedo * 1.12, vec3(0.9)), wash * 0.35 * (1.0 - soot));
+    // foot: damp darkening up to ~1.1 m with a ragged tide line, algae green in the lowest ~60 cm
+    float edge = 0.75 + 0.35 * lmNoise(vec2(q.x * 1.7, 2.0)) + 0.2 * n2;
+    float damp = 1.0 - smoothstep(edge - 0.25, edge + 0.08, y);
+    float alg = (1.0 - smoothstep(0.15, 0.55 + 0.25 * n1, y)) * (0.55 + 0.45 * lmNoise(q * 2.4 + 1.0));
+    albedo *= 1.0 - 0.32 * damp;
+    albedo = mix(albedo, vec3(0.2, 0.27, 0.14), alg * 0.55);
+    rough = min(1.0, rough + 0.05 * soot);
+  }
+
   // ── night uplighting of facades (flood type in the integer part of aMat.w)
   if (flood > 0.5 && lights > 0.01) {
     float h = max(yn.x, 0.0);

@@ -609,11 +609,30 @@ export function genHouse(g: Gen): void {
   /** Turned-look porch post at (x, z) from the deck y0 to y1: plinth block + chamfer step, 15 cm shaft, a
    *  moulded cap (wide fillet over a neck). Inside ±0.12 m of (x, z). */
   function porchPost(x: number, z: number, y0: number, y1: number): void {
+    const pr = t.r, pg = t.g, pb = t.b;
+    // plinth block: scuffed and splashed (feet, mops, rain off the deck)
+    t.setRGB(pr * 0.8, pg * 0.79, pb * 0.76);
     t.box(x - 0.11, y0, z - 0.11, x + 0.11, y0 + 0.26, z + 0.11, 0b110111);
+    t.setRGB(pr, pg, pb);
     t.box(x - 0.12, y0 + 0.26, z - 0.12, x + 0.12, y0 + 0.29, z + 0.12, 0b110111);
-    t.box(x - 0.075, y0 + 0.29, z - 0.075, x + 0.075, y1 - 0.12, z + 0.075, 0b110011);
+    // shaft: 15 cm square with chamfered arrises (octagonal section, flats on the axes)
+    const sy0 = y0 + 0.29, sy1 = y1 - 0.12;
+    const R = (0.075 / Math.cos(Math.PI / 8)) * 0.97;
+    for (let k = 0; k < 8; k++) {
+      const a0 = ((k - 0.5) * Math.PI) / 4, a1 = ((k + 0.5) * Math.PI) / 4;
+      const x0 = x + Math.cos(a0) * R, z0 = z + Math.sin(a0) * R, x1 = x + Math.cos(a1) * R, z1 = z + Math.sin(a1) * R;
+      if (k % 2) t.setRGB(pr * 0.93, pg * 0.93, pb * 0.92); // the chamfers take the light differently
+      t.quad(x1, sy0, z1, x0, sy0, z0, x0, sy1, z0, x1, sy1, z1);
+      t.setRGB(pr, pg, pb);
+    }
     t.box(x - 0.1, y1 - 0.12, z - 0.1, x + 0.1, y1 - 0.06, z + 0.1, 0b111111);
     t.box(x - 0.085, y1 - 0.06, z - 0.085, x + 0.085, y1, z + 0.085, 0b110011);
+    // stepped brackets under the header beam on both sides of the post (the beam runs along x)
+    for (const sx of [-1, 1])
+      for (let j = 0; j < 3; j++) {
+        const xa = x + sx * 0.085, xb = x + sx * (0.13 + 0.07 * j);
+        t.box(Math.min(xa, xb), y1 - 0.36 + 0.12 * j, z - 0.045, Math.max(xa, xb), y1 - 0.24 + 0.12 * j, z + 0.045, 0b111111);
+      }
   }
 
   /** Porch balustrade along x at z: newel posts with caps, moulded handrail, bottom rail clear of the deck,
