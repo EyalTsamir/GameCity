@@ -76,8 +76,12 @@ session merges all three into `claude/pensive-gates-bim12i`. Brief: walk around 
   pass). Camera module JS while walking 0.06–0.09 ms/frame (orbit 0.12–0.18). → no measurable cost.
 * Scenarios (scratch scen.mjs, real keys): pier deck 0.3 walked 48 m; harbour quay stops at x 135.6 (quay 136, water
   beyond); off the west slab edge onto the landscape 40 m (feet follow it up to 0.7); beach stopped at the lifeguard
-  tower (solid r 1.5); footbridge climbs the arch (feet up to 1.9) but stopped at z 125.8 (south end) — under
-  investigation; park blocked by a trunk after 1.5 m → blocked steps now veer round round obstacles (44a809c).
+  tower (solid r 1.5); footbridge climbs the arch (feet up to 1.9) — the "stop" at its south end was only the 17 s
+  walk running out (probes with `?camdebug` → `camera.walkProbe(x, z)` all clear); its ramp→arch joint had a 0.3 m
+  step (max over segment end caps) → height now from the nearest segment (feet error 0.3 → 0.13). Park: stuck on one
+  trunk (r 0.18) because a heading a hair off north "slid" 1e-16 m along x and the veer never ran → axis slides need
+  ≥ 20 % of the step; blocked steps veer ±0.6 / ±1.15 rad (same side first). Discs are now registered in every cell
+  a body could touch them from (was: only cells under the disc itself).
 
 ## Next / open
 * (in progress) scenarios: footbridge arch, pier, beach to the waterline, harbour quay edge, park, off the slab.
