@@ -223,7 +223,7 @@ try {
           platform: { x: -6, y: 0.95, z: -151, yaw: 80, h: 2, w: 0.5, pitch: 6 },
           // F3 ground close-ups: open-track bed, the rock cutting north of the platform, a park lawn
           ballast: { x: -40, y: 0.1, z: -155, yaw: 20, h: 0.3, w: 0.5, pitch: 38 },
-          cutting: { x: -6, y: 1.5, z: -165, yaw: 10, h: 3, w: 0.5, pitch: 10 },
+          cutting: { x: -6, y: 0.8, z: -160.6, yaw: 15, h: 3, w: 0.3, pitch: 8 },
           parklawn: { x: -55, y: 0, z: 17, yaw: 30, h: 0.3, w: 0.5, pitch: 22 },
         };
         if (PLACES[cls]) return PLACES[cls];
