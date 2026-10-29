@@ -153,7 +153,14 @@ float thBaseSpec = 1.0;
   float pix = length( fwidth( p ) ) * 0.7;
   float side = smoothstep( 0.3, 0.55, abs( on.x ) );
   float top = smoothstep( 0.3, 0.5, on.y );
-  bool glass = cls > 1.5 && ( cls < 2.5 || cls > 3.5 );
+  bool glass = cls > 1.5 && ( cls < 2.5 || ( cls > 3.5 && cls < 5.5 ) );
+  // bus body (class 6) inside the flank window runs: with real seated passengers its depth goes behind the cabin
+  // (the kerb-side doors, 1.2 m wide, are glazed down to vDetA.w)
+  if ( abs( cls - 6.0 ) < 0.5 && vSeated > 0.5 && abs( p.x ) > vDetA.x - 0.06 && p.z > vDetB.x && p.z < vDetB.y && p.y < vDetA.z ) {
+    bool door = p.x < 0.0 && ( abs( p.z - vDetB.z ) < 0.6 || abs( p.z - vDetB.w ) < 0.6 );
+    vec3 rdb = normalize( p - vCamObj.xyz );
+    if ( p.y > ( door ? vDetA.w : vDetA.y ) ) thHitT = min( 2.0 * vDetA.x / max( abs( rdb.x ), 0.25 ), 6.0 );
+  }
   if ( glass && uVehDetail.x > 0.5 ) {
     vec3 rd = normalize( p - vCamObj.xyz );
     // the cabin is lit by daylight through all its windows, not by the light on this pane: emitted, under the
@@ -161,7 +168,7 @@ float thBaseSpec = 1.0;
     vec3 inside = thInterior( p, rd, cls, vCamObj.w, ph );
     // (F2: a bus saloon is daylit through a whole wall of glass — at 0.32 its flank panes, which mirror only the
     // dark street, read as opaque black panels)
-    thGlassEmit = inside * vec3( 0.8, 0.88, 0.9 ) * ( 1.0 - 0.92 * uLights ) * ( abs( cls - 4.0 ) < 0.5 ? 0.85 : 0.32 );
+    thGlassEmit = inside * vec3( 0.8, 0.88, 0.9 ) * ( 1.0 - 0.92 * uLights ) * ( abs( cls - 4.0 ) < 0.5 ? 0.7 : 0.32 );
     // lit cabins at night (bus, LIGHT_CABIN): the lamps light the seats and passengers, not a flat panel
     if ( vEmit.a < 0.5 ) {
       thGlassEmit += inside * vec3( 1.0, 0.82, 0.6 ) * ( 3.6 * uLights * vCamObj.w );
@@ -536,7 +543,7 @@ if ( vSeated > 0.5 && thHitT > 0.0 ) {
 }`,
       );
   };
-  material.customProgramCacheKey = () => 'traffic-vehicle-v11';
+  material.customProgramCacheKey = () => 'traffic-vehicle-v12';
   patchLampMaterial(material); // night street-light map (night agent)
 
   const depth = new THREE.MeshDepthMaterial();

@@ -646,7 +646,7 @@ class Builder {
   private geos: THREE.BufferGeometry[] = [];
 
   add(g: THREE.BufferGeometry, o: PartOpts): this {
-    if (curKind && LOD === 0 && o.det && o.det.c !== 1 && o.det.c !== 3 && !CABIN[curKind]) CABIN[curKind] = o.det;
+    if (curKind && LOD === 0 && o.det && o.det.c !== 1 && o.det.c !== 3 && o.det.c !== 6 && !CABIN[curKind]) CABIN[curKind] = o.det;
     if (LOD > 0 && !o.light && !o.decal) {
       // too small to read at this level → drop
       g.computeBoundingBox();
@@ -1439,7 +1439,7 @@ function rakedScreen(b: Builder, w: number, h: number, yc: number, zc: number, r
 function cabSide(b: Builder, x: number, w: number, h: number, yc: number, zc: number, doorZ: number, doorY0: number, glass: PartOpts): void {
   for (const s of [1, -1]) {
     const f = s > 0 ? 'px' : 'nx';
-    b.add(roundPane(w + 0.06, h + 0.06, 0.07, s * (x + 0.006), yc, zc, f), { color: '#1a1c1f', rough: 1.1 });
+    b.add(roundPane(w + 0.06, h + 0.06, 0.07, s * (x + 0.006), yc, zc, f, [w - 0.03, h - 0.03, 0.05]), { color: '#1a1c1f', rough: 1.1 });
     b.add(roundPane(w, h, 0.06, s * (x + 0.011), yc, zc, f), glass);
     if (LOD === 0) {
       b.add(decalPlane(0.008, yc + h / 2 - doorY0, s * (x + 0.004), (yc + h / 2 + doorY0) / 2, doorZ, f), { color: '#121315', rough: 1.3 });
@@ -2050,7 +2050,7 @@ function archedSlab(L: number, y0: number, y1: number, w: number, arches: number
 }
 
 /** flat rounded rectangle facing ±x (side) or ±z, centred at (x, y, z); u along the face width */
-function roundPane(w: number, h: number, r: number, x: number, y: number, z: number, face: 'px' | 'nx' | 'pz' | 'nz'): THREE.BufferGeometry {
+function roundPane(w: number, h: number, r: number, x: number, y: number, z: number, face: 'px' | 'nx' | 'pz' | 'nz', hole: [number, number, number] | null = null): THREE.BufferGeometry {
   const sh = new THREE.Shape();
   const a = w / 2,
     c = h / 2,
@@ -2064,6 +2064,24 @@ function roundPane(w: number, h: number, r: number, x: number, y: number, z: num
   sh.quadraticCurveTo(-a, c, -a, c - q);
   sh.lineTo(-a, -c + q);
   sh.quadraticCurveTo(-a, -c, -a + q, -c);
+  if (hole) {
+    // a frame only (F2: a full backing pane would show through glass that writes the cabin's depth)
+    const [hw, hh, hr] = hole;
+    const ha = hw / 2,
+      hc = hh / 2,
+      hq = Math.min(hr, ha - 0.001, hc - 0.001);
+    const p = new THREE.Path();
+    p.moveTo(-ha + hq, -hc);
+    p.quadraticCurveTo(-ha, -hc, -ha, -hc + hq);
+    p.lineTo(-ha, hc - hq);
+    p.quadraticCurveTo(-ha, hc, -ha + hq, hc);
+    p.lineTo(ha - hq, hc);
+    p.quadraticCurveTo(ha, hc, ha, hc - hq);
+    p.lineTo(ha, -hc + hq);
+    p.quadraticCurveTo(ha, -hc, ha - hq, -hc);
+    p.lineTo(-ha + hq, -hc);
+    sh.holes.push(p);
+  }
   const g = new THREE.ShapeGeometry(sh, LOD === 0 ? 4 : 1);
   if (face === 'px') g.rotateY(Math.PI / 2);
   else if (face === 'nx') g.rotateY(-Math.PI / 2);
@@ -2091,7 +2109,10 @@ function bus(): THREE.BufferGeometry {
   const surf: EndFn = (x, y, sg) => busEndSurface(shape, x, y, sg);
   const sh = loftBus(shape, LOD);
   const cabin: Det = { c: 4, a: [W / 2 - 0.1, 1.3, 2.86, L / 2 - 0.35], b: [-L / 2 + 0.3, L / 2 - 2.55, 0, 0] };
-  if (sh.body) b.add(sh.body, { color: CREAM, rough: 0.85 });
+  // (F2) the body is a closed loft: its flanks run on behind the side panes. Detail class 6 tells the shader where the
+  // window band is (a: half width, band y0 / y1, door glazing y0; b: run z0 / z1, the two kerb-side door centres),
+  // so a cabin with real seated passengers can push that wall's depth behind the cabin (vehicleMaterial.ts)
+  if (sh.body) b.add(sh.body, { color: CREAM, rough: 0.85, det: { c: 6, a: [W / 2, 1.3, 2.46, 0.5], b: [-4.95, 5.12, 0.25, 4.35] } });
   // route-coloured skirt (follows the arches), dark bumpers wrapping the corners
   if (sh.skirt) b.add(sh.skirt, { color: '#ffffff', paint: true, rough: 0.8 });
   if (sh.bumper) b.add(sh.bumper, { color: '#2a2d31', rough: 1.2 });
@@ -2114,7 +2135,7 @@ function bus(): THREE.BufferGeometry {
     const w = z1 - z0,
       zc = (z0 + z1) / 2,
       yc = (yw0 + yw1) / 2;
-    b.add(roundPane(w + 0.07, yw1 - yw0 + 0.07, 0.1, x + s * 0.004, yc, zc, s > 0 ? 'px' : 'nx'), { color: SEAL, rough: 1.1 });
+    b.add(roundPane(w + 0.07, yw1 - yw0 + 0.07, 0.1, x + s * 0.004, yc, zc, s > 0 ? 'px' : 'nx', [w - 0.03, yw1 - yw0 - 0.03, 0.07]), { color: SEAL, rough: 1.1 });
     b.add(roundPane(w, yw1 - yw0, 0.08, x + s * 0.009, yc, zc, s > 0 ? 'px' : 'nx'), glass);
     if (hopper && LOD === 0) b.add(bx(0.012, 0.03, w, x + s * 0.012, yw1 - 0.3, zc), { color: SEAL, rough: 1.1 });
   };
@@ -2131,7 +2152,10 @@ function bus(): THREE.BufferGeometry {
   // folding doors: two glazed leaves each in a dark frame, a seal down the middle, a step plate
   for (const z of [4.35, 0.25]) {
     const x = -W / 2 - 0.004;
-    b.add(decalPlane(1.16, 2.1, x, 0.36 + 1.05, z, 'nx'), { color: '#2b2f33', rough: 0.8 });
+    // the dark door leaf round the glazing (strips: a full backing plane would show through glass that writes the
+    // cabin's depth — F2)
+    for (const [w, h, yc, dz] of [[1.16, 0.17, 0.445, 0], [1.16, 0.12, 2.40, 0], [1.16, 0.07, 1.185, 0], [0.08, 2.1, 1.41, -0.54], [0.12, 2.1, 1.41, 0], [0.08, 2.1, 1.41, 0.54]] as const)
+      b.add(decalPlane(w, h, x, yc, z + dz, 'nx'), { color: '#2b2f33', rough: 0.8 });
     for (const lz of [z - 0.28, z + 0.28]) {
       b.add(roundPane(0.44, 1.12, 0.05, x - 0.006, 1.78, lz, 'nx'), glass);
       b.add(roundPane(0.44, 0.62, 0.05, x - 0.006, 0.84, lz, 'nx'), glass);
@@ -2161,7 +2185,10 @@ function bus(): THREE.BufferGeometry {
   b.add(onEnd(surf, 1, -1.01, 1.01, 2.64, 2.9, 0.006, 6), { color: '#16181b' });
   b.add(onEnd(surf, 1, -0.965, 0.965, 2.66, 2.88, 0.012, 6), { color: '#ffffff', decal: R_BUS_SIGN, decalRows: true, light: LIGHT_SIGN });
   // rear window in a seal (conformed to the curved rear), rear sign, engine hatch with louvres and shut lines
-  b.add(paneOnEnd(surf, -1, 1.98, 0.8, 0.12, 0, 2.31, 0.004), { color: '#1a1c1f', rough: 1.1 });
+  // rear window seal: four strips round the pane (a full backing pane would show through the glass where it writes
+  // the cabin's depth for the seated passengers: F2)
+  for (const [w, h, x, y] of [[1.98, 0.05, 0, 2.31 + 0.375], [1.98, 0.05, 0, 2.31 - 0.375], [0.05, 0.8, 0.965, 2.31], [0.05, 0.8, -0.965, 2.31]] as const)
+    b.add(paneOnEnd(surf, -1, w, h, 0.02, x, y, 0.004, 2, 1), { color: '#1a1c1f', rough: 1.1 });
   b.add(paneOnEnd(surf, -1, 1.9, 0.72, 0.1, 0, 2.31, 0.009), { color: GLASS, light: LIGHT_CABIN, rough: 0.2, det: cabin });
   b.add(onEnd(surf, -1, -0.45, 0.45, 2.75, 2.97, 0.008, 2), { color: '#ffffff', decal: R_BUS_SIGN, decalRows: true, light: LIGHT_SIGN });
   b.add(onEnd(surf, -1, -0.78, 0.78, 0.62, 1.14, 0.004, 6), { color: '#202326', rough: 1.1 });
@@ -2284,7 +2311,7 @@ function icecream(): THREE.BufferGeometry {
   for (const az of [axF, axR]) archLiner(b, az, 0.36, 0.44, W - 0.12);
   // windscreen + cab side windows in seals, over a cab interior
   const glass: PartOpts = { color: GLASS, rough: 0.2, det: { c: 5, a: [0.88, 1.36, 2.1, L / 2 - 0.3], b: [L / 2 - 1.6, L / 2 - 1.0, -9, 0] } };
-  b.add(roundPane(1.84, 0.68, 0.1, 0, 1.69, L / 2 + 0.004, 'pz'), { color: '#1a1c1f', rough: 1.1 });
+  b.add(roundPane(1.84, 0.68, 0.1, 0, 1.69, L / 2 + 0.004, 'pz', [1.73, 0.57, 0.07]), { color: '#1a1c1f', rough: 1.1 });
   b.add(roundPane(1.76, 0.6, 0.08, 0, 1.69, L / 2 + 0.009, 'pz'), glass);
   if (LOD === 0) for (const x of [-0.45, 0.4]) b.add(tube(x - 0.05, 1.42, L / 2 + 0.025, x + 0.25, 1.85, L / 2 + 0.025, 0.011), { color: '#141518', rough: 1.4 });
   cabSide(b, W / 2, 0.82, 0.5, 1.7, L / 2 - 0.72, L / 2 - 1.2, 0.75, glass);
