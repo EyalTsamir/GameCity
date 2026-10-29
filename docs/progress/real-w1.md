@@ -3,6 +3,41 @@
 Branch `claude/real-w1-facades` (from `claude/pensive-gates-bim12i`). Brief: docs/progress/real-briefs.md "W1".
 
 ## Resume here
+* **Session 6 (10-28) — the lead's five facade items.** Bench sheets shots/w1/s6/{base,a1..a4}; sheet
+  docs/progress/real/w1_s6.jpg. Debug views added: `?bdbg=galb` (pane daylight albedo alone), `?bdbg=gem` (pane
+  emission alone), `?bdbg=opp` (bhOpp parts: blue = ground, red = facade, green = upper windows, magenta = its ground
+  floor, yellow = trees). All in materials.ts `bhWall` / `bhOpp`; switches in buildings.ts (`bdbg`).
+  1. **Apartment glass (grey) — root cause found:** probe galb / gem / refl (shots/w1/s6/probe.png, p_opp_c.png): at
+     eye level the pane mirrors the opposite row's GROUND FLOOR, which bhOpp drew as one flat band
+     `mix(wallR, winR, shop * 0.8)` over a sunlit wall → a uniform beige-grey veil on every pane. Fixes (bhOpp):
+     shop fronts in 4.5 m units (fascia colour + lettering, display glass with goods blocks, mullion, striped awnings
+     on ~45 %), upper windows varied (dark / pale nets, lower or upper half), **cars parked along the far kerb**
+     (plane 4.3 m in front of the row: 7 body colours, greenhouse, wheels; per pane different). bhWall: homey
+     reflection × 1.1 → × 0.72; `nearL` = coverage of things right behind the glass (curtains, nets, blinds, plants,
+     notices) → glassAlb factor `mix(0.62 · roomK, 1, nearL)` (fabric at the glass was being dimmed like the room
+     depth); nets 0.56 → 0.68; homey state thresholds: side curtains r3 > 0.66, nets > 0.5, blinds > 0.37, drawn
+     > 0.29, the rest (29 %) bare dark rooms (was 12 %).
+  2. **Office repetition:** office branch rewritten (`os` per window): venetians (unit-coherent, per-window height
+     jitter, some raised, some slats shut), vertical fabric blinds drawn aside (12–22 %), A4 notices / a coloured
+     poster taped to the glass (22–29 %), a desk plant (29–36 %), top-hung transom vents open by day (`ventO`, 10 %:
+     dim tilted-pane reflection); office desks lit by day (`glowI` day 0.07 → 0.35 for offices) → lit/unlit mix.
+  3. **Old-town render:** verified at ~3–4 m (shots/w1/s6/ot_wall2.png, `__city.view` 84,4.5,−17, d 4.2, yaw −15,
+     dof off): a fine float finish, no popcorn — s4's relief reduction holds; nothing changed.
+  4. **Tower curtain wall:** mullion pressure caps by parallax (6–18 cm per tower, side face lit/shaded by the sun's
+     side, sun shadow line on the glass; `capSide/capLit/capSh`, under `depthK` = ?nowinreveal); spandrel per tower
+     `spPanel` (55 % matt panel in the wall colour reflecting 0.3×, else dark-backed glass), also box-filtered in the
+     far path (`spF`); per-pane tint (blue ↔ warm) and mirror strength 0.72–1.25 (fades when a cell < 3 px).
+  5. **Shop fascias (oldtown.ts shop branch):** signboard = back panel + sign face recessed 2.5 cm in a 4.5 cm moulded
+     frame (gilt on gold-letter shops, else trim colour), drip moulding under the fascia, swan-neck lamps (wall plate,
+     riser, arm, cone shade with an emissive underside) instead of the stick + cube.
+  **Checks (s6):** bench a4 console clean; downtown 21.5 h invariants {} (night: lit windows + tower spandrel bands
+  read, no regression); overview 11 h invariants {}, validate []. Commits 5ed457f + the s6 wrap-up.
+  **Open / next (in order):** (a) cars in the street reflection are blocky at 3 m (no wheel arches / lamps) and the
+  white ones read bright — soften with a body-side gradient or lower body albedo; (b) sunlit-front check of the new
+  glass (all bench apartment fronts are in shade; use the `__city.view` framing of s5); (c) curtain-wall caps only on
+  vertical mullions (horizontal transoms flat) and only near (detail > 0.3); (d) perf of the extra bhOpp branches
+  (cars + shop fronts: ≈ 40 ALU per punched-window pixel, near path only) — measure `perf.mjs --variants ";nowinrefl"`;
+  (e) debug views `?bdbg=galb|gem|opp|reveal|ret` to remove when the round ends.
 * **Session 5 (10-28) — DONE, next session starts here:** sheet docs/progress/real/w1_s5.jpg (tower crown, house window
   3 m / 45° in sun, warehouse sectional door, apartment). Checks: downtown console clean, invariants {}; overview OK.
   - **Lawn rim FIXED (lead's request, W5's trace):** mesh.ts `wall()` lowers ground-standing shell walls (|y0| < 2 cm,
@@ -201,6 +236,8 @@ Branch `claude/real-w1-facades` (from `claude/pensive-gates-bim12i`). Brief: doc
   read → pattern turned 90° on the returns + depth AO, frame contact line, pale worn arris.
 
 ## Toggles / tiers / costs
+* s6: no new toggles — street-reflection content rides `?nowinrefl` (uWinRefl), curtain-wall caps ride `?nowinreveal`
+  (depthK), office/apartment window states and spandrels are always on (medium/high shader path; low = far path).
 * `?nowinrefl` (uWinRefl: street / opposite-row reflection in punched windows, near path only, medium/high),
   `?nocolumndetail` (clad arcade columns → plain boxes). `?bdbg=src` / `?bdbg=refl` debug views (see Resume).
 * `?nowingeo` (sill + surround geometry; range by tier). Rendered-wall details ride on `?nowallrelief`.
@@ -232,6 +269,9 @@ TOTAL weighted 3.4M (cache read 79%, write 8%, output 12%). Stopped at milestone
 ## Tokens (session 4, `tokens.py`)
 TOTAL weighted 4.9M (cache read 84%, write 7%, output 9%). Stopped by the lead at ~317k context (over the cap: too many
 waits on the slow shot lock inside one session).
+
+## Tokens (session 6, `tokens.py`)
+TOTAL weighted 1.8M (cache read 75%, write 11%, output 15%); 86 calls, ctx median 166k / max 214k.
 
 ## Tokens (session 5, `tokens.py`)
 TOTAL weighted 2.5M (cache read 80%, write 9%, output 12%); 123 calls, ctx median 171k / max 236k — over the 170k cap:

@@ -259,6 +259,9 @@ export default function create(ctx: CityContext): CityModule {
   if (bdbg.includes('ret')) mats.uniforms.uBhDebug.value = 7;
   if (bdbg.includes('src')) mats.uniforms.uBhDebug.value = 5;
   if (bdbg.includes('refl')) mats.uniforms.uBhDebug.value = 6;
+  if (bdbg.includes('galb')) mats.uniforms.uBhDebug.value = 8;
+  if (bdbg.includes('gem')) mats.uniforms.uBhDebug.value = 9;
+  if (bdbg.includes('opp')) mats.uniforms.uBhDebug.value = 10;
   // anchors for other modules (life: smoke, laundry, bunting, birds; streetlife) + diagnostics for the
   // harness: __city.ctx.services.buildings.setDebug(0 | 1 | 2). Types: src/world/buildings/anchors.ts
   const facades = collectFacades(lots);

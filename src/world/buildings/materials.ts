@@ -915,6 +915,33 @@ vec4 bhOpp(vec3 P, vec3 R, vec3 N, vec3 T, float seed, float fp, float nightF) {
   float D = 12.0 + 9.0 * hs;
   float tF = D / rn;
   float camD = max(distance(P, cameraPosition), 1.0);
+  // cars parked along the far kerb (a plane 4.3 m in front of the row): body colour, dark greenhouse, wheels —
+  // the strongest colour accents in a real street reflection, different in every pane
+  float tC = (D - 4.3) / rn;
+  vec3 Cp = P + R * tC;
+  float fwc = fp * (1.0 + tC / camD) * 1.5 + 0.015;
+  if (Cp.y > 0.05 && Cp.y < 1.5 && fwc < 0.35) {
+    float cu = dot(Cp, T) + seed * 5.1;
+    float ci = floor(cu / 6.2);
+    float ch = bhHash12(vec2(ci, seed * 0.19 + 9.0));
+    float cx = fract(cu / 6.2) * 6.2 - 0.9 - 0.6 * ch;
+    if (ch > 0.3 && cx > 0.0 && cx < 4.3) {
+      float gy = Cp.y - 0.95;
+      float gh = step(0.0, gy) * step(gy, 0.48) * step(0.9 + gy * 0.9, cx) * step(cx, 3.5 - gy * 1.2);
+      float body = step(Cp.y, 0.95 - 0.1 * smoothstep(3.9, 4.3, cx) - 0.12 * (1.0 - smoothstep(0.0, 0.35, cx))) * step(0.18, Cp.y);
+      float wl = min(length(vec2(cx - 0.75, Cp.y - 0.31)), length(vec2(cx - 3.55, Cp.y - 0.31)));
+      float wheel = 1.0 - smoothstep(0.3, 0.3 + fwc, wl);
+      if (gh + body + wheel > 0.0) {
+        float pc = fract(ch * 7.31);
+        vec3 bc = pc < 0.22 ? vec3(0.82, 0.82, 0.8) : (pc < 0.42 ? vec3(0.55, 0.57, 0.6) : (pc < 0.58 ? vec3(0.06) : (pc < 0.7 ? vec3(0.55, 0.08, 0.06) : (pc < 0.82 ? vec3(0.08, 0.16, 0.38) : (pc < 0.9 ? vec3(0.2, 0.3, 0.24) : vec3(0.7, 0.62, 0.45))))));
+        float oS = smoothstep(-0.05, 0.35, -dot(N, uSunDir)) * step(0.0, uSunDir.y);
+        vec3 cc = uCityCol * bc * mix(0.45, 1.1, oS) * (1.0 - 0.35 * smoothstep(0.55, 0.2, Cp.y)) + uSkyHor * 0.12 * step(0.75, Cp.y);
+        cc = mix(cc, uSkyHor * 0.16 + uCityCol * 0.03, gh);
+        cc = mix(cc, vec3(0.02), wheel);
+        return vec4(cc, 1.0);
+      }
+    }
+  }
   if (R.y < 0.0 && P.y + R.y * tF < 0.0) {
     // ground first: pavement (light slabs), kerb, asphalt with a centre dash, the far pavement
     float tg = -P.y / R.y;
@@ -925,6 +952,7 @@ vec4 bhOpp(vec3 P, vec3 R, vec3 N, vec3 T, float seed, float fp, float nightF) {
     float kerb = (1.0 - smoothstep(0.0, 0.12 + gw, abs(dn - 3.0))) + (1.0 - smoothstep(0.0, 0.12 + gw, abs(dn - D + 3.0)));
     float dash = (1.0 - smoothstep(0.06, 0.06 + gw, abs(dn - D * 0.5))) * step(0.5, fract(dot(G, T) / 6.0)) * (1.0 - smoothstep(0.3, 1.2, gw));
     vec3 gc = uGround * mix(0.5, 0.8, pave) * (1.0 + 0.3 * kerb) + uCityCol * 0.4 * dash;
+    if (uBhDebug > 9.5) gc = vec3(0.0, 0.0, 1.0 + pave);
     return vec4(gc, 1.0);
   }
   vec3 Hp = P + R * tF;
@@ -949,10 +977,36 @@ vec4 bhOpp(vec3 P, vec3 R, vec3 N, vec3 T, float seed, float fp, float nightF) {
   float wx = 1.0 - smoothstep(0.5 - fw, 0.5 + fw, bayU);
   float wy = smoothstep(0.9 - fw, 0.9 + fw, stY) * (1.0 - smoothstep(2.3 - fw, 2.3 + fw, stY)) * step(0.0, yU) * step(Hp.y, Hop - 0.6);
   float win = wx * wy;
-  float shop = (1.0 - smoothstep(3.0 - fw, 3.0 + fw, Hp.y)) * smoothstep(0.35 - fw, 0.35 + fw, Hp.y) * (1.0 - smoothstep(0.0, fw + 0.15, abs(fract(lu / 4.5) - 0.5) * 4.5 - 2.0));
   float gridK = 1.0 - smoothstep(0.08, 0.3, fw);
-  vec3 winR = wallR * 0.14 + uSkyHor * 0.1 + vec3(1.0, 0.62, 0.3) * 0.25 * nightF * step(0.55, bhHash12(floor(vec2(lu / 2.6, yU / 3.0)) + bid));
-  vec3 c = mix(wallR, winR, max(win, shop * 0.8) * gridK);
+  float wh = bhHash12(floor(vec2(lu / 2.6, yU / 3.0)) + bid);
+  // upper windows: dark rooms, pale nets / blinds (lower or upper half), a sunlit room
+  float wpal = step(0.62, wh) * mix(1.0, step(stY, 1.65), step(0.85, wh));
+  vec3 winR = wallR * mix(0.1, 0.5, wpal) + uSkyHor * 0.08 + vec3(1.0, 0.62, 0.3) * 0.25 * nightF * step(0.55, wh);
+  vec3 c = mix(wallR, winR, win * gridK);
+  if (Hp.y < 3.6) {
+    // its ground floor: shop fronts (4.5 m units) — fascia with lettering, display glass with goods, a mullion,
+    // striped awnings on some
+    float su = fract(lu / 4.5) * 4.5;
+    float sh2 = bhHash12(vec2(floor(lu / 4.5) + bid * 7.0, seed * 0.13 + 4.0));
+    float fas = smoothstep(3.0 - fw, 3.0 + fw, Hp.y);
+    vec3 fasC = (sh2 < 0.25 ? vec3(0.1, 0.17, 0.3) : (sh2 < 0.5 ? vec3(0.42, 0.08, 0.08) : (sh2 < 0.7 ? vec3(0.08, 0.25, 0.15) : vec3(0.12)))) * uCityCol * mix(0.55, 1.15, oppSun);
+    float lett = step(0.45, fract(su * 2.7 + sh2 * 7.0)) * step(abs(Hp.y - 3.3), 0.1) * step(abs(su - 2.25), 1.3) * gridK;
+    fasC = mix(fasC, uCityCol * vec3(0.95, 0.9, 0.75) * mix(0.6, 1.2, oppSun), lett);
+    float glassF = smoothstep(0.45 - fw, 0.45 + fw, Hp.y) * (1.0 - fas) * smoothstep(0.3 - fw, 0.3 + fw, su) * (1.0 - smoothstep(4.2 - fw, 4.2 + fw, su));
+    vec2 gq = floor(vec2(su / 0.35, Hp.y / 0.4));
+    vec3 goods = vec3(bhHash12(gq + 1.3), bhHash12(gq + 2.7), bhHash12(gq + 4.1)) * step(0.45, bhHash12(gq + sh2 * 17.0)) * step(Hp.y, 2.2);
+    vec3 shopG = uSkyHor * 0.07 + (0.04 + 0.22 * goods * gridK) * uCityCol * 0.5 + vec3(1.0, 0.75, 0.45) * (0.05 + 0.3 * nightF);
+    float mul = (1.0 - smoothstep(0.035, 0.05 + fw, abs(su - (sh2 > 0.5 ? 1.5 : 3.0)))) * gridK;
+    shopG = mix(shopG, wallR * 0.3, mul);
+    c = mix(mix(wallR, shopG, glassF), fasC, fas);
+    if (fract(sh2 * 5.3) > 0.55) {
+      float aw = smoothstep(2.4 - fw, 2.4 + fw, Hp.y) * (1.0 - fas);
+      vec3 awC = mix(vec3(0.75, 0.12, 0.1), vec3(0.1, 0.35, 0.22), step(0.8, fract(sh2 * 5.3))) * uCityCol * mix(0.5, 1.0, oppSun);
+      awC = mix(awC, uCityCol * vec3(0.85, 0.82, 0.75) * mix(0.5, 1.0, oppSun), bhStripe(su * 2.2, fw * 2.2) * gridK);
+      c = mix(c, awC * mix(0.7, 1.0, smoothstep(2.4, 3.0, Hp.y)), aw);
+    }
+  }
+  if (uBhDebug > 9.5) c = vec3(1.0, win * 2.0, Hp.y < 3.6 ? 1.0 : 0.0);
   // the joints between buildings, a darker band under the cornice
   c *= 1.0 - 0.3 * (1.0 - smoothstep(0.0, 0.12 + fw, min(lu, bw - lu))) * gridK;
   c *= 1.0 - 0.18 * (1.0 - smoothstep(0.0, 0.5 + fw, Hop - Hp.y));
@@ -969,6 +1023,7 @@ vec4 bhOpp(vec3 P, vec3 R, vec3 N, vec3 T, float seed, float fp, float nightF) {
     float trunk = (1.0 - smoothstep(0.14, 0.14 + fw, abs(tx))) * step(Hp.y, ty);
     vec3 tc = uCityCol * mix(vec3(0.3, 0.4, 0.22), vec3(0.45, 0.52, 0.3), fract(th * 9.1)) * (0.8 + 0.4 * (wob + 0.5));
     c = mix(c, tc, max(crown, trunk * 0.9) * (1.0 - smoothstep(0.3, 1.0, fw)));
+    if (uBhDebug > 9.5) c = mix(c, vec3(2.0, 2.0, 0.0), max(crown, trunk));
     cov = max(cov, crown * (1.0 - smoothstep(0.3, 1.0, fw)));
   }
   return vec4(c, cov);
@@ -1149,10 +1204,10 @@ void bhWall(inout vec3 albedo, inout float rough, inout float metal, inout vec3 
   }
 
   albedo = bhHeadroom(albedo, baseAlb);
-  if (uBhDebug > 6.5 && (vB.x < 0.5 || vB.y < 0.5)) { albedo = vec3(0.0); emit = vec3(4.0, 0.0, 0.0); return; }
+  if (uBhDebug > 6.5 && uBhDebug < 7.5 && (vB.x < 0.5 || vB.y < 0.5)) { albedo = vec3(0.0); emit = vec3(4.0, 0.0, 0.0); return; }
   if (vB.x < 0.5 || vB.y < 0.5) return;
   vec2 cell = floor(vFac);
-  if (uBhDebug > 6.5 && (cell.x < 0.0 || cell.y < 0.0 || cell.x >= vB.x || cell.y >= vB.y)) { albedo = vec3(0.0); emit = vec3(0.0, 4.0, 0.0); return; }
+  if (uBhDebug > 6.5 && uBhDebug < 7.5 && (cell.x < 0.0 || cell.y < 0.0 || cell.x >= vB.x || cell.y >= vB.y)) { albedo = vec3(0.0); emit = vec3(0.0, 4.0, 0.0); return; }
   if (cell.x < 0.0 || cell.y < 0.0 || cell.x >= vB.x || cell.y >= vB.y) return;
   vec2 f = vFac - cell;
   vec2 pm = f * csz;
@@ -1388,7 +1443,7 @@ void bhWall(inout vec3 albedo, inout float rough, inout float metal, inout vec3 
     lcol = mix(lcol, vec3(0.35, 0.55, 1.0) * (0.6 + 0.7 * fl), tvOn);
   }
   // lit rooms: bright enough to touch the night bloom threshold so districts glow from afar
-  float glowI = mix(0.07, 2.7, nightF) * (0.75 + 0.5 * r2);
+  float glowI = mix(office ? 0.35 : 0.07, 2.7, nightF) * (0.75 + 0.5 * r2);
   if (prof > 1.5 && prof < 2.5) glowI *= 1.25;
   if (prof > 4.5 && prof < 5.5) glowI *= 1.1;
 
@@ -1403,7 +1458,7 @@ void bhWall(inout vec3 albedo, inout float rough, inout float metal, inout vec3 
     vec4 op = bhOpp(vWPos, R, N, Tu, seed, fq.x, nightF);
     env = mix(env, op.rgb, op.a * (1.0 - smoothstep(0.08, 0.25, fq.x)));
   }
-  if (uBhDebug > 5.5) { albedo = vec3(0.0); emit = env; return; } // ?bdbg=refl: the reflected scene alone
+  if (uBhDebug > 5.5 && uBhDebug < 6.5 || uBhDebug > 9.5) { albedo = vec3(0.0); emit = env; return; } // ?bdbg=refl: the reflected scene alone
   // sun glint: panels whose reflected azimuth lines up with the sun flash in a vertical streak
   vec2 sh = normalize(uSunDir.xz + vec2(1e-5, 0.0));
   float hAl = dot(normalize(R.xz + vec2(1e-5, 0.0)), sh);
@@ -1420,6 +1475,9 @@ void bhWall(inout vec3 albedo, inout float rough, inout float metal, inout vec3 
   float envL = dot(env, vec3(0.2126, 0.7152, 0.0722));
   vec3 reflTint = mix(vec3(1.0), gtN, tintAmt) * (curtain ? 0.8 : 1.0); // (for the open-sash strip)
   vec3 refl = mix(env, envL * gtN, tintAmt) * (curtain ? 0.8 : 1.0) + uSunCol * glint;
+  // curtain walls: every pane a slightly different tint and mirror strength (coating batches, pillowing)
+  if (curtain) refl *= mix(vec3(1.0), mix(vec3(0.92, 1.0, 1.08), vec3(1.07, 1.02, 0.92), r3) * mix(0.72, 1.25, fract(r1 * 5.9)), 1.0 - smoothstep(0.3, 1.0, fFac.x));
+  bool spPanel = curtain && bhHash12(vec2(seed, 31.7)) < 0.55;
 
   vec3 transTint = mix(vec3(1.0), gt, curtain ? 0.75 : 0.3);
   // average daylight albedo of a window (room seen through the glass, curtains), cf. the near path
@@ -1456,6 +1514,13 @@ void bhWall(inout vec3 albedo, inout float rough, inout float metal, inout vec3 
     float farGlow = mix(0.07, 2.7, nightF) * (prof > 1.5 && prof < 2.5 ? 1.25 : 1.0);
     if (style > 5.5 && style < 6.5) farGlow = mix(1.6, 2.6, nightF);  // shop windows: lit by day, toned at night (≈ bhShop mean)
     avgGlass = refl * F * paneRefl + farLit * farGlow * farCol * 0.34 * (curtain ? 0.85 : 1.0) + gt * crown * 0.55;
+    if (curtain) {
+      // the spandrel band at every slab, box-filtered (its mean when a storey is a few pixels tall)
+      float spF = clamp((wr.z - pm.y) / max(2.0 * fFac.y * csz.y, 1e-3) + 0.5, 0.0, 1.0);
+      spF = mix(spF, wr.z / csz.y, smoothstep(0.25, 0.6, fFac.y));
+      avgGlass = mix(avgGlass, refl * (spPanel ? F * 0.3 : min(1.0, F * 1.15 + 0.08)), spF);
+      avgAlb = mix(avgAlb, spPanel ? albedo * 0.8 : gt * 0.18, spF);
+    }
   }
 
   if (edge < 0.0) {
@@ -1477,6 +1542,7 @@ void bhWall(inout vec3 albedo, inout float rough, inout float metal, inout vec3 
   float fw = ribbon ? 0.045 : 0.075;
   float frame = 1.0 - smoothstep(fw * 0.7, fw, edge);
   float spandrel = 0.0;
+  float capSide = 0.0, capLit = 0.0, capSh = 0.0; // curtain-wall mullion caps (below)
   float mAx = 1e3, mSg = 0.0; // distance / side to the nearest vertical mullion (frame relief below)
   if (curtain) {
     float ex = min(pm.x, csz.x - pm.x);
@@ -1485,6 +1551,25 @@ void bhWall(inout vec3 albedo, inout float rough, inout float metal, inout vec3 
     float tr = 1.0 - smoothstep(0.018, 0.03, abs(pm.y - wr.z));
     frame = max(mull, tr * detail);
     spandrel = step(pm.y, wr.z);
+    // pressure caps stand 6–18 cm proud on the vertical mullions (parallax): seen obliquely their side face
+    // hides a strip of the pane (lit or shaded by the sun's side); in sun they cast a thin shadow on the glass
+    if (depthK > 0.0 && detail > 0.3) {
+      float capD = mix(0.06, 0.18, bhHash12(vec2(seed, 13.1))) * depthK;
+      float lx = pm.x < csz.x * 0.5 ? pm.x : pm.x - csz.x;
+      float kx = -dot(V, Tu) / max(-dot(V, N), 0.08);
+      float xe = lx + kx * capD;
+      float cw = 0.04;
+      float capF = 1.0 - smoothstep(cw, cw + 0.012, abs(xe));
+      float cov = step(min(lx, xe), cw) * step(-cw, max(lx, xe));
+      capSide = cov * (1.0 - capF);
+      capLit = max(dot(uSunDir, sign(kx) * Tu), 0.0) * step(0.0, uSunDir.y);
+      float sn = dot(uSunDir, N);
+      if (sn > 0.02 && uSunDir.y > 0.0) {
+        float xs = lx + dot(uSunDir, Tu) / sn * capD;
+        capSh = step(min(lx, xs), cw) * step(-cw, max(lx, xs)) * (1.0 - cov);
+      }
+      frame = max(max(capF, capSide), max(1.0 - smoothstep(0.035, 0.055, ey), tr * detail));
+    }
   } else if (style > 0.5 && style < 1.5 || style > 4.5 && style < 5.5) {
     float mv = 1.0 - smoothstep(0.022, 0.034, abs(pm.x - wc.x));
     float mh = 1.0 - smoothstep(0.022, 0.034, abs(pm.y - (wr.z + (wr.w - wr.z) * 0.62)));
@@ -1527,6 +1612,7 @@ void bhWall(inout vec3 albedo, inout float rough, inout float metal, inout vec3 
     if (bev + mvB > 0.02) bhNW = normalize(N + nOff);
   }
   if (curtain || ribbon) fcol = albedo * 0.85;
+  fcol *= mix(1.0, mix(0.5, 1.08, capLit), capSide);
 
   // glass: interior seen through the pane
   vec3 rd = vec3(dot(V, T), V.y, -dot(V, N));
@@ -1556,6 +1642,8 @@ void bhWall(inout vec3 albedo, inout float rough, inout float metal, inout vec3 
   float fpy = fFac.y * csz.y; // metres per pixel vertically
   float fpx = fFac.x * csz.x;
   float openW = 0.0;
+  float ventO = 0.0;
+  float nearL = 0.0; // coverage of things right behind the glass (fabric, blinds, plants): lit by the window, not the room depth
   bool homey = prof < 0.5 || prof > 2.5 && prof < 3.5;
   if (homey) {
     float cr = fract(r3 * 7.13 + r1 * 0.37);
@@ -1569,7 +1657,7 @@ void bhWall(inout vec3 albedo, inout float rough, inout float metal, inout vec3 
     float fstr = bhStripe(wx * (wr.y - wr.x) * 9.0, fpx * 9.0);
     if (fpat > 0.8) cc *= 0.88 + 0.16 * fstr;
     float fa = 1.0 - smoothstep(0.15, 0.6, fpx * 60.0 / max(wr.y - wr.x, 0.3) / 6.2832);
-    if (r3 > 0.58) {
+    if (r3 > 0.66) {
       // side curtains (drawn / half drawn / one side only), folds; a net between them on some
       float cov = r3 > 0.86 ? 0.5 : (r3 > 0.72 ? 0.3 : 0.2);
       float oneSide = step(0.85, fract(r1 * 3.3));
@@ -1586,15 +1674,17 @@ void bhWall(inout vec3 albedo, inout float rough, inout float metal, inout vec3 
       dayA = mix(dayA, vec3(0.56, 0.56, 0.54) * (0.92 + 0.08 * bhStripe(wx * (wr.y - wr.x) * 30.0, fpx * 30.0)), netB * 0.7);
       interior = mix(interior, c2 * lcol * litI * 0.75, side);
       dayA = mix(dayA, c2 * 0.7, side);
-    } else if (r3 > 0.36) {
+      nearL = max(side, netB * 0.7);
+    } else if (r3 > 0.5) {
       // net curtain (full height or café-style lower half): translucent white with a lace hem, glows when lit
       float netTop = cr > 0.45 ? 1.0 : 0.55;
       float hem = (1.0 - smoothstep(0.0, 0.03, abs(wy - netTop + 0.04))) * fa;
       float lace = 0.9 + 0.1 * bhStripe(wx * (wr.y - wr.x) * 24.0, fpx * 24.0) * fa;
       float net = step(wy, netTop) * (0.72 + 0.15 * hem);
       interior = mix(interior, vec3(0.95, 0.9, 0.8) * lcol * litI * 0.55, net);
-      dayA = mix(dayA, vec3(0.56, 0.56, 0.54) * lace, net);
-    } else if (r3 > 0.2) {
+      dayA = mix(dayA, vec3(0.68, 0.68, 0.65) * lace, net);
+      nearL = net;
+    } else if (r3 > 0.37) {
       // roller blind partly down, or a venetian blind (slats, box-filtered)
       float blindTo = 1.0 - (0.15 + 0.6 * cr);
       vec3 rb = mix(vec3(0.88, 0.84, 0.74), cc, step(0.6, cr));
@@ -1604,14 +1694,16 @@ void bhWall(inout vec3 albedo, inout float rough, inout float metal, inout vec3 
       // the blind's bottom bar
       rb *= 1.0 - 0.35 * (1.0 - smoothstep(0.0, 0.025, wy - blindTo)) * fa;
       interior = mix(interior, rb * lcol * litI * 0.6, bl);
-      dayA = mix(dayA, rb * 0.5, bl);
-    } else if (r3 > 0.12) {
+      dayA = mix(dayA, rb * 0.62, bl);
+      nearL = bl;
+    } else if (r3 > 0.29) {
       // curtains fully drawn (a bedroom in the daytime): a fabric wall with a gap in the middle
       float gap = 1.0 - smoothstep(0.0, 0.02, abs(wx - 0.5 - (cr - 0.5) * 0.1) - 0.012);
       float folds = 0.86 + 0.14 * sin(wx * 70.0 + 2.4 * sin(wx * 19.0 + r1 * 7.0)) * (0.55 + 0.45 * sin(wx * 29.0 + r2 * 4.0)) * fa;
       vec3 c2 = cc * folds * (1.0 - 0.5 * gap);
       interior = mix(interior, c2 * lcol * litI * 0.8, 1.0 - gap * 0.6);
       dayA = mix(dayA, c2 * 0.72, 1.0 - gap * 0.6);
+      nearL = 1.0 - gap;
     }
     // a pot plant on some sills
     if (fract(r1 * 5.31) > 0.78) {
@@ -1623,17 +1715,57 @@ void bhWall(inout vec3 albedo, inout float rough, inout float metal, inout vec3 
       dayA = mix(dayA, plantC, leaf * detail);
       interior = mix(interior, vec3(0.5, 0.26, 0.15) * litI * 0.15, pot * detail);
       dayA = mix(dayA, vec3(0.5, 0.26, 0.15), pot * detail);
+      nearL = max(nearL, max(leaf, pot) * detail);
     }
     // a few windows stand open in fine weather (no glass reflection in the opening)
     openW = step(0.94, fract(r2 * 13.7 + r1 * 3.1)) * smoothstep(0.55, 0.85, uDaylight) * step(0.5, wx);
-  } else if (office && fract(u1 * 3.71 + cell.y * 0.37) < 0.4) {
-    // venetian blinds, coherent per office unit; slats box-filtered (no moiré)
-    float blindTo = 1.0 - (0.25 + 0.6 * fract(u2 * 5.3));
-    float slat = 0.75 + 0.25 * bhStripe(pm.y * 9.0, fpy * 9.0);
-    vec3 bc = vec3(0.78, 0.78, 0.74) * slat;
-    float bl = step(blindTo, wy);
-    interior = mix(interior, bc * lcol * litI * 0.6, bl);
-    dayA = mix(dayA, bc * 0.55, bl);
+  } else if (office) {
+    // per window its own state, so a 60-window front never repeats: venetians (coherent per office unit, each
+    // window at its own height, some raised), vertical fabric blinds drawn aside, notices taped to the glass,
+    // a plant on the sill; a few top-hung vents stand open (below). Box-filtered (no moiré).
+    float os = fract(r2 * 7.13 + r3 * 3.31);
+    float fo = 1.0 - smoothstep(0.15, 0.6, fpx * 60.0 / max(wr.y - wr.x, 0.3) / 6.2832);
+    if (fract(u1 * 3.71 + cell.y * 0.37) < 0.4 || os < 0.12) {
+      float blindTo = fract(r1 * 11.3) < 0.15 ? 0.97 : 1.0 - clamp(0.2 + 0.65 * fract(u2 * 5.3) + (r1 - 0.5) * 0.4 * step(0.45, r3), 0.08, 0.92);
+      float shut = step(0.75, fract(r3 * 5.7)); // slats closed: a flat pale screen; open: dark gaps between the slats
+      float slat = mix(0.75 + 0.25 * bhStripe(pm.y * 9.0, fpy * 9.0), 0.92 + 0.08 * bhStripe(pm.y * 18.0, fpy * 18.0), shut);
+      vec3 bc = mix(vec3(0.78, 0.78, 0.74), vec3(0.62, 0.64, 0.66), step(0.7, fract(u1 * 9.7))) * slat;
+      float bl = step(blindTo, wy);
+      bl *= 1.0 - 0.3 * (1.0 - smoothstep(0.0, 0.02, wy - blindTo)) * fo;
+      interior = mix(interior, bc * lcol * litI * 0.6, bl);
+      dayA = mix(dayA, bc * mix(0.55, 0.7, shut), bl);
+      nearL = bl * 0.8;
+    } else if (os < 0.22) {
+      float vb = step(wx, 0.3 + 0.65 * fract(r1 * 4.3));
+      if (fract(r3 * 2.9) > 0.5) vb = step(1.0 - 0.3 - 0.65 * fract(r1 * 4.3), wx);
+      vec3 vc = mix(vec3(0.8, 0.78, 0.72), vec3(0.52, 0.58, 0.64), step(0.6, fract(r3 * 9.1))) * (0.84 + 0.16 * bhStripe(pm.x * 10.0, fpx * 10.0));
+      interior = mix(interior, vc * lcol * litI * 0.6, vb);
+      dayA = mix(dayA, vc * 0.66, vb);
+      nearL = vb;
+    } else if (os < 0.29) {
+      // A4 notices (one or two, text lines) or a coloured poster taped to the glass
+      vec2 q = vec2((wx - 0.15 - 0.45 * fract(r1 * 6.1)) * (wr.y - wr.x), pm.y - wr.z - 0.55 - 0.35 * fract(r3 * 4.7));
+      bool big = fract(r1 * 3.3) > 0.7;
+      vec2 hs2 = big ? vec2(0.3, 0.42) : vec2(0.105, 0.149);
+      float sheet = step(abs(q.x), hs2.x) * step(abs(q.y), hs2.y);
+      if (!big && fract(r2 * 8.1) > 0.5) sheet = max(sheet, step(abs(q.x - 0.25), hs2.x) * step(abs(q.y), hs2.y));
+      vec3 pc = big ? mix(vec3(0.85, 0.3, 0.15), vec3(0.15, 0.4, 0.7), step(0.5, fract(r3 * 7.7))) : vec3(0.9, 0.9, 0.86);
+      pc *= 1.0 - (big ? 0.6 * step(abs(q.y - 0.12), 0.08) : 0.35 * bhStripe(q.y * 40.0, fpy * 40.0) * step(abs(q.x), 0.08)) * fo;
+      interior = mix(interior, pc * lcol * litI * 0.4, sheet);
+      dayA = mix(dayA, pc * 0.8, sheet);
+      nearL = sheet;
+    } else if (os < 0.36) {
+      float pxc = 0.2 + 0.6 * fract(r2 * 3.7);
+      float leaf = 1.0 - smoothstep(0.13, 0.16, length(vec2((wx - pxc) * (wr.y - wr.x), (pm.y - wr.z - 0.3) * 1.1)));
+      float pot = step(abs((wx - pxc) * (wr.y - wr.x)), 0.1) * step(pm.y - wr.z, 0.16);
+      vec3 plantC = mix(vec3(0.14, 0.28, 0.1), vec3(0.3, 0.44, 0.16), fract(r3 * 11.0));
+      vec3 potC = mix(vec3(0.85, 0.85, 0.82), vec3(0.5, 0.26, 0.15), step(0.5, fract(r1 * 7.1)));
+      dayA = mix(mix(dayA, plantC, leaf * detail), potC, pot * detail);
+      interior = mix(interior, plantC * litI * 0.15, max(leaf, pot) * detail);
+      nearL = max(leaf, pot) * detail;
+    }
+    // a top-hung vent in the transom swung open (by day)
+    ventO = step(0.9, fract(r1 * 17.3 + r2 * 2.1)) * step(wr.w - 0.42, pm.y) * smoothstep(0.5, 0.8, uDaylight);
   }
   // recess shadow under the lintel and beside the jambs
   float recess = curtain ? 1.0 : smoothstep(0.0, 0.22, wr.w - pm.y) * mix(0.75, 1.0, smoothstep(0.0, 0.12, min(pm.x - wr.x, wr.y - pm.x)));
@@ -1650,8 +1782,9 @@ void bhWall(inout vec3 albedo, inout float rough, inout float metal, inout vec3 
   }
   // spandrel glass: opaque, darker tinted backing
   interior = mix(interior, vec3(0.0), spandrel);
-  dayA = mix(dayA, gt * 0.18, spandrel);
-  float Fs = mix(F, min(1.0, F * 1.15 + 0.08), spandrel) * (1.0 - openW);
+  // spandrel: per tower a matt metal / fritted panel in the wall colour (reflects little) or dark-backed glass
+  dayA = mix(dayA, spPanel ? albedo * 0.8 : gt * 0.18, spandrel);
+  float Fs = mix(F, spPanel ? F * 0.3 : min(1.0, F * 1.15 + 0.08), spandrel) * (1.0 - openW);
   // reflection: brighter toward the top of each punched pane (sky above, street below)
   float paneGrad = curtain ? 1.0 : mix(0.75, 1.2, wy);
   // punched windows: the reveal and the street canyon cut the reflected sky down, so the curtains / room read
@@ -1659,17 +1792,22 @@ void bhWall(inout vec3 albedo, inout float rough, inout float metal, inout vec3 
   // interior: per window a different balance (dark room / bright net curtain / sun on the glass across)
   float roomK = mix(0.62, 1.0, fract(r1 * 3.71));
   float reflK = (curtain || ribbon) ? mix(0.82, 1.18, fract(r2 * 2.93)) : mix(0.75, 1.9, fract(r2 * 2.93)) * (1.15 - 0.3 * roomK);
-  vec3 glass = interior * (1.0 - Fs) * transTint + refl * Fs * mix(0.65, 1.0, recess) * paneGrad * reflK * ((curtain || ribbon) ? 1.0 : (homey ? 1.1 : 1.6));
-  vec3 glassAlb = dayA * (1.0 - Fs) * transTint * (curtain ? 0.4 : (ribbon ? 0.7 : (homey ? 0.62 * roomK : roomK))); // a room seen through glass by day is far darker than the facade around it
+  vec3 glass = interior * (1.0 - Fs) * transTint + refl * Fs * mix(0.65, 1.0, recess) * paneGrad * reflK * ((curtain || ribbon) ? 1.0 : (homey ? 0.72 : 1.6));
+  vec3 glassAlb = dayA * (1.0 - Fs) * transTint * (curtain ? 0.4 : (ribbon ? 0.7 : (homey ? mix(0.62 * roomK, 1.0, nearL) : roomK))); // a room seen through glass by day is far darker than the facade around it
   // open sash: the swung pane shows a strip of darker, skewed reflection at the hinge side
   glass = mix(glass, env * 0.35 * reflTint, openW * (1.0 - smoothstep(0.62, 0.66, wx)));
+  // the open vent: its tilted pane mirrors the dim ceiling / the ground instead of the street, the room shows under it
+  glass = mix(glass, env * 0.22 * reflTint + interior * 0.5, ventO);
+  glassAlb *= 1.0 - 0.45 * ventO;
   glass += gt * crown * mix(0.55, 0.18, spandrel);
   if (detail < 0.999) {
     glass = mix(avgGlass, glass, detail);
     glassAlb = mix(avgAlb, glassAlb, detail);
     frame *= detail;
   }
-  albedo = mix(glassAlb * min(sunShade, sunShadeG), fcol * sunShade, frame);
+  // ?bdbg=galb (8): the pane's daylight albedo alone (frame black); ?bdbg=gem (9): the pane's emission alone
+  if (uBhDebug > 7.5 && uBhDebug < 9.5) { albedo = uBhDebug < 8.5 ? glassAlb * (1.0 - frame) : vec3(0.0); emit = uBhDebug < 8.5 ? vec3(0.0) : glass * (1.0 - frame); return; }
+  albedo = mix(glassAlb * min(sunShade, sunShadeG) * (1.0 - 0.5 * capSh), fcol * sunShade, frame);
   rough = mix(0.5, (curtain || ribbon) ? 0.34 : 0.7, frame);
   // metallic mullions on curtain walls pick up the environment (sheen lines between panels)
   metal = (curtain || ribbon) ? frame * 0.7 : 0.0;
