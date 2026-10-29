@@ -690,6 +690,59 @@ export function genConstruction(env: Env, lot: Lot): CraneTargets {
       }
     // dried clods knocked off the tyres
     for (let k = 0; k < 18; k++) K.box(M(k % 2 ? '#7d6e58' : '#5e4f3c', PAT.GRAVEL, 0.9), 0.04 + (k % 3) * 0.04, 0.012 + (k % 2) * 0.01, 0.04 + (k % 4) * 0.025, SX + 0.3 + ((k * 1.37) % 5.0), 0.15, gateZ0 + 0.4 + ((k * 2.3) % 5.4), k);
+    // F4 (judge 2 #8 "site ground is clean beige paving; tyre tracks two crisp painted bands"): the yard inside the
+    // hoarding is churned — patches of mud and spread hardcore, standing puddles in the low spots, and the lorry's
+    // ruts from the gate round to the building: wet dark troughs between raised, lighter ridges of pushed-up soil,
+    // water lying in the deepest stretches. Keeps out of the building + scaffold (footprint + 1.8 m).
+    {
+      let sd = 9173;
+      const rr = () => ((sd = (sd * 16807) % 2147483647) / 2147483647);
+      const inFoot = (x: number, z: number, m: number) => x > fx0 - 1.8 - m && x < fx1 + 1.8 + m && z > fz0 - 1.8 - m && z < fz1 + 1.8 + m;
+      const muds = ['#5f5040', '#6e5c47', '#7d6a52', '#544636'];
+      for (let k = 0; k < 70; k++) {
+        const x = -SX + e + 0.6 + rr() * (2 * SX - 2 * e - 1.2),
+          z = -SZ + e + 0.6 + rr() * (2 * SZ - 2 * e - 1.2);
+        const w = 0.8 + rr() * 2.6,
+          d = 0.6 + rr() * 2.0;
+        if (inFoot(x, z, Math.max(w, d) / 2)) continue;
+        const gravel = rr() < 0.35;
+        K.box(M(gravel ? (rr() < 0.5 ? '#8f8a80' : '#7c776d') : muds[k % 4], PAT.GRAVEL, gravel ? 0.95 : 0.6 + rr() * 0.3, 0, 0, 0, gravel ? 0.9 : 0.6), w, 0.008 + rr() * 0.01, d, x, 0.004 + (k % 5) * 0.002, z, rr() * Math.PI);
+      }
+      // puddles: low, flat, almost mirror-smooth
+      const water = M('#3b3a34', PAT.PLAIN, 0.06, 0, 0, 0, 0);
+      for (let k = 0; k < 9; k++) {
+        const x = -SX + e + 1 + rr() * (2 * SX - 2 * e - 2),
+          z = -SZ + e + 1 + rr() * (2 * SZ - 2 * e - 2);
+        if (inFoot(x, z, 1)) continue;
+        const r0 = 0.3 + rr() * 0.7;
+        K.cyl(M('#4a3d2f', PAT.GRAVEL, 0.5, 0, 0, 0, 0.8), r0 + 0.12, r0 + 0.18, 0.02, x, 0.006, z, 10);
+        K.cyl(water, r0, r0, 0.024, x + 0.03, 0.006, z - 0.02, 12);
+      }
+      // ruts: from inside the gate along the yard to the building's near corner
+      const gz2 = (gateZ0 + gateZ1) / 2;
+      const x0r = SX - e - 0.5,
+        x1r = Math.max(fx1 + 2.4, x0r - 9);
+      const N = 22;
+      for (const sdz of [-0.95, 0.95])
+        for (let k = 0; k < N; k++) {
+          const t = k / N,
+            t1 = (k + 1) / N;
+          const xa = x0r + (x1r - x0r) * t,
+            xb = x0r + (x1r - x0r) * t1;
+          const za = gz2 + sdz + Math.sin(t * 3.1) * 1.6 * t,
+            zb = gz2 + sdz + Math.sin(t1 * 3.1) * 1.6 * t1;
+          const L = Math.hypot(xb - xa, zb - za) + 0.04,
+            ry = Math.atan2(-(zb - za), xb - xa);
+          const cx = (xa + xb) / 2,
+            cz = (za + zb) / 2;
+          const nx = Math.sin(ry),
+            nz = Math.cos(ry);
+          const deep = rr() < 0.3;
+          K.box(M(deep ? '#3a3127' : '#4a3d2f', PAT.GRAVEL, deep ? 0.15 : 0.4, 0, 0, 0, 0.7), L, 0.006, 0.42, cx, 0.006, cz, ry);
+          for (const side of [-1, 1]) K.box(M('#7a6750', PAT.GRAVEL, 0.85, 0, 0, 0, 0.8), L, 0.035 + rr() * 0.02, 0.16, cx + nx * side * 0.29, 0.0, cz + nz * side * 0.29, ry + (rr() - 0.5) * 0.06);
+          if (deep) K.box(water, L * 0.8, 0.012, 0.3, cx, 0.006, cz, ry);
+        }
+    }
     // splash dirt along the outer foot of the street hoardings, height varying panel to panel
     const splash = M('#7a6d5b', PAT.GRAVEL, 0.92, 0, 0, 0, 0.4);
     const band = (len: number, cx: number, cz: number, ry: number) => {

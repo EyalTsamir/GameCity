@@ -246,6 +246,55 @@ vec3 boatGlass(vec3 inside, float v) {
   return mix(g, g * 0.8 + vec3(0.04, 0.04, 0.035), smoothstep(0.25, 0.0, v) * 0.5);
 }
 vec3 boatSurface(vec3 col) {
+  int tgS = int(vTagF + 0.5);
+  if ((tgS == ${BT.SAIL} || tgS == ${BT.JIB}) && uBoatDetail > 0.5) {
+    // F4 (judge 2 "flat sheets, no seams or battens"): cross-cut panels with stitched overlaps, tapes along luff,
+    // leech and foot, layered patches at head / tack / clew, batten pockets (main), telltales, a class insignia,
+    // a faint crinkle of the laminate. u = luff → leech, v = foot → head (aExtra of the cloth grid)
+    bool main = tgS == ${BT.SAIL};
+    float su = vHC.y, sv = vExY;
+    float Hs = main ? 7.8 : 6.6;
+    float chord = (main ? 3.1 : 2.7) * pow(1.0 - sv, 1.1) + 0.12;
+    float x = su * chord, y = sv * Hs;
+    float nearS = 1.0 - smoothstep(30.0, 80.0, length(vViewPosition));
+    float sy = (y + x * 0.12) / 0.95;
+    float d = min(fract(sy), 1.0 - fract(sy)) * 0.95;
+    float seam = 1.0 - smoothstep(0.003, 0.009, d);
+    float lap = step(fract(sy), 0.026);
+    col *= 0.975 + 0.04 * bh1(floor(sy) * 7.3 + (main ? 0.0 : 3.0));
+    col *= 1.0 - nearS * (0.05 * lap + 0.13 * seam);
+    float edge = max(max(1.0 - smoothstep(0.03, 0.05, x), 1.0 - smoothstep(0.02, 0.04, chord - x)), 1.0 - smoothstep(0.03, 0.05, y));
+    col *= 1.0 - 0.12 * edge;
+    // corner patches (two layers, the inner one smaller)
+    float pt = min(length(vec2(x, y)), min(length(vec2(chord - x, y)), Hs - y + x * 0.3));
+    col *= 1.0 - 0.06 * (1.0 - smoothstep(0.42, 0.45, pt)) - 0.05 * (1.0 - smoothstep(0.24, 0.27, pt));
+    if (main) {
+      // four batten pockets from the leech, longer higher up
+      for (int k = 1; k <= 4; k++) {
+        float bv = float(k) * 0.2;
+        float by = bv * Hs;
+        float bl = 0.55 + 0.12 * float(k);
+        float inB = step(chord - x, bl) * (1.0 - smoothstep(0.03, 0.045, abs(y - by - (chord - x) * 0.05)));
+        float rim = inB * smoothstep(0.02, 0.035, abs(y - by - (chord - x) * 0.05));
+        col = mix(col, col * 1.04 + 0.01, inB * 0.6);
+        col *= 1.0 - 0.1 * rim * nearS;
+      }
+      // class insignia: a red chevron pair high on the sail
+      vec2 q = vec2(x - chord * 0.42, y - Hs * 0.8);
+      float chev = abs(q.y - (0.18 - abs(q.x) * 0.6));
+      float ins = step(abs(q.x), 0.28) * (step(chev, 0.035) + step(abs(chev - 0.12), 0.035));
+      col = mix(col, vec3(0.62, 0.08, 0.07), min(ins, 1.0) * 0.9);
+    } else {
+      // telltales: wool tufts a hand's width behind the luff, red on one side, green the other
+      for (int k = 1; k <= 3; k++) {
+        float ty = float(k) * 0.25 * Hs;
+        float tt = 1.0 - step(0.035, length(vec2(x - 0.3, (y - ty) * 0.6)));
+        col = mix(col, gl_FrontFacing ? vec3(0.7, 0.08, 0.06) : vec3(0.08, 0.5, 0.15), tt * nearS);
+      }
+    }
+    col *= 0.97 + 0.05 * bn2(vec2(x, y) * 9.0) * nearS;
+    return col;
+  }
   if (int(vTagF + 0.5) == ${BT.GLASS} && uBoatDetail > 0.5) {
     // wheelhouse: console + a figure-less dark interior with the far windows light (v = height on the pane)
     float h = max(0.05, vExY - vHC.y);

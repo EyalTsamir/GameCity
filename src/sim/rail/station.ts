@@ -367,8 +367,8 @@ export function buildStation(g: Geo, st: StationDef): StationBuild {
     lamps.push({ x, y: Y + 3.68, z: lz, size: 1.0 });
   }
 
-  // ── hanging double-faced clock between two columns
-  const clock = { x: colStep / 2, y: eaveY - 0.95, z: colZ };
+  // ── hanging double-faced clock mid-bay, between two columns
+  const clock = { x: 0, y: eaveY - 0.95, z: colZ };
   {
     const { x, y, z } = clock;
     g.kind(K.PLAIN).color(C.ironDark);
@@ -407,9 +407,11 @@ export function buildStation(g: Geo, st: StationDef): StationBuild {
     for (const dx of [-w / 2 + 0.15, w / 2 - 0.15]) g.box(x + dx, (yC + h / 2 + eaveY - 0.32) / 2, colZ, 0.03, eaveY - 0.32 - yC - h / 2, 0.03, 0);
     signs.push({ kind, x, y: yC, z: colZ, w, h, both: true, normal: 1 });
   };
-  hang(-colStep * 1.5, 3.0, 0.46, 'name', eaveY - 0.75);
-  hang(colStep * 1.5, 3.0, 0.46, 'name', eaveY - 0.75);
-  hang(-colStep / 2, 2.3, 0.74, 'board', eaveY - 0.9);
+  // boards and the clock hang mid-bay: the columns stand at cx0 + k·colStep, so ±colStep/2 put a column through
+  // the name ("Tinyh… Central", F4 bug 9)
+  hang(-colStep * 2, 3.0, 0.46, 'name', eaveY - 0.75);
+  hang(colStep * 2, 3.0, 0.46, 'name', eaveY - 0.75);
+  hang(-colStep, 2.3, 0.74, 'board', eaveY - 0.9);
   // platform number on a post by the stairs; poster board on the south railing side
   g.kind(K.PLAIN).color(C.iron);
   g.block(4.2, Y, zS - 0.45, 0.07, 2.3, 0.07);
@@ -465,7 +467,7 @@ export function buildStation(g: Geo, st: StationDef): StationBuild {
     g.color('#22262a');
     g.sphere(x, eaveY - 0.47, colZ - 0.16, 0.07, 8, 4, 0.8);
   }
-  for (const x of [-colStep * 1.0, colStep * 1.0]) {
+  for (const x of [-colStep * 1.5, colStep * 1.5]) {
     g.kind(K.PLAIN).color('#d9dcd8');
     g.push().at(x, eaveY - 0.5, colZ - 0.2).rotX(-1.25);
     g.cyl(0, 0, 0, 0.04, 0.13, 0.22, 8, 0);

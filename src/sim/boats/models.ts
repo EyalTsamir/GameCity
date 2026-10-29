@@ -1027,13 +1027,104 @@ function sailCloth(g: Geo, tag: number, luff: [V3, V3], clewOf: (v: number) => V
 
 function sailboat(g: Geo): void {
   hull(g, SAIL_HULL);
-  // cabin top, cockpit coamings, rudder head
+  const D = (z: number) => sheerAt(SAIL_HULL, z).D;
+  const W = (z: number) => sheerAt(SAIL_HULL, z).W;
+  // F4 (judge 2: "cabin a rounded box, coaming two planks, no fittings"): a moulded coachroof with sloped sides,
+  // portlights, teak grab rails, a sliding hatch over washboards; a real cockpit (coamings, seats, sole, tiller,
+  // winches); bow pulpit, stern pushpit, stanchions and lifelines; cleats, fairleads, a mooring warp
   g.kind(BT.PLAIN).color('#f4f2ec');
-  g.box(0, 0.86, 0.4, 1.5, 0.3, 2.5, 8);
-  g.color('#22303a');
-  for (const sd of [-1, 1]) g.box(sd * 0.755, 0.88, 0.4, 0.01, 0.12, 1.6, 0);
-  g.color('#a9865a');
-  for (const sd of [-1, 1]) g.box(sd * 0.95, 0.82, -2.0, 0.08, 0.14, 2.4, 0);
+  const cz0 = -0.85,
+    cz1 = 1.75,
+    cy0 = 0.66,
+    cy1 = 1.04;
+  // coachroof: trapezoid section (cabin sides lean in 12°), extruded along z, front face raked
+  g.push();
+  g.prism([[-0.74, cy0], [0.74, cy0], [0.64, cy1], [-0.64, cy1]], cz0, cz1 - 0.42, 2);
+  g.pop();
+  g.quad([-0.74, cy0, cz1 - 0.12], [0.74, cy0, cz1 - 0.12], [0.64, cy1, cz1 - 0.42], [-0.64, cy1, cz1 - 0.42]);
+  for (const sd of [-1, 1]) g.tri([sd * 0.74, cy0, cz1 - 0.42], [sd * 0.74, cy0, cz1 - 0.12], [sd * 0.64, cy1, cz1 - 0.42]);
+  g.color('#e9e6dc').box(0, cy1 + 0.01, 0.35, 1.22, 0.02, 2.0, 8); // non-slip panel on the coachroof
+  // portlights: three per side (dark smoked acrylic in a raised frame), the forward one smaller
+  for (const sd of [-1, 1])
+    for (const [z, l] of [[1.05, 0.32], [0.45, 0.42], [-0.15, 0.42]] as const) {
+      g.color('#c9ccce').push().at(sd * 0.712, 0.86, z).rotZ(sd * -0.21);
+      g.box(0, 0, 0, 0.012, 0.13, l + 0.05, 0);
+      g.color('#1b2228').box(sd * 0.004, 0, 0, 0.012, 0.1, l, 0);
+      g.pop();
+    }
+  // teak grab rails on the roof, with their stand-off feet
+  g.color('#9a6a3e');
+  for (const sd of [-1, 1]) {
+    g.box(sd * 0.48, cy1 + 0.09, 0.3, 0.035, 0.03, 1.6, 0);
+    for (let z = -0.45; z <= 1.05; z += 0.5) g.box(sd * 0.48, cy1 + 0.045, z, 0.035, 0.07, 0.07, 0);
+  }
+  // companionway: sliding hatch (with its garage), washboards in the aft face, a sprayhood folded down
+  g.color('#f0eee6').box(0, cy1 + 0.05, -0.35, 0.72, 0.06, 0.95, 8);
+  g.color('#d9d4c4').box(0, cy1 + 0.035, -0.75, 0.62, 0.03, 0.2, 0);
+  g.color('#8b5e34');
+  for (let k = 0; k < 3; k++) g.box(0, cy0 + 0.07 + k * 0.1, cz0 - 0.005, 0.56, 0.095, 0.02, 0);
+  g.color('#2d3f55').box(0, cy1 + 0.07, -0.95, 1.1, 0.1, 0.18, 0); // folded sprayhood
+  // cockpit: coamings (moulded, teak capping), seats, the sole, a tiller on the rudder stock, primary winches
+  const kz0 = -3.0,
+    kz1 = cz0;
+  for (const sd of [-1, 1]) {
+    g.color('#f4f2ec').box(sd * 0.86, D(-1.9) + 0.13, (kz0 + kz1) / 2, 0.06, 0.26, kz1 - kz0, 8);
+    g.color('#9a6a3e').box(sd * 0.86, D(-1.9) + 0.27, (kz0 + kz1) / 2, 0.1, 0.025, kz1 - kz0, 0);
+    g.color('#b88b5a').box(sd * 0.6, D(-1.9) + 0.03, (kz0 + kz1) / 2 - 0.1, 0.42, 0.04, kz1 - kz0 - 0.4, 0); // teak seats
+    // primary winch on the coaming: drum, cap, a coil of sheet beside it
+    g.color('#b9bec2').cyl(sd * 0.86, D(-1.9) + 0.285, kz1 - 0.35, 0.075, 0.06, 0.13, 10, 1);
+    g.color('#3a3f44').cyl(sd * 0.86, D(-1.9) + 0.415, kz1 - 0.35, 0.03, 0.03, 0.02, 8, 1);
+    g.color('#e9e2cf').cyl(sd * 0.86, D(-1.9) + 0.285, kz1 - 0.68, 0.11, 0.11, 0.03, 10, 1);
+  }
+  g.color('#b88b5a');
+  for (let z = kz0 + 0.3; z < kz1 - 0.2; z += 0.09) g.box(0, D(-1.9) + 0.012, z, 0.7, 0.012, 0.06, 0); // teak grating on the sole
+  g.color('#9a6a3e').push().at(0, D(-3.3) + 0.08, -3.25).rotX(0.18);
+  g.box(0, 0, 0.7, 0.05, 0.05, 1.4, 0);
+  g.color('#1c1d1f').box(0, 0, 1.32, 0.06, 0.06, 0.18, 0); // tiller grip
+  g.pop();
+  g.color('#c9cdd0').cyl(0, D(-3.3) - 0.05, -3.25, 0.045, 0.045, 0.16, 8, 1);
+  // pulpit, pushpit, stanchions with two lifelines; deck cleats and fairleads
+  g.color('#cfd3d6');
+  const stZ = [2.45, 1.4, 0.35, -0.7, -1.75, -2.8];
+  const top: V3[] = [],
+    mid: V3[] = [];
+  for (const sd of [-1, 1]) {
+    top.length = 0;
+    mid.length = 0;
+    for (const z of stZ) {
+      const x = sd * (W(z) - 0.07),
+        y = D(z);
+      g.rod([x, y, z], [x * 1.02, y + 0.6, z], 0.012, 5);
+      g.cyl(x, y, z, 0.025, 0.025, 0.02, 6, 1);
+      top.push([x * 1.02, y + 0.6, z]);
+      mid.push([x * 1.01, y + 0.32, z]);
+    }
+    g.color('#e3e4e0');
+    for (let i = 0; i + 1 < top.length; i++) {
+      g.rod(top[i], top[i + 1], 0.004, 3);
+      g.rod(mid[i], mid[i + 1], 0.004, 3);
+    }
+    g.color('#cfd3d6');
+    // bow pulpit: from the last stanchion forward round the stem; pushpit round the transom
+    const bz = 3.15;
+    g.rod(top[0], [sd * 0.18, D(bz) + 0.62, bz], 0.014, 5);
+    g.rod([sd * 0.18, D(bz) + 0.62, bz], [sd * 0.16, D(bz), bz - 0.05], 0.014, 5);
+    g.rod(top[top.length - 1], [sd * (W(-3.35) - 0.05), D(-3.35) + 0.62, -3.35], 0.014, 5);
+    g.rod([sd * (W(-3.35) - 0.05), D(-3.35) + 0.62, -3.35], [sd * (W(-3.35) - 0.05), D(-3.35), -3.3], 0.014, 5);
+    // cleats fore and aft, fairlead at the bow
+    g.color('#c0c4c7');
+    for (const z of [2.75, -3.1]) {
+      const x = sd * (W(z) - 0.2);
+      g.box(x, D(z) + 0.035, z, 0.04, 0.03, 0.2, 8);
+      g.box(x, D(z) + 0.015, z, 0.03, 0.03, 0.06, 8);
+    }
+  }
+  g.rod([0.18, D(3.15) + 0.62, 3.15], [-0.18, D(3.15) + 0.62, 3.15], 0.014, 5);
+  g.rod([W(-3.35) - 0.05, D(-3.35) + 0.62, -3.35], [-(W(-3.35) - 0.05), D(-3.35) + 0.62, -3.35], 0.014, 5);
+  // anchor in its bow roller, a mast-foot block, halyards running aft along the roof
+  g.color('#8a8f93').box(0, D(3.3) + 0.04, 3.3, 0.12, 0.1, 0.3, 0);
+  g.color('#e9e2cf');
+  for (const sd of [-0.06, 0.06]) g.rod([sd, cy1 + 0.02, MAST_Z - 0.1], [sd * 3, cy1 + 0.02, cz0 + 0.05], 0.006, 3);
   // mast + spreaders + forestay/backstay (thin rods)
   g.color('#c9cdd0');
   g.cyl(0, 0.7, MAST_Z, 0.065, 0.05, MAST_TOP - 0.7, 6, 1);

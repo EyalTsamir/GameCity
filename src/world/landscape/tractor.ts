@@ -141,8 +141,8 @@ function bonnetGeometry(): THREE.BufferGeometry {
   return g;
 }
 
-/** body + cab + hitch + cultivator (no wheels) */
-function bodyGeometry(): THREE.BufferGeometry {
+/** body + cab + hitch + cultivator (no wheels); the cab glass goes to `glass` (a see-through mesh) */
+function bodyGeometry(glass: Sink): THREE.BufferGeometry {
   const s = new Sink();
   // chassis: engine block, gearbox and rear axle housing (cast iron)
   s.box(0.62, 0.5, 2.9, 0, 0.72, 0.85, IRON, 0.6, 0.35, 0.05);
@@ -195,7 +195,9 @@ function bodyGeometry(): THREE.BufferGeometry {
   s.box(1.42, 0.16, 1.6, 0, y0, (cz0 + cz1) / 2, BLACK, 0.6, 0.1, 0.03);
   for (const sx of [-1, 1])
     for (const z of [cz0, cz1]) s.box(0.07, y1 - y0, 0.07, sx * cx, (y0 + y1) / 2, z, BLACK, 0.4, 0.2, 0.015, 0.4);
-  const gl = (w: number, h: number, l: number, x: number, y: number, z: number) => s.box(w, h, l, x, y, z, GLASS, 0.04, 0, 0, 0.25);
+  // F4 (judge 2: "the cab is an opaque black box"): glass panes in their own transparent mesh, so the seat,
+  // wheel, dash and levers show through
+  const gl = (w: number, h: number, l: number, x: number, y: number, z: number) => glass.box(w, h, l, x, y, z, GLASS, 0.04, 0, 0, 0);
   gl(1.3, y1 - y0 - 0.12, 0.012, 0, (y0 + y1) / 2 + 0.02, cz1);
   gl(1.3, y1 - y0 - 0.12, 0.012, 0, (y0 + y1) / 2 + 0.02, cz0);
   for (const sx of [-1, 1]) gl(0.012, y1 - y0 - 0.12, cz1 - cz0 - 0.08, sx * cx, (y0 + y1) / 2 + 0.02, (cz0 + cz1) / 2);
@@ -218,8 +220,21 @@ function bodyGeometry(): THREE.BufferGeometry {
     s.rod([sx * cx, 2.6, cz1], [sx * (cx + 0.32), 2.66, cz1 + 0.08], 0.012, 0.012, 6, BLACK, 0.4, 0.5, 0);
     s.box(0.04, 0.26, 0.16, sx * (cx + 0.34), 2.56, cz1 + 0.08, BLACK, 0.3, 0.1, 0.01, 0);
   }
-  s.box(0.5, 0.12, 0.48, 0, 2.0, -0.7, [0.06, 0.06, 0.06], 0.8, 0, 0.04, 0); // seat
-  s.box(0.5, 0.6, 0.1, 0, 2.3, -0.95, [0.06, 0.06, 0.06], 0.8, 0, 0.04, 0);
+  // suspension seat: cushion, backrest with headrest, armrests, the column it sits on
+  s.box(0.5, 0.12, 0.48, 0, 2.0, -0.7, [0.09, 0.09, 0.1], 0.85, 0, 0.04, 0); // seat
+  s.box(0.5, 0.6, 0.1, 0, 2.33, -0.95, [0.09, 0.09, 0.1], 0.85, 0, 0.04, 0);
+  s.box(0.3, 0.16, 0.08, 0, 2.72, -0.96, [0.09, 0.09, 0.1], 0.85, 0, 0.03, 0);
+  for (const sx of [-1, 1]) s.box(0.06, 0.05, 0.32, sx * 0.29, 2.2, -0.72, [0.12, 0.12, 0.12], 0.7, 0, 0.02, 0);
+  s.box(0.22, 0.3, 0.22, 0, 1.82, -0.72, [0.18, 0.18, 0.18], 0.6, 0.4, 0.02, 0);
+  // dash under the windscreen (instrument binnacle on the column), right-hand console with levers and a joystick
+  s.box(1.2, 0.3, 0.16, 0, 1.85, cz1 - 0.1, [0.13, 0.13, 0.14], 0.7, 0, 0.03, 0);
+  s.box(0.34, 0.16, 0.12, 0, 2.08, -0.02, [0.1, 0.1, 0.11], 0.6, 0, 0.03, 0);
+  s.box(0.24, 0.08, 0.01, 0, 2.12, -0.085, [0.22, 0.3, 0.32], 0.2, 0, 0, 0);
+  s.box(0.22, 0.42, 0.75, 0.48, 1.9, -0.75, [0.13, 0.13, 0.14], 0.7, 0, 0.03, 0);
+  for (const [z, c] of [[-0.55, [0.85, 0.12, 0.05]], [-0.7, [0.95, 0.75, 0.05]], [-0.85, [0.1, 0.1, 0.1]]] as [number, RGB][]) {
+    s.rod([0.46, 2.1, z], [0.43, 2.32, z + 0.04], 0.01, 0.01, 5, [0.3, 0.3, 0.3], 0.4, 0.6, 0);
+    s.box(0.04, 0.05, 0.04, 0.43, 2.34, z + 0.04, c, 0.4, 0, 0.012, 0);
+  }
   {
     const t = new THREE.TorusGeometry(0.19, 0.016, 6, 20);
     s.add(t, new THREE.Matrix4().makeRotationX(-0.9).setPosition(0, 2.28, -0.12), BLACK, 0.5, 0, 0);
@@ -400,11 +415,18 @@ export function createTractor(fog: boolean): TractorModel {
   const group = new THREE.Group();
   group.name = 'land-tractor';
   const mat = material(fog);
-  const body = new THREE.Mesh(bodyGeometry(), mat);
+  const glassSink = new Sink();
+  const body = new THREE.Mesh(bodyGeometry(glassSink), mat);
+  const glassMat = new THREE.MeshStandardMaterial({ color: '#1d2b2c', roughness: 0.04, metalness: 0, transparent: true, opacity: 0.32, depthWrite: false, fog });
+  glassMat.name = 'land-tractor-glass';
+  const glass = new THREE.Mesh(glassSink.geometry(), glassMat);
+  glass.name = 'land-tractor-glass';
+  glass.renderOrder = 2;
   body.name = 'land-tractor-body';
   body.castShadow = true;
   body.receiveShadow = true;
   group.add(body);
+  group.add(glass);
   const wheels = [
     { mesh: new THREE.InstancedMesh(wheelGeometry(REAR_R, 0.56, 23, 132), mat, 2), r: REAR_R, x: REAR_X, z: REAR_Z },
     { mesh: new THREE.InstancedMesh(wheelGeometry(FRONT_R, 0.38, 18, 96), mat, 2), r: FRONT_R, x: FRONT_X, z: FRONT_Z },

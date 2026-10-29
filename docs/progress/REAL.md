@@ -11,6 +11,30 @@ Overview must stay at least as impressive as now. Every feature: quality tiers +
 Lead session: session_01XuhAMczW3iK25AAWnf3qog, branch `claude/pensive-gates-bim12i`.
 
 ## Resume here (keep current)
+* 2026-10-29 04:00 UTC — F4 s1 merged (96a271a/6a14a9a: awnings sag, laundry folds+pegs (+1 draw), bunting, sailboat
+  cabin/cockpit/rails/sail seams, tractor glass cab, forklift, aged props/quay/site, ?nonightmarket tarps, back yard
+  fence/patio/shed/pots/toys; trees through buildings fixed; poplar clumps open; cloth 70k→113k tris, cost
+  unmeasured). tsc OK, golden f4 running. F4b session_01XuhAMehKEmHEj5fmKgEJ3K (re-capture blank views, poplars, cost).
+  Tractor driver + sail crew forwarded to F2b. E-scooter (W2) → open list.
+* 2026-10-29 03:35 UTC — HARNESS FIX: the pumpFrames 8×8 clipped jpeg screenshots made Chromium tile an 8×8 patch over
+  later captures (grey stipple; golden harbor 39.7 / oldtown 58.8, F2's "blank views", F3's harbor/westbrook 39/37).
+  Pumps are now full-viewport. Golden after F1+F2 (shots/golden/f1b): overview 0.6, harbor 2.0, oldtown 4.1,
+  downtown 4.4, westbrook 5.7 — all window interiors/house edits, no breakage. F3 s1 (5a6560a) wrapped →
+  F3b session_01XuhAMgSAE5Y4dHDf82na4z (re-capture golden, bench-judge, felt lawn). F3 not merged yet.
+* 2026-10-29 03:15 UTC — F1 s1 (aa407fc/99e6016: unique shop names, bookbinder interior, leaf lobby plants, Café Nord
+  sign, church soot/streaks, school art+blinds, warehouse sign, porch posts; yard_b sills = not a bug; lawn rim = sun
+  shadow leak → OUT OF SCOPE, open) and F2 s1 (4e678f4: actors.ts real posed figures for site/band/kids/boat crews,
+  market shoppers, 22 platform passengers, quay workers; ?noactors) merged, tsc OK. Both hit the context cap →
+  respawned: F1b session_01XuhAMeyiDquvccZotnrbgd (bench-judge s1, school entrance, church mouldings/rose),
+  F2b session_01XuhAMgh2gQQLc7zRmcxRjR (bench-judge actors, vehicle occupants, sailboat crew). F3/F4 still s1.
+* 2026-10-29 02:06 UTC — Judge 2 merged (docs/progress/real-judge-2.md: 4 real / 25 almost / 3 not yet (school,
+  sailboat, sheep-at-3m); #1 places empty, #2 floating sills in yard_b, #3 primitive vehicle occupants, #4 pixel
+  ballast + low-poly cutting, #5 felt lawns + rim, #7 repeated interiors, #8 too new, #9 flat cloth, #10 paving grid).
+  Bug hunter 2 merged (real-bugs-2.md: HIGH placeholder box people; barn tree/poplar clumps, barn moiré, station bikes
+  in planters, creel tails, laundry through tree, duplicate shop names, herd LOD one-frame lag, station board) + the
+  HARNESS CAVEAT: headless renders only during screenshots → bench/capture-set/shot now pump 4 frames (c43100c).
+  Final fix round F1 facades, F2 people everywhere, F3 ground/track/rock, F4 cloth/age/bugs launched (briefs in
+  real-briefs.md "Final fix round"). Then: judge 3 + bug hunter 3 → final report.
 * 2026-10-29 01:20 UTC — Merged W8 s5 (084f5db: Holstein-proportioned cows, 5 breeds, herd spacing fixed, sheep
   fleece locks/dirty belly/knees, tractor bonnet/grille/lamps, lacy umbels; animal cost +337k tris → caps 28/12 @ 40 m
   (re-measure open); golden 0.0, invariants {}). Golden of W6 s2 merge: overview 0.5 / downtown 4.4. Waiting on
@@ -202,6 +226,10 @@ Wave 1 (launched 2026-10-28 15:17 UTC, sibling cloud sessions, briefs in real-br
 | Judge 2 | session_01XuhAMhWPFfC36vewCePr9j | claude/real-judge-2 | real-judge-2.md |
 | Bug hunter 2 | session_01XuhAMerLUHGUUS7BTCdeQe | claude/real-bugs-2 | real-bugs-2.md |
 | W8 countryside (2) | session_01XuhAMfNhLR1sNFxZPZJ7Yq | claude/real-w8-country | real-w8.md |
+| F1 facades final | session_01XuhAMdr8nYgjcxQjFGE8r6 | claude/real-f1-facades | real-w1.md (F1 section) |
+| F2 people everywhere | session_01XuhAMdWkDieoT1KiyUQATj | claude/real-f2-people | real-f2.md |
+| F3 ground/track/rock | session_01XuhAMh42VLib5eEhrkwmHb | claude/real-f3-ground | real-f3.md |
+| F4 cloth/age/bugs | session_01XuhAMeuCcFFs8EDE6dvZYc | claude/real-f4-cloth | real-f4.md |
 Respawn rule: when a worker stops (milestone note, ~200k context, or a usage stop), create a NEW session on the
 same branch with the same brief + "resume from docs/progress/real-wN.md Resume here"; archive the old one.
 

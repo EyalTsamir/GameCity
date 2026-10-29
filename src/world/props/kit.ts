@@ -280,9 +280,22 @@ export function planter(k: Kit, rng: Rng, round: boolean, green?: GreenKit): voi
 export function bikeLite(k: Kit, color: string): void {
   const sh = k.sh;
   const r = 0.33;
-  // tyres as open rings (spokes read as see-through)
+  // tyres: a ring of 10 tube segments with a hub and three spoke bars (F4 bug 4: the open-cylinder band was seen
+  // edge-on from the side, so the rack bikes had no wheels)
   k.m('#1e1f21', 'rubber');
-  for (const x of [-0.52, 0.52]) sh.push().local(x, r, 0, Math.PI / 2, 0, 0).cyl(0, -0.025, 0, r, r, 0.05, 8, 0, false).pop();
+  for (const x of [-0.52, 0.52]) {
+    for (let i = 0; i < 10; i++) {
+      const a0 = (i / 10) * TAU,
+        a1 = ((i + 1) / 10) * TAU;
+      sh.tube(x + Math.cos(a0) * r, r + Math.sin(a0) * r, 0, x + Math.cos(a1) * r, r + Math.sin(a1) * r, 0, 0.022, 0.022, 4);
+    }
+    k.m('#a9aeb2', 'steel');
+    for (let i = 0; i < 3; i++) {
+      const a = (i / 3) * Math.PI + 0.3;
+      sh.tube(x - Math.cos(a) * (r - 0.03), r - Math.sin(a) * (r - 0.03), 0, x + Math.cos(a) * (r - 0.03), r + Math.sin(a) * (r - 0.03), 0, 0.004, 0.004, 3);
+    }
+    k.m('#1e1f21', 'rubber');
+  }
   const R = [-0.52, r],
     C = [-0.02, 0.3],
     S = [-0.17, 0.82],

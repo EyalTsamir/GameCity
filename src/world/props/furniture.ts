@@ -10,6 +10,7 @@ import { GeoSink, Shaper } from '../vegetation/geo';
 import type { Rng } from '../../core/rng';
 import type { LampStyle } from './layout';
 import { boltY, boltZ, cbox, lathe, pixelText, poly, ring } from './shapes';
+import { coverBackDraw, coverDraw, kioskSignDraw, phoneSignDraw, type Printer } from './print';
 
 export const MAT = {
   paint: [0.5, 0.25],
@@ -558,8 +559,10 @@ export function phonebox(k: Kit, g?: Kit): void {
     sh.box(0, 2.13, z + 0.01, 0.86, 0.26, 0.06, 1);
     k.e('#f4f1e8', '#fff1d6', 1.6);
     sh.box(0, 2.15, z + 0.045, 0.6, 0.11, 0.012, 0);
-    k.m('#1c1c1c', 'paint');
-    for (let i = 0; i < 9; i++) sh.box(-0.24 + i * 0.06, 2.15, z + 0.052, 0.035, 0.05, 0.004, 0);
+    if (!printer?.quad(sh, 'pb:TELEPHONE', 0, 2.15, z + 0.0515, 0.6, 0.11, 240, 44, phoneSignDraw(), 1.2)) {
+      k.m('#1c1c1c', 'paint');
+      for (let i = 0; i < 9; i++) sh.box(-0.24 + i * 0.06, 2.15, z + 0.052, 0.035, 0.05, 0.004, 0);
+    }
     if (side === 0) {
       // door handle (the front is the door)
       k.m('#2a2a2a', 'iron');
@@ -571,7 +574,8 @@ export function phonebox(k: Kit, g?: Kit): void {
   }
   // panes (one per side, behind the bars)
   if (g) {
-    g.m('#c3d3da', 'glass');
+    // a dark neutral tint: two light panes (front + back) at 0.42 opacity read as milk glass and hid the phone
+    g.m('#4d5a60', 'glass');
     g.sh.m.copy(sh.m);
     g.sh.local(0, 0, 0);
     for (let side = 0; side < 4; side++) {
@@ -631,7 +635,7 @@ export function phonebox(k: Kit, g?: Kit): void {
  * depth (counter with paper stacks, shelves of covers inside, the roll shutter coiled in its box above),
  * wire magazine racks with tilted covers on both sides, an overhanging roof with fascia, a lit sign.
  */
-const MASTHEADS = ['STYLE', 'AUTO', 'GOLF', 'TIME', 'CHEF', 'HOME', 'SPORT', 'KIDS', 'TECH', 'FILM', 'VOGA', 'NEWS', 'BIKE', 'CASA'];
+const MASTHEADS = ['STYLE', 'AUTO', 'GOLF', 'TIME', 'CHEF', 'HOME', 'SPORT', 'KIDS', 'TECH', 'FILM', 'VOGA', 'NEWS', 'BIKE', 'CASA', 'GARDEN', 'YACHT', 'MOTOR', 'WOMAN', 'PUZZLE', 'TRAVEL', 'MUSIC', 'HEALTH', 'GAMES', 'FARM'];
 const SKIN = ['#e9b99a', '#c98f6a', '#8d5a3b', '#f1cdb4'];
 
 /**
@@ -639,9 +643,32 @@ const SKIN = ['#e9b99a', '#c98f6a', '#8d5a3b', '#f1cdb4'];
  * a car / a dish), the masthead in a contrasting colour across the top, cover lines and a price corner.
  * plain = a cover behind others (only its colour and masthead band show).
  */
-function cover(k: Kit, rng: Rng, w: number, h: number, plain = false): void {
+/** printed covers / sign lettering (props/print.ts); null = pixel-block lettering (low tier, ?noprint) */
+let printer: Printer | null = null;
+export function setPrinter(p: Printer | null): void {
+  printer = p;
+}
+
+function cover(k: Kit, rng: Rng, w: number, h: number, plain = false, title?: string): void {
   const sh = k.sh,
     S = 1 | 2 | 4 | 16 | 32;
+  if (printer) {
+    // one issue per title: paper, ink, photo and kind follow from the title, so a stack reads as copies
+    const t = title ?? rng.pick(MASTHEADS);
+    let hh = 7;
+    for (let i = 0; i < t.length; i++) hh = (hh * 31 + t.charCodeAt(i)) >>> 0;
+    const paper = ['#f4f1ea', '#e63946', '#1d3557', '#f2c230', '#222426', '#e8649a', '#2a9d8f', '#f4a261'][hh % 8];
+    const light = paper === '#f4f1ea' || paper === '#f2c230' || paper === '#f4a261';
+    const ink = light ? ['#c62828', '#1d1f22', '#1d3557'][(hh >>> 3) % 3] : paper === '#1d3557' || paper === '#222426' ? ['#ffffff', '#f2c230'][(hh >>> 3) % 2] : '#ffffff';
+    const photo = ['#9fc3d9', '#d9c3a5', '#5b7c99', '#c7d8b5', '#e7d6c9', '#3a3f55'][(hh >>> 5) % 6];
+    k.m(paper, 'plastic');
+    sh.box(0, 0, 0.004, w, h, 0.008, 8);
+    const ok = plain
+      ? printer.quad(sh, `cb:${t}`, 0, 0, 0.0085, w, h, 72, 96, coverBackDraw(t, paper, ink))
+      : printer.quad(sh, `cf:${t}`, 0, 0, 0.0085, w, h, 96, 128, coverDraw(t, paper, ink, photo, (hh >>> 8) % 3));
+    if (ok) return;
+    sh.box(0, 0, 0.0084, w, h, 0.0002, S);
+  }
   const paper = rng.pick(['#f4f1ea', '#e63946', '#1d3557', '#f2c230', '#222426', '#e8649a', '#2a9d8f', '#f4a261']);
   const ink = paper === '#f4f1ea' || paper === '#f2c230' || paper === '#f4a261' ? rng.pick(['#c62828', '#1d1f22', '#1d3557']) : rng.pick(['#ffffff', '#f2c230']);
   k.m(paper, 'plastic');
@@ -687,7 +714,7 @@ function cover(k: Kit, rng: Rng, w: number, h: number, plain = false): void {
   }
   // masthead across the top, cover lines on the left, price corner
   k.m(ink, 'plastic');
-  const t = rng.pick(MASTHEADS),
+  const t = title ?? rng.pick(MASTHEADS),
     px = Math.min(h * 0.045, (w * 0.9) / (t.length * 4 - 1));
   pixelText(sh, t, 0, h / 2 - px * 3.4, 0.0096, px, 0.0006, true);
   for (let i = 0; i < 3; i++) sh.box(-w * 0.18, py + ph * 0.3 - i * h * 0.07, 0.0096, w * (0.42 - i * 0.07), h * 0.025, 0.0006, S);
@@ -747,6 +774,13 @@ export function newsstand(k: Kit, rng: Rng): void {
   sh.box(0, 1.65 - drop, 0.515, 1.52, 0.03, 0.03, 0);
   sh.box(0, 1.62 - drop, 0.535, 0.16, 0.015, 0.015, 0);
   // wire magazine racks on both sides: tiered trays with a front wire, covers stacked and leaning back
+  // each stack is one title (as on a real rack); no title twice on the stand (F4, judge 2 "repeated titles")
+  const titles = MASTHEADS.slice();
+  for (let i = titles.length - 1; i > 0; i--) {
+    const j = rng.int(0, i);
+    [titles[i], titles[j]] = [titles[j], titles[i]];
+  }
+  let ti = 0;
   for (const sx of [-1, 1]) {
     sh.push().local(sx * 0.9, 0, -0.05, 0, (sx * Math.PI) / 2);
     for (let r = 0; r < 3; r++) {
@@ -758,9 +792,10 @@ export function newsstand(k: Kit, rng: Rng): void {
       for (const x of [-0.5, -0.17, 0.17, 0.5]) sh.box(x, y + 0.03, 0.17, 0.008, 0.06, 0.008, 0);
       for (let c = 0; c < 3; c++) {
         const n = rng.int(2, 4);
+        const tt = titles[ti++ % titles.length];
         for (let j = 0; j < n; j++) {
           sh.push().local(-0.33 + c * 0.33 + rng.range(-0.015, 0.015), y + 0.15, 0.05 + j * 0.018, -0.2 + j * 0.03);
-          cover(k, rng, 0.24, 0.3, j < n - 1);
+          cover(k, rng, 0.24, 0.3, j < n - 1, tt);
           sh.pop();
         }
       }
@@ -812,10 +847,12 @@ export function newsstand(k: Kit, rng: Rng): void {
   k.e('#f2ead6', '#ffe2a8', 1.2);
   sh.box(0, 1.99, 0.527, 1.48, 0.24, 0.004, 1 | 4);
   const title = rng.pick(['NEWS', 'PRESS', 'KIOSK', 'TABAC']);
+  const strap = rng.pick(['PAPERS & MAGAZINES', 'DAILY PAPERS', 'MAGAZINES & SWEETS']);
+  if (printer?.quad(sh, `ks:${title}:${strap}`, 0, 1.99, 0.5295, 1.48, 0.24, 320, 52, kioskSignDraw(title, strap), 0.9)) return;
   k.e('#b8322c', '#ff6a50', 0.8);
   pixelText(sh, title, 0, 2.02, 0.529, 0.028, 0.003, true);
   k.e('#2c2c2c', '#3a3a3a', 0.2);
-  pixelText(sh, rng.pick(['PAPERS & MAGAZINES', 'DAILY PAPERS', 'MAGAZINES & SWEETS']), 0, 1.92, 0.529, 0.008, 0.0012);
+  pixelText(sh, strap, 0, 1.92, 0.529, 0.008, 0.0012);
 }
 
 /**
@@ -977,14 +1014,16 @@ export function bikeRack(k: Kit, rng: Rng): void {
     sh.tube(x - 0.22, 0.74, 0, x + 0.22, 0.74, 0, 0.025, 0.025, 5);
     sh.tube(x + 0.22, 0.74, 0, x + 0.32, 0.62, 0, 0.025, 0.025, 5);
   }
-  const n = rng.int(0, 3);
-  const used = new Set<number>();
-  for (let i = 0; i < n; i++) {
-    const h = rng.int(0, 2);
-    if (used.has(h)) continue;
-    used.add(h);
-    const side = rng.chance(0.5) ? 1 : -1;
-    sh.push().local(hoops[h], 0, side * 0.2, rng.range(-0.05, 0.05) * side, rng.chance(0.5) ? 0 : Math.PI, 0.08 * side);
+  // which hoops hold a bike: none, one, or both end hoops with the bikes on opposite sides (two bikes on the same
+  // side of neighbouring hoops would pass through each other)
+  const PATS = [[], [1], [0], [2], [0, 2], [0, 2], [1]];
+  const pat = PATS[rng.int(0, PATS.length - 1)];
+  const side0 = rng.chance(0.5) ? 1 : -1;
+  for (const h of pat) {
+    const side = h === 2 && pat.length > 1 ? -side0 : side0;
+    // a bike (±0.85 m long) on an end hoop leans with that hoop near its back wheel, so it stays inside the rack's
+    // 2.8 m slot instead of standing in the neighbouring planter (F4 bug 4)
+    sh.push().local(hoops[h] * 0.6, 0, side * 0.2, rng.range(-0.05, 0.05) * side, rng.chance(0.5) ? 0 : Math.PI, 0.08 * side);
     bike(k, rng.pick(BIKE_COLS));
     sh.pop();
     // locked to the hoop: a D-lock round the upright and the down tube (shackle + lock body), or a cable

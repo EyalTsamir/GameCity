@@ -357,8 +357,19 @@ export function genTower(g: Gen): void {
       if (s === FRONT && shopName) {
         const nm = shopName;
         const rr = g.atlas.add(`dshop:${nm}`, 256, 40, boardSign(nm.toUpperCase(), { bg: '#20262c', fg: '#f4f1ea', font: '"Segoe UI", Arial, sans-serif', weight: '600', glow: 0.9, glowColor: '#ffffff' }));
-        const w = Math.min(6, sg.L * 0.4);
-        signOnSide(g, sg, sg.L * 0.25 - w / 2, sg.L * 0.25 + w / 2, arcade ? 0.085 : 0.135, gH - 0.5, gH - 0.05, rr);
+        let w = Math.min(6, sg.L * 0.4);
+        let uc = sg.L * 0.25;
+        if (arcade) {
+          // the arcade columns stand on the outer line (inset 1.6 m): hang the board in the bay between two
+          // columns so no column cuts the name
+          const Lo = sg.L + 3.2;
+          const n = Math.max(2, Math.round(Lo / 4.5));
+          const sp = Lo / n;
+          const k = Math.max(0, Math.min(n - 1, Math.floor((uc + 1.6) / sp)));
+          uc = (k + 0.5) * sp - 1.6;
+          w = Math.min(w, sp - 1.0);
+        }
+        signOnSide(g, sg, uc - w / 2, uc + w / 2, arcade ? 0.085 : 0.135, gH - 0.5, gH - 0.05, rr);
       }
     }
     if (arcade) {
