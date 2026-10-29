@@ -1,4 +1,39 @@
-# Render-performance pass (traffic + pedestrians, then buildings)
+# PERF — local GPU round (Adreno X1-45, 1920x1025): smooth, no hitches
+
+Branch `claude/pensive-gates-bim12i`. Budget file: `perf-results.txt` (repo root). Earlier perf rounds are kept below
+("Earlier round: render-performance pass").
+
+## Resume here
+- Baseline measured (see perf-results.txt). Fix list in priority order is below; the first unchecked item is next.
+- A frozen copy of the round's starting code (8718d0f) can be served for same-run before/after:
+  `git worktree add --detach <dir> 8718d0f`, junction its `node_modules` to this repo's, then
+  `node node_modules/vite/bin/vite.js --config vite.base.config.mjs` (port 5174, own deps cache) and pass
+  `--url http://127.0.0.1:5174/` to perf.mjs / hitch.mjs / drawprof.mjs.
+
+## Tools (new this round, all in scripts/, all lock-serialised)
+- `perf.mjs --views "a;name=x,y,z,d,yaw,pitch" --hours 12,21.5 --gpu 1` — uncapped ms/frame for several views in ONE
+  page load, plus per-pass GPU ms from timer queries (shadow / scene / refl = ctx.scene with another camera / post).
+- `drawprof.mjs` — every main-view draw call wrapped in a TIME_ELAPSED query, ranked (read the ranking, not the sum:
+  on this tiler ~10–20 % of the scene pass is not attributable to single draws).
+- `hideprof.mjs` — marginal cost by hiding a target at runtime (object / name prefix, or `js:label=apply|restore`
+  code for a uniform A/B): the drop of the whole frame incl. shadow casting and early-z effects.
+- `hitch.mjs` — what a viewer sees with vsync: every frame interval per view x hour (boot, arrival after a camera cut,
+  steady, `--fly s` camera flights): mean / p99 / max, jank > 25 ms, hitch > 50 ms, freeze > 100 ms, long tasks,
+  GC drops, allocation rate, shader programs compiled during the window (names).
+- `soak.mjs` now also records the frame intervals per sample window (same counters).
+- `framerec.mjs` — the shared in-page instruments.
+
+## Views
+overview (POI) · street = `5,1.5,-65,9,0,6` (downtown at eye level) · market = `27.5,1,78.5,16,200,28` ·
+harbor (POI) · platform = `-10,1.4,-146.3,6,60,8` (station platform, eye level); 12:00 and 21:30.
+
+## Log
+
+
+---
+
+# Earlier round: render-performance pass
+
 
 Owner: graphics perf engineer (render side of traffic, pedestrians, buildings). Sim logic untouched.
 

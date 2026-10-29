@@ -25,8 +25,11 @@ export type Updater = (dt: number, ctx: CityContext) => void;
  * outweighs the frustum-culling gain of splitting in the wide views, so everything shares ONE
  * static mesh. (Return per-area keys here to split again.)
  */
-export function regionOf(_x: number, _z: number): string {
-  return 'static';
+/** spatial cell of a landmark origin: the static and detail meshes are split per cell so the frustum (and, for the
+ *  detail meshes, the LOD distance) can drop whole cells — one city-wide mesh was drawn in full from every view */
+export const REGION_CELL = 150;
+export function regionOf(x: number, z: number): string {
+  return `${Math.floor(x / REGION_CELL)}_${Math.floor(z / REGION_CELL)}`;
 }
 
 export class Env {
@@ -39,8 +42,10 @@ export class Env {
   readonly T: Kit;
   /** ornament builder (receives clock / flag / rose / stained-glass primitives of the static kits) */
   readonly O: Kit;
-  /** detail builder: small trims of the static kits, collapsed beyond ~100 m (distance LOD) */
-  readonly D: Kit;
+  /** detail builder of the current region: small trims of the static kits, collapsed beyond ~100 m (distance LOD) */
+  D: Kit;
+  /** per-region detail builders (same keys as `regions`) */
+  readonly details = new Map<string, MeshBuilder>();
   readonly glows: GlowPoint[] = [];
   readonly atlas = new SignAtlas(1024, 1536);
   readonly picks: PickTarget[] = [];
@@ -62,8 +67,8 @@ export class Env {
     this.L = new Kit(new MeshBuilder(true));
     this.T = new Kit(new MeshBuilder(false));
     this.O = new Kit(new MeshBuilder(false));
-    this.D = new Kit(new MeshBuilder(true));
     this.S = this.region('mideast');
+    this.D = new Kit(this.S.b.detail!);
   }
 
   region(key: string): Kit {
@@ -73,7 +78,9 @@ export class Env {
       // ornament patterns (clock / flag / rose / stained glass) go to the kinetic mesh, whose
       // shader compiles the full pattern set anyway — keeps the static program lean, no extra draw
       b.ornament = this.K.b;
-      b.detail = this.D.b;
+      const d = new MeshBuilder(true);
+      this.details.set(key, d);
+      b.detail = d;
       this.regions.set(key, b);
     }
     return new Kit(b);
@@ -82,6 +89,7 @@ export class Env {
   /** Start a landmark: local origin at world (x, y, z), local +Z facing yaw. */
   begin(x: number, y: number, z: number, yaw = 0): void {
     this.S = this.region(regionOf(x, z));
+    this.D = new Kit(this.S.b.detail!);
     for (const k of [this.S, this.K, this.L, this.T, this.O, this.D]) {
       k.b.setFrame(x, y, z, yaw);
       k.b.anim = null;

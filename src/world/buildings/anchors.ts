@@ -151,6 +151,8 @@ export interface BuildingsService {
   /** diagnostics: 0 off, 1 weathering mask, 2 wall-quad info */
   setDebug(n: number): void;
   houses(): unknown;
+  /** facade shader uniforms (perf harness: runtime A/B of uWinRefl, uWinDepth, uWallRelief …) */
+  uniforms: Record<string, { value: unknown }>;
 }
 
 /** Module-level collector (reset per module creation). */

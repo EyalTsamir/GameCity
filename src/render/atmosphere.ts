@@ -63,11 +63,13 @@ float atmOD(float ya, float yb, float t, float base, float k) {
   float yf = thAtmo[4].w;
   float o = base - yf;
   float a = ya - yf, b = yb - yf;
+  // one exit (ANGLE's HLSL backend warns X4000 "potentially uninitialized" on an early return here)
+  float od;
   if (a * b < 0.0) {
     float s = a / (a - b);
-    return atmOD1(abs(a) - o, -o, t * s, k) + atmOD1(-o, abs(b) - o, t * (1.0 - s), k);
-  }
-  return atmOD1(abs(a) - o, abs(b) - o, t, k);
+    od = atmOD1(abs(a) - o, -o, t * s, k) + atmOD1(-o, abs(b) - o, t * (1.0 - s), k);
+  } else od = atmOD1(abs(a) - o, abs(b) - o, t, k);
+  return od;
 }
 // glow of the sunlit haze around the sun (broad + tight lobe); the dome adds the same above the horizon
 vec3 thSunLobe(vec3 V) {

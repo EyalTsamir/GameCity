@@ -246,6 +246,16 @@ async function boot(): Promise<void> {
     frameCount++;
     if (frameCount === 2) hideLoading();
   };
+  // shader warm-up behind the loading screen (?nowarmup to skip): every program the city will ever use is
+  // compiled now — objects that only show up later (night market, glows, LOD levels, near sets, far views) would
+  // otherwise compile on their first draw and stall that frame by 50–300 ms
+  if (!params.has('nowarmup')) {
+    setLoading('Warming up…', 0.98);
+    await nextFrame();
+    const t0 = performance.now();
+    warmUp(ctx);
+    if (debug.enabled) console.info(`[boot] warm-up ${(performance.now() - t0).toFixed(0)} ms, ${renderer.info.programs?.length ?? 0} programs`);
+  }
   renderer.setAnimationLoop(loop);
 
   const onResize = () => {
@@ -329,6 +339,33 @@ function reportFrameError(module: string, err: unknown): void {
   }
   frameErrors.push({ module, error: msg, count: 1 });
   console.error(`[frame] ${module}:`, err);
+}
+
+/**
+ * Render one frame with every object drawn (hidden ones shown, culling off) through the real pipeline, so the
+ * main-view, shadow-pass, reflection and post programs are all compiled with the render targets they are used with
+ * (compile() alone would build main-view variants for the screen target). The frame is never shown.
+ */
+function warmUp(ctx: CityContext): void {
+  const forced: [THREE.Object3D, boolean, boolean][] = [];
+  ctx.scene.traverse((o) => {
+    if (!o.visible || o.frustumCulled) {
+      forced.push([o, o.visible, o.frustumCulled]);
+      o.visible = true;
+      o.frustumCulled = false;
+    }
+  });
+  try {
+    ctx.services.postfx?.warmUp?.();
+    ctx.render(0);
+  } catch (err) {
+    reportFrameError('warm-up', err);
+  } finally {
+    for (const [o, v, f] of forced) {
+      o.visible = v;
+      o.frustumCulled = f;
+    }
+  }
 }
 
 /** Place the camera directly (used before the camera module takes over). */

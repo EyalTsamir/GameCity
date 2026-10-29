@@ -224,6 +224,7 @@ export default function create(ctx: CityContext): CityModule {
   let step: QualityStep;
   /** world lens: blur too small to see this frame → the DOF passes are skipped */
   let lensIdle = false;
+  let warmNext = false;
   let dofWanted = true;
 
   const applyEnabled = () => {
@@ -332,6 +333,9 @@ export default function create(ctx: CityContext): CityModule {
     },
     softDepth(): SoftDepth | null {
       return softDepth.texture && enabledAll ? softDepth : null;
+    },
+    warmUp() {
+      warmNext = true;
     },
   };
   // the composer's "stable" depth target is blitted right after the RenderPass every frame; during the
@@ -495,12 +499,26 @@ export default function create(ctx: CityContext): CityModule {
       if (c.distanceFalloff !== f) c.distanceFalloff = f;
     }
 
+    // boot warm-up frame (main.ts warmUp): every optional pass runs once, so its programs compile behind the
+    // loading screen instead of on the first close-up / low sun (DOF passes alone stalled ~0.3 s)
+    const warm = warmNext;
+    warmNext = false;
+    const keepShafts = shafts ? shafts.active : false;
+    if (warm) {
+      tilt.enabled = true;
+      if (shafts) shafts.active = true;
+    }
+
     // the whole frame's GPU time (shadow map + scene + post), read back asynchronously
     gpuTimer.poll(gpuSample);
     gpuTimer.begin();
 
     composer.render(realDt);
     gpuTimer.end();
+    if (warm) {
+      tilt.enabled = dofWanted && !lensIdle;
+      if (shafts) shafts.active = keepShafts;
+    }
     // what softDepth() hands out during the next frame
     const sd = (composer as unknown as { stableDepthTexture: THREE.Texture | null }).stableDepthTexture;
     if (sd) {

@@ -282,6 +282,7 @@ export default function create(ctx: CityContext): CityModule {
       mats.uniforms.uBhDebug.value = n;
     },
     houses: () => houseLog,
+    uniforms: mats.uniforms,
   };
   ctx.services.buildings = service;
 

@@ -42,8 +42,9 @@ export default function create(ctx: CityContext): CityModule {
 
   const triBy: Record<string, number> = {};
   const totalTris = () => {
-    let t = env.K.b.triangleCount + env.L.b.triangleCount + env.T.b.triangleCount + env.O.b.triangleCount + env.D.b.triangleCount;
+    let t = env.K.b.triangleCount + env.L.b.triangleCount + env.T.b.triangleCount + env.O.b.triangleCount;
     for (const b of env.regions.values()) t += b.triangleCount;
+    for (const b of env.details.values()) t += b.triangleCount;
     return t;
   };
   // perf diagnostics: ?lmnokinds=stadium,townhall,… skips those generators
@@ -217,12 +218,14 @@ export default function create(ctx: CityContext): CityModule {
     meshTris[name.replace('landmarks-', '')] = `${Math.round(t)}t/${geo.attributes.position.count}v` as unknown as number;
     return mesh;
   };
+  // static + detail meshes per REGION_CELL cell (frustum-culled; detail cells beyond the LOD distance are skipped)
+  const detailCells: THREE.Mesh[] = [];
   for (const [key, b] of env.regions) {
-    if (b.vertexCount === 0) continue;
-    addMesh(b.toGeometry(), mats.solid, `landmarks-${key}`, true, true);
+    if (b.vertexCount > 0) addMesh(b.toGeometry(), mats.solid, `landmarks-static-${key}`, true, true);
+    const d = env.details.get(key)!;
+    if (d.vertexCount > 0) detailCells.push(addMesh(d.toGeometry(), mats.detail, `landmarks-detail-${key}`, false, true));
   }
   if (env.O.b.vertexCount > 0) addMesh(env.O.b.toGeometry(), mats.ornament, 'landmarks-ornament', true, true);
-  if (env.D.b.vertexCount > 0) addMesh(env.D.b.toGeometry(), mats.detail, 'landmarks-detail', false, true);
   if (env.K.b.vertexCount > 0) {
     const km = addMesh(env.K.b.toGeometry(), mats.kinetic, 'landmarks-kinetic', true, true, false);
     km.customDepthMaterial = mats.kineticDepth;
@@ -239,7 +242,7 @@ export default function create(ctx: CityContext): CityModule {
   if (lmskip.length) {
     for (const o of group.children) {
       const n = o.name;
-      const tag = n.startsWith('landmarks-fountain') ? 'fountain' : n === 'landmarks-kinetic' ? 'kinetic' : n === 'landmarks-lights' ? 'lights' : n === 'landmarks-signs' ? 'signs' : n === 'landmarks-glows' ? 'glows' : n === 'landmarks-crowd' ? 'crowd' : n === 'landmarks-players' || n === 'landmarks-ball' ? 'players' : n === 'landmarks-detail' ? 'detail' : 'static';
+      const tag = n.startsWith('landmarks-fountain') ? 'fountain' : n === 'landmarks-kinetic' ? 'kinetic' : n === 'landmarks-lights' ? 'lights' : n === 'landmarks-signs' ? 'signs' : n === 'landmarks-glows' ? 'glows' : n === 'landmarks-crowd' ? 'crowd' : n === 'landmarks-players' || n === 'landmarks-ball' ? 'players' : n.startsWith('landmarks-detail') ? 'detail' : 'static';
       if (lmskip.includes(tag)) o.visible = false;
     }
   }
@@ -305,9 +308,19 @@ export default function create(ctx: CityContext): CityModule {
   const nightZen = new THREE.Color('#0b1426');
   const nightHor = new THREE.Color('#1c2740');
 
+  // detail cells entirely beyond the LOD distance are not drawn at all (their vertices would only collapse)
+  const detailOn = !lmskip.includes('detail');
+  const cellSpheres = detailCells.map((m) => m.geometry.boundingSphere!);
+
   return {
     name: 'landmarks',
     frame(_realDt, c) {
+      const cp = c.camera.position;
+      const lod = mats.u.uDetailDist.value;
+      for (let i = 0; i < detailCells.length; i++) {
+        const sp = cellSpheres[i];
+        detailCells[i].visible = detailOn && cp.distanceTo(sp.center) - sp.radius < lod;
+      }
       const day = c.uniforms.uDaylight.value;
       const dusk = c.uniforms.uDusk.value;
       zen.copy(nightZen).lerp(dayZen, day);

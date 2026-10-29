@@ -317,11 +317,14 @@ export class CrowdRenderer {
     this.capacity = capacity;
     const pm = makePeopleMaterials();
     patchLampMaterial(pm.material);
+    patchLampMaterial(pm.far);
+    // ?pedfar=0: tiny / pin figures with the full shader (A/B of the far variant)
+    const farMat = new URLSearchParams(location.search).get('pedfar') === '0' ? pm.material : pm.far;
     this.close = new Layer(4, pm.material, null, Math.min(capacity, 48));
     this.near = new Layer(0, pm.material, null, Math.min(capacity, 96));
     this.far = new Layer(1, pm.material, null, capacity);
-    this.tiny = new Layer(2, pm.material, null, capacity);
-    this.pin = new Layer(3, pm.material, null, capacity);
+    this.tiny = new Layer(2, farMat, null, capacity);
+    this.pin = new Layer(3, farMat, null, capacity);
     this.shadow = new Layer(2, makeInvisibleMaterial(), pm.depth, capacity);
     this.shadow.mesh.castShadow = true;
     this.shadow.mesh.receiveShadow = false;

@@ -969,6 +969,7 @@ const FRAG_COLOR = /* glsl */ `
       if (vPedPat < 1.5) st *= step(0.0, vPedS);
       pc = mix(pc, vec3(0.78, 0.78, 0.76), st);
     }
+#ifndef PED_FAR
     if (vPedFace.z > 4.5) {
       // LONG HAIR ENDS: over the last ~7 cm the sheet breaks into separate locks (gaps open between the
       // strand clumps, each clump ends at its own length, fine strands straggle), and it thins out along its
@@ -1013,12 +1014,14 @@ const FRAG_COLOR = /* glsl */ `
     }
     else if (abs(vPedReg - ${R.HAIR}.0) < 0.5 || abs(vPedReg - ${R.BEARD}.0) < 0.5) pc *= pedStrands(vPedRest);
     else if (vPedReg > 0.5 && vPedReg < 3.5 || abs(vPedReg - ${R.OUTER}.0) < 0.5 || abs(vPedReg - ${R.TAIL}.0) < 0.5) pc = pedFabric(pc, vPedReg, vPedH, vPedS);
+#endif
     diffuseColor.rgb *= pc;
   }
 `;
 
 /** hair: strand ridges tilt the normal across the strands (view space; fades where it would alias) */
 const HAIR_NORMAL = /* glsl */ `
+#ifndef PED_FAR
   if (abs(vPedReg - ${R.HAIR}.0) < 0.5) {
     // strand ridges across the flow as a derivative bump (screen-space height gradient), so the shading
     // follows the strands wherever they run (combed from the whorl on the cap, hanging on sheets)
@@ -1047,9 +1050,11 @@ const HAIR_NORMAL = /* glsl */ `
     pedHairT = dot(hT, hT) > 1e-20 ? normalize(hT) : vec3(0.0);
     pedHairSh = (pedN1(hc2) - 0.5) * 0.35 * hk2 + (pedN1(hf.y * 7.0 + ha * 3.0) - 0.5) * 0.15;
   }
+#endif
 `;
 /** fabric: folds, seams and weave tilt the normal (screen-space derivative bump of pedFabH) */
 const FABRIC_NORMAL = /* glsl */ `
+#ifndef PED_FAR
   if (pedFabK > 0.0) {
     vec3 fsx = dFdx(-vViewPosition), fsy = dFdy(-vViewPosition);
     vec3 fr1 = cross(fsy, normal), fr2 = cross(normal, fsx);
@@ -1057,6 +1062,7 @@ const FABRIC_NORMAL = /* glsl */ `
     vec3 fgrad = sign(fdet) * (dFdx(pedFabH) * fr1 + dFdy(pedFabH) * fr2);
     normal = normalize(abs(fdet) * normal - fgrad);
   }
+#endif
 `;
 /** Lambert direct light with per-region wrap (skin, hair) and a faint Blinn sheen (hair, shoes). */
 const LAMBERT_PEOPLE = /* glsl */ `
@@ -1126,6 +1132,9 @@ const HAT_B = [
 
 export interface PersonMaterials {
   material: THREE.MeshLambertMaterial;
+  /** tiny / pin levels (figures ≲ 28 px): the same shader with the hair, face, shoe and fabric detail compiled out —
+   *  all of it fades to nothing below a few pixels, but the full program cost 5–7 ms on the overview's crowd */
+  far: THREE.MeshLambertMaterial;
   depth: THREE.MeshDepthMaterial;
 }
 
@@ -1171,8 +1180,9 @@ function injectVertex(src: string, normals: boolean): string {
   return s;
 }
 
-export function makePeopleMaterials(): PersonMaterials {
+function peopleMaterial(far: boolean): THREE.MeshLambertMaterial {
   const material = new THREE.MeshLambertMaterial();
+  if (far) material.defines = { PED_FAR: '' };
   material.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, sharedUniforms());
     shader.uniforms.uPedNight = globalUniforms.uNight;
@@ -1185,7 +1195,13 @@ export function makePeopleMaterials(): PersonMaterials {
       .replace('#include <lights_lambert_pars_fragment>', LAMBERT_PEOPLE)
       .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n  totalEmissiveRadiance += diffuseColor.rgb * 0.07 * uPedNight;');
   };
-  material.customProgramCacheKey = () => 'tinyhaven-people-4';
+  material.customProgramCacheKey = () => (far ? 'tinyhaven-people-4-far' : 'tinyhaven-people-4');
+  return material;
+}
+
+export function makePeopleMaterials(): PersonMaterials {
+  const material = peopleMaterial(false);
+  const far = peopleMaterial(true);
   const depth = new THREE.MeshDepthMaterial();
   depth.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, sharedUniforms());
@@ -1193,7 +1209,7 @@ export function makePeopleMaterials(): PersonMaterials {
     shader.fragmentShader = shader.fragmentShader.replace('#include <common>', `#include <common>\n${FRAG_PARS}`).replace(/void main\(\)\s*\{/, (m) => `${m}\n${FRAG_FADE}`);
   };
   depth.customProgramCacheKey = () => 'tinyhaven-people-depth-2';
-  return { material, depth };
+  return { material, far, depth };
 }
 
 /** Main-pass material of the shadow proxy: draws nothing (the proxy only casts shadows). */

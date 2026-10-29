@@ -108,6 +108,8 @@ export interface Services {
     setFocus?(distance: number | null): void;
     /** previous frame's scene depth (soft particles; main view only): raw perspective depth unless `linear` */
     softDepth?(): { texture: THREE.Texture; linear: boolean; near: number; far: number; width: number; height: number } | null;
+    /** run every optional pass (DOF, shafts) in the next frame: the boot warm-up compiles their programs */
+    warmUp?(): void;
   };
   traffic?: { count(): number; busCount(): number };
   pedestrians?: { count(): number };
