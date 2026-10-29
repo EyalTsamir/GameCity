@@ -12,6 +12,7 @@ import { wall, bays, moulding, Opening } from './facade';
 import { C, S, quoins, chimney, finial, dormer, wallLantern, flagpole, railing } from './parts';
 import type { Env } from './env';
 import { drawText, signQuad } from './signs';
+import { boxHunt } from '../../core/boxhunt';
 
 export function genTownHall(env: Env, lot: Lot): void {
   const fp = lot.footprint;
@@ -143,6 +144,7 @@ export function genTownHall(env: Env, lot: Lot): void {
   K.coreBox(plaster, 2 * HW - 1.4, y3, coreF - coreB, 0, 0, (coreF + coreB) / 2);
   for (const s of [-1, 1]) K.coreBox(plaster, HW - 0.7 - RX, y3, zF - 0.5 - coreF, s * (RX + (HW - 0.7 - RX) / 2), 0, (zF - 0.5 + coreF) / 2);
   K.coreBox(plaster, 2 * RX, y3 - 4.5, zR - 0.6 - coreF, 0, 4.5, (zR - 0.6 + coreF) / 2);
+  if (boxHunt(env.ctx, 'interiors')) townhallInterior(env, { HW, RX, coreB, coreF, zF, y1, y2 });
 
   // ── centre bay: loggia, balcony, tall windows, crest, lettering
   {
@@ -467,4 +469,119 @@ export function genTownHall(env: Env, lot: Lot): void {
     const open = h >= 8 && h < 18;
     return ['Seat of the city council · built 1902', open ? 'Open now · closes 18:00' : 'Closed · opens 8:00', 'The bell rings every hour'];
   });
+}
+
+/**
+ * Box hunt (?nointeriors): the town hall furnished for the free camera — storey slabs (the hollow 13 m core read as
+ * a void), an entrance hall with marble columns, a chequered floor, a red runner from the loggia doors to the
+ * reception desk, painted portraits, benches, palms, flags and chandeliers; the council chamber upstairs with its
+ * long table, chairs, green carpet and a chandelier.
+ */
+function townhallInterior(env: Env, o: { HW: number; RX: number; coreB: number; coreF: number; zF: number; y1: number; y2: number }): void {
+  const { HW, RX, coreB, coreF, zF, y1, y2 } = o;
+  const D = env.D;
+  const iw = HW - 0.75;
+  const zb = coreB + 0.05,
+    zf = coreF - 0.05;
+  const zm = (zb + zf) / 2;
+  const dz = zf - zb;
+  const wood = M('#5a3820', PAT.PLANKS, 0.65);
+  const woodDark = M('#3b2414', PAT.PLAIN, 0.6);
+  const plasterC = M('#efe6d2', PAT.PLAIN, 0.9);
+  const marble = M('#e7e1d5', PAT.TILES, 0.4, 0, 0, 0, 0.8);
+  const colM = M('#d8cfbd', PAT.PLAIN, 0.4);
+  const gilt = S.gold();
+  const red = M('#7a1e22', PAT.PLAIN, 0.95);
+  // floors and ceilings: the centre between the cores, the wings out to the front wall
+  for (const yy of [0, y1 - 0.25, y2 - 0.25]) {
+    const m = yy === 0 ? marble : plasterC;
+    const t = yy === 0 ? 0.03 : 0.25;
+    D.box(m, iw * 2, t, dz, 0, yy, zm);
+    for (const s of [-1, 1]) D.box(m, iw - RX, t, zF - 0.55 - zf, s * (RX + (iw - RX) / 2), yy, (zf + zF - 0.55) / 2);
+  }
+  // first-floor boards on top of the slab
+  D.box(M('#7a5434', PAT.PLANKS, 0.7), iw * 2, 0.02, dz, 0, y1, zm);
+  // entrance hall: two rows of columns with bases and capitals
+  const colH = y1 - 0.25;
+  for (const x of [-13.5, -9, -4.5, 4.5, 9, 13.5])
+    for (const z of [zb + 2.2, zf - 2.2]) {
+      if (Math.abs(x) > iw - 0.5) continue;
+      D.box(colM, 0.7, 0.3, 0.7, x, 0, z);
+      D.cyl(colM, 0.24, 0.28, colH - 0.6, x, 0.3, z, 14);
+      D.box(colM, 0.66, 0.3, 0.66, x, colH - 0.3, z);
+    }
+  // runner from the loggia doors to the reception desk, the desk, two flags
+  D.box(red, 2.0, 0.012, dz - 1.6, 0, 0.03, zm + 0.8);
+  D.box(wood, 3.2, 1.0, 0.7, 0, 0, zb + 1.6);
+  D.box(woodDark, 3.4, 0.05, 0.85, 0, 1.0, zb + 1.6);
+  for (const s of [-1, 1]) {
+    D.cyl(gilt, 0.025, 0.03, 2.6, s * 2.4, 0, zb + 0.9, 6);
+    D.box(M(s > 0 ? '#1f4f8f' : '#c9a227', PAT.PLAIN, 0.9), 0.02, 1.1, 0.7, s * 2.4, 1.35, zb + 0.55);
+  }
+  // portraits on the back wall (painted: a dark ground, a lit face, a coat), benches below, palms in the corners
+  const portrait = env.atlas.add(64, 80, (g, w, h) => {
+    const gr = g.createLinearGradient(0, 0, 0, h);
+    gr.addColorStop(0, '#3a2a1c');
+    gr.addColorStop(1, '#1a120c');
+    g.fillStyle = gr;
+    g.fillRect(0, 0, w, h);
+    g.fillStyle = '#20232a';
+    g.beginPath();
+    g.ellipse(w / 2, h * 0.92, w * 0.42, h * 0.38, 0, 0, Math.PI * 2);
+    g.fill();
+    g.fillStyle = '#d9b394';
+    g.beginPath();
+    g.ellipse(w / 2, h * 0.4, w * 0.16, h * 0.16, 0, 0, Math.PI * 2);
+    g.fill();
+    g.fillStyle = '#efe8dc';
+    g.fillRect(w * 0.44, h * 0.56, w * 0.12, h * 0.08);
+  });
+  for (const x of [-12, -6.5, 6.5, 12]) {
+    if (Math.abs(x) > iw - 1) continue;
+    D.box(gilt, 1.25, 1.55, 0.06, x, 1.65, zb + 0.03);
+    signQuad(env.T, portrait, 1.0, 1.25, x, 2.42, zb + 0.07, 0, 0);
+    D.box(wood, 1.8, 0.05, 0.42, x, 0.45, zb + 0.35);
+    for (const e of [-0.8, 0.8]) D.box(woodDark, 0.06, 0.45, 0.4, x + e, 0, zb + 0.35);
+  }
+  for (const s of [-1, 1]) {
+    const px = s * (iw - 0.6);
+    D.cyl(M('#8a5a3a', PAT.PLAIN, 0.8), 0.28, 0.22, 0.55, px, 0, zb + 0.6, 10);
+    for (let k = 0; k < 6; k++) {
+      const a = (k / 6) * Math.PI * 2;
+      D.boxC(M('#3f6b35', PAT.PLAIN, 0.8), 0.18, 0.04, 1.0, px + Math.sin(a) * 0.35, 1.2, zb + 0.6 + Math.cos(a) * 0.35, 0.7, a, 0);
+    }
+  }
+  // chandeliers in the hall
+  for (const x of [-9, 0, 9]) {
+    D.box(woodDark, 0.025, 0.7, 0.025, x, colH - 0.7, zm);
+    D.torus(gilt, 0.5, 0.025, x, colH - 0.75, zm, 4, 18);
+    for (let k = 0; k < 6; k++) {
+      const a = (k / 6) * Math.PI * 2;
+      env.L.sphere(LM('#ffe0a8', LMODE.ALWAYS, 1.8, k * 0.31), 0.05, x + Math.sin(a) * 0.5, colH - 0.66, zm + Math.cos(a) * 0.5, 6, 4);
+    }
+  }
+  // council chamber upstairs: green carpet, the long table with chairs both sides, a chandelier, portraits
+  const fy = y1 + 0.02;
+  D.box(M('#2f5a3e', PAT.PLAIN, 0.95), 11, 0.012, Math.min(5, dz - 1.2), 0, fy, zm);
+  D.box(wood, 8.4, 0.07, 1.5, 0, fy + 0.72, zm);
+  for (const lx of [-3.9, 0, 3.9]) for (const lz of [-0.55, 0.55]) D.box(woodDark, 0.1, 0.72, 0.1, lx, fy, zm + lz);
+  for (let i = 0; i < 9; i++) {
+    const x = -3.6 + i * 0.9;
+    for (const s of [-1, 1]) {
+      const z = zm + s * 1.05;
+      D.box(red, 0.46, 0.06, 0.46, x, fy + 0.45, z);
+      D.box(woodDark, 0.46, 0.6, 0.06, x, fy + 0.48, z + s * 0.22);
+      for (const lx of [-0.19, 0.19]) for (const lz of [-0.19, 0.19]) D.box(woodDark, 0.04, 0.45, 0.04, x + lx, fy, z + lz);
+    }
+  }
+  D.torus(gilt, 0.8, 0.03, 0, y2 - 1.3, zm, 4, 24);
+  D.box(woodDark, 0.03, 1.0, 0.03, 0, y2 - 1.3, zm);
+  for (let k = 0; k < 10; k++) {
+    const a = (k / 10) * Math.PI * 2;
+    env.L.sphere(LM('#ffe0a8', LMODE.ALWAYS, 1.8, k * 0.29), 0.05, Math.sin(a) * 0.8, y2 - 1.22, zm + Math.cos(a) * 0.8, 6, 4);
+  }
+  for (const x of [-4, 0, 4]) {
+    D.box(gilt, 1.25, 1.55, 0.06, x, fy + 1.4, zb + 0.03);
+    signQuad(env.T, portrait, 1.0, 1.25, x, fy + 2.17, zb + 0.07, 0, 0);
+  }
 }
