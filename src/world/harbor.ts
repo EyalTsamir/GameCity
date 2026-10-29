@@ -20,7 +20,7 @@ import { rect, type P2, type Rect } from '../core/geom';
 import { QUAY_X, RIVER, WATER_LEVEL } from '../core/constants';
 import { HB, RIG } from './harbor/geo';
 import { createBeamMesh, createHarborMaterials, createGlowMesh, followCraneLamps, NMOB, type GlowPoint } from './harbor/material';
-import { buildBreakwater } from './harbor/breakwater';
+import { buildBreakwater, setArmourStones } from './harbor/breakwater';
 import { buildFishQuay, setQuayDetail } from './harbor/quay';
 import { buildCarouselRotating, buildCarouselStatic, buildPier, buildWheelRotating, buildWheelStatic, type WheelSpec } from './harbor/pier';
 import { buildFerryDock, lifeguardTower, scatterBeach, setBeachDetail } from './harbor/beach';
@@ -169,6 +169,7 @@ export default function create(ctx: CityContext): CityModule {
   const lhF = feats('lighthouse')[0];
   let lantern: THREE.Vector3 | null = null;
   if (bwF?.a && bwF.b) {
+    setArmourStones(boxHunt(ctx, 'armour'));
     const info = buildBreakwater(north, bwF.a, bwF.b, ground, ctx.rng('harbor-breakwater'), lhF ? { x: lhF.x, z: lhF.z, height: Number(lhF.params?.height ?? 24) } : null, glows);
     if (lhF) lantern = info.lantern;
     obstacles.push(rect(info.rootX, bwF.a.z - 8.5, bwF.b.x, bwF.a.z + 7.5));

@@ -474,6 +474,53 @@ export class HB {
     g.dispose();
   }
 
+  /**
+   * Quarried armour stone (box hunt): a chamfered block, jittered and cut by three fracture planes (flat broken
+   * faces), flat-shaded; vertices below the wet line `wetY` (world y) darkened and greened (wet rock, weed).
+   */
+  stone(cx: number, cy: number, cz: number, rx: number, ry: number, rz: number, rng: Rng, yaw = 0, wetY = -1e9): void {
+    const g = new THREE.BoxGeometry(2, 2, 2, 2, 2, 2);
+    const pos = g.getAttribute('position') as THREE.BufferAttribute;
+    const cuts: [THREE.Vector3, number][] = [];
+    for (let k = 0; k < 3; k++) cuts.push([new THREE.Vector3(rng.range(-1, 1), rng.range(-0.5, 1), rng.range(-1, 1)).normalize(), rng.range(0.62, 0.88)]);
+    const moved = new Map<string, [number, number, number]>();
+    for (let i = 0; i < pos.count; i++) {
+      const key = `${pos.getX(i).toFixed(2)},${pos.getY(i).toFixed(2)},${pos.getZ(i).toFixed(2)}`;
+      let p = moved.get(key);
+      if (!p) {
+        _a.set(pos.getX(i), pos.getY(i), pos.getZ(i));
+        _a.multiplyScalar(1 + 0.42 * (1.12 / _a.length() - 1));
+        _a.x += rng.range(-0.11, 0.11);
+        _a.y += rng.range(-0.11, 0.11);
+        _a.z += rng.range(-0.11, 0.11);
+        for (const [n, off] of cuts) {
+          const d = _a.dot(n);
+          if (d > off) _a.addScaledVector(n, off - d);
+        }
+        p = [_a.x, _a.y, _a.z];
+        moved.set(key, p);
+      }
+      pos.setXYZ(i, p[0], p[1], p[2]);
+    }
+    const f = g.toNonIndexed();
+    g.dispose();
+    f.scale(rx / 1.1, ry / 1.1, rz / 1.1);
+    f.rotateY(yaw);
+    f.translate(cx, cy, cz);
+    f.computeVertexNormals();
+    const base = this.count;
+    this.geo(f);
+    f.dispose();
+    for (let i = base; i < this.count; i++) {
+      const y = this.P[i * 3 + 1];
+      const w = Math.min(1, Math.max(0, (wetY + 0.35 - y) / 0.55));
+      if (w <= 0) continue;
+      this.C[i * 3] *= 1 - 0.5 * w;
+      this.C[i * 3 + 1] *= 1 - 0.36 * w;
+      this.C[i * 3 + 2] *= 1 - 0.52 * w;
+    }
+  }
+
   build(): THREE.BufferGeometry {
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.Float32BufferAttribute(this.P, 3));

@@ -1189,6 +1189,12 @@ function poster(k: Kit, t: (typeof POSTERS)[number], w: number, h: number): void
   sh.box(0, -h / 2 + 0.035, e(t.band, 0.0055), w, 0.07, 0.001, 1 | 4);
 }
 
+/** box hunt (?noshelterroof): bus shelters get a barrel roof on ribs instead of a flat slab */
+let SHELTER_ROOF = true;
+export function setShelterRoof(on: boolean): void {
+  SHELTER_ROOF = on;
+}
+
 export function busShelter(k: Kit, g: Kit, routeColor: string, rng: Rng): { glows: { x: number; y: number; z: number; size: number }[] } {
   const sh = k.sh;
   const gs = g.sh;
@@ -1204,6 +1210,43 @@ export function busShelter(k: Kit, g: Kit, routeColor: string, rng: Rng): { glow
   }
   sh.box(0, H - 0.04, zb, L, 0.08, 0.08, 0);
   sh.box(0, 0.12, zb, L, 0.06, 0.06, 0);
+  if (SHELTER_ROOF) {
+    // box hunt (?noshelterroof): a barrel roof — translucent panels on curved steel ribs, a route-coloured fascia
+    // and the lit strip along the open front, a gutter on the back edge
+    const z0 = zf - 0.27,
+      z1 = zb + 0.2;
+    const N = 5;
+    const arc = (t: number): [number, number] => [z0 + (z1 - z0) * t, H + 0.07 + 0.2 * (1 - (2 * t - 1) ** 2) - 0.06 * t];
+    for (let i = 0; i < N; i++) {
+      const [za, ya] = arc(i / N),
+        [zb2, yb] = arc((i + 1) / N);
+      const len = Math.hypot(zb2 - za, yb - ya) + 0.004;
+      const rx = -Math.atan2(yb - ya, zb2 - za);
+      g.m('#dfe9ec', 'glass');
+      gs.push().local(0, (ya + yb) / 2, (za + zb2) / 2, rx, 0, 0);
+      gs.box(0, 0, 0, L + 0.24, 0.025, len, 0);
+      gs.pop();
+      k.m('#4a5157', 'steel');
+      sh.push().local(0, (ya + yb) / 2 - 0.03, (za + zb2) / 2, rx, 0, 0);
+      for (let r = 0; r <= 4; r++) sh.box(-L / 2 - 0.1 + (r * (L + 0.2)) / 4, 0, 0, 0.05, 0.06, len, 0);
+      sh.pop();
+    }
+    const [zF, yF] = arc(0),
+      [zB, yB] = arc(1);
+    k.m(routeColor, 'paint');
+    sh.box(0, yF - 0.02, zF - 0.02, L + 0.34, 0.14, 0.05, 0);
+    k.e('#f6f2e8', '#fff1d6', 1.6);
+    sh.box(0, yF - 0.1, zF + 0.1, L - 0.2, 0.02, 0.08, 2);
+    k.m('#4a5157', 'steel');
+    sh.box(0, yB - 0.03, zB + 0.02, L + 0.34, 0.08, 0.1, 0);
+    sh.box(0, H - 0.01, zf + 0.12, L, 0.07, 0.07, 0);
+    // struts from the post heads up to the ribs
+    for (const zp of [zf + 0.12, zb]) {
+      const t = (zp - z0) / (z1 - z0);
+      const yr = arc(t)[1] - 0.06;
+      for (const x of [-L / 2, L / 2]) sh.box(x, (H + yr) / 2, zp, 0.06, yr - H + 0.02, 0.06, 0);
+    }
+  } else {
   // roof (slight slope down towards the road) + route-coloured fascia and lit strip along the open front
   sh.push().local(0, H + 0.06, (zf + zb) / 2 - 0.05, -0.05);
   k.m('#d4dce0', 'paint');
@@ -1215,6 +1258,7 @@ export function busShelter(k: Kit, g: Kit, routeColor: string, rng: Rng): { glow
   k.e('#f6f2e8', '#fff1d6', 1.6);
   sh.box(0, -0.055, -(zb - zf) / 2 + 0.05, L - 0.2, 0.02, 0.08, 2);
   sh.pop();
+  }
   // glass back panel + one glass end
   g.m('#cfe3ea', 'glass');
   gs.box(0, 1.3, zb, L - 0.1, 2.15, 0.03, 0);

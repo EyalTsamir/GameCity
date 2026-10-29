@@ -11,6 +11,12 @@ import { GLOW } from './material';
 
 export const BW = { crest: 1.5, half: 1.7, wallH: 1.1 } as const;
 
+/** box hunt (?noarmour): quarried armour blocks with a wet line instead of round low-poly blobs */
+let ARMOUR = true;
+export function setArmourStones(on: boolean): void {
+  ARMOUR = on;
+}
+
 const ROCKS = ['#8f877c', '#7d766d', '#9a9081', '#6f6a66', '#a39079', '#857d72'];
 const CONCRETE = '#c4c0b8';
 
@@ -102,7 +108,12 @@ export function buildBreakwater(
       for (let x = x0 + rng.range(0, step); x < x1 + 1.5; x += step * rng.range(0.85, 1.15)) {
         if (ground(x, zz) > yy + 0.4) continue; // inside the cliff
         const jz = rng.range(-0.35, 0.35) * side;
-        if (kind === 'rock') {
+        if (kind === 'rock' && ARMOUR) {
+          // box hunt: quarried blocks in a wider spread of sizes, a wet line at the water
+          const s = Math.min(r === 0 ? 0.85 : 9, 0.45 + 0.95 * Math.pow(rng.next(), 1.4)); // the top row stays clear of the walkway
+          b.color(ROCKS[rng.int(0, ROCKS.length - 1)]);
+          b.stone(x, yy - s * 0.15, zz + jz, s * rng.range(0.9, 1.3), s * rng.range(0.6, 0.85), s * rng.range(0.9, 1.25), rng, rng.range(0, 6.3), WATER_LEVEL + 0.2);
+        } else if (kind === 'rock') {
           const s = rng.range(0.55, 1.05);
           b.color(ROCKS[rng.int(0, ROCKS.length - 1)]);
           b.rock(x, yy - s * 0.15, zz + jz, s * rng.range(0.9, 1.3), s * rng.range(0.6, 0.85), s * rng.range(0.9, 1.25), rng, rng.range(0, 6.3));
@@ -139,7 +150,8 @@ export function buildBreakwater(
         } else {
           const s = rng.range(0.6, 1.1);
           b.color(ROCKS[rng.int(0, ROCKS.length - 1)]);
-          b.rock(px, y, pz, s * 1.2, s * 0.75, s * 1.1, rng, rng.range(0, 6.3));
+          if (ARMOUR) b.stone(px, y, pz, s * 1.2, s * 0.75, s * 1.1, rng, rng.range(0, 6.3), WATER_LEVEL + 0.2);
+          else b.rock(px, y, pz, s * 1.2, s * 0.75, s * 1.1, rng, rng.range(0, 6.3));
         }
       }
     }
