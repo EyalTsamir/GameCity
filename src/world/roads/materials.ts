@@ -218,6 +218,7 @@ vec2 rdStreet(vec2 p) {
 `;
 
 function inject(mat: THREE.MeshStandardMaterial, opts: { attrs: string; varyings: string; assign: string; pars: string; color: string; key: string; uniforms: Record<string, THREE.IUniform>; after?: string; emit?: string; nrm?: string }): void {
+  mat.userData.rdUniforms = opts.uniforms;
   mat.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, opts.uniforms, lampUniforms());
     shader.vertexShader = shader.vertexShader

@@ -361,7 +361,9 @@ vec3 rdHard(inout float rough) {
     // hand-laid (F3, ?nohandlaid): small units (< 1.3 m) are set by hand — courses wander a little, every stone
     // has its own length (jittered joints along the course), and the bond offset drifts from row to row.
     // Kerbs / gutters (curb frame) and large slabs stay machine-straight.
-    float hand = (uRdHand > 0.5 && frame < 1.5 && minS < 1.3) ? 1.0 : 0.0;
+    // (G2: only setts / pavers wander — sawn slabs (sidewalk flags, granite) keep straight courses; the wander on
+    // 0.6–1.2 m slabs read as wavy joints crossing square stones)
+    float hand = (uRdHand > 0.5 && frame < 1.5 && minS < 0.35) ? 1.0 : 0.0;
     float qy = q.y + hand * (nM.r - 0.5) * 0.5 * size.y;
     float row = floor(qy / size.y);
     float off = vV.z >= 0.0 ? mod(row, 2.0) * vV.z : rdHash(vec2(row, 3.7));
