@@ -2,7 +2,7 @@
 // Interactive test of the camera / UI / audio modules with real mouse & keyboard input.
 //
 //   node scripts/ui-test.mjs [--q "only=camera,ui,audio&camdebug"] [--out shots/uitest] [--url http://127.0.0.1:5174/] [--width 1280 --height 720] [--dpr 1.25]
-//                            [--steps intro,drag,pan,wheel,keys,poi,pois,follow,chase,kinds,building,dbl,aircraft,freecam,tour,help,places,
+//                            [--steps intro,drag,pan,wheel,keys,poi,pois,follow,chase,kinds,building,dbl,aircraft,freecam,explore,tour,help,places,
 //                                     sound,time,speed,labels,resize,sweep,tourwatch,walk]
 //
 // Full city: --q noidle (the default `only=camera,ui,audio&camdebug` tests the camera on a stand-in city).
@@ -28,7 +28,7 @@ const width = parseInt(args.width ?? '1280', 10);
 const height = parseInt(args.height ?? '720', 10);
 const dpr = parseFloat(args.dpr ?? '1');
 const q = args.q ?? 'only=camera,ui,audio&camdebug';
-const DEFAULT_STEPS = 'drag,pan,wheel,keys,poi,pois,follow,chase,kinds,building,dbl,aircraft,sweep,freecam,tour,help,places,sound,time,speed,labels,resize,walk';
+const DEFAULT_STEPS = 'drag,pan,wheel,keys,poi,pois,follow,chase,kinds,building,dbl,aircraft,sweep,freecam,explore,tour,help,places,sound,time,speed,labels,resize,walk';
 const wanted = new Set((args.steps ?? DEFAULT_STEPS).split(','));
 const intro = wanted.has('intro');
 const baseUrl = (args.url ?? 'http://127.0.0.1:5173/').replace(/\/?$/, '/'); // --url: another dev server (e.g. a baseline worktree)
@@ -956,7 +956,7 @@ try {
     const near = await st();
     await page.keyboard.press('KeyG');
     await settle(300);
-    step('free camera (G): full arm through buildings, closer zoom, no pops', Math.abs(s0.distance - 70) < 1.5 && near.distance < 11 && near.distance >= 2.5 && m.maxAccel < 6 && m.maxRelDistPerFrame < 0.15, {
+    step('free camera (G): full arm through buildings, closer zoom, no pops', Math.abs(s0.distance - 70) < 1.5 && near.distance < 2 && near.distance >= 0.45 && m.maxAccel < 6 && m.maxRelDistPerFrame < 0.15, {
       arm: Math.round(s0.distance * 10) / 10,
       nearest: Math.round(near.distance * 10) / 10,
       maxAccel: m.maxAccel,
@@ -1196,6 +1196,92 @@ try {
     const mE2 = await mode();
     const btnOn = await page.evaluate(() => document.querySelector('button[aria-label="Walk at street level"]')?.classList.contains('on'));
     step('the HUD button walks, Esc leaves', mE === 'walk' && mE2 === 'orbit' && !btnOn, { entered: mE, after: mE2 });
+  }
+
+  if (wanted.has('explore') && !has('buildings')) skip('explore', 'no buildings module');
+  else if (wanted.has('explore')) {
+    // free camera up close: clicking a building only shows its card, nothing lifts the camera (a flight or a
+    // follow started from inside a building eases out instead of snapping onto the roof), a room inside an
+    // office building, the wheel walks in through the station door at eye height, the ground stops a tilt
+    await page.keyboard.press('KeyG');
+    const camY = () => page.evaluate(() => window.__city.ctx.camera.position.y);
+    const room = () => page.evaluate(() => window.__city.stats().camera?.room);
+    const office = await page.evaluate(() => {
+      const plan = window.__city.ctx.plan;
+      const dt = plan.pois.find((p) => p.id === 'downtown').target;
+      let best = null;
+      for (const l of plan.lots)
+        if (l.kind === 'tower' || l.kind === 'office') {
+          const f = l.footprint;
+          const d = Math.hypot((f.x0 + f.x1) / 2 - dt.x, (f.z0 + f.z1) / 2 - dt.z);
+          if (!best || d < best.d) best = { d, id: l.id, x: (f.x0 + f.x1) / 2, z: (f.z0 + f.z1) / 2, z1: f.z1, sh: l.height / l.floors };
+        }
+      return best;
+    });
+    // 1. street level facing the office building: a click shows its card and the camera stays put
+    await view({ target: { x: office.x, y: 1.6, z: office.z1 + 3 }, distance: 3, yaw: 0, pitch: 6 });
+    await settle(900);
+    const c0 = await page.evaluate(() => window.__city.ctx.camera.position.toArray());
+    const b = await findPickable(['building']);
+    await page.mouse.click(b ? b.x : cx, b ? b.y : cy - 80);
+    await settle(1500);
+    const c1 = await page.evaluate(() => window.__city.ctx.camera.position.toArray());
+    const card = await page.evaluate(() => document.querySelector('.th-info.show .th-info-kicker')?.textContent ?? null);
+    const moved = Math.hypot(c1[0] - c0[0], c1[1] - c0[1], c1[2] - c0[2]);
+    step('free camera: clicking a building shows its card, the camera stays put', !!b && moved < 0.05 && (await mode()) === 'orbit' && /Viewing/.test(card ?? ''), { picked: b?.label, moved: Math.round(moved * 100) / 100, card });
+    await page.keyboard.press('Escape');
+    // 2. inside it: a room, eye height above the floor; then a flight out starts without a jump
+    await view({ target: { x: office.x, y: office.sh * 3 + 1.7, z: office.z }, distance: 0.6, yaw: 200, pitch: 2 });
+    await settle(1200);
+    const inRoom = await room();
+    await shot('explore_room');
+    const y0 = await camY();
+    await page.evaluate(REC_START);
+    await page.keyboard.press('Digit1');
+    await settle(4500);
+    const fl = await page.evaluate(REC_STOP);
+    const fm = motionStats(fl);
+    const firstUp = Math.max(...fl.slice(0, 12).map((f) => f[2] - y0));
+    step('free camera: a room inside an office building; a flight out of it starts without a jump', inRoom === office.id && firstUp < 1.5 && fm.maxStepPerFrame < 12, {
+      room: inRoom,
+      office: office.id,
+      firstUp: Math.round(firstUp * 100) / 100,
+      maxStep: fm.maxStepPerFrame,
+    });
+    // 3. the wheel walks in through the station door and out onto the platform, at eye height
+    await view({ target: { x: 0, y: 1.6, z: -121 }, distance: 6, yaw: 0, pitch: 3 });
+    await settle(1000);
+    const d0 = await page.evaluate(() => window.__city.ctx.camera.position.toArray());
+    await page.mouse.move(cx, cy);
+    await page.evaluate(REC_START);
+    for (let i = 0; i < 26; i++) {
+      await page.mouse.wheel(0, -120);
+      await page.waitForTimeout(60);
+    }
+    await settle(1500);
+    const wm = motionStats(await page.evaluate(REC_STOP));
+    const d1 = await page.evaluate(() => window.__city.ctx.camera.position.toArray());
+    await shot('explore_door');
+    step('free camera: the wheel walks in through the station door at eye height', d1[2] < -129 && Math.abs(d1[1] - d0[1]) < 0.3 && wm.maxStepPerFrame < 1 && wm.maxAccel < 1, {
+      from: d0.map((v) => Math.round(v * 10) / 10),
+      to: d1.map((v) => Math.round(v * 10) / 10),
+      maxStep: wm.maxStepPerFrame,
+      maxAccel: wm.maxAccel,
+    });
+    // 4. tilting down into the ground: the ground stops it
+    await view({ target: { x: 0, y: 0.5, z: -115 }, distance: 3, yaw: 0, pitch: 5 });
+    await settle(600);
+    await page.keyboard.down('KeyF');
+    await page.waitForTimeout(2000);
+    await page.keyboard.up('KeyF');
+    await settle(400);
+    const fy = await page.evaluate(() => {
+      const p = window.__city.ctx.camera.position;
+      return { y: p.y, ground: window.__city.ctx.services.terrain?.height(p.x, p.z) ?? 0, pitch: window.__city.ctx.services.camera.getState().pitch };
+    });
+    step('free camera: never below the ground', fy.y >= fy.ground + 0.35, { y: Math.round(fy.y * 100) / 100, ground: Math.round(fy.ground * 100) / 100, pitch: Math.round(fy.pitch) });
+    await page.keyboard.press('KeyG');
+    await settle(300);
   }
 
   if (wanted.has('tourwatch')) {

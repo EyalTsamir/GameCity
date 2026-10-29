@@ -291,8 +291,8 @@ export default function create(ctx: CityContext): CityModule {
       <section><h3>Mouse</h3><dl>
         <dt>${gst('Left-drag')}</dt><dd>Rotate around the city</dd>
         <dt>${gst('Right-drag')}</dt><dd>Pan (also middle or Shift-drag)</dd>
-        <dt>${gst('Scroll')}</dt><dd>Zoom towards the cursor</dd>
-        <dt>${gst('Click')}</dt><dd>Follow anything that moves — even the balloon and the plane — or take a look at a building; drag to circle it, right-drag to let go</dd>
+        <dt>${gst('Scroll')}</dt><dd>Zoom towards the cursor — up close it carries you on, through doors and into rooms</dd>
+        <dt>${gst('Click')}</dt><dd>Follow anything that moves — even the balloon and the plane — or see what a building is; right-drag to let go</dd>
         <dt>${gst('Double-click')}</dt><dd>Fly to that spot, or in close to what is there</dd>
         <dt>${gst('Minimap')}</dt><dd>Click to fly, drag to pan</dd>
       </dl></section>
