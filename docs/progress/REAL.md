@@ -11,6 +11,12 @@ Overview must stay at least as impressive as now. Every feature: quality tiers +
 Lead session: session_01XuhAMczW3iK25AAWnf3qog, branch `claude/pensive-gates-bim12i`.
 
 ## Resume here (keep current)
+* 2026-10-29 00:04 UTC — Merged W8 s1–4 (8fe65bf: near-LOD sheep/cows animals.ts ?noanimaldetail, real tractor
+  + cultivator + tracks ?notractordetail (field moved to ~230 m), farmsteads farmstead.ts ?nofarmdetail, flower heads
+  by species ?noflowerdetail; golden check of the merge running → shots/golden/w8) and W1 s6 (c72dfe1: apartment glass
+  root cause = flat opposite-row band in bhOpp → shop fronts/awnings/cars, 29 % bare rooms; office blinds/notices,
+  curtain-wall mullions/spandrels, framed fascias + swan-neck lamps). Judge 2 + bug hunter 2 launched on the merged
+  tree. Running: W6(2), W8 (stopped at 320k → respawn after judge), judge 2, bug hunter 2.
 * 2026-10-28 23:32 UTC — Merged W7 s2 (21e8f3d: rounded/raked deckhouses + flared bows + glass, sagging mooring ropes
   with spliced eyes, varied/worn fish boxes + wet patches, site pipes/rebar/pallets/mud/tyre tracks, tactile blisters,
   canopy soffit; noquaylife −172k tris). W7 brief done (open: platform people need benches on the ped graph).
@@ -184,6 +190,8 @@ Wave 1 (launched 2026-10-28 15:17 UTC, sibling cloud sessions, briefs in real-br
 | W1 facades (6) | session_01XuhAMevUWbiYT7AVmkzbyB | claude/real-w1-facades | real-w1.md |
 | W7 dense places II (2) | session_01XuhAMgnc3LjfR6ehMUGwBc | claude/real-w7-quay | real-w7.md |
 | W8 countryside (wave 3) | session_01XuhAMgEAANGwU4gDyorawb | claude/real-w8-country | real-w8.md |
+| Judge 2 | session_01XuhAMhWPFfC36vewCePr9j | claude/real-judge-2 | real-judge-2.md |
+| Bug hunter 2 | session_01XuhAMerLUHGUUS7BTCdeQe | claude/real-bugs-2 | real-bugs-2.md |
 Respawn rule: when a worker stops (milestone note, ~200k context, or a usage stop), create a NEW session on the
 same branch with the same brief + "resume from docs/progress/real-wN.md Resume here"; archive the old one.
 
