@@ -295,7 +295,8 @@ vGcRough = 0.85;
         // length class → metres
         float Lc = len < 0.25 ? mix( 0.045, 0.1, len / 0.25 ) : ( len < 0.5 ? mix( 0.1, 0.36, ( len - 0.25 ) / 0.25 ) : mix( 0.36, 0.85, ( len - 0.5 ) / 0.5 ) );
         float L = Lc * ( 0.62 + 0.62 * rc.y ) * mix( 0.82 + 0.36 * cl.x, 0.66 + 0.68 * cl.x, smoothstep( 0.45, 0.7, len ) );
-        float W = mix( 0.008, 0.013, fract( rc.z * 5.3 ) ) * ( 1.0 + 0.25 * kept );
+        // mown lawn: wider, brighter blades — at ~150/m² thin dark blades over the paler ground read as stubble on felt
+        float W = mix( 0.008, 0.013, fract( rc.z * 5.3 ) ) * ( 1.0 + 0.8 * kept );
         float stiff = 1.0;
         vec2 lean = mix( wd, outw, 0.6 ) * mix( 0.12, 0.42, fract( rc.z * 9.7 ) ) * ( 0.6 + 0.6 * cl.w );
         vec3 base = gcGrassColor( nM, nA, len, wet, marram ? 1.0 : 0.0 );
@@ -303,6 +304,7 @@ vGcRough = 0.85;
         base *= 1.0 + clamp( tone, -0.5, 0.5 ) * 0.38 * kept;
         base *= mix( vec3( 1.0 ), vec3( 0.8, 0.88, 0.92 ), clamp( -tone - 0.52, 0.0, 1.0 ) );
         base *= ( 0.9 + 0.2 * cl.y ) * ( 0.92 + 0.16 * fract( rb.z * 21.7 ) );
+        base *= 1.0 + 0.16 * kept;
         vec3 tip = gcTipColor( base, nA, len );
         float aoRoot = mix( 0.66, 0.46, smoothstep( 0.2, 0.6, len ) );
         // long grass has a dense low layer under the tall stems (no dark gaps at the base)

@@ -384,7 +384,7 @@ vec3 rdHard(inout float rough) {
     float lx = qx - ci;
     cell = vec2(ci, row);
     // joint width varies stone to stone (tight ↔ open, sanded)
-    float jwv = vP.z * (1.0 + hand * (rdHash(cell + 4.4) - 0.4) * 0.9);
+    float jwv = vP.z * (1.0 + hand * ((rdHash(cell + 4.4) - 0.4) * 0.9 - 0.25));
     float dx = min(lx - aL, 1.0 + aR - lx) * size.x;
     float dy = abs(fract(qy / size.y + 0.5) - 0.5) * size.y;
     joint = max(rdLine(dx, jwv, fq.x), rdLine(dy, jwv, fq.y));
@@ -396,9 +396,11 @@ vec3 rdHard(inout float rough) {
   c *= 1.0 - vV.y * det * (1.0 - smoothstep(0.0, minS * 0.32, edge));
   // joints filled with sand / grit (not a uniform dark line); each stone settled at its own height and tilt
   float hd = (uRdHand > 0.5 && vS.z < 5.5 && vS.w < 1.5 && minS < 1.3) ? det : 0.0;
-  vec3 jc = mix(c * (1.0 - vP.w), vec3(0.2, 0.185, 0.16) * (0.75 + 0.5 * nS.b), 0.45 * hd);
+  // (sand-filled joints read lighter than a shadow line: only the chamfer edges are dark)
+  vec3 jc = mix(c * (1.0 - vP.w), c * vec3(0.74, 0.7, 0.62) * (0.8 + 0.4 * nS.b), 0.7 * hd);
   c = mix(c, jc, joint);
   float hs = rdHash(cell + 6.7);
+  c *= 1.0 + (rdHash(cell + 9.3) - 0.5) * 0.16 * hd;
   c *= vec3(1.0 + (hs - 0.5) * 0.06 * hd, 1.0, 1.0 - (hs - 0.5) * 0.06 * hd);
   c *= 1.0 - 0.06 * hd * smoothstep(0.55, 0.95, rdHash(cell + 8.1)) * (1.0 - smoothstep(0.0, minS * 0.3, edge));
   rdN = vec3(rdHash(cell + 2.2) - 0.5, 0.0, rdHash(cell + 3.3) - 0.5) * 0.06 * hd * (1.0 - joint);

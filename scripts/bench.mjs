@@ -224,7 +224,7 @@ try {
           // F3 ground close-ups: open-track bed, the rock cutting north of the platform, a park lawn
           ballast: { x: -40, y: 0.1, z: -155, yaw: 20, h: 0.3, w: 0.5, pitch: 38 },
           cutting: { x: -6, y: 0.8, z: -160.6, yaw: 15, h: 3, w: 0.3, pitch: 8 },
-          parklawn: { x: -55, y: 0, z: 17, yaw: 30, h: 0.3, w: 0.5, pitch: 22 },
+          parklawn: { x: -64, y: 0, z: 6, yaw: 30, h: 0.3, w: 0.5, pitch: 22 },
           cliff: { x: -40, y: 2, z: -164.5, yaw: 8, h: 2, w: 0.3, pitch: 4 },
           tracklawn: { x: -44, y: 0, z: -158.6, yaw: 20, h: 0.3, w: 0.5, pitch: 24 },
         };
