@@ -9,7 +9,7 @@
 
 import * as THREE from 'three';
 import type { Rng } from '../../core/rng';
-import { Kit } from './furniture';
+import { Kit, spokedWheel } from './furniture';
 import { lathe } from './shapes';
 import { parasol, wheelieBins, CANVAS } from './garden';
 import type { ChairOut } from './service';
@@ -74,10 +74,14 @@ function bistroTable(k: Kit, rng: Rng, R: number, metal: string): void {
 
 // ──────────────────────────────────────────────────────────── plazas ──
 
+/** ?noboardmap: plain info-board faces (no title, streets or legend) */
+const BOARD_MAP = typeof location === 'undefined' || !new URLSearchParams(location.search).has('noboardmap');
+
 /**
  * Bistro table with 2-4 chairs (k); market parasol on most (ks). If `chairs` is given, every chair's
  * seat (world) is appended to it; returns whether a parasol was built.
  */
+
 export function cafe(k: Kit, ks: Kit, rng: Rng, canvas?: [string, string], chairs?: ChairOut[]): boolean {
   const sh = k.sh;
   const metal = rng.pick(['#2c3033', '#3b4a40', '#5a3a2a', '#d8d4ca']);
@@ -280,22 +284,9 @@ export function planter(k: Kit, rng: Rng, round: boolean, green?: GreenKit): voi
 export function bikeLite(k: Kit, color: string): void {
   const sh = k.sh;
   const r = 0.33;
-  // tyres: a ring of 10 tube segments with a hub and three spoke bars (F4 bug 4: the open-cylinder band was seen
-  // edge-on from the side, so the rack bikes had no wheels)
-  k.m('#1e1f21', 'rubber');
-  for (const x of [-0.52, 0.52]) {
-    for (let i = 0; i < 10; i++) {
-      const a0 = (i / 10) * TAU,
-        a1 = ((i + 1) / 10) * TAU;
-      sh.tube(x + Math.cos(a0) * r, r + Math.sin(a0) * r, 0, x + Math.cos(a1) * r, r + Math.sin(a1) * r, 0, 0.022, 0.022, 4);
-    }
-    k.m('#a9aeb2', 'steel');
-    for (let i = 0; i < 3; i++) {
-      const a = (i / 3) * Math.PI + 0.3;
-      sh.tube(x - Math.cos(a) * (r - 0.03), r - Math.sin(a) * (r - 0.03), 0, x + Math.cos(a) * (r - 0.03), r + Math.sin(a) * (r - 0.03), 0, 0.004, 0.004, 3);
-    }
-    k.m('#1e1f21', 'rubber');
-  }
+  // tyres: a ring of tube segments with a hub and spokes (F4 bug 4: the open-cylinder band was seen edge-on from
+  // the side; judge 3 #8: thick polygon tyres, no spokes)
+  for (const x of [-0.52, 0.52]) spokedWheel(k, x, r, 12, 10);
   const R = [-0.52, r],
     C = [-0.02, 0.3],
     S = [-0.17, 0.82],
@@ -343,18 +334,57 @@ export function infoBoard(k: Kit, rng: Rng): void {
   sh.box(0.62, 1.0, 0, 0.08, 2.0, 0.08, 1);
   sh.box(0, 1.35, 0, 1.36, 1.0, 0.07, 0);
   sh.box(0, 2.02, 0, 1.4, 0.14, 0.12, 0);
-  // map faces: pale base + blue river + green park blocks + a red "you are here"
+  // map faces (?noboardmap: the old plain faces): a header band with the title, a street map (river, park,
+  // building blocks between paler streets, a red "you are here"), and a legend column with printed lines
+  const detail = BOARD_MAP;
   for (const sz of [1, -1]) {
-    const z = sz * 0.04;
+    const z = sz * 0.04,
+      d = (n: number) => z + sz * 0.004 * n;
     k.e('#ece6d6', '#fff4dc', 0.35);
     sh.box(0, 1.35, z, 1.2, 0.86, 0.01, 0);
     k.e('#7fa8c8', '#fff4dc', 0.3);
-    sh.box(0, 1.08, z + sz * 0.004, 1.2, 0.08, 0.01, 0);
+    sh.box(detail ? -0.17 : 0, 1.08, d(1), detail ? 0.86 : 1.2, 0.08, 0.01, 0);
     k.e('#9cc48a', '#fff4dc', 0.3);
-    sh.box(-0.25, 1.45, z + sz * 0.004, 0.3, 0.22, 0.01, 0);
-    sh.box(0.33, 1.6, z + sz * 0.004, 0.2, 0.14, 0.01, 0);
+    sh.box(-0.25, 1.45, d(1), 0.3, 0.22, 0.01, 0);
+    sh.box(0.33, 1.6, d(1), 0.2, 0.14, 0.01, 0);
+    if (detail) {
+      // header band in the frame colour with the title and a subtitle line
+      k.m(frame, 'paint');
+      sh.box(0, 1.72, d(1), 1.2, 0.12, 0.01, 0);
+      k.e('#f4efe4', '#fff4dc', 0.25);
+      sh.box(-0.36, 1.735, d(2), 0.4, 0.045, 0.01, 0);
+      sh.box(-0.42, 1.69, d(2), 0.28, 0.018, 0.01, 0);
+      // building blocks (warm grey) in a street grid, avoiding river and park
+      k.e('#d2c6ae', '#fff4dc', 0.3);
+      for (let i = 0; i < 5; i++)
+        for (let j = 0; j < 4; j++) {
+          const bx = -0.52 + i * 0.17,
+            by = 1.2 + j * 0.115;
+          if (by < 1.14 || (bx > -0.42 && bx < -0.08 && by > 1.32 && by < 1.58)) continue;
+          if (rng.chance(0.15)) continue;
+          sh.box(bx, by, d(1), 0.13, 0.085, 0.01, 0);
+        }
+      // a main road (amber) and the rail line (dark dashes)
+      k.e('#e8b04a', '#fff4dc', 0.25);
+      sh.box(-0.17, 1.37, d(2), 0.86, 0.016, 0.01, 0);
+      k.m('#3a3f45', 'paint');
+      for (let i = 0; i < 9; i++) sh.box(-0.57 + i * 0.1, 1.15, d(2), 0.06, 0.008, 0.01, 0);
+      // legend column: white panel, coloured keys with printed lines
+      k.e('#f7f3ea', '#fff4dc', 0.3);
+      sh.box(0.44, 1.31, d(1), 0.28, 0.66, 0.01, 0);
+      const keys = ['#d9473f', '#2f7fb8', '#3f8f5a', '#e8b04a', '#7a5a9a', '#3a3f45'];
+      for (let i = 0; i < 6; i++) {
+        const y = 1.56 - i * 0.075;
+        k.m(keys[i], 'plastic');
+        sh.box(0.34, y, d(2), 0.03, 0.03, 0.01, 0);
+        k.m('#5a5f66', 'paint');
+        sh.box(0.46, y + 0.008, d(2), 0.16 - rng.range(0, 0.05), 0.01, 0.01, 0);
+        sh.box(0.44, y - 0.012, d(2), 0.12 - rng.range(0, 0.04), 0.008, 0.01, 0);
+      }
+    }
     k.m('#d9473f', 'plastic');
-    sh.box(0.1, 1.32, z + sz * 0.008, 0.05, 0.05, 0.01, 0);
+    sh.box(0.1, 1.32, d(2), 0.05, 0.05, 0.01, 0);
+    if (detail) sh.box(0.1, 1.3, d(3), 0.012, 0.09, 0.01, 0);
   }
 }
 

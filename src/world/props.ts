@@ -19,7 +19,7 @@ import { NearCells, nearCell } from './lamps/nearCells';
 import { getLayout, occAny, PLANTER, hrand, MASK_WALK, DistanceLod, ChunkCuller, chunkOf } from './props/layout';
 import { furnitureMaterial, glassMaterial } from './props/material';
 import { createGlowMesh, type Glow } from './props/glow';
-import { Kit, lamp, bench, bin, hydrant, mailbox, phonebox, newsstand, planterBox, bollard, bikeRack, busShelter, picketFence, gateLeaf, lowWall, shed, waterButt, FENCE_PAINT, setPrinter } from './props/furniture';
+import { Kit, lamp, bench, bin, hydrant, mailbox, phonebox, newsstand, planterBox, bollard, bikeRack, busShelter, picketFence, gateLeaf, lowWall, shed, waterButt, FENCE_PAINT, setPrinter, setBikeSpokes } from './props/furniture';
 import { Printer } from './props/print';
 import * as GK from './props/garden';
 import * as SK from './props/kit';
@@ -85,6 +85,7 @@ export default function create(ctx: CityContext): CityModule {
   // F4: magazine covers and kiosk lettering printed with real fonts into a canvas atlas (+1 draw near; ?noprint)
   const printer = simple || ctx.debug.params.has('noprint') ? null : new Printer();
   setPrinter(printer);
+  setBikeSpokes(!ctx.debug.params.has('nobikespokes') && ctx.quality.level !== 'low');
 
   /** local → world for a frame at (x, z) with yaw */
   const toWorld = (x: number, z: number, yaw: number, lx: number, lz: number): [number, number] => [x + lx * Math.cos(yaw) + lz * Math.sin(yaw), z - lx * Math.sin(yaw) + lz * Math.cos(yaw)];

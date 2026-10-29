@@ -492,7 +492,11 @@ export function genIndustrial(g: Gen): void {
       if (alongX) t.box(lx - 0.02, H + 0.2, lz - span * 0.18, lx + 0.02, H + rise * 0.75, lz + span * 0.18, 0b111111);
       else t.box(lx - span * 0.18, H + 0.2, lz - 0.02, lx + span * 0.18, H + rise * 0.75, lz + 0.02, 0b111111);
     }
-    vents(H + rise * 0.8, 2);
+    // barrel section: height above the eaves ≈ rise·(1 − (d/half)²) across the span
+    vents((x, z) => {
+      const d = (alongX ? z : x) - c0;
+      return H + rise * Math.max(0, 1 - (d / (span / 2)) ** 2) + 0.3;
+    }, 2);
   }
 
   function orientedRoofUV(p: number[][], ref: number[], v0: number, segL: number): void {
@@ -541,10 +545,9 @@ export function genIndustrial(g: Gen): void {
       t.box(xc - 0.15, yr - 0.05, z0, xc + 0.15, yr + 0.12, z1);
       for (const sd of [FRONT, BACK] as Side[]) gableEnd(sideGeom(body, sd), rise);
     }
-    if (customs) {
-      // skylights along the slopes
-      vents(H + rise * 0.55, 2);
-    } else vents(H + rise * 0.5, 2);
+    // the slope's height at the vent (+0.3: the collar sits in the roofing)
+    const slopeY = (x: number, z: number) => H + rise * Math.max(0, 1 - Math.abs(alongX ? z - (body.z0 + body.z1) / 2 : x - (body.x0 + body.x1) / 2) / half) + 0.3;
+    vents(slopeY, 2);
   }
 
   function gableEnd(sg: SideGeom, rise: number): void {
@@ -569,11 +572,14 @@ export function genIndustrial(g: Gen): void {
     }
   }
 
-  function vents(y: number, n: number): void {
+  /** roof vents; on a pitched / barrel roof `y` is a function of the spot: a fixed height put vents near the
+   * ridge inside the roof, smoking from a bare roof (real-bugs-3 #4) */
+  function vents(yAt: number | ((x: number, z: number) => number), n: number): void {
     const t2 = g.trim;
     for (let k = 0; k < n; k++) {
       const vx = body.x0 + 2 + rng.next() * (body.x1 - body.x0 - 4),
         vz = body.z0 + 2 + rng.next() * (body.z1 - body.z0 - 4);
+      const y = typeof yAt === 'number' ? yAt : yAt(vx, vz);
       setCol(t2, col('#a9b0b5'));
       t2.cylinder(vx, vz, 0.35, y - 1.2, y + 0.8, 8, false);
       setCol(t2, col('#7d858b'));

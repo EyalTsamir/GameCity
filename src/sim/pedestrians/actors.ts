@@ -38,6 +38,8 @@ const PERSONA: Record<ActorRole, Persona> = {
 
 /** cull distance (m): beyond this nobody is drawn (the pin LOD reads as a dot well before) */
 const FAR = 170;
+/** ?noplatformstay: every platform passenger boards a standing train at once (the judge-3 "empty platform") */
+const STAY = typeof location === 'undefined' || !new URLSearchParams(location.search).has('noplatformstay');
 
 interface Static {
   d: ActorDef;
@@ -68,6 +70,8 @@ export class Actors {
   /** platform: sim seconds since the last train left / a train is standing at the platform */
   private sinceTrain = 1e9;
   private trainIn = false;
+  /** sim seconds since the standing train arrived (boarding is spread over the dwell) */
+  private sinceArrive = 0;
 
   constructor(ctx: CityContext) {
     this.ctx = ctx;
@@ -161,11 +165,21 @@ export class Actors {
 
   update(dt: number): void {
     if (!this.trainIn) this.sinceTrain += dt;
+    else this.sinceArrive += dt;
+  }
+
+  private onPlatform(d: ActorDef): boolean {
+    const u = Math.sin(d.seed * 3.917 + 1.3) * 43758.5453;
+    const r = u - Math.floor(u);
+    if (this.trainIn) return STAY && r < (d.seated ? 0.6 : 0.45) ? true : STAY && this.sinceArrive < 2 + r * 5;
+    // boarders who left come back after their delay; stayers never left
+    return this.sinceTrain > d.delay || (STAY && r < (d.seated ? 0.6 : 0.45));
   }
 
   onTrain(arrive: boolean): void {
     this.trainIn = arrive;
     if (!arrive) this.sinceTrain = 0;
+    else this.sinceArrive = 0;
   }
 
   private make(role: ActorRole, seed: number, shirt: number, child: boolean, carry = 0): Member {
@@ -242,7 +256,9 @@ export class Actors {
       const d = s.d;
       // here now? (landmark group / hours / people coming and going by the 20-minute period); fade in and out
       // platform passengers board the train standing at the platform and gather again after it left
-      let on = visible(d.vis, h) && h >= d.h0 && h < d.h1 && (d.group !== 1 || (!this.trainIn && this.sinceTrain > d.delay));
+      // (?noplatformstay: everyone boards at once, as before) — about half wait on for the other line or meet
+      // someone off the train, the rest step aboard one by one once the doors are open (2–7 s into the dwell)
+      let on = visible(d.vis, h) && h >= d.h0 && h < d.h1 && (d.group !== 1 || this.onPlatform(d));
       if (on && d.p < 1) {
         const q = Math.sin(d.seed * 12.9898 + Math.floor(h * 3) * 78.233) * 43758.5453;
         on = q - Math.floor(q) < d.p;
