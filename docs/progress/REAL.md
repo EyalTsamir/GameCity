@@ -11,6 +11,10 @@ Overview must stay at least as impressive as now. Every feature: quality tiers +
 Lead session: session_01XuhAMczW3iK25AAWnf3qog, branch `claude/pensive-gates-bim12i`.
 
 ## Resume here (keep current)
+* 2026-10-29 06:35 UTC — Golden merged3 (all F1–F4 except F3 final): overview 0.7, harbor 3.2 (cliff), oldtown 4.1,
+  downtown 4.7, westbrook 6.0 (window interiors/house edits); console clean, invariants {}. F3 CLOSED (5d37c89
+  merged: pasture ck==3 patchwork/buttercup/tussocks ?nopasture (low = colour only), mown blades +26 %; open: finer
+  pasture grain). All F workers closed. Waiting on judge 3 + bug hunter 3 → fixes → final report.
 * 2026-10-29 06:10 UTC — Judge 3 session_01XuhAMeMgntBxYUvQ4rEq1f (→ claude/real-judge-3) and bug hunter 3
   session_01XuhAMh5UoQnKPjJvjhiQDd (→ claude/real-bugs-3) launched on the merged tree; golden merged3 running.
 * 2026-10-29 06:10 UTC — F2 CLOSED (1271d9f merged: sail crew on cockpit coamings, tractor driver (RIDES registry),
