@@ -2,6 +2,10 @@
 
 Branch `claude/real-w1-facades` (from `claude/pensive-gates-bim12i`). Brief: docs/progress/real-briefs.md "W1".
 
+## F1 session 2 (2026-10-29) — in progress
+* Tasks: (1) bench-judge session-1 changes (shots/f1s2/b*), fix fails; (2) school entrance kit; (3) church mouldings +
+  rose tracery. Lawn rim out of scope.
+
 ## F1 — Facades final (2026-10-29, branch `claude/real-f1-facades`, session 1 — stopped at the context cap)
 ### Resume here
 * **Code done, NOT yet judged on the bench** (each bench/capture costs 2–6 min in this container): first thing next
