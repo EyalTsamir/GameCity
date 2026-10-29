@@ -3,6 +3,17 @@
 Branch `claude/real-f2-people` (from `claude/pensive-gates-bim12i` e1c9780). Brief: real-briefs.md "F2".
 
 ## Resume here
+* 2026-10-29 SESSION 3 ENDED (context rule). Pushed. Typecheck clean; console clean in every f2shot run;
+  invariants {} except one shot-placement "camera below terrain" (s3i car:1 — the capture, not code).
+  ALL s3 TASKS DONE + JUDGED: sail crew in F4 cockpit, tractor driver, train occupants, band drum + uniforms,
+  bus black side windows (F2's own bug, fixed), swing kid hands, cost note (Toggles section). Also: no bus
+  passengers in the kerb doorways (s3i showed one), door glazing shows the saloon (s3i).
+  NEXT: (1) bus: the far-side wheels show through the saloon floor area at low angles (no wheel-arch boxes in
+  the ray-traced interior — W2's thInterior; add arch boxes at axF/axR or note to W2); (2) band instruments at
+  3 m are crude torus/cone/rod (landmarks/park.ts: tuba bell floats) — real horns if wanted; (3) sail helm hands
+  on the knees, not the tiller (the tiller sits ~at the feet: F4 cockpit sole is at deck level); (4) perf.mjs
+  ;nooccupants at eye level on the real GPU (gl_FragDepth → no early-z on vehicle + train materials); (5)
+  judge-2 walker notes (lockstep groups, flat clothes).
 * 2026-10-29 SESSION 3 (session_01XuhAMh8vfAev7DpzP7VknF) STARTED: merged origin/claude/pensive-gates-bim12i (b713343).
   Tasks: sail crew into F4 cockpit + tractor driver; train occupants; band drum detail; bus black side windows;
   re-judge swing/see-saw hands; cost note ;nooccupants/;noactors.
