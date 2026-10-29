@@ -16,7 +16,10 @@ sim/rail/station.ts.
   **Harness problem (for the lead):** ~half of capture-set / bench views come out as one flat colour with a fine dot
   pattern (b1 fq1 before most F4 code loaded; b2 by1/by2/mk1/fk; b3 ye/mk/fk; bench newsstand 3 m, phonebox 3 m,
   boat 10 m; b4 yt + mkn although the same yt view worked in b3). Not framing in the usual sense (yt is 26 m up at
-  pitch 70). Suspect the camera after a snap (4 pumped frames) or the DOF/AO at a degenerate focus.
+  pitch 70). **Cause (lead, 03:30):** pumpFrames' 8×8 clipped screenshots make Chromium tile an 8×8 patch over the
+  capture. Local fix before capturing: remove `, clip: { x: 0, y: 0, width: 8, height: 8 }` from the pump screenshot in
+  scripts/bench.mjs, capture-set.mjs, shot.mjs (not committed here — the lead owns the harness). All blank F4 frames
+  are this artefact, not faults: re-capture them.
 ## Done
 * Bug 2 (tree through barn roof): settlements.ts now returns `blocked(x,z,r)` (building rects + 1 m, barns + 6 m
   for the silo, incl. the near-farm buildings spliced out for farmstead.ts); trees.ts Builder skips a tree whose
