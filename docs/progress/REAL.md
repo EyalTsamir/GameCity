@@ -11,6 +11,8 @@ Overview must stay at least as impressive as now. Every feature: quality tiers +
 Lead session: session_01XuhAMczW3iK25AAWnf3qog, branch `claude/pensive-gates-bim12i`.
 
 ## Resume here (keep current)
+* 2026-10-29 06:10 UTC — Judge 3 session_01XuhAMeMgntBxYUvQ4rEq1f (→ claude/real-judge-3) and bug hunter 3
+  session_01XuhAMh5UoQnKPjJvjhiQDd (→ claude/real-bugs-3) launched on the merged tree; golden merged3 running.
 * 2026-10-29 06:10 UTC — F2 CLOSED (1271d9f merged: sail crew on cockpit coamings, tractor driver (RIDES registry),
   train occupants in EMU saloons, side drum + long band uniforms, black bus flank windows fixed (F2's own glass-depth
   bug; touches traffic/models.ts + vehicleMaterial.ts v12), swing hands OK. Cost: no new draws; +25k tris (+0.55 %)
