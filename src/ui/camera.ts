@@ -11,6 +11,7 @@ import { SurfaceField } from './camera/surface';
 import { Scout, type LiveEntity } from './camera/scout';
 import { TourDirector, type Pose, type TourRig } from './camera/tour';
 import { buildDebugProxy } from './camera/debugProxy';
+import { ExploreAid, FLOOR_CLEAR } from './camera/explore';
 import type { CameraServiceExt, PointerInfo, TourShotInfo } from './shared';
 import { WORLD_MODE } from '../core/world';
 
@@ -57,9 +58,13 @@ const ROOF_MARGIN = 0.3;
 const ARM_HORIZON = 0.62;
 /** below this orbit distance the camera keeps a line of sight to the pivot */
 const LOS_DIST = 100;
-/** free camera (default): the orbit may come this close / this low (guided: MIN_DIST / MIN_PITCH) */
-const FREE_MIN_DIST = 3;
-const FREE_MIN_PITCH = 2 * DEG;
+/** free camera (default): the orbit may come this close / this low — below the pivot, looking up (guided: MIN_DIST / MIN_PITCH) */
+const FREE_MIN_DIST = 0.5;
+const FREE_MIN_PITCH = -55 * DEG;
+/** free camera this close: the wheel moves it forward along the cursor ray (through doorways, into rooms) */
+const DOLLY_DIST = 6;
+/** free camera this close: panning keeps the pivot's height (a storey, under a bridge) instead of settling on the ground */
+const HOLD_Y_DIST = 40;
 
 interface Flight {
   from: Pose;
@@ -170,6 +175,7 @@ export default function create(ctx: CityContext): CityModule {
   const field = new SurfaceField(plan, land?.active ? (x, z) => land.height(x, z) : undefined);
   const TARGET_MARGIN = land?.active ? WORLD_TARGET_MARGIN : DIORAMA_TARGET_MARGIN;
   const scout = new Scout(ctx);
+  const explore = new ExploreAid(ctx, field);
   const raycaster = new THREE.Raycaster();
   const ndc = new THREE.Vector2();
   const _v = new THREE.Vector3();
@@ -255,10 +261,13 @@ export default function create(ctx: CityContext): CityModule {
   const emit = (name: string, payload?: unknown) => ctx.events.emit(name, payload);
 
   // Camera feel. FREE (default): the orbit camera goes exactly where it is steered — through facades and
-  // roofs if need be, only the ground stops it — and never starts touring by itself. GUIDED (G key,
+  // roofs, into buildings (a room is drawn around it there, see ./camera/explore), under bridges; only the
+  // ground / water surface stops it — and never starts touring by itself. Nothing lifts it: no roof lift, no
+  // crane-up, no take-off rise in flights, no re-framing flight when a building is clicked (that only shows
+  // its card). Follow cams keep their line of sight (the arm slides in front of walls). GUIDED (G key,
   // ?guidedcam): the original spring arm that keeps the orbit out of buildings (slides in front of
-  // facades, keeps a line of sight, lifts over roofs) plus the idle auto-tour. Follow cams, flights and
-  // the tour keep their own framing rules in both modes. The choice is remembered (?freecam forces free).
+  // facades, keeps a line of sight, lifts over roofs) plus the idle auto-tour. The tour keeps its own
+  // framing rules in both modes. The choice is remembered (?freecam forces free).
   let guided = ctx.debug.params.has('guidedcam')
     ? true
     : ctx.debug.params.has('freecam')
@@ -270,6 +279,11 @@ export default function create(ctx: CityContext): CityModule {
             return false;
           }
         })();
+  /** free-camera rules apply (nothing lifts or re-frames the camera); the tour keeps its own */
+  const freeRules = () => !guided && !tour.active;
+  /** free camera: a building / landmark clicked for its info card (the camera stays where it is) */
+  let inspect: PickHit | null = null;
+  let focusSet = false;
 
   // ───────────────────────────────────────────── helpers
   const canvasXY = (e: { clientX: number; clientY: number }) => {
@@ -290,7 +304,9 @@ export default function create(ctx: CityContext): CityModule {
 
   const pickAt = (x: number, y: number): PickHit | null => {
     const ray = setRay(x, y);
-    const hit = scout.pick(ray);
+    // from inside a building its own box would catch every click: look past it
+    const inLot = explore.lotAt(camera.position.x, camera.position.y, camera.position.z, 0.3);
+    const hit = scout.pick(ray, inLot ? (h) => h.kind === 'building' && h.id === inLot.id : undefined);
     if (!hit) return null;
     // ignore things hidden behind hills / under the slab
     const tGround = field.raycast(ray.origin, ray.direction, camera.far, _hit, false);
@@ -324,7 +340,14 @@ export default function create(ctx: CityContext): CityModule {
     goal.tz = clamp(goal.tz, bounds.z0 - m, bounds.z1 + m);
     goal.ty = clamp(goal.ty, -2, follow?.cls === 'air' ? AIR_MAX_Y : 140);
     goal.dist = clamp(goal.dist, minDistNow(), MAX_DIST);
-    goal.pitch = clamp(goal.pitch, minPitchNow(), MAX_PITCH);
+    let pMin = minPitchNow();
+    if (pMin < 0) {
+      // free camera looking up from below its pivot: the ground under the pivot stops the arm
+      const g = field.groundAt(goal.tx, goal.tz);
+      goal.ty = Math.max(goal.ty, g + 0.25);
+      pMin = Math.max(pMin, Math.asin(clamp((g + FLOOR_CLEAR + 0.1 - goal.ty) / goal.dist, -1, 1)));
+    }
+    goal.pitch = clamp(goal.pitch, Math.min(pMin, MAX_PITCH), MAX_PITCH);
   };
 
   const stopMotion = () => {
@@ -348,8 +371,10 @@ export default function create(ctx: CityContext): CityModule {
     // rise above the city between distant points (cinematic flights to entities always lift a little)
     let arc = Math.max(0, travel * 0.55 - Math.max(from.dist, toP.dist) * 0.35);
     if (kind === 'follow' || kind === 'tour') arc = Math.max(arc, travel * 0.32 - Math.min(from.dist, toP.dist) * 0.15);
+    // free camera: the flight goes the straight way through whatever is in it — no climb over roofs, no take-off
+    const free = kind !== 'tour' && kind !== 'intro' && freeRules();
     // never skim along roofs: make sure the mid-flight camera clears what lies under the path
-    if (travel > 30) {
+    if (travel > 30 && !free) {
       let top = 0;
       for (let k = 1; k < 8; k++) {
         const u = k / 8;
@@ -364,7 +389,7 @@ export default function create(ctx: CityContext): CityModule {
     // take-off: a camera low between buildings first rises clear of the roofs it would otherwise fly
     // into (holding its distance), then the flight extends — like a drone leaving a street
     let rise = 0;
-    if (toP.dist > from.dist * 1.3) {
+    if (toP.dist > from.dist * 1.3 && !free) {
       const c = Math.cos(from.pitch),
         sx = Math.sin(from.yaw) * c,
         sz = Math.cos(from.yaw) * c,
@@ -401,7 +426,7 @@ export default function create(ctx: CityContext): CityModule {
     // plan a clear path: sample where the camera will be and raise the arc until every sample clears the
     // roofs by 3 m (a flight leaving street level used to cut through the towers it started between)
     const f = flight;
-    for (let it = 0; it < 4; it++) {
+    for (let it = 0; it < (free ? 0 : 4); it++) {
       let worst = 0;
       let lever = 1;
       for (let k = 1; k < 16; k++) {
@@ -449,7 +474,7 @@ export default function create(ctx: CityContext): CityModule {
     // (turning during the low final approach swings the arm through the buildings beside it)
     const ey = f.track ? smoother(e / 0.65) : e;
     out.yaw = a.yaw + (b.yaw - a.yaw) * ey;
-    out.pitch = clamp(a.pitch + (b.pitch - a.pitch) * e + f.pitchArc * bump, 4 * DEG, MAX_PITCH);
+    out.pitch = clamp(a.pitch + (b.pitch - a.pitch) * e + f.pitchArc * bump, Math.min(4 * DEG, a.pitch, b.pitch), MAX_PITCH);
     return u;
   };
 
@@ -468,6 +493,9 @@ export default function create(ctx: CityContext): CityModule {
       return null;
     }
   }
+
+  /** buildings, landmarks and things without a heading stay put */
+  const isStill = (hit: PickHit): boolean => hit.kind === 'building' || hit.kind === 'landmark' || (hit.kind === 'other' && typeof hit.getHeading !== 'function');
 
   /** chase / follow parameters for the current target (aircraft get their own) */
   const paramsFor = (f: FollowState) => (f.cls === 'air' ? AIR_PARAMS : chaseParams(f.hit.kind));
@@ -539,14 +567,16 @@ export default function create(ctx: CityContext): CityModule {
     copyPose(goal, cur);
     // settle the pivot back towards the ground so orbiting continues naturally
     goal.ty = Math.max(field.groundAt(goal.tx, goal.tz), cur.ty - 0.5);
-    if (f.chase) {
+    // (the free camera stays where it is when a follow ends: no rise to a settle pose)
+    const stay = freeRules();
+    if (f.chase && !stay) {
       goal.pitch = Math.max(goal.pitch, 24 * DEG);
       goal.dist = Math.max(goal.dist, 30);
     }
     if (f.cls === 'air' || reason === 'away') {
       // back to the town: the pivot is high up (or far out) — glide home to the overview
       flyHome(reason === 'away' ? 4 : 3);
-    } else if (reason === 'gone' || reason === 'tunnel') settleAfter(f.pos);
+    } else if ((reason === 'gone' || reason === 'tunnel') && !stay) settleAfter(f.pos);
     if (!f.tour) {
       emit('camera:follow', null);
       if (f.chase) emit('camera:chase', false);
@@ -558,7 +588,14 @@ export default function create(ctx: CityContext): CityModule {
     checkMode();
   };
 
+  const clearInspect = () => {
+    if (!inspect) return;
+    inspect = null;
+    emit('camera:follow', null);
+  };
+
   const startFollow = (hit: PickHit, opts: { tour: boolean; dist?: number; pitch?: number; yawOffset?: number }) => {
+    inspect = null;
     const p = new THREE.Vector3();
     let ok = false;
     try {
@@ -567,7 +604,7 @@ export default function create(ctx: CityContext): CityModule {
       ok = false;
     }
     if (!ok || !isFinite(p.x) || !isFinite(p.y) || !isFinite(p.z)) return;
-    const isStatic = hit.kind === 'building' || hit.kind === 'landmark' || (hit.kind === 'other' && typeof hit.getHeading !== 'function');
+    const isStatic = isStill(hit);
     const alt = p.y - field.groundAt(p.x, p.z);
     const cls: TargetClass = isStatic ? 'static' : hit.kind === 'other' && alt > AIR_ON ? 'air' : 'ground';
     const heading = safeHeading(hit) ?? cur.yaw + Math.PI;
@@ -608,7 +645,8 @@ export default function create(ctx: CityContext): CityModule {
       f.aim = cp.aim;
       if (cls === 'air') f.minDist = 28;
       dist = opts.dist ?? clamp(cur.dist, cp.follow * 0.55, cp.follow * 1.6);
-      pitch = opts.pitch ?? (cls === 'air' ? clamp(cur.pitch, 8 * DEG, 22 * DEG) : clamp(cur.pitch, 20 * DEG, 52 * DEG));
+      // (the free camera keeps a low view low)
+      pitch = opts.pitch ?? (cls === 'air' ? clamp(cur.pitch, 8 * DEG, 22 * DEG) : clamp(cur.pitch, freeRules() ? 8 * DEG : 20 * DEG, 52 * DEG));
     }
     follow = f;
     craneLift = 0;
@@ -765,6 +803,7 @@ export default function create(ctx: CityContext): CityModule {
 
   const startTour = () => {
     if (tour.active) return;
+    clearInspect();
     if (follow && !follow.tour) releaseFollow();
     cancelFlight();
     tour.start();
@@ -792,10 +831,12 @@ export default function create(ctx: CityContext): CityModule {
   const flyTo = (view: Partial<CameraState> | Poi, seconds?: number) => {
     if (tour.active) stopTour();
     if (follow) releaseFollow();
+    clearInspect();
     const to = poiPose(view, goal);
-    // a snap (automation: __city.view, the object bench) may use the free camera's close limits
-    to.pitch = clamp(to.pitch, seconds === 0 ? FREE_MIN_PITCH : MIN_PITCH, MAX_PITCH);
-    to.dist = clamp(to.dist, seconds === 0 ? FREE_MIN_DIST : MIN_DIST, MAX_DIST * 1.5);
+    // a snap (automation: __city.view, the object bench) and the free camera may use the free close limits
+    const close = seconds === 0 || freeRules();
+    to.pitch = clamp(to.pitch, close ? FREE_MIN_PITCH : MIN_PITCH, MAX_PITCH);
+    to.dist = clamp(to.dist, close ? FREE_MIN_DIST : MIN_DIST, MAX_DIST * 1.5);
     to.tx = clamp(to.tx, bounds.x0, bounds.x1);
     to.tz = clamp(to.tz, bounds.z0, bounds.z1);
     if (seconds === 0) {
@@ -851,6 +892,9 @@ export default function create(ctx: CityContext): CityModule {
   };
 
   const relaxTargetY = (dt: number) => {
+    // free camera up close: the pivot keeps its height — inside a storey, under a bridge (clampGoal keeps it
+    // above the ground)
+    if (!guided && !follow && goal.dist < HOLD_Y_DIST) return;
     let g = field.groundAt(goal.tx, goal.tz);
     // close to the city the pivot rides over the roofs it crosses instead of sinking into the buildings
     // (an orbit pivot inside a block leaves the camera nothing to look at but that block's roof);
@@ -862,11 +906,38 @@ export default function create(ctx: CityContext): CityModule {
     goal.ty += (g - goal.ty) * damp(2.5, dt);
   };
 
+  /**
+   * Free camera up close: zooming in moves the camera along the ray under (x, y) and shortens the arm to `nd`;
+   * the pivot goes along, so the view direction holds. Zooming out pulls the camera back along its arm.
+   */
+  const dollyAlong = (x: number, y: number, factor: number, nd: number) => {
+    if (factor < 1) {
+      const cp = Math.cos(goal.pitch);
+      _dir.set(Math.sin(goal.yaw) * cp, Math.sin(goal.pitch), Math.cos(goal.yaw) * cp);
+      _pos.set(goal.tx, goal.ty, goal.tz).addScaledVector(_dir, goal.dist);
+      // a wheel notch moves ~0.7 m up close (more while the arm is still long); a near-level view keeps its
+      // eye height (walking in through a door), a clearly raised / lowered one climbs or descends
+      _v2.copy(setRay(x, y).direction);
+      _v2.y *= THREE.MathUtils.smoothstep(Math.abs(_v2.y), 0.1, 0.3);
+      _pos.addScaledVector(_v2, (1 - factor) * Math.max(goal.dist, 3) * 2);
+      goal.tx = _pos.x - _dir.x * nd;
+      goal.ty = clamp(_pos.y - _dir.y * nd, -2, 140);
+      goal.tz = _pos.z - _dir.z * nd;
+    }
+    goal.dist = nd;
+  };
+
   const zoomAt = (x: number | null, y: number | null, factor: number) => {
     const old = goal.dist;
     const minD = minDistNow();
     const nd = clamp(old * factor, minD, MAX_DIST);
     const r = nd / old;
+    if (!follow && !guided && (old < DOLLY_DIST || explore.roomLot)) {
+      // free camera up close (or inside a building, where the height field has nothing to aim at): the camera
+      // moves along the cursor ray — through a doorway, between stalls, up a storey — and the arm shortens
+      dollyAlong(x ?? (ctx.size.width || canvas.clientWidth) / 2, y ?? (ctx.size.height || canvas.clientHeight) / 2, factor, nd);
+      return;
+    }
     if (!follow && x !== null && y !== null && surfacePoint(x, y, _hit)) {
       // keep the point under the cursor fixed on screen
       goal.tx = _hit.x + (goal.tx - _hit.x) * r;
@@ -1087,10 +1158,20 @@ export default function create(ctx: CityContext): CityModule {
     const hit = dbl ? lastClick.hit : pickAt(x, y);
     lastClick = { t: dbl ? 0 : now, x, y, hit: dbl ? null : hit };
     const same = hit && follow && follow.hit.id === hit.id && follow.hit.kind === hit.kind;
+    const still = !!hit && isStill(hit);
     if (dbl) {
       if (same) {
         goal.dist = Math.max(goal.dist * 0.6, minDistNow());
         return;
+      }
+      if (freeRules() && (still || !hit)) {
+        // free camera: glide in close to the spot on the building / ground (no re-framing from outside)
+        const ray = setRay(x, y);
+        const at = hit ? _hit.copy(ray.origin).addScaledVector(ray.direction, hit.distance) : surfacePoint(x, y, _hit) ? _hit : null;
+        if (at) {
+          flyTo({ target: { x: at.x, y: at.y, z: at.z }, distance: clamp(Math.min(goal.dist, at.distanceTo(camera.position)) * 0.5, 3, 12), yaw: cur.yaw / DEG, pitch: cur.pitch / DEG });
+          return;
+        }
       }
       if (!hit && surfacePoint(x, y, _hit)) {
         flyToPoint(_hit.x, _hit.z);
@@ -1098,12 +1179,20 @@ export default function create(ctx: CityContext): CityModule {
       }
     }
     emit('select', hit);
+    if (hit && still && freeRules()) {
+      // free camera: a building / landmark shows its card; the camera stays where it is
+      if (follow) releaseFollow();
+      inspect = hit;
+      emit('camera:follow', hit);
+      return;
+    }
     if (hit) {
       if (same) return;
       if (follow) releaseFollow();
       startFollow(hit, { tour: false });
-    } else if (follow) {
-      releaseFollow();
+    } else {
+      clearInspect();
+      if (follow) releaseFollow();
     }
   };
 
@@ -1163,6 +1252,7 @@ export default function create(ctx: CityContext): CityModule {
         break;
       case 'KeyC':
         if (follow && !follow.tour) setChase(!follow.chase);
+        else if (inspect) toast(`${inspect.label} stays put — the chase cam is for things on the move`);
         else toast('Click something that moves first — then C toggles the chase view');
         break;
       case 'KeyT':
@@ -1177,10 +1267,11 @@ export default function create(ctx: CityContext): CityModule {
           /* storage unavailable */
         }
         clampGoal();
-        toast(guided ? 'Guided camera — keeps out of buildings, tours when idle (G: free)' : 'Free camera — goes wherever you steer it (G: guided)');
+        toast(guided ? 'Guided camera — keeps out of buildings, tours when idle (G: free)' : 'Free camera — goes wherever you steer it, even inside (G: guided)');
         break;
       case 'Escape':
         if (tour.active) stopTour();
+        else if (inspect) clearInspect();
         else if (follow) releaseFollow();
         else if (flight) cancelFlight();
         break;
@@ -1249,7 +1340,8 @@ export default function create(ctx: CityContext): CityModule {
     const tilt = k('KeyR') - k('KeyF');
     const zoom = k('Minus') + k('NumpadSubtract') + k('PageDown') - k('Equal') - k('NumpadAdd') - k('PageUp');
     const fast = shiftHeld ? 2.2 : 1;
-    const speed = goal.dist * 0.65 * fast;
+    // (the free camera up close keeps a walking pace instead of crawling with its short arm)
+    const speed = (!guided && !follow ? Math.max(goal.dist, 5) : goal.dist) * 0.65 * fast;
     const sy = Math.sin(goal.yaw),
       cy = Math.cos(goal.yaw);
     const wantX = (side * cy - fwd * sy) * speed;
@@ -1273,7 +1365,10 @@ export default function create(ctx: CityContext): CityModule {
       else goal.yaw += kbVel.yaw * dt;
     }
     if (Math.abs(kbVel.pitch) > 1e-4) goal.pitch += kbVel.pitch * dt;
-    if (Math.abs(kbVel.zoom) > 1e-4) goal.dist *= Math.exp(kbVel.zoom * dt);
+    if (Math.abs(kbVel.zoom) > 1e-4) {
+      if (!follow && !guided && (goal.dist < DOLLY_DIST || explore.roomLot)) zoomAt(null, null, Math.exp(kbVel.zoom * dt));
+      else goal.dist *= Math.exp(kbVel.zoom * dt);
+    }
     if (fwd || side || rot || tilt || zoom) movingUntil = performance.now() + 300;
   };
 
@@ -1406,7 +1501,9 @@ export default function create(ctx: CityContext): CityModule {
     // flying to a followed thing from an unobstructed view, the crane-up blends in over the second half
     // (at once it would yank the pitch mid-flight); the arm itself never needs a blend (see below)
     const occW = flight && flight.track && flight.occFree ? smoother((flight.t / flight.dur - 0.5) / 0.5) : 1;
-    if (follow && !follow.chase && d < 200) {
+    // (free camera: nothing lifts it — no crane-up, no roof lift below)
+    const noLift = freeRules();
+    if (follow && !follow.chase && d < 200 && !noLift) {
       // elevated follow cams first crane up a little over buildings that would hide the entity…
       const need = clearPitch(cur.tx, cur.ty, cur.tz, cur.yaw, pitch, d, ownSkip) + 2 * DEG;
       const extra = clamp(need - pitch, 0, Math.max(0, 60 * DEG - pitch));
@@ -1565,13 +1662,13 @@ export default function create(ctx: CityContext): CityModule {
       armShown = d;
     }
     // never inside hills / water; glide over (low) roofs — rising ahead of the roofs the arm is sweeping towards
-    // (free camera: only the ground stops it — a lift left from a guided / follow view eases out)
-    const hard = field.groundMaxAt(_pos.x, _pos.z) + (freeOrbit ? 1.2 : 2);
+    // (free camera: only the ground / water surface stops it — a lift left from a guided view eases out)
+    const hard = noLift ? explore.floorAt(_pos.x, _pos.z) : field.groundMaxAt(_pos.x, _pos.z) + 2;
     const soft = field.roofAt(_pos.x, _pos.z, ROOF_MARGIN) + 1.6;
-    let need = freeOrbit ? 0 : Math.max(0, soft - _pos.y);
+    let need = noLift ? 0 : Math.max(0, soft - _pos.y);
     if (!liftAll && need > LIFT_MAX + 2) need = 0;
     const needNow = need;
-    if (looking && !freeOrbit) {
+    if (looking && !noLift) {
       const nl = lookSamples(4, 16);
       for (let k = 1; k <= nl; k++) {
         const p = lookAhead((ARM_HORIZON * k) / nl, pitch, d);
@@ -1605,10 +1702,21 @@ export default function create(ctx: CityContext): CityModule {
     const wantFov = follow?.chase ? Math.max(CHASE_FOV, baseFov) : baseFov;
     fov += (wantFov - fov) * (dt > 0 ? damp(3, dt) : 1);
     camera.fov = fov;
-    camera.near = clamp(effDist * 0.02, 0.3, 20);
+    // free camera: a room around it inside a building (facades are single-sided), a near plane that lets it
+    // pass a wall without cutting into it, and the lens focused on what is ahead once the pivot is a step away
+    explore.update(_pos, noLift && !follow);
+    camera.near = noLift ? explore.nearPlane(_pos, effDist) : clamp(effDist * 0.02, 0.3, 20);
     camera.far = WORLD_MODE ? WORLD_FAR : effDist * 6 + 2500;
     camera.updateProjectionMatrix();
     camera.updateMatrixWorld();
+    const fx = ctx.services.postfx;
+    if (noLift && effDist < 2.5 && fx?.setFocus) {
+      fx.setFocus(explore.focusAt(_pos, _dir.subVectors(_tgt, _pos).normalize()));
+      focusSet = true;
+    } else if (focusSet) {
+      fx?.setFocus?.(null);
+      focusSet = false;
+    }
     eff.tx = _tgt.x;
     eff.ty = _tgt.y;
     eff.tz = _tgt.z;
@@ -1647,6 +1755,7 @@ export default function create(ctx: CityContext): CityModule {
     follow: (hit) => {
       if (tour.active) stopTour();
       if (!hit) {
+        clearInspect();
         releaseFollow();
         return;
       }
@@ -1658,7 +1767,7 @@ export default function create(ctx: CityContext): CityModule {
     mode: () => modeNow(),
     startTour,
     stopTour,
-    following: () => (follow && !follow.tour ? follow.hit : null),
+    following: () => (follow && !follow.tour ? follow.hit : inspect),
     setChase,
     chasing: () => !!follow?.chase,
     touring: () => tour.active,
@@ -1797,6 +1906,7 @@ export default function create(ctx: CityContext): CityModule {
         yaw: Math.round(eff.yaw / DEG),
         pitch: Math.round(eff.pitch / DEG),
         flying: flight ? flight.kind : 'no',
+        room: explore.roomLot ? explore.roomLot.id : 'no',
         frameMs: Math.round(camMs * 1000) / 1000,
       };
     },
@@ -1804,7 +1914,8 @@ export default function create(ctx: CityContext): CityModule {
       const out: string[] = [];
       const p = camera.position;
       if (![p.x, p.y, p.z, eff.tx, eff.ty, eff.tz].every(isFinite)) out.push('camera position / target is not finite');
-      const floor = field.groundAt(p.x, p.z) + 1.9;
+      // (the free camera may come down to the ground / water surface)
+      const floor = freeRules() ? Math.min(field.groundAt(p.x, p.z), explore.floorAt(p.x, p.z) - FLOOR_CLEAR) + 0.2 : field.groundAt(p.x, p.z) + 1.9;
       if (p.y < floor) out.push(`camera below the terrain/water floor (y=${p.y.toFixed(2)} < ${floor.toFixed(2)})`);
       const m = boundsMargin() + 1;
       if (eff.tx < bounds.x0 - m || eff.tx > bounds.x1 + m || eff.tz < bounds.z0 - m || eff.tz > bounds.z1 + m) out.push('camera target outside the slab bounds');
@@ -1832,6 +1943,7 @@ export default function create(ctx: CityContext): CityModule {
       window.removeEventListener('keydown', onActivity, true);
       window.removeEventListener('wheel', onActivity, true);
       window.removeEventListener('pointermove', onActivity, true);
+      explore.dispose();
     },
   };
 }

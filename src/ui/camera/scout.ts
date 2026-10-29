@@ -76,7 +76,7 @@ export class Scout {
   }
 
   /** Pick the nearest hit over all pickers (fault isolated). */
-  pick(ray: THREE.Ray): PickHit | null {
+  pick(ray: THREE.Ray, skip?: (h: PickHit) => boolean): PickHit | null {
     let best: PickHit | null = null;
     for (const p of this.ctx.pickers) {
       let h: PickHit | null = null;
@@ -85,6 +85,7 @@ export class Scout {
       } catch {
         h = null;
       }
+      if (h && skip?.(h)) continue;
       if (h && (!best || h.distance < best.distance)) best = h;
     }
     return best;
