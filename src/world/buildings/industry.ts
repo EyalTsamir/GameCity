@@ -548,6 +548,11 @@ export function genIndustrial(g: Gen): void {
       if (alongX) t.box(lx - 0.02, H + 0.2, lz - span * 0.18, lx + 0.02, H + rise * 0.75, lz + span * 0.18, 0b111111);
       else t.box(lx - span * 0.18, H + 0.2, lz - 0.02, lx + span * 0.18, H + rise * 0.75, lz + 0.02, 0b111111);
     }
+    if (MASS.rooflights) {
+      const pts: [number, number][] = [];
+      for (let k = 1; k < n; k++) pts.push(prof(k));
+      rooflights(alongX, a0, a1, pts, 0);
+    }
     // barrel section: height above the eaves ≈ rise·(1 − (d/half)²) across the span
     vents((x, z) => {
       const d = (alongX ? z : x) - c0;
@@ -590,6 +595,12 @@ export function genIndustrial(g: Gen): void {
       t.box(x0, yb - 0.18, zb - 0.04, x1, yb + 0.02, zb + 0.04, 0b111111);
       for (const sd of [RIGHT, LEFT] as Side[]) gableEnd(sideGeom(body, sd), rise);
       if (MASS.monitor && !customs && mr.chance(0.65)) monitor(true, zc, yr, p);
+      if (MASS.rooflights && !customs) {
+        const f1 = monBand ? 1 - (monBand.half + 0.5) / half : 0.88;
+        rooflights(true, x0, x1, [[zf, yf], [zf + (zc - zf) * f1, yf + (yr - yf) * f1]], 0.12);
+        rooflights(true, x0, x1, [[zb, yb], [zb + (zc - zb) * f1, yb + (yr - yb) * f1]], 0.12);
+        if (!monBand) ridgeVent(true, zc, yr, x0, x1, roofC);
+      }
     } else {
       const xc = (body.x0 + body.x1) / 2;
       const p = rise / half;
@@ -602,6 +613,12 @@ export function genIndustrial(g: Gen): void {
       t.box(xc - 0.15, yr - 0.05, z0, xc + 0.15, yr + 0.12, z1);
       for (const sd of [FRONT, BACK] as Side[]) gableEnd(sideGeom(body, sd), rise);
       if (MASS.monitor && !customs && mr.chance(0.65)) monitor(false, xc, yr, p);
+      if (MASS.rooflights && !customs) {
+        const f1 = monBand ? 1 - (monBand.half + 0.5) / half : 0.88;
+        rooflights(false, z0, z1, [[xr, yR], [xr + (xc - xr) * f1, yR + (yr - yR) * f1]], 0.12);
+        rooflights(false, z0, z1, [[xl, yR], [xl + (xc - xl) * f1, yR + (yr - yR) * f1]], 0.12);
+        if (!monBand) ridgeVent(false, xc, yr, z0, z1, roofC);
+      }
     }
     // the slope's height at the vent (+0.3: the collar sits in the roofing)
     const slopeY = (x: number, z: number) => H + rise * Math.max(0, 1 - Math.abs(alongX ? z - (body.z0 + body.z1) / 2 : x - (body.x0 + body.x1) / 2) / half) + 0.3;
@@ -627,6 +644,55 @@ export function genIndustrial(g: Gen): void {
       // louvre vent
       setCol(t, shade(wallC, 0.6));
       sideBox(t, sg, L / 2 - 0.6, L / 2 + 0.6, 0, 0.08, H + rise * 0.3, H + rise * 0.3 + 0.7, true);
+    }
+  }
+
+  /** ?norooflights: translucent rooflight strips down the roof every few bays; `pts` is the roof's cross
+   *  section (across the hall) as [across, y] from the eave up, `f0` trims the first segment at the eave */
+  function rooflights(alongX: boolean, A0: number, A1: number, pts: [number, number][], f0: number): void {
+    let a0 = A0 + 1.6,
+      a1 = A1 - 1.6;
+    if (office === LEFT && alongX) a0 = Math.max(a0, officeR.x1 + 1.2);
+    if (office === RIGHT && alongX) a1 = Math.min(a1, officeR.x0 - 1.2);
+    const L = a1 - a0;
+    if (L < 4 || pts.length < 2) return;
+    const n = Math.max(2, Math.round(L / 4.4));
+    const w = 1.05;
+    const sec = pts.slice();
+    if (f0 > 0) sec[0] = [sec[0][0] + (sec[1][0] - sec[0][0]) * f0, sec[0][1] + (sec[1][1] - sec[0][1]) * f0];
+    const P = (a: number, c: number, y: number): [number, number, number] => (alongX ? [a, y + 0.035, c] : [c, y + 0.035, a]);
+    for (let i = 0; i < n; i++) {
+      const am = a0 + (L * (i + 0.5)) / n;
+      setCol(t, col(i % 2 ? '#d5dfdc' : '#dbe4e2'));
+      for (let k = 0; k + 1 < sec.length; k++) {
+        const [ca, ya] = sec[k];
+        const [cb, yb] = sec[k + 1];
+        const p0 = P(am - w / 2, ca, ya), p1 = P(am + w / 2, ca, ya), p2 = P(am + w / 2, cb, yb), p3 = P(am - w / 2, cb, yb);
+        const rc = alongX ? [am, Math.min(ya, yb) - 6, (ca + cb) / 2] : [(ca + cb) / 2, Math.min(ya, yb) - 6, am];
+        t.quadAway(p0[0], p0[1], p0[2], p1[0], p1[1], p1[2], p2[0], p2[1], p2[2], p3[0], p3[1], p3[2], rc[0], rc[1], rc[2]);
+      }
+    }
+  }
+
+  /** continuous louvred ridge ventilator over the middle of a gable shed's ridge */
+  function ridgeVent(alongX: boolean, c: number, yr: number, A0: number, A1: number, roofC: THREE.Color): void {
+    let a0 = A0 + (A1 - A0) * 0.22,
+      a1 = A1 - (A1 - A0) * 0.22;
+    if (office === LEFT && alongX) a0 = Math.max(a0, officeR.x1 + 1.5);
+    if (office === RIGHT && alongX) a1 = Math.min(a1, officeR.x0 - 1.5);
+    if (a1 - a0 < 3) return;
+    const B = (aa: number, ab: number, h0: number, h1: number, hw: number, faces = 0b111111) =>
+      alongX ? t.box(aa, h0, c - hw, ab, h1, c + hw, faces) : t.box(c - hw, h0, aa, c + hw, h1, ab, faces);
+    setCol(t, shade(roofC, 0.62));
+    B(a0, a1, yr - 0.1, yr + 0.42, 0.36, 0b111111 & ~8);
+    setCol(t, shade(roofC, 0.95));
+    B(a0 - 0.1, a1 + 0.1, yr + 0.42, yr + 0.5, 0.55, 0b111111);
+    // louvre ribs on the housing every 1.5 m
+    setCol(t, shade(roofC, 0.85));
+    const nr = Math.max(2, Math.round((a1 - a0) / 1.5));
+    for (let k = 0; k <= nr; k++) {
+      const a = a0 + ((a1 - a0) * k) / nr;
+      B(a - 0.05, a + 0.05, yr - 0.05, yr + 0.42, 0.4, 0b111111 & ~8 & ~4);
     }
   }
 

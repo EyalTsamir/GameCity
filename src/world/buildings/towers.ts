@@ -213,6 +213,28 @@ export function genTower(g: Gen): void {
       const L = Math.hypot(b.x - a.x, b.z - a.z);
       const gr = windows && L > 1.2 ? edgeGrid(L) : null;
       wallSeg(g.shell, a.x, a.z, b.x, b.z, y0, y1, gr, look(profile));
+      // ?nopiers: punched masonry walls get piers between the window columns and wider corner piers
+      if (MASS.piers && masonry && sc.style === WIN.PLAIN && !sc.fins && gr && y1 - y0 > 6) {
+        const tx = (b.x - a.x) / L,
+          tz = (b.z - a.z) / L;
+        const ang = Math.atan2(-tz, tx);
+        const nx = -tz,
+          nz = tx;
+        const gap = gr.wx0 * 2;
+        const pw = Math.min(0.55, gap * 0.75);
+        const yA = Math.max(y0, gH);
+        const pier = (u0: number, u1: number, dep: number) => {
+          const um = (u0 + u1) / 2;
+          g.trim.boxRot(a.x + tx * um + nx * (dep / 2 - 0.02), a.z + tz * um + nz * (dep / 2 - 0.02), u1 - u0, dep, yA, y1, ang, 0b111111 & ~8);
+        };
+        setCol(g.trim, shade(wallC, 1.05));
+        if (pw > 0.25) for (let k = 1; k < gr.n; k++) pier(gr.u0 + k * gr.cw - pw / 2, gr.u0 + k * gr.cw + pw / 2, 0.14);
+        const cwid = Math.min(gr.u0 + gr.wx0 * 0.8, 1.0);
+        if (cwid > 0.3) {
+          pier(-0.2, cwid, 0.2);
+          pier(L - cwid, L + 0.2, 0.2);
+        }
+      }
       if (sc.fins && gr && y1 - y0 > 6) {
         setCol(g.trim, shade(wallC, 0.9));
         const tx = (b.x - a.x) / L,
@@ -574,7 +596,7 @@ export function genTower(g: Gen): void {
     }
   }
 
-  /** the mullions run on above the roof as fins (every second cell), tied by a ring beam and a mid rail;
+  /** the mullions run on above the roof as a louvred crown (a fin every half cell) tied by a ring beam;
    *  a lit line under the beam on the accent schemes */
   function glassCrown(poly: P[], y: number, hC: number): void {
     const t = g.trim;
@@ -590,20 +612,18 @@ export function genTower(g: Gen): void {
         nz = tx;
       const ang = Math.atan2(-tz, tx);
       setCol(t, shade(wallC, 0.97));
-      const n = Math.max(1, Math.round(L / (sc.cell * 2)));
-      for (let k = 0; k <= n; k++) {
-        if ((k === 0 || k === n) && L < 2) continue;
+      const n = Math.max(1, Math.round(L / (sc.cell * 0.5)));
+      for (let k = 0; k < n; k++) {
         const u = Math.min(L - 0.1, Math.max(0.1, (L * k) / n));
-        t.boxRot(a.x + tx * u - nx * 0.18, a.z + tz * u - nz * 0.18, 0.12, 0.5, y, yT - 0.2, ang, 0b111111 & ~4 & ~8);
+        t.boxRot(a.x + tx * u - nx * 0.22, a.z + tz * u - nz * 0.22, 0.09, 0.6, y, yT - 0.2, ang, 0b111111 & ~4 & ~8);
       }
-      // ring beam on top (runs past the corners so the edges overlap), slim mid rail
+      // ring beam on top (runs past the corners so the edges overlap)
       setCol(t, shade(wallC, 1.04));
-      const ax = a.x - tx * 0.2 - nx * 0.18,
-        az = a.z - tz * 0.2 - nz * 0.18,
-        bx = b.x + tx * 0.2 - nx * 0.18,
-        bz = b.z + tz * 0.2 - nz * 0.18;
-      t.beam(ax, yT - 0.1, az, bx, yT - 0.1, bz, 0.5, 0.2);
-      if (hC > 3) t.beam(ax, y + hC * 0.48, az, bx, y + hC * 0.48, bz, 0.3, 0.08);
+      const ax = a.x - tx * 0.2 - nx * 0.22,
+        az = a.z - tz * 0.2 - nz * 0.22,
+        bx = b.x + tx * 0.2 - nx * 0.22,
+        bz = b.z + tz * 0.2 - nz * 0.22;
+      t.beam(ax, yT - 0.12, az, bx, yT - 0.12, bz, 0.6, 0.24);
     }
     if (sc.accent && H > 45) accentEdge(poly, yT - 0.32, sc.accent, 2.2);
   }

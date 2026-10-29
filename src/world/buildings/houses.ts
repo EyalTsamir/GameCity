@@ -12,7 +12,6 @@ import {
 import { anchors } from './anchors';
 import { balconyLife, roofClutter, ironRail, acUnit, dish, downpipe } from './clutter';
 import { roofKit, MASS } from './massing';
-import { GREEN } from './green';
 import { WIN, PROF, WALLPAT, ROOFPAT, FRAME, GLASS, LIGHT_MODE } from './materials';
 import { partitionSide } from './oldtown';
 
@@ -461,6 +460,7 @@ export function genApartment(g: Gen): void {
    *  a parapet front (solid / glass / bars like the balconies), a little life on some floors */
   function loggia(sg: SideGeom, la: number, lb: number, front: THREE.Color): void {
     const dep = 1.3;
+    const sgIn: SideGeom = { ...sg, x0: sg.x0 - sg.nx * dep, z0: sg.z0 - sg.nz * dep };
     const grL = makeGrid(la, lb, gH, fH, floors - 1, { spacing: lb - la, cols: 1, winW: Math.min(1.7, lb - la - 0.6), winH: Math.min(fH - 0.35, 2.3), sill: 0.06, margin: 0.2 });
     wallGrid(s, sg, la, lb, gH, H, grL, look(), -dep);
     wallSeg(s, sx(sg, la, 0), sz(sg, la, 0), sx(sg, la, -dep), sz(sg, la, -dep), gH, H, null, plain);
@@ -482,7 +482,8 @@ export function genApartment(g: Gen): void {
         sideBox(t, sg, la - 0.02, lb + 0.02, -0.06, 0.08, y + 1.0, y + 1.06, true, true);
       }
       anchors.balcony(sx(sg, (la + lb) / 2, -dep / 2), y, sz(sg, (la + lb) / 2, -dep / 2), sg.nx, sg.nz, lb - la, dep, 1.0);
-      if (rng.chance(0.4)) g.green.clump(sx(sg, la + 0.45, -0.35), y + 0.02, sz(sg, la + 0.45, -0.35), 0.35, rng.range(0.6, 1.1), rng.weighted([GREEN.SHRUB, GREEN.PALM, GREEN.GERANIUM], [3, 1, 1.5]), 3);
+      // plants, laundry, chairs: the balcony kit, on a side geometry whose wall is the loggia's back wall
+      balconyLife(g, sgIn, la + 0.1, lb - 0.1, y, { rail: 1.0, depth: dep - 0.06, solid: balStyle !== 'bars', green: 0.8 });
     }
     setCol(t, shade(wallC, 0.86));
     sideBox(t, sg, la, lb, -dep, 0.0, H - 0.2, H, true, true);
