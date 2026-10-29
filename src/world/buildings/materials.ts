@@ -793,16 +793,20 @@ vec3 bhShop(vec2 pm, vec2 csz, vec3 rd, float rs, float shopT, float litI, vec3 
         float pot = step(abs(d.x), pw) * step(0.0, d.y) * step(d.y, 0.48);
         float leaves = 0.0, lid = 0.0, rib = 0.0;
         float nL = 5.0 + floor(fract(hk * 9.7) * 4.0);
+        // G1: two species — a broad-leaved rubber plant / an upright snake plant (narrow blades, taller)
+        float upr = uGlassVar > 0.5 ? step(0.5, fract(hk * 4.13)) : 0.0;
+        vec2 aR = mix(vec2(0.25, 2.9), vec2(1.12, 2.02), upr);
+        if (upr > 0.5) { nL = 7.0 + floor(fract(hk * 9.7) * 2.0); sz *= 1.2; }
         for (int i = 0; i < 8; i++) {
           float fi = float(i);
           if (fi >= nL) break;
-          float a = mix(0.25, 2.9, (fi + 0.5) / nL) + 0.3 * (bhHash12(vec2(fi, hk * 13.0)) - 0.5);
+          float a = mix(aR.x, aR.y, (fi + 0.5) / nL) + mix(0.3, 0.12, upr) * (bhHash12(vec2(fi, hk * 13.0)) - 0.5);
           float L = mix(0.45, 0.8, bhHash12(vec2(fi, hk * 7.0 + 1.3))) * sz;
           vec2 dir = vec2(cos(a), sin(a) * 1.25);
           dir = normalize(dir);
           vec2 rel = d - (vec2(0.0, 0.48 + stemH * 0.6) + dir * L * 0.55);
           float al = dot(rel, dir), ac = dot(rel, vec2(-dir.y, dir.x));
-          float lf = 1.0 - smoothstep(0.85, 1.0, length(vec2(al / (L * 0.5), ac / (L * (0.13 + 0.07 * fract(hk * 3.7))))));
+          float lf = 1.0 - smoothstep(0.85, 1.0, length(vec2(al / (L * 0.5), ac / (L * mix(0.13 + 0.07 * fract(hk * 3.7), 0.065, upr)))));
           if (lf > leaves) { leaves = lf; lid = fi; rib = 1.0 - smoothstep(0.004, 0.012, abs(ac)); }
         }
         float stem = step(abs(d.x), 0.012) * step(0.45, d.y) * step(d.y, 0.48 + stemH * 0.6);
