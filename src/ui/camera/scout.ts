@@ -56,6 +56,7 @@ export class Scout {
   private censusRays: RaySpec[] = [];
   private censusNext = 0;
   private censusAt = -1e9;
+  private pastRay = new THREE.Ray();
 
   constructor(private ctx: CityContext) {
     ctx.events.on('bus:stop', (p: { stopId?: number; phase?: string } | undefined) => {
@@ -85,7 +86,19 @@ export class Scout {
       } catch {
         h = null;
       }
-      if (h && skip?.(h)) continue;
+      if (h && skip?.(h)) {
+        // a picker reports its nearest hit only: look past the skipped one (the box the camera is inside)
+        const off = h.distance + 0.05;
+        this.pastRay.copy(ray);
+        this.pastRay.origin.addScaledVector(ray.direction, off);
+        try {
+          h = p.pick(this.pastRay);
+        } catch {
+          h = null;
+        }
+        if (h && skip(h)) h = null;
+        if (h) h.distance += off;
+      }
       if (h && (!best || h.distance < best.distance)) best = h;
     }
     return best;

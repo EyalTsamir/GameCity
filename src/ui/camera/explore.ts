@@ -233,7 +233,9 @@ export class ExploreAid {
         const dx = Math.max(f.x0 - p.x, 0, p.x - f.x1),
           dz = Math.max(f.z0 - p.z, 0, p.z - f.z1),
           dy = Math.max(0, p.y - lot.height);
-        d = Math.min(d, Math.hypot(dx, dy, dz));
+        // (inside a landmark's box — station hall, stadium bowl — its outer walls and roof)
+        const inside = dx === 0 && dz === 0 && dy === 0;
+        d = Math.min(d, inside ? Math.min(p.x - f.x0, f.x1 - p.x, p.z - f.z0, f.z1 - p.z, lot.height - p.y) : Math.hypot(dx, dy, dz));
       }
     return Math.max(0, d);
   }
