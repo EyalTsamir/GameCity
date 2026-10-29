@@ -11,6 +11,12 @@ Overview must stay at least as impressive as now. Every feature: quality tiers +
 Lead session: session_01XuhAMczW3iK25AAWnf3qog, branch `claude/pensive-gates-bim12i`.
 
 ## Resume here (keep current)
+* 2026-10-29 03:15 UTC — F1 s1 (aa407fc/99e6016: unique shop names, bookbinder interior, leaf lobby plants, Café Nord
+  sign, church soot/streaks, school art+blinds, warehouse sign, porch posts; yard_b sills = not a bug; lawn rim = sun
+  shadow leak → OUT OF SCOPE, open) and F2 s1 (4e678f4: actors.ts real posed figures for site/band/kids/boat crews,
+  market shoppers, 22 platform passengers, quay workers; ?noactors) merged, tsc OK. Both hit the context cap →
+  respawned: F1b session_01XuhAMeyiDquvccZotnrbgd (bench-judge s1, school entrance, church mouldings/rose),
+  F2b session_01XuhAMgh2gQQLc7zRmcxRjR (bench-judge actors, vehicle occupants, sailboat crew). F3/F4 still s1.
 * 2026-10-29 02:06 UTC — Judge 2 merged (docs/progress/real-judge-2.md: 4 real / 25 almost / 3 not yet (school,
   sailboat, sheep-at-3m); #1 places empty, #2 floating sills in yard_b, #3 primitive vehicle occupants, #4 pixel
   ballast + low-poly cutting, #5 felt lawns + rim, #7 repeated interiors, #8 too new, #9 flat cloth, #10 paving grid).
