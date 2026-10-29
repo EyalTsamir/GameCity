@@ -1,15 +1,26 @@
 # First-person walk (FPV) — progress log
 
 ## Resume here
-Feature complete and committed; typecheck clean, `vite build` OK. Remaining = verification only:
-1. scenario probe (footbridge arch, pier, beach waterline, harbour quay edge, park, off the slab west) — script
-   `<scratchpad>/uit/scripts/scen.mjs` (screenshots → shots/fpv/s_*.png); fix whatever it shows.
-2. perf A/B at street view `5,1.5,-65,9,0,6` @12, 1536x820@1.25: `<scratchpad>/uit/scripts/abperf.mjs` (baseline =
-   `git archive 024d901` copy served on :5193 with node_modules junctioned + its own cacheDir; this branch on :5183).
-3. full default ui-test (`--q camdebug`, includes `walk`) via `<scratchpad>/uit/run.sh` (a copy of ui-test.mjs importing
-   the main checkout's browser.mjs → shared lock). Then final Hebrew report (controls, coverage, limits, files).
-If the scratchpad is gone: recreate the copy with `sed "s#from './browser.mjs'#from 'file:///C:/Projects/GameCity/scripts/browser.mjs'#"`.
+DONE — feature complete, verified and committed (typecheck clean, `vite build` OK 3.73 MB, full ui-test 50/50, perf
+A/B no measurable cost). Nothing open in scope; ready for the coordinator's merge. Optional follow-ups under "Known
+limits". Running a modified harness script on the shared lock: copy it to a scratch dir with
+`sed "s#from './browser.mjs'#from 'file:///C:/Projects/GameCity/scripts/browser.mjs'#"` and run the copy.
 Ground heights come from `ctx.services.terrain.height` (keep it that way: sibling `places-between` adds stairs/ramps there).
+
+## Known limits
+* Walk-through (no collision): vehicles, pedestrians, fences / low walls / railings (except the station's), benches'
+  full length (only their keep-clear disc × 0.55), gantry-crane legs, countryside buildings and forests beyond the slab.
+* Not walkable: the breakwater (its 1.5 m walkway is only reachable down the spur cliff), the river jetty, the ferry
+  pontoon, tunnels (the hill rises behind the portals), the fenced rail corridor (level crossings and the station
+  platform are open). Walking dead-centre into a large round solid (lifeguard tower) stops you like a wall; any
+  angle slides round it.
+* Pointer lock is skipped under automation (navigator.webdriver), so the captured-mouse path (mouse look, centre-dot
+  click, Esc release) is code-reviewed, not machine-tested; drag-look, keys and touch are tested.
+* The minimap shows the walker as the usual view wedge + focus arrow (the focus sits 30 m ahead).
+
+## Screenshots (shots/fpv/, gitignored)
+t3_walk_enter (downtown junction), t2_walk_platform (station platform), s_park, s_pier, s_harbour (quay, gantry
+crane rails), s_bridge (footbridge end), s_beach, s_country (off the west slab edge), t2_walk_wall (at a shop window).
 
 Branch `claude/fpv-walk-58aa99` (worktree `.claude/worktrees/fpv-walk-58aa99`), cut from `claude/pensive-gates-bim12i`
 at 024d901. One of three parallel sessions (perf quick wins, explore orbit camera, this walk mode); the coordinating
@@ -83,7 +94,4 @@ session merges all three into `claude/pensive-gates-bim12i`. Brief: walk around 
   ≥ 20 % of the step; blocked steps veer ±0.6 / ±1.15 rad (same side first). Discs are now registered in every cell
   a body could touch them from (was: only cells under the disc itself).
 
-## Next / open
-* (in progress) scenarios: footbridge arch, pier, beach to the waterline, harbour quay edge, park, off the slab.
-* perf A/B at the street view (baseline 024d901 copy on :5193 vs this branch): orbit unchanged? walk view cost?
-* full ui-test default steps, typecheck, build.
+* After the slide fixes: park walks round the trunk (10 m in 8 s), quay / beach / walk ui-test step 9/9 again.
