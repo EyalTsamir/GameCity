@@ -261,6 +261,10 @@ export default function create(ctx: CityContext): CityModule {
   ctx.scene.add(group);
 
   if (ctx.quality.level === 'low') mats.uniforms.uDetail.value = 0.4;
+  // ?facadelod=a,b (opt-in trade-off, measured in docs/progress/PERF.md): the near window detail (interiors, frames,
+  // mirrored street) fades to the far average between a and b cells per pixel (default 0.3,0.8 = 3.3 → 1.25 px a bay)
+  const flod = (ctx.debug.params.get('facadelod') ?? '').split(',').map(Number);
+  if (flod.length === 2 && flod.every((v) => v > 0) && flod[0] < flod[1]) mats.uniforms.uDetailPx.value.set(flod[0], flod[1]);
   const winGeo = winRec ? createWinGeo(winRec, ctx.quality.level === 'low' ? 22 : ctx.quality.level === 'medium' ? 32 : 42) : null;
   if (winGeo) group.add(winGeo.group);
   // debug (perf analysis): ?bdbg=noshell,notrim,nocast,nodetail
