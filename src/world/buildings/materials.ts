@@ -1941,8 +1941,8 @@ void bhWall(inout vec3 albedo, inout float rough, inout float metal, inout vec3 
   if (uGlassVar > 0.5 && !curtain && !ribbon) {
     float dayK = 1.0 - nightF;
     if (shopWin || lobbyWin) {
-      Fs = max(Fs, mix(0.06, 0.24 + 0.1 * r3, dayK) * (1.0 - openW));
-      interior *= mix(1.0, 0.7, dayK);
+      Fs = max(Fs, mix(0.04, 0.11 + 0.05 * r3, dayK) * (1.0 - openW));
+      interior *= mix(1.0, 0.82, dayK);
     }
     transTint *= mix(vec3(0.93, 1.0, 0.97), vec3(1.0, 0.98, 0.95), fract(r3 * 4.7 + r1 * 0.3)) * mix(0.92, 1.04, fract(r2 * 6.1));
     float de = min(min(pm.x - wr.x, wr.y - pm.x), min(pm.y - wr.z, wr.w - pm.y)) - fw;
