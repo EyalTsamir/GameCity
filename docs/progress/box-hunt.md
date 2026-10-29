@@ -37,8 +37,13 @@ with walk mode / free camera and fix the next 10, repeat. Every feature: `boxHun
   hedges (near-LOD leaf skin exists), kiosks on the pier deck. Hand-offs: poppy heads (#30: needs a discard in the
   shared grass shader — early-Z risk, groundcover owner), beach ice-cream kiosk (buildings/special.ts — massing
   owner), picket-fence board edges (cost ~30-60k tris city-wide), close-up pedestrian heads / hats (faceted).
-- Pending A/B: `shots/bh2/ver2` (stadium gate, station, reredos), `ver3` (containers, booth), `ver4` (yard props,
-  rack bikes, shop goods). Then perf A/B (`;noboxhunt`), build, final report.
+- Verified: station posters / machines (`ver2`), containers + booth (`ver3`, invariants {}). Stadium gates: the
+  first vestibule (2.7 m deep) was buried in the stand's stepped mass — the stand starts right behind the 0.5 m
+  wall, the arch showed red seat risers; 211f493 fits a shallow lit lobby into the reveal instead (panel, dark
+  tunnel, pay sign, two turnstiles, gate leaves folded open). Reredos was inside the 0.6 m end wall (its inner
+  face is nz0 + 0.6: `wall()` extrudes inward from the outer face) — moved. Re-check: `ver5`.
+- Pending: `ver4` (yard props, rack bikes, shop goods), `ver5`, perf A/B (`;noboxhunt`, 4 views × 2), walk round 2
+  (`v_walk2.js`: 24 eye-level + 6 mid-height views ≥ 38 m from round 1) → judges → fixes. Build OK (3.85 MB).
 - Edit scripts: never pre-convert inserted text to CRLF and then pass it through `R()` again (made `
 `).
 - Already done by earlier rounds (F4, checked in code): building-site mud / ruts / mixer / excavator, quay oil
