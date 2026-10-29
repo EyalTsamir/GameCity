@@ -127,6 +127,65 @@ function tractorGeometry(): FleetTemplate {
   return { pos, col, emi };
 }
 
+/** wheel tracks: two compacted, darker ruts along every pass of the tractor's serpentine (one strip mesh) */
+function wheelTracks(F: Field, longX: boolean, len: number, passes: number, passW: number, H: (x: number, z: number) => number): THREE.Mesh {
+  const pos: number[] = [],
+    alpha: number[] = [];
+  const P = { x: 0, z: 0 };
+  const baseA = longX ? F.x0 + 8 : F.y0 + 8;
+  for (let pass = 0; pass < passes; pass++) {
+    const b = (longX ? F.y0 : F.x0) + 8 + pass * passW;
+    for (const off of [-0.92, 0.92])
+      for (let a = 0; a < len; a += 2.5) {
+        const a1 = Math.min(len, a + 2.5);
+        const q: number[][] = [];
+        for (const [u, v] of [
+          [a, off - 0.26],
+          [a1, off - 0.26],
+          [a1, off + 0.26],
+          [a, off + 0.26],
+        ]) {
+          const fx = longX ? baseA + u : b + v,
+            fy = longX ? b + v : baseA + u;
+          fromField(fx, fy, P);
+          q.push([P.x, H(P.x, P.z) + 0.035, P.z]);
+        }
+        // fade in / out at the headlands
+        const k0 = Math.min(1, a / 6, (len - a) / 6),
+          k1 = Math.min(1, a1 / 6, (len - a1) / 6);
+        for (const [i, k] of [
+          [0, k0],
+          [1, k1],
+          [2, k1],
+          [0, k0],
+          [2, k1],
+          [3, k0],
+        ]) {
+          pos.push(...q[i]);
+          alpha.push(Math.max(0, k) * 0.5);
+        }
+      }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('aAlpha', new THREE.Float32BufferAttribute(alpha, 1));
+  g.computeVertexNormals();
+  const m = new THREE.MeshStandardMaterial({ color: 0x241a12, roughness: 0.95, metalness: 0, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+  m.onBeforeCompile = (sh) => {
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute float aAlpha;\nvarying float vAl;\nvarying vec2 vTw;').replace('#include <begin_vertex>', '#include <begin_vertex>\nvAl = aAlpha; vTw = position.xz;');
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', '#include <common>\nvarying float vAl;\nvarying vec2 vTw;')
+      // tread prints across the rut and a broken edge
+      .replace('vec4 diffuseColor = vec4( diffuse, opacity );', 'float tp = 0.75 + 0.25 * sin( dot( vTw, vec2( 13.0, 9.0 ) ) ) * sin( dot( vTw, vec2( -7.0, 11.0 ) ) );\nvec4 diffuseColor = vec4( diffuse, vAl * tp );');
+  };
+  m.customProgramCacheKey = () => 'th-wheeltracks-v1';
+  const mesh = new THREE.Mesh(g, m);
+  mesh.name = 'land-wheeltracks';
+  mesh.receiveShadow = true;
+  mesh.renderOrder = -1;
+  return mesh;
+}
+
 export interface FarmLife {
   group: THREE.Group;
   animals: number;
@@ -314,7 +373,7 @@ ${POSE_GLSL}`,
   herd.receiveShadow = true;
   group.add(herd);
   if (detail && nA > 0) {
-    const cap = density >= 0.95 ? [24, 12] : density >= 0.7 ? [14, 8] : [6, 4];
+    const cap = density >= 0.95 ? [40, 16] : density >= 0.7 ? [24, 10] : [10, 5];
     const nearR = density >= 0.95 ? 55 : density >= 0.7 ? 42 : 30;
     const near = [createNearHerd(sheepGeometry(), cap[0], 1, uniforms, fog), createNearHerd(cowGeometry(), cap[1], 0, uniforms, fog)];
     for (const n of near) group.add(n.mesh);
@@ -388,6 +447,7 @@ ${POSE_GLSL}`,
     const across = longX ? F.y1 - F.y0 - 16 : F.x1 - F.x0 - 16;
     const passW = 6;
     const passes = Math.max(2, Math.floor(across / passW));
+    if (model3) group.add(wheelTracks(F, longX, len, passes, passW, H));
     let s = 0; // distance along the whole serpentine
     const speed = 2.6;
     tractorPos = new THREE.Vector3();

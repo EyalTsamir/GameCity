@@ -190,7 +190,7 @@ try {
           const ps = (c.ctx.services.groundcover?.flowerPatches ?? []).slice().sort((a, b) => b.density - a.density || Math.hypot(a.x, a.z) - Math.hypot(b.x, b.z));
           const fp = nth(ps);
           if (!fp) return null;
-          return { x: fp.x, y: gy(fp.x, fp.z), z: fp.z, yaw: 30, h: 0.5, w: 0.6, pitch: 30 };
+          return { x: fp.x, y: gy(fp.x, fp.z), z: fp.z, yaw: 30, h: 0.3, w: 0.3, pitch: 42 };
         }
         if (cls === 'farm') {
           const sites = (c.ctx.services.landscape?.model?.sites ?? []).filter((s) => s.kind === 'farm');
