@@ -88,6 +88,7 @@ export default function create(ctx: CityContext): CityModule {
   setPrinter(printer);
   setBikeSpokes(!ctx.debug.params.has('nobikespokes') && ctx.quality.level !== 'low');
   setShelterRoof(boxHunt(ctx, 'shelterroof'));
+  SK.setYardDetail(boxHunt(ctx, 'yardkit'));
   GK.setBinDetail(boxHunt(ctx, 'wheeliebin'));
 
   /** local → world for a frame at (x, z) with yaw */

@@ -551,7 +551,24 @@ vec3 bhShelves(vec2 q, vec3 wallC, float kind, float rs, float y0, float y1, flo
     float k = floor(q.x / w);
     float hh = bhHash12(vec2(k, row + rs * 3.1));
     float ht = 0.35 + 0.5 * fract(hh * 7.3);
-    if (fy < ht && fract(q.x / w) > 0.08 && hh > 0.12) c = bhPal(fract(hh * 3.7)) * (0.75 + 0.35 * fract(hh * 13.1));
+    if (fy < ht && fract(q.x / w) > 0.08 && hh > 0.12) {
+      c = bhPal(fract(hh * 3.7)) * (0.75 + 0.35 * fract(hh * 13.1));
+      if (uBhInt > 0.5) {
+        // box hunt (?nointeriors): printed packaging — a pale label band with a print line on most packs, a
+        // brand roundel near the top, the box side (left) and top edge in shade, some facings split into two
+        // narrower packs
+        float u = fract(q.x / w);
+        float v = fy / ht;
+        if (fract(hh * 17.3) > 0.6) u = fract(u * 2.0);
+        float lab = step(0.34, v) * step(v, 0.66) * step(0.35, fract(hh * 5.3));
+        c = mix(c, vec3(0.93, 0.91, 0.85), lab * 0.9);
+        c = mix(c, c * 0.3, lab * step(0.47, v) * step(v, 0.53) * step(0.2, u) * step(u, 0.8));
+        float dd = length(vec2((u - 0.5) * w, (v - 0.82) * ht * rowH));
+        c = mix(c, bhPal(fract(hh * 9.7)) * 1.1, step(dd, 0.022) * step(0.5, fract(hh * 3.1)));
+        c *= mix(0.62, 1.0, smoothstep(0.1, 0.2, u));
+        c *= 1.0 - 0.3 * smoothstep(0.88, 1.0, v);
+      }
+    }
   } else if (kind < 1.5) {
     float w = 0.035 + 0.025 * bhHash12(vec2(floor(q.x / 0.05), row + rs));
     float k = floor(q.x / w + row * 0.37);

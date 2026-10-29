@@ -516,7 +516,18 @@ function townhallInterior(env: Env, o: { HW: number; RX: number; coreB: number; 
   D.box(woodDark, 3.4, 0.05, 0.85, 0, 1.0, zb + 1.6);
   for (const s of [-1, 1]) {
     D.cyl(gilt, 0.025, 0.03, 2.6, s * 2.4, 0, zb + 0.9, 6);
-    D.box(M(s > 0 ? '#1f4f8f' : '#c9a227', PAT.PLAIN, 0.9), 0.02, 1.1, 0.7, s * 2.4, 1.35, zb + 0.55);
+    // the flag hangs from the pole in soft folds (pleated strips), a gilt ball on top
+    const cloth = M(s > 0 ? '#1f4f8f' : '#c9a227', PAT.PLAIN, 0.9);
+    for (let k = 0; k < 6; k++) {
+      const za = zb + 0.88 - k * 0.12,
+        zc2 = za - 0.12;
+      const xa = s * 2.4 + (k % 2 ? 0.04 : -0.04),
+        xc = s * 2.4 + (k % 2 ? -0.04 : 0.04);
+      const ya = 1.35 + 0.05 * Math.sin(k * 0.9),
+        yc = 1.35 + 0.05 * Math.sin((k + 1) * 0.9);
+      D.quad(cloth, [xa, ya, za], [xc, yc, zc2], [xc, 2.45, zc2], [xa, 2.45, za], 0.12, 1.1, true);
+    }
+    D.sphere(gilt, 0.05, s * 2.4, 2.64, zb + 0.9, 8, 6);
   }
   // portraits on the back wall (painted: a dark ground, a lit face, a coat), benches below, palms in the corners
   const portrait = env.atlas.add(64, 80, (g, w, h) => {

@@ -38,6 +38,12 @@ export function pickLook(rng: Rng): ContainerLook {
   return { body, stripe };
 }
 
+/** box hunt (?nocontainerkit): corner castings, the door seam, hinges and a data plate on every container */
+let KIT = true;
+export function setContainerDetail(on: boolean): void {
+  KIT = on;
+}
+
 /**
  * One container in the builder's CURRENT frame: bottom centre at (x, y, z), length along local
  * z (yaw rotates it), doors at +z.
@@ -90,6 +96,23 @@ export function addContainer(b: HB, x: number, y: number, z: number, len: number
   _d.copy(col).multiplyScalar(0.7);
   b.colorObj(_d);
   for (const bx of [-0.92, -0.32, 0.32, 0.92]) b.box(bx, CH / 2, iz + 0.025, 0.05, CH - 0.45, 0.05, 0, 1 | 2 | 4);
+  if (KIT) {
+    // cast corner fittings proud of the posts, the seam between the doors, hinges on the outer door edges,
+    // handles on the inner bars and a small data plate
+    _d.copy(col).multiplyScalar(0.5);
+    b.colorObj(_d);
+    for (const sx of [-1, 1])
+      for (const sz of [-1, 1])
+        for (const yy of [0.06, CH - 0.06]) b.box(sx * (hw - 0.085), yy, sz * (hl - 0.085), 0.19, 0.12, 0.19, 0, yy < 1 ? 1 : 0);
+    b.colorObj(_d);
+    b.box(0, CH / 2, iz + 0.012, 0.03, CH - 0.3, 0.02, 0, 1 | 2 | 4);
+    for (const sx of [-1, 1]) for (const yy of [0.45, 1.0, 1.6, 2.15]) b.box(sx * (hw - 0.2), yy, iz + 0.03, 0.12, 0.09, 0.05, 0, 1 | 4);
+    _d.copy(col).multiplyScalar(0.4);
+    b.colorObj(_d);
+    for (const bx of [-0.32, 0.32]) b.box(bx + Math.sign(bx) * 0.09, 1.15, iz + 0.06, 0.14, 0.03, 0.03, 0, 1 | 4);
+    b.color('#d9d4c8');
+    b.box(0.55, 2.0, iz + 0.015, 0.26, 0.16, 0.01, 0, 1 | 4);
+  }
   b.pop();
 }
 const _d = new THREE.Color();

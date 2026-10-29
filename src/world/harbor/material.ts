@@ -141,9 +141,21 @@ float hbRough = -1.0;
     float x = vPat.z / max(vPat.y, 0.05);
     float fw = fwidth(x);
     float fade = 1.0 - smoothstep(0.3, 0.85, fw);
+#ifdef HB_TRAP
+    // box hunt (?nocontainerkit): trapezoidal box corrugation — flat outer and inner panels joined by slanted
+    // webs, so the sun draws crisp light / dark stripes; the recessed panel is a touch darker
+    float f = fract(x);
+    float aa = fw * 1.5 + 0.01;
+    float webIn = smoothstep(0.3 - aa, 0.3 + aa, f) - smoothstep(0.44 - aa, 0.44 + aa, f);
+    float webOut = smoothstep(0.8 - aa, 0.8 + aa, f) - smoothstep(0.94 - aa, 0.94 + aa, f);
+    float inner = smoothstep(0.44 - aa, 0.44 + aa, f) - smoothstep(0.8 - aa, 0.8 + aa, f);
+    diffuseColor.rgb *= 1.0 - (0.07 * inner + 0.05 * (webIn + webOut)) * fade;
+    hbTilt = (webOut - webIn) * 0.9 * fade;
+#else
     float ph = x * 6.2832;
     diffuseColor.rgb *= 1.0 + 0.08 * sin(ph) * fade;
     hbTilt = cos(ph) * 0.5 * fade;
+#endif
   } else if (pid > 1.5 && pid < 3.5) {
     float x = vPat.z / max(vPat.y, 0.05);
     float fi = floor(x);
@@ -288,11 +300,12 @@ export interface HarborMaterials {
   rig: RigUniforms;
 }
 
-export function createHarborMaterials(g: GlobalUniforms, lambert = false): HarborMaterials {
+export function createHarborMaterials(g: GlobalUniforms, lambert = false, trap = false): HarborMaterials {
   const rig = createRigUniforms();
   const make = (rigged: boolean): THREE.MeshStandardMaterial | THREE.MeshLambertMaterial => {
     const m = lambert ? new THREE.MeshLambertMaterial({ vertexColors: true }) : new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.8, metalness: 0.0 });
     m.name = rigged ? 'harbor-rigged' : 'harbor-solid';
+    if (trap) m.defines = { ...m.defines, HB_TRAP: '' };
     m.onBeforeCompile = (shader) => {
       Object.assign(shader.uniforms, {
         uLights: g.uLights,
@@ -324,7 +337,7 @@ export function createHarborMaterials(g: GlobalUniforms, lambert = false): Harbo
         .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>\n${FRAG_NORMAL}`)
         .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>\n${FRAG_EMIT}`);
     };
-    m.customProgramCacheKey = () => (rigged ? 'tinyhaven-harbor-rigged-v2' : 'tinyhaven-harbor-solid-v2') + (lambert ? '-l' : '');
+    m.customProgramCacheKey = () => (rigged ? 'tinyhaven-harbor-rigged-v2' : 'tinyhaven-harbor-solid-v2') + (lambert ? '-l' : '') + (trap ? '-t' : '');
     return m;
   };
   const solid = make(false);

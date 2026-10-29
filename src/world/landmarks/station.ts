@@ -585,4 +585,70 @@ function stationInterior(env: Env, HX: number, zB: number, zFr: number, ySpring:
     drawText(g, 'TO THE TRAINS', w / 2, h / 2 + 1, 'bold 22px Arial, sans-serif', '#ffffff', 2);
   });
   signQuad(env.T, plat, 2.0, 2.0 * (40 / 256), 3.6, 4.7, z0 + 0.05, 0, 0.5);
+  // railway travel posters in gilt frames on the entrance wall, a WAY OUT sign over the doors
+  const poster = (sky: string, sea: string, land: string, title: string, sub: string, sail: boolean) =>
+    env.atlas.add(80, 120, (g, w, h) => {
+      const gr = g.createLinearGradient(0, 0, 0, h * 0.6);
+      gr.addColorStop(0, sky);
+      gr.addColorStop(1, '#fbe3b0');
+      g.fillStyle = gr;
+      g.fillRect(0, 0, w, h);
+      g.fillStyle = '#f7c948';
+      g.beginPath();
+      g.arc(w * 0.7, h * 0.3, 9, 0, Math.PI * 2);
+      g.fill();
+      g.fillStyle = sea;
+      g.fillRect(0, h * 0.52, w, h * 0.2);
+      g.fillStyle = land;
+      g.beginPath();
+      g.moveTo(0, h * 0.72);
+      g.quadraticCurveTo(w * 0.35, h * 0.5, w * 0.55, h * 0.62);
+      g.lineTo(w, h * 0.58);
+      g.lineTo(w, h * 0.8);
+      g.lineTo(0, h * 0.8);
+      g.fill();
+      if (sail) {
+        g.fillStyle = '#ffffff';
+        g.beginPath();
+        g.moveTo(w * 0.3, h * 0.36);
+        g.lineTo(w * 0.3, h * 0.55);
+        g.lineTo(w * 0.42, h * 0.55);
+        g.fill();
+      } else {
+        g.fillStyle = '#f4efe2';
+        g.fillRect(w * 0.18, h * 0.38, 6, h * 0.2);
+        g.fillStyle = '#c0392b';
+        g.fillRect(w * 0.18, h * 0.44, 6, 4);
+      }
+      g.fillStyle = '#1d2d4a';
+      g.fillRect(0, h * 0.8, w, h * 0.2);
+      drawText(g, title, w / 2, h * 0.86, 'bold 11px Georgia, serif', '#f6efe0', 1);
+      drawText(g, sub, w / 2, h * 0.95, '7px Arial, sans-serif', '#f2d27a', 1);
+    });
+  const posters = [
+    poster('#7fb6d9', '#2f6f9e', '#d8c38a', 'TINYHAVEN', 'by the sea', true),
+    poster('#9ac3cf', '#356b85', '#6f8f4e', 'LIGHTHOUSE', 'cliff walks', false),
+  ];
+  const pz = z1 - 0.03;
+  [-1, 1].forEach((sx, i) => {
+    const px = sx * (iw - 2.6);
+    D.box(brass, 1.08, 1.56, 0.04, px, 1.25, pz);
+    signQuad(env.T, posters[i], 0.96, 1.44, px, 2.03, pz - 0.03, Math.PI, 0);
+  });
+  const wayOut = env.atlas.add(192, 40, (g, w, h) => {
+    g.fillStyle = '#f2c94c';
+    g.fillRect(0, 0, w, h);
+    drawText(g, 'WAY OUT', w / 2, h / 2 + 1, 'bold 24px Arial, sans-serif', '#1a1a1a', 2);
+  });
+  signQuad(env.T, wayOut, 1.5, 1.5 * (40 / 192), 0, 4.2, z1 - 0.06, Math.PI, 0.5);
+  // ticket machines beside the booking office: housing, lit screen, card slot, a brass name plate
+  for (const dz of [-3.3, 3.3]) {
+    const mx = ox + 0.45,
+      mz = zc + dz;
+    D.box(M('#b8322b', PAT.PLAIN, 0.4, 0.2), 0.6, 1.65, 0.55, mx, 0, mz);
+    D.box(M('#2a2d30', PAT.PLAIN, 0.3), 0.04, 0.4, 0.38, mx + 0.31, 1.15, mz);
+    env.L.box(LM('#bfe3ff', LMODE.ALWAYS, 0.9, dz), 0.012, 0.32, 0.3, mx + 0.335, 1.19, mz);
+    D.box(M('#1b1d20', PAT.PLAIN, 0.4), 0.05, 0.08, 0.2, mx + 0.31, 0.8, mz);
+    D.boxC(M('#2a2d30', PAT.PLAIN, 0.4), 0.18, 0.05, 0.44, mx + 0.26, 1.45, mz, 0, 0, 0.4);
+  }
 }

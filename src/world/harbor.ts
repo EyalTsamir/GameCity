@@ -22,13 +22,13 @@ import { HB, RIG } from './harbor/geo';
 import { createBeamMesh, createHarborMaterials, createGlowMesh, followCraneLamps, NMOB, type GlowPoint } from './harbor/material';
 import { buildBreakwater, setArmourStones } from './harbor/breakwater';
 import { buildFishQuay, setQuayDetail } from './harbor/quay';
-import { buildCarouselRotating, buildCarouselStatic, buildPier, buildWheelRotating, buildWheelStatic, setGondolaDetail, setCarouselDetail, type WheelSpec } from './harbor/pier';
+import { buildCarouselRotating, buildCarouselStatic, buildPier, buildWheelRotating, buildWheelStatic, setGondolaDetail, setCarouselDetail, setBoothDetail, type WheelSpec } from './harbor/pier';
 import { buildFerryDock, lifeguardTower, scatterBeach, setBeachDetail, setFerryDockDetail } from './harbor/beach';
 import { boxHunt } from '../core/boxhunt';
 import { bridgeProfile, buildFootbridge, buildJetty, type BridgeInfo, setRiverLanterns } from './harbor/river';
 import { buildCrane, buildCraneRails, CraneSim, type MobileBox } from './harbor/cranes';
 import { buildMooring, buildQuayEdge, buildShip, mobileShipPos, SHIP, type MobileSlot } from './harbor/ship';
-import { addContainer, CH, CW, fillYard, L20, pickLook, yardRows } from './harbor/containers';
+import { addContainer, CH, CW, fillYard, L20, pickLook, setContainerDetail, yardRows } from './harbor/containers';
 import { buildHarborFloodlights } from './lamps/harborLights';
 import { addLampLights } from '../core/lampLight';
 
@@ -48,7 +48,8 @@ export interface HarborService {
 export default function create(ctx: CityContext): CityModule {
   const t0 = performance.now();
   const plan = ctx.plan;
-  const mats = createHarborMaterials(ctx.uniforms, ctx.debug.params.get('harborStandard') !== '1');
+  const mats = createHarborMaterials(ctx.uniforms, ctx.debug.params.get('harborStandard') !== '1', boxHunt(ctx, 'containerkit'));
+  setContainerDetail(boxHunt(ctx, 'containerkit'));
   const rig = mats.rig;
   const glows: GlowPoint[] = [];
   const north = new HB();
@@ -204,6 +205,7 @@ export default function create(ctx: CityContext): CityModule {
     const wf = feats('ferriswheel')[0];
     if (wf?.rect) {
       wheel = { x: wf.x, z: wf.z, radius: Number(wf.params?.radius ?? 15), hubY: deckY + Number(wf.params?.hub ?? 17.5), rect: wf.rect, deckY };
+      setBoothDetail(boxHunt(ctx, 'pierbooth'));
       buildWheelStatic(beach, wheel, glows);
       setGondolaDetail(boxHunt(ctx, 'gondola'));
       setCarouselDetail(boxHunt(ctx, 'carousel'));

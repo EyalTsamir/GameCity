@@ -532,12 +532,12 @@ function churchInterior(env: Env, d: { NW: number; nz0: number; nz1: number; eav
     panel(36, 24, '#efeae0', 14);
     panel(66, 24, '#3f6b35', 30);
   });
-  D.box(gilt, 2.5, 3.1, 0.08, 0, ay + 1.2, nz0 + 0.04);
-  D.boxC(gilt, 1.5, 0.12, 0.1, -0.62, ay + 4.48, nz0 + 0.05, 0, 0, 0.5);
-  D.boxC(gilt, 1.5, 0.12, 0.1, 0.62, ay + 4.48, nz0 + 0.05, 0, 0, -0.5);
-  signQuad(env.T, reredos, 2.2, 2.75, 0, ay + 2.75, nz0 + 0.09, 0, 0);
+  D.box(gilt, 2.5, 3.1, 0.08, 0, ay + 1.2, nz0 + 0.36);
+  D.boxC(gilt, 1.5, 0.12, 0.1, -0.62, ay + 4.48, nz0 + 0.37, 0, 0, 0.5);
+  D.boxC(gilt, 1.5, 0.12, 0.1, 0.62, ay + 4.48, nz0 + 0.37, 0, 0, -0.5);
+  signQuad(env.T, reredos, 2.2, 2.75, 0, ay + 2.75, nz0 + 0.41, 0, 0);
   // altar: stone table, linen with a front drape and a red frontal, candles, a gilt cross
-  const ax = nz0 + 0.75;
+  const ax = nz0 + 0.95;
   D.box(M('#cfc6b4', PAT.STONE, 0.8, 0, 0, 0, 0.4), 2.0, 0.92, 0.8, 0, ay, ax);
   D.box(linen, 2.1, 0.03, 0.9, 0, ay + 0.92, ax);
   D.box(linen, 2.1, 0.4, 0.02, 0, ay + 0.54, ax + 0.45);

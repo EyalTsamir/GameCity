@@ -17,6 +17,7 @@ import { wall, type Opening } from './facade';
 import { C, flagpole, quoins, railing } from './parts';
 import type { Env } from './env';
 import { drawText, signQuad, type AtlasRect } from './signs';
+import { boxHunt } from '../../core/boxhunt';
 
 export interface ShellSpec {
   /** outer wall plane (local, from the centre) */
@@ -94,6 +95,18 @@ export function stadiumShell(env: Env, sp: ShellSpec): void {
     'stadium-crest',
   );
 
+  // box hunt (?nostadiumgate): the gate arches open onto a turnstile vestibule (concrete, lit, four turnstile
+  // cabinets with tri-arms, a pay sign) behind a painted green gate, instead of a black void with a black gate
+  const vest = boxHunt(env.ctx, 'stadiumgate');
+  const concrete = M('#bdb7ab', PAT.PLAIN, 0.9);
+  const conFloor = M('#8e8a82', PAT.TILES, 0.85, 0, 0, 0, 0.3);
+  const steel = M('#9aa1a6', PAT.PLAIN, 0.35, 0.8);
+  const payHere = env.atlas.add(192, 32, (g, w, h) => {
+    g.fillStyle = '#1f5a3a';
+    g.fillRect(0, 0, w, h);
+    drawText(g, 'TURNSTILES  ·  PAY HERE', w / 2, h / 2 + 1, 'bold 15px Arial, sans-serif', '#ffffff', 1);
+  });
+
   // ── facades
   let gateNo = 0;
   for (let k = 0; k < 4; k++) {
@@ -116,7 +129,7 @@ export function stadiumShell(env: Env, sp: ShellSpec): void {
     const gaps: [number, number][] = [...gates.map((u) => [u, 2.1] as [number, number]), ...exits.map((u) => [u, 1.65] as [number, number])];
     const blocked = (u: number, m: number) => gaps.some(([g, hw]) => Math.abs(u - g) < hw + m) || (south && Math.abs(u) < 1.9 + m);
     const ops: Opening[] = [];
-    for (const u of gates) ops.push({ x: WL + u, y: 0, w: 3.4, h: 3.45, arch: 0.8, fill: 'dark', inset: 0.42, surround: stone, surroundW: 0.32, keystone: stone });
+    for (const u of gates) ops.push({ x: WL + u, y: 0, w: 3.4, h: 3.45, arch: 0.8, fill: vest ? 'none' : 'dark', inset: 0.42, surround: stone, surroundW: 0.32, keystone: stone });
     for (const u of exits) ops.push({ x: WL + u, y: 0, w: 2.6, h: 2.9, arch: 0.6, fill: 'dark', inset: 0.38, surround: stone, surroundW: 0.26, keystone: stone });
     const bays = [-12, -7.2, -2.4, 2.4, 7.2, 12];
     for (let i = 0; i < bays.length; i++) {
@@ -173,7 +186,34 @@ export function stadiumShell(env: Env, sp: ShellSpec): void {
     for (const u of gates) {
       const [ax, az] = L(u - 1.68, W - 0.3);
       const [bx, bz] = L(u + 1.68, W - 0.3);
-      railing(env, [ax, 0, az], [bx, 0, bz], 3.2, '#2a3230');
+      railing(env, [ax, 0, az], [bx, 0, bz], 3.2, vest ? '#2c5a44' : '#2a3230');
+      if (vest) {
+        const D = env.D;
+        const dbox = (m: Mat, w: number, h: number, d: number, uu: number, y: number, dep: number) => {
+          const [x, z] = L(uu, dep);
+          D.box(m, w, h, d, x, y, z, ry);
+        };
+        dbox(concrete, 3.9, 3.9, 0.12, u, 0, W - 2.7);
+        for (const e of [-1, 1]) dbox(concrete, 0.12, 3.9, 2.3, u + e * 1.9, 0, W - 1.6);
+        dbox(concrete, 3.9, 0.12, 2.3, u, 3.8, W - 1.6);
+        dbox(conFloor, 3.9, 0.03, 2.3, u, 0, W - 1.6);
+        for (const cu of [-1.6, -0.55, 0.55, 1.6]) {
+          dbox(steel, 0.3, 1.0, 0.85, u + cu, 0, W - 1.7);
+          dbox(M('#2b2e31', PAT.PLAIN, 0.4), 0.32, 0.04, 0.87, u + cu, 1.0, W - 1.7);
+          if (cu > 1) continue;
+          // tri-arm on the cabinet's right side, one arm barring the lane
+          const [hx, hz] = L(u + cu + 0.17, W - 1.7);
+          for (let a = 0; a < 3; a++) {
+            const t = a * 2.094 + 0.3;
+            const [tx, tz] = L(u + cu + 0.17 + Math.cos(t) * 0.42, W - 1.7 + Math.sin(t) * 0.12);
+            D.rod(steel, [hx, 0.92, hz], [tx, 0.92 - Math.sin(t) * 0.3, tz], 0.018, 5);
+          }
+        }
+        const [px, pz] = L(u, W - 2.62);
+        signQuad(env.T, payHere, 2.4, 0.4, px, 2.8, pz, ry, 0.7);
+        const [lx, lz] = L(u, W - 1.6);
+        env.L.box(LM('#fff2d6', LMODE.ALWAYS, 1.6, u), 1.4, 0.04, 0.2, lx, 3.74, lz, ry);
+      }
       const letter = String.fromCharCode(65 + gateNo++);
       const [sx, sz] = L(u, W + 0.05);
       signQuad(env.T, gateSign(`GATE ${letter}`), 2.3, 0.58, sx, 4.68, sz, ry, 0.6);

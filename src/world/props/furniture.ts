@@ -1062,7 +1062,7 @@ export function setBikeSpokes(on: boolean): void {
 
 /** Spoked bicycle wheel in the local xy plane centred at (x, r): tyre ring (`n` segments), silver rim, hub and
  * `spokes` spokes crossing the hub alternately to each flange. */
-export function spokedWheel(k: Kit, x: number, r: number, n: number, spokes: number): void {
+export function spokedWheel(k: Kit, x: number, r: number, n: number, spokes: number, tyreSides = 5): void {
   const sh = k.sh;
   const ring = (rr: number, w: number, sides: number) => {
     for (let i = 0; i < n; i++) {
@@ -1072,7 +1072,7 @@ export function spokedWheel(k: Kit, x: number, r: number, n: number, spokes: num
     }
   };
   k.m('#1e1f21', 'rubber');
-  ring(r - 0.016, 0.019, 5);
+  ring(r - 0.016, 0.019, tyreSides);
   k.m('#b8bec2', 'steel');
   ring(r - 0.04, 0.008, 3);
   sh.tube(x, r, -0.035, x, r, 0.035, 0.018, 0.018, 6);

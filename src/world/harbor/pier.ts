@@ -346,14 +346,89 @@ export function buildWheelStatic(b: HB, w: WheelSpec, glows: GlowPoint[]): void 
   b.color('#7d838a');
   b.cyl([w.x, hy, w.z - 2.6], [w.x, hy, w.z + 2.6], 0.34, 0.34, 10, 3);
   // ticket booth by the steps
-  b.color('#e63946');
-  b.boxMM(w.x + 3.4, top, w.rect.z0 - 1.6, w.x + 4.8, top + 2.2, w.rect.z0 - 0.3, 1);
-  b.color('#3a2f28').emit('#ffcf8a', 1.4, EMIT.LIGHTS);
-  b.boxMM(w.x + 3.55, top + 1.0, w.rect.z0 - 1.62, w.x + 4.65, top + 1.7, w.rect.z0 - 1.6, 1 | 2 | 8);
-  b.noEmit();
-  b.color(CREAM);
-  b.boxMM(w.x + 3.3, top + 2.2, w.rect.z0 - 1.7, w.x + 4.9, top + 2.4, w.rect.z0 - 0.2, 0);
+  if (BOOTH) ticketBooth(b, w.x + 3.4, w.x + 4.8, w.rect.z0 - 1.6, w.rect.z0 - 0.3, top);
+  else {
+    b.color('#e63946');
+    b.boxMM(w.x + 3.4, top, w.rect.z0 - 1.6, w.x + 4.8, top + 2.2, w.rect.z0 - 0.3, 1);
+    b.color('#3a2f28').emit('#ffcf8a', 1.4, EMIT.LIGHTS);
+    b.boxMM(w.x + 3.55, top + 1.0, w.rect.z0 - 1.62, w.x + 4.65, top + 1.7, w.rect.z0 - 1.6, 1 | 2 | 8);
+    b.noEmit();
+    b.color(CREAM);
+    b.boxMM(w.x + 3.3, top + 2.2, w.rect.z0 - 1.7, w.x + 4.9, top + 2.4, w.rect.z0 - 0.2, 0);
+  }
   glows.push({ x: w.x, y: hy, z: w.z, size: 6.5, color: '#ffd9a8', intensity: 0.42, mode: GLOW.FERRIS });
+}
+
+/** box hunt (?nopierbooth): the ferris-wheel ticket booth as a Victorian kiosk — plinth, panelled walls between
+ *  cream pilasters, a glazed serving window with a counter and a lit interior, a door, a price board and a flared
+ *  two-stage roof with a gilt finial; off = the red box under a slab */
+let BOOTH = true;
+export function setBoothDetail(on: boolean): void {
+  BOOTH = on;
+}
+
+function ticketBooth(b: HB, x0: number, x1: number, z0: number, z1: number, top: number): void {
+  const cx = (x0 + x1) / 2,
+    cz = (z0 + z1) / 2;
+  const H = 2.2;
+  b.noEmit().pat(PAT.NONE);
+  // plinth and walls
+  b.color('#5a2a2a');
+  b.boxMM(x0 - 0.05, top, z0 - 0.05, x1 + 0.05, top + 0.28, z1 + 0.05, 1);
+  b.color('#c22f3a');
+  b.boxMM(x0, top + 0.28, z0, x1, top + H, z1, 1 | 2);
+  // sunk panels on the side and back walls (darker, framed by the wall)
+  b.color('#9e2430');
+  b.boxMM(x0 + 0.18, top + 0.45, z1, x1 - 0.18, top + 0.95, z1 + 0.015, 1 | 2 | 4);
+  b.boxMM(x0 - 0.015, top + 0.45, z0 + 0.18, x0, top + 0.95, z1 - 0.18, 1 | 2 | 32);
+  // cream pilasters at the corners, a cornice band
+  b.color(CREAM);
+  for (const x of [x0, x1]) for (const z of [z0, z1]) b.box(x, top + 0.28 + (H - 0.28) / 2, z, 0.14, H - 0.28, 0.14, 0, 1 | 2);
+  b.boxMM(x0 - 0.1, top + H, z0 - 0.1, x1 + 0.1, top + H + 0.16, z1 + 0.1, 0);
+  b.color('#d4a84a');
+  b.boxMM(x0 - 0.11, top + H + 0.06, z0 - 0.11, x1 + 0.11, top + H + 0.09, z1 + 0.11, 1 | 2);
+  // serving window (−z): glazing over a lit interior, glazing bars, a counter ledge
+  b.color('#3a2f28').emit('#ffcf8a', 1.4, EMIT.LIGHTS);
+  b.boxMM(x0 + 0.18, top + 1.0, z0 - 0.02, x1 - 0.18, top + 1.8, z0, 1 | 2 | 8);
+  b.noEmit();
+  b.color('#a9c7d1').pat(PAT.GLASS);
+  b.boxMM(x0 + 0.2, top + 1.12, z0 - 0.035, x1 - 0.2, top + 1.78, z0 - 0.025, 1 | 2 | 8);
+  b.pat(PAT.NONE);
+  b.color(CREAM);
+  for (const x of [cx - 0.33, cx, cx + 0.33]) b.box(x, top + 1.45, z0 - 0.04, 0.035, 0.68, 0.025, 0, 1 | 2 | 8);
+  b.box(cx, top + 1.45, z0 - 0.04, x1 - x0 - 0.4, 0.035, 0.025, 0, 1 | 8);
+  b.boxMM(x0 + 0.1, top + 0.98, z0 - 0.22, x1 - 0.1, top + 1.04, z0, 0);
+  // door on the +x side with a brass knob, a price board on the back wall
+  b.color('#7a1f28');
+  b.boxMM(x1, top + 0.3, cz - 0.38, x1 + 0.025, top + 2.0, cz + 0.38, 1 | 2 | 16);
+  b.color('#d4a84a');
+  b.box(x1 + 0.04, top + 1.1, cz + 0.28, 0.04, 0.04, 0.04, 0, 0);
+  b.color('#f3ead6');
+  b.boxMM(x0 + 0.25, top + 1.15, z1 + 0.015, x1 - 0.25, top + 1.85, z1 + 0.03, 1 | 2 | 4);
+  b.color('#2a3a5a');
+  for (let i = 0; i < 4; i++) b.boxMM(x0 + 0.35, top + 1.3 + i * 0.13, z1 + 0.03, x1 - 0.55, top + 1.33 + i * 0.13, z1 + 0.036, 1 | 2 | 4);
+  // flared roof: a shallow skirt from the eaves, then a steeper cap to the finial
+  const yE = top + H + 0.16,
+    eave: V3[] = [
+      [x0 - 0.28, yE, z0 - 0.28],
+      [x1 + 0.28, yE, z0 - 0.28],
+      [x1 + 0.28, yE, z1 + 0.28],
+      [x0 - 0.28, yE, z1 + 0.28],
+    ];
+  const mid: V3[] = eave.map((p) => [cx + (p[0] - cx) * 0.55, yE + 0.32, cz + (p[2] - cz) * 0.55]);
+  const pk: V3 = [cx, yE + 1.05, cz];
+  b.color('#2a6f63');
+  for (let k = 0; k < 4; k++) {
+    const k1 = (k + 1) % 4;
+    b.quad(eave[k], eave[k1], mid[k1], mid[k]);
+    b.quad(eave[k1], eave[k], mid[k], mid[k1]);
+    b.triangle(mid[k], mid[k1], pk);
+  }
+  b.color(CREAM);
+  for (let k = 0; k < 4; k++) b.beam(mid[k], mid[(k + 1) % 4], 0.06, 0.05);
+  b.color('#d4a84a');
+  b.cyl([cx, yE + 1.0, cz], [cx, yE + 1.35, cz], 0.025, 0.015, 6, 0);
+  b.sphere(cx, yE + 1.12, cz, 0.08, 8, 6);
 }
 
 /** rotating wheel (rims, spokes, lights) + 24 gondolas, into the rigged builder */
