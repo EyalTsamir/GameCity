@@ -68,9 +68,11 @@ water; halos identical hard discs; the 19 → 21.5 h switch-on is abrupt.
 → sky visibility ≈ 0.9–1.4 ms (one dependent texture fetch + a matrix per lit fragment; the only feature with a real
 cost — off on the low tier), retuned AO / glass / shadow fit ≈ 0 (within noise). The run-2 baseline row (33 / 47 / 47 ms,
 1 console error) is discarded: a file was being edited mid-run and Vite served a half-saved materials.ts.
-Round 3: `?envold` changes only uniform values (0 ms by construction). Lamp specular (night, Standard materials only):
-a night A/B (`perf.mjs --views street;oldtown --hours 21.5 --variants ";nolampspec;envold" --repeat 2`) was queued
-when the session hit its usage limit — output in the scratchpad `perf2.log`, NOT recorded here. Re-run it to close this.
+Round 3, night A/B (21.5 h, 2 repeats, ms/frame): street 46.1 / 44.8 baseline, 44.9 / 43.5 `?nolampspec`,
+44.8 / 44.7 `?envold`; oldtown 62.9 / 61.6, 61.1 / 60.9, 61.7 / 61.4 → lamp specular ≈ 0.7–1.3 ms at night (a GGX
+evaluation on every lamp-lit Standard fragment; candidate for a medium-tier switch), env ×1.7 ≈ 0 (uniforms only).
+NOT yet done: the coordinator's stutter check `node C:/Projects/GameCity/scripts/hitch.mjs --url http://127.0.0.1:5188/`
+(mid-run shader compiles must stay 0, no new freezes > 100 ms) — run it before merging.
 
 ## Log
 - Resize warnings (`ui-test --steps resize`, ~120 × `glBlitFramebuffer … not all the same size`): traced with a
