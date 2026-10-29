@@ -637,10 +637,16 @@ export interface Det {
 
 const _col = new THREE.Color();
 
+/** the ray-traced cabin of each model kind (its glass part's Det: class 2 car, 4 bus, 5 van / lorry cab), for the
+ *  real occupants the pedestrians module seats inside (pedestrians/occupants.ts) */
+export const CABIN: Partial<Record<ModelKind, Det>> = {};
+let curKind: ModelKind | null = null;
+
 class Builder {
   private geos: THREE.BufferGeometry[] = [];
 
   add(g: THREE.BufferGeometry, o: PartOpts): this {
+    if (curKind && LOD === 0 && o.det && o.det.c !== 1 && o.det.c !== 3 && !CABIN[curKind]) CABIN[curKind] = o.det;
     if (LOD > 0 && !o.light && !o.decal) {
       // too small to read at this level → drop
       g.computeBoundingBox();
@@ -2324,10 +2330,12 @@ function icecream(): THREE.BufferGeometry {
 /** Build one vehicle model at detail level `lod` (0 full .. MODEL_LODS-1 far). */
 export function buildModel(kind: ModelKind, lod = 0): THREE.BufferGeometry {
   LOD = Math.max(0, Math.min(MODEL_LODS - 1, lod | 0));
+  curKind = kind;
   try {
     return buildKind(kind);
   } finally {
     LOD = 0;
+    curKind = null;
   }
 }
 

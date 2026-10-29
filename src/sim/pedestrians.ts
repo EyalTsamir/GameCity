@@ -21,6 +21,7 @@ import { CrowdRenderer as LegacyRenderer } from './pedestrians/legacy/render';
 import { gaitConfig } from './pedestrians/rig';
 import { Riders } from './pedestrians/riders';
 import { Actors } from './pedestrians/actors';
+import { Occupants } from './pedestrians/occupants';
 import { buildStallMesh } from './pedestrians/vendors';
 
 export default function create(ctx: CityContext): CityModule {
@@ -54,6 +55,8 @@ export default function create(ctx: CityContext): CityModule {
   const riders = legacy ? null : new Riders(ctx);
   // people placed by other modules (site workers, band, kids, boat crews): real posed figures (actors.ts)
   const actors = legacy || ctx.debug.params.has('noactors') ? null : new Actors(ctx);
+  // people seated in the cars, vans and buses near the camera (occupants.ts; ?nooccupants: the glass shader's own)
+  const occupants = legacy || ctx.debug.params.has('nooccupants') ? null : new Occupants(ctx);
   let nExtra = 0;
 
   const offs: (() => void)[] = [];
@@ -109,6 +112,7 @@ export default function create(ctx: CityContext): CityModule {
       if (riders) {
         riders.sync();
         nExtra = actors ? actors.sync(riders.list, riders.n) : riders.n;
+        if (occupants) nExtra = occupants.sync(riders.list, nExtra);
       }
       if (renderer instanceof CrowdRenderer) renderer.tableware.lights.value = ctx.uniforms.uLights.value;
       if (renderer instanceof CrowdRenderer)
@@ -117,7 +121,7 @@ export default function create(ctx: CityContext): CityModule {
     },
     stats() {
       const extra: Record<string, number> = renderer instanceof CrowdRenderer ? { pinLod: renderer.pin.n, figureVerts: renderer.vertices, shadowVerts: renderer.shadowVertices } : {};
-      return { ...crowd.statsSummary(), riders: riders ? riders.n : 0, actors: actors ? actors.n : 0, drawn: renderer.visible, ...(renderer instanceof CrowdRenderer ? { closeLod: renderer.close.n } : {}), nearLod: renderer.near.n, tinyLod: renderer.tiny.n, ...extra, figureTris: renderer.triangles, simMs: Math.round(ms * 100) / 100 };
+      return { ...crowd.statsSummary(), riders: riders ? riders.n : 0, actors: actors ? actors.n : 0, occupants: occupants ? occupants.n : 0, drawn: renderer.visible, ...(renderer instanceof CrowdRenderer ? { closeLod: renderer.close.n } : {}), nearLod: renderer.near.n, tinyLod: renderer.tiny.n, ...extra, figureTris: renderer.triangles, simMs: Math.round(ms * 100) / 100 };
     },
     invariants() {
       return crowd.invariants();

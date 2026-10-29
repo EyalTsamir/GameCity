@@ -133,7 +133,17 @@ export class Actors {
       const d = ACTORS[i];
       const m = this.make(d.role, d.seed, d.shirt, d.child, d.carry);
       let g: RideGeom | null = null;
-      if (d.seated) g = seatGeom(d.role, d.seatY, d.child);
+      if (d.seated) {
+        g = seatGeom(d.role, d.seatY, d.child);
+        if (d.child && d.rot) {
+          // a swing (hung from a bar overhead): hands up on the chains beside the hips; a see-saw: on the handle
+          // bar 0.2 m ahead at 0.82 m
+          const swing = d.rot.py - d.y > 1;
+          g.barY = swing ? d.seatY + 0.42 : 0.82 - d.y;
+          g.barZ = swing ? 0.05 : 0.2;
+          g.barX = swing ? 0.2 : 0.14;
+        }
+      }
       else if (d.idle >= 0) m.forceIdle = d.idle;
       else if (d.role === 'worker') m.forceIdle = [0, 3, 2, 4, 7][d.seed % 5];
       else if (d.role === 'conductor') m.forceIdle = 7;

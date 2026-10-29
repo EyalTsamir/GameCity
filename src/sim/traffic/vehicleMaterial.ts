@@ -49,6 +49,9 @@ varying float vRough;
 varying float vCoat;
 varying float vMetal;
 varying float vGain;
+// 1 = real occupants sit in this cabin (pedestrians/occupants.ts, aInst2.w = 2): the shader draws none of its own
+// and the glass writes the depth of the cabin surface behind it, so the figures inside show through
+varying float vSeated;
 // variant parts: n = only for variant n - 1; 16 + bits = for the variants whose bit is set
 bool thHidden(float part, float variant, float phase) {
   part -= 100.0 * floor( part * 0.01 + 0.001 );
@@ -100,13 +103,14 @@ vDetB = aDetB;
 #ifdef USE_INSTANCING
   thM = thM * instanceMatrix;
 #endif
-  vCamObj = vec4( transpose( mat3( thM ) ) * ( cameraPosition - thM[3].xyz ), aInst2.w );
+  vCamObj = vec4( transpose( mat3( thM ) ) * ( cameraPosition - thM[3].xyz ), min( aInst2.w, 1.0 ) );
+  vSeated = step( 1.5, aInst2.w );
   vUpV = normalize( ( viewMatrix * vec4( thM[1].xyz, 0.0 ) ).xyz );
   vFwdV = normalize( ( viewMatrix * vec4( thM[2].xyz, 0.0 ) ).xyz );
 }
 {
   int lt = int( aMeta.y + 0.5 );
-  float lon = uLights * aInst2.w;
+  float lon = uLights * min( aInst2.w, 1.0 );
   float bOn = step( fract( uTime * 1.45 + aInst2.z ), 0.5 );
   int bl = int( aInst.y + 0.5 );
   vec3 e = vec3( 0.0 );
@@ -122,7 +126,7 @@ vDetB = aDetB;
   }
   else if ( lt == 7 ) e = vec3( 0.25 + 2.2 * uLights );
   else if ( lt == 8 ) e = vec3( 0.3 + 2.0 * uLights );
-  else if ( lt == 9 ) { e = vec3( 1.0, 0.8, 0.55 ) * ( 0.9 * uLights * aInst2.w ); useD = 0.0; }
+  else if ( lt == 9 ) { e = vec3( 1.0, 0.8, 0.55 ) * ( 0.9 * uLights * min( aInst2.w, 1.0 ) ); useD = 0.0; }
   vEmit = vec4( e, useD );
   float fin = floor( aMeta.w * 0.25 );
   vRough = aMeta.w - fin * 4.0;
@@ -261,6 +265,9 @@ varying float vRough;
 varying float vCoat;
 varying float vMetal;
 varying float vGain;
+// 1 = real occupants sit in this cabin (pedestrians/occupants.ts, aInst2.w = 2): the shader draws none of its own
+// and the glass writes the depth of the cabin surface behind it, so the figures inside show through
+varying float vSeated;
 // A street, not a studio: what a glossy car reflects below the horizon is asphalt (dark), just above it the
 // facades across the street (a blocky skyline over the azimuth, mid-grey), then a bright band of hazy sky and
 // the sky dome. The PMREM sky alone is too smooth to read as gloss (a uniform sheen reads as dust), so the
@@ -354,6 +361,10 @@ void thSeat( vec3 ro, vec3 rd, vec3 ird, float cx, float hw, float z, float cy, 
   thBox( ro, rd, ird, vec3( cx - hw, cy - 0.16, z ), vec3( cx + hw, cy, z + 0.48 ), col * 1.08, tb, nb, cb );
   thBox( ro, rd, ird, vec3( cx - 0.13, ty + 0.05, z - 0.09 ), vec3( cx + 0.13, hy, z - 0.01 ), col, tb, nb, cb );
 }
+// distance along the view ray (object frame) from the pane to the cabin surface seen through it, −1 = none
+float thHitT = -1.0;
+// (three sets it on every program; the fragment stage only has to declare it: the glass depth below)
+uniform mat4 projectionMatrix;
 // what is seen through a window: the cabin, ray-traced in the object frame (seats, dash, steering wheel, a driver)
 vec3 thInterior( vec3 ro, vec3 rd, float style, float occupied, float ph ) {
   float hw = vDetA.x, belt = vDetA.y, roof = vDetA.z, zd = vDetA.w, zr = vDetB.x, fz = vDetB.y, rz = vDetB.z;
@@ -381,14 +392,14 @@ vec3 thInterior( vec3 ro, vec3 rd, float style, float occupied, float ph ) {
       thBox( ro, rd, ird, vec3( -hw + 0.06, cy - 0.12, z ), vec3( -0.3, cy, z + 0.44 ), seatC * 1.1, tb, nb, cb );
       // a seated passenger now and then
       float hp = thH1( ph * 7.0 + float( k ) * 1.37 );
-      if ( hp > 0.55 ) {
+      if ( hp > 0.55 && vSeated < 0.5 ) {
         float px = hp > 0.78 ? hw * 0.62 : -hw * 0.62;
         vec3 cl = vec3( thH1( hp * 9.1 ), thH1( hp * 5.3 ), thH1( hp * 3.7 ) ) * 0.35 + 0.05;
         thEll( ro, rd, vec3( px, cy + 0.28, z + 0.15 ), vec3( 0.19, 0.27, 0.12 ), cl, tb, nb, cb );
         thEll( ro, rd, vec3( px, cy + 0.69, z + 0.16 ), vec3( 0.08, 0.1, 0.09 ), vec3( 0.55, 0.4, 0.3 ) * ( 0.5 + 0.6 * thH1( hp * 2.3 ) ), tb, nb, cb );
       }
     }
-    if ( occupied > 0.5 ) {
+    if ( occupied > 0.5 && vSeated < 0.5 ) {
       // the driver, behind the windscreen on the left
       vec3 dc = vec3( hw - 0.62, belt + 0.05, zd - 0.95 );
       thBox( ro, rd, ird, vec3( dc.x - 0.25, belt - 0.5, dc.z - 0.2 ), vec3( dc.x + 0.25, belt + 0.25, dc.z - 0.1 ), vec3( 0.08 ), tb, nb, cb );
@@ -430,7 +441,7 @@ vec3 thInterior( vec3 ro, vec3 rd, float style, float occupied, float ph ) {
       thBox( ro, rd, ird, vec3( sx - 0.12, ty + 0.01, rz - 0.1 ), vec3( sx + 0.12, hy - 0.04, rz - 0.02 ), seatC, tb, nb, cb );
       thBox( ro, rd, ird, vec3( -sx - 0.12, ty + 0.01, rz - 0.1 ), vec3( -sx + 0.12, hy - 0.04, rz - 0.02 ), seatC, tb, nb, cb );
     }
-    if ( occupied > 0.5 ) {
+    if ( occupied > 0.5 && vSeated < 0.5 ) {
       // the driver: rounded torso and shoulders, arms to the wheel, neck, head with hair
       float hc0 = thH1( ph * 9.1 );
       vec3 cl = hc0 < 0.2 ? vec3( 0.06, 0.08, 0.14 ) : hc0 < 0.4 ? vec3( 0.07 ) : hc0 < 0.55 ? vec3( 0.55, 0.55, 0.52 ) : hc0 < 0.7 ? vec3( 0.25, 0.06, 0.07 ) : hc0 < 0.85 ? vec3( 0.32, 0.27, 0.2 ) : vec3( 0.12, 0.2, 0.32 );
@@ -455,6 +466,7 @@ vec3 thInterior( vec3 ro, vec3 rd, float style, float occupied, float ph ) {
   }
   // inside light: the roof shades the cabin, faces turned up catch the sky through the glass
   float lit = 0.5 + 0.3 * nb.y + 0.15 * abs( nb.x );
+  thHitT = tb;
   return cb * lit * mix( 1.0, 0.55, clamp( ( tb - 0.3 ) * 0.5, 0.0, 1.0 ) );
 }
 `;
@@ -508,7 +520,19 @@ export function createVehicleMaterial(
   if ( vMetal > 0.5 ) radiance *= vGain * thStreetRefl( geometryViewDir, geometryNormal, material.roughness * 0.3 );
 #endif`,
       )
-      .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += vEmit.rgb * mix( vec3( 1.0 ), diffuseColor.rgb, vEmit.a ) * thCabinK + thGlassEmit;');
+      .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += vEmit.rgb * mix( vec3( 1.0 ), diffuseColor.rgb, vEmit.a ) * thCabinK + thGlassEmit;')
+      // cabins with real occupants: the glass takes the depth of the ray-traced cabin surface behind it (every other
+      // fragment keeps its own), so the seated figures (drawn by the pedestrians module) show through the windows
+      .replace(
+        '#include <dithering_fragment>',
+        `#include <dithering_fragment>
+gl_FragDepth = gl_FragCoord.z;
+if ( vSeated > 0.5 && thHitT > 0.0 ) {
+  vec3 thMv = -vViewPosition;
+  vec4 thCp = projectionMatrix * vec4( thMv * ( 1.0 + thHitT / length( thMv ) ), 1.0 );
+  gl_FragDepth = clamp( 0.5 * thCp.z / thCp.w + 0.5, 0.0, 1.0 );
+}`,
+      );
   };
   material.customProgramCacheKey = () => 'traffic-vehicle-v10';
   patchLampMaterial(material); // night street-light map (night agent)

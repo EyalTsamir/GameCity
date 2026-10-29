@@ -345,7 +345,7 @@ export class VehicleRenderer {
         L.mesh.setMatrixAt(idx, this.m4);
         L.mesh.setColorAt(idx, this.colorOf(V.color));
         L.a1.setXYZW(idx, V.brakeVis, this.blinker(V), (V.odo / sp.wheelR) % (Math.PI * 2), V.steer);
-        L.a2.setXYZW(idx, V.variant, V.twoWheel ? V.crank : V.siren, V.phase, 1);
+        L.a2.setXYZW(idx, V.variant, V.twoWheel ? V.crank : V.siren, V.phase, V.seated ? 2 : 1);
       }
 
       if (showLights && V.onScreen) {

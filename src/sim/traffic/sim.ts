@@ -147,6 +147,9 @@ export class Vehicle {
   /** the rider figure and a passenger (pedestrians/riders.ts keeps them here) */
   rider: unknown = null;
   pillion: unknown = null;
+  /** people seated in the cabin (pedestrians/occupants.ts) and whether they are drawn (render: aInst2.w = 2) */
+  occupants: unknown = null;
+  seated = false;
 
   constructor(id: number, spec: VehicleSpec, variant: number, color: string, rng: Rng) {
     this.id = id;

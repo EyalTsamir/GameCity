@@ -78,6 +78,8 @@ try {
   if (args.nodof) await page.evaluate(() => window.__city.ctx.services.postfx?.setEnabled?.('dof', false));
   await page.evaluate((h) => window.__city.setHours(h), hours);
   await page.waitForTimeout(2500);
+  // the first full capture after the time jump comes out as a flat page colour in software GL: throw one away
+  await page.screenshot({ type: 'jpeg', quality: 1, timeout: 240000 }).catch(() => {});
 
   for (const cls of classes) {
     // locate: returns {x,y,z,yaw(deg),h(object height)} or null
@@ -223,6 +225,15 @@ try {
           platform: { x: -6, y: 0.95, z: -151, yaw: 80, h: 2, w: 0.5, pitch: 6 },
         };
         if (PLACES[cls]) return PLACES[cls];
+        // F2 placed people (pedestrians/actorDefs.ts ACTORS): 'actor-<role>' (worker, band, kid, shopper, traveller,
+        // fisher, conductor) — the n-th of that role, framed from its front at standing / seated height
+        if (cls.startsWith('actor-')) {
+          const role = cls.slice(6), a = nth((window.__actors ?? []).filter((a) => a.role === role));
+          if (!a) return null;
+          // people facing a counter / stack / work are seen from the side (in front of them stands the thing they face)
+          const side = ['shopper', 'fisher', 'worker'].includes(role) ? 75 : 0;
+          return { x: a.x, y: a.y, z: a.z, yaw: (a.yaw * 180) / Math.PI + side, h: a.child ? 1.2 : 1.7, w: 1, pitch: 8 };
+        }
         // moving things: ray-pick from elevated poses over the city
         const kind ={ car: 'vehicle', bus: 'bus', pedestrian: 'pedestrian', train: 'train', boat: 'boat' }[cls];
         if (!kind) return null;
