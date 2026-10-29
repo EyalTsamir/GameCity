@@ -3,6 +3,8 @@
 // function + source line; optionally a CPU profile of the same window (self time per function).
 //
 //   node scripts/allocprof.mjs --view street=5,1.5,-65,9,0,6 --hours 12 [--seconds 8] [--speed 1] [--cpu 1] [--top 30]
+//   node scripts/allocprof.mjs --retained 1   → what the boot leaves on the JS heap (live samples only, sampled from
+//                                               before the navigation until --seconds after the first frame)
 //
 // Uses the shared lock; vsync on (what a viewer runs). MB/s are of the sampled window.
 
@@ -24,8 +26,38 @@ const { browser } = await launchBrowser({ extraArgs: ['--enable-precise-memory-i
 try {
   const page = await browser.newPage({ viewport: { width: parseInt(args.width ?? '1920', 10), height: parseInt(args.height ?? '1025', 10) } });
   await page.routeWebSocket(/.*/, () => {});
+  const retained = args.retained === '1';
+  let cdp0 = null;
+  if (retained) {
+    cdp0 = await page.context().newCDPSession(page);
+    await cdp0.send('HeapProfiler.enable');
+    await cdp0.send('HeapProfiler.startSampling', { samplingInterval: 32768 });
+  }
   await page.goto(out.url, { waitUntil: 'domcontentloaded', timeout: 300000 });
   await page.waitForFunction(() => window.__city?.ready && window.__city.frames() > 3, null, { timeout: 300000 });
+  if (retained) {
+    await page.waitForTimeout(seconds * 1000);
+    await cdp0.send('HeapProfiler.collectGarbage');
+    const { profile } = await cdp0.send('HeapProfiler.stopSampling');
+    const rows = new Map();
+    let total = 0;
+    const walk = (n) => {
+      const cf = n.callFrame;
+      const site = `${cf.functionName || '(anon)'} ${String(cf.url).replace(/^.*\/src\//, 'src/').replace(/\?.*$/, '').replace(/^.*\/deps\//, 'deps/')}`;
+      if (n.selfSize > 0) {
+        total += n.selfSize;
+        rows.set(site, (rows.get(site) ?? 0) + n.selfSize);
+      }
+      for (const c of n.children) walk(c);
+    };
+    walk(profile.head);
+    const heap = await page.evaluate(() => (performance.memory ? Math.round(performance.memory.usedJSHeapSize / 1048576) : -1));
+    console.log(`retained after boot: ${(total / 1048576).toFixed(0)} MB sampled (usedJSHeapSize ${heap} MB)`);
+    for (const [site, b] of [...rows].sort((a, b) => b[1] - a[1]).slice(0, top)) console.log(`${(b / 1048576).toFixed(1).padStart(8)} MB  ${site}`);
+    await browser.close().catch(() => {});
+    releaseLock();
+    process.exit(0);
+  }
   await page.evaluate(
     ([spec, h]) => {
       window.__city.setHours(h);

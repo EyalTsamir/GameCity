@@ -32,6 +32,8 @@ const _pos = new THREE.Vector3();
 
 /** pickers that only return static things — skipped when looking for vehicles / boats */
 const STATIC_PICKERS = new Set(['buildings', 'landmarks', 'props', 'vegetation', 'terrain', 'roads', 'water']);
+/** the census only wants buses, trains and boats: the crowd picker (every pedestrian per ray) never returns one */
+const CENSUS_SKIP = new Set([...STATIC_PICKERS, 'pedestrians']);
 
 export interface LiveEntity {
   x: number;
@@ -156,7 +158,7 @@ export class Scout {
       _ray.origin.set(r.ox, r.oy, r.oz);
       _ray.direction.set(r.dx, r.dy, r.dz).normalize();
       for (const p of this.ctx.pickers) {
-        if (STATIC_PICKERS.has(p.name)) continue;
+        if (CENSUS_SKIP.has(p.name)) continue;
         let h: PickHit | null = null;
         try {
           h = p.pick(_ray);

@@ -4,7 +4,7 @@ Branch `claude/pensive-gates-bim12i`. Budget file: `perf-results.txt` (repo root
 ("Earlier round: render-performance pass").
 
 ## Resume here
-- Pushed: c45a8c9 (warm-up, landmark cells, far peds), b52144b (draw order, vehicle far LODs, early-outs).
+- Pushed: c45a8c9 (warm-up, landmark cells, far peds), b52144b (draw order, vehicle far LODs, early-outs), 237a97c.
 - Local, being measured: a200a65 (tree sort, facade chunks), 0726126 (warm-up pins visibility), 237a97c (uDetailPx),
   fd69368 (trees slot 2.5, big landmarks own meshes), c0399b9 (fine furniture cells). Push each after its A/B.
 - Frozen copies (scratchpad worktrees, own vite servers): base 8718d0f :5174, cand1 c45a8c9 :5175, cand2 b52144b :5176,
@@ -98,6 +98,16 @@ Same-run A/B (original 5174 / cand1 5175 / cand2 5176), ms/frame uncapped:
   drew before the facades (street 0.9 → 2.9 ms) → own slot 2.5 (commit fd69368).
 - Land sections after it (exp copy, uLandCut A/B): fields 2.2, banks/sand/rock 2.0, meadow detail 0.1, forest ≈ 0 ms
   in the overview — the 14 ms of the baseline were mostly the sea floor (now an exact early return) and hidden pixels.
+
+### 5. Batch 3 — a200a65 / 0726126 / 237a97c (pushed): far trees near→far, facade chunks, warm-up visibility pin
+Same run, cand2 → cand3 (ms/frame): overview 52.4 → 48.6 (12 h), 55.7 → 52.6 (21.5 h) = the tree sort; street −0.3 /
+−1.1, market −0.5 / −1.0, harbour / platform ±0.2. The facade chunks drawn nearest first gain little: the shell's cost
+is the visible facade pixels (interiors ~4–5 ms, bhOpp 3.7, reveal 2.0, glass variation 1.9 at street level), not
+buildings hidden behind buildings → further facade savings are visible trade-offs (priced switches).
+Boot (bootprobe.mjs, fresh profile, cand2): modules 9 s, warm-up 50 s for 135 programs (≈ 0.35 s each, serial);
+without warm-up the first frame comes at 64 s anyway (it compiles 107 programs) → f594b6a compiles in parallel
+(compileAsync on a 1x1 linear target) before the warm-up frame. Allocation profile (original, street): 1.48 MB of
+garbage per frame — crowd director for…of scans, shadowFit literals / Math.hypot, wind table, census pickers, poses.
 
 ---
 
