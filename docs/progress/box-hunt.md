@@ -34,32 +34,32 @@ e_farm1 `-382,4,97,32.8,113.4,-4.2`; mid: m_stadium `-27,5,73,57.6,128.5,30.2` �
 
 ## Ranked list
 Score = V (how often / how large it is seen, 1–5) × P (how primitive it reads, 1–5). Owner = file to change.
-"✔" = fixed in this round (see Fixes), "→" = handed off.
+"✔" = fixed in this round (see Fixes), "≈" = re-scored after reading the code (already detailed, see Re-scored).
 
 | # | object | where seen (view / file) | V | P | score | what reads primitive | owner |
 |---|---|---|---|---|---|---|---|
-| 1 | traffic + pedestrian signal heads / poles | e_street, bench signal_5m, night e_street | 5 | 4 | 20 | black slab heads on a stick, no visors/backplates/lens depth; ped pole = thick tube + box | `sim/traffic/signals.ts` |
-| 2 | riverside promenade lamps | e_footbridge (row of ~20 along the river wall) | 4 | 5 | 20 | cream cube on a square post, box caps | `world/terrain/railings.ts` |
-| 3 | street litter bins | bench bin_5m, every street | 4 | 4 | 16 | tall dark box with a tiny lid | `world/props` |
-| 4 | countryside villages, hamlets, far farms, church towers | overview, vista, country, riverbend | 3 | 5 | 15 | literally the instanced unit "box + prism"; church = box + 4-sided pyramid | `world/landscape/settlements.ts` |
-| 5 | downtown plaza "abstract" sculpture | bench bench_15m (plaza at −36,−25) | 3 | 5 | 15 | three stacked cubes on a slab — reads as a placeholder | `world/landmarks/park.ts genStatue` |
-| 6 | farmland patchwork without field boundaries | overview, vista | 5 | 3 | 15 | tinted rectangles, few hedgerows / tracks / walls between parcels | `world/landscape/fields.ts` |
-| 7 | back-yard plank fence + wheelie bins | e_oldtown | 3 | 4 | 12 | fence = one flat painted slab with 3 rails; bins = plain boxes | `world/life` (backyard) |
-| 8 | beach umbrellas | e_beach, bench umbrellas | 3 | 4 | 12 | oversized flat 8-sided cone on a bare pole, no ribs / valance | `world/harbor/beach.ts` |
-| 9 | station platform canopy | station, m_station | 3 | 4 | 12 | flat slab over the platform, no columns/brackets/valance | `world/landmarks/station.ts` |
-| 10 | harbour gantry cranes | e_quay, harbor | 4 | 3 | 12 | all members solid square sections; no lattice boom, cab, stairs | `world/harbor/cranes.ts` |
-| 11 | lifeguard tower, beach cabins, sandcastle | e_beach, bench umbrellas_5m | 3 | 4 | 12 | stacked boxes on stilts, flat-roof box cabin, cylinder castle | `world/harbor/beach.ts` |
-| 12 | kite flyer on the beach | e_beach (right edge) | 2 | 5 | 10 | the last box mannequin: cube head, box limbs | `sim/ambient/kites.ts` |
-| 13 | construction site cabin + portaloo | e_midtown | 2 | 5 | 10 | white box on a translucent blue box, no door/window/steps | `world/landmarks/construction.ts` |
+| 1 ✔ | traffic + pedestrian signal heads / poles | e_street, bench signal_5m, night e_street | 5 | 4 | 20 | black slab heads on a stick, no visors/backplates/lens depth; ped pole = thick tube + box | `sim/traffic/signals.ts` |
+| 2 ✔ | riverside promenade lamps | e_footbridge (row of ~20 along the river wall) | 4 | 5 | 20 | cream cube on a square post, box caps | `world/terrain/railings.ts` |
+| 3 ≈ | street litter bins | bench bin_5m, every street | 4 | 4 | 16 | tall dark box with a tiny lid | `world/props` |
+| 4 ✔ | countryside villages, hamlets, far farms, church towers | overview, vista, country, riverbend | 3 | 5 | 15 | literally the instanced unit "box + prism"; church = box + 4-sided pyramid | `world/landscape/settlements.ts` |
+| 5 ✔ | downtown plaza "abstract" sculpture | bench bench_15m (plaza at −36,−25) | 3 | 5 | 15 | three stacked cubes on a slab — reads as a placeholder | `world/landmarks/park.ts genStatue` |
+| 6 ≈ | farmland patchwork without field boundaries | overview, vista | 5 | 3 | 15 | tinted rectangles, few hedgerows / tracks / walls between parcels | `world/landscape/fields.ts` |
+| 7 ✔ | back-yard plank fence + wheelie bins | e_oldtown | 3 | 4 | 12 | fence = one flat painted slab with 3 rails; bins = plain boxes | `world/life` (backyard) |
+| 8 ✔ | beach umbrellas | e_beach, bench umbrellas | 3 | 4 | 12 | oversized flat 8-sided cone on a bare pole, no ribs / valance | `world/harbor/beach.ts` |
+| 9 ≈ | station platform canopy | station, m_station | 3 | 4 | 12 | flat slab over the platform, no columns/brackets/valance | `world/landmarks/station.ts` |
+| 10 ≈ | harbour gantry cranes | e_quay, harbor | 4 | 3 | 12 | all members solid square sections; no lattice boom, cab, stairs | `world/harbor/cranes.ts` |
+| 11 ✔ | lifeguard tower, beach cabins, sandcastle | e_beach, bench umbrellas_5m | 3 | 4 | 12 | stacked boxes on stilts, flat-roof box cabin, cylinder castle | `world/harbor/beach.ts` |
+| 12 ✔ | kite flyer on the beach | e_beach (right edge) | 2 | 5 | 10 | the last box mannequin: cube head, box limbs | `sim/ambient/kites.ts` |
+| 13 ≈ | construction site cabin + portaloo | e_midtown | 2 | 5 | 10 | white box on a translucent blue box, no door/window/steps | `world/landmarks/construction.ts` |
 | 14 | harbour pontoons, small barge | harbor, night harbor | 2 | 4 | 8 | plank slab + cube hut, no floats/cleats/fenders | `world/harbor` |
 | 15 | breakwater armour stones | e_lighthouse | 3 | 3 | 9 | flat-shaded low-poly blobs, one size, no wet line | `world/harbor/breakwater.ts` |
 | 16 | factory chimneys | m_industry, e_industry | 3 | 3 | 9 | straight shafts, no cap / corbel / rod | `world/landmarks/industry.ts` |
-| 17 | church nave "buttresses" | e_church_e | 3 | 3 | 9 | pale flat quads between the windows read as stray slabs | `world/landmarks/church.ts` |
+| 17 ≈ | church nave "buttresses" | e_church_e | 3 | 3 | 9 | pale flat quads between the windows read as stray slabs | `world/landmarks/church.ts` |
 | 18 | stadium street front | e_stadium, m_stadium | 3 | 3 | 9 | flat grey placeholder plaques, black gate arches, floating roof trusses | `world/landmarks/stadium*.ts` |
 | 19 | orchard / hedge trees in the fields | country | 3 | 3 | 9 | identical flat-topped pillows on sticks | `world/landscape/trees.ts` |
 | 20 | town-square fountain (judge B; not re-checked) | e_townhall | 3 | 3 | 9 | tiers read as plain stacked discs | `world/landmarks/fountain.ts` |
-| 21 | industrial tanks / silos | m_industry | 2 | 4 | 8 | white cylinders + cone lids, no ladder/cage/catwalk/pipes | `world/landmarks/industry.ts` |
-| 22 | TV tower shaft | downtown, station, overview | 4 | 2 | 8 | 150 m tower on a 5.8 m shaft: reads as a pipe at distance | `world/landmarks/tvtower.ts` |
+| 21 ≈ | industrial tanks / silos | m_industry | 2 | 4 | 8 | white cylinders + cone lids, no ladder/cage/catwalk/pipes | `world/landmarks/industry.ts` |
+| 22 ✔ | TV tower shaft | downtown, station, overview | 4 | 2 | 8 | 150 m tower on a 5.8 m shaft: reads as a pipe at distance | `world/landmarks/tvtower.ts` |
 | 23 | river / quay wall furniture | e_boathouse, riverside | 4 | 2 | 8 | long plain coping, few rings / fenders / bollards | `world/terrain`, `world/harbor/quay.ts` |
 | 24 | bus shelters | bench busstop, e_depot | 4 | 2 | 8 | flat slab roof on glass panels | `world/props` |
 | 25 | delivery van box body | e_street | 4 | 2 | 8 | box body without seams / rear doors / bumper | `sim/traffic/models.ts` |
