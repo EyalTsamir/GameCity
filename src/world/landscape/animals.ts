@@ -203,7 +203,7 @@ export function sheepGeometry(): THREE.BufferGeometry {
     [0.43, 0.7, 0.14, 0.17],
   ];
   for (const [z, y, rx, ry] of prof) body.push({ p: [0, y, z], rx, ry, b: 0 });
-  B.tube(densify(body, 3), 40, MAT.coat, [true, false], wool);
+  B.tube(densify(body, 3), 32, MAT.coat, [true, false], wool);
   // neck (fleece) into the head — bends when grazing
   B.tube(
     [

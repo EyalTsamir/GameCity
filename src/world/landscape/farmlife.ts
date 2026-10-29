@@ -384,8 +384,9 @@ ${POSE_GLSL}`,
   herd.receiveShadow = true;
   group.add(herd);
   if (detail && nA > 0) {
-    const cap = density >= 0.95 ? [40, 16] : density >= 0.7 ? [24, 10] : [10, 5];
-    const nearR = density >= 0.95 ? 55 : density >= 0.7 ? 42 : 30;
+    // s5: the denser fleece and the new cow cost ~3k/4k tris each (+ the shadow pass): caps and radius cut
+    const cap = density >= 0.95 ? [28, 12] : density >= 0.7 ? [18, 8] : [8, 4];
+    const nearR = density >= 0.95 ? 40 : density >= 0.7 ? 32 : 24;
     const near = [createNearHerd(sheepGeometry(), cap[0], 1, uniforms, fog), createNearHerd(cowGeometry(), cap[1], 0, uniforms, fog)];
     for (const n of near) group.add(n.mesh);
     // selection: the nearest animals of each species within nearR, refreshed when the camera moves (one

@@ -23,7 +23,23 @@ Branch `claude/real-w8-country` (from claude/pensive-gates-bim12i @ 5137562). Br
     stripe, badges; exhaust heat shield, clamp, hinged round rain cap; roof work lamps, amber indicators, red tail lamps.
   - bench.mjs: `--tint t` forces the coat tint of the picked cow/sheep (breed check); wildflower framing = biggest
     dense patch (r ≥ 3), pitch 30.
-  Open: judge s5e/s5f; perf of the 4 toggles; golden.sh.
+  - Flowers (field.ts): umbels drawn as a lacy dome of umbellets (+ the dark central floret on half of them),
+    smaller (5.5–8.5 cm); petal gaps = dark foliage instead of a pale square.
+  Judged (sheet docs/progress/real/w8_s5_animals_tractor.jpg; shots/w8/s5e, s5g, s5h): Holstein and Highland
+  read as cows at 3 m and 10 m; sheep 3 m: cream fleece in soft locks, lumpy silhouette, lying ewe; tractor bonnet
+  has a shape, decal, louvres and a grille; the meadow at 3 m (pick 2) reads as cornflowers/buttercups/poppies.
+  **Perf (perf.mjs, view "-75,1,190,30,-60,18", software GL: ms are noise, read tris/draws):** baseline 5.11 M tris
+  190 draws; noanimaldetail −337k tris −4 draws (before the cap cut below); notractordetail −42k −4; nofarmdetail
+  ≈0 (farms out of view); noflowerdetail −46k. Response: high caps 40/16 → 28/12 sheep/cows, radius 55 → 40 m
+  (medium 18/8 @ 32 m, low 8/4 @ 24 m), sheep body 40 → 32 segments — not re-measured.
+  **golden.sh** (ref = base c79ba92 captured in this container): mean diff 0.0 on all five views.
+  downtown --invariants: {} , console clean.
+  Next: (a) re-measure the herd cost after the cap cut; (b) poppies at 3 m still read as diamonds (head silhouette
+  is the quad — needs a shaped head mesh or alpha-tested near ring); (c) bench: the first capture after a long
+  camera jump shows the coarse herd (stale near selection) — capture order 10,3 and judge the second; a forced
+  reselect hook would fix it; (d) the near selector runs twice per frame when the water reflection renders the
+  scene (the mirrored camera differs > 0.5 m): harmless at these caps but worth a camera filter;
+  (e) Brown Swiss / red / Angus not yet looked at on the bench (`--tint 0.55/0.7/0.83`).
 * **s1–s4 (2026-10-29 00:30 UTC), session 1 ends here.** All four classes have a first real version; judged on
   the bench (sheets shots/w8/s3/sheet_1.png, s4/, s4b/, s2f/farm_*.png; copies in docs/progress/real/w8_*.jpg).
   Next session, in order:
@@ -117,8 +133,8 @@ Branch `claude/real-w8-country` (from claude/pensive-gates-bim12i @ 5137562). Br
   on Adreno. Petals are drawn by colour (gaps shaded like sepals) instead.
 
 ## Toggles / tiers / costs
-* `?noanimaldetail` — coarse herd mesh only. Tiers (density): high 40 sheep + 16 cows within 55 m, medium 24 + 10
-  within 42 m, low 10 + 5 within 30 m. Cost: unmeasured (≈ 40×1.5k + 16×2.5k ≈ 100k tris + shadow pass, only when
+* `?noanimaldetail` — coarse herd mesh only. Tiers (density, s5): high 28 sheep + 12 cows within 40 m, medium 18 + 8
+  within 32 m, low 8 + 4 within 24 m. Measured s5 (old caps): +337k tris, +4 draws incl. the shadow pass. Cost: unmeasured (≈ 40×1.5k + 16×2.5k ≈ 100k tris + shadow pass, only when
   a herd is within 55 m).
 * `?notractordetail` — the old box tractor in the landscape fleet, no tracks.
 * `?nofarmdetail` — farms as instanced boxes again.
