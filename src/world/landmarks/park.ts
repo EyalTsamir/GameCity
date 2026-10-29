@@ -12,6 +12,7 @@ import { C, finial, person, railing } from './parts';
 import type { Env } from './env';
 import { drawText, signQuad } from './signs';
 import { queueContactLocal } from '../props/contact';
+import { boxHunt } from '../../core/boxhunt';
 import { blob, body, capsule, hash1, paint, shell, surface } from './sculpt';
 
 const _m = new THREE.Matrix4();
@@ -460,6 +461,87 @@ export function genGazebo(env: Env, f: Feature): void {
   env.pick(f.id, 'Gazebo', new THREE.Box3(new THREE.Vector3(f.x - R, 0, f.z - R), new THREE.Vector3(f.x + R, eaveY + 2.5, f.z + R)), () => ['Victorian park gazebo · 1888', 'A shady seat by the café', 'Lantern lit at dusk']);
 }
 
+/**
+ * Box hunt (?nobandbrass): the band's instruments at the seated players' hands (actors.ts seatGeom 'band': hands
+ * 0.95 m over the stage, 0.3 m ahead of the hips; mouth ~1.19 m, 0.12 m ahead) — a euphonium held upright with
+ * its bell beside the head, a cornet at the lips, the side drum's sticks, a trombone with its slide reaching out.
+ */
+function bandInstruments(env: Env, seats: [number, number, string][], stageH: number): void {
+  const K = env.K;
+  const gold = S_gold();
+  const throat = M('#6b5222', PAT.PLAIN, 0.45, 0.8);
+  const pearl = M('#efe8d8', PAT.PLAIN, 0.4);
+  const wood = M('#d8c7a2', PAT.PLAIN, 0.6);
+  for (let k = 0; k < seats.length; k++) {
+    const [sx, sz] = seats[k];
+    const ry = Math.atan2(-sx, 1.4 - sz) * 0.6;
+    const sn = Math.sin(ry),
+      cs = Math.cos(ry);
+    /** (forward, up, side) from the player's hips on the stage → bandstand-local point */
+    const P = (f: number, u: number, d: number): V3 => [sx + f * sn + d * cs, stageH + u, sz + f * cs - d * sn];
+    const D = (f: number, u: number, d: number): V3 => [f * sn + d * cs, u, f * cs - d * sn];
+    /** a flared brass bell (outside + a darker throat) from point a along dir, length len, radius r0 → r1 */
+    const bell = (a: V3, dir: V3, len: number, r0: number, r1: number): void => {
+      const out: THREE.Vector2[] = [],
+        inn: THREE.Vector2[] = [];
+      for (let i = 0; i <= 7; i++) {
+        const t = i / 7;
+        const r = r0 + (r1 - r0) * Math.pow(t, 3);
+        out.push(new THREE.Vector2(r, t * len));
+        inn.unshift(new THREE.Vector2(r * 0.9, t * len));
+      }
+      out.push(new THREE.Vector2(r1 + 0.005, len));
+      const d = new THREE.Vector3(dir[0], dir[1], dir[2]).normalize();
+      const mt = new THREE.Matrix4().compose(new THREE.Vector3(a[0], a[1], a[2]), new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), d), new THREE.Vector3(1, 1, 1));
+      const go = new THREE.LatheGeometry(out, 14),
+        gi = new THREE.LatheGeometry(inn, 14);
+      K.geoM(gold, go, mt);
+      K.geoM(throat, gi, mt);
+      go.dispose();
+      gi.dispose();
+    };
+    const valves = (f: number, u: number, d: number, n: number, h: number): void => {
+      for (let i = 0; i < n; i++) {
+        const [x, y, z] = P(f + i * 0.027, u, d);
+        K.cyl(gold, 0.012, 0.012, h, x, y, z, 8);
+        K.cyl(pearl, 0.008, 0.008, 0.018, x, y + h, z, 6);
+      }
+    };
+    if (k === 0) {
+      // euphonium: upright conical body from the bottom bow up past the shoulder, bell beside the head
+      K.rod(gold, P(0.27, 0.72, 0.06), P(0.22, 1.18, 0.1), 0.03, 10);
+      const bw = P(0.29, 0.74, 0.02);
+      K.torus(gold, 0.06, 0.022, bw[0], bw[1], bw[2], 6, 12, Math.PI, Math.PI / 2, ry + Math.PI / 2, Math.PI);
+      K.rod(gold, P(0.33, 0.72, -0.02), P(0.34, 1.02, -0.04), 0.016, 8);
+      bell(P(0.22, 1.16, 0.1), D(0.12, 1, 0.12), 0.24, 0.035, 0.14);
+      valves(0.3, 0.92, -0.07, 3, 0.11);
+      K.rod(gold, P(0.33, 1.02, -0.05), P(0.13, 1.19, 0), 0.007, 6);
+    } else if (k === 1) {
+      // cornet at the lips: lead pipe, valve block at the hands, tuning loop, bell pipe and a bell pointing out
+      K.rod(gold, P(0.12, 1.19, 0), P(0.29, 1.07, -0.01), 0.007, 6);
+      valves(0.27, 0.99, -0.02, 3, 0.085);
+      K.rod(gold, P(0.27, 1.04, -0.045), P(0.17, 1.05, -0.05), 0.007, 6);
+      K.rod(gold, P(0.17, 1.01, -0.05), P(0.27, 1.0, -0.045), 0.007, 6);
+      K.rod(gold, P(0.33, 1.04, -0.02), P(0.47, 1.0, -0.02), 0.009, 6);
+      bell(P(0.46, 1.003, -0.02), D(1, -0.25, 0), 0.15, 0.01, 0.058);
+    } else if (k === 2) {
+      // the drummer's sticks from the hands down onto the head (the drum stands just ahead)
+      for (const d of [-0.1, 0.1]) K.rod(wood, P(0.28, 0.97, d), P(0.43, 0.84, d * 0.4), 0.007, 5);
+    } else {
+      // trombone: slide out ahead and down (two tubes and the crook), brace at the hands; the bell section runs
+      // back over the shoulder and forward again to a big bell
+      K.rod(gold, P(0.13, 1.18, 0.0), P(0.88, 0.95, 0.0), 0.008, 6);
+      K.rod(gold, P(0.15, 1.12, 0.0), P(0.88, 0.89, 0.0), 0.008, 6);
+      K.rod(gold, P(0.88, 0.95, 0.0), P(0.9, 0.92, 0.0), 0.009, 6);
+      K.rod(gold, P(0.9, 0.92, 0.0), P(0.88, 0.89, 0.0), 0.009, 6);
+      K.rod(gold, P(0.3, 1.13, 0.0), P(0.3, 1.07, 0.0), 0.007, 5);
+      K.rod(gold, P(0.13, 1.19, 0.0), P(-0.04, 1.25, 0.09), 0.009, 6);
+      K.rod(gold, P(-0.04, 1.25, 0.09), P(0.3, 1.18, 0.09), 0.01, 6);
+      bell(P(0.29, 1.182, 0.09), D(1, -0.2, 0), 0.22, 0.016, 0.1);
+    }
+  }
+}
+
 function S_gold() {
   return M(C.gold, PAT.PLAIN, 0.3, 0.85);
 }
@@ -558,14 +640,19 @@ export function genBandstand(env: Env, f: Feature): void {
   }
   // instruments
   env.anim({ mode: ANIM.VIS, pivot: new THREE.Vector3(0, stageH, 0), axis: new THREE.Vector3(1, 0, 0), a: 1, b: 0.0, c: 0 });
-  env.K.torus(S_gold(), 0.26, 0.07, -1.0, stageH + 1.05, -0.15, 6, 14, Math.PI * 2, 0, 0.5, 0);
-  env.K.cone(S_gold(), 0.25, 0.4, -0.85, stageH + 1.25, -0.2, 10);
+  const brass = boxHunt(env.ctx, 'bandbrass');
+  if (brass) bandInstruments(env, seats, stageH);
+  else {
+    env.K.torus(S_gold(), 0.26, 0.07, -1.0, stageH + 1.05, -0.15, 6, 14, Math.PI * 2, 0, 0.5, 0);
+    env.K.cone(S_gold(), 0.25, 0.4, -0.85, stageH + 1.25, -0.2, 10);
+  }
   // (F2, judge: "the drum is a plain white cylinder") a side drum on its stand: lacquered shell, painted hoops
   // top and bottom, eight brass tension rods with their lugs, a calfskin head worn darker where it is played
+  // (box hunt: moved in front of the drummer at hand height, ?nobandbrass = where it stood)
   {
-    const dx = 0.4,
-      dz = -0.12,
-      y0 = stageH + 0.5,
+    const dx = brass ? 0.353 : 0.4,
+      dz = brass ? -0.452 : -0.12,
+      y0 = stageH + (brass ? 0.52 : 0.5),
       dh = 0.3,
       r = 0.3;
     const hoop = M('#1f2a4a', PAT.PLAIN, 0.5);
@@ -587,7 +674,7 @@ export function genBandstand(env: Env, f: Feature): void {
       env.K.box(S_gold(), 0.03, 0.06, 0.03, lx, y0 + dh * 0.5 - 0.03, lz, a);
     }
   }
-  for (const sx of [-0.4, 1.1]) env.K.rod(S_gold(), [sx + 0.05, stageH + 1.3, -0.35], [sx + 0.05, stageH + 1.25, 0.15], 0.04, 6);
+  if (!brass) for (const sx of [-0.4, 1.1]) env.K.rod(S_gold(), [sx + 0.05, stageH + 1.3, -0.35], [sx + 0.05, stageH + 1.25, 0.15], 0.04, 6);
   // conductor at the front, facing the band
   env.anim({ mode: ANIM.VIS, pivot: new THREE.Vector3(0, stageH, 1.3), axis: new THREE.Vector3(1, 0, 0), a: 1, b: 0.05, c: 1.0 });
   person(env.K, 0, stageH, 1.3, Math.PI, '#1d1d22', '#1d1d22', '#e2b48c', undefined, false, 0.6);

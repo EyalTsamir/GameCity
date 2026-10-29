@@ -34,6 +34,7 @@ import { GreenKit, makeGreenTexture, createGreenMaterial } from './buildings/gre
 import { setClutter } from './buildings/clutter';
 import { createWinGeo } from './buildings/winGeo';
 import { setMassing, resetMassing, massTiers } from './buildings/massing';
+import { boxHunt } from '../core/boxhunt';
 
 /** edge (m) of the square trim chunks (≈ two city blocks), grid origin at the slab's NW corner */
 const TRIM_CHUNK = 110;
@@ -86,7 +87,7 @@ export default function create(ctx: CityContext): CityModule {
   const t0 = performance.now();
   const plan = ctx.plan;
   // A/B switches: ?legacyfacade = original shell shader
-  const mats = createMaterials(ctx.uniforms, { legacy: ctx.debug.params.has('legacyfacade'), wear: !ctx.debug.params.has('nowear'), winDepth: !ctx.debug.params.has('nowinreveal'), winRefl: !ctx.debug.params.has('nowinrefl'), wallRelief: !ctx.debug.params.has('nowallrelief'), plinth: !ctx.debug.params.has('noplinth'), glassVar: !ctx.debug.params.has('noglassvar') });
+  const mats = createMaterials(ctx.uniforms, { legacy: ctx.debug.params.has('legacyfacade'), wear: !ctx.debug.params.has('nowear'), winDepth: !ctx.debug.params.has('nowinreveal'), winRefl: !ctx.debug.params.has('nowinrefl'), wallRelief: !ctx.debug.params.has('nowallrelief'), plinth: !ctx.debug.params.has('noplinth'), glassVar: !ctx.debug.params.has('noglassvar'), interiors: boxHunt(ctx, 'interiors') });
   // ?nowingeo = no near-LOD sill / surround geometry (the shader sill everywhere)
   const winGeoOn = !ctx.debug.params.has('nowingeo');
   const winRec: number[] | null = winGeoOn ? [] : null;

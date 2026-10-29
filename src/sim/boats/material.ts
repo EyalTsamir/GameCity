@@ -71,11 +71,13 @@ vec3 btRotAxis(vec3 v, vec3 k, float a) {
 }
 const vec3 JIB_T = vec3(${f3(JIB_TACK[0])}, ${f3(JIB_TACK[1])}, ${f3(JIB_TACK[2])});
 const vec3 JIB_K = vec3(${f3(JA.x)}, ${f3(JA.y)}, ${f3(JA.z)});
+// box hunt (?nosailkit): the sail's deepest draft ~40 % back from the luff (real cloth), not mid-chord
+float btDraft(float u) { return BT_DRAFT > 0 ? pow(u, 0.72) : u; }
 vec3 btAnimate(vec3 p, int tg) {
   if (tg == ${BT.SAIL} || tg == ${BT.BOOM}) {
     if (tg == ${BT.SAIL}) {
       float u = aExtra.x, v = aExtra.y;
-      float bulge = sin(3.14159 * u) * (1.0 - 0.55 * v);
+      float bulge = sin(3.14159 * btDraft(u)) * (1.0 - 0.55 * v);
       p.x += aBoat2.x * 0.42 * bulge;
       float fl = aBoat.z * (0.12 + 0.3 * u) * sin(uTime * 11.0 + u * 7.0 + v * 5.0);
       p.x += fl * (1.0 - 0.6 * v);
@@ -84,7 +86,7 @@ vec3 btAnimate(vec3 p, int tg) {
   }
   if (tg == ${BT.JIB}) {
     float u = aExtra.x, v = aExtra.y;
-    float bulge = sin(3.14159 * u) * (1.0 - 0.5 * v);
+    float bulge = sin(3.14159 * btDraft(u)) * (1.0 - 0.5 * v);
     p.x += aBoat2.x * 0.3 * bulge;
     p.x += aBoat.z * (0.1 + 0.35 * u) * sin(uTime * 12.5 + u * 8.0 + v * 3.0);
     return JIB_T + btRotAxis(p - JIB_T, JIB_K, aBoat2.z);
@@ -403,6 +405,12 @@ export interface BoatMaterials {
 }
 
 /** ?noboatdetail (or quality low) turns the shader surface detail off */
+/** box hunt (?nosailkit): sail draft forward of mid-chord (set before the materials compile) */
+let SAIL_DRAFT = true;
+export function setSailDraft(on: boolean): void {
+  SAIL_DRAFT = on;
+}
+
 export function createBoatMaterials(globals: GlobalUniforms, detail = true): BoatMaterials {
   const detailU = { value: detail ? 1 : 0 };
   const material = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.62, metalness: 0.02, side: THREE.DoubleSide });
@@ -413,7 +421,7 @@ export function createBoatMaterials(globals: GlobalUniforms, detail = true): Boa
     shader.uniforms.uBoatDetail = detailU;
     shader.uniforms.uDaylight = globals.uDaylight;
     shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', `#include <common>\n${VERT_PARS}`)
+      .replace('#include <common>', `#include <common>\n#define BT_DRAFT ${SAIL_DRAFT ? 1 : 0}\n${VERT_PARS}`)
       .replace('#include <color_vertex>', VERT_COLOR)
       .replace(
         '#include <beginnormal_vertex>',
@@ -421,7 +429,7 @@ export function createBoatMaterials(globals: GlobalUniforms, detail = true): Boa
         {
           int tg = btTag(aKind);
           float ra = (tg == ${BT.SAIL} || tg == ${BT.BOOM}) ? aBoat.y : 0.0;
-          if (tg == ${BT.SAIL} || tg == ${BT.JIB}) objectNormal = normalize(objectNormal - vec3(0.0, 0.0, aBoat2.x * 0.35 * cos(3.14159 * aExtra.x)));
+          if (tg == ${BT.SAIL} || tg == ${BT.JIB}) objectNormal = normalize(objectNormal - vec3(0.0, 0.0, aBoat2.x * 0.35 * cos(3.14159 * btDraft(aExtra.x))));
           if (ra != 0.0) objectNormal = btRotY(objectNormal, vec2(0.0), ra);
           if (tg == ${BT.JIB}) objectNormal = btRotAxis(objectNormal, JIB_K, aBoat2.z);
         }`,
@@ -456,7 +464,7 @@ export function createBoatMaterials(globals: GlobalUniforms, detail = true): Boa
   depth.onBeforeCompile = (shader) => {
     shader.uniforms.uTime = globals.uTime;
     shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', `#include <common>\n${COMMON}`)
+      .replace('#include <common>', `#include <common>\n#define BT_DRAFT ${SAIL_DRAFT ? 1 : 0}\n${COMMON}`)
       .replace('#include <begin_vertex>', '#include <begin_vertex>\ntransformed = btAnimate(transformed, btTag(aKind));\nif (btHidden(aKind)) transformed = vec3(0.0);');
   };
   depth.customProgramCacheKey = () => 'boats-depth-v2';

@@ -9,8 +9,9 @@ import { composeMatrix } from '../rail/geo';
 import { WATER_LEVEL } from '../../core/constants';
 import { LAYERS } from '../../core/layers';
 import type { Glows } from '../rail/glows';
-import { createBoatMaterials } from './material';
-import { buildBigBoats, buildSmallBoats, DIMS } from './models';
+import { createBoatMaterials, setSailDraft } from './material';
+import { buildBigBoats, buildSmallBoats, DIMS, setSailKit } from './models';
+import { boxHunt } from '../../core/boxhunt';
 import type { Boat } from './fleet';
 
 interface Pool {
@@ -49,6 +50,8 @@ export class BoatRenderer {
     capSmall: number,
   ) {
     this.group.name = 'boats';
+    setSailDraft(boxHunt(ctx, 'sailkit'));
+    setSailKit(boxHunt(ctx, 'sailkit'));
     const { material, depth } = createBoatMaterials(ctx.uniforms, !ctx.debug.params.has('noboatdetail') && ctx.quality.level !== 'low');
     // night: moored / passing boats catch the quay and pier lamps (lamp light map, lamps module)
     import('../../world/lamps/integrate')

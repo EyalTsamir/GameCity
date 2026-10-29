@@ -1025,6 +1025,12 @@ function sailCloth(g: Geo, tag: number, luff: [V3, V3], clewOf: (v: number) => V
   }
 }
 
+/** box hunt (?nosailkit): finer sail cloth (the draft reads as a curve) and the helm's tiller extension */
+let SAILKIT = true;
+export function setSailKit(on: boolean): void {
+  SAILKIT = on;
+}
+
 function sailboat(g: Geo): void {
   hull(g, SAIL_HULL);
   const D = (z: number) => sheerAt(SAIL_HULL, z).D;
@@ -1083,6 +1089,14 @@ function sailboat(g: Geo): void {
   g.color('#1c1d1f').box(0, 0, 1.32, 0.06, 0.06, 0.18, 0); // tiller grip
   g.pop();
   g.color('#c9cdd0').cyl(0, D(-3.3) - 0.05, -3.25, 0.045, 0.045, 0.16, 8, 1);
+  if (SAILKIT) {
+    // box hunt: a tiller extension (hiking stick) from the tiller's end up to the helm's forward hand on the
+    // starboard coaming — the helm steers with it instead of resting both hands on the knees
+    const te: V3 = [0, D(-3.3) + 0.08 + Math.sin(0.18) * 1.3, -3.25 + Math.cos(0.18) * 1.3];
+    const hand: V3 = [0.52, D(-2.35) + 0.42, -2.22];
+    g.color('#1c1d1f').rod(te, hand, 0.011, 5);
+    g.color('#3a3d42').cyl(te[0], te[1] - 0.02, te[2], 0.018, 0.018, 0.04, 6, 1);
+  }
   // pulpit, pushpit, stanchions with two lifelines; deck cleats and fairleads
   g.color('#cfd3d6');
   const stZ = [2.45, 1.4, 0.35, -0.7, -1.75, -2.8];
@@ -1148,6 +1162,8 @@ function sailboat(g: Geo): void {
     ],
     (v) => [0, 2.05 + (MAST_TOP - 0.25 - 2.05) * v, clewZ + (MAST_Z - 0.12 - clewZ) * Math.pow(v, 1.15)],
     MAST_Z,
+    SAILKIT ? 9 : 5,
+    SAILKIT ? 10 : 7,
   );
   // jib: tack at the bow, head up the forestay, clew aft of the mast
   const tackZ = JIB_TACK[2];
@@ -1160,8 +1176,8 @@ function sailboat(g: Geo): void {
     ],
     (v) => [0, 1.3 + (JIB_HEAD[1] - 1.3) * v, MAST_Z - 0.55 + (JIB_HEAD[2] - (MAST_Z - 0.55)) * Math.pow(v, 1.3)],
     tackZ,
-    4,
-    6,
+    SAILKIT ? 7 : 4,
+    SAILKIT ? 8 : 6,
   );
   // crew in the cockpit
   // (F2) the cockpit sole is at deck level: the helm perches on the starboard coaming capping by the tiller, feet on

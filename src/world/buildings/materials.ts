@@ -145,6 +145,8 @@ export interface BuildingMaterials {
     uPlinth: { value: number };
     /** G1: glass as a material — per-bay shop / lobby interiors, per-pane tint + thin edge; ?noglassvar sets 0 */
     uGlassVar: { value: number };
+    /** box hunt: furnished shop interiors (deli goods + counter); ?nointeriors / low quality sets 0 */
+    uBhInt: { value: number };
     /** near-LOD sill geometry: (centre of its range, range m); the shader drops its own sill box inside */
     uGeoWin: { value: THREE.Vector4 };
     uDetailPx: { value: THREE.Vector2 };
@@ -321,6 +323,7 @@ uniform float uWinRefl;
 uniform float uWallRelief;
 uniform float uPlinth;
 uniform float uGlassVar;
+uniform float uBhInt;
 // near-window detail fades to the far average between these cell sizes (cells per pixel: 0.3 = 3.3 px per bay)
 uniform vec2 uDetailPx;
 uniform vec4 uGeoWin;
@@ -562,6 +565,47 @@ vec3 bhShelves(vec2 q, vec3 wallC, float kind, float rs, float y0, float y1, flo
     float neck = mix(0.028, 0.01, smoothstep(0.45, 0.6, fy));
     if (fy < 0.78 && bx < neck && hh > 0.08) c = mix(vec3(0.18, 0.32, 0.16), vec3(0.55, 0.32, 0.1), step(0.45, hh)) * (0.7 + 0.6 * fract(hh * 9.1));
     if (fy < 0.78 && bx < neck && hh > 0.8) c = vec3(0.8, 0.78, 0.7);
+  } else if (kind > 3.5) {
+    // deli (box hunt, ?nointeriors): each shelf its own goods — cheese wheels, jars with lids, labelled tins,
+    // tall oil / wine bottles
+    float rk = fract(bhHash12(vec2(row, rs * 1.9)) * 4.0 + row * 0.37);
+    float yy = fy * rowH;
+    if (rk < 0.25) {
+      float k = floor(q.x / 0.3);
+      float hh = bhHash12(vec2(k, row + rs));
+      vec2 lp = vec2((fract(q.x / 0.3) - 0.5) * 0.3, yy - 0.075);
+      float d = length(max(abs(lp) - vec2(0.1, 0.035), 0.0)) - 0.03;
+      vec3 rind = mix(vec3(0.86, 0.68, 0.3), vec3(0.78, 0.45, 0.17), step(0.6, hh));
+      if (hh > 0.12 && d < 0.0) c = rind * (0.72 + 0.4 * smoothstep(-0.06, 0.06, lp.y)) * (1.0 - 0.25 * smoothstep(-0.01, 0.0, d));
+    } else if (rk < 0.6) {
+      float k = floor(q.x / 0.1);
+      float hh = bhHash12(vec2(k, row * 1.3 + rs));
+      vec2 lp = vec2((fract(q.x / 0.1) - 0.5) * 0.1, yy);
+      float body = length(max(abs(lp - vec2(0.0, 0.075)) - vec2(0.022, 0.045), 0.0)) - 0.014;
+      float lid = bhBox2(lp, vec2(0.0, 0.142), vec2(0.03, 0.012));
+      vec3 fill = hh < 0.25 ? vec3(0.42, 0.5, 0.16) : hh < 0.5 ? vec3(0.78, 0.48, 0.1) : hh < 0.75 ? vec3(0.55, 0.1, 0.12) : vec3(0.2, 0.22, 0.1);
+      if (hh > 0.08 && body < 0.0) c = fill * (0.8 + 0.6 * step(abs(lp.x + 0.016), 0.004));
+      if (hh > 0.08) c = mix(c, hh > 0.55 ? vec3(0.85, 0.82, 0.74) : vec3(0.72, 0.16, 0.14), lid);
+    } else if (rk < 0.8) {
+      float k = floor(q.x / 0.085);
+      float hh = bhHash12(vec2(k, row + rs * 2.1));
+      vec2 lp = vec2((fract(q.x / 0.085) - 0.5) * 0.085, yy);
+      float tin = bhBox2(lp, vec2(0.0, 0.055), vec2(0.034, 0.05));
+      float label = bhBox2(lp, vec2(0.0, 0.055), vec2(0.035, 0.028));
+      if (hh > 0.1) {
+        c = mix(c, vec3(0.7, 0.72, 0.74), tin);
+        c = mix(c, bhPal(fract(hh * 5.3)), label);
+      }
+    } else {
+      float k = floor(q.x / 0.08);
+      float hh = bhHash12(vec2(k, row + rs * 1.7));
+      float bx = abs(fract(q.x / 0.08) - 0.5) * 0.08;
+      float neck = mix(0.03, 0.011, smoothstep(0.5, 0.65, fy));
+      if (fy < 0.85 && bx < neck && hh > 0.08) {
+        c = mix(vec3(0.16, 0.24, 0.1), vec3(0.32, 0.3, 0.08), step(0.5, hh)) * (0.8 + 0.6 * step(bx, 0.006));
+        if (fy > 0.18 && fy < 0.4) c = vec3(0.86, 0.82, 0.7);
+      }
+    }
   } else {
     float k = floor(q.x / 0.26);
     float hh = bhHash12(vec2(k, row + rs * 2.3));
@@ -615,7 +659,7 @@ vec3 bhShop(vec2 pm, vec2 csz, vec3 rd, float rs, float shopT, float litI, vec3 
   float shK = -1.0, shRs = rs, shY0 = 0.0, shY1 = 0.0, shRow = 1.0;
   if (onBack) {
     if (T < 1.5) { if (h.y >= 1.1) { shK = 2.0; shY0 = 1.25; shY1 = min(Hc - 0.5, 2.6); shRow = 0.42; } }
-    else if (T < 2.5) { shK = deli > 0.5 ? 0.0 : 3.0; shY0 = 0.9; shY1 = min(Hc - 0.4, 2.5); shRow = 0.36; }
+    else if (T < 2.5) { shK = deli > 0.5 ? (uBhInt > 0.5 ? 4.0 : 0.0) : 3.0; shY0 = 0.9; shY1 = min(Hc - (deli * uBhInt > 0.5 ? 0.75 : 0.4), 2.5); shRow = 0.36; }
     else if (T < 3.5) { shK = 1.0; shY0 = 0.15; shY1 = Hc - 0.25; shRow = 0.34; }
     else if (T < 4.5) {}
     else if (T < 5.5) { shK = 0.0; shY0 = 0.4; shY1 = min(Hc - 0.5, 2.4); shRow = 0.45; }
@@ -625,7 +669,7 @@ vec3 bhShop(vec2 pm, vec2 csz, vec3 rd, float rs, float shopT, float litI, vec3 
     if (T > 2.5 && T < 3.5) { shK = 1.0; shY0 = 0.15; shY1 = Hc - 0.25; shRow = 0.34; }
     else if (T > 5.5 && T < 6.5) { shK = 0.0; shY0 = 0.2; shY1 = min(Hc - 0.4, 2.4); shRow = 0.36; }
     else if (T < 1.5) {}
-    else if (T < 2.5) { shK = deli > 0.5 ? 0.0 : 3.0; shY0 = 0.9; shY1 = min(Hc - 0.4, 2.3); shRow = 0.36; }
+    else if (T < 2.5) { shK = deli > 0.5 ? (uBhInt > 0.5 ? 4.0 : 0.0) : 3.0; shY0 = 0.9; shY1 = min(Hc - 0.4, 2.3); shRow = 0.36; }
     else if (T < 5.5 && T > 4.5) { shK = 0.0; shY0 = 0.5; shY1 = min(Hc - 0.5, 2.3); shRow = 0.5; }
   }
   vec3 shC = wallC;
@@ -649,7 +693,38 @@ vec3 bhShop(vec2 pm, vec2 csz, vec3 rd, float rs, float shopT, float litI, vec3 
         float cups = bhBox2(vec2(fract((q.x - mxp) / 0.11) * 0.11, q.y), vec2(0.055, 1.6), vec2(0.032, 0.04)) * step(abs(q.x - mxp), 0.27);
         c = mix(c, vec3(0.93, 0.92, 0.9), cups);
       }
-    } else if (T < 2.5) c = shC;
+    } else if (T < 2.5) {
+      c = shC;
+      if (deli * uBhInt > 0.5) {
+        // box hunt (?nointeriors): the deli's chilled display counter along the back (steel panels, a lit glass
+        // band of cold cuts and cheeses, a pale top) and cured sausages hanging from a rail under the ceiling
+        if (q.y < 1.12) {
+          vec3 cc = vec3(0.62, 0.64, 0.66) * (0.85 + 0.15 * step(0.5, fract(q.x / 0.9)));
+          if (q.y > 0.72 && q.y < 1.06) {
+            float k = floor(q.x / 0.22);
+            float hh = bhHash12(vec2(k, rs + 9.0));
+            vec2 lp = vec2((fract(q.x / 0.22) - 0.5) * 0.22, q.y - 0.8);
+            float item = (1.0 - smoothstep(0.9, 1.05, length(lp / vec2(0.09, 0.045)))) * step(0.1, hh);
+            vec3 ic = hh < 0.3 ? vec3(0.8, 0.42, 0.42) : hh < 0.6 ? vec3(0.9, 0.78, 0.4) : hh < 0.8 ? vec3(0.6, 0.18, 0.15) : vec3(0.55, 0.62, 0.3);
+            cc = mix(vec3(0.84, 0.86, 0.84), ic, item);
+            self = max(self, 0.2);
+          }
+          if (q.y >= 1.06) cc = vec3(0.82, 0.8, 0.76);
+          if (q.y < 0.1) cc = vec3(0.12);
+          c = cc;
+        }
+        float ry = Hc - 0.22;
+        float k = floor(q.x / 0.17);
+        float hh = bhHash12(vec2(k, rs + 4.0));
+        vec2 lp = vec2((fract(q.x / 0.17) - 0.5) * 0.17, q.y - ry);
+        float len = 0.16 + 0.16 * hh;
+        float sal = hh > 0.3 ? 1.0 - smoothstep(0.85, 1.05, length(vec2(lp.x / 0.03, (lp.y + 0.03 + len * 0.5) / (len * 0.5)))) : 0.0;
+        float twine = step(abs(lp.x), 0.003) * step(-0.035, lp.y) * step(lp.y, 0.0) * step(0.3, hh);
+        c = mix(c, vec3(0.3, 0.3, 0.3), bhBox2(q, vec2(q.x, ry), vec2(1e3, 0.012)));
+        c = mix(c, vec3(0.85, 0.8, 0.7), twine);
+        c = mix(c, vec3(0.42, 0.14, 0.1) * (0.75 + 0.45 * smoothstep(0.03, -0.03, lp.x)), sal);
+      }
+    }
     else if (T < 3.5) c = shC;
     else if (T < 4.5) {
       // greenery / produce wall
@@ -2298,7 +2373,7 @@ ${LAMP_GLSL}
 
 // ───────────────────────────────────────────────────────── factory ──
 
-export function createMaterials(g: GlobalUniforms, opts: { legacy?: boolean; wear?: boolean; winDepth?: boolean; winRefl?: boolean; wallRelief?: boolean; plinth?: boolean; glassVar?: boolean } = {}): BuildingMaterials {
+export function createMaterials(g: GlobalUniforms, opts: { legacy?: boolean; wear?: boolean; winDepth?: boolean; winRefl?: boolean; wallRelief?: boolean; plinth?: boolean; glassVar?: boolean; interiors?: boolean } = {}): BuildingMaterials {
   const legacy = !!opts.legacy;
   const uniforms = {
     uHours: { value: 12 },
@@ -2318,6 +2393,7 @@ export function createMaterials(g: GlobalUniforms, opts: { legacy?: boolean; wea
     uWallRelief: { value: opts.wallRelief === false ? 0 : 1 },
     uPlinth: { value: opts.plinth === false ? 0 : 1 },
     uGlassVar: { value: opts.glassVar === false ? 0 : 1 },
+    uBhInt: { value: opts.interiors === false ? 0 : 1 },
     uGeoWin: { value: new THREE.Vector4(0, -1e5, 0, 0) },
     uDetailPx: { value: new THREE.Vector2(0.3, 0.8) },
   };
@@ -2358,6 +2434,7 @@ export function createMaterials(g: GlobalUniforms, opts: { legacy?: boolean; wea
         uWallRelief: uniforms.uWallRelief,
         uPlinth: uniforms.uPlinth,
         uGlassVar: uniforms.uGlassVar,
+        uBhInt: uniforms.uBhInt,
         uGeoWin: uniforms.uGeoWin,
         uDetailPx: uniforms.uDetailPx,
         uSunDir: g.uSunDir,
