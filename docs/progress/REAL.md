@@ -11,6 +11,13 @@ Overview must stay at least as impressive as now. Every feature: quality tiers +
 Lead session: session_01XuhAMczW3iK25AAWnf3qog, branch `claude/pensive-gates-bim12i`.
 
 ## Resume here (keep current)
+* 2026-10-29 06:10 UTC — F2 CLOSED (1271d9f merged: sail crew on cockpit coamings, tractor driver (RIDES registry),
+  train occupants in EMU saloons, side drum + long band uniforms, black bus flank windows fixed (F2's own glass-depth
+  bug; touches traffic/models.ts + vehicleMaterial.ts v12), swing hands OK. Cost: no new draws; +25k tris (+0.55 %)
+  for 12 occupants beside a bus; gl_FragDepth disables early-z on vehicle/train materials → needs ;nooccupants perf
+  run on the Adreno). Open: bus wheel arches in saloon, crude band horns, helm hands not on tiller.
+  F3b merged to 47d9f88 (ballast/rock/sward ?nosward/paving; golden ≈0, harbor 1.1 intended); still running pasture
+  + lawn blades. NEXT: when F3 closes → golden + judge 3 + bug hunter 3 → final Hebrew report.
 * 2026-10-29 05:15 UTC — F1 CLOSED (2554424 merged: school entrance kit ?noschoolkit, church hood moulds/archivolts/
   rose tracery/gablet ?nochurchmould (off on low), deli interior type 9, café wainscot+prints, arcade doors centred;
   judged pass: bakery, warehouse sign, porch, school, church, Café Nord). Open: deli shelves box-like, facade perf
