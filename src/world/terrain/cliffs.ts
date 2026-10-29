@@ -237,6 +237,9 @@ export function buildCliffs(
   stone: (x: number, z: number, size: number, embed: number, y?: number) => boolean,
 ): CliffResult {
   const res: CliffResult = { triangles: 0, blocks: 0, columns: 0, feet: [], stones: [] };
+  // broken ledges (REAL judge 3: "stacked slab ledges with straight edges"): every lip sags and juts by its own
+  // amount along the face (value noise, no rng: the strata layout is unchanged). `?nocliffledge` / low quality off
+  const broken = !ctx.debug.params.has('nocliffledge') && ctx.quality.level !== 'low';
   const tri0 = b.triangles;
   const occ = ctx.occupancy;
   const HARD = OCC.ROAD | OCC.SIDEWALK | OCC.RAIL | OCC.PAVED | OCC.BUILDING | OCC.SOLID | OCC.PATH;
@@ -379,6 +382,8 @@ export function buildCliffs(
         // the very top of a face: a little lower at random so the rim is not a ruler line
         if (yt >= c.yTop - 1e-3) yt -= 0.05 + 0.25 * vnoise(c.u * 0.45, k, f.seed);
         else yt -= dropTop;
+        // (only ever lower: a lip above the bed boundary would cut into the layer above)
+        if (broken) yt -= 0.3 * vnoise(c.u * 0.83 + k * 3.7, k * 1.31, f.seed + 17) ** 2;
         yt = Math.max(yt, yb + 0.25);
         const ym = yb + (yt - yb) * (0.38 + rng.next() * 0.22);
         const jit = () => (rng.next() - 0.5) * 0.22;
@@ -388,7 +393,8 @@ export function buildCliffs(
         if (k > 0 && lip[i][k - 1] < 9) db = Math.min(db, lip[i][k - 1] - 0.07);
         db = Math.max(db, -0.05);
         const dm = Math.max(db + 0.04, P * end + jit());
-        const dt = over > 0 ? dm + over * end : Math.max(0.0, Math.min(dm, P * 0.78 * end + jit()));
+        let dt = over > 0 ? dm + over * end : Math.max(0.0, Math.min(dm, P * 0.78 * end + jit()));
+        if (broken) dt = Math.max(0, dt + (vnoise(c.u * 1.27, k * 2.9 + 4, f.seed + 23) - 0.5) * 0.34 * end);
         lip[i][k] = Math.min(lip[i][k], dt);
         vs.push({ x: c.qx, z: c.qz, tb: tAt(c, yb), tm: tAt(c, ym), tt: tAt(c, yt), yb, ym, yt, db, dm, dt, sl: i === i0 || i === i1 ? 0 : (rng.next() - 0.5) * 0.5 });
       }

@@ -69,7 +69,7 @@ export function buildGroundGeometry(model: TerrainModel): { geo: THREE.BufferGeo
   const keep = (i0: number, i1: number, i2: number): boolean => {
     const cx = (pos[i0 * 3] + pos[i1 * 3] + pos[i2 * 3]) / 3;
     const cz = (pos[i0 * 3 + 2] + pos[i1 * 3 + 2] + pos[i2 * 3 + 2]) / 3;
-    return !(cz < -130 && model.inPortalMouth(cx, cz));
+    return !(cz < -130 && model.inPortalMouth(cx, cz, Math.min(pos[i0 * 3 + 1], pos[i1 * 3 + 1], pos[i2 * 3 + 1])));
   };
   const tri = (i0: number, i1: number, i2: number) => {
     if (keep(i0, i1, i2)) idx.push(i0, i1, i2);

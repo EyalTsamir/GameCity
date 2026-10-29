@@ -138,12 +138,20 @@ export function buildCoverMaps(ctx: CityContext): CoverMaps {
 
   // ── 1. where grass may grow (255) ───────────────────────────────────────────────────────────
   const allow = new Raster(CW, CH, SLAB.x0, SLAB.z0, CRES, 255);
+  // (the roads run on through the tunnels: the hill above a bore keeps its grass — `?noportalcut` restores the
+  // old bald strip up to the portal node)
+  const hoods = !ctx.debug.params.has('noportalcut');
   for (const seg of plan.roadSegments) {
     const P = plan.roadNodes[seg.a],
       Q = plan.roadNodes[seg.b];
     const side = seg.sidewalks ? CORRIDOR_HALF : ROAD_HALF + 0.7;
     if (Math.abs(Q.x - P.x) > Math.abs(Q.z - P.z)) allow.rect(P.x, P.z - side, Q.x, P.z + side, 0);
-    else allow.rect(P.x - side, P.z, P.x + side, Q.z, 0);
+    else {
+      let za = Math.min(P.z, Q.z);
+      const pt = hoods && (P.kind === 'portal' || Q.kind === 'portal') ? model.portals.find((p) => p.kind === 'road' && Math.abs(p.x - P.x) < 1) : undefined;
+      if (pt) za = Math.max(za, pt.z - pt.thick - 0.1);
+      allow.rect(P.x - side, za, P.x + side, Math.max(P.z, Q.z), 0);
+    }
   }
   for (const n of plan.roadNodes) if (n.kind !== 'portal') allow.rect(n.x - CORRIDOR_HALF, n.z - CORRIDOR_HALF, n.x + CORRIDOR_HALF, n.z + CORRIDOR_HALF, 0);
   // (north side: grass right up to the ballast shoulder toe at 2.4 m — a bladeless 'mown' strip read as felt)
@@ -184,12 +192,18 @@ export function buildCoverMaps(ctx: CityContext): CoverMaps {
   }
   for (const p of layout.plots) allow.rect(p.rect.x0, p.rect.z0, p.rect.x1, p.rect.z1, 0);
   for (const b of layout.borders) allow.capsule(b.ax, b.az, b.bx, b.bz, b.style === 'hedge' ? 0.35 : b.style === 'wall' ? 0.23 : 0.05, 0);
+  const close = plan.places?.close;
+  if (close) {
+    for (const t of close.stones) allow.rotRect(t.x, t.z, t.w + 0.14, t.t + (t.kind === 2 ? 0.2 : 0.12), t.yaw, 0);
+    allow.rect(close.cross.x - 1.15, close.cross.z - 1.15, close.cross.x + 1.15, close.cross.z + 1.15, 0);
+    allow.rect(close.wallX0 - 0.1, close.wallZ - 0.32, close.wallX1 + 0.1, close.wallZ + 0.32, 0);
+  }
   for (const p of model.portals) {
     // headwalls + approach cuts
     const c = p.cos,
       s = p.sin;
     const hw = p.halfW + 1,
-      d0 = -p.thick - 1,
+      d0 = -p.thick - (hoods ? 0.05 : 1),
       d1 = 8;
     allow.poly(
       [
@@ -209,6 +223,14 @@ export function buildCoverMaps(ctx: CityContext): CoverMaps {
   for (const b of plan.blocks) edge.rectStroke(b.rect.x0, b.rect.z0, b.rect.x1, b.rect.z1, 0.55, 80, 'max');
   for (const b of layout.borders) edge.capsule(b.ax, b.az, b.bx, b.bz, b.style === 'hedge' ? 0.75 : 0.55, b.style === 'hedge' ? 110 : 150, 'max');
   for (const t of trees) if (!t.worn) edge.disc(t.x, t.z, 0.55 + Math.min(0.5, t.h * 0.03), 130, 'max');
+  // the west-edge lane (core/places.ts): unmown verges along the hedgerow foot and the garden hedges, a taller
+  // crown between the ruts
+  const lane = plan.places?.edge;
+  if (lane) {
+    edge.capsule(lane.hedgeX + 0.9, lane.z0, lane.hedgeX + 0.9, lane.z1, 0.7, 200, 'max');
+    edge.capsule(lane.gardenX - 0.4, lane.z0, lane.gardenX - 0.4, lane.z1, 0.5, 170, 'max');
+    edge.capsule((lane.ruts[0] + lane.ruts[1]) / 2, lane.z0, (lane.ruts[0] + lane.ruts[1]) / 2, lane.z1, 0.3, 120, 'max');
+  }
   // trodden bare earth at the foot of park / square trees (vegetation trees[].worn, drawn by vegetation/plants.ts
   // wornPatch): no blades inside, thinning over the last ~30 % of the radius
   const worn = R();
@@ -376,6 +398,12 @@ export function buildCoverMaps(ctx: CityContext): CoverMaps {
     LD = litter.data,
     CD = canopy.data;
   const HARD = OCC.PATH | OCC.SOLID | OCC.BUILDING | OCC.ROAD | OCC.SIDEWALK | OCC.PAVED | OCC.RAIL;
+  // no reed stand on the pond-island footbridge's abutment or landing (core/places.ts)
+  const ib = plan.places?.island;
+  const nearBridge = (x: number, z: number): boolean =>
+    !!ib &&
+    ((Math.abs(x - ib.x) < ib.w / 2 + 1.6 && z > Math.min(ib.z0, ib.z1) - 1.8 && z < Math.max(ib.z0, ib.z1) + 1.2) ||
+      (x > ib.deck.x0 - 1.4 && x < ib.deck.x1 + 1.4 && z > ib.deck.z0 - 1.4 && z < ib.deck.z1 + 1.4));
   for (let j = 0; j < CH; j++) {
     const z = SLAB.z0 + (j + 0.5) * CRES;
     const fz = (z - SLAB.z0) * 2;
@@ -453,7 +481,7 @@ export function buildCoverMaps(ctx: CityContext): CoverMaps {
       if (dEdge < 18) len = Math.max(len, 0.72 * (1 - smooth(4, 15, dEdge + (nag - 0.5) * 6)));
       // habitat: wet shores (natural banks only) and dunes
       let hab = 0;
-      if ((pondish || mouth) && above > -0.5 && above < 0.6 && (o & HARD) === 0) {
+      if ((pondish || mouth) && above > -0.5 && above < 0.6 && (o & HARD) === 0 && !nearBridge(x, z)) {
         const wet = above < 0 ? smooth(-0.5, -0.12, above) : 1 - smooth(0.15, 0.6, above);
         // reeds come in stands, not a continuous fringe
         const stand = smooth(0.4, 0.6, fbm(x * 0.11, z * 0.11, 41));
