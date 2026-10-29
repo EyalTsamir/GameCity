@@ -1,5 +1,14 @@
 # Camera — going inside things (free camera upgrade) — progress log
 
+## Resume here
+* State (2026-10-29 ~21:40): feature implemented + committed (44d8d88, 97022aa); typecheck clean; explore
+  traces / screenshots verified (see Verification). OPEN: (1) full ui-test run on the full city
+  (`node <scratch copy of scripts/ui-test.mjs with browser.mjs imported from C:/Projects/GameCity/scripts>
+  --url http://127.0.0.1:5182/ --q noidle`) — queued on the shared lock when cut off; all default steps incl.
+  the new `explore` must pass; (2) `npm run build`; (3) final report to the user (Hebrew): how to use, fly-up
+  causes, files touched (list below / notes folder `camera-explore.md`).
+* Dev server for this worktree: `npx vite --port 5182 --strictPort`.
+
 Branch `claude/camera-explore-8a2dd3` (cut from `claude/pensive-gates-bim12i`). Brief: a camera that can go inside
 buildings, landmarks, trees, the station, under bridges, and never flies up when it touches a building.
 
