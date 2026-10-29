@@ -49,7 +49,20 @@ sim/rail/station.ts.
   rims, rust bleed, dust on tops, heavier foot grime. (cache key props-furniture-6)
 * Night market: life/nightmarket.ts tarp shroud over every market stall from 19:45 to 6:45 (`?nonightmarket`, off low).
 
+## Judged (shots/f4/b3, bench1)
+* Tractor 3 m: cab glass now see-through — seat + headrest, wheel, levers, dash visible (bench1/tractor_3m.png). Real-ish.
+* Sail 3 m: seams, laps, telltale, tapes read (bench1/boat_3m.png). boat 10 m = camera inside geometry (framing).
+* Market awning close (b3/mkc): sags into two bays either side of the bow, folds; reads as canvas.
+* Quay mid-apron (b3/qy): oil stains were black splats → toned (#4e4c46, softer scale); recheck.
+* Barn roof fs3: moiré gone; rust now streaks along the fall line.
+* Back yard top (b3/yt): line clear of the trees, patio by the door; fence/shed/pots not visible → shed search
+  widened (grid of spots, clear of tree trunks), counters `by_shed`, `by_fence` in props stats.
+
 ## Tried and rejected
+* Bench / capture views that end inside geometry (newsstand 3 m, phonebox 3 m, boat 10 m, mk1, by1, fk, fq1): framing,
+  not faults (seen in b1 before most F4 code loaded) — use high-pitch views (yt, mkc, qy patterns).
+* Poplar "floating clumps" (bug 2b): more crown masses (7 → 9) did not change it; the bits at fs1 are not the crown
+  spacing — next suspect: impostor/near swap or drift leaves (`?nodrift`).
 
 ## Toggles / tiers / costs
 * Cloth cost: pieces 2207 (incl. ~1000 pegs). Before F4 one 4×4 mesh ≈ 70k tris; single 8×5 mesh was 188k →

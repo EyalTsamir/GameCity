@@ -673,8 +673,8 @@ export function buildFishQuay(b: HB, o: FishQuayOpts): void {
         w = 0.5 + rr() * 1.4,
         d = 0.5 + rr() * 1.6;
       if (!clearRail(x, w)) continue;
-      if (k < 0.35) stain(b, x, y(x, z), z, w, d, '#2f2e2b', 0.3 + rr() * 0.3, 0.022); // oil
-      else if (k < 0.55) stain(b, x, y(x, z), z, w * 0.7, d * 0.7, '#6b4a30', 0.4, 0.022); // rust bloom
+      if (k < 0.35) stain(b, x, y(x, z), z, w, d, '#4e4c46', 0.5 + rr() * 0.3, 0.022); // oil
+      else if (k < 0.55) stain(b, x, y(x, z), z, w * 0.7, d * 0.7, '#7a6450', 0.5, 0.022); // rust bloom
       else if (k < 0.7) {
         b.color(rr() < 0.5 ? '#a7a59c' : '#9b998f').pat(PAT.NONE); // cement patch repair, slightly proud, square
         b.box(x, y(x, z) + 0.008, z, w, 0.016, d * 0.8, 0, 0);

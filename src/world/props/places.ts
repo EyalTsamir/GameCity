@@ -1411,6 +1411,7 @@ function backyard(e: PlacesEnv, info: PlacesInfo): void {
   const placeFree = (s: number, d: number, ry: number, rad: number, build: (k: Kit, x: number, y: number, z: number) => void): boolean => {
     const [x, z] = at(s, d);
     if (!e.free(x, z, rad)) return false;
+    for (const t of trees) if (Math.hypot(t.x - x, t.z - z) < rad + 0.45) return false; // clear of trunks
     const y = e.H(x, z) + 0.01;
     const k = e.fine(x);
     k.sh.frame(x, y, z, yaw + ry);
@@ -1451,6 +1452,7 @@ function backyard(e: PlacesEnv, info: PlacesInfo): void {
       for (const ry of [0.45, 1.25]) k.sh.box(0, ry, -0.03, 1.7, 0.08, 0.04, 0);
       e.spot(x, y + 0.02, z, fyaw, 0, 0, 0.9, 0.08, 0.1, 0.2, 0.5);
       e.claim(x, z, 0.3);
+      e.inc('by_fence');
       items++;
     }
   }
@@ -1470,8 +1472,10 @@ function backyard(e: PlacesEnv, info: PlacesInfo): void {
     items++;
   }
   // timber shed in the far corner: boarded walls, felt pent roof, ledged door with a hasp, a cobwebbed window
-  for (const sc of [L / 2 - 1.7, -L / 2 + 1.7]) {
-    const ok = placeFree(sc, Dy - 1.5, Math.PI, 1.35, (k) => {
+  const shedSpots: [number, number][] = [];
+  for (let d = Dy - 1.5; d > 3.2; d -= 0.8) for (const sc of [L / 2 - 1.7, -L / 2 + 1.7, L / 2 - 2.7, -L / 2 + 2.7]) shedSpots.push([sc, d]);
+  for (const [sc, sdd] of shedSpots) {
+    const ok = placeFree(sc, sdd, Math.PI, 1.35, (k) => {
       const W = 2.0,
         D = 1.5,
         Hf = 2.1,
@@ -1515,7 +1519,10 @@ function backyard(e: PlacesEnv, info: PlacesInfo): void {
       k.m('#b8653d', 'ceramic');
       for (let i = 0; i < 4; i++) k.sh.cyl(0.62, 0.0 + i * 0.07, D / 2 + 0.28, 0.08, 0.11, 0.12, 8, 2);
     });
-    if (ok) break;
+    if (ok) {
+      e.inc('by_shed');
+      break;
+    }
   }
   // pots along the fence: terracotta of mixed sizes with geraniums, a lavender, a small bay tree
   for (let i = 0; i < 5; i++) {
