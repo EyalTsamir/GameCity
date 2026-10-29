@@ -11,10 +11,13 @@
 //
 // Places (each with its own URL switch; ?noplaces turns them all off):
 //   lowquay  (?nolowquay)  a lower quay walk along the north river wall, x -63..11, 0.85 m above the water,
-//                          reached by two stone flights from the promenade (gaps in the iron railing)
+//                          reached by a stone flight (west) and a long ramp (east) from the promenade (gaps in
+//                          the iron railing)
 //   oldlane  (?nooldlane)  Old Town block (4,1): an archway passage under a gatehouse from the avenue into a
 //                          paved pocket square, a raised garden terrace behind a balustraded retaining wall
 //                          with a recessed flight, and a stepped lane down through the north row to the street
+//   islandbridge (?noislandbridge)  Central Park: a humped timber footbridge from the pond loop to the island,
+//                          ending on a little landing deck with a bench
 
 import type { CityPlan, Lot, WalkPath, Bench } from './plan';
 import { RIVER, SIDEWALK_Y } from './constants';
@@ -23,7 +26,7 @@ import { hashString } from './rng';
 
 const params = typeof location !== 'undefined' ? new URLSearchParams(location.search) : new URLSearchParams();
 
-export type PlaceId = 'lowquay' | 'oldlane';
+export type PlaceId = 'lowquay' | 'oldlane' | 'islandbridge';
 
 /** a straight flight: `n` risers between yBot and yTop, rising along `axis` in direction `up` */
 export interface PlaceStair {
@@ -33,6 +36,22 @@ export interface PlaceStair {
   yBot: number;
   yTop: number;
   n: number;
+}
+
+/** a straight ramp rising linearly from yBot to yTop along `axis` in direction `up` */
+export interface PlaceRamp {
+  rect: Rect;
+  axis: 'x' | 'z';
+  up: 1 | -1;
+  yBot: number;
+  yTop: number;
+}
+
+export function rampY(r: PlaceRamp, x: number, z: number): number {
+  const R = r.rect;
+  const L = r.axis === 'x' ? R.x1 - R.x0 : R.z1 - R.z0;
+  const u = r.axis === 'x' ? (r.up > 0 ? x - R.x0 : R.x1 - x) : r.up > 0 ? z - R.z0 : R.z1 - z;
+  return r.yBot + (r.yTop - r.yBot) * Math.max(0, Math.min(1, u / L));
 }
 
 export interface QuayPlace {
@@ -45,6 +64,8 @@ export interface QuayPlace {
   landings: Rect[];
   landingY: number;
   stairs: PlaceStair[];
+  /** the east access: a long ramp along the wall (carts, prams, the rowing club's boats) */
+  ramp: PlaceRamp;
   /** outer edge of the flights (cheek wall + handrail line) */
   zCheek: number;
   bollards: P2[];
@@ -67,10 +88,30 @@ export interface LanePlace {
   gate: { rect: Rect; spring: number; crown: number; eave: number; ridge: number };
 }
 
+export interface IslandBridgePlace {
+  /** bridge centre line x, bank end z0 (on the shore path side) → island end z1, deck width */
+  x: number;
+  z0: number;
+  z1: number;
+  w: number;
+  y0: number;
+  y1: number;
+  rise: number;
+  /** timber landing on the island's edge */
+  deck: Rect;
+  deckY: number;
+}
+
+export function islandBridgeY(b: IslandBridgePlace, z: number): number {
+  const t = Math.max(0, Math.min(1, (z - b.z0) / (b.z1 - b.z0)));
+  return b.y0 + (b.y1 - b.y0) * t + b.rise * Math.sin(Math.PI * t);
+}
+
 export interface PlacesDef {
   on: Record<PlaceId, boolean>;
   quay: QuayPlace | null;
   lane: LanePlace | null;
+  island: IslandBridgePlace | null;
   /** solid thin boxes for the first-person walk (balustrades, handrails, cheek walls) */
   walls: Rect[];
   /** promenade railing gaps on the north river wall (stair landings) */
@@ -125,7 +166,7 @@ function bench(plan: CityPlan, x: number, z: number, yaw: number, ax: number, az
 
 // ───────────────────────────────────────────────────────── lower quay ──
 
-function buildQuay(plan: CityPlan, floors: Floor[], stairs: PlaceStair[], walls: Rect[], gaps: { x: number; half: number }[]): QuayPlace {
+function buildQuay(plan: CityPlan, floors: Floor[], stairs: PlaceStair[], ramps: PlaceRamp[], walls: Rect[], gaps: { x: number; half: number }[]): QuayPlace {
   const zWall = RIVER.z0 + 0.25; // water face of the north wall (RIVER_WALL_T / 2)
   const zEdge = RIVER.z0 + 4.0;
   const y = -0.75; // 0.85 m above the river
@@ -140,11 +181,13 @@ function buildQuay(plan: CityPlan, floors: Floor[], stairs: PlaceStair[], walls:
   const lW = rect(x0, RIVER.z0 - 0.3, x0 + LW, zCheek);
   const lE = rect(x1 - LW, RIVER.z0 - 0.3, x1, zCheek);
   const sW: PlaceStair = { rect: rect(x0 + LW, zWall, x0 + LW + n * tread, zCheek), axis: 'x', up: -1, yBot: y, yTop: landingY, n };
-  const sE: PlaceStair = { rect: rect(x1 - LW - n * tread, zWall, x1 - LW, zCheek), axis: 'x', up: 1, yBot: y, yTop: landingY, n };
-  stairs.push(sW, sE);
+  // east: a 1:11 ramp down along the wall instead of a flight
+  const rE: PlaceRamp = { rect: rect(x1 - LW - 12, zWall, x1 - LW, zCheek), axis: 'x', up: 1, yBot: y, yTop: landingY };
+  stairs.push(sW);
+  ramps.push(rE);
   floors.push({ r: lW, y: landingY }, { r: lE, y: landingY }, { r: rect(x0, zWall - 0.05, x1, zEdge), y });
   // handrail along the outer cheek of each flight + the landing edge (the drop to the quay)
-  walls.push(rect(x0, zCheek - 0.04, sW.rect.x1, zCheek + 0.08), rect(sE.rect.x0, zCheek - 0.04, x1, zCheek + 0.08));
+  walls.push(rect(x0, zCheek - 0.04, sW.rect.x1, zCheek + 0.08), rect(rE.rect.x0 + 2.5, zCheek - 0.04, x1, zCheek + 0.08));
   gaps.push({ x: x0 + LW / 2, half: LW / 2 + 0.05 }, { x: x1 - LW / 2, half: LW / 2 + 0.05 });
 
   // walkways: promenade → landing → flight → quay walk → flight → landing → promenade
@@ -154,7 +197,7 @@ function buildQuay(plan: CityPlan, floors: Floor[], stairs: PlaceStair[], walls:
   const xW = x0 + LW / 2,
     xE = x1 - LW / 2;
   const wB = stairEnds(sW).bot,
-    eB = stairEnds(sE).bot;
+    eB = { x: rE.rect.x0, z: zL };
   const pts: P2[] = [
     { x: xW, z: zProm },
     { x: xW, z: RIVER.z0 - 0.35 },
@@ -172,14 +215,14 @@ function buildQuay(plan: CityPlan, floors: Floor[], stairs: PlaceStair[], walls:
     ys.push(y);
     if (k % 2 === 1) bench(plan, x, zWall + 0.5, 0, x, zQ);
   }
-  pts.push({ x: eB.x - 1.4, z: zQ }, { x: eB.x, z: zL }, { x: sE.rect.x1, z: zL }, { x: xE, z: zL }, { x: xE, z: RIVER.z0 - 0.15 }, { x: xE, z: RIVER.z0 - 0.35 }, { x: xE, z: zProm });
-  ys.push(y, y, landingY, landingY, landingY, SIDEWALK_Y, SIDEWALK_Y);
+  pts.push({ x: eB.x - 1.4, z: zQ }, { x: eB.x, z: zL }, { x: (eB.x + rE.rect.x1) / 2, z: zL }, { x: rE.rect.x1, z: zL }, { x: xE, z: zL }, { x: xE, z: RIVER.z0 - 0.15 }, { x: xE, z: RIVER.z0 - 0.35 }, { x: xE, z: zProm });
+  ys.push(y, y, (y + landingY) / 2, landingY, landingY, landingY, SIDEWALK_Y, SIDEWALK_Y);
   addPath(plan, { kind: 'promenade', pts, ys, width: 1.9, surface: 'stone', draw: false });
 
   // mooring bollards along the edge
   const bollards: P2[] = [];
   for (let x = x0 + 4; x < x1 - 3; x += 9) bollards.push({ x, z: zEdge - 0.32 });
-  return { x0, x1, zWall, zEdge, y, landings: [lW, lE], landingY, stairs: [sW, sE], zCheek, bollards };
+  return { x0, x1, zWall, zEdge, y, landings: [lW, lE], landingY, stairs: [sW], ramp: rE, zCheek, bollards };
 }
 
 // ─────────────────────────────────────────────────────── old-town lane ──
@@ -324,6 +367,50 @@ function buildLane(plan: CityPlan, floors: Floor[], stairs: PlaceStair[], walls:
   return { block: blk.rect, passage, square, terrace, lane, squareY, terraceY, wallZ, stair, laneStairs: [fA, fB], gate };
 }
 
+// ──────────────────────────────────────────────────── pond-island bridge ──
+
+function buildIsland(plan: CityPlan, walls: Rect[]): IslandBridgePlace | null {
+  const isl = plan.features.find((f) => f.kind === 'pondisland');
+  const pond = plan.water?.ponds[0];
+  if (!isl || !pond) return null;
+  const ir = Number(isl.params?.radius ?? isl.radius);
+  // the island becomes reachable (no solid disc; renderers read params.radius)
+  isl.radius = 0;
+  const x = isl.x;
+  // the pond loop path (plan.ts genPark): ellipse rx + 3.6 / rz + 3.4, 24 segments — the point on it north of the island
+  const prx = pond.rx + 3.6,
+    prz = pond.rz + 3.4;
+  let zRing = NaN;
+  for (let k = 0; k < 24; k++) {
+    const a0 = (k / 24) * Math.PI * 2,
+      a1 = ((k + 1) / 24) * Math.PI * 2;
+    const p0 = { x: pond.cx + Math.cos(a0) * prx, z: pond.cz + Math.sin(a0) * prz },
+      p1 = { x: pond.cx + Math.cos(a1) * prx, z: pond.cz + Math.sin(a1) * prz };
+    if (p0.z > pond.cz || p1.z > pond.cz || (p0.x - x) * (p1.x - x) > 0) continue;
+    zRing = p0.z + ((p1.z - p0.z) * (x - p0.x)) / (p1.x - p0.x);
+  }
+  if (zRing !== zRing) return null;
+  const shore = pond.cz - pond.rz * Math.sqrt(1 - ((x - pond.cx) / pond.rx) ** 2);
+  const z0 = shore - 1.3; // abutment on the bank
+  const z1 = isl.z - ir + 0.1; // island edge
+  const deck = rect(x - 1.8, z1, x + 0.8, z1 + 1.5);
+  const B: IslandBridgePlace = { x, z0, z1, w: 1.7, y0: 0.06, y1: 0.16, rise: 0.62, deck, deckY: 0.16 };
+  walls.push(rect(x - B.w / 2 - 0.08, z0 + 0.5, x - B.w / 2, z1), rect(x + B.w / 2, z0 + 0.5, x + B.w / 2 + 0.08, z1));
+  const pts: P2[] = [{ x, z: zRing }, { x, z: z0 }];
+  const ys = [0.03, B.y0];
+  for (const t of [0.2, 0.4, 0.6, 0.8]) {
+    const z = z0 + (z1 - z0) * t;
+    pts.push({ x, z });
+    ys.push(islandBridgeY(B, z));
+  }
+  pts.push({ x, z: z1 }, { x, z: z1 + 0.75 });
+  ys.push(B.y1, B.deckY);
+  addPath(plan, { kind: 'park', pts, ys, width: 1.6, surface: 'deck', draw: false });
+  // a bench on the landing, looking west over the pond
+  bench(plan, deck.x0 + 0.45, z1 + 0.75, -Math.PI / 2, x, z1 + 0.75);
+  return B;
+}
+
 // ───────────────────────────────────────────────────────────── build ──
 
 export function buildPlaces(plan: CityPlan): PlacesDef {
@@ -331,34 +418,45 @@ export function buildPlaces(plan: CityPlan): PlacesDef {
   const on: Record<PlaceId, boolean> = {
     lowquay: all && !params.has('nolowquay'),
     oldlane: all && !params.has('nooldlane'),
+    islandbridge: all && !params.has('noislandbridge'),
   };
   const floors: Floor[] = [];
   const stairs: PlaceStair[] = [];
+  const ramps: PlaceRamp[] = [];
   const walls: Rect[] = [];
   const railGaps: { x: number; half: number }[] = [];
-  const quay = on.lowquay ? buildQuay(plan, floors, stairs, walls, railGaps) : null;
+  const quay = on.lowquay ? buildQuay(plan, floors, stairs, ramps, walls, railGaps) : null;
   const lane = on.oldlane ? buildLane(plan, floors, stairs, walls) : null;
+  const island = on.islandbridge ? buildIsland(plan, walls) : null;
   // overall bounds of each place for a fast reject
   const boxes: Rect[] = [];
   if (quay) boxes.push(rect(quay.x0, RIVER.z0 - 0.4, quay.x1, quay.zEdge));
   if (lane) boxes.push(rect(lane.block.x0, lane.block.z0, lane.block.x1, lane.block.z1));
+  const bridgeR = island ? rect(island.x - island.w / 2, island.z0, island.x + island.w / 2, island.z1) : null;
+  if (island && bridgeR) boxes.push(rect(island.deck.x0, bridgeR.z0, island.deck.x1, island.deck.z1));
   const dryR = quay ? rect(quay.x0, RIVER.z0, quay.x1, quay.zEdge) : null;
   const height = (x: number, z: number): number => {
     let hit = false;
     for (const b of boxes) if (inR(b, x, z)) hit = true;
     if (!hit) return NaN;
     for (const s of stairs) if (inR(s.rect, x, z)) return stairY(s, x, z);
+    for (const r of ramps) if (inR(r.rect, x, z)) return rampY(r, x, z);
     for (const f of floors) if (inR(f.r, x, z)) return f.y;
+    if (island && bridgeR) {
+      if (inR(bridgeR, x, z)) return islandBridgeY(island, z);
+      if (inR(island.deck, x, z)) return island.deckY;
+    }
     return NaN;
   };
   return {
     on,
     quay,
     lane,
+    island,
     walls,
     railGaps,
     dropLadder: (x, z) => !!dryR && x > dryR.x0 - 0.6 && x < dryR.x1 + 0.6 && Math.abs(z - RIVER.z0) < 0.5,
     height,
-    dry: (x, z) => !!dryR && inR(dryR, x, z),
+    dry: (x, z) => (!!dryR && inR(dryR, x, z)) || (!!bridgeR && (inR(bridgeR, x, z) || inR(island!.deck, x, z))),
   };
 }

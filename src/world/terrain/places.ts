@@ -7,13 +7,15 @@
 //     ashlar retaining wall with coping and a balustrade, the recessed flight, the stepped lane, and the
 //     gatehouse over the passage (plastered, stone arch ring, barrel-vaulted soffit, windows, tiled roof,
 //     a lantern on each face)
+//   * pond-island bridge: a humped timber footbridge with posts and handrails on a stone abutment, and a
+//     plank landing on piles at the island's edge
 // Quality: on 'low' (or ?noplacedetail) balustrades are solid parapets and the gatehouse has no arch ring
 // or windows.
 
 import * as THREE from 'three';
 import type { CityContext } from '../../core/context';
 import type { Rect } from '../../core/geom';
-import { stairY, type LanePlace, type PlaceStair, type QuayPlace } from '../../core/places';
+import { stairY, islandBridgeY, type IslandBridgePlace, type LanePlace, type PlaceStair, type QuayPlace } from '../../core/places';
 import type { GeoBuilder, V3 } from './builder';
 import type { TerrainModel } from './height';
 import { KIND } from './kinds';
@@ -35,6 +37,8 @@ const COL = {
   roof: C('#a65b3f'),
   lamp: C('#ffd59a'),
 };
+const WOOD = C('#8b6a4b');
+const WOOD_DK = C('#6a4f37');
 const IRON = C('#2f4a3e');
 const IRON_HI = C('#3d5d4f');
 const BOLLARD = C('#2e2f2d');
@@ -114,6 +118,30 @@ function quayStone(b: GeoBuilder, q: QuayPlace, model: TerrainModel): void {
     slab(b, { x0: l.x0, x1: l.x1, z0: q.zWall - 0.02, z1: l.z1 }, q.y, q.landingY - 0.08, 4 | 8 | 16);
   }
   for (const s of q.stairs) flight(b, s, q.y, COL.quayStone);
+  // the east ramp: setts on a sloping top, its open side a triangle of ashlar
+  const r = q.ramp;
+  b.color(COL.paving).set('aMas', KIND.ashlar, 0.22, 1, 0);
+  b.quadFacing([r.rect.x0, r.yBot, r.rect.z0], [r.rect.x1, r.yTop, r.rect.z0], [r.rect.x1, r.yTop, r.rect.z1], [r.rect.x0, r.yBot, r.rect.z1], 0, 1, 0);
+  b.color(COL.quayStone).set('aMas', KIND.ashlar, 0.3, 1, 0);
+  b.polygonFacing(
+    [
+      [r.rect.x0, q.y, r.rect.z1],
+      [r.rect.x1, q.y, r.rect.z1],
+      [r.rect.x1, r.yTop, r.rect.z1],
+    ],
+    [
+      [r.rect.x0, q.y],
+      [r.rect.x1, q.y],
+      [r.rect.x1, r.yTop],
+    ],
+    0,
+    0,
+    1,
+  );
+  // kerb along the open side
+  b.color(COL.coping).set('aMas', KIND.coping, 0, 1, 0);
+  const L = r.rect.x1 - r.rect.x0;
+  b.beam(r.rect.x0 + 0.6, r.yBot + 0.05 + ((r.yTop - r.yBot) * 0.6) / L, r.rect.z1 - 0.1, r.rect.x1, r.yTop + 0.05, r.rect.z1 - 0.1, 0.2, 0.1);
 }
 
 function quayIron(b: GeoBuilder, q: QuayPlace): void {
@@ -140,6 +168,19 @@ function quayIron(b: GeoBuilder, q: QuayPlace): void {
       const yt = onLanding(px) ? hTop : hTop + ((hBot - hTop) * (px - xTop)) / (xBot - xTop);
       b.box(px, (y0 + yt) / 2, zr, 0.035, (yt - y0) / 2, 0.035, 0, 4);
     }
+  }
+  // ramp handrail (posts every ~2 m) from the east landing down to where the drop is small
+  {
+    const r = q.ramp;
+    const l = q.landings[1];
+    const xs: number[] = [l.x1 - 0.1];
+    for (let x = r.rect.x1; x > r.rect.x0 + 2.4; x -= 2.4) xs.push(x);
+    const yAt = (x: number) => (x >= r.rect.x1 ? q.landingY : r.yBot + ((r.yTop - r.yBot) * (x - r.rect.x0)) / (r.rect.x1 - r.rect.x0));
+    b.color(IRON_HI);
+    for (let i = 0; i < xs.length - 1; i++) b.beam(xs[i], yAt(xs[i]) + 0.95, zr, xs[i + 1], yAt(xs[i + 1]) + 0.95, zr, 0.06, 0.05);
+    b.color(IRON);
+    for (let i = 0; i < xs.length - 1; i++) b.beam(xs[i], yAt(xs[i]) + 0.5, zr, xs[i + 1], yAt(xs[i + 1]) + 0.5, zr, 0.035, 0.035);
+    for (const x of xs) b.box(x, yAt(x) + 0.475, zr, 0.035, 0.475, 0.035, 0, 4);
   }
   // mooring bollards on the coping
   for (const p of q.bollards) {
@@ -379,6 +420,66 @@ function laneIron(b: GeoBuilder, P: LanePlace): void {
   }
 }
 
+// ──────────────────────────────────────────────────── pond-island bridge ──
+
+/** humped timber footbridge: stringers + cross planks following the deck profile, posts and handrails, a
+ *  stone abutment on the bank, the island landing on four piles (all timber in the masonry mesh, plain kind) */
+function islandStone(b: GeoBuilder, B: IslandBridgePlace, hi: boolean): void {
+  const x = B.x,
+    hw = B.w / 2;
+  const L = B.z1 - B.z0;
+  const N = Math.max(12, Math.round(L / 0.22));
+  const yAt = (z: number) => islandBridgeY(B, z);
+  // abutment on the bank
+  b.color(COL.wall).set('aMas', KIND.ashlar, 0.3, 1, 0);
+  slab(b, { x0: x - hw - 0.25, x1: x + hw + 0.25, z0: B.z0 - 0.5, z1: B.z0 + 0.6 }, -0.6, B.y0 - 0.06, 4);
+  // stringers (follow the hump in 8 pieces)
+  b.color(WOOD_DK).set('aMas', KIND.plain, 0, 0, 1);
+  for (let i = 0; i < 8; i++) {
+    const za = B.z0 + (L * i) / 8,
+      zb = B.z0 + (L * (i + 1)) / 8;
+    for (const sx of [-hw + 0.1, hw - 0.1]) b.beam(x + sx, yAt(za) - 0.16, za, x + sx, yAt(zb) - 0.16, zb, 0.14, 0.2);
+  }
+  // planks across the deck
+  b.color(WOOD).set('aMas', KIND.plain, 0, 1, 0);
+  for (let i = 0; i < N; i++) {
+    const z = B.z0 + (L * (i + 0.5)) / N;
+    b.box(x, yAt(z) - 0.035, z, hw, 0.035, (L / N) * 0.42, 0, 4);
+  }
+  // posts and handrails on both sides
+  const nP = Math.max(3, Math.round(L / 1.2));
+  for (const sx of [-hw + 0.04, hw - 0.04]) {
+    b.color(WOOD_DK).set('aMas', KIND.plain, 0, 0, 1);
+    for (let i = 0; i <= nP; i++) {
+      const z = B.z0 + 0.3 + ((L - 0.4) * i) / nP;
+      b.box(x + sx, yAt(z) + 0.46, z, 0.05, 0.5, 0.05, 0, 4);
+    }
+    b.color(WOOD).set('aMas', KIND.plain, 0, 0, 1);
+    for (let i = 0; i < nP; i++) {
+      const za = B.z0 + 0.3 + ((L - 0.4) * i) / nP,
+        zb = B.z0 + 0.3 + ((L - 0.4) * (i + 1)) / nP;
+      b.beam(x + sx, yAt(za) + 0.95, za, x + sx, yAt(zb) + 0.95, zb, 0.09, 0.06);
+      if (hi) b.beam(x + sx, yAt(za) + 0.5, za, x + sx, yAt(zb) + 0.5, zb, 0.04, 0.05);
+    }
+  }
+  // island landing: planks on bearers, four piles into the pond
+  const d = B.deck;
+  b.color(WOOD_DK).set('aMas', KIND.plain, 0, 1, 0);
+  for (const [px, pz] of [
+    [d.x0 + 0.12, d.z0 + 0.12],
+    [d.x0 + 0.12, d.z1 - 0.12],
+    [d.x1 - 0.12, d.z0 + 0.12],
+    [d.x1 - 0.12, d.z1 - 0.12],
+  ] as [number, number][])
+    b.box(px, (B.deckY - 1.3) / 2, pz, 0.07, (B.deckY + 1.3) / 2, 0.07, 0, 4);
+  b.color(WOOD).set('aMas', KIND.plain, 0, 0, 1);
+  const nd = Math.round((d.x1 - d.x0) / 0.2);
+  for (let i = 0; i < nd; i++) {
+    const px = d.x0 + ((d.x1 - d.x0) * (i + 0.5)) / nd;
+    b.box(px, B.deckY - 0.035, (d.z0 + d.z1) / 2, ((d.x1 - d.x0) / nd) * 0.42, 0.035, (d.z1 - d.z0) / 2, 0, 4);
+  }
+}
+
 // ─────────────────────────────────────────────────────────────── API ──
 
 function detail(ctx: CityContext): boolean {
@@ -391,6 +492,7 @@ export function buildPlacesStone(b: GeoBuilder, ctx: CityContext, model: Terrain
   if (!pl) return;
   if (pl.quay) quayStone(b, pl.quay, model);
   if (pl.lane) laneStone(b, pl.lane, detail(ctx), lights);
+  if (pl.island) islandStone(b, pl.island, detail(ctx));
 }
 
 /** ironwork (handrails, bollards) into the railing builder */
