@@ -126,6 +126,8 @@ export class FirstPerson {
   private pitch = 0;
   private vx = 0;
   private vz = 0;
+  /** side (±1) the last blocked step veered to */
+  private veer = 1;
   private glide: Glide | null = null;
   // head bob / footsteps
   private phase = 0;
@@ -402,6 +404,21 @@ export class FirstPerson {
           else this.vx *= 0.5;
           ok = true;
           break;
+        }
+      }
+      // round things (trunks, posts, café tables) and corners: veer round them — the way already taken first,
+      // so the body does not dither from side to side
+      for (let j = 0; j < 4 && !ok; j++) {
+        const ang = (j < 2 ? 0.6 : 1.15) * (j % 2 === 0 ? this.veer : -this.veer);
+        const c = Math.cos(ang),
+          sn = Math.sin(ang);
+        const tx = this.x + (sx * c - sz * sn) * c,
+          tz = this.z + (sx * sn + sz * c) * c;
+        if (this.canStep(tx, tz)) {
+          this.x = tx;
+          this.z = tz;
+          this.veer = Math.sign(ang);
+          ok = true;
         }
       }
       if (!ok) {
@@ -701,6 +718,11 @@ export class FirstPerson {
       if (Math.abs(this.feet - h) > 0.5) out.push(`walker feet ${this.feet.toFixed(2)} far from the ground ${h.toFixed(2)}`);
     }
     return out;
+  }
+
+  /** debug: what the walk model sees at (x, z) */
+  probe(x: number, z: number): Record<string, unknown> {
+    return { ...this.surface().probe(x, z, RADIUS), canStep: this.active ? this.canStep(x, z) : null };
   }
 
   /** debug / tests: current body (x, z, feet, surface height) */

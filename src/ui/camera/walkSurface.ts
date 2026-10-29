@@ -269,6 +269,14 @@ export class WalkSurface {
     return true;
   }
 
+  /** debug (?camdebug → camera service walkProbe): what is at (x, z) for a body of radius r */
+  probe(x: number, z: number, r: number): Record<string, unknown> {
+    const k = this.inSlab(x, z) ? this.cellIdx(x, z) : -1;
+    const discs = k >= 0 ? this.discs()[k].filter((d) => Math.hypot(x - d.x, z - d.z) < d.r + r + 1).map((d) => [d.x, d.z, d.r].map((v) => Math.round(v * 100) / 100)) : [];
+    const walls = this.walls.filter((w) => x > w.x0 - r - 1 && x < w.x1 + r + 1 && z > w.z0 - r - 1 && z < w.z1 + r + 1);
+    return { solid: this.solidAt(x, z), clear: this.clear(x, z, r), height: this.heightAt(x, z), ground: this.ground(x, z), flags: this.flags(x, z), deck: this.deckY(x, z, true), discs, walls };
+  }
+
   /** occupancy bits at (x, z) (0 beyond the slab) */
   flags(x: number, z: number): number {
     return this.inSlab(x, z) ? this.ctx.occupancy.get(x, z) : 0;

@@ -1790,6 +1790,7 @@ export default function create(ctx: CityContext): CityModule {
   if (ctx.debug.params.has('camdebug')) {
     const ext = service as unknown as Record<string, unknown>;
     ext.debugState = () => ({ ...dbg, armLen, armLenVel, roofLift, my: motion.yaw, mld: motion.ld });
+    ext.walkProbe = (x: number, z: number) => walk.probe(x, z);
     // blocked stretches of an arm from the current pivot (degrees, metres)
     ext.debugScan = (yawDeg: number, pitchDeg: number, len: number) => {
       const buf = new Float32Array(SCAN_MAX * 2);
