@@ -459,11 +459,11 @@ export default function create(ctx: CityContext): CityModule {
       look.set('uSat', 1.08 + 0.07 * gold - 0.04 * night);
       // (light round: a little more S-curve and cleaner blacks — base AgX is flat, the judges found no true
       // black anywhere; ?lookold = before)
-      look.set('uContrast', lookOld ? 0.17 : 0.23);
+      look.set('uContrast', lookOld ? 0.17 : 0.21);
       if (lookOld) look.setVec('uLift', 0.006, 0.007, 0.011);
-      else look.setVec('uLift', 0.003, 0.0035, 0.0065);
+      else look.setVec('uLift', 0.0045, 0.005, 0.0088);
       look.set('uWarm', 0.006 * (1 - night) + 0.008 * dusk - 0.012 * night);
-      look.set('uVignette', lookOld ? 0.16 + 0.12 * night : 0.2 + 0.14 * night);
+      look.set('uVignette', lookOld ? 0.16 + 0.12 * night : 0.19 + 0.12 * night);
       look.setVec('uShadowTint', -0.003, 0.0, 0.006);
     } else {
       // studio key: sunlit whites sit higher (stronger sun), so the day threshold rises to keep

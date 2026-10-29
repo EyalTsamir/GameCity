@@ -142,11 +142,12 @@ function patchChunks(tex: THREE.Texture, box: THREE.Vector4): boolean {
   if (typeof pars !== 'string' || typeof begin !== 'string' || typeof maps !== 'string') return false;
   if (!begin.includes(anchor) || !begin.includes(hemi) || !begin.includes(hemiEnd) || !maps.includes(ibl)) return false;
   chunks.lights_pars_begin = pars + PARS;
-  // the sun bounce: sunlit ground / facades (albedo ~0.2) light what the sky cannot reach, warm
+  // the sun bounce: sunlit ground / facades (albedo ~0.2) light what the sky cannot reach, warm — at a low sun
+  // mostly the facades that face it, so it does not vanish with the sun's height
   const bounce =
     '#if ( NUM_DIR_LIGHTS > 0 )\n' +
-    '\t{ float thUp = max(dot(directionalLights[ 0 ].direction, thSvM[ 1 ]), 0.0);\n' +
-    '\t  irradiance += directionalLights[ 0 ].color * (0.06 * thUp * (1.0 - thSV)); }\n' +
+    '\t{ float thUp = 0.4 + 0.6 * max(dot(directionalLights[ 0 ].direction, thSvM[ 1 ]), 0.0);\n' +
+    '\t  irradiance += directionalLights[ 0 ].color * (0.07 * thUp * (1.0 - thSV)); }\n' +
     '#endif\n';
   chunks.lights_fragment_begin = begin
     .replace(anchor, anchor + '\n' + BEGIN)

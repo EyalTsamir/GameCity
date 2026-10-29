@@ -14,9 +14,18 @@ import * as THREE from 'three';
 /** diffuse IBL relative to specular IBL */
 export const IBL_DIFFUSE = 0.6;
 
+/**
+ * World mode (light round, ?envold = off): the PMREM is baked from the physical sky in the dome's own units, so
+ * scene.environmentIntensity ~0.5 made every reflection (paint, metal, wet stone, the Fresnel sheen of grazing
+ * surfaces) half as bright as the sky it mirrors. The specular part is scaled up by ENV_SPEC and the diffuse
+ * factor down by the same amount, so the ambient light is unchanged.
+ */
+export const ENV_SPEC = 1.7;
+
 let patched = false;
 
-export function patchIBLChunk(): boolean {
+/** `diffuse`: the diffuse factor actually applied (the light round passes IBL_DIFFUSE / ENV_SPEC with the env boost) */
+export function patchIBLChunk(diffuse = IBL_DIFFUSE): boolean {
   if (patched) return true;
   const key = 'envmap_physical_pars_fragment';
   const chunks = THREE.ShaderChunk as unknown as Record<string, string>;
@@ -25,7 +34,7 @@ export function patchIBLChunk(): boolean {
   const ret = 'return PI * envMapColor.rgb * envMapIntensity;';
   const at = src.indexOf(ret);
   if (at < 0) return false;
-  chunks[key] = src.slice(0, at) + `return PI * envMapColor.rgb * envMapIntensity * ${IBL_DIFFUSE.toFixed(3)};` + src.slice(at + ret.length);
+  chunks[key] = src.slice(0, at) + `return PI * envMapColor.rgb * envMapIntensity * ${diffuse.toFixed(3)};` + src.slice(at + ret.length);
   patched = true;
   return true;
 }

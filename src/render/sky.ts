@@ -12,7 +12,7 @@ import { createClouds, type HeroView, type Obstacle } from './sky/clouds';
 import { ShadowFitter } from './sky/shadowFit';
 import { EnvironmentBaker, type EnvPhysical } from './sky/env';
 import { patchShadowChunk } from './sky/shadowPatch';
-import { patchIBLChunk } from './sky/iblPatch';
+import { patchIBLChunk, IBL_DIFFUSE, ENV_SPEC } from './sky/iblPatch';
 import { installSkyVis, type SkyVisStats } from './sky/skyVis';
 import { patchLampSpecular } from '../core/lampLight';
 import { createRain } from './sky/rain';
@@ -78,7 +78,9 @@ export default async function create(ctx: CityContext): Promise<CityModule> {
   let meterEV = 1;
   let legacy = legacyParam;
   patchShadowChunk();
-  if (!legacyParam) patchIBLChunk();
+  // light round: reflections at the sky's own brightness, diffuse ambient unchanged (?envold)
+  const envSpec = world && !legacyParam && !ctx.debug.params.has('envold') ? ENV_SPEC : 1;
+  if (!legacyParam) patchIBLChunk(IBL_DIFFUSE / envSpec);
   // light round: street-canyon sky visibility for the ambient light (?noskyvis; off on the low tier)
   let skyVis: SkyVisStats | null = null;
   if (world && !legacyParam && !ctx.debug.params.has('noskyvis') && ctx.quality.level !== 'low') skyVis = installSkyVis(ctx.plan);
@@ -394,7 +396,7 @@ export default async function create(ctx: CityContext): Promise<CityModule> {
       meterEV += (target - meterEV) * (lastJump ? 1 : Math.min(1, realDt * 1.5));
     }
     renderer.toneMappingExposure = state.exposure * (1 + overcast * 0.12) * tune.exposure * meterEV;
-    scene.environmentIntensity = state.env * (1 - overcast * 0.2) * tune.env;
+    scene.environmentIntensity = state.env * (1 - overcast * 0.2) * tune.env * envSpec;
 
     if (sun.castShadow) {
       // world: no tilt-shift blur hides the distance → a wider shadowed region, not trimmed behind the focus

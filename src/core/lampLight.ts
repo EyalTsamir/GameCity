@@ -292,7 +292,15 @@ export function patchLampSpecular(): boolean {
 #if defined( TH_LAMP_GLSL ) && defined( STANDARD ) && !defined( TH_NO_LAMP_SPEC )
 if ( thLampSE.r + thLampSE.g + thLampSE.b > 1e-5 ) {
   vec3 thLampV = normalize( ( viewMatrix * vec4( thLampSL, 0.0 ) ).xyz );
-  reflectedLight.directSpecular += ( PI * thLampSE ) * BRDF_GGX( thLampV, geometryViewDir, geometryNormal, material );
+  // the map's virtual lamp stands for heads half a metre wide smeared over metres: never a mirror-sharp lobe
+  // (smooth paving or a lamp's own glass seen from above flared into bloom balls metres wide)
+  PhysicalMaterial thLampM = material;
+  thLampM.roughness = max( material.roughness, 0.5 );
+  vec3 thLampS = ( PI * thLampSE ) * BRDF_GGX( thLampV, geometryViewDir, geometryNormal, thLampM );
+  // soft knee: a sheen at most about as bright as the lamp light itself on a pale surface
+  float thLampY = dot( thLampS, vec3( 0.2126, 0.7152, 0.0722 ) );
+  float thLampK = 0.45 * dot( thLampSE, vec3( 0.2126, 0.7152, 0.0722 ) ) + 1e-4;
+  reflectedLight.directSpecular += thLampS / ( 1.0 + thLampY / thLampK );
 }
 #endif
 ${src}`;

@@ -8,9 +8,13 @@
 - Judge notes (sonnet ×3, per image): scratchpad `judge_day.md`, `judge_dusk.md`, `judge_night.md` (summarised below).
 - DONE: resize warnings fixed (postfx.ts, verified: 0 new warnings, no incomplete blits after 4 resizes).
 - Committed: 53d507d (AO, light key, glass, sky visibility, dusk sea, shadow fit, grade, headlights), 31f7738 (lamp
-  specular, exposure metering, asphalt sheen, GLSL name fix). NEXT: perf A/B (scratchpad perf1.log) → round-2 full
-  capture `shots/light/r2` (same views / hours as base) → judge round 2 → next fixes. Lab script: scratchpad lab.mjs
-  (one page load, list of {name, view, hours, js}); sheets: scratchpad sheet.py.
+  specular, exposure metering, asphalt sheen, GLSL name fix). Perf A/B done (table below). Round 2 captured
+  (`shots/light/r2`) and judged (scratchpad judge2_day / judge2_dusk / judge2_night.md, summary below).
+  Round 3 (uncommitted while being verified): lamp specular widened + soft-capped (fixes the aerial night bloom balls),
+  env specular ×1.7 with diffuse IBL ÷1.7 (`?envold`), night fill 0.36 → 0.42, 7.8 h fill 0.58 → 0.64, grade
+  contrast 0.23 → 0.21 / lift back up / vignette 0.2 → 0.19, canyon sun bounce kept alive at a low sun.
+  NEXT: verify r3 (scratchpad r3a / r3b_envold / r3c_nolampspec) → commit → final capture `shots/light/final` →
+  ui-test + console + invariants → sheets → report. Lab script: scratchpad lab.mjs; sheets: scratchpad sheet.py.
 
 ## Judgement (baseline) — what gives it away as CG
 Day (7.5 / 12 h): objects float (no contact darkening under bikes, benches, stalls, cars, people, wall bases); glass towers
@@ -23,6 +27,17 @@ string lights, headlights don't glow or light the ground yet; direct sun still p
 Night (21.5 h): lamp / headlight pools are hard-edged projected quads; moon shadows too strong and hard; ambient fill
 too high and flat (no real black); no window spill on pavements; glass reads like daytime texture; no lamp glitter in
 water; halos identical hard discs; the 19 → 21.5 h switch-on is abrupt.
+
+## Judgement round 2 (base vs r2, sonnet ×3)
+- Day: 7.5 h better (mirrored curtain walls, cooler shade, deeper contact AO, warmer longer sun), 12 h slightly better.
+  Mild: low-sun shade crushes (street_7h5 asphalt, platform benches), awnings look self-lit against darker ground.
+- Dusk: 18.2 h better (deep slate sea with sky mirror instead of turquoise plastic, canyon depth), 19 h clearly
+  better (lavender sea matching the sky, violet shade). Mild: shade crushes to navy at 18.2 (street, oldtown, market).
+- Night: eye level better (no moon patches, soft pools, real black fields), but REGRESSION in every aerial night
+  view: lamps bloomed into 80–250 px halo balls (lamp specular: a mirror-sharp GGX lobe right under each head seen from
+  above, × the night bloom) → fixed in round 3. Mild: overview / platform darks crushed.
+- Remaining tells (all three): uniform haze with no sun-side warmth; dry diffuse pavements; flat-lit canopies; water
+  reflections too sharp; lamps switch on late (19 h has no pools); shade without coloured bounce.
 
 ## Ranked fixes (wow per millisecond)
 | # | fix | where | est. cost | status |
@@ -37,6 +52,17 @@ water; halos identical hard discs; the 19 → 21.5 h switch-on is abrupt.
 | 8 | Shadow edges: stipple / smudges, penumbra | sky/shadowFit, shadow chunk | small | eye-level fit 14 → 10 cm texels (?shadowold) |
 | 9 | Grazing-sun sheen on asphalt / stone | ground shaders | 0.1–0.3 ms | asphalt roughness 0.8–0.95 → 0.72–0.92 |
 | 10 | Grade: contrast, vignette, highlight bloom | postfx | 0 ms | done (?lookold) |
+
+## Perf (perf.mjs, 1920×1025, 12 h, high, adaptive off, 2 repeats in one run — ms per frame, headless on the Adreno)
+| variant | street (eye level) | overview | market |
+|---|---|---|---|
+| all light-round changes (baseline row, run 1) | 42.9 | 49.7 | 52.2 |
+| `?noskyvis` | 41.9 / 42.1 | 48.6 / 48.3 | 50.8 / 50.8 |
+| `?aoold` | 42.9 / 42.8 | 49.7 / 49.9 | 52.6 / 52.0 |
+| `?glassold&shadowold` | 43.2 / 42.7 | 49.6 / 49.8 | 52.1 / 52.0 |
+→ sky visibility ≈ 0.9–1.4 ms (one dependent texture fetch + a matrix per lit fragment; the only feature with a real
+cost — off on the low tier), retuned AO / glass / shadow fit ≈ 0 (within noise). The run-2 baseline row (33 / 47 / 47 ms,
+1 console error) is discarded: a file was being edited mid-run and Vite served a half-saved materials.ts.
 
 ## Log
 - Resize warnings (`ui-test --steps resize`, ~120 × `glBlitFramebuffer … not all the same size`): traced with a
