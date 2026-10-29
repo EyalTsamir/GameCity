@@ -2,7 +2,9 @@
 
 ## G1 — glass and interiors (branch claude/real-g1-glass)
 ### Resume here
-Fixes 1–8 below pushed (typecheck, console clean, invariants {} at the bugs-3 bank view). Before: shots/g1/before
+**Done for this round (11:38 UTC).** Sheet: `docs/progress/real/g1_glass.jpg` (left = before, right = after:
+bakery, Café Nord, tower lobby, apartment, car; last row = bank/bookshop bays before (top) / after, train cab after).
+Fixes 1–10 below pushed (typecheck, console clean, invariants {} at the bugs-3 bank view). Before: shots/g1/before
 (first page load, pre-edit) + `?noglassvar` / `?novehglass&notrainglass` runs; after: shots/g1/after, after2.
 Bench cost here ≈ 2 min / capture (the 7-class 3 m run needs > 15 min — use `ONLYPOSE=cab_6m node scripts/.g1bench.mjs`
 style filters, local copy, not committed).
@@ -16,6 +18,23 @@ style filters, local copy, not committed).
 * Bus side glass: the panes over the real seated passengers are fully see-through, so the saloon reads open-air.
   **Open**: needs a blended reflection-only overlay draw of the flank window quads (one more instanced draw in
   traffic render) — the opaque vehicle material cannot put a reflection over figures drawn later.
+
+* Train cab: reflective glass with sky / skyline and parked wipers (after2/train_cab_6m) — reads as glass; the
+  desk behind is barely visible under the reflection (fine at 6 m).
+* Checks: typecheck; `shot.mjs --view downtown --invariants` console clean, invariants {} (11:37).
+
+### Toggles / tiers / cost
+`?noglassvar` (facade: 1–5, 9, 10; all inside the near-detail path `uDetail`, i.e. the facade quality tier),
+`?novehglass` (6, 7; inside `uVehDetail.x` = cabin-interior tier), `?notrainglass` (8; reflection all tiers, cab +
+wipers only when `uTrInt`, off on low). Cost: fragment ALU only on glass pixels (one extra plane intersect for the
+desk row, one for the café counter is on the back-wall path); no draws, no textures. **Not measured with perf.mjs**
+(no time in the box — software GL here can only compare variants in one run anyway).
+
+### Open
+* Bus side glass over real seated passengers: needs a blended reflection-only overlay draw (see above).
+* Shop door: handles added, but the door is still a glazed pane pair (no kick plate / push plate).
+* Tower lobby terrace has no café front (judge #9) — layout, not glass (plan / props).
+* Bookshop bays still all books (different shelves per bay now, same type by design).
 
 ### Code pointers
 * Facade glass: `src/world/buildings/materials.ts` `bhWall` (~1066–1925): cell = floor(vFac), r1..r3 per room (1453);
@@ -42,6 +61,10 @@ style filters, local copy, not committed).
    tint, slightly more contrast.
 7. **Bus saloon tyre arch** (`?novehglass`, F2 open): with seated passengers the flank depth ray stops at the
    saloon floor, so the far wheels no longer show through the seat rows.
+9. **Lobby plants in two species** (`?noglassvar`): broad-leaved rubber plant or upright snake plant per pane
+   (judge #9: same plant in every pane; verified after3).
+10. **Pull handles on glazed doors** (`?noglassvar`, near detail): steel bars beside the meeting stiles, door-width
+   openings (< 2.3 m) only — the first try also put them on every tall lobby pane.
 8. **Train cab windscreen** (`?notrainglass`; cab/desk/wipers only when `uTrInt` = not quality low): stylised
    sky / skyline / ground reflection by the reflected direction in the car frame (Fresnel, floor 0.2), dim cab
    with the desk, two parked wipers — no longer a black void.
