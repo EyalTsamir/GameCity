@@ -153,6 +153,13 @@ which three does not do (a home-made ray test against the lot boxes would pop: r
   roads 10.8, harbour 3.7, night market 3.4, winRec 1.7 MB…); the rest is outside its view — left as is (not a
   frame-time problem).
 
+### 8. Batch 5 — f594b6a…5274c61 (cand6): parallel warm-up, garbage, board, census
+cand4 → cand6 (ms/frame): all views within ±1.2 ms (GPU unchanged — this batch targets boot, garbage and spikes).
+Pass split now (12 h): overview scene 36.6 / shadow 2.2 / refl 2.7 / post 5.5; street 30.5 / 2.8 / 2.3 / 6.1; market
+38.7 / 2.4 / 1.5 / 5.3; harbour 32.1 / 2.2 / 3.3 / 5.3; platform 21.4 / 3.0 / 0.7 / 6.0.
+progprobe: the only material re-deriving its program per frame was terrain-tunnel-veils (transparent DoubleSide →
+three draws it back / front with .side flips) → forceSinglePass (identical: black layers).
+
 ---
 
 # Earlier round: render-performance pass
