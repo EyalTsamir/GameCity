@@ -535,6 +535,8 @@ export function createVehicleMaterial(
   #ifdef USE_CLEARCOAT
     // body paint (vCoat > 1.5) gets the street at more contrast: a lacquered panel mirrors it clearly
     clearcoatRadiance *= vGain * thStreetRefl( geometryViewDir, geometryClearcoatNormal, 0.0 ) * ( vCoat > 1.5 && uVehDetail.w > 0.5 ? 1.8 : 1.0 );
+    // G1: glass (gain 3.6) mirrors the street at about 60 %: at full gain the grey sky veil hid the cabin (smoked plastic)
+    if ( uVehGlass > 0.5 && vGain > 3.0 ) clearcoatRadiance *= 0.6;
   #endif
   if ( vMetal > 0.5 ) radiance *= vGain * thStreetRefl( geometryViewDir, geometryNormal, material.roughness * 0.3 );
 #endif`,
