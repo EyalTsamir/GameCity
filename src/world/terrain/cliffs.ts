@@ -302,7 +302,8 @@ export function buildCliffs(
     // small faults every 12–30 m: the beds step up or down (no endless parallel shelves)
     const faults: [number, number][] = [];
     // (alternating throw: the offsets never drift away from the strata grid)
-    for (let u = 6 + rng.next() * 12, sg = rng.chance(0.5) ? 1 : -1; u < f.len; u += 12 + rng.next() * 18, sg = -sg) faults.push([u, sg * (0.3 + rng.next() * 0.4)]);
+    // (F3: denser, larger throws — at 40 m the continuous shelves read as a layer cake)
+    for (let u = 4 + rng.next() * 8, sg = rng.chance(0.5) ? 1 : -1; u < f.len; u += 7 + rng.next() * 11, sg = -sg) faults.push([u, sg * (0.45 + rng.next() * 0.6)]);
     const fault = (u: number) => {
       let o = 0;
       for (const [fu, fo] of faults) o += fo * Math.min(1, Math.max(0, (u - fu) / 0.8 + 0.5));

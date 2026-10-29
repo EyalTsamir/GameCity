@@ -12,6 +12,13 @@
   - lawn felt: (a) the track verge north of the bed was a bladeless "mown" strip (groundcover allow cut at
     RAIL_Z−3.5) → allow/meadow now reach the shoulder toe (−2.45); (b) sward texture in ground.ts (uGcSward,
     ?nosward): 3 layers of blade-tip dashes oriented along the view direction, fade to mean coverage.
+  - lawn felt (c): blades read as dark stubble over pale suede → mown blades 1.8× wider, +16 % brighter, upK +0.32
+    (sky-lit like the ground), aoRoot 0.84; under-blade ground dark green (no thatch brown) at 0.58; sward v3:
+    scales 30/24/11 per m, fade by the LATERAL footprint (fLat) and depth (fpx), gaps dark green, normalised 0.88.
+  - paving: sand-filled joints (lighter than a shadow line, 25 % narrower), ±8 % per-stone luminance.
+  - cliffs: faults every 7–18 m with 0.45–1.05 m throws (was 12–30 / 0.3–0.7): shelves no longer a layer cake at 40 m.
+  Bench poses: `cliff` 3 m ok (10 m lands in the lineside fence), `tracklawn` 3/10 ok, `parklawn` 3 m ok (moved to
+  −64, 6; 10 m inside a building). `townhouse` 3 m = paving reference.
 * 2026-10-29 03:20 — session 1 wrapped up (context cap). ALL CODE BELOW IS UNJUDGED: no clean after-bench yet
   (the first after-captures were black because of a hardscape compile error, fixed in the last commit). FIRST STEP
   for F3b: `scripts/agent-tools/golden.sh m3` (ref = base e1c9780 already in shots/golden/ref — but shots/ is not

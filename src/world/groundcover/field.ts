@@ -306,7 +306,7 @@ vGcRough = 0.85;
         base *= ( 0.9 + 0.2 * cl.y ) * ( 0.92 + 0.16 * fract( rb.z * 21.7 ) );
         base *= 1.0 + 0.16 * kept;
         vec3 tip = gcTipColor( base, nA, len );
-        float aoRoot = mix( 0.66, 0.46, smoothstep( 0.2, 0.6, len ) );
+        float aoRoot = mix( mix( 0.66, 0.84, kept ), 0.46, smoothstep( 0.2, 0.6, len ) );
         // long grass has a dense low layer under the tall stems (no dark gaps at the base)
         bool lowLayer = len > 0.45 && fract( rb.x * 7.31 + rc.y * 0.7 ) < 0.38;
         if ( lowLayer ) {
@@ -437,7 +437,7 @@ vGcRough = 0.85;
         vec3 N = normalize( cross( wd3, T ) );
         if ( dot( N.xz, toCam ) < 0.0 ) N = -N;
         N = normalize( N + wd3 * side * 0.6 );
-        float upK = 0.42 + 0.4 * smoothstep( 3.0, 22.0, dist ) + 0.1 * kept;
+        float upK = 0.42 + 0.4 * smoothstep( 3.0, 22.0, dist ) + 0.32 * kept;   // short lawn blades catch the sky like the sward
         objectNormal = normalize( mix( N, nUp, clamp( upK, 0.0, 0.92 ) ) );
         // colour: shaded roots → mid → tip; gusts press the blades and show the paler side
         float ao = mix( aoRoot, 1.0, smoothstep( 0.0, 0.55, hf ) );

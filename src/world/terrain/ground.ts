@@ -848,8 +848,9 @@ vec3 groundColor() {
     sw = 1.0 - sw;                                   // union coverage; mean 1 − 0.87³ ≈ 0.34
     float swVis = 1.0 - smoothstep( 0.25, 0.6, max( fLat * 27.5, fpx * 6.6 ) );
     vec3 tipC = mix( grass * 1.3, gt * 1.15, 0.4 ) * mix( vec3( 1.0 ), swt, swVis );
-    vec3 swC = mix( grass * 0.78, tipC, sw );
-    grass = mix( grass, swC / 0.97, swVis * kept * 0.85 * uGcSward );
+    // (normalised a little below the mean: up close the blades hide part of the sunlit ground)
+    vec3 swC = mix( grass * vec3( 0.52, 0.6, 0.5 ), tipC, sw );
+    grass = mix( grass, swC / 0.88, swVis * kept * uGcSward );
   }
   gGrassTrans = smoothstep( 0.35, 0.8, len ) * ( 1.0 - pres ) * 0.6;
 
