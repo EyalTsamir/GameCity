@@ -115,7 +115,7 @@ export function genChurch(env: Env, lot: Lot): void {
     K.geo(dark, disc, 0, 4.88, oz - 0.012, 0);
     disc.dispose();
     for (const sg of [-1, 1])
-      for (const t of [0.3, 0.55, 0.8]) K.sphere(trim, 0.065, sg * 1.75 * (1 - t), 4.25 + 1.5 * t + 0.14, tz1 + 0.14, 6, 4);
+      for (const t of [0.3, 0.55, 0.8]) K.sphere(trim, 0.08, sg * 1.75 * (1 - t), 4.25 + 1.5 * t + 0.07, tz1 + 0.2, 6, 4);
     K.b.forceDetail = prev;
   }
   // portal door: boarded leaves (PAT.DOOR) dressed with wrought-iron strap hinges ending in fleur tips, a
