@@ -3,7 +3,7 @@
 //
 //   node scripts/ui-test.mjs [--q "only=camera,ui,audio&camdebug"] [--out shots/uitest] [--url http://127.0.0.1:5174/] [--width 1280 --height 720] [--dpr 1.25]
 //                            [--steps intro,drag,pan,wheel,keys,poi,pois,follow,chase,kinds,building,dbl,aircraft,freecam,tour,help,places,
-//                                     sound,time,speed,labels,resize,sweep,tourwatch]
+//                                     sound,time,speed,labels,resize,sweep,tourwatch,walk]
 //
 // Full city: --q noidle (the default `only=camera,ui,audio&camdebug` tests the camera on a stand-in city).
 // `intro` loads the page with the establishing shot and the first-run hint (otherwise &nointro is added).
@@ -28,7 +28,7 @@ const width = parseInt(args.width ?? '1280', 10);
 const height = parseInt(args.height ?? '720', 10);
 const dpr = parseFloat(args.dpr ?? '1');
 const q = args.q ?? 'only=camera,ui,audio&camdebug';
-const DEFAULT_STEPS = 'drag,pan,wheel,keys,poi,pois,follow,chase,kinds,building,dbl,aircraft,sweep,freecam,tour,help,places,sound,time,speed,labels,resize';
+const DEFAULT_STEPS = 'drag,pan,wheel,keys,poi,pois,follow,chase,kinds,building,dbl,aircraft,sweep,freecam,tour,help,places,sound,time,speed,labels,resize,walk';
 const wanted = new Set((args.steps ?? DEFAULT_STEPS).split(','));
 const intro = wanted.has('intro');
 const baseUrl = (args.url ?? 'http://127.0.0.1:5173/').replace(/\/?$/, '/'); // --url: another dev server (e.g. a baseline worktree)
@@ -963,6 +963,212 @@ try {
       maxRel: m.maxRelDistPerFrame,
       insideFrames: m.insideFrames,
     });
+  }
+
+  if (wanted.has('walk')) {
+    // first-person walk: V at the cursor, real keys / drag-look, feet on the ground, walls, a click, the station
+    // stairs, leaving with V / Esc
+    const wd = () => page.evaluate(() => window.__city.ctx.services.camera.walkDebug?.() ?? null);
+    const camY = () => page.evaluate(() => window.__city.ctx.camera.position.y);
+    const WREC_START = () => {
+      const lots = window.__city.ctx.plan.lots.map((l) => [l.footprint.x0, l.footprint.z0, l.footprint.x1, l.footprint.z1]);
+      const cam = window.__city.ctx.services.camera;
+      window.__wrec = { on: true, frames: [] };
+      const tick = () => {
+        if (!window.__wrec.on) return;
+        const c = window.__city.ctx.camera.position;
+        const d = cam.walkDebug();
+        let inside = 0;
+        for (const l of lots) if (c.x > l[0] && c.x < l[2] && c.z > l[1] && c.z < l[3]) inside = 1;
+        if (d && !d.gliding) window.__wrec.frames.push([performance.now(), c.x, c.y, c.z, d.feet, d.ground, inside, d.x, d.z]);
+        requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+    };
+    const WREC_STOP = () => {
+      window.__wrec.on = false;
+      return window.__wrec.frames;
+    };
+    /** eye height over the feet (bob only), feet vs the walking surface, frames inside a building, distance */
+    const walkStats = (fr) => {
+      let eye = 0,
+        feet = 0,
+        feetSum = 0,
+        inside = 0,
+        dist = 0;
+      for (let i = 0; i < fr.length; i++) {
+        const f = fr[i];
+        eye = Math.max(eye, Math.abs(f[2] - f[4] - 1.65));
+        feet = Math.max(feet, Math.abs(f[4] - f[5]));
+        feetSum += Math.abs(f[4] - f[5]);
+        inside += f[6];
+        if (i > 0) dist += Math.hypot(f[7] - fr[i - 1][7], f[8] - fr[i - 1][8]);
+      }
+      const r = (v) => Math.round(v * 1000) / 1000;
+      return { frames: fr.length, eyeErr: r(eye), feetErrMax: r(feet), feetErrMean: r(feetSum / Math.max(1, fr.length)), inside, walked: Math.round(dist * 100) / 100 };
+    };
+    /** turn the view by dragging (grab-the-view: the point under the cursor stays under it) */
+    const dragTurn = async (dyawRad) => {
+      const k = await page.evaluate(() => (window.__city.ctx.camera.fov * Math.PI) / 180 / window.__city.ctx.size.height);
+      let left = dyawRad / k;
+      while (Math.abs(left) > 1) {
+        const dx = Math.max(-width * 0.4, Math.min(width * 0.4, left));
+        await page.mouse.move(cx - dx / 2, cy);
+        await page.mouse.down({ button: 'left' });
+        for (let i = 1; i <= 12; i++) await page.mouse.move(cx - dx / 2 + (dx * i) / 12, cy);
+        await page.mouse.up({ button: 'left' });
+        left -= dx;
+      }
+      await settle(150);
+    };
+    const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
+
+    await view('downtown');
+    await settle(500);
+    const aim = await page.evaluate(({ x, y }) => {
+      const v = new window.__city.ctx.camera.position.constructor();
+      return window.__city.ctx.services.camera.surfacePoint(x, y, v) ? { x: v.x, z: v.z } : null;
+    }, { x: cx, y: cy + 60 });
+    await page.mouse.move(cx, cy + 60);
+    await page.waitForTimeout(150);
+    await page.keyboard.press('KeyV');
+    await settle(3400);
+    const d0 = await wd();
+    const y0 = await camY();
+    const m0 = await mode();
+    step('V walks from the spot under the cursor, eye 1.65 m over the ground', m0 === 'walk' && !!d0 && !d0.gliding && Math.abs(y0 - d0.ground - 1.65) < 0.08 && !!aim && Math.hypot(d0.x - aim.x, d0.z - aim.z) < 20, {
+      mode: m0,
+      at: d0 && [Math.round(d0.x * 10) / 10, Math.round(d0.z * 10) / 10],
+      cursorPoint: aim && [Math.round(aim.x), Math.round(aim.z)],
+      eyeOverGround: d0 && Math.round((y0 - d0.ground) * 100) / 100,
+    });
+    await shot('walk_enter');
+
+    // drag-to-look: turn towards the most open direction (no facade / water within 12 m), then walk there
+    const open = await page.evaluate(() => {
+      const { plan } = window.__city.ctx;
+      const d = window.__city.ctx.services.camera.walkDebug();
+      let best = { free: -1, yaw: d.yaw };
+      for (let k = 0; k < 24; k++) {
+        const a = (k / 24) * Math.PI * 2;
+        const sx = Math.sin(a),
+          sz = Math.cos(a);
+        let free = 0;
+        for (let s = 0.5; s <= 12; s += 0.5) {
+          const x = d.x + sx * s,
+            z = d.z + sz * s;
+          if (plan.isWater(x, z) || plan.lots.some((l) => x > l.footprint.x0 - 1.2 && x < l.footprint.x1 + 1.2 && z > l.footprint.z0 - 1.2 && z < l.footprint.z1 + 1.2)) break;
+          free = s;
+        }
+        if (free > best.free) best = { free, yaw: a };
+      }
+      return { ...best, from: d.yaw };
+    });
+    await dragTurn(wrap(open.yaw - open.from));
+    const dO = await wd();
+    const turnErr = Math.abs(wrap(dO.yaw - open.yaw));
+    step('drag turns the view (grab the view)', turnErr < 0.06, { wantDeg: Math.round((open.yaw * 180) / Math.PI), gotDeg: Math.round((dO.yaw * 180) / Math.PI), errDeg: Math.round((turnErr * 1800) / Math.PI) / 10, free: open.free });
+
+    // W for 3 s: ~1.4 m/s, eye glued to the ground (bob only)
+    await page.evaluate(WREC_START);
+    await page.keyboard.down('KeyW');
+    await page.waitForTimeout(3000);
+    await page.keyboard.up('KeyW');
+    await settle(600);
+    const w1 = walkStats(await page.evaluate(WREC_STOP));
+    step('W walks forward (~1.4 m/s), feet follow the ground, eye bobs ≤ 6 cm', w1.walked > 2.8 && w1.walked < 5.2 && w1.eyeErr < 0.06 && w1.feetErrMean < 0.05 && w1.inside === 0, w1);
+
+    // drag-to-look: face the nearest facade
+    const wall = await page.evaluate(() => {
+      const d = window.__city.ctx.services.camera.walkDebug();
+      let best = null;
+      for (const l of window.__city.ctx.plan.lots) {
+        const f = l.footprint;
+        const px = Math.max(f.x0, Math.min(f.x1, d.x)),
+          pz = Math.max(f.z0, Math.min(f.z1, d.z));
+        const dist = Math.hypot(px - d.x, pz - d.z);
+        if (!best || dist < best.dist) best = { dist, px, pz, lot: l.id };
+      }
+      return { ...best, yaw: d.yaw, want: Math.atan2(best.px - d.x, best.pz - d.z) };
+    });
+    await dragTurn(wrap(wall.want - wall.yaw));
+    // jog into the wall, then slide along it
+    await page.evaluate(WREC_START);
+    await page.keyboard.down('Shift');
+    await page.keyboard.down('KeyW');
+    await page.waitForTimeout(Math.min(7000, 1500 + wall.dist * 400));
+    await page.keyboard.up('KeyW');
+    await page.keyboard.up('Shift');
+    const atWall = await page.evaluate((id) => {
+      const d = window.__city.ctx.services.camera.walkDebug();
+      const f = window.__city.ctx.plan.lots[id].footprint;
+      const px = Math.max(f.x0, Math.min(f.x1, d.x)),
+        pz = Math.max(f.z0, Math.min(f.z1, d.z));
+      return Math.hypot(px - d.x, pz - d.z);
+    }, wall.lot);
+    await shot('walk_wall');
+    const s0 = await wd();
+    await page.keyboard.down('KeyD');
+    await page.waitForTimeout(2200);
+    await page.keyboard.up('KeyD');
+    await settle(400);
+    const s1 = await wd();
+    const w2 = walkStats(await page.evaluate(WREC_STOP));
+    const slid = Math.hypot(s1.x - s0.x, s1.z - s0.z);
+    step('jogging into a building stops at the wall (never inside) and slides along it', w2.inside === 0 && atWall < 1.0 && slid > 1.2, { ...w2, wallDist: Math.round(wall.dist * 10) / 10, wallGap: Math.round(atWall * 100) / 100, slid: Math.round(slid * 100) / 100 });
+
+    // a click on something while walking: its info card ("Looking at"), Esc closes the card, still walking
+    const thing = await findPickable(['pedestrian', 'vehicle', 'bus', 'building', 'landmark']);
+    if (!thing) skip('walk click', 'nothing pickable in view');
+    else {
+      await page.mouse.click(thing.x, thing.y);
+      await settle(500);
+      const card = await page.evaluate(() => ({ shown: !!document.querySelector('.th-info.show'), kicker: document.querySelector('.th-info-kicker')?.textContent, label: document.querySelector('.th-info-label')?.textContent }));
+      await page.keyboard.press('Escape');
+      await settle(400);
+      const after = { shown: await page.evaluate(() => !!document.querySelector('.th-info.show')), mode: await mode() };
+      step('click while walking shows the info card; Esc closes it and keeps walking', card.shown && /^Looking at/.test(card.kicker ?? '') && !after.shown && after.mode === 'walk', { picked: thing.label, card, after });
+    }
+
+    // the station: from the concourse up the steps onto the platform (0.95 m) — the HUD button walks from the focus
+    await view({ target: { x: 0.4, y: 0, z: -144.6 }, distance: 12, yaw: 0, pitch: 15 });
+    await settle(400);
+    await page.click('button[aria-label="Walk at street level"]');
+    await settle(2600);
+    const p0 = await wd();
+    await page.evaluate(WREC_START);
+    await page.keyboard.down('KeyW');
+    await page.waitForTimeout(5500);
+    await page.keyboard.up('KeyW');
+    await settle(500);
+    const w3 = walkStats(await page.evaluate(WREC_STOP));
+    const p1 = await wd();
+    step('walking up the station steps onto the platform (feet 0.95 m)', !!p0 && !!p1 && p0.feet < 0.2 && Math.abs(p1.feet - 0.95) < 0.03 && p1.z < -149.2 && w3.eyeErr < 0.06 && w3.feetErrMax < 0.25, {
+      from: p0 && [Math.round(p0.x * 10) / 10, Math.round(p0.z * 10) / 10, Math.round(p0.feet * 100) / 100],
+      to: p1 && [Math.round(p1.x * 10) / 10, Math.round(p1.z * 10) / 10, Math.round(p1.feet * 100) / 100],
+      ...w3,
+    });
+    await dragTurn(Math.PI / 2);
+    await shot('walk_platform');
+
+    // leave with V: the orbit camera takes over from the eye and glides up
+    await page.evaluate(REC_START);
+    await page.keyboard.press('KeyV');
+    await settle(2600);
+    const mv = motionStats(await page.evaluate(REC_STOP));
+    const sv = await st();
+    const mL = await mode();
+    step('V leaves the walk: the orbit glides up from the eye without a jump', mL === 'orbit' && sv.distance > 25 && mv.maxStepPerFrame < 3 && mv.insideFrames === 0, { mode: mL, dist: Math.round(sv.distance), maxStep: mv.maxStepPerFrame, maxAccel: mv.maxAccel, inside: mv.insideFrames });
+
+    // the HUD button again, then Esc (mouse never captured in automation) leaves too
+    await page.click('button[aria-label="Walk at street level"]');
+    await settle(2600);
+    const mE = await mode();
+    await page.keyboard.press('Escape');
+    await settle(2400);
+    const mE2 = await mode();
+    const btnOn = await page.evaluate(() => document.querySelector('button[aria-label="Walk at street level"]')?.classList.contains('on'));
+    step('the HUD button walks, Esc leaves', mE === 'walk' && mE2 === 'orbit' && !btnOn, { entered: mE, after: mE2 });
   }
 
   if (wanted.has('tourwatch')) {

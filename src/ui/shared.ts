@@ -57,6 +57,12 @@ export interface CameraServiceExt extends CoreCameraService {
   liveEntities(): { x: number; z: number; kind: PickHit['kind']; color: string }[];
   /** UI hook: a plain click at canvas (x, y) — return true when the UI handled it (e.g. a district flag) */
   clickHook?: ((x: number, y: number) => boolean) | null;
+  /** first-person walk (camera/firstPerson.ts) is on */
+  walking?(): boolean;
+  /** start walking from the camera focus, or stop (the HUD button; the V key walks from the cursor) */
+  toggleWalk?(): void;
+  /** tests: the walker's body (feet, walking-surface height under it, view yaw / pitch in radians), null when not walking */
+  walkDebug?(): { x: number; z: number; feet: number; ground: number; yaw: number; pitch: number; locked: boolean; gliding: boolean } | null;
 }
 
 export interface AudioServiceExt {

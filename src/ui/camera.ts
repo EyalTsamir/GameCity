@@ -11,6 +11,7 @@ import { SurfaceField } from './camera/surface';
 import { Scout, type LiveEntity } from './camera/scout';
 import { TourDirector, type Pose, type TourRig } from './camera/tour';
 import { buildDebugProxy } from './camera/debugProxy';
+import { FirstPerson } from './camera/firstPerson';
 import type { CameraServiceExt, PointerInfo, TourShotInfo } from './shared';
 import { WORLD_MODE } from '../core/world';
 
@@ -254,6 +255,19 @@ export default function create(ctx: CityContext): CityModule {
   const toast = (msg: string) => (ctx.services.ui as { toast?: (m: string) => void } | undefined)?.toast?.(msg);
   const emit = (name: string, payload?: unknown) => ctx.events.emit(name, payload);
 
+  // First-person walk (./camera/firstPerson.ts). While it is active it owns the camera: canvas pointer
+  // input and its keys are routed to it and the orbit update is skipped; flights, follows and the tour end
+  // it first. Leaving hands the eye pose back to the orbit (leaveWalk), so the switch never jumps.
+  const walk = new FirstPerson(ctx, {
+    pointer,
+    pickAt: (x, y) => pickAt(x, y),
+    release: (eye, viewYaw, viewPitch, rise) => leaveWalk(eye, viewYaw, viewPitch, rise),
+    toast,
+    emit,
+    bounds,
+    far: WORLD_MODE ? WORLD_FAR : 4000,
+  });
+
   // Camera feel. FREE (default): the orbit camera goes exactly where it is steered — through facades and
   // roofs if need be, only the ground stops it — and never starts touring by itself. GUIDED (G key,
   // ?guidedcam): the original spring arm that keeps the orbit out of buildings (slides in front of
@@ -304,7 +318,7 @@ export default function create(ctx: CityContext): CityModule {
   };
 
   let lastMode = 'orbit';
-  const modeNow = (): string => (tour.active ? 'tour' : follow && !follow.tour ? 'follow' : 'orbit');
+  const modeNow = (): string => (walk.active ? 'walk' : tour.active ? 'tour' : follow && !follow.tour ? 'follow' : 'orbit');
   const checkMode = () => {
     const m = modeNow();
     if (m !== lastMode) {
@@ -765,6 +779,7 @@ export default function create(ctx: CityContext): CityModule {
 
   const startTour = () => {
     if (tour.active) return;
+    if (walk.active) walk.exit(false);
     if (follow && !follow.tour) releaseFollow();
     cancelFlight();
     tour.start();
@@ -790,6 +805,7 @@ export default function create(ctx: CityContext): CityModule {
 
   // ───────────────────────────────────────────── public flyTo
   const flyTo = (view: Partial<CameraState> | Poi, seconds?: number) => {
+    if (walk.active) walk.exit(false);
     if (tour.active) stopTour();
     if (follow) releaseFollow();
     const to = poiPose(view, goal);
@@ -833,6 +849,76 @@ export default function create(ctx: CityContext): CityModule {
       flyTo(p);
       emit('camera:poi', p.id);
     }
+  };
+
+  // ───────────────────────────────────────────── first-person walk hooks
+  /** V / the HUD button: walk from the point under the cursor (V) or the camera focus — or stop walking */
+  const toggleWalk = (fromCursor: boolean) => {
+    if (walk.active) {
+      walk.exit(true);
+      return;
+    }
+    let x = eff.tx,
+      z = eff.tz;
+    if (fromCursor && pointer.inside && !pointer.dragging && surfacePoint(pointer.x, pointer.y, _hit)) {
+      x = _hit.x;
+      z = _hit.z;
+    }
+    // face the way the camera was looking at that spot
+    const cp = camera.position;
+    const viewYaw = Math.hypot(x - cp.x, z - cp.z) > 2 ? Math.atan2(x - cp.x, z - cp.z) : cur.yaw + Math.PI;
+    if (tour.active) stopTour();
+    if (follow) releaseFollow();
+    cancelFlight();
+    clearInput();
+    stopMotion();
+    kbVel.x = kbVel.z = kbVel.yaw = kbVel.pitch = kbVel.zoom = 0;
+    walk.enter(x, z, viewYaw, !automatedInput);
+    checkMode();
+  };
+  const automatedInput = (navigator as Navigator & { webdriver?: boolean }).webdriver === true;
+
+  /** the orbit takes over from the walker's eye: a pose that reproduces it, then (rise) a glide up and back */
+  const leaveWalk = (eye: THREE.Vector3, viewYaw: number, viewPitch: number, rise: boolean) => {
+    const yaw = viewYaw + Math.PI;
+    const p = Math.max(-viewPitch, 4 * DEG); // the orbit looks down on its pivot (flights keep ≥ 4°)
+    const d = 8;
+    const c = Math.cos(p);
+    cur.tx = eye.x - Math.sin(yaw) * c * d;
+    cur.ty = eye.y - Math.sin(p) * d;
+    cur.tz = eye.z - Math.cos(yaw) * c * d;
+    cur.dist = d;
+    cur.yaw = yaw;
+    cur.pitch = p;
+    copyPose(goal, cur);
+    flight = null;
+    stopMotion();
+    kbVel.x = kbVel.z = kbVel.yaw = kbVel.pitch = kbVel.zoom = 0;
+    roofLift = roofLiftVel = 0;
+    craneLift = craneShown = 0;
+    armLen = Infinity;
+    armLenVel = 0;
+    armShown = Infinity;
+    motion.valid = false;
+    fov = camera.fov;
+    if (rise) {
+      const ax = eye.x + Math.sin(viewYaw) * 12,
+        az = eye.z + Math.cos(viewYaw) * 12;
+      startFlight({ tx: ax, ty: field.groundAt(ax, az), tz: az, dist: 42, yaw, pitch: 24 * DEG }, 1.9, 'user');
+    }
+    checkMode();
+  };
+
+  /** C while walking: leave the walk and chase what was clicked */
+  const chaseFromWalk = () => {
+    const hit = walk.inspected;
+    if (!hit) {
+      toast('Click something that moves first — then C toggles the chase view');
+      return;
+    }
+    walk.exit(false);
+    startFollow(hit, { tour: false });
+    if (follow) setChase(true);
   };
 
   // ───────────────────────────────────────────── gestures
@@ -927,6 +1013,7 @@ export default function create(ctx: CityContext): CityModule {
       /* ignore */
     }
     const p = canvasXY(e);
+    if (walk.active) return walk.pointerDown(e, p.x, p.y);
     pointer.x = p.x;
     pointer.y = p.y;
     if (e.pointerType === 'touch') {
@@ -964,6 +1051,7 @@ export default function create(ctx: CityContext): CityModule {
 
   const onPointerMove = (e: PointerEvent) => {
     const p = canvasXY(e);
+    if (walk.active) return walk.pointerMove(e, p.x, p.y);
     pointer.x = p.x;
     pointer.y = p.y;
     pointer.movedAt = performance.now();
@@ -1032,6 +1120,7 @@ export default function create(ctx: CityContext): CityModule {
 
   const onPointerUp = (e: PointerEvent) => {
     const p = canvasXY(e);
+    if (walk.active) return walk.pointerUp(e, p.x, p.y);
     try {
       if (canvas.hasPointerCapture(e.pointerId)) canvas.releasePointerCapture(e.pointerId);
     } catch {
@@ -1109,6 +1198,7 @@ export default function create(ctx: CityContext): CityModule {
 
   const onWheel = (e: WheelEvent) => {
     e.preventDefault();
+    if (walk.active) return;
     userTakesOver();
     let dy = e.deltaY;
     if (e.deltaMode === 1) dy *= 18;
@@ -1141,6 +1231,7 @@ export default function create(ctx: CityContext): CityModule {
   const onKeyDown = (e: KeyboardEvent) => {
     shiftHeld = e.shiftKey;
     if (isTyping(e.target) || e.ctrlKey || e.metaKey || e.altKey) return;
+    if (walk.key(e, true)) return;
     const code = e.code;
     if (MOVE_KEYS.has(code)) {
       if (!keys.has(code)) userTakesOver();
@@ -1161,8 +1252,12 @@ export default function create(ctx: CityContext): CityModule {
       case 'Home':
         if (overview) flyToPoi(overview.id);
         break;
+      case 'KeyV':
+        toggleWalk(true);
+        break;
       case 'KeyC':
-        if (follow && !follow.tour) setChase(!follow.chase);
+        if (walk.active) chaseFromWalk();
+        else if (follow && !follow.tour) setChase(!follow.chase);
         else toast('Click something that moves first — then C toggles the chase view');
         break;
       case 'KeyT':
@@ -1192,9 +1287,11 @@ export default function create(ctx: CityContext): CityModule {
   const onKeyUp = (e: KeyboardEvent) => {
     shiftHeld = e.shiftKey;
     keys.delete(e.code);
+    walk.key(e, false);
   };
 
   const clearInput = () => {
+    walk.clearInput();
     keys.clear();
     shiftHeld = false;
     if (drag) {
@@ -1645,6 +1742,11 @@ export default function create(ctx: CityContext): CityModule {
   const service: CameraServiceExt = {
     flyTo,
     follow: (hit) => {
+      if (walk.active) {
+        // walking: the info card's Stop / close just closes the card
+        if (!hit) return walk.setInspected(null);
+        walk.exit(false);
+      }
       if (tour.active) stopTour();
       if (!hit) {
         releaseFollow();
@@ -1653,13 +1755,19 @@ export default function create(ctx: CityContext): CityModule {
       if (follow) releaseFollow();
       startFollow(hit, { tour: false });
     },
-    getState: () => ({ target: { x: eff.tx, y: eff.ty, z: eff.tz }, distance: eff.dist, yaw: eff.yaw / DEG, pitch: eff.pitch / DEG }),
-    busy: () => !!(drag && drag.moved) || pinch !== null || flight !== null || performance.now() < movingUntil,
+    getState: () => (walk.active ? walk.state() : { target: { x: eff.tx, y: eff.ty, z: eff.tz }, distance: eff.dist, yaw: eff.yaw / DEG, pitch: eff.pitch / DEG }),
+    busy: () => (walk.active ? walk.busy() : !!(drag && drag.moved) || pinch !== null || flight !== null || performance.now() < movingUntil),
     mode: () => modeNow(),
     startTour,
     stopTour,
-    following: () => (follow && !follow.tour ? follow.hit : null),
-    setChase,
+    following: () => (walk.active ? walk.inspected : follow && !follow.tour ? follow.hit : null),
+    setChase: (on) => {
+      if (!walk.active) setChase(on);
+      else if (on) chaseFromWalk();
+    },
+    walking: () => walk.active,
+    toggleWalk: () => toggleWalk(false),
+    walkDebug: () => (walk.active ? walk.debug() : null),
     chasing: () => !!follow?.chase,
     touring: () => tour.active,
     pickAt,
@@ -1717,6 +1825,12 @@ export default function create(ctx: CityContext): CityModule {
       frames++;
       scout.update();
       scout.updateCensus(0.35);
+      if (walk.active) {
+        walk.frame(dt);
+        checkMode();
+        camMs = camMs * 0.95 + (performance.now() - t0) * 0.05;
+        return;
+      }
       integrateKeys(dt);
       integrateInertia(dt);
       updateFollow(dt);
@@ -1788,10 +1902,11 @@ export default function create(ctx: CityContext): CityModule {
       camMs = camMs * 0.95 + (performance.now() - t0) * 0.05;
     },
     resize() {
-      applyCamera(0);
+      if (!walk.active) applyCamera(0);
     },
     stats() {
       return {
+        ...(walk.active ? walk.stats() : {}),
         mode: modeNow() + (follow?.chase ? '+chase' : ''),
         distance: Math.round(eff.dist),
         yaw: Math.round(eff.yaw / DEG),
@@ -1802,6 +1917,11 @@ export default function create(ctx: CityContext): CityModule {
     },
     invariants() {
       const out: string[] = [];
+      if (walk.active) {
+        out.push(...walk.invariants());
+        if (camera.near <= 0 || camera.far <= camera.near) out.push('bad near/far planes');
+        return out;
+      }
       const p = camera.position;
       if (![p.x, p.y, p.z, eff.tx, eff.ty, eff.tz].every(isFinite)) out.push('camera position / target is not finite');
       const floor = field.groundAt(p.x, p.z) + 1.9;
@@ -1816,6 +1936,7 @@ export default function create(ctx: CityContext): CityModule {
       return out;
     },
     dispose() {
+      walk.dispose();
       canvas.removeEventListener('pointerdown', onPointerDown);
       canvas.removeEventListener('pointermove', onPointerMove);
       canvas.removeEventListener('pointerup', onPointerUp);

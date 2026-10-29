@@ -214,6 +214,7 @@ export default function create(ctx: CityContext): CityModule {
   const g3 = el('div', 'th-group');
   const dofBtn = btn('tiltshift', `${DOF_NAME} (B)`);
   const tourBtn = btn('tour', 'Auto-tour (T)');
+  const walkBtn = btn('walk', 'Walk at street level (V)');
   const weatherBtn = btn('weatherAuto', 'Weather: automatic');
   const soundBtn = btn('soundOff', 'Sound');
   const volWrap = el('div', 'th-vol-wrap');
@@ -229,7 +230,7 @@ export default function create(ctx: CityContext): CityModule {
   const mapBtn = btn('map', 'Minimap (M)');
   const qualityBtn = btn('quality', 'Quality');
   const helpBtn = btn('help', 'Controls & help (H)');
-  g3.append(dofBtn, tourBtn, weatherBtn, soundBtn, volWrap, labelsBtn, placesBtn, mapBtn, qualityBtn, helpBtn);
+  g3.append(dofBtn, tourBtn, walkBtn, weatherBtn, soundBtn, volWrap, labelsBtn, placesBtn, mapBtn, qualityBtn, helpBtn);
   tb.append(g1, el('div', 'th-divider'), g2, el('div', 'th-divider'), g3);
 
   // menus
@@ -304,6 +305,7 @@ export default function create(ctx: CityContext): CityModule {
         <dt>${k('1', '…', '9')}${k('0')}</dt><dd>Places · overview</dd>
         <dt>${k('C')}</dt><dd>Chase view</dd>
         <dt>${k('G')}</dt><dd>Free / guided camera</dd>
+        <dt>${k('V')}</dt><dd>Walk from the spot under the cursor · Shift jogs, Esc frees the mouse</dd>
         <dt>${k('Esc')}</dt><dd>Let go · stop tour</dd>
       </dl></section>
       <section><h3>Time & view</h3><dl>
@@ -343,7 +345,7 @@ export default function create(ctx: CityContext): CityModule {
     const t = e.currentTarget as HTMLElement | null;
     if (t && typeof t.blur === 'function') setTimeout(() => t.blur(), 0);
   };
-  for (const b of [playBtn, ...speedBtns, dofBtn, tourBtn, weatherBtn, soundBtn, labelsBtn, placesBtn, mapBtn, qualityBtn, helpBtn]) b.addEventListener('click', blurSoon);
+  for (const b of [playBtn, ...speedBtns, dofBtn, tourBtn, walkBtn, weatherBtn, soundBtn, labelsBtn, placesBtn, mapBtn, qualityBtn, helpBtn]) b.addEventListener('click', blurSoon);
 
   const setPaused = (p: boolean) => {
     if (p) {
@@ -436,6 +438,12 @@ export default function create(ctx: CityContext): CityModule {
     if (!c) return;
     if (c.touring()) c.stopTour();
     else c.startTour();
+    syncToolbar();
+  });
+
+  // first-person walk (camera/firstPerson.ts)
+  walkBtn.addEventListener('click', () => {
+    cam()?.toggleWalk?.();
     syncToolbar();
   });
 
@@ -705,6 +713,10 @@ export default function create(ctx: CityContext): CityModule {
     tourBtn.disabled = !c;
     tourBtn.classList.toggle('on', !!c?.touring());
     tourBtn.classList.toggle('th-touring', !!c?.touring());
+    const walking = !!c?.walking?.();
+    walkBtn.disabled = !c?.toggleWalk;
+    walkBtn.classList.toggle('on', walking);
+    walkBtn.dataset.tip = walking ? 'Stop walking (V)' : 'Walk at street level (V)';
     const a = audio();
     const sOn = !!a?.enabled();
     soundBtn.innerHTML = sOn ? ICONS.soundOn : ICONS.soundOff;
@@ -735,6 +747,7 @@ export default function create(ctx: CityContext): CityModule {
     const movable = isMovable(hit);
     let kicker = KIND_WORD[hit.kind] ?? 'Following';
     if (hit.kind === 'other') kicker = !movable ? 'Viewing' : isAirborne(hit) ? 'Following · aircraft' : 'Following';
+    if (c?.walking?.()) kicker = kicker.replace(/^(Following|Viewing)/, 'Looking at');
     infoKicker.textContent = kicker;
     infoLabel.textContent = hit.label;
     chaseBtn.style.display = movable ? '' : 'none';
@@ -758,6 +771,11 @@ export default function create(ctx: CityContext): CityModule {
 
   events.on('camera:follow', () => syncInfo());
   events.on('camera:chase', () => syncInfo());
+  events.on('camera:walk', (on: boolean) => {
+    syncToolbar();
+    syncInfo();
+    if (on) hideHint();
+  });
   events.on('camera:tour', (on: boolean) => {
     syncToolbar();
     if (on) toast('Auto-tour — move the camera to take over');

@@ -28,6 +28,7 @@ import {
   brakeSqueal,
   firework,
   clank,
+  footstep,
   musicBoxPhrase,
   type NoiseBank,
   type BirdSpecies,
@@ -364,6 +365,12 @@ export default function create(ctx: CityContext): CityModule {
     const s = stationPos(p?.station);
     const o = spot(s.x, 2, s.z, { ref: 80, wet: 0.3 });
     if (o) brakeSqueal(g!.ac, o.input, g!.ac.currentTime + 0.05);
+  });
+  // first-person walk (camera/firstPerson.ts): one event per footfall
+  events.on('walk:step', (p: { x: number; y: number; z: number; surface: string; jog: boolean } | undefined) => {
+    if (!live() || !p) return;
+    const o = spot(p.x, p.y, p.z, { ref: 6, wet: 0.04, gain: p.jog ? 0.75 : 0.55, life: 0.4 });
+    if (o) footstep(g!.ac, o.input, g!.noise, g!.ac.currentTime + 0.01, p.surface, p.jog ? 1.25 : 1);
   });
   events.on('bus:stop', (p: { stopId?: number; phase?: string } | undefined) => {
     if (!live() || !p || typeof p.stopId !== 'number') return;

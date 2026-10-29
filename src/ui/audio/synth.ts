@@ -598,6 +598,40 @@ export function clank(ac: BaseAudioContext, out: AudioNode, t: number, level = 1
   stopAfter(oscs, t + 0.4, nodes);
 }
 
+// ───────────────────────────────────────────── footsteps (first-person walk)
+
+const STEP_TONE: Record<string, { thump: number; band: number; q: number; scuff: number; len: number; gain: number }> = {
+  paving: { thump: 95, band: 1500, q: 0.9, scuff: 0.5, len: 0.07, gain: 1 },
+  deck: { thump: 150, band: 900, q: 2.2, scuff: 0.35, len: 0.09, gain: 1.1 },
+  grass: { thump: 70, band: 650, q: 0.6, scuff: 0.8, len: 0.12, gain: 0.6 },
+  sand: { thump: 60, band: 480, q: 0.5, scuff: 0.9, len: 0.14, gain: 0.45 },
+};
+
+/** one footfall: a soft heel thump and a filtered scuff, coloured by what the feet are on */
+export function footstep(ac: BaseAudioContext, out: AudioNode, noise: NoiseBank, t: number, surface: string, level = 1): void {
+  const s = STEP_TONE[surface] ?? STEP_TONE.paving;
+  const v = level * s.gain * (0.85 + Math.random() * 0.3);
+  const src = ac.createBufferSource();
+  src.buffer = noise.white;
+  const bp = biquad(ac, 'bandpass', s.band * (0.9 + Math.random() * 0.2), s.q);
+  const ng = ac.createGain();
+  env(ng.gain, t, 0.09 * v * s.scuff, 0.006, s.len);
+  src.connect(bp);
+  bp.connect(ng);
+  ng.connect(out);
+  const o = ac.createOscillator();
+  o.type = 'sine';
+  o.frequency.setValueAtTime(s.thump * 1.6, t);
+  o.frequency.exponentialRampToValueAtTime(s.thump, t + 0.05);
+  const og = ac.createGain();
+  env(og.gain, t, 0.16 * v, 0.004, 0.07);
+  o.connect(og);
+  og.connect(out);
+  src.start(t, Math.random() * Math.max(0, noise.white.duration - 0.5));
+  o.start(t);
+  stopAfter([src, o], t + s.len + 0.15, [src, bp, ng, o, og]);
+}
+
 // ───────────────────────────────────────────── carousel music box
 
 const WALTZ: [number, number][] = [
