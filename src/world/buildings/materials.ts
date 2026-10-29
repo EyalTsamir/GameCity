@@ -145,6 +145,8 @@ export interface BuildingMaterials {
     uPlinth: { value: number };
     /** G1: glass as a material — per-bay shop / lobby interiors, per-pane tint + thin edge; ?noglassvar sets 0 */
     uGlassVar: { value: number };
+    /** light round: curtain walls mirror the sky / neighbours (less coating tint); ?glassold sets 0 */
+    uMirror: { value: number };
     /** near-LOD sill geometry: (centre of its range, range m); the shader drops its own sill box inside */
     uGeoWin: { value: THREE.Vector4 };
     uDetailPx: { value: THREE.Vector2 };
@@ -321,6 +323,7 @@ uniform float uWinRefl;
 uniform float uWallRelief;
 uniform float uPlinth;
 uniform float uGlassVar;
+uniform float uMirror;
 // near-window detail fades to the far average between these cell sizes (cells per pixel: 0.3 = 3.3 px per bay)
 uniform vec2 uDetailPx;
 uniform vec4 uGeoWin;
@@ -1577,7 +1580,8 @@ void bhWall(inout vec3 albedo, inout float rough, inout float metal, inout vec3 
   vec3 env = bhEnv(R, y, seed, fR, lodC, nightF);
   // punched windows at street level mirror the street and the buildings across it (per pane, with parallax)
   // (fq.x >= 0.25: the blend weight below is exactly 0 — skip the trace)
-  if (!curtain && !ribbon && uDetail > 0.5 && uWinRefl > 0.5 && fq.x < 0.25) {
+  // (light round: curtain walls too, up to ~10 storeys — the street across is what a glass tower mirrors at eye level)
+  if ((!curtain || uMirror > 0.5 && y < 32.0) && !ribbon && uDetail > 0.5 && uWinRefl > 0.5 && fq.x < 0.25) {
     vec4 op = bhOpp(vWPos, R, N, Tu, seed, fq.x, nightF);
     env = mix(env, op.rgb, op.a * (1.0 - smoothstep(0.08, 0.25, fq.x)));
   }
@@ -1588,16 +1592,18 @@ void bhWall(inout vec3 albedo, inout float rough, inout float metal, inout vec3 
   float vAl = 1.0 - smoothstep(0.05, 0.7, abs(R.y + uReflLift - uSunDir.y));
   float glint = smoothstep(0.972, 0.9985, hAl) * (0.25 + 0.75 * vAl) * (curtain ? 1.6 : (ribbon ? 1.1 : 0.7));
   float cosv = clamp(-dot(V, Np), 0.0, 1.0);
-  float F0 = curtain ? 0.26 : (ribbon ? 0.2 : 0.1);
+  // light round (uMirror): coated curtain / ribbon glass mirrors more and tints its reflection less — the glass
+  // hue had swallowed the reflected sky and neighbours (towers read as flat teal); ?glassold = before
+  float F0 = curtain ? mix(0.26, 0.32, uMirror) : (ribbon ? mix(0.2, 0.24, uMirror) : 0.1);
   float F = F0 + (1.0 - F0) * pow(1.0 - cosv, 5.0);
   // coated glass reflects in its own colour. Tint by luminance (env brightness × the glass hue normalised to
   // unit luminance) instead of multiplying colours: a warm sky × teal glass would otherwise turn olive-grey at
   // golden hour. Part of the environment's own chroma is kept so sunsets still warm the glass.
-  float tintAmt = curtain ? 0.72 : (ribbon ? 0.5 : 0.2);
+  float tintAmt = curtain ? mix(0.72, 0.42, uMirror) : (ribbon ? mix(0.5, 0.36, uMirror) : 0.2);
   vec3 gtN = gt / max(dot(gt, vec3(0.2126, 0.7152, 0.0722)), 1e-3);
   float envL = dot(env, vec3(0.2126, 0.7152, 0.0722));
   vec3 reflTint = mix(vec3(1.0), gtN, tintAmt) * (curtain ? 0.8 : 1.0); // (for the open-sash strip)
-  vec3 refl = mix(env, envL * gtN, tintAmt) * (curtain ? 0.8 : 1.0) + uSunCol * glint;
+  vec3 refl = mix(env, envL * gtN, tintAmt) * (curtain ? mix(0.8, 0.92, uMirror) : 1.0) + uSunCol * glint;
   // curtain walls: every pane a slightly different tint and mirror strength (coating batches, pillowing)
   if (curtain) refl *= mix(vec3(1.0), mix(vec3(0.92, 1.0, 1.08), vec3(1.07, 1.02, 0.92), r3) * mix(0.72, 1.25, fract(r1 * 5.9)), 1.0 - smoothstep(0.3, 1.0, fFac.x));
   bool spPanel = curtain && bhHash12(vec2(seed, 31.7)) < 0.55;
@@ -2298,7 +2304,7 @@ ${LAMP_GLSL}
 
 // ───────────────────────────────────────────────────────── factory ──
 
-export function createMaterials(g: GlobalUniforms, opts: { legacy?: boolean; wear?: boolean; winDepth?: boolean; winRefl?: boolean; wallRelief?: boolean; plinth?: boolean; glassVar?: boolean } = {}): BuildingMaterials {
+export function createMaterials(g: GlobalUniforms, opts: { legacy?: boolean; wear?: boolean; winDepth?: boolean; winRefl?: boolean; wallRelief?: boolean; plinth?: boolean; glassVar?: boolean; mirror?: boolean } = {}): BuildingMaterials {
   const legacy = !!opts.legacy;
   const uniforms = {
     uHours: { value: 12 },
@@ -2318,6 +2324,7 @@ export function createMaterials(g: GlobalUniforms, opts: { legacy?: boolean; wea
     uWallRelief: { value: opts.wallRelief === false ? 0 : 1 },
     uPlinth: { value: opts.plinth === false ? 0 : 1 },
     uGlassVar: { value: opts.glassVar === false ? 0 : 1 },
+    uMirror: { value: opts.mirror === false ? 0 : 1 },
     uGeoWin: { value: new THREE.Vector4(0, -1e5, 0, 0) },
     uDetailPx: { value: new THREE.Vector2(0.3, 0.8) },
   };
@@ -2358,6 +2365,7 @@ export function createMaterials(g: GlobalUniforms, opts: { legacy?: boolean; wea
         uWallRelief: uniforms.uWallRelief,
         uPlinth: uniforms.uPlinth,
         uGlassVar: uniforms.uGlassVar,
+        uMirror: uniforms.uMirror,
         uGeoWin: uniforms.uGeoWin,
         uDetailPx: uniforms.uDetailPx,
         uSunDir: g.uSunDir,

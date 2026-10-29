@@ -6,7 +6,11 @@
 - Baseline captures: `shots/light/base/<view>_<hour>.png` (7 views × 7.5 / 12 / 18.2 / 19 / 21.5 h, `?nointro&noidle`, hideui).
   Views: overview; street `5,1.5,-65,9,0,6`; market `27.5,1,78.5,16,200,28`; harbor; platform `-10,1.4,-146.3,6,60,8`; park; oldtown.
 - Judge notes (sonnet ×3, per image): scratchpad `judge_day.md`, `judge_dusk.md`, `judge_night.md` (summarised below).
-- DONE: resize warnings fixed (postfx.ts). NEXT: item 1 of the ranked list.
+- DONE: resize warnings fixed (postfx.ts, verified: 0 new warnings, no incomplete blits after 4 resizes).
+- IN PROGRESS (uncommitted until verified): AO tuning (postfx.ts `strong`, ?aoold, ?aork/?aoik, near fade in
+  aoApply.ts), world light key (palette.ts LIGHT_OVERRIDES, ?lightold), curtain-wall mirror (buildings/materials.ts
+  uMirror, ?glassold), street-canyon sky visibility (sky/skyVis.ts, ?noskyvis). Lab script: scratchpad lab.mjs
+  (one page load, list of {name, view, hours, js}); sheets: scratchpad sheet.py.
 
 ## Judgement (baseline) — what gives it away as CG
 Day (7.5 / 12 h): objects float (no contact darkening under bikes, benches, stalls, cars, people, wall bases); glass towers
@@ -42,3 +46,9 @@ water; halos identical hard discs; the 19 → 21.5 h switch-on is abrupt.
   its immutable storage at the old size (texture dims aren't in three's texture cache key) and the per-frame depth blit
   failed from then on — after any window resize AND after any adaptive render-scale step (stale depth for the DOF,
   sun shafts and soft particles). Fix: `postfx.ts` resize() sets the three depth textures' image size with the buffers.
+- AO: in a headless session the adaptive ladder stays at 'full' (capped, gpuMs ≈ 46): N8AO is ON in the captures,
+  yet at eye level it was invisible (1.6 m radius, ×2.4). Lab: radius ×2 / ×1.5 grounds cars, kerbs and wall bases;
+  ×3.5 / ×2 is grainy. New world values: radius clamp(dist·0.03, 2.6, 12), intensity 3.3 + 0.5·far, faded in by view
+  depth (0.5 r → 1.4 r) because a wide radius right in front of the camera is blotchy N8AO noise (inside the tower lobby).
+- Palette alone (bluer sky fill, warmer morning, deep-blue blue hour, darker night): subtle at eye level — the flat
+  street-canyon shade is structural (no sky occlusion), hence skyVis.

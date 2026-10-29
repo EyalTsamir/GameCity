@@ -626,7 +626,31 @@ const WORLD_OVERRIDES: Record<string, Partial<KeyDef>> = {
   '21.3': { haze: 7e-5, mist: 1.1e-3, mistH: 6 },
   '24': { haze: 6e-5, mist: 1.0e-3, mistH: 6 },
 };
-const WORLD_KEYS: KeyDef[] = KEYS.map((k) => ({ ...k, ...(WORLD_OVERRIDES[String(k.h)] ?? {}) }));
+// Light round (2026-10-29): the light balance a photographer would expect (?lightold = the previous world key).
+// Shade is lit by the BLUE sky (a cooler, slightly weaker fill: warm sun against cool shade — the old fill was
+// a grey-lilac that made shade the sunlit hue, only darker); the morning key is warmer and the morning air
+// clearer; after sunset the fill turns a deep blue instead of brown-purple and the exposure no longer lifts
+// the blue hour to day level; night has a darker, bluer ambient and a far weaker moon — moonlight is ~1/50 of a
+// lit street, the old moon painted bright hard-edged moonlit patches across the lamp-lit town (lamps own the night).
+const LIGHT_OVERRIDES: Record<string, Partial<KeyDef>> = {
+  '0': { sunI: 0.2, hemiSky: '#34426c', hemiI: 0.36 },
+  '4.6': { sunI: 0.2, hemiSky: '#34426c', hemiI: 0.36 },
+  '5.3': { hemiSky: '#3f5486', hemiI: 0.6 },
+  '6.7': { sun: '#ffab78', hemiSky: '#9cb0de', hemiI: 0.72 },
+  '7.8': { sun: '#ffd09a', hemiSky: '#a3bde6', hemiGround: '#8c7a62', hemiI: 0.58, haze: 7e-5 },
+  '10': { hemiSky: '#a6c0e8', hemiI: 0.55 },
+  '12.75': { hemiSky: '#a8c2ea', hemiI: 0.55 },
+  '16': { hemiSky: '#a7bfe6', hemiI: 0.58 },
+  '17.6': { hemiSky: '#90a8de' },
+  '18.6': { hemiSky: '#8499d6' },
+  '19.3': { hemiSky: '#6e7fc0', hemiGround: '#5e4a44' },
+  '19.8': { sun: '#8ea2dc', hemiSky: '#4a62aa', hemiGround: '#2f2f3c', hemiI: 0.6, exposure: 1.08 },
+  '20.3': { sunI: 0.24, hemiSky: '#38508e', hemiGround: '#25262f', hemiI: 0.48, exposure: 1.06 },
+  '21.3': { sunI: 0.2, hemiSky: '#34426c', hemiI: 0.36 },
+  '24': { sunI: 0.2, hemiSky: '#34426c', hemiI: 0.36 },
+};
+const lightOld = typeof location !== 'undefined' && new URLSearchParams(location.search).has('lightold');
+const WORLD_KEYS: KeyDef[] = KEYS.map((k) => ({ ...k, ...(WORLD_OVERRIDES[String(k.h)] ?? {}), ...(lightOld ? {} : (LIGHT_OVERRIDES[String(k.h)] ?? {})) }));
 
 /** Linear-space sample of the palette (mutable, reused every frame). */
 export class SkyState {

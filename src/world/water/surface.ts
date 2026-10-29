@@ -383,7 +383,13 @@ vec4 waterBase() {
   wc = mix(wc, pondC, mPond);
   wc = mix(wc, wc * wNightTint, uNight * 0.85);
   // golden hour: keep a saturated teal body under the warm light (not milky tea)
+#ifdef TH_DUSKSEA
+  // light round: golden hour → blue hour the sea darkens with the light (no bright day-teal sheet under a
+  // dimming town): a little of the teal kept, the body falls toward a deep blue
+  wc = mix(wc, wc * vec3(0.5, 0.72, 0.9), 0.6 * TH_GOLD * (1.0 - uNight));
+#else
   wc = mix(wc, wc * vec3(0.72, 1.06, 1.22), 0.55 * TH_GOLD * (1.0 - uNight));
+#endif
 
   // ── Fresnel
   float ndv = clamp(dot(wN, V), 0.0, 1.0);
@@ -417,8 +423,14 @@ vec4 waterBase() {
     vec2 rh = normalize(R.xz + vec2(1e-5, 0.0));
     vec2 shz = normalize(uSunDir.xz + vec2(1e-5, 0.0));
     float gk = TH_GOLD * (1.0 - uNight) * (1.0 - 0.75 * smoothstep(0.55, 0.95, dot(rh, shz)));
+#ifdef TH_DUSKSEA
+    // (light round) it mirrors the dusk sky instead of turning into a teal window
+    sky = mix(sky, uSkyZen * vec3(0.85, 1.0, 1.12), 0.35 * gk);
+    F *= 1.0 - 0.1 * gk;
+#else
     sky = mix(sky, uSkyZen * vec3(0.85, 1.0, 1.12), 0.55 * gk);
     F *= 1.0 - 0.38 * gk;
+#endif
   }
 #endif
   vec4 rc = vec4(0.0);
@@ -594,7 +606,11 @@ vec4 waterBase() {
     vec3 LW = vec3(0.2126, 0.7152, 0.0722);
     float skyL = dot(uSkyZen * 0.5 + uSkyHor * 0.5, LW);
     vec3 wcN = mix(vec3(1.0), wc / max(dot(wc, LW), 1e-4), 0.7);
+#ifdef TH_DUSKSEA
+    wBodyGlow = wcN * skyL * 0.1 * TH_GOLD * (1.0 - uNight) * (1.0 - foam) * (1.0 - mPond) * wDebug.y;
+#else
     wBodyGlow = wcN * skyL * 0.3 * TH_GOLD * (1.0 - uNight) * (1.0 - foam) * (1.0 - mPond) * wDebug.y;
+#endif
   }
 #endif
   return vec4(base, wAlphaB);
@@ -673,11 +689,14 @@ reflectedLight.indirectDiffuse += diffuseColor.rgb * thLampLight(vWW, vec3(0.0, 
   if (dbg === 'refl') defs.TH_WATER_DEBUG = 1;
   if (!WORLD_MODE) defs.TH_DIORAMA = 1;
   else defs.TH_WORLD = 1;
+  // light round: the dusk sea (?waterold = before)
+  const duskSea = WORLD_MODE && !ctx.debug.params.has('waterold');
+  if (duskSea) defs.TH_DUSKSEA = 1;
   // the atmosphere's fog chunks (thHazeColor / thAtmo) exist only when air installed them (not ?noatmo)
   const atmoActive = (ctx.services.atmosphere as { active?: boolean } | undefined)?.active === true;
   if (WORLD_MODE && atmoActive) defs.TH_ATMO = 1;
   mat.defines = defs;
-  mat.customProgramCacheKey = () => 'th-water-v3' + (dbg ?? '') + (WORLD_MODE ? 'w' : 'd') + (atmoActive ? 'a' : '');
+  mat.customProgramCacheKey = () => 'th-water-v3' + (dbg ?? '') + (WORLD_MODE ? 'w' : 'd') + (atmoActive ? 'a' : '') + (duskSea ? 'd' : '');
   const mesh = new THREE.Mesh(geo, mat);
   mesh.name = 'water-surface';
   mesh.receiveShadow = true;
