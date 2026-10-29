@@ -26,6 +26,19 @@ with walk mode / free camera and fix the next 10, repeat. Every feature: `boxHun
 - Verified visually (A/B): two-wheelers, school, reefer, sails, band, deli, shelters, armour, gondolas, carousel,
   church / station / town hall interiors (`shots/bh2/int3`). Pending: barge + ferry dock (`shots/bh2/harb`),
   reredos + town hall council (`shots/bh2/int4`, also fountain / stadium front / quay wall "after" for #18/#20/#23).
+- 4a53758 / 0ea412a: quay-wall furniture (`?noquaywall`, masonry.ts `wallFurniture`: rings, outfalls + stains,
+  sea-wall fender baulks — verified), slimmer ferry piles; **walk re-audit** (28 eye-level views at ped-network
+  nodes by farthest-point sampling, scratch `v_walk.js`, 2 sonnet judges) → fixes: stadium turnstile vestibules
+  behind the gate arches (`?nostadiumgate`), containers: corner castings, door seam, hinges, handles, plate +
+  trapezoidal corrugation in the harbour shader (`?nocontainerkit`, define HB_TRAP), Victorian pier ticket booth
+  (`?nopierbooth`), EUR pallets / drums / forklift / 16-seg rack-bike tyres (`?noyardkit`, props/kit.ts),
+  station posters + WAY OUT + ticket machines, town hall draped flags, printed shop packaging (shelf kind 0).
+  Checked, no change: car glass (G1 already reads as glass), fountain (#20), STOP sign (rim/blank/rails exist),
+  hedges (near-LOD leaf skin exists), kiosks on the pier deck. Hand-offs: poppy heads (#30: needs a discard in the
+  shared grass shader — early-Z risk, groundcover owner), beach ice-cream kiosk (buildings/special.ts — massing
+  owner), picket-fence board edges (cost ~30-60k tris city-wide), close-up pedestrian heads / hats (faceted).
+- Pending A/B: `shots/bh2/ver2` (stadium gate, station, reredos), `ver3` (containers, booth), `ver4` (yard props,
+  rack bikes, shop goods). Then perf A/B (`;noboxhunt`), build, final report.
 - Edit scripts: never pre-convert inserted text to CRLF and then pass it through `R()` again (made `
 `).
 - Already done by earlier rounds (F4, checked in code): building-site mud / ruts / mixer / excavator, quay oil
