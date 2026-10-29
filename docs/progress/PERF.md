@@ -183,6 +183,11 @@ Further: splitting / slimming the facade shader would cut boot further (not done
 The facade LOD option buys ≈ nothing (the cost is in near windows) → not recommended, kept only as a documented switch.
 The near crowd is per-pixel (a near figure is 1352 vertices, 58 % core body; ~50 figures in the market view).
 
+### 12. Garbage after the fixes (allocprof cand5, street, 12 h)
+1.48 → 1.02 MB of garbage per frame (−31 %; per second about the same, 27.5 → 24 MB/s, because frames are faster).
+Left: pose / crowd step paths (gaitPose, computePoseA, avoid, placeOnRail: V8 double boxing), three's
+setValueV3f / addUpdateRange internals, traffic rebuildLists / findLeader, smoke step. atmoDrive's Math.hypot replaced.
+
 ---
 
 # Earlier round: render-performance pass
