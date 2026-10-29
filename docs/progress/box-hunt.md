@@ -6,7 +6,23 @@ Branch `claude/box-hunt-af5a80` (based on `claude/pensive-gates-bim12i` a200754)
 before/after crops kept for the log live in `docs/progress/boxhunt/`.
 
 ## Resume here
-**DONE (2026-10-29 23:20)** — audit, ranked list, 10 fixes with switches, before/after sheet
+**Round 2 (overnight, 2026-10-30) IN PROGRESS** — merged `claude/pensive-gates-bim12i` (083a507) first. Backlog in
+order: (1) ranked list #14–30 minus hand-offs, (2) REAL-REPORT objects, (3) interiors through glass, (4) re-audit
+with walk mode / free camera and fix the next 10, repeat. Every feature: `boxHunt(ctx, name)` switch.
+- Done + committed (f3945ad, e96153a): e-moped / e-scooter / motorbike sculpted (`?no2wdetail`, traffic
+  models.ts `loftZ`), school railings + gates + Sheffield stands (`?noschoolrail`, landmarks/civic.ts),
+  fish-quay reefer as a real container (`?noquaykit`), sail draft + finer cloth + tiller extension (`?nosailkit`),
+  band instruments (`?nobandbrass`, park.ts `bandInstruments`), deli goods / chilled counter / hanging sausages
+  (`?nointeriors`, buildings/materials.ts `uBhInt`, one line in buildings.ts).
+- Verified visually: two-wheelers, school, reefer, sails. Pending: deli + band A/B shots (`shots/bh2/deli_*`,
+  `shots/bh/band/*`).
+- Already done by earlier rounds (F4, checked in code): building-site mud / ruts / mixer / excavator, quay oil
+  stains. Car glass `?novehglass` (real-g) — still to re-check visually.
+- Next: car glass check; station hall, town hall, church interiors; ranked #14 pontoons, #15 armour rocks,
+  #19 orchard trees, #24 bus shelters, #27 gondolas, #29 water tower; then the walk-mode re-audit.
+- Never run `npx prettier` here (no project config: it reformats whole files).
+
+Round 1: **DONE (2026-10-29 23:20)** — audit, ranked list, 10 fixes with switches, before/after sheet
 (`docs/progress/boxhunt/before_after.jpg`), perf A/B, typecheck, build, invariants. Remaining ideas under
 "Still open". The notes below are the history of the round.
 
