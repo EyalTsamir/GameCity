@@ -38,7 +38,9 @@ sim/rail/station.ts.
   patch 4 cm past the faces with a rolled rim (s2c6/mkc: closed, no slit). Yacht 10 m (s2b3) judged real (seams,
   telltales, coachroof, lifelines, crew). Console clean in every report; invariants {} (s2_yard1.log); typecheck clean.
   **Still open for F4:** quay oil stains after toning (qy view), site mud/ruts at eye level, timed cost of
-  `;noprint;nonightmarket;nocloth` on the target GPU.
+  `;noprint;nonightmarket;nocloth` on the target GPU. Lead extra (F1 request, low priority, received late in s2, not
+  started; not found in real-requests.md at pensive-gates head): school railings, gate and bike stands as props
+  (F1 owns the school building) — reuse props/furniture.ts bikeRack + the picket/gate builders.
 ## Done
 * Bug 2 (tree through barn roof): settlements.ts now returns `blocked(x,z,r)` (building rects + 1 m, barns + 6 m
   for the silo, incl. the near-farm buildings spliced out for farmstead.ts); trees.ts Builder skips a tree whose
