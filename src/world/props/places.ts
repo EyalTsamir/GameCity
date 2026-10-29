@@ -1349,10 +1349,34 @@ function backyard(e: PlacesEnv, info: PlacesInfo): void {
     k.sh.pop();
   });
   // the washing line: two posts out in the yard, parallel to the wall
-  const dLine = Math.min(4.5, Math.max(2.6, (Math.abs((r.x1 - r.x0) * nx) + Math.abs((r.z1 - r.z0) * nz)) * 0.45));
+  let dLine = Math.min(4.5, Math.max(2.6, (Math.abs((r.x1 - r.x0) * nx) + Math.abs((r.z1 - r.z0) * nz)) * 0.45));
   const span = Math.min(6, L - 2.5);
   const ends: [number, number, number][] = [];
-  for (const s of [-span / 2, span / 2]) {
+  // keep the line and its washing out of the yard tree (F4 bug 6): try a few offsets from the wall / along it,
+  // reject one whose segment passes within crown radius + 0.6 m of a tree
+  const trees = (e.ctx.services.vegetation as { trees?: { x: number; z: number; r: number }[] } | undefined)?.trees ?? [];
+  const clear = (s0: number, d: number) => {
+    const [ax, az] = at(s0 - span / 2, d),
+      [bx, bz] = at(s0 + span / 2, d);
+    const vx = bx - ax,
+      vz = bz - az,
+      vv = vx * vx + vz * vz;
+    for (const t of trees) {
+      if (Math.abs(t.x - ax) > span + 8 || Math.abs(t.z - az) > span + 8) continue;
+      const u = Math.max(0, Math.min(1, ((t.x - ax) * vx + (t.z - az) * vz) / vv));
+      if (Math.hypot(ax + vx * u - t.x, az + vz * u - t.z) < t.r + 0.6) return false;
+    }
+    return e.free(ax, az, 0.2) && e.free(bx, bz, 0.2);
+  };
+  let lineS = 0;
+  search: for (const d of [dLine, dLine - 1, dLine + 1.2, dLine - 1.8, dLine + 2.2])
+    for (const s0 of [0, -1.5, 1.5, -3, 3])
+      if (d > 1.8 && clear(s0, d)) {
+        dLine = d;
+        lineS = s0;
+        break search;
+      }
+  for (const s of [lineS - span / 2, lineS + span / 2]) {
     const [x, z] = at(s, dLine);
     if (!e.free(x, z, 0.2)) continue;
     const y = e.H(x, z);
@@ -1381,6 +1405,172 @@ function backyard(e: PlacesEnv, info: PlacesInfo): void {
     k.m('#f2efe6', 'ceramic');
     k.sh.cyl(0.05, 0.3, 0, 0.04, 0.035, 0.09, 8, 2);
     k.sh.pop();
+  });
+  // ── F4 (judge 2 "the back yard is not a place"): enclosure, a patio, a shed, pots, children's things
+  const Dy = Math.abs((r.x1 - r.x0) * nx) + Math.abs((r.z1 - r.z0) * nz);
+  const placeFree = (s: number, d: number, ry: number, rad: number, build: (k: Kit, x: number, y: number, z: number) => void): boolean => {
+    const [x, z] = at(s, d);
+    if (!e.free(x, z, rad)) return false;
+    for (const t of trees) if (Math.hypot(t.x - x, t.z - z) < rad + 0.45) return false; // clear of trunks
+    const y = e.H(x, z) + 0.01;
+    const k = e.fine(x);
+    k.sh.frame(x, y, z, yaw + ry);
+    build(k, x, y, z);
+    e.claim(x, z, rad);
+    items++;
+    return true;
+  };
+  // close-board timber fence (1.6 m) round the yard's open sides: posts every 1.8 m, gravel board, feather-edge
+  // boards, a capping rail; a panel is left out where a path, building or furniture is in the way (gates)
+  for (const fe of edges) {
+    if (fe === ed) continue;
+    const fyaw = Math.atan2(-fe.uz, fe.ux);
+    const inN = [Math.sin(fe.yaw), Math.cos(fe.yaw)]; // into the yard
+    const n = Math.floor((fe.L - 0.4) / 1.8);
+    for (let i = 0; i < n; i++) {
+      const sm = -fe.L / 2 + 0.2 + 0.9 + i * 1.8;
+      const x = fe.x + fe.ux * sm + inN[0] * 0.25,
+        z = fe.z + fe.uz * sm + inN[1] * 0.25;
+      if (occ.has(x - inN[0] * 0.85, z - inN[1] * 0.85, OCC.BUILDING) || occ.has(x, z, OCC.BUILDING)) continue;
+      let ok = true;
+      for (const t of [-0.8, 0, 0.8]) if (!e.free(x + fe.ux * t, z + fe.uz * t, 0.08)) ok = false;
+      if (!ok) continue;
+      const y = e.H(x, z);
+      const k = e.fine(x);
+      k.sh.frame(x, y, z, fyaw);
+      k.m('#6f5a43', 'wood');
+      for (const px of [-0.9, 0.9]) k.sh.box(px, 0.8, 0, 0.1, 1.6, 0.1, 1);
+      k.m('#5f5a52', 'stone');
+      k.sh.box(0, 0.075, -0.02, 1.7, 0.15, 0.05, 1);
+      const tone = ['#8a7258', '#7d684f', '#93795c'][i % 3];
+      for (let b = 0; b < 14; b++) {
+        k.m(b % 5 === 2 ? '#75604a' : tone, 'wood');
+        k.sh.box(-0.81 + b * 0.125, 0.86, 0.035 + (b % 2) * 0.008, 0.135, 1.42, 0.018, 1);
+      }
+      k.m('#5e4c39', 'wood');
+      k.sh.box(0, 1.6, 0.0, 1.8, 0.04, 0.12, 0);
+      for (const ry of [0.45, 1.25]) k.sh.box(0, ry, -0.03, 1.7, 0.08, 0.04, 0);
+      e.spot(x, y + 0.02, z, fyaw, 0, 0, 0.9, 0.08, 0.1, 0.2, 0.5);
+      e.claim(x, z, 0.3);
+      e.inc('by_fence');
+      items++;
+    }
+  }
+  // patio of riven flags in front of the door (out past the apron), joints with moss, one slab cracked
+  {
+    const [px, pz] = at(sDoor, 2.3);
+    const py = e.H(px, pz);
+    const k = e.fine(px);
+    k.sh.frame(px, py, pz, yaw);
+    for (let i = -1; i <= 1; i++)
+      for (let j = 0; j < 3; j++) {
+        k.m(['#a8a196', '#b3ab9e', '#9d968a', '#aea595'][(i + 2 + j * 3) % 4], 'stone');
+        k.sh.box(i * 0.62 + rng.range(-0.01, 0.01), 0.018 + rng.range(0, 0.008), -0.6 + j * 0.6 + rng.range(-0.01, 0.01), 0.58, 0.035, 0.56, 1);
+      }
+    k.m('#55663a', 'stone');
+    for (const jx of [-0.31, 0.31]) k.sh.box(jx, 0.004, 0, 0.04, 0.008, 1.8, 1);
+    items++;
+  }
+  // timber shed in the far corner: boarded walls, felt pent roof, ledged door with a hasp, a cobwebbed window
+  const shedSpots: [number, number][] = [];
+  for (let d = Dy - 1.5; d > 3.2; d -= 0.8) for (const sc of [L / 2 - 1.7, -L / 2 + 1.7, L / 2 - 2.7, -L / 2 + 2.7]) shedSpots.push([sc, d]);
+  for (const [sc, sdd] of shedSpots) {
+    const ok = placeFree(sc, sdd, Math.PI, 1.35, (k) => {
+      const W = 2.0,
+        D = 1.5,
+        Hf = 2.1,
+        Hb = 1.85;
+      k.m('#7a6650', 'stone');
+      k.sh.box(0, 0.05, 0, W + 0.1, 0.1, D + 0.1, 1);
+      k.m('#6e5843', 'wood');
+      for (let b = 0; b < 13; b++) k.sh.box(0, 0.25 + b * 0.13, -D / 2, W, 0.14, 0.03, 0);
+      for (const sx of [-1, 1]) for (let b = 0; b < 12; b++) k.sh.box(sx * W / 2, 0.25 + b * 0.13, 0, 0.03, 0.14, D, 0);
+      // front boards either side of the door
+      for (let b = 0; b < 12; b++) {
+        k.sh.box(-0.7, 0.25 + b * 0.13, D / 2, 0.6, 0.14, 0.03, 0);
+        k.sh.box(0.65, 0.25 + b * 0.13, D / 2, 0.7, 0.14, 0.03, 0);
+      }
+      // door (ledged and braced), hasp + padlock
+      k.m('#4f6b5a', 'paint');
+      k.sh.box(-0.05, 0.98, D / 2 + 0.015, 0.68, 1.76, 0.03, 0);
+      for (const yy of [0.3, 1.65]) k.sh.box(-0.05, yy, D / 2 + 0.035, 0.62, 0.1, 0.02, 0);
+      k.sh.push().local(-0.05, 0.98, D / 2 + 0.035, 0, 0, 0.95).box(0, 0, 0, 0.09, 1.45, 0.02, 0).pop();
+      k.m('#2a2a2a', 'iron');
+      k.sh.box(0.22, 1.05, D / 2 + 0.05, 0.12, 0.03, 0.01, 0);
+      k.sh.box(0.27, 1.0, D / 2 + 0.055, 0.04, 0.05, 0.02, 0);
+      // window on the side
+      k.m('#e8e2d2', 'paint');
+      k.sh.box(W / 2 + 0.02, 1.35, 0.1, 0.03, 0.55, 0.65, 0);
+      k.m('#262c30', 'glass');
+      k.sh.box(W / 2 + 0.035, 1.35, 0.1, 0.01, 0.45, 0.55, 0);
+      // corner battens, roof: felt over boards with drip-edge fascia
+      k.m('#5e4c39', 'wood');
+      for (const sx of [-1, 1]) for (const sz of [-1, 1]) k.sh.box(sx * (W / 2 + 0.02), 1.05, sz * (D / 2 + 0.02), 0.06, 1.7, 0.06, 0);
+      k.m('#2b2c2e', 'rubber');
+      k.sh.push().local(0, (Hf + Hb) / 2 + 0.05, 0, Math.atan2(Hf - Hb, D + 0.4)).box(0, 0, 0, W + 0.3, 0.04, D + 0.45, 0).pop();
+      k.m('#5e4c39', 'wood');
+      k.sh.box(0, Hf + 0.0, D / 2 + 0.21, W + 0.3, 0.12, 0.025, 0);
+      // gable-ish infill between the wall tops and the sloping roof
+      k.m('#6e5843', 'wood');
+      for (const sx of [-1, 1]) k.sh.box(sx * W / 2, (Hb + Hf) / 2 - 0.05, 0, 0.03, Hf - Hb + 0.1, D, 0);
+      // a water butt off the gutterless corner, a stack of flower pots by the door
+      k.m('#2f4f3a', 'plastic');
+      k.sh.cyl(W / 2 + 0.38, 0, D / 2 - 0.2, 0.27, 0.3, 0.85, 12, 2);
+      k.m('#b8653d', 'ceramic');
+      for (let i = 0; i < 4; i++) k.sh.cyl(0.62, 0.0 + i * 0.07, D / 2 + 0.28, 0.08, 0.11, 0.12, 8, 2);
+    });
+    if (ok) {
+      e.inc('by_shed');
+      break;
+    }
+  }
+  // pots along the fence: terracotta of mixed sizes with geraniums, a lavender, a small bay tree
+  for (let i = 0; i < 5; i++) {
+    const sp = -L / 2 + 2.6 + i * 0.55 + rng.range(-0.1, 0.1);
+    placeFree(sp, Dy - 0.65, 0, 0.25, (k) => {
+      const big = i % 2 === 0;
+      k.m(i === 3 ? '#8a8f8c' : '#b8653d', 'ceramic');
+      const r0 = big ? 0.14 : 0.1,
+        h = big ? 0.3 : 0.2;
+      k.sh.cyl(0, 0, 0, r0, r0 * 1.3, h, 10, 1);
+      k.sh.cyl(0, h - 0.035, 0, r0 * 1.38, r0 * 1.38, 0.04, 10, 2);
+      k.m('#3b2c20', 'stone');
+      k.sh.disc(0, h - 0.03, 0, r0 * 1.25, 10, 1);
+      if (i === 4) {
+        k.m('#5a4632', 'wood');
+        k.sh.tube(0, h, 0, 0, h + 0.55, 0, 0.015, 0.012, 5);
+        k.m('#3e5b2c', 'plastic');
+        k.sh.ellipsoid(0, h + 0.75, 0, 0.24, 0.26, 0.24, 1);
+      } else {
+        k.m(i === 1 ? '#6f7f5a' : '#3f6a30', 'plastic');
+        for (let j = 0; j < 5; j++) k.sh.ellipsoid(Math.cos(j * 1.3) * r0 * 0.6, h + 0.08 + (j % 2) * 0.05, Math.sin(j * 1.3) * r0 * 0.6, 0.07, 0.06, 0.07, 0);
+        k.m(i === 1 ? '#8f7bc4' : ['#d8322a', '#e85d8a', '#f2f0ea'][i % 3], 'plastic');
+        for (let j = 0; j < 4; j++) k.sh.ellipsoid(Math.cos(j * 1.7 + 0.4) * r0 * 0.7, h + (i === 1 ? 0.3 : 0.17), Math.sin(j * 1.7 + 0.4) * r0 * 0.7, 0.035, i === 1 ? 0.08 : 0.03, 0.035, 0);
+      }
+    });
+  }
+  // children's things: a sandpit with bucket and spade, a ball in the grass, a little bike on its side
+  placeFree(L / 2 - 2.2, Dy * 0.55, 0.3, 0.8, (k) => {
+    k.m('#8a7258', 'wood');
+    for (const [x, z, w, d] of [[0, -0.6, 1.3, 0.1], [0, 0.6, 1.3, 0.1], [-0.6, 0, 0.1, 1.1], [0.6, 0, 0.1, 1.1]] as const) k.sh.box(x, 0.11, z, w, 0.22, d, 1);
+    k.m('#d9c79a', 'stone');
+    k.sh.box(0, 0.08, 0, 1.12, 0.06, 1.12, 1);
+    k.sh.ellipsoid(0.2, 0.11, -0.15, 0.25, 0.06, 0.2, 0);
+    k.m('#e8443a', 'plastic');
+    k.sh.cyl(-0.25, 0.11, 0.2, 0.07, 0.085, 0.13, 10, 1);
+    k.m('#2f7fd0', 'plastic');
+    k.sh.push().local(0.3, 0.16, 0.25, 0, 0.6, 0.4).box(0, 0, 0, 0.3, 0.015, 0.06, 0).pop();
+  });
+  placeFree(-L / 2 + 3.2, Dy * 0.6, 0, 0.2, (k) => {
+    k.m('#d8322a', 'plastic');
+    k.sh.ellipsoid(0, 0.11, 0, 0.11, 0.105, 0.11, 1);
+    k.m('#f2f0ea', 'plastic');
+    k.sh.ellipsoid(0, 0.12, 0, 0.112, 0.03, 0.112, 0);
+  });
+  placeFree(0.5, Dy * 0.7, 1.1, 0.5, (k, x, y, z) => {
+    k.sh.frame(x, y + 0.13, z, yaw + 1.1, 0.55);
+    k.sh.local(0, 0, 0, 0, 0, Math.PI / 2 - 0.12);
+    bicycle(k, rng);
   });
   e.inc('place_backyard');
   const [bx, bz] = at(0, 2.5);

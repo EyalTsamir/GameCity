@@ -327,16 +327,33 @@ export function genMarketStall(env: Env, f: Feature): void {
   }
   K.rod(steel, [-hw - 0.05, yF, fz], [hw + 0.05, yF, fz], 0.018, 6);
   K.rod(steel, [-hw - 0.05, yB, bz], [hw + 0.05, yB, bz], 0.018, 6);
-  for (const x of [-hw, hw]) K.rod(steel, [x, yF, fz], [x, yB, bz], 0.018, 6);
+  for (const x of [-hw, hw, 0]) K.rod(steel, [x, yF, fz], [x, yB, bz], 0.018, 6); // side rails + the middle bow
   // canopy cloth: a grid sagging between the rails, overhanging the front; metric uvs keep the stripes running
   const canopy = M(col, f.id % 3 === 1 ? PAT.PLAIN : PAT.STRIPES, 0.85, 0, 0, 0, 0.2);
   const under = M('#efe9de', PAT.PLAIN, 0.8);
-  const NX = 8, NZ = 4, x0 = -hw - 0.03, x1 = hw + 0.03, z0 = fz + 0.16, z1 = bz - 0.12; // corners stay inside r = 1.3
+  const hem = M(f.id % 2 ? '#f1ece0' : '#3a3f44', PAT.PLAIN, 0.9);
+  // F4 (judge 2 #9): the cloth was a board. Now it sags into the two bays either side of a middle bow (deepest
+  // mid-bay, ~9 cm), the front overhang droops over the rail, and shallow tension folds fan in from the corners
+  // where the canvas is tied down; every stall a little different (age / how hard it was pulled)
+  const NX = 16, NZ = 6, x0 = -hw - 0.03, x1 = hw + 0.03, z0 = fz + 0.16, z1 = bz - 0.12; // corners stay inside r = 1.3
+  const slack = 0.75 + 0.5 * rnd();
+  const foldA = 0.004 + 0.006 * rnd(), foldK = 14 + 8 * rnd();
   const P = (i: number, j: number): [number, number, number] => {
     const u = i / NX, v = j / NZ;
     const x = x0 + (x1 - x0) * u, z = z0 + (z1 - z0) * v;
     const yl = yF + (yB - yF) * ((z - fz) / (bz - fz));
-    const sag = 0.07 * Math.sin(Math.PI * Math.min(1, Math.max(0, (x + hw) / (2 * hw)))) * Math.sin(Math.PI * Math.min(1, Math.max(0, (z - fz) / (bz - fz))));
+    const tz = Math.min(1, Math.max(0, (z - fz) / (bz - fz)));
+    const tx = Math.min(1, Math.max(0, (x + hw) / (2 * hw)));
+    const bay = Math.abs(Math.sin(2 * Math.PI * tx)); // 0 on the side rails and the middle bow
+    const sz = Math.sin(Math.PI * tz);
+    let sag = slack * (0.075 * bay * sz + 0.025 * Math.sin(Math.PI * tx) * sz);
+    // overhang: droops in front of the front rail, a little more mid-bay
+    if (z > fz) sag += ((z - fz) / (z0 - fz)) ** 2 * (0.035 + 0.025 * bay);
+    // tension folds radiating from the four tie-down corners, fading towards the middle of each bay
+    const cx = Math.min(tx, 1 - tx) * 2,
+      cz = Math.min(tz, 1 - tz) * 2;
+    const corner = Math.max(0, 1 - Math.hypot(cx, cz) * 1.3);
+    sag += foldA * corner * Math.sin(foldK * (Math.abs(x) * 1.2 + Math.abs(z - (fz + bz) / 2)));
     return [x, yl + 0.03 - sag, z];
   };
   // (the cloth + valance go to the kinetic kit and move with the shared wind: ANIM.CANOPY; ?nostallwind = static)
@@ -353,8 +370,15 @@ export function genMarketStall(env: Env, f: Feature): void {
   for (let i = 0; i < 10; i++) {
     const xa = x0 + ((x1 - x0) * i) / 10, xb = x0 + ((x1 - x0) * (i + 1)) / 10, xm = (xa + xb) / 2;
     const ya = P(0, 0)[1];
-    const pts: [number, number, number][] = [[xa, ya, z0], [xb, ya, z0], [xb, ya - 0.13, z0], [xm, ya - 0.19, z0], [xa, ya - 0.13, z0]];
+    const ya2 = P(Math.min(NX, Math.round(((xm - x0) / (x1 - x0)) * NX)), 0)[1]; // follows the drooping hem
+    const zz = z0 + 0.008 * Math.sin(i * 2.1 + ph); // hangs with a slight ripple, not on one plane
+    const pts: [number, number, number][] = [[xa, ya2, zz], [xb, ya2, zz], [xb, ya2 - 0.13, zz], [xm, ya2 - 0.19, zz], [xa, ya2 - 0.13, zz]];
     CK.poly(canopy, pts, pts.map((p) => [p[0], p[1]] as [number, number]), true);
+    // the hem: a stitched binding along the scallop edge and the fold-over at the top
+    const hz = zz + 0.002;
+    CK.poly(hem, [[xa, ya2 - 0.13, hz], [xm, ya2 - 0.19, hz], [xm, ya2 - 0.17, hz], [xa, ya2 - 0.11, hz]], [[0, 0], [1, 0], [1, 1], [0, 1]], true);
+    CK.poly(hem, [[xm, ya2 - 0.19, hz], [xb, ya2 - 0.13, hz], [xb, ya2 - 0.11, hz], [xm, ya2 - 0.17, hz]], [[0, 0], [1, 0], [1, 1], [0, 1]], true);
+    CK.poly(hem, [[xa, ya2 - 0.025, hz], [xb, ya2 - 0.025, hz], [xb, ya2 - 0.005, hz], [xa, ya2 - 0.005, hz]], [[0, 0], [1, 0], [1, 1], [0, 1]], true);
   }
   if (stallWind) env.anim(null);
   // back cloth: a drape gathered on the rear rail (tight pleats at the top that open into deep, uneven

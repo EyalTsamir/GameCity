@@ -190,6 +190,8 @@ export interface FarmLife {
   group: THREE.Group;
   animals: number;
   update(dt: number): void;
+  /** pick the near-LOD animals for this camera (call from frame(), before the render) */
+  select(camera: THREE.Camera): void;
   /** attach the tractor's dust trail to the ambient smoke service (after all modules exist) */
   attachSmoke(smoke: { addEmitter(o: { getPosition(out: THREE.Vector3): void | boolean; rate?: number; size?: number; color?: THREE.ColorRepresentation; life?: number; rise?: number; opacity?: number }): unknown } | undefined): void;
 }
@@ -198,6 +200,7 @@ export function createFarmLife(model: LandscapeModel, uniforms: Record<string, T
   const group = new THREE.Group();
   group.name = 'land-farmlife';
   const H = model.height;
+  let select = (_camera: THREE.Camera) => {};
   const slabD = model.slabDist;
   // ── herds in pasture fields
   const R = 1400;
@@ -389,13 +392,14 @@ ${POSE_GLSL}`,
     const nearR = density >= 0.95 ? 40 : density >= 0.7 ? 32 : 24;
     const near = [createNearHerd(sheepGeometry(), cap[0], 1, uniforms, fog), createNearHerd(cowGeometry(), cap[1], 0, uniforms, fog)];
     for (const n of near) group.add(n.mesh);
-    // selection: the nearest animals of each species within nearR, refreshed when the camera moves (one
-    // frame late: the attributes upload with the next render, the same frame for both meshes)
+    // selection: the nearest animals of each species within nearR, refreshed when the camera moves. Runs from
+    // the module's frame() with the main camera, before the draw (F4 bug 8: in onBeforeRender the attribute
+    // uploads only took effect with the next render → a one-frame coarse herd after every camera jump)
     const last = new THREE.Vector3(1e9, 0, 0);
     const best = [new Float32Array(cap[0]), new Float32Array(cap[1])];
     const bestD = [new Float32Array(cap[0]), new Float32Array(cap[1])];
     let tick = 0;
-    herd.onBeforeRender = (_r, _s, camera) => {
+    select = (camera) => {
       const cp = camera.position;
       if (++tick < 20 && cp.distanceToSquared(last) < 0.25) return;
       tick = 0;
@@ -520,6 +524,7 @@ ${POSE_GLSL}`,
     group,
     animals: nA,
     update,
+    select: (camera) => select(camera),
     attachSmoke(smoke) {
       if (!smoke || !tractorPos) return;
       const tp = tractorPos;

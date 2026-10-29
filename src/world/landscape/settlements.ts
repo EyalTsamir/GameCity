@@ -33,9 +33,11 @@ export interface Settlements {
   triangles: number;
   /** lighthouse lantern position (or null) */
   beacon: { x: number; y: number; z: number } | null;
+  /** does a disc (x, z, r) touch a building footprint (+ the farmstead silo/apron)? Trees use it (F4 bug 2). */
+  blocked(x: number, z: number, r: number): boolean;
 }
 
-function placeSite(site: Site, model: LandscapeModel, out: Bld[], towers: { x: number; z: number; y: number; h: number; yaw: number }[], farms: FarmSite[] | null): void {
+function placeSite(site: Site, model: LandscapeModel, out: Bld[], towers: { x: number; z: number; y: number; h: number; yaw: number }[], farms: FarmSite[] | null, foot: Bld[]): void {
   const H = model.height;
   const rnd = (i: number, k: number) => hash2i(site.seed * 131 + i, k, 607);
   const baseYaw = FIELD_ROT + (rnd(0, 1) - 0.5) * 0.6;
@@ -72,6 +74,7 @@ function placeSite(site: Site, model: LandscapeModel, out: Bld[], towers: { x: n
       local.length = 0;
       placeFarm(put, rnd);
       const blds = out.splice(n0);
+      foot.push(...blds);
       if (blds.length) {
         const f: FarmSite = { x: site.x, z: site.z, y: blds[0].y, yaw: baseYaw, seed: site.seed, blds: [] };
         blds.forEach((b, i) => f.blds.push({ lx: local[i][0], lz: local[i][1], y: b.y, w: b.w, d: b.d, h: b.h, roof: b.roof, yawOff: local[i][2], wall: new THREE.Color(WALLS[b.wall]), roofC: new THREE.Color(ROOFS[b.roofC]), kind: b.kind }));
@@ -292,7 +295,9 @@ export function buildSettlements(model: LandscapeModel, uniforms: Record<string,
   const blds: Bld[] = [];
   const towers: { x: number; z: number; y: number; h: number; yaw: number; light?: boolean }[] = [];
   const farms: FarmSite[] | null = new URLSearchParams(location.search).has('nofarmdetail') ? null : [];
-  for (const s of model.sites) placeSite(s, model, blds, towers, farms);
+  const foot: Bld[] = [];
+  for (const s of model.sites) placeSite(s, model, blds, towers, farms, foot);
+  foot.push(...blds);
   // the island lighthouse on the northern cliff top (white tower, red lantern roof)
   const isl = model.island;
   const lx = isl.x + 10,
@@ -353,5 +358,35 @@ export function buildSettlements(model: LandscapeModel, uniforms: Record<string,
       group.add(m);
     }
   }
-  return { group, count: blds.length, triangles, beacon: beacon ? { x: beacon.x, y: beacon.y + beacon.h * 0.82, z: beacon.z } : null };
+  // footprint test: building rect + 1 m, barns + 6 m at the back for the silo; cheap grid of the footprints
+  const cell = 64;
+  const grid = new Map<number, Bld[]>();
+  for (const b of foot) {
+    const R = Math.hypot(b.w, b.d) / 2 + 7;
+    for (let gx = Math.floor((b.x - R) / cell); gx <= Math.floor((b.x + R) / cell); gx++)
+      for (let gz = Math.floor((b.z - R) / cell); gz <= Math.floor((b.z + R) / cell); gz++) {
+        const k = gx * 4096 + gz;
+        const l = grid.get(k);
+        if (l) l.push(b);
+        else grid.set(k, [b]);
+      }
+  }
+  const blocked = (x: number, z: number, r: number) => {
+    const l = grid.get(Math.floor(x / cell) * 4096 + Math.floor(z / cell));
+    if (!l) return false;
+    for (const b of l) {
+      const dx = x - b.x,
+        dz = z - b.z;
+      const c = Math.cos(b.yaw),
+        sn = Math.sin(b.yaw);
+      const lx = Math.abs(dx * c - dz * sn),
+        lz = Math.abs(dx * sn + dz * c);
+      const hd = b.d / 2 + (b.kind === 1 ? 6 : 1);
+      const ox = Math.max(0, lx - b.w / 2 - 1),
+        oz = Math.max(0, lz - hd);
+      if (ox * ox + oz * oz < r * r) return true;
+    }
+    return false;
+  };
+  return { blocked, group, count: blds.length, triangles, beacon: beacon ? { x: beacon.x, y: beacon.y + beacon.h * 0.82, z: beacon.z } : null };
 }

@@ -49,7 +49,7 @@ attribute vec4 aP1;
 attribute vec4 aPiece;
 attribute vec4 aMisc;
 attribute vec4 aCol;
-attribute vec3 aCol2;
+attribute vec4 aCol2;
 uniform float uLifeFarFlutter;
 varying vec2 vLifeUv;
 varying float vLifeShape;
@@ -106,11 +106,30 @@ void lifePiece( out vec3 pos, out vec3 nrm ) {
   float ddv = A * ( sin( arg ) + 0.4 * sin( arg2 ) ) + A * v * k * lenP * ( cos( arg ) + 0.68 * cos( arg2 ) );
   pos = H + Fd * ( v * lenP ) + N0 * disp;
   nrm = normalize( N0 - Fd * ( ddv / max( lenP, 0.05 ) ) );
+  float drape = aCol2.w;
+  if ( shape > 5.5 ) {
+    // clothes peg: a rigid little clip standing on the line, proud of the cloth on the viewer's side
+    vec3 side = dot( N0, cameraPosition - H ) > 0.0 ? N0 : -N0;
+    pos = H + vec3( 0.0, 0.024 - v * lenP, 0.0 ) + side * 0.009;
+    nrm = side;
+  } else if ( drape > 0.0 ) {
+    // laundry: the top edge sags between the pegs (and the hem with it), vertical folds that deepen towards the
+    // hem, the hem gathered in a little; folds every ~12 cm across the width, varied per piece
+    float wP = aPiece.y;
+    float pin = smoothstep( 0.0, 0.08, u ) * smoothstep( 1.0, 0.92, u );
+    float topSag = drape * min( 0.035, wP * 0.05 ) * sin( 3.14159 * clamp( ( u - 0.08 ) / 0.84, 0.0, 1.0 ) );
+    float nf = max( 2.0, floor( wP / 0.12 ) );
+    float fa = 6.2832 * nf * u + aMisc.x * 3.0;
+    float famp = drape * ( 0.006 + 0.026 * v ) * ( 0.6 + 0.4 * sin( aMisc.x * 5.1 + u * 3.0 ) ) * pin;
+    float fold = famp * sin( fa );
+    pos += N0 * fold - vec3( 0.0, topSag * ( 1.0 - 0.3 * v ), 0.0 ) - T * ( u - 0.5 ) * wP * 0.08 * v * drape;
+    nrm = normalize( nrm - T * ( famp * 6.2832 * nf * cos( fa ) / max( wP, 0.05 ) ) );
+  }
   vLifeUv = vec2( u, v );
   vLifeShape = shape;
   #ifndef LIFE_DEPTH
   vLifeCol = aCol.rgb;
-  vLifeCol2 = aCol2;
+  vLifeCol2 = aCol2.rgb;
   vLifePat = aCol.w;
   #endif
 }
@@ -127,7 +146,7 @@ bool lifeKeep( vec2 uv, float shape ) {
   } else if ( shape > 2.5 && shape < 3.5 ) {
     // trousers: two legs below the seat
     if ( uv.y > 0.32 && du < 0.045 ) return false;
-  } else if ( shape > 4.5 ) {
+  } else if ( shape > 4.5 && shape < 5.5 ) {
     // swallow-tail
     if ( uv.y > 0.7 && du < ( uv.y - 0.7 ) * 1.2 ) return false;
   }

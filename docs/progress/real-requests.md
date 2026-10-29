@@ -80,3 +80,9 @@
 * `src/world/landmarks/parts.ts` person() (F2-owned) now registers a real figure; its callers are unchanged.
 * For F4 / harbor: the crabber deckhand and the quay people are now pedestrians-module figures; if the quay
   layout moves, move the `addActor` spots with it.
+## F4 requests (final fix round)
+* **W2 / traffic.ts** — "e-scooter of boxes" (judge 2 #8) lives in src/sim/traffic.ts parked two-wheelers; not F4's file.
+* **F2** — tractor driver (seat at tractor.ts body-local (0, 2.06, −0.7), wheel at (0, 2.28, −0.12)) and the sailboat
+  crew (models.ts sailboat(): figure() calls at (−0.4, 0.62, −1.6) and (0.45, 0.62, −2.5), cockpit seats at x ±0.6).
+* **Props kit** — the newsstand fascia ("NEWS"/"PRESS") is pixelText geometry; a real serif sign needs a canvas-texture
+  sign mesh in the props module (none exists; landmarks has signQuad). Not done: price ≈ 1 draw + 1 texture.
