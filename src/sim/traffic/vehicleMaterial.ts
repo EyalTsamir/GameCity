@@ -160,6 +160,9 @@ float thBaseSpec = 1.0;
     bool door = p.x < 0.0 && ( abs( p.z - vDetB.z ) < 0.6 || abs( p.z - vDetB.w ) < 0.6 );
     vec3 rdb = normalize( p - vCamObj.xyz );
     if ( p.y > ( door ? vDetA.w : vDetA.y ) ) thHitT = min( 2.0 * vDetA.x / max( abs( rdb.x ), 0.25 ), 6.0 );
+    // G1 (F2 open item): a ray looking down through the saloon stops at its floor (the cabin box of thInterior),
+    // so the far-side wheels and arches no longer show through the seat rows
+    if ( uVehGlass > 0.5 && thHitT > 0.0 && rdb.y < -0.02 ) thHitT = min( thHitT, max( ( vDetA.y - 0.62 - p.y ) / rdb.y, 0.05 ) );
   }
   if ( glass && uVehDetail.x > 0.5 ) {
     vec3 rd = normalize( p - vCamObj.xyz );
@@ -169,12 +172,15 @@ float thBaseSpec = 1.0;
     // (F2: a bus saloon is daylit through a whole wall of glass — at 0.32 its flank panes, which mirror only the
     // dark street, read as opaque black panels)
     thGlassEmit = inside * vec3( 0.8, 0.88, 0.9 ) * ( 1.0 - 0.92 * uLights ) * ( abs( cls - 4.0 ) < 0.5 ? 0.7 : 0.32 );
+    // G1: glass, not smoked plastic — the pane itself scatters almost nothing (the milky veil was the diffuse
+    // base lit by the sun), the cabin shows through a faint green float-glass tint with a little more contrast
+    if ( uVehGlass > 0.5 ) thGlassEmit = inside * vec3( 0.74, 0.86, 0.8 ) * ( 1.0 - 0.92 * uLights ) * ( abs( cls - 4.0 ) < 0.5 ? 0.78 : 0.4 );
     // lit cabins at night (bus, LIGHT_CABIN): the lamps light the seats and passengers, not a flat panel
     if ( vEmit.a < 0.5 ) {
       thGlassEmit += inside * vec3( 1.0, 0.82, 0.6 ) * ( 3.6 * uLights * vCamObj.w );
       thCabinK = 0.18;
     }
-    diffuseColor.rgb *= 0.25;
+    diffuseColor.rgb *= uVehGlass > 0.5 ? 0.05 : 0.25;
   }
   if ( abs( cls - 1.0 ) < 0.5 ) {
     if ( uVehDetail.y > 0.5 ) {
@@ -261,6 +267,7 @@ float thBaseSpec = 1.0;
 
 const FRAG_PARS = /* glsl */ `
 uniform vec4 uVehDetail;
+uniform float uVehGlass;
 uniform float uLights;
 varying vec4 vObj;
 varying vec4 vObjN;
@@ -485,6 +492,8 @@ export function createVehicleMaterial(
   atlas: THREE.Texture,
 ): { material: THREE.MeshPhysicalMaterial; depth: THREE.MeshDepthMaterial; detail: { value: THREE.Vector4 } } {
   const detail = { value: new THREE.Vector4(1, 1, 1, 0) };
+  // ?novehglass: the vehicle glass without its G1 changes (clear pane, tint, bus floor clamp)
+  const vehGlass = { value: typeof location !== 'undefined' && new URLSearchParams(location.search).has('novehglass') ? 0 : 1 };
   const material = new THREE.MeshPhysicalMaterial({
     color: 0xffffff,
     vertexColors: true,
@@ -499,6 +508,7 @@ export function createVehicleMaterial(
     shader.uniforms.uTime = uniforms.uTime;
     shader.uniforms.uLights = uniforms.uLights;
     shader.uniforms.uVehDetail = detail;
+    shader.uniforms.uVehGlass = vehGlass;
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', `#include <common>\n${VERT_PARS}`)
       .replace(
@@ -525,6 +535,8 @@ export function createVehicleMaterial(
   #ifdef USE_CLEARCOAT
     // body paint (vCoat > 1.5) gets the street at more contrast: a lacquered panel mirrors it clearly
     clearcoatRadiance *= vGain * thStreetRefl( geometryViewDir, geometryClearcoatNormal, 0.0 ) * ( vCoat > 1.5 && uVehDetail.w > 0.5 ? 1.8 : 1.0 );
+    // G1: glass (gain 3.6) mirrors the street at about 60 %: at full gain the grey sky veil hid the cabin (smoked plastic)
+    if ( uVehGlass > 0.5 && vGain > 3.0 ) clearcoatRadiance *= 0.6;
   #endif
   if ( vMetal > 0.5 ) radiance *= vGain * thStreetRefl( geometryViewDir, geometryNormal, material.roughness * 0.3 );
 #endif`,
