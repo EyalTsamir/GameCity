@@ -74,8 +74,38 @@ yard is bare), the harbour lighthouse (gallery, lantern, dome, vane), the statio
 parked bicycles, the classic street lamp, planters, wind turbines (real towers are plain tubes). The red
 "half-pipe" in e_industry is the camera standing inside a parked car.
 
+## Re-scored after reading the code (judges over-scored these from distance; no change made)
+| # | object | why it stays |
+|---|---|---|
+| 3 | street litter bin | already a detailed model (`props/furniture.ts bin`: fluted body, hood with skirt, liner, door seams) — a square bin reads square; P 4 → 2 |
+| 6 | farmland | hedgerows and farm tracks already run on the parcel borders (`landscape/fields.ts`, `trees.ts`); they read small from 600 m; P 3 → 2 |
+| 7 | back-yard fence | a real close-board fence (posts, gravel board, 14 boards, rails, capping); only the garden/courtyard wheelie bins were boxes (fixed) |
+| 9 | platform canopy | a Victorian canopy on cast-iron columns with brackets, rafters and purlins (`sim/rail/station.ts`); flat only from above |
+| 10 | gantry cranes | box-girder legs and boom are what real STS cranes have; P 3 → 2 |
+| 13 | site cabin / portaloo | stacked cabins with a stair and a moulded, ribbed portaloo with a vented door (`landmarks/construction.ts`); the audit camera stood in an alley |
+| 17 | church "slabs" | real buttresses (body + sloped weathering cap in pale trim); P 3 → 2 |
+| 21 | storage tanks | caged ladder, catwalk bridges with railings, pipe rack, valves, bund wall (`landmarks/industry.ts genTanks`) |
+
 ## Fixes
-(pending)
+All switches: `src/core/boxhunt.ts` — on at medium/high, off on `?quality=low`, each with `?no<name>`, all off with
+`?noboxhunt`. Before/after sheets: `docs/progress/boxhunt/` (made with `?noboxhunt` vs default).
+
+| # | object | change | switch | files |
+|---|---|---|---|---|
+| 1 | traffic + ped signals | tunnel visors (8-sided open hood, outer + inner shell, 216° wrap) round every lens: main head, pole repeater, both ped heads (the flat hood plates + cheeks are gone) | `?nosigvisor` | `sim/traffic/signals.ts` |
+| 2 | promenade lamps | cast-iron lamp: moulded plinth, tapering 8-sided post with collars, ladder arm with ball ends, four-pane lantern widening upwards (glass emissive), corner frames, top band, pyramid cap, finial | `?nopromlamp` | `world/terrain/railings.ts`, `terrain/masonry.ts` |
+| 2b | footbridge + jetty-landing lamps | same lantern family on a moulded foot and collared post (they were the same cube heads) | `?nopromlamp` | `world/harbor/river.ts`, `harbor.ts` |
+| 4 | countryside villages / hamlets / far farms | the instanced unit gains hip ends (30 % full hips, 12 % steep hips, barns 30 % half-hips), a 0.6 m chimney stack over the ridge (75 % of houses) and an L-wing at the back (32 %, big houses 55 %, barns 30 %) — all per-instance in the vertex shader, still ONE instanced mesh; a matching shadow-depth material so shadows follow the shape | `?nolandvariants` | `world/landscape/settlements.ts`, `landscape.ts` |
+| 5 | plaza public art | moulded plinth (base step, chamfered die, capping, bronze plaque); stacked cubes → three balanced polished stones; box twist → double-helix steel spiral with a polished ball; the ring stands in a cast shoe | `?nosculpt` | `world/props/kit.ts`, `props.ts` |
+| 7 | garden / courtyard wheelie bins | 240 l bin: tapered moulded body, rim, lid on a rear hinge bar (some ajar, bag showing), handle brackets, axle + wheels, lifting comb, label | `?nowheeliebin` | `world/props/garden.ts`, `props.ts` |
+| 8 | beach parasols | two-part pole with tilt collar, runner + 8 stretchers, 8 ribs, domed canopy whose panels sag between the ribs, scalloped valance, finial; 20 % smaller (real 1.8–2.3 m span) | `?nobeachkit` | `world/harbor/beach.ts`, `harbor.ts` |
+| 11 | lifeguard tower | hipped roof with fascia and ridge cap instead of the slab; X-bracing on all four sides | `?nobeachkit` | `world/harbor/beach.ts` |
+| 12 | kite flyer | the last box mannequin rebuilt as a person: tapered legs with knees, sneakers, shorts, waisted torso, neck, head + hair cap, arms with elbows (string hand at the old anchor), smooth normals | `?nokiteflyer` | `sim/ambient/kites.ts` |
+| 22 | TV tower shaft | stout foot (r 3.85 m, was 2.9) flaring like a trumpet onto the pavilion, stronger taper to r 2.3 m, denser lathe | `?notvshaft` | `world/landmarks/tvtower.ts` |
+
+Verified in captures (`shots/bh/fix1..3`): promenade lantern, parasols, lifeguard roof, kite flyer, signal visors
+(subtle — the old flat hoods already gave a cap silhouette at 4 m), bridge lanterns. The countryside variants are
+real but small on screen: the units sit 0.5–2 km out, mostly behind trees, from every standard view.
 
 ## Perf
 (pending)
