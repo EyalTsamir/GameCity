@@ -594,11 +594,13 @@ export function genIndustrial(g: Gen): void {
     const names = depot ? ['TRANSIT DEPOT'] : ['NORTHGATE FREIGHT', 'HARBOUR STORES', 'NORTHGATE LOGISTICS', 'BRICKWORKS STORE', 'KESTREL & SONS'];
     const nm = depot ? names[0] : names[(lot.id * 7) % names.length];
     const r = g.atlas.add(`ind:${nm}`, 420, 64, boardSign(nm, { bg: '#f1ede4', fg: '#2c3a46', font: '"Arial Black", "Segoe UI", sans-serif', weight: '900', glow: 0.25, glowColor: '#ffffff', border: '#2c3a46' }));
-    const w = Math.min(sgF.L * 0.55, 11);
+    // the board stays clear of the dock canopies (top at doorH + 0.5): it shrinks rather than overlapping them
     const yS = Math.min(H - 0.5, Math.max(doorH + 1.0, H - 2.0));
+    const yB = Math.min(yS - 0.55, Math.max(yS - 1.65, doorH + 0.75));
+    const w = Math.min(sgF.L * 0.55, 11, (yS - yB - 0.15) * 7.2); // keep the lettering's aspect
     setCol(t, col('#2c3a46'));
-    sideBox(t, sgF, sgF.L / 2 - w / 2 - 0.1, sgF.L / 2 + w / 2 + 0.1, 0, 0.1, yS - 1.65, yS + 0.05, true);
-    signOnSide(g, sgF, sgF.L / 2 - w / 2, sgF.L / 2 + w / 2, 0.135, yS - 1.55, yS - 0.05, r);
+    sideBox(t, sgF, sgF.L / 2 - w / 2 - 0.1, sgF.L / 2 + w / 2 + 0.1, 0, 0.1, yB, yS + 0.05, true);
+    signOnSide(g, sgF, sgF.L / 2 - w / 2, sgF.L / 2 + w / 2, 0.135, yB + 0.1, yS - 0.05, r);
     if (depot) {
       // floodlights over the yard
       for (const u of [1.0, sgF.L - 1.0]) {

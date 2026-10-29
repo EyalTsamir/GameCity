@@ -110,10 +110,21 @@ function ghostPainter(ad: GhostAd) {
   };
 }
 
-let shopCounter = 0;
+// shop names are dealt from a deck (no repeats until all have been used; the old stride 7 over 35 names hit
+// only 5 residues per seed offset → two "Fish & Chips" in one street)
+let shopDeck: number[] = [];
 
 export function resetOldtown(): void {
-  shopCounter = 0;
+  shopDeck = [];
+}
+
+function dealShop(seed: number): number {
+  if (!shopDeck.length) shopDeck = SHOPS.map((_, i) => i);
+  const k = (seed >>> 0) % shopDeck.length;
+  const i = shopDeck[k];
+  shopDeck[k] = shopDeck[shopDeck.length - 1];
+  shopDeck.pop();
+  return i;
 }
 
 interface Part {
@@ -293,7 +304,7 @@ export function genTownhouse(g: Gen): void {
     if (shop) {
       const fasciaY0 = gH - 0.82,
         fasciaY1 = gH - 0.14;
-      const shopDef = SHOPS[(shopCounter++ * 7 + (lot.seed % 5)) % SHOPS.length];
+      const shopDef = SHOPS[dealShop(lot.seed)];
       shopName = shopDef.name;
       const shopT = shopType(shopDef.name);
       anchors.shop(sx(sg, uA, 0), sz(sg, uA, 0), sx(sg, uB, 0), sz(sg, uB, 0), sg.nx, sg.nz, sx(sg, doorU, 0), sz(sg, doorU, 0), shopDef.name, shopT);

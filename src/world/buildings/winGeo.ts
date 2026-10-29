@@ -207,6 +207,7 @@ export function createWinGeo(rec: number[], range: number): WinGeo {
   boxes.setColorAt(0, new THREE.Color());
   const group = new THREE.Group();
   group.name = 'buildings-wingeo';
+  group.userData.rec = { R, flags, WIN_REC };
   group.add(sills, boxes);
 
   const last = new THREE.Vector3(1e9, 0, 0);

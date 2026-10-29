@@ -77,7 +77,7 @@ export function shopType(name: string): number {
   if (/Bank/.test(name)) return 8;
   if (/Café|Bistro|Wine|Tea|Pizzeria|Fish|Anchor|Pub|Gelato|Ice|Espresso|Coffee/.test(name)) return 1;
   if (/Bakery|Pâtisserie|Chocolates|Cheese|Deli|Butcher/.test(name)) return 2;
-  if (/Books|Records|Stationery|Bookbinder/.test(name)) return 3;
+  if (/Books|Records|Stationery/.test(name)) return 3;
   if (/Florist|Greengrocer/.test(name)) return 4;
   if (/Shoes|Hat|Tailor|Barber|Boutique/.test(name)) return 5;
   if (/Pharmacy|Hardware|Post|Bike|Optic/.test(name)) return 6;
@@ -577,7 +577,13 @@ vec3 bhShop(vec2 pm, vec2 csz, vec3 rd, float rs, float shopT, float litI, vec3 
   // (mid-dark, coloured surfaces: a lit room seen from the street has contrast, not a white glow)
   if (T < 1.5) { wallC = vec3(0.46, 0.3, 0.19); floorC = vec3(0.26, 0.17, 0.11); shelfKind = 2.0; }        // café / bar
   else if (T < 2.5) { wallC = vec3(0.68, 0.58, 0.44); floorC = vec3(0.45, 0.36, 0.28); shelfKind = 3.0; }  // bakery
-  else if (T < 3.5) { wallC = vec3(0.32, 0.22, 0.14); floorC = vec3(0.3, 0.2, 0.13); shelfKind = 1.0; }     // books
+  else if (T < 3.5) {                                                                                     // books
+    // shelving per shop: dark walnut, painted sage, or white-painted with a pale floor
+    float bk = bhHash12(vec2(rs, 5.1));
+    wallC = bk < 0.4 ? vec3(0.32, 0.22, 0.14) : bk < 0.7 ? vec3(0.3, 0.38, 0.32) : vec3(0.72, 0.7, 0.66);
+    floorC = bk < 0.7 ? vec3(0.3, 0.2, 0.13) : vec3(0.5, 0.42, 0.32);
+    shelfKind = 1.0;
+  }
   else if (T < 4.5) { wallC = vec3(0.42, 0.48, 0.4); floorC = vec3(0.32, 0.31, 0.29); }                     // florist / grocer
   else if (T < 5.5) { wallC = vec3(0.7, 0.66, 0.62); floorC = vec3(0.42, 0.33, 0.26); }                     // fashion
   else if (T < 6.5) { wallC = vec3(0.74, 0.76, 0.76); floorC = vec3(0.5, 0.5, 0.48); shelfKind = 0.0; }    // pharmacy / hardware
@@ -756,11 +762,32 @@ vec3 bhShop(vec2 pm, vec2 csz, vec3 rd, float rs, float shopT, float litI, vec3 
         mc = mix(vec3(0.55, 0.57, 0.58), mix(vec3(0.2, 0.38, 0.14), bhPal(hb) * 1.15, spot), bloom);
       } else if (T > 7.5) {
         // big potted plant beside the glass
+        // (leaf shapes, not a hashed pixel grid: each pane its own plant — size, leaf count, pot)
         float x = W * (0.15 + 0.7 * hk);
-        float pot = bhBox2(q, vec2(x, 0.25), vec2(0.22, 0.25));
-        float leaves = (1.0 - smoothstep(0.85, 1.0, length((q - vec2(x, 1.2)) / vec2(0.5, 0.75)) + 0.25 * (bhHash12(floor(q * 14.0)) - 0.5)));
-        m = max(pot, leaves);
-        mc = mix(vec3(0.3, 0.3, 0.32), mix(vec3(0.1, 0.22, 0.08), vec3(0.22, 0.38, 0.14), bhHash12(floor(q * 11.0))), leaves);
+        float sz = mix(0.75, 1.25, fract(hk * 5.3));
+        float stemH = 0.55 + 0.35 * fract(hk * 3.1) * sz;
+        vec2 d = q - vec2(x, 0.0);
+        float pw = 0.2 - 0.05 * clamp(0.5 - d.y * 2.0, 0.0, 1.0); // tapered pot
+        float pot = step(abs(d.x), pw) * step(0.0, d.y) * step(d.y, 0.48);
+        float leaves = 0.0, lid = 0.0, rib = 0.0;
+        float nL = 5.0 + floor(fract(hk * 9.7) * 4.0);
+        for (int i = 0; i < 8; i++) {
+          float fi = float(i);
+          if (fi >= nL) break;
+          float a = mix(0.25, 2.9, (fi + 0.5) / nL) + 0.3 * (bhHash12(vec2(fi, hk * 13.0)) - 0.5);
+          float L = mix(0.45, 0.8, bhHash12(vec2(fi, hk * 7.0 + 1.3))) * sz;
+          vec2 dir = vec2(cos(a), sin(a) * 1.25);
+          dir = normalize(dir);
+          vec2 rel = d - (vec2(0.0, 0.48 + stemH * 0.6) + dir * L * 0.55);
+          float al = dot(rel, dir), ac = dot(rel, vec2(-dir.y, dir.x));
+          float lf = 1.0 - smoothstep(0.85, 1.0, length(vec2(al / (L * 0.5), ac / (L * (0.13 + 0.07 * fract(hk * 3.7))))));
+          if (lf > leaves) { leaves = lf; lid = fi; rib = 1.0 - smoothstep(0.004, 0.012, abs(ac)); }
+        }
+        float stem = step(abs(d.x), 0.012) * step(0.45, d.y) * step(d.y, 0.48 + stemH * 0.6);
+        m = max(max(pot, leaves), stem);
+        vec3 potC = mix(vec3(0.82, 0.8, 0.76), vec3(0.24, 0.24, 0.26), step(0.5, fract(hk * 2.9)));
+        vec3 leafC = mix(vec3(0.09, 0.2, 0.07), vec3(0.24, 0.4, 0.13), fract(lid * 0.37 + hk)) * (1.0 - 0.3 * rib);
+        mc = mix(mix(potC, vec3(0.2, 0.16, 0.1), stem), leafC, leaves);
       } else if (T > 6.5) {
         // a display plinth with an object
         float pl = bhBox2(q, vec2(W * 0.5, 0.45), vec2(0.22, 0.45));
@@ -1766,6 +1793,54 @@ void bhWall(inout vec3 albedo, inout float rough, inout float metal, inout vec3 
     }
     // a top-hung vent in the transom swung open (by day)
     ventO = step(0.9, fract(r1 * 17.3 + r2 * 2.1)) * step(wr.w - 0.42, pm.y) * smoothstep(0.5, 0.8, uDaylight);
+  } else if (prof > 5.5 && prof < 6.5) {
+    // school: children's paintings taped to the glass (a row of A3 sheets at child height, each its own
+    // picture: a sun, a house, a crayon scribble, a figure on coloured sugar paper), a paper chain across the
+    // top on some windows, roller blinds part-drawn on others
+    float ww = wr.y - wr.x;
+    float ss = fract(r2 * 5.31 + r1 * 0.7);
+    float yb = pm.y - wr.z;
+    if (ss < 0.72) {
+      float nS = 2.0 + floor(fract(r3 * 3.7) * 3.0);
+      float sl = clamp(wx * nS, 0.0, nS - 0.001);
+      float si = floor(sl);
+      float sh = fract(r1 * 13.1 + si * 0.618);
+      vec2 sq = vec2((fract(sl) - 0.5) * ww / nS, yb - 0.5 - 0.12 * sh);
+      vec2 hsz = sh > 0.6 ? vec2(0.21, 0.15) : vec2(0.15, 0.21); // landscape / portrait A3
+      float sheet = step(abs(sq.x), hsz.x) * step(abs(sq.y), hsz.y) * step(0.18, fract(sh * 7.3));
+      vec3 paper = fract(sh * 3.9) < 0.6 ? vec3(0.92, 0.91, 0.86) : bhPal(fract(sh * 5.3)) * 0.55 + 0.35;
+      vec2 lq = sq / hsz; // -1..1 on the sheet
+      float pk = fract(sh * 11.7);
+      vec3 ink = bhPal(fract(sh * 2.3 + 0.4));
+      float pic = 0.0;
+      if (pk < 0.3) pic = 1.0 - smoothstep(0.3, 0.38, length(lq - vec2(0.35, 0.4)));                                     // sun
+      else if (pk < 0.6) pic = step(abs(lq.x), 0.45) * step(-0.7, lq.y) * step(lq.y, 0.05) + step(abs(lq.x) - 0.5, -lq.y * 0.9 + 0.05) * step(0.05, lq.y) * step(lq.y, 0.55); // house
+      else if (pk < 0.8) pic = step(0.55, fract(lq.y * 3.0 + 0.5 * sin(lq.x * 6.0 + sh * 9.0))) * step(abs(lq.x), 0.8) * step(abs(lq.y), 0.75); // scribble
+      else pic = step(length(lq - vec2(0.0, 0.45)), 0.2) + step(abs(lq.x), 0.08) * step(abs(lq.y + 0.15), 0.4);         // figure
+      pic = clamp(pic, 0.0, 1.0) * detail;
+      vec3 sc = mix(paper, ink, pic * 0.85);
+      // grass strip along the bottom of some drawings
+      sc = mix(sc, vec3(0.25, 0.55, 0.2), step(lq.y, -0.78) * step(0.5, pk) * detail);
+      interior = mix(interior, sc * lcol * litI * 0.35, sheet);
+      dayA = mix(dayA, sc * 0.82, sheet);
+      nearL = sheet;
+      // paper chain / bunting along the head of the window
+      if (fract(r3 * 9.3) > 0.55) {
+        float hy = wr.w - pm.y - 0.12 - 0.08 * (1.0 - pow(abs(wx * 2.0 - 1.0), 2.0));
+        float link = step(abs(hy), 0.035) * step(0.25, fract(wx * ww * 6.0));
+        vec3 lc = bhPal(fract(floor(wx * ww * 6.0) * 0.37));
+        dayA = mix(dayA, lc * 0.8, link * detail);
+        interior = mix(interior, lc * lcol * litI * 0.3, link * detail);
+        nearL = max(nearL, link * detail);
+      }
+    } else {
+      float blindTo = 1.0 - clamp(0.15 + 0.6 * fract(r1 * 7.9), 0.1, 0.8);
+      float bl = step(blindTo, wy);
+      vec3 bc = mix(vec3(0.8, 0.79, 0.74), vec3(0.42, 0.52, 0.66), step(0.6, fract(r3 * 4.1)));
+      interior = mix(interior, bc * lcol * litI * 0.6, bl);
+      dayA = mix(dayA, bc * 0.65, bl);
+      nearL = bl;
+    }
   }
   // recess shadow under the lintel and beside the jambs
   float recess = curtain ? 1.0 : smoothstep(0.0, 0.22, wr.w - pm.y) * mix(0.75, 1.0, smoothstep(0.0, 0.12, min(pm.x - wr.x, wr.y - pm.x)));
@@ -1793,7 +1868,7 @@ void bhWall(inout vec3 albedo, inout float rough, inout float metal, inout vec3 
   float roomK = mix(0.62, 1.0, fract(r1 * 3.71));
   float reflK = (curtain || ribbon) ? mix(0.82, 1.18, fract(r2 * 2.93)) : mix(0.75, 1.9, fract(r2 * 2.93)) * (1.15 - 0.3 * roomK);
   vec3 glass = interior * (1.0 - Fs) * transTint + refl * Fs * mix(0.65, 1.0, recess) * paneGrad * reflK * ((curtain || ribbon) ? 1.0 : (homey ? 0.72 : 1.6));
-  vec3 glassAlb = dayA * (1.0 - Fs) * transTint * (curtain ? 0.4 : (ribbon ? 0.7 : (homey ? mix(0.62 * roomK, 1.0, nearL) : roomK))); // a room seen through glass by day is far darker than the facade around it
+  vec3 glassAlb = dayA * (1.0 - Fs) * transTint * (curtain ? 0.4 : (ribbon ? 0.7 : (homey ? mix(0.62 * roomK, 1.0, nearL) : mix(roomK, 1.0, nearL)))); // a room seen through glass by day is far darker than the facade around it
   // open sash: the swung pane shows a strip of darker, skewed reflection at the hinge side
   glass = mix(glass, env * 0.35 * reflTint, openW * (1.0 - smoothstep(0.62, 0.66, wx)));
   // the open vent: its tilted pane mirrors the dim ceiling / the ground instead of the street, the room shows under it
