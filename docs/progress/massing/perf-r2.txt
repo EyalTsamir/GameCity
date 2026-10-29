@@ -1,0 +1,20 @@
+perf.mjs --views overview;street=5,1.5,-65,9,0,6;industry --hours 12 --repeat 2 --gpu 1 (adaptive=0, 1300x930, Adreno X1-45)
+variants: baseline | r2off = noroofplant&noannex&nomonitor&noporch&nocolonnade&nologgias&norooflights&nopiers&nocrowns | nomassing
+ '(baseline)' | 'overview@12' | 39.48 | 249 | 4359772 
+ '(baseline)' | 'street@12' | 31.29 | 209 | 3697811 
+ '(baseline)' | 'industry@12' | 27.01 | 216 | 3325947 
+ 'noroofplant&noannex&nomonitor&noporch&nocolonnade&nologgias&norooflights&nopiers&nocrowns' | 'overview@12' | 39.31 | 249 | 4327624 
+ 'noroofplant&noannex&nomonitor&noporch&nocolonnade&nologgias&norooflights&nopiers&nocrowns' | 'street@12' | 31.01 | 209 | 3663682 
+ 'noroofplant&noannex&nomonitor&noporch&nocolonnade&nologgias&norooflights&nopiers&nocrowns' | 'industry@12' | 26.55 | 216 | 3312303 
+ 'nomassing' | 'overview@12' | 39.11 | 249 | 4349641 
+ 'nomassing' | 'street@12' | 31.05 | 209 | 3683665 
+ 'nomassing' | 'industry@12' | 26.49 | 216 | 3323999 
+ '(baseline)' | 'overview@12' | 38.72 | 249 | 4360520 
+ '(baseline)' | 'street@12' | 31.07 | 209 | 3696663 
+ '(baseline)' | 'industry@12' | 26.8 | 216 | 3326359 
+ 'noroofplant&noannex&nomonitor&noporch&nocolonnade&nologgias&norooflights&nopiers&nocrowns' | 'overview@12' | 39.24 | 249 | 4327622 
+ 'noroofplant&noannex&nomonitor&noporch&nocolonnade&nologgias&norooflights&nopiers&nocrowns' | 'street@12' | 31.45 | 209 | 3664384 
+ 'noroofplant&noannex&nomonitor&noporch&nocolonnade&nologgias&norooflights&nopiers&nocrowns' | 'industry@12' | 26.76 | 216 | 3312729 
+ 'nomassing' | 'overview@12' | 39.05 | 249 | 4347387 
+ 'nomassing' | 'street@12' | 31.27 | 209 | 3681047 
+ 'nomassing' | 'industry@12' | 26.41 | 216 | 3323339 

@@ -23,7 +23,44 @@ Landmarks are not in scope (boxhunt session); plan.ts layout untouched (places s
 - Verification sets: `shots/r2v`, `shots/r2c` (crown day/dusk, loggias), `shots/r2d` (rooflights/piers, before =
   ?norooflights&nopiers).
 - Harness note: capture-set `--out` relative paths resolve to the MAIN checkout — always pass absolute paths.
-- Next: verify r2d + head office → more audit items → perf A/B + hitch.mjs + ui-test → final report.
+- DONE (cut off by the usage limit before the last polish): perf, hitch, ui-test, captures `shots/r2f/{r2on,r2off,on,off,night}`
+  all ran — see "Round 2 — cost / checks". NOT done: before/after sheets from `shots/r2f` (r2off vs r2on: t28, depfront,
+  dep, find, o18; ?nomassing vs on: overview, downtown, industry, street, oldtown), a fresh `npm run build` after adf11df
+  (typecheck is clean; last build before the final edits: OK, 3.82 MB), ui-test re-run to confirm all steps (the log
+  only shows `"passed": 1`).
+
+## Round 2 — what changed
+- Towers (towers.ts + new `roofplant.ts`): a real rooftop plant on every tower / office roof, varied by type (glass /
+  panel / masonry): lift-motor room with louvres, door, canopy, ladder; fan units with grilles; duct runs on stands;
+  a cooling tower; flues; cable trays; plant screen; guard rail. Curtain-wall towers end in a louvred fin crown
+  (a fin every half cell, ring beam, lit accent line at night). Punched masonry towers / offices get piers between
+  the window columns and wider corner piers. Classical arcade columns (plinth, torus, tapering shaft, echinus,
+  abacus, entablature) on masonry offices, and shopfronts behind every arcade.
+- Industry (industry.ts): head office annex at the exposed end of long gable / barrel halls (ribbon windows, entrance
+  canopy, floor bands, roof kit) with a glazed stair tower rising over its roof; roof monitor (lantern) on ~65 % of
+  gable sheds; rooflight strips down gable and barrel roofs; a louvred ridge ventilator on gable sheds without a
+  monitor; downpipes every second bay on the eave sides; brick plinth.
+- Harbour master (special.ts): recessed front porch — back wall with the door 1.5 m in, return walls, soffit, timber
+  deck with two steps, columns with base and capital, balustrade.
+- Westbrook houses (homes.ts): lean-to porch roofs with a deep fascia, drip board, header beam, gutter, turned posts.
+- Apartment slabs (houses.ts): loggias cut into the back (French window per storey, cheeks, slabs, parapet or bars)
+  with the balcony kit (plants, flower boxes, laundry, chairs) inside.
+
+## Round 2 — cost / checks
+- perf.mjs (1300×930, adaptive=0, 2 passes; `docs/progress/massing/perf-r2.txt`): overview 39.10 ms all on vs 39.28 round-2
+  off vs 39.08 ?nomassing; street 31.18 / 31.23 / 31.16; industry 26.91 / 26.66 / 26.45 → round-2 cost ≤ ~0.3 ms
+  (industry), noise elsewhere. Draw calls identical; triangles +32k overview, +34k street, +14k industry (< 1 %).
+- hitch.mjs (overview, street, industry, downtown × 12:00 / 21:30): new programs 0, new geometries 0, freezes > 100 ms 0
+  in every window; one 55 ms long task on the street arrival (texture uploads, pre-existing).
+- Captures: 0 console / page errors. Invariants: buildings clean; the hitch run logged a pedestrian overlap on a crosswalk
+  (pedestrians module, not this round).
+- No new materials or shader programs (140 programs, same as before); all geometry merged into the existing chunks.
+
+## Round 2 — toggles (all on by default; `?nomassing` turns everything off)
+`?noroofplant` · `?noannex` (head office + stair tower) · `?nomonitor` (roof monitor, downpipes, brick plinth) ·
+`?noporch` (harbour master porch, house porch roofs) · `?nocolonnade` · `?nologgias` · `?norooflights` (rooflights,
+ridge ventilator) · `?nopiers` · `?nocrowns` (now also the glass fin crown). Quality: the roof plant is off on low
+(like the roof kit); the rest is cheap geometry and stays on every tier.
 
 ## Round 1 — Resume here
 - DONE. Verified: typecheck clean, `npm run build` OK (3.77 MB), console clean (0 errors in every capture),
