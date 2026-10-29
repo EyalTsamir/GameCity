@@ -6,6 +6,13 @@ Branch `claude/real-f2-people` (from `claude/pensive-gates-bim12i` e1c9780). Bri
 * 2026-10-29 SESSION 3 (session_01XuhAMh8vfAev7DpzP7VknF) STARTED: merged origin/claude/pensive-gates-bim12i (b713343).
   Tasks: sail crew into F4 cockpit + tractor driver; train occupants; band drum detail; bus black side windows;
   re-judge swing/see-saw hands; cost note ;nooccupants/;noactors.
+  2284ad0: sail crew perched on the F4 cockpit coamings (CrewSeat.seatH; figure() arg), JUDGED GOOD s3a 5/7 m;
+  tractor driver = `RIDES` (actorDefs: a seat on a moving Object3D; tractor.ts registers its group; role farmer,
+  flat cap) JUDGED GOOD s3a; band side drum rebuilt in landmarks/park.ts (shell, navy hoops, 8 brass rods+lugs,
+  worn head, 3-leg stand; moved to z −0.12 off the drummer's knees); train occupants coded (occupants.ts
+  syncTrains/seatCar: back-to-back on the k·1.9 seat-back planes, x ±0.62/±1.06, skip doors; car.seated →
+  aInst2.y = 2; trainMaterial: heads skipped, trHitT → gl_FragDepth, cache key v8). f2shot: kinds train /
+  tractor, spec `waittrain`.
 * 2026-10-29 ~05:00 UTC — SESSION 2 ENDED (tokens.py ctxMax 264k > rule). Pushed. Typecheck clean; console
   clean and invariants {} in every f2shot run (q2–q4 reports).
   DONE s2: vehicle occupants for cars / vans / lorries / buses (`?nooccupants`, see "Vehicle occupants");

@@ -180,7 +180,7 @@ export class Occupants {
     const z0 = -L / 2 + 0.45,
       z1 = c.type === 'cab' ? L / 2 - 1.55 : L / 2 - 0.45;
     const h = this.ctx.clock.hours;
-    const busy = h > 7 && h < 9.5 ? 0.24 : h > 16 && h < 19 ? 0.22 : h > 6 && h < 22 ? 0.15 : 0.05;
+    const busy = h > 7 && h < 9.5 ? 0.28 : h > 16 && h < 19 ? 0.26 : h > 6 && h < 22 ? 0.2 : 0.06;
     const FL = 1.13;
     for (let k = -5; k <= 5; k++) {
       const zn = k * 1.9;
@@ -190,7 +190,7 @@ export class Occupants {
         if (hz < z0 || hz > z1) continue;
         for (const x of [-1.06, -0.62, 0.62, 1.06]) {
           if (!rng.chance(busy)) continue;
-          this.add(o, null, rng, x, hz, sit(FL + 0.45, 0, FL));
+          this.add(o, null, rng, x, hz, sit(FL + 0.45, 0, FL), false);
           o.seats[o.seats.length - 1].f = f;
         }
       }
@@ -219,7 +219,7 @@ export class Occupants {
           if (!rng.chance(busy)) continue;
           // window or aisle place of the double seat
           const x = e * (rng.chance(0.6) ? hw * 0.62 : 0.52);
-          this.add(o, V, rng, x, z + 0.17, sit(cy, z + 0.17, belt - 1.0));
+          this.add(o, V, rng, x, z + 0.17, sit(cy, z + 0.17, belt - 1.0), false);
         }
       }
       return o;
@@ -238,7 +238,7 @@ export class Occupants {
     return o;
   }
 
-  private add(o: Occ, V: Vehicle | null, rng: Rng, x: number, z: number, g: RideGeom): void {
+  private add(o: Occ, V: Vehicle | null, rng: Rng, x: number, z: number, g: RideGeom, shade = true): void {
     o.seats.push({ x, z, g, f: 1 });
     const persona = PERSONA[rng.int(0, PERSONA.length - 1)];
     const p = new Party(-2000 - (this.nextUid - 980000), persona);
@@ -260,13 +260,16 @@ export class Occupants {
       look.bottom = 0x2a3140;
       if (st) st.hat = HAT_STYLES.NONE;
     }
-    // in the cabin's shade and seen through tinted glass (the pane's own reflection is not drawn over them)
-    look.skin = dim(look.skin);
-    look.top = dim(look.top);
-    look.bottom = dim(look.bottom);
-    look.hair = dim(look.hair);
-    look.hat = dim(look.hat);
-    look.accent = dim(look.accent);
+    // in the cabin's shade and seen through tinted glass (the pane's own reflection is not drawn over them); a train
+    // saloon is daylit through both window bands (only a light tint)
+    if (shade) {
+      look.skin = dim(look.skin);
+      look.top = dim(look.top);
+      look.bottom = dim(look.bottom);
+      look.hair = dim(look.hair);
+      look.hat = dim(look.hat);
+      look.accent = dim(look.accent);
+    }
     const m = new Member(this.nextUid++, p, 0, look, rng.next());
     p.members.push(m);
     m.rideG = g;

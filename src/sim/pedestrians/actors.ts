@@ -173,7 +173,8 @@ export class Actors {
     const persona = PERSONA[role];
     const p = new Party(-1000 - (this.nextUid - 950000), persona);
     const h = this.ctx.clock.hours;
-    const look = makeLook(rng, { persona, warm: h > 9 && h < 20, age: child ? 'child' : 'adult' });
+    // (bandsmen are in uniform whatever the weather: the cool wardrobe has long sleeves and trousers)
+    const look = makeLook(rng, { persona, warm: h > 9 && h < 20 && role !== 'band' && role !== 'conductor', age: child ? 'child' : 'adult' });
     look.dog = null;
     look.pram = null;
     look.umbrellaOwner = false;
@@ -195,6 +196,7 @@ export class Actors {
         st.vest = true;
       } else if (role === 'band' || role === 'conductor') {
         // bandsmen: uniform jacket, dark trousers, peaked cap; the conductor in black
+        look.flags &= ~(F.SKIRT | F.SHORTS | F.SHORTSLEEVE);
         st.hat = role === 'band' ? HAT_STYLES.CAP : HAT_STYLES.NONE;
         look.hat = 0x1f2226;
         look.bottom = 0x1f2226;

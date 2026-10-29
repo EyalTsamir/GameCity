@@ -159,7 +159,9 @@ float thBaseSpec = 1.0;
     // the cabin is lit by daylight through all its windows, not by the light on this pane: emitted, under the
     // glass reflection (the diffuse base goes almost black)
     vec3 inside = thInterior( p, rd, cls, vCamObj.w, ph );
-    thGlassEmit = inside * vec3( 0.8, 0.88, 0.9 ) * ( 1.0 - 0.92 * uLights ) * 0.32;
+    // (F2: a bus saloon is daylit through a whole wall of glass — at 0.32 its flank panes, which mirror only the
+    // dark street, read as opaque black panels)
+    thGlassEmit = inside * vec3( 0.8, 0.88, 0.9 ) * ( 1.0 - 0.92 * uLights ) * ( abs( cls - 4.0 ) < 0.5 ? 0.85 : 0.32 );
     // lit cabins at night (bus, LIGHT_CABIN): the lamps light the seats and passengers, not a flat panel
     if ( vEmit.a < 0.5 ) {
       thGlassEmit += inside * vec3( 1.0, 0.82, 0.6 ) * ( 3.6 * uLights * vCamObj.w );
@@ -534,7 +536,7 @@ if ( vSeated > 0.5 && thHitT > 0.0 ) {
 }`,
       );
   };
-  material.customProgramCacheKey = () => 'traffic-vehicle-v10';
+  material.customProgramCacheKey = () => 'traffic-vehicle-v11';
   patchLampMaterial(material); // night street-light map (night agent)
 
   const depth = new THREE.MeshDepthMaterial();
