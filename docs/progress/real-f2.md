@@ -13,6 +13,11 @@ Branch `claude/real-f2-people` (from `claude/pensive-gates-bim12i` e1c9780). Bri
   green: q4) — not camera placement. f2shot.mjs now loads with `adaptive=0` (suspect: adaptive quality
   resizing targets); unconfirmed. Use scripts/agent-tools/f2shot.mjs (≈ 2 min per capture here), not bench.mjs
   (≈ 3–5 min per capture; 25-min background limit). Kill helper must not match its own command line.
+  LEAD (after s2 ended): flat captures = pumpFrames' 8×8 clipped screenshots (Chromium tiles the patch) — clip
+  removed in bench.mjs + f2shot.mjs (lead pushes the same to pensive-gates). F4 (pensive-gates 96a271a) rebuilt
+  the tractor glass cab (seat/wheel/levers) and the sailboat cabin/cockpit: MERGE claude/pensive-gates-bim12i
+  FIRST, then seat a tractor driver and move the sail crew into the new cockpit (positions: real-f4.md,
+  real-requests.md) — do this before the train occupants.
   NEXT, in order: (1) bus side windows render as opaque black panes (q5 01_bus) — check on ?nooccupants whether
   pre-existing (side panes not ray-traced?) — if so the side passengers are hidden: give the flank panes the
   cabin Det / ask W2; (2) train occupants (plan in "Vehicle occupants"); (3) perf.mjs `;nooccupants` and

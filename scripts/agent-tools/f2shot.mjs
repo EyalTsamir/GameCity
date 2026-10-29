@@ -27,7 +27,7 @@ try {
   await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 300000 });
   await page.waitForFunction(() => window.__city && window.__city.ready && window.__city.frames() > 3, null, { timeout: 300000, polling: 500 });
   await page.addStyleTag({ content: '#ui{display:none!important}' });
-  const pump = async (n) => { for (let i = 0; i < n; i++) await page.screenshot({ type: 'jpeg', quality: 1, clip: { x: 0, y: 0, width: 8, height: 8 } }).catch(() => {}); };
+  const pump = async (n) => { for (let i = 0; i < n; i++) await page.screenshot({ type: 'jpeg', quality: 1 }).catch(() => {}); };
   await pump(2);
   console.log('loaded', ((Date.now() - t0) / 1000).toFixed(0), 's');
   for (const spec of shots) {
