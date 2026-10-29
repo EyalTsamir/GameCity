@@ -8,6 +8,7 @@ import type { LandscapeModel, Site } from './model';
 import { FIELD_ROT } from './fields';
 import { hash2i } from './noise';
 import { LAMP_GLSL } from '../../core/lampLight';
+import { buildFarmstead, farmMaterial, type FarmSite } from './farmstead';
 
 interface Bld {
   x: number;
@@ -34,7 +35,7 @@ export interface Settlements {
   beacon: { x: number; y: number; z: number } | null;
 }
 
-function placeSite(site: Site, model: LandscapeModel, out: Bld[], towers: { x: number; z: number; y: number; h: number; yaw: number }[]): void {
+function placeSite(site: Site, model: LandscapeModel, out: Bld[], towers: { x: number; z: number; y: number; h: number; yaw: number }[], farms: FarmSite[] | null): void {
   const H = model.height;
   const rnd = (i: number, k: number) => hash2i(site.seed * 131 + i, k, 607);
   const baseYaw = FIELD_ROT + (rnd(0, 1) - 0.5) * 0.6;
@@ -60,11 +61,25 @@ function placeSite(site: Site, model: LandscapeModel, out: Bld[], towers: { x: n
     }
     if (y < -1.2) return;
     out.push({ ...b, x, z, y: y - 0.3, yaw });
+    local.push([lx, lz, yawOff]);
   };
+  const local: [number, number, number][] = [];
   if (site.kind === 'farm') {
-    put(0, 0, { w: 11 + 3 * rnd(1, 2), d: 8 + 1.5 * rnd(1, 3), h: 5.6 + 1.2 * rnd(1, 4), roof: 4.2, wall: Math.floor(rnd(1, 5) * 5), roofC: Math.floor(rnd(1, 6) * 3), kind: 0 }, 0);
-    put(4 + 6 * rnd(2, 1), 17 + 4 * rnd(2, 2), { w: 20 + 6 * rnd(2, 3), d: 12 + 3 * rnd(2, 4), h: 6 + rnd(2, 5) * 1.5, roof: 5.5, wall: 5 + Math.floor(rnd(2, 6) * 3), roofC: Math.floor(rnd(2, 7) * 6), kind: 1 }, (rnd(2, 8) > 0.5 ? 0 : Math.PI / 2));
-    if (rnd(3, 1) > 0.25) put(-15 - 4 * rnd(3, 2), 8 + 6 * rnd(3, 3), { w: 12, d: 6, h: 3.4, roof: 2.0, wall: 5 + Math.floor(rnd(3, 4) * 3), roofC: 3 + Math.floor(rnd(3, 5) * 3), kind: 2 }, Math.PI / 2);
+    // farms within the free camera's reach (targets stop at slab + 320 m) become real farmsteads (farmstead.ts)
+    const n0 = out.length;
+    const near = farms && model.slabDist(site.x, site.z) < 420;
+    if (near) {
+      local.length = 0;
+      placeFarm(put, rnd);
+      const blds = out.splice(n0);
+      if (blds.length) {
+        const f: FarmSite = { x: site.x, z: site.z, y: blds[0].y, yaw: baseYaw, seed: site.seed, blds: [] };
+        blds.forEach((b, i) => f.blds.push({ lx: local[i][0], lz: local[i][1], y: b.y, w: b.w, d: b.d, h: b.h, roof: b.roof, yawOff: local[i][2], wall: new THREE.Color(WALLS[b.wall]), roofC: new THREE.Color(ROOFS[b.roofC]), kind: b.kind }));
+        farms.push(f);
+      }
+      return;
+    }
+    placeFarm(put, rnd);
     return;
   }
   // villages / hamlets: houses along two crossing streets + a ring of scattered ones
@@ -105,6 +120,17 @@ function placeSite(site: Site, model: LandscapeModel, out: Bld[], towers: { x: n
       tz = site.z - -13 * s + 6 * c;
     towers.push({ x: tx, z: tz, y: H(tx, tz) - 0.3, h: 34 + 8 * rnd(30, 1), yaw: baseYaw });
   }
+}
+
+type Put = (lx: number, lz: number, b: Omit<Bld, 'x' | 'z' | 'y' | 'yaw'>, yawOff: number) => void;
+function placeFarm(put: Put, rnd: (i: number, k: number) => number): void {
+  put(0, 0, { w: 11 + 3 * rnd(1, 2), d: 8 + 1.5 * rnd(1, 3), h: 5.6 + 1.2 * rnd(1, 4), roof: 4.2, wall: Math.floor(rnd(1, 5) * 5), roofC: Math.floor(rnd(1, 6) * 3), kind: 0 }, 0);
+  // the barn behind the house; turned across, it moves out by its extra half-length (no walls touching)
+  const bw = 20 + 6 * rnd(2, 3),
+    bd = 12 + 3 * rnd(2, 4),
+    turned = rnd(2, 8) <= 0.5;
+  put(4 + 6 * rnd(2, 1), 17 + 4 * rnd(2, 2) + (turned ? (bw - bd) / 2 : 0), { w: bw, d: bd, h: 6 + rnd(2, 5) * 1.5, roof: 5.5, wall: 5 + Math.floor(rnd(2, 6) * 3), roofC: Math.floor(rnd(2, 7) * 6), kind: 1 }, turned ? Math.PI / 2 : 0);
+  if (rnd(3, 1) > 0.25) put(-15 - 4 * rnd(3, 2), 8 + 6 * rnd(3, 3), { w: 12, d: 6, h: 3.4, roof: 2.0, wall: 5 + Math.floor(rnd(3, 4) * 3), roofC: 3 + Math.floor(rnd(3, 5) * 3), kind: 2 }, Math.PI / 2);
 }
 
 /** unit gabled building: body 1×1×1 (y 0..1) + roof prism (y 1..2, flagged), ridge along x */
@@ -265,7 +291,8 @@ vec3 bAlbedo() {
 export function buildSettlements(model: LandscapeModel, uniforms: Record<string, THREE.IUniform>, lights: { value: number }, night: { value: number }, fog: boolean): Settlements {
   const blds: Bld[] = [];
   const towers: { x: number; z: number; y: number; h: number; yaw: number; light?: boolean }[] = [];
-  for (const s of model.sites) placeSite(s, model, blds, towers);
+  const farms: FarmSite[] | null = new URLSearchParams(location.search).has('nofarmdetail') ? null : [];
+  for (const s of model.sites) placeSite(s, model, blds, towers, farms);
   // the island lighthouse on the northern cliff top (white tower, red lantern roof)
   const isl = model.island;
   const lx = isl.x + 10,
@@ -317,6 +344,14 @@ export function buildSettlements(model: LandscapeModel, uniforms: Record<string,
   mesh.receiveShadow = true;
   mesh.computeBoundingSphere();
   group.add(mesh);
-  const triangles = blds.length * 14;
+  let triangles = blds.length * 14;
+  if (farms?.length) {
+    const fm = farmMaterial(fog);
+    for (const f of farms) {
+      const m = buildFarmstead(f, model.height, fog, fm);
+      triangles += m.geometry.getAttribute('position').count / 3;
+      group.add(m);
+    }
+  }
   return { group, count: blds.length, triangles, beacon: beacon ? { x: beacon.x, y: beacon.y + beacon.h * 0.82, z: beacon.z } : null };
 }
