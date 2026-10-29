@@ -9,6 +9,9 @@
   --out shots/f3/a2` and compare with shots/f3/before (base; also not in git — recapture from a base worktree on
   5174 if gone). Base cutting_3m was black (pose inside the hill) → pose fixed since; base parklawn was inside
   something → judge lawns via apartment/sheep instead.
+* golden m2 (after the compile fix): console clean; downtown 0.1, oldtown 0.1, overview 0.0, but harbor 39.7 and
+  westbrook 37.2 (m1 had them at 0.9 / 6.6 with only the hardscape shader differing → probably capture variance,
+  harbor m2 is bluer: sea/sky?). LOOK at shots/golden/m2/diff.png before anything else.
 * Then: lawn felt at 3 m (not started), pasture (landscape/shader.ts ck==3, ~l.320: unowned file — lime plane),
   cliff geometry (ledge shape / boulders) if the shader pass is not enough, perf.mjs cost of fixings + bump.
 
