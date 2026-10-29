@@ -320,8 +320,10 @@ export class CrowdRenderer {
     patchLampMaterial(pm.far);
     // ?pedfar=0: tiny / pin figures with the full shader (A/B of the far variant)
     const farMat = new URLSearchParams(location.search).get('pedfar') === '0' ? pm.material : pm.far;
+    // ?pednear=far (debug A/B): the near level drawn with the far program — the upper bound of a leaner near shader
+    const nearMat = new URLSearchParams(location.search).get('pednear') === 'far' ? pm.far : pm.material;
     this.close = new Layer(4, pm.material, null, Math.min(capacity, 48));
-    this.near = new Layer(0, pm.material, null, Math.min(capacity, 96));
+    this.near = new Layer(0, nearMat, null, Math.min(capacity, 96));
     this.far = new Layer(1, pm.material, null, capacity);
     this.tiny = new Layer(2, farMat, null, capacity);
     this.pin = new Layer(3, farMat, null, capacity);
@@ -330,6 +332,7 @@ export class CrowdRenderer {
     this.shadow.mesh.receiveShadow = false;
     this.levels = [this.close, this.near, this.far, this.tiny, this.pin];
     this.layers = [this.close, this.near, this.far, this.tiny, this.pin, this.shadow];
+    ['peds-close', 'peds-near', 'peds-far', 'peds-tiny', 'peds-pin', 'peds-shadow'].forEach((n, i) => (this.layers[i].mesh.name = n));
     // the proxy only draws into shadow maps: decline the main camera's frustum (same planes as the
     // culling frustum computed in write()), accept every other (shadow cameras)
     const mainFr = new THREE.Frustum(),
