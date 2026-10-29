@@ -4,11 +4,16 @@ Branch `claude/pensive-gates-bim12i`. Budget file: `perf-results.txt` (repo root
 ("Earlier round: render-performance pass").
 
 ## Resume here
-- Baseline measured (see perf-results.txt). Fix list in priority order is below; the first unchecked item is next.
-- A frozen copy of the round's starting code (8718d0f) can be served for same-run before/after:
-  `git worktree add --detach <dir> 8718d0f`, junction its `node_modules` to this repo's, then
-  `node node_modules/vite/bin/vite.js --config vite.base.config.mjs` (port 5174, own deps cache) and pass
-  `--url http://127.0.0.1:5174/` to perf.mjs / hitch.mjs / drawprof.mjs.
+- Pushed: c45a8c9 (warm-up, landmark cells, far peds), b52144b (draw order, vehicle far LODs, early-outs).
+- Local, being measured: a200a65 (tree sort, facade chunks), 0726126 (warm-up pins visibility), 237a97c (uDetailPx),
+  fd69368 (trees slot 2.5, big landmarks own meshes), c0399b9 (fine furniture cells). Push each after its A/B.
+- Frozen copies (scratchpad worktrees, own vite servers): base 8718d0f :5174, cand1 c45a8c9 :5175, cand2 b52144b :5176,
+  cand3 237a97c :5177 (exp), cand4 c0399b9 :5178. Measurement queues: shots/perf2/queue*.sh (outputs next to them).
+- Open: market crowd near layer (7.3 ms), allocations (6–40 MB/s → GC), facade near detail (LOD option uDetailPx
+  measured in lod_ab.txt — a visible trade-off: switch, not default), boot time with the warm-up (bootprobe.mjs).
+- A frozen copy of any commit for same-run before/after: `git worktree add --detach <dir> <commit>`, junction its
+  `node_modules` to this repo's, write vite.base.config.mjs (own port + cacheDir), `node node_modules/vite/bin/vite.js
+  --config vite.base.config.mjs`, pass `--url http://127.0.0.1:<port>/` to perf/hitch/drawprof/hideprof/golden.
 
 ## Tools (new this round, all in scripts/, all lock-serialised)
 - `perf.mjs --views "a;name=x,y,z,d,yaw,pitch" --hours 12,21.5 --gpu 1` — uncapped ms/frame for several views in ONE
@@ -63,6 +68,36 @@ harbor (POI) · platform = `-10,1.4,-146.3,6,60,8` (station platform, eye level)
   (facades / ground before the stalls, crowd, landmarks, vehicles in front of them) → fix 3 (draw order).
 - The window-depth / interior LOD thresholds are in window-bay pixels (reveal on below ~5 px per bay ≈ 1 km away at
   1025 px), so the overview runs the near path almost everywhere.
+
+### 3. Fix batch 1 — c45a8c9 (pushed): warm-up, landmark cells, far pedestrian program
+Same-run A/B, original (5174) vs candidate (5175), perf.mjs uncapped, 1920x1025, ms/frame:
+| view | 12 h before → after | 21.5 h before → after |
+|---|---|---|
+| overview | 69.7 → 61.1 (−8.6) | 72.7 → 66.3 (−6.4) |
+| street | 54.2 → 50.9 (−3.3) | 55.6 → 50.9 (−4.7) |
+| market | 58.8 → 58.9 (0) | 60.9 → 59.4 (−1.5) |
+| harbor | 65.0 → 57.8 (−7.3) | 69.3 → 63.0 (−6.3) |
+| platform | 38.4 → 34.0 (−4.4) | 44.6 → 41.2 (−3.5) |
+Main-view triangles −0.4…−0.9 M, draw calls +4…+11 (landmark cells). Re-measured later: within ±1 ms.
+Experiments on the candidate (overview / market, 12 h): constant land albedo −13.7 / −1.0 ms (the land
+albedo function itself is the cost, not its lighting); constant far-tree colour −1.2 / 0 (the trees cost
+raster / overdraw, not shading → sort them); `pedfar=0` (full program on tiny / pin) +3.8 / +0.6.
+
+### 4. Fix batch 2 — b52144b (pushed): opaque draw order, vehicle far LODs, exact early-outs
+Same-run A/B (original 5174 / cand1 5175 / cand2 5176), ms/frame uncapped:
+| view | orig 12 h | cand1 | cand2 | orig 21.5 h | cand1 | cand2 |
+|---|---|---|---|---|---|---|
+| overview | 69.7 | 62.7 | 52.4 | 72.7 | 66.3 | 55.7 |
+| street | 54.2 | 50.0 | 47.1 | 55.6 | 51.3 | 48.3 |
+| market | 58.8 | 58.6 | 52.0 | 60.9 | 59.1 | 49.6 |
+| harbor | 65.0 | 57.6 | 48.3 | 69.3 | 63.6 | 52.7 |
+| platform | 38.4 | 34.0 | 31.5 | 44.6 | 38.7 | 36.4 |
+- lateDraws (main.ts): the merged city meshes tie at the origin in three's depth sort and drew in creation order:
+  facades / roads / ground first, then the stalls, crowd, vehicles, trees covering them. Market hardscape 6.2 → 2.0 ms,
+  market shell 8.1 → 6.1, street shell 12.2 → 9.3 (drawprof). Side effect found: the far impostor trees then
+  drew before the facades (street 0.9 → 2.9 ms) → own slot 2.5 (commit fd69368).
+- Land sections after it (exp copy, uLandCut A/B): fields 2.2, banks/sand/rock 2.0, meadow detail 0.1, forest ≈ 0 ms
+  in the overview — the 14 ms of the baseline were mostly the sea floor (now an exact early return) and hidden pixels.
 
 ---
 
