@@ -1025,6 +1025,9 @@ export function createMasonry(ctx: CityContext, model: TerrainModel): MasonryRes
   vg.setAttribute('color', new THREE.BufferAttribute(rgba, 4));
   vg.deleteAttribute('aAlpha');
   const vmat = new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, depthWrite: false, side: THREE.DoubleSide });
+  // one pass for both sides: three otherwise draws a transparent double-sided material twice (back, then front),
+  // flipping .side + needsUpdate — the program re-derived twice per frame. Black layers blend the same in any order.
+  vmat.forceSinglePass = true;
   const vmesh = new THREE.Mesh(vg, vmat);
   vmesh.name = 'terrain-tunnel-veils';
   vmesh.renderOrder = 1;
