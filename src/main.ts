@@ -378,9 +378,10 @@ function lateDraws(scene: THREE.Scene): void {
 }
 
 /**
- * Render one frame with every object drawn (hidden ones shown, culling off) through the real pipeline, so the
- * main-view, shadow-pass, reflection and post programs are all compiled with the render targets they are used with
- * (compile() alone would build main-view variants for the screen target). The frame is never shown.
+ * Compile every program the city can use before the first frame, with every object drawn (hidden ones shown, culling
+ * off): the main-view programs in parallel (compileAsync on an off-screen target, i.e. the post chain's variants —
+ * with the screen bound it would build tone-mapped ones), then one frame through the real pipeline for the
+ * shadow-pass, reflection and post programs. The frame is never shown.
  */
 async function warmUp(ctx: CityContext): Promise<void> {
   const forced: [THREE.Object3D, boolean, boolean][] = [];
