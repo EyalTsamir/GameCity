@@ -246,6 +246,7 @@ async function boot(): Promise<void> {
     frameCount++;
     if (frameCount === 2) hideLoading();
   };
+  if (params.get('drawsort') !== '0') lateDraws(scene);
   // shader warm-up behind the loading screen (?nowarmup to skip): every program the city will ever use is
   // compiled now — objects that only show up later (night market, glows, LOD levels, near sets, far views) would
   // otherwise compile on their first draw and stall that frame by 50–300 ms
@@ -339,6 +340,30 @@ function reportFrameError(module: string, err: unknown): void {
   }
   frameErrors.push({ module, error: msg, count: 1 });
   console.error(`[frame] ${module}:`, err);
+}
+
+/**
+ * Opaque draw order for the big, expensive full-screen shaders: three sorts opaque draws by renderOrder, then by
+ * the object's ORIGIN depth — every city-wide merged mesh sits at the origin, so they tied and went in creation
+ * order, and the facades / ground were shaded first and then hidden behind the stalls, trees, people and vehicles
+ * drawn after them. Drawn after everything small (renderOrder 0 / −1), their hidden pixels fail the early depth
+ * test. Relative order kept: facades, then roads (before the terrain they cover), then the ground. Order-
+ * independent result: opaque, depth-tested (decals use polygonOffset); the sky dome (1000) stays last.
+ * ?drawsort=0 restores the old order (A/B).
+ */
+const LATE_DRAWS: Record<string, number> = {
+  'buildings-shell': 1,
+  'roads-asphalt': 2,
+  'roads-hardscape': 2,
+  'terrain-ground': 3,
+  'land-ground': 3,
+  'land-island': 3,
+};
+function lateDraws(scene: THREE.Scene): void {
+  scene.traverse((o) => {
+    const r = LATE_DRAWS[o.name];
+    if (r !== undefined) o.renderOrder = r;
+  });
 }
 
 /**

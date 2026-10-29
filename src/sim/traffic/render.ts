@@ -103,7 +103,7 @@ export class VehicleRenderer {
       color: r.color,
     }));
     const atlas = makeAtlas(signs);
-    const { material, depth, detail } = createVehicleMaterial(ctx.uniforms, atlas);
+    const { material, far, depth, detail } = createVehicleMaterial(ctx.uniforms, atlas);
     this.detail = detail.value;
     const q = ctx.debug.params;
     this.detailOff = [q.has('nocarinterior'), q.has('nopanelgaps'), q.has('novehiclewear'), q.has('nocarpaint')];
@@ -119,7 +119,8 @@ export class VehicleRenderer {
         a2.setUsage(THREE.DynamicDrawUsage);
         geo.setAttribute('aInst', a1);
         geo.setAttribute('aInst2', a2);
-        const mesh = new THREE.InstancedMesh(geo, material, cap);
+        // LOD0 only: seated occupants (≤ 38 m) need the glass depth trick; ?vehfd=1 keeps it on every level (A/B)
+        const mesh = new THREE.InstancedMesh(geo, lod === 0 || q.has('vehfd') ? material : far, cap);
         mesh.name = `traffic-${kind}-lod${lod}`;
         mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
         mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(cap * 3), 3);
@@ -335,7 +336,8 @@ export class VehicleRenderer {
         this.sphere.radius += Math.min(MAX_SHADOW_REACH, sp.height * reach);
         draw = this.frustum.intersectsSphere(this.sphere);
       }
-      const L = draw ? this.slot(sp.modelIndex, d2) : null;
+      // a cabin with seated figures stays on LOD0 (the only level with the glass depth trick)
+      const L = draw ? this.slot(sp.modelIndex, V.seated ? 0 : d2) : null;
       if (L) {
         const idx = L.n++;
         this.eul.set(V.pitch, V.yaw, V.roll);

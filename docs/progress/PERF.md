@@ -45,6 +45,25 @@ harbor (POI) · platform = `-10,1.4,-146.3,6,60,8` (station platform, eye level)
   the big items or runtime uniform A/B with long samples; confirm every fix with perf.mjs A/B on frozen copies.
 
 
+### 2. Facade shader A/B (runtime uniforms, hideprof js: targets, 4 s samples, candidate c45a8c9)
+| drop when off (ms) | street 12 h (58.5) | market (62.3) | overview (76.5) |
+|---|---|---|---|
+| whole buildings-shell hidden | 18.6 | 13.4 | 12.3 |
+| uDetail = 0 (interiors, opposite-row reflections, frames…) | 11.6 | 2.9 | 5.5 |
+| uDetail = 0.4 (the 'low' tier) | 4.8 | 1.8 | 5.8 |
+| uWinRefl (bhOpp: the street mirrored per pane) | 3.7 | 1.9 | 0.3 |
+| uWinDepth (reveal / sill ray-trace) | 2.0 | 0 | 0.7 |
+| uGlassVar | 1.9 | 2.1 | 1.9 |
+| uWallRelief / uPlinth / uWear | 0.9 / 0 / ±3 noise | noise | noise |
+| traffic hidden (for the gl_FragDepth question) | 3.5 | 1.0 | 4.6 (its draws sum ≈ 2.5) |
+- Near detail is ALU-bound (skipping the branches removes it) → exact early-outs / LOD fades help, a register-light
+  far program would not be needed for that part.
+- At the market the shell costs 13.4 ms but its detail only 2.9: the rest is base wall shading of pixels that end up
+  hidden — the city-wide merged meshes all sit at the origin, tie in three's depth sort and draw in creation order
+  (facades / ground before the stalls, crowd, landmarks, vehicles in front of them) → fix 3 (draw order).
+- The window-depth / interior LOD thresholds are in window-bay pixels (reveal on below ~5 px per bay ≈ 1 km away at
+  1025 px), so the overview runs the near path almost everywhere.
+
 ---
 
 # Earlier round: render-performance pass

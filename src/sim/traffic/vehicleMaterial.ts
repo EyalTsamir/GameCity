@@ -490,73 +490,82 @@ vec3 thInterior( vec3 ro, vec3 rd, float style, float occupied, float ph ) {
 export function createVehicleMaterial(
   uniforms: GlobalUniforms,
   atlas: THREE.Texture,
-): { material: THREE.MeshPhysicalMaterial; depth: THREE.MeshDepthMaterial; detail: { value: THREE.Vector4 } } {
+): { material: THREE.MeshPhysicalMaterial; far: THREE.MeshPhysicalMaterial; depth: THREE.MeshDepthMaterial; detail: { value: THREE.Vector4 } } {
   const detail = { value: new THREE.Vector4(1, 1, 1, 0) };
   // ?novehglass: the vehicle glass without its G1 changes (clear pane, tint, bus floor clamp)
   const vehGlass = { value: typeof location !== 'undefined' && new URLSearchParams(location.search).has('novehglass') ? 0 : 1 };
-  const material = new THREE.MeshPhysicalMaterial({
-    color: 0xffffff,
-    vertexColors: true,
-    map: atlas,
-    roughness: 0.5,
-    metalness: 0.0,
-    clearcoat: 1,
-    clearcoatRoughness: 0.1,
-  });
-  material.name = 'traffic-vehicle';
-  material.onBeforeCompile = (shader) => {
-    shader.uniforms.uTime = uniforms.uTime;
-    shader.uniforms.uLights = uniforms.uLights;
-    shader.uniforms.uVehDetail = detail;
-    shader.uniforms.uVehGlass = vehGlass;
-    shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', `#include <common>\n${VERT_PARS}`)
-      .replace(
-        '#include <uv_vertex>',
-        // decal rows per variant; aMeta.z < 0: a per-vehicle cell of the number-plate grid (by the phase)
-        `#include <uv_vertex>\n#ifdef USE_MAP\n  if ( aMeta.z < -0.5 ) { float c = floor( aInst2.z * ${PLATE_CELLS.n * PLATE_CELLS.n}.0 ); vMapUv += vec2( mod( c, ${PLATE_CELLS.n}.0 ) * ${PLATE_CELLS.du.toFixed(6)}, -floor( c / ${PLATE_CELLS.n}.0 ) * ${PLATE_CELLS.dv.toFixed(6)} ); }\n  else vMapUv.y -= aMeta.z * aInst2.x;\n#endif`,
-      )
-      .replace('#include <color_vertex>', VERT_COLOR)
-      .replace('#include <beginnormal_vertex>', '#include <beginnormal_vertex>\nif ( aWheel.w > 0.5 ) objectNormal = thWheel( objectNormal );')
-      .replace('#include <begin_vertex>', `#include <begin_vertex>\n${VERT_BEGIN}`);
-    shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', `#include <common>\n${FRAG_PARS}`)
-      .replace('#include <color_fragment>', `#include <color_fragment>\n${FRAG_DETAIL}`)
-      .replace('#include <roughnessmap_fragment>', 'float roughnessFactor = clamp( roughness * vRough + thRoughAdd, 0.04, 1.0 );')
-      .replace('#include <normal_fragment_maps>', '#include <normal_fragment_maps>\nnormal = normalize( normal + thTiltN );')
-      .replace('#include <clearcoat_normal_fragment_begin>', '#include <clearcoat_normal_fragment_begin>\n#ifdef USE_CLEARCOAT\n  clearcoatNormal = normalize( clearcoatNormal + thTiltN );\n#endif')
-      .replace('#include <metalnessmap_fragment>', 'float metalnessFactor = max( vMetal, thMetal );')
-      .replace('#include <lights_physical_fragment>', '#include <lights_physical_fragment>\n{ float thK = mix( thBaseSpec, 1.0, thMetal * 2.0 ); material.specularColor *= thK; material.specularColorBlended *= thK; }\n#ifdef USE_CLEARCOAT\n  material.clearcoat = min( vCoat, 1.0 ) * thCoatK;\n  // body lacquer: a stronger Fresnel coat (F0 0.09) instead of a brighter reflection — the coat both adds the\n  // reflected street and takes the same share from the colour under it, so dark reflections show on white too\n  if ( vCoat > 1.5 && uVehDetail.w > 0.5 ) material.clearcoatF0 = vec3( 0.09 );\n#endif')
-      .replace(
-        '#include <lights_fragment_maps>',
-        `#include <lights_fragment_maps>
-#if defined( RE_IndirectSpecular )
-  { vec3 thRw = reflect( -geometryViewDir, geometryNormal ); thReflDet = clamp( 1.6 - length( fwidth( thRw ) ) * 9.0, 0.0, 1.0 ) * step( 0.5, uVehDetail.w ); }
-  #ifdef USE_CLEARCOAT
-    // body paint (vCoat > 1.5) gets the street at more contrast: a lacquered panel mirrors it clearly
-    clearcoatRadiance *= vGain * thStreetRefl( geometryViewDir, geometryClearcoatNormal, 0.0 ) * ( vCoat > 1.5 && uVehDetail.w > 0.5 ? 1.8 : 1.0 );
-    // G1: glass (gain 3.6) mirrors the street at about 60 %: at full gain the grey sky veil hid the cabin (smoked plastic)
-    if ( uVehGlass > 0.5 && vGain > 3.0 ) clearcoatRadiance *= 0.6;
-  #endif
-  if ( vMetal > 0.5 ) radiance *= vGain * thStreetRefl( geometryViewDir, geometryNormal, material.roughness * 0.3 );
-#endif`,
-      )
-      .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += vEmit.rgb * mix( vec3( 1.0 ), diffuseColor.rgb, vEmit.a ) * thCabinK + thGlassEmit;')
-      // cabins with real occupants: the glass takes the depth of the ray-traced cabin surface behind it (every other
-      // fragment keeps its own), so the seated figures (drawn by the pedestrians module) show through the windows
-      .replace(
-        '#include <dithering_fragment>',
-        `#include <dithering_fragment>
-gl_FragDepth = gl_FragCoord.z;
-if ( vSeated > 0.5 && thHitT > 0.0 ) {
-  vec3 thMv = -vViewPosition;
-  vec4 thCp = projectionMatrix * vec4( thMv * ( 1.0 + thHitT / length( thMv ) ), 1.0 );
-  gl_FragDepth = clamp( 0.5 * thCp.z / thCp.w + 0.5, 0.0, 1.0 );
-}`,
-      );
+  // two programs: the seated-cabin depth trick (gl_FragDepth turns early-z off for every fragment of the draw)
+  // only where real occupants can be seated — LOD0; the far levels use the same shader without it
+  const make = (seatDepth: boolean): THREE.MeshPhysicalMaterial => {
+    const material = new THREE.MeshPhysicalMaterial({
+      color: 0xffffff,
+      vertexColors: true,
+      map: atlas,
+      roughness: 0.5,
+      metalness: 0.0,
+      clearcoat: 1,
+      clearcoatRoughness: 0.1,
+    });
+    material.name = 'traffic-vehicle';
+    material.onBeforeCompile = (shader) => {
+      shader.uniforms.uTime = uniforms.uTime;
+      shader.uniforms.uLights = uniforms.uLights;
+      shader.uniforms.uVehDetail = detail;
+      shader.uniforms.uVehGlass = vehGlass;
+      shader.vertexShader = shader.vertexShader
+        .replace('#include <common>', `#include <common>\n${VERT_PARS}`)
+        .replace(
+          '#include <uv_vertex>',
+          // decal rows per variant; aMeta.z < 0: a per-vehicle cell of the number-plate grid (by the phase)
+          `#include <uv_vertex>\n#ifdef USE_MAP\n  if ( aMeta.z < -0.5 ) { float c = floor( aInst2.z * ${PLATE_CELLS.n * PLATE_CELLS.n}.0 ); vMapUv += vec2( mod( c, ${PLATE_CELLS.n}.0 ) * ${PLATE_CELLS.du.toFixed(6)}, -floor( c / ${PLATE_CELLS.n}.0 ) * ${PLATE_CELLS.dv.toFixed(6)} ); }\n  else vMapUv.y -= aMeta.z * aInst2.x;\n#endif`,
+        )
+        .replace('#include <color_vertex>', VERT_COLOR)
+        .replace('#include <beginnormal_vertex>', '#include <beginnormal_vertex>\nif ( aWheel.w > 0.5 ) objectNormal = thWheel( objectNormal );')
+        .replace('#include <begin_vertex>', `#include <begin_vertex>\n${VERT_BEGIN}`);
+      shader.fragmentShader = shader.fragmentShader
+        .replace('#include <common>', `#include <common>\n${FRAG_PARS}`)
+        .replace('#include <color_fragment>', `#include <color_fragment>\n${FRAG_DETAIL}`)
+        .replace('#include <roughnessmap_fragment>', 'float roughnessFactor = clamp( roughness * vRough + thRoughAdd, 0.04, 1.0 );')
+        .replace('#include <normal_fragment_maps>', '#include <normal_fragment_maps>\nnormal = normalize( normal + thTiltN );')
+        .replace('#include <clearcoat_normal_fragment_begin>', '#include <clearcoat_normal_fragment_begin>\n#ifdef USE_CLEARCOAT\n  clearcoatNormal = normalize( clearcoatNormal + thTiltN );\n#endif')
+        .replace('#include <metalnessmap_fragment>', 'float metalnessFactor = max( vMetal, thMetal );')
+        .replace('#include <lights_physical_fragment>', '#include <lights_physical_fragment>\n{ float thK = mix( thBaseSpec, 1.0, thMetal * 2.0 ); material.specularColor *= thK; material.specularColorBlended *= thK; }\n#ifdef USE_CLEARCOAT\n  material.clearcoat = min( vCoat, 1.0 ) * thCoatK;\n  // body lacquer: a stronger Fresnel coat (F0 0.09) instead of a brighter reflection — the coat both adds the\n  // reflected street and takes the same share from the colour under it, so dark reflections show on white too\n  if ( vCoat > 1.5 && uVehDetail.w > 0.5 ) material.clearcoatF0 = vec3( 0.09 );\n#endif')
+        .replace(
+          '#include <lights_fragment_maps>',
+          `#include <lights_fragment_maps>
+  #if defined( RE_IndirectSpecular )
+    { vec3 thRw = reflect( -geometryViewDir, geometryNormal ); thReflDet = clamp( 1.6 - length( fwidth( thRw ) ) * 9.0, 0.0, 1.0 ) * step( 0.5, uVehDetail.w ); }
+    #ifdef USE_CLEARCOAT
+      // body paint (vCoat > 1.5) gets the street at more contrast: a lacquered panel mirrors it clearly
+      clearcoatRadiance *= vGain * thStreetRefl( geometryViewDir, geometryClearcoatNormal, 0.0 ) * ( vCoat > 1.5 && uVehDetail.w > 0.5 ? 1.8 : 1.0 );
+      // G1: glass (gain 3.6) mirrors the street at about 60 %: at full gain the grey sky veil hid the cabin (smoked plastic)
+      if ( uVehGlass > 0.5 && vGain > 3.0 ) clearcoatRadiance *= 0.6;
+    #endif
+    if ( vMetal > 0.5 ) radiance *= vGain * thStreetRefl( geometryViewDir, geometryNormal, material.roughness * 0.3 );
+  #endif`,
+        )
+        .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += vEmit.rgb * mix( vec3( 1.0 ), diffuseColor.rgb, vEmit.a ) * thCabinK + thGlassEmit;')
+        // cabins with real occupants: the glass takes the depth of the ray-traced cabin surface behind it (every other
+        // fragment keeps its own), so the seated figures (drawn by the pedestrians module) show through the windows
+        .replace(
+          '#include <dithering_fragment>',
+          seatDepth
+            ? `#include <dithering_fragment>
+  gl_FragDepth = gl_FragCoord.z;
+  if ( vSeated > 0.5 && thHitT > 0.0 ) {
+    vec3 thMv = -vViewPosition;
+    vec4 thCp = projectionMatrix * vec4( thMv * ( 1.0 + thHitT / length( thMv ) ), 1.0 );
+    gl_FragDepth = clamp( 0.5 * thCp.z / thCp.w + 0.5, 0.0, 1.0 );
+  }`
+            : '#include <dithering_fragment>',
+        );
+    };
+    material.customProgramCacheKey = () => (seatDepth ? 'traffic-vehicle-v12' : 'traffic-vehicle-v12-nd');
+    patchLampMaterial(material); // night street-light map (night agent)
+    return material;
   };
-  material.customProgramCacheKey = () => 'traffic-vehicle-v12';
-  patchLampMaterial(material); // night street-light map (night agent)
+  const material = make(true);
+  const far = make(false);
 
   const depth = new THREE.MeshDepthMaterial();
   depth.name = 'traffic-vehicle-depth';
@@ -569,5 +578,5 @@ if ( vSeated > 0.5 && thHitT > 0.0 ) {
       .replace('#include <begin_vertex>', '#include <begin_vertex>\nif ( thHidden( aPart, aInst2.x, aInst2.z ) ) transformed = vec3( 0.0 );');
   };
   depth.customProgramCacheKey = () => 'traffic-vehicle-depth-v4';
-  return { material, depth, detail };
+  return { material, far, depth, detail };
 }

@@ -1547,7 +1547,8 @@ void bhWall(inout vec3 albedo, inout float rough, inout float metal, inout vec3 
   vec3 R = reflect(V, Np);
   vec3 env = bhEnv(R, y, seed, fR, lodC, nightF);
   // punched windows at street level mirror the street and the buildings across it (per pane, with parallax)
-  if (!curtain && !ribbon && uDetail > 0.5 && uWinRefl > 0.5) {
+  // (fq.x >= 0.25: the blend weight below is exactly 0 — skip the trace)
+  if (!curtain && !ribbon && uDetail > 0.5 && uWinRefl > 0.5 && fq.x < 0.25) {
     vec4 op = bhOpp(vWPos, R, N, Tu, seed, fq.x, nightF);
     env = mix(env, op.rgb, op.a * (1.0 - smoothstep(0.08, 0.25, fq.x)));
   }
