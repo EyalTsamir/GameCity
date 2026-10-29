@@ -58,6 +58,8 @@ export function landUniforms(globals: { uTime: { value: number }; uWind: { value
     cSlabSandWet: C('#c4af7e'),
     cBedB: C('#6b6a58'),
     uLandDbg: { value: 0 },
+    /** pasture texture (F3): 1 full, 0.5 colour only (?quality=low), 0 = original flat tone (?nopasture) */
+    uPasture: { value: typeof location === 'undefined' ? 1 : ((q) => (q.has('nopasture') ? 0 : q.get('quality') === 'low' ? 0.5 : 1))(new URLSearchParams(location.search)) },
     // per-plot field / meadow decisions (terrain.ts buildFieldMask); xf.z = 0 → mask off (per-pixel cover)
     tFieldMask: { value: null as THREE.Texture | null },
     /** groundcover's outermost (long-grass) blade ring fade (out0, out1, m from the camera) */
@@ -95,6 +97,7 @@ uniform vec3 cWheat, cStubble, cGreens, cSoil, cPasture, cHay, cPlough, cFallow,
 uniform vec3 cMeadow, cMeadowDry, cForestB, cForestC, cGap, cHedge, cTrack;
 uniform vec3 cSand, cWetSand, cRock, cRock2, cMud;
 uniform float uLandDbg;
+uniform float uPasture;
 uniform sampler2D tFieldMask;
 uniform vec2 uBladeFade;
 uniform vec4 uFieldXf;
@@ -321,6 +324,23 @@ vec3 landAlbedo() {
       fc = cPasture * (0.84 + 0.24 * nB.r * midF + 0.12 * pv);
       fc *= 1.0 - 0.1 * smoothstep(0.55, 0.75, nB.b) * midF;
       fc = mix(fc, fc * vec3(1.1, 1.05, 0.85), smoothstep(0.6, 0.8, nW.b) * 0.5);
+      if (uPasture > 0.25) {
+        // (F3, judge 2 #5 "flat lime plane") a grazed sward is not one green: less lime, greyer where it is eaten
+        // short and trodden, lusher by the damp hollows; buttercup / clover tints in patches; rank tussocks
+        // (dung pats the stock leave alone) as dark clumps up close, their mean tone far away
+        fc = mix(fc, meadow * (0.9 + 0.2 * pv), 0.3) * vec3(0.95, 0.97, 1.0);
+        float graze = smoothstep(0.35, 0.7, nB.g * 0.6 + nA.b * 0.4);
+        fc = mix(fc, fc * vec3(1.06, 1.04, 0.86), graze * 0.45);
+        fc = mix(fc, fc * vec3(0.86, 0.96, 0.92), (1.0 - graze) * 0.35);
+        fc = mix(fc, vec3(0.62, 0.55, 0.12), smoothstep(0.66, 0.82, nB.a) * smoothstep(0.4, 0.7, nW.g) * 0.12 * midF);
+        if (uPasture > 0.75) {
+          // (explicit LOD: implicit derivatives are undefined inside this per-field branch)
+          vec4 nT = textureLod(tLN, p.xz * (1.0 / 3.5), max(0.0, log2(fp * 256.0 / 3.5)));
+          float tusF = 1.0 - smoothstep(0.06, 0.3, fp);
+          float tus = smoothstep(0.62, 0.68, nT.g * 0.7 + nT.a * 0.3);
+          fc *= mix(0.955, 1.0 - 0.3 * tus + 0.06 * (nT.b - 0.5), tusF);
+        }
+      }
       float path = 1.0 - smoothstep(0.012, 0.012 + fp * 0.02 + 0.006, abs(nP.g - 0.5));
       // (a few worn paths, not a worm pattern of noise contours over the whole pasture)
       fc = mix(fc, mix(cTrack, fc, 0.35), path * 0.4 * smoothstep(0.58, 0.72, nW.r) * (1.0 - smoothstep(1.0, 4.0, fp)));

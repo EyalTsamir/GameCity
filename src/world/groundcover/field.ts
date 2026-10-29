@@ -304,7 +304,7 @@ vGcRough = 0.85;
         base *= 1.0 + clamp( tone, -0.5, 0.5 ) * 0.38 * kept;
         base *= mix( vec3( 1.0 ), vec3( 0.8, 0.88, 0.92 ), clamp( -tone - 0.52, 0.0, 1.0 ) );
         base *= ( 0.9 + 0.2 * cl.y ) * ( 0.92 + 0.16 * fract( rb.z * 21.7 ) );
-        base *= 1.0 + 0.16 * kept;
+        base *= 1.0 + 0.26 * kept;
         vec3 tip = gcTipColor( base, nA, len );
         float aoRoot = mix( mix( 0.66, 0.84, kept ), 0.46, smoothstep( 0.2, 0.6, len ) );
         // long grass has a dense low layer under the tall stems (no dark gaps at the base)

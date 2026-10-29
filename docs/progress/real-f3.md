@@ -1,6 +1,13 @@
 # F3 — Ground, track and rock (final fix round)
 
 ## Resume here
+* 2026-10-29 06:50 session 2 final: pasture done (lead-approved, landscape/shader.ts ck==3 only): less lime (30 %
+  toward the meadow tone, cooler), grazed ↔ lush patchwork, buttercup tint patches, rank tussocks (3.5 m noise,
+  explicit-LOD fetch, fade by footprint 6–30 cm → mean 0.955). Toggle ?nopasture; ?quality=low = colour only (URL
+  quality, not adaptive). Cost: one extra noise fetch on near pasture pixels (not measured; trivial). Golden m6:
+  overview 0.1 (pasture barely in that view — diffs are boats/water), harbor 1.5, others ≤ 0.3. Sheep 3 m judged.
+  Lawn blades +26 % brightness on mown lawns. Harness: the lead's pump-clip fix was applied locally (not
+  committed — it lands via the base branch).
 * 2026-10-29 06:10 session 2 WRAPPED (context cap; last: lawn blade upK +0.48 kept, judged at parklawn 3 m).
   Open: pasture (needs lead OK), lawn blades still a bit darker than the sward. Session 2 summary (all pushed): golden m5 after all changes: overview 0.0, downtown 0.3,
   oldtown 0.1, westbrook 0.3, harbor 1.1 (cliff faults, intended); console clean; downtown invariants {}.
@@ -99,7 +106,7 @@ staticMaterial.ts (track bed), src/world/terrain/**, src/world/groundcover/**, s
 * tokens.py: TOTAL weighted 3.9M, 195 calls, ctx median 177k / max 237k (system+brief 40 %).
 
 ## Next
-* Pasture (landscape/shader.ts ck==3, unowned) — asked the lead for permission (session 2); not touched.
+* Pasture: done; next lever = finer near grain between the tussocks (still smooth at 3 m).
 * Lawn: blades still read darker than the sward at 3 m in full sun (side-lit cards) — next lever is blade count on
   mown lawns (ring A 576/tile; cost) or a blade normal that follows the ground normal for short blades.
 * Ballast at 2 m still shows some cell outlines; stones are flat (no parallax) — acceptable from 3 m.
