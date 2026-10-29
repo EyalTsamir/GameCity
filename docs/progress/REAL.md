@@ -11,6 +11,10 @@ Overview must stay at least as impressive as now. Every feature: quality tiers +
 Lead session: session_01XuhAMczW3iK25AAWnf3qog, branch `claude/pensive-gates-bim12i`.
 
 ## Resume here (keep current)
+* 2026-10-29 12:10 UTC — ROUND CLOSED. G1 (glass/interiors), G2 (pavement/fountain/ballast), G3 (platform/board/
+  bikes/people/bark) merged. Final golden (shots/golden/final, real/final_golden_diff.png): overview 0.7, harbor 3.2,
+  oldtown 4.1, downtown 4.9, westbrook 6.0; console clean, invariants {}. Final report: docs/progress/REAL-REPORT.md
+  (Hebrew; changes, toggles, counted costs, open list). Watchdog trigger deleted, autocheckpoint stopped.
 * 2026-10-29 10:16 UTC — Bug hunter 3 merged (0 HIGH / 1 MED / 3 low; MED barn-roof moiré fixed by lead, sheet
   real/lead_barn_roof_fix.jpg; invariants {} at 11/21.5/6.5, soak clean, heap flat). Judge 3 merged (time-boxed:
   3 real / 29 almost / 0 not yet vs judge 2 4/25/3; top 10 in real-judge-3.md). LAST FIX ROUND (deadline 11:50 UTC,
