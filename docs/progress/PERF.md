@@ -183,6 +183,12 @@ Further: splitting / slimming the facade shader would cut boot further (not done
 The facade LOD option buys ≈ nothing (the cost is in near windows) → not recommended, kept only as a documented switch.
 The near crowd is per-pixel (a near figure is 1352 vertices, 58 % core body; ~50 figures in the market view).
 
+- `pednear=far` (near figures drawn with the far program — NOT shippable, near faces ≈ 20 px): market 50.3 → 45.4
+  ms, street 44.2 → 43.9 → the hair / face / fabric fragment detail of the near level is worth up to ~4.7 ms at the
+  market; a slimmer near program that keeps what reads at 16–44 m is the next crowd item.
+- Early-compile kick-off (4befe3b) first produced 237 programs (the fallback lights were still in the scene → every
+  early compile a throwaway variant) and no gain (40.4 s); 5a39100 compiles only with the real lights — re-measuring.
+
 ### 12. Garbage after the fixes (allocprof cand5, street, 12 h)
 1.48 → 1.02 MB of garbage per frame (−31 %; per second about the same, 27.5 → 24 MB/s, because frames are faster).
 Left: pose / crowd step paths (gaitPose, computePoseA, avoid, placeOnRail: V8 double boxing), three's
