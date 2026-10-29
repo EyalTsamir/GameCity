@@ -90,7 +90,7 @@ export class WalkSurface {
       const n = P.pts.length;
       const deck = P.kind === 'bridge' || P.kind === 'pier' || P.kind === 'boardwalk';
       const ys: number[] = [];
-      for (let k = 0; k < n; k++) ys.push(P.kind === 'bridge' && k > 0 && k < n - 1 ? P.y + 0.45 : P.y);
+      for (let k = 0; k < n; k++) ys.push(P.kind === 'bridge' && k > 0 && k < n - 1 ? P.y + 0.45 : (P.ys?.[k] ?? P.y));
       for (let k = 0; k < n - 1; k++) {
         const a = P.pts[k],
           b = P.pts[k + 1];
@@ -110,6 +110,8 @@ export class WalkSurface {
       }
     }
     for (const a of plan.areas) if (a.kind === 'boardwalk') this.slabs.push({ r: a.rect, y: 0.3, deck: true });
+    // balustrades / handrails of the places between buildings (core/places.ts); their stairs are terrain height
+    for (const w of plan.places?.walls ?? []) this.walls.push(w);
 
     // ── the station platform (sim/rail/station.ts): stairs in the middle, ramps at both ends, railings
     const st = plan.rail?.stations?.[0];

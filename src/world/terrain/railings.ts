@@ -18,7 +18,7 @@ const IRON = new THREE.Color('#2f4a3e');
 const IRON_HI = new THREE.Color('#3d5d4f');
 const LADDER = new THREE.Color('#3a3b38');
 
-export function createRailings(ladders: LadderSpot[], gaps: { x: number; half: number }[], lampGlobes: GeoBuilder): RailingResult {
+export function createRailings(ladders: LadderSpot[], gaps: { x: number; half: number }[], lampGlobes: GeoBuilder, extra?: (b: GeoBuilder) => void): RailingResult {
   const b = new GeoBuilder();
   const zR = RIVER.z0 - RIVER_WALL_T / 2; // centre of the north wall coping
   const y0 = 0.15 + 0.2; // coping top
@@ -97,6 +97,7 @@ export function createRailings(ladders: LadderSpot[], gaps: { x: number; half: n
       b.beam(ox - tx * 0.24, y, oz - tz * 0.24, ox + tx * 0.24, y, oz + tz * 0.24, 0.035, 0.035);
     }
   }
+  extra?.(b);
   const geo = b.build(true);
   const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.48, metalness: 0.35 });
   const mesh = new THREE.Mesh(geo, mat);

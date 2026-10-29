@@ -224,7 +224,7 @@ export function buildPedNetwork(plan: CityPlan, net: RoadNetwork, occ: Occupancy
     const ids: number[] = [];
     const n = P.pts.length;
     for (let k = 0; k < n; k++) {
-      let y = def.y;
+      let y = def.ys?.[k] ?? def.y;
       if (def.kind === 'bridge' && k > 0 && k < n - 1) y = def.y + 0.45;
       ids.push(getPathNode(P.pts[k], y));
     }

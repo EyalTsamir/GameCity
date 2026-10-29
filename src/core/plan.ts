@@ -21,6 +21,7 @@ import { Rng, hashString } from './rng';
 import { CORRIDOR_HALF, FURN_OFFSET, QUAY_X, RAIL_Z, RIVER, SLAB, WATER_LEVEL, XS, ZS, SIDEWALK_Y } from './constants';
 import { P2, Rect, Dir, rect, rectInset, rectContains, rectsOverlap, clamp, smoothstep, DIR_YAW } from './geom';
 import { DIORAMA } from './world';
+import { buildPlaces, type PlacesDef } from './places';
 
 // ───────────────────────────────────────────────────────────── types ──
 
@@ -349,6 +350,8 @@ export interface WalkPath {
   surface: 'gravel' | 'paving' | 'deck' | 'sand' | 'stone';
   /** walking surface height (bridges arch up to yMid in the middle) */
   y: number;
+  /** per-vertex walking heights (stairs, terraces — core/places.ts); overrides `y` */
+  ys?: number[];
   yMid?: number;
   /** should the ground renderer draw this path? (false when it lies on an already paved / decked area) */
   draw: boolean;
@@ -395,6 +398,8 @@ export interface CityPlan {
   rail: RailDef;
   water: WaterDef;
   pois: Poi[];
+  /** stairs, terraces, passages, the lower quay (core/places.ts) */
+  places: PlacesDef;
   /** ground height of the natural terrain (city zone = 0, hills > 0, water beds < 0). */
   heightAt(x: number, z: number): number;
   /** true where open water (sea, river, pond) covers the ground */
@@ -446,6 +451,7 @@ export function generatePlan(seed = 'tinyhaven'): CityPlan {
     rail: null as unknown as RailDef,
     water: null as unknown as WaterDef,
     pois: [],
+    places: null as unknown as PlacesDef,
     heightAt,
     isWater: (x, z) => isWaterAt(plan, x, z),
     districtAt: (x, z) => districtAt(plan, x, z),
@@ -461,6 +467,7 @@ export function generatePlan(seed = 'tinyhaven'): CityPlan {
   buildBusLines(plan);
   buildStreetSlots(plan, rng.fork('slots'));
   buildPois(plan);
+  plan.places = buildPlaces(plan);
   return plan;
 }
 
@@ -1980,6 +1987,7 @@ export function heightAt(x: number, z: number): number {
 }
 
 function isWaterAt(plan: CityPlan, x: number, z: number): boolean {
+  if (plan.places?.dry(x, z)) return false;
   if (heightAt(x, z) < WATER_LEVEL - 0.02) return true;
   for (const p of plan.water?.ponds ?? []) {
     const dx = (x - p.cx) / p.rx,
