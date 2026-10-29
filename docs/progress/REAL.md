@@ -11,6 +11,12 @@ Overview must stay at least as impressive as now. Every feature: quality tiers +
 Lead session: session_01XuhAMczW3iK25AAWnf3qog, branch `claude/pensive-gates-bim12i`.
 
 ## Resume here (keep current)
+* 2026-10-29 04:50 UTC — merged F4 s2 (print.ts printed newsstand/kiosk/phonebox, ?noprint; phonebox glass; poplar
+  clumps fixed) and F2 s2 (9ec2ae1: occupants.ts real seated drivers/passengers within 38 m, ?nooccupants; sheet
+  real/f2_s2_people.jpg). tsc OK, pushed. Golden f4 (before these two): overview 0.6, others 2–6 (facade edits).
+  F3b granted the pasture block of landscape/shader.ts (toggle + overview eye check). F2c
+  session_01XuhAMh8vfAev7DpzP7VknF (sail crew in new cockpit, tractor driver, train occupants, drum, bus windows,
+  cost). Open: e-moped boxes (traffic models, unowned), e-scooter.
 * 2026-10-29 04:00 UTC — F4 s1 merged (96a271a/6a14a9a: awnings sag, laundry folds+pegs (+1 draw), bunting, sailboat
   cabin/cockpit/rails/sail seams, tractor glass cab, forklift, aged props/quay/site, ?nonightmarket tarps, back yard
   fence/patio/shed/pots/toys; trees through buildings fixed; poplar clumps open; cloth 70k→113k tris, cost
