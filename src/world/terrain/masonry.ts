@@ -148,17 +148,20 @@ vec3 masonryColor(vec3 base) {
 #ifdef TH_FLATN
   if (kind > 2.5 && kind < 3.5 || kind > 5.5) {
     vec2 bq = kind > 5.5 ? cuv : uv;
+    // octaves sized so each is a real feature (0.2–0.75 m fractures, 4–14 cm chips), each faded by its own pixel
+    // footprint: a derivative bump finer than ~3 px turns into per-pixel speckle (session-1 version did)
+    float fp = max(length(dFdx(p)), length(dFdy(p)));
     vec4 b1 = texture2D(tNoise, bq * vec2(0.33, 0.47) + vMas.y * 1.7);
-    vec4 b2 = texture2D(tNoise, bq * vec2(1.21, 1.43) + 0.37);
-    vec4 b3 = texture2D(tNoise, bq * 3.9 + 0.71);
+    vec4 b2 = texture2D(tNoise, bq * vec2(0.9, 1.05) + 0.37);
+    vec4 b3 = texture2D(tNoise, bq * 0.35 + 0.71);
     float rg = 1.0 - abs(2.0 * b1.r - 1.0);
-    float rg2 = 1.0 - abs(2.0 * b2.a - 1.0);
-    float hb = 0.14 * rg * rg + 0.05 * rg2 * rg2 + 0.022 * b2.g + 0.008 * b3.b;
+    float rg2 = 1.0 - abs(2.0 * b2.g - 1.0);
+    float hb = 0.14 * rg * rg + (0.035 * rg2 * rg2 + 0.012 * b3.b) * (1.0 - smoothstep(0.006, 0.016, fp));
     // soften the facets: lean the flat normal toward the shared-vertex normal (rounded boulders, no flat triangles)
     vec3 sn = normalize(vMN);
     if (dot(sn, n) > 0.15) n = normalize(mix(n, sn, 0.7));
     vec3 dpx = dFdx(p), dpy = dFdy(p);
-    float fade = 1.0 - smoothstep(0.03, 0.1, max(length(dpx), length(dpy)));
+    float fade = 1.0 - smoothstep(0.03, 0.1, fp);
     vec3 r1 = cross(dpy, n), r2 = cross(n, dpx);
     float det = dot(dpx, r1);
     vec3 grad = sign(det) * (dFdx(hb) * r1 + dFdy(hb) * r2);

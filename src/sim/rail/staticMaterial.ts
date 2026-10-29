@@ -132,11 +132,22 @@ vec2 rlG = vec2(0.0);
     float g = rlHash(id + 3.1), g2 = rlHash(id + 8.9);
     vec3 st = vec3(0.98, 0.97, 0.95) * (0.62 + 0.62 * g);
     st *= g2 < 0.14 ? vec3(1.08, 0.94, 0.82) : (g2 > 0.9 ? vec3(0.9, 0.95, 1.04) : vec3(1.0));
-    float rim = smoothstep(0.02, 0.2, gap);
-    float top = 1.0 - smoothstep(0.1, 0.55, length(rel));
-    vec3 sc = st * mix(0.32, 1.0, rim) * (0.9 + 0.16 * top);
-    // rlG: round stone tops (points away from the stone centre), plus the slope into the voids
-    rlG = -rel * (1.4 * amp) * (bal ? 1.0 : 0.6);
+    // crushed (not cobbled) stone: 3–5 flat broken faces per stone (the offset from the centre quantised into
+    // sectors, each face its own slope and shade); stones touch in most places and leave dark voids only where a
+    // low-frequency "packing" noise opens them — no continuous grout network (it read as crazy paving)
+    float nf = 3.0 + floor(g2 * 2.99);
+    float sa = (atan(rel.y, rel.x) + 3.1416) / 6.2832 * nf + g * 7.0;
+    float sec = floor(sa);
+    float fa = (sec + 0.5 - g * 7.0) / nf * 6.2832 - 3.1416;
+    float fh = rlHash(id + sec * 1.37 + 2.3);
+    vec2 fdir = vec2(cos(fa), sin(fa));
+    float lr = length(rel);
+    float pack = rlNoise(wp * 4.1 + 2.7);
+    float voidD = mix(0.5, 0.1, smoothstep(0.3, 0.7, pack));
+    float rim = smoothstep(0.0, mix(0.07, 0.24, smoothstep(0.35, 0.75, pack)), gap);
+    vec3 sc = st * mix(voidD, 1.0, rim) * (0.66 + 0.5 * fh) * (0.92 + 0.16 * rlHash(floor(q * 5.0)));
+    // rlG: the face slope (a broken face tilts away from the stone's crown) + the fall into the voids
+    rlG = (-fdir * (0.5 + 0.9 * fh) * smoothstep(0.05, 0.3, lr) - rel * 0.5) * amp * (bal ? 1.1 : 0.6);
     float g3 = rlNoise(wp * 1.3), g4 = rlNoise(wp * 7.0 + 3.3);
     vec3 far = vec3(0.86) * (0.9 + 0.2 * g3);
     diffuseColor.rgb *= mix(far, sc, amp * 0.9) * (0.92 + 0.14 * g3) * (0.94 + 0.1 * g4);
