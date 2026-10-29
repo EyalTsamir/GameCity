@@ -68,6 +68,14 @@ session merges all three into `claude/pensive-gates-bim12i`. Brief: walk around 
   → "Looking at · building" card, Esc closes it and the walk goes on, station concourse → up the steps → feet 0.95 on
   the platform, V leaves (max camera step 0.7 m/frame, no inside frames), HUD button + Esc.
 * Found + fixed on the way: `#ui > *` (style.css) re-enabled pointer events on the overlay → it swallowed every click.
+* Perf A/B (uncapped, adaptive off, street view `5,1.5,-65,9,0,6` @12, 1536x820@1.25, interleaved ×2, one browser):
+  baseline 024d901 orbit 42.92 / 42.84 ms; this branch orbit 43.45 / 42.93 ms (same 229 draws / 3.69 M tris → noise);
+  this branch walking at the same spot 43.61 / 42.21 ms (avg 42.91 = baseline; 236 draws, FOV 66, lens idle → no DOF
+  pass). Camera module JS while walking 0.06–0.09 ms/frame (orbit 0.12–0.18). → no measurable cost.
+* Scenarios (scratch scen.mjs, real keys): pier deck 0.3 walked 48 m; harbour quay stops at x 135.6 (quay 136, water
+  beyond); off the west slab edge onto the landscape 40 m (feet follow it up to 0.7); beach stopped at the lifeguard
+  tower (solid r 1.5); footbridge climbs the arch (feet up to 1.9) but stopped at z 125.8 (south end) — under
+  investigation; park blocked by a trunk after 1.5 m → blocked steps now veer round round obstacles (44a809c).
 
 ## Next / open
 * (in progress) scenarios: footbridge arch, pier, beach to the waterline, harbour quay edge, park, off the slab.
