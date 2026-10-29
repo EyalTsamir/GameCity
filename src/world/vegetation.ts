@@ -1324,13 +1324,16 @@ export default function create(ctx: CityContext): CityModule {
     const rng = ctx.rng('veg-edge');
     const leaf = col('#4f6a33');
     for (const [z0, z1] of edge.hedges) {
-      // in 6–9 m pieces with their own height and a slight wander (no ruler-straight top)
+      // untrimmed: 4–7 m overlapping pieces, each its own height, width, tone and wander, a lumpy crown (wild)
       for (let a = z0; a < z1 - 0.3; ) {
-        const b = Math.min(z1, a + rng.range(6, 9));
-        const hgt = rng.range(1.75, 2.25);
-        const xa = edge.hedgeX + rng.range(-0.12, 0.12);
+        const b = Math.min(z1, a + rng.range(4, 7));
+        const hgt = rng.range(1.6, 2.5);
+        const xa = edge.hedgeX + rng.range(-0.2, 0.2);
+        const wd = rng.range(1.15, 1.6);
+        const lc = leaf.clone().multiplyScalar(rng.range(0.82, 1.12));
         selP(xa);
-        hedge(plantSink, pw, xa, a, xa, b, H(xa, a), rng.range(1.15, 1.4), hgt, leaf.clone().multiplyScalar(rng.range(0.85, 1.1)), rng.int(0, 1e6));
+        if (legacy) hedge(plantSink, pw, xa, a, xa, b, H(xa, a), wd, hgt, lc, rng.int(0, 1e6));
+        else NEW.hedge(plantSink, pw, xa, Math.max(z0, a - 0.35), xa, b, H(xa, a), wd, hgt, lc, rng.int(0, 1e6), H, 1);
         if (cardsOn)
           plants.push({ kind: 'hedge', x: xa, y: H(xa, a), z: (a + b) / 2, h: hgt, r: (b - a) / 2, seed: rng.int(0, 1e9), color: '#' + leaf.getHexString(), seg: [xa, a, xa, b, 1.25], noStems: noFenceDetail });
         hedgeLen += b - a;

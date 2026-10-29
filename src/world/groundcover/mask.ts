@@ -276,13 +276,18 @@ export function buildCoverMaps(ctx: CityContext): CoverMaps {
   // ── 4. pavement weeds: small spots along wall bases and kerbs, in tree pits and at pole feet
   const weed = R();
   const wr = ctx.rng('groundcover-weeds');
+  // clustered, not metered (audit: an even ~1 m rhythm of identical tufts along every frontage was the most repeated
+  // tell): a 10–20 m noise gates the chance (bare stretches, then a weedy patch with bigger clumps); `?noweedclump`
+  const clump = !ctx.debug.params.has('noweedclump');
   const weedLine = (ax: number, az: number, bx: number, bz: number, prob: number, rMin: number, rMax: number) => {
     const L = Math.hypot(bx - ax, bz - az);
     const n = Math.floor(L / 0.9);
     for (let i = 0; i < n; i++) {
-      if (wr.next() > prob) continue;
+      const u = (i + 0.5) / Math.max(1, n);
+      const c = clump ? smooth(0.38, 0.68, fbm((ax + (bx - ax) * u) * 0.07, (az + (bz - az) * u) * 0.07, 91)) : 0.5;
+      if (wr.next() > prob * (clump ? 0.1 + 2.1 * c : 1)) continue;
       const t = (i + wr.next()) / Math.max(1, n);
-      weed.disc(ax + (bx - ax) * t, az + (bz - az) * t, wr.range(rMin, rMax), 255, 'max');
+      weed.disc(ax + (bx - ax) * t, az + (bz - az) * t, wr.range(rMin, rMax) * (clump ? 0.75 + 0.6 * c : 1), 255, 'max');
     }
   };
   for (const seg of plan.roadSegments) {

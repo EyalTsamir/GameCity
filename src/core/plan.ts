@@ -347,7 +347,7 @@ export interface WalkPath {
   kind: WalkKind;
   pts: P2[];
   width: number;
-  surface: 'gravel' | 'paving' | 'deck' | 'sand' | 'stone';
+  surface: 'gravel' | 'paving' | 'deck' | 'sand' | 'stone' | 'track'; // track: a farm-lane wheel rut (shoulder gravel, grass creeping in)
   /** walking surface height (bridges arch up to yMid in the middle) */
   y: number;
   /** per-vertex walking heights (stairs, terraces — core/places.ts); overrides `y` */

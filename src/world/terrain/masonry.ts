@@ -110,6 +110,29 @@ vec3 th_ashlar(vec2 uv, float ch, vec3 base) {
   return mix(c, mMortar * (0.9 + 0.2 * bh), joint);
 }
 
+// granite setts (ashlar kind with a negative course: places-between old-town square): 13 cm rows of 17–23 cm stones
+// in running bond, domed tops (lighter crowns, darker shoulders), gritty dark joints, a few warm / blue stones.
+// Stones and joints fade to their mean tone once a stone is under ~4 px (no moire on the oblique view)
+vec3 th_setts(vec2 uv, vec3 base, float fw) {
+  float ch = 0.13;
+  float row = floor(uv.y / ch);
+  float rh = th_hash12(vec2(row, 3.7));
+  float bl = 0.17 + 0.06 * rh;
+  float uu = uv.x / bl + rh * 5.3;
+  float cid = floor(uu);
+  float fu = fract(uu), fv = fract(uv.y / ch);
+  float dmin = min(min(fu, 1.0 - fu) * bl, min(fv, 1.0 - fv) * ch);
+  float det = 1.0 - smoothstep(0.012, 0.035, fw);
+  float joint = 1.0 - smoothstep(0.007, 0.015 + fw, dmin);
+  float crown = smoothstep(0.0, 0.055, dmin);
+  float bh = th_hash12(vec2(cid, row));
+  float bh2 = th_hash12(vec2(cid + 7.1, row - 3.3));
+  vec3 c = base * (0.78 + 0.38 * bh) * (0.8 + 0.26 * crown);
+  c *= bh2 < 0.14 ? vec3(1.07, 0.98, 0.88) : (bh2 > 0.88 ? vec3(0.9, 0.95, 1.05) : vec3(1.0));
+  c = mix(c, base * 0.4, joint * 0.92);
+  return mix(base * 0.86, c, det);
+}
+
 vec3 mN = vec3(0.0, 1.0, 0.0);
 // bump-perturbed world normal for rock (cliff skin, boulders) — replaces the flat facet normal for lighting
 vec3 mNb = vec3(0.0);
@@ -145,6 +168,7 @@ vec3 masonryColor(vec3 base) {
   vec2 uv;
   if (abs(n.y) < 0.7) uv = vec2(dot(p.xz, normalize(vec2(-n.z, n.x))), p.y);
   else uv = vec2(dot(p.xz, vMas.zw), dot(p.xz, vec2(-vMas.w, vMas.z)));
+  float fwUV = max(fwidth(uv.x), fwidth(uv.y));
   // rock relief (F3): fractured, chipped surface on the cliff skin and boulders so a facet is never a flat plane.
   // Height in metres from ridged noise (sharp fracture creases) + two finer octaves; normal from its screen
   // derivatives (Mikkelsen's surface-gradient bump), faded out once a 0.3 m feature is under ~3 px.
@@ -187,7 +211,7 @@ vec3 masonryColor(vec3 base) {
     col *= 0.9 + 0.16 * nf.r;
     mRough = 0.86;
   } else if (kind < 1.5) {
-    col = th_ashlar(uv, vMas.y, base);
+    col = vMas.y < 0.0 ? th_setts(uv, base, fwUV) : th_ashlar(uv, vMas.y, base);
     col *= 0.93 + 0.12 * nf.g;
     mRough = 0.88;
   } else if (kind < 2.5) {

@@ -24,7 +24,7 @@ interface Cover {
   mat: number;
   variant: number;
   area?: Area;
-  /** rectangle the band layout / specials align to, and the bands [period, width, border, macro] */
+  /** rectangle the band layout / specials align to, and the bands [period, width, border, macro] (macro < 0: no slot drain) */
   rect?: Rect;
   bands?: [number, number, number, number];
 }
@@ -103,7 +103,7 @@ function coverForBlock(b: Block): Cover | null {
   switch (b.surface) {
     case 'paving':
       if (b.kind === 'oldtown' || b.kind === 'market') return { key: 'bsetts', mesh: 'H', mat: HM.setts, variant: 0, rect: b.rect, bands: [0, 0, 0, 0.06] };
-      return { key: 'bpave', mesh: 'H', mat: HM.plaza, variant: 2, rect: b.rect, bands: [10.5, 0.3, 0.5, 0.05] };
+      return { key: 'bpave', mesh: 'H', mat: HM.plaza, variant: 2, rect: b.rect, bands: [10.5, 0.3, 0.5, -0.05] };
     case 'concrete':
       return { key: 'byard', mesh: 'H', mat: HM.concrete, variant: 0, rect: b.rect, bands: [0, 0, 0, 0.06] };
     case 'asphalt':
@@ -479,7 +479,7 @@ export function buildCovers(ctx: CityContext, A: MeshBuilder, H: MeshBuilder): {
       sl.push({ x: c.x + mx * (half * scale + jl), z: c.z + mz * (half * scale + jl) });
       sr.push({ x: c.x - mx * (half * scale + jr), z: c.z - mz * (half * scale + jr) });
     }
-    surf(H, paved ? HM.pathPaved : HM.pathGravel, 0, 9, 0);
+    surf(H, paved ? HM.pathPaved : p.surface === 'track' ? HM.shoulder : HM.pathGravel, 0, 9, 0);
     for (let i = 0; i < N; i++) {
       left.push(H.v(sl[i].x, y, sl[i].z));
       right.push(H.v(sr[i].x, y, sr[i].z));

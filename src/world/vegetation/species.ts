@@ -1201,7 +1201,8 @@ export function bush(s: GeoSink, w: Wind, x: number, y: number, z: number, r: nu
  * Clipped hedge along a→b (ground level y): crisp clipped faces (sides, bevels, flat top) with
  * leafy relief from the shader, a dark foot and a fresh, lighter top.
  */
-export function hedge(s: GeoSink, w: Wind, ax: number, az: number, bx: number, bz: number, y: number, width: number, height: number, leaf: THREE.Color, seed: number, yAt?: (x: number, z: number) => number): void {
+/** `wild` 0..1: an untrimmed field hedgerow (lumpy crown rising and falling by up to ±0.45 m, sides bulging) */
+export function hedge(s: GeoSink, w: Wind, ax: number, az: number, bx: number, bz: number, y: number, width: number, height: number, leaf: THREE.Color, seed: number, yAt?: (x: number, z: number) => number, wild = 0): void {
   const L = Math.hypot(bx - ax, bz - az);
   if (L < 0.3) return;
   const ux = (bx - ax) / L,
@@ -1246,8 +1247,8 @@ export function hedge(s: GeoSink, w: Wind, ax: number, az: number, bx: number, b
     w.az = cz;
     w.ay = gy;
     // per-ring leafy bulge (shared by every face so edges stay closed)
-    const bulge = 0.05 * Math.sin(cx * 3.7 + cz * 2.9 + ph) + 0.03 * Math.sin(cx * 9.1 - cz * 8.3 + ph * 2.1);
-    const topB = 0.05 * Math.sin(cx * 4.3 - cz * 3.1 + ph * 0.7) + 0.025 * Math.sin(cx * 11.3 + cz * 10.1);
+    const bulge = (0.05 * Math.sin(cx * 3.7 + cz * 2.9 + ph) + 0.03 * Math.sin(cx * 9.1 - cz * 8.3 + ph * 2.1)) * (1 + 2 * wild) + wild * 0.14 * Math.sin(cx * 1.1 + cz * 1.3 + ph * 1.7);
+    const topB = (0.05 * Math.sin(cx * 4.3 - cz * 3.1 + ph * 0.7) + 0.025 * Math.sin(cx * 11.3 + cz * 10.1)) * (1 + 2 * wild) + wild * (0.28 * Math.sin(cx * 0.83 + cz * 0.91 + ph) + 0.14 * Math.sin(cx * 2.3 - cz * 1.9 + ph * 1.3));
     const mott = 0.92 + 0.1 * Math.sin(cx * 2.3 + cz * 1.9 + ph) + 0.06 * Math.sin(cx * 7.1 - cz * 5.3);
     for (const face of faces) {
       for (let pi = 0; pi < face.pts.length; pi++) {

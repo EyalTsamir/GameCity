@@ -191,9 +191,9 @@ function buildModel(plan: CityPlan): TerrainModel {
     const back = ramp - lz;
     const wt = wallTop(p, Math.min(ax, reach), side) - 0.05;
     let R = wt + 0.075 * back;
-    // where the hill rises steeply right behind the coping (the ridge foot), a bank ramps up to meet it (~1:1.1)
+    // where the hill rises steeply right behind the coping (the ridge foot), a bank ramps up to meet it (~1:1.7: any steeper and the ground shader paints it as rock)
     // instead of a flat shelf ending in a bare step — never above the natural slope 1.6 m further in
-    if (HOODS) R = Math.max(R, Math.min(wt + 0.9 * back, natAtLocal(p, lx, lz - 1.6)));
+    if (HOODS) R = Math.max(R, Math.min(wt + 0.6 * back, natAtLocal(p, lx, lz - 1.6)));
     let w = 1 - smoothstep(reach, reach + 3.5, ax);
     // only the first metres behind the facade are lifted (enough to bury the parapet);
     // further back the natural hill takes over (and never spills over the east cliff)

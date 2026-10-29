@@ -884,14 +884,14 @@ function buildEdge(plan: CityPlan, walls: Rect[]): EdgePlace | null {
   // (the branch points are vertices of A: pedNetwork's end-on-segment split ignores the outer 1 % of a segment)
   const pa: P2[] = [{ x: ruts[0], z: z0 + 0.9 }, { x: ruts[0], z: z0 + 2.6 }, { x: ruts[0], z: z1 - 1.6 }, { x: ruts[0], z: z1 - 1.2 }];
   if (prom) pa.push({ x: prom.pts[0].x, z: prom.pts[0].z });
-  addPath(plan, { kind: 'promenade', pts: pa, ys: pa.map(() => 0.02), width: 0.8, surface: 'gravel', draw: true });
+  addPath(plan, { kind: 'promenade', pts: pa, ys: pa.map(() => 0.02), width: 0.8, surface: 'track', draw: true });
   const pb: P2[] = [
     { x: ruts[0], z: z0 + 2.6 },
     { x: ruts[1], z: z0 + 4.2 },
     { x: ruts[1], z: z1 - 3.2 },
     { x: ruts[0], z: z1 - 1.6 },
   ];
-  addPath(plan, { kind: 'promenade', pts: pb, ys: pb.map(() => 0.02), width: 0.8, surface: 'gravel', draw: true });
+  addPath(plan, { kind: 'promenade', pts: pb, ys: pb.map(() => 0.02), width: 0.8, surface: 'track', draw: true });
   // hedgerow runs with two field-gate gaps and a stile gap
   const gz = [blk.rect.z0 + (blk.rect.z1 - blk.rect.z0) * 0.27, blk.rect.z0 + (blk.rect.z1 - blk.rect.z0) * 0.68];
   const sz = blk.rect.z0 + (blk.rect.z1 - blk.rect.z0) * 0.5;

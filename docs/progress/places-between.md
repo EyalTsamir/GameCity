@@ -81,6 +81,16 @@ a few boxes + glow sprites.
 
 ## Log
 
+- 2026-10-30 — round 2 item 6 + audit fixes (usage limit hit here; shots `shots/r2/p7`, validate [] clean):
+  colonnade line = the plaza slot drain on block paving (rddbg A/B `shots/r2/p6`) → block paving opts out (negative
+  macro), the plaza drain is a frame + one continuous slot (roads/glsl.ts, covers.ts); ballast voids thinner
+  (rail/staticMaterial.ts); old-town square/passage floor = granite setts (masonry ashlar with negative course) with a
+  flag gutter on the archway axis + flag bands at the wall feet (detail tier); pavement weeds clustered by noise
+  (`?noweedclump`); west hedgerow untrimmed (`hedge(..., wild)`), lane ruts = `track` surface (shoulder gravel);
+  portal bank eased to 1:1.7 (was painted as rock). NOT yet viewed: p7 lane/edge/portal/arcade10/ballast/ridge
+  shots. Left: review those, audit items 1 (cliff seams — compare ridge vs ridge_off) and 4/8/9, perf A/B,
+  hitch.mjs (coordinator: 0 mid-run compiles), ui-test walk, build.
+
 - 2026-10-30 — round 2 items 3–5 (+ cliff ledges of 6). Portals: `inPortalMouth` takes the triangle's lowest y (ground
   triangles on the headwall top are no longer dropped with the mouth slab), the shelf behind the coping ramps up to the
   hillside (height.ts), groundcover keeps its no-grass rect only to the portal face, scrub/fern/birch hood (rng

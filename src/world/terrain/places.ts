@@ -260,13 +260,51 @@ function balustrade(b: GeoBuilder, ax: number, az: number, bx: number, bz: numbe
   }
 }
 
+/** old-town square setts (granite, a little darker than the flags) and the gutter flags */
+const SETT = C('#a39d93');
+const GUTTER = C('#9a9284');
+
+/**
+ * Square + passage floor (detail tier): granite setts (masonry ashlar with a negative course) with a flagstone gutter
+ * on the archway axis (two rows of long flags) and a flag band along both facades and the retaining-wall foot.
+ */
+function squareFloor(b: GeoBuilder, P: LanePlace): void {
+  const S = P.square,
+    A = P.passage,
+    y = P.squareY;
+  const cx = (A.x0 + A.x1) / 2;
+  const band = 0.45,
+    gw = 0.32;
+  const floor = (xs: number[], zs: number[], kindOf: (i: number, j: number) => 'sett' | 'band' | 'gutter'): void => {
+    for (let i = 0; i < xs.length - 1; i++)
+      for (let j = 0; j < zs.length - 1; j++) {
+        if (xs[i + 1] - xs[i] < 0.02 || zs[j + 1] - zs[j] < 0.02) continue;
+        const k = kindOf(i, j);
+        if (k === 'sett') b.color(SETT).set('aMas', KIND.ashlar, -1, 1, 0);
+        else if (k === 'gutter') b.color(GUTTER).set('aMas', KIND.ashlar, gw, 0, 1);
+        else b.color(COL.paving).set('aMas', KIND.ashlar, band, j === 0 && i > 0 && i < xs.length - 2 ? 1 : 0, j === 0 && i > 0 && i < xs.length - 2 ? 0 : 1);
+        top(b, { x0: xs[i], x1: xs[i + 1], z0: zs[j], z1: zs[j + 1] }, y);
+      }
+  };
+  const g0 = Math.max(S.x0 + band, cx - gw),
+    g1 = Math.min(S.x1 - band, cx + gw);
+  const sx = [S.x0, S.x0 + band, g0, g1, S.x1 - band, S.x1];
+  floor(sx, [S.z0, S.z0 + band, S.z1], (i, j) => (i === 0 || i === sx.length - 2 || j === 0 ? 'band' : i === 2 ? 'gutter' : 'sett'));
+  // the passage: setts wall to wall, the gutter running through to the street
+  const px = [A.x0, Math.max(A.x0, cx - gw), Math.min(A.x1, cx + gw), A.x1];
+  floor(px, [A.z0, A.z1], (i) => (i === 1 ? 'gutter' : 'sett'));
+}
+
 function laneStone(b: GeoBuilder, P: LanePlace, hi: boolean, lights: GlowPoint[]): void {
   const s = P.stair;
   // square + archway floor: paving flush with the sidewalk
-  b.color(COL.paving).set('aMas', KIND.ashlar, 0.45, 1, 0);
-  top(b, P.square, P.squareY);
-  b.set('aMas', KIND.ashlar, 0.45, 0, 1);
-  top(b, P.passage, P.squareY);
+  if (hi) squareFloor(b, P);
+  else {
+    b.color(COL.paving).set('aMas', KIND.ashlar, 0.45, 1, 0);
+    top(b, P.square, P.squareY);
+    b.set('aMas', KIND.ashlar, 0.45, 0, 1);
+    top(b, P.passage, P.squareY);
+  }
   // terrace top: gravel with paved walks (0.5 m cells merged into runs along x)
   const T = P.terrace;
   const tz = (T.z0 + P.wallZ) / 2 - 0.5;
