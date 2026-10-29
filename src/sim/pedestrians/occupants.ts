@@ -217,6 +217,8 @@ export class Occupants {
         if (z < zr + 0.5) break;
         for (const e of [1, -1]) {
           if (!rng.chance(busy)) continue;
+          // nobody sits in the kerb-side (−X) doorways (traffic/models.ts bus doors at z 0.25 / 4.35, 1.16 m wide)
+          if (e < 0 && (Math.abs(z + 0.17 - 0.25) < 0.75 || Math.abs(z + 0.17 - 4.35) < 0.75)) continue;
           // window or aisle place of the double seat
           const x = e * (rng.chance(0.6) ? hw * 0.62 : 0.52);
           this.add(o, V, rng, x, z + 0.17, sit(cy, z + 0.17, belt - 1.0), false);

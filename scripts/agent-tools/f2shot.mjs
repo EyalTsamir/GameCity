@@ -83,10 +83,12 @@ try {
     await pump(PUMP);
     const file = path.join(out, String(report.caps.length).padStart(2, '0') + '_' + spec.replace(/:/g, '_') + '.png');
     await page.screenshot({ path: file, timeout: 240000 });
-    report.caps.push({ spec, file, ...res });
+    const st = await page.evaluate(() => { const s = window.__city.stats(); const m = s.modules ?? s; const p = m.pedestrians ?? {}; return { calls: s.drawCalls ?? m.drawCalls, tris: s.triangles ?? m.triangles, occ: p.occupants, act: p.actors, close: p.closeLod, near: p.nearLod, fTris: p.figureTris, sVerts: p.shadowVerts }; }).catch(() => null);
+    report.caps.push({ spec, file, ...res, st });
+    console.log('stats', JSON.stringify(st));
     console.log('shot', spec, ((Date.now() - t0) / 1000).toFixed(0), 's');
   }
-  report.stats = await page.evaluate(() => window.__city.stats().modules?.pedestrians ?? null).catch(() => null);
+  report.stats = await page.evaluate(() => { const s = window.__city.stats(); const m = s.modules ?? s; return { drawCalls: s.drawCalls ?? m.drawCalls, triangles: s.triangles ?? m.triangles, pedestrians: m.pedestrians ?? null }; }).catch(() => null);
   report.invariants = await page.evaluate(() => window.__city.invariants()).catch((e) => String(e));
 } finally {
   await browser.close();

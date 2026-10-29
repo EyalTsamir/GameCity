@@ -3,6 +3,17 @@
 Branch `claude/real-f2-people` (from `claude/pensive-gates-bim12i` e1c9780). Brief: real-briefs.md "F2".
 
 ## Resume here
+* 2026-10-29 SESSION 3 ENDED (context rule). Pushed. Typecheck clean; console clean in every f2shot run;
+  invariants {} except one shot-placement "camera below terrain" (s3i car:1 — the capture, not code).
+  ALL s3 TASKS DONE + JUDGED: sail crew in F4 cockpit, tractor driver, train occupants, band drum + uniforms,
+  bus black side windows (F2's own bug, fixed), swing kid hands, cost note (Toggles section). Also: no bus
+  passengers in the kerb doorways (s3i showed one), door glazing shows the saloon (s3i).
+  NEXT: (1) bus: the far-side wheels show through the saloon floor area at low angles (no wheel-arch boxes in
+  the ray-traced interior — W2's thInterior; add arch boxes at axF/axR or note to W2); (2) band instruments at
+  3 m are crude torus/cone/rod (landmarks/park.ts: tuba bell floats) — real horns if wanted; (3) sail helm hands
+  on the knees, not the tiller (the tiller sits ~at the feet: F4 cockpit sole is at deck level); (4) perf.mjs
+  ;nooccupants at eye level on the real GPU (gl_FragDepth → no early-z on vehicle + train materials); (5)
+  judge-2 walker notes (lockstep groups, flat clothes).
 * 2026-10-29 SESSION 3 (session_01XuhAMh8vfAev7DpzP7VknF) STARTED: merged origin/claude/pensive-gates-bim12i (b713343).
   Tasks: sail crew into F4 cockpit + tractor driver; train occupants; band drum detail; bus black side windows;
   re-judge swing/see-saw hands; cost note ;nooccupants/;noactors.
@@ -13,6 +24,17 @@ Branch `claude/real-f2-people` (from `claude/pensive-gates-bim12i` e1c9780). Bri
   syncTrains/seatCar: back-to-back on the k·1.9 seat-back planes, x ±0.62/±1.06, skip doors; car.seated →
   aInst2.y = 2; trainMaterial: heads skipped, trHitT → gl_FragDepth, cache key v8). f2shot: kinds train /
   tractor, spec `waittrain`.
+  LATER s3: train occupants JUDGED (s3b/s3c: seated passengers through the saloon windows; not dimmed — the saloon
+  is daylit; density 0.2 by day, 0.28 rush); band: cool wardrobe forced (no shorts / skirts / short sleeves);
+  swing kid re-judged 3 m: hands on the chains GOOD (s3b).
+  BUS BLACK SIDE WINDOWS = F2's bug (not pre-existing: ?nooccupants s3e shows the interior): seated glass pushes
+  its depth into the cabin and (1) the full black seal pane 5 mm behind each flank pane, (2) the lofted body's
+  solid flank behind the panes, (3) the dark door-leaf backing plane then won the depth test. Fixed: seal =
+  roundPane ring (`hole` arg; also the 2 other seal-backed roundPane models), bus rear seal = 4 strips, door leaf
+  backing = 6 strips; bus body gets detail class 6 (window band spans + door centres) and vehicleMaterial pushes
+  that band's depth behind the cabin when seated (glass test now `cls 4..5`; CABIN skips c 6; cache key v12);
+  bus saloon glass emission 0.32 → 0.7 (cls 4). JUDGED s3g: bus side / front-¾ / kerb side show driver +
+  passengers through every flank window. Door glazing re-check: s3i.
 * 2026-10-29 ~05:00 UTC — SESSION 2 ENDED (tokens.py ctxMax 264k > rule). Pushed. Typecheck clean; console
   clean and invariants {} in every f2shot run (q2–q4 reports).
   DONE s2: vehicle occupants for cars / vans / lorries / buses (`?nooccupants`, see "Vehicle occupants");
@@ -116,6 +138,14 @@ Branch `claude/real-f2-people` (from `claude/pensive-gates-bim12i` e1c9780). Bri
 ## Tried and rejected (why)
 
 ## Toggles / tiers / costs
+* COST (s3, SwiftShader container: ms meaningless, counts only). Draw calls: none added by either (figures are
+  instances of the crowd renderer's existing LOD meshes). Downtown overview (190 m): base 185 calls / 4.233 M tris;
+  ;nooccupants 185 / 4.232 M (0 occupants beyond 38 m); ;noactors 185 / 4.237 M (box people cost slightly MORE
+  tris than the 54 actors at pin / tiny LOD). Eye level beside a bus (s3g vs s3h ;nooccupants, same view): 200 = 200 calls,
+  4.471 M vs 4.446 M tris (+25 k, +0.55 %): 12 occupants, near-LOD figures 11 vs 2, figure tris 63.7 k vs 43.2 k
+  (≈ 2.3 k per near figure), shadow verts 8.1 k vs 5.5 k. gl_FragDepth on the
+  vehicle + train materials disables early-z for those meshes: measure on the target with perf.mjs
+  `--variants ";nooccupants"` at downtown eye level (not feasible here).
 * `?nooccupants` — no real vehicle occupants (the glass shader's ray-traced ones everywhere). Cost not measured
   (≤ 64 extra figures, only within 38 m; gl_FragDepth disables early-z on the vehicle material — measure).
 * `?noactors` — the old box figures (person() / figure() build their boxes again) and no Actors class at all
