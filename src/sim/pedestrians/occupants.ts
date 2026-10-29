@@ -89,8 +89,8 @@ export class Occupants {
         m.yaw = V.yaw;
         m.lean = 0;
         m.pedal = 0;
-        // the driver's hands stay on the wheel; nobody walks
-        m.stopped = true;
+        // (stopped = a rider's foot down on the road: never in a cabin)
+        m.stopped = false;
         m.speed = 0;
         m.vx = 0;
         m.vz = 0;

@@ -363,6 +363,8 @@ void thSeat( vec3 ro, vec3 rd, vec3 ird, float cx, float hw, float z, float cy, 
 }
 // distance along the view ray (object frame) from the pane to the cabin surface seen through it, −1 = none
 float thHitT = -1.0;
+// (three sets it on every program; the fragment stage only has to declare it: the glass depth below)
+uniform mat4 projectionMatrix;
 // what is seen through a window: the cabin, ray-traced in the object frame (seats, dash, steering wheel, a driver)
 vec3 thInterior( vec3 ro, vec3 rd, float style, float occupied, float ph ) {
   float hw = vDetA.x, belt = vDetA.y, roof = vDetA.z, zd = vDetA.w, zr = vDetB.x, fz = vDetB.y, rz = vDetB.z;

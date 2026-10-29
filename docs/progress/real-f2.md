@@ -3,6 +3,17 @@
 Branch `claude/real-f2-people` (from `claude/pensive-gates-bim12i` e1c9780). Brief: real-briefs.md "F2".
 
 ## Resume here
+* 2026-10-29 ~03:25 UTC — SESSION 2 (session_01XuhAMgh2gQQLc7zRmcxRjR). 57286e8: vehicle occupants coded
+  (pedestrians/occupants.ts, `?nooccupants`; traffic Vehicle.occupants/seated, render aInst2.w = 2 when seated,
+  vehicleMaterial: vSeated skips shader occupants + glass writes gl_FragDepth of the traced cabin hit; models.ts
+  `CABIN[kind]` = the glass Det recorded at build). bench.mjs: `actor-<role>` classes (window.__actors = ACTORS).
+  Paths here: /home/user/gamecity (lowercase).
+  JUDGED s2 (shots/f2/b1, b2): site worker stooped at the brick pallet (10 m) OK; swing kid 3 m OK but hands
+  in front of the chest → fixed (02c8010: swing hands on the chains, see-saw on the handle bar); market 8 m
+  (shopper at the cheese counter, queue, browsers) GOOD; fish quay 3/8 m (creel stacker, box sorter, crabber
+  crew) GOOD. Several bench captures came out as a flat colour (camera inside something / 1st capture) —
+  bench.mjs costs ~3 min per capture here (5 renders each) and the 25-min background limit killed b2.
+  → scripts/agent-tools/f2shot.mjs: lean one-load captures (960×540, no LOS search) for car/bus/boat/actor.
 * 2026-10-29 ~03:10 UTC — session 1 ENDED at the context rule (tokens.py ctxMax > 170k; get_session reads 0).
   Pushed. Code done (below) and typechecks; console clean in every run (0 errors / warnings / frame errors).
   JUDGED ONLY ONE VIEW: shots/f2/a2/quay_11.png — a real figure in oilskins working at the creel stack (was
