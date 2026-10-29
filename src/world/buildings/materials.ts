@@ -147,6 +147,7 @@ export interface BuildingMaterials {
     uGlassVar: { value: number };
     /** near-LOD sill geometry: (centre of its range, range m); the shader drops its own sill box inside */
     uGeoWin: { value: THREE.Vector4 };
+    uDetailPx: { value: THREE.Vector2 };
   };
 }
 
@@ -314,6 +315,8 @@ uniform float uWinRefl;
 uniform float uWallRelief;
 uniform float uPlinth;
 uniform float uGlassVar;
+// near-window detail fades to the far average between these cell sizes (cells per pixel: 0.3 = 3.3 px per bay)
+uniform vec2 uDetailPx;
 uniform vec4 uGeoWin;
 // world-space normal override from bhWall (window reveals, sills, wall relief); zero = keep the geometric normal
 vec3 bhNW = vec3(0.0);
@@ -1418,7 +1421,7 @@ void bhWall(inout vec3 albedo, inout float rough, inout float metal, inout vec3 
   }
   if (curtain) edge = 1.0; // the whole cell is glazing (vision + spandrel glass)
   // level of detail: cells smaller than a few pixels fade to an average look
-  float geoDetail = 1.0 - smoothstep(0.3, 0.8, px);
+  float geoDetail = 1.0 - smoothstep(uDetailPx.x, uDetailPx.y, px);
   float detail = geoDetail * uDetail;
   float winFrac = curtain ? 1.0 : clamp((4.0 * wh.x * wh.y) / max(csz.x * csz.y, 1e-3), 0.0, 1.0);
   float nightF = clamp(uLights * (0.42 + 0.58 * uNight), 0.0, 1.0);
@@ -2290,6 +2293,7 @@ export function createMaterials(g: GlobalUniforms, opts: { legacy?: boolean; wea
     uPlinth: { value: opts.plinth === false ? 0 : 1 },
     uGlassVar: { value: opts.glassVar === false ? 0 : 1 },
     uGeoWin: { value: new THREE.Vector4(0, -1e5, 0, 0) },
+    uDetailPx: { value: new THREE.Vector2(0.3, 0.8) },
   };
   const frameCols = { value: FRAME_COLS.map((c) => new THREE.Color(c)) };
   const glassCols = { value: GLASS_COLS.map((c) => new THREE.Color(c)) };
@@ -2329,6 +2333,7 @@ export function createMaterials(g: GlobalUniforms, opts: { legacy?: boolean; wea
         uPlinth: uniforms.uPlinth,
         uGlassVar: uniforms.uGlassVar,
         uGeoWin: uniforms.uGeoWin,
+        uDetailPx: uniforms.uDetailPx,
         uSunDir: g.uSunDir,
         ...lampUniforms(),
       });
