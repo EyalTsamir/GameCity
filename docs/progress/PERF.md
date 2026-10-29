@@ -189,6 +189,10 @@ The near crowd is per-pixel (a near figure is 1352 vertices, 58 % core body; ~50
 - Early-compile kick-off (4befe3b) first produced 237 programs (the fallback lights were still in the scene → every
   early compile a throwaway variant) and no gain (40.4 s); 5a39100 compiles only with the real lights — re-measuring.
 
+- 5a39100 measured (copy :5182): first frame 26.2 s (bootprobe) / 27.6 s (hitch), warm-up waits 12.2 s, 138
+  programs, compileprobe: the facade program starts at 4.9 s and takes 20 s, total compile work 183 s (was 989 s
+  with everything queued at once); hitch: 0 compiles, console clean, invariants {}.
+
 ### 12. Garbage after the fixes (allocprof cand5, street, 12 h)
 1.48 → 1.02 MB of garbage per frame (−31 %; per second about the same, 27.5 → 24 MB/s, because frames are faster).
 Left: pose / crowd step paths (gaitPose, computePoseA, avoid, placeOnRail: V8 double boxing), three's
