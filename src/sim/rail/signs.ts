@@ -46,7 +46,9 @@ export function createSigns(globals: GlobalUniforms, slots: SignSlot[], stationN
   const cv = document.createElement('canvas');
   cv.width = W;
   cv.height = H;
-  const g = cv.getContext('2d')!;
+  // a CPU-backed canvas: the board text changes every game minute, and copying a GPU canvas into the sRGB texture
+  // took Chrome's slow path (read back + re-upload: a 30–60 ms frame at every refresh, ~3 ms/frame on average)
+  const g = cv.getContext('2d', { willReadFrequently: true })!;
   g.fillStyle = '#000';
   g.fillRect(0, 0, W, H);
 

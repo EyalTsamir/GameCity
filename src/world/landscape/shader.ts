@@ -527,7 +527,8 @@ vec3 landAlbedo() {
 
   // ── river banks: a narrow strip of mud at the waterline, reed beds in patches, then lush bank grass
   // (the meadow's own colour and variation, greener) — never a bare tan band
-  {
+  // (exact early-outs here and for the dunes / rock below: a block whose mix weight is 0 is skipped)
+  if (wet != 0.0) {
     float hy = p.y - ${WL.toFixed(2)};
     vec3 bankG = meadow * vec3(0.84, 0.98, 0.8) * (0.9 + 0.2 * nB.g);
     vec3 bc = mix(cMud * (0.85 + 0.25 * nB.b), bankG, smoothstep(0.1, 0.45, hy + 0.2 * (nB.g - 0.5)));
@@ -580,6 +581,15 @@ vec3 landAlbedo() {
   // (the noise moves the marram / bare-sand boundary only: the cover weight against the fields stays
   // smooth, else the field colours show through the dunes in blotches)
   float sN = (nA.b - 0.5) * 1.1 + (nB.g - 0.5) * 0.7 + (texture2D(tLN, p.xz * (1.0 / 13.0)).r - 0.5) * 0.15 * midF;
+  // the dune band is dune all through (marram over sand), never a half-mix with the meadow / fields
+  // inland of it (that read as camouflage blotches); its inland edge wanders with the noise
+  // a field (decided per plot) runs to its own border over the dune fringe: the back-dune ends at the
+  // field's hedge / margin, not in a pale haze over the crop (the open beach stays sand)
+  // (the final weight first: the dune colour below is only worked out where it shows)
+  float sand0 = sand;
+  sand = max(sand, smoothstep(0.04, 0.3, vCov.z + sN * 0.12));
+  sand *= 1.0 - fieldW * (1.0 - smoothstep(0.55, 0.85, vCov.z));
+  if (sand != 0.0) {
   vec3 sc = mix(cWetSand, cSand, smoothstep(${(WL + 0.2).toFixed(2)}, ${(WL + 1.0).toFixed(2)}, p.y));
   // next to the slab the beach is the town beach's own sand (terrain/ground.ts gSand / gSandWet): no colour
   // step along the slab edge; the landscape's quieter tone takes over within ~80 m
@@ -591,7 +601,7 @@ vec3 landAlbedo() {
   }
   // marram: sparse on the fore-dune, closing into a soft vegetated back-dune (a smooth gradient with
   // only broad variation — 5–15 m patches read as camouflage blotches against sunlit sand)
-  float marram = smoothstep(0.25, 0.85, (1.0 - sand) * 1.6 - 0.15 + sN * 0.22) * smoothstep(${(WL + 1.6).toFixed(2)}, ${(WL + 2.6).toFixed(2)}, p.y);
+  float marram = smoothstep(0.25, 0.85, (1.0 - sand0) * 1.6 - 0.15 + sN * 0.22) * smoothstep(${(WL + 1.6).toFixed(2)}, ${(WL + 2.6).toFixed(2)}, p.y);
   // close up: single tufts (sub-metre speckle with the same mean)
   if (vCov.z > 0.02 && fp < 4.0) {
     vec2 tc = p.xz / 0.7;
@@ -615,33 +625,33 @@ vec3 landAlbedo() {
   }
   // wrack line of dried seaweed along the last high tide
   sc *= 1.0 - 0.18 * (1.0 - smoothstep(0.15, 0.45 + fp, abs(p.y - ${(WL + 0.75).toFixed(2)} - 0.12 * (nB.g - 0.5)))) * (1.0 - smoothstep(0.5, 2.0, fp));
-  // the dune band is dune all through (marram over sand), never a half-mix with the meadow / fields
-  // inland of it (that read as camouflage blotches); its inland edge wanders with the noise
-  sand = max(sand, smoothstep(0.04, 0.3, vCov.z + sN * 0.12));
   sc *= mix(0.94 + 0.08 * nB.g * midF, 1.0, nearSlabS);
   // wind ripples — not next to the town beach (its sand is smooth)
   if (fp < 0.4) sc *= 1.0 - 0.05 * lStripe(p.x * 0.8 + p.z * 0.6 + nB.r * 3.0, 0.7, 0.4, fp) * smoothstep(20.0, 70.0, vCov3.y);
-  // a field (decided per plot) runs to its own border over the dune fringe: the back-dune ends at the
-  // field's hedge / margin, not in a pale haze over the crop (the open beach stays sand)
-  sand *= 1.0 - fieldW * (1.0 - smoothstep(0.55, 0.85, vCov.z));
   col = mix(col, sc, sand);
+  }
   // ── rock (steep slopes, cliffs)
   // (steep faces sample the noise on a vertical plane — the ground plane's noise smears down a cliff —
   // with strata, joints and dark water streaks; ledges and gentle parts keep a grassy / scree tone)
-  vec3 rc;
+  vec3 rc = vec3(0.0);
   {
     float steepR = smoothstep(0.45, 0.8, 1.0 - Ng.y);
     vec2 hz = normalize(Ng.xz + vec2(1e-4));
     vec2 vp = vec2(dot(p.xz, vec2(-hz.y, hz.x)), p.y);
-    vec4 nv1 = texture2D(tLN, vp * vec2(1.0 / 23.0, 1.0 / 9.0));
-    vec4 nv2 = texture2D(tLN, vp * vec2(1.0 / 6.0, 1.0 / 2.5));
-    float rn = mix(nB.r, nv1.r * 0.6 + nv2.g * 0.4, steepR);
-    rc = mix(cRock, cRock2, smoothstep(0.3, 0.7, rn + 0.3 * sin(p.y * 0.9 + nA.g * 6.0)));
-    float strata = 1.0 - smoothstep(0.0, 0.08 + fp * 0.1, abs(fract(p.y / 1.7 + nv1.b * 0.6) - 0.5) - 0.38);
-    rc *= 1.0 - 0.18 * strata * steepR * (1.0 - smoothstep(0.5, 2.0, fp));
-    float streak = smoothstep(0.55, 0.8, texture2D(tLN, vp * vec2(1.0 / 4.0, 1.0 / 40.0)).a);
-    rc *= 1.0 - 0.3 * streak * steepR;
-    rc = mix(rc, meadow * 0.7, (1.0 - steepR) * smoothstep(0.45, 0.7, nB.g) * 0.6);   // grass on ledges
+    // (explicit gradients: implicit derivatives are undefined inside the rock-only branch)
+    vec2 vpx = dFdx(vp), vpy = dFdy(vp);
+    if (rock != 0.0) {
+      const vec2 k1 = vec2(1.0 / 23.0, 1.0 / 9.0), k2 = vec2(1.0 / 6.0, 1.0 / 2.5), k3 = vec2(1.0 / 4.0, 1.0 / 40.0);
+      vec4 nv1 = textureGrad(tLN, vp * k1, vpx * k1, vpy * k1);
+      vec4 nv2 = textureGrad(tLN, vp * k2, vpx * k2, vpy * k2);
+      float rn = mix(nB.r, nv1.r * 0.6 + nv2.g * 0.4, steepR);
+      rc = mix(cRock, cRock2, smoothstep(0.3, 0.7, rn + 0.3 * sin(p.y * 0.9 + nA.g * 6.0)));
+      float strata = 1.0 - smoothstep(0.0, 0.08 + fp * 0.1, abs(fract(p.y / 1.7 + nv1.b * 0.6) - 0.5) - 0.38);
+      rc *= 1.0 - 0.18 * strata * steepR * (1.0 - smoothstep(0.5, 2.0, fp));
+      float streak = smoothstep(0.55, 0.8, textureGrad(tLN, vp * k3, vpx * k3, vpy * k3).a);
+      rc *= 1.0 - 0.3 * streak * steepR;
+      rc = mix(rc, meadow * 0.7, (1.0 - steepR) * smoothstep(0.45, 0.7, nB.g) * 0.6);   // grass on ledges
+    }
   }
   col = mix(col, rc, rock);
   // ── surf on the open coasts (island, far shores): broken white water at the waterline, kept
