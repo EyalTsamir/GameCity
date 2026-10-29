@@ -11,7 +11,8 @@ import {
 } from './gen';
 import { anchors } from './anchors';
 import { balconyLife, roofClutter, ironRail, acUnit, dish, downpipe } from './clutter';
-import { roofKit } from './massing';
+import { roofKit, MASS } from './massing';
+import { GREEN } from './green';
 import { WIN, PROF, WALLPAT, ROOFPAT, FRAME, GLASS, LIGHT_MODE } from './materials';
 import { partitionSide } from './oldtown';
 
@@ -374,12 +375,26 @@ export function genApartment(g: Gen): void {
     bandWithOpenings(sg, 0, sg.L, ops, (a, b) => {
       const n = Math.max(1, Math.round((b - a - 0.6) / 3.0));
       const gr = makeGrid(a, b, gH, fH, floors - 1, { spacing: 3.0, cols: n, winW: 1.5, winH: 1.5, sill: 0.85, margin: 0.4 });
-      wallGrid(s, sg, a, b, gH, H, gr, look());
+      // ?nologgias: the back's balcony columns are loggias cut into the block (wall split around them)
+      const logg = MASS.loggias && sd === BACK;
+      const lhw = Math.min(gr.cw / 2 - 0.2, 1.35);
+      const lcols: number[] = [];
+      if (logg) for (let i = 0; i < gr.n; i++) if ((i + 1) % 2 === 0) lcols.push(gridU(gr, i));
+      if (lcols.length) {
+        let cur = a;
+        for (const u of lcols) {
+          wallGrid(s, sg, cur, u - lhw, gH, H, gr, look());
+          loggia(sg, u - lhw, u + lhw, accent[lcols.indexOf(u) % 2]);
+          cur = u + lhw;
+        }
+        wallGrid(s, sg, cur, b, gH, H, gr, look());
+      } else wallGrid(s, sg, a, b, gH, H, gr, look());
       const gr0 = makeGrid(a, b, 0, gH, 1, { spacing: 3.0, cols: n, winW: 1.5, winH: 1.45, sill: 1.0, margin: 0.4 });
       wallGrid(s, sg, a, b, 0, gH, gr0, look());
       // balconies on every other column, from the first floor up
       for (let i = 0; i < gr.n; i++) {
         if ((i + (sd === BACK ? 1 : 0)) % 2 === 1) continue;
+        if (lcols.length) continue;
         const u = gridU(gr, i);
         for (let j = 0; j < gr.m; j++) balcony(sg, u, gr.v0 + j * gr.ch, accent[(i + j) % 2], sd === BACK);
       }
@@ -440,6 +455,37 @@ export function genApartment(g: Gen): void {
       t.box(px + 0.2, H, inner.z0 + 1.0, px + 0.3, H + 0.4, inner.z0 + 1.1, 0b111111);
       t.box(px + 2.1, H, inner.z0 + 1.0, px + 2.2, H + 0.4, inner.z0 + 1.1, 0b111111);
     }
+  }
+
+  /** a loggia bay from the first floor up: back wall 1.3 m in with a French window per storey, cheeks, slabs,
+   *  a parapet front (solid / glass / bars like the balconies), a little life on some floors */
+  function loggia(sg: SideGeom, la: number, lb: number, front: THREE.Color): void {
+    const dep = 1.3;
+    const grL = makeGrid(la, lb, gH, fH, floors - 1, { spacing: lb - la, cols: 1, winW: Math.min(1.7, lb - la - 0.6), winH: Math.min(fH - 0.35, 2.3), sill: 0.06, margin: 0.2 });
+    wallGrid(s, sg, la, lb, gH, H, grL, look(), -dep);
+    wallSeg(s, sx(sg, la, 0), sz(sg, la, 0), sx(sg, la, -dep), sz(sg, la, -dep), gH, H, null, plain);
+    wallSeg(s, sx(sg, lb, -dep), sz(sg, lb, -dep), sx(sg, lb, 0), sz(sg, lb, 0), gH, H, null, plain);
+    for (let j = 0; j < floors - 1; j++) {
+      const y = gH + j * fH;
+      // slab (its soffit is the ceiling of the loggia below)
+      setCol(t, shade(wallC, 0.86));
+      sideBox(t, sg, la, lb, -dep, 0.06, y - 0.2, y, true, true);
+      // parapet front
+      if (balStyle === 'bars') {
+        setCol(t, shade(front, 0.95));
+        sideBox(t, sg, la, lb, -0.02, 0.06, y, y + 0.12, true);
+        railing(t, sx(sg, la + 0.05, 0.02), sz(sg, la + 0.05, 0.02), sx(sg, lb - 0.05, 0.02), sz(sg, lb - 0.05, 0.02), y, 1.0, railC, 0.12, 1);
+      } else {
+        setCol(t, balStyle === 'glass' ? col('#7f97a6') : front);
+        sideBox(t, sg, la, lb, -0.04, 0.06, y, y + 1.0, false, true);
+        setCol(t, shade(front, 0.85));
+        sideBox(t, sg, la - 0.02, lb + 0.02, -0.06, 0.08, y + 1.0, y + 1.06, true, true);
+      }
+      anchors.balcony(sx(sg, (la + lb) / 2, -dep / 2), y, sz(sg, (la + lb) / 2, -dep / 2), sg.nx, sg.nz, lb - la, dep, 1.0);
+      if (rng.chance(0.4)) g.green.clump(sx(sg, la + 0.45, -0.35), y + 0.02, sz(sg, la + 0.45, -0.35), 0.35, rng.range(0.6, 1.1), rng.weighted([GREEN.SHRUB, GREEN.PALM, GREEN.GERANIUM], [3, 1, 1.5]), 3);
+    }
+    setCol(t, shade(wallC, 0.86));
+    sideBox(t, sg, la, lb, -dep, 0.0, H - 0.2, H, true, true);
   }
 
   function stairCore(sg: SideGeom, u: number): void {

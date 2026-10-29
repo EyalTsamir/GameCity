@@ -257,6 +257,7 @@ export function genTower(g: Gen): void {
   };
 
   // ── massing
+  const masonry = sc.style !== WIN.CURTAIN && (sc.pattern === WALLPAT.BRICK || sc.pattern === WALLPAT.STONE || sc.pattern === WALLPAT.PANELS);
   const podiumTop = sc.podium && H > 28 ? gH + fH * (H > 60 ? 2 : 1) : 0;
   let shaft = podiumTop > 0 ? insetRect(fp, Math.min(2.4, Math.min(W, D) * 0.1)) : base;
   const chamfer = Math.min(sc.chamfer, Math.min(shaft.x1 - shaft.x0, shaft.z1 - shaft.z0) * 0.2);
@@ -292,7 +293,6 @@ export function genTower(g: Gen): void {
   // massing variants (own RNG stream): wedding-cake setbacks on masonry, an asymmetric setback, notched
   // (re-entrant) corners, or a set-back top storey with a terrace
   const mr = massRng(g);
-  const masonry = sc.style !== WIN.CURTAIN && (sc.pattern === WALLPAT.BRICK || sc.pattern === WALLPAT.STONE || sc.pattern === WALLPAT.PANELS);
   let notch = 0;
   if (MASS.setbacks && !twin && tiers.length === 1 && (sc.crown === 'flat' || sc.crown === 'screen' || sc.crown === 'stepped') && H > 12) {
     const fl = (y: number) => gH + fH * Math.max(1, Math.round((y - gH) / fH));
@@ -352,12 +352,15 @@ export function genTower(g: Gen): void {
     if (!last && MASS.setbacks) setbackRoof(t.r, tiers[i + 1].r, t.y1);
   }
   shaft = tiers[tiers.length - 1].r;
+  // ?nocrowns: curtain-wall towers end in an open crown of fins instead of a plain parapet line
+  const crownH = MASS.crowns && sc.style === WIN.CURTAIN && sc.crown !== 'slant' && sc.crown !== 'screen' && !twin && H > 20 ? Math.min(4.2, Math.max(2.2, H * 0.05)) : 0;
+  if (crownH > 0) glassCrown(notch > 0 ? notchPoly(shaft, notch) : rectPoly(shaft, tiers[tiers.length - 1].c), H + 1.18, crownH);
   if (sc.crown !== 'slant') {
     if (sc.crown === 'screen') crownScreen(notch > 0 ? notchPoly(shaft, notch) : rectPoly(shaft, chamfer), H);
     rooftop(insetRect(shaft, 0.6), H, sc.crown !== 'screen');
   }
   if (H >= 60) {
-    const top = sc.crown === 'screen' ? H + 5.2 : H + 1.3;
+    const top = sc.crown === 'screen' ? H + 5.2 : crownH > 0 ? H + 1.18 + crownH + 0.15 : H + 1.3;
     let k = 0;
     for (const p of rectPoly(insetRect(shaft, 0.3), 0)) aviationLight(g, p.x, top, p.z, (k++ % 2) * 0.0);
   }
@@ -569,6 +572,40 @@ export function genTower(g: Gen): void {
       aviationLight(g, r.x0 + 0.3, highY + 0.4, zb + 0.3);
       aviationLight(g, r.x1 - 0.3, highY + 0.4, zb + 0.3);
     }
+  }
+
+  /** the mullions run on above the roof as fins (every second cell), tied by a ring beam and a mid rail;
+   *  a lit line under the beam on the accent schemes */
+  function glassCrown(poly: P[], y: number, hC: number): void {
+    const t = g.trim;
+    const yT = y + hC;
+    for (let i = 0; i < poly.length; i++) {
+      const a = poly[i],
+        b = poly[(i + 1) % poly.length];
+      const L = Math.hypot(b.x - a.x, b.z - a.z);
+      if (L < 0.3) continue;
+      const tx = (b.x - a.x) / L,
+        tz = (b.z - a.z) / L;
+      const nx = -tz,
+        nz = tx;
+      const ang = Math.atan2(-tz, tx);
+      setCol(t, shade(wallC, 0.97));
+      const n = Math.max(1, Math.round(L / (sc.cell * 2)));
+      for (let k = 0; k <= n; k++) {
+        if ((k === 0 || k === n) && L < 2) continue;
+        const u = Math.min(L - 0.1, Math.max(0.1, (L * k) / n));
+        t.boxRot(a.x + tx * u - nx * 0.18, a.z + tz * u - nz * 0.18, 0.12, 0.5, y, yT - 0.2, ang, 0b111111 & ~4 & ~8);
+      }
+      // ring beam on top (runs past the corners so the edges overlap), slim mid rail
+      setCol(t, shade(wallC, 1.04));
+      const ax = a.x - tx * 0.2 - nx * 0.18,
+        az = a.z - tz * 0.2 - nz * 0.18,
+        bx = b.x + tx * 0.2 - nx * 0.18,
+        bz = b.z + tz * 0.2 - nz * 0.18;
+      t.beam(ax, yT - 0.1, az, bx, yT - 0.1, bz, 0.5, 0.2);
+      if (hC > 3) t.beam(ax, y + hC * 0.48, az, bx, y + hC * 0.48, bz, 0.3, 0.08);
+    }
+    if (sc.accent && H > 45) accentEdge(poly, yT - 0.32, sc.accent, 2.2);
   }
 
   function crownScreen(poly: P[], y: number): void {

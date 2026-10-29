@@ -4,7 +4,21 @@ Branch `claude/buildings-massing-f65621` (based on `claude/pensive-gates-bim12i`
 up perf-wins). Goal: ordinary buildings read as architecture, not "a box with a triangle on top" — break the volume.
 Landmarks are not in scope (boxhunt session); plan.ts layout untouched (places session); materials.ts untouched.
 
-## Resume here
+## Round 2 — Resume here (overnight backlog from the coordinator)
+- Backlog: 1 tower rooftop plant · 2 industrial halls / depot / harbour master · 3 Westbrook porches, midtown
+  colonnade · 4 apartment loggias, glass-tower crowns · 5 eye-level audit → fix the 10 weakest, repeat.
+- Done (code, typecheck clean): 1 `roofplant.ts` (verified in shots: `shots/r2plant/sheet.jpg`, ?noroofplant);
+  2 industry head office / roof monitor / downpipes / plinth (?noannex ?nomonitor), harbour-master recessed porch
+  (?noporch); 3 lean-to porch roofs + turned posts (?noporch), classical arcade columns + shopfronts behind arcades
+  (?nocolonnade). Items 2–3 NOT yet verified in shots.
+- Bug fixed after 2af8c6f: `masonry` was used by buildLobby before its `const` (lots 18 and 23 threw) — moved up.
+- 4 coded (uncommitted until verified): apartment loggias on the back (houses.ts `loggia()`, ?nologgias), glass-tower
+  crown of fins + ring beam + mid rail (towers.ts `glassCrown()`, under ?nocrowns; curtain schemes, not slant/screen/twin).
+- Verification set: `shots/r2v/{after,before}` (before = ?noannex&nomonitor&noporch&nocolonnade&nologgias).
+- Harness note: capture-set `--out` relative paths resolve to the MAIN checkout — always pass absolute paths.
+- Next: verify 2–4 → commit → item 5 (eye-level audit) → perf/checks.
+
+## Round 1 — Resume here
 - DONE. Verified: typecheck clean, `npm run build` OK (3.77 MB), console clean (0 errors in every capture),
   `invariants()` `{}` (incl. the footprint rule for every lot), perf measured. ui-test freecam/explore/building: see
   "Checks" below.
