@@ -11,6 +11,13 @@ Overview must stay at least as impressive as now. Every feature: quality tiers +
 Lead session: session_01XuhAMczW3iK25AAWnf3qog, branch `claude/pensive-gates-bim12i`.
 
 ## Resume here (keep current)
+* 2026-10-29 10:16 UTC — Bug hunter 3 merged (0 HIGH / 1 MED / 3 low; MED barn-roof moiré fixed by lead, sheet
+  real/lead_barn_roof_fix.jpg; invariants {} at 11/21.5/6.5, soak clean, heap flat). Judge 3 merged (time-boxed:
+  3 real / 29 almost / 0 not yet vs judge 2 4/25/3; top 10 in real-judge-3.md). LAST FIX ROUND (deadline 11:50 UTC,
+  briefs "Last fix round" in real-briefs.md): G1 glass+interiors session_01XuhAMchYpCKHeJK1wzC582
+  (claude/real-g1-glass), G2 ground/track/fountain session_01XuhAMeMkG8owJFaC9Qvb4X (claude/real-g2-ground), G3
+  places/people/props session_01XuhAMgzSSWTpaXYDh3LWtT (claude/real-g3-places). Then: merge, golden, tokens.py,
+  final Hebrew report, delete watchdog trig_01CiV41L5Hg1nJEasChWKp9Q, stop autocheckpoint.
 * 2026-10-29 06:35 UTC — Golden merged3 (all F1–F4 except F3 final): overview 0.7, harbor 3.2 (cliff), oldtown 4.1,
   downtown 4.7, westbrook 6.0 (window interiors/house edits); console clean, invariants {}. F3 CLOSED (5d37c89
   merged: pasture ck==3 patchwork/buttercup/tussocks ?nopasture (low = colour only), mown blades +26 %; open: finer
