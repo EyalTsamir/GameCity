@@ -109,6 +109,9 @@ vec3 th_ashlar(vec2 uv, float ch, vec3 base) {
 }
 
 vec3 mN = vec3(0.0, 1.0, 0.0);
+// bump-perturbed world normal for rock (cliff skin, boulders) — replaces the flat facet normal for lighting
+vec3 mNb = vec3(0.0);
+float mTerr = -1.0;
 uniform float uNight;
 uniform vec3 uMoonDir;
 // Moonlit stone: the dark night key barely reaches the steep, mostly south-facing faces, so rock
@@ -140,6 +143,41 @@ vec3 masonryColor(vec3 base) {
   vec2 uv;
   if (abs(n.y) < 0.7) uv = vec2(dot(p.xz, normalize(vec2(-n.z, n.x))), p.y);
   else uv = vec2(dot(p.xz, vMas.zw), dot(p.xz, vec2(-vMas.w, vMas.z)));
+  // rock relief (F3): fractured, chipped surface on the cliff skin and boulders so a facet is never a flat plane.
+  // Height in metres from ridged noise (sharp fracture creases) + two finer octaves; normal from its screen
+  // derivatives (Mikkelsen's surface-gradient bump), faded out once a 0.3 m feature is under ~3 px.
+#ifdef TH_FLATN
+  if (kind > 2.5 && kind < 3.5 || kind > 5.5) {
+    vec2 bq = kind > 5.5 ? cuv : uv;
+    // octaves sized so each is a real feature (0.2–0.75 m fractures, 4–14 cm chips), each faded by its own pixel
+    // footprint: a derivative bump finer than ~3 px turns into per-pixel speckle (session-1 version did)
+    float fp = max(length(dFdx(p)), length(dFdy(p)));
+    vec4 b1 = texture2D(tNoise, bq * vec2(0.33, 0.47) + vMas.y * 1.7);
+    vec4 b2 = texture2D(tNoise, bq * vec2(0.9, 1.05) + 0.37);
+    vec4 b3 = texture2D(tNoise, bq * 0.35 + 0.71);
+    // chipped, not pitted: the fracture field is terraced (flat broken planes, steep risers = sharp edges), with
+    // thin bedding laminae stepping along the strata on the cliff (cuv.y = height)
+    float t1 = (b1.r * 0.8 + b2.b * 0.2) * 5.0;
+    float ft = fract(t1);
+    float hterr = (floor(t1) + smoothstep(0.72, 1.0, ft) + 0.12 * ft) * 0.2;
+    float lam = kind > 5.5 ? fract(bq.y * 5.5 + b2.r * 1.6) : 0.0;
+    float fine = 1.0 - smoothstep(0.006, 0.016, fp);
+    float hb = 0.16 * hterr + (0.018 * lam * lam + 0.02 * b2.g + 0.008 * b3.b) * fine;
+    mTerr = floor(t1);
+    // soften the facets: lean the flat normal toward the shared-vertex normal (rounded boulders, no flat triangles)
+    vec3 sn = normalize(vMN);
+    if (dot(sn, n) > 0.15) n = normalize(mix(n, sn, 0.7));
+    vec3 dpx = dFdx(p), dpy = dFdy(p);
+    float fade = 1.0 - smoothstep(0.03, 0.1, fp);
+    vec3 r1 = cross(dpy, n), r2 = cross(n, dpx);
+    float det = dot(dpx, r1);
+    vec3 grad = sign(det) * (dFdx(hb) * r1 + dFdy(hb) * r2);
+    vec3 bn = abs(det) * n - grad * fade;
+    if (dot(bn, bn) > 1e-20) n = normalize(bn);
+    mNb = n;
+    mN = n;
+  }
+#endif
   vec4 nz = texture2D(tNoise, (p.xz + p.y * 0.7) * 0.21);
   vec4 nf = texture2D(tNoise, (p.xz * 1.3 + vec2(p.y * 1.1, -p.y * 0.9)) * 0.9);
   vec3 col = base;
@@ -191,22 +229,26 @@ vec3 masonryColor(vec3 base) {
     col *= mix(1.0, 0.64 + 0.44 * smoothstep(0.15, 0.85, streak), side);
     col = mix(col, col * vec3(0.5, 0.53, 0.55), smoothstep(0.6, 0.78, st4.a) * side * 0.75);
     col *= 0.86 + 0.26 * nv.g;
+    // each broken plane of the fracture terraces its own weathering: fresher (paler, warmer) or older (greyer)
+    if (mTerr >= 0.0) { float ht = th_hash12(vec2(mTerr, floor(cuv.x * 0.7 + mTerr * 0.37))); col *= mix(vec3(0.88, 0.9, 0.92), vec3(1.1, 1.06, 0.98), ht); }
     col = mix(col, col * vec3(1.1, 1.04, 0.86) + vec3(0.035, 0.028, 0.0), smoothstep(0.6, 0.8, nu.a) * 0.55 * side);
-    col = mix(col, vec3(0.5, 0.52, 0.44) * (0.85 + 0.3 * nv.b), smoothstep(0.64, 0.8, nv.a) * 0.4 * side);
+    col = mix(col, vec3(0.5, 0.52, 0.44) * (0.85 + 0.3 * nv.b), smoothstep(0.64, 0.8, nv.a) * 0.22 * side);
     // hairline cracks across the strata + vertical joints that split the beds into blocks
     float ck = 1.0 - smoothstep(0.0, 0.03 + fw * 0.2, abs(nv.r - 0.5));
-    col *= 1.0 - 0.3 * ck * side * (1.0 - smoothstep(0.15, 0.5, fw));
+    col *= 1.0 - 0.1 * ck * side * (1.0 - smoothstep(0.15, 0.5, fw));
     float fwu = length(vec2(cdx.x, cdy.x)) * 0.37 + 1e-4;
     float ju = abs(fract(cuv.x * 0.37 + nu.b * 0.9 + vMas.y * 2.3) - 0.5);
     float joint = (1.0 - smoothstep(0.012, 0.03 + fwu, 0.5 - ju)) * (1.0 - smoothstep(0.08, 0.3, fwu));
     col *= 1.0 - 0.45 * joint * side;
     // ledges: moss and grass tufts on everything facing up, the edge broken by noise
-    float up = smoothstep(0.45, 0.85, n.y);
+    float up = smoothstep(0.6, 0.92, n.y);
     vec2 mp = p.xz * 0.55;
     float mossN = textureGrad(tNoise, mp, pdx * 0.55, pdy * 0.55).g * 0.6 + nv.b * 0.4;
-    float moss = up * smoothstep(0.2, 0.42, mossN);
-    vec3 mossC = mix(mMoss, mGrass, smoothstep(0.35, 0.7, nu.g)) * (0.85 + 0.3 * nv.r);
-    col = mix(col, mossC, moss * 0.94);
+    // patchy: soil, grit and bare rock show between the cushions on a ledge
+    float moss = up * smoothstep(0.32, 0.55, mossN + 0.25 * (nf.r - 0.5));
+    col = mix(col, vec3(0.3, 0.26, 0.2) * (0.8 + 0.4 * nf.g), up * (1.0 - moss) * 0.45);
+    vec3 mossC = mix(mMoss, mGrass, smoothstep(0.35, 0.7, nu.g)) * (0.85 + 0.3 * nv.r) * vec3(0.8, 0.82, 0.72);
+    col = mix(col, mossC, moss * 0.88);
     // shrubs and tufts rooting in the ledges (darker clumps in the moss)
     col = mix(col, mGrass * vec3(0.42, 0.48, 0.36), up * smoothstep(0.6, 0.74, nv.r * 0.6 + mossN * 0.4) * 0.85);
     // a little green creeping over the lip of each ledge
@@ -254,12 +296,13 @@ function masonryMaterial(ctx: CityContext, flat: boolean): THREE.MeshStandardMat
       .replace('#include <lights_fragment_end>', '#include <lights_fragment_end>\nreflectedLight.indirectDiffuse += diffuseColor.rgb * (thLampLight(vMW, mN) + mNightLift());')
       .replace('#include <color_fragment>', '#include <color_fragment>\ndiffuseColor.rgb = masonryColor(diffuseColor.rgb);')
       .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = mRough;')
+      .replace('#include <normal_fragment_maps>', '#include <normal_fragment_maps>\nif (mNb.x != 0.0 || mNb.y != 0.0 || mNb.z != 0.0) normal = normalize((viewMatrix * vec4(mNb, 0.0)).xyz);')
       .replace(
         '#include <emissivemap_fragment>',
         '#include <emissivemap_fragment>\nif (vMas.x > 4.5 && vMas.x < 5.5) totalEmissiveRadiance += diffuseColor.rgb * (1.1 + 2.6 * uLights);',
       );
   };
-  mat.customProgramCacheKey = () => (flat ? 'th-masonry-v5f' : 'th-masonry-v5');
+  mat.customProgramCacheKey = () => (flat ? 'th-masonry-v6f' : 'th-masonry-v5');
   return mat;
 }
 

@@ -18,6 +18,8 @@ export interface SignalDef {
 }
 
 export interface TrackBuild {
+  /** sleeper centres along x (for the near-only fixings, buildTrackFixings) */
+  sleepers: number[];
   wires: number[];
   masts: number[];
   signals: SignalDef[];
@@ -27,6 +29,9 @@ const COL = {
   ballast: '#8b8478',
   ballastEdge: '#7d766b',
   sleeper: '#5b4a3d',
+  sleeperOld: '#6b6158',
+  basePlate: '#4a3c33',
+  clip: '#5d554c',
   railSide: '#6c5649',
   railHead: '#cfd1d2',
   panel: '#9d998f',
@@ -99,14 +104,19 @@ export function buildTrack(g: Geo, gt: Geo, gd: Geo, plan: CityPlan, prof: RailP
     }
   }
 
-  // ── sleepers
-  g.kind(K.WOOD);
+  // ── sleepers: hand-laid timber, a little irregular in spacing and squareness, each its own weathered tone
+  g.kind(K.SLEEPER);
+  const sleepers: number[] = [];
   for (let x = x0 + 0.35; x < x1 - 0.3; x += 0.65) {
     if (xings.some((xc) => Math.abs(x - xc) < XING_HALF + 0.2)) continue;
-    const top = prof.top(x) - RAIL_H;
-    const j = 0.85 + rng.next() * 0.25;
-    g.color(COL.sleeper, j);
-    g.box(x, top - 0.06, zc, 0.24, 0.12, 2.5, 8);
+    const sx = x + (rng.next() - 0.5) * 0.05;
+    const top = prof.top(sx) - RAIL_H;
+    const j = 0.8 + rng.next() * 0.32;
+    g.color(rng.next() < 0.18 ? COL.sleeperOld : COL.sleeper, j);
+    g.push().at(sx, 0, zc + (rng.next() - 0.5) * 0.04, (rng.next() - 0.5) * 0.022);
+    g.box(0, top - 0.06, 0, 0.24 + rng.next() * 0.03, 0.12, 2.5 + rng.next() * 0.1, 8);
+    g.pop();
+    sleepers.push(sx);
   }
 
   // ── rails (head + web/foot), following the vertical profile
@@ -373,5 +383,45 @@ export function buildTrack(g: Geo, gt: Geo, gd: Geo, plan: CityPlan, prof: RailP
     gt.block(x, 0, zc + 2.95, 0.8, 1.1, 0.55);
   }
 
-  return { wires, masts, signals };
+  return { sleepers, wires, masts, signals };
+}
+
+/**
+ * Rail fastenings for the near track only: per sleeper and rail a steel baseplate, a cast chair hugging the rail foot
+ * on each side, a spring clip over the foot and two screw heads. Split into chunks of `CHUNK` m along x so the rail
+ * module can show only the ones near the camera (they are invisible beyond ~40 m and would cost ~0.15 M vertices
+ * over the whole line).
+ */
+export const FIX_CHUNK = 24;
+export function buildTrackFixings(prof: RailProfile, sleepers: number[], rng: Rng): { x: number; geo: Geo }[] {
+  const zc = prof.z;
+  const out = new Map<number, Geo>();
+  for (const sx of sleepers) {
+    const ci = Math.floor(sx / FIX_CHUNK);
+    let g = out.get(ci);
+    if (!g) out.set(ci, (g = new Geo()));
+    const top = prof.top(sx) - RAIL_H;
+    for (const side of [-1, 1]) {
+      const rz = zc + side * (GAUGE / 2);
+      const rust = 0.8 + rng.next() * 0.35;
+      g.kind(K.PLAIN).color(COL.basePlate, rust);
+      // baseplate (sole plate) under the foot, its shoulders proud of the sleeper top
+      g.box(sx, top + 0.004, rz, 0.19, 0.016, 0.38, 8);
+      for (const s of [-1, 1]) {
+        // chair jaw against the foot / web
+        g.color(COL.basePlate, rust * 0.92);
+        g.box(sx, top + 0.03, rz + s * 0.088, 0.15, 0.04, 0.03, 8);
+        // spring clip: a bent bar over the foot flange (toe on the foot, heel in the chair shoulder)
+        g.color(COL.clip, 0.85 + rng.next() * 0.3);
+        g.box(sx + 0.035, top + 0.024, rz + s * 0.072, 0.018, 0.018, 0.05, 8);
+        g.box(sx - 0.035, top + 0.024, rz + s * 0.072, 0.018, 0.018, 0.05, 8);
+        g.box(sx, top + 0.036, rz + s * 0.098, 0.088, 0.016, 0.018, 8);
+        // coach-screw heads outside the jaw
+        g.color(COL.basePlate, rust * 0.75);
+        g.box(sx + s * 0.045, top + 0.02, rz + s * 0.155, 0.035, 0.02, 0.035, 8);
+        g.box(sx - s * 0.045, top + 0.02, rz + s * 0.155, 0.035, 0.02, 0.035, 8);
+      }
+    }
+  }
+  return [...out.entries()].map(([ci, geo]) => ({ x: (ci + 0.5) * FIX_CHUNK, geo }));
 }

@@ -17,7 +17,7 @@ import type { CityContext, CityModule, PickHit } from '../core/context';
 import { Geo } from './rail/geo';
 import { makeProfile } from './rail/profile';
 import { createRailStaticMaterial } from './rail/staticMaterial';
-import { buildTrack } from './rail/track';
+import { buildTrack, buildTrackFixings, FIX_CHUNK } from './rail/track';
 import { buildStation } from './rail/station';
 import { buildCrossingGear } from './rail/crossingGear';
 import { createSigns } from './rail/signs';
@@ -67,6 +67,20 @@ export default function create(ctx: CityContext): CityModule {
     m.updateMatrix();
   }
   root.add(flatMesh, tallMesh);
+
+  // near-only rail fastenings (baseplates, chairs, clips, screws) in chunks along the line (F3; ?notrackfix)
+  const fixDist = ctx.debug.params.has('notrackfix') ? 0 : ctx.quality.level === 'low' ? 0 : ctx.quality.level === 'medium' ? 22 : 38;
+  const fixChunks = fixDist > 0
+    ? buildTrackFixings(prof, track.sleepers, rng.fork('fix')).map(({ x, geo }) => {
+        const m = new THREE.Mesh(geo.build(), bedMat);
+        m.name = 'rail-fixings';
+        m.receiveShadow = true;
+        m.matrixAutoUpdate = false;
+        m.visible = false;
+        root.add(m);
+        return { x, m };
+      })
+    : [];
 
   // overhead wires
   const wireGeo = new THREE.BufferGeometry();
@@ -197,6 +211,14 @@ export default function create(ctx: CityContext): CityModule {
     },
     frame(realDt) {
       const a = performance.now();
+      if (fixChunks.length) {
+        const cp = ctx.camera.position;
+        const dzc = Math.abs(cp.z - prof.z), hy = Math.max(0, cp.y - 1);
+        for (const f of fixChunks) {
+          const dx = Math.max(0, Math.abs(cp.x - f.x) - FIX_CHUNK / 2);
+          f.m.visible = Math.hypot(dx, dzc, hy) < fixDist;
+        }
+      }
       // uniforms: crossings, signals, clock
       const c0 = sim.crossings[0],
         c1 = sim.crossings[1];

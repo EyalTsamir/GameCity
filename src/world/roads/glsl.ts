@@ -33,6 +33,7 @@ vec3 rdN = vec3(0.0);
 // pixel footprint fw exceeds ~1.5 cm, so it never sparkles in the distance.
 uniform float uRdWear;
 uniform float uKerbD;
+uniform float uRdHand;
 vec4 rdLitter(vec2 p, float fw, float dens, float leafy) {
   float near = 1.0 - smoothstep(0.008, 0.02, fw);
   if (near <= 0.0 || dens <= 0.0 || uRdWear < 0.5) return vec4(0.0);
@@ -357,20 +358,52 @@ vec3 rdHard(inout float rough) {
     joint = rdLine(e, vP.z, fwm);
     edge = e;
   } else {
-    float row = floor(q.y / size.y);
+    // hand-laid (F3, ?nohandlaid): small units (< 1.3 m) are set by hand — courses wander a little, every stone
+    // has its own length (jittered joints along the course), and the bond offset drifts from row to row.
+    // Kerbs / gutters (curb frame) and large slabs stay machine-straight.
+    float hand = (uRdHand > 0.5 && frame < 1.5 && minS < 1.3) ? 1.0 : 0.0;
+    float qy = q.y + hand * (nM.r - 0.5) * 0.5 * size.y;
+    float row = floor(qy / size.y);
     float off = vV.z >= 0.0 ? mod(row, 2.0) * vV.z : rdHash(vec2(row, 3.7));
+    off += hand * (rdHash(vec2(row, 1.9)) - 0.5) * 0.22;
     float qx = q.x / size.x + off;
-    cell = vec2(floor(qx), row);
-    float dx = abs(fract(qx + 0.5) - 0.5) * size.x;
-    float dy = abs(fract(q.y / size.y + 0.5) - 0.5) * size.y;
-    joint = max(rdLine(dx, vP.z, fq.x), rdLine(dy, vP.z, fq.y));
+    float J = hand * 0.34;
+    float i0 = floor(qx);
+    float aL = (rdHash(vec2(i0, row + 0.37)) - 0.5) * J;
+    float aR = (rdHash(vec2(i0 + 1.0, row + 0.37)) - 0.5) * J;
+    float ci = i0;
+    if (qx - i0 < aL) {
+      ci = i0 - 1.0;
+      aR = aL;
+      aL = (rdHash(vec2(i0 - 1.0, row + 0.37)) - 0.5) * J;
+    } else if (qx - i0 >= 1.0 + aR) {
+      ci = i0 + 1.0;
+      aL = aR;
+      aR = (rdHash(vec2(i0 + 2.0, row + 0.37)) - 0.5) * J;
+    }
+    float lx = qx - ci;
+    cell = vec2(ci, row);
+    // joint width varies stone to stone (tight ↔ open, sanded)
+    float jwv = vP.z * (1.0 + hand * ((rdHash(cell + 4.4) - 0.4) * 0.9 - 0.25));
+    float dx = min(lx - aL, 1.0 + aR - lx) * size.x;
+    float dy = abs(fract(qy / size.y + 0.5) - 0.5) * size.y;
+    joint = max(rdLine(dx, jwv, fq.x), rdLine(dy, jwv, fq.y));
     edge = min(dx, dy);
-    sl = vec2(fract(qx), fract(q.y / size.y));
+    sl = vec2((lx - aL) / (1.0 + aR - aL), fract(qy / size.y));
   }
   float det = 1.0 - smoothstep(0.1, 0.35, fwm / minS);
   vec3 c = vC * (1.0 + (rdHash(cell) - 0.5) * vV.x * det);
   c *= 1.0 - vV.y * det * (1.0 - smoothstep(0.0, minS * 0.32, edge));
-  c *= 1.0 - vP.w * joint;
+  // joints filled with sand / grit (not a uniform dark line); each stone settled at its own height and tilt
+  float hd = (uRdHand > 0.5 && vS.z < 5.5 && vS.w < 1.5 && minS < 1.3) ? det : 0.0;
+  // (sand-filled joints read lighter than a shadow line: only the chamfer edges are dark)
+  vec3 jc = mix(c * (1.0 - vP.w), c * vec3(0.74, 0.7, 0.62) * (0.8 + 0.4 * nS.b), 0.7 * hd);
+  c = mix(c, jc, joint);
+  float hs = rdHash(cell + 6.7);
+  c *= 1.0 + (rdHash(cell + 9.3) - 0.5) * 0.16 * hd;
+  c *= vec3(1.0 + (hs - 0.5) * 0.06 * hd, 1.0, 1.0 - (hs - 0.5) * 0.06 * hd);
+  c *= 1.0 - 0.06 * hd * smoothstep(0.55, 0.95, rdHash(cell + 8.1)) * (1.0 - smoothstep(0.0, minS * 0.3, edge));
+  rdN = vec3(rdHash(cell + 2.2) - 0.5, 0.0, rdHash(cell + 3.3) - 0.5) * 0.06 * hd * (1.0 - joint);
   // bands: border band + inner line + band grid aligned to the cover rectangle, macro tint per band cell
   float band = 0.0;
   vec2 bcell = floor(p / 4.5);
@@ -410,6 +443,15 @@ vec3 rdHard(inout float rough) {
   float st = vX.z > 0.0 ? smoothstep(0.5 - fq.y / max(vX.y, 1e-3), 0.5 + fq.y / max(vX.y, 1e-3), tS) : abs(tS - 0.5) * 2.0;
   c *= 1.0 + step(1e-3, vX.y) * abs(vX.z) * (st - 0.5);
   rough = vX.w;
+  // a worn walking line along the sidewalk (special 1: vS.x = distance from the kerb): stones polished smoother and
+  // a touch darker, tone differences rubbed down, wandering with the noise
+  if (vS.z > 0.5 && vS.z < 1.5 && uRdHand > 0.5) {
+    float wl = 1.0 - smoothstep(0.35, 1.1, abs(vS.x - 1.9 + (nM.g - 0.5) * 1.2));
+    wl *= 0.55 + 0.45 * nM.b;
+    c = mix(c, vec3(dot(c, vec3(0.333))), wl * 0.18);
+    c *= 1.0 - 0.07 * wl;
+    rough -= 0.12 * wl;
+  }
   float sp = vS.z;
   if (sp > 0.5 && sp < 1.5) {
     // tactile paving beside the crosswalks (vS.x = distance from curb, vS.y = along the arm)

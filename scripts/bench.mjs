@@ -223,6 +223,12 @@ try {
           site: { x: -62.5, y: 0, z: -24, yaw: 70, h: 3, w: 0.5, pitch: 8 },
           siteyard: { x: -66, y: 0, z: -22, yaw: 120, h: 3, w: 0.5, pitch: 12 },
           platform: { x: -6, y: 0.95, z: -151, yaw: 80, h: 2, w: 0.5, pitch: 6 },
+          // F3 ground close-ups: open-track bed, the rock cutting north of the platform, a park lawn
+          ballast: { x: -40, y: 0.1, z: -155, yaw: 20, h: 0.3, w: 0.5, pitch: 38 },
+          cutting: { x: -6, y: 0.8, z: -160.6, yaw: 15, h: 3, w: 0.3, pitch: 8 },
+          parklawn: { x: -64, y: 0, z: 6, yaw: 30, h: 0.3, w: 0.5, pitch: 22 },
+          cliff: { x: -40, y: 2, z: -164.5, yaw: 8, h: 2, w: 0.3, pitch: 4 },
+          tracklawn: { x: -44, y: 0, z: -158.6, yaw: 20, h: 0.3, w: 0.5, pitch: 24 },
         };
         if (PLACES[cls]) return PLACES[cls];
         // F2 placed people (pedestrians/actorDefs.ts ACTORS): 'actor-<role>' (worker, band, kid, shopper, traveller,
@@ -342,7 +348,7 @@ try {
           const c = window.__city, THREE = await import('/@fs' + window.__benchThree);
           const meshes = [];
           // glass counts (curtain walls); billboards / sky / water / particles do not
-          const skip = /glow|halo|cloud|sky|water|atmo|spark|smoke|rain|firework|shadow/i;
+          const skip = /glow|halo|cloud|sky|water|atmo|spark|smoke|rain|firework|shadow|fixings/i;
           // traverse(), not traverseVisible(): chunk / frustum culling and near-only LODs hide meshes that are
           // invisible from the CURRENT camera but in view from the candidate one (the bin 10 m capture ended
           // inside a culled bus shelter). Coarse + fine LOD twins both block, which is harmless.

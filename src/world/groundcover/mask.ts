@@ -146,7 +146,8 @@ export function buildCoverMaps(ctx: CityContext): CoverMaps {
     else allow.rect(P.x - side, P.z, P.x + side, Q.z, 0);
   }
   for (const n of plan.roadNodes) if (n.kind !== 'portal') allow.rect(n.x - CORRIDOR_HALF, n.z - CORRIDOR_HALF, n.x + CORRIDOR_HALF, n.z + CORRIDOR_HALF, 0);
-  allow.rect(plan.rail.portalW - 4, RAIL_Z - 3.5, plan.rail.portalE + 4, RAIL_Z + 3.5, 0);
+  // (north side: grass right up to the ballast shoulder toe at 2.4 m — a bladeless 'mown' strip read as felt)
+  allow.rect(plan.rail.portalW - 4, RAIL_Z - 2.45, plan.rail.portalE + 4, RAIL_Z + 3.5, 0);
   // block interiors: top-most area surface wins (as roads/covers.ts draws them)
   for (const b of plan.blocks) if (b.surface !== 'grass') allow.rect(b.rect.x0, b.rect.z0, b.rect.x1, b.rect.z1, 0);
   const areas = plan.areas.slice().sort((p, q) => p.layer - q.layer || p.id - q.id);
@@ -227,7 +228,7 @@ export function buildCoverMaps(ctx: CityContext): CoverMaps {
   // south bank: a wildflower meadow with mown strips along the riverbank paths and around picnic spots
   meadow.rect(SLAB.x0, 126.6, 117, SLAB.z1, 215);
   // railway embankment: rough meadow
-  meadow.rect(plan.rail.portalW, RAIL_Z - 9, plan.rail.portalE, RAIL_Z - 3.4, 170);
+  meadow.rect(plan.rail.portalW, RAIL_Z - 9, plan.rail.portalE, RAIL_Z - 2.45, 170);
   // park: an unmown shore band around the pond + a few wildflower islands away from the paths
   const pond = model.pond;
   if (pond) meadow.ellipse(pond.cx, pond.cz, pond.rx + 3.9, pond.rz + 3.9, 0, 175, 'max', 0.62);
