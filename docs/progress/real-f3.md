@@ -1,6 +1,8 @@
 # F3 — Ground, track and rock (final fix round)
 
 ## Resume here
+* 2026-10-29 (session 2) — fresh container restored (npm ci, base worktree /home/user/gc-base on 5174). Re-capturing
+  golden ref (base e1c9780) + m3 to settle the harbor/westbrook diff.
 * 2026-10-29 03:20 — session 1 wrapped up (context cap). ALL CODE BELOW IS UNJUDGED: no clean after-bench yet
   (the first after-captures were black because of a hardscape compile error, fixed in the last commit). FIRST STEP
   for F3b: `scripts/agent-tools/golden.sh m3` (ref = base e1c9780 already in shots/golden/ref — but shots/ is not
