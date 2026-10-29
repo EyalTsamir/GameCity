@@ -83,9 +83,25 @@ function flight(b: GeoBuilder, s: PlaceStair, base: number, sideCol: THREE.Color
   }
 }
 
+/**
+ * Wall lantern: plate on the wall at (wx, wz) facing (nx, nz), bracket, glowing box, plus a halo and a light pool on
+ * the floor below (glows.ts sprites — the places are not in the lamp-light list).
+ */
+function lantern(b: GeoBuilder, lights: GlowPoint[], wx: number, y: number, wz: number, nx: number, nz: number, floorY: number): void {
+  const yaw = Math.atan2(nx, nz);
+  b.color(IRON).set('aMas', KIND.dark, 0, 1, 0);
+  b.box(wx + nx * 0.02, y + 0.2, wz + nz * 0.02, 0.07, 0.13, 0.04, yaw, 0);
+  b.box(wx + nx * 0.2, y + 0.24, wz + nz * 0.2, 0.035, 0.035, 0.2, yaw, 0);
+  b.box(wx + nx * 0.4, y + 0.21, wz + nz * 0.4, 0.11, 0.025, 0.11, yaw + Math.PI / 4, 0);
+  b.color(COL.lamp).set('aMas', KIND.lamp, 0, 1, 0);
+  b.box(wx + nx * 0.4, y + 0.04, wz + nz * 0.4, 0.085, 0.15, 0.085, yaw + Math.PI / 4, 0);
+  lights.push({ x: wx + nx * 0.4, y: y + 0.04, z: wz + nz * 0.4, size: 0.65, kind: 'halo', color: '#ffd08c', intensity: 0.55 });
+  lights.push({ x: wx + nx * 1.1, y: floorY + 0.03, z: wz + nz * 1.1, size: 2.8, kind: 'pool', color: '#ffbe72', intensity: 0.32 });
+}
+
 // ─────────────────────────────────────────────────────────── lower quay ──
 
-function quayStone(b: GeoBuilder, q: QuayPlace, model: TerrainModel): void {
+function quayStone(b: GeoBuilder, q: QuayPlace, model: TerrainModel, lights: GlowPoint[]): void {
   const bed = (x: number) => model.height(x, q.zEdge + 0.4) - 0.35;
   const cop = 0.45;
   const yC = q.y - 0.16;
@@ -138,6 +154,17 @@ function quayStone(b: GeoBuilder, q: QuayPlace, model: TerrainModel): void {
     0,
     1,
   );
+  // low bollard lights along the wall foot (between the benches)
+  for (let x = q.stairs[0].rect.x1 + 3.5; x < r.rect.x0 - 2; x += 14) {
+    const z = q.zWall + 0.22;
+    b.color(BOLLARD).set('aMas', KIND.dark, 0, 1, 0);
+    b.box(x, q.y + 0.36, z, 0.07, 0.36, 0.07, 0, 4);
+    b.box(x, q.y + 0.84, z, 0.1, 0.03, 0.1, 0, 4);
+    b.color(COL.lamp).set('aMas', KIND.lamp, 0, 1, 0);
+    b.box(x, q.y + 0.77, z, 0.075, 0.05, 0.075, 0, 4 | 8);
+    lights.push({ x, y: q.y + 0.77, z, size: 0.32, kind: 'halo', color: '#ffd08c', intensity: 0.45 });
+    lights.push({ x, y: q.y + 0.03, z: z + 1.2, size: 2.4, kind: 'pool', color: '#ffbe72', intensity: 0.3 });
+  }
   // kerb along the open side
   b.color(COL.coping).set('aMas', KIND.coping, 0, 1, 0);
   const L = r.rect.x1 - r.rect.x0;
@@ -309,6 +336,8 @@ function laneStone(b: GeoBuilder, P: LanePlace, hi: boolean, lights: GlowPoint[]
   }
   flight(b, fA, 0, COL.wall);
   flight(b, fB, 0, COL.wall);
+  // a wall lantern over the lane's landing (east wall)
+  lantern(b, lights, L.x1 + 0.14, fA.yBot + 2.7, (fA.rect.z0 + fB.rect.z1) / 2, -1, 0, fA.yBot);
   gatehouse(b, P, hi, lights);
 }
 
@@ -374,13 +403,7 @@ function gatehouse(b: GeoBuilder, P: LanePlace, hi: boolean, lights: GlowPoint[]
       }
     }
     // a lantern on a bracket above the arch
-    const ly = crown + ring + 0.1;
-    const lx = xc + R * 0.82;
-    b.color(IRON).set('aMas', KIND.dark, 0, 1, 0);
-    b.box(lx, ly + 0.55, z + nz * 0.22, 0.025, 0.025, 0.22, 0, 0);
-    b.color(COL.lamp).set('aMas', KIND.lamp, 0, 1, 0);
-    b.box(lx, ly + 0.36, z + nz * 0.42, 0.09, 0.15, 0.09, Math.PI / 4, 0);
-    lights.push({ x: lx, y: ly + 0.36, z: z + nz * 0.42, size: 0.8, kind: 'halo', color: '#ffd08c', intensity: 0.9 });
+    lantern(b, lights, xc + R * 0.82, crown + ring + 0.2, z, 0, nz, P.squareY);
   }
   // barrel-vaulted soffit through the passage (facing down / inwards)
   b.color(COL.plaster.clone().multiplyScalar(0.9)).set('aMas', KIND.plain, 0, 1, 0);
@@ -408,15 +431,15 @@ function gatehouse(b: GeoBuilder, P: LanePlace, hi: boolean, lights: GlowPoint[]
 }
 
 function laneIron(b: GeoBuilder, P: LanePlace): void {
-  // wall-mounted handrails along the west side of the lane flights
-  const x = P.lane.x0 + 0.07;
+  // wall-mounted handrails along the west side of the lane flights (the facade stands ~0.16 m inside the footprint)
+  const x = P.lane.x0 - 0.05;
   for (const s of P.laneStairs) {
     const zb = s.rect.z0 - 0.3,
       zt = s.rect.z1 + 0.3;
     b.color(IRON_HI);
     b.beam(x, s.yBot + 0.92, zb, x, s.yTop + 0.92, zt, 0.05, 0.05);
     b.color(IRON);
-    for (const z of [zb + 0.1, zt - 0.1]) b.beam(x - 0.06, s.yBot + 0.92 + ((s.yTop - s.yBot) * (z - zb)) / (zt - zb), z, x, s.yBot + 0.92 + ((s.yTop - s.yBot) * (z - zb)) / (zt - zb), z, 0.03, 0.03);
+    for (const z of [zb + 0.1, zt - 0.1]) b.beam(x - 0.2, s.yBot + 0.92 + ((s.yTop - s.yBot) * (z - zb)) / (zt - zb), z, x, s.yBot + 0.92 + ((s.yTop - s.yBot) * (z - zb)) / (zt - zb), z, 0.03, 0.03);
   }
 }
 
@@ -490,7 +513,7 @@ function detail(ctx: CityContext): boolean {
 export function buildPlacesStone(b: GeoBuilder, ctx: CityContext, model: TerrainModel, lights: GlowPoint[]): void {
   const pl = ctx.plan.places;
   if (!pl) return;
-  if (pl.quay) quayStone(b, pl.quay, model);
+  if (pl.quay) quayStone(b, pl.quay, model, lights);
   if (pl.lane) laneStone(b, pl.lane, detail(ctx), lights);
   if (pl.island) islandStone(b, pl.island, detail(ctx));
 }
