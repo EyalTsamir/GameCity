@@ -68,6 +68,8 @@ session merges all three into `claude/pensive-gates-bim12i`. Brief: walk around 
   → "Looking at · building" card, Esc closes it and the walk goes on, station concourse → up the steps → feet 0.95 on
   the platform, V leaves (max camera step 0.7 m/frame, no inside frames), HUD button + Esc.
 * Found + fixed on the way: `#ui > *` (style.css) re-enabled pointer events on the overlay → it swallowed every click.
+* Full default ui-test, full city (`--q camdebug`, 1280x720): **50/50**, 0 console errors / page errors, invariants
+  clean — every existing step plus the 9 walk checks (incl. touch: stick walked back 2 m, right-side drag turned).
 * Perf A/B (uncapped, adaptive off, street view `5,1.5,-65,9,0,6` @12, 1536x820@1.25, interleaved ×2, one browser):
   baseline 024d901 orbit 42.92 / 42.84 ms; this branch orbit 43.45 / 42.93 ms (same 229 draws / 3.69 M tris → noise);
   this branch walking at the same spot 43.61 / 42.21 ms (avg 42.91 = baseline; 236 draws, FOV 66, lens idle → no DOF
