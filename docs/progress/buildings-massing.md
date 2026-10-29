@@ -58,6 +58,7 @@ Earlier round: `v1_street.jpg`, `v1_overview.jpg`. Before = `?nomassing` on the 
 
 ## Checks
 - typecheck clean; build OK; captures: 0 console errors / page errors; invariants `{}`.
+- `ui-test.mjs --steps freecam,explore,building`: 7/7 OK (incl. "a room inside an office building"), 0 errors.
 
 ## Files touched (for the merge)
 src/world/buildings/massing.ts (new), src/world/buildings/oldtown.ts, towers.ts, houses.ts, special.ts,
