@@ -1,7 +1,9 @@
 # F3 — Ground, track and rock (final fix round)
 
 ## Resume here
-* 2026-10-29 session 2 — golden m3 (fresh ref from base e1c9780, both 1280×720 pumped): ALL ≈0 (harbor 0.4 =
+* 2026-10-29 06:00 session 2 DONE so far (all pushed): golden m5 after all changes: overview 0.0, downtown 0.3,
+  oldtown 0.1, westbrook 0.3, harbor 1.1 (cliff faults, intended); console clean; downtown invariants {}.
+* session 2 — golden m3 (fresh ref from base e1c9780, both 1280×720 pumped): ALL ≈0 (harbor 0.4 =
   cliff skin behind the quay, westbrook 0.1) → m2's 39.7/37.2 was a stale/broken ref, NOT a regression.
   Bench judgments (960×540, `/tmp/claude-0/run.sh <out> <classes> <dists>` wrapper; ~2.5 min/capture here):
   - rock bump (session 1) = per-pixel SPECKLE at 10 m (octaves of 3–6 mm texels) → fixed: octaves resized, fine
@@ -17,6 +19,10 @@
     scales 30/24/11 per m, fade by the LATERAL footprint (fLat) and depth (fpx), gaps dark green, normalised 0.88.
   - paving: sand-filled joints (lighter than a shadow line, 25 % narrower), ±8 % per-stone luminance.
   - cliffs: faults every 7–18 m with 0.45–1.05 m throws (was 12–30 / 0.3–0.7): shelves no longer a layer cake at 40 m.
+  - HARNESS LESSON: editing a src file while a capture runs breaks the following captures (golden m4 downtown =
+    a flat green frame, 34.1; same cause as session 1's m2). Never edit src/ while bench/golden/perf runs.
+  - perf (SwiftShader 960×540, noisy): station POI notrackfix ±0 (fixings culled at that range); park POI sward
+    ≈ 5 % of frame before the far-skip → now skipped beyond its fade (swVis computed first).
   Bench poses: `cliff` 3 m ok (10 m lands in the lineside fence), `tracklawn` 3/10 ok, `parklawn` 3 m ok (moved to
   −64, 6; 10 m inside a building). `townhouse` 3 m = paving reference.
 * 2026-10-29 03:20 — session 1 wrapped up (context cap). ALL CODE BELOW IS UNJUDGED: no clean after-bench yet
@@ -79,8 +85,18 @@ staticMaterial.ts (track bed), src/world/terrain/**, src/world/groundcover/**, s
 * Not done: litter under market stalls (stall positions are F4's props) — request if wanted.
 
 ## Toggles / tiers / costs
-* ?notrackfix (fixings; off on low, 22 m medium, 38 m high), ?nohandlaid (paving). Rock bump / ballast: no toggle
-  yet (?legacyterrain disables the masonry flat path). Costs NOT measured yet (perf.mjs to do: station view with
-  ;notrackfix and downtown with ;nohandlaid).
+* ?notrackfix (fixings; off on low, 22 m medium, 38 m high), ?nohandlaid (paving), ?nosward (lawn sward texture,
+  all tiers; skipped per pixel beyond its fade ~8–10 m). Rock bump / ballast: replacements, no toggle
+  (?legacyterrain disables the masonry flat path).
+* Measured (perf.mjs, SwiftShader 960×540, compare within run only): near-track view "-40,0.3,-155,7,20,30":
+  fixings = +2 draw calls, +19 k triangles, ms within noise (315 vs 346 — the toggle-off run was slower);
+  sward ≈ 2 % there (315 vs 322); park POI before the far-skip ≈ 5 %. Station POI: fixings culled (0).
+* Sheets: docs/progress/real/f3_session2_before_after.jpg (rows: ballast 2→3 m, park lawn 3 m, rock 10 m
+  speckle → 3 m terraces, cutting 40 m, paving 3 m; left = before, right = after).
 
 ## Next
+* Pasture (landscape/shader.ts ck==3, unowned) — asked the lead for permission (session 2); not touched.
+* Lawn: blades still read darker than the sward at 3 m in full sun (side-lit cards) — next lever is blade count on
+  mown lawns (ring A 576/tile; cost) or a blade normal that follows the ground normal for short blades.
+* Ballast at 2 m still shows some cell outlines; stones are flat (no parallax) — acceptable from 3 m.
+* Bench 10 m poses for cliff/parklawn land inside fence/building (use 3 m and ballast 40 m).

@@ -821,7 +821,9 @@ vec3 groundColor() {
   // sward (judge 2 #5 "felt"): the modelled blades are ~150/m², a real lawn has thousands — between them the
   // ground shows dense blade tips: two layers of randomly oriented 2–3 cm dashes, lit tips over dark gaps,
   // some yellowed. Faded (to the same mean) once a 2 cm cell is under ~4 px, so it never shimmers.
-  if ( kept * uGcSward > 0.01 ) {
+  // (skipped entirely beyond the fade: the hashes cost ~5 % of the ground pass otherwise)
+  float swVis = 1.0 - smoothstep( 0.25, 0.6, max( fLat * 27.5, fpx * 6.6 ) );
+  if ( kept * uGcSward * swVis > 0.01 ) {
     float sw = 1.0, swB = 0.0;
     vec2 vdir = p.xz - cameraPosition.xz;
     float vAn = atan( vdir.y, vdir.x + 1e-5 );
@@ -846,7 +848,6 @@ vec3 groundColor() {
       if ( b > swB ) { swB = b; swt = h.y < 0.12 ? vec3( 1.2, 1.12, 0.72 ) : vec3( 0.85 + 0.35 * fract( h.x * 7.3 ) ); }
     }
     sw = 1.0 - sw;                                   // union coverage; mean 1 − 0.87³ ≈ 0.34
-    float swVis = 1.0 - smoothstep( 0.25, 0.6, max( fLat * 27.5, fpx * 6.6 ) );
     vec3 tipC = mix( grass * 1.3, gt * 1.15, 0.4 ) * mix( vec3( 1.0 ), swt, swVis );
     // (normalised a little below the mean: up close the blades hide part of the sunlit ground)
     vec3 swC = mix( grass * vec3( 0.52, 0.6, 0.5 ), tipC, sw );
