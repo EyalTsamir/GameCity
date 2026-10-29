@@ -167,6 +167,13 @@ three draws it back / front with .side flips) → forceSinglePass (identical: bl
 - boot 33.4 s to the first frame (original: 52 s, then compile stalls); console clean, frame errors 0, invariants {}.
 - garbage still 6–30 MB/s steady, 46–60 MB/s on flights / platform arrival (station crowd) — open.
 
+### 10. Shader compile times (compileprobe.mjs, cand6, fresh profile)
+138 programs, sum 989 s of compile+link, wall 41 s to the first frame: the facade program (buildings-shell, 201 kB of
+generated source) alone takes 28.7 s; every other program completes within ~9.4 s of the start (in parallel). So the
+warm-up's wall time is the facade shader; and compiling only started after the ~9 s of module builds → 4befe3b
+starts each module's programs (renderer.compile on a 1x1 off-screen target) right after the module is built.
+Further: splitting / slimming the facade shader would cut boot further (not done: risk to the look).
+
 ---
 
 # Earlier round: render-performance pass
