@@ -5,16 +5,18 @@ Owned: src/world/props/**, life/**, harbor/** + boats/** (except figure()), land
 sim/rail/station.ts.
 
 ## Resume here
-* Session 1 WIP (code written, judging in progress — shots/f4/b1 = first batch, mostly pre-change code).
-  Written: all bugs 2–6, 8, 9; cloth (awning, laundry drape + pegs, bunting); sailboat cabin/cockpit/rails + sail
-  seams/battens; tractor see-through cab + interior; forklift rebuilt; painted-metal age; night-market shroud.
-  Then added: back yard (fence, patio, shed, pots, sandpit, ball, kid's bike), quay apron age, site mud/ruts/puddles
-  (construction.ts), newsstand one-title-per-stack (24 mastheads), corrugated rust as streaks, cloth split into
-  two meshes (plain 4×4 / draped laundry 8×5). Verified (shots/f4/b2): bug 9 board clear of columns, bug 4 wheels,
-  bug 5 tails to the ground, bug 2 no tree in the barn, herd near LOD; console clean, invariants {} (camera only).
-  Open: bug 2 "floating poplar clumps" persist at fs1 (not crown spacing — check ?nodrift / far impostor);
-  views by1/mk1/fk put the camera inside geometry → use shots/f4/b3 views. Judge b3 + bench1 next.
-
+* 2026-10-29 03:55 — **Session 1 ends (context cap).** All pushed. Console clean, invariants {} (shots/f4/b4/report.json:
+  by_shed 1, by_fence 16 panels; cloth 113k tris; 163 draws in the b4 overview session). Overview unchanged
+  (shots/f4/b4/overview_11.png).
+  **Next (session 2), in order:** (1) judge the back yard at eye level (shed, fence, pots, sandpit, ball, kid's bike —
+  views ending inside geometry are a harness/camera problem, below); (2) night market at 21.5 h (mkn frame came out
+  blank); (3) forklift + sailboat cabin/rails at 3/10 m (bench boat 10 m and fk views were blank); (4) quay oil stains
+  after toning; (5) site mud/ruts at eye level; (6) perf.mjs `;nonightmarket` and cloth before/after;
+  (7) poplar floating clumps (bug 2b) — try `?nodrift`, `?landtrees=0`; (8) phone box / newsstand age at 3 m.
+  **Harness problem (for the lead):** ~half of capture-set / bench views come out as one flat colour with a fine dot
+  pattern (b1 fq1 before most F4 code loaded; b2 by1/by2/mk1/fk; b3 ye/mk/fk; bench newsstand 3 m, phonebox 3 m,
+  boat 10 m; b4 yt + mkn although the same yt view worked in b3). Not framing in the usual sense (yt is 26 m up at
+  pitch 70). Suspect the camera after a snap (4 pumped frames) or the DOF/AO at a degenerate focus.
 ## Done
 * Bug 2 (tree through barn roof): settlements.ts now returns `blocked(x,z,r)` (building rects + 1 m, barns + 6 m
   for the silo, incl. the near-farm buildings spliced out for farmstead.ts); trees.ts Builder skips a tree whose
@@ -72,3 +74,7 @@ sim/rail/station.ts.
 * `?nonightmarket` (off on low). Others ride existing toggles (`?nostallwind` keeps the cloth static).
 
 ## Code pointers (learned this session)
+
+## tokens.py (s1)
+TOTAL weighted 6.1M  (cache read 84%, cache write 7%, output 10%)
+agent               calls   w(M)    %  ctxMed  ctxMax cold coldW%  idle>5min: warm/cold
