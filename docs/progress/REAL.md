@@ -11,6 +11,11 @@ Overview must stay at least as impressive as now. Every feature: quality tiers +
 Lead session: session_01XuhAMczW3iK25AAWnf3qog, branch `claude/pensive-gates-bim12i`.
 
 ## Resume here (keep current)
+* 2026-10-29 03:35 UTC — HARNESS FIX: the pumpFrames 8×8 clipped jpeg screenshots made Chromium tile an 8×8 patch over
+  later captures (grey stipple; golden harbor 39.7 / oldtown 58.8, F2's "blank views", F3's harbor/westbrook 39/37).
+  Pumps are now full-viewport. Golden after F1+F2 (shots/golden/f1b): overview 0.6, harbor 2.0, oldtown 4.1,
+  downtown 4.4, westbrook 5.7 — all window interiors/house edits, no breakage. F3 s1 (5a6560a) wrapped →
+  F3b session_01XuhAMgSAE5Y4dHDf82na4z (re-capture golden, bench-judge, felt lawn). F3 not merged yet.
 * 2026-10-29 03:15 UTC — F1 s1 (aa407fc/99e6016: unique shop names, bookbinder interior, leaf lobby plants, Café Nord
   sign, church soot/streaks, school art+blinds, warehouse sign, porch posts; yard_b sills = not a bug; lawn rim = sun
   shadow leak → OUT OF SCOPE, open) and F2 s1 (4e678f4: actors.ts real posed figures for site/band/kids/boat crews,
