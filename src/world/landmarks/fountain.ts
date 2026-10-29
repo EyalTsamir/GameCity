@@ -33,6 +33,7 @@ void main() {
 
 const SPRAY_FRAG = /* glsl */ `
 uniform float uTime;
+uniform float uJetReal;
 uniform float uLights;
 uniform float uDaylight;
 varying vec2 vSp;
@@ -51,9 +52,22 @@ void main() {
   float s = vSp.y * vLen;
   float flow = sn(vec2(vSp.x * 9.0, s * 2.2 - uTime * 4.5)) * 0.6 + sn(vec2(vSp.x * 23.0, s * 6.0 - uTime * 7.0)) * 0.4;
   float fres = 1.0 - abs(dot(normalize(vN), normalize(vV)));
-  float a = (0.28 + 0.55 * flow) * (0.55 + 0.6 * fres);
-  a *= smoothstep(0.0, 0.04, vSp.y) * (1.0 - smoothstep(0.86, 1.0, vSp.y) * 0.6);
-  vec3 day = mix(vec3(0.72, 0.84, 0.9), vec3(1.0), flow * 0.6) * (0.55 + 0.5 * uDaylight);
+  float a;
+  vec3 day;
+  if (uJetReal > 0.5) {
+    // (G2, ?nofountainfx) aerated water, not glass: dense white core, feathered edges, fine streaks running with
+    // the flow, the stream tearing into gaps and spray towards its end (no bead end)
+    float streak = sn(vec2(vSp.x * 41.0, s * 1.4 - uTime * 6.0)) * 0.55 + sn(vec2(vSp.x * 87.0, s * 3.5 - uTime * 9.0)) * 0.45;
+    float core = 1.0 - smoothstep(0.25, 0.95, fres);
+    float tear = smoothstep(0.45, 1.0, vSp.y) * (0.35 + 0.65 * sn(vec2(vSp.x * 13.0, s * 4.0 - uTime * 8.0)));
+    a = (0.18 + 0.62 * flow * streak + 0.3 * streak) * (0.3 + 0.75 * core);
+    a *= smoothstep(0.0, 0.04, vSp.y) * (1.0 - smoothstep(0.7, 0.98, vSp.y)) * (1.0 - 0.7 * tear);
+    day = mix(vec3(0.78, 0.86, 0.9), vec3(1.0, 1.0, 0.99), streak * 0.7 + core * 0.2) * (0.6 + 0.45 * uDaylight);
+  } else {
+    a = (0.28 + 0.55 * flow) * (0.55 + 0.6 * fres);
+    a *= smoothstep(0.0, 0.04, vSp.y) * (1.0 - smoothstep(0.86, 1.0, vSp.y) * 0.6);
+    day = mix(vec3(0.72, 0.84, 0.9), vec3(1.0), flow * 0.6) * (0.55 + 0.5 * uDaylight);
+  }
   vec3 night = mix(vec3(0.45, 0.85, 1.0), vec3(1.0, 0.95, 0.85), flow) * 1.25;
   vec3 col = mix(day, night, uLights);
   gl_FragColor = vec4(col, clamp(a, 0.0, 0.85));
@@ -86,6 +100,7 @@ void main() {
 
 const DROP_FRAG = /* glsl */ `
 uniform float uLights;
+uniform float uJetReal;
 uniform float uDaylight;
 varying float vA;
 #include <common>
@@ -93,7 +108,8 @@ varying float vA;
 void main() {
   vec2 c = gl_PointCoord - 0.5;
   float r = length(c);
-  float a = (1.0 - smoothstep(0.25, 0.5, r)) * vA * 0.8;
+  // (G2) small soft spray drops, not white beads
+  float a = uJetReal > 0.5 ? (1.0 - smoothstep(0.04, 0.3, r)) * vA * 0.5 : (1.0 - smoothstep(0.25, 0.5, r)) * vA * 0.8;
   vec3 col = mix(vec3(0.85, 0.93, 1.0) * (0.6 + 0.45 * uDaylight), vec3(0.7, 0.95, 1.0) * 1.4, uLights);
   gl_FragColor = vec4(col, a);
   #ifdef USE_FOG
@@ -103,8 +119,8 @@ void main() {
 }
 `;
 
-function waterMaterial(g: GlobalUniforms): THREE.MeshStandardMaterial {
-  const m = new THREE.MeshStandardMaterial({ color: '#235f74', roughness: 0.06, metalness: 0.0 });
+function waterMaterial(g: GlobalUniforms, fx: boolean): THREE.MeshStandardMaterial {
+  const m = new THREE.MeshStandardMaterial({ color: '#235f74', roughness: fx ? 0.1 : 0.06, metalness: 0.0 });
   m.onBeforeCompile = (sh) => {
     sh.uniforms.uTime = g.uTime;
     sh.uniforms.uLights = g.uLights;
@@ -125,8 +141,27 @@ function waterMaterial(g: GlobalUniforms): THREE.MeshStandardMaterial {
           grad += normalize(p - uFC.xz + 1e-4) * cos(r * 9.0 - t * 6.0) * 0.12;
           grad += vec2(cos(p.x * 3.1 + t * 1.7), cos(p.y * 2.7 - t * 1.3)) * 0.06;
           grad += vec2(cos((p.x + p.y) * 7.0 - t * 3.0), cos((p.x - p.y) * 6.0 + t * 2.4)) * 0.05;
+          if (uFx > 0.5) grad += vec2(cos(p.x * 17.0 + p.y * 5.0 - t * 5.1), cos(p.y * 15.0 - p.x * 6.0 + t * 4.3)) * 0.07
+                + vec2(cos(p.x * 31.0 - t * 7.0), cos(p.y * 29.0 + t * 6.2)) * 0.035;
           vec3 nW = normalize(vec3(-grad.x, 1.0, -grad.y));
           normal = normalize((viewMatrix * vec4(nW, 0.0)).xyz);
+        }`,
+      )
+      .replace(
+        '#include <color_fragment>',
+        `#include <color_fragment>
+        if (uFx > 0.5) {
+          // (G2) shallow water over a stone floor: the floor (light, with dancing caustics) shows through near the
+          // rim and fades into a deeper green-teal towards the middle; dark wind patches break the surface
+          vec2 p = vFW.xz;
+          float r = length(p - uFC.xz);
+          float shallow = vFW.y > 1.0 ? 0.8 : smoothstep(3.4, 5.2, r);
+          vec2 cq = p * 2.3 + vec2(uTime * 0.21, -uTime * 0.17);
+          float c1 = abs(sin(cq.x * 2.1 + sin(cq.y * 1.7 + uTime * 0.9) * 1.3) + sin(cq.y * 2.3 + sin(cq.x * 1.9 - uTime * 0.8) * 1.2));
+          float caust = pow(1.0 - clamp(c1 * 0.5, 0.0, 1.0), 3.0);
+          vec3 floorC = vec3(0.34, 0.36, 0.32) * (1.0 + 0.7 * caust);
+          vec3 deep = vec3(0.03, 0.1, 0.1);
+          diffuseColor.rgb = mix(deep, floorC * vec3(0.5, 0.74, 0.7), 0.22 + 0.42 * shallow);
         }`,
       )
       .replace(
@@ -139,9 +174,10 @@ function waterMaterial(g: GlobalUniforms): THREE.MeshStandardMaterial {
         }`,
       );
     sh.uniforms.uFC = { value: (m.userData.center as THREE.Vector3) ?? new THREE.Vector3() };
-    sh.fragmentShader = sh.fragmentShader.replace('uniform float uTime;', 'uniform float uTime;\nuniform vec3 uFC;');
+    sh.uniforms.uFx = { value: fx ? 1 : 0 };
+    sh.fragmentShader = sh.fragmentShader.replace('uniform float uTime;', 'uniform float uTime;\nuniform vec3 uFC;\nuniform float uFx;');
   };
-  m.customProgramCacheKey = () => 'lm-fountain-water-v1';
+  m.customProgramCacheKey = () => 'lm-fountain-water-v2' + (fx ? 'x' : '');
   return m;
 }
 
@@ -226,6 +262,8 @@ export function genFountain(env: Env, f: Feature, g: GlobalUniforms): void {
   env.begin(f.x, 0, f.z, 0);
   env.checkRadius(f.x, f.z, f.radius || R, 'fountain');
   const K = env.S;
+  // ?nofountainfx: the old glass-tube jets and the flat pool (all tiers: a few ALU on small surfaces)
+  const fxOn = typeof location === 'undefined' || !new URLSearchParams(location.search).has('nofountainfx');
   const stone = M('#ddd3c0', PAT.STONE, 0.75, 0, 0, FLOOD.SOFT, 0.15);
   const stoneTrim = M('#e8e0cf', PAT.PLAIN, 0.7, 0, 0, FLOOD.SOFT);
   const mosaic = M('#24566a', PAT.STONE, 0.6, 0, 0, 0, 0.1);
@@ -369,7 +407,7 @@ export function genFountain(env: Env, f: Feature, g: GlobalUniforms): void {
   disc(rIn + 0.01, wY);
   disc(1.6, 1.7);
   disc(0.84, 3.0);
-  const wm = waterMaterial(g);
+  const wm = waterMaterial(g, fxOn);
   wm.userData.center = new THREE.Vector3(f.x, 0, f.z);
   const wMerged = new THREE.Mesh(mergeSimple(wGeo), wm);
   wMerged.name = 'landmarks-fountain-water';
@@ -475,7 +513,7 @@ export function genFountain(env: Env, f: Feature, g: GlobalUniforms): void {
     side: THREE.DoubleSide,
     fog: true,
   });
-  Object.assign(smat.uniforms, { uTime: g.uTime, uLights: g.uLights, uDaylight: g.uDaylight });
+  Object.assign(smat.uniforms, { uTime: g.uTime, uLights: g.uLights, uDaylight: g.uDaylight, uJetReal: { value: fxOn ? 1 : 0 } });
   const spray = new THREE.Mesh(sg, smat);
   spray.name = 'landmarks-fountain-spray';
   spray.renderOrder = 2;
@@ -534,7 +572,7 @@ export function genFountain(env: Env, f: Feature, g: GlobalUniforms): void {
     depthWrite: false,
     fog: true,
   });
-  Object.assign(dmat.uniforms, { uTime: g.uTime, uLights: g.uLights, uDaylight: g.uDaylight });
+  Object.assign(dmat.uniforms, { uTime: g.uTime, uLights: g.uLights, uDaylight: g.uDaylight, uJetReal: { value: fxOn ? 1 : 0 } });
   const drops = new THREE.Points(dg, dmat);
   drops.name = 'landmarks-fountain-drops';
   drops.renderOrder = 2;

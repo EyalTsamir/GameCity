@@ -35,7 +35,9 @@ uniform float uRdWear;
 uniform float uKerbD;
 uniform float uRdHand;
 vec4 rdLitter(vec2 p, float fw, float dens, float leafy) {
-  float near = 1.0 - smoothstep(0.008, 0.02, fw);
+  // (G2) fw is the LARGER footprint axis: at grazing views a 5 mm butt seen with the geometric-mean footprint
+  // aliased into rows of black dashes ("barcode" along the wall band, dotted lines under the colonnades)
+  float near = 1.0 - smoothstep(0.006, 0.014, fw);
   if (near <= 0.0 || dens <= 0.0 || uRdWear < 0.5) return vec4(0.0);
   vec2 g = floor(p / 0.6);
   vec4 acc = vec4(0.0);
@@ -260,7 +262,7 @@ vec3 rdAsphalt(inout float rough) {
   // ── gutter litter: leaves, butts, gum and paper collect along the kerb
   {
     float gut = step(0.5, vA.x) * smoothstep(2.75, 3.15, abs(lat)) * onRoad;
-    vec4 lt = rdLitter(p, sqrt(fwP.x * fwP.y) + 1e-5, gut * (0.35 + 0.4 * smoothstep(0.4, 0.7, nM.g)), 0.7);
+    vec4 lt = rdLitter(p, max(fwP.x, fwP.y) + 1e-5, gut * (0.35 + 0.4 * smoothstep(0.4, 0.7, nM.g)), 0.7);
     c = mix(c, lt.rgb, lt.a);
     rough = mix(rough, 0.85, lt.a);
   }
@@ -361,7 +363,9 @@ vec3 rdHard(inout float rough) {
     // hand-laid (F3, ?nohandlaid): small units (< 1.3 m) are set by hand — courses wander a little, every stone
     // has its own length (jittered joints along the course), and the bond offset drifts from row to row.
     // Kerbs / gutters (curb frame) and large slabs stay machine-straight.
-    float hand = (uRdHand > 0.5 && frame < 1.5 && minS < 1.3) ? 1.0 : 0.0;
+    // (G2: only setts / pavers wander — sawn slabs (sidewalk flags, granite) keep straight courses; the wander on
+    // 0.6–1.2 m slabs read as wavy joints crossing square stones)
+    float hand = (uRdHand > 0.5 && frame < 1.5 && minS < 0.35) ? 1.0 : 0.0;
     float qy = q.y + hand * (nM.r - 0.5) * 0.5 * size.y;
     float row = floor(qy / size.y);
     float off = vV.z >= 0.0 ? mod(row, 2.0) * vV.z : rdHash(vec2(row, 3.7));
@@ -516,7 +520,7 @@ vec3 rdHard(inout float rough) {
     c *= 1.0 - 0.38 * line;
     c = mix(c, c * vec3(0.86, 0.79, 0.67), silt * 0.55);
     rough -= 0.25 * line;
-    vec4 lt = rdLitter(p, sqrt(fwp.x * fwp.y) + 1e-5, 0.45 * (1.0 - smoothstep(0.05, 0.25, d)), 0.8);
+    vec4 lt = rdLitter(p, max(fwp.x, fwp.y) + 1e-5, 0.45 * (1.0 - smoothstep(0.05, 0.25, d)), 0.8);
     c = mix(c, lt.rgb, lt.a * 0.9);
    }
   } else if (sp > 3.5) {
@@ -592,7 +596,7 @@ vec3 rdHard(inout float rough) {
         c = mix(c, c * sc3, clamp(fill * 0.8 + ring * 0.7, 0.0, 1.0));
       }
     }
-    vec4 lt = rdLitter(p, sqrt(fwp.x * fwp.y) + 1e-5, (onSide * 0.22 + 0.08) * (0.6 + 0.6 * nM.g) + onSide * 0.25 * smoothstep(5.9, 6.5, lat), 0.35);
+    vec4 lt = rdLitter(p, max(fwp.x, fwp.y) + 1e-5, (onSide * 0.22 + 0.08) * (0.6 + 0.6 * nM.g) + onSide * 0.25 * smoothstep(5.9, 6.5, lat), 0.35);
     c = mix(c, lt.rgb, lt.a * 0.9);
   }
   float wetH = max(uRain, uWetH * 0.85);

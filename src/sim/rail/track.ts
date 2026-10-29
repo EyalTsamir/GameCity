@@ -5,6 +5,7 @@
 
 import type { CityPlan } from '../../core/plan';
 import type { Rng } from '../../core/rng';
+import type { V3 } from './geo';
 import { Geo } from './geo';
 import { K } from './staticMaterial';
 import { GAUGE, PANEL_TOP, RAIL_H, BALLAST_DROP, XING_HALF, XING_RAMP, WIRE_H, RAIL_TOP, type RailProfile } from './profile';
@@ -50,6 +51,17 @@ const COL = {
   cabinet: '#a9aea5',
 };
 
+const NO_BED_RELIEF = typeof location !== 'undefined' && new URLSearchParams(location.search).has('nobedrelief');
+/** bed cross-section (G2): [z offset from the track centre, height relative to the sleeper tops] (edges = ±bedHalfTop) */
+const BED_PROFILE: [number, number][] = [
+  [-1.62, -0.035], [-1.42, 0.02], [-1.3, 0.005], [-1.0, -0.028], [-0.55, -0.04], [0, -0.05],
+  [0.55, -0.04], [1.0, -0.028], [1.3, 0.005], [1.42, 0.02], [1.62, -0.035],
+];
+const hash2 = (a: number, b: number): number => {
+  const h = Math.sin(a * 127.1 + b * 311.7) * 43758.5453;
+  return h - Math.floor(h);
+};
+
 /**
  * `g` receives the low, shadow-receiving track bed; `gt` the tall, shadow-casting lineside
  * furniture; `gd` the level-crossing decks (drawn with a polygon offset so they win over the
@@ -72,6 +84,7 @@ export function buildTrack(g: Geo, gt: Geo, gd: Geo, plan: CityPlan, prof: RailP
   const xs = [...new Set(xsSet.map((v) => Math.round(v * 1000) / 1000))].sort((a, b) => a - b);
 
   // ── ballast bed (trapezoid), cut at the crossing decks
+  const bedRelief = !NO_BED_RELIEF;
   const bedHalfTop = 1.62,
     bedHalfBot = 2.4;
   for (let i = 0; i < xs.length - 1; i++) {
@@ -85,6 +98,33 @@ export function buildTrack(g: Geo, gt: Geo, gd: Geo, plan: CityPlan, prof: RailP
     g.kind(K.BALLAST);
     g.color(COL.ballast, j);
     // top
+    if (bedRelief) {
+      // (G2, ?nobedrelief) a real bed is not a table top: the cribs sag a few cm below the sleeper tops (their
+      // sides show), the shoulders are heaped over the sleeper ends and roll off to the slopes, and every crib
+      // is filled a little differently. Cross-section rows × ~0.33 m steps along the track (≈ 14 tris per metre).
+      const n = Math.max(1, Math.round((xb - xa) / 0.33));
+      const row = (x: number, k: number): V3[] => {
+        const t = prof.top(x), yEdge = Math.max(0.03, t - BALLAST_DROP);
+        return BED_PROFILE.map(([dz, dy], m) => {
+          const edge = m === 0 || m === BED_PROFILE.length - 1;
+          const jit = edge ? 0 : (hash2(k + xa * 7.1, m) - 0.5) * 0.022;
+          return [x, edge ? yEdge : Math.max(0.03, t - RAIL_H + dy + jit), zc + dz] as V3;
+        });
+      };
+      let r0 = row(xa, 0);
+      for (let k = 1; k <= n; k++) {
+        const r1 = row(xa + ((xb - xa) * k) / n, k);
+        g.color(COL.ballast, j);
+        for (let m = 0; m < r0.length - 1; m++) g.quad(r0[m + 1], r1[m + 1], r1[m], r0[m]);
+        // shoulders stepped with the top (no T-junction cracks along the bed edge)
+        const L = r0.length - 1;
+        g.color(COL.ballastEdge);
+        g.quad([r0[0][0], -0.02, zc + bedHalfBot], [r1[0][0], -0.02, zc + bedHalfBot], r1[L], r0[L]);
+        g.quad([r1[0][0], -0.02, zc - bedHalfBot], [r0[0][0], -0.02, zc - bedHalfBot], r0[0], r1[0]);
+        r0 = r1;
+      }
+      continue;
+    }
     g.quad([xa, ya, zc + bedHalfTop], [xb, yb, zc + bedHalfTop], [xb, yb, zc - bedHalfTop], [xa, ya, zc - bedHalfTop]);
     g.color(COL.ballastEdge);
     // shoulders
