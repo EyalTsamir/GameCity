@@ -2,7 +2,20 @@
 
 ## G1 — glass and interiors (branch claude/real-g1-glass)
 ### Resume here
-Started 10:15 UTC, deadline 11:50. Before bench: shots/g1/before (townhouse, office, tower, apartment, car, bus, train @3 m).
+Fixes 1–8 below pushed (typecheck, console clean, invariants {} at the bugs-3 bank view). Before: shots/g1/before
+(first page load, pre-edit) + `?noglassvar` / `?novehglass&notrainglass` runs; after: shots/g1/after, after2.
+Bench cost here ≈ 2 min / capture (the 7-class 3 m run needs > 15 min — use `ONLYPOSE=cab_6m node scripts/.g1bench.mjs`
+style filters, local copy, not committed).
+
+### Judged (3 m bench, 11 h)
+* Shop reflection floor 0.24–0.34 first try: overshot — bakery and Café Nord washed to a pale mirror, the warm
+  interior the judge liked was gone. Re-tuned to 0.11–0.16 + interior ×0.82 by day (after2).
+* Car glass: halving the diffuse base changed nothing visible — the veil is the clear-coat street reflection at
+  gain 3.6; now ×0.6 on glass (after2).
+* Apartment: fewer / softer car posters — reads better, the panes now differ.
+* Bus side glass: the panes over the real seated passengers are fully see-through, so the saloon reads open-air.
+  **Open**: needs a blended reflection-only overlay draw of the flank window quads (one more instanced draw in
+  traffic render) — the opaque vehicle material cannot put a reflection over figures drawn later.
 
 ### Code pointers
 * Facade glass: `src/world/buildings/materials.ts` `bhWall` (~1066–1925): cell = floor(vFac), r1..r3 per room (1453);
