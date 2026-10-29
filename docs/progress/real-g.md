@@ -2,6 +2,11 @@
 
 ## G2 — Ground, track, water (branch claude/real-g2-ground)
 ### Resume here
+* 11:37 UTC FINAL (time-box). Colonnade dots also survive uRdWear=0 (shots/g2/cmp5.png) → they come from the base
+  slab pattern in the joint/edge branch of glsl.ts ~l.340–400 (joint rdLine / chamfer darkening / per-stone rdN
+  tilt `rdN = … * 0.06 * hd`) on the plaza:2 forecourt slabs (frame 1) in the shaded arcade. Next session: A/B
+  that block (set rdN = 0, then hd = 0) at office 3 m with shots/g2/probe.mjs (one load, `~`-separated variants;
+  roads materials expose userData.rdUniforms), and widen the joint filter (rdLine width vs fq) if it is the joint.
 * 11:33 UTC checks: typecheck clean; downtown shot invariants {} + console clean; golden vs base worktree (port
   5174, 1280×720, 11 h): overview 0.0, downtown 0.02. Colonnade dots: hide:roads-hardscape removes them (arcade
   floor is plain) → they ARE in the hardscape shader, not litter (A/B with uRdWear=0 → shots/g2/p10).
