@@ -16,6 +16,7 @@ import { WIN, PROF, WALLPAT, ROOFPAT, FRAME, GLASS, LIGHT_MODE, shopType } from 
 import { letterSign, helipadMark, boardSign } from './signs';
 import { GREEN } from './green';
 import { MASS, massRng, recordTier, notchPoly, notchCap, crownCornice, roofKit } from './massing';
+import { towerPlant, roofPlantOn } from './roofplant';
 
 interface P {
   x: number;
@@ -585,32 +586,37 @@ export function genTower(g: Gen): void {
     const t = g.trim;
     const w = r.x1 - r.x0,
       d = r.z1 - r.z0;
+    // ?noroofplant: real plant (roofplant.ts) instead of the grey penthouse + boxes; the rng draws below stay the same
+    const plant = roofPlantOn() ? towerPlant(g, r, y, { kind: masonry ? 'masonry' : sc.style === WIN.CURTAIN ? 'glass' : 'panel', wall: wallC, tank: sc.tank, curtain: sc.style === WIN.CURTAIN, H }) : null;
     // mechanical penthouse
     const pw = w * rng.range(0.38, 0.55),
       pd = d * rng.range(0.35, 0.5);
     const px = r.x0 + w * rng.range(0.25, 0.75),
       pz = r.z0 + d * rng.range(0.3, 0.7);
-    const ph = rng.range(3, 4.2);
+    const ph0 = rng.range(3, 4.2);
+    const ph = plant ? plant.h : ph0;
     const pc = col('#b9b6ae');
     setCol(t, pc);
-    const bx0 = Math.max(r.x0, px - pw / 2),
-      bx1 = Math.min(r.x1, px + pw / 2),
-      bz0 = Math.max(r.z0, pz - pd / 2),
-      bz1 = Math.min(r.z1, pz + pd / 2);
-    t.box(bx0, y, bz0, bx1, y + ph, bz1);
-    setCol(t, shade(pc, 0.7));
-    for (let k = 0; k < 3; k++) {
-      const yy = y + 1 + k * 0.45;
-      t.box(bx0 - 0.04, yy, bz0 - 0.04, bx1 + 0.04, yy + 0.18, bz1 + 0.04, 0b110011);
+    const bx0 = plant ? plant.x0 : Math.max(r.x0, px - pw / 2),
+      bx1 = plant ? plant.x1 : Math.min(r.x1, px + pw / 2),
+      bz0 = plant ? plant.z0 : Math.max(r.z0, pz - pd / 2),
+      bz1 = plant ? plant.z1 : Math.min(r.z1, pz + pd / 2);
+    if (!plant) {
+      t.box(bx0, y, bz0, bx1, y + ph, bz1);
+      setCol(t, shade(pc, 0.7));
+      for (let k = 0; k < 3; k++) {
+        const yy = y + 1 + k * 0.45;
+        t.box(bx0 - 0.04, yy, bz0 - 0.04, bx1 + 0.04, yy + 0.18, bz1 + 0.04, 0b110011);
+      }
+      setCol(t, col('#8f8c85'));
+      t.box(bx0 - 0.12, y + ph, bz0 - 0.12, bx1 + 0.12, y + ph + 0.15, bz1 + 0.12);
     }
-    setCol(t, col('#8f8c85'));
-    t.box(bx0 - 0.12, y + ph, bz0 - 0.12, bx1 + 0.12, y + ph + 0.15, bz1 + 0.12);
     // cooling units with fans
     const nU = rng.int(2, 4);
     for (let k = 0; k < nU; k++) {
       const ux = r.x0 + 1.2 + rng.next() * (w - 2.4),
         uz = r.z0 + 1.2 + rng.next() * (d - 2.4);
-      if (ux > bx0 - 1.3 && ux < bx1 + 1.3 && uz > bz0 - 1.3 && uz < bz1 + 1.3) continue;
+      if (plant || (ux > bx0 - 1.3 && ux < bx1 + 1.3 && uz > bz0 - 1.3 && uz < bz1 + 1.3)) continue;
       setCol(t, col('#cfd3d4'));
       t.box(ux - 0.9, y, uz - 0.9, ux + 0.9, y + 1.1, uz + 0.9);
       setCol(t, col('#3a3f44'));
@@ -620,7 +626,7 @@ export function genTower(g: Gen): void {
     if (sc.tank && rng.chance(0.75)) {
       const tx = r.x0 + 1.8 + rng.next() * Math.max(0.1, w - 3.6),
         tz = r.z0 + 1.8 + rng.next() * Math.max(0.1, d - 3.6);
-      if (!(tx > bx0 - 1.8 && tx < bx1 + 1.8 && tz > bz0 - 1.8 && tz < bz1 + 1.8)) waterTank(tx, tz, y);
+      if (!plant && !(tx > bx0 - 1.8 && tx < bx1 + 1.8 && tz > bz0 - 1.8 && tz < bz1 + 1.8)) waterTank(tx, tz, y);
     }
     // antenna mast (tall buildings) / gantry
     if (allowTall && H > 55) {
@@ -650,7 +656,7 @@ export function genTower(g: Gen): void {
       for (let k = 0; k < 2; k++) {
         const dx = r.x0 + 0.8 + rng.next() * (w - 1.6),
           dz = r.z0 + 0.8 + rng.next() * (d - 1.6);
-        if (dx > bx0 - 0.8 && dx < bx1 + 0.8 && dz > bz0 - 0.8 && dz < bz1 + 0.8) continue;
+        if (plant || (dx > bx0 - 0.8 && dx < bx1 + 0.8 && dz > bz0 - 0.8 && dz < bz1 + 0.8)) continue;
         setCol(t, col('#e9e9e6'));
         t.cylinder(dx, dz, 0.05, y, y + 0.9, 4, false);
         t.cone(dx, dz, 0.55, y + 0.8, y + 1.15, 8);

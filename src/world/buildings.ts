@@ -34,6 +34,7 @@ import { GreenKit, makeGreenTexture, createGreenMaterial } from './buildings/gre
 import { setClutter } from './buildings/clutter';
 import { createWinGeo } from './buildings/winGeo';
 import { setMassing, resetMassing, massTiers } from './buildings/massing';
+import { setRoofPlant } from './buildings/roofplant';
 
 /** edge (m) of the square trim chunks (≈ two city blocks), grid origin at the slab's NW corner */
 const TRIM_CHUNK = 110;
@@ -129,6 +130,8 @@ export default function create(ctx: CityContext): CityModule {
   setClutter(!ctx.debug.params.has('noclutter'));
   // massing: ?nomassing / ?nooriels ?noturrets ?nocrossgables ?nosetbacks ?nocrowns ?noroofkit (buildings/massing.ts)
   setMassing(ctx.debug.params, ctx.quality.level);
+  // ?noroofplant (or quality low): the simple tower rooftop instead of roofplant.ts
+  setRoofPlant(!ctx.debug.params.has('noroofplant') && !ctx.debug.params.has('nomassing') && ctx.quality.level !== 'low');
   resetMassing();
   setDoorLife(!ctx.debug.params.has('nodoorlife'));
   setGutters(!ctx.debug.params.has('nogutters'));
