@@ -2,8 +2,50 @@
 
 Branch `claude/real-w1-facades` (from `claude/pensive-gates-bim12i`). Brief: docs/progress/real-briefs.md "W1".
 
-## F1 — Facades final (2026-10-29, branch `claude/real-f1-facades`)
+## F1 — Facades final (2026-10-29, branch `claude/real-f1-facades`, session 1 — stopped at the context cap)
 ### Resume here
+* **Code done, NOT yet judged on the bench** (each bench/capture costs 2–6 min in this container): first thing next
+  session, bench `school,church,warehouse,house,tower,office,shop --dists 3,10` and the old-town shops (Books /
+  Bookbinder / Fish & Chips) + downtown "CAFÉ NORD" arcade; fix what reads wrong.
+* **Lawn rim (judge-2 #5) is REAL** (shots/f1/rim/apartment_3m.png, pumped frames): a 1–2 px bright yellow-green line
+  along the whole wall/lawn seam at the bench apartment (−137.5, −56.5), wall in shade. Runtime probe
+  `scripts/.f1/variants.mjs` (scratch, not committed; one load, variants by eval: a default / b sun castShadow off /
+  c groundcover meshes hidden / d buildings-* hidden) → shots/f1/rimv/*.png, log shots/f1/rimv.log — read it first.
+  If b removes it: shadow bias (sky owner, request already in real-requests.md); if c: groundcover edge tufts; if d
+  keeps it: terrain lawn edge.
+* **Yard sill slabs (judge-2 #2) = NOT a bug:** numeric probe over all 4330 sill records (each sill centre tested
+  against the buildings-shell wall triangles, `group.userData.rec` on `buildings-wingeo`): 0 records off a wall.
+  The slabs in `yb=76.5,0.5,17.5,14,250,25` with `?nolaundry` are the back-wall sills of the building the CAMERA
+  IS INSIDE (its walls are back-face culled; judge view yard_b ≈ camera at x+9 = inside the east row too). The
+  rods higher up are laundry wires anchored on those culled walls. Free cameras inside footprints were the cause.
+### Done (session 1, commits after 'F1: log skeleton')
+* bug 7: oldtown.ts shop names dealt from a deck (`dealShop`, no repeats until all 34 used; the old stride
+  `*7 % 35` hit 5 residues → two Fish & Chips / two Tailors).
+* #7 interiors: `shopType('Bookbinder')` → 7 (framed pictures, not the bookshop); books (type 3) shelving per shop
+  (walnut / sage / white-painted, pale floor); lobby plant (bhShop mid layer, T > 7.5) drawn as 5–8 elliptic
+  leaves with midribs, stem, tapered pot, size/pot colour per pane (was a hash grid of 7 cm "pixels");
+  towers.ts arcade shop sign (Café Nord…) centred in the bay between two arcade columns, width ≤ bay − 1 m.
+* glassAlb for non-home windows: `mix(roomK, 1, nearL)` (sheets/blinds at the glass no longer dimmed like the
+  room depth — affects office notices too).
+* school (materials.ts, `prof == SCHOOL`): 72 % of windows carry 2–4 A3 children's paintings at child height (sun /
+  house / scribble / figure on white or sugar paper, grass strip), some with a paper chain under the head; the rest
+  roller blinds part-drawn. (Entrance handles, noticeboard, railings, bike stands, sign fixings: NOT done.)
+* #8 church: landmarks/shaders.ts lmSurface, gated `flood == FLOOD.CHURCH` (only the church's stone + trim) on
+  walls: blotchy soot rising with height, dark drip streaks + pale washed lanes, damp tide line to ~1.1 m, algae
+  green in the bottom ~0.6 m. (Arch/pediment mouldings and rose-window tracery: NOT done.)
+* warehouse: the name board's bottom stays ≥ doorH + 0.75 (dock canopy top = doorH + 0.5); board shrinks, width
+  keeps the lettering aspect.
+* house porch posts (homes.ts `porchPost`): chamfered octagonal shaft (flats on the axes, chamfers 7 % darker),
+  scuffed darker plinth block, stepped 3-tier brackets under the header beam.
+### Open (in order)
+lawn rim fix (after the probe); bench-judge everything above; school entrance kit (door pull handles, glazed
+noticeboard with papers, sign fixings — railings/gate/bike stands are outside the footprint → props/F4 request);
+church mouldings + rose tracery; warehouse door wear; bug 9 station name board = src/sim/rail/station.ts (F4's).
+### Tried and rejected
+* Judge views yard_b / `81.5,1.2,17.5,6,250,12` / `82,3,19,10,250,10` / `85.5,…,90`: camera inside geometry (grey or
+  dark-green frames) — check `plan.lots` footprints before using a free camera.
+
+## Resume here
 * Step 0: re-verify judge-2 #2 (yard_b sill slabs, view `76.5,1.2,17.5,9,90,10`) and #5 (apartment lawn rim) with the
   pumped-frame harness. Then F1 items in order of screen impact.
 ### Done
