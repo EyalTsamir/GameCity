@@ -189,3 +189,47 @@ stems with leaves, droop, colour variation); a farm building at 10–40 m (barn 
 silo, fences, gates, hay bales). Contact: hooves and tyres sit in the grass, tracks in the field.
 Bench: add `sheep`, `cow`, `tractor`, `flowerbed` classes to scripts/bench.mjs (commit that first).
 Toggles e.g. `?noanimaldetail`, `?noflowerdetail`, `?nofarmdetail`; tiers; measure cost (herds can be many).
+
+## Final fix round (after judge 2 + bug hunter 2) — read docs/progress/real-judge-2.md and real-bugs-2.md first
+Harness note (bug hunter 2): headless Chromium renders only during screenshots. bench/capture-set/shot now pump 4
+frames before each capture (c43100c). Re-check anything judged as an "LOD bug" before fixing it.
+
+### F1 — Facades final (owner: src/world/buildings/**, landmarks/church.ts, landmarks/civic.ts school bits)
+Judge 2 #2 floating sill slabs over the back yard (verify at judge view yard_b WITH pumped frames; if real, fix
+winGeo placement), #5 bright lawn/wall rim on apartments (re-verify; it was fixed at the bench apartment — find the
+walls where it still shows), #7 repeated interiors (office upper floors, tower/office lobbies with pixelated plants,
+"Books"/"Bookbinder" identical, "CAFÉ NORD" sign/interior mismatch + sign behind column), #8 church weathering
+(soot, green at the foot, mouldings on arch/pediment, rose-window tracery), school "not yet" (entrance doors with
+handles, noticeboard, railings/gate, bike stands, children's work in windows, sign fixings), warehouse sign/canopy
+overlap, house porch posts, bug 7 duplicate shop names (oldtown.ts:296), bug 9 station name board (if in buildings
+— else note for F4).
+
+### F2 — People everywhere (owner: src/sim/pedestrians/**, landmarks/parts.ts person(), boats/models.ts figure(),
+### vehicle occupants in sim/traffic + sim/rail interiors — presentation only)
+Bug hunter 2 #1 HIGH: replace every placeholder "box person" (site workers, band, playground kids, boat crews and
+passengers) with the real pedestrian figure (shared close/near LOD, posed). Judge 2 #3: car drivers, bus and train
+passengers, sailboat crew — real heads/shoulders/arms through every window (a cheap seated bust LOD of the real
+figure is fine). Then judge 2 #1 empty places: shoppers browsing and queuing at market stalls, people working the
+fish quay (fisherman on the crabber, forklift driver), passengers waiting along the platform edge (benches on the
+ped graph — the platform owner's request in real-requests.md), site workers doing things; the lone suitcase gets an
+owner. Pedestrian notes from judge 2 (walking groups in lockstep single-file, flat clothes at 3 m) last.
+
+### F3 — Ground, track and rock (owner: src/sim/rail/track.ts + staticMaterial.ts (track bed only), src/world/terrain/**
+### (cliffs, rocks, ground lawn shading), src/world/groundcover/** (lawn blades), src/world/roads/surfaces.ts (paving))
+Judge 2 #4 pixel-mosaic ballast and train floor (filtering/scale: real ballast = 3–6 cm stones, rounded, varied grey,
+sleepers with rail chairs and clips; the saloon floor through the door is W2's file — note it in requests if not
+yours), low-poly rock cutting beside the platform and behind the quay (break up the slabs, rounder boulders,
+weathering, vegetation in ledges); #5 lawns read as felt (blade texture at 3 m, no pale centre band in park strips,
+pasture not a flat lime plane); #10 paving regularity (per-stone tone/height jitter, wear paths, litter under stalls,
+softer joints). School street tree with smooth black trunk = vegetation bark (fix if in your files).
+
+### F4 — Cloth, age and the small bugs (owner: src/world/props/**, life/**, harbor/** + boats/** (except figure()),
+### landscape/farmstead.ts + farmlife.ts, sim/rail/station.ts)
+Judge 2 #9 flat cloth: market awnings sag/billow/hem, laundry drapes with sag and pegs, bunting flutters, sails with
+seams and draft; #8 age consistency on props (quay apron stains, site ground mud/gravel/puddles and real ruts instead
+of painted bands, kiosk/phone box/newsstand paint chips, newsstand pixel font + repeated titles, phone inside the
+phone box, e-scooter of boxes); night market closed/shrouded at night; back yard as a place (enclosure, paving, shed,
+pots, toys; bug 6 laundry through a tree); bug 2 tree through a barn roof + floating poplar leaf clumps, bug 3 barn
+roof moiré, bug 4 station bikes in planters + wheel-less rack bikes, bug 5 creel rope tails, bug 8 near-herd one-frame
+lag (select from frame() before the draw), bug 9 station board vs column (station.ts), sailboat "not yet" (cabin,
+coaming, sails, fittings), tractor glass cab with seat/wheel/driver (driver via F2's figure), forklift of boxes.
