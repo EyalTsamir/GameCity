@@ -84,11 +84,13 @@ export function buildNightMarket(ctx: CityContext): NightMarket | null {
     const yTop = (z: number, x = hw) => yF + (yB - yF) * ((z - fz) / (bz - fz)) + 0.06 + bowAt(x, z);
     // top: over the canopy, pooling a little between the bows
     patch(12, 5, (u, v) => {
-      const x = -hw + 2 * hw * u,
-        z = fz + (bz - fz) * v;
+      // 4 cm past the face lines, rolled down over them at the rim (no slit along the top edges)
+      const x = -(hw + 0.04) + 2 * (hw + 0.04) * u,
+        z = fz + 0.04 + (bz - fz - 0.08) * v;
+      const rim = Math.pow(Math.max(Math.abs(2 * u - 1), Math.abs(2 * v - 1)), 10) * 0.06;
       // pulled over the middle bow (a ridge front to back), pooling a little either side of it
       const sag = 0.06 * Math.abs(Math.sin(2 * Math.PI * u)) * Math.sin(Math.PI * v);
-      return [x, yTop(z, x) - sag, z, 0.95 - sag * 2];
+      return [x, yTop(z, Math.max(-hw, Math.min(hw, x))) - sag - rim, z, 0.95 - sag * 2];
     }, () => 1);
     // a hanging face from the top edge (x, z along the edge) down to the hem; out = outward normal (x, z)
     const face = (x0: number, z0: number, x1: number, z1: number, ox: number, oz: number, nu: number) =>
@@ -103,7 +105,9 @@ export function buildNightMarket(ctx: CityContext): NightMarket | null {
         const fold = Math.sin(u * L * 7.5 + ph + 0.8 * Math.sin(u * L * 2.3)) * (0.015 + 0.05 * v);
         const flare = 0.1 * v * v * v;
         const gather = Math.sin(Math.PI * u);
-        const out = (fold + flare) * (0.5 + 0.5 * gather) + 0.02;
+        // no offset at the face ends: neighbouring faces meet on the corner line (the goods showed through the gap)
+        const end = Math.min(1, 7 * u, 7 * (1 - u));
+        const out = ((fold + flare) * (0.5 + 0.5 * gather) + 0.02) * end;
         const shade = (0.82 + 0.18 * (0.5 + 0.5 * Math.sin(u * L * 7.5 + ph + 0.8 * Math.sin(u * L * 2.3)))) * (1 - 0.18 * v * v);
         return [x + ox * out, y, z + oz * out, shade];
       }, (v) => 0.55 * (1 - v) + 0.15);
