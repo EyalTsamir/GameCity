@@ -16,7 +16,7 @@ import { anchors } from './anchors';
 import { balconyLife, potPlant, roofClutter } from './clutter';
 import { GREEN } from './green';
 import { WIN, PROF, WALLPAT, ROOFPAT, FRAME, GLASS, LIGHT_MODE, shopType } from './materials';
-import { letterSign, boardSign, clockFace } from './signs';
+import { letterSign, boardSign, clockFace, noticeBoard } from './signs';
 import { partitionSide } from './oldtown';
 
 const PREV: Side[] = [LEFT, FRONT, RIGHT, BACK];
@@ -362,6 +362,12 @@ function seaview(g: Gen): void {
 
 // ─────────────────────────────────────────────────────────── school ──
 
+let schoolKit = true;
+/** ?noschoolkit: no door pulls / kick plates / noticeboard / intercom / sign bolts on the school (A/B). */
+export function setSchoolKit(on: boolean): void {
+  schoolKit = on;
+}
+
 export function genSchool(g: Gen): void {
   const { lot, rng } = g;
   const f = makeBody(g, 0.3);
@@ -384,13 +390,22 @@ export function genSchool(g: Gen): void {
         wallPlain(s, sg, p.a, p.b, 0, H + 0.8, { color: brick, pattern: WALLPAT.BRICK, seed: g.seed });
         continue;
       }
-      const ops = doors.filter((u) => u >= p.a && u <= p.b).map((u) => ({ u, w: 2.2, h: 2.6 }));
+      // the main entrance keeps a plain wall bay each side for the noticeboard / intercom (under the canopy)
+      const wide = (u: number): boolean => schoolKit && main && sd === FRONT && u - 2.7 >= p.a && u + 2.7 <= p.b;
+      const ops = doors.filter((u) => u >= p.a && u <= p.b).map((u) => ({ u, w: wide(u) ? 5.4 : 2.2, h: 2.6 }));
       bandWithOpenings(sg, p.a, p.b, ops, (a, b) => {
         const n = Math.max(1, Math.round((b - a) / 3.4));
         const gr = makeGrid(a, b, 0, gH, 1, { spacing: (b - a) / n, cols: n, winW: Math.min(2.6, (b - a) / n - 0.8), winH: gH - 1.5, sill: 0.95, margin: 0.4 });
         wallGrid(s, sg, a, b, 0, gH, gr, look);
         dressings(sg, gr);
-      }, (a, b, y0) => wallPlain(s, sg, a, b, y0, gH, { color: brick, pattern: WALLPAT.BRICK, seed: g.seed }));
+      }, (a, b, y0) => {
+        const wl = { color: brick, pattern: WALLPAT.BRICK, seed: g.seed };
+        if (b - a < 3) return wallPlain(s, sg, a, b, y0, gH, wl);
+        const m = (a + b) / 2;
+        wallPlain(s, sg, a, m - 1.1, 0, gH, wl);
+        wallPlain(s, sg, m + 1.1, b, 0, gH, wl);
+        wallPlain(s, sg, m - 1.1, m + 1.1, y0, gH, wl);
+      });
       if (floors > 1) {
         const n = Math.max(1, Math.round((p.b - p.a - 0.8) / 3.4));
         const gr = makeGrid(p.a, p.b, gH, gH, floors - 1, { spacing: 3.4, cols: n, winW: 2.6, winH: gH - 1.4, sill: 0.9, margin: 0.4 });
@@ -405,8 +420,8 @@ export function genSchool(g: Gen): void {
       const segs: [number, number][] = [];
       let cur = p.a;
       for (const o of ops.sort((x, y) => x.u - y.u)) {
-        if (o.u - o.w / 2 - 0.2 > cur) segs.push([cur, o.u - o.w / 2 - 0.2]);
-        cur = o.u + o.w / 2 + 0.2;
+        if (o.u - 1.3 > cur) segs.push([cur, o.u - 1.3]);
+        cur = o.u + 1.3;
       }
       if (p.b > cur) segs.push([cur, p.b]);
       for (const [a, b] of segs) sideBox(t, sg, a, b, 0, 0.1, 0, 0.6);
@@ -416,6 +431,7 @@ export function genSchool(g: Gen): void {
         setCol(t, band);
         sideBox(t, sg, u - 2.2, u + 2.2, 0, 1.45, 3.0, 3.3, true);
         lightBox(g, sx(sg, u, 1.0) - 0.15, 2.92, sz(sg, u, 1.0) - 0.15, sx(sg, u, 1.0) + 0.15, 3.0, sz(sg, u, 1.0) + 0.15, '#fff1d6', LIGHT_MODE.STEADY, 3);
+        if (schoolKit) entranceKit(sg, u, wide(u));
         if (sd === FRONT && main) {
           // carved name panel: a dressed-stone tablet with a moulded border, letters cut dark into it
           const r = g.atlas.add('school-carved', 512, 64, letterSign('WESTBROOK SCHOOL', '#5b4a3a', '#000000', 'Georgia, "Times New Roman", serif', 0, '#e9e1d0'));
@@ -431,6 +447,62 @@ export function genSchool(g: Gen): void {
   const inner: LRect = { x0: body.x0 + 0.3, x1: body.x1 - 0.3, z0: body.z0 + 0.3, z1: body.z1 - 0.3 };
   flatRoof(s, inner, H + 0.02, col('#8d8a84'), ROOFPAT.FLAT, g.seed);
   innerParapet(g, inner, H, H + 0.8, shade(brick, 0.9));
+
+  /**
+   * Entrance hardware at a double glazed door at u (niche depth 0.35): stainless D-pull bars on both leaves at
+   * the meeting stiles, kick plates, a rubber seal line; on the main entrance (`bays`) a glazed noticeboard with
+   * pinned papers on the left bay and an intercom + visitors plaque on the right one.
+   */
+  function entranceKit(sg: SideGeom, u: number, bays: boolean): void {
+    const d = 0.35;
+    const steel = col('#b8bdc0');
+    setCol(t, col('#2a2c2e'));
+    sideBox(t, sg, u - 0.012, u + 0.012, -d, -d + 0.014, 0.14, 2.56);
+    for (const sgn of [-1, 1]) {
+      const hu = u + sgn * 0.16;
+      setCol(t, steel);
+      sideBox(t, sg, hu - 0.016, hu + 0.016, -d + 0.05, -d + 0.075, 0.82, 1.68);
+      for (const y of [0.88, 1.62]) sideBox(t, sg, hu - 0.012, hu + 0.012, -d, -d + 0.05, y - 0.012, y + 0.012);
+      setCol(t, shade(steel, 0.92));
+      sideBox(t, sg, sgn < 0 ? u - 1.08 : u + 0.03, sgn < 0 ? u - 0.03 : u + 1.08, -d, -d + 0.006, 0.15, 0.44);
+    }
+    if (!bays) return;
+    // noticeboard: green aluminium case, papers recessed 4 cm behind the lip, a pale glazing edge, header plaque
+    const a = u - 2.6,
+      b = u - 1.45,
+      y0 = 1.05,
+      y1 = 2.0;
+    const frame = col('#2f5d50');
+    setCol(t, shade(frame, 0.8));
+    sideBox(t, sg, a, b, 0, 0.02, y0, y1);
+    setCol(t, frame);
+    sideBox(t, sg, a, a + 0.05, 0.02, 0.075, y0, y1, true);
+    sideBox(t, sg, b - 0.05, b, 0.02, 0.075, y0, y1, true);
+    sideBox(t, sg, a + 0.05, b - 0.05, 0.02, 0.075, y0, y0 + 0.05, true);
+    sideBox(t, sg, a + 0.05, b - 0.05, 0.02, 0.075, y1 - 0.05, y1, true);
+    setCol(t, col('#dfe8ea'));
+    sideBox(t, sg, a + 0.05, b - 0.05, 0.068, 0.072, y1 - 0.065, y1 - 0.05);
+    sideBox(t, sg, b - 0.065, b - 0.05, 0.068, 0.072, y0 + 0.05, y1 - 0.05);
+    setCol(t, col('#c8ccce'));
+    sideBox(t, sg, b - 0.035, b - 0.015, 0.075, 0.085, (y0 + y1) / 2 - 0.03, (y0 + y1) / 2 + 0.03); // lock
+    const nr = g.atlas.add(`school-notices:${g.seed % 7}`, 256, 216, noticeBoard(g.seed));
+    signOnSide(g, sg, a + 0.05, b - 0.05, 0.022, y0 + 0.05, y1 - 0.05, nr);
+    const hr = g.atlas.add('school-noticehead', 192, 40, boardSign('NOTICES', { bg: '#2f5d50', fg: '#f4f1ea', glow: 0 }));
+    signOnSide(g, sg, a + 0.2, b - 0.2, 0.012, y1 + 0.05, y1 + 0.2, hr);
+    // intercom: stainless panel with a speaker grille, call button and camera eye
+    const iu = u + 1.5;
+    setCol(t, steel);
+    sideBox(t, sg, iu - 0.08, iu + 0.08, 0, 0.03, 1.22, 1.52, true);
+    setCol(t, col('#2b2d2f'));
+    for (let k = 0; k < 4; k++) sideBox(t, sg, iu - 0.05, iu + 0.05, 0.03, 0.034, 1.4 + k * 0.022, 1.41 + k * 0.022);
+    sideBox(t, sg, iu - 0.012, iu + 0.012, 0.03, 0.036, 1.47, 1.494);
+    setCol(t, col('#4f86c6'));
+    sideBox(t, sg, iu - 0.03, iu + 0.03, 0.03, 0.04, 1.28, 1.34);
+    const vr = g.atlas.add('school-visitors', 256, 96, boardSign('ALL VISITORS PLEASE REPORT TO RECEPTION', { bg: '#f4f1ea', fg: '#2f5d50', border: '#2f5d50', glow: 0, font: 'Arial, sans-serif' }));
+    setCol(t, col('#c8ccce'));
+    sideBox(t, sg, u + 1.72, u + 2.58, 0, 0.012, 1.34, 1.66, true);
+    signOnSide(g, sg, u + 1.73, u + 2.57, 0.014, 1.35, 1.65, vr);
+  }
 
   /** Stone lintels (with a soldier-course look: a dark joint line under them) and keyed corners per window. */
   function dressings(sg: SideGeom, gr: Grid): void {
@@ -482,6 +554,13 @@ export function genSchool(g: Gen): void {
     const sgF = sideGeom(body, FRONT);
     const r = g.atlas.add('gym', 192, 64, boardSign('GYM', { bg: '#efe9dc', fg: '#2f5d50', glow: 0.3 }));
     signOnSide(g, sgF, sgF.L / 2 - 1.3, sgF.L / 2 + 1.3, 0.14, H - 1.5, H - 0.6, r);
+    if (schoolKit) {
+      // the board is bolted through spacers: a dark backing edge and four bolt heads
+      setCol(t, col('#3b3f42'));
+      sideBox(t, sgF, sgF.L / 2 - 1.32, sgF.L / 2 + 1.32, 0.1, 0.135, H - 1.52, H - 0.58);
+      setCol(t, col('#c4c8ca'));
+      for (const du of [-1.18, 1.18]) for (const y of [H - 1.4, H - 0.7]) sideBox(t, sgF, sgF.L / 2 + du - 0.02, sgF.L / 2 + du + 0.02, 0.14, 0.152, y - 0.02, y + 0.02);
+    }
   }
   void rng;
 }

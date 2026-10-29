@@ -297,3 +297,101 @@ export function helipadMark(): Draw {
     g.fillRect(w / 2 - s * 0.3, h / 2 - s * 0.1, s * 0.6, s * 0.2);
   };
 }
+
+/**
+ * School noticeboard contents: a cork back with pinned sheets (typed notices, a coloured poster, a child's
+ * drawing, a timetable grid), each with a drop shadow and a coloured pin; seeded per board.
+ */
+export function noticeBoard(seed: number): Draw {
+  return (g, w, h, glow) => {
+    g.fillStyle = '#000';
+    g.fillRect(0, 0, w, h);
+    if (glow) return;
+    let s = seed * 9301 + 49297;
+    const r = (): number => ((s = (s * 9301 + 49297) % 233280) / 233280);
+    // cork with speckle
+    g.fillStyle = '#a77c4f';
+    g.fillRect(0, 0, w, h);
+    for (let i = 0; i < 900; i++) {
+      g.fillStyle = r() < 0.5 ? 'rgba(70,40,15,0.25)' : 'rgba(230,190,140,0.22)';
+      g.fillRect(r() * w, r() * h, 1 + r() * 2, 1 + r() * 2);
+    }
+    const sheets: [number, number, number, number][] = [];
+    const cols = 4;
+    for (let c = 0; c < cols; c++) {
+      let y = h * (0.05 + r() * 0.06);
+      while (y < h * 0.8) {
+        const sw = (w / cols) * (0.68 + r() * 0.22),
+          sh = sw * (r() < 0.7 ? 1.41 : 0.72);
+        if (y + sh > h * 0.96) break;
+        sheets.push([(w / cols) * c + (w / cols - sw) / 2 + (r() - 0.5) * 6, y, sw, sh]);
+        y += sh + h * (0.03 + r() * 0.05);
+      }
+    }
+    const paper = ['#f4f1e8', '#f6f3ea', '#fbf0a8', '#f7c9d6', '#cfe6f7', '#d9efc7', '#f4f1e8'];
+    for (const [x, y, sw, sh] of sheets) {
+      const kind = Math.floor(r() * 5);
+      g.save();
+      g.translate(x + sw / 2, y + sh / 2);
+      g.rotate((r() - 0.5) * 0.08);
+      g.fillStyle = 'rgba(30,15,5,0.35)';
+      g.fillRect(-sw / 2 + 2, -sh / 2 + 3, sw, sh);
+      g.fillStyle = kind === 1 ? ['#e2483a', '#2f6fd0', '#3c9a52', '#f2b233'][Math.floor(r() * 4)] : paper[Math.floor(r() * paper.length)];
+      g.fillRect(-sw / 2, -sh / 2, sw, sh);
+      if (kind === 1) {
+        // poster: big heading + a picture block
+        g.fillStyle = '#ffffff';
+        g.fillRect(-sw * 0.4, -sh * 0.4, sw * 0.8, sh * 0.16);
+        g.fillStyle = 'rgba(255,255,255,0.75)';
+        g.beginPath();
+        g.arc(0, sh * 0.08, sw * 0.24, 0, Math.PI * 2);
+        g.fill();
+        g.fillRect(-sw * 0.35, sh * 0.36, sw * 0.7, sh * 0.04);
+      } else if (kind === 2) {
+        // child's drawing: sun, house, green ground
+        g.fillStyle = '#4bb04a';
+        g.fillRect(-sw / 2, sh * 0.25, sw, sh * 0.25);
+        g.fillStyle = '#f2c230';
+        g.beginPath();
+        g.arc(sw * 0.25, -sh * 0.3, sw * 0.12, 0, Math.PI * 2);
+        g.fill();
+        g.fillStyle = '#d2463a';
+        g.fillRect(-sw * 0.3, -sh * 0.05, sw * 0.32, sh * 0.3);
+        g.beginPath();
+        g.moveTo(-sw * 0.36, -sh * 0.05);
+        g.lineTo(-sw * 0.14, -sh * 0.22);
+        g.lineTo(sw * 0.08, -sh * 0.05);
+        g.fill();
+      } else if (kind === 3) {
+        // timetable grid
+        g.strokeStyle = 'rgba(40,40,60,0.7)';
+        g.lineWidth = 1;
+        for (let i = 0; i <= 5; i++) {
+          g.beginPath();
+          g.moveTo(-sw * 0.42 + (sw * 0.84 * i) / 5, -sh * 0.32);
+          g.lineTo(-sw * 0.42 + (sw * 0.84 * i) / 5, sh * 0.4);
+          g.stroke();
+        }
+        for (let j = 0; j <= 7; j++) {
+          g.beginPath();
+          g.moveTo(-sw * 0.42, -sh * 0.32 + (sh * 0.72 * j) / 7);
+          g.lineTo(sw * 0.42, -sh * 0.32 + (sh * 0.72 * j) / 7);
+          g.stroke();
+        }
+        g.fillStyle = '#26314a';
+        g.fillRect(-sw * 0.42, -sh * 0.44, sw * 0.6, sh * 0.06);
+      } else {
+        // typed notice: heading + text lines
+        g.fillStyle = '#1e2433';
+        g.fillRect(-sw * 0.38, -sh * 0.4, sw * (0.4 + r() * 0.36), sh * 0.06);
+        g.fillStyle = 'rgba(40,44,58,0.6)';
+        for (let ly = -sh * 0.26; ly < sh * 0.38; ly += sh * 0.055) g.fillRect(-sw * 0.38, ly, sw * (0.5 + r() * 0.26), Math.max(1, sh * 0.018));
+      }
+      g.fillStyle = ['#d83030', '#2a62c8', '#f0c020', '#2a9a4a'][Math.floor(r() * 4)];
+      g.beginPath();
+      g.arc(0, -sh / 2 + 4, 2.6, 0, Math.PI * 2);
+      g.fill();
+      g.restore();
+    }
+  };
+}
