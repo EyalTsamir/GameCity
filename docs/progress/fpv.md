@@ -1,5 +1,16 @@
 # First-person walk (FPV) — progress log
 
+## Resume here
+Feature complete and committed; typecheck clean, `vite build` OK. Remaining = verification only:
+1. scenario probe (footbridge arch, pier, beach waterline, harbour quay edge, park, off the slab west) — script
+   `<scratchpad>/uit/scripts/scen.mjs` (screenshots → shots/fpv/s_*.png); fix whatever it shows.
+2. perf A/B at street view `5,1.5,-65,9,0,6` @12, 1536x820@1.25: `<scratchpad>/uit/scripts/abperf.mjs` (baseline =
+   `git archive 024d901` copy served on :5193 with node_modules junctioned + its own cacheDir; this branch on :5183).
+3. full default ui-test (`--q camdebug`, includes `walk`) via `<scratchpad>/uit/run.sh` (a copy of ui-test.mjs importing
+   the main checkout's browser.mjs → shared lock). Then final Hebrew report (controls, coverage, limits, files).
+If the scratchpad is gone: recreate the copy with `sed "s#from './browser.mjs'#from 'file:///C:/Projects/GameCity/scripts/browser.mjs'#"`.
+Ground heights come from `ctx.services.terrain.height` (keep it that way: sibling `places-between` adds stairs/ramps there).
+
 Branch `claude/fpv-walk-58aa99` (worktree `.claude/worktrees/fpv-walk-58aa99`), cut from `claude/pensive-gates-bim12i`
 at 024d901. One of three parallel sessions (perf quick wins, explore orbit camera, this walk mode); the coordinating
 session merges all three into `claude/pensive-gates-bim12i`. Brief: walk around Tinyhaven as a person — no gameplay.
