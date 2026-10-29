@@ -134,6 +134,7 @@ uniform vec2 uClip;
 uniform float uGrime;
 uniform float uLights;
 uniform float uTrInt;
+uniform float uTrGlass;
 varying vec3 vEmit;
 varying float vWX;
 varying vec3 vLoc;
@@ -485,6 +486,8 @@ export function createTrainMaterials(globals: GlobalUniforms, clipX0: number, cl
   const interior = { value: typeof location !== 'undefined' && new URLSearchParams(location.search).has('notraininterior') ? 0 : 1 };
   // ?notraindecals: no livery lettering / pictograms (W2 s6)
   const decals = { value: typeof location !== 'undefined' && new URLSearchParams(location.search).has('notraindecals') ? 0 : 1 };
+  // ?notrainglass: the cab glass without its G1 reflection / cab / wipers
+  const glassOn = { value: typeof location !== 'undefined' && new URLSearchParams(location.search).has('notrainglass') ? 0 : 1 };
   const material = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.48, metalness: 0.08 });
   material.name = 'rail-train';
   material.onBeforeCompile = (shader) => {
@@ -493,6 +496,7 @@ export function createTrainMaterials(globals: GlobalUniforms, clipX0: number, cl
     shader.uniforms.uClip = clip;
     shader.uniforms.uGrime = grime;
     shader.uniforms.uTrInt = interior;
+    shader.uniforms.uTrGlass = glassOn;
     shader.uniforms.uTrDecal = { value: decalTexture() };
     shader.uniforms.uTrDec = decals;
     shader.vertexShader = shader.vertexShader
@@ -606,6 +610,32 @@ export function createTrainMaterials(globals: GlobalUniforms, clipX0: number, cl
               trEmK = 0.0;
               diffuseColor.rgb *= tg == ${T.VESTIB} ? 0.0 : mix(0.45, 1.0, trDecA);
             }
+          }
+          // G1: the cab windscreen as glass, not a black void — a stylised sky / skyline / ballast reflection by the
+          // reflected direction in the car frame (Fresnel-weighted, with a floor: a raked screen mirrors a lot), the
+          // dim cab and the driver's desk behind it, two wipers parked along the bottom (near detail: uTrInt, off on
+          // quality low). ?notrainglass: the old flat dark glass
+          if (tg == ${T.GLASS} && uTrGlass > 0.5) {
+            vec3 d = normalize(vLocDir);
+            vec3 nL = normalize(cross(dFdx(vLoc), dFdy(vLoc)));
+            if (dot(nL, d) > 0.0) nL = -nL;
+            vec3 R = reflect(d, nL);
+            float cs = clamp(-dot(d, nL), 0.0, 1.0);
+            float Fr = max(0.05 + 0.95 * pow(1.0 - cs, 5.0), 0.2);
+            vec3 sky = mix(vec3(0.66, 0.73, 0.8), vec3(0.34, 0.5, 0.72), smoothstep(0.0, 0.6, R.y));
+            vec3 gnd = mix(vec3(0.13, 0.13, 0.12), vec3(0.3, 0.29, 0.27), smoothstep(-0.45, 0.0, R.y));
+            float az = atan(R.x, R.z);
+            float skl = 0.04 + 0.05 * step(0.5, fract(az * 2.2 + 0.3)) * fract(az * 7.7) + 0.03 * sin(az * 23.0);
+            vec3 env = R.y > 0.0 ? mix(sky, vec3(0.3, 0.32, 0.31), step(R.y, skl)) : gnd;
+            vec3 cab = vec3(0.04, 0.045, 0.05);
+            float wip = 0.0;
+            if (uTrInt > 0.5) {
+              cab = mix(vec3(0.07, 0.075, 0.08), vec3(0.02), 1.0 - smoothstep(2.56, 2.6, vLoc.y));
+              float wx = abs(vLoc.x);
+              wip = (1.0 - smoothstep(0.007, 0.014, abs(vLoc.y - 2.3 - (1.1 - wx) * 0.13))) * step(0.15, wx) * step(wx, 1.08);
+            }
+            diffuseColor.rgb = mix(cab, vec3(0.015), wip);
+            trIntE += env * Fr * (1.0 - 0.88 * uLights) * (1.0 - wip);
           }
         }`,
       )

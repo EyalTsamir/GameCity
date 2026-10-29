@@ -143,6 +143,8 @@ export interface BuildingMaterials {
     uWinRefl: { value: number };
     uWallRelief: { value: number };
     uPlinth: { value: number };
+    /** G1: glass as a material — per-bay shop / lobby interiors, per-pane tint + thin edge; ?noglassvar sets 0 */
+    uGlassVar: { value: number };
     /** near-LOD sill geometry: (centre of its range, range m); the shader drops its own sill box inside */
     uGeoWin: { value: THREE.Vector4 };
   };
@@ -311,6 +313,7 @@ uniform float uWinDepth;
 uniform float uWinRefl;
 uniform float uWallRelief;
 uniform float uPlinth;
+uniform float uGlassVar;
 uniform vec4 uGeoWin;
 // world-space normal override from bhWall (window reveals, sills, wall relief); zero = keep the geometric normal
 vec3 bhNW = vec3(0.0);
@@ -605,6 +608,18 @@ vec3 bhShop(vec2 pm, vec2 csz, vec3 rd, float rs, float shopT, float litI, vec3 
       c = h.y < 1.1 ? wallC * 0.6 : bhShelves(vec2(q.x, q.y), wallC, 2.0, rs, 1.25, min(Hc - 0.5, 2.6), 0.42);
       // menu board
       c = mix(c, vec3(0.12, 0.13, 0.12), bhBox2(q, vec2(W * 0.5, Hc - 0.75), vec2(min(0.6, W * 0.25), 0.3)));
+      if (uGlassVar > 0.5) {
+        // G1: the bar counter along the back (panelled front, a pale top) with an espresso machine (steel body,
+        // two dark group heads, cups warming on top) somewhere along it — what says "café" through the glass
+        float ctop = bhBox2(q, vec2(q.x, 1.07), vec2(1.0, 0.035));
+        if (q.y < 1.1) c = mix(wallC * (0.42 + 0.08 * step(0.5, fract(q.x / 0.62))), vec3(0.6, 0.55, 0.48), ctop);
+        float mxp = W * (0.25 + 0.5 * bhHash12(vec2(rs, 6.1)));
+        float mach = bhBox2(q, vec2(mxp, 1.32), vec2(0.33, 0.22));
+        float gh = max(bhBox2(q, vec2(mxp - 0.15, 1.19), vec2(0.045, 0.05)), bhBox2(q, vec2(mxp + 0.15, 1.19), vec2(0.045, 0.05)));
+        c = mix(c, mix(vec3(0.66, 0.67, 0.69) * (0.75 + 0.3 * smoothstep(1.1, 1.54, q.y)), vec3(0.04), gh), mach);
+        float cups = bhBox2(vec2(fract((q.x - mxp) / 0.11) * 0.11, q.y), vec2(0.055, 1.6), vec2(0.032, 0.04)) * step(abs(q.x - mxp), 0.27);
+        c = mix(c, vec3(0.93, 0.92, 0.9), cups);
+      }
     } else if (T < 2.5) c = bhShelves(q, wallC, deli > 0.5 ? 0.0 : 3.0, rs, 0.9, min(Hc - 0.4, 2.5), 0.36);
     else if (T < 3.5) c = bhShelves(q, wallC, 1.0, rs, 0.15, Hc - 0.25, 0.34);
     else if (T < 4.5) {
@@ -873,6 +888,45 @@ vec3 bhRoom(vec2 pm, vec2 csz, vec3 rd, float rs, float litI, vec3 lcol, float p
     c = wallC * 0.86;
     lf = 0.62;
   }
+  // G1: office floors and curtain-wall towers are furnished — ceiling light panels in a tile grid, carpet tiles,
+  // and a row of desks (top, modesty panel, monitors, some lit at night) as a parallax layer mid-room; a bare lit
+  // box read as an empty pale room from close up (bugs-3 #3). ?noglassvar: the old room
+  if (uGlassVar > 0.5 && (prof > 0.5 && prof < 1.5 || style > 1.5 && style < 2.5)) {
+    if (tt.y <= t + eps && rd.y > 0.0) {
+      vec2 cq = h.xz + vec2(fract(rs * 0.37) * 1.8, 0.0);
+      vec2 cg = abs(fract(cq / 0.6) - 0.5);
+      c *= 1.0 - 0.12 * step(0.46, max(cg.x, cg.y));
+      vec2 lp = abs(fract(cq / vec2(1.8, 2.4)) - 0.5) * vec2(1.8, 2.4);
+      float panel = step(lp.x, 0.29) * step(lp.y, 0.59);
+      c = mix(c, vec3(0.98, 0.98, 0.96), panel);
+      lf = mix(lf, 2.4, panel);
+    } else if (tt.y <= t + eps) {
+      vec2 fg = abs(fract(h.xz / 0.5) - 0.5);
+      c *= 0.88 + 0.16 * bhHash12(floor(h.xz / 0.5) + rs) - 0.14 * step(0.46, max(fg.x, fg.y));
+    }
+    float dzD = depth * (0.32 + 0.22 * fract(rs * 3.3));
+    float tD = (dzD - ro.z) / max(rd.z, 1e-3);
+    if (tD < t) {
+      vec2 dq = (ro + rd * tD).xy;
+      float mu = dq.x / 1.6 + fract(rs * 0.71);
+      float mx = fract(mu);
+      float hm = bhHash12(vec2(floor(mu), rs + 11.0));
+      float top = step(abs(dq.y - 0.74), 0.025) * step(abs(mx - 0.5), 0.48);
+      float pan = step(dq.y, 0.72) * step(0.04, dq.y) * step(abs(mx - 0.5), 0.44);
+      float mcx = mx - 0.5 - (hm - 0.5) * 0.4;
+      float mon = step(abs(mcx), 0.16) * step(abs(dq.y - 0.99), 0.15) * step(0.18, hm);
+      float stem = step(abs(mcx), 0.02) * step(0.76, dq.y) * step(dq.y, 0.86) * step(0.18, hm);
+      if (top + pan + mon + stem > 0.0) {
+        vec3 deskC = mix(vec3(0.82, 0.8, 0.76), vec3(0.62, 0.48, 0.32), step(0.6, fract(rs * 1.9)));
+        c = top > 0.0 ? deskC : (mon + stem > 0.0 ? vec3(0.05, 0.055, 0.06) : vec3(0.3, 0.31, 0.33));
+        lf = top > 0.0 ? 1.0 : 0.55;
+        // a screen left on (inner area): lit by itself, readable at night
+        float scr = mon * step(abs(mcx), 0.145) * step(abs(dq.y - 0.995), 0.125) * step(0.45, fract(hm * 7.3));
+        if (scr > 0.0) { c = mix(vec3(0.35, 0.45, 0.6), vec3(0.75, 0.75, 0.7), step(0.7, fract(hm * 3.1))); lf = 1.4; }
+        h = vec3(dq, dzD);
+      }
+    }
+  }
   float dz = clamp(h.z / depth, 0.0, 1.0);
   // daylight entering through the window: bright near the glass, falling off into the room
   dayAlb = c * 0.55 * (1.0 - 0.7 * dz) * (0.85 + 0.3 * lf);
@@ -959,7 +1013,8 @@ vec4 bhOpp(vec3 P, vec3 R, vec3 N, vec3 T, float seed, float fp, float nightF) {
     float ci = floor(cu / 6.2);
     float ch = bhHash12(vec2(ci, seed * 0.19 + 9.0));
     float cx = fract(cu / 6.2) * 6.2 - 0.9 - 0.6 * ch;
-    if (ch > 0.3 && cx > 0.0 && cx < 4.3) {
+    // (G1: fewer, softer cars — a crisp full-strength car in every ground-floor pane read as the same flat poster)
+    if (ch > (uGlassVar > 0.5 ? 0.5 : 0.3) && cx > 0.0 && cx < 4.3) {
       float gy = Cp.y - 0.95;
       float gh = step(0.0, gy) * step(gy, 0.48) * step(0.9 + gy * 0.9, cx) * step(cx, 3.5 - gy * 1.2);
       float body = step(Cp.y, 0.95 - 0.1 * smoothstep(3.9, 4.3, cx) - 0.12 * (1.0 - smoothstep(0.0, 0.35, cx))) * step(0.18, Cp.y);
@@ -972,7 +1027,7 @@ vec4 bhOpp(vec3 P, vec3 R, vec3 N, vec3 T, float seed, float fp, float nightF) {
         vec3 cc = uCityCol * bc * mix(0.45, 1.1, oS) * (1.0 - 0.35 * smoothstep(0.55, 0.2, Cp.y)) + uSkyHor * 0.12 * step(0.75, Cp.y);
         cc = mix(cc, uSkyHor * 0.16 + uCityCol * 0.03, gh);
         cc = mix(cc, vec3(0.02), wheel);
-        return vec4(cc, 1.0);
+        return vec4(cc, uGlassVar > 0.5 ? 0.55 + 0.3 * fract(ch * 3.3) : 1.0);
       }
     }
   }
@@ -1660,8 +1715,20 @@ void bhWall(inout vec3 albedo, inout float rough, inout float metal, inout vec3 
   vec3 dayA;     // daylight-lit albedo seen through the glass
   bool lobbyWin = style > 6.5 && csz.y > 2.6 && prof > 4.5 && prof < 5.5;
   if (lobbyWin) litI = lit * mix(0.55 + 0.2 * r2, 0.85 + 0.2 * r2, nightF);
-  if (uDetail > 0.5 && shopWin) interior = bhShop(pm, csz, normalize(rd), seed * 1.37 + shopT * 11.0, shopT, litI, lcol, dayA);
-  else if (uDetail > 0.5 && lobbyWin) interior = bhShop(pm, csz, normalize(rd), seed * 1.37 + cell.x * 3.1, 8.0, litI, vec3(1.0, 0.82, 0.6), dayA);
+  // G1: one shop keeps one type, but every bay / lobby pane its own layout. The wall's cell grid restarts on each
+  // emitted segment (a ground floor is often one segment per bay), so the bay id comes from the world position of
+  // the cell along the wall plus the facing — not from cell.x (that made 8 bank bays / every lobby pane identical)
+  float rsShop = seed * 1.37 + shopT * 11.0, rsLobby = seed * 1.37 + cell.x * 3.1, shopTR = shopT;
+  if (uGlassVar > 0.5) {
+    float bayId = floor((q.x - uSign * f.x * csz.x) / max(csz.x, 0.3) + 0.5);
+    float face = floor(atan(N.z, N.x) * 1.2732 + 4.5);
+    float bayH = bhHash12(vec2(bayId + face * 61.0, mod(seed, 613.0) + cell.y * 7.0));
+    if (shopTR < 0.5) shopTR = 1.0 + floor(bhHash12(vec2(rsShop, 3.3)) * 6.99);
+    rsShop += floor(bayH * 97.0) * 1.913;
+    rsLobby = mod(seed, 613.0) * 1.37 + floor(bayH * 97.0) * 1.913;
+  }
+  if (uDetail > 0.5 && shopWin) interior = bhShop(pm, csz, normalize(rd), rsShop, shopTR, litI, lcol, dayA);
+  else if (uDetail > 0.5 && lobbyWin) interior = bhShop(pm, csz, normalize(rd), rsLobby, 8.0, litI, vec3(1.0, 0.82, 0.6), dayA);
   else if (uDetail > 0.5) {
     interior = bhRoom(pm, csz, normalize(rd), r1 * 31.0 + seed, litI, lcol, prof, style, dayA);
     dayA *= 0.5; // a room by day is several times darker than the street it looks onto (curtains near the glass keep their light)
@@ -1867,6 +1934,20 @@ void bhWall(inout vec3 albedo, inout float rough, inout float metal, inout vec3 
   // spandrel: per tower a matt metal / fritted panel in the wall colour (reflects little) or dark-backed glass
   dayA = mix(dayA, spPanel ? albedo * 0.8 : gt * 0.18, spandrel);
   float Fs = mix(F, spPanel ? F * 0.3 : min(1.0, F * 1.15 + 0.08), spandrel) * (1.0 - openW);
+  // G1: glass as a material. A shop window by day mirrors the street more than it shows the (darker) shop: a
+  // reflection floor and a dimmer interior, so the pane reads as glass, not an open hole; every pane its own faint
+  // tint (float-glass batches: green / neutral / warm); a thin bright line where the glazing edge meets the frame
+  float gEdge = 0.0;
+  if (uGlassVar > 0.5 && !curtain && !ribbon) {
+    float dayK = 1.0 - nightF;
+    if (shopWin || lobbyWin) {
+      Fs = max(Fs, mix(0.06, 0.24 + 0.1 * r3, dayK) * (1.0 - openW));
+      interior *= mix(1.0, 0.7, dayK);
+    }
+    transTint *= mix(vec3(0.93, 1.0, 0.97), vec3(1.0, 0.98, 0.95), fract(r3 * 4.7 + r1 * 0.3)) * mix(0.92, 1.04, fract(r2 * 6.1));
+    float de = min(min(pm.x - wr.x, wr.y - pm.x), min(pm.y - wr.z, wr.w - pm.y)) - fw;
+    gEdge = (1.0 - smoothstep(0.004, 0.012 + fpx, de)) * step(-0.002, de) * (1.0 - frame) * detail;
+  }
   // reflection: brighter toward the top of each punched pane (sky above, street below)
   float paneGrad = curtain ? 1.0 : mix(0.75, 1.2, wy);
   // punched windows: the reveal and the street canyon cut the reflected sky down, so the curtains / room read
@@ -1882,6 +1963,8 @@ void bhWall(inout vec3 albedo, inout float rough, inout float metal, inout vec3 
   glass = mix(glass, env * 0.22 * reflTint + interior * 0.5, ventO);
   glassAlb *= 1.0 - 0.45 * ventO;
   glass += gt * crown * mix(0.55, 0.18, spandrel);
+  glass = mix(glass, refl * 0.55 + env * 0.1, gEdge * 0.6);
+  glassAlb = mix(glassAlb, vec3(0.2, 0.26, 0.24), gEdge * 0.5);
   if (detail < 0.999) {
     glass = mix(avgGlass, glass, detail);
     glassAlb = mix(avgAlb, glassAlb, detail);
@@ -2173,7 +2256,7 @@ ${LAMP_GLSL}
 
 // ───────────────────────────────────────────────────────── factory ──
 
-export function createMaterials(g: GlobalUniforms, opts: { legacy?: boolean; wear?: boolean; winDepth?: boolean; winRefl?: boolean; wallRelief?: boolean; plinth?: boolean } = {}): BuildingMaterials {
+export function createMaterials(g: GlobalUniforms, opts: { legacy?: boolean; wear?: boolean; winDepth?: boolean; winRefl?: boolean; wallRelief?: boolean; plinth?: boolean; glassVar?: boolean } = {}): BuildingMaterials {
   const legacy = !!opts.legacy;
   const uniforms = {
     uHours: { value: 12 },
@@ -2192,6 +2275,7 @@ export function createMaterials(g: GlobalUniforms, opts: { legacy?: boolean; wea
     uWinRefl: { value: opts.winRefl === false ? 0 : 1 },
     uWallRelief: { value: opts.wallRelief === false ? 0 : 1 },
     uPlinth: { value: opts.plinth === false ? 0 : 1 },
+    uGlassVar: { value: opts.glassVar === false ? 0 : 1 },
     uGeoWin: { value: new THREE.Vector4(0, -1e5, 0, 0) },
   };
   const frameCols = { value: FRAME_COLS.map((c) => new THREE.Color(c)) };
@@ -2230,6 +2314,7 @@ export function createMaterials(g: GlobalUniforms, opts: { legacy?: boolean; wea
         uWinRefl: uniforms.uWinRefl,
         uWallRelief: uniforms.uWallRelief,
         uPlinth: uniforms.uPlinth,
+        uGlassVar: uniforms.uGlassVar,
         uGeoWin: uniforms.uGeoWin,
         uSunDir: g.uSunDir,
         ...lampUniforms(),
