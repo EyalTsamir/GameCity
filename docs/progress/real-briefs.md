@@ -233,3 +233,23 @@ pots, toys; bug 6 laundry through a tree); bug 2 tree through a barn roof + floa
 roof moiré, bug 4 station bikes in planters + wheel-less rack bikes, bug 5 creel rope tails, bug 8 near-herd one-frame
 lag (select from frame() before the draw), bug 9 station board vs column (station.ts), sailboat "not yet" (cabin,
 coaming, sails, fittings), tractor glass cab with seat/wheel/driver (driver via F2's figure), forklift of boxes.
+
+## Last fix round (after judge 3 + bug hunter 3) — read docs/progress/real-judge-3.md + real-bugs-3.md first
+Time-box: 90 min, push at every fix (not at the end), final note to the lead by the deadline in your prompt.
+Harness: placed actors fade in over ~25 frames — warm up (shots/j3/places.mjs) before judging places. Pump screenshots
+are full-viewport. Verify a judge finding at its view before fixing (camera inside a building ≠ bug; shots/f4/pick.mjs).
+
+### G1 — Glass and interiors (owner: buildings/** glass + interiors, traffic vehicleMaterial glass, rail trainMaterial glass)
+Judge 3 #1: shop glass reads as a hole, car glass smoked plastic, bus side glass invisible, train cab glass a black void,
+apartment panes repeat one "poster" reflection — treat glass as a MATERIAL (tint, thin frame edge, interior visible,
+per-pane variation); reuse the office-glass approach that already works. No new reflection system (out of scope).
+#9 + bugs-3: same lobby plant in every tower pane, Café Nord has no café inside, bank/bookshop ground-floor interior
+repeats per bay, night tower room empty and flat. Bus saloon tyre arch (F2 open).
+### G2 — Ground, track, water (owner: roads/surfaces.ts, terrain/**, rail track bed, landmarks fountain)
+Judge 3 #2 downtown pavement: dashed acne line along every colonnade, black "barcode" dash line along the pavement, wavy
+joints across square slabs (likely F3 hand-laid paving — check ?nohandlaid). #6 ballast still flat/level with sleepers
+at the judge's view, cutting still slab ledges. #5 fountain glass-tube jets + flat cyan pool. Church gablet stray rod.
+### G3 — Places, people, small props (owner: sim/pedestrians/**, sim/rail/station.ts, props/**, vegetation trunks)
+Judge 3 #4 platform empties whenever a train stands + blank info board. #8 rack bikes polygon disc wheels. #7 people at
+3 m: groups interpenetrate, white jagged shirt bib, crude pram. #10 street-tree trunk bark + flat shard branch cards
+inside crowns (only if time). Bugs-3: smoke from a bare Northgate roof (-93.3,13.4,-105.5) — find the emitter.
