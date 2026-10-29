@@ -376,8 +376,9 @@ function warmUp(ctx: CityContext): void {
   ctx.scene.traverse((o) => {
     if (!o.visible || o.frustumCulled) {
       forced.push([o, o.visible, o.frustumCulled]);
-      o.visible = true;
-      o.frustumCulled = false;
+      // pinned for the frame: modules also set visibility inside the render call (scene.onBeforeRender)
+      Object.defineProperty(o, 'visible', { configurable: true, get: () => true, set: () => {} });
+      Object.defineProperty(o, 'frustumCulled', { configurable: true, get: () => false, set: () => {} });
     }
   });
   try {
@@ -387,6 +388,8 @@ function warmUp(ctx: CityContext): void {
     reportFrameError('warm-up', err);
   } finally {
     for (const [o, v, f] of forced) {
+      delete (o as { visible?: boolean }).visible;
+      delete (o as { frustumCulled?: boolean }).frustumCulled;
       o.visible = v;
       o.frustumCulled = f;
     }
