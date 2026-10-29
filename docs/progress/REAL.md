@@ -11,6 +11,14 @@ Overview must stay at least as impressive as now. Every feature: quality tiers +
 Lead session: session_01XuhAMczW3iK25AAWnf3qog, branch `claude/pensive-gates-bim12i`.
 
 ## Resume here (keep current)
+* 2026-10-29 02:06 UTC — Judge 2 merged (docs/progress/real-judge-2.md: 4 real / 25 almost / 3 not yet (school,
+  sailboat, sheep-at-3m); #1 places empty, #2 floating sills in yard_b, #3 primitive vehicle occupants, #4 pixel
+  ballast + low-poly cutting, #5 felt lawns + rim, #7 repeated interiors, #8 too new, #9 flat cloth, #10 paving grid).
+  Bug hunter 2 merged (real-bugs-2.md: HIGH placeholder box people; barn tree/poplar clumps, barn moiré, station bikes
+  in planters, creel tails, laundry through tree, duplicate shop names, herd LOD one-frame lag, station board) + the
+  HARNESS CAVEAT: headless renders only during screenshots → bench/capture-set/shot now pump 4 frames (c43100c).
+  Final fix round F1 facades, F2 people everywhere, F3 ground/track/rock, F4 cloth/age/bugs launched (briefs in
+  real-briefs.md "Final fix round"). Then: judge 3 + bug hunter 3 → final report.
 * 2026-10-29 01:20 UTC — Merged W8 s5 (084f5db: Holstein-proportioned cows, 5 breeds, herd spacing fixed, sheep
   fleece locks/dirty belly/knees, tractor bonnet/grille/lamps, lacy umbels; animal cost +337k tris → caps 28/12 @ 40 m
   (re-measure open); golden 0.0, invariants {}). Golden of W6 s2 merge: overview 0.5 / downtown 4.4. Waiting on
@@ -202,6 +210,10 @@ Wave 1 (launched 2026-10-28 15:17 UTC, sibling cloud sessions, briefs in real-br
 | Judge 2 | session_01XuhAMhWPFfC36vewCePr9j | claude/real-judge-2 | real-judge-2.md |
 | Bug hunter 2 | session_01XuhAMerLUHGUUS7BTCdeQe | claude/real-bugs-2 | real-bugs-2.md |
 | W8 countryside (2) | session_01XuhAMfNhLR1sNFxZPZJ7Yq | claude/real-w8-country | real-w8.md |
+| F1 facades final | session_01XuhAMdr8nYgjcxQjFGE8r6 | claude/real-f1-facades | real-w1.md (F1 section) |
+| F2 people everywhere | session_01XuhAMdWkDieoT1KiyUQATj | claude/real-f2-people | real-f2.md |
+| F3 ground/track/rock | session_01XuhAMh42VLib5eEhrkwmHb | claude/real-f3-ground | real-f3.md |
+| F4 cloth/age/bugs | session_01XuhAMeuCcFFs8EDE6dvZYc | claude/real-f4-cloth | real-f4.md |
 Respawn rule: when a worker stops (milestone note, ~200k context, or a usage stop), create a NEW session on the
 same branch with the same brief + "resume from docs/progress/real-wN.md Resume here"; archive the old one.
 
