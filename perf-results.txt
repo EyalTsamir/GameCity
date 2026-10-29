@@ -124,3 +124,27 @@ Measured 2026-10-29 ~19:40, same machine / settings as above. Log: docs/progress
 
 5. IMAGE: golden mean diff 0.0 in all five views; street level 0.00–0.93 by day, 0.27–4.45 at night (night-market cloth
    sway, window flicker = motion). Visible change by design: the departure board keeps its last state beyond 45 m.
+
+==============================================================================================================
+QUICK-WINS ROUND (branch claude/perf-wins-a4bce3: a5e584c, 32dcf7c) — same-session A/B against 024d901
+Measured 2026-10-29 ~21:00-22:15, same machine / settings; two sibling sessions shared the GPU (noisy).
+
+1. STUTTER (hitch.mjs, vsync + adaptive on, one page load per build)
+   window                 024d901: mean   p99    max  out | final: mean   p99    max  out
+   platform@12                   33.97   66.8   83.4    8 |        33.61   50.1   50.2    0
+   platform@21.5                 42.37   83.4   83.4    7 |        40.44   50.2   50.2    0
+   street@21.5                   48.84   66.7   66.8    0 |        44.91   66.7   66.8    0
+   fly to street                 50.00  100.0  100.0    0 |        46.85   66.8   69.5    0
+   whole run: outliers 20 -> 1, freezes 0 -> 0, worst frame 100 -> 83.6 ms, mid-run compiles 0 -> 0,
+   console 0 errors, invariants {}
+   cause of the platform outliers: the departure board's canvas -> sRGB texture copy (Chrome read-back path)
+
+2. BOOT (fresh profile, no shader cache): first frame 27.8 / 25.7 s -> 20.0 / 20.1 s (bootprobe, interleaved);
+   hitch.mjs boot 28.1 -> 20.5 s. Facade program compile 18.5 -> 14.0 s (standalone, interleaved x3) and it now
+   starts at 1.1 s (was 5.5 s).
+
+3. GPU (runtime A/B in one page): land early-outs -0.6 ms overview; water mirror at the facade 'low' tier
+   -0.15 / -0.35 ms refl pass (overview / harbour); departure board -3.1 ms average at the platform (uploads).
+   Uncapped perf.mjs frame times otherwise within the +-2 ms noise of this session.
+
+4. IMAGE: golden + street set vs a clean baseline capture: mean <= 0.04 / 255 in all 15 views.

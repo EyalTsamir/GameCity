@@ -50,6 +50,29 @@ compared within one run only.
   normal, Kajiya-Kay, fabric, shoes) — each ≤ ~1 ms (inside the noise); the near program's ~7 ms is spread over
   everything (the far program's −4.9 ms only comes from dropping all of it). Footbridge "3.6 ms": noise.
 
+### Final verification (024d901 on :5184 vs 32dcf7c on :5181, same session)
+- hitch.mjs (vsync, adaptive on, 5 views × 12 / 21.5 h + 5 flights, one page load each): outliers 20 → 1, freezes
+  0 → 0, worst frame 100 → 83.6 ms, mid-run compiles 0 → 0; platform steady 12 h / 21.5 h: 8 / 7 outliers → 0 / 0,
+  p99 66.8 / 83.4 → 50.1 / 50.2 ms; flights p99 ≤ 67 ms (base up to 100); boot window 28.1 → 20.5 s to the first
+  frame; console 0 errors, frame errors none, invariants {} (both).
+- bootprobe (fresh profile, interleaved ×2): 27.8 / 25.7 s → 20.0 / 20.1 s.
+- GPU, runtime A/B in one page (revert by shader patch / uniform pin, 3 cycles): land early-outs −0.6 ms overview
+  (≈ 0 harbour), reflection tier −0.15 / −0.35 ms on the refl pass (overview / harbour).
+- perf.mjs uncapped ×2 interleaved: run 1 within ±2 ms (street / market / harbour 21.5 h −1.4 … −2.0, overview ±0);
+  the candidate's run 2 was +5 ms in EVERY view incl. untouched ones (external GPU load) → not usable. Frame time
+  is not where this round's gains are: they are stutter (board) and boot.
+- golden (5 aerial + 10 street-level captures) vs a second clean baseline capture: mean ≤ 0.04 / 255 in all 15
+  (night ≤ 0.01); 63 scattered pixels in aerial downtown (shop-interior hash thresholds after the restructure).
+  Control: two baseline loads differ by 1.2–1.6 at night (the first load's exposure), same as base vs final.
+- typecheck clean; `npm run build` OK (3.71 MB); dist/index.html from file:// — 0 errors, invariants {}.
+
+### Next (by expected gain)
+1. Boot (now ~20 s fresh): the warm-up frame still compiles the shadow-depth and post programs at the first real
+   render (~3–5 s); compiling them during the module builds needs a hook into three's shadow-map depth-material
+   cache. The facade program is still the long pole (12–18 s): bhShop is ~45 % of it (stub test).
+2. Overview land albedo 8.5 ms: a baked far-field albedo (static part) with the gust / caustic overlay on top.
+3. Near crowd at the market (~7 ms of fragment work, spread over every feature; far program −4.9 upper bound).
+
 ## Resume here (round closed 2026-10-29 ~20:00)
 **Done:** final same-run verification (original 8718d0f vs final 729b6a7) → docs/progress/PERF-REPORT.md (Hebrew) and
 the "AFTER" section of perf-results.txt (= the new budget). Everything pushed to claude/pensive-gates-bim12i.
