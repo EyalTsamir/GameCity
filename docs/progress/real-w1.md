@@ -2,7 +2,18 @@
 
 Branch `claude/real-w1-facades` (from `claude/pensive-gates-bim12i`). Brief: docs/progress/real-briefs.md "W1".
 
-## F1 session 2 (2026-10-29) — in progress
+## F1 session 2 (2026-10-29) — DONE (wrapped up at the lead's request)
+### Resume here
+* Judged (shots/f1s2/j2, j3 day; j4 night 21.5 h): bakery, warehouse sign, porch posts, school kit, church rose /
+  gablet / portal, Café Nord (sign in bay, door now centred in its bay) — pass. Downtown: console clean,
+  invariants {}, validate []; overview invariants {}. Night run: only a pedestrians invariant (fade-out ped inside a
+  prop at 32.2, 26.8 — not facades).
+* **Open:** (a) the deli's jar shelves (bhShelves kind 0) still read like boxes/books at 6 m — give type 9 a
+  chilled counter with cheese wheels / hams on hooks; (b) perf of ?noschoolkit / ?nochurchmould not measured (small:
+  school a few hundred tris; church ~25 tori + extrusions on the near-detail mesh); (c) warehouse door wear,
+  church soot still subtle; (d) railings/gate/bike stands at the school → F4 (real-requests.md).
+* Toggles new this session: `?noschoolkit`, `?nochurchmould` (also off on low).
+
 * Tasks: (1) bench-judge session-1 changes (shots/f1s2/b*), fix fails; (2) school entrance kit; (3) church mouldings +
   rose tracery. Lawn rim out of scope.
 * **School entrance kit (special.ts genSchool, `?noschoolkit`, all tiers — a few hundred trim tris):** main FRONT
