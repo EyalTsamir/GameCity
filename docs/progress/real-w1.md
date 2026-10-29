@@ -21,6 +21,17 @@ Branch `claude/real-w1-facades` (from `claude/pensive-gates-bim12i`). Brief: doc
   across the street → use `shot.mjs --view "70,7.0,92.4,6,12,4"` (rose) / `"70,5.6,92.4,6,15,6"` (portal). A
   capture costs ~2 min here (load ~4 min).
 * The diagonal "rod" over the church gablet in church_7m = the gablet finial's shadow (not geometry).
+* **Bench-judged session-1 items** (scripts/.f1/judge.mjs, one load, frontal lot views; shots/f1s2/j2):
+  bakery / warehouse sign over the canopy / porch posts + brackets: pass. Café Nord: sign in its bay passes, but the
+  café interior (bottle shelving on every wall) read as a bookshop → side walls wainscot + framed prints, bar shelving
+  on the back wall only; the arcade column stood in front of the lobby door → towers.ts buildLobby centres arcade
+  doors in their bay (visual shift ≤ half a bay from the plan door). Delicatessen showed the bakery's loaves →
+  shopType 9 (Deli/Cheese/Butcher/Chocolates; shader remaps to T 2 with `deli`: white tiles, dark floor, jar shelves).
+* **Invariant hits fixed:** "sign atlas overflowed" (noticeboard cell 256×216 opened a new shelf → 128×96); church
+  portal label stops 4 cm out of the footprint below 2.4 m (depth 0.16 → 0.12). Downtown after: console clean,
+  invariants {}, validate [] (shots/f1s2/downtown.png).
+* **Harness:** lead's fix applied — the 8×8 `clip` removed from pump screenshots (bench/capture-set/shot/.f1); the
+  grey stipple frames (church 3 m, shop 4 m, school 10 m) were that, not framing.
 
 ## F1 — Facades final (2026-10-29, branch `claude/real-f1-facades`, session 1 — stopped at the context cap)
 ### Resume here
