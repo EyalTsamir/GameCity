@@ -46,6 +46,7 @@ const width = parseInt(args.width ?? '1280', 10);
 const height = parseInt(args.height ?? '720', 10);
 const settle = parseInt(args.settle ?? '1500', 10);
 const pickIdx = parseInt(args.pick ?? '0', 10);
+const tintOv = args.tint !== undefined ? parseFloat(args.tint) : -1; // cow/sheep: force the coat tint (breed)
 const yawOff = parseFloat(args.yaw ?? '18');
 const pitchOv = args.pitch !== undefined ? parseFloat(args.pitch) : null;
 let url = args.url ?? 'http://127.0.0.1:5173/';
@@ -74,7 +75,7 @@ try {
   for (const cls of classes) {
     // locate: returns {x,y,z,yaw(deg),h(object height)} or null
     const loc = await page.evaluate(
-      async ([cls, k]) => {
+      async ([cls, k, tint]) => {
         const c = window.__city, plan = c.ctx.plan;
         const gy = (x, z) => c.ctx.services.terrain?.height?.(x, z) ?? plan.heightAt(x, z);
         const YAW = { N: 180, E: 90, S: 0, W: -90 };
@@ -168,6 +169,10 @@ try {
           const i = nth(all);
           if (i === null) return null;
           c.setSpeed(0);
+          if (tint >= 0) {
+            const ib = c.ctx.scene.getObjectByName('land-herds')?.geometry.getAttribute('iB');
+            if (ib) ib.array[(i / 7) * 4 + 1] = tint;
+          }
           const x = herd[i], z = herd[i + 2], yaw = (herd[i + 3] * 180) / Math.PI;
           // 3/4 front-side view: the animal faces +z rotated by yaw
           return { x, y: herd[i + 1], z, yaw: yaw + 55, h: cls === 'sheep' ? 0.9 : 1.4, w: cls === 'sheep' ? 1.2 : 2.2, pitch: 10 };
@@ -287,7 +292,7 @@ try {
         }
         return { x: p.x, y: p.y, z: p.z, yaw: yaw + 35, h: H, w: 2 };
       },
-      [cls, pickIdx],
+      [cls, pickIdx, tintOv],
     );
     if (!loc) {
       report.missing.push(cls);

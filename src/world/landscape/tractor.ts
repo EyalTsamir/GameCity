@@ -86,6 +86,61 @@ export class Sink {
   }
 }
 
+/** the bonnet shell: z 0.48 → 2.5, bottom at y 1.0, top 1.66 sloping to 1.54 with an elliptical nose */
+function bonnetGeometry(): THREE.BufferGeometry {
+  const z0 = 0.48,
+    z1 = 2.5,
+    zn = 2.3, // start of the nose curve
+    R = 0.15; // top-corner radius
+  const zs: number[] = [];
+  for (let i = 0; i <= 12; i++) zs.push(z0 + ((zn - z0) * i) / 12);
+  for (let i = 1; i <= 8; i++) zs.push(zn + (z1 - zn) * Math.sin((i / 8) * Math.PI * 0.5));
+  // section outline (right half, bottom → shoulder → top centre), mirrored
+  const sec = (z: number): [number, number][] => {
+    const d = Math.max(0, z - zn) / (z1 - zn);
+    const drop = 0.13 * (1 - Math.sqrt(Math.max(0, 1 - d * d)));
+    const T = 1.66 - (0.1 * (Math.min(z, zn) - z0)) / (zn - z0) - drop;
+    const wb = 0.47 - 0.05 * (1 - Math.sqrt(Math.max(0, 1 - d * d))),
+      wt = wb - 0.035;
+    const r = Math.min(R, (T - 1.0) * 0.45);
+    const pts: [number, number][] = [[wb, 1.0], [wb - 0.012, 1.0 + (T - 1.0 - r) * 0.5], [wt, T - r]];
+    for (let k = 1; k <= 6; k++) {
+      const a = (k / 6) * Math.PI * 0.5;
+      pts.push([wt - r + r * Math.cos(a), T - r + r * Math.sin(a)]);
+    }
+    pts.push([0, T + 0.008]);
+    const full = pts.slice();
+    for (let k = pts.length - 2; k >= 0; k--) full.push([-pts[k][0], pts[k][1]]);
+    return full;
+  };
+  const pos: number[] = [],
+    idx: number[] = [];
+  let n = 0;
+  for (const z of zs) {
+    const sc = sec(z);
+    n = sc.length;
+    for (const [x, y] of sc) pos.push(x, y, z);
+  }
+  for (let i = 0; i < zs.length - 1; i++)
+    for (let k = 0; k < n - 1; k++) {
+      const a = i * n + k,
+        b = a + 1,
+        c = a + n,
+        d = c + 1;
+      idx.push(a, b, c, b, d, c);
+    }
+  // front face (the grille sits on it): a fan from its centre
+  const c0 = pos.length / 3,
+    last = (zs.length - 1) * n;
+  pos.push(0, 1.22, z1);
+  for (let k = 0; k < n - 1; k++) idx.push(c0, last + k, last + k + 1);
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setIndex(idx);
+  g.computeVertexNormals();
+  return g;
+}
+
 /** body + cab + hitch + cultivator (no wheels) */
 function bodyGeometry(): THREE.BufferGeometry {
   const s = new Sink();
@@ -94,19 +149,27 @@ function bodyGeometry(): THREE.BufferGeometry {
   s.rod([-REAR_X + 0.22, REAR_R, REAR_Z], [REAR_X - 0.22, REAR_R, REAR_Z], 0.14, 0.14, 12, IRON, 0.55, 0.4);
   s.box(1.1, 0.16, 0.22, 0, FRONT_R, FRONT_Z, IRON, 0.6, 0.3, 0.03); // front axle beam
   s.rod([-FRONT_X + 0.16, FRONT_R, FRONT_Z], [FRONT_X - 0.16, FRONT_R, FRONT_Z], 0.09, 0.09, 10, IRON);
-  // bonnet: sloping down to the nose, side louvres, grille, headlights
-  {
-    const g = new RoundedBoxGeometry(0.94, 0.66, 2.05, 3, 0.1);
-    const p = g.getAttribute('position');
-    for (let i = 0; i < p.count; i++) if (p.getY(i) > 0) p.setY(i, p.getY(i) - 0.13 * ((p.getZ(i) + 1.025) / 2.05));
-    g.computeVertexNormals();
-    s.add(g, new THREE.Matrix4().makeTranslation(0, 1.33, 1.5), PAINT, 0.32, 0.1, 0.6);
+  // bonnet: a pressed shell — sides leaning in (tumblehome), big radius at the top corners, the top line
+  // sloping down to a radiused nose; side louvre panels, a decal stripe, a recessed grille with vertical
+  // louvres in a surround, headlamps either side of it, maker's badge
+  s.add(bonnetGeometry(), new THREE.Matrix4(), PAINT, 0.32, 0.1, 0.6);
+  for (const sx of [-1, 1]) {
+    const lean = new THREE.Euler(0, 0, sx * 0.09);
+    s.box(0.012, 0.3, 0.62, sx * 0.462, 1.3, 1.95, BLACK, 0.6, 0, 0.006, 0.5, lean); // louvre panel (recess)
+    for (let i = 0; i < 7; i++) s.box(0.03, 0.022, 0.58, sx * (0.466 - 0.0035 * i), 1.17 + i * 0.043, 1.95, PAINT_DK, 0.5, 0.2, 0.006, 0.5, new THREE.Euler(0, 0, sx * 0.5));
+    s.box(0.006, 0.045, 1.55, sx * 0.44, 1.5, 1.42, [0.82, 0.8, 0.74], 0.35, 0, 0, 0.3, lean); // decal stripe
+    s.box(0.006, 0.02, 1.55, sx * 0.443, 1.46, 1.42, [0.05, 0.05, 0.05], 0.35, 0, 0, 0.3, lean);
+    s.box(0.006, 0.06, 0.2, sx * 0.448, 1.37, 1.0, [0.75, 0.75, 0.72], 0.2, 0.8, 0.004, 0.2, lean); // model badge
+    // headlamps: chrome-rimmed lenses beside the grille, amber side markers on the corners
+    s.rod([sx * 0.31, 1.27, 2.47], [sx * 0.31, 1.27, 2.52], 0.075, 0.075, 14, [0.6, 0.6, 0.58], 0.15, 0.9, 0.2);
+    s.rod([sx * 0.31, 1.27, 2.52], [sx * 0.31, 1.27, 2.53], 0.062, 0.058, 14, [0.92, 0.92, 0.88], 0.05, 0.1, 0.1);
+    s.box(0.03, 0.05, 0.1, sx * 0.43, 1.27, 2.4, [0.9, 0.42, 0.04], 0.1, 0, 0.01, 0.2);
   }
-  for (const sx of [-1, 1])
-    for (let i = 0; i < 6; i++) s.box(0.02, 0.035, 0.6, sx * 0.475, 1.18 + i * 0.065, 1.85, BLACK, 0.6, 0, 0.008, 0.5);
-  s.box(0.8, 0.46, 0.05, 0, 1.24, 2.53, BLACK, 0.5, 0.2, 0.01, 0.4); // grille
-  for (let i = 0; i < 7; i++) s.box(0.76, 0.022, 0.03, 0, 1.04 + i * 0.065, 2.56, PAINT_DK, 0.4, 0.3, 0.005, 0.4);
-  for (const sx of [-1, 1]) s.box(0.16, 0.08, 0.04, sx * 0.3, 1.55, 2.5, [0.8, 0.8, 0.75], 0.08, 0.2, 0.015, 0.2);
+  s.box(0.42, 0.36, 0.03, 0, 1.2, 2.5, [0.012, 0.012, 0.012], 0.7, 0.2, 0.008, 0.4); // grille opening
+  s.box(0.47, 0.41, 0.025, 0, 1.2, 2.49, [0.5, 0.5, 0.48], 0.25, 0.8, 0.012, 0.4); // surround
+  for (let i = 0; i < 9; i++) s.box(0.018, 0.33, 0.05, -0.18 + i * 0.045, 1.2, 2.505, PAINT_DK, 0.45, 0.3, 0.005, 0.4, new THREE.Euler(0, 0.6, 0));
+  s.box(0.42, 0.03, 0.04, 0, 1.2, 2.52, [0.55, 0.55, 0.52], 0.25, 0.8, 0.008, 0.3); // centre bar
+  s.box(0.14, 0.04, 0.012, 0, 1.38, 2.5, [0.85, 0.85, 0.8], 0.15, 0.9, 0.006, 0.2); // badge on the nose
   // front weights: a stack of cast slabs on a carrier
   s.box(0.9, 0.12, 0.5, 0, 0.62, 2.66, IRON, 0.6, 0.3, 0.02);
   for (let i = 0; i < 6; i++) s.box(0.12, 0.36, 0.44, -0.33 + i * 0.132, 0.86, 2.7, [0.12, 0.12, 0.115], 0.55, 0.3, 0.025);
@@ -116,8 +179,11 @@ function bodyGeometry(): THREE.BufferGeometry {
   // exhaust stack with muffler and rain cap beside the A-pillar; air pre-cleaner on the other side
   s.rod([0.38, 1.6, 0.62], [0.38, 1.75, 0.62], 0.05, 0.05, 10, IRON, 0.6, 0.4, 0);
   s.rod([0.38, 1.75, 0.62], [0.38, 2.3, 0.62], 0.085, 0.085, 12, [0.14, 0.13, 0.12], 0.7, 0.5, 0);
+  s.rod([0.38, 1.8, 0.66], [0.38, 2.25, 0.66], 0.07, 0.07, 10, [0.42, 0.41, 0.38], 0.4, 0.8, 0); // heat shield
   s.rod([0.38, 2.3, 0.62], [0.38, 3.0, 0.62], 0.05, 0.048, 10, [0.06, 0.05, 0.045], 0.8, 0.4, 0);
-  s.box(0.12, 0.012, 0.13, 0.38, 3.02, 0.6, [0.06, 0.05, 0.045], 0.7, 0.5, 0, 0, new THREE.Euler(0.35, 0, 0));
+  s.rod([0.38, 2.86, 0.62], [0.38, 2.9, 0.62], 0.058, 0.058, 10, [0.06, 0.05, 0.045], 0.8, 0.4, 0); // clamp
+  s.rod([0.33, 3.0, 0.57], [0.43, 3.0, 0.57], 0.008, 0.008, 6, [0.06, 0.05, 0.045], 0.7, 0.5, 0); // hinge pin
+  s.add(new THREE.CylinderGeometry(0.06, 0.06, 0.008, 14), new THREE.Matrix4().makeRotationX(0.45).setPosition(0.38, 3.03, 0.62), [0.07, 0.06, 0.05], 0.7, 0.5, 0); // rain cap, flipped up
   s.rod([-0.38, 1.6, 0.62], [-0.38, 2.42, 0.62], 0.07, 0.07, 10, BLACK, 0.5, 0.1, 0);
   s.rod([-0.38, 2.42, 0.62], [-0.38, 2.52, 0.62], 0.1, 0.06, 10, BLACK, 0.5, 0.1, 0);
   // cab: floor pan, four pillars, glass all round, roof with an overhang and a beacon, mirrors, seat, wheel
@@ -140,6 +206,14 @@ function bodyGeometry(): THREE.BufferGeometry {
   s.box(1.62, 0.13, 1.85, 0, y1 + 0.06, (cz0 + cz1) / 2 + 0.02, PAINT, 0.3, 0.1, 0.05, 0);
   s.box(1.5, 0.05, 1.7, 0, y1 - 0.02, (cz0 + cz1) / 2 + 0.02, BLACK, 0.6, 0, 0.02, 0);
   s.rod([-0.55, y1 + 0.12, cz0 + 0.25], [-0.55, y1 + 0.24, cz0 + 0.25], 0.06, 0.05, 10, [0.9, 0.4, 0.03], 0.2, 0, 0);
+  // lights: work lamps on the roof front, amber indicators on the front pillars, red tail lamps at the back
+  for (const sx of [-1, 1]) {
+    s.box(0.16, 0.12, 0.1, sx * 0.42, y1 + 0.06, cz1 + 0.14, BLACK, 0.4, 0.2, 0.02, 0);
+    s.box(0.13, 0.09, 0.01, sx * 0.42, y1 + 0.06, cz1 + 0.19, [0.95, 0.95, 0.9], 0.05, 0.1, 0.004, 0);
+    s.box(0.05, 0.08, 0.05, sx * (cx + 0.045), y1 - 0.12, cz1 + 0.01, [0.95, 0.45, 0.04], 0.1, 0, 0.012, 0);
+    s.box(0.07, 0.12, 0.03, sx * (cx - 0.02), 1.8, cz0 - 0.05, [0.7, 0.03, 0.02], 0.1, 0, 0.012, 0.2);
+    s.box(0.05, 0.05, 0.03, sx * (cx - 0.02), 1.69, cz0 - 0.05, [0.95, 0.45, 0.04], 0.1, 0, 0.01, 0.2);
+  }
   for (const sx of [-1, 1]) {
     s.rod([sx * cx, 2.6, cz1], [sx * (cx + 0.32), 2.66, cz1 + 0.08], 0.012, 0.012, 6, BLACK, 0.4, 0.5, 0);
     s.box(0.04, 0.26, 0.16, sx * (cx + 0.34), 2.56, cz1 + 0.08, BLACK, 0.3, 0.1, 0.01, 0);

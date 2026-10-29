@@ -272,14 +272,24 @@ export function createFarmLife(model: LandscapeModel, uniforms: Record<string, T
           hy = F.y0 + (F.y1 - F.y0) * (0.25 + 0.5 * lhash(F.pid, 76));
         const spread = (sheep ? 9 : 14) * (F.small ? 0.6 : 1);
         const tintBase = lhash(F.pid, 77);
+        // animals keep a body length apart (they used to stand inside each other): up to 4 tries per animal
+        const placed: number[] = [];
+        const gap2 = (sheep ? 1.5 : 2.8) ** 2;
         for (let a = 0; a < n; a++) {
-          const r1 = hash2i(F.pid, a, 78),
-            r2 = hash2i(F.pid, a, 79);
-          const rad = spread * Math.sqrt(-2 * Math.log(Math.max(1e-4, r1)));
-          let ax = hx + Math.cos(r2 * 6.283) * rad,
-            ay = hy + Math.sin(r2 * 6.283) * rad;
-          ax = Math.min(F.x1 - 3, Math.max(F.x0 + 3, ax));
-          ay = Math.min(F.y1 - 3, Math.max(F.y0 + 3, ay));
+          let ax = 0,
+            ay = 0,
+            ok = false;
+          for (let t = 0; t < 4 && !ok; t++) {
+            const r1 = hash2i(F.pid, a + t * 997, 78),
+              r2 = hash2i(F.pid, a + t * 997, 79);
+            const rad = spread * Math.sqrt(-2 * Math.log(Math.max(1e-4, r1)));
+            ax = Math.min(F.x1 - 3, Math.max(F.x0 + 3, hx + Math.cos(r2 * 6.283) * rad));
+            ay = Math.min(F.y1 - 3, Math.max(F.y0 + 3, hy + Math.sin(r2 * 6.283) * rad));
+            ok = true;
+            for (let j = 0; j < placed.length && ok; j += 2) if ((placed[j] - ax) ** 2 + (placed[j + 1] - ay) ** 2 < gap2) ok = false;
+          }
+          if (!ok) continue;
+          placed.push(ax, ay);
           fromField(ax, ay, w);
           if (!fieldOK(w.x, w.z)) continue;
           // most of a herd faces the same way (grazing into the wind), a few stray
@@ -351,8 +361,9 @@ ${POSE_GLSL}`,
   transformed = pr + iA.xyz;
   // coats: brown / black / white-black piebald / red; patches from the body position
   float pat = step(0.15, sin(position.x * 9.0 + position.z * 4.0 + iB.z * 20.0) + sin(position.z * 7.0 - position.y * 6.0 + iB.z * 11.0));
-  vec3 cow = iB.y < 0.28 ? vec3(0.13, 0.075, 0.045) : iB.y < 0.5 ? vec3(0.02, 0.02, 0.02)
-    : iB.y < 0.75 ? mix(vec3(0.02), vec3(0.62, 0.6, 0.55), pat) : vec3(0.24, 0.1, 0.045);
+  float br = herdBreed(iB.y); // the same breeds as the near model (animals.ts)
+  vec3 cow = br < 0.5 ? mix(vec3(0.025), vec3(0.64, 0.62, 0.57), max(pat, step(position.y, 0.55))) : br < 1.5 ? vec3(0.22, 0.16, 0.12)
+    : br < 2.5 ? vec3(0.3, 0.12, 0.05) : br < 3.5 ? vec3(0.03) : vec3(0.45, 0.24, 0.1);
   // wool: off-white with a dirty underside and the lumps catching the light differently
   vec3 wool = vec3(0.6, 0.57, 0.49) * (0.86 + 0.18 * fract(iB.z * 13.7)) * mix(0.55, 1.0, smoothstep(-0.7, 0.3, normal.y));
   vec3 dark = vec3(0.04, 0.035, 0.03) * (0.8 + 0.4 * iB.y);
@@ -364,7 +375,7 @@ ${POSE_GLSL}`,
       .replace('#include <common>', '#include <common>\nvarying vec3 vAc;')
       .replace('vec4 diffuseColor = vec4( diffuse, opacity );', 'vec4 diffuseColor = vec4( vAc, opacity );');
   };
-  mat.customProgramCacheKey = () => 'th-landherd-v3';
+  mat.customProgramCacheKey = () => 'th-landherd-v4';
   const herd = new THREE.Mesh(ig, mat);
   herd.name = 'land-herds';
   herd.frustumCulled = false;
