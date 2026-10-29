@@ -62,3 +62,14 @@ Branch `claude/real-f2-people` (from `claude/pensive-gates-bim12i` e1c9780). Bri
   mostly pin/tiny LOD beyond 40 m; capacity shared with the crowd's 720).
 
 ## Next
+
+## Tokens (session 1, tokens.py)
+```
+agent               calls   w(M)    %  ctxMed  ctxMax cold coldW%  idle>5min: warm/cold
+LEAD                  121    2.8100.0    195k    257k    0     0%  2/0
+
+```
+
+## Sheets
+* docs/progress/real/f2_quay_s1.jpg — fish quay 11 h: a fisher in oilskins at the creel stack (real figure).
+* capture-set report shots/f2/a2/report.json: console clean, invariants {}, frameErrors [].
