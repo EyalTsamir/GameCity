@@ -171,6 +171,18 @@ warm-up's wall time is the facade shader; and compiling only started after the ~
 starts each module's programs (renderer.compile on a 1x1 off-screen target) right after the module is built.
 Further: splitting / slimming the facade shader would cut boot further (not done: risk to the look).
 
+### 11. Crowd and facade-LOD prices (hideprof on cand6, 4 s samples, noise ±1.5 ms)
+| hidden / switched (ms) | market | street | overview |
+|---|---|---|---|
+| pedestrians (all) | 11.8 | 5.2 | 3.9 |
+| peds-near (16–44 m) | 8.3 | 1.4 | 0 |
+| peds-close (< 16 m) | 2.9 | 1.1 | 0.8 |
+| peds-pin (> 300 m, vertex-bound) | 0.7 | 1.5 | 3.5 |
+| facadelod 0.15,0.4 | 0.5 | 0.3 | 0.1 |
+| facadelod 0.1,0.25 | 0.3 | −0.4 | 1.1 |
+The facade LOD option buys ≈ nothing (the cost is in near windows) → not recommended, kept only as a documented switch.
+The near crowd is per-pixel (a near figure is 1352 vertices, 58 % core body; ~50 figures in the market view).
+
 ---
 
 # Earlier round: render-performance pass
