@@ -3,6 +3,19 @@
 Read this first when resuming after an interruption (usage limits have cut runs before).
 Per-module logs live next to this file: `docs/progress/<module>.md`.
 
+## Lead state (parallel-sessions round, 2026-10-29 evening) — six worktree sessions, all merged here
+* Merged into `claude/pensive-gates-bim12i`: camera-explore (free camera goes inside things, never lifted —
+  camera-explore.md), fpv-walk (first-person walk, `V` — fpv.md), perf-wins (stutter + boot — PERF.md quick-wins
+  section), buildings-massing (oriels, turrets, cross gables, tower setbacks, roof kit, `?nomassing` —
+  buildings-massing.md), places-between (lower river quay, old-town archway lane, pond-island bridge, `?noplaces`
+  — places-between.md), box-hunt (30-item ranked audit, 10 fixes, `?noboxhunt` — box-hunt.md).
+* Next detail work: box-hunt.md "Handoff" (rooftop plant on the downtown towers is the biggest box left; industrial
+  sheds; station entrance steps / platform edge) and "Still open"; buildings-massing.md "not done" (industrial halls,
+  loggias, glass-tower crowns).
+* Known: resizing the window logs ~120 `glBlitFramebuffer … not all the same size` WebGL warnings (ui-test `resize`);
+  not caused by this round's branches, not yet traced. Live build: https://tinyhaven-496.netlify.app (Netlify,
+  `.netlify/` links this folder; `npm run build && npx -y netlify-cli deploy --prod --dir dist`).
+
 ## Lead state (world round, 2026-10-19 → 10-24) — see docs/progress/WORLD.md (its "Resume here" is the live resume point)
 * "A world, not a model": the tabletop frame was replaced by a landscape to the horizon (`?diorama` keeps the
   model); 7 workstreams (world, air, ground, foliage, streetlife, life, wear) each with a final report in
