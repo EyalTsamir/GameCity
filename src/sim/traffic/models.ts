@@ -2496,7 +2496,8 @@ export const RIDE: Record<'bike' | 'moto', RideGeom[]> = {
 /** a passenger on the back of a Vespa: hands round the rider's waist, feet on the floorboard's rear */
 export const RIDE_PILLION: RideGeom = { mode: 2, seatY: 0.8, seatZ: -0.6, barY: 0.98, barZ: -0.38, barX: 0.15, footY: 0.31, footZ: -0.3, footX: 0.15, crank: 0, lean: 0.06 };
 
-/** box hunt (?no2wdetail): sculpted e-moped / e-scooter / motorbike bodies instead of rounded boxes */
+/** box hunt (?no2wdetail): sculpted e-moped / e-scooter / motorbike bodies instead of rounded boxes (the scooter and
+ *  motorbike bodies on LOD 0–1 only: beyond 150 m the light old body, ~1/3 of the triangles) */
 let TW = true;
 export function setTwoWheelDetail(on: boolean): void {
   TW = on;
@@ -2731,7 +2732,7 @@ function motos(): THREE.BufferGeometry {
       R = 0.24;
     fatWheel(b, zf, R, 0.1, true, SC);
     fatWheel(b, zr, R, 0.11, false, SC);
-    if (TW) {
+    if (TW && LOD < 2) {
       // box hunt: the body sculpted — a lofted rear cowl bulging over the engine and narrowing under the saddle,
       // a curved leg shield with the horn grille, a domed front mudguard, a lofted headset with a round lamp in
       // a chrome bezel and the speedo on top, round mirrors, a stitched saddle, alloy floor trims with rubber
@@ -2880,7 +2881,7 @@ function motos(): THREE.BufferGeometry {
       R = 0.3;
     fatWheel(b, zf, R, 0.11, true, MB);
     fatWheel(b, zr, R, 0.15, false, MB);
-    if (TW) {
+    if (TW && LOD < 2) {
       // box hunt: cast wheels with brake discs, a crankcase with side covers and a finned cylinder block, header
       // pipes into a chrome silencer, chain and sprocket, a lofted tank (filler cap), seat and tail, a round
       // headlamp in a chrome bezel with twin clocks, mirrors, a hugger and the plate on its holder

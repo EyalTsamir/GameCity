@@ -1356,7 +1356,10 @@ function fencePost(k: Kit, x: number, z: number, w: number, h: number, paint: st
  * ground. With an rng (near detail): weathered paint (grey timber showing at the foot, algae, splash), slight
  * unevenness per picket. Optional end posts (gates).
  */
-export function picketFence(k: Kit, L: number, paint: string, postA: boolean, postB: boolean, rng?: Rng): void {
+export function picketFence(k: Kit, L: number, paint: string, postA: boolean, postB: boolean, rng?: Rng, kd?: Kit): void {
+  // box hunt (?nopicketedge): the boards' sawn edges (sides + the two slopes of the point) into the near-only cells
+  // `kd` (same frame), so a board reads 24 mm thick close up; far away the flat pair of faces is enough
+  if (kd) kd.m(paint, 'paint');
   const sh = k.sh;
   const H = 0.92;
   const nPosts = Math.max(1, Math.round(L / 1.9));
@@ -1407,6 +1410,35 @@ export function picketFence(k: Kit, L: number, paint: string, postA: boolean, po
         sk.tri(a, c, b);
         sk.tri(a, e, c);
         sk.tri(e, d, c);
+      }
+    }
+    if (kd) {
+      // outline b → c → d → e → a (counter-clockwise seen from +z), each edge a quad across the board's thickness
+      // with its outward normal; the edges are a shade darker than the faces
+      const ol: [number, number][] = [
+        [x + 0.0425, 0.05],
+        [x + 0.0425 + lean, top],
+        [x + lean, top + 0.075],
+        [x - 0.0425 + lean, top],
+        [x - 0.0425, 0.05],
+      ];
+      const ks = kd.s,
+        ksh = kd.sh;
+      ks.rgb(_pc.r * tone * 0.86, _pc.g * tone * 0.86, _pc.b * tone * 0.86);
+      for (let i = 0; i < 4; i++) {
+        const [px, py] = ol[i],
+          [qx, qy] = ol[i + 1];
+        const dx = qx - px,
+          dy = qy - py;
+        const dl = Math.hypot(dx, dy) || 1;
+        const nx = dy / dl,
+          ny = -dx / dl;
+        const p1 = ksh.v(px, py, 0.012, nx, ny, 0),
+          p2 = ksh.v(qx, qy, 0.012, nx, ny, 0),
+          p3 = ksh.v(qx, qy, -0.012, nx, ny, 0),
+          p4 = ksh.v(px, py, -0.012, nx, ny, 0);
+        ks.tri(p1, p3, p2);
+        ks.tri(p1, p4, p3);
       }
     }
   }

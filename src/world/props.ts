@@ -88,6 +88,16 @@ export default function create(ctx: CityContext): CityModule {
   setPrinter(printer);
   setBikeSpokes(!ctx.debug.params.has('nobikespokes') && ctx.quality.level !== 'low');
   setShelterRoof(boxHunt(ctx, 'shelterroof'));
+  const picketEdge = boxHunt(ctx, 'picketedge');
+  // box hunt (?noyardkit): the small yard-kit parts (drum hoops / chimes / caps, forklift chain, rams, wheel, rims,
+  // lamps) go to the near-only cells instead of the always-drawn / shadow-casting kits
+  const yardKit = boxHunt(ctx, 'yardkit');
+  const yardNear = (x: number, y: number, z: number, yaw: number): Kit | undefined => {
+    if (!yardKit) return undefined;
+    const kd = KD.at(x, z);
+    kd.sh.frame(x, y, z, yaw);
+    return kd;
+  };
   SK.setYardDetail(boxHunt(ctx, 'yardkit'));
   GK.setBinDetail(boxHunt(ctx, 'wheeliebin'));
 
@@ -268,7 +278,12 @@ export default function create(ctx: CityContext): CityModule {
     const paint = FENCE_PAINT[b.paint % FENCE_PAINT.length];
     if (b.style === 'picket') {
       const frng = noFenceDetail ? undefined : new Rng(Math.floor(hash01(b.ax, b.az, 17) * 1e9));
-      picketFence(kf, L, paint, b.gateA, b.gateB, frng);
+      let kdp: Kit | undefined;
+      if (frng && picketEdge) {
+        kdp = KD.at(b.ax, b.az);
+        kdp.sh.frame(b.ax, H(b.ax, b.az), b.az, yaw);
+      }
+      picketFence(kf, L, paint, b.gateA, b.gateB, frng, kdp);
       // a gate in the gap after a street fence when that gap is the front walk to the door (gardens[].front)
       if (frng && b.street && b.gateB) {
         const ux = dx / L,
@@ -398,7 +413,7 @@ export default function create(ctx: CityContext): CityModule {
           break;
         case 'drums':
           at(kf);
-          SK.drums(kf, srng);
+          SK.drums(kf, srng, yardNear(it.x, y, it.z, it.yaw));
           break;
         case 'skip':
           at(KS);
@@ -406,7 +421,7 @@ export default function create(ctx: CityContext): CityModule {
           break;
         case 'forklift':
           at(KS);
-          SK.forklift(KS, srng);
+          SK.forklift(KS, srng, yardNear(it.x, y, it.z, it.yaw));
           break;
         case 'crates':
           at(kf);

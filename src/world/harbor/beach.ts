@@ -30,6 +30,28 @@ export function setBeachDetail(on: boolean): void {
   DETAIL = on;
 }
 
+/** box hunt (?nobeachtoys): a smooth six-gore beach ball with white pole caps, a moulded sandcastle (ribbed bucket
+ *  towers with crenellations and arrow slits, curtain walls, a keep with a door, a wet moat with a heaped rim, shells,
+ *  a two-sided flag, a bucket with a handle and a spade) and towels with a rumpled surface, a hem and fringed ends;
+ *  off = the earlier faceted ball, cone-and-cylinder castle and flat towel quads */
+let TOYS = true;
+export function setBeachToys(on: boolean): void {
+  TOYS = on;
+}
+
+/** stable 0..1 hash of a position (variation without touching the placement rng stream) */
+function hpos(x: number, z: number, k: number): number {
+  const s = Math.sin(x * 12.9898 + z * 78.233 + k * 37.719) * 43758.5453;
+  return s - Math.floor(s);
+}
+
+/** quad of half-size (w, h) centred at c, facing the horizontal direction (dx, dz) */
+function faceQuad(b: HB, cx: number, cy: number, cz: number, dx: number, dz: number, w: number, h: number): void {
+  const tx = dz * w,
+    tz = -dx * w;
+  b.quad([cx - tx, cy - h, cz - tz], [cx + tx, cy - h, cz + tz], [cx + tx, cy + h, cz + tz], [cx - tx, cy + h, cz - tz]);
+}
+
 export function lifeguardTower(b: HB, x: number, z: number, yaw: number, ground: Ground): void {
   // built facing +z locally (yaw turns it to face the sea)
   const gy = ground(x, z);
@@ -356,6 +378,7 @@ function parasolReal(b: HB, x: number, gy: number, z: number, c1: string, c2: st
 }
 
 function towel(b: HB, x: number, z: number, yaw: number, ground: Ground, c1: string, c2: string): void {
+  if (TOYS) return towelReal(b, x, z, yaw, ground, c1, c2);
   const gy = ground(x, z);
   b.pushT(x, gy - 0.015, z, yaw);
   const L = 1.7,
@@ -369,6 +392,63 @@ function towel(b: HB, x: number, z: number, yaw: number, ground: Ground, c1: str
   for (const [a, c, col] of bands) {
     b.color(col);
     b.quad([-W / 2, 0.035, a], [-W / 2, 0.035, c], [W / 2, 0.035, c], [W / 2, 0.035, a]);
+  }
+  b.pop();
+}
+
+/** a beach towel lying on the sand: gently rumpled terry (smooth normals), a thin hem all round, a white pinstripe
+ *  inside each end band and a fringe of tassels at both ends */
+function towelReal(b: HB, x: number, z: number, yaw: number, ground: Ground, c1: string, c2: string): void {
+  const gy = ground(x, z);
+  b.pushT(x, gy - 0.015, z, yaw);
+  const L = 1.7,
+    W = 0.85;
+  const ph = hpos(x, z, 3) * 6.283;
+  // height of the cloth (local u along the length = z, v across = x)
+  const H = (u: number, v: number) => 0.033 + 0.007 * Math.sin(u * 4.3 + ph) * Math.sin(v * 6.1 + ph * 0.7) + 0.004 * Math.sin(u * 11.0 + v * 3.0 + ph * 1.9);
+  const us = [-L / 2, -L / 2 + 0.2, -L / 2 + 0.25, -0.4, 0, 0.4, L / 2 - 0.25, L / 2 - 0.2, L / 2];
+  const vs = [-W / 2, -W / 4, 0, W / 4, W / 2];
+  const bandCol = (i: number) => (i === 1 || i === us.length - 3 ? '#fbf7ee' : i === 0 || i === us.length - 2 ? c2 : c1);
+  const sv = (u: number, v: number) => {
+    const e = 0.01;
+    const gu = (H(u + e, v) - H(u - e, v)) / (2 * e),
+      gv = (H(u, v + e) - H(u, v - e)) / (2 * e);
+    return b.vtx(v, H(u, v), u, -gv, 1, -gu);
+  };
+  for (let i = 0; i < us.length - 1; i++) {
+    b.color(bandCol(i));
+    for (let j = 0; j < vs.length - 1; j++) {
+      const i0 = sv(us[i], vs[j]),
+        i1 = sv(us[i + 1], vs[j]),
+        i2 = sv(us[i + 1], vs[j + 1]),
+        i3 = sv(us[i], vs[j + 1]);
+      b.tri(i0, i1, i2);
+      b.tri(i0, i2, i3);
+    }
+    // hem along both long sides
+    const u0 = us[i],
+      u1 = us[i + 1];
+    b.quad([-W / 2, H(u0, -W / 2), u0], [-W / 2, 0.016, u0], [-W / 2, 0.016, u1], [-W / 2, H(u1, -W / 2), u1]);
+    b.quad([W / 2, H(u1, W / 2), u1], [W / 2, 0.016, u1], [W / 2, 0.016, u0], [W / 2, H(u0, W / 2), u0]);
+  }
+  // hem across both ends
+  b.color(c2);
+  for (let j = 0; j < vs.length - 1; j++) {
+    const v0 = vs[j],
+      v1 = vs[j + 1];
+    b.quad([v0, H(-L / 2, v0), -L / 2], [v1, H(-L / 2, v1), -L / 2], [v1, 0.016, -L / 2], [v0, 0.016, -L / 2]);
+    b.quad([v1, H(L / 2, v1), L / 2], [v0, H(L / 2, v0), L / 2], [v0, 0.016, L / 2], [v1, 0.016, L / 2]);
+  }
+  // tassels
+  b.color('#f3eee2');
+  for (const end of [-1, 1]) {
+    const ua = end < 0 ? -L / 2 - 0.05 : L / 2,
+      ub = end < 0 ? -L / 2 : L / 2 + 0.05;
+    for (let k = 0; k < 11; k++) {
+      const v = -W / 2 + 0.04 + (k / 10) * (W - 0.08);
+      const dv = 0.006 + 0.004 * Math.sin(k * 2.3 + ph);
+      b.quad([v - 0.007, 0.018, ua], [v - 0.007 + dv, 0.018, ub], [v + 0.007 + dv, 0.018, ub], [v + 0.007, 0.018, ua]);
+    }
   }
   b.pop();
 }
@@ -411,6 +491,36 @@ function windbreak(b: HB, x: number, z: number, ground: Ground, cols: [string, s
 
 export function beachBall(b: HB, x: number, z: number, ground: Ground, r = 0.22): void {
   const gy = ground(x, z);
+  if (TOYS) {
+    // six gores of three smooth facets each over 10 rings; the top and bottom rings are the white valve caps
+    const cols = ['#e63946', '#fbf7ee', '#2a9d8f', '#fbf7ee', '#e9c46a', '#fbf7ee'];
+    const LON = 18,
+      LAT = 10;
+    const cy = gy + r * 0.96,
+      rot = hpos(x, z, 5) * 6.283;
+    const sv = (a: number, t: number) => {
+      const nx = Math.sin(t) * Math.cos(a + rot),
+        ny = Math.cos(t),
+        nz = Math.sin(t) * Math.sin(a + rot);
+      return b.vtx(x + nx * r, cy + ny * r, z + nz * r, nx, ny, nz);
+    };
+    for (let k = 0; k < LON; k++) {
+      const a0 = (k / LON) * Math.PI * 2,
+        a1 = ((k + 1) / LON) * Math.PI * 2;
+      for (let j = 0; j < LAT; j++) {
+        b.color(j === 0 || j === LAT - 1 ? '#fbf7ee' : cols[Math.floor(k / 3)]);
+        const t0 = (j / LAT) * Math.PI,
+          t1 = ((j + 1) / LAT) * Math.PI;
+        const i00 = sv(a0, t0),
+          i10 = sv(a1, t0),
+          i11 = sv(a1, t1),
+          i01 = sv(a0, t1);
+        if (j > 0) b.tri(i00, i10, i11);
+        if (j < LAT - 1) b.tri(i00, i11, i01);
+      }
+    }
+    return;
+  }
   const cols = ['#e63946', '#fbf7ee', '#2a9d8f', '#fbf7ee', '#e9c46a', '#fbf7ee'];
   // 6 gores
   for (let k = 0; k < 6; k++) {
@@ -457,6 +567,7 @@ export function kayak(b: HB, x: number, z: number, yaw: number, ground: Ground, 
 
 export function sandcastle(b: HB, x: number, z: number, ground: Ground, rng: Rng): void {
   const gy = ground(x, z) - 0.02;
+  if (TOYS) return sandcastleReal(b, x, z, gy, rng);
   b.color('#e3cf98');
   b.cyl([x, gy, z], [x, gy + 0.32, z], 0.55, 0.45, 10, 2);
   for (let k = 0; k < 4; k++) {
@@ -475,6 +586,212 @@ export function sandcastle(b: HB, x: number, z: number, ground: Ground, rng: Rng
   b.cyl([x + 0.9, gy, z + 0.3], [x + 0.9, gy + 0.22, z + 0.3], 0.1, 0.13, 7, 1);
   b.color('#e63946');
   b.box(x + 0.75, gy + 0.03, z - 0.5, 0.12, 0.03, 0.5, 0.6, 0);
+}
+
+/** a moulded sandcastle: a slumped mound inside a wet moat with a heaped rim, four ribbed bucket towers (crenellated
+ *  tops, arrow slits) joined by crenellated curtain walls, a taller keep with an arched door, shells pressed into the
+ *  slope, a paper flag; a bucket (rim lip, sand inside, handle) and a spade lie beside it */
+function sandcastleReal(b: HB, x: number, z: number, gy: number, rng: Rng): void {
+  const rot = hpos(x, z, 1) * Math.PI * 2;
+  const P = (r: number, a: number): [number, number] => [x + Math.cos(a) * r, z + Math.sin(a) * r];
+  // wet moat ring + heaped rim
+  b.color('#b39a66');
+  const NR = 22;
+  for (let i = 0; i < NR; i++) {
+    const a0 = rot + (i / NR) * Math.PI * 2,
+      a1 = rot + ((i + 1) / NR) * Math.PI * 2;
+    const [ix0, iz0] = P(0.78, a0),
+      [ix1, iz1] = P(0.78, a1),
+      [ox1, oz1] = P(0.95, a1),
+      [ox0, oz0] = P(0.95, a0);
+    b.quad([ix0, gy + 0.04, iz0], [ix1, gy + 0.04, iz1], [ox1, gy + 0.04, oz1], [ox0, gy + 0.04, oz0]);
+  }
+  b.color('#dcc58f');
+  b.lathe(
+    [
+      [1.1, 0.0],
+      [1.03, 0.065],
+      [0.98, 0.07],
+      [0.94, 0.03],
+    ],
+    NR,
+    x,
+    gy,
+    z,
+  );
+  // mound (damp, packed)
+  b.color('#d6bd86');
+  b.lathe(
+    [
+      [0.8, 0.0],
+      [0.74, 0.06],
+      [0.64, 0.12],
+      [0.54, 0.16],
+      [0.36, 0.185],
+      [0.0, 0.19],
+    ],
+    18,
+    x,
+    gy,
+    z,
+  );
+  // towers: an upturned ribbed bucket each, crenellated rim, an arrow slit facing out
+  const tower: [number, number][] = [
+    [0.165, 0.0],
+    [0.16, 0.12],
+    [0.168, 0.13],
+    [0.168, 0.145],
+    [0.155, 0.155],
+    [0.148, 0.28],
+    [0.156, 0.29],
+    [0.156, 0.305],
+    [0.143, 0.315],
+    [0.135, 0.42],
+    [0.11, 0.425],
+    [0.105, 0.405],
+    [0.0, 0.405],
+  ];
+  const ta: number[] = [];
+  for (let k = 0; k < 4; k++) {
+    const a = rot + Math.PI / 4 + (k * Math.PI) / 2;
+    ta.push(a);
+    const [tx, tz] = P(0.5, a);
+    b.color('#dcc58f');
+    b.lathe(tower, 14, tx, gy, tz);
+    for (let m = 0; m < 6; m++) {
+      const am = a + (m / 6) * Math.PI * 2;
+      b.box(tx + Math.cos(am) * 0.118, gy + 0.45, tz + Math.sin(am) * 0.118, 0.06, 0.055, 0.04, Math.PI / 2 - am, 1);
+    }
+    b.color('#6d5a3c');
+    faceQuad(b, tx + Math.cos(a) * 0.153, gy + 0.22, tz + Math.sin(a) * 0.153, Math.cos(a), Math.sin(a), 0.012, 0.035);
+  }
+  // curtain walls between the towers, merlons on top
+  b.color('#d9c18b');
+  for (let k = 0; k < 4; k++) {
+    const [ax, az] = P(0.5, ta[k]),
+      [bx, bz] = P(0.5, ta[(k + 1) % 4]);
+    const L = Math.hypot(bx - ax, bz - az);
+    const ex = (bx - ax) / L,
+      ez = (bz - az) / L;
+    const yaw = Math.atan2(-ez, ex);
+    b.box((ax + bx) / 2, gy + 0.12, (az + bz) / 2, L - 0.2, 0.24, 0.085, yaw, 1);
+    for (const s of [-0.12, 0, 0.12]) b.box((ax + bx) / 2 + ex * s, gy + 0.265, (az + bz) / 2 + ez * s, 0.055, 0.05, 0.085, yaw, 1);
+  }
+  // keep: a bigger bucket on the mound, eight merlons, an arched door and two slits
+  b.color('#dcc58f');
+  b.lathe(
+    [
+      [0.255, 0.0],
+      [0.25, 0.15],
+      [0.262, 0.16],
+      [0.262, 0.175],
+      [0.245, 0.185],
+      [0.232, 0.42],
+      [0.2, 0.425],
+      [0.195, 0.405],
+      [0.0, 0.405],
+    ],
+    16,
+    x,
+    gy + 0.16,
+    z,
+  );
+  for (let m = 0; m < 8; m++) {
+    const am = rot + (m / 8) * Math.PI * 2;
+    b.box(x + Math.cos(am) * 0.215, gy + 0.6, z + Math.sin(am) * 0.215, 0.07, 0.06, 0.05, Math.PI / 2 - am, 1);
+  }
+  b.color('#5f4e34');
+  const da = rot;
+  const dcx = x + Math.cos(da) * 0.26,
+    dcz = z + Math.sin(da) * 0.26;
+  faceQuad(b, dcx, gy + 0.24, dcz, Math.cos(da), Math.sin(da), 0.05, 0.05);
+  // round head of the door: a half-disc fan
+  {
+    const tx = Math.sin(da),
+      tz = -Math.cos(da);
+    const ox = Math.cos(da) * 0.001,
+      oz = Math.sin(da) * 0.001;
+    for (let i = 0; i < 4; i++) {
+      const q0 = (i / 4) * Math.PI,
+        q1 = ((i + 1) / 4) * Math.PI;
+      b.triangle(
+        [dcx + ox, gy + 0.29, dcz + oz],
+        [dcx + ox + tx * 0.05 * Math.cos(q0), gy + 0.29 + 0.05 * Math.sin(q0), dcz + oz + tz * 0.05 * Math.cos(q0)],
+        [dcx + ox + tx * 0.05 * Math.cos(q1), gy + 0.29 + 0.05 * Math.sin(q1), dcz + oz + tz * 0.05 * Math.cos(q1)],
+      );
+    }
+  }
+  for (const s of [-1, 1]) {
+    const a = da + s * 1.4;
+    faceQuad(b, x + Math.cos(a) * 0.236, gy + 0.46, z + Math.sin(a) * 0.236, Math.cos(a), Math.sin(a), 0.012, 0.04);
+  }
+  // shells pressed into the slope
+  for (let i = 0; i < 6; i++) {
+    const a = rot + i * 1.13 + hpos(x, z, 10 + i) * 0.6;
+    const r = 0.6 + hpos(x, z, 20 + i) * 0.12;
+    const [sx, sz] = P(r, a);
+    b.color(i % 3 === 0 ? '#f2c9c0' : '#f6f1e6');
+    b.sphere(sx, gy + 0.19 - (r - 0.36) * 0.4, sz, 0.024, 6, 3, 0.45);
+  }
+  // flag on the keep
+  b.color('#9a7b4f');
+  b.cyl([x, gy + 0.56, z], [x, gy + 0.92, z], 0.007, 0.006, 4, 0);
+  b.color('#e63946');
+  b.quad2([x, gy + 0.92, z], [x + 0.17, gy + 0.875, z + 0.02], [x + 0.17, gy + 0.865, z + 0.02], [x, gy + 0.82, z]);
+  // bucket with a rim lip and sand inside, its handle folded down the front
+  const bc = rng.pick(['#2a9d8f', '#e9c46a', '#457b9d']);
+  const ba = rot + 0.7;
+  const [bx, bz] = P(1.17, ba);
+  b.color(bc);
+  b.lathe(
+    [
+      [0.0, 0.0],
+      [0.1, 0.0],
+      [0.13, 0.215],
+      [0.138, 0.22],
+      [0.138, 0.235],
+      [0.126, 0.235],
+      [0.12, 0.2],
+      [0.112, 0.15],
+    ],
+    16,
+    bx,
+    gy + 0.02,
+    bz,
+  );
+  b.color('#d6bd86');
+  b.lathe(
+    [
+      [0.113, 0.15],
+      [0.06, 0.158],
+      [0.0, 0.16],
+    ],
+    16,
+    bx,
+    gy + 0.02,
+    bz,
+  );
+  b.color(bc);
+  {
+    const pts: V3[] = [];
+    for (let i = 0; i <= 8; i++) {
+      const q = (i / 8) * Math.PI;
+      const lx = Math.cos(q) * 0.14,
+        lz = Math.sin(q) * 0.15,
+        ly = 0.225 - Math.sin(q) * 0.1;
+      pts.push([bx + lx * Math.cos(ba) - lz * Math.sin(ba), gy + 0.02 + ly, bz + lx * Math.sin(ba) + lz * Math.cos(ba)]);
+    }
+    b.tube(pts, 0.006, 4);
+  }
+  // spade lying on the sand: blade, shaft, T-grip
+  const sa = rot + 2.5;
+  const [sx, sz] = P(1.12, sa);
+  const ux = -Math.sin(sa),
+    uz = Math.cos(sa);
+  b.color('#e63946');
+  b.box(sx, gy + 0.03, sz, 0.15, 0.012, 0.17, Math.atan2(ux, uz), 0);
+  b.cyl([sx + ux * 0.08, gy + 0.035, sz + uz * 0.08], [sx + ux * 0.46, gy + 0.04, sz + uz * 0.46], 0.012, 0.012, 6, 0);
+  b.cyl([sx + ux * 0.46 - uz * 0.06, gy + 0.04, sz + uz * 0.46 + ux * 0.06], [sx + ux * 0.46 + uz * 0.06, gy + 0.04, sz + uz * 0.46 - ux * 0.06], 0.013, 0.013, 6, 3);
 }
 
 // ──────────────────────────────────────────────────────────── ferry dock

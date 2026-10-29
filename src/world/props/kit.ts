@@ -554,8 +554,8 @@ function pallet(k: Kit, y: number, tint: number): void {
   k.s.b *= tint;
   if (YARD) {
     // EUR pallet: bottom boards, nine blocks, three stringer boards, five deck boards with gaps between them
-    for (const z of [-0.43, 0, 0.43]) sh.box(0, y + 0.011, z, 1.2, 0.022, 0.1, 0);
-    for (const x of [-0.53, 0, 0.53]) for (const z of [-0.43, 0, 0.43]) sh.box(x, y + 0.061, z, 0.14, 0.078, 0.14, 1 | 2);
+    for (const z of [-0.43, 0, 0.43]) sh.box(0, y + 0.011, z, 1.2, 0.022, 0.1, 1);
+    for (const x of [-0.53, 0, 0.53]) for (const z of [-0.43, 0, 0.43]) if (x !== 0 || z !== 0) sh.box(x, y + 0.061, z, 0.14, 0.078, 0.14, 1 | 2);
     for (const x of [-0.53, 0, 0.53]) sh.box(x, y + 0.111, 0, 0.14, 0.022, 1.0, 1);
     for (const z of [-0.43, -0.215, 0, 0.215, 0.43]) sh.box(0, y + 0.133, z, 1.2, 0.022, 0.13, 1);
     return;
@@ -605,8 +605,8 @@ export function palletGoods(k: Kit, rng: Rng): void {
   }
 }
 
-/** Cluster of oil drums (some on a pallet). */
-export function drums(k: Kit, rng: Rng): void {
+/** Cluster of oil drums (some on a pallet); `kd` (same frame) = near-only cells for the chimes, hoops and caps. */
+export function drums(k: Kit, rng: Rng, kd?: Kit): void {
   const sh = k.sh;
   const col = rng.pick(['#2f5f9e', '#c9302c', '#e8b23c', '#3f6e4a', '#3a3f44']);
   const onPallet = rng.chance(0.4);
@@ -625,14 +625,17 @@ export function drums(k: Kit, rng: Rng): void {
     const dc = rng.chance(0.8) ? col : rng.pick(['#2f5f9e', '#c9302c', '#e8b23c']);
     k.m(dc, 'paint');
     if (YARD) {
-      // lid recessed inside a rolled chime, two rolling hoops, the bung and vent caps
+      // lid recessed inside a rolled chime, two rolling hoops, the bung and vent caps (the small parts near only)
       sh.cyl(x, y0, z, 0.29, 0.29, 0.865, 14, 2);
-      sh.cyl(x, y0 + 0.85, z, 0.297, 0.297, 0.04, 14, 0);
-      sh.cyl(x, y0, z, 0.297, 0.297, 0.03, 14, 0);
-      for (const hy of [0.29, 0.58]) sh.cyl(x, y0 + hy, z, 0.302, 0.302, 0.035, 14, 0);
-      k.m('#3a3d40', 'steel');
-      sh.cyl(x + 0.17, y0 + 0.865, z + 0.05, 0.038, 0.038, 0.018, 8, 2);
-      sh.cyl(x - 0.18, y0 + 0.865, z - 0.06, 0.026, 0.026, 0.018, 8, 2);
+      const kk = kd ?? k,
+        ds = kk.sh;
+      kk.m(dc, 'paint');
+      ds.cyl(x, y0 + 0.85, z, 0.297, 0.297, 0.04, 14, 0);
+      ds.cyl(x, y0, z, 0.297, 0.297, 0.03, 14, 0);
+      for (const hy of [0.29, 0.58]) ds.cyl(x, y0 + hy, z, 0.302, 0.302, 0.035, 14, 0);
+      kk.m('#3a3d40', 'steel');
+      ds.cyl(x + 0.17, y0 + 0.865, z + 0.05, 0.038, 0.038, 0.018, 8, 2);
+      ds.cyl(x - 0.18, y0 + 0.865, z - 0.06, 0.026, 0.026, 0.018, 8, 2);
       continue;
     }
     sh.cyl(x, y0, z, 0.29, 0.29, 0.88, 8, 2);
@@ -686,8 +689,8 @@ export function skip(ks: Kit, rng: Rng): void {
   }
 }
 
-/** Counterbalance forklift (forks towards +Z). */
-export function forklift(ks: Kit, rng: Rng): void {
+/** Counterbalance forklift (forks towards +Z); `kd` (same frame) = near-only cells for the small box-hunt parts. */
+export function forklift(ks: Kit, rng: Rng, kd?: Kit): void {
   const sh = ks.sh;
   const body = rng.pick(['#e8b23c', '#e86a2c', '#c9302c', '#3f6e4a']);
   // chassis + counterweight
@@ -723,38 +726,46 @@ export function forklift(ks: Kit, rng: Rng): void {
         sh.push().local(x, r, z, 0, 0, Math.PI / 2).cyl(0, -0.11, 0, r, r, 0.22, 8, 3, false).pop();
         continue;
       }
-      // round tyre with a rounded shoulder and a painted rim + hub
+      // round tyre with a rounded shoulder and a painted rim + hub (rim and hub near only)
       ks.m('#1d1f22', 'rubber');
       sh.push().local(x, r, z, 0, 0, Math.PI / 2);
-      sh.cyl(0, -0.1, 0, r, r, 0.2, 16, 0);
-      sh.cyl(0, -0.11, 0, r * 0.9, r, 0.01, 16, 0);
-      sh.cyl(0, 0.1, 0, r, r * 0.9, 0.01, 16, 0);
-      ks.m('#c8ccd0', 'steel');
-      sh.cyl(0, x > 0 ? -0.112 : 0.11, 0, r * 0.6, r * 0.6, 0.002, 12, x > 0 ? 1 : 2);
-      ks.m('#2a2c2e', 'steel');
-      sh.cyl(0, x > 0 ? -0.13 : 0.112, 0, 0.06, 0.06, 0.018, 8, x > 0 ? 1 : 2);
+      sh.cyl(0, -0.1, 0, r, r, 0.2, 14, 0);
+      sh.cyl(0, -0.11, 0, r * 0.9, r, 0.01, 14, 0);
+      sh.cyl(0, 0.1, 0, r, r * 0.9, 0.01, 14, 0);
       sh.pop();
+      const kk = kd ?? ks,
+        ds = kk.sh;
+      ds.push().local(x, r, z, 0, 0, Math.PI / 2);
+      kk.m('#c8ccd0', 'steel');
+      ds.cyl(0, x > 0 ? -0.112 : 0.11, 0, r * 0.6, r * 0.6, 0.002, 12, x > 0 ? 1 : 2);
+      kk.m('#2a2c2e', 'steel');
+      ds.cyl(0, x > 0 ? -0.13 : 0.112, 0, 0.06, 0.06, 0.018, 8, x > 0 ? 1 : 2);
+      ds.pop();
     }
   if (YARD) {
-    // mast inner channels, lift chain, tilt rams, carriage bars; LPG bottle on the counterweight; steering wheel,
-    // seat back, lamps on the guard posts
+    // mast inner channels, carriage bars, LPG bottle on the counterweight, seat back (shadow casters); lift chain,
+    // tilt rams, bottle valve, steering column + wheel, lamps on the guard posts (near only)
     ks.m('#4a4d50', 'steel');
     for (const x of [-0.22, 0.22]) sh.box(x, 1.3, 0.7, 0.08, 2.35, 0.08, 1);
-    ks.m('#1d1f22', 'steel');
-    for (const x of [-0.08, 0.08]) sh.box(x, 1.4, 0.66, 0.025, 2.2, 0.02, 0);
     ks.m('#6a6d70', 'steel');
-    for (const x of [-0.38, 0.38]) sh.tube(x, 0.75, 0.25, x, 1.15, 0.66, 0.035, 0.035, 6);
     for (const yy of [0.3, 0.62]) sh.box(0, yy, 0.86, 0.82, 0.05, 0.04, 0);
     ks.m('#d8d4cc', 'paint');
     sh.push().local(0, 1.2, -1.02, 0, 0, Math.PI / 2).cyl(0, -0.38, 0, 0.15, 0.15, 0.76, 12, 3).pop();
-    ks.m('#c49a45', 'steel');
-    sh.cyl(0.4, 1.32, -1.02, 0.03, 0.03, 0.06, 6, 2);
     ks.m('#1d1f22', 'rubber');
-    sh.tube(0, 1.0, 0.2, 0, 1.38, 0.05, 0.022, 0.022, 6);
-    sh.push().local(0, 1.4, 0.04, -0.75, 0, 0).cyl(0, -0.015, 0, 0.16, 0.16, 0.03, 12, 3).pop();
     sh.box(0, 1.25, -0.62, 0.48, 0.42, 0.06, 0);
-    ks.e('#ffe9b0', '#ffd27a', 1.6);
-    for (const x of [-0.45, 0.45]) sh.box(x, 2.1, 0.4, 0.09, 0.09, 0.06, 0);
+    const kk = kd ?? ks,
+      ds = kk.sh;
+    kk.m('#1d1f22', 'steel');
+    for (const x of [-0.08, 0.08]) ds.box(x, 1.4, 0.66, 0.025, 2.2, 0.02, 0);
+    kk.m('#6a6d70', 'steel');
+    for (const x of [-0.38, 0.38]) ds.tube(x, 0.75, 0.25, x, 1.15, 0.66, 0.035, 0.035, 6);
+    kk.m('#c49a45', 'steel');
+    ds.cyl(0.4, 1.32, -1.02, 0.03, 0.03, 0.06, 6, 2);
+    kk.m('#1d1f22', 'rubber');
+    ds.tube(0, 1.0, 0.2, 0, 1.38, 0.05, 0.022, 0.022, 6);
+    ds.push().local(0, 1.4, 0.04, -0.75, 0, 0).cyl(0, -0.015, 0, 0.16, 0.16, 0.03, 12, 3).pop();
+    kk.e('#ffe9b0', '#ffd27a', 1.6);
+    for (const x of [-0.45, 0.45]) ds.box(x, 2.1, 0.4, 0.09, 0.09, 0.06, 0);
   }
   ks.e('#ffe9b0', '#ffb84a', 1.4);
   sh.box(0, 2.32, -0.6, 0.1, 0.08, 0.1, 0);
