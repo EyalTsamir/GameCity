@@ -13,7 +13,7 @@ Lead session: session_01XuhAMczW3iK25AAWnf3qog, branch `claude/pensive-gates-bim
 ## Resume here (keep current)
 * 2026-10-29 00:04 UTC — Merged W8 s1–4 (8fe65bf: near-LOD sheep/cows animals.ts ?noanimaldetail, real tractor
   + cultivator + tracks ?notractordetail (field moved to ~230 m), farmsteads farmstead.ts ?nofarmdetail, flower heads
-  by species ?noflowerdetail; golden check of the merge running → shots/golden/w8) and W1 s6 (c72dfe1: apartment glass
+  by species ?noflowerdetail; lead golden check: overview 0.5 / downtown 3.1 / oldtown 3.8 / harbor 1.8 (boat forms) / westbrook 5.6 (garages), console clean, invariants {}) and W1 s6 (c72dfe1: apartment glass
   root cause = flat opposite-row band in bhOpp → shop fronts/awnings/cars, 29 % bare rooms; office blinds/notices,
   curtain-wall mullions/spandrels, framed fascias + swan-neck lamps). Judge 2 + bug hunter 2 launched on the merged
   tree. Running: W6(2), W8 (stopped at 320k → respawn after judge), judge 2, bug hunter 2.
