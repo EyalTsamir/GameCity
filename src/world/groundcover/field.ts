@@ -437,7 +437,7 @@ vGcRough = 0.85;
         vec3 N = normalize( cross( wd3, T ) );
         if ( dot( N.xz, toCam ) < 0.0 ) N = -N;
         N = normalize( N + wd3 * side * 0.6 );
-        float upK = 0.42 + 0.4 * smoothstep( 3.0, 22.0, dist ) + 0.32 * kept;   // short lawn blades catch the sky like the sward
+        float upK = 0.42 + 0.4 * smoothstep( 3.0, 22.0, dist ) + 0.48 * kept;   // short lawn blades lit like the sward around them
         objectNormal = normalize( mix( N, nUp, clamp( upK, 0.0, 0.92 ) ) );
         // colour: shaded roots → mid → tip; gusts press the blades and show the paler side
         float ao = mix( aoRoot, 1.0, smoothstep( 0.0, 0.55, hf ) );

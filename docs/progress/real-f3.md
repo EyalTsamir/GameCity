@@ -1,7 +1,8 @@
 # F3 — Ground, track and rock (final fix round)
 
 ## Resume here
-* 2026-10-29 06:00 session 2 DONE so far (all pushed): golden m5 after all changes: overview 0.0, downtown 0.3,
+* 2026-10-29 06:10 session 2 WRAPPED (context cap; last: lawn blade upK +0.48 kept, judged at parklawn 3 m).
+  Open: pasture (needs lead OK), lawn blades still a bit darker than the sward. Session 2 summary (all pushed): golden m5 after all changes: overview 0.0, downtown 0.3,
   oldtown 0.1, westbrook 0.3, harbor 1.1 (cliff faults, intended); console clean; downtown invariants {}.
 * session 2 — golden m3 (fresh ref from base e1c9780, both 1280×720 pumped): ALL ≈0 (harbor 0.4 =
   cliff skin behind the quay, westbrook 0.1) → m2's 39.7/37.2 was a stale/broken ref, NOT a regression.
@@ -93,6 +94,9 @@ staticMaterial.ts (track bed), src/world/terrain/**, src/world/groundcover/**, s
   sward ≈ 2 % there (315 vs 322); park POI before the far-skip ≈ 5 %. Station POI: fixings culled (0).
 * Sheets: docs/progress/real/f3_session2_before_after.jpg (rows: ballast 2→3 m, park lawn 3 m, rock 10 m
   speckle → 3 m terraces, cutting 40 m, paving 3 m; left = before, right = after).
+
+## Session 2 tokens
+* tokens.py: TOTAL weighted 3.9M, 195 calls, ctx median 177k / max 237k (system+brief 40 %).
 
 ## Next
 * Pasture (landscape/shader.ts ck==3, unowned) — asked the lead for permission (session 2); not touched.
