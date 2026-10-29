@@ -8,8 +8,8 @@ Branch `claude/real-w1-facades` (from `claude/pensive-gates-bim12i`). Brief: doc
   session, bench `school,church,warehouse,house,tower,office,shop --dists 3,10` and the old-town shops (Books /
   Bookbinder / Fish & Chips) + downtown "CAFÉ NORD" arcade; fix what reads wrong.
 * **Lawn rim (judge-2 #5) is REAL and is lighting:** shots/f1/rim/apartment_3m.png (bench, pumped frames) shows a
-  1–2 px lime line along the whole wall/lawn seam (wall in shade). Runtime probe (scratch `scripts/.f1/variants.mjs`,
-  not committed) shots/f1/rimv/ab.png: default = lit strip at the contact over a shadowed lawn; sun castShadow off
+  1–2 px lime line along the whole wall/lawn seam (wall in shade). Runtime probe (`scripts/.f1/variants.mjs` (committed probe tool),
+  shots/f1/rimv/ab.png: default = lit strip at the contact over a shadowed lawn; sun castShadow off
   = the strip merges into the uniformly lit lawn → it is the sun-shadow leak at the contact (bias / normalBias,
   render/sky.ts l.393–404), not facade or grass. The wall is already sunk 10 cm (s5); a facade-side skirt cannot beat
   a depth bias → sky owner, see real-requests.md (W1 s5 entry). Not fixed here.
