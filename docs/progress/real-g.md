@@ -2,6 +2,9 @@
 
 ## G2 — Ground, track, water (branch claude/real-g2-ground)
 ### Resume here
+* 11:33 UTC checks: typecheck clean; downtown shot invariants {} + console clean; golden vs base worktree (port
+  5174, 1280×720, 11 h): overview 0.0, downtown 0.02. Colonnade dots: hide:roads-hardscape removes them (arcade
+  floor is plain) → they ARE in the hardscape shader, not litter (A/B with uRdWear=0 → shots/g2/p10).
 * 11:18 UTC: pushed fountain + ballast (judged, sheet docs/progress/real/g2_fountain_ballast.jpg), straight slabs
   (judged office 3/10 m), litter max-footprint + arcade floor 0.005 (NOT effective on the colonnade dots — see
   Findings). Golden overview/downtown vs base worktree (port 5174) running → shots/g2/gold_{base,now}.
