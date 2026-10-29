@@ -70,21 +70,14 @@ export function windAt(x: number, z: number, t: number, wind: THREE.Vector2, out
 // ── prevailing wind over the day
 
 /** strength by hour (piecewise smooth): calm night, morning breeze, fresh afternoon, calm evening */
+// (hour, strength) knots — flat and module-level: this runs every frame (the per-call table + destructuring was garbage)
+const KNOTS = [0, 0.28, 5, 0.22, 8, 0.42, 11, 0.62, 14.5, 0.86, 17, 0.7, 19.5, 0.42, 22, 0.32, 24, 0.28];
 function dayStrength(h: number): number {
-  const knots: [number, number][] = [
-    [0, 0.28],
-    [5, 0.22],
-    [8, 0.42],
-    [11, 0.62],
-    [14.5, 0.86],
-    [17, 0.7],
-    [19.5, 0.42],
-    [22, 0.32],
-    [24, 0.28],
-  ];
-  for (let i = 0; i < knots.length - 1; i++) {
-    const [h0, s0] = knots[i];
-    const [h1, s1] = knots[i + 1];
+  for (let i = 0; i + 3 < KNOTS.length; i += 2) {
+    const h0 = KNOTS[i],
+      s0 = KNOTS[i + 1],
+      h1 = KNOTS[i + 2],
+      s1 = KNOTS[i + 3];
     if (h >= h0 && h <= h1) {
       const u = (h - h0) / (h1 - h0);
       return s0 + (s1 - s0) * u * u * (3 - 2 * u);

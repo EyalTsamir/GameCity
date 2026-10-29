@@ -3169,7 +3169,10 @@ export class Crowd {
     for (const T of this.places.terraces) {
       const want = open ? (T.cafes.length >= 7 ? 2 : 1) : 0;
       let have = 0;
-      for (const p of this.parties) if (p.staff === T && p.state === 'serve') have++;
+      // (indexed loops in the director: it runs every step over ~1000 parties per terrace / stall, and an
+      // unoptimised for…of allocated an iterator result per element — the largest garbage source per frame)
+      const ps = this.parties;
+      for (let i = 0; i < ps.length; i++) if (ps[i].staff === T && ps[i].state === 'serve') have++;
       if (have < want) {
         if (this.busyAt(T.x, T.z, 0.75)) continue;
         const p = this.makeParty('worker', 1);
@@ -3214,7 +3217,8 @@ export class Crowd {
     for (const st of this.places.vendors) {
       const open = dry && h >= st.open && h < st.close;
       let have: Party | null = null;
-      for (const p of this.parties) if (p.stall === st && p.state === 'serve') have = p;
+      const ps = this.parties;
+      for (let i = 0; i < ps.length; i++) if (ps[i].stall === st && ps[i].state === 'serve') have = ps[i];
       if (open && !have) {
         if (this.busyAt(st.vx, st.vz, 0.6)) continue;
         // (a casual look turned stallholder: the 'worker' persona put them in hi-vis vests and hard hats)

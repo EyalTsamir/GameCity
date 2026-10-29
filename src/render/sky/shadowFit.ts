@@ -32,6 +32,17 @@ const _tmp = new THREE.Vector3();
 
 type V2 = { x: number; z: number };
 
+// per-frame scratch points (fit() runs every frame: object literals there were ~90 kB of garbage per frame)
+const _v2: V2[] = [];
+let _v2n = 0;
+function v2(x: number, z: number): V2 {
+  const o = _v2[_v2n] ?? (_v2[_v2n] = { x: 0, z: 0 });
+  _v2n++;
+  o.x = x;
+  o.z = z;
+  return o;
+}
+
 /** Sutherland–Hodgman clip of a convex 2D polygon by n.x*x + n.z*z + d >= 0. */
 function clipPoly(poly: V2[], nx: number, nz: number, d: number, out: V2[]): V2[] {
   out.length = 0;
@@ -44,7 +55,7 @@ function clipPoly(poly: V2[], nx: number, nz: number, d: number, out: V2[]): V2[
     if (da >= 0) out.push(a);
     if (da >= 0 !== db >= 0) {
       const t = da / (da - db);
-      out.push({ x: a.x + (b.x - a.x) * t, z: a.z + (b.z - a.z) * t });
+      out.push(v2(a.x + (b.x - a.x) * t, a.z + (b.z - a.z) * t));
     }
   }
   return out;
@@ -57,6 +68,7 @@ export class ShadowFitter {
   private polyA: V2[] = [];
   private polyB: V2[] = [];
   private pts: { x: number; y: number }[] = [];
+  private ptsPool: { x: number; y: number }[] = [];
   private lastHs = 0;
 
   constructor(public params: ShadowFitParams) {}
@@ -84,7 +96,7 @@ export class ShadowFitter {
     // trimmed to farK × maxRadius, which buys texel density where the picture is sharp
     let cfx = focus.x - camera.position.x,
       cfz = focus.z - camera.position.z;
-    const cfl = Math.hypot(cfx, cfz);
+    const cfl = Math.sqrt(cfx * cfx + cfz * cfz);
     if (cfl > 1e-3) {
       cfx /= cfl;
       cfz /= cfl;
@@ -93,12 +105,15 @@ export class ShadowFitter {
     const fy = focus.x * _Y.x + focus.y * _Y.y + focus.z * _Y.z;
     const pts = this.pts;
     pts.length = 0;
+    _v2n = 0;
+    const pool = this.ptsPool;
+    let pn = 0;
     const m = this.params.margin ?? 6;
     for (const h of sampleHeights) {
       let poly = this.polyA;
       let other = this.polyB;
       poly.length = 0;
-      poly.push({ x: slab.x0 - m, z: slab.z0 - m }, { x: slab.x1 + m, z: slab.z0 - m }, { x: slab.x1 + m, z: slab.z1 + m }, { x: slab.x0 - m, z: slab.z1 + m });
+      poly.push(v2(slab.x0 - m, slab.z0 - m), v2(slab.x1 + m, slab.z0 - m), v2(slab.x1 + m, slab.z1 + m), v2(slab.x0 - m, slab.z1 + m));
       for (const pl of _frustum.planes) {
         const nx = pl.normal.x,
           ny = pl.normal.y,
@@ -122,7 +137,7 @@ export class ShadowFitter {
         if (farK < 1) {
           const dx = px - focus.x,
             dz = pz - focus.z;
-          const d = Math.hypot(dx, dz);
+          const d = Math.sqrt(dx * dx + dz * dz);
           // full radius to the sides and in front, farK × radius straight behind (smooth in angle)
           const cosB = d > 1e-3 ? Math.max(0, (dx * cfx + dz * cfz) / d) : 0;
           const lim = maxRadius * (1 + (farK - 1) * cosB);
@@ -134,12 +149,16 @@ export class ShadowFitter {
         let lx = px * _X.x + h * _X.y + pz * _X.z - fx;
         let ly = px * _Y.x + h * _Y.y + pz * _Y.z - fy;
         // keep the region near the focus (beyond it the tilt-shift blur takes over)
-        const r = Math.hypot(lx, ly);
+        const r = Math.sqrt(lx * lx + ly * ly);
         if (r > maxRadius) {
           lx *= maxRadius / r;
           ly *= maxRadius / r;
         }
-        pts.push({ x: lx, y: ly });
+        const pt = pool[pn] ?? (pool[pn] = { x: 0, y: 0 });
+        pn++;
+        pt.x = lx;
+        pt.y = ly;
+        pts.push(pt);
       }
     }
     if (pts.length === 0) pts.push({ x: 0, y: 0 });
@@ -158,7 +177,7 @@ export class ShadowFitter {
     let cx = (x0 + x1) / 2,
       cy = (y0 + y1) / 2;
     let rad = 0;
-    for (const p of pts) rad = Math.max(rad, Math.hypot(p.x - cx, p.y - cy));
+    for (const p of pts) rad = Math.max(rad, Math.sqrt((p.x - cx) * (p.x - cx) + (p.y - cy) * (p.y - cy)));
     rad = Math.max(minRadius, rad + 4);
     // quantise size (2^(1/6) steps) with hysteresis so small camera motions never rescale
     const q = Math.pow(2, Math.ceil(Math.log2(rad) * 6) / 6);

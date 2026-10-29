@@ -254,7 +254,7 @@ async function boot(): Promise<void> {
     setLoading('Warming up…', 0.98);
     await nextFrame();
     const t0 = performance.now();
-    warmUp(ctx);
+    await warmUp(ctx);
     if (debug.enabled) console.info(`[boot] warm-up ${(performance.now() - t0).toFixed(0)} ms, ${renderer.info.programs?.length ?? 0} programs`);
   }
   renderer.setAnimationLoop(loop);
@@ -373,7 +373,7 @@ function lateDraws(scene: THREE.Scene): void {
  * main-view, shadow-pass, reflection and post programs are all compiled with the render targets they are used with
  * (compile() alone would build main-view variants for the screen target). The frame is never shown.
  */
-function warmUp(ctx: CityContext): void {
+async function warmUp(ctx: CityContext): Promise<void> {
   const forced: [THREE.Object3D, boolean, boolean][] = [];
   ctx.scene.traverse((o) => {
     if (!o.visible || o.frustumCulled) {
@@ -384,6 +384,19 @@ function warmUp(ctx: CityContext): void {
     }
   });
   try {
+    // 1) every main-view program at once, compiled in parallel (KHR_parallel_shader_compile: ANGLE / D3D11 took ~0.35 s
+    //    per program serially — 50 s for the city on a fresh shader cache). Bound to an off-screen target so the
+    //    variants match the post chain's (linear, no tone mapping).
+    const rt = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType });
+    const prev = ctx.renderer.getRenderTarget();
+    ctx.renderer.setRenderTarget(rt);
+    try {
+      await ctx.renderer.compileAsync(ctx.scene, ctx.camera);
+    } finally {
+      ctx.renderer.setRenderTarget(prev);
+      rt.dispose();
+    }
+    // 2) one frame through the real pipeline: shadow-pass depth programs, reflection and post passes
     ctx.services.postfx?.warmUp?.();
     ctx.render(0);
   } catch (err) {
