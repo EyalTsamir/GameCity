@@ -1,13 +1,8 @@
 # Camera — going inside things (free camera upgrade) — progress log
 
 ## Resume here
-* State (2026-10-29 ~21:40): feature implemented + committed (44d8d88, 97022aa); typecheck clean; explore
-  traces / screenshots verified (see Verification). OPEN: (1) full ui-test run on the full city
-  (`node <scratch copy of scripts/ui-test.mjs with browser.mjs imported from C:/Projects/GameCity/scripts>
-  --url http://127.0.0.1:5182/ --q noidle`) — queued on the shared lock when cut off; all default steps incl.
-  the new `explore` must pass; (2) `npm run build`; (3) final report to the user (Hebrew): how to use, fly-up
-  causes, files touched (list below / notes folder `camera-explore.md`).
-* Dev server for this worktree: `npx vite --port 5182 --strictPort`.
+* DONE (2026-10-29 ~21:45): implemented, verified, committed. Only the final report to the user remains if
+  resumed. Dev server for this worktree: `npx vite --port 5182 --strictPort`.
 
 Branch `claude/camera-explore-8a2dd3` (cut from `claude/pensive-gates-bim12i`). Brief: a camera that can go inside
 buildings, landmarks, trees, the station, under bridges, and never flies up when it touches a building.
@@ -68,7 +63,11 @@ Per-frame camera traces (`?camdebug`, playwright, street spot beside a downtown 
 * Screenshots (session scratchpad): office ground floor (door + street outside), office 6th floor (curtain
   wall), apartment (A/B: void → room), station hall → platform, church nave + looking up at the vault,
   under the river footbridge, inside a park tree canopy, between market stalls.
-* `npm run typecheck` clean.
+* `npm run typecheck` clean; `npm run build` OK (dist/index.html 3.72 MB).
+* Full ui-test, full city (`--q noidle`, all default steps incl. `explore`): **45/45 pass**, 0 console errors,
+  0 page errors, invariants clean. Warnings: 256× `GL_INVALID_FRAMEBUFFER_OPERATION: glBlitFramebuffer …
+  Attachments are not all the same size` — reproduced by the `resize` step alone (115×), i.e. the postfx
+  soft-depth blit while the canvas is resized; not touched by this branch (reported to the coordinator).
 
 ## Known issues / next
 * The room is a box per storey of the footprint: towers with setbacks / podiums show a room slightly
