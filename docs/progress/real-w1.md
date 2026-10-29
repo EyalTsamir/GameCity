@@ -2,6 +2,13 @@
 
 Branch `claude/real-w1-facades` (from `claude/pensive-gates-bim12i`). Brief: docs/progress/real-briefs.md "W1".
 
+## F1 — Facades final (2026-10-29, branch `claude/real-f1-facades`)
+### Resume here
+* Step 0: re-verify judge-2 #2 (yard_b sill slabs, view `76.5,1.2,17.5,9,90,10`) and #5 (apartment lawn rim) with the
+  pumped-frame harness. Then F1 items in order of screen impact.
+### Done
+### Tried and rejected
+
 ## Resume here
 * **Session 6 (10-28) — the lead's five facade items.** Bench sheets shots/w1/s6/{base,a1..a4}; sheet
   docs/progress/real/w1_s6.jpg. Debug views added: `?bdbg=galb` (pane daylight albedo alone), `?bdbg=gem` (pane
