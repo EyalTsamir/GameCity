@@ -19,7 +19,8 @@ import { NearCells, nearCell } from './lamps/nearCells';
 import { getLayout, occAny, PLANTER, hrand, MASK_WALK, DistanceLod, ChunkCuller, chunkOf } from './props/layout';
 import { furnitureMaterial, glassMaterial } from './props/material';
 import { createGlowMesh, type Glow } from './props/glow';
-import { Kit, lamp, bench, bin, hydrant, mailbox, phonebox, newsstand, planterBox, bollard, bikeRack, busShelter, picketFence, gateLeaf, lowWall, shed, waterButt, FENCE_PAINT } from './props/furniture';
+import { Kit, lamp, bench, bin, hydrant, mailbox, phonebox, newsstand, planterBox, bollard, bikeRack, busShelter, picketFence, gateLeaf, lowWall, shed, waterButt, FENCE_PAINT, setPrinter } from './props/furniture';
+import { Printer } from './props/print';
 import * as GK from './props/garden';
 import * as SK from './props/kit';
 import { planScatter, scatterDisc, type ScatterItem } from './props/scatter';
@@ -81,6 +82,9 @@ export default function create(ctx: CityContext): CityModule {
   const noLampDetail = ctx.debug.params.has('nolampdetail') || ctx.quality.level === 'low';
   // W5: weathered pickets, posts set in the ground, garden gates (?nofencedetail, off on low)
   const noFenceDetail = ctx.debug.params.has('nofencedetail') || ctx.quality.level === 'low';
+  // F4: magazine covers and kiosk lettering printed with real fonts into a canvas atlas (+1 draw near; ?noprint)
+  const printer = simple || ctx.debug.params.has('noprint') ? null : new Printer();
+  setPrinter(printer);
 
   /** local → world for a frame at (x, z) with yaw */
   const toWorld = (x: number, z: number, yaw: number, lx: number, lz: number): [number, number] => [x + lx * Math.cos(yaw) + lz * Math.sin(yaw), z - lx * Math.sin(yaw) + lz * Math.cos(yaw)];
@@ -846,6 +850,13 @@ export default function create(ctx: CityContext): CityModule {
     gm.renderOrder = 2;
     gm.frustumCulled = false;
     if (parts.includes('glass')) root.add(gm);
+  }
+  setPrinter(null);
+  const printMesh = printer?.mesh();
+  if (printMesh) {
+    geos.push(printMesh.geometry);
+    if (parts.includes('furniture')) root.add(printMesh);
+    culler.add(printMesh, () => near, 8);
   }
   const contactMesh = buildContactMesh(spots);
   if (contactMesh) {

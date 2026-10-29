@@ -10,6 +10,7 @@ import { GeoSink, Shaper } from '../vegetation/geo';
 import type { Rng } from '../../core/rng';
 import type { LampStyle } from './layout';
 import { boltY, boltZ, cbox, lathe, pixelText, poly, ring } from './shapes';
+import { coverBackDraw, coverDraw, kioskSignDraw, phoneSignDraw, type Printer } from './print';
 
 export const MAT = {
   paint: [0.5, 0.25],
@@ -558,8 +559,10 @@ export function phonebox(k: Kit, g?: Kit): void {
     sh.box(0, 2.13, z + 0.01, 0.86, 0.26, 0.06, 1);
     k.e('#f4f1e8', '#fff1d6', 1.6);
     sh.box(0, 2.15, z + 0.045, 0.6, 0.11, 0.012, 0);
-    k.m('#1c1c1c', 'paint');
-    for (let i = 0; i < 9; i++) sh.box(-0.24 + i * 0.06, 2.15, z + 0.052, 0.035, 0.05, 0.004, 0);
+    if (!printer?.quad(sh, 'pb:TELEPHONE', 0, 2.15, z + 0.0515, 0.6, 0.11, 240, 44, phoneSignDraw(), 1.2)) {
+      k.m('#1c1c1c', 'paint');
+      for (let i = 0; i < 9; i++) sh.box(-0.24 + i * 0.06, 2.15, z + 0.052, 0.035, 0.05, 0.004, 0);
+    }
     if (side === 0) {
       // door handle (the front is the door)
       k.m('#2a2a2a', 'iron');
@@ -571,7 +574,8 @@ export function phonebox(k: Kit, g?: Kit): void {
   }
   // panes (one per side, behind the bars)
   if (g) {
-    g.m('#c3d3da', 'glass');
+    // a dark neutral tint: two light panes (front + back) at 0.42 opacity read as milk glass and hid the phone
+    g.m('#4d5a60', 'glass');
     g.sh.m.copy(sh.m);
     g.sh.local(0, 0, 0);
     for (let side = 0; side < 4; side++) {
@@ -639,9 +643,32 @@ const SKIN = ['#e9b99a', '#c98f6a', '#8d5a3b', '#f1cdb4'];
  * a car / a dish), the masthead in a contrasting colour across the top, cover lines and a price corner.
  * plain = a cover behind others (only its colour and masthead band show).
  */
+/** printed covers / sign lettering (props/print.ts); null = pixel-block lettering (low tier, ?noprint) */
+let printer: Printer | null = null;
+export function setPrinter(p: Printer | null): void {
+  printer = p;
+}
+
 function cover(k: Kit, rng: Rng, w: number, h: number, plain = false, title?: string): void {
   const sh = k.sh,
     S = 1 | 2 | 4 | 16 | 32;
+  if (printer) {
+    // one issue per title: paper, ink, photo and kind follow from the title, so a stack reads as copies
+    const t = title ?? rng.pick(MASTHEADS);
+    let hh = 7;
+    for (let i = 0; i < t.length; i++) hh = (hh * 31 + t.charCodeAt(i)) >>> 0;
+    const paper = ['#f4f1ea', '#e63946', '#1d3557', '#f2c230', '#222426', '#e8649a', '#2a9d8f', '#f4a261'][hh % 8];
+    const light = paper === '#f4f1ea' || paper === '#f2c230' || paper === '#f4a261';
+    const ink = light ? ['#c62828', '#1d1f22', '#1d3557'][(hh >>> 3) % 3] : ['#ffffff', '#f2c230'][(hh >>> 3) % 2];
+    const photo = ['#9fc3d9', '#d9c3a5', '#5b7c99', '#c7d8b5', '#e7d6c9', '#3a3f55'][(hh >>> 5) % 6];
+    k.m(paper, 'plastic');
+    sh.box(0, 0, 0.004, w, h, 0.008, 8);
+    const ok = plain
+      ? printer.quad(sh, `cb:${t}`, 0, 0, 0.0085, w, h, 72, 96, coverBackDraw(t, paper, ink))
+      : printer.quad(sh, `cf:${t}`, 0, 0, 0.0085, w, h, 96, 128, coverDraw(t, paper, ink, photo, (hh >>> 8) % 3));
+    if (ok) return;
+    sh.box(0, 0, 0.0084, w, h, 0.0002, S);
+  }
   const paper = rng.pick(['#f4f1ea', '#e63946', '#1d3557', '#f2c230', '#222426', '#e8649a', '#2a9d8f', '#f4a261']);
   const ink = paper === '#f4f1ea' || paper === '#f2c230' || paper === '#f4a261' ? rng.pick(['#c62828', '#1d1f22', '#1d3557']) : rng.pick(['#ffffff', '#f2c230']);
   k.m(paper, 'plastic');
@@ -820,10 +847,12 @@ export function newsstand(k: Kit, rng: Rng): void {
   k.e('#f2ead6', '#ffe2a8', 1.2);
   sh.box(0, 1.99, 0.527, 1.48, 0.24, 0.004, 1 | 4);
   const title = rng.pick(['NEWS', 'PRESS', 'KIOSK', 'TABAC']);
+  const strap = rng.pick(['PAPERS & MAGAZINES', 'DAILY PAPERS', 'MAGAZINES & SWEETS']);
+  if (printer?.quad(sh, `ks:${title}:${strap}`, 0, 1.99, 0.5295, 1.48, 0.24, 320, 52, kioskSignDraw(title, strap), 0.9)) return;
   k.e('#b8322c', '#ff6a50', 0.8);
   pixelText(sh, title, 0, 2.02, 0.529, 0.028, 0.003, true);
   k.e('#2c2c2c', '#3a3a3a', 0.2);
-  pixelText(sh, rng.pick(['PAPERS & MAGAZINES', 'DAILY PAPERS', 'MAGAZINES & SWEETS']), 0, 1.92, 0.529, 0.008, 0.0012);
+  pixelText(sh, strap, 0, 1.92, 0.529, 0.008, 0.0012);
 }
 
 /**
