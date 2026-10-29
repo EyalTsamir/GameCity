@@ -12,8 +12,13 @@ sim/rail/station.ts.
   visible). Poplar floating clumps (bug 2b): cause = leaf cards squashed in y by KIND_ASPECT 0.35 → top masses only
   ±0.02 tall at a 0.075 step; step now 1.5·0.35·r (11 masses). Back yard eye level (shots/f4/s2/yard1.png) reads.
   Captures here are slow (~2–3 min each incl. pumps; page load ~100 s): keep batches ≤ 3 captures.
-  Next: s2c1 (yard reverse, forklift, poplar fs1), night market 21.5, perf note. Not mine: the parked e-moped next to
-  the phone box (sim/traffic models) still reads as boxes.
+  Not mine: the parked e-moped next to the phone box (sim/traffic models) still reads as boxes.
+* s2 later — judged: forklift 6 m (s2c1/fk_11) real; poplar fs1 (s2c2/fs1_11) continuous column after a 2nd pass (tip
+  masses ≥ 0.055, step 1.25·0.35·r, 9 masses — the 1st pass still left loose dots up the spire); back yard from above
+  (s2c2/yh_11): fence, shed, lines, pots read; the "floating planks" there were buildings-trim with the camera inside
+  a building (ray-picked with shots/f4/pick.mjs — handy for any "what is that" question). Night market (s2c3): the
+  shrouds read as black monoliths with the goods visible through the open backs → lighter weathered tarp set, a
+  ridge over the middle bow, a back face, warm festoon spill (emissive · uLights, tops 1, faces 0.15–0.7).
 * 2026-10-29 03:55 — **Session 1 ends (context cap).** All pushed. Console clean, invariants {} (shots/f4/b4/report.json:
   by_shed 1, by_fence 16 panels; cloth 113k tris; 163 draws in the b4 overview session). Overview unchanged
   (shots/f4/b4/overview_11.png).
@@ -29,6 +34,11 @@ sim/rail/station.ts.
   capture. Local fix before capturing: remove `, clip: { x: 0, y: 0, width: 8, height: 8 }` from the pump screenshot in
   scripts/bench.mjs, capture-set.mjs, shot.mjs (not committed here — the lead owns the harness). All blank F4 frames
   are this artefact, not faults: re-capture them.
+* s2 END (pushed). Also fixed after the log above: shroud corners met (face offset tapered to 0 at the ends), top
+  patch 4 cm past the faces with a rolled rim (s2c6/mkc: closed, no slit). Yacht 10 m (s2b3) judged real (seams,
+  telltales, coachroof, lifelines, crew). Console clean in every report; invariants {} (s2_yard1.log); typecheck clean.
+  **Still open for F4:** quay oil stains after toning (qy view), site mud/ruts at eye level, timed cost of
+  `;noprint;nonightmarket;nocloth` on the target GPU.
 ## Done
 * Bug 2 (tree through barn roof): settlements.ts now returns `blocked(x,z,r)` (building rects + 1 m, barns + 6 m
   for the silo, incl. the near-farm buildings spliced out for farmstead.ts); trees.ts Builder skips a tree whose
@@ -84,6 +94,11 @@ sim/rail/station.ts.
 * Market stall canopy 8×4 → 16×6 + hem: ≈ +0.45k tris/stall (20 stalls ≈ +9k).
 * Rack bikes (bikeLite) tube tyres: +~160 tris per bike.
 * `?nonightmarket` (off on low). Others ride existing toggles (`?nostallwind` keeps the cloth static).
+* s2 costs (counted, not timed — perf.mjs on this SwiftShader box gives 1–2 frames per variant, no signal):
+  night market ≈ 1.05k tris/stall (top 120, 4 faces ≈ 920) × stalls in the square, 1 draw + 1 shadow draw, night
+  only. props-print: 2 tris per cover/sign (≈ 75 covers per newsstand), +1 draw within the near gate, one 1024²
+  canvas texture (≈ 5.3 MB with mips) — `?noprint` / low tier = old pixel boxes. Poplar: 9 masses as before (card
+  count unchanged within ±10 %). Measure on the target with `perf.mjs --variants ";noprint;nonightmarket;nocloth"`.
 
 ## Code pointers (learned this session)
 

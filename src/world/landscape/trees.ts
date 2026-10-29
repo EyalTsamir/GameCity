@@ -473,12 +473,13 @@ function shapeOf(kind: number): Shape {
     // a slim column of leaf masses on the axis, tapering to a point. Leaf cards are squashed in y by
     // KIND_ASPECT (a mass is only ±r·0.35 tall in tree units), so the step follows each mass's own height:
     // with an even 0.075 step the small top masses hung 0.4–0.5 m apart over the column (F4 bug 2b)
-    const rAt = (y: number) => (0.5 * (1 - Math.pow(Math.min(1, Math.max(0, (y - 0.3) / 0.62)), 1.6)) + 0.08) * 0.36;
+    // (and the tip masses stay ≥ 0.055: 8 alpha cards on a smaller mass read as loose dots up a spire)
+    const rAt = (y: number) => (0.46 * (1 - Math.pow(Math.min(1, Math.max(0, (y - 0.3) / 0.6)), 1.8)) + 0.155) * 0.36;
     let y = 0.3;
-    for (let i = 0; i < 18 && y < 0.93; i++) {
+    for (let i = 0; i < 18 && y < 0.9; i++) {
       const r = rAt(y);
       sh.clumps.push({ x: (rnd(i, 5) - 0.5) * 0.05 * (r / 0.2), y, z: (rnd(i, 6) - 0.5) * 0.05 * (r / 0.2), r });
-      y += 1.5 * KIND_ASPECT[KIND.poplar] * r;
+      y += 1.25 * KIND_ASPECT[KIND.poplar] * r;
     }
     sh.trunkTop = 0.3;
     sh.trunkR = 0.03;
