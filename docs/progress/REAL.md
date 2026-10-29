@@ -11,6 +11,10 @@ Overview must stay at least as impressive as now. Every feature: quality tiers +
 Lead session: session_01XuhAMczW3iK25AAWnf3qog, branch `claude/pensive-gates-bim12i`.
 
 ## Resume here (keep current)
+* 2026-10-29 05:15 UTC — F1 CLOSED (2554424 merged: school entrance kit ?noschoolkit, church hood moulds/archivolts/
+  rose tracery/gablet ?nochurchmould (off on low), deli interior type 9, café wainscot+prints, arcade doors centred;
+  judged pass: bakery, warehouse sign, porch, school, church, Café Nord). Open: deli shelves box-like, facade perf
+  unmeasured, lawn rim (sun shadow leak, out of scope), night pedestrians invariant (→ F2c). Running: F2c, F3b.
 * 2026-10-29 05:10 UTC — F4 CLOSED (3e30dab merged: night-market tarps rebuilt (ridge, back face, rolled top, festoon
   spill), yacht/forklift/back yard judged real; shots/f4/pick.mjs ray-picks an on-screen object. Costs counted:
   night market ≈1.05k tris/stall +1 draw +1 shadow draw (night only); props-print 2 tris/cover +1 draw near +1024²
