@@ -12,11 +12,18 @@ Landmarks are not in scope (boxhunt session); plan.ts layout untouched (places s
   (?noporch); 3 lean-to porch roofs + turned posts (?noporch), classical arcade columns + shopfronts behind arcades
   (?nocolonnade). Items 2–3 NOT yet verified in shots.
 - Bug fixed after 2af8c6f: `masonry` was used by buildLobby before its `const` (lots 18 and 23 threw) — moved up.
-- 4 coded (uncommitted until verified): apartment loggias on the back (houses.ts `loggia()`, ?nologgias), glass-tower
-  crown of fins + ring beam + mid rail (towers.ts `glassCrown()`, under ?nocrowns; curtain schemes, not slant/screen/twin).
-- Verification set: `shots/r2v/{after,before}` (before = ?noannex&nomonitor&noporch&nocolonnade&nologgias).
+- 2–4 verified (b7cef76, 0295250): sheet `docs/progress/massing/r2_items234.jpg`; loggias (houses.ts `loggia()`,
+  ?nologgias) carry the balcony kit (plants, laundry) via an inset side geometry; glass crown = louvred fins every
+  half cell + ring beam + lit accent line (towers.ts `glassCrown()`, ?nocrowns; curtain schemes, not slant/screen/twin).
+- 5 audit (sonnet, `shots/audit1`, 42 views): accepted #1 bare industrial roofs → rooflight strips + ridge ventilator
+  (industry.ts `rooflights()` / `ridgeVent()`, ?norooflights); #6 flat masonry office grids → piers between window
+  columns + corner piers (towers.ts tierWalls, ?nopiers); head office: glazed stair tower rising over the roof
+  (?noannex). Rejected: shopfront variety (blade signs exist; shop shader is the boot's long pole), glass overexposure
+  (material, not massing), apartment solid parapets (period-correct).
+- Verification sets: `shots/r2v`, `shots/r2c` (crown day/dusk, loggias), `shots/r2d` (rooflights/piers, before =
+  ?norooflights&nopiers).
 - Harness note: capture-set `--out` relative paths resolve to the MAIN checkout — always pass absolute paths.
-- Next: verify 2–4 → commit → item 5 (eye-level audit) → perf/checks.
+- Next: verify r2d + head office → more audit items → perf A/B + hitch.mjs + ui-test → final report.
 
 ## Round 1 — Resume here
 - DONE. Verified: typecheck clean, `npm run build` OK (3.77 MB), console clean (0 errors in every capture),

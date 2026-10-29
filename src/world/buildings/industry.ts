@@ -551,7 +551,7 @@ export function genIndustrial(g: Gen): void {
     if (MASS.rooflights) {
       const pts: [number, number][] = [];
       for (let k = 1; k < n; k++) pts.push(prof(k));
-      rooflights(alongX, a0, a1, pts, 0);
+      rooflights(alongX, a0, a1, pts, 0, roofC);
     }
     // barrel section: height above the eaves ≈ rise·(1 − (d/half)²) across the span
     vents((x, z) => {
@@ -597,8 +597,8 @@ export function genIndustrial(g: Gen): void {
       if (MASS.monitor && !customs && mr.chance(0.65)) monitor(true, zc, yr, p);
       if (MASS.rooflights && !customs) {
         const f1 = monBand ? 1 - (monBand.half + 0.5) / half : 0.88;
-        rooflights(true, x0, x1, [[zf, yf], [zf + (zc - zf) * f1, yf + (yr - yf) * f1]], 0.12);
-        rooflights(true, x0, x1, [[zb, yb], [zb + (zc - zb) * f1, yb + (yr - yb) * f1]], 0.12);
+        rooflights(true, x0, x1, [[zf, yf], [zf + (zc - zf) * f1, yf + (yr - yf) * f1]], 0.12, roofC);
+        rooflights(true, x0, x1, [[zb, yb], [zb + (zc - zb) * f1, yb + (yr - yb) * f1]], 0.12, roofC);
         if (!monBand) ridgeVent(true, zc, yr, x0, x1, roofC);
       }
     } else {
@@ -615,8 +615,8 @@ export function genIndustrial(g: Gen): void {
       if (MASS.monitor && !customs && mr.chance(0.65)) monitor(false, xc, yr, p);
       if (MASS.rooflights && !customs) {
         const f1 = monBand ? 1 - (monBand.half + 0.5) / half : 0.88;
-        rooflights(false, z0, z1, [[xr, yR], [xr + (xc - xr) * f1, yR + (yr - yR) * f1]], 0.12);
-        rooflights(false, z0, z1, [[xl, yR], [xl + (xc - xl) * f1, yR + (yr - yR) * f1]], 0.12);
+        rooflights(false, z0, z1, [[xr, yR], [xr + (xc - xr) * f1, yR + (yr - yR) * f1]], 0.12, roofC);
+        rooflights(false, z0, z1, [[xl, yR], [xl + (xc - xl) * f1, yR + (yr - yR) * f1]], 0.12, roofC);
         if (!monBand) ridgeVent(false, xc, yr, z0, z1, roofC);
       }
     }
@@ -649,21 +649,24 @@ export function genIndustrial(g: Gen): void {
 
   /** ?norooflights: translucent rooflight strips down the roof every few bays; `pts` is the roof's cross
    *  section (across the hall) as [across, y] from the eave up, `f0` trims the first segment at the eave */
-  function rooflights(alongX: boolean, A0: number, A1: number, pts: [number, number][], f0: number): void {
+  function rooflights(alongX: boolean, A0: number, A1: number, pts: [number, number][], f0: number, roofC: THREE.Color): void {
     let a0 = A0 + 1.6,
       a1 = A1 - 1.6;
     if (office === LEFT && alongX) a0 = Math.max(a0, officeR.x1 + 1.2);
     if (office === RIGHT && alongX) a1 = Math.min(a1, officeR.x0 - 1.2);
     const L = a1 - a0;
     if (L < 4 || pts.length < 2) return;
-    const n = Math.max(2, Math.round(L / 4.4));
-    const w = 1.05;
+    const n = Math.max(2, Math.round(L / 5.0));
+    const w = 0.95;
+    // translucent sheeting: a pale, slightly green-white version of the roof colour
+    const c0 = roofC.clone().lerp(col('#e3ece8'), 0.46),
+      c1 = roofC.clone().lerp(col('#e3ece8'), 0.4);
     const sec = pts.slice();
     if (f0 > 0) sec[0] = [sec[0][0] + (sec[1][0] - sec[0][0]) * f0, sec[0][1] + (sec[1][1] - sec[0][1]) * f0];
     const P = (a: number, c: number, y: number): [number, number, number] => (alongX ? [a, y + 0.035, c] : [c, y + 0.035, a]);
     for (let i = 0; i < n; i++) {
       const am = a0 + (L * (i + 0.5)) / n;
-      setCol(t, col(i % 2 ? '#d5dfdc' : '#dbe4e2'));
+      setCol(t, i % 2 ? c1 : c0);
       for (let k = 0; k + 1 < sec.length; k++) {
         const [ca, ya] = sec[k];
         const [cb, yb] = sec[k + 1];
@@ -775,6 +778,19 @@ export function genIndustrial(g: Gen): void {
     const lookO: WallLook = { color: offC, pattern: WALLPAT.PLASTER, frame: FRAME.DARK, glass: GLASS.BLUE, style: WIN.RIBBON, profile: PROF.OFFICE, seed: g.seed + 21 };
     const plainO = { color: offC, pattern: WALLPAT.PLASTER, seed: g.seed + 21 };
     const inner: Side = office === LEFT ? RIGHT : LEFT;
+    const outer: Side = office === LEFT ? LEFT : RIGHT;
+    // a glazed stair tower at the outer front corner (flush, one pane per half landing), rising over the roof
+    const sw = 2.6;
+    const stair = r.x1 - r.x0 > 9.5 && r.z1 - r.z0 > 6;
+    const sr: LRect = office === LEFT ? { x0: r.x0, x1: r.x0 + sw, z0: r.z1 - sw, z1: r.z1 } : { x0: r.x1 - sw, x1: r.x1, z0: r.z1 - sw, z1: r.z1 };
+    const yS = top + 1.7;
+    const stairSpan = (sd: Side, L: number): [number, number] | null => {
+      if (!stair) return null;
+      if (sd === FRONT) return office === LEFT ? [0, sw] : [L - sw, L];
+      if (sd === outer) return office === LEFT ? [L - sw, L] : [0, sw];
+      return null;
+    };
+    const lookG: WallLook = { color: shade(offC, 0.9), pattern: WALLPAT.SMOOTH, frame: FRAME.DARK, glass: GLASS.BLUE, style: WIN.CURTAIN, profile: PROF.OFFICE, seed: g.seed + 23 };
     for (const sd of [FRONT, RIGHT, BACK, LEFT] as Side[]) {
       const sg = sideGeom(r, sd);
       const L = sg.L;
@@ -782,19 +798,29 @@ export function genIndustrial(g: Gen): void {
         wallPlain(s, sg, 0, L, 0, top, plainO);
         continue;
       }
-      const nC = Math.max(1, Math.round((L - 1.0) / 2.7));
-      const up = makeGrid(0, L, 3.6, 3.6, officeN - 1, { spacing: L / nC, cols: nC, winW: Math.min(2.1, L / nC - 0.6), winH: 1.55, sill: 0.95, margin: 0.55 });
+      const st = stairSpan(sd, L);
+      const ua = st && st[0] === 0 ? st[1] : 0,
+        ub = st && st[1] === L ? st[0] : L;
+      const W = ub - ua;
+      const nC = Math.max(1, Math.round((W - 1.0) / 2.7));
+      const up = makeGrid(ua, ub, 3.6, 3.6, officeN - 1, { spacing: W / nC, cols: nC, winW: Math.min(2.1, W / nC - 0.6), winH: 1.55, sill: 0.95, margin: 0.55 });
       // the face towards the shed shows only above its roof: windows there, plain inside
-      wallGrid(s, sg, 0, L, 3.6, oH, up, lookO);
-      wallPlain(s, sg, 0, L, oH, top, plainO);
+      wallGrid(s, sg, ua, ub, 3.6, oH, up, lookO);
+      wallPlain(s, sg, ua, ub, oH, top, plainO);
+      if (st) {
+        const nG = Math.max(2, Math.floor((yS - 0.3) / 1.8));
+        const ch = (yS - 0.3) / nG;
+        const gs = makeGrid(st[0], st[1], 0.3, ch, nG, { spacing: sw, cols: 1, winW: sw - 0.4, winH: ch - 0.16, sill: 0.08, margin: 0.2 });
+        wallGrid(s, sg, st[0], st[1], 0, yS, gs, lookG);
+      }
       if (sd === inner) {
         wallPlain(s, sg, 0, L, 0, 3.6, plainO);
         continue;
       }
-      const g0 = makeGrid(0, L, 0, 3.6, 1, { spacing: L / nC, cols: nC, winW: Math.min(2.1, L / nC - 0.6), winH: 1.7, sill: 0.9, margin: 0.55 });
+      const g0 = makeGrid(ua, ub, 0, 3.6, 1, { spacing: W / nC, cols: nC, winW: Math.min(2.1, W / nC - 0.6), winH: 1.7, sill: 0.9, margin: 0.55 });
       if (sd === FRONT) {
         const du = office === LEFT ? L * 0.66 : L * 0.34;
-        bandWithOpenings(sg, 0, L, [{ u: du, w: 1.9, h: 2.6 }], (a, b) => {
+        bandWithOpenings(sg, ua, ub, [{ u: du, w: 1.9, h: 2.6 }], (a, b) => {
           const n0 = Math.max(1, Math.round((b - a - 0.8) / 2.6));
           const gg = makeGrid(a, b, 0, 3.6, 1, { spacing: (b - a) / n0, cols: n0, winW: Math.min(2.0, (b - a) / n0 - 0.6), winH: 1.7, sill: 0.9, margin: 0.4 });
           wallGrid(s, sg, a, b, 0, 3.6, gg, lookO);
@@ -803,12 +829,25 @@ export function genIndustrial(g: Gen): void {
         setCol(t, col('#4a5056'));
         sideBox(t, sg, du - 1.6, du + 1.6, 0, 1.05, 2.95, 3.1, true);
         lightBox(g, sx(sg, du, 0.6) - 0.15, 2.88, sz(sg, du, 0.6) - 0.15, sx(sg, du, 0.6) + 0.15, 2.95, sz(sg, du, 0.6) + 0.15, '#fff1d6', LIGHT_MODE.STEADY, 3);
-      } else wallGrid(s, sg, 0, L, 0, 3.6, g0, lookO);
+      } else wallGrid(s, sg, ua, ub, 0, 3.6, g0, lookO);
       // floor bands + coping
       setCol(t, shade(offC, 0.88));
-      for (let k = 1; k < officeN; k++) sideBox(t, sg, 0, L, 0, 0.08, k * 3.6 - 0.14, k * 3.6, true);
+      for (let k = 1; k < officeN; k++) sideBox(t, sg, ua, ub, 0, 0.08, k * 3.6 - 0.14, k * 3.6, true);
       setCol(t, shade(offC, 1.06));
-      sideBox(t, sg, -0.05, L + 0.05, 0, 0.1, top, top + 0.1, true);
+      sideBox(t, sg, ua > 0 ? ua : -0.05, ub < L ? ub : L + 0.05, 0, 0.1, top, top + 0.1, true);
+    }
+    if (stair) {
+      // stair head over the roof: plain inner faces, slab, coping
+      for (const sd of [BACK, inner] as Side[]) {
+        const sg = sideGeom(sr, sd);
+        wallPlain(s, sg, 0, sg.L, oH, yS, plainO);
+      }
+      flatRoof(s, sr, yS, col('#8a8780'), ROOFPAT.FLAT, g.seed);
+      setCol(t, shade(offC, 1.06));
+      t.box(sr.x0 - 0.05, yS, sr.z0 - 0.05, sr.x1 + 0.05, yS + 0.14, sr.z0 + 0.2, 0b111111);
+      t.box(sr.x0 - 0.05, yS, sr.z1 - 0.2, sr.x1 + 0.05, yS + 0.14, sr.z1 + 0.05, 0b111111);
+      t.box(sr.x0 - 0.05, yS, sr.z0 + 0.2, sr.x0 + 0.2, yS + 0.14, sr.z1 - 0.2, 0b111111);
+      t.box(sr.x1 - 0.2, yS, sr.z0 + 0.2, sr.x1 + 0.05, yS + 0.14, sr.z1 - 0.2, 0b111111);
     }
     // roof: inner parapet faces, flat roof, plant
     const ir: LRect = { x0: r.x0 + 0.25, x1: r.x1 - 0.25, z0: r.z0 + 0.25, z1: r.z1 - 0.25 };
@@ -819,12 +858,17 @@ export function genIndustrial(g: Gen): void {
       t.quad(bx, oH, bz, ax, oH, az, ax, top, az, bx, top, bz);
     }
     setCol(t, shade(offC, 1.06));
+    // parapet copings (clear of the stair head)
+    const fx0 = stair && office === LEFT ? sr.x1 : r.x0,
+      fx1 = stair && office === RIGHT ? sr.x0 : r.x1;
+    const sz1L = stair && office === LEFT ? sr.z0 : r.z1 - 0.26,
+      sz1R = stair && office === RIGHT ? sr.z0 : r.z1 - 0.26;
     t.box(r.x0, top, r.z0, r.x1, top + 0.1, r.z0 + 0.26, 0b111111);
-    t.box(r.x0, top, r.z1 - 0.26, r.x1, top + 0.1, r.z1, 0b111111);
-    t.box(r.x0, top, r.z0 + 0.26, r.x0 + 0.26, top + 0.1, r.z1 - 0.26, 0b111111);
-    t.box(r.x1 - 0.26, top, r.z0 + 0.26, r.x1, top + 0.1, r.z1 - 0.26, 0b111111);
+    t.box(fx0, top, r.z1 - 0.26, fx1, top + 0.1, r.z1, 0b111111);
+    t.box(r.x0, top, r.z0 + 0.26, r.x0 + 0.26, top + 0.1, sz1L, 0b111111);
+    t.box(r.x1 - 0.26, top, r.z0 + 0.26, r.x1, top + 0.1, sz1R, 0b111111);
     flatRoof(s, ir, oH + 0.02, col('#8a8780'), ROOFPAT.FLAT, g.seed);
-    roofKit(g, ir, oH + 0.02, { rng: mr, plant: 0.5, tank: 0.25, solar: 0.45, garden: 0.05, wall: shade(offC, 0.92) });
+    roofKit(g, ir, oH + 0.02, { rng: mr, plant: 0.5, tank: 0.25, solar: 0.45, garden: 0.05, wall: shade(offC, 0.92), keep: stair ? [{ x0: sr.x0 - 0.6, z0: sr.z0 - 0.6, x1: sr.x1 + 0.6, z1: sr.z1 + 0.6 }] : [] });
   }
 
   function vents(yAt: number | ((x: number, z: number) => number), n: number): void {
