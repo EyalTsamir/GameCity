@@ -160,6 +160,13 @@ Pass split now (12 h): overview scene 36.6 / shadow 2.2 / refl 2.7 / post 5.5; s
 progprobe: the only material re-deriving its program per frame was terrain-tunnel-veils (transparent DoubleSide →
 three draws it back / front with .side flips) → forceSinglePass (identical: black layers).
 
+### 9. Stutter after the fixes (hitch.mjs on cand5, vsync, adaptive on)
+- 0 shader programs compiled in any window or flight (the grass rings too); 0 freezes (> 100 ms) in every steady
+  and arrival window; outliers (> 2x median) 0 everywhere except the platform (12 / 10 s: the GPU sits at ~33 ms,
+  so vsync alternates 33 / 50 / 66 ms); flights: ≤ 1 frame of 100–117 ms each (GPU spikes over heavy areas).
+- boot 33.4 s to the first frame (original: 52 s, then compile stalls); console clean, frame errors 0, invariants {}.
+- garbage still 6–30 MB/s steady, 46–60 MB/s on flights / platform arrival (station crowd) — open.
+
 ---
 
 # Earlier round: render-performance pass
