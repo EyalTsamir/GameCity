@@ -1,4 +1,6 @@
-המשך את Tinyhaven מהענף `claude/pensive-gates-bim12i`. קרא קודם את `CLAUDE.md` ואת `docs/progress/REAL-REPORT.md`: מה נוסף בסבב הקודם, המתגים והעלויות שנספרו.
+**קודם הבא את הקוד העדכני:** `git fetch origin && git checkout claude/pensive-gates-bim12i && git pull origin claude/pensive-gates-bim12i`. אחר כך `npm ci` אם `node_modules` לא עדכני, והפעל את שרת הפיתוח (`npm run dev`).
+
+המשך את Tinyhaven. קרא את `CLAUDE.md` ואת `docs/progress/REAL-REPORT.md`: מה נוסף בסבב הקודם, המתגים והעלויות שנספרו.
 
 **ההקשר:** הסבב הקודם הוסיף הרבה פרטים לאובייקטים, אבל רץ בענן עם רינדור תוכנתי, ולכן אף עלות לא נמדדה במילישניות. בפועל, על המחשב שלי, העיר **נתקעת ומקרטעת**. עכשיו אתה רץ מקומית, על הכרטיס הגרפי האמיתי (Adreno X1-45, בערך 1920×1025), אז אפשר למדוד באמת.
 
