@@ -7,12 +7,12 @@ Branch `claude/real-w1-facades` (from `claude/pensive-gates-bim12i`). Brief: doc
 * **Code done, NOT yet judged on the bench** (each bench/capture costs 2–6 min in this container): first thing next
   session, bench `school,church,warehouse,house,tower,office,shop --dists 3,10` and the old-town shops (Books /
   Bookbinder / Fish & Chips) + downtown "CAFÉ NORD" arcade; fix what reads wrong.
-* **Lawn rim (judge-2 #5) is REAL** (shots/f1/rim/apartment_3m.png, pumped frames): a 1–2 px bright yellow-green line
-  along the whole wall/lawn seam at the bench apartment (−137.5, −56.5), wall in shade. Runtime probe
-  `scripts/.f1/variants.mjs` (scratch, not committed; one load, variants by eval: a default / b sun castShadow off /
-  c groundcover meshes hidden / d buildings-* hidden) → shots/f1/rimv/*.png, log shots/f1/rimv.log — read it first.
-  If b removes it: shadow bias (sky owner, request already in real-requests.md); if c: groundcover edge tufts; if d
-  keeps it: terrain lawn edge.
+* **Lawn rim (judge-2 #5) is REAL and is lighting:** shots/f1/rim/apartment_3m.png (bench, pumped frames) shows a
+  1–2 px lime line along the whole wall/lawn seam (wall in shade). Runtime probe (scratch `scripts/.f1/variants.mjs`,
+  not committed) shots/f1/rimv/ab.png: default = lit strip at the contact over a shadowed lawn; sun castShadow off
+  = the strip merges into the uniformly lit lawn → it is the sun-shadow leak at the contact (bias / normalBias,
+  render/sky.ts l.393–404), not facade or grass. The wall is already sunk 10 cm (s5); a facade-side skirt cannot beat
+  a depth bias → sky owner, see real-requests.md (W1 s5 entry). Not fixed here.
 * **Yard sill slabs (judge-2 #2) = NOT a bug:** numeric probe over all 4330 sill records (each sill centre tested
   against the buildings-shell wall triangles, `group.userData.rec` on `buildings-wingeo`): 0 records off a wall.
   The slabs in `yb=76.5,0.5,17.5,14,250,25` with `?nolaundry` are the back-wall sills of the building the CAMERA
@@ -37,8 +37,11 @@ Branch `claude/real-w1-facades` (from `claude/pensive-gates-bim12i`). Brief: doc
   keeps the lettering aspect.
 * house porch posts (homes.ts `porchPost`): chamfered octagonal shaft (flats on the axes, chamfers 7 % darker),
   scuffed darker plinth block, stepped 3-tier brackets under the header beam.
+### Checks (end of session 1)
+downtown: console clean, invariants {}, validate []; overview: clean, invariants {} (shots/f1/downtown.png,
+overview.png). golden.sh NOT run (no shots/golden/ref in this container; needs a base-commit ref capture).
 ### Open (in order)
-lawn rim fix (after the probe); bench-judge everything above; school entrance kit (door pull handles, glazed
+lawn rim → sky owner; bench-judge everything above; school entrance kit (door pull handles, glazed
 noticeboard with papers, sign fixings — railings/gate/bike stands are outside the footprint → props/F4 request);
 church mouldings + rose tracery; warehouse door wear; bug 9 station name board = src/sim/rail/station.ts (F4's).
 ### Tried and rejected
