@@ -13,7 +13,8 @@ import { createMasonry, MOON_DIR } from './terrain/masonry';
 import { createGlows, type GlowPoint } from './terrain/glow';
 
 export interface TerrainService {
-  /** rendered ground height (plan.heightAt + local refinements: pond, portals, river mouth, cliff) */
+  /** rendered ground height (plan.heightAt + local refinements: pond, portals, river mouth, cliff; terraces,
+   *  stairs and the lower quay of core/places.ts) */
   height(x: number, z: number): number;
   /** rock outcrop footprints (vegetation should avoid them) */
   rocks: { x: number; z: number; r: number }[];
@@ -43,8 +44,13 @@ export default function create(ctx: CityContext): CityModule {
   root.add(glows);
   ctx.scene.add(root);
 
+  // terraces, stairs and the lower quay (core/places.ts) stand on top of the ground mesh: the walking surface
+  const places = ctx.plan.places;
   const service: TerrainService = {
-    height: model.height,
+    height: places ? (x, z) => {
+      const p = places.height(x, z);
+      return p === p ? p : model.height(x, z);
+    } : model.height,
     rocks: masonry.rocks,
     portals: model.portals.map((p) => ({ kind: p.kind, x: p.x, z: p.z, yaw: p.yaw, width: p.width, height: p.height })),
     promenadeLamps: masonry.railings.lampPosts,

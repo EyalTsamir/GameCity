@@ -17,6 +17,7 @@ import { KIND, type LadderSpot } from './kinds';
 import { createRailings, type RailingResult } from './railings';
 import { buildCliffs, type CliffResult } from './cliffs';
 import type { GlowPoint } from './glow';
+import { buildPlacesStone, buildPlacesIron } from './places';
 
 export { KIND };
 export type { LadderSpot };
@@ -980,7 +981,7 @@ export function createMasonry(ctx: CityContext, model: TerrainModel): MasonryRes
 
   // ladders (positions shared with the railings module)
   const ladders: LadderSpot[] = [];
-  for (const x of [-144, -48, 48, 104]) ladders.push({ x, z: RIVER.z0, nx: 0, nz: 1, top: SIDEWALK_Y + 0.2 });
+  for (const x of [-144, -48, 48, 104]) if (!plan.places?.dropLadder(x, RIVER.z0)) ladders.push({ x, z: RIVER.z0, nx: 0, nz: 1, top: SIDEWALK_Y + 0.2 });
   for (const x of [-168, -112, -20, 62]) ladders.push({ x, z: RIVER.z1, nx: 0, nz: -1, top: 0.2 });
   for (const z of [-131, -97, -58, -31, -2]) ladders.push({ x: QUAY_X, z, nx: 1, nz: 0, top: 0.12 });
 
@@ -1006,8 +1007,11 @@ export function createMasonry(ctx: CityContext, model: TerrainModel): MasonryRes
     rocks.push(...cliffs.stones);
   }
 
-  // iron railings / ladders (their lamp globes are emissive masonry)
-  const railings = createRailings(ladders, gaps, b);
+  // places between buildings (core/places.ts): lower quay, old-town lane, terrace, gatehouse
+  buildPlacesStone(b, ctx, model, lights);
+
+  // iron railings / ladders (their lamp globes are emissive masonry); the places' stair landings are railing gaps
+  const railings = createRailings(ladders, plan.places ? [...gaps, ...plan.places.railGaps] : gaps, b, (ib) => buildPlacesIron(ib, ctx));
 
   const geo = b.build(true);
   const mesh = new THREE.Mesh(geo, masonryMaterial(ctx, flatMasonry));
