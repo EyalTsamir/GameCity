@@ -192,10 +192,12 @@ try {
           return { x, y: gy(x, z), z, yaw: (Math.atan2(Math.cos(a), Math.sin(a)) * 180) / Math.PI, h: 0.6, w: 1.2, pitch: 32 };
         }
         if (cls === 'wildflower') {
-          const ps = (c.ctx.services.groundcover?.flowerPatches ?? []).slice().sort((a, b) => b.density - a.density || Math.hypot(a.x, a.z) - Math.hypot(b.x, b.z));
+          // big dense patches first (open meadow, not a few heads under a shrub), at the centre,
+          // looking down at 30° with the late-morning sun behind the camera
+          const ps = (c.ctx.services.groundcover?.flowerPatches ?? []).filter((p) => p.r >= 3).sort((a, b) => b.density * b.r - a.density * a.r || Math.hypot(a.x, a.z) - Math.hypot(b.x, b.z));
           const fp = nth(ps);
           if (!fp) return null;
-          return { x: fp.x, y: gy(fp.x, fp.z), z: fp.z, yaw: 30, h: 0.3, w: 0.3, pitch: 42 };
+          return { x: fp.x, y: gy(fp.x, fp.z), z: fp.z, yaw: 200, h: 0.25, w: 0.3, pitch: 30 };
         }
         if (cls === 'farm') {
           const sites = (c.ctx.services.landscape?.model?.sites ?? []).filter((s) => s.kind === 'farm');

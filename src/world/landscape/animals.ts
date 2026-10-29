@@ -463,6 +463,8 @@ vec3 herdNear(vec3 p, float bendW, vec3 nrm, float mat) {
       p += nrm * k + vec3(0.0, -0.6 * k * (1.0 - abs(nrm.y)), 0.0);
     }
     if (highland) size *= 0.9;
+    // beef breeds (Angus, Highland): no dairy udder — folded up into the belly
+    if (herdBreed(iB.y) > 2.5 && mat > 3.5 && mat < 4.5 && p.z < 0.0) p.y = max(p.y, 0.84);
   }
   float lie = herdLying(iB);
   float down = lie > 0.5 ? 0.0 : herdGraze(iB);
@@ -564,7 +566,7 @@ float hRough = 0.9;
     // fleece: staples in clumps (two scales of noise), cream with a grey-brown dirty underside and breech
     float n1 = hnNoise(o * 34.0 + ph * 50.0), n2 = hnNoise(o * 95.0 + ph * 20.0);
     // staple locks: cells ~3.5 cm, rounded tips with dark crevices between them
-    vec3 cp = o * 28.0 + ph * 9.0, ci = floor(cp), cf = fract(cp);
+    vec3 cp = o * vec3(17.0, 13.0, 17.0) + ph * 9.0 + (vec3(n1, n2, n1 * n2) - 0.5) * 1.1, ci = floor(cp), cf = fract(cp); // warped: irregular locks
     float f1 = 9.0, f2 = 9.0;
     for (int k = 0; k < 27; k++) {
       vec3 g = vec3(float(k % 3) - 1.0, float((k / 3) % 3) - 1.0, float(k / 9) - 1.0);
@@ -572,15 +574,15 @@ float hRough = 0.9;
       float d = dot(r, r);
       if (d < f1) { f2 = f1; f1 = d; } else if (d < f2) f2 = d;
     }
-    float lock = smoothstep(0.0, 0.35, sqrt(f2) - sqrt(f1));      // 0 in the crevice between locks
+    float lock = smoothstep(0.0, 0.55, sqrt(f2) - sqrt(f1));      // 0 in the crevice between locks
     float fl = (n1 * 0.6 + n2 * 0.4) * 0.6 + lock * 0.4;
-    gHerdBump = m == 0 ? n1 * 0.012 + lock * 0.006 : 0.0;
-    vec3 wool = vec3(0.68, 0.63, 0.52) * (0.88 + 0.18 * fract(ph * 13.7));
+    gHerdBump = m == 0 ? n1 * 0.01 + lock * 0.004 : 0.0;
+    vec3 wool = vec3(0.74, 0.68, 0.54) * (0.88 + 0.16 * fract(ph * 13.7));
     // dirtier underneath: belly, the fringe over the legs and the breech, with dung tags behind
     float dirt = smoothstep(0.6, 0.36, y) * 0.85 + smoothstep(-0.45, -0.64, o.z) * 0.5;
     dirt += smoothstep(0.55, 0.75, hnNoise(o * 18.0 + ph * 3.0)) * smoothstep(-0.4, -0.6, o.z) * smoothstep(0.7, 0.45, y);
     wool = mix(wool, vec3(0.31, 0.26, 0.19), clamp(dirt, 0.0, 1.0) * 0.8);
-    wool *= (0.6 + 0.45 * fl) * mix(0.55, 1.0, lock);
+    wool *= (0.74 + 0.32 * fl) * mix(0.72, 1.0, lock);
     bool blackSheep = tint > 0.95;
     if (blackSheep) wool *= vec3(0.16, 0.14, 0.13);
     // faces: black (Suffolk-like) on a third, mottled white-tan otherwise
@@ -616,7 +618,7 @@ float hRough = 0.9;
       sheen = 1.0;
     } else {
       float st = hnNoise(vec3(o.x * 60.0, o.y * 9.0, o.z * 60.0));
-      coat = mix(vec3(0.42, 0.2, 0.08), vec3(0.62, 0.38, 0.17), st) * (0.85 + 0.15 * fract(ph * 5.1));
+      coat = mix(vec3(0.24, 0.085, 0.03), vec3(0.46, 0.2, 0.07), st) * (0.85 + 0.15 * fract(ph * 5.1));
       hair = st;
     }
     coat *= 0.88 + 0.22 * hair;

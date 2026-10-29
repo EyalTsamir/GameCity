@@ -3,6 +3,27 @@
 Branch `claude/real-w8-country` (from claude/pensive-gates-bim12i @ 5137562). Brief: docs/progress/real-briefs.md "W8".
 
 ## Resume here
+* **s5 (session 2, 2026-10-29), in progress.** Lead verdict on s4: tractor/farmstead/flower bed real steps; sheep
+  read at 10 m; cow at 10 m = black pig. Done in s5 (commit e4c1c76+):
+  - Cow rebuilt to Holstein proportions (animals.ts `cowGeometry`): profile as (z, top, bottom, half-width) —
+    chest floor 0.63–0.67 (legs = half the 1.45 m height), flank rising to 0.93 at the stifle, square rump, hooks
+    (amp 0.1) + pins + thurl hollow + paralumbar hollow, longer neck to z 1.22, 0.6 m head with jaw, broad muzzle,
+    nostrils, ears out sideways (the old ear blob was oriented fore-aft), long switch. Neck pivot (0,1.15,0.6), graze 1.08 rad.
+  - Breeds: `herdBreed(tint)` (BREED_GLSL, shared by the coarse mesh in farmlife.ts): <0.45 Holstein (soft
+    patches, white legs/belly/switch, blaze), <0.62 Brown Swiss (pale muzzle ring), <0.78 red, <0.88 Angus (sheen),
+    else Highland (MAT.longhorn horns collapsed on other breeds in the VS, shaggy coat = VS normal displacement
+    + strand noise, size 0.9).
+  - Herd spacing: animals ≥ 2.8 m (cows) / 1.5 m (sheep) apart, 4 tries (they stood inside each other — this also
+    hid the bench target behind a neighbour).
+  - Sheep: `densify()` rings ×3, 40 segments, 110+260 fleece lumps (amp 0.06/0.026), ragged belly fringe; fragment:
+    3×3×3 Voronoi staple locks (dark crevices), dirty belly/breech + dung tags, tan faces darker, legs darker
+    toward the hooves, bigger knees/hocks.
+  - Tractor: `bonnetGeometry()` (tumblehome sides, R 0.15 top corners, elliptical nose), recessed grille with
+    vertical louvres + chrome surround + centre bar, round headlamps, amber markers, side louvre panels, decal
+    stripe, badges; exhaust heat shield, clamp, hinged round rain cap; roof work lamps, amber indicators, red tail lamps.
+  - bench.mjs: `--tint t` forces the coat tint of the picked cow/sheep (breed check); wildflower framing = biggest
+    dense patch (r ≥ 3), pitch 30.
+  Open: judge s5e/s5f; perf of the 4 toggles; golden.sh.
 * **s1–s4 (2026-10-29 00:30 UTC), session 1 ends here.** All four classes have a first real version; judged on
   the bench (sheets shots/w8/s3/sheet_1.png, s4/, s4b/, s2f/farm_*.png; copies in docs/progress/real/w8_*.jpg).
   Next session, in order:

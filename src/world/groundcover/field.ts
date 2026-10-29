@@ -163,12 +163,21 @@ if ( vGcHead.w > 0.5 && vGcHead.y > -1.0 ) {
   float np = vGcHead.z;
   float th = atan( q.y, q.x ) + vGcHead.w * 6.2831;
   float aa = fwidth( r ) * 1.2 + 1e-3;
-  vec3 gap = vGcPet * 0.3 + vec3( 0.03, 0.06, 0.02 );
+  // between the petals: the shadowed foliage behind the head (not a pale paper square)
+  vec3 gap = vGcPet * 0.08 + vec3( 0.035, 0.055, 0.02 );
   vec3 c;
   if ( np < 0.5 ) {
-    // umbel: a dome of tiny florets
-    float fl = fract( sin( dot( floor( q * 7.0 ), vec2( 12.9898, 78.233 ) ) ) * 43758.5453 );
-    c = mix( gap, vGcPet, ( 1.0 - smoothstep( 1.0 - aa, 1.0 + aa, r ) ) * ( 0.55 + 0.45 * step( 0.3, fl ) ) );
+    // umbel (wild carrot / yarrow): a lacy dome of small umbellets on rays, gaps between them, the
+    // centre umbellet often dark; shaded darker at the rim of the dome
+    vec2 g = q * 3.2 + vGcHead.w * 7.0;
+    vec2 cell = floor( g ), f = fract( g ) - 0.5;
+    float h1 = fract( sin( dot( cell, vec2( 12.9898, 78.233 ) ) ) * 43758.5453 );
+    vec2 o = f - ( vec2( h1, fract( h1 * 7.13 ) ) - 0.5 ) * 0.35;
+    float ub = 1.0 - smoothstep( 0.28 - aa * 3.0, 0.34 + aa * 3.0, length( o ) );
+    float fine = fract( sin( dot( floor( q * 14.0 ), vec2( 39.3, 11.7 ) ) ) * 9631.7 );
+    float inside = 1.0 - smoothstep( 0.92 - aa, 1.0 + aa, r );
+    c = mix( gap, vGcPet * ( 1.0 - 0.3 * r * r ) * ( 0.8 + 0.25 * fine ), ub * inside );
+    c = mix( c, vec3( 0.12, 0.04, 0.06 ), ( 1.0 - smoothstep( 0.07, 0.1, r ) ) * step( 0.5, fract( vGcHead.w * 5.3 ) ) );
   } else {
     // petals: lobes round the centre; many narrow rays (daisies) or a few broad ones (poppy, buttercup)
     float lobe = abs( cos( th * np * 0.5 ) );
@@ -371,7 +380,7 @@ vGcRough = 0.85;
         vec3 eyeC = vec3( 0.0 );
         if ( fk >= 0 ) {
           // stem + head; the head faces the camera
-          float hsz = ( fk == 4 ? mix( 0.07, 0.1, rc.y ) : ( fk == 0 ? mix( 0.06, 0.085, rc.y ) : ( fk == 2 ? mix( 0.042, 0.056, rc.y ) : ( fk == 3 ? mix( 0.026, 0.036, rc.y ) : ( fk >= 6 ? mix( 0.016, 0.026, rc.y ) : mix( 0.036, 0.05, rc.y ) ) ) ) ) ) * ( fk < 6 ? 1.35 : 1.15 );
+          float hsz = ( fk == 4 ? mix( 0.055, 0.085, rc.y ) : ( fk == 0 ? mix( 0.06, 0.085, rc.y ) : ( fk == 2 ? mix( 0.042, 0.056, rc.y ) : ( fk == 3 ? mix( 0.026, 0.036, rc.y ) : ( fk >= 6 ? mix( 0.016, 0.026, rc.y ) : mix( 0.036, 0.05, rc.y ) ) ) ) ) ) * ( fk < 6 ? 1.35 : 1.15 );
           // stems stand a little above the grass, a few well above it
           if ( fk < 6 ) L = max( L * 1.12, ( fk == 4 ? 0.6 : 0.42 ) + 0.32 * rc.y ) * ( len > 0.5 ? 1.0 : 0.6 ) * ( fract( rc.x * 13.3 ) < 0.2 ? 1.3 : 1.0 );
           else L = mix( 0.06, 0.12, rc.y );
