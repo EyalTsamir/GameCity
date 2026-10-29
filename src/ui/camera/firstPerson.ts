@@ -391,13 +391,15 @@ export class FirstPerson {
         this.z += sz;
         continue;
       }
-      // slide: keep the component along the wall (the larger one first)
+      // slide: keep the component along the wall (the larger one first) — only a real share of the step (a
+      // heading a hair off an axis would "slide" by 1e-16 m and never get round a post)
       const xFirst = Math.abs(sx) >= Math.abs(sz);
+      const minPart = 0.2 * Math.hypot(sx, sz);
       let ok = false;
       for (const ax of xFirst ? [0, 1] : [1, 0]) {
         const tx = ax === 0 ? this.x + sx : this.x,
           tz = ax === 0 ? this.z : this.z + sz;
-        if ((ax === 0 ? sx : sz) !== 0 && this.canStep(tx, tz)) {
+        if (Math.abs(ax === 0 ? sx : sz) > minPart && this.canStep(tx, tz)) {
           this.x = tx;
           this.z = tz;
           if (ax === 0) this.vz *= 0.5;

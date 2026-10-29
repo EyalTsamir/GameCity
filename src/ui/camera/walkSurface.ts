@@ -43,6 +43,8 @@ interface Slab {
 }
 
 const CELL = 8;
+/** largest body radius clear() is asked about (the walker's 0.42, the spawn search's 0.57) */
+const BODY_MAX = 0.6;
 
 export interface WalkSurfaceOpts {
   /** ground height anywhere (terrain inside the slab, the landscape beyond) */
@@ -150,10 +152,12 @@ export class WalkSurface {
     if (this.discCells) return this.discCells;
     const cells: Disc[][] = Array.from({ length: this.cw * this.ch }, () => []);
     const add = (x: number, z: number, r: number) => {
-      const i0 = Math.max(0, Math.floor((x - r - this.x0) / CELL)),
-        i1 = Math.min(this.cw - 1, Math.floor((x + r - this.x0) / CELL));
-      const j0 = Math.max(0, Math.floor((z - r - this.z0) / CELL)),
-        j1 = Math.min(this.ch - 1, Math.floor((z + r - this.z0) / CELL));
+      // registered wherever a body (centre looked up, radius ≤ BODY_MAX) could touch it
+      const m = r + BODY_MAX;
+      const i0 = Math.max(0, Math.floor((x - m - this.x0) / CELL)),
+        i1 = Math.min(this.cw - 1, Math.floor((x + m - this.x0) / CELL));
+      const j0 = Math.max(0, Math.floor((z - m - this.z0) / CELL)),
+        j1 = Math.min(this.ch - 1, Math.floor((z + m - this.z0) / CELL));
       for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) cells[j * this.cw + i].push({ x, z, r });
     };
     const veg = this.ctx.services.vegetation as { trees?: { x: number; z: number; r: number; h: number }[] } | undefined;
