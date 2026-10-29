@@ -22,7 +22,7 @@ import { HB, RIG } from './harbor/geo';
 import { createBeamMesh, createHarborMaterials, createGlowMesh, followCraneLamps, NMOB, type GlowPoint } from './harbor/material';
 import { buildBreakwater, setArmourStones } from './harbor/breakwater';
 import { buildFishQuay, setQuayDetail } from './harbor/quay';
-import { buildCarouselRotating, buildCarouselStatic, buildPier, buildWheelRotating, buildWheelStatic, type WheelSpec } from './harbor/pier';
+import { buildCarouselRotating, buildCarouselStatic, buildPier, buildWheelRotating, buildWheelStatic, setGondolaDetail, type WheelSpec } from './harbor/pier';
 import { buildFerryDock, lifeguardTower, scatterBeach, setBeachDetail } from './harbor/beach';
 import { boxHunt } from '../core/boxhunt';
 import { bridgeProfile, buildFootbridge, buildJetty, type BridgeInfo, setRiverLanterns } from './harbor/river';
@@ -204,6 +204,7 @@ export default function create(ctx: CityContext): CityModule {
     if (wf?.rect) {
       wheel = { x: wf.x, z: wf.z, radius: Number(wf.params?.radius ?? 15), hubY: deckY + Number(wf.params?.hub ?? 17.5), rect: wf.rect, deckY };
       buildWheelStatic(beach, wheel, glows);
+      setGondolaDetail(boxHunt(ctx, 'gondola'));
       gondolas = buildWheelRotating(rides, wheel);
     }
     const cf = feats('carousel')[0];

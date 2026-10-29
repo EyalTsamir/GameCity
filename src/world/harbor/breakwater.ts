@@ -112,7 +112,7 @@ export function buildBreakwater(
           // box hunt: quarried blocks in a wider spread of sizes, a wet line at the water
           const s = Math.min(r === 0 ? 0.85 : 9, 0.45 + 0.95 * Math.pow(rng.next(), 1.4)); // the top row stays clear of the walkway
           b.color(ROCKS[rng.int(0, ROCKS.length - 1)]);
-          b.stone(x, yy - s * 0.15, zz + jz, s * rng.range(0.9, 1.3), s * rng.range(0.6, 0.85), s * rng.range(0.9, 1.25), rng, rng.range(0, 6.3), WATER_LEVEL + 0.2);
+          b.stone(x, yy - s * 0.15, zz + jz, s * rng.range(0.9, 1.3), s * rng.range(0.6, 0.85), s * rng.range(0.9, 1.25), rng, rng.range(0, 6.3), WATER_LEVEL + 0.75);
         } else if (kind === 'rock') {
           const s = rng.range(0.55, 1.05);
           b.color(ROCKS[rng.int(0, ROCKS.length - 1)]);
@@ -150,7 +150,7 @@ export function buildBreakwater(
         } else {
           const s = rng.range(0.6, 1.1);
           b.color(ROCKS[rng.int(0, ROCKS.length - 1)]);
-          if (ARMOUR) b.stone(px, y, pz, s * 1.2, s * 0.75, s * 1.1, rng, rng.range(0, 6.3), WATER_LEVEL + 0.2);
+          if (ARMOUR) b.stone(px, y, pz, s * 1.2, s * 0.75, s * 1.1, rng, rng.range(0, 6.3), WATER_LEVEL + 0.75);
           else b.rock(px, y, pz, s * 1.2, s * 0.75, s * 1.1, rng, rng.range(0, 6.3));
         }
       }

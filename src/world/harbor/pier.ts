@@ -357,6 +357,12 @@ export function buildWheelStatic(b: HB, w: WheelSpec, glows: GlowPoint[]): void 
 }
 
 /** rotating wheel (rims, spokes, lights) + 24 gondolas, into the rigged builder */
+/** box hunt (?nogondola): round domed gondolas instead of box tubs under pyramid lids */
+let GONDOLA = true;
+export function setGondolaDetail(on: boolean): void {
+  GONDOLA = on;
+}
+
 export function buildWheelRotating(b: HB, w: WheelSpec): number {
   const R = w.radius,
     R2 = R - 1.4;
@@ -439,6 +445,34 @@ export function buildWheelRotating(b: HB, w: WheelSpec): number {
       pz = w.z;
     b.rig(RIG.GONDOLA, 0, (k * 0.37) % 1).pivot(px, py, pz);
     const c = cols[k % cols.length];
+    if (GONDOLA) {
+      // box hunt (?nogondola): a round cabin — a yoke from the axle, an octagonal domed canopy with its band and a
+      // gilt finial, four slim posts, a flared tub with a cream rim, a floor and two facing benches inside
+      b.color('#c9ccd0');
+      for (const sz of [-1, 1]) b.beam([px, py - 0.02, pz + sz * 0.08], [px, py - 0.42, pz + sz * 0.5], 0.06, 0.06);
+      b.color(c);
+      b.cyl([px, py - 0.62, pz], [px, py - 0.5, pz], 0.92, 0.92, 8, 1, Math.PI / 8);
+      b.cyl([px, py - 0.5, pz], [px, py - 0.3, pz], 0.92, 0.14, 8, 2, Math.PI / 8);
+      b.color('#f2cf5b');
+      b.sphere(px, py - 0.25, pz, 0.07, 6, 4);
+      b.color('#e8e4da');
+      for (let q = 0; q < 4; q++) {
+        const t = (q + 0.5) * (Math.PI / 2);
+        b.box(px + Math.cos(t) * 0.68, py - 1.06, pz + Math.sin(t) * 0.68, 0.05, 0.9, 0.05, 0, 3);
+      }
+      b.color(c);
+      b.cyl([px, py - 2.05, pz], [px, py - 1.54, pz], 0.62, 0.8, 10, 1, Math.PI / 10);
+      b.color('#fbf7ee');
+      b.cyl([px, py - 1.55, pz], [px, py - 1.47, pz], 0.84, 0.84, 10, 3, Math.PI / 10);
+      b.color('#6f6a62');
+      b.cyl([px, py - 1.6, pz], [px, py - 1.58, pz], 0.78, 0.78, 10, 2, Math.PI / 10);
+      b.color('#7a4b2c');
+      for (const sx of [-1, 1]) {
+        b.box(px + sx * 0.46, py - 1.36, pz, 0.28, 0.05, 0.9, 0, 0);
+        b.box(px + sx * 0.6, py - 1.12, pz, 0.05, 0.42, 0.9, 0, 0);
+      }
+      continue;
+    }
     b.color('#c9ccd0');
     b.box(px, py - 0.25, pz, 0.12, 0.5, 0.12, 0, 0);
     // canopy

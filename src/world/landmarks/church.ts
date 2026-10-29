@@ -11,6 +11,8 @@ import { V3, Kit, pointedPoints } from './kit';
 import { wall as wallBase, moulding, Opening, WallSpec } from './facade';
 import { C, S, finial } from './parts';
 import type { Env } from './env';
+import { LM, LMODE } from './builder';
+import { boxHunt } from '../../core/boxhunt';
 
 export function genChurch(env: Env, lot: Lot): void {
   const fp = lot.footprint;
@@ -348,6 +350,8 @@ export function genChurch(env: Env, lot: Lot): void {
   K.box(gold, 0.1, 1.0, 0.1, 0, cRidge - 0.1, az);
   K.box(gold, 0.55, 0.1, 0.1, 0, cRidge + 0.55, az);
 
+  if (boxHunt(env.ctx, 'interiors')) churchInterior(env, { NW, nz0, nz1, eave, ridge, nBays, CW, cz1, az });
+
   // ── night: tower beams and ground pools
   for (const s of [-1, 1]) env.glow(s * 2.2, 0.3, tz1 + 1.2, { size: 0.6, kind: 'beam', color: '#ffe0b0', intensity: 0.2, dir: [s * -0.6, 22, -1.0], endSize: 3.0 });
   env.glow(0, 0.1, HD + 0.8, { size: 3.5, kind: 'pool', color: '#ffc27a', intensity: 0.3 });
@@ -464,4 +468,96 @@ function dressOpening(K: Kit, s: WallSpec, o: Opening): void {
     }
   }
   K.b.forceDetail = prev;
+}
+
+/**
+ * Box hunt (?nointeriors): the nave furnished for the free camera — flagstone floor, a raised chancel with its step,
+ * a dressed altar with candles and a cross, pulpit and lectern, two banks of pews with kneelers either side of a red
+ * runner, three candle chandeliers, open timber trusses under a planked ceiling, organ pipes over the entrance.
+ * Everything in the detail kit (collapsed far away: only ever seen from inside).
+ */
+function churchInterior(env: Env, d: { NW: number; nz0: number; nz1: number; eave: number; ridge: number; nBays: number; CW: number; cz1: number; az: number }): void {
+  const { NW, nz0, nz1, eave, ridge, nBays, CW, cz1, az } = d;
+  const D = env.D;
+  const iw = NW - 0.32;
+  const nL = nz1 - nz0;
+  const flags = M('#b9ae98', PAT.TILES, 0.75, 0, 0, 0, 0.2);
+  const marble = M('#d9d2c4', PAT.TILES, 0.45, 0, 0, 0, 0.7);
+  const oak = M('#6a4529', PAT.PLANKS, 0.7);
+  const oakDark = M('#4a2f1c', PAT.PLAIN, 0.7);
+  const red = M('#7d1f24', PAT.PLAIN, 0.95);
+  const linen = M('#efeae0', PAT.PLAIN, 0.9);
+  const gilt = S.gold();
+  // floors: nave flags, chancel + apse raised a step in pale stone
+  D.box(flags, iw * 2, 0.03, nL, 0, 0, (nz0 + nz1) / 2);
+  D.box(marble, (CW - 0.32) * 2, 0.2, cz1 - az, 0, 0, (az + cz1) / 2);
+  D.cyl(marble, 2.25, 2.25, 0.2, 0, 0, az, 6, false, 'cyl', 0, Math.PI * 2, Math.PI / 6);
+  D.box(marble, (CW - 0.32) * 2, 0.1, 0.42, 0, 0, cz1 + 0.21);
+  // altar: stone table, linen with a front drape and a red frontal, candles, a gilt cross
+  const ax = az - 0.7;
+  D.box(M('#cfc6b4', PAT.STONE, 0.8, 0, 0, 0, 0.4), 2.0, 0.92, 0.8, 0, 0.2, ax);
+  D.box(linen, 2.1, 0.03, 0.9, 0, 1.12, ax);
+  D.box(linen, 2.1, 0.4, 0.02, 0, 0.74, ax + 0.45);
+  D.box(red, 0.9, 0.62, 0.025, 0, 0.42, ax + 0.455);
+  for (const sx of [-0.7, 0.7]) {
+    D.cyl(gilt, 0.05, 0.07, 0.42, sx, 1.15, ax - 0.1, 8);
+    D.cyl(linen, 0.025, 0.025, 0.26, sx, 1.57, ax - 0.1, 6);
+    env.L.sphere(LM('#ffd38a', LMODE.ALWAYS, 2.4, sx), 0.022, sx, 1.86, ax - 0.1, 5, 4);
+  }
+  D.box(gilt, 0.05, 0.62, 0.05, 0, 1.15, ax - 0.2);
+  D.box(gilt, 0.34, 0.05, 0.05, 0, 1.6, ax - 0.2);
+  // pulpit (octagonal drum on a stem, stairs) on the north side of the chancel arch, lectern opposite
+  const px = -(iw - 1.0),
+    pz = nz0 + 1.1;
+  D.cyl(oakDark, 0.14, 0.18, 1.0, px, 0, pz, 8);
+  D.cyl(oak, 0.62, 0.48, 1.05, px, 1.0, pz, 8);
+  D.cyl(oakDark, 0.66, 0.66, 0.07, px, 2.05, pz, 8);
+  for (let i = 0; i < 5; i++) D.box(oakDark, 0.6, 0.2 * (i + 1), 0.3, px + 0.9, 0, pz + 1.55 - i * 0.28);
+  D.cyl(gilt, 0.04, 0.12, 1.1, iw - 1.2, 0.03, pz, 8);
+  D.boxC(gilt, 0.5, 0.04, 0.36, iw - 1.2, 1.18, pz, 0.35, Math.PI, 0);
+  // pews: two banks either side of the aisle, facing the altar (−z); seat, back, ends, kneeler; a runner between
+  const aisle = 0.78,
+    pL = iw - 0.35 - aisle,
+    pc = aisle + pL / 2;
+  for (let z = nz0 + 2.7; z < nz1 - 1.4; z += 0.96)
+    for (const sx of [-1, 1]) {
+      const cx = sx * pc;
+      D.box(oak, pL, 0.05, 0.4, cx, 0.42, z);
+      D.box(oak, pL, 0.48, 0.05, cx, 0.5, z + 0.22);
+      for (const e of [-1, 1]) D.box(oakDark, 0.07, 0.96, 0.56, cx + (e * pL) / 2, 0.03, z + 0.02);
+      D.box(red, pL - 0.12, 0.07, 0.13, cx, 0.06, z - 0.42);
+    }
+  D.box(red, aisle * 2 - 0.3, 0.012, nL - 0.9, 0, 0.03, (nz0 + nz1) / 2 + 0.3);
+  // chandeliers: chain, a gilt ring of candles (lit), a boss underneath
+  for (let i = 0; i < 3; i++) {
+    const cz = nz0 + nL * (0.22 + i * 0.28);
+    D.box(oakDark, 0.03, eave + 0.6 - 5.3, 0.03, 0, 5.3, cz);
+    D.torus(gilt, 0.55, 0.025, 0, 5.25, cz, 4, 20);
+    D.sphere(gilt, 0.09, 0, 5.12, cz, 8, 6);
+    for (let k = 0; k < 8; k++) {
+      const a = (k / 8) * Math.PI * 2;
+      const x = Math.sin(a) * 0.55,
+        z = cz + Math.cos(a) * 0.55;
+      D.cyl(linen, 0.02, 0.02, 0.14, x, 5.27, z, 5);
+      env.L.sphere(LM('#ffd38a', LMODE.ALWAYS, 2.2, k * 0.37), 0.022, x, 5.45, z, 5, 4);
+    }
+  }
+  // roof inside: a planked ceiling under the slates, tie beams, principal rafters and king posts at the bays
+  const yE = eave - 0.25,
+    yR = ridge - 0.75;
+  for (const sx of [-1, 1])
+    D.quad(M('#5d3f27', PAT.PLANKS, 0.8), [sx * iw, yE, nz0 + 0.3], [0, yR, nz0 + 0.3], [0, yR, nz1], [sx * iw, yE, nz1], nL, Math.hypot(iw, yR - yE), true);
+  for (let i = 0; i <= nBays; i++) {
+    const z = Math.min(nz1 - 0.2, Math.max(nz0 + 0.45, nz0 + (nL * i) / nBays));
+    D.box(oakDark, iw * 2, 0.28, 0.24, 0, eave - 0.9, z);
+    for (const sx of [-1, 1]) D.beam(oakDark, [sx * iw, eave - 0.75, z], [0, yR - 0.1, z], 0.2, 0.22);
+    D.box(oakDark, 0.18, yR - (eave - 0.62), 0.18, 0, eave - 0.62, z);
+  }
+  // organ over the entrance: a dark case and a fan of gilt pipes
+  const oz = nz1 - 0.5;
+  D.box(oakDark, 4.6, 2.4, 0.7, 0, 3.4, oz);
+  for (let i = -7; i <= 7; i++) {
+    const h = 1.6 + 1.3 * Math.cos((i / 7) * 1.2);
+    D.cyl(gilt, 0.09, 0.09, h, i * 0.28, 5.8, oz - 0.1, 8);
+  }
 }

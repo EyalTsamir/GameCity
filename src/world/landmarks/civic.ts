@@ -647,7 +647,7 @@ function schoolBounds(env: Env): void {
     const ex = hx + ux * w,
       ez = hz + uz * w;
     railing(env, [hx, 0.05, hz], [ex, 0.05, ez], H - 0.05, green, false, true);
-    const ry = Math.atan2(ux, uz) + Math.PI / 2;
+    const ry = Math.atan2(ux, uz);
     for (const y of [0.08, H - 0.02, H * 0.5]) env.S.box(steel, 0.05, 0.05, w, (hx + ex) / 2, y - 0.025, (hz + ez) / 2, ry);
     for (const [x, z] of [
       [hx + ux * 0.03, hz + uz * 0.03],

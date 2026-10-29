@@ -513,7 +513,7 @@ export class HB {
     f.dispose();
     for (let i = base; i < this.count; i++) {
       const y = this.P[i * 3 + 1];
-      const w = Math.min(1, Math.max(0, (wetY + 0.35 - y) / 0.55));
+      const w = Math.min(1, Math.max(0, (wetY + 0.25 - y) / 0.7));
       if (w <= 0) continue;
       this.C[i * 3] *= 1 - 0.5 * w;
       this.C[i * 3 + 1] *= 1 - 0.36 * w;
