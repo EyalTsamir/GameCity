@@ -17,11 +17,20 @@ with walk mode / free camera and fix the next 10, repeat. Every feature: `boxHun
   (`?noshelterroof`), breakwater quarried armour + wet line (`?noarmour`, geo.ts `HB.stone`), round ferris
   gondolas (`?nogondola`), church nave / station booking hall / town hall furnished (`?nointeriors`:
   `churchInterior`, `stationInterior`, `townhallInterior`, all in the detail kit `env.D`).
-- Verified visually (A/B): two-wheelers, school, reefer, sails, band, deli, shelters, armour. Pending A/B:
-  church / station / gondolas (`shots/bh2/int`), town hall.
+- 4a611aa: **env.D bug** — primitives added straight to the detail kit had their LOD pivot at the world origin, so
+  everything in `env.D` vanished once the camera was > 100 m from (0,0,0) (all three interiors, school rails);
+  fixed with `MeshBuilder.autoPivot` (set on every region's detail sink in env.ts). Carved carousel horses
+  (`?nocarousel`, pier.ts `horseCarved`), church sanctuary dais + rail + painted reredos (the chancel behind the
+  nave wall is closed), fireworks barge kit (`?nobarge`, vehicleModels.ts `bargeKit`, VB.geo), ferry pontoon
+  fit-out: guide piles, tyre fenders, cleats, ladder, lifebuoy, barrel roof, gangway slats (`?noferrydock`).
+- Verified visually (A/B): two-wheelers, school, reefer, sails, band, deli, shelters, armour, gondolas, carousel,
+  church / station / town hall interiors (`shots/bh2/int3`). Pending: barge + ferry dock (`shots/bh2/harb`),
+  reredos + town hall council (`shots/bh2/int4`, also fountain / stadium front / quay wall "after" for #18/#20/#23).
+- Edit scripts: never pre-convert inserted text to CRLF and then pass it through `R()` again (made `
+`).
 - Already done by earlier rounds (F4, checked in code): building-site mud / ruts / mixer / excavator, quay oil
   stains. Car glass `?novehglass` (real-g) — still to re-check visually.
-- Next: car glass check; ranked #29 water tower, #19 orchard trees, #28 tunnel portals, #25 van body, #26 pier;
+- Next: car glass check; ranked #18 stadium front, #20 fountain, #23 quay wall, #30 poppies, #26 pier kiosks;
   then the walk-mode re-audit; perf A/B + build at the end. Scratch tools: `evalshots.mjs` (eval-driven views,
   before/after variants under one lock) + `v_*.js` view scripts in the session scratchpad.
 - Never run `npx prettier` here (no project config: it reformats whole files).
