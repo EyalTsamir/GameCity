@@ -144,3 +144,6 @@ Branch `claude/real-w8-country` (from claude/pensive-gates-bim12i @ 5137562). Br
 TOTAL weighted 3.6M (cache read 72%, cache write 9%, output 19%); 123 calls, ctx median 209k, max 323k, 0 cold.
 The system prompt + brief alone is ~1.1M lifetime (30%): the base context of this session type is large, so the
 next session should wrap after ~60 calls.
+
+## Token report (session 2, tokens.py)
+TOTAL weighted 1.8M (cache read 73%, cache write 10%, output 16%).
