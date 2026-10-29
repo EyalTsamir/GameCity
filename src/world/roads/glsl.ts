@@ -443,7 +443,7 @@ vec3 rdHard(inout float rough) {
   rough = vX.w;
   // a worn walking line along the sidewalk (special 1: vS.x = distance from the kerb): stones polished smoother and
   // a touch darker, tone differences rubbed down, wandering with the noise
-  if (sp > 0.5 && sp < 1.5 && uRdHand > 0.5) {
+  if (vS.z > 0.5 && vS.z < 1.5 && uRdHand > 0.5) {
     float wl = 1.0 - smoothstep(0.35, 1.1, abs(vS.x - 1.9 + (nM.g - 0.5) * 1.2));
     wl *= 0.55 + 0.45 * nM.b;
     c = mix(c, vec3(dot(c, vec3(0.333))), wl * 0.18);
