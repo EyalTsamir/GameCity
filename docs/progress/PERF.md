@@ -140,6 +140,12 @@ without warm-up the first frame comes at 64 s anyway (it compiles 107 programs) 
 (compileAsync on a 1x1 linear target) before the warm-up frame. Allocation profile (original, street): 1.48 MB of
 garbage per frame — crowd director for…of scans, shadowFit literals / Math.hypot, wind table, census pickers, poses.
 
+### 6. Batch 4 — fd69368 / c0399b9 (pushed): far trees slot 2.5, big landmarks own meshes, fine furniture cells
+cand3 → cand4 (ms/frame, 12 h / 21.5 h): overview +0.7 / −1.9, street −2.2 / +0.3, market −1.7 / +1.3, harbour −0.4 /
+−0.2, platform −1.3 / +0.1 — small, ±1.5 ms noise; triangles unchanged (4.24 M overview): at street level the
+furniture / landmark cells behind the buildings are still inside the view frustum — the missing piece is occlusion,
+which three does not do (a home-made ray test against the lot boxes would pop: rejected). +10…19 draw calls.
+
 ---
 
 # Earlier round: render-performance pass
