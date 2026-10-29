@@ -419,8 +419,9 @@ function dressOpening(K: Kit, s: WallSpec, o: Opening): void {
     const spring = o.y + o.h - o.arch;
     const ux = o.w / 2 + sw + bw / 2;
     for (const sg of [-1, 1]) {
-      const b1 = new THREE.BoxGeometry(bw + 0.04, 0.22, big ? 0.16 : 0.12);
-      b1.translate(o.x + sg * ux, spring - 0.11, (big ? 0.16 : 0.12) / 2);
+      // (≤ 0.12 out: the stops reach below 2.4 m, where nothing may leave the footprint)
+      const b1 = new THREE.BoxGeometry(bw + 0.04, 0.22, 0.12);
+      b1.translate(o.x + sg * ux, spring - 0.11, 0.06);
       K.geoM(sur, b1, wm, 'box');
       b1.dispose();
       const b2 = new THREE.BoxGeometry(bw - 0.02, 0.1, big ? 0.1 : 0.07);

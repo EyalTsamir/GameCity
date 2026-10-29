@@ -491,7 +491,7 @@ export function genSchool(g: Gen): void {
     sideBox(t, sg, b - 0.065, b - 0.05, 0.068, 0.072, y0 + 0.05, y1 - 0.05);
     setCol(t, col('#c8ccce'));
     sideBox(t, sg, b - 0.035, b - 0.015, 0.075, 0.085, (y0 + y1) / 2 - 0.03, (y0 + y1) / 2 + 0.03); // lock
-    const nr = g.atlas.add(`school-notices:${g.seed % 7}`, 256, 216, noticeBoard(g.seed));
+    const nr = g.atlas.add(`school-notices:${g.seed % 7}`, 128, 96, noticeBoard(g.seed));
     signOnSide(g, sg, a + 0.05, b - 0.05, 0.022, y0 + 0.05, y1 - 0.05, nr);
     const hr = g.atlas.add('school-noticehead', 192, 40, boardSign('NOTICES', { bg: '#2f5d50', fg: '#f4f1ea', glow: 0 }));
     signOnSide(g, sg, a + 0.2, b - 0.2, 0.012, y1 + 0.05, y1 + 0.2, hr);
