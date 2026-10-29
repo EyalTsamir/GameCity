@@ -82,6 +82,22 @@ void lmKin(inout vec3 p, inout vec3 n) {
     float a = aAnim.y * sin(aAnim.z * uTime + aAnim.w);
     p = piv + lmRot(p - piv, aAxis, a);
     n = lmRot(n, aAxis, a);
+  } else if (mode < 3.5) {
+    // [W6] stall canopy cloth in the shared wind: billows inside the rails (zero on them: a = half width
+    // along aAxis, b = half depth between the rails), the overhang + valance beyond the rails flaps; c = phase
+    vec3 cx = aAxis;
+    vec3 cz = normalize(cross(cx, vec3(0.0, 1.0, 0.0)));
+    float sx = dot(p - piv, cx), sz = dot(p - piv, cz);
+    float wx = clamp(1.0 - (sx * sx) / (aAnim.y * aAnim.y), 0.0, 1.0);
+    float wz = clamp(1.0 - (sz * sz) / (aAnim.z * aAnim.z), 0.0, 1.0);
+    float ov = max(abs(sz) - aAnim.z, 0.0);
+    vec2 lw = thWindAt(piv.xz);
+    float ws = clamp(length(lw), 0.0, 1.5);
+    float t = uTime * (1.6 + 1.4 * ws) + aAnim.w;
+    float bil = (0.012 + 0.022 * ws) * wx * wz * (0.6 + 0.4 * sin(t + sx * 1.7) * sin(t * 0.63 + sz * 2.3));
+    float flap = (0.05 + 0.12 * ws) * ov * (0.5 + 0.5 * wx) * sin(t * 2.3 + sx * 3.1 + aAnim.w);
+    p.y += bil + flap;
+    p += cz * sign(sz) * flap * 0.5;
   } else if (mode < 4.5) {
     // reserved
   } else if (mode < 5.5) {

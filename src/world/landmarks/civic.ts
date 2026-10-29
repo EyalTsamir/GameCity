@@ -307,6 +307,7 @@ export function genMarketStall(env: Env, f: Feature): void {
   const K = env.S;
   // individual produce, price cards, scales and ground clutter (off: low tier, ?nomarketdetail)
   richStall = !env.ctx.debug.params.has('nomarketdetail') && env.ctx.quality.level !== 'low';
+  const stallWind = !env.ctx.debug.params.has('nostallwind') && env.ctx.quality.level !== 'low';
   const col = STALL_COLS[Number(f.params?.color ?? f.id) % STALL_COLS.length];
   const goods = stallGoods(env, f);
   const wood = M('#9a6b43', PAT.PLANKS, 0.85, 0, 0, 0, 0.4);
@@ -338,20 +339,24 @@ export function genMarketStall(env: Env, f: Feature): void {
     const sag = 0.07 * Math.sin(Math.PI * Math.min(1, Math.max(0, (x + hw) / (2 * hw)))) * Math.sin(Math.PI * Math.min(1, Math.max(0, (z - fz) / (bz - fz))));
     return [x, yl + 0.03 - sag, z];
   };
+  // (the cloth + valance go to the kinetic kit and move with the shared wind: ANIM.CANOPY; ?nostallwind = static)
+  const CK = stallWind ? env.K : K;
+  if (stallWind) env.anim({ mode: ANIM.CANOPY, pivot: new THREE.Vector3(0, yF, (fz + bz) / 2), axis: new THREE.Vector3(1, 0, 0), a: hw + 0.02, b: (fz - bz) / 2, c: ph });
   for (let i = 0; i < NX; i++)
     for (let j = 0; j < NZ; j++) {
       const a = P(i, j), b = P(i + 1, j), c = P(i + 1, j + 1), d = P(i, j + 1);
       const uv: [number, number][] = [[a[0], a[2]], [b[0], b[2]], [c[0], c[2]], [d[0], d[2]]];
-      K.poly(canopy, [a, b, c, d], uv);
-      K.poly(under, [d, c, b, a], uv);
+      CK.poly(canopy, [a, b, c, d], uv);
+      CK.poly(under, [d, c, b, a], uv);
     }
   // scalloped valance along the front edge
   for (let i = 0; i < 10; i++) {
     const xa = x0 + ((x1 - x0) * i) / 10, xb = x0 + ((x1 - x0) * (i + 1)) / 10, xm = (xa + xb) / 2;
     const ya = P(0, 0)[1];
     const pts: [number, number, number][] = [[xa, ya, z0], [xb, ya, z0], [xb, ya - 0.13, z0], [xm, ya - 0.19, z0], [xa, ya - 0.13, z0]];
-    K.poly(canopy, pts, pts.map((p) => [p[0], p[1]] as [number, number]), true);
+    CK.poly(canopy, pts, pts.map((p) => [p[0], p[1]] as [number, number]), true);
   }
+  if (stallWind) env.anim(null);
   // back cloth: a drape gathered on the rear rail (tight pleats at the top that open into deep, uneven
   // folds towards the hem), hem a little above the ground, one panel corner tucked back
   const backM = M(col, PAT.PLAIN, 0.92, 0, 0, 0, 0.35);

@@ -63,3 +63,12 @@
   passengers (some with the luggage W7 placed: wheeled case at x −7.7, holdall x 17.2, rucksack on the bench x −17.2)
   would complete the "station platform" dense place. Same for the fish quay (x 127..136, z −140..−122): one or two
   workers (oilskins) at the creels / fish boxes, a man mending nets on the bench at the store (x ≈ 130.8, z −139).
+
+## W6 → W1 (buildings): export rear ground-floor window spans (2026-10-29)
+* The W6 back yard hangs a door, gas meter, downpipe + butt and an AC on the old-town rear walls. Without the window
+  layout they land on windows; places.ts now uses a rule probed on lots 64/65 (bay = L/3.4, windows at
+  a0 + bay·(0.48 + i), 1.1 m + 0.11 surrounds) — fragile if the facade grid changes.
+* Ask: `services.buildings.windows(lot)` (or a `ground` list on FacadeSpan incl. rear walls) → [{s0, s1, y0, y1}] for
+  ground-floor openings, from Builder.winRec before it is released (buildings.ts:245).
+* FYI (no bug): "beige planks at ~1 m" in the lead's s1 back-yard frames = buildings-sills / -surrounds seen with the
+  camera INSIDE lot 64 (its rear wall culled); from the yard they sit correctly on the wall.

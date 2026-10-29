@@ -59,6 +59,8 @@ export const ANIM = {
   SPIN: 1,
   /** angle = a * sin(b * t + c) */
   SWING: 2,
+  /** stall canopy cloth in the wind: billow inside the rails, flap beyond (a = half width along axis, b = half depth, c = phase) */
+  CANOPY: 3,
   /** crane slewing parts: angle = uCrane.x about +Y through the pivot */
   CRANE_SLEW: 5,
   /** crane trolley: slide along aAxis by uCrane.y, then slew */

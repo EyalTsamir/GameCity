@@ -131,20 +131,15 @@ export function cafe(k: Kit, ks: Kit, rng: Rng, canvas?: [string, string], chair
  */
 export function kerbCafe(k: Kit, rng: Rng, chairs?: ChairOut[]): void {
   const sh = k.sh;
-  k.m(rng.pick(['#2c3033', '#3b4a40', '#d8d4ca']), 'iron');
-  sh.cyl(0, 0, 0, 0.17, 0.035, 0.72, 6, 0);
-  k.m(rng.pick(['#e9e4d8', '#c9b48a', '#2c3033', '#b8b2a6']), rng.chance(0.5) ? 'stone' : 'wood');
-  sh.cyl(0, 0.72, 0, 0.29, 0.29, 0.03, 10, 3);
+  // the terrace set in miniature: pedestal table + two bent-tube bistro chairs, never quite square to it
+  bistroTable(k, rng, 0.29, rng.pick(['#2c3033', '#3b4a40', '#5a3a2a', '#d8d4ca']));
   const chairCol = rng.pick(['#2c3033', '#c9473f', '#3f7a8f', '#d8d4ca', '#8a5b3a', '#4f7a4a', '#d8b24a']);
+  const woven = rng.chance(0.5);
   for (const a of [Math.PI / 2, -Math.PI / 2]) {
-    sh.push().local(Math.sin(a) * 0.55, 0, Math.cos(a) * 0.55, 0, a + Math.PI + rng.range(-0.15, 0.15));
-    k.m(chairCol, 'iron');
-    for (const x of [-0.17, 0.17]) {
-      sh.box(x, 0.21, 0.15, 0.028, 0.42, 0.028, 1);
-      sh.box(x, 0.43, -0.17, 0.028, 0.86, 0.028, 1);
-    }
-    sh.box(0, 0.44, 0, 0.4, 0.035, 0.38, 0);
-    sh.push().local(0, 0.68, -0.18, -0.1).box(0, 0, 0, 0.38, 0.24, 0.025, 0).pop();
+    const dist = rng.range(0.5, 0.64);
+    const off = rng.range(-0.08, 0.08);
+    sh.push().local(Math.sin(a) * dist, 0, Math.cos(a) * dist + off, 0, a + Math.PI + rng.range(-0.25, 0.25));
+    bistroChair(k, chairCol, rng, woven);
     if (chairs) {
       sh.world(0, 0.4575, 0.02, _seat);
       sh.world(0, 0.4575, 1.02, _fwd);
@@ -152,12 +147,25 @@ export function kerbCafe(k: Kit, rng: Rng, chairs?: ChairOut[]): void {
     }
     sh.pop();
   }
+  // cups on saucers, a sugar pot, a menu card in a stand; a water glass on some
+  for (const [x, z] of [[0.11, 0.03], [-0.11, -0.03]] as const) {
+    if (x < 0 && rng.chance(0.4)) continue;
+    k.m('#f2efe6', 'ceramic');
+    sh.cyl(x, 0.752, z, 0.06, 0.055, 0.008, 10, 2);
+    sh.cyl(x, 0.76, z, 0.038, 0.03, 0.058, 8, 2);
+    k.m('#3a2418', 'ceramic');
+    sh.cyl(x, 0.812, z, 0.033, 0.033, 0.004, 8, 2);
+  }
   k.m('#f2efe6', 'ceramic');
-  sh.cyl(0.1, 0.75, 0.05, 0.04, 0.032, 0.065, 6, 2);
-  if (rng.chance(0.5)) sh.cyl(-0.1, 0.75, -0.04, 0.04, 0.032, 0.065, 6, 2);
+  sh.cyl(0, 0.752, 0.12, 0.028, 0.026, 0.05, 8, 2);
+  k.m(rng.pick(['#2a3a2a', '#6a2a2a', '#1f2a3a']), 'plastic');
+  sh.push().local(-0.02, 0.752, -0.13, 0, rng.range(-0.6, 0.6));
+  sh.push().local(0, 0, 0.01, 0.22).box(0, 0.055, 0, 0.09, 0.11, 0.004, 0).pop();
+  sh.push().local(0, 0, -0.01, -0.22).box(0, 0.055, 0, 0.09, 0.11, 0.004, 0).pop();
+  sh.pop();
   if (rng.chance(0.35)) {
     k.m('#cfe3e8', 'glass');
-    sh.cyl(0.0, 0.75, -0.12, 0.035, 0.03, 0.2, 6, 2);
+    sh.cyl(0.13, 0.752, -0.12, 0.032, 0.028, 0.11, 8, 2);
   }
 }
 
