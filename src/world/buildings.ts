@@ -86,7 +86,7 @@ export default function create(ctx: CityContext): CityModule {
   const t0 = performance.now();
   const plan = ctx.plan;
   // A/B switches: ?legacyfacade = original shell shader
-  const mats = createMaterials(ctx.uniforms, { legacy: ctx.debug.params.has('legacyfacade'), wear: !ctx.debug.params.has('nowear'), winDepth: !ctx.debug.params.has('nowinreveal'), winRefl: !ctx.debug.params.has('nowinrefl'), wallRelief: !ctx.debug.params.has('nowallrelief'), plinth: !ctx.debug.params.has('noplinth'), glassVar: !ctx.debug.params.has('noglassvar'), mirror: !ctx.debug.params.has('glassold') });
+  const mats = createMaterials(ctx.uniforms, { legacy: ctx.debug.params.has('legacyfacade'), wear: !ctx.debug.params.has('nowear'), winDepth: !ctx.debug.params.has('nowinreveal'), winRefl: !ctx.debug.params.has('nowinrefl'), wallRelief: !ctx.debug.params.has('nowallrelief'), plinth: !ctx.debug.params.has('noplinth'), glassVar: !ctx.debug.params.has('noglassvar') });
   // ?nowingeo = no near-LOD sill / surround geometry (the shader sill everywhere)
   const winGeoOn = !ctx.debug.params.has('nowingeo');
   const winRec: number[] | null = winGeoOn ? [] : null;
@@ -94,6 +94,8 @@ export default function create(ctx: CityContext): CityModule {
   // the facade shell is chunked on the trim grid as well: culled per chunk, and drawn nearest chunk first (frame())
   // so the near facades' depth rejects the (expensive) facade pixels of the buildings behind them
   const shellChunks = new Map<number, Builder>();
+  // light round: ?glassold = curtain walls with the old coating tint (no street mirrored in them)
+  if (ctx.debug.params.has('glassold')) mats.uniforms.uMirror.value = 0;
   const shellOf = (x: number, z: number): Builder => {
     const key = chunkKey(x, z);
     let b = shellChunks.get(key);

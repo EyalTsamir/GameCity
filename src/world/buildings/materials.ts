@@ -141,12 +141,12 @@ export interface BuildingMaterials {
     uWinDepth: { value: number };
     /** 1 = punched windows mirror the street / opposite buildings (bhOpp); ?nowinrefl sets 0 */
     uWinRefl: { value: number };
+    /** light round: curtain walls mirror the sky / neighbours (less coating tint); ?glassold sets 0 (buildings.ts) */
+    uMirror: { value: number };
     uWallRelief: { value: number };
     uPlinth: { value: number };
     /** G1: glass as a material — per-bay shop / lobby interiors, per-pane tint + thin edge; ?noglassvar sets 0 */
     uGlassVar: { value: number };
-    /** light round: curtain walls mirror the sky / neighbours (less coating tint); ?glassold sets 0 */
-    uMirror: { value: number };
     /** near-LOD sill geometry: (centre of its range, range m); the shader drops its own sill box inside */
     uGeoWin: { value: THREE.Vector4 };
     uDetailPx: { value: THREE.Vector2 };
@@ -320,10 +320,10 @@ uniform float uBhDebug;
 uniform float uWear;
 uniform float uWinDepth;
 uniform float uWinRefl;
+uniform float uMirror;
 uniform float uWallRelief;
 uniform float uPlinth;
 uniform float uGlassVar;
-uniform float uMirror;
 // near-window detail fades to the far average between these cell sizes (cells per pixel: 0.3 = 3.3 px per bay)
 uniform vec2 uDetailPx;
 uniform vec4 uGeoWin;
@@ -2304,7 +2304,7 @@ ${LAMP_GLSL}
 
 // ───────────────────────────────────────────────────────── factory ──
 
-export function createMaterials(g: GlobalUniforms, opts: { legacy?: boolean; wear?: boolean; winDepth?: boolean; winRefl?: boolean; wallRelief?: boolean; plinth?: boolean; glassVar?: boolean; mirror?: boolean } = {}): BuildingMaterials {
+export function createMaterials(g: GlobalUniforms, opts: { legacy?: boolean; wear?: boolean; winDepth?: boolean; winRefl?: boolean; wallRelief?: boolean; plinth?: boolean; glassVar?: boolean } = {}): BuildingMaterials {
   const legacy = !!opts.legacy;
   const uniforms = {
     uHours: { value: 12 },
@@ -2321,10 +2321,10 @@ export function createMaterials(g: GlobalUniforms, opts: { legacy?: boolean; wea
     uWear: { value: opts.wear === false ? 0 : 1 },
     uWinDepth: { value: opts.winDepth === false ? 0 : 1 },
     uWinRefl: { value: opts.winRefl === false ? 0 : 1 },
+    uMirror: { value: 1 },
     uWallRelief: { value: opts.wallRelief === false ? 0 : 1 },
     uPlinth: { value: opts.plinth === false ? 0 : 1 },
     uGlassVar: { value: opts.glassVar === false ? 0 : 1 },
-    uMirror: { value: opts.mirror === false ? 0 : 1 },
     uGeoWin: { value: new THREE.Vector4(0, -1e5, 0, 0) },
     uDetailPx: { value: new THREE.Vector2(0.3, 0.8) },
   };
@@ -2362,10 +2362,10 @@ export function createMaterials(g: GlobalUniforms, opts: { legacy?: boolean; wea
         uWear: uniforms.uWear,
         uWinDepth: uniforms.uWinDepth,
         uWinRefl: uniforms.uWinRefl,
+        uMirror: uniforms.uMirror,
         uWallRelief: uniforms.uWallRelief,
         uPlinth: uniforms.uPlinth,
         uGlassVar: uniforms.uGlassVar,
-        uMirror: uniforms.uMirror,
         uGeoWin: uniforms.uGeoWin,
         uDetailPx: uniforms.uDetailPx,
         uSunDir: g.uSunDir,
