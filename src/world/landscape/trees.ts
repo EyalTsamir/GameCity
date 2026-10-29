@@ -124,7 +124,9 @@ class Builder {
   yaw: number[] = [];
   kind: number[] = [];
   tint: number[] = [];
+  blocked?: (x: number, z: number, r: number) => boolean;
   add(x: number, y: number, z: number, h: number, w: number, kind: number, seed: number): void {
+    if (this.blocked?.(x, z, w * 0.35)) return; // no crown through a roof (F4 bug 2)
     this.x.push(x);
     this.y.push(y);
     this.z.push(z);
@@ -150,9 +152,10 @@ class Builder {
 }
 
 /** place every countryside tree (deterministic) */
-export function placeTrees(model: LandscapeModel, density: number, forestHint?: (x: number, z: number) => number): { list: TreeList; ms: number } {
+export function placeTrees(model: LandscapeModel, density: number, forestHint?: (x: number, z: number) => number, blocked?: (x: number, z: number, r: number) => boolean): { list: TreeList; ms: number } {
   const t0 = performance.now();
   const B = new Builder();
+  B.blocked = blocked;
   const H = model.height;
   let seed = 1;
   const slabD = model.slabDist;
@@ -468,9 +471,10 @@ function shapeOf(kind: number): Shape {
     sh.trunkR = 0.03;
   } else if (kind === KIND.poplar) {
     // a slim column of leaf masses on the axis, tapering to a point
-    for (let i = 0; i < 7; i++) {
-      const y = 0.3 + i * 0.1;
-      const r = 0.5 * (1 - Math.pow(i / 7, 1.6)) + 0.08;
+    // (9 overlapping masses: with 7 the top ones read as clumps floating over the column, F4 bug 2)
+    for (let i = 0; i < 9; i++) {
+      const y = 0.3 + i * 0.075;
+      const r = 0.5 * (1 - Math.pow(i / 9, 1.6)) + 0.08;
       sh.clumps.push({ x: (rnd(i, 5) - 0.5) * 0.06, y, z: (rnd(i, 6) - 0.5) * 0.06, r: r * 0.36 });
     }
     sh.trunkTop = 0.3;

@@ -977,14 +977,16 @@ export function bikeRack(k: Kit, rng: Rng): void {
     sh.tube(x - 0.22, 0.74, 0, x + 0.22, 0.74, 0, 0.025, 0.025, 5);
     sh.tube(x + 0.22, 0.74, 0, x + 0.32, 0.62, 0, 0.025, 0.025, 5);
   }
-  const n = rng.int(0, 3);
-  const used = new Set<number>();
-  for (let i = 0; i < n; i++) {
-    const h = rng.int(0, 2);
-    if (used.has(h)) continue;
-    used.add(h);
-    const side = rng.chance(0.5) ? 1 : -1;
-    sh.push().local(hoops[h], 0, side * 0.2, rng.range(-0.05, 0.05) * side, rng.chance(0.5) ? 0 : Math.PI, 0.08 * side);
+  // which hoops hold a bike: none, one, or both end hoops with the bikes on opposite sides (two bikes on the same
+  // side of neighbouring hoops would pass through each other)
+  const PATS = [[], [1], [0], [2], [0, 2], [0, 2], [1]];
+  const pat = PATS[rng.int(0, PATS.length - 1)];
+  const side0 = rng.chance(0.5) ? 1 : -1;
+  for (const h of pat) {
+    const side = h === 2 && pat.length > 1 ? -side0 : side0;
+    // a bike (±0.85 m long) on an end hoop leans with that hoop near its back wheel, so it stays inside the rack's
+    // 2.8 m slot instead of standing in the neighbouring planter (F4 bug 4)
+    sh.push().local(hoops[h] * 0.6, 0, side * 0.2, rng.range(-0.05, 0.05) * side, rng.chance(0.5) ? 0 : Math.PI, 0.08 * side);
     bike(k, rng.pick(BIKE_COLS));
     sh.pop();
     // locked to the hoop: a D-lock round the upright and the down tube (shackle + lock body), or a cable

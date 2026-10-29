@@ -1349,10 +1349,34 @@ function backyard(e: PlacesEnv, info: PlacesInfo): void {
     k.sh.pop();
   });
   // the washing line: two posts out in the yard, parallel to the wall
-  const dLine = Math.min(4.5, Math.max(2.6, (Math.abs((r.x1 - r.x0) * nx) + Math.abs((r.z1 - r.z0) * nz)) * 0.45));
+  let dLine = Math.min(4.5, Math.max(2.6, (Math.abs((r.x1 - r.x0) * nx) + Math.abs((r.z1 - r.z0) * nz)) * 0.45));
   const span = Math.min(6, L - 2.5);
   const ends: [number, number, number][] = [];
-  for (const s of [-span / 2, span / 2]) {
+  // keep the line and its washing out of the yard tree (F4 bug 6): try a few offsets from the wall / along it,
+  // reject one whose segment passes within crown radius + 0.6 m of a tree
+  const trees = (e.ctx.services.vegetation as { trees?: { x: number; z: number; r: number }[] } | undefined)?.trees ?? [];
+  const clear = (s0: number, d: number) => {
+    const [ax, az] = at(s0 - span / 2, d),
+      [bx, bz] = at(s0 + span / 2, d);
+    const vx = bx - ax,
+      vz = bz - az,
+      vv = vx * vx + vz * vz;
+    for (const t of trees) {
+      if (Math.abs(t.x - ax) > span + 8 || Math.abs(t.z - az) > span + 8) continue;
+      const u = Math.max(0, Math.min(1, ((t.x - ax) * vx + (t.z - az) * vz) / vv));
+      if (Math.hypot(ax + vx * u - t.x, az + vz * u - t.z) < t.r + 0.6) return false;
+    }
+    return e.free(ax, az, 0.2) && e.free(bx, bz, 0.2);
+  };
+  let lineS = 0;
+  search: for (const d of [dLine, dLine - 1, dLine + 1.2, dLine - 1.8, dLine + 2.2])
+    for (const s0 of [0, -1.5, 1.5, -3, 3])
+      if (d > 1.8 && clear(s0, d)) {
+        dLine = d;
+        lineS = s0;
+        break search;
+      }
+  for (const s of [lineS - span / 2, lineS + span / 2]) {
     const [x, z] = at(s, dLine);
     if (!e.free(x, z, 0.2)) continue;
     const y = e.H(x, z);

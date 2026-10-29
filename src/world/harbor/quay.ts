@@ -187,7 +187,8 @@ function fishBoxStack(b: HB, x: number, y: number, z: number, n: number, yaw: nu
  *  different (hashed from its position): netting colour and fade, hoop height (bent by use), a buoy rope tail,
  *  weed and dried bait caught in the bottom */
 const CREEL_NETS = ['#5c8a62', '#4f7a5a', '#2f5f9a', '#3b6f8f', '#c0622f', '#2a2c2a', '#7d8a5a'];
-function creel(b: HB, x: number, y: number, z: number, yaw: number): void {
+/** lift: height of this pot above the ground (stacked); < 0 = an inner pot of a stack, no rope tail */
+function creel(b: HB, x: number, y: number, z: number, yaw: number, lift = 0): void {
   const hsh = (k: number) => {
     const v = Math.sin(x * 12.9898 + z * 78.233 + k * 37.719) * 43758.5453;
     return v - Math.floor(v);
@@ -233,15 +234,25 @@ function creel(b: HB, x: number, y: number, z: number, yaw: number): void {
     b.box((hsh(14) - 0.5) * 0.3, 0.075, (hsh(15) - 0.5) * 0.2, 0.12, 0.025, 0.08, 0, 0);
   }
   // a tail of the back rope hanging off one end
-  if (hsh(16) < 0.45) {
+  if (lift >= 0 && hsh(16) < 0.45) {
     b.color(hsh(17) < 0.5 ? '#d6c48e' : '#c0622f');
     b.tube(
-      [
-        [0.3, 0.07, 0.05],
-        [0.42, 0.04, 0.1 + hsh(18) * 0.1],
-        [0.55 + hsh(19) * 0.2, 0.012, 0.0],
-        [0.7 + hsh(20) * 0.3, 0.012, -0.15 - hsh(21) * 0.2],
-      ],
+      lift > 0.05
+        ? [
+            // on a stacked creel the tail drops down the side of the stack to the concrete (F4 bug 5)
+            [0.3, 0.07, 0.05],
+            [0.335, 0.0, 0.08],
+            [0.345, -lift * 0.5, 0.09 + hsh(18) * 0.04],
+            [0.36, 0.03 - lift, 0.1],
+            [0.5 + hsh(19) * 0.2, 0.012 - lift, 0.05],
+            [0.65 + hsh(20) * 0.3, 0.012 - lift, -0.1 - hsh(21) * 0.2],
+          ]
+        : [
+            [0.3, 0.07, 0.05],
+            [0.42, 0.04, 0.1 + hsh(18) * 0.1],
+            [0.55 + hsh(19) * 0.2, 0.012, 0.0],
+            [0.7 + hsh(20) * 0.3, 0.012, -0.15 - hsh(21) * 0.2],
+          ],
       0.009,
       4,
     );
@@ -282,55 +293,136 @@ function netHeap(b: HB, x: number, y: number, z: number, rng: Rng): void {
   b.cyl([x - 1.1, y + 0.1, z + 0.75], [x + 1.1, y + 0.1, z + 0.75], 0.03, 0.03, 5, 0);
 }
 
-/** counterbalance forklift (2.5 t): chassis + counterweight, overhead guard, seat + wheel, mast + carriage +
- *  forks (lowered), four wheels */
+/** counterbalance forklift (2.5 t, LPG). F4 (judge 2: "forklift of boxes"): a moulded body extruded from its side
+ *  profile (low nose under the mast, operator step, cowl, rounded counterweight), the gas bottle strapped on the
+ *  back, a sprung seat with hip restraint, steering wheel with spinner knob, hydraulic levers, the overhead guard
+ *  on raked posts, a two-stage mast of channel rails with chains, tilt rams, carriage with load backrest, tapered
+ *  forks; cushion tyres on rims, lamps, beacon; scuffed paint, oily dirt low down */
+let forkliftBody: THREE.ExtrudeGeometry | null = null;
 function forklift(b: HB, x: number, y: number, z: number, yaw: number): void {
   b.pushT(x, y, z, yaw);
-  // +z = forks
-  b.color('#e0a21b').pat(PAT.RUST, 0.15);
-  b.box(0, 0.6, 0.1, 1.1, 0.6, 1.5, 0, 0);
-  b.box(0, 0.75, -0.85, 1.12, 0.9, 0.5, 0, 0);
+  // +z = forks. Body side profile in (s = -z, y), extruded across x (0.92 m), bevelled edges
+  if (!forkliftBody) {
+    const sh = new THREE.Shape();
+    sh.moveTo(-0.62, 0.2); // nose bottom (under the mast)
+    sh.lineTo(-0.62, 0.62);
+    sh.lineTo(-0.5, 0.7); // front scuttle
+    sh.lineTo(-0.36, 0.7);
+    sh.lineTo(-0.3, 0.52); // operator step / floor plate
+    sh.lineTo(0.28, 0.52);
+    sh.lineTo(0.32, 0.98); // cowl under the seat
+    sh.lineTo(0.55, 1.0);
+    sh.quadraticCurveTo(1.12, 1.02, 1.14, 0.62); // counterweight, rounded at the back
+    sh.lineTo(1.12, 0.2);
+    sh.lineTo(0.95, 0.12);
+    sh.lineTo(-0.5, 0.12);
+    sh.closePath();
+    forkliftBody = new THREE.ExtrudeGeometry(sh, { depth: 0.86, bevelEnabled: true, bevelThickness: 0.03, bevelSize: 0.03, bevelSegments: 2, curveSegments: 8 });
+    forkliftBody.translate(0, 0, -0.43);
+    forkliftBody.applyMatrix4(new THREE.Matrix4().makeRotationY(Math.PI / 2)); // shape x → −z, extrusion → x
+    forkliftBody.translate(0, 0, -0.1);
+  }
+  b.color('#e0a21b').pat(PAT.RUST, 0.22);
+  b.geo(forkliftBody);
+  // oily grime along the bottom of the body and the step
+  b.color('#3a3226').pat(PAT.RUST, 0.6);
+  b.box(0, 0.16, -0.3, 0.95, 0.08, 1.6, 0, 0);
   b.color('#2a2c2e').pat(PAT.NONE);
-  b.box(0, 0.92, 0.2, 0.42, 0.06, 0.46, 0, 0);
-  b.box(0, 1.1, -0.06, 0.42, 0.42, 0.08, 0, 0);
-  b.cyl([0, 1.0, 0.6], [0, 1.35, 0.5], 0.03, 0.03, 5, 0);
-  torusTube(b, 0, 1.36, 0.48, 0.15, 0.015, 'y', 12);
-  // overhead guard
+  b.box(0, 0.535, 0.15, 0.82, 0.02, 0.55, 0, 0); // ribbed rubber floor mat
+  for (let k = 0; k < 6; k++) b.box(0, 0.55, -0.08 + k * 0.09, 0.78, 0.012, 0.025, 0, 0);
+  // LPG bottle strapped across the back, valve and hose to the regulator
+  b.color('#c8cbcc').pat(PAT.RUST, 0.1);
+  b.cyl([-0.36, 1.2, -1.15], [0.36, 1.2, -1.15], 0.15, 0.15, 12, 3);
+  b.color('#2a2c2e').pat(PAT.NONE);
+  for (const sx of [-0.22, 0.22]) b.cyl([sx, 1.2, -1.15], [sx + 0.03, 1.2, -1.15], 0.158, 0.158, 12, 0);
+  b.color('#b07a2a');
+  b.cyl([0.36, 1.2, -1.15], [0.43, 1.22, -1.15], 0.03, 0.025, 6, 3);
+  b.color('#1c1d1f');
+  b.tube([[0.43, 1.22, -1.15], [0.48, 1.15, -1.0], [0.4, 1.02, -0.88]], 0.012, 4);
+  // seat: cushion, curved backrest, hip restraint wings, on its sprung base
+  b.color('#1f2123');
+  b.box(0, 1.06, -0.48, 0.44, 0.1, 0.44, 0, 0);
+  b.box(0, 1.3, -0.69, 0.44, 0.44, 0.08, 0, 0);
+  for (const sx of [-0.21, 0.21]) b.box(sx, 1.17, -0.58, 0.05, 0.14, 0.24, 0, 0);
+  b.color('#e0a21b').pat(PAT.RUST, 0.22);
+  b.box(0, 1.0, -0.45, 0.5, 0.04, 0.5, 0, 0);
+  // steering column, wheel with a spinner knob, dash pod, three hydraulic levers by the right knee
+  b.color('#2a2c2e').pat(PAT.NONE);
+  b.cyl([0, 0.7, 0.38], [0, 1.2, 0.18], 0.04, 0.035, 6, 0);
+  b.box(0, 1.02, 0.36, 0.3, 0.14, 0.12, 0, 0);
+  b.color('#1c1d1f');
+  torusTube(b, 0, 1.22, 0.17, 0.17, 0.016, 'y', 14);
+  b.cyl([0.12, 1.22, 0.12], [0.12, 1.29, 0.12], 0.018, 0.018, 6, 2);
+  for (let k = 0; k < 3; k++) {
+    b.color('#2a2c2e');
+    b.cyl([0.3 + k * 0.05, 0.72, 0.42], [0.3 + k * 0.05, 1.05, 0.3], 0.01, 0.01, 4, 0);
+    b.color(k === 0 ? '#c0392b' : '#1c1d1f');
+    b.sphere(0.3 + k * 0.05, 1.06, 0.3, 0.028, 6, 4);
+  }
+  // overhead guard: raked front posts, straight rear posts, a slatted roof
   b.color('#25282b');
-  for (const sx of [-0.48, 0.48]) {
-    b.beam([sx, 0.9, -0.4], [sx, 2.1, -0.4], 0.06, 0.06);
-    b.beam([sx, 0.9, 0.62], [sx, 2.1, 0.55], 0.06, 0.06);
+  for (const sx of [-0.44, 0.44]) {
+    b.beam([sx, 0.7, 0.48], [sx, 2.08, 0.3], 0.06, 0.05);
+    b.beam([sx, 1.0, -0.82], [sx, 2.08, -0.72], 0.06, 0.05);
   }
-  b.box(0, 2.12, 0.08, 1.02, 0.05, 1.05, 0, 0);
-  for (let k = 0; k < 5; k++) b.box(0, 2.1, -0.35 + k * 0.22, 0.98, 0.04, 0.04, 0, 0);
-  // mast, carriage, forks
-  b.color('#2f3236');
-  for (const sx of [-0.33, 0.33]) b.box(sx, 1.15, 0.95, 0.09, 2.2, 0.12, 0, 0);
-  b.box(0, 2.22, 0.95, 0.75, 0.08, 0.12, 0, 0);
-  b.box(0, 0.42, 1.05, 0.8, 0.5, 0.06, 0, 0);
-  b.color('#3d4044');
-  for (const sx of [-0.25, 0.25]) {
-    b.box(sx, 0.38, 1.1, 0.1, 0.45, 0.05, 0, 0);
-    b.box(sx, 0.05, 1.68, 0.1, 0.04, 1.15, 0, 0);
-  }
-  // wheels
-  b.color('#141516');
-  for (const [wx, wz, r] of [
-    [-0.5, 0.65, 0.3],
-    [0.5, 0.65, 0.3],
-    [-0.48, -0.75, 0.24],
-    [0.48, -0.75, 0.24],
-  ])
-    b.cyl([wx - 0.11, r, wz], [wx + 0.11, r, wz], r, r, 12, 3);
-  b.color('#c9c4b6');
-  for (const [wx, wz] of [
-    [-0.62, 0.65],
-    [0.62, 0.65],
-  ])
-    b.cyl([wx - 0.005, 0.3, wz], [wx + 0.005, 0.3, wz], 0.15, 0.15, 10, 3);
-  // amber beacon on the guard
+  for (const sx of [-0.44, 0.44]) b.beam([sx, 2.1, 0.32], [sx, 2.1, -0.74], 0.07, 0.05);
+  for (let k = 0; k < 6; k++) b.box(0, 2.12, -0.66 + k * 0.18, 0.92, 0.035, 0.05, 0, 0);
+  // work lamps on the front posts, amber beacon on the roof, rear lamps on the counterweight
+  b.color('#1c1d1f');
+  for (const sx of [-0.47, 0.47]) b.box(sx, 1.95, 0.36, 0.1, 0.08, 0.06, 0, 0);
+  b.color('#f2f0e6');
+  for (const sx of [-0.47, 0.47]) b.box(sx, 1.95, 0.394, 0.08, 0.06, 0.01, 0, 0);
   b.color('#e8a21c');
-  b.vcyl(0.38, 2.14, -0.4, 0.05, 0.08, 8, 2);
+  b.vcyl(0.3, 2.14, -0.6, 0.05, 0.09, 8, 2);
+  b.color('#a3241c');
+  for (const sx of [-0.38, 0.38]) b.box(sx, 0.85, -1.27, 0.08, 0.06, 0.02, 0, 0);
+  // mast: outer + inner channel rails, cross-heads, lift chains, tilt rams from the body
+  b.color('#2f3236');
+  for (const sx of [-1, 1]) {
+    b.box(sx * 0.34, 1.2, 0.72, 0.05, 2.3, 0.14, 0, 0);
+    b.box(sx * 0.37, 1.2, 0.72, 0.012, 2.3, 0.14, 0, 0);
+    b.box(sx * 0.26, 1.26, 0.74, 0.04, 2.3, 0.1, 0, 0);
+  }
+  b.box(0, 2.32, 0.72, 0.76, 0.08, 0.14, 0, 0);
+  b.box(0, 0.32, 0.72, 0.76, 0.1, 0.14, 0, 0);
+  b.color('#1a1b1c');
+  for (const sx of [-0.12, 0.12]) b.box(sx, 1.4, 0.7, 0.04, 1.85, 0.02, 0, 0);
+  b.color('#8d9296');
+  b.cyl([0, 0.4, 0.66], [0, 2.1, 0.66], 0.035, 0.035, 8, 3); // free-lift cylinder
+  for (const sx of [-0.4, 0.4]) {
+    b.color('#2a2c2e');
+    b.cyl([sx, 0.55, 0.1], [sx, 0.98, 0.62], 0.04, 0.04, 6, 3);
+    b.color('#b9bec2');
+    b.cyl([sx, 0.8, 0.39], [sx, 0.98, 0.62], 0.022, 0.022, 6, 3);
+  }
+  // carriage plate + load backrest grid, forks with heels and tapered tips (lowered)
+  b.color('#2f3236');
+  b.box(0, 0.42, 0.86, 0.84, 0.4, 0.05, 0, 0);
+  for (let k = 0; k < 5; k++) b.box(-0.36 + k * 0.18, 0.95, 0.86, 0.035, 0.7, 0.035, 0, 0);
+  b.box(0, 1.3, 0.86, 0.84, 0.05, 0.04, 0, 0);
+  b.color('#3d4044').pat(PAT.RUST, 0.35);
+  for (const sx of [-0.25, 0.25]) {
+    b.box(sx, 0.4, 0.92, 0.1, 0.55, 0.05, 0, 0);
+    b.box(sx, 0.08, 1.5, 0.1, 0.04, 1.1, 0, 0);
+    b.beam([sx, 0.08, 2.04], [sx, 0.06, 2.1], 0.1, 0.02);
+    b.beam([sx, 0.12, 0.93], [sx, 0.06, 1.02], 0.1, 0.05); // heel
+  }
+  // cushion tyres on rims with hub nuts (drive wheels under the mast, steer wheels under the counterweight)
+  for (const [wx, wz, r, wd] of [
+    [-0.55, 0.5, 0.3, 0.22],
+    [0.55, 0.5, 0.3, 0.22],
+    [-0.52, -0.95, 0.24, 0.18],
+    [0.52, -0.95, 0.24, 0.18],
+  ]) {
+    const sd = Math.sign(wx);
+    b.color('#151617').pat(PAT.NONE);
+    b.cyl([wx - wd / 2, r, wz], [wx + wd / 2, r, wz], r, r, 16, 3);
+    b.color('#c9c4b6').pat(PAT.RUST, 0.3);
+    b.cyl([wx + sd * (wd / 2), r, wz], [wx + sd * (wd / 2 + 0.008), r, wz], r * 0.6, r * 0.6, 12, 3);
+    b.color('#3d4044').pat(PAT.NONE);
+    b.cyl([wx + sd * (wd / 2), r, wz], [wx + sd * (wd / 2 + 0.03), r, wz], r * 0.22, r * 0.18, 8, 3);
+  }
+  b.pat(PAT.NONE);
   b.pop();
 }
 
@@ -479,7 +571,7 @@ export function buildFishQuay(b: HB, o: FishQuayOpts): void {
       for (let lev = 0; lev < n; lev++) {
         const cx = 133.3 + row * 0.5,
           cz = -129.2 + col * 0.7;
-        creel(b, cx + (rng.next() - 0.5) * 0.04, y(cx, cz) + lev * 0.37, cz, Math.PI / 2 + (k++ % 3) * 0.03 - 0.03);
+        creel(b, cx + (rng.next() - 0.5) * 0.04, y(cx, cz) + lev * 0.37, cz, Math.PI / 2 + (k++ % 3) * 0.03 - 0.03, lev === 0 ? 0 : col === 0 ? lev * 0.37 : -1);
       }
     }
   creel(b, 132.3, y(132.3, -127.4), -127.4, 1.2);

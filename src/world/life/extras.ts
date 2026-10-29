@@ -130,7 +130,8 @@ function market(ctx: CityContext, cloth: ClothSystem, poles: PoleBuilder, lamps:
         gap = 0.08;
       const n = Math.max(2, Math.floor((L - 0.6) / (w + gap)));
       for (let i = 0; i < n; i++)
-        cloth.addPiece(line, (0.3 + (i + 0.5) * ((L - 0.6) / n)) / L, { w, len: 0.42, shape: SHAPE.PENNANT, col: set[i % set.length], pattern: PAT.PLAIN, weight: 0.9, phase: rng.range(0, 6.283) });
+        // hand-tied: spacing a little uneven, pennants not all the same size, each flapping on its own (judge 2 #9)
+        cloth.addPiece(line, (0.3 + (i + 0.5 + rng.range(-0.1, 0.1)) * ((L - 0.6) / n)) / L, { w: w * rng.range(0.92, 1.06), len: 0.42 * rng.range(0.9, 1.08), shape: SHAPE.PENNANT, col: set[i % set.length], pattern: PAT.PLAIN, weight: rng.range(0.75, 0.95), flutter: rng.range(1.3, 1.8), phase: rng.range(0, 6.283) });
     }
   };
   // mast ↔ mast, then each mast radiates to the walls around it (alternating lights / flags)
@@ -238,6 +239,7 @@ function dryers(ctx: CityContext, cloth: ClothSystem, st: ExtraStats): void {
         pattern: shape === SHAPE.SHEET && rng.chance(0.5) ? PAT.STRIPES : shape === SHAPE.RECT && rng.chance(0.3) ? PAT.BORDER : PAT.PLAIN,
         weight: shape === SHAPE.SHEET ? 2.0 : 1.4,
         flutter: 0.8,
+        drape: 1,
         phase: rng.range(0, 6.283),
       });
       st.dryerItems++;
@@ -276,6 +278,7 @@ function dryers(ctx: CityContext, cloth: ClothSystem, st: ExtraStats): void {
             pattern: big && rng.chance(0.4) ? PAT.MIDBAND : PAT.PLAIN,
             weight: big ? 1.9 : 1.3,
             flutter: 0.8,
+            drape: 1,
             phase: rng.range(0, 6.283),
           });
           st.dryerItems++;

@@ -24,6 +24,7 @@ import { PoleBuilder } from './life/poles';
 import { buildExtras, type ExtraStats } from './life/extras';
 import { Drift } from './life/drift';
 import { createChimneySmoke, type ChimneySmoke } from './life/chimneys';
+import { buildNightMarket, type NightMarket } from './life/nightmarket';
 
 type TreeList = { x: number; z: number; r: number; h: number }[];
 
@@ -72,6 +73,17 @@ export default function create(ctx: CityContext): CityModule {
     }
   }
   if (!buildings) problems.push('life: ctx.services.buildings missing — no bunting / laundry / chimney anchors');
+
+  // ── the market shrouded after closing time (?nonightmarket; off on low)
+  let nightMarket: NightMarket | null = null;
+  if (!params.has('nonightmarket') && ctx.quality.level !== 'low') {
+    try {
+      nightMarket = buildNightMarket(ctx);
+      if (nightMarket) ctx.scene.add(nightMarket.mesh);
+    } catch (err) {
+      fail('nightmarket', err);
+    }
+  }
 
   // ── smoke from daily life (emitters of the ambient module's shared smoke pool)
   let chimneySmoke: ChimneySmoke | null = null;
@@ -128,6 +140,7 @@ export default function create(ctx: CityContext): CityModule {
     },
     frame(realDt) {
       if (clothOk) guard('cloth', () => cloth.frame(), () => (clothOk = false));
+      if (nightMarket) guard('nightmarket', () => nightMarket!.frame(), () => (nightMarket = null));
       const t = ctx.uniforms.uTime.value;
       if (drift) guard('drift', () => drift!.frame(realDt, Math.max(0, Math.min(1, t - lastT))), () => (drift = null));
       lastT = t;

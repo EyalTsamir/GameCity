@@ -10,7 +10,7 @@ import { WIND_GLSL } from '../../core/wind';
 import { patchLampMaterial } from '../lamps/integrate';
 import { LIFE_CLOTH_PARS, LIFE_LINE_GLSL, LIFE_MASK_GLSL, LIFE_PATTERN_GLSL } from './glsl';
 
-export const SHAPE = { PENNANT: 0, RECT: 1, SHIRT: 2, TROUSERS: 3, SHEET: 4, SWALLOW: 5 } as const;
+export const SHAPE = { PENNANT: 0, RECT: 1, SHIRT: 2, TROUSERS: 3, SHEET: 4, SWALLOW: 5, PEG: 6 } as const;
 export const PAT = { PLAIN: 0, BANDS: 1, MIDBAND: 2, DIAG: 3, PRAYER: 4, TRICOLOUR: 5, CROSS: 6, BORDER: 7, STRIPES: 8 } as const;
 
 export interface Line {
@@ -45,9 +45,12 @@ export interface PieceOpts {
   /** flutter amplitude multiplier */
   flutter?: number;
   phase?: number;
+  /** laundry: hangs in vertical folds from clothes pegs (the pegs are added as pieces too); 0..1 */
+  drape?: number;
 }
 
 const _c = new THREE.Color();
+const PEG_COLS = ['#c9a77a', '#bf9c6c', '#e8443a', '#2f7fd0', '#f2d23a', '#3fae5a', '#f0f0ea'];
 
 /** Builder + renderer for every cloth piece, wire and festoon bulb of the life module. */
 export class ClothSystem {
@@ -79,6 +82,14 @@ export class ClothSystem {
   /** a piece hinged on line `line` centred at parameter s */
   addPiece(line: number, s: number, o: PieceOpts): void {
     this.pieces.push({ line, s, pole: null, o });
+    // laundry is pegged: two pegs near the corners (three on a sheet), wood or coloured plastic
+    if (o.drape && o.shape !== SHAPE.PEG) {
+      const L = Math.max(0.1, this.span(line));
+      const h = Math.floor(((o.phase ?? s * 7.3) * 1000) % 97);
+      const col = PEG_COLS[h % PEG_COLS.length];
+      const at = o.w > 0.8 ? [-0.44, 0, 0.44] : o.w < 0.14 ? [0] : [-0.42, 0.42];
+      for (const f of at) this.pieces.push({ line, s: s + (f * o.w) / L, pole: null, o: { w: 0.016, len: 0.072, shape: SHAPE.PEG, col, weight: 1 } });
+    }
   }
 
   /** a flag on a vertical hoist from `top` down to `bottom` */
@@ -122,8 +133,9 @@ export class ClothSystem {
 
   // ───────────────────────────────────────────────────────────── cloth ──
   private buildCloth(shared: Record<string, { value: unknown }>, sphere: THREE.Sphere): void {
-    const NU = 4,
-      NV = 4;
+    // 8 × 5: enough columns for the vertical drape folds of laundry (4 × 4 before F4)
+    const NU = 8,
+      NV = 5;
     const base = new THREE.PlaneGeometry(1, 1, NU, NV);
     // remap the plane to (u, v) ∈ [0,1]² with v growing away from the hinge
     const pos = base.getAttribute('position') as THREE.BufferAttribute;
@@ -138,7 +150,7 @@ export class ClothSystem {
       PC = new Float32Array(n * 4),
       MI = new Float32Array(n * 4),
       C1 = new Float32Array(n * 4),
-      C2 = new Float32Array(n * 3);
+      C2 = new Float32Array(n * 4);
     this.pieces.forEach((p, i) => {
       const o = p.o;
       if (p.pole) {
@@ -154,14 +166,14 @@ export class ClothSystem {
       _c.set(o.col);
       C1.set([_c.r, _c.g, _c.b, o.pattern ?? 0], i * 4);
       _c.set(o.col2 ?? o.col);
-      C2.set([_c.r, _c.g, _c.b], i * 3);
+      C2.set([_c.r, _c.g, _c.b, o.drape ?? 0], i * 4);
     });
     geo.setAttribute('aP0', new THREE.InstancedBufferAttribute(P0, 4));
     geo.setAttribute('aP1', new THREE.InstancedBufferAttribute(P1, 4));
     geo.setAttribute('aPiece', new THREE.InstancedBufferAttribute(PC, 4));
     geo.setAttribute('aMisc', new THREE.InstancedBufferAttribute(MI, 4));
     geo.setAttribute('aCol', new THREE.InstancedBufferAttribute(C1, 4));
-    geo.setAttribute('aCol2', new THREE.InstancedBufferAttribute(C2, 3));
+    geo.setAttribute('aCol2', new THREE.InstancedBufferAttribute(C2, 4));
     geo.instanceCount = n;
     geo.boundingSphere = sphere.clone();
 

@@ -355,7 +355,7 @@ function laundryLine(cloth: ClothSystem, rng: Rng, ax: number, ay: number, az: n
     }
     if (x + w > end) break;
     const s = (x + w / 2) / L;
-    cloth.addPiece(line, s, { w, len, shape, col, col2, pattern: pat, weight, flutter: 0.85, phase: rng.range(0, 6.283) });
+    cloth.addPiece(line, s, { w, len, shape, col, col2, pattern: pat, weight, flutter: 0.85, phase: rng.range(0, 6.283), drape: 1 });
     st.laundryItems++;
     x += w + rng.range(0.04, 0.22);
   }

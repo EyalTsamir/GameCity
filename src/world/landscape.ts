@@ -223,11 +223,13 @@ export default function create(ctx: CityContext): CityModule {
   // ── farmsteads, hamlets, villages
   let bldCount = 0;
   let beacon: { x: number; y: number; z: number } | null = null;
+  let bldBlocked: ((x: number, z: number, r: number) => boolean) | undefined;
   if (params.get('landbld') !== '0') {
     const st = buildSettlements(model, uniforms, ctx.uniforms.uLights, ctx.uniforms.uNight, fog);
     root.add(st.group);
     bldCount = st.count;
     beacon = st.beacon;
+    bldBlocked = st.blocked;
   }
   // ── night lights of villages and farms
   let lamps: LandLights | null = null;
@@ -288,7 +290,7 @@ export default function create(ctx: CityContext): CityModule {
   let treeMs = 0;
   if (params.get('landtrees') !== '0') {
     const fg = splatCover(topo, heights, 0, CX, CZ, 1300, 12);
-    const placed = placeTrees(model, ctx.quality.density, (x, z) => fg.at(x, z));
+    const placed = placeTrees(model, ctx.quality.density, (x, z) => fg.at(x, z), bldBlocked);
     treeMs = placed.ms;
     trees = createLandTrees(placed.list, uniforms, fog, ctx.quality.shadows && ctx.quality.level !== 'low');
     root.add(trees.group);
@@ -323,6 +325,7 @@ export default function create(ctx: CityContext): CityModule {
     },
     frame() {
       trees?.update(ctx.camera);
+      farm?.select(ctx.camera);
       if (lamps) lamps.frame(ctx.size.height * ctx.renderer.getPixelRatio() * ctx.quality.renderScale);
     },
     stats() {
