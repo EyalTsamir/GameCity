@@ -15,7 +15,7 @@
 import * as THREE from 'three';
 import type { CityContext } from '../../core/context';
 import type { Rect } from '../../core/geom';
-import { stairY, islandBridgeY, type IslandBridgePlace, type LanePlace, type PlaceStair, type QuayPlace } from '../../core/places';
+import { stairY, islandBridgeY, type CuttingPlace, type IslandBridgePlace, type LanePlace, type PlaceStair, type QuayPlace, type StationPlace } from '../../core/places';
 import type { GeoBuilder, V3 } from './builder';
 import type { TerrainModel } from './height';
 import { KIND } from './kinds';
@@ -37,6 +37,9 @@ const COL = {
   roof: C('#a65b3f'),
   lamp: C('#ffd59a'),
 };
+const GRANITE = C('#bdb7ab');
+const GRANITE_HI = C('#cfc9bd');
+const CUT_STONE = C('#a99c86');
 const WOOD = C('#8b6a4b');
 const WOOD_DK = C('#6a4f37');
 const IRON = C('#2f4a3e');
@@ -503,6 +506,92 @@ function islandStone(b: GeoBuilder, B: IslandBridgePlace, hi: boolean): void {
   }
 }
 
+// ──────────────────────────────────────────────────────── station front ──
+
+function stationStone(b: GeoBuilder, S: StationPlace, lights: GlowPoint[]): void {
+  const F = S.forecourt;
+  const [cL, cR] = S.cheeks;
+  const y0 = 0.15;
+  // forecourt paving around the perron (flush with the sidewalk), its kerbed ends
+  b.color(GRANITE).set('aMas', KIND.ashlar, 0.6, 1, 0);
+  for (const r of [
+    { x0: F.x0, x1: cL.x0, z0: F.z0, z1: F.z1 },
+    { x0: cR.x1, x1: F.x1, z0: F.z0, z1: F.z1 },
+    { x0: cL.x0, x1: cR.x1, z0: S.stair.rect.z1, z1: F.z1 },
+  ])
+    top(b, r, y0);
+  b.color(COL.coping).set('aMas', KIND.coping, 0, 0, 1);
+  for (const [x, sx] of [
+    [F.x0, -1],
+    [F.x1, 1],
+  ] as [number, number][])
+    b.quadFacing([x, -0.05, F.z0], [x, -0.05, F.z1], [x, y0, F.z1], [x, y0, F.z0], sx, 0, 0);
+  // landing: large slabs on a granite body
+  b.color(GRANITE_HI).set('aMas', KIND.ashlar, 0.9, 1, 0);
+  top(b, S.landing, S.landingY);
+  flight(b, S.stair, 0, GRANITE);
+  // cheek blocks with a capping and a lamp standard each
+  for (const c of S.cheeks) {
+    b.color(GRANITE).set('aMas', KIND.ashlar, 0.3, 0, 1);
+    slab(b, c, 0, S.cheekY - 0.08, 4 | 8);
+    b.color(GRANITE_HI).set('aMas', KIND.coping, 0, 0, 1);
+    slab(b, { x0: c.x0 - 0.05, x1: c.x1 + 0.05, z0: c.z0, z1: c.z1 + 0.05 }, S.cheekY - 0.08, S.cheekY, 4);
+    const cx = (c.x0 + c.x1) / 2,
+      cz = c.z1 - 0.32;
+    b.color(IRON).set('aMas', KIND.dark, 0, 1, 0);
+    b.box(cx, S.cheekY + 0.12, cz, 0.14, 0.12, 0.14, 0, 4);
+    b.box(cx, S.cheekY + 1.7, cz, 0.05, 1.6, 0.05, 0, 4);
+    b.box(cx, S.cheekY + 3.32, cz, 0.16, 0.03, 0.16, Math.PI / 4, 0);
+    b.color(COL.lamp).set('aMas', KIND.lamp, 0, 1, 0);
+    b.box(cx, S.cheekY + 3.55, cz, 0.15, 0.22, 0.15, Math.PI / 4, 0);
+    b.color(IRON).set('aMas', KIND.dark, 0, 1, 0);
+    b.box(cx, S.cheekY + 3.8, cz, 0.19, 0.03, 0.19, Math.PI / 4, 0);
+    lights.push({ x: cx, y: S.cheekY + 3.55, z: cz, size: 0.9, kind: 'halo', color: '#ffd08c', intensity: 0.6 });
+    lights.push({ x: cx, y: 0.2, z: cz + 1.4, size: 3.4, kind: 'pool', color: '#ffbe72', intensity: 0.3 });
+  }
+}
+
+// ────────────────────────────────────────────────── cutting retaining wall ──
+
+function cuttingStone(b: GeoBuilder, K: CuttingPlace, hi: boolean): void {
+  const z = K.z,
+    zb = K.z - K.t;
+  const yb = -0.25;
+  // face (coursed rubble-faced ashlar), ends, coping
+  b.color(CUT_STONE).set('aMas', KIND.ashlar, 0.4, 1, 0);
+  const n = Math.ceil((K.x1 - K.x0) / 6);
+  for (let i = 0; i < n; i++) {
+    const xa = K.x0 + ((K.x1 - K.x0) * i) / n,
+      xc = K.x0 + ((K.x1 - K.x0) * (i + 1)) / n;
+    b.quadFacing([xa, yb, z], [xc, yb, z], [xc, K.top, z], [xa, K.top, z], 0, 0, 1);
+  }
+  b.set('aMas', KIND.ashlar, 0.4, 0, 1);
+  for (const [x, sx] of [
+    [K.x0, -1],
+    [K.x1, 1],
+  ] as [number, number][])
+    b.quadFacing([x, yb, zb], [x, yb, z], [x, K.top, z], [x, K.top, zb], sx, 0, 0);
+  b.color(COL.coping).set('aMas', KIND.coping, 0, 1, 0);
+  slab(b, { x0: K.x0 - 0.08, x1: K.x1 + 0.08, z0: zb - 0.05, z1: z + 0.1 }, K.top, K.top + 0.18, 4);
+  // pilasters (buttress strips) and weep holes
+  const nP = Math.max(2, Math.round((K.x1 - K.x0) / 7.5));
+  for (let i = 0; i <= nP; i++) {
+    const x = K.x0 + ((K.x1 - K.x0) * i) / nP;
+    b.color(CUT_STONE.clone().multiplyScalar(1.06)).set('aMas', KIND.ashlar, 0.4, 1, 0);
+    slab(b, { x0: x - 0.38, x1: x + 0.38, z0: z - 0.05, z1: z + 0.28 }, yb, K.top + 0.05, 4 | 16);
+    b.color(COL.coping).set('aMas', KIND.coping, 0, 1, 0);
+    slab(b, { x0: x - 0.46, x1: x + 0.46, z0: z - 0.05, z1: z + 0.36 }, K.top + 0.05, K.top + 0.3, 4 | 16);
+  }
+  if (hi) {
+    b.color(COL.window).set('aMas', KIND.dark, 0, 1, 0);
+    for (let x = K.x0 + 1.9; x < K.x1 - 1; x += 2.5) {
+      const near = ((x - K.x0) / ((K.x1 - K.x0) / nP)) % 1;
+      if (near < 0.12 || near > 0.88) continue;
+      b.quadFacing([x - 0.06, 0.45, z + 0.01], [x + 0.06, 0.45, z + 0.01], [x + 0.06, 0.57, z + 0.01], [x - 0.06, 0.57, z + 0.01], 0, 0, 1);
+    }
+  }
+}
+
 // ─────────────────────────────────────────────────────────────── API ──
 
 function detail(ctx: CityContext): boolean {
@@ -516,6 +605,8 @@ export function buildPlacesStone(b: GeoBuilder, ctx: CityContext, model: Terrain
   if (pl.quay) quayStone(b, pl.quay, model, lights);
   if (pl.lane) laneStone(b, pl.lane, detail(ctx), lights);
   if (pl.island) islandStone(b, pl.island, detail(ctx));
+  if (pl.station) stationStone(b, pl.station, lights);
+  if (pl.cutting) cuttingStone(b, pl.cutting, detail(ctx));
 }
 
 /** ironwork (handrails, bollards) into the railing builder */

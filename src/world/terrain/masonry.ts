@@ -1002,6 +1002,8 @@ export function createMasonry(ctx: CityContext, model: TerrainModel): MasonryRes
     const sink: { x: number; z: number; r: number }[] = [];
     cliffs = buildCliffs(ctx, model, b, ctx.rng('terrain-cliffs'), (x, z, size, embed, y) => {
       if (rocks.some((q) => Math.hypot(q.x - x, q.z - z) < q.r + size * 0.6)) return false;
+      const cut = plan.places?.cutting; // no scree in front of the cutting's retaining wall
+      if (cut && x > cut.x0 - 1.5 && x < cut.x1 + 1.5 && z > cut.z - cut.t - 3) return false;
       addRock(b, srng, model, x, z, size, embed, sink, y, 0.92);
       return true;
     });

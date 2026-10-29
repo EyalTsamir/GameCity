@@ -16,17 +16,21 @@
 //   oldlane  (?nooldlane)  Old Town block (4,1): an archway passage under a gatehouse from the avenue into a
 //                          paved pocket square, a raised garden terrace behind a balustraded retaining wall
 //                          with a recessed flight, and a stepped lane down through the north row to the street
+//   station  (?nostationfront)  Central Station: facade set back 2.5 m for a granite forecourt; a two-step perron
+//                          across the three doors with cheek blocks and lamp standards
+//   cutting  (?nocutwall)  a masonry retaining wall with pilasters at the toe of the rock cut behind the tracks
 //   islandbridge (?noislandbridge)  Central Park: a humped timber footbridge from the pond loop to the island,
 //                          ending on a little landing deck with a bench
 
 import type { CityPlan, Lot, WalkPath, Bench } from './plan';
 import { RIVER, SIDEWALK_Y } from './constants';
+import { RIDGE_FOOT_Z } from './plan';
 import { P2, Rect, rect } from './geom';
 import { hashString } from './rng';
 
 const params = typeof location !== 'undefined' ? new URLSearchParams(location.search) : new URLSearchParams();
 
-export type PlaceId = 'lowquay' | 'oldlane' | 'islandbridge';
+export type PlaceId = 'lowquay' | 'oldlane' | 'islandbridge' | 'station' | 'cutting';
 
 /** a straight flight: `n` risers between yBot and yTop, rising along `axis` in direction `up` */
 export interface PlaceStair {
@@ -107,11 +111,34 @@ export function islandBridgeY(b: IslandBridgePlace, z: number): number {
   return b.y0 + (b.y1 - b.y0) * t + b.rise * Math.sin(Math.PI * t);
 }
 
+export interface StationPlace {
+  /** granite forecourt between the sidewalk and the (set back) facade, flush with the sidewalk */
+  forecourt: Rect;
+  /** the perron in front of the doors: landing + flight down to the forecourt, cheek blocks at both ends */
+  landing: Rect;
+  landingY: number;
+  stair: PlaceStair;
+  cheeks: Rect[];
+  cheekY: number;
+}
+
+/** masonry retaining wall at the toe of the rock cut north of the tracks */
+export interface CuttingPlace {
+  x0: number;
+  x1: number;
+  /** wall face line (south face) and thickness */
+  z: number;
+  t: number;
+  top: number;
+}
+
 export interface PlacesDef {
   on: Record<PlaceId, boolean>;
   quay: QuayPlace | null;
   lane: LanePlace | null;
   island: IslandBridgePlace | null;
+  station: StationPlace | null;
+  cutting: CuttingPlace | null;
   /** solid thin boxes for the first-person walk (balustrades, handrails, cheek walls) */
   walls: Rect[];
   /** promenade railing gaps on the north river wall (stair landings) */
@@ -411,6 +438,56 @@ function buildIsland(plan: CityPlan, walls: Rect[]): IslandBridgePlace | null {
   return B;
 }
 
+// ──────────────────────────────────────────────────────── station front ──
+
+function buildStation(plan: CityPlan, floors: Floor[], stairs: PlaceStair[], walls: Rect[], boxes: Rect[]): StationPlace | null {
+  const st = plan.lots.find((l) => l.kind === 'station');
+  if (!st) return null;
+  const fp = st.footprint;
+  const zS = st.rect.z1; // block edge = back of the sidewalk
+  // the facade moves 2.5 m back: room for a forecourt and a perron in front of the three doors
+  const zF = fp.z1 - 2.5;
+  fp.z1 = zF;
+  for (const d of st.doors) if (d.dir === 'S') d.z = zF;
+  const n = 2,
+    tread = 0.36;
+  const landingY = SIDEWALK_Y + n * 0.15;
+  const xs = st.doors.filter((d) => d.dir === 'S').map((d) => d.x);
+  const x0 = Math.min(...xs) - 3.1,
+    x1 = Math.max(...xs) + 3.1;
+  const landing = rect(x0, zF, x1, zF + 1.7);
+  const stair: PlaceStair = { rect: rect(x0, landing.z1, x1, landing.z1 + n * tread), axis: 'z', up: -1, yBot: SIDEWALK_Y, yTop: landingY, n };
+  const forecourt = rect(fp.x0, zF, fp.x1, zS);
+  const cheeks = [rect(x0 - 0.55, zF, x0, stair.rect.z1), rect(x1, zF, x1 + 0.55, stair.rect.z1)];
+  const cheekY = landingY + 0.42;
+  stairs.push(stair);
+  floors.push({ r: landing, y: landingY }, { r: forecourt, y: SIDEWALK_Y });
+  for (const c of cheeks) {
+    walls.push(c);
+    floors.push({ r: c, y: cheekY });
+  }
+  boxes.push(rect(fp.x0 - 0.1, zF - 0.1, fp.x1 + 0.1, zS + 0.1));
+  // a walk from each door over the perron to the sidewalk
+  for (const x of xs) {
+    addPath(plan, {
+      kind: 'plaza',
+      pts: [{ x, z: zF + 0.3 }, { x, z: landing.z1 }, { x, z: stair.rect.z1 }, { x, z: zS }],
+      ys: [landingY, landingY, SIDEWALK_Y, SIDEWALK_Y],
+      width: 2.4,
+      surface: 'stone',
+      draw: false,
+      linkEnds: [1],
+    });
+  }
+  return { forecourt, landing, landingY, stair, cheeks, cheekY };
+}
+
+function buildCutting(): CuttingPlace {
+  // between the two road-tunnel cuttings (their wing walls reach 19 m either side of x = -110 / 55)
+  // face 1.2 m in front of the ridge foot (clear of the cliff skin's relief), thick enough to meet the rock behind
+  return { x0: -88, x1: 33, z: RIDGE_FOOT_Z + 1.2, t: 1.7, top: 2.7 };
+}
+
 // ───────────────────────────────────────────────────────────── build ──
 
 export function buildPlaces(plan: CityPlan): PlacesDef {
@@ -419,6 +496,8 @@ export function buildPlaces(plan: CityPlan): PlacesDef {
     lowquay: all && !params.has('nolowquay'),
     oldlane: all && !params.has('nooldlane'),
     islandbridge: all && !params.has('noislandbridge'),
+    station: all && !params.has('nostationfront'),
+    cutting: all && !params.has('nocutwall'),
   };
   const floors: Floor[] = [];
   const stairs: PlaceStair[] = [];
@@ -430,6 +509,8 @@ export function buildPlaces(plan: CityPlan): PlacesDef {
   const island = on.islandbridge ? buildIsland(plan, walls) : null;
   // overall bounds of each place for a fast reject
   const boxes: Rect[] = [];
+  const station = on.station ? buildStation(plan, floors, stairs, walls, boxes) : null;
+  const cutting = on.cutting ? buildCutting() : null;
   if (quay) boxes.push(rect(quay.x0, RIVER.z0 - 0.4, quay.x1, quay.zEdge));
   if (lane) boxes.push(rect(lane.block.x0, lane.block.z0, lane.block.x1, lane.block.z1));
   const bridgeR = island ? rect(island.x - island.w / 2, island.z0, island.x + island.w / 2, island.z1) : null;
@@ -453,6 +534,8 @@ export function buildPlaces(plan: CityPlan): PlacesDef {
     quay,
     lane,
     island,
+    station,
+    cutting,
     walls,
     railGaps,
     dropLadder: (x, z) => !!dryR && x > dryR.x0 - 0.6 && x < dryR.x1 + 0.6 && Math.abs(z - RIVER.z0) < 0.5,
