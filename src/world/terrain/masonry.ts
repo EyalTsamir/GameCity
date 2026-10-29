@@ -109,6 +109,8 @@ vec3 th_ashlar(vec2 uv, float ch, vec3 base) {
 }
 
 vec3 mN = vec3(0.0, 1.0, 0.0);
+// bump-perturbed world normal for rock (cliff skin, boulders) — replaces the flat facet normal for lighting
+vec3 mNb = vec3(0.0);
 uniform float uNight;
 uniform vec3 uMoonDir;
 // Moonlit stone: the dark night key barely reaches the steep, mostly south-facing faces, so rock
@@ -140,6 +142,28 @@ vec3 masonryColor(vec3 base) {
   vec2 uv;
   if (abs(n.y) < 0.7) uv = vec2(dot(p.xz, normalize(vec2(-n.z, n.x))), p.y);
   else uv = vec2(dot(p.xz, vMas.zw), dot(p.xz, vec2(-vMas.w, vMas.z)));
+  // rock relief (F3): fractured, chipped surface on the cliff skin and boulders so a facet is never a flat plane.
+  // Height in metres from ridged noise (sharp fracture creases) + two finer octaves; normal from its screen
+  // derivatives (Mikkelsen's surface-gradient bump), faded out once a 0.3 m feature is under ~3 px.
+#ifdef TH_FLATN
+  if (kind > 2.5 && kind < 3.5 || kind > 5.5) {
+    vec2 bq = kind > 5.5 ? cuv : uv;
+    vec4 b1 = texture2D(tNoise, bq * vec2(0.33, 0.47) + vMas.y * 1.7);
+    vec4 b2 = texture2D(tNoise, bq * vec2(1.21, 1.43) + 0.37);
+    vec4 b3 = texture2D(tNoise, bq * 3.9 + 0.71);
+    float rg = 1.0 - abs(2.0 * b1.r - 1.0);
+    float rg2 = 1.0 - abs(2.0 * b2.a - 1.0);
+    float hb = 0.14 * rg * rg + 0.05 * rg2 * rg2 + 0.022 * b2.g + 0.008 * b3.b;
+    vec3 dpx = dFdx(p), dpy = dFdy(p);
+    float fade = 1.0 - smoothstep(0.03, 0.1, max(length(dpx), length(dpy)));
+    vec3 r1 = cross(dpy, n), r2 = cross(n, dpx);
+    float det = dot(dpx, r1);
+    vec3 grad = sign(det) * (dFdx(hb) * r1 + dFdy(hb) * r2);
+    mNb = normalize(abs(det) * n - grad * fade);
+    n = mNb;
+    mN = n;
+  }
+#endif
   vec4 nz = texture2D(tNoise, (p.xz + p.y * 0.7) * 0.21);
   vec4 nf = texture2D(tNoise, (p.xz * 1.3 + vec2(p.y * 1.1, -p.y * 0.9)) * 0.9);
   vec3 col = base;
@@ -254,12 +278,13 @@ function masonryMaterial(ctx: CityContext, flat: boolean): THREE.MeshStandardMat
       .replace('#include <lights_fragment_end>', '#include <lights_fragment_end>\nreflectedLight.indirectDiffuse += diffuseColor.rgb * (thLampLight(vMW, mN) + mNightLift());')
       .replace('#include <color_fragment>', '#include <color_fragment>\ndiffuseColor.rgb = masonryColor(diffuseColor.rgb);')
       .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = mRough;')
+      .replace('#include <normal_fragment_maps>', '#include <normal_fragment_maps>\nif (mNb.x != 0.0 || mNb.y != 0.0 || mNb.z != 0.0) normal = normalize((viewMatrix * vec4(mNb, 0.0)).xyz);')
       .replace(
         '#include <emissivemap_fragment>',
         '#include <emissivemap_fragment>\nif (vMas.x > 4.5 && vMas.x < 5.5) totalEmissiveRadiance += diffuseColor.rgb * (1.1 + 2.6 * uLights);',
       );
   };
-  mat.customProgramCacheKey = () => (flat ? 'th-masonry-v5f' : 'th-masonry-v5');
+  mat.customProgramCacheKey = () => (flat ? 'th-masonry-v6f' : 'th-masonry-v5');
   return mat;
 }
 
