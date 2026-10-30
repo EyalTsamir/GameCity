@@ -12,6 +12,8 @@ import type { GlobalUniforms } from '../../core/uniforms';
 import { addLampLights, type LampLight } from '../../core/lampLight';
 
 const LEGACY = typeof location !== 'undefined' && new URLSearchParams(location.search).has('legacylamps');
+// light round: ?haloold = the broad halo disc of before (it hid the lamp heads at night)
+const HALO_OLD = typeof location !== 'undefined' && new URLSearchParams(location.search).has('haloold');
 
 function hash2(x: number, z: number): number {
   const s = Math.sin(x * 12.9898 + z * 78.233) * 43758.5453;
@@ -137,8 +139,15 @@ void main() {
   float r = length(vUv);
   float g;
   if (vHalo > 0.5) {
+#ifdef TH_HALO_OLD
     g = exp(-r * r * 4.2) * (1.0 - smoothstep(0.72, 1.0, r));
     g += exp(-r * r * 34.0) * 0.55;
+#else
+    // (light round) a lamp's glare at night: a hot core the size of the glass (the bloom spreads it) and a faint
+    // wide veil below the bloom threshold — the old broad disc crossed it over the whole head and hid the housing
+    g = exp(-r * r * 6.0) * (1.0 - smoothstep(0.6, 1.0, r)) * 0.3;
+    g += exp(-r * r * 60.0) * 1.1;
+#endif
   } else {
     // ground pool: soft, no hot core
     g = exp(-r * r * 2.6) * (1.0 - smoothstep(0.55, 1.0, r));
@@ -200,6 +209,7 @@ export function createGlowMesh(u: GlobalUniforms, allGlows: Glow[]): THREE.Mesh 
     vertexShader: VERT,
     fragmentShader: FRAG,
     uniforms: THREE.UniformsUtils.merge([THREE.UniformsLib.fog, {}]),
+    defines: HALO_OLD ? { TH_HALO_OLD: 1 } : {},
     transparent: true,
     depthWrite: false,
     blending: THREE.AdditiveBlending,
