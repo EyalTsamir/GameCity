@@ -13,7 +13,9 @@ Per-module logs live next to this file: `docs/progress/<module>.md`.
   sheds; station entrance steps / platform edge) and "Still open"; buildings-massing.md "not done" (industrial halls,
   loggias, glass-tower crowns).
 * Known: resizing the window logs ~120 `glBlitFramebuffer … not all the same size` WebGL warnings (ui-test `resize`);
-  not caused by this round's branches, not yet traced. Live build: https://tinyhaven-496.netlify.app (Netlify,
+  not caused by this round's branches, not yet traced. Once (2026-10-30 03:20, overview ×4 for 20 s, not reproduced
+  in 2 reruns): two pedestrians overlapping 18.9 s at (-160, 109.3), "student:promenade/act vs stroller:promenade/leave"
+  — an activity spot on the west promenade that a leaving stroller walks through. Live build: https://tinyhaven-496.netlify.app (Netlify,
   `.netlify/` links this folder; `npm run build && npx -y netlify-cli deploy --prod --dir dist`).
 
 ## Lead state (world round, 2026-10-19 → 10-24) — see docs/progress/WORLD.md (its "Resume here" is the live resume point)
