@@ -9,7 +9,7 @@
   (shrubs) + iron bollards; darker water-stair risers. Checks (08:10): perf overview 49.6/48.9 vs `?noplaces`
   48.65/48.7 ms, close + station within noise; hitch 0 new programs / 0 freezes (noon + night); validate []; build OK;
   walk probe all routes; ui-test walk: the "click while walking → info card" step is flaky (picks a moving
-  pedestrian; passed 9/9 on a rerun in round 2). Still open: a small dark slot on the harbour stairs' top tread (not
+  pedestrian; rerun at 08:12: 9/9 passed). Still open: a small dark slot on the harbour stairs' top tread (not
   the crane rail — source unknown). Open from the ranking: lower-quay waterline/coping chips, pond
   path edge outline (all park paths), farm-lane hedge lumps, field emptiness (landscape), harbour oil-stain decals.
 - **Round 2 (overnight backlog from the coordinator)**: all 7 items done — 1 station, 2 water stairs/slipway, 3 portal
