@@ -343,6 +343,8 @@ export interface FieldMask {
   tex: THREE.DataTexture;
   /** x0, z0, 1/size, 1/size (world → uv) */
   xf: THREE.Vector4;
+  /** the R channel the shader reads at a plot's centre (bilinear, 0..1; −1 outside) */
+  at(x: number, z: number): number;
 }
 /** one cover channel of the land vertices splatted onto a square grid (holes push-pull filled) */
 export interface CoverGrid {
@@ -450,7 +452,18 @@ export function buildFieldMask(topo: RingTopology, heights: LandHeights, model: 
   tex.generateMipmaps = false;
   tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
   tex.needsUpdate = true;
-  return { tex, xf: new THREE.Vector4(x0, z0, 1 / (2 * half), 1 / (2 * half)) };
+  const at = (x: number, z: number): number => {
+    const fx = (x - x0) / res - 0.5,
+      fz = (z - z0) / res - 0.5;
+    if (fx < 0 || fz < 0 || fx >= N - 1 || fz >= N - 1) return -1;
+    const i = Math.floor(fx),
+      j = Math.floor(fz);
+    const tx = fx - i,
+      tz = fz - j;
+    const r = (ii: number, jj: number) => data[(jj * N + ii) * 2];
+    return ((r(i, j) * (1 - tx) + r(i + 1, j) * tx) * (1 - tz) + (r(i, j + 1) * (1 - tx) + r(i + 1, j + 1) * tx) * tz) / 255;
+  };
+  return { tex, xf: new THREE.Vector4(x0, z0, 1 / (2 * half), 1 / (2 * half)), at };
 }
 
 /** slab ground normal at an edge vertex (terrain/ground.ts slopePick formula) */

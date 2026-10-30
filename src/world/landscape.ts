@@ -28,6 +28,10 @@ import { buildLandLights, type LandLights } from './landscape/lights';
 import { createFarmLife, type FarmLife } from './landscape/farmlife';
 import { buildCountryRoads, type CountryRoads } from './landscape/roads';
 import { Fleet } from './landscape/fleet';
+import { buildRowAtlas, rowMaterial, rowDepthMaterial, RowSink } from './landscape/rows';
+import { buildFarmKit, HedgeSink, type FarmKitStats } from './landscape/farmkit';
+import { hmix, toField, fromField, fieldAt, newField, cropKind } from './landscape/fields';
+import { nature } from '../core/nature';
 import type { SmokeService } from '../sim/ambient';
 
 export interface LandscapeService {
@@ -43,6 +47,8 @@ export interface LandscapeService {
   model: LandscapeModel;
   /** countryside tree detail 0..1 (3D near-set radius; 0 = impostors only) — for the adaptive ladder */
   setTreeDetail(k: number): void;
+  /** crop at a field point: kind · 2 + row axis (fields.ts), −1 off the crop (margins, meadow plots, outside the mask) */
+  cropAt(x: number, z: number): number;
   /** ring topology + heights of the land mesh */
   topo: RingTopology | null;
   heights: LandHeights | null;
@@ -80,6 +86,7 @@ export default function create(ctx: CityContext): CityModule {
     cover: (x, z, out) => model.cover(x, z, out ?? coverTmp),
     coastSD: model.coastSD,
     setTreeDetail: () => {},
+    cropAt: () => -1,
     model,
     topo: null,
     heights: null,
@@ -123,10 +130,35 @@ export default function create(ctx: CityContext): CityModule {
   ctx.events.on('quality', (q: { level: string }) => (uniforms.uBladeFade.value as THREE.Vector2).fromArray(bladeFade(q.level)));
   // per-plot field / meadow decisions round the town (?landfieldmask=0: per-pixel cover, the old cut)
   let maskMs = 0;
+  let fieldMask: ReturnType<typeof buildFieldMask> | null = null;
   if (params.get('landfieldmask') !== '0') {
     const tm0 = performance.now();
     const fm = buildFieldMask(topo, heights, model, CX, CZ, 3200, 16);
+    fieldMask = fm;
     uniforms.tFieldMask.value = fm.tex;
+    {
+      const f = newField();
+      const q = { x: 0, y: 0 },
+        w = { x: 0, z: 0 };
+      const kinds = new Map<number, number>();
+      service.cropAt = (x, z) => {
+        toField(x, z, q);
+        fieldAt(q.x, q.y, f);
+        const dB = Math.min(q.x - f.x0, f.x1 - q.x, q.y - f.y0, f.y1 - q.y);
+        if (dB < 1.7) return -1;
+        let ck = kinds.get(f.pid);
+        if (ck === undefined) {
+          fromField((f.x0 + f.x1) / 2, (f.y0 + f.y1) / 2, w);
+          ck = fm.at(w.x, w.z) >= 0.35 + 0.3 * hmix(f.pid, 83) ? cropKind(f.crop, f.small, model.grazing(w.x, w.z), f.tun) : -1;
+          kinds.set(f.pid, ck);
+        }
+        if (ck < 0) return -1;
+        // rows at constant q.x (0) or q.y (1), as the shader's `along`
+        const longX = f.x1 - f.x0 >= f.y1 - f.y0;
+        const alongX = hmix(f.pid, 19) >= 0.8 ? !longX : longX;
+        return ck * 2 + (alongX ? 0 : 1);
+      };
+    }
     (uniforms.uFieldXf.value as THREE.Vector4).copy(fm.xf);
     maskMs = performance.now() - tm0;
   }
@@ -289,9 +321,11 @@ export default function create(ctx: CityContext): CityModule {
   // ── countryside trees (near 3D set around the camera + far impostors)
   let trees: LandTrees | null = null;
   let treeMs = 0;
+  const kitOn = nature(ctx, 'farmkit');
+  const hedgeSink = kitOn && nature(ctx, 'striphedges') ? new HedgeSink() : null;
   if (params.get('landtrees') !== '0') {
     const fg = splatCover(topo, heights, 0, CX, CZ, 1300, 12);
-    const placed = placeTrees(model, ctx.quality.density, (x, z) => fg.at(x, z), bldBlocked);
+    const placed = placeTrees(model, ctx.quality.density, (x, z) => fg.at(x, z), bldBlocked, hedgeSink);
     treeMs = placed.ms;
     trees = createLandTrees(placed.list, uniforms, fog, ctx.quality.shadows && ctx.quality.level !== 'low');
     root.add(trees.group);
@@ -310,6 +344,30 @@ export default function create(ctx: CityContext): CityModule {
       tier = tierDetail(q.level);
       t.setDetail(tier * adapt);
     });
+  }
+  // ── what stands on the farmland: rows, bales, tunnels, fences, hedges, reeds, dune fences (one static kit)
+  let kitStats: FarmKitStats | null = null;
+  let kitTris = 0;
+  let kitMs = 0;
+  if (kitOn) {
+    const tk0 = performance.now();
+    const atlas = buildRowAtlas();
+    const sink = new RowSink();
+    const fm = fieldMask;
+    // the land shader's per-plot decision (fieldW): the mask at the plot centre against a per-plot threshold
+    const fieldW = fm ? (pid: number, x: number, z: number) => fm.at(x, z) >= 0.35 + 0.3 * hmix(pid, 83) : null;
+    kitStats = buildFarmKit(sink, model, fieldW, hedgeSink, {
+      rows: nature(ctx, 'farmrows'),
+      bales: nature(ctx, 'bales'),
+      fences: nature(ctx, 'farmfences'),
+      reeds: nature(ctx, 'reedbeds'),
+      dunes: nature(ctx, 'dunekit'),
+    });
+    kitTris = sink.triangles;
+    const mat = rowMaterial(atlas, uniforms, fog);
+    const depth = rowDepthMaterial(atlas);
+    for (const m of sink.finish(mat, depth, ctx.quality.shadows && ctx.quality.level !== 'low')) root.add(m);
+    kitMs = performance.now() - tk0;
   }
   ctx.scene.add(root);
   const buildMs = performance.now() - t0;
@@ -350,6 +408,9 @@ export default function create(ctx: CityContext): CityModule {
         ringMs: Math.round(ringMs),
         buildMs: Math.round(buildMs),
         fieldMaskMs: Math.round(maskMs),
+        kitTris,
+        kitMs: Math.round(kitMs),
+        ...(kitStats ? { kitRows: kitStats.rows, kitBales: kitStats.bales, kitTunnels: kitStats.tunnels, kitFences: kitStats.fences, kitHedges: kitStats.hedges, kitReeds: kitStats.reeds, kitDune: kitStats.dune, kitStone: kitStats.stone } : {}),
       };
     },
     invariants() {

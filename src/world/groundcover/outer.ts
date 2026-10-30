@@ -14,6 +14,7 @@ import { SLAB } from '../../core/constants';
 import { fbm, vnoise } from '../terrain/noise';
 import { GROUND_DROP } from '../terrain/height';
 import { RING_TILE, type TileGrid } from './mask';
+import { natureOn } from '../../core/nature';
 
 /** half size of the window (m); centre snapped to SNAP so tiles stay on the global 8 m lattice */
 export const WIN_HALF = 112;
@@ -40,6 +41,8 @@ interface LandscapeLike {
   active: boolean;
   height(x: number, z: number): number;
   cover(x: number, z: number, out?: LandCover): LandCover;
+  /** crop code at a field point (kind · 2 + row axis), −1 off the crop (fields.ts) */
+  cropAt?(x: number, z: number): number;
 }
 
 /** one window's maps (the shader reads them as tCoverO / tFlowerO / tGHO) */
@@ -123,6 +126,8 @@ export function createCoverWindow(ctx: CityContext): CoverWindow | null {
   const tmp: LandCover = { water: 0, sand: 0, rock: 0, forest: 0, field: 0, meadow: 0, wet: 0 };
   const fs = new Float32Array(6);
   const cs = new Float32Array(7);
+  const cropC = new Int8Array(FN * FN);
+  const cropOn = !!land.cropAt && natureOn('cropblades');
 
   const inSlab = (x: number, z: number, pad: number) => x > SLAB.x0 + pad && x < SLAB.x1 - pad && z > SLAB.z0 + pad && z < SLAB.z1 - pad;
 
@@ -181,6 +186,14 @@ export function createCoverWindow(ctx: CityContext): CoverWindow | null {
       for (let k = 0; k < 7; k++) cs[k] = (cov[a * 7 + k] + (cov[b * 7 + k] - cov[a * 7 + k]) * tx) * (1 - tz) + (cov[c * 7 + k] + (cov[d * 7 + k] - cov[c * 7 + k]) * tx) * tz;
       return (lat[a] + (lat[b] - lat[a]) * tx) * (1 - tz) + (lat[c] + (lat[d] - lat[c]) * tx) * tz;
     };
+    // ── what grows on the fields here (1 m lattice; the plot's own crop, the same parcels as the land shader)
+    if (cropOn) {
+      for (let j = 0; j < FN; j++) {
+        if ((j & 7) === 0) yield;
+        const z = z0 + (j + 0.5) * FRES;
+        for (let i = 0; i < FN; i++) cropC[j * FN + i] = inSlab(x0 + (i + 0.5) * FRES, z, -0.01) ? -1 : land.cropAt!(x0 + (i + 0.5) * FRES, z);
+      }
+    }
     // ── texels
     const { cover, height } = o;
     cover.fill(0);
@@ -206,9 +219,48 @@ export function createCoverWindow(ctx: CityContext): CoverWindow | null {
           wet = cs[6];
         // meadow + grassy field headlands, thinned under forest
         const tuft = 0.75 + 0.25 * vnoise(x * 0.7, z * 0.7, 91);
-        let dens = (meadow * 0.78 + field * 0.12) * (1 - forest * 0.92) * (1 - rock) * tuft;
+        let dens = (meadow * 0.78 + field * (cropOn ? 0.78 : 0.12)) * (1 - forest * 0.92) * (1 - rock) * tuft;
         let len = 0.62 + 0.3 * smooth(0.35, 0.75, fbm(x * 0.05, z * 0.05, 92));
         let hab = 0;
+        const crop = cropOn && forest < 0.5 && sand < 0.5 ? cropC[(j >> 1) * FN + (i >> 1)] : -1;
+        if (crop >= 0) {
+          const ck = crop >> 1,
+            ax = crop & 1;
+          if (ck === 0) {
+            // standing wheat: dense to the headland
+            dens = 0.92 * (0.85 + 0.15 * tuft);
+            len = 0.9;
+            hab = 101 + ax;
+          } else if (ck === 1) {
+            dens = 0.72 * tuft;
+            len = 0.28;
+            hab = 103 + ax;
+          } else if (ck === 2) {
+            dens = 0.8;
+            len = 0.3;
+            hab = 105 + ax;
+          } else if (ck === 4) {
+            dens = 0.7 * tuft;
+            len = 0.26;
+            hab = 111 + ax;
+          } else if (ck === 9) {
+            dens = 0.85;
+            len = 0.3;
+            hab = 117 + ax;
+          } else if (ck === 5) {
+            dens = 0.04;
+            len = 0.3;
+          } else if (ck === 3 || ck === 8) {
+            // grazed or mown: a short dense sward
+            dens = 0.88 * tuft;
+            len = ck === 3 ? 0.27 + 0.16 * smooth(0.5, 0.75, fbm(x * 0.09, z * 0.09, 93)) : 0.26;
+          } else if (ck === 12 || ck === 10 || ck === 7) {
+            // the alleys between rows: thin, worn grass
+            dens = 0.3 * tuft;
+            len = 0.27;
+          }
+          // (fallow keeps the long meadow)
+        }
         if (wet > 0.15) {
           const stand = smooth(0.4, 0.6, fbm(x * 0.11, z * 0.11, 41));
           const sv = wet * (0.08 + 0.92 * stand);
@@ -250,7 +302,8 @@ export function createCoverWindow(ctx: CityContext): CoverWindow | null {
         const k = Math.round((z - z0) / CG) * CN + Math.round((x - x0) / CG);
         const hb = cover[cq + 2];
         const best = hb > 0 && hb <= 100 ? 5 : spIdx[k];
-        const meadowF = smooth(0.42, 0.62, cover[cq + 1] / 255) * smooth(0.15, 0.5, cover[cq] / 255) * (hb >= 150 ? 0 : 1);
+        // (poppies among the wheat, not a meadow of them)
+        const meadowF = smooth(0.42, 0.62, cover[cq + 1] / 255) * smooth(0.15, 0.5, cover[cq] / 255) * (hb >= 150 ? 0 : hb > 100 && hb < 120 ? 0.12 : 1);
         flower[q] = Math.round(clamp01(spDen[k] * meadowF) * 255);
         flower[q + 1] = Math.round(((best + 0.5) / 6) * 255);
       }

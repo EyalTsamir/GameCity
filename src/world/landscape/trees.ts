@@ -18,6 +18,7 @@ import { FROW, toField, fromField, rowB, colB, colOff, colW, rowHedge, colHedge,
 import { hash2i, vnoise, smooth } from './noise';
 import { WIND_GLSL } from '../../core/wind';
 import { SLAB } from '../../core/constants';
+import type { HedgeSink } from './farmkit';
 
 export const KIND = { broad: 0, conifer: 1, poplar: 2, small: 3 } as const;
 const NK = 4;
@@ -154,7 +155,7 @@ class Builder {
 }
 
 /** place every countryside tree (deterministic) */
-export function placeTrees(model: LandscapeModel, density: number, forestHint?: (x: number, z: number) => number, blocked?: (x: number, z: number, r: number) => boolean): { list: TreeList; ms: number } {
+export function placeTrees(model: LandscapeModel, density: number, forestHint?: (x: number, z: number) => number, blocked?: (x: number, z: number, r: number) => boolean, hedges?: HedgeSink | null): { list: TreeList; ms: number } {
   const t0 = performance.now();
   const B = new Builder();
   B.blocked = blocked;
@@ -253,9 +254,15 @@ export function placeTrees(model: LandscapeModel, density: number, forestHint?: 
         if (d > R) continue;
         const near = slabD(w.x, w.z) < 760;
         // hedges break up: gaps, gates
-        if (vnoise(fx / 23 + key * 0.37, fy / 23, 21) < 0.28) continue;
+        if (vnoise(fx / 23 + key * 0.37, fy / 23, 21) < 0.28) {
+          hedges?.gap();
+          continue;
+        }
         const y = H(w.x, w.z);
-        if (!arable(w.x, w.z, y)) continue;
+        if (!arable(w.x, w.z, y)) {
+          hedges?.gap();
+          continue;
+        }
         const s = lhash(key * 977 + i, 2);
         // jitter across the line
         const jx = (lhash(key * 977 + i, 3) - 0.5) * 1.2;
@@ -269,7 +276,8 @@ export function placeTrees(model: LandscapeModel, density: number, forestHint?: 
         } else if (near) {
           // the hedge itself: bushes
           const hh = 2.3 + 1.6 * s;
-          B.add(w.x, H(w.x, w.z), w.z, hh, hh * (1.1 + 0.4 * lhash(key * 977 + i, 6)), KIND.small, seed++);
+          if (hedges) hedges.add(w.x, H(w.x, w.z), w.z, hh, key);
+          else B.add(w.x, H(w.x, w.z), w.z, hh, hh * (1.1 + 0.4 * lhash(key * 977 + i, 6)), KIND.small, seed++);
         }
       }
     };

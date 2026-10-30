@@ -438,6 +438,12 @@ ${LG ? `    // (perf-deep) the rest of the block only shows where the field weig
       fc = mix(fc, fc * vec3(1.25, 1.18, 0.9), smoothstep(0.55, 0.8, nP.b) * 0.4);
       fc = mix(fc, fc * vec3(1.18, 1.16, 1.0), gust * 0.6);
       fc *= 1.0 - 0.35 * tram;
+    } else if (ck == 12) {
+      // vineyard floor: bare tilled strip under the row, grassy alley between; far away (the strips have sunk) the rows
+      float rw = lStripe(tr, 3.0, 0.32, fpt);
+      fc = mix(cPasture * vec3(0.92, 0.88, 0.7), cSoil * 1.05, 0.35 + 0.45 * smoothstep(0.35, 0.7, nP.g));
+      fc = mix(fc, cSoil * 0.8, rw * 0.7);
+      fc = mix(fc, cGreens * vec3(0.72, 0.8, 0.62) * (0.9 + 0.2 * pv), smoothstep(1.0, 2.6, fp) * (0.5 + 0.5 * rw));
     } else {
       // polytunnels: white plastic hoops in rows (shaded as half cylinders), grass between
       float tw = 8.5 + 1.5 * fhmix(pid, 59);
