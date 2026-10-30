@@ -32,6 +32,8 @@ export function aoUniforms() {
     uAOTint: new THREE.Uniform(new THREE.Color(0, 0, 0)),
     /** fog near / far (planar view depth); far <= near disables the fade */
     uAOFog: new THREE.Uniform(new THREE.Vector2(0, 0)),
+    /** fade-in by view depth (m): a wide radius right in front of the camera is all noise (x >= y: off) */
+    uAONear: new THREE.Uniform(new THREE.Vector2(0, 0)),
     uAOProjInv: new THREE.Uniform(new THREE.Matrix4()),
     /** full-resolution size in pixels (as N8AO's `resolution`) */
     uAORes: new THREE.Uniform(new THREE.Vector2(1, 1)),
@@ -88,6 +90,7 @@ uniform float uAOIntensity;
 uniform float uAOFalloff;
 uniform vec3 uAOTint;
 uniform vec2 uAOFog;
+uniform vec2 uAONear;
 uniform mat4 uAOProjInv;
 uniform vec2 uAORes;
 ${VIEWPOS_GLSL}
@@ -158,6 +161,7 @@ void mainImage(const in vec4 inputColor, const in vec2 uv, const in float depth,
 #endif
   a = pow(a, uAOIntensity);
   if (uAOFog.y > uAOFog.x) a = mix(a, 1.0, smoothstep(uAOFog.x, uAOFog.y, -pos.z));
+  if (uAONear.y > uAONear.x) a = mix(1.0, a, smoothstep(uAONear.x, uAONear.y, -pos.z));
   outputColor = vec4(mix(inputColor.rgb, uAOTint * inputColor.rgb, 1.0 - a), inputColor.a);
 }
 `;

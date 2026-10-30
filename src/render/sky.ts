@@ -12,7 +12,9 @@ import { createClouds, type HeroView, type Obstacle } from './sky/clouds';
 import { ShadowFitter } from './sky/shadowFit';
 import { EnvironmentBaker, type EnvPhysical } from './sky/env';
 import { patchShadowChunk } from './sky/shadowPatch';
-import { patchIBLChunk } from './sky/iblPatch';
+import { patchIBLChunk, IBL_DIFFUSE, ENV_SPEC } from './sky/iblPatch';
+import { installSkyVis, type SkyVisStats } from './sky/skyVis';
+import { patchLampSpecular } from '../core/lampLight';
 import { createRain } from './sky/rain';
 import { cameraFocus } from './focus';
 import { TONE_MAPPING } from './look';
@@ -71,9 +73,20 @@ export default async function create(ctx: CityContext): Promise<CityModule> {
   if (world) ctx.services.atmosphere = atmoSvc;
   // ?legacylight = the original light rig (palette, shadow filtering, IBL) for A/B runs
   const legacyParam = ctx.debug.params.has('legacylight');
+  const shadowOld = ctx.debug.params.has('shadowold');
+  const noMeter = ctx.debug.params.has('noexpmeter');
+  let meterEV = 1;
   let legacy = legacyParam;
   patchShadowChunk();
-  if (!legacyParam) patchIBLChunk();
+  // light round: reflections at the sky's own brightness, diffuse ambient unchanged (?envold)
+  const envSpec = world && !legacyParam && !ctx.debug.params.has('envold') ? ENV_SPEC : 1;
+  if (!legacyParam) patchIBLChunk(IBL_DIFFUSE / envSpec);
+  // light round: street-canyon sky visibility for the ambient light (?noskyvis; off on the low tier)
+  let skyVis: SkyVisStats | null = null;
+  if (world && !legacyParam && !ctx.debug.params.has('noskyvis') && ctx.quality.level !== 'low') skyVis = installSkyVis(ctx.plan);
+  // light round: street lamps' specular sheen — opt-in (?lampspec, never on the low tier): measured 1.1–2.3 ms at night
+  // on the Adreno (it keeps the lamp term alive in every uber-shader) for a faint streak on the asphalt
+  if (!legacyParam && ctx.debug.params.has('lampspec') && ctx.quality.level !== 'low') patchLampSpecular();
   renderer.toneMapping = TONE_MAPPING;
   renderer.shadowMap.enabled = ctx.quality.shadows;
   renderer.shadowMap.type = THREE.PCFShadowMap;
@@ -376,14 +389,23 @@ export default async function create(ctx: CityContext): Promise<CityModule> {
       fog.far = (dist * 3.2 + 1700 + camH * 1.5) * (1 - overcast * 0.5);
     }
 
-    renderer.toneMappingExposure = state.exposure * (1 + overcast * 0.12) * tune.exposure;
-    scene.environmentIntensity = state.env * (1 - overcast * 0.2) * tune.env;
+    // light round: metering — a camera down in a street canyon (little sky around it) exposes up to ~+0.3 EV more,
+    // as a photographer / auto-exposure would; eased, so walking past a gap never pumps (?noexpmeter)
+    if (skyVis && !noMeter) {
+      const v = skyVis.at(camPos.x, camPos.y, camPos.z);
+      const target = Math.min(1.22, Math.pow(1 / (0.5 + 0.5 * v), 0.55));
+      meterEV += (target - meterEV) * (lastJump ? 1 : Math.min(1, realDt * 1.5));
+    }
+    renderer.toneMappingExposure = state.exposure * (1 + overcast * 0.12) * tune.exposure * meterEV;
+    scene.environmentIntensity = state.env * (1 - overcast * 0.2) * tune.env * envSpec;
 
     if (sun.castShadow) {
       // world: no tilt-shift blur hides the distance → a wider shadowed region, not trimmed behind the focus
       // (overview distances: the long golden-hour shadows of trees, hedgerows and towers across the fields
       // around the town need the map out to ~1 km; texels stay ≈ 1 m there, ≈ 0.3 m at POI distances)
-      const maxR = world ? THREE.MathUtils.clamp(dist * 1.6 + 120, 140, 950) : legacy ? THREE.MathUtils.clamp(dist * 1.55 + 30, 70, 420) : THREE.MathUtils.clamp(dist * 1.2 + 24, 60, 420);
+      // (light round: from street level a 105 m disc — texels ≈ 10 cm instead of 14 at the eye-level views, where
+      // contact shadows of bikes, benches and people live; the overview distances are unchanged; ?shadowold)
+      const maxR = world ? (shadowOld ? THREE.MathUtils.clamp(dist * 1.6 + 120, 140, 950) : THREE.MathUtils.clamp(dist * 1.75 + 90, 105, 950)) : legacy ? THREE.MathUtils.clamp(dist * 1.55 + 30, 70, 420) : THREE.MathUtils.clamp(dist * 1.2 + 24, 60, 420);
       const minR = legacy ? THREE.MathUtils.clamp(dist * 0.55, 28, 200) : THREE.MathUtils.clamp(dist * 0.45, 22, 200);
       fitter.fit(ctx.camera, sun, _L, _focus, maxR, minR, legacy || world ? 1 : 0.62);
       const cam = sun.shadow.camera;
@@ -512,6 +534,8 @@ export default async function create(ctx: CityContext): Promise<CityModule> {
         hemiI: Math.round(hemi.intensity * 100) / 100,
         envI: Math.round(scene.environmentIntensity * 100) / 100,
         key: legacy ? 'legacy' : world ? 'world' : 'studio',
+        skyVisMs: skyVis ? skyVis.ms : -1,
+        meterEV: Math.round(meterEV * 100) / 100,
         hazeKm: world ? Math.round(3.912 / Math.max(1e-6, atmo.params.haze + atmo.params.rayleigh.y) / 100) / 10 : -1,
         mist: world ? Math.round(atmo.params.mist * 1e4) / 1e4 : 0,
         clouds: cloudLayer ? Math.round(cloudLayer.uCu.value.x * 100) / 100 : clouds.count,

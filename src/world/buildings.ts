@@ -96,6 +96,8 @@ export default function create(ctx: CityContext): CityModule {
   // the facade shell is chunked on the trim grid as well: culled per chunk, and drawn nearest chunk first (frame())
   // so the near facades' depth rejects the (expensive) facade pixels of the buildings behind them
   const shellChunks = new Map<number, Builder>();
+  // light round: ?glassold = curtain walls with the old coating tint (no street mirrored in them)
+  if (ctx.debug.params.has('glassold')) mats.uniforms.uMirror.value = 0;
   const shellOf = (x: number, z: number): Builder => {
     const key = chunkKey(x, z);
     let b = shellChunks.get(key);

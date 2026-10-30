@@ -361,7 +361,7 @@ export class VehicleRenderer {
         if (np + 2 <= this.maxPools) {
           // headlight pool ahead
           const L = V.spec.model === 'bus' ? 9 : 7.5,
-            W = sp.width * 1.9;
+            W = Math.max(sp.width * 1.9, 2.8); // (a scooter's low beam spreads like a car's, not a torch streak)
           this.eul.set(0, V.yaw, 0);
           this.q.setFromEuler(this.eul);
           this.pos.set(V.x + fx * (hl + L * 0.42), 0.03, V.z + fz * (hl + L * 0.42));
@@ -573,9 +573,11 @@ function poolTexture(): THREE.Texture {
     for (let i = 0; i < w; i++) {
       const u = (i + 0.5) / w - 0.5; // -0.5..0.5 across
       const v = (j + 0.5) / h; // 0 at the car end (texture top → local -Z) .. 1 far
-      const spread = 0.18 + v * 0.32;
-      const lat = Math.max(0, 1 - (Math.abs(u) / spread) ** 2);
-      const lon = Math.sin(Math.min(1, v * 1.15) * Math.PI) ** 0.8 * (1 - v * 0.35);
+      // light round: a real low-beam footprint — gaussian across (no flat plateau with an edge), bright a few
+      // metres ahead of the bumper, then a long inverse-square-ish fade (the old sine profile read as a lit quad)
+      const spread = 0.15 + v * 0.3;
+      const lat = Math.exp(-3.2 * (u / spread) ** 2) * Math.min(1, (0.5 - Math.abs(u)) * 12);
+      const lon = Math.min(1, v / 0.16) ** 1.5 * (1 - v) ** 1.6 * 1.25;
       const a = Math.max(0, Math.min(1, lat * lon));
       const k = (j * w + i) * 4;
       img.data[k] = img.data[k + 1] = img.data[k + 2] = 255;
