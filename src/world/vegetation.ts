@@ -418,8 +418,11 @@ export default function create(ctx: CityContext): CityModule {
     }
   };
 
+  // (the churchyard — core/places.ts close — is planted below, not as a courtyard)
+  const close = plan.places?.close ?? null;
   for (const a of plan.areas) {
     if (a.greenery <= 0) continue;
+    if (close && a.id === close.areaId) continue;
     const m = mix(a);
     if (!m) continue;
     const rng = ctx.rng(`veg-area-${a.id}`);
@@ -904,10 +907,12 @@ export default function create(ctx: CityContext): CityModule {
 
   // ─────────────────────────────────────────────────────────── plants ──
   let bushCount = 0;
-  const bushOk = (x: number, z: number, r: number): boolean => {
+  // (`hill`: on the hill above a tunnel bore — the road / rail occupancy below does not block)
+  const bushOk = (x: number, z: number, r: number, hill = false): boolean => {
     if (x < slab.x0 + r + 0.2 || x > slab.x1 - r - 0.2 || z < slab.z0 + r + 0.2 || z > slab.z1 - r - 0.2) return false;
-    if (occAny(occ, x, z, r * 0.75, HARD | OCC.PATH)) return false;
-    if (layout.walk.anyInCircle(x, z, r * 0.7, MASK_WALK)) return false;
+    if (!hill && occAny(occ, x, z, r * 0.75, HARD | OCC.PATH)) return false;
+    if (close && x > close.bounds.x0 - r && x < close.bounds.x1 + r && z > close.bounds.z0 - r && z < close.bounds.z1 + r) return false;
+    if (!hill && layout.walk.anyInCircle(x, z, r * 0.7, MASK_WALK)) return false;
     if (furn.any(x, z, 3, (id, d) => d < furn.r[id] + r * 0.8)) return false;
     if (lampHash.any(x, z, r + 0.5, () => true)) return false;
     if (rocks.any(x, z, 5, (id, d) => d < rocks.r[id] + r * 0.6)) return false;
@@ -915,8 +920,8 @@ export default function create(ctx: CityContext): CityModule {
     if (bushes.any(x, z, r + 2.5, (id, d) => d < (r + bushes.r[id]) * 0.85)) return false;
     return true;
   };
-  const addBush = (x: number, z: number, r: number, h: number, seed: number, flower?: THREE.Color, detail = 1): boolean => {
-    if (!bushOk(x, z, r)) return false;
+  const addBush = (x: number, z: number, r: number, h: number, seed: number, flower?: THREE.Color, detail = 1, hill = false): boolean => {
+    if (!bushOk(x, z, r, hill)) return false;
     if (cardsOn) {
       // leaf-card shrub: oleander / bougainvillea when flowering, else a leafy evergreen
       const fh = hash01(x * 2.3, z * 1.7, 31);
@@ -1067,6 +1072,67 @@ export default function create(ctx: CityContext): CityModule {
         const rr = rng.range(0.45, 0.75);
         plants.push({ kind: 'fern', x, y: H(x, z), z, h: rr * rng.range(0.9, 1.2), r: rr, seed: rng.int(0, 1e9), tone: rng.range(0.35, 0.7), age: 0.5 });
         fernCount++;
+      }
+    }
+  }
+
+  // portal hoods: the bank above each tunnel headwall (kept clear of forest trees) gets scrub — shrubs, ferns
+  // and a few young birches / oaks — so the headwall sits in a wooded hillside, not on a bald shelf
+  // (`?noportalcut` off)
+  let hoodCount = 0;
+  if (!ctx.debug.params.has('noportalcut')) {
+    const rng = ctx.rng('veg-portal-hood');
+    for (const p of terrain?.portals ?? []) {
+      const c = Math.cos(p.yaw),
+        s = Math.sin(p.yaw);
+      const road = p.kind === 'road';
+      const hw = (road ? p.width / 2 + 6 : p.width / 2 + 3.2) + 2.5;
+      // (wing-wall reach as terrain/height.ts) the steep strip right behind the coping, bare rock-coloured soil
+      // otherwise: low scrub clinging to it, along the headwall and the wings
+      const reach = road ? 19 : 10.5;
+      const nb = Math.round((road ? 46 : 18) * Math.max(0.5, density));
+      for (let k = 0; k < nb; k++) {
+        const lx = rng.range(-reach + 0.8, reach - 0.8),
+          lz = -rng.range(1.45, 3.3);
+        const x = p.x + lx * c + lz * s,
+          z = p.z - lx * s + lz * c;
+        const h0 = H(x, z);
+        if (h0 < 1.0) continue;
+        const g = Math.hypot(H(x + 0.7, z) - H(x - 0.7, z), H(x, z + 0.7) - H(x, z - 0.7)) / 1.4;
+        if (g > 2.6) continue;
+        const rr = rng.range(0.42, 0.78);
+        if (addBush(x, z, rr, rr * rng.range(0.8, 1.15), rng.int(0, 1e9), undefined, 1, true)) hoodCount++;
+        else if (cardsOn && !trees.any(x, z, 1.5, (_id, dd) => dd < 0.45)) {
+          plants.push({ kind: 'fern', x, y: h0, z, h: rr * 0.85, r: rr * 0.85, seed: rng.int(0, 1e9), tone: rng.range(0.35, 0.7), age: 0.5 });
+          hoodCount++;
+        }
+      }
+      const n = Math.round((road ? 26 : 16) * Math.max(0.5, density));
+      for (let k = 0; k < n; k++) {
+        const lx = rng.range(-hw, hw),
+          lz = -rng.range(1.9, 7.5);
+        const x = p.x + lx * c + lz * s,
+          z = p.z - lx * s + lz * c;
+        const h0 = H(x, z);
+        if (h0 < p.height + 1.2) continue;
+        const g = Math.hypot(H(x + 0.7, z) - H(x - 0.7, z), H(x, z + 0.7) - H(x, z - 0.7)) / 1.4;
+        if (g > 0.85) continue;
+        // a young tree now and then, well back from the parapet
+        if (lz < -4.2 && rng.chance(0.16)) {
+          const sp: Species = rng.chance(0.5) ? 'birch' : 'round';
+          const sz = { h: rng.range(3.6, 5.8), r: rng.range(1.1, 1.6) };
+          if (rocks.any(x, z, 6, (id, d) => d < rocks.r[id] + 1.0)) continue;
+          if (trees.any(x, z, sz.r + 4.5, (id, d) => d < Math.max(1.6, (sz.r + trees.r[id]) * 0.6))) continue;
+          plant({ sp, x, z, y: h0 - 0.08, h: sz.h, r: sz.r, surround: 'none', syaw: 0, tag: 'forest', detail: 1, tone: 0.55 + rng.range(0, 0.3) });
+          hoodCount++;
+          continue;
+        }
+        const rr = rng.range(0.5, 1.05);
+        if (addBush(x, z, rr, rr * rng.range(0.85, 1.25), rng.int(0, 1e9), undefined, 1, true)) hoodCount++;
+        else if (cardsOn && !trees.any(x, z, 1.5, (_id, dd) => dd < 0.45)) {
+          plants.push({ kind: 'fern', x, y: h0, z, h: rr * 0.8, r: rr * 0.8, seed: rng.int(0, 1e9), tone: rng.range(0.35, 0.7), age: 0.5 });
+          hoodCount++;
+        }
       }
     }
   }
@@ -1250,6 +1316,41 @@ export default function create(ctx: CityContext): CityModule {
       }
     }
   }
+
+  // the field hedgerow along the town's west edge (core/places.ts edge): an untrimmed hawthorn / blackthorn hedge,
+  // taller and looser than a garden hedge, with oaks standing out of it and brambly shrubs at its foot
+  const edge = plan.places?.edge ?? null;
+  if (edge) {
+    const rng = ctx.rng('veg-edge');
+    const leaf = col('#4f6a33');
+    for (const [z0, z1] of edge.hedges) {
+      // untrimmed: 4–7 m overlapping pieces, each its own height, width, tone and wander, a lumpy crown (wild)
+      for (let a = z0; a < z1 - 0.3; ) {
+        const b = Math.min(z1, a + rng.range(4, 7));
+        const hgt = rng.range(1.6, 2.5);
+        const xa = edge.hedgeX + rng.range(-0.2, 0.2);
+        const wd = rng.range(1.15, 1.6);
+        const lc = leaf.clone().multiplyScalar(rng.range(0.82, 1.12));
+        selP(xa);
+        if (legacy) hedge(plantSink, pw, xa, a, xa, b, H(xa, a), wd, hgt, lc, rng.int(0, 1e6));
+        else NEW.hedge(plantSink, pw, xa, Math.max(z0, a - 0.35), xa, b, H(xa, a), wd, hgt, lc, rng.int(0, 1e6), H, 1);
+        if (cardsOn)
+          plants.push({ kind: 'hedge', x: xa, y: H(xa, a), z: (a + b) / 2, h: hgt, r: (b - a) / 2, seed: rng.int(0, 1e9), color: '#' + leaf.getHexString(), seg: [xa, a, xa, b, 1.25], noStems: noFenceDetail });
+        hedgeLen += b - a;
+        a = b;
+      }
+    }
+    for (const t of edge.trees) plant({ sp: t.sp, x: t.x, z: t.z, y: H(t.x, t.z), h: t.h, r: t.r, surround: 'none', syaw: 0, tag: 'lawn' });
+    // shrubs at the hedge foot on the lane side, now and then
+    for (let z = edge.z0 + 2; z < edge.z1 - 2; z += rng.range(3, 7)) {
+      if (rng.chance(0.45)) continue;
+      const rr = rng.range(0.45, 0.8);
+      addBush(edge.hedgeX + 0.95, z, rr, rr * rng.range(0.9, 1.3), rng.int(0, 1e9), rng.chance(0.15) ? col('#f4efe6') : undefined, 1, true);
+    }
+  }
+
+  // churchyard yews and a lime (core/places.ts close) — appended last, so no other planting's rng shifts
+  for (const t of close?.trees ?? []) plant({ sp: t.sp, x: t.x, z: t.z, y: H(t.x, t.z), h: t.h, r: t.r, surround: 'none', syaw: 0, tag: 'courtyard' });
 
   // ─────────────────────────────────────────────────────────── meshes ──
   const root = new THREE.Group();
@@ -1512,6 +1613,7 @@ export default function create(ctx: CityContext): CityModule {
         forest: forestCount,
         forestBand: bandCount,
         forestMantle: mantleCount,
+        portalHood: hoodCount,
         ferns: fernCount,
         street: planted.filter((t) => t.tag === 'street').length,
         bushes: bushCount,

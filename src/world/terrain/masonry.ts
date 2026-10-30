@@ -110,6 +110,29 @@ vec3 th_ashlar(vec2 uv, float ch, vec3 base) {
   return mix(c, mMortar * (0.9 + 0.2 * bh), joint);
 }
 
+// granite setts (ashlar kind with a negative course: places-between old-town square): 13 cm rows of 17–23 cm stones
+// in running bond, domed tops (lighter crowns, darker shoulders), gritty dark joints, a few warm / blue stones.
+// Stones and joints fade to their mean tone once a stone is under ~4 px (no moire on the oblique view)
+vec3 th_setts(vec2 uv, vec3 base, float fw) {
+  float ch = 0.13;
+  float row = floor(uv.y / ch);
+  float rh = th_hash12(vec2(row, 3.7));
+  float bl = 0.17 + 0.06 * rh;
+  float uu = uv.x / bl + rh * 5.3;
+  float cid = floor(uu);
+  float fu = fract(uu), fv = fract(uv.y / ch);
+  float dmin = min(min(fu, 1.0 - fu) * bl, min(fv, 1.0 - fv) * ch);
+  float det = 1.0 - smoothstep(0.012, 0.035, fw);
+  float joint = 1.0 - smoothstep(0.007, 0.015 + fw, dmin);
+  float crown = smoothstep(0.0, 0.055, dmin);
+  float bh = th_hash12(vec2(cid, row));
+  float bh2 = th_hash12(vec2(cid + 7.1, row - 3.3));
+  vec3 c = base * (0.78 + 0.38 * bh) * (0.8 + 0.26 * crown);
+  c *= bh2 < 0.14 ? vec3(1.07, 0.98, 0.88) : (bh2 > 0.88 ? vec3(0.9, 0.95, 1.05) : vec3(1.0));
+  c = mix(c, base * 0.4, joint * 0.92);
+  return mix(base * 0.86, c, det);
+}
+
 vec3 mN = vec3(0.0, 1.0, 0.0);
 // bump-perturbed world normal for rock (cliff skin, boulders) — replaces the flat facet normal for lighting
 vec3 mNb = vec3(0.0);
@@ -145,6 +168,7 @@ vec3 masonryColor(vec3 base) {
   vec2 uv;
   if (abs(n.y) < 0.7) uv = vec2(dot(p.xz, normalize(vec2(-n.z, n.x))), p.y);
   else uv = vec2(dot(p.xz, vMas.zw), dot(p.xz, vec2(-vMas.w, vMas.z)));
+  float fwUV = max(fwidth(uv.x), fwidth(uv.y));
   // rock relief (F3): fractured, chipped surface on the cliff skin and boulders so a facet is never a flat plane.
   // Height in metres from ridged noise (sharp fracture creases) + two finer octaves; normal from its screen
   // derivatives (Mikkelsen's surface-gradient bump), faded out once a 0.3 m feature is under ~3 px.
@@ -187,7 +211,7 @@ vec3 masonryColor(vec3 base) {
     col *= 0.9 + 0.16 * nf.r;
     mRough = 0.86;
   } else if (kind < 1.5) {
-    col = th_ashlar(uv, vMas.y, base);
+    col = vMas.y < 0.0 ? th_setts(uv, base, fwUV) : th_ashlar(uv, vMas.y, base);
     col *= 0.93 + 0.12 * nf.g;
     mRough = 0.88;
   } else if (kind < 2.5) {
@@ -322,6 +346,8 @@ interface WallSpec {
   pillarA?: boolean;
   pillarB?: boolean;
   course: number;
+  /** openings through the whole wall (arc-length ranges): a slipway (core/places.ts) */
+  holes?: [number, number][];
 }
 
 function buildWall(b: GeoBuilder, w: WallSpec): void {
@@ -339,19 +365,26 @@ function buildWall(b: GeoBuilder, w: WallSpec): void {
     s += Math.abs(t1 - t0) > 0.05 ? 0.5 : 2;
   }
   st.push(L);
+  const holes = w.holes ?? [];
+  for (const [h0, h1] of holes) st.push(h0, h1);
+  st.sort((a, c) => a - c);
+  const inHole = (s0: number, s1: number) => holes.some(([h0, h1]) => (s0 + s1) / 2 > h0 && (s0 + s1) / 2 < h1);
   const back = -thick;
   // water face (ashlar)
   b.color(w.stone).set('aMas', KIND.ashlar, w.course, tx, tz);
   for (let i = 0; i < st.length - 1; i++) {
     const s0 = st[i],
       s1 = st[i + 1];
+    if (s1 - s0 < 1e-4 || inHole(s0, s1)) continue;
     b.quadFacing(P(s0, 0, w.bottom(s0)), P(s1, 0, w.bottom(s1)), P(s1, 0, w.top(s1)), P(s0, 0, w.top(s0)), nx, 0, nz);
   }
   // end cross-sections (at slab edges / free ends)
-  for (const [s, sign] of [
+  const ends: [number, number][] = [
     [0, -1],
     [L, 1],
-  ] as [number, number][]) {
+  ];
+  for (const [h0, h1] of holes) ends.push([h0, 1], [h1, -1]);
+  for (const [s, sign] of ends) {
     const t = w.top(s),
       bt = w.bottom(s);
     b.quadFacing(P(s, 0, bt), P(s, back, bt), P(s, back, t), P(s, 0, t), tx * sign, 0, tz * sign);
@@ -363,6 +396,7 @@ function buildWall(b: GeoBuilder, w: WallSpec): void {
   for (let i = 0; i < st.length - 1; i++) {
     const s0 = st[i],
       s1 = st[i + 1];
+    if (s1 - s0 < 1e-4 || inHole(s0, s1)) continue;
     const y0 = w.top(s0),
       y1 = w.top(s1);
     const h = w.capH;
@@ -371,10 +405,7 @@ function buildWall(b: GeoBuilder, w: WallSpec): void {
     b.quadFacing(P(s0, c1, y0), P(s1, c1, y1), P(s1, c1, y1 + h), P(s0, c1, y0 + h), -nx, 0, -nz);
     b.quadFacing(P(s0, 0, y0), P(s1, 0, y1), P(s1, c0, y1), P(s0, c0, y0), 0, -1, 0);
   }
-  for (const [s, sign] of [
-    [0, -1],
-    [L, 1],
-  ] as [number, number][]) {
+  for (const [s, sign] of ends) {
     const y = w.top(s);
     b.quadFacing(P(s, c0, y), P(s, c1, y), P(s, c1, y + w.capH), P(s, c0, y + w.capH), tx * sign, 0, tz * sign);
   }
@@ -1026,7 +1057,8 @@ export function createMasonry(ctx: CityContext, model: TerrainModel): MasonryRes
     capOut: 0.12,
     top: () => 0,
     bottom: (s) => bed(SLAB.x0 + s, RIVER.z1 - 0.4),
-    parapet: { h: 0.42, w: 0.34, gaps: sGaps },
+    parapet: { h: 0.42, w: 0.34, gaps: [...sGaps, ...(plan.places?.southParapetGaps ?? []).map(([a, c]) => [a - SLAB.x0, c - SLAB.x0] as [number, number])] },
+    holes: (plan.places?.southWallHoles ?? []).map(([a, c]) => [a - SLAB.x0, c - SLAB.x0] as [number, number]),
     pillarB: true,
     course: 0.52,
   });
@@ -1046,8 +1078,8 @@ export function createMasonry(ctx: CityContext, model: TerrainModel): MasonryRes
   // ladders (positions shared with the railings module)
   const ladders: LadderSpot[] = [];
   for (const x of [-144, -48, 48, 104]) if (!plan.places?.dropLadder(x, RIVER.z0)) ladders.push({ x, z: RIVER.z0, nx: 0, nz: 1, top: SIDEWALK_Y + 0.2 });
-  for (const x of [-168, -112, -20, 62]) ladders.push({ x, z: RIVER.z1, nx: 0, nz: -1, top: 0.2 });
-  for (const z of [-131, -97, -58, -31, -2]) ladders.push({ x: QUAY_X, z, nx: 1, nz: 0, top: 0.12 });
+  for (const x of [-168, -112, -20, 62]) if (!plan.places?.dropLadder(x, RIVER.z1)) ladders.push({ x, z: RIVER.z1, nx: 0, nz: -1, top: 0.2 });
+  for (const z of [-131, -97, -58, -31, -2]) if (!plan.places?.dropLadder(QUAY_X, z)) ladders.push({ x: QUAY_X, z, nx: 1, nz: 0, top: 0.12 });
   if (boxHunt(ctx, 'quaywall')) {
     const gx = gaps.map((g) => g.x - SLAB.x0);
     const lad = (z: number) => ladders.filter((l) => l.z === z).map((l) => l.x - SLAB.x0);
@@ -1072,6 +1104,8 @@ export function createMasonry(ctx: CityContext, model: TerrainModel): MasonryRes
     const sink: { x: number; z: number; r: number }[] = [];
     cliffs = buildCliffs(ctx, model, b, ctx.rng('terrain-cliffs'), (x, z, size, embed, y) => {
       if (rocks.some((q) => Math.hypot(q.x - x, q.z - z) < q.r + size * 0.6)) return false;
+      const cut = plan.places?.cutting; // no scree in front of the cutting's retaining wall
+      if (cut && x > cut.x0 - 1.5 && x < cut.x1 + 1.5 && z > cut.z - cut.t - 3) return false;
       addRock(b, srng, model, x, z, size, embed, sink, y, 0.92);
       return true;
     });

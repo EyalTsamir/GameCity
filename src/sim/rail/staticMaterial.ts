@@ -143,8 +143,10 @@ vec2 rlG = vec2(0.0);
     vec2 fdir = vec2(cos(fa), sin(fa));
     float lr = length(rel);
     float pack = rlNoise(wp * 4.1 + 2.7);
-    float voidD = mix(0.5, 0.1, smoothstep(0.3, 0.7, pack));
-    float rim = smoothstep(0.0, mix(0.07, 0.24, smoothstep(0.35, 0.75, pack)), gap);
+    // (places-between round 2: thinner creases where the stones touch — the old 7 cm-wide dark rim on every stone
+    // drew a continuous outline network that read as crazy paving at 3 m)
+    float voidD = mix(0.62, 0.14, smoothstep(0.38, 0.78, pack));
+    float rim = smoothstep(0.0, mix(0.035, 0.22, smoothstep(0.42, 0.8, pack)), gap);
     vec3 sc = st * mix(voidD, 1.0, rim) * (0.66 + 0.5 * fh) * (0.92 + 0.16 * rlHash(floor(q * 5.0)));
     // rlG: the face slope (a broken face tilts away from the stone's crown) + the fall into the voids
     rlG = (-fdir * (0.5 + 0.9 * fh) * smoothstep(0.05, 0.3, lr) - rel * 0.5) * amp * (bal ? 1.1 : 0.6);

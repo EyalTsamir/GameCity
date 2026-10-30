@@ -106,6 +106,8 @@ const TABLE: Record<string, Surf> = {
   [`${HM.pavers}:0`]: S({ size: [0.2, 0.1], jw: 0.011, jd: 0.4, tint: 0.2, bevel: 0.1, bond: -2, speck: 0.1, color: lin(0.45, 0.33, 0.28) }),
   // park paths
   [`${HM.pathGravel}:0`]: S({ speck: 0.36, color: lin(0.56, 0.48, 0.36), rough: 1 }),
+  // farm-lane wheel ruts (walk path surface 'track'): darker earthy grit, grass creeping in from the edges
+  [`${HM.pathGravel}:1`]: S({ speck: 0.5, color: lin(0.25, 0.21, 0.16), stain: 0.2, special: 3, rough: 1 }),
   [`${HM.pathPaved}:0`]: S({ size: [0.4, 0.4], jw: 0.016, jd: 0.32, tint: 0.1, bevel: 0.05, bond: 0.5, speck: 0.1, color: lin(0.55, 0.48, 0.38), special: 2 }),
   // vertical sides: concrete, dark, earth, timber
   [`${HM.side}:0`]: S({ speck: 0.14, color: lin(0.5, 0.48, 0.45) }),

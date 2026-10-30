@@ -24,7 +24,7 @@ interface Cover {
   mat: number;
   variant: number;
   area?: Area;
-  /** rectangle the band layout / specials align to, and the bands [period, width, border, macro] */
+  /** rectangle the band layout / specials align to, and the bands [period, width, border, macro] (macro < 0: no slot drain) */
   rect?: Rect;
   bands?: [number, number, number, number];
 }
@@ -103,7 +103,7 @@ function coverForBlock(b: Block): Cover | null {
   switch (b.surface) {
     case 'paving':
       if (b.kind === 'oldtown' || b.kind === 'market') return { key: 'bsetts', mesh: 'H', mat: HM.setts, variant: 0, rect: b.rect, bands: [0, 0, 0, 0.06] };
-      return { key: 'bpave', mesh: 'H', mat: HM.plaza, variant: 2, rect: b.rect, bands: [10.5, 0.3, 0.5, 0.05] };
+      return { key: 'bpave', mesh: 'H', mat: HM.plaza, variant: 2, rect: b.rect, bands: [10.5, 0.3, 0.5, -0.05] };
     case 'concrete':
       return { key: 'byard', mesh: 'H', mat: HM.concrete, variant: 0, rect: b.rect, bands: [0, 0, 0, 0.06] };
     case 'asphalt':
@@ -124,6 +124,8 @@ export function buildCovers(ctx: CityContext, A: MeshBuilder, H: MeshBuilder): {
   const deckArea = plan.areas.find((a) => a.kind === 'boardwalk');
   const promArea = plan.areas.find((a) => a.kind === 'promenade');
   const inRect = (r: Rect | undefined, x: number, z: number, m = 0) => !!r && x > r.x0 - m && x < r.x1 + m && z > r.z0 - m && z < r.z1 + m;
+  // parking lots inside a block meet the lawn at a concrete edging kerb (audit: asphalt ran straight into the grass)
+  const parkKerbs = !ctx.debug.params.has('noparkkerb');
 
   for (const f of plan.features) {
     if (f.kind === 'fountain') info.radial.push({ x: f.x, z: f.z, r: 11.5 });
@@ -199,6 +201,16 @@ export function buildCovers(ctx: CityContext, A: MeshBuilder, H: MeshBuilder): {
             if (lower(i - 1, jj)) skirtRun(xs[i], zs[jj], xs[i], zs[jj + 1], -1, 0, i === 0);
             if (lower(i1 + 1, jj)) skirtRun(xs[i1 + 1], zs[jj], xs[i1 + 1], zs[jj + 1], 1, 0, i1 === nx - 1);
           }
+          if (parkKerbs && c.key === 'parking') {
+            for (let k = i; k <= i1; k++) {
+              if (j > 0 && lower(k, j - 1)) edgeKerb(xs[k], zs[j], xs[k + 1], zs[j], 0, -1);
+              if (j1 < nz - 1 && lower(k, j1 + 1)) edgeKerb(xs[k], zs[j1 + 1], xs[k + 1], zs[j1 + 1], 0, 1);
+            }
+            for (let jj = j; jj <= j1; jj++) {
+              if (i > 0 && lower(i - 1, jj)) edgeKerb(xs[i], zs[jj], xs[i], zs[jj + 1], -1, 0);
+              if (i1 < nx - 1 && lower(i1 + 1, jj)) edgeKerb(xs[i1 + 1], zs[jj], xs[i1 + 1], zs[jj + 1], 1, 0);
+            }
+          }
         }
       }
     }
@@ -245,6 +257,19 @@ export function buildCovers(ctx: CityContext, A: MeshBuilder, H: MeshBuilder): {
   }
 
   /** Skirt from the ground up to the cover height along an edge; on block edges only where no sidewalk adjoins. */
+  /** a 15 cm concrete edging kerb on the lawn side of a cover edge (outward normal nx,nz), 9 cm proud of the cover */
+  function edgeKerb(x0: number, z0: number, x1: number, z1: number, nx: number, nz: number): void {
+    if (Math.hypot(x1 - x0, z1 - z0) < 0.2) return;
+    const w = 0.15,
+      top = Y.cover + 0.09;
+    surf(H, HM.side, 0, 9, 0);
+    const ox = nx * w,
+      oz = nz * w;
+    H.rect(Math.min(x0, x1 + ox), Math.min(z0, z1 + oz), Math.max(x0, x1 + ox), Math.max(z0, z1 + oz), top);
+    H.wall(x0 + ox, z0 + oz, x1 + ox, z1 + oz, Y.ground - 0.03, top, nx, nz);
+    H.wall(x0, z0, x1, z1, Y.cover, top, -nx, -nz);
+  }
+
   function skirtRun(x0: number, z0: number, x1: number, z1: number, nx: number, nz: number, blockEdge: boolean): void {
     const L = Math.hypot(x1 - x0, z1 - z0);
     if (L < 1e-3) return;
@@ -479,7 +504,7 @@ export function buildCovers(ctx: CityContext, A: MeshBuilder, H: MeshBuilder): {
       sl.push({ x: c.x + mx * (half * scale + jl), z: c.z + mz * (half * scale + jl) });
       sr.push({ x: c.x - mx * (half * scale + jr), z: c.z - mz * (half * scale + jr) });
     }
-    surf(H, paved ? HM.pathPaved : HM.pathGravel, 0, 9, 0);
+    surf(H, paved ? HM.pathPaved : HM.pathGravel, p.surface === 'track' ? 1 : 0, 9, 0);
     for (let i = 0; i < N; i++) {
       left.push(H.v(sl[i].x, y, sl[i].z));
       right.push(H.v(sr[i].x, y, sr[i].z));

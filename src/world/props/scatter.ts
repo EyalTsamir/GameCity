@@ -605,6 +605,7 @@ export function planScatter(inp: ScatterInputs): ScatterItem[] {
   // ─────────────────────────────────────────────────────── courtyards ──
   for (const a of plan.areas) {
     if (a.kind !== 'courtyard') continue;
+    if (plan.places?.close?.areaId === a.id) continue; // the churchyard (core/places.ts)
     const r = a.rect;
     const Z = zone(r, { paved: false, edge: 0.5, walkPad: 0.5, buildPad: 0.3 });
     const near = (x: number, z: number) => {

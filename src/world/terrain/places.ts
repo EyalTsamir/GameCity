@@ -15,7 +15,7 @@
 import * as THREE from 'three';
 import type { CityContext } from '../../core/context';
 import type { Rect } from '../../core/geom';
-import { stairY, islandBridgeY, type IslandBridgePlace, type LanePlace, type PlaceStair, type QuayPlace } from '../../core/places';
+import { stairY, islandBridgeY, type CuttingPlace, type IslandBridgePlace, type LanePlace, type PlaceStair, type QuayPlace, type StationPlace, type WaterStairs, type Slipway, type ClosePlace, type CloseStone, type YardGate, type EdgePlace } from '../../core/places';
 import type { GeoBuilder, V3 } from './builder';
 import type { TerrainModel } from './height';
 import { KIND } from './kinds';
@@ -37,6 +37,9 @@ const COL = {
   roof: C('#a65b3f'),
   lamp: C('#ffd59a'),
 };
+const GRANITE = C('#bdb7ab');
+const GRANITE_HI = C('#cfc9bd');
+const CUT_STONE = C('#a99c86');
 const WOOD = C('#8b6a4b');
 const WOOD_DK = C('#6a4f37');
 const IRON = C('#2f4a3e');
@@ -257,13 +260,51 @@ function balustrade(b: GeoBuilder, ax: number, az: number, bx: number, bz: numbe
   }
 }
 
+/** old-town square setts (granite, a little darker than the flags) and the gutter flags */
+const SETT = C('#a39d93');
+const GUTTER = C('#9a9284');
+
+/**
+ * Square + passage floor (detail tier): granite setts (masonry ashlar with a negative course) with a flagstone gutter
+ * on the archway axis (two rows of long flags) and a flag band along both facades and the retaining-wall foot.
+ */
+function squareFloor(b: GeoBuilder, P: LanePlace): void {
+  const S = P.square,
+    A = P.passage,
+    y = P.squareY;
+  const cx = (A.x0 + A.x1) / 2;
+  const band = 0.45,
+    gw = 0.32;
+  const floor = (xs: number[], zs: number[], kindOf: (i: number, j: number) => 'sett' | 'band' | 'gutter'): void => {
+    for (let i = 0; i < xs.length - 1; i++)
+      for (let j = 0; j < zs.length - 1; j++) {
+        if (xs[i + 1] - xs[i] < 0.02 || zs[j + 1] - zs[j] < 0.02) continue;
+        const k = kindOf(i, j);
+        if (k === 'sett') b.color(SETT).set('aMas', KIND.ashlar, -1, 1, 0);
+        else if (k === 'gutter') b.color(GUTTER).set('aMas', KIND.ashlar, gw, 0, 1);
+        else b.color(COL.paving).set('aMas', KIND.ashlar, band, j === 0 && i > 0 && i < xs.length - 2 ? 1 : 0, j === 0 && i > 0 && i < xs.length - 2 ? 0 : 1);
+        top(b, { x0: xs[i], x1: xs[i + 1], z0: zs[j], z1: zs[j + 1] }, y);
+      }
+  };
+  const g0 = Math.max(S.x0 + band, cx - gw),
+    g1 = Math.min(S.x1 - band, cx + gw);
+  const sx = [S.x0, S.x0 + band, g0, g1, S.x1 - band, S.x1];
+  floor(sx, [S.z0, S.z0 + band, S.z1], (i, j) => (i === 0 || i === sx.length - 2 || j === 0 ? 'band' : i === 2 ? 'gutter' : 'sett'));
+  // the passage: setts wall to wall, the gutter running through to the street
+  const px = [A.x0, Math.max(A.x0, cx - gw), Math.min(A.x1, cx + gw), A.x1];
+  floor(px, [A.z0, A.z1], (i) => (i === 1 ? 'gutter' : 'sett'));
+}
+
 function laneStone(b: GeoBuilder, P: LanePlace, hi: boolean, lights: GlowPoint[]): void {
   const s = P.stair;
   // square + archway floor: paving flush with the sidewalk
-  b.color(COL.paving).set('aMas', KIND.ashlar, 0.45, 1, 0);
-  top(b, P.square, P.squareY);
-  b.set('aMas', KIND.ashlar, 0.45, 0, 1);
-  top(b, P.passage, P.squareY);
+  if (hi) squareFloor(b, P);
+  else {
+    b.color(COL.paving).set('aMas', KIND.ashlar, 0.45, 1, 0);
+    top(b, P.square, P.squareY);
+    b.set('aMas', KIND.ashlar, 0.45, 0, 1);
+    top(b, P.passage, P.squareY);
+  }
   // terrace top: gravel with paved walks (0.5 m cells merged into runs along x)
   const T = P.terrace;
   const tz = (T.z0 + P.wallZ) / 2 - 0.5;
@@ -503,6 +544,189 @@ function islandStone(b: GeoBuilder, B: IslandBridgePlace, hi: boolean): void {
   }
 }
 
+// ──────────────────────────────────────────────────────── station front ──
+
+function stationStone(b: GeoBuilder, S: StationPlace, lights: GlowPoint[]): void {
+  const F = S.forecourt;
+  const [cL, cR] = S.cheeks;
+  const y0 = 0.15;
+  // forecourt paving around the perron (flush with the sidewalk), its kerbed ends
+  b.color(GRANITE).set('aMas', KIND.ashlar, 0.6, 1, 0);
+  for (const r of [
+    { x0: F.x0, x1: cL.x0, z0: F.z0, z1: F.z1 },
+    { x0: cR.x1, x1: F.x1, z0: F.z0, z1: F.z1 },
+    { x0: cL.x0, x1: cR.x1, z0: S.stair.rect.z1, z1: F.z1 },
+  ])
+    top(b, r, y0);
+  b.color(COL.coping).set('aMas', KIND.coping, 0, 0, 1);
+  for (const [x, sx] of [
+    [F.x0, -1],
+    [F.x1, 1],
+  ] as [number, number][])
+    b.quadFacing([x, -0.05, F.z0], [x, -0.05, F.z1], [x, y0, F.z1], [x, y0, F.z0], sx, 0, 0);
+  // landing: large slabs on a granite body
+  b.color(GRANITE_HI).set('aMas', KIND.ashlar, 0.9, 1, 0);
+  top(b, S.landing, S.landingY);
+  flight(b, S.stair, 0, GRANITE);
+  // cheek blocks with a capping and a lamp standard each
+  for (const c of S.cheeks) {
+    b.color(GRANITE).set('aMas', KIND.ashlar, 0.3, 0, 1);
+    slab(b, c, 0, S.cheekY - 0.08, 4 | 8);
+    b.color(GRANITE_HI).set('aMas', KIND.coping, 0, 0, 1);
+    slab(b, { x0: c.x0 - 0.05, x1: c.x1 + 0.05, z0: c.z0, z1: c.z1 + 0.05 }, S.cheekY - 0.08, S.cheekY, 4);
+    const cx = (c.x0 + c.x1) / 2,
+      cz = c.z1 - 0.32;
+    b.color(IRON).set('aMas', KIND.dark, 0, 1, 0);
+    b.box(cx, S.cheekY + 0.12, cz, 0.14, 0.12, 0.14, 0, 4);
+    b.box(cx, S.cheekY + 1.7, cz, 0.05, 1.6, 0.05, 0, 4);
+    b.box(cx, S.cheekY + 3.32, cz, 0.16, 0.03, 0.16, Math.PI / 4, 0);
+    b.color(COL.lamp).set('aMas', KIND.lamp, 0, 1, 0);
+    b.box(cx, S.cheekY + 3.55, cz, 0.15, 0.22, 0.15, Math.PI / 4, 0);
+    b.color(IRON).set('aMas', KIND.dark, 0, 1, 0);
+    b.box(cx, S.cheekY + 3.8, cz, 0.19, 0.03, 0.19, Math.PI / 4, 0);
+    lights.push({ x: cx, y: S.cheekY + 3.55, z: cz, size: 0.9, kind: 'halo', color: '#ffd08c', intensity: 0.6 });
+    lights.push({ x: cx, y: 0.2, z: cz + 1.4, size: 3.4, kind: 'pool', color: '#ffbe72', intensity: 0.3 });
+  }
+}
+
+// ────────────────────────────────────────────────── cutting retaining wall ──
+
+function cuttingStone(b: GeoBuilder, K: CuttingPlace, hi: boolean): void {
+  const z = K.z,
+    zb = K.z - K.t;
+  const yb = -0.25;
+  // face (coursed rubble-faced ashlar), ends, coping
+  b.color(CUT_STONE).set('aMas', KIND.ashlar, 0.4, 1, 0);
+  const n = Math.ceil((K.x1 - K.x0) / 6);
+  for (let i = 0; i < n; i++) {
+    const xa = K.x0 + ((K.x1 - K.x0) * i) / n,
+      xc = K.x0 + ((K.x1 - K.x0) * (i + 1)) / n;
+    b.quadFacing([xa, yb, z], [xc, yb, z], [xc, K.top, z], [xa, K.top, z], 0, 0, 1);
+  }
+  b.set('aMas', KIND.ashlar, 0.4, 0, 1);
+  for (const [x, sx] of [
+    [K.x0, -1],
+    [K.x1, 1],
+  ] as [number, number][])
+    b.quadFacing([x, yb, zb], [x, yb, z], [x, K.top, z], [x, K.top, zb], sx, 0, 0);
+  b.color(COL.coping).set('aMas', KIND.coping, 0, 1, 0);
+  slab(b, { x0: K.x0 - 0.08, x1: K.x1 + 0.08, z0: zb - 0.05, z1: z + 0.1 }, K.top, K.top + 0.18, 4);
+  // pilasters (buttress strips) and weep holes
+  const nP = Math.max(2, Math.round((K.x1 - K.x0) / 7.5));
+  for (let i = 0; i <= nP; i++) {
+    const x = K.x0 + ((K.x1 - K.x0) * i) / nP;
+    b.color(CUT_STONE.clone().multiplyScalar(1.06)).set('aMas', KIND.ashlar, 0.4, 1, 0);
+    slab(b, { x0: x - 0.38, x1: x + 0.38, z0: z - 0.05, z1: z + 0.28 }, yb, K.top + 0.05, 4 | 16);
+    b.color(COL.coping).set('aMas', KIND.coping, 0, 1, 0);
+    slab(b, { x0: x - 0.46, x1: x + 0.46, z0: z - 0.05, z1: z + 0.36 }, K.top + 0.05, K.top + 0.3, 4 | 16);
+  }
+  if (hi) {
+    b.color(COL.window).set('aMas', KIND.dark, 0, 1, 0);
+    for (let x = K.x0 + 1.9; x < K.x1 - 1; x += 2.5) {
+      const near = ((x - K.x0) / ((K.x1 - K.x0) / nP)) % 1;
+      if (near < 0.12 || near > 0.88) continue;
+      b.quadFacing([x - 0.06, 0.45, z + 0.01], [x + 0.06, 0.45, z + 0.01], [x + 0.06, 0.57, z + 0.01], [x - 0.06, 0.57, z + 0.01], 0, 0, 1);
+    }
+  }
+}
+
+// ───────────────────────────────────────────── water stairs and slipway ──
+
+const isect = (a: Rect, c: Rect): Rect | null => {
+  const r = { x0: Math.max(a.x0, c.x0), z0: Math.max(a.z0, c.z0), x1: Math.min(a.x1, c.x1), z1: Math.min(a.z1, c.z1) };
+  return r.x1 - r.x0 > 0.01 && r.z1 - r.z0 > 0.01 ? r : null;
+};
+
+function waterStairsStone(b: GeoBuilder, W: WaterStairs, model: TerrainModel): void {
+  const cx = (W.body.x0 + W.body.x1) / 2,
+    cz = (W.body.z0 + W.body.z1) / 2;
+  const bed = model.height(cx, cz) - 0.3;
+  const stone = W.id === 'harbour' ? C('#aaa498') : COL.quayStone;
+  b.color(stone).set('aMas', KIND.ashlar, 0.45, 1, 0);
+  slab(b, W.bottom, bed, W.bottomY - 0.08, 4 | 8);
+  b.color(COL.step).set('aMas', KIND.coping, 0, 1, 0);
+  slab(b, W.bottom, W.bottomY - 0.08, W.bottomY, 4);
+  flight(b, W.stair, bed, stone);
+  const wetTop = isect(W.top, W.body);
+  if (wetTop) {
+    b.color(stone).set('aMas', KIND.ashlar, 0.45, 1, 0);
+    slab(b, wetTop, bed, W.topY - 0.1, 4 | 8);
+  }
+  b.color(COL.coping).set('aMas', KIND.coping, 0, W.stair.axis === 'x' ? 1 : 0, W.stair.axis === 'x' ? 0 : 1);
+  slab(b, W.top, W.topY - 0.1, W.topY, 4);
+}
+
+function waterStairsIron(b: GeoBuilder, W: WaterStairs): void {
+  const s = W.stair;
+  const ax = s.axis;
+  // rail line along the outer (water) edge: over the top landing, down the nosings, over the bottom landing
+  const off = W.railSide === 'x0' ? W.body.x0 + 0.06 : W.railSide === 'x1' ? W.body.x1 - 0.06 : W.railSide === 'z0' ? W.body.z0 + 0.06 : W.body.z1 - 0.06;
+  const P = (u: number, y: number): [number, number, number] => (ax === 'x' ? [u, y, off] : [off, y, u]);
+  const lo = ax === 'x' ? s.rect.x0 : s.rect.z0,
+    hi = ax === 'x' ? s.rect.x1 : s.rect.z1;
+  const uTop = s.up > 0 ? hi : lo,
+    uBot = s.up > 0 ? lo : hi;
+  const dir = s.up > 0 ? 1 : -1;
+  const pts: [number, number][] = [
+    [uTop + dir * 1.1, W.topY],
+    [uTop, W.topY],
+    [uBot, W.bottomY],
+    [uBot - dir * 1.0, W.bottomY],
+  ];
+  b.color(IRON_HI);
+  for (let i = 0; i < pts.length - 1; i++) b.beam(...P(pts[i][0], pts[i][1] + 0.95), ...P(pts[i + 1][0], pts[i + 1][1] + 0.95), 0.06, 0.05);
+  b.color(IRON);
+  for (let i = 0; i < pts.length - 1; i++) b.beam(...P(pts[i][0], pts[i][1] + 0.5), ...P(pts[i + 1][0], pts[i + 1][1] + 0.5), 0.035, 0.035);
+  for (const [u, y] of pts) {
+    const yb = u === uTop || u === uTop + dir * 1.1 ? W.topY : W.bottomY;
+    void y;
+    const [x, , z] = P(u, 0);
+    b.box(x, yb + 0.475, z, 0.035, 0.475, 0.035, 0, 4);
+  }
+}
+
+function slipwayStone(b: GeoBuilder, S: Slipway, model: TerrainModel, hi: boolean): void {
+  const r = S.ramp.rect;
+  const yT = S.ramp.yTop,
+    yB = S.ramp.yBot;
+  const bed = model.height((r.x0 + r.x1) / 2, r.z0 + 1) - 0.3;
+  const CONC = C('#a7a196');
+  // inclined deck (setts at the top, concrete below), side walls down to the bed, a toe
+  b.color(CONC).set('aMas', KIND.ashlar, 0.32, 1, 0);
+  b.quadFacing([r.x0, yB, r.z0], [r.x1, yB, r.z0], [r.x1, yT, r.z1], [r.x0, yT, r.z1], 0, 1, 0);
+  b.color(COL.quayStone).set('aMas', KIND.ashlar, 0.52, 0, 1);
+  for (const [x, sx] of [
+    [r.x0, -1],
+    [r.x1, 1],
+  ] as [number, number][])
+    b.polygonFacing(
+      [
+        [x, bed, r.z0],
+        [x, bed, r.z1],
+        [x, yT, r.z1],
+        [x, yB, r.z0],
+      ],
+      [
+        [r.z0, bed],
+        [r.z1, bed],
+        [r.z1, yT],
+        [r.z0, yB],
+      ],
+      sx,
+      0,
+      0,
+    );
+  b.quadFacing([r.x0, bed, r.z0], [r.x1, bed, r.z0], [r.x1, yB, r.z0], [r.x0, yB, r.z0], 0, 0, -1);
+  // kerbs along both edges
+  b.color(COL.coping).set('aMas', KIND.coping, 0, 0, 1);
+  for (const x of [r.x0 + 0.12, r.x1 - 0.12]) b.beam(x, yB + 0.06, r.z0, x, yT + 0.06, r.z1, 0.24, 0.12);
+  if (hi) {
+    // two timber skid rails for the boat trolleys
+    b.color(WOOD_DK).set('aMas', KIND.plain, 0, 0, 1);
+    for (const x of [(r.x0 + r.x1) / 2 - 0.6, (r.x0 + r.x1) / 2 + 0.6]) b.beam(x, yB + 0.05, r.z0 + 0.3, x, yT + 0.035, r.z1 - 0.2, 0.14, 0.07);
+  }
+}
+
 // ─────────────────────────────────────────────────────────────── API ──
 
 function detail(ctx: CityContext): boolean {
@@ -510,12 +734,346 @@ function detail(ctx: CityContext): boolean {
 }
 
 /** stonework of every place into the masonry builder; lantern glows are appended to `lights` */
+// ─────────────────────────────────────────────────────────── church close ──
+
+const HEAD = [C('#a9a291'), C('#948e80'), C('#b8b09c'), C('#857f73'), C('#a39a83')];
+const LICHEN = [C('#9a9a6e'), C('#a49c74'), C('#8b8f70')];
+const SLATE = C('#5f6469');
+const TILE = C('#8a4a36');
+const OAK = C('#7a5a3c');
+const OAK_DK = C('#5a412b');
+
+/**
+ * Churchyard (core/places.ts ClosePlace): the low boundary wall along the street with gate piers, the lych-gate
+ * (oak frame on stone sills, tiled roof, a lantern under the ridge), the memorial cross on its stepped base,
+ * headstones (upright, some shouldered or leaning, a few slate) and chest tombs. Railings: closeIron.
+ */
+function closeStone(b: GeoBuilder, P: ClosePlace, hi: boolean, lights: GlowPoint[]): void {
+  const y0 = P.groundY;
+  const wz = P.wallZ;
+  const gx0 = P.gx - P.gw / 2 - 0.3,
+    gx1 = P.gx + P.gw / 2 + 0.3;
+  // boundary wall: plinth + coping, 0.62 m, on both sides of the gate
+  for (const [a, c] of [
+    [P.wallX0, gx0],
+    [gx1, P.wallX1],
+  ] as [number, number][]) {
+    if (c - a < 0.3) continue;
+    b.color(COL.wall).set('aMas', KIND.ashlar, 0.21, 1, 0);
+    slab(b, { x0: a, x1: c, z0: wz - 0.2, z1: wz + 0.2 }, y0 - 0.1, y0 + 0.54);
+    b.color(COL.coping).set('aMas', KIND.coping, 0, 1, 0);
+    slab(b, { x0: a - 0.02, x1: c + 0.02, z0: wz - 0.25, z1: wz + 0.25 }, y0 + 0.54, y0 + 0.62);
+  }
+  // end piers + gate piers (capped)
+  for (const x of [P.wallX0 + 0.25, gx0, gx1, P.wallX1 - 0.25]) {
+    b.color(COL.wall).set('aMas', KIND.ashlar, 0.3, 1, 0);
+    b.box(x, y0 + 0.62, wz, 0.28, 0.72, 0.28, 0, 4);
+    b.color(COL.coping).set('aMas', KIND.coping, 0, 1, 0);
+    b.box(x, y0 + 1.4, wz, 0.33, 0.06, 0.33, 0, 4);
+    b.box(x, y0 + 1.52, wz, 0.2, 0.08, 0.2, Math.PI / 4, 4);
+  }
+  // lych-gate: four oak posts on stone sills, wall plates, tie beams, braces, a king post in each open gable,
+  // a steep tiled roof with its ridge along the wall, seats along the sides
+  {
+    const hx = P.gw / 2 - 0.05,
+      hz = 1.0,
+      eave = y0 + 2.25,
+      ridge = y0 + 3.55;
+    const wz = P.gz;
+    b.color(COL.coping).set('aMas', KIND.coping, 0, 1, 0);
+    for (const sx of [-1, 1]) b.box(P.gx + sx * hx, y0 + 0.12, wz, 0.16, 0.14, hz + 0.18, 0, 4);
+    b.color(OAK).set('aMas', KIND.plain, 0, 1, 0);
+    for (const sx of [-1, 1])
+      for (const sz of [-1, 1]) {
+        b.box(P.gx + sx * hx, (y0 + 0.26 + eave) / 2, wz + sz * hz, 0.09, (eave - y0 - 0.26) / 2, 0.09, 0, 0);
+        b.beam(P.gx + sx * hx, eave - 0.75, wz + sz * hz, P.gx + sx * (hx - 0.55), eave - 0.08, wz + sz * hz, 0.07, 0.07);
+      }
+    b.color(OAK_DK).set('aMas', KIND.plain, 0, 1, 0);
+    for (const sz of [-1, 1]) b.box(P.gx, eave + 0.07, wz + sz * hz, hx + 0.32, 0.08, 0.1, 0, 0);
+    for (const sx of [-1, 1]) {
+      b.box(P.gx + sx * hx, eave + 0.17, wz, 0.1, 0.07, hz + 0.3, 0, 0);
+      b.box(P.gx + sx * hx, (eave + 0.24 + ridge) / 2, wz, 0.07, (ridge - eave - 0.24) / 2, 0.07, 0, 0);
+      for (const sz of [-1, 1]) b.beam(P.gx + sx * hx, eave + 0.2, wz + sz * (hz + 0.3), P.gx + sx * hx, ridge, wz, 0.08, 0.1);
+      b.box(P.gx + sx * (hx - 0.3), y0 + 0.45, wz, 0.17, 0.04, hz - 0.15, 0, 0);
+    }
+    b.color(TILE).set('aMas', KIND.plain, 0, 1, 0);
+    const ov = 0.45,
+      ex = hx + 0.42;
+    for (const sz of [-1, 1]) {
+      const ze = wz + sz * (hz + ov);
+      b.quadFacing([P.gx - ex, eave - 0.05, ze], [P.gx + ex, eave - 0.05, ze], [P.gx + ex, ridge + 0.12, wz], [P.gx - ex, ridge + 0.12, wz], 0, 0.8, sz * 0.6);
+      // underside (seen from inside the gate)
+      b.quadFacing([P.gx - ex, eave - 0.1, ze], [P.gx + ex, eave - 0.1, ze], [P.gx + ex, ridge + 0.07, wz], [P.gx - ex, ridge + 0.07, wz], 0, -0.8, -sz * 0.6);
+      if (hi)
+        for (let k = 1; k < 7; k++) {
+          const t = k / 7;
+          b.box(P.gx, eave - 0.05 + (ridge + 0.12 - (eave - 0.05)) * t + 0.015, ze + (wz - ze) * t, ex, 0.018, 0.03, 0, 4);
+        }
+    }
+    b.color(C('#6f3a2a')).set('aMas', KIND.plain, 0, 1, 0);
+    b.box(P.gx, ridge + 0.16, wz, ex + 0.02, 0.07, 0.1, 0, 4);
+    b.color(IRON).set('aMas', KIND.dark, 0, 1, 0);
+    b.box(P.gx, ridge - 0.42, wz, 0.012, 0.32, 0.012, 0, 0);
+    b.color(COL.lamp).set('aMas', KIND.lamp, 0, 1, 0);
+    b.box(P.gx, ridge - 0.88, wz, 0.09, 0.14, 0.09, Math.PI / 4, 0);
+    lights.push({ x: P.gx, y: ridge - 0.88, z: wz, size: 0.7, kind: 'halo', color: '#ffd08c', intensity: 0.55 });
+    lights.push({ x: P.gx, y: y0 + 0.03, z: wz, size: 3.2, kind: 'pool', color: '#ffbe72', intensity: 0.3 });
+  }
+  // memorial cross: three steps, plinth, a tapering shaft, the head (a wheel cross when hi)
+  {
+    const { x, z } = P.cross;
+    b.color(COL.step).set('aMas', KIND.coping, 0, 1, 0);
+    [1.05, 0.78, 0.52].forEach((h, i) => b.box(x, y0 + 0.11 + i * 0.22, z, h, 0.11, h, 0, 4));
+    b.color(COL.arch).set('aMas', KIND.ashlar, 0.5, 1, 0);
+    b.box(x, y0 + 1.16, z, 0.3, 0.5, 0.3, 0, 4);
+    b.color(COL.coping).set('aMas', KIND.coping, 0, 1, 0);
+    b.box(x, y0 + 1.7, z, 0.34, 0.05, 0.34, 0, 4);
+    b.color(COL.arch).set('aMas', KIND.plain, 0, 1, 0);
+    const s0 = y0 + 1.75,
+      s1 = s0 + 2.5;
+    b.beam(x, s0, z, x + 0.001, s1, z, 0.2, 0.18);
+    b.box(x, s1 - 0.62, z, 0.48, 0.09, 0.09, 0, 0);
+    if (hi) {
+      const R = 0.3,
+        N = 12;
+      for (let k = 0; k < N; k++) {
+        const a0 = (k / N) * Math.PI * 2,
+          a1 = ((k + 1) / N) * Math.PI * 2;
+        b.beam(x + Math.cos(a0) * R, s1 - 0.62 + Math.sin(a0) * R, z, x + Math.cos(a1) * R, s1 - 0.62 + Math.sin(a1) * R, z, 0.06, 0.06);
+      }
+    }
+  }
+  // headstones + chest tombs
+  for (const t of P.stones) {
+    const nx = Math.sin(t.yaw),
+      nz = Math.cos(t.yaw);
+    if (t.kind === 2) {
+      b.color(HEAD[Math.floor(t.tone * 5) % 5]).set('aMas', KIND.ashlar, 0.36, Math.cos(t.yaw), -Math.sin(t.yaw));
+      b.box(t.x, y0 + 0.28, t.z, t.w / 2, 0.3, t.t / 2, t.yaw, 4);
+      b.color(COL.coping).set('aMas', KIND.coping, 0, 1, 0);
+      b.box(t.x, y0 + 0.63, t.z, t.w / 2 + 0.06, 0.05, t.t / 2 + 0.06, t.yaw, 4);
+      continue;
+    }
+    // limestone greys, some lichen-yellowed, slate dark
+    const sc = t.kind === 1 ? SLATE : t.tone > 0.78 ? LICHEN[Math.floor(t.tone * 31) % 3] : HEAD[Math.floor(t.tone * 5) % 5];
+    b.color(sc).set('aMas', KIND.plain, 0, 1, 0);
+    // upright, leaning along its facing direction (the tilt keeps the beam's width along the row)
+    const lx = nx * t.lean,
+      lz = nz * t.lean;
+    const hb = t.shoulder ? t.h - 0.08 : t.h;
+    b.beam(t.x, y0 - 0.15, t.z, t.x + lx * (hb + 0.15), y0 + hb, t.z + lz * (hb + 0.15), t.w, t.t);
+    if (t.shoulder && hi) archHead(b, t, y0, hb);
+    else if (t.shoulder) b.beam(t.x + lx * (hb + 0.15), y0 + hb, t.z + lz * (hb + 0.15), t.x + lx * (hb + 0.27), y0 + hb + 0.12, t.z + lz * (hb + 0.27), t.w * 0.62, t.t);
+    if (hi && t.kerb) {
+      // kerbed plot in front of it
+      b.color(COL.coping).set('aMas', KIND.coping, 0, 1, 0);
+      const ux = Math.cos(t.yaw),
+        uz = -Math.sin(t.yaw);
+      for (const sd of [-1, 1]) b.box(t.x + nx * 1.0 + ux * sd * (t.w / 2 + 0.04), y0 + 0.05, t.z + nz * 1.0 + uz * sd * (t.w / 2 + 0.04), 0.05, 0.08, 0.85, t.yaw, 4);
+      b.box(t.x + nx * 1.88, y0 + 0.05, t.z + nz * 1.88, t.w / 2 + 0.09, 0.08, 0.05, t.yaw, 4);
+    }
+  }
+}
+
+// ─────────────────────────────────────────────────────────── west edge ──
+
+const TIMBER = C('#8c8170');
+const TIMBER_DK = C('#6f6556');
+
+/** five-bar field gate hung on a heel post, its leaf `dir` (unit, horizontal) from the hinge, posts either side */
+function fieldGate(b: GeoBuilder, hx: number, hz: number, w: number, dirX: number, dirZ: number, postDirX: number, postDirZ: number): void {
+  const y0 = 0.02;
+  // gate posts: the hanging post at the hinge, the shutting post across the gap (along postDir)
+  b.color(TIMBER_DK).set('aMas', KIND.plain, 0, 1, 0);
+  for (const [px, pz] of [
+    [hx - dirX * 0.14, hz - dirZ * 0.14],
+    [hx + postDirX * (w + 0.14), hz + postDirZ * (w + 0.14)],
+  ] as [number, number][]) {
+    b.box(px, y0 + 0.75, pz, 0.1, 0.8, 0.1, 0, 0);
+    b.box(px, y0 + 1.58, pz, 0.11, 0.03, 0.11, Math.PI / 4, 4);
+  }
+  // the leaf: heel and head stiles, five bars (top rail heavier), a diagonal brace
+  const yaw = Math.atan2(-dirZ, dirX);
+  const P = (u: number, y: number): [number, number, number] => [hx + dirX * u, y0 + y, hz + dirZ * u];
+  b.color(TIMBER).set('aMas', KIND.plain, 0, 1, 0);
+  for (const u of [0.04, w - 0.05]) {
+    const [x, , z] = P(u, 0);
+    b.box(x, y0 + 0.65, z, 0.045, 0.55, 0.045, yaw, 0);
+  }
+  [0.22, 0.42, 0.62, 0.84, 1.1].forEach((y, i) => {
+    const [x, , z] = P(w / 2, 0);
+    b.box(x, y0 + y, z, w / 2 - 0.02, i === 4 ? 0.055 : 0.035, i === 4 ? 0.04 : 0.022, yaw, 0);
+  });
+  const a0 = P(0.08, 0.22),
+    a1 = P(w * 0.62, 1.06);
+  b.beam(a0[0], a0[1], a0[2], a1[0], a1[1], a1[2], 0.035, 0.07);
+  b.color(IRON).set('aMas', KIND.dark, 0, 1, 0);
+  for (const y of [0.3, 1.0]) {
+    const [x, , z] = P(0.25, 0);
+    b.box(x, y0 + y, z, 0.24, 0.016, 0.03, yaw, 0);
+  }
+}
+
+function edgeWood(b: GeoBuilder, E: EdgePlace): void {
+  for (const g of E.gates) {
+    if (g.axis === 'z') {
+      // in the hedgerow: hung at the north side of the gap, shutting post at the south side; open = swung out into
+      // the field (−x) by ~75°
+      const a = g.open ? (75 * Math.PI) / 180 : 0;
+      fieldGate(b, g.x, g.z - g.w / 2 + 0.15, g.w - 0.3, -Math.sin(a), Math.cos(a), 0, 1);
+    } else fieldGate(b, g.x - g.w / 2 + 0.15, g.z, g.w - 0.3, 1, 0, 1, 0);
+  }
+  if (E.stile) {
+    // a step stile: two posts, three rails between them, a tread either side
+    const { x, z } = E.stile;
+    b.color(TIMBER_DK).set('aMas', KIND.plain, 0, 1, 0);
+    for (const sz of [-1, 1]) b.box(x, 0.6, z + sz * 0.42, 0.07, 0.62, 0.07, 0, 0);
+    b.color(TIMBER).set('aMas', KIND.plain, 0, 1, 0);
+    for (const y of [0.35, 0.7, 1.02]) b.box(x, y, z, 0.03, 0.04, 0.45, 0, 0);
+    for (const sx of [-1, 1]) {
+      b.box(x + sx * 0.32, 0.38, z, 0.13, 0.03, 0.3, 0, 0);
+      b.box(x + sx * 0.36, 0.2, z, 0.04, 0.2, 0.04, 0, 0);
+    }
+  }
+  // fingerpost: square post, a cap, two arms (up the lane, along the promenade) with pointed ends
+  {
+    const { x, z } = E.post;
+    b.color(C('#d9d2c3')).set('aMas', KIND.plain, 0, 1, 0);
+    b.box(x, 1.15, z, 0.055, 1.15, 0.055, 0, 4);
+    b.box(x, 2.33, z, 0.08, 0.03, 0.08, 0, 4);
+    for (const [dx, dz, y] of [
+      [0, -1, 2.02],
+      [1, 0, 1.8],
+    ] as [number, number, number][]) {
+      const yaw = Math.atan2(-dz, dx);
+      b.box(x + dx * 0.36, y, z + dz * 0.36, 0.3, 0.07, 0.016, yaw, 0);
+      b.box(x + dx * 0.68, y, z + dz * 0.68, 0.055, 0.055, 0.016, yaw + Math.PI / 4, 0);
+    }
+    b.color(C('#2f2f2c')).set('aMas', KIND.dark, 0, 1, 0);
+    for (const [dx, dz, y] of [
+      [0, -1, 2.02],
+      [1, 0, 1.8],
+    ] as [number, number, number][]) {
+      const yaw = Math.atan2(-dz, dx);
+      for (const sd of [-1, 1]) b.box(x + dx * 0.34 - dz * sd * 0.018, y, z + dz * 0.34 + dx * sd * 0.018, 0.2, 0.012, 0.002, yaw, 0);
+    }
+  }
+}
+
+// ──────────────────────────────────────────────────────── back-yard gate ──
+
+const GATE = [C('#4d6b57'), C('#456250'), C('#52705b')];
+
+/** ledged-and-braced board gate (painted), hung on the east post of its fence slot, standing open outwards;
+ *  iron strap hinges and a thumb latch. The fence and its posts are props' (props/places.ts back yard). */
+function yardGateWood(b: GeoBuilder, g: YardGate, model: TerrainModel): void {
+  const ux = g.leaf.x - g.hingeX,
+    uz = g.leaf.z - g.z;
+  const L = Math.hypot(ux, uz);
+  const tx = ux / L,
+    tz = uz / L;
+  const yaw = Math.atan2(-tz, tx);
+  // face normal (the side the ledges are on)
+  const nx = tz,
+    nz = -tx;
+  const y0 = model.height(g.hingeX, g.z) + 0.07;
+  const n = 11;
+  const bw = (L - 0.04) / n;
+  for (let k = 0; k < n; k++) {
+    const u = 0.02 + (k + 0.5) * bw;
+    b.color(GATE[k % 3]).set('aMas', KIND.plain, 0, 1, 0);
+    const hBoard = 1.42 + (k % 2) * 0.01;
+    b.box(g.hingeX + tx * u, y0 + hBoard / 2, g.z + tz * u, bw / 2 - 0.005, hBoard / 2, 0.012, yaw, 0);
+  }
+  // ledges + braces (rising from the hinge side)
+  b.color(C('#3e5948')).set('aMas', KIND.plain, 0, 1, 0);
+  const off = 0.03;
+  const ys = [0.22, 0.72, 1.22];
+  for (const yy of ys) b.box(g.hingeX + tx * (L / 2) + nx * off, y0 + yy, g.z + tz * (L / 2) + nz * off, L / 2 - 0.06, 0.045, 0.017, yaw, 0);
+  for (let i = 0; i < 2; i++) b.beam(g.hingeX + tx * 0.12 + nx * off, y0 + ys[i] + 0.06, g.z + tz * 0.12 + nz * off, g.hingeX + tx * (L - 0.12) + nx * off, y0 + ys[i + 1] - 0.06, g.z + tz * (L - 0.12) + nz * off, 0.075, 0.03);
+  // strap hinges on the top and bottom ledges, a thumb latch at the free end
+  b.color(IRON).set('aMas', KIND.dark, 0, 1, 0);
+  for (const yy of [ys[0], ys[2]]) b.box(g.hingeX + tx * 0.3 + nx * (off + 0.02), y0 + yy, g.z + tz * 0.3 + nz * (off + 0.02), 0.3, 0.018, 0.006, yaw, 0);
+  b.box(g.hingeX + tx * (L - 0.12) - nx * 0.03, y0 + 0.98, g.z + tz * (L - 0.12) - nz * 0.03, 0.04, 0.06, 0.012, yaw, 0);
+  // gravel threshold strip under the slot
+  b.color(COL.gravel).set('aMas', KIND.plain, 0, 1, 0);
+  top(b, { x0: g.x - 0.85, x1: g.x + 0.85, z0: g.z - 0.12, z1: g.z + 0.12 }, model.height(g.x, g.z) + 0.035);
+}
+
+/** the arched head of an upright (a half disc of the stone's width and thickness on top of its shaft at hb) */
+function archHead(b: GeoBuilder, t: CloseStone, y0: number, hb: number): void {
+  const nx = Math.sin(t.yaw),
+    nz = Math.cos(t.yaw);
+  const ux = Math.cos(t.yaw),
+    uz = -Math.sin(t.yaw);
+  const R = t.w / 2,
+    N = 7;
+  // outline in (u along the width, v up from hb), shear by the lean (offset along n grows with height)
+  const prof: [number, number][] = [];
+  for (let k = 0; k <= N; k++) {
+    const a = (k / N) * Math.PI;
+    prof.push([Math.cos(a) * R, Math.sin(a) * R * 0.8]);
+  }
+  const W = (u: number, v: number, d: number): V3 => {
+    const y = hb + v;
+    const sh = t.lean * (y + 0.15) + d;
+    return [t.x + ux * u + nx * sh, y0 + y, t.z + uz * u + nz * sh];
+  };
+  for (const sd of [-1, 1]) {
+    const d = (sd * t.t) / 2;
+    b.polygonFacing(
+      prof.map(([u, v]) => W(u, v, d)),
+      prof.map(([u, v]) => [u, v] as [number, number]),
+      nx * sd,
+      0,
+      nz * sd,
+    );
+  }
+  for (let k = 0; k < N; k++) {
+    const [u0, v0] = prof[k],
+      [u1, v1] = prof[k + 1];
+    const mx = (u0 + u1) / 2,
+      my = (v0 + v1) / 2;
+    b.quadFacing(W(u0, v0, -t.t / 2), W(u1, v1, -t.t / 2), W(u1, v1, t.t / 2), W(u0, v0, t.t / 2), ux * mx, my, uz * mx);
+  }
+}
+
+/** railings on the churchyard wall: round bars with spear tops between the piers */
+function closeIron(b: GeoBuilder, P: ClosePlace): void {
+  const y = P.groundY + 0.62;
+  const gx0 = P.gx - P.gw / 2 - 0.3,
+    gx1 = P.gx + P.gw / 2 + 0.3;
+  for (const [a, c] of [
+    [P.wallX0 + 0.55, gx0 - 0.3],
+    [gx1 + 0.3, P.wallX1 - 0.55],
+  ] as [number, number][]) {
+    if (c - a < 0.3) continue;
+    b.color(IRON);
+    for (const yy of [y + 0.1, y + 0.78]) b.beam(a, yy, P.wallZ, c, yy, P.wallZ, 0.035, 0.03);
+    const n = Math.max(1, Math.round((c - a) / 0.14));
+    for (let k = 0; k <= n; k++) {
+      const x = a + ((c - a) * k) / n;
+      b.color(IRON);
+      b.beam(x, y, P.wallZ, x + 0.001, y + 0.92, P.wallZ, 0.022, 0.022);
+      b.color(IRON_HI);
+      b.box(x, y + 0.95, P.wallZ, 0.03, 0.04, 0.012, 0, 0);
+    }
+  }
+}
+
 export function buildPlacesStone(b: GeoBuilder, ctx: CityContext, model: TerrainModel, lights: GlowPoint[]): void {
   const pl = ctx.plan.places;
   if (!pl) return;
   if (pl.quay) quayStone(b, pl.quay, model, lights);
   if (pl.lane) laneStone(b, pl.lane, detail(ctx), lights);
   if (pl.island) islandStone(b, pl.island, detail(ctx));
+  if (pl.station) stationStone(b, pl.station, lights);
+  if (pl.cutting) cuttingStone(b, pl.cutting, detail(ctx));
+  for (const w of pl.waterStairs) waterStairsStone(b, w, model);
+  if (pl.slipway) slipwayStone(b, pl.slipway, model, detail(ctx));
+  if (pl.close) closeStone(b, pl.close, detail(ctx), lights);
+  if (pl.yardGate) yardGateWood(b, pl.yardGate, model);
+  if (pl.edge) edgeWood(b, pl.edge);
 }
 
 /** ironwork (handrails, bollards) into the railing builder */
@@ -524,4 +1082,6 @@ export function buildPlacesIron(b: GeoBuilder, ctx: CityContext): void {
   if (!pl) return;
   if (pl.quay) quayIron(b, pl.quay);
   if (pl.lane) laneIron(b, pl.lane);
+  for (const w of pl.waterStairs) waterStairsIron(b, w);
+  if (pl.close) closeIron(b, pl.close);
 }

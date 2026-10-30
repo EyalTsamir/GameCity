@@ -16,17 +16,31 @@
 //   oldlane  (?nooldlane)  Old Town block (4,1): an archway passage under a gatehouse from the avenue into a
 //                          paved pocket square, a raised garden terrace behind a balustraded retaining wall
 //                          with a recessed flight, and a stepped lane down through the north row to the street
+//   station  (?nostationfront)  Central Station: facade set back 2.5 m for a granite forecourt; a two-step perron
+//                          across the three doors with cheek blocks and lamp standards
+//   cutting  (?nocutwall)  a masonry retaining wall with pilasters at the toe of the rock cut behind the tracks
+//   waterstairs (?nowaterstairs)  water stairs down the south river wall by the rowing club and down the harbour
+//                          sea wall (south of the cargo ship), a boat slipway through the south river wall
 //   islandbridge (?noislandbridge)  Central Park: a humped timber footbridge from the pond loop to the island,
 //                          ending on a little landing deck with a bench
+//   close    (?noclose)    St Mary's churchyard, Old Town block (4,3): the gap between the church and the south row
+//                          opened to the street through a lych-gate in a low railed wall; a flagged path to a
+//                          memorial cross in the old courtyard, now a churchyard lawn with headstones and yews
+//   yardgate (?noyardgate) Old Town block (4,2): the south gap between the townhouses and the hotel ends in a
+//                          gate in the back yard's close-board fence; a gravel path from the street to the yard
+//   edge     (?noedgelane) the town's west edge: Westbrook's back gardens end at a farm lane (two gravel ruts and a
+//                          grass crown, long-grass verges) behind a field hedgerow with oaks along the slab edge,
+//                          field gates and a stile into the fields, a fingerpost where it meets the river promenade
 
 import type { CityPlan, Lot, WalkPath, Bench } from './plan';
-import { RIVER, SIDEWALK_Y } from './constants';
+import { QUAY_X, RIVER, SIDEWALK_Y, SLAB, WATER_LEVEL } from './constants';
+import { RIDGE_FOOT_Z } from './plan';
 import { P2, Rect, rect } from './geom';
 import { hashString } from './rng';
 
 const params = typeof location !== 'undefined' ? new URLSearchParams(location.search) : new URLSearchParams();
 
-export type PlaceId = 'lowquay' | 'oldlane' | 'islandbridge';
+export type PlaceId = 'lowquay' | 'oldlane' | 'islandbridge' | 'station' | 'cutting' | 'waterstairs' | 'close' | 'yardgate' | 'edge';
 
 /** a straight flight: `n` risers between yBot and yTop, rising along `axis` in direction `up` */
 export interface PlaceStair {
@@ -107,11 +121,127 @@ export function islandBridgeY(b: IslandBridgePlace, z: number): number {
   return b.y0 + (b.y1 - b.y0) * t + b.rise * Math.sin(Math.PI * t);
 }
 
+export interface StationPlace {
+  /** granite forecourt between the sidewalk and the (set back) facade, flush with the sidewalk */
+  forecourt: Rect;
+  /** the perron in front of the doors: landing + flight down to the forecourt, cheek blocks at both ends */
+  landing: Rect;
+  landingY: number;
+  stair: PlaceStair;
+  cheeks: Rect[];
+  cheekY: number;
+}
+
+/** masonry retaining wall at the toe of the rock cut north of the tracks */
+export interface CuttingPlace {
+  x0: number;
+  x1: number;
+  /** wall face line (south face) and thickness */
+  z: number;
+  t: number;
+  top: number;
+}
+
+/** a flight down a quay wall into the water: top landing flush with the coping, steps, a wet landing at the waterline */
+export interface WaterStairs {
+  id: string;
+  /** wall line + outward (water) normal; the flight runs along the wall */
+  stair: PlaceStair;
+  top: Rect;
+  topY: number;
+  bottom: Rect;
+  bottomY: number;
+  /** footprint of the whole thing in front of the wall (body from the bed) */
+  body: Rect;
+  /** outer edge (handrail line) — side facing the water */
+  railSide: 'x0' | 'x1' | 'z0' | 'z1';
+}
+
+/** a boat slipway cut through the south river wall */
+export interface Slipway {
+  ramp: PlaceRamp;
+  /** under-water toe */
+  toeY: number;
+}
+
+export interface CloseStone {
+  x: number;
+  z: number;
+  /** facing (an upright's inscription side; chest tombs lie along the local x axis) */
+  yaw: number;
+  w: number;
+  h: number;
+  t: number;
+  /** lean along the facing direction (never 0: it orients the beam), 0 upright limestone · 1 slate · 2 chest tomb */
+  lean: number;
+  kind: 0 | 1 | 2;
+  shoulder: boolean;
+  kerb: boolean;
+  tone: number;
+}
+
+export interface ClosePlace {
+  /** the courtyard area turned churchyard (vegetation / props leave it to the close) */
+  areaId: number;
+  /** everything the close covers (lawns + the gate) */
+  bounds: Rect;
+  groundY: number;
+  /** street boundary wall along z = wallZ from wallX0 to wallX1; the lych-gate opening gx ± gw/2, the gate's
+   *  roof centred on gz (set back into the churchyard: its front posts stand on the wall line, not the sidewalk) */
+  wallZ: number;
+  gz: number;
+  wallX0: number;
+  wallX1: number;
+  gx: number;
+  gw: number;
+  cross: P2;
+  stones: CloseStone[];
+  /** yews / a lime planted by vegetation */
+  trees: { x: number; z: number; sp: 'column' | 'round'; h: number; r: number }[];
+}
+
+/** the back-yard gate (block 4,2): a ledged-and-braced board gate in the close-board fence, open outwards */
+export interface YardGate {
+  /** slot centre on the fence line, hinge post x, the leaf's open end */
+  x: number;
+  z: number;
+  hingeX: number;
+  leaf: P2;
+}
+
+/** the west edge (core/places.ts buildEdge): lane, hedgerow, gates */
+export interface EdgePlace {
+  /** rut centre lines (x), the lane's z range */
+  ruts: [number, number];
+  z0: number;
+  z1: number;
+  /** garden boundary (the lots' new back edge) */
+  gardenX: number;
+  /** hedgerow centre line x and its runs (z ranges between the gaps) */
+  hedgeX: number;
+  hedges: [number, number][];
+  /** field gates in the hedgerow gaps (centre z, open = swung into the field) and one across the lane's north end */
+  gates: { x: number; z: number; axis: 'x' | 'z'; w: number; open: boolean }[];
+  stile: P2 | null;
+  post: P2;
+  trees: { x: number; z: number; h: number; r: number; sp: 'round' | 'birch' }[];
+}
+
 export interface PlacesDef {
   on: Record<PlaceId, boolean>;
   quay: QuayPlace | null;
   lane: LanePlace | null;
   island: IslandBridgePlace | null;
+  station: StationPlace | null;
+  cutting: CuttingPlace | null;
+  waterStairs: WaterStairs[];
+  slipway: Slipway | null;
+  close: ClosePlace | null;
+  yardGate: YardGate | null;
+  edge: EdgePlace | null;
+  /** parapet gaps on the south river wall (x ranges) and holes through its body (slipway) */
+  southParapetGaps: [number, number][];
+  southWallHoles: [number, number][];
   /** solid thin boxes for the first-person walk (balustrades, handrails, cheek walls) */
   walls: Rect[];
   /** promenade railing gaps on the north river wall (stair landings) */
@@ -411,7 +541,393 @@ function buildIsland(plan: CityPlan, walls: Rect[]): IslandBridgePlace | null {
   return B;
 }
 
+// ──────────────────────────────────────────────────────── station front ──
+
+function buildStation(plan: CityPlan, floors: Floor[], stairs: PlaceStair[], walls: Rect[], boxes: Rect[]): StationPlace | null {
+  const st = plan.lots.find((l) => l.kind === 'station');
+  if (!st) return null;
+  const fp = st.footprint;
+  const zS = st.rect.z1; // block edge = back of the sidewalk
+  // the facade moves 2.5 m back: room for a forecourt and a perron in front of the three doors
+  const zF = fp.z1 - 2.5;
+  fp.z1 = zF;
+  for (const d of st.doors) if (d.dir === 'S') d.z = zF;
+  const n = 2,
+    tread = 0.36;
+  const landingY = SIDEWALK_Y + n * 0.15;
+  const xs = st.doors.filter((d) => d.dir === 'S').map((d) => d.x);
+  const x0 = Math.min(...xs) - 3.1,
+    x1 = Math.max(...xs) + 3.1;
+  const landing = rect(x0, zF, x1, zF + 1.7);
+  const stair: PlaceStair = { rect: rect(x0, landing.z1, x1, landing.z1 + n * tread), axis: 'z', up: -1, yBot: SIDEWALK_Y, yTop: landingY, n };
+  const forecourt = rect(fp.x0, zF, fp.x1, zS);
+  const cheeks = [rect(x0 - 0.55, zF, x0, stair.rect.z1), rect(x1, zF, x1 + 0.55, stair.rect.z1)];
+  const cheekY = landingY + 0.42;
+  stairs.push(stair);
+  floors.push({ r: landing, y: landingY }, { r: forecourt, y: SIDEWALK_Y });
+  for (const c of cheeks) {
+    walls.push(c);
+    floors.push({ r: c, y: cheekY });
+  }
+  boxes.push(rect(fp.x0 - 0.1, zF - 0.1, fp.x1 + 0.1, zS + 0.1));
+  // a walk from each door over the perron to the sidewalk
+  for (const x of xs) {
+    addPath(plan, {
+      kind: 'plaza',
+      pts: [{ x, z: zF + 0.3 }, { x, z: landing.z1 }, { x, z: stair.rect.z1 }, { x, z: zS }],
+      ys: [landingY, landingY, SIDEWALK_Y, SIDEWALK_Y],
+      width: 2.4,
+      surface: 'stone',
+      draw: false,
+      linkEnds: [1],
+    });
+  }
+  return { forecourt, landing, landingY, stair, cheeks, cheekY };
+}
+
+function buildCutting(): CuttingPlace {
+  // between the two road-tunnel cuttings (their wing walls reach 19 m either side of x = -110 / 55)
+  // face 1.2 m in front of the ridge foot (clear of the cliff skin's relief), thick enough to meet the rock behind
+  return { x0: -88, x1: 33, z: RIDGE_FOOT_Z + 1.2, t: 1.7, top: 2.7 };
+}
+
+// ────────────────────────────────────────── river + harbour water stairs ──
+
+function buildWaterWorks(plan: CityPlan, floors: Floor[], stairs: PlaceStair[], ramps: PlaceRamp[], walls: Rect[], boxes: Rect[], dry: Rect[], drops: Rect[]): { ws: WaterStairs[]; slip: Slipway; pGaps: [number, number][]; holes: [number, number][] } {
+  const ws: WaterStairs[] = [];
+  const wet = WATER_LEVEL + 0.15; // bottom landing just clear of the water
+  // 1. south river wall, west of the rowing-club jetty: top landing on the coping (y 0.2) at x 87.7..89.3, flight down
+  //    westwards along the wall face, wet landing at the waterline
+  {
+    const zF = RIVER.z1 - 0.25; // water face of the south wall
+    const zO = zF - 1.6;
+    const topY = 0.19,
+      n = 11;
+    const top = rect(87.7, zO, 89.3, RIVER.z1 + 0.4);
+    const stair: PlaceStair = { rect: rect(87.7 - n * 0.3, zO, 87.7, zF), axis: 'x', up: 1, yBot: wet, yTop: topY, n };
+    const bottom = rect(stair.rect.x0 - 1.6, zO, stair.rect.x0, zF);
+    ws.push({ id: 'river-s', stair, top, topY, bottom, bottomY: wet, body: rect(bottom.x0, zO, top.x1, zF), railSide: 'z0' });
+    walls.push(rect(bottom.x0 + 1.2, zO - 0.08, top.x1, zO + 0.04));
+    const zL = (zO + zF) / 2;
+    addPath(plan, {
+      kind: 'riverbank',
+      pts: [{ x: 88.5, z: RIVER.z1 + 5 }, { x: 88.5, z: RIVER.z1 + 0.6 }, { x: 88.5, z: zL }, { x: stair.rect.x1, z: zL }, { x: stair.rect.x0, z: zL }, { x: bottom.x0 + 0.5, z: zL }],
+      ys: [0.03, 0.03, topY, topY, wet, wet],
+      width: 1.5,
+      surface: 'stone',
+      draw: false,
+    });
+  }
+  // 2. harbour quay, between the cargo ship's stern and the ferry dock: flight north along the sea wall
+  {
+    const xF = QUAY_X + 0.3; // water face of the sea wall
+    const xO = xF + 1.7;
+    const topY = 0.11,
+      n = 12;
+    const top = rect(QUAY_X - 0.6, -26.2, xO, -24.6);
+    const stair: PlaceStair = { rect: rect(xF, -26.2 - n * 0.3, xO, -26.2), axis: 'z', up: 1, yBot: wet, yTop: topY, n };
+    const bottom = rect(xF, stair.rect.z0 - 1.8, xO, stair.rect.z0);
+    ws.push({ id: 'harbour', stair, top, topY, bottom, bottomY: wet, body: rect(xF, bottom.z0, xO, top.z1), railSide: 'x1' });
+    walls.push(rect(xO - 0.04, bottom.z1 - 1.0, xO + 0.08, top.z1));
+    drops.push(rect(QUAY_X - 1, bottom.z0 - 1, QUAY_X + 1, top.z1 + 1));
+  }
+  for (const w of ws) {
+    stairs.push(w.stair);
+    floors.push({ r: w.top, y: w.topY }, { r: w.bottom, y: w.bottomY });
+    boxes.push(rect(w.body.x0 - 0.7, w.body.z0, w.body.x1, w.body.z1 + 0.5));
+    dry.push(w.body);
+  }
+  // 3. slipway east of the rowing club: a ramp from the bank (flush) down through a gap in the south wall into the river
+  const ramp: PlaceRamp = { rect: rect(99, RIVER.z1 - 6.5, 103, RIVER.z1 + 0.5), axis: 'z', up: 1, yBot: -1.95, yTop: 0.0 };
+  ramps.push(ramp);
+  boxes.push(ramp.rect);
+  const zDry = ramp.rect.z0 + ((WATER_LEVEL + 0.08 - ramp.yBot) / (ramp.yTop - ramp.yBot)) * (ramp.rect.z1 - ramp.rect.z0);
+  dry.push(rect(ramp.rect.x0, zDry, ramp.rect.x1, ramp.rect.z1));
+  addPath(plan, {
+    kind: 'riverbank',
+    pts: [{ x: 101, z: RIVER.z1 + 5 }, { x: 101, z: RIVER.z1 + 0.5 }, { x: 101, z: zDry + 0.8 }],
+    ys: [0.03, 0.0, ramp.yBot + ((zDry + 0.8 - ramp.rect.z0) / (ramp.rect.z1 - ramp.rect.z0)) * (ramp.yTop - ramp.yBot)],
+    width: 2.0,
+    surface: 'stone',
+    draw: false,
+  });
+  const pGaps: [number, number][] = [
+    [ws[0].top.x0 - 0.05, ws[0].top.x1 + 0.05],
+    [ramp.rect.x0 - 0.2, ramp.rect.x1 + 0.2],
+  ];
+  return { ws, slip: { ramp, toeY: ramp.yBot }, pGaps, holes: [[ramp.rect.x0, ramp.rect.x1]] };
+}
+
 // ───────────────────────────────────────────────────────────── build ──
+
+// ─────────────────────────────────────────────────────────── church close ──
+
+const h01 = (a: number, b: number, c: number): number => {
+  let h = hashString(`close:${a.toFixed(2)}:${b.toFixed(2)}:${c}`);
+  h = Math.imul(h ^ (h >>> 15), 0x2c1b3c6d);
+  return ((h ^ (h >>> 12)) >>> 0) / 4294967296;
+};
+
+function segDist(x: number, z: number, a: P2, b: P2): number {
+  const dx = b.x - a.x,
+    dz = b.z - a.z;
+  const t = Math.max(0, Math.min(1, ((x - a.x) * dx + (z - a.z) * dz) / (dx * dx + dz * dz || 1)));
+  return Math.hypot(x - a.x - dx * t, z - a.z - dz * t);
+}
+
+function buildClose(plan: CityPlan, walls: Rect[]): ClosePlace | null {
+  const ch = plan.lots.find((l) => l.kind === 'church');
+  if (!ch) return null;
+  const blk = plan.blocks.find((b) => b.id === ch.blockId);
+  const court = plan.areas.find((a) => a.kind === 'courtyard' && a.blockId === ch.blockId);
+  if (!blk || !court) return null;
+  const fp = ch.footprint,
+    C = court.rect,
+    r = blk.rect;
+  const south = plan.lots.filter((l) => l.blockId === blk.id && l.kind === 'townhouse' && l.front === 'S' && l.footprint.x0 >= fp.x1 - 0.1);
+  if (!south.length) return null;
+  const sx1 = Math.min(...south.map((l) => l.footprint.x0));
+  // the gap must reach the courtyard and be wide enough for a gate
+  if (sx1 - fp.x1 < 4.5 || C.z1 < r.z1 - 14 || C.x0 > fp.x1 + 3) return null;
+  const groundY = 0;
+  const wallZ = r.z1 - 0.25;
+  const wallX0 = fp.x1 + 0.2,
+    wallX1 = sx1 - 0.2;
+  const gw = 2.2;
+  const gx = (wallX0 + wallX1) / 2;
+  const gz = wallZ - 1.0;
+  const cross = { x: (C.x0 + C.x1) / 2, z: (C.z0 + C.z1) / 2 };
+  // lawns: the gap and the strip along the church's east flank (garden kind: no scatter, no vegetation rng)
+  const lawn = (q: Rect) => {
+    const id = plan.areas.length;
+    plan.areas.push({ id, kind: 'garden', surface: 'grass', rect: q, blockId: blk.id, greenery: 0, layer: 2 });
+    blk.areas.push(id);
+  };
+  lawn(rect(fp.x1, C.z1, sx1, r.z1));
+  lawn(rect(fp.x1, C.z0, C.x0, C.z1));
+  // the flagged path: street → lych-gate → through the gap → the cross
+  const pts = [
+    { x: gx, z: r.z1 + 1.6 },
+    { x: gx, z: C.z1 + 1.2 },
+    { x: cross.x - 0.5, z: cross.z + 1.45 },
+  ];
+  addPath(plan, { kind: 'plaza', pts, ys: [SIDEWALK_Y, groundY, groundY], width: 1.5, surface: 'paving', draw: true, linkEnds: [0] });
+  // two benches beside the path's last leg, facing it (sitters look across at the graves and the cross)
+  const P1 = pts[1],
+    P2 = pts[2];
+  const dl = Math.hypot(P2.x - P1.x, P2.z - P1.z);
+  const dx = (P2.x - P1.x) / dl,
+    dz = (P2.z - P1.z) / dl;
+  const benches: P2[] = [];
+  for (const [u, sd] of [
+    [0.45, 1],
+    [0.7, -1],
+  ]) {
+    const ax = P1.x + dx * dl * u,
+      az = P1.z + dz * dl * u;
+    const nx = -dz * sd,
+      nz = dx * sd;
+    const bx = ax + nx * 1.35,
+      bz = az + nz * 1.35;
+    bench(plan, bx, bz, Math.atan2(-nx, -nz), ax, az);
+    benches.push({ x: bx, z: bz });
+  }
+  const trees: ClosePlace['trees'] = [
+    { x: wallX0 + 0.6, z: wallZ - 2.7, sp: 'column', h: 5.2, r: 0.9 },
+    { x: wallX1 - 0.6, z: wallZ - 2.7, sp: 'column', h: 4.8, r: 0.85 },
+    { x: C.x1 - 2.6, z: C.z0 + 2.8, sp: 'round', h: 9.5, r: 3.2 },
+    { x: cross.x + 3.4, z: cross.z - 3.2, sp: 'column', h: 5.6, r: 1.0 },
+  ];
+  const clear = (x: number, z: number, m: number): boolean => {
+    for (let i = 0; i < pts.length - 1; i++) if (segDist(x, z, pts[i], pts[i + 1]) < 0.75 + m) return false;
+    if (Math.abs(x - cross.x) < 1.25 + m && Math.abs(z - cross.z) < 1.25 + m) return false;
+    for (const t of trees) if (Math.hypot(t.x - x, t.z - z) < (t.sp === 'round' ? 1.3 : 0.9) + m) return false;
+    for (const q of benches) if (Math.hypot(q.x - x, q.z - z) < 1.1 + m) return false;
+    return true;
+  };
+  const stones: CloseStone[] = [];
+  const E = Math.PI / 2; // uprights face east, graves lie east of them
+  const upright = (x: number, z: number, kerbOk: boolean, i: number) => {
+    const q = h01(x, z, i);
+    const slate = q < 0.14;
+    const w = slate ? 0.48 + h01(x, z, 1) * 0.15 : 0.52 + h01(x, z, 2) * 0.26;
+    const lean = (h01(x, z, 3) < 0.3 ? 0.03 + h01(x, z, 4) * 0.07 : 0.012 + h01(x, z, 5) * 0.012) * (h01(x, z, 6) < 0.25 ? -1 : 1);
+    stones.push({ x, z, yaw: E, w, h: slate ? 0.75 + h01(x, z, 7) * 0.3 : 0.6 + h01(x, z, 8) * 0.45, t: slate ? 0.06 : 0.09 + h01(x, z, 9) * 0.04, lean, kind: slate ? 1 : 0, shoulder: !slate && h01(x, z, 10) < 0.45, kerb: kerbOk && h01(x, z, 11) < 0.3, tone: h01(x, z, 12) });
+    walls.push(rect(x - 0.08, z - w / 2, x + 0.08, z + w / 2));
+  };
+  // rows in the courtyard (each grave plot ~2.25 m east-west)
+  for (let x = C.x0 + 0.9, row = 0; x < C.x1 - 1.9; x += 2.25, row++) {
+    for (let z = C.z0 + 1.0; z < C.z1 - 0.7; ) {
+      const zz = z + (h01(x, z, 20) - 0.5) * 0.25;
+      const q = h01(x, z, 21);
+      if (q < 0.08 && clear(x + 0.95, zz, 0.6) && zz < C.z1 - 1.2) {
+        // chest tomb (lies east-west)
+        stones.push({ x: x + 0.95, z: zz, yaw: 0, w: 1.9, h: 0.65, t: 0.85, lean: 0.012, kind: 2, shoulder: false, kerb: false, tone: h01(x, z, 22) });
+        walls.push(rect(x, zz - 0.45, x + 1.9, zz + 0.45));
+        z += 1.9;
+        continue;
+      }
+      if (q > 0.12 && clear(x, zz, 0.15) && clear(x + 1.0, zz, 0.2)) upright(x, zz, x + 1.95 < C.x1 - 0.1, row);
+      z += 1.15 + h01(x, z, 23) * 0.35;
+    }
+  }
+  // a row along the church's east flank and two short rows either side of the path in the gap
+  for (let z = C.z0 + 0.9; z < C.z1 - 0.4; z += 1.3 + h01(fp.x1, z, 24) * 0.3) if (clear(fp.x1 + 0.55, z, 0.1) && h01(fp.x1, z, 25) > 0.18) upright(fp.x1 + 0.55, z, false, 7);
+  for (const x of [fp.x1 + 0.55, gx + 1.35])
+    for (let z = C.z1 + 0.9; z < wallZ - 3.0; z += 1.25 + h01(x, z, 26) * 0.3) if (x + 0.1 < sx1 - 0.3 && clear(x, z, 0.1) && h01(x, z, 27) > 0.2) upright(x, z, false, 8);
+  // solids for the first-person walk: wall runs, gate posts, cross base
+  const gx0 = gx - gw / 2 - 0.3,
+    gx1 = gx + gw / 2 + 0.3;
+  walls.push(rect(wallX0, wallZ - 0.28, gx0 + 0.28, wallZ + 0.28), rect(gx1 - 0.28, wallZ - 0.28, wallX1, wallZ + 0.28));
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) walls.push(rect(gx + sx * (gw / 2 - 0.05) - 0.1, gz + sz - 0.1, gx + sx * (gw / 2 - 0.05) + 0.1, gz + sz + 0.1));
+  walls.push(rect(cross.x - 1.05, cross.z - 1.05, cross.x + 1.05, cross.z + 1.05));
+  return { areaId: court.id, bounds: rect(fp.x1, C.z0, Math.max(C.x1, sx1), r.z1 + 1.6), groundY, wallZ, gz, wallX0, wallX1, gx, gw, cross, stones, trees };
+}
+
+// ─────────────────────────────────────────────────────── back-yard gate ──
+
+/**
+ * Old Town block (4,2): the W6 back yard (props/places.ts — the oldtown courtyard nearest the Old Town POI) has a
+ * close-board fence round its open sides; the gap in the south row (between the townhouses and the hotel) ran
+ * into it. A gravel path from the street through the gap ends in the yard; it crosses the fence at one panel
+ * slot (posts every 1.8 m, as props draws them), which props leaves out (walkway) — the gate goes there.
+ */
+function buildYardGate(plan: CityPlan, walls: Rect[]): YardGate | null {
+  const old = plan.pois.find((q) => q.id === 'oldtown');
+  const tx = old?.target.x ?? 82,
+    tz = old?.target.z ?? 10;
+  const courts = plan.areas.filter((a) => a.kind === 'courtyard' && plan.blocks.find((b) => b.id === a.blockId)?.kind === 'oldtown');
+  let court = courts[0];
+  let best = Infinity;
+  for (const a of courts) {
+    const d = Math.hypot((a.rect.x0 + a.rect.x1) / 2 - tx, (a.rect.z0 + a.rect.z1) / 2 - tz) - Math.min(a.rect.x1 - a.rect.x0, a.rect.z1 - a.rect.z0) * 2;
+    if (d < best) {
+      best = d;
+      court = a;
+    }
+  }
+  if (!court) return null;
+  const C = court.rect;
+  const blk = plan.blocks.find((b) => b.id === court.blockId)!;
+  // widest gap in the south row between the yard's x range and the row's lots
+  const row = plan.lots.filter((l) => l.blockId === blk.id && l.footprint.z1 > C.z1 + 0.5 && l.footprint.x1 > C.x0 && l.footprint.x0 < C.x1 + 2);
+  const xs = row.map((l) => [l.footprint.x0, l.footprint.x1]).sort((a, b) => a[0] - b[0]);
+  let g0 = NaN,
+    g1 = NaN,
+    cur = C.x0;
+  for (const [a, b] of xs) {
+    if (a - cur > (g1 - g0 || 0) && a > C.x0) {
+      g0 = cur;
+      g1 = a;
+    }
+    cur = Math.max(cur, b);
+  }
+  if (!(g1 - g0 > 3)) return null;
+  // the fence slot nearest the gap's middle: the south edge runs from x1 to x0 (props/places.ts edges[1])
+  const L = C.x1 - C.x0,
+    cx = (C.x0 + C.x1) / 2;
+  const n = Math.floor((L - 0.4) / 1.8);
+  const mid = (Math.max(g0, C.x0) + Math.min(g1, C.x1)) / 2;
+  let sx = NaN;
+  for (let i = 0; i < n; i++) {
+    const x = cx - (-L / 2 + 0.2 + 0.9 + i * 1.8);
+    if (x - 0.9 > g0 + 0.3 && x + 0.9 < g1 - 0.3 && !(Math.abs(x - mid) > Math.abs(sx - mid))) sx = x;
+  }
+  if (!(sx === sx)) return null;
+  const fz = C.z1 - 0.25;
+  addPath(plan, {
+    kind: 'plaza',
+    pts: [
+      { x: sx, z: blk.rect.z1 + 1.6 },
+      { x: sx, z: fz - 1.6 },
+      { x: (sx + C.x0 + 3.5) / 2, z: (C.z0 + C.z1) / 2 + 1.0 },
+    ],
+    ys: [SIDEWALK_Y, 0, 0],
+    width: 1.2,
+    surface: 'gravel',
+    draw: true,
+    linkEnds: [0],
+  });
+  // leaf hinged on the east post, open ~85° outwards (into the gap, clear of the path)
+  const hingeX = sx + 0.9;
+  const a = (85 * Math.PI) / 180;
+  const leaf = { x: hingeX - Math.cos(a) * 1.68, z: fz + Math.sin(a) * 1.68 };
+  walls.push(rect(Math.min(hingeX, leaf.x) - 0.05, fz, Math.max(hingeX, leaf.x) + 0.05, leaf.z));
+  return { x: sx, z: fz, hingeX, leaf };
+}
+
+// ──────────────────────────────────────────────────────────── west edge ──
+
+/**
+ * Westbrook's house lots ran right up to the slab edge, so the town stopped at a wall of clipped garden hedges
+ * facing an empty meadow. The back 3.8 m of every garden (and of the allotments) becomes a farm lane: two gravel
+ * ruts with a grass crown between long-grass verges, from the river promenade north to a field gate at the hill
+ * foot; along the slab edge a field hedgerow with standard oaks, two field gates and a stile into the fields.
+ */
+function buildEdge(plan: CityPlan, walls: Rect[]): EdgePlace | null {
+  const blk = plan.blocks.find((b) => b.kind === 'suburb' && b.rect.x0 <= SLAB.x0 + 0.1);
+  if (!blk) return null;
+  const gardenX = SLAB.x0 + 5.8;
+  const lots = plan.lots.filter((l) => l.blockId === blk.id && l.rect.x0 < gardenX);
+  if (!lots.length || lots.some((l) => l.footprint.x0 < gardenX + 4)) return null;
+  for (const l of lots) l.rect = rect(gardenX, l.rect.z0, l.rect.x1, l.rect.z1);
+  for (const id of blk.areas) {
+    const a = plan.areas[id];
+    if (a.rect.x0 < gardenX + 0.2) a.rect = rect(gardenX + 0.2, a.rect.z0, a.rect.x1, a.rect.z1);
+  }
+  const ruts: [number, number] = [SLAB.x0 + 2.7, SLAB.x0 + 4.5];
+  const hedgeX = SLAB.x0 + 0.8;
+  const prom = plan.paths.find((q) => q.kind === 'promenade' && Math.abs(q.pts[0].x - (SLAB.x0 + 2)) < 0.01);
+  const z1 = blk.rect.z1 - 0.4;
+  const z0 = blk.rect.z0 + 1.2;
+  // the walkable ruts: the west one joins the promenade's west end, the east one branches off it at both ends
+  // (the branch points are vertices of A: pedNetwork's end-on-segment split ignores the outer 1 % of a segment)
+  const pa: P2[] = [{ x: ruts[0], z: z0 + 0.9 }, { x: ruts[0], z: z0 + 2.6 }, { x: ruts[0], z: z1 - 1.6 }, { x: ruts[0], z: z1 - 1.2 }];
+  if (prom) pa.push({ x: prom.pts[0].x, z: prom.pts[0].z });
+  addPath(plan, { kind: 'promenade', pts: pa, ys: pa.map(() => 0.02), width: 0.8, surface: 'track', draw: true });
+  const pb: P2[] = [
+    { x: ruts[0], z: z0 + 2.6 },
+    { x: ruts[1], z: z0 + 4.2 },
+    { x: ruts[1], z: z1 - 3.2 },
+    { x: ruts[0], z: z1 - 1.6 },
+  ];
+  addPath(plan, { kind: 'promenade', pts: pb, ys: pb.map(() => 0.02), width: 0.8, surface: 'track', draw: true });
+  // hedgerow runs with two field-gate gaps and a stile gap
+  const gz = [blk.rect.z0 + (blk.rect.z1 - blk.rect.z0) * 0.27, blk.rect.z0 + (blk.rect.z1 - blk.rect.z0) * 0.68];
+  const sz = blk.rect.z0 + (blk.rect.z1 - blk.rect.z0) * 0.5;
+  const cuts: [number, number][] = [
+    [gz[0], 1.85],
+    [sz, 0.45],
+    [gz[1], 1.85],
+  ];
+  const hedges: [number, number][] = [];
+  let a = blk.rect.z0 + 0.3;
+  for (const [c, h] of cuts) {
+    hedges.push([a, c - h]);
+    a = c + h;
+  }
+  hedges.push([a, z1 + 1.2]);
+  for (const [h0, h1] of hedges) walls.push(rect(hedgeX - 0.55, h0, hedgeX + 0.55, h1));
+  const gates: EdgePlace['gates'] = [
+    { x: hedgeX, z: gz[0], axis: 'z', w: 3.5, open: false },
+    { x: hedgeX, z: gz[1], axis: 'z', w: 3.5, open: true },
+    // across the lane's north end (a field gate into the hill pasture)
+    { x: (ruts[0] + ruts[1]) / 2, z: z0 - 0.2, axis: 'x', w: 3.6, open: false },
+  ];
+  for (const g of gates) if (!g.open) walls.push(g.axis === 'z' ? rect(g.x - 0.1, g.z - g.w / 2, g.x + 0.1, g.z + g.w / 2) : rect(g.x - g.w / 2, g.z - 0.1, g.x + g.w / 2, g.z + 0.1));
+  walls.push(rect(hedgeX - 0.12, sz - 0.5, hedgeX + 0.12, sz + 0.5)); // the stile's fence panel (stepped over in reality)
+  // hedgerow standards: oaks (a birch now and then), irregular spacing, kept off the gates
+  const trees: EdgePlace['trees'] = [];
+  for (let z = blk.rect.z0 + 9; z < z1 - 4; ) {
+    const q = h01(hedgeX, z, 40);
+    if (cuts.every(([c, h]) => Math.abs(z - c) > h + 3.2)) {
+      const big = q > 0.35;
+      trees.push({ x: hedgeX + (h01(hedgeX, z, 41) - 0.5) * 0.7, z, h: big ? 10 + q * 4 : 6.5 + q * 3, r: big ? 3.6 + q * 1.3 : 2.4 + q, sp: q < 0.12 ? 'birch' : 'round' });
+    }
+    z += 17 + h01(hedgeX, z, 42) * 22;
+  }
+  return { ruts, z0, z1, gardenX, hedgeX, hedges, gates, stile: { x: hedgeX, z: sz }, post: { x: gardenX - 0.45, z: z1 - 0.9 }, trees };
+}
 
 export function buildPlaces(plan: CityPlan): PlacesDef {
   const all = !params.has('noplaces');
@@ -419,6 +935,12 @@ export function buildPlaces(plan: CityPlan): PlacesDef {
     lowquay: all && !params.has('nolowquay'),
     oldlane: all && !params.has('nooldlane'),
     islandbridge: all && !params.has('noislandbridge'),
+    station: all && !params.has('nostationfront'),
+    cutting: all && !params.has('nocutwall'),
+    waterstairs: all && !params.has('nowaterstairs'),
+    close: all && !params.has('noclose'),
+    yardgate: all && !params.has('noyardgate'),
+    edge: all && !params.has('noedgelane'),
   };
   const floors: Floor[] = [];
   const stairs: PlaceStair[] = [];
@@ -430,6 +952,14 @@ export function buildPlaces(plan: CityPlan): PlacesDef {
   const island = on.islandbridge ? buildIsland(plan, walls) : null;
   // overall bounds of each place for a fast reject
   const boxes: Rect[] = [];
+  const station = on.station ? buildStation(plan, floors, stairs, walls, boxes) : null;
+  const cutting = on.cutting ? buildCutting() : null;
+  const dryRects: Rect[] = [];
+  const drops: Rect[] = [];
+  const works = on.waterstairs ? buildWaterWorks(plan, floors, stairs, ramps, walls, boxes, dryRects, drops) : null;
+  const close = on.close ? buildClose(plan, walls) : null;
+  const yardGate = on.yardgate ? buildYardGate(plan, walls) : null;
+  const edge = on.edge ? buildEdge(plan, walls) : null;
   if (quay) boxes.push(rect(quay.x0, RIVER.z0 - 0.4, quay.x1, quay.zEdge));
   if (lane) boxes.push(rect(lane.block.x0, lane.block.z0, lane.block.x1, lane.block.z1));
   const bridgeR = island ? rect(island.x - island.w / 2, island.z0, island.x + island.w / 2, island.z1) : null;
@@ -453,10 +983,19 @@ export function buildPlaces(plan: CityPlan): PlacesDef {
     quay,
     lane,
     island,
+    station,
+    cutting,
+    waterStairs: works?.ws ?? [],
+    slipway: works?.slip ?? null,
+    close,
+    yardGate,
+    edge,
+    southParapetGaps: works?.pGaps ?? [],
+    southWallHoles: works?.holes ?? [],
     walls,
     railGaps,
-    dropLadder: (x, z) => !!dryR && x > dryR.x0 - 0.6 && x < dryR.x1 + 0.6 && Math.abs(z - RIVER.z0) < 0.5,
+    dropLadder: (x, z) => (!!dryR && x > dryR.x0 - 0.6 && x < dryR.x1 + 0.6 && Math.abs(z - RIVER.z0) < 0.5) || drops.some((r) => inR(r, x, z)),
     height,
-    dry: (x, z) => (!!dryR && inR(dryR, x, z)) || (!!bridgeR && (inR(bridgeR, x, z) || inR(island!.deck, x, z))),
+    dry: (x, z) => (!!dryR && inR(dryR, x, z)) || (!!bridgeR && (inR(bridgeR, x, z) || inR(island!.deck, x, z))) || dryRects.some((r) => inR(r, x, z)),
   };
 }

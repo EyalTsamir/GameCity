@@ -78,8 +78,9 @@ export interface TerrainModel {
   waterLevel(x: number, z: number): number;
   /** true where a refinement changes the plan height noticeably */
   refined(x: number, z: number): boolean;
-  /** true inside a tunnel mouth (ground triangles there are dropped) */
-  inPortalMouth(x: number, z: number): boolean;
+  /** true inside a tunnel mouth (ground triangles there are dropped); `yMin` = the lowest vertex of the
+   *  triangle: ground lying on the headwall top (above the arch crown) is not part of the mouth */
+  inPortalMouth(x: number, z: number, yMin?: number): boolean;
 }
 
 const cache = new WeakMap<CityPlan, TerrainModel>();
@@ -92,6 +93,9 @@ export function getTerrainModel(plan: CityPlan): TerrainModel {
   }
   return m;
 }
+
+/** `?noportalcut` (places-between): the old flat shelf + bare step behind the road headwalls */
+const HOODS = typeof location === 'undefined' || !new URLSearchParams(location.search).has('noportalcut');
 
 function smax(a: number, b: number, k: number): number {
   const h = Math.max(k - Math.abs(a - b), 0) / k;
@@ -185,7 +189,11 @@ function buildModel(plan: CityPlan): TerrainModel {
     }
     // behind the wall line: hill raised to the wall top, then blending into the natural slope
     const back = ramp - lz;
-    const R = wallTop(p, Math.min(ax, reach), side) - 0.05 + 0.075 * back;
+    const wt = wallTop(p, Math.min(ax, reach), side) - 0.05;
+    let R = wt + 0.075 * back;
+    // where the hill rises steeply right behind the coping (the ridge foot), a bank ramps up to meet it (~1:1.7: any steeper and the ground shader paints it as rock)
+    // instead of a flat shelf ending in a bare step — never above the natural slope 1.6 m further in
+    if (HOODS) R = Math.max(R, Math.min(wt + 0.6 * back, natAtLocal(p, lx, lz - 1.6)));
     let w = 1 - smoothstep(reach, reach + 3.5, ax);
     // only the first metres behind the facade are lifted (enough to bury the parapet);
     // further back the natural hill takes over (and never spills over the east cliff)
@@ -270,13 +278,13 @@ function buildModel(plan: CityPlan): TerrainModel {
   const refined = (x: number, z: number): boolean => Math.abs(height(x, z) - heightAt(x, z)) > 0.02;
 
   /** true inside a portal's mouth slab (the wall-line ramp would otherwise close the opening) */
-  const inPortalMouth = (x: number, z: number): boolean => {
+  const inPortalMouth = (x: number, z: number, yMin = -Infinity): boolean => {
     for (const p of portals) {
       const dx = x - p.x,
         dz = z - p.z;
       const lx = dx * p.cos - dz * p.sin;
       const lz = dx * p.sin + dz * p.cos;
-      if (Math.abs(lx) < p.width / 2 + 0.3 && lz > -p.thick - 0.05 && lz < 0.05) return true;
+      if (Math.abs(lx) < p.width / 2 + 0.3 && lz > -p.thick - 0.05 && lz < 0.05 && yMin < p.height + 0.8) return true;
     }
     return false;
   };

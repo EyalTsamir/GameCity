@@ -298,7 +298,13 @@ export default function create(ctx: CityContext): CityModule {
     chimneys: anchors.chimneys,
     balconies: anchors.balconies,
     facades,
-    spans: collectSpans(lots, facades, (d) => d === 'oldtown' || d === 'market'),
+    // (no washing line across the churchyard — core/places.ts close)
+    spans: collectSpans(lots, facades, (d) => d === 'oldtown' || d === 'market').filter((s) => {
+      const b = ctx.plan.places?.close?.bounds;
+      const mx = (s.ax + s.bx) / 2,
+        mz = (s.az + s.bz) / 2;
+      return !b || s.kind === 'street' || mx < b.x0 || mx > b.x1 || mz < b.z0 || mz > b.z1;
+    }),
     perches: anchors.perches,
     laundry: anchors.laundry,
     vents: anchors.vents,
