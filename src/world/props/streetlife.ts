@@ -114,19 +114,22 @@ export function placeStreetKit(e: StreetKitEnv): { x: number; z: number }[] & { 
         const v = DIR_VEC[arm];
         for (const sd of [1, -1]) {
           if (hash01(I.id, DIR_VEC[arm].x * 3 + DIR_VEC[arm].z * 5, sd + 9) > 0.65) continue;
-          // two 2.1 m panels from just behind the stop line
-          for (const al of [STOPLINE + 2.05, STOPLINE + 4.2]) {
-            const x = I.x + v.x * al - v.z * (ROAD_HALF + 0.24) * sd,
-              z = I.z + v.z * al + v.x * (ROAD_HALF + 0.24) * sd;
+          // panels along the kerb wherever the band is clear between the stop line and 15 m out (slots stand every few
+          // metres, so a run of fixed positions never fitted)
+          let panels = 0;
+          for (let al = STOPLINE + 1.1; al < 15 && panels < 2; al += 0.4) {
             const bx = I.x + v.x * al - v.z * FURN_OFFSET * sd,
               bz = I.z + v.z * al + v.x * FURN_OFFSET * sd;
-            const ok = [-0.9, 0, 0.9].every((o) => free(bx + v.x * o, bz + v.z * o, 0.2));
-            if (!ok) break;
+            if (![-0.75, 0, 0.75].every((o) => free(bx + v.x * o, bz + v.z * o, 0.1))) continue;
+            const x = I.x + v.x * al - v.z * (ROAD_HALF + 0.24) * sd,
+              z = I.z + v.z * al + v.x * (ROAD_HALF + 0.24) * sd;
             const yaw = Math.atan2(v.z, -v.x); // local X along the arm
             const [k, kd] = at(x, SIDEWALK_Y, z, yaw);
-            guardRail(k, kd, 2.1, col);
-            for (const o of [-0.8, 0, 0.8]) claim(x + v.x * o, z + v.z * o, 0.15);
+            guardRail(k, kd, 1.8, col);
+            for (const o of [-0.75, 0, 0.75]) claim(bx + v.x * o, bz + v.z * o, 0.12);
             inc('guardRail');
+            panels++;
+            al += 1.5;
           }
         }
       }
