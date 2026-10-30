@@ -27,6 +27,16 @@ back and side walls; 7 factory roof bare from the air.
 
 Also: sign atlas height 1024 → 1280 (always on), new mesh `buildings-glass`, `Gen.glass`.
 
+## Cost (`perf.mjs`, 1920x1025, noon, `;nodetailb`, 2 repeats, power guard: on AC throughout)
+| view | on (ms) | `?nodetailb` (ms) | change | triangles |
+|---|---|---|---|---|
+| overview | 37.71, 37.05 | 37.32, 36.70 | +0.4 | +84 k |
+| downtown | 36.16, 36.39 | 36.17, 36.23 | +0.1 | +85 k |
+| street `5,1.5,-65,9,0,6` | 33.56, 33.57 | 34.61, 34.51 | **-1.0** (real lobby pixels replace facade pixels) | +117 k (first pass read +347 k, a different LOD state) |
+| market `27.5,1,78.5,16,200,28` | 33.35, 33.38 | 33.33, 33.36 | 0 | ~+40 k (first pass +183 k) |
+
+Within budget (+1 ms, +250 k). Draw calls +1 (glass) on most views.
+
 ## Best views
 Lobbies: `38.8,2.2,-58,8,215,-3` (office 31) and Haven Tower `-27.5,2.2,-32.5,8,30,-3` at 18.2 and 21.5.
 Slant crown: `-39.5,82,-97.5,110,-55,30`.
