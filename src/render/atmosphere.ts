@@ -28,6 +28,7 @@
 // folded about that plane, so the integral equals the real camera → water → object path.
 
 import * as THREE from 'three';
+import { perfOn } from '../core/perfdeep';
 
 /** number of vec4 slots in the shared atmosphere uniform */
 export const ATMO_N = 12;
@@ -150,6 +151,66 @@ vec3 thAtmoAttenuate(vec3 col, vec3 ray) {
 }
 `;
 
+/**
+ * The same atmosphere for the fog chunk of every material, cheaper per pixel (perf-deep, ?noatmofast; the whole term
+ * costs 3–5 ms a frame): the camera's end of both height integrals is a per-frame constant (setAtmoCamera, height above
+ * the fold plane, so also right for the mirrored camera), one length, one log2 for the two sun lobes, skipped where
+ * they are below 1e-6 anyway (exponents ≥ 11, see atmoDrive), no haze-start division (always 0).
+ */
+const ATMO_FAST = /* glsl */ `
+float atmODf(float ya, float yb, float t, float base, float k, float Ea) {
+  float yf = thAtmo[4].w;
+  float o = base - yf;
+  float a = ya - yf, b = yb - yf;
+  float od;
+  if (a * b < 0.0) {
+    float s = a / (a - b);
+    od = atmOD1(abs(a) - o, -o, t * s, k) + atmOD1(-o, abs(b) - o, t * (1.0 - s), k);
+  } else {
+    float da = (abs(a) - o) * k, db = (abs(b) - o) * k;
+    float d = db - da;
+    od = abs(d) > 1e-4 ? t * (Ea - exp(-db)) / d : t * Ea * (1.0 - 0.5 * d);
+  }
+  return od;
+}
+vec3 thAtmoApplyF(vec3 col, vec3 ray) {
+  float t = length(ray);
+  float yc = cameraPosition.y, yp = yc + ray.y;
+  vec3 TR = exp(-thAtmo[2].rgb * atmODf(yc, yp, t, thAtmo[3].w, thAtmo[2].w, thAtmo[7].w));
+  float TM = exp(-thAtmo[11].x * atmODf(yc, yp, t, thAtmo[3].w, thAtmo[11].y, thAtmo[11].z));
+  vec3 T = TR * TM;
+  float Ta = dot(T, vec3(0.2126, 0.7152, 0.0722));
+  vec3 V = ray / max(t, 1e-4);
+  float l = dot(col, vec3(0.2126, 0.7152, 0.0722));
+  col = mix(col, vec3(l), thAtmo[6].w * (1.0 - Ta));
+  float g = thAtmo[10].y;
+  vec3 L = thAtmo[0].xyz;
+  float mu = dot(V, L);
+  float hs = dot(V.xz, V.xz) * dot(L.xz, L.xz);
+  float c = hs > 1e-10 ? dot(V.xz, L.xz) * inversesqrt(hs) : 0.0;
+  float c2 = 2.0 * c * c - 1.0;
+  float c3 = (2.0 * c2 - 1.0) * c;
+  vec3 haze = max(thAtmo[3].rgb + thAtmo[4].rgb * c + thAtmo[5].rgb * c2 + thAtmo[6].rgb * c3, vec3(0.0));
+  if (mu > 0.25) {
+    float lg = log2(mu);
+    haze += thAtmo[1].rgb * (exp2(max(thAtmo[0].w, 1.0) * lg) + thAtmo[10].z * exp2(max(thAtmo[10].w, 1.0) * lg));
+  }
+  col = (col * TR + thAtmo[7].rgb * g * (1.0 - TR)) * TM + haze * g * (1.0 - TM);
+  if (thAtmo[8].w > 0.0) {
+    vec2 q = (cameraPosition.xz + ray.xz + thAtmo[9].xy) * thAtmo[9].z;
+    float n = atmNoise2(q) * 0.65 + atmNoise2(q * 2.7 + 5.3) * 0.35;
+    float patchy = mix(1.0, smoothstep(0.25, 0.75, n) * 1.8, thAtmo[9].w);
+    float Tmist = exp(-thAtmo[8].w * patchy * atmOD(yc, yp, t, thAtmo[4].w, thAtmo[5].w));
+    float mm = max(mu, 0.0);
+    vec3 mc = thAtmo[8].rgb + thAtmo[1].rgb * thAtmo[1].w * mm * mm * mm * mm;
+    col = mix(mc, col, Tmist);
+  }
+  return col;
+}
+`;
+
+const FAST = perfOn('atmofast');
+
 const PARS_VERTEX = /* glsl */ `
 #ifdef USE_FOG
   varying vec3 vFogView;
@@ -158,7 +219,7 @@ const PARS_VERTEX = /* glsl */ `
 
 const VERTEX = /* glsl */ `
 #ifdef USE_FOG
-  vFogView = mvPosition.xyz;
+  vFogView = ${FAST ? 'mvPosition.xyz * mat3( viewMatrix )' : 'mvPosition.xyz'};
 #endif
 `;
 
@@ -167,7 +228,8 @@ const PARS_FRAGMENT = /* glsl */ `
   uniform vec4 thAtmo[${ATMO_N}];
   varying vec3 vFogView;
   ${ATMO_FUNCS}
-  vec3 thFogRay() { return vFogView * mat3(viewMatrix); }
+  ${FAST ? ATMO_FAST : ''}
+  vec3 thFogRay() { return ${FAST ? 'vFogView' : 'vFogView * mat3(viewMatrix)'}; }
   // legacy hand-written fog (smoothstep(fogNear, fogFar, vFogDepth) / mix(c, fogColor, f)) → this atmosphere
   float thLegacyFogCoord() {
     vec4 Tt = thAtmoT(thFogRay());
@@ -191,7 +253,7 @@ const FRAGMENT = /* glsl */ `
   #ifdef TH_FOG_ADDITIVE
     gl_FragColor.rgb = thAtmoAttenuate(gl_FragColor.rgb, thFogRay());
   #else
-    gl_FragColor.rgb = thAtmoApply(gl_FragColor.rgb, thFogRay());
+    gl_FragColor.rgb = ${FAST ? 'thAtmoApplyF' : 'thAtmoApply'}(gl_FragColor.rgb, thFogRay());
   #endif
 #endif
 `;
@@ -311,6 +373,15 @@ export function writeAtmosphere(p: AtmosphereParams): void {
   set(9, p.mistDrift.x, p.mistDrift.y, p.mistFreq, p.mistPatchiness);
   set(10, p.startDist, p.gain, p.lobe2, p.lobe2Exp);
   set(11, p.haze, 1 / Math.max(1, p.hazeScaleHeight), 0, 0);
+}
+
+/** the camera's end of the two height integrals (ATMO_FAST): call with the final camera height, before the frame's draws */
+export function setAtmoCamera(y: number): void {
+  const d = atmoData;
+  const yf = d[4 * 4 + 3];
+  const h = Math.abs(y - yf) - (d[3 * 4 + 3] - yf);
+  d[7 * 4 + 3] = Math.exp(-h * d[2 * 4 + 3]);
+  d[11 * 4 + 2] = Math.exp(-h * d[11 * 4 + 1]);
 }
 
 /** optical depth factor of an exponential layer (CPU mirror of atmOD1; heights above the base) */

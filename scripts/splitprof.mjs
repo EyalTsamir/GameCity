@@ -12,7 +12,7 @@
 //
 // Options: --q extra query, --seconds window length (default 2), --cycles n (default 3).
 import { launchBrowser, acquireLock, releaseLock } from './browser.mjs';
-import { installGpuProfiler, resetGpu, readGpu } from './framerec.mjs';
+import { installGpuProfiler, resetGpu, readGpu, installDrawProfiler, resetDraws, readDraws } from './framerec.mjs';
 import fs from 'node:fs';
 
 const args = {};
@@ -82,7 +82,7 @@ try {
     });
     console.table(lights);
     out.results = { rows, lights };
-  } else if (mode === 'split') {
+  } else if (mode === 'split' || mode === 'vdraws') {
     await page.evaluate(() => {
       const ctx = window.__city.ctx;
       const r = ctx.renderer;
@@ -143,6 +143,24 @@ try {
         }
       };
     });
+    if (mode === 'vdraws') {
+      // the draw ranking with the main view scissored to 1x1: vertices + binning per draw, no shading
+      await installDrawProfiler(page);
+      await page.evaluate(() => (window.__split.mode = 'scissor'));
+      for (const h of hours)
+        for (const v of views) {
+          await go(page, v.spec, h);
+          await page.waitForTimeout(3000);
+          await resetDraws(page);
+          await page.waitForTimeout(Math.max(seconds, 3) * 1000);
+          const rows = (await readDraws(page)).filter((r) => r.ms < 1000);
+          out.results.push({ view: v.name, hours: h, rows });
+          console.log(`
+== ${v.name} @ ${h}h vertex/binning sum ${rows.reduce((a, r) => a + r.ms, 0).toFixed(1)} ms`);
+          for (const r of rows.slice(0, parseInt(args.top ?? '22', 10))) console.log(r.ms.toFixed(2).padStart(7), String(r.tris).padStart(8), r.label.slice(0, 70));
+        }
+      return;
+    }
     await installGpuProfiler(page);
     const sample = async (m) => {
       await page.evaluate((mm) => (window.__split.mode = mm), m);

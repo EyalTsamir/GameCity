@@ -20,6 +20,7 @@ import { AOApplyEffect, aoUniforms } from './postfx/aoApply';
 import { AdaptiveController, GpuTimer, buildLadder, type QualityStep } from './postfx/adaptive';
 import { WORLD_MODE } from '../core/world';
 import { SunShaftsEffect } from './postfx/sunShafts';
+import { setAtmoCamera } from './atmosphere';
 import type { AtmosphereService } from './sky/atmoDrive';
 
 /** previous frame's scene depth for soft particles (see ctx.services.postfx.softDepth) */
@@ -410,6 +411,7 @@ export default function create(ctx: CityContext): CityModule {
   ctx.render = (realDt: number) => {
     renderer.info.reset();
     camera.updateMatrixWorld();
+    setAtmoCamera(camera.position.y);
     // world: the raymarched cumulus deck for this frame's final camera (the dome composites it)
     (ctx.services.sky as { renderClouds?(r: THREE.WebGLRenderer, c: THREE.PerspectiveCamera): void } | undefined)?.renderClouds?.(renderer, camera);
     if (!enabledAll) {

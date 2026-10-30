@@ -11,6 +11,7 @@
 
 import * as THREE from 'three';
 import { globalUniforms } from '../../core/uniforms';
+import { perfOn } from '../../core/perfdeep';
 import { BONE, FB, REG } from './body';
 import { PIV, PIV_COUNT, pivotTable } from './rig';
 
@@ -232,10 +233,23 @@ bool pedVisible(uint d0) {
 float pedShrink = 1.0;
 void pedPose(inout vec3 p, inout vec3 n) {
   vPedFade = P_fade;
+//@if DET
   vPedFace = vec3(0.0);
   vPedFB = ((iC2.w >> 9u) & 63u) | (((iC2.w >> 8u) & 1u) << 6u); // face bits | shirt collar (64) | jacket (128, below)
+//@endif
+//@if DET&!R
   vPedHairW = vec4(pedRGB(iC1.x), P_w);
   vPedSkin = pedRGB(iC0.x);
+//@endif
+//@if R
+  // (decoded once: the varyings, the hair / skin regions and the leg hem below all reuse them)
+  vec3 skin = pedRGB(iC0.x), hairC = pedRGB(iC1.x);
+  float legTe = pedP8(iC0.z) * 1.275 - 0.1;
+//@endif
+//@if DET&R
+  vPedHairW = vec4(hairC, P_w);
+  vPedSkin = skin;
+//@endif
   uint d0 = aData.x;
   if (!pedVisible(d0)) { p = vec3(0.0, -50.0, 0.0); n = vec3(0.0, 1.0, 0.0); vPedA = vPedB = vec3(0.0); vPedS = 0.0; vPedH = 0.0; vPedPat = 0.0; vPedMat = vec2(0.0); return; }
   int bone = int(d0 & 31u);
@@ -244,6 +258,7 @@ void pedPose(inout vec3 p, inout vec3 n) {
   float h = float(aData.y & 0xFFFFu) * (4.0 / 65535.0) - 2.0;
   float w = float(aData.y >> 16u) * (1.0 / 65535.0);
   vec2 aux = pedU2(aData.z);
+//@if !F
   if (region == ${R.FACE}) {
     vPedFace = vec3(aux, 1.0);
     // per-person face shape: nose length / bridge, chin, cheeks, lip fullness (stable hash of the look)
@@ -259,6 +274,7 @@ void pedPose(inout vec3 p, inout vec3 n) {
     p += n * dn * (1.0 - 0.4 * P_c);
   }
   else if (region == ${R.FOOT}) vPedFace = vec3(aux, 2.0);
+//@endif
   pedW = vec3(P_w, P_c, P_b);
   // ── morph
   p += pedW.x * vec3(pedM16(aMorph.x & 0xFFFFu), pedM16(aMorph.x >> 16u), pedM16(aMorph.y & 0xFFFFu))
@@ -266,14 +282,20 @@ void pedPose(inout vec3 p, inout vec3 n) {
      + pedW.z * vec3(pedM16(aMorph.w & 0xFFFFu), 0.0, pedM16(aMorph.w >> 16u));
   uint nd = aData.w;
   n = normalize(n + pedW.x * (vec3(float(nd & 1023u), float((nd >> 10u) & 1023u), float((nd >> 20u) & 1023u)) * (2.0 / 1023.0) - 1.0));
+//@if DET
   vPedRest = p;
+//@endif
+//@if C
   vPedRN = n;
+//@endif
+//@if DET
   vPedReg = float(region);
   vPedHgt = 1.76 - 0.12 * P_w - 0.54 * P_c;
   vPedBend = bone == ${B.THIGH_L} || bone == ${B.SHIN_L} || bone == ${B.FOOT_L} ? abs(P_kneeL)
            : bone == ${B.THIGH_R} || bone == ${B.SHIN_R} || bone == ${B.FOOT_R} ? abs(P_kneeR)
            : bone == ${B.UPPER_L} || bone == ${B.FORE_L} || bone == ${B.HAND_L} ? abs(P_elbowL)
            : bone == ${B.UPPER_R} || bone == ${B.FORE_R} || bone == ${B.HAND_R} ? abs(P_elbowR) : 0.0;
+//@endif
 
   // ── parametric garments
   if (region == ${R.HAIR}) {
@@ -287,6 +309,12 @@ void pedPose(inout vec3 p, inout vec3 n) {
       // long hair: vertices deeper than the hair length are lifted to the hem. The tips are uneven (clumps of
       // different length, longest at the middle of the back) and the sheet ripples in and out across its
       // width into locks that gain volume as they fall, so neither the hem nor the outline is a ruled line
+//@if F
+      // (tiny / pin: the hem as one line at the hair length — the lock ripples are a centimetre or two)
+      float lift = max(0.0, aux.x - pedP8(iC1.x) * 0.5);
+      p.y += lift;
+      p.xz = mix(p.xz, vec2(0.0, -0.01), 0.3 * smoothstep(0.0, 0.03, lift));
+//@else
       float len = pedP8(iC1.x) * 0.5;
       float a = atan(p.x, p.z);
       float sd = float(iC1.x & 15u);
@@ -306,6 +334,8 @@ void pedPose(inout vec3 p, inout vec3 n) {
       p.xz += rad * (0.0045 * rip + 0.006) * g;
       n.xz -= vec2(rad.y, -rad.x) * drip * 0.5;
       n = normalize(n);
+//@endif
+//@if !F
     } else if (((d0 >> 10u) & 63u) == ${FB.HAIR + 1}u && uPedHairline > 0.5) {
       // cap: aux.y = s (0 hairline … 1 crown). Hair stands off the scalp in locks, not as a smooth helmet:
       // lumps in the silhouette grow from the hairline, a little more lift on the crown / back
@@ -315,6 +345,7 @@ void pedPose(inout vec3 p, inout vec3 n) {
       // (not under a hat: the lumps and crown lift poked through caps as dark blotches)
       float grow = smoothstep(0.05, 0.45, aux.y) * (((iC1.y >> 24u) & 7u) != 0u ? 0.0 : 1.0);
       p += n * grow * (0.0045 * lump + 0.007 * smoothstep(0.3, 1.0, aux.y) * (0.6 + 0.4 * -n.z));
+//@endif
     }
     // volume (curly / full hair): scale about the head centre
     float vol = float((iC1.y >> 27u) & 31u) * (1.0 / 31.0);
@@ -396,9 +427,14 @@ void pedPose(inout vec3 p, inout vec3 n) {
   // following the leg (fit 0 leggings … 0.6 jeans … 1 loose): a radial push from the rest leg axis up to the
   // drape radius (6.1 cm at the ankle, 6.8 at the knee, 7.2 at mid-thigh: a regular trouser leg on the
   // average man), no new vertices
+//@if !F
   if (region == ${R.LEG}) {
     float fit = float((iC2.x >> 26u) & 15u) * (1.0 / 15.0);
+//@if R
+    float te = legTe;
+//@else
     float te = pedP8(iC0.z) * 1.275 - 0.1;
+//@endif
     if (fit > 0.0 && h > te - 0.002 && h < 0.8) {
       bool left = bone == ${B.THIGH_L} || bone == ${B.SHIN_L} || bone == ${B.FOOT_L};
       vec3 hp = pedPivS(${PIV.HIP}, left), kn = pedPivS(${PIV.KNEE}, left), an = pedPivS(${PIV.ANKLE}, left);
@@ -411,9 +447,11 @@ void pedPose(inout vec3 p, inout vec3 n) {
       if (r > 1e-4 && rt > r) p.xz += d * ((rt - r) * k / r);
     }
   }
+//@endif
 
   // ── hand grip: fingers curl towards the palm about the knuckles
   if (bone == ${B.HAND_L} || bone == ${B.HAND_R}) pedShrink = 0.15;
+//@if !F&!D
   if ((bone == ${B.HAND_L} || bone == ${B.HAND_R}) && aux.x > 0.0) {
     bool left = bone == ${B.HAND_L};
     vec3 wr = pedPivS(${PIV.WRIST}, left);
@@ -423,6 +461,7 @@ void pedPose(inout vec3 p, inout vec3 n) {
     float z0 = 1.0 - aux.x;
     pedJoint(p, n, pedRZ(left ? -g : g), kn, z0);
   }
+//@endif
 
   // ── forward kinematics
   if (bone == ${B.BAG_L} || bone == ${B.BAG_R} || bone == ${B.UMB} || bone == ${B.CANE}) {
@@ -450,15 +489,20 @@ void pedPose(inout vec3 p, inout vec3 n) {
     pedPelvis(p, n);
   }
 
+//@if C
   // ── colours
+//@if !R
   vec3 skin = pedRGB(iC0.x);
+//@endif
   vec3 top = pedRGB(iC0.y);
   vec3 bottom = pedRGB(iC0.z);
   vec3 outer = pedRGB(iC1.w);
   uint prm = iC2.w;
   float jacketHem = pedP8(iC2.y) * 1.275 - 0.1;
   bool jacket = jacketHem > -0.05;
+//@if DET
   if (jacket) vPedFB |= 128u;
+//@endif
   vec3 legwear = skin;
   uint lw = (iC2.x >> 24u) & 3u;
   if (lw == 1u) legwear = vec3(0.022, 0.021, 0.024);
@@ -496,7 +540,11 @@ void pedPose(inout vec3 p, inout vec3 n) {
     Bc = skin;
     s = h - sl;
   } else if (region == ${R.LEG}) {
+//@if R
+    float te = legTe;
+//@else
     float te = pedP8(iC0.z) * 1.275 - 0.1;
+//@endif
     float bt = float((iC0.w >> 24u) & 63u) * 0.01;
     vec3 shoes = pedRGB(iC0.w);
     if (bt > 0.0 && abs(h - bt) < abs(h - te)) { A = te < bt ? bottom : legwear; Bc = shoes; s = h - bt; }
@@ -511,10 +559,17 @@ void pedPose(inout vec3 p, inout vec3 n) {
     A = skin;
     Bc = jacket ? outer : top;
     s = h - nt;
+//@if R
+  } else if (region == ${R.HAIR}) {
+    A = Bc = hairC;
+  } else if (region == ${R.BEARD}) {
+    A = Bc = hairC * 0.82;
+//@else
   } else if (region == ${R.HAIR}) {
     A = Bc = pedRGB(iC1.x);
   } else if (region == ${R.BEARD}) {
     A = Bc = pedRGB(iC1.x) * 0.82;
+//@endif
   } else if (region == ${R.HAT}) {
     A = pedRGB(iC1.y);
     uint st = (iC1.y >> 24u) & 7u;
@@ -570,6 +625,7 @@ void pedPose(inout vec3 p, inout vec3 n) {
           : region == ${R.FOOT} ? vec2(0.0, 0.09)
           : region == ${R.BAG} || region == ${R.HAT} ? vec2(0.1, 0.04)
           : vec2(0.12, 0.0);
+//@endif
 
   // ── to world
   float sc = P_scale;
@@ -1167,8 +1223,38 @@ function sharedUniforms(): Record<string, THREE.IUniform> {
   return (shared ??= uniformsFor());
 }
 
-function injectVertex(src: string, normals: boolean): string {
-  let s = src.replace('#include <common>', `#include <common>\n${VERT_PARS}`);
+// Perf-deep (?nopedvfar): the vertex program is written once with `//@if FLAGS … //@else … //@endif` guards (flags joined
+// by &, `!` negates, nesting allowed) that are resolved here per variant, so a switched-off build is the old text.
+//   R   decode skin / hair / leg-hem values once        C    the colour block and its inputs (not the shadow proxy)
+//   DET the varyings only the detailed fragment reads    F    tiny / pin: detail below a pixel left out    D  shadow proxy
+const VFAR = perfOn('pedvfar');
+type VertVariant = 'full' | 'far' | 'depth';
+const vertParsCache: Partial<Record<VertVariant, string>> = {};
+function vertParsFor(v: VertVariant): string {
+  const cached = vertParsCache[v];
+  if (cached) return cached;
+  const flags = new Set<string>(!VFAR ? ['C', 'DET'] : v === 'full' ? ['R', 'C', 'DET'] : v === 'far' ? ['R', 'C', 'F'] : ['R', 'D']);
+  const on: boolean[] = [true]; // nesting: a line is live when every open guard holds
+  const stack: boolean[] = [];
+  const out: string[] = [];
+  for (const line of VERT_PARS.split('\n')) {
+    if (line.startsWith('//@if ')) {
+      const ok = line.slice(6).split('&').every((t) => (t[0] === '!' ? !flags.has(t.slice(1)) : flags.has(t)));
+      stack.push(ok);
+      on.push(on[on.length - 1] && ok);
+    } else if (line.startsWith('//@else')) {
+      on.pop();
+      on.push(on[on.length - 1] && !stack[stack.length - 1]);
+    } else if (line.startsWith('//@endif')) {
+      on.pop();
+      stack.pop();
+    } else if (on[on.length - 1]) out.push(line);
+  }
+  return (vertParsCache[v] = out.join('\n'));
+}
+
+function injectVertex(src: string, normals: boolean, variant: VertVariant): string {
+  let s = src.replace('#include <common>', `#include <common>\n${vertParsFor(variant)}`);
   if (normals) {
     s = s
       .replace('#include <beginnormal_vertex>', 'vec3 objectNormal = vec3( normal );\n  vec3 pedP = vec3( position );\n  pedPose( pedP, objectNormal );')
@@ -1187,7 +1273,7 @@ function peopleMaterial(far: boolean): THREE.MeshLambertMaterial {
   material.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, sharedUniforms());
     shader.uniforms.uPedNight = globalUniforms.uNight;
-    shader.vertexShader = injectVertex(shader.vertexShader, true);
+    shader.vertexShader = injectVertex(shader.vertexShader, true, far ? 'far' : 'full');
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>\n${FRAG_PARS}\nuniform float uPedNight;`)
       .replace(/void main\(\)\s*\{/, (m) => `${m}\n${FRAG_FADE}`)
@@ -1196,7 +1282,7 @@ function peopleMaterial(far: boolean): THREE.MeshLambertMaterial {
       .replace('#include <lights_lambert_pars_fragment>', LAMBERT_PEOPLE)
       .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n  totalEmissiveRadiance += diffuseColor.rgb * 0.07 * uPedNight;');
   };
-  material.customProgramCacheKey = () => (far ? 'tinyhaven-people-4-far' : 'tinyhaven-people-4');
+  material.customProgramCacheKey = () => (far ? 'tinyhaven-people-4-far' : 'tinyhaven-people-4') + (VFAR ? '-v1' : '');
   return material;
 }
 
@@ -1206,10 +1292,10 @@ export function makePeopleMaterials(): PersonMaterials {
   const depth = new THREE.MeshDepthMaterial();
   depth.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, sharedUniforms());
-    shader.vertexShader = injectVertex(shader.vertexShader, false);
+    shader.vertexShader = injectVertex(shader.vertexShader, false, 'depth');
     shader.fragmentShader = shader.fragmentShader.replace('#include <common>', `#include <common>\n${FRAG_PARS}`).replace(/void main\(\)\s*\{/, (m) => `${m}\n${FRAG_FADE}`);
   };
-  depth.customProgramCacheKey = () => 'tinyhaven-people-depth-2';
+  depth.customProgramCacheKey = () => 'tinyhaven-people-depth-2' + (VFAR ? '-v1' : '');
   return { material, far, depth };
 }
 

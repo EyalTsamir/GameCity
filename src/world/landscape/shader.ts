@@ -15,6 +15,15 @@ import { LAMP_GLSL, lampUniforms } from '../../core/lampLight';
 import { noiseTexture } from '../terrain/noise';
 import { WL } from './model';
 import { gcPalette, GC_PALETTE_GLSL } from '../groundcover/palette';
+import { perfOn } from '../../core/perfdeep';
+
+// perf-deep (docs/progress/perf-deep.md): FXC flattens an `if` holding an implicit-gradient fetch, so the sea-bed / field /
+// caustic early-outs only save work when every fetch inside is explicit. `landgates` hoists the footprint derivatives
+// (pdx, pdy) and turns the land's noise fetches into textureGrad with the same gradients (same samples), then gates on
+// exactly-zero weights. `?nolandgates` / `?noperfdeep` generate the old source.
+const LG = perfOn('landgates');
+/** land noise fetch: textureGrad with the hoisted footprint derivatives scaled by the uv scale `k` (= the implicit result) */
+const lnTex = (uv: string, k: string, swz = 'xy') => (LG ? `textureGrad(tLN, ${uv}, pdx.${swz} * ${k}, pdy.${swz} * ${k})` : `texture2D(tLN, ${uv})`);
 
 const C = (hex: string) => ({ value: new THREE.Color(hex) });
 
@@ -139,16 +148,21 @@ vec3 landAlbedo() {
   vec3 p = vLW;
   float fp = max(length(fwidth(p.xz)), 1e-3);
   float fpm = min(length(dFdx(p.xz)), length(dFdy(p.xz)));   // footprint along the finer screen axis
+${LG ? `  vec2 pdx = dFdx(p.xz), pdy = dFdy(p.xz);   // hoisted: every fetch below uses these (explicit gradients)` : ''}
   float forest = vCov.x, field = vCov.y, sand = vCov.z, rock = vCov.w;
   float wet = vCov2.x, meadowW = vCov2.y, seam = vCov2.z;
   // raised canopy (far woods): its edge slopes are forest too, never lit meadow terraces
   forest = max(forest, smoothstep(0.05, 0.35, vCov2.w));
   vec3 Ng = normalize(vLN);
   lnN = Ng;
+${LG ? `  // rock-face plane and its derivatives, hoisted out of the branches (derivatives are undefined in divergent flow)
+  vec2 hz = normalize(Ng.xz + vec2(1e-4));
+  vec2 vp = vec2(dot(p.xz, vec2(-hz.y, hz.x)), p.y);
+  vec2 vpx = dFdx(vp), vpy = dFdy(vp);` : ''}
   // macro tonal patches (survive any distance) + mid variation (faded by the footprint)
-  vec4 nM = texture2D(tLN, p.xz * (1.0 / 1900.0));
+${LG ? '' : `  vec4 nM = texture2D(tLN, p.xz * (1.0 / 1900.0));
   vec4 nA = texture2D(tLN, p.xz * (1.0 / 420.0));
-  vec4 nB = texture2D(tLN, p.xz * (1.0 / 47.0));
+`}  vec4 nB = ${lnTex('p.xz * (1.0 / 47.0)', '(1.0 / 47.0)')};
   // sea / river bed ≥ 0.3 m under water (no wood, no rock): the bed block at the end replaces the whole albedo
   // (its mix weight is 1 there) — compute just that (the open sea floor is ~a third of the overview's land pixels)
   // (one exit for the whole function: ANGLE's HLSL backend warns X4000 on an early return here)
@@ -160,22 +174,31 @@ vec3 landAlbedo() {
       vec3 bed = mix(cBedA, cBedB, smoothstep(0.2, 6.0, depth));
       bed = mix(bed, mix(cMud * 0.8, cBedB * 0.7, smoothstep(0.3, 2.5, depth)), 1.0 - smoothstep(30.0, 55.0, vCov3.x));
       bed *= 0.9 + 0.16 * nB.b;
-      vec2 cp = p.xz * 0.23;
+${LG ? `      // caustics: weight exactly 0 from 3.8 m deep (1 - smoothstep(0.8, 3.8, depth)) and at footprints >= 2 m
+      if (depth < 3.8 && fp < 2.0) {
+        vec2 cp = p.xz * 0.23;
+        float c1 = ${lnTex('cp + vec2(uTime * 0.011, uTime * 0.007)', '0.23')}.g;
+        float c2 = ${lnTex('cp * 1.37 + vec2(-uTime * 0.009, uTime * 0.012)', '(0.23 * 1.37)')}.g;
+        float caus = (1.0 - smoothstep(0.0, 0.07, abs(c1 - c2))) * smoothstep(0.05, 0.45, depth) * (1.0 - smoothstep(0.8, 3.8, depth)) * (1.0 - uNight);
+        bed += vec3(0.85, 1.0, 0.95) * caus * 0.3 * (1.0 - smoothstep(0.5, 2.0, fp));
+      }` : `      vec2 cp = p.xz * 0.23;
       float c1 = texture2D(tLN, cp + vec2(uTime * 0.011, uTime * 0.007)).g;
       float c2 = texture2D(tLN, cp * 1.37 + vec2(-uTime * 0.009, uTime * 0.012)).g;
       float caus = (1.0 - smoothstep(0.0, 0.07, abs(c1 - c2))) * smoothstep(0.05, 0.45, depth) * (1.0 - smoothstep(0.8, 3.8, depth)) * (1.0 - uNight);
-      bed += vec3(0.85, 1.0, 0.95) * caus * 0.3 * (1.0 - smoothstep(0.5, 2.0, fp));
+      bed += vec3(0.85, 1.0, 0.95) * caus * 0.3 * (1.0 - smoothstep(0.5, 2.0, fp));`}
       lnRes = bed;
     }
   } else {
+${LG ? `  vec4 nM = ${lnTex('p.xz * (1.0 / 1900.0)', '(1.0 / 1900.0)')};   // (the sea-bed branch needs neither)
+  vec4 nA = ${lnTex('p.xz * (1.0 / 420.0)', '(1.0 / 420.0)')};` : ''}
   float macro = (nM.g - 0.5) * 0.9 + (nA.r - 0.5) * 0.6;
   float midF = 1.0 - smoothstep(1.5, 6.0, fp);
   float gust = thGust(p.xz) * clamp(length(uWind) * 1.3, 0.0, 1.0);
 
   // ── meadow (wild grass): green ↔ dry patches
   // = groundcover's long-grass blades seen from above (same palette functions, same noise and scales)
-  vec4 gM = texture2D(tLN, p.xz * 0.0031);
-  vec4 gA = texture2D(tLN, p.xz * 0.0104);
+  vec4 gM = ${lnTex('p.xz * 0.0031', '0.0031')};
+  vec4 gA = ${lnTex('p.xz * 0.0104', '0.0104')};
   vec3 gBase = gcGrassColor(gM, gA, 0.72, wet, 0.0);
   vec3 meadow = gcTopColor(gBase, gcTipColor(gBase, gA, 0.72), 0.72);
   meadow *= 0.94 + 0.12 * nB.a * midF + 0.08 * macro;
@@ -184,12 +207,12 @@ vec3 landAlbedo() {
   // tussocks and trampled patches (metre scale, faded by the footprint), fresh vs dry tips
   {
     float nf = 1.0 - smoothstep(0.08, 0.5, fp);
-    vec4 nT1 = texture2D(tLN, p.xz * (1.0 / 3.7));
-    vec4 nT2 = texture2D(tLN, p.zx * (1.0 / 11.0));
+    vec4 nT1 = ${lnTex('p.xz * (1.0 / 3.7)', '(1.0 / 3.7)')};
+    vec4 nT2 = ${lnTex('p.zx * (1.0 / 11.0)', '(1.0 / 11.0)', 'yx')};
     meadow *= 1.0 + (nT1.r - 0.5) * 0.2 * nf + (nT2.g - 0.5) * 0.14 * midF;
     meadow = mix(meadow, meadow * vec3(1.12, 1.07, 0.88), smoothstep(0.55, 0.8, nT2.b) * 0.35 * midF);
     // 5–15 m mottling (clover, rushes, sorrel patches) visible from the town edge
-    vec4 nT3 = texture2D(tLN, p.xz * (1.0 / 29.0) + 0.37);
+    vec4 nT3 = ${lnTex('p.xz * (1.0 / 29.0) + 0.37', '(1.0 / 29.0)')};
     meadow *= 1.0 + (nT3.a - 0.5) * 0.3 * (1.0 - smoothstep(2.0, 8.0, fp));
     meadow = mix(meadow, meadow * vec3(0.86, 1.04, 0.9), smoothstep(0.6, 0.75, nT3.r) * 0.6);
   }
@@ -228,7 +251,7 @@ vec3 landAlbedo() {
   if (field > 0.0 || (inMask && forest < 0.97)) {
     // borders wander a little (hedges and ditches are never ruler-straight); the crop rows do not
     vec2 qr = FROT * p.xz;
-    vec2 q = qr + (texture2D(tLN, p.xz * (1.0 / 160.0)).ba - 0.5) * 3.6;
+    vec2 q = qr + (${lnTex('p.xz * (1.0 / 160.0)', '(1.0 / 160.0)')}.ba - 0.5) * 3.6;
     ivec2 id; vec4 box;
     float ch = fParcel(q, id, box);
     int pid = id.x * 13 + id.y;
@@ -283,6 +306,9 @@ vec3 landAlbedo() {
         fieldW = step(0.35 + 0.3 * fhmix(pid, 83), mv) * smoothstep(-0.5 * fp - 0.3, 0.5 * fp + 0.3, sdf - 1.0);
       } else fieldW = field;
     }
+${LG ? `    // (perf-deep) the rest of the block only shows where the field weight is non-zero: with fieldW = 0, mix(col, fc, 0) and the
+    // hedgeM / trackM * fieldW terms are exact no-ops; under a closed canopy (forest -> 1, mix weight 1 below) it is hidden
+    if (fieldW > 0.0 && forest < 0.9999) {` : ''}
     // crop kind (fields.ts cropKind): smallholding mix, coastal grazing land, or the farmland mix
     int ck = fCropKind(ch, small, vCov3.w, tun);
     float dx0 = q.x - box.x, dx1 = box.z - q.x, dy0 = q.y - box.y, dy1 = box.w - q.y;
@@ -305,9 +331,14 @@ vec3 landAlbedo() {
     float fpt = fp;
     // striation along the drill direction (passes of the machines): anisotropic noise, metres across ×
     // tens of metres along — it is what reads at 50–700 m where single rows are sub-pixel
-    vec4 nS = texture2D(tLN, vec2(tr * (1.0 / 9.0), tl * (1.0 / 140.0)) + vec2(float(id.y) * 0.13, float(id.x) * 0.29));
-    vec4 nP = texture2D(tLN, q * (1.0 / 23.0) + vec2(float(id.x) * 0.37, float(id.y) * 0.71));
-    vec4 nW = texture2D(tLN, q * (1.0 / 95.0) + vec2(float(id.y) * 0.21, 0.4));
+    ${LG ? `// (stri below is exactly 0 for fp <= 0.03 and fp >= 9: no fetch then; the gradients follow the tr / tl axis swaps)
+    vec2 qgx = FROT * pdx, qgy = FROT * pdy;
+    vec2 tgx = mix(qgx.yx, qgx.xy, along), tgy = mix(qgy.yx, qgy.xy, along);
+    tgx = mix(tgx, tgx.yx, head); tgy = mix(tgy, tgy.yx, head);
+    vec4 nS = vec4(0.5);
+    if (fp > 0.03 && fp < 9.0) nS = textureGrad(tLN, vec2(tr * (1.0 / 9.0), tl * (1.0 / 140.0)) + vec2(float(id.y) * 0.13, float(id.x) * 0.29), tgx * vec2(1.0 / 9.0, 1.0 / 140.0), tgy * vec2(1.0 / 9.0, 1.0 / 140.0));` : `vec4 nS = texture2D(tLN, vec2(tr * (1.0 / 9.0), tl * (1.0 / 140.0)) + vec2(float(id.y) * 0.13, float(id.x) * 0.29));`}
+    vec4 nP = ${LG ? 'textureGrad(tLN, q * (1.0 / 23.0) + vec2(float(id.x) * 0.37, float(id.y) * 0.71), qgx * (1.0 / 23.0), qgy * (1.0 / 23.0))' : 'texture2D(tLN, q * (1.0 / 23.0) + vec2(float(id.x) * 0.37, float(id.y) * 0.71))'};
+    vec4 nW = ${LG ? 'textureGrad(tLN, q * (1.0 / 95.0) + vec2(float(id.y) * 0.21, 0.4), qgx * (1.0 / 95.0), qgy * (1.0 / 95.0))' : 'texture2D(tLN, q * (1.0 / 95.0) + vec2(float(id.y) * 0.21, 0.4))'};
     float stri = (nS.g - 0.5) * smoothstep(0.03, 0.25, fp) * (1.0 - smoothstep(3.0, 9.0, fp));
     // tramlines: paired wheel tracks every 18–24 m, kept ≥ ~1 px wide far away
     float tlP = 18.0 + 6.0 * fhmix(pid, 37);
@@ -461,14 +492,15 @@ vec3 landAlbedo() {
       trackM = max(trackM, isT * (1.0 - smoothstep(1.3 - fp * 0.5, 1.3 + fp * 0.5, dB)));
     }
     col = mix(col, fc, fieldW);
+${LG ? '    }' : ''}
   }
 
   // ── forest canopy: crowns as sun-lit domes (fake normals), dark gaps
   // far woods must read as woods, not felt: crisp irregular edges against the open land (the cover is
   // per vertex, tens of metres apart out there), stands of different trees, crown groups as a rough
   // texture that survives distance
-  vec4 nS2 = texture2D(tLN, p.xz * (1.0 / 150.0));
-  vec4 nG = texture2D(tLN, p.xz * (1.0 / 19.0));
+  vec4 nS2 = ${lnTex('p.xz * (1.0 / 150.0)', '(1.0 / 150.0)')};
+  vec4 nG = ${lnTex('p.xz * (1.0 / 19.0)', '(1.0 / 19.0)')};
   {
     float fw = smoothstep(0.0, 0.08, forest) * (1.0 - smoothstep(0.85, 1.0, forest));
     forest = mix(forest, smoothstep(0.3, 0.7, forest + (nA.r - 0.5) * 0.45 + (nS2.a - 0.5) * 0.35 + (nG.g - 0.5) * 0.2), fw);
@@ -486,7 +518,7 @@ vec3 landAlbedo() {
     float treeBand = 1.0 - smoothstep(760.0, 830.0, vCov3.y);
     if (treeBand > 0.01) {
       vec3 floorC = mix(vec3(0.07, 0.058, 0.038), vec3(0.065, 0.095, 0.035), smoothstep(0.4, 0.65, nB.g));
-      floorC = mix(floorC, vec3(0.11, 0.08, 0.045), smoothstep(0.62, 0.8, nP2r(p.xz)) * 0.6);   // needle / leaf litter
+      floorC = mix(floorC, vec3(0.11, 0.08, 0.045), smoothstep(0.62, 0.8, ${LG ? lnTex('p.xz * (1.0 / 6.3)', '(1.0 / 6.3)') + '.r' : 'nP2r(p.xz)'}) * 0.6);   // needle / leaf litter
       floorC *= 0.8 + 0.35 * nB.r * midF;
       // far off, the gaps between the instanced crowns average out to the canopy tone
       floorC = mix(floorC, fcol * 0.8, smoothstep(2.0, 10.0, fp));
@@ -580,7 +612,7 @@ vec3 landAlbedo() {
   // the dunes (noise only in the transition, the open beach and the inland stay as they are)
   // (the noise moves the marram / bare-sand boundary only: the cover weight against the fields stays
   // smooth, else the field colours show through the dunes in blotches)
-  float sN = (nA.b - 0.5) * 1.1 + (nB.g - 0.5) * 0.7 + (texture2D(tLN, p.xz * (1.0 / 13.0)).r - 0.5) * 0.15 * midF;
+  float sN = (nA.b - 0.5) * 1.1 + (nB.g - 0.5) * 0.7 + (${lnTex('p.xz * (1.0 / 13.0)', '(1.0 / 13.0)')}.r - 0.5) * 0.15 * midF;
   // the dune band is dune all through (marram over sand), never a half-mix with the meadow / fields
   // inland of it (that read as camouflage blotches); its inland edge wanders with the noise
   // a field (decided per plot) runs to its own border over the dune fringe: the back-dune ends at the
@@ -636,11 +668,11 @@ vec3 landAlbedo() {
   vec3 rc = vec3(0.0);
   {
     float steepR = smoothstep(0.45, 0.8, 1.0 - Ng.y);
-    vec2 hz = normalize(Ng.xz + vec2(1e-4));
+${LG ? '' : `    vec2 hz = normalize(Ng.xz + vec2(1e-4));
     vec2 vp = vec2(dot(p.xz, vec2(-hz.y, hz.x)), p.y);
     // (explicit gradients: implicit derivatives are undefined inside the rock-only branch)
     vec2 vpx = dFdx(vp), vpy = dFdy(vp);
-    if (rock != 0.0) {
+`}    if (rock != 0.0) {
       const vec2 k1 = vec2(1.0 / 23.0, 1.0 / 9.0), k2 = vec2(1.0 / 6.0, 1.0 / 2.5), k3 = vec2(1.0 / 4.0, 1.0 / 40.0);
       vec4 nv1 = textureGrad(tLN, vp * k1, vpx * k1, vpy * k1);
       vec4 nv2 = textureGrad(tLN, vp * k2, vpx * k2, vpy * k2);
@@ -671,11 +703,18 @@ vec3 landAlbedo() {
       // the river (and its banks) has a silty, dark bed — the sand shelf is the sea's
       bed = mix(bed, mix(cMud * 0.8, cBedB * 0.7, smoothstep(0.3, 2.5, depth)), 1.0 - smoothstep(30.0, 55.0, vCov3.x));
       bed *= 0.9 + 0.16 * nB.b;
-      vec2 cp = p.xz * 0.23;
+${LG ? `      // caustic weight is exactly 0 at depth <= 0.05 m, from 3.8 m down and at footprints >= 2 m
+      if (depth > 0.05 && depth < 3.8 && fp < 2.0) {
+        vec2 cp = p.xz * 0.23;
+        float c1 = ${lnTex('cp + vec2(uTime * 0.011, uTime * 0.007)', '0.23')}.g;
+        float c2 = ${lnTex('cp * 1.37 + vec2(-uTime * 0.009, uTime * 0.012)', '(0.23 * 1.37)')}.g;
+        float caus = (1.0 - smoothstep(0.0, 0.07, abs(c1 - c2))) * smoothstep(0.05, 0.45, depth) * (1.0 - smoothstep(0.8, 3.8, depth)) * (1.0 - uNight);
+        bed += vec3(0.85, 1.0, 0.95) * caus * 0.3 * (1.0 - smoothstep(0.5, 2.0, fp));
+      }` : `      vec2 cp = p.xz * 0.23;
       float c1 = texture2D(tLN, cp + vec2(uTime * 0.011, uTime * 0.007)).g;
       float c2 = texture2D(tLN, cp * 1.37 + vec2(-uTime * 0.009, uTime * 0.012)).g;
       float caus = (1.0 - smoothstep(0.0, 0.07, abs(c1 - c2))) * smoothstep(0.05, 0.45, depth) * (1.0 - smoothstep(0.8, 3.8, depth)) * (1.0 - uNight);
-      bed += vec3(0.85, 1.0, 0.95) * caus * 0.3 * (1.0 - smoothstep(0.5, 2.0, fp));
+      bed += vec3(0.85, 1.0, 0.95) * caus * 0.3 * (1.0 - smoothstep(0.5, 2.0, fp));`}
       bed = mix(bed, rc * 0.7, rock * 0.5);
       col = mix(col, bed, smoothstep(0.0, 0.3, depth));
     }
@@ -704,6 +743,6 @@ export function landMaterial(uniforms: Record<string, THREE.IUniform>, fog: bool
         '#include <lights_fragment_end>\nreflectedLight.indirectDiffuse += diffuseColor.rgb * thLampLight(vLW, lnN);',
       );
   };
-  mat.customProgramCacheKey = () => 'th-land-v1';
+  mat.customProgramCacheKey = () => LG ? 'th-land-v2' : 'th-land-v1';
   return mat;
 }

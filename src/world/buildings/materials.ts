@@ -29,6 +29,16 @@ import * as THREE from 'three';
 import type { GlobalUniforms } from '../../core/uniforms';
 import { LAMP_GLSL, lampUniforms } from '../../core/lampLight';
 import { LEGACY_SHELL_FRAG_PARS, LEGACY_SHELL_FRAG_MAIN } from './legacyShell';
+import { perfOn } from '../../core/perfdeep';
+
+// perf-deep: exact early-outs in the facade shader (each skipped term has weight exactly 0 there; the gated
+// blocks fetch with textureGrad, derivatives taken before the branch, so FXC keeps a real branch). `?nofacadegates`
+// / `?noperfdeep` emit the old source. uBhDebug is folded to 0 unless a ?bdbg= switch is present.
+const FG = perfOn('facadegates');
+const BH_DBG = typeof location !== 'undefined' && new URLSearchParams(location.search).has('bdbg');
+const FG_DBG_OFF = FG && !BH_DBG;
+const fg = (gated: string, plain: string): string => (FG ? gated : plain);
+const FG_KEY = FG ? (FG_DBG_OFF ? '-fg' : '-fgd') : '';
 
 export const WIN = {
   /** single pane + frame */
@@ -318,7 +328,7 @@ uniform vec3 uCityCol;
 uniform vec3 uCloudCol;
 uniform vec3 uSunDir;
 uniform float uReflLift;
-uniform float uBhDebug;
+${FG_DBG_OFF ? '#define uBhDebug 0.0' : 'uniform float uBhDebug;'}
 uniform float uWear;
 uniform float uWinDepth;
 uniform float uWinRefl;
@@ -337,7 +347,10 @@ float bhSrc = 0.0;
 // precast panel grid of the current wall: (origin along the wall, origin height, panel width, panel height);
 // walls with a window grid set it to one bay × one storey (bhWall), others keep a generic 3.0 × 1.6 m grid
 vec4 bhPG = vec4(0.0, 0.0, 3.0, 1.6);
-${LAMP_GLSL}
+${fg(`// screen derivatives of the wall coordinate q, taken once in uniform flow: the gated pattern fetches use textureGrad
+vec2 bhDX = vec2(0.0);
+vec2 bhDY = vec2(0.0);
+`, '')}${LAMP_GLSL}
 
 // box-filtered square wave: fraction of [x - w/2, x + w/2] where fract(x) > 0.5
 float bhStripeI(float t) { return floor(t) * 0.5 + max(fract(t) - 0.5, 0.0); }
@@ -401,7 +414,30 @@ float bhPanelH(vec2 q) {
 vec2 bhWallSlope(float pat, vec2 q, float seed, vec2 fq, vec2 so) {
   float fp = max(fq.x, fq.y);
   vec2 s = vec2(0.0);
-  if (pat < 0.5) { // render: trowel undulation + grit
+${fg(`  if (pat < 0.5) { // render: trowel undulation + grit (each term fetches only where its fade weight is above 0)
+    float e = 0.02;
+    if (fp < 0.012) {
+      vec2 uq = q * 0.3 + so.yx;
+      vec2 uqx = bhDX * 0.3, uqy = bhDY * 0.3;
+      float h0 = textureGrad(uBhNoise, uq, uqx, uqy).a;
+      float hx = textureGrad(uBhNoise, uq + vec2(e * 0.3, 0.0), uqx, uqy).a, hy = textureGrad(uBhNoise, uq + vec2(0.0, e * 0.3), uqx, uqy).a;
+      s += vec2(hx - h0, hy - h0) / e * 0.0035 * (1.0 - smoothstep(0.004, 0.012, fp));
+    }
+    if (fp < 0.005) {
+      vec2 gq = q * 2.3 + vec2(seed * 0.21, 0.0);
+      vec2 gqx = bhDX * 2.3, gqy = bhDY * 2.3;
+      float g0 = textureGrad(uBhNoise, gq, gqx, gqy).a;
+      float gx = textureGrad(uBhNoise, gq + vec2(0.004, 0.0), gqx, gqy).a, gy = textureGrad(uBhNoise, gq + vec2(0.0, 0.004), gqx, gqy).a;
+      s += vec2(gx - g0, gy - g0) * 0.22 * (1.0 - smoothstep(0.002, 0.005, fp));
+    }
+    if (fp < 0.06) {
+      vec2 tq = q * vec2(0.045, 0.07) + so;
+      vec2 tqx = bhDX * vec2(0.045, 0.07), tqy = bhDY * vec2(0.045, 0.07);
+      float t0 = textureGrad(uBhNoise, tq, tqx, tqy).g;
+      float tx = textureGrad(uBhNoise, tq + vec2(0.0045, 0.0), tqx, tqy).g, ty = textureGrad(uBhNoise, tq + vec2(0.0, 0.007), tqx, tqy).g;
+      s += vec2(tx - t0, ty - t0) / 0.1 * 0.075 * (1.0 - smoothstep(0.02, 0.06, fp));
+    }
+  } else if (pat < 1.5) {`, `  if (pat < 0.5) { // render: trowel undulation + grit
     float e = 0.02;
     vec2 uq = q * 0.3 + so.yx;
     float h0 = texture2D(uBhNoise, uq).a;
@@ -418,7 +454,7 @@ vec2 bhWallSlope(float pat, vec2 q, float seed, vec2 fq, vec2 so) {
     s = vec2(hx - h0, hy - h0) / e * 0.0035 * (1.0 - smoothstep(0.004, 0.012, fp))
       + vec2(gx - g0, gy - g0) * 0.22 * (1.0 - smoothstep(0.002, 0.005, fp))
       + vec2(tx - t0, ty - t0) / 0.1 * 0.075 * (1.0 - smoothstep(0.02, 0.06, fp));
-  } else if (pat < 1.5) {
+  } else if (pat < 1.5) {`)}
     float e = 0.0022;
     vec2 id;
     float h0 = bhBrickH(bhBrick(q, seed, id));
@@ -458,11 +494,16 @@ vec3 bhWallPattern(float pat, vec2 q, float seed, vec2 fq, vec4 nm, float grain)
     res = vec3((0.9 + 0.2 * nm.g) * (0.955 + 0.09 * grain));
     // near the camera: float-finish sand (mm speckle) and the patchy tone of hand-applied render / repainting
     float fpp = max(fq.x, fq.y);
-    float spk = texture2D(uBhNoise, q * 2.3 + vec2(seed * 0.21, 0.0)).a;
+${fg(`    float spk = 0.5, mot = 0.5; // their weights are exactly 0 at fpp >= 0.006 / 0.05
+    if (fpp < 0.006) spk = textureGrad(uBhNoise, q * 2.3 + vec2(seed * 0.21, 0.0), bhDX * 2.3, bhDY * 2.3).a;
+    if (fpp < 0.05) mot = textureGrad(uBhNoise, q * 0.62 + vec2(0.0, seed * 0.13), bhDX * 0.62, bhDY * 0.62).g;
+`, `    float spk = texture2D(uBhNoise, q * 2.3 + vec2(seed * 0.21, 0.0)).a;
     float mot = texture2D(uBhNoise, q * 0.62 + vec2(0.0, seed * 0.13)).g;
-    res *= 1.0 + (spk - 0.5) * 0.12 * (1.0 - smoothstep(0.002, 0.006, fpp)) + (mot - 0.5) * 0.16 * (1.0 - smoothstep(0.015, 0.05, fpp));
+`)}    res *= 1.0 + (spk - 0.5) * 0.12 * (1.0 - smoothstep(0.002, 0.006, fpp)) + (mot - 0.5) * 0.16 * (1.0 - smoothstep(0.015, 0.05, fpp));
   } else if (pat < 1.5) { // brick: real 215 × 65 mm bricks in 10 mm joints, bond per building
-    vec2 bid;
+${fg(`    res = vec3(1.03) * (0.89 + 0.22 * nm.g); // aa = 1 from fq.y = 0.0375 up: the pattern is only its mean
+    if (fq.y < 0.04) {
+`, '')}    vec2 bid;
     vec4 bl = bhBrick(q, seed, bid);
     float aa = clamp(fq.y / 0.075 * 2.0, 0.0, 1.0);
     float mortar = 1.0 - bhBrickH(bl);
@@ -475,20 +516,26 @@ vec3 bhWallPattern(float pat, vec2 q, float seed, vec2 fq, vec4 nm, float grain)
     brick = mix(brick, vec3(1.1), chip * 0.6);
     brick = mix(brick, vec3(1.3, 1.27, 1.22) * (0.94 + 0.12 * grain), mortar);
     res = mix(brick, vec3(1.03), aa) * (0.89 + 0.22 * nm.g);
-  } else if (pat < 2.5) { // corrugated metal: vertical ribs
-    float aa = clamp(fq.x / 0.32 * 2.0, 0.0, 1.0);
+${fg('    }\n', '')}  } else if (pat < 2.5) { // corrugated metal: vertical ribs
+${fg(`    res = vec3(0.93 * (0.9 + 0.2 * nm.g)); // aa = 1 from fq.x = 0.16 up
+    if (fq.x < 0.17) {
+`, '')}    float aa = clamp(fq.x / 0.32 * 2.0, 0.0, 1.0);
     float phr = fract(q.x / 0.32);
     float pan = smoothstep(0.72, 0.8, phr) + 1.0 - smoothstep(0.02, 0.1, phr);
     float rib = 0.97 - 0.12 * clamp(pan, 0.0, 1.0); // the pans sit 32 mm back in the crowns' shade
     res = vec3(mix(rib, 0.93, aa) * (0.9 + 0.2 * nm.g));
-  } else if (pat < 3.5) { // timber siding: horizontal boards with shadow lines
-    float bh = 0.3;
+${fg('    }\n', '')}  } else if (pat < 3.5) { // timber siding: horizontal boards with shadow lines
+${fg(`    res = vec3(0.93 * (0.91 + 0.18 * nm.g)); // aa = 1 from fq.y = 0.15 up
+    if (fq.y < 0.16) {
+`, '')}    float bh = 0.3;
     float fy = fract(q.y / bh);
     float aa = clamp(fq.y / bh * 2.0, 0.0, 1.0);
     float board = mix(0.7, 1.0, smoothstep(0.0, 0.2, fy)) * (0.9 + 0.16 * bhHash12(vec2(floor(q.y / bh), floor(q.x / 3.7)) + seed));
     res = vec3(mix(board, 0.93, aa) * (0.91 + 0.18 * nm.g));
-  } else if (pat < 4.5) { // ashlar stone blocks
-    float ch = 0.62;
+${fg('    }\n', '')}  } else if (pat < 4.5) { // ashlar stone blocks
+${fg(`    res = vec3(0.96 * (0.91 + 0.18 * nm.g)); // aa = 1 from fq.y = 0.248 up
+    if (fq.y < 0.26) {
+`, '')}    float ch = 0.62;
     float row = floor(q.y / ch);
     float fy = fract(q.y / ch);
     float bx = q.x / 1.25 + mod(row, 2.0) * 0.5;
@@ -497,7 +544,7 @@ vec3 bhWallPattern(float pat, vec2 q, float seed, vec2 fq, vec4 nm, float grain)
     float joint = max(1.0 - smoothstep(0.0, 0.05, fy), 1.0 - smoothstep(0.0, 0.025, min(fx, 1.0 - fx)));
     float sn = bhHash12(vec2(floor(bx), row) + seed);
     res = vec3(mix((0.9 + 0.16 * sn) * mix(1.0, 0.78, joint), 0.96, aa) * (0.91 + 0.18 * nm.g));
-  } else if (pat < 5.5) { // precast concrete panels (one bay × one storey on gridded walls): sealed joints
+${fg('    }\n', '')}  } else if (pat < 5.5) { // precast concrete panels (one bay × one storey on gridded walls): sealed joints
     // with chamfered arrises, per-panel tone (each panel was cast separately), a darker drip line along each
     // panel's bottom edge, aggregate speckle and blow holes near the camera
     vec2 gg = (q - bhPG.xy) / bhPG.zw;
@@ -1291,11 +1338,19 @@ void bhWall(inout vec3 albedo, inout float rough, inout float metal, inout vec3 
   float y = vWPos.y;
   vec3 baseAlb = albedo;
   if (vB.x > 0.5 && vB.y > 0.5) bhPG = vec4(q.x - uSign * fract(vFac.x) * csz.x, y - fract(vFac.y) * csz.y, csz.x, csz.y);
-  albedo *= bhWallPattern(pat, q, seed, fq, nm, grain);
+${fg(`  vec2 qdx = dFdx(q), qdy = dFdy(q);
+  bhDX = qdx; bhDY = qdy;
+  vec3 wallPat = bhWallPattern(pat, q, seed, fq, nm, grain);
+  albedo *= wallPat;
+  // every pattern's slope term is 0 from fp = 0.09 up (its widest fade is the corrugated one, 0.03..0.09)
+  if (uWallRelief > 0.5 && uDetail > 0.5 && max(fq.x, fq.y) < 0.09) {
+    vec2 rs = bhWallSlope(pat, q, seed, fq, so);
+    if (dot(rs, rs) > 1e-6) bhNW = normalize(N - T * rs.x - vec3(0.0, rs.y, 0.0));
+  }`, `  albedo *= bhWallPattern(pat, q, seed, fq, nm, grain);
   if (uWallRelief > 0.5 && uDetail > 0.5) {
     vec2 rs = bhWallSlope(pat, q, seed, fq, so);
     if (dot(rs, rs) > 1e-6) bhNW = normalize(N - T * rs.x - vec3(0.0, rs.y, 0.0));
-  }
+  }`)}
   // plinth course: the foot of the wall is a 30–60 cm band of a harder, darker material (rendered / stone /
   // engineering brick; a concrete upstand under corrugated sheds), 2–3 cm proud with a weathered top ledge,
   // splash speckles and damp at the bottom. Drawn on wall pixels only (glass and doors keep their own look).
@@ -1319,7 +1374,8 @@ void bhWall(inout vec3 albedo, inout float rough, inout float metal, inout vec3 
       }
       pc *= 0.85 + 0.15 * grain;
       // splash speckles + damp toward the ground
-      float spl = smoothstep(0.55, 0.75, texture2D(uBhNoise, q * 1.3 + so).a) * (1.0 - smoothstep(0.0, 0.25, y));
+${fg(`      float spl = 0.0; // weighted by (1 - smoothstep(0.005, 0.02, fq.y)) below: 0 from fq.y = 0.02 up
+      if (fq.y < 0.02) spl = smoothstep(0.55, 0.75, textureGrad(uBhNoise, q * 1.3 + so, bhDX * 1.3, bhDY * 1.3).a) * (1.0 - smoothstep(0.0, 0.25, y));`, `      float spl = smoothstep(0.55, 0.75, texture2D(uBhNoise, q * 1.3 + so).a) * (1.0 - smoothstep(0.0, 0.25, y));`)}
       pc *= (1.0 - 0.35 * spl * (1.0 - smoothstep(0.005, 0.02, fq.y))) * mix(0.72, 1.0, smoothstep(0.0, 0.18 + 0.1 * nm.g, y));
       // the ledge on top catches the sky; a thin shadow line just under it
       float led = smoothstep(pH - 0.03 - aaP, pH - 0.012, y) * (1.0 - smoothstep(pH - 0.012, pH, y));
@@ -1371,7 +1427,8 @@ void bhWall(inout vec3 albedo, inout float rough, inout float metal, inout vec3 
     // splash zone: rain bouncing off the ground soils the bottom 25–45 cm of every wall (new or old), a soft
     // gradient plus soil specks that read near the camera
     float spz = 1.0 - smoothstep(0.03, 0.34 + 0.2 * nm.g, y);
-    float spd = smoothstep(0.58, 0.8, texture2D(uBhNoise, q * 1.7 + so.yx).a) * (1.0 - smoothstep(0.003, 0.01, fq.y)) * (1.0 - smoothstep(0.05, 0.45, y));
+${fg(`    float spd = 0.0; // weight (1 - smoothstep(0.003, 0.01, fq.y)) is 0 from fq.y = 0.01 up
+    if (fq.y < 0.01) spd = smoothstep(0.58, 0.8, textureGrad(uBhNoise, q * 1.7 + so.yx, bhDX * 1.7, bhDY * 1.7).a) * (1.0 - smoothstep(0.003, 0.01, fq.y)) * (1.0 - smoothstep(0.05, 0.45, y));`, `    float spd = smoothstep(0.58, 0.8, texture2D(uBhNoise, q * 1.7 + so.yx).a) * (1.0 - smoothstep(0.003, 0.01, fq.y)) * (1.0 - smoothstep(0.05, 0.45, y));`)}
     albedo *= mix(vec3(1.0), vec3(0.5, 0.47, 0.42), clamp(spz * 0.6 + spd * 0.5, 0.0, 0.8) * min(wStr, 1.0));
     float tide = 0.35 + 0.6 * oldness + 0.35 * (nm.g - 0.5) + 0.1 * (grain - 0.5) + 0.2 * (np.r - 0.5);
     float damp = 1.0 - smoothstep(tide - 0.14, tide + 0.03, y);
@@ -1516,7 +1573,9 @@ void bhWall(inout vec3 albedo, inout float rough, inout float metal, inout vec3 
     // the returns carry the wall's surface turned through 90° (brick headers / render on the reveal), so the
     // arris reads as a corner instead of the pattern running on across it
     vec2 rq = dSurf == 1 ? vec2(dDepth * revD + 0.37, dQ.y) : vec2(dQ.x, dDepth * revD + 0.21);
-    vec3 c = baseAlb * bhWallPattern(pat, rq, seed + 3.0, fq, nm, grain) * (albedo / max(baseAlb * bhWallPattern(pat, q, seed, fq, nm, grain), vec3(1e-3)));
+${fg(`    bhDX = dFdx(rq); bhDY = dFdy(rq); // the return's own screen derivatives for the pattern's gradient fetches
+    vec3 c = baseAlb * bhWallPattern(pat, rq, seed + 3.0, fq, nm, grain) * (albedo / max(baseAlb * wallPat, vec3(1e-3)));
+    bhDX = qdx; bhDY = qdy;`, `    vec3 c = baseAlb * bhWallPattern(pat, rq, seed + 3.0, fq, nm, grain) * (albedo / max(baseAlb * bhWallPattern(pat, q, seed, fq, nm, grain), vec3(1e-3)));`)}
     // depth AO toward the frame, a dark contact line where the reveal meets the frame, a worn pale arris
     float arris = (1.0 - smoothstep(0.0, 0.08, dDepth)) * 0.18;
     float contact = smoothstep(0.82, 0.97, dDepth) * 0.35;
@@ -1564,7 +1623,25 @@ void bhWall(inout vec3 albedo, inout float rough, inout float metal, inout vec3 
       float lenK = 0.35 + 1.4 * hw2;                            // short drips … long runs
       float drk = 0.35 + 0.6 * fract(hw1 * 7.31);
       float inX = smoothstep(wr.x - 0.1, wr.x + 0.06, pm.x) * (1.0 - smoothstep(wr.y - 0.06, wr.y + 0.1, pm.x));
-      float run = 1.0 - smoothstep(0.0, (0.5 + 2.2 * sn * sn) * lenK, dS);
+${fg(`      float ew = max(0.09, fq.x * 1.25);
+      float ends = (1.0 - smoothstep(0.0, ew, abs(pm.x - wr.x - 0.05))) * step(0.3, fract(hw2 * 3.7)) + (1.0 - smoothstep(0.0, ew, abs(pm.x - wr.y + 0.05))) * step(0.3, fract(hw2 * 5.3));
+      ends *= 0.09 / ew;
+      // rivulet noise: derivatives before the branch, the fetch itself (textureGrad) inside it
+      vec2 ruv = vec2(pm.x * 2.6 + seed * 0.11 + cell.x * 0.37, dS * 0.05 + cell.y * 0.21);
+      vec2 ruvx = dFdx(ruv), ruvy = dFdy(ruv);
+      float rs = 0.0;
+      if (inX > 0.0 || ends > 0.0) { // the piers beside the window: every term below is 0
+        float run = 1.0 - smoothstep(0.0, (0.5 + 2.2 * sn * sn) * lenK, dS);
+        rs = inX * run * smoothstep(0.1, 0.8, sn) * amt + ends * (1.0 - smoothstep(0.0, (1.3 + 1.8 * sn) * lenK, dS)) * (0.4 + 0.6 * amt);
+        // near the camera the stain splits into rivulets (2–5 cm wide runs that wander a little) and is darkest in
+        // the 10–15 cm right under the sill where the water leaves the drip
+        float nearS = 1.0 - smoothstep(0.004, 0.014, fq.x);
+        if (nearS > 0.0) {
+          float riv = textureGrad(uBhNoise, ruv, ruvx, ruvy).g;
+          rs *= mix(1.0, 0.35 + 1.3 * smoothstep(0.38, 0.68, riv), nearS);
+        }
+        rs += inX * (1.0 - smoothstep(0.0, 0.14, dS)) * step(dS, 0.5) * step(wr.z, pm.y + 0.5) * 0.35 * float(sillW) * smoothstep(0.2, 0.6, hw1);
+      }`, `      float run = 1.0 - smoothstep(0.0, (0.5 + 2.2 * sn * sn) * lenK, dS);
       float ew = max(0.09, fq.x * 1.25);
       float ends = (1.0 - smoothstep(0.0, ew, abs(pm.x - wr.x - 0.05))) * step(0.3, fract(hw2 * 3.7)) + (1.0 - smoothstep(0.0, ew, abs(pm.x - wr.y + 0.05))) * step(0.3, fract(hw2 * 5.3));
       ends *= 0.09 / ew;
@@ -1574,7 +1651,7 @@ void bhWall(inout vec3 albedo, inout float rough, inout float metal, inout vec3 
       float nearS = 1.0 - smoothstep(0.004, 0.014, fq.x);
       float riv = texture2D(uBhNoise, vec2(pm.x * 2.6 + seed * 0.11 + cell.x * 0.37, dS * 0.05 + cell.y * 0.21)).g;
       rs *= mix(1.0, 0.35 + 1.3 * smoothstep(0.38, 0.68, riv), nearS);
-      rs += inX * (1.0 - smoothstep(0.0, 0.14, dS)) * step(dS, 0.5) * step(wr.z, pm.y + 0.5) * 0.35 * float(sillW) * smoothstep(0.2, 0.6, hw1);
+      rs += inX * (1.0 - smoothstep(0.0, 0.14, dS)) * step(dS, 0.5) * step(wr.z, pm.y + 0.5) * 0.35 * float(sillW) * smoothstep(0.2, 0.6, hw1);`)}
       albedo *= mix(vec3(1.0), dirtTint * 0.9, clamp(rs, 0.0, 1.0) * 0.82 * drk * wStr);
       if (pat > 4.5 && pat < 5.5 && prof > 0.5 && prof < 1.5) {
         // office panel walls: the window band (piers between the windows) and the spandrel panels above /
@@ -2273,7 +2350,7 @@ void bhRoof(inout vec3 albedo, inout float rough, inout vec3 emit, vec3 N, vec3 
   if (pat < 6.5) { // skylight glazing
     vec2 g = p / vec2(1.2, 0.9);
     vec2 gf = abs(fract(g) - 0.5);
-    float aa = clamp(fwidth(g.x) * 2.0, 0.0, 1.0);
+    float aa = clamp(${fg('fp.x / 1.2', 'fwidth(g.x)')} * 2.0, 0.0, 1.0);
     float bar = mix(max(1.0 - smoothstep(0.42, 0.46, gf.x * 1.0) * (1.0 - smoothstep(0.4, 0.46, gf.y)), 0.0), 0.25, aa);
     vec3 R = reflect(V, N);
     float cosv = clamp(-dot(V, N), 0.0, 1.0);
@@ -2489,7 +2566,7 @@ export function createMaterials(g: GlobalUniforms, opts: { legacy?: boolean; wea
         );
     }
   };
-  shell.customProgramCacheKey = () => (legacy ? 'tinyhaven-buildings-shell-legacy' : 'tinyhaven-buildings-shell-v2');
+  shell.customProgramCacheKey = () => (legacy ? 'tinyhaven-buildings-shell-legacy' : `tinyhaven-buildings-shell-v2${FG_KEY}`);
 
   const trim = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.8, metalness: 0.0 });
   trim.name = 'buildings-trim';

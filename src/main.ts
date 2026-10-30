@@ -14,6 +14,7 @@ import type { CityContext, CityModule, ModuleFactory, QualityState, CameraState,
 import { validateWorld } from './debug/validate';
 import { createShadowLod } from './render/shadowLod';
 import { cullHiddenTriangles } from './render/geomCull';
+import { perfOn } from './core/perfdeep';
 
 // Load order matters: static world → simulations → post-processing → camera → UI.
 const MODULES: [string, () => Promise<{ default: ModuleFactory }>][] = [
@@ -425,8 +426,11 @@ const LATE_DRAWS: Record<string, number> = {
   'land-island': 3,
 };
 function lateDraws(scene: THREE.Scene): void {
+  // (perf-deep, ?nomtnlate: the mountains after the land in front of them: half of their pixels were shaded and then
+  // covered; the waste census of the overview, 0.105 of the screen)
+  const mtn = perfOn('mtnlate');
   scene.traverse((o) => {
-    const r = LATE_DRAWS[o.name];
+    const r = LATE_DRAWS[o.name] ?? (mtn && o.name === 'land-mountains' ? 3.5 : undefined);
     if (r !== undefined) o.renderOrder = r;
   });
 }
