@@ -6,6 +6,15 @@ Branch `claude/box-hunt-af5a80` (based on `claude/pensive-gates-bim12i` a200754)
 before/after crops kept for the log live in `docs/progress/boxhunt/`.
 
 ## Resume here
+**Round 3 (2026-10-30) IN PROGRESS** — audit `shots/bh3/audit` (r3: 4 new eye-level nodes + 2 at night, 10 POI
+fly-overs at 35 m noon + 8 at night; r3n: interiors at night), 2 sonnet judges + own look. Ranked 10 (mine): cranes,
+river railing, pier kiosks, floodlight heads (≈ already 5×3 lamp housings), interiors dark at night, allotment
+sheds, lifeguard tower (≈ detailed), beach lamps (≈ detailed), ship containers (≈ same kit as the yard), playground
+(≈ chains / tiles / slide detailed). Fixed in 0e8f95f: `?nocranekit`, `?noriverrail`, `?nopierkiosk`, `?noshedkit`,
+interior halos + floor pools (under `?nointeriors`). Pending: verify (`shots/bh3/{crane,rk,sn}`), perf A/B, hitch,
+build, Round 3 section. Hand-offs: canal-wall black boxes = lower-quay bollards (places), rooftop plant + balcony
+railings (massing), lamp glare hides the fixtures at night (light).
+
 **Round 2 (overnight, 2026-10-30) DONE** (see "Round 2" at the end: fixes, perf, smoothness, checks, hand-offs; sheet `docs/progress/boxhunt/round2_before_after.jpg`) — merged `claude/pensive-gates-bim12i` (083a507) first. Backlog in
 order: (1) ranked list #14–30 minus hand-offs, (2) REAL-REPORT objects, (3) interiors through glass, (4) re-audit
 with walk mode / free camera and fix the next 10, repeat. Every feature: `boxHunt(ctx, name)` switch.
