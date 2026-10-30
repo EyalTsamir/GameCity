@@ -6,7 +6,13 @@ Branch `claude/director-mode-bc531f`, cut from `claude/pensive-gates-bim12i` @ 0
 
 ## Resume here
 * Film + photo mode implemented and committed; `film` / `photo` ui-test steps pass; film hitch: 0 new programs, 0 freezes.
-* Next: storyboard judged at full resolution, phone check, full 54 + new steps, `file://` build, final log.
+* Done since: storyboard read at full resolution and weak shots retuned (harbour end, night crane, title, end card);
+  phones checked with real touch at 390×844, 360×740, 844×390 (flow passes, toolbar fits).
+* Left: full ui-test, `npm run build` + film from `file://`, final hitch and `docs/progress/director/storyboard.png`,
+  then delete the temporary `film-sheet.mjs` / `film-hitch.mjs` from the MAIN checkout and restore its `ui-test.mjs`
+  (`git -C C:/Projects/GameCity status --short` must be clean).
+* The laptop was on battery (2026-10-30) during the last runs: GPU timings are throttled, so numbers measured then are
+  marked as battery numbers and prove nothing about cost.
 
 ## Design
 * `src/ui/camera/film.ts` (`FilmDirector`), `filmShots.ts` (data only). The camera module runs it in `frame()` like the

@@ -41,6 +41,8 @@ and swallow Vite's HMR websocket so a test page never reloads mid-run. Always Re
 - `node scripts/soak.mjs --minutes 4 --speed 4` — long run sampling fps, heap, module stats and invariant violations
   (4 min at 4× ≈ one game day).
 - `node scripts/ui-test.mjs` — real mouse/keyboard tests of camera/UI/audio; run one step with `--steps follow` (see its header for the list).
+- `node scripts/film-sheet.mjs --out shots/film/sheet.png [--mode realtime|seek] [--every 6 | --stamps 3,25]` — contact sheet of the opening film
+  (`seek` scouts a path fast; only `realtime` has the train on cue). `node scripts/film-hitch.mjs` — frame intervals and new shader programs per shot.
 
 "Running a single test" = `shot.mjs --q "only=<module>" --invariants`, a single `ui-test.mjs --steps <name>`, or `?validate`.
 
@@ -51,7 +53,8 @@ and swallow Vite's HMR websocket so a test page never reloads mid-run. Always Re
 plan and graphs), `?time=21.5`, `?speed=4`, `?quality=low|medium|high`, `?seed=…`, `?adaptive=0` (freeze adaptive
 quality), `?nointro` (skip the opening camera glide), `?noidle` (no auto-tour after 2 idle minutes),
 `?hide=traffic,pedestrians` (simulate without drawing), `?diorama` (tabletop presentation), `?wind=<0..1.5>` /
-`?winddir=<deg>` (pin the wind). Modules have more debug switches (one per world-round feature, e.g. `?noland`,
+`?winddir=<deg>` (pin the wind), `?film` / `?nofilm` (force / skip the opening film; every automated browser and any
+start-state parameter already skip it, see `filmWanted()` in `src/ui/camera/film.ts`), `?filmfps=30|60`. Modules have more debug switches (one per world-round feature, e.g. `?noland`,
 `?nograss`, `?noleafcards`, `?nocloth`, `?noatmo`) — listed in `docs/progress/WORLD.md` and their progress logs.
 In the page, `window.__city` exposes `view()`, `setHours()`, `setSpeed()`, `stats()`, `invariants()`, `validate()`, `frameErrors`, `ctx`.
 
