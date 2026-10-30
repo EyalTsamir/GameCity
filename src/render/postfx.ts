@@ -225,11 +225,6 @@ export default function create(ctx: CityContext): CityModule {
     t.type = THREE.UnsignedInt101111Type;
     t.internalFormat = 'R11F_G11F_B10F';
   }
-  // ?depth24: the scene depth as DEPTH_COMPONENT24 instead of 32F (test)
-  if (params.has('depth24')) {
-    const c = composer as unknown as { stableDepthTexture: THREE.Texture | null };
-    for (const d of [composer.inputBuffer.depthTexture, composer.outputBuffer.depthTexture, c.stableDepthTexture]) if (d) d.type = THREE.UnsignedIntType;
-  }
 
   // bloom passes are skipped entirely while bloom is off
   const bloomUpdate = bloom.update.bind(bloom);

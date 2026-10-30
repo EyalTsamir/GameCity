@@ -434,11 +434,8 @@ const LATE_DRAWS: Record<string, number> = {
   'land-island': 3,
 };
 function lateDraws(scene: THREE.Scene): void {
-  // (perf-deep, ?nomtnlate: the mountains after the land in front of them: half of their pixels were shaded and then
-  // covered; the waste census of the overview, 0.105 of the screen)
-  const mtn = perfOn('mtnlate');
   scene.traverse((o) => {
-    const r = LATE_DRAWS[o.name] ?? (mtn && o.name === 'land-mountains' ? 3.5 : undefined);
+    const r = LATE_DRAWS[o.name];
     if (r !== undefined) o.renderOrder = r;
   });
 }
