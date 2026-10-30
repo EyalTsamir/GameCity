@@ -329,3 +329,51 @@ the night camera cut to the overview (arrive window, no compile, no long task).
 - **people**: close-up pedestrians (capsule limbs, mitten hands, flat hair) and the boat passengers (v08) were the
   judges' #1 in both walk rounds.
 - **groundcover**: poppy heads need a discard in the shared grass shader (early-Z risk).
+
+## Round 3 (2026-10-30) — walk + fly audit, noon + night
+Audit (`shots/bh3/audit`): `r3` = 4 new eye-level ped nodes ≥ 34 m from rounds 1–2 (2 also at 21:30) + every city
+POI flown at 35 m / 32° (10 at noon, 8 at night); `r3n` = the furnished interiors and a shopfront street at 21:30.
+Two sonnet judges (eye + night, aerial) + own crops. Before/after sheet: `docs/progress/boxhunt/round3_before_after.jpg`.
+
+Ranked 10 (my domain; ≈ = checked in code, already detailed, no change):
+1. STS gantry cranes (aerial #1: plain portal) → fixed. 2. River railing (square posts and bars at eye level) →
+fixed. 3. Pier kiosks (striped boxes) → fixed. 4. Stadium floodlight heads ≈ (frame + 5×3 lit lamp housings exist,
+small from 35 m). 5. Interiors dark at night (only wall washes; the candles / globes are tiny) → fixed.
+6. Allotment sheds (box + slab roof + blank plate window) → fixed. 7. Lifeguard tower ≈ (X-braces, hipped roof,
+railing, ramp, flag, life ring, rescue board). 8. Beach lamps ≈ (base, banded column, caged lantern, cap, finial,
+flange in the fine kit). 9. Ship containers ≈ (same `addContainer` as the yard → round-2 castings / hinges apply).
+10. Playground ≈ (link chains, hangers, worn rubber tiles, slide with a roof).
+
+| object | change | switch | files |
+|---|---|---|---|
+| STS cranes | switchback stair tower up the landside leg (8 flights: treads, stringers, handrail, landings with guard rails, a bridge onto the boom catwalk), cable reel on a pedestal with its cable to the quay, diaphragm bands on the legs, trolley rails on the girders, louvres + door + roof guard rail on the machinery house (all in the gantry rig: they travel with it) | `?nocranekit` | `harbor/cranes.ts`, `harbor.ts` |
+| river railing | cast iron: moulded base block, collar and ball finial on every post, a round handrail on a flat bar, spear-headed dog bars every ~0.33 m (the paired balusters + plates go) | `?noriverrail` | `terrain/railings.ts`, `masonry.ts` (1 line) |
+| pier kiosks | plinth, corner pilasters, a counter on brackets with goods (jars, boxes, ice-cream cones), a lit back shelf with packs, awning arms + side cheeks + scalloped valance, a lettered name board, roof finial, a chalk A-board on the deck | `?nopierkiosk` | `harbor/pier.ts`, `harbor.ts` |
+| allotment sheds | joinery in the fine kit (near-gated, not in the always-drawn coarse kit): bearers, lap-board shadow lines on all faces, corner trims, framed window with glazing bars + sill, ledged-and-braced door with hasp + padlock, gutter + downpipe | `?noshedkit` | `props/furniture.ts`, `props.ts` |
+| interiors at night | halos at the church / town-hall chandeliers and the station globes + warm floor pools under them (the pools feed the lamp light map, so pews, floor and walls light up through the glass) | `?nointeriors` | `landmarks/{church,townhall,station}.ts` |
+
+Hand-offs (round 3): **places** — the black boxes on the river wall at the waterline in eye-level views are the
+lower-quay mooring bollards (`terrain/places.ts quayIron`, already handed off in round 2); **massing** — rooftop
+plant boxes on the downtown towers, balcony railings as flat lattice sheets (old town), sawtooth factory roofs
+without glazing; **light** — at night the street-lamp glare hides the fixtures (the judges' #1 at night: "glowing
+blob, no housing"); the heads are modelled, the halo / bloom size decides whether they read.
+
+### Perf (Adreno X1-45, 1920×1025, noon, `perf.mjs --variants ";noboxhunt" --repeat 2`, rounds 1–3 together)
+| view | ms/frame on (2 runs) | ms/frame `?noboxhunt` | Δ ms | draw calls on / off | triangles on / off |
+|---|---|---|---|---|---|
+| downtown@12 | 58.4, 57.9 (58.1) | 57.4, 56.1 (56.8) | +1.4 | 238 / 238 | 4.68 M / 4.33 M (+353 k, +8.1 %) |
+| harbor@12 | 51.6, 51.8 (51.7) | 49.9, 50.3 (50.1) | +1.6 | 248 / 248 | 4.80 M / 4.40 M (+404 k, +9.2 %) |
+| beach@12 | 54.6, 54.6 (54.6) | 55.9, 53.2 (54.5) | +0.1 | 249 / 249 | 4.80 M / 4.34 M (+456 k, +10.5 %) |
+| street@12 | 49.0, 50.1 (49.6) | 48.7, 49.0 (48.8) | +0.7 | 234 / 234 | 4.14 M / 3.81 M (+327 k, +8.6 %) |
+
+Round 3 adds ~+20–60 k triangles over round 2 (`perf4`: +296–399 k) and no draw calls (the kits live in existing
+meshes: crane rig, railing mesh, pier static mesh, the fine prop cells; the interior glows are sprites in the existing
+glow mesh). The ms deltas sit in the same +0.1–1.6 ms band as before (this run was on a busier machine: every view
+2–3 ms slower in both variants than `perf4`).
+
+### Smoothness
+HITCH_RESULT
+
+### Checks
+`npm run typecheck` clean; `npm run build` OK (`dist/index.html` 3.86 MB); every capture: invariants `{}`, console
+and frame errors none.
