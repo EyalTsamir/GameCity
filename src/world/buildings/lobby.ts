@@ -250,10 +250,10 @@ export function realLobby(g: Gen, sg: SideGeom, o: LobbyOpts): void {
   const firm = o.name ?? FIRMS[firmIdx++ % FIRMS.length];
   const key = `lob:${firm}`;
   const nameFg = P.slats ? '#f4efe4' : '#e8cf9a';
-  const rr = g.atlas.add(key, 384, 56, letterSign(firm, nameFg, '#ffe9c4', undefined, 1, '#000000'));
+  const rr = g.atlas.add(key, 320, 44, letterSign(firm, nameFg, '#ffe9c4', undefined, 1, '#000000'));
   const nw = Math.min(featW * 0.74, firm.length * 0.3);
   const ny = Math.min(head - 0.75, 2.75);
-  signOnSide(g, sg, featC - nw / 2, featC + nw / 2, back + 0.125, ny, ny + (nw * 56) / 384, rr);
+  signOnSide(g, sg, featC - nw / 2, featC + nw / 2, back + 0.125, ny, ny + (nw * 44) / 320, rr);
 
   // reception desk: stone front with a lit kick, overhanging top, rounded ends, monitors
   const dW = Math.min(featW * 0.8, 4.6);
