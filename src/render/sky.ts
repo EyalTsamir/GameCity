@@ -84,8 +84,9 @@ export default async function create(ctx: CityContext): Promise<CityModule> {
   // light round: street-canyon sky visibility for the ambient light (?noskyvis; off on the low tier)
   let skyVis: SkyVisStats | null = null;
   if (world && !legacyParam && !ctx.debug.params.has('noskyvis') && ctx.quality.level !== 'low') skyVis = installSkyVis(ctx.plan);
-  // light round: street lamps' specular sheen (?nolampspec)
-  if (!legacyParam && !ctx.debug.params.has('nolampspec')) patchLampSpecular();
+  // light round: street lamps' specular sheen — opt-in (?lampspec, never on the low tier): measured 1.1–2.3 ms at night
+  // on the Adreno (it keeps the lamp term alive in every uber-shader) for a faint streak on the asphalt
+  if (!legacyParam && ctx.debug.params.has('lampspec') && ctx.quality.level !== 'low') patchLampSpecular();
   renderer.toneMapping = TONE_MAPPING;
   renderer.shadowMap.enabled = ctx.quality.shadows;
   renderer.shadowMap.type = THREE.PCFShadowMap;

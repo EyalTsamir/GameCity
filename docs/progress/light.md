@@ -53,7 +53,7 @@ water; halos identical hard discs; the 19 → 21.5 h switch-on is abrupt.
 | 4 | Contact shadows at eye level (screen-space, sun direction) + tighter AO near the camera | postfx/aoApply.ts | 0.5–1 ms | done differently: N8AO retuned (?aoold) + street-canyon sky visibility (?noskyvis) + metering |
 | 5 | Glass: curtain walls / car glass mirror sky + opposite facades | buildings/materials.ts (minimal), vehicle glass | 0.2–0.5 ms | curtain walls done (?glassold); car glass already mirrors a street model (vehicleMaterial thStreetRefl) — unchanged |
 | 6 | Water: sky-tinted Fresnel at dusk, broken reflections, sun glitter | water | ~0.1 ms | dusk sea done (?waterold) |
-| 7 | Blue hour: lights on earlier, string lights / lamps glow, window spill | lamps, uLights ramp, bloom | 0 ms | lamp specular sheen (?nolampspec, widened + capped in r3); switch-on unchanged (core/time.ts: sun < 2.9°; at 19 h the lamps are on but invisible against daylight, as in photographs) |
+| 7 | Blue hour: lights on earlier, string lights / lamps glow, window spill | lamps, uLights ramp, bloom | 0 ms | lamp specular sheen — opt-in `?lampspec` since r5 (1–2 ms for a faint streak); switch-on unchanged (core/time.ts: sun < 2.9°; at 19 h the lamps are on but invisible against daylight, as in photographs) |
 | 8 | Shadow edges: stipple / smudges, penumbra | sky/shadowFit, shadow chunk | small | eye-level fit 14 → 10 cm texels (?shadowold) |
 | 9 | Grazing-sun sheen on asphalt / stone | ground shaders | 0.1–0.3 ms | asphalt roughness 0.8–0.95 → 0.72–0.92; env specular ×1.7 (?envold) gives grazing sky sheen on all paving |
 | 10 | Grade: contrast, vignette, highlight bloom | postfx | 0 ms | done (?lookold; r3: contrast 0.21, lift halfway back) |
@@ -71,8 +71,17 @@ cost — off on the low tier), retuned AO / glass / shadow fit ≈ 0 (within noi
 Round 3, night A/B (21.5 h, 2 repeats, ms/frame): street 46.1 / 44.8 baseline, 44.9 / 43.5 `?nolampspec`,
 44.8 / 44.7 `?envold`; oldtown 62.9 / 61.6, 61.1 / 60.9, 61.7 / 61.4 → lamp specular ≈ 0.7–1.3 ms at night (a GGX
 evaluation on every lamp-lit Standard fragment; candidate for a medium-tier switch), env ×1.7 ≈ 0 (uniforms only).
-NOT yet done: the coordinator's stutter check `node C:/Projects/GameCity/scripts/hitch.mjs --url http://127.0.0.1:5188/`
-(mid-run shader compiles must stay 0, no new freezes > 100 ms) — run it before merging.
+Stutter check (`hitch.mjs`, 5 views × 12 / 18.2 / 21.5 h, `shots/light/hitch.json`): 0 mid-run shader compiles in every
+window (all light-round patches go in before main.ts' precompile / warmUp). Freezes > 100 ms appeared only in the
+21.5 h windows late in the run (market up to 616 ms); the night perf A/B in one session (perf3) shows such spikes
+landing at random on any variant — the first page load, `?noskyvis`, and the all-toggles-off variant alike — i.e.
+external GPU load (sibling sessions), not a light-round cost. Steady night cost of the whole round: market +2.7 ms,
+oldtown +2.2, harbor +2.0 (lamp specular ≈ 1–1.4, sky visibility ≈ 1–1.5). Round 4: lamp specular faded out by
+90 m from the eye and skipped beyond (aerial nights pay nothing), off on the low tier.
+Round 5: a cheap lobe (GGX D, Kelemen visibility, Schlick) on ground-facing surfaces only still cost (perf5, 3 repeats,
+GPU ms) street +1.8, market +1.1, oldtown +2.3 — even aerial, where nearly every fragment skips the branch: the cost is
+keeping the lamp term (thLampSE / thLampSL) alive in every uber-shader, not the lobe. For a streak the judges called
+barely visible that is poor value → the lamp specular is OFF by default, `?lampspec` turns it on (never on low).
 
 ## Log
 - Resize warnings (`ui-test --steps resize`, ~120 × `glBlitFramebuffer … not all the same size`): traced with a
@@ -109,7 +118,7 @@ NOT yet done: the coordinator's stutter check `node C:/Projects/GameCity/scripts
 - Eye-level shadow fit (`sky.ts`, `?shadowold`): radius clamp(d·1.75 + 90, 105, 950) (was d·1.6 + 120, ≥ 140) →
   texels ≈ 10 cm instead of 14 at street level; aerial distances unchanged.
 - Grade (`postfx.ts`, `?lookold`): S-curve 0.17 → 0.23, lift halved, vignette 0.16 → 0.2.
-- Lamp specular (`core/lampLight.ts` patchLampSpecular, `?nolampspec`): GGX from the lamp map's virtual lamp, added
+- Lamp specular (`core/lampLight.ts` patchLampSpecular; was `?nolampspec`, now opt-in `?lampspec`): GGX from the lamp map's virtual lamp, added
   after the integrations' thLampLight call. Round 2 showed the trap: right under every head, seen from above, H ≈ N and
   a smooth surface (or the lamp's own glass) gave a mirror-sharp peak that the night bloom turned into 80–250 px balls
   over park / oldtown / market / harbor. Round 3: the lamp lobe uses roughness ≥ 0.5 (the virtual lamp is heads half a

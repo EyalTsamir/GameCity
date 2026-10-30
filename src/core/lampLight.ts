@@ -280,8 +280,8 @@ let specPatched = false;
  * car paint and stone; a material can opt out with the define TH_NO_LAMP_SPEC — the water has its own lamp
  * reflections). One-time patch of three's aomap_fragment (included by every lit material right after the
  * lights — and after the integrations' `thLampLight(…)` call): Standard / Physical materials that integrate the lamp
- * light add GGX specular from the lamp map's virtual lamp with the material's own roughness. Call before any
- * material compiles (the sky module does). Returns true when patched.
+ * light add a cheap GGX specular from the lamp map's virtual lamp (the material's roughness, ≥ 0.5) on ground-facing
+ * surfaces within 90 m of the eye. Call before any material compiles (the sky module does). Returns true when patched.
  */
 export function patchLampSpecular(): boolean {
   if (specPatched) return true;
@@ -290,17 +290,27 @@ export function patchLampSpecular(): boolean {
   if (typeof src !== 'string') return false;
   chunks.aomap_fragment = /* glsl */ `
 #if defined( TH_LAMP_GLSL ) && defined( STANDARD ) && !defined( TH_NO_LAMP_SPEC )
-if ( thLampSE.r + thLampSE.g + thLampSE.b > 1e-5 ) {
+// the streak on the ground is a near-field effect: faded out by 90 m from the eye and skipped beyond (aerial views pay
+// nothing), and only on ground-facing surfaces (walls barely show it, and they are half of an eye-level frame)
+float thLampW = ( 1.0 - smoothstep( 50.0, 90.0, length( vViewPosition ) ) ) * smoothstep( 0.55, 0.8, dot( geometryNormal, viewMatrix[ 1 ].xyz ) );
+if ( thLampW > 0.0 && thLampSE.r + thLampSE.g + thLampSE.b > 1e-5 ) {
   vec3 thLampV = normalize( ( viewMatrix * vec4( thLampSL, 0.0 ) ).xyz );
-  // the map's virtual lamp stands for heads half a metre wide smeared over metres: never a mirror-sharp lobe
-  // (smooth paving or a lamp's own glass seen from above flared into bloom balls metres wide)
-  PhysicalMaterial thLampM = material;
-  thLampM.roughness = max( material.roughness, 0.5 );
-  vec3 thLampS = ( PI * thLampSE ) * BRDF_GGX( thLampV, geometryViewDir, geometryNormal, thLampM );
+  vec3 thLampH = normalize( thLampV + geometryViewDir );
+  float thNoH = saturate( dot( geometryNormal, thLampH ) );
+  float thVoH = saturate( dot( geometryViewDir, thLampH ) );
+  // GGX distribution (the π cancels), Kelemen visibility 1 / (4 VoH²), Schlick Fresnel — far cheaper than BRDF_GGX.
+  // Roughness ≥ 0.5: the map's virtual lamp stands for heads half a metre wide smeared over metres, never a
+  // mirror-sharp lobe (smooth paving seen from above flared into bloom balls metres wide)
+  float thA = max( material.roughness, 0.5 );
+  thA *= thA;
+  thA *= thA;
+  float thDd = thNoH * thNoH * ( thA - 1.0 ) + 1.0;
+  vec3 thF = mix( material.specularColorBlended, vec3( material.specularF90 ), pow( 1.0 - thVoH, 5.0 ) );
+  vec3 thLampS = thLampSE * thF * ( 0.25 * thA / ( thDd * thDd * max( thVoH * thVoH, 0.05 ) ) );
   // soft knee: a sheen at most about as bright as the lamp light itself on a pale surface
   float thLampY = dot( thLampS, vec3( 0.2126, 0.7152, 0.0722 ) );
   float thLampK = 0.45 * dot( thLampSE, vec3( 0.2126, 0.7152, 0.0722 ) ) + 1e-4;
-  reflectedLight.directSpecular += thLampS / ( 1.0 + thLampY / thLampK );
+  reflectedLight.directSpecular += thLampS * ( thLampW / ( 1.0 + thLampY / thLampK ) );
 }
 #endif
 ${src}`;
