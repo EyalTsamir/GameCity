@@ -89,6 +89,18 @@ export class Env {
     return new Kit(b);
   }
 
+  /** a detail mesh of its own for a group of small features (culled and LOD-gated as one); the static parts stay in
+   *  their region. Use the returned builder as `S.b.detail` of each feature (after begin()). */
+  ownDetail(key: string): MeshBuilder {
+    let d = this.details.get(key);
+    if (!d) {
+      d = new MeshBuilder(true);
+      d.autoPivot = true;
+      this.details.set(key, d);
+    }
+    return d;
+  }
+
   /** Start a landmark: local origin at world (x, y, z), local +Z facing yaw. */
   begin(x: number, y: number, z: number, yaw = 0): void {
     this.S = this.region(this.regionTag ?? regionOf(x, z));

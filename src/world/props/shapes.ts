@@ -145,7 +145,7 @@ export function boltZ(sh: Shaper, x: number, y: number, z: number, r: number): v
 
 /** bolt head standing up on a horizontal surface at (x, y, z) */
 export function boltY(sh: Shaper, x: number, y: number, z: number, r: number): void {
-  sh.cyl(x, y, z, r, r * 0.92, r * 0.7, 6, 2, false);
+  sh.cyl(x, y, z, r, r * 0.92, r * 0.7, 4, 2, false); // (a 1 cm head: 6 sides cost 15 k triangles over the town for nothing)
 }
 
 /** horizontal torus-ish ring (n-gon tube) of radius R at height y */

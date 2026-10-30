@@ -6,6 +6,7 @@
 // beach and pond cells are left to the terrain. Cells are merged into rectangles per surface, so
 // covers never overlap (no z-fighting) and all sit at one height.
 
+import { geomOn } from '../../core/geomhunt';
 import type { CityContext } from '../../core/context';
 import type { Area, Block, CityPlan, WalkPath } from '../../core/plan';
 import type { P2, Rect } from '../../core/geom';
@@ -359,6 +360,9 @@ export function buildCovers(ctx: CityContext, A: MeshBuilder, H: MeshBuilder): {
     // north end (quay concrete) and south end (river wall)
     H.wall(r.x0, r.z0, r.x1, r.z0, Y.ground, y, 0, -1);
     H.wall(r.x1, r.z1, r.x0, r.z1, Y.ground, y, 0, 1);
+    deckLip(r.x0, r.z1, r.x0, r.z0, -1, 0);
+    deckLip(r.x0, r.z0, r.x1, r.z0, 0, -1);
+    deckLip(r.x1, r.z1, r.x0, r.z1, 0, 1);
     // east fascia down to the sand, broken around the bump-out
     const bw = plan.paths.find((p) => p.kind === 'boardwalk' && p.pts.length > 3);
     const bump = bw ? bumpOut(bw, r.x1) : null;
@@ -380,7 +384,25 @@ export function buildCovers(ctx: CityContext, A: MeshBuilder, H: MeshBuilder): {
     }
   }
 
+  /** geometry hunt (?nodecklip): the deck boards stand 3.5 cm proud of the fascia, an edge board with a shadow under it (a razor-sharp slab edge) */
+  function deckLip(ax: number, az: number, bx: number, bz: number, nx: number, nz: number): void {
+    if (!geomOn('decklip')) return;
+    const p = 0.035,
+      y1 = Y.deck,
+      y0 = Y.deck - 0.08;
+    const qx = ax + nx * p,
+      qz = az + nz * p,
+      rx = bx + nx * p,
+      rz = bz + nz * p;
+    surf(H, HM.deck, 0, 9, 0);
+    H.wall(qx, qz, rx, rz, y0, y1, nx, nz);
+    H.quadFacing(H.v(ax, y1, az, 0, 1, 0), H.v(bx, y1, bz, 0, 1, 0), H.v(rx, y1, rz, 0, 1, 0), H.v(qx, y1, qz, 0, 1, 0), 0, 1, 0);
+    H.quadFacing(H.v(ax, y0, az, 0, -1, 0), H.v(bx, y0, bz, 0, -1, 0), H.v(rx, y0, rz, 0, -1, 0), H.v(qx, y0, qz, 0, -1, 0), 0, -1, 0);
+    surf(H, HM.side, 3, 9, 0);
+  }
+
   function fascia(ax: number, az: number, bx: number, bz: number, nx: number, nz: number): void {
+    deckLip(ax, az, bx, bz, nx, nz);
     const L = Math.hypot(bx - ax, bz - az);
     const n = Math.max(1, Math.ceil(L / 3));
     surf(H, HM.side, 3, 9, 0);

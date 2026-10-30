@@ -689,8 +689,13 @@ export function splitByCells(geo: THREE.BufferGeometry, cell: number): THREE.Buf
     const g = new THREE.BufferGeometry();
     for (const [name, attr] of Object.entries(geo.attributes)) g.setAttribute(name, attr);
     g.setIndex(ids);
-    g.computeBoundingBox();
-    g.computeBoundingSphere();
+    // (from the cell's own vertices: computeBoundingBox() reads the whole shared position buffer, every cell got the
+    // city's box and neither the frustum nor any distance gate ever dropped one)
+    const box = new THREE.Box3();
+    const v = new THREE.Vector3();
+    for (const i of ids) box.expandByPoint(v.fromBufferAttribute(pos, i));
+    g.boundingBox = box;
+    g.boundingSphere = box.getBoundingSphere(new THREE.Sphere());
     return g;
   });
 }

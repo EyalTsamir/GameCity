@@ -26,7 +26,8 @@ import * as OLD from './vegetation/legacy/species';
 import { Wind, col, LEAF, type Species, type TreeSpec } from './vegetation/species';
 import { NearCells, nearCell } from './lamps/nearCells';
 import { flowerBed, flowerClump, crop, soilRow, surround, treeGuard, wornPatch, GRATE_HOLE, FLOWERS, type Surround } from './vegetation/plants';
-import { getLayout, occAny, PLANTER, hrand, MASK_WALK, DistanceLod, ChunkCuller, chunkOf, type Layout } from './props/layout';
+import { getLayout, occAny, PLANTER, hrand, MASK_WALK, DistanceLod, ChunkCuller, chunkOf, splitByCells, type Layout } from './props/layout';
+import { geomHunt } from '../core/geomhunt';
 import { getLeafAtlas } from './vegetation/atlas';
 import { FoliageLayer, LodTexture, cardMaterials, woodMaterials, cardKnobs, type InstBuf, type PlantRef } from './vegetation/foliage';
 import { structure, emitFar, emitNear, newCardBuf, newWoodBuf, type PlantDef, type KindName } from './vegetation/crowns';
@@ -1390,7 +1391,22 @@ export default function create(ctx: CityContext): CityModule {
   const farMesh = mk(farSink, 'veg-trees-far', tm.mat, true, 'trees');
   mk(forestSink, 'veg-forest', tm.mat, true, 'forest');
   PC.forEach((c, i) => culler.add(mk(c.s, `veg-plants-${sides[i]}`, pm.mat, false, 'plants')));
-  FC.forEach((c, i) => culler.add(mk(c.s, `veg-plants-fine-${sides[i]}`, pm.mat, false, 'plants'), () => near));
+  if (geomHunt(ctx, 'finecut')) {
+    // geometry hunt: flowers, crops and reeds per 150 m cell, drawn within 180 m (one city-wide mesh of 100 k triangles)
+    for (const [i, c] of FC.entries()) {
+      if (c.s.vcount === 0 || !parts.includes('plants')) continue;
+      const whole = c.s.build();
+      geos.push(whole);
+      for (const geo of splitByCells(whole, 150)) {
+        const m = staticMesh(geo, pm.mat, `veg-plants-fine-${sides[i]}`);
+        m.receiveShadow = true;
+        m.renderOrder = -1;
+        root.add(m);
+        const cell = geo.boundingBox!;
+        culler.add(m, () => near && cell.distanceToPoint(ctx.camera.position) < 180);
+      }
+    }
+  } else FC.forEach((c, i) => culler.add(mk(c.s, `veg-plants-fine-${sides[i]}`, pm.mat, false, 'plants'), () => near));
   for (const c of NC.list()) if (c.item.s.vcount > 0) culler.add(mk(c.item.s, 'veg-plants-near-detail', pm.mat, false, 'plants'), () => nearCell(ctx.camera, c));
   farMesh.visible = false;
   const sum = (a: { s: GeoSink }[], key: 'tcount' | 'vcount') => a.reduce((acc, c) => acc + c.s[key], 0);

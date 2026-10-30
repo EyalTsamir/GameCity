@@ -929,7 +929,7 @@ export function genTownhouse(g: Gen): void {
     const ridge = yBase + wh + 0.65;
     wallTri(s, sgF, 0, w, w / 2, yBase + wh, ridge, wallLook);
     // cheeks back to where the main roof rises above them
-    const depth = (yBase + wh - yBase) / pitch + 0.5;
+    const depth = Math.max(wh / pitch + 0.5, (ridge - yBase) / pitch + 0.03); // (else the roof stays open at the back under 45°)
     const zb = zFront - depth;
     setCol(s, wallC);
     s.A[0] = s.A[1] = s.A[2] = s.A[3] = 0;

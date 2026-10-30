@@ -1634,6 +1634,21 @@ function punt(g: Geo): void {
   rope(g, [0, D + 0.1, 1.68], top, 0.4, 0.014, '#e9e2c8');
 }
 
+/** Geometry hunt: one geometry per boat type (index = variant − 1). The merged pools below draw every type for every
+ *  boat and collapse the wrong ones in the vertex shader: a 3 m punt cost the vertices of all four small boats. */
+export function buildBoatVariants(pool: 'big' | 'small'): THREE.BufferGeometry[] {
+  const builders = pool === 'big' ? [ferry, tug, tour, fishingBoat] : [sailboat, motorboat, rowingShell, punt];
+  crewBuild.pool = pool;
+  CREW[pool].length = 0;
+  return builders.map((fn, i) => {
+    const g = new Geo();
+    g.variant(i + 1);
+    fn(g);
+    g.variant(0);
+    return g.build({ anim: false, extra: true });
+  });
+}
+
 export function buildBigBoats(): THREE.BufferGeometry {
   const g = new Geo();
   crewBuild.pool = 'big';

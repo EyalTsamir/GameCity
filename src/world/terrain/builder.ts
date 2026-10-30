@@ -146,6 +146,34 @@ export class GeoBuilder {
     if (!(skip & 4)) this.quad(v[0], v[1], v[5], v[4]); // -y
   }
 
+  /** Round post / turned shape about a vertical axis: profile [y, r] bottom → top, smooth normals, no bottom; r = 0 at the end closes it. */
+  lathe(cx: number, cz: number, prof: [number, number][], sides: number, rot = 0): void {
+    const base = this.count;
+    const n = prof.length;
+    for (let i = 0; i < n; i++) {
+      const [y, r] = prof[i];
+      const [ya, ra] = prof[Math.max(0, i - 1)];
+      const [yb, rb] = prof[Math.min(n - 1, i + 1)];
+      // normal of the profile (dy, -dr), averaged over both neighbours by the chord
+      const dy = yb - ya,
+        dr = rb - ra;
+      const l = Math.hypot(dy, dr) || 1;
+      for (let k = 0; k <= sides; k++) {
+        const a = rot + (k / sides) * Math.PI * 2;
+        const sa = Math.sin(a),
+          ca = Math.cos(a);
+        this.vertex(cx + sa * r, y, cz + ca * r, (sa * dy) / l, -dr / l, (ca * dy) / l);
+      }
+    }
+    const w = sides + 1;
+    for (let i = 0; i < n - 1; i++)
+      for (let k = 0; k < sides; k++) {
+        const p = base + i * w + k;
+        if (prof[i][1] > 1e-5) this.idx.push(p, p + 1, p + w);
+        if (prof[i + 1][1] > 1e-5) this.idx.push(p + 1, p + w + 1, p + w);
+      }
+  }
+
   /** Box between two points on the ground plane (a beam/rail), with cross-section w x h centred at heights y. */
   beam(ax: number, ay: number, az: number, bx: number, by: number, bz: number, w: number, h: number): void {
     const dx = bx - ax,

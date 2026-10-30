@@ -16,6 +16,7 @@ import { Rng, hash01 } from '../core/rng';
 import type { DistrictKind } from '../core/plan';
 import { GeoSink, staticMesh } from './vegetation/geo';
 import { NearCells, nearCell } from './lamps/nearCells';
+import { geomHunt } from '../core/geomhunt';
 import { getLayout, occAny, PLANTER, hrand, MASK_WALK, DistanceLod, ChunkCuller, chunkOf, splitByCells } from './props/layout';
 import { furnitureMaterial, glassMaterial } from './props/material';
 import { createGlowMesh, type Glow } from './props/glow';
@@ -38,6 +39,8 @@ import { buildContactMesh, takeQueuedContacts, type ContactSpot } from './props/
 interface TerrainSvc {
   height(x: number, z: number): number;
 }
+
+const FINE_CUT = 240;
 
 export default function create(ctx: CityContext): CityModule {
   const t0 = performance.now();
@@ -805,6 +808,7 @@ export default function create(ctx: CityContext): CityModule {
   const lod = new DistanceLod(ctx);
   const culler = new ChunkCuller(ctx);
   const FINE_CELL = 120;
+  const fineCut = geomHunt(ctx, 'finecut');
   let near = true;
   const geos: THREE.BufferGeometry[] = [];
   const addFurniture = (kit: Kit, name: string, fine: boolean) => {
@@ -840,7 +844,10 @@ export default function create(ctx: CityContext): CityModule {
       m.receiveShadow = true;
       m.renderOrder = -1;
       if (parts.includes('furniture')) root.add(m);
-      culler.add(m, () => near, 8);
+      // (geometry hunt ?nofinecut: a low camera drew the fine furniture of the whole town, 430 k triangles; a bench is
+      // a dozen pixels at this distance and hidden by the kerb-side traffic)
+      const cell = geo.boundingBox!;
+      culler.add(m, fineCut ? () => near && cell.distanceToPoint(ctx.camera.position) < FINE_CUT : () => near, 8);
     }
   }
   for (const c of KD.list()) {

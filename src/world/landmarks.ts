@@ -227,9 +227,8 @@ export default function create(ctx: CityContext): CityModule {
   const detailCells: THREE.Mesh[] = [];
   for (const [key, b] of env.regions) {
     if (b.vertexCount > 0) addMesh(b.toGeometry(), mats.solid, `landmarks-static-${key}`, true, true);
-    const d = env.details.get(key)!;
-    if (d.vertexCount > 0) detailCells.push(addMesh(d.toGeometry(), mats.detail, `landmarks-detail-${key}`, false, true));
   }
+  for (const [key, d] of env.details) if (d.vertexCount > 0) detailCells.push(addMesh(d.toGeometry(), mats.detail, `landmarks-detail-${key}`, false, true));
   if (env.O.b.vertexCount > 0) addMesh(env.O.b.toGeometry(), mats.ornament, 'landmarks-ornament', true, true);
   if (env.K.b.vertexCount > 0) {
     const km = addMesh(env.K.b.toGeometry(), mats.kinetic, 'landmarks-kinetic', true, true, false);

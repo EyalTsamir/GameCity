@@ -12,6 +12,8 @@ import { updateWind } from './core/wind';
 import { Rng } from './core/rng';
 import type { CityContext, CityModule, ModuleFactory, QualityState, CameraState, DebugFlags } from './core/context';
 import { validateWorld } from './debug/validate';
+import { createShadowLod } from './render/shadowLod';
+import { cullHiddenTriangles } from './render/geomCull';
 
 // Load order matters: static world → simulations → post-processing → camera → UI.
 const MODULES: [string, () => Promise<{ default: ModuleFactory }>][] = [
@@ -193,8 +195,10 @@ async function boot(): Promise<void> {
     try {
       const mod = await loader();
       const t0 = performance.now();
+      const childrenBefore = scene.children.length;
       const inst = await mod.default(ctx);
       if (inst) modules.push(inst);
+      for (let c = childrenBefore; c < scene.children.length; c++) scene.children[c].userData.module = name; // scripts/geomaudit.mjs
       if (name === 'sky' && preRT && wanted.some(([n]) => n === 'buildings')) facadeStandIn = await facadeStandInMesh(ctx);
       precompile();
       if (name === 'buildings') dropStandIn();
@@ -209,6 +213,8 @@ async function boot(): Promise<void> {
   dropStandIn();
   if (ctx.services.sky) scene.remove(fallback);
   ctx.events.emit('modules:ready', modules.map((m) => m.name));
+  cullHiddenTriangles(ctx);
+  const shadowLod = createShadowLod(ctx);
   // street lights follow the clock with a short ease, but a clock jump (time slider, setHours) snaps them
   let snapLights = true;
   ctx.events.on('timejump', () => (snapLights = true));
@@ -274,6 +280,7 @@ async function boot(): Promise<void> {
       }
     }
     try {
+      shadowLod?.();
       ctx.render(realDt);
     } catch (err) {
       reportFrameError('render', err);

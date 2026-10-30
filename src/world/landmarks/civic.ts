@@ -6,6 +6,7 @@ import type { Feature } from '../../core/plan';
 import { ANIM, M, PAT, type Mat } from './builder';
 import { C, S, flagpole, person, railing } from './parts';
 import { boxHunt } from '../../core/boxhunt';
+import { geomHunt } from '../../core/geomhunt';
 import type { Env } from './env';
 import { drawText, signQuad } from './signs';
 import { shell } from './sculpt';
@@ -57,11 +58,22 @@ export function genFlagpole(env: Env, f: Feature, design: number): void {
 // ───────────────────────────────────────────────────────────── market stalls ──
 
 let richStall = true;
+// marketlod: the stalls were half a million triangles (20 stalls × ~26 k: cloth at 2 cm grids, 90-triangle plums, crates of
+// 22 boxes) — the biggest single object in the city, drawn twice (shadows). Now: domes for what lies in a heap, a coarser
+// cloth grid, crates without their hidden faces; ?nomarketlod = the old counts
+let stallLod = true;
 const _mm = new THREE.Matrix4();
 const _rz = new THREE.Matrix4();
-const _ball = new THREE.SphereGeometry(1, 9, 6);
-const _egg = new THREE.SphereGeometry(1, 8, 6);
-const _olive = new THREE.SphereGeometry(1, 6, 4);
+const domeGeo = (ws: number, hs: number) => new THREE.SphereGeometry(1, ws, hs, 0, Math.PI * 2, 0, Math.PI * 0.72); // a heap hides the underside (tilts up to ±35°)
+const _ballFull = new THREE.SphereGeometry(1, 9, 6);
+const _eggFull = new THREE.SphereGeometry(1, 8, 6);
+const _oliveFull = new THREE.SphereGeometry(1, 6, 4);
+const _ballTop = domeGeo(7, 3);
+const _ballLow = domeGeo(5, 2);
+const _egg1 = domeGeo(6, 3);
+const _olive1 = new THREE.SphereGeometry(1, 4, 2);
+const _loaf1 = domeGeo(7, 3);
+const _fish1 = new THREE.SphereGeometry(1, 6, 3);
 const _sc = new THREE.Vector3();
 const STALL_COLS = ['#d8343f', '#2a9d8f', '#e9873a', '#3f73b0', '#e3b62c', '#8d6cab'];
 type Goods = { name: string; produce: string[]; crate: string };
@@ -110,9 +122,42 @@ function stallGoods(env: Env, f: Feature): Goods {
 
 /** Slatted wooden crate (w × h × d, bottom at y): bottom, two slats per long side with a gap, solid
  *  ends with a hand hole, corner battens. */
-function slatCrate(K: Env['S'], m: Mat, w: number, h: number, d: number, x: number, y: number, z: number): void {
+function slatCrate(K: Env['S'], m: Mat, w: number, h: number, d: number, x: number, y: number, z: number, filled = false): void {
   const t = 0.012,
     gap = Math.min(0.028, h * 0.14);
+  if (stallLod) {
+    // no hidden faces: slats are outer quads over a dark core when the crate is full / carries another; an open crate
+    // adds the inner quads and a floor. ~50 / ~80 triangles (was 264)
+    const sh = (h - 0.01 - 2 * gap) / 3;
+    if (filled) K.coreBox(M(m.c.clone().multiplyScalar(0.3), PAT.PLAIN, 0.95), w - 2 * t, h - 0.02, d - 2 * t, x, y + 0.005, z);
+    else K.flat(m, w - 0.02, d - 0.02, x, y + t, z);
+    for (const sz of [-1, 1]) {
+      const ry = sz > 0 ? 0 : Math.PI;
+      for (let i = 0; i < 3; i++) {
+        const sy = y + 0.01 + i * (sh + gap);
+        K.panel(m, w, sh, x, sy, z + sz * (d / 2), ry, w, sh);
+        if (!filled) K.panel(m, w - 2 * t, sh, x, sy, z + sz * (d / 2 - t), ry + Math.PI, w, sh);
+      }
+      K.flat(m, w, t, x, y + 0.01 + 2 * (sh + gap) + sh, z + sz * (d / 2 - t / 2));
+    }
+    for (const sx of [-1, 1]) {
+      const ry = sx > 0 ? Math.PI / 2 : -Math.PI / 2;
+      K.panel(m, d, h * 0.5, x + sx * (w / 2), y, z, ry, d, h * 0.5);
+      K.panel(m, d, h * 0.22, x + sx * (w / 2), y + h * 0.78, z, ry, d, h * 0.22);
+      if (!filled) {
+        K.panel(m, d - 2 * t, h * 0.5, x + sx * (w / 2 - t), y, z, ry + Math.PI, d, h * 0.5);
+        K.panel(m, d - 2 * t, h * 0.22, x + sx * (w / 2 - t), y + h * 0.78, z, ry + Math.PI, d, h * 0.22);
+      }
+      K.flat(m, t, d, x + sx * (w / 2 - t / 2), y + h, z);
+      // corner battens: the two outer faces
+      for (const sz of [-1, 1]) {
+        const cx = x + sx * (w / 2 - 0.0075), cz = z + sz * (d / 2 - 0.0075);
+        K.panel(m, 0.025, h, cx, y, cz + sz * 0.016, sz > 0 ? 0 : Math.PI, 0.025, h);
+        K.panel(m, 0.025, h, cx + sx * 0.016, y, cz, ry, 0.025, h);
+      }
+    }
+    return;
+  }
   // bottom: four slats with gaps
   for (let i = 0; i < 4; i++) K.box(m, w - 0.01, t, d / 4 - 0.012, x, y, z - d / 2 + (d / 4) * (i + 0.5));
   // long sides: three slats with open gaps; ends: a low board and a top board with a hand slot between
@@ -133,6 +178,7 @@ function produce(K: Env['S'], goods: Goods, ci: number, w: number, d: number, x:
     K.box(M(c0, PAT.GRAVEL, 0.7, 0, 0, 0, 0.3 + ci * 0.1), w - 0.04, 0.03, d - 0.04, x, y - 0.03, z);
     return;
   }
+  const lod = stallLod;
   const r = kind === 'BREAD' ? 0.06 : kind === 'CHEESE' ? 0.08 : kind === 'FISH' ? 0.05 : kind === 'HONEY' || kind === 'SPICES' ? 0.05 : kind === 'FLOWERS' ? 0.05 : 0.038;
   const nx = Math.max(2, Math.floor(w / (r * 2.1))), nz = Math.max(2, Math.floor(d / (r * 2.1)));
   let s = seed;
@@ -149,11 +195,11 @@ function produce(K: Env['S'], goods: Goods, ci: number, w: number, d: number, x:
       for (let i = 0; i < per; i++) {
         const px = x + ((i + 0.5) / per - 0.5) * (w - 0.08), pz = z + ((j + 0.5) / rows - 0.5) * (d - 0.1);
         _mm.makeRotationY(Math.PI / 2 + 0.35 + (rnd() - 0.5) * 0.3).multiply(new THREE.Matrix4().makeRotationZ(0.25)).scale(_sc.set(0.11, 0.024, 0.035)).setPosition(px, y + 0.012 + j * 0.012, pz);
-        const eg = new THREE.SphereGeometry(1, 9, 5);
+        const eg = lod ? _fish1 : new THREE.SphereGeometry(1, 9, 5);
         K.geoM(pick(), eg, _mm);
-        eg.dispose();
+        if (!lod) eg.dispose();
       }
-    K.sphere(M('#f1d934', PAT.PLAIN, 0.6), 0.028, x + w * 0.3, y + 0.04, z + d * 0.3, 7, 5);
+    K.sphere(M('#f1d934', PAT.PLAIN, 0.6), 0.028, x + w * 0.3, y + 0.04, z + d * 0.3, lod ? 6 : 7, lod ? 3 : 5);
     return;
   }
   if (kind === 'FLOWERS') {
@@ -161,15 +207,16 @@ function produce(K: Env['S'], goods: Goods, ci: number, w: number, d: number, x:
     const nb = 2;
     for (let b2 = 0; b2 < nb; b2++) {
       const bx = x + (b2 - 0.5) * w * 0.5;
-      K.cyl(M('#a9b1b5', PAT.PLAIN, 0.4, 0.7), 0.1, 0.085, 0.2, bx, y - 0.12, z, 12);
+      if (lod) K.cylOn(M('#a9b1b5', PAT.PLAIN, 0.4, 0.7), 0.1, 0.085, 0.2, bx, y - 0.12, z, 9);
+      else K.cyl(M('#a9b1b5', PAT.PLAIN, 0.4, 0.7), 0.1, 0.085, 0.2, bx, y - 0.12, z, 12);
       const m = mats[(b2 + ci) % 3];
       const n = 9;
       for (let k = 0; k < n; k++) {
         const a = (k / n) * Math.PI * 2 + rnd(), rr = k === 0 ? 0 : 0.05 + rnd() * 0.05;
         const hx = bx + Math.sin(a) * rr * 1.4, hz = z + Math.cos(a) * rr * 1.2, hy = y + 0.28 + rnd() * 0.12 - rr;
         K.rod(M('#3f7a33', PAT.PLAIN, 0.8), [bx + Math.sin(a) * 0.02, y - 0.02, z + Math.cos(a) * 0.02], [hx, hy, hz], 0.005, 3);
-        K.sphere(m, 0.032 + rnd() * 0.012, hx, hy, hz, 7, 5);
-        if (k % 3 === 0) K.sphere(M('#4f8a3c', PAT.PLAIN, 0.8), 0.025, hx - 0.03, hy - 0.06, hz, 5, 3);
+        K.sphere(m, 0.032 + rnd() * 0.012, hx, hy, hz, lod ? 6 : 7, lod ? 3 : 5);
+        if (k % 3 === 0) K.sphere(M('#4f8a3c', PAT.PLAIN, 0.8), 0.025, hx - 0.03, hy - 0.06, hz, lod ? 4 : 5, lod ? 2 : 3);
       }
     }
     return;
@@ -181,11 +228,11 @@ function produce(K: Env['S'], goods: Goods, ci: number, w: number, d: number, x:
         for (let j = 0; j < nz - L; j++) {
           const px = x + ((i + 0.5 + L * 0.5) / nx - 0.5) * (w - r * 2) * 1.05, pz = z + ((j + 0.5 + L * 0.5) / nz - 0.5) * (d - r * 2) * 1.05;
           _mm.makeRotationY(rnd() * Math.PI).scale(_sc.set(r * 1.7, r * 0.75, r)).setPosition(px, y + r * 0.45 + L * r * 1.1, pz);
-          const eg = new THREE.SphereGeometry(1, 9, 6);
+          const eg = lod ? _loaf1 : new THREE.SphereGeometry(1, 9, 6);
           K.geoM(pick(), eg, _mm);
-          eg.dispose();
+          if (!lod) eg.dispose();
         }
-    for (let k = 0; k < 4; k++) K.rod(mats[1], [x - w * 0.3 + k * 0.07, y, z - d * 0.38], [x - w * 0.3 + k * 0.075 + 0.02, y + 0.42, z - d * 0.42], 0.022, 6);
+    for (let k = 0; k < 4; k++) K.rod(mats[1], [x - w * 0.3 + k * 0.07, y, z - d * 0.38], [x - w * 0.3 + k * 0.075 + 0.02, y + 0.42, z - d * 0.42], 0.022, lod ? 5 : 6);
     return;
   }
   if (kind === 'SPICES') {
@@ -193,6 +240,11 @@ function produce(K: Env['S'], goods: Goods, ci: number, w: number, d: number, x:
     for (let k = 0; k < 4; k++) {
       const px = x + ((k % 2) - 0.5) * w * 0.5, pz = z + (Math.floor(k / 2) - 0.5) * d * 0.5;
       const m = M(new THREE.Color(goods.produce[(ci + k) % goods.produce.length]), PAT.GRAVEL, 0.95, 0, 0, 0, 0.2 + k * 0.1);
+      if (lod) {
+        K.cylOn(M('#e8e0d0', PAT.PLAIN, 0.4), 0.075, 0.05, 0.04, px, y - 0.04, pz, 9);
+        K.cylOn(m, 0.01, 0.075, 0.07, px, y, pz, 9);
+        continue;
+      }
       K.cyl(M('#e8e0d0', PAT.PLAIN, 0.4), 0.075, 0.05, 0.04, px, y - 0.04, pz, 12);
       K.cyl(m, 0.01, 0.075, 0.07, px, y, pz, 12);
     }
@@ -211,7 +263,7 @@ function produce(K: Env['S'], goods: Goods, ci: number, w: number, d: number, x:
           const er = 0.021 * (0.92 + rnd() * 0.16);
           const ec = new THREE.Color(goods.produce[(ci + t + Math.floor(rnd() * 2)) % goods.produce.length]).multiplyScalar(0.9 + rnd() * 0.18);
           _mm.makeRotationY(rnd() * 3).multiply(_rz.makeRotationZ((rnd() - 0.5) * 0.4)).scale(_sc.set(er, er * 1.3, er)).setPosition(px, y + er * 0.7, pz);
-          K.geoM(M(ec, PAT.PLAIN, 0.5), _egg, _mm);
+          K.geoM(M(ec, PAT.PLAIN, 0.5), lod ? _egg1 : _eggFull, _mm);
         }
     }
     return;
@@ -220,13 +272,14 @@ function produce(K: Env['S'], goods: Goods, ci: number, w: number, d: number, x:
     // glazed bowls heaped with olives (each a small ellipsoid), wooden spoon in one
     for (let k = 0; k < 3; k++) {
       const px = x + (k - 1) * w * 0.32, pz = z + (k % 2 ? 0.04 : -0.04);
-      K.cyl(M(['#2f5d8a', '#c9a24a', '#e8e0d0'][(k + ci) % 3], PAT.PLAIN, 0.25), 0.075, 0.05, 0.045, px, y - 0.045, pz, 14);
+      if (lod) K.cylOn(M(['#2f5d8a', '#c9a24a', '#e8e0d0'][(k + ci) % 3], PAT.PLAIN, 0.25), 0.075, 0.05, 0.045, px, y - 0.045, pz, 9);
+      else K.cyl(M(['#2f5d8a', '#c9a24a', '#e8e0d0'][(k + ci) % 3], PAT.PLAIN, 0.25), 0.075, 0.05, 0.045, px, y - 0.045, pz, 14);
       const c1 = new THREE.Color(goods.produce[(ci + k) % goods.produce.length]);
       for (let n = 0; n < 26; n++) {
         const a = rnd() * Math.PI * 2, rr = Math.sqrt(rnd()) * 0.062;
         const oy = y + 0.008 + (0.062 - rr) * 0.45 + rnd() * 0.008;
         _mm.makeRotationY(rnd() * 3).multiply(_rz.makeRotationZ(rnd() * 3)).scale(_sc.set(0.009, 0.012, 0.009)).setPosition(px + Math.sin(a) * rr, oy, pz + Math.cos(a) * rr);
-        K.geoM(M(c1.clone().multiplyScalar(0.8 + rnd() * 0.4), PAT.PLAIN, 0.25), _olive, _mm);
+        K.geoM(M(c1.clone().multiplyScalar(0.8 + rnd() * 0.4), PAT.PLAIN, 0.25), lod ? _olive1 : _oliveFull, _mm);
       }
       if (k === 1) K.rod(M('#b08a5a', PAT.PLAIN, 0.8), [px, y + 0.02, pz], [px + 0.06, y + 0.12, pz - 0.04], 0.005, 4);
     }
@@ -256,19 +309,29 @@ function produce(K: Env['S'], goods: Goods, ci: number, w: number, d: number, x:
         if (kind === 'CHEESE') {
           if ((i + j + L) % 2) continue;
           const cr = r * (0.85 + rnd() * 0.25);
+          if (lod) {
+            K.cylOn(m, cr, cr, cr * 0.8, px, y + ly * r * 0.8, pz, 9);
+            K.cyl(M(c0.clone().multiplyScalar(0.7), PAT.PLAIN, 0.7), cr * 1.005, cr * 1.005, cr * 0.12, px, y + ly * r * 0.8 + cr * 0.34, pz, 9, true);
+            continue;
+          }
           K.cyl(m, cr, cr, cr * 0.8, px, y + ly * r * 0.8, pz, 14);
           K.cyl(M(c0.clone().multiplyScalar(0.7), PAT.PLAIN, 0.7), cr * 1.005, cr * 1.005, cr * 0.12, px, y + ly * r * 0.8 + cr * 0.34, pz, 14);
         } else if (kind === 'HONEY') {
           const hy = y + L * r * 2.3;
           const hr = r * (rnd() < 0.3 ? 0.55 : 0.7);
+          if (lod) {
+            K.cyl(m, hr, hr, hr * 2.6, px, hy, pz, 6, true);
+            K.cylOn(M(rnd() < 0.5 ? '#c9b26a' : '#d8d2c4', PAT.PLAIN, 0.4, 0.6), hr * 1.03, hr * 1.03, r * 0.3, px, hy + hr * 2.6, pz, 6);
+            continue;
+          }
           K.cyl(m, hr, hr, hr * 2.6, px, hy, pz, 10);
           K.cyl(M(rnd() < 0.5 ? '#c9b26a' : '#d8d2c4', PAT.PLAIN, 0.4, 0.6), hr * 1.03, hr * 1.03, r * 0.3, px, hy + hr * 2.6, pz, 10);
         } else if (kind === 'VEGETABLES' && ci % 4 === 1) {
           // carrots: tapered roots with leafy tops, laid across the crate
           const a = (rnd() - 0.5) * 0.9;
           const ex = Math.cos(a) * 0.07, ez = Math.sin(a) * 0.07;
-          K.rod(m, [px - ex, y + ly * 0.03 + 0.02, pz - ez], [px + ex, y + ly * 0.03 + 0.02 + (rnd() - 0.5) * 0.02, pz + ez], 0.011 + rnd() * 0.006, 6);
-          K.sphere(M('#4f8a3c', PAT.PLAIN, 0.8), 0.022, px - ex * 1.3, y + ly * 0.03 + 0.03, pz - ez * 1.3, 5, 3);
+          K.rod(m, [px - ex, y + ly * 0.03 + 0.02, pz - ez], [px + ex, y + ly * 0.03 + 0.02 + (rnd() - 0.5) * 0.02, pz + ez], 0.011 + rnd() * 0.006, lod ? 4 : 6);
+          K.sphere(M('#4f8a3c', PAT.PLAIN, 0.8), 0.022, px - ex * 1.3, y + ly * 0.03 + 0.03, pz - ez * 1.3, lod ? 4 : 5, lod ? 2 : 3);
         } else {
           const k = kind === 'VEGETABLES' && ci % 4 === 0 ? 1.7 : kind === 'VEGETABLES' && ci % 4 === 3 ? 1.3 : 1;
           const rr = r * k * (0.78 + rnd() * 0.4);
@@ -280,7 +343,7 @@ function produce(K: Env['S'], goods: Goods, ci: number, w: number, d: number, x:
             const sq = 0.86 + rnd() * 0.2;
             _mm.makeRotationY(rnd() * 6.3).multiply(_rz.makeRotationZ((rnd() - 0.5) * 1.2)).scale(_sc.set(rr, rr * sq, rr * (0.94 + rnd() * 0.12))).setPosition(px, py, pz);
           }
-          K.geoM(m, _ball, _mm);
+          K.geoM(m, !lod ? _ballFull : L === 0 && layers > 1 ? _ballLow : _ballTop, _mm);
           if (kind === 'FRUIT' && rnd() < 0.3) K.rod(M('#5a4028', PAT.PLAIN, 0.9), [px, py + rr * 0.85, pz], [px + 0.006 * (rnd() - 0.5), py + rr * 1.15, pz], 0.003, 3);
         }
       }
@@ -291,7 +354,8 @@ function produce(K: Env['S'], goods: Goods, ci: number, w: number, d: number, x:
 function priceCard(env: Env, x: number, y: number, z: number, price: string): void {
   const K = env.S;
   K.rod(M('#d8c9a8', PAT.PLAIN, 0.8), [x, y - 0.14, z], [x, y + 0.02, z], 0.004, 3);
-  K.box(M('#3a2c20', PAT.PLAIN, 0.9), 0.1, 0.07, 0.006, x, y - 0.005, z - 0.004);
+  if (stallLod) K.panel(M('#3a2c20', PAT.PLAIN, 0.9), 0.1, 0.07, x, y - 0.035, z - 0.001, 0, 1, 1, true);
+  else K.box(M('#3a2c20', PAT.PLAIN, 0.9), 0.1, 0.07, 0.006, x, y - 0.005, z - 0.004);
   const card = env.atlas.add(80, 52, (g, w, h) => {
     g.fillStyle = '#1d211f';
     g.fillRect(0, 0, w, h);
@@ -306,6 +370,13 @@ export function genMarketStall(env: Env, f: Feature): void {
   env.begin(f.x, 0, f.z, f.yaw);
   env.checkRadius(f.x, f.z, R, 'marketstall');
   const K = env.S;
+  stallLod = geomHunt(env.ctx, 'marketlod');
+  // the stalls' goods get a detail mesh of their own: the region's was drawn whenever any part of the 150 m cell was near
+  const regionDetail = K.b.detail;
+  if (stallLod) {
+    K.b.detail = env.ownDetail('market');
+    K.b.detail.setFrame(f.x, 0, f.z, f.yaw);
+  }
   // individual produce, price cards, scales and ground clutter (off: low tier, ?nomarketdetail)
   richStall = !env.ctx.debug.params.has('nomarketdetail') && env.ctx.quality.level !== 'low';
   const stallWind = !env.ctx.debug.params.has('nostallwind') && env.ctx.quality.level !== 'low';
@@ -336,7 +407,7 @@ export function genMarketStall(env: Env, f: Feature): void {
   // F4 (judge 2 #9): the cloth was a board. Now it sags into the two bays either side of a middle bow (deepest
   // mid-bay, ~9 cm), the front overhang droops over the rail, and shallow tension folds fan in from the corners
   // where the canvas is tied down; every stall a little different (age / how hard it was pulled)
-  const NX = 16, NZ = 6, x0 = -hw - 0.03, x1 = hw + 0.03, z0 = fz + 0.16, z1 = bz - 0.12; // corners stay inside r = 1.3
+  const NX = stallLod ? 12 : 16, NZ = stallLod ? 4 : 6, x0 = -hw - 0.03, x1 = hw + 0.03, z0 = fz + 0.16, z1 = bz - 0.12; // corners stay inside r = 1.3
   const slack = 0.75 + 0.5 * rnd();
   const foldA = 0.004 + 0.006 * rnd(), foldK = 14 + 8 * rnd();
   const P = (i: number, j: number): [number, number, number] => {
@@ -385,19 +456,20 @@ export function genMarketStall(env: Env, f: Feature): void {
   // back cloth: a drape gathered on the rear rail (tight pleats at the top that open into deep, uneven
   // folds towards the hem), hem a little above the ground, one panel corner tucked back
   const backM = M(col, PAT.PLAIN, 0.92, 0, 0, 0, 0.35);
-  for (const part of shell(72, 10, (u, v, o) => {
+  for (const part of shell(stallLod ? 36 : 72, stallLod ? 4 : 10, (u, v, o) => {
     const x = -hw - 0.02 + (2 * hw + 0.04) * u;
     const dn = 1 - v; // 0 at the rail, 1 at the hem
     const amp = 0.018 + 0.035 * dn;
     const fz2 = amp * (Math.sin(x * 22 + ph) + 0.45 * Math.sin(x * 9.3 + ph * 1.7) + 0.25 * Math.sin(x * 41));
     const hem = 0.27 + 0.03 * Math.sin(x * 5 + ph) + (u > 0.88 ? (u - 0.88) * 1.2 : 0);
     o.set(x, yB - 0.03 - dn * (yB - 0.03 - hem), bz - 0.035 - fz2 - (u > 0.9 ? (u - 0.9) * 0.4 * dn : 0));
-  }, 0.003)) {
+  }, 0.003, false, !stallLod)) {
     K.geo(backM, part);
     part.dispose();
   }
   // curtain rings on the rail
-  for (let i = 0; i <= 10; i++) K.cylX(steel, 0.024, 0.008, -hw + (2 * hw * i) / 10, yB - 0.005, bz, 8);
+  if (stallLod) for (let i = 0; i <= 10; i += 2) K.cylX(steel, 0.024, 0.008, -hw + (2 * hw * i) / 10, yB - 0.005, bz, 5, 0, true);
+  else for (let i = 0; i <= 10; i++) K.cylX(steel, 0.024, 0.008, -hw + (2 * hw * i) / 10, yB - 0.005, bz, 8);
   // trestle table: thick top on two A-frame trestles, a cloth skirt to the ground at the front
   const top = M('#b88a5c', PAT.PLANKS, 0.8, 0, 0, 0, 0.5);
   const tz = fz - 0.22, ty = 0.78;
@@ -419,9 +491,15 @@ export function genMarketStall(env: Env, f: Feature): void {
   const folds = (x: number, a: number) => a * (0.6 * Math.sin(x * 17 + ph) + 0.3 * Math.sin(x * 31 + ph * 2.3) + 0.15 * Math.sin(x * 53));
   // top + front: v runs from the back edge over the top, round the edge, down to the hem
   const L0 = td, L1 = 0.03, L2 = drop;
-  for (const part of shell(64, 16, (u, v, o) => {
+  // (lod: the flat top is one row, the roll one, the drop four; the folds' finest wave is 12 cm, 32 columns = 6 cm)
+  const clothS = (v: number) => {
+    if (!stallLod) return v * (L0 + L1 + L2);
+    const r = v * 6;
+    return r <= 1 ? r * L0 : r <= 2 ? L0 + (r - 1) * L1 : L0 + L1 + ((r - 2) / 4) * L2;
+  };
+  for (const part of shell(stallLod ? 32 : 64, stallLod ? 6 : 16, (u, v, o) => {
     const x = tw / 2 + 0.01 - (tw + 0.02) * u;
-    const s2 = v * (L0 + L1 + L2);
+    const s2 = clothS(v);
     if (s2 <= L0) o.set(x, ct, tz - td / 2 + s2);
     else if (s2 <= L0 + L1) {
       const a = ((s2 - L0) / L1) * Math.PI / 2;
@@ -432,18 +510,18 @@ export function genMarketStall(env: Env, f: Feature): void {
       const hemLift = d > 0.9 ? 0.012 * Math.sin(x * 23 + ph) * (d - 0.9) * 10 : 0;
       o.set(x, ct - 0.02 - d * L2 + hemLift, tz + td / 2 + 0.02 + amp * 0.5 + folds(x, amp));
     }
-  }, 0.004)) {
+  }, 0.004, false, !stallLod)) {
     K.geo(cloth, part);
     part.dispose();
   }
   // end drops
   for (const sx of [-1, 1]) {
-    for (const part of shell(12, 10, (u, v, o) => {
+    for (const part of shell(stallLod ? 5 : 12, stallLod ? 3 : 10, (u, v, o) => {
       const z = tz - td / 2 + td * (sx > 0 ? 1 - u : u);
       const d = 1 - v;
       const amp = 0.035 * Math.pow(d, 1.3);
       o.set(sx * (tw / 2 + 0.01 + amp * 0.4 + folds(z + sx, amp)), ct - 0.01 - d * (drop - 0.04), z);
-    }, 0.004)) {
+    }, 0.004, false, !stallLod)) {
       K.geo(cloth, part);
       part.dispose();
     }
@@ -453,7 +531,7 @@ export function genMarketStall(env: Env, f: Feature): void {
   const crateM = M(goods.crate, PAT.PLANKS, 0.85, 0, 0, 0, 0.6);
   for (let i = 0; i < 4; i++) {
     const x = -hw + 0.27 + i * 0.485;
-    if (goods.name !== 'FLOWERS') slatCrate(K, crateM, 0.42, 0.13, 0.34, x, ty + 0.018, tz - 0.02);
+    if (goods.name !== 'FLOWERS') slatCrate(K, crateM, 0.42, 0.13, 0.34, x, ty + 0.018, tz - 0.02, true);
     produce(K, goods, i, 0.42, 0.34, x, ty + 0.15, tz - 0.02, seed + i * 31);
     // price card on a stick, chalked
     if (richStall && goods.name !== 'FISH' && (i % 2 === 0 || rnd() < 0.6)) priceCard(env, x + 0.14, ty + 0.3, tz + 0.12, `${1 + Math.floor(rnd() * 5)}.${['20', '50', '80', '95', '40'][Math.floor(rnd() * 5)]}`);
@@ -463,26 +541,42 @@ export function genMarketStall(env: Env, f: Feature): void {
   if (richStall && goods.name !== 'FLOWERS') {
     const sx = hw - 0.2, sz = tz + 0.14, sy = ct + 0.002;
     const enamel = M(['#b8322c', '#2f5d4a', '#e8e1cf', '#2b4c7e'][f.id % 4], PAT.PLAIN, 0.3, 0.1);
+    const dialSeg = stallLod ? 12 : 18;
     K.box(enamel, 0.22, 0.045, 0.2, sx, sy, sz);
     K.boxC(enamel, 0.2, 0.03, 0.06, sx, sy + 0.055, sz + 0.07, -0.6, 0, 0);
     K.box(enamel, 0.07, 0.11, 0.07, sx, sy + 0.045, sz - 0.02);
     const dy = sy + 0.14, dz = sz + 0.03;
-    K.cylX(enamel, 0.085, 0.05, sx, dy, dz, 18, Math.PI / 2);
-    K.cylX(M('#f6f3ea', PAT.PLAIN, 0.35), 0.072, 0.004, sx, dy, dz + 0.025, 18, Math.PI / 2);
-    K.cylX(M('#c9b26a', PAT.PLAIN, 0.3, 0.8), 0.079, 0.006, sx, dy, dz + 0.024, 18, Math.PI / 2, true);
+    K.cylX(enamel, 0.085, 0.05, sx, dy, dz, dialSeg, Math.PI / 2);
+    K.cylX(M('#f6f3ea', PAT.PLAIN, 0.35), 0.072, 0.004, sx, dy, dz + 0.025, dialSeg, Math.PI / 2);
+    K.cylX(M('#c9b26a', PAT.PLAIN, 0.3, 0.8), 0.079, 0.006, sx, dy, dz + 0.024, dialSeg, Math.PI / 2, true);
     const ink = M('#1d1f22', PAT.PLAIN, 0.5);
-    for (let t = 0; t < 20; t++) {
-      const a = -2.4 + (4.8 * t) / 19, big = t % 5 === 0;
-      K.boxC(ink, 0.003, big ? 0.014 : 0.008, 0.001, sx + Math.sin(a) * 0.06, dy + Math.cos(a) * 0.06, dz + 0.028, 0, 0, -a);
+    if (stallLod) {
+      // ticks + needle as flat quads on the dial (they were 3 mm boxes: 12 triangles each)
+      const tick = (m: Mat, w: number, a: number, r0: number, r1: number) => {
+        const s = Math.sin(a), c = Math.cos(a), z2 = dz + 0.0275, wx = c * w / 2, wy = -s * w / 2;
+        const ax = sx + s * r0, ay = dy + c * r0, bx = sx + s * r1, by = dy + c * r1;
+        K.poly(m, [[ax - wx, ay - wy, z2], [ax + wx, ay + wy, z2], [bx + wx, by + wy, z2], [bx - wx, by - wy, z2]]);
+      };
+      for (let t = 0; t < 10; t++) {
+        const a = -2.4 + (4.8 * t) / 9;
+        tick(ink, 0.003, a, 0.053, t % 3 === 0 ? 0.067 : 0.063);
+      }
+      tick(M('#c62828', PAT.PLAIN, 0.5), 0.003, -2.4 + rnd() * 0.6, -0.005, 0.055);
+      K.sphere(ink, 0.006, sx, dy, dz + 0.0275, 4, 2);
+    } else {
+      for (let t = 0; t < 20; t++) {
+        const a = -2.4 + (4.8 * t) / 19, big = t % 5 === 0;
+        K.boxC(ink, 0.003, big ? 0.014 : 0.008, 0.001, sx + Math.sin(a) * 0.06, dy + Math.cos(a) * 0.06, dz + 0.028, 0, 0, -a);
+      }
+      const na = -2.4 + rnd() * 0.6;
+      K.boxC(M('#c62828', PAT.PLAIN, 0.5), 0.003, 0.06, 0.001, sx + Math.sin(na) * 0.025, dy + Math.cos(na) * 0.025, dz + 0.029, 0, 0, -na);
+      K.cylX(ink, 0.006, 0.004, sx, dy, dz + 0.029, 8, Math.PI / 2);
     }
-    const na = -2.4 + rnd() * 0.6;
-    K.boxC(M('#c62828', PAT.PLAIN, 0.5), 0.003, 0.06, 0.001, sx + Math.sin(na) * 0.025, dy + Math.cos(na) * 0.025, dz + 0.029, 0, 0, -na);
-    K.cylX(ink, 0.006, 0.004, sx, dy, dz + 0.029, 8, Math.PI / 2);
-    K.cylX(M('#dfe8ec', PAT.PLAIN, 0.05, 0.1), 0.073, 0.002, sx, dy, dz + 0.031, 18, Math.PI / 2);
+    K.cylX(M('#dfe8ec', PAT.PLAIN, 0.05, 0.1), 0.073, 0.002, sx, dy, dz + 0.031, dialSeg, Math.PI / 2);
     // pan: a shallow dished steel bowl on a short column
-    K.cyl(steel, 0.012, 0.012, 0.05, sx, dy + 0.085, sz - 0.03, 6);
-    K.cyl(steel, 0.13, 0.1, 0.028, sx, dy + 0.13, sz - 0.03, 18);
-    K.cyl(M('#7d8589', PAT.PLAIN, 0.35, 0.7), 0.118, 0.118, 0.002, sx, dy + 0.155, sz - 0.03, 18);
+    K.cyl(steel, 0.012, 0.012, 0.05, sx, dy + 0.085, sz - 0.03, 6, stallLod);
+    K.cyl(steel, 0.13, 0.1, 0.028, sx, dy + 0.13, sz - 0.03, dialSeg);
+    K.cyl(M('#7d8589', PAT.PLAIN, 0.35, 0.7), 0.118, 0.118, 0.002, sx, dy + 0.155, sz - 0.03, dialSeg);
     // a paper bag and a few brass weights beside it
     K.boxC(M('#c8a878', PAT.PLAIN, 0.95), 0.1, 0.13, 0.06, sx - 0.2, ct + 0.065, sz + 0.06, 0, 0.3, 0.05);
     for (let i = 0; i < 3; i++) K.cyl(M('#b8963c', PAT.PLAIN, 0.35, 0.9), 0.018 - i * 0.004, 0.02 - i * 0.004, 0.03 - i * 0.006, sx + 0.08 + i * 0.035, ct, sz + 0.1, 10);
@@ -491,18 +585,18 @@ export function genMarketStall(env: Env, f: Feature): void {
   K.box(wood, 2 * hw - 0.2, 0.03, 0.32, 0, 0.62, bz + 0.24);
   for (let i = 0; i < 3; i++) {
     const x = -0.6 + i * 0.6;
-    slatCrate(K, crateM, 0.42, 0.26, 0.3, x, 0.65, bz + 0.24);
+    slatCrate(K, crateM, 0.42, 0.26, 0.3, x, 0.65, bz + 0.24, true);
     produce(K, goods, i + 1, 0.42, 0.3, x, 0.92, bz + 0.24, seed + 97 * i);
   }
-  for (const x of [-0.75, 0.75]) slatCrate(K, crateM, 0.42, 0.3, 0.3, x, 0.3, bz + 0.24);
+  for (const x of [-0.75, 0.75]) slatCrate(K, crateM, 0.42, 0.3, 0.3, x, 0.3, bz + 0.24, true);
   if (richStall) {
     // on the ground: stacked empty crates, flattened cardboard, a box with tape, sometimes a hand truck
-    slatCrate(K, crateM, 0.42, 0.3, 0.32, -hw + 0.35, 0, bz + 0.2);
-    for (let i = 0; i < 2; i++) slatCrate(K, crateM, 0.42, 0.13, 0.32, -hw + 0.36 + i * 0.01, 0.3 + i * 0.14, bz + 0.2);
+    slatCrate(K, crateM, 0.42, 0.3, 0.32, -hw + 0.35, 0, bz + 0.2, true);
+    for (let i = 0; i < 2; i++) slatCrate(K, crateM, 0.42, 0.13, 0.32, -hw + 0.36 + i * 0.01, 0.3 + i * 0.14, bz + 0.2, i === 0);
     // under the table: reserve stock in crates (one stacked), a lidded cardboard box
-    slatCrate(K, crateM, 0.42, 0.26, 0.32, -0.3, 0, tz - 0.04);
+    slatCrate(K, crateM, 0.42, 0.26, 0.32, -0.3, 0, tz - 0.04, goods.name !== 'FLOWERS');
     if (goods.name !== 'FLOWERS') produce(K, goods, 2, 0.42, 0.32, -0.3, 0.25, tz - 0.04, seed + 501);
-    slatCrate(K, crateM, 0.42, 0.18, 0.32, 0.25, 0, tz - 0.02);
+    slatCrate(K, crateM, 0.42, 0.18, 0.32, 0.25, 0, tz - 0.02, true);
     slatCrate(K, crateM, 0.42, 0.18, 0.32, 0.27, 0.185, tz - 0.03);
     const card = M('#b8915f', PAT.PLAIN, 0.95);
     const card2 = M('#a8824f', PAT.PLAIN, 0.95);
@@ -538,6 +632,7 @@ export function genMarketStall(env: Env, f: Feature): void {
     }
   }
   K.b.forceDetail = false;
+  K.b.detail = regionDetail;
   // sign board at the canopy front
   const sign = env.atlas.add(192, 40, (g, w, h) => {
     g.fillStyle = '#f7f1e3';

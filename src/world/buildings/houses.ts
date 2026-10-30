@@ -276,7 +276,7 @@ export function genHouseLegacy(g: Gen): void {
     wallGrid(s, sgF, 0, w, yBase - 0.3, yBase + wh, gr, look());
     const ridge = yBase + wh + 0.6;
     wallTri(s, sgF, 0, w, w / 2, yBase + wh, ridge, plainLook);
-    const depth = wh / pitch + 0.6;
+    const depth = Math.max(wh / pitch + 0.6, (ridge - yBase) / pitch + 0.03); // (else the roof stays open at the back under 45°)
     const zb = zFront - depth;
     wallSeg(s, cx + w / 2, zFront, cx + w / 2, zb, yBase - 0.3, yBase + wh, null, plainLook);
     wallSeg(s, cx - w / 2, zb, cx - w / 2, zFront, yBase - 0.3, yBase + wh, null, plainLook);

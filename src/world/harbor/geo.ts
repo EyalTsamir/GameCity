@@ -8,6 +8,7 @@
 // Everything accumulates into ONE BufferGeometry (one draw call).
 
 import * as THREE from 'three';
+import { toCreasedNormals } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { Rng } from '../../core/rng';
 
 export type V3 = [number, number, number];
@@ -70,6 +71,11 @@ const _d = new THREE.Vector3();
 const _s = new THREE.Vector3();
 const _u = new THREE.Vector3();
 const _m = new THREE.Matrix4();
+
+let ARMOUR_SOFT = true;
+export function setArmourSoft(on: boolean): void {
+  ARMOUR_SOFT = on;
+}
 
 export class HB {
   readonly rigged: boolean;
@@ -507,10 +513,28 @@ export class HB {
     f.scale(rx / 1.1, ry / 1.1, rz / 1.1);
     f.rotateY(yaw);
     f.translate(cx, cy, cz);
-    f.computeVertexNormals();
+    let done = f;
+    if (ARMOUR_SOFT && wetY > -1e8) {
+      // geometry hunt (?noarmoursoft): stones in the splash zone reach into the water (a flat one at the waterline read as
+      // a plate lying on the surface, its underside in view); broken faces meet with soft creases, not knife edges
+      const water = wetY - 0.75;
+      const fp = f.getAttribute('position') as THREE.BufferAttribute;
+      // barely awash, its flat top would still be a plate: a stone either stands out of the water or stays under it
+      f.computeBoundingBox();
+      if (f.boundingBox!.max.y < water + 0.38) {
+        f.dispose();
+        return;
+      }
+      for (let i = 0; i < fp.count; i++) {
+        const y = fp.getY(i);
+        if (y < cy) fp.setY(i, Math.min(y, water - 0.7 - (cy - y) * 0.25));
+      }
+      done = toCreasedNormals(f, 0.75);
+      f.dispose();
+    } else f.computeVertexNormals();
     const base = this.count;
-    this.geo(f);
-    f.dispose();
+    this.geo(done);
+    done.dispose();
     for (let i = base; i < this.count; i++) {
       const y = this.P[i * 3 + 1];
       const w = Math.min(1, Math.max(0, (wetY + 0.25 - y) / 0.7));
