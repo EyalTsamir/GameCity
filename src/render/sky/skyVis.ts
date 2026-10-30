@@ -118,8 +118,8 @@ float thSkyVis(vec3 wp, vec3 wn) {
   float y = wp.y;
   float s = y < 6.0 ? mix(v.r, v.g, clamp(y / 6.0, 0.0, 1.0)) : (y < 15.0 ? mix(v.g, v.b, (y - 6.0) / 9.0) : (y < 30.0 ? mix(v.b, v.a, (y - 15.0) / 15.0) : mix(v.a, 1.0, smoothstep(30.0, 60.0, y))));
   // (a sky view factor of 0.5 at the foot of a canyon reads ~0.6 in a photograph: the canyon walls are
-  // themselves lit and bounce light down — the warm sun part of that is added below)
-  return mix(1.0, s, 0.85);
+  // themselves lit and bounce light down — the warm sun part of that is added below; 0.85 crushed golden-hour lanes)
+  return mix(1.0, s, 0.75);
 }
 `;
 

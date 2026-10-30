@@ -393,7 +393,7 @@ export default async function create(ctx: CityContext): Promise<CityModule> {
     // as a photographer / auto-exposure would; eased, so walking past a gap never pumps (?noexpmeter)
     if (skyVis && !noMeter) {
       const v = skyVis.at(camPos.x, camPos.y, camPos.z);
-      const target = Math.min(1.22, Math.pow(1 / (0.5 + 0.5 * v), 0.55));
+      const target = Math.min(1.3, Math.pow(1 / (0.5 + 0.5 * v), 0.62));
       meterEV += (target - meterEV) * (lastJump ? 1 : Math.min(1, realDt * 1.5));
     }
     renderer.toneMappingExposure = state.exposure * (1 + overcast * 0.12) * tune.exposure * meterEV;
