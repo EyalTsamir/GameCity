@@ -1518,7 +1518,62 @@ export function lowWall(k: Kit, L: number, brick: boolean, postA: boolean, postB
 
 const SHED_PAINT = ['#5f8f6a', '#4f7ea0', '#a54a3c', '#8a6a48', '#c9a24a'];
 
-export function shed(k: Kit, paint: number, rng: Rng): void {
+/** box hunt (?noshedkit): the allotment shed's joinery in the fine kit `kd` (same frame): lap-board shadow lines,
+ *  corner trims, a framed window with glazing bars and a sill, a ledged-and-braced door with a hasp, a gutter with a
+ *  downpipe, timber bearers */
+function shedKit(kd: Kit, col: string, W: number, D: number, H0: number): void {
+  const sh = kd.sh;
+  const dark = '#' + new THREE.Color(col).multiplyScalar(0.62).getHexString();
+  // bearers
+  kd.m('#3b3328', 'wood');
+  sh.box(0, 0.05, 0, W + 0.06, 0.1, D + 0.06, 1);
+  // lap lines: back + both sides full width, the front around the door and window
+  kd.m(dark, 'wood');
+  for (let y = 0.24; y < H0 - 0.08; y += 0.14) {
+    sh.box(0, y, -D / 2 - 0.006, W - 0.1, 0.016, 0.012, 1 | 8 | 16 | 32);
+    for (const sx of [-1, 1]) sh.box(sx * (W / 2 + 0.006), y, 0, 0.012, 0.016, D - 0.1, 1 | 4 | 8 | (sx > 0 ? 16 : 32));
+    sh.box(-W / 2 + 0.1, y, D / 2 + 0.006, 0.14, 0.016, 0.012, 1 | 4 | 16 | 32);
+    if (y < 1.12 || y > 1.58) sh.box(0.48, y, D / 2 + 0.006, 0.84, 0.016, 0.012, 1 | 4 | 16 | 32);
+    else for (const x of [0.12, 0.84]) sh.box(x, y, D / 2 + 0.006, 0.14, 0.016, 0.012, 1 | 4 | 16 | 32);
+  }
+  // corner trims
+  kd.m('#efe8d8', 'paint');
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) sh.box(sx * (W / 2 - 0.01), H0 / 2 + 0.05, sz * (D / 2 - 0.01), 0.06, H0 - 0.1, 0.06, 1);
+  // window: frame, glazing bars, sill
+  for (const [x, y, sx, sy] of [
+    [0.48, 1.57, 0.58, 0.05],
+    [0.48, 1.13, 0.58, 0.05],
+    [0.21, 1.35, 0.05, 0.48],
+    [0.75, 1.35, 0.05, 0.48],
+    [0.48, 1.35, 0.025, 0.4],
+    [0.48, 1.35, 0.5, 0.025],
+  ])
+    sh.box(x, y, D / 2 + 0.025, sx, sy, 0.03, 1);
+  sh.box(0.48, 1.09, D / 2 + 0.05, 0.66, 0.035, 0.09, 0);
+  // door: three ledges and two braces on the face, a black hasp + padlock
+  kd.m('#5a4430', 'wood');
+  for (const y of [0.3, 0.92, 1.55]) sh.box(-0.4, y, D / 2 + 0.04, 0.56, 0.09, 0.022, 1);
+  for (const [ya, yb] of [
+    [0.3, 0.92],
+    [0.92, 1.55],
+  ]) {
+    const L = Math.hypot(0.46, yb - ya);
+    sh.push().local(-0.4, (ya + yb) / 2, D / 2 + 0.042, 0, 0, Math.atan2(yb - ya, -0.46));
+    sh.box(0, 0, 0, L, 0.07, 0.02, 1);
+    sh.pop();
+  }
+  kd.m('#1d1f22', 'iron');
+  sh.box(-0.12, 0.98, D / 2 + 0.055, 0.12, 0.035, 0.012, 0);
+  sh.box(-0.085, 0.93, D / 2 + 0.06, 0.045, 0.05, 0.02, 0);
+  // gutter along the front eave + downpipe at the window corner
+  kd.m('#2c2f2e', 'plastic');
+  sh.push().local(0, H0 + 0.02, D / 2 + 0.17, 0, 0, Math.PI / 2);
+  sh.cyl(0, -W / 2 - 0.1, 0, 0.045, 0.045, W + 0.2, 6, 3);
+  sh.pop();
+  sh.cyl(W / 2 + 0.02, 0.15, D / 2 + 0.17, 0.028, 0.028, H0 - 0.15, 6, 0);
+}
+
+export function shed(k: Kit, paint: number, rng: Rng, kd?: Kit): void {
   const sh = k.sh;
   const W = 1.9,
     D = 1.5,
@@ -1543,6 +1598,7 @@ export function shed(k: Kit, paint: number, rng: Rng): void {
   sh.box(0.48, 1.35, D / 2 + 0.01, 0.5, 0.4, 0.02, 0);
   k.m('#b8643f', 'ceramic');
   for (let i = 0; i < rng.int(1, 3); i++) sh.cyl(0.25 + i * 0.25, 0, D / 2 + 0.3, 0.09, 0.12, 0.22, 6, 2);
+  if (kd) shedKit(kd, col, W, D, H0);
 }
 
 export function waterButt(k: Kit, rng: Rng): void {

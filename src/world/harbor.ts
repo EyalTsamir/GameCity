@@ -22,11 +22,11 @@ import { HB, RIG } from './harbor/geo';
 import { createBeamMesh, createHarborMaterials, createGlowMesh, followCraneLamps, NMOB, type GlowPoint } from './harbor/material';
 import { buildBreakwater, setArmourStones } from './harbor/breakwater';
 import { buildFishQuay, setQuayDetail } from './harbor/quay';
-import { buildCarouselRotating, buildCarouselStatic, buildPier, buildWheelRotating, buildWheelStatic, setGondolaDetail, setCarouselDetail, setBoothDetail, type WheelSpec } from './harbor/pier';
+import { buildCarouselRotating, buildCarouselStatic, buildPier, buildWheelRotating, buildWheelStatic, setGondolaDetail, setCarouselDetail, setBoothDetail, setKioskDetail, type WheelSpec } from './harbor/pier';
 import { buildFerryDock, lifeguardTower, scatterBeach, setBeachDetail, setBeachToys, setFerryDockDetail } from './harbor/beach';
 import { boxHunt } from '../core/boxhunt';
 import { bridgeProfile, buildFootbridge, buildJetty, type BridgeInfo, setRiverLanterns } from './harbor/river';
-import { buildCrane, buildCraneRails, CraneSim, type MobileBox } from './harbor/cranes';
+import { buildCrane, buildCraneRails, CraneSim, setCraneDetail, type MobileBox } from './harbor/cranes';
 import { buildMooring, buildQuayEdge, buildShip, mobileShipPos, SHIP, type MobileSlot } from './harbor/ship';
 import { addContainer, CH, CW, fillYard, L20, pickLook, setContainerDetail, yardRows } from './harbor/containers';
 import { buildHarborFloodlights } from './lamps/harborLights';
@@ -93,6 +93,7 @@ export default function create(ctx: CityContext): CityModule {
     });
     const rail = craneF[0];
     buildCraneRails(north, rail.x, Math.min(rail.a?.z ?? -122, rail.b?.z ?? -24), Math.max(rail.a?.z ?? -122, rail.b?.z ?? -24));
+    setCraneDetail(boxHunt(ctx, 'cranekit'));
     craneF.forEach((f, i) => {
       const m0 = mobs[i * 2],
         m1 = mobs[i * 2 + 1];
@@ -200,6 +201,7 @@ export default function create(ctx: CityContext): CityModule {
     const x0 = Math.min(pierF.a.x, pierF.b.x),
       x1 = Math.max(pierF.a.x, pierF.b.x);
     const benchX = plan.benches.filter((bb) => Math.abs(bb.z - pz) < width / 2 + 0.5 && bb.x > x0).map((bb) => bb.x);
+    setKioskDetail(boxHunt(ctx, 'pierkiosk'));
     buildPier(beach, { xa: x0, xb: x1, z: pz, width, deckY, benchX }, ground, ctx.rng('harbor-pier'), glows);
     obstacles.push(rect(x0, pz - width / 2 - 0.2, x1 + 0.3, pz + width / 2 + 0.2));
     const wf = feats('ferriswheel')[0];

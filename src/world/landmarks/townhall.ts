@@ -570,6 +570,8 @@ function townhallInterior(env: Env, o: { HW: number; RX: number; coreB: number; 
       const a = (k / 6) * Math.PI * 2;
       env.L.sphere(LM('#ffe0a8', LMODE.ALWAYS, 1.8, k * 0.31), 0.05, x + Math.sin(a) * 0.5, colH - 0.66, zm + Math.cos(a) * 0.5, 6, 4);
     }
+    env.glow(x, colH - 0.68, zm, { size: 1.6, kind: 'halo', color: '#ffd89a', intensity: 0.32 });
+    env.glow(x, 0.14, zm, { size: 4.2, kind: 'pool', color: '#ffcf8a', intensity: 0.18 });
   }
   // council chamber upstairs: green carpet, the long table with chairs both sides, a chandelier, portraits
   const fy = y1 + 0.02;
@@ -591,6 +593,7 @@ function townhallInterior(env: Env, o: { HW: number; RX: number; coreB: number; 
     const a = (k / 10) * Math.PI * 2;
     env.L.sphere(LM('#ffe0a8', LMODE.ALWAYS, 1.8, k * 0.29), 0.05, Math.sin(a) * 0.8, y2 - 1.22, zm + Math.cos(a) * 0.8, 6, 4);
   }
+  env.glow(0, y2 - 1.25, zm, { size: 2.2, kind: 'halo', color: '#ffd89a', intensity: 0.32 });
   for (const x of [-4, 0, 4]) {
     D.box(gilt, 1.25, 1.55, 0.06, x, fy + 1.4, zb + 0.03);
     signQuad(env.T, portrait, 1.0, 1.25, x, fy + 2.17, zb + 0.07, 0, 0);

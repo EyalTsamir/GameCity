@@ -577,6 +577,8 @@ function stationInterior(env: Env, HX: number, zB: number, zFr: number, ySpring:
     for (const pz of [z0 + 2.4, zc + 0.2, z1 - 2.2]) {
       D.box(iron, 0.02, ySpring - 5.4, 0.02, px, 5.4, pz);
       env.L.sphere(LM('#ffe2b0', LMODE.ALWAYS, 1.3, px * 0.1), 0.26, px, 5.2, pz, 10, 8);
+      env.glow(px, 5.2, pz, { size: 1.5, kind: 'halo', color: '#ffe2b0', intensity: 0.35 });
+      env.glow(px, 0.14, pz, { size: 4.0, kind: 'pool', color: '#ffd9a0', intensity: 0.16 });
     }
   // a direction sign over the platform doors
   const plat = env.atlas.add(256, 40, (g, w, h) => {

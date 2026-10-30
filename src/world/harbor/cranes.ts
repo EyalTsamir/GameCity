@@ -32,6 +32,14 @@ const C_YEL = '#e9b83a';
 const C_DARK = '#3a3d42';
 const C_GLASS = '#33424d';
 
+/** box hunt (?nocranekit): a switchback stair tower up the landside leg (treads, stringers, landings, guard
+ *  rails), the cable reel on the landside sill with its cable down to the quay, diaphragm bands on the legs, trolley
+ *  rails on the boom girders, louvres / door / roof guard rail on the machinery house; off = the bare portal */
+let KIT = true;
+export function setCraneDetail(on: boolean): void {
+  KIT = on;
+}
+
 export interface CraneGeomInfo {
   /** crane centre x (between the rails) */
   xc: number;
@@ -178,6 +186,8 @@ export function buildCrane(b: HB, i: number, xc: number, z0: number, glows: Glow
   for (const fx of [xc + 9, xc + 15.5]) glows.push({ x: fx, y: 2.9, z: z0, size: 6.5, pool: true, color: '#fff0d0', intensity: 0.22, crane: i, craneRig: 1 });
   glows.push({ x: xc - 9.5, y: 0.08, z: z0, size: 7.0, pool: true, color: '#fff0d0', intensity: 0.26, crane: i, craneRig: 1 });
 
+  if (KIT) craneKit(b, xc, z0, hx0, hx1);
+
   // ── trolley + operator cab
   b.rig(RIG.TROLLEY, i);
   b.color(C_YEL);
@@ -233,6 +243,96 @@ export function buildCrane(b: HB, i: number, xc: number, z0: number, glows: Glow
     }
   b.rig(RIG.STATIC);
   return { xc, z0, tx0, hy0 };
+}
+
+/** the box-hunt fit-out of one gantry (rig = gantry, set by the caller) */
+function craneKit(b: HB, xc: number, z0: number, hx0: number, hx1: number): void {
+  const g = CRANE;
+  const xL = xc - g.gauge / 2,
+    xW = xc + g.gauge / 2;
+  // diaphragm bands round the legs every ~4 m
+  b.color(C_LEG_DK);
+  for (const x of [xL, xW])
+    for (const sz of [-1, 1])
+      for (let y = 4.2; y < g.boomY0 - 1; y += 4.1) if (Math.abs(y - 13.15) > 1) b.box(x, y, z0 + sz * g.legZ, 1.03, 0.14, 1.03, 0, 0);
+  // trolley rails on top of the girders
+  b.color('#3a3d42');
+  for (const sz of [-1, 1]) b.boxMM(xc + g.back + 0.2, g.boomY1, z0 + sz * 1.8 - 0.06, xc + g.out - 0.3, g.boomY1 + 0.1, z0 + sz * 1.8 + 0.06, 1);
+  // switchback stair tower outside the landside leg (z0 + legZ): 8 flights from the ground to the boom catwalk
+  const xs = xL - 1.0,
+    zc = z0 + g.legZ,
+    za = zc - 1.7,
+    zb = zc + 1.7;
+  const N = 8,
+    rise = (g.boomY0 - 0.05) / N;
+  const RAIL = '#e9e4d8';
+  for (let k = 0; k < N; k++) {
+    const y0 = k * rise,
+      y1 = (k + 1) * rise;
+    const up = k % 2 === 0;
+    const z0f = up ? za : zb,
+      z1f = up ? zb : za;
+    // stringers + handrail on the outside
+    b.color(C_DARK);
+    for (const dx of [-0.42, 0.42]) b.beam([xs + dx, y0, z0f], [xs + dx, y1, z1f], 0.06, 0.2);
+    b.color(RAIL);
+    b.beam([xs - 0.45, y0 + 1.0, z0f], [xs - 0.45, y1 + 1.0, z1f], 0.045, 0.045);
+    // treads
+    b.color('#6d7075');
+    const nt = 11;
+    for (let t = 1; t < nt; t++) {
+      const f = t / nt;
+      b.box(xs, y0 + (y1 - y0) * f - 0.02, z0f + (z1f - z0f) * f, 0.8, 0.04, 0.26, 0, 1);
+    }
+    // landing at the top of the flight: grating + guard rail round the open sides
+    const zl = up ? zb + 0.4 : za - 0.4;
+    b.color('#6d7075');
+    b.box(xs, y1 - 0.03, zl, 0.86, 0.06, 0.8, 0, 0);
+    b.color(RAIL);
+    const ze = up ? zl + 0.38 : zl - 0.38;
+    b.beam([xs - 0.45, y1 + 1.0, zl - 0.4], [xs - 0.45, y1 + 1.0, zl + 0.4], 0.045, 0.045);
+    b.beam([xs - 0.45, y1 + 1.0, ze], [xs + 0.43, y1 + 1.0, ze], 0.045, 0.045);
+    for (const [px, pz] of [
+      [xs - 0.45, zl - 0.4],
+      [xs - 0.45, zl + 0.4],
+      [xs + 0.43, ze],
+    ])
+      b.box(px, y1 + 0.5, pz, 0.045, 1.0, 0.045, 0, 1 | 2);
+  }
+  // the stair's top landing (N even → it ends on the za side) ties into the boom catwalk across the top beam
+  b.color('#8d8f91');
+  b.boxMM(xs - 0.43, g.boomY0 - 0.08, za - 0.8, xL + 0.6, g.boomY0 + 0.02, za, 0);
+  // cable reel on the landside sill (outside face), cable dropping to the quay trench
+  const rz = z0 - 2.2,
+    rx = xL - 1.05,
+    ry = 2.0;
+  b.color('#3a3d42');
+  b.cyl([rx - 0.42, ry, rz], [rx + 0.42, ry, rz], 0.75, 0.75, 16, 0);
+  b.color(C_YEL);
+  for (const dx of [-0.46, 0.46]) b.cyl([rx + dx - 0.03, ry, rz], [rx + dx + 0.03, ry, rz], 1.35, 1.35, 18, 3);
+  b.color(C_LEG_DK);
+  b.box(rx + 0.48, ry * 0.5 + 0.2, rz, 0.12, ry + 0.2, 0.5, 0, 1);
+  b.box(rx - 0.48, ry * 0.5 + 0.2, rz, 0.12, ry + 0.2, 0.5, 0, 1);
+  b.color('#1d1f22');
+  b.cyl([rx, ry - 0.75, rz], [rx, 0.08, rz + 0.25], 0.07, 0.07, 6, 0);
+  // machinery house: louvres on both long sides, a door with a landing on the landside end, roof guard rail
+  b.color('#bdb8ac');
+  for (const sz of [-1, 1])
+    for (let k = 0; k < 4; k++) b.box(hx1 - 1.0, g.boomY1 + 0.9 + k * 0.18, z0 + sz * 2.72, 1.1, 0.06, 0.05, 0, 1);
+  b.color('#8d9093');
+  b.boxMM(hx0 - 0.03, g.boomY1 + 0.15, z0 - 0.5, hx0 + 0.02, g.boomY1 + 2.25, z0 + 0.5, 0);
+  b.color(RAIL);
+  const ry1 = g.boomY1 + 3.55;
+  for (const [ax, az, bx, bz] of [
+    [hx0 + 0.3, z0 - 2.4, hx1 - 0.3, z0 - 2.4],
+    [hx0 + 0.3, z0 + 2.4, hx1 - 0.3, z0 + 2.4],
+    [hx0 + 0.3, z0 - 2.4, hx0 + 0.3, z0 + 2.4],
+    [hx1 - 0.3, z0 - 2.4, hx1 - 0.3, z0 + 2.4],
+  ]) {
+    b.beam([ax, ry1 + 1.0, az], [bx, ry1 + 1.0, bz], 0.045, 0.045);
+    b.beam([ax, ry1 + 0.5, az], [bx, ry1 + 0.5, bz], 0.035, 0.035);
+  }
+  for (const x of [hx0 + 0.3, (hx0 + hx1) / 2, hx1 - 0.3]) for (const sz of [-1, 1]) b.box(x, ry1 + 0.5, z0 + sz * 2.4, 0.045, 1.0, 0.045, 0, 1 | 2);
 }
 
 // ─────────────────────────────────────────────────────────── simulation ──

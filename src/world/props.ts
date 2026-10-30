@@ -92,6 +92,7 @@ export default function create(ctx: CityContext): CityModule {
   // box hunt (?noyardkit): the small yard-kit parts (drum hoops / chimes / caps, forklift chain, rams, wheel, rims,
   // lamps) go to the near-only cells instead of the always-drawn / shadow-casting kits
   const yardKit = boxHunt(ctx, 'yardkit');
+  const shedKit = boxHunt(ctx, 'shedkit');
   const yardNear = (x: number, y: number, z: number, yaw: number): Kit | undefined => {
     if (!yardKit) return undefined;
     const kd = KD.at(x, z);
@@ -634,7 +635,8 @@ export default function create(ctx: CityContext): CityModule {
     if (p.shed) {
       sel(p.shed.x);
       k.sh.frame(p.shed.x, H(p.shed.x, p.shed.z), p.shed.z, p.shed.yaw);
-      shed(k, p.shed.paint, prng);
+      if (shedKit) kf.sh.frame(p.shed.x, H(p.shed.x, p.shed.z), p.shed.z, p.shed.yaw);
+      shed(k, p.shed.paint, prng, shedKit ? kf : undefined);
       inc('shed');
     }
     if (p.barrel) {
