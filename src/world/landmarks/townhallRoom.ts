@@ -337,6 +337,13 @@ export function buildTownhallRoom(env: Env, rooms: Rooms, d: TownhallDims): Room
     bal([s * 1.62, yG, zFoot], [s * 1.62, yLand, zLand]);
     bal([s * 3.38, yLand, zLand], [s * 3.38, yTopStair, zFoot]);
     bal([s * 5.22, yLand, zLand], [s * 5.22, yTopStair, zFoot]);
+    // the upper flights hang free: a plastered soffit and stringers under the steps
+    {
+      const y0 = yLand - 0.3 - rise,
+        y1 = yTopStair - 0.3 - rise;
+      K.quad(white, [s * 3.38, y0, zLand], [s * 5.22, y0, zLand], [s * 5.22, y1, zFoot], [s * 3.38, y1, zFoot], 1.8, 3, true);
+      for (const x of [3.38, 5.22]) K.beam(white, [s * x, yLand - 0.05, zLand], [s * x, yTopStair - 0.05, zFoot], 0.06, 0.62);
+    }
     room.blockDisc(s * 1.72, zFoot + 0.08, 0.2);
     // the door leaves stand open against the wall
     K.box(M('#5b3b25', RP.OAK, 0.45), 0.07, 2.7, 0.95, s * 1.02, yG, ZC - 0.48);
@@ -509,9 +516,21 @@ export function buildTownhallRoom(env: Env, rooms: Rooms, d: TownhallDims): Room
       const cc = M('#7a1e22', PAT.PLAIN, 0.9);
       for (let k = 0; k < 5; k++) K.box(cc, 0.12, 4.0, 0.06 + (k % 2) * 0.05, x + e * (0.95 + k * 0.11), yU + 0.1, RZ1 - 0.07);
     }
-  K.box(dadoD, 3.2, 0.07, 0.8, 0, yU + 0.72, (RZ0 + RZ1) / 2 + 0.05);
-  for (const e of [-1.4, 1.4]) for (const q of [-0.3, 0.3]) K.box(dadoD, 0.07, 0.72, 0.07, e, yU, (RZ0 + RZ1) / 2 + 0.05 + q);
-  room.blockAt(-1.7, (RZ0 + RZ1) / 2 - 0.4, 1.7, (RZ0 + RZ1) / 2 + 0.5, yU - 0.3, yU + 0.3);
+  // two side tables with their chairs: the way from the door to the balcony stays clear
+  for (const s of [-1, 1]) {
+    const tx = s * 3.2,
+      tz = RZ0 + 0.75;
+    K.box(dadoD, 2.2, 0.06, 0.7, tx, yU + 0.72, tz);
+    for (const e of [-1, 1]) for (const q of [-1, 1]) K.box(dadoD, 0.06, 0.72, 0.06, tx + e * 1.02, yU, tz + q * 0.28);
+    K.box(M('#efe6d2', PAT.PLAIN, 0.9), 0.42, 0.015, 0.3, tx - 0.5, yU + 0.78, tz + 0.05, 0.1 * s);
+    K.lathe(gilt, [[0.09, 0], [0.03, 0.04], [0.02, 0.26], [0.05, 0.3], [0.07, 0.34]], tx + 0.6, yU + 0.78, tz, 10);
+    for (const c of [-0.55, 0.55]) {
+      K.box(red, 0.44, 0.07, 0.44, tx + c, yU + 0.44, tz + 0.65);
+      K.box(dadoD, 0.44, 0.52, 0.04, tx + c, yU + 0.5, tz + 0.87);
+      for (const e of [-1, 1]) for (const q of [-1, 1]) K.box(dadoD, 0.035, 0.44, 0.035, tx + c + e * 0.19, yU, tz + 0.65 + q * 0.19);
+    }
+    room.blockAt(Math.min(tx - 1.15, tx + 1.15), tz - 0.4, Math.max(tx - 1.15, tx + 1.15), tz + 0.9, yU - 0.3, yU + 0.3);
+  }
   room.lamps.push({ x: 0, y: 8, z: (RZ0 + RZ1) / 2, k: 0.7, r: 3.2 });
   K.torus(gilt, 0.55, 0.02, 0, 8, (RZ0 + RZ1) / 2, 5, 22);
   for (let k = 0; k < 8; k++) {
