@@ -194,8 +194,12 @@ function hotels(ctx: CityContext, cloth: ClothSystem, poles: PoleBuilder, ground
       const ang = (32 * Math.PI) / 180;
       const L = 1.75;
       const b = new THREE.Vector3(bx + n.x * L * Math.cos(ang), y0 + L * Math.sin(ang), bz + n.z * L * Math.cos(ang));
-      poles.box(a.x - n.x * 0.02, y0, a.z - n.z * 0.02, Math.abs(n.x) > 0.5 ? 0.06 : 0.16, 0.22, Math.abs(n.z) > 0.5 ? 0.06 : 0.16, '#3a3a3a');
-      poles.rod(a, b, 0.022, '#d8d4cc');
+      // wall plate + an angled socket, a dark bronze staff that reads against pale facades, a gilt ball finial
+      poles.box(a.x - n.x * 0.01, y0, a.z - n.z * 0.01, Math.abs(n.x) > 0.5 ? 0.05 : 0.2, 0.34, Math.abs(n.z) > 0.5 ? 0.05 : 0.2, '#2c2a27');
+      const sk = new THREE.Vector3(bx + n.x * 0.3 * Math.cos(ang), y0 + 0.3 * Math.sin(ang), bz + n.z * 0.3 * Math.cos(ang));
+      poles.rod(a, sk, 0.045, '#2c2a27');
+      poles.rod(a, b, 0.03, '#4a3f30');
+      poles.pole(b.x, b.y - 0.01, b.z, b.y, 0.026, '#4a3f30', '#c9a640');
       const [c1, c2, pat] = designs[(k0 + i + 1) % designs.length];
       // the flag hangs from the staff: a line piece along the staff (no sag)
       const line = cloth.addLine({ ax: a.x + n.x * 0.12, ay: a.y + 0.08, az: a.z + n.z * 0.12, bx: b.x, by: b.y, bz: b.z, sag: 0, seed: rng.next(), wire: '#d8d4cc', r: 0.01 });

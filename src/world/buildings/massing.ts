@@ -43,15 +43,17 @@ export interface MassingFlags {
   piers: boolean;
   /** shopfront joinery: consoles at the fascia ends, a capped cornice, stall risers + sills under the windows */
   shopfronts: boolean;
+  /** apartment slab gable ends: a full window grid (corner living rooms + kitchens) instead of two small columns */
+  endWalls: boolean;
   /** 0 low, 1 medium, 2 high — fine roof furniture only from medium */
   q: number;
 }
 
-export const MASS: MassingFlags = { oriels: true, turrets: true, crossGables: true, setbacks: true, crowns: true, roofKit: true, annex: true, monitor: true, porches: true, colonnade: true, loggias: true, rooflights: true, piers: true, shopfronts: true, q: 2 };
+export const MASS: MassingFlags = { oriels: true, turrets: true, crossGables: true, setbacks: true, crowns: true, roofKit: true, annex: true, monitor: true, porches: true, colonnade: true, loggias: true, rooflights: true, piers: true, shopfronts: true, endWalls: true, q: 2 };
 
 /**
  * URL switches: ?nomassing (all off) or one by one ?nooriels ?noturrets ?nocrossgables ?nosetbacks ?nocrowns
- * ?noroofkit ?noannex ?nomonitor ?noporch ?nocolonnade ?nologgias ?norooflights ?nopiers ?noshopfront. Quality: low keeps the massing (cheap, it carries the skyline) but drops the roof furniture.
+ * ?noroofkit ?noannex ?nomonitor ?noporch ?nocolonnade ?nologgias ?norooflights ?nopiers ?noshopfront ?noendwalls. Quality: low keeps the massing (cheap, it carries the skyline) but drops the roof furniture.
  */
 export function setMassing(p: { has(k: string): boolean }, level: 'low' | 'medium' | 'high'): void {
   const all = !p.has('nomassing');
@@ -68,6 +70,7 @@ export function setMassing(p: { has(k: string): boolean }, level: 'low' | 'mediu
   MASS.rooflights = all && !p.has('norooflights');
   MASS.piers = all && !p.has('nopiers');
   MASS.shopfronts = all && !p.has('noshopfront');
+  MASS.endWalls = all && !p.has('noendwalls');
   MASS.q = level === 'low' ? 0 : level === 'medium' ? 1 : 2;
   MASS.roofKit = all && !p.has('noroofkit') && MASS.q > 0;
 }
