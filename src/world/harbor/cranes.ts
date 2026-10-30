@@ -310,9 +310,9 @@ function craneKit(b: HB, xc: number, z0: number, hx0: number, hx1: number): void
   b.cyl([rx - 0.42, ry, rz], [rx + 0.42, ry, rz], 0.75, 0.75, 16, 0);
   b.color(C_YEL);
   for (const dx of [-0.46, 0.46]) b.cyl([rx + dx - 0.03, ry, rz], [rx + dx + 0.03, ry, rz], 1.35, 1.35, 18, 3);
-  b.color(C_LEG_DK);
-  b.box(rx + 0.48, ry * 0.5 + 0.2, rz, 0.12, ry + 0.2, 0.5, 0, 1);
-  b.box(rx - 0.48, ry * 0.5 + 0.2, rz, 0.12, ry + 0.2, 0.5, 0, 1);
+  b.color(C_DARK);
+  for (const dx of [-0.56, 0.56]) b.box(rx + dx, ry / 2, rz, 0.08, ry, 0.3, 0, 1);
+  b.cyl([rx - 0.6, ry, rz], [rx + 0.6, ry, rz], 0.1, 0.1, 8, 3);
   b.color('#1d1f22');
   b.cyl([rx, ry - 0.75, rz], [rx, 0.08, rz + 0.25], 0.07, 0.07, 6, 0);
   // machinery house: louvres on both long sides, a door with a landing on the landside end, roof guard rail

@@ -341,13 +341,14 @@ function kioskKit(b: HB, x: number, z: number, w: number, d: number, col: string
   b.quad2([axb - 0.28, top, azb - 0.22], [axb + 0.28, top, azb - 0.22], [axb + 0.28, top + 0.85, azb - 0.02], [axb - 0.28, top + 0.85, azb - 0.02]);
   b.quad2([axb - 0.28, top, azb + 0.18], [axb + 0.28, top, azb + 0.18], [axb + 0.28, top + 0.85, azb - 0.0], [axb - 0.28, top + 0.85, azb - 0.0]);
   b.color('#22302a');
-  b.quad([axb - 0.23, top + 0.1, azb - 0.205], [axb + 0.23, top + 0.1, azb - 0.205], [axb + 0.23, top + 0.78, azb - 0.035], [axb - 0.23, top + 0.78, azb - 0.035]);
+  b.quad([axb - 0.23, top + 0.1, azb - 0.21], [axb - 0.23, top + 0.78, azb - 0.04], [axb + 0.23, top + 0.78, azb - 0.04], [axb + 0.23, top + 0.1, azb - 0.21]);
   b.color('#e8e4d8');
+  // chalk lines on the board's tilted face (facing the walk)
+  const zc = (y: number) => azb - 0.21 + ((y - top - 0.1) / 0.68) * 0.17 - 0.008;
   for (let k = 0; k < 4; k++) {
     const yy = top + 0.65 - k * 0.13;
-    const t = (yy - top) / 0.85;
-    const zz = azb - 0.22 + 0.2 * t - 0.006;
-    b.quad([axb - 0.18, yy - 0.02, zz], [axb - 0.18 + 0.12 + r(k + 80) * 0.22, yy - 0.02, zz], [axb - 0.18 + 0.12 + r(k + 80) * 0.22, yy + 0.02, zz], [axb - 0.18, yy + 0.02, zz]);
+    const x1 = axb - 0.18 + 0.12 + r(k + 80) * 0.22;
+    b.quad([axb - 0.18, yy - 0.02, zc(yy - 0.02)], [axb - 0.18, yy + 0.02, zc(yy + 0.02)], [x1, yy + 0.02, zc(yy + 0.02)], [x1, yy - 0.02, zc(yy - 0.02)]);
   }
 }
 
