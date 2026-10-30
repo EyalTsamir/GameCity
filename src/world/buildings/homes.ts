@@ -24,6 +24,9 @@ import {
 import { WIN, PROF, WALLPAT, ROOFPAT, FRAME, GLASS, LIGHT_MODE } from './materials';
 import { genHouseLegacy } from './houses';
 import { windowBox, shutterPair, shutterState, downpipe, acUnit, climber } from './clutter';
+import { dB } from '../../core/detailbuildings';
+import { homeSide, homeBack } from './services';
+import { Rng } from '../../core/rng';
 import { MASS } from './massing';
 import { GREEN } from './green';
 
@@ -596,6 +599,14 @@ export function genHouse(g: Gen): void {
     if (floors === 2 && rng.chance(0.4)) {
       const bk = sideGeom(M, BACK);
       if (bk.L > 3) acUnit(g, bk, rng.range(1.0, bk.L - 1.0), gH + 0.4, 0);
+    }
+    // ?noservices: meter boxes and a hose reel on the side away from the drive, a soil stack and vents at the back
+    if (dB('services')) {
+      const sr = new Rng(((lot.seed * 31) ^ 0x9e3779) >>> 0 || 5);
+      const sS = sideGeom(M, g.driveSide === LEFT ? RIGHT : LEFT);
+      homeSide(g, sS, sS.L, eave - 0.1, INS, sr);
+      const bS = sideGeom(M, BACK);
+      homeBack(g, bS, 0, bS.L, eave - 0.1, gH, INS, sr);
     }
     if (rng.chance(0.18)) {
       const sd = sideGeom(M, rng.chance(0.5) ? LEFT : RIGHT);

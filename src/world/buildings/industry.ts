@@ -20,6 +20,9 @@ import { geomOn } from '../../core/geomhunt';
 import { partitionSide } from './oldtown';
 import { MASS, massRng, upFacet, roofKit } from './massing';
 import { downpipe } from './clutter';
+import { dB } from '../../core/detailbuildings';
+import { dockSeal, shedServices } from './services';
+import { Rng } from '../../core/rng';
 
 const METAL_WALLS = ['#9aa6ad', '#7f98a3', '#b9c3c9', '#6f8f86', '#c9c1a6', '#8d9aa5'];
 const PREV: Side[] = [LEFT, FRONT, RIGHT, BACK];
@@ -52,6 +55,7 @@ export function genIndustrial(g: Gen): void {
 
   // -- massing (own RNG): a head office at an exposed end of a long shed (?noannex)
   const mr = massRng(g);
+  const serviceRng = new Rng(((lot.seed * 41) ^ 0x3c6ef3) >>> 0 || 11);
   const hallAlongX = body.x1 - body.x0 >= body.z1 - body.z0;
   let office: Side | -1 = -1;
   let officeR: LRect = { x0: 0, x1: 0, z0: 0, z1: 0 };
@@ -175,6 +179,13 @@ export function genIndustrial(g: Gen): void {
       }
     }
     for (const u of rollups) rollupDoor(sg, u);
+    // ?noservices: dock seals, conduit, cabinets, louvres
+    if (dB('services') && fullyExposed && !customs) {
+      rollups.forEach((u, i) => dockSeal(g, sg, u - doorW / 2, u + doorW / 2, doorH, INS - 0.02, i + 1));
+      const oc = officeCover(sd, sg.L);
+      const opsS = oc ? [...ops, { u: (oc[0] + oc[1]) / 2, w: oc[1] - oc[0] }] : ops;
+      shedServices(g, sg, uA, uB, opsS, H, brick ? lowTop + 0.2 : lowTop - 0.17, brick, serviceRng);
+    }
     // ?nomonitor: downpipes from the eaves gutter at every second bay line of the long sides
     const eaveSide = (lot.roof === 'gable' || lot.roof === 'barrel') && (hallAlongX ? sd === FRONT || sd === BACK : sd === LEFT || sd === RIGHT);
     if (MASS.monitor && eaveSide && fullyExposed && !customs) {
@@ -476,6 +487,29 @@ export function genIndustrial(g: Gen): void {
         setWallAttrs(s, null, plain);
         const ref = mk((a + b) / 2, H + th * 0.3, (m0 + m1) / 2);
         triAway(q0, q1, q2, ref);
+      }
+      // ?noroofscape: standing seams down each slope, a ridge capping, glazing bars on the north lights
+      if (dB('roofscape')) {
+        const nRib = Math.round((m1 - m0) / 1.6);
+        setCol(t, shade(roofC, 1.16));
+        for (let k = 1; k < nRib; k++) {
+          const m = m0 + ((m1 - m0) * k) / nRib;
+          const pa = mk(a + 0.08, H + 0.03, m),
+            pb = mk(b - gl - 0.03, H + th + 0.03, m);
+          t.beam(pa[0], pa[1], pa[2], pb[0], pb[1], pb[2], 0.05, 0.05);
+        }
+        setCol(t, shade(roofC, 0.8));
+        const ra = mk(b - gl, H + th + 0.03, m0),
+          rb = mk(b - gl, H + th + 0.03, m1);
+        t.beam(ra[0], ra[1], ra[2], rb[0], rb[1], rb[2], 0.18, 0.09);
+        setCol(t, col('#2c3238'));
+        const nBar = Math.round((m1 - m0) / 1.2);
+        for (let k = 1; k < nBar; k++) {
+          const m = m0 + ((m1 - m0) * k) / nBar;
+          const pa = mk(b - 0.02, H + 0.03, m),
+            pb = mk(b - gl - 0.01, H + th, m);
+          t.beam(pa[0], pa[1], pa[2], pb[0], pb[1], pb[2], 0.04, 0.05);
+        }
       }
       // gutter between teeth
       setCol(t, col('#5a5f64'));
