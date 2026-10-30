@@ -13,16 +13,17 @@ All scenes built and committed; remaining work is listed under "Status". Cheap w
 - [x] market day, delivery stops, wedding, musician audience + sound, park life, balcony life + window cradle
 - [x] box-hunt hand-offs: garments + washing hours, hand-tied bunting (stack smoke: see "Stack smoke" below)
 - [x] pedestrian bugs (see "Pedestrian bugs")
-- [ ] verification numbers (perf / hitch / ui-test / soak) — filled in below as they come
+- [x] verified by eye: every scene from eye level, market / wedding / musician in walk mode, wedding from mid-distance, stack smoke from the air
+- [x] checks: see "Verification" (perf A/B numbers go there last)
 
 ## What was added
 | scene | story | toggle | quality | best view (`--view`) + hour |
 |---|---|---|---|---|
 | Market day | van turns in over the pavement ~6:20, tarps hauled off stall by stall, vendors + 2 porters stack crates, van reverses out 7:30; 14:30 pack-up, van back 15:45, crates cleared, tarps on 17:00–17:40, van leaves | `?nomarketday` | low: tarps + van, no crates / porters | `27.5,1,78.5,16,200,28` at 6.4–7.5 and 15.8–17.6 |
-| Delivery stops | any delivery van passing an open stop (7 planned in front of shops) pulls half onto the pavement, hazards on; driver opens up, wheels a trolley of crates into the shop, comes back, shuts up, rejoins; a van is sent if none for 75 s | `?nodelivery` | on | 6:24–16:30; `__city.ctx.services.scenes.scenes` → delivery `.stops` for places |
+| Delivery stops | any delivery van passing an open stop (7 planned in front of shops) pulls half onto the pavement, hazards on; driver opens up, wheels a trolley of crates into the shop, comes back, shuts up, rejoins; a van is sent if none for 75 s | `?nodelivery` | on | 6:24–16:30; e.g. `106.1,1,-39.1,11,235.6,9`; delivery `.stops` lists the places |
 | Wedding | 10:45 at St. Mary's: car waiting, 16 guests line up, couple out to confetti, photo on the steps, bouquet thrown, walk to the decorated car, drive off (tins + ribbons), guests wave and drift off; confetti stays ~70 s | `?nowedding` | off on low | `70,1.2,95.2,7,-12,6` from 10.7 (100 s) |
 | Musician | up to 9 extra listeners in 2 arcs, joining and drifting off; song ends every 52 s: applause (wave + sound); finger-picked guitar + clapping via `ui/audio/synth.ts`, heard within ~40 m | `?nomusician` | off on low | `40.8,1,20,14,110,12` at 12–21 |
-| Park life | ball game in a ring (2 from 15:00), tag from 12:30, 3 picnics ~11:15–15:30 (rug shaken out, sit, eat, pack up) | `?noparklife` | off on low | `__city…parklife.balls[0].c`, 9:30–18:30 |
+| Park life | ball game in a ring, tag from 12:30 (a second ball game from 15:00 only where the lawn has room for a third ring: today it has not), 3 picnics ~11:15–15:30 (rug shaken out, sit, eat, pack up) | `?noparklife` | off on low | `-32.4,1,9.6,12,30,12` (ball) 9:30–18:30, `-56.4,1,27.6,11,-30,12` (tag) from 12:30 |
 | Balcony life | washing hung 7:24–10 / taken in 17:24–19:36 (cloth shader hides each piece by its own hours; ~10% stay out overnight) with someone on the balcony; watering 7:12–9:18 and 17:48–19:48; leaning with a cup; pool of 7 near the camera | `?nobalconylife` | off on low | `-132,8,-56,22,180,4` at 18.6 |
 | Window cradle | two cleaners in a cradle on office lot 29, working down bay by bay 8:36–16:36 | `?nobalconylife` | off on low | `39,18,-70,20,90,8` |
 
@@ -41,8 +42,23 @@ props: one InstancedMesh per kind (`scenes/kit.ts`), only drawn while one is out
 2. **Rare overlap at an activity spot (−160, 109.3)**: neighbouring attractions could offer the same ground (the statue ring and duck-pond shore had 18 pairs of spots within 0.38 m): `places.ts` drops the duplicates; and a person stopped or walking free who is on top of someone for > 0.8 s takes small steps apart (`trackOverlaps`).
 3. **Paused group overlap (48.9, 63)**: rail stops had no check for someone already standing there: `pauseTaken()` makes the second group walk on.
 
+Found by the day-long soak, all three also on the base commit (6 min at 4x, `shots/ls/dump_*.json`, not committed):
+4. **Knots on crossings**: on a corner where everyone yields to someone else no way round is left; such a knot held a crossing for minutes, until the reservations expired (one run: 7 parties for 200 s at node 19). A party without progress for 14 s on a crossing, 28 s elsewhere, now walks on through for 3.5 s (`knotT`).
+5. **Cafe-goers leaving the walk in the middle of a zebra**: arrival fired on a crossing (standing in the road, and the crossing stayed reserved through the coffee). Arrival now waits until across.
+
+| 6 min at 4x, samples | crossing w/o reservation | overlaps | in the road | stuck |
+|---|---|---|---|---|
+| base 078430f | 43 | 26 | 7 | 0 |
+| this branch, before 4 + 5 | 277 | 150 | 5 | 219 |
+| this branch, after | 0 | 13 | 2 | 0 |
+
+One run each, and the crowd is chaotic: the 277 / 219 row was one long knot and does not show the branch made knots more likely. Left open: the 2 in-the-road samples (cafe 37 at (92.7, 48.5): its seat path runs along the kerb line of the raster, and (96.1, 44.2)); the hot corners of the overlaps are the park's (-115, -5) and (-105, 40), as on the base. Boats also on the base: "Tinyhaven Belle overlaps Halcyon" (-0.16 m), "hull off open water" samples.
+
 ## Stack smoke
-At noon from the air (`-116,20,-98,300,-30,48`) the works stacks now read white-grey in the current build (the light session changed the sky lighting since the box-hunt note); no change needed there. Checked at 18:00 below if that differs.
+From the air (`-116,20,-98,300,-30,48`) the works stacks read white-grey at noon and warm cream in the 18:00 light, not brown: no change made. (Why they differ from the box-hunt note was not looked into.)
+
+## Verification
+PERF_PLACEHOLDER
 
 ## Time scale (read this first)
 One game day = 16 real minutes at 1× (1 game hour = 40 real / sim seconds). People walk in real seconds, so a scene that
