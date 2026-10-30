@@ -346,8 +346,7 @@ export function wrappedPhysicalPars(): string {
   if (a < 0 || b < a) physPars = src;
   else
     physPars =
-      '#define TH_LIGHT_WRAPS
-' +
+      '#define TH_LIGHT_WRAPS\n' +
       src.slice(0, a + irr.length) +
       '\n\tvec3 thIrrW = saturate( ( dot( geometryNormal, directLight.direction ) + thWrap ) / ( 1.0 + thWrap ) ) * directLight.color;' +
       src.slice(a + irr.length, b) +
