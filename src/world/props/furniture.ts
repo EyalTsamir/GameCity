@@ -490,9 +490,52 @@ export function bin(k: Kit, modern: boolean, rng?: Rng): void {
   sh.push().local(0, 0.46, 0.247).box(0, 0, 0, 0.09, 0.11, 0.012, 0).pop();
 }
 
+/** box hunt (?nohydrantkit): a rounder barrel, bolted base and bonnet flanges, caps with pentagon nuts on the three
+ *  outlets, keeper chains, a reflective band */
+let HYD = true;
+export function setHydrantDetail(on: boolean): void {
+  HYD = on;
+}
+
+function hydrantKit(k: Kit, body: string): void {
+  const sh = k.sh;
+  k.m('#4a4e52', 'iron');
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 6) * Math.PI * 2 + 0.3;
+    sh.box(Math.cos(a) * 0.135, 0.068, Math.sin(a) * 0.135, 0.025, 0.018, 0.025, 1);
+    sh.box(Math.cos(a) * 0.118, 0.614, Math.sin(a) * 0.118, 0.02, 0.016, 0.02, 1);
+  }
+  k.m(body, 'paint');
+  for (const s of [1, -1]) sh.tube(s * 0.19, 0.38, 0, s * 0.228, 0.38, 0, 0.056, 0.056, 10, true);
+  sh.tube(0, 0.33, 0.2, 0, 0.33, 0.238, 0.074, 0.074, 10, true);
+  k.m('#3a3d40', 'iron');
+  for (const s of [1, -1]) sh.tube(s * 0.228, 0.38, 0, s * 0.255, 0.38, 0, 0.022, 0.022, 5, true);
+  sh.tube(0, 0.33, 0.238, 0, 0.33, 0.266, 0.026, 0.026, 5, true);
+  for (const s of [1, -1]) sh.beam(s * 0.21, 0.33, 0.02, s * 0.1, 0.27, 0.07, 0.008, 0.008);
+  sh.beam(0.03, 0.27, 0.22, 0.07, 0.24, 0.1, 0.008, 0.008);
+  k.m('#f2f0ea', 'plastic');
+  sh.cyl(0, 0.47, 0, 0.11, 0.109, 0.035, 12, 0);
+}
+
 export function hydrant(k: Kit, yellow: boolean): void {
   const sh = k.sh;
   const body = yellow ? '#e3b23c' : '#c8352b';
+  if (HYD) {
+    k.m('#5a5f63', 'iron');
+    sh.cyl(0, 0, 0, 0.16, 0.16, 0.06, 12, 2);
+    k.m(body, 'paint');
+    sh.cyl(0, 0.06, 0, 0.11, 0.105, 0.5, 12, 0);
+    sh.cyl(0, 0.56, 0, 0.13, 0.13, 0.05, 12, 2);
+    sh.ellipsoid(0, 0.61, 0, 0.115, 0.1, 0.115, 0);
+    k.m('#e8e4da', 'paint');
+    sh.cyl(0, 0.69, 0, 0.035, 0.035, 0.06, 5, 2);
+    k.m(body, 'paint');
+    sh.tube(-0.08, 0.38, 0, -0.19, 0.38, 0, 0.045, 0.045, 8, true);
+    sh.tube(0.08, 0.38, 0, 0.19, 0.38, 0, 0.045, 0.045, 8, true);
+    sh.tube(0, 0.33, 0.08, 0, 0.33, 0.2, 0.06, 0.06, 8, true);
+    hydrantKit(k, body);
+    return;
+  }
   k.m('#5a5f63', 'iron');
   sh.cyl(0, 0, 0, 0.16, 0.16, 0.06, 8, 2);
   k.m(body, 'paint');

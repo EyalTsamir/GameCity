@@ -1007,10 +1007,53 @@ export function pingpong(k: Kit): void {
   sh.box(0, 0.86, 0, 0.03, 0.15, 1.6, 0);
 }
 
+/** box hunt (?nocourttable): the courtyard table built like one — a top of five planks with gaps on two cleats,
+ *  splayed A-frame trestles with cross bars and a stretcher, carriage bolts; slatted benches on legs with foot bars */
+let COURT = true;
+export function setCourtTableDetail(on: boolean): void {
+  COURT = on;
+}
+
+function courtTableKit(k: Kit, wood: string): void {
+  const sh = k.sh;
+  k.m(wood, 'wood');
+  const pw = (0.75 - 4 * 0.01) / 5;
+  for (let i = 0; i < 5; i++) sh.box(0, 0.735, -0.375 + pw / 2 + i * (pw + 0.01), 1.5, 0.04, pw, 0);
+  for (const x of [-0.6, 0.6]) {
+    sh.box(x, 0.695, 0, 0.05, 0.04, 0.7, 0);
+    for (const s of [1, -1]) {
+      sh.push().local(x, 0.3375, s * 0.22, -s * 0.288, 0, 0);
+      sh.box(0, 0, 0, 0.05, 0.704, 0.07, 1);
+      sh.pop();
+    }
+    sh.box(x, 0.25, 0, 0.05, 0.05, 0.5, 0);
+  }
+  sh.box(0, 0.3, 0, 1.15, 0.05, 0.05, 0);
+  // benches: two seat planks on cleats, legs with foot bars and a stretcher
+  for (const z of [-0.68, 0.68]) {
+    for (const dz of [-0.07, 0.07]) sh.box(0, 0.43, z + dz, 1.5, 0.035, 0.13, 0);
+    for (const x of [-0.6, 0.6]) {
+      sh.box(x, 0.395, z, 0.05, 0.035, 0.26, 0);
+      for (const dz of [-0.08, 0.08]) sh.box(x, 0.19, z + dz, 0.05, 0.38, 0.05, 1);
+      sh.box(x, 0.07, z, 0.05, 0.04, 0.22, 0);
+    }
+    sh.box(0, 0.16, z, 1.15, 0.04, 0.04, 0);
+  }
+  // carriage bolts where the legs meet the cleats
+  k.m('#3a3d40', 'iron');
+  for (const x of [-0.625, 0.625]) for (const s of [1, -1]) sh.box(x + Math.sign(x) * 0.002, 0.64, s * 0.13, 0.012, 0.03, 0.03, 0);
+}
+
 /** Courtyard table with two benches. */
 export function courtTable(k: Kit, rng: Rng): void {
   const sh = k.sh;
   const wood = rng.pick(['#8a6240', '#a87f58', '#6f5a48']);
+  if (COURT) {
+    courtTableKit(k, wood);
+    k.m(rng.pick(['#e9e4d8', '#7aa0c8', '#c95f4a']), 'ceramic');
+    sh.cyl(0.2, 0.755, 0.05, 0.06, 0.05, 0.12, 6, 2);
+    return;
+  }
   k.m(wood, 'wood');
   sh.box(0, 0.73, 0, 1.5, 0.05, 0.75, 0);
   for (const x of [-0.6, 0.6]) sh.box(x, 0.36, 0, 0.06, 0.72, 0.6, 1);

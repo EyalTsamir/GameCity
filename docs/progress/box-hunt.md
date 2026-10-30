@@ -6,6 +6,15 @@ Branch `claude/box-hunt-af5a80` (based on `claude/pensive-gates-bim12i` a200754)
 before/after crops kept for the log live in `docs/progress/boxhunt/`.
 
 ## Resume here
+**Round 4 (2026-10-30) DONE** (section "Round 4" at the end; sheet `docs/progress/boxhunt/round4_before_after.jpg`) — audit
+`shots/bh4/audit/r4` (10 new eye-level nodes × 12:00 / 18:12 / 21:30 + 10 POI fly-overs at golden hour), 3 sonnet
+judges + own crops. Ranked 10 (mine): container feeder superstructure, flatbed lorry rear, ferris-wheel hub,
+courtyard table, construction billboards lit with no source, hydrant; ≈ box van, stop signs, signal heads, kerb
+planters. Fixed in ddb3be0 / 1b58bd1 / 48d98b3 / 8c29abc: `?nohoardlamp`, `?noshipkit` (+ funnel winding bug),
+`?nowheelhub`, `?nolorrykit`, `?nocourttable`, `?nohydrantkit`; verified (`shots/bh4/{fix,fix2}`), perf A/B, hitch
+(0 mid-run compiles), build. Hand-offs: pedestrians (fade-out peds flagged after setHours jumps), massing (arcade
+glazing), life (laundry, bunting), vegetation (planter planting), ambient (industry smoke), light (lamp glare).
+
 **Round 3 (2026-10-30) DONE** (section "Round 3" at the end; sheet `docs/progress/boxhunt/round3_before_after.jpg`) — audit `shots/bh3/audit` (r3: 4 new eye-level nodes + 2 at night, 10 POI
 fly-overs at 35 m noon + 8 at night; r3n: interiors at night), 2 sonnet judges + own look. Ranked 10 (mine): cranes,
 river railing, pier kiosks, floodlight heads (≈ already 5×3 lamp housings), interiors dark at night, allotment
@@ -382,3 +391,67 @@ machine (round 2, 25 windows): 0 freezes. Console / page errors none, invariants
 ### Checks
 `npm run typecheck` clean; `npm run build` OK (`dist/index.html` 3.86 MB); every capture: invariants `{}`, console
 and frame errors none.
+
+## Round 4 (2026-10-30) — walk + fly audit, noon + golden hour + night
+Audit (`shots/bh4/audit/r4`): 10 new eye-level ped nodes ≥ 26 m from rounds 1–3, each at 12:00 / 18:12 / 21:30
+(e/g/n), + every city POI flown at 48 m / 28° at golden hour (fg_). Three sonnet judges (noon eye; golden + night
+eye; night eye + golden aerial) + own crops. Before/after sheet: `docs/progress/boxhunt/round4_before_after.jpg`.
+
+Ranked 10 (my domain; ≈ = checked in code, already detailed, no change):
+1. Container feeder's superstructure (the harbour fly-over sits right over it: bare white roof slab, a stick mast,
+   a floating black plank) → fixed. 2. Flatbed lorry from behind (one black chassis block, no plate, a slab bed end)
+   → fixed. 3. Ferris-wheel hub (plain drum, a grey box at each A-frame top) → fixed. 4. Courtyard table (a slab on
+   two slab legs, slab benches) → fixed. 5. Construction billboards lit at night with no light source → fixed.
+6. Fire hydrant (bare outlets) → fixed. 7. Box van ≈ (corner posts, joint strips, roller shutter / doors, side
+guards, marker lamps already). 8. Stop signs ≈ (rolled rim, back rails, clamps, bolts — the judges read the face
+as "flat"). 9. Traffic-signal heads ≈ (round-1 tunnel visors; from behind a head is a box). 10. Kerb planters ≈
+(weep holes, stains, soil, mulch; the scrappy part is the planting = vegetation).
+
+| object | change | switch | files |
+|---|---|---|---|
+| container feeder | guard rails round the bridge roof, the bridge-front walkway and the house top; radar scanners on gearbox pedestals, a tripod-braced mast with a radar platform, horn and yard lamps; sat-com domes, GPS mushrooms, VHF whips, a binnacle, searchlights; bridge window mullions; AC condensers with fans, mushroom vents, generator exhaust; lifebuoys, side doors; a 24-sided funnel with three exhaust pipes (sooty tops) and a ladder; **bug** (always on): the funnel walls were wound inward, so the near wall vanished and the funnel looked hollow | `?noshipkit` | `harbor/ship.ts`, `harbor.ts` |
+| flatbed lorry | ladder chassis (two rails, cross members) instead of one solid block — daylight between the rails, axle beams and diff housings showing; tank / battery brackets; mudguards with sloped ends; a steel tailboard rail; an under-run guard on brackets; a rear number plate | `?nolorrykit` | `sim/traffic/models.ts`, `render.ts` |
+| ferris wheel | spoke flanges with bolt circles and a banded barrel on the hub; 144 tangential tension cables laced in crossing pairs from the flanges to the inner ring; pillow-block bearings on cross-head plates (housing, feet + bolts, end cap, axle nut) instead of the grey boxes | `?nowheelhub` | `harbor/pier.ts`, `harbor.ts` |
+| courtyard table | five-plank top with gaps on cleats, splayed A-frame trestles with cross bars and a stretcher, carriage bolts; benches of two planks on legs with foot bars and a stretcher | `?nocourttable` | `props/kit.ts`, `props.ts` |
+| construction billboards | three trough floodlights on arms over each of the two lit boards (lit after dusk, halos) | `?nohoardlamp` | `landmarks/construction.ts` |
+| fire hydrant | 12-sided barrel, bolted base + bonnet flanges, outlet caps with pentagon nuts, keeper chains, a reflective band | `?nohydrantkit` | `props/furniture.ts`, `props.ts` |
+
+Verified: `shots/bh4/fix` (harbour fly-over, bridge views, hub, billboards at night, table) and `shots/bh4/fix2`
+(`?tlineup` showroom lorries from behind / 3/4, hydrant, table close, funnel after the winding fix), on vs
+`?noshipkit&nolorrykit&nowheelhub&nocourttable&nohoardlamp(&nohydrantkit)`; console / frame errors none.
+
+### Perf (Adreno X1-45, 1920×1025, noon, `perf.mjs --variants ";noboxhunt" --repeat 2`, rounds 1–4 together)
+| view | ms/frame on | ms/frame `?noboxhunt` | Δ ms | draw calls on / off | triangles on / off |
+|---|---|---|---|---|---|
+| downtown@12 | 57.9 | 56.6 | +1.2 | 238 / 238 | 4.70 M / 4.33 M (+367 k, +8.5 %) |
+| harbor@12 | 52.1 | 50.3 | +1.9 | 248 / 248 | 4.82 M / 4.40 M (+420 k, +9.5 %) |
+| beach@12 | 54.8 | 52.0 | +2.8 | 249 / 249 | 4.82 M / 4.34 M (+477 k, +11.0 %) |
+| street@12 | 49.6 | 48.5 | +1.1 | 229 / 229 | 4.07 M / 3.73 M (+343 k, +9.2 %) |
+
+Only the first repeat is usable: during the second the machine was loaded (every view ~2× slower in both
+variants, 92–132 ms). Round 4 adds ~+17–24 k triangles over round 3 (`perf5`: 4.68 / 4.80 / 4.80 M) and no draw
+calls — every kit lives in an existing mesh (harbour rigged + ride builders, the traffic model geometry, the fine
+prop cells, the landmark kits / glow sprites). The ms deltas are in the earlier +0.1–1.9 ms band except beach
+(+2.8, round 3: +0.1) — within this machine's run-to-run noise; re-measure on an idle machine.
+
+Hand-offs (round 4, judge items owned elsewhere): **pedestrians** — after `setHours` jumps the invariants list
+fade-out pedestrians "inside a solid prop" / "standing in the road" (11–12 in both on and `?no…` variants of
+`shots/bh4/fix`; none in `fix2`, which has no time jumps); **massing** — the arcade / office ground-floor glazing
+(e01: blank cream slabs by day, dull grey at night, no fit-out); **life** — washing lines read as huge flat white
+sheets (e07) and the bunting as identical evenly spaced triangles (g09); **vegetation** — the kerb planters'
+planting is scrappy (the planter itself is detailed); **ambient** — the industrial stack smoke reads as brown blobs
+from the air (fg_industry); **light** — street-lamp glare still hides the heads at night.
+
+### Smoothness
+`hitch.mjs` (overview / harbor / beach / downtown × 12:00 + 21:30, 6 s, boot + arrive + steady = 17 windows), A/B in
+one sitting — on a loaded GPU (some other page kept it busy: steady frames ~100–118 ms in both variants, ~2× the
+idle `perf6` numbers, so nearly every frame counts as a "freeze"): **0 mid-run shader programs in both**
+(`newPrograms` = 0 in every window after boot); box hunt on: boot 105 s, steady mean 107.7 ms, 471 frames > 100 ms,
+74 long tasks, worst 267 ms; `?noboxhunt`: boot 97 s, steady mean 102.9 ms, 393 frames > 100 ms, 88 long tasks,
+worst 234 ms. Console / page / frame errors none, invariants `{}` in both. Everything added is build-time geometry
+in existing meshes or static glow sprites — no per-frame work, no new materials or programs. Re-run on an idle
+machine for clean freeze numbers (round 2's idle run: 0 freezes).
+
+### Checks
+`npm run typecheck` clean; `npm run build` OK; every capture: console / frame errors none; invariants `{}` except the
+pre-existing fade-out pedestrian flags after time jumps (both variants — see hand-offs).

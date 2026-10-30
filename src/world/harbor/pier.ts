@@ -417,6 +417,14 @@ export interface WheelSpec {
   deckY: number;
 }
 
+/** box hunt (?nowheelhub): the wheel's hub and bearings engineered — spoke flanges with bolt circles and a banded
+ *  barrel on the rotating hub, tangential tension cables laced (crossing pairs) from the flanges to the inner ring;
+ *  pillow-block bearings on cross-head plates at the A-frame tops (housing, feet + bolts, end cap, axle nut) */
+let HUB = true;
+export function setWheelHubDetail(on: boolean): void {
+  HUB = on;
+}
+
 export function buildWheelStatic(b: HB, w: WheelSpec, glows: GlowPoint[]): void {
   const top = w.deckY;
   b.noEmit().pat(PAT.NONE);
@@ -454,7 +462,18 @@ export function buildWheelStatic(b: HB, w: WheelSpec, glows: GlowPoint[]): void 
       }
     }
     b.color('#8f949a');
-    b.box(w.x, hy, zt, 1.0, 1.1, 0.7, 0, 0);
+    if (HUB) {
+      b.box(w.x, hy - 0.62, zt, 1.5, 0.16, 0.95, 0, 0);
+      b.color('#6f757b');
+      b.box(w.x, hy - 0.39, zt, 1.32, 0.3, 0.66, 0, 0);
+      b.cyl([w.x, hy, zt - 0.36], [w.x, hy, zt + 0.36], 0.6, 0.6, 16, 3);
+      b.color('#4a4f55');
+      for (const dx of [-0.52, 0.52]) for (const dz of [-0.2, 0.2]) b.vcyl(w.x + dx, hy - 0.24, zt + dz, 0.055, 0.1, 6, 2);
+      b.color('#9aa0a6');
+      b.cyl([w.x, hy, zt + s * 0.36], [w.x, hy, zt + s * 0.5], 0.42, 0.4, 14, s > 0 ? 2 : 1);
+      b.color('#4a4f55');
+      b.cyl([w.x, hy, zt + s * 0.5], [w.x, hy, zt + s * 0.62], 0.21, 0.21, 6, s > 0 ? 2 : 1);
+    } else b.box(w.x, hy, zt, 1.0, 1.1, 0.7, 0, 0);
   }
   // static axle
   b.color('#7d838a');
@@ -573,6 +592,33 @@ export function buildWheelRotating(b: HB, w: WheelSpec): number {
       b.box(w.x + Math.cos(a) * 1.45, hy + Math.sin(a) * 1.45, zz + s * 0.06, 0.13, 0.13, 0.06, 0, 0);
     }
     b.noEmit();
+  }
+  if (HUB) {
+    // spoke flanges (bolt heads on their outer faces) and a banded barrel between them
+    for (const s of [-1, 1]) {
+      const zf = w.z + s * 0.78;
+      b.color('#d9d3c4');
+      b.cyl([w.x, hy, zf - 0.07], [w.x, hy, zf + 0.07], 1.22, 1.22, 24, 3);
+      b.color('#8f949a');
+      for (let k = 0; k < 24; k++) {
+        const a = (k / 24) * Math.PI * 2;
+        b.box(w.x + Math.cos(a) * 1.08, hy + Math.sin(a) * 1.08, zf + s * 0.09, 0.07, 0.07, 0.04, 0, 0);
+      }
+    }
+    b.color('#c9c2b2');
+    for (const dz of [-0.35, 0, 0.35]) b.cyl([w.x, hy, w.z + dz - 0.05], [w.x, hy, w.z + dz + 0.05], 1.0, 1.0, 16, 0);
+    // tension cables laced tangentially from the flanges to the inner ring, crossing in pairs
+    b.color('#bdb8ac');
+    const nc = 36;
+    for (const zr of sides) {
+      const zf = w.z + Math.sign(zr - w.z) * 0.78;
+      for (let k = 0; k < nc; k++)
+        for (const t of [1, -1]) {
+          const a = (k / nc) * Math.PI * 2,
+            a2 = a + t * 0.32;
+          b.beam([w.x + Math.cos(a) * 1.2, hy + Math.sin(a) * 1.2, zf], [w.x + Math.cos(a2) * R2, hy + Math.sin(a2) * R2, zr], 0.03, 0.03, false);
+        }
+    }
   }
   for (const zr of sides) {
     // outer rim: emissive chase light ring

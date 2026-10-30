@@ -19,7 +19,7 @@ import { NearCells, nearCell } from './lamps/nearCells';
 import { getLayout, occAny, PLANTER, hrand, MASK_WALK, DistanceLod, ChunkCuller, chunkOf, splitByCells } from './props/layout';
 import { furnitureMaterial, glassMaterial } from './props/material';
 import { createGlowMesh, type Glow } from './props/glow';
-import { Kit, lamp, bench, bin, hydrant, mailbox, phonebox, newsstand, planterBox, bollard, bikeRack, busShelter, picketFence, gateLeaf, lowWall, shed, waterButt, FENCE_PAINT, setPrinter, setBikeSpokes, setShelterRoof } from './props/furniture';
+import { Kit, lamp, bench, bin, hydrant, mailbox, phonebox, newsstand, planterBox, bollard, bikeRack, busShelter, picketFence, gateLeaf, lowWall, shed, waterButt, FENCE_PAINT, setPrinter, setBikeSpokes, setShelterRoof, setHydrantDetail } from './props/furniture';
 import { Printer } from './props/print';
 import * as GK from './props/garden';
 import * as SK from './props/kit';
@@ -101,6 +101,8 @@ export default function create(ctx: CityContext): CityModule {
   };
   SK.setYardDetail(boxHunt(ctx, 'yardkit'));
   GK.setBinDetail(boxHunt(ctx, 'wheeliebin'));
+  SK.setCourtTableDetail(boxHunt(ctx, 'courttable'));
+  setHydrantDetail(boxHunt(ctx, 'hydrantkit'));
 
   /** local → world for a frame at (x, z) with yaw */
   const toWorld = (x: number, z: number, yaw: number, lx: number, lz: number): [number, number] => [x + lx * Math.cos(yaw) + lz * Math.sin(yaw), z - lx * Math.sin(yaw) + lz * Math.cos(yaw)];

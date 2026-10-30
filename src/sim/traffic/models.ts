@@ -1872,6 +1872,14 @@ function tarpLoad(b: Builder, w: number, y0: number, h: number, z0: number, z1: 
  * main + wide-angle mirrors on arms; fuel tank, battery box, side guards, mud flaps, bed rails with rope hooks,
  * a ladder-rack headboard; steered front axle + tandem rear on steel wheels.
  */
+/** box hunt (?nolorrykit): the flatbed's underside and rear — a ladder chassis (two rails, cross members, axle
+ *  beams, diff housings) instead of one solid block, tank / battery brackets, mudguards with sloped ends, a steel
+ *  tailboard rail, an under-run guard on brackets and a rear number plate */
+let LK = true;
+export function setLorryDetail(on: boolean): void {
+  LK = on;
+}
+
 function lorry(): THREE.BufferGeometry {
   const b = new Builder();
   const L = 7.6,
@@ -1879,7 +1887,14 @@ function lorry(): THREE.BufferGeometry {
   const zCab = L / 2 - 0.95;
   const axF = L / 2 - 1.3;
   const zf = L / 2;
-  b.add(bx(1.4, 0.32, L - 0.4, 0, 0.5, -0.1), { color: '#2b2e33', rough: 1.4 });
+  if (LK) {
+    // ladder chassis: daylight between the rails from behind, the axles and diffs showing
+    for (const s of [1, -1]) b.add(bx(0.12, 0.3, L - 0.4, s * 0.43, 0.5, -0.1), { color: '#2b2e33', rough: 1.4 });
+    for (const z of [axF - 2.0, axF - 3.4, axF - 4.95, -L / 2 + 0.28]) b.add(bx(0.74, 0.1, 0.12, 0, 0.55, z), { color: '#2b2e33', rough: 1.4 });
+    for (const z of [axF, axF - 4.4, axF - 5.5]) b.add(bx(1.7, 0.12, 0.12, 0, 0.48, z), { color: '#26282b', rough: 1.2 });
+    for (const z of [axF - 4.4, axF - 5.5]) b.add(rbox(0.34, 0.34, 0.34, 0.12, 0, 0.48, z), { color: '#26282b', rough: 1.2 });
+    for (const s of [1, -1]) b.add(bx(0.24, 0.05, 0.6, s * 0.6, 0.62, s > 0 ? axF - 1.5 : axF - 1.4), { color: '#2b2e33', rough: 1.2 });
+  } else b.add(bx(1.4, 0.32, L - 0.4, 0, 0.5, -0.1), { color: '#2b2e33', rough: 1.4 });
   const cab: BusShape = {
     L: 1.9,
     W: 2.3,
@@ -1981,6 +1996,14 @@ function lorry(): THREE.BufferGeometry {
   for (const x of [-1.1, -0.55, 0, 0.55, 1.1]) b.add(bx(0.07, 1.22, 0.07, x, 1.06, hz), { color: '#8b98a3', rough: 0.7 });
   if (LOD === 0) for (const y of [1.78]) b.add(bx(W - 0.05, 0.05, 0.05, 0, y, hz), { color: '#8b98a3', rough: 0.7 });
   b.add(bx(W + 0.04, 0.16, 0.12, 0, 0.76, -L / 2 + 0.06), { color: '#3a3d42' });
+  if (LK) {
+    // steel tailboard rail on the bed end, under-run guard on two brackets, plate on the tail bar
+    b.add(bx(W - 0.04, 0.2, 0.05, 0, 0.87, bedZ - bedD / 2 - 0.015), { color: '#3a3d42', rough: 0.9 });
+    b.add(rbox(2.0, 0.12, 0.1, 0.03, 0, 0.42, -L / 2 + 0.02), { color: '#3a3d42', rough: 1 });
+    for (const s of [1, -1]) b.add(bx(0.08, 0.3, 0.08, s * 0.43, 0.55, -L / 2 + 0.1), { color: '#2b2e33', rough: 1.2 });
+    b.add(bx(0.49, 0.12, 0.012, 0, 0.76, -L / 2 - 0.004), { color: '#16171a', rough: 1.2 });
+    b.add(decalPlane(0.46, 0.1, 0, 0.76, -L / 2 - 0.011, 'nz'), { color: '#ffffff', rough: 0.6, decal: R_PLATE, plate: true });
+  }
   // variant 0: palletised goods, each strapped down: slatted timber crates and stacks of taped cartons
   const loads: [number, number, number, number, number, 'crate' | 'cartons', string][] = [
     [1.05, 0.95, 1.3, 0.56, 0.95, 'crate', '#b88a57'],
@@ -2009,6 +2032,13 @@ function lorry(): THREE.BufferGeometry {
     wheel(b, s * 1.0, 0.48, axF - 4.4, 0.48, 0.38, false, '#c9ccd0', 'steel');
     wheel(b, s * 1.0, 0.48, axF - 5.5, 0.48, 0.38, false, '#c9ccd0', 'steel');
     b.add(bx(0.42, 0.06, 2.2, s * 1.0, 1.0, axF - 4.95), { color: '#2b2e33' });
+    if (LK)
+      for (const e of [1, -1]) {
+        const sk = new THREE.BoxGeometry(0.42, 0.035, 0.42);
+        sk.rotateX(e * 0.75);
+        sk.translate(s * 1.0, 0.86, axF - 4.95 + e * 1.24);
+        b.add(sk, { color: '#2b2e33' });
+      }
   }
   return b.build();
 }

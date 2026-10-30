@@ -34,6 +34,15 @@ const WHITE = '#f1ede4';
 const DECK = '#5e7466';
 const HATCH = '#56685d';
 
+/** box hunt (?noshipkit): the feeder's superstructure fitted out — guard rails round the bridge roof, the
+ *  bridge-front walkway and the house top, radar scanners on gearbox pedestals, a tripod-braced mast with a radar
+ *  platform, horn and yard lamps, sat-com domes, GPS mushrooms, VHF whips, a binnacle, searchlights, window
+ *  mullions, AC units + vents, lifebuoys, doors; a smoother funnel with exhaust pipes and a ladder */
+let KIT = true;
+export function setShipDetail(on: boolean): void {
+  KIT = on;
+}
+
 export interface ShipInfo {
   /** local → world (rest) */
   toWorld(lx: number, ly: number, lz: number, out?: THREE.Vector3): THREE.Vector3;
@@ -336,7 +345,7 @@ export function buildShip(
   b.noEmit();
   // mast with radar scanners + masthead light
   b.color('#e9e4d8');
-  b.cyl([0, top + 2.95, -27.2], [0, top + 9.0, -27.2], 0.16, 0.1, 6, 2);
+  b.cyl([0, top + 2.95, -27.2], [0, top + 9.0, -27.2], 0.16, 0.1, KIT ? 10 : 6, 2);
   b.box(0, top + 5.2, -27.2, 3.8, 0.14, 0.14, 0, 0);
   b.color('#2c3034');
   b.box(-1.2, top + 3.35, -28.6, 2.6, 0.12, 0.35, 0.3, 0);
@@ -349,10 +358,11 @@ export function buildShip(
     const fz = -31.6,
       fy0 = top,
       fy1 = top + 5.6;
+    const NS = KIT ? 24 : 12;
     const ring = (y: number, rz: number, rx: number, dz: number): V3[] => {
       const pts: V3[] = [];
-      for (let k = 0; k < 12; k++) {
-        const a = (k / 12) * Math.PI * 2;
+      for (let k = 0; k < NS; k++) {
+        const a = (k / NS) * Math.PI * 2;
         pts.push([Math.cos(a) * rx, y, fz + dz + Math.sin(a) * rz]);
       }
       return pts;
@@ -367,18 +377,19 @@ export function buildShip(
       b.color(c);
       const ra = ring(ya, 1.75, 1.35, (ya - fy0) * -0.12);
       const rb = ring(yb, 1.75, 1.35, (yb - fy0) * -0.12);
-      for (let k = 0; k < 12; k++) {
-        const k2 = (k + 1) % 12;
-        b.quad(ra[k], ra[k2], rb[k2], rb[k]);
+      for (let k = 0; k < NS; k++) {
+        const k2 = (k + 1) % NS;
+        b.quad(ra[k2], ra[k], rb[k], rb[k2]); // outward (was wound inward: the near wall vanished)
       }
     }
     b.color('#141618');
     const rt = ring(fy1, 1.75, 1.35, (fy1 - fy0) * -0.12);
-    for (let k = 1; k < 11; k++) b.triangle(rt[0], rt[k + 1], rt[k]);
+    for (let k = 1; k < NS - 1; k++) b.triangle(rt[0], rt[k + 1], rt[k]);
     // emblem on the band (white diamond) both sides
     b.color(WHITE);
     for (const s of [1, -1]) b.box(s * 1.37, fy1 - 1.95, fz - (fy1 - 1.95 - fy0) * 0.12, 0.05, 0.5, 0.5, 0, 0);
   }
+  if (KIT) shipKit(b, top, bz0, bz1);
   // free-fall lifeboat on its stern ramp (orange)
   b.color('#8f9599');
   b.beam([0, SHIP.deckY + 2.2, -33.0], [0, SHIP.deckY + 0.9, -36.6], 2.2, 0.15);
@@ -449,6 +460,144 @@ export function buildShip(
 }
 
 /** world rest position (bottom centre) of a mobile 20ft box on the ship */
+/** the box-hunt fit-out of the superstructure (ship-local frame, rig SHIP; `top` = bridge-deck floor) */
+function shipKit(b: HB, top: number, bz0: number, bz1: number): void {
+  const yR = top + 2.95;
+  const RAIL = '#ece8de';
+  // guard rail (top rail + knee rail + stanchions) along a polyline at deck height y
+  const rail = (y: number, pts: [number, number][]) => {
+    for (let k = 0; k < pts.length - 1; k++) {
+      const [ax, az] = pts[k],
+        [cx, cz] = pts[k + 1];
+      b.beam([ax, y + 1.0, az], [cx, y + 1.0, cz], 0.045, 0.045, false);
+      b.beam([ax, y + 0.52, az], [cx, y + 0.52, cz], 0.03, 0.03, false);
+      const n = Math.max(1, Math.round(Math.hypot(cx - ax, cz - az) / 1.3));
+      for (let i = k === 0 ? 0 : 1; i <= n; i++) b.box(ax + ((cx - ax) * i) / n, y + 0.5, az + ((cz - az) * i) / n, 0.045, 1.0, 0.045, 0, 1 | 2);
+    }
+  };
+  b.color(RAIL);
+  // bridge roof (monkey island), open at the funnel
+  rail(yR, [
+    [-0.9, bz0 - 0.1],
+    [-5.6, bz0 - 0.1],
+    [-5.6, bz1 + 0.25],
+    [5.6, bz1 + 0.25],
+    [5.6, bz0 - 0.1],
+    [0.9, bz0 - 0.1],
+  ]);
+  // walkway in front of the bridge windows, and the house top behind the wings
+  rail(top, [
+    [-5.8, bz1 - 0.2],
+    [-5.8, SHIP.superZ1 + 0.2],
+    [5.8, SHIP.superZ1 + 0.2],
+    [5.8, bz1 - 0.2],
+  ]);
+  for (const s of [1, -1])
+    rail(top, [
+      [s * 5.8, bz1 - 2.3],
+      [s * 5.8, SHIP.superZ0 - 0.02],
+      [s * 1.2, SHIP.superZ0 - 0.02],
+    ]);
+  // bridge window mullions (front + sides)
+  b.color(WHITE);
+  for (let k = 1; k < 10; k++) b.box(-5.2 + k * 1.04, top + 1.75, bz1 + 0.045, 0.07, 1.1, 0.04, 0, 1 | 2 | 4);
+  for (const s of [1, -1]) for (let k = 1; k < 5; k++) b.box(s * 5.455, top + 1.75, bz0 + 0.6 + k * 1.06, 0.05, 1.1, 0.07, 0, 1 | 2 | (s > 0 ? 16 : 32));
+  // mast: tripod struts, radar platform, scanner gearboxes, horn, yard lamps
+  b.color('#e9e4d8');
+  for (const s of [1, -1]) b.beam([s * 1.5, yR, -27.2], [0, top + 4.9, -27.2], 0.09, 0.09);
+  b.color('#8d9093');
+  b.boxMM(0.35, top + 5.22, -27.6, 1.75, top + 5.29, -26.8, 0);
+  b.color('#d8d2c5');
+  b.box(1.0, top + 5.395, -27.2, 0.32, 0.21, 0.34, 0, 1);
+  b.box(-1.2, top + 3.12, -28.6, 0.45, 0.34, 0.5, 0.3, 1);
+  b.cyl([0, top + 4.4, -27.05], [0, top + 4.4, -26.5], 0.05, 0.17, 8, 0);
+  b.color('#2c3034');
+  for (const s of [1, -1]) b.vcyl(s * 1.85, top + 5.27, -27.2, 0.07, 0.18, 6, 2);
+  // sat-com domes, GPS mushrooms, VHF whips
+  for (const s of [1, -1]) {
+    b.color('#bdb8ac');
+    b.vcyl(s * 3.9, yR, -29.3, 0.12, 0.72, 8, 0);
+    b.color(WHITE);
+    b.sphere(s * 3.9, yR + 1.1, -29.3, 0.45, 12, 8);
+  }
+  for (const [x, z] of [
+    [-4.7, -25.6],
+    [-4.0, -25.6],
+    [4.6, -25.4],
+  ]) {
+    b.color('#bdb8ac');
+    b.vcyl(x, yR, z, 0.03, 0.35, 5, 0);
+    b.color(WHITE);
+    b.vcyl(x, yR + 0.35, z, 0.1, 0.12, 8, 3);
+  }
+  b.color('#e9e4d8');
+  for (const [x, z] of [
+    [5.25, -29.9],
+    [-5.25, -29.9],
+    [2.4, -30.0],
+    [-2.6, -29.95],
+  ])
+    b.vcyl(x, yR, z, 0.022, 3.2, 4, 2, 0.012);
+  // magnetic compass binnacle + searchlights at the front corners
+  b.color(WHITE);
+  b.cyl([0, yR, -24.6], [0, yR + 0.95, -24.6], 0.2, 0.15, 8, 2);
+  b.color('#b08d57');
+  b.sphere(0, yR + 1.06, -24.6, 0.2, 8, 5);
+  for (const s of [1, -1]) {
+    b.color('#2c3034');
+    b.box(s * 4.9, yR + 0.36, -24.0, 0.08, 0.72, 0.08, 0, 1);
+    b.cyl([s * 4.9, yR + 0.84, -24.2], [s * 4.9, yR + 0.84, -23.75], 0.17, 0.19, 10, 3);
+  }
+  // house top behind the bridge: AC condensers with fan discs, mushroom vents, generator exhaust
+  for (const s of [1, -1]) {
+    b.color('#cfcabe');
+    b.box(s * 3.6, top + 0.4, -32.0, 1.4, 0.8, 0.9, 0, 1);
+    b.color('#2c3034');
+    b.vcyl(s * 3.6, top + 0.8, -32.0, 0.32, 0.03, 12, 2);
+    b.color('#d8d2c5');
+    b.vcyl(s * 2.3, top, -33.0, 0.13, 0.65, 6, 0);
+    b.vcyl(s * 2.3, top + 0.65, -33.0, 0.3, 0.12, 10, 3);
+  }
+  b.color('#3b3d40');
+  b.vcyl(4.7, top, -30.85, 0.1, 2.3, 6, 2);
+  // funnel: exhaust pipes (main engine x2, boiler) with sooty tops, a ladder up the aft face
+  const fz = -31.6;
+  const fzTop = fz - 5.6 * 0.12;
+  for (const [x, dz, r] of [
+    [-0.42, 0.3, 0.3],
+    [0.42, 0.3, 0.3],
+    [0, -0.6, 0.2],
+  ]) {
+    b.color('#4a4d50');
+    b.cyl([x, top + 5.0, fzTop + dz], [x, top + 6.25, fzTop + dz], r, r, 12, 0);
+    b.color('#141517');
+    b.cyl([x, top + 6.25, fzTop + dz], [x, top + 6.5, fzTop + dz], r, r * 0.97, 12, 2);
+  }
+  const zAft = (y: number) => fz - 0.12 * (y - top) - 1.75 - 0.09;
+  b.color('#3b3d40');
+  for (const s of [1, -1]) b.beam([s * 0.22, top + 0.2, zAft(top + 0.2)], [s * 0.22, top + 5.4, zAft(top + 5.4)], 0.04, 0.04);
+  for (let y = top + 0.5; y < top + 5.3; y += 0.3) b.box(0, y, zAft(y), 0.44, 0.03, 0.03, 0, 0);
+  // doors at the main deck (both sides, forward corner) and lifebuoys on the house sides + bridge-front rail
+  for (const s of [1, -1]) {
+    b.color('#8d9093');
+    b.boxMM(s > 0 ? 5.6 : -5.64, SHIP.deckY + 0.1, -24.45, s > 0 ? 5.64 : -5.6, SHIP.deckY + 2.0, -23.75, 1);
+    b.color('#2c3034');
+    b.box(s * 5.655, SHIP.deckY + 1.0, -23.95, 0.03, 0.05, 0.14, 0, 0);
+  }
+  b.color('#f26a1b');
+  const tor = new THREE.TorusGeometry(0.3, 0.065, 5, 12);
+  const mm = new THREE.Matrix4();
+  const q = new THREE.Quaternion();
+  const one = new THREE.Vector3(1, 1, 1);
+  for (const s of [1, -1]) {
+    q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI / 2);
+    b.geo(tor, mm.compose(new THREE.Vector3(s * 5.7, SHIP.deckY + 2.6 + 1.3, -24.3), q, one));
+    q.identity();
+    b.geo(tor, mm.compose(new THREE.Vector3(s * 4.4, top + 0.62, SHIP.superZ1 + 0.26), q, one));
+  }
+  tor.dispose();
+}
+
 export function mobileShipPos(info: ShipInfo, slot: number, row: number): THREE.Vector3 {
   return info.toWorld(SHIP.rows[row], SHIP.hatchY + 2 * CH, SHIP.slots[slot]);
 }

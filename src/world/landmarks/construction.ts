@@ -13,6 +13,7 @@ import { wall } from './facade';
 import { C, person, railing } from './parts';
 import type { Env } from './env';
 import { drawText, signQuad } from './signs';
+import { boxHunt } from '../../core/boxhunt';
 
 export interface CraneTargets {
   /** pick-up / set-down spots (world) with the surface height the load rests on */
@@ -506,6 +507,30 @@ export function genConstruction(env: Env, lot: Lot): CraneTargets {
   });
   signQuad(env.T, render, 8.4, 2.6, SX - e + 0.05, 0.0, -2.0, Math.PI / 2, 0.5);
   signQuad(env.T, render, 8.4, 2.6, 0.0, 0.0, -SZ + e - 0.05, Math.PI, 0.5);
+  if (boxHunt(env.ctx, 'hoardlamp')) {
+    // box hunt (?nohoardlamp): the lit billboards get their lights — three trough floodlights on arms over each
+    // board (lit after dusk) instead of the boards glowing from nowhere
+    const armM = M('#2c3035', PAT.PLAIN, 0.6);
+    const boardLamps = (cx: number, cz: number, ry: number) => {
+      const nx = Math.sin(ry),
+        nz = Math.cos(ry),
+        tx = Math.cos(ry),
+        tz = -Math.sin(ry);
+      for (const t of [-2.8, 0, 2.8]) {
+        const bx = cx + tx * t - nx * 0.04,
+          bz = cz + tz * t - nz * 0.04;
+        const hx = bx + nx * 0.92,
+          hz = bz + nz * 0.92;
+        K.beam(armM, [bx, 2.4, bz], [bx, 2.8, bz], 0.045);
+        K.beam(armM, [bx, 2.76, bz], [hx, 2.96, hz], 0.035);
+        K.box(armM, 0.7, 0.1, 0.17, hx, 2.88, hz, ry);
+        env.L.box(LM('#fff1d6', LMODE.NIGHT, 2.6), 0.62, 0.02, 0.1, hx, 2.865, hz, ry);
+        env.glow(hx, 2.84, hz, { size: 0.55, kind: 'halo', color: '#fff1d6', intensity: 0.45 });
+      }
+    };
+    boardLamps(SX - e + 0.05, -2.0, Math.PI / 2);
+    boardLamps(0.0, -SZ + e - 0.05, Math.PI);
+  }
   const safety = env.atlas.add(256, 112, (g, w, h) => {
     g.fillStyle = '#1f5fae';
     g.fillRect(0, 0, w, h);
