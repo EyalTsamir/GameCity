@@ -390,7 +390,8 @@ export function buildMarkings(ctx: CityContext, atlasGlyphs: Record<string, Glyp
   // ── street works (?nocoverkit): a manhole is a casting set in a repair, not a sticker. Raised frame with a bevelled
   // foot, a ragged collar of tar where the reinstatement was sealed, sometimes the square of the old excavation
   const coverKit = streetDetail(ctx, 'coverkit') && !legacy;
-  const TAR = C('#1b1b1e'),
+  const TAR = C('#28282b'),
+    SEAM = C('#343437'),
     FRAME = C('#6b675f');
   const ring = (c: P2, r0: (a: number) => number, r1: (a: number) => number, y0: number, y1: number, n: number, nup: number) => {
     const g = solid;
@@ -417,20 +418,26 @@ export function buildMarkings(ctx: CityContext, atlasGlyphs: Record<string, Glyp
       h1 = rng.next() * 6.28;
     const rag = (a: number) => R * (1.26 + 0.18 * Math.sin(a * 3 + h1) * Math.sin(a * 5 + h0 * 9) + 0.16 * h0);
     setPaint(TAR, 0.12, -1);
-    ring(c, (a) => R * 1.06 + 0 * a, rag, y - 0.0015, y - 0.0015, 14, 1);
+    ring(c, (a) => R * 1.06 + 0 * a, rag, y - 0.0015, y - 0.0015, 22, 1);
     setPaint(FRAME, 0.05, -1);
-    ring(c, () => R * 1.09, () => R * 1.01, y - 0.001, y + 0.006, 14, 0.5);
-    ring(c, () => R * 1.01, () => R * 0.94, y + 0.006, y + 0.006, 14, 1);
+    ring(c, () => R * 1.09, () => R * 1.01, y - 0.001, y + 0.006, 20, 0.5);
+    ring(c, () => R * 1.01, () => R * 0.94, y + 0.006, y + 0.006, 20, 1);
     if (h0 < 0.5) {
       // the square of the old excavation, sealed
       const r = RIGHT(u);
       const s = 0.72 + 0.28 * rng.next();
       const P = (a: number, b: number): P2 => ({ x: c.x + u.x * a * s + r.x * b * s, z: c.z + u.z * a * s + r.z * b * s });
-      setPaint(TAR, 0.06, -1);
-      line(P(1, 1), P(1, -1), 0.06, y - 0.002);
-      line(P(1, -1), P(-1, -1), 0.06, y - 0.002);
-      line(P(-1, -1), P(-1, 1), 0.06, y - 0.002);
-      line(P(-1, 1), P(1, 1), 0.06, y - 0.002);
+      // (a saw cut with sealant that has worn away in stretches, not a drawn outline)
+      setPaint(SEAM, 0.03, -1);
+      for (const [p0, p1] of [[P(1, 1), P(1, -1)], [P(1, -1), P(-1, -1)], [P(-1, -1), P(-1, 1)], [P(-1, 1), P(1, 1)]]) {
+        const n = 5;
+        for (let i = 0; i < n; i++) {
+          if (rng.chance(0.35)) continue;
+          const t0 = i / n,
+            t1 = (i + 1) / n;
+          line({ x: p0.x + (p1.x - p0.x) * t0, z: p0.z + (p1.z - p0.z) * t0 }, { x: p0.x + (p1.x - p0.x) * t1, z: p0.z + (p1.z - p0.z) * t1 }, 0.022, y - 0.002);
+        }
+      }
     }
   };
 
@@ -440,7 +447,7 @@ export function buildMarkings(ctx: CityContext, atlasGlyphs: Record<string, Glyp
       z = z0,
       a = a0,
       left = len;
-    const w = rng.range(0.035, 0.06);
+    const w = rng.range(0.022, 0.04);
     const curl = rng.range(0.25, 0.7);
     setPaint(TAR, w, -1);
     while (left > 0) {
@@ -464,7 +471,7 @@ export function buildMarkings(ctx: CityContext, atlasGlyphs: Record<string, Glyp
     curBase = ASPH;
     if (coverKit) {
       const inBox = (x: number, z: number) => Math.min(Math.abs(x - I.x), Math.abs(z - I.z)) < ROAD_HALF - 0.25 && Math.max(Math.abs(x - I.x), Math.abs(z - I.z)) < 12;
-      for (let k = rng.int(4, 8); k > 0; k--) snake(I.x + rng.range(-3, 3), I.z + rng.range(-3, 3), rng.range(0, 6.28), rng.range(2, 7), inBox);
+      for (let k = rng.int(2, 5); k > 0; k--) snake(I.x + rng.range(-3, 3), I.z + rng.range(-3, 3), rng.range(0, 6.28), rng.range(2, 7), inBox);
     }
     for (const cw of I.crosswalks) {
       const v = DIR_VEC[cw.arm];

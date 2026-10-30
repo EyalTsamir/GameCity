@@ -414,14 +414,24 @@ export function placeStreetKit(e: StreetKitEnv): { x: number; z: number }[] & { 
       const alongX = Math.abs(sh.nz) > 0.5;
       const c = alongX ? nearest(sh.az + sh.nz * 8, ZS) : nearest(sh.ax + sh.nx * 8, XS);
       const band = c - (alongX ? sh.nz : sh.nx) * FURN_OFFSET;
-      const off = srng.range(-0.8, 0.8);
-      const x = alongX ? sh.doorX + off : band,
-        z = alongX ? band : sh.doorZ + off;
-      const jd = alongX ? Math.abs(x - nearest(x, XS)) : Math.abs(z - nearest(z, ZS));
-      if (jd < 9.5 || srng.next() > 0.85) continue;
+      // (a door often has a tree, lamp or bench straight across the pavement: slide along until the band is clear)
       const ax = alongX ? 1 : 0,
         az = alongX ? 0 : 1;
-      if (![-0.7, 0, 0.7].every((o) => free(x + ax * o, z + az * o, 0.3))) continue;
+      if (srng.next() > 0.85) continue;
+      let x = 0,
+        z = 0,
+        found = false;
+      const off0 = srng.range(-0.8, 0.8);
+      for (const o of [0, 1.5, -1.5, 3, -3, 4.5, -4.5]) {
+        x = alongX ? sh.doorX + off0 + o : band;
+        z = alongX ? band : sh.doorZ + off0 + o;
+        const jd = alongX ? Math.abs(x - nearest(x, XS)) : Math.abs(z - nearest(z, ZS));
+        if (jd >= 9.5 && [-0.7, 0, 0.7].every((t) => free(x + ax * t, z + az * t, 0.3))) {
+          found = true;
+          break;
+        }
+      }
+      if (!found) continue;
       const fy = Math.atan2(-sh.nx, -sh.nz);
       const y = SIDEWALK_Y + 0.004;
       const [k, kd] = at(x, y, z, fy);
