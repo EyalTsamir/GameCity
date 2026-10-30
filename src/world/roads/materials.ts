@@ -6,6 +6,7 @@
 // Joint patterns are box-filtered analytically with fwidth so they fade out cleanly with distance.
 
 import * as THREE from 'three';
+import { streetDetail } from '../../core/streetdetail';
 import type { CityContext } from '../../core/context';
 import { XS, ZS } from '../../core/constants';
 import { LAMP_GLSL, lampUniforms } from '../../core/lampLight';
@@ -449,6 +450,7 @@ export function createMaterials(ctx: CityContext, info: SurfaceInfo, atlas: THRE
       ...puddles,
       tRC: { value: cracks },
       uAsph: { value: asphaltColor },
+      uJuncWear: { value: streetDetail(ctx, 'junctionwear') ? 1 : 0 },
       uCourt: { value: court },
       uCourtA: { value: lin('#3d78ae') },
       uCourtB: { value: lin('#4b8c5e') },

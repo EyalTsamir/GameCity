@@ -13,6 +13,8 @@ import type { CityContext } from '../../core/context';
 import type { Dir, P2 } from '../../core/geom';
 import type { DistrictKind } from '../../core/plan';
 import { CORRIDOR_HALF, ROAD_HALF, SIDEWALK_Y } from '../../core/constants';
+import { hash01 } from '../../core/rng';
+import { streetDetail } from '../../core/streetdetail';
 import type { MeshBuilder } from './builder';
 import { HM, surf } from './surfaces';
 
@@ -204,16 +206,18 @@ type TactileFn = (x: number, z: number) => number;
  * paving rows at the given offsets. Paving rows next to crosswalks carry (distance from curb, along-arm
  * coordinate) in aS.zw for the tactile paving.
  */
-function extrudeCurb(H: MeshBuilder, pts: CurbPt[], rows: number[], height: HeightFn, style: number, tactile: TactileFn | null): void {
+function extrudeCurb(H: MeshBuilder, pts: CurbPt[], rows: number[], height: HeightFn, style: number, tactile: TactileFn | null, stoneSeed = 0): void {
   const n = pts.length;
   if (n < 2) return;
+  // (kerb stones on: the continuous kerb stays as a dark backing just behind the stones, so a joint never opens a hole)
+  const back = stoneSeed ? 0.014 : 0;
   // vertex columns per part, filled per sample
   const cols: number[][] = [];
   for (const p of pts) {
     const col: number[] = [];
     const h0 = height(p.x, p.z, 0, p.nx, p.nz);
     const yTop0 = h0.y;
-    const yFace = Math.max(Y.gutter, yTop0 - CHAMFER);
+    const yFace = Math.max(Y.gutter, yTop0 - CHAMFER - back);
     // gutter (d = distance from the kerb face: channel grime line, silt)
     surf(H, HM.gutter, 0, GUTTER, p.u);
     col.push(H.v(p.x - p.nx * GUTTER, Y.gutter, p.z - p.nz * GUTTER));
@@ -231,7 +235,7 @@ function extrudeCurb(H: MeshBuilder, pts: CurbPt[], rows: number[], height: Heig
     const hc = height(p.x + p.nx * CHAMFER, p.z + p.nz * CHAMFER, CHAMFER, p.nx, p.nz);
     col.push(H.v(p.x, yFace, p.z, -p.nx * cn, cn, -p.nz * cn));
     surf(H, HM.curb, 0, CHAMFER, p.u);
-    col.push(H.v(p.x + p.nx * CHAMFER, hc.y, p.z + p.nz * CHAMFER, -p.nx * cn, cn, -p.nz * cn));
+    col.push(H.v(p.x + p.nx * CHAMFER, hc.y - back, p.z + p.nz * CHAMFER, -p.nx * cn, cn, -p.nz * cn));
     // curb top
     const pushTop = (d: number, mat: number) => {
       const x = p.x + p.nx * d,
@@ -242,7 +246,7 @@ function extrudeCurb(H: MeshBuilder, pts: CurbPt[], rows: number[], height: Heig
         const a = tactile ? tactile(x, z) : -1;
         surf(H, mat, style, a >= 0 ? d : 9, a >= 0 ? a : 0);
       } else surf(H, mat, 0, mat === HM.curb ? d : 9, p.u);
-      return H.v(x, h.y, z, -h.gx / l, 1 / l, -h.gz / l);
+      return H.v(x, h.y - (mat === HM.curb ? back : 0), z, -h.gx / l, 1 / l, -h.gz / l);
     };
     col.push(pushTop(CHAMFER, HM.curb));
     col.push(pushTop(CURB_TOP, HM.curb));
@@ -267,10 +271,97 @@ function extrudeCurb(H: MeshBuilder, pts: CurbPt[], rows: number[], height: Heig
     const nx = -(pts[i].nx + pts[i + 1].nx) / 2,
       nz = -(pts[i].nz + pts[i + 1].nz) / 2;
     H.quadFacing(a[2], b[2], b[3], a[3], nx, 0, nz);
-    H.quadFacing(a[4], b[4], b[5], a[5], nx, 1, nz);
+    if (!stoneSeed) H.quadFacing(a[4], b[4], b[5], a[5], nx, 1, nz);
   }
   quadsBetween(6, 7);
   for (let r = 0; r < rows.length - 1; r++) quadsBetween(8 + r, 9 + r);
+  if (stoneSeed) kerbStones(H, pts, height, stoneSeed);
+}
+
+/**
+ * The kerb as separate granite units, one per metre of arclength (the shader's joints): each set by hand a few
+ * millimetres proud of its neighbours and tilted its own way, the arris worn to its own width along the stone, and
+ * every twelfth stone with a corner knocked off by a tyre. The inner edge stays pinned to the paving. Dropped kerbs
+ * lay their units flat (the variance fades with the drop). A dead straight line becomes a line somebody laid.
+ */
+function kerbStones(H: MeshBuilder, pts: CurbPt[], height: HeightFn, seed: number): void {
+  const cn = Math.SQRT1_2;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const A = pts[i],
+      B = pts[i + 1];
+    const span = B.u - A.u;
+    if (span < 1e-4) continue;
+    let u = A.u;
+    while (u < B.u - 1e-4) {
+      const k = Math.floor(u + 1e-4);
+      const ue = Math.min(B.u, k + 1);
+      const h = (s: number) => hash01(k, seed, s);
+      const lat0 = 0.002 + 0.012 * h(1) * h(1);
+      const latS = (h(2) - 0.5) * 0.007;
+      const dy0 = (h(3) - 0.5) * 0.012;
+      const dyS = (h(4) - 0.5) * 0.007;
+      const camA = 0.012 + 0.034 * h(5),
+        camB = 0.012 + 0.034 * h(6);
+      const tilt = (h(7) - 0.5) * 0.1;
+      const chipped = h(8) < 0.08;
+      const chipF = h(9) < 0.5 ? 0.13 + 0.1 * h(10) : -(0.13 + 0.1 * h(10));
+      const breaks = [u, ue];
+      if (chipped) {
+        const uc = chipF > 0 ? k + chipF : k + 1 + chipF;
+        if (uc > u + 0.01 && uc < ue - 0.01) breaks.splice(1, 0, uc);
+      }
+      const col = (uu: number) => {
+        const t = (uu - A.u) / span;
+        let nx = A.nx + (B.nx - A.nx) * t,
+          nz = A.nz + (B.nz - A.nz) * t;
+        const nl = Math.hypot(nx, nz) || 1;
+        nx /= nl;
+        nz /= nl;
+        const x = A.x + (B.x - A.x) * t,
+          z = A.z + (B.z - A.z) * t;
+        const f = uu - k - 0.5;
+        const chip = !chipped ? 0 : chipF > 0 ? Math.max(0, 1 - (uu - k) / chipF) : Math.max(0, 1 - (k + 1 - uu) / -chipF);
+        const h0 = height(x, z, 0, nx, nz);
+        const firm = Math.max(0, Math.min(1, (h0.y - Y.gutter - 0.03) / 0.09));
+        const lat = (lat0 + latS * f) * firm + 0.0015;
+        const cham = (camA + (camB - camA) * (f + 0.5)) * (0.45 + 0.55 * firm) + 0.05 * chip * firm;
+        const yT = h0.y + (dy0 + dyS * f) * firm;
+        const yF = Math.max(Y.gutter + 0.001, yT - cham - 0.03 * chip * firm);
+        const hc = height(x + nx * cham, z + nz * cham, cham, nx, nz);
+        const yC = hc.y + (dy0 + dyS * f) * firm * 0.8;
+        const hi = height(x + nx * CURB_TOP, z + nz * CURB_TOP, CURB_TOP, nx, nz);
+        const tx = -nz,
+          tz = nx;
+        const fnx = -nx + tx * tilt,
+          fnz = -nz + tz * tilt;
+        const topS = (hi.y - yC) / Math.max(0.05, CURB_TOP - cham);
+        const tl = Math.hypot(topS, 1);
+        surf(H, HM.curbFace, 0, -(yF - Y.gutter) - CHAMFER, uu);
+        const foot = H.v(x - nx * lat, Y.gutter - 0.004, z - nz * lat, fnx, 0, fnz);
+        surf(H, HM.curbFace, 0, -CHAMFER, uu);
+        const face = H.v(x - nx * lat, yF, z - nz * lat, fnx, 0, fnz);
+        surf(H, HM.curb, 0, -CHAMFER, uu);
+        const c0 = H.v(x - nx * lat, yF, z - nz * lat, -nx * cn, cn, -nz * cn);
+        surf(H, HM.curb, 0, CHAMFER, uu);
+        const c1 = H.v(x + nx * cham, yC, z + nz * cham, -nx * cn, cn, -nz * cn);
+        const t0 = H.v(x + nx * cham, yC, z + nz * cham, (-nx * topS) / tl, 1 / tl, (-nz * topS) / tl);
+        surf(H, HM.curb, 0, CURB_TOP, uu);
+        const t1 = H.v(x + nx * CURB_TOP, hi.y, z + nz * CURB_TOP, (-nx * topS) / tl, 1 / tl, (-nz * topS) / tl);
+        return { foot, face, c0, c1, t0, t1, nx, nz };
+      };
+      let a = col(breaks[0]);
+      for (let b = 1; b < breaks.length; b++) {
+        const c = col(breaks[b]);
+        const nx = -(a.nx + c.nx) / 2,
+          nz = -(a.nz + c.nz) / 2;
+        H.quadFacing(a.foot, c.foot, c.face, a.face, nx, 0, nz);
+        H.quadFacing(a.c0, c.c0, c.c1, a.c1, nx, 1, nz);
+        H.quadFacing(a.t0, c.t0, c.t1, a.t1, 0, 1, 0);
+        a = c;
+      }
+      u = ue;
+    }
+  }
 }
 
 export function buildStreets(ctx: CityContext, A: MeshBuilder, H: MeshBuilder): StreetStats {
@@ -278,6 +369,7 @@ export function buildStreets(ctx: CityContext, A: MeshBuilder, H: MeshBuilder): 
   const net = ctx.roads;
   const stats: StreetStats = { junctions: 0, segments: 0, rampEnds: 0, driveKerbs: 0 };
   const B = CORRIDOR_HALF;
+  const stones = streetDetail(ctx, 'kerbstones') && !ctx.debug.params.has('nokerbdetail');
   const promenade = plan.areas.find((a) => a.kind === 'promenade');
   const inRaised = (x: number, z: number) => !!promenade && x > promenade.rect.x0 && x < promenade.rect.x1 && z > promenade.rect.z0 && z < promenade.rect.z1;
   const styleAt = (x: number, z: number) => walkStyle(plan.districtAt(x, z)?.kind);
@@ -340,7 +432,7 @@ export function buildStreets(ctx: CityContext, A: MeshBuilder, H: MeshBuilder): 
       const wpts: CurbPt[] = c.pts.map((p) => ({ x: I.x + p.x, z: I.z + p.z, nx: p.nx, nz: p.nz, u: p.u }));
       const mid = wpts[Math.floor(wpts.length / 2)];
       const style = styleAt(mid.x + mid.nx * 5, mid.z + mid.nz * 5);
-      extrudeCurb(H, wpts, ROWS_JUNCTION, height, style, tactile);
+      extrudeCurb(H, wpts, ROWS_JUNCTION, height, style, tactile, stones ? 1 + I.id * 8 + c.start : 0);
       // flat fill between the last row and the junction box
       const dl = ROWS_JUNCTION[ROWS_JUNCTION.length - 1];
       const fill: P2[] = wpts.map((p) => ({ x: p.x + p.nx * dl, z: p.z + p.nz * dl }));
@@ -453,7 +545,7 @@ export function buildStreets(ctx: CityContext, A: MeshBuilder, H: MeshBuilder): 
         const mx = (a.x + b.x) / 2 + nx * 5,
           mz = (a.z + b.z) / 2 + nz * 5;
         const style = styleAt(mx, mz);
-        extrudeCurb(H, pts, ROWS_SEGMENT, xo.length ? drop : FLAT, style, null);
+        extrudeCurb(H, pts, ROWS_SEGMENT, xo.length ? drop : FLAT, style, null, stones ? 5000 + seg.a * 300 + seg.b * 2 + (sd > 0 ? 1 : 0) : 0);
         // back face towards the block (unless it borders the raised promenade)
         const W = CORRIDOR_HALF - ROAD_HALF;
         if (!inRaised(mx - nx * 1.7, mz - nz * 1.7)) {

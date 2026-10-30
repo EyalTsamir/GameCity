@@ -17,6 +17,8 @@ import { HARD_ATTRS } from './roads/surfaces';
 import { pointInPoly, type P2 } from '../core/geom';
 import { createPuddles } from './roads/puddles';
 import { ROAD_HALF } from '../core/constants';
+import { streetDetail } from '../core/streetdetail';
+import { buildLiftedSlabs } from './roads/paving';
 
 export default function create(ctx: CityContext): CityModule {
   const t0 = performance.now();
@@ -24,6 +26,7 @@ export default function create(ctx: CityContext): CityModule {
   const H = new MeshBuilder(HARD_ATTRS);
   const streets = buildStreets(ctx, A, H);
   const covers = buildCovers(ctx, A, H);
+  const liftedSlabs = streetDetail(ctx, 'liftedslabs') ? buildLiftedSlabs(ctx, H) : 0;
   const atlas = buildAtlas();
   const puddles = createPuddles(ctx);
   const mats = createMaterials(ctx, { radial: covers.info.radial, court: covers.info.court }, atlas.tex, puddles.uniforms);
@@ -67,6 +70,7 @@ export default function create(ctx: CityContext): CityModule {
         segments: streets.segments,
         dropKerbs: streets.rampEnds,
         driveKerbs: streets.driveKerbs,
+        liftedSlabs,
         covers: covers.stats.coverRects,
         paths: covers.stats.pathRibbons,
         zebras: marks.stats.zebras,

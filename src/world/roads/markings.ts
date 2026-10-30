@@ -9,6 +9,7 @@ import type { Dir, P2, Rect } from '../../core/geom';
 import { DIR_VEC } from '../../core/geom';
 import { CORRIDOR_HALF, QUAY_X, ROAD_HALF, STOPLINE } from '../../core/constants';
 import { Rng } from '../../core/rng';
+import { streetDetail } from '../../core/streetdetail';
 import { MeshBuilder } from './builder';
 import { Y } from './streets';
 import type { CoverInfo } from './covers';
@@ -386,10 +387,85 @@ export function buildMarkings(ctx: CityContext, atlasGlyphs: Record<string, Glyp
     line({ x: r.x0, z: r.z1 }, { x: r.x0, z: r.z0 }, w, y);
   };
 
+  // ── street works (?nocoverkit): a manhole is a casting set in a repair, not a sticker. Raised frame with a bevelled
+  // foot, a ragged collar of tar where the reinstatement was sealed, sometimes the square of the old excavation
+  const coverKit = streetDetail(ctx, 'coverkit') && !legacy;
+  const TAR = C('#1b1b1e'),
+    FRAME = C('#6b675f');
+  const ring = (c: P2, r0: (a: number) => number, r1: (a: number) => number, y0: number, y1: number, n: number, nup: number) => {
+    const g = solid;
+    M.set('uv', (g.u0 + g.u1) / 2, (g.v0 + g.v1) / 2);
+    for (let k = 0; k < n; k++) {
+      const a0 = (k / n) * Math.PI * 2,
+        a1 = ((k + 1) / n) * Math.PI * 2;
+      const ca = Math.cos(a0),
+        sa = Math.sin(a0),
+        cb = Math.cos(a1),
+        sb = Math.sin(a1);
+      const out = Math.sqrt(1 - nup * nup);
+      const q0 = M.v(c.x + ca * r0(a0), y0, c.z + sa * r0(a0), ca * out, nup, sa * out),
+        q1 = M.v(c.x + cb * r0(a1), y0, c.z + sb * r0(a1), cb * out, nup, sb * out),
+        q2 = M.v(c.x + cb * r1(a1), y1, c.z + sb * r1(a1), cb * out, nup, sb * out),
+        q3 = M.v(c.x + ca * r1(a0), y1, c.z + sa * r1(a0), ca * out, nup, sa * out);
+      M.quadUp(q0, q1, q2, q3);
+    }
+  };
+  const coverSet = (c: P2, u: P2, y: number) => {
+    if (!coverKit) return;
+    const R = 0.36;
+    const h0 = rng.next(),
+      h1 = rng.next() * 6.28;
+    const rag = (a: number) => R * (1.26 + 0.18 * Math.sin(a * 3 + h1) * Math.sin(a * 5 + h0 * 9) + 0.16 * h0);
+    setPaint(TAR, 0.12, -1);
+    ring(c, (a) => R * 1.06 + 0 * a, rag, y - 0.0015, y - 0.0015, 14, 1);
+    setPaint(FRAME, 0.05, -1);
+    ring(c, () => R * 1.09, () => R * 1.01, y - 0.001, y + 0.006, 14, 0.5);
+    ring(c, () => R * 1.01, () => R * 0.94, y + 0.006, y + 0.006, 14, 1);
+    if (h0 < 0.5) {
+      // the square of the old excavation, sealed
+      const r = RIGHT(u);
+      const s = 0.72 + 0.28 * rng.next();
+      const P = (a: number, b: number): P2 => ({ x: c.x + u.x * a * s + r.x * b * s, z: c.z + u.z * a * s + r.z * b * s });
+      setPaint(TAR, 0.06, -1);
+      line(P(1, 1), P(1, -1), 0.06, y - 0.002);
+      line(P(1, -1), P(-1, -1), 0.06, y - 0.002);
+      line(P(-1, -1), P(-1, 1), 0.06, y - 0.002);
+      line(P(-1, 1), P(1, 1), 0.06, y - 0.002);
+    }
+  };
+
+  /** tar snake: crack sealant poured by hand along a wandering crack, with the odd side branch */
+  const snake = (x0: number, z0: number, a0: number, len: number, inside: (x: number, z: number) => boolean, branch = true) => {
+    let x = x0,
+      z = z0,
+      a = a0,
+      left = len;
+    const w = rng.range(0.035, 0.06);
+    const curl = rng.range(0.25, 0.7);
+    setPaint(TAR, w, -1);
+    while (left > 0) {
+      const st = rng.range(0.25, 0.55);
+      a += rng.range(-curl, curl);
+      const nx = x + Math.cos(a) * st,
+        nz = z + Math.sin(a) * st;
+      if (!inside(nx, nz)) return;
+      // (the piece runs a little past its end so that the bends close)
+      line({ x, z }, { x: nx + Math.cos(a) * w * 0.4, z: nz + Math.sin(a) * w * 0.4 }, w * rng.range(0.85, 1.15), yRoad - 0.001);
+      x = nx;
+      z = nz;
+      left -= st;
+      if (branch && left > 0.8 && rng.chance(0.09)) snake(x, z, a + rng.pick([-1, 1]) * rng.range(0.7, 1.4), left * rng.range(0.3, 0.6), inside, false);
+    }
+  };
+
   // ── junctions: zebras, stop lines, STOP text, lane arrows, centre manhole
   for (const I of net.intersections) {
     if (I.control === 'portal') continue;
     curBase = ASPH;
+    if (coverKit) {
+      const inBox = (x: number, z: number) => Math.min(Math.abs(x - I.x), Math.abs(z - I.z)) < ROAD_HALF - 0.25 && Math.max(Math.abs(x - I.x), Math.abs(z - I.z)) < 12;
+      for (let k = rng.int(4, 8); k > 0; k--) snake(I.x + rng.range(-3, 3), I.z + rng.range(-3, 3), rng.range(0, 6.28), rng.range(2, 7), inBox);
+    }
     for (const cw of I.crosswalks) {
       const v = DIR_VEC[cw.arm];
       const side = RIGHT(v);
@@ -418,6 +494,12 @@ export function buildMarkings(ctx: CityContext, atlasGlyphs: Record<string, Glyp
         setPaint(WHITE, 0.35, 0.35);
         line(P(STOPLINE - 0.175, 0.1), P(STOPLINE - 0.175, ROAD_HALF - 0.32), 0.35);
         stats.stopLines++;
+        // a ghost of the stop line that was here before the junction was remarked
+        if (coverKit && rng.chance(0.35)) {
+          setPaint(C('#a9a69c'), 0.35, 0.95);
+          const g = STOPLINE + rng.range(0.7, 1.5);
+          line(P(g, rng.range(0.1, 0.8)), P(g, ROAD_HALF - rng.range(0.32, 1.4)), 0.3);
+        }
       }
       const lane = net.lanes[lid];
       const segLen = lane.length + STOPLINE * 2;
@@ -439,8 +521,10 @@ export function buildMarkings(ctx: CityContext, atlasGlyphs: Record<string, Glyp
       stats.decals++;
     }
     if (rng.chance(0.6)) {
+      const c = { x: I.x + rng.range(-1.5, 1.5), z: I.z + rng.range(-1.5, 1.5) };
       setPaint(IRON, 1, -1);
-      quad({ x: I.x + rng.range(-1.5, 1.5), z: I.z + rng.range(-1.5, 1.5) }, { x: 0, z: -1 }, 0.72, 0.72, yRoad, atlasGlyphs.manhole);
+      quad(c, { x: 0, z: -1 }, 0.72, 0.72, yRoad, atlasGlyphs.manhole);
+      coverSet(c, { x: 0, z: -1 }, yRoad);
       stats.decals++;
     }
   }
@@ -486,7 +570,48 @@ export function buildMarkings(ctx: CityContext, atlasGlyphs: Record<string, Glyp
       const lat = rng.pick([-1.75, -0.6, 0.6, 1.75]) + rng.range(-0.3, 0.3);
       setPaint(IRON, 1, -1);
       quad(P(s, lat), d, 0.72, 0.72, yRoad, atlasGlyphs.manhole);
+      coverSet(P(s, lat), d, yRoad);
       stats.decals++;
+    }
+    if (coverKit) {
+      const onRoad = (x: number, z: number) => {
+        const sa = (x - Na.x) * d.x + (z - Na.z) * d.z,
+          la = (x - Na.x) * r.x + (z - Na.z) * r.z;
+        return sa > 9 && sa < L - 9 && Math.abs(la) < ROAD_HALF - 0.25;
+      };
+      for (let k = rng.int(1, 4); k > 0; k--) {
+        const c = P(rng.range(10, L - 10), rng.range(-3, 3));
+        // longitudinal cracks follow the road, transverse ones cross it
+        const along = Math.atan2(d.z, d.x) + (rng.chance(0.5) ? 0 : Math.PI);
+        snake(c.x, c.z, rng.chance(0.65) ? along : along + Math.PI / 2, rng.range(2.5, 9), onRoad);
+      }
+      const mixed = rng.pick([1, -1]);
+      // valve boxes and stop taps near the kerb: small round castings, each with its own tar ring
+      for (let k = rng.int(1, 3); k > 0; k--) {
+        const c = P(rng.range(11, L - 11), mixed * rng.range(2.65, 3.1));
+        setPaint(IRON, 1, -1);
+        quad(c, d, 0.24, 0.24, yRoad, atlasGlyphs.manhole);
+        setPaint(TAR, 0.05, -1);
+        const rr = rng.range(0.15, 0.2);
+        ring(c, () => 0.12, () => rr, yRoad - 0.0015, yRoad - 0.0015, 8, 1);
+      }
+      // footway boxes: a double telecom chamber near the wall, single gas / water lids in the walking band
+      if (rng.chance(0.55)) {
+        const sd = rng.chance(0.5) ? 1 : -1;
+        const s = rng.range(13, L - 13),
+          lat = rng.range(4.9, 5.9);
+        setPaint(IRON, 1, -1, C('#c9c6c0'));
+        quad(P(s - 0.34, sd * lat), d, 0.62, 0.66, Y.walk + 0.003, atlasGlyphs.lid);
+        quad(P(s + 0.34, sd * lat), d, 0.62, 0.66, Y.walk + 0.003, atlasGlyphs.lid);
+        stats.decals += 2;
+      }
+      for (let k = rng.int(1, 3); k > 0; k--) {
+        const sd = rng.chance(0.5) ? 1 : -1;
+        setPaint(IRON, 1, -1, C('#c9c6c0'));
+        const sz = rng.range(0.16, 0.26);
+        quad(P(rng.range(10, L - 10), sd * rng.range(4.0, 6.2)), d, sz, sz, Y.walk + 0.003, atlasGlyphs.lid);
+        stats.decals++;
+      }
     }
     // gully grates mid-block
     for (const sd of [1, -1]) {

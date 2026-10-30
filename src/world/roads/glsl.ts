@@ -87,6 +87,7 @@ float rdCrackNet(vec2 p, float cell, float w, float fw) {
 
 export const ASPHALT2 = /* glsl */ `
 uniform vec3 uAsph;
+uniform float uJuncWear;
 uniform vec4 uCourt;
 uniform vec3 uCourtA;
 uniform vec3 uCourtB;
@@ -107,9 +108,11 @@ vec3 rdAsphalt(inout float rough) {
   float seam = 0.0;
   float lat = 9.0, dj = 99.0, onRoad = 0.0, t = 0.0, al = 0.0;
   vec2 sg = vec2(0.0);
+  vec2 lj = vec2(99.0);
   if (vA.x > 0.5) {
     float lx = mod(p.x - (${XS0}) + ${PH}, ${P}) - ${PH};
     float lz = mod(p.y - (${ZS0}) + ${PH}, ${P}) - ${PH};
+    lj = vec2(lx, lz);
     bool ns = abs(lx) < abs(lz);
     lat = ns ? lx : lz;
     dj = abs(ns ? lz : lx);
@@ -190,6 +193,23 @@ vec3 rdAsphalt(inout float rough) {
     }
     c *= 1.0 - 0.5 * seam;
     rough -= 0.2 * seam;
+    // junction box (?nojunctionwear): where the wheels turn. Rubber arcs round the kerb returns (right turners hug
+    // them, left turners swing wide), the straight wheel paths crossing, a dark oily middle, a sealed crack map
+    if (dj < ${JBOX} && uJuncWear > 0.5) {
+      vec2 aj = abs(lj);
+      float rr = length(aj - 6.0);
+      float arcs = (1.0 - smoothstep(0.08, 0.36, abs(rr - 3.45))) + 0.85 * (1.0 - smoothstep(0.08, 0.36, abs(rr - 5.05)))
+                 + 0.6 * (1.0 - smoothstep(0.1, 0.42, abs(rr - 7.05))) + 0.5 * (1.0 - smoothstep(0.1, 0.42, abs(rr - 8.65)));
+      arcs *= step(aj.x, 6.0) * step(aj.y, 6.0) * smoothstep(0.34, 0.62, nM.g * 0.55 + nS.r * 0.45);
+      c *= 1.0 - 0.2 * arcs;
+      rough -= 0.2 * arcs;
+      float thru = 1.0 - smoothstep(0.12, 0.42, min(min(abs(aj.x - 0.95), abs(aj.x - 2.55)), min(abs(aj.y - 0.95), abs(aj.y - 2.55))));
+      c *= 1.0 + 0.05 * thru * (0.5 + nM.b);
+      c *= 1.0 - 0.2 * (1.0 - smoothstep(1.0, 6.0, length(lj))) * (0.45 + 0.8 * nM.a);
+      float net = rdCrackNet(p + 7.3, 3.4, 0.05, fw) * smoothstep(0.46, 0.6, nL.a * 0.6 + nM.r * 0.4);
+      c = mix(c, vec3(0.03, 0.03, 0.032), net * 0.8);
+      rough -= 0.4 * net;
+    }
     // overbanding: wide black sealant strips over old joints / crack repairs, meandering across the lanes
     {
       float ob = 0.0;
@@ -289,8 +309,11 @@ vec3 rdAsphalt(inout float rough) {
     float rut = (1.0 - smoothstep(0.1, 0.35, min(abs(alat - 0.95), abs(alat - 2.55)))) * wet * 0.1;
     float thr = mix(0.9, 0.67, wet);
     float lw = low + rut;
+    // (a water edge follows the grain of the surface: fine break-up instead of a smooth lens)
+    if (lw > thr - 0.08) lw += 0.07 * (texture2D(tRN, p * 1.9).g - 0.5) + 0.05 * (nS.b - 0.5);
     float flw = fwidth(lw) + 1e-4;
-    float lmask = mix(0.5, 1.0, step(0.5, vA.x)) * step(vA.y, 1.5);
+    // (standing water away from the gutter only after rain: on a dry road a lens of sky has no reason to be there)
+    float lmask = mix(0.5, 1.0, step(0.5, vA.x)) * step(vA.y, 1.5) * smoothstep(0.02, 0.2, wet);
     pud = max(pud, smoothstep(thr - flw, thr + flw, lw) * lmask);
     prim = max(prim, smoothstep(thr - 0.035, thr, lw) * lmask);
     float rimW = clamp(prim - pud, 0.0, 1.0);
@@ -584,8 +607,9 @@ vec3 rdHard(inout float rough) {
       c *= 1.0 - 0.12 * (1.0 - smoothstep(0.0, 0.9, dE)) * (0.6 + 0.4 * nM.g);
     }
     // drink / food stains: irregular blots + dried rings, more where people sit and wait
-    float stn = smoothstep(0.7, 0.74, nS.r * 0.55 + nM.a * 0.45) * (1.0 - onSide * 0.5);
-    c = mix(c, c * vec3(0.78, 0.74, 0.7), stn * 0.6);
+    // (soft edge, broken by the grain: a hard 4 % threshold drew 2 m tan lenses with an outline across the slabs)
+    float stn = smoothstep(0.66, 0.84, nS.r * 0.55 + nM.a * 0.3 + nS.g * 0.15) * (1.0 - onSide * 0.5);
+    c = mix(c, c * vec3(0.8, 0.77, 0.74), stn * 0.5);
     {
       vec2 sc = floor(p / 1.7);
       float hs = rdHash(sc + 41.3);
