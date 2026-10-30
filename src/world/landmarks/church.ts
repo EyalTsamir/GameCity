@@ -584,6 +584,9 @@ function churchInterior(env: Env, d: { NW: number; nz0: number; nz1: number; eav
       D.cyl(linen, 0.02, 0.02, 0.14, x, 5.27, z, 5);
       env.L.sphere(LM('#ffd38a', LMODE.ALWAYS, 2.2, k * 0.37), 0.022, x, 5.45, z, 5, 4);
     }
+    // night: the candle ring's glow and the warm pool it throws on the aisle and pews
+    env.glow(0, 5.42, cz, { size: 1.7, kind: 'halo', color: '#ffd08a', intensity: 0.32 });
+    env.glow(0, 0.12, cz, { size: 4.6, kind: 'pool', color: '#ffc27a', intensity: 0.2 });
   }
   // roof inside: a planked ceiling under the slates, tie beams, principal rafters and king posts at the bays
   const yE = eave - 0.25,

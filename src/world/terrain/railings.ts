@@ -62,6 +62,16 @@ function promenadeLamp(b: GeoBuilder, glass: GeoBuilder, px: number, y0: number,
   return y0 + 4.18;
 }
 
+/** box hunt (?noriverrail): the river railing as cast iron — posts on a moulded base with a ball finial, a round
+ *  handrail, spear-headed dog bars between the lower rails; off = square posts, flat rails, paired balusters */
+let RAILKIT = true;
+export function setRiverRailDetail(on: boolean): void {
+  RAILKIT = on;
+}
+const _rm = new THREE.Matrix4();
+const _rq = new THREE.Quaternion();
+const _ry = new THREE.Vector3(0, 1, 0);
+
 export function createRailings(
   ladders: LadderSpot[],
   gaps: { x: number; half: number }[],
@@ -71,6 +81,9 @@ export function createRailings(
 ): RailingResult {
   const b = new GeoBuilder();
   const zR = RIVER.z0 - RIVER_WALL_T / 2; // centre of the north wall coping
+  // shared pieces of the railing kit (ball finial, spear head = a 4-sided pyramid with a collar)
+  const ball = new THREE.SphereGeometry(0.05, 8, 5);
+  const spear = new THREE.ConeGeometry(0.026, 0.1, 4).rotateY(Math.PI / 4);
   const y0 = 0.15 + 0.2; // coping top
   const holes: [number, number][] = [];
   for (const g of gaps) holes.push([g.x - g.half, g.x + g.half]);
@@ -93,11 +106,19 @@ export function createRailings(
     const step = L / n;
     for (let i = 0; i <= n; i++) {
       const px = r0 + i * step;
-      // post with a small cap
+      // post with a small cap (kit: a moulded base block, collar under the handrail, ball finial)
       b.color(IRON);
       b.box(px, y0 + 0.55, zR, 0.045, 0.55, 0.045, 0, 4);
-      b.color(IRON_HI);
-      b.box(px, y0 + 1.13, zR, 0.07, 0.035, 0.07, 0, 4);
+      if (RAILKIT) {
+        b.box(px, y0 + 0.07, zR, 0.07, 0.07, 0.07, 0, 4);
+        b.box(px, y0 + 0.16, zR, 0.058, 0.02, 0.058, 0, 4);
+        b.color(IRON_HI);
+        b.box(px, y0 + 1.135, zR, 0.055, 0.025, 0.055, 0, 4);
+        b.geometry(ball, _rm.makeTranslation(px, y0 + 1.22, zR));
+      } else {
+        b.color(IRON_HI);
+        b.box(px, y0 + 1.13, zR, 0.07, 0.035, 0.07, 0, 4);
+      }
       // ornamental lamp post every ~22 m
       if (px >= nextLamp && i > 0 && i < n) {
         nextLamp = px + 22;
@@ -117,10 +138,28 @@ export function createRailings(
     }
     // rails
     b.color(IRON_HI);
-    b.beam(r0, y0 + 1.06, zR, r1, y0 + 1.06, zR, 0.07, 0.06);
+    if (RAILKIT) {
+      // round handrail on a flat bar
+      const hr = new THREE.CylinderGeometry(0.034, 0.034, r1 - r0, 8, 1, true);
+      _rq.setFromUnitVectors(_ry, new THREE.Vector3(1, 0, 0));
+      b.geometry(hr, _rm.compose(new THREE.Vector3((r0 + r1) / 2, y0 + 1.085, zR), _rq, new THREE.Vector3(1, 1, 1)));
+      hr.dispose();
+      b.beam(r0, y0 + 1.04, zR, r1, y0 + 1.04, zR, 0.02, 0.03);
+    } else b.beam(r0, y0 + 1.06, zR, r1, y0 + 1.06, zR, 0.07, 0.06);
     b.color(IRON);
     b.beam(r0, y0 + 0.62, zR, r1, y0 + 0.62, zR, 0.04, 0.04);
     b.beam(r0, y0 + 0.2, zR, r1, y0 + 0.2, zR, 0.04, 0.04);
+    if (RAILKIT) {
+      // spear-headed dog bars every ~0.33 m, through both lower rails, heads just under the handrail
+      const nb = Math.max(2, Math.round(step / 0.33));
+      for (let i = 0; i < n; i++)
+        for (let j = 1; j < nb; j++) {
+          const bx = r0 + (i + j / nb) * step;
+          b.box(bx, y0 + 0.5, zR, 0.011, 0.36, 0.011, 0, 12);
+          b.geometry(spear, _rm.makeTranslation(bx, y0 + 0.9, zR));
+        }
+      continue;
+    }
     // light balusters in pairs between posts (rhythm without shimmer)
     for (let i = 0; i < n; i++) {
       const xm = r0 + (i + 0.5) * step;
@@ -151,6 +190,8 @@ export function createRailings(
       b.beam(ox - tx * 0.24, y, oz - tz * 0.24, ox + tx * 0.24, y, oz + tz * 0.24, 0.035, 0.035);
     }
   }
+  ball.dispose();
+  spear.dispose();
   extra?.(b);
   const geo = b.build(true);
   const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.48, metalness: 0.35 });

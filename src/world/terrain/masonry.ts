@@ -15,7 +15,7 @@ import { noiseTexture, GLSL_HASH, vnoise } from './noise';
 import { LAMP_GLSL, lampUniforms } from '../../core/lampLight';
 import { KIND, type LadderSpot } from './kinds';
 import { boxHunt } from '../../core/boxhunt';
-import { createRailings, type RailingResult } from './railings';
+import { createRailings, setRiverRailDetail, type RailingResult } from './railings';
 import { buildCliffs, type CliffResult } from './cliffs';
 import type { GlowPoint } from './glow';
 import { buildPlacesStone, buildPlacesIron } from './places';
@@ -1082,6 +1082,7 @@ export function createMasonry(ctx: CityContext, model: TerrainModel): MasonryRes
   buildPlacesStone(b, ctx, model, lights);
 
   // iron railings / ladders (their lamp globes are emissive masonry); the places' stair landings are railing gaps
+  setRiverRailDetail(boxHunt(ctx, 'riverrail'));
   const railings = createRailings(ladders, plan.places ? [...gaps, ...plan.places.railGaps] : gaps, b, (ib) => buildPlacesIron(ib, ctx), boxHunt(ctx, 'promlamp'));
 
   const geo = b.build(true);

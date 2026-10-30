@@ -239,9 +239,123 @@ function lamp(b: HB, x: number, top: number, z: number, glows: GlowPoint[]): voi
   glows.push({ x, y: top + 0.04, z: z + (z > 62 ? -1.4 : 1.4), size: 3.6, pool: true, color: '#ffbe72', intensity: 0.32 });
 }
 
+/** box hunt (?nopierkiosk): the deck kiosks fitted out — plinth, corner pilasters, a counter with goods, a lit
+ *  back shelf, awning arms + side cheeks + scalloped valance, a lettered name board, roof finial, an A-board */
+let KIOSK = true;
+export function setKioskDetail(on: boolean): void {
+  KIOSK = on;
+}
+
+function kioskKit(b: HB, x: number, z: number, w: number, d: number, col: string, col2: string, top: number, seed: number): void {
+  const h = 2.4;
+  const zf = z - d / 2;
+  const r = (k: number) => {
+    const s = Math.sin(seed * 12.9898 + k * 78.233) * 43758.5453;
+    return s - Math.floor(s);
+  };
+  // plinth band and corner pilasters
+  b.color('#5a4a3c');
+  b.boxMM(x - w / 2 - 0.03, top, zf - 0.03, x + w / 2 + 0.03, top + 0.16, z + d / 2 + 0.03, 1);
+  b.color(col2);
+  for (const sx of [-1, 1])
+    for (const sz of [-1, 1]) b.box(x + sx * (w / 2 - 0.02), top + h / 2, z + sz * (d / 2 - 0.02), 0.1, h, 0.1, 0, 1);
+  // counter board on brackets, goods on it
+  b.color('#8a5a3a');
+  b.boxMM(x - w / 2 + 0.2, top + 0.98, zf - 0.32, x + w / 2 - 0.2, top + 1.03, zf + 0.04, 0);
+  b.color(col2);
+  for (const bx of [x - w / 2 + 0.4, x + w / 2 - 0.4]) b.beam([bx, top + 0.7, zf - 0.01], [bx, top + 0.98, zf - 0.28], 0.04, 0.04);
+  const goods = ['#f2c14e', '#e76f51', '#f4f1de', '#81b29a', '#e9c46a', '#ff8fab'];
+  const ng = Math.max(3, Math.round(w / 0.5));
+  for (let i = 0; i < ng; i++) {
+    const gx = x - w / 2 + 0.4 + ((w - 0.8) * (i + 0.5)) / ng;
+    const kind = Math.floor(r(i) * 3);
+    b.color(goods[Math.floor(r(i + 10) * goods.length)]);
+    if (kind === 0) b.cyl([gx, top + 1.03, zf - 0.14], [gx, top + 1.2, zf - 0.14], 0.06, 0.055, 8, 2);
+    else if (kind === 1) b.box(gx, top + 1.1, zf - 0.14, 0.22, 0.14, 0.16, 0, 1);
+    else {
+      b.cyl([gx, top + 1.03, zf - 0.14], [gx, top + 1.14, zf - 0.14], 0.012, 0.045, 6, 0);
+      b.color('#fbf7ee');
+      b.sphere(gx, top + 1.17, zf - 0.14, 0.045, 6, 4);
+    }
+  }
+  // lit back shelf seen through the hatch: two shelf boards with rows of packs
+  for (const sy of [1.35, 1.7]) {
+    b.color('#c9a77a').emit('#ffcf8a', 0.7, EMIT.LIGHTS);
+    b.boxMM(x - w / 2 + 0.3, top + sy, zf + 0.04, x + w / 2 - 0.3, top + sy + 0.03, zf + 0.07, 1);
+    const np = Math.max(4, Math.round((w - 0.6) / 0.16));
+    for (let i = 0; i < np; i++) {
+      const px = x - w / 2 + 0.3 + ((w - 0.6) * (i + 0.5)) / np;
+      b.color(goods[Math.floor(r(i * 3 + sy * 7) * goods.length)]).emit('#ffcf8a', 0.5, EMIT.LIGHTS);
+      b.box(px, top + sy + 0.03 + 0.09, zf + 0.055, 0.11, 0.18, 0.03, 0, 1 | 8);
+    }
+  }
+  b.noEmit();
+  // awning: arms from the wall to the front bar, side cheeks, scalloped valance along the front
+  const ya = top + 2.15,
+    yb = top + 1.85,
+    zb = zf - 0.75;
+  b.color('#3a3d40');
+  b.cyl([x - w / 2 - 0.1, yb, zb], [x + w / 2 + 0.1, yb, zb], 0.02, 0.02, 6, 3);
+  for (const ax of [x - w / 2 - 0.05, x + w / 2 + 0.05]) b.beam([ax, top + 1.45, zf - 0.01], [ax, yb, zb], 0.025, 0.025);
+  b.color(col);
+  for (const sx of [-1, 1]) {
+    const ax = x + sx * (w / 2 + 0.1);
+    b.quad2([ax, ya, zf], [ax, yb, zb], [ax, yb - 0.18, zb], [ax, ya - 0.1, zf]);
+  }
+  const nA = Math.max(4, Math.round(w / 0.4));
+  for (let i = 0; i < nA; i++) {
+    const xa = x - w / 2 - 0.1 + ((w + 0.2) * i) / nA,
+      xb2 = x - w / 2 - 0.1 + ((w + 0.2) * (i + 1)) / nA;
+    const xm = (xa + xb2) / 2,
+      rr = (xb2 - xa) / 2;
+    b.color(i % 2 === 0 ? col : '#fbf7ee');
+    b.quad2([xa, yb, zb], [xb2, yb, zb], [xb2, yb - 0.1, zb], [xa, yb - 0.1, zb]);
+    for (let k = 0; k < 4; k++) {
+      const a0 = (k / 4) * Math.PI,
+        a1 = ((k + 1) / 4) * Math.PI;
+      const p0: V3 = [xm - Math.cos(a0) * rr, yb - 0.1 - Math.sin(a0) * rr * 0.6, zb],
+        p1: V3 = [xm - Math.cos(a1) * rr, yb - 0.1 - Math.sin(a1) * rr * 0.6, zb];
+      b.triangle([xm, yb - 0.1, zb], p1, p0);
+      b.triangle([xm, yb - 0.1, zb], p0, p1);
+    }
+  }
+  // name board on the fascia above the awning: cream panel, painted lettering, a frame
+  const bw = Math.min(w - 0.3, 2.2);
+  b.color(col2);
+  b.boxMM(x - bw / 2, top + 2.16, zf - 0.04, x + bw / 2, top + 2.38, zf - 0.01, 1);
+  b.color('#2b2b2b');
+  const nl = Math.max(5, Math.round(bw / 0.17));
+  let lx = x - bw / 2 + 0.12;
+  for (let i = 0; i < nl && lx < x + bw / 2 - 0.12; i++) {
+    const lw = 0.05 + r(i + 40) * 0.07;
+    if (r(i + 60) > 0.18) b.boxMM(lx, top + 2.21, zf - 0.046, lx + lw, top + 2.33, zf - 0.04, 1 | 8);
+    lx += lw + 0.035;
+  }
+  // roof finial
+  b.color('#c49a45');
+  b.sphere(x, top + h + 0.95, z, 0.07, 8, 5);
+  // chalk A-board out on the deck
+  const axb = x + w / 2 - 0.2,
+    azb = zf - 0.95;
+  b.color('#6b4a2e');
+  b.quad2([axb - 0.28, top, azb - 0.22], [axb + 0.28, top, azb - 0.22], [axb + 0.28, top + 0.85, azb - 0.02], [axb - 0.28, top + 0.85, azb - 0.02]);
+  b.quad2([axb - 0.28, top, azb + 0.18], [axb + 0.28, top, azb + 0.18], [axb + 0.28, top + 0.85, azb - 0.0], [axb - 0.28, top + 0.85, azb - 0.0]);
+  b.color('#22302a');
+  b.quad([axb - 0.23, top + 0.1, azb - 0.21], [axb - 0.23, top + 0.78, azb - 0.04], [axb + 0.23, top + 0.78, azb - 0.04], [axb + 0.23, top + 0.1, azb - 0.21]);
+  b.color('#e8e4d8');
+  // chalk lines on the board's tilted face (facing the walk)
+  const zc = (y: number) => azb - 0.21 + ((y - top - 0.1) / 0.68) * 0.17 - 0.008;
+  for (let k = 0; k < 4; k++) {
+    const yy = top + 0.65 - k * 0.13;
+    const x1 = axb - 0.18 + 0.12 + r(k + 80) * 0.22;
+    b.quad([axb - 0.18, yy - 0.02, zc(yy - 0.02)], [axb - 0.18, yy + 0.02, zc(yy + 0.02)], [x1, yy + 0.02, zc(yy + 0.02)], [x1, yy - 0.02, zc(yy - 0.02)]);
+  }
+}
+
 function kiosk(b: HB, x: number, z: number, w: number, d: number, col: string, col2: string, rng: Rng, glows: GlowPoint[], top: number): void {
   const h = 2.4;
   b.noEmit();
+  if (KIOSK) kioskKit(b, x, z, w, d, col, col2, top, x * 0.37 + z);
   // vertical candy stripes on the walls
   const nS = Math.max(4, Math.round(w / 0.45));
   for (let i = 0; i < nS; i++) {
