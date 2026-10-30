@@ -6,6 +6,12 @@ Branch `claude/box-hunt-af5a80` (based on `claude/pensive-gates-bim12i` a200754)
 before/after crops kept for the log live in `docs/progress/boxhunt/`.
 
 ## Resume here
+**Round 4 (2026-10-30) IN PROGRESS** — audit `shots/bh4/audit/r4` (10 new eye-level nodes × 12:00 / 18:12 / 21:30 + 10 POI
+fly-overs at golden hour), 3 sonnet judges + own crops. Ranked 10 (mine): container feeder superstructure, flatbed
+lorry rear, ferris-wheel hub, courtyard table, construction billboards lit with no source, hydrant; ≈ box van, stop
+signs, signal heads, kerb planters. Fixes: `?noshipkit`, `?nolorrykit`, `?nowheelhub`, `?nocourttable`,
+`?nohoardlamp`, `?nohydrantkit` (verify `shots/bh4/fix`, `fix2`); pending: perf A/B (`perf6.log`), hitch, log section.
+
 **Round 3 (2026-10-30) DONE** (section "Round 3" at the end; sheet `docs/progress/boxhunt/round3_before_after.jpg`) — audit `shots/bh3/audit` (r3: 4 new eye-level nodes + 2 at night, 10 POI
 fly-overs at 35 m noon + 8 at night; r3n: interiors at night), 2 sonnet judges + own look. Ranked 10 (mine): cranes,
 river railing, pier kiosks, floodlight heads (≈ already 5×3 lamp housings), interiors dark at night, allotment
