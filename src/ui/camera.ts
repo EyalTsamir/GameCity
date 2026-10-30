@@ -257,6 +257,7 @@ export default function create(ctx: CityContext): CityModule {
   let lastClick: { t: number; x: number; y: number; hit: PickHit | null } = { t: 0, x: 0, y: 0, hit: null };
   /** when the film last handed the camera back / when the auto-tour may follow it */
   let filmEndedAt = -1e9;
+  let filmFov = BASE_FOV;
   let filmTourAt = Infinity;
   let hoverCursor = false;
 
@@ -1985,9 +1986,13 @@ export default function create(ctx: CityContext): CityModule {
     armLenVel = 0;
     armShown = Infinity;
     motion.valid = false;
-    fov = camera.fov;
+    // (the film's whole-window lens: the picture only gains what the bars hid. The next frame goes on from here —
+    // applyCamera(0) would snap the lens to the orbit's own)
+    fov = filmFov;
+    camera.fov = fov;
+    camera.updateProjectionMatrix();
+    armPrevD = cur.dist;
     filmEndedAt = performance.now();
-    applyCamera(0);
     checkMode();
   };
 
@@ -1998,8 +2003,9 @@ export default function create(ctx: CityContext): CityModule {
             camera.position.copy(eye);
             camera.up.set(0, 1, 0);
             camera.lookAt(look);
-            fov = lens;
-            camera.fov = lens;
+            filmFov = lens;
+            // only the band between the letterbox bars is rendered
+            camera.fov = (2 * Math.atan((Math.tan((lens * DEG) / 2) * ctx.size.height) / window.innerHeight)) / DEG;
             explore.update(eye, false);
             const d = eye.distanceTo(look);
             camera.near = explore.nearPlane(eye, d);
@@ -2028,7 +2034,7 @@ export default function create(ctx: CityContext): CityModule {
           },
           floorAt: (x, z) => explore.floorAt(x, z),
           lotAt: (x, y, z) => explore.lotAt(x, y, z),
-          aspect: () => (ctx.size.width || 1) / (ctx.size.height || 1),
+          aspect: () => window.innerWidth / Math.max(1, window.innerHeight),
         })
       : null;
 

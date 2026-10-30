@@ -1470,7 +1470,8 @@ try {
           if (!R.on) return;
           if (R.ends < 0 && !f.active()) R.ends = R.p.length;
           cam.getWorldDirection(v);
-          R.p.push([cam.position.x, cam.position.y, cam.position.z, v.x, v.y, v.z]);
+          // (pixels per unit of view tangent: what a lens change between the film and the orbit would show as a zoom)
+          R.p.push([cam.position.x, cam.position.y, cam.position.z, v.x, v.y, v.z, window.__city.ctx.size.height / Math.tan((cam.fov * Math.PI) / 360)]);
           requestAnimationFrame(tick);
         };
         requestAnimationFrame(tick);
@@ -1480,15 +1481,17 @@ try {
         const R = window.__fr;
         R.on = false;
         let maxStep = 0,
-          maxTurn = 0;
+          maxTurn = 0,
+          maxZoom = 0;
         const from = Math.max(1, R.ends - 2);
         for (let i = from; i < Math.min(R.p.length, R.ends + 12); i++) {
           const a = R.p[i - 1],
             b = R.p[i];
           maxStep = Math.max(maxStep, Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]));
           maxTurn = Math.max(maxTurn, Math.hypot(a[3] - b[3], a[4] - b[4], a[5] - b[5]));
+          maxZoom = Math.max(maxZoom, Math.abs(a[6] / b[6] - 1));
         }
-        return { frames: R.p.length, handedAt: R.ends, maxStep, maxTurn };
+        return { frames: R.p.length, handedAt: R.ends, maxStep, maxTurn, maxZoom };
       });
     const handback = async (name, act, limit = 8) => {
       await page.waitForFunction(() => window.__city.ctx.services.camera.film.playing() && window.__city.ctx.services.camera.film.time() > 3.5, null, { timeout: 120000, polling: 50 });
@@ -1502,7 +1505,7 @@ try {
         return { active: c.film.active(), mode: c.mode(), following: !!c.following(), hold: window.__city.ctx.clock.holdTime };
       });
       // (the film flies ≈ 60 m/s here: a step of a frame or two is motion, a snap is far more)
-      step(`film: ${name} hands the camera back at once, without a snap`, !s.active && s.mode === 'orbit' && !s.hold && m.handedAt >= 0 && m.maxStep < limit && m.maxTurn < 0.06 && !s.following, { ...m, ...s });
+      step(`film: ${name} hands the camera back at once, without a snap`, !s.active && s.mode === 'orbit' && !s.hold && m.handedAt >= 0 && m.maxStep < limit && m.maxTurn < 0.06 && m.maxZoom < 0.04 && !s.following, { ...m, ...s });
     };
     await handback('a click', async () => {
       await page.mouse.move(cx, cy);

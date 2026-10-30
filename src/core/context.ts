@@ -125,8 +125,10 @@ export interface Services {
     setFocus?(distance: number | null): void;
     /** lens aperture f-number for the depth of field (null: the default) */
     setLens?(n: number | null): void;
-    /** adaptive quality keeps measuring but only changes on release (film shots, photo mode) */
-    holdQuality?(on: boolean): void;
+    /** adaptive quality changes nothing while held (film shots, photo mode); stepDown: the release may step down */
+    holdQuality?(on: boolean, stepDown?: boolean): void;
+    /** the film's curtain has measured a frame: start from the step that should fit its 33 ms */
+    startQuality?(frameMs: number): void;
     /** photo mode's picture settings (null: none) */
     setPhoto?(p: PhotoLook | null): void;
     /** draw one frame at the top quality step now and hand over the canvas before the browser clears it */
@@ -175,6 +177,10 @@ export interface CityContext {
   pickers: Picker[];
   /** Renders one frame. The post-processing module replaces this. */
   render: (realDt: number) => void;
+  /** the film's frame cadence: draw at this rate at most (an even 33 ms instead of 33 / 50 alternation); 0 = free */
+  frameCap?: number;
+  /** render only this many device-independent rows (letterboxed film: the bars cost nothing); 0 = the whole window */
+  cropView?: (rows: number) => void;
   debug: DebugFlags;
   /** independent deterministic RNG stream per label */
   rng(label: string): Rng;

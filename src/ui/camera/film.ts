@@ -42,7 +42,7 @@ export function filmWanted(params: URLSearchParams): boolean {
 
 /** What the director needs from the camera rig (camera.ts). */
 export interface FilmRig {
-  /** apply a pose this frame (lens = vertical fov in degrees, focus in metres) */
+  /** apply a pose this frame (lens = vertical fov of the whole window in degrees, focus in metres) */
   place(eye: THREE.Vector3, look: THREE.Vector3, fov: number, focus: number): void;
   /** the orbit camera takes over from this pose; carry = velocity of the eye (m/s) */
   release(eye: THREE.Vector3, look: THREE.Vector3, carry: THREE.Vector3): void;
@@ -145,13 +145,16 @@ export class FilmDirector {
   readonly total: number;
   private readonly tracks: Track[];
   private phase: Phase = Phase.Idle;
+  /** the window is being given back */
+  leaving = false;
   private t = 0;
   private cur = 0;
   private wait = 0;
   private prepPoses: number[][] = [];
   private prepI = 0;
   private prepFrames = 0;
-  private naturalEnd = false;
+  private readonly prepDt = new Float32Array(64);
+  private prepN = 0;
   private readonly val = new Float64Array(STRIDE);
   private readonly eye = new THREE.Vector3();
   private readonly look = new THREE.Vector3();
@@ -221,13 +224,13 @@ export class FilmDirector {
     return this.phase === Phase.Play ? this.tracks[this.cur].shot.id : '';
   }
 
-  /** letterbox on wide windows only (phones held upright keep the full height) */
+  /** letterbox on wide windows only (phones held upright keep the full height); the bars are not rendered at all */
   layout(): void {
-    const w = this.ctx.size.width,
-      h = this.ctx.size.height;
-    const bar = Math.max(0, (h - w / 2.39) / 2);
-    const on = w / Math.max(1, h) > 1.45 ? bar : 0;
-    this.root.style.setProperty('--film-bar', `${Math.round(on)}px`);
+    const w = window.innerWidth,
+      h = window.innerHeight;
+    const bar = w / Math.max(1, h) > 1.45 ? Math.round(Math.max(0, (h - w / 2.39) / 2)) : 0;
+    this.root.style.setProperty('--film-bar', `${bar}px`);
+    if (this.phase !== Phase.Idle) this.ctx.cropView?.(bar > 0 ? h - 2 * bar : 0);
   }
 
   /** first load: the curtain is already closed; `closing` = a replay, close it over what is on screen first */
@@ -239,7 +242,6 @@ export class FilmDirector {
     } catch {
       /* storage unavailable */
     }
-    this.layout();
     this.speedBefore = ctx.clock.speed > 0 ? ctx.clock.speed : 1;
     ctx.clock.speed = 1;
     ctx.clock.holdTime = true;
@@ -255,7 +257,6 @@ export class FilmDirector {
     this.caption.classList.remove('show');
     this.hint.classList.remove('show');
     this.curtain.classList.remove('th-film-instant');
-    this.naturalEnd = false;
     this.cueTitleOut = this.cueHintIn = this.cueHintOut = this.cueEnd = false;
     this.capShown = -1;
     this.lastLens = -1;
@@ -268,6 +269,7 @@ export class FilmDirector {
       this.curtain.classList.add('th-film-instant');
       this.setCurtain(1);
       this.beginPrep();
+      this.layout();
     }
   }
 
@@ -280,6 +282,7 @@ export class FilmDirector {
     this.prepI = 0;
     this.prepFrames = 0;
     this.prepPoses = [];
+    this.prepN = 0;
     for (const tr of this.tracks) {
       const n = tr.shot.keys.length;
       for (const i of n > 2 ? [0, Math.floor(n / 2), n - 1] : [0, n - 1]) {
@@ -297,10 +300,14 @@ export class FilmDirector {
     const { ctx } = this;
     const seen = this.phase === Phase.Play;
     this.phase = Phase.Idle;
-    this.naturalEnd = natural;
+    // (the camera module's resize leaves the pose alone meanwhile)
+    this.leaving = true;
+    ctx.cropView?.(0);
+    this.leaving = false;
+    ctx.frameCap = 0;
     ctx.clock.holdTime = false;
     ctx.clock.speed = this.speedBefore;
-    this.setHold(false);
+    this.setHold(false, false);
     const fx = ctx.services.postfx;
     fx?.setFocus?.(null);
     fx?.setLens?.(null);
@@ -321,10 +328,10 @@ export class FilmDirector {
     if (natural) this.onFinished?.();
   }
 
-  private setHold(on: boolean): void {
+  private setHold(on: boolean, stepDown = false): void {
     if (this.held === on) return;
     this.held = on;
-    this.ctx.services.postfx?.holdQuality?.(on);
+    this.ctx.services.postfx?.holdQuality?.(on, stepDown);
   }
 
   private setCurtain(a: number): void {
@@ -350,10 +357,25 @@ export class FilmDirector {
     this.t = 0;
     this.cur = 0;
     this.curtain.classList.remove('th-film-instant');
+    this.setCadence();
     // the regional that pulls in during the platform shot (a running train is cleared while nobody can see the line)
     (this.ctx.services.rail as RailService | undefined)?.sim?.bookArrival(TRAIN_STOPS_AT, TRAIN_DIR);
     this.pose();
     this.prevEye.copy(this.eye);
+  }
+
+  /**
+   * What the curtain frames measured: the starting quality step, and the cadence. A machine that cannot hold 60 fps gets
+   * an even 30 (33 / 50 ms alternation reads as stutter in a slow camera move). ?filmfps=30|60 forces it.
+   */
+  private setCadence(): void {
+    const { ctx } = this;
+    const n = this.prepN;
+    const d = this.prepDt.subarray(0, n).sort();
+    const ms = n > 0 ? d[n >> 1] * 1000 : 16;
+    ctx.services.postfx?.startQuality?.(ms);
+    const forced = Number(ctx.debug.params.get('filmfps'));
+    ctx.frameCap = forced > 0 ? (forced >= 60 ? 0 : forced) : ms > 20 ? 30 : 0;
   }
 
   /** hours at film time t: each shot's range, gliding across the dip between two shots */
@@ -416,7 +438,7 @@ export class FilmDirector {
     }
     this.setCurtain(a);
     // quality may only step while the picture is black
-    this.setHold(a < 0.98);
+    this.setHold(a < 0.95, true);
   }
 
   private cues(): void {
@@ -462,12 +484,15 @@ export class FilmDirector {
           const h = this.ctx.clock.hours;
           if (h < 9 || h > 20) this.ctx.clock.setHours(10);
           this.beginPrep();
+          this.layout();
         }
         return;
       case Phase.Prep: {
         this.wait -= dt;
         const p = this.prepPoses[this.prepI];
         if (p) {
+          // (the first frames also upload and settle; the rest measure what the film will cost)
+          if (this.prepI > 1 && this.prepN < this.prepDt.length) this.prepDt[this.prepN++] = dt;
           this.eye.set(p[0], p[1], p[2]);
           this.look.set(p[3], p[4], p[5]);
           this.rig.place(this.eye, this.look, p[6], 300);

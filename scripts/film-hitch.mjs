@@ -33,16 +33,22 @@ try {
     page.evaluate(() => {
       const f = window.__city.ctx.services.camera.film;
       const st = window.__city.stats();
-      return { t: f.time(), shot: f.shot(), playing: f.playing(), active: f.active(), hours: window.__city.ctx.clock.label(), step: st.postfx?.step, gpuMs: st.postfx?.gpuMs, dc: st.drawCalls, tris: st.triangles };
+      return { t: f.time(), shot: f.shot(), playing: f.playing(), active: f.active(), frames: window.__city.frames(), now: performance.now(), hours: window.__city.ctx.clock.label(), step: st.postfx?.step, gpuMs: st.postfx?.gpuMs, dc: st.drawCalls, tris: st.triangles, cap: window.__city.ctx.frameCap ?? 0 };
     });
   let m = await recMark(page);
   let before = await readFrames(page, m);
+  let prevDraw = await film();
   const close = async (name) => {
     const sl = await readFrames(page, m);
     const st = frameStats(sl);
     const info = await film();
+    // (with the 30 fps cadence the recorder still ticks every refresh: the drawn frames are counted here)
+    const drawMs = Math.round(((info.now - prevDraw.now) / Math.max(1, info.frames - prevDraw.frames)) * 10) / 10;
+    prevDraw = info;
     const w = {
       name,
+      drawMs,
+      cap: info.cap,
       ...st,
       newPrograms: sl.programs - before.programs,
       newGeometries: sl.geometries - before.geometries,
@@ -55,7 +61,7 @@ try {
     };
     out.windows.push(w);
     process.stderr.write(
-      `${name.padEnd(12)} mean ${String(w.meanMs).padStart(6)} p99 ${String(w.p99).padStart(6)} max ${String(w.max).padStart(7)} jank ${String(w.jank25).padStart(3)} hitch ${String(w.hitch50).padStart(3)} freeze ${String(w.freeze100).padStart(2)} ` +
+      `${name.padEnd(12)} draw ${String(w.drawMs).padStart(6)} cap ${w.cap} mean ${String(w.meanMs).padStart(6)} p99 ${String(w.p99).padStart(6)} max ${String(w.max).padStart(7)} jank ${String(w.jank25).padStart(3)} hitch ${String(w.hitch50).padStart(3)} freeze ${String(w.freeze100).padStart(2)} ` +
         `lt ${w.longTasks}/${w.longTaskMax}ms gc ${w.gcDrops} alloc ${w.allocMBs}MB/s prog+${w.newPrograms} geo+${w.newGeometries} tex+${w.newTextures} ${w.step ?? ''} gpu ${w.gpuMs ?? '-'} dc ${w.dc}${w.newProgramKeys.length ? ' new: ' + w.newProgramKeys.join(' | ') : ''}\n`,
     );
     m = await recMark(page);

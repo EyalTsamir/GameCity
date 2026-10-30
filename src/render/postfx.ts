@@ -363,8 +363,11 @@ export default function create(ctx: CityContext): CityModule {
     setLens(n) {
       lensN = n !== null && Number.isFinite(n) && n > 0 ? n : lensBase;
     },
-    holdQuality(on) {
-      adaptive.hold(on);
+    holdQuality(on, stepDown) {
+      adaptive.hold(on, stepDown);
+    },
+    startQuality(frameMs) {
+      adaptive.startAt(frameMs);
     },
     setPhoto(p) {
       photo = p;
@@ -571,9 +574,14 @@ export default function create(ctx: CityContext): CityModule {
     const warm = warmNext;
     warmNext = false;
     const keepShafts = shafts ? shafts.active : false;
+    const keepShaftI = shafts ? shafts.strength : 0;
     if (warm) {
       tilt.enabled = true;
-      if (shafts) shafts.active = true;
+      if (shafts) {
+        // (a strength of 0 skips the mask and blur passes: their programs would compile on the first low sun)
+        shafts.active = true;
+        shafts.strength = 0.5;
+      }
     }
 
     // the whole frame's GPU time (shadow map + scene + post), read back asynchronously
@@ -584,7 +592,10 @@ export default function create(ctx: CityContext): CityModule {
     gpuTimer.end();
     if (warm) {
       tilt.enabled = dofWanted && !lensIdle;
-      if (shafts) shafts.active = keepShafts;
+      if (shafts) {
+        shafts.active = keepShafts;
+        shafts.strength = keepShaftI;
+      }
     }
     // what softDepth() hands out during the next frame
     const sd = (composer as unknown as { stableDepthTexture: THREE.Texture | null }).stableDepthTexture;
