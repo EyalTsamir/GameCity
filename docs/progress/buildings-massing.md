@@ -4,6 +4,24 @@ Branch `claude/buildings-massing-f65621` (based on `claude/pensive-gates-bim12i`
 up perf-wins). Goal: ordinary buildings read as architecture, not "a box with a triangle on top" — break the volume.
 Landmarks are not in scope (boxhunt session); plan.ts layout untouched (places session); materials.ts untouched.
 
+## Round 4 — Resume here (short round, after merging claude/pensive-gates-bim12i at fe4486e) — DONE
+- Apartment slab gable ends (ae6980f): a window every ~2.7 m (corner living rooms, kitchens) instead of two small
+  columns (houses.ts, `?noendwalls`, new).
+- Hotel flags (ae6980f, fd3ea83; src/world/life/extras.ts): wall plate + socket, dark bronze staff, gilt finial (the
+  pale thin staff vanished against the facade); over a balcony (buildings' `balconies` anchors, same lot, facing the
+  street, floor at flag height) the staff is clamped to the front of the railing at 40° — it used to run through it.
+- Dusk / night walk (`shots/r4n`, 12 views × 18:30 / 21:30): door lamps, lit stair cores, dock lights, lit shop signs,
+  glass crowns all already there. Fixed: tall masonry towers ended dark — a warm concealed strip under each cornice
+  frieze (9b45fce, towers.ts, `?nocrowns`; skipped on accent schemes, which have their own line). Not mine: head-office
+  windows read pale at dusk (window material).
+- Checks: typecheck clean; `npm run build` OK (3.93 MB with the merged sibling work); captures 0 console errors;
+  ui-test 7/7, 0 errors, invariants {} (`shots/perf/uitest4.txt`); hitch (`shots/perf/hitch4.txt`, old-town street /
+  downtown / hotel × 12:00 / 21:30): mid-run compiles 0, geometry uploads 0, night windows 0 freezes; three single
+  GPU-side frames of 383–733 ms at noon (no main-thread long task, CPU 7–10 ms, next to adaptive grass / leaf steps,
+  other sessions' browsers running) — not A/B-tested this round (round 3's interleaved A/B showed no difference with
+  `?nomassing`); worth one `hitch.mjs` A/B on a quiet machine.
+- Round 4 DONE (fd3ea83 + this log).
+
 ## Round 3 — Resume here (after the usage-limit reset) — DONE
 - Done: sheets `docs/progress/massing/r2_before_after.jpg` (round-2 off vs on), `r2_overall.jpg` (?nomassing vs all on),
   `r2_night.jpg`; fresh `npm run build` OK (3.82 MB); ui-test `--q "noidle&camdebug" --steps freecam,explore,building`
@@ -93,7 +111,7 @@ Landmarks are not in scope (boxhunt session); plan.ts layout untouched (places s
 ## Round 2 — toggles (all on by default; `?nomassing` turns everything off)
 `?noroofplant` · `?noannex` (head office + stair tower) · `?nomonitor` (roof monitor, downpipes, brick plinth) ·
 `?noporch` (harbour master porch, house porch roofs) · `?nocolonnade` · `?nologgias` · `?norooflights` (rooflights,
-ridge ventilator) · `?nopiers` · `?nocrowns` (now also the glass fin crown + glass screen) · `?noshopfront` (round 3). Quality: the roof plant is off on low
+ridge ventilator) · `?nopiers` · `?nocrowns` (now also the glass fin crown + glass screen) · `?noshopfront` (round 3) · `?noendwalls` (round 4). Quality: the roof plant is off on low
 (like the roof kit); the rest is cheap geometry and stays on every tier.
 
 ## Round 1 — Resume here
