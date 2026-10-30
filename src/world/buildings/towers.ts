@@ -611,8 +611,14 @@ export function genTower(g: Gen): void {
       const nx = -tz,
         nz = tx;
       const ang = Math.atan2(-tz, tx);
-      setCol(t, shade(wallC, 0.97));
       const n = Math.max(1, Math.round(L / (sc.cell * 0.5)));
+      // the curtain wall carried on past the roof as a glass screen between the fins (panes never lit), glazed on
+      // both faces so the far side still reads as glass from above
+      const grS = makeGrid(0, L, y, hC - 0.25, 1, { spacing: L / n, cols: n, winW: L / n - 0.08, winH: hC - 0.4, sill: 0.06, margin: 0 });
+      const lookS = look(PROF.NEVER, WIN.CURTAIN);
+      wallSeg(g.shell, a.x - nx * 0.4, a.z - nz * 0.4, b.x - nx * 0.4, b.z - nz * 0.4, y, yT - 0.25, grS, lookS);
+      wallSeg(g.shell, b.x - nx * 0.43, b.z - nz * 0.43, a.x - nx * 0.43, a.z - nz * 0.43, y, yT - 0.25, grS, lookS);
+      setCol(t, shade(wallC, 0.97));
       for (let k = 0; k < n; k++) {
         const u = Math.min(L - 0.1, Math.max(0.1, (L * k) / n));
         t.boxRot(a.x + tx * u - nx * 0.22, a.z + tz * u - nz * 0.22, 0.09, 0.6, y, yT - 0.2, ang, 0b111111 & ~4 & ~8);
