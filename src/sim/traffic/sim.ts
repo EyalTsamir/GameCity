@@ -92,6 +92,8 @@ export class Vehicle {
   route = -1;
   ridx = 0;
   dwell = 0;
+  /** bus doors: 0 shut … 1 folded open (render.ts, a real-time ease) */
+  doorK = 0;
   dwellStop = -1;
   served = -1;
   departBlink = 0;

@@ -1228,6 +1228,7 @@ const FABRIC_NORMAL = /* glsl */ `
 /** Lambert direct light with per-region wrap (skin, hair) and a faint Blinn sheen (hair, shoes). */
 const LAMBERT_PEOPLE = /* glsl */ `
 varying vec3 vViewPosition;
+uniform float uPedFill;
 vec3 pedHairT = vec3(0.0);
 float pedHairSh = 0.0;
 struct LambertMaterial {
@@ -1263,7 +1264,11 @@ void RE_Direct_Lambert( const in IncidentLight directLight, const in vec3 geomet
   }
 }
 void RE_IndirectDiffuse_Lambert( const in vec3 irradiance, const in vec3 geometryPosition, const in vec3 geometryNormal, const in vec3 geometryViewDir, const in vec3 geometryClearcoatNormal, const in LambertMaterial material, inout ReflectedLight reflectedLight ) {
-  reflectedLight.indirectDiffuse += irradiance * BRDF_Lambert( material.diffuseColor );
+  // a person in the shade stands in light bounced off the pavement and the walls: without it figures in a
+  // shadow are black cut-outs on a bright street. More fill, and warm light from below.
+  vec3 upV = normalize( viewMatrix[ 1 ].xyz );
+  float below = 0.5 - 0.5 * dot( geometryNormal, upV );
+  reflectedLight.indirectDiffuse += irradiance * uPedFill * ( 1.0 + below * vec3( 0.9, 0.82, 0.72 ) ) * BRDF_Lambert( material.diffuseColor );
 }
 #define RE_Direct RE_Direct_Lambert
 #define RE_IndirectDiffuse RE_IndirectDiffuse_Lambert
@@ -1309,6 +1314,7 @@ function uniformsFor(): Record<string, THREE.IUniform> {
     uPedHatB: { value: HAT_B.map((a) => new THREE.Vector4(...(a as [number, number, number, number]))) },
     uPedHairline: { value: 1 },
     uPedFolds: { value: 1 },
+    uPedFill: { value: detailPeople('pedfill') ? 1.25 : 1 },
   };
 }
 

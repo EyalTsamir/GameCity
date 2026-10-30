@@ -91,8 +91,10 @@ export const COLORS_2W: Record<TwoWheelType, string[]> = {
 /** Population mix for ordinary traffic (buses, police and the ice-cream van are managed separately). */
 export const MIX: { model: ModelKind; variant: number; w: number }[] = [
   { model: 'compact', variant: 0, w: 17 },
-  { model: 'hatch', variant: 0, w: 21 },
-  { model: 'sedan', variant: SEDAN_PLAIN, w: 19 },
+  { model: 'hatch', variant: 0, w: 17 },
+  { model: 'estate', variant: 0, w: 8 },
+  { model: 'mpv', variant: 0, w: 6 },
+  { model: 'sedan', variant: SEDAN_PLAIN, w: 16 },
   { model: 'sedan', variant: SEDAN_TAXI, w: 8 },
   { model: 'suv', variant: 0, w: 15 },
   { model: 'delivery', variant: 0, w: 7 },

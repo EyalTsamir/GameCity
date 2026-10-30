@@ -2203,6 +2203,8 @@ function bus(): THREE.BufferGeometry {
       b.add(bx(0.03, 0.03, 1.12, x + 0.005, 0.34, z), { color: '#e3bd24', rough: 0.8 });
     }
     b.add(bx(0.06, 0.04, 1.12, -W / 2 + 0.01, 0.32, z), { color: '#7d8287', rough: 0.7, finish: 'chrome' });
+    // behind the leaves: the doorway, a pane of the cabin (dark when the doors are shut, the leaves cover it)
+    b.add(roundPane(1.1, 2.0, 0.02, -W / 2 - 0.002, 1.4, z, 'nx'), glass);
   }
   // front: the windscreen is part of the shell (wrapping the corners); wipers, destination display above it
   const zf = L / 2;

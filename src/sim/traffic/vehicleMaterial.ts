@@ -94,6 +94,19 @@ if ( aWheel.w > 0.5 ) transformed = aWheel.xyz + thWheel( transformed - aWheel.x
 // tyre contact patch: the rubber flattens where it meets the road (after the spin, so it stays at the bottom)
 if ( aDetC > 2.5 && aDetC < 3.5 ) transformed.y = max( transformed.y, aWheel.y - aDetA.x );
 if ( thHidden( aPart, aInst2.x, aInst2.z ) ) transformed = vec3( 0.0 );
+// bus doors (models.ts, kerb side, centred at z 4.35 and 0.25): each leaf folds in half against its jamb, out over the kerb
+if ( aInst2.y > 9.5 && aInst2.y > 10.001 && transformed.x < -1.253 && transformed.y > 0.36 && transformed.y < 2.46 ) {
+  float dz0 = abs( transformed.z - 4.35 ) < 0.62 ? 4.35 : abs( transformed.z - 0.25 ) < 0.62 ? 0.25 : -99.0;
+  if ( dz0 > -90.0 ) {
+    float dOpen = aInst2.y - 10.0;
+    float dz = transformed.z - dz0;
+    float dSide = dz >= 0.0 ? 1.0 : -1.0;
+    float dT = abs( dz ) / 0.58; // 0 at the meeting edge … 1 at the jamb
+    float dF = dOpen * dOpen * ( 3.0 - 2.0 * dOpen );
+    transformed.z = dz0 + dSide * 0.58 * mix( dT, 0.84 + 0.16 * dT, dF );
+    transformed.x -= 0.2 * dF * ( 1.0 - abs( 2.0 * dT - 1.0 ) );
+  }
+}
 vObj = vec4( transformed, aDetC );
 vObjN = vec4( objectNormal, aInst2.z );
 vDetA = aDetA;
@@ -562,7 +575,7 @@ export function createVehicleMaterial(
             : '#include <dithering_fragment>',
         );
     };
-    material.customProgramCacheKey = () => (seatDepth ? 'traffic-vehicle-v13' : 'traffic-vehicle-v13-nd');
+    material.customProgramCacheKey = () => (seatDepth ? 'traffic-vehicle-v14' : 'traffic-vehicle-v14-nd');
     patchLampMaterial(material); // night street-light map (night agent)
     return material;
   };
