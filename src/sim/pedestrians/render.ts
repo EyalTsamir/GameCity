@@ -7,12 +7,13 @@
 // plus prams, dogs and blob contact shadows as before.
 
 import * as THREE from 'three';
+import { detailPeople } from '../../core/detailPeople';
 import { DOG_OFFSET, F, buildBlobGeometry, buildDogGeometry, buildPramGeometry, makeBlobMaterial, makeDogMaterials, makePramMaterials } from './figure';
-import { FB, figureMesh, type Lod } from './body';
+import { BONE, FB, figureMesh, type Lod } from './body';
 import { HAT_STYLES, POSE_KEYS, POSE_UINTS, makeInvisibleMaterial, makePeopleMaterials } from './shader';
 import { computePoseA, poseIn } from './animate';
 import { newGaitState, type GaitState } from './gait';
-import { gripPoint, newPose, type Pose } from './pose';
+import { fkPoint, gripPoint, newPose, type Pose } from './pose';
 import { rigOf, type Rig } from './rig';
 import { styleFromFlags, type Look, type Style } from './looks';
 import type { Crowd, Member } from './crowd';
@@ -259,6 +260,10 @@ const states = new WeakMap<Member, RenderState>();
  */
 /** close level (sculpted face, fingers); 0 turns it off (`?nopeopledetail`) */
 const LOD_CLOSE = 15;
+/** foot contact shadows (?nofootcontact), the close-level budget (?noclosebudget): detail-people.md */
+const FOOT_CONTACT = detailPeople('footcontact');
+const CLOSE_BUDGET = detailPeople('closebudget');
+const FOOT_A = 0.5;
 const LOD_NEAR = 40;
 const LOD_TINY = 110;
 const LOD_PIN = 300;
@@ -301,6 +306,12 @@ export class CrowdRenderer {
   readonly sph = new THREE.Sphere();
   private fPlanes = new Float64Array(24);
   private hand = { x: 0, y: 0, z: 0 };
+  private fpA = { x: 0, y: 0, z: 0 };
+  private fpB = { x: 0, y: 0, z: 0 };
+  /** close-level budget: this many figures (the nearest), however many stand within reach of it (a wedding) */
+  private closeBudget = CLOSE_BUDGET ? 14 : 1e9;
+  private closeK = 1;
+  private closeWanted = 0;
   private cam = new THREE.Vector3();
   private pose: Pose = newPose();
   private sRoot = new Float32Array(4);
@@ -389,7 +400,7 @@ export class CrowdRenderer {
     this.dogHand = makeAttr(dg, 'iHand', new Float32Array(dcap * 4), 4);
 
     const bg = buildBlobGeometry();
-    const bcap = capacity + pcap + dcap;
+    const bcap = capacity + pcap + dcap + (capClose + capNear) * 2;
     this.blob = new THREE.InstancedMesh(bg, makeBlobMaterial(), bcap);
     this.blob.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     this.blobA = makeAttr(bg, 'iBlobA', new Float32Array(bcap), 1);
@@ -462,7 +473,14 @@ export class CrowdRenderer {
     // table settings only where a 5–15 cm object still covers a few pixels
     const tableD = 70 * ls;
     this.tableware.begin();
-    const closeD = this.closeDist * ls;
+    // the budget pulls the close radius in while too many figures stand inside it, slowly so nobody flips
+    // back and forth; 13 k triangles each at 20 ns: a crowd at 15 m is otherwise 5 ms
+    const cw = this.closeWanted;
+    this.closeWanted = 0;
+    const budget = this.closeBudget;
+    if (cw > budget) this.closeK = Math.max(0.35, this.closeK * 0.985);
+    else if (cw < budget * 0.8) this.closeK = Math.min(1, this.closeK * 1.01);
+    const closeD = this.closeDist * ls * this.closeK;
     edges[0] = closeD;
     edges[1] = nearD;
     edges[2] = tinyD;
@@ -523,6 +541,7 @@ export class CrowdRenderer {
         }
         // level with hysteresis around each switch distance
         let lv = d < closeD ? 0 : d < nearD ? 1 : d < tinyD ? 2 : d < pinD ? 3 : 4;
+        if (lv === 0) this.closeWanted++;
         if (st.lod >= 0 && Math.abs(lv - st.lod) === 1) {
           const edge = edges[Math.min(lv, st.lod)];
           if (Math.abs(d - edge) < HYST * Math.max(0.5, Math.min(lv, st.lod))) lv = st.lod;
@@ -620,6 +639,43 @@ export class CrowdRenderer {
           yawMatrix(this.m4);
           this.blob.setMatrixAt(nb, this.m4);
           BA[nb++] = blobAlpha * m.fade;
+        }
+        // each shoe's own contact shadow, close up: the sun shadow's texels are far coarser than a sole, and
+        // without it the feet hover. It fades as the foot lifts.
+        if (FOOT_CONTACT && (layer === this.close || layer === this.near) && m.rideG === null && lying < 0.05 && m.sit < 0.5) {
+          for (let side = 0; side < 2; side++) {
+            const left = side === 0;
+            const bone = left ? BONE.FOOT_L : BONE.FOOT_R;
+            const aX = (left ? 1 : -1) * r.ankle.x;
+            // mid-sole, then the toe: the two give the foot's position and heading
+            const FP0 = this.fpA,
+              FP1 = this.fpB;
+            FP0.x = aX;
+            FP0.y = 0;
+            FP0.z = r.ankle.z + 0.06;
+            FP1.x = aX;
+            FP1.y = 0;
+            FP1.z = r.ankle.z + 0.16;
+            fkPoint(r, pose, bone, FP0);
+            fkPoint(r, pose, bone, FP1);
+            const lift = Math.max(0, FP0.y * r.s);
+            if (lift > 0.11 || nb >= bcap) continue;
+            const a = FOOT_A * (1 - lift / 0.11) * m.fade;
+            // figure frame → world
+            const wx = mx + (fz * FP0.x + fx * FP0.z) * r.s,
+              wz = mz + (-fx * FP0.x + fz * FP0.z) * r.s;
+            MI[0] = wx;
+            MI[1] = m.y + 0.019;
+            MI[2] = wz;
+            MI[3] = m.yaw + Math.atan2(FP1.x - FP0.x, FP1.z - FP0.z);
+            MI[4] = 0.21 * r.stature / 1.76;
+            MI[5] = 1;
+            MI[6] = 0.46 * r.stature / 1.76;
+            yawMatrix(this.m4);
+            this.blob.setMatrixAt(nb, this.m4);
+            BA[nb++] = a;
+          }
+          MI[3] = m.yaw;
         }
         // pram
         // (fabric < 0: hands on a push bar, but what is pushed is someone else's: a trolley, a crate carried)

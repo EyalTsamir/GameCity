@@ -14,6 +14,7 @@
 // used — it is slide-free at constant speed.
 
 import type { Member } from './crowd';
+import { detailPeople } from '../../core/detailPeople';
 import { legIKa, LIK, type LegSolve } from './pose';
 import { stepLength, type Rig } from './rig';
 
@@ -164,6 +165,8 @@ export interface GaitOut {
   run: number;
 }
 
+/** each person's own arm swing (?nowalkstyle) */
+const WALK_STYLE = detailPeople('walkstyle');
 const GAIT_KEYS = ['hipFlexL', 'hipAbdL', 'footYawL', 'kneeL', 'ankleL', 'hipFlexR', 'hipAbdR', 'footYawR', 'kneeR', 'ankleR', 'rootX', 'rootY', 'pelvisYaw', 'pelvisRoll', 'waistBend', 'waistTwist', 'chestTwist', 'headPitch', 'headYawCorr', 'shFlexL', 'shFlexR', 'elbowL', 'elbowR', 'shAbdL', 'shAbdR', 'caneX', 'caneZ', 'run'] as const;
 
 export function newGaitOut(): GaitOut {
@@ -1091,15 +1094,19 @@ export function gaitPose(m: Member, r: Rig, st: GaitState | null, frame: number,
   const A = (((0.17 + 0.12 * Math.min(vRel, 2)) * kidK * (1 - 0.55 * r.old) * (1 - 0.22 * hb)) + (0.5 - ((0.17 + 0.12 * Math.min(vRel, 2)) * kidK * (1 - 0.55 * r.old) * (1 - 0.22 * hb))) * run) * Math.min(Math.max(kWalk * 1.2, 0), 1);
   const fL = -Math.cos(TAU * (uL - 0.05));
   const fR = -fL;
+  // each person's own swing (animate.ts has the posture): how far, how bent, how close to the body
+  const stA = WALK_STYLE ? 0.72 + 0.56 * ((m.seed * 73.3) % 1) : 1;
+  const stE = WALK_STYLE ? ((m.seed * 31.7) % 1) * 0.22 : 0;
+  const stB = WALK_STYLE ? ((m.seed * 19.1) % 1) * 0.05 : 0;
   const bias = (0.05 + (0.12 - 0.05) * run) * gw;
-  o.shFlexL = bias + A * fL;
-  o.shFlexR = bias + A * fR;
-  const eBase = ((0.24 + 0.15 * r.old) + (1.45 - (0.24 + 0.15 * r.old)) * (run * gw));
+  o.shFlexL = bias + A * stA * fL;
+  o.shFlexR = bias + A * stA * fR;
+  const eBase = ((0.24 + stE + 0.15 * r.old) + (1.45 - (0.24 + stE + 0.15 * r.old)) * (run * gw));
   const eSw = ((0.4 * Math.min(Math.max(A / 0.33, 0), 1.2)) + (0.25 - (0.4 * Math.min(Math.max(A / 0.33, 0), 1.2))) * run);
   o.elbowL = eBase + eSw * Math.max(0, fL) * (1 - 0.3 * run) - 0.1 * run * fL;
   o.elbowR = eBase + eSw * Math.max(0, fR) * (1 - 0.3 * run) - 0.1 * run * fR;
   // heavy builds carry the arms a little away from the body
-  o.shAbdL = (0.05 + (0.12 - 0.05) * run) + 0.07 * hb;
+  o.shAbdL = (0.05 + stB + (0.12 - 0.05) * run) + 0.07 * hb;
   o.shAbdR = o.shAbdL;
   // cane (right hand): planted with the left foot's stance, swung forward with its swing
   o.caneX = -(r.hip.x * 2.3 + 0.05);

@@ -4,6 +4,7 @@
 // IK (pose.ts armIK). Writes a Pose (pose.ts).
 
 import type { Member } from './crowd';
+import { detailPeople } from '../../core/detailPeople';
 import { F } from './figure';
 import { gaitIn, gaitPose, newGaitOut, type GaitState, type IdleShift } from './gait';
 import { AIK, armIKa, fkPoint, legIKa, LIK, toChestFrame, type ArmSolve, type LegSolve, type Pose } from './pose';
@@ -75,6 +76,9 @@ function reachFig(r: Rig, o: Pose, a: Arm, left: boolean, px: number, py: number
   reach(r, a, left, px, py, pz, grip);
 }
 
+/** each person's own walk (?nowalkstyle), talking on the way (?nowalktalk) */
+const WALK_STYLE = detailPeople('walkstyle');
+const WALK_TALK = detailPeople('walktalk');
 const IDLE = { RELAXED: 0, POCKETS: 1, CROSSED: 2, HIP: 3, BEHIND: 4, PHONE: 5, CUP: 6, TALK: 7, GUITAR: 8 } as const;
 /** standing with friends: listening poses (talking is decided by the party's conversation turns) */
 const IDLE_W_CHAT = [0.35, 0.25, 0.2, 0.15, 0.05, 0, 0];
@@ -227,6 +231,23 @@ export function computePoseA(m: Member, umbrella: boolean, r: Rig, o: Pose, gs: 
   let chestRoll = -0.5 * pelvisRoll * (1 - gw);
   let headPitch = -0.2 * old + G.headPitch;
   let headYaw = m.headYaw + G.headYawCorr;
+  // a look beyond a glance takes the shoulders along a little (the head stays on its target)
+  if (m.gazeT > 0 && upright > 0.5) {
+    const hy0 = m.headYaw;
+    const tw = (hy0 > 0.45 ? hy0 - 0.45 : hy0 < -0.45 ? hy0 + 0.45 : 0) * 0.4;
+    chestTwist += tw;
+    headYaw -= tw;
+  }
+  headPitch += m.gazePitch;
+  // each person walks in their own way: posture (a slouch, a straight back), where they look, how far the
+  // arms swing (the swing itself: gait.ts)
+  if (WALK_STYLE && m.rideG === null && gw > 0.01) {
+    const s3 = (m.seed * 113.1) % 1,
+      s4 = (m.seed * 57.7) % 1;
+    chestBend += (s3 * s3 * 0.16 - 0.035) * gw * (1 - r.c);
+    waistBend += (s3 - 0.45) * 0.035 * gw;
+    headPitch += (s4 * s4 * 0.2 - 0.04) * gw;
+  }
   const headRoll = -0.25 * chestRoll;
   // working in place (actors.ts): stooped over a low task, or leaning a little over a bench / counter
   const wk = m.rideG === null && m.sit < 0.05 ? m.work : 0;
@@ -617,6 +638,107 @@ export function computePoseA(m: Member, umbrella: boolean, r: Rig, o: Pose, gs: 
       reach(r, armR, false, -1, -1, -0.2, 0.6);
       headPitch = (headPitch + (0.42 - headPitch) * (0.6 + 0.4 * (1 - gw)));
       prop = PROP.PHONE;
+    }
+  }
+  // hands in pockets, or behind the back: not everyone swings their arms (from far away that is what tells people apart)
+  if (WALK_STYLE && gw > 0.01 && RG === null && m.holdK < 0.01 && m.walkProp === 0 && m.carry === 0 && upright > 0.5 && r.c < 0.5 && m.chat === 0) {
+    const s6 = (m.seed * 211.3) % 1;
+    const kk = gw;
+    if (s6 < 0.055 + 0.03 * (1 - r.w)) {
+      // pockets: one hand or both (the rig's belly reach as in the standing variant)
+      const belly = 0.04 * Math.max(0, r.b) * hk;
+      if (handL) {
+        RT[0] = r.hip.x + 0.052 * hk;
+        RT[1] = r.hip.y + 0.015 * hk;
+        RT[2] = 0.065 * hk + belly;
+        RT[3] = kk;
+        reach(r, armL, true, 1, -0.2, -0.6, 0.7);
+      }
+      if (handR && s6 < 0.035) {
+        RT[0] = -(r.hip.x + 0.052 * hk);
+        RT[1] = r.hip.y + 0.015 * hk;
+        RT[2] = 0.065 * hk + belly;
+        RT[3] = kk;
+        reach(r, armR, false, -1, -0.2, -0.6, 0.7);
+      }
+    } else if (r.old > 0.25 && s6 < 0.3 && handL && handR) {
+      RT[0] = 0.035 * hk;
+      RT[1] = r.waist.y - 0.09 * hk;
+      RT[2] = -0.17 * hk;
+      RT[3] = kk;
+      reach(r, armL, true, 1, -0.4, 0.2, 0.5);
+      RT[0] = -0.035 * hk;
+      RT[1] = r.waist.y - 0.07 * hk;
+      RT[2] = -0.175 * hk;
+      RT[3] = kk;
+      reach(r, armR, false, -1, -0.4, 0.2, 0.5);
+    }
+  }
+  // talking on the way: the speaker of the party's turn (as when standing) talks with a hand, the others nod
+  if (WALK_TALK && gw > 0.5 && RG === null && m.party.members.length > 1 && m.holdK < 0.5 && m.walkProp === 0 && upright > 0.9 && r.c < 0.5) {
+    const tg = t - m.seed * 10;
+    const pid = m.party.id;
+    const talkP = Math.sin(pid * 39.3) * 43758.5453;
+    if (talkP - Math.floor(talkP) < 0.65) {
+      const turn = Math.floor((tg + pid * 7.3) / 5.5);
+      const tin = tg + pid * 7.3 - turn * 5.5;
+      const hs = Math.sin(pid * 12.9898 + turn * 78.233) * 43758.5453;
+      const n = m.party.members.length;
+      if (Math.floor((hs - Math.floor(hs)) * n) === m.idx) {
+        const left = (m.seed * 7.31) % 1 < 0.3 ? handL : false;
+        const on = (hs * 3.7) % 1;
+        if ((left || handR) && Math.abs(on) < 0.6) {
+          const a0 = Math.min(Math.max(tin / 0.7, 0), 1),
+            a1 = Math.min(Math.max((5.5 - tin) / 0.7, 0), 1);
+          const k = a0 * a0 * (3 - 2 * a0) * (a1 * a1 * (3 - 2 * a1));
+          const s = left ? 1 : -1;
+          const g1 = Math.sin(t * 2.3 + m.seed * 11),
+            g2 = Math.sin(t * 3.7 + m.seed * 5);
+          RT[0] = s * (0.15 + 0.035 * g1) * hk;
+          RT[1] = r.waist.y + (0.07 + 0.05 * g2) * hk;
+          RT[2] = (0.26 + 0.035 * g1) * hk;
+          RT[3] = k;
+          const arm = left ? armL : armR;
+          reach(r, arm, left, s, -1, -0.4, 0.25);
+          arm.twist += 0.3 * g2 * k;
+          arm.wrist += 0.25 * g1 * k;
+          headPitch += 0.025 * Math.sin(t * 3.1 + m.seed) * k;
+        }
+      } else headPitch += 0.03 * Math.max(0, Math.sin(t * 1.9 + m.seed * 6)) * (m.gazeT > 0 ? 1 : 0);
+    }
+  }
+  // hand in hand: both reach for the point between them, at the height the smaller one can hold it
+  if (m.holdM !== null && m.holdK > 0.01 && RG === null) {
+    const om = m.holdM;
+    const fw = Math.sin(m.yaw),
+      fv = Math.cos(m.yaw);
+    const dx = om.x - m.x,
+      dz = om.z - m.z;
+    const lx = dx * fv - dz * fw, // companion in this figure's frame: + = its left
+      lz = dx * fw + dz * fv;
+    const left = lx > 0;
+    if (left ? handL : handR) {
+      const ks = r.s;
+      const small = Math.min(1, Math.min(om.look.scale, L.scale));
+      const kidH = om.look.kind === 'boy' || om.look.kind === 'girl' || L.kind === 'boy' || L.kind === 'girl' ? 0.74 : 0.86;
+      const swing = 0.02 * Math.sin(m.phase);
+      const hkk = m.holdK * m.holdK * (3 - 2 * m.holdK);
+      RT[0] = (lx * 0.5) / ks;
+      RT[1] = (kidH * small) / ks;
+      RT[2] = (lz * 0.5 + 0.1 + swing) / ks;
+      RT[3] = hkk;
+      const s = left ? 1 : -1;
+      o.waistBend = waistBend;
+      o.chestBend = chestBend;
+      o.rootX = rootX;
+      o.rootY = rootY;
+      o.rootZ = rootZ;
+      o.pelvisRoll = pelvisRoll;
+      o.pelvisYaw = pelvisYaw;
+      o.chestRoll = chestRoll;
+      o.waistTwist = waistTwist;
+      o.chestTwist = chestTwist;
+      reachFig(r, o, left ? armL : armR, left, s, -0.2, -0.3, 0.65);
     }
   }
   // rider: both hands on the grips

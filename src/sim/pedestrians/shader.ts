@@ -10,6 +10,7 @@
 // and the nearest hem boundary; the fragment shader picks the side per pixel (crisp hems).
 
 import * as THREE from 'three';
+import { detailPeople } from '../../core/detailPeople';
 import { globalUniforms } from '../../core/uniforms';
 import { perfOn } from '../../core/perfdeep';
 import { BONE, FB, REG } from './body';
@@ -776,7 +777,8 @@ vec3 pedLocks(vec3 r, float tip) {
 // the bend), trouser breaks over the shoe, sleeve gathers, side drape at the waist, weave grain; denim
 // gets the orange twin stitching and back pockets. Fades out where a pixel covers > ~1 cm.
 // a fold: a narrow crest, broad shallow troughs (−0.25 … 0.75)
-float pedRidge(float x) { float t = 1.0 - abs(fract(x) - 0.5) * 2.0; return t * t * t - 0.25; }
+// (zero at the cell ends: each fold is scaled per cell, and a step in the height is a dotted line in the derivative bump)
+float pedRidge(float x) { float t = 1.0 - abs(fract(x) - 0.5) * 2.0; return t * t * t - 0.25 * sin(3.1416 * t); }
 float pedBand2(float d, float hw, float px) { return 1.0 - smoothstep(hw - px * 0.5, hw + px * 0.5, abs(d)); }
 // relief for the normal stage (FABRIC_NORMAL): fold / seam height + weave, and the fabric share (fuzz sheen)
 uniform float uPedFolds;
@@ -803,8 +805,9 @@ vec3 pedFabric(vec3 pc, float reg, float h, float sHem) {
   bool knit = !denim && reg < 2.5 && pk < 0.35;
   float wv = denim ? sin(gA) : knit ? sin(tA * 0.75) * (0.8 + 0.2 * sin(r.y * 2400.0)) : sin(r.y * 2600.0 + sin(tA * 0.5)) * 0.6;
   float wvA = denim ? gA : knit ? tA * 0.75 : r.y * 2600.0;
-  float wvK = 1.0 - smoothstep(0.3, 0.7, fwidth(wvA) / 6.2832);
-  sh *= 1.0 + (denim ? 0.07 : 0.035) * (pedN1(gA) - 0.5) * (1.0 - smoothstep(0.25, 0.6, fwidth(gA)));
+  // (derivative bump needs ≥ 5–6 px per ripple: nearer the pixel size its 2×2 derivatives read as a dot grid)
+  float wvK = 1.0 - smoothstep(0.1, 0.2, fwidth(wvA) / 6.2832);
+  float grain = 1.0 + (denim ? 0.07 : 0.035) * (pedN1(gA) - 0.5) * (1.0 - smoothstep(0.25, 0.6, fwidth(gA)));
   float bend = vPedBend;
   float fold = 0.0; // fold relief height (m)
   if (reg > 2.5 && reg < 3.5) {
@@ -890,6 +893,13 @@ vec3 pedFabric(vec3 pc, float reg, float h, float sHem) {
     float be = clamp(bend / 1.8, 0.0, 1.0);
     float cre = sin((h - 0.5) * 170.0 + rn.y * 3.0) * ez * step(0.0, rn.z + 0.3);
     sh *= 1.0 - (0.1 + 0.3 * be) * max(cre, 0.0);
+    // a sleeve twists and falls in a few soft diagonal folds, tighter in the crook of the arm
+    {
+      float pidS = pk * 6.2832;
+      float sP = h * vPedHgt * 0.33 / 0.045 + ang * 1.1 * side + 0.9 * sin(h * 7.0 + pidS);
+      float sF = sin(sP * 3.1416 * 0.5);
+      fold += 0.0018 * sF * sF * sF * (0.6 + 0.8 * ez + 0.5 * be * ez);
+    }
     float cuff = 1.0 - smoothstep(0.05, 0.12, h);
     sh *= 1.0 - 0.1 * cuff * max(sin(h * 300.0 + ang * 2.0), 0.0);
     sh *= 1.0 - 0.14 * pedBand2(inner - 0.97, 0.025, px * 10.0);
@@ -904,6 +914,19 @@ vec3 pedFabric(vec3 pc, float reg, float h, float sHem) {
     float chest = exp(-pow((h - 0.62) / 0.1, 2.0)) * step(0.3, rn.z);
     sh *= 1.0 + 0.04 * chest * sin(r.x * 160.0 - h * 30.0);
     stitch += pedBand2(sHem - 0.012, 0.0025, px * 6.0) * step(0.0, sHem) * step(h, 0.6);
+    // the cloth hangs from the shoulders (metres of fold height, in the normal): two sets of soft flowing
+    // folds, each person's own, across the chest and belly (never mirrored: a symmetric fan reads as a print),
+    // a little deeper at the waist, where the cloth bunches. Cloth over a body, not paint on a mannequin.
+    {
+      float pid = pk * 6.2832 + step(r.z, 0.0) * 2.1;
+      float nx = r.x / (0.09 * vPedHgt), ny = (h - 0.5) * 3.2;
+      float f1 = sin(nx * 1.7 + ny * 1.25 + 1.5 * sin(ny * 1.15 + pid) + pid);
+      float f2 = sin(-nx * 1.35 + ny * 1.9 + 1.3 * sin(nx * 1.4 - pid * 0.7) + pid * 2.3);
+      float wst = exp(-pow((h - 0.32) / 0.16, 2.0));
+      float upper = smoothstep(0.96, 0.82, h);
+      fold += upper * (0.0034 * f1 * f1 * f1 + 0.0026 * (0.35 + 0.65 * wst) * f2 * f2 * f2);
+      fold += 0.0012 * wst * sin(ny * 11.0 + nx * 1.2 + 2.0 * f1) * smoothstep(0.2, 0.8, abs(rn.x));
+    }
     float fx = r.x * 1.76 / max(vPedHgt, 0.5);
     float frontK = smoothstep(0.35, 0.6, rn.z);
     if ((vPedFB & 64u) != 0u) {
@@ -925,11 +948,19 @@ vec3 pedFabric(vec3 pc, float reg, float h, float sHem) {
   } else {
     // coats / skirts: long vertical drape folds
     sh *= 1.0 + 0.07 * sin(ang * 7.0 + h * 3.0) * (0.6 + 0.4 * sin(ang * 3.0));
+    {
+      // pipe folds: from the waist they widen and deepen towards the hem, each its own width
+      float pidT = pk * 6.2832;
+      // (angle of the rest position, not the normal: the long thin triangles of a tail bend its interpolated normal)
+      float tA = atan(r.x, r.z + 0.01);
+      float tP = tA * 2.1 + 0.3 * sin(h * 5.0 + pidT) + pidT;
+      fold += 0.008 * (pedN1(tP) + 0.5 * pedN1(tP * 2.3 + 3.0) - 0.75) * (0.2 + 0.8 * (1.0 - smoothstep(0.1, 0.9, h)));
+    }
   }
   // sleeves and trouser legs: folds only on the garment side of the hem (s > 0) — on bare forearms and
   // shins below a short sleeve / shorts the cuff gathers and crease rings read as stripes on the skin
   float cloth = reg > 1.5 && reg < 3.5 ? clamp(sHem / max(fwidth(sHem), 1e-4) + 0.5, 0.0, 1.0) : 1.0;
-  pc *= mix(1.0, sh, det * cloth);
+  pc *= mix(1.0, sh * grain, det * cloth);
   pedFabK = det * cloth;
   // a hem stands off the limb: its shadow on the skin / sock just below the edge, and the double-layer
   // hem's rolled edge catching the light just above it (shorts and short sleeves read as cloth, not paint)
@@ -1307,6 +1338,7 @@ function sharedUniforms(): Record<string, THREE.IUniform> {
 //   DET the varyings only the detailed fragment reads    F    tiny / pin: detail below a pixel left out    D  shadow proxy
 //   PAL the skeleton comes from the bone palette (palette.ts; ?nopedpalette, or no float target: the per-vertex chain)
 const VFAR = perfOn('pedvfar');
+const SHADOW_LIFT = detailPeople('pedshadowlift');
 type VertVariant = 'full' | 'far' | 'depth';
 const vertParsCache: Record<string, string> = {};
 function vertParsFor(v: VertVariant, pal: boolean): string {
@@ -1358,15 +1390,27 @@ function peopleMaterial(far: boolean, pal: PalUniforms): THREE.MeshLambertMateri
     if (pal) Object.assign(shader.uniforms, pal);
     shader.uniforms.uPedNight = globalUniforms.uNight;
     shader.vertexShader = injectVertex(shader.vertexShader, true, far ? 'far' : 'full', pal !== null);
+    // the figure's shadow lookup starts 12 cm towards the sun: the coarse proxy (the tiny level, its own hems and
+    // elbows) no longer shadows the detailed figure it stands in for. That self-shadow was a speckled band along
+    // every hem and across the torso; buildings, trees and other people still shadow the figure.
+    if (SHADOW_LIFT) {
+      shader.uniforms.uPedSun = globalUniforms.uSunDir;
+      shader.vertexShader = shader.vertexShader
+        .replace('#include <common>', '#include <common>\nuniform vec3 uPedSun;')
+        .replace('#include <shadowmap_vertex>', '#ifdef USE_SHADOWMAP\n  vec3 pedWP0 = worldPosition.xyz;\n  worldPosition.xyz += uPedSun * 0.12;\n#endif\n#include <shadowmap_vertex>\n#ifdef USE_SHADOWMAP\n  worldPosition.xyz = pedWP0;\n#endif');
+    }
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>\n${FRAG_PARS}\nuniform float uPedNight;`)
       .replace(/void main\(\)\s*\{/, (m) => `${m}\n${FRAG_FADE}`)
       .replace('#include <color_fragment>', `#include <color_fragment>\n${FRAG_COLOR}`)
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>\n${HAIR_NORMAL}\n${FABRIC_NORMAL}`)
       .replace('#include <lights_lambert_pars_fragment>', LAMBERT_PEOPLE)
+      // the sun shadow's per-pixel noise rotation (three's PCF) stipples a figure's small surfaces in a dot grid
+      // wherever a penumbra crosses them: a fixed disc, same taps
+      .replace('#include <shadowmap_pars_fragment>', SHADOW_LIFT ? THREE.ShaderChunk.shadowmap_pars_fragment.replace('interleavedGradientNoise( gl_FragCoord.xy ) * PI2', '0.7') : '#include <shadowmap_pars_fragment>')
       .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n  totalEmissiveRadiance += diffuseColor.rgb * 0.07 * uPedNight;');
   };
-  material.customProgramCacheKey = () => (far ? 'tinyhaven-people-4-far' : 'tinyhaven-people-4') + (VFAR ? '-v1' : '') + (pal ? '-pal' : '');
+  material.customProgramCacheKey = () => (far ? 'tinyhaven-people-4-far' : 'tinyhaven-people-4') + (VFAR ? '-v1' : '') + (pal ? '-pal' : '') + (SHADOW_LIFT ? '-sl' : '');
   return material;
 }
 

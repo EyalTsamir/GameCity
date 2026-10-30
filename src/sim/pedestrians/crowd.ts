@@ -21,6 +21,7 @@
 // Short free walks (to a corner spot, a seat, the bus door…) wait for people in the way.
 
 import * as THREE from 'three';
+import { detailPeople } from '../../core/detailPeople';
 import type { CityContext, PickHit } from '../../core/context';
 import type { Dir } from '../../core/geom';
 import { OCC } from '../../core/occupancy';
@@ -116,6 +117,10 @@ interface Claim {
   dE: number;
 }
 
+/** people look at things (the camera at eye level, companions, passers-by, the traffic): ?nogaze */
+const GAZE = detailPeople('gaze');
+/** hand in hand: ?noholdhands */
+const HOLD_HANDS = detailPeople('holdhands');
 /** ?nogroupgap: the old side-by-side spacing (no extra room for bags / rucksacks) */
 const GROUP_GAP = typeof location === 'undefined' || !new URLSearchParams(location.search).has('nogroupgap');
 const SPACING = 0.8;
@@ -210,6 +215,18 @@ export class Member {
   headYaw = 0;
   headGoal = 0;
   headT = 0;
+  /** looking at something (gaze): seconds left, whom (a companion, a passer-by; null: gazeX/Z or the camera) */
+  gazeT = 0;
+  gazeM: Member | null = null;
+  gazeCam = false;
+  gazeX = 0;
+  gazeZ = 0;
+  /** extra head pitch towards what is looked at (+ = down) and its goal */
+  gazePitch = 0;
+  gazePitchGoal = 0;
+  /** walking hand in hand with this companion (0…1 how far the hand has reached) */
+  holdM: Member | null = null;
+  holdK = 0;
   fade = 0;
   present = false;
   reading = false;
@@ -3156,9 +3173,141 @@ export class Crowd {
         else if (idle) m.headGoal = this.rng.chance(0.55) ? this.rng.range(-0.7, 0.7) : 0;
         else m.headGoal = this.rng.chance(0.25) ? this.rng.range(-0.55, 0.55) : 0;
         if (m.lie > 0.5) m.headGoal *= 0.3;
+        if (GAZE) this.chooseGaze(m, p, idle, waiting);
       }
-      m.headYaw += (m.headGoal - m.headYaw) * Math.min(1, h * 3);
+      if (m.gazeT > 0) this.trackGaze(m, h);
+      else m.gazePitchGoal = 0;
+      m.gazePitch += (m.gazePitchGoal - m.gazePitch) * Math.min(1, h * 3);
+      m.headYaw += (m.headGoal - m.headYaw) * Math.min(1, h * (m.gazeT > 0 ? 4.5 : 3));
+      // a hand reaches for the companion's while the two walk side by side, lets go when they part
+      if (m.holdM !== null) {
+        const o = m.holdM;
+        const dx = o.x - m.x,
+          dz = o.z - m.z;
+        const near = o.present && dx * dx + dz * dz < 1.1 && m.speed > 0.25 && m.speed < 2 && p.file < 0.3 && m.sit < 0.05 && m.lie < 0.05 && m.ground < 0.05;
+        m.holdK = clamp(m.holdK + (near ? h * 1.6 : -h * 3), 0, 1);
+      }
     }
+  }
+
+  // ── gaze: people look at something, not at a random angle ─────────
+
+  /** on a new head target: the camera at eye level, a companion, a passer-by or the traffic; else the random glance stands */
+  private chooseGaze(m: Member, p: Party, idle: boolean, waiting: boolean): void {
+    m.gazeT = 0;
+    m.gazeM = null;
+    m.gazeCam = false;
+    const cam = this.ctx.camera.position;
+    const cdx = cam.x - m.x,
+      cdz = cam.z - m.z;
+    const c2 = cdx * cdx + cdz * cdz;
+    // beyond this the head turn no longer reads, and the search is not free
+    if (c2 > 2500 || m.lie > 0.5 || m.ground > 0.5) return;
+    const rng = this.rng;
+    // someone walking up at eye level gets noticed: a look, held for a moment (walk mode, a low free camera)
+    if (c2 < 110 && c2 > 0.5 && cam.y < m.y + 3.5) {
+      const a = Math.abs(angleDiff(m.yaw, Math.atan2(cdx, cdz)));
+      if (a < 1.3 && rng.chance(c2 < 25 ? 0.5 : 0.28)) {
+        m.gazeCam = true;
+        m.gazeT = rng.range(1.2, 2.6);
+        return;
+      }
+    }
+    // companions: talking while walking or standing about
+    const n = p.members.length;
+    if (n > 1 && rng.chance(idle ? 0.6 : 0.5)) {
+      const o = p.members[(m.idx + 1 + (n > 2 && rng.chance(0.5) ? 1 : 0)) % n];
+      if (o !== m && o.present) {
+        m.gazeM = o;
+        m.gazeT = rng.range(1.4, 4.2);
+        return;
+      }
+    }
+    // the kerb: at the traffic (the nearest thing moving), not at nothing
+    if (waiting && rng.chance(0.7)) {
+      const tr = this.ctx.services.traffic as { vehicles(): { x: number; z: number; v: number }[] } | undefined;
+      if (tr) {
+        let best = 900;
+        let vx = 0,
+          vz = 0;
+        const vs = tr.vehicles();
+        for (let i = 0; i < vs.length; i++) {
+          const V = vs[i];
+          if (V.v < 1) continue;
+          const d2 = (V.x - m.x) * (V.x - m.x) + (V.z - m.z) * (V.z - m.z);
+          if (d2 < best) {
+            best = d2;
+            vx = V.x;
+            vz = V.z;
+          }
+        }
+        if (best < 900 && Math.abs(angleDiff(m.yaw, Math.atan2(vx - m.x, vz - m.z))) < 1.3) {
+          m.gazeX = vx;
+          m.gazeZ = vz;
+          m.gazeT = rng.range(0.9, 2);
+          return;
+        }
+      }
+    }
+    // a passer-by ahead (a child, a dog or a pram above all)
+    if (rng.chance(idle ? 0.5 : 0.3)) {
+      let best: Member | null = null;
+      let bs = 0;
+      for (const q of this.parties) {
+        if (q === p || q.state === 'gone') continue;
+        const o = q.members[0];
+        if (!o.present) continue;
+        const dx = o.x - m.x,
+          dz = o.z - m.z;
+        const dd = dx * dx + dz * dz;
+        if (dd > 49) continue;
+        const a = Math.abs(angleDiff(m.yaw, Math.atan2(dx, dz)));
+        if (a > 1.15) continue;
+        const sc = (o.look.dog || o.look.pram || o.look.kind === 'boy' || o.look.kind === 'girl' ? 2.5 : 1) * (1 - 0.5 * a) / (1 + dd * 0.1) * (0.5 + o.seed);
+        if (sc > bs) {
+          bs = sc;
+          best = o;
+        }
+      }
+      if (best !== null) {
+        m.gazeM = best;
+        m.gazeT = rng.range(0.9, 2.2);
+      }
+    }
+  }
+
+  /** per step while a gaze lasts: turns the head goal towards the target; past what a neck can do the look ends */
+  private trackGaze(m: Member, h: number): void {
+    m.gazeT -= h;
+    let tx = m.gazeX,
+      tz = m.gazeZ,
+      ty = m.y + 1.2;
+    if (m.gazeCam) {
+      const c = this.ctx.camera.position;
+      tx = c.x;
+      tz = c.z;
+      ty = c.y;
+    } else if (m.gazeM !== null) {
+      const o = m.gazeM;
+      if (!o.present) {
+        m.gazeT = 0;
+        return;
+      }
+      tx = o.x;
+      tz = o.z;
+      ty = o.y + 1.48 * o.look.scale * (o.look.kind === 'boy' || o.look.kind === 'girl' ? 0.72 : 1);
+    }
+    const dx = tx - m.x,
+      dz = tz - m.z;
+    const a = angleDiff(m.yaw, Math.atan2(dx, dz));
+    if (Math.abs(a) > 1.45 || m.gazeT <= 0) {
+      m.gazeT = 0;
+      m.headGoal = 0;
+      return;
+    }
+    m.headGoal = clamp(a, -1.2, 1.2);
+    const eye = m.y + 1.5 * m.look.scale * (m.look.kind === 'boy' || m.look.kind === 'girl' ? 0.72 : 1);
+    m.gazePitchGoal = clamp(-Math.atan2(ty - eye, Math.max(0.4, Math.hypot(dx, dz))), -0.35, 0.42);
   }
 
   // ── overlaps (for invariants) ────────────────────────────────────
@@ -3665,6 +3814,24 @@ export class Crowd {
     }
     else p.offs = [0];
     p.span = Math.max(...p.offs.map((o) => Math.abs(o)));
+    // a parent and a small child walk hand in hand, and some couples
+    if (HOLD_HANDS && size >= 2) {
+      const free = (l: Look) => !l.pram && !l.dog && !(l.flags & (F.CANE | F.ROD | F.BRIEFCASE));
+      for (let i = 0; i + 1 < size; i++) {
+        const a = looks[i],
+          b = looks[i + 1];
+        if (!free(a) || !free(b)) continue;
+        const pair = kid(a) !== kid(b) ? 0.8 : !kid(a) && !kid(b) && (persona === 'couple' || persona === 'stroller') ? 0.28 : 0;
+        if (pair > 0 && rng.chance(pair)) {
+          const A = p.members[i],
+            B = p.members[i + 1];
+          A.holdM = B;
+          B.holdM = A;
+          A.walkProp = B.walkProp = 0;
+          break;
+        }
+      }
+    }
     p.R = p.span + BODY_R;
     p.front = looks[0].pram ? 1.3 : looks[0].dog ? 0.95 : 0.3;
     p.keep = rng.range(0.12, 0.62);
