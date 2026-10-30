@@ -112,4 +112,4 @@ Baseline output: `docs/progress/geometry/audit_baseline.md`.
 - Station bike racks: about 60 k in `props-furniture-fine` (spoked wheels 180–230 triangles), a far wheel would halve it.
 - `harbor-north` 27 k never seen (stacked containers' inner faces): only the box-level census says so, check before cutting.
 - Vite's watcher can miss an edit under load: curl the served module when a change seems to have no effect (this hid the #6 correction through one A/B).
-- Fine-cut pop (`?nofinecut`, 240 m / 180 m) not checked on a long avenue at eye level: benches and flowers can appear at that distance.
+- Fine cut (`?nofinecut`, 240 m / 180 m): no pixel differs by more than 24/255 along three long avenues at eye level; checked on still frames, the moment of crossing the distance was not watched in motion.
