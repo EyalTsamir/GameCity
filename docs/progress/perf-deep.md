@@ -7,10 +7,11 @@ Harness from the main checkout (shared lock), every GPU run behind `scripts/powe
 (`power-guard.mjs` and `splitprof.mjs` were copied untracked into the main checkout's scripts/ to run there: delete after this round.)
 
 ## Resume here
-State at 15:20 (2026-10-30). Frozen copy of the head: scratchpad cand on :5194 (git checkout --detach <sha>). Baseline eba5730: scratchpad base on :5193. Live tree :5192. A palette agent is editing src/sim/pedestrians (uncommitted: palette.ts, pedestrians.ts, render.ts, shader.ts).
-Measured now (head without palette, alternating A/B): overview 40.5, downtown 38.8, street 37–39, market 43 (baseline 48.5 / 55.1 / 46.5 / 47.3).
-Next: (1) palette result: compile check, images on/off at speed=0, abprof-style A/B, commit; (2) clean A/B of depth24 (noisy −1 street/market), reflection half rate, atmofast etc. with no agent running; (3) night numbers; (4) visual: blind judges on the hero views at 12, 18.2, 21.5, ?diorama and quality=medium/low; sky banding after the dome noise (scratchpad skyset.mjs, skycmp.mjs); (5) hitch, bootprobe, ui-test, shot invariants, build; (6) ledger, image sheet in docs/progress/perfdeep/, delete main-checkout scripts copies (power-guard, splitprof, abprof), memory note, report in Hebrew.
-Ideas not yet tried: SMAA weights with a depth early-out (≤ 0.7 ms), bloom targets as R11 (≤ 0.1), shadow map D16, land far-field bake (≤ 3 ms overview only), atmosphere LUT, canvas depth false, resolution prices for the ladder (quality.renderScale + resize event in abprof), sharpen at scale < 1.
+State at 17:30 (2026-10-30), head 6860abb. Frozen head: scratchpad cand on :5194. Baseline eba5730: scratchpad base on :5193. Live tree :5192.
+Measured at 12 h (no agents, clean perf.mjs run, ±0.1): overview 36, downtown 35, street 33.5, market 32 against noperfdeep 47 / 52.5 / 45 / 46.
+Running: final ledger queue (perf base/cand ×2 at 12, 18.2, 21.5, hitch, bootprobe, soak), outputs in scratchpad m/m20.
+Next: blind judges on hero views baseline vs head; ui-test, shot invariants, build; ledger and ranked table here; image sheet in docs/progress/perfdeep/; delete main-checkout copies (scripts/power-guard, splitprof, abprof); report in Hebrew.
+Candidates left: cheap floor under deep sea (bound −1.1 overview, −0.6 beach), land far-field bake, atmosphere per vertex, SMAA early-out.
 
 ## Target (set after the first measurements)
 **−30 % frame time in all four views at both hours (street 46 → 32, overview 48 → 34, downtown 55 → 38, market 47 → 33), stretch −35 %.**
