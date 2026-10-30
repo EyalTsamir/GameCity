@@ -172,8 +172,109 @@ try {
         out.results.push(row);
         console.log(JSON.stringify(row));
       }
+  } else if (mode === 'passes') {
+    // every framebuffer bind of a frame starts a new TIME_ELAPSED query: ms per render-pass segment, in frame order,
+    // with the viewport size, draw calls and whether the segment cleared
+    await page.evaluate(() => {
+      const r = window.__city.ctx.renderer;
+      const gl = r.getContext();
+      const ext = gl.getExtension('EXT_disjoint_timer_query_webgl2');
+      const P = (window.__pp = { on: false, rows: new Map(), frames: 0 });
+      const pool = [],
+        pending = [];
+      let seg = 0,
+        active = null,
+        cur = null,
+        vw = 0,
+        vh = 0;
+      const close = () => {
+        if (!active) return;
+        gl.endQuery(ext.TIME_ELAPSED_EXT);
+        pending.push([active, cur]);
+        active = null;
+      };
+      const open = () => {
+        close();
+        if (!P.on) return;
+        active = pool.pop() ?? gl.createQuery();
+        gl.beginQuery(ext.TIME_ELAPSED_EXT, active);
+        cur = { i: seg++, draws: 0, tris: 0, w: vw, h: vh, clear: 0 };
+      };
+      const bind = gl.bindFramebuffer.bind(gl);
+      gl.bindFramebuffer = (t, f) => {
+        bind(t, f);
+        if (t !== gl.READ_FRAMEBUFFER) open();
+      };
+      const vp = gl.viewport.bind(gl);
+      gl.viewport = (x, y, w, h) => {
+        vw = w;
+        vh = h;
+        if (cur) {
+          cur.w = w;
+          cur.h = h;
+        }
+        vp(x, y, w, h);
+      };
+      const clr = gl.clear.bind(gl);
+      gl.clear = (m) => {
+        if (cur) cur.clear |= m;
+        clr(m);
+      };
+      for (const n of ['drawArrays', 'drawElements', 'drawArraysInstanced', 'drawElementsInstanced']) {
+        const f = gl[n].bind(gl);
+        gl[n] = (...a) => {
+          if (cur) {
+            cur.draws++;
+            cur.tris += n.includes('Elements') ? a[1] / 3 : a[2] / 3;
+          }
+          f(...a);
+        };
+      }
+      const tick = () => {
+        close();
+        seg = 0;
+        P.frames++;
+        while (pending.length) {
+          const [q, c] = pending[0];
+          if (!gl.getQueryParameter(q, gl.QUERY_RESULT_AVAILABLE)) break;
+          const ms = gl.getQueryParameter(q, gl.QUERY_RESULT) / 1e6;
+          pending.shift();
+          pool.push(q);
+          if (!P.on) continue;
+          const key = `${String(c.i).padStart(2, '0')} ${c.w}x${c.h}`;
+          const row = P.rows.get(key) ?? { ms: 0, n: 0, draws: 0, tris: 0, clear: c.clear };
+          row.ms += ms;
+          row.n++;
+          row.draws += c.draws;
+          row.tris += c.tris;
+          P.rows.set(key, row);
+        }
+        open();
+        requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+    });
+    for (const h of hours)
+      for (const v of views) {
+        await go(page, v.spec, h);
+        await page.waitForTimeout(3000);
+        const rows = await page.evaluate(async (sec) => {
+          const P = window.__pp;
+          P.rows.clear();
+          P.frames = 0;
+          P.on = true;
+          await new Promise((res) => setTimeout(res, sec * 1000));
+          P.on = false;
+          await new Promise((res) => setTimeout(res, 300));
+          const n = Math.max(1, P.frames);
+          return [...P.rows].map(([k, x]) => ({ seg: k, ms: +(x.ms / x.n).toFixed(3), seen: +(x.n / n).toFixed(2), draws: Math.round(x.draws / x.n), kTris: Math.round(x.tris / x.n / 1000), clear: x.clear })).sort((a, b) => (a.seg < b.seg ? -1 : 1));
+        }, Math.max(seconds, 3));
+        out.results.push({ view: v.name, hours: h, rows });
+        console.log(`\n== ${v.name} @ ${h}h, sum ${rows.reduce((s, r) => s + r.ms * r.seen, 0).toFixed(2)} ms`);
+        console.table(rows);
+      }
   } else if (mode === 'overdraw') {
-    const top = parseInt(args.top ?? '40', 10);
+    const top =parseInt(args.top ?? '40', 10);
     for (const h of hours)
       for (const v of views) {
         await go(page, v.spec, h);
@@ -207,6 +308,16 @@ try {
               for (let i = 0; i < w * h2; i++) t += buf[i * 4];
               return t;
             };
+            // state is forced right before the GL draw: three sets its own blend state after onBeforeRender
+            let mainDraw = false;
+            for (const n of ['drawArrays', 'drawElements', 'drawArraysInstanced', 'drawElementsInstanced', 'multiDrawArraysWEBGL', 'multiDrawElementsWEBGL']) {
+              const fn = gl[n];
+              if (!fn) continue;
+              gl[n] = function (...a) {
+                if (on && mainDraw) force();
+                return fn.apply(gl, a);
+              };
+            }
             const res = new Map();
             let prev = 0,
               screen = 1;
@@ -223,11 +334,11 @@ try {
               objs.push([o, b, a]);
               o.onBeforeRender = function (rr, s, cam, g, m, gr) {
                 b.call(this, rr, s, cam, g, m, gr);
-                if (on && cam === ctx.camera) force();
+                if (cam === ctx.camera) mainDraw = true;
               };
               o.onAfterRender = function (rr, s, cam, g, m, gr) {
                 if (on && cam === ctx.camera) {
-                  // three's state cache believes its own blend state: force again before the next draw (above)
+                  mainDraw = false;
                   const t = sum();
                   const l = labelOf(this);
                   const row = res.get(l) ?? { px: 0, calls: 0 };
@@ -249,7 +360,7 @@ try {
                 on = true;
               }
               render.call(this, scene, camera);
-              on = false;
+              if (main) on = false;
             };
             // one frame (the pass clears its target first; the bloom / AO reads are harmless)
             await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => requestAnimationFrame(resolve))));

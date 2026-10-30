@@ -497,6 +497,7 @@ void RE_Direct_Grass( const in IncidentLight directLight, const in vec3 geometry
   reflectedLight.directDiffuse += directLight.color * material.diffuseColor * vec3( 1.1, 1.12, 0.72 ) * tr * RECIPROCAL_PI * 2.4;
 }
 #undef RE_Direct
+#define TH_LIGHT_WRAPS
 #define RE_Direct RE_Direct_Grass
 `;
 

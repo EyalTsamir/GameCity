@@ -15,6 +15,7 @@
 
 import * as THREE from 'three';
 import type { CityPlan } from '../../core/plan';
+import { perfOn } from '../../core/perfdeep';
 
 const CELL = 2;
 const MARGIN = 40;
@@ -107,14 +108,14 @@ export function installSkyVis(plan: CityPlan): SkyVisStats | null {
   return { cells: nx * nz, ms: Math.round((performance.now() - t0) * 10) / 10, at };
 }
 
-const PARS = /* glsl */ `
+const PARS = () => /* glsl */ `
 uniform sampler2D thSkyVisTex;
 uniform vec4 thSkyVisBox;
 // sky visibility at world point wp (normal wn, both world space): 1 = open sky
 float thSkyVis(vec3 wp, vec3 wn) {
   vec2 uv = (wp.xz + wn.xz * 1.5 - thSkyVisBox.xy) * thSkyVisBox.zw;
   if (uv.x <= 0.0 || uv.y <= 0.0 || uv.x >= 1.0 || uv.y >= 1.0) return 1.0;
-  vec4 v = texture2D(thSkyVisTex, uv);
+  vec4 v = ${perfOn('skyvislod') ? 'textureLod(thSkyVisTex, uv, 0.0)' : 'texture2D(thSkyVisTex, uv)'};
   float y = wp.y;
   float s = y < 6.0 ? mix(v.r, v.g, clamp(y / 6.0, 0.0, 1.0)) : (y < 15.0 ? mix(v.g, v.b, (y - 6.0) / 9.0) : (y < 30.0 ? mix(v.b, v.a, (y - 15.0) / 15.0) : mix(v.a, 1.0, smoothstep(30.0, 60.0, y))));
   // (a sky view factor of 0.5 at the foot of a canyon reads ~0.6 in a photograph: the canyon walls are
@@ -141,7 +142,7 @@ function patchChunks(tex: THREE.Texture, box: THREE.Vector4): boolean {
   const ibl = 'iblIrradiance += getIBLIrradiance( geometryNormal );';
   if (typeof pars !== 'string' || typeof begin !== 'string' || typeof maps !== 'string') return false;
   if (!begin.includes(anchor) || !begin.includes(hemi) || !begin.includes(hemiEnd) || !maps.includes(ibl)) return false;
-  chunks.lights_pars_begin = pars + PARS;
+  chunks.lights_pars_begin = pars + PARS();
   // the sun bounce: sunlit ground / facades (albedo ~0.2) light what the sky cannot reach, warm — at a low sun
   // mostly the facades that face it, so it does not vanish with the sun's height
   const bounce =
