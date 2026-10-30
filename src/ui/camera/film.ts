@@ -11,7 +11,7 @@
 // DOM: the curtain, letterbox bars and title cards, all driven by CSS classes (see ui.css `.th-film`).
 
 import * as THREE from 'three';
-import type { CityContext } from '../../core/context';
+import type { CityContext, PhotoLook } from '../../core/context';
 import { TAGLINE, DIORAMA } from '../../core/world';
 import { CITY_NAME } from '../../core/constants';
 import type { RailService } from '../../sim/rail';
@@ -66,7 +66,11 @@ const enum Phase {
 const MIN_BLACK = 2.6; // s: the title stays on black at least this long, while the prep frames run
 const PREP_FRAMES = 2;
 const END_CARD = 9; // s before the end
-const TITLE_OUT = 10; // s into the film
+const TITLE_OUT = 8; // s into the film
+/** the film's own print: a little more contrast and colour than the live city's natural grade */
+const PRINT: PhotoLook = { exposure: 1, saturation: 1.08, contrast: 0.07, warm: 0.003, vignette: 0.1, lift: -0.002, miniature: false };
+/** s: the print eases away after the film */
+const PRINT_OUT = 1.6;
 const FADE_IN = 2.4; // s: first picture out of black
 
 function smooth(t: number): number {
@@ -163,6 +167,8 @@ export class FilmDirector {
   private cueHintOut = false;
   private cueEnd = false;
   private speedBefore = 1;
+  private readonly print: PhotoLook = { ...PRINT };
+  private printFade = 0;
   private readonly root: HTMLDivElement;
   private readonly curtain: HTMLDivElement;
   private readonly title: HTMLDivElement;
@@ -238,6 +244,9 @@ export class FilmDirector {
     ctx.clock.speed = 1;
     ctx.clock.holdTime = true;
     (ctx.services.sky as { setWeather?(v: number): void } | undefined)?.setWeather?.(0);
+    Object.assign(this.print, PRINT);
+    this.printFade = 0;
+    ctx.services.postfx?.setPhoto?.(this.print);
     this.setHold(true);
     this.root.classList.remove('th-film-done');
     this.root.classList.add('th-film-on');
@@ -295,6 +304,7 @@ export class FilmDirector {
     const fx = ctx.services.postfx;
     fx?.setFocus?.(null);
     fx?.setLens?.(null);
+    this.printFade = PRINT_OUT;
     if (seen) this.rig.release(this.eye, this.look, this.carry);
     else this.rig.releaseToOverview();
     this.curtain.classList.remove('th-film-instant');
@@ -493,6 +503,29 @@ export class FilmDirector {
       default:
         return;
     }
+  }
+
+  /** while no film plays: the print's last moments (photo mode takes the same slot and simply replaces it) */
+  idle(dt: number): void {
+    if (this.printFade <= 0) return;
+    this.printFade -= dt;
+    const fx = this.ctx.services.postfx;
+    if (this.printFade <= 0) {
+      fx?.setPhoto?.(null);
+      return;
+    }
+    const k = this.printFade / PRINT_OUT;
+    const p = this.print;
+    p.saturation = 1 + (PRINT.saturation - 1) * k;
+    p.contrast = PRINT.contrast * k;
+    p.warm = PRINT.warm * k;
+    p.vignette = PRINT.vignette * k;
+    p.lift = PRINT.lift * k;
+  }
+
+  /** photo mode took over the picture settings: nothing left to ease */
+  dropPrint(): void {
+    this.printFade = 0;
   }
 
   /** eye positions inside buildings or below the ground along the whole film (tests) */

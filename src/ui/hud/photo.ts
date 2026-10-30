@@ -25,7 +25,7 @@ const LOOKS: Look[] = [
 
 const FOCUS_MIN = 1;
 const FOCUS_MAX = 800;
-const F_MIN = 0.8;
+const F_MIN = 0.5;
 const F_MAX = 22;
 /** the clock eases back to where it was over this long when leaving */
 const RESTORE_S = 0.9;
@@ -126,6 +126,7 @@ export class PhotoMode {
     const { ctx } = this;
     const c = this.cam();
     c?.film.stop();
+    c?.film.dropPrint();
     c?.releaseAll();
     c?.setFreeOverride(true);
     this.restore = null;

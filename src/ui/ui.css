@@ -2,7 +2,9 @@
    Everything lives in .th-ui (inside #ui). The container itself never blocks the city:
    only cards / buttons receive pointer events. */
 
-#ui > .th-ui {
+#ui > .th-ui,
+#ui > .th-film,
+#ui > .th-photo-flash {
   pointer-events: none;
 }
 
@@ -1340,13 +1342,13 @@
 .th-film-end {
   position: absolute;
   left: 50%;
-  top: 33%;
+  top: 27%;
   width: min(92vw, 860px);
   transform: translate(-50%, -50%);
   text-align: center;
   opacity: 0;
   transition: opacity 1.6s ease;
-  text-shadow: 0 2px 30px rgba(0, 0, 0, 0.55);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.35), 0 2px 34px rgba(0, 0, 0, 0.6);
 }
 .th-film-title.show,
 .th-film-end.show {

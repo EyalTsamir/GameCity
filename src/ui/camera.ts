@@ -1916,6 +1916,7 @@ export default function create(ctx: CityContext): CityModule {
       shot: () => film?.shotId ?? '',
       seek: (t) => film?.seek(t),
       check: () => film?.check() ?? [],
+      dropPrint: () => film?.dropPrint(),
     },
     releaseAll: () => {
       if (walk.active) walk.exit(false);
@@ -2097,6 +2098,7 @@ export default function create(ctx: CityContext): CityModule {
         camMs = camMs * 0.95 + (performance.now() - t0) * 0.05;
         return;
       }
+      film?.idle(dt);
       if (t0 > filmTourAt) {
         filmTourAt = Infinity;
         if (t0 - lastActivity > 12000 && !tour.active && !follow && !flight && !walk.active) startTour();

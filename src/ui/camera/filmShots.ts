@@ -41,7 +41,7 @@ export const SHOTS: readonly FilmShot[] = [
     id: 'dawn-sea',
     dur: 14,
     dip: 0,
-    hours: [6.55, 7.0],
+    hours: [6.72, 7.1],
     keys: [
       { at: 0, eye: [1040, 58, -560], look: [140, 18, -70], fov: 28 },
       { at: 7, eye: [600, 36, -330], look: [135, 16, -72], fov: 30 },
@@ -53,7 +53,7 @@ export const SHOTS: readonly FilmShot[] = [
     id: 'harbour',
     dur: 12,
     dip: 0,
-    hours: [7.0, 7.5],
+    hours: [7.1, 7.65],
     caption: 'The harbour',
     keys: [
       { at: 0, eye: [270, 20, -150], look: [128, 14, -78], fov: 36 },
@@ -98,9 +98,9 @@ export const SHOTS: readonly FilmShot[] = [
     caption: 'Central Station',
     lens: 1.2,
     keys: [
-      { at: 0, eye: [-18, 2.55, -150.4], look: [-70, 2.4, -155], fov: 38, focus: 30 },
-      { at: 6, eye: [-19, 2.55, -150.4], look: [-60, 2.4, -155], fov: 38, focus: 12 },
-      { at: 13, eye: [-20.5, 2.55, -150.6], look: [-40, 2.4, -156.5], fov: 42, focus: 5 },
+      { at: 0, eye: [-18, 2.55, -151.9], look: [-70, 2.4, -154], fov: 38, focus: 30 },
+      { at: 6, eye: [-19, 2.55, -151.9], look: [-60, 2.4, -154.5], fov: 38, focus: 12 },
+      { at: 13, eye: [-20.5, 2.55, -151.9], look: [-40, 2.4, -155.5], fov: 42, focus: 5 },
     ],
   },
   {
@@ -137,8 +137,9 @@ export const SHOTS: readonly FilmShot[] = [
     settle: true,
     keys: [
       { at: 0, eye: [79.4, 3.4, 78.6], look: [85, 1.8, 72], fov: 46 },
-      { at: 4, eye: [79, 20, 79], look: [86, 10, 66], fov: 44 },
-      { at: 9, eye: [130, 75, 190], look: [50, 10, 20], fov: 38 },
+      { at: 2, eye: [80.6, 8.5, 78.4], look: [85.5, 4.5, 69], fov: 45 },
+      { at: 4.5, eye: [81, 22, 80], look: [83, 12, 62], fov: 43 },
+      { at: 9.5, eye: [130, 75, 190], look: [50, 10, 20], fov: 38 },
       { at: 17, eye: [335, 150, 520], look: [-5, 0, -15], fov: 34 },
     ],
   },

@@ -77,6 +77,8 @@ export interface CameraServiceExt extends CoreCameraService {
     seek(t: number): void;
     /** tests: eye positions inside buildings / below ground along the film */
     check(): string[];
+    /** photo mode takes over the picture settings */
+    dropPrint(): void;
   };
   /** ends the tour, a walk, a follow and flights where the camera is (no rise, no re-framing) */
   releaseAll(): void;
