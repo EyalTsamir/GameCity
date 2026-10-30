@@ -16,6 +16,11 @@ import type { CityContext, CityModule } from '../core/context';
 import { Cast } from './scenes/cast';
 import { Kit } from './scenes/kit';
 import { MarketDay } from './scenes/market';
+import { Deliveries } from './scenes/delivery';
+import { Wedding } from './scenes/wedding';
+import { Musician } from './scenes/musician';
+import { ParkLife } from './scenes/park';
+import { BalconyLife } from './scenes/balcony';
 
 export interface Scene {
   readonly name: string;
@@ -52,6 +57,12 @@ export default function create(ctx: CityContext): CityModule {
     }
   };
   build('nomarketday', true, () => new MarketDay(ctx, cast, low));
+  build('nodelivery', true, () => new Deliveries(ctx, cast, ctx.rng('scenes-delivery')));
+  build('nowedding', false, () => new Wedding(ctx, cast, ctx.rng('scenes-wedding')));
+  let musician: Musician | null = null;
+  build('nomusician', false, () => (musician = new Musician(ctx, cast, ctx.rng('scenes-musician'))));
+  build('noparklife', false, () => new ParkLife(ctx, cast, ctx.rng('scenes-park')));
+  build('nobalconylife', false, () => new BalconyLife(ctx, cast, ctx.rng('scenes-balcony')));
 
   const guard = (s: Scene, fn: () => void) => {
     try {
@@ -64,7 +75,7 @@ export default function create(ctx: CityContext): CityModule {
   };
 
   ctx.pickers.push({ name: 'scenes', pick: (ray: THREE.Ray) => cast.pick(ray) });
-  ctx.services.scenes = { sync: (list: unknown[], n: number) => cast.sync(list as never[], n), cast, scenes };
+  ctx.services.scenes = { sync: (list: unknown[], n: number) => cast.sync(list as never[], n), cast, scenes, get musician() { return musician?.state ?? null; } };
   ctx.events.on('timejump', () => {
     for (let i = scenes.length - 1; i >= 0; i--) {
       const s = scenes[i];

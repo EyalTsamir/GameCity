@@ -188,7 +188,8 @@ export class Wedding implements Scene {
     });
     if (!lane) return;
     const sp = SPECS.sedan;
-    const stand = d.x + 2.0;
+    // (the lamp 7 m east of the door and the bench 4 m west of it leave just this stretch of kerb)
+    const stand = d.x + 3.4;
     const zLane = lane.path.at(0).z;
     const curve = (x0: number, z0: number, x1: number, z1: number): P2[] => {
       const out: P2[] = [];
@@ -200,8 +201,8 @@ export class Wedding implements Scene {
       return out;
     };
     const zK = zLane - 2.3;
-    const cs = lane.path.at(0).x - (stand + 7);
-    this.stop = sim.addKerbStop({ lane: lane.id, s: cs + sp.len / 2, pathIn: new Path2(curve(stand + 7, zLane, stand, zK)), pathOut: new Path2(curve(stand, zK, stand - 6, zLane)), outLane: lane.id, outS: lane.path.at(0).x - (stand - 6) + sp.len / 2, roll: -0.075, speed: 2.2, reverseOut: false, model: 'wedding', holdMax: 400 });
+    const cs = lane.path.at(0).x - (stand + 6);
+    this.stop = sim.addKerbStop({ lane: lane.id, s: cs + sp.len / 2, pathIn: new Path2(curve(stand + 6, zLane, stand, zK)), pathOut: new Path2(curve(stand, zK, stand - 6, zLane)), outLane: lane.id, outS: lane.path.at(0).x - (stand - 6) + sp.len / 2, roll: -0.075, speed: 2.2, reverseOut: false, model: 'wedding', holdMax: 400 });
   }
 
   private begin(): void {
@@ -368,7 +369,7 @@ export class Wedding implements Scene {
         q.p.speed = 1.0 + (i % 4) * 0.07;
         const dir = i % 5 === 4 ? 0 : i % 2 ? 1 : -1;
         const far = 16 + (i % 6) * 3;
-        q.b = t + 1 + (i % 7) * 1.4;
+        q.at = t + 1 + (i % 7) * 1.4;
         q.p.a = dir;
         q.p.b = far;
       }
@@ -378,7 +379,7 @@ export class Wedding implements Scene {
     }
     if (this.beat === 12) {
       for (const q of this.guests) {
-        if (q.p.t === 0 && t >= q.b) {
+        if (q.p.t === 0 && t >= q.at) {
           q.p.t = 1;
           const dir = q.p.a;
           if (dir === 0) q.p.walk(d.x + 0.3, d.z + 0.9, d.x + 0.3, d.z + 0.2);
@@ -392,9 +393,11 @@ export class Wedding implements Scene {
       if (!this.photographer.walking) this.photographer.hide();
     }
     if (t >= END || (this.beat === 12 && this.guests.every((q) => q.p.t === 2))) {
-      for (const q of this.guests) {
+      for (let i = 0; i < this.guests.length; i++) {
+        const q = this.guests[i];
         q.p.hide();
         q.p.t = 0;
+        q.at = 0.5 + i * 0.85;
       }
       b.hide();
       g.hide();

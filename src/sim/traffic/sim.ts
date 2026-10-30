@@ -1423,9 +1423,9 @@ export class TrafficSim {
         V.brakeVis = 1;
         if (st.release || st.held > st.holdMax) st.state = 4;
       } else if (st.state === 4) {
-        // indicate and wait for a gap on the lane we rejoin (nobody within 26 m behind, nothing in the way ahead)
+        // indicate and wait for a gap on the lane we rejoin
         V.departBlink = 1;
-        if (this.laneFree(st.outLane, st.outS - V.len - 26, st.outS + 10) && !this.laneCommitted(st.outLane)) {
+        if (this.kerbGap(st.outLane, st.outS, V.len)) {
           st.state = 5;
           st.u = 0;
           V.hazard = false;
@@ -1439,6 +1439,17 @@ export class TrafficSim {
         }
       }
     }
+  }
+
+  /** room to pull out at front position s: the place itself free, and anyone behind able to stop for us */
+  private kerbGap(lane: number, s: number, len: number): boolean {
+    const l = this.lists[lane];
+    for (let i = 0; i < l.length; i++) {
+      const en = l[i];
+      if (en.rear < s + 3 && en.front > s - len - 1.5) return false;
+      if (en.front <= s - len && s - len - en.front < 4 + en.v.v * 1.6) return false;
+    }
+    return true;
   }
 
   /** every vehicle to draw: the lanes' and the ones standing off them (reused array) */

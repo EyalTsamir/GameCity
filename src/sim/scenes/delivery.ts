@@ -86,7 +86,7 @@ export function planDeliveryStops(ctx: CityContext, sim: TrafficSim, rng: Rng): 
   const shops = ctx.plan.lots.filter((l) => l.shopfront && l.doors.length > 0);
   const lanes = ctx.roads.lanes.filter((l) => !l.sink && !l.crossing && l.length > 34);
   // deterministic but not ordered by plan position
-  rng.shuffle?.(shops);
+  rng.shuffle(shops);
   for (const lot of shops) {
     if (out.length >= 14) break;
     const door = lot.doors[0];
@@ -102,30 +102,30 @@ export function planDeliveryStops(ctx: CityContext, sim: TrafficSim, rng: Rng): 
       const lat = (door.x - p0.x) * rx + (door.z - p0.z) * rz;
       if (lat < 3.5 || lat > 11 || a < 0 || a > lane.length) continue;
       // the van stands with its back a little before the door: try a few places along the kerb
-      for (const shift of [2.6, -2.2, 5.4, -5, 8]) {
+      for (const shift of [2.6, -2.2, 5.4, -5, 8, -8, 10.5, -10.5]) {
         const cs = a + shift; // van centre along the lane, standing
         // room to brake + pull in behind it (8 m), to pull out again ahead of it (9 m), junctions clear both ways
-        if (cs < 26 || cs > lane.length - 24) continue;
+        if (cs < 15 || cs > lane.length - 13) continue;
         if (lane.busStops.some((b) => Math.abs(b.s - cs) < 18)) continue;
         const c = lane.path.at(cs);
         const x = c.x + rx * LAT,
           z = c.z + rz * LAT;
         // the van on the kerb + the pull-in behind and pull-out ahead (narrower: it swings in)
-        if (!clearBox(ctx, keep, c.x, c.z, n.x, n.z, 4, LAT - 1.0, LAT + 1.15)) continue;
-        if (!clearBox(ctx, keep, c.x - n.x * 7.5, c.z - n.z * 7.5, n.x, n.z, 3.5, 0, LAT * 0.5 + 0.9)) continue;
-        if (!clearBox(ctx, keep, c.x + n.x * 7.5, c.z + n.z * 7.5, n.x, n.z, 3.5, 0, LAT * 0.5 + 0.9)) continue;
+        if (!clearBox(ctx, keep, c.x, c.z, n.x, n.z, 3.5, LAT - 1.0, LAT + 1.1)) continue;
+        if (!clearBox(ctx, keep, c.x - n.x * 7, c.z - n.z * 7, n.x, n.z, 3, 0, 1.5)) continue;
+        if (!clearBox(ctx, keep, c.x + n.x * 7, c.z + n.z * 7, n.x, n.z, 3, 0, 1.5)) continue;
         // far enough from the other stops
         if (out.some((o) => (o.x - x) ** 2 + (o.z - z) ** 2 < 24 * 24)) continue;
         // walking room to the door: pavement all the way, clear of furniture (a straight walk from the back of the van)
         const bx = x - n.x * (sp.len / 2 + 1.5) + rx * 0.8,
           bz = z - n.z * (sp.len / 2 + 1.5) + rz * 0.8;
         const dd = Math.hypot(door.x - bx, door.z - bz);
-        let ok = dd < 16;
+        let ok = dd < 19;
         for (let t = 0.06; t < 0.95 && ok; t += 0.5 / dd) {
           const wx = bx + (door.x - bx) * t,
             wz = bz + (door.z - bz) * t;
           if (ctx.occupancy.has(wx, wz, OCC.SOLID | OCC.ROAD)) ok = false;
-          for (const k of keep) if ((k.x - wx) ** 2 + (k.z - wz) ** 2 < (k.r + 0.45) ** 2) ok = false;
+          for (const k of keep) if ((k.x - wx) ** 2 + (k.z - wz) ** 2 < (k.r + 0.25) ** 2) ok = false;
         }
         if (!ok) continue;
         const front = cs - 7 + sp.len / 2;

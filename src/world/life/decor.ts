@@ -65,6 +65,17 @@ const BULB_FEST = ['#ff6a4a', '#ffd25a', '#6ad06a', '#5aa0ff', '#ff8ad0', '#ffd9
 
 const LAUNDRY_COLS = ['#f2efe8', '#ece8de', '#f2efe8', '#a8c4dc', '#e8a8b0', '#f0d890', '#2f3a52', '#4a6a90', '#c84a3a', '#6a9a6a', '#d8c8a8', '#ffffff', '#e8c0a0', '#7a5a8a'];
 
+/**
+ * When a balcony / courtyard line's washing is out (hours): hung through the morning, in at dusk. A few lines stay out
+ * all night (somebody forgot). Same for scenes/balcony.ts, which sends someone out on the balcony at those hours.
+ */
+export function laundryWindow(lot: number, ax: number, az: number): { out: number; in: number } {
+  const k = Math.abs(Math.sin(lot * 12.9898 + ax * 78.233 + az * 37.719) * 43758.5453) % 1;
+  const k2 = (k * 7.13) % 1;
+  if (k2 < 0.1) return { out: -1, in: 99 };
+  return { out: 7.4 + k * 2.6, in: 17.4 + k2 * 2.2 };
+}
+
 export interface DecorStats {
   street: number;
   court: number;
@@ -114,7 +125,7 @@ export function decorate(ctx: CityContext, cloth: ClothSystem, b: BuildingsLike 
     }
     if (!opts.laundry) continue;
     st.court++;
-    laundryLine(cloth, rng, sp.ax, sp.ay, sp.az, sp.bx, sp.by, sp.bz, 0.22 + 0.012 * L, true, st);
+    laundryLine(cloth, rng, sp.ax, sp.ay, sp.az, sp.bx, sp.by, sp.bz, 0.03 + rng.range(0.012, 0.022) * L, true, st, laundryWindow(sp.lotA, sp.ax, sp.az));
   }
 
   // balcony lines (rigid, wire drawn by buildings)
@@ -122,7 +133,7 @@ export function decorate(ctx: CityContext, cloth: ClothSystem, b: BuildingsLike 
     for (const l of b.laundry) {
       const rng = new Rng((Math.imul(l.lot + 3, 40503) ^ Math.floor((l.ax + l.az) * 100)) >>> 0 || 5);
       st.balcony++;
-      laundryLine(cloth, rng, l.ax, l.ay, l.az, l.bx, l.by, l.bz, 0.015, false, st);
+      laundryLine(cloth, rng, l.ax, l.ay, l.az, l.bx, l.by, l.bz, 0.015, false, st, laundryWindow(l.lot, l.ax, l.az));
     }
   }
   if (lamps.length) {
@@ -224,6 +235,15 @@ function blocked(ax: number, ay: number, az: number, bx: number, by: number, bz:
   return false;
 }
 
+/** a pennant's colour after a summer in the sun */
+function fadeCol(rng: Rng, hex: string): string {
+  const f = rng.range(0.82, 1.04),
+    w = rng.range(0, 0.14);
+  const v = parseInt(hex.slice(1), 16);
+  const ch = (sh: number) => Math.round(Math.min(255, ((v >> sh) & 255) * f * (1 - w) + 235 * w));
+  return `#${((ch(16) << 16) | (ch(8) << 8) | ch(0)).toString(16).padStart(6, '0')}`;
+}
+
 function streetLine(cloth: ClothSystem, rng: Rng, sp: SpanLike, ax: number, az: number, bx: number, bz: number, st: DecorStats, lamps: LampLight[], second: boolean): void {
   const ay = sp.ay,
     by = sp.by;
@@ -231,7 +251,7 @@ function streetLine(cloth: ClothSystem, rng: Rng, sp: SpanLike, ax: number, az: 
   if (L < 4) return;
   const roll = rng.next();
   const style = sp.district === 'market' ? (second ? 'festoon' : roll < 0.45 ? 'festoon' : roll < 0.8 ? 'bunting' : 'prayer') : second ? (roll < 0.5 ? 'festoon' : 'bunting') : roll < 0.6 ? 'bunting' : roll < 0.8 ? 'prayer' : 'festoon';
-  const sag = L * rng.range(0.03, 0.05) + 0.12;
+  const sag = L * rng.range(0.04, 0.085) + 0.12;
   const seed = rng.next();
   const line = cloth.addLine({ ax, ay, az, bx, by, bz, sag, seed, wire: style === 'festoon' ? '#2a2826' : '#4a4640', r: style === 'festoon' ? 0.008 : 0.006 });
   const lowest = Math.min(ay, by) - sag;
@@ -266,25 +286,32 @@ function streetLine(cloth: ClothSystem, rng: Rng, sp: SpanLike, ax: number, az: 
   const n = Math.max(2, Math.floor((L - 0.5) / pitch));
   const off = rng.int(0, set.length - 1);
   const pat = prayer ? PAT.PRAYER : rng.chance(0.25) ? PAT.BORDER : PAT.PLAIN;
+  // hand-tied: spacing and sizes a little uneven, an odd one out of order, a gap where one has blown away; some lines
+  // run swallow-tails or small flags among the triangles, and each piece fades in the sun on its own
+  const mixed = !prayer && rng.chance(0.4);
+  const random = !prayer && rng.chance(0.3);
   for (let i = 0; i < n; i++) {
-    const s = (0.25 + (i + 0.5) * ((L - 0.5) / n)) / L;
-    const c = set[(i + off) % set.length];
+    if (!prayer && rng.chance(0.05)) continue;
+    const s = (0.25 + (i + 0.5 + rng.range(-0.2, 0.2)) * ((L - 0.5) / n)) / L;
+    const c = fadeCol(rng, random || rng.chance(0.07) ? rng.pick(set) : set[(i + off) % set.length]);
+    const sc = rng.range(0.86, 1.12);
+    const alt = mixed && i % rng.int(2, 4) === 0;
     cloth.addPiece(line, s, {
-      w,
-      len: len * rng.range(0.96, 1.04),
-      shape: prayer ? SHAPE.RECT : SHAPE.PENNANT,
+      w: w * sc,
+      len: len * rng.range(0.84, 1.14) * (alt ? 0.85 : 1),
+      shape: prayer ? SHAPE.RECT : alt ? SHAPE.SWALLOW : SHAPE.PENNANT,
       col: c,
       col2: pat === PAT.BORDER ? '#f4efe4' : c,
       pattern: pat,
-      weight: prayer ? 1.1 : 0.9,
-      flutter: prayer ? 1.1 : 1.0,
+      weight: (prayer ? 1.1 : 0.9) * rng.range(0.8, 1.25),
+      flutter: (prayer ? 1.1 : 1.0) * rng.range(0.75, 1.45),
       phase: rng.range(0, 6.283),
     });
   }
   st.lowest = Math.min(st.lowest, lowest - len);
 }
 
-function laundryLine(cloth: ClothSystem, rng: Rng, ax: number, ay: number, az: number, bx: number, by: number, bz: number, sag: number, wire: boolean, st: DecorStats): void {
+function laundryLine(cloth: ClothSystem, rng: Rng, ax: number, ay: number, az: number, bx: number, by: number, bz: number, sag: number, wire: boolean, st: DecorStats, hours: { out: number; in: number }): void {
   const L = Math.hypot(bx - ax, by - ay, bz - az);
   if (L < 0.8) return;
   const line = cloth.addLine({ ax, ay, az, bx, by, bz, sag, seed: rng.next(), wire: '#d8d6d0', r: 0.004 });
@@ -293,25 +320,32 @@ function laundryLine(cloth: ClothSystem, rng: Rng, ax: number, ay: number, az: n
   let x = rng.range(0.15, 0.5);
   const end = L - 0.15;
   let guard = 0;
+  // one household's washing: a few favourite colours and mostly clothes, at most a sheet or two on a long line
+  const house = [rng.pick(LAUNDRY_COLS), rng.pick(LAUNDRY_COLS), rng.pick(LAUNDRY_COLS)];
+  let sheets = L > 5 ? rng.int(0, 2) : 0;
+  // gaps: the line is rarely full
+  const fullness = rng.range(0.55, 1);
+  // the washing goes out (and comes in) from one end of the line to the other
+  const hang = (s: number) => [hours.out + s * 0.22, hours.in + s * 0.22] as [number, number];
   while (x < end && guard++ < 60) {
-    if (rng.chance(0.12) && L > 3) {
-      x += rng.range(0.5, 1.4);
+    if (!rng.chance(fullness) && L > 2.5) {
+      x += rng.range(0.25, 1.1);
       continue;
     }
-    const kind = rng.weighted(['shirt', 'tee', 'trousers', 'sheet', 'towel', 'small'] as const, [3, 3, 2, L > 4 ? 1.4 : 0.3, 2.2, 2.6]);
+    const kind = rng.weighted(['shirt', 'tee', 'trousers', 'sheet', 'towel', 'small', 'dress', 'shorts'] as const, [3, 3.5, 2.4, sheets > 0 ? 0.9 : 0, 1.6, 3.2, 1.4, 1.6]);
     let w = 0.5,
       len = 0.6,
       shape: number = SHAPE.RECT,
       weight = 1.3,
       pat: number = PAT.PLAIN;
-    let col = rng.pick(LAUNDRY_COLS);
+    let col = rng.chance(0.6) ? rng.pick(house) : rng.pick(LAUNDRY_COLS);
     let col2 = col;
     switch (kind) {
       case 'shirt':
         w = rng.range(0.5, 0.62);
         len = rng.range(0.6, 0.72);
         shape = SHAPE.SHIRT;
-        if (rng.chance(0.25)) {
+        if (rng.chance(0.3)) {
           pat = PAT.STRIPES;
           col2 = '#f4efe4';
         }
@@ -321,6 +355,23 @@ function laundryLine(cloth: ClothSystem, rng: Rng, ax: number, ay: number, az: n
         len = rng.range(0.5, 0.6);
         shape = SHAPE.SHIRT;
         break;
+      case 'dress':
+        w = rng.range(0.42, 0.5);
+        len = rng.range(0.85, 1.05);
+        shape = SHAPE.SHIRT;
+        weight = 1.5;
+        col = rng.pick(['#c84a6a', '#4a7ab0', '#e8c070', '#6a9a8a', '#a86aa8', '#e89a7a']);
+        if (rng.chance(0.3)) {
+          pat = PAT.MIDBAND;
+          col2 = '#f4efe4';
+        }
+        break;
+      case 'shorts':
+        w = rng.range(0.34, 0.4);
+        len = rng.range(0.34, 0.46);
+        shape = SHAPE.TROUSERS;
+        col = rng.pick(['#3d5578', '#c8b896', '#5a5a58', '#8a4a4a', '#2f3a52']);
+        break;
       case 'trousers':
         w = rng.range(0.38, 0.44);
         len = rng.range(0.85, 1.0);
@@ -329,34 +380,36 @@ function laundryLine(cloth: ClothSystem, rng: Rng, ax: number, ay: number, az: n
         col = rng.pick(['#4a6a90', '#3d5578', '#2f3a52', '#8a7a62', '#5a5a58', '#c8b896']);
         break;
       case 'sheet':
-        w = Math.min(end - x, rng.range(1.2, 1.7));
-        len = rng.range(1.0, 1.35);
+        // folded over the line: narrower and shorter than the sheet is, full of soft folds, not a white wall
+        sheets--;
+        w = Math.min(end - x, rng.range(0.85, 1.25));
+        len = rng.range(0.7, 0.95);
         shape = SHAPE.SHEET;
-        weight = 2.4;
-        col = rng.pick(['#f4f1ea', '#eeeae0', '#dfe8ee', '#f0e4e4', '#e6eedd']);
-        if (rng.chance(0.3)) {
-          pat = PAT.BORDER;
-          col2 = rng.pick(['#a8c4dc', '#e8a8b0', '#c8d8a8']);
+        weight = 2.0;
+        col = rng.pick(['#e8e2d4', '#dfe4e8', '#e8dcd8', '#dce4d4', '#c8d4e0', '#e0d0c0']);
+        if (rng.chance(0.45)) {
+          pat = rng.chance(0.5) ? PAT.BORDER : PAT.STRIPES;
+          col2 = rng.pick(['#a8c4dc', '#e8a8b0', '#c8d8a8', '#f4efe4']);
         }
         break;
       case 'towel':
-        w = rng.range(0.45, 0.6);
-        len = rng.range(0.75, 0.95);
+        w = rng.range(0.42, 0.56);
+        len = rng.range(0.65, 0.85);
         shape = SHAPE.SHEET;
         weight = 1.8;
         pat = rng.chance(0.6) ? PAT.MIDBAND : PAT.PLAIN;
         col2 = rng.pick(['#f4efe4', '#2f6db5', '#c8402e']);
         break;
       default:
-        w = rng.range(0.16, 0.24);
-        len = rng.range(0.2, 0.3);
+        w = rng.range(0.14, 0.24);
+        len = rng.range(0.18, 0.3);
         weight = 1.0;
-        col = rng.pick(['#f4efe4', '#2f3a52', '#e8a8b0', '#a8c4dc', '#5a5a58']);
+        col = rng.pick(['#f4efe4', '#2f3a52', '#e8a8b0', '#a8c4dc', '#5a5a58', '#c84a3a']);
     }
     if (x + w > end) break;
     const s = (x + w / 2) / L;
-    cloth.addPiece(line, s, { w, len, shape, col, col2, pattern: pat, weight, flutter: 0.85, phase: rng.range(0, 6.283), drape: 1 });
+    cloth.addPiece(line, s, { w, len, shape, col, col2, pattern: pat, weight, flutter: 0.85, phase: rng.range(0, 6.283), drape: kind === 'sheet' ? 1.6 : 1, hang: hang(s) });
     st.laundryItems++;
-    x += w + rng.range(0.04, 0.22);
+    x += w + rng.range(0.03, 0.26);
   }
 }

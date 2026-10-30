@@ -696,3 +696,62 @@ export function musicBoxPhrase(ac: BaseAudioContext, out: AudioNode, t: number, 
     };
   return tt - t;
 }
+
+// ───────────────────────────────────────────── street musician
+/** one bar of finger-picked guitar (plucked triangle + a soft body resonance); returns its duration */
+export function guitarPhrase(ac: BaseAudioContext, out: AudioNode, t: number, chord: number[], level = 1): number {
+  const beat = 0.34;
+  const pat = [0, 2, 1, 3, 2, 1, 3, 2];
+  for (let i = 0; i < pat.length; i++) {
+    const f = chord[pat[i] % chord.length];
+    const t0 = t + i * beat + Math.random() * 0.012;
+    const o = ac.createOscillator();
+    o.type = 'triangle';
+    o.frequency.value = f;
+    const o2 = ac.createOscillator();
+    o2.type = 'sine';
+    o2.frequency.value = f * 2.003;
+    const g = ac.createGain();
+    const vel = (i % 4 === 0 ? 0.11 : 0.075) * level * (0.85 + Math.random() * 0.3);
+    g.gain.setValueAtTime(0, t0);
+    g.gain.linearRampToValueAtTime(vel, t0 + 0.006);
+    g.gain.exponentialRampToValueAtTime(vel * 0.25, t0 + 0.28);
+    g.gain.exponentialRampToValueAtTime(0.0003, t0 + 1.1);
+    const lp = ac.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.setValueAtTime(3200, t0);
+    lp.frequency.exponentialRampToValueAtTime(900, t0 + 0.5);
+    o.connect(lp);
+    const g2 = ac.createGain();
+    g2.gain.value = 0.28;
+    o2.connect(g2).connect(lp);
+    lp.connect(g).connect(out);
+    o.start(t0);
+    o2.start(t0);
+    o.stop(t0 + 1.15);
+    o2.stop(t0 + 1.15);
+  }
+  return pat.length * beat;
+}
+
+/** a small crowd clapping for `dur` s: short bursts of band-passed noise */
+export function clapping(ac: BaseAudioContext, out: AudioNode, t: number, noise: AudioBuffer, people: number, dur: number, level = 1): void {
+  const n = Math.min(70, Math.round(people * 3.2 * dur));
+  for (let i = 0; i < n; i++) {
+    const t0 = t + Math.random() * dur * (Math.random() < 0.8 ? 0.7 : 1);
+    const s = ac.createBufferSource();
+    s.buffer = noise;
+    s.loop = true;
+    const bp = ac.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.value = 900 + Math.random() * 1500;
+    bp.Q.value = 1.1;
+    const g = ac.createGain();
+    const v = 0.05 * level * (0.5 + Math.random());
+    g.gain.setValueAtTime(v, t0);
+    g.gain.exponentialRampToValueAtTime(0.0004, t0 + 0.05);
+    s.connect(bp).connect(g).connect(out);
+    s.start(t0, Math.random());
+    s.stop(t0 + 0.06);
+  }
+}
