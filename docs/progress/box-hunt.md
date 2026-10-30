@@ -6,13 +6,13 @@ Branch `claude/box-hunt-af5a80` (based on `claude/pensive-gates-bim12i` a200754)
 before/after crops kept for the log live in `docs/progress/boxhunt/`.
 
 ## Resume here
-**Round 3 (2026-10-30) IN PROGRESS** — audit `shots/bh3/audit` (r3: 4 new eye-level nodes + 2 at night, 10 POI
+**Round 3 (2026-10-30) DONE** (section "Round 3" at the end; sheet `docs/progress/boxhunt/round3_before_after.jpg`) — audit `shots/bh3/audit` (r3: 4 new eye-level nodes + 2 at night, 10 POI
 fly-overs at 35 m noon + 8 at night; r3n: interiors at night), 2 sonnet judges + own look. Ranked 10 (mine): cranes,
 river railing, pier kiosks, floodlight heads (≈ already 5×3 lamp housings), interiors dark at night, allotment
 sheds, lifeguard tower (≈ detailed), beach lamps (≈ detailed), ship containers (≈ same kit as the yard), playground
 (≈ chains / tiles / slide detailed). Fixed in 0e8f95f: `?nocranekit`, `?noriverrail`, `?nopierkiosk`, `?noshedkit`,
-interior halos + floor pools (under `?nointeriors`). Pending: verify (`shots/bh3/{crane,rk,sn}`), perf A/B, hitch,
-build, Round 3 section. Hand-offs: canal-wall black boxes = lower-quay bollards (places), rooftop plant + balcony
+interior halos + floor pools (under `?nointeriors`); verified (`shots/bh3/{crane,rk,sn}`), perf A/B, hitch A/B,
+build — all in the Round 3 section. Hand-offs: canal-wall black boxes = lower-quay bollards (places), rooftop plant + balcony
 railings (massing), lamp glare hides the fixtures at night (light).
 
 **Round 2 (overnight, 2026-10-30) DONE** (see "Round 2" at the end: fixes, perf, smoothness, checks, hand-offs; sheet `docs/progress/boxhunt/round2_before_after.jpg`) — merged `claude/pensive-gates-bim12i` (083a507) first. Backlog in
@@ -372,7 +372,12 @@ glow mesh). The ms deltas sit in the same +0.1–1.6 ms band as before (this run
 2–3 ms slower in both variants than `perf4`).
 
 ### Smoothness
-HITCH_RESULT
+`hitch.mjs` (overview / harbor / station / riverside × 12:00 + 21:30, 6 s, boot + arrive + steady = 17 windows), A/B in
+one sitting on a loaded machine (boot ~99 s in both — sibling sessions busy): **0 mid-run shader compiles in both**;
+box hunt on: 8 frames > 100 ms, 29 long tasks, worst 133 ms, steady mean 50.6 ms; `?noboxhunt`: 12 frames > 100 ms,
+40 long tasks, worst 217 ms, steady mean 48.6 ms → the freezes are machine load, not this round (everything added
+is build-time geometry or static glow sprites; no per-frame work, no new programs). The earlier clean run on an idle
+machine (round 2, 25 windows): 0 freezes. Console / page errors none, invariants `{}` in both.
 
 ### Checks
 `npm run typecheck` clean; `npm run build` OK (`dist/index.html` 3.86 MB); every capture: invariants `{}`, console
