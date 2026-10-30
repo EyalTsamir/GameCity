@@ -4145,7 +4145,7 @@ export class Crowd {
     switch (p.state) {
       case 'serve':
         if (p.stall) {
-          doing = p.stall.kind === 'busker' ? 'Playing the guitar for passers-by' : m.carry === 2 ? 'Serving a customer' : `Minding the ${p.stall.label.toLowerCase()}`;
+          doing = p.stall.kind === 'busker' ? 'Playing the guitar for passers-by' : p.stall.kind === 'market' && this.ctx.clock.hours < 7.4 ? 'Setting up the stall' : p.stall.kind === 'market' && this.ctx.clock.hours >= 14.5 ? 'Packing up the stall' : m.carry === 2 ? 'Serving a customer' : `Minding the ${p.stall.label.toLowerCase()}`;
           break;
         }
         doing = p.servePhase === 2 ? (m.carry === 1 ? 'Taking an order' : 'Serving a table') : m.carry === 2 ? 'Bringing an order out' : p.servePhase === 0 ? 'Waiting tables, keeping an eye on the terrace' : 'Waiting tables';

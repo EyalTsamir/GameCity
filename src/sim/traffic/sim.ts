@@ -1346,6 +1346,17 @@ export class TrafficSim {
   }
 
   private updateKerbs(h: number): void {
+    // a vehicle on its way to a stop may be taken off the road (hidden despawn, watchdog, end of its trip): free the stop
+    for (let i = 0; i < this.kerbStops.length; i++) {
+      const st = this.kerbStops[i];
+      if (st.V !== null && st.V.dead) {
+        const k = this.offLane.indexOf(st.V);
+        if (k >= 0) this.offLane.splice(k, 1);
+        st.V = null;
+        st.state = 0;
+        st.release = false;
+      }
+    }
     // brakes done: out of the lane (traffic flows past from now on)
     let any = false;
     for (let i = 0; i < this.vehicles.length; i++) {

@@ -64,14 +64,11 @@ export default function create(ctx: CityContext): CityModule {
   build('noparklife', false, () => new ParkLife(ctx, cast, ctx.rng('scenes-park')));
   build('nobalconylife', false, () => new BalconyLife(ctx, cast, ctx.rng('scenes-balcony')));
 
-  const guard = (s: Scene, fn: () => void) => {
-    try {
-      fn();
-    } catch (err) {
-      problems.push(`scenes: ${s.name} failed (${err instanceof Error ? err.message : String(err)})`);
-      console.error('[scenes]', s.name, err);
-      scenes.splice(scenes.indexOf(s), 1);
-    }
+  // a scene that throws is switched off, the rest play on
+  const drop = (s: Scene, err: unknown) => {
+    problems.push(`scenes: ${s.name} failed (${err instanceof Error ? err.message : String(err)})`);
+    console.error('[scenes]', s.name, err);
+    scenes.splice(scenes.indexOf(s), 1);
   };
 
   ctx.pickers.push({ name: 'scenes', pick: (ray: THREE.Ray) => cast.pick(ray) });
@@ -79,7 +76,11 @@ export default function create(ctx: CityContext): CityModule {
   ctx.events.on('timejump', () => {
     for (let i = scenes.length - 1; i >= 0; i--) {
       const s = scenes[i];
-      guard(s, () => s.timejump?.());
+      try {
+        s.timejump?.();
+      } catch (err) {
+        drop(s, err);
+      }
     }
   });
   ctx.events.on('quality', () => kit.setShadows(ctx.quality.shadows));
@@ -93,7 +94,11 @@ export default function create(ctx: CityContext): CityModule {
       cast.beginObs();
       for (let i = scenes.length - 1; i >= 0; i--) {
         const s = scenes[i];
-        guard(s, () => s.update(dt));
+        try {
+          s.update(dt);
+        } catch (err) {
+          drop(s, err);
+        }
       }
       cast.step(dt);
       ms = ms * 0.9 + (performance.now() - t0) * 0.1;
@@ -104,7 +109,11 @@ export default function create(ctx: CityContext): CityModule {
       for (let i = scenes.length - 1; i >= 0; i--) {
         const s = scenes[i];
         if ((s.x - cam.x) ** 2 + (s.z - cam.z) ** 2 > s.reach * s.reach) continue;
-        guard(s, () => s.draw(kit));
+        try {
+          s.draw(kit);
+        } catch (err) {
+          drop(s, err);
+        }
       }
       kit.end();
     },

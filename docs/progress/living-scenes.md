@@ -4,11 +4,45 @@ Branch `claude/living-scenes-2a2bcc` (cut from `claude/pensive-gates-bim12i` @ 0
 from the main checkout (`node C:/Projects/GameCity/scripts/<x>.mjs --url http://127.0.0.1:5189/`).
 
 ## Resume here
-- See "Status" at the bottom of this section; every scene is committed separately.
+All scenes built and committed; remaining work is listed under "Status". Cheap ways to look at a scene: the table below
+(view + hour); `__city.ctx.services.scenes.scenes` holds the scene objects (private fields readable from `--eval`).
 
 ### Status
 - [x] audit (below)
-- [ ] scene system + scenes (see the table once built)
+- [x] framework: `src/sim/scenes.ts`, `scenes/kit.ts`, `scenes/cast.ts`, `KerbStop` in `sim/traffic/sim.ts`
+- [x] market day, delivery stops, wedding, musician audience + sound, park life, balcony life + window cradle
+- [x] box-hunt hand-offs: garments + washing hours, hand-tied bunting (stack smoke: see "Stack smoke" below)
+- [x] pedestrian bugs (see "Pedestrian bugs")
+- [ ] verification numbers (perf / hitch / ui-test / soak) — filled in below as they come
+
+## What was added
+| scene | story | toggle | quality | best view (`--view`) + hour |
+|---|---|---|---|---|
+| Market day | van turns in over the pavement ~6:20, tarps hauled off stall by stall, vendors + 2 porters stack crates, van reverses out 7:30; 14:30 pack-up, van back 15:45, crates cleared, tarps on 17:00–17:40, van leaves | `?nomarketday` | low: tarps + van, no crates / porters | `27.5,1,78.5,16,200,28` at 6.4–7.5 and 15.8–17.6 |
+| Delivery stops | any delivery van passing an open stop (7 planned in front of shops) pulls half onto the pavement, hazards on; driver opens up, wheels a trolley of crates into the shop, comes back, shuts up, rejoins; a van is sent if none for 75 s | `?nodelivery` | on | 6:24–16:30; `__city.ctx.services.scenes.scenes` → delivery `.stops` for places |
+| Wedding | 10:45 at St. Mary's: car waiting, 16 guests line up, couple out to confetti, photo on the steps, bouquet thrown, walk to the decorated car, drive off (tins + ribbons), guests wave and drift off; confetti stays ~70 s | `?nowedding` | off on low | `70,1.2,95.2,7,-12,6` from 10.7 (100 s) |
+| Musician | up to 9 extra listeners in 2 arcs, joining and drifting off; song ends every 52 s: applause (wave + sound); finger-picked guitar + clapping via `ui/audio/synth.ts`, heard within ~40 m | `?nomusician` | off on low | `40.8,1,20,14,110,12` at 12–21 |
+| Park life | ball game in a ring (2 from 15:00), tag from 12:30, 3 picnics ~11:15–15:30 (rug shaken out, sit, eat, pack up) | `?noparklife` | off on low | `__city…parklife.balls[0].c`, 9:30–18:30 |
+| Balcony life | washing hung 7:24–10 / taken in 17:24–19:36 (cloth shader hides each piece by its own hours; ~10% stay out overnight) with someone on the balcony; watering 7:12–9:18 and 17:48–19:48; leaning with a cup; pool of 7 near the camera | `?nobalconylife` | off on low | `-132,8,-56,22,180,4` at 18.6 |
+| Window cradle | two cleaners in a cradle on office lot 29, working down bay by bay 8:36–16:36 | `?nobalconylife` | off on low | `39,18,-70,20,90,8` |
+
+`?noscenes` removes all of it (and the kerb stops, tarp haul, laundry hours). People are crowd figures (no new draw calls);
+props: one InstancedMesh per kind (`scenes/kit.ts`), only drawn while one is out, one shared program compiled at warm-up.
+
+## Contracts added
+- `traffic/sim.ts` **KerbStop**: a vehicle brakes to the stop like a bus, then **leaves the lane lists entirely** (`sim.offLane`, pose driven along `pathIn`) so traffic flows past: no junction or crossing can be held up by a scene (`control`/`integrate` skip it). It rejoins when `kerbGap()` holds; from the moment it sets off it holds its lane place, so followers brake behind it. Stops are planned with ≥ 15 m from the lane start, ≥ 13 m from the stop line, no level-crossing lanes.
+- `Crowd.extraObs`: discs the walkers go round (scene people, a van's flank). Scene people themselves follow scripts.
+- `look.pram.fabric < 0`: both hands on a bar, no pram drawn (trolley, carried crate).
+- `world/life/cloth.ts` piece option `hang: [out, in]` + `uLifeHours`; `decor.ts laundryWindow()` shared with `scenes/balcony.ts`.
+- `nightmarket.ts`: `TARP_MORNING / TARP_EVENING / TARP_STAGGER`, shared with `scenes/market.ts`; vendor hours in `vendors.ts marketStalls` (6:24–17:36).
+
+## Pedestrian bugs (fixed at the cause, checks not weakened)
+1. **Fade-outs after `setHours`**: (a) `beginFadeOut` ended a crossing and faded the party on the zebra: it now waits until across (`fadeAfterCross`); (b) the excess cull in `warmStart` faded out vendors and waiters where they stood (inside the stall's SOLID cell): staff are no longer culled, and a vendor sent home fades at its counter without tripping the check (`p.stall` exemption is now independent of state, it never moves).
+2. **Rare overlap at an activity spot (−160, 109.3)**: neighbouring attractions could offer the same ground (the statue ring and duck-pond shore had 18 pairs of spots within 0.38 m): `places.ts` drops the duplicates; and a person stopped or walking free who is on top of someone for > 0.8 s takes small steps apart (`trackOverlaps`).
+3. **Paused group overlap (48.9, 63)**: rail stops had no check for someone already standing there: `pauseTaken()` makes the second group walk on.
+
+## Stack smoke
+At noon from the air (`-116,20,-98,300,-30,48`) the works stacks now read white-grey in the current build (the light session changed the sky lighting since the box-hunt note); no change needed there. Checked at 18:00 below if that differs.
 
 ## Time scale (read this first)
 One game day = 16 real minutes at 1× (1 game hour = 40 real / sim seconds). People walk in real seconds, so a scene that
