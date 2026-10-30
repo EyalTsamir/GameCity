@@ -22,6 +22,8 @@ export const ICONS = {
   map: S('<path d="M3.5 6.5 9 4.5l6 2 5.5-2v13L15 19.5l-6-2-5.5 2z"/><path d="M9 4.5v13M15 6.5v13"/>'),
   chase: S('<path d="M3 15.5c3-1 5.5-1.5 9-1.5s6 .5 9 1.5"/><path d="M7 11.5l2.2-3.7h5.6l2.2 3.7"/><rect x="5.5" y="11.4" width="13" height="4.4" rx="1.6"/><circle cx="8.6" cy="17.4" r="1.4" fill="currentColor" stroke="none"/><circle cx="15.4" cy="17.4" r="1.4" fill="currentColor" stroke="none"/>'),
   stop: S('<circle cx="12" cy="12" r="8.5"/><rect x="9" y="9" width="6" height="6" rx="1" fill="currentColor" stroke="none"/>'),
+  film: S('<rect x="3.5" y="5" width="17" height="14" rx="2.4"/><path d="M7.5 5v14M16.5 5v14M3.5 9.5h4M3.5 14.5h4M16.5 9.5h4M16.5 14.5h4"/><path d="M10.6 9.6v4.8l3.6-2.4z" fill="currentColor" stroke="none"/>'),
+  photo: S('<path d="M4 8.5A1.5 1.5 0 0 1 5.5 7h2.6l1.5-2.2h4.8L15.9 7h2.6A1.5 1.5 0 0 1 20 8.5v9a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 17.5z"/><circle cx="12" cy="12.8" r="3.4"/>'),
   walk: S('<circle cx="13.4" cy="4.4" r="1.9" fill="currentColor" stroke="none"/><path d="M12.8 8 11.2 13.4l2.4 3.2.8 4M11.2 13.4l-1.4 3.4-2.2 3.6M12.8 8l2.6 3.4 2.4.6M12.8 8l-3.2 2.4-1.1 2.4"/>'),
   // kinds for the info card
   vehicle: S('<path d="M5 13l1.8-4.4A2 2 0 0 1 8.6 7.4h6.8a2 2 0 0 1 1.8 1.2L19 13"/><rect x="3.5" y="12.8" width="17" height="4.6" rx="1.6"/><circle cx="7.5" cy="17.6" r="1.6" fill="currentColor" stroke="none"/><circle cx="16.5" cy="17.6" r="1.6" fill="currentColor" stroke="none"/>'),

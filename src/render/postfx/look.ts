@@ -74,10 +74,11 @@ uniform vec3 uHighTint;
 uniform float uVignette;
 uniform float uVigStart;
 uniform float uWarm;
+uniform float uPhotoExp;
 void mainImage(const in vec4 inputColor, const in vec2 uv, out vec4 outputColor) {
   vec3 c = thSafeColor(inputColor.rgb);
   // white-balance nudge (warm by day, cool by night) before the curve
-  c *= vec3(1.0 + uWarm, 1.0, 1.0 - uWarm);
+  c *= vec3(1.0 + uWarm, 1.0, 1.0 - uWarm) * uPhotoExp;
 #ifdef TH_WORLD_LOOK
   c = thAgX(c);
 #else
@@ -116,6 +117,7 @@ export class LookEffect extends Effect {
         ['uVignette', new THREE.Uniform(0.28)],
         ['uVigStart', new THREE.Uniform(0.42)],
         ['uWarm', new THREE.Uniform(0.0)],
+        ['uPhotoExp', new THREE.Uniform(1.0)],
         ['uLookSlope', new THREE.Uniform(new THREE.Vector3(1, 1, 1))],
         ['uLookPower', new THREE.Uniform(1.0)],
         ['uLookSat', new THREE.Uniform(1.0)],

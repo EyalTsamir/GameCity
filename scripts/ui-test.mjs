@@ -3,7 +3,7 @@
 //
 //   node scripts/ui-test.mjs [--q "only=camera,ui,audio&camdebug"] [--out shots/uitest] [--url http://127.0.0.1:5174/] [--width 1280 --height 720] [--dpr 1.25]
 //                            [--steps intro,drag,pan,wheel,keys,poi,pois,follow,chase,kinds,building,dbl,aircraft,freecam,explore,tour,help,places,
-//                                     sound,time,speed,labels,resize,sweep,tourwatch,walk]
+//                                     sound,time,speed,labels,resize,sweep,tourwatch,walk,photo,film]
 //
 // Full city: --q noidle (the default `only=camera,ui,audio&camdebug` tests the camera on a stand-in city).
 // `intro` loads the page with the establishing shot and the first-run hint (otherwise &nointro is added).
@@ -28,7 +28,7 @@ const width = parseInt(args.width ?? '1280', 10);
 const height = parseInt(args.height ?? '720', 10);
 const dpr = parseFloat(args.dpr ?? '1');
 const q = args.q ?? 'only=camera,ui,audio&camdebug';
-const DEFAULT_STEPS = 'drag,pan,wheel,keys,poi,pois,follow,chase,kinds,building,dbl,aircraft,sweep,freecam,explore,tour,help,places,sound,time,speed,labels,resize,walk';
+const DEFAULT_STEPS = 'drag,pan,wheel,keys,poi,pois,follow,chase,kinds,building,dbl,aircraft,sweep,freecam,explore,tour,help,places,sound,time,speed,labels,resize,walk,photo,film';
 const wanted = new Set((args.steps ?? DEFAULT_STEPS).split(','));
 const intro = wanted.has('intro');
 const baseUrl = (args.url ?? 'http://127.0.0.1:5173/').replace(/\/?$/, '/'); // --url: another dev server (e.g. a baseline worktree)
@@ -1307,6 +1307,247 @@ try {
     // a cut is a big jump relative to the viewing distance (the old yaw-flip bug: 157 m at 203 m = 3.3×), a pop
     // a big second difference (old: 28–167); a long flight legitimately covers >12 m per frame far out
     step('tour is smooth (no jump cuts, never inside a building)', m.maxRelDistPerFrame < 0.3 && m.maxAccel < 20 && m.insideFrames <= 2, m);
+  }
+
+  if (wanted.has('photo')) {
+    await view({ target: { x: 27.5, y: 1, z: 78.5 }, distance: 40, yaw: 200, pitch: 25 });
+    await settle(600);
+    const state = () =>
+      page.evaluate(() => {
+        const { clock, services } = window.__city.ctx;
+        const c = services.camera;
+        const tb = document.querySelector('.th-toolbar');
+        const panel = document.querySelector('.th-photo');
+        const r = panel.getBoundingClientRect();
+        return {
+          on: document.querySelector('.th-ui').classList.contains('th-photoing'),
+          toolbar: +getComputedStyle(tb).opacity,
+          panel: +getComputedStyle(panel).opacity,
+          inView: r.left >= -1 && r.right <= innerWidth + 1 && r.top >= -1 && r.bottom <= innerHeight + 1,
+          hours: clock.hours,
+          hold: clock.holdTime,
+          speed: clock.speed,
+          mode: c.mode(),
+          yaw: c.getState().yaw,
+        };
+      });
+    const s0 = await state();
+    await page.keyboard.press('KeyP');
+    await settle(800);
+    const s1 = await state();
+    step('P enters photo mode: HUD away, panel on screen, clock held', s1.on && s1.toolbar < 0.05 && s1.panel > 0.9 && s1.inView && s1.hold, s1);
+    await shot('photo_panel');
+    // the free camera still works
+    await page.mouse.move(cx - 200, cy);
+    await page.mouse.down({ button: 'left' });
+    for (let i = 1; i <= 12; i++) await page.mouse.move(cx - 200 + i * 8, cy);
+    await page.mouse.up({ button: 'left' });
+    await settle(500);
+    const s2 = await state();
+    step('photo mode keeps the free camera', Math.abs(s2.yaw - s1.yaw) > 3, { dyaw: s2.yaw - s1.yaw });
+    // controls: time, exposure, aperture, focus, looks
+    const setRange = (k, v) =>
+      page.evaluate(
+        ([k2, v2]) => {
+          const r = document.querySelector(`.th-photo [data-k="${k2}"]`);
+          r.value = String(v2);
+          r.dispatchEvent(new Event('input', { bubbles: true }));
+        },
+        [k, v],
+      );
+    await setRange('time', 18.4);
+    await settle(300);
+    const s3 = await state();
+    await setRange('expo', 1);
+    await setRange('aperture', 0.05);
+    await setRange('focus', 0.4);
+    await settle(500);
+    const s4 = await page.evaluate(() => {
+      const fx = window.__city.stats().postfx;
+      const v = (k) => document.querySelector(`.th-photo [data-v="${k}"]`).textContent;
+      return { focus: fx.focus, coc: fx.cocPx, dof: fx.dof, expo: v('expo'), aperture: v('aperture'), focusText: v('focus'), time: v('time') };
+    });
+    step('photo sliders: time glides, exposure / aperture / focus apply', Math.abs(s3.hours - 18.4) < 0.02 && s3.hold && s4.expo === '+1.0 EV' && Math.abs(s4.focus - 14.5) < 3 && s4.coc > 0.7 && s4.dof === 'on', s4);
+    await shot('photo_controls');
+    const looks = await page.$$eval('.th-photo [data-look]', (l) => l.map((b) => b.dataset.look));
+    for (const l of looks) {
+      await page.click(`.th-photo [data-look="${l}"]`);
+      await settle(350);
+      await shot(`photo_look_${l}`);
+    }
+    await page.click('.th-photo [data-look="natural"]');
+    // a click on the scene focuses there (and follows nothing)
+    await page.click('.th-photo [data-act="auto"]');
+    await page.mouse.click(cx - 240, cy + 100);
+    await settle(300);
+    const focused = await page.evaluate(() => ({ text: document.querySelector('.th-photo [data-v="focus"]').textContent, following: !!window.__city.ctx.services.camera.following() }));
+    step('a click in photo mode focuses there', focused.text !== 'Auto' && !focused.following, focused);
+    // save: a real download of a real picture
+    const dl = page.waitForEvent('download', { timeout: 20000 });
+    await page.click('.th-photo [data-act="save"]');
+    const download = await dl;
+    const name = download.suggestedFilename();
+    const file = `${outBase}_saved.png`;
+    await download.saveAs(file);
+    const png = fs.readFileSync(file);
+    const pic = await page.evaluate(async (b64) => {
+      const bmp = await createImageBitmap(await (await fetch(`data:image/png;base64,${b64}`)).blob());
+      const c = document.createElement('canvas');
+      c.width = bmp.width;
+      c.height = bmp.height;
+      const g = c.getContext('2d');
+      g.drawImage(bmp, 0, 0);
+      const d = g.getImageData(0, 0, c.width, c.height).data;
+      let lum = 0,
+        minA = 255,
+        hi = 0,
+        lo = 255;
+      for (let i = 0; i < d.length; i += 4 * 97) {
+        const l = d[i] * 0.2 + d[i + 1] * 0.7 + d[i + 2] * 0.1;
+        lum += l;
+        hi = Math.max(hi, l);
+        lo = Math.min(lo, l);
+        minA = Math.min(minA, d[i + 3]);
+      }
+      return { w: bmp.width, h: bmp.height, meanLum: lum / (d.length / (4 * 97)), hi, lo, minA };
+    }, png.toString('base64'));
+    report.screenshots.push(file);
+    step('save picture downloads a PNG of the frame (tinyhaven-hh-mm.png, opaque, not blank)', /^tinyhaven-\d\d-\d\d\.png$/.test(name) && png.length > 50000 && pic.minA === 255 && pic.hi - pic.lo > 40 && pic.meanLum > 8, { name, bytes: png.length, ...pic });
+    // leaving restores everything
+    await page.keyboard.press('KeyP');
+    await settle(1500);
+    const s5 = await state();
+    step('leaving photo mode restores clock, speed and HUD', !s5.on && s5.toolbar > 0.9 && s5.hold === s0.hold && s5.speed === s0.speed && Math.abs(s5.hours - s1.hours) < 0.15, s5);
+    // the button and Esc, too
+    await page.click('.th-toolbar [data-tip^="Photo"]');
+    await settle(500);
+    const s6 = await state();
+    await page.keyboard.press('Escape');
+    await settle(800);
+    const s7 = await state();
+    step('photo button enters, Esc leaves', s6.on && !s7.on, { button: s6.on, esc: s7.on });
+  }
+
+  if (wanted.has('film')) {
+    // the film only plays on request here (navigator.webdriver): a page of its own, last of all
+    await page.goto(`${baseUrl}?film&noidle`, { waitUntil: 'domcontentloaded', timeout: 300000 });
+    await page.waitForFunction(() => window.__city?.ready && window.__city.frames() > 1, null, { timeout: 300000, polling: 100 });
+    const fs0 = await page.evaluate(() => {
+      const f = window.__city.ctx.services.camera.film;
+      const r = document.querySelector('.th-ui');
+      return {
+        active: f.active(),
+        total: f.total(),
+        check: f.check().slice(0, 10),
+        filming: r.classList.contains('th-filming'),
+        toolbar: +getComputedStyle(document.querySelector('.th-toolbar')).opacity,
+        seen: localStorage.getItem('tinyhaven.filmSeen'),
+        mode: window.__city.ctx.services.camera.mode(),
+      };
+    });
+    step('film: plays on load, HUD hidden, once-per-visitor flag written', fs0.active && fs0.filming && fs0.toolbar < 0.3 && fs0.seen === '1' && fs0.mode === 'film', fs0);
+    step('film: no eye position inside a building or below ground, 75–110 s long', fs0.check.length === 0 && fs0.total >= 75 && fs0.total <= 110, { check: fs0.check, total: fs0.total });
+    await page.waitForFunction(() => window.__city.ctx.services.camera.film.playing(), null, { timeout: 120000, polling: 50 });
+    await page.evaluate(() => {
+      window.__jumps = 0;
+      window.__city.ctx.events.on('timejump', () => window.__jumps++);
+      window.__filmH0 = window.__city.ctx.clock.hours;
+    });
+    await page.waitForTimeout(6000);
+    await shot('film_dawn');
+    const fs1 = await page.evaluate(() => {
+      const c = window.__city.ctx;
+      return { t: c.services.camera.film.time(), hours: c.clock.hours, h0: window.__filmH0, jumps: window.__jumps, title: +getComputedStyle(document.querySelector('.th-film-title')).opacity };
+    });
+    step('film: time runs, the clock glides without a jump, title shows', fs1.t > 3 && fs1.hours > fs1.h0 && fs1.jumps === 0 && fs1.title > 0.5, fs1);
+    const rec = () =>
+      page.evaluate(() => {
+        const R = (window.__fr = { on: true, p: [], ends: -1 });
+        const cam = window.__city.ctx.camera;
+        const f = window.__city.ctx.services.camera.film;
+        const v = cam.position.clone();
+        const tick = () => {
+          if (!R.on) return;
+          if (R.ends < 0 && !f.active()) R.ends = R.p.length;
+          cam.getWorldDirection(v);
+          // (pixels per unit of view tangent: what a lens change between the film and the orbit would show as a zoom)
+          R.p.push([cam.position.x, cam.position.y, cam.position.z, v.x, v.y, v.z, window.__city.ctx.size.height / Math.tan((cam.fov * Math.PI) / 360)]);
+          requestAnimationFrame(tick);
+        };
+        requestAnimationFrame(tick);
+      });
+    const recStop = () =>
+      page.evaluate(() => {
+        const R = window.__fr;
+        R.on = false;
+        let maxStep = 0,
+          maxTurn = 0,
+          maxZoom = 0;
+        const from = Math.max(1, R.ends - 2);
+        for (let i = from; i < Math.min(R.p.length, R.ends + 12); i++) {
+          const a = R.p[i - 1],
+            b = R.p[i];
+          maxStep = Math.max(maxStep, Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]));
+          maxTurn = Math.max(maxTurn, Math.hypot(a[3] - b[3], a[4] - b[4], a[5] - b[5]));
+          maxZoom = Math.max(maxZoom, Math.abs(a[6] / b[6] - 1));
+        }
+        return { frames: R.p.length, handedAt: R.ends, maxStep, maxTurn, maxZoom };
+      });
+    const handback = async (name, act, limit = 8) => {
+      await page.waitForFunction(() => window.__city.ctx.services.camera.film.playing() && window.__city.ctx.services.camera.film.time() > 3.5, null, { timeout: 120000, polling: 50 });
+      await rec();
+      await page.waitForTimeout(250);
+      await act();
+      await page.waitForTimeout(900);
+      const m = await recStop();
+      const s = await page.evaluate(() => {
+        const c = window.__city.ctx.services.camera;
+        return { active: c.film.active(), mode: c.mode(), following: !!c.following(), hold: window.__city.ctx.clock.holdTime };
+      });
+      // (the film flies ≈ 60 m/s here: a step of a frame or two is motion, a snap is far more)
+      step(`film: ${name} hands the camera back at once, without a snap`, !s.active && s.mode === 'orbit' && !s.hold && m.handedAt >= 0 && m.maxStep < limit && m.maxTurn < 0.06 && m.maxZoom < 0.04 && !s.following, { ...m, ...s });
+    };
+    await handback('a click', async () => {
+      await page.mouse.move(cx, cy);
+      await page.mouse.down({ button: 'left' });
+      await page.mouse.up({ button: 'left' });
+    });
+    await shot('film_handed_back');
+    await settle(800);
+    const tip = await page.evaluate(() => +getComputedStyle(document.querySelector('.th-toolbar')).opacity);
+    step('film: the HUD comes back', tip > 0.9, { toolbar: tip });
+    const replay = () => page.click('.th-toolbar [data-tip="Play the film"]');
+    await replay();
+    await settle(400);
+    const again = await page.evaluate(() => window.__city.ctx.services.camera.film.active());
+    step('film: the toolbar button replays it', again, { active: again });
+    await handback('a key', () => page.keyboard.press('KeyX'));
+    await replay();
+    // (the wheel then zooms, from far out: tens of metres per frame, eased)
+    await handback('the wheel', () => page.mouse.wheel(0, -120), 40);
+    await replay();
+    await handback('a touch', () =>
+      page.evaluate(() => {
+        const cv = document.querySelector('canvas#city');
+        cv.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerType: 'touch', pointerId: 7, clientX: 300, clientY: 300, isPrimary: true }));
+        cv.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerType: 'touch', pointerId: 7, clientX: 300, clientY: 300, isPrimary: true }));
+      }),
+    );
+    // to the end by itself: the camera rests on the night overview, the HUD returns
+    await replay();
+    await page.waitForFunction(() => window.__city.ctx.services.camera.film.playing(), null, { timeout: 120000, polling: 50 });
+    await page.evaluate(() => {
+      const f = window.__city.ctx.services.camera.film;
+      f.seek(f.total() - 2);
+    });
+    await page.waitForFunction(() => !window.__city.ctx.services.camera.film.active(), null, { timeout: 20000, polling: 50 });
+    await settle(700);
+    const end = await page.evaluate(() => {
+      const c = window.__city.ctx;
+      return { mode: c.services.camera.mode(), hold: c.clock.holdTime, hours: c.clock.hours, toolbar: +getComputedStyle(document.querySelector('.th-toolbar')).opacity };
+    });
+    step('film: runs to its end at night and hands over', end.mode === 'orbit' && !end.hold && end.hours > 20.5 && end.toolbar > 0.8, end);
+    await shot('film_end');
   }
 
   report.invariants = await page.evaluate(() => window.__city.invariants());

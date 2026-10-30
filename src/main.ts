@@ -154,6 +154,26 @@ async function boot(): Promise<void> {
 
   // ── load modules (fault isolated)
   const modules: CityModule[] = [];
+  // the window, or the band of it the letterboxed film shows (ctx.cropView)
+  let cropRows = 0;
+  const applySize = () => {
+    const w = window.innerWidth,
+      full = window.innerHeight;
+    const h = cropRows > 0 ? Math.min(cropRows, full) : full;
+    canvas.style.height = cropRows > 0 ? `${h}px` : '';
+    canvas.style.top = cropRows > 0 ? `${(full - h) / 2}px` : '';
+    ctx.size.width = w;
+    ctx.size.height = h;
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+    renderer.setSize(w, h, false);
+    for (const m of modules) m.resize?.(w, h, ctx);
+  };
+  ctx.cropView = (rows) => {
+    if (rows === cropRows) return;
+    cropRows = rows;
+    applySize();
+  };
   const failed: LoadFailure[] = [];
   const wanted: typeof MODULES = params.has('planview')
     ? [['planview', () => import('./debug/planView')]]
@@ -231,11 +251,12 @@ async function boot(): Promise<void> {
   // ?fps=30: draw every other display refresh (an even 33 ms cadence instead of 33/50 ms alternation when a frame
   // does not fit in one refresh); off by default
   const fpsCap = Number(params.get('fps')) || 0;
-  const minInterval = fpsCap > 0 ? 1000 / fpsCap - 4 : 0;
   let lastDraw = -1e9;
   const loop = (timestamp: number) => {
-    if (minInterval > 0) {
-      if (timestamp - lastDraw < minInterval) return;
+    // (ctx.frameCap: the same for the film while it runs)
+    const cap = ctx.frameCap || fpsCap;
+    if (cap > 0) {
+      if (timestamp - lastDraw < 1000 / cap - 4) return;
       lastDraw = timestamp;
     }
     timer.update(timestamp);
@@ -310,17 +331,7 @@ async function boot(): Promise<void> {
   }
   renderer.setAnimationLoop(loop);
 
-  const onResize = () => {
-    const w = window.innerWidth,
-      h = window.innerHeight;
-    ctx.size.width = w;
-    ctx.size.height = h;
-    camera.aspect = w / h;
-    camera.updateProjectionMatrix();
-    renderer.setSize(w, h, false);
-    for (const m of modules) m.resize?.(w, h, ctx);
-  };
-  window.addEventListener('resize', onResize);
+  window.addEventListener('resize', applySize);
 
   // ── debug / automation API
   const api = {

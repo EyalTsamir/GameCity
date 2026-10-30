@@ -11,6 +11,7 @@ import { DIORAMA, TAGLINE } from '../core/world';
 import { ICONS, SKY_DIAL, type IconName } from './hud/icons';
 import { Minimap, type LiveDot } from './hud/minimap';
 import { DistrictLabels, type ScreenRect } from './hud/labels';
+import { PhotoMode } from './hud/photo';
 import { cameraExt, audioExt, type TourShotInfo } from './shared';
 
 type QualityMode = 'auto' | QualityLevel;
@@ -215,6 +216,8 @@ export default function create(ctx: CityContext): CityModule {
   const dofBtn = btn('tiltshift', `${DOF_NAME} (B)`);
   const tourBtn = btn('tour', 'Auto-tour (T)');
   const walkBtn = btn('walk', 'Walk at street level (V)');
+  const filmBtn = btn('film', 'Play the film');
+  const photoBtn = btn('photo', 'Photo mode (P)');
   const weatherBtn = btn('weatherAuto', 'Weather: automatic');
   const soundBtn = btn('soundOff', 'Sound');
   const volWrap = el('div', 'th-vol-wrap');
@@ -226,11 +229,11 @@ export default function create(ctx: CityContext): CityModule {
   vol.setAttribute('aria-label', 'Volume');
   volWrap.appendChild(vol);
   const labelsBtn = btn('labels', 'District labels (L)');
-  const placesBtn = btn('places', 'Places (P)');
+  const placesBtn = btn('places', 'Places (O)');
   const mapBtn = btn('map', 'Minimap (M)');
   const qualityBtn = btn('quality', 'Quality');
   const helpBtn = btn('help', 'Controls & help (H)');
-  g3.append(dofBtn, tourBtn, walkBtn, weatherBtn, soundBtn, volWrap, labelsBtn, placesBtn, mapBtn, qualityBtn, helpBtn);
+  g3.append(dofBtn, tourBtn, walkBtn, filmBtn, photoBtn, weatherBtn, soundBtn, volWrap, labelsBtn, placesBtn, mapBtn, qualityBtn, helpBtn);
   tb.append(g1, el('div', 'th-divider'), g2, el('div', 'th-divider'), g3);
 
   // menus
@@ -314,7 +317,8 @@ export default function create(ctx: CityContext): CityModule {
         <dt>${k('T')}</dt><dd>Cinematic auto-tour</dd>
         <dt>${k('B')}</dt><dd>${DOF_NAME}</dd>
         <dt>${k('L')}${k('M')}</dt><dd>Labels · minimap</dd>
-        <dt>${k('P')}${k('H')}</dt><dd>Places · this help</dd>
+        <dt>${k('O')}${k('H')}</dt><dd>Places · this help</dd>
+        <dt>${k('P')}</dt><dd>Photo mode · save a picture</dd>
         <dt>${k('U')}</dt><dd>Hide the controls</dd>
         <dt>${k('`')}</dt><dd>Frame-rate meter</dd>
       </dl></section>
@@ -345,7 +349,7 @@ export default function create(ctx: CityContext): CityModule {
     const t = e.currentTarget as HTMLElement | null;
     if (t && typeof t.blur === 'function') setTimeout(() => t.blur(), 0);
   };
-  for (const b of [playBtn, ...speedBtns, dofBtn, tourBtn, walkBtn, weatherBtn, soundBtn, labelsBtn, placesBtn, mapBtn, qualityBtn, helpBtn]) b.addEventListener('click', blurSoon);
+  for (const b of [playBtn, ...speedBtns, dofBtn, tourBtn, walkBtn, filmBtn, photoBtn, weatherBtn, soundBtn, labelsBtn, placesBtn, mapBtn, qualityBtn, helpBtn]) b.addEventListener('click', blurSoon);
 
   const setPaused = (p: boolean) => {
     if (p) {
@@ -444,6 +448,42 @@ export default function create(ctx: CityContext): CityModule {
   // first-person walk (camera/firstPerson.ts)
   walkBtn.addEventListener('click', () => {
     cam()?.toggleWalk?.();
+    syncToolbar();
+  });
+
+  // the film (camera/film.ts) and photo mode (hud/photo.ts)
+  filmBtn.addEventListener('click', () => cam()?.film.play());
+  photoBtn.addEventListener('click', () => photo.toggle());
+  const photo = new PhotoMode(ctx, cam, root, toast, () => dofPref);
+  let filming = false;
+  events.on('film', (on: boolean) => {
+    filming = on;
+    root.classList.toggle('th-filming', on);
+    if (on) {
+      closeMenus();
+      setHelp(false);
+      showCaption(null);
+      tooltip.classList.remove('show');
+    } else {
+      // the film held the sky clear: back to what the visitor had chosen
+      setWeather(weather, false);
+      hintAt = t + 1.5;
+      layout();
+    }
+    syncToolbar();
+  });
+  // (the first load's film started before this module existed)
+  if (cam()?.film.active()) {
+    filming = true;
+    root.classList.add('th-filming');
+  }
+  events.on('photo', (on: boolean) => {
+    if (on) {
+      closeMenus();
+      setHelp(false);
+      showCaption(null);
+      tooltip.classList.remove('show');
+    }
     syncToolbar();
   });
 
@@ -717,6 +757,8 @@ export default function create(ctx: CityContext): CityModule {
     walkBtn.disabled = !c?.toggleWalk;
     walkBtn.classList.toggle('on', walking);
     walkBtn.dataset.tip = walking ? 'Stop walking (V)' : 'Walk at street level (V)';
+    filmBtn.disabled = !c;
+    photoBtn.disabled = !ctx.services.postfx?.capture;
     const a = audio();
     const sOn = !!a?.enabled();
     soundBtn.innerHTML = sOn ? ICONS.soundOn : ICONS.soundOff;
@@ -835,6 +877,11 @@ export default function create(ctx: CityContext): CityModule {
   };
   const onKey = (e: KeyboardEvent) => {
     if (e.code === 'Escape') {
+      if (photo.active) {
+        photo.exit();
+        e.stopImmediatePropagation();
+        return;
+      }
       if (helpOpen) {
         setHelp(false);
         e.stopImmediatePropagation();
@@ -878,6 +925,9 @@ export default function create(ctx: CityContext): CityModule {
         setMap(!mapOn);
         break;
       case 'KeyP':
+        photo.toggle();
+        break;
+      case 'KeyO':
         toggleMenu(placesMenu, placesBtn);
         break;
       case 'KeyB':
@@ -890,7 +940,8 @@ export default function create(ctx: CityContext): CityModule {
         setFps(!fpsOn);
         break;
       case 'KeyU':
-        setHud(!hudHidden);
+        if (photo.active) photo.togglePanel();
+        else setHud(!hudHidden);
         break;
       case 'Slash':
         if (e.shiftKey) setHelp(!helpOpen);
@@ -989,7 +1040,7 @@ export default function create(ctx: CityContext): CityModule {
     const c = cam();
     if (!c) return;
     const p = c.pointer;
-    const active = p.inside && !p.dragging && !helpOpen && now - p.movedAt < 4000 && !c.touring();
+    const active = p.inside && !p.dragging && !helpOpen && now - p.movedAt < 4000 && !c.touring() && !photo.active;
     if (!active) {
       labels.setHover(null);
       if (hoverHit || hoverFlag) {
@@ -1097,6 +1148,7 @@ export default function create(ctx: CityContext): CityModule {
   const camForHook = cam();
   if (camForHook)
     camForHook.clickHook = (x, y) => {
+      if (photo.click(x, y)) return true;
       const d = labels.hitTest(x, y);
       if (!d) return false;
       labels.fly(d);
@@ -1127,6 +1179,8 @@ export default function create(ctx: CityContext): CityModule {
     fpsShown = 60,
     msEma = 16;
   let t = 0;
+  /** the first-run hint waits for this moment (and for the film to end) */
+  let hintAt = 4.2;
   let lastToolbarSync = 0;
   let frameStart = 0;
   let uiMs = 0;
@@ -1137,10 +1191,14 @@ export default function create(ctx: CityContext): CityModule {
       const now = performance.now();
       t += realDt;
       frameStart = now;
+      photo.frame(realDt);
       updateClock();
-      labels.update(realDt);
-      minimap.draw(now);
-      updateHover(now);
+      // (nothing of this shows during the film)
+      if (!filming) {
+        labels.update(realDt);
+        minimap.draw(now);
+        updateHover(now);
+      }
       perf.update(realDt);
       // info lines refresh at 4 Hz
       infoTimer += realDt;
@@ -1157,7 +1215,7 @@ export default function create(ctx: CityContext): CityModule {
         if ((c?.following() ?? null) !== followHit) syncInfo();
       }
       // first-run hint after the establishing shot
-      if (hintState === 'wait' && t > 4.2) {
+      if (hintState === 'wait' && t > hintAt && !filming && !photo.active) {
         if (automated && !ctx.debug.params.has('hint')) hintState = 'done';
         else {
           hintState = 'show';
@@ -1202,6 +1260,7 @@ export default function create(ctx: CityContext): CityModule {
     dispose() {
       if (camForHook && camForHook.clickHook) camForHook.clickHook = null;
       window.removeEventListener('keydown', onKey, true);
+      photo.dispose();
       document.removeEventListener('pointerdown', onDocDown, true);
       ctx.canvas.removeEventListener('pointerdown', onCanvasInteract);
       ctx.canvas.removeEventListener('wheel', onCanvasInteract);

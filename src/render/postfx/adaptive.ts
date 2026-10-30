@@ -70,6 +70,10 @@ const FAST_FPS = 57;
 const GPU_HEAVY = 14;
 /** predicted GPU ms per frame at the higher level must stay below this to step up */
 const GPU_UP = 13.5;
+/** a held shot slower than this per frame steps down at the next fade (the film's cadence is 33 ms) */
+const HELD_SLOW_MS = 37;
+/** the film's curtain: the top step keeps going up to this much GPU time per frame */
+const START_FULL_MS = 31;
 
 /** Asynchronous per-frame GPU timing (TIME_ELAPSED queries), results arrive a few frames late. */
 export class GpuTimer {
@@ -137,6 +141,12 @@ export class AdaptiveController {
   private verify: { from: number; fps: number; gpu: number } | null = null;
   /** measured GPU ms saved by stepping from level i to i + 1 */
   private saving: number[] = [];
+  /** film shots / photo mode: see hold() */
+  private held = false;
+  private heldTime = 0;
+  private heldFrames = 0;
+  /** recent GPU ms per frame whatever the state (-1 = no timer) */
+  private rawGpu = -1;
 
   constructor(
     public readonly ladder: QualityStep[],
@@ -146,6 +156,7 @@ export class AdaptiveController {
 
   /** one GPU timing result (ms) for a frame drawn at the current level */
   gpuSample(ms: number): void {
+    this.rawGpu = this.rawGpu < 0 ? ms : this.rawGpu + (ms - this.rawGpu) * 0.2;
     if (this.warmup > 0) return;
     this.gpuSum += ms;
     this.gpuN++;
@@ -155,6 +166,10 @@ export class AdaptiveController {
   frame(realDt: number): boolean {
     this.clock += realDt;
     if (!this.enabled) return false;
+    if (this.held) {
+      this.heldTime += realDt;
+      this.heldFrames++;
+    }
     if (this.warmup > 0) {
       this.warmup -= realDt;
       return false;
@@ -175,7 +190,44 @@ export class AdaptiveController {
     this.fps = fps;
     this.gpuMs = gpu;
     if (this.capped && this.clock >= this.cappedUntil) this.capped = false;
+    if (this.held) return false;
+    return this.decide(fps, gpu);
+  }
 
+  /**
+   * Hold quality changes (film shots, photo mode): the frames go on being timed but nothing changes. Released with
+   * stepDown (the film's fades, while the picture is black): a shot that ran slower than HELD_SLOW_MS steps down, once,
+   * without the usual verification — the next shot is another view, so a before / after would say nothing.
+   */
+  hold(on: boolean, stepDown = false): void {
+    if (this.held === on) return;
+    this.held = on;
+    if (on) {
+      this.heldTime = 0;
+      this.heldFrames = 0;
+      return;
+    }
+    const slow = this.heldFrames >= 12 && this.heldTime / this.heldFrames > HELD_SLOW_MS / 1000;
+    if (stepDown && slow && this.enabled && this.level < this.ladder.length - 1) {
+      this.verify = null;
+      this.set(this.level + 1);
+    }
+    this.winTime = this.winFrames = this.winMax = 0;
+  }
+
+  /**
+   * The film's curtain: one measured frame cost (GPU time where timers exist, else the median frame interval) picks the
+   * starting step, so the first shot does not have to find it out in front of the visitor. Only from the top.
+   */
+  startAt(frameMs: number): void {
+    if (!this.enabled || this.level !== 0) return;
+    const ms = this.rawGpu > 0 ? this.rawGpu : frameMs;
+    const want = ms <= START_FULL_MS ? '' : ms <= 36 ? 'no-ao' : ms <= 44 ? 'scale-0.85' : ms <= 58 ? 'scale-0.72' : 'scale-0.6';
+    const i = this.ladder.findIndex((s) => s.name === want);
+    if (i > 0) this.set(i);
+  }
+
+  private decide(fps: number, gpu: number): boolean {
     // did the last step down help? (first clean window after it settled)
     if (this.verify) {
       const v = this.verify;

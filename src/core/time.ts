@@ -74,6 +74,15 @@ export class WorldClock {
     this.events?.emit('timejump', this.hours);
   }
 
+  /**
+   * Move the clock without announcing a jump (the film, photo mode): nothing starts over — the crowd keeps walking, the
+   * street lights ease. Only for moves that are continuous or hidden; a real jump is setHours.
+   */
+  glideHours(h: number): void {
+    this.hours = ((h % 24) + 24) % 24;
+    this.recompute();
+  }
+
   /** "HH:MM" */
   label(): string {
     const h = Math.floor(this.hours);

@@ -259,6 +259,22 @@ export class RailSim {
     };
   }
 
+  /**
+   * The film books its train: the line is cleared (only behind a curtain: a running train just vanishes) and the next
+   * service is a regional that stops at the platform `seconds` from now, running in `dir`.
+   */
+  bookArrival(seconds: number, dir: 1 | -1): void {
+    this.trains.length = 0;
+    this.queue.length = 0;
+    const nom = this.nominal('regional', dir, 4);
+    const s = this.makeService(dir, 'regional', this.time + Math.max(0, seconds - nom.arrive));
+    s.nCars = 4;
+    s.departAt = s.spawnAt + nom.depart;
+    s.doneAt = s.spawnAt + nom.done;
+    this.queue.push(s);
+    this.planAhead();
+  }
+
   /** keep three services planned beyond the running train */
   private planAhead(): void {
     while (this.queue.length < 3) {
