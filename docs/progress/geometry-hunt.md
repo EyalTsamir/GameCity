@@ -21,15 +21,15 @@ lines of "Ranked findings" and "Left for later". Before / after: `docs/progress/
 
 Everything added for shape (lunettes, plates, edge boards, turned bollards) is included: net −1.6 M overview, −0.5 M street, −1.35 M downtown, −1.4 M harbor.
 
-## Perf (`perf.mjs`, 1920×1025, noon, `?nogeomhunt` → on, two repeats, siblings sharing the machine; measured just before the last correction of #6, +16 k triangles)
-| view | off | on | gain | g_shadow off → on |
+## Perf (`perf.mjs`, 1920×1025, noon, `?nogeomhunt` → on, two repeats, final code; on AC: `PowerLineStatus` Online before, between and after the runs)
+| view | off | on | change | g_shadow off → on |
 |---|---|---|---|---|
-| overview | 50.4 ms | 48.2 ms | −2.2 ms | 2.4 → 0.9 |
-| street | 47.3 ms | 46.7 ms | −0.5 ms | 2.8 → 2.6 |
-| downtown | 58.3 ms | 53.5 ms | −4.8 ms | 2.2 → 1.3 |
-| harbor | 51.6 ms | 47.8 ms | −3.8 ms | 2.4 → 1.35 |
+| overview | 49.2 ms | 47.3 ms | -1.9 ms | 2.4 → 0.9 |
+| street | 46.3 ms | 45.7 ms | -0.6 ms | 2.8 → 2.5 |
+| downtown | 57.0 ms | 52.3 ms | -4.7 ms | 2.2 → 1.3 |
+| harbor | 50.5 ms | 46.7 ms | -3.8 ms | 2.4 → 1.4 |
 
-`?nogeomhunt` still keeps the always-on bug fixes (cells that never culled), so street "off" is below the true baseline.
+`?nogeomhunt` still keeps the always-on bug fixes (cells that never culled), so street "off" is below the true baseline. Same reason for its draw calls: 214 off, 217 on (the plant cells), against 220 at the baseline.
 
 ## Audit counts (`geomaudit`, whole city)
 | | baseline | final |
@@ -42,7 +42,7 @@ Everything added for shape (lunettes, plates, edge boards, turned bollards) is i
 | sunk parts | 1730 | 1729 (tunnel veils, piles, bridge piers: no visible case found) |
 | buried triangles | 27124 (a3) | 26822, deliberately left: see #6 |
 
-Verification: typecheck clean, build OK, `invariants {}`, `validate []`, `hitch` prog +0, `ui-test` 54/54, console clean.
+Verification: typecheck clean, build OK, `invariants {}`, `validate []`, `hitch` prog +0 (rerun on the final code, on AC), `ui-test` 54/54 (before the last correction of #6, which only keeps more triangles), console clean.
 
 Roughly half of the frame's triangles were the shadow pass (one 2048² map fitted around the camera focus: 181 m wide at
 street level, 1825 m at the overview).
