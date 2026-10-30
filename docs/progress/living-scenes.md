@@ -4,7 +4,7 @@ Branch `claude/living-scenes-2a2bcc` (cut from `claude/pensive-gates-bim12i` @ 0
 from the main checkout (`node C:/Projects/GameCity/scripts/<x>.mjs --url http://127.0.0.1:5189/`).
 
 ## Resume here
-All scenes built and committed; remaining work is listed under "Status". Cheap ways to look at a scene: the table below
+Finished: all scenes built, committed and verified; the branch waits to be merged by the coordinator. What could still be done is under "Open". Cheap ways to look at a scene: the table below
 (view + hour); `__city.ctx.services.scenes.scenes` holds the scene objects (private fields readable from `--eval`).
 
 ### Status
@@ -58,7 +58,30 @@ One run each, and the crowd is chaotic: the 277 / 219 row was one long knot and 
 From the air (`-116,20,-98,300,-30,48`) the works stacks read white-grey at noon and warm cream in the 18:00 light, not brown: no change made. (Why they differ from the box-hunt note was not looked into.)
 
 ## Verification
-PERF_PLACEHOLDER
+On final code, all on AC power (checked before each run):
+- `npm run typecheck` clean, `npm run build` OK (3.99 MB, single file).
+- `ui-test.mjs --q noidle`: 54 passed, 0 failed.
+- `shot.mjs --view overview --invariants --validate --speed 4 --wait 20000`: invariants `{}`, validate `[]`, no console errors. A long soak is not clean: see the table under "Pedestrian bugs" and "Open".
+- `hitch.mjs`, 5 views x 4 hours including the scene hours: 41 windows, 0 new programs.
+- Before / after sheet: `docs/progress/scenes/before-after.jpg`.
+
+Perf A/B `perf.mjs --variants ";noscenes" --repeat 2 --gpu 1`, 1920x1025, high, adaptive off (mean of 2; another session may have been using the machine, load was not checked, the two repeats agree within 0.5 ms):
+
+| view | hour | scenes ms | `?noscenes` ms | difference | draw calls | triangles |
+|---|---|---|---|---|---|---|
+| street `5,1.5,-65,9,0,6` | 12 | 45.05 | 44.80 | +0.25 | +14 | +21 k |
+| market `27.5,1,78.5,16,200,28` | 9.5 | 58.67 | 58.37 | +0.30 | +10 | +13 k |
+| park `-32.4,1,9.6,12,30,12` | 15.6 | 53.05 | 51.31 | **+1.74** | +10 | +59 k |
+| church `70,1,95,15,10,10` | 10.76 | 61.92 | 58.46 | **+3.46** | +15 | +147 k |
+| overview | 12 | 50.03 | 50.04 | 0 | 0 | 0 |
+
+The target of at most +1 ms holds in ordinary views and from the air; it does **not** hold close up to the park games (+1.7) or the wedding (+3.5). Those are figures close to the camera (20 extra people at the church), for as long as the scene lasts (the wedding: about 100 s once a day, only near the church). On low both are off. The split between figures and kit props was not measured.
+
+## Open
+- Wedding and park cost above (fewer guests on medium, or lower-LOD guests, would be the first things to try).
+- Two in-the-road samples per day at cafe seats, and the park-corner overlaps, are still there (both also on the base commit).
+- The guitar and applause have not been listened to: headless runs only show that they raise no errors.
+- Not played through at 1x from start to finish in one sitting: each scene was watched at its hours, the day-long runs were at 4x.
 
 ## Time scale (read this first)
 One game day = 16 real minutes at 1× (1 game hour = 40 real / sim seconds). People walk in real seconds, so a scene that
