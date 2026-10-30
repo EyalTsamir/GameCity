@@ -351,6 +351,13 @@ export function genTownhouse(g: Gen): void {
           const n = len > 4.6 ? 2 : 1;
           const gr = makeGrid(a, b, 0, gH, 1, { spacing: len / n, cols: n, winW: (len - 0.5) / n - 0.25, winH: fasciaY0 - 0.12 - 0.3, sill: 0.3, margin: 0.22 });
           wallGrid(g.shell, sg, a, b, 0, groundTop, gr, { ...look(PROF.SHOP, WIN.SHOP), color: shopC, pattern: WALLPAT.SMOOTH + 16 * shopT, frame: FRAME.DARK });
+          // ?noshopfront: a panelled stall riser under the display windows and a projecting sill on it
+          if (MASS.shopfronts && gr.n > 0) {
+            setCol(t, shade(shopC, 0.82));
+            sideBox(t, sg, a + 0.22, b - 0.22, 0, 0.06, 0.04, 0.27, true);
+            setCol(t, shade(shopC, 0.7));
+            sideBox(t, sg, a + 0.18, b - 0.18, 0, 0.13, 0.27, 0.33, true);
+          }
         },
         (a, b, y0) => wallPlain(g.shell, sg, a, b, y0, groundTop, { color: shopC, pattern: WALLPAT.SMOOTH, seed: g.seed }),
       );
@@ -367,6 +374,17 @@ export function genTownhouse(g: Gen): void {
       sideBox(t, sg, uA + 0.3, uB - 0.3, 0, 0.16, fasciaY0, fasciaY1, true);
       setCol(t, trimC);
       sideBox(t, sg, uA + 0.2, uB - 0.2, 0, 0.22, fasciaY1, fasciaY1 + 0.08, true);
+      if (MASS.shopfronts) {
+        // a capped cornice over the fascia and a carved console at each end (deep scroll block over a smaller
+        // drop), the classic shopfront's frame
+        sideBox(t, sg, uA + 0.08, uB - 0.08, 0, 0.3, fasciaY1 + 0.08, fasciaY1 + 0.13, true);
+        setCol(t, shade(trimC, 0.94));
+        for (const [c0, c1] of [[uA + 0.02, uA + 0.3], [uB - 0.3, uB - 0.02]]) {
+          sideBox(t, sg, c0, c1, 0, 0.27, fasciaY0 + 0.1, fasciaY1, true);
+          sideBox(t, sg, c0 + 0.04, c1 - 0.04, 0, 0.21, fasciaY0 - 0.12, fasciaY0 + 0.1, true);
+          sideBox(t, sg, c0 + 0.08, c1 - 0.08, 0, 0.17, fasciaY0 - 0.22, fasciaY0 - 0.12, true);
+        }
+      }
       const gold = rng.chance(0.6) ? '#f2d27a' : '#f6f0e0';
       const signRect = g.atlas.add(`shop:${shopDef.name}:${shopC.getHexString()}`, 256, 48, boardSign(shopDef.name, { bg: `#${shopC.getHexString()}`, fg: gold, border: gold, glow: 0.75, glowColor: '#ffd9a0' }));
       const sLen = Math.min(uB - uA - 0.9, (fasciaY1 - fasciaY0 - 0.1) * 5.3);
