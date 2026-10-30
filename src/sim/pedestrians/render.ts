@@ -602,7 +602,8 @@ export class CrowdRenderer {
           BA[nb++] = blobAlpha * m.fade;
         }
         // pram
-        if (L.pram && np < this.pram.instanceMatrix.count) {
+        // (fabric < 0: hands on a push bar, but what is pushed is someone else's: a trolley, a crate carried)
+        if (L.pram && L.pram.fabric >= 0 && np < this.pram.instanceMatrix.count) {
           MI[0] = mx;
           MI[1] = m.y;
           MI[2] = mz;

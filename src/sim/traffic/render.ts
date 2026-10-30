@@ -295,14 +295,20 @@ export class VehicleRenderer {
     let np = 0,
       nf = 0;
     const poolCol = this.col;
-    for (const V of sim.vehicles) {
-      sim.computePose(V);
+    const drawList = sim.drawList();
+    for (let vi = 0; vi < drawList.length; vi++) {
+      const V = drawList[vi];
+      if (!V.offLane) sim.computePose(V);
       const sp = V.spec;
       // body pitch (braking dips the nose) and roll (lean out of turns)
       let pitchT = Math.max(-0.035, Math.min(0.035, -V.a * 0.0085));
       let rollT = Math.max(-0.045, Math.min(0.045, ((V.v * V.v) / sp.wheelbase) * Math.tan(V.steer) * 0.011));
       if (V.dwell > 0) {
         rollT = -0.022; // the bus kneels towards the kerb
+        pitchT = 0;
+      }
+      if (V.offLane) {
+        rollT = V.offRoll;
         pitchT = 0;
       }
       if (V.twoWheel) {
@@ -345,7 +351,7 @@ export class VehicleRenderer {
         const idx = L.n++;
         this.eul.set(V.pitch, V.yaw, V.roll);
         this.q.setFromEuler(this.eul);
-        this.pos.set(V.x, ROAD_Y, V.z);
+        this.pos.set(V.x, ROAD_Y + (V.offLane ? V.offY : 0), V.z);
         this.m4.compose(this.pos, this.q, this.scl);
         L.mesh.setMatrixAt(idx, this.m4);
         L.mesh.setColorAt(idx, this.colorOf(V.color));
@@ -477,6 +483,7 @@ export class VehicleRenderer {
 
   private blinker(V: Vehicle): number {
     if (V.progT > 45) return 3;
+    if (V.hazard) return 3;
     if (V.departBlink > 0) return 1;
     const sim = this.sim;
     if (V.elem >= sim.NL) {

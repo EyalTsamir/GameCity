@@ -774,9 +774,15 @@ export class Crowd {
     this.parties.length = w;
   }
 
+  /** people and things of other modules the crowd walks round (scenes): x, z, vx, vz, r per entry */
+  extraObs: Float64Array = new Float64Array(0);
+  nExtraObs = 0;
+
   private rebuildGrid(): void {
     const g = this.grid;
     g.clear();
+    const eo = this.extraObs;
+    for (let i = 0; i < this.nExtraObs; i++) g.add(eo[i * 5], eo[i * 5 + 1], eo[i * 5 + 2], eo[i * 5 + 3], eo[i * 5 + 4], -2, null, 0, 1);
     for (const p of this.parties) {
       if (p.state === 'gone') continue;
       for (const m of p.members) {
@@ -3277,8 +3283,8 @@ export class Crowd {
       m.faceYaw = st.yaw;
       return;
     }
-    if (st.kind === 'market' && this.ctx.clock.hours >= 14.5) {
-      // packing up: crates from the counter to the back of the stall and back again
+    if (st.kind === 'market' && (this.ctx.clock.hours >= 14.5 || this.ctx.clock.hours < 7.4)) {
+      // setting up / packing up: crates from the counter to the back of the stall and back again
       if (p.timer <= 0) {
         const toBack = m.carry !== 2;
         m.carry = toBack ? 2 : 0;

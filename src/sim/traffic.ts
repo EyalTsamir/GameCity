@@ -189,6 +189,8 @@ export default function create(ctx: CityContext): CityModule {
     /** live vehicle list (the array is replaced when vehicles leave: fetch it every frame); riders of the
      * two-wheelers (V.twoWheel) are drawn by the pedestrians module from V.x/z/yaw/lean/crank */
     vehicles: () => sim.vehicles,
+    /** scenes: kerb stops (sim.ts KerbStop) */
+    sim,
     busCount: () => sim.busCount(),
     /** parked bicycles / mopeds / e-scooters on the pavement (keep-clear points for walkers) */
     parked2w: parked2w.map((p) => ({ x: p.x, z: p.z, yaw: p.yaw, len: p.model === 'moto' ? 1.9 : p.variant === 1 ? 1.2 : 1.8 })),
