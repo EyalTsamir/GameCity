@@ -43,7 +43,7 @@ export function surface(nu: number, nv: number, fn: SurfFn, closeU = false): THR
  * A thin shell of thickness `thick` behind the surface fn (outer side = du × dv): outer + inner skins and
  * the rim strips round the open edges (all four, or v-edges only when closeU). Returns the parts.
  */
-export function shell(nu: number, nv: number, fn: SurfFn, thick: number, closeU = false): THREE.BufferGeometry[] {
+export function shell(nu: number, nv: number, fn: SurfFn, thick: number, closeU = false, rims = true): THREE.BufferGeometry[] {
   const outer = surface(nu, nv, fn, closeU);
   const P = outer.getAttribute('position') as THREE.BufferAttribute;
   const N = outer.getAttribute('normal') as THREE.BufferAttribute;
@@ -55,6 +55,7 @@ export function shell(nu: number, nv: number, fn: SurfFn, thick: number, closeU 
   for (let t = 0; t < ix.length; t += 3) flipped.push(ix[t], ix[t + 2], ix[t + 1]);
   inner.setIndex(flipped);
   inner.computeVertexNormals();
+  if (!rims) return [outer, inner]; // (a few mm of cloth edge: never seen, ~a third of the triangles)
   // rims: double-sided strips (both windings) between matching outer / inner boundary vertices
   const cols = closeU ? nu : nu + 1;
   const rim: number[] = [];

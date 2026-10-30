@@ -4,6 +4,8 @@
 //   node scripts/geomaudit.mjs --url http://127.0.0.1:5191/ --out shots/geom/base [--q "nogeomhunt"] [--module props]
 //   node scripts/geomaudit.mjs --url … --out shots/geom/base --census [--census-res 512] [--census-points 140]
 //   node scripts/geomaudit.mjs --harness C:/Projects/GameCity/scripts …   (browser.mjs of the main checkout: its shared lock)
+//   node scripts/geomaudit.mjs --url … --no-audit --tris "overview;street=5,1.5,-65,9,0,6;downtown;harbor"   (triangles per view)
+//   node scripts/geomaudit.mjs --url … --no-audit --drill "landmarks-static" --drill-min 5000   (repeated part families of meshes)
 //
 // Writes <out>.json (everything, including samples with world positions) and <out>.md (ranked tables). Per mesh:
 //   tris          triangles of one draw × instances       casts      castShadow
@@ -763,6 +765,28 @@ try {
   await page.waitForFunction(() => window.__city?.ready && window.__city.frames() > 3, null, { timeout: 400000 });
   await page.evaluate((v) => window.__city.view(v), args.view ?? 'overview');
   await page.waitForTimeout(1500);
+  if (args.tris) {
+    // triangles and draw calls per view (all passes of a rendered frame): --tris "overview;street=5,1.5,-65,9,0,6"
+    report.tris = [];
+    await page.setViewportSize({ width: 1920, height: 1025 });
+    for (const v of String(args.tris).split(';').filter(Boolean)) {
+      const name = v.includes('=') ? v.slice(0, v.indexOf('=')) : v;
+      const spec = v.includes('=') ? v.slice(v.indexOf('=') + 1) : v;
+      await page.evaluate((sp) => {
+        window.__city.setHours(12);
+        if (/^[a-z]/i.test(sp)) window.__city.view(sp);
+        else {
+          const [x, y, z, distance, yaw, pitch] = sp.split(',').map(Number);
+          window.__city.view({ target: { x, y, z }, distance, yaw, pitch });
+        }
+      }, spec);
+      await page.waitForTimeout(1200);
+      for (let k = 0; k < 4; k++) await page.screenshot({ type: 'jpeg', quality: 1 }).catch(() => {});
+      const st = await page.evaluate(() => window.__city.stats());
+      report.tris.push({ view: name, drawCalls: st.drawCalls, triangles: st.triangles });
+      console.log(`${name.padEnd(12)} ${String(st.drawCalls).padStart(4)} dc  ${(st.triangles / 1e6).toFixed(3)} M tris`);
+    }
+  }
   if (!args['no-audit']) report.audit = await page.evaluate(auditInPage, { skipParts: !!args['skip-parts'] });
   report.errors = errs;
   if (args.drill) report.drill = await page.evaluate(drillInPage, { re: args.drill, top: parseInt(args['drill-top'] ?? '40', 10), min: parseInt(args['drill-min'] ?? '0', 10), inst: true });
@@ -779,7 +803,10 @@ fs.writeFileSync(`${out}.json`, JSON.stringify(report, null, 0));
 
 // ── markdown digest ───────────────────────────────────────────────────────────────────────────────────────────
 const md = [];
-if (report.harnessError) md.push(`HARNESS ERROR: ${report.harnessError}`);
+if (report.harnessError) {
+  md.push(`HARNESS ERROR: ${report.harnessError}`);
+  console.log(report.harnessError);
+}
 if (report.audit) {
   const a = report.audit;
   const rows = a.rows;
@@ -830,6 +857,7 @@ if (report.census) {
   const tot = c.rows.reduce((s, r) => ({ t: s.t + r.tris, h: s.h + r.hidden, ti: s.ti + r.tiny }), { t: 0, h: 0, ti: 0 });
   md.push('', `Totals: ${tot.t} tris, ${tot.h} hidden, ${tot.ti} tiny.`);
 }
+if (report.tris) md.push('', '## Triangles per view', '', '| view | draw calls | triangles |', '|---|---|---|', ...report.tris.map((t) => `| ${t.view} | ${t.drawCalls} | ${t.triangles} |`));
 if (report.drill) {
   for (const d of report.drill) {
     md.push('', `## Drill ${d.path} — ${d.tris} tris, ${d.parts} parts`, '', '| tris | parts | tris/part | size m | area m² | at |', '|---|---|---|---|---|---|');

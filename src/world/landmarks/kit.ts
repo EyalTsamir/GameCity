@@ -116,6 +116,18 @@ export class Kit {
     g.dispose();
   }
 
+  /** Frustum standing on something: as `cyl` without the bottom cap (it can never be seen). */
+  cylOn(m: Mat, rTop: number, rBot: number, h: number, x: number, y: number, z: number, seg = 12): void {
+    if (h <= 0) return;
+    const g = new THREE.CylinderGeometry(rTop, rBot, h, seg, 1, false);
+    const bottom = g.groups[2]; // side, top, bottom
+    g.setIndex(Array.from(g.getIndex()!.array).slice(0, bottom.start));
+    g.translate(0, h / 2, 0);
+    _m.makeTranslation(x, y, z);
+    this.b.add(g, m, _m, 'cyl', 2 * Math.PI * Math.max(rTop, rBot), 1);
+    g.dispose();
+  }
+
   /** Horizontal cylinder (axis along local X after yaw ry), centred at (x, y, z). */
   cylX(m: Mat, r: number, len: number, x: number, y: number, z: number, seg = 10, ry = 0, open = false): void {
     const g = new THREE.CylinderGeometry(r, r, len, seg, 1, open);
