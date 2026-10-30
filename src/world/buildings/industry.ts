@@ -163,6 +163,15 @@ export function genIndustrial(g: Gen): void {
       // corner trims
       sideBox(t, sg, uA, uA + 0.15, 0, 0.12, 0, H);
       sideBox(t, sg, uB - 0.15, uB, 0, 0.12, 0, H);
+      // ?nomonitor: the portal frame's steel columns expressed as cover strips at the bay lines
+      if (MASS.monitor && !customs) {
+        setCol(t, shade(wallC, 0.8));
+        for (let i = 1; i < nb; i++) {
+          const u = uA + i * bw;
+          if (ops.some((o) => Math.abs(o.u - u) < o.w / 2 + 0.3)) continue;
+          sideBox(t, sg, u - 0.13, u + 0.13, 0, 0.11, 0.9, H - 0.25);
+        }
+      }
     }
     for (const u of rollups) rollupDoor(sg, u);
     // ?nomonitor: downpipes from the eaves gutter at every second bay line of the long sides
@@ -910,9 +919,11 @@ export function genIndustrial(g: Gen): void {
     const yS = Math.min(H - 0.5, Math.max(doorH + 1.0, H - 2.0));
     const yB = Math.min(yS - 0.55, Math.max(yS - 1.65, doorH + 0.75));
     const w = Math.min(sgF.L * 0.55, 11, (yS - yB - 0.15) * 7.2); // keep the lettering's aspect
+    // the board stands proud of the brick pilasters / string course (they used to cut through it)
+    const bo = brick ? INS + 0.08 : 0.1;
     setCol(t, col('#2c3a46'));
-    sideBox(t, sgF, sgF.L / 2 - w / 2 - 0.1, sgF.L / 2 + w / 2 + 0.1, 0, 0.1, yB, yS + 0.05, true);
-    signOnSide(g, sgF, sgF.L / 2 - w / 2, sgF.L / 2 + w / 2, 0.135, yB + 0.1, yS - 0.05, r);
+    sideBox(t, sgF, sgF.L / 2 - w / 2 - 0.1, sgF.L / 2 + w / 2 + 0.1, 0, bo, yB, yS + 0.05, true);
+    signOnSide(g, sgF, sgF.L / 2 - w / 2, sgF.L / 2 + w / 2, bo + 0.035, yB + 0.1, yS - 0.05, r);
     if (depot) {
       // floodlights over the yard
       for (const u of [1.0, sgF.L - 1.0]) {

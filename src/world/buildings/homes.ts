@@ -277,7 +277,7 @@ export function genHouse(g: Gen): void {
     }
     setCol(t, shade(trimC, 0.92));
     t.hrect(pa, zP, pb, M.z1, postH - 0.31, false);
-    if (rng.chance(0.6)) porchBench(pa + 0.5, zP + 0.25);
+    if (rng.chance(0.6)) porchBench(pa, pb, pa + du, zP + 0.25, 0.16);
   } else {
     // door in the main front wall (veranda / L-plan recess / garage plan / bay plan)
     const ops: Op[] = [{ u: doorX - M.x0, w: 1.05, h: 2.2, kind: 'door' }];
@@ -441,7 +441,7 @@ export function genHouse(g: Gen): void {
     if (vb - sb > 0.4) porchRail(sb, vb - 0.2, zp, 0.22, 0.85, trimC);
     setCol(t, col('#b9b2a6'));
     t.box(sa, 0, F.z1 - 0.12, sb, 0.11, F.z1 - 0.01, 0b110111);
-    if (rng.chance(0.7)) porchBench(va + 0.4, M.z1 + 0.25);
+    if (rng.chance(0.7)) porchBench(va, vb, doorX, M.z1 + 0.25, 0.22);
   }
 
   // ── garage wing
@@ -676,10 +676,25 @@ export function genHouse(g: Gen): void {
     t.box(x0, y - 0.05, z1 - 0.03, x1, y + 0.004, z1, 0b111111);
   }
 
-  function porchBench(x: number, z: number): void {
-    setCol(t, col(rng.pick(['#6b4c37', '#f6f3ec', '#2f5d50'])));
-    t.box(x, 0.16, z, x + 1.1, 0.6, z + 0.45);
-    t.box(x, 0.6, z - 0.07, x + 1.1, 1.05, z + 0.03);
+  /** Porch bench against the wall (back at z, facing +z) on the side of the door with more room — never in front
+   *  of the door: slatted seat and back, legs, arm rests. */
+  function porchBench(a: number, b: number, door: number, z: number, y0: number): void {
+    const c = col(rng.pick(['#6b4c37', '#f6f3ec', '#2f5d50']));
+    const bl = 1.1;
+    const lRoom = door - 0.85 - (a + 0.3),
+      rRoom = b - 0.3 - (door + 0.85);
+    if (Math.max(lRoom, rRoom) < bl) return;
+    const x = lRoom >= rRoom ? a + 0.3 : b - 0.3 - bl;
+    const ys = y0 + 0.42;
+    setCol(t, shade(c, 0.85));
+    for (const lx of [x + 0.04, x + bl - 0.1]) {
+      t.box(lx, y0, z - 0.02, lx + 0.06, ys + 0.5, z + 0.04, 0b110111); // back leg + back post
+      t.box(lx, y0, z + 0.36, lx + 0.06, ys + 0.22, z + 0.42, 0b110111); // front leg + arm post
+    }
+    setCol(t, c);
+    for (let k = 0; k < 3; k++) t.box(x + 0.02, ys - 0.04, z + 0.03 + k * 0.14, x + bl - 0.02, ys, z + 0.15 + k * 0.14, 0b111111);
+    for (const yb of [ys + 0.14, ys + 0.32]) t.box(x + 0.1, yb, z + 0.0, x + bl - 0.1, yb + 0.1, z + 0.03, 0b111111);
+    for (const ax of [x, x + bl - 0.14]) t.box(ax, ys + 0.22, z - 0.02, ax + 0.14, ys + 0.26, z + 0.46, 0b111111);
   }
 
   /** Lean-to roof between x a..b from the wall line zW (height yW) out to zO (height yO), posts optional. */
