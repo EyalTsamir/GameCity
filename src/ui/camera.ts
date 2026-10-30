@@ -255,8 +255,8 @@ export default function create(ctx: CityContext): CityModule {
   const touches = new Map<number, { x: number; y: number }>();
   let pinch: { mx: number; my: number; dist: number; angle: number; n: number } | null = null;
   let lastClick: { t: number; x: number; y: number; hit: PickHit | null } = { t: 0, x: 0, y: 0, hit: null };
-  /** when the film last handed the camera back / when the auto-tour may follow it */
-  let filmEndedAt = -1e9;
+  /** the press in progress ended the film / when the auto-tour may follow it */
+  let filmPress = false;
   let filmFov = BASE_FOV;
   let filmTourAt = Infinity;
   let hoverCursor = false;
@@ -1240,9 +1240,11 @@ export default function create(ctx: CityContext): CityModule {
     if (!d.moved) {
       stopMotion();
       // (the press that ended the film only took the camera: it follows nothing)
-      if (e.type === 'pointerup' && (d.mode === 'rotate' || d.touch) && d.lt > filmEndedAt + 5) handleClick(p.x, p.y);
+      if (e.type === 'pointerup' && (d.mode === 'rotate' || d.touch) && !filmPress) handleClick(p.x, p.y);
+      filmPress = false;
       return;
     }
+    filmPress = false;
     // keep the inertia only if the pointer was still moving at release
     if (performance.now() - d.lt > 70) stopMotion();
     movingUntil = performance.now() + 700;
@@ -1992,7 +1994,6 @@ export default function create(ctx: CityContext): CityModule {
     camera.fov = fov;
     camera.updateProjectionMatrix();
     armPrevD = cur.dist;
-    filmEndedAt = performance.now();
     checkMode();
   };
 
@@ -2059,6 +2060,7 @@ export default function create(ctx: CityContext): CityModule {
     if (!film?.active) return;
     film.stop();
     filmTourAt = Infinity;
+    filmPress = e.type === 'pointerdown';
     if (e instanceof KeyboardEvent && !FILM_PASS_KEYS.has(e.code)) {
       e.preventDefault();
       e.stopImmediatePropagation();
@@ -2187,7 +2189,7 @@ export default function create(ctx: CityContext): CityModule {
     },
     resize() {
       film?.layout();
-      if (!walk.active && !film?.active) applyCamera(0);
+      if (!walk.active && !film?.active && !film?.leaving) applyCamera(0);
     },
     stats() {
       return {
