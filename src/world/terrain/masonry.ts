@@ -1083,9 +1083,15 @@ export function createMasonry(ctx: CityContext, model: TerrainModel): MasonryRes
   if (boxHunt(ctx, 'quaywall')) {
     const gx = gaps.map((g) => g.x - SLAB.x0);
     const lad = (z: number) => ladders.filter((l) => l.z === z).map((l) => l.x - SLAB.x0);
-    wallFurniture(b, walls[0], () => SIDEWALK_Y, [...gx, ...lad(RIVER.z0)], false);
-    wallFurniture(b, walls[1], () => 0, [...gx, ...lad(RIVER.z1)], false);
-    wallFurniture(b, walls[2], (s) => Math.max(0, model.natural(QUAY_X - 0.9, SEA_WALL_Z0 + s) - 0.1), ladders.filter((l) => l.x === QUAY_X).map((l) => l.z - SEA_WALL_Z0), true);
+    // (places-between: no rings / outfalls / fenders over the water stairs and the slipway — span points every metre)
+    const span = (a: number, c: number) => Array.from({ length: Math.ceil(c - a) + 2 }, (_, i) => a - 0.5 + i);
+    const pl = plan.places;
+    const onRiver = (z: number) => (pl?.waterStairs ?? []).filter((w) => Math.abs(w.body.z0 - z) < 4 || Math.abs(w.body.z1 - z) < 4).flatMap((w) => span(w.body.x0 - SLAB.x0, w.body.x1 - SLAB.x0));
+    const onSea = (pl?.waterStairs ?? []).filter((w) => Math.abs(w.body.x0 - QUAY_X) < 4 || Math.abs(w.body.x1 - QUAY_X) < 4).flatMap((w) => span(w.body.z0 - SEA_WALL_Z0, w.body.z1 - SEA_WALL_Z0));
+    const holes = (pl?.southWallHoles ?? []).flatMap(([a, c]) => span(a - SLAB.x0, c - SLAB.x0));
+    wallFurniture(b, walls[0], () => SIDEWALK_Y, [...gx, ...lad(RIVER.z0), ...onRiver(RIVER.z0)], false);
+    wallFurniture(b, walls[1], () => 0, [...gx, ...lad(RIVER.z1), ...onRiver(RIVER.z1), ...holes], false);
+    wallFurniture(b, walls[2], (s) => Math.max(0, model.natural(QUAY_X - 0.9, SEA_WALL_Z0 + s) - 0.1), [...ladders.filter((l) => l.x === QUAY_X).map((l) => l.z - SEA_WALL_Z0), ...onSea], true);
   }
 
   // portals
