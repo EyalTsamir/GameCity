@@ -191,6 +191,7 @@ export function genIndustrial(g: Gen): void {
       doorNiche(g, sg, u, { w: pdW, h: pdH, depth: 0.15, wallColor: wallC, frameColor: col('#3a3f44'), doorColor: col(brick ? '#2f4a3a' : '#5e6a72'), glass: false, seed: g.seed, frameOut: Math.min(0.1, (fullyExposed ? INS : 0) - 0.02 + 0.02) });
       setCol(t, col('#3a3f44'));
       sideBox(t, sg, u - 1.0, u + 1.0, 0, 0.9, 2.75, 2.88, true);
+      if (geomOn('canopyplates')) for (const bu of [u - 0.98, u + 0.94]) sideBox(t, sg, bu, bu + 0.04, 0, 0.6, 2.45, 2.75);
       lightBox(g, sx(sg, u, 0.5) - 0.12, 2.68, sz(sg, u, 0.5) - 0.12, sx(sg, u, 0.5) + 0.12, 2.75, sz(sg, u, 0.5) + 0.12, '#fff1d6', LIGHT_MODE.STEADY, 3.2);
     }
     void isEnd;
@@ -414,6 +415,8 @@ export function genIndustrial(g: Gen): void {
       }
       setCol(t, col('#4a5056'));
       sideBox(t, sg, a - 0.4, b + 0.4, 0, 1.15, doorH + 0.35, doorH + 0.5, true);
+      // (geometry hunt ?nocanopyplates: the slab hung from nothing)
+      if (geomOn('canopyplates')) for (const bu of [a - 0.38, b + 0.34]) sideBox(t, sg, bu, bu + 0.04, 0, 0.75, doorH + 0.02, doorH + 0.35);
       lightBox(g, sx(sg, u, 0.7) - 0.15, doorH + 0.28, sz(sg, u, 0.7) - 0.15, sx(sg, u, 0.7) + 0.15, doorH + 0.35, sz(sg, u, 0.7) + 0.15, '#fff1d6', LIGHT_MODE.STEADY, 3);
     } else {
       // arched head over the customs doors
@@ -555,7 +558,45 @@ export function genIndustrial(g: Gen): void {
       setCol(t, col('#3a4650'));
       const lx = alongX ? m + (end ? 0.03 : -0.03) : c0,
         lz = alongX ? c0 : m + (end ? 0.03 : -0.03);
-      if (alongX) t.box(lx - 0.02, H + 0.2, lz - span * 0.18, lx + 0.02, H + rise * 0.75, lz + span * 0.18, 0b111111);
+      if (geomOn('lunette')) {
+        // geometry hunt: a real lunette under the arc, framed, with bars (it was a bare dark rectangle on the wall)
+        const W = span * 0.24,
+          Ht = rise * 0.62,
+          y0 = H + 0.22;
+        const P = (u: number, y: number, o: number): [number, number, number] => (alongX ? [m + (end ? o : -o), y, c0 + u] : [c0 + u, y, m + (end ? o : -o)]);
+        const arc = (scale: number, o: number) => {
+          const N = 8;
+          for (let k = 0; k < N; k++) {
+            const a0 = Math.PI * (k / N),
+              a1 = Math.PI * ((k + 1) / N);
+            const u0 = -Math.cos(a0) * W * scale,
+              u1 = -Math.cos(a1) * W * scale;
+            const h0 = Math.sin(a0) * Ht * scale,
+              h1 = Math.sin(a1) * Ht * scale;
+            const A = P(u0, y0, o),
+              B = P(u1, y0, o),
+              C = P(u1, y0 + h1, o),
+              D = P(u0, y0 + h0, o);
+            const flip = alongX ? !end : !!end;
+            if (flip) t.quad(A[0], A[1], A[2], B[0], B[1], B[2], C[0], C[1], C[2], D[0], D[1], D[2]);
+            else t.quad(B[0], B[1], B[2], A[0], A[1], A[2], D[0], D[1], D[2], C[0], C[1], C[2]);
+          }
+        };
+        setCol(t, trimC);
+        arc(1.09, 0.03);
+        setCol(t, col('#2b353d'));
+        arc(1, 0.05);
+        setCol(t, trimC);
+        for (const f of [-0.5, 0, 0.5]) {
+          const yT = y0 + Math.sqrt(1 - f * f) * Ht;
+          const A = P(W * f - 0.035, y0, 0.05),
+            B = P(W * f + 0.035, yT, 0.07);
+          t.box(Math.min(A[0], B[0]), y0, Math.min(A[2], B[2]), Math.max(A[0], B[0]), yT, Math.max(A[2], B[2]), 0b110111);
+        }
+        const A = P(-W * 1.09, y0 - 0.1, 0.03),
+          B = P(W * 1.09, y0, 0.09);
+        t.box(Math.min(A[0], B[0]), y0 - 0.1, Math.min(A[2], B[2]), Math.max(A[0], B[0]), y0, Math.max(A[2], B[2]), 0b111111);
+      } else if (alongX) t.box(lx - 0.02, H + 0.2, lz - span * 0.18, lx + 0.02, H + rise * 0.75, lz + span * 0.18, 0b111111);
       else t.box(lx - span * 0.18, H + 0.2, lz - 0.02, lx + span * 0.18, H + rise * 0.75, lz + 0.02, 0b111111);
     }
     if (MASS.rooflights) {

@@ -15,6 +15,7 @@
 import * as THREE from 'three';
 import type { CityContext } from '../../core/context';
 import type { Rect } from '../../core/geom';
+import { QUAY_X } from '../../core/constants';
 import { geomOn } from '../../core/geomhunt';
 import { stairY, islandBridgeY, type CuttingPlace, type IslandBridgePlace, type LanePlace, type PlaceStair, type QuayPlace, type StationPlace, type WaterStairs, type Slipway, type ClosePlace, type CloseStone, type YardGate, type EdgePlace } from '../../core/places';
 import type { GeoBuilder, V3 } from './builder';
@@ -732,11 +733,15 @@ function waterStairsStone(b: GeoBuilder, W: WaterStairs, model: TerrainModel): v
   const bed = model.height(cx, cz) - 0.3;
   const stone = W.id === 'harbour' ? C('#aaa498') : COL.quayStone;
   b.color(stone).set('aMas', KIND.ashlar, 0.45, 1, 0);
-  slab(b, W.bottom, bed, W.bottomY - 0.08, 4 | 8);
+  // the harbour flight stood 30 cm off the sea wall: a dark slot beside every tread, from the landing down. Rendered up to
+  // the wall (the walking surface stays W.stair)
+  const toWall = (r: Rect): Rect => (W.id === 'harbour' ? { ...r, x0: QUAY_X - 0.02 } : r);
+  const bottom = toWall(W.bottom);
+  slab(b, bottom, bed, W.bottomY - 0.08, 4 | 8);
   b.color(COL.step).set('aMas', KIND.coping, 0, 1, 0);
-  slab(b, W.bottom, W.bottomY - 0.08, W.bottomY, 4);
+  slab(b, bottom, W.bottomY - 0.08, W.bottomY, 4);
   // risers in a darker, weathered stone than the treads (round 3 audit: pale on pale read as a flat ramp)
-  flight(b, W.stair, bed, stone.clone().multiplyScalar(0.74));
+  flight(b, { ...W.stair, rect: toWall(W.stair.rect) }, bed, stone.clone().multiplyScalar(0.74));
   const wetTop = isect(W.top, W.body);
   if (wetTop) {
     b.color(stone).set('aMas', KIND.ashlar, 0.45, 1, 0);
