@@ -5,7 +5,7 @@
 //   node scripts/abprof.mjs --url http://127.0.0.1:5192/ --views "overview;street=5,1.5,-65,9,0,6" --hours 12 --cycles 4 --seconds 2 \
 //     --ab "noao=__city.ctx.services.postfx.setEnabled('ao',false)|__city.ctx.services.postfx.setEnabled('ao',true)"
 //
-// --ab is a ";;"-separated list of label=apply|restore page code; --init page code run once after boot (helpers).
+// --ab is a ";;"-separated list of label=apply|restore page code; --init page code run once after boot (helpers), --preinit page code run before the page's scripts.
 import { launchBrowser, acquireLock, releaseLock } from './browser.mjs';
 import fs from 'node:fs';
 
@@ -34,6 +34,7 @@ const { browser } = await launchBrowser({ extraArgs: ['--disable-gpu-vsync', '--
 try {
   const page = await browser.newPage({ viewport: { width: 1920, height: 1025 }, deviceScaleFactor: 1 });
   await page.routeWebSocket(/.*/, () => {});
+  if (args.preinit) await page.addInitScript(args.preinit);
   await page.goto(`${baseUrl}?${q}`, { waitUntil: 'domcontentloaded', timeout: 600000 });
   await page.waitForFunction(() => window.__city?.ready && window.__city.frames() > 3, null, { timeout: 600000 });
   if (args.init) await page.evaluate((c) => (0, eval)(c), args.init);
