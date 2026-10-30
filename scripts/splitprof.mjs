@@ -310,6 +310,7 @@ try {
             };
             // state is forced right before the GL draw: three sets its own blend state after onBeforeRender
             let mainDraw = false;
+            let base0 = 0;
             for (const n of ['drawArrays', 'drawElements', 'drawArraysInstanced', 'drawElementsInstanced', 'multiDrawArraysWEBGL', 'multiDrawElementsWEBGL']) {
               const fn = gl[n];
               if (!fn) continue;
@@ -319,6 +320,7 @@ try {
               };
             }
             const res = new Map();
+            let first = new Map();
             let prev = 0,
               screen = 1;
             const objs = [];
@@ -334,7 +336,10 @@ try {
               objs.push([o, b, a]);
               o.onBeforeRender = function (rr, s, cam, g, m, gr) {
                 b.call(this, rr, s, cam, g, m, gr);
-                if (cam === ctx.camera) mainDraw = true;
+                if (cam === ctx.camera) {
+                  mainDraw = true;
+                  if (on && prev < 0) base0 = sum();
+                }
               };
               o.onAfterRender = function (rr, s, cam, g, m, gr) {
                 if (on && cam === ctx.camera) {
@@ -342,7 +347,8 @@ try {
                   const t = sum();
                   const l = labelOf(this);
                   const row = res.get(l) ?? { px: 0, calls: 0 };
-                  row.px += t - prev;
+                  // (the first draw's reading also holds the clear colour: taken from an empty read before it, below)
+                  row.px += t - (prev < 0 ? base0 : prev);
                   row.calls++;
                   res.set(l, row);
                   prev = t;
@@ -355,12 +361,34 @@ try {
             r.render = function (scene, camera) {
               const main = scene === ctx.scene && camera === ctx.camera;
               if (main) {
-                prev = 0;
+                prev = -1; // the target's clear colour is in the first reading
                 res.clear();
                 on = true;
               }
               render.call(this, scene, camera);
-              if (main) on = false;
+              if (main) {
+                // second pass over the finished depth buffer: what passes now is what is really visible, per draw
+                first = new Map(res);
+                res.clear();
+                prev = sum();
+                const ac = this.autoClear,
+                  bg = scene.background,
+                  au = this.shadowMap.autoUpdate,
+                  mw = scene.matrixWorldAutoUpdate,
+                  ob = scene.onBeforeRender;
+                this.autoClear = false;
+                scene.background = null;
+                this.shadowMap.autoUpdate = false;
+                scene.matrixWorldAutoUpdate = false;
+                scene.onBeforeRender = () => {};
+                render.call(this, scene, camera);
+                this.autoClear = ac;
+                scene.background = bg;
+                this.shadowMap.autoUpdate = au;
+                scene.matrixWorldAutoUpdate = mw;
+                scene.onBeforeRender = ob;
+                on = false;
+              }
             };
             // one frame (the pass clears its target first; the bloom / AO reads are harmless)
             await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => requestAnimationFrame(resolve))));
@@ -371,14 +399,19 @@ try {
             }
             void blend;
             void dis;
-            const list = [...res].map(([label, x]) => ({ label, Mpx: +(x.px / 1e6).toFixed(3), calls: x.calls, ofScreen: +(x.px / screen).toFixed(3) })).sort((p, n) => n.Mpx - p.Mpx);
-            const total = list.reduce((s, x) => s + x.ofScreen, 0);
-            return { total: +total.toFixed(3), screen, list: list.slice(0, topN) };
+            const list = [...first].map(([label, x]) => {
+              const vis = (res.get(label)?.px ?? 0) / screen,
+                all = x.px / screen;
+              return { label, shaded: +all.toFixed(3), visible: +vis.toFixed(3), wasted: +(all - vis).toFixed(3), calls: x.calls };
+            }).sort((p, n) => n.wasted - p.wasted);
+            const total = list.reduce((s, x) => s + x.shaded, 0);
+            const wasted = list.reduce((s, x) => s + x.wasted, 0);
+            return { total: +total.toFixed(3), wasted: +wasted.toFixed(3), screen, list: list.slice(0, topN) };
           },
           top,
         );
         out.results.push({ view: v.name, hours: h, ...rows });
-        console.log(`\n== ${v.name} @ ${h}h: fragments that passed depth / screen = ${rows.total}`);
+        console.log(`\n== ${v.name} @ ${h}h: fragments shaded / screen = ${rows.total}, wasted ${rows.wasted}`);
         console.table(rows.list);
       }
   }
