@@ -319,6 +319,7 @@ export default function create(ctx: CityContext): CityModule {
       if (ctx.debug.enabled) console.info(`[postfx] quality → ${s.name}`);
     },
     params.get('adaptive') !== '0',
+    perfOn('adapt30'),
   );
   step = ladder[0];
   if (ctx.debug.enabled) ctx.services.postfxInternals = { composer, ao, aoFx, clouds, tilt, bloom, look, smaa, fxPass, renderPass, setAOPath, adaptive, ladder };
