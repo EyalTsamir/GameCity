@@ -1235,6 +1235,10 @@
   .th-divider {
     display: none;
   }
+  .th-group {
+    flex-wrap: wrap;
+    justify-content: center;
+  }
   .th-minimap {
     right: 10px;
   }
@@ -1261,6 +1265,9 @@
 }
 
 @media (max-width: 560px) {
+  .th-btn {
+    width: 27px;
+  }
   .th-help-cols {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -1349,6 +1356,12 @@
   opacity: 0;
   transition: opacity 1.6s ease;
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.35), 0 2px 34px rgba(0, 0, 0, 0.6);
+}
+.th-film-end {
+  /* over the dark land and water in front of the town, not across the lit towers */
+  top: auto;
+  bottom: calc(var(--film-bar) + 7%);
+  transform: translateX(-50%);
 }
 .th-film-title.show,
 .th-film-end.show {

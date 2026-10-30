@@ -43,13 +43,14 @@ export const SHOTS: readonly FilmShot[] = [
     dip: 0,
     hours: [6.72, 7.1],
     keys: [
-      { at: 0, eye: [1040, 58, -560], look: [140, 18, -70], fov: 28 },
-      { at: 7, eye: [600, 36, -330], look: [135, 16, -72], fov: 30 },
+      // (the town starts right of centre, clear of the title)
+      { at: 0, eye: [1040, 58, -560], look: [185, 18, 12], fov: 28 },
+      { at: 7, eye: [600, 36, -330], look: [150, 16, -50], fov: 30 },
       { at: 14, eye: [270, 20, -150], look: [128, 14, -78], fov: 36 },
     ],
   },
   {
-    // the same take: down the moored cargo ship's flank, past her stern, in under the gantry cranes
+    // the same take: down the moored cargo ship's flank, then out and up to see all of her under the gantry cranes
     id: 'harbour',
     dur: 12,
     dip: 0,
@@ -59,7 +60,7 @@ export const SHOTS: readonly FilmShot[] = [
       { at: 0, eye: [270, 20, -150], look: [128, 14, -78], fov: 36 },
       { at: 5, eye: [186, 12, -86], look: [146, 10, -74], fov: 40 },
       { at: 9, eye: [170, 13, -44], look: [146, 11, -80], fov: 42 },
-      { at: 12, eye: [124, 13, -36], look: [150, 12, -92], fov: 44 },
+      { at: 12, eye: [186, 24, -14], look: [136, 15, -74], fov: 44 },
     ],
   },
   {
@@ -137,8 +138,8 @@ export const SHOTS: readonly FilmShot[] = [
     settle: true,
     keys: [
       { at: 0, eye: [79.4, 3.4, 78.6], look: [85, 1.8, 72], fov: 46 },
-      { at: 2, eye: [80.6, 8.5, 78.4], look: [85.5, 4.5, 69], fov: 45 },
-      { at: 4.5, eye: [81, 22, 80], look: [83, 12, 62], fov: 43 },
+      { at: 2, eye: [80.6, 8.5, 78.4], look: [85.5, 7, 66], fov: 45 },
+      { at: 4.5, eye: [81, 24, 82], look: [84, 22, 40], fov: 43 },
       { at: 9.5, eye: [130, 75, 190], look: [50, 10, 20], fov: 38 },
       { at: 17, eye: [335, 150, 520], look: [-5, 0, -15], fov: 34 },
     ],
