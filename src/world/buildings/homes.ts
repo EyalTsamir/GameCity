@@ -24,6 +24,7 @@ import {
 import { WIN, PROF, WALLPAT, ROOFPAT, FRAME, GLASS, LIGHT_MODE } from './materials';
 import { genHouseLegacy } from './houses';
 import { windowBox, shutterPair, shutterState, downpipe, acUnit, climber } from './clutter';
+import { MASS } from './massing';
 import { GREEN } from './green';
 
 const HOUSE_WALLS = ['#f4efe4', '#efe3c8', '#dfe4e2', '#c9dcea', '#cfdcbf', '#f2dfa0', '#efcfc4', '#d8c4a6', '#e8e8e8', '#bfd3d6', '#e3d6ee', '#f0d9b5'];
@@ -276,7 +277,7 @@ export function genHouse(g: Gen): void {
     }
     setCol(t, shade(trimC, 0.92));
     t.hrect(pa, zP, pb, M.z1, postH - 0.31, false);
-    if (rng.chance(0.6)) porchBench(pa + 0.5, zP + 0.25);
+    if (rng.chance(0.6)) porchBench(pa, pb, pa + du, zP + 0.25, 0.16);
   } else {
     // door in the main front wall (veranda / L-plan recess / garage plan / bay plan)
     const ops: Op[] = [{ u: doorX - M.x0, w: 1.05, h: 2.2, kind: 'door' }];
@@ -440,7 +441,7 @@ export function genHouse(g: Gen): void {
     if (vb - sb > 0.4) porchRail(sb, vb - 0.2, zp, 0.22, 0.85, trimC);
     setCol(t, col('#b9b2a6'));
     t.box(sa, 0, F.z1 - 0.12, sb, 0.11, F.z1 - 0.01, 0b110111);
-    if (rng.chance(0.7)) porchBench(va + 0.4, M.z1 + 0.25);
+    if (rng.chance(0.7)) porchBench(va, vb, doorX, M.z1 + 0.25, 0.22);
   }
 
   // ── garage wing
@@ -675,10 +676,25 @@ export function genHouse(g: Gen): void {
     t.box(x0, y - 0.05, z1 - 0.03, x1, y + 0.004, z1, 0b111111);
   }
 
-  function porchBench(x: number, z: number): void {
-    setCol(t, col(rng.pick(['#6b4c37', '#f6f3ec', '#2f5d50'])));
-    t.box(x, 0.16, z, x + 1.1, 0.6, z + 0.45);
-    t.box(x, 0.6, z - 0.07, x + 1.1, 1.05, z + 0.03);
+  /** Porch bench against the wall (back at z, facing +z) on the side of the door with more room — never in front
+   *  of the door: slatted seat and back, legs, arm rests. */
+  function porchBench(a: number, b: number, door: number, z: number, y0: number): void {
+    const c = col(rng.pick(['#6b4c37', '#f6f3ec', '#2f5d50']));
+    const bl = 1.1;
+    const lRoom = door - 0.85 - (a + 0.3),
+      rRoom = b - 0.3 - (door + 0.85);
+    if (Math.max(lRoom, rRoom) < bl) return;
+    const x = lRoom >= rRoom ? a + 0.3 : b - 0.3 - bl;
+    const ys = y0 + 0.42;
+    setCol(t, shade(c, 0.85));
+    for (const lx of [x + 0.04, x + bl - 0.1]) {
+      t.box(lx, y0, z - 0.02, lx + 0.06, ys + 0.5, z + 0.04, 0b110111); // back leg + back post
+      t.box(lx, y0, z + 0.36, lx + 0.06, ys + 0.22, z + 0.42, 0b110111); // front leg + arm post
+    }
+    setCol(t, c);
+    for (let k = 0; k < 3; k++) t.box(x + 0.02, ys - 0.04, z + 0.03 + k * 0.14, x + bl - 0.02, ys, z + 0.15 + k * 0.14, 0b111111);
+    for (const yb of [ys + 0.14, ys + 0.32]) t.box(x + 0.1, yb, z + 0.0, x + bl - 0.1, yb + 0.1, z + 0.03, 0b111111);
+    for (const ax of [x, x + bl - 0.14]) t.box(ax, ys + 0.22, z - 0.02, ax + 0.14, ys + 0.26, z + 0.46, 0b111111);
   }
 
   /** Lean-to roof between x a..b from the wall line zW (height yW) out to zO (height yO), posts optional. */
@@ -686,17 +702,33 @@ export function genHouse(g: Gen): void {
     roofLook(s, roofC, rPat, g.seed + 5);
     const sl = Math.hypot(zO - zW, yW - yO);
     roofPoly(s, [[a, yO, zO], [b, yO, zO], [b, yW, zW], [a, yW, zW]], [1, 0, 0], [0, (yW - yO) / sl, (zW - zO) / sl]);
-    // ceiling (seen from below) + fascia
+    // ceiling (seen from below) + fascia; ?noporch: a real roof edge — deep fascia, drip board, header beam,
+    // a gutter, turned posts (the old thin plate on two slab posts)
+    const deep = MASS.porches;
+    const yc = deep ? yO - 0.14 : yO - 0.06;
     setCol(t, shade(trimC, 0.92));
-    t.quad(a, yO - 0.06, zW, b, yO - 0.06, zW, b, yO - 0.06, zO, a, yO - 0.06, zO);
+    t.quad(a, yc, zW, b, yc, zW, b, yc, zO, a, yc, zO);
     setCol(t, trimC);
-    t.box(a, yO - 0.2, zO - 0.05, b, yO + 0.01, zO, 0b111111 & ~8);
+    t.box(a, yO - (deep ? 0.3 : 0.2), zO - 0.05, b, yO + (deep ? 0.04 : 0.01), zO, 0b111111 & ~8);
+    if (deep) {
+      setCol(t, shade(trimC, 0.8));
+      t.box(a - 0.02, yO + 0.02, zO - 0.07, b + 0.02, yO + 0.06, zO + 0.02, 0b111111);
+      setCol(t, trimC);
+      t.box(a, yO - 0.4, zO - 0.26, b, yO - 0.14, zO - 0.08, 0b111111);
+      if (yO - 0.12 > 2.4) {
+        setCol(t, col('#ece9e1'));
+        t.box(a - 0.03, yO - 0.11, zO, b + 0.03, yO + 0.01, zO + 0.11, 0b111111);
+      }
+    }
     // side cheeks (triangular boards closing the lean-to)
     for (const x of [a, b]) {
-      t.quadAway(x, yO - 0.2, zO, x, yO, zO, x, yW, zW, x, yO - 0.06, zW, x + (x === a ? 1 : -1), yO, (zW + zO) / 2);
+      t.quadAway(x, yO - (deep ? 0.3 : 0.2), zO, x, yO, zO, x, yW, zW, x, yc, zW, x + (x === a ? 1 : -1), yO, (zW + zO) / 2);
     }
     if (posts) {
-      for (const x of [a + 0.12, b - 0.12]) t.box(x - 0.08, 0, zO - 0.2, x + 0.08, yO - 0.18, zO - 0.04, 0b110111);
+      if (deep) {
+        setCol(t, trimC);
+        for (const x of [a + 0.14, b - 0.14]) porchPost(x, zO - 0.17, 0, yO - 0.4);
+      } else for (const x of [a + 0.12, b - 0.12]) t.box(x - 0.08, 0, zO - 0.2, x + 0.08, yO - 0.18, zO - 0.04, 0b110111);
     }
   }
 

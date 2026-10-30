@@ -9,7 +9,7 @@
 import * as THREE from 'three';
 import type { Builder } from './mesh';
 import { Rng } from '../../core/rng';
-import { Gen, LRect, SideGeom, Grid, WallLook, sx, sz, makeGrid, wallSeg, setWallAttrs, setCol, shade, col, roofLook, roofPoly } from './gen';
+import { Gen, LRect, SideGeom, Grid, WallLook, sx, sz, sideBox, makeGrid, wallSeg, setWallAttrs, setCol, shade, col, roofLook, roofPoly } from './gen';
 import { ROOFPAT } from './materials';
 import { anchors } from './anchors';
 import { GREEN } from './green';
@@ -27,15 +27,31 @@ export interface MassingFlags {
   crowns: boolean;
   /** roof furniture on flat roofs (plant rooms, tanks, vents, solar, gardens) */
   roofKit: boolean;
+  /** head office block at an exposed end of a long industrial shed */
+  annex: boolean;
+  /** roof monitors on gable sheds, downpipes and a brick plinth on industrial halls */
+  monitor: boolean;
+  /** porches: harbour master's recessed porch, Westbrook house porches */
+  porches: boolean;
+  /** classical arcade columns on masonry offices, shopfronts behind every arcade */
+  colonnade: boolean;
+  /** loggias cut into the back of the apartment slabs */
+  loggias: boolean;
+  /** rooflight strips and ridge ventilators on industrial sheds */
+  rooflights: boolean;
+  /** piers between the window columns of punched masonry towers / offices */
+  piers: boolean;
+  /** shopfront joinery: consoles at the fascia ends, a capped cornice, stall risers + sills under the windows */
+  shopfronts: boolean;
   /** 0 low, 1 medium, 2 high — fine roof furniture only from medium */
   q: number;
 }
 
-export const MASS: MassingFlags = { oriels: true, turrets: true, crossGables: true, setbacks: true, crowns: true, roofKit: true, q: 2 };
+export const MASS: MassingFlags = { oriels: true, turrets: true, crossGables: true, setbacks: true, crowns: true, roofKit: true, annex: true, monitor: true, porches: true, colonnade: true, loggias: true, rooflights: true, piers: true, shopfronts: true, q: 2 };
 
 /**
  * URL switches: ?nomassing (all off) or one by one ?nooriels ?noturrets ?nocrossgables ?nosetbacks ?nocrowns
- * ?noroofkit. Quality: low keeps the massing (cheap, it carries the skyline) but drops the roof furniture.
+ * ?noroofkit ?noannex ?nomonitor ?noporch ?nocolonnade ?nologgias ?norooflights ?nopiers ?noshopfront. Quality: low keeps the massing (cheap, it carries the skyline) but drops the roof furniture.
  */
 export function setMassing(p: { has(k: string): boolean }, level: 'low' | 'medium' | 'high'): void {
   const all = !p.has('nomassing');
@@ -44,6 +60,14 @@ export function setMassing(p: { has(k: string): boolean }, level: 'low' | 'mediu
   MASS.crossGables = all && !p.has('nocrossgables');
   MASS.setbacks = all && !p.has('nosetbacks');
   MASS.crowns = all && !p.has('nocrowns');
+  MASS.annex = all && !p.has('noannex');
+  MASS.monitor = all && !p.has('nomonitor');
+  MASS.porches = all && !p.has('noporch');
+  MASS.colonnade = all && !p.has('nocolonnade');
+  MASS.loggias = all && !p.has('nologgias');
+  MASS.rooflights = all && !p.has('norooflights');
+  MASS.piers = all && !p.has('nopiers');
+  MASS.shopfronts = all && !p.has('noshopfront');
   MASS.q = level === 'low' ? 0 : level === 'medium' ? 1 : 2;
   MASS.roofKit = all && !p.has('noroofkit') && MASS.q > 0;
 }
@@ -230,7 +254,25 @@ export function oriel(g: Gen, sg: SideGeom, uc: number, w: number, s: OrielSpec)
   const bt = base.map((p) => [p[0], y0 - 0.16, p[1]]);
   triOut(t, bt[0], bt[1], bt[2], [bt[0][0], y0, bt[0][1]]);
   triOut(t, bt[0], bt[2], bt[3], [bt[0][0], y0, bt[0][1]]);
-  if (s.corbel > 0.05) {
+  if (s.corbel > 0.05 && MASS.q > 0 && w > 1.6) {
+    // from medium: a stepped corbel table — two mouldings stepping back under the base, a carved two-step console
+    // under each front corner. All within 0.36 m of the floor line: the window head of the storey below sits
+    // just under it (the deep tapering corbel ran into it)
+    let yt = y0 - 0.16;
+    for (const [gr, hh] of [[-0.1, 0.11], [-0.25, 0.09]]) {
+      const P2 = plan(gr);
+      prism(t, P2, yt - hh, yt, false);
+      const b2 = P2.map((p) => [p[0], yt - hh, p[1]]);
+      triOut(t, b2[0], b2[1], b2[2], [b2[0][0], yt, b2[0][1]]);
+      triOut(t, b2[0], b2[2], b2[3], [b2[0][0], yt, b2[0][1]]);
+      yt -= hh;
+    }
+    setCol(t, shade(s.trimC, 0.86));
+    for (const ub of c > 0 ? [uA + c + 0.1, uB - c - 0.1] : [uA + 0.2, uB - 0.2]) {
+      sideBox(t, sg, ub - 0.09, ub + 0.09, o0, o0 + s.dep + 0.02, y0 - 0.27, y0 - 0.16, true);
+      sideBox(t, sg, ub - 0.07, ub + 0.07, o0, o0 + s.dep - 0.12, y0 - 0.38, y0 - 0.27, true);
+    }
+  } else if (s.corbel > 0.05) {
     const lo = [
       [uA + 0.2, o0],
       [uA + c * 0.5 + 0.25, o0 + s.dep * 0.28],

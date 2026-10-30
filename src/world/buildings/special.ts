@@ -610,21 +610,29 @@ export function genHarbormaster(g: Gen): void {
     const sg = sideGeom(body, sd);
     const doors = doorsOn(g, f, sd, sg.L);
     const ops = doors.map((u) => ({ u, w: 1.3, h: 2.4 }));
-    bandWithOpenings(sg, 0, sg.L, ops, (a, b) => {
-      if (b - a < 1.6) return wallPlain(s, sg, a, b, 0, gH, look);
-      const n = Math.max(1, Math.round((b - a) / 2.6));
-      const gr = makeGrid(a, b, 0, gH, 1, { spacing: (b - a) / n, cols: n, winW: 1.2, winH: 1.6, sill: 0.9, margin: 0.35 });
-      wallGrid(s, sg, a, b, 0, gH, gr, look);
-    }, (a, b, y0) => wallPlain(s, sg, a, b, y0, gH, look));
+    // ?noporch: the front door sits in a porch recessed under the upper floor (columns, deck, steps)
+    const porch = MASS.porches && sd === FRONT && doors.length > 0 ? porchSpan(doors[0], sg.L) : null;
+    const groundBand = (sgB: SideGeom, uA: number, uB: number, opsB: { u: number; w: number; h: number }[]) =>
+      bandWithOpenings(sgB, uA, uB, opsB, (a, b) => {
+        if (b - a < 1.6) return wallPlain(s, sgB, a, b, 0, gH, look);
+        const n = Math.max(1, Math.round((b - a) / 2.6));
+        const gr = makeGrid(a, b, 0, gH, 1, { spacing: (b - a) / n, cols: n, winW: 1.2, winH: 1.6, sill: 0.9, margin: 0.35 });
+        wallGrid(s, sgB, a, b, 0, gH, gr, look);
+      }, (a, b, y0) => wallPlain(s, sgB, a, b, y0, gH, look));
+    if (porch) {
+      groundBand(sg, 0, porch[0], []);
+      groundBand(sg, porch[1], sg.L, []);
+      buildPorch(sg, porch[0], porch[1], doors[0]);
+    } else groundBand(sg, 0, sg.L, ops);
     const gr = makeGrid(0, sg.L, gH, fH, 1, { spacing: 2.6, cols: 3, winW: 1.15, winH: 1.5, sill: 0.8, margin: 0.8 });
     wallGrid(s, sg, 0, sg.L, gH, H, gr, look);
     setCol(t, navy);
-    for (const [a, b] of around(0, sg.L, ops)) sideBox(t, sg, a, b, 0, 0.12, 0, 0.5);
+    for (const [a, b] of around(0, sg.L, porch ? [{ u: (porch[0] + porch[1]) / 2, w: porch[1] - porch[0] + 0.3 }] : ops)) sideBox(t, sg, a, b, 0, 0.12, 0, 0.5);
     sideBox(t, sg, 0, sg.L, 0, 0.14, gH - 0.08, gH + 0.1, true);
     sideBox(t, sg, 0, 0.18, 0, 0.12, 0, H);
     sideBox(t, sg, sg.L - 0.18, sg.L, 0, 0.12, 0, H);
     for (const u of doors) {
-      doorNiche(g, sg, u, { w: 1.3, h: 2.4, depth: 0.25, wallColor: white, frameColor: navy, doorColor: navy, glass: false, transom: true, lamp: true, seed: g.seed, frameOut: 0.12 });
+      if (!porch) doorNiche(g, sg, u, { w: 1.3, h: 2.4, depth: 0.25, wallColor: white, frameColor: navy, doorColor: navy, glass: false, transom: true, lamp: true, seed: g.seed, frameOut: 0.12 });
       const r = g.atlas.add('harbourmaster', 384, 64, boardSign('HARBOUR MASTER', { bg: '#263a5c', fg: '#f4f1ea', glow: 0.6, border: '#c9a24a' }));
       setCol(t, navy);
       sideBox(t, sg, u - 2.3, u + 2.3, 0, 0.12, gH + 0.15, gH + 0.95, true);
@@ -636,6 +644,63 @@ export function genHarbormaster(g: Gen): void {
       signOnSide(g, sg, sg.L / 2 - 0.55, sg.L / 2 + 0.55, 0.06, H - 1.25, H - 0.15, ck);
     }
   }
+  /** porch span around the door (clear of the corner posts) */
+  function porchSpan(u: number, L: number): [number, number] | null {
+    const a = Math.max(0.6, u - 2.3),
+      b = Math.min(L - 0.6, u + 2.3);
+    return b - a > 3.2 ? [a, b] : null;
+  }
+
+  /** recessed porch: back wall with the door 1.5 m in, return walls, soffit, deck with two steps, columns, balustrade */
+  function buildPorch(sg: SideGeom, pa: number, pb: number, du: number): void {
+    const dep = 1.5,
+      deck = 0.45;
+    const sgIn: SideGeom = { ...sg, x0: sg.x0 - sg.nx * dep, z0: sg.z0 - sg.nz * dep };
+    // back wall with the door
+    bandWithOpenings(sgIn, pa, pb, [{ u: du, w: 1.3, h: 2.4 + deck }], (a, b) => {
+      if (b - a < 1.4) return wallPlain(s, sgIn, a, b, 0, gH, look);
+      const gr = makeGrid(a, b, 0, gH, 1, { spacing: b - a, cols: 1, winW: Math.min(1.1, b - a - 0.5), winH: 1.5, sill: 1.05, margin: 0.25 });
+      wallGrid(s, sgIn, a, b, 0, gH, gr, look);
+    }, (a, b, y0) => wallPlain(s, sgIn, a, b, y0, gH, look));
+    doorNiche(g, sgIn, du, { w: 1.3, h: 2.4 + deck, depth: 0.2, wallColor: white, frameColor: navy, doorColor: navy, glass: false, transom: true, lamp: true, seed: g.seed, frameOut: 0.1 });
+    // return walls (facing into the porch)
+    wallSeg(s, sx(sg, pa, 0), sz(sg, pa, 0), sx(sg, pa, -dep), sz(sg, pa, -dep), 0, gH, null, look);
+    wallSeg(s, sx(sg, pb, -dep), sz(sg, pb, -dep), sx(sg, pb, 0), sz(sg, pb, 0), 0, gH, null, look);
+    // soffit (painted boards) under the upper floor
+    setCol(t, col('#e9e4d8'));
+    const c0x = sx(sg, pa, 0), c0z = sz(sg, pa, 0), c1x = sx(sg, pb, 0), c1z = sz(sg, pb, 0);
+    const c2x = sx(sg, pb, -dep), c2z = sz(sg, pb, -dep), c3x = sx(sg, pa, -dep), c3z = sz(sg, pa, -dep);
+    t.quadAway(c0x, gH - 0.08, c0z, c1x, gH - 0.08, c1z, c2x, gH - 0.08, c2z, c3x, gH - 0.08, c3z, (c0x + c2x) / 2, gH + 1, (c0z + c2z) / 2);
+    // timber deck with a fascia, two steps up to it in front of the door
+    setCol(t, col('#9a8a74'));
+    sideBox(t, sg, pa, pb, -dep, -0.6, 0, deck, false, true);
+    setCol(t, col('#b5b0a6'));
+    sideBox(t, sg, du - 1.0, du + 1.0, -0.6, -0.33, 0, deck - 0.15, false, true);
+    sideBox(t, sg, du - 1.0, du + 1.0, -0.33, -0.06, 0, deck - 0.3, false, true);
+    sideBox(t, sg, pa, du - 1.0, -0.6, -0.06, 0, deck, false, true);
+    sideBox(t, sg, du + 1.0, pb, -0.6, -0.06, 0, deck, false, true);
+    // columns: base, shaft, capital (white), at the ends and between
+    const nC = Math.max(2, Math.round((pb - pa) / 1.9) + 1);
+    for (let k = 0; k < nC; k++) {
+      const u = pa + 0.22 + ((pb - pa - 0.44) * k) / (nC - 1);
+      if (Math.abs(u - du) < 0.9) continue;
+      const px = sx(sg, u, -0.3),
+        pz = sz(sg, u, -0.3);
+      setCol(t, col('#e2ddd2'));
+      t.box(px - 0.2, deck, pz - 0.2, px + 0.2, deck + 0.22, pz + 0.2);
+      setCol(t, white);
+      t.cylinder(px, pz, 0.13, deck + 0.22, gH - 0.38, 10, false, 0.11);
+      setCol(t, col('#e2ddd2'));
+      t.cylinder(px, pz, 0.15, gH - 0.38, gH - 0.3, 10, false, 0.15);
+      t.box(px - 0.22, gH - 0.3, pz - 0.22, px + 0.22, gH - 0.08, pz + 0.22);
+    }
+    // balustrade along the deck edge, open at the steps
+    for (const [a, b] of [[pa + 0.22, du - 1.0], [du + 1.0, pb - 0.22]]) {
+      if (b - a < 0.4) continue;
+      railing(t, sx(sg, a, -0.55), sz(sg, a, -0.55), sx(sg, b, -0.55), sz(sg, b, -0.55), deck, 0.9, white, 0.12, 1);
+    }
+  }
+
   // hip roof + lookout lantern + signal mast
   const yr = H + 3.0;
   hipRoof(g, body, H, yr, 0.45, col('#4d5560'), ROOFPAT.SLATE, white);

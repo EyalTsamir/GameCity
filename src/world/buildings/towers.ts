@@ -16,6 +16,7 @@ import { WIN, PROF, WALLPAT, ROOFPAT, FRAME, GLASS, LIGHT_MODE, shopType } from 
 import { letterSign, helipadMark, boardSign } from './signs';
 import { GREEN } from './green';
 import { MASS, massRng, recordTier, notchPoly, notchCap, crownCornice, roofKit } from './massing';
+import { towerPlant, roofPlantOn } from './roofplant';
 
 interface P {
   x: number;
@@ -79,8 +80,28 @@ export function setColumnDetail(on: boolean): void {
  * chamfer step, stone / concrete cladding in ~1 m courses with 12 mm recessed joints, a 6 cm shadow gap under
  * a slightly wider cap plate that meets the soffit. Clipped to [0, L] like the plain column (corners are shared).
  */
-function arcadeColumn(t: Gen['trim'], sg: ReturnType<typeof sideGeom>, u: number, gH: number, c: THREE.Color, seed: number): void {
+function arcadeColumn(t: Gen['trim'], sg: ReturnType<typeof sideGeom>, u: number, gH: number, c: THREE.Color, seed: number, classical = false): void {
   const L = sg.L;
+  if (classical && columnDetail) {
+    // ?nocolonnade: a classical column — square plinth, torus, tapering 12-sided shaft, echinus + abacus
+    const cx = sx(sg, Math.min(L - 0.4, Math.max(0.4, u)), -0.37),
+      cz = sz(sg, Math.min(L - 0.4, Math.max(0.4, u)), -0.37);
+    setCol(t, shade(c, 0.86));
+    t.box(cx - 0.36, 0, cz - 0.36, cx + 0.36, 0.28, cz + 0.36);
+    setCol(t, shade(c, 0.95));
+    t.cylinder(cx, cz, 0.33, 0.28, 0.36, 12, false, 0.31);
+    t.cylinder(cx, cz, 0.31, 0.36, 0.42, 12, false, 0.27);
+    setCol(t, c);
+    t.cylinder(cx, cz, 0.27, 0.42, gH - 0.62, 12, false, 0.23);
+    setCol(t, shade(c, 0.95));
+    t.cylinder(cx, cz, 0.24, gH - 0.62, gH - 0.56, 12, false, 0.24);
+    t.cylinder(cx, cz, 0.24, gH - 0.56, gH - 0.4, 12, false, 0.34);
+    setCol(t, shade(c, 1.04));
+    t.box(cx - 0.38, gH - 0.4, cz - 0.38, cx + 0.38, gH - 0.22, cz + 0.38);
+    // entablature block above the capital up to the soffit
+    t.box(cx - 0.36, gH - 0.22, cz - 0.36, cx + 0.36, gH, cz + 0.36);
+    return;
+  }
   const box = (h: number, o0: number, o1: number, y0: number, y1: number) =>
     sideBox(t, sg, Math.max(0, u - h), Math.min(L, u + h), o0, o1, y0, y1, false, true);
   if (!columnDetail) {
@@ -192,6 +213,28 @@ export function genTower(g: Gen): void {
       const L = Math.hypot(b.x - a.x, b.z - a.z);
       const gr = windows && L > 1.2 ? edgeGrid(L) : null;
       wallSeg(g.shell, a.x, a.z, b.x, b.z, y0, y1, gr, look(profile));
+      // ?nopiers: punched masonry walls get piers between the window columns and wider corner piers
+      if (MASS.piers && masonry && sc.style === WIN.PLAIN && !sc.fins && gr && y1 - y0 > 6) {
+        const tx = (b.x - a.x) / L,
+          tz = (b.z - a.z) / L;
+        const ang = Math.atan2(-tz, tx);
+        const nx = -tz,
+          nz = tx;
+        const gap = gr.wx0 * 2;
+        const pw = Math.min(0.55, gap * 0.75);
+        const yA = Math.max(y0, gH);
+        const pier = (u0: number, u1: number, dep: number) => {
+          const um = (u0 + u1) / 2;
+          g.trim.boxRot(a.x + tx * um + nx * (dep / 2 - 0.02), a.z + tz * um + nz * (dep / 2 - 0.02), u1 - u0, dep, yA, y1, ang, 0b111111 & ~8);
+        };
+        setCol(g.trim, shade(wallC, 1.05));
+        if (pw > 0.25) for (let k = 1; k < gr.n; k++) pier(gr.u0 + k * gr.cw - pw / 2, gr.u0 + k * gr.cw + pw / 2, 0.14);
+        const cwid = Math.min(gr.u0 + gr.wx0 * 0.8, 1.0);
+        if (cwid > 0.3) {
+          pier(-0.2, cwid, 0.2);
+          pier(L - cwid, L + 0.2, 0.2);
+        }
+      }
       if (sc.fins && gr && y1 - y0 > 6) {
         setCol(g.trim, shade(wallC, 0.9));
         const tx = (b.x - a.x) / L,
@@ -236,6 +279,7 @@ export function genTower(g: Gen): void {
   };
 
   // ── massing
+  const masonry = sc.style !== WIN.CURTAIN && (sc.pattern === WALLPAT.BRICK || sc.pattern === WALLPAT.STONE || sc.pattern === WALLPAT.PANELS);
   const podiumTop = sc.podium && H > 28 ? gH + fH * (H > 60 ? 2 : 1) : 0;
   let shaft = podiumTop > 0 ? insetRect(fp, Math.min(2.4, Math.min(W, D) * 0.1)) : base;
   const chamfer = Math.min(sc.chamfer, Math.min(shaft.x1 - shaft.x0, shaft.z1 - shaft.z0) * 0.2);
@@ -271,7 +315,6 @@ export function genTower(g: Gen): void {
   // massing variants (own RNG stream): wedding-cake setbacks on masonry, an asymmetric setback, notched
   // (re-entrant) corners, or a set-back top storey with a terrace
   const mr = massRng(g);
-  const masonry = sc.style !== WIN.CURTAIN && (sc.pattern === WALLPAT.BRICK || sc.pattern === WALLPAT.STONE || sc.pattern === WALLPAT.PANELS);
   let notch = 0;
   if (MASS.setbacks && !twin && tiers.length === 1 && (sc.crown === 'flat' || sc.crown === 'screen' || sc.crown === 'stepped') && H > 12) {
     const fl = (y: number) => gH + fH * Math.max(1, Math.round((y - gH) / fH));
@@ -331,12 +374,15 @@ export function genTower(g: Gen): void {
     if (!last && MASS.setbacks) setbackRoof(t.r, tiers[i + 1].r, t.y1);
   }
   shaft = tiers[tiers.length - 1].r;
+  // ?nocrowns: curtain-wall towers end in an open crown of fins instead of a plain parapet line
+  const crownH = MASS.crowns && sc.style === WIN.CURTAIN && sc.crown !== 'slant' && sc.crown !== 'screen' && !twin && H > 20 ? Math.min(4.2, Math.max(2.2, H * 0.05)) : 0;
+  if (crownH > 0) glassCrown(notch > 0 ? notchPoly(shaft, notch) : rectPoly(shaft, tiers[tiers.length - 1].c), H + 1.18, crownH);
   if (sc.crown !== 'slant') {
     if (sc.crown === 'screen') crownScreen(notch > 0 ? notchPoly(shaft, notch) : rectPoly(shaft, chamfer), H);
     rooftop(insetRect(shaft, 0.6), H, sc.crown !== 'screen');
   }
   if (H >= 60) {
-    const top = sc.crown === 'screen' ? H + 5.2 : H + 1.3;
+    const top = sc.crown === 'screen' ? H + 5.2 : crownH > 0 ? H + 1.18 + crownH + 0.15 : H + 1.3;
     let k = 0;
     for (const p of rectPoly(insetRect(shaft, 0.3), 0)) aviationLight(g, p.x, top, p.z, (k++ % 2) * 0.0);
   }
@@ -362,7 +408,10 @@ export function genTower(g: Gen): void {
     // the shop named on the front board fills the whole ground floor: its windows show that interior
     const shopName = lot.shopfront && !haven ? SHOP_NAMES[shopIdx++ % SHOP_NAMES.length] : '';
     const shopT = shopName ? shopType(shopName) : 0;
-    const lookL: WallLook = { color: shade(wallC, 0.75), pattern: WALLPAT.SMOOTH + 16 * shopT, frame: FRAME.DARK, glass: sc.glass, style: lot.shopfront ? WIN.SHOP : WIN.DOOR, profile: lot.shopfront ? PROF.SHOP : PROF.ALWAYS, seed: g.seed + 11 };
+    // ?nocolonnade: behind an arcade the ground floor is always shopfronts (a lobby wall there read as blank)
+    const arcadeShops = arcade && !lot.shopfront && MASS.colonnade;
+    const shopT2 = arcadeShops ? shopType(SHOP_NAMES[(g.seed * 7) % SHOP_NAMES.length]) : shopT;
+    const lookL: WallLook = { color: shade(wallC, 0.75), pattern: WALLPAT.SMOOTH + 16 * shopT2, frame: FRAME.DARK, glass: sc.glass, style: lot.shopfront || arcadeShops ? WIN.SHOP : WIN.DOOR, profile: lot.shopfront || arcadeShops ? PROF.SHOP : PROF.ALWAYS, seed: g.seed + 11 };
     for (const s of [FRONT, RIGHT, BACK, LEFT] as Side[]) {
       const sg = sideGeom(ar, s);
       // doors: plan door u is along the footprint side; map to this rect
@@ -454,7 +503,7 @@ export function genTower(g: Gen): void {
         const n = Math.max(2, Math.round(sg.L / 4.5));
         for (let k = 0; k <= n; k++) {
           if (k === n) continue; // corners are shared with the next side
-          arcadeColumn(t, sg, (sg.L * k) / n, gH, wallC, g.seed + k);
+          arcadeColumn(t, sg, (sg.L * k) / n, gH, wallC, g.seed + k, MASS.colonnade && masonry);
         }
       }
       setCol(t, shade(wallC, 0.6));
@@ -547,6 +596,44 @@ export function genTower(g: Gen): void {
     }
   }
 
+  /** the mullions run on above the roof as a louvred crown (a fin every half cell) tied by a ring beam;
+   *  a lit line under the beam on the accent schemes */
+  function glassCrown(poly: P[], y: number, hC: number): void {
+    const t = g.trim;
+    const yT = y + hC;
+    for (let i = 0; i < poly.length; i++) {
+      const a = poly[i],
+        b = poly[(i + 1) % poly.length];
+      const L = Math.hypot(b.x - a.x, b.z - a.z);
+      if (L < 0.3) continue;
+      const tx = (b.x - a.x) / L,
+        tz = (b.z - a.z) / L;
+      const nx = -tz,
+        nz = tx;
+      const ang = Math.atan2(-tz, tx);
+      const n = Math.max(1, Math.round(L / (sc.cell * 0.5)));
+      // the curtain wall carried on past the roof as a glass screen between the fins (panes never lit), glazed on
+      // both faces so the far side still reads as glass from above
+      const grS = makeGrid(0, L, y, hC - 0.25, 1, { spacing: L / n, cols: n, winW: L / n - 0.08, winH: hC - 0.4, sill: 0.06, margin: 0 });
+      const lookS = look(PROF.NEVER, WIN.CURTAIN);
+      wallSeg(g.shell, a.x - nx * 0.4, a.z - nz * 0.4, b.x - nx * 0.4, b.z - nz * 0.4, y, yT - 0.25, grS, lookS);
+      wallSeg(g.shell, b.x - nx * 0.43, b.z - nz * 0.43, a.x - nx * 0.43, a.z - nz * 0.43, y, yT - 0.25, grS, lookS);
+      setCol(t, shade(wallC, 0.97));
+      for (let k = 0; k < n; k++) {
+        const u = Math.min(L - 0.1, Math.max(0.1, (L * k) / n));
+        t.boxRot(a.x + tx * u - nx * 0.22, a.z + tz * u - nz * 0.22, 0.09, 0.6, y, yT - 0.2, ang, 0b111111 & ~4 & ~8);
+      }
+      // ring beam on top (runs past the corners so the edges overlap)
+      setCol(t, shade(wallC, 1.04));
+      const ax = a.x - tx * 0.2 - nx * 0.22,
+        az = a.z - tz * 0.2 - nz * 0.22,
+        bx = b.x + tx * 0.2 - nx * 0.22,
+        bz = b.z + tz * 0.2 - nz * 0.22;
+      t.beam(ax, yT - 0.12, az, bx, yT - 0.12, bz, 0.6, 0.24);
+    }
+    if (sc.accent && H > 45) accentEdge(poly, yT - 0.32, sc.accent, 2.2);
+  }
+
   function crownScreen(poly: P[], y: number): void {
     // open louvred screen hiding the plant: vertical fins + top band, lit at night
     const t = g.trim;
@@ -585,32 +672,37 @@ export function genTower(g: Gen): void {
     const t = g.trim;
     const w = r.x1 - r.x0,
       d = r.z1 - r.z0;
+    // ?noroofplant: real plant (roofplant.ts) instead of the grey penthouse + boxes; the rng draws below stay the same
+    const plant = roofPlantOn() ? towerPlant(g, r, y, { kind: masonry ? 'masonry' : sc.style === WIN.CURTAIN ? 'glass' : 'panel', wall: wallC, tank: sc.tank, curtain: sc.style === WIN.CURTAIN, H }) : null;
     // mechanical penthouse
     const pw = w * rng.range(0.38, 0.55),
       pd = d * rng.range(0.35, 0.5);
     const px = r.x0 + w * rng.range(0.25, 0.75),
       pz = r.z0 + d * rng.range(0.3, 0.7);
-    const ph = rng.range(3, 4.2);
+    const ph0 = rng.range(3, 4.2);
+    const ph = plant ? plant.h : ph0;
     const pc = col('#b9b6ae');
     setCol(t, pc);
-    const bx0 = Math.max(r.x0, px - pw / 2),
-      bx1 = Math.min(r.x1, px + pw / 2),
-      bz0 = Math.max(r.z0, pz - pd / 2),
-      bz1 = Math.min(r.z1, pz + pd / 2);
-    t.box(bx0, y, bz0, bx1, y + ph, bz1);
-    setCol(t, shade(pc, 0.7));
-    for (let k = 0; k < 3; k++) {
-      const yy = y + 1 + k * 0.45;
-      t.box(bx0 - 0.04, yy, bz0 - 0.04, bx1 + 0.04, yy + 0.18, bz1 + 0.04, 0b110011);
+    const bx0 = plant ? plant.x0 : Math.max(r.x0, px - pw / 2),
+      bx1 = plant ? plant.x1 : Math.min(r.x1, px + pw / 2),
+      bz0 = plant ? plant.z0 : Math.max(r.z0, pz - pd / 2),
+      bz1 = plant ? plant.z1 : Math.min(r.z1, pz + pd / 2);
+    if (!plant) {
+      t.box(bx0, y, bz0, bx1, y + ph, bz1);
+      setCol(t, shade(pc, 0.7));
+      for (let k = 0; k < 3; k++) {
+        const yy = y + 1 + k * 0.45;
+        t.box(bx0 - 0.04, yy, bz0 - 0.04, bx1 + 0.04, yy + 0.18, bz1 + 0.04, 0b110011);
+      }
+      setCol(t, col('#8f8c85'));
+      t.box(bx0 - 0.12, y + ph, bz0 - 0.12, bx1 + 0.12, y + ph + 0.15, bz1 + 0.12);
     }
-    setCol(t, col('#8f8c85'));
-    t.box(bx0 - 0.12, y + ph, bz0 - 0.12, bx1 + 0.12, y + ph + 0.15, bz1 + 0.12);
     // cooling units with fans
     const nU = rng.int(2, 4);
     for (let k = 0; k < nU; k++) {
       const ux = r.x0 + 1.2 + rng.next() * (w - 2.4),
         uz = r.z0 + 1.2 + rng.next() * (d - 2.4);
-      if (ux > bx0 - 1.3 && ux < bx1 + 1.3 && uz > bz0 - 1.3 && uz < bz1 + 1.3) continue;
+      if (plant || (ux > bx0 - 1.3 && ux < bx1 + 1.3 && uz > bz0 - 1.3 && uz < bz1 + 1.3)) continue;
       setCol(t, col('#cfd3d4'));
       t.box(ux - 0.9, y, uz - 0.9, ux + 0.9, y + 1.1, uz + 0.9);
       setCol(t, col('#3a3f44'));
@@ -620,7 +712,7 @@ export function genTower(g: Gen): void {
     if (sc.tank && rng.chance(0.75)) {
       const tx = r.x0 + 1.8 + rng.next() * Math.max(0.1, w - 3.6),
         tz = r.z0 + 1.8 + rng.next() * Math.max(0.1, d - 3.6);
-      if (!(tx > bx0 - 1.8 && tx < bx1 + 1.8 && tz > bz0 - 1.8 && tz < bz1 + 1.8)) waterTank(tx, tz, y);
+      if (!plant && !(tx > bx0 - 1.8 && tx < bx1 + 1.8 && tz > bz0 - 1.8 && tz < bz1 + 1.8)) waterTank(tx, tz, y);
     }
     // antenna mast (tall buildings) / gantry
     if (allowTall && H > 55) {
@@ -650,7 +742,7 @@ export function genTower(g: Gen): void {
       for (let k = 0; k < 2; k++) {
         const dx = r.x0 + 0.8 + rng.next() * (w - 1.6),
           dz = r.z0 + 0.8 + rng.next() * (d - 1.6);
-        if (dx > bx0 - 0.8 && dx < bx1 + 0.8 && dz > bz0 - 0.8 && dz < bz1 + 0.8) continue;
+        if (plant || (dx > bx0 - 0.8 && dx < bx1 + 0.8 && dz > bz0 - 0.8 && dz < bz1 + 0.8)) continue;
         setCol(t, col('#e9e9e6'));
         t.cylinder(dx, dz, 0.05, y, y + 0.9, 4, false);
         t.cone(dx, dz, 0.55, y + 0.8, y + 1.15, 8);
