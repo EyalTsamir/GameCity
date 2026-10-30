@@ -92,6 +92,7 @@ function auditInPage(opt) {
   const HASH_BITS = 22;
   const table = new Float64Array(1 << HASH_BITS);
   const tableW = new Int8Array(1 << HASH_BITS);
+  const tableTwin = new Uint8Array(1 << HASH_BITS);
 
   for (const mesh of meshes) {
     const geo = mesh.geometry;
@@ -144,7 +145,11 @@ function auditInPage(opt) {
       W[off + 2] = m[2] * x + m[6] * y + m[10] * z + m[14];
     };
 
+    // the ground and water sheets are coarser than terrain.height: "buried" means nothing for them
+    const surfaceMesh = /land-(ground|reflect|island|mountains)|terrain-ground|water-surface|sky-dome|clouds|land-road/.test(row.path);
     table.fill(0);
+    tableTwin.fill(0);
+    const flipKeys = [];
     let parentArr = null;
     const weld = new Map();
     const staticForParts = !instanced && !opt.skipParts;
@@ -203,6 +208,7 @@ function auditInPage(opt) {
       if (l2 > 1 && Math.sqrt(l2) / alt > 300) row.sliver++;
 
       // winding vs vertex normals
+      let flippedNow = false;
       if (nrm && side === 0) {
         const vx = nrm.getX(i0) + nrm.getX(i1) + nrm.getX(i2);
         const vy = nrm.getY(i0) + nrm.getY(i1) + nrm.getY(i2);
@@ -215,10 +221,7 @@ function auditInPage(opt) {
           wz = m[2] * vx + m[6] * vy + m[10] * vz;
         }
         const d = (wx * nx + wy * ny + wz * nz) / (dbl * (Math.hypot(wx, wy, wz) || 1));
-        if (d < -0.3) {
-          row.flipped++;
-          samplesOf(row.samples.flipped, 8, at());
-        }
+        flippedNow = d < -0.3;
       }
 
       // coincident triangles (sorted quantised corners; winding from the corner permutation)
@@ -247,15 +250,19 @@ function auditInPage(opt) {
               samplesOf(row.samples.dup, 6, at());
             } else {
               row.backto++;
+              tableTwin[slot] = 1;
               samplesOf(row.samples.backto, 6, at());
             }
             break;
           }
           slot = (slot + 1) % table.length;
         }
+        // a wound-back triangle with a coincident twin is a two-sided panel (same normals both ways): harmless.
+        // Only the ones without a twin vanish from their visible side; the twin may come later, so count at the end
+        if (flippedNow) flipKeys.push(key, mx, my, mz);
       }
 
-      if (!inst) {
+      if (!inst && !surfaceMesh) {
         const g0 = gh(W[0], W[2]), g1 = gh(W[3], W[5]), g2 = gh(W[6], W[8]);
         if (W[1] < g0 - 0.08 && W[4] < g1 - 0.08 && W[7] < g2 - 0.08 && my < gh(mx, mz) - 0.08) {
           row.buried++;
@@ -265,6 +272,22 @@ function auditInPage(opt) {
           samplesOf(row.samples.bottom, 6, at());
         }
       }
+    }
+
+    for (let f = 0; f < flipKeys.length; f += 4) {
+      const key = flipKeys[f];
+      let slot = key % table.length, twin = false;
+      for (let probes = 0; probes < 16; probes++) {
+        if (table[slot] === 0) break;
+        if (table[slot] === key) {
+          twin = tableTwin[slot] === 1;
+          break;
+        }
+        slot = (slot + 1) % table.length;
+      }
+      if (twin) continue;
+      row.flipped++;
+      samplesOf(row.samples.flipped, 8, [round(flipKeys[f + 1]), round(flipKeys[f + 2]), round(flipKeys[f + 3])]);
     }
 
     // connected parts of static meshes
@@ -565,7 +588,7 @@ async function censusInPage(opt) {
     const y = nd.y ?? ground(x, z);
     pedCand.push([x, y + 1.6, z]);
   }
-  pts.push(...farthest(pedCand, opt.points, 26));
+  pts.push(...farthest(pedCand, opt.points, opt.spacing ?? 26));
   const laneCand = [];
   for (const l of ctx.roads?.lanes ?? []) {
     const a = l.path?.points?.[0] ?? l.points?.[0];
@@ -582,6 +605,12 @@ async function censusInPage(opt) {
     }
   }
 
+  // aerial grid over the town (a free camera can fly anywhere): what is unseen from here AND from the ground is hidden
+  for (let ax = -180; ax <= 180; ax += 72)
+    for (let az = -170; az <= 130; az += 60) {
+      pts.push([ax + 18, 45, az + 12]);
+      pts.push([ax - 18, 110, az - 12]);
+    }
   // (the page's own frames run during the yields below: set the whole state again after each one)
   const bindState = () => {
     gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
@@ -656,7 +685,60 @@ async function censusInPage(opt) {
         clusters.set(k, (clusters.get(k) ?? 0) + 1);
       } else tiny++;
     }
-    summary.push({ ...r, first: undefined, seen: seenN, hidden, tiny, hiddenArea: Math.round(hiddenArea), down, up, side: sidew, topClusters: [...clusters.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6) });
+    // connected parts (welded at 1 cm) that were never seen at all, grouped by triangle count + size
+    const hiddenParts = {};
+    if (e.tri >= 800) {
+      const par = new Int32Array(e.tri * 3);
+      for (let i = 0; i < par.length; i++) par[i] = i;
+      const find = (a) => {
+        while (par[a] !== a) {
+          par[a] = par[par[a]];
+          a = par[a];
+        }
+        return a;
+      };
+      const weld = new Map();
+      for (let i = 0; i < par.length; i++) {
+        const o = i * 4;
+        const k = Math.round(e.f[o] * 100) * 73856093 + Math.round(e.f[o + 1] * 100) * 19349663 + Math.round(e.f[o + 2] * 100) * 83492791;
+        const q = weld.get(k);
+        if (q === undefined) weld.set(k, i);
+        else par[find(i)] = find(q);
+      }
+      for (let t = 0; t < e.tri; t++) {
+        par[find(t * 3 + 1)] = find(t * 3);
+        par[find(t * 3 + 2)] = find(t * 3);
+      }
+      const parts = new Map();
+      for (let t = 0; t < e.tri; t++) {
+        const pk = find(t * 3);
+        let b = parts.get(pk);
+        if (!b) parts.set(pk, (b = { n: 0, seen: 0, x0: 1e9, y0: 1e9, z0: 1e9, x1: -1e9, y1: -1e9, z1: -1e9 }));
+        b.n++;
+        if (seen[e.first + t] > 0) b.seen++;
+        for (let c = 0; c < 3; c++) {
+          const o = (t * 3 + c) * 4;
+          const X = e.f[o], Y = e.f[o + 1], Z = e.f[o + 2];
+          if (X < b.x0) b.x0 = X;
+          if (X > b.x1) b.x1 = X;
+          if (Y < b.y0) b.y0 = Y;
+          if (Y > b.y1) b.y1 = Y;
+          if (Z < b.z0) b.z0 = Z;
+          if (Z > b.z1) b.z1 = Z;
+        }
+      }
+      const rr = (v) => Math.round(v * 10) / 10;
+      for (const b of parts.values()) {
+        if (b.seen > 0) continue;
+        const k = `${b.n}|${rr(b.x1 - b.x0)}x${rr(b.y1 - b.y0)}x${rr(b.z1 - b.z0)}`;
+        const h = (hiddenParts[k] ??= { parts: 0, tris: 0, at: [] });
+        h.parts++;
+        h.tris += b.n;
+        if (h.at.length < 3) h.at.push([rr((b.x0 + b.x1) / 2), rr(b.y0), rr((b.z0 + b.z1) / 2)]);
+      }
+    }
+    const topHidden = Object.entries(hiddenParts).sort((x, y) => y[1].tris - x[1].tris).slice(0, 12).map(([k, v]) => ({ key: k, ...v }));
+    summary.push({ ...r, first: undefined, seen: seenN, hidden, tiny, hiddenArea: Math.round(hiddenArea), down, up, side: sidew, topClusters: [...clusters.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6), topHidden });
     gl.deleteVertexArray(e.vao);
     gl.deleteBuffer(e.buf);
   }
@@ -813,7 +895,7 @@ try {
   report.errors = errs;
   if (args.drill) report.drill = await page.evaluate(drillInPage, { re: args.drill, top: parseInt(args['drill-top'] ?? '40', 10), min: parseInt(args['drill-min'] ?? '0', 10), inst: true });
   if (args.census) {
-    report.census = await page.evaluate(censusInPage, { res: parseInt(args['census-res'] ?? '512', 10), points: parseInt(args['census-points'] ?? '140', 10), skipMesh: args['census-skip'] ?? null });
+    report.census = await page.evaluate(censusInPage, { res: parseInt(args['census-res'] ?? '512', 10), points: parseInt(args['census-points'] ?? '140', 10), spacing: parseFloat(args['census-spacing'] ?? '26'), skipMesh: args['census-skip'] ?? null });
   }
 } catch (e) {
   report.harnessError = String(e?.stack ?? e);
@@ -876,6 +958,11 @@ if (report.census) {
   md.push('`hidden` = never rasterised and area > 0.02 m²; `tiny` = never rasterised, smaller (too small or hidden).', '');
   md.push('| tris | seen | hidden | down | up | side | tiny | hidden m² | module/path |', '|---|---|---|---|---|---|---|---|---|');
   for (const r of c.rows.slice(0, 70)) md.push(`| ${r.tris} | ${r.seen} | ${r.hidden} | ${r.down} | ${r.up} | ${r.side} | ${r.tiny} | ${r.hiddenArea} | ${r.module}/${r.path} |`);
+  const hp = [];
+  for (const r of c.rows) for (const h of r.topHidden ?? []) hp.push({ ...h, path: r.path });
+  hp.sort((x, y) => y.tris - x.tris);
+  md.push('', '### Parts never seen (top families)', '', '| tris | parts | tris/part | size m | mesh | at |', '|---|---|---|---|---|---|');
+  for (const h of hp.slice(0, 80)) md.push(`| ${h.tris} | ${h.parts} | ${h.key.split('|')[0]} | ${h.key.split('|')[1]} | ${h.path} | ${JSON.stringify(h.at.slice(0, 2))} |`);
   const tot = c.rows.reduce((s, r) => ({ t: s.t + r.tris, h: s.h + r.hidden, ti: s.ti + r.tiny }), { t: 0, h: 0, ti: 0 });
   md.push('', `Totals: ${tot.t} tris, ${tot.h} hidden, ${tot.ti} tiny.`);
 }
