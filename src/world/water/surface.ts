@@ -728,6 +728,7 @@ reflectedLight.indirectDiffuse += diffuseColor.rgb * thLampLight(vWW, vec3(0.0, 
   const duskSea = WORLD_MODE && !ctx.debug.params.has('waterold');
   if (duskSea) defs.TH_DUSKSEA = 1;
   defs.TH_NO_LAMP_SPEC = 1; // (its lamp reflections are its own: the planar pass / lampR)
+  defs.TH_NO_WET = 1;
   // the atmosphere's fog chunks (thHazeColor / thAtmo) exist only when air installed them (not ?noatmo)
   const atmoActive = (ctx.services.atmosphere as { active?: boolean } | undefined)?.active === true;
   if (WORLD_MODE && atmoActive) defs.TH_ATMO = 1;

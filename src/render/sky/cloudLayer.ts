@@ -133,6 +133,12 @@ export function cloudLayerUniforms() {
     uCloudCity: { value: new THREE.Color(0, 0, 0) },
     /** light direction for the clouds (sun by day, moon by night) */
     uCloudL: { value: new THREE.Vector3(0, 1, 0) },
+    /** storm band (sky/weather.ts): wind x, z, lead edge (m), trail edge (m) */
+    uStorm: { value: new THREE.Vector4(1, 0, -1e7, -1e7) },
+    /** x amount (0 no band), y edge half width (m), z sky darkening, w solid deck share */
+    uStormK: { value: new THREE.Vector4(0, 3500, 0, 0) },
+    /** lightning in the deck: world x, z, intensity, radius (m) */
+    uCloudFlash: { value: new THREE.Vector4(0, 0, 0, 4000) },
   };
 }
 export type CloudLayerUniforms = ReturnType<typeof cloudLayerUniforms>;
@@ -144,7 +150,15 @@ uniform vec4 uCu;
 uniform vec4 uCuSlab;
 uniform vec4 uCi;
 uniform vec2 uCloudWind;
+uniform vec4 uStorm;
+uniform vec4 uStormK;
 const float CL_RG = 6360e3;
+// the storm band's cover at world xz (sky/weather.ts coverAt)
+float clStorm(vec2 xz) {
+  if (uStormK.x <= 0.0) return 0.0;
+  float s = dot(xz, uStorm.xy);
+  return uStormK.x * (1.0 - smoothstep(uStorm.z - uStormK.y, uStorm.z + uStormK.y, s)) * smoothstep(uStorm.w - uStormK.y, uStorm.w + uStormK.y, s);
+}
 // cumulus thickness field 0..1 at world xz (m): which ~1.7 km noise cells host a cloud (coverage, varied by
 // large weather patches), its rounded body (~1 km across), and (full) billowy cauliflower rims. Fair-weather
 // cumulus are separate ~0.5–2 km clouds with clear gaps, never a scatter of tiny flakes.
@@ -153,11 +167,14 @@ float cuField(vec2 xz, float lod, bool full) {
   vec4 wx = textureLod(tCloudNoise, p * 0.13 + vec2(0.31, 0.77), lod + 1.0);
   vec2 warp = (vec2(wx.r, wx.a) - 0.5) * 0.3;
   vec4 c = textureLod(tCloudNoise, p * 0.42 + warp, lod);
-  float cov = clamp(uCu.x * (0.4 + 1.2 * smoothstep(0.3, 0.72, wx.a)), 0.0, 1.0);
+  float stc = clStorm(xz);
+  float cov = max(clamp(uCu.x * (0.4 + 1.2 * smoothstep(0.3, 0.72, wx.a)), 0.0, 1.0), stc * 0.98);
   float pick = smoothstep(1.0 - cov - 0.12, 1.0 - cov + 0.12, c.r * 0.75 + wx.a * 0.25);
   // dome cross-section over the (cone-like) Worley cell: r 0 at the centre → 1 at the rim
   float r = clamp((0.86 - c.g) / 0.52, 0.0, 1.0);
   float body = sqrt(max(0.0, 1.0 - r * r)) * pick;
+  // inside the band the cells merge into one deck, lumpy on top and thinner toward the edges
+  body = max(body, stc * uStormK.w * (0.5 + 0.5 * c.r + 0.35 * c.g));
   if (!full || body <= 0.0) return body;
   vec4 b = textureLod(tCloudNoise, p * 2.1 + warp * 1.6 + vec2(0.53, 0.19), lod + 0.3);
   return clamp(body * (0.62 + 0.55 * b.g) - (1.0 - body) * 0.4 * (1.0 - b.g) - 0.1 * (b.b - 0.5), 0.0, 1.0);
@@ -169,7 +186,9 @@ float cuDens(vec2 xz, float h01, float lod, bool full) {
   // via the field's detail), the base stays flat, and small / partly picked clouds stay low and flat
   // (1.12: even the thickest cloud tops out below the slab ceiling — never box-clipped)
   float prof = 0.08 + 1.12 * h01;
-  return clamp((f - prof) * 3.2, 0.0, 1.0) * smoothstep(0.0, 0.035, h01);
+  // (storm: a torn, ragged base instead of a flat one)
+  float rag = uStormK.w > 0.0 ? clStorm(xz) * uStormK.w * textureLod(tCloudNoise, xz / 2300.0 + 0.37, lod).g * 0.2 : 0.0;
+  return clamp((f - prof) * 3.2, 0.0, 1.0) * smoothstep(rag, rag + 0.035, h01);
 }
 // cirrus: broad veils with fibres stretched along the wind (opacity texture, never thresholded detail)
 float ciDensity(vec2 xz, float lod) {

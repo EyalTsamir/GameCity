@@ -299,6 +299,7 @@ vec3 rdAsphalt(inout float rough) {
     c = mix(c, c * 0.3 + vec3(0.004, 0.005, 0.006), pud);
     rough = mix(rough, 0.03, pud);
     if (pud > 0.002) rdEmit += pud * rdPuddleLamps(vWP, normalize(vWP - cameraPosition));
+    rdEmit += rdStreetMirror(vWP, pud, max(uRain, wet * 0.85) * 0.8, nS.rg);
   }
   float wetAll = max(uRain, uWet * 0.85);
   float puddle = smoothstep(0.64, 0.72, nL.g * 0.6 + nM.r * 0.4) * uRain;
@@ -603,6 +604,7 @@ vec3 rdHard(inout float rough) {
     c = mix(c, lt.rgb, lt.a * 0.9);
   }
   float wetH = max(uRain, uWetH * 0.85);
+  rdEmit += rdStreetMirror(vWP, 0.0, wetH * 0.55, nS.rg);
   c *= mix(1.0, 0.76, wetH);
   rough = mix(rough, rough * 0.55, wetH);
   return c;
