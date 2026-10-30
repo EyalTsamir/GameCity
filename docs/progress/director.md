@@ -61,7 +61,7 @@ film's low poses break: `handback.pitch` / `handback.margin` in `camera.ts` let 
 stored: the film step alone runs the free camera, the full run the guided one. Both are covered that way.
 
 ## Numbers (film-hitch, 1920×1025, vsync)
-Living-scenes and geometry-hunt on the GPU in the last column; the first two were on AC, one sibling on the GPU.
+Living-scenes and geometry-hunt on the GPU in the last column; living-scenes in the first two (power state not recorded).
 | | before crop/cadence | after | final (AC, 2026-10-30) |
 |---|---|---|---|
 | new programs during the film | 2 | 0 | 0 |
