@@ -22,8 +22,71 @@ import { perfOn } from '../../core/perfdeep';
 // (pdx, pdy) and turns the land's noise fetches into textureGrad with the same gradients (same samples), then gates on
 // exactly-zero weights. `?nolandgates` / `?noperfdeep` generate the old source.
 const LG = perfOn('landgates');
-/** land noise fetch: textureGrad with the hoisted footprint derivatives scaled by the uv scale `k` (= the implicit result) */
-const lnTex = (uv: string, k: string, swz = 'xy') => (LG ? `textureGrad(tLN, ${uv}, pdx.${swz} * ${k}, pdy.${swz} * ${k})` : `texture2D(tLN, ${uv})`);
+// perf-deep `landlod` (`?nolandlod`; needs landgates): the footprint histogram says the overview's land is mostly fp 0.5–2 m (fp >= 47 m is under 1 % of it),
+// so a distance LOD buys little: the waste is what is computed and then hidden or weighted 0. Exact, so no crossfade is needed:
+//  - meadow (5 fetches, wind gust, ~170 instructions) only where it shows: not under a closed canopy, not inside a field's interior
+//    (the field's parcel decision runs first; pasture, fallow, margins, fences, wet / rock / river blocks still get it);
+//  - gust only for the meadow and the crops that sway (wheat, hay, maize); forest noise only where there is forest (or surf);
+//  - fetches whose every weight is 0 at this footprint or crop: nT1 (fp >= 0.5), nT2 (fp >= 6), nT3 (mip >= 7: red max 0.586 < 0.6 and fp >= 8),
+//    dune noise, striation / nW per crop, the rank-tussock fetch (fp >= 0.3), the settlement SDF on meadow plots;
+//  - textureLod with one log2 per pixel instead of textureGrad (same mip: rotation keeps lengths, anisotropy is 1).
+const LL = LG && perfOn('landlod');
+/** land noise fetch: textureGrad with the hoisted footprint derivatives scaled by the uv scale `k` (= the implicit result); landlod: the same mip by textureLod */
+const lnTex = (uv: string, k: string, swz = 'xy') =>
+  LL ? `textureLod(tLN, ${uv}, lnL + log2(${k}))` : LG ? `textureGrad(tLN, ${uv}, pdx.${swz} * ${k}, pdy.${swz} * ${k})` : `texture2D(tLN, ${uv})`;
+
+const GUST = `thGust(p.xz) * clamp(length(uWind) * 1.3, 0.0, 1.0)`;
+/** the meadow colour (one text for the old inline place and the two landlod call sites, where `meadow` is declared outside) */
+const meadowBlock = () => /* glsl */ `  // ── meadow (wild grass): green ↔ dry patches
+  // = groundcover's long-grass blades seen from above (same palette functions, same noise and scales)
+  vec4 gM = ${lnTex('p.xz * 0.0031', '0.0031')};
+  vec4 gA = ${lnTex('p.xz * 0.0104', '0.0104')};
+  vec3 gBase = gcGrassColor(gM, gA, 0.72, wet, 0.0);
+  ${LL ? '' : 'vec3 '}meadow = gcTopColor(gBase, gcTipColor(gBase, gA, 0.72), 0.72);
+  meadow *= 0.94 + 0.12 * nB.a * midF + 0.08 * macro;
+  // the hill country is wetter: lusher, greener grass up there (never the dry felt of the lowland)
+  meadow = mix(meadow, meadow * vec3(0.84, 1.02, 0.78), smoothstep(50.0, 160.0, p.y) * 0.8);
+  // tussocks and trampled patches (metre scale, faded by the footprint), fresh vs dry tips
+  {
+    float nf = 1.0 - smoothstep(0.08, 0.5, fp);
+${LL ? `    // (0.5: the weights below are exactly 0 where the fetch is skipped)
+    vec4 nT1 = vec4(0.5), nT2 = vec4(0.5), nT3 = vec4(0.5);
+    if (fp < 0.5) nT1 = ${lnTex('p.xz * (1.0 / 3.7)', '(1.0 / 3.7)')};
+    if (fp < 6.0) nT2 = ${lnTex('p.zx * (1.0 / 11.0)', '(1.0 / 11.0)', 'yx')};` : `    vec4 nT1 = ${lnTex('p.xz * (1.0 / 3.7)', '(1.0 / 3.7)')};
+    vec4 nT2 = ${lnTex('p.zx * (1.0 / 11.0)', '(1.0 / 11.0)', 'yx')};`}
+    meadow *= 1.0 + (nT1.r - 0.5) * 0.2 * nf + (nT2.g - 0.5) * 0.14 * midF;
+    meadow = mix(meadow, meadow * vec3(1.12, 1.07, 0.88), smoothstep(0.55, 0.8, nT2.b) * 0.35 * midF);
+    // 5–15 m mottling (clover, rushes, sorrel patches) visible from the town edge
+${LL ? `    // (from mip 7 of this 29 m tile, i.e. rho >= 14.5 m: red <= 0.586, under the 0.6 edge below; fp >= rho, so the alpha weight is 0 too)
+    if (lnL + log2(1.0 / 29.0) < 7.0) nT3 = ${lnTex('p.xz * (1.0 / 29.0) + 0.37', '(1.0 / 29.0)')};` : `    vec4 nT3 = ${lnTex('p.xz * (1.0 / 29.0) + 0.37', '(1.0 / 29.0)')};`}
+    meadow *= 1.0 + (nT3.a - 0.5) * 0.3 * (1.0 - smoothstep(2.0, 8.0, fp));
+    meadow = mix(meadow, meadow * vec3(0.86, 1.04, 0.9), smoothstep(0.6, 0.75, nT3.r) * 0.6);
+  }
+  meadow = mix(meadow, meadow * vec3(1.12, 1.13, 1.05), gust * 0.5);
+  // under the near blade rings (groundcover's roaming window) the ground is the shaded thatch between
+  // the stems — exactly what the town ground does (terrain/ground.ts), so the lawn / meadow keeps its tone
+  // across the slab edge instead of turning into a lighter lawn outside
+  {
+    float bdist = distance(p, cameraPosition);
+    float vz = (cameraPosition.y - p.y) / max(bdist, 1.0);
+    float presM = (1.0 - smoothstep(uBladeFade.x - 1.5, uBladeFade.y, bdist)) * (1.0 - smoothstep(0.12, 0.5, vz) * 0.85);
+    meadow = mix(meadow, mix(gBase * 0.58, gcThatch, 0.3), presM * 0.62);
+  }
+  // wildflower specks: tiny and sparse up close, an average tint further away (the ground agent's
+  // blades carry the near meadow)
+  {
+    float fl = smoothstep(0.55, 0.8, nA.a) * 0.5 + 0.12;
+    if (fp < 0.25) {
+      vec2 fc = p.xz * 3.1;
+      vec2 hh = lhash22(floor(fc));
+      float rr = length(fract(fc) - 0.5 - (hh - 0.5) * 0.6);
+      float dotM = step(hh.x, fl * 0.35) * (1.0 - smoothstep(0.06, 0.06 + fp * 3.0, rr));
+      vec3 fcol = hh.y < 0.3 ? vec3(0.55, 0.08, 0.05) : hh.y < 0.5 ? vec3(0.28, 0.34, 0.65) : hh.y < 0.8 ? vec3(0.75, 0.74, 0.68) : vec3(0.72, 0.6, 0.12);
+      meadow = mix(meadow, fcol, dotM * (1.0 - smoothstep(0.08, 0.25, fp)) * 0.7);
+    }
+    meadow *= 1.0 + fl * 0.06 * smoothstep(0.08, 0.4, fp);
+  }
+`;
 
 const C = (hex: string) => ({ value: new THREE.Color(hex) });
 
@@ -148,7 +211,8 @@ vec3 landAlbedo() {
   vec3 p = vLW;
   float fp = max(length(fwidth(p.xz)), 1e-3);
   float fpm = min(length(dFdx(p.xz)), length(dFdy(p.xz)));   // footprint along the finer screen axis
-${LG ? `  vec2 pdx = dFdx(p.xz), pdy = dFdy(p.xz);   // hoisted: every fetch below uses these (explicit gradients)` : ''}
+${LG ? `  vec2 pdx = dFdx(p.xz), pdy = dFdy(p.xz);   // hoisted: every fetch below uses these (explicit gradients)` : ''}${LL ? `
+  float lnL = 0.5 * log2(max(max(dot(pdx, pdx), dot(pdy, pdy)), 1e-10)) + 8.0;   // mip level of a 1 m tile (256 texels); a tile of scale k: lnL + log2(k)` : ''}
   float forest = vCov.x, field = vCov.y, sand = vCov.z, rock = vCov.w;
   float wet = vCov2.x, meadowW = vCov2.y, seam = vCov2.z;
   // raised canopy (far woods): its edge slopes are forest too, never lit meadow terraces
@@ -193,54 +257,16 @@ ${LG ? `  vec4 nM = ${lnTex('p.xz * (1.0 / 1900.0)', '(1.0 / 1900.0)')};   // (t
   vec4 nA = ${lnTex('p.xz * (1.0 / 420.0)', '(1.0 / 420.0)')};` : ''}
   float macro = (nM.g - 0.5) * 0.9 + (nA.r - 0.5) * 0.6;
   float midF = 1.0 - smoothstep(1.5, 6.0, fp);
-  float gust = thGust(p.xz) * clamp(length(uWind) * 1.3, 0.0, 1.0);
+${LL ? `  // (landlod: worked out below, once it is known whether they show)
+  float gust = 0.0;
+  vec3 meadow = vec3(0.0), col = vec3(0.0);
+  bool meadowDone = false;
+  // the dune weight below can only be non-zero with cover here or a high enough noise (its finest term is at most 0.075 * midF)
+  float sN0 = (nA.b - 0.5) * 1.1 + (nB.g - 0.5) * 0.7;
+  bool sandMay = vCov.z > 0.0 || (sN0 + 0.075 * midF) * 0.12 > 0.04;
+  bool bankMeadow = wet != 0.0 || rock != 0.0 || (vCov3.x < 12.0 && vCov3.y < 140.0);   // the blocks after the fields that mix the meadow in` : `  float gust = ${GUST};
 
-  // ── meadow (wild grass): green ↔ dry patches
-  // = groundcover's long-grass blades seen from above (same palette functions, same noise and scales)
-  vec4 gM = ${lnTex('p.xz * 0.0031', '0.0031')};
-  vec4 gA = ${lnTex('p.xz * 0.0104', '0.0104')};
-  vec3 gBase = gcGrassColor(gM, gA, 0.72, wet, 0.0);
-  vec3 meadow = gcTopColor(gBase, gcTipColor(gBase, gA, 0.72), 0.72);
-  meadow *= 0.94 + 0.12 * nB.a * midF + 0.08 * macro;
-  // the hill country is wetter: lusher, greener grass up there (never the dry felt of the lowland)
-  meadow = mix(meadow, meadow * vec3(0.84, 1.02, 0.78), smoothstep(50.0, 160.0, p.y) * 0.8);
-  // tussocks and trampled patches (metre scale, faded by the footprint), fresh vs dry tips
-  {
-    float nf = 1.0 - smoothstep(0.08, 0.5, fp);
-    vec4 nT1 = ${lnTex('p.xz * (1.0 / 3.7)', '(1.0 / 3.7)')};
-    vec4 nT2 = ${lnTex('p.zx * (1.0 / 11.0)', '(1.0 / 11.0)', 'yx')};
-    meadow *= 1.0 + (nT1.r - 0.5) * 0.2 * nf + (nT2.g - 0.5) * 0.14 * midF;
-    meadow = mix(meadow, meadow * vec3(1.12, 1.07, 0.88), smoothstep(0.55, 0.8, nT2.b) * 0.35 * midF);
-    // 5–15 m mottling (clover, rushes, sorrel patches) visible from the town edge
-    vec4 nT3 = ${lnTex('p.xz * (1.0 / 29.0) + 0.37', '(1.0 / 29.0)')};
-    meadow *= 1.0 + (nT3.a - 0.5) * 0.3 * (1.0 - smoothstep(2.0, 8.0, fp));
-    meadow = mix(meadow, meadow * vec3(0.86, 1.04, 0.9), smoothstep(0.6, 0.75, nT3.r) * 0.6);
-  }
-  meadow = mix(meadow, meadow * vec3(1.12, 1.13, 1.05), gust * 0.5);
-  // under the near blade rings (groundcover's roaming window) the ground is the shaded thatch between
-  // the stems — exactly what the town ground does (terrain/ground.ts), so the lawn / meadow keeps its tone
-  // across the slab edge instead of turning into a lighter lawn outside
-  {
-    float bdist = distance(p, cameraPosition);
-    float vz = (cameraPosition.y - p.y) / max(bdist, 1.0);
-    float presM = (1.0 - smoothstep(uBladeFade.x - 1.5, uBladeFade.y, bdist)) * (1.0 - smoothstep(0.12, 0.5, vz) * 0.85);
-    meadow = mix(meadow, mix(gBase * 0.58, gcThatch, 0.3), presM * 0.62);
-  }
-  // wildflower specks: tiny and sparse up close, an average tint further away (the ground agent's
-  // blades carry the near meadow)
-  {
-    float fl = smoothstep(0.55, 0.8, nA.a) * 0.5 + 0.12;
-    if (fp < 0.25) {
-      vec2 fc = p.xz * 3.1;
-      vec2 hh = lhash22(floor(fc));
-      float rr = length(fract(fc) - 0.5 - (hh - 0.5) * 0.6);
-      float dotM = step(hh.x, fl * 0.35) * (1.0 - smoothstep(0.06, 0.06 + fp * 3.0, rr));
-      vec3 fcol = hh.y < 0.3 ? vec3(0.55, 0.08, 0.05) : hh.y < 0.5 ? vec3(0.28, 0.34, 0.65) : hh.y < 0.8 ? vec3(0.75, 0.74, 0.68) : vec3(0.72, 0.6, 0.12);
-      meadow = mix(meadow, fcol, dotM * (1.0 - smoothstep(0.08, 0.25, fp)) * 0.7);
-    }
-    meadow *= 1.0 + fl * 0.06 * smoothstep(0.08, 0.4, fp);
-  }
-  vec3 col = meadow;
+${meadowBlock()}  vec3 col = meadow;`}
 
   // ── field patchwork
   float hedgeM = 0.0, trackM = 0.0, fieldW = 0.0;
@@ -248,7 +274,7 @@ ${LG ? `  vec4 nM = ${lnTex('p.xz * (1.0 / 1900.0)', '(1.0 / 1900.0)')};   // (t
   // rules); outside, where the per-vertex cover says so
   vec2 pmuv = (p.xz - uFieldXf.xy) * uFieldXf.zw;
   bool inMask = uFieldXf.z > 0.0 && all(greaterThan(pmuv, vec2(0.002))) && all(lessThan(pmuv, vec2(0.998)));
-  if (field > 0.0 || (inMask && forest < 0.97)) {
+  if (${LL ? '(field > 0.0 || (inMask && forest < 0.97)) && (forest < 0.9999 || sandMay || uLandDbg > 0.5)' : 'field > 0.0 || (inMask && forest < 0.97)'}) {
     // borders wander a little (hedges and ditches are never ruler-straight); the crop rows do not
     vec2 qr = FROT * p.xz;
     vec2 q = qr + (${lnTex('p.xz * (1.0 / 160.0)', '(1.0 / 160.0)')}.ba - 0.5) * 3.6;
@@ -302,8 +328,11 @@ ${LG ? `  vec4 nM = ${lnTex('p.xz * (1.0 / 1900.0)', '(1.0 / 1900.0)')};   // (t
       if (inMask && all(greaterThan(muv, vec2(0.002))) && all(lessThan(muv, vec2(0.998)))) {
         float mv = textureLod(tFieldMask, muv, 0.0).r;
         // settlements cut fields along their own round edge (signed distance, per pixel)
-        float sdf = (textureLod(tFieldMask, pmuv, 0.0).g * 2.0 - 1.0) * ${SITE_SDF.toFixed(1)};
-        fieldW = step(0.35 + 0.3 * fhmix(pid, 83), mv) * smoothstep(-0.5 * fp - 0.3, 0.5 * fp + 0.3, sdf - 1.0);
+${LL ? `        if (mv >= 0.35 + 0.3 * fhmix(pid, 83)) {   // (a meadow plot needs no distance)
+          float sdf = (textureLod(tFieldMask, pmuv, 0.0).g * 2.0 - 1.0) * ${SITE_SDF.toFixed(1)};
+          fieldW = smoothstep(-0.5 * fp - 0.3, 0.5 * fp + 0.3, sdf - 1.0);
+        }` : `        float sdf = (textureLod(tFieldMask, pmuv, 0.0).g * 2.0 - 1.0) * ${SITE_SDF.toFixed(1)};
+        fieldW = step(0.35 + 0.3 * fhmix(pid, 83), mv) * smoothstep(-0.5 * fp - 0.3, 0.5 * fp + 0.3, sdf - 1.0);`}
       } else fieldW = field;
     }
 ${LG ? `    // (perf-deep) the rest of the block only shows where the field weight is non-zero: with fieldW = 0, mix(col, fc, 0) and the
@@ -315,7 +344,15 @@ ${LG ? `    // (perf-deep) the rest of the block only shows where the field weig
     float dB = min(min(dx0, dx1), min(dy0, dy1));
     // distance to the parcel's own (hedged / tracked) borders
     float pdx0 = q.x - pbox.x, pdx1 = pbox.z - q.x, pdy0 = q.y - pbox.y, pdy1 = pbox.w - q.y;
-    float pB = min(min(pdx0, pdx1), min(pdy0, pdy1));
+    float pB = min(min(pdx0, pdx1), min(pdy0, pdy1));${LL ? `
+    // a field's interior shows no meadow: only a part-weighted field, pasture (3), fallow (6), the margin and fence strips use it
+    // (the margin and fence tests are their exactly-0 ranges further down)
+    bool meadowHere = fieldW < 0.9999 || ck == 3 || ck == 6 || bankMeadow || dB < (small ? 1.2 + 1.4 * fhmix(pid, 23) : 2.6 + 2.6 * fhmix(pid, 23)) + 1.5 * nB.r || (dB < 0.25 + fp && pB - dB >= 0.01);
+    if (meadowHere || ck == 0 || ck == 4 || ck == 10) gust = ${GUST};
+    if (meadowHere) {
+${meadowBlock()}      col = meadow;
+      meadowDone = true;
+    }` : ''}
     longX = step(box.w - box.y, box.z - box.x);
     // rows run along the field's long side (or across, by hash)
     float flip = step(0.8, fhmix(pid, 19));
@@ -331,14 +368,22 @@ ${LG ? `    // (perf-deep) the rest of the block only shows where the field weig
     float fpt = fp;
     // striation along the drill direction (passes of the machines): anisotropic noise, metres across ×
     // tens of metres along — it is what reads at 50–700 m where single rows are sub-pixel
-    ${LG ? `// (stri below is exactly 0 for fp <= 0.03 and fp >= 9: no fetch then; the gradients follow the tr / tl axis swaps)
+    ${LL ? `// (stri below is exactly 0 for fp <= 0.03 and fp >= 9, and only wheat, stubble, greens, ploughed, sunflowers and maize use it; the gradients follow the tr / tl axis swaps)
+    vec4 nS = vec4(0.5);
+    if (fp > 0.03 && fp < 9.0 && (ck <= 2 || ck == 5 || ck == 7 || ck == 10)) {
+      vec2 qgx = FROT * pdx, qgy = FROT * pdy;
+      vec2 sk = vec2(1.0 / 9.0, 1.0 / 140.0);
+      vec2 tgx = (head > 0.5 ? mix(qgx.xy, qgx.yx, along) : mix(qgx.yx, qgx.xy, along)) * sk, tgy = (head > 0.5 ? mix(qgy.xy, qgy.yx, along) : mix(qgy.yx, qgy.xy, along)) * sk;
+      nS = textureLod(tLN, vec2(tr * (1.0 / 9.0), tl * (1.0 / 140.0)) + vec2(float(id.y) * 0.13, float(id.x) * 0.29), 0.5 * log2(max(max(dot(tgx, tgx), dot(tgy, tgy)), 1e-10)) + 8.0);
+    }` : LG ? `// (stri below is exactly 0 for fp <= 0.03 and fp >= 9: no fetch then; the gradients follow the tr / tl axis swaps)
     vec2 qgx = FROT * pdx, qgy = FROT * pdy;
     vec2 tgx = mix(qgx.yx, qgx.xy, along), tgy = mix(qgy.yx, qgy.xy, along);
     tgx = mix(tgx, tgx.yx, head); tgy = mix(tgy, tgy.yx, head);
     vec4 nS = vec4(0.5);
     if (fp > 0.03 && fp < 9.0) nS = textureGrad(tLN, vec2(tr * (1.0 / 9.0), tl * (1.0 / 140.0)) + vec2(float(id.y) * 0.13, float(id.x) * 0.29), tgx * vec2(1.0 / 9.0, 1.0 / 140.0), tgy * vec2(1.0 / 9.0, 1.0 / 140.0));` : `vec4 nS = texture2D(tLN, vec2(tr * (1.0 / 9.0), tl * (1.0 / 140.0)) + vec2(float(id.y) * 0.13, float(id.x) * 0.29));`}
-    vec4 nP = ${LG ? 'textureGrad(tLN, q * (1.0 / 23.0) + vec2(float(id.x) * 0.37, float(id.y) * 0.71), qgx * (1.0 / 23.0), qgy * (1.0 / 23.0))' : 'texture2D(tLN, q * (1.0 / 23.0) + vec2(float(id.x) * 0.37, float(id.y) * 0.71))'};
-    vec4 nW = ${LG ? 'textureGrad(tLN, q * (1.0 / 95.0) + vec2(float(id.y) * 0.21, 0.4), qgx * (1.0 / 95.0), qgy * (1.0 / 95.0))' : 'texture2D(tLN, q * (1.0 / 95.0) + vec2(float(id.y) * 0.21, 0.4))'};
+    vec4 nP = ${LL ? lnTex('q * (1.0 / 23.0) + vec2(float(id.x) * 0.37, float(id.y) * 0.71)', '(1.0 / 23.0)') : LG ? 'textureGrad(tLN, q * (1.0 / 23.0) + vec2(float(id.x) * 0.37, float(id.y) * 0.71), qgx * (1.0 / 23.0), qgy * (1.0 / 23.0))' : 'texture2D(tLN, q * (1.0 / 23.0) + vec2(float(id.x) * 0.37, float(id.y) * 0.71))'};
+${LL ? `    vec4 nW = vec4(0.5);   // (only wheat, greens, pasture, hay and ploughed read it)
+    if (ck == 0 || ck == 2 || ck == 3 || ck == 4 || ck == 5) nW = ${lnTex('q * (1.0 / 95.0) + vec2(float(id.y) * 0.21, 0.4)', '(1.0 / 95.0)')};` : `    vec4 nW = ${LG ? 'textureGrad(tLN, q * (1.0 / 95.0) + vec2(float(id.y) * 0.21, 0.4), qgx * (1.0 / 95.0), qgy * (1.0 / 95.0))' : 'texture2D(tLN, q * (1.0 / 95.0) + vec2(float(id.y) * 0.21, 0.4))'};`}
     float stri = (nS.g - 0.5) * smoothstep(0.03, 0.25, fp) * (1.0 - smoothstep(3.0, 9.0, fp));
     // tramlines: paired wheel tracks every 18–24 m, kept ≥ ~1 px wide far away
     float tlP = 18.0 + 6.0 * fhmix(pid, 37);
@@ -385,11 +430,13 @@ ${LG ? `    // (perf-deep) the rest of the block only shows where the field weig
         fc = mix(fc, vec3(0.62, 0.55, 0.12), smoothstep(0.66, 0.82, nB.a) * smoothstep(0.4, 0.7, nW.g) * 0.12 * midF);
         if (uPasture > 0.75) {
           // (explicit LOD: implicit derivatives are undefined inside this per-field branch)
-          vec4 nT = textureLod(tLN, p.xz * (1.0 / 3.5), max(0.0, log2(fp * 256.0 / 3.5)));
+${LL ? `          if (fp >= 0.3) fc *= 0.955;   // (tusF is exactly 0)
+          else {
+` : ''}          vec4 nT = textureLod(tLN, p.xz * (1.0 / 3.5), max(0.0, log2(fp * 256.0 / 3.5)));
           float tusF = 1.0 - smoothstep(0.06, 0.3, fp);
           float tus = smoothstep(0.62, 0.68, nT.g * 0.7 + nT.a * 0.3);
           fc *= mix(0.955, 1.0 - 0.3 * tus + 0.06 * (nT.b - 0.5), tusF);
-        }
+${LL ? '          }\n' : ''}        }
       }
       float path = 1.0 - smoothstep(0.012, 0.012 + fp * 0.02 + 0.006, abs(nP.g - 0.5));
       // (a few worn paths, not a worm pattern of noise contours over the whole pasture)
@@ -457,13 +504,13 @@ ${LG ? `    // (perf-deep) the rest of the block only shows where the field weig
     // field edges: wildflower margin (rank grass; poppies / cow parsley / buttercups as a tint far away)
     float mW = small ? 1.2 + 1.4 * pv : 2.6 + 2.6 * pv;
     float margin = 1.0 - smoothstep(0.8, mW + 1.5 * nB.r, dB);
-    vec3 weeds = meadow * mix(vec3(0.92), vec3(1.06, 0.92, 0.88), smoothstep(0.55, 0.7, nP.a));
+${LL ? '    if (margin > 0.0) {\n' : ''}    vec3 weeds = meadow * mix(vec3(0.92), vec3(1.06, 0.92, 0.88), smoothstep(0.55, 0.7, nP.a));
     float fh = fhmix(pid, 67);
     // (a tint, not a pale bevel round every field)
     vec3 flowerT = fh < 0.35 ? vec3(0.6, 0.2, 0.12) : fh < 0.7 ? vec3(0.6, 0.6, 0.52) : vec3(0.7, 0.6, 0.18);
     weeds = mix(weeds, flowerT, (0.08 + 0.14 * smoothstep(0.5, 0.8, nP.g)) * smoothstep(0.05, 0.6, fp + 0.1));
     fc = mix(fc, weeds, margin * (ck == 3 ? 0.5 : 1.0));
-    // fence / ditch line between the strips of one parcel (no hedge)
+${LL ? '    }\n' : ''}    // fence / ditch line between the strips of one parcel (no hedge)
     float fence = (1.0 - smoothstep(0.25, 0.25 + fp, dB)) * step(0.6, pB - dB + 0.6) * step(0.01, pB - dB);
     fc = mix(fc, meadow * 0.7, fence * 0.8);
     // hedgerows and tracks on the parcel borders
@@ -494,13 +541,22 @@ ${LG ? `    // (perf-deep) the rest of the block only shows where the field weig
     col = mix(col, fc, fieldW);
 ${LG ? '    }' : ''}
   }
-
+${LL ? `  if (!meadowDone && ((forest < 0.9999 && fieldW < 0.9999) || bankMeadow)) {
+    gust = ${GUST};
+${meadowBlock()}    col = meadow;
+  }
+` : ''}
   // ── forest canopy: crowns as sun-lit domes (fake normals), dark gaps
   // far woods must read as woods, not felt: crisp irregular edges against the open land (the cover is
   // per vertex, tens of metres apart out there), stands of different trees, crown groups as a rough
   // texture that survives distance
-  vec4 nS2 = ${lnTex('p.xz * (1.0 / 150.0)', '(1.0 / 150.0)')};
-  vec4 nG = ${lnTex('p.xz * (1.0 / 19.0)', '(1.0 / 19.0)')};
+${LL ? `  // (no forest: its noise is unused, nG then only feeds the surf, whose band is exactly 0 outside this test)
+  float surfH = p.y - ${WL.toFixed(2)};
+  bool surfOn = vCov3.y > 400.0 && surfH > -0.4 && surfH < 0.35 + fp * 0.45;
+  vec4 nS2 = vec4(0.5), nG = vec4(0.5);
+  if (forest > 0.0) nS2 = ${lnTex('p.xz * (1.0 / 150.0)', '(1.0 / 150.0)')};
+  if (forest > 0.0 || surfOn) nG = ${lnTex('p.xz * (1.0 / 19.0)', '(1.0 / 19.0)')};` : `  vec4 nS2 = ${lnTex('p.xz * (1.0 / 150.0)', '(1.0 / 150.0)')};
+  vec4 nG = ${lnTex('p.xz * (1.0 / 19.0)', '(1.0 / 19.0)')};`}
   {
     float fw = smoothstep(0.0, 0.08, forest) * (1.0 - smoothstep(0.85, 1.0, forest));
     forest = mix(forest, smoothstep(0.3, 0.7, forest + (nA.r - 0.5) * 0.45 + (nS2.a - 0.5) * 0.35 + (nG.g - 0.5) * 0.2), fw);
@@ -529,16 +585,18 @@ ${LG ? '    }' : ''}
       float big = step(0.5, nB.a);
       vec2 cc = p.xz / mix(5.0, 8.5, big);
       vec2 ci = floor(cc);
-      float best = 9.0; vec2 bo = vec2(0.0); float bh = 0.0;
+      float best = 9.0; vec2 bo = vec2(0.0); float bh = 0.0;${LL ? ' vec2 bc = ci;' : ''}
       for (int j = -1; j <= 1; j++) for (int i = -1; i <= 1; i++) {
         vec2 c = ci + vec2(float(i), float(j));
         vec2 o = lhash22(c + big * 17.0) * 0.9 + 0.05;
         vec2 dv = cc - (c + o);
-        float r = 0.45 + 0.45 * lhash2(c + 3.7 + big * 5.0);
+${LL ? `        // (r <= 0.9 and the factor below >= 0.9, so dd >= length(dv): this cell cannot win, no more hashes)
+        if (dot(dv, dv) >= best * best) continue;
+` : ''}        float r = 0.45 + 0.45 * lhash2(c + 3.7 + big * 5.0);
         float dd = length(dv) / r * (0.9 + 0.2 * lhash2(c + 7.3));
-        if (dd < best) { best = dd; bo = dv / r; bh = lhash2(c + 9.1); }
+        if (dd < best) { best = dd; bo = dv / r; ${LL ? 'bc = c;' : 'bh = lhash2(c + 9.1);'} }
       }
-      float inC = 1.0 - smoothstep(0.8, 1.0, best + 0.15 * (nB.b - 0.5));
+${LL ? '      bh = lhash2(bc + 9.1);\n' : ''}      float inC = 1.0 - smoothstep(0.8, 1.0, best + 0.15 * (nB.b - 0.5));
       vec3 dome = normalize(vec3(bo.x * 0.9, max(0.05, sqrt(max(0.0, 1.0 - best * best))), bo.y * 0.9));
       float fade = (1.0 - smoothstep(1.0, 2.5, fp)) * closed;
       Nf = normalize(mix(Ng, dome, inC * fade * 0.5));
@@ -612,7 +670,8 @@ ${LG ? '    }' : ''}
   // the dunes (noise only in the transition, the open beach and the inland stay as they are)
   // (the noise moves the marram / bare-sand boundary only: the cover weight against the fields stays
   // smooth, else the field colours show through the dunes in blotches)
-  float sN = (nA.b - 0.5) * 1.1 + (nB.g - 0.5) * 0.7 + (${lnTex('p.xz * (1.0 / 13.0)', '(1.0 / 13.0)')}.r - 0.5) * 0.15 * midF;
+${LL ? `  float sN = sN0;
+  if (sandMay && midF > 0.0) sN += (${lnTex('p.xz * (1.0 / 13.0)', '(1.0 / 13.0)')}.r - 0.5) * 0.15 * midF;` : `  float sN = (nA.b - 0.5) * 1.1 + (nB.g - 0.5) * 0.7 + (${lnTex('p.xz * (1.0 / 13.0)', '(1.0 / 13.0)')}.r - 0.5) * 0.15 * midF;`}
   // the dune band is dune all through (marram over sand), never a half-mix with the meadow / fields
   // inland of it (that read as camouflage blotches); its inland edge wanders with the noise
   // a field (decided per plot) runs to its own border over the dune fringe: the back-dune ends at the
@@ -635,7 +694,7 @@ ${LG ? '    }' : ''}
   // only broad variation — 5–15 m patches read as camouflage blotches against sunlit sand)
   float marram = smoothstep(0.25, 0.85, (1.0 - sand0) * 1.6 - 0.15 + sN * 0.22) * smoothstep(${(WL + 1.6).toFixed(2)}, ${(WL + 2.6).toFixed(2)}, p.y);
   // close up: single tufts (sub-metre speckle with the same mean)
-  if (vCov.z > 0.02 && fp < 4.0) {
+  if (vCov.z > 0.02 && fp < ${LL ? '0.25' : '4.0'}) {
     vec2 tc = p.xz / 0.7;
     vec2 th = lhash22(floor(tc));
     float tuft = step(th.x, marram) * (1.0 - smoothstep(0.25, 0.42, length(fract(tc) - 0.5 - (th - 0.5) * 0.4)));
@@ -688,7 +747,7 @@ ${LG ? '' : `    vec2 hz = normalize(Ng.xz + vec2(1e-4));
   col = mix(col, rc, rock);
   // ── surf on the open coasts (island, far shores): broken white water at the waterline, kept
   // ≥ ~1 px far away; the town's shores have the water shader's own foam
-  {
+  ${LL ? 'if (surfOn) ' : ''}{
     float hw = p.y - ${WL.toFixed(2)};
     float band = (1.0 - smoothstep(0.05, 0.35 + fp * 0.45, hw)) * smoothstep(-0.4, -0.05, hw);
     float br = smoothstep(0.38, 0.62, nB.g * 0.55 + nG.r * 0.45);
@@ -743,6 +802,6 @@ export function landMaterial(uniforms: Record<string, THREE.IUniform>, fog: bool
         '#include <lights_fragment_end>\nreflectedLight.indirectDiffuse += diffuseColor.rgb * thLampLight(vLW, lnN);',
       );
   };
-  mat.customProgramCacheKey = () => LG ? 'th-land-v2' : 'th-land-v1';
+  mat.customProgramCacheKey = () => LL ? 'th-land-v3' : LG ? 'th-land-v2' : 'th-land-v1';
   return mat;
 }

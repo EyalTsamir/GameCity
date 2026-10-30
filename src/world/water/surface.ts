@@ -40,6 +40,9 @@ import { perfOn } from '../../core/perfdeep';
 // fetch or fwidth, so those fetches become textureGrad with derivatives hoisted before the branches. `?nowatergates` /
 // `?noperfdeep` generate the old source.
 const WG = perfOn('watergates');
+// perf-deep `waterlod` (`?nowaterlod`): the hull loop costs ~15 instructions per hull on every water pixel even where every hull
+// fails its own distance test: one test against the box round all of them skips it (exact).
+const WL = perfOn('waterlod');
 
 export interface SurfaceResult {
   mesh: THREE.Mesh;
@@ -227,7 +230,7 @@ uniform vec4 uHullA[${MAX_HULLS}];
 uniform vec4 uHullB[${MAX_HULLS}];
 uniform vec4 uHullC[${MAX_HULLS}];
 uniform int uHullN;
-uniform vec3 wShallow;
+${WL ? 'uniform vec4 uHullBox;\n' : ''}uniform vec3 wShallow;
 uniform vec3 wMid;
 uniform vec3 wDeep;
 uniform vec3 wRivS;
@@ -496,7 +499,7 @@ ${WG ? '' : `    vec2 duv = fwidth(uv0) * uReflInfo.yz;
 
   // ── hull contact: contact shadow + foam line
   float hDark = 0.0, hFoam = 0.0;
-  for (int i = 0; i < ${MAX_HULLS}; i++) {
+${WL ? '  if (p.x >= uHullBox.x && p.z >= uHullBox.y && p.x <= uHullBox.z && p.z <= uHullBox.w)\n' : ''}  for (int i = 0; i < ${MAX_HULLS}; i++) {
     if (i >= uHullN) break;
     vec4 A = uHullA[i];
     vec4 B = uHullB[i];
@@ -729,7 +732,7 @@ reflectedLight.indirectDiffuse += diffuseColor.rgb * thLampLight(vWW, vec3(0.0, 
   const atmoActive = (ctx.services.atmosphere as { active?: boolean } | undefined)?.active === true;
   if (WORLD_MODE && atmoActive) defs.TH_ATMO = 1;
   mat.defines = defs;
-  mat.customProgramCacheKey = () => 'th-water-v3' + (WG ? 'g' : '') + (dbg ?? '') + (WORLD_MODE ? 'w' : 'd') + (atmoActive ? 'a' : '') + (duskSea ? 'd' : '');
+  mat.customProgramCacheKey = () => 'th-water-v3' + (WG ? 'g' : '') + (WL ? 'l' : '') + (dbg ?? '') + (WORLD_MODE ? 'w' : 'd') + (atmoActive ? 'a' : '') + (duskSea ? 'd' : '');
   const mesh = new THREE.Mesh(geo, mat);
   mesh.name = 'water-surface';
   mesh.receiveShadow = true;
