@@ -42,6 +42,11 @@ const PALETTES: Palette[] = [
 const FIRMS = ['MERIDIAN TRUST', 'NORTHGATE CAPITAL', 'HARBOUR MUTUAL', 'LUMEN & CO', 'ATLAS INSURANCE', 'OSPREY PARTNERS', 'CASTELLAN', 'HAVEN TELECOM', 'BEACON HOUSE', 'WESTBROOK & SONS'];
 
 const FLOOR_Y = 0.16;
+let firmIdx = 0;
+/** every lobby gets its own firm, in lot order */
+export function resetLobbies(): void {
+  firmIdx = 0;
+}
 const TILE = 1.2;
 
 export interface LobbyOpts {
@@ -242,7 +247,7 @@ export function realLobby(g: Gen, sg: SideGeom, o: LobbyOpts): void {
   sideBox(l, sg, featC - featW / 2, featC + featW / 2, back + 0.06, back + 0.2, head - 0.05, head - 0.015, true);
   l.L[3] = sv0;
   // the firm's name on it
-  const firm = o.name ?? FIRMS[seed % FIRMS.length];
+  const firm = o.name ?? FIRMS[firmIdx++ % FIRMS.length];
   const key = `lob:${firm}`;
   const nameFg = P.slats ? '#f4efe4' : '#e8cf9a';
   const rr = g.atlas.add(key, 384, 56, letterSign(firm, nameFg, '#ffe9c4', undefined, 1, '#000000'));
@@ -553,6 +558,7 @@ function canopy(g: Gen, sg: SideGeom, o: LobbyOpts, GL: number, u: number, P: Pa
     }
     sideBox(t, sg, u - hw, u + hw, cd - 0.03, cd + 0.03, y + 0.17, y + 0.23, true, true);
     gl.quad(X(u - hw, cd), y + 0.235, Z(u - hw, cd), X(u + hw, cd), y + 0.235, Z(u + hw, cd), X(u + hw, 0.05), y + 0.1, Z(u + hw, 0.05), X(u - hw, 0.05), y + 0.1, Z(u - hw, 0.05));
+    gl.quad(X(u - hw, 0.05), y + 0.1, Z(u - hw, 0.05), X(u + hw, 0.05), y + 0.1, Z(u + hw, 0.05), X(u + hw, cd), y + 0.235, Z(u + hw, cd), X(u - hw, cd), y + 0.235, Z(u - hw, cd));
     for (const lu of [u - 1.2, u, u + 1.2]) lightBox(g, X(lu, 0.1) - 0.06, y - 0.02, Z(lu, 0.1) - 0.06, X(lu, 0.1) + 0.06, y, Z(lu, 0.1) + 0.06, '#fff1d6', LIGHT_MODE.STEADY, 3.5);
   } else if (kind === 2) {
     // bronze marquee: a deep box with a lit soffit, the fascia carries the number
@@ -691,7 +697,6 @@ export function createGlassMaterial(u: { uSkyZen: { value: THREE.Color }; uSkyHo
     name: 'buildings-glass',
     transparent: true,
     depthWrite: false,
-    side: THREE.DoubleSide,
     uniforms: { uSkyZen: u.uSkyZen, uSkyHor: u.uSkyHor, uCityCol: u.uCityCol, uGround: u.uGround },
     vertexShader: /* glsl */ `
 varying vec3 vW;
@@ -712,7 +717,6 @@ varying vec3 vN;
 void main() {
   vec3 V = normalize(cameraPosition - vW);
   vec3 N = normalize(vN);
-  if (!gl_FrontFacing) N = -N;
   float c = clamp(dot(N, V), 0.0, 1.0);
   float F = 0.05 + 0.95 * pow(1.0 - c, 4.0);
   vec3 R = reflect(-V, N);

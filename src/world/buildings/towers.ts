@@ -16,9 +16,9 @@ import { WIN, PROF, WALLPAT, ROOFPAT, FRAME, GLASS, LIGHT_MODE, shopType } from 
 import { letterSign, helipadMark, boardSign } from './signs';
 import { GREEN } from './green';
 import { MASS, massRng, recordTier, notchPoly, notchCap, crownCornice, roofKit } from './massing';
-import { towerPlant, roofPlantOn } from './roofplant';
+import { towerPlant, roofPlantOn, roofFloor } from './roofplant';
 import { dB } from '../../core/detailbuildings';
-import { realLobby, lobbySpan, groundFit, arcadeSoffit } from './lobby';
+import { realLobby, lobbySpan, groundFit, arcadeSoffit, resetLobbies } from './lobby';
 
 interface P {
   x: number;
@@ -138,6 +138,7 @@ function arcadeColumn(t: Gen['trim'], sg: ReturnType<typeof sideGeom>, u: number
 
 export function resetTowers(): void {
   shopIdx = 0;
+  resetLobbies();
 }
 
 export function rectPoly(r: LRect, c = 0): P[] {
@@ -237,6 +238,7 @@ export function genTower(g: Gen): void {
           pier(L - cwid, L + 0.2, 0.2);
         }
       }
+      if (gr && y1 - y0 > 2.5 && sc.style !== WIN.PLAIN) facadeDepth(a, b, L, gr, Math.max(y0, gH), y1, y1);
       if (sc.fins && gr && y1 - y0 > 6) {
         setCol(g.trim, shade(wallC, 0.9));
         const tx = (b.x - a.x) / L,
@@ -393,6 +395,63 @@ export function genTower(g: Gen): void {
   }
 
   // ───────────────────────────────────────────────────── pieces ──
+
+  /** ?nofacadedepth: real relief on the shader grids: curtain walls get pressure caps on every mullion and a floor
+   *  rail, ribbons a nosing under each sill and a sun shelf on brackets over each head. ya / yb = top at each end. */
+  function facadeDepth(a: P, b: P, L: number, gr: Grid, y0: number, ya: number, yb: number): void {
+    if (!dB('facadedepth')) return;
+    const t = g.trim;
+    const tx = (b.x - a.x) / L,
+      tz = (b.z - a.z) / L;
+    const nx = -tz,
+      nz = tx;
+    const ang = Math.atan2(-tz, tx);
+    const yTop = Math.max(ya, yb);
+    const fc = col(sc.frame === FRAME.ALU ? '#aab3ba' : sc.frame === FRAME.BLACK ? '#1f2226' : '#2e3a44');
+    const span = (u: number) => ya + ((yb - ya) * u) / L;
+    if (sc.style === WIN.CURTAIN) {
+      setCol(t, fc);
+      for (let k = 0; k <= gr.n; k++) {
+        const u = gr.u0 + k * gr.cw;
+        if (u < 0.02 || u > L - 0.02) continue;
+        t.boxRot(a.x + tx * u + nx * 0.035, a.z + tz * u + nz * 0.035, 0.075, 0.07, y0, span(u), ang, 0b010111);
+      }
+      setCol(t, shade(fc, 0.92));
+      const j0 = Math.ceil((y0 - gH) / fH - 1e-3);
+      for (let j = j0; gH + j * fH < yTop - 0.3; j++) {
+        const y = gH + j * fH;
+        if (y < y0 + 0.2) continue;
+        // a sloped top (slant crown): the rail stops where the wall does
+        const uEnd = yb === ya ? L : Math.max(0, Math.min(L, ((y - ya) / (yb - ya)) * L));
+        const u0 = yb > ya ? uEnd : 0,
+          u1 = yb > ya ? L : yb < ya ? uEnd : L;
+        if (u1 - u0 < 0.2) continue;
+        const um = (u0 + u1) / 2;
+        t.boxRot(a.x + tx * um + nx * 0.03, a.z + tz * um + nz * 0.03, u1 - u0, 0.06, y - 0.05, y + 0.05, ang, 0b011111);
+      }
+    } else if (sc.style === WIN.RIBBON) {
+      const shelf = (g.seed + (nx > 0.5 ? 1 : 0) + (nz > 0.5 ? 2 : 0)) % 3 !== 0;
+      for (let j = 0; j < floors - 1; j++) {
+        const base = gH + j * fH;
+        if (base + sc.head > yTop || base < y0 - 1e-3) continue;
+        const ySill = base + sc.sill;
+        const yHead = base + fH - sc.head;
+        const um = L / 2;
+        setCol(t, shade(wallC, 1.08));
+        t.boxRot(a.x + tx * um + nx * 0.04, a.z + tz * um + nz * 0.04, L, 0.08, ySill - 0.09, ySill, ang, 0b111111 & ~32);
+        if (shelf && yHead < yTop - 0.05) {
+          setCol(t, shade(wallC, 0.82));
+          t.boxRot(a.x + tx * um + nx * 0.29, a.z + tz * um + nz * 0.29, L - 0.1, 0.58, yHead + 0.03, yHead + 0.075, ang, 0b111111 & ~32);
+          const nB = Math.max(1, Math.round(L / (gr.cw * 2)));
+          setCol(t, shade(wallC, 0.62));
+          for (let k = 0; k <= nB; k++) {
+            const u = 0.25 + ((L - 0.5) * k) / nB;
+            t.beam(a.x + tx * u + nx * 0.02, yHead - 0.24, a.z + tz * u + nz * 0.02, a.x + tx * u + nx * 0.52, yHead + 0.03, a.z + tz * u + nz * 0.52, 0.03, 0.03);
+          }
+        }
+      }
+    }
+  }
 
   /** furniture on the strips of a lower tier's roof left open by the tier above */
   function setbackRoof(lo: LRect, up: LRect, y: number): void {
@@ -591,11 +650,13 @@ export function genTower(g: Gen): void {
         uB = (L - gr.u0) / gr.cw;
       const v = (y: number) => (y - gr.v0) / gr.ch;
       g.shell.quad(a.x, y0, a.z, b.x, y0, b.z, b.x, yb, b.z, a.x, ya, a.z, uA, v(y0), uB, v(y0), uB, v(yb), uA, v(ya));
+      facadeDepth(a, b, L, gr, y0, ya, yb);
     }
     // sloped glass roof
     roofLook(g.shell, col('#6f8798'), ROOFPAT.SKYLIGHT, g.seed);
     const sl = Math.hypot(zf - zb, highY - lowY);
     roofPoly(g.shell, [[r.x0, lowY, zf], [r.x1, lowY, zf], [r.x1, highY, zb], [r.x0, highY, zb]], [1, 0, 0], [0, (highY - lowY) / sl, (zb - zf) / sl]);
+    if (dB('roofscape')) slantBars(r, zf, zb, lowY, highY, yAt);
     // accent strip along the slanted edges
     if (sc.accent) {
       const l = g.lights;
@@ -609,6 +670,53 @@ export function genTower(g: Gen): void {
     if (yTop >= 55) {
       aviationLight(g, r.x0 + 0.3, highY + 0.4, zb + 0.3);
       aviationLight(g, r.x1 - 0.3, highY + 0.4, zb + 0.3);
+    }
+  }
+
+  /** ?noroofscape: the sloped glass is a real glazed roof: rafters, purlins, an eaves gutter, a walkway and a rail
+   *  along the ridge, the cleaning cradle's track and a ladder down the glass */
+  function slantBars(r: LRect, zf: number, zb: number, lowY: number, highY: number, yAt: (z: number) => number): void {
+    const t = g.trim;
+    const n = Math.max(2, Math.round((r.x1 - r.x0) / (sc.cell * 2)));
+    const nz = Math.max(2, Math.round((zf - zb) / 2.4));
+    const lift = 0.05;
+    const fc = col('#2c343c');
+    setCol(t, fc);
+    for (let k = 0; k <= n; k++) {
+      const x = r.x0 + ((r.x1 - r.x0) * k) / n;
+      t.beam(x, lowY + lift, zf, x, highY + lift, zb, k === 0 || k === n ? 0.16 : 0.07, 0.09);
+    }
+    setCol(t, shade(fc, 1.2));
+    for (let j = 1; j < nz; j++) {
+      const z = zf + ((zb - zf) * j) / nz;
+      t.beam(r.x0, yAt(z) + lift, z, r.x1, yAt(z) + lift, z, 0.05, 0.07);
+    }
+    // eaves gutter + ridge capping
+    setCol(t, col('#3a4148'));
+    t.box(r.x0 - 0.05, lowY - 0.12, zf - 0.02, r.x1 + 0.05, lowY + 0.1, zf + 0.14, 0b110111);
+    t.box(r.x0 - 0.05, highY - 0.1, zb - 0.1, r.x1 + 0.05, highY + 0.14, zb + 0.14);
+    // a cat ladder on the glass and the cradle track each side of it
+    const lx = r.x0 + (r.x1 - r.x0) * (0.3 + ((g.seed % 5) / 5) * 0.4);
+    setCol(t, col('#9aa1a7'));
+    t.beam(lx - 0.25, lowY + 0.12, zf, lx - 0.25, highY + 0.12, zb, 0.04, 0.04);
+    t.beam(lx + 0.25, lowY + 0.12, zf, lx + 0.25, highY + 0.12, zb, 0.04, 0.04);
+    const nR = Math.round((zf - zb) / 0.6);
+    for (let j = 1; j < nR; j++) {
+      const z = zf + ((zb - zf) * j) / nR;
+      t.box(lx - 0.25, yAt(z) + 0.1, z - 0.012, lx + 0.25, yAt(z) + 0.135, z + 0.012, 0b110111);
+    }
+    setCol(t, col('#c9cdd0'));
+    for (const x of [r.x0 + 0.5, r.x1 - 0.5]) t.beam(x, lowY + 0.15, zf - 0.2, x, highY + 0.15, zb + 0.2, 0.09, 0.12);
+    // cradle parked at the ridge, rail along the ridge
+    setCol(t, col('#d9a43a'));
+    t.box(r.x0 + 0.2, highY + 0.14, zb + 0.15, r.x0 + 1.1, highY + 1.1, zb + 1.2);
+    setCol(t, col('#c9cdd0'));
+    const yr = highY + 0.14;
+    t.box(r.x0, yr + 0.95, zb + 0.03, r.x1, yr + 1.0, zb + 0.07, 0b111111);
+    const m = Math.max(2, Math.round((r.x1 - r.x0) / 2));
+    for (let i = 0; i <= m; i++) {
+      const x = r.x0 + ((r.x1 - r.x0) * i) / m;
+      t.box(x - 0.02, yr, zb + 0.03, x + 0.02, yr + 0.95, zb + 0.07, 0b110111);
     }
   }
 
@@ -690,6 +798,7 @@ export function genTower(g: Gen): void {
       d = r.z1 - r.z0;
     // ?noroofplant: real plant (roofplant.ts) instead of the grey penthouse + boxes; the rng draws below stay the same
     const plant = roofPlantOn() ? towerPlant(g, r, y, { kind: masonry ? 'masonry' : sc.style === WIN.CURTAIN ? 'glass' : 'panel', wall: wallC, tank: sc.tank, curtain: sc.style === WIN.CURTAIN, H }) : null;
+    if (plant && dB('roofscape')) roofFloor(g, r, y, plant);
     // mechanical penthouse
     const pw = w * rng.range(0.38, 0.55),
       pd = d * rng.range(0.35, 0.5);
