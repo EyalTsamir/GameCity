@@ -4,6 +4,40 @@ Branch `claude/buildings-massing-f65621` (based on `claude/pensive-gates-bim12i`
 up perf-wins). Goal: ordinary buildings read as architecture, not "a box with a triangle on top" — break the volume.
 Landmarks are not in scope (boxhunt session); plan.ts layout untouched (places session); materials.ts untouched.
 
+## Round 3 — Resume here (after the usage-limit reset) — DONE
+- Done: sheets `docs/progress/massing/r2_before_after.jpg` (round-2 off vs on), `r2_overall.jpg` (?nomassing vs all on),
+  `r2_night.jpg`; fresh `npm run build` OK (3.82 MB); ui-test `--q "noidle&camdebug" --steps freecam,explore,building`
+  7/7, 0 errors, invariants {} (`shots/perf/uitest2.txt`; without `--q noidle` the script tests a stand-in city and
+  skips building/explore — that was the "passed 1" of round 2).
+- Glass crown (1f71dde): a curtain-wall glass screen between the fins (both faces, `PROF.NEVER` panes) — it read as
+  a white railing / cage from mid distance; now glass carried past the roof, dark with the lit accent line at night.
+- Audit 2 (sonnet, `shots/audit2`, 24 views) checked against the images — accepted and fixed (61ac540, b8b0329):
+  industrial name board cut by the brick pilasters (bug) → board proud of them; porch bench in front of the door
+  (bug) → bench on the side with room (or none), slatted with arms; oriel corbel ran into the window head below and
+  read as a plain tray → stepped corbel table (two mouldings) + a two-step console under each front corner, within
+  0.38 m of the floor line (low keeps the old corbel); steel column cover strips at the bay lines of clad sheds
+  (?nomonitor); shopfronts: carved consoles at the fascia ends, capped cornice, panelled stall risers + sills
+  (?noshopfront, new). Rejected: house ridge caps / verges (already there — gableRoof barge boards + ridge cap),
+  apartment solid balconies (period style), Haven Tower (landmark, other session), hotel flag poles (props).
+- Industrial head office (ffb5fff): the firm's name in raised letters over the top window row (depot: TINYHAVEN
+  TRANSIT), lit at night; names shared with the hall's board (`FIRMS` in industry.ts).
+- Harness: run perf / hitch / captures with the MAIN checkout's scripts (`node C:/Projects/GameCity/scripts/…
+  --url http://127.0.0.1:5185/`) — their lock dir is shared with the sibling sessions; the worktree's own scripts
+  lock only this worktree, and a first round-3 A/B overlapped another session's Chrome (numbers 40–100 % off, discarded).
+- Cost (perf.mjs, main checkout, 1300×930, adaptive=0, 2 passes; `docs/progress/massing/perf-r3.txt`): shopfronts ≈ 0
+  (GPU 31.1 vs 31.2 ms old-town street; +7–10k triangles); everything of rounds 1–3 vs `?nomassing`: GPU +0.3–0.4 ms
+  (overview 38.7 vs 38.3, old-town street 31.15 vs 30.85, downtown 37.7 vs 37.4, industry 23.6 vs 23.2); draw calls
+  unchanged; triangles +0.4–0.6 %.
+- Smoothness (hitch.mjs, main checkout): mid-run program compiles 0, geometry uploads 0 in every window. The arrival
+  long tasks after a camera jump (60–176 ms) are the same with `?nomassing` (interleaved A/B `shots/perf/hitchA*/B*`:
+  old-town arrival 169 / 176 vs 160 ms, industry 114 / 127 vs 116 ms) — not from this work (a second `?nomassing`
+  pass ran under outside load, all doubled; ignored). The machine ran ~3× the round-2 CPU frame time throughout
+  (sibling sessions), so absolute hitch numbers are worse than round 2's for everyone.
+- typecheck clean; `npm run build` OK (3.82 MB); captures 0 console / page errors; ui-test (main checkout,
+  `--q "noidle&camdebug" --steps freecam,explore,building`) 7/7 after all round-3 changes (`shots/perf/uitest3.txt`).
+- Round 3 DONE (last commit see git log). Possible follow-ups: apartment slab end walls (stair-core window strip),
+  hotel flag brackets (props), a dusk / night eye-level audit pass.
+
 ## Round 2 — Resume here (overnight backlog from the coordinator)
 - Backlog: 1 tower rooftop plant · 2 industrial halls / depot / harbour master · 3 Westbrook porches, midtown
   colonnade · 4 apartment loggias, glass-tower crowns · 5 eye-level audit → fix the 10 weakest, repeat.
@@ -59,7 +93,7 @@ Landmarks are not in scope (boxhunt session); plan.ts layout untouched (places s
 ## Round 2 — toggles (all on by default; `?nomassing` turns everything off)
 `?noroofplant` · `?noannex` (head office + stair tower) · `?nomonitor` (roof monitor, downpipes, brick plinth) ·
 `?noporch` (harbour master porch, house porch roofs) · `?nocolonnade` · `?nologgias` · `?norooflights` (rooflights,
-ridge ventilator) · `?nopiers` · `?nocrowns` (now also the glass fin crown). Quality: the roof plant is off on low
+ridge ventilator) · `?nopiers` · `?nocrowns` (now also the glass fin crown + glass screen) · `?noshopfront` (round 3). Quality: the roof plant is off on low
 (like the roof kit); the rest is cheap geometry and stays on every tier.
 
 ## Round 1 — Resume here
