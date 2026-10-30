@@ -12,6 +12,7 @@
   (round 3: lamp specular widened + soft-capped — fixes the aerial night bloom balls of round 2 —, env specular ×1.7
   with diffuse IBL ÷1.7 `?envold`, night fill 0.36 → 0.42, 7.8 h fill 0.58 → 0.64, grade contrast 0.21 / lift back
   up, canyon sun bounce alive at a low sun).
+- Round 5 (8f31b45 + this): lamp specular opt-in `?lampspec`; hitch A/B shows no light-round freezes or compiles.
 - STATUS: round complete. Final captures `shots/light/final` (same 35 as base), before/after sheets per hour
   `shots/light/sheets/before_after_<hour>.jpg`. Verified: console 0 errors (7 pre-existing ANGLE warnings, same as
   base), invariants {} in every capture run, full-city `ui-test --q noidle` 54/54 (incl. the 3 resize-layout steps,
@@ -82,6 +83,13 @@ Round 5: a cheap lobe (GGX D, Kelemen visibility, Schlick) on ground-facing surf
 GPU ms) street +1.8, market +1.1, oldtown +2.3 — even aerial, where nearly every fragment skips the branch: the cost is
 keeping the lamp term (thLampSE / thLampSL) alive in every uber-shader, not the lobe. For a streak the judges called
 barely visible that is poor value → the lamp specular is OFF by default, `?lampspec` turns it on (never on low).
+Stutter A/B (`hitch.mjs`, street / oldtown / harbor / market × 19 / 21.5 h, back to back, `shots/light/hitch_A1.json`
+= this branch, `hitch_B1.json` = every light toggle off): mid-run shader compiles 0 / 0; freezes > 100 ms 464 / 427,
+worst frame 267 / 267 ms — the machine was loaded (GPU 95–120 ms/frame in BOTH, twice the usual; sibling sessions),
+the two match window by window → no freezes come from the light round. (The perf round's 0-freeze runs were made
+on a quiet machine; re-run `hitch_A/B` when the siblings are idle for clean absolute numbers.)
+Final 19 h / 21.5 h captures re-taken with the lamp specular off (`shots/light/final_night`, copied into `final`, sheets
+rebuilt): console 0 errors, invariants {}.
 
 ## Log
 - Resize warnings (`ui-test --steps resize`, ~120 × `glBlitFramebuffer … not all the same size`): traced with a
