@@ -65,7 +65,7 @@ On final code, all on AC power (checked before each run):
 - `hitch.mjs`, 5 views x 4 hours including the scene hours: 41 windows, 0 new programs.
 - Before / after sheet: `docs/progress/scenes/before-after.jpg`.
 
-Perf A/B `perf.mjs --variants ";noscenes" --repeat 2 --gpu 1`, 1920x1025, high, adaptive off (mean of 2; another session may have been using the machine, load was not checked, the two repeats agree within 0.5 ms):
+Perf A/B `perf.mjs --variants ";noscenes" --repeat 2 --gpu 1`, 1920x1025, high, adaptive off (mean of 2; another session may have been using the machine, load was not checked, the two repeats of a variant differ by up to 0.8 ms):
 
 | view | hour | scenes ms | `?noscenes` ms | difference | draw calls | triangles |
 |---|---|---|---|---|---|---|
