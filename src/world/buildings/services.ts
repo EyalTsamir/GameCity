@@ -204,3 +204,76 @@ export function balconyAwning(g: Gen, sg: SideGeom, uA: number, uB: number, y: n
     bb = P(uB, dep - 0.015, y1 - 0.005);
   t.beam(ba[0], ba[1], ba[2], bb[0], bb[1], bb[2], 0.03, 0.03);
 }
+
+/**
+ * A blank party wall above a lower neighbour: a chimney breast running up it, the scar of the roof of a house long gone
+ * (a paler gable with its flashing line), a bricked-up window, iron tie plates, a repair in fresher render. Above 2.4 m.
+ */
+export function partyWall(g: Gen, sg: SideGeom, uA: number, uB: number, yLow: number, yTop: number, c: THREE.Color, painted: boolean, rng: Rng): void {
+  const t = g.trim;
+  const L = uB - uA;
+  const y0 = yLow + 0.04;
+  // chimney breast, stepping in once on the way up
+  const bu = rng.chance(0.5) ? uA + Math.min(1.1, L * 0.2) : uB - Math.min(1.1, L * 0.2);
+  const hw = 0.55;
+  setCol(t, shade(c, 0.96));
+  const step = y0 + (yTop - y0) * 0.55;
+  sideBox(t, sg, bu - hw, bu + hw, 0, 0.14, y0, step);
+  sideBox(t, sg, bu - hw * 0.72, bu + hw * 0.72, 0, 0.14, step, yTop);
+  setCol(t, shade(c, 1.08));
+  sideBox(t, sg, bu - hw - 0.02, bu + hw + 0.02, 0, 0.145, step - 0.02, step + 0.05);
+  // tie plates at the floor lines: an X of flat iron on a boss
+  setCol(t, col('#2d2a28'));
+  const nTie = Math.min(3, Math.floor(L / 2.6));
+  for (let i = 0; i < nTie; i++) {
+    const u = uA + ((i + 0.5) * L) / nTie;
+    if (Math.abs(u - bu) < hw + 0.35) continue;
+    const y = Math.min(yTop - 0.7, y0 + 0.9 + ((i * 2 + 1) % 3) * 0.8);
+    sideBox(t, sg, u - 0.24, u + 0.24, 0, 0.022, y - 0.03, y + 0.03);
+    sideBox(t, sg, u - 0.03, u + 0.03, 0, 0.022, y - 0.24, y + 0.24);
+    sideBox(t, sg, u - 0.055, u + 0.055, 0, 0.04, y - 0.055, y + 0.055);
+    // rust run below it
+    setCol(t, col('#6a4a34'));
+    sideBox(t, sg, u - 0.035, u + 0.035, 0, 0.003, y - 0.75, y - 0.05);
+    setCol(t, col('#2d2a28'));
+  }
+  if (!painted && yTop - y0 > 2.6 && L > 5) {
+    // the scar: pale plaster gable of a vanished house, its flashing line, a bricked-up window inside it
+    const uL = uA + L * 0.12,
+      uR = uB - L * 0.12;
+    const uP = (uL + uR) / 2;
+    const yE = y0 + 0.1;
+    const yR = Math.min(yTop - 0.35, yE + (uR - uL) * 0.4);
+    const pale = shade(c, 0.9 + rng.next() * 0.2);
+    const o = 0.006;
+    const P = (u: number, y: number): [number, number, number] => [sx(sg, u, o), y, sz(sg, u, o)];
+    const a = P(uL, yE),
+      b = P(uR, yE),
+      d = P(uP, yR);
+    setCol(t, pale);
+    t.triangle(a[0], a[1], a[2], b[0], b[1], b[2], d[0], d[1], d[2]);
+    setCol(t, shade(c, 0.55));
+    const q = (u: number, y: number): [number, number, number] => [sx(sg, u, 0.012), y, sz(sg, u, 0.012)];
+    for (const [ua, ya, ub, yb] of [[uL, yE, uP, yR], [uP, yR, uR, yE]] as const) {
+      const pa = q(ua, ya),
+        pb = q(ub, yb);
+      t.beam(pa[0], pa[1], pa[2], pb[0], pb[1], pb[2], 0.012, 0.1);
+    }
+    const wu = uP + (rng.chance(0.5) ? 1 : -1) * Math.min(0.9, L * 0.1);
+    const wy = yE + 0.35;
+    const wH = Math.min(1.1, (yR - yE) * 0.42);
+    if (wH > 0.6) {
+      setCol(t, shade(c, 0.72));
+      sideBox(t, sg, wu - 0.5, wu + 0.5, 0.006, 0.012, wy, wy + wH);
+      setCol(t, shade(c, 1.12));
+      sideBox(t, sg, wu - 0.58, wu + 0.58, 0.006, 0.026, wy + wH, wy + wH + 0.14);
+    }
+  } else if (L > 4) {
+    // a repair in fresher render
+    const pw = rng.range(0.8, 1.8),
+      ph = rng.range(0.5, 1.2);
+    const pu = uA + rng.next() * Math.max(0.1, L - pw);
+    setCol(t, shade(c, 1.1));
+    sideBox(t, sg, pu, pu + pw, 0.004, 0.008, y0 + 0.2, Math.min(yTop - 0.2, y0 + 0.2 + ph));
+  }
+}

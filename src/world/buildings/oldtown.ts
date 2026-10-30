@@ -15,7 +15,7 @@ import { boardSign, bladeSign } from './signs';
 import { PALETTE } from '../../core/gfx';
 import { anchors } from './anchors';
 import { dB } from '../../core/detailbuildings';
-import { homeBack } from './services';
+import { homeBack, partyWall } from './services';
 import { Rng } from '../../core/rng';
 import { windowBox, balconyLife, shutterPair, shutterState, julietBalcony, acUnit, dish, downpipe, potPlant, ironRail, climber, facadeCable, roofClutter as clutterRoof } from './clutter';
 import { GREEN } from './green';
@@ -245,7 +245,10 @@ export function genTownhouse(g: Gen): void {
         wallPlain(g.shell, sg, p.a, p.b, 0, eave, wallLook);
         // painted advertisement on a tall blank party wall above a lower neighbour
         const free = eave - p.h;
-        if ((s === LEFT || s === RIGHT) && free > 3.6 && p.b - p.a > 6 && rng.chance(free > 5 ? 0.85 : 0.5)) ghostSign(sg, p.a, p.b, p.h, eave);
+        const painted = (s === LEFT || s === RIGHT) && free > 3.6 && p.b - p.a > 6 && rng.chance(free > 5 ? 0.85 : 0.5);
+        if (painted) ghostSign(sg, p.a, p.b, p.h, eave);
+        // ?nopartywalls: the history of a wall that used to have a neighbour
+        if (free > 2.2 && p.b - p.a > 3.5 && (s === LEFT || s === RIGHT) && dB('partywalls')) partyWall(g, sg, p.a, p.b, Math.max(2.5, p.h), eave, wallLook.color, painted, new Rng(((lot.seed * 59 + s) ^ 0x2f6e2b) >>> 0 || 17));
         continue;
       }
       const len = p.b - p.a;
