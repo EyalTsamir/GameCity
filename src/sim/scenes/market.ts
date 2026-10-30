@@ -164,6 +164,8 @@ export class MarketDay implements Scene {
         this.shift = want;
       }
     }
+    // too late for this shift (it got held up, or the clock was moved): it needn't come
+    if (want === 0 && st.state === 1) sim.cancelKerb(st);
     // the van holds until its hour is up
     if (st.state === 3) {
       this.doors = Math.min(1, this.doors + dt / 2);
@@ -320,6 +322,7 @@ export class MarketDay implements Scene {
     this.doors = 0;
     // a van still standing goes home with the jump
     if (st && st.state === 3) st.release = true;
+    if (st) this.sim?.cancelKerb(st);
   }
 
   stats(): Record<string, number> {

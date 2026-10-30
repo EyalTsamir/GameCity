@@ -356,6 +356,8 @@ export class Party {
   serveCafe: CafePlace | null = null;
   /** told to fade out while on a crossing: seconds of the fade, once across */
   fadeAfterCross = 0;
+  /** seconds left of walking on through a knot of people nobody could get out of */
+  passT = 0;
   constructor(id: number, persona: Persona) {
     this.id = id;
     this.persona = persona;
@@ -1364,7 +1366,8 @@ export class Crowd {
     }
     // end of rail (or the café entry point)
     if (!p.endDoor) vT = Math.min(vT, Math.sqrt(2 * 1.6 * Math.max(0, Math.min(r.length, p.exitS) - p.s)) + 0.15);
-    if (p.vCap < vT) vT = Math.max(0, p.vCap);
+    if (p.passT > 0) p.passT -= h;
+    else if (p.vCap < vT) vT = Math.max(0, p.vCap);
     const dv = vT - p.v;
     p.v += clamp(dv, -3.2 * h, 1.3 * h);
     if (p.v < 0) p.v = 0;
@@ -1394,6 +1397,9 @@ export class Crowd {
       p.relaxT = Math.max(p.relaxT, 1);
     }
     if (p.progressT > 12 && !p.crossing && this.turnBack(p)) return;
+    // a knot on a corner where everyone yields to someone else and no way round is left (it held a crossing for minutes,
+    // until its reservations expired): walk on through it
+    if (p.progressT > (p.crossing ? 14 : 28)) p.passT = 3.5;
     if (p.progressT > 12 && r.legs[legAt(r, p.s)].edge.kind === 'door') {
       // stuck in a doorway / front path: back inside rather than standing there for ever
       this.beginFadeOut(p, 0.8);

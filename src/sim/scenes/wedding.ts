@@ -506,6 +506,7 @@ export class Wedding implements Scene {
     }
     const st = this.stop;
     if (st && st.state === 3) st.release = true;
+    if (st) this.sim?.cancelKerb(st);
     if (h >= START + 2) this.ran = true;
   }
 

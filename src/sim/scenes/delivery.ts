@@ -337,6 +337,7 @@ export class Deliveries implements Scene {
   }
 
   timejump(): void {
+    for (const s of this.stops) this.sim?.cancelKerb(s.st);
     for (const c of this.crew) {
       if (c.stop) {
         c.stop.st.release = true;

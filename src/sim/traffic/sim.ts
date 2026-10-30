@@ -1305,6 +1305,16 @@ export class TrafficSim {
   }
 
   /** send a vehicle of this spec to a stop now, spawned out of sight (the market van, the wedding car) */
+  /** a vehicle still on its way to the stop is called off: it just drives on */
+  cancelKerb(st: KerbStop): void {
+    if (st.state !== 1 || st.V === null) return;
+    st.V.kerb = null;
+    st.V.kerbGo = false;
+    st.V = null;
+    st.state = 0;
+    st.release = false;
+  }
+
   sendTo(st: KerbStop, spec: VehicleSpec, variant: number, color: string): boolean {
     if (st.V !== null) return false;
     const V = this.makeVehicle(spec, variant, color);

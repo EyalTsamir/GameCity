@@ -255,7 +255,7 @@ export class BalconyLife implements Scene {
         c.t = 5;
       }
     }
-    const wob = c.ph === 1 ? Math.sin(h * 900) * 0.22 : 0;
+    const wob = c.ph === 1 ? Math.sin(this.ctx.uniforms.uTime.value * 1.3) * 0.22 : 0;
     const off = 0.85;
     const tx = -c.nz,
       tz = c.nx;
