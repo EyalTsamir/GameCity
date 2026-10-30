@@ -867,3 +867,78 @@ export function worksSite(k: Kit, kd: Kit, L: number, rng: Rng): void {
   k.m('#2a5fa8', 'plastic');
   sh.beam(-L * 0.42, 0.02, -0.12, L * 0.1, 0.02, -0.12, 0.055, 0.055);
 }
+
+/** Empties out for the brewery: stacked plastic crates with bottle necks showing (the necks near only). */
+export function bottleCrates(k: Kit, kd: Kit, rng: Rng): void {
+  const sh = k.sh;
+  const col = rng.pick(['#b8322c', '#1d6f3a', '#1d3557', '#d9a51f']);
+  const stacks = rng.int(2, 3);
+  for (let c = 0; c < stacks; c++) {
+    const x = (c - (stacks - 1) / 2) * 0.43,
+      n = rng.int(1, 4);
+    const yaw = rng.range(-0.05, 0.05);
+    for (let i = 0; i < n; i++) {
+      sh.push().local(x + rng.range(-0.01, 0.01), i * 0.3, rng.range(-0.015, 0.015), 0, yaw, 0);
+      k.m(col, 'plastic');
+      // walls with a hand slot: bottom rail, top rail, corner posts
+      sh.box(0, 0.03, 0, 0.4, 0.06, 0.3, 1);
+      sh.box(0, 0.265, 0, 0.4, 0.07, 0.3, 1 | 2);
+      for (const sx of [-1, 1]) for (const sz of [-1, 1]) sh.box(sx * 0.18, 0.15, sz * 0.13, 0.04, 0.18, 0.04, 1 | 2);
+      k.m('#1a2a20', 'plastic');
+      sh.box(0, 0.16, 0, 0.32, 0.2, 0.22, 1 | 2);
+      sh.pop();
+    }
+    const y = n * 0.3;
+    kd.sh.push().local(x, y - 0.3, 0, 0, yaw, 0);
+    for (let a = 0; a < 4; a++) for (let b = 0; b < 3; b++) {
+      kd.m(rng.chance(0.75) ? '#2a4a2c' : '#5a3a1e', 'glass');
+      kd.sh.cyl(-0.135 + a * 0.09, 0.2, -0.09 + b * 0.09, 0.03, 0.012, 0.13, 5, 1);
+    }
+    kd.sh.pop();
+  }
+}
+
+/** Baker's crates of the morning's loaves stacked at the kerb. */
+export function breadCrates(k: Kit, kd: Kit, rng: Rng): void {
+  const sh = k.sh;
+  for (let i = 0; i < 3; i++) {
+    sh.push().local(-0.25 + (i % 2) * 0.5, i < 2 ? 0 : 0.17, i < 2 ? 0 : 0.01, 0, rng.range(-0.06, 0.06), 0);
+    k.m(rng.pick(['#2c5a8c', '#b8322c', '#3a3d42']), 'plastic');
+    sh.box(0, 0.015, 0, 0.5, 0.03, 0.36, 1);
+    for (const y of [0.07, 0.13]) {
+      sh.box(0, y, 0.175, 0.5, 0.035, 0.012, 1);
+      sh.box(0, y, -0.175, 0.5, 0.035, 0.012, 1);
+      sh.box(0.245, y, 0, 0.012, 0.035, 0.36, 1);
+      sh.box(-0.245, y, 0, 0.012, 0.035, 0.36, 1);
+    }
+    k.m('#c0955a', 'wood');
+    sh.box(0, 0.08, 0, 0.46, 0.09, 0.32, 1);
+    for (let j = 0; j < 5; j++) {
+      kd.m(rng.pick(['#c58f4e', '#b37d40', '#d2a163']), 'wood');
+      kd.sh.ellipsoid(-0.18 + j * 0.09, 0.125, rng.range(-0.04, 0.04), 0.038, 0.032, 0.14, 0);
+    }
+    sh.pop();
+  }
+}
+
+/** Hardware shop: a tub of brooms and rakes, galvanised buckets nested in a stack. */
+export function brooms(k: Kit, kd: Kit, rng: Rng): void {
+  const sh = k.sh;
+  k.m('#8a8e90', 'steel');
+  sh.cyl(-0.34, 0, 0, 0.17, 0.2, 0.32, 10, 2);
+  k.m('#3a3430', 'stone');
+  sh.disc(-0.34, 0.3, 0, 0.18, 10, 1);
+  for (let i = 0; i < 7; i++) {
+    const a = rng.range(0, 6.28),
+      r = rng.range(0.02, 0.13);
+    const tx = -0.34 + Math.cos(a) * r * 2.2,
+      tz = Math.sin(a) * r * 2.2;
+    k.m(rng.pick(['#c7a877', '#b69561', '#9a8058']), 'wood');
+    sh.beam(-0.34 + Math.cos(a) * r, 0.25, Math.sin(a) * r, tx, 1.5, tz, 0.022, 0.022);
+    kd.m(rng.pick(['#c9a93e', '#3a3a3c', '#e0554a']), 'plastic');
+    kd.sh.box(tx, 1.56, tz, 0.26, 0.11, 0.05, 0);
+  }
+  k.m('#9aa2a6', 'steel');
+  sh.cyl(0.26, 0, 0.02, 0.115, 0.15, 0.26, 10, 2);
+  for (let i = 1; i < 5; i++) sh.cyl(0.26, 0.2 + i * 0.05, 0.02, 0.122, 0.152, 0.05, 10, 0);
+}

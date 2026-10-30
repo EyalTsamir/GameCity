@@ -16,7 +16,7 @@ import type { GreenKit } from '../buildings/green';
 import type { Kit } from './furniture';
 import { MASK_WALK, type getLayout } from './layout';
 import type { Printer } from './print';
-import { barrier, bookCart, cabinet, cardboard, cellarHatch, clothesRail, cone, doorMat, flowerBuckets, fruitStand, guardRail, pavementLights, postNotice, postcardRack, posterColumn, sacks, signPost, wheelStop, worksSign, worksSite, type SignKind } from './streetkit';
+import { barrier, bookCart, bottleCrates, breadCrates, brooms, cabinet, cardboard, cellarHatch, clothesRail, cone, doorMat, flowerBuckets, fruitStand, guardRail, pavementLights, postNotice, postcardRack, posterColumn, sacks, signPost, wheelStop, worksSign, worksSite, type SignKind } from './streetkit';
 import { bike } from './furniture';
 
 export interface StreetKitEnv {
@@ -415,7 +415,7 @@ export function placeStreetKit(e: StreetKitEnv): { x: number; z: number }[] & { 
       const x = alongX ? sh.doorX + off : band,
         z = alongX ? band : sh.doorZ + off;
       const jd = alongX ? Math.abs(x - nearest(x, XS)) : Math.abs(z - nearest(z, ZS));
-      if (jd < 9.5 || srng.next() > 0.8 || sh.type === 1 || sh.type === 2) continue;
+      if (jd < 9.5 || srng.next() > 0.85) continue;
       const ax = alongX ? 1 : 0,
         az = alongX ? 0 : 1;
       if (![-0.7, 0, 0.7].every((o) => free(x + ax * o, z + az * o, 0.3))) continue;
@@ -440,6 +440,18 @@ export function placeStreetKit(e: StreetKitEnv): { x: number; z: number }[] & { 
         case 5:
           clothesRail(k, kd, srng);
           inc('clothesRail');
+          break;
+        case 1:
+          bottleCrates(k, kd, srng);
+          inc('bottleCrates');
+          break;
+        case 2:
+          breadCrates(k, kd, srng);
+          inc('breadCrates');
+          break;
+        case 6:
+          brooms(k, kd, srng);
+          inc('brooms');
           break;
         default:
           postcardRack(k, kd, srng, printer);
