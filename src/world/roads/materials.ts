@@ -386,8 +386,10 @@ const PAINT_AFTER = /* glsl */ `
   vec2 st = rdStreet(vWP.xz);
   float lat = abs(st.x);
   float wheel = max(1.0 - smoothstep(0.15, 0.5, abs(lat - 0.95)), 1.0 - smoothstep(0.15, 0.5, abs(lat - 2.55)));
-  float wearAmt = max(vM.y, 0.35) * (0.5 + 0.6 * wheel);
-  float nw = texture2D(tRN, vWP.xz * 0.8).a * 0.6 + texture2D(tRN, vWP.xz * 0.21).b * 0.4;
+  float wearAmt = max(vM.y, 0.35) * (0.3 + 0.8 * wheel);
+  // tyre-worn, not blotchy (audit: the zebra stripes read as leopard print): the wear noise is stretched along the
+  // street (streaks in the direction of travel), plus a fine chip octave
+  float nw = texture2D(tRN, vec2(st.x * 1.9, st.y * 0.28)).a * 0.55 + texture2D(tRN, vec2(st.x * 0.7, st.y * 0.09) + 0.37).b * 0.25 + texture2D(tRN, vWP.xz * 2.3 + 0.61).g * 0.2;
   // (detail fade from the geometric-mean pixel footprint: at eye level the paint is seen at grazing angles)
   vec2 fwq = fwidth(vWP.xz);
   float detq = 1.0 - smoothstep(0.1, 0.35, sqrt(fwq.x * fwq.y) / 0.1);

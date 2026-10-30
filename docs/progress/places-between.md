@@ -2,13 +2,14 @@
 
 ## Resume here
 
-- **Round 2 (overnight backlog from the coordinator)**, branch merged with `claude/pensive-gates-bim12i` at 083a507.
-  Backlog order: 1 station ✔ · 2 river slipway/steps + harbour water stairs ✔ · 3 tunnel-portal cuttings ✔ · 4 old
-  town (churchyard, yard gate, island landing) ✔ · 5 town↔countryside edge (west farm lane) ✔ — 3–5 committed together;
-  verification shots `shots/r2/p5` (portal bank, arched headstones, edge) + walk probe `walk3.mjs` were queued on the
-  browser lock · 6 REAL-REPORT ground items: cliff ledges ✔ (`?nocliffledge`), colonnade dots → the plaza slot drain
-  (prepared in scratch `drain_fix.py`, verify with `probe6.mjs` rddbg A/B first), gravel/ballast relief (G2 already
-  added `?nobedrelief` — judge on a close shot) · 7 walk audit → fix the 10 weakest spots.
+- **Round 2 (overnight backlog from the coordinator)**: all 7 items done — 1 station, 2 water stairs/slipway, 3 portal
+  cuttings, 4 old town (churchyard, yard gate, island landing), 5 west farm lane, 6 REAL ground items (colonnade line =
+  slot drain, cliff ledges, ballast voids), 7 audit fixes (sonnet audit of ~42 eye-level views, `shots/r2/audit`;
+  fixed: weed rhythm, old-town square setts, zebra/paint wear streaks, parking-lot kerbs, lane ruts/hedgerow; judged
+  not worth changing: quay slab, beach edge, riverside steps; open: cliff block seams look dark at 8 m — by design
+  crevices, untouched). Checks: validate [] + invariants {}, walk probe (`walk3.mjs`) all routes, hitch 0 mid-run
+  programs, build 3.83 MB. Next if resumed: nothing in the backlog — candidates are the cliff seams and a wheel-stop
+  row in parking lots.
 - Headless plan check (no browser, no lock): scratch `planssr.mjs` (Vite SSR → generatePlan + roads + occupancy +
   pedNetwork; prints `peds.warnings`, optional eval file). Copy it into the worktree root to run (`node planssr.tmp.mjs
   <worktree> [eval.js]`) so `vite` resolves.
@@ -34,6 +35,10 @@
 | Pond-island landing: no reed stand on the bridge abutment / landing (groundcover habitat skip) | `-74.2,0.4,12,10,180,14` | (with `?noislandbridge`) |
 | West edge (`?noedgelane`): Westbrook's back gardens (and the allotments) end 3.8 m earlier at a farm lane — two gravel ruts, grass crown, long-grass verges — from the river promenade north to a field gate at the hill foot; a field hedgerow (untrimmed, 1.75–2.25 m, in pieces) with standard oaks along the slab edge, two five-bar field gates (one open) and a step stile; a fingerpost at the promenade | `-200,1,30,45,-90,10`, lane `-196.4,1.6,20,10,180,4`, air `-205,0,40,90,-60,40` | `?noedgelane` |
 | Cliffs (REAL judge 3 #6): broken ledges — every stratum lip sags and juts by its own amount along the face (value noise) | track `-20,1.8,-162,9,20,8` | `?nocliffledge` (off on low) |
+| Old-town square setts (detail tier; low / `?noplacedetail` → the old flags): granite setts in the pocket square and the archway passage, a two-row flagstone gutter on the archway axis to the street, flag bands at the facades and the retaining-wall foot (masonry ashlar kind with a negative course = `th_setts`) | `82,1.4,-30,9,200,8`, `83.7,1.2,-39,9,0,4` | `?noplacedetail` |
+| Farm-lane ruts: walk path surface `track` (earthy grit + grass creeping in, a narrow worn margin so the crown stays grass) | lane `-196.4,1.6,20,10,180,4` | (with `?noedgelane`) |
+| Parking-lot edging kerbs where an in-block lot meets lawn (roads/covers.ts `edgeKerb`) | `-140,1.4,-30,9,90,8` | `?noparkkerb` |
+| Pavement weeds clustered by noise (no metered 1 m rhythm) | any frontage | `?noweedclump` |
 
 All: `?noplaces`. Detail tier: `quality=low` or `?noplacedetail` → solid parapets instead of balusters, no arch ring / gatehouse windows.
 

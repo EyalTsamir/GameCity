@@ -208,8 +208,9 @@ function buildMask(ctx: CityContext, feet: readonly CliffFoot[], legacy: boolean
   w.lineJoin = 'round';
   for (const p of plan.paths) {
     if (!p.draw) continue;
-    w.strokeStyle = p.surface === 'paving' ? 'rgb(0,0,110)' : 'rgb(0,0,190)';
-    w.lineWidth = (p.width + 1.1) * sx;
+    // (farm-lane ruts: a narrow, light worn margin — the grass crown between the two ruts stays)
+    w.strokeStyle = p.surface === 'paving' ? 'rgb(0,0,110)' : p.surface === 'track' ? 'rgb(0,0,120)' : 'rgb(0,0,190)';
+    w.lineWidth = (p.width + (p.surface === 'track' ? 0.3 : 1.1)) * sx;
     w.beginPath();
     p.pts.forEach((q, i) => (i ? w.lineTo(X(q.x), Z(q.z)) : w.moveTo(X(q.x), Z(q.z))));
     w.stroke();
@@ -234,7 +235,7 @@ function buildMask(ctx: CityContext, feet: readonly CliffFoot[], legacy: boolean
     // sidewalk) are trodden into fans, doorsteps worn
     w.strokeStyle = 'rgb(0,0,78)';
     for (const p of plan.paths) {
-      if (!p.draw || p.surface === 'deck') continue;
+      if (!p.draw || p.surface === 'deck' || p.surface === 'track') continue;
       const P = p.pts;
       for (let i = 1; i < P.length - 1; i++) {
         const ax = P[i].x - P[i - 1].x,
