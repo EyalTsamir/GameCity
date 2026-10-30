@@ -842,6 +842,17 @@ export function genIndustrial(g: Gen): void {
       // floor bands + coping
       setCol(t, shade(offC, 0.88));
       for (let k = 1; k < officeN; k++) sideBox(t, sg, ua, ub, 0, 0.08, k * 3.6 - 0.14, k * 3.6, true);
+      // the firm's name in raised letters across the top of the front, over the last window row (lit at night)
+      const yL0 = (officeN - 1) * 3.6 + 2.62,
+        yL1 = Math.min(top - 0.12, yL0 + 0.85);
+      if (sd === FRONT && yL1 - yL0 > 0.45) {
+        const firm = depot ? 'TINYHAVEN TRANSIT' : FIRMS[(lot.id * 7) % FIRMS.length];
+        const ink = depot ? '#23405c' : ['#2c3a46', '#7c2a22', '#2f4a3a'][lot.id % 3];
+        const lr = g.atlas.add(`indL:${firm}:${ink}`, 512, 56, letterSign(firm, ink, '#ffe6b8', '"Arial Black", "Segoe UI", sans-serif', 0.5));
+        const lw = Math.min(W * 0.86, (yL1 - yL0) * (512 / 56));
+        const uc = (ua + ub) / 2;
+        signOnSide(g, sg, uc - lw / 2, uc + lw / 2, 0.03, yL0, yL1, lr);
+      }
       setCol(t, shade(offC, 1.06));
       sideBox(t, sg, ua > 0 ? ua : -0.05, ub < L ? ub : L + 0.05, 0, 0.1, top, top + 0.1, true);
     }
@@ -912,8 +923,7 @@ export function genIndustrial(g: Gen): void {
     const r = g.atlas.add('customs', 900, 72, letterSign('OLD CUSTOMS WAREHOUSE', '#ece2c6', '#ffe1a8', 'Georgia, "Times New Roman", serif', 0.45));
     signOnSide(g, sgF, sgF.L * 0.5 - 14, sgF.L * 0.5 + 14, INS + 0.06, H - 1.85, H - 0.55, r);
   } else {
-    const names = depot ? ['TRANSIT DEPOT'] : ['NORTHGATE FREIGHT', 'HARBOUR STORES', 'NORTHGATE LOGISTICS', 'BRICKWORKS STORE', 'KESTREL & SONS'];
-    const nm = depot ? names[0] : names[(lot.id * 7) % names.length];
+    const nm = depot ? 'TRANSIT DEPOT' : FIRMS[(lot.id * 7) % FIRMS.length];
     const r = g.atlas.add(`ind:${nm}`, 420, 64, boardSign(nm, { bg: '#f1ede4', fg: '#2c3a46', font: '"Arial Black", "Segoe UI", sans-serif', weight: '900', glow: 0.25, glowColor: '#ffffff', border: '#2c3a46' }));
     // the board stays clear of the dock canopies (top at doorH + 0.5): it shrinks rather than overlapping them
     const yS = Math.min(H - 0.5, Math.max(doorH + 1.0, H - 2.0));
@@ -934,6 +944,9 @@ export function genIndustrial(g: Gen): void {
     }
   }
 }
+
+/** firm names on the industrial halls (name board; the head office carries the same name in letters) */
+const FIRMS = ['NORTHGATE FREIGHT', 'HARBOUR STORES', 'NORTHGATE LOGISTICS', 'BRICKWORKS STORE', 'KESTREL & SONS'];
 
 function yawOf(front: string): number {
   return front === 'S' ? 0 : front === 'E' ? Math.PI / 2 : front === 'N' ? Math.PI : -Math.PI / 2;
