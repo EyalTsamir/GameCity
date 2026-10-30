@@ -2,6 +2,16 @@
 
 ## Resume here
 
+- **Round 3** (merged pensive-gates dd7caf3; sonnet audit of the domain at 12 / 18.2 / 21.5 h, `shots/r3/audit`,
+  ranking in the Log). Fixed: quay-wall furniture kept off the stairs/slipway (721ef12); crane rails + yellow buffers
+  ended short of the harbour water stairs; cutting-wall weathering (weep streaks, coping drips, foot moss); grave
+  candles + cross lanterns (churchyard at night); square gutter = lengthwise darker setts; station forecourt planters
+  (shrubs) + iron bollards; darker water-stair risers. Checks (08:10): perf overview 49.6/48.9 vs `?noplaces`
+  48.65/48.7 ms, close + station within noise; hitch 0 new programs / 0 freezes (noon + night); validate []; build OK;
+  walk probe all routes; ui-test walk: the "click while walking → info card" step is flaky (picks a moving
+  pedestrian; rerun at 08:12: 9/9 passed). Still open: a small dark slot on the harbour stairs' top tread (not
+  the crane rail — source unknown). Open from the ranking: lower-quay waterline/coping chips, pond
+  path edge outline (all park paths), farm-lane hedge lumps, field emptiness (landscape), harbour oil-stain decals.
 - **Round 2 (overnight backlog from the coordinator)**: all 7 items done — 1 station, 2 water stairs/slipway, 3 portal
   cuttings, 4 old town (churchyard, yard gate, island landing), 5 west farm lane, 6 REAL ground items (colonnade line =
   slot drain, cliff ledges, ballast voids), 7 audit fixes (sonnet audit of ~42 eye-level views, `shots/r2/audit`;
@@ -101,6 +111,11 @@ hedge + cards ≈ 230 m) — first thing to thin if the target needs it.
 - `src/world/terrain.ts` (service height), `src/world/terrain/masonry.ts` (call + ladders + gaps), `src/world/terrain/railings.ts` (extra callback)
 
 ## Log
+
+- 2026-10-30 — round 3 audit ranking (sonnet, 51 shots): 1 cutting wall (clean plane, punched holes, black at night)
+  2 harbour stairs (flat ramp, black slot = crane rail end, yellow buffer on the landing) 3 churchyard (night black
+  hole) 4 lower quay (no waterline band, dark at night) 5 square (gutter = featureless strip) 6 pond path edge
+  7 station forecourt bare 8 farm-lane hedge blobs 9 field emptiness 10 yard gate fence. Fixed 1–3, 5, 7 (see Resume).
 
 - 2026-10-30 — round 2 item 6 + audit fixes (usage limit hit here; shots `shots/r2/p7`, validate [] clean):
   colonnade line = the plaza slot drain on block paving (rddbg A/B `shots/r2/p6`) → block paving opts out (negative

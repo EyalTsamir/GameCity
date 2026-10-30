@@ -1351,6 +1351,12 @@ export default function create(ctx: CityContext): CityModule {
 
   // churchyard yews and a lime (core/places.ts close) — appended last, so no other planting's rng shifts
   for (const t of close?.trees ?? []) plant({ sp: t.sp, x: t.x, z: t.z, y: H(t.x, t.z), h: t.h, r: t.r, surround: 'none', syaw: 0, tag: 'courtyard' });
+  // station forecourt planters (places round 3): three shrubs each, rooted in the soil at 0.47 (terrain service height)
+  {
+    const rng = ctx.rng('veg-station-planters');
+    for (const p of plan.places?.station?.planters ?? [])
+      for (let k = 0; k < 3; k++) addBush(p.x0 + ((p.x1 - p.x0) * (k + 0.5)) / 3, (p.z0 + p.z1) / 2, 0.42, rng.range(0.75, 1.05), rng.int(0, 1e9), undefined, 1, true);
+  }
 
   // ─────────────────────────────────────────────────────────── meshes ──
   const root = new THREE.Group();
