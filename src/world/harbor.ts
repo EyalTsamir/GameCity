@@ -22,12 +22,12 @@ import { HB, RIG } from './harbor/geo';
 import { createBeamMesh, createHarborMaterials, createGlowMesh, followCraneLamps, NMOB, type GlowPoint } from './harbor/material';
 import { buildBreakwater, setArmourStones } from './harbor/breakwater';
 import { buildFishQuay, setQuayDetail } from './harbor/quay';
-import { buildCarouselRotating, buildCarouselStatic, buildPier, buildWheelRotating, buildWheelStatic, setGondolaDetail, setCarouselDetail, setBoothDetail, setKioskDetail, type WheelSpec } from './harbor/pier';
+import { buildCarouselRotating, buildCarouselStatic, buildPier, buildWheelRotating, buildWheelStatic, setGondolaDetail, setCarouselDetail, setBoothDetail, setKioskDetail, setWheelHubDetail, type WheelSpec } from './harbor/pier';
 import { buildFerryDock, lifeguardTower, scatterBeach, setBeachDetail, setBeachToys, setFerryDockDetail } from './harbor/beach';
 import { boxHunt } from '../core/boxhunt';
 import { bridgeProfile, buildFootbridge, buildJetty, type BridgeInfo, setRiverLanterns } from './harbor/river';
 import { buildCrane, buildCraneRails, CraneSim, setCraneDetail, type MobileBox } from './harbor/cranes';
-import { buildMooring, buildQuayEdge, buildShip, mobileShipPos, SHIP, type MobileSlot } from './harbor/ship';
+import { buildMooring, buildQuayEdge, buildShip, mobileShipPos, setShipDetail, SHIP, type MobileSlot } from './harbor/ship';
 import { addContainer, CH, CW, fillYard, L20, pickLook, setContainerDetail, yardRows } from './harbor/containers';
 import { buildHarborFloodlights } from './lamps/harborLights';
 import { addLampLights } from '../core/lampLight';
@@ -78,6 +78,7 @@ export default function create(ctx: CityContext): CityModule {
   slotPairs.slice(0, craneF.length).forEach(([a, b], i) => {
     mobSlots.push({ slot: a, row: rowsFor[i * 2] }, { slot: b, row: rowsFor[i * 2 + 1] });
   });
+  setShipDetail(boxHunt(ctx, 'shipkit'));
   const ship = shipF ? buildShip(anim, shipF.x, shipF.z, shipF.yaw, ctx.rng('harbor-ship'), mobSlots, glows) : null;
 
   // ───────────────────────────────────────────── quay, cranes, containers
@@ -208,6 +209,7 @@ export default function create(ctx: CityContext): CityModule {
     if (wf?.rect) {
       wheel = { x: wf.x, z: wf.z, radius: Number(wf.params?.radius ?? 15), hubY: deckY + Number(wf.params?.hub ?? 17.5), rect: wf.rect, deckY };
       setBoothDetail(boxHunt(ctx, 'pierbooth'));
+      setWheelHubDetail(boxHunt(ctx, 'wheelhub'));
       buildWheelStatic(beach, wheel, glows);
       setGondolaDetail(boxHunt(ctx, 'gondola'));
       setCarouselDetail(boxHunt(ctx, 'carousel'));
