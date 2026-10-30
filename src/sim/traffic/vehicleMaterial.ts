@@ -375,7 +375,7 @@ void thEll( vec3 ro, vec3 rd, vec3 c, vec3 r, vec3 col, inout float tb, inout ve
 void thSeat( vec3 ro, vec3 rd, vec3 ird, float cx, float hw, float z, float cy, float ty, float hy, vec3 col, inout float tb, inout vec3 nb, inout vec3 cb ) {
   thBox( ro, rd, ird, vec3( cx - hw, cy - 0.06, z - 0.11 ), vec3( cx + hw, ty, z ), col, tb, nb, cb );
   thBox( ro, rd, ird, vec3( cx - hw, cy - 0.16, z ), vec3( cx + hw, cy, z + 0.48 ), col * 1.08, tb, nb, cb );
-  thBox( ro, rd, ird, vec3( cx - 0.13, ty + 0.05, z - 0.09 ), vec3( cx + 0.13, hy, z - 0.01 ), col, tb, nb, cb );
+  thEll( ro, rd, vec3( cx, ( ty + hy ) * 0.5 + 0.02, z - 0.05 ), vec3( 0.125, ( hy - ty ) * 0.5 + 0.015, 0.055 ), col, tb, nb, cb );
 }
 // distance along the view ray (object frame) from the pane to the cabin surface seen through it, −1 = none
 float thHitT = -1.0;
@@ -434,7 +434,7 @@ vec3 thInterior( vec3 ro, vec3 rd, float style, float occupied, float ph ) {
       }
     }
   } else {
-    vec3 seatC = trimC * ( 0.9 + 0.5 * thH1( ph * 3.3 ) );
+    vec3 seatC = trimC * ( 0.65 + 0.4 * thH1( ph * 3.3 ) );
     float hy = roof - 0.12, ty = hy - 0.22, cy = belt - 0.36;
     float sx = hw * 0.5, shw = min( 0.25, hw * 0.45 );
     // dashboard under the windscreen, steering wheel on the left (driver) side
@@ -454,8 +454,8 @@ vec3 thInterior( vec3 ro, vec3 rd, float style, float occupied, float ph ) {
       // rear bench
       thBox( ro, rd, ird, vec3( -hw + 0.04, cy - 0.06, rz - 0.12 ), vec3( hw - 0.04, ty - 0.04, rz ), seatC, tb, nb, cb );
       thBox( ro, rd, ird, vec3( -hw + 0.04, cy - 0.16, rz ), vec3( hw - 0.04, cy, rz + 0.45 ), seatC * 1.08, tb, nb, cb );
-      thBox( ro, rd, ird, vec3( sx - 0.12, ty + 0.01, rz - 0.1 ), vec3( sx + 0.12, hy - 0.04, rz - 0.02 ), seatC, tb, nb, cb );
-      thBox( ro, rd, ird, vec3( -sx - 0.12, ty + 0.01, rz - 0.1 ), vec3( -sx + 0.12, hy - 0.04, rz - 0.02 ), seatC, tb, nb, cb );
+      thEll( ro, rd, vec3( sx, ty + 0.07, rz - 0.06 ), vec3( 0.115, 0.075, 0.05 ), seatC, tb, nb, cb );
+      thEll( ro, rd, vec3( -sx, ty + 0.07, rz - 0.06 ), vec3( 0.115, 0.075, 0.05 ), seatC, tb, nb, cb );
     }
     if ( occupied > 0.5 && vSeated < 0.5 ) {
       // the driver: rounded torso and shoulders, arms to the wheel, neck, head with hair
@@ -522,7 +522,9 @@ export function createVehicleMaterial(
         .replace('#include <color_vertex>', VERT_COLOR)
         .replace('#include <beginnormal_vertex>', '#include <beginnormal_vertex>\nif ( aWheel.w > 0.5 ) objectNormal = thWheel( objectNormal );')
         .replace('#include <begin_vertex>', `#include <begin_vertex>\n${VERT_BEGIN}`);
+      // (the sun shadow's per-pixel noise rotation speckles paint and glass: a fixed disc, same taps)
       shader.fragmentShader = shader.fragmentShader
+        .replace('#include <shadowmap_pars_fragment>', THREE.ShaderChunk.shadowmap_pars_fragment.replace('interleavedGradientNoise( gl_FragCoord.xy ) * PI2', '0.7'))
         .replace('#include <common>', `#include <common>\n${FRAG_PARS}`)
         .replace('#include <color_fragment>', `#include <color_fragment>\n${FRAG_DETAIL}`)
         .replace('#include <roughnessmap_fragment>', 'float roughnessFactor = clamp( roughness * vRough + thRoughAdd, 0.04, 1.0 );')
@@ -560,7 +562,7 @@ export function createVehicleMaterial(
             : '#include <dithering_fragment>',
         );
     };
-    material.customProgramCacheKey = () => (seatDepth ? 'traffic-vehicle-v12' : 'traffic-vehicle-v12-nd');
+    material.customProgramCacheKey = () => (seatDepth ? 'traffic-vehicle-v13' : 'traffic-vehicle-v13-nd');
     patchLampMaterial(material); // night street-light map (night agent)
     return material;
   };
