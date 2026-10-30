@@ -25,6 +25,17 @@ hedges), mid-distance check at 30-60 m, re-measure, final checks from `DETAIL-RO
 Audit tool: `services.props.streetKit` lists every kit item `{k, x, z}` (read it in the page to aim the camera). Shots in
 `shots/ds/`.
 
+## Perf
+Budget: at most +1 ms in overview, downtown, street, market; at most +250 k triangles in a full-city view.
+Run 1, commit c6e94d9, frozen build, AC, `;nostreetdetail`, 2 repeats (market off: one outlier of 39.3 dropped):
+| view | on ms | off ms | delta | triangles on / off |
+|---|---|---|---|---|
+| overview | 38.5, 37.6 | 37.9, 37.0 | +0.6 | 2.81-3.17 M / 2.75 M (noisy with the shadow fit) |
+| street | 36.5, 36.2 | 35.1, 35.0 | +1.3 | 3.38-3.60 M / 3.26-3.48 M |
+| market | 35.1, 35.2 | 34.1 | +1.1 | 3.36-3.49 M / 3.41 M |
+| downtown | 37.4, 38.2 | 36.7, 36.8 | +1.1 | 3.41 M / 3.13-3.16 M (+260 k) |
+Slightly OVER budget, before road works, parking kit, sacks and more goods were added. Trim. Per-family run: `shots/ds/perf2`.
+
 ## Toggles (`src/core/streetdetail.ts`, master `?nostreetdetail`, all off on low unless noted)
 | switch | what | files |
 |---|---|---|
