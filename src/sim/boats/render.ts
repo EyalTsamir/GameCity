@@ -3,6 +3,7 @@
 // (heave / pitch / roll smoothed per hull size), frustum-compacted instance lists, navigation
 // light halos, picking (oriented boxes).
 
+import { geomHunt } from '../../core/geomhunt';
 import * as THREE from 'three';
 import type { CityContext } from '../../core/context';
 import { composeMatrix } from '../rail/geo';
@@ -10,7 +11,7 @@ import { WATER_LEVEL } from '../../core/constants';
 import { LAYERS } from '../../core/layers';
 import type { Glows } from '../rail/glows';
 import { createBoatMaterials, setSailDraft } from './material';
-import { buildBigBoats, buildSmallBoats, DIMS, setSailKit } from './models';
+import { buildBigBoats, buildBoatVariants, buildSmallBoats, DIMS, setSailKit } from './models';
 import { boxHunt } from '../../core/boxhunt';
 import type { Boat } from './fleet';
 
@@ -26,7 +27,10 @@ const LIGHT_COL = ['#ff2a14', '#33ff77', '#fff4dc'];
 
 export class BoatRenderer {
   readonly group = new THREE.Group();
-  private pools: Record<'big' | 'small', Pool>;
+  /** per pool: one mesh per boat type (index = variant − 1), or one merged mesh (?noboatsplit) */
+  private pools: Record<'big' | 'small', Pool[]>;
+  private readonly split: boolean;
+  private readonly allPools: Pool[];
   private m4 = new THREE.Matrix4();
   private frustum = new THREE.Frustum();
   private pm = new THREE.Matrix4();
@@ -82,7 +86,11 @@ export class BoatRenderer {
       this.group.add(mesh);
       return { mesh, a1, a2, c2, n: 0 };
     };
-    this.pools = { big: mk(buildBigBoats(), capBig, 'boats-big'), small: mk(buildSmallBoats(), capSmall, 'boats-small') };
+    this.split = geomHunt(ctx, 'boatsplit');
+    this.pools = this.split
+      ? { big: buildBoatVariants('big').map((g, i) => mk(g, capBig, `boats-big-${i + 1}`)), small: buildBoatVariants('small').map((g, i) => mk(g, capSmall, `boats-small-${i + 1}`)) }
+      : { big: [mk(buildBigBoats(), capBig, 'boats-big')], small: [mk(buildSmallBoats(), capSmall, 'boats-small')] };
+    this.allPools = [...this.pools.big, ...this.pools.small];
     for (let i = 0; i < glowCount; i++) glows.setup(glowBase + i, '#ffffff', 0.3, 0);
   }
 
@@ -102,8 +110,7 @@ export class BoatRenderer {
   update(boats: Boat[], camera: THREE.Camera, night: boolean): void {
     this.pm.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
     this.frustum.setFromProjectionMatrix(this.pm);
-    this.pools.big.n = 0;
-    this.pools.small.n = 0;
+    for (const p of this.allPools) p.n = 0;
     this.drawn = 0;
     this.nearView = 0;
     let gi = 0;
@@ -119,7 +126,7 @@ export class BoatRenderer {
         this.sphere.center.y = 2 * WATER_LEVEL - this.sphere.center.y - (b.type === 'sail' ? 6 : 2);
         if (!this.frustum.intersectsSphere(this.sphere)) continue;
       }
-      const p = this.pools[b.dims.mesh];
+      const p = this.pools[b.dims.mesh][this.split ? b.dims.variant - 1 : 0];
       if (p.n >= p.mesh.instanceMatrix.count) continue;
       const i = p.n++;
       this.drawn++;
@@ -140,7 +147,7 @@ export class BoatRenderer {
       }
     }
     for (let k = gi; k < this.glowCount; k++) this.slot(k, 0);
-    for (const p of [this.pools.big, this.pools.small]) {
+    for (const p of this.allPools) {
       p.mesh.count = p.n;
       p.mesh.visible = p.n > 0;
       if (p.n > 0) {

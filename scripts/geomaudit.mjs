@@ -783,7 +783,29 @@ try {
       await page.waitForTimeout(1200);
       for (let k = 0; k < 4; k++) await page.screenshot({ type: 'jpeg', quality: 1 }).catch(() => {});
       const st = await page.evaluate(() => window.__city.stats());
-      report.tris.push({ view: name, drawCalls: st.drawCalls, triangles: st.triangles });
+      const shadow = await page.evaluate(() => {
+        const { ctx } = window.__city;
+        let sun = null;
+        ctx.scene.traverse((o) => {
+          if (o.isDirectionalLight && o.castShadow && !sun) sun = o;
+        });
+        if (!sun) return null;
+        const fr = sun.shadow.getFrustum();
+        const rows = [];
+        ctx.scene.traverseVisible((o) => {
+          if (!o.isMesh || !o.castShadow) return;
+          if (o.frustumCulled && o.geometry.boundingSphere && !fr.intersectsObject(o)) return;
+          const g = o.geometry, n = Math.min(g.drawRange?.count ?? Infinity, g.index ? g.index.count : g.attributes.position.count) / 3;
+          const inst = o.isInstancedMesh ? o.count : g.isInstancedBufferGeometry ? g.instanceCount : 1;
+          let path = '';
+          for (let p = o; p && p !== ctx.scene; p = p.parent) path = `${p.name || p.type}/${path}`;
+          rows.push({ path, tris: Math.round(n * inst) });
+        });
+        rows.sort((a, b) => b.tris - a.tris);
+        return { size: sun.shadow.mapSize.x, area: [sun.shadow.camera.right - sun.shadow.camera.left, sun.shadow.camera.top - sun.shadow.camera.bottom], total: rows.reduce((a, r) => a + r.tris, 0), rows: rows.slice(0, 24) };
+      });
+      report.tris.push({ view: name, drawCalls: st.drawCalls, triangles: st.triangles, shadow });
+      if (shadow && args['shadow-list']) console.log(`  shadow pass ${(shadow.total / 1e6).toFixed(3)} M, map ${shadow.size}, area ${shadow.area.map(Math.round).join('×')} m: ${shadow.rows.map((r) => `${r.path}${Math.round(r.tris / 1000)}k`).join(' ')}`);
       console.log(`${name.padEnd(12)} ${String(st.drawCalls).padStart(4)} dc  ${(st.triangles / 1e6).toFixed(3)} M tris`);
     }
   }
