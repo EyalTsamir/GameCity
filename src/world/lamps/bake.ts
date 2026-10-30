@@ -25,10 +25,15 @@ export interface BakeResult {
   peak: number;
 }
 
+// light round: ?poolold = the flatter pools of before (judged "evenly lit warm ground, no pool falloff" where lamps
+// stand close: overlapping wide tails plus a low knee flattened every lane into one orange wash)
+const POOL_OLD = typeof location !== 'undefined' && new URLSearchParams(location.search).has('poolold');
 /** profile exponent (core sharpness) per kind */
-const CORE: Record<LampLight['kind'], number> = { street: 1.6, path: 0.6, plaza: 1.4, flood: 0, spill: 0, portal: 1.0 };
+const CORE: Record<LampLight['kind'], number> = POOL_OLD
+  ? { street: 1.6, path: 0.6, plaza: 1.4, flood: 0, spill: 0, portal: 1.0 }
+  : { street: 2.2, path: 1.0, plaza: 1.9, flood: 0, spill: 0, portal: 1.5 };
 /** soft-compression knee (stored range is 0..4) */
-const KNEE = 2.4;
+const KNEE = POOL_OLD ? 2.4 : 3.0;
 
 const _c = new THREE.Color();
 
