@@ -3,6 +3,9 @@
 Read this first when resuming after an interruption (usage limits have cut runs before).
 Per-module logs live next to this file: `docs/progress/<module>.md`.
 
+## Perf-deep round (2026-10-30, branch claude/perf-deep-cf97ce) — see docs/progress/perf-deep.md
+10–18 ms a frame recovered in the hero views (noon: overview 47 → 35.5, downtown 53 → 35, street 45 → 33.5, market 46 → 32), no visible change. Master switch `?noperfdeep`.
+
 ## Lead state (2026-10-30 afternoon) — living-scenes, director-mode, geometry-hunt merged at e449579
 * Merged: living-scenes (market day, deliveries, wedding, musician, park, balconies, `?noscenes` — living-scenes.md),
   director-mode (opening film `?film` / `?nofilm`, photo mode `P`, Places moved to `O` — director.md), geometry-hunt
