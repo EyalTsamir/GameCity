@@ -115,7 +115,9 @@ export class BalconyLife implements Scene {
     const a = cast.add({ persona: 'worker', dress: (L, r) => dressWork(L, r) }, 7521);
     const b = cast.add({ persona: 'worker', dress: (L, r) => dressWork(L, r) }, 7522);
     a.doing = b.doing = `Cleaning the windows of ${lot.name || 'the block'}`;
-    this.cradle = { x0, x1, z0, z1, nx, nz, top: lot.height - 2.2, yaw: Math.atan2(nx, nz), col: 0, y: lot.height - 2.2, ph: 0, t: 0, roofY: lot.height, a, b };
+    // (offices step back near the top: it hangs from the davits on the setback)
+    const roof = lot.height * 0.66;
+    this.cradle = { x0, x1, z0, z1, nx, nz, top: roof - 2.4, yaw: Math.atan2(nx, nz), col: 0, y: roof - 2.4, ph: 0, t: 0, roofY: roof, a, b };
   }
 
   private start(A: Actor, b: Balcony, act: Act): void {
@@ -282,7 +284,8 @@ export class BalconyLife implements Scene {
       const L = c.roofY + 0.5 - c.y;
       for (const s of [-1.3, 1.3]) {
         kit.put('cable', x + tx * s - c.nx * 0.45, c.y + 0.3, z + tz * s - c.nz * 0.45, 0, 0xffffff, 1, L, 1);
-        // the outrigger on the roof
+        // the davit arm over the parapet
+        kit.put('cable', x + tx * s, c.roofY + 0.5, z + tz * s, 0, 0xffffff, 5, 1.5, 5, Math.PI / 2);
       }
       kit.put('squeegee', c.a.m.x - c.nx * 0.3, c.y + 1.0, c.a.m.z - c.nz * 0.3, 0, 0xffffff, 1, 1, 1, 0, Math.sin(this.ctx.uniforms.uTime.value * 1.8) * 0.5);
       kit.put('squeegee', c.b.m.x - c.nx * 0.3, c.y + 1.0, c.b.m.z - c.nz * 0.3, 0, 0xffffff, 1, 1, 1, 0, -Math.sin(this.ctx.uniforms.uTime.value * 2.1) * 0.5);
