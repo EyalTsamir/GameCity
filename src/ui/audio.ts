@@ -30,6 +30,8 @@ import {
   clank,
   footstep,
   musicBoxPhrase,
+  guitarPhrase,
+  clapping,
   type NoiseBank,
   type BirdSpecies,
 } from './audio/synth';
@@ -69,6 +71,14 @@ function clamp(v: number, a: number, b: number): number {
 }
 
 type AnyWindow = Window & { webkitAudioContext?: typeof AudioContext };
+
+/** the busker's song: Am, F, C, G (four arpeggio tones each, Hz) */
+const GUITAR_CHORDS = [
+  [110, 220, 261.63, 329.63],
+  [87.31, 220, 261.63, 349.23],
+  [130.81, 196, 261.63, 329.63],
+  [98, 196, 246.94, 293.66],
+];
 
 export default function create(ctx: CityContext): CityModule {
   const { plan, events, clock, roads } = ctx;
@@ -424,6 +434,9 @@ export default function create(ctx: CityContext): CityModule {
   let windPhase = Math.random() * 100;
   let wavePhase = Math.random() * 100;
   let carouselNext = 0;
+  let guitarNext = 0;
+  let guitarBar = 0;
+  let wasClap = false;
   let shipNext = performance.now() + 30000 + Math.random() * 40000;
   const rnd = (a: number, b: number) => a + Math.random() * (b - a);
 
@@ -542,6 +555,22 @@ export default function create(ctx: CityContext): CityModule {
       if (o) carouselNext = t + musicBoxPhrase(ac, o.input, t + 0.05, 1, 523.25 * (Math.random() < 0.5 ? 1 : 0.8909)) + 0.4;
       else carouselNext = t + 2;
     }
+    // the street musician (never loud: small reference distance, heard only within ~40 m) and the applause after a song
+    const scn = ctx.services.scenes as { musician: { x: number; z: number; playing: boolean; applause: number; audience: number } | null } | undefined;
+    const mus = scn?.musician;
+    if (mus && mus.playing && clock.speed > 0 && t > guitarNext) {
+      const o = spot(mus.x, 1.2, mus.z, { ref: 6, wet: 0.2, gain: 0.5, life: 4 });
+      if (o && o.dist < 45) {
+        const C = GUITAR_CHORDS[guitarBar++ % GUITAR_CHORDS.length];
+        guitarNext = t + guitarPhrase(ac, o.input, t + 0.05, C) + 0.02;
+      } else guitarNext = t + 1.5;
+    }
+    if (mus && mus.applause > 0 && !wasClap) {
+      const o = spot(mus.x, 1.2, mus.z, { ref: 7, wet: 0.25, gain: 0.55, life: 5 });
+      if (o && o.dist < 45) clapping(ac, o.input, t + 0.05, g!.noise.white, Math.max(3, mus.audience), 3.2);
+      guitarNext = t + 4.2;
+    }
+    wasClap = !!mus && mus.applause > 0;
     // ship horn in the harbour now and then
     const now = performance.now();
     if (now > shipNext) {

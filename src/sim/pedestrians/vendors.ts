@@ -64,9 +64,10 @@ export function marketStalls(ctx: CityContext): Stall[] {
       vx: f.x - fx * 0.15 + fz * 0.2 * ((f.id % 2) * 2 - 1),
       vz: f.z - fz * 0.15 - fx * 0.2 * ((f.id % 2) * 2 - 1),
       place: { kind: 'view', node: -1, label: 'Browsing the market stalls', theme: 'market', spots: [], x: f.x + fx * 1.2, z: f.z + fz * 1.2 },
-      // trading until 14:30, then packing up until 16:30
-      open: 7.5,
-      close: 16.5,
+      // set up from 6:30 (the tarps come off), trading 7:30–14:30, then packing up until the tarps are back on ~17:30
+      // (?nomarketday: 7:30–16:30 as before)
+      open: ctx.debug.params.has('noscenes') || ctx.debug.params.has('nomarketday') ? 7.5 : 6.4,
+      close: ctx.debug.params.has('noscenes') || ctx.debug.params.has('nomarketday') ? 16.5 : 17.6,
       label: 'market stall',
     });
   }

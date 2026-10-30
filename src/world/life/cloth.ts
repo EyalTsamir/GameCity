@@ -45,8 +45,10 @@ export interface PieceOpts {
   /** flutter amplitude multiplier */
   flutter?: number;
   phase?: number;
-  /** laundry: hangs in vertical folds from clothes pegs (the pegs are added as pieces too); 0..1 */
+  /** laundry: hangs in vertical folds from clothes pegs (the pegs are added as pieces too); 0..1 (> 1 fuller folds) */
   drape?: number;
+  /** out on the line only between these hours (laundry: hung in the morning, taken in at dusk) */
+  hang?: [number, number];
 }
 
 const _c = new THREE.Color();
@@ -55,10 +57,12 @@ const PEG_COLS = ['#c9a77a', '#bf9c6c', '#e8443a', '#2f7fd0', '#f2d23a', '#3fae5
 /** Builder + renderer for every cloth piece, wire and festoon bulb of the life module. */
 export class ClothSystem {
   readonly group = new THREE.Group();
+  /** ?nobalconylife / ?noscenes: the washing stays out day and night */
+  private laundryHours = true;
   readonly lines: Line[] = [];
   private pieces: { line: number; s: number; pole: null | { top: THREE.Vector3; bottom: THREE.Vector3 }; o: PieceOpts }[] = [];
   private bulbs: { line: number; s: number; drop: number; r: number; col: string }[] = [];
-  readonly uniforms = { uLifeFarFlutter: { value: 220 }, uClothTrans: { value: 1.1 }, uLifePxK: { value: 0.001 }, uBulbGain: { value: 0 }, uBulbNight: { value: 0 } };
+  readonly uniforms = { uLifeFarFlutter: { value: 220 }, uClothTrans: { value: 1.1 }, uLifePxK: { value: 0.001 }, uBulbGain: { value: 0 }, uBulbNight: { value: 0 }, uLifeHours: { value: 12 } };
   clothMesh: THREE.Mesh | null = null;
   /** plain pieces (4 × 4 grid) and draped laundry (8 × 5) */
   clothMeshes: THREE.Mesh[] = [];
@@ -69,6 +73,7 @@ export class ClothSystem {
 
   constructor(private ctx: CityContext) {
     this.group.name = 'life-cloth';
+    this.laundryHours = !(ctx.debug.params.has('noscenes') || ctx.debug.params.has('nobalconylife'));
   }
 
   addLine(l: Omit<Line, 'wire' | 'r'> & Partial<Pick<Line, 'wire' | 'r'>>): number {
@@ -90,7 +95,7 @@ export class ClothSystem {
       const h = Math.floor(((o.phase ?? s * 7.3) * 1000) % 97);
       const col = PEG_COLS[h % PEG_COLS.length];
       const at = o.w > 0.8 ? [-0.44, 0, 0.44] : o.w < 0.14 ? [0] : [-0.42, 0.42];
-      for (const f of at) this.pieces.push({ line, s: s + (f * o.w) / L, pole: null, o: { w: 0.016, len: 0.072, shape: SHAPE.PEG, col, weight: 1 } });
+      for (const f of at) this.pieces.push({ line, s: s + (f * o.w) / L, pole: null, o: { w: 0.016, len: 0.072, shape: SHAPE.PEG, col, weight: 1, hang: o.hang } });
     }
   }
 
@@ -151,7 +156,8 @@ export class ClothSystem {
         PC = new Float32Array(n * 4),
         MI = new Float32Array(n * 4),
         C1 = new Float32Array(n * 4),
-        C2 = new Float32Array(n * 4);
+        C2 = new Float32Array(n * 4),
+        HG = new Float32Array(n * 2);
       list.forEach((p, i) => {
         const o = p.o;
         if (p.pole) {
@@ -168,6 +174,7 @@ export class ClothSystem {
         C1.set([_c.r, _c.g, _c.b, o.pattern ?? 0], i * 4);
         _c.set(o.col2 ?? o.col);
         C2.set([_c.r, _c.g, _c.b, o.drape ?? 0], i * 4);
+        HG.set(o.hang ?? [-1, 99], i * 2);
       });
       geo.setAttribute('aP0', new THREE.InstancedBufferAttribute(P0, 4));
       geo.setAttribute('aP1', new THREE.InstancedBufferAttribute(P1, 4));
@@ -175,6 +182,7 @@ export class ClothSystem {
       geo.setAttribute('aMisc', new THREE.InstancedBufferAttribute(MI, 4));
       geo.setAttribute('aCol', new THREE.InstancedBufferAttribute(C1, 4));
       geo.setAttribute('aCol2', new THREE.InstancedBufferAttribute(C2, 4));
+      geo.setAttribute('aHang', new THREE.InstancedBufferAttribute(HG, 2));
       geo.instanceCount = n;
       geo.boundingSphere = sphere.clone();
       this.tris += n * NU * NV * 2;
@@ -223,7 +231,7 @@ void RE_Direct_Cloth( const in IncidentLight directLight, const in vec3 geometry
 `,
         );
     };
-    mat.customProgramCacheKey = () => 'life-cloth-1';
+    mat.customProgramCacheKey = () => 'life-cloth-2';
     patchLampMaterial(mat);
 
     const depth = new THREE.MeshDepthMaterial({ side: THREE.DoubleSide });
@@ -237,7 +245,7 @@ void RE_Direct_Cloth( const in IncidentLight directLight, const in vec3 geometry
         .replace('#include <common>', `#include <common>\nvarying vec2 vLifeUv;\nvarying float vLifeShape;\n${LIFE_MASK_GLSL}`)
         .replace('#include <clipping_planes_fragment>', '#include <clipping_planes_fragment>\n  if ( !lifeKeep( vLifeUv, vLifeShape ) ) discard;');
     };
-    depth.customProgramCacheKey = () => 'life-cloth-depth-1';
+    depth.customProgramCacheKey = () => 'life-cloth-depth-2';
 
     for (const [list, NU, NV] of [[plain, 4, 4], [draped, 8, 5]] as const) {
       if (!list.length) continue;
@@ -409,5 +417,6 @@ void RE_Direct_Cloth( const in IncidentLight directLight, const in vec3 geometry
     const lights = Math.min(1, Math.max(0, this.ctx.uniforms.uLights.value));
     this.uniforms.uBulbGain.value = 0.04 + lights * 5.5;
     this.uniforms.uBulbNight.value = lights;
+    this.uniforms.uLifeHours.value = this.laundryHours ? this.ctx.clock.hours : 12;
   }
 }

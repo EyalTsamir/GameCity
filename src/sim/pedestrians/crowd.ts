@@ -354,6 +354,10 @@ export class Party {
   stall: Stall | null = null;
   servePhase = 0;
   serveCafe: CafePlace | null = null;
+  /** told to fade out while on a crossing: seconds of the fade, once across */
+  fadeAfterCross = 0;
+  /** seconds left of walking on through a knot of people nobody could get out of */
+  knotT = 0;
   constructor(id: number, persona: Persona) {
     this.id = id;
     this.persona = persona;
@@ -667,7 +671,7 @@ export class Crowd {
     // drop the excess first (fast fades)
     let alive = this.alive();
     if (alive > target * 1.25) {
-      const order = this.parties.filter((p) => p.state !== 'gone').sort(() => this.rng.next() - 0.5);
+      const order = this.parties.filter((p) => p.state !== 'gone' && !p.stall && !p.staff).sort(() => this.rng.next() - 0.5);
       for (const p of order) {
         if (alive <= target) break;
         alive -= p.size;
@@ -774,9 +778,15 @@ export class Crowd {
     this.parties.length = w;
   }
 
+  /** people and things of other modules the crowd walks round (scenes): x, z, vx, vz, r per entry */
+  extraObs: Float64Array = new Float64Array(0);
+  nExtraObs = 0;
+
   private rebuildGrid(): void {
     const g = this.grid;
     g.clear();
+    const eo = this.extraObs;
+    for (let i = 0; i < this.nExtraObs; i++) g.add(eo[i * 5], eo[i * 5 + 1], eo[i * 5 + 2], eo[i * 5 + 3], eo[i * 5 + 4], -2, null, 0, 1);
     for (const p of this.parties) {
       if (p.state === 'gone') continue;
       for (const m of p.members) {
@@ -1324,7 +1334,10 @@ export class Crowd {
     // rail stops (window shopping, market stalls, bridge views)
     const st = p.stops[p.stopIdx];
     if (st) {
-      if (p.s >= st.s - 0.03) {
+      if (p.s >= st.s - 0.03 && this.pauseTaken(p)) {
+        // someone already stands here (another group stopped for the same window, the same chat): walk on
+        p.stopIdx++;
+      } else if (p.s >= st.s - 0.03) {
         p.state = 'pause';
         p.timer = st.dur;
         p.pauseYaw = st.yaw;
@@ -1352,8 +1365,10 @@ export class Crowd {
       vT = Math.min(vT, Math.sqrt(2 * 1.4 * Math.max(0, st.s - p.s)) + 0.05);
     }
     // end of rail (or the café entry point)
-    if (!p.endDoor) vT = Math.min(vT, Math.sqrt(2 * 1.6 * Math.max(0, Math.min(r.length, p.exitS) - p.s)) + 0.15);
-    if (p.vCap < vT) vT = Math.max(0, p.vCap);
+    // (a café's way in can come right after a zebra: off the road first, never leave the walk in the middle of it)
+    if (!p.endDoor && !p.crossing) vT = Math.min(vT, Math.sqrt(2 * 1.6 * Math.max(0, Math.min(r.length, p.exitS) - p.s)) + 0.15);
+    if (p.knotT > 0) p.knotT -= h;
+    else if (p.vCap < vT) vT = Math.max(0, p.vCap);
     const dv = vT - p.v;
     p.v += clamp(dv, -3.2 * h, 1.3 * h);
     if (p.v < 0) p.v = 0;
@@ -1383,6 +1398,9 @@ export class Crowd {
       p.relaxT = Math.max(p.relaxT, 1);
     }
     if (p.progressT > 12 && !p.crossing && this.turnBack(p)) return;
+    // a knot on a corner where everyone yields to someone else and no way round is left (it held a crossing for minutes,
+    // until its reservations expired): walk on through it
+    if (p.progressT > (p.crossing ? 14 : 28)) p.knotT = 3.5;
     if (p.progressT > 12 && r.legs[legAt(r, p.s)].edge.kind === 'door') {
       // stuck in a doorway / front path: back inside rather than standing there for ever
       this.beginFadeOut(p, 0.8);
@@ -1409,12 +1427,12 @@ export class Crowd {
     // arrival
     if (p.endDoor) {
       if (this.trailS(p) > r.length + 0.5) this.finish(p);
-    } else if (p.s >= p.exitS - 0.05) {
+    } else if (p.s >= p.exitS - 0.05 && !p.crossing) {
       this.arrive(p);
     } else if (p.s >= r.length - 0.02) {
       p.s = r.length;
       this.arrive(p);
-    } else if (p.goal?.spots && Math.min(r.length, p.exitS) - p.s < 3 && p.v < 0.1 && p.vCap < 0.2 && p.blockedT > 0.6) {
+    } else if (p.goal?.spots && !p.crossing && Math.min(r.length, p.exitS) - p.s < 3 && p.v < 0.1 && p.vCap < 0.2 && p.blockedT > 0.6) {
       // our seat / spot is right there but people stand in the way to the end of the walk: go straight to it
       this.arrive(p);
     }
@@ -3082,9 +3100,9 @@ export class Crowd {
   private beginFadeOut(p: Party, secs: number): void {
     if (p.state === 'gone') return;
     if (p.crossing) {
-      // never vanish in the road: finish crossing first by fading quickly after
-      this.ctx.intersections.endCross(p.id);
-      p.crossing = null;
+      // never vanish in the road: finish crossing first (step() fades them as soon as they are across)
+      p.fadeAfterCross = secs;
+      return;
     }
     p.state = 'fadeout';
     p.timer = secs;
@@ -3093,6 +3111,11 @@ export class Crowd {
   // ── animation ────────────────────────────────────────────────────
 
   private animate(p: Party, h: number): void {
+    if (p.fadeAfterCross > 0 && !p.crossing) {
+      const secs = p.fadeAfterCross;
+      p.fadeAfterCross = 0;
+      this.beginFadeOut(p, secs);
+    }
     const rate = h * 1.25;
     for (const m of p.members) {
       // gait amplitude follows the actual speed
@@ -3155,6 +3178,20 @@ export class Crowd {
           if (Math.hypot(o.x - m.x, o.z - m.z) < 0.35) close = o;
         });
         m.overlapT = close ? m.overlapT + dt : 0;
+        // on top of someone for more than a moment (stopped beside each other, a leaver blocked by someone at the next
+        // spot): take a small step apart, as people do
+        if (close && m.overlapT > 0.8 && (p.state === 'pause' || p.state === 'leave' || p.state === 'approach' || p.state === 'fadein' || p.state === 'toWait' || p.state === 'wait')) {
+          const c = close as Member;
+          const dx = m.x - c.x,
+            dz = m.z - c.z;
+          const d = Math.hypot(dx, dz) || 1;
+          const nx = m.x + (dx / d) * 0.09,
+            nz = m.z + (dz / d) * 0.09;
+          if (this.walkable(m, nx, nz)) {
+            m.x = nx;
+            m.z = nz;
+          }
+        }
         if (close && m.overlapT > 2) m.overlapInfo = `${this.legKind(p)}/${p.state} vs ${(close as Member).party.persona}:${this.legKind((close as Member).party)}/${(close as Member).party.state}`;
       }
     }
@@ -3277,8 +3314,8 @@ export class Crowd {
       m.faceYaw = st.yaw;
       return;
     }
-    if (st.kind === 'market' && this.ctx.clock.hours >= 14.5) {
-      // packing up: crates from the counter to the back of the stall and back again
+    if (st.kind === 'market' && (this.ctx.clock.hours >= 14.5 || this.ctx.clock.hours < 7.4)) {
+      // setting up / packing up: crates from the counter to the back of the stall and back again
       if (p.timer <= 0) {
         const toBack = m.carry !== 2;
         m.carry = toBack ? 2 : 0;
@@ -3763,6 +3800,22 @@ export class Crowd {
   }
 
   /** anyone (present) within r of (x, z)? */
+  /** another party standing within reach of where this party's members would stop */
+  private pauseTaken(p: Party): boolean {
+    const g = this.grid;
+    let taken = false;
+    for (let i = 0; i < p.members.length && !taken; i++) {
+      const m = p.members[i];
+      g.each(m.x, m.z, 0.9, (k) => {
+        if (g.op[k] === p.id) return;
+        const dx = g.ox[k] - m.x,
+          dz = g.oz[k] - m.z;
+        if (dx * dx + dz * dz < 0.7 * 0.7 && g.ovx[k] * g.ovx[k] + g.ovz[k] * g.ovz[k] < 0.25) taken = true;
+      });
+    }
+    return taken;
+  }
+
   private busyAt(x: number, z: number, r: number): boolean {
     let busy = false;
     this.grid.each(x, z, r + 0.3, (k) => {
@@ -4099,7 +4152,7 @@ export class Crowd {
     switch (p.state) {
       case 'serve':
         if (p.stall) {
-          doing = p.stall.kind === 'busker' ? 'Playing the guitar for passers-by' : m.carry === 2 ? 'Serving a customer' : `Minding the ${p.stall.label.toLowerCase()}`;
+          doing = p.stall.kind === 'busker' ? 'Playing the guitar for passers-by' : p.stall.kind === 'market' && this.ctx.clock.hours < 7.4 ? 'Setting up the stall' : p.stall.kind === 'market' && this.ctx.clock.hours >= 14.5 ? 'Packing up the stall' : m.carry === 2 ? 'Serving a customer' : `Minding the ${p.stall.label.toLowerCase()}`;
           break;
         }
         doing = p.servePhase === 2 ? (m.carry === 1 ? 'Taking an order' : 'Serving a table') : m.carry === 2 ? 'Bringing an order out' : p.servePhase === 0 ? 'Waiting tables, keeping an eye on the terrace' : 'Waiting tables';
@@ -4267,9 +4320,9 @@ export class Crowd {
         if (flags & OCC.WATER && this.places.onDeck(m.x, m.z)) flags &= ~OCC.WATER;
         const onCrosswalkLeg = this.onCrosswalk(p, m);
         // sitting on a fountain rim (and getting on / off it) is inside the fountain's footprint by design
-        if (p.goal?.bench?.rim && (p.state === 'settle' || p.state === 'act' || p.state === 'rise')) flags &= ~OCC.SOLID;
+        if (p.goal?.bench?.rim && (p.state === 'settle' || p.state === 'act' || p.state === 'rise' || p.state === 'fadeout')) flags &= ~OCC.SOLID;
         // market vendors stand behind their counters, inside the stall's footprint
-        if (p.stall && p.state === 'serve') flags &= ~OCC.SOLID;
+        if (p.stall) flags &= ~OCC.SOLID;
         if (flags & (OCC.BUILDING | OCC.WATER | OCC.SOLID)) {
           if (nBad++ < 12) out.push(`pedestrian ${m.uid} (${p.state}) inside ${flags & OCC.BUILDING ? 'a building' : flags & OCC.WATER ? 'water' : 'a solid prop'} at (${m.x.toFixed(1)}, ${m.z.toFixed(1)})`);
         }

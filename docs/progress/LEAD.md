@@ -8,7 +8,7 @@ Per-module logs live next to this file: `docs/progress/<module>.md`.
   camera-explore.md), fpv-walk (first-person walk, `V` — fpv.md), perf-wins (stutter + boot — PERF.md quick-wins
   section), buildings-massing (oriels, turrets, cross gables, tower setbacks, roof kit, `?nomassing` —
   buildings-massing.md), places-between (lower river quay, old-town archway lane, pond-island bridge, `?noplaces`
-  — places-between.md), box-hunt (30-item ranked audit, 10 fixes, `?noboxhunt` — box-hunt.md).
+  — places-between.md), box-hunt (30-item ranked audit, 10 fixes, `?noboxhunt` — box-hunt.md), living scenes (market day, deliveries, wedding, musician's audience, park life, balcony life, `?noscenes` — living-scenes.md).
 * Next detail work: box-hunt.md "Handoff" (rooftop plant on the downtown towers is the biggest box left; industrial
   sheds; station entrance steps / platform edge) and "Still open"; buildings-massing.md "not done" (industrial halls,
   loggias, glass-tower crowns).

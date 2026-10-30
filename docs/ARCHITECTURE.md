@@ -29,14 +29,14 @@ src/render/sky.ts      lights, sky, sun/moon/stars, clouds, fog, shadow fitting 
 src/render/postfx.ts   post-processing, tone mapping, adaptive quality              (module "postfx")
 src/world/*.ts         static world renderers: terrain, landscape (beyond the slab), water, roads, buildings, landmarks,
                        harbor, vegetation, props, groundcover (grass/meadows), life (cloth, chimneys, drift), lamps
-src/sim/*.ts           dynamic life: ambient, traffic, pedestrians, rail, boats
+src/sim/*.ts           dynamic life: ambient, traffic, pedestrians, rail, boats, scenes (scripted small stories)
 src/ui/*.ts            camera, ui (HTML overlay), audio
 src/debug/             validate.ts (static checks), planView.ts (2D map: ?planview)
 scripts/shot.mjs       headless screenshot + console/invariant report (real GPU)
 ```
 
 Load order (main.ts): sky, terrain, landscape, water, ambient, roads, buildings, landmarks, harbor, vegetation, props,
-groundcover, life, lamps, traffic, pedestrians, rail, boats, postfx, camera, ui, audio. (sky/postfx run before the camera module exists:
+groundcover, life, lamps, traffic, pedestrians, rail, boats, scenes, postfx, camera, ui, audio. (sky/postfx run before the camera module exists:
 look services up lazily every frame, e.g. `ctx.services.camera?.getState()`.) A module may use services registered by
 modules **earlier** in the list (always null-check: a module can fail or be excluded with `?only=`).
 

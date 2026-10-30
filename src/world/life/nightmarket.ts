@@ -8,7 +8,13 @@ import type { CityContext } from '../../core/context';
 
 // weathered canvas / PVC tarps (sun-faded: the old dark set read as black monoliths under the string lights)
 const TARPS = ['#5a7590', '#6a8466', '#8a8e90', '#9c8f72', '#4f6f8c', '#8d5346', '#7b8a7c', '#a8a08a'];
-/** market hours: shrouded from CLOSE until OPEN */
+/** the tarps come off stall by stall from TARP_MORNING and go back on from TARP_EVENING (hours), over TARP_STAGGER */
+export const TARP_MORNING = 6.45,
+  TARP_EVENING = 17.0,
+  TARP_STAGGER = 0.65;
+/** one stall's tarp takes this long to haul (hours; 0.12 h = 5 s) */
+const TARP_HAUL = 0.12;
+/** ?noscenes / ?nomarketday: the old instant change */
 const CLOSE = 19.75,
   OPEN = 6.75;
 
@@ -25,9 +31,13 @@ export function buildNightMarket(ctx: CityContext): NightMarket | null {
   if (!stalls.length) return null;
   const terrain = ctx.services.terrain as { height?(x: number, z: number): number } | undefined;
   const H = (x: number, z: number) => terrain?.height?.(x, z) ?? ctx.plan.heightAt(x, z);
+  const animated = !ctx.debug.params.has('noscenes') && !ctx.debug.params.has('nomarketday');
   const pos: number[] = [],
     col: number[] = [],
-    spill: number[] = [];
+    spill: number[] = [],
+    // per vertex: x, y, z where it is hauled to (the stall's top back rail), w = order (hem first); stagger per stall
+    haul: number[] = [],
+    stag: number[] = [];
   const c = new THREE.Color(),
     c2 = new THREE.Color();
   // stall frame (landmarks/civic.ts genMarketStall): hw 1.0, front rail z 0.6 at 2.3 m, back rail z −0.6 at 2.62 m
@@ -41,6 +51,8 @@ export function buildNightMarket(ctx: CityContext): NightMarket | null {
       sy = Math.sin(f.yaw);
     const g = H(f.x, f.z);
     const W = (x: number, y: number, z: number): [number, number, number] => [f.x + x * cy + z * sy, g + y, f.z - x * sy + z * cy];
+    const rail = (x: number): [number, number, number] => W(x * 0.3, yB + 0.05, bz);
+    const k = ((f.id * 7) % stalls.length) / stalls.length;
     let seed = (f.id * 7919 + 13) >>> 0;
     const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
     c.set(TARPS[f.id % TARPS.length]);
@@ -57,6 +69,10 @@ export function buildNightMarket(ctx: CityContext): NightMarket | null {
       const put = (p: [number, number, number, number]) => {
         pos.push(...W(p[0], p[1], p[2]));
         spill.push(lit(vv));
+        // hem and front go first, the rest follows up and over to the back rail
+        const order = 1 - Math.min(1, Math.max(0, (yB - p[1]) / yB * 0.7 + ((p[2] - bz) / (fz - bz)) * 0.3));
+        haul.push(...rail(p[0]), order);
+        stag.push(k);
         c2.copy(c).multiplyScalar(p[3]);
         col.push(c2.r, c2.g, c2.b);
       };
@@ -126,15 +142,28 @@ export function buildNightMarket(ctx: CityContext): NightMarket | null {
   geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
   geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
   geo.setAttribute('aSpill', new THREE.Float32BufferAttribute(spill, 1));
+  geo.setAttribute('aHaul', new THREE.Float32BufferAttribute(haul, 4));
+  geo.setAttribute('aStag', new THREE.Float32BufferAttribute(stag, 1));
+  const uHaul = { value: new THREE.Vector3(0, 1, 0) };
   geo.computeVertexNormals();
   const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9, metalness: 0, side: THREE.DoubleSide });
   mat.name = 'life-night-market';
   // warm spill from the festoon lights strung over the square (they are glows, not lights): the tops catch most
   mat.onBeforeCompile = (sh) => {
     sh.uniforms.uLights = ctx.uniforms.uLights;
+    sh.uniforms.uHaul = uHaul;
     sh.vertexShader = sh.vertexShader
-      .replace('#include <common>', '#include <common>\nattribute float aSpill;\nvarying float vSpill;')
-      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvSpill = aSpill;');
+      .replace('#include <common>', '#include <common>\nattribute float aSpill;\nattribute vec4 aHaul;\nattribute float aStag;\nuniform vec3 uHaul;\nvarying float vSpill;')
+      // uHaul: x = progress over the stagger, y = 1 coming off / 0 going on, z = one stall's share of the stagger
+      .replace(
+        '#include <begin_vertex>',
+        `#include <begin_vertex>
+vSpill = aSpill;
+float hR = clamp( ( uHaul.x - aStag ) / uHaul.z, 0.0, 1.0 );
+float hOff = uHaul.y < 0.5 ? 1.0 - hR : hR;
+float hK = smoothstep( aHaul.w * 0.7, aHaul.w * 0.7 + 0.3, hOff );
+transformed = mix( transformed, aHaul.xyz, hK );`,
+      );
     sh.fragmentShader = sh.fragmentShader
       .replace('#include <common>', '#include <common>\nuniform float uLights;\nvarying float vSpill;')
       .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += diffuseColor.rgb * vec3(1.0, 0.78, 0.5) * 0.16 * vSpill * uLights;');
@@ -145,7 +174,26 @@ export function buildNightMarket(ctx: CityContext): NightMarket | null {
   mesh.receiveShadow = true;
   const frame = () => {
     const h = ctx.clock.hours;
-    mesh.visible = h >= CLOSE || h < OPEN;
+    if (!animated) {
+      mesh.visible = h >= CLOSE || h < OPEN;
+      return;
+    }
+    const share = TARP_HAUL / TARP_STAGGER;
+    if (h >= TARP_MORNING && h < TARP_MORNING + TARP_STAGGER + TARP_HAUL) {
+      // coming off
+      uHaul.value.set((h - TARP_MORNING) / TARP_STAGGER, 1, share);
+      mesh.visible = true;
+      mesh.castShadow = false;
+    } else if (h >= TARP_EVENING && h < TARP_EVENING + TARP_STAGGER + TARP_HAUL) {
+      // going back on
+      uHaul.value.set((h - TARP_EVENING) / TARP_STAGGER, 0, share);
+      mesh.visible = true;
+      mesh.castShadow = false;
+    } else {
+      uHaul.value.set(0, 1, share);
+      mesh.visible = h >= TARP_EVENING || h < TARP_MORNING;
+      mesh.castShadow = true;
+    }
   };
   frame();
   return { mesh, frame };

@@ -50,6 +50,8 @@ attribute vec4 aPiece;
 attribute vec4 aMisc;
 attribute vec4 aCol;
 attribute vec4 aCol2;
+attribute vec2 aHang;
+uniform float uLifeHours;
 uniform float uLifeFarFlutter;
 varying vec2 vLifeUv;
 varying float vLifeShape;
@@ -59,7 +61,21 @@ varying vec3 vLifeCol2;
 varying float vLifePat;
 #endif
 void lifePiece( out vec3 pos, out vec3 nrm ) {
-  float u = position.x, v = position.y;
+  // out on the line only between its hours (pegged on / unpegged in about a game minute)
+  float hangK = smoothstep( aHang.x, aHang.x + 0.03, uLifeHours ) * ( 1.0 - smoothstep( aHang.y, aHang.y + 0.03, uLifeHours ) );
+  if ( hangK <= 0.0 ) {
+    pos = vec3( 0.0, -1000.0, 0.0 );
+    nrm = vec3( 0.0, 1.0, 0.0 );
+    vLifeUv = vec2( 0.0 );
+    vLifeShape = 0.0;
+    #ifndef LIFE_DEPTH
+    vLifeCol = vec3( 0.0 );
+    vLifeCol2 = vec3( 0.0 );
+    vLifePat = 0.0;
+    #endif
+    return;
+  }
+  float u = position.x, v = position.y * hangK;
   float shape = aPiece.w;
   float mode = aMisc.z;
   float uu = shape < 0.5 ? 0.5 + ( u - 0.5 ) * ( 1.0 - v ) : u;
@@ -118,10 +134,14 @@ void lifePiece( out vec3 pos, out vec3 nrm ) {
     float wP = aPiece.y;
     float pin = smoothstep( 0.0, 0.08, u ) * smoothstep( 1.0, 0.92, u );
     float topSag = drape * min( 0.035, wP * 0.05 ) * sin( 3.14159 * clamp( ( u - 0.08 ) / 0.84, 0.0, 1.0 ) );
+    // (wide pieces gather irregularly: a few deep folds over the fine ones, the hem uneven)
     float nf = max( 2.0, floor( wP / 0.12 ) );
+    float big = smoothstep( 0.6, 1.1, wP );
     float fa = 6.2832 * nf * u + aMisc.x * 3.0;
     float famp = drape * ( 0.006 + 0.026 * v ) * ( 0.6 + 0.4 * sin( aMisc.x * 5.1 + u * 3.0 ) ) * pin;
-    float fold = famp * sin( fa );
+    float deep = big * ( 0.03 + 0.07 * v ) * pin * sin( 6.2832 * ( 2.0 + floor( fract( aMisc.x * 2.1 ) * 2.5 ) ) * u + aMisc.x * 5.0 );
+    float fold = famp * sin( fa ) + deep;
+    pos.y += big * lenP * v * 0.07 * sin( 9.0 * u + aMisc.x * 4.0 );
     pos += N0 * fold - vec3( 0.0, topSag * ( 1.0 - 0.3 * v ), 0.0 ) - T * ( u - 0.5 ) * wP * 0.08 * v * drape;
     nrm = normalize( nrm - T * ( famp * 6.2832 * nf * cos( fa ) / max( wP, 0.05 ) ) );
   }

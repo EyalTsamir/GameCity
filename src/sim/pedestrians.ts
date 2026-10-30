@@ -113,6 +113,9 @@ export default function create(ctx: CityContext): CityModule {
         riders.sync();
         nExtra = actors ? actors.sync(riders.list, riders.n) : riders.n;
         if (occupants) nExtra = occupants.sync(riders.list, nExtra);
+        // the people of the scenes (the scenes module loads after this one)
+        const scenes = ctx.services.scenes as { sync(list: unknown[], n: number): number } | undefined;
+        if (scenes) nExtra = scenes.sync(riders.list, nExtra);
       }
       if (renderer instanceof CrowdRenderer) renderer.tableware.lights.value = ctx.uniforms.uLights.value;
       if (renderer instanceof CrowdRenderer)
