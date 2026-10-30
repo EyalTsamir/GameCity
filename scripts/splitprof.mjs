@@ -159,7 +159,10 @@ try {
 == ${v.name} @ ${h}h vertex/binning sum ${rows.reduce((a, r) => a + r.ms, 0).toFixed(1)} ms`);
           for (const r of rows.slice(0, parseInt(args.top ?? '22', 10))) console.log(r.ms.toFixed(2).padStart(7), String(r.tris).padStart(8), r.label.slice(0, 70));
         }
-      return;
+      if (args.out) fs.writeFileSync(args.out, JSON.stringify(out, null, 1));
+      await browser.close().catch(() => {});
+      releaseLock();
+      process.exit(0);
     }
     await installGpuProfiler(page);
     const sample = async (m) => {

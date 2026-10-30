@@ -21,6 +21,7 @@ import { AdaptiveController, GpuTimer, buildLadder, type QualityStep } from './p
 import { WORLD_MODE } from '../core/world';
 import { SunShaftsEffect } from './postfx/sunShafts';
 import { setAtmoCamera } from './atmosphere';
+import { perfOn } from '../core/perfdeep';
 import type { AtmosphereService } from './sky/atmoDrive';
 
 /** previous frame's scene depth for soft particles (see ctx.services.postfx.softDepth) */
@@ -216,13 +217,18 @@ export default function create(ctx: CityContext): CityModule {
   const fxPass = new EffectPass(camera, ...(Object.keys(all) as (keyof typeof all)[]).filter((k) => fxList.includes(k)).map((k) => all[k]));
   fxPass.dithering = true;
   composer.addPass(fxPass);
-  // ?r11: the scene target as R11F_G11F_B10F (32 bpp): after addPass, the effects' own buffers follow the composer's
-  // type at addPass
-  if (params.has('r11')) {
+  // The scene target as R11F_G11F_B10F (32 bpp, nothing reads its alpha): half the bandwidth of RGBA16F on this tiler,
+  // 3–5 ms a frame (perf-deep, ?nor11). After addPass: the effects' own buffers follow the composer's type at addPass.
+  if (perfOn('r11') && fbType === THREE.HalfFloatType) {
     const t = composer.inputBuffer.texture;
     t.format = THREE.RGBFormat;
     t.type = THREE.UnsignedInt101111Type;
     t.internalFormat = 'R11F_G11F_B10F';
+  }
+  // ?depth24: the scene depth as DEPTH_COMPONENT24 instead of 32F (test)
+  if (params.has('depth24')) {
+    const c = composer as unknown as { stableDepthTexture: THREE.Texture | null };
+    for (const d of [composer.inputBuffer.depthTexture, composer.outputBuffer.depthTexture, c.stableDepthTexture]) if (d) d.type = THREE.UnsignedIntType;
   }
 
   // bloom passes are skipped entirely while bloom is off

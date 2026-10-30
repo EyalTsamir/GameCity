@@ -227,7 +227,6 @@ void RE_Direct_Cloth( const in IncidentLight directLight, const in vec3 geometry
   reflectedLight.directDiffuse += directLight.color * material.diffuseColor * material.diffuseColor * uClothTrans * back * ( 0.5 + 1.2 * fwd );
 }
 #undef RE_Direct
-#define TH_LIGHT_WRAPS
 #define RE_Direct RE_Direct_Cloth
 `,
         );

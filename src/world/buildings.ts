@@ -261,6 +261,8 @@ export default function create(ctx: CityContext): CityModule {
   // rejected before it is shaded, also the small objects drawn before the facades. Trivial program and pushed back a
   // little so that nothing changes on the facade itself. Own trivial program: the old attempt (colorWrite = false on
   // the facade material) still ran the whole facade shader. Main view only (not in the reflection layer).
+  const prepass: THREE.Mesh[] = [];
+  const prepassMinY = Number(ctx.debug.params.get('prepassy') ?? 12);
   if (perfOn('shellprepass') && ctx.quality.level === 'high') {
     const depthOnly = new THREE.ShaderMaterial({
       name: 'buildings-prepass',
@@ -279,6 +281,7 @@ export default function create(ctx: CityContext): CityModule {
       p.updateMatrix();
       p.renderOrder = -100;
       group.add(p);
+      prepass.push(p);
     }
   }
   for (const b of trimChunks.values()) add(b, mats.trim, 'buildings-trim', true, true);
@@ -413,6 +416,8 @@ export default function create(ctx: CityContext): CityModule {
     },
     frame(_realDt, c) {
       if (winGeo) winGeo.frame(c.camera.position, mats.uniforms.uGeoWin.value);
+      // (it pays from above, where facades hide facades: downtown −6 ms; at the market, +1.8 ms)
+      if (prepass.length > 0 && prepass[0].visible !== c.camera.position.y >= prepassMinY) for (const p of prepass) p.visible = c.camera.position.y >= prepassMinY;
       // facade chunks nearest first inside their late-draw slot (main.ts lateDraws: renderOrder 1; 0 = ?drawsort=0)
       if (shellMeshes.length > 1 && shellMeshes[0].renderOrder >= 1) {
         const cp = c.camera.position;
