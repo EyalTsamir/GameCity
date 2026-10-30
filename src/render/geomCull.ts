@@ -1,7 +1,8 @@
 // Geometry hunt (?nohiddencull, docs/progress/geometry-hunt.md): one pass over the finished static meshes at boot that
-// drops the triangles nobody can ever see: degenerate ones, faces looking down onto the ground they stand on, and
-// faces wholly under the terrain. Measured by scripts/geomaudit.mjs (degenerate / bottom / buried). Only the index
-// changes, so nothing else about a mesh does; shadows are safe because a removed bottom only ever shadowed its own footprint.
+// drops the triangles nobody can ever see: degenerate ones and faces looking down onto the ground they stand on
+// (scripts/geomaudit.mjs: degenerate, bottom). Only the index changes; shadows are safe because a removed bottom only
+// ever shadowed its own footprint. "Under the terrain" is deliberately not a criterion: terrain.height is the walking
+// surface, so tunnel linings and quay stair walls count as buried (A/B showed daylight through the tunnels).
 
 import * as THREE from 'three';
 import type { CityContext } from '../core/context';
@@ -9,18 +10,13 @@ import { geomHunt } from '../core/geomhunt';
 import type { TerrainService } from '../world/terrain';
 
 /** world-space static merged meshes (instanced, animated and ground / water sheets stay out) */
-const MESHES = /^(props-|landmarks-static|landmarks-detail|harbor-north|harbor-beach|harbor-south|terrain-masonry|terrain-railings|traffic-signal|rail-bed|rail-fixings|rail-furniture|roads-hardscape|land-farmstead|veg-plants|buildings-trim)/;
-/** tunnel linings lie under the hill by design: nothing near a portal or along the bores counts as buried */
-const PORTAL_R = 45;
-const BURIED = 0.08;
+const MESHES = /^(props-|landmarks-static|landmarks-detail|harbor-north|harbor-beach|harbor-south|terrain-railings|traffic-signal|rail-furniture|roads-hardscape|land-farmstead|veg-plants|buildings-trim)/;
 const ON_GROUND = 0.035;
 
 export function cullHiddenTriangles(ctx: CityContext): void {
   const terrain = ctx.services.terrain as TerrainService | undefined;
   if (!terrain || !geomHunt(ctx, 'hiddencull')) return;
   const H = terrain.height;
-  const portals = terrain.portals;
-  const nearPortal = (x: number, z: number): boolean => portals.some((p) => Math.abs(p.x - x) < PORTAL_R && Math.abs(p.z - z) < PORTAL_R);
   const seen = new Set<THREE.BufferGeometry>();
   const debug = new URLSearchParams(location.search).has('debug');
   const t0 = performance.now();
@@ -62,13 +58,9 @@ export function cullHiddenTriangles(ctx: CityContext): void {
       const len = Math.sqrt(nx * nx + ny * ny + nz * nz);
       let hidden = len < 1e-7;
       if (!hidden) {
-        const mx = (ax + bx + cx) / 3,
-          my = (ay + by + cy) / 3,
-          mz = (az + bz + cz) / 3;
-        const g = H(mx, mz);
         const top = Math.max(ay, by, cy);
-        if (ny / len < -0.7 && top <= g + 3 * ON_GROUND) hidden = top <= Math.min(H(ax, az), H(bx, bz), H(cx, cz)) + ON_GROUND;
-        else if (my < g - BURIED) hidden = ay < H(ax, az) - BURIED && by < H(bx, bz) - BURIED && cy < H(cx, cz) - BURIED && !nearPortal(mx, mz);
+        // (cheap test first: only faces looking down near their ground ask for all the corners)
+        if (ny / len < -0.7 && top <= H((ax + bx + cx) / 3, (az + bz + cz) / 3) + 3 * ON_GROUND) hidden = top <= Math.min(H(ax, az), H(bx, bz), H(cx, cz)) + ON_GROUND;
       }
       if (hidden) {
         dropped++;
