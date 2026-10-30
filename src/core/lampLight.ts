@@ -213,7 +213,7 @@ vec3 thLampLight(vec3 wp, vec3 wn) {
         float id = inversesqrt(d2);
         vec3 L = vec3(dir.x * dh, v, dir.y * dh) * id;
         // shaded heads: (almost) nothing above the lamp; lanterns leak a little sideways
-        float cut = smoothstep(-0.22, 0.32, L.y);
+        float cut = smoothstep(-0.4, 0.45, L.y); // (light round: was -0.22..0.32 — a hard wedge on walls at head height)
         float lamD = dot(wn, L);
         // light from several sides: the horizontal part wraps around the surface
         float lamI = L.y * wn.y + sqrt(max(1.0 - L.y * L.y, 0.0)) * length(wn.xz) * 0.34;
