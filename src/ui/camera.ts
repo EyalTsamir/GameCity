@@ -351,9 +351,11 @@ export default function create(ctx: CityContext): CityModule {
   };
 
   const minDistNow = () => (!follow ? (guided ? MIN_DIST : FREE_MIN_DIST) : follow.chase || follow.tour ? Math.max(CHASE_MIN_DIST, follow.cls === 'air' ? 24 : 0) : follow.minDist);
-  const minPitchNow = () => (follow?.cls === 'air' ? AIR_MIN_PITCH : follow?.chase ? 4 * DEG : follow || guided ? MIN_PITCH : FREE_MIN_PITCH);
+  /** the film may hand over a pose outside the orbit's limits: they close in on it gently instead of pulling it back */
+  const handback = { pitch: 0, margin: 0 };
+  const minPitchNow = () => (follow?.cls === 'air' ? AIR_MIN_PITCH : follow?.chase ? 4 * DEG : follow || guided ? MIN_PITCH - handback.pitch : FREE_MIN_PITCH);
   /** how far the pivot may leave the slab (following an aircraft lets it roam much further) */
-  const boundsMargin = () => (follow?.cls === 'air' ? AIR_MARGIN : 0);
+  const boundsMargin = () => (follow?.cls === 'air' ? AIR_MARGIN : handback.margin);
 
   const clampGoal = () => {
     const m = boundsMargin();
@@ -1974,13 +1976,16 @@ export default function create(ctx: CityContext): CityModule {
     cur.yaw = Math.atan2(_dir.x, _dir.z);
     cur.pitch = Math.asin(clamp(_dir.y, -1, 1));
     copyPose(goal, cur);
+    handback.pitch = handback.margin = 0;
+    handback.pitch = Math.max(0, minPitchNow() - cur.pitch);
+    handback.margin = Math.max(0, bounds.x0 - cur.tx, cur.tx - bounds.x1, bounds.z0 - cur.tz, cur.tz - bounds.z1);
     flight = null;
     stopMotion();
     // the camera glides out of the film's last move instead of stopping dead (a drag or a press cancels it)
-    if (Math.hypot(carry.x, carry.z) < 40) {
-      inertia.px = carry.x;
-      inertia.pz = carry.z;
-    }
+    const carrySpeed = Math.hypot(carry.x, carry.z);
+    const carryScale = carrySpeed > 40 ? 40 / carrySpeed : 1;
+    inertia.px = carry.x * carryScale;
+    inertia.pz = carry.z * carryScale;
     kbVel.x = kbVel.z = kbVel.yaw = kbVel.pitch = kbVel.zoom = 0;
     roofLift = roofLiftVel = 0;
     craneLift = craneShown = 0;
@@ -2107,6 +2112,8 @@ export default function create(ctx: CityContext): CityModule {
         return;
       }
       film?.idle(dt);
+      handback.pitch = Math.max(0, handback.pitch - 0.1 * dt);
+      handback.margin = Math.max(0, handback.margin - 70 * dt);
       if (t0 > filmTourAt) {
         filmTourAt = Infinity;
         if (t0 - lastActivity > 12000 && !tour.active && !follow && !flight && !walk.active) startTour();
