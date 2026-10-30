@@ -5,3 +5,6 @@ export function perfOn(name: string): boolean {
   const q = typeof location !== 'undefined' ? new URLSearchParams(location.search) : null;
   return !(q && (q.has('noperfdeep') || q.has('no' + name)));
 }
+
+/** flat varyings come from a triangle's first vertex (WEBGL_provoking_vertex, set in main.ts before the modules load) */
+export const flatConvention = { first: false };
