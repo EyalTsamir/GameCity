@@ -704,3 +704,166 @@ export function pavementLights(kd: Kit, rng: Rng): void {
     sh.disc(((i + 0.5) / nx - 0.5) * nx * P, 0.0065, ((j + 0.5) / nz - 0.5) * nz * P, 0.042, 6, 1);
   }
 }
+
+// ───────────────────────────────────────────────────── kerbside odds and ends ──
+
+/** Precast wheel stop at the head of a parking bay (X across the bay): two dowel pins, painted ends, scuffed top. */
+export function wheelStop(k: Kit, kd: Kit, rng: Rng): void {
+  const sh = k.sh;
+  const W = rng.range(1.65, 1.85);
+  k.m(rng.pick(['#8d8a82', '#7c7a74', '#a09c92']), 'stone');
+  cbox(sh, 0, 0.05, 0, W, 0.1, 0.15, 0.02);
+  kd.m('#d9b52a', 'paint');
+  for (const s of [-1, 1]) kd.sh.box((s * (W - 0.24)) / 2, 0.1005, 0, 0.2, 0.001, 0.11, 55);
+  kd.m('#3c3b39', 'iron');
+  for (const s of [-1, 1]) kd.sh.cyl((s * W) / 3.2, 0.1, 0, 0.012, 0.012, 0.003, 5, 2);
+}
+
+/** Black rubbish sacks set out at the kerb: bulging, tied at the neck, slumped against each other. */
+export function sacks(k: Kit, kd: Kit, rng: Rng, n: number): void {
+  const sh = k.sh;
+  for (let i = 0; i < n; i++) {
+    const x = (i - (n - 1) / 2) * 0.42 + rng.range(-0.05, 0.05),
+      z = rng.range(-0.08, 0.08);
+    const r = rng.range(0.19, 0.25),
+      h = rng.range(0.28, 0.4);
+    k.m(rng.chance(0.8) ? '#16171a' : '#23262b', 'plastic');
+    sh.ellipsoid(x, h * 0.46, z, r, h * 0.5, r * rng.range(0.82, 1), 1);
+    kd.sh.push().local(x, h * 0.92, z, rng.range(-0.3, 0.3), 0, rng.range(-0.3, 0.3));
+    kd.m('#16171a', 'plastic');
+    kd.sh.cyl(0, 0, 0, 0.018, 0.05, 0.1, 5, 2);
+    kd.sh.pop();
+  }
+}
+
+/** Flattened cartons in a tied bundle, laid out for the morning round. */
+export function cardboard(k: Kit, rng: Rng): void {
+  const sh = k.sh;
+  let y = 0;
+  const n = rng.int(3, 6);
+  for (let i = 0; i < n; i++) {
+    const w = rng.range(0.6, 0.85),
+      d = rng.range(0.42, 0.62),
+      t = rng.range(0.012, 0.03);
+    k.m(rng.pick(['#a9855a', '#b89668', '#9c7a50', '#c2a478']), 'wood');
+    sh.push().local(rng.range(-0.04, 0.04), y + t / 2, rng.range(-0.03, 0.03), 0, rng.range(-0.1, 0.1), 0);
+    sh.box(0, 0, 0, w, t, d, 1);
+    sh.pop();
+    y += t;
+  }
+  k.m('#e6e0d0', 'plastic');
+  sh.box(0, y / 2, 0, 0.012, y + 0.004, 0.66, 1);
+}
+
+/** Red-and-white plastic barrier panel on rubber feet along local X. */
+export function barrier(k: Kit, kd: Kit, L: number, lamp: boolean): void {
+  const sh = k.sh;
+  k.m('#d8d6cf', 'plastic');
+  for (const s of [-1, 1]) sh.box((s * (L - 0.1)) / 2, 0.52, 0, 0.05, 1.04, 0.03, 1);
+  // the striped board: red blocks on white
+  k.m('#e9e6dc', 'plastic');
+  sh.box(0, 0.92, 0, L - 0.05, 0.2, 0.02, 1 | 16 | 32);
+  const n = Math.round(L / 0.3);
+  k.m('#c8262c', 'plastic');
+  for (let i = 0; i < n; i += 2) sh.box(-L / 2 + (i + 0.5) * (L / n), 0.92, 0, (L / n) * 0.96, 0.2, 0.022, 1 | 16 | 32);
+  sh.box(0, 0.26, 0, L - 0.05, 0.05, 0.016, 1 | 16 | 32);
+  k.m('#23252a', 'rubber');
+  for (const s of [-1, 1]) sh.box((s * (L - 0.1)) / 2, 0.035, 0, 0.14, 0.07, 0.42, 1);
+  if (lamp) {
+    kd.m('#2c2c30', 'plastic');
+    kd.sh.box(-L / 2 + 0.08, 1.07, 0, 0.05, 0.06, 0.05, 1);
+    kd.e('#e8a020', '#ffb030', 3.2);
+    kd.sh.cyl(-L / 2 + 0.08, 1.1, 0, 0.055, 0.055, 0.05, 8, 2);
+  }
+}
+
+/** Traffic cone with a reflective sleeve on its square rubber foot. */
+export function cone(k: Kit, kd: Kit): void {
+  const sh = k.sh;
+  k.m('#23252a', 'rubber');
+  sh.box(0, 0.015, 0, 0.3, 0.03, 0.3, 1);
+  k.m('#e8611f', 'plastic');
+  sh.cyl(0, 0.03, 0, 0.1, 0.022, 0.52, 8, 2);
+  kd.m('#ece8dc', 'plastic');
+  kd.sh.cyl(0, 0.26, 0, 0.0635, 0.046, 0.13, 8, 0);
+}
+
+/** Roadworks plate on legs, facing +Z: red triangle with the digging man on a yellow backing. */
+export function worksSign(k: Kit, kd: Kit, printer: Printer | null): void {
+  const sh = k.sh;
+  k.m('#9ba2a6', 'steel');
+  sh.beam(0, 1.15, 0, -0.22, 0, -0.05, 0.022, 0.022);
+  sh.beam(0, 1.15, 0, 0.22, 0, -0.05, 0.022, 0.022);
+  sh.beam(0, 1.15, -0.01, 0, 0, -0.34, 0.022, 0.022);
+  kd.m('#23252a', 'rubber');
+  kd.sh.box(0, 0.03, -0.12, 0.56, 0.05, 0.32, 1);
+  k.m('#a4a9ab', 'steel');
+  sh.box(0, 0.86, 0, 0.62, 0.6, 0.006, 0);
+  printer?.quad(sh, 'sign:works', 0, 0.86, 0.0036, 0.62, 0.6, 64, 62, (g, w, h) => {
+    g.fillStyle = '#f2c230';
+    g.fillRect(0, 0, w, h);
+    g.fillStyle = '#c81e2a';
+    g.beginPath();
+    g.moveTo(w / 2, h * 0.04);
+    g.lineTo(w * 0.97, h * 0.92);
+    g.lineTo(w * 0.03, h * 0.92);
+    g.fill();
+    g.fillStyle = '#f6f3ea';
+    g.beginPath();
+    g.moveTo(w / 2, h * 0.24);
+    g.lineTo(w * 0.8, h * 0.82);
+    g.lineTo(w * 0.2, h * 0.82);
+    g.fill();
+    g.fillStyle = '#16161a';
+    g.beginPath();
+    g.arc(w * 0.46, h * 0.46, w * 0.035, 0, Math.PI * 2);
+    g.fill();
+    g.strokeStyle = '#16161a';
+    g.lineWidth = w * 0.035;
+    g.lineCap = 'round';
+    g.beginPath();
+    g.moveTo(w * 0.47, h * 0.52);
+    g.lineTo(w * 0.52, h * 0.65);
+    g.lineTo(w * 0.42, h * 0.78);
+    g.moveTo(w * 0.52, h * 0.65);
+    g.lineTo(w * 0.57, h * 0.78);
+    g.moveTo(w * 0.48, h * 0.56);
+    g.lineTo(w * 0.62, h * 0.62);
+    g.lineTo(w * 0.68, h * 0.78);
+    g.stroke();
+    g.beginPath();
+    g.moveTo(w * 0.34, h * 0.8);
+    g.lineTo(w * 0.42, h * 0.72);
+    g.lineTo(w * 0.42, h * 0.8);
+    g.fill();
+  });
+}
+
+/** Works in the furniture band: lifted slabs stacked on a pallet, an open sand bed with a heap, tools, the new pipe. */
+export function worksSite(k: Kit, kd: Kit, L: number, rng: Rng): void {
+  const sh = k.sh;
+  // the opened bed: damp yellow sand where the paving is up
+  k.m('#b89a62', 'stone');
+  sh.box(0, 0.008, 0, L - 0.5, 0.012, 0.56, 1);
+  k.m('#c8ab72', 'stone');
+  sh.ellipsoid(-L * 0.18, 0.02, 0.02, 0.5, 0.2, 0.26, 1);
+  // stacked slabs on a pallet
+  k.m('#8a6f4a', 'wood');
+  sh.box(L * 0.28, 0.06, 0, 0.8, 0.12, 0.5, 1);
+  for (let i = 0; i < 5; i++) {
+    k.m(rng.pick(['#a7a49c', '#9b9890', '#b0ada5']), 'stone');
+    sh.push().local(L * 0.28 + rng.range(-0.01, 0.01), 0.13 + i * 0.05, rng.range(-0.01, 0.01), 0, rng.range(-0.03, 0.03), 0);
+    sh.box(0, 0.02, 0, 0.72, 0.046, 0.44, 1);
+    sh.pop();
+  }
+  // shovel stuck in the heap, a bucket
+  k.m('#5e4a32', 'wood');
+  sh.beam(-L * 0.18, 0.12, 0.02, -L * 0.18 + 0.12, 1.02, -0.06, 0.03, 0.03);
+  kd.m('#3a3d40', 'steel');
+  kd.sh.box(-L * 0.18 - 0.01, 0.1, 0.03, 0.2, 0.26, 0.012, 0);
+  k.m('#2b2d31', 'plastic');
+  sh.cyl(L * 0.02, 0.012, 0.12, 0.11, 0.14, 0.27, 8, 2);
+  // the point of it all: the blue water pipe lying in the bed
+  k.m('#2a5fa8', 'plastic');
+  sh.beam(-L * 0.42, 0.02, -0.12, L * 0.1, 0.02, -0.12, 0.055, 0.055);
+}

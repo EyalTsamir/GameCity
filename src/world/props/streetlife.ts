@@ -16,7 +16,8 @@ import type { GreenKit } from '../buildings/green';
 import type { Kit } from './furniture';
 import { MASK_WALK, type getLayout } from './layout';
 import type { Printer } from './print';
-import { bookCart, cabinet, cellarHatch, clothesRail, doorMat, flowerBuckets, fruitStand, guardRail, pavementLights, postNotice, postcardRack, posterColumn, signPost, type SignKind } from './streetkit';
+import { barrier, bookCart, cabinet, cardboard, cellarHatch, clothesRail, cone, doorMat, flowerBuckets, fruitStand, guardRail, pavementLights, postNotice, postcardRack, posterColumn, sacks, signPost, wheelStop, worksSign, worksSite, type SignKind } from './streetkit';
+import { bike } from './furniture';
 
 export interface StreetKitEnv {
   ctx: CityContext;
@@ -165,6 +166,18 @@ export function placeStreetKit(e: StreetKitEnv): { x: number; z: number }[] & { 
           spot(x, SIDEWALK_Y, z, yaw, 0, 0, 0.05, 0.05, 0.05, 0.14, 0.4);
           claim(x, z, 0.15);
           inc('signPost');
+          // somebody locked a bicycle to it
+          if (rng.chance(0.14)) {
+            const bx = x + dx * sd * 0.42,
+              bz = z + dz * sd * 0.42;
+            if (free(bx, bz, 0.35)) {
+              const by = Math.atan2(rx * sd, rz * sd) + Math.PI / 2 + rng.range(-0.1, 0.1);
+              k.sh.frame(bx, SIDEWALK_Y, bz, by).local(0, 0, 0, rng.range(0.1, 0.17), 0, 0);
+              bike(k, rng.pick(['#a33a2c', '#1d3557', '#2a6f5a', '#22242a', '#c9a23a', '#e8e4d8']));
+              claim(bx, bz, 0.35);
+              inc('lockedBike');
+            }
+          }
         }
       }
       if (cabsOn && rng.chance(dist === 'downtown' || dist === 'midtown' || dist === 'industrial' ? 0.75 : 0.5)) {
@@ -180,6 +193,129 @@ export function placeStreetKit(e: StreetKitEnv): { x: number; z: number }[] & { 
           claim(x, z, 0.5);
           inc('cabinet');
         }
+      }
+    }
+  }
+
+  // ── street works and what is put out at the kerb
+  if (streetDetail(ctx, 'roadworks')) {
+    // sites on streets of different character: the first free 6 m run along the band
+    const want: DistrictKind[] = ['midtown', 'oldtown', 'residential', 'market', 'downtown'];
+    for (const dk of want) {
+      let done = false;
+      for (const seg of plan.roadSegments) {
+        if (done || !seg.sidewalks) continue;
+        const A = plan.roadNodes[seg.a],
+          B = plan.roadNodes[seg.b];
+        const L = Math.hypot(B.x - A.x, B.z - A.z);
+        const dx = (B.x - A.x) / L,
+          dz = (B.z - A.z) / L;
+        const rx = -dz,
+          rz = dx;
+        for (const sd of [1, -1]) {
+          if (done) break;
+          for (let s = L / 2 - 8; s < L / 2 + 8 && !done; s += 1.5) {
+            const x = A.x + dx * s + rx * FURN_OFFSET * sd,
+              z = A.z + dz * s + rz * FURN_OFFSET * sd;
+            if (plan.districtAt(x + rx * sd * 3, z + rz * sd * 3)?.kind !== dk) continue;
+            const run = 5.4;
+            if (![-2.4, -1.2, 0, 1.2, 2.4].every((o) => free(x + dx * o, z + dz * o, 0.32))) continue;
+            // local X along the street, +Z away from the road
+            const yaw = Math.atan2(rx * sd, rz * sd);
+            const axX = Math.cos(yaw),
+              axZ = -Math.sin(yaw);
+            const [k, kd] = at(x, SIDEWALK_Y + 0.002, z, yaw);
+            worksSite(k, kd, run, rng);
+            // barriers: the long pavement side, the two ends; cones on the road side of the gutter
+            for (const b of [-1.65, 0, 1.65]) {
+              k.sh.push().local(b, 0, 0.36);
+              kd.sh.push().local(b, 0, 0.36);
+              barrier(k, kd, 1.65, b === -1.65);
+              k.sh.pop();
+              kd.sh.pop();
+            }
+            for (const e2 of [-1, 1]) {
+              k.sh.push().local(e2 * 2.5, 0, 0, 0, Math.PI / 2, 0);
+              kd.sh.push().local(e2 * 2.5, 0, 0, 0, Math.PI / 2, 0);
+              barrier(k, kd, 0.72, false);
+              k.sh.pop();
+              kd.sh.pop();
+            }
+            const lat = -(FURN_OFFSET - ROAD_HALF + 0.26);
+            for (let c = -2.4; c <= 2.41; c += 1.2) {
+              const cx = x + axX * c + rx * sd * lat,
+                cz = z + axZ * c + rz * sd * lat;
+              const k2 = fine(cx),
+                kd2 = near(cx, cz);
+              k2.sh.frame(cx, 0.012, cz, c);
+              kd2.sh.frame(cx, 0.012, cz, c);
+              cone(k2, kd2);
+            }
+            // the sign faces the traffic, on the approach side of the works
+            const sx = x - dx * sd * 3.1,
+              sz = z - dz * sd * 3.1;
+            if (free(sx, sz, 0.15)) {
+              const [k3, kd3] = at(sx, SIDEWALK_Y, sz, Math.atan2(-dx * sd, -dz * sd));
+              worksSign(k3, kd3, printer);
+              claim(sx, sz, 0.2);
+            }
+            for (const o of [-2.4, -1.2, 0, 1.2, 2.4]) claim(x + axX * o, z + axZ * o, 0.45);
+            inc('roadWorks');
+            done = true;
+          }
+        }
+      }
+    }
+  }
+  if (streetDetail(ctx, 'kerbsideodds')) {
+    for (const seg of plan.roadSegments) {
+      if (!seg.sidewalks) continue;
+      const A = plan.roadNodes[seg.a],
+        B = plan.roadNodes[seg.b];
+      const L = Math.hypot(B.x - A.x, B.z - A.z);
+      const dx = (B.x - A.x) / L,
+        dz = (B.z - A.z) / L;
+      for (const sd of [1, -1]) {
+        if (!rng.chance(0.42)) continue;
+        const s = rng.range(CORRIDOR_HALF + 3, L - CORRIDOR_HALF - 3);
+        const rx = -dz * sd,
+          rz = dx * sd;
+        const x = A.x + dx * s + rx * FURN_OFFSET,
+          z = A.z + dz * s + rz * FURN_OFFSET;
+        if (!free(x, z, 0.5)) continue;
+        const yaw = Math.atan2(rx, rz) + rng.range(-0.15, 0.15);
+        const [k, kd] = at(x, SIDEWALK_Y, z, yaw);
+        if (rng.chance(0.6)) {
+          sacks(k, kd, rng, rng.int(2, 4));
+          inc('sacks');
+        } else {
+          cardboard(k, rng);
+          inc('cardboard');
+        }
+        spot(x, SIDEWALK_Y, z, yaw, 0, 0, 0.4, 0.22, 0.12, 0.2, 0.28);
+        claim(x, z, 0.45);
+      }
+    }
+  }
+
+  // ── parking lots: precast wheel stops at the head of the bays, oil under where the engines stand
+  if (streetDetail(ctx, 'parkingkit')) {
+    for (const a of plan.areas) {
+      if (a.kind !== 'parking' || !a.stalls || a.stalls.length < 3) continue;
+      for (const st of a.stalls) {
+        // (Stall.yaw: cars stand nose out to the aisle, so the stop lies behind the rear tyres)
+        const fx = Math.sin(st.yaw),
+          fz = Math.cos(st.yaw);
+        const x = st.x - fx * 1.95,
+          z = st.z - fz * 1.95;
+        if (rng.chance(0.82)) {
+          const [k, kd] = at(x, H(x, z) + 0.02, z, st.yaw + rng.range(-0.025, 0.025));
+          wheelStop(k, kd, rng);
+          inc('wheelStop');
+        }
+        // drips: a soft stain under the engine bay, darker where many cars have stood
+        spot(st.x, 0.012, st.z, st.yaw, 0, 0.9, 0.42, 0.34, 0.3, 0.42, 0.34 + rng.next() * 0.3);
+        if (rng.chance(0.4)) spot(st.x, 0.012, st.z, st.yaw, rng.range(-0.5, 0.5), rng.range(-1.2, 1.2), 0.07, 0.07, 0.07, 0.12, 0.6);
       }
     }
   }
