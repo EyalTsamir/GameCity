@@ -1281,3 +1281,293 @@
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ───────────────────────────── the film (camera/film.ts) */
+.th-ui.th-filming > *,
+.th-ui.th-photoing > :not(.th-photo):not(.th-toasts) {
+  opacity: 0 !important;
+  pointer-events: none !important;
+  transition: opacity 0.5s ease;
+}
+.th-film {
+  --film-bar: 0px;
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  pointer-events: none;
+  overflow: hidden;
+  font-family: 'Sitka Banner', 'Sitka Display', 'Sitka Heading', 'Iowan Old Style', 'Palatino Linotype', 'Book Antiqua', Palatino, Georgia, serif;
+  color: #f6efe0;
+  visibility: hidden;
+}
+.th-film.th-film-on,
+.th-film.th-film-done {
+  visibility: visible;
+}
+.th-film-curtain {
+  position: absolute;
+  inset: 0;
+  background: #05070a;
+  opacity: 0;
+  transition: opacity 0.65s ease;
+}
+.th-film-on .th-film-curtain {
+  transition: none;
+}
+.th-film-curtain.th-film-instant {
+  transition: none;
+}
+.th-film-bar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: var(--film-bar);
+  background: #05070a;
+  transition: transform 0.9s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.th-film-top {
+  top: 0;
+  transform: translateY(-101%);
+}
+.th-film-bottom {
+  bottom: 0;
+  transform: translateY(101%);
+}
+.th-film-on .th-film-bar {
+  transform: none;
+}
+.th-film-title,
+.th-film-end {
+  position: absolute;
+  left: 50%;
+  top: 33%;
+  width: min(92vw, 860px);
+  transform: translate(-50%, -50%);
+  text-align: center;
+  opacity: 0;
+  transition: opacity 1.6s ease;
+  text-shadow: 0 2px 30px rgba(0, 0, 0, 0.55);
+}
+.th-film-title.show,
+.th-film-end.show {
+  opacity: 1;
+}
+.th-film-name {
+  font-size: clamp(44px, 9.5vmin, 104px);
+  font-weight: 400;
+  letter-spacing: 0.04em;
+  line-height: 1.05;
+}
+.th-film-rule {
+  width: 72px;
+  height: 1px;
+  margin: 16px auto 14px;
+  background: rgba(246, 239, 224, 0.7);
+}
+.th-film-tag {
+  font-size: clamp(16px, 3vmin, 27px);
+  font-style: italic;
+  letter-spacing: 0.02em;
+}
+.th-film-sub {
+  margin-top: 8px;
+  font-size: clamp(13px, 2.1vmin, 19px);
+  opacity: 0.82;
+}
+.th-film-caption {
+  position: absolute;
+  left: clamp(18px, 5vw, 72px);
+  bottom: calc(var(--film-bar) + clamp(14px, 4vh, 40px));
+  font-size: clamp(17px, 3.1vmin, 30px);
+  font-style: italic;
+  letter-spacing: 0.015em;
+  opacity: 0;
+  transition: opacity 1.1s ease;
+  text-shadow: 0 1px 18px rgba(0, 0, 0, 0.65);
+}
+.th-film-caption.show {
+  opacity: 0.95;
+}
+.th-film-hint {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(var(--film-bar) * 0.5 - 9px);
+  text-align: center;
+  font-family: 'Bahnschrift', 'DIN Alternate', 'Segoe UI Variable Text', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  font-size: 12.5px;
+  letter-spacing: 0.04em;
+  opacity: 0;
+  transition: opacity 1.2s ease;
+}
+.th-film-hint.show {
+  opacity: 0.62;
+}
+@media (max-aspect-ratio: 145/100) {
+  .th-film-hint {
+    bottom: max(14px, env(safe-area-inset-bottom));
+  }
+  .th-film-caption {
+    bottom: 44px;
+  }
+}
+
+/* ───────────────────────────── photo mode (hud/photo.ts) */
+.th-photo {
+  position: absolute;
+  right: 16px;
+  top: 16px;
+  width: 292px;
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+  padding: 12px 14px;
+  border-radius: 18px;
+  pointer-events: auto;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-6px);
+  transition: opacity 0.3s ease, transform 0.3s ease, visibility 0.3s;
+}
+.th-ui.th-photoing > .th-photo {
+  opacity: 1;
+  visibility: visible;
+  transform: none;
+}
+.th-ui.th-photoing > .th-photo.th-dim {
+  opacity: 0.22;
+}
+.th-photo.th-away .th-photo-body {
+  display: none;
+}
+.th-photo-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  font-family: var(--font-display);
+  font-size: 18px;
+  margin-bottom: 8px;
+}
+.th-photo-note {
+  font-family: var(--font-ui);
+  font-size: 11px;
+  color: var(--ink-soft);
+}
+.th-chips,
+.th-photo-opts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-bottom: 9px;
+}
+.th-photo-opts {
+  margin: 8px 0 2px;
+}
+.th-chip {
+  font: inherit;
+  font-size: 12px;
+  color: var(--ink);
+  padding: 5px 10px;
+  min-height: 28px;
+  border: 1px solid var(--ink-faint);
+  border-radius: 999px;
+  background: transparent;
+  cursor: pointer;
+}
+.th-chip:hover {
+  background: var(--accent-soft);
+}
+.th-chip.on {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.th-photo-row {
+  display: grid;
+  grid-template-columns: 62px minmax(0, 1fr) 58px;
+  align-items: center;
+  gap: 8px;
+  min-height: 30px;
+  font-size: 12px;
+}
+.th-photo-row b {
+  font-weight: 500;
+  text-align: right;
+  color: var(--ink-soft);
+}
+.th-photo-row .th-range {
+  width: 100%;
+}
+.th-photo-dock {
+  display: flex;
+  gap: 6px;
+  margin-top: 10px;
+}
+.th-photo.th-away .th-photo-dock {
+  margin-top: 0;
+}
+.th-photo-dock .th-pill {
+  flex: 0 0 auto;
+  justify-content: center;
+}
+.th-photo-dock .th-photo-save {
+  flex: 1 1 auto;
+  background: var(--accent);
+  color: #fff;
+}
+.th-photo-save svg {
+  width: 17px;
+  height: 17px;
+}
+.th-photo-flash {
+  position: fixed;
+  inset: 0;
+  z-index: 41;
+  background: #fff;
+  opacity: 0;
+  pointer-events: none;
+}
+.th-photo-flash.go {
+  animation: th-photo-flash 0.42s ease-out;
+}
+@keyframes th-photo-flash {
+  0% {
+    opacity: 0.75;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+@media (max-width: 760px), (max-height: 560px) {
+  .th-photo {
+    left: 8px;
+    right: 8px;
+    top: auto;
+    bottom: 8px;
+    width: auto;
+    max-height: 56vh;
+    padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
+  }
+  .th-photo-note {
+    display: none;
+  }
+  .th-chip {
+    min-height: 34px;
+  }
+  .th-photo-row {
+    min-height: 38px;
+  }
+  .th-photo-dock .th-pill {
+    min-height: 40px;
+  }
+  .th-photo-dock .th-kbd {
+    display: none;
+  }
+}
+@media (max-height: 560px) and (min-width: 640px) {
+  .th-photo {
+    left: auto;
+    width: 320px;
+    max-height: calc(100vh - 16px);
+  }
+}

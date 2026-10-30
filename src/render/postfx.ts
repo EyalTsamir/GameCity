@@ -10,7 +10,7 @@
 import * as THREE from 'three';
 import { BlendFunction, BloomEffect, EdgeDetectionMode, Effect, EffectAttribute, EffectComposer, EffectPass, FXAAEffect, RenderPass, SMAAEffect, SMAAPreset } from 'postprocessing';
 import { N8AOPostPass } from 'n8ao';
-import type { CityContext, CityModule } from '../core/context';
+import type { CityContext, CityModule, PhotoLook } from '../core/context';
 import { cameraFocus } from './focus';
 import { TONE_MAPPING } from './look';
 import { TiltShiftEffect } from './postfx/tiltShift';
@@ -54,7 +54,10 @@ export default function create(ctx: CityContext): CityModule {
   // grade (AgX + time-of-day CDL look; ?gradeold = the diorama grade)
   const world = WORLD_MODE;
   const lensMode = world && !params.has('tiltshift');
-  const lensN = Math.max(0.7, Number(params.get('lensN') ?? 1.6) || 1.6);
+  const lensBase = Math.max(0.7, Number(params.get('lensN') ?? 1.6) || 1.6);
+  let lensN = lensBase;
+  /** photo mode's picture settings */
+  let photo: PhotoLook | null = null;
   const worldGrade = world && !params.has('gradeold');
   const atmo = () => ctx.services.atmosphere as AtmosphereService | undefined;
 
@@ -357,6 +360,27 @@ export default function create(ctx: CityContext): CityModule {
     warmUp() {
       warmNext = true;
     },
+    setLens(n) {
+      lensN = n !== null && Number.isFinite(n) && n > 0 ? n : lensBase;
+    },
+    holdQuality(on) {
+      adaptive.hold(on);
+    },
+    setPhoto(p) {
+      photo = p;
+      if (!p) look.set('uPhotoExp', 1);
+    },
+    capture(type) {
+      // top quality for the picture: the resolution and AO come back in the same call (nothing is presented in
+      // between); the canvas is read in the task that drew it, so no preserveDrawingBuffer
+      const keep = step;
+      const top = ladder[0];
+      if (keep !== top) applyStep({ ...keep, renderScale: top.renderScale, ao: top.ao, dof: top.dof });
+      ctx.render(0);
+      const done = new Promise<Blob | null>((resolve) => renderer.domElement.toBlob(resolve, type));
+      if (keep !== top) applyStep(keep);
+      return done;
+    },
   };
   // the composer's "stable" depth target is blitted right after the RenderPass every frame; during the
   // next frame's scene pass it still holds the previous frame (a separate FBO: legal to sample)
@@ -399,7 +423,7 @@ export default function create(ctx: CityContext): CityModule {
 
     renderer.getDrawingBufferSize(_sz);
     const lite = step.dof === 'lite';
-    if (lensMode) {
+    if (lensMode && !photo?.miniature) {
       // thin lens, 35 mm full-frame equivalent (24 mm sensor height, focal length from the vertical
       // FOV), aperture f/lensN: blur-circle radius at infinity in output pixels. coc(z) = K·(1 − F/z)
       // is exactly the tilt-shift model with no sharp band. Beyond ~40 m focus it is sub-pixel → skipped.
@@ -479,6 +503,20 @@ export default function create(ctx: CityContext): CityModule {
       // a deeper vignette at night: the lit town sits in a soft pool, the backdrop sinks to indigo
       look.set('uVignette', 0.28 + 0.14 * night);
       look.setVec('uShadowTint', -0.004, 0.0, 0.007);
+    }
+
+    // ── photo mode: its picture settings on top of the grade above
+    if (photo) {
+      look.set('uPhotoExp', photo.exposure);
+      const u = look.uniforms;
+      look.set('uSat', (u.get('uSat')!.value as number) * photo.saturation);
+      look.set('uWarm', (u.get('uWarm')!.value as number) + photo.warm);
+      look.set('uVignette', (u.get('uVignette')!.value as number) + photo.vignette);
+      // (only the world grade sets these two every frame)
+      if (worldGrade) {
+        look.set('uContrast', (u.get('uContrast')!.value as number) + photo.contrast);
+        (u.get('uLift')!.value as THREE.Vector3).addScalar(photo.lift);
+      }
     }
 
     // ── cloud shadows (data published by the sky module)

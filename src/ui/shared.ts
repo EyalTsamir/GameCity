@@ -63,6 +63,25 @@ export interface CameraServiceExt extends CoreCameraService {
   toggleWalk?(): void;
   /** tests: the walker's body (feet, walking-surface height under it, view yaw / pitch in radians), null when not walking */
   walkDebug?(): { x: number; z: number; feet: number; ground: number; yaw: number; pitch: number; locked: boolean; gliding: boolean } | null;
+  /** the opening film (camera/film.ts) */
+  film: {
+    play(): void;
+    stop(): void;
+    active(): boolean;
+    playing(): boolean;
+    /** film seconds */
+    time(): number;
+    total(): number;
+    shot(): string;
+    /** storyboard: jump within the film */
+    seek(t: number): void;
+    /** tests: eye positions inside buildings / below ground along the film */
+    check(): string[];
+  };
+  /** ends the tour, a walk, a follow and flights where the camera is (no rise, no re-framing) */
+  releaseAll(): void;
+  /** photo mode: the free camera's rules for now, whatever G says */
+  setFreeOverride(on: boolean): void;
 }
 
 export interface AudioServiceExt {

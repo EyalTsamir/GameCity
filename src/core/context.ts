@@ -83,6 +83,23 @@ export interface CameraState {
 }
 
 /** Optional services modules expose to each other (all may be missing if a module failed). */
+/** photo mode: on top of the time-of-day grade */
+export interface PhotoLook {
+  /** exposure multiplier */
+  exposure: number;
+  saturation: number;
+  /** added to the S-curve */
+  contrast: number;
+  /** added to the white-balance nudge */
+  warm: number;
+  /** added to the vignette */
+  vignette: number;
+  /** added to the black lift (faded film) */
+  lift: number;
+  /** tilt-shift miniature instead of the natural lens */
+  miniature: boolean;
+}
+
 export interface Services {
   camera?: {
     flyTo(view: Partial<CameraState> | Poi, seconds?: number): void;
@@ -106,6 +123,14 @@ export interface Services {
     isEnabled(effect: 'dof' | 'bloom' | 'ao'): boolean;
     /** focus distance override (world units) or null for automatic */
     setFocus?(distance: number | null): void;
+    /** lens aperture f-number for the depth of field (null: the default) */
+    setLens?(n: number | null): void;
+    /** adaptive quality keeps measuring but only changes on release (film shots, photo mode) */
+    holdQuality?(on: boolean): void;
+    /** photo mode's picture settings (null: none) */
+    setPhoto?(p: PhotoLook | null): void;
+    /** draw one frame at the top quality step now and hand over the canvas before the browser clears it */
+    capture?(type: string): Promise<Blob | null>;
     /** previous frame's scene depth (soft particles; main view only): raw perspective depth unless `linear` */
     softDepth?(): { texture: THREE.Texture; linear: boolean; near: number; far: number; width: number; height: number } | null;
     /** run every optional pass (DOF, shafts) in the next frame: the boot warm-up compiles their programs */

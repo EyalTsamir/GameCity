@@ -13,6 +13,7 @@ import { TourDirector, type Pose, type TourRig } from './camera/tour';
 import { buildDebugProxy } from './camera/debugProxy';
 import { FirstPerson } from './camera/firstPerson';
 import { ExploreAid, FLOOR_CLEAR } from './camera/explore';
+import { FilmDirector, filmWanted } from './camera/film';
 import type { CameraServiceExt, PointerInfo, TourShotInfo } from './shared';
 import { WORLD_MODE } from '../core/world';
 
@@ -254,6 +255,9 @@ export default function create(ctx: CityContext): CityModule {
   const touches = new Map<number, { x: number; y: number }>();
   let pinch: { mx: number; my: number; dist: number; angle: number; n: number } | null = null;
   let lastClick: { t: number; x: number; y: number; hit: PickHit | null } = { t: 0, x: 0, y: 0, hit: null };
+  /** when the film last handed the camera back / when the auto-tour may follow it */
+  let filmEndedAt = -1e9;
+  let filmTourAt = Infinity;
   let hoverCursor = false;
 
   const pointer: PointerInfo = { x: -1, y: -1, inside: false, dragging: false, movedAt: 0 };
@@ -282,6 +286,8 @@ export default function create(ctx: CityContext): CityModule {
   // ?guidedcam): the original spring arm that keeps the orbit out of buildings (slides in front of
   // facades, keeps a line of sight, lifts over roofs) plus the idle auto-tour. The tour keeps its own
   // framing rules in both modes. The choice is remembered (?freecam forces free).
+  /** photo mode: the free camera for now, the visitor's choice kept here */
+  let guidedSaved: boolean | null = null;
   let guided = ctx.debug.params.has('guidedcam')
     ? true
     : ctx.debug.params.has('freecam')
@@ -334,7 +340,7 @@ export default function create(ctx: CityContext): CityModule {
   };
 
   let lastMode = 'orbit';
-  const modeNow = (): string => (walk.active ? 'walk' : tour.active ? 'tour' : follow && !follow.tour ? 'follow' : 'orbit');
+  const modeNow = (): string => (film?.active ? 'film' : walk.active ? 'walk' : tour.active ? 'tour' : follow && !follow.tour ? 'follow' : 'orbit');
   const checkMode = () => {
     const m = modeNow();
     if (m !== lastMode) {
@@ -817,6 +823,7 @@ export default function create(ctx: CityContext): CityModule {
 
   const startTour = () => {
     if (tour.active) return;
+    if (film?.active) film.stop();
     if (walk.active) walk.exit(false);
     clearInspect();
     if (follow && !follow.tour) releaseFollow();
@@ -844,6 +851,7 @@ export default function create(ctx: CityContext): CityModule {
 
   // ───────────────────────────────────────────── public flyTo
   const flyTo = (view: Partial<CameraState> | Poi, seconds?: number) => {
+    if (film?.active) film.stop();
     if (walk.active) walk.exit(false);
     if (tour.active) stopTour();
     if (follow) releaseFollow();
@@ -895,6 +903,7 @@ export default function create(ctx: CityContext): CityModule {
   // ───────────────────────────────────────────── first-person walk hooks
   /** V / the HUD button: walk from the point under the cursor (V) or the camera focus — or stop walking */
   const toggleWalk = (fromCursor: boolean) => {
+    if (film?.active) film.stop();
     if (walk.active) {
       walk.exit(true);
       return;
@@ -1229,7 +1238,8 @@ export default function create(ctx: CityContext): CityModule {
     updateCursor();
     if (!d.moved) {
       stopMotion();
-      if (e.type === 'pointerup' && (d.mode === 'rotate' || d.touch)) handleClick(p.x, p.y);
+      // (the press that ended the film only took the camera: it follows nothing)
+      if (e.type === 'pointerup' && (d.mode === 'rotate' || d.touch) && d.lt > filmEndedAt + 5) handleClick(p.x, p.y);
       return;
     }
     // keep the inertia only if the pointer was still moving at release
@@ -1896,6 +1906,36 @@ export default function create(ctx: CityContext): CityModule {
     },
     caption: () => captionInfo,
     liveEntities: () => scout.live(liveList),
+    film: {
+      play: () => playFilm(),
+      stop: () => film?.stop(),
+      active: () => !!film?.active,
+      playing: () => !!film?.playing,
+      time: () => film?.time ?? 0,
+      total: () => film?.total ?? 0,
+      shot: () => film?.shotId ?? '',
+      seek: (t) => film?.seek(t),
+      check: () => film?.check() ?? [],
+    },
+    releaseAll: () => {
+      if (walk.active) walk.exit(false);
+      if (tour.active) stopTour();
+      if (follow) releaseFollow();
+      clearInspect();
+      cancelFlight();
+      stopMotion();
+    },
+    setFreeOverride: (on) => {
+      if (on === (guidedSaved !== null)) return;
+      if (on) {
+        guidedSaved = guided;
+        guided = false;
+      } else {
+        guided = guidedSaved ?? guided;
+        guidedSaved = null;
+      }
+      clampGoal();
+    },
   };
   ctx.services.camera = service;
   if (ctx.debug.params.has('camdebug')) {
@@ -1914,7 +1954,121 @@ export default function create(ctx: CityContext): CityModule {
   const params = ctx.debug.params;
   // the stand-in city is only for isolated tests: with the real world loaded it would double everything
   const proxy = params.has('camdebug') && ctx.pickers.length === 0 ? buildDebugProxy(ctx) : null;
-  if (overview && !params.has('nointro')) {
+  // ───────────────────────────────────────────── the film (./camera/film.ts)
+  const leaveFilm = (eye: THREE.Vector3, look: THREE.Vector3, carry: THREE.Vector3) => {
+    // a pivot on the view line, within reach of the orbit's limits: the first orbit frame shows exactly this pose
+    _dir.subVectors(eye, look);
+    let d = _dir.length();
+    if (d < 1e-3) d = 1;
+    _dir.divideScalar(d);
+    d = clamp(d, FREE_MIN_DIST, MAX_DIST * 0.95);
+    cur.tx = eye.x - _dir.x * d;
+    cur.ty = clamp(eye.y - _dir.y * d, -2, 140);
+    cur.tz = eye.z - _dir.z * d;
+    cur.dist = _v.set(cur.tx, cur.ty, cur.tz).distanceTo(eye);
+    _dir.subVectors(eye, _v).divideScalar(Math.max(cur.dist, 1e-3));
+    cur.yaw = Math.atan2(_dir.x, _dir.z);
+    cur.pitch = Math.asin(clamp(_dir.y, -1, 1));
+    copyPose(goal, cur);
+    flight = null;
+    stopMotion();
+    // the camera glides out of the film's last move instead of stopping dead (a drag or a press cancels it)
+    if (Math.hypot(carry.x, carry.z) < 40) {
+      inertia.px = carry.x;
+      inertia.pz = carry.z;
+    }
+    kbVel.x = kbVel.z = kbVel.yaw = kbVel.pitch = kbVel.zoom = 0;
+    roofLift = roofLiftVel = 0;
+    craneLift = craneShown = 0;
+    armLen = Infinity;
+    armLenVel = 0;
+    armShown = Infinity;
+    motion.valid = false;
+    fov = camera.fov;
+    filmEndedAt = performance.now();
+    applyCamera(0);
+    checkMode();
+  };
+
+  const film: FilmDirector | null =
+    plan.pois.length > 0 && !params.has('only')
+      ? new FilmDirector(ctx, {
+          place(eye, look, lens, focus) {
+            camera.position.copy(eye);
+            camera.up.set(0, 1, 0);
+            camera.lookAt(look);
+            fov = lens;
+            camera.fov = lens;
+            explore.update(eye, false);
+            const d = eye.distanceTo(look);
+            camera.near = explore.nearPlane(eye, d);
+            camera.far = WORLD_MODE ? WORLD_FAR : d * 6 + 2500;
+            camera.updateProjectionMatrix();
+            camera.updateMatrixWorld();
+            ctx.services.postfx?.setFocus?.(focus);
+            eff.tx = cur.tx = look.x;
+            eff.ty = cur.ty = look.y;
+            eff.tz = cur.tz = look.z;
+            eff.dist = cur.dist = d;
+            _v.subVectors(eye, look);
+            eff.yaw = cur.yaw = Math.atan2(_v.x, _v.z);
+            eff.pitch = cur.pitch = Math.asin(clamp(_v.y / Math.max(d, 1e-6), -1, 1));
+            copyPose(goal, cur);
+          },
+          release: leaveFilm,
+          releaseToOverview() {
+            if (!overview) return;
+            copyPose(cur, poiPose(overview, cur));
+            copyPose(goal, cur);
+            motion.valid = false;
+            fov = WORLD_MODE ? worldFov(cur.dist) : BASE_FOV;
+            applyCamera(0);
+            checkMode();
+          },
+          floorAt: (x, z) => explore.floorAt(x, z),
+          lotAt: (x, y, z) => explore.lotAt(x, y, z),
+          aspect: () => (ctx.size.width || 1) / (ctx.size.height || 1),
+        })
+      : null;
+
+  /** the toolbar's replay, or the first load (curtain already closed) */
+  const playFilm = (first = false) => {
+    if (!film || film.active) return;
+    if (walk.active) walk.exit(false);
+    if (tour.active) stopTour();
+    if (follow) releaseFollow();
+    clearInspect();
+    cancelFlight();
+    clearInput();
+    stopMotion();
+    kbVel.x = kbVel.z = kbVel.yaw = kbVel.pitch = kbVel.zoom = 0;
+    film.play(!first);
+    checkMode();
+  };
+
+  // any key, press or wheel takes the camera (seen first: capture on window, registered before the UI's)
+  const FILM_PASS_KEYS = new Set([...MOVE_KEYS, 'KeyP']);
+  const filmInput = (e: Event) => {
+    if (!film?.active) return;
+    film.stop();
+    filmTourAt = Infinity;
+    if (e instanceof KeyboardEvent && !FILM_PASS_KEYS.has(e.code)) {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+    }
+  };
+  window.addEventListener('pointerdown', filmInput, true);
+  window.addEventListener('keydown', filmInput, true);
+  window.addEventListener('wheel', filmInput, { capture: true, passive: true });
+  if (film) {
+    film.onFinished = () => {
+      // nobody took the camera: the city goes on showing itself
+      filmTourAt = performance.now() + 14000;
+    };
+  }
+
+  if (film && filmWanted(params)) playFilm(true);
+  else if (overview && !params.has('nointro')) {
     const end = poiPose(overview, cur);
     const start: Pose = { tx: end.tx + 40, ty: end.ty, tz: end.tz - 30, dist: end.dist * 1.75, yaw: end.yaw - 78 * DEG, pitch: 66 * DEG };
     copyPose(cur, start);
@@ -1937,6 +2091,16 @@ export default function create(ctx: CityContext): CityModule {
       frames++;
       scout.update();
       scout.updateCensus(0.35);
+      if (film?.active) {
+        film.frame(dt);
+        checkMode();
+        camMs = camMs * 0.95 + (performance.now() - t0) * 0.05;
+        return;
+      }
+      if (t0 > filmTourAt) {
+        filmTourAt = Infinity;
+        if (t0 - lastActivity > 12000 && !tour.active && !follow && !flight && !walk.active) startTour();
+      }
       if (walk.active) {
         walk.frame(dt);
         checkMode();
@@ -2014,7 +2178,8 @@ export default function create(ctx: CityContext): CityModule {
       camMs = camMs * 0.95 + (performance.now() - t0) * 0.05;
     },
     resize() {
-      if (!walk.active) applyCamera(0);
+      film?.layout();
+      if (!walk.active && !film?.active) applyCamera(0);
     },
     stats() {
       return {
@@ -2041,7 +2206,7 @@ export default function create(ctx: CityContext): CityModule {
       const floor = freeRules() ? Math.min(field.groundAt(p.x, p.z), explore.floorAt(p.x, p.z) - FLOOR_CLEAR) + 0.2 : field.groundAt(p.x, p.z) + 1.9;
       if (p.y < floor) out.push(`camera below the terrain/water floor (y=${p.y.toFixed(2)} < ${floor.toFixed(2)})`);
       const m = boundsMargin() + 1;
-      if (eff.tx < bounds.x0 - m || eff.tx > bounds.x1 + m || eff.tz < bounds.z0 - m || eff.tz > bounds.z1 + m) out.push('camera target outside the slab bounds');
+      if (!film?.active && (eff.tx < bounds.x0 - m || eff.tx > bounds.x1 + m || eff.tz < bounds.z0 - m || eff.tz > bounds.z1 + m)) out.push('camera target outside the slab bounds');
       if (!flight && goal.pitch < minPitchNow() - 1e-3) out.push('pitch below the limit');
       if (follow && follow.cls === 'static' && !flight && eff.dist < follow.minDist * 0.5) out.push(`too close to the viewed ${follow.hit.kind} (${eff.dist.toFixed(1)} m)`);
       if (camera.near <= 0 || camera.far <= camera.near) out.push('bad near/far planes');
@@ -2067,6 +2232,10 @@ export default function create(ctx: CityContext): CityModule {
       window.removeEventListener('keydown', onActivity, true);
       window.removeEventListener('wheel', onActivity, true);
       window.removeEventListener('pointermove', onActivity, true);
+      window.removeEventListener('pointerdown', filmInput, true);
+      window.removeEventListener('keydown', filmInput, true);
+      window.removeEventListener('wheel', filmInput, true);
+      film?.dispose();
       explore.dispose();
     },
   };

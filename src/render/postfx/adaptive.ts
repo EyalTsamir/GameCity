@@ -70,6 +70,8 @@ const FAST_FPS = 57;
 const GPU_HEAVY = 14;
 /** predicted GPU ms per frame at the higher level must stay below this to step up */
 const GPU_UP = 13.5;
+/** a held controller still steps down below this: a film shot at single-digit fps is worse than a quality change */
+const HOLD_MIN_FPS = 22;
 
 /** Asynchronous per-frame GPU timing (TIME_ELAPSED queries), results arrive a few frames late. */
 export class GpuTimer {
@@ -137,6 +139,8 @@ export class AdaptiveController {
   private verify: { from: number; fps: number; gpu: number } | null = null;
   /** measured GPU ms saved by stepping from level i to i + 1 */
   private saving: number[] = [];
+  /** film shots / photo mode: keep measuring, but change nothing until release (unless the frame rate is dire) */
+  private held = false;
 
   constructor(
     public readonly ladder: QualityStep[],
@@ -175,7 +179,22 @@ export class AdaptiveController {
     this.fps = fps;
     this.gpuMs = gpu;
     if (this.capped && this.clock >= this.cappedUntil) this.capped = false;
+    if (this.held && fps >= HOLD_MIN_FPS) {
+      // the counters go on; verification and steps wait for the release
+      if (fps < SLOW_FPS) this.slowWins = gpu < 0 || gpu >= GPU_HEAVY ? this.slowWins + 1 : 0;
+      return false;
+    }
+    return this.decide(fps, gpu);
+  }
 
+  /** hold quality changes (on), or release them: what has come up meanwhile happens now */
+  hold(on: boolean): void {
+    if (this.held === on) return;
+    this.held = on;
+    if (!on && this.enabled && this.warmup <= 0 && (this.verify || this.slowWins >= 3)) this.decide(this.fps, this.gpuMs);
+  }
+
+  private decide(fps: number, gpu: number): boolean {
     // did the last step down help? (first clean window after it settled)
     if (this.verify) {
       const v = this.verify;
