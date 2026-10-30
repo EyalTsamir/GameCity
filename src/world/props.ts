@@ -34,6 +34,7 @@ import { XS, ZS, FURN_OFFSET } from '../core/constants';
 import { addLampLights, type LampLight } from '../core/lampLight';
 import { buildPlaces } from './props/places';
 import { boxHunt } from '../core/boxhunt';
+import { placeStreetKit } from './props/streetlife';
 import { buildContactMesh, takeQueuedContacts, type ContactSpot } from './props/contact';
 
 interface TerrainSvc {
@@ -596,6 +597,26 @@ export default function create(ctx: CityContext): CityModule {
     }
   }
 
+  // ──────────────────────────────── street kit + shop fronts (detail round) ──
+  const streetPlaced = simple
+    ? []
+    : placeStreetKit({
+        ctx,
+        plan,
+        occ,
+        layout,
+        H,
+        fine: (x) => KF[chunkOf(x)],
+        near: (x, z) => KD.at(x, z),
+        casters: KS,
+        green: greenKit,
+        greenB,
+        printer,
+        trees: (ctx.services.vegetation as { trees?: { x: number; z: number }[] } | undefined)?.trees ?? [],
+        spot,
+        inc,
+      });
+
   // ───────────────────────────────────────────────────────── bollards ──
   {
     const vegTrees = (ctx.services.vegetation as { trees?: { x: number; z: number }[] } | undefined)?.trees ?? [];
@@ -910,6 +931,7 @@ export default function create(ctx: CityContext): CityModule {
     root.add(contactMesh);
   }
   ctx.services.props = service;
+  (service as PropsService & { streetKit?: unknown }).streetKit = streetPlaced.kinds;
   if (terraceLights.length && !ctx.debug.params.has('noterracelights')) addLampLights(terraceLights);
   const glowMesh = createGlowMesh(ctx.uniforms, glows);
   if (parts.includes('glows')) root.add(glowMesh);
@@ -954,6 +976,7 @@ export default function create(ctx: CityContext): CityModule {
       for (const it of scatter) check(it.kind, it.x, it.z);
       for (const gp of layout.gardens) for (const it of gp.items) check(it.kind, it.x, it.z);
       for (const it of placed) check('place item', it.x, it.z);
+      for (const it of streetPlaced) if (layout.walk.get(it.x, it.z) & MASK_WALK) out.push(`street kit item at (${it.x.toFixed(1)}, ${it.z.toFixed(1)}) on a walkway`);
       return out.slice(0, 20);
     },
     dispose() {

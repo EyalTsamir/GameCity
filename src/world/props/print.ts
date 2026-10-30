@@ -88,7 +88,7 @@ export class Printer {
     tex.anisotropy = 4;
     tex.generateMipmaps = true;
     tex.minFilter = THREE.LinearMipmapLinearFilter;
-    const mat = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.62, metalness: 0, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+    const mat = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.62, metalness: 0, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2, alphaTest: 0.5 });
     mat.onBeforeCompile = (sh) => {
       sh.uniforms.uLights = globalUniforms.uLights;
       sh.vertexShader = sh.vertexShader
