@@ -6,7 +6,11 @@
   ranking in the Log). Fixed: quay-wall furniture kept off the stairs/slipway (721ef12); crane rails + yellow buffers
   ended short of the harbour water stairs; cutting-wall weathering (weep streaks, coping drips, foot moss); grave
   candles + cross lanterns (churchyard at night); square gutter = lengthwise darker setts; station forecourt planters
-  (shrubs) + iron bollards; darker water-stair risers. Open from the ranking: lower-quay waterline/coping chips, pond
+  (shrubs) + iron bollards; darker water-stair risers. Checks (08:10): perf overview 49.6/48.9 vs `?noplaces`
+  48.65/48.7 ms, close + station within noise; hitch 0 new programs / 0 freezes (noon + night); validate []; build OK;
+  walk probe all routes; ui-test walk: the "click while walking → info card" step is flaky (picks a moving
+  pedestrian; passed 9/9 on a rerun in round 2). Still open: a small dark slot on the harbour stairs' top tread (not
+  the crane rail — source unknown). Open from the ranking: lower-quay waterline/coping chips, pond
   path edge outline (all park paths), farm-lane hedge lumps, field emptiness (landscape), harbour oil-stain decals.
 - **Round 2 (overnight backlog from the coordinator)**: all 7 items done — 1 station, 2 water stairs/slipway, 3 portal
   cuttings, 4 old town (churchyard, yard gate, island landing), 5 west farm lane, 6 REAL ground items (colonnade line =
