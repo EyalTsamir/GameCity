@@ -4,9 +4,11 @@ Branch `claude/detail-buildings-67bbbf`. Shared rules: `DETAIL-ROUND.md`. Switch
 `?nodetailb` all off, `?no<name>` one family.
 
 ## Resume here
-Round 1 in progress. Done and committed: real lobbies (`lobby.ts`), ground-floor joinery, arcade soffits, facade relief,
-glazed slant crown, roof membrane / pavers. Next: industrial wall services + dock seals, homes (side services, back
-doors), perf measure (`perf.mjs --variants ";nodetailb"`), hitch, final checks, sheets in `docs/progress/detail/buildings/`.
+Round 1 built and committed up to 024b4e7. Perf A/B (`;nodetailb`, 4 views, 2 repeats) is running: output in the session
+scratchpad `perf1/out.txt`. Then: verify awnings and sawtooth by eye, invariants must be `{}` again (the sign atlas
+overflow is fixed by SIZE_H 1280, recheck), hitch, final checks of DETAIL-ROUND.md, before/after sheet in
+`docs/progress/detail/buildings/`, a fresh audit for round 2. Round-2 ideas: houses' repetition (owners), party walls, apartment
+entrances, kiosk slab, L-shaped hall. Watch: heredocs over ~7 KB are cut by the Bash tool, write patch scripts with Write.
 
 ## Audit (round 1, 84 views at noon: eye level, 45 m air, back; own look)
 Ranked by wow per ms: 1 identical blank office / tower ground floors; 2 slant crown a bare blue plane from the air; 3 flat
@@ -20,6 +22,10 @@ back and side walls; 7 factory roof bare from the air.
 | Ground-floor joinery | `?nogroundfit` | stall riser + cap, real mullions, transom, head rail, up-down lights on the shader bays; arcade soffit beams and lanterns | |
 | Facade relief | `?nofacadedepth` | curtain walls: pressure caps on every mullion, floor rails. Ribbons: sill nosing, sun shelf on brackets (2 of 3 sides) | |
 | Roofscape | `?noroofscape` | slant crown: rafters, purlins, gutter, ridge cap, cat ladder, cradle and track, rail. Tower roofs: membrane strips, patches, pavers, drains, lightning rods | |
+| Wall services | `?noservices` | sheds: dock seals, bumpers, chevrons, stencilled bay numbers, conduit, switch cabinets, extract louvres + stains, fire points, risers. Homes: meter boxes, hose reel, soil stack with branches, vents with stains | |
+| Sawtooth + awnings | `?noroofscape`, `?noawnings` | sawtooth: standing seams, ridge capping, glazing bars. Apartments: striped drop-arm awnings on 16 % of balconies | |
+
+Also: sign atlas height 1024 → 1280 (always on), new mesh `buildings-glass`, `Gen.glass`.
 
 ## Best views
 Lobbies: `38.8,2.2,-58,8,215,-3` (office 31) and Haven Tower `-27.5,2.2,-32.5,8,30,-3` at 18.2 and 21.5.
