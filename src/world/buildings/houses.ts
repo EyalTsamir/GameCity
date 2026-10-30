@@ -362,10 +362,14 @@ export function genApartment(g: Gen): void {
       const pc = col(rng.pick(['#8d9497', '#5a5f62', '#e9e6dd']));
       downpipe(g, sg, 0.3, H + 0.3, pc, INS);
       if (rng.chance(0.5)) downpipe(g, sg, sg.L - 0.3, H + 0.3, pc, INS);
-      // gable ends: a column of small windows
-      const gr = makeGrid(0, sg.L, gH, fH, floors - 1, { spacing: 3.0, cols: 2, winW: 0.9, winH: 1.3, sill: 0.95, margin: 1.6 });
+      // gable ends: a column of small windows; ?noendwalls off: the corner flats' rooms look out here too — a window
+      // every ~2.7 m (living rooms at the corners, kitchens / baths between)
+      const full = MASS.endWalls;
+      const ec = full ? Math.max(3, Math.round((sg.L - 1.8) / 2.7)) : 2;
+      const eo = full ? { spacing: 2.7, cols: ec, winW: 1.15, winH: 1.4, margin: 0.9 } : { spacing: 3.0, cols: 2, winW: 0.9, winH: 1.3, margin: 1.6 };
+      const gr = makeGrid(0, sg.L, gH, fH, floors - 1, { ...eo, sill: 0.95 });
       wallGrid(s, sg, 0, sg.L, gH, H, gr, look());
-      const gr0 = makeGrid(0, sg.L, 0, gH, 1, { spacing: 3.0, cols: 2, winW: 0.9, winH: 1.3, sill: 1.0, margin: 1.6 });
+      const gr0 = makeGrid(0, sg.L, 0, gH, 1, { ...eo, sill: 1.0 });
       wallGrid(s, sg, 0, sg.L, 0, gH, gr0, look());
       continue;
     }

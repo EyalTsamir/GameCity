@@ -168,6 +168,17 @@ function lifeguards(ctx: CityContext, cloth: ClothSystem, poles: PoleBuilder, gr
 }
 
 // ─────────────────────────────────────────────────────────────── hotels ──
+/** the part of buildings' BalconyAnchor the flag staffs need (buildings loads before life) */
+interface BalconyLike {
+  x: number;
+  y: number;
+  z: number;
+  nx: number;
+  nz: number;
+  d: number;
+  rail: number;
+  lot: number;
+}
 function hotels(ctx: CityContext, cloth: ClothSystem, poles: PoleBuilder, ground: Ground, st: ExtraStats): void {
   const designs: [string, string, number][] = [
     ['#2f5aa0', '#f4efe4', PAT.CROSS],
@@ -186,16 +197,44 @@ function hotels(ctx: CityContext, cloth: ClothSystem, poles: PoleBuilder, ground
     const y0 = g + 5.6;
     const rng = new Rng(lot.seed >>> 0 || 3);
     const k0 = rng.int(0, designs.length - 1);
+    // the hotel's own balconies at flag height (a staff from the wall would run through their railings)
+    const bals = (((ctx.services.buildings as { balconies?: BalconyLike[] } | undefined)?.balconies) ?? []).filter(
+      (bl) => bl.lot === lot.id && bl.nx * n.x + bl.nz * n.z > 0.9 && bl.y > g + 2.0 && bl.y < y0 + 0.8,
+    );
+    const used = new Set<BalconyLike>();
     for (let i = -1; i <= 1; i++) {
-      // wall bracket on the facade, staff angled 35° up and out (≤ 1.2 m beyond the wall)
-      const bx = door.x + tx * i * 3.0,
+      // wall bracket on the facade, staff angled 32° up and out; over a balcony: clamped to the front of its
+      // railing instead, staff at 40°
+      let bx = door.x + tx * i * 3.0,
         bz = door.z + tz * i * 3.0;
-      const a = new THREE.Vector3(bx + n.x * 0.04, y0, bz + n.z * 0.04);
-      const ang = (32 * Math.PI) / 180;
+      let out = 0.04,
+        yb = y0,
+        ang = (32 * Math.PI) / 180;
+      let best: BalconyLike | null = null,
+        bd = 2.0;
+      for (const bl of bals) {
+        const lat = Math.abs((bl.x - bx) * tx + (bl.z - bz) * tz);
+        if (lat < bd && !used.has(bl)) (bd = lat), (best = bl);
+      }
+      if (best) {
+        used.add(best);
+        const lat = (best.x - bx) * tx + (best.z - bz) * tz;
+        bx += tx * lat;
+        bz += tz * lat;
+        out = (best.x - bx) * n.x + (best.z - bz) * n.z + best.d / 2 + 0.03;
+        yb = best.y + best.rail - 0.05;
+        ang = (40 * Math.PI) / 180;
+      }
+      const a = new THREE.Vector3(bx + n.x * out, yb, bz + n.z * out);
       const L = 1.75;
-      const b = new THREE.Vector3(bx + n.x * L * Math.cos(ang), y0 + L * Math.sin(ang), bz + n.z * L * Math.cos(ang));
-      poles.box(a.x - n.x * 0.02, y0, a.z - n.z * 0.02, Math.abs(n.x) > 0.5 ? 0.06 : 0.16, 0.22, Math.abs(n.z) > 0.5 ? 0.06 : 0.16, '#3a3a3a');
-      poles.rod(a, b, 0.022, '#d8d4cc');
+      const b = new THREE.Vector3(a.x + n.x * L * Math.cos(ang), yb + L * Math.sin(ang), a.z + n.z * L * Math.cos(ang));
+      // wall plate (or rail clamp) + an angled socket, a dark bronze staff that reads against pale facades, a
+      // gilt ball finial
+      poles.box(a.x - n.x * 0.01, yb, a.z - n.z * 0.01, Math.abs(n.x) > 0.5 ? 0.05 : 0.2, 0.34, Math.abs(n.z) > 0.5 ? 0.05 : 0.2, '#2c2a27');
+      const sk = new THREE.Vector3(a.x + n.x * 0.3 * Math.cos(ang), yb + 0.3 * Math.sin(ang), a.z + n.z * 0.3 * Math.cos(ang));
+      poles.rod(a, sk, 0.045, '#2c2a27');
+      poles.rod(a, b, 0.03, '#4a3f30');
+      poles.pole(b.x, b.y - 0.01, b.z, b.y, 0.026, '#4a3f30', '#c9a640');
       const [c1, c2, pat] = designs[(k0 + i + 1) % designs.length];
       // the flag hangs from the staff: a line piece along the staff (no sag)
       const line = cloth.addLine({ ax: a.x + n.x * 0.12, ay: a.y + 0.08, az: a.z + n.z * 0.12, bx: b.x, by: b.y, bz: b.z, sag: 0, seed: rng.next(), wire: '#d8d4cc', r: 0.01 });
