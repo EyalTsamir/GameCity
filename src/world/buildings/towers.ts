@@ -370,6 +370,9 @@ export function genTower(g: Gen): void {
     // ?nocrowns: masonry tiers end in a deep cornice on brackets below the parapet
     if (MASS.crowns && masonry) crownCornice(g, poly, t.y1 + (last ? 0.62 : 0.5), last ? 0.62 : 0.42, shade(wallC, 1.1), true);
     if (sc.accent && H > 45) accentEdge(poly, t.y1 + (last ? 1.15 : 0.95), sc.accent, last ? 2.6 : 1.8);
+    // ?nocrowns: tall masonry towers without an accent scheme get a warm concealed strip under each cornice's
+    // frieze — the crown reads floodlit at night instead of ending in the dark
+    else if (MASS.crowns && masonry && H > 28) accentEdge(poly, t.y1 + (last ? 0.62 : 0.5) - 1.02, '#ffcf8a', last ? 1.6 : 1.2);
     // the roof a setback leaves: terrace with planters / a garden, plant
     if (!last && MASS.setbacks) setbackRoof(t.r, tiers[i + 1].r, t.y1);
   }
