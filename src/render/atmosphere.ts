@@ -97,6 +97,15 @@ float atmNoise2(vec2 p) {
   f = f * f * (3.0 - 2.0 * f);
   return mix(mix(atmHash12(i), atmHash12(i + vec2(1.0, 0.0)), f.x), mix(atmHash12(i + vec2(0.0, 1.0)), atmHash12(i + vec2(1.0, 1.0)), f.x), f.y);
 }
+// sea fog: the share of this ray that runs inside the bank (east of its wavering edge); continuous as an end crosses it
+float thBankShare(vec3 ray, float n) {
+  if (thAtmo[11].w == 0.0) return 1.0;
+  float x0 = thAtmo[11].w + (n - 0.5) * 170.0;
+  float a = cameraPosition.x - x0, b = a + ray.x;
+  if (a >= 0.0 && b >= 0.0) return 1.0;
+  if (a < 0.0 && b < 0.0) return 0.0;
+  return (a > 0.0 ? a : b) / abs(a - b);
+}
 // transmittances along camera → camera + ray: blue air (Rayleigh-like, per channel, ~8 km scale height:
 // far ridges turn blue) → TR; aerosol (grey, ~1 km: valleys haze, peaks clear) → TM; ground mist → Tmist
 void thAtmoTs(vec3 ray, out vec3 TR, out float TM, out float Tmist) {
@@ -110,7 +119,7 @@ void thAtmoTs(vec3 ray, out vec3 TR, out float TM, out float Tmist) {
     vec2 q = (cameraPosition.xz + ray.xz + thAtmo[9].xy) * thAtmo[9].z;
     float n = atmNoise2(q) * 0.65 + atmNoise2(q * 2.7 + 5.3) * 0.35;
     float patchy = mix(1.0, smoothstep(0.25, 0.75, n) * 1.8, thAtmo[9].w);
-    Tm = exp(-thAtmo[8].w * patchy * atmOD(yc, yp, t, thAtmo[4].w, thAtmo[5].w));
+    Tm = exp(-thAtmo[8].w * patchy * thBankShare(ray, n) * atmOD(yc, yp, t, thAtmo[4].w, thAtmo[5].w));
   }
   Tmist = Tm;
 }
@@ -200,7 +209,7 @@ vec3 thAtmoApplyF(vec3 col, vec3 ray) {
     vec2 q = (cameraPosition.xz + ray.xz + thAtmo[9].xy) * thAtmo[9].z;
     float n = atmNoise2(q) * 0.65 + atmNoise2(q * 2.7 + 5.3) * 0.35;
     float patchy = mix(1.0, smoothstep(0.25, 0.75, n) * 1.8, thAtmo[9].w);
-    float Tmist = exp(-thAtmo[8].w * patchy * atmOD(yc, yp, t, thAtmo[4].w, thAtmo[5].w));
+    float Tmist = exp(-thAtmo[8].w * patchy * thBankShare(ray, n) * atmOD(yc, yp, t, thAtmo[4].w, thAtmo[5].w));
     float mm = max(mu, 0.0);
     vec3 mc = thAtmo[8].rgb + thAtmo[1].rgb * thAtmo[1].w * mm * mm * mm * mm;
     col = mix(mc, col, Tmist);
@@ -317,6 +326,8 @@ export interface AtmosphereParams {
   mistDrift: THREE.Vector2;
   mistFreq: number;
   mistPatchiness: number;
+  /** sea fog: the mist lies only east of this x (m), a bank rolling in from the sea; 0 = everywhere (plain mist) */
+  bankX: number;
   startDist: number;
   gain: number;
   /** tight sun lobe (aureole) weight relative to the broad one, and its exponent */
@@ -345,6 +356,7 @@ export function createAtmosphereParams(): AtmosphereParams {
     mistDrift: new THREE.Vector2(0, 0),
     mistFreq: 1 / 90,
     mistPatchiness: 0.6,
+    bankX: 0,
     startDist: 0,
     gain: 1,
     lobe2: 0,
@@ -372,7 +384,7 @@ export function writeAtmosphere(p: AtmosphereParams): void {
   set(8, p.mistColor.r, p.mistColor.g, p.mistColor.b, p.mist);
   set(9, p.mistDrift.x, p.mistDrift.y, p.mistFreq, p.mistPatchiness);
   set(10, p.startDist, p.gain, p.lobe2, p.lobe2Exp);
-  set(11, p.haze, 1 / Math.max(1, p.hazeScaleHeight), 0, 0);
+  set(11, p.haze, 1 / Math.max(1, p.hazeScaleHeight), 0, p.bankX);
 }
 
 /** the camera's end of the two height integrals (ATMO_FAST): call with the final camera height, before the frame's draws */

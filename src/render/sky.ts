@@ -227,6 +227,7 @@ export default async function create(ctx: CityContext): Promise<CityModule> {
   // detail round: a storm band crossing the town (sky/weather.ts, ?nostorm = the old even shower)
   const director = world && cloudLayer && detailOn('storm') ? new WeatherDirector(wRng, clock.day, ctx.debug.params) : null;
   atmo.storm = director;
+  if (director) director.layer = cloudLayer;
   if (director) (ctx.services as { weather?: WeatherDirector }).weather = director;
   const wetOn = !!director && detailOn('wetfacade') && patchWetChunk();
   let sunOver = 0;
@@ -380,7 +381,8 @@ export default async function create(ctx: CityContext): Promise<CityModule> {
     sunVis = smooth(-0.06, 0.03, sh);
     moonVis = smooth(0.06, -0.1, sh);
     _sunSky.copy(_sunVisual);
-    dome.update(state, _sunSky, clock.moonDir, sunVis, moonVis, clock.realTime, overcast);
+    // (with a storm band the dome reads the band itself; what others copy from it is the sun's cover: the water's glitter)
+    dome.update(state, _sunSky, clock.moonDir, sunVis, moonVis, clock.realTime, sunOver);
     if (world) {
       // sky glow of the lit town (and the villages around): warm, low, only with the street lights on
       atmo.cityGlow.setRGB(1.0, 0.6, 0.32).multiplyScalar(0.045 * ctx.uniforms.uLights.value * (1 - overcast * 0.3) + 0.03 * overcast * ctx.uniforms.uLights.value);
@@ -573,6 +575,7 @@ export default async function create(ctx: CityContext): Promise<CityModule> {
       lightning.update(realDt, director!.storm, ctx.camera, cloudLayer.uCu.value.y, _rs.x, _rs.y);
       cloudLayer.uCloudFlash.value.set(lightning.at.x, lightning.at.z, flash * 2.4, 3400);
       dome.setFlash(lightning.dir, flash);
+      director!.flashNow = flash;
     }
 
     // ── environment (only when the palette drifted noticeably)

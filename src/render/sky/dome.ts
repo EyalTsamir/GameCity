@@ -202,6 +202,15 @@ void main() {
   col = mix(col, groundCol, below);
 #endif
 
+#ifdef TH_WORLD
+  // sea fog: from inside or behind the bank the low sky goes the way the land does (the sky above the layer stays)
+  if (thAtmo[11].w != 0.0) {
+    vec3 fr = d * (min(40.0, thAtmo[5].w > 0.0 ? 2.5 / thAtmo[5].w : 40.0) / max(y, 0.012));
+    float fk = 1.0 - exp(-thAtmo[8].w * thBankShare(fr * 3.0, 0.5) * atmOD(cameraPosition.y, cameraPosition.y + fr.y, length(fr), thAtmo[4].w, thAtmo[5].w));
+    col = mix(col, thAtmo[8].rgb + thAtmo[1].rgb * thAtmo[1].w * pow(max(dot(d, thAtmo[0].xyz), 0.0), 4.0), fk);
+  }
+#endif
+
   float aboveH = smoothstep(-0.02, 0.06, y);
   vec3 skyBase = col;
 
@@ -269,7 +278,7 @@ void main() {
      + texture2D(tCloudVol, cuv + vec2(-0.4 * ct.x, ct.y)) + texture2D(tCloudVol, cuv - vec2(-0.4 * ct.x, ct.y))) * 0.16;
   col = col * (1.0 - cv.a) + cv.rgb;
   // the rainbow hangs in the rain in front of the deck
-  if (uRainbow.w > 0.001) col += thRainbow(d, uSunDir) * uRainbow.rgb * uRainbow.w * clStorm(cameraPosition.xz + normalize(d.xz + vec2(1e-5, 0.0)) * 14000.0) * smoothstep(-0.005, 0.05, y);
+  if (uRainbow.w > 0.001) col += thRainbow(d, uSunDir) * uRainbow.rgb * uRainbow.w * 0.6 * clStorm(cameraPosition.xz + normalize(d.xz + vec2(1e-5, 0.0)) * 14000.0) * smoothstep(-0.005, 0.05, y);
   // a lightning flash: the whole deck flickers, brightest around the stroke's bearing
   if (uFlash.w > 0.001) col += vec3(0.62, 0.7, 0.92) * uFlash.w * (0.06 + 0.5 * pow(max(dot(d, uFlash.xyz), 0.0), 4.0)) * max(thOc, 0.15) * smoothstep(-0.01, 0.03, y);
 #endif

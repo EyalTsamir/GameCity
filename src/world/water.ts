@@ -137,6 +137,16 @@ export default function create(ctx: CityContext): CityModule {
     if (d.uMoonDir) (sky.uSkyMoonDir.value as THREE.Vector3).copy(d.uMoonDir.value);
     if (d.uMoonVis) sky.uSkyMoonVis.value = d.uMoonVis.value;
     if (d.uOvercast) sky.uSkyOvercast.value = d.uOvercast.value;
+    const w = (ctx.services as { weather?: { rain: number; storm: number; flashNow: number; layer: { uStorm: { value: THREE.Vector4 }; uStormK: { value: THREE.Vector4 } } | null } }).weather;
+    if (w) {
+      sky.uRainW.value = w.rain;
+      sky.uStormW.value = w.storm;
+      sky.uSkyFlash.value = w.flashNow;
+      if (w.layer) {
+        (sky.uStorm.value as THREE.Vector4).copy(w.layer.uStorm.value);
+        (sky.uStormK.value as THREE.Vector4).copy(w.layer.uStormK.value);
+      }
+    }
   };
   if (!ctx.services.sky) {
     // no sky module (?only=…): moon from the clock, fixed day colours

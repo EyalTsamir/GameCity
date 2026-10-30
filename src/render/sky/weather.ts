@@ -44,6 +44,9 @@ export class WeatherDirector {
   sunBlock = 0;
   /** rainbow visibility 0..1 */
   rainbow = 0;
+  /** morning sea fog: how much, and the bank's west edge (m, world x; 0 is treated as 'everywhere' by the shader) */
+  fog = 0;
+  fogX = 600;
   /** how dark the band's sky is, 0 a grey shower .. 1 a black storm */
   dark = 0;
   /** edges of the band (m along `dir` from the town) and how much of a deck it is (0 no band) */
@@ -51,6 +54,9 @@ export class WeatherDirector {
   trail = -1e7;
   amount = 0;
   dir = new THREE.Vector2(0.92, 0.39);
+  /** set by the sky module: lightning right now, and the cloud layer's band uniforms (for the water's mirror of them) */
+  flashNow = 0;
+  layer: { uStorm: { value: THREE.Vector4 }; uStormK: { value: THREE.Vector4 } } | null = null;
 
   private forced: number | null = null;
   private pinned: number | null = null;
@@ -58,6 +64,9 @@ export class WeatherDirector {
   private episode: Episode | null = null;
   private plannedDay: number;
   private power = 0;
+  private fogEp: { t0: number; t1: number } | null = null;
+  private fogPin: number | null = null;
+  private fogForced = false;
 
   constructor(
     private rng: WeatherRng,
@@ -71,6 +80,12 @@ export class WeatherDirector {
     else if (w === 'storm') this.forced = 1;
     else if (w === 'clear') this.forced = 0;
     else if (w === 'passage') this.passage = true;
+    if (w === 'fog') this.fogForced = true;
+    const fx = params.get('fogx');
+    if (fx !== null && Number.isFinite(Number(fx))) {
+      this.fogForced = true;
+      this.fogPin = Number(fx);
+    }
     const f = params.get('stormfront');
     if (f !== null && Number.isFinite(Number(f))) this.pinned = Number(f) * 1000;
   }
@@ -89,6 +104,8 @@ export class WeatherDirector {
     this.plannedDay = day;
     const r = this.rng.next();
     const base = (day - 1) * 24;
+    // sea fog rolls in before dawn on some mornings and burns off by mid morning
+    if (day === 3 || (day > 3 && this.rng.next() < 0.28)) this.fogEp = { t0: base + 5.0, t1: base + this.rng.range(9, 10.2) };
     if (day === 2) {
       // the showpiece: its back edge passes at the start of the golden hour → sun under the deck, rainbow
       const dur = 2.2;
@@ -148,6 +165,22 @@ export class WeatherDirector {
         }
       } else this.amount = 0;
     }
+    // ── sea fog: the bank's edge comes in from the sea (x 900 → −140: over the harbour and the old town), then lifts
+    let fogT = 0,
+      fogTx = 900;
+    if (this.fogForced) {
+      fogT = 1;
+      fogTx = this.fogPin ?? 40;
+    } else if (this.fogEp) {
+      const e = this.fogEp;
+      fogT = smooth(e.t0, e.t0 + 1.2, now) * (1 - smooth(e.t1 - 1.3, e.t1, now));
+      fogTx = 900 - 1040 * smooth(e.t0, e.t0 + 2.6, now);
+      if (now > e.t1) this.fogEp = null;
+    }
+    fogT *= 1 - Math.min(1, this.rain * 2);
+    this.fog += (fogT - this.fog) * (snap ? 1 : Math.min(1, realDt * 0.5));
+    this.fogX += (fogTx - this.fogX) * (snap ? 1 : Math.min(1, realDt * 0.5));
+
     // the band moves with the wind (a slow veer does not swing it across the sky)
     if (ws > 1e-3 && this.amount === 0) this.dir.set(wind.x / ws, wind.y / ws);
 
