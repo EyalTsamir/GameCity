@@ -12,6 +12,7 @@
 // noon horizon matches the authored key), so twilight darkens naturally and exposure does the rest.
 
 import * as THREE from 'three';
+import { perfOn } from '../../core/perfdeep';
 import { FS_VERT, FullscreenPass } from '../postfx/fullscreen';
 
 const RG = 6360e3;
@@ -158,7 +159,9 @@ vec3 thSkyLUT(sampler2D lut, vec3 d, vec3 s) {
 export class SkyLUT {
   readonly target: THREE.WebGLRenderTarget;
   private pass: FullscreenPass;
-  private last = new Float32Array(6);
+  // (doubles: `g` and `ms` are compared with ===, in Float32Array they never matched and the LUT + its CPU twin were
+  // redone every frame, 0.65 ms; ?noskylut)
+  private last = perfOn('skylut') ? new Float64Array(6) : new Float32Array(6);
   renders = 0;
 
   constructor(size = 64) {

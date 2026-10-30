@@ -22,6 +22,7 @@ import * as THREE from 'three';
 import type { CityContext } from '../../core/context';
 import { LAYERS } from '../../core/layers';
 import { WATER_LEVEL, SLAB, RIVER } from '../../core/constants';
+import { perfOn } from '../../core/perfdeep';
 
 export type ReflectionLevel = 0 | 1 | 2;
 
@@ -101,6 +102,9 @@ export class PlanarReflection {
   private dbgList: THREE.Object3D[] = [];
   /** ?reflfacade: facades at full detail in the pass (A/B) */
   private facadeDetail: boolean;
+  private halfRate = perfOn('reflhalf');
+  private skip = false;
+  private lastEye = new THREE.Vector3();
   // stats
   calls = 0;
   tris = 0;
@@ -206,7 +210,19 @@ export class PlanarReflection {
   /** arm the pass for this frame (module frame()) */
   request(): void {
     this.pending = this.level > 0 && this.attached;
-    if (!this.pending) this.uniforms.uReflInfo.value.x = 0;
+    if (!this.pending) {
+      this.uniforms.uReflInfo.value.x = 0;
+      return;
+    }
+    // every other frame (?noreflhalf: every frame): the lookup uses the matrix of the camera that drew the mirror, so a
+    // frame-old mirror stays in place on the water; only a camera cut redraws at once
+    if (this.halfRate) {
+      const cp = this.ctx.camera.position;
+      const moved = this.lastEye.distanceToSquared(cp);
+      const cut = moved > 25 && moved > 0.0025 * cp.y * cp.y;
+      if (!cut && this.renders > 0 && this.skip) this.pending = false;
+      this.skip = this.pending;
+    }
   }
 
   private resize(): void {
@@ -404,6 +420,7 @@ export class PlanarReflection {
       this.busy = false;
     }
     this.renders++;
+    this.lastEye.copy(this.camPos);
     this.uniforms.uReflInfo.value.x = 1;
   }
 

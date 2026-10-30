@@ -18,6 +18,7 @@ import { styleFromFlags, type Look, type Style } from './looks';
 import type { Crowd, Member } from './crowd';
 import { patchLampMaterial } from '../../world/lamps/integrate';
 import { Tableware, HELD_CUP, HELD_GLASS } from './tableware';
+import { createPalette, type PedPalette } from './palette';
 
 const clamp = (x: number, a: number, b: number) => (x < a ? a : x > b ? b : x);
 const q8 = (h: number) => clamp(Math.round(((h + 0.1) / 1.275) * 255), 0, 255);
@@ -187,11 +188,14 @@ class Layer {
   private rootAttr: THREE.InstancedBufferAttribute;
   private poseBuf: THREE.InstancedInterleavedBuffer;
   private colBuf: THREE.InstancedInterleavedBuffer;
+  /** each instance's row in the bone palette (null: the per-vertex chain) */
+  private row: Uint32Array | null = null;
+  private rowAttr: THREE.InstancedBufferAttribute | null = null;
   readonly capacity: number;
   readonly tris: number;
   readonly verts: number;
   n = 0;
-  constructor(lod: Lod, material: THREE.Material, depth: THREE.Material | null, capacity: number) {
+  constructor(lod: Lod, material: THREE.Material, depth: THREE.Material | null, capacity: number, palette: boolean) {
     this.capacity = capacity;
     const fm = figureMesh(lod);
     const base = fm.geometry;
@@ -209,6 +213,10 @@ class Layer {
     this.colBuf = new THREE.InstancedInterleavedBuffer(this.col, 12);
     this.colBuf.setUsage(THREE.DynamicDrawUsage);
     for (let i = 0; i < 3; i++) g.setAttribute(`iC${i}`, new THREE.InterleavedBufferAttribute(this.colBuf, 4, i * 4));
+    if (palette) {
+      this.row = new Uint32Array(capacity);
+      this.rowAttr = makeAttr(g, 'iPalRow', this.row, 1);
+    }
     g.instanceCount = 0;
     this.geo = g;
     this.mesh = new THREE.Mesh(g, material);
@@ -216,11 +224,12 @@ class Layer {
     this.tris = fm.triangles;
     this.verts = fm.vertices;
   }
-  put(root: Float32Array, pose: Uint32Array, col: Uint32Array): void {
+  put(root: Float32Array, pose: Uint32Array, col: Uint32Array, row: number): void {
     const n = this.n++;
     this.root.set(root, n * 4);
     this.pose.set(pose, n * POSE_UINTS);
     this.col.set(col, n * 12);
+    if (this.row !== null) this.row[n] = row;
   }
   finish(): void {
     const n = this.n;
@@ -228,6 +237,7 @@ class Layer {
     flush(this.rootAttr, n, 4);
     flush(this.poseBuf, n, POSE_UINTS);
     flush(this.colBuf, n, 12);
+    if (this.rowAttr !== null) flush(this.rowAttr, n, 1);
     this.mesh.visible = n > 0;
   }
 }
@@ -312,22 +322,29 @@ export class CrowdRenderer {
   /** close-level distance (m at the reference view); 0 = off */
   closeDist = LOD_CLOSE;
   private camRef: THREE.PerspectiveCamera | null = null;
+  /** the figures' bone matrices, computed once per frame on the GPU (null: per vertex, ?nopedpalette) */
+  private palette: PedPalette | null;
 
-  constructor(scene: THREE.Scene, capacity: number, castShadow: boolean) {
+  constructor(scene: THREE.Scene, capacity: number, castShadow: boolean, gl: THREE.WebGLRenderer) {
     this.capacity = capacity;
-    const pm = makePeopleMaterials();
+    const capClose = Math.min(capacity, 48),
+      capNear = Math.min(capacity, 96);
+    // one palette row per figure, and a figure takes a place in the level it is drawn at
+    this.palette = createPalette(gl, capClose + capNear + capacity * 3);
+    const pal = this.palette !== null;
+    const pm = makePeopleMaterials(this.palette ? this.palette.uniforms : null);
     patchLampMaterial(pm.material);
     patchLampMaterial(pm.far);
     // ?pedfar=0: tiny / pin figures with the full shader (A/B of the far variant)
     const farMat = new URLSearchParams(location.search).get('pedfar') === '0' ? pm.material : pm.far;
     // ?pednear=far (debug A/B): the near level drawn with the far program — the upper bound of a leaner near shader
     const nearMat = new URLSearchParams(location.search).get('pednear') === 'far' ? pm.far : pm.material;
-    this.close = new Layer(4, pm.material, null, Math.min(capacity, 48));
-    this.near = new Layer(0, nearMat, null, Math.min(capacity, 96));
-    this.far = new Layer(1, pm.material, null, capacity);
-    this.tiny = new Layer(2, farMat, null, capacity);
-    this.pin = new Layer(3, farMat, null, capacity);
-    this.shadow = new Layer(2, makeInvisibleMaterial(), pm.depth, capacity);
+    this.close = new Layer(4, pm.material, null, capClose, pal);
+    this.near = new Layer(0, nearMat, null, capNear, pal);
+    this.far = new Layer(1, pm.material, null, capacity, pal);
+    this.tiny = new Layer(2, farMat, null, capacity, pal);
+    this.pin = new Layer(3, farMat, null, capacity, pal);
+    this.shadow = new Layer(2, makeInvisibleMaterial(), pm.depth, capacity, pal);
     this.shadow.mesh.castShadow = true;
     this.shadow.mesh.receiveShadow = false;
     this.levels = [this.close, this.near, this.far, this.tiny, this.pin];
@@ -423,6 +440,8 @@ export class CrowdRenderer {
     const raining = rain > 0.15;
     const all = this.layers;
     for (let i = 0; i < all.length; i++) all[i].n = 0;
+    const palette = this.palette;
+    if (palette !== null) palette.begin();
     let np = 0,
       nd = 0,
       nb = 0;
@@ -572,14 +591,15 @@ export class CrowdRenderer {
         R[3] = m.yaw;
         packPose(pose, PP);
         CC[10] = flags >>> 0;
-        if (shadows && d2 < shadowD2 && this.shadow.n < this.shadow.capacity) this.shadow.put(R, PP, CC);
+        const row = palette !== null ? palette.add(PP) : 0;
+        if (shadows && d2 < shadowD2 && this.shadow.n < this.shadow.capacity) this.shadow.put(R, PP, CC, row);
         if (out && out !== layer && out.n < out.capacity) {
           // incoming level keeps the dither cells below xf, the outgoing one (negative fade) the rest
           packScaleFade(pose.scale, -Math.max(0.002, st.xf), PP);
-          out.put(R, PP, CC);
+          out.put(R, PP, CC, row);
           packScaleFade(pose.scale, Math.min(0.994, st.xf), PP);
         }
-        layer.put(R, PP, CC);
+        layer.put(R, PP, CC, row);
         // blob shadow
         const fx = Math.sin(m.yaw),
           fz = Math.cos(m.yaw);
@@ -688,9 +708,11 @@ export class CrowdRenderer {
     this.pram.visible = np > 0;
     this.dog.visible = nd > 0;
     this.blob.visible = nb > 0;
+    if (palette !== null && this.group.visible) palette.render();
   }
 
   dispose(): void {
+    if (this.palette !== null) this.palette.dispose();
     const mats = new Set<THREE.Material>();
     for (const l of [this.close, this.near, this.far, this.tiny, this.pin, this.shadow]) {
       l.geo.dispose();

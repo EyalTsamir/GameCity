@@ -4,6 +4,7 @@
 // fades into a calm haze so the diorama floats in front of a studio backdrop.
 
 import * as THREE from 'three';
+import { perfOn } from '../../core/perfdeep';
 import type { SkyState } from './palette';
 import { ATMO_FUNCS, ATMO_N, atmoData } from '../atmosphere';
 import { SKY_LUT_GLSL } from './physical';
@@ -248,6 +249,10 @@ void main() {
      + texture2D(tCloudVol, cuv + vec2(-0.4 * ct.x, ct.y)) + texture2D(tCloudVol, cuv - vec2(-0.4 * ct.x, ct.y))) * 0.16;
   col = col * (1.0 - cv.a) + cv.rgb;
 #endif
+${perfOn('r11') ? `  // the scene target is R11F_G11F_B10F (relative step 1/64–1/32, blue 1/32–1/16): one step of noise keeps the
+  // big gradient from contouring
+  float thIgn = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));
+  col *= 1.0 + (thIgn - 0.5) * vec3(0.022, 0.022, 0.044);` : ''}
   gl_FragColor = vec4(col, 1.0);
   #include <tonemapping_fragment>
   #include <colorspace_fragment>

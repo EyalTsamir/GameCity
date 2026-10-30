@@ -20,6 +20,8 @@ import { AOApplyEffect, aoUniforms } from './postfx/aoApply';
 import { AdaptiveController, GpuTimer, buildLadder, type QualityStep } from './postfx/adaptive';
 import { WORLD_MODE } from '../core/world';
 import { SunShaftsEffect } from './postfx/sunShafts';
+import { setAtmoCamera } from './atmosphere';
+import { perfOn } from '../core/perfdeep';
 import type { AtmosphereService } from './sky/atmoDrive';
 
 /** previous frame's scene depth for soft particles (see ctx.services.postfx.softDepth) */
@@ -215,6 +217,14 @@ export default function create(ctx: CityContext): CityModule {
   const fxPass = new EffectPass(camera, ...(Object.keys(all) as (keyof typeof all)[]).filter((k) => fxList.includes(k)).map((k) => all[k]));
   fxPass.dithering = true;
   composer.addPass(fxPass);
+  // The scene target as R11F_G11F_B10F (32 bpp, nothing reads its alpha): half the bandwidth of RGBA16F on this tiler,
+  // 3–5 ms a frame (perf-deep, ?nor11). After addPass: the effects' own buffers follow the composer's type at addPass.
+  if (perfOn('r11') && fbType === THREE.HalfFloatType) {
+    const t = composer.inputBuffer.texture;
+    t.format = THREE.RGBFormat;
+    t.type = THREE.UnsignedInt101111Type;
+    t.internalFormat = 'R11F_G11F_B10F';
+  }
 
   // bloom passes are skipped entirely while bloom is off
   const bloomUpdate = bloom.update.bind(bloom);
@@ -304,6 +314,7 @@ export default function create(ctx: CityContext): CityModule {
       if (ctx.debug.enabled) console.info(`[postfx] quality → ${s.name}`);
     },
     params.get('adaptive') !== '0',
+    perfOn('adapt30'),
   );
   step = ladder[0];
   if (ctx.debug.enabled) ctx.services.postfxInternals = { composer, ao, aoFx, clouds, tilt, bloom, look, smaa, fxPass, renderPass, setAOPath, adaptive, ladder };
@@ -402,6 +413,7 @@ export default function create(ctx: CityContext): CityModule {
   ctx.render = (realDt: number) => {
     renderer.info.reset();
     camera.updateMatrixWorld();
+    setAtmoCamera(camera.position.y);
     // world: the raymarched cumulus deck for this frame's final camera (the dome composites it)
     (ctx.services.sky as { renderClouds?(r: THREE.WebGLRenderer, c: THREE.PerspectiveCamera): void } | undefined)?.renderClouds?.(renderer, camera);
     if (!enabledAll) {

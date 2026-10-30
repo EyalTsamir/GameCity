@@ -38,6 +38,7 @@ and swallow Vite's HMR websocket so a test page never reloads mid-run. Always Re
   (vsync and frame cap disabled, adaptive quality off); the difference between variants is a module's cost.
   The fps reported by shot.mjs is capped at 60 and says nothing about cost. GPU clocks make numbers noisy:
   compare variants within one run and repeat.
+- `node scripts/abprof.mjs --views downtown --ab "label=apply code|restore code"` — A/B in one page with alternating windows, ±0.1–0.4 ms where reloads give ±1–2; `scripts/splitprof.mjs` — fragment vs vertex, overdraw, per-draw vertices; `scripts/power-guard.mjs` — stops a run when the charger drops.
 - `node scripts/soak.mjs --minutes 4 --speed 4` — long run sampling fps, heap, module stats and invariant violations
   (4 min at 4× ≈ one game day).
 - `node scripts/ui-test.mjs` — real mouse/keyboard tests of camera/UI/audio; run one step with `--steps follow` (see its header for the list).
@@ -126,7 +127,7 @@ clouds on planned paths that frame the hero overview. One wind for everything: `
   `footprint` (overhangs ≤ 1.2 m and only above 2.4 m).
 - Performance target is an integrated Qualcomm Adreno X1-45 at ~1920×1025 device px. The scene pass is largely
   vertex-bound: merge/instance (≈165–190 draw calls in full-city views since the world round, 2.3–2.8 M triangles), distance LODs, few shadow casters, no per-frame allocations.
-  Measure with `perf.mjs` before and after. The world round (2026-10) exceeds the old ≤ +2 ms rule on high by design
+  Measure with `perf.mjs` before and after. Perf-deep findings (`docs/progress/perf-deep.md`, switches `?noperfdeep`, `?no<name>`): a `flat` varying costs a geometry shader unless the provoking vertex is first (`main.ts`), `invalidateFramebuffer` is very expensive here, static triangles cost 2.5 ns each. The world round (2026-10) exceeds the old ≤ +2 ms rule on high by design
   (estimated +4–6 ms at eye level / +3.5–4.5 ms overview, unmeasured on the target): every feature has a quality
   tier and a URL toggle so the budget can be decided from real measurements — see `docs/progress/WORLD.md`.
 - Keep the console clean (diagnostics only behind `?debug`) and keep the build single-file: no web workers, no

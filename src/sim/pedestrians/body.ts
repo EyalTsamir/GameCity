@@ -19,6 +19,7 @@
 // sleeves / trousers / tops / skirts are continuous parameters instead of hidden meshes.
 
 import * as THREE from 'three';
+import { flatConvention } from '../../core/perfdeep';
 import { TARGETS, TORSO_H, type BodyRing, type Dims, type FootRing, type LimbRing, type V3 } from './rig';
 
 // ───────────────────────────────────────────────────────────── codes ──
@@ -2226,7 +2227,9 @@ export function figureMesh(lod: Lod): FigureMesh {
   g.setAttribute('normal', new THREE.BufferAttribute(N0, 3));
   g.setAttribute('aMorph', new THREE.BufferAttribute(morph, 4));
   g.setAttribute('aData', new THREE.BufferAttribute(data, 4));
-  g.setIndex(base.idx);
+  // region and material are flat varyings and do change across some triangles: the same vertex provokes in either convention
+  const idx = flatConvention.first ? base.idx.map((_, i) => base.idx[i % 3 === 0 ? i + 2 : i - 1]) : base.idx;
+  g.setIndex(idx);
   g.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, 0.9, 0), 2.5);
   const out = { geometry: g, vertices: nv, triangles: base.idx.length / 3 };
   cache.set(lod, out);

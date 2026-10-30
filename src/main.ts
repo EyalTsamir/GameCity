@@ -14,6 +14,7 @@ import type { CityContext, CityModule, ModuleFactory, QualityState, CameraState,
 import { validateWorld } from './debug/validate';
 import { createShadowLod } from './render/shadowLod';
 import { cullHiddenTriangles } from './render/geomCull';
+import { flatConvention, perfOn } from './core/perfdeep';
 
 // Load order matters: static world → simulations → post-processing → camera → UI.
 const MODULES: [string, () => Promise<{ default: ModuleFactory }>][] = [
@@ -85,6 +86,14 @@ async function boot(): Promise<void> {
     stencil: false,
     preserveDrawingBuffer: params.has('preserve'),
   });
+  // Flat varyings under ANGLE/D3D11: GLES takes them from a triangle's last vertex, D3D from its first, so the default
+  // puts a geometry shader on every draw of a program with one (people, landmarks). −9 ms at the market (perf-deep).
+  // The figures rotate their triangles to keep the same vertex (body.ts); in landmarks vMat is uniform per part.
+  const pvExt = perfOn('pvfirst') ? renderer.getContext().getExtension('WEBGL_provoking_vertex') : null;
+  if (pvExt) {
+    pvExt.provokingVertexWEBGL(0x8e4d);
+    flatConvention.first = true;
+  }
   renderer.setPixelRatio(quality.pixelRatio);
   renderer.setSize(window.innerWidth, window.innerHeight, false);
   renderer.outputColorSpace = THREE.SRGBColorSpace;

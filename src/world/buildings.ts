@@ -12,6 +12,7 @@
 // spatial chunks so the main and the shadow pass frustum-cull what they can't see.
 
 import * as THREE from 'three';
+import { perfOn } from '../core/perfdeep';
 import type { CityContext, CityModule, PickHit } from '../core/context';
 import type { Lot, BuildingKind, Area } from '../core/plan';
 import { DIR_YAW } from '../core/geom';
@@ -256,6 +257,30 @@ export default function create(ctx: CityContext): CityModule {
     m.geometry.computeBoundingBox();
     return m.geometry.boundingBox!;
   });
+  // depth-only pre-pass of the (few thousand) facade triangles, first of the frame: everything behind a building is
+  // rejected before it is shaded, also the small objects drawn before the facades. Trivial program and pushed back a
+  // little so that nothing changes on the facade itself. Own trivial program: the old attempt (colorWrite = false on
+  // the facade material) still ran the whole facade shader. Main view only (not in the reflection layer).
+  if (perfOn('shellprepass') && ctx.quality.level === 'high') {
+    const depthOnly = new THREE.ShaderMaterial({
+      name: 'buildings-prepass',
+      vertexShader: 'void main() { gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 ); }',
+      fragmentShader: 'void main() {}',
+      colorWrite: false,
+      side: mats.shell.side,
+      polygonOffset: true,
+      polygonOffsetFactor: 1,
+      polygonOffsetUnits: 1,
+    });
+    for (const m of shellMeshes) {
+      const p = new THREE.Mesh(m.geometry, depthOnly);
+      p.name = 'buildings-prepass';
+      p.matrixAutoUpdate = false;
+      p.updateMatrix();
+      p.renderOrder = -100;
+      group.add(p);
+    }
+  }
   for (const b of trimChunks.values()) add(b, mats.trim, 'buildings-trim', true, true);
   add(lights, mats.lights, 'buildings-lights', false, false);
   add(signs, mats.signs, 'buildings-signs', false, true);

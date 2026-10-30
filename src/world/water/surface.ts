@@ -33,6 +33,16 @@ import type { HullContacts } from './hulls';
 import { MAX_HULLS } from './hulls';
 import type { WaterExtension } from './extension';
 import { WORLD_MODE } from '../../core/world';
+import { perfOn } from '../../core/perfdeep';
+
+// perf-deep (docs/progress/perf-deep.md): early-outs for terms whose weight is exactly 0 (fine ripples and sparkles at coarse
+// footprints, river-only fetches at sea, foam noise in the open sea). FXC flattens an `if` that holds an implicit-gradient
+// fetch or fwidth, so those fetches become textureGrad with derivatives hoisted before the branches. `?nowatergates` /
+// `?noperfdeep` generate the old source.
+const WG = perfOn('watergates');
+// perf-deep `waterlod` (`?nowaterlod`): the hull loop costs ~15 instructions per hull on every water pixel even where every hull
+// fails its own distance test: one test against the box round all of them skips it (exact).
+const WL = perfOn('waterlod');
 
 export interface SurfaceResult {
   mesh: THREE.Mesh;
@@ -220,7 +230,7 @@ uniform vec4 uHullA[${MAX_HULLS}];
 uniform vec4 uHullB[${MAX_HULLS}];
 uniform vec4 uHullC[${MAX_HULLS}];
 uniform int uHullN;
-uniform vec3 wShallow;
+${WL ? 'uniform vec4 uHullBox;\n' : ''}uniform vec3 wShallow;
 uniform vec3 wMid;
 uniform vec3 wDeep;
 uniform vec3 wRivS;
@@ -301,8 +311,11 @@ float wHullW(float u, vec4 B, float transom) {
 vec4 waterBase() {
   vec3 p = vWW;
   float t = uTime;
+${WG ? `  vec2 pdx = dFdx(p.xz), pdy = dFdy(p.xz);   // hoisted: the gated fetches below use explicit gradients
   // slab: baked field texture; beyond the slab (world mode): per-vertex field values
-  vec4 fld = vFld.w < -0.5 ? texture2D(tField, (p.xz - uSlabXf.xy) * uSlabXf.zw) : vFld;
+  vec4 fld = vFld;
+  if (vFld.w < -0.5) fld = textureGrad(tField, (p.xz - uSlabXf.xy) * uSlabXf.zw, pdx * uSlabXf.zw, pdy * uSlabXf.zw);` : `  // slab: baked field texture; beyond the slab (world mode): per-vertex field values
+  vec4 fld = vFld.w < -0.5 ? texture2D(tField, (p.xz - uSlabXf.xy) * uSlabXf.zw) : vFld;`}
   float depth = fld.r + vDisp;
   float shore = fld.g;
   float beach = fld.b;
@@ -325,7 +338,9 @@ vec4 waterBase() {
   vec4 mA = texture2D(tWM, pw * (1.0 / 270.0) + vec2(-t * 0.0019, 0.0));
   vec4 mB = texture2D(tWM, p.xz * (1.0 / 160.0) + vec2(-t * 0.0012, t * 0.0008));
   vec2 pr = vec2(p.x - t * 0.33, p.z);
-  vec4 mR = texture2D(tWM, pr * vec2(1.0 / 70.0, 1.0 / 16.0));
+${WG ? `  // (river streaks: its weights mRiv and smoothstep(0.15, 0.45, region) are both exactly 0 for region <= 0.15, the open sea)
+  vec4 mR = vec4(0.0);
+  if (region > 0.15) mR = textureGrad(tWM, pr * vec2(1.0 / 70.0, 1.0 / 16.0), pdx * vec2(1.0 / 70.0, 1.0 / 16.0), pdy * vec2(1.0 / 70.0, 1.0 / 16.0));` : `  vec4 mR = texture2D(tWM, pr * vec2(1.0 / 70.0, 1.0 / 16.0));`}
   // 0 glassy slick .. 1 ruffled: broad patches + long glassy wind slicks (lanes along the wind)
   float slick = smoothstep(0.6, 0.78, mA.r) * mSea;
   float ruff = clamp(0.55 + 1.5 * (mB.g - 0.5) + 0.5 * (mA.r - 0.5), 0.0, 1.0);
@@ -355,12 +370,21 @@ vec4 waterBase() {
   vec2 rt = s1 * k1 + s2 * k2;
   tilt += wdir * rt.x + wper * rt.y;
   // river: flow ripples drift east
-  vec4 rf = texture2D(tWN, vec2(p.x * 0.11 - t * 0.075, p.z * 0.23));
+${WG ? `  if (mRiv > 0.0) {   // (the term is multiplied by mRiv)
+    vec4 rf = textureGrad(tWN, vec2(p.x * 0.11 - t * 0.075, p.z * 0.23), pdx * vec2(0.11, 0.23), pdy * vec2(0.11, 0.23));
+    tilt += (rf.xz * 2.0 - 1.0) * vec2(0.05, 0.12) * mRiv * calm;
+  }
+  // fine analytic ripples, box-filtered by the footprint (weight exactly 0 from fp = 0.45 m)
+  if (fp < 0.45) {
+    vec2 gr = vec2(0.0);
+    th_ripple(p.xz, t, gr);
+    tilt -= gr * calm * (0.6 + 0.4 * amp) * (1.0 - smoothstep(0.12, 0.45, fp));
+  }` : `  vec4 rf = texture2D(tWN, vec2(p.x * 0.11 - t * 0.075, p.z * 0.23));
   tilt += (rf.xz * 2.0 - 1.0) * vec2(0.05, 0.12) * mRiv * calm;
   // fine analytic ripples, box-filtered by the footprint
   vec2 gr = vec2(0.0);
   th_ripple(p.xz, t, gr);
-  tilt -= gr * calm * (0.6 + 0.4 * amp) * (1.0 - smoothstep(0.12, 0.45, fp));
+  tilt -= gr * calm * (0.6 + 0.4 * amp) * (1.0 - smoothstep(0.12, 0.45, fp));`}
   wN = normalize(vec3(tilt.x, 1.0, tilt.y));
   // unresolved slope variance (mip + footprint) → roughness
   float wVar = var1 * k1 * k1 * 2.2 + var2 * k2 * k2 * 2.2 + smoothstep(0.1, 0.6, fp) * 0.004;
@@ -440,6 +464,10 @@ vec4 waterBase() {
   vec2 eb = min(p.xz - uSlabBox.xy, uSlabBox.zw - p.xz);
   reflW *= smoothstep(0.0, 2.5, min(eb.x, eb.y));
 #endif
+${WG ? `  // (fwidth hoisted out of the branch so that it can really skip: ponds, reflection pass off)
+  vec4 c0 = uReflMat * vec4(p.x, ${WATER_LEVEL.toFixed(2)}, p.z, 1.0);
+  vec2 uv0 = c0.xy / c0.w;
+  vec2 duv = fwidth(uv0) * uReflInfo.yz;` : ''}
   if (reflW > 0.001) {
     vec2 vh = normalize(V.xz + vec2(1e-5, 0.0));
     vec2 vs = vec2(-vh.y, vh.x);
@@ -447,14 +475,14 @@ vec4 waterBase() {
     vec2 dt = tilt - (-g * amp) * 0.6;
     float kd = mix(2.2, 5.0, ruff) * (0.6 + 0.4 * min(dist / 150.0, 1.5)) * (1.0 - 0.35 * smoothstep(200.0, 600.0, dist));
     vec2 off = vh * dot(dt, vh) * kd * 2.4 + vs * dot(dt, vs) * kd * 0.8;
-    vec4 c0 = uReflMat * vec4(p.x, ${WATER_LEVEL.toFixed(2)}, p.z, 1.0);
+${WG ? '' : `    vec4 c0 = uReflMat * vec4(p.x, ${WATER_LEVEL.toFixed(2)}, p.z, 1.0);
     vec2 uv0 = c0.xy / c0.w;
-    vec4 c1 = uReflMat * vec4(p.x + off.x, ${WATER_LEVEL.toFixed(2)}, p.z + off.y, 1.0);
+`}    vec4 c1 = uReflMat * vec4(p.x + off.x, ${WATER_LEVEL.toFixed(2)}, p.z + off.y, 1.0);
     vec2 uv = c1.xy / c1.w;
     vec4 c2 = uReflMat * vec4(p.x + off.x + vh.x, ${WATER_LEVEL.toFixed(2)}, p.z + off.y + vh.y, 1.0);
     vec2 su = c2.xy / c2.w - uv;
-    vec2 duv = fwidth(uv0) * uReflInfo.yz;
-    float lod0 = log2(max(max(duv.x, duv.y), 1e-3));
+${WG ? '' : `    vec2 duv = fwidth(uv0) * uReflInfo.yz;
+`}    float lod0 = log2(max(max(duv.x, duv.y), 1e-3));
     float lod = clamp(lod0 + 0.35 + 1.4 * ruff + min(25.0 * wVar, 2.0), 0.0, uReflInfo.w);
     // far away the waves break a reflection into a soft, short, darker smear (no ghost copies)
     float farR = smoothstep(140.0, 520.0, dist);
@@ -471,7 +499,7 @@ vec4 waterBase() {
 
   // ── hull contact: contact shadow + foam line
   float hDark = 0.0, hFoam = 0.0;
-  for (int i = 0; i < ${MAX_HULLS}; i++) {
+${WL ? '  if (p.x >= uHullBox.x && p.z >= uHullBox.y && p.x <= uHullBox.z && p.z <= uHullBox.w)\n' : ''}  for (int i = 0; i < ${MAX_HULLS}; i++) {
     if (i >= uHullN) break;
     vec4 A = uHullA[i];
     vec4 B = uHullB[i];
@@ -498,8 +526,15 @@ vec4 waterBase() {
   }
 
   // ── foam: shoreline + swash, beach wave lines, wall lapping, hull lines
-  vec4 lc = texture2D(tWM, p.xz * (1.0 / 9.0) + vec2(t * 0.011, -t * 0.007));
-  vec4 lf = texture2D(tWM, p.xz * (1.0 / 3.1) - vec2(t * 0.017, t * 0.023));
+${WG ? `  // open sea (no shore within 15 m, deeper than any edge band, no hull foam, no pond): edge, line, lap and hFoam are all exactly 0
+  // whatever the lace is (edge's band is <= 0.38 m, line / lap vanish at shore >= 15 / 0.95) and so is mPond * pondBank, so the
+  // two lace fetches are skipped (the 0.5 stands in, never used)
+  vec4 lc = vec4(0.5), lf = vec4(0.5);
+  if (!(depth >= 0.38 && shore >= 15.0 && hFoam <= 0.0 && mPond <= 0.0)) {
+    lc = textureGrad(tWM, p.xz * (1.0 / 9.0) + vec2(t * 0.011, -t * 0.007), pdx * (1.0 / 9.0), pdy * (1.0 / 9.0));
+    lf = textureGrad(tWM, p.xz * (1.0 / 3.1) - vec2(t * 0.017, t * 0.023), pdx * (1.0 / 3.1), pdy * (1.0 / 3.1));
+  }` : `  vec4 lc = texture2D(tWM, p.xz * (1.0 / 9.0) + vec2(t * 0.011, -t * 0.007));
+  vec4 lf = texture2D(tWM, p.xz * (1.0 / 3.1) - vec2(t * 0.017, t * 0.023));`}
   float lace = lc.b * 0.6 + lf.b * 0.4;
   float swash = 0.5 + 0.5 * sin(t * 0.85 - shore * 0.9);
   float edge = (1.0 - smoothstep(0.0, (0.12 + 0.16 * lace + 0.1 * swash) * mix(1.0, 0.35, mPond), depth)) * smoothstep(-0.02, 0.02, depth);
@@ -526,7 +561,7 @@ vec4 waterBase() {
   wGlintK = sunUp * (1.0 - uSkyOvercast * 0.9) * (1.0 + 0.6 * TH_GOLD);
   // sparkles: point glints — random wave facets on a 0.35 m grid flash when they face the light;
   // ~1-2 px wide whatever the distance, faded out before they could alias
-  {
+${WG ? `  if (fp < 0.2) {   // (weight (1 - smoothstep(0.05, 0.2, fp)) is exactly 0 from there on)` : '  {'}
     float cs = 0.35;
     vec2 cq = p.xz / cs;
     vec2 ci = floor(cq);
@@ -697,7 +732,7 @@ reflectedLight.indirectDiffuse += diffuseColor.rgb * thLampLight(vWW, vec3(0.0, 
   const atmoActive = (ctx.services.atmosphere as { active?: boolean } | undefined)?.active === true;
   if (WORLD_MODE && atmoActive) defs.TH_ATMO = 1;
   mat.defines = defs;
-  mat.customProgramCacheKey = () => 'th-water-v3' + (dbg ?? '') + (WORLD_MODE ? 'w' : 'd') + (atmoActive ? 'a' : '') + (duskSea ? 'd' : '');
+  mat.customProgramCacheKey = () => 'th-water-v3' + (WG ? 'g' : '') + (WL ? 'l' : '') + (dbg ?? '') + (WORLD_MODE ? 'w' : 'd') + (atmoActive ? 'a' : '') + (duskSea ? 'd' : '');
   const mesh = new THREE.Mesh(geo, mat);
   mesh.name = 'water-surface';
   mesh.receiveShadow = true;

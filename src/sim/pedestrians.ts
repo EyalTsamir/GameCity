@@ -30,7 +30,7 @@ export default function create(ctx: CityContext): CityModule {
   gaitConfig.legacy = legacy;
   const places = buildPlaces(ctx, rng.fork('places'));
   const crowd = new Crowd(ctx, places, rng.fork('crowd'));
-  const renderer = legacy ? new LegacyRenderer(ctx.scene, 720, ctx.quality.shadows) : new CrowdRenderer(ctx.scene, 720, ctx.quality.shadows);
+  const renderer = legacy ? new LegacyRenderer(ctx.scene, 720, ctx.quality.shadows) : new CrowdRenderer(ctx.scene, 720, ctx.quality.shadows, ctx.renderer);
   // ?hide=pedestrians: simulate but draw nothing (isolates the rendering cost in perf runs)
   if ((ctx.debug.params.get('hide') ?? '').split(',').includes('pedestrians')) renderer.group.visible = false;
   if (ctx.debug.params.has('pedlod')) {

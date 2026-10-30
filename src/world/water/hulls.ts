@@ -45,6 +45,8 @@ export class HullContacts {
     uHullB: { value: Array.from({ length: MAX_HULLS }, () => new THREE.Vector4(1, 1, 0.1, -0.24)) },
     uHullC: { value: Array.from({ length: MAX_HULLS }, () => new THREE.Vector4()) },
     uHullN: { value: 0 },
+    /** xz box round every hull's test circle (x0, z0, x1, z1), read by the water shader (perf-deep `waterlod`) */
+    uHullBox: { value: new THREE.Vector4(1, 1, 0, 0) },
   };
   private frustum = new THREE.Frustum();
   private pm = new THREE.Matrix4();
@@ -59,6 +61,10 @@ export class HullContacts {
     this.frustum.setFromProjectionMatrix(this.pm);
     const U = this.uniforms;
     let n = 0;
+    let bx0 = Infinity,
+      bz0 = Infinity,
+      bx1 = -Infinity,
+      bz1 = -Infinity;
     const push = (x: number, z: number, yaw: number, a: number, b: number, ub: number, us: number, transom: number, speed: number, foam: number, dark: number) => {
       if (n >= MAX_HULLS) return;
       this.sphere.center.set(x, -1.6, z);
@@ -67,6 +73,11 @@ export class HullContacts {
       U.uHullA.value[n].set(x, z, Math.sin(yaw), Math.cos(yaw));
       U.uHullB.value[n].set(a, b, ub, us);
       U.uHullC.value[n].set(transom, speed, foam, dark);
+      // (the shader's per-hull early-out radius: half length + 9 m)
+      bx0 = Math.min(bx0, x - a - 9);
+      bz0 = Math.min(bz0, z - a - 9);
+      bx1 = Math.max(bx1, x + a + 9);
+      bz1 = Math.max(bz1, z + a + 9);
       n++;
     };
     const ship = (this.ctx.services.harbor as { ship?: ShipSvc | null } | undefined)?.ship;
@@ -89,6 +100,8 @@ export class HullContacts {
       }
     }
     U.uHullN.value = n;
+    if (n > 0) U.uHullBox.value.set(bx0, bz0, bx1, bz1);
+    else U.uHullBox.value.set(1, 1, 0, 0);
     this.count = n;
   }
 }

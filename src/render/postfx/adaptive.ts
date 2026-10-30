@@ -72,6 +72,15 @@ const GPU_HEAVY = 14;
 const GPU_UP = 13.5;
 /** a held shot slower than this per frame steps down at the next fade (the film's cadence is 33 ms) */
 const HELD_SLOW_MS = 37;
+/**
+ * perf-deep (?noadapt30): above this GPU time per frame no step of the ladder reaches 60 fps, so the next cadence a
+ * step can buy is 30 fps. A steady 30 is not "slow": quality only goes down below HOLD30_FPS, and comes back whenever
+ * the step's measured saving still fits the 33 ms. Before, a 25–33 ms GPU walked the ladder (AO, then resolution) for
+ * a frame rate it could never reach.
+ */
+const HOLD30_GPU = 24;
+const HOLD30_FPS = 28;
+const HOLD30_UP = 30.5;
 /** the film's curtain: the top step keeps going up to this much GPU time per frame */
 const START_FULL_MS = 31;
 
@@ -152,6 +161,7 @@ export class AdaptiveController {
     public readonly ladder: QualityStep[],
     private onChange: (step: QualityStep, level: number) => void,
     public enabled = true,
+    private hold30 = false,
   ) {}
 
   /** one GPU timing result (ms) for a frame drawn at the current level */
@@ -245,14 +255,18 @@ export class AdaptiveController {
     }
 
     const gpuHeavy = gpu < 0 || gpu >= GPU_HEAVY;
-    if (fps < SLOW_FPS) {
+    const hold30 = this.hold30 && gpu >= HOLD30_GPU;
+    // (a step back up that still fits the 30 fps cadence)
+    const upSaving = this.level > 0 ? this.saving[this.level - 1] : undefined;
+    const fits30 = this.hold30 && fps >= HOLD30_FPS && gpu > 0 && upSaving !== undefined && gpu + upSaving <= HOLD30_UP;
+    if (fps < (hold30 ? HOLD30_FPS : SLOW_FPS)) {
       this.slowWins = gpuHeavy ? this.slowWins + 1 : 0;
       this.fastWins = 0;
       if (!gpuHeavy && !this.capped) {
         this.capped = true; // slow, but our GPU work is light: external cap
         this.cappedUntil = this.clock + 30;
       }
-    } else if (fps >= FAST_FPS) {
+    } else if (fps >= FAST_FPS || fits30) {
       this.fastWins++;
       this.slowWins = 0;
     } else {
@@ -270,7 +284,7 @@ export class AdaptiveController {
     if (this.fastWins >= this.upWait && this.level > 0) {
       const s = this.saving[this.level - 1];
       // with GPU timing: only climb when the predicted cost fits
-      if (gpu > 0 && s !== undefined && gpu + s > GPU_UP) {
+      if (gpu > 0 && s !== undefined && gpu + s > (fits30 ? HOLD30_UP : GPU_UP)) {
         this.fastWins = 0;
         return false;
       }
