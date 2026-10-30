@@ -29,12 +29,15 @@ import { genFlagpole, genMarketStall, genCourtHoops } from './landmarks/civic';
 import { genWaterTower, genChimney, genTanks } from './landmarks/industry';
 import { genStatue, genGazebo, genBandstand, genKiosk, genPlayground, genPicnic } from './landmarks/park';
 import { genWindTurbine, turbineUpdater } from './landmarks/turbines';
+import { Rooms } from './landmarks/rooms';
 
 export default function create(ctx: CityContext): CityModule {
   const t0 = performance.now();
   const plan = ctx.plan;
   const mats = createMaterials(ctx.uniforms);
   const env = new Env(ctx, mats.u);
+  const rooms = new Rooms();
+  env.rooms = rooms;
   const counts: Record<string, number> = {};
   const count = (k: string) => (counts[k] = (counts[k] ?? 0) + 1);
   const stadiums: StadiumInfo[] = [];
@@ -239,6 +242,8 @@ export default function create(ctx: CityContext): CityModule {
   const glowMesh = buildGlows(env.glows, mats.glows);
   if (glowMesh) group.add(glowMesh);
   for (const o of env.extra) group.add(o);
+  for (const r of rooms.list) r.finish(ctx, group, ctx.uniforms);
+  if (rooms.list.length) ctx.services.rooms = rooms;
   group.matrixAutoUpdate = false;
   ctx.scene.add(group);
   // perf diagnostics: ?lmskip=static,kinetic,lights,signs,glows,fountain,crowd,players
@@ -325,6 +330,7 @@ export default function create(ctx: CityContext): CityModule {
         const sp = cellSpheres[i];
         detailCells[i].visible = detailOn && cp.distanceTo(sp.center) - sp.radius < lod;
       }
+      rooms.frame(c, c.camera);
       const day = c.uniforms.uDaylight.value;
       const dusk = c.uniforms.uDusk.value;
       zen.copy(nightZen).lerp(dayZen, day);

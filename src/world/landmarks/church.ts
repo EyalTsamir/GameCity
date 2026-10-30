@@ -14,6 +14,8 @@ import type { Env } from './env';
 import { LM, LMODE } from './builder';
 import { boxHunt } from '../../core/boxhunt';
 import { signQuad } from './signs';
+import { lmDetail } from '../../core/lmdetail';
+import { buildChurchRoom } from './churchRoom';
 
 export function genChurch(env: Env, lot: Lot): void {
   const fp = lot.footprint;
@@ -23,6 +25,8 @@ export function genChurch(env: Env, lot: Lot): void {
   env.begin(cx, 0, cz, yaw);
   env.checkLot(fp, 'church');
   const K = env.S;
+  // ?noherochurch: the closed nave of the box hunt (walls + filler volumes, nothing to walk into)
+  const hero = !!env.rooms && lmDetail(env.ctx, 'herochurch');
   // ?nochurchmould: no hood moulds / archivolts / rose tracery / gablet dressing (A/B); off on low quality
   const mould = !env.ctx.debug.params.has('nochurchmould') && env.ctx.quality.level !== 'low';
   const wall = (k: Kit, spec: WallSpec): void => {
@@ -52,11 +56,12 @@ export function genChurch(env: Env, lot: Lot): void {
     const c = w / 2;
     const o: Opening[] = [];
     if (face === 'front') {
-      o.push({ x: c, y: 0, w: 2.3, h: 4.3, arch: 1.7, pointed: true, fill: 'door', inset: 0.45, surround: trim, surroundW: 0.32, infill: M('#5a3420', PAT.DOOR, 0.6, 0, 0.6, 0, 0.8) });
+      o.push({ x: c, y: 0, w: 2.3, h: 4.3, arch: 1.7, pointed: true, fill: hero ? 'none' : 'door', inset: 0.45, surround: trim, surroundW: 0.32, infill: M('#5a3420', PAT.DOOR, 0.6, 0, 0.6, 0, 0.8) });
       o.push({ x: c, y: 6.1, w: 2.7, h: 2.7, round: true, fill: 'stained', inset: 0.3, surround: trim, surroundW: 0.26, infill: M('#d8ccb0', PAT.ROSE, 0.5, 0, 0.95, 0, 0.3) });
     } else if (face === 'side') {
       o.push({ x: c, y: 6.4, w: 0.65, h: 2.2, arch: 0.45, pointed: true, fill: 'stained', glow: 0.8, seed: 0.3, inset: 0.25, surround: trim, surroundW: 0.12, infill: stained(0.31) });
     }
+    if (face === 'back' && hero) o.push({ x: c, y: 0, w: 2.1, h: 3.6, arch: 1.2, pointed: true, fill: 'none' });
     if (face !== 'back') o.push({ x: c, y: 11.3, w: 0.6, h: 1.9, arch: 0.4, pointed: true, fill: 'dark', inset: 0.25, surround: trim, surroundW: 0.1 });
     // clock (round opening holding the face) — not on the back (hidden by the nave roof)
     if (face !== 'back') o.push({ x: c, y: 15.4, w: 2.0, h: 2.0, round: true, fill: 'none' });
@@ -68,7 +73,8 @@ export function genChurch(env: Env, lot: Lot): void {
   wall(K, { w: TW * 2, h: tTop, depth: 0.7, x: 0, y: 0, z: tz0, ry: Math.PI, mat: stone, openings: towerOpen('back') });
   for (const s of [-1, 1]) wall(K, { w: tD, h: tTop, depth: 0.7, x: s * TW, y: 0, z: tzc, ry: (s * Math.PI) / 2, mat: stone, openings: towerOpen('side') });
   // floors inside the tower openings (hide the void behind the clock holes)
-  K.coreBox(dark, TW * 2 - 1.4, tTop - 1.0, tD - 1.4, 0, 0.5, tzc);
+  if (hero) K.coreBox(dark, TW * 2 - 1.4, tTop - 1.0 - 4.4, tD - 1.4, 0, 4.9, tzc);
+  else K.coreBox(dark, TW * 2 - 1.4, tTop - 1.0, tD - 1.4, 0, 0.5, tzc);
   // clock faces (front + both sides + back)
   for (const [fx, fz, ry] of [
     [0, tz1, 0],
@@ -125,8 +131,8 @@ export function genChurch(env: Env, lot: Lot): void {
   // meeting stile, ring pulls on round back plates, a stone threshold; a darker plinth course round the base
   const iron = M('#1f1d1b', PAT.PLAIN, 0.55, 0.6);
   const dz = tz1 - 0.45 + 0.013;
-  K.box(M('#3e2516', PAT.PLAIN, 0.7), 0.07, 3.0, 0.03, 0, 0, dz + 0.004);
-  for (const sgn of [-1, 1]) {
+  if (!hero) K.box(M('#3e2516', PAT.PLAIN, 0.7), 0.07, 3.0, 0.03, 0, 0, dz + 0.004);
+  if (!hero) for (const sgn of [-1, 1]) {
     for (const yy of [0.55, 1.55, 2.55]) {
       K.box(iron, 0.95, 0.075, 0.022, sgn * 0.6, yy, dz);
       K.box(iron, 0.07, 0.16, 0.024, sgn * 0.11, yy - 0.042, dz, Math.PI / 4);
@@ -280,10 +286,11 @@ export function genChurch(env: Env, lot: Lot): void {
     openings: [
       { x: 1.2, y: 2.6, w: 0.8, h: 3.0, arch: 0.6, pointed: true, fill: 'stained', glow: 0.85, inset: 0.25, infill: stained(0.8) },
       { x: NW * 2 - 1.2, y: 2.6, w: 0.8, h: 3.0, arch: 0.6, pointed: true, fill: 'stained', glow: 0.85, inset: 0.25, infill: stained(0.66) },
+      ...(hero ? [{ x: NW, y: 0, w: 2.1, h: 3.6, arch: 1.2, pointed: true, fill: 'none' as const }] : []),
     ],
   });
-  wall(K, { w: NW * 2, h: ridge, depth: 0.6, x: 0, y: 0, z: nz0, ry: Math.PI, mat: stone, outline: gableOutline(NW * 2), openings: [{ x: NW, y: 9.8, w: 1.6, h: 1.6, round: true, fill: 'stained', glow: 0.85, inset: 0.25, surround: trim, surroundW: 0.15, infill: M('#d8ccb0', PAT.ROSE, 0.5, 0, 0.9, 0, 0.6) }] });
-  K.coreBox(dark, NW * 2 - 1.2, eave - 0.3, nL - 1.2, 0, 0, (nz0 + nz1) / 2);
+  wall(K, { w: NW * 2, h: ridge, depth: 0.6, x: 0, y: 0, z: nz0, ry: Math.PI, mat: stone, outline: gableOutline(NW * 2), openings: [{ x: NW, y: 9.8, w: 1.6, h: 1.6, round: true, fill: 'stained', glow: 0.85, inset: 0.25, surround: trim, surroundW: 0.15, infill: M('#d8ccb0', PAT.ROSE, 0.5, 0, 0.9, 0, 0.6) }, ...(hero ? [{ x: NW, y: 0, w: 5.0, h: 7.2, arch: 3.0, pointed: true, fill: 'none' as const }] : [])] });
+  if (!hero) K.coreBox(dark, NW * 2 - 1.2, eave - 0.3, nL - 1.2, 0, 0, (nz0 + nz1) / 2);
   K.gableRoof(slate, -NW, NW, nz0 - 0.15, nz1 + 0.45, eave, ridge, 'z', 0.45, 0.2, trim);
   // ridge cresting + gable crosses
   K.box(M('#3f4750', PAT.PLAIN, 0.5, 0.4), 0.12, 0.2, nL + 0.4, 0, ridge - 0.05, (nz0 + nz1) / 2);
@@ -333,8 +340,10 @@ export function genChurch(env: Env, lot: Lot): void {
       openings: i === 0 || i === 3 ? [] : [{ x: L / 2, y: 2.6, w: 1.0, h: 4.0, arch: 0.75, pointed: true, fill: 'stained', glow: 0.9, inset: 0.3, surround: trim, surroundW: 0.12, infill: stained(0.2 + i * 0.3) }],
     });
   }
-  K.coreBox(dark, CW * 2 - 1.2, cEave - 0.3, cz1 - az, 0, 0, (az + cz1) / 2 - 0.3);
-  K.cyl(dark, 2.1, 2.1, cEave - 0.3, 0, 0, az, 6);
+  if (!hero) {
+    K.coreBox(dark, CW * 2 - 1.2, cEave - 0.3, cz1 - az, 0, 0, (az + cz1) / 2 - 0.3);
+    K.cyl(dark, 2.1, 2.1, cEave - 0.3, 0, 0, az, 6);
+  }
   // chancel roof: gable part + apse fan
   K.gableRoof(slate, -CW, CW, az, cz1 + 0.2, cEave, cRidge, 'z', 0.35, 0.16, trim);
   const ridgeEnd: V3 = [0, cRidge, az];
@@ -351,7 +360,8 @@ export function genChurch(env: Env, lot: Lot): void {
   K.box(gold, 0.1, 1.0, 0.1, 0, cRidge - 0.1, az);
   K.box(gold, 0.55, 0.1, 0.1, 0, cRidge + 0.55, az);
 
-  if (boxHunt(env.ctx, 'interiors')) churchInterior(env, { NW, nz0, nz1, eave, ridge, nBays, CW, cz1, az });
+  if (hero) buildChurchRoom(env, env.rooms!, { NW, nz0, nz1, eave, ridge, nBays, CW, cz0, cz1, az, cEave, cRidge, TW, tz0, tz1, apse: apsePts, cx, cz, yaw, fp });
+  else if (boxHunt(env.ctx, 'interiors')) churchInterior(env, { NW, nz0, nz1, eave, ridge, nBays, CW, cz1, az });
 
   // ── night: tower beams and ground pools
   for (const s of [-1, 1]) env.glow(s * 2.2, 0.3, tz1 + 1.2, { size: 0.6, kind: 'beam', color: '#ffe0b0', intensity: 0.2, dir: [s * -0.6, 22, -1.0], endSize: 3.0 });

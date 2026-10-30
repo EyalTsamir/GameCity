@@ -10,6 +10,7 @@ import { Kit } from './kit';
 import type { GlowPoint } from './glows';
 import { SignAtlas } from './signs';
 import type { LmUniforms } from './materials';
+import type { Rooms } from './rooms';
 
 export interface PickTarget {
   id: number;
@@ -56,6 +57,8 @@ export class Env {
   /** extra meshes created by generators (fountain water, crowd…) */
   readonly extra: THREE.Object3D[] = [];
   readonly stats: Record<string, number | string> = {};
+  /** hero interiors (near-only, landmarks/rooms.ts) */
+  rooms: Rooms | null = null;
   private fx = new THREE.Matrix4();
   private yaw = 0;
   private violations = 0;

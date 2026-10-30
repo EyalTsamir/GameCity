@@ -42,6 +42,12 @@ interface Slab {
   deck: boolean;
 }
 
+/** the hero interiors (world/landmarks/rooms.ts): undefined = this point is not in a room, ask the city */
+interface RoomsSvc {
+  solid(x: number, z: number): boolean | undefined;
+  height(x: number, z: number): number | undefined;
+}
+
 const CELL = 8;
 /** largest body radius clear() is asked about (the walker's 0.42, the spawn search's 0.57) */
 const BODY_MAX = 0.6;
@@ -235,6 +241,8 @@ export class WalkSurface {
   heightAt(x: number, z: number): number {
     let h = this.ground(x, z);
     if (!this.inSlab(x, z)) return h;
+    const room = (this.ctx.services.rooms as RoomsSvc | undefined)?.height(x, z);
+    if (room !== undefined) return room;
     const o = this.ctx.occupancy.get(x, z);
     if (o & OCC.SIDEWALK) h = Math.max(h, SIDEWALK_Y);
     const p = this.platformY(x, z);
@@ -252,6 +260,8 @@ export class WalkSurface {
       return this.outsideWater(x, z);
     }
     if (this.platformY(x, z) > -Infinity) return false;
+    const room = (this.ctx.services.rooms as RoomsSvc | undefined)?.solid(x, z);
+    if (room !== undefined) return room;
     const o = this.ctx.occupancy.get(x, z);
     if (o & (OCC.BUILDING | OCC.SOLID)) return true;
     if (o & OCC.WATER) return !(this.deckY(x, z, true) > -Infinity);
