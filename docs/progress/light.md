@@ -13,6 +13,23 @@
   with diffuse IBL ÷1.7 `?envold`, night fill 0.36 → 0.42, 7.8 h fill 0.58 → 0.64, grade contrast 0.21 / lift back
   up, canyon sun bounce alive at a low sun).
 - Round 5 (8f31b45 + this): lamp specular opt-in `?lampspec`; hitch A/B shows no light-round freezes or compiles.
+- Short round 2 (2026-10-30 morning, after merging claude/pensive-gates-bim12i = fe4486e with buildings / places /
+  box-hunt): hero views overview, street, market, harbor, lane `83.7,1.2,-39,9,0,4`, quay `-58,0,111,22,10,6`,
+  churchyard `80.1,1.5,90,11,0,6` at 18.2 / 21.5 h → `shots/light/m1` (before) / `m2` (after), sheets
+  `shots/light/sheets/m1_m2_<hour>.jpg`; judges scratchpad judge3_dusk.md / judge3_night.md. Fixes (one commit each,
+  all 0 ms GPU — tuning only): lamp halos as a glass-sized hot core + faint veil (`?haloold`, props/glow.ts — the box
+  hunt's "glare hides the lamp housing"); tighter lamp pools, profile exponent +0.4–0.6 and knee 2.4 → 3.0
+  (`?poolold`, lamps/bake.ts — "evenly lit orange ground, no pool falloff"); golden-hour lanes less crushed (sky
+  visibility strength 0.85 → 0.75, canyon metering up to +0.38 EV); softer lamp cut-off above the heads
+  (smoothstep(−0.4, 0.45) — the wedge on the churchyard wall).
+  Verified: m2 captures console 0 errors, invariants {}; hitch (`shots/light/hitch_m2.json`, overview / street / lane /
+  market × 18.2 / 21.5 h) 0 mid-run shader compiles in every window, adaptive ladder stepping (refl-low), no errors;
+  the machine was loaded again (GPU 82–105 ms/frame, twice the usual) so its freeze count is environmental, as
+  the earlier same-load A/B with every light toggle off showed. Visible result: street / lane lamp heads show their
+  arm and housing with a small hot core instead of a 150 px blob; golden-hour lanes a little lighter in shade.
+  Left from the judges (not 0-cost tuning): sun glitter / specular on glass and water at golden hour, contact-
+  hardening penumbrae, warm Mie forward scatter in the haze (must stay in sync with the dome), window emission
+  variety, headlight road cones.
 - STATUS: round complete. Final captures `shots/light/final` (same 35 as base), before/after sheets per hour
   `shots/light/sheets/before_after_<hour>.jpg`. Verified: console 0 errors (7 pre-existing ANGLE warnings, same as
   base), invariants {} in every capture run, full-city `ui-test --q noidle` 54/54 (incl. the 3 resize-layout steps,
