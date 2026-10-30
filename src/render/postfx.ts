@@ -215,6 +215,14 @@ export default function create(ctx: CityContext): CityModule {
   const fxPass = new EffectPass(camera, ...(Object.keys(all) as (keyof typeof all)[]).filter((k) => fxList.includes(k)).map((k) => all[k]));
   fxPass.dithering = true;
   composer.addPass(fxPass);
+  // ?r11: the scene target as R11F_G11F_B10F (32 bpp): after addPass, the effects' own buffers follow the composer's
+  // type at addPass
+  if (params.has('r11')) {
+    const t = composer.inputBuffer.texture;
+    t.format = THREE.RGBFormat;
+    t.type = THREE.UnsignedInt101111Type;
+    t.internalFormat = 'R11F_G11F_B10F';
+  }
 
   // bloom passes are skipped entirely while bloom is off
   const bloomUpdate = bloom.update.bind(bloom);
