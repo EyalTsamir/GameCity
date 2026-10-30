@@ -193,8 +193,10 @@ async function boot(): Promise<void> {
     try {
       const mod = await loader();
       const t0 = performance.now();
+      const childrenBefore = scene.children.length;
       const inst = await mod.default(ctx);
       if (inst) modules.push(inst);
+      for (let c = childrenBefore; c < scene.children.length; c++) scene.children[c].userData.module = name; // scripts/geomaudit.mjs
       if (name === 'sky' && preRT && wanted.some(([n]) => n === 'buildings')) facadeStandIn = await facadeStandInMesh(ctx);
       precompile();
       if (name === 'buildings') dropStandIn();
