@@ -3,6 +3,24 @@
 Read this first when resuming after an interruption (usage limits have cut runs before).
 Per-module logs live next to this file: `docs/progress/<module>.md`.
 
+## Lead state (2026-10-30 afternoon) — living-scenes, director-mode, geometry-hunt merged at e449579
+* Merged: living-scenes (market day, deliveries, wedding, musician, park, balconies, `?noscenes` — living-scenes.md),
+  director-mode (opening film `?film` / `?nofilm`, photo mode `P`, Places moved to `O` — director.md), geometry-hunt
+  (triangle + defect cleanup, `scripts/geomaudit.mjs`, `?nogeomhunt` — geometry-hunt.md).
+* Checks on e449579, AC power, quiet machine: typecheck + build OK (4.04 MB); overview shot invariants `{}`, validate `[]`,
+  console clean; ui-test full run 69/71 on battery, the 2 failures (click-follow flake, film wheel hand-back) pass on AC
+  (`--steps film,kinds` 11/11); hitch overview 12 / 21.5 h: 0 freezes, max 83.5 ms, 0 mid-run programs.
+* Perf (`perf.mjs`, 1920×1025, high, 2 interleaved repeats, ms/frame at 12 h and 21.5 h):
+  all on: overview 47.4 / 49.9, downtown 54.1 / 56.3, street 45.7 / 44.3, market 46.4 / 44.0. `?nogeomhunt` costs +2.2 / +1.4,
+  +3.6 / +4.7, 0 / −1.2, +3.9 / +5.5 (triangles 3.1 M → 4.7 M overview). `?noscenes` saves 0 / 0.1, 1.2 / 0.2, 0.6 / 1.0, 0.3 / 0.6.
+  `?nomassing&noplaces&noboxhunt` saves 2.2 / 2.2, 3.3 / 3.2, 4.8 / 3.4, 2.1 / 1.5. Headless, so ~18–23 fps here; the
+  street view gets nothing from geometry-hunt and is the most expensive to detail.
+* Power: the charger contact is unreliable and battery doubles frame times (100 ms vs 49 ms). Run perf / hitch only
+  behind a loop that polls `PowerStatus.PowerLineStatus` and kills the run when it leaves `Online`.
+* Published copies: Netlify (see below) and GitHub Pages https://eyaltsamir.github.io/GameCity/ (`gh-pages` holds only the
+  built `index.html` + `.nojekyll`; Pages source = that branch). Two old Pages workflows on remote `main` would run on a push
+  to `main` and could replace the page: remove them first if `main` is ever pushed.
+
 ## Lead state (parallel-sessions round, 2026-10-29 evening) — six worktree sessions, all merged here
 * Merged into `claude/pensive-gates-bim12i`: camera-explore (free camera goes inside things, never lifted —
   camera-explore.md), fpv-walk (first-person walk, `V` — fpv.md), perf-wins (stutter + boot — PERF.md quick-wins
