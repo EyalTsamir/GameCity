@@ -1035,8 +1035,8 @@ export function buildChurchRoom(env: Env, rooms: Rooms, d: ChurchDims): Room {
     caseTop = gy + 5.0;
   K.box(oakD, caseW, 1.5, 0.95, 0, gy + 0.2, oz);
   K.box(oak, caseW + 0.12, 0.08, 1.0, 0, gy + 1.7, oz);
-  K.box(M('#2a1a0d', RP.OAK, 0.7), caseW, caseTop - gy - 1.78, 0.5, 0, gy + 1.78, oz - 0.22);
-  for (let x = -caseW / 2 + 0.3; x < caseW / 2; x += 0.6) K.box(oak, 0.05, 1.3, 0.02, x, gy + 0.3, oz + 0.48);
+  K.box(M('#2a1a0d', RP.OAK, 0.7), caseW, caseTop - gy - 1.78, 0.5, 0, gy + 1.78, oz + 0.22);
+  for (let x = -caseW / 2 + 0.3; x < caseW / 2; x += 0.6) K.box(oak, 0.05, 1.3, 0.02, x, gy + 0.3, oz - 0.48);
   const pipe = M('#d8c48a', RP.BRASS, 0.22, 1);
   const pipeFoot = M('#a58f58', RP.BRASS, 0.3, 1);
   const towers = [
@@ -1047,26 +1047,26 @@ export function buildChurchRoom(env: Env, rooms: Rooms, d: ChurchDims): Room {
   const addPipe = (x: number, base: number, h: number, r: number, zp: number) => {
     K.cone(pipeFoot, r, 0.22, x, base, zp, 10, 0, true);
     K.cyl(pipe, r, r, h, x, base + 0.22, zp, 10, true);
-    K.box(M('#231a10', PAT.PLAIN, 0.8), r * 1.25, 0.05, 0.01, x, base + 0.48, zp + r);
+    K.box(M('#231a10', PAT.PLAIN, 0.8), r * 1.25, 0.05, 0.01, x, base + 0.48, zp - r);
     K.sphere(pipeFoot, r * 1.02, x, base + 0.22 + h, zp, 10, 3, 0.25, 0, Math.PI * 2, 0, Math.PI / 2);
   };
   for (const t of towers) {
     for (let i = 0; i < t.n; i++) {
       const k = i - (t.n - 1) / 2;
-      addPipe(t.x + k * t.r * 2.15, gy + 1.78, t.h * (1 - 0.12 * Math.abs(k) * (Math.abs(k) / ((t.n - 1) / 2 || 1))), t.r, oz + 0.2);
+      addPipe(t.x + k * t.r * 2.15, gy + 1.78, t.h * (1 - 0.12 * Math.abs(k) * (Math.abs(k) / ((t.n - 1) / 2 || 1))), t.r, oz - 0.2);
     }
     // the tower's crown: a carved cornice and a gilt pinnacle
     const w = t.n * t.r * 2.3 + 0.1;
-    K.box(oakD, w, 0.14, 0.34, t.x, gy + 1.78 + t.h + 0.36, oz + 0.12);
-    K.box(oak, w + 0.1, 0.05, 0.4, t.x, gy + 1.78 + t.h + 0.5, oz + 0.12);
+    K.box(oakD, w, 0.14, 0.34, t.x, gy + 1.78 + t.h + 0.36, oz - 0.12);
+    K.box(oak, w + 0.1, 0.05, 0.4, t.x, gy + 1.78 + t.h + 0.5, oz - 0.12);
     K.cone(gilt, 0.1, 0.42, t.x, gy + 1.78 + t.h + 0.55, oz + 0.12, 8);
   }
   for (const e of [-1, 1]) {
     // flats between the towers: pipes rising towards the middle
-    for (let i = 0; i < 4; i++) addPipe(e * (0.72 + i * 0.17), gy + 1.78, 1.5 + (3 - i) * 0.1, 0.06, oz + 0.18);
-    K.box(oakD, 0.14, caseTop - gy - 2.0, 0.34, e * (caseW / 2 - 0.07), gy + 1.78, oz + 0.05);
+    for (let i = 0; i < 4; i++) addPipe(e * (0.72 + i * 0.17), gy + 1.78, 1.5 + (3 - i) * 0.1, 0.06, oz - 0.18);
+    K.box(oakD, 0.14, caseTop - gy - 2.0, 0.34, e * (caseW / 2 - 0.07), gy + 1.78, oz - 0.05);
   }
-  K.box(oakD, caseW, 0.2, 0.62, 0, gy + 1.78 + 1.72, oz - 0.02 + 0.08);
+  K.box(oakD, caseW, 0.2, 0.62, 0, gy + 1.78 + 1.72, oz - 0.06);
   // underside of the gallery: joists + ceiling boards, lit by the door
   for (let z = gz + 0.3; z < NZ1; z += 0.55) K.box(roofOak, IX * 2, 0.14, 0.1, 0, gy - 0.14, z);
 

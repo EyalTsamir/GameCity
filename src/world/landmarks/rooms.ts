@@ -45,6 +45,8 @@ export const RP = {
   MOSAIC: 37,
   /** polished brass or gilt: reflects the windows */
   BRASS: 38,
+  /** chequered black and cream marble, 60 cm, veined and polished */
+  CHEQUER: 39,
 } as const;
 
 const ROOM_VERT = /* glsl */ `
@@ -82,27 +84,53 @@ uniform vec4 uCell;
 uniform float uCellH;
 uniform vec4 uZone;
 uniform vec4 uRoof;
+uniform vec4 uRoofOnly;
+uniform float uWinSwap;
+uniform vec4 uSide;
+uniform float uSideH;
 uniform sampler2D uGlass;
 vec4 glassAlong(vec3 P, vec3 D, float lod) {
   if (P.z < uZone.x || P.z > uZone.y || P.x < uZone.z || P.x > uZone.w) return vec4(0.0);
-  if (uRoof.x > 0.0) {
-    if (D.y < 0.02) return vec4(0.0);
-    vec3 H = P + D * ((uRoof.x - P.y) / D.y);
-    if (abs(H.x) > uRoof.y || H.z < uRoof.z || H.z > uRoof.w) return vec4(0.0);
-    vec2 cell = fract(vec2(H.x / 1.7, H.z / 2.15));
-    return textureLod(uGlass, vec2(uCell.x + cell.x * uCell.z, uCell.w + cell.y * uCellH), lod);
+  if (uRoof.x > 0.0 && abs(P.x) < uRoofOnly.x) {
+    if (D.y > 0.02) {
+      vec3 H = P + D * ((uRoof.x - P.y) / D.y);
+      if (abs(H.x) <= uRoof.y && H.z >= uRoof.z && H.z <= uRoof.w) {
+        vec2 cell = fract(H.xz / uRoofOnly.zw);
+        vec4 g = textureLod(uGlass, vec2(uCell.x + cell.x * uCell.z, uCell.w + cell.y * uCellH), lod + 2.5);
+        return vec4(g.rgb * 0.75, 1.0);
+      }
+    }
+    if (P.z < uRoofOnly.y) return vec4(0.0);
   }
-  if (abs(D.x) < 0.02) return vec4(0.0);
-  float sd = D.x > 0.0 ? 1.0 : -1.0;
-  float t = (sd * uWinA.x - P.x) / D.x;
-  if (t < 0.0) return vec4(0.0);
-  vec3 H = P + D * t;
-  float bi = floor((H.z - uWinA.y) / uWinA.z + 0.5);
-  if (bi < 0.0 || bi >= uWinA.w) return vec4(0.0);
-  vec2 uv = vec2((H.z - (uWinA.y + bi * uWinA.z)) / uWinB.x + 0.5, (H.y - uWinB.y) / uWinB.z);
-  if (uv.x <= 0.0 || uv.x >= 1.0 || uv.y <= 0.0 || uv.y >= 1.0) return vec4(0.0);
-  float c = bi + (sd > 0.0 ? 0.0 : uWinA.w);
-  return textureLod(uGlass, vec2(uCell.x + (c + uv.x * uCell.z / uCell.y) * uCell.y, uCell.w + uv.y * uCellH), lod);
+  vec3 Q = uWinSwap > 0.5 ? P.zyx : P;
+  vec3 E = uWinSwap > 0.5 ? D.zyx : D;
+  if (abs(E.x) >= 0.02) {
+    float sd = E.x > 0.0 ? 1.0 : -1.0;
+    float t = (sd * uWinA.x - Q.x) / E.x;
+    if (t >= 0.0) {
+      vec3 H = Q + E * t;
+      float bi = floor((H.z - uWinA.y) / uWinA.z + 0.5);
+      vec2 uv = vec2((H.z - (uWinA.y + bi * uWinA.z)) / uWinB.x + 0.5, (H.y - uWinB.y) / uWinB.z);
+      if (bi >= 0.0 && bi < uWinA.w && uv.x > 0.0 && uv.x < 1.0 && uv.y > 0.0 && uv.y < 1.0) {
+        float c = bi + (sd > 0.0 ? 0.0 : uWinA.w) + (uRoof.x > 0.0 ? 1.0 : 0.0);
+        vec4 g = textureLod(uGlass, vec2(uCell.x + (c + uv.x * uCell.z / uCell.y) * uCell.y, uCell.w + uv.y * uCellH), lod);
+        if (g.a > 0.01 || uSide.x <= 0.0) return g;
+      }
+    }
+  }
+  // plain windows in the end walls (x = +-X, every period metres, glazing bars): the low sun comes in here
+  if (uSide.x > 0.0 && abs(D.x) > 0.02) {
+    float t = (sign(D.x) * uSide.x - P.x) / D.x;
+    vec3 H = P + D * t;
+    float k = floor(H.z / uSide.y + 0.5);
+    float dz = H.z - k * uSide.y;
+    float dy = H.y - uSide.w;
+    if (abs(k) < 1.5 && abs(dz) < uSide.z && dy > 0.0 && dy < uSideH) {
+      float bars = step(0.03, abs(dz)) * step(0.03, abs(dy - uSideH * 0.46));
+      return vec4(1.0, 0.96, 0.88, bars);
+    }
+  }
+  return vec4(0.0);
 }
 `;
 
@@ -254,10 +282,19 @@ void main() {
     float det = lmDetail(FM, 0.03);
     alb *= mix(1.0, (0.84 + 0.28 * h) * (1.0 - 0.45 * g), det);
     gloss = 0.1;
-  } else {
+  } else if (pat < 38.5) {
     alb *= 0.92 + 0.12 * lmNoise(q * 9.0);
     metal = 1.0;
     gloss = 0.5;
+  } else {
+    vec2 c = floor(q / 0.6);
+    float ck = mod(c.x + c.y, 2.0);
+    float vein = 1.0 - smoothstep(0.0, 0.035 + FM, abs(lmNoise(q * 1.7 + c * 3.1) - 0.5));
+    vec3 t = ck < 0.5 ? vec3(0.8, 0.76, 0.68) : vec3(0.075, 0.07, 0.075);
+    t = mix(t, vec3(0.44, 0.41, 0.38), vein * 0.55);
+    float g = max(lmLines(q.x, 0.6, 0.002, FQ.x), lmLines(q.y, 0.6, 0.002, FQ.y));
+    alb = mix(t, t * 0.6, g);
+    gloss = 0.2;
   }
   vec3 amb = uRoomSky * vBake.x + uRoomLamp * vBake.y;
   vec3 c = alb * amb;
@@ -399,6 +436,8 @@ export interface RoomWin {
   nz: number;
   area: number;
   trans: number;
+  /** a roof light */
+  ny?: number;
 }
 
 export interface WindowRow {
@@ -458,6 +497,12 @@ export class Room {
   ambient = 0.1;
   row: WindowRow | null = null;
   roof: { y: number; hx: number; z0: number; z1: number } | null = null;
+  /** only the roof lights a point with |x| < [0] and z < [1]; roof glazing tile [2] x [3] metres */
+  roofOnly: [number, number, number, number] = [1e3, 1e3, 1.7, 2.15];
+  /** the window row stands in z = +-X instead of x = +-X */
+  swapAxes = false;
+  /** plain end-wall windows for the sun: x = +-X, period, half width, sill, height */
+  side: { X: number; period: number; hw: number; y0: number; h: number } | null = null;
   /** where the sun lookup applies (room-local z0, z1, x0, x1): nothing outside the zone sees these windows */
   zone: [number, number, number, number] = [-1e3, 1e3, -1e3, 1e3];
   /** glass atlas cells of the window row */
@@ -481,6 +526,9 @@ export class Room {
   readonly free: Rect[] = [];
   readonly floors: { r: Rect; y: number | ((x: number, z: number) => number) }[] = [];
   readonly solids: Rect[] = [];
+  readonly solidsY: { r: Rect; y0: number; y1: number }[] = [];
+  /** floors overlap in plan: pick by the walker's feet; off the floors the footprint is solid and outside it the city answers */
+  core: Rect | null = null;
   readonly discs: { x: number; z: number; r: number }[] = [];
   /** distance beyond which nothing of the room is drawn */
   near = 40;
@@ -542,6 +590,33 @@ export class Room {
   /** furniture the walker goes round (local rectangle) */
   block(x0: number, z0: number, x1: number, z1: number): void {
     this.solids.push(this.rectL(x0, z0, x1, z1));
+  }
+
+  /** furniture that only stands in the way of feet between y0 and y1 (a room with storeys) */
+  blockAt(x0: number, z0: number, x1: number, z1: number, y0: number, y1: number): void {
+    this.solidsY.push({ r: this.rectL(x0, z0, x1, z1), y0, y1 });
+  }
+
+  /** world → room-local z */
+  lz(x: number, z: number): number {
+    return this.s * (x - this.ox) + this.c * (z - this.oz);
+  }
+
+  /** the floor in reach of these feet (NaN: the lowest) */
+  level(x: number, z: number, feet: number): number | undefined {
+    let best: number | undefined;
+    let bd = Infinity;
+    for (const f of this.floors) {
+      const q = f.r;
+      if (x < q.x0 || x > q.x1 || z < q.z0 || z > q.z1) continue;
+      const y = typeof f.y === 'number' ? f.y : f.y(x, z);
+      const d = Number.isNaN(feet) ? y : Math.abs(y - feet);
+      if (d < bd && (Number.isNaN(feet) || d <= 0.62)) {
+        bd = d;
+        best = y;
+      }
+    }
+    return best;
   }
 
   blockDisc(x: number, z: number, r: number): void {
@@ -754,7 +829,7 @@ export class Room {
   }
 
   /** the lit sheets of one window: `n` lengthwise slices in each direction. Window corners in local coordinates (bottom-left, bottom-right, top-left), uvs from the atlas cell. */
-  addShafts(bl: V3, br: V3, tl: V3, out: V3, r: AtlasRect, n = 3): void {
+  addShafts(bl: V3, br: V3, tl: V3, out: V3, r: AtlasRect, n = 3, nrmH: V3 = [0, 1, 0]): void {
     const S = this.shaft;
     const w = (p: V3): V3 => [this.wx(p[0], p[2]), p[1], this.wz(p[0], p[2])];
     const wout: V3 = [this.c * out[0] + this.s * out[2], out[1], -this.s * out[0] + this.c * out[2]];
@@ -778,7 +853,6 @@ export class Room {
       }
       S.idx.push(base, base + 1, base + 2, base + 1, base + 3, base + 2);
     };
-    const nrmH: V3 = [0, 1, 0];
     const eu: V3 = [br[0] - bl[0], br[1] - bl[1], br[2] - bl[2]];
     const lu = Math.hypot(eu[0], eu[1], eu[2]) || 1;
     const nrmV: V3 = [(this.c * eu[0] + this.s * eu[2]) / lu, 0, (-this.s * eu[0] + this.c * eu[2]) / lu];
@@ -816,7 +890,7 @@ export class Room {
         const d2 = dx * dx + dy * dy + dz * dz + 0.2;
         const d = Math.sqrt(d2);
         const c1 = (dx * _n.x + dy * _n.y + dz * _n.z) / d;
-        const c2 = -(dx * w.nx + dz * w.nz) / d;
+        const c2 = -(dx * w.nx + dy * (w.ny ?? 0) + dz * w.nz) / d;
         if (c2 <= 0) continue;
         // wrapped: half of what enters has already bounced off something
         sky += (w.trans * w.area * (0.35 + 0.65 * Math.max(c1, 0)) * c2) / (Math.PI * d2);
@@ -856,6 +930,10 @@ export class Room {
       uCellH: { value: this.cellH },
       uZone: { value: new THREE.Vector4(this.zone[0], this.zone[1], this.zone[2], this.zone[3]) },
       uRoof: { value: this.roof ? new THREE.Vector4(this.roof.y, this.roof.hx, this.roof.z0, this.roof.z1) : new THREE.Vector4(0, 0, 0, 0) },
+      uRoofOnly: { value: new THREE.Vector4(this.roofOnly[0], this.roofOnly[1], this.roofOnly[2], this.roofOnly[3]) },
+      uWinSwap: { value: this.swapAxes ? 1 : 0 },
+      uSide: { value: this.side ? new THREE.Vector4(this.side.X, this.side.period, this.side.hw, this.side.y0) : new THREE.Vector4(0, 1, 0, 0) },
+      uSideH: { value: this.side ? this.side.h : 0 },
       uGlass: { value: tex },
     };
     this.material = new THREE.ShaderMaterial({ vertexShader: ROOM_VERT, fragmentShader: ROOM_FRAG, vertexColors: true, uniforms: roomU as unknown as Record<string, THREE.IUniform> });
@@ -984,6 +1062,8 @@ const _lampC = new THREE.Color('#ffc98a');
 export class Rooms {
   readonly list: Room[] = [];
   private inside: Room | null = null;
+  /** the walker's feet (NaN: not walking), for rooms with storeys */
+  feet = NaN;
 
   add(r: Room): Room {
     this.list.push(r);
@@ -1050,6 +1130,14 @@ export class Rooms {
   solid(x: number, z: number): boolean | undefined {
     const r = this.at(x, z);
     if (!r) return undefined;
+    if (r.core) {
+      const y = r.level(x, z, this.feet);
+      if (y === undefined) return x >= r.core.x0 && x <= r.core.x1 && z >= r.core.z0 && z <= r.core.z1 ? true : undefined;
+      for (const s of r.solidsY) if (y >= s.y0 && y <= s.y1 && x >= s.r.x0 && x <= s.r.x1 && z >= s.r.z0 && z <= s.r.z1) return true;
+      for (const s of r.solids) if (x >= s.x0 && x <= s.x1 && z >= s.z0 && z <= s.z1) return true;
+      for (const d of r.discs) if ((x - d.x) ** 2 + (z - d.z) ** 2 < d.r * d.r) return true;
+      return false;
+    }
     let free = false;
     for (const f of r.free) {
       if (x >= f.x0 && x <= f.x1 && z >= f.z0 && z <= f.z1) {
@@ -1067,6 +1155,7 @@ export class Rooms {
   height(x: number, z: number): number | undefined {
     const r = this.at(x, z);
     if (!r) return undefined;
+    if (r.core) return r.level(x, z, this.feet);
     for (const f of r.floors) {
       const q = f.r;
       if (x >= q.x0 && x <= q.x1 && z >= q.z0 && z <= q.z1) return typeof f.y === 'number' ? f.y : f.y(x, z);

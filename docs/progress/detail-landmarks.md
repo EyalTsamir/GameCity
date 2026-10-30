@@ -12,9 +12,12 @@ run can wait more than 10 minutes.
 State:
 - DONE, seen by eye (`shots/dl/c2`): room engine `landmarks/rooms.ts`, St Mary's room `landmarks/churchRoom.ts` (`?noherochurch`), walker
   hook in `ui/camera/walkSurface.ts` (`ctx.services.rooms`: 2 small additive checks).
-- WRITTEN, NOT YET SEEN: apse lining offset, door leaves swinging inward, organ case rebuilt, triptych redrawn, shaft tuning (capture
-  `shots/dl/c3`), and the real walk from the street to the chancel (`walk1.mjs`, `shots/dl/w1`). Check these first.
-- Not measured yet: perf, triangles of the room, `hitch.mjs`, ui-test.
+- DONE, seen by eye (`shots/dl/c3`): church apse, doors, triptych, shafts. The organ faced the wrong way (pipes behind its own panel): turned round.
+- DONE, seen by eye (`shots/dl/t1`): Town Hall hall `landmarks/townhallRoom.ts` (`?noherotownhall`): marble hall, imperial stair, galleries,
+  stained laylight, wings with portraits, the city as a table model, enquiries counter, reception room, the balcony over the fountain.
+  Floors by level: `Room.core` + `Rooms.feet` (one line each in `firstPerson.ts`: enter and before moving).
+- Checking: real-key walk through both (`walk2.mjs`, `shots/dl/w2`), laylight from below.
+- Not measured yet: perf, triangles of the rooms, `hitch.mjs`, ui-test.
 
 ## The room engine
 Near-only mesh per room (`Room.near`, nothing drawn in wide views), own ShaderMaterial, same surface patterns plus `RP.*` (flags, encaustic,
@@ -42,3 +45,4 @@ None yet.
 
 ## Edits outside my files
 `src/ui/camera/walkSurface.ts`: asks `ctx.services.rooms` first in `heightAt` and `solidAt`.
+`src/ui/camera/firstPerson.ts`: tells `ctx.services.rooms.feet` where the feet are (on entering, and before each move).

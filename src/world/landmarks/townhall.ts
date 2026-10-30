@@ -13,6 +13,8 @@ import { C, S, quoins, chimney, finial, dormer, wallLantern, flagpole, railing }
 import type { Env } from './env';
 import { drawText, signQuad } from './signs';
 import { boxHunt } from '../../core/boxhunt';
+import { lmDetail } from '../../core/lmdetail';
+import { buildTownhallRoom } from './townhallRoom';
 
 export function genTownHall(env: Env, lot: Lot): void {
   const fp = lot.footprint;
@@ -138,13 +140,16 @@ export function genTownHall(env: Env, lot: Lot): void {
     wallLantern(env, K, -1.6, 2.9, -zC - 0.02, Math.PI, 0.8);
     wallLantern(env, K, 1.6, 2.9, -zC - 0.02, Math.PI, 0.8);
   }
-  // core volume (kept clear of the loggia behind the centre arcade)
+  // core volume (kept clear of the loggia behind the centre arcade); the walkable hall replaces it
+  const hero = !!env.rooms && lmDetail(env.ctx, 'herotownhall');
   const coreF = 3.2;
   const coreB = -zC + 0.5;
-  K.coreBox(plaster, 2 * HW - 1.4, y3, coreF - coreB, 0, 0, (coreF + coreB) / 2);
-  for (const s of [-1, 1]) K.coreBox(plaster, HW - 0.7 - RX, y3, zF - 0.5 - coreF, s * (RX + (HW - 0.7 - RX) / 2), 0, (zF - 0.5 + coreF) / 2);
-  K.coreBox(plaster, 2 * RX, y3 - 4.5, zR - 0.6 - coreF, 0, 4.5, (zR - 0.6 + coreF) / 2);
-  if (boxHunt(env.ctx, 'interiors')) townhallInterior(env, { HW, RX, coreB, coreF, zF, y1, y2 });
+  if (!hero) {
+    K.coreBox(plaster, 2 * HW - 1.4, y3, coreF - coreB, 0, 0, (coreF + coreB) / 2);
+    for (const s of [-1, 1]) K.coreBox(plaster, HW - 0.7 - RX, y3, zF - 0.5 - coreF, s * (RX + (HW - 0.7 - RX) / 2), 0, (zF - 0.5 + coreF) / 2);
+    K.coreBox(plaster, 2 * RX, y3 - 4.5, zR - 0.6 - coreF, 0, 4.5, (zR - 0.6 + coreF) / 2);
+    if (boxHunt(env.ctx, 'interiors')) townhallInterior(env, { HW, RX, coreB, coreF, zF, y1, y2 });
+  } else buildTownhallRoom(env, env.rooms!, { HW, RX, zF, zR, y1, y2, cx, cz, yaw, fp });
 
   // ── centre bay: loggia, balcony, tall windows, crest, lettering
   {
@@ -166,6 +171,7 @@ export function genTownHall(env: Env, lot: Lot): void {
     const lz0 = zR - 0.6 - loggiaD;
     K.box(granite, w - 0.6, 0.45, loggiaD - 0.9, 0, 0, lz0 + (loggiaD - 0.9) / 2);
     K.steps(granite, w - 0.6, 3, 0.15, 0.3, 0, 0, zR - 0.6);
+    if (hero) for (const s of [-1, 1]) K.box(plaster, 0.06, 4.4, loggiaD, s * (RX - 0.09), 0, lz0 + loggiaD / 2);
     K.box(M('#efe2c6', PAT.PLAIN, 0.85), w - 0.6, 0.2, loggiaD, 0, 4.3, lz0 + loggiaD / 2);
     wall(K, {
       w: w - 0.6,
@@ -177,7 +183,9 @@ export function genTownHall(env: Env, lot: Lot): void {
       ry: 0,
       mat: M('#ead9b6', PAT.STONE, 0.85, 0, 0, FLOOD.SOFT, 0.2),
       openings: [
-        { x: (w - 0.6) / 2, y: 0.45, w: 1.9, h: 3.1, arch: 0.95, fill: 'door', glow: 0.9, seed: 0.2, inset: 0.15, surround: trim, surroundW: 0.15, infill: M('#5b3b25', PAT.DOOR, 0.55, 0, 0.9, 0, 0.2) },
+        hero
+          ? { x: (w - 0.6) / 2, y: 0.45, w: 1.9, h: 3.1, arch: 0.95, fill: 'none' as const, surround: trim, surroundW: 0.15 }
+          : { x: (w - 0.6) / 2, y: 0.45, w: 1.9, h: 3.1, arch: 0.95, fill: 'door', glow: 0.9, seed: 0.2, inset: 0.15, surround: trim, surroundW: 0.15, infill: M('#5b3b25', PAT.DOOR, 0.55, 0, 0.9, 0, 0.2) },
         { x: (w - 0.6) / 2 - 3.3, y: 1.0, w: 1.2, h: 2.3, arch: 0.6, fill: 'window', glow: 0.8, seed: 0.3, inset: 0.12 },
         { x: (w - 0.6) / 2 + 3.3, y: 1.0, w: 1.2, h: 2.3, arch: 0.6, fill: 'window', glow: 0.8, seed: 0.35, inset: 0.12 },
       ],
@@ -198,7 +206,11 @@ export function genTownHall(env: Env, lot: Lot): void {
       z: zR,
       ry: 0,
       mat: stone,
-      openings: arches.map((ax, i) => ({ x: RX + ax, y: 0.45, w: 1.6, h: 3.6, arch: 0.8, fill: 'window' as const, glow: 0.7, seed: 0.2 + i * 0.15, surround: trim, surroundW: 0.2, keystone: trim })),
+      openings: arches.map((ax, i) =>
+        hero && i === 1
+          ? { x: RX + ax, y: 0.22, w: 1.6, h: 3.83, arch: 0.8, fill: 'none' as const, surround: trim, surroundW: 0.2, keystone: trim }
+          : { x: RX + ax, y: 0.45, w: 1.6, h: 3.6, arch: 0.8, fill: 'window' as const, glow: 0.7, seed: 0.2 + i * 0.15, surround: trim, surroundW: 0.2, keystone: trim },
+      ),
     });
     // balcony with stone balustrade (above 2.4 m, projecting into the allowance)
     K.box(trim, w - 0.4, 0.28, 1.15, 0, y1 + 0.1, zR + 0.5);

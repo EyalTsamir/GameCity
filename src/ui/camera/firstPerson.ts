@@ -189,6 +189,8 @@ export class FirstPerson {
     const cam = this.ctx.camera;
     this.x = spot.x;
     this.z = spot.z;
+    const rooms = this.ctx.services.rooms as { feet: number } | undefined;
+    if (rooms) rooms.feet = cam.position.y - EYE;
     this.feet = s.heightAt(spot.x, spot.z);
     this.feetV = 0;
     this.yaw = viewYaw;
@@ -339,6 +341,8 @@ export class FirstPerson {
     if (Math.abs(this.vx) + Math.abs(this.vz) < 1e-3) this.vx = this.vz = 0;
     const x0 = this.x,
       z0 = this.z;
+    const rooms = this.ctx.services.rooms as { feet: number } | undefined;
+    if (rooms) rooms.feet = this.feet;
     if (this.vx || this.vz) this.move(this.vx * dt, this.vz * dt);
     const moved = Math.hypot(this.x - x0, this.z - z0);
     this.walked += moved;
