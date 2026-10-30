@@ -63,6 +63,8 @@ export interface Gen {
   signs: Builder;
   /** static laundry cloth (trim material, separate mesh: life may hide it and hang animated cloth) */
   cloth: Builder;
+  /** real glass panes (one transparent mesh, lobby.ts) */
+  glass: Builder;
   /** leaf cards (balcony / window-box plants, hanging greenery, ivy) — see green.ts */
   green: GreenKit;
   atlas: SignAtlas;

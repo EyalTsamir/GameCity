@@ -17,6 +17,8 @@ import { letterSign, helipadMark, boardSign } from './signs';
 import { GREEN } from './green';
 import { MASS, massRng, recordTier, notchPoly, notchCap, crownCornice, roofKit } from './massing';
 import { towerPlant, roofPlantOn } from './roofplant';
+import { dB } from '../../core/detailbuildings';
+import { realLobby, lobbySpan, groundFit, arcadeSoffit } from './lobby';
 
 interface P {
   x: number;
@@ -428,7 +430,15 @@ export function genTower(g: Gen): void {
           bw = Lr / n;
         doors = doors.map((u) => Math.min(sg.L - 1.6, Math.max(1.6, (Math.min(n - 1, Math.max(0, Math.floor((u + 1.6) / bw))) + 0.5) * bw - 1.6)));
       }
+      // ?nolobby3d: a real lobby behind real glass on the front, around the main door (lobby.ts)
+      const span = s === FRONT && doors.length > 0 && dB('lobby3d') ? lobbySpan(sg.L, doors[0]) : null;
+      const lobDoors = span ? doors.filter((u) => u > span.a + 1.5 && u < span.b - 1.5) : [];
+      const lob = span && lobDoors.length > 0 ? span : null;
+      const headY = gH - 0.6;
+      if (lob) doors = doors.filter((u) => !lobDoors.includes(u));
       const ops = doors.map((u) => ({ u, w: 2.4, h: 3.0 }));
+      if (lob) ops.push({ u: (lob.a + lob.b) / 2, w: lob.b - lob.a, h: headY });
+      const fit = dB('groundfit');
       bandWithOpenings(
         sg, 0, sg.L, ops,
         (a, b) => {
@@ -436,9 +446,11 @@ export function genTower(g: Gen): void {
           const n = Math.max(1, Math.round(len / 2.6));
           const gr = makeGrid(a, b, 0, gH, 1, { spacing: len / n, cols: n, winW: len / n - 0.18, winH: gH - 0.9, sill: 0.12, margin: 0.06 });
           wallGrid(g.shell, sg, a, b, 0, gH, gr, lookL);
+          if (fit) groundFit(g, sg, a, b, gr, gH, sc.frame === FRAME.ALU ? '#7f868c' : sc.frame === FRAME.CREAM ? '#3f3a33' : '#24282c', masonry ? '#7d7668' : '#3f4245', !arcade);
         },
         (a, b, y0) => wallPlain(g.shell, sg, a, b, y0, gH, { color: shade(wallC, 0.7), pattern: WALLPAT.SMOOTH, seed: g.seed }),
       );
+      if (lob) realLobby(g, sg, { a: lob.a, b: lob.b, head: headY, doors: lobDoors, masonry, tall: H > 60, arcade, name: haven ? 'HAVEN TOWER' : undefined });
       for (const u of doors) {
         doorNiche(g, sg, u, { w: 2.4, h: 3.0, depth: 0.25, wallColor: shade(wallC, 0.7), frameColor: col('#2c3238'), doorColor: col('#2c3238'), glass: true, profile: PROF.ALWAYS, seed: g.seed + 5, frameOut: arcade ? 0.15 : 0.12 });
         // entrance canopy (above 2.4 m) + downlights
@@ -508,6 +520,7 @@ export function genTower(g: Gen): void {
           if (k === n) continue; // corners are shared with the next side
           arcadeColumn(t, sg, (sg.L * k) / n, gH, wallC, g.seed + k, MASS.colonnade && masonry);
         }
+        if (dB('groundfit')) arcadeSoffit(g, sg, n, gH, wallC);
       }
       setCol(t, shade(wallC, 0.6));
       t.hrect(r.x0, r.z0, r.x1, r.z1, gH - 0.01, false);

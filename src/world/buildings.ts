@@ -37,6 +37,8 @@ import { createWinGeo } from './buildings/winGeo';
 import { setMassing, resetMassing, massTiers } from './buildings/massing';
 import { boxHunt } from '../core/boxhunt';
 import { setRoofPlant } from './buildings/roofplant';
+import { setDetailB } from '../core/detailbuildings';
+import { createGlassMaterial } from './buildings/lobby';
 
 /** edge (m) of the square trim chunks (≈ two city blocks), grid origin at the slab's NW corner */
 const TRIM_CHUNK = 110;
@@ -122,11 +124,13 @@ export default function create(ctx: CityContext): CityModule {
   const lights = new Builder({ color: true, light: true });
   const signs = new Builder({ normal: true, uv: true });
   const cloth = new Builder({ normal: true, color: true });
+  const glassB = new Builder({ normal: true });
   // ?nogreen = no leaf cards (A/B)
   const noGreen = ctx.debug.params.has('nogreen');
   const greenB = new Builder({ normal: true, color: true, uv: true, aux: true });
   const greenKit = new GreenKit(greenB, new Rng('buildings:green'));
   const atlas = new SignAtlas();
+  setDetailB(ctx.debug.params, ctx.quality.level);
   resetOldtown();
   resetTowers();
   resetHomes();
@@ -164,7 +168,7 @@ export default function create(ctx: CityContext): CityModule {
     const D = ns ? fp.z1 - fp.z0 : fp.x1 - fp.x0;
     const trim = trimOf(cx, cz);
     const shell = shellOf(cx, cz);
-    for (const b of [shell, trim, lights, signs, cloth, greenB]) b.frame(yaw, cx, 0, cz);
+    for (const b of [shell, trim, lights, signs, cloth, glassB, greenB]) b.frame(yaw, cx, 0, cz);
     const g: Gen = {
       lot,
       rng: new Rng(lot.seed >>> 0 || 1),
@@ -176,6 +180,7 @@ export default function create(ctx: CityContext): CityModule {
       lights,
       signs,
       cloth,
+      glass: glassB,
       green: greenKit,
       atlas,
       cover: computeCover(lot, plan.lots, yaw, cx, cz, W, D),
@@ -198,7 +203,7 @@ export default function create(ctx: CityContext): CityModule {
         if (bad++ === 0) firstBad = `(${x.toFixed(2)}, ${y.toFixed(2)}, ${z.toFixed(2)}) is ${d.toFixed(2)} m outside`;
       }
     };
-    for (const b of [shell, trim, lights, signs, cloth, greenB]) b.check = check;
+    for (const b of [shell, trim, lights, signs, cloth, glassB, greenB]) b.check = check;
     const gen = GENERATORS[lot.kind] ?? genFallback;
     anchors.begin(lot, trim);
     try {
@@ -208,7 +213,7 @@ export default function create(ctx: CityContext): CityModule {
       if (ctx.debug.enabled) console.error('[buildings]', lot.id, err);
     }
     anchors.end();
-    for (const b of [shell, trim, lights, signs, cloth, greenB]) b.check = null;
+    for (const b of [shell, trim, lights, signs, cloth, glassB, greenB]) b.check = null;
     if (bad > 0) {
       violations++;
       problems.push(`lot ${lot.id} (${lot.kind}): ${bad} vertices break the footprint rule, e.g. ${firstBad}`);
@@ -287,6 +292,8 @@ export default function create(ctx: CityContext): CityModule {
   // static balcony laundry (no shadow; life hides it once its animated cloth hangs on service.laundry)
   add(cloth, mats.trim, 'buildings-laundry', false, true);
   const clothMesh = meshes.find((m) => m.name === 'buildings-laundry') ?? null;
+  const glassMat = glassB.vertexCount > 0 ? createGlassMaterial(mats.uniforms) : null;
+  if (glassMat) add(glassB, glassMat, 'buildings-glass', false, false);
   // plants: alpha-tested leaf cards (one draw call + shadow pass on medium/high)
   const greenTex = noGreen ? null : makeGreenTexture();
   const greenMat = greenTex ? createGreenMaterial(ctx.uniforms, greenTex) : null;
@@ -490,7 +497,7 @@ export default function create(ctx: CityContext): CityModule {
       const out = [...problems];
       if (built.length !== lots.length) out.push(`built ${built.length} of ${lots.length} building lots`);
       if (doorsBuilt < doorsWanted) out.push(`${doorsWanted - doorsBuilt} of ${doorsWanted} doors missing`);
-      if (meshes.length > 5 + 2 * MAX_TRIM_CHUNKS) out.push(`too many building meshes (${meshes.length})`);
+      if (meshes.length > 6 + 2 * MAX_TRIM_CHUNKS) out.push(`too many building meshes (${meshes.length})`);
       if (violations > 0) out.push(`${violations} building(s) violate the footprint rule`);
       if (atlas.full) out.push('sign atlas overflowed');
       return out;
@@ -503,6 +510,7 @@ export default function create(ctx: CityContext): CityModule {
       mats.lights.dispose();
       mats.signs.dispose();
       greenMat?.dispose();
+      glassMat?.dispose();
       tex.map.dispose();
       tex.glow.dispose();
     },
