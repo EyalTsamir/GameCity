@@ -130,6 +130,9 @@ export interface StationPlace {
   stair: PlaceStair;
   cheeks: Rect[];
   cheekY: number;
+  /** round 3: a granite planter trough (shrubs: vegetation) and a row of iron bollards on each free end of the forecourt */
+  planters: Rect[];
+  bollards: P2[];
 }
 
 /** masonry retaining wall at the toe of the rock cut north of the tracks */
@@ -582,7 +585,25 @@ function buildStation(plan: CityPlan, floors: Floor[], stairs: PlaceStair[], wal
       linkEnds: [1],
     });
   }
-  return { forecourt, landing, landingY, stair, cheeks, cheekY };
+  // the free ends of the forecourt (beside the perron): a planter against the facade, bollards along the front edge
+  const planters: Rect[] = [];
+  const bollards: P2[] = [];
+  for (const [a, c] of [
+    [fp.x0, cheeks[0].x0],
+    [cheeks[1].x1, fp.x1],
+  ]) {
+    if (c - a < 4) continue;
+    const m = (a + c) / 2;
+    const p = rect(m - 1.5, zF + 0.35, m + 1.5, zF + 1.3);
+    planters.push(p);
+    walls.push(p);
+    floors.push({ r: rect(p.x0 + 0.1, p.z0 + 0.1, p.x1 - 0.1, p.z1 - 0.1), y: 0.47 });
+    for (let x = a + 0.8; x <= c - 0.7; x += 1.6) {
+      bollards.push({ x, z: zS - 0.35 });
+      walls.push(rect(x - 0.09, zS - 0.44, x + 0.09, zS - 0.26));
+    }
+  }
+  return { forecourt, landing, landingY, stair, cheeks, cheekY, planters, bollards };
 }
 
 function buildCutting(): CuttingPlace {

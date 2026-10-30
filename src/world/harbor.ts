@@ -92,7 +92,10 @@ export default function create(ctx: CityContext): CityModule {
       mobs.push({ id: i, state: i % 2 === 0 ? 'ship' : 'quay', ship: sp, quay: new THREE.Vector3(quayX, 0.03, sp.z) });
     });
     const rail = craneF[0];
-    buildCraneRails(north, rail.x, Math.min(rail.a?.z ?? -122, rail.b?.z ?? -24), Math.max(rail.a?.z ?? -122, rail.b?.z ?? -24));
+    // (the rails + their buffers stop short of the harbour water stairs — places-between; the last crane is far north)
+    const hs = ctx.plan.places?.waterStairs.find((w) => w.id === 'harbour');
+    const zEnd = Math.max(rail.a?.z ?? -122, rail.b?.z ?? -24);
+    buildCraneRails(north, rail.x, Math.min(rail.a?.z ?? -122, rail.b?.z ?? -24), hs ? Math.min(zEnd, hs.body.z0 - 1.6) : zEnd);
     setCraneDetail(boxHunt(ctx, 'cranekit'));
     craneF.forEach((f, i) => {
       const m0 = mobs[i * 2],

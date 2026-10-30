@@ -262,11 +262,11 @@ function balustrade(b: GeoBuilder, ax: number, az: number, bx: number, bz: numbe
 
 /** old-town square setts (granite, a little darker than the flags) and the gutter flags */
 const SETT = C('#a39d93');
-const GUTTER = C('#9a9284');
+const GUTTER = C('#857d70');
 
 /**
- * Square + passage floor (detail tier): granite setts (masonry ashlar with a negative course) with a flagstone gutter
- * on the archway axis (two rows of long flags) and a flag band along both facades and the retaining-wall foot.
+ * Square + passage floor (detail tier): granite setts (masonry ashlar with a negative course) with a gutter of darker
+ * setts laid lengthwise on the archway axis and a flag band along both facades and the retaining-wall foot.
  */
 function squareFloor(b: GeoBuilder, P: LanePlace): void {
   const S = P.square,
@@ -281,7 +281,8 @@ function squareFloor(b: GeoBuilder, P: LanePlace): void {
         if (xs[i + 1] - xs[i] < 0.02 || zs[j + 1] - zs[j] < 0.02) continue;
         const k = kindOf(i, j);
         if (k === 'sett') b.color(SETT).set('aMas', KIND.ashlar, -1, 1, 0);
-        else if (k === 'gutter') b.color(GUTTER).set('aMas', KIND.ashlar, gw, 0, 1);
+        // the gutter: a channel of darker setts laid lengthwise (flags read as a featureless strip — round 3 audit)
+        else if (k === 'gutter') b.color(GUTTER).set('aMas', KIND.ashlar, -1, 0, 1);
         else b.color(COL.paving).set('aMas', KIND.ashlar, band, j === 0 && i > 0 && i < xs.length - 2 ? 1 : 0, j === 0 && i > 0 && i < xs.length - 2 ? 0 : 1);
         top(b, { x0: xs[i], x1: xs[i + 1], z0: zs[j], z1: zs[j + 1] }, y);
       }
@@ -564,6 +565,27 @@ function stationStone(b: GeoBuilder, S: StationPlace, lights: GlowPoint[]): void
     [F.x1, 1],
   ] as [number, number][])
     b.quadFacing([x, -0.05, F.z0], [x, -0.05, F.z1], [x, y0, F.z1], [x, y0, F.z0], sx, 0, 0);
+  // planter troughs (granite, coping rim, soil) and cast-iron bollards on the free ends (round 3 audit: bare forecourt)
+  for (const p of S.planters) {
+    b.color(GRANITE).set('aMas', KIND.ashlar, 0.25, 1, 0);
+    slab(b, p, 0, 0.5, 4 | 8);
+    b.color(GRANITE_HI).set('aMas', KIND.coping, 0, 1, 0);
+    for (const r of [
+      { x0: p.x0 - 0.04, x1: p.x1 + 0.04, z0: p.z0 - 0.04, z1: p.z0 + 0.1 },
+      { x0: p.x0 - 0.04, x1: p.x1 + 0.04, z0: p.z1 - 0.1, z1: p.z1 + 0.04 },
+      { x0: p.x0 - 0.04, x1: p.x0 + 0.1, z0: p.z0 + 0.1, z1: p.z1 - 0.1 },
+      { x0: p.x1 - 0.1, x1: p.x1 + 0.04, z0: p.z0 + 0.1, z1: p.z1 - 0.1 },
+    ])
+      slab(b, r, 0.5, 0.57, 4);
+    b.color(SOIL).set('aMas', KIND.plain, 0, 1, 0);
+    top(b, { x0: p.x0 + 0.1, x1: p.x1 - 0.1, z0: p.z0 + 0.1, z1: p.z1 - 0.1 }, 0.47);
+  }
+  b.color(IRON).set('aMas', KIND.dark, 0, 1, 0);
+  for (const q of S.bollards) {
+    b.box(q.x, y0 + 0.4, q.z, 0.065, 0.4, 0.065, 0, 4);
+    b.box(q.x, y0 + 0.62, q.z, 0.085, 0.025, 0.085, 0, 0);
+    b.box(q.x, y0 + 0.82, q.z, 0.08, 0.035, 0.08, 0, 0);
+  }
   // landing: large slabs on a granite body
   b.color(GRANITE_HI).set('aMas', KIND.ashlar, 0.9, 1, 0);
   top(b, S.landing, S.landingY);
@@ -627,6 +649,53 @@ function cuttingStone(b: GeoBuilder, K: CuttingPlace, hi: boolean): void {
       if (near < 0.12 || near > 0.88) continue;
       b.quadFacing([x - 0.06, 0.45, z + 0.01], [x + 0.06, 0.45, z + 0.01], [x + 0.06, 0.57, z + 0.01], [x - 0.06, 0.57, z + 0.01], 0, 0, 1);
     }
+    cuttingWeathering(b, K, nP);
+  }
+}
+
+/** a deterministic 0..1 hash (renderer-side weathering; no rng stream is touched) */
+const hh = (a: number): number => {
+  const v = Math.sin(a * 127.1 + 311.7) * 43758.5453;
+  return v - Math.floor(v);
+};
+const DAMP = C('#6d6656');
+const SOIL = C('#4a3a2c');
+const DRIP = C('#a39a87');
+const FOOTMOSS = C('#55603a');
+
+/**
+ * Weathering on the cutting wall face (detail tier; REAL round 3 audit: "one clean plane, holes punched in it"):
+ * a damp streak running down from every weep hole, irregular drip stains hanging from the coping, a broken band of
+ * moss / damp at the foot. Flat quads 1.5 cm proud of the face, merged into the masonry mesh.
+ */
+function cuttingWeathering(b: GeoBuilder, K: CuttingPlace, nP: number): void {
+  const zf = K.z + 0.015;
+  const strip = (x: number, w0: number, w1: number, y0: number, y1: number, col: THREE.Color, k: number) => {
+    b.color(col.clone().multiplyScalar(0.9 + 0.2 * hh(k * 3.1))).set('aMas', KIND.plain, 0, 1, 0);
+    b.quadFacing([x - w1 / 2, y0, zf], [x + w1 / 2, y0, zf], [x + w0 / 2, y1, zf], [x - w0 / 2, y1, zf], 0, 0, 1);
+  };
+  // weep-hole streaks (same spacing rule as the holes)
+  for (let x = K.x0 + 1.9; x < K.x1 - 1; x += 2.5) {
+    const near = ((x - K.x0) / ((K.x1 - K.x0) / nP)) % 1;
+    if (near < 0.12 || near > 0.88) continue;
+    const len = 0.25 + 0.4 * hh(x);
+    strip(x + (hh(x + 1) - 0.5) * 0.04, 0.1, 0.16 + 0.1 * hh(x + 2), Math.max(-0.2, 0.45 - len), 0.45, DAMP, x);
+  }
+  // drip stains from the coping: narrow streaks (a little darker than the stone) every 0.5–1.5 m, 0.3–1.4 m long
+  for (let x = K.x0 + 0.5, k = 0; x < K.x1 - 0.5; x += 0.5 + 1.0 * hh(x * 0.37), k++) {
+    const pil = ((x - K.x0) / ((K.x1 - K.x0) / nP)) % 1;
+    if (pil < 0.06 || pil > 0.94) continue;
+    const len = 0.3 + 1.1 * hh(x * 1.7) ** 1.5;
+    strip(x, 0.07 + 0.12 * hh(x * 2.3), 0.05 + 0.06 * hh(x * 2.9), K.top - len, K.top, DRIP, k + 50);
+  }
+  // damp / moss band at the foot, in pieces of varying height
+  for (let x = K.x0, k = 0; x < K.x1 - 0.3; k++) {
+    const w = 1.2 + 2.4 * hh(x * 0.61 + 7);
+    const xc = Math.min(K.x1, x + w);
+    const h = 0.12 + 0.3 * hh(x * 1.13 + 3);
+    b.color(FOOTMOSS.clone().multiplyScalar(0.85 + 0.3 * hh(k + 9))).set('aMas', KIND.plain, 0, 1, 0);
+    b.quadFacing([x, -0.05, zf], [xc, -0.05, zf], [xc, h * (0.6 + 0.4 * hh(xc)), zf], [x, h, zf], 0, 0, 1);
+    x = xc;
   }
 }
 
@@ -646,7 +715,8 @@ function waterStairsStone(b: GeoBuilder, W: WaterStairs, model: TerrainModel): v
   slab(b, W.bottom, bed, W.bottomY - 0.08, 4 | 8);
   b.color(COL.step).set('aMas', KIND.coping, 0, 1, 0);
   slab(b, W.bottom, W.bottomY - 0.08, W.bottomY, 4);
-  flight(b, W.stair, bed, stone);
+  // risers in a darker, weathered stone than the treads (round 3 audit: pale on pale read as a flat ramp)
+  flight(b, W.stair, bed, stone.clone().multiplyScalar(0.74));
   const wetTop = isect(W.top, W.body);
   if (wetTop) {
     b.color(stone).set('aMas', KIND.ashlar, 0.45, 1, 0);
@@ -842,6 +912,25 @@ function closeStone(b: GeoBuilder, P: ClosePlace, hi: boolean, lights: GlowPoint
         b.beam(x + Math.cos(a0) * R, s1 - 0.62 + Math.sin(a0) * R, z, x + Math.cos(a1) * R, s1 - 0.62 + Math.sin(a1) * R, z, 0.06, 0.06);
       }
     }
+  }
+  // grave candles (round 3 audit: the churchyard was a black hole at night): red glass lanterns in front of about one
+  // upright in six and a pair on the cross's top step — tiny lamp boxes + halo / pool glows (hash-picked, no rng)
+  {
+    const candle = (x: number, y: number, z: number, red: boolean) => {
+      b.color('#3a3632').set('aMas', KIND.plain, 0, 1, 0);
+      b.box(x, y + 0.025, z, 0.06, 0.025, 0.06, 0, 4);
+      b.color(red ? '#ff6d3c' : '#ffcf86').set('aMas', KIND.lamp, 0, 1, 0);
+      b.box(x, y + 0.11, z, 0.045, 0.06, 0.045, 0, 4);
+      lights.push({ x, y: y + 0.12, z, size: 0.28, kind: 'halo', color: red ? '#ff7a45' : '#ffd08c', intensity: 0.5 });
+      lights.push({ x, y: y0 + 0.03, z, size: 1.1, kind: 'pool', color: red ? '#ff8a50' : '#ffbe72', intensity: 0.2 });
+    };
+    for (const t of P.stones) {
+      if (t.kind === 2 || hh(t.x * 3.7 + t.z * 1.3) > 0.17) continue;
+      candle(t.x + Math.sin(t.yaw) * 0.34, y0, t.z + Math.cos(t.yaw) * 0.34, true);
+    }
+    const cz = P.cross.z + 0.42;
+    candle(P.cross.x - 0.3, y0 + 0.66, cz, false);
+    candle(P.cross.x + 0.3, y0 + 0.66, cz, true);
   }
   // headstones + chest tombs
   for (const t of P.stones) {
