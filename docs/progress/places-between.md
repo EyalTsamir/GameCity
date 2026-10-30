@@ -77,6 +77,22 @@ Differences are within run-to-run noise (mixed sign, ≤ ~1 ms). The stonework/i
 module and/or the extra glow sprites (not investigated). Lights added after this run (lanterns, bollard lights) are
 a few boxes + glow sprites.
 
+### Round 2 cost (perf.mjs, 1920×1025, high, 12:00, 2 interleaved repeats; ±2 ms run-to-run noise on this machine)
+
+| variant (overview) | ms | triangles |
+| --- | --- | --- |
+| all places | 47.6 / 47.8 (split run: 50.0 / 46.7) | 4.371 M |
+| `?noplaces` | 45.95 / 45.74 (45.1 / 44.0) | 4.339 M |
+| `?noedgelane` | 46.3 / 47.1 | −37k |
+| `?noclose` | 47.4 / 47.2 | −17k |
+| `?noportalcut` | 45.4 / 46.5 | −2k |
+| `?noparkkerb` | 46.9 / (92: outlier) | ~0 |
+
+All places together ≈ +2 ms at the overview (round 1 alone was ≤ 0.5); close `82,0,78,45,25,50` and edge
+`-205,0,40,90,-60,40` within noise. No extra draw calls (251 either way); hitch.mjs: 0 new programs in every window.
+`?debug` frame time 38.6 vs 37.5 ms (`?noplaces`). Biggest single item: the west hedgerow's leaf cards (untrimmed
+hedge + cards ≈ 230 m) — first thing to thin if the target needs it.
+
 ## Files touched
 
 - new: `src/core/places.ts`, `src/world/terrain/places.ts`, this log
