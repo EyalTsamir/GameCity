@@ -10,7 +10,8 @@ import { FROW, toField, fromField, rowB, colB, colOff, colW, lhash, fieldsOfParc
 import { hash2i } from './noise';
 import { SLAB } from '../../core/constants';
 import type { Fleet, FleetTemplate } from './fleet';
-import { createTractor, FRONT_Z, REAR_Z } from './tractor';
+import { createTractor, FRONT_Z, REAR_Z, setTractorLod } from './tractor';
+import { geomOn } from '../../core/geomhunt';
 import { sheepGeometry, cowGeometry, createNearHerd, POSE_GLSL } from './animals';
 
 /** unit cow (faces +z, length ~2.2 m): body, head, four legs; aPart 0 body, 1 head, 2 legs */
@@ -455,6 +456,7 @@ ${POSE_GLSL}`,
   if (tractorField) {
     const F = tractorField;
     // the near-real model (tractor.ts) or, with ?notractordetail, the old box template in the fleet
+    setTractorLod(geomOn('tractorlod'));
     const model3 = new URLSearchParams(location.search).has('notractordetail') ? null : createTractor(fog);
     const tid = model3 ? -1 : fleet.add(tractorGeometry());
     if (model3) group.add(model3.group);

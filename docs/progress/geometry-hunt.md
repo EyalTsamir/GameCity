@@ -48,5 +48,21 @@ Baseline output: `docs/progress/geometry/audit_baseline.md`.
 | 4 | **Bug: split cells never culled.** `splitByCells` called `computeBoundingBox()` on geometries sharing the whole position buffer, so every 120 m cell had the city's box and was drawn in every view | −300 k street, −12 dc | always | `props/layout.ts` |
 | 5 | **Fine furniture / plants cut by distance**: 240 m (benches, bins, racks: a dozen pixels and hidden by traffic), plants split into 150 m cells, 180 m | included in #4 | `?nofinecut` | `props.ts`, `vegetation.ts` |
 
+## Ranked findings (round 2 visual audit: 161 close-ups, four judges; every line checked against the image and the code)
+"False" = the judge's claim did not survive a look at full resolution. Rank = how often and how large it is on screen.
+| rank | what | track | where | status |
+|---|---|---|---|---|
+| 1 | Open back on gable dormers: ridge stops short of the main slope, under 45° a white arrow stands on the roof | A | `buildings/{homes,houses,oldtown}.ts` | **fixed** |
+| 2 | Armour stones at the waterline read as plates lying on the water, knife-edged facets everywhere | A/B | `harbor/geo.ts stone` | **fixed** `?noarmoursoft` |
+| 3 | "HAVEN BRICKWORKS" letters hang across the window heads | A | `buildings/industry.ts` | **fixed** `?nobrickboard` |
+| 4 | Square bollards at the lower quay and the station forecourt | B | `terrain/places.ts` | **fixed** `?noroundiron` |
+| 5 | Tree trunks "4-5 sided" | B | judges 4 | false: ≥ 8 sides with flare and bark, dark side reads flat |
+| 6 | Kerb-ramp wedge, ramp handrail in mid-air, picket gate | A | judge 4 | false: correct shapes, confusing perspective through a fence |
+| 7 | Serrated fringe on stone reveals | A | judge 3 | not geometry (half-res AO / shadow edge on the smooth reveal): out of scope |
+| 8 | Hedges: slab with a straight dark foot | B | `veg-plants` | open |
+| 9 | Beach umbrella 12-gon with a sharp rib | B | `harbor/beach.ts` | open |
+| 10 | Stadium aisle blocks | B | false at full size: stepped aisles read as steps | - |
+| 11 | Rock plates on the rail-portal slope | B | `terrain/cliffs.ts` | open |
+
 ## Toggles
 `?nogeomhunt` (all) · `?nomarketlod` · `?noshadowlod` · `?noboatsplit` · `?nofinecut`.

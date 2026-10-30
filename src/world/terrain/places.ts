@@ -15,6 +15,7 @@
 import * as THREE from 'three';
 import type { CityContext } from '../../core/context';
 import type { Rect } from '../../core/geom';
+import { geomOn } from '../../core/geomhunt';
 import { stairY, islandBridgeY, type CuttingPlace, type IslandBridgePlace, type LanePlace, type PlaceStair, type QuayPlace, type StationPlace, type WaterStairs, type Slipway, type ClosePlace, type CloseStone, type YardGate, type EdgePlace } from '../../core/places';
 import type { GeoBuilder, V3 } from './builder';
 import type { TerrainModel } from './height';
@@ -57,6 +58,9 @@ function slab(b: GeoBuilder, r: Rect, y0: number, y1: number, skip = 4): void {
 }
 
 /** the treads of a flight as columns standing on `base` (risers face down the flight) */
+/** geometry hunt (?noroundiron): bollards turned, not square posts */
+const ROUND_IRON = geomOn('roundiron');
+
 function flight(b: GeoBuilder, s: PlaceStair, base: number, sideCol: THREE.Color): void {
   const r = s.rect;
   const L = s.axis === 'x' ? r.x1 - r.x0 : r.z1 - r.z0;
@@ -161,10 +165,16 @@ function quayStone(b: GeoBuilder, q: QuayPlace, model: TerrainModel, lights: Glo
   for (let x = q.stairs[0].rect.x1 + 3.5; x < r.rect.x0 - 2; x += 14) {
     const z = q.zWall + 0.22;
     b.color(BOLLARD).set('aMas', KIND.dark, 0, 1, 0);
-    b.box(x, q.y + 0.36, z, 0.07, 0.36, 0.07, 0, 4);
-    b.box(x, q.y + 0.84, z, 0.1, 0.03, 0.1, 0, 4);
+    if (ROUND_IRON) {
+      b.lathe(x, z, [[q.y, 0.1], [q.y + 0.05, 0.085], [q.y + 0.08, 0.06], [q.y + 0.72, 0.055]], 10);
+      b.lathe(x, z, [[q.y + 0.81, 0.09], [q.y + 0.84, 0.105], [q.y + 0.87, 0.07], [q.y + 0.885, 0]], 10);
+    } else {
+      b.box(x, q.y + 0.36, z, 0.07, 0.36, 0.07, 0, 4);
+      b.box(x, q.y + 0.84, z, 0.1, 0.03, 0.1, 0, 4);
+    }
     b.color(COL.lamp).set('aMas', KIND.lamp, 0, 1, 0);
-    b.box(x, q.y + 0.77, z, 0.075, 0.05, 0.075, 0, 4 | 8);
+    if (ROUND_IRON) b.lathe(x, z, [[q.y + 0.72, 0.07], [q.y + 0.82, 0.07]], 10);
+    else b.box(x, q.y + 0.77, z, 0.075, 0.05, 0.075, 0, 4 | 8);
     lights.push({ x, y: q.y + 0.77, z, size: 0.32, kind: 'halo', color: '#ffd08c', intensity: 0.45 });
     lights.push({ x, y: q.y + 0.03, z: z + 1.2, size: 2.4, kind: 'pool', color: '#ffbe72', intensity: 0.3 });
   }
@@ -215,8 +225,14 @@ function quayIron(b: GeoBuilder, q: QuayPlace): void {
   // mooring bollards on the coping
   for (const p of q.bollards) {
     b.color(BOLLARD);
-    b.box(p.x, q.y + 0.26, p.z, 0.13, 0.26, 0.13, Math.PI / 8, 4);
-    b.box(p.x, q.y + 0.55, p.z, 0.17, 0.04, 0.17, Math.PI / 8, 4);
+    if (ROUND_IRON) {
+      // cast mooring bollard: foot flange, waist, flared head
+      const y = q.y;
+      b.lathe(p.x, p.z, [[y, 0.2], [y + 0.04, 0.19], [y + 0.07, 0.125], [y + 0.36, 0.115], [y + 0.47, 0.2], [y + 0.52, 0.2], [y + 0.57, 0.11], [y + 0.585, 0]], 10);
+    } else {
+      b.box(p.x, q.y + 0.26, p.z, 0.13, 0.26, 0.13, Math.PI / 8, 4);
+      b.box(p.x, q.y + 0.55, p.z, 0.17, 0.04, 0.17, Math.PI / 8, 4);
+    }
   }
 }
 
@@ -582,9 +598,13 @@ function stationStone(b: GeoBuilder, S: StationPlace, lights: GlowPoint[]): void
   }
   b.color(IRON).set('aMas', KIND.dark, 0, 1, 0);
   for (const q of S.bollards) {
-    b.box(q.x, y0 + 0.4, q.z, 0.065, 0.4, 0.065, 0, 4);
-    b.box(q.x, y0 + 0.62, q.z, 0.085, 0.025, 0.085, 0, 0);
-    b.box(q.x, y0 + 0.82, q.z, 0.08, 0.035, 0.08, 0, 0);
+    if (ROUND_IRON) {
+      b.lathe(q.x, q.z, [[y0, 0.1], [y0 + 0.05, 0.09], [y0 + 0.08, 0.065], [y0 + 0.6, 0.055], [y0 + 0.615, 0.08], [y0 + 0.64, 0.08], [y0 + 0.655, 0.055], [y0 + 0.8, 0.05], [y0 + 0.83, 0.08], [y0 + 0.86, 0.06], [y0 + 0.875, 0]], 8);
+    } else {
+      b.box(q.x, y0 + 0.4, q.z, 0.065, 0.4, 0.065, 0, 4);
+      b.box(q.x, y0 + 0.62, q.z, 0.085, 0.025, 0.085, 0, 0);
+      b.box(q.x, y0 + 0.82, q.z, 0.08, 0.035, 0.08, 0, 0);
+    }
   }
   // landing: large slabs on a granite body
   b.color(GRANITE_HI).set('aMas', KIND.ashlar, 0.9, 1, 0);

@@ -16,6 +16,7 @@ import { anchors } from './anchors';
 import { WIN, PROF, WALLPAT, ROOFPAT, FRAME, GLASS, LIGHT_MODE } from './materials';
 import { letterSign, boardSign } from './signs';
 import { PALETTE } from '../../core/gfx';
+import { geomOn } from '../../core/geomhunt';
 import { partitionSide } from './oldtown';
 import { MASS, massRng, upFacet, roofKit } from './massing';
 import { downpipe } from './clutter';
@@ -918,7 +919,13 @@ export function genIndustrial(g: Gen): void {
   const sgF = sideGeom(body, FRONT);
   if (brickworks) {
     const r = g.atlas.add('brickworks', 640, 80, letterSign('HAVEN BRICKWORKS', '#efe6d4', '#ffe7b0', '"Arial Black", Impact, sans-serif', 0.55));
-    signOnSide(g, sgF, sgF.L * 0.5 - 9.5, sgF.L * 0.5 + 9.5, INS - 0.0 + 0.06, H - 2.55, H - 0.65, r);
+    // (geometry hunt: the letters hung in the air across the window heads; a painted board carries them, proud of the piers)
+    const bo = geomOn('brickboard') ? INS + 0.08 : INS - 0.0 + 0.03;
+    if (bo > INS + 0.05) {
+      setCol(t, col('#33261f'));
+      sideBox(t, sgF, sgF.L * 0.5 - 9.8, sgF.L * 0.5 + 9.8, 0, bo, H - 2.62, H - 0.58, true);
+    }
+    signOnSide(g, sgF, sgF.L * 0.5 - 9.5, sgF.L * 0.5 + 9.5, bo + 0.03, H - 2.55, H - 0.65, r);
   } else if (customs) {
     const r = g.atlas.add('customs', 900, 72, letterSign('OLD CUSTOMS WAREHOUSE', '#ece2c6', '#ffe1a8', 'Georgia, "Times New Roman", serif', 0.45));
     signOnSide(g, sgF, sgF.L * 0.5 - 14, sgF.L * 0.5 + 14, INS + 0.06, H - 1.85, H - 0.55, r);

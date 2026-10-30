@@ -562,7 +562,9 @@ export function genHouse(g: Gen): void {
     else {
       const two = M.x1 - M.x0 > 7.4 && rng.chance(0.5);
       const xs = two ? [M.x0 + (M.x1 - M.x0) * 0.3, M.x0 + (M.x1 - M.x0) * 0.7] : [mx + rng.range(-1, 1)];
-      for (const x of xs) gableDormer(x, zFront, yBase, slope, kindD === 2);
+      // (a gambrel's dormer stays under the knee: its ridge came through the shallow upper slope as a white arrow)
+      const yTopD = roofKind === 'gambrel' ? eave + (M.z1 - zc) * 0.4 * GAMB_P : eave + (M.z1 - zc) * slope;
+      if (yBase + 1.35 + 0.3 < yTopD) for (const x of xs) gableDormer(x, zFront, yBase, slope, kindD === 2, yTopD);
     }
   }
   if (frontSlope && !dormers && roofKind !== 'gambrel' && rng.chance(0.2)) solar(eave, rise);
@@ -882,14 +884,15 @@ export function genHouse(g: Gen): void {
     t.box(x0, yE - 0.16, r.z0 - ov - 0.03, x1, yE + 0.02, r.z0 - ov + 0.03, 0b111111 & ~8);
   }
 
-  function gableDormer(cx: number, zFront: number, yBase: number, slope: number, hipped: boolean): void {
+  function gableDormer(cx: number, zFront: number, yBase: number, slope: number, hipped: boolean, yRidge: number): void {
     const w = 1.6,
       wh = 1.35;
     const sgD: SideGeom = { x0: cx - w / 2, z0: zFront, tx: 1, tz: 0, nx: 0, nz: 1, L: w };
     const gr = makeGrid(0, w, yBase, wh, 1, { spacing: w, cols: 1, winW: 0.9, winH: 0.85, sill: 0.25, margin: 0.1 });
     wallGrid(s, sgD, 0, w, yBase - 0.3, yBase + wh, gr, upLook());
-    const ridge = yBase + wh + 0.6;
-    const depth = wh / slope + 0.6;
+    // (the ridge runs back until the main slope has risen over it: it used to stop short, and under 45° the roof stayed open at the back)
+    const ridge = Math.min(yBase + wh + 0.6, yRidge - 0.08);
+    const depth = Math.max(wh / slope + 0.6, (ridge - yBase) / slope + 0.03);
     const zb = zFront - depth;
     wallSeg(s, cx + w / 2, zFront, cx + w / 2, zb, yBase - 0.3, yBase + wh, null, upPlain);
     wallSeg(s, cx - w / 2, zb, cx - w / 2, zFront, yBase - 0.3, yBase + wh, null, upPlain);

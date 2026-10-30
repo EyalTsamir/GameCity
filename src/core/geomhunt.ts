@@ -6,6 +6,12 @@ import type { CityContext, QualityLevel } from './context';
 
 const RANK: Record<QualityLevel, number> = { low: 0, medium: 1, high: 2 };
 
+/** the same switch for builders without a context (no quality tier) */
+export function geomOn(name: string): boolean {
+  const q = typeof location !== 'undefined' ? new URLSearchParams(location.search) : null;
+  return !(q && (q.has('nogeomhunt') || q.has('no' + name)));
+}
+
 /** is geometry-hunt feature `name` on (`?no<name>` / `?nogeomhunt` off; below quality tier `min` off)? */
 export function geomHunt(ctx: Pick<CityContext, 'quality'>, name: string, min: QualityLevel = 'low'): boolean {
   const q = typeof location !== 'undefined' ? new URLSearchParams(location.search) : null;

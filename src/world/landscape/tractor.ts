@@ -25,6 +25,13 @@ const RIM: RGB = [0.5, 0.42, 0.3];
 const IMPL: RGB = [0.04, 0.12, 0.32];
 const MUD: RGB = [0.16, 0.12, 0.08];
 
+const LOD = { box: 1, tread: 2, around: 4 };
+export function setTractorLod(on: boolean): void {
+  LOD.box = on ? 1 : 2;
+  LOD.tread = on ? 2 : 3;
+  LOD.around = on ? 4 : 5.74;
+}
+
 export class Sink {
   pos: number[] = [];
   /** procedural surface id per vertex (farmstead.ts shader); 0 = plain */
@@ -62,7 +69,8 @@ export class Sink {
     }
   }
   box(w: number, h: number, l: number, x: number, y: number, z: number, c: RGB, rough = 0.45, metal = 0, r = 0.02, mud = 1, rot?: THREE.Euler): void {
-    const g = r > 0 ? new RoundedBoxGeometry(w, h, l, 2, Math.min(r, w / 2.1, h / 2.1, l / 2.1)) : new THREE.BoxGeometry(w, h, l);
+    // (geometry hunt ?notractorlod: 300 triangles for a 2 cm radius nobody can resolve beyond a few metres)
+    const g = r > 0 ? new RoundedBoxGeometry(w, h, l, LOD.box, Math.min(r, w / 2.1, h / 2.1, l / 2.1)) : new THREE.BoxGeometry(w, h, l);
     this.m.makeRotationFromEuler(rot ?? new THREE.Euler()).setPosition(x, y, z);
     this.add(g, this.m, c, rough, metal, mud);
   }
@@ -310,8 +318,9 @@ function bodyGeometry(glass: Sink): THREE.BufferGeometry {
 }
 
 /** a lugged tractor tyre on its rim, axis x, centred on the origin */
-function wheelGeometry(R: number, W: number, lugs: number, around: number): THREE.BufferGeometry {
+function wheelGeometry(R: number, W: number, lugs: number): THREE.BufferGeometry {
   const s = new Sink();
+  const around = Math.round(lugs * LOD.around);
   const rr = R * 0.58; // rim radius
   // section profile (x, r) from the inner bead round the tread to the outer bead
   const prof: [number, number][] = [
@@ -332,7 +341,7 @@ function wheelGeometry(R: number, W: number, lugs: number, around: number): THRE
   // refine the tread section so the chevrons can be cut into it
   const pp: [number, number][] = [];
   for (let i = 0; i < prof.length - 1; i++) {
-    const n = prof[i][1] > R * 0.97 && prof[i + 1][1] > R * 0.97 ? 3 : 1;
+    const n = prof[i][1] > R * 0.97 && prof[i + 1][1] > R * 0.97 ? LOD.tread : 1;
     for (let k = 0; k < n; k++) {
       const t = k / n;
       pp.push([prof[i][0] + (prof[i + 1][0] - prof[i][0]) * t, prof[i][1] + (prof[i + 1][1] - prof[i][1]) * t]);
@@ -431,8 +440,8 @@ export function createTractor(fog: boolean): TractorModel {
   group.add(body);
   group.add(glass);
   const wheels = [
-    { mesh: new THREE.InstancedMesh(wheelGeometry(REAR_R, 0.56, 23, 132), mat, 2), r: REAR_R, x: REAR_X, z: REAR_Z },
-    { mesh: new THREE.InstancedMesh(wheelGeometry(FRONT_R, 0.38, 18, 96), mat, 2), r: FRONT_R, x: FRONT_X, z: FRONT_Z },
+    { mesh: new THREE.InstancedMesh(wheelGeometry(REAR_R, 0.56, 23), mat, 2), r: REAR_R, x: REAR_X, z: REAR_Z },
+    { mesh: new THREE.InstancedMesh(wheelGeometry(FRONT_R, 0.38, 18), mat, 2), r: FRONT_R, x: FRONT_X, z: FRONT_Z },
   ];
   for (const w of wheels) {
     w.mesh.name = 'land-tractor-wheels';
