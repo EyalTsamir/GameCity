@@ -153,6 +153,7 @@ uniform sampler2D uPedPal2;
 uniform vec3 uPedPiv[${PIV_COUNT * 4}];
 uniform vec4 uPedHatA[8];
 uniform float uPedHairline;
+uniform float uPedT;
 uniform vec4 uPedHatB[8];
 varying vec3 vPedA;
 varying vec3 vPedB;
@@ -456,6 +457,14 @@ void pedPose(inout vec3 p, inout vec3 n) {
       float hemY = pedP8(iC1.z) * hip.y;
       p.y = p.y - u * max(0.0, p.y - hemY);
       p.xz += rad0 * u * float(iC2.w & 255u) * (seated ? 0.0003 : 0.001);
+//@if !F
+      // the hem falls in pipe folds and moves a little in the air (a clean circle reads as a lampshade)
+      if (!seated) {
+        float tSeed = float(iC2.w & 255u) * 0.37 + float(iC1.z) * 0.11;
+        float tPhi = atan(rad0.x, rad0.y);
+        p.xz += rad0 * u * u * (0.016 * sin(tPhi * 7.0 + tSeed) + 0.007 * sin(tPhi * 13.0 - tSeed * 2.0) + 0.006 * sin(uPedT * 1.7 + tPhi * 2.0 + tSeed));
+      }
+//@endif
     }
     float k = u < -0.75 ? 0.0 : (u < -0.25 ? (seated ? 0.45 : 0.15) : (seated ? 1.0 : 0.25 + 0.5 * u));
     float side = aux.y;
@@ -782,6 +791,7 @@ float pedRidge(float x) { float t = 1.0 - abs(fract(x) - 0.5) * 2.0; return t * 
 float pedBand2(float d, float hw, float px) { return 1.0 - smoothstep(hw - px * 0.5, hw + px * 0.5, abs(d)); }
 // relief for the normal stage (FABRIC_NORMAL): fold / seam height + weave, and the fabric share (fuzz sheen)
 uniform float uPedFolds;
+uniform float uPedT;
 float pedFabH = 0.0;
 float pedFabK = 0.0;
 vec3 pedFabric(vec3 pc, float reg, float h, float sHem) {
@@ -1046,6 +1056,10 @@ vec3 pedFacePaint(vec3 skin, vec2 F) {
   // touches its bottom edge, so little sclera shows above / below it
   float upper = 0.0047 * qa + 0.0007 * ex / ew;
   float lower = -0.003 * pow(max(q, 0.0), 0.9) + 0.0005 * ex / ew;
+  // people blink: about every 3–6 s, 150 ms, each at their own time
+  float blH = fract(dot(vPedHairW.rgb, vec3(3.1, 7.7, 5.3)));
+  float blT = fract(uPedT * (0.17 + 0.14 * blH) + blH * 13.0);
+  upper = mix(upper, lower, smoothstep(0.0, 0.012, blT) * (1.0 - smoothstep(0.018, 0.034, blT)));
   float dU = upper - ey, dL = ey - lower;
   float open = smoothstep(-px * 0.5, px * 0.5, min(dU, dL)) * step(0.0, q);
   vec3 iris = eyeC == 0u ? vec3(0.07, 0.04, 0.025) : eyeC == 1u ? vec3(0.17, 0.09, 0.04) : eyeC == 2u ? vec3(0.17, 0.16, 0.08) : vec3(0.2, 0.27, 0.33);
@@ -1314,6 +1328,7 @@ function uniformsFor(): Record<string, THREE.IUniform> {
     uPedHatB: { value: HAT_B.map((a) => new THREE.Vector4(...(a as [number, number, number, number]))) },
     uPedHairline: { value: 1 },
     uPedFolds: { value: 1 },
+    uPedT: globalUniforms.uTime,
     uPedFill: { value: detailPeople('pedfill') ? 1.25 : 1 },
   };
 }

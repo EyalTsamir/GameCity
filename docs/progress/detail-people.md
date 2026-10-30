@@ -3,7 +3,7 @@
 Branch `claude/detail-people-7b792a`, port 5205. Shared rules: `DETAIL-ROUND.md`. Master switch `?nodetailpeople`, one `?no<name>` per family (`src/core/detailPeople.ts`).
 
 ## Resume here
-Round 1 in progress. See "Rounds" for what is committed; the ranked list below is what is left. Capture tool: a small driver in the session scratchpad (`lab.mjs`, shots as JS strings), rewrite if lost: one page, `setSpeed(0)`, `C.view(...)` per shot.
+Round 1 and most of round 2 committed. See "Rounds"; next: perf at church/wedding (`--views`, `;noclosebudget`), then the soak and final checks in `DETAIL-ROUND.md`; ideas left under "Left". Capture tool: a small driver in the session scratchpad (`lab.mjs`, shots as JS strings), rewrite if lost: one page, `setSpeed(0)`, `C.view(...)` per shot.
 
 ## Audit (round 1, by eye at 2–30 m, noon + night)
 Ranked by wow per ms:
@@ -29,6 +29,23 @@ Ranked by wow per ms:
 | Talking on the way: hand gestures in turns, nods | `?nowalktalk` | arm IK for speakers only |
 | Hand in hand: child + parent 80 %, couples 28 % | `?noholdhands` | arm IK |
 | Close-level budget: radius pulls in beyond 14 figures | `?noclosebudget` | saves |
+
+### Round 2: vehicles, life details
+| feature | toggle | cost |
+|---|---|---|
+| Bus doors fold open at stops (VS, `aInst2.y = 10 + open`), the doorway shows the cabin | none (bug-level fix) | a few VS ops on vehicles, one pane per door |
+| Estates and people carriers in traffic (they only stood parked) | none | same draw calls when present |
+| Car cabins: round headrests, darker seats; no shadow speckle on paint and glass | none | 0 |
+| Shoes with a real toe box (rig rings) | none | 0 |
+| Fill and bounce light on figures in shade (no black cut-outs) | `?nopedfill` | few ALU |
+| Blink (FS, close level), hem pipe folds + slow air movement (VS, not far levels) | always on with close level | few ALU |
+
+Measured, round 1 at 1300x930, 2 repeats, AC, interleaved (ms/frame vs `?nodetailpeople`): overview +0.4 (noise ±0.3), downtown 0, street +0.15, market −0.3, plaza −0.2. Triangles unchanged within the crowd's variation. Below the budget of +1 ms.
+
+## Left
+- Hair still reads a little as a helmet at 2–3 m; faces are good at ≥ 3 m.
+- Car body shapes share one face (grille + oval lamps): new front ends per model would be the next vehicle step.
+- Scenes: wedding / park perf to confirm with the close budget; café seat and park-corner overlaps unchanged.
 
 ## Hand-offs
 - **light-sky-water**: three's PCF noise rotation (`interleavedGradientNoise` in `shadowmap_pars_fragment`) is a visible halftone on the ground along every sun-shadow edge at eye level (`src/render/sky/shadowPatch.ts` could replace it near the camera: a fixed disc costs nothing, and figures here now use one). Grep the chunk for `interleavedGradientNoise( gl_FragCoord.xy ) * PI2`.
