@@ -1365,7 +1365,8 @@ export class Crowd {
       vT = Math.min(vT, Math.sqrt(2 * 1.4 * Math.max(0, st.s - p.s)) + 0.05);
     }
     // end of rail (or the café entry point)
-    if (!p.endDoor) vT = Math.min(vT, Math.sqrt(2 * 1.6 * Math.max(0, Math.min(r.length, p.exitS) - p.s)) + 0.15);
+    // (a café's way in can come right after a zebra: off the road first, never leave the walk in the middle of it)
+    if (!p.endDoor && !p.crossing) vT = Math.min(vT, Math.sqrt(2 * 1.6 * Math.max(0, Math.min(r.length, p.exitS) - p.s)) + 0.15);
     if (p.passT > 0) p.passT -= h;
     else if (p.vCap < vT) vT = Math.max(0, p.vCap);
     const dv = vT - p.v;
@@ -1426,12 +1427,12 @@ export class Crowd {
     // arrival
     if (p.endDoor) {
       if (this.trailS(p) > r.length + 0.5) this.finish(p);
-    } else if (p.s >= p.exitS - 0.05) {
+    } else if (p.s >= p.exitS - 0.05 && !p.crossing) {
       this.arrive(p);
     } else if (p.s >= r.length - 0.02) {
       p.s = r.length;
       this.arrive(p);
-    } else if (p.goal?.spots && Math.min(r.length, p.exitS) - p.s < 3 && p.v < 0.1 && p.vCap < 0.2 && p.blockedT > 0.6) {
+    } else if (p.goal?.spots && !p.crossing && Math.min(r.length, p.exitS) - p.s < 3 && p.v < 0.1 && p.vCap < 0.2 && p.blockedT > 0.6) {
       // our seat / spot is right there but people stand in the way to the end of the walk: go straight to it
       this.arrive(p);
     }
