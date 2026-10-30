@@ -590,6 +590,15 @@ export function buildPlaces(ctx: CityContext, rng: Rng): Places {
     return true;
   };
   for (const v of views) v.spots = v.spots.filter((sp) => dry(sp.x, sp.z));
+  // two neighbouring attractions (the statue's ring from two nodes, the duck pond's shore) can offer the same ground:
+  // a spot on top of another's would put two strangers in one place
+  const taken: { x: number; z: number; v: SpotPlace }[] = [];
+  for (const v of views)
+    v.spots = v.spots.filter((sp) => {
+      for (const t of taken) if (t.v !== v && (t.x - sp.x) ** 2 + (t.z - sp.z) ** 2 < 0.55 * 0.55) return false;
+      taken.push({ x: sp.x, z: sp.z, v });
+      return true;
+    });
   for (let i = views.length - 1; i >= 0; i--) if (!views[i].spots.length) views.splice(i, 1);
   // benches are sat down on from the front: skip any whose front is over the water (sea-facing pier benches)
   for (let i = benches.length - 1; i >= 0; i--) {

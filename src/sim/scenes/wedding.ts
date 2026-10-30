@@ -37,9 +37,10 @@ function dressBride(L: Look): void {
   if (st) {
     st.hat = HAT_STYLES.NONE;
     st.sleeve = 0.9;
-    st.tail = 3;
+    st.outer = 0xf8f4ee;
+    st.tail = 2;
     st.tailHem = 0.03;
-    st.tailFlare = 0.2;
+    st.tailFlare = 0.22;
     st.jacketHem = -1;
     st.lapels = false;
     st.tie = false;
@@ -90,7 +91,8 @@ function dressGuest(L: Look, rng: Rng, man: boolean): void {
       st.hat = rng.chance(0.3) ? HAT_STYLES.SUNHAT : HAT_STYLES.NONE;
       if (st.hat) L.hat = rng.pick([0xf0e8d8, c]);
       st.sleeve = rng.chance(0.5) ? 1.1 : 0.7;
-      st.tail = 3;
+      st.outer = c;
+      st.tail = 2;
       st.tailHem = rng.range(0.3, 0.42);
       st.tailFlare = 0.08;
       st.jacketHem = -1;
@@ -261,7 +263,7 @@ export class Wedding implements Scene {
       g = this.groom;
     if (this.beat === 0 && t >= COUPLE - 1) {
       // the photographer is ready across the pavement, the couple come out arm in arm
-      this.photographer.show(d.x + 0.4, d.z + 4.2, Math.PI).walk(d.x + 0.2, d.z + 3.55);
+      this.photographer.show(d.x - 1.6, d.z + 4.2, Math.PI).walk(d.x - 1.3, d.z + 3.5);
       b.show(d.x + 0.24, d.z + 0.1, 0);
       g.show(d.x - 0.24, d.z + 0.1, 0);
       b.speed = g.speed = 0.75;
@@ -290,7 +292,7 @@ export class Wedding implements Scene {
       b.walk(d.x + 0.27, d.z + 2.5);
       g.walk(d.x - 0.27, d.z + 2.5);
       this.photographer.m.forceIdle = 5;
-      this.photographer.walk(d.x + 0.1, d.z + 4.25);
+      this.photographer.walk(d.x - 1.0, d.z + 4.25);
       this.photographer.face(Math.PI);
       b.face(0);
       g.face(0);

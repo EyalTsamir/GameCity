@@ -160,7 +160,7 @@ const GEOS: Record<PartName, () => THREE.BufferGeometry> = {
   cable: () => box(0.014, 1, 0.014, 0, 0, 0, '#26282b'),
   can: canGeo,
   vanrear: vanRearGeo,
-  confetti: () => box(0.05, 0.004, 0.035, 0, 0, 0, '#ffffff'),
+  confetti: () => box(0.075, 0.004, 0.05, 0, 0, 0, '#ffffff'),
   bouquet: () => merge([sph(0.08, 0, 0.06, 0, '#f4e8ec', 0), sph(0.035, 0.05, 0.11, 0.03, '#e8a0b0', 0), sph(0.03, -0.05, 0.1, -0.02, '#f0d890', 0), cyl(0.012, 0.03, 0.13, 0, -0.03, 0, '#5a7a3a', 5)]),
   // white satin along the bonnet and a bow, two tins on strings at the back (root at the car's centre, +z forward)
   ribbon: () => merge([box(0.16, 0.012, 2.2, -0.36, 1.02, 1.08, '#fbf8f4'), box(0.16, 0.012, 2.2, 0.36, 1.02, 1.08, '#fbf8f4'), box(0.3, 0.14, 0.09, 0, 1.02, 2.1, '#fbf8f4'), box(0.1, 0.1, 0.1, 0, 1.03, 2.1, '#f0dfe4'), sph(0.1, -0.2, 1.08, 2.1, '#f8eef0', 0), sph(0.1, 0.2, 1.08, 2.1, '#f8eef0', 0), cyl(0.04, 0.04, 0.1, -0.3, 0.07, -3.1, '#c0c4c8', 6, 0, Math.PI / 2), cyl(0.04, 0.04, 0.1, 0.05, 0.07, -3.35, '#c0c4c8', 6, Math.PI / 2), cyl(0.04, 0.04, 0.1, 0.32, 0.07, -3.05, '#c8ccd0', 6, 0, Math.PI / 2), box(0.008, 0.008, 0.9, -0.15, 0.3, -2.7, '#d8d8d8'), box(0.008, 0.008, 1.1, 0.1, 0.3, -2.8, '#d8d8d8')]),

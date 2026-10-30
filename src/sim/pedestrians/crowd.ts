@@ -354,6 +354,8 @@ export class Party {
   stall: Stall | null = null;
   servePhase = 0;
   serveCafe: CafePlace | null = null;
+  /** told to fade out while on a crossing: seconds of the fade, once across */
+  fadeAfterCross = 0;
   constructor(id: number, persona: Persona) {
     this.id = id;
     this.persona = persona;
@@ -667,7 +669,7 @@ export class Crowd {
     // drop the excess first (fast fades)
     let alive = this.alive();
     if (alive > target * 1.25) {
-      const order = this.parties.filter((p) => p.state !== 'gone').sort(() => this.rng.next() - 0.5);
+      const order = this.parties.filter((p) => p.state !== 'gone' && !p.stall && !p.staff).sort(() => this.rng.next() - 0.5);
       for (const p of order) {
         if (alive <= target) break;
         alive -= p.size;
@@ -1330,7 +1332,10 @@ export class Crowd {
     // rail stops (window shopping, market stalls, bridge views)
     const st = p.stops[p.stopIdx];
     if (st) {
-      if (p.s >= st.s - 0.03) {
+      if (p.s >= st.s - 0.03 && this.pauseTaken(p)) {
+        // someone already stands here (another group stopped for the same window, the same chat): walk on
+        p.stopIdx++;
+      } else if (p.s >= st.s - 0.03) {
         p.state = 'pause';
         p.timer = st.dur;
         p.pauseYaw = st.yaw;
@@ -3088,9 +3093,9 @@ export class Crowd {
   private beginFadeOut(p: Party, secs: number): void {
     if (p.state === 'gone') return;
     if (p.crossing) {
-      // never vanish in the road: finish crossing first by fading quickly after
-      this.ctx.intersections.endCross(p.id);
-      p.crossing = null;
+      // never vanish in the road: finish crossing first (step() fades them as soon as they are across)
+      p.fadeAfterCross = secs;
+      return;
     }
     p.state = 'fadeout';
     p.timer = secs;
@@ -3099,6 +3104,11 @@ export class Crowd {
   // ── animation ────────────────────────────────────────────────────
 
   private animate(p: Party, h: number): void {
+    if (p.fadeAfterCross > 0 && !p.crossing) {
+      const secs = p.fadeAfterCross;
+      p.fadeAfterCross = 0;
+      this.beginFadeOut(p, secs);
+    }
     const rate = h * 1.25;
     for (const m of p.members) {
       // gait amplitude follows the actual speed
@@ -3161,6 +3171,20 @@ export class Crowd {
           if (Math.hypot(o.x - m.x, o.z - m.z) < 0.35) close = o;
         });
         m.overlapT = close ? m.overlapT + dt : 0;
+        // on top of someone for more than a moment (stopped beside each other, a leaver blocked by someone at the next
+        // spot): take a small step apart, as people do
+        if (close && m.overlapT > 0.8 && (p.state === 'pause' || p.state === 'leave' || p.state === 'approach' || p.state === 'fadein' || p.state === 'toWait' || p.state === 'wait')) {
+          const c = close as Member;
+          const dx = m.x - c.x,
+            dz = m.z - c.z;
+          const d = Math.hypot(dx, dz) || 1;
+          const nx = m.x + (dx / d) * 0.09,
+            nz = m.z + (dz / d) * 0.09;
+          if (this.walkable(m, nx, nz)) {
+            m.x = nx;
+            m.z = nz;
+          }
+        }
         if (close && m.overlapT > 2) m.overlapInfo = `${this.legKind(p)}/${p.state} vs ${(close as Member).party.persona}:${this.legKind((close as Member).party)}/${(close as Member).party.state}`;
       }
     }
@@ -3769,6 +3793,22 @@ export class Crowd {
   }
 
   /** anyone (present) within r of (x, z)? */
+  /** another party standing within reach of where this party's members would stop */
+  private pauseTaken(p: Party): boolean {
+    const g = this.grid;
+    let taken = false;
+    for (let i = 0; i < p.members.length && !taken; i++) {
+      const m = p.members[i];
+      g.each(m.x, m.z, 0.9, (k) => {
+        if (g.op[k] === p.id) return;
+        const dx = g.ox[k] - m.x,
+          dz = g.oz[k] - m.z;
+        if (dx * dx + dz * dz < 0.7 * 0.7 && g.ovx[k] * g.ovx[k] + g.ovz[k] * g.ovz[k] < 0.25) taken = true;
+      });
+    }
+    return taken;
+  }
+
   private busyAt(x: number, z: number, r: number): boolean {
     let busy = false;
     this.grid.each(x, z, r + 0.3, (k) => {
@@ -4273,9 +4313,9 @@ export class Crowd {
         if (flags & OCC.WATER && this.places.onDeck(m.x, m.z)) flags &= ~OCC.WATER;
         const onCrosswalkLeg = this.onCrosswalk(p, m);
         // sitting on a fountain rim (and getting on / off it) is inside the fountain's footprint by design
-        if (p.goal?.bench?.rim && (p.state === 'settle' || p.state === 'act' || p.state === 'rise')) flags &= ~OCC.SOLID;
+        if (p.goal?.bench?.rim && (p.state === 'settle' || p.state === 'act' || p.state === 'rise' || p.state === 'fadeout')) flags &= ~OCC.SOLID;
         // market vendors stand behind their counters, inside the stall's footprint
-        if (p.stall && p.state === 'serve') flags &= ~OCC.SOLID;
+        if (p.stall) flags &= ~OCC.SOLID;
         if (flags & (OCC.BUILDING | OCC.WATER | OCC.SOLID)) {
           if (nBad++ < 12) out.push(`pedestrian ${m.uid} (${p.state}) inside ${flags & OCC.BUILDING ? 'a building' : flags & OCC.WATER ? 'water' : 'a solid prop'} at (${m.x.toFixed(1)}, ${m.z.toFixed(1)})`);
         }

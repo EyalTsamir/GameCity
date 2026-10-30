@@ -1693,6 +1693,7 @@ export class TrafficSim {
     // off-road: body centre and both axle points must be on ROAD/PAVED
     const P: P2 = { x: 0, z: 0 };
     for (const V of vs) {
+      if (V.offLane) continue; // (pulling out from a kerb stop: on the kerb by design)
       const pts: [number, number][] = [[V.x, V.z]];
       this.pointBehind(V, V.spec.frontOverhang, P);
       pts.push([P.x, P.z]);

@@ -19,6 +19,8 @@ function freeSpots(ctx: CityContext, rects: { x0: number; z0: number; x1: number
   const trees = (ctx.services.vegetation as { trees?: { x: number; z: number; r?: number }[] } | undefined)?.trees ?? [];
   const discs = (ctx.services.props as { discs?: { x: number; z: number; r: number }[] } | undefined)?.discs ?? [];
   const hard = OCC.BUILDING | OCC.SOLID | OCC.ROAD | OCC.WATER | OCC.RAIL | OCC.PATH | OCC.SIDEWALK | OCC.PAVED;
+  // not in the wildflowers
+  const patches = (ctx.services.groundcover as { flowerPatches?: { x: number; z: number; r: number }[] } | undefined)?.flowerPatches ?? [];
   const cands: (Spot & { k: number })[] = [];
   for (const R of rects)
     for (let z = R.z0 + r; z < R.z1 - r; z += 2)
@@ -26,6 +28,7 @@ function freeSpots(ctx: CityContext, rects: { x0: number; z0: number; x1: number
         if (ctx.occupancy.anyInCircle(x, z, r, hard)) continue;
         if (trees.some((t) => Math.hypot(t.x - x, t.z - z) < r + 0.55)) continue;
         if (discs.some((d) => Math.hypot(d.x - x, d.z - z) < r + d.r)) continue;
+        if (patches.some((d) => Math.hypot(d.x - x, d.z - z) < r * 0.6 + d.r)) continue;
         cands.push({ x, z, k: rng.next() });
       }
   cands.sort((a, b) => a.k - b.k);
