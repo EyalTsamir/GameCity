@@ -197,11 +197,13 @@ export function buildFarmKit(
         };
         if (on.rows && (ck === CK.vine || ck === CK.maize || ck === CK.sunflower)) {
           const G = grid(P, 12);
+          const nearRoad = model.road(wx, wz, rh, Math.hypot(P.x1 - P.x0, P.y1 - P.y0) * 0.5 + 12);
           const pitch = ck === CK.vine ? 3 : ck === CK.maize ? 1.9 : 1.7;
           const inset = ck === CK.vine ? 3.2 : 2.2;
           rowsOf(P, pitch, inset, ck === CK.vine ? 6.5 : 8, (f0x, f0y, f1x, f1y, s0, row) => {
             const [ax, az, bx, bz] = seg(f0x, f0y, f1x, f1y);
             if (model.siteAt((ax + bx) / 2, (az + bz) / 2, 3) >= 0) return;
+            if (nearRoad && model.road((ax + bx) / 2, (az + bz) / 2, rh, 10) && rh.d < model.roads[rh.i].halfW + 2.5) return;
             const ya = G(f0x, f0y),
               yb = G(f1x, f1y);
             const var_ = 0.92 + 0.16 * hash2i(row, Math.floor(s0 / 11), 813);
@@ -210,8 +212,10 @@ export function buildFarmKit(
               s.wall(B.vine, ax, ya, az, bx, yb, bz, s0 + row * 3.1, 1.75, tt, tt * (1 + tilt), tt * (1 - tilt));
               s.top(B.canopy, ax, ya, az, bx, yb, bz, s0 + row * 2.3, 1.62, 0.85, 0.76 * tt, 0.8 * tt, 0.66 * tt);
             } else if (ck === CK.maize) {
-              s.wall(B.maize, ax, ya, az, bx, yb, bz, s0 + row * 5.7, 2.5, tt, tt, tt * 0.95, 0.5);
-              s.top(B.canopy, ax, ya, az, bx, yb, bz, s0 + row * 4.1, 2.15, 1.45, 0.62 * tt, 0.82 * tt, 0.66 * tt);
+              const h0 = 2.0 + 0.42 * vnoise((ax + az) / 9, row * 0.37, 814),
+                h1 = 2.0 + 0.42 * vnoise((bx + bz) / 9, row * 0.37, 814);
+              s.wall(B.maize, ax, ya, az, bx, yb, bz, s0 + row * 5.7, h0 * 1.14, tt, tt, tt * 0.95, 0.5, 0.08, 1, h1 * 1.14);
+              s.top(B.canopy, ax, ya, az, bx, yb, bz, s0 + row * 4.1, h0 * 0.95, 1.05, 0.62 * tt, 0.82 * tt, 0.66 * tt, h1 * 0.95);
             } else {
               s.wall(B.sunflower, ax, ya, az, bx, yb, bz, s0 + row * 4.9, 2.1, tt, tt, tt, 0.5);
               s.top(B.sunTop, ax, ya, az, bx, yb, bz, s0 + row * 3.3, 1.82, 1.3, tt, tt, tt);
@@ -267,8 +271,9 @@ export function buildFarmKit(
   // ── hedges: a wall each side and a ragged top; a run breaks where the hedge has a gap
   if (hedges) {
     for (const r of hedges.runs) {
-      if (r.x.length < 2) continue;
+      if (r.x.length < 4) continue; // a stub of hedge is a box
       const stepN = 2; // two points ≈ 5.4 m
+      const endK = (i: number) => Math.min(1, (0.35 + Math.min(i, r.x.length - 1 - i) * 0.3)); // the ends sink away
       let s0 = r.tone * 31;
       const gt = 0.96 + 0.2 * r.tone;
       const tg = (r.tone - 0.5) * 0.16;
@@ -286,8 +291,8 @@ export function buildFarmKit(
           yb = r.y[e] + GROUND_DROP;
         // the top billows (shared heights along the run), the two faces wander apart
         const hgtAt = (u: number) => 1.5 + 2.3 * vnoise(u / 13 + r.tone * 40, r.tone * 9, 834) + 1.2 * vnoise(u / 4.7, r.tone * 17, 835);
-        const hh = hgtAt(s0),
-          hh1 = hgtAt(s0 + len);
+        const hh = hgtAt(s0) * endK(i),
+          hh1 = hgtAt(s0 + len) * endK(e);
         const offAt = (u: number) => 0.42 + 0.5 * vnoise(u / 6.1, r.tone * 23, 833);
         const o0 = offAt(s0),
           o1 = offAt(s0 + len);
@@ -305,12 +310,12 @@ export function buildFarmKit(
     const L = model.riverLine;
     const p = { x: 0, z: 0 },
       p2 = { x: 0, z: 0 };
-    const stepS = 7;
-    for (let si = 2; si * stepS < Math.min(L.length, 2200); si++) {
+    const stepS = 3.6;
+    for (let si = 6; si * stepS < Math.min(L.length, 2200); si++) {
       const sa = si * stepS;
       for (const side of [-1, 1]) {
         const g = vnoise(sa / 46, side * 3.1, 871);
-        if (g < 0.42) continue;
+        if (g < 0.46 || hash2i(si, side, 874) < 0.3) continue;
         L.at(sa, p);
         L.at(sa + stepS, p2);
         const tx = p2.x - p.x,
@@ -319,20 +324,24 @@ export function buildFarmKit(
         const nx = -tz / tl,
           nz = tx / tl;
         const halfW = 8 + 5.5 * smooth(0, 420, sa) - 3.5 * smooth(2600, 6000, sa);
-        // two ragged lines at the waterline, wandering in and out
-        for (let row = 0; row < 2; row++) {
-          const o0 = halfW + (row ? 1.5 : -0.4) + 1.3 * vnoise(sa / 11, side * 5 + row, 872);
-          const o1 = halfW + (row ? 1.5 : -0.4) + 1.3 * vnoise((sa + stepS) / 11, side * 5 + row, 872);
-          const ax = p.x + nx * o0 * side,
-            az = p.z + nz * o0 * side;
-          const bx = p2.x + nx * o1 * side,
-            bz = p2.z + nz * o1 * side;
-          if (model.slabDist(ax, az) < 2) continue;
-          const ya = Math.max(WL + 0.05, H(ax, az)),
-            yb = Math.max(WL + 0.05, H(bx, bz));
-          const tt = 0.86 + 0.28 * vnoise(sa / 30, side * row, 873);
-          const hh = (row ? 1.75 : 2.2) * (0.78 + 0.34 * g);
-          s.wall(B.reed, ax, ya, az, bx, yb, bz, sa + side * 31, hh, tt, tt, tt * 0.92, 0.55, 0.12);
+        // clumps at all angles across the waterline: a bed from any side, never one straight palisade
+        const n = 1 + Math.floor(hash2i(si, side, 875) * 2.2);
+        for (let row = 0; row < n; row++) {
+          const off = halfW - 0.6 + 3.4 * hash2i(si * 3 + row, side, 876);
+          const cx = p.x + nx * off * side + (tx / tl) * stepS * hash2i(si, row, 877),
+            cz = p.z + nz * off * side + (tz / tl) * stepS * hash2i(si, row, 878);
+          if (model.slabDist(cx, cz) < 2) continue;
+          const ang = Math.atan2(tz, tx) + (hash2i(si * 5 + row, side, 879) - 0.5) * 2.2;
+          const ll = 1.7 + 2.1 * hash2i(si * 7 + row, side, 880);
+          const ax = cx - Math.cos(ang) * ll,
+            az = cz - Math.sin(ang) * ll,
+            bx = cx + Math.cos(ang) * ll,
+            bz = cz + Math.sin(ang) * ll;
+          const ya = Math.max(WL + 0.03, H(ax, az)),
+            yb = Math.max(WL + 0.03, H(bx, bz));
+          const tt = 0.84 + 0.3 * vnoise(sa / 30, side * row, 873);
+          const hh = (1.25 + 1.0 * hash2i(si, row, 882)) * (0.8 + 0.3 * g);
+          s.wall(B.reed, ax, ya, az, bx, yb, bz, sa * 1.7 + row * 9 + side * 31, hh, tt, tt, tt * 0.92, 0.55, 0.12);
           st.reeds += 2;
         }
       }
@@ -408,7 +417,170 @@ export function buildFarmKit(
       }
     }
   }
+  // ── duckboards through the dunes to the sand, boats hauled up above the tide line
+  if (on.dunes) {
+    const L = model.coastLine;
+    const p = { x: 0, z: 0 },
+      p2 = { x: 0, z: 0 };
+    let s0 = 0;
+    for (let a = 0; a < L.length; a += 8) {
+      L.at(a, p);
+      if (p.z > 152) {
+        s0 = a;
+        break;
+      }
+    }
+    for (const [a, kind] of [
+      [60, 0],
+      [165, 1],
+      [260, 0],
+      [395, 1],
+      [520, 0],
+    ] as [number, number][]) {
+      L.at(s0 + a, p);
+      L.at(s0 + a + 4, p2);
+      const tx = p2.x - p.x,
+        tz = p2.z - p.z;
+      const tl = Math.hypot(tx, tz) || 1;
+      let nx = -tz / tl,
+        nz = tx / tl;
+      if (nx > 0) {
+        nx = -nx;
+        nz = -nz;
+      }
+      if (model.cliffness(p.x, p.z) > 0.4) continue;
+      // the walk runs from the rough grazing down to the upper beach, wandering a little
+      let px = 0,
+        pz = 0,
+        py = 0,
+        run = 0;
+      for (let d = 96; d >= 20; d -= 3.2) {
+        const side = 5 * Math.sin(d / 17 + a);
+        const x = p.x + nx * d + (tx / tl) * side,
+          z = p.z + nz * d + (tz / tl) * side;
+        const y = H(x, z) + 0.16;
+        if (d < 96) {
+          const len = Math.hypot(x - px, z - pz) || 1;
+          const wx = -(z - pz) / len,
+            wz = (x - px) / len;
+          // planks are the solid band's streaks, grey, salt-bleached
+          const hw = 0.85;
+          const t = 0.48 + 0.14 * hash2i(Math.round(d), Math.round(a), 895);
+          s.solid(
+            B.solid,
+            x,
+            z,
+            [px + wx * hw, py, pz + wz * hw, 0, 1, 0, run / 4, 0, px - wx * hw, py, pz - wz * hw, 0, 1, 0, run / 4, 1, x - wx * hw, y, z - wz * hw, 0, 1, 0, (run + len) / 4, 1, x + wx * hw, y, z + wz * hw, 0, 1, 0, (run + len) / 4, 0],
+            [0, 2, 1, 0, 3, 2],
+            t,
+            t * 0.96,
+            t * 0.88,
+          );
+          st.dune += 2;
+          run += len;
+        }
+        px = x;
+        pz = z;
+        py = y;
+      }
+      // a pair of beach boats near every other walk
+      if (kind) {
+        for (let b = 0; b < 3; b++) {
+          const off = 15 + 7 * hash2i(b, Math.round(a), 896);
+          const al = (b - 1) * 7 + 4 * hash2i(b, Math.round(a), 897);
+          const x = p.x + nx * off + (tx / tl) * al,
+            z = p.z + nz * off + (tz / tl) * al;
+          boat(s, x, H(x, z), z, Math.atan2(nx, nz) + (hash2i(b, Math.round(a), 898) - 0.5) * 0.7, hash2i(b, Math.round(a), 899));
+          st.dune += 40;
+        }
+      }
+    }
+  }
+
+  // ── olive terraces: dry-stone walls along the contour round the hill towns
+  if (on.fences) {
+    for (const site of model.sites) {
+      if (!site.town) continue;
+      for (let ring = 0; ring < 4; ring++) {
+        const R = site.r * (1.14 + ring * 0.2);
+        const N = Math.round((R * 6.283) / 11);
+        let s0 = 0;
+        for (let i = 0; i < N; i++) {
+          if (vnoise(i / 5, ring * 7.3 + site.seed, 891) < 0.32) continue;
+          const a0 = (i / N) * 6.283,
+            a1 = ((i + 1) / N) * 6.283;
+          const wob = (a: number) => R * (1 + 0.1 * Math.sin(a * 3 + site.seed + ring) + 0.05 * Math.sin(a * 7 + ring * 2));
+          const ax = site.x + Math.cos(a0) * wob(a0),
+            az = site.z + Math.sin(a0) * wob(a0),
+            bx = site.x + Math.cos(a1) * wob(a1),
+            bz = site.z + Math.sin(a1) * wob(a1);
+          s.wall(B.stone, ax, H(ax, az), az, bx, H(bx, bz), bz, s0, 1.5, 1, 0.97, 0.92, 0.8, 0.06, 0);
+          st.stone += 2;
+          s0 += 11;
+        }
+      }
+    }
+  }
   return st;
+}
+
+/** a small open boat on the sand: painted strakes, dark inside, a thwart; leaning on its bilge */
+function boat(s: RowSink, x: number, y: number, z: number, yaw: number, h: number): void {
+  const L = 2.3,
+    W = 0.78,
+    D = 0.62;
+  const c = Math.cos(yaw),
+    sn = Math.sin(yaw);
+  const heel = 0.16 * (h - 0.5);
+  const verts: number[] = [];
+  const tris: number[] = [];
+  const P = (u: number, v: number, w: number): [number, number, number] => {
+    const vv = v * Math.cos(heel) - w * Math.sin(heel),
+      ww = v * Math.sin(heel) + w * Math.cos(heel);
+    return [x + vv * c + u * sn, y + ww + 0.28, z - vv * sn + u * c];
+  };
+  // hull sections along the keel: half width and sheer rise at each station
+  const N = 6;
+  const sec = (t: number): [number, number] => {
+    const a = t * 2 - 1;
+    return [W * Math.pow(Math.max(0, 1 - a * a), 0.6), D * 0.45 + 0.32 * a * a];
+  };
+  const put = (p: [number, number, number], nx: number, ny: number, nz: number, u: number, t: number) => {
+    const wx = nx * c + nz * sn,
+      wz = -nx * sn + nz * c;
+    verts.push(p[0], p[1], p[2], wx, ny, wz, u, t);
+  };
+  for (let i = 0; i <= N; i++) {
+    const t = i / N;
+    const [w, top] = sec(t);
+    const u = (t - 0.5) * 2 * L;
+    put(P(u, 0, -D * 0.2), 0, -1, 0, t, 0.1);
+    put(P(u, w, top), 0.9, 0.2, 0, t, 0.5);
+    put(P(u, -w, top), -0.9, 0.2, 0, t, 0.5);
+  }
+  for (let i = 0; i < N; i++) {
+    const a = i * 3;
+    tris.push(a, a + 3, a + 4, a, a + 4, a + 1);
+    tris.push(a, a + 2, a + 5, a, a + 5, a + 3);
+  }
+  const k = h < 0.34 ? [0.62, 0.66, 0.68] : h < 0.67 ? [0.12, 0.26, 0.4] : [0.5, 0.17, 0.11];
+  s.solid(B.solid, x, z, verts, tris, k[0], k[1], k[2]);
+  // the dark inside + the thwart (a flat lid just below the sheer)
+  const lv: number[] = [];
+  const lt: number[] = [];
+  for (let i = 0; i <= N; i++) {
+    const t = i / N;
+    const [w, top] = sec(t);
+    const u = (t - 0.5) * 2 * L;
+    const a = P(u, w * 0.92, top - 0.1),
+      b = P(u, -w * 0.92, top - 0.1);
+    lv.push(a[0], a[1], a[2], 0, 1, 0, t, 0.5, b[0], b[1], b[2], 0, 1, 0, t, 0.5);
+  }
+  for (let i = 0; i < N; i++) {
+    const a = i * 2;
+    lt.push(a, a + 2, a + 3, a, a + 3, a + 1);
+  }
+  s.solid(B.solid, x, z, lv, lt, 0.16, 0.13, 0.11);
 }
 
 /** a round bale lying on its side (8-sided, smooth) */

@@ -25,7 +25,7 @@ export function buildLandLights(model: LandscapeModel, lights: { value: number }
     sz.push(s);
   };
   for (const site of model.sites) {
-    const n = site.kind === 'village' ? 26 : site.kind === 'hamlet' ? 7 : 2;
+    const n = site.town ? 46 : site.kind === 'village' ? 26 : site.kind === 'hamlet' ? 7 : 2;
     for (let i = 0; i < n; i++) {
       const a = hash2i(site.seed, i, 811) * Math.PI * 2;
       const r = site.r * (site.kind === 'farm' ? 0.3 + 0.4 * hash2i(site.seed, i, 812) : 0.15 + 0.85 * Math.sqrt(hash2i(site.seed, i, 812)));

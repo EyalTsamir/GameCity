@@ -206,29 +206,36 @@ function drawBand(c: Ctx, b: number, R: (k: number) => number): void {
       break;
     }
     case B.reed: {
-      for (let i = 0; i < 620; i++) {
-        const x = R(i + 51) * BW;
-        const h = (1.1 + 1.15 * R(i + 52)) * pxm;
-        const t = R(i + 53);
-        const lean = (R(i + 54) - 0.5) * 14;
-        c.strokeStyle = rgb(92 + 66 * t, 110 + 44 * t, 56 + 22 * t);
-        c.lineWidth = 2;
-        c.beginPath();
-        c.moveTo(x, G);
-        c.quadraticCurveTo(x + lean * 0.3, G - h * 0.6, x + lean, G - h);
-        c.stroke();
-        for (let k = 0; k < 3; k++) {
-          const yy = G - h * (0.25 + 0.2 * k);
-          arc(c, x + lean * 0.2 * k, yy, 30 + 24 * R(i + k), 2.6, -Math.PI / 2 + (R(i * 3 + k) < 0.5 ? 0.4 : -0.4), 0.32, rgb(78 + 60 * t, 104 + 46 * t, 50 + 18 * t));
-        }
-        // plume or cattail
-        const r = R(i + 55);
-        if (r < 0.34) {
-          c.fillStyle = rgb(142, 112, 92);
-          for (let k = 0; k < 7; k++) leaf(c, x + lean, G - h + 2, 14, 2.8, -Math.PI / 2 + (k - 3) * 0.2, c.fillStyle as string);
-        } else if (r < 0.42) {
-          c.fillStyle = rgb(58, 38, 24);
-          c.fillRect(x + lean - 2.2, G - h + 6, 4.4, 16);
+      // stands, not a palisade: clumps with air between them, thin stems, long lance leaves, a dark mass low down
+      for (let cl = 0; cl < 34; cl++) {
+        const cx = R(cl * 17 + 51) * BW;
+        const spread = 18 + 46 * R(cl * 17 + 52);
+        const tall = 0.62 + 0.38 * R(cl * 17 + 53);
+        for (let i = 0; i < 26; i++) {
+          const k = cl * 101 + i * 13;
+          const x = cx + (R(k + 1) + R(k + 2) - 1) * spread;
+          const h = (0.85 + 1.35 * R(k + 3)) * pxm * tall;
+          const t = R(k + 4);
+          const lean = (R(k + 5) - 0.5) * 18;
+          // leaves first, then the stem on top
+          for (let j = 0; j < 3; j++) {
+            const yy = G - h * (0.08 + 0.32 * R(k + 6 + j));
+            const side = R(k + 9 + j) < 0.5 ? 0.35 : -0.35;
+            arc(c, x + lean * 0.2, yy, 26 + 30 * R(k + 12 + j), 2.8, -Math.PI / 2 + side, 0.34, rgb(70 + 54 * t, 96 + 44 * t, 44 + 18 * t));
+          }
+          c.strokeStyle = rgb(112 + 62 * t, 118 + 44 * t, 66 + 22 * t);
+          c.lineWidth = 1.7;
+          c.beginPath();
+          c.moveTo(x, G);
+          c.quadraticCurveTo(x + lean * 0.3, G - h * 0.6, x + lean, G - h);
+          c.stroke();
+          const r = R(k + 15);
+          if (r < 0.3) {
+            for (let j = 0; j < 7; j++) leaf(c, x + lean, G - h + 3, 13 + 5 * R(k + 16 + j), 2.6, -Math.PI / 2 + (j - 3) * 0.17, rgb(150, 118, 96));
+          } else if (r < 0.37) {
+            c.fillStyle = rgb(58, 38, 24);
+            c.fillRect(x + lean - 2.1, G - h + 5, 4.2, 15);
+          }
         }
       }
       break;

@@ -19,71 +19,70 @@ import { hash2i, vnoise, smooth } from './noise';
 import { WIND_GLSL } from '../../core/wind';
 import { SLAB } from '../../core/constants';
 import type { HedgeSink } from './farmkit';
+import { natureOn } from '../../core/nature';
 
-export const KIND = { broad: 0, conifer: 1, poplar: 2, small: 3 } as const;
-const NK = 4;
+export const KIND = { broad: 0, conifer: 1, poplar: 2, small: 3, oak: 4, pine: 5, olive: 6, cypress: 7 } as const;
+const NK = 8;
+// (?notreekinds: every tree one of the first four, as before)
+const SPECIES = natureOn('treekinds');
 
 /** 3D trees within this radius of the camera (m); round crowns read the same as impostors beyond */
 const NEAR_R = 125;
 /** rebuild the near set after the camera moved this far (m) */
 const NEAR_STEP = 18;
 /** per-kind cap of 3D instances */
-const NEAR_CAP = [1100, 1500, 500, 3000];
+const NEAR_CAP = [1100, 1500, 500, 3000, 500, 400, 700, 400];
 const TILE = 64;
 /** camera travel (m) after which the far impostors are re-sorted near → far */
 const FAR_SORT = 90;
 /** typical crown width / height per kind: leaf cards are pre-squashed so they stay square in the world */
-const KIND_ASPECT = [0.85, 0.55, 0.35, 1.25];
+const KIND_ASPECT = [0.85, 0.55, 0.35, 1.25, 1.3, 0.9, 1.1, 0.2];
 /** leaf cards use uv 0..LEAF_U of the leaf texture; bark / core cones sample the solid corner */
 const LEAF_U = 0.875;
 const SOLID_UV = 0.95;
 
-/** procedural leaf-cluster texture: R = leaf shade, A = coverage (one cluster, ragged edge, gaps) */
+/** procedural leaf-cluster texture: R = leaf shade, A = coverage (one cluster, ragged edge, gaps). Small leaves: a crown of
+ *  table-sized leaves is what gave the old trees away at 20–60 m. */
 function leafTexture(): THREE.DataTexture {
-  const S = 128,
+  const S = 256,
     C = Math.round(S * LEAF_U);
   const data = new Uint8Array(S * S * 4);
-  // leaves: centre, direction, length, width, shade (drawn in order: later on top)
-  const L: number[][] = [];
-  for (let i = 0; i < 64; i++) {
-    const r = Math.sqrt(hash2i(i, 1, 5101)) * 0.4 * C,
+  for (let y = C + 2; y < S; y++)
+    for (let x = C + 2; x < S; x++) {
+      const o = (y * S + x) * 4;
+      data[o] = 200;
+      data[o + 3] = 255;
+    }
+  const N = 300;
+  for (let i = 0; i < N; i++) {
+    // deeper leaves first, the outer ones on top; a thin scatter beyond the edge breaks the silhouette
+    const r = Math.sqrt(hash2i(i, 1, 5101)) * 0.46 * C,
       a = hash2i(i, 2, 5101) * Math.PI * 2;
     const cx = C / 2 + Math.cos(a) * r,
       cy = C / 2 + Math.sin(a) * r;
-    // leaves point outward (petioles toward the cluster centre) with some scatter
-    const d = a + (hash2i(i, 3, 5101) - 0.5) * 1.6;
-    const len = C * (0.13 + 0.06 * hash2i(i, 4, 5101));
-    // lit from above-left, inner leaves darker
-    const shade = 0.62 + 0.3 * hash2i(i, 5, 5101) + 0.12 * (r / (0.4 * C)) - 0.1 * Math.sin(a);
-    L.push([cx, cy, Math.cos(d), Math.sin(d), len, len * 0.42, shade]);
-  }
-  for (let y = 0; y < S; y++) {
-    for (let x = 0; x < S; x++) {
-      const o = (y * S + x) * 4;
-      if (x >= C + 2 && y >= C + 2) {
-        data[o] = 200;
-        data[o + 3] = 255;
-        continue;
-      }
-      if (x >= C || y >= C) continue;
-      let sh = -1;
-      for (const [cx, cy, dx, dy, len, wid, shade] of L) {
+    if (r > 0.34 * C && hash2i(i, 7, 5101) < 0.45) continue;
+    const d = a + (hash2i(i, 3, 5101) - 0.5) * 2.2;
+    const len = C * (0.07 + 0.045 * hash2i(i, 4, 5101));
+    const wid = len * 0.46;
+    const shade = (0.5 + 0.34 * hash2i(i, 5, 5101) + 0.12 * (r / (0.4 * C)) - 0.1 * Math.sin(a)) * (0.72 + 0.28 * (i / N));
+    const dx = Math.cos(d),
+      dy = Math.sin(d);
+    const R = Math.ceil(len * 0.55);
+    for (let y = Math.max(0, Math.floor(cy - R)); y <= Math.min(C - 1, Math.ceil(cy + R)); y++)
+      for (let x = Math.max(0, Math.floor(cx - R)); x <= Math.min(C - 1, Math.ceil(cx + R)); x++) {
         const px = x + 0.5 - cx,
           py = y + 0.5 - cy;
         const u = px * dx + py * dy,
           v = -px * dy + py * dx;
-        // leaf blade: pointed ellipse along u ∈ [-len/2, len/2]
         const t = u / (len * 0.5);
         if (t < -1 || t > 1) continue;
         const hw = wid * 0.5 * Math.sqrt(1 - t * t) * (1 - 0.25 * t);
         if (Math.abs(v) > hw) continue;
-        // midrib a little darker, the edge a little lighter
-        sh = shade * (0.9 + 0.12 * Math.min(1, Math.abs(v) / Math.max(hw, 0.5)));
+        const sh = shade * (0.88 + 0.16 * Math.min(1, Math.abs(v) / Math.max(hw, 0.5)));
+        const o = (y * S + x) * 4;
+        data[o] = Math.round(Math.min(1, sh / 1.3) * 255);
+        data[o + 3] = 255;
       }
-      if (sh < 0) continue;
-      data[o] = Math.round(Math.min(1, sh / 1.3) * 255);
-      data[o + 3] = 255;
-    }
   }
   // bleed the mean leaf shade into the transparent texels: the mips must not average leaves with black
   let sum = 0,
@@ -197,10 +196,14 @@ export function placeTrees(model: LandscapeModel, density: number, forestHint?: 
         const stand = vnoise(x / 140, z / 140, 14);
         const conP = Math.min(0.85, 0.25 + 0.35 * smooth(10, 60, y) + 0.4 * (stand - 0.5));
         const r = hash2i(gx, gz, 15);
-        const kind = r < conP ? KIND.conifer : r > 0.96 ? KIND.poplar : KIND.broad;
+        let kind: number = r < conP ? KIND.conifer : r > 0.96 ? KIND.poplar : KIND.broad;
+        const r2 = hash2i(gx, gz, 18);
+        if (SPECIES && kind === KIND.broad && r2 < 0.42) kind = KIND.oak;
+        // stone pine stands on the warm seaward slopes
+        if (SPECIES && kind === KIND.conifer && model.coastSD(x, z) < 330 && r2 < 0.6) kind = KIND.pine;
         const age = 0.65 + 0.5 * hash2i(gx, gz, 16);
-        const hh = kind === KIND.conifer ? 15 * age + 3 : kind === KIND.poplar ? 20 * age : 13 * age + 2;
-        const ww = kind === KIND.conifer ? hh * 0.36 : kind === KIND.poplar ? hh * 0.3 : hh * (0.62 + 0.2 * hash2i(gx, gz, 17));
+        const hh = kind === KIND.conifer ? 15 * age + 3 : kind === KIND.poplar ? 20 * age : kind === KIND.pine ? 13 * age + 4 : 13 * age + 2;
+        const ww = kind === KIND.conifer ? hh * 0.36 : kind === KIND.poplar ? hh * 0.3 : kind === KIND.pine ? hh * 0.72 : hh * (0.62 + 0.2 * hash2i(gx, gz, 17));
         B.add(x, y, z, hh, ww, kind, seed++);
       }
     }
@@ -268,11 +271,22 @@ export function placeTrees(model: LandscapeModel, density: number, forestHint?: 
         const jx = (lhash(key * 977 + i, 3) - 0.5) * 1.2;
         fromField(fx + (ax === bx ? jx : 0), fy + (ay === by ? jx : 0), w);
         if (i * 2.7 >= nextTree) {
-          nextTree += 7 + 20 * lhash(key * 977 + i, 4);
           const r = lhash(key * 977 + i, 5);
-          const kind = r < 0.12 ? KIND.conifer : r < 0.2 ? KIND.poplar : KIND.broad;
-          const hh = kind === KIND.poplar ? 17 + 8 * s : kind === KIND.conifer ? 11 + 7 * s : 9 + 9 * s;
-          B.add(w.x, H(w.x, w.z), w.z, hh, kind === KIND.broad ? hh * (0.7 + 0.25 * s) : hh * 0.33, kind, seed++);
+          if (SPECIES) {
+            // groups of two or three with long open hedge between them; a young one beside an old one
+            const g4 = lhash(key * 977 + i, 4);
+            nextTree += g4 < 0.45 ? 5 + 5 * s : 24 + 62 * g4;
+            const kind = r < 0.34 ? KIND.oak : r < 0.62 ? KIND.broad : r < 0.72 ? KIND.poplar : r < 0.8 ? KIND.cypress : r < 0.86 ? KIND.conifer : KIND.small;
+            const age = 0.55 + 0.6 * s;
+            const hh = kind === KIND.poplar ? 13 + 9 * s : kind === KIND.cypress ? 9 + 7 * s : kind === KIND.conifer ? 9 + 6 * s : kind === KIND.small ? 4.5 + 2.5 * s : kind === KIND.oak ? 11 * age + 2 : 12 * age + 2;
+            const ww = kind === KIND.oak ? hh * (1.0 + 0.3 * s) : kind === KIND.broad ? hh * (0.72 + 0.2 * s) : kind === KIND.small ? hh * 1.1 : kind === KIND.cypress ? hh * 0.2 : hh * 0.33;
+            B.add(w.x, H(w.x, w.z), w.z, hh, ww, kind, seed++);
+          } else {
+            nextTree += 7 + 20 * lhash(key * 977 + i, 4);
+            const kind = r < 0.12 ? KIND.conifer : r < 0.2 ? KIND.poplar : KIND.broad;
+            const hh = kind === KIND.poplar ? 17 + 8 * s : kind === KIND.conifer ? 11 + 7 * s : 9 + 9 * s;
+            B.add(w.x, H(w.x, w.z), w.z, hh, kind === KIND.broad ? hh * (0.7 + 0.25 * s) : hh * 0.33, kind, seed++);
+          }
         } else if (near) {
           // the hedge itself: bushes
           const hh = 2.3 + 1.6 * s;
@@ -327,7 +341,7 @@ export function placeTrees(model: LandscapeModel, density: number, forestHint?: 
           const fy = P.y0 + (P.y1 - P.y0) * (0.2 + 0.6 * lhash(pk, 63));
           fromField(fx, fy, w);
           const y = H(w.x, w.z);
-          if (arable(w.x, w.z, y)) B.add(w.x, y, w.z, 13 + 7 * lhash(pk, 64), 15 + 7 * lhash(pk, 65), KIND.broad, seed++);
+          if (arable(w.x, w.z, y)) B.add(w.x, y, w.z, 11 + 6 * lhash(pk, 64), 14 + 7 * lhash(pk, 65), SPECIES ? KIND.oak : KIND.broad, seed++);
         } else if (ck === CK.orchard && cityR(w.x, w.z) < 1900) {
           // orchard rows
           const ox0 = P.x0 + 4,
@@ -341,7 +355,8 @@ export function placeTrees(model: LandscapeModel, density: number, forestHint?: 
               if (!arable(w.x, w.z, y)) continue;
               const s = lhash(Math.round(fx * 3) ^ pk, Math.round(fy * 3));
               if (s < 0.06) continue; // a missing tree here and there
-              B.add(w.x, y, w.z, 4.2 + 1.6 * s, 4.8 + 1.4 * s, KIND.small, seed++);
+              if (SPECIES && lhash(pk, 66) < 0.55) B.add(w.x, y, w.z, 3.6 + 2.2 * s, 4.2 + 2.2 * s, KIND.olive, seed++);
+              else B.add(w.x, y, w.z, 4.2 + 1.6 * s, 4.8 + 1.4 * s, KIND.small, seed++);
             }
           }
         }
@@ -384,51 +399,134 @@ export function placeTrees(model: LandscapeModel, density: number, forestHint?: 
   // ── dune pines behind the southern beach, a few wind-bent trees on the cliff tops
   {
     const dc = { water: 0, sand: 0, rock: 0, forest: 0, field: 0, meadow: 0, wet: 0 };
-    for (let i = 0; i < 900; i++) {
+    for (let i = 0; i < (SPECIES ? 2600 : 900); i++) {
       const z = 160 + 560 * hash2i(i, 1, 41);
       const x = 60 + 520 * hash2i(i, 2, 41);
       const sd = model.coastSD(x, z);
-      if (sd < 55 || sd > 240) continue;
+      if (sd < 55 || sd > (SPECIES ? 150 : 240)) continue;
       const y = H(x, z);
       if (!landOK(x, z, y, 8)) continue;
       if (vnoise(x / 70, z / 70, 42) < 0.45) continue;
       // on the dunes / coastal meadow, never in a field
       if (model.cover(x, z, dc, y).field > 0.3) continue;
       const s = hash2i(i, 3, 41);
-      B.add(x, y, z, 8 + 6 * s, 7 + 4 * s, KIND.conifer, seed++);
+      if (SPECIES) B.add(x, y, z, 9 + 7 * s, 7.5 + 5 * s, KIND.pine, seed++);
+      else B.add(x, y, z, 8 + 6 * s, 7 + 4 * s, KIND.conifer, seed++);
     }
     // dune scrub: low bushes in clumps on the back dunes (the shader darkens the same ground)
-    for (let i = 0; i < 2600; i++) {
+    for (let i = 0; i < (SPECIES ? 5200 : 2600); i++) {
       const z = 150 + 620 * hash2i(i, 4, 43);
       const x = 60 + 560 * hash2i(i, 5, 43);
       const sd = model.coastSD(x, z);
-      if (sd < 26 || sd > 95) continue;
+      if (sd < 26 || sd > (SPECIES ? 135 : 95)) continue;
       // a few thickets, not a dotted carpet (dark dots read as a leopard pattern from the hero view)
       if (vnoise(x / 45, z / 45, 44) < 0.6) continue;
       const y = H(x, z);
       if (!landOK(x, z, y, 3)) continue;
       model.cover(x, z, dc, y);
-      if (dc.sand < 0.06 || dc.field > 0.2) continue;
+      if ((!SPECIES && dc.sand < 0.06) || dc.field > 0.2) continue;
       const s = hash2i(i, 6, 43);
       const hh = 1.2 + 1.5 * s;
       B.add(x, y, z, hh, hh * (1.3 + 0.6 * hash2i(i, 7, 43)), KIND.small, seed++);
     }
   }
 
+  // ── the hill country north and west, out to 4 km: copses on the crests, tree lines down the gullies and along the old field
+  // walls (billboards only: 15 m is 6 px from the town). Bare hills read as felt at noon and as sand at sunset.
+  if (SPECIES && natureOn('hillscatter')) {
+    const cell = 38;
+    for (let gx = -130; gx <= 40; gx++) {
+      for (let gz = -120; gz <= 20; gz++) {
+        const x = (gx + hash2i(gx, gz, 71)) * cell,
+          z = (gz + hash2i(gx, gz, 72)) * cell;
+        const dS = slabD(x, z);
+        if (dS < 720 || dS > 4200) continue;
+        if (model.coastSD(x, z) < 150) continue;
+        // copses: patches of a noise; lines: the noise's contour (a thin band wanders across the slope)
+        const n1 = vnoise(x / 170, z / 170, 73);
+        const n2 = vnoise(x / 410, z / 410, 74);
+        const copse = n1 > 0.66;
+        const line = Math.abs(n2 - 0.5) < 0.014 || Math.abs(vnoise(x / 260 + 5, z / 260, 75) - 0.47) < 0.012;
+        if (!copse && !line) continue;
+        if (hash2i(gx, gz, 76) > (copse ? 0.8 : 0.9)) continue;
+        const y = H(x, z);
+        if (!landOK(x, z, y, 10) || y < 3) continue;
+        if (model.siteAt(x, z, 14) >= 0) continue;
+        if (model.forestAt(x, z, y) > 0.3) continue;
+        if (x < -150 && model.river(x, z, rv) && rv.d < rv.halfW + 12) continue;
+        const r = hash2i(gx, gz, 77);
+        const kind = r < 0.5 ? KIND.oak : r < 0.75 ? KIND.broad : r < 0.9 ? KIND.cypress : KIND.conifer;
+        const s = hash2i(gx, gz, 78);
+        const hh = kind === KIND.cypress ? 11 + 6 * s : 10 + 8 * s;
+        B.add(x, y, z, hh, kind === KIND.cypress ? hh * 0.2 : kind === KIND.conifer ? hh * 0.36 : hh * 1.05, kind, seed++);
+      }
+    }
+  }
+
   // ── settlements: yard trees and windbreaks
   for (const site of model.sites) {
-    const n = site.kind === 'farm' ? 7 : site.kind === 'hamlet' ? 14 : 34;
+    const n = site.kind === 'farm' ? 7 : site.kind === 'hamlet' ? 14 : site.town ? 70 : 34;
     for (let i = 0; i < n; i++) {
       const a = hash2i(site.seed, i, 51) * Math.PI * 2;
-      const rr = site.r * (0.45 + 0.75 * hash2i(site.seed, i, 52));
+      const rr = site.town ? site.r * (1.04 + 0.7 * Math.pow(hash2i(site.seed, i, 52), 1.5)) : site.r * (0.45 + 0.75 * hash2i(site.seed, i, 52));
       const x = site.x + Math.cos(a) * rr,
         z = site.z + Math.sin(a) * rr;
       const y = H(x, z);
       if (!landOK(x, z, y, 10)) continue;
       const r = hash2i(site.seed, i, 53);
-      const kind = r < 0.25 ? KIND.conifer : r < 0.35 ? KIND.poplar : KIND.broad;
-      const hh = kind === KIND.poplar ? 16 + 6 * r : 8 + 8 * r;
-      B.add(x, y, z, hh, kind === KIND.broad ? hh * 0.85 : hh * 0.33, kind, seed++);
+      const kind = site.town ? (r < 0.42 ? KIND.cypress : KIND.olive) : SPECIES ? (r < 0.2 ? KIND.cypress : r < 0.3 ? KIND.poplar : r < 0.5 ? KIND.olive : r < 0.7 ? KIND.oak : KIND.broad) : r < 0.25 ? KIND.conifer : r < 0.35 ? KIND.poplar : KIND.broad;
+      const hh = kind === KIND.poplar ? 16 + 6 * r : kind === KIND.cypress ? 11 + 7 * r : kind === KIND.olive ? 4 + 2 * r : 8 + 8 * r;
+      B.add(x, y, z, hh, kind === KIND.broad || kind === KIND.oak || kind === KIND.olive ? hh * 0.9 : kind === KIND.cypress ? hh * 0.2 : hh * 0.33, kind, seed++);
+    }
+  }
+
+  if (SPECIES && natureOn('avenues')) {
+    // a cypress drive up to a good many of the farms: the line the eye picks out from anywhere
+    for (const site of model.sites) {
+      if (site.kind !== 'farm' || hash2i(site.seed, 1, 61) > 0.5 || slabD(site.x, site.z) > 1900) continue;
+      const a = hash2i(site.seed, 2, 61) * Math.PI * 2;
+      const dx = Math.cos(a),
+        dz = Math.sin(a);
+      const n = 6 + Math.floor(hash2i(site.seed, 3, 61) * 9);
+      for (let i = 0; i < n; i++) {
+        for (const side of [-1, 1]) {
+          const d = site.r * 0.9 + i * 8.5;
+          const x = site.x + dx * d - dz * side * 3.4,
+            z = site.z + dz * d + dx * side * 3.4;
+          const y = H(x, z);
+          if (!landOK(x, z, y, 8) || model.siteAt(x, z, -4) >= 0 || model.coastSD(x, z) < 60) continue;
+          if (hash2i(site.seed * 7 + i, side, 62) < 0.08) continue; // a lost one
+          const s = hash2i(site.seed * 7 + i, side, 63);
+          const hh = 11 + 5 * s;
+          B.add(x, y, z, hh, hh * 0.19, KIND.cypress, seed++);
+        }
+      }
+    }
+    // stretches of country road lined with trees: plane-like near the villages, pines toward the coast
+    for (const r of model.roads) {
+      if (r.kind !== 'road') continue;
+      const L = r.line;
+      const p = { x: 0, z: 0 },
+        p2 = { x: 0, z: 0 };
+      for (let s = 40; s < Math.min(L.length, 3600); s += 13) {
+        if (vnoise(s / 260, r.halfW * 3, 64) < 0.5) continue;
+        L.at(s, p);
+        L.at(s + 2, p2);
+        const tx = p2.x - p.x,
+          tz = p2.z - p.z;
+        const tl = Math.hypot(tx, tz) || 1;
+        for (const side of [-1, 1]) {
+          if (hash2i(Math.round(s), side, 65) < 0.1) continue;
+          const off = r.halfW + 3.6;
+          const x = p.x + (-tz / tl) * off * side,
+            z = p.z + (tx / tl) * off * side;
+          const y = H(x, z);
+          if (y < WL + 0.4 || model.siteAt(x, z, 2) >= 0) continue;
+          const u = hash2i(Math.round(s), side, 66);
+          const hh = 13 + 5 * u;
+          B.add(x, y, z, hh, hh * 0.72, KIND.broad, seed++);
+        }
+      }
     }
   }
   return { list: B.done(), ms: performance.now() - t0 };
@@ -452,6 +550,10 @@ interface Shape {
   trunkR: number;
   /** branch tips (from the trunk top) */
   branches: [number, number, number][];
+  /** limb thickness (× the trunk radius) */
+  limb?: number;
+  /** the trunk's lean (tree units at its top) */
+  bend?: number;
 }
 
 /** shared by the 3D near trees and the impostor atlas, so both read alike */
@@ -459,18 +561,68 @@ function shapeOf(kind: number): Shape {
   const sh: Shape = { clumps: [], tiers: [], trunkTop: 0.45, trunkR: 0.035, branches: [] };
   const rnd = (i: number, k: number) => hash2i(kind * 100 + i, k, 4417);
   if (kind === KIND.broad) {
-    // a darker core and an irregular shell of leaf masses with gaps between them (sky shows through
-    // the silhouette), a few masses pushed out or hanging low
-    sh.clumps.push({ x: 0, y: 0.6, z: 0, r: 0.2 });
-    sh.clumps.push({ x: 0.03, y: 0.78, z: -0.02, r: 0.15 });
-    for (let i = 0; i < 8; i++) {
-      const a = (i / 8) * Math.PI * 2 + (rnd(i, 1) - 0.5) * 0.6;
-      const rr = 0.24 + 0.1 * rnd(i, 2);
-      const y = 0.46 + 0.36 * rnd(i, 3);
-      sh.clumps.push({ x: Math.cos(a) * rr, y, z: Math.sin(a) * rr, r: 0.1 + 0.07 * rnd(i, 4) });
-      if (i % 2 === 0) sh.branches.push([Math.cos(a) * rr * 0.75, y - 0.05, Math.sin(a) * rr * 0.75]);
+    // lime / ash: an oval crown from low on the trunk, a darker core and an irregular shell of leaf masses with gaps
+    sh.clumps.push({ x: 0, y: 0.56, z: 0, r: 0.21 });
+    sh.clumps.push({ x: 0.03, y: 0.76, z: -0.02, r: 0.16 });
+    for (let i = 0; i < 10; i++) {
+      const a = (i / 10) * Math.PI * 7 + (rnd(i, 1) - 0.5) * 0.9;
+      const y = 0.36 + 0.54 * (i / 9) + (rnd(i, 3) - 0.5) * 0.07;
+      const rr = (0.3 + 0.1 * rnd(i, 2)) * Math.sqrt(Math.max(0.12, 1 - Math.pow((y - 0.52) / 0.5, 2)));
+      sh.clumps.push({ x: Math.cos(a) * rr, y, z: Math.sin(a) * rr, r: 0.09 + 0.08 * rnd(i, 4) });
+      if (i < 7) sh.branches.push([Math.cos(a) * rr * 0.75, y - 0.04, Math.sin(a) * rr * 0.75]);
     }
-    sh.trunkTop = 0.48;
+    sh.trunkTop = 0.34;
+    sh.trunkR = 0.04;
+  } else if (kind === KIND.oak) {
+    // a field oak: short thick bole, heavy limbs spreading wide, a flat-bottomed dome
+    sh.clumps.push({ x: 0, y: 0.62, z: 0, r: 0.2 });
+    for (let i = 0; i < 13; i++) {
+      const a = (i / 13) * Math.PI * 9 + (rnd(i, 1) - 0.5) * 0.7;
+      const u = rnd(i, 3);
+      const y = 0.4 + 0.42 * u;
+      const rr = (0.39 + 0.08 * rnd(i, 2)) * Math.sqrt(Math.max(0.08, 1 - u * u * 0.92));
+      sh.clumps.push({ x: Math.cos(a) * rr, y, z: Math.sin(a) * rr, r: 0.085 + 0.07 * rnd(i, 4) });
+      if (i < 8) sh.branches.push([Math.cos(a) * rr * 0.82, y - 0.03, Math.sin(a) * rr * 0.82]);
+    }
+    sh.trunkTop = 0.26;
+    sh.trunkR = 0.038;
+    sh.limb = 0.72;
+  } else if (kind === KIND.pine) {
+    // stone pine: a tall bare stem, limbs forking high, a flat umbrella
+    for (let i = 0; i < 9; i++) {
+      const a = (i / 9) * Math.PI * 5 + (rnd(i, 1) - 0.5) * 0.5;
+      const rr = i === 0 ? 0 : 0.14 + 0.28 * rnd(i, 2);
+      const y = 0.84 + 0.08 * (1 - rr / 0.42) + (rnd(i, 3) - 0.5) * 0.03;
+      sh.clumps.push({ x: Math.cos(a) * rr, y, z: Math.sin(a) * rr, r: 0.12 + 0.05 * rnd(i, 4) });
+      if (i) sh.branches.push([Math.cos(a) * rr * 0.85, y - 0.04, Math.sin(a) * rr * 0.85]);
+    }
+    sh.trunkTop = 0.68;
+    sh.trunkR = 0.034;
+    sh.limb = 0.55;
+  } else if (kind === KIND.olive) {
+    // olive: a fat gnarled bole, a loose irregular crown with sky through it
+    for (let i = 0; i < 7; i++) {
+      const a = (i / 7) * Math.PI * 4 + (rnd(i, 1) - 0.5) * 1.1;
+      const rr = i === 0 ? 0.04 : 0.16 + 0.22 * rnd(i, 2);
+      const y = 0.48 + 0.34 * rnd(i, 3);
+      sh.clumps.push({ x: Math.cos(a) * rr, y, z: Math.sin(a) * rr, r: 0.14 + 0.08 * rnd(i, 4) });
+      if (i) sh.branches.push([Math.cos(a) * rr * 0.85, y - 0.08, Math.sin(a) * rr * 0.85]);
+    }
+    sh.trunkTop = 0.34;
+    sh.trunkR = 0.075;
+    sh.limb = 0.6;
+    sh.bend = 0.05;
+  } else if (kind === KIND.cypress) {
+    // Italian cypress: a closed dark flame from near the ground, the masses small and packed
+    const rAt = (y: number) => 0.36 * Math.pow(Math.max(0, 1 - Math.pow(Math.max(0, y - 0.3) / 0.72, 1.7)), 0.8) * (0.6 + 0.4 * Math.min(1, y / 0.2));
+    let y = 0.08;
+    for (let i = 0; i < 24 && y < 0.98; i++) {
+      const r = Math.max(0.05, rAt(y));
+      sh.clumps.push({ x: (rnd(i, 5) - 0.5) * 0.08, y, z: (rnd(i, 6) - 0.5) * 0.08, r });
+      y += 0.9 * KIND_ASPECT[KIND.cypress] * r + 0.012;
+    }
+    sh.trunkTop = 0.14;
+    sh.trunkR = 0.1;
   } else if (kind === KIND.conifer) {
     const n = 5;
     for (let t = 0; t < n; t++) {
@@ -551,13 +703,25 @@ function kindGeometry(kind: number): THREE.BufferGeometry {
     else for (let i = 0; i < p.count; i++) idx.push(base + i);
   };
   // trunk
-  const tr = new THREE.CylinderGeometry(sh.trunkR * 0.7, sh.trunkR, sh.trunkTop, 5, 1, true);
+  // (swept: root flare at the foot, a lean, tapering into the fork)
+  const tr = new THREE.CylinderGeometry(sh.trunkR * 0.72, sh.trunkR, sh.trunkTop, 7, 3, true);
   tr.translate(0, sh.trunkTop / 2, 0);
+  {
+    const p = tr.getAttribute('position') as THREE.BufferAttribute;
+    const lean = sh.bend ?? 0.012;
+    for (let i = 0; i < p.count; i++) {
+      const t = p.getY(i) / sh.trunkTop;
+      const fl = 1 + 0.65 * Math.pow(1 - t, 6);
+      p.setXYZ(i, p.getX(i) * fl + lean * t * t, p.getY(i), p.getZ(i) * fl + lean * 0.5 * t);
+    }
+    tr.computeVertexNormals();
+  }
   addGeo(tr, 0, null, [0, 0, 0]);
   // branches: thin 3-sided prisms from the trunk top toward the clumps
   for (const b of sh.branches) {
     const len = Math.hypot(b[0], b[1] - sh.trunkTop, b[2]);
-    const g = new THREE.CylinderGeometry(sh.trunkR * 0.3, sh.trunkR * 0.55, len, 3, 1, true);
+    const lk = sh.limb ?? 0.5;
+    const g = new THREE.CylinderGeometry(sh.trunkR * 0.25, sh.trunkR * lk, len, 4, 1, true);
     g.translate(0, len / 2, 0);
     const dir = new THREE.Vector3(b[0], b[1] - sh.trunkTop, b[2]).normalize();
     g.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir));
@@ -637,7 +801,7 @@ function kindGeometry(kind: number): THREE.BufferGeometry {
     idx.push(base, base + 1, base + 2, base, base + 2, base + 3);
   };
   sh.clumps.forEach((c) => {
-    const n = Math.max(8, Math.min(20, Math.round(c.r * 88)));
+    const n = Math.max(9, Math.min(22, Math.round(c.r * 100)));
     for (let i = 0; i < n; i++) {
       // directions over the sphere (a little upward), centres toward the clump's surface
       const zz = 1 - 2 * rnd(),
@@ -652,7 +816,7 @@ function kindGeometry(kind: number): THREE.BufferGeometry {
         pz = c.z + dz * d;
       // card planes: half facing out, half random (seen edge-on from some side: depth in the crown)
       const q = rnd();
-      card(px, py, pz, c.r * (0.66 + 0.2 * rnd()), 0, 0, 0, dx * q + (rnd() - 0.5), dy * q + (rnd() - 0.5), dz * q + (rnd() - 0.5), [c.x, c.y, c.z]);
+      card(px, py, pz, c.r * (0.58 + 0.2 * rnd()), 0, 0, 0, dx * q + (rnd() - 0.5), dy * q + (rnd() - 0.5), dz * q + (rnd() - 0.5), [c.x, c.y, c.z]);
     }
   });
   sh.tiers.forEach((t, i) => {
@@ -704,10 +868,12 @@ varying float vCrown;
 varying float vTint;
 varying float vKind;
 varying float vLocalY;
+varying float vLocalY0;
 `;
 
 /** leafy crown shading shared by the 3D trees and the impostors: albedo by kind + tint */
 const TREE_ALBEDO = /* glsl */ `
+float gTreeBark = 1.0;
 vec3 treeAlbedo(float kind, float tint, float crown, float ly) {
   // tones matched to the vegetation module's forest (sRGB #4f8a33…#5a9636 broadleaf, #2b5a3a…#33683f
   // spruce/fir, #3d6a36 pine), linear
@@ -719,8 +885,12 @@ vec3 treeAlbedo(float kind, float tint, float crown, float ly) {
   vec3 poplar = mix(vec3(0.055, 0.15, 0.035), vec3(0.075, 0.18, 0.04), tint);
   vec3 small = mix(vec3(0.06, 0.15, 0.036), vec3(0.085, 0.18, 0.045), tint);
   small = mix(small, vec3(0.045, 0.11, 0.035), step(0.7, fract(tint * 4.1)) * 0.7);
-  vec3 c = kind < 0.5 ? broad : kind < 1.5 ? conif : kind < 2.5 ? poplar : small;
-  vec3 bark = vec3(0.09, 0.07, 0.055);
+  vec3 c = kind < 0.5 ? broad : kind < 1.5 ? conif : kind < 2.5 ? poplar : kind < 3.5 ? small :
+    kind < 4.5 ? mix(vec3(0.04, 0.105, 0.028), vec3(0.062, 0.135, 0.032), tint) :                 // oak: deep, warm green
+    kind < 5.5 ? mix(vec3(0.03, 0.098, 0.04), vec3(0.046, 0.125, 0.045), tint) :                  // stone pine
+    kind < 6.5 ? mix(vec3(0.115, 0.15, 0.085), vec3(0.15, 0.178, 0.105), tint) :                  // olive: silver-grey green
+    mix(vec3(0.018, 0.06, 0.03), vec3(0.028, 0.08, 0.034), tint);                                 // cypress: near-black green
+  vec3 bark = (kind > 4.5 && kind < 5.5 ? vec3(0.17, 0.095, 0.06) : kind > 5.5 && kind < 6.5 ? vec3(0.2, 0.18, 0.15) : vec3(0.15, 0.125, 0.1)) * (crown > 0.5 ? 1.0 : gTreeBark);
   return mix(bark, c * (0.75 + 0.45 * ly), crown);
 }
 `;
@@ -746,6 +916,7 @@ varying float vCrown;
 varying float vTint;
 varying float vKind;
 varying float vLocalY;
+varying float vLocalY0;
 ${WIND_GLSL}`,
       )
       .replace(
@@ -757,6 +928,7 @@ vLeafUv = uv;
 vKind = aInst.x;
 vTint = aInst.y;
 vLocalY = clamp((position.y - 0.25) / 0.7, 0.0, 1.0);
+vLocalY0 = position.y;
 {
   // sway: the crown leans downwind with the gusts, more at the top
   vec3 base = (modelMatrix * instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
@@ -778,6 +950,8 @@ vLocalY = clamp((position.y - 0.25) / 0.7, 0.0, 1.0);
 if (lt.a < 0.5) discard;
 vec4 nT = texture2D(tLN, vTW.xz * 0.37 + vTW.y * 0.21);
 float leafAO = mix(0.42, 1.0, vAO) * (0.78 + 0.44 * nT.r) * mix(1.0, lt.r * 1.3, vCrown);
+// bark: furrows along the stem, darker at the foot
+if (vCrown < 0.5) gTreeBark = (0.62 + 0.76 * texture2D(tLN, vec2((vTW.x + vTW.z) * 1.7, vTW.y * 0.19)).g) * mix(0.72, 1.0, smoothstep(0.0, 0.35, vLocalY0));
 vec4 diffuseColor = vec4(treeAlbedo(vKind, vTint, vCrown, vLocalY) * mix(1.0, leafAO, vCrown), opacity);`,
       )
       .replace(
@@ -805,17 +979,17 @@ if (vCrown > 0.5) {
 {
   // backlit translucency of the foliage
   vec3 V = normalize(cameraPosition - vTW);
-  float bt = pow(clamp(dot(-V, normalize(uSunDir)), 0.0, 1.0), 6.0) * vCrown * (1.0 - uNight);
+  float bt = pow(clamp(dot(-V, normalize(uSunDir)) * 0.5 + 0.5, 0.0, 1.0), 5.0) * vCrown * (1.0 - uNight);
   // the light through the leaves is the sun's own (colour + intensity: weak and red when low)
   vec3 sunC = vec3(0.0);
 #if NUM_DIR_LIGHTS > 0
   sunC = directionalLights[0].color;
 #endif
-  reflectedLight.indirectDiffuse += diffuseColor.rgb * sunC * vec3(0.9, 1.0, 0.55) * bt * 0.22;
+  reflectedLight.indirectDiffuse += diffuseColor.rgb * sunC * vec3(1.0, 1.0, 0.5) * bt * 0.46;
 }`,
       );
   };
-  mat.customProgramCacheKey = () => 'th-landtree-v2';
+  mat.customProgramCacheKey = () => 'th-landtree-v3';
   return mat;
 }
 
@@ -837,8 +1011,8 @@ function treeDepthMaterial(leaf: THREE.Texture): THREE.MeshDepthMaterial {
 
 // ───────────────────────────────────────────────────── impostors ──
 
-const ATLAS_W = 512,
-  ATLAS_H = 256; // 4 cells of 128 × 256
+const ATLAS_W = 1024,
+  ATLAS_H = 256; // 8 cells of 128 × 256
 
 /** raytrace clumps of leaf spheres into an albedo-variation + alpha atlas and a normal atlas */
 function buildAtlas(): { col: THREE.DataTexture; nrm: THREE.DataTexture } {
@@ -1020,7 +1194,8 @@ varying vec3 vBR;
 varying vec3 vBU;
 varying vec3 vBF;
 varying float vCrown;
-varying float vLocalY;`,
+varying float vLocalY;
+varying float vLocalY0;`,
       )
       .replace(
         '#include <begin_vertex>',
@@ -1042,12 +1217,13 @@ varying float vLocalY;`,
   if (dn < uNearC.w) wp = C;
   transformed = wp;
   vTW = wp;
-  vUv2 = vec2((iDat.y + 0.5 + q.x) * 0.25, 1.0 - q.y);
+  vUv2 = vec2((iDat.y + 0.5 + q.x) * 0.125, 1.0 - q.y);
   vKind = iDat.y;
   vTint = iDat.z;
   vBR = R; vBU = U; vBF = F;
   vCrown = 1.0;
   vLocalY = q.y;
+  vLocalY0 = q.y;
 }`,
       )
       .replace('#include <beginnormal_vertex>', 'vec3 objectNormal = normalize(cameraPosition - iPos.xyz);\n#ifdef USE_TANGENT\nvec3 objectTangent = vec3(1.0, 0.0, 0.0);\n#endif');
@@ -1069,6 +1245,7 @@ varying vec3 vBF;
         'vec4 diffuseColor = vec4( diffuse, opacity );',
         `vec4 tc = texture2D(tTreeCol, vUv2);
 if (tc.a < 0.5) discard;
+
 vec4 diffuseColor = vec4(treeAlbedo(vKind, vTint, tc.g, tc.b) * (0.6 + 0.6 * tc.r), 1.0);`,
       )
       .replace(
@@ -1085,17 +1262,17 @@ vec4 diffuseColor = vec4(treeAlbedo(vKind, vTint, tc.g, tc.b) * (0.6 + 0.6 * tc.
         `#include <lights_fragment_end>
 {
   vec3 V = normalize(cameraPosition - vTW);
-  float bt = pow(clamp(dot(-V, normalize(uSunDir)), 0.0, 1.0), 6.0) * tc.g * (1.0 - uNight);
+  float bt = pow(clamp(dot(-V, normalize(uSunDir)) * 0.5 + 0.5, 0.0, 1.0), 5.0) * tc.g * (1.0 - uNight);
   // the light through the leaves is the sun's own (colour + intensity: weak and red when low)
   vec3 sunC = vec3(0.0);
 #if NUM_DIR_LIGHTS > 0
   sunC = directionalLights[0].color;
 #endif
-  reflectedLight.indirectDiffuse += diffuseColor.rgb * sunC * vec3(0.9, 1.0, 0.55) * bt * 0.22;
+  reflectedLight.indirectDiffuse += diffuseColor.rgb * sunC * vec3(1.0, 1.0, 0.5) * bt * 0.36;
 }`,
       );
   };
-  mat.customProgramCacheKey = () => 'th-landimp-v2';
+  mat.customProgramCacheKey = () => 'th-landimp-v3';
   return mat;
 }
 

@@ -17,6 +17,7 @@
 import { SLAB, WATER_LEVEL, RIVER } from '../../core/constants';
 import { fbm, ridged, smooth, lerp, smin, vnoise, hash2i } from './noise';
 import { Polyline, type PolyHit } from './polyline';
+import { natureOn } from '../../core/nature';
 
 /** slab-edge → world height blend distance (m) */
 export const BLEND = 46;
@@ -50,6 +51,10 @@ export interface Site {
   /** radius of the flattened / built area */
   r: number;
   seed: number;
+  /** a compact hill town round a bell tower, on a summit in the view from the town (skyline) */
+  town?: boolean;
+  /** a walled abbey on a ridge (kind hamlet) */
+  abbey?: boolean;
 }
 
 export interface LandscapeModel {
@@ -200,6 +205,8 @@ const ROAD_DEFS: RoadDef[] = [
   { kind: 'road', halfW: 2.9, ctrl: [[-1720, -95], [-1660, 60], [-1560, 230], [-1380, 380], [-1120, 470], [-880, 520], [-720, 700], [-600, 960], [-520, 1250], [-420, 1650], [-330, 2100], [-250, 2900]] },
   { kind: 'lane', halfW: 2.1, ctrl: [[-1300, -170], [-1290, -330], [-1265, -520], [-1250, -700], [-1290, -950], [-1380, -1300]] },
   { kind: 'lane', halfW: 2.1, ctrl: [[-880, 520], [-760, 420], [-640, 330], [-520, 300], [-420, 330]] },
+  // the lane that leaves the town westward through the fields and joins the country road (the eye follows it out)
+  ...(natureOn('skyline') ? [{ kind: 'lane' as const, halfW: 2.3, ctrl: [[-206, 24], [-262, 32], [-340, 18], [-430, -18], [-540, -30], [-660, -74], [-800, -96], [-950, -62], [-1120, -92], [-1300, -170]] as [number, number][] }] : []),
 ];
 
 export interface Road {
@@ -223,6 +230,34 @@ function buildSites(model: { world0(x: number, z: number): number; isWaterW(x: n
     // a fishing hamlet on the island's sheltered west side
     { kind: 'hamlet', x: 1995, z: -540, r: 45, seed: 57 },
   ];
+  if (natureOn('skyline')) {
+    // summits that the overview and the free camera look at: each site goes to the highest ground near its mark
+    const summit = (x: number, z: number, R: number): [number, number] => {
+      let bx = x,
+        bz = z,
+        bh = -1e9;
+      for (let i = -6; i <= 6; i++)
+        for (let j = -6; j <= 6; j++) {
+          const px = x + (i / 6) * R,
+            pz = z + (j / 6) * R;
+          const h = model.world0(px, pz);
+          if (h > bh) {
+            bh = h;
+            bx = px;
+            bz = pz;
+          }
+        }
+      return [bx, bz];
+    };
+    const [ax, az] = summit(-1460, -1120, 300);
+    sites.push({ kind: 'village', town: true, x: ax, z: az, r: 92, seed: 71 });
+    const [bx, bz] = summit(-640, -2120, 340);
+    sites.push({ kind: 'village', town: true, x: bx, z: bz, r: 78, seed: 83 });
+    const [cx, cz] = summit(-90, -1640, 280);
+    sites.push({ kind: 'hamlet', abbey: true, x: cx, z: cz, r: 42, seed: 97 });
+    const [dx, dz] = summit(-2500, -760, 320);
+    sites.push({ kind: 'village', town: true, x: dx, z: dz, r: 66, seed: 89 });
+  }
   // farmsteads: a jittered lattice over the farmland W and S, skipping water, steep or forested ground
   let seed = 100;
   for (let gx = -12; gx <= 3; gx++) {
@@ -271,6 +306,8 @@ export interface SlabHeight {
   /** terrain.height (refined slab ground) */
   (x: number, z: number): number;
 }
+
+const DUNE_BELT = natureOn('dunekit');
 
 export function createLandscapeModel(slabHeight: SlabHeight): LandscapeModel {
   const riverLine = new Polyline(RIVER_CTRL, 12, 160);
@@ -633,6 +670,8 @@ export function createLandscapeModel(slabHeight: SlabHeight): LandscapeModel {
     const settled = siteAt(x, z, 0) >= 0;
     const arable = (1 - out.forest) * (1 - out.sand) * (1 - out.rock) * (1 - wet) * (1 - smooth(0.12, 0.3, slope)) * (1 - out.water);
     out.field = settled ? 0 : arable * (1 - smooth(260, 420, h));
+    // rough grazing behind the dunes: the crops stop short of the beach, they don't run into it
+    if (DUNE_BELT && sd > 0 && sd < 130 && cl < 0.5) out.field *= smooth(62, 128, sd);
     out.meadow = Math.max(0, (1 - out.water) * (1 - out.forest) * (1 - out.sand) - out.field - out.rock * 0.7);
     return out;
   };

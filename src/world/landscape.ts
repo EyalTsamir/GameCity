@@ -32,6 +32,7 @@ import { buildRowAtlas, rowMaterial, rowDepthMaterial, RowSink } from './landsca
 import { buildFarmKit, HedgeSink, type FarmKitStats } from './landscape/farmkit';
 import { hmix, toField, fromField, fieldAt, newField, cropKind } from './landscape/fields';
 import { nature } from '../core/nature';
+import { buildPowerLines, WIRE_DAY } from './landscape/powerlines';
 import type { SmokeService } from '../sim/ambient';
 
 export interface LandscapeService {
@@ -346,6 +347,9 @@ export default function create(ctx: CityContext): CityModule {
     });
   }
   // ── what stands on the farmland: rows, bales, tunnels, fences, hedges, reeds, dune fences (one static kit)
+  let wires: THREE.LineSegments | null = null;
+  const wireDay = new THREE.Color(WIRE_DAY);
+  let wireNight = -1;
   let kitStats: FarmKitStats | null = null;
   let kitTris = 0;
   let kitMs = 0;
@@ -363,6 +367,10 @@ export default function create(ctx: CityContext): CityModule {
       reeds: nature(ctx, 'reedbeds'),
       dunes: nature(ctx, 'dunekit'),
     });
+    if (nature(ctx, 'powerlines')) {
+      wires = buildPowerLines(sink, model, fog);
+      root.add(wires);
+    }
     kitTris = sink.triangles;
     const mat = rowMaterial(atlas, uniforms, fog);
     const depth = rowDepthMaterial(atlas);
@@ -383,6 +391,10 @@ export default function create(ctx: CityContext): CityModule {
       if (dt > 0) fleet.commit();
     },
     frame() {
+      if (wires && ctx.uniforms.uNight.value !== wireNight) {
+        wireNight = ctx.uniforms.uNight.value;
+        (wires.material as THREE.LineBasicMaterial).color.copy(wireDay).multiplyScalar(1 - 0.96 * wireNight);
+      }
       trees?.update(ctx.camera);
       farm?.select(ctx.camera);
       if (lamps) lamps.frame(ctx.size.height * ctx.renderer.getPixelRatio() * ctx.quality.renderScale);
