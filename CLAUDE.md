@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 **Tinyhaven** — a self-running city (traffic, pedestrians, trains, boats, day/night) set in a landscape that runs to
 the horizon (farmland, forest, mountains, sea), in Three.js r186 + TypeScript, built with Vite 8. `?diorama` shows the
 original tabletop model (slab on a plinth on an oak table, tilt-shift) — `src/core/world.ts` (`DIORAMA` / `WORLD_MODE`). Everything is procedural (geometry, canvas textures, WebAudio
-synthesis): no external assets, URLs or CDNs. Runtime deps are only `three`, `postprocessing`, `n8ao`.
+synthesis), or baked by our own code at build time (`scripts/bake.mjs`, see below): no external assets, scans, photos, URLs or CDNs. Runtime deps are only `three`, `postprocessing`, `n8ao`.
 
 Deeper reference: `docs/ARCHITECTURE.md`. Project history and per-module status / next steps:
 `docs/progress/LEAD.md`, `docs/progress/WORLD.md` (the "world" realism round: plan, contracts, per-feature toggles and
@@ -19,7 +19,8 @@ an interrupted task is resumed without loss).
 
 - `npm run dev` — dev server at http://127.0.0.1:5173 (strict port). The verification scripts below expect it running.
 - `npm run typecheck` — `tsc --noEmit` (TypeScript 7 native compiler). The only static check: no linter, no unit-test framework.
-- `npm run build` — Vite + `vite-plugin-singlefile` → one self-contained `dist/index.html` (~3.1 MB) that also runs from `file://`.
+- `npm run build` — Vite + `vite-plugin-singlefile` → `dist/index.html` (~4.5 MB, JS and CSS inlined; runs from `file://`) + the baked files from `public/bake` in `dist/bake`.
+- `npm run bake` — `scripts/bake.mjs`: runs the city's own shaders in Chrome and writes `public/bake/` (gitignored): land albedo, far-facade atlas. Only what changed is redone (fingerprints); run it before `build` for a deploy and **before any perf measurement**, see "Baked files" below.
 - `npm start` — `scripts/serve.mjs`: serve `dist/` on 127.0.0.1:4173 (next free port) and open the browser.
   `Launch Tinyhaven.cmd` = build if `dist/` is missing, then serve (or open the file directly when Node is absent).
 
@@ -101,6 +102,8 @@ later modules (e.g. camera state used by sky/postfx) is looked up lazily every f
 - Hard-coded couplings: the fireworks barge footprint at (180, −58) is a nav obstacle in `boats.ts`; chimney smoke
   plumes start at plan height + 0.4 (the landmark stacks end at + 0.35).
 
+**Baked files** (`docs/progress/baking.md`). Allowed for anything worthwhile, as long as our code generates them. Rules: a baked file only ever makes the city cheaper. With a file missing, late, or made from other inputs (`?nobake`, `file://`, a shader or mesh changed since) the module draws the same picture procedurally, so a stale bake costs frame time and never looks wrong, and it costs it silently: **rebake before measuring**. Nothing baked may look soft close up: it is drawn only where a texel is about a pixel, and the procedural path stays the near path. What depends on the hour, the camera or the wind stays live. `src/core/bakeFiles.ts` loads (gzip inside the file, BC1, GPUs without S3TC stay procedural, staged uploads); land `src/world/landscape/bake.ts` (`?nolandbake`, `?landsoft`), facades `src/world/buildings/farFacade.ts` (`?nofacbake`, `?facsoft`), visibility `src/render/pvs.ts` (off, `?pvs`: the log says why).
+
 **Rendering.** `postfx` replaces `ctx.render` with a pmndrs postprocessing pipeline on HalfFloat targets (kept for HDR
 bloom and a banding-free sky): N8AO computed at half resolution but applied inside the final merged effect pass
 (`postfx/aoApply.ts`), depth of field (world mode: a natural lens that only acts at close focus; `?diorama`: the
@@ -130,5 +133,5 @@ clouds on planned paths that frame the hero overview. One wind for everything: `
   Measure with `perf.mjs` before and after. Perf-deep findings (`docs/progress/perf-deep.md`, switches `?noperfdeep`, `?no<name>`): a `flat` varying costs a geometry shader unless the provoking vertex is first (`main.ts`), `invalidateFramebuffer` is very expensive here, static triangles cost 2.5 ns each. The world round (2026-10) exceeds the old ≤ +2 ms rule on high by design
   (estimated +4–6 ms at eye level / +3.5–4.5 ms overview, unmeasured on the target): every feature has a quality
   tier and a URL toggle so the budget can be decided from real measurements — see `docs/progress/WORLD.md`.
-- Keep the console clean (diagnostics only behind `?debug`) and keep the build single-file: no web workers, no
-  runtime-fetched assets, no new dependencies.
+- Keep the console clean (diagnostics only behind `?debug`). No new runtime dependencies, no fetches from other hosts. The page must
+  keep working from `file://` without its baked files.

@@ -19,7 +19,7 @@ import { DIR_YAW } from '../core/geom';
 import { Rng } from '../core/rng';
 import { PALETTE } from '../core/gfx';
 import { Builder } from './buildings/mesh';
-import { createMaterials } from './buildings/materials';
+import { createMaterials, shellClassOf, SHELL_CLASS, SHELL_SPLIT } from './buildings/materials';
 import { SignAtlas } from './buildings/signs';
 import { Gen, Interval, LocalDoor, Side, col, jit, setDoorLife, setGutters } from './buildings/gen';
 import { genTownhouse, resetOldtown } from './buildings/oldtown';
@@ -39,6 +39,8 @@ import { boxHunt } from '../core/boxhunt';
 import { setRoofPlant } from './buildings/roofplant';
 import { setDetailB } from '../core/detailbuildings';
 import { createGlassMaterial } from './buildings/lobby';
+import { buildFarShell, farBakeKey, FAR_ATLAS, FAR_SOFT } from './buildings/farFacade';
+import { bakeOn, bakeTexture, uploadStaged } from '../core/bakeFiles';
 
 /** edge (m) of the square trim chunks (≈ two city blocks), grid origin at the slab's NW corner */
 const TRIM_CHUNK = 110;
@@ -257,7 +259,39 @@ export default function create(ctx: CityContext): CityModule {
   for (const b of shellChunks.values()) shellTris += b.triangleCount;
   const triCounts = { shell: shellTris, trim: trimTris, lights: lights.triangleCount, signs: signs.triangleCount, green: greenB.triangleCount };
   for (const b of shellChunks.values()) add(b, mats.shell, 'buildings-shell', true, true);
-  const shellMeshes = meshes.filter((m) => m.name === 'buildings-shell');
+  // shop fronts and roofs out of the wall chunks: programs of their own (materials.ts SHELL_SPLIT), one mesh each
+  if (SHELL_SPLIT && !mats.legacy) {
+    const chunks = meshes.filter((m) => m.name === 'buildings-shell').map((m) => m.geometry);
+    for (const [cls, mat, name] of [[SHELL_CLASS.SHOP, mats.shellShop, 'buildings-shell-shop'], [SHELL_CLASS.ROOF, mats.shellRoof, 'buildings-shell-roof']] as const) {
+      const g = extractShellClass(chunks, cls);
+      if (!g) continue;
+      const mesh = new THREE.Mesh(g, mat);
+      mesh.name = name;
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      mesh.matrixAutoUpdate = false;
+      mesh.updateMatrix();
+      group.add(mesh);
+      meshes.push(mesh);
+    }
+  }
+  // the walls' far program (farFacade.ts): procedural until the atlas has arrived. ?nofacbake: procedural always
+  const farShell = SHELL_SPLIT && !mats.legacy ? buildFarShell(meshes.filter((m) => m.name === 'buildings-shell').map((m) => m.geometry)) : null;
+  const farTextures = { tFF0: { value: null as THREE.Texture | null }, tFF1: { value: null as THREE.Texture | null }, tFF2: { value: null as THREE.Texture | null } };
+  const farSoft = Number(ctx.debug.params.get('facsoft')) || FAR_SOFT;
+  let farOn = false;
+  let farGeoMesh: THREE.Mesh | null = null; // (stays visible: collapsed until uFarD is set, and so compiled at boot with the rest)
+  if (farShell && !ctx.debug.params.has('nofacbake') && bakeOn(ctx.debug.params)) {
+    const far = new THREE.Mesh(farShell.geometry, mats.shellFar(farTextures));
+    far.name = 'buildings-shell-far';
+    far.receiveShadow = true;
+    far.matrixAutoUpdate = false;
+    far.updateMatrix();
+    far.frustumCulled = false;
+    group.add(far);
+    farGeoMesh = far;
+  }
+  const shellMeshes = meshes.filter((m) => m.name.startsWith('buildings-shell'));
   const shellBoxes = shellMeshes.map((m) => {
     m.geometry.computeBoundingBox();
     return m.geometry.boundingBox!;
@@ -312,7 +346,7 @@ export default function create(ctx: CityContext): CityModule {
   // debug (perf analysis): ?bdbg=noshell,notrim,nocast,nodetail
   const bdbg = (ctx.debug.params.get('bdbg') ?? '').split(',');
   for (const m of meshes) {
-    if (bdbg.includes('noshell') && m.name === 'buildings-shell') m.visible = false;
+    if (bdbg.includes('noshell') && m.name.startsWith('buildings-shell')) m.visible = false;
     if (bdbg.includes('notrim') && m.name === 'buildings-trim') m.visible = false;
     if (bdbg.includes('nocast')) m.castShadow = false;
   }
@@ -356,6 +390,45 @@ export default function create(ctx: CityContext): CityModule {
     massTiers,
   };
   ctx.services.buildings = service;
+  if (farShell) {
+    const key = farBakeKey(mats.shellText, farShell.geometry);
+    service.farBakeKey = () => key;
+    service.renderFarBake = (pass) => {
+      const size = pass === 1 ? FAR_ATLAS / 2 : FAR_ATLAS;
+      const rt = new THREE.WebGLRenderTarget(size, size, { type: THREE.UnsignedByteType, format: THREE.RGBAFormat, colorSpace: pass === 2 ? THREE.NoColorSpace : THREE.SRGBColorSpace, depthBuffer: false });
+      const mat = mats.shellBake(pass);
+      const mesh = new THREE.Mesh(farShell.geometry, mat);
+      mesh.frustumCulled = false;
+      const scene = new THREE.Scene();
+      scene.add(mesh);
+      const r = ctx.renderer;
+      const prevRT = r.getRenderTarget();
+      const prevClear = r.getClearColor(new THREE.Color());
+      const prevA = r.getClearAlpha();
+      const prevShadow = r.shadowMap.autoUpdate;
+      r.shadowMap.autoUpdate = false;
+      r.setRenderTarget(rt);
+      r.setClearColor(0x000000, 0);
+      r.clear();
+      r.render(scene, ctx.camera);
+      r.setRenderTarget(prevRT);
+      r.setClearColor(prevClear, prevA);
+      r.shadowMap.autoUpdate = prevShadow;
+      mat.dispose();
+      return rt;
+    };
+    if (farGeoMesh) {
+      const params = ctx.debug.params;
+      void Promise.all([bakeTexture('fac0', params, key), bakeTexture('fac1', params, key), bakeTexture('fac2', params, key, { linear: true })]).then(async ([t0, t1, t2]) => {
+        if (!t0 || !t1 || !t2) return;
+        await uploadStaged(ctx.renderer, [t0, t1, t2]);
+        farTextures.tFF0.value = t0;
+        farTextures.tFF1.value = t1;
+        farTextures.tFF2.value = t2;
+        farOn = true;
+      });
+    }
+  }
 
   // ── picking (ray vs building boxes)
   const tmpV = new THREE.Vector3();
@@ -420,6 +493,11 @@ export default function create(ctx: CityContext): CityModule {
     },
     frame(_realDt, c) {
       if (winGeo) winGeo.frame(c.camera.position, mats.uniforms.uGeoWin.value);
+      if (farOn && farShell) {
+        // a texel of the atlas at this distance is farSoft pixels
+        const pxAt1m = (c.size.height * c.renderer.getPixelRatio()) / (2 * Math.tan(THREE.MathUtils.degToRad(c.camera.fov) / 2));
+        mats.uFarD.value = (farShell.texel * pxAt1m) / farSoft;
+      }
       // facade chunks nearest first inside their late-draw slot (main.ts lateDraws: renderOrder 1; 0 = ?drawsort=0)
       if (shellMeshes.length > 1 && shellMeshes[0].renderOrder >= 1) {
         const cp = c.camera.position;
@@ -497,7 +575,7 @@ export default function create(ctx: CityContext): CityModule {
       const out = [...problems];
       if (built.length !== lots.length) out.push(`built ${built.length} of ${lots.length} building lots`);
       if (doorsBuilt < doorsWanted) out.push(`${doorsWanted - doorsBuilt} of ${doorsWanted} doors missing`);
-      if (meshes.length > 6 + 2 * MAX_TRIM_CHUNKS) out.push(`too many building meshes (${meshes.length})`);
+      if (meshes.length > 8 + 2 * MAX_TRIM_CHUNKS) out.push(`too many building meshes (${meshes.length})`);
       if (violations > 0) out.push(`${violations} building(s) violate the footprint rule`);
       if (atlas.full) out.push('sign atlas overflowed');
       return out;
@@ -506,6 +584,8 @@ export default function create(ctx: CityContext): CityModule {
       ctx.scene.remove(group);
       for (const m of meshes) m.geometry.dispose();
       mats.shell.dispose();
+      mats.shellShop.dispose();
+      mats.shellRoof.dispose();
       mats.trim.dispose();
       mats.lights.dispose();
       mats.signs.dispose();
@@ -518,6 +598,49 @@ export default function create(ctx: CityContext): CityModule {
 }
 
 // ───────────────────────────────────────────────────────── helpers ──
+
+/** Move the triangles of one program class out of the wall chunks into one new geometry (the chunks keep the rest). */
+function extractShellClass(chunks: THREE.BufferGeometry[], cls: number): THREE.BufferGeometry | null {
+  const names = Object.keys(chunks[0].attributes);
+  const out: Record<string, number[]> = Object.fromEntries(names.map((n) => [n, []]));
+  const index: number[] = [];
+  let nv = 0;
+  for (const g of chunks) {
+    const idx = g.index!.array;
+    const kw = g.getAttribute('aB');
+    const keep: number[] = [];
+    const remap = new Map<number, number>();
+    for (let t = 0; t < idx.length; t += 3) {
+      if (shellClassOf(kw.getW(idx[t])) === cls) {
+        for (let k = 0; k < 3; k++) {
+          const v = idx[t + k];
+          let w = remap.get(v);
+          if (w === undefined) {
+            w = nv++;
+            remap.set(v, w);
+            for (const n of names) {
+              const a = g.getAttribute(n);
+              for (let c = 0; c < a.itemSize; c++) out[n].push(a.array[v * a.itemSize + c]);
+            }
+          }
+          index.push(w);
+        }
+      } else keep.push(idx[t], idx[t + 1], idx[t + 2]);
+    }
+    if (keep.length !== idx.length) {
+      g.setIndex(new THREE.BufferAttribute(idx instanceof Uint16Array ? Uint16Array.from(keep) : Uint32Array.from(keep), 1));
+      g.computeBoundingBox();
+      g.computeBoundingSphere();
+    }
+  }
+  if (index.length === 0) return null;
+  const g = new THREE.BufferGeometry();
+  for (const n of names) g.setAttribute(n, new THREE.BufferAttribute(Float32Array.from(out[n]), chunks[0].getAttribute(n).itemSize));
+  g.setIndex(new THREE.BufferAttribute(Uint32Array.from(index), 1));
+  g.computeBoundingBox();
+  g.computeBoundingSphere();
+  return g;
+}
 
 function estimateTop(lot: Lot): number {
   switch (lot.roof) {

@@ -1,7 +1,7 @@
 # Tinyhaven — architecture & conventions
 
 A living miniature city (tabletop diorama) in Three.js r186 + TypeScript, built with Vite.
-`npm run dev` → http://127.0.0.1:5173 · `npm run build` → single self-contained `dist/index.html`.
+`npm run dev` → http://127.0.0.1:5173 · `npm run bake` → `public/bake/` (see docs/progress/baking.md) · `npm run build` → `dist/index.html` with JS and CSS inlined (runs from `file://`) + `dist/bake/`.
 
 ## 1. Big picture
 
@@ -163,7 +163,8 @@ fallback lights are used). Errors from modules you don't own are not your proble
   `src/debug/*`, `index.html`, `package.json` belong to the lead. If you truly need a core change, keep it
   minimal and **additive** (new optional field/helper), never change existing behaviour, and report it.
 * No new npm dependencies, no external URLs/CDNs/assets. Everything procedural (canvas textures,
-  generated geometry, WebAudio synthesis). Available: `three` (+ `three/examples/jsm/*`), `postprocessing`, `n8ao`.
+  generated geometry, WebAudio synthesis), or baked by our own code at build time into files the page loads from its own host
+  (`scripts/bake.mjs`, `src/core/bakeFiles.ts`); the page must still work without them. Available: `three` (+ `three/examples/jsm/*`), `postprocessing`, `n8ao`.
 * Console must stay clean in normal operation: no errors, no warnings, no log spam
   (gate diagnostics behind `ctx.debug.enabled`).
 * `npx tsc --noEmit -p .` must pass for your files.

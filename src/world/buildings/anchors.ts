@@ -135,6 +135,9 @@ export interface ShopFront {
 }
 
 export interface BuildingsService {
+  /** the far facades' atlas (farFacade.ts, scripts/bake.mjs): one pass, and the fingerprint of what it depends on */
+  renderFarBake?: (pass: number) => import('three').WebGLRenderTarget;
+  farBakeKey?: () => string;
   shops: ShopFront[];
   chimneys: ChimneyTop[];
   balconies: BalconyAnchor[];

@@ -1,5 +1,5 @@
 @echo off
-rem Opens the city. dist\index.html is fully self-contained (no server, no internet needed).
+rem Opens the city. dist\index.html needs no server and no internet; served locally it also uses the baked files, if "npm run bake" made them.
 rem With Node.js it is rebuilt first (a few seconds, so it always matches the code you have) and served locally.
 cd /d "%~dp0"
 where node >nul 2>nul

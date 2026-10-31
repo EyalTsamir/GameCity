@@ -18,6 +18,8 @@ import { createLandscapeModel, CX, CZ, type Cover, type LandscapeModel } from '.
 import { buildRings, type RingTopology } from './landscape/rings';
 import { buildLand, buildIslandPatch, buildFieldMask, splatCover, makeSlabNormal, LAND_MAX_D, GROUND_DROP, type LandHeights, type LandHole } from './landscape/terrain';
 import { landUniforms, landMaterial } from './landscape/shader';
+import { landBakeKey, landFarMaterial, renderLandBake, LandTiles, LAND_SOFT, type LandBakeSource } from './landscape/bake';
+import { bakeOn, bakeTexture, uploadStaged } from '../core/bakeFiles';
 import { buildMountains } from './landscape/mountains';
 import { placeTrees, createLandTrees, type LandTrees } from './landscape/trees';
 import { buildSettlements } from './landscape/settlements';
@@ -31,7 +33,7 @@ import { Fleet } from './landscape/fleet';
 import { buildRowAtlas, rowMaterial, rowDepthMaterial, RowSink } from './landscape/rows';
 import { buildFarmKit, HedgeSink, type FarmKitStats } from './landscape/farmkit';
 import { hmix, toField, fromField, fieldAt, newField, cropKind } from './landscape/fields';
-import { nature } from '../core/nature';
+import { moonLift, nature } from '../core/nature';
 import { buildPowerLines, WIRE_DAY } from './landscape/powerlines';
 import { buildWoods, buildEdgeHedge, buildRiverRocks, buildBeach, type WoodsStats } from './landscape/woods';
 import type { SmokeService } from '../sim/ambient';
@@ -54,6 +56,10 @@ export interface LandscapeService {
   /** ring topology + heights of the land mesh */
   topo: RingTopology | null;
   heights: LandHeights | null;
+  /** render one of the land bake's two textures (scripts/bake.mjs) */
+  renderBake?: (which: 0 | 1) => THREE.WebGLRenderTarget;
+  /** what a land bake must have been made from */
+  bakeKey?: () => string;
 }
 
 /** the undergrowth is hidden with the camera above this (m) */
@@ -167,7 +173,14 @@ export default function create(ctx: CityContext): CityModule {
     (uniforms.uFieldXf.value as THREE.Vector4).copy(fm.xf);
     maskMs = performance.now() - tm0;
   }
-  const land = new THREE.Mesh(geo, landMaterial(uniforms, fog));
+  // baked far land (landscape/bake.ts): procedural until the files have arrived. ?nolandbake: procedural always
+  const bakeWanted = !params.has('nolandbake') && bakeOn(params);
+  const bakeSoft = Number(params.get('landsoft')) || LAND_SOFT;
+  const bakeSources: LandBakeSource[] = [{ geometry: geo, y: GROUND_DROP }];
+  const black = new THREE.DataTexture(new Uint8Array(4), 1, 1);
+  const bakeU = { tLB0: { value: black as THREE.Texture }, tLB1: { value: black as THREE.Texture }, uBakeOn: { value: 0 } };
+  const tiles = bakeWanted ? new LandTiles(geo, GROUND_DROP) : null;
+  const land = new THREE.Mesh(tiles ? tiles.pure : geo, landMaterial(uniforms, fog));
   land.name = 'land-ground';
   land.position.y = GROUND_DROP;
   land.receiveShadow = true;
@@ -175,17 +188,20 @@ export default function create(ctx: CityContext): CityModule {
   land.matrixAutoUpdate = false;
   land.updateMatrix();
   root.add(land);
+  let islandTiles: LandTiles | null = null;
   let islandTris = 0;
   if (islandBox) {
     const step = ctx.quality.level === 'low' ? 26 : ctx.quality.level === 'medium' ? 19 : 14;
     const ig = buildIslandPatch(model, islandBox, step);
-    const island = new THREE.Mesh(ig, land.material);
+    if (tiles) islandTiles = new LandTiles(ig, GROUND_DROP);
+    const island = new THREE.Mesh(islandTiles ? islandTiles.pure : ig, land.material);
     island.name = 'land-island';
     island.position.y = GROUND_DROP;
     island.receiveShadow = true;
     island.matrixAutoUpdate = false;
     island.updateMatrix();
     root.add(island);
+    bakeSources.push({ geometry: ig, y: GROUND_DROP });
     islandTris = ig.index!.count / 3;
     // a coarse copy for the water's reflection pass
     const rg = buildIslandPatch(model, islandBox, 40);
@@ -396,6 +412,48 @@ export default function create(ctx: CityContext): CityModule {
     kitMs = performance.now() - tk0;
   }
   ctx.scene.add(root);
+  // ── the baked far land: tiles that are far from the camera, and the reflection proxies
+  service.renderBake = (which) => renderLandBake(ctx.renderer, bakeSources, uniforms, which);
+  service.bakeKey = () => landBakeKey(model.height, (x, z) => model.cover(x, z, coverTmp));
+  if (tiles) {
+    const farMat = landFarMaterial(uniforms, fog, bakeU, moonLift('smoothstep(8.0, 80.0, vLMoon)'));
+    const proxies = root.children.filter((o) => o.name === 'land-reflect-island' || o.name === 'land-reflect') as THREE.Mesh[];
+    const blendMat = landMaterial(uniforms, fog, { textures: bakeU, soft: bakeSoft });
+    const addDraw = (g: THREE.BufferGeometry, mat: THREE.Material, name: string) => {
+      const m = new THREE.Mesh(g, mat);
+      m.name = name;
+      m.position.y = GROUND_DROP;
+      m.receiveShadow = true;
+      m.matrixAutoUpdate = false;
+      m.updateMatrix();
+      m.frustumCulled = false;
+      root.add(m);
+    };
+    land.frustumCulled = false;
+    addDraw(tiles.blend, blendMat, 'land-ground-blend');
+    addDraw(tiles.far, farMat, 'land-ground-far');
+    if (islandTiles) {
+      addDraw(islandTiles.blend, blendMat, 'land-island-blend');
+      addDraw(islandTiles.far, farMat, 'land-island-far');
+    }
+    const useBake = (t0b: THREE.Texture, t1b: THREE.Texture) => {
+      bakeU.tLB0.value = t0b;
+      bakeU.tLB1.value = t1b;
+      bakeU.uBakeOn.value = 1;
+      for (const o of proxies) o.material = farMat;
+      tiles.enabled = true;
+      if (islandTiles) islandTiles.enabled = true;
+    };
+    if (params.get('landbake') === 'rt') useBake(renderLandBake(ctx.renderer, bakeSources, uniforms, 0).texture, renderLandBake(ctx.renderer, bakeSources, uniforms, 1).texture);
+    else {
+      const key = service.bakeKey();
+      void Promise.all([bakeTexture('land0', params, key), bakeTexture('land1', params, key)]).then(async ([t0b, t1b]) => {
+        if (!t0b || !t1b) return;
+        await uploadStaged(ctx.renderer, [t0b, t1b]);
+        useBake(t0b, t1b);
+      });
+    }
+  }
   const buildMs = performance.now() - t0;
   const landTris = (geo.index?.count ?? 0) / 3;
   const landVerts = geo.getAttribute('position').count;
@@ -409,6 +467,11 @@ export default function create(ctx: CityContext): CityModule {
       if (dt > 0) fleet.commit();
     },
     frame() {
+      if (tiles) {
+        const pxAt1m = (ctx.size.height * ctx.renderer.getPixelRatio()) / (2 * Math.tan(THREE.MathUtils.degToRad(ctx.camera.fov) / 2));
+        tiles.update(ctx.camera.position, pxAt1m, bakeSoft);
+        islandTiles?.update(ctx.camera.position, pxAt1m, bakeSoft);
+      }
       if (wires && ctx.uniforms.uNight.value !== wireNight) {
         wireNight = ctx.uniforms.uNight.value;
         (wires.material as THREE.LineBasicMaterial).color.copy(wireDay).multiplyScalar(1 - 0.96 * wireNight);
@@ -430,6 +493,7 @@ export default function create(ctx: CityContext): CityModule {
         chimneys,
         landVerts,
         landTris,
+        ...(tiles ? { farTiles: tiles.farCount, bakeOn: bakeU.uBakeOn.value } : {}),
         islandTris,
         mtnVerts,
         mtnTris,
