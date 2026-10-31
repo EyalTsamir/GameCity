@@ -811,6 +811,32 @@ const IN_MEMORY = [
   ['{F} {S}', 'Teacher, gardener, friend', '{Y} – {Z}'],
   ['Presented by the', 'Friends of the Park', '{Z}'],
 ];
+const AGENTS = ['Hartley & Moss', 'Quay Estates', 'Tinyhaven Homes', 'Beacon Lettings', 'Marlow & Dean'];
+/** an estate agent's board in a garden */
+export function agentBoard(seed: number): { deal: string; firm: string; phone: string; colour: number; ink: number } {
+  const r = stream(seed + 2207);
+  const k = int(r, 0, AGENTS.length - 1);
+  return { deal: pick(r, ['FOR SALE', 'FOR SALE', 'TO LET', 'SOLD']), firm: AGENTS[k], phone: phone(r), colour: [0x1e3a5c, 0xa8322a, 0x2a5d4a, 0xe0b52a, 0x4a3468][k], ink: k === 3 ? 0x1c1c22 : 0xf6f3ea };
+}
+
+const BY_WATER = [
+  { head: 'DEEP WATER', lines: ['No swimming from the quay', 'No diving', 'Lifebelt 40 m to the left'] },
+  { head: 'TIDES', lines: ['Slippery when wet', 'Keep children in sight', 'In danger call 999, ask for the coastguard'] },
+  { head: 'NO FISHING', lines: ['From this wall, by order', 'Harbour master 01632 960 100', 'Please take your line home'] },
+  { head: 'SEA WALL', lines: ['Keep off the rocks', 'Waves may break over the path', 'in strong winds'] },
+];
+const BY_GREEN = [
+  { head: 'PARK RULES', lines: ['Dogs on leads, please', 'No cycling on the paths', 'Gates close at dusk'] },
+  { head: 'BALL GAMES', lines: ['On the lower lawn only', 'Please keep away from the beds', 'Thank you'] },
+  { head: 'PLEASE', lines: ['Do not feed the ducks bread', 'Oats and peas are kinder', 'Friends of the Park'] },
+  { head: 'TREE WALK', lines: ['Follow the green arrows', 'Forty kinds in half a mile', 'Leaflets at the café'] },
+];
+/** a council board by a path */
+export function placeBoard(seed: number, water: boolean): { head: string; lines: string[] } {
+  const a = water ? BY_WATER : BY_GREEN;
+  return a[seed % a.length];
+}
+
 const FAMED = ['Harbour pilot', 'Lifeboat coxswain', 'Chart maker', 'Botanist', 'Novelist', 'Lighthouse engineer', 'Composer', 'Pioneer of the steam ferry', 'Physician to the poor', 'Marine painter', 'Astronomer', 'Founder of the town library', 'Suffragist', 'Bridge builder'];
 /** a round blue plaque on an old house: who lived here */
 export function heritageOf(seed: number): { name: string; years: string; did: string; lived: string } {

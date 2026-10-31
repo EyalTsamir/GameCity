@@ -4,7 +4,7 @@
 
 import { FACE, ICON } from './font';
 import { fadeFor, shade, type LetterSink, type TextOpts } from './sink';
-import { billOf, firm, heritageOf, houseName, noticeOf, paperOf, phone, pick, placard, plaqueOf, price, residents, stream, tenants, weekLines, COUNCIL, type Shop, type R } from './wording';
+import { agentBoard, billOf, firm, heritageOf, houseName, placeBoard, noticeOf, paperOf, phone, pick, placard, plaqueOf, price, residents, stream, tenants, weekLines, COUNCIL, type Shop, type R } from './wording';
 
 /** tiers: 0 big (name boards), 1 middle (paper, headings), 2 fine (body text) */
 export type Tier = 0 | 1 | 2;
@@ -621,6 +621,63 @@ export function bluePlaque(s: LetterSink, seed: number, tier: Tier): void {
   opt(0.021, FACE.SERIF, c + 0.012, who.years);
   opt(0.0195, FACE.SERIF, c - 0.03, who.did);
   opt(0.0195, FACE.SERIF, c - 0.062, who.lived);
+}
+
+/** a board on a post, facing both ways. (x, z) is the foot of the post, (nx, nz) one way it faces */
+function standing(s: LetterSink, x: number, y: number, z: number, nx: number, nz: number, W: number, H: number, yb: number, face: (sgn: number) => void): void {
+  const top = yb + H + 0.04,
+    hw = 0.03;
+  for (const [ax, az] of [[nx, nz], [nz, -nx], [-nx, -nz], [-nz, nx]]) s.wall(x + ax * hw, y, z + az * hw, ax, az, 0).solid(-hw, 0, hw, top, 0x5b5146);
+  for (const sgn of [1, -1]) {
+    const ax = sgn * nx,
+      az = sgn * nz;
+    // right of a wall facing (ax, az) is (az, -ax)
+    s.wall(x + ax * 0.034 - (az * W) / 2, y + yb, z + az * 0.034 + (ax * W) / 2, ax, az, 0);
+    face(sgn);
+  }
+}
+
+/** an estate agent's board in a garden */
+export function estateBoard(s: LetterSink, x: number, y: number, z: number, nx: number, nz: number, seed: number): void {
+  const b = agentBoard(seed);
+  const W = 0.72,
+    H = 0.56;
+  s.fadeAt(34);
+  standing(s, x, y, z, nx, nz, W, H, 1.45, () => {
+    s.solid(0, 0, W, H, 0xf6f3ea);
+    s.solid(0, H * 0.62, W, H, b.colour, 0.0004);
+    const size = s.fit(b.deal, W - 0.08, 0.13, FACE.SANS_B);
+    s.text(b.deal, W / 2, H * 0.72, size, { face: FACE.SANS_B, color: b.ink, align: 'center', z: 0.0008 });
+    s.text(b.firm, W / 2, H * 0.36, s.fit(b.firm, W - 0.1, 0.07, FACE.SERIF_B), { face: FACE.SERIF_B, color: INK, align: 'center', z: 0.0008 });
+    s.text(b.phone, W / 2, H * 0.12, 0.05, { face: FACE.SANS, color: INK, align: 'center', z: 0.0008, maxW: W - 0.1 });
+  });
+}
+
+/** a council board by a path, at the water or in the green */
+export function councilBoard(s: LetterSink, x: number, y: number, z: number, nx: number, nz: number, seed: number, water: boolean, tier: Tier): void {
+  const b = placeBoard(seed, water);
+  const W = 0.62,
+    H = 0.46;
+  const col = water ? 0x1e4a78 : 0x2a5d4a;
+  if (tier === 1) {
+    s.fadeAt(30);
+    standing(s, x, y, z, nx, nz, W, H, 1.1, () => {
+      s.solid(0, 0, W, H, 0xf2efe6);
+      s.solid(0, H - 0.11, W, H, col, 0.0004);
+      s.text(b.head, W / 2, H - 0.082, s.fit(b.head, W - 0.08, 0.062, FACE.SANS_B), { face: FACE.SANS_B, color: 0xf6f3ea, align: 'center', z: 0.0008 });
+    });
+    return;
+  }
+  if (tier !== 2) return;
+  s.fadeAt(fadeFor(0.012));
+  standing(s, x, y, z, nx, nz, W, H, 1.1, () => {
+    let yy = H - 0.165;
+    for (const l of b.lines) {
+      s.text(l, W / 2, yy, 0.026, { face: FACE.SANS, color: INK, align: 'center', z: 0.0008, maxW: W - 0.06 });
+      yy -= 0.052;
+    }
+    s.text(COUNCIL, W / 2, 0.022, 0.016, { face: FACE.SANS, color: GREY, align: 'center', z: 0.0008, maxW: W - 0.06 });
+  });
 }
 
 /** the small plate under a road sign */

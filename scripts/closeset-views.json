@@ -58,7 +58,20 @@
  {"id": "text-works", "area": "text", "x": -156.1, "z": -96.1, "yaw": -90, "y": 1.4},
  {"id": "text-post", "area": "text", "x": -50.3, "z": -60.3, "yaw": 0, "y": 2.0},
  {"id": "text-plate", "area": "text", "x": -121.3, "z": -72.7, "yaw": 0, "y": 2.8},
- {"id": "text-blue", "area": "text", "x": 103, "z": -33.1, "yaw": 90, "y": 2.67},
+ {"id": "text-blue", "area": "text", "x": -146.8, "z": -18.5, "yaw": 0, "y": 2.67},
  {"id": "text-awning", "area": "text", "x": 23.2, "z": 50.6, "yaw": 180, "y": 2.5},
- {"id": "text-shopdoor", "area": "text", "x": 6.5, "z": 89.03, "yaw": -75, "y": 1.5}
+ {"id": "text-shopdoor", "area": "text", "x": 6.5, "z": 89.03, "yaw": -75, "y": 1.5},
+ {"id": "walk-old0", "area": "walk", "x": 8, "z": 50.6, "yaw": 180, "y": 1.9},
+ {"id": "walk-old1", "area": "walk", "x": 16, "z": 50.6, "yaw": 180, "y": 1.9},
+ {"id": "walk-old2", "area": "walk", "x": 24, "z": 50.6, "yaw": 180, "y": 1.9},
+ {"id": "walk-old3", "area": "walk", "x": 32, "z": 50.6, "yaw": 180, "y": 1.9},
+ {"id": "walk-old4", "area": "walk", "x": 40, "z": 50.6, "yaw": 180, "y": 1.9},
+ {"id": "walk-home0", "area": "walk", "x": -176.7, "z": 6, "yaw": 90, "y": 1.7},
+ {"id": "walk-home1", "area": "walk", "x": -176.7, "z": 20, "yaw": 90, "y": 1.7},
+ {"id": "walk-home2", "area": "walk", "x": -176.7, "z": 34, "yaw": 90, "y": 1.7},
+ {"id": "walk-home3", "area": "walk", "x": -176.7, "z": 48, "yaw": 90, "y": 1.7},
+ {"id": "walk-home4", "area": "walk", "x": -176.7, "z": 62, "yaw": 90, "y": 1.7},
+ {"id": "text-agent", "area": "text", "x": -137.5, "z": 36.8, "yaw": 0, "y": 1.7},
+ {"id": "text-council", "area": "text", "x": -43, "z": 30.5, "yaw": -90, "y": 1.3},
+ {"id": "text-quay", "area": "text", "x": 75.9, "z": -33.9, "yaw": 180, "y": 1.45}
 ]

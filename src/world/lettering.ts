@@ -15,6 +15,7 @@ import { patchLampMaterial } from './lamps/integrate';
 import type { BuildingsService, LetterSpot } from './buildings/anchors';
 import { XS, ZS } from '../core/constants';
 import { EW_NAMES, NS_NAMES } from '../core/streets';
+import { DIR_VEC } from '../core/geom';
 import { FACE, GlyphAtlas } from './lettering/font';
 import { FADE_UNIT, LetterSink } from './lettering/sink';
 import { addressOf, shopFor, streetOf } from './lettering/shopname';
@@ -162,8 +163,9 @@ export default function create(ctx: CityContext): CityModule {
 
   /** a point just in front of a wall is out in the open: somebody can read what is on it */
   const open = (p: LetterSpot, u: number): boolean => {
-    const x = p.x + p.tx * u + p.nx * 0.9,
-      z = p.z + p.tz * u + p.nz * 0.9;
+    const o = 0.9 + (p.depth ?? 0);
+    const x = p.x + p.tx * u + p.nx * o,
+      z = p.z + p.tz * u + p.nz * o;
     const f = occ.get(x, z);
     return !(f & (OCC.BUILDING | OCC.WATER | OCC.SOLID | OCC.RAIL));
   };
@@ -253,17 +255,6 @@ export default function create(ctx: CityContext): CityModule {
             onSpot(s, p, 0.018);
             paint.doorSticker(s, p.w / 2 - 0.065, 1.1, DOOR_NOTES[seed % DOOR_NOTES.length], seed);
           });
-        }
-        // some old houses remember somebody
-        if ((lot.kind === 'townhouse' || lot.kind === 'apartment') && seed % 3 === 1 && open(p, -0.5)) {
-          for (const tier of [1, 2] as Tier[]) {
-            put(tier, cx(p), cz(p), (s) => {
-              const u = -0.72; // (a porch lamp may have the other side)
-              s.frame(p.x + p.tx * u + p.nx * back, 2.45, p.z + p.tz * u + p.nz * back, p.tx, 0, p.tz, 0, 1, 0, 0);
-              paint.bluePlaque(s, seed, tier);
-            });
-          }
-          marks.push(['blue', p.x - p.tx * 0.5, 2.67, p.z - p.tz * 0.5, p.nx, p.nz]);
         }
         // a detached house has a name by the door; a works says who it is and what to do
         const beside = p.w + 0.2;
@@ -524,6 +515,66 @@ export default function create(ctx: CityContext): CityModule {
         paint.lampTag(s, num);
       });
     }
+  }
+
+  // ── some old houses remember somebody: a round plaque where the wall is plain, between its windows
+  if (closeText(ctx, 'streetlabels')) {
+    let n = 0;
+    for (const p of spots) {
+      if ((p.kind !== 'wall' && p.kind !== 'upper') || p.w < 0.8 || p.y > 2.4 || p.y + p.h < 2.95) continue;
+      const lot = lotOf.get(p.lot);
+      if (!lot || (lot.kind !== 'townhouse' && lot.kind !== 'apartment')) continue;
+      if (n++ % 2 !== 0 || !open(p, p.w / 2)) continue;
+      const seed = p.lot * 37 + n;
+      const u = (p.w - 0.44) / 2;
+      for (const tier of [1, 2] as Tier[]) {
+        put(tier, cx(p), cz(p), (s) => {
+          s.frame(p.x + p.tx * u, 2.45, p.z + p.tz * u, p.tx, 0, p.tz, 0, 1, 0, 0);
+          paint.bluePlaque(s, seed, tier);
+        });
+      }
+      marks.push(['blue', cx(p), 2.67, cz(p), p.nx, p.nz]);
+    }
+  }
+
+  // ── boards on posts: agents' in some gardens, the council's by some benches
+  if (closeText(ctx, 'streetnotices')) {
+    const terrain = ctx.services.terrain as { height?(x: number, z: number): number } | undefined;
+    const groundAt = (x: number, z: number): number => terrain?.height?.(x, z) ?? ctx.plan.heightAt(x, z);
+    const free = (x: number, z: number): boolean => !(occ.get(x, z) & (OCC.BUILDING | OCC.WATER | OCC.SOLID | OCC.ROAD | OCC.RAIL | OCC.SIDEWALK | OCC.PATH | OCC.PAVED));
+    for (const lot of lots) {
+      if (lot.kind !== 'house' || lot.doors.length === 0 || lot.seed % 4 !== 0) continue;
+      const d = lot.doors[0];
+      const v = DIR_VEC[d.dir];
+      // somewhere in the front garden, clear of the path
+      let x = 0,
+        z = 0,
+        found = false;
+      for (const [out, side] of [[3.4, 1.9], [3.4, -1.9], [2.4, 2.6], [2.4, -2.6], [4.4, 2.6], [4.4, -2.6]]) {
+        x = d.x + v.x * out - v.z * side;
+        z = d.z + v.z * out + v.x * side;
+        if ((found = free(x, z))) break;
+      }
+      if (!found) continue;
+      const y = groundAt(x, z);
+      const fx = x,
+        fz = z;
+      put(1, fx, fz, (s) => paint.estateBoard(s, fx, y, fz, v.x, v.z, lot.seed));
+      marks.push(['agent', fx, y + 1.7, fz, v.x, v.z]);
+    }
+    ctx.plan.benches.forEach((b, i) => {
+      if (i % 5 !== 2) return;
+      const fx = Math.sin(b.yaw),
+        fz = Math.cos(b.yaw);
+      const x = b.x + fz * 1.5,
+        z = b.z - fx * 1.5;
+      if (occ.get(x, z) & (OCC.BUILDING | OCC.WATER | OCC.SOLID | OCC.ROAD | OCC.RAIL)) return;
+      let water = false;
+      for (const [dx, dz] of [[9, 0], [-9, 0], [0, 9], [0, -9]]) if (ctx.plan.isWater(x + dx, z + dz)) water = true;
+      const y = groundAt(x, z);
+      for (const tier of [1, 2] as Tier[]) put(tier, x, z, (s) => paint.councilBoard(s, x, y, z, fx, fz, i, water, tier));
+      marks.push(['council', x, y + 1.3, z, fx, fz]);
+    });
   }
 
   // ── street names: an enamel plate on the wall nearest each corner
