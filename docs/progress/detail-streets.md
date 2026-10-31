@@ -6,24 +6,16 @@ that edits cannot leak into a run: `npx vite build --outDir shots/ds/perfdist`, 
 --port 5213 --strictPort --host 127.0.0.1`, then `perf.mjs --url http://127.0.0.1:5213/`.
 
 ## Resume here
-Round 1 (ground) and round 2 (street kit, shop fronts) committed. A perf A/B of commit c6e94d9 was started from a frozen
-build (`shots/ds/perfdist`, port 5213, output `shots/ds/perf1`, `;nostreetdetail`, overview / street / market / downtown):
-read its result, it does not yet include road works, parking kit, sacks, or the café / bakery / hardware goods.
+Rounds 1-2 (ground, street kit, shop fronts, works) committed and measured within budget (see Perf, run 3). Seen by eye and
+good: guard rails (52 after the placement fix), poster columns, fruit stand, clothes rail, sacks, cardboard, works. Tar fixed:
+weathered grey, continuous strips (separate quads read as ant trails from afar), thinner overbanding, old digs a broken saw cut.
 
-NOT yet looked at by eye: road works, wheel stops, sacks, cardboard, locked bikes, guard rails (the count was 0 before the
-check moved to the band centre: confirm it is > 0 now), bottle / bread crates, brooms, clothes rail after the fan fix, tar
-snakes and stronger junction wear. Camera aiming: read `services.props.streetKit` with scratch `kitpos.mjs` (a page with
-`only=terrain,landscape,roads,buildings,landmarks,harbor,vegetation,props,camera`, evaluate
-`__city.ctx.services.props.streetKit`, group by `k`). When aiming at a shop item stand on the pavement side: several of
-the first shots ended up inside shops.
+Next: golden-hour + night audit (`shots/ds/r3b`), independent judge on an image sheet, then the places items (lower-quay
+waterline and coping: bed, weed fringe, fenders; cliff seams), plot edges (retaining walls, fences, hedges), mid-distance
+check at 30-60 m, re-measure, final checks from `DETAIL-ROUND.md`, before/after sheets in `docs/progress/detail/streets/`, report.
 
-Next after that: golden-hour + night audit (rule: noon, 18.2, 21.5), independent judge on an image sheet, then the places
-items (lower-quay waterline and coping: bed, weed fringe, fenders; cliff seams), plot edges (retaining walls, fences,
-hedges), mid-distance check at 30-60 m, re-measure, final checks from `DETAIL-ROUND.md`, before/after sheets in
-`docs/progress/detail/streets/`, report.
-
-Audit tool: `services.props.streetKit` lists every kit item `{k, x, z}` (read it in the page to aim the camera). Shots in
-`shots/ds/`.
+Audit tool: `services.props.streetKit` lists every kit item `{k, x, z}` (scratch `kitpos.mjs`; note `wheelStop` reports the
+last claim, not its own place). Shots in `shots/ds/`. When aiming at a shop item stand on the pavement side.
 
 ## Perf
 Budget: at most +1 ms in overview, downtown, street, market; at most +250 k triangles in a full-city view.
@@ -34,7 +26,18 @@ Run 1, commit c6e94d9, frozen build, AC, `;nostreetdetail`, 2 repeats (market of
 | street | 36.5, 36.2 | 35.1, 35.0 | +1.3 | 3.38-3.60 M / 3.26-3.48 M |
 | market | 35.1, 35.2 | 34.1 | +1.1 | 3.36-3.49 M / 3.41 M |
 | downtown | 37.4, 38.2 | 36.7, 36.8 | +1.1 | 3.41 M / 3.13-3.16 M (+260 k) |
-Slightly OVER budget, before road works, parking kit, sacks and more goods were added. Trim. Per-family run: `shots/ds/perf2`.
+Looked over budget, but this run and the per-family run 2 (street base 34.9, master off 33.1, families not additive) were
+dominated by figures: pedestrians near the camera differ with the variant (the kit claims change their stream).
+Run 3, commit 4f5757c, frozen build, AC, `hide=traffic,pedestrians` (so only static + ground), 3 repeats:
+| view | base | master off | ground off (kerb, cover, junction, slabs, path) | kit off | shop, works, odds, parking off |
+|---|---|---|---|---|---|
+| street | 31.36, 31.34, 30.48 | 30.73, 30.63, 29.77 (+0.67) | 30.73, 30.72, 29.71 (-0.67) | 31.38, 31.38, 30.57 (0) | 31.23, 31.31, 30.36 (-0.1) |
+| market | 29.16, 29.10, 28.21 | 28.65, 28.40, 27.80 (+0.5) | 28.89, 28.67, 27.86 (-0.35) | 29.00, 29.12, 28.22 (0) | 29.17, 28.99, 28.05 (-0.05) |
+Within budget: all of the cost is the ground (hardscape vertices with their heavy format plus markings), the kit is effectively
+free. Whole-city static triangles (`__city.stats()`): roads +64 k (kerb stones 36 k, cover kit 19 k), props +35 k, near cells
++28 k: about +127 k, half the budget. The triangle counter itself flips by 220 k between runs (shadow fit): never read it from
+one sample.
+**Measuring a static feature: use `hide=traffic,pedestrians`.** Without it the figures near the camera outweigh the feature.
 
 ## Toggles (`src/core/streetdetail.ts`, master `?nostreetdetail`, all off on low unless noted)
 | switch | what | files |
