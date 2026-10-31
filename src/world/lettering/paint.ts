@@ -521,6 +521,101 @@ export function mailPlate(s: LetterSink, w: number, h: number, seed: number): vo
   s.text('Market Street', w / 2, h - 0.138, 0.0085, { face: FACE.SANS, color: GREY, align: 'center', maxW: w - 0.012 });
 }
 
+/** a market trader's card: what it is and what it costs, chalked over the printed price */
+export function priceCard(s: LetterSink, w: number, h: number, lines: string[]): void {
+  s.fadeAt(fadeFor(0.009));
+  s.solid(0, 0, w, h, 0x1d211f);
+  const ns = s.fit(lines[0], w * 0.9, h * 0.3, FACE.HAND);
+  s.text(lines[0], w / 2, h * 0.64, ns, { face: FACE.HAND, color: 0xf2efe6, align: 'center', z: 0.0003 });
+  const ps = s.fit(lines[1] ?? '', w * 0.9, h * 0.36, FACE.HAND);
+  s.text(lines[1] ?? '', w / 2, h * 0.25, ps, { face: FACE.HAND, color: 0xf2d890, align: 'center', z: 0.0003, weight: 0.1 });
+  s.text(lines[2] ?? '', w / 2, h * 0.07, h * 0.15, { face: FACE.HAND, color: 0xd9d4c4, align: 'center', z: 0.0003, maxW: w * 0.9 });
+}
+
+/** the small plate under a road sign */
+export function signPlate(s: LetterSink, w: number, h: number, lines: string[]): void {
+  s.fadeAt(26);
+  s.solid(0, 0, w, h, 0xf6f3ea);
+  const t = 0.005;
+  s.solid(0.004, 0.004, w - 0.004, 0.004 + t, INK, 0.0003);
+  s.solid(0.004, h - 0.004 - t, w - 0.004, h - 0.004, INK, 0.0003);
+  s.solid(0.004, 0.004, 0.004 + t, h - 0.004, INK, 0.0003);
+  s.solid(w - 0.004 - t, 0.004, w - 0.004, h - 0.004, INK, 0.0003);
+  const size = Math.min(s.fit(lines[0], w * 0.88, h * 0.36, FACE.SANS_B), s.fit(lines[1] ?? '', w * 0.88, h * 0.36, FACE.SANS_B));
+  s.text(lines[0], w / 2, h * 0.57, size, { face: FACE.SANS_B, color: INK, align: 'center', z: 0.0005 });
+  s.text(lines[1] ?? '', w / 2, h * 0.15, size, { face: FACE.SANS_B, color: INK, align: 'center', z: 0.0005 });
+}
+
+const CAB = [
+  ['Haven Telecom', 'Cabinet'],
+  ['Haven Electricity', 'Feeder pillar'],
+  ['Tinyhaven Gas', 'Governor'],
+  ['Traffic Signals', 'Controller'],
+];
+
+/** who owns a street cabinet, and its number */
+export function cabinetLabel(s: LetterSink, w: number, h: number, seed: number, kind: number): void {
+  const [a, b] = CAB[kind % CAB.length];
+  s.fadeAt(fadeFor(0.008));
+  s.text(a, w / 2, h - 0.016, 0.0115, { face: FACE.SANS_B, color: INK, align: 'center', maxW: w - 0.008 });
+  s.text(`${b} ${100 + (seed % 899)}`, w / 2, h - 0.031, 0.0095, { face: FACE.SANS, color: INK, align: 'center', maxW: w - 0.008 });
+  s.text('Fault? 0800 555 0142', w / 2, h - 0.044, 0.0075, { face: FACE.SANS, color: GREY, align: 'center', maxW: w - 0.008 });
+}
+
+export function cabinetWarning(s: LetterSink, w: number, h: number): void {
+  s.fadeAt(fadeFor(0.012));
+  s.text('!', w / 2, h * 0.3, h * 0.5, { face: FACE.BLACK, color: INK, align: 'center' });
+  s.text('DANGER', w / 2, h * 0.08, h * 0.15, { face: FACE.SANS_B, color: INK, align: 'center', maxW: w * 0.9 });
+}
+
+/** on the door of a litter bin */
+export function binLabel(s: LetterSink, w: number, h: number): void {
+  s.fadeAt(fadeFor(0.012));
+  s.text('LITTER', w / 2, h * 0.62, 0.04, { face: FACE.HUMAN, color: 0xe8e8e0, align: 'center', track: 0.08 });
+  s.text('Please keep Tinyhaven tidy', w / 2, h * 0.42, 0.0125, { face: FACE.SANS, color: 0xd8d8d0, align: 'center', maxW: w });
+  s.text(COUNCIL, w / 2, h * 0.27, 0.0105, { face: FACE.SANS, color: 0xd8d8d0, align: 'center', maxW: w });
+}
+
+/** a lamp post's number on its yellow tag */
+export function lampTag(s: LetterSink, n: number): void {
+  s.fadeAt(fadeFor(0.012));
+  s.solid(0, 0, 0.09, 0.075, 0xe6c21e);
+  s.text('TH', 0.045, 0.046, 0.02, { face: FACE.SANS_B, color: INK, align: 'center', z: 0.0004 });
+  s.text(String(n), 0.045, 0.012, 0.028, { face: FACE.SANS_B, color: INK, align: 'center', z: 0.0004 });
+}
+
+const STREET_CHALK = [
+  ['TODAY', 'Fresh fish', 'Soup & bread £5', 'Hot coffee'],
+  ['SPECIALS', 'Crab salad', 'Mackerel pâté', 'Lemon tart'],
+  ['OPEN', 'Teas · Cakes', 'Dogs welcome', 'Come on in!'],
+  ['MARKET', 'Fri & Sat', 'Local honey', 'Cheese stall'],
+  ['LUNCH', '2 courses £12', 'Pie of the day', 'Ale £4.20'],
+  ['ICE CREAMS', 'Cones £2.50', 'Tubs to go', 'Lollies'],
+  ['SALE', 'Everything', 'must go', 'Half price'],
+];
+
+/** words on a chalk board that belongs to no shop (a market, a pitch) */
+export function chalkWords(s: LetterSink, w: number, h: number, seed: number, tier: Tier): void {
+  const lines = STREET_CHALK[seed % STREET_CHALK.length];
+  const r = stream(seed);
+  if (tier === 1) {
+    s.fadeAt(26);
+    s.solid(0, 0, w, h, 0x1f2421);
+    const size = s.fit(lines[0], w * 0.86, 0.1, FACE.HAND);
+    s.text(lines[0], w / 2, h - 0.14, size, { face: FACE.HAND, color: 0xf0efe0, align: 'center', z: 0.0005, weight: 0.1 });
+    s.solid(w * 0.15, h - 0.165, w * 0.85, h - 0.16, 0xe8e6d8, 0.0005, 0, 0, 24, 0.7);
+    return;
+  }
+  if (tier !== 2) return;
+  s.fadeAt(fadeFor(0.03));
+  let y = h - 0.25;
+  for (let i = 1; i < lines.length; i++) {
+    const size = s.fit(lines[i], w * 0.88, 0.062, FACE.HAND);
+    s.text(lines[i], w / 2, y, size, { face: FACE.HAND, color: i === 2 ? 0xf0d890 : 0xeeeee2, align: 'center', z: 0.0005, rot: (r() - 0.5) * 0.04 });
+    y -= 0.115;
+  }
+}
+
 /** the council's small print on things it owns */
 export function councilLabel(s: LetterSink, w: number, words: string, opts: TextOpts = {}): void {
   s.fadeAt(fadeFor(0.008));

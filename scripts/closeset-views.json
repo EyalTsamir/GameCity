@@ -38,5 +38,17 @@
  {"id": "water-riverwall", "area": "water", "x": -90, "z": 110.2, "yaw": 10, "y": -0.7},
  {"id": "water-riverbank", "area": "water", "x": -300, "z": 118, "yaw": 95, "h": 0.0},
  {"id": "country-field", "area": "country", "x": -230, "z": 30, "yaw": 70, "h": 0.0},
- {"id": "country-forest", "area": "country", "x": -350, "z": -150, "yaw": 40, "h": 0.0}
+ {"id": "country-forest", "area": "country", "x": -350, "z": -150, "yaw": 40, "h": 0.0},
+ {"id": "text-fascia", "area": "text", "x": -91.1, "z": -56.6, "yaw": 180, "y": 3.7},
+ {"id": "text-timetable", "area": "text", "x": -3.7, "z": -88.5, "yaw": -90, "y": 2.04},
+ {"id": "text-flag", "area": "text", "x": -3.9, "z": -88.5, "yaw": 0, "y": 2.5},
+ {"id": "text-column", "area": "text", "x": -46.2, "z": -74.8, "yaw": 15, "y": 1.4},
+ {"id": "text-notice", "area": "text", "x": -44, "z": -116, "yaw": 0, "y": 1.58},
+ {"id": "text-paper", "area": "text", "x": 4.1, "z": -86, "yaw": 0, "y": 1.2},
+ {"id": "text-tenants", "area": "text", "x": -13.3, "z": -71.8, "yaw": 0, "y": 1.45},
+ {"id": "text-house", "area": "text", "x": -130.8, "z": -72.7, "yaw": 0, "y": 1.7},
+ {"id": "text-plaque", "area": "text", "x": 11, "z": -69.2, "yaw": 0, "y": 0.97},
+ {"id": "text-mail", "area": "text", "x": 44, "z": -5.9, "yaw": 0, "y": 0.95},
+ {"id": "text-post", "area": "text", "x": -55, "z": -65, "yaw": 45, "y": 2.3},
+ {"id": "text-wall", "area": "text", "x": -138.9, "z": 27.1, "yaw": 180, "y": 1.3}
 ]

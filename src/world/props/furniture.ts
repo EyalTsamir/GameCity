@@ -417,6 +417,7 @@ export function bin(k: Kit, modern: boolean, rng?: Rng): void {
     }
     k.m(bodyC, 'paint');
     for (const [x, z] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) cbox(sh, x * 0.19, 0.79, z * 0.19, 0.045, 0.16, 0.045, 0.008);
+    markProp(sh, 'binlabel', 0, 0.5, 0.2125, 0.2, 0.17, 0);
     // hood: stainless, overhanging 2.5 cm, low pyramid top
     k.m('#c3c9cd', 'steel');
     cbox(sh, 0, 0.885, 0, 0.47, 0.05, 0.47, 0.01);
@@ -859,6 +860,10 @@ export function newsstand(k: Kit, rng: Rng): void {
       sh.box(x, 1.32, 0.17, 0.016, 0.95, 0.016, 0);
       sh.box(x, 1.32, 0.02, 0.016, 0.95, 0.016, 0);
     }
+    // the day's placard, wired on under the bottom tray
+    k.m('#e8e4d6', 'plastic');
+    sh.box(0, 0.58, 0.165, 0.46, 0.56, 0.006, 0);
+    markProp(sh, 'placard', 0, 0.58, 0.1695, 0.44, 0.54, rng.int(0, 1000));
     sh.pop();
   }
   // back: three framed panels and a poster case (glazed frame, lit at night); steel kick plate
@@ -1325,6 +1330,7 @@ export function busShelter(k: Kit, g: Kit, routeColor: string, rng: Rng): { glow
   for (const sx of [-1, 1]) {
     sh.push().local(L / 2 + sx * 0.061, 1.3, (zf + 0.12 + zb) / 2, 0, (sx * Math.PI) / 2, 0);
     poster(k, POSTERS[(theme + (sx > 0 ? 0 : 1)) % POSTERS.length], zb - zf - 0.3, 1.6);
+    markProp(sh, 'adpanel', 0, 0, 0.0075, zb - zf - 0.3, 1.6, rng.int(0, 1e6));
     sh.pop();
   }
   // bench along the glass back, facing the road (-Z)

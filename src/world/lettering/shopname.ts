@@ -75,10 +75,18 @@ export function shopFor(lot: { id: number }, word: string): Shop {
   return shopOf(lot.id, word, addressOf(lot).street);
 }
 
+const titles = new Map<number, string>();
+
+/** the name over a lot's shop, once its generator has signed it */
+export function signedTitle(lot: number): string | undefined {
+  return titles.get(lot);
+}
+
 /** what the far sign of a shop says, and in what lettering */
 export function shopSign(lot: { id: number }, word: string): { text: string; family: string | undefined; weight: string | undefined } {
   if (!textOn()) return { text: word, family: undefined, weight: undefined };
   const shop = shopFor(lot, word);
+  titles.set(lot.id, shop.title);
   const c = canvasFamily(shop.face);
   return { text: shop.title, family: c.family, weight: c.weight };
 }

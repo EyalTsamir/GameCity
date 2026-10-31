@@ -9,6 +9,7 @@ import { boxHunt } from '../../core/boxhunt';
 import { geomHunt } from '../../core/geomhunt';
 import type { Env } from './env';
 import { drawText, signQuad } from './signs';
+import { markProp } from '../lettering/spots';
 import { shell } from './sculpt';
 import { queueContactLocal } from '../props/contact';
 
@@ -350,8 +351,27 @@ function produce(K: Env['S'], goods: Goods, ci: number, w: number, d: number, x:
   }
 }
 
+/** what lies in each crate of a stall, in the order of its colours, and how it is sold */
+const GOODS_WORDS: Record<string, { names: string[]; unit: string }> = {
+  FRUIT: { names: ['Apples', 'Oranges', 'Lemons', 'Pears'], unit: 'per kg' },
+  VEGETABLES: { names: ['Greens', 'Carrots', 'Tomatoes', 'Beetroot'], unit: 'per kg' },
+  FLOWERS: { names: ['Peonies', 'Sunflowers', 'Lavender', 'Marigolds'], unit: 'a bunch' },
+  BREAD: { names: ['Cob loaf', 'Rye', 'Bloomer', 'Sourdough'], unit: 'each' },
+  CHEESE: { names: ['Cheddar', 'Gouda', 'Caerphilly', 'Comté'], unit: 'per 100 g' },
+  HONEY: { names: ['Wildflower', 'Heather', 'Clover', 'Dark forest'], unit: 'a jar' },
+  SPICES: { names: ['Paprika', 'Saffron', 'Turmeric', 'Cumin'], unit: 'a bag' },
+  EGGS: { names: ['White', 'Brown', 'Speckled', 'Duck'], unit: 'half doz.' },
+  OLIVES: { names: ['Green', 'Picholine', 'Kalamata', 'Cracked'], unit: 'per 100 g' },
+};
+const _stall = { x: 0, z: 0, c: 1, s: 0 };
+const stallFrame = {
+  world(x: number, y: number, z: number, out: THREE.Vector3): THREE.Vector3 {
+    return out.set(_stall.x + x * _stall.c + z * _stall.s, y, _stall.z - x * _stall.s + z * _stall.c);
+  },
+};
+
 /** chalk price card on a stick (w = 9 cm) */
-function priceCard(env: Env, x: number, y: number, z: number, price: string): void {
+function priceCard(env: Env, x: number, y: number, z: number, price: string, goods?: Goods, crate = 0): void {
   const K = env.S;
   K.rod(M('#d8c9a8', PAT.PLAIN, 0.8), [x, y - 0.14, z], [x, y + 0.02, z], 0.004, 3);
   if (stallLod) K.panel(M('#3a2c20', PAT.PLAIN, 0.9), 0.1, 0.07, x, y - 0.035, z - 0.001, 0, 1, 1, true);
@@ -363,12 +383,18 @@ function priceCard(env: Env, x: number, y: number, z: number, price: string): vo
     drawText(g, 'per kg', w / 2, h * 0.8, 'italic 12px Georgia, serif', '#d9d4c4', 0);
   }, `price:${price}`);
   signQuad(env.T, card, 0.09, 0.06, x, y, z + 0.0005, 0, 0);
+  const w = goods && GOODS_WORDS[goods.name];
+  if (w) markProp(stallFrame, 'pricecard', x, y, z + 0.0015, 0.09, 0.06, 0, 0, `${w.names[crate % 4]}|£${price}|${w.unit}`);
 }
 
 export function genMarketStall(env: Env, f: Feature): void {
   const R = f.radius || 1.3;
   env.begin(f.x, 0, f.z, f.yaw);
   env.checkRadius(f.x, f.z, R, 'marketstall');
+  _stall.x = f.x;
+  _stall.z = f.z;
+  _stall.c = Math.cos(f.yaw);
+  _stall.s = Math.sin(f.yaw);
   const K = env.S;
   stallLod = geomHunt(env.ctx, 'marketlod');
   // the stalls' goods get a detail mesh of their own: the region's was drawn whenever any part of the 150 m cell was near
@@ -534,7 +560,7 @@ export function genMarketStall(env: Env, f: Feature): void {
     if (goods.name !== 'FLOWERS') slatCrate(K, crateM, 0.42, 0.13, 0.34, x, ty + 0.018, tz - 0.02, true);
     produce(K, goods, i, 0.42, 0.34, x, ty + 0.15, tz - 0.02, seed + i * 31);
     // price card on a stick, chalked
-    if (richStall && goods.name !== 'FISH' && (i % 2 === 0 || rnd() < 0.6)) priceCard(env, x + 0.14, ty + 0.3, tz + 0.12, `${1 + Math.floor(rnd() * 5)}.${['20', '50', '80', '95', '40'][Math.floor(rnd() * 5)]}`);
+    if (richStall && goods.name !== 'FISH' && (i % 2 === 0 || rnd() < 0.6)) priceCard(env, x + 0.14, ty + 0.3, tz + 0.12, `${1 + Math.floor(rnd() * 5)}.${['20', '50', '80', '95', '40'][Math.floor(rnd() * 5)]}`, goods, i);
   }
   // scales on the corner of the table: an enamelled dial scale — cast base with a bevelled front, the round
   // dial facing the customer (white face, chapter ring, ticks, needle, glass bezel), a steel pan on top

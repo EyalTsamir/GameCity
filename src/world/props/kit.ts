@@ -7,6 +7,7 @@
 // Local frame as in furniture.ts (origin on the ground, +Y up, +Z = the item's front).
 // `k` = the kit the small parts go to, `ks` = the shadow-casting kit for the big silhouettes.
 
+import { markProp } from '../lettering/spots';
 import * as THREE from 'three';
 import type { Rng } from '../../core/rng';
 import { Kit, spokedWheel } from './furniture';
@@ -183,6 +184,10 @@ export function aFrame(k: Kit, rng: Rng): void {
     sh.box(0, 0.47, 0, 0.58, 0.94, 0.03, 0);
     k.m('#1f2421', 'stone');
     sh.box(0, 0.52, sgn * 0.017, 0.48, 0.72, 0.006, 0);
+    // (the readable words: world/lettering. A side facing -Z is written in a frame turned round)
+    sh.push().local(0, 0, 0, 0, sgn > 0 ? 0 : Math.PI);
+    markProp(sh, 'aboard', 0, 0.52, 0.0245, 0.48, 0.72, rng.int(0, 1e6));
+    sh.pop();
     // chalk: title + a few lines
     k.m('#e9e6dd', 'stone');
     sh.box(0, 0.78, sgn * 0.022, 0.3, 0.05, 0.004, 0);

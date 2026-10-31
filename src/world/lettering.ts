@@ -141,8 +141,18 @@ export default function create(ctx: CityContext): CityModule {
 
   // ── the shops: names, doors, windows
   const shopByLot = new Map<number, Shop>();
+  const frontWord = new Map<number, string>();
   const spots = buildings?.letterSpots ?? [];
-  for (const p of spots) if (p.kind === 'fascia' && p.word) shopByLot.set(p.lot, shopFor({ id: p.lot }, p.word));
+  for (const p of spots) {
+    if (p.kind !== 'fascia' || !p.word) continue;
+    shopByLot.set(p.lot, shopFor({ id: p.lot }, p.word));
+    frontWord.set(p.lot, p.word);
+  }
+  /** the shop behind a word on a building: its front's, or one of those the other sides are let to */
+  const shopOfWord = (lot: number, word: string): Shop => (frontWord.get(lot) === word ? shopByLot.get(lot)! : shopFor({ id: lot + 100000 * (1 + (hashText(word) % 9)) }, word));
+  const sideKey = (p: LetterSpot): number => p.lot * 16 + (Math.round(p.nx) + 1) * 4 + (Math.round(p.nz) + 1);
+  const wordOfSide = new Map<number, string>();
+  for (const p of spots) if ((p.kind === 'window' || p.kind === 'band' || p.kind === 'fascia') && p.word) wordOfSide.set(sideKey(p), p.word);
   const lots = ctx.plan.lots;
   const lotOf = new Map(lots.map((l) => [l.id, l]));
   const windowsSeen = new Map<number, number>();
@@ -165,7 +175,7 @@ export default function create(ctx: CityContext): CityModule {
           paint.fascia(s, p.w, p.h, shop, p.bg ?? 0x20262c, p.fg ?? 0xf4f1ea, upper);
         });
       } else if (p.kind === 'band' && p.word) {
-        const shop = shopFor({ id: p.lot + 100000 * (1 + Math.round(p.nx + 2 * p.nz)) }, p.word);
+        const shop = shopOfWord(p.lot, p.word);
         put(0, cx(p), cz(p), (s) => {
           onSpot(s, p);
           paint.band(s, p.w, p.h, shop, p.fg ?? 0xf4f1ea);
@@ -176,11 +186,10 @@ export default function create(ctx: CityContext): CityModule {
   if (closeText(ctx, 'shopwindows')) {
     for (const p of spots) {
       if (p.kind !== 'window' || !p.word || p.w < 0.6) continue;
-      const lot = lotOf.get(p.lot);
-      const own = shopByLot.get(p.lot);
-      const shop = own && p.word && hashText(own.trade) && own ? (lot?.shopfront ? own : shopFor({ id: p.lot + 100000 }, p.word)) : shopFor({ id: p.lot + 100000 }, p.word);
-      const which = windowsSeen.get(p.lot) ?? 0;
-      windowsSeen.set(p.lot, which + 1);
+      const shop = shopOfWord(p.lot, p.word);
+      const seen = sideKey(p);
+      const which = windowsSeen.get(seen) ?? 0;
+      windowsSeen.set(seen, which + 1);
       for (const tier of [1, 2] as Tier[]) {
         put(tier, cx(p), cz(p), (s) => {
           onSpot(s, p);
@@ -202,7 +211,8 @@ export default function create(ctx: CityContext): CityModule {
       if (p.kind !== 'door') continue;
       const lot = lotOf.get(p.lot);
       if (!lot) continue;
-      const shop = shopByLot.get(p.lot);
+      const word = wordOfSide.get(sideKey(p));
+      const shop = word ? shopOfWord(p.lot, word) : shopByLot.get(p.lot);
       const seed = (p.seed ?? p.lot) + p.lot * 131;
       const addr = addressOf(lot);
       if (p.glass && shop) {
@@ -255,7 +265,8 @@ export default function create(ctx: CityContext): CityModule {
   if (closeText(ctx, 'chalkboards')) {
     for (const p of spots) {
       if (p.kind !== 'door' || !p.glass) continue;
-      const shop = shopByLot.get(p.lot);
+      const word = wordOfSide.get(sideKey(p));
+      const shop = word ? shopOfWord(p.lot, word) : shopByLot.get(p.lot);
       if (!shop?.chalk || shop.seed % 4 === 3) continue;
       // beside the door, close to the wall; the far side from the walkers' line, only on open pavement
       const side = shop.seed % 2 ? p.w + 0.55 : -0.55;
@@ -392,6 +403,56 @@ export default function create(ctx: CityContext): CityModule {
           paint.placardPaint(s, p.w, p.h, p.seed);
         });
         break;
+      case 'adpanel':
+        if (!closeText(ctx, 'streetnotices')) break;
+        for (const tier of [1, 2] as Tier[]) {
+          put(tier, pcx(p), pcz(p), (s) => {
+            onProp(s, p);
+            s.glowAll(0.75);
+            paint.billPaint(s, p.w, p.h, p.seed, tier);
+            s.glowAll(0);
+          });
+        }
+        break;
+      case 'aboard':
+        if (!closeText(ctx, 'chalkboards')) break;
+        for (const tier of [1, 2] as Tier[]) {
+          put(tier, pcx(p), pcz(p), (s) => {
+            onProp(s, p);
+            paint.chalkWords(s, p.w, p.h, p.seed, tier);
+          });
+        }
+        break;
+      case 'signplate':
+        if (!closeText(ctx, 'streetlabels')) break;
+        put(1, pcx(p), pcz(p), (s) => {
+          onProp(s, p);
+          paint.signPlate(s, p.w, p.h, (p.word ?? '|').split('|'));
+        });
+        break;
+      case 'cablabel':
+      case 'cabwarn':
+        if (!closeText(ctx, 'streetlabels')) break;
+        put(2, pcx(p), pcz(p), (s) => {
+          onProp(s, p);
+          if (p.kind === 'cablabel') paint.cabinetLabel(s, p.w, p.h, p.seed, p.part ?? 0);
+          else paint.cabinetWarning(s, p.w, p.h);
+        });
+        break;
+      case 'pricecard':
+        if (!closeText(ctx, 'chalkboards')) break;
+        put(2, pcx(p), pcz(p), (s) => {
+          onProp(s, p);
+          paint.priceCard(s, p.w, p.h, (p.word ?? '|').split('|'));
+        });
+        break;
+      case 'binlabel':
+        if (!closeText(ctx, 'streetlabels')) break;
+        put(2, pcx(p), pcz(p), (s) => {
+          onProp(s, p);
+          paint.binLabel(s, p.w, p.h);
+        });
+        break;
       case 'mailplate':
         if (!closeText(ctx, 'streetlabels')) break;
         put(2, pcx(p), pcz(p), (s) => {
@@ -414,6 +475,21 @@ export default function create(ctx: CityContext): CityModule {
           paint.benchPlaque(s, p.seed);
         });
         break;
+    }
+  }
+
+  // ── a number on every lamp post, as the lighting engineers keep them
+  if (closeText(ctx, 'streetlabels')) {
+    let n = 100;
+    for (const sl of ctx.plan.slots) {
+      if (sl.kind !== 'lamp') continue;
+      const num = n++;
+      const nx = Math.sin(sl.yaw),
+        nz = Math.cos(sl.yaw);
+      put(2, sl.x, sl.z, (s) => {
+        s.wall(sl.x + nz * -0.045 + nx * 0.0, SIDEWALK_Y + 1.55, sl.z + nx * 0.045, nx, nz, 0.092);
+        paint.lampTag(s, num);
+      });
     }
   }
 

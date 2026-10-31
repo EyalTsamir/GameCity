@@ -59,6 +59,7 @@ export class LetterSink {
   /** added to every part's z */
   private z0 = 0.004;
   private fade = 255;
+  private glowBase = 0;
   private clipOn = false;
   private clipA = 0;
   private clipB = 0;
@@ -107,6 +108,12 @@ export class LetterSink {
     return this;
   }
 
+  /** everything from here on glows at night at least this much (a panel lit from behind); 0 ends it */
+  glowAll(v: number): this {
+    this.glowBase = v;
+    return this;
+  }
+
   private grow(): void {
     const f = new Float32Array(this.f.length * 2);
     f.set(this.f);
@@ -136,7 +143,7 @@ export class LetterSink {
     b[k + 4] = (col >> 16) & 255;
     b[k + 5] = (col >> 8) & 255;
     b[k + 6] = col & 255;
-    b[k + 7] = (glow * 255) | 0;
+    b[k + 7] = (Math.max(glow, this.glowBase) * 255) | 0;
     b[k + 8] = ((weight + 0.5) * 255) | 0;
     b[k + 9] = this.fade;
     b[k + 10] = (from * 10) | 0;
