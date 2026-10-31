@@ -11,7 +11,7 @@ After editing, the first lab render can fail with an Error (Vite reloading): `cu
 **Tools (mine):**
 - `node scripts/peoplelab-sw.mjs --out shots/lab/x.png --q "n=12&cols=4&cell=400&d=1&fov=19&force=0&seed=3&hour=12"`: software GL, no city, **no shared lock, 6 s**. Modes: `mode=turn&only=<i>&who=0&angles=0,35,70` (n = number of cells), `mode=seq&who=0&only=<i>&dt=0.14&part=body&d=3&angle=70` (walk frames), `part=face|neck|hand|foot|body`. `force=0` = always the close level, `force=1` near. The last label prints the close level's triangles. A 404 line is the favicon. Source `scripts/lab/people.ts`.
 - `node scripts/peoplelab.mjs --out shots/lab/c2 --n 12 --cols 4 --rows 3 --cell 400 --hours 12,18.2,21.5 --d 1 portraits` (also `hands`, `feet`, `seq --kind walk|side|back|pass|sit --speed 0.25`): in the real city through the shared browser lock, can queue over 15 min, run in the background. DOF off unless `--sharp 0`.
-- A run `shots/lab/c2` was started at 23:04 at about commit 0d63eb0: READ IT when it lands. Then run one on the newest code.
+- Lab framings also `part=hip|shin|shoulder`, `angle=90|170` for profiles and backs: these found most of round 3's faults, look at them after any change to the body.
 
 ## Audit (2026-10-31, 1 m, lab + city)
 What made them carved wooden dolls, each confirmed by eye and by code:
@@ -24,7 +24,9 @@ What made them carved wooden dolls, each confirmed by eye and by code:
 7. Bracelet of sleeve cloth at the wrist. Torn trouser shapes at the hips. Jagged star at the neck's foot. Flat triangular ears. Neck a post. Wire straps floating over the shoulders.
 Second audit (city sheet c1, noon and night): straight dark patches on faces from the 5-sided shadow proxy head; dark skin vanishes at night; hairline tips bleached by the blend to skin; hair poking through hats; sky visible through a hat's open bottom; "briefs" at the hips.
 
-## Done so far (commits 7b4c71b … 28e9a0d)
+Third audit (city sheets c2/c3, lab at hips, shins, shoulders, backs, profiles): puppet mouth, a bruise under the cheek, a bag of head behind the throat with the neck at the jaw, torn hairlines, fringe a flap with walls, a stripe down the back of bald heads, diamond corners and a V at the hips, a corner plus a notch at the shoulder, sawtooth folds and dotted seams on cloth, a jagged line in the wet eye, torn long hair under hats.
+
+## Done so far (commits 7b4c71b … 7d719dd)
 | feature | toggle | cost |
 |---|---|---|
 | Close level has its own program `PED_CLOSE` (VS flag `CL`). Near keeps its old painted face | `?nocloseface` falls back to the old painted face | one more program at boot |
@@ -48,12 +50,20 @@ Second audit (city sheet c1, noon and night): straight dark patches on faces fro
 | Hips: pelvis below the hip ring inside the thighs, same normal field, plain cloth in the zone where they cut each other: no line | always at close | 0 |
 | Hands: palm rounds off, 7-sided fingers with round tips. Ears: egg outline, rim, crest, fold, bowl, concha. Neck tapers | always at close | small |
 | Fabric lines judged by their own derivative (no dashes), weave relief much lower (it read as corrugation) | close | a few fwidth |
+| Softer face: mouth, chin and wings of the nose lower, fuller lower cheek, chin lower on the face, wider jaw bump, calmer red at the shadow's edge, softer cavities | closeface | 0 |
+| Skull: the jaw's underside rises to the back, the nape meets the skull above the jaw, its normal runs on into the neck; plain skin behind the ears (no stripe at the back) | closeface | 0 |
+| Hairline and fringe ends without torn points; fringe sweeps up at its ends and sinks into the cap, its locks calmer; sheet locks without a corner (no dots); long hair tucked up under hats; moustache breaks into hairs; curls have bumps | hairshell | 0 |
+| Eyes: no step at the lid (no jagged glint), lashes taper at the corners, brows less dashed | closeface | 0 |
+| Hips: pelvis behind the thighs, thigh's outer line runs on from the hip, one normal field across the midline: no V, no corner | always at close | 0 |
+| Shoulder: last torso rings inside a rounder arm cap, wider slope. Neck a little thicker, tint in front only. Round scoop, straight V | always at close | 0 |
+| Cloth at close: `pedRidge` without corners, fewer knee rings, seams no longer bump height, no puckers: no sawtooth and no dots | always at close | fewer ALU |
+| Thumb with a round tip | always at close | 28 tris |
 Close level now **14.6 k tris, 8.2 k verts** (was about 13 k at the start, 17.8 k before thinning the head).
 
 ## Next, ranked
-1. Read `shots/lab/c2`, then a fresh city run: shadow patches gone? night skin? sheet dots on long hair (rows of tiny dots along the columns in the lab, may be SwiftShader only)?
-2. Motion in the city: `peoplelab seq --kind walk/side/pass/sit`, `walkhitch`, close↔near cross-fade pops.
-3. Curls: bumps in the normal for cut 2 (`pedN2` is there), silhouette lumps are limited now. Moustache hard-edged: feather like the beard. Fingernails. Shirt collars at close on the new yoke: check. Arm caps at the shoulder look boxy.
+1. Read `shots/lab/c3` (d=3 sheet, walk sequence) and `shots/lab/c4` (9.5 h, 17 h, newest code): skin not orange? mouth lines? night dark skin?
+2. Motion: `peoplelab seq --kind side/pass/sit`, `walkhitch`, close↔near cross-fade pops. Walking in the lab looks right; heads already turn to the camera (crowd.ts chooseGaze), eyes follow (render.ts eyeGaze).
+3. Small: arm's cap still has a small notch in short sleeves, backpack strap's corner at the bust, lapel notch diamonds on jackets, marks on the back of the wrist.
 4. Final checks from `CLOSE-ROUND.md`: typecheck, build, ui-test `--q noidle` (kinds is a known flake), shot overview invariants/validate at speed 4 wait 20000, hitch 0 mid-run compiles, `?diorama`, `?quality=medium|low`, perf on `?noclosepeople` behind `power-guard` after `npm run bake`. Budget +0.2 ms overview/downtown, +0.7 ms street `5,1.5,-65,9,0,6` and market `27.5,1,78.5,16,200,28`.
 
 ## Changes outside my files
