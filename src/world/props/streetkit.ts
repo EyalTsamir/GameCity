@@ -10,6 +10,7 @@ import type { GreenKit } from '../buildings/green';
 import { GREEN } from '../buildings/green';
 import type { Kit } from './furniture';
 import type { Printer } from './print';
+import { markProp } from '../lettering/spots';
 import { boltZ, cbox, lathe } from './shapes';
 
 type Draw = (g: CanvasRenderingContext2D, w: number, h: number) => void;
@@ -406,6 +407,7 @@ export function posterColumn(ks: Kit, k: Kit, kd: Kit, rng: Rng, printer: Printe
       const a = ((i + s) / F) * Math.PI * 2 + Math.PI / F;
       sh.push().local(0, 0, 0, 0, a, 0);
       printer.quad(sh, `bill:${bill}:${s}`, 0, y0 + hh / 2, apo, facetW, hh, 56, 200, posterDraw(bill, s === 0 ? 1 : 2));
+      markProp(sh, 'bill', 0, y0 + hh / 2, apo, facetW, hh, seed + i, s);
       sh.pop();
     }
   }
@@ -441,6 +443,7 @@ export function postNotice(kd: Kit, printer: Printer | null, r: number, y: numbe
   kd.m('#7a7468', 'wood');
   sh.box(0, y, r + 0.005, 0.22, 0.31, 0.004, 1 | 4);
   printer?.quad(sh, `notice:${seed % 12}`, 0, y, r + 0.0075, 0.21, 0.3, 42, 60, noticeDraw(seed % 12));
+  markProp(sh, 'notice', 0, y, r + 0.0078, 0.21, 0.3, seed);
 }
 
 // ──────────────────────────────────────────────────────── shop-front life ──

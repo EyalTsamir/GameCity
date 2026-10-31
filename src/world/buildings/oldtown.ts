@@ -12,6 +12,7 @@ import {
 } from './gen';
 import { WIN, PROF, WALLPAT, ROOFPAT, FRAME, GLASS, LIGHT_MODE, shopType } from './materials';
 import { boardSign, bladeSign } from './signs';
+import { shopSign } from '../lettering/shopname';
 import { PALETTE } from '../../core/gfx';
 import { anchors } from './anchors';
 import { dB } from '../../core/detailbuildings';
@@ -357,6 +358,7 @@ export function genTownhouse(g: Gen): void {
           const n = len > 4.6 ? 2 : 1;
           const gr = makeGrid(a, b, 0, gH, 1, { spacing: len / n, cols: n, winW: (len - 0.5) / n - 0.25, winH: fasciaY0 - 0.12 - 0.3, sill: 0.3, margin: 0.22 });
           wallGrid(g.shell, sg, a, b, 0, groundTop, gr, { ...look(PROF.SHOP, WIN.SHOP), color: shopC, pattern: WALLPAT.SMOOTH + 16 * shopT, frame: FRAME.DARK });
+          anchors.spot(sg, 'window', a + 0.42, b - 0.42, 0.34, fasciaY0 - 0.14, 0, { word: shopDef.name });
           // ?noshopfront: a panelled stall riser under the display windows and a projecting sill on it
           if (MASS.shopfronts && gr.n > 0) {
             setCol(t, shade(shopC, 0.82));
@@ -392,7 +394,8 @@ export function genTownhouse(g: Gen): void {
         }
       }
       const gold = rng.chance(0.6) ? '#f2d27a' : '#f6f0e0';
-      const signRect = g.atlas.add(`shop:${shopDef.name}:${shopC.getHexString()}`, 256, 48, boardSign(shopDef.name, { bg: `#${shopC.getHexString()}`, fg: gold, border: gold, glow: 0.75, glowColor: '#ffd9a0' }));
+      const sign = shopSign(lot, shopDef.name);
+      const signRect = g.atlas.add(`shop:${sign.text}:${shopC.getHexString()}`, 256, 48, boardSign(sign.text, { bg: `#${shopC.getHexString()}`, fg: gold, border: gold, glow: 0.75, glowColor: '#ffd9a0', font: sign.family, weight: sign.weight }));
       const sLen = Math.min(uB - uA - 0.9, (fasciaY1 - fasciaY0 - 0.1) * 5.3);
       const sc = (uA + uB) / 2;
       // the signboard: a panel standing proud of the fascia in a moulded frame (gilt or trim colour), the
@@ -405,6 +408,7 @@ export function genTownhouse(g: Gen): void {
       setCol(t, shade(shopC, 0.85));
       sideBox(t, sg, sA, sB, 0.16, 0.205, fy0, fy1);
       signOnSide(g, sg, sA, sB, 0.21, fy0, fy1, signRect);
+      anchors.spot(sg, 'fascia', sA, sB, fy0, fy1, 0.21, { word: shopDef.name, bg: shopC.getHex(), fg: parseInt(gold.slice(1), 16) });
       setCol(t, gold === '#f2d27a' ? shade(col(gold), 0.8) : trimC);
       sideBox(t, sg, sA - fw, sB + fw, 0.16, 0.235, fy1, fy1 + fw);
       sideBox(t, sg, sA - fw, sB + fw, 0.16, 0.235, fy0 - fw, fy0, true);

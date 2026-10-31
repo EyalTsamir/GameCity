@@ -134,11 +134,41 @@ export interface ShopFront {
   lot: number;
 }
 
+/** Somewhere on a facade that lettering may go (world/lettering): a rectangle on a wall, a door, a sign board. */
+export interface LetterSpot {
+  kind: 'fascia' | 'band' | 'window' | 'door' | 'wall' | 'tenants' | 'number';
+  lot: number;
+  /** world position of the rectangle's lower left corner, seen from outside */
+  x: number;
+  y: number;
+  z: number;
+  /** world direction of its width, and out of the wall */
+  tx: number;
+  tz: number;
+  nx: number;
+  nz: number;
+  w: number;
+  h: number;
+  /** the generator's shop word */
+  word?: string;
+  /** paint and lettering colours, css hex */
+  bg?: number;
+  fg?: number;
+  /** door: glazed */
+  glass?: boolean;
+  seed?: number;
+  /** a number on the plate, floors of a building */
+  num?: number;
+  style?: number;
+}
+
 export interface BuildingsService {
   /** the far facades' atlas (farFacade.ts, scripts/bake.mjs): one pass, and the fingerprint of what it depends on */
   renderFarBake?: (pass: number) => import('three').WebGLRenderTarget;
   farBakeKey?: () => string;
   shops: ShopFront[];
+  /** where lettering can go (world/lettering) */
+  letterSpots: LetterSpot[];
   chimneys: ChimneyTop[];
   balconies: BalconyAnchor[];
   facades: FacadeSpan[];
@@ -168,6 +198,7 @@ class AnchorSink {
   laundry: LaundryLine[] = [];
   vents: VentTop[] = [];
   shops: ShopFront[] = [];
+  letterSpots: LetterSpot[] = [];
   private lot: Lot | null = null;
   private b: Builder | null = null;
 
@@ -178,6 +209,7 @@ class AnchorSink {
     this.laundry = [];
     this.vents = [];
     this.shops = [];
+    this.letterSpots = [];
     this.lot = null;
     this.b = null;
   }
@@ -235,6 +267,30 @@ class AnchorSink {
       wnz = b.toWorldZ(nx, nz) - oz;
     const l = Math.hypot(wnx, wnz) || 1;
     this.shops.push({ ax: b.toWorldX(ax, az), az: b.toWorldZ(ax, az), bx: b.toWorldX(bx, bz), bz: b.toWorldZ(bx, bz), nx: wnx / l, nz: wnz / l, name, type, doorX: b.toWorldX(dx, dz), doorZ: b.toWorldZ(dx, dz), lot: lot.id });
+  }
+
+  /** a rectangle [uA, uB] × [y0, y1] at offset o from the side's wall line, for the lettering module */
+  spot(sg: { x0: number; z0: number; tx: number; tz: number; nx: number; nz: number }, kind: LetterSpot['kind'], uA: number, uB: number, y0: number, y1: number, o: number, extra?: Partial<LetterSpot>): void {
+    const { lot, b } = this;
+    if (!lot || !b) return;
+    const lx = sg.x0 + sg.tx * uA + sg.nx * o,
+      lz = sg.z0 + sg.tz * uA + sg.nz * o;
+    const ox = b.toWorldX(0, 0),
+      oz = b.toWorldZ(0, 0);
+    this.letterSpots.push({
+      kind,
+      lot: lot.id,
+      x: b.toWorldX(lx, lz),
+      y: y0,
+      z: b.toWorldZ(lx, lz),
+      tx: b.toWorldX(sg.tx, sg.tz) - ox,
+      tz: b.toWorldZ(sg.tx, sg.tz) - oz,
+      nx: b.toWorldX(sg.nx, sg.nz) - ox,
+      nz: b.toWorldZ(sg.nx, sg.nz) - oz,
+      w: uB - uA,
+      h: y1 - y0,
+      ...extra,
+    });
   }
 
   vent(x: number, y: number, z: number, kind: 'bakery' | 'kitchen', shop: string): void {

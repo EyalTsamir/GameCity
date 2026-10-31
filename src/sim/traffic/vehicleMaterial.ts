@@ -535,7 +535,7 @@ export function createVehicleMaterial(
         .replace(
           '#include <uv_vertex>',
           // decal rows per variant; aMeta.z < 0: a per-vehicle cell of the number-plate grid (by the phase)
-          `#include <uv_vertex>\n#ifdef USE_MAP\n  if ( aMeta.z < -0.5 ) { float c = floor( aInst2.z * ${PLATE_CELLS.n * PLATE_CELLS.n}.0 ); vMapUv += vec2( mod( c, ${PLATE_CELLS.n}.0 ) * ${PLATE_CELLS.du.toFixed(6)}, -floor( c / ${PLATE_CELLS.n}.0 ) * ${PLATE_CELLS.dv.toFixed(6)} ); }\n  else vMapUv.y -= aMeta.z * aInst2.x;\n#endif`,
+          `#include <uv_vertex>\n#ifdef USE_MAP\n  if ( aMeta.z < -0.5 ) { float c = floor( aInst2.z * ${PLATE_CELLS.cols * PLATE_CELLS.rows}.0 ); vMapUv += vec2( mod( c, ${PLATE_CELLS.cols}.0 ) * ${PLATE_CELLS.du.toFixed(6)}, -floor( c / ${PLATE_CELLS.cols}.0 ) * ${PLATE_CELLS.dv.toFixed(6)} ); }\n  else vMapUv.y -= aMeta.z * aInst2.x;\n#endif`,
         )
         .replace('#include <color_vertex>', VERT_COLOR)
         .replace('#include <beginnormal_vertex>', '#include <beginnormal_vertex>\nif ( aWheel.w > 0.5 ) objectNormal = thWheel( objectNormal );')

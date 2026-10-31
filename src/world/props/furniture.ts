@@ -11,6 +11,7 @@ import type { Rng } from '../../core/rng';
 import type { LampStyle } from './layout';
 import { boltY, boltZ, cbox, lathe, pixelText, poly, ring } from './shapes';
 import { coverBackDraw, coverDraw, kioskSignDraw, phoneSignDraw, type Printer } from './print';
+import { markProp } from '../lettering/spots';
 
 export const MAT = {
   paint: [0.5, 0.25],
@@ -307,7 +308,9 @@ export function bench(k: Kit, style: 'classic' | 'modern' | 'wood', rng: Rng, le
     for (const x of [-0.72, 0.72]) for (let i = 0; i < 5; i++) sh.cyl(x, 0.485, -0.2 + i * 0.105, 0.007, 0.007, 0.002, 6, 2);
     for (let i = 0; i < 3; i++) {
       const t = i / 2;
-      sh.push().local(0, 0.6 + t * 0.22, -0.25 - t * 0.05, -0.2).box(0, 0, 0, L, 0.075, 0.03, 0).pop();
+      sh.push().local(0, 0.6 + t * 0.22, -0.25 - t * 0.05, -0.2).box(0, 0, 0, L, 0.075, 0.03, 0);
+      if (i === 2 && rng.chance(0.35)) markProp(sh, 'plaque', 0, 0, 0.0155, 0.17, 0.055, rng.int(0, 1e6));
+      sh.pop();
     }
     return;
   }
@@ -333,7 +336,11 @@ export function bench(k: Kit, style: 'classic' | 'modern' | 'wood', rng: Rng, le
     for (let i = 0; i < 4; i++) cbox(sh, 0, 0.445, -0.18 + i * 0.12, L, 0.045, 0.1, 0.009, 0);
     k.m('#3a3a38', 'iron');
     for (const x of [-0.75, 0, 0.75]) for (let i = 0; i < 4; i++) sh.cyl(x, 0.49, -0.18 + i * 0.12, 0.008, 0.008, 0.003, 6, 2);
-    for (let i = 0; i < 2; i++) sh.push().local(0, 0.66 + i * 0.16, -0.28 - i * 0.035, -0.22).box(0, 0, 0, L, 0.1, 0.035, 0).pop();
+    for (let i = 0; i < 2; i++) {
+      sh.push().local(0, 0.66 + i * 0.16, -0.28 - i * 0.035, -0.22).box(0, 0, 0, L, 0.1, 0.035, 0);
+      if (i === 1 && rng.chance(0.45)) markProp(sh, 'plaque', 0, 0, 0.018, 0.17, 0.055, rng.int(0, 1e6));
+      sh.pop();
+    }
     return;
   }
   // classic: cast-iron ends, painted or natural slats
@@ -562,8 +569,10 @@ export function mailbox(k: Kit): void {
   sh.box(0, 0.98, 0.215, 0.22, 0.035, 0.02, 0);
   k.m('#ece8de', 'paint');
   sh.box(0, 0.74, 0.218, 0.14, 0.17, 0.012, 0);
+  markProp(sh, 'mailplate', 0, 0.74, 0.2245, 0.14, 0.17, 0);
   k.m('#d8b04a', 'iron');
   sh.box(0, 1.08, 0.22, 0.1, 0.05, 0.01, 0);
+  markProp(sh, 'mailcrest', 0, 1.08, 0.2255, 0.1, 0.05, 0);
 }
 
 /**
@@ -839,6 +848,8 @@ export function newsstand(k: Kit, rng: Rng): void {
         for (let j = 0; j < n; j++) {
           sh.push().local(-0.33 + c * 0.33 + rng.range(-0.015, 0.015), y + 0.15, 0.05 + j * 0.018, -0.2 + j * 0.03);
           cover(k, rng, 0.24, 0.3, j < n - 1, tt);
+          // the bottom tray holds today's papers (lettering): the front page, in reach of a reader
+          if (r === 0 && j === n - 1) markProp(sh, 'cover', 0, 0, 0.0088, 0.24, 0.3, (ti * 37 + c) >>> 0);
           sh.pop();
         }
       }
@@ -1338,6 +1349,7 @@ export function busShelter(k: Kit, g: Kit, routeColor: string, rng: Rng): { glow
     sh.push().local(sx * 0.012, 0, 0, 0, (sx * Math.PI) / 2, 0);
     k.m('#f4f2ea', 'paint');
     sh.box(0, -0.02, 0.001, 0.47, 0.57, 0.002, 1 | 4);
+    markProp(sh, 'stopflag', 0, 0.0, 0.0075, 0.47, 0.6, 0);
     k.m(routeColor, 'paint');
     sh.box(0, 0.235, 0.003, 0.47, 0.13, 0.002, 1 | 4);
     k.m('#ffffff', 'paint');
@@ -1359,6 +1371,7 @@ export function busShelter(k: Kit, g: Kit, routeColor: string, rng: Rng): { glow
   sh.box(0, 0, 0, 0.32, 0.44, 0.04, 0);
   k.m('#f1efe8', 'paint');
   sh.box(0, -0.01, 0.021, 0.29, 0.38, 0.002, 1 | 4);
+  markProp(sh, 'timetable', 0, -0.01, 0.0265, 0.29, 0.38, 0);
   k.m(routeColor, 'paint');
   sh.box(0, 0.165, 0.023, 0.29, 0.05, 0.002, 1 | 4);
   k.m('#ffffff', 'paint');
