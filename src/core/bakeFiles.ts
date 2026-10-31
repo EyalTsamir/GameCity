@@ -15,9 +15,10 @@ export interface BakeManifest {
 let manifest: Promise<BakeManifest | null> | null = null;
 
 export function bakeOn(params: URLSearchParams): boolean {
-  // (the browser's data saver: the same picture, computed here)
-  const saver = (navigator as Navigator & { connection?: { saveData?: boolean } }).connection?.saveData === true;
-  return !params.has('nobake') && !saver && location.protocol !== 'file:';
+  // (the browser's data saver or a slow line: 18 MB aren't worth it, the same picture is computed here)
+  const net = (navigator as Navigator & { connection?: { saveData?: boolean; effectiveType?: string } }).connection;
+  const slow = net?.saveData === true || /2g|3g/.test(net?.effectiveType ?? '');
+  return !params.has('nobake') && !slow && location.protocol !== 'file:';
 }
 
 function readManifest(): Promise<BakeManifest | null> {
@@ -51,59 +52,6 @@ export async function bakeBytes(name: string, params: URLSearchParams, key: stri
   }
 }
 
-/** BC1 → RGBA8, for the GPUs without S3TC (phones): one mip */
-function decodeBC1(src: Uint8Array, w: number, h: number): Uint8Array {
-  const out = new Uint8Array(w * h * 4);
-  const pal = new Uint8Array(16);
-  let p = 0;
-  for (let by = 0; by < h; by += 4)
-    for (let bx = 0; bx < w; bx += 4) {
-      const c0 = src[p] | (src[p + 1] << 8),
-        c1 = src[p + 2] | (src[p + 3] << 8);
-      const r0 = ((c0 >> 11) * 255) / 31,
-        g0 = (((c0 >> 5) & 63) * 255) / 63,
-        b0 = ((c0 & 31) * 255) / 31;
-      const r1 = ((c1 >> 11) * 255) / 31,
-        g1 = (((c1 >> 5) & 63) * 255) / 63,
-        b1 = ((c1 & 31) * 255) / 31;
-      pal[0] = r0;
-      pal[1] = g0;
-      pal[2] = b0;
-      pal[4] = r1;
-      pal[5] = g1;
-      pal[6] = b1;
-      if (c0 > c1) {
-        pal[8] = (2 * r0 + r1) / 3;
-        pal[9] = (2 * g0 + g1) / 3;
-        pal[10] = (2 * b0 + b1) / 3;
-        pal[12] = (r0 + 2 * r1) / 3;
-        pal[13] = (g0 + 2 * g1) / 3;
-        pal[14] = (b0 + 2 * b1) / 3;
-      } else {
-        pal[8] = (r0 + r1) / 2;
-        pal[9] = (g0 + g1) / 2;
-        pal[10] = (b0 + b1) / 2;
-        pal[12] = pal[13] = pal[14] = 0;
-      }
-      for (let j = 0; j < 4; j++) {
-        const bits = src[p + 4 + j];
-        for (let i = 0; i < 4; i++) {
-          const x = bx + i,
-            y = by + j;
-          if (x >= w || y >= h) continue;
-          const k = (bits >> (i * 2)) & 3;
-          const o = (y * w + x) * 4;
-          out[o] = pal[k * 4];
-          out[o + 1] = pal[k * 4 + 1];
-          out[o + 2] = pal[k * 4 + 2];
-          out[o + 3] = 255;
-        }
-      }
-      p += 8;
-    }
-  return out;
-}
-
 let s3tc: boolean | null = null;
 const supportsS3TC = (): boolean => {
   if (s3tc === null) {
@@ -113,9 +61,13 @@ const supportsS3TC = (): boolean => {
   return s3tc;
 };
 
-/** a baked BC1 texture (sRGB unless `linear`), or null when it is not available or was made from something else (`key`); never rejects */
+/**
+ * a baked BC1 texture (sRGB unless `linear`), or null when it is not available or was made from something else (`key`); never
+ * rejects. Also null on the GPUs without S3TC (phones): unpacked in the page five of these would take 430 MB there, so those
+ * stay on the procedural path.
+ */
 export async function bakeTexture(name: string, params: URLSearchParams, key: string, opts: { linear?: boolean; anisotropy?: number } = {}): Promise<THREE.Texture | null> {
-  if (!bakeOn(params)) return null;
+  if (!bakeOn(params) || !supportsS3TC()) return null;
   try {
     const m = await readManifest();
     const entry = m?.files?.[name];
@@ -127,27 +79,19 @@ export async function bakeTexture(name: string, params: URLSearchParams, key: st
     const w0 = head.getUint32(4, true),
       h0 = head.getUint32(8, true),
       nm = head.getUint32(12, true);
-    let tex: THREE.Texture;
-    if (supportsS3TC()) {
-      const mips: { data: Uint8Array; width: number; height: number }[] = [];
-      let off = 16,
-        w = w0,
-        h = h0;
-      for (let i = 0; i < nm; i++) {
-        const size = Math.max(1, Math.ceil(w / 4)) * Math.max(1, Math.ceil(h / 4)) * 8;
-        mips.push({ data: new Uint8Array(buf, off, size), width: w, height: h });
-        off += size;
-        w = Math.max(1, w >> 1);
-        h = Math.max(1, h >> 1);
-      }
-      tex = new THREE.CompressedTexture(mips as unknown as ImageData[], w0, h0, THREE.RGB_S3TC_DXT1_Format, THREE.UnsignedByteType);
-      tex.minFilter = THREE.LinearMipmapLinearFilter;
-    } else {
-      const rgba = decodeBC1(new Uint8Array(buf, 16), w0, h0);
-      tex = new THREE.DataTexture(rgba, w0, h0, THREE.RGBAFormat, THREE.UnsignedByteType);
-      tex.minFilter = THREE.LinearMipmapLinearFilter;
-      tex.generateMipmaps = true;
+    const mips: { data: Uint8Array; width: number; height: number }[] = [];
+    let off = 16,
+      w = w0,
+      h = h0;
+    for (let i = 0; i < nm; i++) {
+      const size = Math.max(1, Math.ceil(w / 4)) * Math.max(1, Math.ceil(h / 4)) * 8;
+      mips.push({ data: new Uint8Array(buf, off, size), width: w, height: h });
+      off += size;
+      w = Math.max(1, w >> 1);
+      h = Math.max(1, h >> 1);
     }
+    const tex = new THREE.CompressedTexture(mips as unknown as ImageData[], w0, h0, THREE.RGB_S3TC_DXT1_Format, THREE.UnsignedByteType);
+    tex.minFilter = THREE.LinearMipmapLinearFilter;
     tex.magFilter = THREE.LinearFilter;
     tex.anisotropy = opts.anisotropy ?? 8;
     tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
