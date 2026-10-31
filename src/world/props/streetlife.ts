@@ -18,6 +18,7 @@ import { MASK_WALK, type getLayout } from './layout';
 import type { Printer } from './print';
 import { barrier, bookCart, bottleCrates, breadCrates, brooms, cabinet, cardboard, cellarHatch, clothesRail, cone, doorMat, flowerBuckets, fruitStand, guardRail, pavementLights, postNotice, postcardRack, posterColumn, sacks, signPost, wheelStop, worksSign, worksSite, type SignKind } from './streetkit';
 import { bike } from './furniture';
+import { wheelieBins } from './garden';
 
 export interface StreetKitEnv {
   ctx: CityContext;
@@ -77,6 +78,8 @@ export function placeStreetKit(e: StreetKitEnv): { x: number; z: number }[] & { 
       kd = near(x, z);
     k.sh.frame(x, y, z, yaw);
     kd.sh.frame(x, y, z, yaw);
+    lx = x;
+    lz = z;
     return [k, kd];
   };
 
@@ -290,7 +293,12 @@ export function placeStreetKit(e: StreetKitEnv): { x: number; z: number }[] & { 
         if (!free(x, z, 0.5)) continue;
         const yaw = Math.atan2(rx, rz) + rng.range(-0.15, 0.15);
         const [k, kd] = at(x, SIDEWALK_Y, z, yaw);
-        if (rng.chance(0.6)) {
+        const dk = plan.districtAt(x + rx * 3, z + rz * 3)?.kind;
+        if (dk === 'residential' || dk === 'suburb') {
+          // collection day: each house has wheeled its bins to the kerb, handles to the road
+          wheelieBins(k, rng, rng.int(1, 3));
+          inc('kerbBins');
+        } else if (rng.chance(0.6)) {
           sacks(k, kd, rng, rng.int(2, 4));
           inc('sacks');
         } else {

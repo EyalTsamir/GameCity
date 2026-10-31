@@ -719,20 +719,30 @@ export function wheelStop(k: Kit, kd: Kit, rng: Rng): void {
   for (const s of [-1, 1]) kd.sh.cyl((s * W) / 3.2, 0.1, 0, 0.012, 0.012, 0.003, 5, 2);
 }
 
-/** Black rubbish sacks set out at the kerb: bulging, tied at the neck, slumped against each other. */
+/** Black rubbish sacks set out at the kerb: slumped and lumpy with whatever is inside, faceted creases, matt film, tied necks. */
 export function sacks(k: Kit, kd: Kit, rng: Rng, n: number): void {
   const sh = k.sh;
   for (let i = 0; i < n; i++) {
-    const x = (i - (n - 1) / 2) * 0.42 + rng.range(-0.05, 0.05),
-      z = rng.range(-0.08, 0.08);
-    const r = rng.range(0.19, 0.25),
-      h = rng.range(0.28, 0.4);
-    k.m(rng.chance(0.8) ? '#16171a' : '#23262b', 'plastic');
-    sh.ellipsoid(x, h * 0.46, z, r, h * 0.5, r * rng.range(0.82, 1), 1);
-    kd.sh.push().local(x, h * 0.92, z, rng.range(-0.3, 0.3), 0, rng.range(-0.3, 0.3));
-    kd.m('#16171a', 'plastic');
-    kd.sh.cyl(0, 0, 0, 0.018, 0.05, 0.1, 5, 2);
+    const x = (i - (n - 1) / 2) * 0.46 + rng.range(-0.06, 0.06),
+      z = rng.range(-0.1, 0.1);
+    const r = rng.range(0.21, 0.28),
+      h = rng.range(0.26, 0.36);
+    const col = rng.chance(0.8) ? '#1b1c1f' : '#26292e';
+    k.m(col, 'rubber');
+    sh.push().local(x, 0, z, rng.range(-0.14, 0.14), rng.range(0, 6.28), rng.range(-0.14, 0.14));
+    // the slumped belly, wide on the ground
+    sh.ellipsoid(0, h * 0.3, 0, r * 1.08, h * 0.34, r * rng.range(0.78, 0.95), 1);
+    // what is inside pushes out: a shoulder to one side, a smaller corner of a box on the other
+    sh.ellipsoid(r * 0.28, h * 0.58, r * 0.08, r * 0.66, h * 0.36, r * 0.62, 0);
+    sh.ellipsoid(-r * 0.36, h * 0.42, -r * 0.2, r * 0.42, h * 0.26, r * 0.46, 0);
+    // tied neck with the two ears of the knot flopping over
+    kd.sh.push().local(0, 0, 0, 0, 0, 0);
+    kd.m(col, 'rubber');
+    kd.sh.cyl(r * 0.14, h * 0.82, 0, 0.05, 0.02, 0.07, 5, 2);
+    kd.sh.beam(r * 0.14, h * 0.88, 0, r * 0.14 + 0.09, h * 0.8, 0.03, 0.032, 0.008);
+    kd.sh.beam(r * 0.14, h * 0.88, 0, r * 0.14 - 0.07, h * 0.82, -0.05, 0.03, 0.008);
     kd.sh.pop();
+    sh.pop();
   }
 }
 
