@@ -423,6 +423,22 @@ function torsoPoint(r: BodyRing, bust: number, phi: number, n = 2.3): P3 {
   return [r.hw * se(s, n), r.y, z];
 }
 
+const YOKE_T = [0.14, 0.28, 0.42, 0.56, 0.7, 0.82, 0.92, 1];
+/** close level: a ring of the yoke, t 0 (shoulder ring) … 1 (just inside the neck, about its first third) */
+function yokeRing(d: Dims, t: number): BodyRing {
+  const R = d.torso[10];
+  const N = closeNeck(d, 0),
+    N1 = closeNeck(d, 1);
+  const k = 0.72;
+  const E = { y: N.y + (N1.y - N.y) * k, hw: N.hw + (N1.hw - N.hw) * k + 0.0005, f: N.f + (N1.f - N.f) * k + 0.0005, b: N.b + (N1.b - N.b) * k + 0.0005, cz: N.cz + (N1.cz - N.cz) * k };
+  const u = Math.min(1, t / 0.92);
+  // (the last row dives into the neck: a steep crossing leaves a clean line, two nearly parallel tubes a zigzag)
+  const inn = t > 0.92 ? 0.008 : 0;
+  const L = (a: number, c: number) => a + (c - a) * u - inn;
+  // (rising more steeply close to the neck: the trapezius)
+  return { y: R.y + (E.y - R.y) * Math.pow(u, 1.7), hw: L(R.hw, E.hw), f: L(R.f, E.f), b: L(R.b, E.b), cz: R.cz + (E.cz - R.cz) * u };
+}
+
 function buildTorso(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
   const n = cfg.torsoSides;
   const rings: Ring[] = [];
@@ -449,6 +465,7 @@ function buildTorso(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
     return { r, bust: L(d.bust), h: L(TORSO_H), w: TORSO_BONE[i][1] + (TORSO_BONE[i + 1][1] - TORSO_BONE[i][1]) * t, tint: L(TORSO_TINT), bone: TORSO_BONE[i + (t > 0.5 ? 1 : 0)][0] };
   };
   for (const x of steps) {
+    if (cfg.close && x > 10) continue;
     const ri = Math.round(x);
     const exact = Math.abs(x - ri) < 1e-6;
     const q = exact ? { r: T[ri], bust: d.bust[ri], h: TORSO_H[ri], w: TORSO_BONE[ri][1], tint: TORSO_TINT[ri], bone: TORSO_BONE[ri][0] } : lerpR(x);
@@ -460,39 +477,28 @@ function buildTorso(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
     }
     rings.push({ ids, c: [0, q.r.y, q.r.cz] });
   }
+  if (cfg.close) {
+    // the yoke: from the shoulder ring in to the neck's own outline, so the torso meets the neck in one clean ring instead of two tubes
+    // cutting each other in a jagged star. The neckline is drawn on it by the fragment shader (h, angle): any shape, no polygons.
+    b.use(TORSO_BONE[10][0], REG.TORSO, -1, 1);
+    for (const t of YOKE_T) {
+      const r = yokeRing(d, t);
+      b.setTint(1 - 0.08 * t);
+      const ids: number[] = [];
+      for (let k = 0; k < n; k++) {
+        const phi = (k / n) * Math.PI * 2;
+        ids.push(b.v(torsoPoint(r, 0, phi, 2.3 - 0.3 * t), TORSO_H[10] + (1 - TORSO_H[10]) * t, TORSO_BONE[10][1], Math.abs(Math.atan2(Math.sin(phi), Math.cos(phi))), Math.sin(phi)));
+      }
+      rings.push({ ids, c: [0, r.y - 0.04, r.cz] });
+    }
+  }
   bridge(b, rings);
   // bottom cap (crotch)
   const r0 = d.torso[cfg.torsoRings[0]];
   b.use(BONE.PELVIS, REG.TORSO, -1, 0.75);
   const apex = b.v([0, r0.y - 0.03 * (d.H / 1.76), r0.cz - 0.005], 0, 0, 0, 0);
   capFan(b, rings[0], apex, [0, r0.y + 0.05, r0.cz]);
-  if (cfg.close) {
-    const N0 = closeNeck(d, 0),
-      R9 = T[10];
-    const rows: [number, number, number][] = [
-      // up the neck from its foot: how far out of the neck, height, h
-      [0.0165, -0.006, 0.985],
-      [0.0115, 0.008, 0.995],
-      [0.0035, 0.014, 0.999],
-      [0.0, 0.009, 0.999],
-    ];
-    const rs: Ring[] = [];
-    const nn = 24;
-    b.use(BONE.CHEST, REG.TORSO, -1, 1);
-    for (const [o, dy, hh] of rows) {
-      b.setTint(hh > 0.998 ? 0.9 : 1);
-      const ids: number[] = [];
-      for (let k = 0; k < nn; k++) {
-        const phi = (k / nn) * Math.PI * 2;
-        // (a crew neck sits lower in front than at the back)
-        const dr = -0.012 * Math.max(0, Math.cos(phi)) ** 2;
-        const q = torsoPoint({ ...N0, y: R9.y + dy + 0.018 * (d.H / 1.76) + dr, hw: N0.hw + o, f: N0.f + o, b: N0.b + o }, 0, phi, 2);
-        ids.push(b.v(q, hh, 0, Math.abs(Math.atan2(Math.sin(phi), Math.cos(phi))), Math.sin(phi)));
-      }
-      rs.push({ ids, c: [0, R9.y - 0.1, N0.cz] });
-    }
-    bridge(b, rs);
-  }
+  if (cfg.close) return;
   // top: the neck closes it (torso top ring hidden inside the neck)
   const rt = d.torso[cfg.torsoRings[cfg.torsoRings.length - 1]];
   b.use(BONE.CHEST, REG.TORSO, -1, 1);
@@ -691,7 +697,7 @@ export function faceRelief(U: number, Y: number, nose: number): number {
   // cheekbone, running back into the arch before the ear; the soft plane below it; the mouth's barrel; the jaw line
   r += 0.0048 * gs(ax - 0.048, Y + 0.03, 0.026, 0.02);
   r += 0.0012 * gs(ax - 0.074, Y + 0.022, 0.024, 0.017);
-  r -= 0.0014 * gs(ax - 0.058, Y + 0.056, 0.016, 0.018);
+  r -= 0.0007 * gs(ax - 0.058, Y + 0.056, 0.02, 0.02);
   r += 0.0052 * gs(U, Y + 0.066, 0.034, 0.026);
   // nose: starts at the root between the eyes, bridge rising to the tip, wings, the underside back to the lip
   const nk = nose / 0.024;
@@ -748,18 +754,19 @@ function buildCloseBeard(b: MeshBuilder, d: Dims): void {
   const phis: number[] = [];
   for (let i = 0; i <= 14; i++) phis.push(-1.95 + (3.9 * i) / 14);
   const Ys = [-0.112, -0.1, -0.088, -0.076, -0.062, -0.046, -0.03];
-  const grid = Ys.map((Y, ri) => phis.map((phi) => b.v(closeHeadPoint(d, phi, Y, (ri === 0 ? 0.007 : 0.0055) * k).p, 2, ri === 0 ? 0.1 : 0)));
-  const mouthFree = (phi: number, Y: number) => Math.abs(Math.sin(phi)) < 0.42 && Y > -0.084;
+  const pushes = [0.0075, 0.0065, 0.006, 0.0045, 0.0032, 0.0024, 0.002];
+  const grid = Ys.map((Y, ri) =>
+    phis.map((phi) => {
+      const c = closeHeadPoint(d, phi, Y, pushes[ri] * k);
+      return b.v(c.p, 2, ri === 0 ? 0.1 : 0, c.X, Y);
+    }),
+  );
   for (let r = 0; r < Ys.length - 1; r++)
     for (let c = 0; c < phis.length - 1; c++) {
-      const pm = (phis[c] + phis[c + 1]) / 2,
-        ym = (Ys[r] + Ys[r + 1]) / 2;
-      // cheeks only at the sides; below the lip the whole chin
-      if (mouthFree(pm, ym) || (Ys[r + 1] > -0.05 && Math.abs(Math.sin(pm)) < 0.75)) continue;
       b.quadOut(grid[r][c], grid[r][c + 1], grid[r + 1][c + 1], grid[r + 1][c], [0, d.headRings[2].y, d.headRings[2].cz - 0.02]);
     }
   const R0 = d.headRings[0];
-  const under = b.v([0, R0.y - 0.012 * k, R0.cz + 0.01 * k], 2, 0.15);
+  const under = b.v([0, R0.y - 0.012 * k, R0.cz + 0.01 * k], 2, 0.15, 0, -0.112);
   for (let c = 0; c < phis.length - 1; c++) b.triOut(grid[0][c], grid[0][c + 1], under, [0, R0.y + 0.03, R0.cz - 0.01]);
   // moustache: over the upper lip from under the nose to the lip line, ends drooping a little
   b.use(BONE.HEAD, REG.BEARD, FB.MOUSTACHE, 1);
@@ -823,7 +830,7 @@ function buildCloseHead(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
   const jaw = rings[0].ids.map((id) => [b.pos[id * 3], b.pos[id * 3 + 1], b.pos[id * 3 + 2]] as P3);
   const under: Ring[] = [rings[0]];
   for (const u of [0.18, 0.4, 0.68, 1]) {
-    b.use(BONE.HEAD, REG.SKIN, -1, 0.9 - 0.28 * u);
+    b.use(BONE.HEAD, u < 0.5 ? REG.FACE : REG.SKIN, -1, 0.9 - 0.28 * u);
     const ids: number[] = [];
     for (let i = 0; i < n; i++) {
       const t = (i / n) * Math.PI * 2;
@@ -838,7 +845,8 @@ function buildCloseHead(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
       // quarter-round: first down round the edge, then back along the under-jaw towards the neck
       const e = 1 - (1 - u) ** 2;
       const drop = 0.006 * k * Math.sin(Math.PI * Math.min(1, u * 1.4));
-      ids.push(b.v([j[0] + (q[0] - j[0]) * e, j[1] + (q[1] - j[1]) * u - drop, j[2] + (q[2] - j[2]) * e], 2, 0));
+      const Xj = Math.atan2(Math.sin(phi), Math.cos(phi)) * 0.0775;
+      ids.push(b.v([j[0] + (q[0] - j[0]) * e, j[1] + (q[1] - j[1]) * u - drop, j[2] + (q[2] - j[2]) * e], 2, 0, u < 0.5 ? Xj : 0, u < 0.5 ? yb - 0.002 : 0));
     }
     under.push({ ids, c: [0, R[0].y + 0.04, R[0].cz] });
   }
@@ -1368,7 +1376,7 @@ function buildHair(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
     // close: the sheet starts up on the cap (over it, a little proud) so the hair flows out of the cap
     // instead of hanging from a ledge at its edge
     const yS = cfg.close ? y0 + (crown - y0) * 0.3 : y0 + 0.012 * hk;
-    const edge = headSurface(d, phi, yS, cfg.close ? vol * 0.8 + 0.002 : vol * 0.9);
+    const edge = headSurface(d, phi, yS, cfg.close ? vol * 0.5 : vol * 0.9);
     // widest outline of the head at this angle (hair falls from there)
     const wide = headSurface(d, phi, d.headRings[5].y, vol * 1.2);
     const col: number[] = [];
@@ -1990,7 +1998,8 @@ function strapPath(b: MeshBuilder, d: Dims, cfg: LodCfg, p0: P3, p1: P3, wdt: nu
     const sp = torsoPoint(r, bust, phi);
     const rp = Math.hypot(p[0], p[2] - r.cz),
       rs = Math.hypot(sp[0], sp[2] - r.cz) + wdt * 0.9 + 0.003;
-    if (rp >= rs || rp < 1e-4) return p;
+    // (up on the shoulder a radial push goes sideways: there only out of the body, never onto it)
+    if (rp < 1e-4 || (p[1] > T[9].y && rp >= rs)) return p;
     const k = rs / rp;
     return [p[0] * k, p[1], r.cz + (p[2] - r.cz) * k];
   };
@@ -2009,7 +2018,7 @@ function strapPath(b: MeshBuilder, d: Dims, cfg: LodCfg, p0: P3, p1: P3, wdt: nu
     const p = pts[i];
     const dir = norm(sub(pts[Math.min(N, i + 1)], pts[Math.max(0, i - 1)]));
     let o = norm([p[0], 0, p[2] - cz]);
-    if (p[1] > T[T.length - 1].y - 0.01) o = norm(add(o, [0, 1.5, 0]));
+    o = norm(add(o, [0, 2 * sstep(T[9].y, T[10].y, p[1]), 0]));
     const sd = norm(cross(dir, o));
     const oo = mul(o, th);
     rowO.push(b.v(add(add(p, mul(sd, half)), oo), 0, 0));
@@ -2023,6 +2032,52 @@ function strapPath(b: MeshBuilder, d: Dims, cfg: LodCfg, p0: P3, p1: P3, wdt: nu
     b.quadOut(edgeA[i], edgeA[i + 1], rowO[i + 1], rowO[i], pts[i]);
     b.quadOut(edgeB[i], edgeB[i + 1], rowI[i + 1], rowI[i], pts[i]);
   }
+}
+
+/** close level: a backpack strap in the plane x, over the shoulder from the back (ring yB) to the chest (ring yF): it lies on the body's own
+ *  outline ring by ring, and its ribbon stays square to x. Returns the point it ends on, in front. */
+function strapOver(b: MeshBuilder, d: Dims, x: number, iB: number, iF: number, wdt: number): { back: P3; front: P3 } {
+  const T = d.torso;
+  const onRing = (i: number, front: boolean): P3 => {
+    const r = T[i];
+    let lo = front ? 0 : Math.PI / 2,
+      hi = front ? Math.PI / 2 : Math.PI;
+    const ax = Math.abs(x);
+    for (let k = 0; k < 18; k++) {
+      const m = (lo + hi) / 2;
+      const q = torsoPoint(r, d.bust[i], m)[0];
+      if (front ? q < ax : q > ax) lo = m;
+      else hi = m;
+    }
+    const q = torsoPoint(r, d.bust[i], (lo + hi) / 2);
+    return [x, q[1], q[2]];
+  };
+  const raw: P3[] = [];
+  for (let i = iB; i <= 10; i++) raw.push(onRing(i, false));
+  // over the top, where the yoke's width comes to x
+  let tTop = 0.5;
+  for (let t = 0; t <= 1; t += 0.02) if (yokeRing(d, t).hw >= Math.abs(x)) tTop = t;
+  const rt = yokeRing(d, tTop);
+  raw.push([x, rt.y, rt.cz - rt.b * 0.32], [x, rt.y + 0.004, rt.cz], [x, rt.y, rt.cz + rt.f * 0.32]);
+  for (let i = 10; i >= iF; i--) raw.push(onRing(i, true));
+  // one round of corner cutting
+  let pts: P3[] = [raw[0]];
+  for (let i = 0; i < raw.length - 1; i++) pts.push(lerp3(raw[i], raw[i + 1], 0.25), lerp3(raw[i], raw[i + 1], 0.75));
+  pts.push(raw[raw.length - 1]);
+  const centre: P3 = [x, T[9].y - 0.06, T[9].cz];
+  const half = wdt * 1.6,
+    th = wdt * 0.4;
+  const rows = pts.map((p, i) => {
+    const dir = norm(sub(pts[Math.min(pts.length - 1, i + 1)], pts[Math.max(0, i - 1)]));
+    let o: P3 = [0, -dir[2], dir[1]];
+    if (o[1] * (p[1] - centre[1]) + o[2] * (p[2] - centre[2]) < 0) o = mul(o, -1);
+    const q = add(p, mul(o, 0.0035));
+    const X: P3 = [half, 0, 0];
+    return [b.v(sub(q, X), 0, 0), b.v(add(add(q, mul(o, th)), mul(X, -0.8)), 0, 0), b.v(add(add(q, mul(o, th)), mul(X, 0.8)), 0, 0), b.v(add(q, X), 0, 0)];
+  });
+  for (let i = 0; i < rows.length - 1; i++)
+    for (let k = 0; k < 3; k++) b.quadOut(rows[i][k], rows[i][k + 1], rows[i + 1][k + 1], rows[i + 1][k], centre);
+  return { back: pts[0], front: pts[pts.length - 1] };
 }
 
 const BAG_DETAIL = detailPeople('bagdetail');
@@ -2088,9 +2143,17 @@ function buildProps(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
         b.use(BONE.CHEST, REG.STRAP, FB.BACKPACK, 0.7);
         const r8 = d.torso[8];
         for (const s of [1, -1]) {
-          const top = shoulderTop(d, 0.092 * hk * s);
-          strapPath(b, d, cfg, [0.1 * s * hk, r8.y, r8.cz - r8.b - 0.012], top, 0.01 * hk);
-          strapPath(b, d, cfg, top, [0.105 * s * hk, r7.y - 0.03 * hk, r7.cz + r7.f + 0.008 + d.bust[7] * 0.7], 0.01 * hk);
+          if (!cfg.close) {
+            const top = shoulderTop(d, 0.092 * hk * s);
+            strapPath(b, d, cfg, [0.1 * s * hk, r8.y, r8.cz - r8.b - 0.012], top, 0.01 * hk);
+            strapPath(b, d, cfg, top, [0.105 * s * hk, r7.y - 0.03 * hk, r7.cz + r7.f + 0.008 + d.bust[7] * 0.7], 0.01 * hk);
+          } else {
+            const chest = strapOver(b, d, 0.098 * s * hk, 8, 7, 0.01 * hk).front;
+            const r5 = d.torso[5];
+            const side: P3 = [s * r5.hw * 0.98, r5.y + 0.01 * hk, r5.cz + r5.f * 0.25];
+            strapPath(b, d, cfg, chest, side, 0.008 * hk);
+            strapPath(b, d, cfg, side, [0.11 * s * hk, r5.y - 0.02 * hk, r5.cz - r5.b - 0.01], 0.008 * hk);
+          }
         }
       }
     }
@@ -2120,9 +2183,16 @@ function buildProps(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
       // strap: bag corner → across the chest → over the right shoulder → down the back to the bag
       const top = shoulderTop(d, -0.095 * hk);
       const r7 = d.torso[7];
-      strapPath(b, d, cfg, [x + 0.07 * hk, y + 0.07 * hk, z - 0.01], [-0.02 * hk, r7.y, r7.cz + r7.f + 0.008 + d.bust[7]], 0.011 * hk);
-      strapPath(b, d, cfg, [-0.02 * hk, r7.y, r7.cz + r7.f + 0.008 + d.bust[7]], top, 0.011 * hk);
-      strapPath(b, d, cfg, top, [0.14 * hk, r6.y - 0.06 * hk, r6.cz - r6.b - 0.01], 0.011 * hk);
+      if (cfg.close) {
+        // (over the shoulder ring by ring, the diagonals hugging the body from there)
+        const over = strapOver(b, d, -0.1 * hk, 8, 8, 0.011 * hk);
+        strapPath(b, d, cfg, [x + 0.07 * hk, y + 0.07 * hk, z - 0.01], over.front, 0.011 * hk);
+        strapPath(b, d, cfg, over.back, [0.14 * hk, r6.y - 0.06 * hk, r6.cz - r6.b - 0.01], 0.011 * hk);
+      } else {
+        strapPath(b, d, cfg, [x + 0.07 * hk, y + 0.07 * hk, z - 0.01], [-0.02 * hk, r7.y, r7.cz + r7.f + 0.008 + d.bust[7]], 0.011 * hk);
+        strapPath(b, d, cfg, [-0.02 * hk, r7.y, r7.cz + r7.f + 0.008 + d.bust[7]], top, 0.011 * hk);
+        strapPath(b, d, cfg, top, [0.14 * hk, r6.y - 0.06 * hk, r6.cz - r6.b - 0.01], 0.011 * hk);
+      }
       void r9;
     }
   }

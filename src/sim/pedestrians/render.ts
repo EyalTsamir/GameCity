@@ -97,7 +97,7 @@ export function lookData(L: Look): LookCache {
   if (s.hairLen > 0.03) f |= bit(FB.HAIRLONG);
   if (s.hair === 'ponytail') f |= bit(FB.PONY);
   if (s.hair === 'bun' || s.hair === 'manbun') f |= bit(FB.BUN);
-  if (s.fringe) f |= bit(FB.FRINGE);
+  if (s.fringe && s.hat === 0) f |= bit(FB.FRINGE);
   if (s.hair !== 'bald' && s.hair !== 'crop' && s.hat === 0 && !s.hood) f |= bit(FB.LOCKS);
   if (s.beard === 1) f |= bit(FB.BEARD);
   if (s.beard >= 1) f |= bit(FB.MOUSTACHE);

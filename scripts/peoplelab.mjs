@@ -64,7 +64,7 @@ const frame = ([i, d, angle, part]) => {
   const c = window.__city.ctx;
   const m = window.__lab[i];
   const L = m.look;
-  const h = L.kind === 'child' || L.kind === 'boy' || L.kind === 'girl' ? 1.2 : L.kind === 'woman' ? 1.5 : 1.62;
+  const h = L.kind === 'child' || L.kind === 'boy' || L.kind === 'girl' ? 0.925 * (0.78 + 0.06 * L.age) : L.kind === 'woman' ? 1.5 : 1.62;
   const sit = m.sit > 0.5;
   const y = m.y + (part === 'hand' ? 0.82 : part === 'foot' ? 0.12 : (sit ? h - 0.42 : h) * (L.scale ?? 1));
   window.__city.setSpeed(0);
@@ -116,6 +116,8 @@ try {
     await page.waitForFunction(() => window.__city && window.__city.ready && window.__city.frames() > 3, null, { timeout: 300000, polling: 250 });
     await page.addStyleTag({ content: '#ui{display:none!important}' });
     await page.waitForTimeout(3000);
+    // (the lens hunts for focus at this distance: figures only, sharp, unless asked otherwise)
+    if (num('sharp', 1)) await page.evaluate(() => window.__city.ctx.services.postfx?.setEnabled?.('dof', false));
     const crop = num('crop', mode === 'seq' ? 700 : 420);
     const clip = { x: 960 - crop / 2, y: 512 - crop / 2, width: crop, height: crop };
     if (args.eval) console.log(await page.evaluate(args.eval));

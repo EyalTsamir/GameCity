@@ -200,7 +200,7 @@ export function faceMaps(relief: ReliefFn): { a: THREE.DataTexture; b: THREE.Dat
       const o = (j * W + i) * 4;
       A[o] = enc((at(F, i + 1, j) - at(F, i - 1, j)) / (2 * du));
       A[o + 1] = enc((at(F, i, j + 1) - at(F, i, j - 1)) / (2 * dy));
-      const cav = 1 - clamp(Math.max(0, b1[j * W + i] - T[j * W + i]) * 130 + Math.max(0, b2[j * W + i] - T[j * W + i]) * 26, 0, 0.62);
+      const cav = 1 - clamp(Math.max(0, b1[j * W + i] - T[j * W + i]) * 130 + Math.max(0, b2[j * W + i] - T[j * W + i]) * 15, 0, 0.62);
       A[o + 2] = Math.round(clamp(cav, 0, 1) * 255);
       const blood = 0.62 * gs(ax - 0.046, Y + 0.036, 0.024, 0.021) + 0.5 * gs(ax - 0.005, Y + 0.036, 0.014, 0.014) + 0.3 * gs(ax - 0.012, Y + 0.098, 0.02, 0.014) + 0.28 * gs(ax - 0.009, Y + 0.056, 0.022, 0.012) + 0.22 * gs(ax - 0.03, Y - 0.04, 0.05, 0.022);
       A[o + 3] = Math.round(clamp(blood, 0, 1) * 255);
