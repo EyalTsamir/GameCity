@@ -1221,6 +1221,7 @@ function buildFingers(
     [0.42, 0.95, 0.12],
     [0.33, 0.86, 0.22],
     [0.2, 0.74, 0.1],
+    [0.075, 0.5, 0.05],
   ];
   for (let s = 0; s < tseg.length; s++) {
     const [lf, rr, a] = tseg[s];
@@ -1230,7 +1231,7 @@ function buildFingers(
     const ids: number[] = [];
     for (let k = 0; k < TS; k++) {
       const phi = (k / TS) * Math.PI * 2;
-      b.use(HA, REG.SKIN, -1, s === 3 && Math.sin(phi) * side > 0.4 ? 1.1 : 0.97);
+      b.use(HA, REG.SKIN, -1, s >= 3 && Math.sin(phi) * side > 0.4 ? 1.1 : 0.97);
       ids.push(b.v(add(c, add(mul(U, tr * rr * Math.sin(phi)), mul(V, tr * rr * 0.9 * Math.cos(phi)))), -0.3, 0));
     }
     rings.push({ ids, c });

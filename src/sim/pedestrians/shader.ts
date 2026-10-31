@@ -1405,7 +1405,7 @@ vec3 pedFaceClose(vec3 skin, vec2 F) {
   // beard's shadow, a little yellow on the forehead
   vec3 pc = skin;
   float blood = A.a * (0.55 + 0.6 * kq) * mix(0.55, 1.0, smoothstep(0.08, 0.4, lum));
-  pc *= mix(vec3(1.0), vec3(1.07, 0.9, 0.87), blood);
+  pc *= mix(vec3(1.0), vec3(1.05, 0.93, 0.9), blood);
   pc *= mix(vec3(1.0), vec3(0.85, 0.8, 0.84), B.a * 0.62 * (0.6 + 0.6 * ageK));
   pc *= 1.0 + vec3(0.02, 0.012, -0.03) * smoothstep(0.012, 0.05, F.y);
   if ((vPedFB & 32u) != 0u || w < 0.5) {
@@ -1899,7 +1899,7 @@ void RE_Direct_Lambert( const in IncidentLight directLight, const in vec3 geomet
     // skin: light soaks in and comes out redder round the shadow's edge; a soft oil sheen on top, strongest on the nose and brow;
     // the eye's own glint and the lips' come through the same lobe
     float sNL = dot( geometryNormal, directLight.direction );
-    vec3 sW = vec3( 0.36, 0.2, 0.16 );
+    vec3 sW = vec3( 0.27, 0.18, 0.15 );
     vec3 sD = saturate( ( vec3( sNL ) + sW ) / ( vec3( 1.0 ) + sW ) );
     vec3 sI = sD * sD * ( 3.0 - 2.0 * sD ) * 0.35 + sD * 0.65;
     float vis = mix( 1.0, pedAO, 0.55 );
@@ -1963,7 +1963,7 @@ void RE_IndirectDiffuse_Lambert( const in vec3 irradiance, const in vec3 geometr
     float nv = 1.0 - saturate( dot( geometryNormal, geometryViewDir ) );
     reflectedLight.indirectDiffuse += irradiance * (0.05 + 0.06 * uPedNight) * pedAO * nv * nv * nv;
     float sLum = dot( material.diffuseColor, vec3( 0.3, 0.55, 0.15 ) );
-    pedAmb *= 1.0 + 1.6 * uPedNight * ( 1.0 - smoothstep( 0.02, 0.16, sLum ) );
+    pedAmb *= 1.0 + 2.8 * uPedNight * ( 1.0 - smoothstep( 0.02, 0.2, sLum ) );
   }
 #endif
   reflectedLight.indirectDiffuse += irradiance * pedAmb * uPedFill * ( 1.0 + below * vec3( 0.9, 0.82, 0.72 ) ) * BRDF_Lambert( material.diffuseColor );
