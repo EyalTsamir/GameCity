@@ -16,7 +16,7 @@ import { perfOn } from '../../core/perfdeep';
 import { BONE, FB, REG } from './body';
 import { PIV, PIV_COUNT, pivotTable } from './rig';
 import { closePeople } from '../../core/closePeople';
-import { FACE_U, FACE_Y0, FACE_Y1, faceMaps } from './faceMap';
+import { EYE, FACE_U, FACE_Y0, FACE_Y1, faceMaps } from './faceMap';
 import { faceRelief } from './body';
 
 /** Per-instance pose values, packed two per uint (16-bit fixed, range ±8, 1/4096). Order = layout. */
@@ -496,6 +496,7 @@ void pedPose(inout vec3 p, inout vec3 n) {
       {
         // how it's cut: 0 short back and sides, 1 side parting, 2 curls, 3 long or bob, 4 pixie, 5 pulled back
         uint hs = iC2.z >> 29u;
+        lump = clamp(lump, -1.3, 1.3) * (1.0 - smoothstep(0.8, 0.98, aux.y));
         uint hh = (iC1.x * 2654435761u) ^ (iC1.z * 40503u) ^ (iC0.w * 69069u);
         hh ^= hh >> 15u; hh *= 2246822519u; hh ^= hh >> 13u;
         float px = (float(hh & 255u) / 255.0 - 0.5);
@@ -1255,13 +1256,13 @@ vec3 pedFaceClose(vec3 skin, vec2 F) {
   pedSpecK = 0.2 + 0.3 * exp(-F.x * F.x / 0.00025 - pow(F.y + 0.02, 2.0) / 0.0012) + 0.14 * smoothstep(0.012, 0.04, F.y) - 0.12 * ageK;
   pedGloss = 26.0;
   // eyes
-  float ex = ax - 0.031, ey = F.y - 0.0004;
-  float ew = 0.0122;
+  float ex = ax - ${EYE.x.toFixed(4)}, ey = F.y - 0.0004;
+  float ew = ${EYE.w.toFixed(4)};
   float q = 1.0 - (ex * ex) / (ew * ew);
   float qa = pow(max(q, 0.0), 0.75);
   // (kp.y: how open: wide awake to heavy-lidded; old lids hang lower)
-  float upper = 0.0047 * (0.82 + 0.36 * kp.y - 0.16 * ageK) * qa + 0.0007 * ex / ew;
-  float lower = -0.003 * pow(max(q, 0.0), 0.9) + 0.0005 * ex / ew;
+  float upper = ${EYE.up.toFixed(4)} * (0.82 + 0.36 * kp.y - 0.16 * ageK) * qa + 0.0007 * ex / ew;
+  float lower = -${EYE.lo.toFixed(4)} * pow(max(q, 0.0), 0.9) + 0.0005 * ex / ew;
   float blH = fract(dot(vPedHairW.rgb, vec3(3.1, 7.7, 5.3)));
   float blT = fract(uPedT * (0.17 + 0.14 * blH) + blH * 13.0);
   upper = mix(upper, lower, smoothstep(0.0, 0.012, blT) * (1.0 - smoothstep(0.018, 0.034, blT)));
@@ -1270,16 +1271,16 @@ vec3 pedFaceClose(vec3 skin, vec2 F) {
   vec3 iris = eyeC == 0u ? vec3(0.055, 0.03, 0.018) : eyeC == 1u ? vec3(0.15, 0.08, 0.035) : eyeC == 2u ? vec3(0.17, 0.16, 0.08) : vec3(0.2, 0.27, 0.33);
   // where the eyes look (iC3 has no room for it yet: straight ahead, a little down when old)
   vec2 gz = vec2(0.0, -0.0003);
-  float eU = F.x - sg * 0.031;
+  float eU = F.x - sg * ${EYE.x.toFixed(4)};
   float dI = length(vec2(eU - gz.x, ey - gz.y));
   vec3 scl = mix(vec3(0.62, 0.58, 0.53), skin * vec3(1.25, 1.15, 1.05), 0.2);
   vec3 eye = mix(scl, scl * vec3(0.8, 0.68, 0.64), smoothstep(0.003, 0.0115, abs(ex)));
-  float ir = dI / 0.0057;
+  float ir = dI / ${EYE.iris.toFixed(4)};
   float ia = atan(ey - gz.y, eU - gz.x);
   float fib = 0.5 + 0.25 * sin(ia * 11.0 + float(eyeC)) + 0.25 * sin(ia * 23.0 + 1.7);
   vec3 irisC = iris * mix(1.5, 0.5, smoothstep(0.45, 1.0, ir)) * mix(1.0, 0.75 + 0.5 * fib, det);
-  eye = mix(eye, irisC, 1.0 - smoothstep(0.0057 - px * 0.5, 0.0057 + px * 0.5, dI));
-  eye = mix(eye, vec3(0.008), 1.0 - smoothstep(0.0021 - px * 0.5, 0.0021 + px * 0.5, dI));
+  eye = mix(eye, irisC, 1.0 - smoothstep(${EYE.iris.toFixed(4)} - px * 0.5, ${EYE.iris.toFixed(4)} + px * 0.5, dI));
+  eye = mix(eye, vec3(0.008), 1.0 - smoothstep(${EYE.pupil.toFixed(4)} - px * 0.5, ${EYE.pupil.toFixed(4)} + px * 0.5, dI));
   // the upper lid and lashes shade the eyeball; the ball turns away towards the corners
   eye *= 0.86 * (1.0 - 0.66 * (1.0 - smoothstep(0.0, 0.0044, dU))) * (1.0 - 0.22 * (1.0 - smoothstep(0.0, 0.0014, dL)));
   // the wet rim of the lower lid
@@ -1300,7 +1301,7 @@ vec3 pedFaceClose(vec3 skin, vec2 F) {
   float bx = ax - 0.0292;
   float bt = clamp((bx + 0.0175) / 0.0375, 0.0, 1.0);
   float arch = mix(0.0026, 0.0052, fract(kp.x * 7.0));
-  float bcy = 0.0132 + arch * sin(bt * 2.7) - 0.0018 * bt;
+  float bcy = 0.0155 + arch * sin(bt * 2.7) - 0.0018 * bt;
   float bth = mix(0.0031, 0.0011, bt) * mix(1.1, 0.62, w) * (0.72 + 0.56 * kp.x);
   float bedge = smoothstep(bth + px * 0.6, bth * 0.45, abs(F.y - bcy)) * smoothstep(-0.0195, -0.0165, bx) * (1.0 - smoothstep(0.0145, 0.0195, bx));
   // (the hairs lean outwards and up along the arch, broken by a per-pixel stripe that fades before it aliases)
@@ -1323,11 +1324,11 @@ vec3 pedFaceClose(vec3 skin, vec2 F) {
   pc = mix(pc, lipC, lip * mix(0.5, 1.0, det));
   pedSpecK = mix(pedSpecK, 0.55, lip);
   pedGloss = mix(pedGloss, 46.0, lip);
-  float mouthL = pedBand(ly - 0.0009 * exp(-(F.x * F.x) / 0.000016) + 0.0004 * (F.x * F.x) / (lhw * lhw), 0.00045, px) * step(0.002, lq);
-  pc = mix(pc, skin * 0.24, mouthL * 0.85 * det);
+  float mouthL = pedBand(ly - 0.0009 * exp(-(F.x * F.x) / 0.000016) + 0.0004 * (F.x * F.x) / (lhw * lhw), 0.00032, px) * step(0.002, lq);
+  pc = mix(pc, skin * 0.3, mouthL * 0.8 * det);
   // nostrils
-  vec2 nd = vec2((ax - 0.0066) / 0.0026, (F.y + 0.0474) / 0.0012);
-  pc = mix(pc, skin * 0.26, (1.0 - smoothstep(0.5, 1.0, length(nd))) * 0.8 * det);
+  vec2 nd = vec2((ax - 0.0062) / 0.0024, (F.y + 0.05) / 0.00105);
+  pc = mix(pc, skin * 0.3, (1.0 - smoothstep(0.4, 1.0, length(nd))) * 0.75 * det);
   return pc;
 }
 #endif
@@ -1504,9 +1505,18 @@ const FRAG_COLOR = /* glsl */ `
       // along the hairline (two noise octaves round the head), a soft root shadow on the skin side
       pc *= pedStrands(vPedRest);
       float a = atan(vPedRest.x, vPedRest.z + 0.015);
+#ifdef PED_CLOSE
+      float e = vPedFace.x + (pedN1(a * 38.0) - 0.5) * 0.05 + (pedN1(a * 120.0) - 0.5) * 0.05 + (pedN1(a * 340.0 + vPedRest.y * 300.0) - 0.5) * 0.07 * (1.0 - smoothstep(0.3, 0.7, fwidth(a * 340.0)));
+#else
       float e = vPedFace.x + (pedN1(a * 55.0) - 0.5) * 0.14 + (pedN1(a * 170.0 + vPedRest.y * 300.0) - 0.5) * 0.08 * (1.0 - smoothstep(0.3, 0.7, fwidth(a * 170.0)));
+#endif
+#ifdef PED_CLOSE
+      float cov = smoothstep(0.02, 0.05 + 0.02 * smoothstep(0.1, 0.5, fwidth(a * 170.0)), e);
+      vec3 skinSide = vPedSkin * 0.86 + pc * 0.03;
+#else
       float cov = smoothstep(0.0, 0.17, e);
       vec3 skinSide = mix(vPedSkin, vPedSkin * 0.8 + pc * 0.12, 0.6);
+#endif
       pc = mix(skinSide, pc, cov);
     }
     else if (vPedFace.z > 1.5) pc = pedShoe(pc, vPedFace.xy, vPedS);
@@ -1574,7 +1584,11 @@ const HAIR_NORMAL = /* glsl */ `
 #endif
     hT -= normal * dot(hT, normal);
     pedHairT = dot(hT, hT) > 1e-20 ? normalize(hT) : vec3(0.0);
+#ifdef PED_CLOSE
+    pedHairSh = (pedN1(hc2) - 0.5) * 0.16 * hk2 + (pedN1(hf.y * 7.0 + ha * 3.0) - 0.5) * 0.1;
+#else
     pedHairSh = (pedN1(hc2) - 0.5) * 0.35 * hk2 + (pedN1(hf.y * 7.0 + ha * 3.0) - 0.5) * 0.15;
+#endif
   }
 #endif
 `;
@@ -1639,7 +1653,11 @@ void RE_Direct_Lambert( const in IncidentLight directLight, const in vec3 geomet
     float s2 = pow( sqrt( max( 1.0 - d2 * d2, 0.0 ) ), 24.0 );
     float vis = smoothstep( -0.1, 0.35, dot( geometryNormal, directLight.direction ) );
     vec3 hc = min( material.diffuseColor * 4.0 + 0.04, vec3( 1.0 ) );
+#ifdef PED_CLOSE
+    reflectedLight.directDiffuse += directLight.color * vis * ( 0.016 * s1 + 0.034 * s2 * hc );
+#else
     reflectedLight.directDiffuse += directLight.color * vis * ( 0.035 * s1 + 0.05 * s2 * hc );
+#endif
   } else if ( vPedMat.y > 0.0 ) {
     float nh = saturate( dot( geometryNormal, normalize( directLight.direction + geometryViewDir ) ) );
     reflectedLight.directDiffuse += directLight.color * vPedMat.y * pow( nh, 18.0 ) * saturate( dot( geometryNormal, directLight.direction ) * 4.0 );

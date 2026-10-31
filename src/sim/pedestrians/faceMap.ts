@@ -12,6 +12,9 @@ import * as THREE from 'three';
 export const FACE_U = 0.13;
 export const FACE_Y0 = -0.125;
 export const FACE_Y1 = 0.075;
+/** the eye's opening, shared by the paint (shader.ts), the lids here and the socket in the mesh: half width, top, bottom, iris and
+ *  pupil radius. A little larger than life: the style is an animated film's, and eyes are what you look at. */
+export const EYE = { x: 0.031, w: 0.0138, up: 0.0056, lo: 0.0035, iris: 0.0067, pupil: 0.0025 };
 const W = 256;
 const H = 384;
 
@@ -54,28 +57,28 @@ function fine(ax: number, Y: number): number {
   let r = 0;
   // lids: the eye's opening as the paint draws it (shader.ts), the upper lid's edge standing proud, a fold above it, the
   // lower lid's rim, the soft trough under it
-  const ex = ax - 0.031,
+  const ex = ax - EYE.x,
     ey = Y - 0.0004,
-    ew = 0.0122;
+    ew = EYE.w;
   const q = 1 - (ex * ex) / (ew * ew);
   if (q > -0.8) {
     const qa = Math.pow(Math.max(q, 0), 0.75);
-    const up = 0.0047 * qa + (0.0007 * ex) / ew;
-    const lo = -0.003 * Math.pow(Math.max(q, 0), 0.9) + (0.0005 * ex) / ew;
+    const up = EYE.up * qa + (0.0007 * ex) / ew;
+    const lo = -EYE.lo * Math.pow(Math.max(q, 0), 0.9) + (0.0005 * ex) / ew;
     const wide = 1 - sstep(0.9, 1.5, Math.abs(ex) / ew);
     const dU = ey - up;
     const dL = lo - ey;
-    r += 0.0007 * Math.exp(-((dU - 0.0009) ** 2) / 1.2e-6) * wide;
+    r += 0.0004 * Math.exp(-((dU - 0.0009) ** 2) / 1.2e-6) * wide;
     r -= 0.0007 * Math.exp(-((dU - 0.0044) ** 2) / 0.8e-6) * wide;
-    r += 0.00035 * Math.exp(-((dL - 0.0007) ** 2) / 0.8e-6) * wide;
+    r += 0.00018 * Math.exp(-((dL - 0.0007) ** 2) / 0.8e-6) * wide;
     r -= 0.0004 * Math.exp(-((dL - 0.0058) ** 2) / 5e-6) * wide;
     if (dU < 0 && dL < 0) r -= 0.0005; // the eye sits behind its lids
   }
   // nose: the ball of the tip, its two lobes, the crease round each wing, the nostrils, the columella between them
-  r += 0.0009 * gs(ax - 0.0036, Y + 0.0385, 0.0042, 0.0042);
-  r -= 0.0008 * gs(Math.hypot(ax - 0.0112, (Y + 0.0418) * 1.1) - 0.0068, 0, 0.0013, 1) * sstep(-0.03, -0.038, Y + 0.3 * (ax - 0.012));
-  r -= 0.0028 * gs(ax - 0.0066, Y + 0.0472, 0.0027, 0.0013);
-  r += 0.0005 * gs(ax, Y + 0.046, 0.0016, 0.004);
+  r += 0.0006 * gs(ax - 0.0032, Y + 0.0415, 0.0042, 0.0042);
+  r -= 0.0006 * gs(Math.hypot(ax - 0.0108, (Y + 0.0445) * 1.1) - 0.0062, 0, 0.0013, 1) * sstep(-0.034, -0.042, Y + 0.3 * (ax - 0.012));
+  r -= 0.002 * gs(ax - 0.0062, Y + 0.0498, 0.0023, 0.0011);
+  r += 0.0004 * gs(ax, Y + 0.0485, 0.0016, 0.004);
   // inner corner of the eye: the hollow against the bridge
   r -= 0.0009 * gs(ax - 0.0165, Y - 0.001, 0.0034, 0.006);
   // nasolabial fold: barely there on the young, soft fullness outside it
