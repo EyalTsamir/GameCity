@@ -48,7 +48,19 @@ stars, plaster + stencil, oak, glass, pictures from the room atlas, flames, marb
 3. A few seated figures in the nave, near-only.
 4. Exteriors and harbour (not started): bandstand, lifeguard tower, harbour stairs slot (geometry-hunt #8 says fixed: check), film shots.
 
-## Results (2026-10-31, high, 1920x1025, on AC, power guard clean)
+## Results after round 5 (2026-10-31, high, 1920x1025, on AC, power guard clean)
+| view | ms, this branch | ms, `?nolmdetail` | delta | triangles delta |
+|---|---|---|---|---|
+| overview | 35.89 | 35.60 | +0.29 | +136 k |
+| downtown | 35.20 | 35.01 | +0.19 | +85 k |
+| street | 31.74 | 31.72 | +0.02 | +24 k |
+| market | 32.03 | 31.93 | +0.10 | +84 k |
+
+Pairs with the same draw count: a view flips between two states (208/236, 218/228 draws) in both variants, whatever the switch, so a pair across states means nothing. In the lantern: 16.0 ms (the sea fills the view).
+`hitch.mjs`: prog+0 geo+0 tex+0 in every window. `shot --invariants --validate`: {} and []. ui-test: 71 passed, 0 failed. `?diorama`, `?quality=medium`, `?quality=low`: invariants {}. Film sheet seen (`--mode seek` only); the black frame at 45 s is the film's own dip between shots (46 s is the platform). No shot goes through a changed room, but the mast shows in the far shots of the tower.
+Sheets: `docs/progress/detail/landmarks/lighthouse.jpg`, `tower.jpg`.
+
+## Results after round 1 (2026-10-31, high, 1920x1025, on AC, power guard clean)
 | view | ms, this branch | ms, `?nolmdetail` | delta | triangles delta |
 |---|---|---|---|---|
 | overview | 35.77 | 35.45 | +0.32 | +124 k |
