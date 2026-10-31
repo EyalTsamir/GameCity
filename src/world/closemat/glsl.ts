@@ -280,9 +280,9 @@ void main() {
   vec4 c = CMT(tCrack, q * 0.39 + so * 0.61, 0.39);
   // a wider sweep of the float: the surface is not flat at hand scale
   vec4 w = CMT(tGrain, q * 0.31 + so.yx, 0.31);
-  vec2 s = (g.rg - 0.5) * 0.72 + (w.rg - 0.5) * 0.5;
+  vec2 s = (g.rg - 0.5) * 0.4 + (w.rg - 0.5) * 0.25;
   float light = cmLight(N, normalize(N - T * s.x - U * s.y));
-  vec3 ratio = vec3(light * (1.0 + (g.b - 0.5) * 0.2) * (1.0 - 0.22 * g.a));
+  vec3 ratio = vec3(light * (1.0 + (g.b - 0.5) * 0.14) * (1.0 - 0.15 * g.a));
   ratio *= 0.93 + 0.14 * c.b;
   // hairline crazing where the render has been working, the odd longer crack
   float dist = c.r * 0.04;
@@ -306,7 +306,7 @@ void main() {
     // what is under: a browner, coarser coat, in a pit
     vec2 s2 = (g.rg - 0.5) * 1.9;
     float l2 = cmLight(N, normalize(N - T * s2.x - U * s2.y));
-    vec3 under = vec3(0.34, 0.31, 0.27) * (0.65 + 0.7 * g.b) * l2 * (1.0 - 0.5 * g.a);
+    vec3 under = mix(col * 0.55, vec3(0.34, 0.31, 0.27), 0.4) * (0.65 + 0.7 * g.b) * l2 * (1.0 - 0.5 * g.a);
     ratio = mix(ratio, min(under / max(col, vec3(0.05)), vec3(1.6)), chip);
   }
   ratio *= 1.0 + 0.16 * rim;
@@ -331,9 +331,9 @@ void main() {
   vec4 f = textureGrad(tFibre, uv, dgx * vec2(0.833, 3.33), dgy * vec2(0.833, 3.33));
   vec4 c = CMT(tCrack, q * 0.39 + so + rnd * 3.0, 0.39);
   float paint = step(0.3, fract(seed * 0.6113 + 0.3));
-  vec2 s = (f.rg - 0.5) * mix(0.38, 0.12, paint);
+  vec2 s = (f.rg - 0.5) * mix(0.38, 0.07, paint);
   float light = min(cmLight(N, normalize(N - T * s.x - U * s.y)), 1.12);
-  vec3 ratio = vec3(light * (1.0 + (f.b - 0.5) * mix(0.24, 0.06, paint)) * (1.0 - mix(0.26, 0.07, paint) * f.a));
+  vec3 ratio = vec3(light * (1.0 + (f.b - 0.5) * mix(0.24, 0.03, paint)) * (1.0 - mix(0.26, 0.03, paint) * f.a));
   // the paint has gone along the grain, first at the foot and under the lap: grey old wood
   float yy = vP.y;
   float wear = 0.74 - 0.14 * (1.0 - smoothstep(0.3, 1.8, yy)) - 0.08 * (1.0 - smoothstep(0.0, 0.12, fy));
@@ -348,7 +348,7 @@ void main() {
   ratio *= mix(1.0, 0.45, smoothstep(0.4985, 0.4996, dj));
   vec2 nq = vec2(fract(q.x / 0.6 + 0.5) - 0.5, (fy - 0.82)) * vec2(0.6, 0.3);
   float nail = 1.0 - smoothstep(0.0035, 0.0055, length(nq));
-  ratio *= 1.0 - 0.62 * nail;
+  ratio *= 1.0 - 0.4 * nail;
   float rust = (1.0 - smoothstep(0.0, 0.02 + 0.03 * c.a, length(vec2(nq.x, min(nq.y, 0.0) * 0.25)))) * (1.0 - nail);
   ratio *= mix(vec3(1.0), vec3(0.8, 0.72, 0.62), rust * paint);
   // the shadow under the lap is never a ruled line
@@ -377,7 +377,7 @@ void main() {
   // bed: tooled stone. Fine diagonal strokes of the chisel over the whole face, on some blocks
   float d = min(min(fx, 1.0 - fx) * 1.25, min(fy, 1.0 - fy) * ch);
   float e = d - (w.b - 0.45) * 0.03 - (g.b - 0.5) * 0.012;
-  vec2 s = (g.rg - 0.5) * 0.5 + (w.rg - 0.5) * 0.42;
+  vec2 s = (g.rg - 0.5) * 0.34 + (w.rg - 0.5) * 0.26;
   float tool = step(0.5, fract(rnd * 5.7));
   float stroke = sin(dot(q, vec2(0.7, 1.0)) * 420.0 + g.b * 6.0) * tool * (1.0 - smoothstep(0.0012, 0.003, fa));
   s += vec2(0.7, 1.0) * stroke * 0.09;
@@ -475,9 +475,10 @@ void main() {
     float reach = 0.28 * (1.0 - smoothstep(0.0, 0.2, bot < 0.45 ? 1.0 : 0.0));
     float edge = (1.0 - smoothstep(0.0, 0.1, 0.5 - bot)) * 0.3 + (1.0 - smoothstep(0.0, 0.025, 0.5 - lap)) * 0.34 + (1.0 - smoothstep(pH, pH + 1.6, vP.y)) * 0.26;
     float fl = c.a * 0.55 + c.b * 0.32 + g.b * 0.13 + edge + reach * 0.0;
-    float rust = smoothstep(0.75, 0.8, fl);
-    float rrim = smoothstep(0.67, 0.75, fl) * (1.0 - rust);
-    vec3 rc = mix(vec3(0.075, 0.033, 0.015), vec3(0.17, 0.072, 0.026), g.b) * (1.0 - 0.3 * g.a);
+    fl += (fract(seed * 0.91) - 0.6) * 0.14;
+    float rust = smoothstep(0.76, 0.81, fl);
+    float rrim = smoothstep(0.68, 0.76, fl) * (1.0 - rust);
+    vec3 rc = mix(vec3(0.05, 0.028, 0.017), vec3(0.105, 0.052, 0.028), g.b) * (1.0 - 0.3 * g.a);
     vec2 s2 = (g.rg - 0.5) * 0.7;
     float lr = cmLight(N, normalize(N - T * s2.x - U * s2.y));
     ratio = mix(ratio, rc * lr / max(col, vec3(0.04)), rust);
@@ -814,7 +815,7 @@ void main() {
       vec2 s = (g.rg - 0.5) * 0.16;
       ratio = vec3(cmLight(N, normalize(N - G * s.x - C * s.y)));
       ratio *= 1.0 + (f.b - 0.5) * 0.08;
-      vec3 rc = mix(vec3(0.07, 0.032, 0.016), vec3(0.16, 0.07, 0.028), g.b) * (1.0 - 0.3 * g.a);
+      vec3 rc = mix(vec3(0.05, 0.028, 0.017), vec3(0.105, 0.052, 0.028), g.b) * (1.0 - 0.3 * g.a);
       ratio = mix(ratio, min(rc / col, vec3(3.0)), chip);
       ratio *= mix(vec3(1.0), vec3(0.92, 0.82, 0.7), smoothstep(0.6, 0.71, fl) * (1.0 - chip));
 #else

@@ -587,9 +587,9 @@ ${fg('    }\n', '')}  } else if (pat < 5.5) { // precast concrete panels (one ba
     vec3 tone = vec3(0.9 + 0.16 * pn) * mix(vec3(1.0), vec3(1.03, 1.0, 0.95), step(0.6, pn2)) * mix(vec3(1.0), vec3(0.96, 0.98, 1.02), step(pn2, 0.25));
     float near = 1.0 - smoothstep(0.002, 0.006, max(fq.x, fq.y));
     float spk = texture2D(uBhNoise, q * 1.9 + vec2(seed * 0.37, 0.0)).a;
-    float hole = step(0.84, bhHash12(floor(q / 0.035) + seed * 3.1)) * (1.0 - smoothstep(0.003, 0.006, length(fract(q / 0.035) - 0.5) * 0.035));
+    float hole = step(0.97, bhHash12(floor(q / 0.035) + seed * 3.1)) * (1.0 - smoothstep(0.003, 0.006, length(fract(q / 0.035) - 0.5) * 0.035));
     float mot = texture2D(uBhNoise, q * 0.55 + vec2(seed * 0.29, 0.0)).g;
-    tone *= 1.0 + near * ((spk - 0.5) * 0.22 - 0.45 * hole) + (mot - 0.5) * 0.14 * (1.0 - smoothstep(0.015, 0.05, max(fq.x, fq.y)));
+    tone *= 1.0 + near * ((spk - 0.5) * 0.22 - 0.32 * hole) + (mot - 0.5) * 0.14 * (1.0 - smoothstep(0.015, 0.05, max(fq.x, fq.y)));
     // drip line + soiling under each panel's top joint (rain runs off the joint above)
     float under = 1.0 - smoothstep(0.0, 0.18 + 0.35 * nm.b, bhPG.w - fg.y);
     tone *= 1.0 - 0.1 * under * (0.6 + 0.4 * nm.g);
