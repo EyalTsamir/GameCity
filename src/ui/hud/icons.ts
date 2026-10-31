@@ -17,6 +17,7 @@ export const ICONS = {
   help: S('<circle cx="12" cy="12" r="9"/><path d="M9.6 9.4a2.5 2.5 0 0 1 4.8.9c0 1.7-2.4 2.2-2.4 3.7"/><circle cx="12" cy="17.2" r="1" fill="currentColor" stroke="none"/>'),
   weatherAuto: S('<circle cx="9" cy="9" r="3.4"/><path d="M9 2.5v1.3M2.5 9h1.3M4.4 4.4l.9.9M13.6 4.4l-.9.9"/><path d="M8.5 19.5h9a3.5 3.5 0 0 0 .3-7 5 5 0 0 0-9.4 1.3 2.9 2.9 0 0 0 .1 5.7z" style="fill: rgba(var(--paper), 1)"/>'),
   weatherClear: S('<circle cx="12" cy="12" r="4.2"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M5.6 18.4 7 17M17 7l1.4-1.4"/>'),
+  weatherStorm: S('<path d="M7.5 13.5h10a3.6 3.6 0 0 0 .3-7.2 5.2 5.2 0 0 0-9.8 1.4 2.9 2.9 0 0 0-.5 5.8z"/><path d="M13 13.5l-2.5 3.8h2.8L11 21"/>'),
   weatherRain: S('<path d="M7.5 14.5h10a3.6 3.6 0 0 0 .3-7.2 5.2 5.2 0 0 0-9.8 1.4 2.9 2.9 0 0 0-.5 5.8z"/><path d="M8.5 17.5l-1 2.5M12.5 17.5l-1 2.5M16.5 17.5l-1 2.5"/>'),
   close: S('<path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/>'),
   map: S('<path d="M3.5 6.5 9 4.5l6 2 5.5-2v13L15 19.5l-6-2-5.5 2z"/><path d="M9 4.5v13M15 6.5v13"/>'),

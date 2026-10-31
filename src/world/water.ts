@@ -52,6 +52,7 @@ interface DomeUniforms {
   uMoonDir?: { value: THREE.Vector3 };
   uMoonVis?: { value: number };
   uOvercast?: { value: number };
+  uRainbow?: { value: THREE.Vector4 };
 }
 
 export default function create(ctx: CityContext): CityModule {

@@ -487,22 +487,22 @@ export default function create(ctx: CityContext): CityModule {
     syncToolbar();
   });
 
-  // weather: automatic showers (sky decides) → always clear → rain
-  type Weather = 'auto' | 'clear' | 'rain';
+  // weather: automatic (sky decides) → always clear → rain → a storm
+  type Weather = 'auto' | 'clear' | 'rain' | 'storm';
   let weather: Weather = 'auto';
   const sky = () => ctx.services.sky;
   const setWeather = (w: Weather, announce: boolean) => {
     weather = w;
     const s = sky();
     try {
-      s?.setWeather?.(w === 'auto' ? NaN : w === 'clear' ? 0 : 0.85);
+      s?.setWeather?.(w === 'auto' ? NaN : w === 'clear' ? 0 : w === 'rain' ? 0.85 : 1);
     } catch {
       /* ignore */
     }
-    if (announce) toast(w === 'auto' ? 'Weather: the sky decides' : w === 'clear' ? 'Weather: clear skies' : 'Weather: rain showers');
+    if (announce) toast(w === 'auto' ? 'Weather: the sky decides' : w === 'clear' ? 'Weather: clear skies' : w === 'rain' ? 'Weather: rain showers' : 'Weather: a storm is coming');
     syncToolbar();
   };
-  weatherBtn.addEventListener('click', () => setWeather(weather === 'auto' ? 'clear' : weather === 'clear' ? 'rain' : 'auto', true));
+  weatherBtn.addEventListener('click', () => setWeather(weather === 'auto' ? 'clear' : weather === 'clear' ? 'rain' : weather === 'rain' ? 'storm' : 'auto', true));
 
   // sound (the click is the user gesture that unlocks WebAudio)
   const toggleSound = () => {
@@ -746,9 +746,9 @@ export default function create(ctx: CityContext): CityModule {
     dofBtn.classList.toggle('on', hasPost && safeIsEnabled('dof'));
     const canWeather = typeof sky()?.setWeather === 'function';
     weatherBtn.disabled = !canWeather;
-    weatherBtn.innerHTML = ICONS[weather === 'auto' ? 'weatherAuto' : weather === 'clear' ? 'weatherClear' : 'weatherRain'];
+    weatherBtn.innerHTML = ICONS[weather === 'auto' ? 'weatherAuto' : weather === 'clear' ? 'weatherClear' : weather === 'rain' ? 'weatherRain' : 'weatherStorm'];
     weatherBtn.classList.toggle('on', weather !== 'auto');
-    weatherBtn.dataset.tip = weather === 'auto' ? 'Weather: automatic' : weather === 'clear' ? 'Weather: clear' : 'Weather: rain';
+    weatherBtn.dataset.tip = weather === 'auto' ? 'Weather: automatic' : weather === 'clear' ? 'Weather: clear' : weather === 'rain' ? 'Weather: rain' : 'Weather: storm';
     const c = cam();
     tourBtn.disabled = !c;
     tourBtn.classList.toggle('on', !!c?.touring());

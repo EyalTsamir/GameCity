@@ -44,6 +44,10 @@ export interface WeatherRng {
   range(a: number, b: number): number;
 }
 
+const HELD_SPEED = 900; // m/s
+const HELD_START = -16000;
+const HELD_END = 40000;
+
 export class WeatherDirector {
   /** 0..1 at the town: falling rain / how much of it is a storm (wind, waves, lightning) / wet surfaces */
   rain = 0;
@@ -69,6 +73,11 @@ export class WeatherDirector {
   layer: { uStorm: { value: THREE.Vector4 }; uStormK: { value: THREE.Vector4 } } | null = null;
 
   private forced: number | null = null;
+  /** a held band (the weather button, ?weather=): it sweeps in and out at HELD_SPEED instead of popping on */
+  private heldOn = false;
+  private hLead = 1e7;
+  private hTrail = -1e7;
+  private hLevel = 0;
   private pinned: number | null = null;
   private passage = false;
   private episode: Episode | null = null;
@@ -89,6 +98,10 @@ export class WeatherDirector {
     if (w === 'rain') this.forced = 0.8;
     else if (w === 'storm') this.forced = 1;
     else if (w === 'clear') this.forced = 0;
+    if (this.forced) {
+      this.heldOn = true;
+      this.hLevel = this.forced;
+    }
     else if (w === 'passage') this.passage = true;
     if (w === 'fog') this.fogForced = true;
     const fx = params.get('fogx');
@@ -139,15 +152,44 @@ export class WeatherDirector {
     let targetRain = 0,
       targetStorm = 0;
     const ws = Math.hypot(wind.x, wind.y);
-    if (this.forced !== null || this.pinned !== null || this.passage) {
-      if (this.forced !== null) {
-        // held weather: the whole sky
-        this.lead = 1e7;
-        this.trail = -1e7;
-        this.amount = this.forced > 0 ? 1 : 0;
-        targetRain = this.forced;
-        targetStorm = smooth(0.85, 1, this.forced);
-        this.power = this.dark = 0.25 + 0.75 * targetStorm;
+    if (this.forced !== null || this.heldOn || this.pinned !== null || this.passage) {
+      if (this.forced !== null || this.heldOn) {
+        // held weather: a band with one edge at infinity. It comes in from upwind and leaves downwind (about 20 s of real
+        // time until the rain starts or stops: the button shows the weather arriving); a time jump skips that
+        const want = this.forced !== null && this.forced > 0;
+        const leaving = this.heldOn && this.hTrail > -1e6;
+        if (want && !this.heldOn) {
+          this.heldOn = true;
+          this.hLead = snap ? 1e7 : HELD_START;
+          this.hTrail = -1e7;
+        }
+        if (this.heldOn) {
+          if (want && !leaving) {
+            this.hLevel = this.forced!;
+            this.hLead = snap || this.hLead > HELD_END ? 1e7 : this.hLead + HELD_SPEED * realDt;
+          } else {
+            if (!leaving) this.hTrail = HELD_START;
+            this.hTrail += HELD_SPEED * realDt;
+            if (snap || this.hTrail > HELD_END) {
+              this.heldOn = false;
+              this.hLead = 1e7;
+              this.hTrail = -1e7;
+            }
+          }
+        }
+        if (this.heldOn) {
+          this.lead = this.hLead;
+          this.trail = this.hTrail;
+          this.amount = 1;
+          const width = this.hLead - this.hTrail;
+          targetRain = this.hLevel * this.rainAt(this.hLead, width);
+          const dark = smooth(0.85, 1, this.hLevel);
+          targetStorm = dark * this.stormAt(this.hLead, width);
+          this.power = this.dark = 0.25 + 0.75 * dark;
+        } else {
+          this.lead = this.trail = -1e7;
+          this.amount = 0;
+        }
       } else {
         // pinned front, or ?weather=passage: one lap of the band over about four minutes of real time
         const width = 26000;

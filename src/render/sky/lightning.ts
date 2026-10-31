@@ -1,7 +1,7 @@
 // Lightning: in a storm, every few seconds of real time, a flash in the deck, and sometimes a stroke to the ground in the
 // direction the camera looks at. A flash is a short train of decaying pulses; the sky module turns the value into light
 // (ambient, sky, the deck around the stroke). The stroke is one small ribbon mesh, rebuilt into preallocated arrays.
-// Emits 'lightning' ({ distance, power }): thunder is a matter of whoever makes sound.
+// Emits 'lightning' ({ distance, power, bolt, x, z }): the audio module makes the thunder.
 
 import * as THREE from 'three';
 import type { EventBus } from '../../core/events';
@@ -123,7 +123,7 @@ export class Lightning {
     this.strikes++;
     if (bolt) this.buildBolt(this.at.x, deck, this.at.z, r.range(4, 9));
     else this.geo.setDrawRange(0, 0);
-    this.events.emit('lightning', { distance: d, power, bolt });
+    this.events.emit('lightning', { distance: d, power, bolt, x: this.at.x, z: this.at.z });
   }
 
   private buildBolt(x: number, top: number, z: number, width: number): void {

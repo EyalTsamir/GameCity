@@ -27,6 +27,7 @@ import {
   airHiss,
   brakeSqueal,
   firework,
+  thunder,
   clank,
   footstep,
   musicBoxPhrase,
@@ -412,6 +413,13 @@ export default function create(ctx: CityContext): CityModule {
     const o = spot(bellPos.x, bellPos.y, bellPos.z, { ref: 180, wet: 0.55, gain: 1.2, life: t - ac.currentTime + n * spacing + 8 });
     if (!o) return;
     for (let i = 0; i < n; i++) churchBell(ac, o.input, t + i * spacing + o.dist / 340, 174.6, 1);
+  });
+  // (the flash is seen at once; the sound comes distance / 340 m/s later, dulled by spot's air filter)
+  events.on('lightning', (p: { distance: number; power: number; x: number; z: number } | undefined) => {
+    if (!live() || !p) return;
+    const delay = p.distance / 340;
+    const o = spot(p.x, 600, p.z, { ref: 3000, wet: 0.5, gain: 1.5 * p.power, life: delay + 13 });
+    if (o) thunder(g!.ac, o.input, g!.noise, g!.ac.currentTime + delay, clamp(1 - (p.distance - 1400) / 3200, 0, 1));
   });
   events.on('fireworks', (p: { x?: number; y?: number; z?: number; count?: number } | number | undefined) => {
     if (!live()) return;
