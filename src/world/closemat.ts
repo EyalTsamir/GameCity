@@ -179,7 +179,7 @@ export default function create(ctx: CityContext): CityModule {
   if (on.solid) {
     // only what is drawn whenever it is near: a level of detail hidden up close would leave its copy on the air
     const cell = 8;
-    const solid = (name: string, test: (n: string) => boolean, rust: boolean, radius: number, top: number) => {
+    const solid = (name: string, test: (n: string) => boolean, kind: '' | 'CM_RUST' | 'CM_JOINERY', radius: number, top: number) => {
       const geos = byName(test).filter((g) => g.getAttribute('normal') && g.getAttribute('color'));
       const grid = new TriGrid(geos, SOLID_ATTRS, cell, (g, a, b, c) => {
         // what moves does not stay under its copy
@@ -193,12 +193,12 @@ export default function create(ctx: CityContext): CityModule {
         const dy = Math.abs(P.getX(b) - P.getX(c)) + Math.abs(P.getY(b) - P.getY(c)) + Math.abs(P.getZ(b) - P.getZ(c));
         return dx + dy > 0.12;
       });
-      layer(name, grid, SOLID_ATTRS, rust ? '#define CM_RUST\n' + CM_SOLID : CM_SOLID, 'CM_SOLID', radius, cell, top);
+      layer(name, grid, SOLID_ATTRS, (kind ? `#define ${kind}\n` : '') + CM_SOLID, 'CM_SOLID', radius, cell, top);
     };
-    solid('cmTrim', (n) => n === 'buildings-trim', false, 12, 30);
-    solid('cmMasonry', (n) => n === 'terrain-masonry' || n.startsWith('landmarks-static') || n.startsWith('landmarks-detail') || n.startsWith('harbor-north') || n.startsWith('harbor-yards') || n.startsWith('harbor-river') || n.startsWith('harbor-beach'), false, 12, 8);
-    solid('cmStreet', (n) => n === 'props-furniture-e' || n === 'props-furniture-w' || n === 'props-furniture-fine-e' || n === 'props-furniture-fine-w' || n === 'props-casters' || n === 'life-poles', false, 12, 6);
-    solid('cmMetal', (n) => n === 'terrain-railings' || n === 'traffic-signal-poles' || n === 'rail-furniture', true, 12, 8);
+    solid('cmTrim', (n) => n === 'buildings-trim', 'CM_JOINERY', 12, 30);
+    solid('cmMasonry', (n) => n === 'terrain-masonry' || n.startsWith('landmarks-static') || n.startsWith('landmarks-detail') || n.startsWith('harbor-north') || n.startsWith('harbor-yards') || n.startsWith('harbor-river') || n.startsWith('harbor-beach'), '', 12, 8);
+    solid('cmStreet', (n) => n === 'props-furniture-e' || n === 'props-furniture-w' || n === 'props-furniture-fine-e' || n === 'props-furniture-fine-w' || n === 'props-casters' || n === 'life-poles', '', 12, 6);
+    solid('cmMetal', (n) => n === 'terrain-railings' || n === 'traffic-signal-poles' || n === 'rail-furniture', 'CM_RUST', 12, 8);
   }
   if (closeMat(ctx, 'cmlitter')) addLitter(ctx);
   stats.bootMs = Math.round(performance.now() - t0);

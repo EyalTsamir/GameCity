@@ -552,8 +552,8 @@ void main() {
   ratio *= 1.0 + (0.5 - s0.a) * 0.16 * (1.0 - stone * 0.5);
   float dist = c.r * 0.04;
   float zone = smoothstep(0.56, 0.72, c.b);
-  float crack = zone * (1.0 - smoothstep(0.0012 + 0.0024 * c.a, 0.003 + 0.003 * c.a + fa * 0.8, dist));
-  ratio *= 1.0 - 0.74 * crack;
+  float crack = zone * (1.0 - smoothstep(0.0008 + 0.0012 * c.a, 0.002 + 0.002 * c.a + fa * 0.8, dist));
+  ratio *= 1.0 - 0.6 * crack;
   gl_FragColor = vec4(max(mix(vec3(1.0), ratio, k), vec3(0.0)), 1.0);
 }
 `;
@@ -777,6 +777,13 @@ void main() {
   // warm mid-to-dark browns are timber; the rest is paint on metal when dark or saturated, mineral when pale and grey
   float wood = step(0.28, sat) * step(col.b, col.g) * step(col.g, col.r) * step(0.03, lum) * step(lum, 0.42) * step(col.g, col.r * 0.82);
   float paint = (1.0 - wood) * max(step(0.3, sat), step(lum, 0.12));
+#ifdef CM_JOINERY
+  paint = 1.0 - wood;
+#endif
+#ifdef CM_RUST
+  paint = 1.0;
+  wood = 0.0;
+#endif
   vec3 ratio;
   vec4 c = CMT(tCrack, q * 0.39 + vGr.xz * 3.0, 0.39);
   if (wood > 0.5) {
@@ -791,15 +798,16 @@ void main() {
     if (paint > 0.5) {
       vec2 fu = vec2(q.x / 1.2, q.y / 0.3);
       vec4 f = textureGrad(tFibre, fu, gx * vec2(0.833, 3.33), gy * vec2(0.833, 3.33));
-      float fl = c.a * 0.72 + c.b * 0.2 + g.b * 0.08;
-      float chip = smoothstep(0.71, 0.73 + fa, fl);
-      float rim = smoothstep(0.67, 0.71, fl) * (1.0 - chip);
+      vec4 cs = CMT(tCrack, q * 1.3 + vGr.xz * 5.0, 1.3);
+      float fl = cs.a * 0.62 + c.b * 0.26 + g.b * 0.12;
+      float chip = smoothstep(0.73, 0.745 + fa, fl);
+      float rim = smoothstep(0.69, 0.73, fl) * (1.0 - chip);
 #ifdef CM_RUST
       // enamel on steel: orange peel, a scratch, rust where it has chipped, weeping below
       vec2 s = (g.rg - 0.5) * 0.16;
       ratio = vec3(cmLight(N, normalize(N - G * s.x - C * s.y)));
       ratio *= 1.0 + (f.b - 0.5) * 0.08;
-      vec3 rc = mix(vec3(0.17, 0.072, 0.03), vec3(0.36, 0.17, 0.06), g.b) * (1.0 - 0.3 * g.a);
+      vec3 rc = mix(vec3(0.11, 0.05, 0.025), vec3(0.24, 0.115, 0.045), g.b) * (1.0 - 0.3 * g.a);
       ratio = mix(ratio, min(rc / col, vec3(3.0)), chip);
       ratio *= mix(vec3(1.0), vec3(0.92, 0.82, 0.7), smoothstep(0.6, 0.71, fl) * (1.0 - chip));
 #else
@@ -812,8 +820,8 @@ void main() {
 #endif
       ratio *= 1.0 + 0.12 * rim;
     } else {
-      vec2 s = (g.rg - 0.5) * 0.65;
-      ratio = vec3(cmLight(N, normalize(N - G * s.x - C * s.y)) * (1.0 + (g.b - 0.5) * 0.22) * (1.0 - 0.44 * g.a));
+      vec2 s = (g.rg - 0.5) * 0.5;
+      ratio = vec3(cmLight(N, normalize(N - G * s.x - C * s.y)) * (1.0 + (g.b - 0.5) * 0.2) * (1.0 - 0.3 * g.a));
       ratio *= 0.93 + 0.14 * c.b;
       float dist = c.r * 0.04;
       ratio *= 1.0 - 0.5 * smoothstep(0.6, 0.72, c.b) * (1.0 - smoothstep(0.0008, 0.0022 + fa * 0.8, dist));
