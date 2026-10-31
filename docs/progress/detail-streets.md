@@ -6,16 +6,24 @@ that edits cannot leak into a run: `npx vite build --outDir shots/ds/perfdist`, 
 --port 5213 --strictPort --host 127.0.0.1`, then `perf.mjs --url http://127.0.0.1:5213/`.
 
 ## Resume here
-Rounds 1-2 (ground, street kit, shop fronts, works) committed and measured within budget (see Perf, run 3). Seen by eye and
-good: guard rails (52 after the placement fix), poster columns, fruit stand, clothes rail, sacks, cardboard, works. Tar fixed:
-weathered grey, continuous strips (separate quads read as ant trails from afar), thinner overbanding, old digs a broken saw cut.
+Five rounds done and committed; the ranked list has nothing left in these files worth its cost (see Left). Measured within
+budget, final checks at the end of this file's Log. Nothing is merged or pushed.
 
-Next: golden-hour + night audit (`shots/ds/r3b`), independent judge on an image sheet, then the places items (lower-quay
-waterline and coping: bed, weed fringe, fenders; cliff seams), plot edges (retaining walls, fences, hedges), mid-distance
-check at 30-60 m, re-measure, final checks from `DETAIL-ROUND.md`, before/after sheets in `docs/progress/detail/streets/`, report.
+Audit tool: `services.props.streetKit` lists every kit item `{k, x, z}` (scratch `kitpos.mjs`, a page with
+`only=terrain,landscape,roads,buildings,landmarks,harbor,vegetation,props,camera`). Stand on the road side when aiming at a
+kit item: goods turn their face to the pavement. Shots in `shots/ds/`. Sheets in `docs/progress/detail/streets/`.
 
-Audit tool: `services.props.streetKit` lists every kit item `{k, x, z}` (scratch `kitpos.mjs`; note `wheelStop` reports the
-last claim, not its own place). Shots in `shots/ds/`. When aiming at a shop item stand on the pavement side.
+## Best view for each thing
+| what | view (`--view` / hour) |
+|---|---|
+| kerb stones, tar, cover in its collar | `-137,1,36,14,0,4` noon; `-128.7,0.2,-7,3,175,18` noon |
+| road at 30-60 m (streaks, wheel paths, patches) | `-110,1.5,20,30,0,2` noon; `0,1.5,-92,30,0,1.5` noon, 18.2 |
+| lower quay (tide stain, coping blocks, ladder, rubbing posts) | `-45,-1.2,114,8,25,8` noon, 18.2; `-30,-1,114,5,-20,4` noon |
+| guard rail, sign backs | `-69,0.8,-68.9,6,30,12` noon |
+| poster column | `-47,1.4,-77.3,6,30,6` noon, 18.2 |
+| road works | `85.9,0.5,-6.1,5,-110,14` noon, 21.5 |
+| bins out, bottle crates, sacks | `-128.7,0.6,-6.1,3.5,165,10`; `3.9,0.6,75.9,3,-70,10`; `20,0.3,-68.9,3,15,14` noon |
+| park path edge | `-58,0.3,20,12,30,8` noon |
 
 ## Perf
 Budget: at most +1 ms in overview, downtown, street, market; at most +250 k triangles in a full-city view.
@@ -44,7 +52,7 @@ one sample.
 |---|---|---|
 | `?nokerbstones` | kerb as separate granite units: each proud and tilted its own way, worn arris, knocked corners; continuous kerb stays as a backing | `roads/streets.ts` |
 | `?noliftedslabs` | slabs rocked on one edge or corner, root heave round street trees, on the shader's grid | `roads/paving.ts` |
-| `?nojunctionwear` | junction box: rubber arcs, dust between wheels, oily middle, sealed crack map | `roads/glsl.ts` |
+| `?nojunctionwear` | junction box: rubber arcs, dust between wheels, oily middle; also long streaks, stronger wheel paths, grimier gutter, more trench scars on all road | `roads/glsl.ts` |
 | `?nocoverkit` | manholes in a raised frame with a tar collar and the square of the old dig; tar snakes; valve boxes; telecom chambers; ghost stop lines | `roads/markings.ts` |
 | `?nopathedge` | park paths: no dark wall; granite soldier course, skirt following the ground, soil bank with grass | `roads/covers.ts` |
 | `?nosignalback` | signal heads from behind: galvanised plate, rails, conduit (additive edit in the people session's file) | `sim/traffic/signals.ts` |
@@ -55,20 +63,37 @@ one sample.
 | `?nopostnotices` | paper notices cable-tied to lamp posts (near only) | same |
 | `?noshopfront` | doormats, cellar flaps, pavement lights, goods at the kerb (fruit, flowers, books, clothes, postcards) | same |
 | `?noroadworks` | works sites in the furniture band: sand bed, slabs on a pallet, barriers, cones, sign | same |
-| `?nokerbsideodds` | sacks and cardboard put out at the kerb | same |
+| `?nokerbsideodds` | sacks and cardboard at the kerb, wheelie bins on residential streets | same |
 | `?noparkingkit` | wheel stops, engine drips in the car parks | same |
+| `?nogutterdrift` | grit, leaves, butts and scraps against the kerb, near cells only (+18 k triangles in all, drawn within 30 m) | same |
+| `?noquaywear` | lower quay: water face in stacked tide tones, coping as separate blocks with knocked corners, rust, iron ladders, tarred rubbing posts | `terrain/places.ts` |
 
-Always on (bug fixes): pavement stain edge softened (it drew 2 m tan lenses with an outline), no standing water away from the
+Always on (bug fixes): cracks and overbanding thinner and greyer, more road patches, cutting wall foot in stacked tones instead of a straight band, pilasters shallower, weather across ashlar at the scale of metres, pavement stain edge softened (it drew 2 m tan lenses with an outline), no standing water away from the
 gutter on a dry road, tar overbanding less mirror-like. The print material now alpha-tests (round sign plates).
 
 ## Hand-offs
 - **nature** (`groundcover/mask.ts`): pavement weeds at eye level are the loudest thing on the ground: blades too long and
-  too wide, combs along every wall foot and kerb. A third of the length, thinner, mostly at joints.
+  too wide, combs along every wall foot and kerb. A third of the length, thinner, mostly at joints. Both judges also saw the
+  razor-straight edge between pavement and lawn: grass should lap over it.
 - **light**: at eye level the shadow edge on paving shows a regular dither pattern.
-- **people**: signal head fixings touched in `sim/traffic/signals.ts` (additive block, one line in the repeater).
+- **people**: signal head fixings touched in `sim/traffic/signals.ts` (additive block, one line in the repeater). Market
+  stalls under their evening tarps read as lumpy blobs in `27.5,1,78.5,16,200,28` at 18.2 (`sim/scenes/market.ts`).
+- **water**: a sharp-edged teal shape on the river surface off the lower quay, `-45,-1.2,114,8,25,8` at noon.
+
+## Left, not worth its cost here
+- Cliff lobes above the cutting wall (`-20,1.8,-162,14,25,6`) read as sculpted at 8 m: geometry work, far from most walks.
+- Black side faces on the cutting-wall pilasters: cause not found (plain dressing quads came out black too), made narrow by
+  making the pilasters shallower.
+- Wet-band tones on the quay show fine steps at under 5 m: invisible from the promenade.
 
 ## Log
 - 2026-10-31 audit: 16 eye-level noon views (`shots/ds/a1`), own look. Ranked: 1 black outline round park paths; 2 blank
   junctions; 3 dead straight kerbs; 4 flat paving without any moved slab; 5 lens puddles and tan stains; 6 no utilities, signs
   or paper at street level; 7 signal backs; 8 nothing outside shop doors. Already done by earlier rounds and left alone: tree
   pits and grates, push buttons, kerb shader, litter.
+- 2026-10-31 rounds 2-5. Kit first looked over budget (+1.8 ms street): figures, see Perf. Guard rails placed nothing until
+  they searched the kerb for a free run. Shop goods slide along the kerb (8 items to 20). Judge 1 (6.5/10): clean asphalt, ant
+  trails on the junction, works with no trench. Ant trails took four attempts: strips, footprint fade, dissolve, then the cause:
+  a sliver's derivatives faded its long triangles to the pale base and left its short ones dark; hairlines now skip that fade and
+  stop at a pixel. Judge 2 (6.5/10, with weeds and facades out of scope): gutters and carriageway too clean: gutter drift, grimier
+  band, more trench scars.

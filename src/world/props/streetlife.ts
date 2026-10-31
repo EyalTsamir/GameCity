@@ -16,7 +16,7 @@ import type { GreenKit } from '../buildings/green';
 import type { Kit } from './furniture';
 import { MASK_WALK, type getLayout } from './layout';
 import type { Printer } from './print';
-import { barrier, bookCart, bottleCrates, breadCrates, brooms, cabinet, cardboard, cellarHatch, clothesRail, cone, doorMat, flowerBuckets, fruitStand, guardRail, pavementLights, postNotice, postcardRack, posterColumn, sacks, signPost, wheelStop, worksSign, worksSite, type SignKind } from './streetkit';
+import { barrier, gutterDrift, bookCart, bottleCrates, breadCrates, brooms, cabinet, cardboard, cellarHatch, clothesRail, cone, doorMat, flowerBuckets, fruitStand, guardRail, pavementLights, postNotice, postcardRack, posterColumn, sacks, signPost, wheelStop, worksSign, worksSite, type SignKind } from './streetkit';
 import { bike } from './furniture';
 import { wheelieBins } from './garden';
 
@@ -307,6 +307,32 @@ export function placeStreetKit(e: StreetKitEnv): { x: number; z: number }[] & { 
         }
         spot(x, SIDEWALK_Y, z, yaw, 0, 0, 0.4, 0.22, 0.12, 0.2, 0.28);
         claim(x, z, 0.45);
+      }
+    }
+  }
+
+  // ── the gutter: grit, leaves, butts and scraps against the kerb (near only, no stone of it reaches the budget)
+  if (streetDetail(ctx, 'gutterdrift')) {
+    for (const seg of plan.roadSegments) {
+      if (!seg.sidewalks) continue;
+      const A = plan.roadNodes[seg.a],
+        B = plan.roadNodes[seg.b];
+      const L = Math.hypot(B.x - A.x, B.z - A.z);
+      const dx = (B.x - A.x) / L,
+        dz = (B.z - A.z) / L;
+      for (const sd of [1, -1]) {
+        const rx = -dz * sd,
+          rz = dx * sd;
+        // local X along the street, +Z towards the kerb
+        const yaw = Math.atan2(rx, rz);
+        for (let s = CORRIDOR_HALF + 2; s < L - CORRIDOR_HALF - 2; s += rng.range(0.6, 2.4)) {
+          const lat = ROAD_HALF - rng.range(0.08, 0.2);
+          const x = A.x + dx * s + rx * lat,
+            z = A.z + dz * s + rz * lat;
+          const kd = near(x, z);
+          kd.sh.frame(x, 0.018, z, yaw); // (the gutter band of the road lies at +0.014)
+          gutterDrift(kd, rng);
+        }
       }
     }
   }

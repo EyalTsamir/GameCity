@@ -714,7 +714,7 @@ export function wheelStop(k: Kit, kd: Kit, rng: Rng): void {
   k.m(rng.pick(['#8d8a82', '#7c7a74', '#a09c92']), 'stone');
   cbox(sh, 0, 0.05, 0, W, 0.1, 0.15, 0.02);
   kd.m('#d9b52a', 'paint');
-  for (const s of [-1, 1]) kd.sh.box((s * (W - 0.24)) / 2, 0.1005, 0, 0.2, 0.001, 0.11, 55);
+  for (const s of [-1, 1]) kd.sh.box((s * (W - 0.24)) / 2, 0.1005, 0, 0.2, 0.001, 0.11, 61);
   kd.m('#3c3b39', 'iron');
   for (const s of [-1, 1]) kd.sh.cyl((s * W) / 3.2, 0.1, 0, 0.012, 0.012, 0.003, 5, 2);
 }
@@ -959,4 +959,34 @@ export function brooms(k: Kit, kd: Kit, rng: Rng): void {
   k.m('#9aa2a6', 'steel');
   sh.cyl(0.26, 0, 0.02, 0.115, 0.15, 0.26, 10, 2);
   for (let i = 1; i < 5; i++) sh.cyl(0.26, 0.2 + i * 0.05, 0.02, 0.122, 0.152, 0.05, 10, 0);
+}
+
+/** What collects against a kerb, flat on the road (X along the kerb, +Z towards it): a drift of grit, leaves, butts, a scrap. */
+export function gutterDrift(kd: Kit, rng: Rng): void {
+  const sh = kd.sh;
+  const top = 61; // top face only
+  if (rng.chance(0.55)) {
+    const n = rng.int(1, 3);
+    for (let i = 0; i < n; i++) {
+      kd.m(rng.pick(['#5e5a50', '#66604f', '#55524a', '#6e6654']), 'stone');
+      sh.push().local(rng.range(-0.25, 0.25), 0.001 + i * 0.0006, rng.range(-0.03, 0.03), 0, rng.range(-0.25, 0.25), 0);
+      sh.box(0, 0, 0, rng.range(0.2, 0.75), 0.001, rng.range(0.04, 0.12), top);
+      sh.pop();
+    }
+  }
+  for (let i = rng.int(0, 5); i > 0; i--) {
+    const kind = rng.next();
+    sh.push().local(rng.range(-0.45, 0.45), 0.003 + i * 0.0004, rng.range(-0.1, 0.08), 0, rng.range(0, 3.14), 0);
+    if (kind < 0.6) {
+      kd.m(rng.pick(['#6d4f2a', '#8a6a34', '#5a4326', '#7a5a2c', '#a07a3a']), 'wood');
+      sh.box(0, 0, 0, rng.range(0.04, 0.08), 0.001, rng.range(0.025, 0.05), top);
+    } else if (kind < 0.85) {
+      kd.m(rng.pick(['#d8d0bc', '#c49a6c']), 'plastic');
+      sh.box(0, 0, 0, 0.03, 0.001, 0.009, top);
+    } else {
+      kd.m(rng.pick(['#cfcabb', '#b8b3a6', '#8ca0a8']), 'plastic');
+      sh.box(0, 0, 0, rng.range(0.05, 0.12), 0.001, rng.range(0.04, 0.08), top);
+    }
+    sh.pop();
+  }
 }

@@ -174,8 +174,8 @@ vec3 rdAsphalt(inout float rough) {
     c *= 1.0 - 0.4 * oil;
     rough -= 0.35 * oil;
     // gutter: dusty band along the kerb, darker damp line right at it
-    c = mix(c, vec3(0.2, 0.185, 0.16) * (0.85 + 0.3 * nS.r), smoothstep(2.85, 3.3, alat) * onRoad * 0.45);
-    c *= 1.0 - 0.25 * smoothstep(3.28, 3.48, alat) * onRoad;
+    c = mix(c, vec3(0.2, 0.185, 0.16) * (0.85 + 0.3 * nS.r), smoothstep(2.85 - 0.3 * uJuncWear, 3.3, alat) * onRoad * (0.45 + 0.3 * uJuncWear * (0.35 + 1.3 * strk.a)));
+    c *= 1.0 - (0.25 + 0.12 * uJuncWear) * smoothstep(3.22, 3.48, alat) * onRoad;
     // sealed cracks on worn sections
     float worn = smoothstep(0.22, 0.55, age) * onRoad * step(${JBOX}, dj);
     if (worn > 0.001) {
@@ -226,7 +226,7 @@ vec3 rdAsphalt(inout float rough) {
     }
     // utility trench cut across one lane
     float tc = rdHash(sg + 8.8);
-    if (tc < 0.45) {
+    if (tc < 0.45 + 0.17 * uJuncWear) {
       float tpos = 10.0 + 35.0 * fract(tc * 13.7);
       float tw = 0.7 + 0.6 * fract(tc * 7.1);
       float dt = abs(t - tpos);
