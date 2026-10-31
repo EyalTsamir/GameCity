@@ -510,6 +510,10 @@ void main() {
   ratio *= 1.0 + 0.22 * smoothstep(0.55, 0.9, f.a + c.a * 0.4) * hand;
   float nick = smoothstep(0.76, 0.8, c.a * 0.7 + g.b * 0.3);
   ratio = mix(ratio, vec3(1.7), nick * 0.7);
+  vec3 dust = vec3(0.26, 0.25, 0.235) * (0.7 + 0.6 * g.b) / col;
+  float film = (0.04 + 0.16 * smoothstep(0.3, 0.8, c.b) + 0.22 * (1.0 - smoothstep(0.0, 1.4, vP.y))) * (0.6 + 0.8 * f.b);
+  film += 0.3 * smoothstep(0.7, 0.92, f.a);
+  ratio = mix(ratio, dust, clamp(film, 0.0, 1.0) * smoothstep(0.32, 0.1, dot(col, vec3(0.3, 0.59, 0.11))));
   gl_FragColor = vec4(max(mix(vec3(1.0), ratio, k), vec3(0.0)), 1.0);
 }
 `;
@@ -525,9 +529,9 @@ void main() {
   float fa = cmArea(gx, gy);
   if (fa >= CM_LIM) discard;
   float k = 1.0 - smoothstep(CM_LIM * 0.45, CM_LIM, fa);
-  vec4 g = CMT(tGrain, p * 1.667, 1.667);
-  // the ground is most of a street view: only the first metres pay for relief and cracks
+  // the ground is most of a street view: only the first metres pay for grain, relief and cracks
   float fine = 1.0 - smoothstep(CM_LIM * 0.3, CM_LIM * 0.5, fa);
+  vec4 g = fine > 0.0 ? mix(vec4(0.5), CMT(tGrain, p * 1.667, 1.667), fine) : vec4(0.5);
   // (the grain pushes the lookup about: no straight polygon edges)
   vec2 sq = p * 1.8 + (g.rg - 0.5) * 0.035;
   vec4 s0 = CMT(tStones, sq, 1.8);
@@ -662,9 +666,9 @@ void main() {
   cmSlab(p, q, frame, size, cell, edge);
   float rnd = cmHash(cell + 11.7);
   vec2 win = vec2(rnd * 31.0, fract(rnd * 7.7) * 37.0);
-  vec4 g = CMT(tGrain, uv * 1.667 + win, 1.667);
-  vec4 c = CMT(tCrack, uv * 0.39 + win * 0.17, 0.39);
   float fine = 1.0 - smoothstep(CM_LIM * 0.3, CM_LIM * 0.5, fa);
+  vec4 g = fine > 0.0 ? mix(vec4(0.5), CMT(tGrain, uv * 1.667 + win, 1.667), fine) : vec4(0.5);
+  vec4 c = CMT(tCrack, uv * 0.39 + win * 0.17, 0.39);
   vec4 st = fine > 0.0 ? CMT(tStones, uv * 2.1 + win, 2.1) : vec4(0.5);
   // stone: flecks of its minerals, relief, pits; a fired clay brick (red pavers) shows no flecks
   vec2 s = (g.rg - 0.5) * 0.62;
@@ -713,8 +717,8 @@ void main() {
   vec2 ld = uSunDir.xz / max(uSunDir.y, 0.25);
   float fine = 1.0 - smoothstep(CM_LIM * 0.3, CM_LIM * 0.5, fa);
   vec4 s1 = fine > 0.0 ? CMT(tStones, uv * sc + ld * 0.012, sc) : s0;
-  vec4 g = CMT(tGrain, uv * 1.667, 1.667);
-  vec4 c = CMT(tCrack, uv * 0.39, 0.39);
+  vec4 g = fine > 0.0 ? mix(vec4(0.5), CMT(tGrain, uv * 1.667, 1.667), fine) : vec4(0.5);
+  vec4 c = fine > 0.0 ? CMT(tCrack, uv * 0.39, 0.39) : vec4(0.5);
   float st = smoothstep(0.05, 0.3, s0.r);
   float id = s0.g;
   vec3 tone = vec3(0.7 + 0.62 * id);
@@ -850,12 +854,12 @@ void main() {
   float fa = cmArea(gx, gy);
   if (fa >= CM_LIM) discard;
   float k = 1.0 - smoothstep(CM_LIM * 0.45, CM_LIM, fa);
-  vec4 g = CMT(tGrain, p * 1.667, 1.667);
+  float fine = 1.0 - smoothstep(CM_LIM * 0.3, CM_LIM * 0.5, fa);
+  vec4 g = fine > 0.0 ? mix(vec4(0.5), CMT(tGrain, p * 1.667, 1.667), fine) : vec4(0.5);
   vec4 c = CMT(tCrack, p * 0.39, 0.39);
   vec2 sq = p * 1.8 + (g.rg - 0.5) * 0.035;
   vec4 s0 = CMT(tStones, sq, 1.8);
   vec2 ld = uSunDir.xz / max(uSunDir.y, 0.25);
-  float fine = 1.0 - smoothstep(CM_LIM * 0.3, CM_LIM * 0.5, fa);
   vec4 s1 = fine > 0.0 ? CMT(tStones, sq + ld * 0.0035, 1.8) : s0;
   float rel = (s0.b - s1.b) * 1.5 * fine * uDaylight * smoothstep(0.02, 0.3, uSunDir.y);
   vec3 ratio = vec3(1.0 + clamp(-rel, -0.2, 0.2));
