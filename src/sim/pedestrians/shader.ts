@@ -1749,8 +1749,8 @@ const FRAG_COLOR = /* glsl */ `
       e -= (1.0 - vPedHairW.w) * (0.2 * ageH * (0.4 + hk1) + 0.04) * smoothstep(0.14, 0.55, aA) * (1.0 - smoothstep(0.95, 1.45, aA));
       if (e < 0.03) discard;
       float cov = 1.0;
-      vec3 skinSide = pc;
       pc *= 0.84 + 0.16 * smoothstep(0.03, 0.12, e);
+      vec3 skinSide = pc;
       // short back and sides: the scalp shows through low down
       if (vPedFC.x == 0u || vPedFC.x == 4u) {
         float grain = mix(pedN1(a * 340.0 + vPedRest.y * 90.0), 0.5, smoothstep(0.3, 0.7, fwidth(a * 340.0)));
@@ -1760,7 +1760,9 @@ const FRAG_COLOR = /* glsl */ `
       if (vPedFC.x == 1u || vPedFC.x == 3u) {
         float pX = vPedFC.x == 1u ? (hk0 < 0.5 ? -0.034 : 0.034) : (hk0 - 0.5) * 0.05;
         float wob = (pedN1(vPedRest.z * 240.0) - 0.5) * 0.0012;
-        if (abs(vPedRest.x - pX + wob) < 0.0007 && vPedRest.z > -0.012 + 0.0) discard;
+        // (scalp in the hair's shade, soft-edged: skin in the sun read as a white thread on dark hair)
+        float pW = max(fwidth(vPedRest.x), 1e-4);
+        pc = mix(pc, vPedSkin * 0.62 * (0.75 + 0.25 * vPedHairW.r), (1.0 - smoothstep(0.0004, 0.0009 + pW, abs(vPedRest.x - pX + wob))) * smoothstep(-0.02, -0.008, vPedRest.z) * 0.85);
       }
 #else
       float cov = smoothstep(0.0, 0.17, e);
