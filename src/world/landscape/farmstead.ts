@@ -9,6 +9,7 @@
 
 import * as THREE from 'three';
 import { Sink, type RGB } from './tractor';
+import { natureOn } from '../../core/nature';
 
 export interface FarmBld {
   lx: number;
@@ -33,7 +34,7 @@ export interface FarmSite {
   blds: FarmBld[];
 }
 
-const S = { plain: 0, boards: 1, sheet: 2, tiles: 3, render: 4, brick: 5, galv: 6, wrap: 7, straw: 8, concrete: 9 } as const;
+const S = { plain: 0, boards: 1, sheet: 2, tiles: 3, render: 4, brick: 5, galv: 6, wrap: 7, straw: 8, concrete: 9, gravel: 10 } as const;
 
 function rnd(seed: number, i: number): number {
   const x = Math.sin(seed * 127.1 + i * 311.7) * 43758.5453;
@@ -225,6 +226,160 @@ function shed(s: Sink, m: THREE.Matrix4, b: FarmBld, seed: number): void {
   s.surf = S.plain;
 }
 
+/** what a yard collects: gravel between the buildings, muck heap, log stack, trough, drums, pallets, old haystacks, a wind pump */
+function farmYard(s: Sink, site: FarmSite, gy: (lx: number, lz: number) => number, barn: FarmBld, others: FarmBld[]): void {
+  const house = others.find((o) => o.kind === 0) ?? barn;
+  const cx = (house.lx + barn.lx) / 2,
+    cz = (house.lz + barn.lz) / 2;
+  const R = Math.max(9, Math.hypot(house.lx - barn.lx, house.lz - barn.lz) * 0.62);
+  // gravel: a fan over the ground, wandering edge
+  {
+    const n = 22;
+    const pos: number[] = [cx, gy(cx, cz) + 0.05, cz];
+    const nrm: number[] = [0, 1, 0];
+    const idx: number[] = [];
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * 6.283;
+      const r = R * (0.78 + 0.34 * rnd(site.seed, 200 + i));
+      const x = cx + Math.cos(a) * r,
+        z = cz + Math.sin(a) * r;
+      pos.push(x, gy(x, z) + 0.05, z);
+      nrm.push(0, 1, 0);
+      idx.push(0, 1 + ((i + 1) % n), 1 + i);
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    g.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3));
+    g.setIndex(idx);
+    s.base = gy(cx, cz);
+    s.surf = S.gravel;
+    s.add(g, new THREE.Matrix4(), [0.4, 0.36, 0.3], 1, 0, 0);
+    s.surf = S.plain;
+  }
+  // a free spot round the yard's edge: clear of every building
+  const all = [barn, ...others];
+  const spot = (a: number, rr: number): [number, number] | null => {
+    const x = cx + Math.cos(a) * rr,
+      z = cz + Math.sin(a) * rr;
+    for (const o of all) {
+      const dx = x - o.lx,
+        dz = z - o.lz;
+      const c = Math.cos(o.yawOff),
+        sn = Math.sin(o.yawOff);
+      if (Math.abs(dx * c - dz * sn) < o.w / 2 + 2.2 && Math.abs(dx * sn + dz * c) < o.d / 2 + 2.2) return null;
+    }
+    return gy(x, z) + site.y < -1 ? null : [x, z];
+  };
+  const place = (i: number, rr: number): [number, number, number] | null => {
+    for (let k = 0; k < 7; k++) {
+      const p = spot(rnd(site.seed, 240 + i) * 6.283 + k * 0.9, rr);
+      if (p) return [p[0], gy(p[0], p[1]), p[1]];
+    }
+    return null;
+  };
+  const T = (x: number, y: number, z: number, ry = 0) => new THREE.Matrix4().makeRotationY(ry).setPosition(x, y, z);
+  // muck heap: dark, steaming-brown, straw in it
+  let p = place(1, R * 1.1);
+  if (p) {
+    s.base = p[1];
+    s.surf = S.straw;
+    const g = new THREE.ConeGeometry(2.6, 1.25, 9, 2);
+    s.add(g, T(p[0], p[1] + 0.55, p[2]), [0.19, 0.14, 0.09], 1, 0, 0.4);
+    s.surf = S.plain;
+  }
+  // log stack against the yard's edge
+  p = place(2, R * 0.86);
+  if (p) {
+    s.base = p[1];
+    const ry = rnd(site.seed, 260) * 3;
+    for (let row = 0, y = 0.16; row < 3; row++, y += 0.27)
+      for (let i = 0; i < 4 - row; i++) {
+        const off = (i - (3 - row) / 2) * 0.33;
+        const m = new THREE.Matrix4().makeRotationZ(Math.PI / 2).premultiply(new THREE.Matrix4().makeRotationY(ry));
+        m.setPosition(p[0] - Math.sin(ry) * off, p[1] + y, p[2] - Math.cos(ry) * off);
+        const t = 0.8 + 0.4 * rnd(site.seed, 270 + row * 7 + i);
+        s.add(new THREE.CylinderGeometry(0.15, 0.17, 2.6, 6), m, [0.29 * t, 0.21 * t, 0.14 * t], 0.95, 0, 0.3);
+      }
+  }
+  // stone trough with dark water, oil drums, a stack of pallets
+  p = place(3, R * 0.8);
+  if (p) {
+    s.base = p[1];
+    const ry = rnd(site.seed, 280) * 3;
+    s.surf = S.concrete;
+    s.add(new THREE.BoxGeometry(2.1, 0.62, 0.72), T(p[0], p[1] + 0.3, p[2], ry), [0.42, 0.4, 0.36], 0.9, 0, 0.5);
+    s.surf = S.plain;
+    s.add(new THREE.BoxGeometry(1.86, 0.03, 0.5), T(p[0], p[1] + 0.61, p[2], ry), [0.05, 0.07, 0.07], 0.1, 0, 0);
+  }
+  p = place(4, R * 0.92);
+  if (p) {
+    s.base = p[1];
+    for (let i = 0; i < 3; i++) {
+      const a = i * 2.3;
+      const k = rnd(site.seed, 290 + i);
+      s.add(new THREE.CylinderGeometry(0.29, 0.29, 0.88, 9), T(p[0] + Math.cos(a) * 0.5, p[1] + 0.44, p[2] + Math.sin(a) * 0.5), k < 0.4 ? [0.3, 0.12, 0.06] : k < 0.7 ? [0.08, 0.16, 0.2] : [0.3, 0.3, 0.28], 0.55, 0.5, 0.4);
+    }
+    const ry = rnd(site.seed, 296) * 3;
+    for (let i = 0; i < 5; i++) s.add(new THREE.BoxGeometry(1.2, 0.13, 1.0), T(p[0] + 2.1, p[1] + 0.07 + i * 0.145, p[2] + 0.4, ry + (i % 2) * 0.05), [0.42, 0.34, 0.24], 0.95, 0, 0.3);
+  }
+  // two old ricks on the far side of the barn: round, thatched by the weather, a pole through the crown
+  for (let k = 0; k < 2; k++) {
+    const a = rnd(site.seed, 300 + k) * 6.283;
+    const q = spot(a, R * 2.1 + k * 6);
+    if (!q) continue;
+    const y0 = gy(q[0], q[1]);
+    s.base = y0;
+    s.surf = S.straw;
+    s.add(new THREE.CylinderGeometry(2.0, 1.75, 2.0, 10, 1, true), T(q[0], y0 + 1.0, q[1]), [0.5, 0.41, 0.24], 1, 0, 0.4);
+    s.add(new THREE.ConeGeometry(2.25, 2.3, 10), T(q[0], y0 + 3.1, q[1]), [0.44, 0.37, 0.22], 1, 0, 0);
+    s.surf = S.plain;
+    s.rod([q[0], y0 + 3.5, q[1]], [q[0] + 0.05, y0 + 4.9, q[1]], 0.04, 0.03, 4, [0.25, 0.2, 0.14], 0.9, 0, 0);
+  }
+  // a wind pump over the well: four legs, cross braces, a fan of galvanised blades, a tail vane (points where it pleases)
+  if (rnd(site.seed, 310) < 0.7) {
+    const q = spot(rnd(site.seed, 311) * 6.283, R * 1.9);
+    if (q) {
+      const y0 = gy(q[0], q[1]);
+      s.base = y0;
+      const H2 = 9.5;
+      const steel: RGB = [0.34, 0.35, 0.35];
+      const wAt = (h: number) => 1.5 * (1 - h / H2) + 0.2;
+      for (const [sx, sz] of [
+        [1, 1],
+        [-1, 1],
+        [-1, -1],
+        [1, -1],
+      ])
+        s.rod([q[0] + sx * wAt(0), y0 - 0.2, q[1] + sz * wAt(0)], [q[0] + sx * wAt(H2), y0 + H2, q[1] + sz * wAt(H2)], 0.045, 0.03, 4, steel, 0.5, 0.6, 0.2);
+      for (let h = 1.6; h < H2 - 0.5; h += 2.4) {
+        const w = wAt(h);
+        for (const [ax, az, bx, bz] of [
+          [1, 1, -1, 1],
+          [-1, 1, -1, -1],
+          [-1, -1, 1, -1],
+          [1, -1, 1, 1],
+        ])
+          s.rod([q[0] + ax * w, y0 + h, q[1] + az * w], [q[0] + bx * w, y0 + h, q[1] + bz * w], 0.018, 0.018, 3, steel, 0.5, 0.6, 0);
+      }
+      const ya = rnd(site.seed, 312) * 6.283;
+      const fx = Math.sin(ya),
+        fz = Math.cos(ya);
+      const hub: [number, number, number] = [q[0] + fx * 0.5, y0 + H2 + 0.2, q[1] + fz * 0.5];
+      const rot = new THREE.Matrix4().makeRotationY(ya);
+      for (let i = 0; i < 14; i++) {
+        const a = (i / 14) * 6.283;
+        const m = new THREE.Matrix4().makeRotationZ(a).premultiply(rot);
+        m.multiply(new THREE.Matrix4().makeRotationY(0.5));
+        const e = new THREE.Vector3(0, 0.95, 0).applyMatrix4(new THREE.Matrix4().makeRotationZ(a).premultiply(rot));
+        m.setPosition(hub[0] + e.x, hub[1] + e.y, hub[2] + e.z);
+        s.add(new THREE.BoxGeometry(0.26, 1.3, 0.02), m, [0.52, 0.53, 0.53], 0.45, 0.65, 0);
+      }
+      s.rod([q[0], y0 + H2 + 0.2, q[1]], [q[0] - fx * 1.6, y0 + H2 + 0.25, q[1] - fz * 1.6], 0.025, 0.025, 4, steel, 0.5, 0.6, 0);
+      s.add(new THREE.BoxGeometry(0.02, 0.62, 0.9), new THREE.Matrix4().makeRotationY(ya).setPosition(q[0] - fx * 2.0, y0 + H2 + 0.25, q[1] - fz * 2.0), [0.56, 0.2, 0.14], 0.5, 0.3, 0);
+    }
+  }
+}
+
 export function buildFarmstead(site: FarmSite, H: (x: number, z: number) => number, fog: boolean, mat: THREE.Material): THREE.Mesh {
   const s = new Sink();
   const cy = Math.cos(site.yaw),
@@ -247,6 +402,11 @@ export function buildFarmstead(site: FarmSite, H: (x: number, z: number) => numb
   }
   s.mudTop = 0.5;
   s.mudSpan = 0.5;
+  if (barnB && natureOn('farmyard')) {
+    farmYard(s, site, gy, barnB, site.blds.filter((o) => o !== barnB));
+    s.mudTop = 0.5;
+    s.mudSpan = 0.5;
+  }
   if (barnB) {
     const b = barnB;
     const ry = b.yawOff;
@@ -490,6 +650,13 @@ float gFsRough;`,
     float t = fsN(p * 4.0) * 0.5 + fsN(p * 30.0) * 0.5;
     diffuseColor.rgb *= 0.82 + 0.25 * t;
     gFsBump = fsN(p * 80.0) * 0.0012 * aa;
+  } else if (sf == 10) {
+    // yard gravel: stones, darker wheel-worn tracks, grass creeping in where nobody drives
+    float st = fsH(floor(p * 26.0));
+    float wear = fsN(p * vec3(0.22, 0.0, 0.22));
+    diffuseColor.rgb *= mix(1.0, 0.7 + 0.6 * st, aa) * (0.8 + 0.4 * wear);
+    diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.13, 0.17, 0.07), smoothstep(0.62, 0.8, fsN(p * 0.7)) * 0.8);
+    gFsBump = st * 0.008 * aa;
   }
 }`,
       )
@@ -507,6 +674,6 @@ float gFsRough;`,
 }`,
       );
   };
-  m.customProgramCacheKey = () => 'th-farmstead-v1';
+  m.customProgramCacheKey = () => 'th-farmstead-v2';
   return m;
 }

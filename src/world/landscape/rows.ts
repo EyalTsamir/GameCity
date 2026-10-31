@@ -1,4 +1,4 @@
-// Row strips: what makes a coloured patch read as farmed land. One static merged kit in a few distance-collapsed chunks,
+// Row strips: what makes a coloured patch read as farmed land. One static merged kit in three meshes,
 // one material, one atlas of tiling alpha-cut "walls" (vines on their wires, maize, sunflowers, hedge, reeds, marram, wire
 // and rail fences, dry-stone walls, sand fences) plus solid parts (bales, polytunnels). A vine row is two quads per 6 m:
 // triangles are the cheap currency here (perf-deep.md), and the rows and their shadows are what the eye reads at 100–700 m.
@@ -516,14 +516,16 @@ class Chunk {
   idx: number[] = [];
 }
 
-const CHUNK = 1400;
+// three meshes: draw calls cost more here than the triangles culling would save. North and south of the town within
+// shadow reach, and everything further out, which casts no shadow (the shadow frustum never gets there in practice).
+const NEAR_BOX = 1300;
 const vBand = (b: number, t: number) => (b + (PAD + (1 - t) * (BH - 2 * PAD)) / BH) / NB;
 
 /** the merged kit: chunks of static geometry in world coordinates */
 export class RowSink {
   private chunks = new Map<number, Chunk>();
   private ch(x: number, z: number): Chunk {
-    const k = (Math.floor(x / CHUNK) + 512) * 2048 + Math.floor(z / CHUNK) + 512;
+    const k = Math.abs(x) > NEAR_BOX || Math.abs(z) > NEAR_BOX ? 2 : z < 0 ? 0 : 1;
     let c = this.chunks.get(k);
     if (!c) this.chunks.set(k, (c = new Chunk()));
     return c;
@@ -594,7 +596,7 @@ export class RowSink {
   /** build the meshes */
   finish(mat: THREE.Material, depth: THREE.Material, castShadow: boolean): THREE.Mesh[] {
     const out: THREE.Mesh[] = [];
-    for (const c of this.chunks.values()) {
+    for (const [k, c] of this.chunks) {
       if (!c.idx.length) continue;
       const g = new THREE.BufferGeometry();
       g.setAttribute('position', new THREE.Float32BufferAttribute(c.pos, 3));
@@ -606,7 +608,7 @@ export class RowSink {
       g.computeBoundingSphere();
       const m = new THREE.Mesh(g, mat);
       m.name = 'land-rows';
-      m.castShadow = castShadow;
+      m.castShadow = castShadow && k < 2;
       m.receiveShadow = true;
       m.customDepthMaterial = depth as THREE.MeshDepthMaterial;
       m.matrixAutoUpdate = false;
