@@ -7,9 +7,11 @@
 import type { CityContext } from '../../core/context';
 import { OCC } from '../../core/occupancy';
 import type { Rng } from '../../core/rng';
+import { addLampLights, type LampLight } from '../../core/lampLight';
 import { addActor } from '../../sim/pedestrians/actorDefs';
 import { addContainer, pickLook } from './containers';
-import { HB, PAT, type V3 } from './geo';
+import { EMIT, HB, PAT, type V3 } from './geo';
+import type { GlowPoint } from './material';
 import { pallet, stain, torusTube } from './quay';
 
 export interface QuayLifeOpts {
@@ -24,6 +26,7 @@ export interface QuayLifeOpts {
   /** the coping (quay edge) */
   edgeX: number;
   ladders: number[];
+  glows: GlowPoint[];
 }
 
 const NOPE = OCC.ROAD | OCC.BUILDING | OCC.SOLID | OCC.RAIL;
@@ -188,6 +191,34 @@ function terminalTractor(b: HB, x: number, y: number, z: number, rng: Rng): void
   addContainer(b, x, y + 1.22, z - 5.2, 12.19, pickLook(rng), 0);
 }
 
+/** an 11 m mast (under the cranes' lower portal beam) by the seaward rail, its heads aimed along the lane, at the stacks and at the ship */
+function lightMast(b: HB, x: number, z: number, ground: (x: number, z: number) => number, glows: GlowPoint[], lights: LampLight[]): void {
+  const g = ground(x, z);
+  const H = 11;
+  b.noEmit().pat(PAT.NONE);
+  b.color('#8e8b83');
+  b.vcyl(x, g, z, 0.34, 0.5, 8, 2);
+  b.color('#e6b92c');
+  b.vcyl(x, g + 0.5, z, 0.2, 1.0, 8, 0, 0.19);
+  b.color('#6f7478');
+  b.vcyl(x, g + 1.5, z, 0.19, H - 1.5, 8, 0, 0.1);
+  b.color('#2a2d30');
+  b.box(x, g + H, z, 0.12, 0.1, 2.0, 0, 0);
+  for (const [sz, ax, az] of [[-1, x - 2, z - 15], [1, x - 2, z + 15], [0, x + 8, z]] as [number, number, number][]) {
+    const lz = z + sz * 0.9;
+    const yaw = Math.atan2(ax - x, az - lz);
+    b.pushT(x, g + H + 0.05, lz, yaw, 0.5);
+    b.color('#23262a');
+    b.box(0, 0, -0.07, 0.62, 0.42, 0.12);
+    b.color('#f4f6ff').emit('#f0f4ff', 3.0, EMIT.LIGHTS);
+    b.box(0, 0, 0.0, 0.52, 0.32, 0.03, 0, 4);
+    b.noEmit();
+    b.pop();
+    glows.push({ x: x + Math.sin(yaw) * 0.2, y: g + H - 0.1, z: lz + Math.cos(yaw) * 0.2, size: 1.1, color: '#eaf1ff', intensity: 0.9 });
+    lights.push({ x, y: g + H, z: lz, pole: H, radius: sz === 0 ? 8 : 15, color: '#e8eeff', intensity: sz === 0 ? 0.32 : 0.6, kind: 'flood', aim: [ax, ground(ax, az), az] });
+  }
+}
+
 export function buildContainerQuayLife(b: HB, o: QuayLifeOpts): void {
   const { ctx, ground, rng, x0, x1, z0, z1, edgeX } = o;
   const occ = ctx.occupancy;
@@ -261,6 +292,15 @@ export function buildContainerQuayLife(b: HB, o: QuayLifeOpts): void {
     }
     z += 6 + rng.next() * 7;
   }
+
+  // ── light masts
+  const lights: LampLight[] = [];
+  for (let q = z0 + 8; q < z1 - 4; q += 25) {
+    if (occ.has(x1 - 0.3, q, NOPE)) continue;
+    lightMast(b, x1 - 0.3, q, ground, o.glows, lights);
+    solid(x1 - 0.3, q, 0.34, 0.34);
+  }
+  addLampLights(lights);
 
   // ── lifebuoys on the coping
   for (let q = z0 + 8; q < z1; q += 21) {

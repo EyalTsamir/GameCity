@@ -295,7 +295,29 @@ export function buildShip(
   const lv = 2.6;
   const top = SHIP.deckY + 4 * lv; // 12.0
   b.color(WHITE);
-  b.boxMM(-5.6, SHIP.deckY, z0, 5.6, top, z1, 1);
+  if (!KIT) b.boxMM(-5.6, SHIP.deckY, z0, 5.6, top, z1, 1);
+  else {
+    // one box a level: the hull pattern weeps rust from each deck edge down the white paint
+    for (let k = 0; k < 4; k++) {
+      const y1 = SHIP.deckY + (k + 1) * lv;
+      b.pat(PAT.HULL, y1);
+      b.boxMM(-5.6, y1 - lv, z0, 5.6, y1, z1, 1);
+    }
+  }
+  b.pat(PAT.NONE);
+  if (KIT) {
+    // welded plate seams, a door per level
+    b.color('#c3bdb0');
+    for (const s of [1, -1]) for (let wz = z0 + 0.55; wz < z1; wz += 1.4) b.boxMM(s * 5.6 - 0.006, SHIP.deckY, wz - 0.008, s * 5.6 + 0.006, top, wz + 0.008);
+    for (let wx = -5.0; wx <= 5.01; wx += 1.15) b.boxMM(wx - 0.008, SHIP.deckY, z1 - 0.006, wx + 0.008, top, z1 + 0.006);
+    for (let k = 0; k < 3; k++) {
+      const y = SHIP.deckY + k * lv + 0.1;
+      b.color('#8d9396');
+      b.boxMM(5.61, y, z1 - 2.6, 5.635, y + 1.9, z1 - 1.85);
+      b.color('#2b2f33');
+      b.boxMM(5.63, y + 1.2, z1 - 2.4, 5.64, y + 1.55, z1 - 2.05);
+    }
+  }
   // deck overhang slabs at each level
   b.color('#d8d2c5');
   for (let k = 1; k <= 4; k++) {

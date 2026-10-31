@@ -113,7 +113,7 @@ export function buildCrane(b: HB, i: number, xc: number, z0: number, glows: Glow
           b.color(k % 2 ? '#1e1f20' : '#e6b92c');
           b.box(x, 1.75 + k * 0.28, z, 0.975, 0.28, 0.975, 0, 3);
         }
-        b.color('#f4f2ea');
+        b.color('#a9a596');
         b.box(x, 4.9, z - sz * 0.485, 0.5, 0.62, 0.012, 0, 0);
         b.color(C_LEG_DK);
         for (const yy of [7.7, 15.9]) {

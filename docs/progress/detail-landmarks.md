@@ -4,7 +4,11 @@ Branch `claude/detail-landmarks-28de6d`. Shared rules: `DETAIL-ROUND.md`. Switch
 `?no<name>` one family).
 
 ## Resume here
-Round 1 in progress: hero interiors. Dev server: `npx vite --port 5202 --strictPort --host 127.0.0.1`.
+Round 1 finished and reported (hero interiors, commit 95ea595: see Results). Round 2 in progress, from a fresh audit at eye level (`shots/dl/a2`):
+1. the working quay and the ship were pitch black at night (`quayLife.ts`: own light masts); 2. the ship's house was a plain box from the quay
+(`ship.ts`, under `?noshipkit`); 3. the breakwater walk was a bare wall (`breakwater.ts`, `?nobwlife`). Then round 3 from another fresh audit, candidates:
+armour stones, tractor cab, church chancel wall grey at noon, café interior, the film in real time. Added after round 1: people in the nave and the
+Town Hall (commit 7f5b3ed), to be seen by eye. Dev server: `npx vite --port 5202 --strictPort --host 127.0.0.1`.
 Scratch tools (session scratchpad, may be gone): `ev.mjs` (named eye→look captures through the shared browser lock), `walk1.mjs`
 (real keys in walk mode), `sheet.py`, `shoot.sh`. Run captures in the background: the browser queue is shared by six sessions and a
 run can wait more than 10 minutes.
@@ -21,7 +25,7 @@ State:
 - DONE, seen (`shots/dl/x3`): `?noquaylife2` container quay clutter (`harbor/quayLife.ts`), `?nohorses` galloper horses + canopy bulbs, `?nobandroof`
   bandstand roof; always on: real-size bricks (25 × 9.5 cm, `shaders.ts`), hazard bands on the crane legs (`?nocranekit`), lifeguard rails, shutters, lifebuoy (`?nobeachkit`).
 - Real-key walks (`walk2.mjs`): church door → altar rail; town hall square → stair → gallery → balcony and back; station street → hall → platform.
-- All checks done, see Results. Not done: seated figures in the nave, a café interior, breakwater armour stones (blocky at eye level), richer tractor cab.
+- Round 1 checks done, see Results. Not done: a café interior, breakwater armour stones (blocky at eye level), richer tractor cab.
 
 ## The room engine
 Near-only mesh per room (`Room.near`, nothing drawn in wide views), own ShaderMaterial, same surface patterns plus `RP.*` (flags, encaustic,

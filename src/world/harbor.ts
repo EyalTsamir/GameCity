@@ -20,7 +20,7 @@ import { rect, type P2, type Rect } from '../core/geom';
 import { QUAY_X, RIVER, WATER_LEVEL } from '../core/constants';
 import { HB, RIG } from './harbor/geo';
 import { createBeamMesh, createHarborMaterials, createGlowMesh, followCraneLamps, NMOB, type GlowPoint } from './harbor/material';
-import { buildBreakwater, setArmourStones } from './harbor/breakwater';
+import { buildBreakwater, setArmourStones, setBreakwaterLife } from './harbor/breakwater';
 import { setArmourSoft } from './harbor/geo';
 import { geomHunt } from '../core/geomhunt';
 import { buildFishQuay, setQuayDetail } from './harbor/quay';
@@ -172,7 +172,7 @@ export default function create(ctx: CityContext): CityModule {
 
   if (lmDetail(ctx, 'quaylife2')) {
     const hs = ctx.plan.places?.waterStairs.find((w) => w.id === 'harbour');
-    buildContainerQuayLife(north, { ctx, ground, rng: ctx.rng('harbor-quaylife2'), x0: 130.9, x1: 134.45, z0: -118, z1: hs ? hs.body.z0 - 3 : -24, edgeX: QX, ladders: ladderZ });
+    buildContainerQuayLife(north, { ctx, ground, rng: ctx.rng('harbor-quaylife2'), x0: 130.9, x1: 134.45, z0: -118, z1: hs ? hs.body.z0 - 3 : -24, edgeX: QX, ladders: ladderZ, glows });
   }
 
   // night work lighting (night agent): floodlight masts on the quay apron + in the container yard
@@ -186,6 +186,7 @@ export default function create(ctx: CityContext): CityModule {
   if (bwF?.a && bwF.b) {
     setArmourStones(boxHunt(ctx, 'armour'));
     setArmourSoft(geomHunt(ctx, 'armoursoft'));
+    setBreakwaterLife(lmDetail(ctx, 'bwlife'));
     const info = buildBreakwater(north, bwF.a, bwF.b, ground, ctx.rng('harbor-breakwater'), lhF ? { x: lhF.x, z: lhF.z, height: Number(lhF.params?.height ?? 24) } : null, glows);
     if (lhF) lantern = info.lantern;
     obstacles.push(rect(info.rootX, bwF.a.z - 8.5, bwF.b.x, bwF.a.z + 7.5));

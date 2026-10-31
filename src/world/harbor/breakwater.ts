@@ -2,6 +2,7 @@
 // walkway with a seaward crown wall, emerging from the rocky cliff; round head carrying the
 // red-and-white lighthouse (gallery, lantern room with a glowing lens, dome, vane).
 
+import { addActor } from '../../sim/pedestrians/actorDefs';
 import * as THREE from 'three';
 import { WATER_LEVEL } from '../../core/constants';
 import type { Rng } from '../../core/rng';
@@ -39,6 +40,12 @@ function tetrapod(b: HB, x: number, y: number, z: number, s: number, rng: Rng): 
     v.set(l[0], l[1], l[2]).normalize().applyQuaternion(q).multiplyScalar(s);
     b.cyl([x, y, z], [x + v.x, y + v.y, z + v.z], s * 0.42, s * 0.24, 6, 2);
   }
+}
+
+let LIFE = false;
+/** ?nobwlife: the bare crown wall and walkway */
+export function setBreakwaterLife(on: boolean): void {
+  LIFE = on;
 }
 
 export function buildBreakwater(
@@ -96,6 +103,52 @@ export function buildBreakwater(
     glows.push({ x, y: crest + 0.05, z: z - hw + 1.2, size: 3.0, pool: true, color: '#ffbe72', intensity: 0.28 });
   }
   b.pat(PAT.NONE);
+  if (LIFE) {
+    const yWall = crest + BW.wallH;
+    // cast sections of the crown wall: joints, tide of damp at the foot, rust from the old fixings
+    for (let x = x0 + 4; x < x1 - 1; x += 6.2) {
+      b.color('#7f7b73');
+      b.boxMM(x - 0.018, crest, z - hw - 0.002, x + 0.018, yWall, z - hw + 0.006);
+      b.color('#9a968c');
+      b.boxMM(x - 0.3, yWall - 0.03, z - hw - 0.002, x - 0.26, yWall - 0.02, z - hw + 0.004);
+      const rs = rng.next();
+      if (rs < 0.6) {
+        b.color('#8a6a4c');
+        const rx = x + 1.2 + rs * 3;
+        b.boxMM(rx - 0.025, yWall - 0.7 - rs, z - hw - 0.002, rx + 0.025, yWall - 0.18, z - hw + 0.003);
+        b.color('#3d3a36');
+        b.boxMM(rx - 0.05, yWall - 0.2, z - hw - 0.002, rx + 0.05, yWall - 0.1, z - hw + 0.012);
+      }
+    }
+    b.color('#8f8b81');
+    b.boxMM(x0, crest, z - hw - 0.002, x1 - 0.5, crest + 0.28, z - hw + 0.004);
+    // a galvanised handrail on the harbour side, breaks at the bollards' berths
+    b.color('#a7adb0');
+    for (let x = x0 + 2; x < x1 - 4; x += 2.4) b.cyl([x, crest + 0.14, z + hw - 0.1], [x, crest + 1.05, z + hw - 0.1], 0.022, 0.022, 6, 0);
+    for (const yy of [0.62, 1.05]) b.cyl([x0 + 2, crest + yy, z + hw - 0.1], [x1 - 4, crest + yy, z + hw - 0.1], 0.02, 0.02, 6, 2);
+    // two anglers with rods over the rail, a bucket, a folding stool; a lifebuoy on the wall
+    for (const [ax, h0, h1, p] of [[x0 + 16, 5, 11, 0.8], [x0 + 21, 15, 21, 0.7], [x0 + 31.5, 6, 20, 0.6]] as [number, number, number, number][]) {
+      const ay = crest;
+      addActor({ x: ax, y: ay, z: z + hw - 0.75, yaw: 0, role: 'fisher', idle: 7, h0, h1, p });
+      b.color('#3a2c20');
+      b.cyl([ax + 0.25, ay + 0.95, z + hw - 0.1], [ax + 0.35, ay + 3.1, z + hw + 2.6], 0.009, 0.004, 4, 0);
+      b.color('#2f6fb3');
+      b.vcyl(ax + 0.7, ay, z + hw - 0.5, 0.15, 0.27, 9, 1, 0.18);
+      b.color('#5a5e60');
+      b.boxMM(ax - 0.7, ay, z + hw - 0.68, ax - 0.34, ay + 0.33, z + hw - 0.34);
+    }
+    for (let x = x0 + 12; x < x1 - 6; x += 38) {
+      b.color('#b53a2a');
+      b.boxMM(x - 0.3, crest + 0.9, z - hw + 0.002, x + 0.3, crest + 1.8, z - hw + 0.03);
+      b.color('#ee6c2a');
+      const pts: V3[] = [];
+      for (let k = 0; k <= 12; k++) {
+        const a = (k / 12) * Math.PI * 2;
+        pts.push([x + Math.cos(a) * 0.23, crest + 1.35 + Math.sin(a) * 0.23, z - hw + 0.06]);
+      }
+      b.tube(pts, 0.05, 6, true);
+    }
+  }
   // ── rock armour, harbour side (south): rows down the slope
   const slopeRows = (side: number, zTop: number, yTop: number, zBot: number, yBot: number, kind: 'rock' | 'tetra') => {
     const rows = 5;
