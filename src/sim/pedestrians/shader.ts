@@ -150,6 +150,7 @@ attribute uvec4 iC2;
 //@if CL
 float pedSunLift = 0.12;
 flat varying vec3 vPedGaze;
+flat varying float vPedBrim;
 flat varying uvec2 vPedFC; // the person's cut (x) and a hashed word for the paint (y) (no attribute free for it: the limit is 16 and instancing takes them)
 float pedDn;
 vec2 pedDg;
@@ -365,6 +366,10 @@ void pedPose(inout vec3 p, inout vec3 n) {
   uint h2 = h1 * 2654435761u; h2 ^= h2 >> 15u;
   uint h3 = h2 * 2246822519u; h3 ^= h3 >> 13u;
   vPedFC = uvec2(iC2.z >> 29u, h3);
+  {
+    uint hatSt = (iC1.y >> 24u) & 7u;
+    vPedBrim = hatSt == 0u ? 0.0 : (iC2.z & ${1 << FB.VISOR}u) != 0u ? uPedHatB[int(hatSt)].z : uPedHatB[int(hatSt)].x + 0.012;
+  }
   {
     // where the eyes look (render.ts eyeGaze), radians in the head's frame
     uint gz = uint((P_spare1 + 8.0) * 4096.0 + 0.5);
@@ -918,6 +923,7 @@ float pedN1(float x) { float i = floor(x), f = fract(x); f = f * f * (3.0 - 2.0 
 #ifdef PED_CLOSE
 flat varying uvec2 vPedFC;
 flat varying vec3 vPedGaze;
+flat varying float vPedBrim;
 float pedN2(vec2 p) {
   vec2 i = floor(p), f = fract(p);
   f = f * f * (3.0 - 2.0 * f);
@@ -1353,7 +1359,7 @@ vec3 pedFaceClose(vec3 skin, vec2 F) {
   vec2 gA = (A.rg * 2.0 - 1.0) * 1.2, gB = (B.rg * 2.0 - 1.0) * 1.2 * wr;
   pedFaceG = vec2((gA.x + gB.x) * sg, gA.y + gB.y);
   pedFaceP = F;
-  pedAO = A.b;
+  pedAO = A.b * (1.0 - 0.4 * smoothstep(0.0, 0.1, vPedBrim) * smoothstep(-0.12, 0.03, F.y));
   pedSkinK = 1.0;
   float lum = dot(skin, vec3(0.3, 0.55, 0.15));
   // the skin's colour isn't one colour: blood in the cheeks, the nose and round the mouth, thin bluish skin round the eyes, the
@@ -1680,7 +1686,7 @@ const FRAG_COLOR = /* glsl */ `
       float ageH = float((vPedFB & 3u) * 2u + ((vPedFB >> 11u) & 1u)) / 7.0;
       // a forehead of its own; men's temples go back with age
       e -= (hk1 - 0.5) * 0.09 * (1.0 - smoothstep(0.9, 1.5, aA));
-      e -= (1.0 - vPedHairW.w) * (0.42 * ageH * (0.4 + hk1) + 0.05) * smoothstep(0.14, 0.55, aA) * (1.0 - smoothstep(0.95, 1.45, aA));
+      e -= (1.0 - vPedHairW.w) * (0.2 * ageH * (0.4 + hk1) + 0.04) * smoothstep(0.14, 0.55, aA) * (1.0 - smoothstep(0.95, 1.45, aA));
       if (e < 0.03) discard;
       float cov = 1.0;
       vec3 skinSide = pc;
@@ -1826,6 +1832,14 @@ void RE_Direct_Lambert( const in IncidentLight directLight, const in vec3 geomet
     vec3 sD = saturate( ( vec3( sNL ) + sW ) / ( vec3( 1.0 ) + sW ) );
     vec3 sI = sD * sD * ( 3.0 - 2.0 * sD ) * 0.35 + sD * 0.65;
     float vis = mix( 1.0, pedAO, 0.55 );
+    if ( vPedBrim > 0.0 && pedFaceP.y != 0.0 ) {
+      // under a hat's brim: the shadow's edge drops down the face as the sun climbs
+      vec3 sUp = viewMatrix[ 1 ].xyz;
+      vec3 sF0 = geometryNormal - sUp * dot( geometryNormal, sUp );
+      float sEl = dot( directLight.direction, sUp ) / max( 0.08, dot( directLight.direction, normalize( sF0 + vec3( 1e-4 ) ) ) );
+      float sY = 0.047 - vPedBrim * sEl;
+      vis *= 1.0 - 0.85 * smoothstep( sY - 0.014, sY + 0.014, pedFaceP.y );
+    }
     reflectedLight.directDiffuse += sI * directLight.color * vis * BRDF_Lambert( material.diffuseColor );
     vec3 sH = normalize( directLight.direction + geometryViewDir );
     float sN = saturate( dot( geometryNormal, sH ) ), sV = saturate( dot( geometryViewDir, sH ) );
@@ -1973,7 +1987,6 @@ function vertParsFor(v: VertVariant, pal: boolean): string {
   if (cached) return cached;
   const flags = new Set<string>(!VFAR ? ['C', 'DET'] : v === 'full' || v === 'close' ? ['R', 'C', 'DET'] : v === 'far' ? ['R', 'C', 'F'] : ['R', 'D']);
   if (v === 'close') flags.add('CL');
-  else if (CLOSE) flags.add('NF');
   if (pal) flags.add('PAL');
   const on: boolean[] = [true]; // nesting: a line is live when every open guard holds
   const stack: boolean[] = [];
@@ -2014,7 +2027,6 @@ function peopleMaterial(far: boolean, pal: PalUniforms, close = false): THREE.Me
   const material = new THREE.MeshLambertMaterial();
   if (far) material.defines = { PED_FAR: '' };
   else if (close) material.defines = { PED_CLOSE: '', PED_NOFACE: '' };
-  else if (CLOSE) material.defines = { PED_NOFACE: '' };
   material.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, sharedUniforms());
     if (pal) Object.assign(shader.uniforms, pal);

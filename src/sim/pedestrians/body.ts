@@ -370,7 +370,7 @@ const LODS: Record<Lod, LodCfg> = {
   4: {
     torsoSides: 20,
     torsoRings: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
-    headSides: 56,
+    headSides: 44,
     headRings: [0, 1, 2, 3, 4, 5, 6, 7],
     neck: [0, 1, 2],
     neckSides: 16,
@@ -803,7 +803,7 @@ function buildCloseHead(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
   // rows: 1.8 mm through the nose base and the lips (nostrils, vermilion borders, mouth line in form), 3 mm elsewhere
   for (let y = -0.104; y < 0.03; ) {
     Ys.push(y);
-    y += y > -0.082 && y < -0.032 ? 0.0018 : 0.003;
+    y += y > -0.082 && y < -0.036 ? 0.0026 : 0.0042;
   }
   void yt;
   const yc = (d.crown - ye) / k;
@@ -957,8 +957,9 @@ function buildCloseHead(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
     const pL = C(1),
       pR = C(-1);
     const yB = 0.008 * k;
-    stick(b, add(pL, [-rx * k * 0.98, yB, -0.001]), add([0, (pL[1] + pR[1]) / 2 + yB + 0.002, (pL[2] + pR[2]) / 2 + 0.002] as P3, [0, 0, 0]), 0.0013, 4);
-    stick(b, add(pR, [rx * k * 0.98, yB, -0.001]), [0, (pL[1] + pR[1]) / 2 + yB + 0.002, (pL[2] + pR[2]) / 2 + 0.002], 0.0013, 4);
+    const bridgeTop = closeHeadPoint(d, 0, 0.005, 0.0065 * k).p;
+    stick(b, add(pL, [-rx * k * 0.96, yB, -0.002]), bridgeTop, 0.0013, 4);
+    stick(b, add(pR, [rx * k * 0.96, yB, -0.002]), bridgeTop, 0.0013, 4);
     for (const s of [1, -1]) {
       const hinge = add(s > 0 ? pL : pR, [s * rx * k, 0.006 * k, -0.002]);
       const m1 = closeHeadPoint(d, s * 1.25, 0.006, 0.0035 * k).p;

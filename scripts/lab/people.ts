@@ -8,6 +8,7 @@ import { makeLook } from '/src/sim/pedestrians/looks';
 import { Member, Party } from '/src/sim/pedestrians/crowd';
 import { CrowdRenderer } from '/src/sim/pedestrians/render';
 import { rigOf } from '/src/sim/pedestrians/rig';
+import { figureMesh } from '/src/sim/pedestrians/body';
 import { globalUniforms } from '/src/core/uniforms';
 
 const q = new URLSearchParams(location.search);
@@ -166,5 +167,6 @@ if (mode === 'grid') {
     labels.push(`${i}`);
   }
 }
+labels.push(`tris ${figureMesh(4).triangles} verts ${figureMesh(4).vertices}`);
 (window as unknown as Record<string, unknown>).__labels = labels;
 (window as unknown as Record<string, unknown>).__done = true;
