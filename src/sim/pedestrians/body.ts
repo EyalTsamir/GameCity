@@ -700,9 +700,9 @@ export function faceRelief(U: number, Y: number, nose: number): number {
   r += 0.0036 * gs(ax - 0.0315, Y + 0.0005, 0.0135, 0.0072);
   r -= 0.0022 * gs(ax - 0.077, Y - 0.018, 0.016, 0.022);
   // cheekbone, running back into the arch before the ear; the soft plane below it; the mouth's barrel; the jaw line
-  r += 0.0048 * gs(ax - 0.048, Y + 0.03, 0.026, 0.02);
+  r += 0.0034 * gs(ax - 0.048, Y + 0.032, 0.028, 0.024);
   r += 0.0012 * gs(ax - 0.074, Y + 0.022, 0.024, 0.017);
-  r -= 0.0007 * gs(ax - 0.058, Y + 0.056, 0.02, 0.02);
+  r += 0.0016 * gs(ax - 0.05, Y + 0.064, 0.03, 0.03);
   r += 0.0052 * gs(U, Y + 0.066, 0.034, 0.026);
   // nose: starts at the root between the eyes, bridge rising to the tip, wings, the underside back to the lip
   const nk = nose / 0.024;
@@ -712,14 +712,14 @@ export function faceRelief(U: number, Y: number, nose: number): number {
   const wN = 0.0058 + 0.0046 * sstep(0.004, tipY, Y);
   r += prof * Math.exp(-(U * U) / (wN * wN));
   r += 0.0036 * nk * gs(U, Y + 0.0425, 0.0078, 0.0072);
-  r += 0.0017 * nk * gs(ax - 0.0108, Y + 0.0445, 0.0052, 0.0052);
+  r += 0.0012 * nk * gs(ax - 0.0108, Y + 0.0445, 0.0058, 0.0058);
   // lips: upper, lower, the line between them, the corners; the groove under them; chin
-  r += 0.0032 * gs(U, Y + 0.0612, 0.0215, 0.0048);
-  r += 0.0043 * gs(U, Y + 0.0722, 0.0185, 0.0052);
-  r -= 0.0024 * gs(U, Y + 0.0666, 0.025, 0.0016);
-  r -= 0.0016 * gs(ax - 0.0265, Y + 0.0668, 0.004, 0.005);
-  r -= 0.0026 * gs(U, Y + 0.0825, 0.018, 0.0038);
-  r += 0.0052 * gs(U, Y + 0.098, 0.0185, 0.0115);
+  r += 0.0024 * gs(U, Y + 0.0612, 0.0215, 0.0052);
+  r += 0.0032 * gs(U, Y + 0.0722, 0.0185, 0.0056);
+  r -= 0.0016 * gs(U, Y + 0.0666, 0.025, 0.0016);
+  r -= 0.0009 * gs(ax - 0.0265, Y + 0.0668, 0.005, 0.006);
+  r -= 0.0016 * gs(U, Y + 0.0825, 0.018, 0.0045);
+  r += 0.0046 * gs(U, Y + 0.098, 0.0185, 0.0115);
   return r;
 }
 

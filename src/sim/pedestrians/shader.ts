@@ -402,7 +402,7 @@ void pedPose(inout vec3 p, inout vec3 n) {
       pedBump(q, 0.0028 * fa.z, 0.0, -0.046, 0.0085, 0.0052);  // the tip droops or tilts
       pedBump(q, 0.0028 * fa.w, 0.0, -0.009, 0.0062, 0.01);   // a hooked bridge
       pedBump(q, 0.0065 * fb.x, 0.0, -0.101, 0.021, 0.012);   // the chin
-      pedBump(q, 0.0075 * fb.y, 0.088, -0.082, 0.034, 0.024); // the jaw's width
+      pedBump(q, 0.0075 * fb.y, 0.088, -0.082, 0.036, 0.03); // the jaw's width
       pedBump(q, 0.005 * fb.z, 0.056, -0.02, 0.025, 0.018);   // cheekbones
       pedBump(q, 0.0055 * fb.w + 0.003 * (P_b - age), 0.05, -0.062, 0.028, 0.026); // full or lean cheeks (build, age)
       vec3 fc = vec3(float(h2 & 255u), float((h2 >> 8u) & 255u), float((h2 >> 16u) & 255u)) / 127.5 - 1.0;
@@ -411,7 +411,7 @@ void pedPose(inout vec3 p, inout vec3 n) {
       pedBump(q, 0.0028 * fc.y, 0.0, -0.0722, 0.018, 0.006);
       pedBump(q, 0.0032 * fc.z, 0.0, -0.066, 0.031, 0.022);   // how far the mouth comes forward
       // a woman's face: a narrower jaw, a smaller chin, a smoother brow, fuller cheeks high up. A child's: round cheeks, no brow, a small chin.
-      pedBump(q, -0.0115 * P_w, 0.088, -0.082, 0.034, 0.024);
+      pedBump(q, -0.008 * P_w, 0.086, -0.086, 0.042, 0.036);
       pedBump(q, -0.0048 * P_w, 0.0, -0.104, 0.02, 0.012);
       pedBump(q, -0.0034 * P_w, 0.0, -0.03, 0.0085, 0.024);
       pedBump(q, 0.0012 * P_w, 0.0, -0.0612, 0.02, 0.0056);
@@ -1475,7 +1475,7 @@ vec3 pedFaceClose(vec3 skin, vec2 F) {
   pc = mix(pc, mouthC, mouthL * mix(0.8, 1.0, smoothstep(0.03, 0.2, mo)) * det);
   // nostrils
   vec2 nd = vec2((ax - 0.0062) / 0.0024, (F.y + 0.05) / 0.00105);
-  pc = mix(pc, skin * 0.3, (1.0 - smoothstep(0.4, 1.0, length(nd))) * 0.75 * det);
+  pc = mix(pc, skin * 0.34, (1.0 - smoothstep(0.3, 1.0, length(nd))) * 0.55 * det);
   return pc;
 }
 #endif
@@ -1655,17 +1655,23 @@ const FRAG_COLOR = /* glsl */ `
       pc += vec3(0.022, 0.021, 0.021) * pow(lk.x, 6.0) * (0.5 + lk.y) * lk.z * (1.0 - smoothstep(0.15, 0.4, dot(pc, vec3(0.33))));
 #endif
       vec2 hf = pedHairFlow(vPedRest);
+#ifdef PED_CLOSE
+      float ca = hf.x * 44.0 + sin(hf.y * 9.0) * 0.8;
+#else
       float ca = hf.x * 26.0 + sin(hf.y * 9.0) * 0.8;
+#endif
       float far = smoothstep(0.35, 0.9, fwidth(ca));
       // each lock (one clump wide) tapers to a point and has its own length; fine strands straggle past it
       float li = floor(ca);
       float lr = fract(sin(li * 91.7 + 3.1) * 43758.5453);
       float tri = 1.0 - abs(fract(ca) - 0.5) * 2.0;
       float fine = pedN1(hf.x * 90.0 + hf.y * 3.0) * (1.0 - smoothstep(0.35, 0.8, fwidth(hf.x * 90.0)));
-      float clump = tri * 0.85 + fine * 0.3;
 #ifdef PED_CLOSE
-      float tipK = 1.0 - smoothstep(0.0, 0.028, vPedFace.x - lr * 0.018);
+      // (rounded ends: points read as a torn edge)
+      float clump = sqrt(tri) * 0.85 + fine * 0.3;
+      float tipK = 1.0 - smoothstep(0.0, 0.016, vPedFace.x - lr * 0.012);
 #else
+      float clump = tri * 0.85 + fine * 0.3;
       float tipK = 1.0 - smoothstep(0.0, 0.06, vPedFace.x - lr * 0.03);
 #endif
       float edgeK = 1.0 - smoothstep(1.17, 1.45, vPedFace.y);
@@ -1683,7 +1689,7 @@ const FRAG_COLOR = /* glsl */ `
       pc *= pedStrands(vPedRest);
       float a = atan(vPedRest.x, vPedRest.z + 0.015);
 #ifdef PED_CLOSE
-      float e = vPedFace.x + (pedN1(a * 38.0) - 0.5) * 0.06 + (pedN1(a * 120.0) - 0.5) * 0.05 * (1.0 - smoothstep(0.25, 0.6, fwidth(a * 120.0))) + (pedN1(a * 340.0 + vPedRest.y * 300.0) - 0.5) * 0.07 * (1.0 - smoothstep(0.25, 0.6, fwidth(a * 340.0)));
+      float e = vPedFace.x + (pedN1(a * 38.0) - 0.5) * 0.04 + (pedN1(a * 120.0) - 0.5) * 0.02 * (1.0 - smoothstep(0.25, 0.6, fwidth(a * 120.0))) + (pedN1(a * 340.0 + vPedRest.y * 300.0) - 0.5) * 0.03 * (1.0 - smoothstep(0.25, 0.6, fwidth(a * 340.0)));
 #else
       float e = vPedFace.x + (pedN1(a * 55.0) - 0.5) * 0.14 + (pedN1(a * 170.0 + vPedRest.y * 300.0) - 0.5) * 0.08 * (1.0 - smoothstep(0.3, 0.7, fwidth(a * 170.0)));
 #endif

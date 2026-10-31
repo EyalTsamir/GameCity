@@ -76,15 +76,15 @@ function fine(ax: number, Y: number): number {
   }
   // nose: the ball of the tip, its two lobes, the crease round each wing, the nostrils, the columella between them
   r += 0.0006 * gs(ax - 0.0032, Y + 0.0415, 0.0042, 0.0042);
-  r -= 0.0006 * gs(Math.hypot(ax - 0.0108, (Y + 0.0445) * 1.1) - 0.0062, 0, 0.0013, 1) * sstep(-0.034, -0.042, Y + 0.3 * (ax - 0.012));
-  r -= 0.002 * gs(ax - 0.0062, Y + 0.0498, 0.0023, 0.0011);
+  r -= 0.00035 * gs(Math.hypot(ax - 0.0108, (Y + 0.0445) * 1.1) - 0.0062, 0, 0.0018, 1) * sstep(-0.034, -0.042, Y + 0.3 * (ax - 0.012));
+  r -= 0.0012 * gs(ax - 0.0062, Y + 0.0505, 0.0023, 0.0009);
   r += 0.0004 * gs(ax, Y + 0.0485, 0.0016, 0.004);
   // inner corner of the eye: the hollow against the bridge
   r -= 0.0009 * gs(ax - 0.0165, Y - 0.001, 0.0034, 0.006);
   // nasolabial fold: barely there on the young, soft fullness outside it
   const nl = ax - (0.02 + 0.34 * Math.max(0, -0.045 - Y));
   const nlY = sstep(-0.04, -0.05, Y) * sstep(-0.082, -0.07, Y);
-  r -= 0.0005 * gs(nl, 0, 0.0028, 1) * nlY;
+  r -= 0.0003 * gs(nl, 0, 0.0032, 1) * nlY;
   r += 0.0005 * gs(nl - 0.006, 0, 0.005, 1) * nlY;
   // philtrum, the cupid's bow, the mouth line with its corners, a lower lip with a soft centre, the groove above the chin
   r += 0.0006 * gs(ax - 0.0036, Y + 0.0525, 0.0017, 0.0042);
@@ -92,8 +92,8 @@ function fine(ax: number, Y: number): number {
   const bow = 0.0012 * (gs(ax - 0.0055, 0, 0.0035, 1) - 0.6 * gs(ax, 0, 0.0025, 1));
   r += 0.0005 * gs(ax, Y + 0.0572 - bow, 0.017, 0.0009);
   const mouth = -0.0665 + 0.0009 * gs(ax, 0, 0.004, 1) - 0.0004 * (ax / 0.021) ** 2;
-  r -= 0.0014 * gs(ax, Y - mouth, 0.0235, 0.0007);
-  r -= 0.0009 * gs(ax - 0.0245, Y + 0.0668, 0.0026, 0.0028);
+  r -= 0.001 * gs(ax, Y - mouth, 0.0235, 0.0007);
+  r -= 0.0005 * gs(ax - 0.0245, Y + 0.0668, 0.0026, 0.0028);
   r += 0.0005 * gs(ax - 0.007, Y + 0.0722, 0.008, 0.0035);
   r -= 0.0003 * gs(ax, Y + 0.071, 0.0026, 0.0035);
   r += 0.0004 * gs(ax - 0.006, Y + 0.0602, 0.006, 0.0026);
