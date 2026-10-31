@@ -1055,6 +1055,8 @@ function wheel(b: Builder, x: number, y: number, z: number, r: number, w: number
 }
 
 interface CarDims {
+  /** the model's own face: lamp height / width, grille height / half width, tail lamp height / width */
+  face?: { lh?: number; lw?: number; gh?: number; gx?: number; tlh?: number; tlw?: number };
   L: number;
   W: number;
   wheelR: number;
@@ -1161,8 +1163,10 @@ function carDetails(b: Builder, d: CarDims, s: CarShape): void {
     const low = y4 + 0.016;
     if (sign > 0) {
       const round = !!d.roundLights;
-      const lh = round ? Math.min(0.19, top - low) : Math.min(0.12, top - low),
-        lw = round ? 0.22 : 0.4;
+      // each model has its own face: lamp and grille proportions (a shared grille + lamps read as one car)
+      const fc = d.face ?? {};
+      const lh = round ? Math.min(0.19, top - low) : Math.min(fc.lh ?? 0.12, top - low),
+        lw = round ? 0.22 : fc.lw ?? 0.4;
       const xo = hw - (round ? 0.16 : 0.07);
       for (const sd of [1, -1]) {
         const a = sd > 0 ? xo - lw : -xo,
@@ -1177,16 +1181,16 @@ function carDetails(b: Builder, d: CarDims, s: CarShape): void {
         b.add(onEnd(s, 1, bx0, bx1, y3 - 0.065, y3 - 0.03, 0.005, 4), { color: AMBER, light: sd > 0 ? LIGHT_BLINK_L : LIGHT_BLINK_R, rough: 0.3 });
       }
       // upper grille between the lamps (honeycomb in a dark surround) + badge; lower intake under the plate
-      const gx = round ? 0.3 : hw - 0.07 - lw - 0.08;
-      const gy0 = Math.max(low, top - 0.075);
+      const gx = round ? 0.3 : Math.min(fc.gx ?? 9, hw - 0.07 - lw - 0.08);
+      const gy0 = Math.max(low, top - (fc.gh ?? 0.075));
       b.add(onEnd(s, 1, -gx - 0.015, gx + 0.015, gy0 - 0.012, top - 0.005, 0.003, 4), d.bumper === 'chrome' ? { color: CHROME, rough: 0.3 } : { color: '#1a1c1f', rough: 1.2 });
       b.add(onEnd(s, 1, -gx, gx, gy0, top - 0.017, 0.006, 4), { color: '#8a8f95', rough: 0.9, decal: R_GRILLE });
       b.add(onEnd(s, 1, -hw + 0.3, hw - 0.3, y2 + 0.002, y2 + 0.07, 0.003, 6), { color: '#1a1c1f', rough: 1.2 });
       b.add(onEnd(s, 1, -hw + 0.31, hw - 0.31, y2 + 0.01, y2 + 0.062, 0.006, 6), { color: '#6a6f75', rough: 0.9, decal: R_GRILLE });
       if (LOD === 0) b.add(flatOnEnd(s, 1, 0.07, 0.04, 0, (gy0 + top) / 2 - 0.008, 0.011), { color: '#b4b8bc', rough: 0.45, finish: 'chrome' });
     } else {
-      const lh = Math.min(0.13, top - low),
-        lw = 0.4;
+      const lh = Math.min(d.face?.tlh ?? 0.13, top - low),
+        lw = d.face?.tlw ?? 0.4;
       for (const sd of [1, -1]) {
         const xo = hw - 0.05;
         const a = sd > 0 ? xo - lw : -xo,
@@ -1322,7 +1326,7 @@ function hatch(): THREE.BufferGeometry {
   // small roof spoiler over the rear window
   b.add(rbox(c.topW - 0.12, 0.045, 0.2, 0.02, 0, topAt(shape, shape.rwTop + 0.06) - 0.025, shape.rwTop - 0.02), { color: '#ffffff', paint: true });
   roofBox(b, c.topY, c.topZ, c.topW);
-  carDetails(b, { L, W, wheelR: 0.31, wheelW: 0.23, axF: 1.22, axR: -1.33, wheelX: W / 2 - 0.09, bodyY: 0.31, bodyH: 0.6, bodyR: 0.2, lightY: 0.68, bumper: 'paint', rim: '#6d737a' }, shape);
+  carDetails(b, { face: { lh: 0.085, lw: 0.47, gh: 0.045, gx: 0.42, tlh: 0.1, tlw: 0.34 }, L, W, wheelR: 0.31, wheelW: 0.23, axF: 1.22, axR: -1.33, wheelX: W / 2 - 0.09, bodyY: 0.31, bodyH: 0.6, bodyR: 0.2, lightY: 0.68, bumper: 'paint', rim: '#6d737a' }, shape);
   return b.build();
 }
 
@@ -1332,7 +1336,7 @@ function sedan(): THREE.BufferGeometry {
     W = 1.78;
   const shape: CarShape = { L, W, sill: 0.31, belt: 0.9, roof: 1.42, noseH: 0.76, hoodH: 0.88, wsBase: 1.0, wsTop: 0.2, rwTop: -0.85, rwBase: -1.5, deckH: 0.99, tailH: 0.96, pillarB: -0.3, pillarC: -1.0, glassRear: -1.25, tumble: 0.18, axF: 1.375, axR: -1.325, wheelR: 0.32 };
   const c = loftBody(b, shape, true, true, 'paint');
-  carDetails(b, { L, W, wheelR: 0.32, wheelW: 0.24, axF: 1.375, axR: -1.325, wheelX: W / 2 - 0.1, bodyY: 0.33, bodyH: 0.58, bodyR: 0.18, lightY: 0.69, bumper: 'paint' }, shape);
+  carDetails(b, { face: { lh: 0.105, lw: 0.44, gh: 0.1, tlh: 0.11, tlw: 0.52 }, L, W, wheelR: 0.32, wheelW: 0.24, axF: 1.375, axR: -1.325, wheelX: W / 2 - 0.1, bodyY: 0.33, bodyH: 0.58, bodyR: 0.18, lightY: 0.69, bumper: 'paint' }, shape);
   // taxi (variant 1 → part 2): roof sign + chequer band
   b.add(rbox(0.6, 0.18, 0.28, 0.05, 0, c.topY - 0.01, c.topZ), { color: '#fff3b8', light: LIGHT_TAXI, part: 2, rough: 0.6 });
   b.add(decalPlane(0.54, 0.15, 0, c.topY + 0.08, c.topZ + 0.142, 'pz'), { color: '#ffffff', decal: R_TAXI, light: LIGHT_TAXI, part: 2 });
@@ -1382,7 +1386,7 @@ function estate(): THREE.BufferGeometry {
   const c = loftBody(b, shape, true, false, 'paint');
   const ry = roofRails(b, shape, c, 0.045);
   roofBox(b, ry + 0.02, c.topZ, c.topW);
-  carDetails(b, { L, W, wheelR: 0.32, wheelW: 0.24, axF: 1.42, axR: -1.4, wheelX: W / 2 - 0.1, bodyY: 0.33, bodyH: 0.6, bodyR: 0.18, lightY: 0.7, bumper: 'paint', rim: '#8b9097' }, shape);
+  carDetails(b, { face: { lh: 0.12, lw: 0.36, gh: 0.065, tlh: 0.22, tlw: 0.2 }, L, W, wheelR: 0.32, wheelW: 0.24, axF: 1.42, axR: -1.4, wheelX: W / 2 - 0.1, bodyY: 0.33, bodyH: 0.6, bodyR: 0.18, lightY: 0.7, bumper: 'paint', rim: '#8b9097' }, shape);
   return b.build();
 }
 
@@ -1395,7 +1399,7 @@ function mpv(): THREE.BufferGeometry {
   loftBody(b, shape, true, false, 'dark');
   // the sliding door's rail along the rear quarter, under the side glass
   for (const sd of [1, -1]) b.add(bx(0.012, 0.018, 0.9, sd * (W / 2 - 0.035), shape.belt + 0.01, -1.55), { color: '#17191c', rough: 1.2 });
-  carDetails(b, { L, W, wheelR: 0.33, wheelW: 0.24, axF: 1.43, axR: -1.42, wheelX: W / 2 - 0.1, bodyY: 0.35, bodyH: 0.66, bodyR: 0.2, lightY: 0.78, rim: '#5e636a' }, shape);
+  carDetails(b, { face: { lh: 0.16, lw: 0.34, gh: 0.05, gx: 0.34, tlh: 0.26, tlw: 0.18 }, L, W, wheelR: 0.33, wheelW: 0.24, axF: 1.43, axR: -1.42, wheelX: W / 2 - 0.1, bodyY: 0.35, bodyH: 0.66, bodyR: 0.2, lightY: 0.78, rim: '#5e636a' }, shape);
   return b.build();
 }
 
@@ -1416,7 +1420,7 @@ function suv(): THREE.BufferGeometry {
   cov.rotateX(Math.PI / 2);
   cov.translate(0, 0.84, -L / 2 - 0.2);
   b.add(cov, { color: '#ffffff', paint: true });
-  carDetails(b, { L, W, wheelR: 0.37, wheelW: 0.27, axF: 1.425, axR: -1.325, wheelX: W / 2 - 0.1, bodyY: 0.4, bodyH: 0.74, bodyR: 0.18, lightY: 0.9 }, shape);
+  carDetails(b, { face: { lh: 0.14, lw: 0.3, gh: 0.15, gx: 0.5, tlh: 0.2, tlw: 0.24 }, L, W, wheelR: 0.37, wheelW: 0.27, axF: 1.425, axR: -1.325, wheelX: W / 2 - 0.1, bodyY: 0.4, bodyH: 0.74, bodyR: 0.18, lightY: 0.9 }, shape);
   return b.build();
 }
 

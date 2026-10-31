@@ -324,12 +324,14 @@ float thReflDet = 1.0;
 float thStreetRefl( vec3 viewDir, vec3 n, float soft ) {
   vec3 R = inverseTransformDirection( reflect( -viewDir, n ), viewMatrix );
   float e = R.y + 0.12;
-  float w = 0.022 + soft;
+  // (wider on flat panels, where the reflected direction hardly changes: a gap between two reflected blocks
+  // otherwise fills a boot lid as a hard-edged white rectangle)
+  float w = 0.022 + soft + 0.07 * thReflDet;
   float az = atan( R.x, R.z );
   // two rows of facades: near blocks (~25 around) with their roof lines over far, lower ones; soft block edges
   float a1 = az * 4.0, b1 = floor( a1 ), f1 = fract( a1 );
   float h1 = thRH( b1 + 17.0 ), h1n = thRH( b1 + 18.0 );
-  float hs = 0.1 + 0.42 * mix( h1, h1n, smoothstep( 0.9, 1.0, f1 ) );
+  float hs = 0.1 + 0.42 * mix( h1, h1n, smoothstep( 0.55, 1.0, f1 ) );
   float a2 = az * 9.0, h2 = thRH( floor( a2 ) + 51.0 );
   float hf = 0.06 + 0.16 * h2;
   // trees in front of some blocks: lumpy crowns that break the roof line
@@ -348,7 +350,7 @@ float thStreetRefl( vec3 viewDir, vec3 n, float soft ) {
   float up = max( e - hs, 0.0 );
   vec2 cp = R.xz / ( R.y + 0.25 ) * 2.2;
   float cl = smoothstep( 0.45, 0.8, thVN( vec3( cp, 5.0 ) ) * 0.65 + thVN( vec3( cp * 2.3, 9.0 ) ) * 0.35 );
-  float skyL = 1.1 + 1.5 * exp( -up * 6.0 ) + 0.7 * cl * thReflDet;
+  float skyL = 1.1 + 0.85 * exp( -up * 6.0 ) + 0.7 * cl * thReflDet;
   // ground: asphalt, a lighter pavement / kerb band just below the horizon
   float pav = smoothstep( -0.09, -0.06, e ) * ( 1.0 - smoothstep( -0.012, 0.0, e ) );
   float road = 0.07 + 0.18 * pav;
