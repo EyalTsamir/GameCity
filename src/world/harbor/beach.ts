@@ -118,6 +118,47 @@ export function lifeguardTower(b: HB, x: number, z: number, yaw: number, ground:
   b.color('#f2efe6');
   for (const sx of [-1, 1]) b.box(sx * 1.1, deck + 0.45, 0.95, 0.06, 0.9, 0.06, 0, 3);
   b.box(0, deck + 0.9, 1.5, 2.3, 0.06, 0.06, 0, 0);
+  if (DETAIL) {
+    b.color('#f2efe6');
+    for (const yy of [0.32, 0.62]) b.box(0, deck + yy, 1.5, 2.3, 0.035, 0.035, 0, 0);
+    for (const sx of [-1, 1]) {
+      b.box(sx * 1.13, deck + 0.45, 1.5, 0.06, 0.9, 0.06, 0, 3);
+      for (const yy of [0.32, 0.62, 0.9]) b.box(sx * 1.13, deck + yy, 0.95, 0.035, 0.035, 1.15, 0, 0);
+    }
+    // top-hung shutters propped open over the front and side windows
+    b.color('#e63946').pat(PAT.PLANKS_X, 0.12);
+    b.pushT(0, deck + 1.42, 0.59, 0, -0.55);
+    b.box(0, 0, 0.28, 1.34, 0.03, 0.58, 0, 0);
+    b.pop();
+    b.pat(PAT.NONE).color('#d9d3c6');
+    for (const sx of [-0.55, 0.55]) b.beam([sx, deck + 0.82, 0.57], [sx, deck + 1.25, 1.03], 0.02, 0.02);
+    // clapboard lines on the hut
+    b.color('#cfc9bb');
+    for (let i = 0; i < 6; i++) b.box(0, deck + 0.08 + i * 0.15, 0.555, 1.92, 0.012, 0.01, 0, 0);
+    // lifebuoy on the rail
+    b.color('#ee6c2a');
+    {
+      const pts: V3[] = [];
+      for (let k = 0; k <= 14; k++) {
+        const a = (k / 14) * Math.PI * 2;
+        pts.push([0.62 + Math.cos(a) * 0.25, deck + 0.58 + Math.sin(a) * 0.25, 1.55]);
+      }
+      b.tube(pts, 0.05, 6, true);
+    }
+    b.color('#f4f1e8');
+    for (const a of [0.7, 2.3, 3.9, 5.5]) b.box(0.62 + Math.cos(a) * 0.25, deck + 0.58 + Math.sin(a) * 0.25, 1.55, 0.11, 0.11, 0.115, a, 0);
+    // a rescue board leaning on a stilt
+    b.color('#e8b62a');
+    b.pushT(0.98, 0, 1.05, 0, -0.16);
+    b.box(0, deck - 1.02, 0, 0.5, 2.5, 0.07, 0, 0);
+    b.color('#c43b2b');
+    b.box(0, deck - 1.02, 0.04, 0.09, 2.45, 0.012, 0, 0);
+    b.pop();
+    // binoculars on a post at the corner of the rail
+    b.color('#2b2f33');
+    b.vcyl(-0.55, deck + 0.9, 1.5, 0.018, 0.22, 6, 0);
+    for (const sx of [-0.6, -0.5]) b.cyl([sx, deck + 1.14, 1.42], [sx, deck + 1.14, 1.6], 0.03, 0.035, 8, 3);
+  }
   b.box(1.12, deck + 0.9, 0.25, 0.06, 0.06, 2.5, 0, 0);
   b.box(-1.12, deck + 0.9, 0.25, 0.06, 0.06, 2.5, 0, 0);
   // ramp down the back (local −z)

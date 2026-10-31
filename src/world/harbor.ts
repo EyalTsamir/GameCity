@@ -27,6 +27,8 @@ import { buildFishQuay, setQuayDetail } from './harbor/quay';
 import { buildCarouselRotating, buildCarouselStatic, buildPier, buildWheelRotating, buildWheelStatic, setGondolaDetail, setCarouselDetail, setBoothDetail, setKioskDetail, setWheelHubDetail, type WheelSpec } from './harbor/pier';
 import { buildFerryDock, lifeguardTower, scatterBeach, setBeachDetail, setBeachToys, setFerryDockDetail } from './harbor/beach';
 import { boxHunt } from '../core/boxhunt';
+import { lmDetail } from '../core/lmdetail';
+import { buildContainerQuayLife } from './harbor/quayLife';
 import { bridgeProfile, buildFootbridge, buildJetty, type BridgeInfo, setRiverLanterns } from './harbor/river';
 import { buildCrane, buildCraneRails, CraneSim, setCraneDetail, type MobileBox } from './harbor/cranes';
 import { buildMooring, buildQuayEdge, buildShip, mobileShipPos, setShipDetail, SHIP, type MobileSlot } from './harbor/ship';
@@ -168,6 +170,11 @@ export default function create(ctx: CityContext): CityModule {
     obstacles.push(rect(QX, shipF.z - SHIP.half - 1, QX + 16, shipF.z + SHIP.half + 1));
   }
 
+  if (lmDetail(ctx, 'quaylife2')) {
+    const hs = ctx.plan.places?.waterStairs.find((w) => w.id === 'harbour');
+    buildContainerQuayLife(north, { ctx, ground, rng: ctx.rng('harbor-quaylife2'), x0: 130.9, x1: 134.45, z0: -118, z1: hs ? hs.body.z0 - 3 : -24, edgeX: QX, ladders: ladderZ });
+  }
+
   // night work lighting (night agent): floodlight masts on the quay apron + in the container yard
   const flood = buildHarborFloodlights(north, ground, ctx.occupancy, glows);
   problems.push(...flood.skipped);
@@ -218,7 +225,7 @@ export default function create(ctx: CityContext): CityModule {
       setWheelHubDetail(boxHunt(ctx, 'wheelhub'));
       buildWheelStatic(beach, wheel, glows);
       setGondolaDetail(boxHunt(ctx, 'gondola'));
-      setCarouselDetail(boxHunt(ctx, 'carousel'));
+      setCarouselDetail(boxHunt(ctx, 'carousel'), lmDetail(ctx, 'horses'));
       gondolas = buildWheelRotating(rides, wheel);
     }
     const cf = feats('carousel')[0];

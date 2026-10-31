@@ -13,6 +13,8 @@ import { C, S, mansard, quoins, chimney, finial, dormer, wallLantern, flagpole, 
 import type { Env } from './env';
 import { drawText, signQuad } from './signs';
 import { boxHunt } from '../../core/boxhunt';
+import { lmDetail } from '../../core/lmdetail';
+import { buildStationRoom } from './stationRoom';
 
 /** Glazed segmental barrel vault spanning x0..x1 along z0..z1. */
 export function barrelVault(K: Kit, glass: Mat, rib: Mat, x0: number, x1: number, z0: number, z1: number, ySpring: number, rise: number, segs: number, ribEvery: number): void {
@@ -124,13 +126,14 @@ export function genStation(env: Env, lot: Lot): void {
   const winY = 5.6;
   const winH = 7.6;
   const arcadeX = [-3.5, 0, 3.5];
+  const hero = !!env.rooms && lmDetail(env.ctx, 'herostation');
   const frontOpenings: Opening[] = arcadeX.map((ax, i) => ({
     x: fw / 2 + ax,
     y: 0,
     w: 2.6,
     h: 4.0,
     arch: 1.3,
-    fill: 'door' as const,
+    fill: hero && i === 1 ? ('none' as const) : ('door' as const),
     glow: 0.95,
     seed: 0.2,
     inset: 0.32,
@@ -155,7 +158,8 @@ export function genStation(env: Env, lot: Lot): void {
   wall(K, { w: fw, h: arcCy + arcR, depth: 0.55, x: 0, y: 0, z: zF, ry: 0, mat: stone, openings: frontOpenings, outline });
   // archivolt crest + mouldings
   moulding(K, trim, 0, zF, 0, fw, 4.2, 0.22, 0.16);
-  moulding(K, granite, 0, zF, 0, fw, 0, 0.55, 0.1);
+  if (hero) for (const s of [-1, 1]) moulding(K, granite, (s * (fw / 2 + 1.3)) / 2, zF, 0, fw / 2 - 1.3, 0, 0.55, 0.1);
+  else moulding(K, granite, 0, zF, 0, fw, 0, 0.55, 0.1);
   for (const s of [-1, 1]) {
     K.box(trim, 0.9, 0.3, 0.5, s * (fw / 2 - 0.45), arcCy, zF - 0.2);
     finial(K, gold, s * (fw / 2 - 0.45), arcCy + 0.3, zF - 0.2, 0.9, 0.12);
@@ -244,7 +248,7 @@ export function genStation(env: Env, lot: Lot): void {
 
   // back gable (platform side) with a glazed lunette and a second clock
   const backOutline = vaultOutline(fw, ySpring, rise, 0.45);
-  const backOpenings: Opening[] = [-3.6, 0, 3.6].map((ax) => ({ x: fw / 2 + ax, y: 0, w: 2.8, h: 4.2, arch: 1.4, fill: 'door' as const, glow: 0.95, inset: 0.3, surround: trim, surroundW: 0.2, infill: M('#3b4a3f', PAT.DOOR, 0.5, 0.1, 0.95, 0, 0.15) }));
+  const backOpenings: Opening[] = [-3.6, 0, 3.6].map((ax) => ({ x: fw / 2 + ax, y: 0, w: hero && ax === 0 ? 2.6 : 2.8, h: hero && ax === 0 ? 4.0 : 4.2, arch: hero && ax === 0 ? 1.3 : 1.4, fill: hero && ax === 0 ? ('none' as const) : ('door' as const), glow: 0.95, inset: 0.3, surround: trim, surroundW: 0.2, infill: M('#3b4a3f', PAT.DOOR, 0.5, 0.1, 0.95, 0, 0.15) }));
   backOpenings.push({ x: fw / 2, y: 5.6, w: fw - 2.4, h: ySpring + rise - 0.7 - 5.6, arch: rise + 0.6, fill: 'glass', glow: 0.95, inset: 0.3, surround: trim, surroundW: 0.3, infill: M(C.ironGreen, PAT.GLAZING, 0.3, 0.3, 0.95, 0, 0.2) });
   wall(K, { w: fw, h: ySpring + rise + 0.45, depth: 0.5, x: 0, y: 0, z: zB, ry: Math.PI, mat: stone, openings: backOpenings, outline: backOutline });
   moulding(K, trim, 0, zB, Math.PI, fw, 4.5, 0.22, 0.15);
@@ -442,7 +446,13 @@ export function genStation(env: Env, lot: Lot): void {
     wallLantern(env, K, s * (x1 - 0.6), 3.2, zP + 0.02, 0, 0.75);
   }
 
-  if (boxHunt(env.ctx, 'interiors')) stationInterior(env, HX, zB, zF - 0.55, ySpring);
+  if (hero)
+    buildStationRoom(env, env.rooms!, {
+      HX, zF, zB, ySpring, rise, cx, cz, yaw,
+      winF: { w: winW, y: winY, h: winH, arch: winW / 2 },
+      winB: { w: fw - 2.4, y: 5.6, h: ySpring + rise - 0.7 - 5.6, arch: rise + 0.6 },
+    });
+  else if (boxHunt(env.ctx, 'interiors')) stationInterior(env, HX, zB, zF - 0.55, ySpring);
 
   // ── uplight pools in front of the facade (night)
   for (const gx of [-HW + 3.5, -11, 11, HW - 3.5]) env.glow(gx * sx, 0.1, HD + 0.6, { size: 2.6, kind: 'pool', color: '#ffbf75', intensity: 0.22 });

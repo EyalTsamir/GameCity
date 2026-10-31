@@ -317,14 +317,14 @@ void lmSurface(inout vec3 albedo, inout float rough, inout float metal, inout ve
     albedo *= 0.95 + 0.07 * lmNoise(q * 0.6 + seed * 13.0);
   } else if (pat == 1.0) {
     // brick
-    float bh = 0.19, bw = 0.42;
+    float bh = 0.095, bw = 0.25;
     float row = floor(q.y / bh);
     float bx = q.x / bw + mod(row, 2.0) * 0.5;
     float col = floor(bx);
     float det = lmDetail(FQ.y, bh);
     float h = lmH12(vec2(col, row) + seed * 37.0);
     albedo *= mix(1.0, 0.86 + 0.24 * h - (h > 0.94 ? 0.18 : 0.0), det);
-    float mort = max(lmLines(q.y, bh, 0.011, FQ.y), lmLines(q.x + mod(row, 2.0) * bw * 0.5, bw, 0.011, FQ.x) * det);
+    float mort = max(lmLines(q.y, bh, 0.007, FQ.y), lmLines(q.x + mod(row, 2.0) * bw * 0.5, bw, 0.007, FQ.x) * det);
     albedo = mix(albedo, mix(base, vec3(0.8, 0.77, 0.72), 0.7), mort * 0.85);
     albedo *= 0.93 + 0.1 * lmNoise(q * 0.5 + 3.0);
   } else if (pat == 2.0) {
