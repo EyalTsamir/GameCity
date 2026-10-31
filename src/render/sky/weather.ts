@@ -141,7 +141,7 @@ export class WeatherDirector {
       } else {
         // pinned front, or ?weather=passage: one lap of the band over about four minutes of real time
         const width = 26000;
-        const lead = this.pinned ?? ((now * 40 * 3600) % 90) * 1000 - 18000;
+        const lead = this.pinned ?? ((now * 15) % 90) * 1000 - 18000;
         this.setBand(lead, width, 1);
         const r = this.rainAt(lead, width);
         targetRain = r;

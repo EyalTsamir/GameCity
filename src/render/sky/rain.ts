@@ -12,7 +12,6 @@ import { LAMP_GLSL, lampUniforms } from '../../core/lampLight';
 
 const VERT = /* glsl */ `
 #include <common>
-#include <fog_pars_vertex>
 attribute vec4 aSeed;   // xyz: position in the unit box, w: phase
 attribute float aKind;  // 0 near, 1 wide
 ${LAMP_GLSL}
@@ -59,16 +58,15 @@ void main() {
   vAcross = position.x;
   // thin drops carry less light than the pixels they cover; none right at the lens
   float on = step(aSeed.y, uAmount.x) * mix(uAmount.y, 1.0, aKind);
-  vAlpha = on * (1.05 / px) * smoothstep(0.6, 2.2, dist) * (0.55 + 0.45 * position.y);
+  // (the air, per streak: the atmosphere's fragment fog on a screenful of needles costs more than they do)
+  vAlpha = on * (1.05 / px) * smoothstep(0.6, 2.2, dist) * (0.55 + 0.45 * position.y) * exp(-dist * 0.0016);
   if (on <= 0.0) gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
   vLit = uColor + min(thLampLight(wp, vec3(0.0, 1.0, 0.0)), vec3(3.5)) * 1.1;
-  #include <fog_vertex>
 }
 `;
 
 const FRAG = /* glsl */ `
 #include <common>
-#include <fog_pars_fragment>
 uniform float uOpacity;
 varying float vAlpha;
 varying vec3 vLit;
@@ -76,7 +74,6 @@ varying float vAcross;
 void main() {
   if (vAlpha < 0.004) discard;
   gl_FragColor = vec4(vLit, uOpacity * vAlpha * (1.0 - vAcross * vAcross));
-  #include <fog_fragment>
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
 }
@@ -84,7 +81,6 @@ void main() {
 
 const SPLASH_VERT = /* glsl */ `
 #include <common>
-#include <fog_pars_vertex>
 attribute vec4 aSeed;
 ${LAMP_GLSL}
 uniform vec3 uNear;
@@ -118,13 +114,11 @@ void main() {
   vLife = on * (1.0 - life) * smoothstep(0.0, 0.08, life) * smoothstep(0.6, 3.0, -mvPosition.z);
   if (on <= 0.0) gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
   vLit = uColor * 1.5 + min(thLampLight(wp, vec3(0.0, 1.0, 0.0)), vec3(3.0)) * 1.25;
-  #include <fog_vertex>
 }
 `;
 
 const SPLASH_FRAG = /* glsl */ `
 #include <common>
-#include <fog_pars_fragment>
 varying vec2 vQ;
 varying float vLife;
 varying vec3 vLit;
@@ -134,7 +128,6 @@ void main() {
   float d = length(vec2(vQ.x, vQ.y * 0.55 + 0.42));
   float ring = smoothstep(0.55, 0.85, d) * (1.0 - smoothstep(0.85, 1.0, d));
   gl_FragColor = vec4(vLit, ring * vLife * 0.5);
-  #include <fog_fragment>
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
 }
@@ -188,7 +181,6 @@ export function createRain(density: number, seed: () => number): Rain {
   kind.fill(1, nNear * 4);
   geo.setAttribute('aKind', new THREE.BufferAttribute(kind, 1));
   const uniforms = {
-    ...THREE.UniformsUtils.merge([THREE.UniformsLib.fog]),
     ...lampUniforms(),
     uNear: { value: new THREE.Vector3() },
     uCenter: { value: new THREE.Vector3() },
@@ -209,7 +201,6 @@ export function createRain(density: number, seed: () => number): Rain {
     transparent: true,
     depthWrite: false,
     side: THREE.DoubleSide,
-    fog: true,
   });
   const mesh = new THREE.Mesh(geo, material);
   mesh.name = 'rain';
@@ -225,7 +216,6 @@ export function createRain(density: number, seed: () => number): Rain {
     s[3] = seed();
   });
   const su = {
-    ...THREE.UniformsUtils.merge([THREE.UniformsLib.fog]),
     ...lampUniforms(),
     uNear: uniforms.uNear,
     uSize: { value: 34 },
@@ -243,7 +233,6 @@ export function createRain(density: number, seed: () => number): Rain {
     transparent: true,
     depthWrite: false,
     side: THREE.DoubleSide,
-    fog: true,
   });
   const splash = new THREE.Mesh(sg, sm);
   splash.name = 'rain-splash';
