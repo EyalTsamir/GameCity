@@ -42,6 +42,7 @@ and swallow Vite's HMR websocket so a test page never reloads mid-run. Always Re
 - `node scripts/abprof.mjs --views downtown --ab "label=apply code|restore code"` — A/B in one page with alternating windows, ±0.1–0.4 ms where reloads give ±1–2; `scripts/splitprof.mjs` — fragment vs vertex, overdraw, per-draw vertices; `scripts/power-guard.mjs` — stops a run when the charger drops.
 - `node scripts/soak.mjs --minutes 4 --speed 4` — long run sampling fps, heap, module stats and invariant violations
   (4 min at 4× ≈ one game day).
+- `node scripts/closeset.mjs --area walls --d 3 --hours 12 --out shots/close [--ab "noxxx"] [--lens 4]` — the close-up test set: fixed ordinary viewpoints at 1, 3, 10 m, noon / 18.2 / 21.5, contact sheets (`docs/progress/close-foundation.md`). `node scripts/walkhitch.mjs [--q noxxx]` — stutter while walking with real keys.
 - `node scripts/ui-test.mjs` — real mouse/keyboard tests of camera/UI/audio; run one step with `--steps follow` (see its header for the list).
 - `node scripts/film-sheet.mjs --out shots/film/sheet.png [--mode realtime|seek] [--every 6 | --stamps 3,25]` — contact sheet of the opening film
   (`seek` scouts a path fast; only `realtime` has the train on cue). `node scripts/film-hitch.mjs` — frame intervals and new shader programs per shot.
@@ -54,7 +55,7 @@ and swallow Vite's HMR websocket so a test page never reloads mid-run. Always Re
 `?validate` (static world checks → console), `?planview[=x0,z0,x1,z1][&layers=lots,peds,lanes,…]` (2D map of the
 plan and graphs), `?time=21.5`, `?speed=4`, `?quality=low|medium|high`, `?seed=…`, `?adaptive=0` (freeze adaptive
 quality), `?nointro` (skip the opening camera glide), `?noidle` (no auto-tour after 2 idle minutes),
-`?hide=traffic,pedestrians` (simulate without drawing), `?diorama` (tabletop presentation), `?wind=<0..1.5>` /
+`?hide=traffic,pedestrians` (simulate without drawing), `?nonear` / `?no<layer>` / `?nearr=<k>` / `?neardebug` (near-detail bubble), `?nolens` (the walker's zoom), `?lensN=<f>` (default aperture), `?diorama` (tabletop presentation), `?wind=<0..1.5>` /
 `?winddir=<deg>` (pin the wind), `?film` / `?nofilm` (force / skip the opening film; every automated browser and any
 start-state parameter already skip it, see `filmWanted()` in `src/ui/camera/film.ts`), `?filmfps=30|60`. Modules have more debug switches (one per world-round feature, e.g. `?noland`,
 `?nograss`, `?noleafcards`, `?nocloth`, `?noatmo`) — listed in `docs/progress/WORLD.md` and their progress logs.
@@ -80,7 +81,7 @@ In the page, `window.__city` exposes `view()`, `setHours()`, `setSpeed()`, `stat
 **Modules.** Each subsystem is a file default-exporting `create(ctx) → CityModule`
 (`update(simDt)`, `frame(realDt)`, `stats()`, `invariants()`), with helpers in a same-named folder. `main.ts` loads
 them by dynamic import in this order, each fault-isolated (a module that throws is skipped and the city still runs):
-sky, terrain, landscape, water, ambient, roads, buildings, landmarks, harbor, vegetation, props, groundcover, life, lamps,
+sky, terrain, landscape, water, ambient, roads, buildings, landmarks, harbor, vegetation, props, groundcover, life, lamps, near,
 traffic, pedestrians, rail, boats, scenes, postfx, camera, ui, audio. A module may rely only on services of modules loaded before it; anything from
 later modules (e.g. camera state used by sky/postfx) is looked up lazily every frame and null-checked.
 `simDt` is scaled by `clock.speed` (0 when paused, up to ~0.8 s at 8×): simulations sub-step.
@@ -94,6 +95,7 @@ later modules (e.g. camera state used by sky/postfx) is looked up lazily every f
   `terrain.portals/rocks/promenadeLamps`; `water.waveHeight/surfaceY`; `smoke.addEmitter` (ambient — signature at the
   top of `src/sim/ambient.ts`); `camera` (`flyTo(view, 0)` snaps — used by `__city.view`); `postfx.setEnabled`;
   `boats.fleet.boats`; harbour obstacles for boat navigation.
+- `ctx.services.nearDetail` (`nearOf(ctx)`, `src/core/nearDetail.ts`, exists before any module): fine detail only around the camera, built per cell by a budgeted queue; `nearLens` in the same file for levels of detail through the lens. How to use it: top of `docs/progress/close-foundation.md`.
 - Level crossings (`ctx.roads.crossings`): rail writes `closed`/`gate`, traffic writes `occupied`; trains hold for an
   occupied crossing, vehicles never stop inside `[s0, s1]`.
 - Events: `bus:stop`, `train:arrive` / `train:depart` (pedestrian crowds, audio), `crossing`, `hour` (bells),
