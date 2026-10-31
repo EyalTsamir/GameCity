@@ -271,7 +271,7 @@ export class AtmosphereDriver {
     grey(p.airColor, 0.35 + overcast * 0.5);
 
     // (storm: spray and rain in the air, low down, as haze: the mist branch would be another noise fetch on every fragment, ~1 ms at the market)
-    p.haze = haze + (w ? w.storm * 0.0009 * (1 - smooth(30, 110, camY)) : 0);
+    p.haze = haze + (w ? w.storm * 0.0007 * (1 - smooth(8, 45, camY)) : 0);
     p.hazeScaleHeight = 1000;
     p.rayleigh.set(5.802e-6, 13.558e-6, 33.1e-6).multiplyScalar(BLUE_AIR * (1 + overcast));
     p.rayleighScaleHeight = 8000;
