@@ -39,7 +39,8 @@ Sibling sessions were running, so read differences of less than about 1 ms as no
 | downtown@21.5 | 39.84 / 38.41 | 39.78 / 38.63 | 39.14 / 38.87 |
 | market@21.5 | 38.04 / 36.72 | 39.83 / 37.72 | 38.41 / 38.89 |
 Dry: +0.1 to +0.6 ms, market@21.5 +1.4 on spread repeats. The storm only costs while it lasts. This table is from before the mirror trims (five taps to three, lower
-resolution, one tap on paving): after the first two, street@12 storm +0.8, market@12 +2.1 on noisy repeats, hence the paving trim. An earlier run put the mirror at 1.3 ms at street level; dropping the spray mist above the ground took the overview's storm from +2.8 to about 0.
+resolution, one tap on paving). Clean run after them, 3 repeats within 0.1 ms: street@12 storm +1.42, market@12 +1.87. A / B at the market on spread repeats: `?nowetfacade` -0.5 to -1.2,
+`?nostreetmirror` 0 to -1.4; the wet patch was then simplified to one sine. An earlier run put the mirror at 1.3 ms at street level; dropping the spray mist above the ground took the overview's storm from +2.8 to about 0.
 
 ## Half-rate water mirror in motion
 Paired stills, not video: same path, paused clock, 1.2 m per frame (36 m/s at 30 fps), `?noreflhalf` against the default (`shots/detail-light/probe2.mjs`).

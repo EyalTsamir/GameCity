@@ -19,12 +19,11 @@ uniform vec4 thWet[1];
 const APPLY = /* glsl */ `
 #ifndef TH_NO_WET
 if (thWet[0].x > 0.002) {
-  mat3 thWm = mat3(viewMatrix);
-  vec3 thWn = transpose(thWm) * normal;
-  vec3 thWp = transpose(thWm) * (-vViewPosition - viewMatrix[3].xyz);
-  // walls: bands of run-off, wandering a little on their way down
-  float thWs = 0.5 + 0.5 * sin(thWp.x * 2.3 + thWp.z * 1.9 + 1.7 * sin(thWp.y * 0.35 + (thWp.x + thWp.z) * 0.9));
-  float thWk = thWet[0].x * mix(0.45 + 0.55 * thWs, 1.0, smoothstep(0.2, 0.75, thWn.y)) * smoothstep(-0.6, -0.1, thWn.y);
+  float thWu = dot(normal, viewMatrix[1].xyz);
+  // walls: bands of run-off (world x, z, a slight slant with y; rain pays for these few dot products per fragment)
+  vec3 thWo = -vViewPosition - viewMatrix[3].xyz;
+  float thWs = 0.5 + 0.5 * sin(dot(thWo, viewMatrix[0].xyz) * 2.3 + dot(thWo, viewMatrix[2].xyz) * 1.9 + dot(thWo, viewMatrix[1].xyz) * 0.3);
+  float thWk = thWet[0].x * mix(0.45 + 0.55 * thWs, 1.0, smoothstep(0.2, 0.75, thWu)) * smoothstep(-0.6, -0.1, thWu);
   material.diffuseColor *= 1.0 - 0.4 * thWk;
   material.roughness = mix(material.roughness, max(0.16, material.roughness * 0.42), thWk);
 }
