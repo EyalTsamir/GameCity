@@ -3,7 +3,7 @@
 Stage 2 of `CLOSE-ROUND.md`. Worktree `objective-proskuriakova-485af7`, port 5212. Owns close-range surface detail.
 
 ## Resume here
-Round 1 nearly closed. System built (`src/world/closemat*`, `src/core/closemat.ts`) and committed. Families on: walls (brick, plaster, timber, stone, panel, sheet, smooth, incl. window reveals), asphalt, slabs, loose ground, decks, solids (trim = joinery, masonry + landmarks + harbour, street furniture, metal), sills (`winGeo.ts`), real litter replacing the painted one (`closemat/litter.ts`, `RD_LITTER` in the road shaders). Autofocus now also raycasts these surfaces (`services.closeMat.rayHit`, used in `ui/camera.ts`).
+Three rounds done; final checks next (item 6). System built (`src/world/closemat*`, `src/core/closemat.ts`) and committed. Families on: walls (brick, plaster, timber, stone, panel, sheet, smooth, incl. window reveals), asphalt, slabs, loose ground, decks, solids (trim = joinery, masonry + landmarks + harbour, street furniture, metal), sills (`winGeo.ts`), real litter replacing the painted one (`closemat/litter.ts`, `RD_LITTER` in the road shaders). Autofocus now also raycasts these surfaces (`services.closeMat.rayHit`, used in `ui/camera.ts`).
 
 Harness notes for resuming:
 - Perf: `bash <scratchpad>/perf.sh <outdir> [views] [hours]` = bake to `public/bake` of this worktree (`--out`, the main-checkout script would otherwise write to the main checkout!) then `abprof` hiding every `near-cm*` object in one page, behind power-guard. Equivalent by hand: `abprof --ab "cm=<traverse scene, near-cm* visible=false>|<restore>"`.
@@ -17,6 +17,13 @@ Open items, in order:
 4. `cmPaint` is in (`roads-markings`, offset −4 so it sits above the markings' −2): look at it, `ground-road`.
 5. Night (21.5) and dusk (18.2) pass; `walkhitch`, `hitch`; boot cost (stats of module `closemat`: `tilesMs`, `bootMs`, triangles per layer; the slowest cell in `__city.near.stats()`, keep under 2 ms).
 6. Final checks of CLOSE-ROUND.md; end with CLOSE-DONE.
+
+## Rounds
+- Round 1: the system, walls, ground, solids, litter. Round 2: focus (the lot's box pulled the lens to 0.5 m in front of every porch), then a look at every wall family: timber, joinery, plaster, stone, rust, blow holes, cost split by family. Round 3: audit of doors, ground, furniture at 1 and 3 m: sand layer from the ground mask, rail bed, dust on dark paint, runs under sills.
+- Left for later: the ballast is a flat painted Voronoi at 1 m (real stones in the bubble would be the fix, close-vehicles or a later wave); black grit cloud on the boardwalk by the kiosk at `furn-busstop` (not this layer); a vertical hairline through window glass and a dotted horizon line in reflections (close-windows); roofs have no overlay (`w >= 63.5` skipped), never seen on foot.
+
+## Edits in other people's files
+`src/ui/camera.ts` (focus: exact ray), `src/main.ts` (module after `scenes`), `src/world/roads/{glsl,materials}.ts` (`RD_LITTER`: painted litter off when real litter is on), `src/world/buildings/winGeo.ts` (sills: `cmsills`), `src/world/buildings/materials.ts` (sill streak wander, rivulets, rarer blow holes; the fac bake needs a rebake), `src/world/props/material.ts` (iron rust small and dark). Service: `ctx.services.closeMat.rayHit`.
 
 ## The idea
 A near-only copy of the wall, road, paving and trim triangles, cut to the cells of the bubble, is drawn **after** everything opaque with a small program whose output **multiplies** what the city's shader drew (`DST_COLOR, ZERO` on the scene's float target; ratios above 1 work). So:
@@ -33,4 +40,4 @@ Parts:
 - `src/world/closemat.ts`: module, layers.
 
 ## Switches
-`?noclosemat` all. `?nocmwalls ?nocmroad ?nocmpaving ?nocmsolid` a family. `?nocmBrick ?nocmPlaster ?nocmTimber ?nocmStone ?nocmPanel ?nocmSheet ?nocmSmooth ?nocmRoad ?nocmSlab ?nocmLoose ?nocmDeck ?nocmTrim ?nocmMasonry ?nocmStreet ?nocmMetal` a layer. `?cmr=<k>` scales the radii. `?nearr` and `?neardebug` of the bubble work too. Tier: medium and up (the bubble's default); low has none.
+`?noclosemat` all. `?nocmwalls ?nocmroad ?nocmpaving ?nocmsolid` a family. `?nocmBrick ?nocmPlaster ?nocmTimber ?nocmStone ?nocmPanel ?nocmSheet ?nocmSmooth ?nocmRoad ?nocmSlab ?nocmLoose ?nocmDeck ?nocmPaint ?nocmSand ?nocmTrim ?nocmMasonry ?nocmStreet ?nocmMetal` a layer. `?cmr=<k>` scales the radii. `?nearr` and `?neardebug` of the bubble work too. Tier: medium and up (the bubble's default); low has none.

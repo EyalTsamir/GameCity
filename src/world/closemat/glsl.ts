@@ -478,7 +478,7 @@ void main() {
     fl += (fract(seed * 0.91) - 0.6) * 0.14;
     float rust = smoothstep(0.76, 0.81, fl);
     float rrim = smoothstep(0.68, 0.76, fl) * (1.0 - rust);
-    vec3 rc = mix(vec3(0.05, 0.028, 0.017), vec3(0.105, 0.052, 0.028), g.b) * (1.0 - 0.3 * g.a);
+    vec3 rc = mix(vec3(0.05, 0.033, 0.021), vec3(0.1, 0.062, 0.036), g.b) * (1.0 - 0.3 * g.a);
     vec2 s2 = (g.rg - 0.5) * 0.7;
     float lr = cmLight(N, normalize(N - T * s2.x - U * s2.y));
     ratio = mix(ratio, rc * lr / max(col, vec3(0.04)), rust);
@@ -819,7 +819,7 @@ void main() {
       vec2 s = (g.rg - 0.5) * 0.16;
       ratio = vec3(cmLight(N, normalize(N - G * s.x - C * s.y)));
       ratio *= 1.0 + (f.b - 0.5) * 0.08;
-      vec3 rc = mix(vec3(0.05, 0.028, 0.017), vec3(0.105, 0.052, 0.028), g.b) * (1.0 - 0.3 * g.a);
+      vec3 rc = mix(vec3(0.05, 0.033, 0.021), vec3(0.1, 0.062, 0.036), g.b) * (1.0 - 0.3 * g.a);
       ratio = mix(ratio, min(rc / col, vec3(3.0)), chip);
       ratio *= mix(vec3(1.0), vec3(0.92, 0.82, 0.7), smoothstep(0.6, 0.71, fl) * (1.0 - chip));
 #else
@@ -828,6 +828,8 @@ void main() {
       ratio = vec3(min(cmLight(N, normalize(N - G * s.x - C * s.y)), 1.1));
       ratio *= 1.0 + (f.b - 0.5) * 0.04;
       chip *= smoothstep(0.74, 0.8, fl);
+      float dustK = smoothstep(0.3, 0.08, lum) * (0.05 + 0.14 * smoothstep(0.3, 0.8, c.b) + 0.16 * (1.0 - smoothstep(0.0, 1.4, vP.y))) * (0.6 + 0.8 * g.b);
+      ratio = mix(ratio, vec3(0.24, 0.23, 0.215) / col, clamp(dustK, 0.0, 1.0));
       vec3 under = mix(vec3(0.3, 0.27, 0.22), vec3(0.42, 0.4, 0.36), smoothstep(0.76, 0.86, fl)) * (0.7 + 0.6 * f.b);
       ratio = mix(ratio, min(under / col, vec3(3.0)), chip);
 #endif
@@ -905,7 +907,7 @@ void main() {
     vec3 tone = vec3(0.86 + 0.3 * id);
     tone *= mix(vec3(1.0), vec3(1.08, 1.0, 0.86), step(0.5, fract(id * 7.3)));
     tone = mix(tone, vec3(0.5, 0.46, 0.42), step(0.9, fract(id * 3.1)));
-    tone = mix(tone, vec3(1.3), step(0.94, fract(id * 13.7)));
+    tone = mix(tone, vec3(1.14), step(0.97, fract(id * 13.7)));
     ratio *= mix(vec3(1.0), mix(vec3(0.84), tone, smoothstep(0.05, 0.3, s0.r)), fine);
     // a shell, a bit of weed
     vec4 s1 = CMT(tStones, p * 1.1 + 3.7, 1.1);
