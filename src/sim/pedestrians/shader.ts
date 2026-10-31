@@ -1900,7 +1900,8 @@ void RE_Direct_Lambert( const in IncidentLight directLight, const in vec3 geomet
   if ( pedSkinK > 0.0 ) {
     // skin: light soaks in and comes out redder round the shadow's edge; a soft oil sheen on top, strongest on the nose and brow;
     // the eye's own glint and the lips' come through the same lobe
-    float sNL = dot( geometryNormal, directLight.direction );
+    // (a film's fill: under a high sun the lower face, a few degrees further from it than the forehead, went dark in one step)
+    float sNL = dot( normalize( geometryNormal + viewMatrix[ 1 ].xyz * 0.3 ), directLight.direction );
     vec3 sW = vec3( 0.27, 0.18, 0.15 );
     vec3 sD = saturate( ( vec3( sNL ) + sW ) / ( vec3( 1.0 ) + sW ) );
     vec3 sI = sD * sD * ( 3.0 - 2.0 * sD ) * 0.35 + sD * 0.65;
