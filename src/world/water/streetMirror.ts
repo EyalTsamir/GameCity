@@ -48,16 +48,14 @@ vec3 rdStreetMirror(vec3 wp, float pud, float film, vec2 nn) {
   // the film smears the image toward the viewer and wobbles it; standing water only ripples
   vec2 q = wp.xz + (nn - 0.5) * mix(0.5, 0.06, pud) * min(1.0 + dist * 0.05, 3.0);
   if (pud > 0.01) q += rdRainRings(wp.xz) * pud * 0.9;
-  float smear = mix(1.2 + dist * 0.14, 0.12, pud);
+  float smear = mix(1.6 + dist * 0.2, 0.12, pud);
   float lod = mix(2.0, 0.4, pud);
   vec2 sv = vh * smear;
   vec4 c0 = uSReflMat * vec4(q.x, 0.0, q.y, 1.0);
   vec4 c1 = uSReflMat * vec4(q.x + sv.x, 0.0, q.y + sv.y, 1.0);
   vec4 c2 = uSReflMat * vec4(q.x - sv.x, 0.0, q.y - sv.y, 1.0);
-  vec4 c3 = uSReflMat * vec4(q.x + sv.x * 2.4, 0.0, q.y + sv.y * 2.4, 1.0);
-  vec4 c4 = uSReflMat * vec4(q.x - sv.x * 2.4, 0.0, q.y - sv.y * 2.4, 1.0);
   vec2 uv = c0.xy / c0.w;
-  vec4 r = textureLod(tSRefl, uv, lod) * 0.32 + (textureLod(tSRefl, c1.xy / c1.w, lod) + textureLod(tSRefl, c2.xy / c2.w, lod)) * 0.22 + (textureLod(tSRefl, c3.xy / c3.w, lod + 0.5) + textureLod(tSRefl, c4.xy / c4.w, lod + 0.5)) * 0.12;
+  vec4 r = textureLod(tSRefl, uv, lod) * 0.46 + (textureLod(tSRefl, c1.xy / c1.w, lod + 0.3) + textureLod(tSRefl, c2.xy / c2.w, lod + 0.3)) * 0.27;
   vec2 ed = min(uv, 1.0 - uv);
   float k = uSRefl.x * w * smoothstep(0.0, 0.03, min(ed.x, ed.y));
   // what the mirror covers, the sky sheen of the IBL no longer shows
