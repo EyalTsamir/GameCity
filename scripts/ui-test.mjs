@@ -3,7 +3,7 @@
 //
 //   node scripts/ui-test.mjs [--q "only=camera,ui,audio&camdebug"] [--out shots/uitest] [--url http://127.0.0.1:5174/] [--width 1280 --height 720] [--dpr 1.25]
 //                            [--steps intro,drag,pan,wheel,keys,poi,pois,follow,chase,kinds,building,dbl,aircraft,freecam,explore,tour,help,places,
-//                                     sound,time,speed,labels,resize,sweep,tourwatch,walk,photo,film]
+//                                     sound,time,speed,labels,resize,sweep,tourwatch,walk,lens,photo,film]
 //
 // Full city: --q noidle (the default `only=camera,ui,audio&camdebug` tests the camera on a stand-in city).
 // `intro` loads the page with the establishing shot and the first-run hint (otherwise &nointro is added).
@@ -28,7 +28,7 @@ const width = parseInt(args.width ?? '1280', 10);
 const height = parseInt(args.height ?? '720', 10);
 const dpr = parseFloat(args.dpr ?? '1');
 const q = args.q ?? 'only=camera,ui,audio&camdebug';
-const DEFAULT_STEPS = 'drag,pan,wheel,keys,poi,pois,follow,chase,kinds,building,dbl,aircraft,sweep,freecam,explore,tour,help,places,sound,time,speed,labels,resize,walk,photo,film';
+const DEFAULT_STEPS = 'drag,pan,wheel,keys,poi,pois,follow,chase,kinds,building,dbl,aircraft,sweep,freecam,explore,tour,help,places,sound,time,speed,labels,resize,walk,lens,photo,film';
 const wanted = new Set((args.steps ?? DEFAULT_STEPS).split(','));
 const intro = wanted.has('intro');
 const baseUrl = (args.url ?? 'http://127.0.0.1:5173/').replace(/\/?$/, '/'); // --url: another dev server (e.g. a baseline worktree)
@@ -965,6 +965,29 @@ try {
     });
   }
 
+  if (wanted.has('lens')) {
+    // the walker's lens: the wheel and + - magnify without moving, the bubble follows, leaving puts the lens back
+    const lens = () => page.evaluate(() => ({ fov: window.__city.ctx.camera.fov, zoom: window.__city.ctx.services.camera.lensNow(), x: window.__city.ctx.camera.position.x, z: window.__city.ctx.camera.position.z, near: window.__city.near.stats().lens }));
+    await page.evaluate(() => window.__city.view({ target: { x: -100, y: 0.15, z: 50.4 }, distance: 6, yaw: -90, pitch: 12 }));
+    await page.waitForTimeout(1500);
+    await page.mouse.move(640, 360);
+    await page.keyboard.press('KeyV');
+    await page.waitForTimeout(2500);
+    const a = await lens();
+    for (let i = 0; i < 6; i++) await page.mouse.wheel(0, -200);
+    await page.waitForTimeout(1500);
+    const b = await lens();
+    step('in the walk the wheel magnifies without moving the walker', b.zoom > 3 && b.fov < a.fov / 2 && Math.hypot(b.x - a.x, b.z - a.z) < 0.2 && b.near > a.near * 2, { a, b });
+    for (let i = 0; i < 6; i++) await page.keyboard.press('Minus');
+    await page.waitForTimeout(1200);
+    const c = await lens();
+    step('the minus key takes it back', c.zoom < b.zoom * 0.5, { c });
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('KeyV');
+    await page.waitForTimeout(3000);
+    const d = await lens();
+    step('leaving the walk puts the lens back', d.zoom === 1 && d.fov > 30, { d });
+  }
   if (wanted.has('walk')) {
     // first-person walk: V at the cursor, real keys / drag-look, feet on the ground, walls, a click, the station
     // stairs, leaving with V / Esc

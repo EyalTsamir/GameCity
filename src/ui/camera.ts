@@ -308,6 +308,8 @@ export default function create(ctx: CityContext): CityModule {
   /** free camera: a building / landmark clicked for its info card (the camera stays where it is) */
   let inspect: PickHit | null = null;
   let focusSet = false;
+  let focusPick = Infinity;
+  let focusPickAt = -1e9;
 
   // ───────────────────────────────────────────── helpers
   const canvasXY = (e: { clientX: number; clientY: number }) => {
@@ -1831,7 +1833,17 @@ export default function create(ctx: CityContext): CityModule {
     camera.updateMatrixWorld();
     const fx = ctx.services.postfx;
     if (noLift && effDist < 2.5 && fx?.setFocus) {
-      fx.setFocus(explore.focusAt(_pos, _dir.subVectors(_tgt, _pos).normalize()));
+      _dir.subVectors(_tgt, _pos).normalize();
+      let f = explore.focusAt(_pos, _dir);
+      // what moves stands on nothing the height field knows: twice a second, only this close, a look along the ray at the people and the cars
+      const now = performance.now();
+      if (now - focusPickAt > 500) {
+        focusPickAt = now;
+        const hit = scout.pick(raycaster.ray.set(_pos, _dir));
+        focusPick = hit && hit.kind !== 'building' ? hit.distance : Infinity;
+      }
+      if (focusPick < f) f = Math.max(0.5, focusPick);
+      fx.setFocus(f);
       focusSet = true;
     } else if (focusSet) {
       fx?.setFocus?.(null);

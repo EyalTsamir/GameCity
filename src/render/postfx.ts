@@ -56,7 +56,7 @@ export default function create(ctx: CityContext): CityModule {
   // grade (AgX + time-of-day CDL look; ?gradeold = the diorama grade)
   const world = WORLD_MODE;
   const lensMode = world && !params.has('tiltshift');
-  const lensBase = Math.max(0.7, Number(params.get('lensN') ?? 1.6) || 1.6);
+  const lensBase = Math.max(0.7, Number(params.get('lensN') ?? 2.8) || 2.8);
   let lensN = lensBase;
   /** photo mode's picture settings */
   let photo: PhotoLook | null = null;

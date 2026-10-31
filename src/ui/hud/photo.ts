@@ -147,7 +147,7 @@ export class PhotoMode {
     this.time.value = String(ctx.clock.hours);
     this.expo.value = '0';
     this.zoom.value = '0';
-    this.aperture.value = String(logFrom(1.6, F_MIN, F_MAX));
+    this.aperture.value = String(logFrom(2.8, F_MIN, F_MAX));
     Object.assign(this.look, NEUTRAL, { exposure: 1 });
     this.setLook('natural');
     this.applyExposure();

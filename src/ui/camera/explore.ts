@@ -257,7 +257,7 @@ export class ExploreAid {
     return prox < near * 2 ? Math.max(0.05, prox * 0.5) : near;
   }
 
-  /** distance to what the camera at `p` looks at along `dir`: the room's far side inside, else the city (≥ 2.5 m) */
+  /** distance to what the camera at `p` looks at along `dir`: the room's far side inside, else the city (≥ 0.5 m: a close look is sharp where it looks) */
   focusAt(p: THREE.Vector3, dir: THREE.Vector3): number {
     let t = -1;
     if (this.roomLot) {
@@ -267,7 +267,7 @@ export class ExploreAid {
       if (this._box.containsPoint(p) && this._ray.intersectBox(this._box, this._hit)) t = this._hit.distanceTo(p);
     }
     if (t < 0) t = this.field.raycast(p, dir, 600, this._hit, !this.lotAt(p.x, p.y, p.z));
-    return t < 0 ? 300 : Math.max(2.5, t);
+    return t < 0 ? 300 : Math.max(0.5, t);
   }
 
   dispose(): void {
