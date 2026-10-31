@@ -14,6 +14,7 @@ import type { CityContext, CityModule, ModuleFactory, QualityState, CameraState,
 import { validateWorld } from './debug/validate';
 import { createShadowLod } from './render/shadowLod';
 import { cullHiddenTriangles } from './render/geomCull';
+import { createPvs } from './render/pvs';
 import { flatConvention, perfOn } from './core/perfdeep';
 
 // Load order matters: static world → simulations → post-processing → camera → UI.
@@ -245,6 +246,7 @@ async function boot(): Promise<void> {
   ctx.events.emit('modules:ready', modules.map((m) => m.name));
   cullHiddenTriangles(ctx);
   const shadowLod = createShadowLod(ctx);
+  const pvs = createPvs(ctx);
   // street lights follow the clock with a short ease, but a clock jump (time slider, setHours) snaps them
   let snapLights = true;
   ctx.events.on('timejump', () => (snapLights = true));
@@ -312,6 +314,7 @@ async function boot(): Promise<void> {
     }
     try {
       shadowLod?.();
+      pvs?.();
       ctx.render(realDt);
     } catch (err) {
       reportFrameError('render', err);

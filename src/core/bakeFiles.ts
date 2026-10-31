@@ -35,6 +35,20 @@ async function fetchBytes(file: string): Promise<ArrayBuffer | null> {
   return new Response(new Blob([b]).stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer();
 }
 
+/** a baked file as bytes, or null when it is not available or was made from something else; never rejects */
+export async function bakeBytes(name: string, params: URLSearchParams, key: string): Promise<Uint8Array | null> {
+  if (!bakeOn(params)) return null;
+  try {
+    const m = await readManifest();
+    const entry = m?.files?.[name];
+    if (!entry || entry.key !== key) return null;
+    const buf = await fetchBytes(entry.file);
+    return buf ? new Uint8Array(buf) : null;
+  } catch {
+    return null;
+  }
+}
+
 /** BC1 → RGBA8, for the GPUs without S3TC (phones): one mip */
 function decodeBC1(src: Uint8Array, w: number, h: number): Uint8Array {
   const out = new Uint8Array(w * h * 4);

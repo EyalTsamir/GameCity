@@ -319,7 +319,7 @@ vec4 diffuseColor = vec4(texture2D(tFF0, vAtlas).rgb, opacity);
     vec3 refl = mix(env, envL * gtN, tintAmt) * (curtain ? mix(0.8, 0.92, uMirror) : 1.0) + uSunCol * glint;
     if (curtain) refl *= mix(vec3(1.0), mix(vec3(0.92, 1.0, 1.08), vec3(1.07, 1.02, 0.92), r3) * mix(0.72, 1.25, fract(r1 * 5.9)), 1.0 - smoothstep(0.3, 1.0, fwidth(vFac.x)));
     ffEmit = refl * (F / F0) * ffM.g + ffE * 4.0 * lit * glow;
-    ffEmit += gt * crown * mix(0.18, 0.55, clamp(ffM.g / F0 - 1.0, 0.0, 1.0)) * step(0.01, ffM.g);
+    ffEmit += gt * crown * 0.55 * step(0.01, ffM.g);
   }
   ffEmit += diffuseColor.rgb * crown * vec3(0.55, 0.62, 0.75) * (1.0 - step(0.01, ffM.g));
   ffEmit = min(ffEmit, vec3(16.0));

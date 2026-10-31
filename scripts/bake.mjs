@@ -2,10 +2,12 @@
 // Bake: run the city's own shaders once in the real browser and store the results as files the page loads
 // (docs/progress/baking.md). Everything still comes from this repository's code; no external asset goes in.
 //
-//   node scripts/bake.mjs [--url http://127.0.0.1:5173/] [--only land0,land1] [--out public/bake]
+//   npm run bake                      everything whose inputs changed (seconds; the visibility job, when due, some minutes)
+//   node scripts/bake.mjs [--url http://127.0.0.1:5210/] [--only fac0,fac1,fac2] [--force 1] [--out public/bake]
 //
-// Needs the dev server (or --url of any server of this source tree) and Chrome (scripts/browser.mjs). Writes
-// <out>/<name>.bct.gz (BC1 + mips: scripts/bc1.mjs) and <out>/manifest.json. The page finds them through src/core/bakeFiles.ts.
+// Starts its own dev server unless --url names one of this source tree; needs Chrome (scripts/browser.mjs). Writes
+// <out>/<name>.bct.gz (BC1 + mips: scripts/bc1.mjs), <out>/<name>.bin.gz and <out>/manifest.json, with the fingerprint of what
+// each was made from. The page finds them through src/core/bakeFiles.ts and ignores a file whose fingerprint isn't its own.
 
 import { launchBrowser, acquireLock, releaseLock } from './browser.mjs';
 import { encodeBCT } from './bc1.mjs';
@@ -13,17 +15,32 @@ import fs from 'node:fs';
 import path from 'node:path';
 import zlib from 'node:zlib';
 import { fileURLToPath } from 'node:url';
+import { spawn } from 'node:child_process';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const args = {};
 for (let i = 2; i < process.argv.length; i++) if (process.argv[i].startsWith('--')) args[process.argv[i].slice(2)] = process.argv[++i];
-const baseUrl = (args.url ?? 'http://127.0.0.1:5173/').replace(/\/?$/, '/');
+let baseUrl = args.url;
+let server = null;
+if (!baseUrl) {
+  // our own dev server, on a port of its own
+  baseUrl = 'http://127.0.0.1:5198/';
+  server = spawn(process.execPath, [path.join(here, '..', 'node_modules', 'vite', 'bin', 'vite.js'), '--port', '5198', '--strictPort', '--host', '127.0.0.1'], { cwd: path.join(here, '..'), stdio: 'ignore' });
+  for (let i = 0; ; i++) {
+    const up = await fetch(baseUrl).then((r) => r.ok).catch(() => false);
+    if (up) break;
+    if (i > 120) throw new Error('the dev server did not start');
+    await new Promise((done) => setTimeout(done, 500));
+  }
+}
+baseUrl = baseUrl.replace(/\/?$/, '/');
 const outDir = path.resolve(args.out ?? path.join(here, '..', 'public', 'bake'));
 const only = (args.only ?? '').split(',').filter(Boolean);
 fs.mkdirSync(outDir, { recursive: true });
 
-/** one bake job: page code for an RGBA8 render target, page code for the fingerprint of its inputs */
+/** one bake job: page code for an RGBA8 render target (or for base64 bytes), page code for the fingerprint of its inputs */
 const JOBS = {
+  pvs: { bytes: `__city.ctx.services.pvs.bake()`, key: `__city.ctx.services.pvs.key()` },
   land0: { rt: `__city.ctx.services.landscape.renderBake(0)`, key: `__city.ctx.services.landscape.bakeKey()` },
   land1: { rt: `__city.ctx.services.landscape.renderBake(1)`, key: `__city.ctx.services.landscape.bakeKey()` },
   fac0: { rt: `__city.ctx.services.buildings.renderFarBake(0)`, key: `__city.ctx.services.buildings.farBakeKey()`, sharp: 0.35 },
@@ -67,11 +84,27 @@ try {
   const page = await browser.newPage({ viewport: { width: 640, height: 360 }, deviceScaleFactor: 1 });
   await page.routeWebSocket(/.*/, () => {});
   page.on('pageerror', (e) => console.error('page error:', e.message));
-  await page.goto(`${baseUrl}?nobake&quality=high&adaptive=0&nointro&noidle&skip=ui,audio,traffic,pedestrians,boats,rail,scenes`, { waitUntil: 'domcontentloaded', timeout: 600000 });
+  await page.goto(`${baseUrl}?nobake&quality=high&adaptive=0&nointro&noidle&skip=ui,audio`, { waitUntil: 'domcontentloaded', timeout: 600000 });
   await page.waitForFunction(() => window.__city?.ready, null, { timeout: 600000 });
   for (const [name, job] of Object.entries(JOBS)) {
     if (only.length && !only.includes(name)) continue;
     const t0 = Date.now();
+    const have = manifest.files[name];
+    if (!args.force && have && fs.existsSync(path.join(outDir, have.file)) && have.key === (await page.evaluate((c) => (0, eval)(c), job.key))) {
+      console.log(`${name}: up to date`);
+      continue;
+    }
+    if (job.bytes) {
+      const b64 = await page.evaluate((c) => (0, eval)(c), job.bytes);
+      const raw = Buffer.from(b64, 'base64');
+      const key = await page.evaluate((c) => (0, eval)(c), job.key);
+      const gz = zlib.gzipSync(raw, { level: 9 });
+      const file = `${name}.bin.gz`;
+      fs.writeFileSync(path.join(outDir, file), gz);
+      manifest.files[name] = { file, bytes: gz.length, key };
+      console.log(`${name}: ${((Date.now() - t0) / 1000).toFixed(1)} s, ${raw.length} bytes → ${gz.length} gzip`);
+      continue;
+    }
     const meta = await page.evaluate((c) => {
       const rt = (0, eval)(c);
       window.__bakeRT = rt;
@@ -108,5 +141,6 @@ try {
 } finally {
   await browser.close().catch(() => {});
   releaseLock();
+  server?.kill();
 }
 fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 1));

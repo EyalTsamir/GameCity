@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "vite --port 5173 --strictPort",
     "build": "vite build",
+    "bake": "node scripts/bake.mjs",
     "preview": "vite preview --port 4173 --strictPort",
     "typecheck": "tsc --noEmit -p .",
     "start": "node scripts/serve.mjs",
