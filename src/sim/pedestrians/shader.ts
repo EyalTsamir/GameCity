@@ -1963,7 +1963,7 @@ void RE_IndirectDiffuse_Lambert( const in vec3 irradiance, const in vec3 geometr
     float nv = 1.0 - saturate( dot( geometryNormal, geometryViewDir ) );
     reflectedLight.indirectDiffuse += irradiance * (0.05 + 0.06 * uPedNight) * pedAO * nv * nv * nv;
     float sLum = dot( material.diffuseColor, vec3( 0.3, 0.55, 0.15 ) );
-    pedAmb *= 1.0 + 2.8 * uPedNight * ( 1.0 - smoothstep( 0.02, 0.2, sLum ) );
+    pedAmb *= 1.0 + ( 0.45 + 2.5 * uPedNight ) * ( 1.0 - smoothstep( 0.02, 0.2, sLum ) );
   }
 #endif
   reflectedLight.indirectDiffuse += irradiance * pedAmb * uPedFill * ( 1.0 + below * vec3( 0.9, 0.82, 0.72 ) ) * BRDF_Lambert( material.diffuseColor );

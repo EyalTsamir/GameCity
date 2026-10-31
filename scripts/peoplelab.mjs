@@ -64,7 +64,7 @@ const frame = ([i, d, angle, part]) => {
   const c = window.__city.ctx;
   const m = window.__lab[i];
   const L = m.look;
-  const h = L.kind === 'child' || L.kind === 'boy' || L.kind === 'girl' ? 0.925 * (0.92 + 0.05 * L.age) : L.kind === 'woman' ? 1.5 : 1.62;
+  const h = L.kind === 'child' || L.kind === 'boy' || L.kind === 'girl' ? 0.15 + 0.925 * (0.92 + 0.05 * L.age) : L.kind === 'woman' ? 1.5 : 1.62;
   const sit = m.sit > 0.5;
   const y = m.y + (part === 'hand' ? 0.82 : part === 'foot' ? 0.12 : (sit ? h - 0.42 : h) * (L.scale ?? 1));
   window.__city.setSpeed(0);
