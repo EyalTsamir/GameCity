@@ -16,7 +16,8 @@ import * as THREE from 'three';
 import type { CityContext, CityModule } from '../core/context';
 import { LAMP_MAP, TH_LAMP_SPOTS, addLampLights, bindLampChannel, lampChannel, lampLights, lampSpotUniforms, type LampLight } from '../core/lampLight';
 import { bakeLampMap, type BakeResult } from './lamps/bake';
-import { patchLampScene } from './lamps/integrate';
+import { patchLampMaterial, patchLampScene } from './lamps/integrate';
+import { closeLightOn } from '../core/closelight';
 import { shopSpillLights } from './lamps/spill';
 
 export interface LampsService {
@@ -24,6 +25,9 @@ export interface LampsService {
   /** PNG data URL of the baked map (debug, ?lampdebug only) */
   preview(): string;
 }
+
+/** street furniture of modules that don't integrate the lamp light themselves */
+const UNLIT = /^(traffic-signal-(poles|fixings)|traffic-street-names|terrain-railings|rail-(furniture|fixings|signs)|props-print|life-night-market|buildings-signs)$/;
 
 interface Spot {
   l: LampLight;
@@ -87,6 +91,14 @@ export default function create(ctx: CityContext): CityModule {
     service.baked = true;
     if (ctx.debug.enabled) console.info(`[lamps] baked ${result.lights} lights (${spots.length} dynamic) in ${result.ms.toFixed(0)} ms, peak ${result.peak.toFixed(2)}`);
     if (params.has('lampall')) autoPatched = patchLampScene(ctx.scene);
+    // (these had no lamp light at all: black silhouettes against the lit street at night; small on screen, so they cost little. ?nosignallit)
+    if (closeLightOn('signallit')) {
+      ctx.scene.traverse((o) => {
+        if (!UNLIT.test(o.name)) return;
+        const m = (o as THREE.Mesh).material;
+        for (const x of Array.isArray(m) ? m : m ? [m] : []) if (patchLampMaterial(x)) autoPatched++;
+      });
+    }
   };
   ctx.events.on('modules:ready', bake);
 

@@ -17,6 +17,8 @@ import { TiltShiftEffect } from './postfx/tiltShift';
 import { LookEffect } from './postfx/look';
 import { CloudShadowEffect, cloudShadowUniforms, type CloudShadowData } from './postfx/cloudShadow';
 import { AOApplyEffect, aoUniforms } from './postfx/aoApply';
+import { contactUniforms, updateContact } from './postfx/contact';
+import { closeLight } from '../core/closelight';
 import { AdaptiveController, GpuTimer, buildLadder, type QualityStep } from './postfx/adaptive';
 import { WORLD_MODE } from '../core/world';
 import { SunShaftsEffect } from './postfx/sunShafts';
@@ -157,7 +159,9 @@ export default function create(ctx: CityContext): CityModule {
   const clouds = new CloudShadowEffect(cloudU, camera, { x0: sl.x0 - 260, z0: sl.z0 - 260, x1: sl.x1 + 260, z1: sl.z1 + 260 }, 256, cloudField);
   // ambient occlusion applied in the effect pass (and in the tilt-shift prefilter), see postfx/aoApply.ts
   const aoU = aoUniforms();
-  const aoFx = new AOApplyEffect(aoU, params.has('aoexact'));
+  // contact shadows (postfx/contact.ts, ?nocontact): computed with the half-res AO, so they go with it (high tier, first to step down)
+  const contactU = world && wantAO && closeLight(ctx, 'contact', 'high') ? contactUniforms() : null;
+  const aoFx = new AOApplyEffect(aoU, params.has('aoexact'), contactU);
   const aoTint = new THREE.Color();
   aoFx.onUpdate = () => {
     const on = !!ao && ao.enabled && aoFused;
@@ -172,6 +176,7 @@ export default function create(ctx: CityContext): CityModule {
     aoU.uAOTint.value.copy(aoTint.copy(c.color).convertSRGBToLinear());
     aoU.uAOProjInv.value.copy(camera.projectionMatrixInverse);
     aoU.uAORes.value.set(composer.inputBuffer.width, composer.inputBuffer.height);
+    if (contactU) updateContact(contactU, aoU.uCTint.value, ctx, composer.inputBuffer.height * 0.5);
     const at = atmo();
     const fog = scene.fog as THREE.Fog | null;
     if (at && at.active) {

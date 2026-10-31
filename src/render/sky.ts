@@ -252,6 +252,8 @@ export default async function create(ctx: CityContext): Promise<CityModule> {
   const skyService = {
     sun,
     hemi,
+    /** 0..1: how much of the light is direct sun now (0 by night, under cloud) */
+    keyShare: 0,
     setWeather(r: number) {
       forced = Number.isFinite(r) ? Math.min(1, Math.max(0, r)) : null;
       director?.setForced(forced);
@@ -506,6 +508,7 @@ export default async function create(ctx: CityContext): Promise<CityModule> {
     const cloudNight = smooth(-0.07, -0.3, sh);
     if (cottonClouds) clouds.frame(ctx.camera, state, _L, sun.color, lightI, sunVis, lights * (1 - sunVis * 0.8), overcast, cloudNight);
     const shStrength = (usingMoon ? 0.3 * moonW : sunW) * (1 - sunOver * 0.85);
+    skyService.keyShare = usingMoon ? 0 : sunW * (1 - sunOver * 0.85); // (contact shadows, postfx/contact.ts)
     _shTint.setRGB(0.6, 0.645, 0.75);
     clouds.writeShadows(cloudShadows, _L, shStrength, _shTint);
     if (cloudLayer) {

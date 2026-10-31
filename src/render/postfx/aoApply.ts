@@ -16,6 +16,7 @@
 import * as THREE from 'three';
 import { Effect, EffectAttribute } from 'postprocessing';
 import { FS_VERT, FullscreenPass } from './fullscreen';
+import { CONTACT_BLUR_GLSL, CONTACT_FRAG, type ContactUniforms } from './contact';
 
 /** Shared with the tilt-shift prefilter. */
 export function aoUniforms() {
@@ -37,6 +38,8 @@ export function aoUniforms() {
     uAOProjInv: new THREE.Uniform(new THREE.Matrix4()),
     /** full-resolution size in pixels (as N8AO's `resolution`) */
     uAORes: new THREE.Uniform(new THREE.Vector2(1, 1)),
+    /** contact shadows (postfx/contact.ts): colour of a fully occluded pixel */
+    uCTint: new THREE.Uniform(new THREE.Vector3(1, 1, 1)),
   };
 }
 export type AOUniforms = ReturnType<typeof aoUniforms>;
@@ -67,17 +70,23 @@ vec3 aoViewPos(float depth, vec2 coord) {
 }
 `;
 
-/** half-res: (AO, view distance); the background gets the largest half-float distance */
+/** half-res: (AO, view distance, contact shadow); the background gets the largest half-float distance */
 const PREP_FRAG = /* glsl */ `
 uniform sampler2D tAO;
 uniform highp sampler2D tAODepth;
 uniform mat4 uAOProjInv;
 varying vec2 vUv;
+${CONTACT_BLUR_GLSL}
 void main() {
   ivec2 c = ivec2(gl_FragCoord.xy);
   float d = texelFetch(tAODepth, c, 0).x;
   float z = d >= 1.0 ? 6e4 : uAOProjInv[3][2] / (uAOProjInv[2][3] * (d * 2.0 - 1.0) + uAOProjInv[3][3]);
-  gl_FragColor = vec4(texelFetch(tAO, c, 0).r, abs(z), 0.0, 1.0);
+  vec4 ao = texelFetch(tAO, c, 0);
+  float cs = 0.0;
+#ifdef CONTACT
+  if (abs(z) < uCOn.x) cs = thContactBlur(c, abs(z));
+#endif
+  gl_FragColor = vec4(ao.r, abs(z), cs, 1.0);
 }
 `;
 
@@ -93,6 +102,7 @@ uniform vec2 uAOFog;
 uniform vec2 uAONear;
 uniform mat4 uAOProjInv;
 uniform vec2 uAORes;
+uniform vec3 uCTint;
 ${VIEWPOS_GLSL}
 
 #ifdef AO_EXACT
@@ -151,18 +161,22 @@ void mainImage(const in vec4 inputColor, const in vec2 uv, const in float depth,
   ivec2 mx = ivec2(hsz) - 1;
   float zc = -pos.z;
   float iz = 40.0 / zc; // 1 / (2.5 % of the distance)
-  vec2 s00 = texelFetch(tAOPack, clamp(i0, ivec2(0), mx), 0).rg;
-  vec2 s10 = texelFetch(tAOPack, clamp(i0 + ivec2(1, 0), ivec2(0), mx), 0).rg;
-  vec2 s01 = texelFetch(tAOPack, clamp(i0 + ivec2(0, 1), ivec2(0), mx), 0).rg;
-  vec2 s11 = texelFetch(tAOPack, clamp(i0 + ivec2(1, 1), ivec2(0), mx), 0).rg;
+  vec3 s00 = texelFetch(tAOPack, clamp(i0, ivec2(0), mx), 0).rgb;
+  vec3 s10 = texelFetch(tAOPack, clamp(i0 + ivec2(1, 0), ivec2(0), mx), 0).rgb;
+  vec3 s01 = texelFetch(tAOPack, clamp(i0 + ivec2(0, 1), ivec2(0), mx), 0).rgb;
+  vec3 s11 = texelFetch(tAOPack, clamp(i0 + ivec2(1, 1), ivec2(0), mx), 0).rgb;
   vec4 dz = vec4(s00.y, s10.y, s01.y, s11.y) - zc;
   vec4 w = vec4((1.0 - f.x) * (1.0 - f.y), f.x * (1.0 - f.y), (1.0 - f.x) * f.y, f.x * f.y) / (1.0 + dz * dz * (iz * iz)) + 1e-5;
   float a = dot(w, vec4(s00.x, s10.x, s01.x, s11.x)) / dot(w, vec4(1.0));
+  float cs = dot(w, vec4(s00.z, s10.z, s01.z, s11.z)) / dot(w, vec4(1.0));
 #endif
   a = pow(a, uAOIntensity);
   if (uAOFog.y > uAOFog.x) a = mix(a, 1.0, smoothstep(uAOFog.x, uAOFog.y, -pos.z));
   if (uAONear.y > uAONear.x) a = mix(1.0, a, smoothstep(uAONear.x, uAONear.y, -pos.z));
   outputColor = vec4(mix(inputColor.rgb, uAOTint * inputColor.rgb, 1.0 - a), inputColor.a);
+#ifndef AO_EXACT
+  outputColor.rgb *= mix(vec3(1.0), uCTint, cs);
+#endif
 }
 `;
 
@@ -173,9 +187,12 @@ export class AOApplyEffect extends Effect {
   private pack: THREE.WebGLRenderTarget;
   private exact: boolean;
   private u: AOUniforms;
+  private contactU: ContactUniforms | null;
+  private contactPass: FullscreenPass | null = null;
+  private contactRT: THREE.WebGLRenderTarget | null = null;
 
   /** @param exact use N8AO's original 3x3 compositer maths (debug / comparison) */
-  constructor(u: AOUniforms, exact = false) {
+  constructor(u: AOUniforms, exact = false, contact: ContactUniforms | null = null) {
     super('AOApplyEffect', FRAG, {
       attributes: EffectAttribute.DEPTH,
       defines: exact ? new Map([['AO_EXACT', '1']]) : new Map<string, string>(),
@@ -183,13 +200,33 @@ export class AOApplyEffect extends Effect {
     });
     this.u = u;
     this.exact = exact;
+    this.contactU = contact;
     this.pack = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, depthBuffer: false, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter });
     this.pack.texture.name = 'AO.Pack';
     u.tAOPack.value = this.pack.texture;
+    if (contact) {
+      this.contactRT = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, format: THREE.RGFormat, depthBuffer: false, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter });
+      this.contactRT.texture.name = 'AO.Contact';
+      contact.tCPack.value = this.contactRT.texture;
+      this.contactPass = new FullscreenPass(
+        new THREE.ShaderMaterial({
+          name: 'AOContact',
+          uniforms: { tAO: u.tAO, tAODepth: u.tAODepth, uAOProjInv: u.uAOProjInv, ...contact },
+          defines: { CONTACT: 1 },
+          vertexShader: FS_VERT,
+          fragmentShader: CONTACT_FRAG,
+          depthTest: false,
+          depthWrite: false,
+          blending: THREE.NoBlending,
+          toneMapped: false,
+        }),
+      );
+    }
     this.prep = new FullscreenPass(
       new THREE.ShaderMaterial({
         name: 'AOPrep',
-        uniforms: { tAO: u.tAO, tAODepth: u.tAODepth, uAOProjInv: u.uAOProjInv },
+        uniforms: { tAO: u.tAO, tAODepth: u.tAODepth, uAOProjInv: u.uAOProjInv, ...(contact ?? {}) },
+        defines: contact ? { CONTACT: 1 } : {},
         vertexShader: FS_VERT,
         fragmentShader: PREP_FRAG,
         depthTest: false,
@@ -205,7 +242,12 @@ export class AOApplyEffect extends Effect {
     const ao = this.u.tAO.value;
     if (this.exact || this.u.uAOOn.value < 0.5 || !ao) return;
     const img = ao.image as { width: number; height: number };
-    if (this.pack.width !== img.width || this.pack.height !== img.height) this.pack.setSize(img.width, img.height);
+    if (this.pack.width !== img.width || this.pack.height !== img.height) {
+      this.pack.setSize(img.width, img.height);
+      this.contactRT?.setSize(img.width, img.height);
+    }
+    // (a camera high above everything has no pixel in range: no pass, one compare per pixel in the prep)
+    if (this.contactPass && this.contactRT && this.contactU && this.contactU.uCOn.value.x > 0) this.contactPass.render(renderer, this.contactRT);
     this.prep.render(renderer, this.pack);
   }
 
@@ -213,5 +255,7 @@ export class AOApplyEffect extends Effect {
     super.dispose();
     this.pack.dispose();
     this.prep.dispose();
+    this.contactRT?.dispose();
+    this.contactPass?.dispose();
   }
 }
