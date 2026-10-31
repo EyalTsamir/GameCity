@@ -36,14 +36,14 @@ Text on/off in one page (`abprof`, layers hidden; delta = hidden minus shown, so
 
 Inside the noise everywhere, at worst about 0.4 ms at the market at night; budget 0.7. One night street run read −2.6 ±3.31: no information.
 Overview and downtown at night read −0.45 and −0.55 while `near.stats()` shows 0 letter cells shown and 0 triangles: nothing of this module is drawn there, so that difference is not text. Not explained. Page-reload `perf.mjs` at overview, noon: 25.32 / 26.11 with, 25.80 / 25.94 with `?nolettering`, the same triangles once settled (3.2 M). The first row, 3.64 M, was the page before the first view had settled.
-- Triangles: about 6 200 in the street view (a letter is 2). 3 extra draw calls per visible ring cell group: 13 + 11 + 6 cells in the street view, 30 draws, one program.
+- Triangles: about 6 200 in the street view (a letter is 2). Draw calls: one per visible cell, 13 + 11 + 6 = 30 in the street view, one program.
 - `hitch.mjs`: 0 new programs in every window. Maxima of 350 ms (overview steady, noon) and 267 ms (street arrive, noon) occurred once, with other sessions on the machine; the same windows at night stayed at 51 ms. Not shown to be this module.
 - `walkhitch.mjs` 85 m: max 51.0 ms with, 50.2 ms without; 0 new programs; 16 new geometries (one per built cell); slowest cell build 1.3 ms.
 - Boot: 278 ms for the atlas and the items (measured once, on the first version, with fewer items). GPU: one 2048² R8 atlas with mips, about 5.6 MB.
 - Quality: `medium` keeps it, `low` has none (far atlas names stay).
 
 ## Final checks
-typecheck, build (4.5 MB). `ui-test --q noidle`: 73 passed, `kinds` failed; passes alone (known flake). Overview at speed 4 with `?diorama`: invariants `{}`, validate `[]`. `?quality=medium|low` and `?nolettering`: no errors, invariants `{}`.
+typecheck, build (4.5 MB). `ui-test --q noidle`: 73 passed, `kinds` failed; passes alone (known flake). Overview at speed 4, and `?diorama`: invariants `{}`, validate `[]`, diorama looked at. `?quality=medium|low` and `?nolettering`: no errors, invariants `{}`.
 
 ## Left
 Not worth it yet or not reached: office and lobby door numbers in sharp type, ghost signs on party walls, school noticeboard and platform poster board in the sharp font, classic benches' plaques, shelter route map, chalk edge roughness, boat names. Window words in full noon sun are pale at 1 m (the glass reflection competes). Autofocus reads the written faces of street things, doors and windows only: wall plates and blue plaques rely on the wall itself.
