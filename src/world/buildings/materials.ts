@@ -39,6 +39,18 @@ const BH_DBG = typeof location !== 'undefined' && new URLSearchParams(location.s
 const FG_DBG_OFF = FG && !BH_DBG;
 const fg = (gated: string, plain: string): string => (FG ? gated : plain);
 const FG_KEY = FG ? (FG_DBG_OFF ? '-fg' : '-fgd') : '';
+// Facade program split (docs/progress/bake.md, `?noshellsplit`): on this GPU a program's cost follows its size, not the code a
+// pixel takes. bhShop alone cost 6-10 ms a frame on ALL facade pixels, though its branch is only taken in shop windows.
+// So the shops and the roofs get programs of their own and every other wall a much smaller one, with the same picture.
+// BH_CLASS: 0 everything in one program (the old way), 1 walls without shop fronts, 2 shop fronts and doors, 3 roofs.
+export const SHELL_SPLIT = perfOn('shellsplit');
+export const SHELL_CLASS = { ALL: 0, WALL: 1, SHOP: 2, ROOF: 3 } as const;
+/** program class of a shell primitive from its aB.w (kind = mode * 64 + style * 8 + profile) */
+export function shellClassOf(kindW: number): number {
+  const kind = Math.floor(kindW + 0.5);
+  if (kindW >= 63.5) return SHELL_CLASS.ROOF;
+  return Math.floor((kind % 64) / 8 + 0.01) > 5.5 ? SHELL_CLASS.SHOP : SHELL_CLASS.WALL;
+}
 
 export const WIN = {
   /** single pane + frame */
@@ -120,6 +132,10 @@ export const LIGHT_MODE = { STEADY: 0, BLINK: 1, NEON: 2, ALWAYS: 3, PULSE: 4 } 
 
 export interface BuildingMaterials {
   shell: THREE.MeshStandardMaterial;
+  /** shop fronts and doors (SHELL_SPLIT), the same material with its own program */
+  shellShop: THREE.MeshStandardMaterial;
+  /** roofs (SHELL_SPLIT) */
+  shellRoof: THREE.MeshStandardMaterial;
   trim: THREE.MeshStandardMaterial;
   lights: THREE.MeshBasicMaterial;
   signs: THREE.MeshStandardMaterial;
@@ -589,6 +605,7 @@ vec3 bhPal(float h) {
   return c;
 }
 // shelves of goods on a wall: q = (along the wall, height); kind 0 small boxes, 1 book spines, 2 bottles, 3 loaves
+#if BH_CLASS == 0 || BH_CLASS == 2
 vec3 bhShelves(vec2 q, vec3 wallC, float kind, float rs, float y0, float y1, float rowH) {
   if (q.y < y0 || q.y > y1) return wallC;
   float row = floor((q.y - y0) / rowH);
@@ -1021,6 +1038,7 @@ vec3 bhShop(vec2 pm, vec2 csz, vec3 rd, float rs, float shopT, float litI, vec3 
 // fake room behind the window (interior mapping). Returns the lamp-lit radiance (emission) and
 // writes the daylight-lit part as an albedo (dayAlb) so it follows the facade's real lighting
 // (sun / shade / shadows) instead of glowing uniformly.
+#endif
 vec3 bhRoom(vec2 pm, vec2 csz, vec3 rd, float rs, float litI, vec3 lcol, float prof, float style, out vec3 dayAlb) {
   float depth = max(3.2, csz.x * 1.5);
   vec3 ro = vec3(pm, 0.0);
@@ -1924,13 +1942,21 @@ ${fg(`      float ew = max(0.09, fq.x * 1.25);
   vec3 rd = vec3(dot(V, T), V.y, -dot(V, N));
   rd.z = max(rd.z, 0.04);
   float litI = lit * glowI;
+#if BH_CLASS == 0 || BH_CLASS == 2
   bool shopWin = style > 5.5 && style < 6.5;
+#else
+  const bool shopWin = false;
+#endif
   // open shops keep their lights on in daytime too
   // (and at night stay readable rather than a blown-out glow: the interior detail carries the window)
   if (shopWin) litI = lit * mix(0.62 + 0.25 * r2, 0.9 + 0.25 * r2, nightF);
   vec3 interior; // lamp-lit radiance seen through the glass
   vec3 dayA;     // daylight-lit albedo seen through the glass
+#if BH_CLASS == 0 || BH_CLASS == 2
   bool lobbyWin = style > 6.5 && csz.y > 2.6 && prof > 4.5 && prof < 5.5;
+#else
+  const bool lobbyWin = false;
+#endif
   if (lobbyWin) litI = lit * mix(0.55 + 0.2 * r2, 0.85 + 0.2 * r2, nightF);
   // G1: one shop keeps one type, but every bay / lobby pane its own layout. The wall's cell grid restarts on each
   // emitted segment (a ground floor is often one segment per bay), so the bay id comes from the world position of
@@ -1945,8 +1971,11 @@ ${fg(`      float ew = max(0.09, fq.x * 1.25);
     rsLobby = mod(seed, 613.0) * 1.37 + floor(bayH * 97.0) * 1.913;
   }
   // (one bhShop call site for shops and lobbies: the D3D compiler inlines each one — it is the biggest function)
+#if BH_CLASS == 0 || BH_CLASS == 2
   if (uDetail > 0.5 && (shopWin || lobbyWin)) interior = bhShop(pm, csz, normalize(rd), shopWin ? rsShop : rsLobby, shopWin ? shopTR : 8.0, litI, shopWin ? lcol : vec3(1.0, 0.82, 0.6), dayA);
-  else if (uDetail > 0.5) {
+  else
+#endif
+  if (uDetail > 0.5) {
     interior = bhRoom(pm, csz, normalize(rd), r1 * 31.0 + seed, litI, lcol, prof, style, dayA);
     dayA *= 0.5; // a room by day is several times darker than the street it looks onto (curtains near the glass keep their light)
   }
@@ -2195,6 +2224,7 @@ ${fg(`      float ew = max(0.09, fq.x * 1.25);
   metal = (curtain || ribbon) ? frame * 0.7 : 0.0;
   // closed shops: many pull down a ribbed steel roller shutter (tagged with graffiti on some), a few leave
   // it half down in the early morning
+#if BH_CLASS == 0 || BH_CLASS == 2
   if (shopWin && uWear > 0.5) {
     float sh = bhHash12(vec2(seed, 4.4));
     float hs = mod(uHours + 24.0, 24.0);
@@ -2220,6 +2250,7 @@ ${fg(`      float ew = max(0.09, fq.x * 1.25);
       bhSrc = 5.0; return;
     }
   }
+#endif
   bhSrc = 6.0;
   emit += glass * (1.0 - frame) + fcol * crown * 0.4 * frame;
 }
@@ -2383,8 +2414,14 @@ vec3 bhEmit = vec3(0.0);
   vec3 alb = diffuseColor.rgb;
   float rgh = -1.0;
   float mtl = -1.0;
+#if BH_CLASS == 3
+  bhSrc = 7.0; bhRoof(alb, rgh, bhEmit, bN, bV);
+#elif BH_CLASS == 0
   if (vB.w < 63.5) bhWall(alb, rgh, mtl, bhEmit, bN, bV);
   else { bhSrc = 7.0; bhRoof(alb, rgh, bhEmit, bN, bV); }
+#else
+  bhWall(alb, rgh, mtl, bhEmit, bN, bV);
+#endif
   if (uBhDebug > 4.5 && uBhDebug < 5.5) {
     float s = bhSrc;
     vec3 pc = s < 0.5 ? vec3(1,1,1) : s < 1.5 ? vec3(1,0,0) : s < 2.5 ? vec3(0,1,0) : s < 3.5 ? vec3(0,0,1) : s < 4.5 ? vec3(1,1,0) : s < 5.5 ? vec3(0,1,1) : s < 6.5 ? vec3(1,0,1) : vec3(1,0.5,0);
@@ -2504,7 +2541,7 @@ export function createMaterials(g: GlobalUniforms, opts: { legacy?: boolean; wea
 
   const shell = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.86, metalness: 0.0 });
   shell.name = 'buildings-shell';
-  shell.onBeforeCompile = (shader) => {
+  const shellCompile = (shader: THREE.WebGLProgramParametersWithUniforms) => {
     Object.assign(shader.uniforms, {
       uHours: uniforms.uHours,
       uSkyZen: uniforms.uSkyZen,
@@ -2566,7 +2603,18 @@ export function createMaterials(g: GlobalUniforms, opts: { legacy?: boolean; wea
         );
     }
   };
-  shell.customProgramCacheKey = () => (legacy ? 'tinyhaven-buildings-shell-legacy' : `tinyhaven-buildings-shell-v2${FG_KEY}`);
+  const shellVariant = (m: THREE.MeshStandardMaterial, cls: number) => {
+    m.onBeforeCompile = shellCompile;
+    m.defines = { ...m.defines, BH_CLASS: cls };
+    m.customProgramCacheKey = () => (legacy ? 'tinyhaven-buildings-shell-legacy' : `tinyhaven-buildings-shell-v2${FG_KEY}-c${cls}`);
+  };
+  shellVariant(shell, SHELL_SPLIT ? SHELL_CLASS.WALL : SHELL_CLASS.ALL);
+  const shellShop = shell.clone();
+  shellShop.name = 'buildings-shell-shop';
+  shellVariant(shellShop, SHELL_CLASS.SHOP);
+  const shellRoof = shell.clone();
+  shellRoof.name = 'buildings-shell-roof';
+  shellVariant(shellRoof, SHELL_CLASS.ROOF);
 
   const trim = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.8, metalness: 0.0 });
   trim.name = 'buildings-trim';
@@ -2606,5 +2654,5 @@ export function createMaterials(g: GlobalUniforms, opts: { legacy?: boolean; wea
   });
   signs.name = 'buildings-signs';
 
-  return { shell, trim, lights, signs, noise, legacy, uniforms };
+  return { shell, shellShop, shellRoof, trim, lights, signs, noise, legacy, uniforms };
 }

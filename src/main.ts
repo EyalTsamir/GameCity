@@ -425,13 +425,17 @@ function reportFrameError(module: string, err: unknown): void {
  */
 const LATE_DRAWS: Record<string, number> = {
   'buildings-shell': 1,
+  'buildings-shell-shop': 1,
+  'buildings-shell-roof': 1,
   'roads-asphalt': 2,
   'roads-hardscape': 2,
   // the countryside impostor trees: behind the town's facades (street views) but in front of the land they stand on
   'land-trees-far': 2.5,
   'terrain-ground': 3,
   'land-ground': 3,
+  'land-ground-far': 3,
   'land-island': 3,
+  'land-island-far': 3,
 };
 function lateDraws(scene: THREE.Scene): void {
   scene.traverse((o) => {

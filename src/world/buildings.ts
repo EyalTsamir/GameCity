@@ -19,7 +19,7 @@ import { DIR_YAW } from '../core/geom';
 import { Rng } from '../core/rng';
 import { PALETTE } from '../core/gfx';
 import { Builder } from './buildings/mesh';
-import { createMaterials } from './buildings/materials';
+import { createMaterials, shellClassOf, SHELL_CLASS, SHELL_SPLIT } from './buildings/materials';
 import { SignAtlas } from './buildings/signs';
 import { Gen, Interval, LocalDoor, Side, col, jit, setDoorLife, setGutters } from './buildings/gen';
 import { genTownhouse, resetOldtown } from './buildings/oldtown';
@@ -257,7 +257,23 @@ export default function create(ctx: CityContext): CityModule {
   for (const b of shellChunks.values()) shellTris += b.triangleCount;
   const triCounts = { shell: shellTris, trim: trimTris, lights: lights.triangleCount, signs: signs.triangleCount, green: greenB.triangleCount };
   for (const b of shellChunks.values()) add(b, mats.shell, 'buildings-shell', true, true);
-  const shellMeshes = meshes.filter((m) => m.name === 'buildings-shell');
+  // shop fronts and roofs out of the wall chunks: programs of their own (materials.ts SHELL_SPLIT), one mesh each
+  if (SHELL_SPLIT && !mats.legacy) {
+    const chunks = meshes.filter((m) => m.name === 'buildings-shell').map((m) => m.geometry);
+    for (const [cls, mat, name] of [[SHELL_CLASS.SHOP, mats.shellShop, 'buildings-shell-shop'], [SHELL_CLASS.ROOF, mats.shellRoof, 'buildings-shell-roof']] as const) {
+      const g = extractShellClass(chunks, cls);
+      if (!g) continue;
+      const mesh = new THREE.Mesh(g, mat);
+      mesh.name = name;
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      mesh.matrixAutoUpdate = false;
+      mesh.updateMatrix();
+      group.add(mesh);
+      meshes.push(mesh);
+    }
+  }
+  const shellMeshes = meshes.filter((m) => m.name.startsWith('buildings-shell'));
   const shellBoxes = shellMeshes.map((m) => {
     m.geometry.computeBoundingBox();
     return m.geometry.boundingBox!;
@@ -312,7 +328,7 @@ export default function create(ctx: CityContext): CityModule {
   // debug (perf analysis): ?bdbg=noshell,notrim,nocast,nodetail
   const bdbg = (ctx.debug.params.get('bdbg') ?? '').split(',');
   for (const m of meshes) {
-    if (bdbg.includes('noshell') && m.name === 'buildings-shell') m.visible = false;
+    if (bdbg.includes('noshell') && m.name.startsWith('buildings-shell')) m.visible = false;
     if (bdbg.includes('notrim') && m.name === 'buildings-trim') m.visible = false;
     if (bdbg.includes('nocast')) m.castShadow = false;
   }
@@ -497,7 +513,7 @@ export default function create(ctx: CityContext): CityModule {
       const out = [...problems];
       if (built.length !== lots.length) out.push(`built ${built.length} of ${lots.length} building lots`);
       if (doorsBuilt < doorsWanted) out.push(`${doorsWanted - doorsBuilt} of ${doorsWanted} doors missing`);
-      if (meshes.length > 6 + 2 * MAX_TRIM_CHUNKS) out.push(`too many building meshes (${meshes.length})`);
+      if (meshes.length > 8 + 2 * MAX_TRIM_CHUNKS) out.push(`too many building meshes (${meshes.length})`);
       if (violations > 0) out.push(`${violations} building(s) violate the footprint rule`);
       if (atlas.full) out.push('sign atlas overflowed');
       return out;
@@ -506,6 +522,8 @@ export default function create(ctx: CityContext): CityModule {
       ctx.scene.remove(group);
       for (const m of meshes) m.geometry.dispose();
       mats.shell.dispose();
+      mats.shellShop.dispose();
+      mats.shellRoof.dispose();
       mats.trim.dispose();
       mats.lights.dispose();
       mats.signs.dispose();
@@ -518,6 +536,49 @@ export default function create(ctx: CityContext): CityModule {
 }
 
 // ───────────────────────────────────────────────────────── helpers ──
+
+/** Move the triangles of one program class out of the wall chunks into one new geometry (the chunks keep the rest). */
+function extractShellClass(chunks: THREE.BufferGeometry[], cls: number): THREE.BufferGeometry | null {
+  const names = Object.keys(chunks[0].attributes);
+  const out: Record<string, number[]> = Object.fromEntries(names.map((n) => [n, []]));
+  const index: number[] = [];
+  let nv = 0;
+  for (const g of chunks) {
+    const idx = g.index!.array;
+    const kw = g.getAttribute('aB');
+    const keep: number[] = [];
+    const remap = new Map<number, number>();
+    for (let t = 0; t < idx.length; t += 3) {
+      if (shellClassOf(kw.getW(idx[t])) === cls) {
+        for (let k = 0; k < 3; k++) {
+          const v = idx[t + k];
+          let w = remap.get(v);
+          if (w === undefined) {
+            w = nv++;
+            remap.set(v, w);
+            for (const n of names) {
+              const a = g.getAttribute(n);
+              for (let c = 0; c < a.itemSize; c++) out[n].push(a.array[v * a.itemSize + c]);
+            }
+          }
+          index.push(w);
+        }
+      } else keep.push(idx[t], idx[t + 1], idx[t + 2]);
+    }
+    if (keep.length !== idx.length) {
+      g.setIndex(new THREE.BufferAttribute(idx instanceof Uint16Array ? Uint16Array.from(keep) : Uint32Array.from(keep), 1));
+      g.computeBoundingBox();
+      g.computeBoundingSphere();
+    }
+  }
+  if (index.length === 0) return null;
+  const g = new THREE.BufferGeometry();
+  for (const n of names) g.setAttribute(n, new THREE.BufferAttribute(Float32Array.from(out[n]), chunks[0].getAttribute(n).itemSize));
+  g.setIndex(new THREE.BufferAttribute(Uint32Array.from(index), 1));
+  g.computeBoundingBox();
+  g.computeBoundingSphere();
+  return g;
+}
 
 function estimateTop(lot: Lot): number {
   switch (lot.roof) {

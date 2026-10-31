@@ -17,6 +17,7 @@ import { WL } from './model';
 import { gcPalette, GC_PALETTE_GLSL } from '../groundcover/palette';
 import { perfOn } from '../../core/perfdeep';
 import { moonLift, natureOn } from '../../core/nature';
+import { LAND_BAKE_GLSL, LAND_GUST_VERT } from './bake';
 
 // perf-deep (docs/progress/perf-deep.md): FXC flattens an `if` holding an implicit-gradient fetch, so the sea-bed / field /
 // caustic early-outs only save work when every fetch inside is explicit. `landgates` hoists the footprint derivatives
@@ -774,16 +775,64 @@ ${LG ? `      // caustic weight is exactly 0 at depth <= 0.05 m, from 3.8 m down
 `;
 
 /** build the land material (MeshStandardMaterial; the standard fog chunks stay in) */
-export function landMaterial(uniforms: Record<string, THREE.IUniform>, fog: boolean): THREE.MeshStandardMaterial {
+/** the land shader's derivatives, taken once in uniform flow: inside the branch of landMaterial's bake variant they would flatten it */
+const hoist = (src: string): string =>
+  [
+    ['float fp = max(length(fwidth(p.xz)), 1e-3);', 'float fp = lgFp;'],
+    ['float fpm = min(length(dFdx(p.xz)), length(dFdy(p.xz)));', 'float fpm = lgFpm;'],
+    ['vec2 pdx = dFdx(p.xz), pdy = dFdy(p.xz);', 'vec2 pdx = lgPdx, pdy = lgPdy;'],
+    ['vec2 vpx = dFdx(vp), vpy = dFdy(vp);', 'vec2 vpx = lgVpx, vpy = lgVpy;'],
+  ].reduce((t, [a, b]) => t.replace(a, b), src);
+
+/** build the land material (MeshStandardMaterial; the standard fog chunks stay in); with `bake`: melts into the baked albedo per pixel, where a texel is at most `soft` pixels, once uBakeOn is 1 */
+export function landMaterial(uniforms: Record<string, THREE.IUniform>, fog: boolean, bake?: { textures: { tLB0: THREE.IUniform; tLB1: THREE.IUniform; uBakeOn: THREE.IUniform }; soft: number }): THREE.MeshStandardMaterial {
   const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.94, metalness: 0, fog });
   mat.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, uniforms);
+    if (bake) Object.assign(shader.uniforms, bake.textures);
     shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', '#include <common>\n' + LAND_VERT_PARS)
-      .replace('#include <begin_vertex>', '#include <begin_vertex>\n' + LAND_VERT_MAIN);
+      .replace('#include <common>', '#include <common>\n' + LAND_VERT_PARS + (bake ? `
+varying float vLGust;
+uniform float uTime;
+uniform vec2 uWind;
+${WIND_GLSL}` : ''))
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\n' + LAND_VERT_MAIN + (bake ? LAND_GUST_VERT : ''));
     shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', '#include <common>\n' + LAND_FRAG_PARS)
-      .replace('vec4 diffuseColor = vec4( diffuse, opacity );', 'vec4 diffuseColor = vec4( landAlbedo(), opacity );')
+      .replace('#include <common>', '#include <common>\n' + (bake ? `
+varying float vLGust;
+uniform float uBakeOn;
+float lgFp, lgFpm;
+vec2 lgPdx, lgPdy, lgVpx, lgVpy;
+${LAND_BAKE_GLSL}
+${hoist(LAND_FRAG_PARS)}` : LAND_FRAG_PARS))
+      .replace(
+        'vec4 diffuseColor = vec4( diffuse, opacity );',
+        bake
+          ? `vec3 lbC;
+{
+  vec3 lb0 = vLW;
+  lgPdx = dFdx(lb0.xz); lgPdy = dFdy(lb0.xz);
+  lgFp = max(length(fwidth(lb0.xz)), 1e-3);
+  lgFpm = min(length(lgPdx), length(lgPdy));
+  vec3 lbN = normalize(vLN);
+  vec2 lbH = normalize(lbN.xz + vec2(1e-4));
+  vec2 lbV = vec2(dot(lb0.xz, vec2(-lbH.y, lbH.x)), lb0.y);
+  lgVpx = dFdx(lbV); lgVpy = dFdy(lbV);
+  // the bake only where it is sharp enough for this pixel. It is whole a little before LandTiles would give the tile to
+  // the far program, so that no line shows between the two
+  float lbT = landBakeDensity(lb0.xz, lgPdx, lgPdy);
+  float lbK = uBakeOn * smoothstep(${(0.6 / bake.soft).toFixed(6)}, ${(0.85 / bake.soft).toFixed(6)}, lbT);
+  lnN = lbN;
+  if (lbK <= 0.0) lbC = landAlbedo();
+  else {
+    vec3 lbA = landBake(lb0.xz, lgPdx, lgPdy);
+    lbA = mix(lbA, lbA * vec3(1.14, 1.12, 1.0), vLGust * 0.6);
+    lbC = lbK >= 1.0 ? lbA : mix(landAlbedo(), lbA, lbK);
+  }
+}
+vec4 diffuseColor = vec4( lbC, opacity );`
+          : 'vec4 diffuseColor = vec4( landAlbedo(), opacity );',
+      )
       .replace('#include <normal_fragment_maps>', '#include <normal_fragment_maps>\nnormal = normalize((viewMatrix * vec4(lnN, 0.0)).xyz);')
       .replace(
         '#include <lights_fragment_end>',
@@ -792,6 +841,6 @@ ${moonLift('smoothstep(8.0, 80.0, vCov3.y)')}
 reflectedLight.indirectDiffuse += diffuseColor.rgb * thLampLight(vLW, lnN);`,
       );
   };
-  mat.customProgramCacheKey = () => LG ? 'th-land-v3' : 'th-land-v1b';
+  mat.customProgramCacheKey = () => (LG ? 'th-land-v3' : 'th-land-v1b') + (bake ? `b${bake.soft}` : '');
   return mat;
 }

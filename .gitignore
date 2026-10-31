@@ -7,3 +7,4 @@ scripts/.shotqueue/
 
 # Local Netlify folder
 .netlify
+public/bake/
