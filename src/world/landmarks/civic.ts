@@ -384,7 +384,7 @@ function priceCard(env: Env, x: number, y: number, z: number, price: string, goo
   }, `price:${price}`);
   signQuad(env.T, card, 0.09, 0.06, x, y, z + 0.0005, 0, 0);
   const w = goods && GOODS_WORDS[goods.name];
-  if (w) markProp(stallFrame, 'pricecard', x, y, z + 0.0015, 0.09, 0.06, 0, 0, `${w.names[crate % 4]}|£${price}|${w.unit}`);
+  if (w) markProp(stallFrame, 'pricecard', x, y + 0.03, z + 0.0015, 0.09, 0.06, 0, 0, `${w.names[crate % 4]}|£${price}|${w.unit}`);
 }
 
 export function genMarketStall(env: Env, f: Feature): void {

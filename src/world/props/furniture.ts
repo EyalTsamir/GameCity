@@ -417,7 +417,6 @@ export function bin(k: Kit, modern: boolean, rng?: Rng): void {
     }
     k.m(bodyC, 'paint');
     for (const [x, z] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) cbox(sh, x * 0.19, 0.79, z * 0.19, 0.045, 0.16, 0.045, 0.008);
-    markProp(sh, 'binlabel', 0, 0.5, 0.2125, 0.2, 0.17, 0);
     // hood: stainless, overhanging 2.5 cm, low pyramid top
     k.m('#c3c9cd', 'steel');
     cbox(sh, 0, 0.885, 0, 0.47, 0.05, 0.47, 0.01);
@@ -459,6 +458,7 @@ export function bin(k: Kit, modern: boolean, rng?: Rng): void {
     k.m('#2b2f33', 'plastic');
     pixelText(sh, 'LITTER', 0, 0.455, z + 0.003, 0.0055, 0.001);
     sh.box(0, 0.428, z + 0.003, 0.12, 0.004, 0.001, 55);
+    markProp(sh, 'binlabel', 0, 0.45, z + 0.0036, 0.16, 0.07, 0);
     if (r01() < 0.4) {
       k.m(r01() < 0.5 ? '#2e7d4f' : '#2b6ca3', 'plastic');
       sh.box(-0.02, 0.3, z + 0.001, 0.08, 0.08, 0.003, 0);

@@ -87,6 +87,7 @@ varying vec2 vLetUv;`,
       float d = texture2D(uSdf, vLetUv).r;
       float w = clamp(fwidth(d) * 0.7, 0.012, 0.3);
       float th = 0.5 - (vLet.x - 0.5) * 0.28;
+      th -= min(w, 0.2) * 0.35; // small print would wash out as its strokes get thinner than a pixel
       la = smoothstep(th - w, th + w, d);
     }
     la *= vLet.y;

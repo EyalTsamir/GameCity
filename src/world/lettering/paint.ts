@@ -610,12 +610,13 @@ export function cabinetWarning(s: LetterSink, w: number, h: number): void {
   s.text('DANGER', w / 2, h * 0.08, h * 0.15, { face: FACE.SANS_B, color: INK, align: 'center', maxW: w * 0.9 });
 }
 
-/** on the door of a litter bin */
+/** the label on the door of a litter bin */
 export function binLabel(s: LetterSink, w: number, h: number): void {
   s.fadeAt(fadeFor(0.012));
-  s.text('LITTER', w / 2, h * 0.62, 0.04, { face: FACE.HUMAN, color: 0xe8e8e0, align: 'center', track: 0.08 });
-  s.text('Please keep Tinyhaven tidy', w / 2, h * 0.42, 0.0125, { face: FACE.SANS, color: 0xd8d8d0, align: 'center', maxW: w });
-  s.text(COUNCIL, w / 2, h * 0.27, 0.0105, { face: FACE.SANS, color: 0xd8d8d0, align: 'center', maxW: w });
+  s.solid(0, 0, w, h, 0xe9e4d6);
+  s.text('LITTER', w / 2, h * 0.5, 0.027, { face: FACE.HUMAN, color: INK, align: 'center', z: 0.0004, track: 0.08, weight: 0.1 });
+  s.text('Please keep Tinyhaven tidy', w / 2, h * 0.27, 0.0085, { face: FACE.SANS, color: INK, align: 'center', z: 0.0004, maxW: w - 0.012 });
+  s.text(COUNCIL, w / 2, h * 0.09, 0.007, { face: FACE.SANS, color: GREY, align: 'center', z: 0.0004, maxW: w - 0.012 });
 }
 
 /** a lamp post's number on its yellow tag */
