@@ -30,18 +30,11 @@ const LOG_K = (1 - RHO1) / Math.log(RMAX / R1);
 /** both textures are this size */
 export const LAND_BAKE_SIZE = 4096;
 /**
- * How many screen pixels one texel may cover, beyond the camera's foreground. In the foreground, where the eye rests and
- * nothing hides softness, a little over half of that (LAND_NEAR_K): the haze and the distance take care of the rest.
+ * How many screen pixels one texel may cover. 4 with the bake's sharpening is about the same as the procedural surface
+ * from the overview: field edges a little softer at 2x zoom. Keeping the overview's foreground procedural costs nearly all
+ * the gain: that foreground is where the land's cost is (docs/progress/baking.md).
  */
 export const LAND_SOFT = 4;
-const LAND_NEAR_K = 0.55;
-const LAND_NEAR_D = [700, 1500] as const;
-/** GLSL float: the limit at a distance d, with `soft` substituted */
-export const landSoftGlsl = (soft: number, d: string) => `(${f(soft)} * mix(${f(LAND_NEAR_K)}, 1.0, smoothstep(${f(LAND_NEAR_D[0])}, ${f(LAND_NEAR_D[1])}, ${d})))`;
-function softAt(soft: number, d: number): number {
-  const t = Math.min(1, Math.max(0, (d - LAND_NEAR_D[0]) / (LAND_NEAR_D[1] - LAND_NEAR_D[0])));
-  return soft * (LAND_NEAR_K + (1 - LAND_NEAR_K) * t * t * (3 - 2 * t));
-}
 
 const f = (v: number) => v.toFixed(6);
 
@@ -404,9 +397,8 @@ export class LandTiles {
       const fx = Math.max(Math.abs(t.box.min.x - cam.x), Math.abs(t.box.max.x - cam.x)),
         fy = Math.max(Math.abs(t.box.min.y - cam.y), Math.abs(t.box.max.y - cam.y)),
         fz = Math.max(Math.abs(t.box.min.z - cam.z), Math.abs(t.box.max.z - cam.z));
-      const df = Math.hypot(fx, fy, fz);
-      const best = (Math.max(t.radial0 * sr, t.tangent0 * st) * pxAt1m) / df;
-      const side = worst <= softAt(soft, d) ? 2 : best >= softAt(soft, df) * LAND_BLEND[1] ? 0 : 1;
+      const best = (Math.max(t.radial0 * sr, t.tangent0 * st) * pxAt1m) / Math.hypot(fx, fy, fz);
+      const side = worst <= soft ? 2 : best >= soft * LAND_BLEND[1] ? 0 : 1;
       if (side !== t.side) {
         t.side = side;
         changed = true;

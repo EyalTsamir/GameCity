@@ -17,7 +17,7 @@ import { WL } from './model';
 import { gcPalette, GC_PALETTE_GLSL } from '../groundcover/palette';
 import { perfOn } from '../../core/perfdeep';
 import { moonLift, natureOn } from '../../core/nature';
-import { LAND_BAKE_GLSL, LAND_BLEND, LAND_GUST_VERT, landSoftGlsl } from './bake';
+import { LAND_BAKE_GLSL, LAND_BLEND, LAND_GUST_VERT } from './bake';
 
 // perf-deep (docs/progress/perf-deep.md): FXC flattens an `if` holding an implicit-gradient fetch, so the sea-bed / field /
 // caustic early-outs only save work when every fetch inside is explicit. `landgates` hoists the footprint derivatives
@@ -821,8 +821,7 @@ ${hoist(LAND_FRAG_PARS)}` : LAND_FRAG_PARS))
   // the bake only where it is sharp enough for this pixel. It is whole a little before LandTiles would give the tile to
   // the far program, so that no line shows between the two
   float lbT = landBakeDensity(lb0.xz, lgPdx, lgPdy);
-  float lbL = ${landSoftGlsl(bake.soft, 'length(lb0 - cameraPosition)')};
-  float lbK = uBakeOn * smoothstep(${(1 / LAND_BLEND[1]).toFixed(6)} / lbL, ${(1 / LAND_BLEND[0]).toFixed(6)} / lbL, lbT);
+  float lbK = uBakeOn * smoothstep(${(1 / (LAND_BLEND[1] * bake.soft)).toFixed(6)}, ${(1 / (LAND_BLEND[0] * bake.soft)).toFixed(6)}, lbT);
   lnN = lbN;
   if (lbK <= 0.0) lbC = landAlbedo();
   else {
