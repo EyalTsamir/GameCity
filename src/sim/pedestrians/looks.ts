@@ -9,6 +9,7 @@
 // generator seeded by a hash of the main draws.
 
 import { detailPeople } from '../../core/detailPeople';
+import { closePeople } from '../../core/closePeople';
 import { Rng } from '../../core/rng';
 import { F } from './figure';
 
@@ -111,7 +112,8 @@ const H = (list: string[]) => list.map(hex);
 const W = (pairs: [string, number][]) => pairs.flatMap(([c, n]) => Array.from({ length: n }, () => hex(c)));
 
 // (the light end a little deeper and warmer: in full sun it blew out to a white mask on a face turned to the light)
-const SKIN = H(detailPeople('skintone') ? ['#e2bb9f', '#dbae90', '#d1a07f', '#c6906c', '#b88059', '#a36c47', '#8b5838', '#72452c', '#583321', '#dbab8c'] : ['#efcfb8', '#e9c3a6', '#e0b494', '#d4a17c', '#c48c64', '#ad754e', '#94603f', '#7a4b31', '#5e3825', '#e8bfa0']);
+// (close-up round: real skin carries more blue than these did: under a warm sun, through the tone curve, brown skin read as brick)
+const SKIN = closePeople('skin2') ? H(['#e4c4af', '#dcb69f', '#cfa68c', '#bf957a', '#ac8168', '#946c54', '#7a5644', '#624335', '#4a3229', '#dbb298']) : H(detailPeople('skintone') ? ['#e2bb9f', '#dbae90', '#d1a07f', '#c6906c', '#b88059', '#a36c47', '#8b5838', '#72452c', '#583321', '#dbab8c'] : ['#efcfb8', '#e9c3a6', '#e0b494', '#d4a17c', '#c48c64', '#ad754e', '#94603f', '#7a4b31', '#5e3825', '#e8bfa0']);
 const HAIR_YOUNG = W([
   ['#15110f', 3],
   ['#221913', 3],

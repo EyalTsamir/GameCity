@@ -125,7 +125,7 @@ export function lookData(L: Look): LookCache {
   return c;
 }
 
-/** close-level face bits: age lines 2 | eye colour 2 | lipstick 1 | stubble 1 (deterministic per look) */
+/** close-level face bits: age lines 2 | eye colour 2 | lipstick 1 | stubble 1 | older half of the age tier 1 (deterministic per look) */
 function faceBits(L: Look, s: Style): number {
   let h = (L.skin * 2654435761) ^ (L.hair * 40503) ^ (L.top * 2246822519) ^ (L.age * 3266489917);
   h = Math.imul(h ^ (h >>> 15), 2246822519) >>> 0;
@@ -138,7 +138,7 @@ function faceBits(L: Look, s: Style): number {
   const female = L.kind === 'woman' || L.kind === 'girl';
   const lip = female && L.age >= 17 && L.age < 75 && r(8) < 0.3 ? 1 : 0;
   const stub = !female && L.age >= 19 && s.beard === 0 && r(16) < 0.4 ? 1 : 0;
-  return age | (eye << 2) | (lip << 4) | (stub << 5);
+  return age | (eye << 2) | (lip << 4) | (stub << 5) | ((L.age >= (age === 3 ? 80 : age === 2 ? 65 : age === 1 ? 51 : 31) ? 1 : 0) << 6);
 }
 
 function writeColours(col: Uint32Array, L: Look, s: Style, top: number, bottom: number): void {
@@ -353,7 +353,7 @@ export class CrowdRenderer {
     const farMat = new URLSearchParams(location.search).get('pedfar') === '0' ? pm.material : pm.far;
     // ?pednear=far (debug A/B): the near level drawn with the far program — the upper bound of a leaner near shader
     const nearMat = new URLSearchParams(location.search).get('pednear') === 'far' ? pm.far : pm.material;
-    this.close = new Layer(4, pm.material, null, capClose, pal);
+    this.close = new Layer(4, pm.close, null, capClose, pal);
     this.near = new Layer(0, nearMat, null, capNear, pal);
     this.far = new Layer(1, pm.material, null, capacity, pal);
     this.tiny = new Layer(2, farMat, null, capacity, pal);
