@@ -3,6 +3,20 @@
 Read this first when resuming after an interruption (usage limits have cut runs before).
 Per-module logs live next to this file: `docs/progress/<module>.md`.
 
+## Detail round (2026-10-31, six sessions) — see docs/progress/DETAIL-ROUND.md and detail-<session>.md
+Merged at 5b9f3e8, no conflicts: buildings, streets, people and vehicles, landmarks and harbour (hero interiors, lighthouse, tower lift, stadium), nature and the horizon, light and weather (storm with button and thunder, sun column, rain curtains, rainbow). Master switches `?nodetailb`, `?nostreetdetail`, `?nodetailpeople`, `?nolmdetail`, `?nonature`, `?nodetaillight`, each with `?no<feature>`.
+Checks on the merge, behind `scripts/power-guard.mjs`: typecheck + build OK (4.41 MB); overview at speed 4 and downtown on low and medium, diorama, street at night: invariants `{}`, validate `[]`, console errors none (8 D3D compile warnings, the known kind); ui-test 70/71, `kinds` passes alone; hitch overview 12 / 21.5 h 40.1 / 42.1 ms mean, 0 freezes, max 66.7 ms, 0 mid-run programs; film-hitch 0 new programs, 0 freezes; realtime film sheet looked right.
+Cost, same session, interleaved, 2 + 2 runs, 1920×1025, high, ms per frame, pre-round f364487 → merged (all six switches off):
+| hour | overview | downtown | street | market |
+|---|---|---|---|---|
+| 12 | 35.8 → 39.2 (36.3) | 35.5 → 37.5 (35.5) | 33.9 → 34.9 (34.4) | 32.5 → 33.8 (33.6) |
+| 18.2 | 35.3 → 38.2 (36.2) | 34.2 → 36.8 (34.8) | 32.0 → 34.3 (32.9) | 30.8 → 31.9 (31.7) |
+| 21.5 | 39.2 → 40.1 (39.4) | 38.4 → 39.8 (38.8) | 33.7 → 33.6 (34.4) | 36.5 → 35.9 (36.7) |
+Mean +1.5 ms, of which +0.6 stays with all switches off (always-on fixes, or noise). Triangles overview +0.5 M, downtown +0.5–0.77 M. Live at 1920×1025 and noon, adaptive stays on `full` over 45 s: overview 28 → 25 fps, downtown 28 → 25, street 31 → 29.
+Decision: nothing visible cut. No session clearly exceeds its +1 ms (per-session columns are noisy, ±1 ms: nature at the overview at noon +1.57 in frame time, its steady window +0.77). The steady 30 fps target is missed by day at the overview and downtown, as it was before this round (28 fps). The baking session is meant to win that back. If it does not, perf-deep "What remains" and adaptive `scale-0.9` (the user's call) are next.
+Not verified: nobody has watched the storm, the street mirror or walking in real motion with a human eye; the thunder has not been heard (the user does not want sound work, see below).
+User direction for what follows: (1) baking session, Opus 5.5 at max: the assumption "everything computed in the browser, one file" is cancelled, sources stay our own code; (2) a second massive detail wave judged up close (walk view, zoom) as much as far, built as systems across the city, no hand-made one-off places; faces realistic-stylised first, then towards realism while it holds. No sound work. Left lists: each detail-<session>.md.
+
 ## Perf-deep round (2026-10-30, branch claude/perf-deep-cf97ce) — see docs/progress/perf-deep.md
 10–18 ms a frame recovered in the hero views (noon: overview 47 → 35.5, downtown 53 → 35, street 45 → 33.5, market 46 → 32), no visible change. Master switch `?noperfdeep`.
 Merged at d65a1f8. Checks on the merge, behind `scripts/power-guard.mjs`: typecheck + build OK (4.06 MB); overview shot invariants `{}`, validate `[]`, console clean; ui-test 70/71 with the known `kinds` flake (rerun alone); hitch overview 12 / 21.5 h: 36.6 / 40.0 ms mean, 0 freezes, max 66.8 ms, 0 mid-run programs. Not judged: motion (half-rate water mirror, adaptive holding 25–29 fps at the overview).
