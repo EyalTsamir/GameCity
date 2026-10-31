@@ -50,6 +50,21 @@ Measured, round 1 at 1300x930, 2 repeats, AC, interleaved (ms/frame vs `?nodetai
 
 Measured before round 3, at 1920x1025, high, 10.76 h, 2 repeats, AC (ms/frame, head vs `?nodetailpeople`): street 33.4 vs 32.8 (+0.6), market 33.6 vs 33.2 (+0.4), park 37.0 vs 36.0 (+1.0), church 38.1 vs 38.0 (+0.1). Other sessions were using the machine, repeats differ by up to 1 ms. The close budget made no measurable difference in these windows (`?noclosebudget` church 37.4): the wedding was probably not in its crowded phase during the measurement, so its saving at the wedding is **unconfirmed**. Triangles did not change beyond the crowd's own variation.
 
+### Round 4: new car bodies and faces, hair, clothes (audit 2026-10-31, after the weekly reset)
+Fresh audit at eye level. Ranked: (1) the cars ride high with a toy's windscreen and share one face; (2) dark paint washes to the same silver-blue on every upward panel; (3) hair is a helmet at 2–3 m; (4) four in ten people should not wear a plain solid colour; (5) backpacks are flat slabs; (6) light skin blows out to a white mask in full sun. Audited and left alone, looked fine at eye level: trains and platform, boats, vans, lorry, bus, cyclists.
+| feature | toggle | cost |
+|---|---|---|
+| Six cars instead of one: each model has its own nose shape, lamps (atlas + rounded conformed quads `endQuad`), grille, intake, fog lamps, bumper furniture and tail (`carFront`, `carTail`) | `?nocarfaces` | triangles: about the same as the old parts (`carSmalls` adds a little on level 0) |
+| Real ground clearance (sill −8 cm, bumper line kept), thicker noses, a windscreen wider at its base than its top (`screenSpread`), square tails on the boxy models (`TAIL_SQUARE`) | `?nocarfaces` | 0 |
+| Paint keeps its colour: lacquer gain falls off head-on (`thPaintGain`), still mirrors at grazing angles | none | 0 |
+| Wheels by model (5, 6, 7 or 10 spokes), exhausts, mast aerials, chrome or black rubbing strips | `?nocarfaces` | level 0 only |
+| Hair: 48 separate locks over the cap (close level, not cropped hair, no hat), broader swells and curls in the cap's outline | `?nohairlocks` | ~480 tris on a close figure |
+| Cloth prints: stripes, checks, chest print, yoke, dots (near + close, fade before aliasing; plain on white / bridal cloth) | `?noclothprints` | FS ALU, one branch for plain cloth |
+| Backpacks: soft sack, front pocket, zips, side pockets, webbing, grab loop | `?nobagdetail` | small; the pocket on the near level, the rest on close |
+| The jaw's shade on the throat (vertex tint); light skin tones deeper and warmer | `?noskintone` (skin only) | 0 |
+
+Measured after hair, backpacks and the car bodies (before prints, wheels and small parts): 1920x1025, high, 10.76 h, 2 repeats, AC behind the guard, ms/frame head vs `?nodetailpeople`: overview 35.0–35.5 vs 35.0–35.8, downtown 34.9–35.0 vs 34.9, street 33.4–33.6 vs 33.3–33.4, market 32.5 vs 32.3–32.5, park 31.5 vs 31.5. Within noise, at most +0.2. Triangles unchanged within the crowd's own variation. Not behind the master switch, so not in this comparison: paint gain and the neck tint (both 0 by construction).
+
 ## Checks at the head
 `npm run typecheck` clean, `npm run build` OK. `shot.mjs --view overview --invariants --validate --speed 4 --wait 20000`: invariants `{}`, validate `[]`, console clean. `hitch.mjs`: prog+0 in all windows. `ui-test.mjs --q noidle`: 70 passed, `kinds` failed, then passed alone (the known flake). (All on the code before round 3 except the last overview shot, below.) `?diorama`, `?quality=medium`, `?quality=low`: no errors, invariants `{}`; their images were not looked at. Soak 4 min at 4×: no frame errors, 0 new programs, heap steady; overlap invariant samples at the park corners (-116, -4) and (-116, 39), the hot corners `living-scenes.md` already lists, not compared with a baseline soak. Not run: the opening film. Motion was checked in short stepped sequences, not watched at 1x. Sheet: `detail/people/round1-2.jpg`.
 

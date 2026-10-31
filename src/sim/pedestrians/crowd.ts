@@ -814,9 +814,14 @@ export class Crowd {
         const L = m.look;
         if (!L.pram && !L.dog) continue;
         if (L.pram) {
-          // pram pushed in front: two discs along it
-          g.add(m.x + fx * 0.72, m.z + fz * 0.72, m.vx, m.vz, 0.27, p.id, null, fx, fz);
-          g.add(m.x + fx * 1.04, m.z + fz * 1.04, m.vx, m.vz, 0.27, p.id, null, fx, fz);
+          // pram pushed in front: two discs along it; parked across behind a sitter (render.ts)
+          if (m.sit > 0.5) {
+            g.add(m.x - fx * 0.72 + fz * 0.16, m.z - fz * 0.72 - fx * 0.16, m.vx, m.vz, 0.27, p.id, null, fx, fz);
+            g.add(m.x - fx * 0.72 - fz * 0.16, m.z - fz * 0.72 + fx * 0.16, m.vx, m.vz, 0.27, p.id, null, fx, fz);
+          } else {
+            g.add(m.x + fx * 0.72, m.z + fz * 0.72, m.vx, m.vz, 0.27, p.id, null, fx, fz);
+            g.add(m.x + fx * 1.04, m.z + fz * 1.04, m.vx, m.vz, 0.27, p.id, null, fx, fz);
+          }
         }
         if (L.dog) {
           // dog on the walker's left (DOG_OFFSET, left = (fz, -fx)), body ≈ 0.63 × size long: two discs along its back

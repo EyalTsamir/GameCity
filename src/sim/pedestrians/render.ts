@@ -63,6 +63,8 @@ function packScaleFade(scale: number, fade: number, o: Uint32Array): void {
 }
 // instance matrix inputs: x, y, z, yaw, sx, sy, sz (written by the caller)
 const MI = new Float64Array(7);
+/** how far behind a sitter the parked pram stands (m) */
+const PRAM_BACK = 0.72;
 /** m ← T(x, y, z) · Ry(yaw) · S(sx, sy, sz) from MI (what compose(pos, quatY(yaw), scl) gives) */
 function yawMatrix(m: THREE.Matrix4): void {
   const e = m.elements;
@@ -681,11 +683,18 @@ export class CrowdRenderer {
         // pram
         // (fabric < 0: hands on a push bar, but what is pushed is someone else's: a trolley, a crate carried)
         if (L.pram && L.pram.fabric >= 0 && np < this.pram.instanceMatrix.count) {
-          MI[0] = mx;
+          // sitting down, the pram is parked across behind the chair (it stayed pushed out in front: through the table,
+          // with the sitter inside it)
+          const pk = Math.min(1, m.sit * 1.25);
+          const pcx = fx * (1 - pk) * 0.9 - fx * pk * PRAM_BACK,
+            pcz = fz * (1 - pk) * 0.9 - fz * pk * PRAM_BACK;
+          MI[0] = mx - pk * (fx * PRAM_BACK + fz * 0.85);
           MI[1] = m.y;
-          MI[2] = mz;
+          MI[2] = mz - pk * (fz * PRAM_BACK - fx * 0.85);
+          MI[3] = m.yaw + pk * (Math.PI / 2);
           MI[4] = MI[5] = MI[6] = Math.min(1.05, Math.max(0.95, L.scale));
           yawMatrix(this.m4);
+          MI[3] = m.yaw;
           this.pram.setMatrixAt(np, this.m4);
           PM[np * 4] = L.pram.fabric;
           PM[np * 4 + 1] = m.fade;
@@ -693,15 +702,17 @@ export class CrowdRenderer {
           PM[np * 4 + 3] = 0;
           np++;
           if (nb < bcap) {
-            MI[0] = mx + fx * 0.9;
+            MI[0] = mx + pcx;
             MI[1] = m.y + 0.016;
-            MI[2] = mz + fz * 0.9;
+            MI[2] = mz + pcz;
+            MI[3] = m.yaw + pk * (Math.PI / 2);
             MI[4] = 0.55;
             MI[5] = 1;
             MI[6] = 0.95;
             yawMatrix(this.m4);
             this.blob.setMatrixAt(nb, this.m4);
             BA[nb++] = blobAlpha * 0.9 * m.fade;
+            MI[3] = m.yaw;
           }
         }
         // dog
