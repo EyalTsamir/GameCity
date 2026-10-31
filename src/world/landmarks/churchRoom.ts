@@ -10,6 +10,7 @@ import { Hole, RP, Room, Rooms } from './rooms';
 import type { Env } from './env';
 import type { AtlasRect } from './signs';
 import { drawText } from './signs';
+import { addActor } from '../../sim/pedestrians/actorDefs';
 
 export interface ChurchDims {
   NW: number;
@@ -1286,6 +1287,14 @@ export function buildChurchRoom(env: Env, rooms: Rooms, d: ChurchDims): Room {
   room.walk(-1.0, pzS, 1.0, d.fp.z1 - d.cz + 0.05, 0.16);
 
   // the sky bake and the sun
+  // a few people in the pews (they come and go), one lighting a candle
+  for (const [row, sx, off, h0, h1, p] of [[1, -1, 0.5, 8, 20, 0.7], [2, 1, 0.35, 8, 19, 0.6], [4, -1, 0.3, 9, 18, 0.5], [4, -1, 0.72, 9, 18, 0.5], [6, 1, 0.6, 7, 20, 0.7], [7, -1, 0.45, 10, 19, 0.5]] as [number, number, number, number, number, number][]) {
+    const lx = sx * (pIn + pL * off),
+      lz = pz0 + row * pStep;
+    addActor({ x: room.wx(lx, lz), y: yF, z: room.wz(lx, lz), yaw: Math.PI + d.yaw, role: 'traveller', seated: true, seatY: 0.465, h0, h1, p });
+  }
+  addActor({ x: room.wx(vx - 0.62, vz), y: yF, z: room.wz(vx - 0.62, vz), yaw: Math.PI / 2 + d.yaw, role: 'shopper', work: 2, h0: 8, h1: 20, p: 0.6 });
+
   room.ambient = 0.15;
   room.skyK = 1.15;
   room.lampK = 0.62;

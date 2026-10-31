@@ -10,6 +10,7 @@ import { Hole, RP, Room, Rooms } from './rooms';
 import type { Env } from './env';
 import { drawText } from './signs';
 import { OCC } from '../../core/occupancy';
+import { addActor } from '../../sim/pedestrians/actorDefs';
 
 export interface TownhallDims {
   HW: number;
@@ -575,6 +576,21 @@ export function buildTownhallRoom(env: Env, rooms: Rooms, d: TownhallDims): Room
   room.walk(-RX1 + 0.02, ZC + 0.3, RX1 - 0.02, RZ1, yTopStair);
   room.walk(-0.7, RZ1, 0.7, d.zR + 0.02, 4.92);
   room.walk(-RX + 0.5, d.zR, RX - 0.5, d.zR + 0.9, d.y1 + 0.38);
+
+  // people: round the model, at the counter, on the stair, at the French window; office hours, a share at a time
+  const P = (lx: number, ly: number, lz: number, yaw: number, o: { seated?: boolean; idle?: number; h0?: number; h1?: number; p?: number; role?: 'shopper' | 'traveller' | 'worker'; work?: number } = {}) =>
+    addActor({ x: room.wx(lx, lz), y: ly, z: room.wz(lx, lz), yaw: yaw + d.yaw, role: o.role ?? 'shopper', h0: o.h0 ?? 8, h1: o.h1 ?? 18.5, p: o.p ?? 0.7, seated: o.seated, seatY: 0.47, idle: o.idle, work: o.work });
+  P(-11.25, yG, 2.75, Math.PI, { p: 0.8 });
+  P(-9.6, yG, 1.2, -Math.PI / 2);
+  P(-12.2, yG, -0.6, 0.5, { p: 0.5 });
+  P(11.25, yG, 1.75, Math.PI, { role: 'worker', work: 2, p: 0.9 });
+  P(10.6, yG, 0.1, 0, { p: 0.6 });
+  P(-9.36, yG, ZB + 0.5, 0, { seated: true, p: 0.5 });
+  P(13.1, yG, ZB + 0.5, 0, { seated: true, p: 0.5 });
+  P(-0.9, yLand, zLand - 0.9, Math.PI, { p: 0.6 });
+  P(4.2, yU, 0.6, -Math.PI / 2, { p: 0.5 });
+  P(0.9, yU, ZC + 0.9, 0, { h0: 9, h1: 21, p: 0.4 });
+  P(-1.6, d.y1 + 0.38, d.zR + 0.55, 0.2, { h0: 9, h1: 21, p: 0.5 });
 
   // light from above, dust in it
   room.addShafts([-3.4, yTop, -3.7], [3.4, yTop, -3.7], [-3.4, yTop, 1.7], [0, 1, 0], tile, env.ctx.quality.level === 'high' ? 4 : 2, [0, 0, 1]);
