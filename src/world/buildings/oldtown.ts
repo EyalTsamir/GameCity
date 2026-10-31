@@ -607,6 +607,7 @@ export function genTownhouse(g: Gen): void {
         setCol(t, top);
       }
     }
+    anchors.spot(sg, 'awning', uA, uB, yF - 0.17, yF, out + 0.012, { bg: ac.getHex() });
     // front roller bar
     setCol(t, col('#4a4a48'));
     t.beam(sx(sg, uA, out), yF + 0.01, sz(sg, uA, out), sx(sg, uB, out), yF + 0.01, sz(sg, uB, out), 0.045, 0.045);

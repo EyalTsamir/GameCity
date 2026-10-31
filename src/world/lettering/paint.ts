@@ -4,7 +4,7 @@
 
 import { FACE, ICON } from './font';
 import { fadeFor, shade, type LetterSink, type TextOpts } from './sink';
-import { billOf, firm, houseName, noticeOf, paperOf, phone, pick, placard, plaqueOf, price, residents, stream, tenants, weekLines, COUNCIL, type Shop, type R } from './wording';
+import { billOf, firm, heritageOf, houseName, noticeOf, paperOf, phone, pick, placard, plaqueOf, price, residents, stream, tenants, weekLines, COUNCIL, type Shop, type R } from './wording';
 
 /** tiers: 0 big (name boards), 1 middle (paper, headings), 2 fine (body text) */
 export type Tier = 0 | 1 | 2;
@@ -572,6 +572,58 @@ export function priceCard(s: LetterSink, w: number, h: number, lines: string[]):
   const ps = s.fit(lines[1] ?? '', w * 0.9, h * 0.36, FACE.HAND);
   s.text(lines[1] ?? '', w / 2, h * 0.25, ps, { face: FACE.HAND, color: 0xf2d890, align: 'center', z: 0.0003, weight: 0.1 });
   s.text(lines[2] ?? '', w / 2, h * 0.07, h * 0.15, { face: FACE.HAND, color: 0xd9d4c4, align: 'center', z: 0.0003, maxW: w * 0.9 });
+}
+
+/** the shop's name on its awning's valance, on a band of the cloth's colour */
+export function awningName(s: LetterSink, w: number, h: number, shop: Shop, cloth: number): void {
+  s.fadeAt(34);
+  s.solid(0, 0, w, h, cloth);
+  const title = shop.title.toUpperCase();
+  const size = s.fit(title, w * 0.8, h * 0.62, FACE.SANS_B, 0.1);
+  const light = ((cloth >> 16) & 255) * 0.3 + ((cloth >> 8) & 255) * 0.59 + (cloth & 255) * 0.11 > 150;
+  s.text(title, w / 2, h / 2 - size * 0.34, size, { face: FACE.SANS_B, color: light ? INK : 0xf6f3ea, align: 'center', z: 0.0004, track: 0.1 });
+}
+
+/** the street's name on the wall of a corner, enamel with a black rim */
+export function streetPlate(s: LetterSink, name: string, w: number, h: number): void {
+  s.fadeAt(40);
+  s.box(0, 0, w, h, 0.008, 0xf4f1e8);
+  const b = 0.009,
+    z = 0.0085;
+  s.solid(b, b, w - b, b + 0.005, INK, z);
+  s.solid(b, h - b - 0.005, w - b, h - b, INK, z);
+  s.solid(b, b, b + 0.005, h - b, INK, z);
+  s.solid(w - b - 0.005, b, w - b, h - b, INK, z);
+  const up = name.toUpperCase();
+  const size = s.fit(up, w - 0.14, 0.075, FACE.SERIF_B, 0.03);
+  s.text(up, (w - 0.05) / 2 + 0.012, h / 2 - size * 0.34, size, { face: FACE.SERIF_B, color: INK, align: 'center', z: z + 0.0003, track: 0.03 });
+  s.text('TH', w - 0.04, h / 2 - 0.012, 0.03, { face: FACE.SANS_B, color: 0xb4322a, align: 'center', z: z + 0.0003 });
+}
+
+/** a round blue plaque */
+export function bluePlaque(s: LetterSink, seed: number, tier: Tier): void {
+  const D = 0.44,
+    c = D / 2;
+  const who = heritageOf(seed);
+  const disc = (d: number, col: number, z: number) => {
+    for (let i = 0; i < 5; i++) s.sheet(c, c, d * 0.986, d * 0.986, (i * Math.PI) / 10, col, z);
+  };
+  if (tier === 1) {
+    s.fadeAt(24);
+    disc(D, 0xf2efe6, 0.002);
+    disc(D - 0.02, 0x1f4f8f, 0.0024);
+    return;
+  }
+  if (tier !== 2) return;
+  s.fadeAt(fadeFor(0.012));
+  const white = 0xf4f2ea;
+  const opt = (size: number, face: number, y: number, str: string) => s.text(str, c, y, size, { face: face as TextOpts['face'], color: white, align: 'center', z: 0.0028, maxW: D * 0.74 });
+  opt(0.0145, FACE.SANS_B, D - 0.075, 'CIVIC SOCIETY');
+  s.solid(c - 0.07, D - 0.09, c + 0.07, D - 0.088, white, 0.0028);
+  opt(0.029, FACE.SERIF_B, c + 0.046, who.name);
+  opt(0.021, FACE.SERIF, c + 0.012, who.years);
+  opt(0.0195, FACE.SERIF, c - 0.03, who.did);
+  opt(0.0195, FACE.SERIF, c - 0.062, who.lived);
 }
 
 /** the small plate under a road sign */

@@ -17,7 +17,7 @@ import { XS, ZS } from '../core/constants';
 import { EW_NAMES, NS_NAMES } from '../core/streets';
 import { FACE, GlyphAtlas } from './lettering/font';
 import { FADE_UNIT, LetterSink } from './lettering/sink';
-import { addressOf, shopFor } from './lettering/shopname';
+import { addressOf, shopFor, streetOf } from './lettering/shopname';
 import { propSpots, type PropSpot } from './lettering/spots';
 import { DOOR_NOTES, hashText, type Shop } from './lettering/wording';
 import * as paint from './lettering/paint';
@@ -135,6 +135,8 @@ export default function create(ctx: CityContext): CityModule {
     items++;
   };
 
+  /** where the sparse things went, for looking at them (?debug tools) */
+  const marks: [string, number, number, number, number, number][] = [];
   /** the frame of a facade spot; `o` further out from the wall */
   const onSpot = (s: LetterSink, p: LetterSpot, z0 = 0.004): LetterSink => s.frame(p.x, p.y, p.z, p.tx, 0, p.tz, 0, 1, 0, z0);
   const cx = (p: LetterSpot): number => p.x + (p.tx * p.w) / 2;
@@ -182,6 +184,17 @@ export default function create(ctx: CityContext): CityModule {
           paint.band(s, p.w, p.h, shop, p.fg ?? 0xf4f1ea);
         });
       }
+    }
+  }
+  if (closeText(ctx, 'shopsigns')) {
+    for (const p of spots) {
+      if (p.kind !== 'awning') continue;
+      const shop = shopByLot.get(p.lot);
+      if (!shop) continue;
+      put(1, cx(p), cz(p), (s) => {
+        onSpot(s, p, 0.001);
+        paint.awningName(s, p.w, p.h, shop, p.bg ?? 0x8a2a2a);
+      });
     }
   }
   if (closeText(ctx, 'shopwindows')) {
@@ -240,6 +253,17 @@ export default function create(ctx: CityContext): CityModule {
             onSpot(s, p, 0.018);
             paint.doorSticker(s, p.w / 2 - 0.065, 1.1, DOOR_NOTES[seed % DOOR_NOTES.length], seed);
           });
+        }
+        // some old houses remember somebody
+        if ((lot.kind === 'townhouse' || lot.kind === 'apartment') && seed % 9 === 4 && open(p, p.w + 0.4)) {
+          for (const tier of [1, 2] as Tier[]) {
+            put(tier, cx(p), cz(p), (s) => {
+              const u = p.w + 0.28;
+              s.frame(p.x + p.tx * u + p.nx * 0.3, 2.45, p.z + p.tz * u + p.nz * 0.3, p.tx, 0, p.tz, 0, 1, 0, 0);
+              paint.bluePlaque(s, seed, tier);
+            });
+          }
+          marks.push(['blue', p.x + p.tx * (p.w + 0.5), 2.67, p.z + p.tz * (p.w + 0.5), p.nx, p.nz]);
         }
         // a detached house has a name by the door; a works says who it is and what to do
         const beside = p.w + 0.2;
@@ -502,6 +526,39 @@ export default function create(ctx: CityContext): CityModule {
     }
   }
 
+  // ── street names: an enamel plate on the wall nearest each corner
+  if (closeText(ctx, 'streetnames')) {
+    const seen = new Set<string>();
+    const nodes = ctx.plan.roadNodes.filter((n) => n.kind === 'junction');
+    for (const p of spots) {
+      if (p.kind !== 'wall' || p.w < 1.2 || p.h < 3) continue;
+      const mx = cx(p),
+        mz = cz(p);
+      let bi = -1,
+        bd = 18 * 18;
+      nodes.forEach((n, i) => {
+        const d = (n.x - mx) ** 2 + (n.z - mz) ** 2;
+        if (d < bd) {
+          bd = d;
+          bi = i;
+        }
+      });
+      if (bi < 0 || !open(p, p.w / 2)) continue;
+      if (!(occ.get(mx + p.nx * 3, mz + p.nz * 3) & (OCC.SIDEWALK | OCC.ROAD))) continue;
+      const st = streetOf(mx, mz, p.nx, p.nz);
+      const key = `${bi}:${st.name}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const W = 0.78,
+        H = 0.17;
+      put(0, mx, mz, (s) => {
+        s.frame(p.x + (p.tx * (p.w - W)) / 2, 2.75, p.z + (p.tz * (p.w - W)) / 2, p.tx, 0, p.tz, 0, 1, 0, 0.002);
+        paint.streetPlate(s, st.name, W, H);
+      });
+      marks.push(['plate', mx, 2.8, mz, p.nx, p.nz]);
+    }
+  }
+
   // ── street names: a post with two blades at a corner of every junction
   if (closeText(ctx, 'streetnames')) {
     for (const node of ctx.plan.roadNodes) {
@@ -562,14 +619,19 @@ export default function create(ctx: CityContext): CityModule {
   }
 
   // ── the lens: what you read comes into focus (the autofocus knows walls, people and cars, not a timetable on a pole)
-  const faces = new Map<number, PropSpot[]>();
+  type Face = Pick<PropSpot, 'x' | 'y' | 'z' | 'rx' | 'ry' | 'rz' | 'ux' | 'uy' | 'uz' | 'w' | 'h'>;
+  const faces = new Map<number, Face[]>();
   const FACE_CELL = 4;
-  const faceKey = (x: number, z: number): number => (Math.floor(x / FACE_CELL) + 32768) * 65536 + (Math.floor(z / FACE_CELL) + 32768);
-  for (const p of propSpots) {
-    const k = faceKey(pcx(p), pcz(p));
-    let list = faces.get(k);
-    if (!list) faces.set(k, (list = []));
-    list.push(p);
+  const addFace = (p: Face): void => {
+    const k = (Math.floor((p.x + (p.rx * p.w) / 2) / FACE_CELL) + 32768) * 65536 + (Math.floor((p.z + (p.rz * p.w) / 2) / FACE_CELL) + 32768);
+    const list = faces.get(k);
+    if (list) list.push(p);
+    else faces.set(k, [p]);
+  };
+  for (const p of propSpots) addFace(p);
+  // doors and shop windows stand back from the wall the autofocus knows, tenant boards and glass have nothing behind them
+  for (const p of spots) {
+    if (p.kind === 'door' || p.kind === 'window' || p.kind === 'tenants') addFace({ x: p.x, y: p.y, z: p.z, rx: p.tx, ry: 0, rz: p.tz, ux: 0, uy: 1, uz: 0, w: p.w, h: p.h });
   }
   const FACE_MARGIN = 0.12;
   /** the distance along a ray to the nearest written face within reach, or Infinity */
@@ -626,7 +688,7 @@ export default function create(ctx: CityContext): CityModule {
     });
   });
 
-  ctx.services.lettering = { props: propSpots, spots, focusOn };
+  ctx.services.lettering = { props: propSpots, spots, focusOn, marks };
   return {
     name,
     frame() {

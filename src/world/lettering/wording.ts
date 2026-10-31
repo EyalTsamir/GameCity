@@ -811,6 +811,14 @@ const IN_MEMORY = [
   ['{F} {S}', 'Teacher, gardener, friend', '{Y} – {Z}'],
   ['Presented by the', 'Friends of the Park', '{Z}'],
 ];
+const FAMED = ['Harbour pilot', 'Lifeboat coxswain', 'Chart maker', 'Botanist', 'Novelist', 'Lighthouse engineer', 'Composer', 'Pioneer of the steam ferry', 'Physician to the poor', 'Marine painter', 'Astronomer', 'Founder of the town library', 'Suffragist', 'Bridge builder'];
+/** a round blue plaque on an old house: who lived here */
+export function heritageOf(seed: number): { name: string; years: string; did: string; lived: string } {
+  const r = stream(seed + 773);
+  const born = int(r, 1760, 1890);
+  return { name: `${first(r)} ${surname(r)}`, years: `${born} – ${born + int(r, 48, 88)}`, did: pick(r, FAMED), lived: pick(r, ['lived here', 'was born here', 'worked here', 'lodged here']) };
+}
+
 export function plaqueOf(seed: number): string[] {
   const r = stream(seed + 411);
   const F = first(r),
