@@ -395,8 +395,11 @@ void pedPose(inout vec3 p, inout vec3 n) {
       pedBump(q, 0.0028 * fc.y, 0.0, -0.0722, 0.018, 0.006);
       pedBump(q, 0.0032 * fc.z, 0.0, -0.066, 0.031, 0.022);   // how far the mouth comes forward
       // a woman's face: a narrower jaw, a smaller chin, a smoother brow, fuller cheeks high up. A child's: round cheeks, no brow, a small chin.
-      pedBump(q, -0.0085 * P_w, 0.088, -0.082, 0.034, 0.024);
-      pedBump(q, -0.0035 * P_w, 0.0, -0.104, 0.02, 0.012);
+      pedBump(q, -0.0115 * P_w, 0.088, -0.082, 0.034, 0.024);
+      pedBump(q, -0.0048 * P_w, 0.0, -0.104, 0.02, 0.012);
+      pedBump(q, -0.0034 * P_w, 0.0, -0.03, 0.0085, 0.024);
+      pedBump(q, 0.0012 * P_w, 0.0, -0.0612, 0.02, 0.0056);
+      pedBump(q, 0.0014 * P_w, 0.0, -0.0722, 0.018, 0.006);
       pedBump(q, -0.0026 * P_w, 0.03, 0.017, 0.028, 0.0085);
       pedBump(q, 0.0018 * P_w, 0.048, -0.022, 0.02, 0.016);
       pedBump(q, 0.0055 * P_c, 0.05, -0.052, 0.03, 0.028);
@@ -482,7 +485,7 @@ void pedPose(inout vec3 p, inout vec3 n) {
       float sd = float(iC1.x & 15u);
       float L2 = len * (1.0 + 0.09 * sin(a * 7.0 + sd) + 0.06 * sin(a * 15.0 + 1.7 + sd * 0.5) - 0.12 * (1.0 - abs(sin(a * 0.5))));
 //@if CL
-      L2 *= mix(0.58, 1.0, smoothstep(1.0, 2.0, abs(a)));
+      L2 = len * (1.0 + 0.07 * sin(a * 5.0 + sd) - 0.12 * (1.0 - abs(sin(a * 0.5)))) * mix(0.58, 1.0, smoothstep(1.0, 2.0, abs(a)));
 //@endif
       float lift = max(0.0, aux.x - L2);
       p.y += lift;
@@ -589,7 +592,12 @@ void pedPose(inout vec3 p, inout vec3 n) {
 //@endif
       float top = smoothstep(0.15, 1.0, s);
       p.xz += rad * ha.x * (1.0 - 0.5 * top * hb.w);
-      p.y += ha.y * top - ha.z * (1.0 - s) + ha.w * max(0.0, cos(phi)) * s * (1.0 - smoothstep(0.8, 1.0, s));
+//@if CL
+      float hatLift = max(ha.y, -0.003);
+//@else
+      float hatLift = ha.y;
+//@endif
+      p.y += hatLift * top - ha.z * (1.0 - s) + ha.w * max(0.0, cos(phi)) * s * (1.0 - smoothstep(0.8, 1.0, s));
 //@if CL
       }
 //@endif
@@ -1347,7 +1355,8 @@ vec3 pedFaceClose(vec3 skin, vec2 F) {
   pedSpecK = 0.2 + 0.3 * exp(-F.x * F.x / 0.00025 - pow(F.y + 0.02, 2.0) / 0.0012) + 0.14 * smoothstep(0.012, 0.04, F.y) - 0.12 * ageK;
   pedGloss = 26.0;
   // eyes
-  float ex = ax - ${EYE.x.toFixed(4)}, ey = F.y - 0.0004;
+  float eS = 1.0 + 0.09 * w + 0.1 * (1.0 - smoothstep(0.0, 0.2, ageK));
+  float ex = (ax - ${EYE.x.toFixed(4)}) / eS, ey = (F.y - 0.0004) / eS;
   float ew = ${EYE.w.toFixed(4)};
   float q = 1.0 - (ex * ex) / (ew * ew);
   float qa = pow(max(q, 0.0), 0.75);
@@ -1367,7 +1376,7 @@ vec3 pedFaceClose(vec3 skin, vec2 F) {
   dU = upper - ey;
   dL = ey - lower;
   open = smoothstep(-px * 0.5, px * 0.5, min(dU, dL)) * step(0.0, q);
-  float eU = F.x - sg * ${EYE.x.toFixed(4)};
+  float eU = (F.x - sg * ${EYE.x.toFixed(4)}) / eS;
   float dI = length(vec2(eU - gz.x, ey - gz.y));
   vec3 scl = mix(vec3(0.62, 0.58, 0.53), skin * vec3(1.25, 1.15, 1.05), 0.2);
   vec3 eye = mix(scl, scl * vec3(0.8, 0.68, 0.64), smoothstep(0.003, 0.0115, abs(ex)));
@@ -1414,11 +1423,11 @@ vec3 pedFaceClose(vec3 skin, vec2 F) {
   float loB = -0.0064 * fullL * pow(lq, 0.7);
   float lip = smoothstep(-px * 0.5, px * 0.5, min(upT - ly, ly - loB)) * step(0.0005, lq);
   vec3 lipN = mix(skin * vec3(0.8, 0.54, 0.52), skin * vec3(0.72, 0.44, 0.47) + vec3(0.02, 0.0, 0.004), w);
-  lipN = mix(lipN, skin * vec3(0.86, 0.66, 0.68), smoothstep(0.2, 0.05, lum) * 0.8);
+  lipN = mix(lipN, skin * vec3(1.02, 0.66, 0.66), smoothstep(0.2, 0.05, lum) * 0.8);
   vec3 lipC = (vPedFB & 16u) != 0u ? mix(vec3(0.3, 0.035, 0.05), vec3(0.42, 0.11, 0.1), fract(kp.z * 11.0)) : lipN;
   lipC *= mix(1.0, 0.82, step(0.0, ly));
   pc = mix(pc, lipC, lip * mix(0.5, 1.0, det));
-  pedSpecK = mix(pedSpecK, 0.55, lip);
+  pedSpecK = mix(pedSpecK, 0.32, lip);
   pedGloss = mix(pedGloss, 46.0, lip);
   float mouthL = pedBand(ly - 0.0009 * exp(-(F.x * F.x) / 0.000016) + 0.0004 * (F.x * F.x) / (lhw * lhw), 0.00032, px) * step(0.002, lq);
   pc = mix(pc, skin * 0.3, mouthL * 0.8 * det);
