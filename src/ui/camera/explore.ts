@@ -267,6 +267,23 @@ export class ExploreAid {
       if (this._box.containsPoint(p) && this._ray.intersectBox(this._box, this._hit)) t = this._hit.distanceTo(p);
     }
     if (t < 0) t = this.field.raycast(p, dir, 600, this._hit, !this.lotAt(p.x, p.y, p.z));
+    // the height field has 2 m cells: a wall right in front of the camera, exactly
+    if (!this.roomLot && (t < 0 || t < 12)) {
+      const reach = t < 0 ? 12 : t + 2;
+      this._ray.set(p, dir);
+      for (let u = 0; u <= reach; u += 2) {
+        const list = this.near(p.x + dir.x * u, p.z + dir.z * u);
+        if (!list) continue;
+        for (const lot of list) {
+          const f = this.volumeAt(lot, p.y + dir.y * u);
+          this._box.min.set(f.x0, -0.5, f.z0);
+          this._box.max.set(f.x1, lot.height, f.z1);
+          if (this._box.containsPoint(p) || !this._ray.intersectBox(this._box, this._hit)) continue;
+          const d = this._hit.distanceTo(p);
+          if (t < 0 || d < t) t = d;
+        }
+      }
+    }
     return t < 0 ? 300 : Math.max(0.5, t);
   }
 

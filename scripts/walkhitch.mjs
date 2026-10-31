@@ -3,6 +3,7 @@
 // geometries created on the way, and what the near-detail bubble built. Near detail appearing must not show here.
 //
 //   node scripts/walkhitch.mjs --url http://127.0.0.1:5211/ [--q "nonear"] [--seconds 25] [--at "-100,0.15,50.4,-90"] [--hours 12] [--jog 1]
+//                              [--shot x.png [--lens 4]]   at the end, a picture of what the walker sees, through the lens
 //
 // --at x,y,z,yaw: where to start, yaw the side the camera comes from (it walks away from there). 1920×1025, adaptive off.
 
@@ -56,6 +57,12 @@ try {
     const c = window.__city.ctx.camera.position;
     return { at: [c.x, c.z], near: window.__city.near.stats(), frameErrors: window.__city.frameErrors };
   });
+  if (args.shot) {
+    await page.evaluate((k) => window.__city.ctx.services.camera.setLens(k, 0), parseFloat(args.lens ?? '1'));
+    await page.waitForTimeout(800);
+    for (let k = 0; k < 4; k++) await page.screenshot({ type: 'jpeg', quality: 1 });
+    await page.screenshot({ path: args.shot });
+  }
   const st = frameStats(fr);
   Object.assign(out, { walked: Math.round(Math.hypot(end.at[0] - start[0], end.at[1] - start[1])), from: start.map(Math.round), to: end.at.map(Math.round) });
   Object.assign(out, { meanMs: st.meanMs, p99: st.p99, max: st.max, jank25: st.jank25, hitch50: st.hitch50, freeze100: st.freeze100, longTasks: st.longTasks, longTaskMax: st.longTaskMax, allocMBs: st.allocMBs });

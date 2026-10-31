@@ -113,9 +113,11 @@ const placeInPage = ([v, d, lensK]) => {
   if (ty === undefined) ty = ground(x, z) + (v.h ?? 0);
   const EYE = 1.6;
   const rise = ground(x, z) + EYE - ty;
-  const dist = d * lensK;
+  // (a person or a car: the distance is from its surface, not from its middle)
+  const dist = (d + (picked ? (v.dyn === 'person' ? 0.25 : (picked.len ?? 4.2) * 0.5) : 0)) * lensK;
   // the eye of someone standing there, or looking down when the point is closer than the eye is high
-  const pitch = Math.abs(rise) < d * 0.85 ? (Math.asin(rise / d) * 180) / Math.PI : rise > 0 ? 58 : -40;
+  const arm = dist / lensK;
+  const pitch = Math.abs(rise) < arm * 0.85 ? (Math.asin(rise / arm) * 180) / Math.PI : rise > 0 ? 58 : -40;
   window.__city.setSpeed(0);
   window.__city.view({ target: { x, y: ty, z }, distance: dist, yaw, pitch });
   if (lensK !== 1) c.services.camera?.setLens?.(lensK, 0);

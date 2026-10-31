@@ -1065,7 +1065,7 @@ export default function create(ctx: CityContext): CityModule {
 
   const applyRotate = (dx: number, dy: number) => {
     const h = ctx.size.height || 720;
-    const k = (Math.PI * 1.15) / h; // a full-height drag ≈ 200°
+    const k = (Math.PI * 1.15) / h / orbitLens; // a full-height drag ≈ 200° (through a lens the picture moves as fast as ever)
     const dYaw = -dx * k;
     const dPitch = dy * k * 0.75;
     if (follow && follow.relative) {
