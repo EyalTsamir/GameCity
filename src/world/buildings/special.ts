@@ -6,7 +6,7 @@
 // Rowing Club boathouse (timber, boat doors, crossed oars).
 
 import { dB } from '../../core/detailbuildings';
-import { realLobby } from './lobby';
+import { realLobby, kioskRoom } from './lobby';
 import * as THREE from 'three';
 import {
   Gen, LRect, Side, FRONT, RIGHT, BACK, LEFT, Grid, WallLook, SideGeom,
@@ -283,14 +283,18 @@ function seaview(g: Gen): void {
         wallPlain(s, sg, p.a, p.b, 0, H, { color: white, pattern: WALLPAT.PLASTER, seed: g.seed });
         continue;
       }
-      const ops = doors.filter((u) => u >= p.a && u <= p.b).map((u) => ({ u, w: 2.4, h: 3.1 }));
+      // ?nolobby3d: the front door opens into a real foyer (lobby.ts)
+      const here = doors.filter((u) => u >= p.a && u <= p.b);
+      const foyer = sd === FRONT && here.length > 0 && dB('lobby3d') && here[0] - 3.2 > p.a + 0.3 && here[0] + 3.2 < p.b - 0.3 ? here[0] : -1;
+      const ops = here.map((u) => (u === foyer ? { u, w: 6.4, h: 3.4 } : { u, w: 2.4, h: 3.1 }));
       bandWithOpenings(sg, p.a, p.b, ops, (a, b) => {
         const n = Math.max(1, Math.round((b - a) / 3.2));
         const gr = makeGrid(a, b, 0, gH, 1, { spacing: (b - a) / n, cols: n, winW: 1.8, winH: 2.7, sill: 0.7, margin: 0.4 });
         wallGrid(s, sg, a, b, 0, gH, gr, look(WIN.ARCHED, accent, PROF.SHOP));
       }, (a, b, y0) => wallPlain(s, sg, a, b, y0, gH, { color: accent, pattern: WALLPAT.PLASTER, seed: g.seed }));
       for (const u of doors.filter((d) => d >= p.a && d <= p.b)) {
-        doorNiche(g, sg, u, { w: 2.4, h: 3.1, depth: 0.35, wallColor: accent, frameColor: col('#f6f1e4'), doorColor: col('#2a6f74'), glass: true, profile: PROF.ALWAYS, seed: g.seed + 2, frameOut: 0.2 });
+        if (u === foyer) realLobby(g, sg, { a: u - 3.2, b: u + 3.2, head: 3.4, doors: [u], masonry: false, tall: false, arcade: false, name: 'SEAVIEW HOTEL', palette: 1, canopy: false });
+        else doorNiche(g, sg, u, { w: 2.4, h: 3.1, depth: 0.35, wallColor: accent, frameColor: col('#f6f1e4'), doorColor: col('#2a6f74'), glass: true, profile: PROF.ALWAYS, seed: g.seed + 2, frameOut: 0.2 });
         setCol(t, col('#2a6f74'));
         sideBox(t, sg, u - 2.0, u + 2.0, 0, 1.2, 3.5, 3.75, true);
         for (const lu of [u - 1.2, u, u + 1.2]) lightBox(g, sx(sg, lu, 0.8) - 0.1, 3.42, sz(sg, lu, 0.8) - 0.1, sx(sg, lu, 0.8) + 0.1, 3.5, sz(sg, lu, 0.8) + 0.1, '#fff1d6', LIGHT_MODE.STEADY, 3.5);
@@ -768,8 +772,21 @@ export function genKiosk(g: Gen): void {
     const sg = sideGeom(body, sd);
     if (sd === FRONT) {
       // service window with counter
-      const gr = makeGrid(0, sg.L, 0, wallTop, 1, { spacing: sg.L, cols: 1, winW: sg.L - 1.0, winH: 1.15, sill: 1.05, margin: 0 });
-      wallGrid(s, sg, 0, sg.L, 0, wallTop, gr, look);
+      if (dB('kiosks')) {
+        // ?nokiosks: the hatch opens into a real little shop (lobby.ts)
+        const plain = { color: wallC, pattern: ice ? WALLPAT.SIDING : WALLPAT.PLASTER, seed: g.seed };
+        const hA = 0.5,
+          hB = sg.L - 0.5,
+          hY = Math.min(wallTop - 0.1, 2.3);
+        wallPlain(s, sg, 0, sg.L, 0, 1.05, plain);
+        wallPlain(s, sg, 0, hA, 1.05, hY, plain);
+        wallPlain(s, sg, hB, sg.L, 1.05, hY, plain);
+        wallPlain(s, sg, 0, sg.L, hY, wallTop, plain);
+        kioskRoom(g, sg, hA, hB, 1.05, hY, Math.min(2.2, g.D - 0.9), ice, trimC);
+      } else {
+        const gr = makeGrid(0, sg.L, 0, wallTop, 1, { spacing: sg.L, cols: 1, winW: sg.L - 1.0, winH: 1.15, sill: 1.05, margin: 0 });
+        wallGrid(s, sg, 0, sg.L, 0, wallTop, gr, look);
+      }
       setCol(t, trimC);
       sideBox(t, sg, 0.4, sg.L - 0.4, 0, 0.18, 0.98, 1.06, true);
       g.doorsBuilt += g.doors.filter((d) => d.side === FRONT).length;

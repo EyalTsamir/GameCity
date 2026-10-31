@@ -9,7 +9,8 @@
 
 import * as THREE from 'three';
 import type { Builder } from './mesh';
-import { Gen, SideGeom, Grid, sx, sz, sideBox, col, shade, setCol, signOnSide, lightBox } from './gen';
+import { Gen, SideGeom, Grid, sx, sz, sideBox, sideQuad, col, shade, setCol, signOnSide, lightBox } from './gen';
+import { Rng } from '../../core/rng';
 import { LIGHT_MODE } from './materials';
 import { letterSign, boardSign } from './signs';
 import { GREEN } from './green';
@@ -731,4 +732,195 @@ void main() {
 }`,
   });
   return m;
+}
+
+/** Poster for the kiosk wall: a newspaper bill or the ice-cream menu. Dim at night, lit by the hatch. */
+function kioskBill(lines: string[], bg: string, fg: string, serif: boolean) {
+  return (c: CanvasRenderingContext2D, w: number, h: number, glow: boolean): void => {
+    c.fillStyle = glow ? '#000' : bg;
+    c.fillRect(0, 0, w, h);
+    if (glow) return;
+    c.fillStyle = fg;
+    c.textAlign = 'center';
+    c.textBaseline = 'middle';
+    const n = lines.length;
+    lines.forEach((tx, i) => {
+      const size = Math.min((h / n) * 0.72, (w / Math.max(4, tx.length)) * 1.5);
+      c.font = `bold ${Math.round(size)}px ${serif ? 'Georgia, serif' : '"Trebuchet MS", sans-serif'}`;
+      c.fillText(tx, w / 2, ((i + 0.5) * h) / n);
+    });
+  };
+}
+
+/**
+ * The inside of a kiosk behind an open hatch [a, b] x [y0, y1]: shelves full of magazines and a coffee machine, or tubs of
+ * ice cream under a glass with cones behind; a shopkeeper, a ceiling light. Unlit geometry in the lights mesh, baked like
+ * the lobbies: no new surface program, and fewer facade pixels.
+ */
+export function kioskRoom(g: Gen, sg: SideGeom, a: number, b: number, y0: number, y1: number, dep: number, ice: boolean, trimC: THREE.Color): void {
+  const l = g.lights,
+    t = g.trim;
+  const r = new Rng((Math.floor(g.seed * 41) ^ 0x51ed27) >>> 0 || 3);
+  const X = (u: number, o: number): number => sx(sg, u, o);
+  const Z = (u: number, o: number): number => sz(sg, u, o);
+  const yF = y0 - 0.12,
+    yC = y1 + 0.12;
+  const uA = a - 0.3,
+    uB = b + 0.3,
+    uc = (a + b) / 2;
+  const wallC = ice ? hex('#f3c9d3') : hex('#b79f78');
+  l.L[0] = LIGHT_MODE.STEADY;
+  l.L[1] = 0;
+  l.L[2] = 0;
+  l.L[3] = 1.05;
+  // walls and ceiling, seen from inside (the lower part of the back wall is darker: the light is overhead)
+  const inner = (ax: number, ay: number, az: number, bx: number, by: number, bz: number, cx: number, cy: number, cz: number, dx: number, dy: number, dz: number, rx: number, ry: number, rz: number): void => l.quadAway(ax, ay, az, bx, by, bz, cx, cy, cz, dx, dy, dz, rx, ry, rz);
+  l.setColor(wallC.clone().multiplyScalar(0.72));
+  sideQuad(l, sg, uA, uB, -dep, yF - 0.3, y0 + 0.35);
+  l.setColor(wallC);
+  sideQuad(l, sg, uA, uB, -dep, y0 + 0.35, yC);
+  for (const [u, sign] of [[uA, -1], [uB, 1]] as const) {
+    l.setColor(wallC.clone().multiplyScalar(0.85));
+    inner(X(u, 0), yF - 0.3, Z(u, 0), X(u, -dep), yF - 0.3, Z(u, -dep), X(u, -dep), yC, Z(u, -dep), X(u, 0), yC, Z(u, 0), X(u + sign * 3, -1), y0, Z(u + sign * 3, -1));
+  }
+  l.setColor(hex(ice ? '#fff4ea' : '#f0e2c4', 0.92));
+  inner(X(uA, 0), yC, Z(uA, 0), X(uB, 0), yC, Z(uB, 0), X(uB, -dep), yC, Z(uB, -dep), X(uA, -dep), yC, Z(uA, -dep), X(uc, -1), yC + 3, Z(uc, -1));
+  l.setColor(hex('#4b4238'));
+  inner(X(uA, 0), yF - 0.3, Z(uA, 0), X(uB, 0), yF - 0.3, Z(uB, 0), X(uB, -dep), yF - 0.3, Z(uB, -dep), X(uA, -dep), yF - 0.3, Z(uA, -dep), X(uc, -1), yF - 3, Z(uc, -1));
+  // the light itself
+  {
+    const sv = l.L[3];
+    l.L[3] = 4.5;
+    l.setColor(hex('#ffe9c4'));
+    sideBox(l, sg, uc - 0.5, uc + 0.5, -dep * 0.55, -dep * 0.35, yC - 0.035, yC, true);
+    l.L[3] = sv;
+  }
+  // counter inside the hatch, in trim like the sill outside
+  setCol(t, trimC);
+  sideBox(t, sg, a - 0.3, b + 0.3, -0.42, 0, y0 - 0.07, y0 + 0.01, false, true);
+  setCol(t, shade(trimC, 0.82));
+  sideBox(t, sg, a - 0.04, a, -0.12, 0.03, y0, y1);
+  sideBox(t, sg, b, b + 0.04, -0.12, 0.03, y0, y1);
+  sideBox(t, sg, a - 0.04, b + 0.04, -0.12, 0.03, y1, y1 + 0.05, true);
+  // the keeper, at the counter
+  const su = a + (b - a) * (r.chance(0.5) ? 0.34 : 0.62);
+  const so = -0.78;
+  const skin = hex(r.pick(['#d9a782', '#a8714a', '#6e4a31', '#e6b898']));
+  const shirt = hex(ice ? '#f7f3ec' : r.pick(['#44637a', '#6d3f3a', '#4c5a44']));
+  const cx = X(su, so),
+    cz = Z(su, so);
+  l.setColor(shirt);
+  l.cylinder(cx, cz, 0.17, yF - 0.2, y0 + 0.42, 8, false, 0.2);
+  l.setColor(hex(ice ? '#ff8fab' : '#2f5d50'));
+  sideBox(l, sg, su - 0.14, su + 0.14, so + 0.16, so + 0.205, yF - 0.2, y0 + 0.22);
+  l.setColor(shirt.clone().multiplyScalar(0.92));
+  for (const k of [-1, 1]) {
+    const ax = X(su + k * 0.23, so),
+      az = Z(su + k * 0.23, so),
+      bx = X(su + k * 0.17, so + 0.24),
+      bz = Z(su + k * 0.17, so + 0.24);
+    l.beam(ax, y0 + 0.36, az, bx, y0 + 0.04, bz, 0.09, 0.09);
+  }
+  l.setColor(skin);
+  l.sphere(cx, y0 + 0.62, cz, 0.115, 8, 6);
+  for (const k of [-1, 1]) l.sphere(X(su + k * 0.17, so + 0.27), y0 + 0.05, Z(su + k * 0.17, so + 0.27), 0.05, 5, 4);
+  l.setColor(hex(ice ? '#ffffff' : r.pick(['#2a221c', '#5a3d25', '#8d8a84'])));
+  l.sphere(X(su, so - 0.015), y0 + 0.66, Z(su, so - 0.015), 0.112, 8, 4);
+
+  if (ice) {
+    // back wall: shelf of cones, sundae glasses, the menu; the freezer under its glass at the counter
+    const yS = y0 + 0.5;
+    l.setColor(hex('#b98a5a'));
+    sideBox(l, sg, a, b, -dep, -dep + 0.2, yS - 0.04, yS, true);
+    for (let k = 0; k < 7; k++) {
+      const u = a + 0.22 + k * 0.3;
+      if (u > b - 0.15) break;
+      l.setColor(hex('#d9a35b'));
+      const px = X(u, -dep + 0.1),
+        pz = Z(u, -dep + 0.1);
+      for (let j = 0; j < 2; j++) l.cone(px, pz, 0.05, yS + 0.24 + j * 0.05, yS + j * 0.05, 6);
+    }
+    const flav = ['#fff1c9', '#ff9ccf', '#a8e6cf', '#6b4226', '#f6ee8c', '#b8d67a', '#d94f70', '#f5f0e6'];
+    // the menu: a cream board, a coloured scoop and a dark line of writing per flavour
+    const mU = su > uc ? a + 0.62 : b - 0.62;
+    const yM = Math.min(yC - 0.08, y0 + 1.1);
+    l.setColor(hex('#7a2f4a'));
+    sideBox(l, sg, mU - 0.42, mU + 0.42, -dep, -dep + 0.02, yM - 0.3, yM);
+    l.setColor(hex('#fff6e8', 1.1));
+    sideQuad(l, sg, mU - 0.39, mU + 0.39, -dep + 0.021, yM - 0.27, yM - 0.03);
+    for (let k = 0; k < 6; k++) {
+      const u = mU - 0.36 + (k % 2) * 0.39;
+      const y = yM - 0.09 - Math.floor(k / 2) * 0.075;
+      l.setColor(hex(flav[k]));
+      sideQuad(l, sg, u, u + 0.045, -dep + 0.024, y - 0.022, y + 0.022);
+      l.setColor(hex('#6d5a52'));
+      sideQuad(l, sg, u + 0.07, u + 0.31, -dep + 0.024, y - 0.008, y + 0.008);
+    }
+    const n = Math.floor((b - a - 0.1) / 0.2);
+    l.setColor(hex('#cfd6da'));
+    sideBox(l, sg, a, b, -0.4, -0.02, y0 + 0.01, y0 + 0.025);
+    for (let row = 0; row < 2; row++) {
+      for (let k = 0; k < n; k++) {
+        const u = a + 0.15 + k * 0.2;
+        const o = -0.31 + row * 0.19;
+        l.setColor(hex(flav[(k * 3 + row * 5) % flav.length], 1.15));
+        l.sphere(X(u, o), y0 + 0.05, Z(u, o), 0.08, 6, 3);
+      }
+    }
+    // sneeze glass
+    const G = g.glass;
+    G.quad(X(a, 0.02), y0 + 0.02, Z(a, 0.02), X(b, 0.02), y0 + 0.02, Z(b, 0.02), X(b, -0.3), y0 + 0.34, Z(b, -0.3), X(a, -0.3), y0 + 0.34, Z(a, -0.3));
+    // cone-stand and napkins on the sill
+    setCol(t, col('#f4f4f2'));
+    t.cylinder(X(a + 0.25, 0.09), Z(a + 0.25, 0.09), 0.05, y0 + 0.01, y0 + 0.1, 6, true);
+  } else {
+    // three shelves of magazines, faces out, each with its masthead
+    const covers = ['#e63946', '#457b9d', '#e9c46a', '#2a9d8f', '#f4a261', '#8d6cab', '#f1f1ec', '#2b2d42', '#d65db1', '#ffb703'];
+    const dark = hex('#5a4128');
+    for (let row = 0; row < 3; row++) {
+      const yS = y0 + 0.1 + row * 0.42;
+      if (yS + 0.3 > yC) break;
+      l.setColor(dark);
+      sideBox(l, sg, uA + 0.04, uB - 0.04, -dep, -dep + 0.16, yS - 0.03, yS, true);
+      const oo = -dep + 0.15;
+      let u = uA + 0.1;
+      while (u < uB - 0.32) {
+        const w = 0.2 + r.next() * 0.05;
+        const c = hex(r.pick(covers));
+        l.setColor(c);
+        sideQuad(l, sg, u, u + w, oo, yS, yS + 0.3);
+        l.setColor(c.clone().multiplyScalar(0.5).addScalar(0.45));
+        sideQuad(l, sg, u + 0.02, u + w - 0.02, oo + 0.002, yS + 0.23, yS + 0.28);
+        l.setColor(c.clone().multiplyScalar(0.72));
+        sideQuad(l, sg, u + 0.03, u + w - 0.03, oo + 0.002, yS + 0.05, yS + 0.18);
+        u += w + 0.03;
+      }
+    }
+    // coffee machine on the far end of the counter, cups, a jar of sweets, a stack of papers
+    const mu = su > uc ? a + 0.32 : b - 0.32;
+    setCol(t, col('#a9adb0'));
+    sideBox(t, sg, mu - 0.24, mu + 0.24, -0.42, -0.14, y0 + 0.01, y0 + 0.14, false, true);
+    setCol(t, col('#7c2a22'));
+    sideBox(t, sg, mu - 0.24, mu + 0.24, -0.42, -0.2, y0 + 0.14, y0 + 0.4, false, true);
+    setCol(t, col('#c9ccce'));
+    sideBox(t, sg, mu - 0.24, mu + 0.24, -0.42, -0.14, y0 + 0.4, y0 + 0.47, false, true);
+    setCol(t, col('#26282a'));
+    for (const k of [-0.09, 0.09]) sideBox(t, sg, mu + k - 0.025, mu + k + 0.025, -0.2, -0.13, y0 + 0.2, y0 + 0.25);
+    setCol(t, col('#f4f2ec'));
+    for (let k = 0; k < 3; k++) t.cylinder(X(mu - 0.14 + k * 0.14, -0.28), Z(mu - 0.14 + k * 0.14, -0.28), 0.03, y0 + 0.47, y0 + 0.53, 6, true, 0.038);
+    const pa = su > uc ? uc - 0.3 : uc + 0.05;
+    for (let k = 0; k < 2; k++) {
+      setCol(t, col('#e3dfd2'));
+      sideBox(t, sg, pa + k * 0.33, pa + k * 0.33 + 0.28, -0.1, 0.17, y0 + 0.01, y0 + 0.07 + k * 0.02);
+      setCol(t, col('#23252a'));
+      sideBox(t, sg, pa + k * 0.33 + 0.03, pa + k * 0.33 + 0.25, 0.03, 0.14, y0 + 0.07 + k * 0.02, y0 + 0.072 + k * 0.02);
+    }
+    // bills on the wall under the counter
+    const b1 = g.atlas.add('kiosk:bill1', 128, 96, kioskBill(['HAVEN', 'POST', 'Ferry late'], '#f4efe2', '#1d1d1f', true));
+    const b2 = g.atlas.add('kiosk:bill2', 128, 96, kioskBill(['FIREWORKS', 'SATURDAY'], '#f6e36d', '#1d1d1f', false));
+    signOnSide(g, sg, uc - 1.0, uc - 0.2, 0.012, 0.42, 0.92, b1);
+    signOnSide(g, sg, uc + 0.2, uc + 1.0, 0.012, 0.42, 0.92, b2);
+  }
+  // a warm strip under the hatch head for the evening
+  lightBox(g, X(a + 0.1, -0.1), y1 - 0.02, Z(a + 0.1, -0.1), X(b - 0.1, -0.08), y1, Z(b - 0.1, -0.08), '#ffe6b8', LIGHT_MODE.STEADY, 2.4);
 }
