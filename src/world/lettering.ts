@@ -240,6 +240,14 @@ export default function create(ctx: CityContext): CityModule {
             paint.doorSticker(s, p.w / 2 - 0.065, 1.1, DOOR_NOTES[seed % DOOR_NOTES.length], seed);
           });
         }
+        // a detached house has a name by the door; a works says who it is and what to do
+        const beside = p.w + 0.2;
+        const atWall = (s: LetterSink): LetterSink => s.frame(p.x + p.tx * beside + p.nx * 0.3, 1.32, p.z + p.tz * beside + p.nz * 0.3, p.tx, 0, p.tz, 0, 1, 0, 0.003);
+        if (lot.kind === 'house' && seed % 3 !== 2 && open(p, beside + 0.1)) {
+          put(1, cx(p), cz(p), (s) => paint.housePlate(atWall(s), seed));
+        } else if ((lot.kind === 'warehouse' || lot.kind === 'factory' || lot.kind === 'depot') && open(p, beside + 0.3)) {
+          for (const tier of [1, 2] as Tier[]) put(tier, cx(p), cz(p), (s) => paint.worksPlate(atWall(s), lot.id, tier));
+        }
       }
     }
     for (const p of spots) {
@@ -487,7 +495,7 @@ export default function create(ctx: CityContext): CityModule {
       const nx = Math.sin(sl.yaw),
         nz = Math.cos(sl.yaw);
       put(2, sl.x, sl.z, (s) => {
-        s.wall(sl.x + nz * -0.045 + nx * 0.0, SIDEWALK_Y + 1.55, sl.z + nx * 0.045, nx, nz, 0.092);
+        s.wall(sl.x - nz * 0.045, SIDEWALK_Y + 2.1, sl.z + nx * 0.045, nx, nz, 0.092);
         paint.lampTag(s, num);
       });
     }
@@ -552,6 +560,50 @@ export default function create(ctx: CityContext): CityModule {
     }
   }
 
+  // ── the lens: what you read comes into focus (the autofocus knows walls, people and cars, not a timetable on a pole)
+  const faces = new Map<number, PropSpot[]>();
+  const FACE_CELL = 4;
+  const faceKey = (x: number, z: number): number => (Math.floor(x / FACE_CELL) + 32768) * 65536 + (Math.floor(z / FACE_CELL) + 32768);
+  for (const p of propSpots) {
+    const k = faceKey(pcx(p), pcz(p));
+    let list = faces.get(k);
+    if (!list) faces.set(k, (list = []));
+    list.push(p);
+  }
+  const FACE_MARGIN = 0.12;
+  /** the distance along a ray to the nearest written face within reach, or Infinity */
+  const focusOn = (ox: number, oy: number, oz: number, dx: number, dy: number, dz: number): number => {
+    let best = Infinity;
+    const cx0 = Math.floor(Math.min(ox, ox + dx * 5) / FACE_CELL) - 1,
+      cx1 = Math.floor(Math.max(ox, ox + dx * 5) / FACE_CELL) + 1,
+      cz0 = Math.floor(Math.min(oz, oz + dz * 5) / FACE_CELL) - 1,
+      cz1 = Math.floor(Math.max(oz, oz + dz * 5) / FACE_CELL) + 1;
+    for (let i = cx0; i <= cx1; i++) {
+      for (let j = cz0; j <= cz1; j++) {
+        const list = faces.get((i + 32768) * 65536 + (j + 32768));
+        if (!list) continue;
+        for (const p of list) {
+          // the normal of the plate: width × height
+          const nx = p.ry * p.uz - p.rz * p.uy,
+            ny = p.rz * p.ux - p.rx * p.uz,
+            nz = p.rx * p.uy - p.ry * p.ux;
+          const den = dx * nx + dy * ny + dz * nz;
+          if (den > -0.05) continue; // from behind, or edge on
+          const t = ((p.x - ox) * nx + (p.y - oy) * ny + (p.z - oz) * nz) / den;
+          if (t <= 0.1 || t >= best || t > 5) continue;
+          const hx = ox + dx * t - p.x,
+            hy = oy + dy * t - p.y,
+            hz = oz + dz * t - p.z;
+          const u = hx * p.rx + hy * p.ry + hz * p.rz,
+            v = hx * p.ux + hy * p.uy + hz * p.uz;
+          if (u < -FACE_MARGIN || u > p.w + FACE_MARGIN || v < -FACE_MARGIN || v > p.h + FACE_MARGIN) continue;
+          best = t;
+        }
+      }
+    }
+    return best;
+  };
+
   // ── the bubble's layers
   RINGS.forEach((ring, t) => {
     const g = grids[t];
@@ -573,7 +625,7 @@ export default function create(ctx: CityContext): CityModule {
     });
   });
 
-  ctx.services.lettering = { props: propSpots, spots };
+  ctx.services.lettering = { props: propSpots, spots, focusOn };
   return {
     name,
     frame() {

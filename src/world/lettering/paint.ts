@@ -4,7 +4,7 @@
 
 import { FACE, ICON } from './font';
 import { fadeFor, shade, type LetterSink, type TextOpts } from './sink';
-import { billOf, noticeOf, paperOf, placard, plaqueOf, price, residents, stream, tenants, weekLines, COUNCIL, type Shop, type R } from './wording';
+import { billOf, firm, houseName, noticeOf, paperOf, phone, pick, placard, plaqueOf, price, residents, stream, tenants, weekLines, COUNCIL, type Shop, type R } from './wording';
 
 /** tiers: 0 big (name boards), 1 middle (paper, headings), 2 fine (body text) */
 export type Tier = 0 | 1 | 2;
@@ -223,6 +223,48 @@ export function homeBells(s: LetterSink, flats: number, seed: number, tier: Tier
   for (let k = 0; k < flats; k++) s.text(names[k], 0.012, 0.021 + k * rowH, 0.011, { face: FACE.MONO, color: INK, z: 0.0066, maxW: pw - 0.05 });
 }
 
+/** a slate or ceramic name by the door of a house */
+export function housePlate(s: LetterSink, seed: number): void {
+  const r = stream(seed + 4441);
+  const name = houseName(r);
+  const slate = seed % 2 === 0;
+  const w = 0.3,
+    h = 0.11;
+  s.fadeAt(16);
+  s.box(0, 0, w, h, 0.008, slate ? 0x34383c : 0xf0ebdc);
+  const col = slate ? 0xe6e2d4 : 0x24406c;
+  const size = s.fit(name, w - 0.04, 0.05, FACE.SERIF);
+  s.text(name, w / 2, h / 2 - size * 0.32, size, { face: FACE.SERIF, color: col, align: 'center', z: 0.0085 });
+}
+
+/** by the door of a works: its name, and what callers are to do */
+export function worksPlate(s: LetterSink, seed: number, tier: Tier): void {
+  const r = stream(seed + 9001);
+  const w = 0.5,
+    h = 0.34;
+  const head = firm(r);
+  if (tier === 1) {
+    s.fadeAt(26);
+    s.box(0, 0, w, h, 0.006, 0xf2f0e8);
+    s.solid(0, h - 0.1, w, h, 0x1e3a5c, 0.0065);
+    const size = s.fit(head, w - 0.04, 0.042, FACE.SANS_B);
+    s.text(head, w / 2, h - 0.066, size, { face: FACE.SANS_B, color: 0xffffff, align: 'center', z: 0.0068 });
+    return;
+  }
+  if (tier !== 2) return;
+  const lines = pick(r, [
+    ['All visitors report', 'to reception', 'Hi-vis beyond this point'],
+    ['Deliveries Mon – Fri', '7.30 am – 3.30 pm', 'Sound horn for attention'],
+    ['Goods in round the side', 'No waiting at this door', 'Keep access clear'],
+    ['Authorised staff only', 'Mind reversing vehicles', 'This site is monitored'],
+  ]);
+  s.fadeAt(fadeFor(0.012));
+  s.text(lines[0], 0.024, h - 0.14, 0.024, { face: FACE.SANS_B, color: INK, z: 0.0068, maxW: w - 0.048 });
+  s.text(lines[1], 0.024, h - 0.178, 0.024, { face: FACE.SANS, color: INK, z: 0.0068, maxW: w - 0.048 });
+  s.text(lines[2], 0.024, h - 0.222, 0.018, { face: FACE.SANS, color: GREY, z: 0.0068, maxW: w - 0.048 });
+  s.text(phone(r), 0.024, 0.024, 0.018, { face: FACE.MONO, color: INK, z: 0.0068 });
+}
+
 /** the enamel or ceramic plate over a door, written again at full sharpness */
 export function numberPlate(s: LetterSink, w: number, h: number, n: number, style: number): void {
   s.fadeAt(18);
@@ -397,21 +439,21 @@ export function timetable(s: LetterSink, w: number, h: number, st: StopInfo, tie
     return;
   }
   if (tier !== 2) return;
-  s.fadeAt(fadeFor(0.006));
-  const fs = 0.0078;
-  let y = h - 0.066;
+  s.fadeAt(fadeFor(0.007));
+  const fs = 0.0102;
+  let y = h - 0.068;
   s.text(`Towards ${st.to}`, 0.012, y, fs * 1.15, { face: FACE.SANS_B, color: INK, z: 0.001, maxW: w - 0.024 });
-  y -= fs * 1.5;
+  y -= fs * 1.45;
   const stops = st.next.slice(0, 5);
   stops.forEach((n, i) => {
-    s.text(`${n}`, 0.018, y, fs * 0.9, { face: FACE.SANS, color: GREY, z: 0.001, maxW: w * 0.7 });
-    s.text(`${(i + 1) * 4 + 1} min`, w - 0.012, y, fs * 0.9, { face: FACE.SANS, color: GREY, align: 'right', z: 0.001 });
-    y -= fs * 1.25;
+    s.text(`${n}`, 0.018, y, fs * 0.9, { face: FACE.SANS, color: INK, z: 0.001, maxW: w * 0.7 });
+    s.text(`${(i + 1) * 4 + 1} min`, w - 0.012, y, fs * 0.9, { face: FACE.SANS, color: INK, align: 'right', z: 0.001 });
+    y -= fs * 1.2;
   });
   y -= fs * 0.3;
   line(s, 0.012, y + fs * 0.9, w - 0.012, y + fs * 0.9, GREY, 0.0006, 0.001);
-  s.text('Hour', 0.012, y, fs * 0.9, { face: FACE.SANS_B, color: INK, z: 0.001 });
-  s.text('Mon – Fri', 0.04, y, fs * 0.9, { face: FACE.SANS_B, color: INK, z: 0.001 });
+  s.text('Hr', 0.012, y, fs * 0.9, { face: FACE.SANS_B, color: INK, z: 0.001 });
+  s.text('Mon – Fri', 0.042, y, fs * 0.9, { face: FACE.SANS_B, color: INK, z: 0.001 });
   s.text('Sat / Sun', 0.04 + (w - 0.05) * 0.55, y, fs * 0.9, { face: FACE.SANS_B, color: INK, z: 0.001 });
   y -= fs * 1.2;
   const wk = st.headway,
@@ -420,9 +462,9 @@ export function timetable(s: LetterSink, w: number, h: number, st: StopInfo, tie
     const peak = (hr >= 7 && hr < 10) || (hr >= 16 && hr < 19);
     const late = hr >= 21;
     s.text(String(hr).padStart(2, '0'), 0.012, y, fs, { face: FACE.MONO, color: INK, z: 0.001, weight: 0.1 });
-    s.text(minutes(st.offset, late ? 30 : peak ? Math.max(5, wk - 2) : wk), 0.04, y, fs * 0.85, { face: FACE.MONO, color: INK, z: 0.001, maxW: (w - 0.05) * 0.53 });
+    s.text(minutes(st.offset, late ? 30 : peak ? Math.max(5, wk - 2) : wk), 0.042, y, fs * 0.85, { face: FACE.MONO, color: INK, z: 0.001, maxW: (w - 0.05) * 0.53 });
     s.text(minutes(st.offset + 3, late || hr < 8 ? 60 : we), 0.04 + (w - 0.05) * 0.55, y, fs * 0.85, { face: FACE.MONO, color: INK, z: 0.001, maxW: (w - 0.05) * 0.44 });
-    y -= fs * 1.13;
+    y -= fs * 1.1;
   }
 }
 

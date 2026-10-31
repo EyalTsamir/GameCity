@@ -1843,6 +1843,8 @@ export default function create(ctx: CityContext): CityModule {
         focusPick = hit && hit.kind !== 'building' ? hit.distance : Infinity;
       }
       if (focusPick < f) f = Math.max(0.5, focusPick);
+      const read = (ctx.services.lettering as { focusOn?(ox: number, oy: number, oz: number, dx: number, dy: number, dz: number): number } | undefined)?.focusOn?.(_pos.x, _pos.y, _pos.z, _dir.x, _dir.y, _dir.z) ?? Infinity;
+      if (read < f) f = Math.max(0.5, read);
       fx.setFocus(f);
       focusSet = true;
     } else if (focusSet) {

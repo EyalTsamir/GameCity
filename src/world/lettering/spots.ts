@@ -26,10 +26,6 @@ export interface PropSpot {
 
 export const propSpots: PropSpot[] = [];
 
-export function resetPropSpots(): void {
-  propSpots.length = 0;
-}
-
 const _o = new THREE.Vector3();
 const _r = new THREE.Vector3();
 const _u = new THREE.Vector3();
