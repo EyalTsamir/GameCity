@@ -525,13 +525,14 @@ void main() {
   if (fa >= CM_LIM) discard;
   float k = 1.0 - smoothstep(CM_LIM * 0.45, CM_LIM, fa);
   vec4 g = CMT(tGrain, p * 1.667, 1.667);
-  vec4 c = CMT(tCrack, p * 0.39, 0.39);
+  // the ground is most of a street view: only the first metres pay for relief and cracks
+  float fine = 1.0 - smoothstep(CM_LIM * 0.3, CM_LIM * 0.5, fa);
   // (the grain pushes the lookup about: no straight polygon edges)
   vec2 sq = p * 1.8 + (g.rg - 0.5) * 0.035;
   vec4 s0 = CMT(tStones, sq, 1.8);
   // the stones' relief against the light: the same tile a little toward the sun
   vec2 ld = uSunDir.xz / max(uSunDir.y, 0.25);
-  vec4 s1 = CMT(tStones, sq + ld * 0.0035, 1.8);
+  vec4 s1 = fine > 0.0 ? CMT(tStones, sq + ld * 0.0035, 1.8) : s0;
   float id = s0.g;
   // some stones lie under the binder, the road is not a mosaic
   float buried = smoothstep(0.3, 0.36, fract(id * 5.7));
@@ -544,16 +545,19 @@ void main() {
   float binder = 0.56 + 0.22 * g.b;
   vec3 ratio = mix(vec3(binder), tone, stone);
   // sun on one side of each stone, shade on the other
-  float rel = (s0.b - s1.b) * 2.6 * uDaylight * smoothstep(0.02, 0.3, uSunDir.y);
+  float rel = (s0.b - s1.b) * 2.6 * fine * uDaylight * smoothstep(0.02, 0.3, uSunDir.y);
   ratio *= 1.0 + clamp(-rel, -0.32, 0.42) + (s0.b - 0.3) * 0.42;
   vec2 sl = (g.rg - 0.5) * 0.5;
   ratio *= cmLight(N, normalize(N - vec3(sl.x, 0.0, sl.y)));
   // coarser stones standing out, hairline cracks in the old wearing course, a dusty film in the hollows
   ratio *= 1.0 + (0.5 - s0.a) * 0.16 * (1.0 - stone * 0.5);
-  float dist = c.r * 0.04;
-  float zone = smoothstep(0.56, 0.72, c.b);
-  float crack = zone * (1.0 - smoothstep(0.0008 + 0.0012 * c.a, 0.002 + 0.002 * c.a + fa * 0.8, dist));
-  ratio *= 1.0 - 0.6 * crack;
+  if (fine > 0.0) {
+    vec4 c = CMT(tCrack, p * 0.39, 0.39);
+    float dist = c.r * 0.04;
+    float zone = smoothstep(0.56, 0.72, c.b);
+    float crack = zone * (1.0 - smoothstep(0.0008 + 0.0012 * c.a, 0.002 + 0.002 * c.a + fa * 0.8, dist));
+    ratio *= 1.0 - 0.6 * crack * fine;
+  }
   gl_FragColor = vec4(max(mix(vec3(1.0), ratio, k), vec3(0.0)), 1.0);
 }
 `;
@@ -659,13 +663,14 @@ void main() {
   vec2 win = vec2(rnd * 31.0, fract(rnd * 7.7) * 37.0);
   vec4 g = CMT(tGrain, uv * 1.667 + win, 1.667);
   vec4 c = CMT(tCrack, uv * 0.39 + win * 0.17, 0.39);
-  vec4 st = CMT(tStones, uv * 2.1 + win, 2.1);
+  float fine = 1.0 - smoothstep(CM_LIM * 0.3, CM_LIM * 0.5, fa);
+  vec4 st = fine > 0.0 ? CMT(tStones, uv * 2.1 + win, 2.1) : vec4(0.5);
   // stone: flecks of its minerals, relief, pits; a fired clay brick (red pavers) shows no flecks
   vec2 s = (g.rg - 0.5) * 0.62;
   float light = cmLight(N, normalize(N - TX * s.x - TZ * s.y));
   float clay = step(vCl.g * 1.5, vCl.r);
   vec3 ratio = vec3(light * (1.0 + (g.b - 0.5) * 0.24) * (1.0 - 0.24 * g.a));
-  ratio *= 1.0 + (st.g - 0.5) * mix(0.3, 0.05, clay) * smoothstep(0.08, 0.3, st.r);
+  ratio *= 1.0 + (st.g - 0.5) * mix(0.3, 0.05, clay) * fine * smoothstep(0.08, 0.3, st.r);
   ratio *= 0.92 + 0.16 * c.b;
   // the edge of each stone: worn, nibbled by frost and wheels; corners go first; a wide dirty margin
   vec2 sa = max(size, vec2(minS));
@@ -705,7 +710,8 @@ void main() {
   float sc = mix(5.0, 1.8, coarse);
   vec4 s0 = CMT(tStones, uv * sc, sc);
   vec2 ld = uSunDir.xz / max(uSunDir.y, 0.25);
-  vec4 s1 = CMT(tStones, uv * sc + ld * 0.012, sc);
+  float fine = 1.0 - smoothstep(CM_LIM * 0.3, CM_LIM * 0.5, fa);
+  vec4 s1 = fine > 0.0 ? CMT(tStones, uv * sc + ld * 0.012, sc) : s0;
   vec4 g = CMT(tGrain, uv * 1.667, 1.667);
   vec4 c = CMT(tCrack, uv * 0.39, 0.39);
   float st = smoothstep(0.05, 0.3, s0.r);
@@ -714,7 +720,7 @@ void main() {
   tone *= mix(vec3(1.0), vec3(1.12, 1.0, 0.86), step(0.6, fract(id * 7.3)));
   tone = mix(tone, vec3(1.5), step(0.9, fract(id * 13.7)) * coarse);
   vec3 ratio = mix(vec3(0.42 + 0.3 * g.b), tone, st);
-  float rel = (s0.b - s1.b) * 2.4 * uDaylight * smoothstep(0.02, 0.3, uSunDir.y);
+  float rel = (s0.b - s1.b) * 2.4 * fine * uDaylight * smoothstep(0.02, 0.3, uSunDir.y);
   ratio *= 1.0 + clamp(-rel, -0.35, 0.4) + (s0.b - 0.3) * 0.3;
   vec2 sl = (g.rg - 0.5) * 0.7;
   ratio *= cmLight(N, normalize(N - vec3(sl.x, 0.0, sl.y)));
@@ -846,8 +852,9 @@ void main() {
   vec2 sq = p * 1.8 + (g.rg - 0.5) * 0.035;
   vec4 s0 = CMT(tStones, sq, 1.8);
   vec2 ld = uSunDir.xz / max(uSunDir.y, 0.25);
-  vec4 s1 = CMT(tStones, sq + ld * 0.0035, 1.8);
-  float rel = (s0.b - s1.b) * 1.5 * uDaylight * smoothstep(0.02, 0.3, uSunDir.y);
+  float fine = 1.0 - smoothstep(CM_LIM * 0.3, CM_LIM * 0.5, fa);
+  vec4 s1 = fine > 0.0 ? CMT(tStones, sq + ld * 0.0035, 1.8) : s0;
+  float rel = (s0.b - s1.b) * 1.5 * fine * uDaylight * smoothstep(0.02, 0.3, uSunDir.y);
   vec3 ratio = vec3(1.0 + clamp(-rel, -0.2, 0.2));
   ratio *= 0.9 + 0.2 * smoothstep(0.1, 0.4, s0.r);
   // worn: dark where the binder shows through, in patches

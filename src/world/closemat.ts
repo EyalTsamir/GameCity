@@ -20,6 +20,8 @@ import { roadNoise } from './roads/materials';
 
 /** pixels one metre covers at 1 m in the bubble's reference view */
 const REF_PX = 1099;
+/** the ground fills a street view: the radius that pays for itself (at eye level the fade ends about 5 m away) */
+const GROUND_R = 10;
 
 const WALL_ATTRS: SourceAttr[] = [
   { name: 'position', size: 3 },
@@ -155,18 +157,25 @@ export default function create(ctx: CityContext): CityModule {
     wall('cmPanel', WALLPAT.PANELS, CM_PANEL, 14);
     wall('cmSheet', WALLPAT.CORRUGATED, CM_SHEET, 14);
     wall('cmSmooth', WALLPAT.SMOOTH, CM_SMOOTH, 10);
+    // nothing to draw on a curtain wall, but the lens has to stop at the glass
+    grids.push(
+      new TriGrid(walls, WALL_ATTRS, cell, (g, a) => {
+        const w = g.getAttribute('aB').getW(a);
+        return w < 63.5 && Math.floor((Math.floor(w + 0.5) % 64) / 8 + 0.01) === 2;
+      }),
+    );
   }
   if (on.road) {
     const road = byName((n) => n === 'roads-asphalt');
     const cell = 8;
-    layer('cmRoad', new TriGrid(road, ROAD_ATTRS, cell, () => true), ROAD_ATTRS, CM_ASPHALT, 'CM_GROUND', 14, cell, 0.3);
+    layer('cmRoad', new TriGrid(road, ROAD_ATTRS, cell, () => true), ROAD_ATTRS, CM_ASPHALT, 'CM_GROUND', GROUND_R, cell, 0.3);
   }
   if (on.road) {
     // the markings' own offset is stronger than a plain layer's: above it
     const road = byName((n) => n === 'roads-markings');
     const cell = 8;
     const grid = new TriGrid(road, ROAD_ATTRS, cell, () => true);
-    layer('cmPaint', grid, ROAD_ATTRS, CM_PAINT, 'CM_GROUND', 14, cell, 0.3, -4);
+    layer('cmPaint', grid, ROAD_ATTRS, CM_PAINT, 'CM_GROUND', GROUND_R, cell, 0.3, -4);
   }
   if (on.paving) {
     const hard = byName((n) => n === 'roads-hardscape');
@@ -179,8 +188,8 @@ export default function create(ctx: CityContext): CityModule {
       return 'slab';
     };
     const hg = (want: string) => new TriGrid(hard, HARD_ATTRS, cell, (g, a) => kind(g, a) === want);
-    layer('cmSlab', hg('slab'), HARD_ATTRS, CM_SLAB, 'CM_HARD', 14, cell, 1.2);
-    layer('cmLoose', hg('loose'), HARD_ATTRS, CM_LOOSE, 'CM_HARD', 12, cell, 0.5);
+    layer('cmSlab', hg('slab'), HARD_ATTRS, CM_SLAB, 'CM_HARD', GROUND_R, cell, 1.2);
+    layer('cmLoose', hg('loose'), HARD_ATTRS, CM_LOOSE, 'CM_HARD', GROUND_R, cell, 0.5);
     layer('cmDeck', hg('deck'), HARD_ATTRS, CM_DECK, 'CM_HARD', 14, cell, 1.2);
   }
   if (on.solid) {

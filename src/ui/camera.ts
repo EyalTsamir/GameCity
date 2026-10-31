@@ -309,6 +309,7 @@ export default function create(ctx: CityContext): CityModule {
   let inspect: PickHit | null = null;
   let focusSet = false;
   let focusPick = Infinity;
+  let focusReal = -1;
   let focusPickAt = -1e9;
   const _focusFrom = new THREE.Vector3(1e9, 0, 0);
 
@@ -1845,9 +1846,10 @@ export default function create(ctx: CityContext): CityModule {
         const hit = scout.pick(raycaster.ray.set(_pos, _dir));
         focusPick = hit && hit.kind !== 'building' ? hit.distance : Infinity;
         // the surfaces themselves, where the near materials know them: a bench, a post, the wall at the back of a porch
-        const real = (ctx.services.closeMat as { rayHit(p: THREE.Vector3, d: THREE.Vector3, maxT: number): number } | undefined)?.rayHit(_pos, _dir, 12) ?? -1;
-        if (real >= 0 && real < focusPick) focusPick = real;
+        focusReal = (ctx.services.closeMat as { rayHit(p: THREE.Vector3, d: THREE.Vector3, maxT: number): number } | undefined)?.rayHit(_pos, _dir, 12) ?? -1;
       }
+      // (better than the lot's box, which stands in front of a porch)
+      if (focusReal >= 0 && !explore.roomLot) f = Math.max(0.5, focusReal);
       if (focusPick < f) f = Math.max(0.5, focusPick);
       fx.setFocus(f);
       focusSet = true;

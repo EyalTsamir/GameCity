@@ -11,10 +11,10 @@ Harness notes for resuming:
 - Don't use `python3` in Bash here (a Store stub that hangs). Patch with a node script file in the scratchpad or Edit.
 
 Open items, in order:
-1. Read `shots/perf1/ab.txt` (first A/B: overview, downtown, street, market, wall 3 m, road 3 m). Budget +0.2 far, +0.7 street/market.
+1. First A/B, before the trims (AC, fresh bake): overview none (+0.12 ±0.16), downtown none (+0.08 ±0.14), street 0.72 ±0.42, market 0.68 ±0.34, 3 m from a brick wall 1.64 ±0.33, 3 m over a road 1.03 ±0.84. Budget +0.2 far, +0.7 street/market. Trimmed since (`discard` past the fade, aniso 4): `shots/perf2/ab.txt` is the re-measure.
 2. Re-check at 1 m after the focus fix: wall-suburb, wall-house, wall-factory, door-house, ground-kerb were all blurred (stale pick, then porch). White joinery should no longer look like pumice (`CM_JOINERY`). Lamp post orange patches at `furn-lamp`: compare `?noclosemat`, may be the base's `pWear`.
 3. Sample walls of each pattern not yet seen: timber after fibre retune, stone, panel, corrugated (findwalls output in the background task; `wall-warehouse` is brick).
-4. Add `cmPaint`: road markings (`roads-markings`, position + normal) multiplied with aggregate relief and worn specks; polygon offset stronger than the markings' −2.
+4. `cmPaint` is in (`roads-markings`, offset −4 so it sits above the markings' −2): look at it, `ground-road`.
 5. Night (21.5) and dusk (18.2) pass; `walkhitch`, `hitch`; boot cost (stats of module `closemat`: `tilesMs`, `bootMs`, triangles per layer; the slowest cell in `__city.near.stats()`, keep under 2 ms).
 6. Final checks of CLOSE-ROUND.md; end with CLOSE-DONE.
 
