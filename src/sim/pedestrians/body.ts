@@ -515,7 +515,8 @@ function buildNeckHead(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
     const H = [1.0, 1.12, 1.25];
     for (const ri of cfg.neck) {
       const r = d.neckRings[ri];
-      b.use(BONE.HEAD, REG.NECK, -1, ri === 0 ? 0.86 : ri === 1 ? 0.93 : 1);
+      // (the jaw's shade on the throat: the head is otherwise cut out against a neck of the same brightness)
+      b.use(BONE.HEAD, REG.NECK, -1, ri === 0 ? 0.92 : ri === 1 ? 0.8 : 0.62);
       const ids: number[] = [];
       for (let k = 0; k < n; k++) ids.push(b.v(torsoPoint(r, 0, (k / n) * Math.PI * 2, 2), H[ri], W[ri]));
       rings.push({ ids, c: [0, r.y, r.cz] });
@@ -764,7 +765,7 @@ function buildCloseHead(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
   const jaw = rings[0].ids.map((id) => [b.pos[id * 3], b.pos[id * 3 + 1], b.pos[id * 3 + 2]] as P3);
   const under: Ring[] = [rings[0]];
   for (const u of [0.18, 0.4, 0.68, 1]) {
-    b.use(BONE.HEAD, REG.SKIN, -1, 0.92 - 0.06 * u);
+    b.use(BONE.HEAD, REG.SKIN, -1, 0.9 - 0.28 * u);
     const ids: number[] = [];
     for (let i = 0; i < n; i++) {
       const t = (i / n) * Math.PI * 2;
@@ -784,7 +785,7 @@ function buildCloseHead(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
     under.push({ ids, c: [0, R[0].y + 0.04, R[0].cz] });
   }
   bridge(b, under);
-  b.use(BONE.HEAD, REG.SKIN, -1, 0.84);
+  b.use(BONE.HEAD, REG.SKIN, -1, 0.62);
   const chin = b.v([0, neckIn.y + 0.01, neckIn.cz], 2, 0);
   capFan(b, under[under.length - 1], chin, [0, R[0].y + 0.05, R[0].cz]);
   // ears: a shell (helix rim standing off the head, hollow concha) between the brow and the nose base
@@ -1925,6 +1926,7 @@ function strapPath(b: MeshBuilder, d: Dims, cfg: LodCfg, p0: P3, p1: P3, wdt: nu
   }
 }
 
+const BAG_DETAIL = detailPeople('bagdetail');
 function buildProps(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
   const hk = d.H / 1.76;
   const all = cfg.props === 'all';
@@ -1937,11 +1939,13 @@ function buildProps(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
     if (far) softBox(b, [0, r7.y, back - 0.055 * hk], [0.27 * hk, 0.34 * hk, 0.11 * hk]);
     else {
       // rounded pack: a short loft (front face flat against the back)
-      const n = all ? 8 : 6;
+      const n = cfg.close ? 12 : all ? 8 : 6;
       const rings: Ring[] = [];
-      const ys = all ? [-0.18, -0.02, 0.17] : [-0.17, 0.15];
+      const ys = cfg.close ? [-0.18, -0.15, -0.02, 0.1, 0.16, 0.185] : all ? [-0.18, -0.02, 0.17] : [-0.17, 0.15];
       ys.forEach((dy, i) => {
-        const shrink = i === 0 || i === ys.length - 1 ? 0.85 : 1;
+        // a soft sack: full low down where the load sits, rolling over at the top; darker towards the bottom
+        const shrink = cfg.close ? [0.86, 0.98, 1, 0.95, 0.84, 0.62][i] : i === 0 || i === ys.length - 1 ? 0.85 : 1;
+        if (cfg.close) b.setTint([0.74, 0.82, 0.96, 1, 0.97, 0.9][i]);
         const ids: number[] = [];
         for (let k = 0; k < n; k++) {
           const phi = (k / n) * Math.PI * 2 + Math.PI / n;
@@ -1958,6 +1962,28 @@ function buildProps(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
         bo = rings[0];
       capFan(b, t, b.v(add(t.c, [0, 0.012 * hk, 0]), 0, 0), bo.c);
       capFan(b, bo, b.v(add(bo.c, [0, -0.012 * hk, 0]), 0, 0), t.c);
+      if (all && BAG_DETAIL) {
+        // the front pocket, a shade darker, standing proud of the pack's face
+        const zf = back - 0.115 * hk;
+        b.setTint(0.84);
+        softBox(b, [0, r7.y - 0.095 * hk, zf - 0.012 * hk], [0.2 * hk, 0.13 * hk, 0.034 * hk]);
+        if (cfg.close) {
+          // zips, side pockets, webbing down the body, the grab loop on top
+          b.use(BONE.CHEST, REG.DARK, FB.BACKPACK, 0.9);
+          softBox(b, [0, r7.y - 0.036 * hk, zf - 0.029 * hk], [0.17 * hk, 0.006 * hk, 0.003]);
+          softBox(b, [0, r7.y + 0.11 * hk, zf + 0.009 * hk], [0.2 * hk, 0.006 * hk, 0.004]);
+          b.use(BONE.CHEST, REG.BAG, FB.BACKPACK, 0.8);
+          for (const s of [1, -1]) softBox(b, [s * 0.139 * hk, r7.y - 0.105 * hk, back - 0.06 * hk], [0.018 * hk, 0.11 * hk, 0.075 * hk]);
+          b.use(BONE.CHEST, REG.STRAP, FB.BACKPACK, 0.72);
+          for (const s of [1, -1]) softBox(b, [s * 0.07 * hk, r7.y + 0.025 * hk, zf - 0.001 * hk], [0.016 * hk, 0.25 * hk, 0.004]);
+          const topY = r7.y + 0.165 * hk,
+            tz = back - 0.06 * hk;
+          const pk: P3 = [0, topY + 0.03 * hk, tz];
+          stick(b, [-0.035 * hk, topY - 0.002, tz], [-0.018 * hk, pk[1], tz], 0.0045);
+          stick(b, [-0.018 * hk, pk[1], tz], [0.018 * hk, pk[1], tz], 0.0045);
+          stick(b, [0.018 * hk, pk[1], tz], [0.035 * hk, topY - 0.002, tz], 0.0045);
+        }
+      }
       if (all) {
         // straps: pack top → over the shoulder (trapezius) → down the front of the chest
         b.use(BONE.CHEST, REG.STRAP, FB.BACKPACK, 0.7);
