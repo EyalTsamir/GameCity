@@ -24,6 +24,7 @@ import type { CityContext } from '../../core/context';
 import { WIND_GLSL } from '../../core/wind';
 import { LAMP_GLSL, lampUniforms } from '../../core/lampLight';
 import { SLAB } from '../../core/constants';
+import { natureOn } from '../../core/nature';
 import { noiseTexture } from '../terrain/noise';
 import { GC_PALETTE_GLSL, gcPalette } from './palette';
 import { CRES, FRES, CW, CH, FW, FH, type CoverMaps, type TileGrid } from './mask';
@@ -239,12 +240,22 @@ vGcRough = 0.85;
     float wet = ( hab > 0.5 && hab < 100.5 ) ? hab / 100.0 : 0.0;
     float dune = hab > 149.5 ? clamp( ( hab - 150.0 ) / 105.0, 0.0, 1.0 ) : 0.0;
     float weedH = abs( hab - 120.0 ) < 0.5 ? 1.0 : 0.0;
+    // crops (outer.ts: 101 + kind code · 2 + row axis): 0 wheat 1 stubble 2 greens 5 hay 8 market garden
+    float cropK = -1.0;
+    if ( hab > 100.5 && hab < 119.5 ) cropK = floor( ( hab - 101.0 ) * 0.5 + 0.01 );
     float len = cov.g;
     float lawnOK = iTile.w;
     // fallen leaves drift into clusters (against roots, in hollows), not an even sprinkle
     float leafCl = cov.a > 0.01 ? smoothstep( 0.35, 0.75, textureLod( tNoise, root * 0.37, 0.0 ).g ) * 1.9 + 0.08 : 0.0;
     bool leaf = rc.x < cov.a * uKind.z * leafCl;
     bool alive = ra.z < cov.r * uBlade.z && ( len > 0.22 || wet > 0.0 || lawnOK > 0.5 );
+    if ( cropK > 1.5 && cropK != 5.0 ) {
+      // drilled rows: same frame as the land shader's (fields.ts, field rotation 8 degrees)
+      float rowT = mod( hab - 101.0, 2.0 ) < 0.5 ? dot( root, vec2( 0.9902681, 0.1391731 ) ) : dot( root, vec2( -0.1391731, 0.9902681 ) );
+      float pitch = cropK > 5.0 ? 0.62 : 0.5;
+      float dr = ( fract( rowT / pitch ) - 0.5 ) * pitch;
+      if ( abs( dr ) > 0.13 ) alive = false;
+    }
     vec3 rw = vec3( root.x, y0, root.y );
     float dist = distance( rw, cameraPosition );
     float fin = uFade.x + ( uFade.y - uFade.x ) * rb.x;
@@ -308,7 +319,7 @@ vGcRough = 0.85;
         vec3 tip = gcTipColor( base, nA, len );
         float aoRoot = mix( mix( 0.66, 0.84, kept ), 0.46, smoothstep( 0.2, 0.6, len ) );
         // long grass has a dense low layer under the tall stems (no dark gaps at the base)
-        bool lowLayer = len > 0.45 && fract( rb.x * 7.31 + rc.y * 0.7 ) < 0.38;
+        bool lowLayer = len > 0.45 && cropK < 0.0 && fract( rb.x * 7.31 + rc.y * 0.7 ) < 0.38;
         if ( lowLayer ) {
           L *= mix( 0.28, 0.45, fract( rc.z * 3.7 ) );
           W *= 1.25;
@@ -316,7 +327,7 @@ vGcRough = 0.85;
           aoRoot = 0.62;
         }
         // seed heads on long grass
-        bool seed = len > 0.48 && !lowLayer && fract( rc.x * 17.9 ) < 0.13;
+        bool seed = len > 0.48 && !lowLayer && cropK < 0.0 && fract( rc.x * 17.9 ) < 0.13;
         if ( seed ) {
           float sk = fract( rc.y * 5.1 );
           tip = sk < 0.45 ? mix( tip, gcStraw, 0.55 ) : ( sk < 0.8 ? tip * vec3( 1.05, 1.0, 0.85 ) : mix( tip, vec3( 0.2, 0.12, 0.13 ), 0.55 ) );
@@ -346,10 +357,54 @@ vGcRough = 0.85;
           tip = mix( base * 1.12, gcStraw, 0.55 );
           aoRoot = 0.55;
         }
+        if ( cropK > -0.5 ) {
+          stiff = 0.55;
+          lean = mix( wd, outw, 0.3 ) * mix( 0.04, 0.2, fract( rc.z * 9.7 ) );
+          aoRoot = 0.5;
+          if ( cropK < 0.5 ) {
+            // wheat: one height, a fine stem and a heavy ear that nods a little; tone drifts across the field
+            L = mix( 0.72, 0.98, rc.y ) * ( 0.94 + 0.12 * cl.x );
+            W = mix( 0.006, 0.01, fract( rc.z * 5.3 ) );
+            base = mix( vec3( 0.26, 0.21, 0.075 ), vec3( 0.34, 0.27, 0.095 ), nA.b ) * ( 0.88 + 0.24 * fract( rb.z * 21.7 ) );
+            tip = mix( vec3( 0.56, 0.41, 0.14 ), vec3( 0.68, 0.5, 0.19 ), nA.g ) * ( 0.9 + 0.2 * fract( rc.x * 13.1 ) );
+            aoRoot = 0.34;
+          } else if ( cropK < 1.5 ) {
+            // stubble: cut straws, pale, stiff; the odd self-sown green
+            L = mix( 0.09, 0.2, rc.y );
+            W = mix( 0.005, 0.009, fract( rc.z * 5.3 ) );
+            base = vec3( 0.42, 0.34, 0.17 ) * ( 0.8 + 0.3 * fract( rb.z * 21.7 ) );
+            tip = base * 1.25;
+            if ( fract( rc.x * 17.9 ) < 0.06 ) { base = vec3( 0.13, 0.2, 0.05 ); tip = base * 1.2; }
+            stiff = 0.15;
+            lean = wd * 0.12;
+          } else if ( cropK < 2.5 ) {
+            // a row crop (sugar beet, potatoes): broad leaves splayed from the row
+            L = mix( 0.2, 0.4, rc.y );
+            W = mix( 0.04, 0.075, fract( rc.z * 5.3 ) );
+            lean = outw * mix( 0.3, 0.75, fract( rc.z * 9.7 ) );
+            base = mix( vec3( 0.06, 0.13, 0.04 ), vec3( 0.1, 0.2, 0.05 ), cl.y );
+            tip = base * vec3( 1.4, 1.35, 1.1 );
+          } else if ( cropK < 5.5 ) {
+            // hay after the mower: short, pale, lying over
+            L = mix( 0.07, 0.17, rc.y );
+            W = mix( 0.008, 0.014, fract( rc.z * 5.3 ) );
+            base = mix( vec3( 0.2, 0.25, 0.09 ), vec3( 0.3, 0.3, 0.13 ), cl.y );
+            tip = base * 1.25;
+            lean = wd * 0.5;
+          } else {
+            // market garden: cabbages, lettuce and leeks, one to a block of ~3 m
+            float bl = fract( floor( dot( root, vec2( 0.14, 0.99 ) ) / 3.2 ) * 0.37 + floor( dot( root, vec2( 0.99, -0.14 ) ) / 7.0 ) * 0.61 );
+            L = bl < 0.33 ? mix( 0.22, 0.34, rc.y ) : ( bl < 0.66 ? mix( 0.14, 0.24, rc.y ) : mix( 0.3, 0.5, rc.y ) );
+            W = bl < 0.66 ? mix( 0.06, 0.1, fract( rc.z * 5.3 ) ) : mix( 0.018, 0.03, fract( rc.z * 5.3 ) );
+            lean = bl < 0.66 ? outw * mix( 0.45, 0.85, fract( rc.z * 9.7 ) ) : wd * 0.12;
+            base = bl < 0.33 ? vec3( 0.1, 0.2, 0.15 ) : ( bl < 0.66 ? vec3( 0.2, 0.34, 0.07 ) : vec3( 0.12, 0.24, 0.1 ) );
+            tip = base * 1.3;
+          }
+        }
         // flowers
         int fk = -1;
         float flowerP = flw.r * uKind.x;
-        if ( !reed && !marram && rb.z < 1.0 ) {
+        if ( !reed && !marram && rb.z < 1.0 && cropK < 0.5 ) {
           // flowers grow in clusters: a third of the clumps carry most of them, one species per clump
           // (the patch's dominant species, a third of the clumps another one)
           float clusterK = cl.z > 0.64 ? 3.0 : 0.25;
@@ -377,6 +432,8 @@ vGcRough = 0.85;
         // level → height fraction, width profile (flowers and cattails shape the top)
         float hf = lv;
         float wp = 1.0 - pow( lv, 1.6 );
+        // an ear of wheat: the blade swells over its top third (the near ring has the vertices for it)
+        if ( cropK > -0.5 && cropK < 0.5 && uKind.w < 0.5 ) wp = lv < 0.5 ? 0.7 : ( lv < 0.9 ? 2.8 : 0.5 );
         float headW = 0.0;
         vec3 headC = vec3( 0.0 );
         vec3 eyeC = vec3( 0.0 );
@@ -440,6 +497,8 @@ vGcRough = 0.85;
         float upK = 0.42 + 0.4 * smoothstep( 3.0, 22.0, dist ) + 0.48 * kept;   // short lawn blades lit like the sward around them
         objectNormal = normalize( mix( N, nUp, clamp( upK, 0.0, 0.92 ) ) );
         // colour: shaded roots → mid → tip; gusts press the blades and show the paler side
+        ${natureOn('fieldblades') ? `// out in the fields the blades stand sparse on sunlit ground: no sward to shade their roots, or they read as black ticks
+        if ( inO && headW <= 0.0 ) { aoRoot = max( aoRoot, 0.78 ); base *= 1.35; tip *= 1.2; }` : ''}
         float ao = mix( aoRoot, 1.0, smoothstep( 0.0, 0.55, hf ) );
         vec3 col = mix( base, tip, smoothstep( 0.35, 1.0, hf ) ) * ao;
         float press = smoothstep( 0.25, 0.7, wl * flexK * stiff ) * smoothstep( 0.3, 1.0, hf );

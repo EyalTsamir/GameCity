@@ -12,6 +12,7 @@
 //
 // Service: ctx.services.vegetation = { trees: { x, z, r, h }[] }
 
+import { nature } from '../core/nature';
 import * as THREE from 'three';
 import type { CityContext, CityModule } from '../core/context';
 import { OCC } from '../core/occupancy';
@@ -1222,6 +1223,7 @@ export default function create(ctx: CityContext): CityModule {
   }
 
   // planter slots: flowers + a small shrub (props draws the planter box)
+  const fullBox = nature(ctx, 'fullplanters');
   for (const s of plan.slots) {
     if (s.kind !== 'planter') continue;
     const rng = new Rng(Math.floor(hash01(s.x, s.z, 3) * 1e9));
@@ -1241,6 +1243,8 @@ export default function create(ctx: CityContext): CityModule {
         continue;
       }
       flowerClump(fineSink, fpw, s.x + ux * u, y, s.z + uz * u, 0.17, i % 2 ? pc : pc2, rng);
+      // a full box: a second row along each long side (fewer gaps of bare soil)
+      if (fullBox) for (const sd of [-1, 1]) flowerClump(fineSink, fpw, s.x + ux * (u + 0.08 * sd) - uz * 0.15 * sd, y, s.z + uz * (u + 0.08 * sd) + ux * 0.15 * sd, 0.13, sd > 0 ? pc2 : pc, rng);
     }
   }
 
@@ -1323,14 +1327,17 @@ export default function create(ctx: CityContext): CityModule {
   const edge = plan.places?.edge ?? null;
   if (edge) {
     const rng = ctx.rng('veg-edge');
+    const edgeStrips = nature(ctx, 'farmkit') && nature(ctx, 'edgehedge');
     const leaf = col('#4f6a33');
     for (const [z0, z1] of edge.hedges) {
       // untrimmed: 4–7 m overlapping pieces, each its own height, width, tone and wander, a lumpy crown (wild)
       for (let a = z0; a < z1 - 0.3; ) {
         const b = Math.min(z1, a + rng.range(4, 7));
-        const hgt = rng.range(1.6, 2.5);
+        // the landscape's cut-out strips (landscape/woods.ts) carry the outline: the core stays inside them
+        const coreK = edgeStrips ? 0.68 : 1;
+        const hgt = rng.range(1.6, 2.5) * coreK;
         const xa = edge.hedgeX + rng.range(-0.2, 0.2);
-        const wd = rng.range(1.15, 1.6);
+        const wd = rng.range(1.15, 1.6) * (edgeStrips ? 0.88 : 1);
         const lc = leaf.clone().multiplyScalar(rng.range(0.82, 1.12));
         selP(xa);
         if (legacy) hedge(plantSink, pw, xa, a, xa, b, H(xa, a), wd, hgt, lc, rng.int(0, 1e6));

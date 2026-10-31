@@ -6,6 +6,7 @@
 // Both come from the same lobes, so the LOD cross-fade keeps the silhouette. Near detail is generated lazily
 // (first time a plant comes close) from the same seed.
 
+import { natureOn } from '../../core/nature';
 import * as THREE from 'three';
 import { Rng, hash01 } from '../../core/rng';
 import { InstBuf, pushCard, pushWood, CARD_SPECS, WOOD_SPECS, STILL, type PlantRef, type Sway, type CardIn } from './foliage';
@@ -720,6 +721,8 @@ function fernStruct(st: Struct, rng: Rng): void {
 }
 
 /** clipped hedge: tips spread over both faces and the top (cards lie along the faces, tops break the line) */
+const HEDGE_TOPS = natureOn('hedgetops');
+
 function hedgeStruct(st: Struct, rng: Rng): void {
   const { def } = st;
   const [ax, az, bx, bz, wd] = def.seg ?? [def.x, def.z, def.x + 1, def.z, 0.6];
@@ -757,6 +760,8 @@ function hedgeStruct(st: Struct, rng: Rng): void {
     // top
     const p: V3 = [cx + vx * rng.range(-hw, hw) * 0.8, y + hh + 0.01, cz + vz * rng.range(-hw, hw) * 0.8];
     st.tips.push({ p, d: [0, 1, 0], sway: { ph1: ph, w1: 0.1, ph2: rng.next(), w2: 0.25 }, lobe: li, s: rng.range(0.9, 1.2) });
+    // (one row of top clusters left the clipped top bare from eye level)
+    if (HEDGE_TOPS) st.tips.push({ p: [cx + vx * rng.range(-hw, hw) * 0.85, y + hh + 0.015, cz + vz * rng.range(-hw, hw) * 0.85], d: [0, 1, 0], sway: { ph1: ph, w1: 0.1, ph2: rng.next(), w2: 0.25 }, lobe: li, s: rng.range(0.9, 1.25) });
   }
   // the rounded clipped ends get their own leaf clusters (species.ts hedge() rounds the core ~15 cm past each end)
   for (const [e, sg] of [

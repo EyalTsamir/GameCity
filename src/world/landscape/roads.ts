@@ -5,6 +5,7 @@
 // small dynamic mesh (≈ 1 k vertices transformed on the CPU per frame).
 
 import * as THREE from 'three';
+import { moonLift } from '../../core/nature';
 import type { LandscapeModel, Road } from './model';
 import { WL } from './model';
 import { hash2i } from './noise';
@@ -39,9 +40,16 @@ vec3 roadAlbedo(vec3 wp) {
   }
   if (vRK > 0.5) {
     // gravel lane: two wheel tracks, a grassy crown, ragged grass edges
-    vec3 grav = vec3(0.42, 0.38, 0.31) * (0.85 + 0.25 * n1.g);
-    float crown = 1.0 - smoothstep(0.12, 0.3, a);
-    float edge = smoothstep(0.72 - 0.15 * n1.b, 1.0, a);
+    vec3 grav = vec3(0.35, 0.315, 0.26) * (0.85 + 0.25 * n1.g);
+    vec4 n3 = texture2D(tLN, wp.xz * 0.53);
+    // near: single stones; the wheel tracks are packed darker, damp in patches
+    float nearG = 1.0 - smoothstep(0.03, 0.25, fp);
+    grav *= 1.0 + nearG * (rHash(floor(wp.xz * 11.0)) - 0.5) * 0.6;
+    grav *= 1.0 + nearG * (rHash(floor(wp.xz * 31.0)) - 0.5) * 0.3;
+    grav *= 1.0 - 0.24 * (1.0 - smoothstep(0.08, 0.22, abs(a - 0.52))) * (0.7 + 0.6 * n1.r);
+    grav = mix(grav, grav * vec3(0.66, 0.68, 0.66), smoothstep(0.58, 0.72, n3.b) * (1.0 - smoothstep(0.1, 0.3, abs(a - 0.52))));
+    float crown = 1.0 - smoothstep(0.08, 0.3, a + (n3.r - 0.5) * 0.2);
+    float edge = smoothstep(0.72 - 0.2 * n1.b - 0.12 * n3.g, 1.0, a);
     vec3 grass = vec3(0.12, 0.17, 0.06) * (0.8 + 0.4 * n2.r);
     return mix(grav, grass, max(crown * 0.85, edge));
   }
@@ -63,10 +71,11 @@ function roadMaterial(uniforms: Record<string, THREE.IUniform>, fog: boolean): T
       .replace('#include <common>', '#include <common>\nattribute vec3 aRS;\nvarying vec2 vRS;\nvarying float vRK;\nvarying vec3 vRW;')
       .replace('#include <begin_vertex>', '#include <begin_vertex>\nvRS = aRS.xy;\nvRK = aRS.z;\nvRW = (modelMatrix * vec4(transformed, 1.0)).xyz;');
     shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', '#include <common>\nvarying vec3 vRW;\n' + ROAD_FRAG)
+      .replace('#include <common>', '#include <common>\nuniform float uNight;\nvarying vec3 vRW;\n' + ROAD_FRAG)
+      .replace('#include <lights_fragment_end>', `#include <lights_fragment_end>\n${moonLift()}`)
       .replace('vec4 diffuseColor = vec4( diffuse, opacity );', 'vec4 diffuseColor = vec4( roadAlbedo(vRW), opacity );');
   };
-  mat.customProgramCacheKey = () => 'th-landroad-v1';
+  mat.customProgramCacheKey = () => 'th-landroad-v2';
   return mat;
 }
 

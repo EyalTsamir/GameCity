@@ -4,6 +4,7 @@
 // instanced mesh whose single matrix is updated per frame.
 
 import * as THREE from 'three';
+import { moonLift } from '../../core/nature';
 import type { LandscapeModel } from './model';
 import { WL, CX, CZ } from './model';
 import { FROW, toField, fromField, rowB, colB, colOff, colW, lhash, fieldsOfParcel, cropKind, CK, type Field } from './fields';
@@ -376,7 +377,8 @@ ${POSE_GLSL}`,
       )
       .replace('#include <beginnormal_vertex>', '#include <beginnormal_vertex>\n{ float c = cos(iA.w), s = sin(iA.w); objectNormal = vec3(c * objectNormal.x + s * objectNormal.z, objectNormal.y, -s * objectNormal.x + c * objectNormal.z); }');
     shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', '#include <common>\nvarying vec3 vAc;')
+      .replace('#include <common>', '#include <common>\nuniform float uNight;\nvarying vec3 vAc;')
+      .replace('#include <lights_fragment_end>', `#include <lights_fragment_end>\n${moonLift()}`)
       .replace('vec4 diffuseColor = vec4( diffuse, opacity );', 'vec4 diffuseColor = vec4( vAc, opacity );');
   };
   mat.customProgramCacheKey = () => 'th-landherd-v4';

@@ -4,6 +4,7 @@
 // one instanced mesh. Walls get window rows (shader), lit at night.
 
 import * as THREE from 'three';
+import { moonLift } from '../../core/nature';
 import type { LandscapeModel, Site } from './model';
 import { FIELD_ROT } from './fields';
 import { hash2i } from './noise';
@@ -41,7 +42,7 @@ export interface Settlements {
   blocked(x: number, z: number, r: number): boolean;
 }
 
-function placeSite(site: Site, model: LandscapeModel, out: Bld[], towers: { x: number; z: number; y: number; h: number; yaw: number }[], farms: FarmSite[] | null, foot: Bld[]): void {
+function placeSite(site: Site, model: LandscapeModel, out: Bld[], towers: TowerRec[], farms: FarmSite[] | null, foot: Bld[]): void {
   const H = model.height;
   const rnd = (i: number, k: number) => hash2i(site.seed * 131 + i, k, 607);
   const baseYaw = FIELD_ROT + (rnd(0, 1) - 0.5) * 0.6;
@@ -89,6 +90,14 @@ function placeSite(site: Site, model: LandscapeModel, out: Bld[], towers: { x: n
     placeFarm(put, rnd);
     return;
   }
+  if (site.town) {
+    placeTown(site, put, rnd, towers, baseYaw, H);
+    return;
+  }
+  if (site.abbey) {
+    placeAbbey(site, put, rnd, towers, baseYaw, H);
+    return;
+  }
   // villages / hamlets: houses along two crossing streets + a ring of scattered ones
   const n = site.kind === 'village' ? 38 : 9;
   const streetYaw = [0, Math.PI / 2 + (rnd(9, 1) - 0.5) * 0.5];
@@ -128,6 +137,70 @@ function placeSite(site: Site, model: LandscapeModel, out: Bld[], towers: { x: n
       tz = site.z - -13 * s + 6 * c;
     towers.push({ x: tx, z: tz, y: H(tx, tz) - 0.3, h: 34 + 8 * rnd(30, 1), yaw: baseYaw });
   }
+}
+
+type TowerRec = { x: number; z: number; y: number; h: number; yaw: number; flat?: boolean; w?: number };
+
+/**
+ * a compact hill town: houses packed in rings round a square, every roof terracotta, walls stone and ochre, the bell tower
+ * and the church at the top, a taller house or two at the rim. From 2–3 km it reads as a crust of roofs on the summit.
+ */
+function placeTown(site: Site, put: Put, rnd: (i: number, k: number) => number, towers: TowerRec[], baseYaw: number, H: (x: number, z: number) => number): void {
+  const terracotta = [0, 1, 2, 5, 0, 1];
+  let i = 0;
+  for (let ring = 0; ring < 6; ring++) {
+    const R = 19 + ring * ((site.r - 19) / 5.2);
+    const n = Math.floor((R * 6.283) / 12.6);
+    for (let k = 0; k < n; k++) {
+      i++;
+      if (rnd(i, 50) < 0.1) continue; // a lane, a yard
+      const a = ((k + rnd(i, 51) * 0.5) / n) * 6.283 + ring * 0.7;
+      const rr = R + (rnd(i, 52) - 0.5) * 5;
+      const big = rnd(i, 54) < 0.14;
+      put(
+        Math.cos(a) * rr,
+        Math.sin(a) * rr,
+        {
+          w: (big ? 13 : 9) + 2.5 * rnd(i, 55),
+          d: 6.5 + 2 * rnd(i, 56),
+          h: (big ? 9.5 : 6) + 2.5 * rnd(i, 57) + (ring === 5 ? 1.5 : 0),
+          roof: 2.1 + 0.9 * rnd(i, 58),
+          wall: Math.floor(rnd(i, 59) * 5),
+          roofC: terracotta[Math.floor(rnd(i, 60) * 6)],
+          kind: 0,
+          ...houseVariant(rnd, i + 300, big),
+        },
+        a + Math.PI / 2 + (rnd(i, 61) - 0.5) * 0.3,
+      );
+    }
+  }
+  // the church on the square, the campanile beside it, a second lower tower on the rim
+  put(-3, 9, { w: 26, d: 11, h: 11, roof: 5, wall: 3, roofC: 0, kind: 0 }, 0.1);
+  const c = Math.cos(baseYaw),
+    s = Math.sin(baseYaw);
+  const tx = site.x - 18 * c + 2 * s,
+    tz = site.z + 18 * s + 2 * c;
+  towers.push({ x: tx, z: tz, y: H(tx, tz) - 0.3, h: 40 + 8 * rnd(30, 2), yaw: baseYaw, flat: true, w: 6.4 });
+  const a2 = rnd(30, 3) * 6.283;
+  const ux = site.x + Math.cos(a2) * site.r * 0.8,
+    uz = site.z + Math.sin(a2) * site.r * 0.8;
+  towers.push({ x: ux, z: uz, y: H(ux, uz) - 0.3, h: 25 + 5 * rnd(30, 4), yaw: a2, flat: true, w: 6 });
+}
+
+/** an abbey on a ridge: church, a square of long ranges round a cloister, a bell tower */
+function placeAbbey(site: Site, put: Put, rnd: (i: number, k: number) => number, towers: TowerRec[], baseYaw: number, H: (x: number, z: number) => number): void {
+  const wall = 1,
+    roofC = 0;
+  put(0, -24, { w: 42, d: 13, h: 15, roof: 6, wall, roofC, kind: 0 }, 0);
+  put(-28, -1, { w: 34, d: 9, h: 9, roof: 3.2, wall, roofC, kind: 0 }, Math.PI / 2);
+  put(28, -1, { w: 34, d: 9, h: 9, roof: 3.2, wall, roofC, kind: 0 }, Math.PI / 2);
+  put(0, 20, { w: 48, d: 9, h: 10, roof: 3.2, wall, roofC, kind: 0 }, 0);
+  for (let i = 0; i < 5; i++) put(-30 + i * 15, 36 + 6 * rnd(i, 70), { w: 9, d: 6, h: 4.5, roof: 2.1, wall: 2, roofC: 1, kind: 2 }, (rnd(i, 71) - 0.5) * 0.4);
+  const c = Math.cos(baseYaw),
+    s = Math.sin(baseYaw);
+  const tx = site.x + 25 * c - 25 * s,
+    tz = site.z - 25 * s - 25 * c;
+  towers.push({ x: tx, z: tz, y: H(tx, tz) - 0.3, h: 44, yaw: baseYaw, flat: true, w: 7 });
 }
 
 /** box hunt: a hipped or gabled roof, a chimney and on some an L-wing at the back (houses) */
@@ -375,6 +448,7 @@ vec3 bAlbedo() {
 }`,
       )
       .replace('vec4 diffuseColor = vec4( diffuse, opacity );', 'vec4 diffuseColor = vec4( bAlbedo(), opacity );')
+      .replace('#include <lights_fragment_end>', `#include <lights_fragment_end>\n${moonLift()}`)
       .replace(
         '#include <emissivemap_fragment>',
         '#include <emissivemap_fragment>\ntotalEmissiveRadiance += vec3(1.0, 0.68, 0.34) * bWin * uLights * 2.2;',
@@ -398,7 +472,7 @@ function buildingDepthMaterial(): THREE.MeshDepthMaterial {
 
 export function buildSettlements(model: LandscapeModel, uniforms: Record<string, THREE.IUniform>, lights: { value: number }, night: { value: number }, fog: boolean, variants = true): Settlements {
   const blds: Bld[] = [];
-  const towers: { x: number; z: number; y: number; h: number; yaw: number; light?: boolean }[] = [];
+  const towers: (TowerRec & { light?: boolean })[] = [];
   const farms: FarmSite[] | null = new URLSearchParams(location.search).has('nofarmdetail') ? null : [];
   const foot: Bld[] = [];
   for (const s of model.sites) placeSite(s, model, blds, towers, farms, foot);
@@ -427,8 +501,10 @@ export function buildSettlements(model: LandscapeModel, uniforms: Record<string,
   // towers (church spires, the lighthouse): gable units whose ridge collapses into a spire (kind 3)
   for (const t of towers) {
     const lh = t.light === true;
-    const w = lh ? 4.2 : 5.5;
-    blds.push({ x: t.x, z: t.z, y: t.y, w, d: w, h: t.h * 0.66, roof: t.h * 0.34, yaw: t.yaw, wall: lh ? 0 : 3, roofC: lh ? 1 : 4, kind: 3 });
+    const w = t.w ?? (lh ? 4.2 : 5.5);
+    // (a campanile ends in a low pyramid, a northern spire in a tall one)
+    const rk = t.flat ? 0.1 : 0.34;
+    blds.push({ x: t.x, z: t.z, y: t.y, w, d: w, h: t.h * (1 - rk), roof: t.h * rk, yaw: t.yaw, wall: t.flat ? 2 : lh ? 0 : 3, roofC: t.flat ? 0 : lh ? 1 : 4, kind: 3 });
   }
   // all buildings: one instanced mesh
   const geo = gableGeometry(variants);

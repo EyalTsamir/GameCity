@@ -6,6 +6,9 @@
 import * as THREE from 'three';
 import type { LandscapeModel } from './model';
 import { hash2i } from './noise';
+import { natureOn } from '../../core/nature';
+
+const GLOW = natureOn('townglow');
 
 export interface LandLights {
   points: THREE.Points;
@@ -25,13 +28,13 @@ export function buildLandLights(model: LandscapeModel, lights: { value: number }
     sz.push(s);
   };
   for (const site of model.sites) {
-    const n = site.kind === 'village' ? 26 : site.kind === 'hamlet' ? 7 : 2;
+    const n = site.town ? 46 : site.kind === 'village' ? 26 : site.kind === 'hamlet' ? 7 : 2;
     for (let i = 0; i < n; i++) {
       const a = hash2i(site.seed, i, 811) * Math.PI * 2;
       const r = site.r * (site.kind === 'farm' ? 0.3 + 0.4 * hash2i(site.seed, i, 812) : 0.15 + 0.85 * Math.sqrt(hash2i(site.seed, i, 812)));
       const x = site.x + Math.cos(a) * r,
         z = site.z + Math.sin(a) * r;
-      add(x, z, H(x, z) + 4 + 2 * hash2i(site.seed, i, 813), hash2i(site.seed, i, 814), site.kind === 'farm' ? 1.0 : 1.3);
+      add(x, z, H(x, z) + 4 + 2 * hash2i(site.seed, i, 813), hash2i(site.seed, i, 814), site.kind === 'farm' ? 1.0 : GLOW ? 1.7 : 1.3);
     }
   }
   // the island lighthouse: a strong white-gold beacon
@@ -59,7 +62,8 @@ void main() {
   float d = -mv.z;
   // world size ~aSize m, but never smaller than ~1.6 px
   float px = aSize * 2.2 * projectionMatrix[1][1] * 0.5 * uVH / max(d, 1.0);
-  gl_PointSize = max(px, 1.6 * uVH / 1025.0);
+  // (a lamp seen from a field away is a point with some bloom, not a moon on the farmhouse wall)
+  gl_PointSize = ${GLOW ? 'clamp(px, 2.3 * uVH / 1025.0, (aSize > 5.0 ? 60.0 : 8.0) * uVH / 1025.0)' : 'max(px, 1.6 * uVH / 1025.0)'};
   // distance dimming (aerial extinction) and the smallest sprites fainter
   float ext = exp(-d * 1.4e-4);
   vA = uLights * ext * min(1.0, px / 1.6 + 0.35);
@@ -74,7 +78,7 @@ void main() {
   float r2 = dot(q, q);
   if (r2 > 1.0) discard;
   float g = exp(-r2 * 3.5);
-  gl_FragColor = vec4(vCol * g * vA * 2.4, 1.0);
+  gl_FragColor = vec4(vCol * g * vA * ${GLOW ? '4.2' : '2.4'}, 1.0);
 }`,
     transparent: true,
     depthWrite: false,

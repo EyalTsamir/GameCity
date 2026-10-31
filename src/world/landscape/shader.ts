@@ -16,6 +16,7 @@ import { noiseTexture } from '../terrain/noise';
 import { WL } from './model';
 import { gcPalette, GC_PALETTE_GLSL } from '../groundcover/palette';
 import { perfOn } from '../../core/perfdeep';
+import { moonLift, natureOn } from '../../core/nature';
 
 // perf-deep (docs/progress/perf-deep.md): FXC flattens an `if` holding an implicit-gradient fetch, so the sea-bed / field /
 // caustic early-outs only save work when every fetch inside is explicit. `landgates` hoists the footprint derivatives
@@ -214,7 +215,7 @@ ${LG ? `  vec4 nM = ${lnTex('p.xz * (1.0 / 1900.0)', '(1.0 / 1900.0)')};   // (t
     // 5–15 m mottling (clover, rushes, sorrel patches) visible from the town edge
     vec4 nT3 = ${lnTex('p.xz * (1.0 / 29.0) + 0.37', '(1.0 / 29.0)')};
     meadow *= 1.0 + (nT3.a - 0.5) * 0.3 * (1.0 - smoothstep(2.0, 8.0, fp));
-    meadow = mix(meadow, meadow * vec3(0.86, 1.04, 0.9), smoothstep(0.6, 0.75, nT3.r) * 0.6);
+    meadow = mix(meadow, meadow * vec3(0.86, 1.04, 0.9), smoothstep(0.42, 0.82, nT3.r) * 0.45);
   }
   meadow = mix(meadow, meadow * vec3(1.12, 1.13, 1.05), gust * 0.5);
   // under the near blade rings (groundcover's roaming window) the ground is the shaded thatch between
@@ -406,6 +407,23 @@ ${LG ? `    // (perf-deep) the rest of the block only shows where the field weig
       fc = cPlough * (0.88 + 0.24 * pv) * (1.0 + 0.32 * stri);
       fc *= 1.0 - 0.2 * lStripe(tr, 0.9, 0.45, fpt);
       fc *= 0.85 + 0.3 * nW.a;
+      ${natureOn('soilclods') ? `// close up: turned slices that catch the light on one side, clods, a pale stone here and there
+      if (fp < 0.25) {
+        float cf = 1.0 - smoothstep(0.08, 0.25, fp);
+        vec4 nC1 = ${lnTex('p.xz * (1.0 / 0.53)', '(1.0 / 0.53)')};
+        vec4 nC2 = ${lnTex('p.zx * (1.0 / 1.9)', '(1.0 / 1.9)', 'yx')};
+        float ph = 6.2832 * (tr + 0.45 * (nC2.r - 0.5)) / 0.9;
+        vec2 ax = mix(vec2(-0.1391731, 0.9902681), vec2(0.9902681, 0.1391731), along);
+        if (head > 0.5) ax = vec2(ax.y, -ax.x);
+        // (a low sun darkens anything tilted away from it: less relief then, or the field turns to leopard skin)
+        vec2 sl = (ax * cos(ph) * 0.3 + (nC1.rg - 0.5) * 0.5 + (nC2.gb - 0.5) * 0.25) * mix(0.25, 1.0, smoothstep(0.12, 0.5, uSunDir.y));
+        lnN = normalize(lnN + vec3(sl.x, 0.0, sl.y) * cf * fieldW);
+        fc *= mix(1.0, (0.62 + 0.8 * nC1.b) * (0.86 + 0.28 * nC2.a) * (0.84 + 0.16 * sin(ph)), cf);
+        vec2 sc2 = p.xz * 4.1;
+        vec2 sh2 = lhash22(floor(sc2));
+        float st2 = step(sh2.x, 0.035) * (1.0 - smoothstep(0.1, 0.1 + fp * 3.0, length(fract(sc2) - 0.5 - (sh2 - 0.5) * 0.6)));
+        fc = mix(fc, vec3(0.24, 0.22, 0.19) * (0.7 + 0.6 * sh2.y), st2 * cf);
+      }` : ''}
     } else if (ck == 6) {
       // fallow wildflower meadow
       fc = mix(meadow, cFallow, 0.4);
@@ -438,6 +456,12 @@ ${LG ? `    // (perf-deep) the rest of the block only shows where the field weig
       fc = mix(fc, fc * vec3(1.25, 1.18, 0.9), smoothstep(0.55, 0.8, nP.b) * 0.4);
       fc = mix(fc, fc * vec3(1.18, 1.16, 1.0), gust * 0.6);
       fc *= 1.0 - 0.35 * tram;
+    } else if (ck == 12) {
+      // vineyard floor: bare tilled strip under the row, grassy alley between; far away (the strips have sunk) the rows
+      float rw = lStripe(tr, 3.0, 0.32, fpt);
+      fc = mix(cPasture * vec3(0.92, 0.88, 0.7), cSoil * 1.05, 0.35 + 0.45 * smoothstep(0.35, 0.7, nP.g));
+      fc = mix(fc, cSoil * 0.8, rw * 0.7);
+      fc = mix(fc, cGreens * vec3(0.72, 0.8, 0.62) * (0.9 + 0.2 * pv), smoothstep(1.0, 2.6, fp) * (0.5 + 0.5 * rw));
     } else {
       // polytunnels: white plastic hoops in rows (shaded as half cylinders), grass between
       float tw = 8.5 + 1.5 * fhmix(pid, 59);
@@ -517,9 +541,19 @@ ${LG ? '    }' : ''}
     // lattices), broken gaps, domes only where the wood is closed, gentle relief (the low sun exaggerates it)
     float treeBand = 1.0 - smoothstep(760.0, 830.0, vCov3.y);
     if (treeBand > 0.01) {
-      vec3 floorC = mix(vec3(0.07, 0.058, 0.038), vec3(0.065, 0.095, 0.035), smoothstep(0.4, 0.65, nB.g));
-      floorC = mix(floorC, vec3(0.11, 0.08, 0.045), smoothstep(0.62, 0.8, ${LG ? lnTex('p.xz * (1.0 / 6.3)', '(1.0 / 6.3)') + '.r' : 'nP2r(p.xz)'}) * 0.6);   // needle / leaf litter
+      vec3 floorC = mix(vec3(0.088, 0.066, 0.042), vec3(0.058, 0.098, 0.034), smoothstep(0.42, 0.62, nB.g));
+      floorC = mix(floorC, vec3(0.13, 0.095, 0.054), smoothstep(0.62, 0.8, ${LG ? lnTex('p.xz * (1.0 / 6.3)', '(1.0 / 6.3)') + '.r' : 'nP2r(p.xz)'}) * 0.6);   // needle / leaf litter
       floorC *= 0.8 + 0.35 * nB.r * midF;
+      // close up: single fallen leaves, dark gaps, twigs, a pale dry drift (the land's noise at leaf scale)
+      if (fp < 0.22) {
+        float lf = 1.0 - smoothstep(0.05, 0.22, fp);
+        vec4 nL = ${lnTex('p.xz * (1.0 / 0.41)', '(1.0 / 0.41)')};
+        vec4 nK = ${lnTex('p.zx * (1.0 / 1.7)', '(1.0 / 1.7)', 'yx')};
+        floorC *= 1.0 + lf * ((nL.r - 0.5) * 0.8 + (nK.g - 0.5) * 0.6);
+        floorC = mix(floorC, vec3(0.17, 0.1, 0.045), lf * smoothstep(0.6, 0.66, nL.b) * 0.6);
+        floorC = mix(floorC, vec3(0.14, 0.115, 0.07), lf * smoothstep(0.62, 0.68, nL.a) * smoothstep(0.45, 0.6, nK.r) * 0.55);
+        floorC = mix(floorC, vec3(0.025, 0.018, 0.012), lf * smoothstep(0.68, 0.72, nK.a) * 0.6);
+      }
       // far off, the gaps between the instanced crowns average out to the canopy tone
       floorC = mix(floorC, fcol * 0.8, smoothstep(2.0, 10.0, fp));
       fcol = mix(fcol, floorC, treeBand);
@@ -656,7 +690,20 @@ ${LG ? '    }' : ''}
     sc = mix(sc, scr * (0.85 + 0.3 * nB.r), scrubA * mix(0.12, clump * 0.8, near));
   }
   // wrack line of dried seaweed along the last high tide
-  sc *= 1.0 - 0.18 * (1.0 - smoothstep(0.15, 0.45 + fp, abs(p.y - ${(WL + 0.75).toFixed(2)} - 0.12 * (nB.g - 0.5)))) * (1.0 - smoothstep(0.5, 2.0, fp));
+  sc *= 1.0 - 0.3 * (1.0 - smoothstep(0.1, 0.4 + fp, abs(p.y - ${(WL + 0.75).toFixed(2)} - 0.14 * (nB.g - 0.5)))) * (1.0 - smoothstep(0.5, 2.0, fp));
+  // close up: grain, scuffs of feet and wind, broken shell along the upper beach
+  if (fp < 0.3 && nearSlabS < 0.99) {
+    float gf = (1.0 - smoothstep(0.04, 0.3, fp)) * (1.0 - nearSlabS);
+    vec4 nS1 = ${lnTex('p.xz * (1.0 / 0.37)', '(1.0 / 0.37)')};
+    vec4 nS2 = ${lnTex('p.zx * (1.0 / 2.3)', '(1.0 / 2.3)', 'yx')};
+    sc *= 1.0 + gf * ((nS1.r - 0.5) * 0.2 + (nS2.g - 0.5) * 0.2);
+    sc *= 1.0 - gf * 0.08 * smoothstep(0.5, 0.85, nS2.b);
+    vec2 sc1 = p.xz * 5.0;
+    vec2 sh = lhash22(floor(sc1));
+    float sr = length(fract(sc1) - 0.5 - (sh - 0.5) * 0.6);
+    float sd1 = step(sh.x, 0.07) * (1.0 - smoothstep(0.05, 0.05 + fp * 3.0, sr));
+    sc = mix(sc, sh.y < 0.6 ? vec3(0.78, 0.75, 0.68) : vec3(0.16, 0.14, 0.12), sd1 * gf * 0.85);
+  }
   sc *= mix(0.94 + 0.08 * nB.g * midF, 1.0, nearSlabS);
   // wind ripples — not next to the town beach (its sand is smooth)
   if (fp < 0.4) sc *= 1.0 - 0.05 * lStripe(p.x * 0.8 + p.z * 0.6 + nB.r * 3.0, 0.7, 0.4, fp) * smoothstep(20.0, 70.0, vCov3.y);
@@ -740,9 +787,11 @@ export function landMaterial(uniforms: Record<string, THREE.IUniform>, fog: bool
       .replace('#include <normal_fragment_maps>', '#include <normal_fragment_maps>\nnormal = normalize((viewMatrix * vec4(lnN, 0.0)).xyz);')
       .replace(
         '#include <lights_fragment_end>',
-        '#include <lights_fragment_end>\nreflectedLight.indirectDiffuse += diffuseColor.rgb * thLampLight(vLW, lnN);',
+        `#include <lights_fragment_end>
+${moonLift('smoothstep(8.0, 80.0, vCov3.y)')}
+reflectedLight.indirectDiffuse += diffuseColor.rgb * thLampLight(vLW, lnN);`,
       );
   };
-  mat.customProgramCacheKey = () => LG ? 'th-land-v2' : 'th-land-v1';
+  mat.customProgramCacheKey = () => LG ? 'th-land-v3' : 'th-land-v1b';
   return mat;
 }
