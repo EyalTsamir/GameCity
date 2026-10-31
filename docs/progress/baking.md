@@ -145,10 +145,10 @@ Harness lesson: WebGL query results arrive only after the task ends, so a bake m
 ## Checks on the final state
 - Typecheck and build OK. Overview at speed 4: invariants {}, validate [], console clean. Low, medium, storm and `?diorama`: no errors, images right.
 - `ui-test`: 70 of 71; the `kinds` click-follow step passes alone (the known flake).
-- Soak 4 min at 4×, a full game day: 0 violations, 0 new programs, 0 freezes, heap flat at about 920 MB after the first GC (the base is about 1 GB in the same check).
+- Soak 4 min at 4×, a full game day: 0 violations, 0 new programs, 0 freezes, heap flat at about 920 MB after the first GC.
 - Film: 0 new programs, 0 freezes, 12 hitches over 50 ms against 31 on the base, same run conditions.
 - `hitch.mjs` overview, 12 and 21.5: 0 new programs, 0 freezes, slowest frame 83 ms at boot.
-- Boot, warm shader cache, 4 loads each: ready at 11.6 s baked, 11.2 s not. In the next 12 s: 381 frames against 307 at the overview, slowest frame 100 ms against 83 (the uploads).
+- Boot, warm shader cache, 4 loads each, typical values (one slow outlier each, the first load of the browser among them): ready at 11.6 s baked, 11.2 s not. In the next 12 s: 381 frames against 307 at the overview, slowest frame 100 ms against 83 (the uploads).
 - A forced context loss comes back with the bakes on. Built site over http uses all five files; from `file://`, without S3TC and with the files blocked it runs procedural, same picture, no errors (a host with no `bake/` at all logs one 404 for the manifest).
 - 8 runs with visibility off, 6 on the base: no context loss.
 Not checked: the hand-over in motion by a human eye; a real host (nothing deployed); another GPU; a real phone (no S3TC was simulated).
