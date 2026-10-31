@@ -16,8 +16,12 @@ State:
 - DONE, seen by eye (`shots/dl/t1`): Town Hall hall `landmarks/townhallRoom.ts` (`?noherotownhall`): marble hall, imperial stair, galleries,
   stained laylight, wings with portraits, the city as a table model, enquiries counter, reception room, the balcony over the fountain.
   Floors by level: `Room.core` + `Rooms.feet` (one line each in `firstPerson.ts`: enter and before moving).
-- Checking: real-key walk through both (`walk2.mjs`, `shots/dl/w2`), laylight from below.
-- Not measured yet: perf, triangles of the rooms, `hitch.mjs`, ui-test.
+- DONE, seen by eye (`shots/dl/s2`): station hall `landmarks/stationRoom.ts` (`?noherostation`): street door to platform in a straight line, glass
+  vault with the rib shadow on the floor, compass mosaic, booking office, café, departures, people waiting.
+- DONE, seen (`shots/dl/x3`): `?noquaylife2` container quay clutter (`harbor/quayLife.ts`), `?nohorses` galloper horses + canopy bulbs, `?nobandroof`
+  bandstand roof; always on: real-size bricks (25 × 9.5 cm, `shaders.ts`), hazard bands on the crane legs (`?nocranekit`), lifeguard rails, shutters, lifebuoy (`?nobeachkit`).
+- Real-key walks (`walk2.mjs`): church door → altar rail; town hall square → stair → gallery → balcony and back; station street → hall → platform.
+- Open checks: `scratchpad/final.sh` results below.
 
 ## The room engine
 Near-only mesh per room (`Room.near`, nothing drawn in wide views), own ShaderMaterial, same surface patterns plus `RP.*` (flags, encaustic,

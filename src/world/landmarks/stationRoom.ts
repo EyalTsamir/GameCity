@@ -482,9 +482,13 @@ export function buildStationRoom(env: Env, rooms: Rooms, d: StationDims): Room {
     }
 
   // ── the walker: straight through, or wander
+  // the forecourt stands 0.41 above the hall floor: two steps down inside the front door
+  K.box(stone, 2.5, 0.205, 0.45, 0, yF, ZF - 0.23);
+  K.box(stone, 2.5, 0.41, d.zF - ZF + 0.14, 0, yF, (ZF + d.zF + 0.14) / 2);
+  room.walk(-1.25, ZF - 0.46, 1.25, ZF, yF + 0.205);
   room.walk(-IX, ZB, IX, ZF, yF);
   for (const s of [-1, 1]) for (const z of [ZF, ZB]) room.block(Math.min(s * 1.3, s * 1.4), z > 0 ? z - 1.25 : z, Math.max(s * 1.3, s * 1.4), z > 0 ? z : z + 1.25);
-  room.walk(-1.25, ZF - 0.05, 1.25, d.zF + 0.2, yF);
+  room.walk(-1.25, ZF, 1.25, d.zF + 0.2, yF + 0.41);
   room.walk(-1.25, d.zB - 0.2, 1.25, ZB + 0.05, yF);
 
   // ── people waiting: office hours, a share of them at any time
