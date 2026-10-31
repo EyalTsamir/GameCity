@@ -321,6 +321,9 @@ float thRH( float n ) { return fract( fract( n * 0.1031 ) * ( n * 0.1031 + 33.33
 // detail fade: 1 where the reflected direction changes slowly across a pixel, 0 where it swings fast
 // (tight curvature or far away) — set once per fragment in uniform control flow (fwidth)
 float thReflDet = 1.0;
+// lacquer: mirrors the street at grazing angles, little head-on (at a flat 1.8 the sky washed every dark colour to
+// the same silver-blue on all upward-facing panels)
+float thPaintGain( vec3 viewDir, vec3 n ) { float nv = clamp( dot( n, viewDir ), 0.0, 1.0 ); return mix( 1.0, 0.3, nv ); }
 float thStreetRefl( vec3 viewDir, vec3 n, float soft ) {
   vec3 R = inverseTransformDirection( reflect( -viewDir, n ), viewMatrix );
   float e = R.y + 0.12;
@@ -554,7 +557,7 @@ export function createVehicleMaterial(
     { vec3 thRw = reflect( -geometryViewDir, geometryNormal ); thReflDet = clamp( 1.6 - length( fwidth( thRw ) ) * 9.0, 0.0, 1.0 ) * step( 0.5, uVehDetail.w ); }
     #ifdef USE_CLEARCOAT
       // body paint (vCoat > 1.5) gets the street at more contrast: a lacquered panel mirrors it clearly
-      clearcoatRadiance *= vGain * thStreetRefl( geometryViewDir, geometryClearcoatNormal, 0.0 ) * ( vCoat > 1.5 && uVehDetail.w > 0.5 ? 1.8 : 1.0 );
+      clearcoatRadiance *= vGain * thStreetRefl( geometryViewDir, geometryClearcoatNormal, 0.0 ) * ( vCoat > 1.5 && uVehDetail.w > 0.5 ? thPaintGain( geometryViewDir, geometryClearcoatNormal ) : 1.0 );
       // G1: glass (gain 3.6) mirrors the street at about 60 %: at full gain the grey sky veil hid the cabin (smoked plastic)
       if ( uVehGlass > 0.5 && vGain > 3.0 ) clearcoatRadiance *= 0.6;
     #endif
@@ -577,7 +580,7 @@ export function createVehicleMaterial(
             : '#include <dithering_fragment>',
         );
     };
-    material.customProgramCacheKey = () => (seatDepth ? 'traffic-vehicle-v14' : 'traffic-vehicle-v14-nd');
+    material.customProgramCacheKey = () => (seatDepth ? 'traffic-vehicle-v15' : 'traffic-vehicle-v15-nd');
     patchLampMaterial(material); // night street-light map (night agent)
     return material;
   };

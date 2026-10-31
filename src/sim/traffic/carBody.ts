@@ -41,6 +41,17 @@ export interface CarShape {
   wheelR: number;
   /** dark plastic cladding along the bottom and round the arches (SUV) */
   clad?: boolean;
+  /** top of the bumpers (default: 0.27 above the sill) */
+  bumpTop?: number;
+  /** the model's own nose: end profile and how much the corners set back in plan */
+  nose?: EndProfile;
+  sweep?: number;
+  /** the same for the tail (a square tail keeps its lamps facing backwards, not round the corner) */
+  tail?: EndProfile;
+  tailSweep?: number;
+  /** the windscreen's base spreads out by this much each side, leaving a slim A pillar (a screen narrower at its
+   *  base than at its top reads as a toy) */
+  screenSpread?: number;
 }
 
 export type LoftRegion = 'body' | 'glass' | 'trim' | 'seal' | 'well' | 'clad' | 'bumper' | 'gap';
@@ -107,13 +118,13 @@ function archAt(s: CarShape, z: number): number {
 }
 
 /** top of the bumpers (the seam between bumper and wing / quarter panel) */
-export const bumperTop = (s: CarShape): number => s.sill + 0.27;
+export const bumperTop = (s: CarShape): number => s.bumpTop ?? s.sill + 0.27;
 
 // End zones: every ring point (0 bottom centre … 9 roof centre) has its own end, set back from the car's end
 // by `sb` (the fascia rakes back above the bumper, the chin tucks under), and over the last `r` metres before
 // it rounds in plan by `ix` and in elevation by `dy` along a quarter ellipse. The bumper line (point 3) reaches
 // furthest; the bonnet rolls down into the fascia; the corners round in plan, so the nose is no box.
-interface EndProfile {
+export interface EndProfile {
   sb: number[];
   ix: number[];
   dy: number[];
@@ -131,12 +142,40 @@ const TAIL: EndProfile = {
   dy: [0.025, 0.025, 0.01, 0, 0, -0.01, -0.025, -0.03, -0.037, -0.042],
   r: [0.1, 0.18, 0.32, 0.36, 0.36, 0.32, 0.22, 0.18, 0.16, 0.15],
 };
+export const TAIL_SQUARE: EndProfile = {
+  sb: [0.07, 0.07, 0.035, 0, 0.02, 0.035, 0.04, 0.045, 0.05, 0.05],
+  ix: [0, 0.04, 0.07, 0.085, 0.085, 0.09, 0.09, 0.085, 0.08, 0],
+  dy: [0.025, 0.025, 0.01, 0, 0, -0.01, -0.02, -0.025, -0.03, -0.035],
+  r: [0.1, 0.14, 0.18, 0.2, 0.2, 0.18, 0.15, 0.13, 0.12, 0.11],
+};
+/** upright square nose: a saloon or a wagon of the old school */
+export const NOSE_BLUNT: EndProfile = {
+  sb: [0.07, 0.07, 0.03, 0, 0.012, 0.03, 0.04, 0.045, 0.05, 0.055],
+  ix: [0, 0.04, 0.08, 0.1, 0.1, 0.11, 0.11, 0.1, 0.09, 0],
+  dy: [0.03, 0.03, 0.02, 0, 0, -0.01, -0.025, -0.03, -0.035, -0.04],
+  r: [0.1, 0.15, 0.22, 0.24, 0.24, 0.22, 0.18, 0.16, 0.15, 0.14],
+};
+/** a modern wedge: the fascia rakes well back from the bumper, the corners are cut hard */
+export const NOSE_WEDGE: EndProfile = {
+  sb: [0.08, 0.08, 0.04, 0, 0.06, 0.14, 0.17, 0.18, 0.19, 0.2],
+  ix: [0, 0.05, 0.16, 0.2, 0.23, 0.26, 0.27, 0.26, 0.2, 0],
+  dy: [0.03, 0.03, 0.025, 0, 0, -0.02, -0.05, -0.06, -0.07, -0.075],
+  r: [0.12, 0.2, 0.42, 0.48, 0.48, 0.44, 0.36, 0.3, 0.26, 0.24],
+};
+/** a little round car: everything turns in early */
+export const NOSE_ROUND: EndProfile = {
+  sb: [0.08, 0.08, 0.04, 0, 0.03, 0.07, 0.1, 0.12, 0.14, 0.16],
+  ix: [0, 0.06, 0.18, 0.24, 0.27, 0.29, 0.29, 0.28, 0.22, 0],
+  dy: [0.03, 0.03, 0.025, 0, 0, -0.02, -0.05, -0.065, -0.08, -0.09],
+  r: [0.14, 0.24, 0.46, 0.5, 0.5, 0.46, 0.4, 0.36, 0.3, 0.26],
+};
 const ZONE = 0.5;
 const RING = 10;
 /** the ends also curve in plan across their whole width: set-back at the corners relative to the centre */
 const SWEEP_NOSE = 0.07,
   SWEEP_TAIL = 0.05;
-const sweepAt = (s: CarShape, x: number, d: number, sg: number) => (sg > 0 ? SWEEP_NOSE : SWEEP_TAIL) * ((2 * x) / s.W) ** 2 * smooth(1 - d / ZONE);
+const sweepOf = (s: CarShape, sg: number) => (sg > 0 ? s.sweep ?? SWEEP_NOSE : s.tailSweep ?? SWEEP_TAIL);
+const sweepAt = (s: CarShape, x: number, d: number, sg: number) => sweepOf(s, sg) * ((2 * x) / s.W) ** 2 * smooth(1 - d / ZONE);
 
 const quarter = (u: number) => (u >= 1 ? 0 : 1 - Math.sqrt(Math.max(0, 1 - (1 - u) * (1 - u))));
 
@@ -176,12 +215,13 @@ function ringAt(s: CarShape, z: number, P: Float64Array): number {
   set(6, lerp(w - 0.05, w - 0.046), lerp(T - 0.008, belt + 0.03));
   set(7, lerp(w - 0.09, wt + 0.015), lerp(T, Math.max(belt + 0.035, T - 0.05)));
   // crowned bonnet / boot lid / roof
-  set(8, lerp(w - 0.3, wt - 0.09), T + lerp(0.018, 0.004));
+  const spread = s.screenSpread ? s.screenSpread * Math.min(smooth((s.wsBase + 0.28 - z) / 0.28), smooth((z - s.rwBase + 0.22) / 0.22)) : 0;
+  set(8, lerp(w - 0.3 + spread, wt - 0.09), T + lerp(0.018, 0.004));
   set(9, 0, T + 0.033);
   // end zones
   const d = h - Math.abs(z);
   if (d < ZONE) {
-    const e = z > 0 ? NOSE : TAIL;
+    const e = z > 0 ? s.nose ?? NOSE : s.tail ?? TAIL;
     const sg = z > 0 ? 1 : -1;
     let rMax = ZONE;
     // the tail's upper points round only within the boot deck (hatchbacks / SUVs end in the tailgate glass)
@@ -230,7 +270,7 @@ export function endSurface(s: CarShape, x: number, y: number, sign: number): { z
       const t = clamp01((yy - ya) / Math.max(1e-4, yb2 - ya));
       const xx = _P[k * 3] + (_P[(k + 1) * 3] - _P[k * 3]) * t;
       const zz = _P[k * 3 + 2] + (_P[(k + 1) * 3 + 2] - _P[k * 3 + 2]) * t;
-      if (i === 0 && ax <= xx) return zz + (sign * ((sign > 0 ? SWEEP_NOSE : SWEEP_TAIL) * 4 * (xx * xx - ax * ax))) / (s.W * s.W); // on the end cap
+      if (i === 0 && ax <= xx) return zz + (sign * (sweepOf(s, sign) * 4 * (xx * xx - ax * ax))) / (s.W * s.W); // on the end cap
       if (ax <= xx) {
         const u = (ax - px) / Math.max(1e-5, xx - px);
         return pz + (zz - pz) * u;
@@ -411,7 +451,7 @@ export function loftCar(s: CarShape, lod: number): LoftParts {
     B = new THREE.Vector3(),
     C = new THREE.Vector3();
   const nC = lod === 0 ? 8 : lod === 1 ? 3 : 1;
-  const sw = (sg: number) => (sg > 0 ? SWEEP_NOSE : SWEEP_TAIL) * 4 / (s.W * s.W);
+  const sw = (sg: number) => (sweepOf(s, sg) * 4) / (s.W * s.W);
   for (const j of [0, NS - 1]) {
     const sg = j === 0 ? -1 : 1;
     const k2 = sw(sg);
