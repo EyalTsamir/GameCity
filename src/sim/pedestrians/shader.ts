@@ -556,7 +556,7 @@ void pedPose(inout vec3 p, inout vec3 n) {
           lift = 0.002 * lump - 0.0035 * exp(-pX * pX / 0.000018) * smoothstep(0.1, 0.4, aux.y) * smoothstep(-0.05, 0.03, p.z) + 0.004 * sideK;
         } else if (hs == 5u) {
           // pulled back tight, nothing standing up
-          lift = 0.0011 * lump - 0.003 * smoothstep(0.5, 1.0, aux.y);
+          lift = 0.0011 * lump - 0.0012 * smoothstep(0.5, 0.8, aux.y) * (1.0 - smoothstep(0.85, 0.98, aux.y));
         } else lift = 0.0045 * lump + 0.007 * smoothstep(0.3, 1.0, aux.y) * (0.6 + 0.4 * -n.z);
         p += n * grow * lift;
         if (((iC1.y >> 24u) & 7u) != 0u) p -= n * 0.0086 * min(1.0, aux.y * 2.6);
@@ -1891,6 +1891,8 @@ void RE_IndirectDiffuse_Lambert( const in vec3 irradiance, const in vec3 geometr
   if ( pedSkinK > 0.0 ) {
     float nv = 1.0 - saturate( dot( geometryNormal, geometryViewDir ) );
     reflectedLight.indirectDiffuse += irradiance * (0.05 + 0.06 * uPedNight) * pedAO * nv * nv * nv;
+    float sLum = dot( material.diffuseColor, vec3( 0.3, 0.55, 0.15 ) );
+    pedAmb *= 1.0 + 1.6 * uPedNight * ( 1.0 - smoothstep( 0.02, 0.16, sLum ) );
   }
 #endif
   reflectedLight.indirectDiffuse += irradiance * pedAmb * uPedFill * ( 1.0 + below * vec3( 0.9, 0.82, 0.72 ) ) * BRDF_Lambert( material.diffuseColor );
