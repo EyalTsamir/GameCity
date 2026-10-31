@@ -260,7 +260,8 @@ export class PlanarReflection {
   private resize(): void {
     const r = this.ctx.renderer;
     r.getDrawingBufferSize(this.sz);
-    const k = (this.level === 2 ? 1 / 3 : 1 / 4.5) * Math.max(0.5, Math.min(1, this.ctx.quality.renderScale || 1));
+    // (the street mirror is only ever read blurred: the lower resolution)
+    const k = (this.level === 2 && !this.street ? 1 / 3 : 1 / 4.5) * Math.max(0.5, Math.min(1, this.ctx.quality.renderScale || 1));
     const w = Math.max(64, Math.round(this.sz.x * k)),
       h = Math.max(36, Math.round(this.sz.y * k));
     if (w !== this.width || h !== this.height) {

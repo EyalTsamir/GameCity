@@ -251,6 +251,7 @@ export function createRain(density: number, seed: () => number): Rain {
   splash.visible = false;
   splash.renderOrder = 6;
 
+  let warmFrames = 6;
   return {
     mesh,
     splash,
@@ -259,9 +260,12 @@ export function createRain(density: number, seed: () => number): Rain {
       su.uGroundXf.value.copy(xf);
     },
     update(time, amount, center, distance, camera, wind, color, resX, resY) {
-      mesh.visible = amount > 0.01;
+      // (the first frames draw both with nothing on, so that their programs compile at boot, not when the first rain falls)
+      const warm = warmFrames > 0;
+      if (warm) warmFrames--;
+      mesh.visible = amount > 0.01 || warm;
       const low = 1 - Math.min(1, Math.max(0, (camera.position.y - 25) / 90));
-      splash.visible = mesh.visible && low > 0 && !!su.tGround.value;
+      splash.visible = warm || (mesh.visible && low > 0 && !!su.tGround.value);
       if (!mesh.visible) return;
       const u = uniforms;
       camera.getWorldDirection(_fwd);

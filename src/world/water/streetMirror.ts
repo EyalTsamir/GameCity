@@ -34,6 +34,22 @@ vec2 rdRainRings(vec2 p) {
   float w = sin((r - ph * 0.3) * 62.0) * exp(-r * 9.0) * (1.0 - ph) * (1.0 - smoothstep(0.1, 0.27, r));
   return d / r * w * step(h, 0.3 + 0.6 * uRain) * step(0.05, uRain);
 }
+// paving: one blurred tap (it can fill the screen, and its joints break the image up anyway)
+vec3 rdPavingMirror(vec3 wp, float film, vec2 nn) {
+  if (uSRefl.x < 0.004 || film < 0.004) return vec3(0.0);
+  vec3 V = cameraPosition - wp;
+  float dist = length(V);
+  V /= dist;
+  float F = mix(0.1, 1.0, pow(1.0 - max(V.y, 0.0), 3.0));
+  vec2 q = wp.xz + (nn - 0.5) * min(0.6 + dist * 0.05, 2.5);
+  vec4 c0 = uSReflMat * vec4(q.x, 0.0, q.y, 1.0);
+  vec2 uv = c0.xy / c0.w;
+  vec4 r = textureLod(tSRefl, uv, 2.8);
+  vec2 ed = min(uv, 1.0 - uv);
+  float k = uSRefl.x * film * smoothstep(0.0, 0.03, min(ed.x, ed.y));
+  rdSpecOcc = 1.0 - clamp(r.a * k, 0.0, 1.0);
+  return min(r.rgb, vec3(6.0)) * F * k * 1.6;
+}
 // pud 0..1 standing water, film 0..1 wet surface, nn noise 0..1
 vec3 rdStreetMirror(vec3 wp, float pud, float film, vec2 nn) {
   if (uSRefl.x < 0.004) return vec3(0.0);

@@ -68,6 +68,7 @@ export class Lightning {
   private gains = [0, 0, 0, 0];
   private path: number[] = [];
   strikes = 0;
+  private warm = 6;
 
   constructor(
     private rng: LightningRng,
@@ -216,7 +217,9 @@ export class Lightning {
     }
     this.value = v;
     const on = v > 0.04 && this.geo.drawRange.count > 0;
-    this.mesh.visible = on;
+    // (the first frames draw it empty, so that its program compiles at boot, not at the first strike)
+    this.mesh.visible = on || this.warm > 0;
+    if (this.warm > 0) this.warm--;
     if (on) {
       this.mat.uniforms.uI.value = 42 * Math.min(1.6, v);
       (this.mat.uniforms.uRes.value as THREE.Vector2).set(resX, resY);
