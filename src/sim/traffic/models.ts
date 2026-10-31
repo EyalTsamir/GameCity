@@ -1169,7 +1169,7 @@ function sideDisc(r: number, n: number, side: number, x: number, y: number, z: n
  * the shader) on an alloy (five tapered spokes, lip, nuts, cap, brake disc behind), a steel wheel with a domed hub
  * cap, or a steel truck / bus wheel (boss + ten nuts). Middle level: tread + one textured face; far: plain discs.
  */
-function wheel(b: Builder, x: number, y: number, z: number, r: number, w: number, front: boolean, rim = RIM, style: WheelStyle = 'cap'): void {
+function wheel(b: Builder, x: number, y: number, z: number, r: number, w: number, front: boolean, rim = RIM, style: WheelStyle = 'cap', spokes = 5, spokeK = 1): void {
   const side = Math.sign(x) || 1;
   const wh = { x, y, z, front };
   const hw = w / 2;
@@ -1223,9 +1223,9 @@ function wheel(b: Builder, x: number, y: number, z: number, r: number, w: number
     // brake disc + hat behind the spokes
     b.add(sideDisc(rr * 0.8, 20, side, x + side * hw * 0.15, y, z), { color: '#75797e', rough: 0.9, finish: 'chrome', wheel: wh });
     b.add(sideDisc(r * 0.24, 12, side, x + side * hw * 0.2, y, z), { color: '#4a4e53', rough: 1, wheel: wh });
-    for (let k = 0; k < 5; k++) {
+    for (let k = 0; k < spokes; k++) {
       // tapered spoke, dished: the hub end stands proud of the rim lip
-      const sp = new THREE.BoxGeometry(0.026, rr - r * 0.12, 1, 1, 1, 1);
+      const sp = new THREE.BoxGeometry(0.026, rr - r * 0.12, spokeK, 1, 1, 1);
       const p = sp.attributes.position;
       const len = rr - r * 0.12;
       for (let i = 0; i < p.count; i++) {
@@ -1235,9 +1235,10 @@ function wheel(b: Builder, x: number, y: number, z: number, r: number, w: number
       }
       sp.computeVertexNormals();
       sp.translate(0, r * 0.12 + len / 2, 0);
-      sp.rotateX((k * 2 * Math.PI) / 5);
+      sp.rotateX((k * 2 * Math.PI) / spokes);
       sp.translate(face - side * 0.012, y, z);
       b.add(sp, { color: rim, rough: 0.5, wheel: wh });
+      if (k >= 5) continue;
       const nut = new THREE.CylinderGeometry(0.011, 0.011, 0.02, 6);
       nut.rotateZ(Math.PI / 2);
       const a = ((k + 0.5) * 2 * Math.PI) / 5;
@@ -1652,15 +1653,57 @@ function carTail(b: Builder, d: CarDims, s: CarShape, style: CarStyle): number {
   return plateY;
 }
 
+/** close level: the small things that tell a car from a model of one: exhaust, aerial, rubbing strips */
+function carSmalls(b: Builder, s: CarShape, style: CarStyle): void {
+  const hw = s.W / 2;
+  const tail = endRing(s, -1);
+  const pipe = (x: number, r: number) => {
+    const e = new THREE.CylinderGeometry(r, r * 0.92, 0.16, 10, 1, true);
+    e.rotateX(Math.PI / 2);
+    const y = tail[4] + 0.018;
+    e.translate(x, y, -s.L / 2 + 0.035);
+    b.add(e, { color: '#6b6f74', rough: 0.6, finish: 'chrome' });
+    const hole = new THREE.CircleGeometry(r * 0.86, 10);
+    hole.rotateY(Math.PI);
+    hole.translate(x, y, -s.L / 2 - 0.02);
+    b.add(hole, { color: '#08090a', rough: 1.8 });
+  };
+  const px = hw - 0.42;
+  if (style === 'sedan') {
+    pipe(px, 0.03);
+    pipe(px - 0.09, 0.03);
+  } else if (style === 'suv') pipe(px + 0.1, 0.042);
+  else pipe(px, style === 'compact' ? 0.022 : 0.028);
+  // a mast aerial on the old-school cars
+  if (style === 'sedan' || style === 'estate' || style === 'compact') {
+    const az = s.rwTop + 0.1;
+    const a = new THREE.CylinderGeometry(0.0022, 0.0045, 0.34, 4);
+    a.rotateX(-0.3);
+    a.translate(0, topAt(s, az) + 0.195, az - 0.05);
+    b.add(a, { color: '#191a1c', rough: 0.8 });
+  }
+  // rubbing strips along the doors, between the wheel arches
+  const ra = s.wheelR + 0.075;
+  const z0 = s.axR + ra + 0.04,
+    z1 = s.axF - ra - 0.04;
+  const y = s.sill + 0.26;
+  const strip: PartOpts | null = style === 'sedan' ? { color: CHROME, rough: 0.3 } : style === 'estate' || style === 'mpv' ? { color: '#1b1c1f', rough: 1 } : null;
+  if (strip) for (const sd of [1, -1] as const) b.add(flankDecal(s, sd, z0, z1, y, y + 0.035, 0.005), strip);
+}
+
 /** Wheels, lights, grilles, plates and badges common to the cars, placed on the lofted ends. */
 function carDetails(b: Builder, d: CarDims, s: CarShape): void {
   const { W } = d;
   const ws = d.wheel ?? 'alloy';
   const rc = d.rim ?? RIM;
-  wheel(b, d.wheelX, d.wheelR, d.axF, d.wheelR, d.wheelW, true, rc, ws);
-  wheel(b, -d.wheelX, d.wheelR, d.axF, d.wheelR, d.wheelW, true, rc, ws);
-  wheel(b, d.wheelX, d.wheelR, d.axR, d.wheelR, d.wheelW, false, rc, ws);
-  wheel(b, -d.wheelX, d.wheelR, d.axR, d.wheelR, d.wheelW, false, rc, ws);
+  // each model its own wheels: spokes and how broad they are
+  const sn = CAR_FACES && d.style === 'sedan' ? 10 : CAR_FACES && d.style === 'estate' ? 7 : CAR_FACES && d.style === 'suv' ? 6 : 5;
+  const sk = sn === 10 ? 0.5 : sn === 7 ? 0.72 : sn === 6 ? 1.25 : 1;
+  wheel(b, d.wheelX, d.wheelR, d.axF, d.wheelR, d.wheelW, true, rc, ws, sn, sk);
+  wheel(b, -d.wheelX, d.wheelR, d.axF, d.wheelR, d.wheelW, true, rc, ws, sn, sk);
+  wheel(b, d.wheelX, d.wheelR, d.axR, d.wheelR, d.wheelW, false, rc, ws, sn, sk);
+  wheel(b, -d.wheelX, d.wheelR, d.axR, d.wheelR, d.wheelW, false, rc, ws, sn, sk);
+  if (CAR_FACES && d.style && LOD === 0) carSmalls(b, s, d.style);
   const hw = W / 2;
   const dark: PartOpts = { color: '#16171a', rough: 1.3 };
   for (const sign of [1, -1]) {
@@ -1933,11 +1976,11 @@ function suv(): THREE.BufferGeometry {
   const ry = roofRails(b, shape, c, 0.065);
   roofBox(b, ry + 0.02, c.topZ, c.topW);
   // spare wheel on the tailgate
-  const sp = new THREE.CylinderGeometry(0.31, 0.31, 0.2, sg(14));
+  const sp = new THREE.CylinderGeometry(0.31, 0.31, 0.2, sg(26));
   sp.rotateX(Math.PI / 2);
   sp.translate(0, 0.84, -L / 2 - 0.09);
   b.add(sp, { color: TYRE, rough: 1.8 });
-  const cov = new THREE.CylinderGeometry(0.24, 0.24, 0.05, sg(14));
+  const cov = new THREE.CylinderGeometry(0.24, 0.24, 0.05, sg(26));
   cov.rotateX(Math.PI / 2);
   cov.translate(0, 0.84, -L / 2 - 0.2);
   b.add(cov, { color: '#ffffff', paint: true });
