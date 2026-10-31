@@ -33,7 +33,7 @@ export interface ParkedCar {
   label?: string;
 }
 
-const MOVING_CAP: Record<ModelKind, number> = { compact: 70, hatch: 80, sedan: 90, suv: 60, delivery: 40, lorry: 30, bus: 10, icecream: 4, bike: 70, moto: 70, estate: 0, mpv: 0 };
+const MOVING_CAP: Record<ModelKind, number> = { compact: 70, hatch: 80, sedan: 90, suv: 60, delivery: 40, lorry: 30, bus: 10, icecream: 4, bike: 70, moto: 70, estate: 40, mpv: 30 };
 const ROAD_Y = 0.012;
 /** beyond this camera distance a car popping in/out is a sub-4-pixel event */
 const POP_DIST = 290;
@@ -356,7 +356,9 @@ export class VehicleRenderer {
         L.mesh.setMatrixAt(idx, this.m4);
         L.mesh.setColorAt(idx, this.colorOf(V.color));
         L.a1.setXYZW(idx, V.brakeVis, this.blinker(V), (V.odo / sp.wheelR) % (Math.PI * 2), V.steer);
-        L.a2.setXYZW(idx, V.variant, V.twoWheel ? V.crank : V.siren, V.phase, V.seated ? 2 : 1);
+        // bus doors: fold open once it has stopped, close before it pulls away (shader: aInst2.y = 10 + open)
+      if (sp.model === 'bus') V.doorK = Math.max(0, Math.min(1, V.doorK + (V.dwell > 0.9 && V.v < 0.2 ? realDt * 1.5 : -realDt * 1.6)));
+      L.a2.setXYZW(idx, V.variant, V.twoWheel ? V.crank : sp.model === 'bus' ? 10 + V.doorK : V.siren, V.phase, V.seated ? 2 : 1);
       }
 
       if (showLights && V.onScreen) {

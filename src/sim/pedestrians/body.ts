@@ -18,6 +18,7 @@
 // Colour regions are resolved in the shader from per-instance colours and hem parameters, so
 // sleeves / trousers / tops / skirts are continuous parameters instead of hidden meshes.
 
+import { detailPeople } from '../../core/detailPeople';
 import * as THREE from 'three';
 import { flatConvention } from '../../core/perfdeep';
 import { TARGETS, TORSO_H, type BodyRing, type Dims, type FootRing, type LimbRing, type V3 } from './rig';
@@ -106,6 +107,8 @@ export const FB = {
   FRINGE: 26,
   /** shown only when NO hat is worn (hair volume on the crown) */
   NOHAT: 27,
+  /** close level: separate locks over the cap (hair that isn't cropped, no hat) */
+  LOCKS: 28,
 } as const;
 
 /** 0 near (< 40 m), 1 lo, 2 tiny, 3 pin, 4 close (< ~15 m: sculpted face, fingers, fabric detail) */
@@ -134,6 +137,8 @@ class MeshBuilder {
   /** stand-in positions for vertices whose rest position is degenerate (parametric skirt rings, the
    *  outer brim ring): used for the normals only (figureMesh) */
   standIn = new Map<number, P3>();
+  /** vertices whose normal leans towards a horizontal direction: (x, z, share) */
+  nHint = new Map<number, [number, number, number]>();
   d0: number[] = [];
   d1: number[] = [];
   d2: number[] = [];
@@ -399,7 +404,9 @@ const TORSO_BONE: [number, number][] = [
   [BONE.CHEST, 0],
   [BONE.CHEST, 0],
 ];
-const TORSO_TINT = [0.82, 0.92, 1, 1, 1, 1, 1, 1, 0.96, 1, 1.02, 1];
+// (hip blend: the dark rings at the bottom of the torso against a bright thigh drew a pair of briefs on light trousers)
+const HIP_BLEND = detailPeople('hipblend');
+const TORSO_TINT = [HIP_BLEND ? 0.93 : 0.82, HIP_BLEND ? 0.98 : 0.92, 1, 1, 1, 1, 1, 1, 0.96, 1, 1.02, 1];
 
 // ──────────────────────────────────────────────────────── body parts ──
 
@@ -512,7 +519,8 @@ function buildNeckHead(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
     const H = [1.0, 1.12, 1.25];
     for (const ri of cfg.neck) {
       const r = d.neckRings[ri];
-      b.use(BONE.HEAD, REG.NECK, -1, ri === 0 ? 0.86 : ri === 1 ? 0.93 : 1);
+      // (the jaw's shade on the throat: the head is otherwise cut out against a neck of the same brightness)
+      b.use(BONE.HEAD, REG.NECK, -1, ri === 0 ? 0.92 : ri === 1 ? 0.8 : 0.62);
       const ids: number[] = [];
       for (let k = 0; k < n; k++) ids.push(b.v(torsoPoint(r, 0, (k / n) * Math.PI * 2, 2), H[ri], W[ri]));
       rings.push({ ids, c: [0, r.y, r.cz] });
@@ -761,7 +769,7 @@ function buildCloseHead(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
   const jaw = rings[0].ids.map((id) => [b.pos[id * 3], b.pos[id * 3 + 1], b.pos[id * 3 + 2]] as P3);
   const under: Ring[] = [rings[0]];
   for (const u of [0.18, 0.4, 0.68, 1]) {
-    b.use(BONE.HEAD, REG.SKIN, -1, 0.92 - 0.06 * u);
+    b.use(BONE.HEAD, REG.SKIN, -1, 0.9 - 0.28 * u);
     const ids: number[] = [];
     for (let i = 0; i < n; i++) {
       const t = (i / n) * Math.PI * 2;
@@ -781,7 +789,7 @@ function buildCloseHead(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
     under.push({ ids, c: [0, R[0].y + 0.04, R[0].cz] });
   }
   bridge(b, under);
-  b.use(BONE.HEAD, REG.SKIN, -1, 0.84);
+  b.use(BONE.HEAD, REG.SKIN, -1, 0.62);
   const chin = b.v([0, neckIn.y + 0.01, neckIn.cz], 2, 0);
   capFan(b, under[under.length - 1], chin, [0, R[0].y + 0.05, R[0].cz]);
   // ears: a shell (helix rim standing off the head, hollow concha) between the brow and the nose base
@@ -1077,7 +1085,7 @@ function buildLeg(b: MeshBuilder, d: Dims, cfg: LodCfg, side: 1 | -1): void {
   const specs: LimbSpec[] = [];
   for (const i of cfg.thigh) {
     const r = d.thigh[i];
-    specs.push({ a: hp, b: kn, ring: r, bone: i === 5 ? SH : TH, w: THIGH_W[i], h: 1 - 0.5 * r.t, reg: REG.LEG, tint: i === 0 ? 0.86 : 1 });
+    specs.push({ a: hp, b: kn, ring: r, bone: i === 5 ? SH : TH, w: THIGH_W[i], h: 1 - 0.5 * r.t, reg: REG.LEG, tint: i === 0 ? (HIP_BLEND ? 0.93 : 0.86) : 1 });
   }
   for (const i of cfg.shin) {
     const r = d.shin[i];
@@ -1090,7 +1098,15 @@ function buildLeg(b: MeshBuilder, d: Dims, cfg: LodCfg, side: 1 | -1): void {
     buildLimb(b, specs, cfg.limbSides, side, false);
     return;
   }
-  buildLimb(b, specs, cfg.limbSides, side, true);
+  const legRings = buildLimb(b, specs, cfg.limbSides, side, true);
+  if (HIP_BLEND && cfg.details) {
+    // the thigh tube going into the pelvis is a crease all round the hip: its top rings take the pelvis's own outward
+    // normal, so cloth runs on over the join
+    cfg.thigh.forEach((i, j) => {
+      const k = i === 0 ? 1 : i === 1 ? 0.7 : i === 2 ? 0.22 : 0;
+      if (k > 0) for (const id of legRings[j].ids) b.nHint.set(id, [b.pos[id * 3], b.pos[id * 3 + 2] - hp[2], k]);
+    });
+  }
   // shoe last (foot frame: ankle at the origin, toes out 6°)
   const yaw = 0.105 * side;
   const cy = Math.cos(yaw),
@@ -1148,6 +1164,67 @@ function hairlineU(phi: number): number {
   return pts[pts.length - 1][1];
 }
 
+const HAIR_LOCKS = detailPeople('hairlocks');
+/** close level: 48 separate locks lying over the cap, combed down from the crown in three overlapping tiers, each its
+ *  own tone, standing off the scalp and tapering to a free tip past the hairline: the cap alone reads as a helmet */
+function buildHairLocks(b: MeshBuilder, d: Dims, vol: number, hk: number): void {
+  const chin = d.headRings[0].y - 0.006,
+    crown = d.crown;
+  const ss = (a: number, c: number, x: number) => {
+    const t = clamp((x - a) / (c - a), 0, 1);
+    return t * t * (3 - 2 * t);
+  };
+  // the cap's own surface (buildHair + the shader's lift), so a lock never sinks into it
+  const onCap = (phi: number, s: number, lift: number): P3 => {
+    const y0 = chin + (crown - chin) * hairlineU(phi);
+    const sp = Math.max(0, s);
+    const t = Math.pow(sp, 0.85);
+    const y = y0 + (crown - y0) * t + Math.min(0, s) * (crown - y0);
+    const cap = vol * (0.08 + 0.92 * Math.min(1, sp * 2.6)) * (1 - 0.35 * t);
+    const grow = ss(0.05, 0.45, sp) * (0.0045 + 0.007 * ss(0.3, 1, sp) * (0.6 - 0.4 * Math.cos(phi)));
+    return headSurface(d, phi, Math.min(y, crown - 0.004), cap + grow + lift * hk);
+  };
+  const centre: P3 = [0, chin + (crown - chin) * 0.62, d.headRings[5].cz];
+  let seed = 41;
+  const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  b.use(BONE.HEAD, REG.HAIR, FB.LOCKS, 1);
+  const lock = (phi: number, s0: number, s1: number, width: number, drift: number) => {
+    const tone = 0.82 + 0.26 * rnd();
+    const n = 3;
+    const ids: number[][] = [];
+    const C: P3[] = [];
+    for (let i = 0; i <= n; i++) {
+      const t = i / n;
+      const lift = 0.001 + 0.0052 * Math.sin(Math.PI * Math.min(1, t * 1.15)) + 0.0015 * t;
+      C.push(onCap(phi + drift * t * t, s0 + (s1 - s0) * t, lift));
+    }
+    for (let i = 0; i < n; i++) {
+      const t = i / n;
+      const tan = norm(sub(C[i + 1], C[i]));
+      const up = norm(sub(C[i], centre));
+      const side = norm(cross(tan, up));
+      const w = width * hk * (0.55 + 0.75 * Math.sin(Math.PI * (t * 0.8 + 0.1))) * (1 - 0.15 * t);
+      const tn = tone * (0.72 + 0.28 * Math.min(1, t * 2.5));
+      ids.push([b.v(add(C[i], mul(side, w)), 2, 0, 0, 0, tn * 0.92), b.v(add(C[i], mul(up, 0.0028 * hk)), 2, 0, 0, 0, tn), b.v(add(C[i], mul(side, -w)), 2, 0, 0, 0, tn * 0.92)]);
+    }
+    const tip = b.v(C[n], 2, 0, 0, 0, tone);
+    const up = norm(sub(C[1], centre));
+    for (let i = 0; i < n - 1; i++)
+      for (let k = 0; k < 2; k++) b.quadDir(ids[i][k], ids[i][k + 1], ids[i + 1][k + 1], ids[i + 1][k], norm(sub(C[i], centre)));
+    b.triDir(ids[n - 1][0], ids[n - 1][1], tip, up);
+    b.triDir(ids[n - 1][1], ids[n - 1][2], tip, up);
+  };
+  for (let k = 0; k < 14; k++) lock(((k + rnd() * 0.7) / 14) * Math.PI * 2, 0.97 - 0.04 * rnd(), 0.6 + 0.08 * rnd(), 0.017 + 0.007 * rnd(), (rnd() - 0.5) * 0.5);
+  for (let k = 0; k < 16; k++) lock(((k + 0.5 + rnd() * 0.6) / 16) * Math.PI * 2, 0.74 + 0.06 * rnd(), 0.3 + 0.1 * rnd(), 0.015 + 0.007 * rnd(), (rnd() - 0.5) * 0.45);
+  for (let k = 0; k < 18; k++) {
+    const phi = ((k + rnd() * 0.8) / 18) * Math.PI * 2;
+    const a = Math.abs(Math.atan2(Math.sin(phi), Math.cos(phi))); // 0 front … π back
+    // the front stops at the hairline (no curtain over the face), the sides and the nape run on past it
+    const tip = a < 1.0 ? 0.03 + 0.05 * rnd() : -0.015 - 0.06 * rnd() * ss(1.0, 1.6, a);
+    lock(phi, 0.42 + 0.08 * rnd(), tip, 0.012 + 0.007 * rnd(), (rnd() - 0.5) * 0.35);
+  }
+}
+
 function buildHair(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
   const n = cfg.hairSides ?? cfg.headSides;
   const chin = d.headRings[0].y - 0.006;
@@ -1174,6 +1251,7 @@ function buildHair(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
   bridge(b, rings);
   const apex = b.v([0, crown + vol * 0.75, d.headRings[d.headRings.length - 1].cz - 0.006], 2, 0, 0, 1);
   capFan(b, rings[rings.length - 1], apex, [0, crown - 0.06 * hk, 0]);
+  if (cfg.close && HAIR_LOCKS) buildHairLocks(b, d, vol, hk);
 
   if (cfg.hairLong.length === 0) return;
   // long hair sheet: hangs from the back / sides of the head behind the shoulders (aux1 = hang
@@ -1860,6 +1938,7 @@ function strapPath(b: MeshBuilder, d: Dims, cfg: LodCfg, p0: P3, p1: P3, wdt: nu
   }
 }
 
+const BAG_DETAIL = detailPeople('bagdetail');
 function buildProps(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
   const hk = d.H / 1.76;
   const all = cfg.props === 'all';
@@ -1872,11 +1951,13 @@ function buildProps(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
     if (far) softBox(b, [0, r7.y, back - 0.055 * hk], [0.27 * hk, 0.34 * hk, 0.11 * hk]);
     else {
       // rounded pack: a short loft (front face flat against the back)
-      const n = all ? 8 : 6;
+      const n = cfg.close ? 12 : all ? 8 : 6;
       const rings: Ring[] = [];
-      const ys = all ? [-0.18, -0.02, 0.17] : [-0.17, 0.15];
+      const ys = cfg.close ? [-0.18, -0.15, -0.02, 0.1, 0.16, 0.185] : all ? [-0.18, -0.02, 0.17] : [-0.17, 0.15];
       ys.forEach((dy, i) => {
-        const shrink = i === 0 || i === ys.length - 1 ? 0.85 : 1;
+        // a soft sack: full low down where the load sits, rolling over at the top; darker towards the bottom
+        const shrink = cfg.close ? [0.86, 0.98, 1, 0.95, 0.84, 0.62][i] : i === 0 || i === ys.length - 1 ? 0.85 : 1;
+        if (cfg.close) b.setTint([0.74, 0.82, 0.96, 1, 0.97, 0.9][i]);
         const ids: number[] = [];
         for (let k = 0; k < n; k++) {
           const phi = (k / n) * Math.PI * 2 + Math.PI / n;
@@ -1893,6 +1974,28 @@ function buildProps(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
         bo = rings[0];
       capFan(b, t, b.v(add(t.c, [0, 0.012 * hk, 0]), 0, 0), bo.c);
       capFan(b, bo, b.v(add(bo.c, [0, -0.012 * hk, 0]), 0, 0), t.c);
+      if (all && BAG_DETAIL) {
+        // the front pocket, a shade darker, standing proud of the pack's face
+        const zf = back - 0.115 * hk;
+        b.setTint(0.84);
+        softBox(b, [0, r7.y - 0.095 * hk, zf - 0.012 * hk], [0.2 * hk, 0.13 * hk, 0.034 * hk]);
+        if (cfg.close) {
+          // zips, side pockets, webbing down the body, the grab loop on top
+          b.use(BONE.CHEST, REG.DARK, FB.BACKPACK, 0.9);
+          softBox(b, [0, r7.y - 0.036 * hk, zf - 0.029 * hk], [0.17 * hk, 0.006 * hk, 0.003]);
+          softBox(b, [0, r7.y + 0.11 * hk, zf + 0.009 * hk], [0.2 * hk, 0.006 * hk, 0.004]);
+          b.use(BONE.CHEST, REG.BAG, FB.BACKPACK, 0.8);
+          for (const s of [1, -1]) softBox(b, [s * 0.139 * hk, r7.y - 0.105 * hk, back - 0.06 * hk], [0.018 * hk, 0.11 * hk, 0.075 * hk]);
+          b.use(BONE.CHEST, REG.STRAP, FB.BACKPACK, 0.72);
+          for (const s of [1, -1]) softBox(b, [s * 0.07 * hk, r7.y + 0.025 * hk, zf - 0.001 * hk], [0.016 * hk, 0.25 * hk, 0.004]);
+          const topY = r7.y + 0.165 * hk,
+            tz = back - 0.06 * hk;
+          const pk: P3 = [0, topY + 0.03 * hk, tz];
+          stick(b, [-0.035 * hk, topY - 0.002, tz], [-0.018 * hk, pk[1], tz], 0.0045);
+          stick(b, [-0.018 * hk, pk[1], tz], [0.018 * hk, pk[1], tz], 0.0045);
+          stick(b, [0.018 * hk, pk[1], tz], [0.035 * hk, topY - 0.002, tz], 0.0045);
+        }
+      }
       if (all) {
         // straps: pack top → over the shoulder (trapezius) → down the front of the chest
         b.use(BONE.CHEST, REG.STRAP, FB.BACKPACK, 0.7);
@@ -2182,6 +2285,21 @@ function computeNormals(pos: number[], idx: number[]): Float32Array {
   return n;
 }
 
+function applyHints(n: Float32Array, b: MeshBuilder): Float32Array {
+  for (const [i, [x, z, k]] of b.nHint) {
+    const o = i * 3,
+      l = Math.hypot(x, z) || 1;
+    const nx = n[o] * (1 - k) + (x / l) * k,
+      ny = n[o + 1] * (1 - k),
+      nz = n[o + 2] * (1 - k) + (z / l) * k;
+    const m = Math.hypot(nx, ny, nz) || 1;
+    n[o] = nx / m;
+    n[o + 1] = ny / m;
+    n[o + 2] = nz / m;
+  }
+  return n;
+}
+
 const md16 = (v: number) => clamp(Math.round((v + 1) * 32768), 0, 65535);
 const n10 = (v: number) => clamp(Math.round((v + 1) * 511.5), 0, 1023);
 
@@ -2204,8 +2322,8 @@ export function figureMesh(lod: Lod): FigureMesh {
   const base = T[0];
   const nv = base.count;
   for (const t of T) if (t.count !== nv || t.idx.length !== base.idx.length) throw new Error(`figure LOD${lod}: morph targets differ in topology`);
-  const N0 = computeNormals(withStandIns(base), base.idx);
-  const N1 = computeNormals(withStandIns(T[1]), base.idx);
+  const N0 = applyHints(computeNormals(withStandIns(base), base.idx), base);
+  const N1 = applyHints(computeNormals(withStandIns(T[1]), base.idx), T[1]);
   const morph = new Uint32Array(nv * 4);
   const data = new Uint32Array(nv * 4);
   for (let i = 0; i < nv; i++) {

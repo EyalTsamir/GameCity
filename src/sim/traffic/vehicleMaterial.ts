@@ -94,6 +94,19 @@ if ( aWheel.w > 0.5 ) transformed = aWheel.xyz + thWheel( transformed - aWheel.x
 // tyre contact patch: the rubber flattens where it meets the road (after the spin, so it stays at the bottom)
 if ( aDetC > 2.5 && aDetC < 3.5 ) transformed.y = max( transformed.y, aWheel.y - aDetA.x );
 if ( thHidden( aPart, aInst2.x, aInst2.z ) ) transformed = vec3( 0.0 );
+// bus doors (models.ts, kerb side, centred at z 4.35 and 0.25): each leaf folds in half against its jamb, out over the kerb
+if ( aInst2.y > 9.5 && aInst2.y > 10.001 && transformed.x < -1.253 && transformed.y > 0.36 && transformed.y < 2.46 ) {
+  float dz0 = abs( transformed.z - 4.35 ) < 0.62 ? 4.35 : abs( transformed.z - 0.25 ) < 0.62 ? 0.25 : -99.0;
+  if ( dz0 > -90.0 ) {
+    float dOpen = aInst2.y - 10.0;
+    float dz = transformed.z - dz0;
+    float dSide = dz >= 0.0 ? 1.0 : -1.0;
+    float dT = abs( dz ) / 0.58; // 0 at the meeting edge … 1 at the jamb
+    float dF = dOpen * dOpen * ( 3.0 - 2.0 * dOpen );
+    transformed.z = dz0 + dSide * 0.58 * mix( dT, 0.84 + 0.16 * dT, dF );
+    transformed.x -= 0.2 * dF * ( 1.0 - abs( 2.0 * dT - 1.0 ) );
+  }
+}
 vObj = vec4( transformed, aDetC );
 vObjN = vec4( objectNormal, aInst2.z );
 vDetA = aDetA;
@@ -308,15 +321,20 @@ float thRH( float n ) { return fract( fract( n * 0.1031 ) * ( n * 0.1031 + 33.33
 // detail fade: 1 where the reflected direction changes slowly across a pixel, 0 where it swings fast
 // (tight curvature or far away) — set once per fragment in uniform control flow (fwidth)
 float thReflDet = 1.0;
+// lacquer: mirrors the street at grazing angles, little head-on (at a flat 1.8 the sky washed every dark colour to
+// the same silver-blue on all upward-facing panels)
+float thPaintGain( vec3 viewDir, vec3 n ) { float nv = clamp( dot( n, viewDir ), 0.0, 1.0 ); return mix( 1.0, 0.3, nv ); }
 float thStreetRefl( vec3 viewDir, vec3 n, float soft ) {
   vec3 R = inverseTransformDirection( reflect( -viewDir, n ), viewMatrix );
   float e = R.y + 0.12;
-  float w = 0.022 + soft;
+  // (wider on flat panels, where the reflected direction hardly changes: a gap between two reflected blocks
+  // otherwise fills a boot lid as a hard-edged white rectangle)
+  float w = 0.022 + soft + 0.07 * thReflDet;
   float az = atan( R.x, R.z );
   // two rows of facades: near blocks (~25 around) with their roof lines over far, lower ones; soft block edges
   float a1 = az * 4.0, b1 = floor( a1 ), f1 = fract( a1 );
   float h1 = thRH( b1 + 17.0 ), h1n = thRH( b1 + 18.0 );
-  float hs = 0.1 + 0.42 * mix( h1, h1n, smoothstep( 0.9, 1.0, f1 ) );
+  float hs = 0.1 + 0.42 * mix( h1, h1n, smoothstep( 0.55, 1.0, f1 ) );
   float a2 = az * 9.0, h2 = thRH( floor( a2 ) + 51.0 );
   float hf = 0.06 + 0.16 * h2;
   // trees in front of some blocks: lumpy crowns that break the roof line
@@ -335,7 +353,7 @@ float thStreetRefl( vec3 viewDir, vec3 n, float soft ) {
   float up = max( e - hs, 0.0 );
   vec2 cp = R.xz / ( R.y + 0.25 ) * 2.2;
   float cl = smoothstep( 0.45, 0.8, thVN( vec3( cp, 5.0 ) ) * 0.65 + thVN( vec3( cp * 2.3, 9.0 ) ) * 0.35 );
-  float skyL = 1.1 + 1.5 * exp( -up * 6.0 ) + 0.7 * cl * thReflDet;
+  float skyL = 1.1 + 0.85 * exp( -up * 6.0 ) + 0.7 * cl * thReflDet;
   // ground: asphalt, a lighter pavement / kerb band just below the horizon
   float pav = smoothstep( -0.09, -0.06, e ) * ( 1.0 - smoothstep( -0.012, 0.0, e ) );
   float road = 0.07 + 0.18 * pav;
@@ -375,7 +393,7 @@ void thEll( vec3 ro, vec3 rd, vec3 c, vec3 r, vec3 col, inout float tb, inout ve
 void thSeat( vec3 ro, vec3 rd, vec3 ird, float cx, float hw, float z, float cy, float ty, float hy, vec3 col, inout float tb, inout vec3 nb, inout vec3 cb ) {
   thBox( ro, rd, ird, vec3( cx - hw, cy - 0.06, z - 0.11 ), vec3( cx + hw, ty, z ), col, tb, nb, cb );
   thBox( ro, rd, ird, vec3( cx - hw, cy - 0.16, z ), vec3( cx + hw, cy, z + 0.48 ), col * 1.08, tb, nb, cb );
-  thBox( ro, rd, ird, vec3( cx - 0.13, ty + 0.05, z - 0.09 ), vec3( cx + 0.13, hy, z - 0.01 ), col, tb, nb, cb );
+  thEll( ro, rd, vec3( cx, ( ty + hy ) * 0.5 + 0.02, z - 0.05 ), vec3( 0.125, ( hy - ty ) * 0.5 + 0.015, 0.055 ), col, tb, nb, cb );
 }
 // distance along the view ray (object frame) from the pane to the cabin surface seen through it, −1 = none
 float thHitT = -1.0;
@@ -434,7 +452,7 @@ vec3 thInterior( vec3 ro, vec3 rd, float style, float occupied, float ph ) {
       }
     }
   } else {
-    vec3 seatC = trimC * ( 0.9 + 0.5 * thH1( ph * 3.3 ) );
+    vec3 seatC = trimC * ( 0.65 + 0.4 * thH1( ph * 3.3 ) );
     float hy = roof - 0.12, ty = hy - 0.22, cy = belt - 0.36;
     float sx = hw * 0.5, shw = min( 0.25, hw * 0.45 );
     // dashboard under the windscreen, steering wheel on the left (driver) side
@@ -454,8 +472,8 @@ vec3 thInterior( vec3 ro, vec3 rd, float style, float occupied, float ph ) {
       // rear bench
       thBox( ro, rd, ird, vec3( -hw + 0.04, cy - 0.06, rz - 0.12 ), vec3( hw - 0.04, ty - 0.04, rz ), seatC, tb, nb, cb );
       thBox( ro, rd, ird, vec3( -hw + 0.04, cy - 0.16, rz ), vec3( hw - 0.04, cy, rz + 0.45 ), seatC * 1.08, tb, nb, cb );
-      thBox( ro, rd, ird, vec3( sx - 0.12, ty + 0.01, rz - 0.1 ), vec3( sx + 0.12, hy - 0.04, rz - 0.02 ), seatC, tb, nb, cb );
-      thBox( ro, rd, ird, vec3( -sx - 0.12, ty + 0.01, rz - 0.1 ), vec3( -sx + 0.12, hy - 0.04, rz - 0.02 ), seatC, tb, nb, cb );
+      thEll( ro, rd, vec3( sx, ty + 0.07, rz - 0.06 ), vec3( 0.115, 0.075, 0.05 ), seatC, tb, nb, cb );
+      thEll( ro, rd, vec3( -sx, ty + 0.07, rz - 0.06 ), vec3( 0.115, 0.075, 0.05 ), seatC, tb, nb, cb );
     }
     if ( occupied > 0.5 && vSeated < 0.5 ) {
       // the driver: rounded torso and shoulders, arms to the wheel, neck, head with hair
@@ -522,7 +540,9 @@ export function createVehicleMaterial(
         .replace('#include <color_vertex>', VERT_COLOR)
         .replace('#include <beginnormal_vertex>', '#include <beginnormal_vertex>\nif ( aWheel.w > 0.5 ) objectNormal = thWheel( objectNormal );')
         .replace('#include <begin_vertex>', `#include <begin_vertex>\n${VERT_BEGIN}`);
+      // (the sun shadow's per-pixel noise rotation speckles paint and glass: a fixed disc, same taps)
       shader.fragmentShader = shader.fragmentShader
+        .replace('#include <shadowmap_pars_fragment>', THREE.ShaderChunk.shadowmap_pars_fragment.replace('interleavedGradientNoise( gl_FragCoord.xy ) * PI2', '0.7'))
         .replace('#include <common>', `#include <common>\n${FRAG_PARS}`)
         .replace('#include <color_fragment>', `#include <color_fragment>\n${FRAG_DETAIL}`)
         .replace('#include <roughnessmap_fragment>', 'float roughnessFactor = clamp( roughness * vRough + thRoughAdd, 0.04, 1.0 );')
@@ -537,7 +557,7 @@ export function createVehicleMaterial(
     { vec3 thRw = reflect( -geometryViewDir, geometryNormal ); thReflDet = clamp( 1.6 - length( fwidth( thRw ) ) * 9.0, 0.0, 1.0 ) * step( 0.5, uVehDetail.w ); }
     #ifdef USE_CLEARCOAT
       // body paint (vCoat > 1.5) gets the street at more contrast: a lacquered panel mirrors it clearly
-      clearcoatRadiance *= vGain * thStreetRefl( geometryViewDir, geometryClearcoatNormal, 0.0 ) * ( vCoat > 1.5 && uVehDetail.w > 0.5 ? 1.8 : 1.0 );
+      clearcoatRadiance *= vGain * thStreetRefl( geometryViewDir, geometryClearcoatNormal, 0.0 ) * ( vCoat > 1.5 && uVehDetail.w > 0.5 ? thPaintGain( geometryViewDir, geometryClearcoatNormal ) : 1.0 );
       // G1: glass (gain 3.6) mirrors the street at about 60 %: at full gain the grey sky veil hid the cabin (smoked plastic)
       if ( uVehGlass > 0.5 && vGain > 3.0 ) clearcoatRadiance *= 0.6;
     #endif
@@ -560,7 +580,7 @@ export function createVehicleMaterial(
             : '#include <dithering_fragment>',
         );
     };
-    material.customProgramCacheKey = () => (seatDepth ? 'traffic-vehicle-v12' : 'traffic-vehicle-v12-nd');
+    material.customProgramCacheKey = () => (seatDepth ? 'traffic-vehicle-v15' : 'traffic-vehicle-v15-nd');
     patchLampMaterial(material); // night street-light map (night agent)
     return material;
   };

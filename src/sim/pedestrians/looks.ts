@@ -8,6 +8,7 @@
 // style, hems, jackets / coats / dresses, legwear, shoes) lives in `style`, drawn from a private
 // generator seeded by a hash of the main draws.
 
+import { detailPeople } from '../../core/detailPeople';
 import { Rng } from '../../core/rng';
 import { F } from './figure';
 
@@ -109,7 +110,8 @@ const H = (list: string[]) => list.map(hex);
 /** list with repeated entries (weights as counts) */
 const W = (pairs: [string, number][]) => pairs.flatMap(([c, n]) => Array.from({ length: n }, () => hex(c)));
 
-const SKIN = H(['#efcfb8', '#e9c3a6', '#e0b494', '#d4a17c', '#c48c64', '#ad754e', '#94603f', '#7a4b31', '#5e3825', '#e8bfa0']);
+// (the light end a little deeper and warmer: in full sun it blew out to a white mask on a face turned to the light)
+const SKIN = H(detailPeople('skintone') ? ['#e2bb9f', '#dbae90', '#d1a07f', '#c6906c', '#b88059', '#a36c47', '#8b5838', '#72452c', '#583321', '#dbab8c'] : ['#efcfb8', '#e9c3a6', '#e0b494', '#d4a17c', '#c48c64', '#ad754e', '#94603f', '#7a4b31', '#5e3825', '#e8bfa0']);
 const HAIR_YOUNG = W([
   ['#15110f', 3],
   ['#221913', 3],
