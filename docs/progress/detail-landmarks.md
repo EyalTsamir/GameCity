@@ -48,6 +48,17 @@ stars, plaster + stencil, oak, glass, pictures from the room atlas, flames, marb
 3. A few seated figures in the nave, near-only.
 4. Exteriors and harbour (not started): bandstand, lifeguard tower, harbour stairs slot (geometry-hunt #8 says fixed: check), film shots.
 
+## Results after round 6 (2026-10-31, high, 1920x1025, on AC, power guard clean)
+| view | ms, this branch | ms, `?nolmdetail` | delta | triangles delta | pair |
+|---|---|---|---|---|---|
+| overview | 35.89 | 35.60 | +0.29 | +155 k | round 5 same-state pair; round 6 only gave 236 v 209 draws (+0.26), crowd adds 19 k |
+| downtown | 35.28 | 35.02 | +0.26 | +86 k | 232 draws |
+| street | 32.36 | 32.31 | +0.05 | +24 k | 218 draws |
+| market | 32.17 | 31.76 | +0.41 | +83 k | 186 draws |
+
+`hitch.mjs`: prog+0 geo+0 tex+0 in every window. `shot --invariants --validate`: {} and []. ui-test: 70 passed, `kinds` failed in the full run and passed alone (known flake). `?diorama`, `?quality=medium|low`: invariants {}. The charger dropped twice during perf runs (09:42, 10:39): those runs were stopped by the guard and thrown away.
+Sheet: `docs/progress/detail/landmarks/stadium.jpg`.
+
 ## Results after round 5 (2026-10-31, high, 1920x1025, on AC, power guard clean)
 | view | ms, this branch | ms, `?nolmdetail` | delta | triangles delta |
 |---|---|---|---|---|
