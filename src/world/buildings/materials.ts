@@ -29,6 +29,7 @@ import * as THREE from 'three';
 import { FAR_BAKE_OUT, FAR_FRAG_MAIN, FAR_FRAG_PARS, FAR_VERT_MAIN, FAR_VERT_PARS, NEAR_VERT_MAIN, NEAR_VERT_PARS } from './farFacade';
 import type { GlobalUniforms } from '../../core/uniforms';
 import { LAMP_GLSL, lampUniforms } from '../../core/lampLight';
+import { GLASS_MIRROR_GLSL, glassMirror } from '../water/glassMirror';
 import { LEGACY_SHELL_FRAG_PARS, LEGACY_SHELL_FRAG_MAIN } from './legacyShell';
 import { perfOn } from '../../core/perfdeep';
 
@@ -615,6 +616,9 @@ vec3 bhPal(float h) {
   c = mix(c, vec3(0.9, 0.88, 0.84), step(0.88, h));
   return c;
 }
+#if BH_CLASS == 0 || BH_CLASS == 2
+${GLASS_MIRROR_GLSL}
+#endif
 // shelves of goods on a wall: q = (along the wall, height); kind 0 small boxes, 1 book spines, 2 bottles, 3 loaves
 #if BH_CLASS == 0 || BH_CLASS == 2
 vec3 bhShelves(vec2 q, vec3 wallC, float kind, float rs, float y0, float y1, float rowH) {
@@ -1782,13 +1786,24 @@ ${fg(`      float ew = max(0.09, fq.x * 1.25);
   vec3 Np = normalize(N + (T * ((r1 - 0.5) * 0.04 + (f.x - 0.5) * 0.03) + vec3(0.0, (r2 - 0.5) * 0.03 + (f.y - 0.5) * 0.025, 0.0)) * wob);
   vec3 R = reflect(V, Np);
   vec3 env = bhEnv(R, y, seed, fR, lodC, nightF);
+#if BH_CLASS == 0 || BH_CLASS == 2
+  // shop fronts and lobbies: the real street, while the mirror is on their plane (water/glassMirror.ts)
+  vec3 envM = env;
+  // (where the pass drew nothing it is sky: the plain gradient, since bhEnv paints a town of its own into the horizon)
+  float gmK = (style > 5.5 && uDetail > 0.5) ? bhGlassMirror(vWPos, N, (vec2(r1, r2) - 0.5) * 0.004, 0.0, mix(uSkyHor, uSkyZen, smoothstep(0.0, 0.6, R.y)), envM) : 0.0;
+#else
+  const float gmK = 0.0;
+#endif
   // punched windows at street level mirror the street and the buildings across it (per pane, with parallax)
   // (fq.x >= 0.25: the blend weight below is exactly 0 — skip the trace)
   // (light round: curtain walls too, up to ~10 storeys — the street across is what a glass tower mirrors at eye level)
-  if ((!curtain || uMirror > 0.5 && y < 32.0) && !ribbon && uDetail > 0.5 && uWinRefl > 0.5 && fq.x < 0.25) {
+  if ((!curtain || uMirror > 0.5 && y < 32.0) && !ribbon && uDetail > 0.5 && uWinRefl > 0.5 && fq.x < 0.25 && gmK < 0.999) {
     vec4 op = bhOpp(vWPos, R, N, Tu, seed, fq.x, nightF);
     env = mix(env, op.rgb, op.a * (1.0 - smoothstep(0.08, 0.25, fq.x)));
   }
+#if BH_CLASS == 0 || BH_CLASS == 2
+  env = mix(env, envM, gmK);
+#endif
   if (uBhDebug > 5.5 && uBhDebug < 6.5 || uBhDebug > 9.5) { albedo = vec3(0.0); emit = env; return; } // ?bdbg=refl: the reflected scene alone
   // sun glint: panels whose reflected azimuth lines up with the sun flash in a vertical streak
   vec2 sh = normalize(uSunDir.xz + vec2(1e-5, 0.0));
@@ -2210,6 +2225,9 @@ ${fg(`      float ew = max(0.09, fq.x * 1.25);
     if (shopWin || lobbyWin) {
       Fs = max(Fs, mix(0.04, 0.11 + 0.05 * r3, dayK) * (1.0 - openW));
       interior *= mix(1.0, 0.82, dayK);
+      // (with the real street to show: a bright street over a dim shop, as a window reads by day)
+      Fs = mix(Fs, max(Fs, 0.26 * (1.0 - openW)), gmK * dayK);
+      interior *= 1.0 - 0.3 * gmK * dayK;
     }
     transTint *= mix(vec3(0.93, 1.0, 0.97), vec3(1.0, 0.98, 0.95), fract(r3 * 4.7 + r1 * 0.3)) * mix(0.92, 1.04, fract(r2 * 6.1));
     float de = min(min(pm.x - wr.x, wr.y - pm.x), min(pm.y - wr.z, wr.w - pm.y)) - fw;
@@ -2222,7 +2240,7 @@ ${fg(`      float ew = max(0.09, fq.x * 1.25);
   // interior: per window a different balance (dark room / bright net curtain / sun on the glass across)
   float roomK = mix(0.62, 1.0, fract(r1 * 3.71));
   float reflK = (curtain || ribbon) ? mix(0.82, 1.18, fract(r2 * 2.93)) : mix(0.75, 1.9, fract(r2 * 2.93)) * (1.15 - 0.3 * roomK);
-  vec3 glass = interior * (1.0 - Fs) * transTint + refl * Fs * mix(0.65, 1.0, recess) * paneGrad * reflK * ((curtain || ribbon) ? 1.0 : (homey ? 0.72 : 1.6));
+  vec3 glass = interior * (1.0 - Fs) * transTint + refl * Fs * mix(mix(0.65, 1.0, recess) * paneGrad * reflK * ((curtain || ribbon) ? 1.0 : (homey ? 0.72 : 1.6)), 1.0, gmK);
   vec3 glassAlb = dayA * (1.0 - Fs) * transTint * (curtain ? 0.4 : (ribbon ? 0.7 : (homey ? mix(0.62 * roomK, 1.0, nearL) : mix(roomK, 1.0, nearL)))); // a room seen through glass by day is far darker than the facade around it
   // open sash: the swung pane shows a strip of darker, skewed reflection at the hinge side
   glass = mix(glass, env * 0.35 * reflTint, openW * (1.0 - smoothstep(0.62, 0.66, wx)));
@@ -2585,6 +2603,7 @@ export function createMaterials(g: GlobalUniforms, opts: { legacy?: boolean; wea
     });
     if (!legacy) {
       Object.assign(shader.uniforms, {
+        ...glassMirror,
         uBhNoise: { value: noise },
         uSkyGlow: uniforms.uSkyGlow,
         uSunCol: uniforms.uSunCol,

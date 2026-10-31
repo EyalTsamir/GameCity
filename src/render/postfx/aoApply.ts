@@ -190,6 +190,7 @@ export class AOApplyEffect extends Effect {
   private contactU: ContactUniforms | null;
   private contactPass: FullscreenPass | null = null;
   private contactRT: THREE.WebGLRenderTarget | null = null;
+  private contactWarm = false;
 
   /** @param exact use N8AO's original 3x3 compositer maths (debug / comparison) */
   constructor(u: AOUniforms, exact = false, contact: ContactUniforms | null = null) {
@@ -247,7 +248,11 @@ export class AOApplyEffect extends Effect {
       this.contactRT?.setSize(img.width, img.height);
     }
     // (a camera high above everything has no pixel in range: no pass, one compare per pixel in the prep)
-    if (this.contactPass && this.contactRT && this.contactU && this.contactU.uCOn.value.x > 0) this.contactPass.render(renderer, this.contactRT);
+    // (the first frame always: compiled at boot even if the first view is from the air)
+    if (this.contactPass && this.contactRT && this.contactU && (this.contactU.uCOn.value.x > 0 || !this.contactWarm)) {
+      this.contactWarm = true;
+      this.contactPass.render(renderer, this.contactRT);
+    }
     this.prep.render(renderer, this.pack);
   }
 

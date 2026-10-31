@@ -14,7 +14,7 @@ try {
   const res = await page.evaluate(async (v) => {
     const c = window.__city;
     c.setHours(21.5);
-    c.view({ x: v[0], y: v[1], z: v[2], distance: v[3], yaw: v[4], pitch: v[5] });
+    c.view({ target: { x: v[0], y: v[1], z: v[2] }, distance: v[3], yaw: v[4], pitch: v[5] });
     await new Promise((d) => setTimeout(d, 2000));
     const { renderer, scene } = c.ctx;
     const gl = renderer.getContext();
