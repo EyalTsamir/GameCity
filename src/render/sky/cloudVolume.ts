@@ -113,7 +113,8 @@ void main() {
       vec2 fd = (p.xz - uCloudFlash.xy) / uCloudFlash.w;
       amb += vec3(0.72, 0.8, 1.0) * uCloudFlash.z * exp(-dot(fd, fd)) * (1.0 - 0.6 * h01);
     }
-    vec3 L = uCloudSun * Tl * phase * (0.75 + 0.25 * h01) + amb;
+    // (no low sun reaches in under a storm's deck, whatever the holes in the cells near this point)
+    vec3 L = uCloudSun * Tl * phase * (0.75 + 0.25 * h01) * (1.0 - 0.97 * solid) + amb;
     S += T * L * a;
     tw += t * T * a;
     ww += T * a;
