@@ -56,5 +56,9 @@
  {"id": "text-placard", "area": "text", "x": 4.1, "z": -85.9, "yaw": 0, "y": 0.73},
  {"id": "text-ad", "area": "text", "x": -4.2, "z": -89, "yaw": 0, "y": 1.45},
  {"id": "text-works", "area": "text", "x": -156.1, "z": -96.1, "yaw": -90, "y": 1.4},
- {"id": "text-post", "area": "text", "x": -50.3, "z": -60.3, "yaw": 0, "y": 2.0}
+ {"id": "text-post", "area": "text", "x": -50.3, "z": -60.3, "yaw": 0, "y": 2.0},
+ {"id": "text-plate", "area": "text", "x": -121.3, "z": -72.7, "yaw": 0, "y": 2.8},
+ {"id": "text-blue", "area": "text", "x": 103, "z": -33.1, "yaw": 90, "y": 2.67},
+ {"id": "text-awning", "area": "text", "x": 23.2, "z": 50.6, "yaw": 180, "y": 2.5},
+ {"id": "text-shopdoor", "area": "text", "x": 6.5, "z": 89.03, "yaw": -75, "y": 1.5}
 ]

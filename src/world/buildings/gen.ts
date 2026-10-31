@@ -281,6 +281,7 @@ export function wallGrid(b: Builder, sg: SideGeom, uA: number, uB: number, y0: n
 export function wallPlain(b: Builder, sg: SideGeom, uA: number, uB: number, y0: number, y1: number, look: { color: THREE.Color; pattern: number; seed: number }, o = 0): void {
   if (uB - uA < 1e-3 || y1 - y0 < 1e-3) return;
   if (y0 < 0.5 && y1 > 2.2 && uB - uA > 1.4 && o === 0) anchors.spot(sg, 'wall', uA, uB, y0, y1, 0);
+  else if (y0 < 2.6 && y1 > 3.05 && uB - uA > 0.85 && o === 0) anchors.spot(sg, 'upper', uA, uB, y0, y1, 0);
   setCol(b, look.color);
   b.A[0] = b.A[1] = b.A[2] = b.A[3] = 0;
   b.B[0] = 0;
@@ -853,7 +854,7 @@ export function doorNiche(g: Gen, sg: SideGeom, u: number, o: DoorOpts): void {
     signOnSide(g, sg, u - nw / 2, u + nw / 2, 0.012, o.h + 0.24, o.h + 0.24 + nw * (48 / 72), r);
     anchors.spot(sg, 'number', u - nw / 2, u + nw / 2, o.h + 0.24, o.h + 0.24 + nw * (48 / 72), 0.012, { num, style: sty });
   }
-  anchors.spot(sg, 'door', ua, ub, 0, leafH, -d, { glass: !!o.glass, seed: o.seed, style: o.seed % 4 });
+  anchors.spot(sg, 'door', ua, ub, 0, leafH, -d, { glass: !!o.glass, seed: o.seed, style: o.seed % 4, depth: d });
   g.doorsBuilt++;
 }
 

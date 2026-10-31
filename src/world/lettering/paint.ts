@@ -595,7 +595,7 @@ export function streetPlate(s: LetterSink, name: string, w: number, h: number): 
   s.solid(b, b, b + 0.005, h - b, INK, z);
   s.solid(w - b - 0.005, b, w - b, h - b, INK, z);
   const up = name.toUpperCase();
-  const size = s.fit(up, w - 0.14, 0.075, FACE.SERIF_B, 0.03);
+  const size = s.fit(up, w - 0.2, 0.075, FACE.SERIF_B, 0.03);
   s.text(up, (w - 0.05) / 2 + 0.012, h / 2 - size * 0.34, size, { face: FACE.SERIF_B, color: INK, align: 'center', z: z + 0.0003, track: 0.03 });
   s.text('TH', w - 0.04, h / 2 - 0.012, 0.03, { face: FACE.SANS_B, color: 0xb4322a, align: 'center', z: z + 0.0003 });
 }
@@ -605,13 +605,10 @@ export function bluePlaque(s: LetterSink, seed: number, tier: Tier): void {
   const D = 0.44,
     c = D / 2;
   const who = heritageOf(seed);
-  const disc = (d: number, col: number, z: number) => {
-    for (let i = 0; i < 5; i++) s.sheet(c, c, d * 0.986, d * 0.986, (i * Math.PI) / 10, col, z);
-  };
   if (tier === 1) {
     s.fadeAt(24);
-    disc(D, 0xf2efe6, 0.002);
-    disc(D - 0.02, 0x1f4f8f, 0.0024);
+    s.disc(c, c, c, 0xf2efe6, 0.002);
+    s.disc(c, c, c - 0.01, 0x1f4f8f, 0.0024);
     return;
   }
   if (tier !== 2) return;

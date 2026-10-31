@@ -206,6 +206,26 @@ export class LetterSink {
     return this;
   }
 
+  /** a round plate: quads fanned from its centre */
+  disc(cx: number, cy: number, r: number, color: number, z = 0, parts = 12): this {
+    const zz = this.z0 + z,
+      nx = this.nx,
+      ny = this.ny,
+      nz = this.nz;
+    for (let i = 0; i < parts; i++) {
+      if ((this.nv + 4) * FLOATS > this.f.length || this.ni + 6 > this.idx.length) this.grow();
+      const a0 = (i / parts) * Math.PI * 2,
+        am = ((i + 0.5) / parts) * Math.PI * 2,
+        a1 = ((i + 1) / parts) * Math.PI * 2;
+      this.vert(cx, cy, zz, -1, 0, nx, ny, nz, color, 0.5, 0, 0, 24);
+      this.vert(cx + Math.cos(a0) * r, cy + Math.sin(a0) * r, zz, -1, 0, nx, ny, nz, color, 0.5, 0, 0, 24);
+      this.vert(cx + Math.cos(am) * r, cy + Math.sin(am) * r, zz, -1, 0, nx, ny, nz, color, 0.5, 0, 0, 24);
+      this.vert(cx + Math.cos(a1) * r, cy + Math.sin(a1) * r, zz, -1, 0, nx, ny, nz, color, 0.5, 0, 0, 24);
+      this.quadIdx();
+    }
+    return this;
+  }
+
   /** a box standing on the surface (x, y on it, from z to z + d): a frame's rail, a case, a plate with an edge */
   box(x0: number, y0: number, x1: number, y1: number, d: number, color: number, side = shade(color, 0.72), z = 0): this {
     const a = this.z0 + z,

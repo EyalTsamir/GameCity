@@ -229,6 +229,7 @@ export default function create(ctx: CityContext): CityModule {
       const shop = word ? shopOfWord(p.lot, word) : shopByLot.get(p.lot);
       const seed = (p.seed ?? p.lot) + p.lot * 131;
       const addr = addressOf(lot);
+      const back = p.depth ?? 0.3;
       if (p.glass && shop) {
         for (const tier of [1, 2] as Tier[]) {
           put(tier, cx(p), cz(p), (s) => {
@@ -242,8 +243,7 @@ export default function create(ctx: CityContext): CityModule {
           for (const tier of [1, 2] as Tier[]) {
             put(tier, cx(p), cz(p), (s) => {
               // on the wall beside the door, outside the frame
-              const depth = 0.35;
-              s.frame(p.x + p.tx * (p.w + 0.2) + p.nx * depth, 1.14, p.z + p.tz * (p.w + 0.2) + p.nz * depth, p.tx, 0, p.tz, 0, 1, 0, 0.003);
+              s.frame(p.x + p.tx * (p.w + 0.2) + p.nx * back, 1.14, p.z + p.tz * (p.w + 0.2) + p.nz * back, p.tx, 0, p.tz, 0, 1, 0, 0.003);
               paint.homeBells(s, flats, seed, tier);
             });
           }
@@ -255,19 +255,19 @@ export default function create(ctx: CityContext): CityModule {
           });
         }
         // some old houses remember somebody
-        if ((lot.kind === 'townhouse' || lot.kind === 'apartment') && seed % 9 === 4 && open(p, p.w + 0.4)) {
+        if ((lot.kind === 'townhouse' || lot.kind === 'apartment') && seed % 3 === 1 && open(p, -0.5)) {
           for (const tier of [1, 2] as Tier[]) {
             put(tier, cx(p), cz(p), (s) => {
-              const u = p.w + 0.28;
-              s.frame(p.x + p.tx * u + p.nx * 0.3, 2.45, p.z + p.tz * u + p.nz * 0.3, p.tx, 0, p.tz, 0, 1, 0, 0);
+              const u = -0.72; // (a porch lamp may have the other side)
+              s.frame(p.x + p.tx * u + p.nx * back, 2.45, p.z + p.tz * u + p.nz * back, p.tx, 0, p.tz, 0, 1, 0, 0);
               paint.bluePlaque(s, seed, tier);
             });
           }
-          marks.push(['blue', p.x + p.tx * (p.w + 0.5), 2.67, p.z + p.tz * (p.w + 0.5), p.nx, p.nz]);
+          marks.push(['blue', p.x - p.tx * 0.5, 2.67, p.z - p.tz * 0.5, p.nx, p.nz]);
         }
         // a detached house has a name by the door; a works says who it is and what to do
         const beside = p.w + 0.2;
-        const atWall = (s: LetterSink): LetterSink => s.frame(p.x + p.tx * beside + p.nx * 0.3, 1.32, p.z + p.tz * beside + p.nz * 0.3, p.tx, 0, p.tz, 0, 1, 0, 0.003);
+        const atWall = (s: LetterSink): LetterSink => s.frame(p.x + p.tx * beside + p.nx * back, 1.32, p.z + p.tz * beside + p.nz * back, p.tx, 0, p.tz, 0, 1, 0, 0.003);
         if (lot.kind === 'house' && seed % 3 !== 2 && open(p, beside + 0.1)) {
           put(1, cx(p), cz(p), (s) => paint.housePlate(atWall(s), seed));
         } else if ((lot.kind === 'warehouse' || lot.kind === 'factory' || lot.kind === 'depot') && open(p, beside + 0.3)) {
@@ -531,7 +531,7 @@ export default function create(ctx: CityContext): CityModule {
     const seen = new Set<string>();
     const nodes = ctx.plan.roadNodes.filter((n) => n.kind === 'junction');
     for (const p of spots) {
-      if (p.kind !== 'wall' || p.w < 1.2 || p.h < 3) continue;
+      if ((p.kind !== 'wall' && p.kind !== 'upper') || p.y + p.h < 3.05) continue;
       const mx = cx(p),
         mz = cz(p);
       let bi = -1,
@@ -549,7 +549,7 @@ export default function create(ctx: CityContext): CityModule {
       const key = `${bi}:${st.name}`;
       if (seen.has(key)) continue;
       seen.add(key);
-      const W = 0.78,
+      const W = Math.min(0.78, p.w - 0.06),
         H = 0.17;
       put(0, mx, mz, (s) => {
         s.frame(p.x + (p.tx * (p.w - W)) / 2, 2.75, p.z + (p.tz * (p.w - W)) / 2, p.tx, 0, p.tz, 0, 1, 0, 0.002);

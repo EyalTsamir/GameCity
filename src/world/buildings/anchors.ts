@@ -136,7 +136,7 @@ export interface ShopFront {
 
 /** Somewhere on a facade that lettering may go (world/lettering): a rectangle on a wall, a door, a sign board. */
 export interface LetterSpot {
-  kind: 'fascia' | 'band' | 'window' | 'door' | 'wall' | 'tenants' | 'number' | 'awning';
+  kind: 'fascia' | 'band' | 'window' | 'door' | 'wall' | 'tenants' | 'number' | 'awning' | 'upper';
   lot: number;
   /** world position of the rectangle's lower left corner, seen from outside */
   x: number;
@@ -156,6 +156,8 @@ export interface LetterSpot {
   fg?: number;
   /** door: glazed */
   glass?: boolean;
+  /** how far a door stands back from its wall */
+  depth?: number;
   seed?: number;
   /** a number on the plate, floors of a building */
   num?: number;
