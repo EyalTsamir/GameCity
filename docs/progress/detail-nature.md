@@ -70,7 +70,9 @@ Undergrowth moved to a fourth mesh without a shadow pass, ferns thinned (fewer t
 Perf `perf5` (on AC, 3 repeats, `;nonature`, high, 1920×1025), overview / downtown / street / market:
 +0.37 / +0.54 / +0.47 / +0.46 ms; triangles −22 k / +213 k / +141 k / +260 k (frame-to-frame swing of the shadow passes is ±200 k; market
 is at the +250 k line within it); draw calls −12 / +7 / +3 / +11. Static: kit ~100 k tris, build ~650 ms at boot.
-Checks: see the last commit message of this log; before / after sheets in `docs/progress/detail/nature/`.
+Checks at the last code commit (2cd67a6): typecheck, build 4.11 MB; overview at speed 4 invariants `{}`, validate `[]`; hitch prog+0 in every window;
+`quality=medium`, `quality=low` and `?diorama` clean with `{}` / `[]`; film sheet looked at in seek mode, nature hardly in it; ui-test 70 passed + `kinds` (flake, alone: see below).
+Before / after sheets in `docs/progress/detail/nature/`.
 Best views: farmland `farm=-340,4,300,70,30,14` at noon and 18.2; sunflowers and pylon `-300,3,-130,60,30,6`; wood `-250,6,-260,30,160,8`
 at noon; river at eye level `-520,0.5,160,16,250,5`; hill towns from `overview` at noon; farm yard `-382,3,97,34,60,14`; dune pines `330,2,420,60,70,8`.
 Files outside my folders: none. `src/core/nature.ts` is new.
