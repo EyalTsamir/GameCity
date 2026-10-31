@@ -784,7 +784,8 @@ function buildCloseBeard(b: MeshBuilder, d: Dims): void {
       const hf = 1 - 0.8 * t * t;
       const notch = 0.0022 * Math.exp(-((phi / 0.09) ** 2));
       const Y = -0.0535 - droop + ri * 0.0072 * hf - (ri > 0 ? notch : 0);
-      return b.v(closeHeadPoint(d, phi, Y, (ri === 0 ? 0.0044 * (1 - 0.55 * t * t) : 0.0018) * k).p, 2, 0);
+      const cm = closeHeadPoint(d, phi, Y, (ri === 0 ? 0.0044 * (1 - 0.55 * t * t) : 0.0018) * k);
+      return b.v(cm.p, 2, 0, cm.X, ri * hf);
     }),
   );
   for (let r = 0; r < 2; r++) for (let c = 0; c < mp.length - 1; c++) b.quadOut(rows[r][c], rows[r][c + 1], rows[r + 1][c + 1], rows[r + 1][c], [0, d.headRings[3].y, d.headRings[3].cz - 0.03]);

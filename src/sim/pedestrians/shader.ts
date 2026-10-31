@@ -435,7 +435,7 @@ void pedPose(inout vec3 p, inout vec3 n) {
   }
   else if (region == ${R.FOOT}) vPedFace = vec3(aux, 2.0);
   else if (region == ${R.TORSO}) vPedFace = vec3(aux.x, pedP8(iC2.w) * 0.4 + 0.95 > 1.02 ? 1.0 : (iC2.z & ${1 << FB.COLLAR}u) != 0u ? 0.5 : 0.0, 0.0);
-  else if (region == ${R.BEARD} && ((d0 >> 10u) & 63u) == ${FB.BEARD + 1}u) vPedFace = vec3(aux, 7.0);
+  else if (region == ${R.BEARD}) vPedFace = vec3(aux, ((d0 >> 10u) & 63u) == ${FB.BEARD + 1}u ? 7.0 : 8.0);
 //@endif
 //@if !F&!CL&!NF
   if (region == ${R.FACE}) {
@@ -1608,7 +1608,15 @@ const FRAG_COLOR = /* glsl */ `
     }
 #ifndef PED_FAR
 #ifdef PED_CLOSE
-    if (vPedFace.z > 6.5) {
+    if (vPedFace.z > 7.5) {
+      // MOUSTACHE: aux y runs -1 … 1 over its height; its edge breaks into hairs
+      float mh = 1.0 - abs(vPedFace.y);
+      float mp = mix(pedN1(vPedFace.x * 1300.0), 0.5, smoothstep(0.3, 0.7, fwidth(vPedFace.x * 1300.0)));
+      if (mh + (mp - 0.5) * 0.7 < 0.04) discard;
+      pc *= pedStrands(vPedRest) * (0.84 + 0.16 * smoothstep(0.0, 0.4, mh));
+      pc = pedGrey(pc, vPedRest);
+    }
+    else if (vPedFace.z > 6.5) {
       // BEARD: the shell covers the lower face, where it grows is the person's own: 0 full, 1 goatee, 2 along the jaw, 3 close and boxed.
       // Ends in single hairs. Strands hang.
       vec2 F = vPedFace.xy;
@@ -1681,6 +1689,10 @@ const FRAG_COLOR = /* glsl */ `
 #endif
 #ifdef PED_CLOSE
       pc = pedGrey(pc, vPedRest);
+      if (vPedFC.x == 2u) {
+        vec2 hfc = pedHairFlow(vPedRest);
+        pc *= 0.86 + 0.32 * mix(pedN2(vec2(hfc.x * 15.0, hfc.y * 19.0)), 0.5, smoothstep(0.25, 0.6, fwidth(hfc.x * 15.0)));
+      }
       float aA = abs(a);
       float hk0 = float((vPedFC.y >> 8u) & 255u) / 255.0, hk1 = float((vPedFC.y >> 16u) & 255u) / 255.0;
       float ageH = float((vPedFB & 3u) * 2u + ((vPedFB >> 11u) & 1u)) / 7.0;
@@ -1775,6 +1787,12 @@ const HAIR_NORMAL = /* glsl */ `
     float hk2 = 1.0 - smoothstep(0.35, 0.8, fwidth(hc2));
     float hbrk = 0.55 + 0.45 * pedN1(hf.y * 16.0 + ha * 5.0);
     float hH = 0.55 * sin(hq * 6.2832) * 0.00009 * hk + (pedN1(hc2) + 0.5 * pedN1(hc2 * 2.3 + 7.0) - 0.75) * 0.0006 * hk2 * hbrk;
+#ifdef PED_CLOSE
+    if (vPedFC.x == 2u) {
+      float cuK = 1.0 - smoothstep(0.25, 0.6, fwidth(ha * 15.0));
+      hH += (pedN2(vec2(ha * 15.0, hf.y * 19.0)) + 0.5 * pedN2(vec2(ha * 31.0, hf.y * 37.0)) - 0.75) * 0.0065 * cuK;
+    }
+#endif
     if (vPedFace.z > 4.5) {
       // sheet: each big lock is a rounded bundle (its normal curves across it, so the sheen breaks per lock)
       vec3 lk = pedLocks(vPedRest, vPedFace.x);
