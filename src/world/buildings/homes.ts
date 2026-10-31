@@ -23,9 +23,10 @@ import {
 } from './gen';
 import { WIN, PROF, WALLPAT, ROOFPAT, FRAME, GLASS, LIGHT_MODE } from './materials';
 import { genHouseLegacy } from './houses';
-import { windowBox, shutterPair, shutterState, downpipe, acUnit, climber } from './clutter';
+import { windowBox, shutterPair, shutterState, downpipe, acUnit, climber, potPlant, aerial, dish } from './clutter';
 import { dB } from '../../core/detailbuildings';
 import { homeSide, homeBack } from './services';
+import { GABLE_PAINTS, gableDress, cornerDress, dentils, roofWindow, ventPipe, weatherVane, hoop, hangingBasket, waterButt } from './owners';
 import { Rng } from '../../core/rng';
 import { MASS } from './massing';
 import { GREEN } from './green';
@@ -170,6 +171,8 @@ export function genHouse(g: Gen): void {
     M.z0 += ed;
   }
   const garageInSide = plan !== 'garage';
+  // ?noowners: run last, so that their random draws leave the rest of the house alone
+  const later: ((r: Rng) => void)[] = [];
 
   // ── classic porch recess (only plan 'classic')
   const pd = rng.range(1.7, 2.1);
@@ -281,6 +284,10 @@ export function genHouse(g: Gen): void {
     setCol(t, shade(trimC, 0.92));
     t.hrect(pa, zP, pb, M.z1, postH - 0.31, false);
     if (rng.chance(0.6)) porchBench(pa, pb, pa + du, zP + 0.25, 0.16);
+    later.push((r) => {
+      if (r.chance(0.6)) for (const x of [pa + 0.55, pb - 0.55]) hangingBasket(g, x, M.z1 - 0.32, postH - 0.3, r);
+      if (r.chance(0.7) && du > 1.1) potPlant(g, psg, du - 0.85, 0.28, 0.16, 1, GREEN.GERANIUM);
+    });
   } else {
     // door in the main front wall (veranda / L-plan recess / garage plan / bay plan)
     const ops: Op[] = [{ u: doorX - M.x0, w: 1.05, h: 2.2, kind: 'door' }];
@@ -302,6 +309,14 @@ export function genHouse(g: Gen): void {
       groundRun(sgF, a, b, ops, true, gH, true);
     } else groundRun(sgF, 0, M.x1 - M.x0, ops, true, gH, true);
     if (bay) bayWindow(M.x0 + bay.a, M.x0 + bay.b, M.z1, F.z1);
+    if (plan === 'lplan' || plan === 'bay') {
+      const bayFree = bay && bay.a + M.x0 < doorX ? M.x1 - 0.38 : M.x0 + 0.38;
+      const buttX = wing ? (wing.x0 > M.x0 + 0.01 ? M.x0 + 0.38 : M.x1 - 0.38) : bayFree;
+      later.push((r) => {
+        if (Math.abs(buttX - doorX) > 1.2 && r.chance(0.55)) waterButt(g, buttX, M.z1 + 0.33, r);
+        if (r.chance(0.8)) for (const k of r.chance(0.5) ? [-1, 1] : [1]) potPlant(g, sgF, doorX - M.x0 + k * 1.02, 0.3, 0.02, 1, r.chance(0.5) ? GREEN.PETUNIA : GREEN.GERANIUM);
+      });
+    }
     if (plan === 'bay' || plan === 'garage') doorHood(doorX, M.z1);
     // porch lamp beside the door (below 2.4 m only where the wall is set back from the footprint)
     if (plan === 'garage') wallLamp(g, sgF, doorX - M.x0 + 0.95, 2.42, 0);
@@ -389,6 +404,7 @@ export function genHouse(g: Gen): void {
     gambrelRoof(M, eave, yr);
   }
 
+  let wingGable: { sg: SideGeom; yR: number; attic: boolean } | null = null;
   // ── L wing: front-gabled, ridge across the main ridge, roof runs into the main front slope
   if (wing) {
     const ws = sideGeom(wing, FRONT);
@@ -413,6 +429,7 @@ export function genHouse(g: Gen): void {
     const fs = sideGeom(wr, FRONT);
     const attic = makeGrid(fs.L / 2 - 0.55, fs.L / 2 + 0.55, eave + 0.3, Math.min(1.5, wRise * 0.6), 1, { spacing: 1.1, cols: 1, winW: 0.7, winH: Math.min(0.9, wRise * 0.42), sill: 0.05, margin: 0 });
     wallTri(s, fs, 0, fs.L, fs.L / 2, eave, eave + wRise, upPlain, wRise > 1.9 ? attic : null, WIN.MUNTIN, PROF.HOME, frameIdx, GLASS.NEUTRAL);
+    wingGable = { sg: fs, yR: eave + wRise, attic: wRise > 1.9 };
     // porch roof over the recess in front of the door (lean-to between wing and body corner)
     const ra = wingIsRight ? M.x0 : wing.x1,
       rb = wingIsRight ? wing.x0 : M.x1;
@@ -445,6 +462,9 @@ export function genHouse(g: Gen): void {
     setCol(t, col('#b9b2a6'));
     t.box(sa, 0, F.z1 - 0.12, sb, 0.11, F.z1 - 0.01, 0b110111);
     if (rng.chance(0.7)) porchBench(va, vb, doorX, M.z1 + 0.25, 0.22);
+    later.push((r) => {
+      if (r.chance(0.7)) for (let k = 0; k < n; k++) if (k % 2 === 0 || n < 3) hangingBasket(g, va + 0.12 + ((vb - va - 0.24) * (k + 0.5)) / n, zp - 0.22, 2.5, r);
+    });
   }
 
   // ── garage wing
@@ -570,7 +590,11 @@ export function genHouse(g: Gen): void {
       if (yBase + 1.35 + 0.3 < yTopD) for (const x of xs) gableDormer(x, zFront, yBase, slope, kindD === 2, yTopD);
     }
   }
-  if (frontSlope && !dormers && roofKind !== 'gambrel' && rng.chance(0.2)) solar(eave, rise);
+  let panels = false;
+  if (frontSlope && !dormers && roofKind !== 'gambrel' && rng.chance(0.2)) {
+    solar(eave, rise);
+    panels = true;
+  }
   // chimney: on the ridge near one end, or at a gable end
   {
     const ch = col(rng.pick(['#9a5a45', '#8a4f3e', '#a0a0a0', '#b5a48e']));
@@ -612,6 +636,75 @@ export function genHouse(g: Gen): void {
       const sd = sideGeom(M, rng.chance(0.5) ? LEFT : RIGHT);
       if (sd.L > 3) climber(g, sd, rng.range(1.2, sd.L - 1.2), rng.range(1.2, 2.6), rng.range(2.2, eave - 0.3), INS, rng.chance(0.6) ? GREEN.IVY_WALL : GREEN.JASMINE);
     }
+  }
+
+  // ?noowners: what the owners did over the years (owners.ts)
+  if (dB('owners')) {
+    const r = new Rng(((lot.seed * 67) ^ 0x3c6ef372) >>> 0 || 11);
+    const gk = r.int(0, 4);
+    const paint = col(r.pick(GABLE_PAINTS));
+    if (gk < 3) {
+      if (roofKind === 'gableX' || roofKind === 'gableZ') {
+        for (const sd of (ridgeAlongX ? [RIGHT, LEFT] : [FRONT, BACK]) as Side[]) gableDress(g, sideGeom(M, sd), eave, yr, yr - eave > 2.2, gk, paint, r);
+      }
+      if (wingGable) gableDress(g, wingGable.sg, eave, wingGable.yR, wingGable.attic, gk, paint, r);
+    }
+    // corners of the front
+    const up = twoTone ? gH + 0.04 : 0.2;
+    const corner: 'boards' | 'quoins' | null = siding ? 'boards' : !brick ? (r.chance(0.55) ? 'quoins' : null) : r.chance(0.3) ? 'quoins' : null;
+    if (corner && floors === 2) {
+      const cC = corner === 'boards' ? trimC : col(r.pick(['#d9d3c4', '#c9bfae', '#e2d9c6']));
+      for (const right of [false, true]) {
+        const x = right ? M.x1 : M.x0;
+        const flushWing = wing && (right ? wing.x1 >= M.x1 - 1e-3 : wing.x0 <= M.x0 + 1e-3);
+        const open = plan === 'classic' && (right ? porchRight : porchLeft);
+        const byGarage = gar && (right ? gar.x0 >= M.x1 - 1e-3 : gar.x1 <= M.x0 + 1e-3);
+        const y0 = byGarage ? Math.max(up, garTop + 0.3) : open ? Math.max(up, gH + 0.04) : up;
+        cornerDress(g, x, flushWing ? F.z1 : M.z1, right, y0, eave - 0.03, corner, cC);
+      }
+    }
+    if (brick && floors === 2 && r.chance(0.6)) dentils(g, sgF, wing && wing.x0 <= M.x0 + 0.01 ? wing.x1 - M.x0 : 0, wing && wing.x0 > M.x0 + 0.01 ? wing.x0 - M.x0 : sgF.L, eave - 0.2, wc);
+    // things on the roof
+    if (roofKind !== 'gambrel') {
+      const away = g.driveSide === RIGHT ? -1 : 1;
+      const useFront = ridgeAlongX && !dormers && !panels && plan !== 'lplan' && r.chance(0.5);
+      if (ridgeAlongX) {
+        const halfR = (M.z1 - M.z0) / 2;
+        const len = Math.hypot(1, pitch);
+        if (r.chance(0.55) && halfR > 2) {
+          const wW = 0.78,
+            wL = 1.15;
+          const x = (M.x0 + M.x1) / 2 - away * r.range(0.3, 1.1) - wW / 2;
+          const d = halfR * r.range(0.32, 0.45);
+          if (useFront) roofWindow(g, [x, eave + d * pitch, M.z1 - d], [1, 0, 0], [0, pitch / len, -1 / len], wW, wL);
+          else roofWindow(g, [x + wW, eave + d * pitch, M.z0 + d], [-1, 0, 0], [0, pitch / len, 1 / len], wW, wL);
+        }
+        if (r.chance(0.7)) {
+          const d = halfR * r.range(0.5, 0.75);
+          ventPipe(g, (M.x0 + M.x1) / 2 + away * r.range(0.4, 1.4), eave + d * pitch, M.z0 + d);
+        }
+      }
+      const rx = ridgeAlongX ? (M.x0 + M.x1) / 2 - away * (M.x1 - M.x0) * 0.32 : (M.x0 + M.x1) / 2;
+      const rz = ridgeAlongX ? (M.z0 + M.z1) / 2 : M.z0 + (M.z1 - M.z0) * 0.72;
+      if (roofKind === 'gableX' || roofKind === 'gableZ') {
+        if (r.chance(0.2)) weatherVane(g, rx, yr + 0.08, rz, r);
+        else if (r.chance(0.4)) aerial(g, rx, rz, yr, r.range(1.5, 2.3));
+      }
+    }
+    if (floors === 2 && r.chance(0.16)) {
+      const sd = sideGeom(M, g.driveSide === LEFT ? LEFT : RIGHT);
+      if (sd.L > 4) dish(g, sd, sd.L * r.range(0.35, 0.65), eave - 0.75, 0);
+    }
+    if (gar && r.chance(0.5)) {
+      const fsg = sideGeom(gar, FRONT);
+      hoop(g, fsg, fsg.L / 2, garTop);
+    }
+    // a rose or jasmine trained up the front
+    if (plan !== 'classic' && plan !== 'veranda' && r.chance(0.3) && sgF.L > 5) {
+      const u = doorX - M.x0 > sgF.L / 2 ? 0.75 : sgF.L - 0.75;
+      if (!wing) climber(g, sgF, u, r.range(0.8, 1.4), Math.min(eave - 0.3, r.range(2.6, 5)), INS, r.chance(0.5) ? GREEN.JASMINE : GREEN.BOUGAIN);
+    }
+    for (const f of later) f(r);
   }
 
   // ──────────────────────────────────────────────────── helpers ──
