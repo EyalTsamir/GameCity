@@ -241,7 +241,7 @@ export function buildWoods(s: RowSink, model: LandscapeModel): WoodsStats {
         }
         st.shrubs++;
         n++;
-      } else if (patch > 0.36 || pick > 0.82) {
+      } else if (patch > 0.44 || pick > 0.88) {
         // bracken and bramble mounds in drifts
         const a = hash2i(i, j, 835) * 3.14;
         const w = 0.55 + 0.55 * hash2i(i, j, 836);

@@ -373,7 +373,11 @@ export default function create(ctx: CityContext): CityModule {
       wires = buildPowerLines(sink, model, fog);
       root.add(wires);
     }
-    if (nature(ctx, 'woodfloor')) woodStats = buildWoods(sink, model);
+    if (nature(ctx, 'woodfloor')) {
+      sink.bucket = 3;
+      woodStats = buildWoods(sink, model);
+      sink.bucket = -1;
+    }
     if (nature(ctx, 'riverrocks')) buildRiverRocks(sink, model);
     const edge = ctx.plan.places?.edge;
     if (edge && nature(ctx, 'edgehedge')) buildEdgeHedge(sink, edge.hedgeX, edge.hedges);

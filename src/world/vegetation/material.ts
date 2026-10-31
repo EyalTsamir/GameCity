@@ -176,11 +176,11 @@ void thCell8( vec3 p, out vec3 d, out float edge, out float id ) {
 // leaves in it, dark gaps between them (no clay)
 const HEDGE_LEAF = natureOn('hedgeleaf')
   ? /* glsl */ `
-      float f3 = 1.0 - smoothstep( 0.12, 0.4, foot * 3.1 );
+      float f3 = ( 1.0 - smoothstep( 0.12, 0.4, foot * 3.1 ) ) * step( thAmt, 0.7 ) * step( 0.55, thAmt ); // hedges only (leafiness 0.62)
       if ( f3 > 0.001 ) {
         vec4 n3 = thNoised( p * 3.1 + vec3( 3.1, 8.7, 1.3 ) );
         float lv = smoothstep( -0.2, 0.16, n3.x );
-        diffuseColor.rgb *= mix( vec3( 1.0 ), ( 0.26 + 0.52 * lv ) * vec3( 1.0 + 0.1 * n3.y, 1.0, 1.0 - 0.14 * n3.y ), f3 );
+        diffuseColor.rgb *= mix( vec3( 1.0 ), ( 0.12 + 0.3 * lv ) * vec3( 1.0 + 0.1 * n3.y, 1.0, 1.0 - 0.14 * n3.y ), f3 );
         thAO *= mix( 1.0, 0.45 + 0.55 * lv, f3 );
         g += n3.yzw * ( 0.9 * f3 );
       }

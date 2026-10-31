@@ -524,8 +524,10 @@ const vBand = (b: number, t: number) => (b + (PAD + (1 - t) * (BH - 2 * PAD)) / 
 /** the merged kit: chunks of static geometry in world coordinates */
 export class RowSink {
   private chunks = new Map<number, Chunk>();
+  /** ≥ 0: everything goes into this mesh until reset (3 = undergrowth under the canopy: no shadow pass) */
+  bucket = -1;
   private ch(x: number, z: number): Chunk {
-    const k = Math.abs(x) > NEAR_BOX || Math.abs(z) > NEAR_BOX ? 2 : z < 0 ? 0 : 1;
+    const k = this.bucket >= 0 ? this.bucket : Math.abs(x) > NEAR_BOX || Math.abs(z) > NEAR_BOX ? 2 : z < 0 ? 0 : 1;
     let c = this.chunks.get(k);
     if (!c) this.chunks.set(k, (c = new Chunk()));
     return c;

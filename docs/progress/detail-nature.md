@@ -4,10 +4,11 @@ Owns `src/world/vegetation*`, `src/world/groundcover*`, `src/world/landscape*`. 
 Switch file: `src/core/nature.ts` (`?nonature`, `?no<feature>`).
 
 ## Resume here
-Round 1 committed (8d33e7c, 73cb1ba). Round 2 (woods, hedges, limbs, wires) in progress: see Log. Next: farm yards,
-mountains' tree line, river rocks check, tiers (medium/low, diorama), final checks. Dev server: `npx vite --port 5204
---strictPort --host 127.0.0.1` from this worktree. Captures from the main checkout with `--url http://127.0.0.1:5204/`,
-output into `shots/nat/` of this worktree (ignored). `shots/nat/brk.mjs <view> <query> <js>` is a one-off probe (ignored).
+Three rounds done, final checks run (see the end of the Log). Nothing in progress. Left, in order of worth: clipped garden
+hedge tops are still smooth at under 3 m; beach sand beyond the slab is plain; bare hills at 1–4 km could take more copses
+(each costs impostors); reed plumes a little heavy and pink at eye level. Dev server: `npx vite --port 5204 --strictPort
+--host 127.0.0.1` from this worktree. Captures from the main checkout with `--url http://127.0.0.1:5204/`, output into
+`shots/nat/` (ignored).
 
 ## Audit, round 0 (shots/nat/a0, a1: 25 views at 11 and 18.2)
 What reads as fake, ranked by how much of the first impression it costs:
@@ -52,7 +53,27 @@ second row of flowers in kerb planters (`fullplanters`), meadow mottling softene
 
 Toggles so far: `?nonature`, `?nofarmkit`, `?nostriphedges`, `?nofarmrows`, `?nobales`, `?nofarmfences`, `?noreedbeds`,
 `?nodunekit`, `?nopowerlines`, `?notreekinds`, `?noskyline`, `?nohillscatter`, `?noavenues`, `?nocropblades`,
-`?nowoodfloor`, `?noriverrocks`, `?noedgehedge`, `?notreelimbs`, `?nohedgeleaf`, `?nofullplanters`.
+`?nowoodfloor`, `?noriverrocks`, `?noedgehedge`, `?notreelimbs`, `?nohedgeleaf`, `?nofullplanters`, `?nofarmyard`, `?notownglow`.
+
+### Round 3
+Fresh audit (w5, w6): overview and farms hold up at noon and 18.2; yards were bare; lights in the country hard to see at 21.5.
+Added: farm yards (`farmyard`, `farmstead.ts`: gravel surface, muck heap, log stack, trough, drums, pallets, two ricks, wind pump
+on ~70 % of the three real farms); country lights 1.7 m / min 2.3 px / brighter (`townglow`). A big town halo was tried and
+removed: the sprite is depth-clipped by the hill and reads as a rising moon.
+Trim: kit in three meshes (north, south, far; far casts no shadow), draw calls from +72 to about +10.
+Checks so far: typecheck, build 4.11 MB, overview `{}` / `[]` at speed 4, hitch prog+0 in all windows, quality medium / low
+and `?diorama` clean, film sheet fine (nature hardly in it), ui-test 70 passed + `kinds` (known flake, rerun alone).
+
+Undergrowth moved to a fourth mesh without a shadow pass, ferns thinned (fewer triangles), hedge core drops into shade near the camera.
+
+### Final state
+Perf `perf5` (on AC, 3 repeats, `;nonature`, high, 1920×1025), overview / downtown / street / market:
++0.37 / +0.54 / +0.47 / +0.46 ms; triangles −22 k / +213 k / +141 k / +260 k (frame-to-frame swing of the shadow passes is ±200 k; market
+is at the +250 k line within it); draw calls −12 / +7 / +3 / +11. Static: kit ~100 k tris, build ~650 ms at boot.
+Checks: see the last commit message of this log; before / after sheets in `docs/progress/detail/nature/`.
+Best views: farmland `farm=-340,4,300,70,30,14` at noon and 18.2; sunflowers and pylon `-300,3,-130,60,30,6`; wood `-250,6,-260,30,160,8`
+at noon; river at eye level `-520,0.5,160,16,250,5`; hill towns from `overview` at noon; farm yard `-382,3,97,34,60,14`; dune pines `330,2,420,60,70,8`.
+Files outside my folders: none. `src/core/nature.ts` is new.
 
 ## Hand-offs
 - Streets / places: pale green ellipses on the gravel ruts of the west lane (`hedge_lane=-196.4,1.6,20,10,180,4`): read as stains.
