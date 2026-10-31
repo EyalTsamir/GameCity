@@ -15,7 +15,9 @@ export interface BakeManifest {
 let manifest: Promise<BakeManifest | null> | null = null;
 
 export function bakeOn(params: URLSearchParams): boolean {
-  return !params.has('nobake') && location.protocol !== 'file:';
+  // (the browser's data saver: the same picture, computed here)
+  const saver = (navigator as Navigator & { connection?: { saveData?: boolean } }).connection?.saveData === true;
+  return !params.has('nobake') && !saver && location.protocol !== 'file:';
 }
 
 function readManifest(): Promise<BakeManifest | null> {
@@ -102,9 +104,13 @@ function decodeBC1(src: Uint8Array, w: number, h: number): Uint8Array {
   return out;
 }
 
+let s3tc: boolean | null = null;
 const supportsS3TC = (): boolean => {
-  const gl = document.createElement('canvas').getContext('webgl2');
-  return !!gl && !!gl.getExtension('WEBGL_compressed_texture_s3tc') && !!gl.getExtension('WEBGL_compressed_texture_s3tc_srgb');
+  if (s3tc === null) {
+    const gl = document.createElement('canvas').getContext('webgl2');
+    s3tc = !!gl && !!gl.getExtension('WEBGL_compressed_texture_s3tc') && !!gl.getExtension('WEBGL_compressed_texture_s3tc_srgb');
+  }
+  return s3tc;
 };
 
 /** a baked BC1 texture (sRGB unless `linear`), or null when it is not available or was made from something else (`key`); never rejects */

@@ -2,7 +2,7 @@
 // Bake: run the city's own shaders once in the real browser and store the results as files the page loads
 // (docs/progress/baking.md). Everything still comes from this repository's code; no external asset goes in.
 //
-//   npm run bake                      everything whose inputs changed (seconds; the visibility job, when due, some minutes)
+//   npm run bake                      everything whose inputs changed (about a minute)
 //   node scripts/bake.mjs [--url http://127.0.0.1:5210/] [--only fac0,fac1,fac2] [--force 1] [--out public/bake]
 //
 // Starts its own dev server unless --url names one of this source tree; needs Chrome (scripts/browser.mjs). Writes
@@ -40,7 +40,8 @@ fs.mkdirSync(outDir, { recursive: true });
 
 /** one bake job: page code for an RGBA8 render target (or for base64 bytes), page code for the fingerprint of its inputs */
 const JOBS = {
-  pvs: { bytes: `__city.ctx.services.pvs.bake()`, key: `__city.ctx.services.pvs.key()` },
+  // (off: src/render/pvs.ts. Only with --only pvs, some minutes)
+  pvs: { bytes: `__city.ctx.services.pvs.bake()`, key: `__city.ctx.services.pvs.key()`, optIn: true },
   land0: { rt: `__city.ctx.services.landscape.renderBake(0)`, key: `__city.ctx.services.landscape.bakeKey()` },
   land1: { rt: `__city.ctx.services.landscape.renderBake(1)`, key: `__city.ctx.services.landscape.bakeKey()` },
   fac0: { rt: `__city.ctx.services.buildings.renderFarBake(0)`, key: `__city.ctx.services.buildings.farBakeKey()`, sharp: 0.35 },
@@ -77,6 +78,13 @@ function fillHoles(rgba, w, h) {
 
 const manifestPath = path.join(outDir, 'manifest.json');
 const manifest = fs.existsSync(manifestPath) ? JSON.parse(fs.readFileSync(manifestPath, 'utf8')) : { files: {} };
+/** the fingerprint is in the name: a browser's or a host's cache can never pair a new manifest with an old file */
+function store(name, file, data, key) {
+  const old = manifest.files[name]?.file;
+  if (old && old !== file) fs.rmSync(path.join(outDir, old), { force: true });
+  fs.writeFileSync(path.join(outDir, file), data);
+  manifest.files[name] = { file, bytes: data.length, key };
+}
 
 await acquireLock();
 const { browser } = await launchBrowser({});
@@ -84,10 +92,10 @@ try {
   const page = await browser.newPage({ viewport: { width: 640, height: 360 }, deviceScaleFactor: 1 });
   await page.routeWebSocket(/.*/, () => {});
   page.on('pageerror', (e) => console.error('page error:', e.message));
-  await page.goto(`${baseUrl}?nobake&quality=high&adaptive=0&nointro&noidle&skip=ui,audio`, { waitUntil: 'domcontentloaded', timeout: 600000 });
+  await page.goto(`${baseUrl}?nobake&pvs&quality=high&adaptive=0&nointro&noidle&skip=ui,audio`, { waitUntil: 'domcontentloaded', timeout: 600000 });
   await page.waitForFunction(() => window.__city?.ready, null, { timeout: 600000 });
   for (const [name, job] of Object.entries(JOBS)) {
-    if (only.length && !only.includes(name)) continue;
+    if (only.length ? !only.includes(name) : job.optIn) continue;
     const t0 = Date.now();
     const have = manifest.files[name];
     if (!args.force && have && fs.existsSync(path.join(outDir, have.file)) && have.key === (await page.evaluate((c) => (0, eval)(c), job.key))) {
@@ -99,9 +107,8 @@ try {
       const raw = Buffer.from(b64, 'base64');
       const key = await page.evaluate((c) => (0, eval)(c), job.key);
       const gz = zlib.gzipSync(raw, { level: 9 });
-      const file = `${name}.bin.gz`;
-      fs.writeFileSync(path.join(outDir, file), gz);
-      manifest.files[name] = { file, bytes: gz.length, key };
+      const file = `${name}-${key}.bin.gz`;
+      store(name, file, gz, key);
       console.log(`${name}: ${((Date.now() - t0) / 1000).toFixed(1)} s, ${raw.length} bytes → ${gz.length} gzip`);
       continue;
     }
@@ -133,9 +140,8 @@ try {
     if (args.raw) fs.writeFileSync(path.join(args.raw, `${name}.rgba`), rgba);
     const bct = encodeBCT(rgba, meta.w, meta.h, !!job.linear, job.sharp ?? parseFloat(args.sharp ?? '0.8'));
     const gz = zlib.gzipSync(bct, { level: 9 });
-    const file = `${name}.bct.gz`;
-    fs.writeFileSync(path.join(outDir, file), gz);
-    manifest.files[name] = { file, bytes: gz.length, key };
+    const file = `${name}-${key}.bct.gz`;
+    store(name, file, gz, key);
     console.log(`${name}: ${meta.w}x${meta.h}, gpu + readback ${((t1 - t0) / 1000).toFixed(1)} s, encode ${((Date.now() - t1) / 1000).toFixed(1)} s, ${(bct.length / 1e6).toFixed(1)} MB → ${(gz.length / 1e6).toFixed(1)} MB gzip`);
   }
 } finally {
