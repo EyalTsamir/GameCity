@@ -448,6 +448,7 @@ void main() {
     mvPosition = modelViewMatrix * vec4(c, 1.0);
     mvPosition.xy += aCorner * aInfo.x;
   }
+  if (mode > 5.5 && mode < 6.5) vCol *= smoothstep(3.0, 16.0, -mvPosition.z);
   if (k < 0.002) mvPosition = vec4(0.0, 0.0, 2.0, 1.0);
   gl_Position = projectionMatrix * mvPosition;
   #include <fog_vertex>

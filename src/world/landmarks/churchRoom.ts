@@ -575,7 +575,8 @@ export function buildChurchRoom(env: Env, rooms: Rooms, d: ChurchDims): Room {
     const a = -Math.PI / 2 + (i / 20) * Math.PI * 2;
     rosePts.push([Math.cos(a) * (roseR + 0.2), roseR + 0.2 + Math.sin(a) * (roseR + 0.2)]);
   }
-  room.wall(ash, (u, v) => [u, v, NZ0], -IX, IX, 0, yRid, [{ u: 0, pts: archPts, v0: 0 }, { u: 0, pts: rosePts, v0: roseY - 0.2 }], 0.5, 0.35, false, gableClip);
+  // warmer than the side walls: it takes no sun, only the blue of the bake, and light bounced off the sunlit floor is what really reaches it
+  room.wall(M('#e7d4a8', PAT.STONE, 0.9, 0, 0, 0, 0.3), (u, v) => [u, v, NZ0], -IX, IX, 0, yRid, [{ u: 0, pts: archPts, v0: 0 }, { u: 0, pts: rosePts, v0: roseY - 0.2 }], 0.5, 0.35, false, gableClip);
   {
     const P = (u: number, v: number, dep: number): V3 => [u, v, NZ0 - dep];
     splay(room, ash, P, { u: 0, pts: archPts, v0: 0 }, { u: 0, pts: archPts, v0: 0 }, 0.6, true);

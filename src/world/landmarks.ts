@@ -30,6 +30,9 @@ import { genWaterTower, genChimney, genTanks } from './landmarks/industry';
 import { genStatue, genGazebo, genBandstand, genKiosk, genPlayground, genPicnic } from './landmarks/park';
 import { genWindTurbine, turbineUpdater } from './landmarks/turbines';
 import { Rooms } from './landmarks/rooms';
+import { buildLighthouseRoom } from './landmarks/lighthouseRoom';
+import { breakwaterRoot } from './harbor/breakwater';
+import { lmDetail } from '../core/lmdetail';
 
 export default function create(ctx: CityContext): CityModule {
   const t0 = performance.now();
@@ -242,6 +245,13 @@ export default function create(ctx: CityContext): CityModule {
   const glowMesh = buildGlows(env.glows, mats.glows);
   if (glowMesh) group.add(glowMesh);
   for (const o of env.extra) group.add(o);
+  // the lighthouse stands out on the breakwater, built by the harbour; only its inside (and the walk out to it) lives here
+  const lhF = ctx.plan.features.find((f) => f.kind === 'lighthouse');
+  const bwF = ctx.plan.features.find((f) => f.kind === 'breakwater');
+  const terrain = ctx.services.terrain as { height(x: number, z: number): number } | undefined;
+  if (lhF && bwF?.a && bwF.b && terrain && lmDetail(ctx, 'bwlife') && lmDetail(ctx, 'lhroom')) {
+    buildLighthouseRoom(rooms, lhF.x, lhF.z, Number(lhF.params?.height ?? 24), breakwaterRoot(bwF.a.x, bwF.b.x, bwF.a.z, (x, z) => terrain.height(x, z)));
+  }
   for (const r of rooms.list) r.finish(ctx, group, ctx.uniforms);
   if (rooms.list.length) ctx.services.rooms = rooms;
   group.matrixAutoUpdate = false;
