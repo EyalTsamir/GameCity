@@ -119,6 +119,8 @@ export function lookData(L: Look): LookCache {
   if (s.lapels) f |= bit(FB.LAPELS);
   if (s.hood) f |= bit(FB.HOOD);
   if (s.vest) f |= bit(FB.VEST);
+  // (the close level: how this person's hair is cut, in the mask's top bits)
+  f |= (s.hair === 'side' ? 1 : s.hair === 'curly' ? 2 : s.hair === 'long' || s.hair === 'bob' ? 3 : s.hair === 'pixie' ? 4 : s.hair === 'ponytail' || s.hair === 'bun' || s.hair === 'manbun' ? 5 : 0) << 29;
   writeColours(col, L, s, L.top, L.bottom);
   c = { style: s, col, flags: f >>> 0 };
   lookCache.set(L, c);
@@ -802,7 +804,7 @@ export class CrowdRenderer {
 export function swimwear(L: Look, s: Style, flags: number, C: Uint32Array): number {
   const female = L.kind === 'woman' || L.kind === 'girl';
   const swim = L.swim || L.skin;
-  const keep = bit(FB.HAIR) | bit(FB.LOCKS) | bit(FB.HAIRLONG) | bit(FB.PONY) | bit(FB.BUN) | bit(FB.FRINGE) | bit(FB.BEARD) | bit(FB.MOUSTACHE) | bit(FB.TOWEL) | bit(FB.HAT) | bit(FB.BRIM) | bit(FB.VISOR);
+  const keep = 0xe0000000 | bit(FB.HAIR) | bit(FB.LOCKS) | bit(FB.HAIRLONG) | bit(FB.PONY) | bit(FB.BUN) | bit(FB.FRINGE) | bit(FB.BEARD) | bit(FB.MOUSTACHE) | bit(FB.TOWEL) | bit(FB.HAT) | bit(FB.BRIM) | bit(FB.VISOR);
   flags &= keep;
   C[0] = w(L.skin, q8(1.12)); // sleeveless
   if (female) {

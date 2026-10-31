@@ -466,6 +466,33 @@ function buildTorso(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
   b.use(BONE.PELVIS, REG.TORSO, -1, 0.75);
   const apex = b.v([0, r0.y - 0.03 * (d.H / 1.76), r0.cz - 0.005], 0, 0, 0, 0);
   capFan(b, rings[0], apex, [0, r0.y + 0.05, r0.cz]);
+  if (cfg.close) {
+    const N0 = closeNeck(d, 0),
+      R9 = T[10];
+    const rows: [number, number, number][] = [
+      // up the neck from its foot: how far out of the neck, height, h
+      [0.0165, -0.006, 0.985],
+      [0.0115, 0.008, 0.995],
+      [0.0035, 0.014, 0.999],
+      [0.0, 0.009, 0.999],
+    ];
+    const rs: Ring[] = [];
+    const nn = 24;
+    b.use(BONE.CHEST, REG.TORSO, -1, 1);
+    for (const [o, dy, hh] of rows) {
+      b.setTint(hh > 0.998 ? 0.9 : 1);
+      const ids: number[] = [];
+      for (let k = 0; k < nn; k++) {
+        const phi = (k / nn) * Math.PI * 2;
+        // (a crew neck sits lower in front than at the back)
+        const dr = -0.012 * Math.max(0, Math.cos(phi)) ** 2;
+        const q = torsoPoint({ ...N0, y: R9.y + dy + 0.018 * (d.H / 1.76) + dr, hw: N0.hw + o, f: N0.f + o, b: N0.b + o }, 0, phi, 2);
+        ids.push(b.v(q, hh, 0, Math.abs(Math.atan2(Math.sin(phi), Math.cos(phi))), Math.sin(phi)));
+      }
+      rs.push({ ids, c: [0, R9.y - 0.1, N0.cz] });
+    }
+    bridge(b, rs);
+  }
   // top: the neck closes it (torso top ring hidden inside the neck)
   const rt = d.torso[cfg.torsoRings[cfg.torsoRings.length - 1]];
   b.use(BONE.CHEST, REG.TORSO, -1, 1);
@@ -818,36 +845,47 @@ function buildCloseHead(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
   b.use(BONE.HEAD, REG.SKIN, -1, 0.62);
   const chin = b.v([0, neckIn.y + 0.01, neckIn.cz], 2, 0);
   capFan(b, under[under.length - 1], chin, [0, R[0].y + 0.05, R[0].cz]);
-  // ears: a shell (helix rim standing off the head, hollow concha) between the brow and the nose base
+  // ears: from the brow to the nose base, leaning back: the root on the skull, the rolled rim of the helix standing off it, a
+  // fold inside the rim, the bowl of the concha, a soft lobe
   for (const side of [1, -1]) {
-    b.use(BONE.HEAD, REG.SKIN, -1, 0.93);
-    const phi0 = side * (Math.PI / 2 + 0.22);
-    const yE = ye - 0.017 * k;
+    const phi0 = side * (Math.PI / 2 + 0.2);
+    const yE = ye - 0.019 * k;
     const base = torsoPoint(headRingAt(d, yE), 0, phi0, 2.1);
-    const out: P3 = norm([Math.sin(phi0), 0, Math.cos(phi0) * 0.5]);
+    const out: P3 = norm([side * 0.92, 0, -0.38]);
     const back: P3 = norm([0, 0, -1]);
-    const up: P3 = norm(add([0, 1, 0], mul(back, 0.28)));
-    const hgt = 0.031 * k,
-      wid = 0.0165 * k;
-    const rim: number[] = [],
-      root: number[] = [];
-    const NE = 12;
+    const up: P3 = norm(add([0, 1, 0], mul(back, 0.2)));
+    const hgt = 0.0315 * k,
+      wid = 0.0175 * k;
+    const NE = 14;
+    const root: number[] = [],
+      rim: number[] = [],
+      fold: number[] = [];
+    // the outline: narrower below, a lobe that hangs and has no rim
+    const at = (a: number, s: number): P3 => {
+      const lz = Math.cos(a),
+        ly = Math.sin(a);
+      const lo = ly < 0 ? 1 - 0.32 * ly * ly : 1;
+      return add(base, add(mul(back, (lz * wid * lo + 0.006 * k) * s), mul(up, ly * hgt * s)));
+    };
     for (let i = 0; i < NE; i++) {
       const a = (i / NE) * Math.PI * 2;
       const lz = Math.cos(a),
         ly = Math.sin(a);
-      // the helix stands off most at the back and top; the lobe hangs a little forward
-      const stand = (0.006 + 0.009 * Math.max(0, lz) + 0.003 * Math.max(0, ly)) * k;
-      const c = add(add(base, mul(back, lz * wid + 0.004 * k)), mul(up, ly * hgt * (ly < 0 ? 0.92 : 1)));
-      rim.push(b.v(add(c, mul(out, stand)), 2, 0));
-      root.push(b.v(add(add(base, mul(back, lz * wid * 0.55 + 0.002 * k)), add(mul(up, ly * hgt * 0.6), mul(out, -0.003 * k))), 2, 0));
+      const stand = (0.0075 + 0.0105 * Math.max(0, lz) + 0.0035 * Math.max(0, ly)) * k * (ly < -0.5 ? 0.75 : 1);
+      b.use(BONE.HEAD, REG.SKIN, -1, 0.97);
+      root.push(b.v(add(at(a, 0.72), mul(out, -0.004 * k)), 2, 0));
+      b.setTint(1.02);
+      rim.push(b.v(add(at(a, 1), mul(out, stand)), 2, 0));
+      b.setTint(0.84);
+      fold.push(b.v(add(at(a, 0.74), mul(out, stand * 0.72)), 2, 0));
     }
-    b.setTint(0.78);
-    const concha = b.v(add(add(base, mul(back, 0.002 * k)), add(mul(up, -0.004 * k), mul(out, 0.0015 * k))), 2, 0);
+    b.setTint(0.66);
+    const concha = b.v(add(add(base, mul(back, 0.004 * k)), add(mul(up, -0.005 * k), mul(out, 0.0035 * k))), 2, 0);
     for (let i = 0; i < NE; i++) {
       const i1 = (i + 1) % NE;
-      b.triDir(rim[i], rim[i1], concha, out);
       b.quadOut(rim[i], rim[i1], root[i1], root[i], sub(base, mul(out, 0.03)));
+      b.quadDir(rim[i], rim[i1], fold[i1], fold[i], out);
+      b.triDir(fold[i], fold[i1], concha, out);
     }
   }
 }
@@ -1110,7 +1148,9 @@ function buildLeg(b: MeshBuilder, d: Dims, cfg: LodCfg, side: 1 | -1): void {
     an = pv(d.ankle, side);
   const specs: LimbSpec[] = [];
   for (const i of cfg.thigh) {
-    const r = d.thigh[i];
+    const r0 = d.thigh[i];
+    const tk = cfg.close ? [0.68, 0.84, 0.97, 1, 1, 1][i] : 1;
+    const r = tk === 1 ? r0 : { ...r0, rx: r0.rx * tk, rz: r0.rz * tk };
     specs.push({ a: hp, b: kn, ring: r, bone: i === 5 ? SH : TH, w: THIGH_W[i], h: 1 - 0.5 * r.t, reg: REG.LEG, tint: i === 0 ? (HIP_BLEND ? 0.93 : 0.86) : 1 });
   }
   for (const i of cfg.shin) {
@@ -1445,8 +1485,9 @@ function buildHair(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
       rowsF.forEach(([y, push], ri) => {
         const row: number[] = [];
         phis.forEach((phi, k) => {
-          const jag = ri === 3 ? (((k * 7919) % 5) / 4 - 0.5) * 0.008 * hk - 0.006 * Math.abs(phi) * hk : 0;
-          row.push(b.v(headSurface(d, phi, y + jag + (ri === 2 ? jag * 0.4 : 0), push), 2, 0));
+          // (the tips are in the fragment shader, strand by strand: aux2 = height above the lowest row)
+          const jag = ri === 3 ? -0.006 * Math.abs(phi) * hk : 0;
+          row.push(b.v(headSurface(d, phi, y + jag, push), 2, 0, 0, [0.075, 0.05, 0.025, 0][ri]));
         });
         ids.push(row);
       });

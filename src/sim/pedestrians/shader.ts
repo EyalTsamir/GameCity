@@ -378,6 +378,13 @@ void pedPose(inout vec3 p, inout vec3 n) {
       pedBump(q, 0.0022 * fc.y, 0.0, -0.0612, 0.02, 0.0056);  // the lips
       pedBump(q, 0.0028 * fc.y, 0.0, -0.0722, 0.018, 0.006);
       pedBump(q, 0.0032 * fc.z, 0.0, -0.066, 0.031, 0.022);   // how far the mouth comes forward
+      // a woman's face: a narrower jaw, a smaller chin, a smoother brow, fuller cheeks high up. A child's: round cheeks, no brow, a small chin.
+      pedBump(q, -0.0085 * P_w, 0.088, -0.082, 0.034, 0.024);
+      pedBump(q, -0.0035 * P_w, 0.0, -0.104, 0.02, 0.012);
+      pedBump(q, -0.0026 * P_w, 0.03, 0.017, 0.028, 0.0085);
+      pedBump(q, 0.0018 * P_w, 0.048, -0.022, 0.02, 0.016);
+      pedBump(q, 0.0055 * P_c, 0.05, -0.052, 0.03, 0.028);
+      pedBump(q, -0.0024 * P_c, 0.03, 0.017, 0.03, 0.009);
       // age: the jowl, the hollow under the cheekbone, the temple
       pedBump(q, 0.0042 * age, 0.056, -0.09, 0.022, 0.016);
       pedBump(q, -0.0028 * age, 0.058, -0.045, 0.02, 0.02);
@@ -462,7 +469,8 @@ void pedPose(inout vec3 p, inout vec3 n) {
       p.xz = mix(p.xz, vec2(0.0, -0.01), 0.3 * smoothstep(0.0, 0.03, lift));
       float dep = min(aux.x, L2);
       // FS: distance from the tips (locks separate and thin there) + angle (the front edges thin out)
-      vPedFace = vec3(L2 - dep, abs(a), 5.0); // |a|: no ±π seam down the back
+      // (only hair long enough to have ends of its own breaks up: on a short bob all of the sheet is near the tips)
+      vPedFace = vec3(L2 - dep + 1.0 - smoothstep(0.03, 0.09, len), abs(a), 5.0); // |a|: no ±π seam down the back
       float g = smoothstep(0.0, 0.1, dep) * (0.6 + 0.4 * smoothstep(0.1, 0.35, dep));
       float ph = a * 9.0 + sd + dep * 6.0;
       float rip = 0.6 * sin(ph) + 0.4 * sin(a * 17.0 - sd);
@@ -484,9 +492,42 @@ void pedPose(inout vec3 p, inout vec3 n) {
       lump = lump * (1.0 + 1.6 * curl) + 0.5 * sin(a * 3.0 + p.y * 34.0 + float(iC1.x & 7u) * 1.7) + 0.9 * curl * sin(a * 19.0 + p.y * 130.0);
       // (not under a hat: the lumps and crown lift poked through caps as dark blotches)
       float grow = smoothstep(0.05, 0.45, aux.y) * (((iC1.y >> 24u) & 7u) != 0u ? 0.0 : 1.0);
+//@if CL
+      {
+        // how it's cut: 0 short back and sides, 1 side parting, 2 curls, 3 long or bob, 4 pixie, 5 pulled back
+        uint hs = iC2.z >> 29u;
+        uint hh = (iC1.x * 2654435761u) ^ (iC1.z * 40503u) ^ (iC0.w * 69069u);
+        hh ^= hh >> 15u; hh *= 2246822519u; hh ^= hh >> 13u;
+        float px = (float(hh & 255u) / 255.0 - 0.5);
+        float sideK = smoothstep(0.35, 0.95, abs(n.x)) * (1.0 - smoothstep(0.4, 0.95, n.y));
+        float frontK = smoothstep(0.1, 0.8, n.z);
+        float lift = 0.0;
+        if (hs == 0u || hs == 4u) {
+          // the sides clipped, more on top, combed up at the front
+          lift = 0.0035 * lump * (1.0 - 0.6 * sideK) + (0.006 + 0.005 * px) * smoothstep(0.35, 0.8, aux.y) * (1.0 - sideK) + (0.004 + 0.008 * abs(px)) * frontK * smoothstep(0.3, 0.7, aux.y) - 0.004 * sideK;
+        } else if (hs == 1u) {
+          // a parting on one side, the hair lifting away from it and falling over to the other
+          float pX = (px < 0.0 ? -0.034 : 0.034) - p.x;
+          float over = pX * (px < 0.0 ? -1.0 : 1.0);
+          lift = 0.0035 * lump * (1.0 - 0.5 * sideK) - 0.0035 * exp(-pX * pX / 0.00002) * smoothstep(0.25, 0.5, aux.y) + 0.011 * smoothstep(0.0, 0.05, -over) * (1.0 - smoothstep(0.08, 0.14, -over)) * smoothstep(0.25, 0.6, aux.y) - 0.003 * sideK;
+        } else if (hs == 3u) {
+          // a parting down the middle or to one side, close to the skull over the crown, full round the sides
+          float pX = p.x - px * 0.05;
+          lift = 0.002 * lump - 0.0035 * exp(-pX * pX / 0.000018) * smoothstep(0.1, 0.4, aux.y) * smoothstep(-0.05, 0.03, p.z) + 0.004 * sideK;
+        } else if (hs == 5u) {
+          // pulled back tight, nothing standing up
+          lift = 0.0011 * lump - 0.003 * smoothstep(0.5, 1.0, aux.y);
+        } else lift = 0.0045 * lump + 0.007 * smoothstep(0.3, 1.0, aux.y) * (0.6 + 0.4 * -n.z);
+        p += n * grow * lift;
+      }
+//@else
       p += n * grow * (0.0045 * lump + 0.007 * smoothstep(0.3, 1.0, aux.y) * (0.6 + 0.4 * -n.z));
 //@endif
+//@endif
     }
+//@if CL
+    else if (((d0 >> 10u) & 63u) == ${FB.FRINGE + 1}u) vPedFace = vec3(aux.y, abs(atan(p.x, p.z)), 5.0);
+//@endif
     // volume (curly / full hair): scale about the head centre
     float vol = float((iC1.y >> 27u) & 31u) * (1.0 / 31.0);
     if (vol > 0.0 && bone == ${B.HEAD}) {
@@ -845,6 +886,13 @@ float pedStrands(vec3 r) {
 // lock profile (0 in the gap between two locks … 1 on its crest), y = per-lock random, z = fade (1 near)
 vec3 pedLocks(vec3 r, float tip) {
   float a = atan(r.x, r.z + 0.015);
+#ifdef PED_CLOSE
+  // (broad soft locks, each its own width: fine regular ones read as a bead curtain)
+  float lc = a * 3.4 + 1.6 * pedN1(a * 1.9 + 4.0) + sin(r.y * 8.0 + a * 2.0) * 0.45 + sin(r.y * 23.0 - a * 3.0) * 0.1;
+  float idc = floor(lc);
+  float uc = fract(lc) * 2.0 - 1.0;
+  return vec3(1.0 - uc * uc, fract(sin(idc * 57.31 + 1.3) * 43758.5453), 1.0 - smoothstep(0.25, 0.6, fwidth(lc)));
+#endif
   // (uneven widths: a low-frequency warp bunches some locks and spreads others)
   float la = a * 7.5 + 1.1 * pedN1(a * 2.3 + 4.0) + sin(r.y * 22.0 + a * 3.0) * 0.35 + sin(r.y * 51.0 - a * 5.0) * 0.12;
   float id = floor(la);
@@ -1415,10 +1463,16 @@ const FRAG_COLOR = /* glsl */ `
       pc *= pedStrands(vPedRest);
       // big locks all round (the back read as one black sheet): occluded gaps, a tone per lock
       vec3 lk = pedLocks(vPedRest, vPedFace.x);
+#ifdef PED_CLOSE
+      pc *= mix(1.0, (0.74 + 0.26 * lk.x) * (0.9 + 0.2 * lk.y), lk.z);
+#else
       pc *= mix(1.0, (0.55 + 0.45 * lk.x) * (0.85 + 0.3 * lk.y), lk.z);
+#endif
       // sky sheen on each lock's crest: black hair in shade still shows its locks (a grey-blue lift that
       // the albedo carries into the ambient light — the direct-light sheen alone only shows in the sun)
+#ifndef PED_CLOSE
       pc += vec3(0.022, 0.021, 0.021) * pow(lk.x, 6.0) * (0.5 + lk.y) * lk.z * (1.0 - smoothstep(0.15, 0.4, dot(pc, vec3(0.33))));
+#endif
       vec2 hf = pedHairFlow(vPedRest);
       float ca = hf.x * 26.0 + sin(hf.y * 9.0) * 0.8;
       float far = smoothstep(0.35, 0.9, fwidth(ca));
@@ -1428,10 +1482,14 @@ const FRAG_COLOR = /* glsl */ `
       float tri = 1.0 - abs(fract(ca) - 0.5) * 2.0;
       float fine = pedN1(hf.x * 90.0 + hf.y * 3.0) * (1.0 - smoothstep(0.35, 0.8, fwidth(hf.x * 90.0)));
       float clump = tri * 0.85 + fine * 0.3;
+#ifdef PED_CLOSE
+      float tipK = 1.0 - smoothstep(0.0, 0.028, vPedFace.x - lr * 0.018);
+#else
       float tipK = 1.0 - smoothstep(0.0, 0.06, vPedFace.x - lr * 0.03);
+#endif
       float edgeK = 1.0 - smoothstep(1.17, 1.45, vPedFace.y);
 #ifdef PED_CLOSE
-      float need = tipK * (1.0 - far);
+            float need = tipK * (1.0 - far);
 #else
       float need = max(tipK, edgeK * 0.65) * (1.0 - far);
 #endif
@@ -1508,6 +1566,9 @@ const HAIR_NORMAL = /* glsl */ `
     normal = normalize(abs(hdet) * normal - hgrad);
     // strand direction (view space) = gradient of the distance along the flow, in the surface plane
     vec3 hT = sign(hdet) * (dFdx(hf.y) * hr1 + dFdy(hf.y) * hr2);
+#ifdef PED_CLOSE
+    if (vPedFace.z > 4.5) hT = viewMatrix[1].xyz;
+#endif
     hT -= normal * dot(hT, normal);
     pedHairT = dot(hT, hT) > 1e-20 ? normalize(hT) : vec3(0.0);
     pedHairSh = (pedN1(hc2) - 0.5) * 0.35 * hk2 + (pedN1(hf.y * 7.0 + ha * 3.0) - 0.5) * 0.15;
