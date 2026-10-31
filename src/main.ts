@@ -35,6 +35,7 @@ const MODULES: [string, () => Promise<{ default: ModuleFactory }>][] = [
   ['life', () => import('./world/life')],
   ['lamps', () => import('./world/lamps')],
   ['near', () => import('./world/near')],
+  ['closemat', () => import('./world/closemat')],
   ['traffic', () => import('./sim/traffic')],
   ['pedestrians', () => import('./sim/pedestrians')],
   ['rail', () => import('./sim/rail')],
