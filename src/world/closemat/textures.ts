@@ -318,11 +318,16 @@ export interface CloseTiles {
   ms: number;
 }
 
+let made: CloseTiles | null = null;
+
+/** one set per page: the first caller pays */
 export function makeCloseTiles(aniso = 4): CloseTiles {
+  if (made) return made;
   const t0 = performance.now();
   const grain = grainTile(aniso),
     crack = crackTile(aniso),
     fibre = fibreTile(aniso),
     stones = stonesTile(aniso);
-  return { grain, crack, fibre, stones, ms: performance.now() - t0 };
+  made = { grain, crack, fibre, stones, ms: performance.now() - t0 };
+  return made;
 }

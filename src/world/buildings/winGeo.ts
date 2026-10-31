@@ -8,6 +8,8 @@
 // instanced meshes are refilled from the bins near the camera whenever it has moved a few metres (no
 // per-frame allocations). `?nowingeo` disables it; range by quality (low 22 m, medium 32 m, high 42 m).
 
+import { closeMatSwitch } from '../../core/closemat';
+import { makeCloseTiles } from '../closemat/textures';
 import * as THREE from 'three';
 import { LAMP_GLSL, lampUniforms } from '../../core/lampLight';
 import { WIN, WALLPAT } from './materials';
@@ -114,11 +116,19 @@ function fixWinding(g: THREE.BufferGeometry): void {
   }
 }
 
+// close-up stone (close-materials): the same tiles as every other near surface, in place of the 2.4 cm blocks of speckle
+const CM_STONE = closeMatSwitch('cmsills');
+
 function makeMaterial(): THREE.MeshStandardMaterial {
   const m = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.86, metalness: 0.0 });
   m.name = 'buildings-wingeo';
   m.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, lampUniforms());
+    if (CM_STONE) {
+      const tiles = makeCloseTiles();
+      shader.uniforms.tCmGrain = { value: tiles.grain };
+      shader.uniforms.tCmCrack = { value: tiles.crack };
+    }
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', `#include <common>\nvarying vec3 vThWPos;\nvarying vec3 vThWNrm;\nvarying vec3 vThLoc;`)
       .replace(
@@ -133,7 +143,7 @@ vThWNrm = normalize(mat3(thM) * objectNormal);
 vThLoc = transformed;`,
       );
     shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', `#include <common>\nvarying vec3 vThWPos;\nvarying vec3 vThWNrm;\nvarying vec3 vThLoc;\n${LAMP_GLSL}`)
+      .replace('#include <common>', `#include <common>\nvarying vec3 vThWPos;\nvarying vec3 vThWNrm;\nvarying vec3 vThLoc;\n${LAMP_GLSL}${CM_STONE ? '\nuniform sampler2D tCmGrain;\nuniform sampler2D tCmCrack;\nvec4 cmG;\nvec3 cmT;\nvec3 cmB;' : ''}`)
       .replace(
         '#include <color_fragment>',
         `#include <color_fragment>
@@ -141,21 +151,34 @@ vThLoc = transformed;`,
   // weathering: grime + lichen speckle on the top, a darker underside lip, fine grit everywhere
   vec3 wn = normalize(vThWNrm);
   vec3 wp = vThWPos;
-  float g1 = fract(sin(dot(floor(wp * 41.0), vec3(12.99, 78.23, 37.71))) * 43758.55);
+${CM_STONE ? `  vec3 an = abs(wn);
+  vec2 wq = an.y > 0.6 ? wp.xz : (an.x > 0.6 ? wp.zy : wp.xy);
+  cmT = an.y > 0.6 ? vec3(1.0, 0.0, 0.0) : (an.x > 0.6 ? vec3(0.0, 0.0, 1.0) : vec3(1.0, 0.0, 0.0));
+  cmB = an.y > 0.6 ? vec3(0.0, 0.0, 1.0) : vec3(0.0, 1.0, 0.0);
+  cmG = texture2D(tCmGrain, wq * 1.667 + floor(wp.xz * 0.5) * 0.37);
+  vec4 cmC = texture2D(tCmCrack, wq * 0.39 + floor(wp.xz * 0.5) * 0.13);
+  float g1 = cmG.b;
+  float g2 = cmC.b;
+  diffuseColor.rgb *= (0.84 + 0.3 * g1) * (1.0 - 0.32 * cmG.a) * (0.92 + 0.16 * g2);
+  diffuseColor.rgb *= 1.0 - 0.45 * smoothstep(0.55, 0.72, g2) * (1.0 - smoothstep(0.0008, 0.0024, cmC.r * 0.04));` : `  float g1 = fract(sin(dot(floor(wp * 41.0), vec3(12.99, 78.23, 37.71))) * 43758.55);
   float g2 = fract(sin(dot(floor(wp * 9.0), vec3(3.17, 11.3, 5.71))) * 1731.3);
-  diffuseColor.rgb *= 0.93 + 0.1 * g1;
+  diffuseColor.rgb *= 0.93 + 0.1 * g1;`}
   float top = smoothstep(0.6, 0.9, wn.y);
   diffuseColor.rgb *= mix(1.0, mix(0.72, 0.9, g2), top * 0.8);
-  diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.3, 0.34, 0.22), top * step(0.93, g1) * 0.35);
+  diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.3, 0.34, 0.22), top * ${CM_STONE ? 'smoothstep(0.62, 0.66, cmG.b * 0.4 + g2 * 0.6)' : 'step(0.93, g1)'} * 0.35);
   diffuseColor.rgb *= mix(1.0, 0.62, smoothstep(-0.5, -0.9, wn.y));
 }`,
+      )
+      .replace(
+        '#include <normal_fragment_maps>',
+        `#include <normal_fragment_maps>${CM_STONE ? '\nnormal = normalize(normal - mat3(viewMatrix) * (cmT * (cmG.r - 0.5) + cmB * (cmG.g - 0.5)) * 0.7);' : ''}`,
       )
       .replace(
         '#include <lights_fragment_end>',
         `#include <lights_fragment_end>\nreflectedLight.indirectDiffuse += diffuseColor.rgb * thLampLight(vThWPos, normalize(vThWNrm));`,
       );
   };
-  m.customProgramCacheKey = () => 'tinyhaven-buildings-wingeo-v1';
+  m.customProgramCacheKey = () => `tinyhaven-buildings-wingeo-v1${CM_STONE ? '-cm' : ''}`;
   return m;
 }
 

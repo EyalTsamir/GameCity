@@ -109,6 +109,7 @@ varying vec4 vA;
 varying vec4 vB;
 varying vec4 vC;
 varying vec4 vD;
+uniform float uWinDepth;
 float cmOpen(float px) {
   if (vB.x < 0.5 || vB.y < 0.5) return 1.0;
   vec2 cell = floor(vFac);
@@ -131,10 +132,43 @@ const WALL_MAIN = /* glsl */ `
   float fa = cmArea(gx, gy);
   if (fa >= CM_LIM) { gl_FragColor = vec4(1.0); return; }
   float k = 1.0 - smoothstep(CM_LIM * 0.45, CM_LIM, fa);
-  float open = cmOpen(fa);
-  if (open <= 0.0) { gl_FragColor = vec4(1.0); return; }
-  k *= open;
   float seed = floor(vB.z + 0.5);
+  float open = cmOpen(fa);
+  if (open <= 0.0) {
+    // in the opening: bhWall's reveal. The jambs and the head carry the wall's surface turned through 90°; the rest is glass and frame
+    vec2 cell = floor(vFac);
+    vec2 pm = (vFac - cell) * vC.xy;
+    float style = floor(mod(floor(vB.w + 0.5), 64.0) / 8.0 + 0.01);
+    float revD = (style > 6.5 ? 0.07 : (style > 5.5 ? 0.09 : (style > 2.5 && style < 3.5 ? 0.06 : (style > 3.5 && style < 4.5 ? 0.1 : 0.14)))) * uWinDepth;
+    if (revD < 0.001) { gl_FragColor = vec4(1.0); return; }
+    float uSign = dot(vec2(dFdx(vFac.x), dFdy(vFac.x)), vec2(gx.x, gy.x)) < 0.0 ? -1.0 : 1.0;
+    vec3 Tu = T * uSign;
+    vec3 V = normalize(vP - cameraPosition);
+    vec2 kd = vec2(dot(V, Tu), V.y) / max(-dot(V, N), 0.06) * revD;
+    vec2 kdS = mix(vec2(1e-5), sign(kd) * max(abs(kd), vec2(1e-5)), abs(sign(kd)));
+    vec2 sEx = vec2(kd.x > 0.0 ? (vA.y - pm.x) : (vA.x - pm.x), kd.y > 0.0 ? (vA.w - pm.y) : (vA.z - pm.y)) / kdS;
+    float sHit = min(min(sEx.x, sEx.y), 1.0);
+    bool jamb = sEx.x < sEx.y;
+    // (the inner sill is drawn as stone by the base: left to it)
+    if (sHit >= 1.0 || (!jamb && kd.y <= 0.0)) { gl_FragColor = vec4(1.0); return; }
+    vec2 dQ = q + kd * sHit * vec2(uSign, 1.0);
+    q = jamb ? vec2(sHit * revD + 0.37, dQ.y) : vec2(dQ.x, sHit * revD + 0.21);
+    gx = dFdx(q);
+    gy = dFdy(q);
+    fa = cmArea(gx, gy);
+    k *= 1.0 - smoothstep(0.012, 0.03, fa);
+    vec3 Nw = N;
+    if (jamb) {
+      N = -Tu * sign(kd.x);
+      T = Nw;
+    } else {
+      N = vec3(0.0, -1.0, 0.0);
+      U = Nw;
+    }
+    seed += 3.0;
+    open = 1.0;
+  }
+  k *= open;
   vec2 so = vec2(fract(seed * 0.1373), fract(seed * 0.3119)) * 17.0;
   vec3 col = max(vCol, vec3(0.02));
   // the plinth course of bhWall: another material, drawn by its own branch below

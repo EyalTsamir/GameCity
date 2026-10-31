@@ -90,6 +90,7 @@ export default function create(ctx: CityContext): CityModule {
     tRN: { value: roadNoise() },
     uSunDir: globalUniforms.uSunDir,
     uDaylight: globalUniforms.uDaylight,
+    uWinDepth: (ctx.services.buildings as { uniforms?: { uWinDepth: THREE.IUniform } } | undefined)?.uniforms?.uWinDepth ?? { value: 0 },
   };
 
   const material = (name: string, frag: string, define: string, radius: number): THREE.ShaderMaterial =>

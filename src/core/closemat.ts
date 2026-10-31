@@ -7,6 +7,11 @@ import type { CityContext, QualityLevel } from './context';
 const RANK: Record<QualityLevel, number> = { low: 0, medium: 1, high: 2 };
 const params = typeof location !== 'undefined' ? new URLSearchParams(location.search) : null;
 
+/** the same without a tier: for what is built before the tier matters, and costs next to nothing where it is not seen */
+export function closeMatSwitch(name: string): boolean {
+  return !(params && (params.has('noclosemat') || params.has('no' + name)));
+}
+
 /** is close material `name` on (`?no<name>` / `?noclosemat` off; below quality tier `min` off)? */
 export function closeMat(ctx: Pick<CityContext, 'quality'>, name: string, min: QualityLevel = 'medium'): boolean {
   return !(params && (params.has('noclosemat') || params.has('no' + name))) && RANK[ctx.quality.level] >= RANK[min];
