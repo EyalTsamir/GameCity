@@ -1841,6 +1841,9 @@ export default function create(ctx: CityContext): CityModule {
         focusPickAt = now;
         const hit = scout.pick(raycaster.ray.set(_pos, _dir));
         focusPick = hit && hit.kind !== 'building' ? hit.distance : Infinity;
+        // the surfaces themselves, where the near materials know them: a bench, a post, the wall at the back of a porch
+        const real = (ctx.services.closeMat as { rayHit(p: THREE.Vector3, d: THREE.Vector3, maxT: number): number } | undefined)?.rayHit(_pos, _dir, 12) ?? -1;
+        if (real >= 0 && real < focusPick) focusPick = real;
       }
       if (focusPick < f) f = Math.max(0.5, focusPick);
       fx.setFocus(f);

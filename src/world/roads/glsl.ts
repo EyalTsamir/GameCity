@@ -34,6 +34,7 @@ vec3 rdN = vec3(0.0);
 uniform float uRdWear;
 uniform float uKerbD;
 uniform float uRdHand;
+#ifdef RD_LITTER
 vec4 rdLitter(vec2 p, float fw, float dens, float leafy) {
   // (G2) fw is the LARGER footprint axis: at grazing views a 5 mm butt seen with the geometric-mean footprint
   // aliased into rows of black dashes ("barcode" along the wall band, dotted lines under the colonnades)
@@ -76,6 +77,7 @@ vec4 rdLitter(vec2 p, float fw, float dens, float leafy) {
   acc.a *= near;
   return acc;
 }
+#endif
 // Voronoi crack network: cell borders as box-filtered lines, fading to their mean coverage with distance
 float rdCrackNet(vec2 p, float cell, float w, float fw) {
   vec4 v = texture2D(tRC, p / (cell * 8.0));
@@ -282,9 +284,11 @@ vec3 rdAsphalt(inout float rough) {
   // ── gutter litter: leaves, butts, gum and paper collect along the kerb
   {
     float gut = step(0.5, vA.x) * smoothstep(2.75, 3.15, abs(lat)) * onRoad;
+#ifdef RD_LITTER
     vec4 lt = rdLitter(p, max(fwP.x, fwP.y) + 1e-5, gut * (0.35 + 0.4 * smoothstep(0.4, 0.7, nM.g)), 0.7);
     c = mix(c, lt.rgb, lt.a);
     rough = mix(rough, 0.85, lt.a);
+#endif
   }
   // ── puddles (roads/puddles.ts): a few in the gutters even in dry weather, many after rain
   {
@@ -547,8 +551,10 @@ vec3 rdHard(inout float rough) {
     c *= 1.0 - 0.38 * line;
     c = mix(c, c * vec3(0.86, 0.79, 0.67), silt * 0.55);
     rough -= 0.25 * line;
+#ifdef RD_LITTER
     vec4 lt = rdLitter(p, max(fwp.x, fwp.y) + 1e-5, 0.45 * (1.0 - smoothstep(0.05, 0.25, d)), 0.8);
     c = mix(c, lt.rgb, lt.a * 0.9);
+#endif
    }
   } else if (sp > 3.5) {
     // working surfaces: oil blobs + tyre streaks along the long axis (quays, yards)
@@ -624,8 +630,10 @@ vec3 rdHard(inout float rough) {
         c = mix(c, c * sc3, clamp(fill * 0.8 + ring * 0.7, 0.0, 1.0));
       }
     }
+#ifdef RD_LITTER
     vec4 lt = rdLitter(p, max(fwp.x, fwp.y) + 1e-5, (onSide * 0.22 + 0.08) * (0.6 + 0.6 * nM.g) + onSide * 0.25 * smoothstep(5.9, 6.5, lat), 0.35);
     c = mix(c, lt.rgb, lt.a * 0.9);
+#endif
   }
   float wetH = max(uRain, uWetH * 0.85);
   rdEmit += rdPavingMirror(vWP, wetH * 0.7, nS.rg);

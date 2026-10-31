@@ -13,7 +13,6 @@ export interface SourceAttr {
 
 /** the vertices of triangles the bubble can ask for, one grid per class of surface */
 export class TriGrid {
-  private readonly data: Float32Array[] = [];
   /** per bucket: offset into `tris` */
   private start: Int32Array = new Int32Array(1);
   /** (geometry index * 2^24 is not enough room: pairs) triangle's geometry and first index */
@@ -25,6 +24,8 @@ export class TriGrid {
   /** floats per vertex in a built cell */
   readonly stride: number;
   triangles = 0;
+  /** offset of a per-vertex direction filled in per triangle (aGrain): the way the piece runs */
+  private readonly grainAt: number;
 
   constructor(
     private readonly geos: THREE.BufferGeometry[],
@@ -33,6 +34,13 @@ export class TriGrid {
     keep: (geo: THREE.BufferGeometry, a: number, b: number, c: number) => boolean,
   ) {
     this.stride = attrs.reduce((s, a) => s + a.size, 0);
+    let off = 0;
+    let gr = -1;
+    for (const a of attrs) {
+      if (a.name === 'aGrain') gr = off;
+      off += a.size;
+    }
+    this.grainAt = gr;
     this.index(keep);
   }
 
@@ -111,23 +119,77 @@ export class TriGrid {
       this.tris[p] = gi;
       this.tris[p + 1] = t;
     });
-    // the arrays a build reads, unpacked once
-    for (const g of this.geos) {
-      const pos = g.getAttribute('position');
-      const v = new Float32Array(pos.count * this.stride);
-      let o = 0;
-      for (const a of this.attrs) {
-        const src = g.getAttribute(a.name) as THREE.BufferAttribute | THREE.InterleavedBufferAttribute | undefined;
-        if (src) {
-          for (let i = 0; i < pos.count; i++) {
-            for (let c = 0; c < a.size; c++) {
-              v[i * this.stride + o + c] = c === 0 ? src.getX(i) : c === 1 ? src.getY(i) : c === 2 ? src.getZ(i) : src.getW(i);
-            }
+  }
+
+  /** the nearest triangle along a ray within maxT (m), or -1. Short rays only: it walks the grid and tests what it meets */
+  raycast(ox: number, oy: number, oz: number, dx: number, dy: number, dz: number, maxT: number): number {
+    if (this.triangles === 0) return -1;
+    let best = -1;
+    let last = -1;
+    const C = this.cell;
+    for (let u = 0; ; u += C * 0.5) {
+      const t = Math.min(u, maxT);
+      const bi = Math.floor((ox + dx * t) / C) - this.x0,
+        bj = Math.floor((oz + dz * t) / C) - this.z0;
+      if (bi >= 0 && bj >= 0 && bi < this.nx && bj < this.nz) {
+        const b = bj * this.nx + bi;
+        if (b !== last) {
+          last = b;
+          for (let q = this.start[b]; q < this.start[b + 1]; q++) {
+            const g = this.geos[this.tris[q * 2]];
+            const tri = this.tris[q * 2 + 1];
+            const idx = g.index;
+            const P = g.getAttribute('position').array as Float32Array;
+            const a = (idx ? idx.getX(tri) : tri) * 3,
+              e = (idx ? idx.getX(tri + 1) : tri + 1) * 3,
+              f = (idx ? idx.getX(tri + 2) : tri + 2) * 3;
+            const e1x = P[e] - P[a],
+              e1y = P[e + 1] - P[a + 1],
+              e1z = P[e + 2] - P[a + 2],
+              e2x = P[f] - P[a],
+              e2y = P[f + 1] - P[a + 1],
+              e2z = P[f + 2] - P[a + 2];
+            const px = dy * e2z - dz * e2y,
+              py = dz * e2x - dx * e2z,
+              pz = dx * e2y - dy * e2x;
+            const det = e1x * px + e1y * py + e1z * pz;
+            if (det > -1e-9 && det < 1e-9) continue;
+            const inv = 1 / det;
+            const tx = ox - P[a],
+              ty = oy - P[a + 1],
+              tz = oz - P[a + 2];
+            const v = (tx * px + ty * py + tz * pz) * inv;
+            if (v < 0 || v > 1) continue;
+            const qx = ty * e1z - tz * e1y,
+              qy = tz * e1x - tx * e1z,
+              qz = tx * e1y - ty * e1x;
+            const w = (dx * qx + dy * qy + dz * qz) * inv;
+            if (w < 0 || v + w > 1) continue;
+            const hit = (e2x * qx + e2y * qy + e2z * qz) * inv;
+            if (hit > 0.05 && hit <= maxT && (best < 0 || hit < best)) best = hit;
           }
         }
-        o += a.size;
       }
-      this.data.push(v);
+      if (t >= maxT) break;
+    }
+    return best;
+  }
+
+  /** one vertex of a source geometry into the scratch (an attribute it does not have stays 0) */
+  private read(g: THREE.BufferGeometry, v: number, out: Float32Array, at: number): void {
+    let o = at;
+    for (const a of this.attrs) {
+      const src = g.getAttribute(a.name) as THREE.BufferAttribute | undefined;
+      if (src && src.array instanceof Float32Array && (src as unknown as { isInterleavedBufferAttribute?: boolean }).isInterleavedBufferAttribute !== true) {
+        const arr = src.array;
+        const p = v * src.itemSize;
+        for (let c = 0; c < a.size; c++) out[o + c] = c < src.itemSize ? arr[p + c] : 0;
+      } else if (src) {
+        for (let c = 0; c < a.size; c++) out[o + c] = c === 0 ? src.getX(v) : c === 1 ? src.getY(v) : c === 2 ? src.getZ(v) : src.getW(v);
+      } else {
+        for (let c = 0; c < a.size; c++) out[o + c] = 0;
+      }
+      o += a.size;
     }
   }
 
@@ -155,16 +217,14 @@ export class TriGrid {
       const gi = this.tris[q * 2],
         t = this.tris[q * 2 + 1];
       const g = this.geos[gi];
-      const d = this.data[gi];
       const idx = g.index;
       const v0 = idx ? idx.getX(t) : t,
         v1 = idx ? idx.getX(t + 1) : t + 1,
         v2 = idx ? idx.getX(t + 2) : t + 2;
-      for (let c = 0; c < S; c++) {
-        ax[c] = d[v0 * S + c];
-        ax[S + c] = d[v1 * S + c];
-        ax[2 * S + c] = d[v2 * S + c];
-      }
+      this.read(g, v0, ax, 0);
+      this.read(g, v1, ax, S);
+      this.read(g, v2, ax, 2 * S);
+      if (this.grainAt >= 0) grainOf(ax, S, this.grainAt);
       // Sutherland-Hodgman against the four sides, in a fixed order
       let m = 3;
       m = clip(ax, bx, m, S, 0, x0, 1);
@@ -187,6 +247,46 @@ export class TriGrid {
     }
     if (n === 0) return null;
     return make(out.slice(0, n));
+  }
+}
+
+/** the way a piece runs: of a quad's two triangles the longest edge is the diagonal, so the second longest edge is its long side */
+function grainOf(t: Float32Array, S: number, at: number): void {
+  const ax = t[S] - t[0],
+    ay = t[S + 1] - t[1],
+    az = t[S + 2] - t[2],
+    bx = t[2 * S] - t[S],
+    by = t[2 * S + 1] - t[S + 1],
+    bz = t[2 * S + 2] - t[S + 2],
+    cx = t[0] - t[2 * S],
+    cy = t[1] - t[2 * S + 1],
+    cz = t[2] - t[2 * S + 2];
+  const la = ax * ax + ay * ay + az * az,
+    lb = bx * bx + by * by + bz * bz,
+    lc = cx * cx + cy * cy + cz * cz;
+  let ex, ey, ez, l;
+  if ((la >= lb && la <= lc) || (la <= lb && la >= lc)) {
+    ex = ax;
+    ey = ay;
+    ez = az;
+    l = la;
+  } else if ((lb >= la && lb <= lc) || (lb <= la && lb >= lc)) {
+    ex = bx;
+    ey = by;
+    ez = bz;
+    l = lb;
+  } else {
+    ex = cx;
+    ey = cy;
+    ez = cz;
+    l = lc;
+  }
+  // a sign that does not depend on which triangle of the quad it is
+  const n = (Math.sqrt(l) || 1) * ((ey !== 0 ? ey : ex !== 0 ? ex : ez) < 0 ? -1 : 1);
+  for (let k = 0; k < 3; k++) {
+    t[k * S + at] = ex / n;
+    t[k * S + at + 1] = ey / n;
+    t[k * S + at + 2] = ez / n;
   }
 }
 

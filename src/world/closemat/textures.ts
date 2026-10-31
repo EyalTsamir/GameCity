@@ -123,10 +123,20 @@ function grainTile(aniso: number): THREE.DataTexture {
   octave(h, 192, 192, 0.26, 5);
   octave(h, 384, 384, 0.16, 6);
   normalize(h);
+  // pits: a few sharp holes, the rest torn shapes where a patchy field peaks (no one looks at round dots twice)
   const p = new Float32Array(N * N);
-  pits(p, 2400, 0.7, 4.5, 7);
+  pits(p, 500, 0.6, 2.4, 7);
+  const torn = new Float32Array(N * N);
+  octave(torn, 64, 64, 1, 8);
+  octave(torn, 128, 128, 0.8, 9);
+  octave(torn, 256, 256, 0.4, 10);
+  normalize(torn);
+  for (let i = 0; i < p.length; i++) {
+    const t = Math.min(1, Math.max(0, (torn[i] - 0.73) / 0.05));
+    if (t > p[i]) p[i] = t;
+  }
   // pits are holes in the surface: they enter the slopes
-  for (let i = 0; i < h.length; i++) h[i] -= 0.22 * p[i];
+  for (let i = 0; i < h.length; i++) h[i] -= 0.14 * p[i];
   const data = new Uint8Array(N * N * 4);
   slopes(h, data, 11, 11);
   put(data, 2, h);
@@ -219,26 +229,26 @@ function fibreTile(aniso: number): THREE.DataTexture {
     for (let x = 0; x < N; x++) {
       const k = y * N + x;
       // an integer number of rings around the tile, so that it stays tileable: the warp shifts the phase, and its own tile closes
-      const ph = ((y + 0.5) / N) * 22 + warp[k] * 3.2;
+      const ph = ((y + 0.5) / N) * 7 + warp[k] * 2.2;
       const s = 0.5 + 0.5 * Math.sin(ph * 6.2832);
-      h[k] = Math.pow(s, 2.4) * 0.5;
+      h[k] = Math.pow(s, 3) * 0.3;
     }
   }
-  octave(h, 6, 64, 0.34, 63);
-  octave(h, 12, 128, 0.3, 64);
-  octave(h, 24, 256, 0.24, 65);
-  octave(h, 48, 384, 0.12, 66);
+  octave(h, 6, 48, 0.3, 63);
+  octave(h, 12, 96, 0.26, 64);
+  octave(h, 24, 192, 0.22, 65);
+  octave(h, 48, 384, 0.14, 66);
   normalize(h);
   // pores: short dark dashes along the grain
   const p = new Float32Array(N * N);
-  for (let n = 0; n < 2600; n++) {
+  for (let n = 0; n < 1400; n++) {
     const cx = Math.floor(hash(n, 1, 71) * N),
       cy = Math.floor(hash(n, 2, 71) * N),
       len = 3 + Math.floor(20 * Math.pow(hash(n, 3, 71), 2));
     for (let i = 0; i < len; i++) p[cy * N + ((cx + i) % N)] = Math.max(p[cy * N + ((cx + i) % N)], 1 - Math.abs(i / len - 0.5));
   }
   const data = new Uint8Array(N * N * 4);
-  slopes(h, data, 5, 14);
+  slopes(h, data, 3, 8);
   put(data, 2, h);
   put(data, 3, p);
   return texture(data, 'closemat-fibre', aniso);

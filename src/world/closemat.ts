@@ -4,7 +4,7 @@
 // scene's float target). So lighting, shadows, night and weathering stay as they are, the far versions and the bakes are not
 // touched, and the price is paid only by pixels near the camera. Nothing is built or drawn from the air.
 //
-// Switches (src/core/closemat.ts): ?noclosemat all; ?nocmwalls ?nocmroad ?nocmpaving ?nocmsolid one family; ?cmr=<k> scales the radii.
+// Switches (src/core/closemat.ts): ?noclosemat all; ?nocmwalls ?nocmroad ?nocmpaving ?nocmsolid ?nocmlitter one family; ?cmr=<k> scales the radii.
 
 import * as THREE from 'three';
 import type { CityContext, CityModule } from '../core/context';
@@ -13,6 +13,7 @@ import { globalUniforms } from '../core/uniforms';
 import { nearOf } from '../core/nearDetail';
 import { interleaved, TriGrid, type SourceAttr } from './closemat/source';
 import { makeCloseTiles } from './closemat/textures';
+import { addLitter } from './closemat/litter';
 import { CM_ASPHALT, CM_BRICK, CM_COMMON, CM_DECK, CM_LOOSE, CM_PANEL, CM_PLASTER, CM_SHEET, CM_SLAB, CM_SMOOTH, CM_SOLID, CM_STONE, CM_TIMBER, CM_VERT } from './closemat/glsl';
 import { WALLPAT } from './buildings/materials';
 import { roadNoise } from './roads/materials';
@@ -45,15 +46,28 @@ const HARD_ATTRS: SourceAttr[] = [
   { name: 'aX', size: 4 },
 ];
 
+export interface CloseMatService {
+  /** distance to the nearest surface along a ray (normalised), or -1 within maxT */
+  rayHit(p: THREE.Vector3, d: THREE.Vector3, maxT: number): number;
+}
+
+const SOLID_ATTRS: SourceAttr[] = [
+  { name: 'position', size: 3 },
+  { name: 'normal', size: 3 },
+  { name: 'color', size: 3, to: 'aCol' },
+  { name: 'aGrain', size: 3 },
+];
+
 export default function create(ctx: CityContext): CityModule {
   const near = nearOf(ctx);
   const on = {
     walls: closeMat(ctx, 'cmwalls'),
     road: closeMat(ctx, 'cmroad'),
     paving: closeMat(ctx, 'cmpaving'),
+    solid: closeMat(ctx, 'cmsolid'),
   };
   const stats: Record<string, number | string> = {};
-  if (!on.walls && !on.road && !on.paving) return { name: 'closemat', stats: () => stats };
+  if (!on.walls && !on.road && !on.paving && !on.solid) return { name: 'closemat', stats: () => stats };
 
   const t0 = performance.now();
   const tiles = makeCloseTiles(ctx.quality.level === 'high' ? 8 : 4);
@@ -100,9 +114,11 @@ export default function create(ctx: CityContext): CityModule {
       toneMapped: false,
     });
 
+  const grids: TriGrid[] = [];
   const layer = (name: string, grid: TriGrid, attrs: SourceAttr[], frag: string, define: string, radius: number, cell: number, top: number): void => {
     stats[name] = grid.triangles;
     if (grid.triangles === 0) return;
+    grids.push(grid);
     const R = radius * rK;
     near.addMeshes({
       name,
@@ -159,9 +175,45 @@ export default function create(ctx: CityContext): CityModule {
     layer('cmLoose', hg('loose'), HARD_ATTRS, CM_LOOSE, 'CM_HARD', 12, cell, 0.5);
     layer('cmDeck', hg('deck'), HARD_ATTRS, CM_DECK, 'CM_HARD', 14, cell, 1.2);
   }
-  // (CM_SOLID: trim and others, next)
-  void CM_SOLID;
+  if (on.solid) {
+    // only what is drawn whenever it is near: a level of detail hidden up close would leave its copy on the air
+    const cell = 8;
+    const solid = (name: string, test: (n: string) => boolean, rust: boolean, radius: number, top: number) => {
+      const geos = byName(test).filter((g) => g.getAttribute('normal') && g.getAttribute('color'));
+      const grid = new TriGrid(geos, SOLID_ATTRS, cell, (g, a, b, c) => {
+        const sway = g.getAttribute('aSway') ?? g.getAttribute('aAnim');
+        if (sway && (sway.itemSize === 4 ? sway.getW(a) : sway.getX(a)) !== 0) return false;
+        // a piece too small to have a surface
+        const P = g.getAttribute('position');
+        const dx = Math.abs(P.getX(a) - P.getX(b)) + Math.abs(P.getY(a) - P.getY(b)) + Math.abs(P.getZ(a) - P.getZ(b));
+        const dy = Math.abs(P.getX(b) - P.getX(c)) + Math.abs(P.getY(b) - P.getY(c)) + Math.abs(P.getZ(b) - P.getZ(c));
+        return dx + dy > 0.12;
+      });
+      layer(name, grid, SOLID_ATTRS, rust ? '#define CM_RUST\n' + CM_SOLID : CM_SOLID, 'CM_SOLID', radius, cell, top);
+    };
+    solid('cmTrim', (n) => n === 'buildings-trim', false, 12, 30);
+    solid('cmMasonry', (n) => n === 'terrain-masonry' || n.startsWith('harbor-north') || n.startsWith('harbor-yards') || n.startsWith('harbor-river') || n.startsWith('harbor-beach'), false, 12, 8);
+    solid('cmStreet', (n) => n === 'props-furniture-e' || n === 'props-furniture-w' || n === 'props-furniture-fine-e' || n === 'props-furniture-fine-w' || n === 'props-casters' || n === 'life-poles', false, 12, 6);
+    solid('cmMetal', (n) => n === 'terrain-railings' || n === 'traffic-signal-poles' || n === 'rail-furniture', true, 12, 8);
+  }
+  if (closeMat(ctx, 'cmlitter')) addLitter(ctx);
   stats.bootMs = Math.round(performance.now() - t0);
+  // what the lens should focus on from up close: the real surfaces, down to a bench or the wall at the back of a porch
+  const service: CloseMatService = {
+    rayHit(p, d, maxT) {
+      let best = -1;
+      let reach = maxT;
+      for (const g of grids) {
+        const t = g.raycast(p.x, p.y, p.z, d.x, d.y, d.z, reach);
+        if (t >= 0) {
+          best = t;
+          reach = t;
+        }
+      }
+      return best;
+    },
+  };
+  ctx.services.closeMat = service;
 
   return { name: 'closemat', stats: () => stats };
 }

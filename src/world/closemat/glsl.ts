@@ -115,7 +115,7 @@ float cmOpen(float px) {
   if (cell.x < 0.0 || cell.y < 0.0 || cell.x >= vB.x || cell.y >= vB.y) return 1.0;
   vec2 pm = (vFac - cell) * vC.xy;
   float d = max(max(vA.x - pm.x, pm.x - vA.y), max(vA.z - pm.y, pm.y - vA.w));
-  return smoothstep(0.012, 0.03 + px, d);
+  return smoothstep(0.0, 0.004 + px, d);
 }
 `;
 
@@ -201,10 +201,11 @@ void main() {
     float aaE = 0.0035 + fa * 0.9;
     float m = 1.0 - smoothstep(0.0065 - aaE, 0.0065 + aaE, e);
     // face: fired surface, sand pits, a blush of darker firing over some of its length
-    vec2 s = (g.rg - 0.5) * 0.85 + (vec2(rnd, fract(rnd * 5.1)) - 0.5) * 0.07;
+    float rough = 0.25 + 0.5 * fract(rnd * 23.1);
+    vec2 s = (g.rg - 0.5) * rough + (vec2(rnd, fract(rnd * 5.1)) - 0.5) * 0.07;
     float light = cmLight(N, normalize(N - T * s.x - U * s.y));
     float fire = smoothstep(0.42, 0.72, c.b + (rnd - 0.5) * 0.5);
-    vec3 face = vec3(light * (1.0 + (g.b - 0.5) * 0.34) * (1.0 - 0.5 * g.a));
+    vec3 face = vec3(1.05 * light * (1.0 + (g.b - 0.5) * 0.3) * (1.0 - 0.42 * rough * g.a));
     face *= mix(vec3(1.06, 1.02, 0.98), vec3(0.8, 0.76, 0.76), fire * fract(rnd * 3.7));
     // the arris catches the sky above and hides below
     float top = 1.0 - smoothstep(0.0, 0.014, bl.w - bl.y - 0.006);
@@ -222,12 +223,12 @@ void main() {
     face = mix(face, vec3(0.72, 0.71, 0.68) / max(col * base, vec3(0.05)), 0.55 * eff);
     // mortar: its own colour, not the brick's. Recessed: shaded under the brick above, lit along the brick below
     float inJ = 1.0 - smoothstep(0.0, 0.012, bl.y);
-    vec3 mort = vec3(0.34, 0.325, 0.295) * (0.72 + 0.56 * g.b + 0.3 * (c.b - 0.5)) * (1.0 - 0.5 * g.a);
-    mort *= mix(0.86, 0.58, inJ);
+    vec3 mort = vec3(0.4, 0.385, 0.35) * (0.72 + 0.56 * g.b + 0.3 * (c.b - 0.5)) * (1.0 - 0.3 * g.a);
+    mort *= mix(0.95, 0.7, inJ);
     // what the base drew under the new edge: the mortar band or the brick
     float baseM = 1.0 - smoothstep(0.004, 0.0085, d);
     vec3 under = mix(base, vec3(1.3) * (0.94 + 0.12 * c.a), baseM);
-    vec3 mr = mort / max(col * under, vec3(0.04));
+    vec3 mr = min(mort / max(col * under, vec3(0.04)), vec3(1.9));
     // pale mortar joints would fight the lit arris the base draws on the upper-left of each joint: pull it down
     vec3 fr = face / mix(vec3(1.0), under / base, baseM);
     ratio = mix(fr, mr, m);
@@ -247,7 +248,7 @@ void main() {
   vec4 w = CMT(tGrain, q * 0.31 + so.yx, 0.31);
   vec2 s = (g.rg - 0.5) * 0.72 + (w.rg - 0.5) * 0.5;
   float light = cmLight(N, normalize(N - T * s.x - U * s.y));
-  vec3 ratio = vec3(light * (1.0 + (g.b - 0.5) * 0.22) * (1.0 - 0.38 * g.a));
+  vec3 ratio = vec3(light * (1.0 + (g.b - 0.5) * 0.2) * (1.0 - 0.22 * g.a));
   ratio *= 0.93 + 0.14 * c.b;
   // hairline crazing where the render has been working, the odd longer crack
   float dist = c.r * 0.04;
@@ -272,7 +273,7 @@ void main() {
     vec2 s2 = (g.rg - 0.5) * 1.9;
     float l2 = cmLight(N, normalize(N - T * s2.x - U * s2.y));
     vec3 under = vec3(0.34, 0.31, 0.27) * (0.65 + 0.7 * g.b) * l2 * (1.0 - 0.5 * g.a);
-    ratio = mix(ratio, under / max(col, vec3(0.05)), chip);
+    ratio = mix(ratio, min(under / max(col, vec3(0.05)), vec3(1.6)), chip);
   }
   ratio *= 1.0 + 0.16 * rim;
   if (vP.y < pH) ratio = mix(ratio, vec3(light * (1.0 - 0.3 * g.a)), 0.7);
@@ -296,9 +297,9 @@ void main() {
   vec4 f = textureGrad(tFibre, uv, dgx * vec2(0.833, 3.33), dgy * vec2(0.833, 3.33));
   vec4 c = CMT(tCrack, q * 0.39 + so + rnd * 3.0, 0.39);
   float paint = step(0.3, fract(seed * 0.6113 + 0.3));
-  vec2 s = (f.rg - 0.5) * mix(1.1, 0.45, paint);
+  vec2 s = (f.rg - 0.5) * mix(0.8, 0.3, paint);
   float light = cmLight(N, normalize(N - T * s.x - U * s.y));
-  vec3 ratio = vec3(light * (1.0 + (f.b - 0.5) * mix(0.55, 0.22, paint)) * (1.0 - mix(0.5, 0.22, paint) * f.a));
+  vec3 ratio = vec3(light * (1.0 + (f.b - 0.5) * mix(0.42, 0.14, paint)) * (1.0 - mix(0.4, 0.12, paint) * f.a));
   // the paint has gone along the grain, first at the foot and under the lap: grey old wood
   float yy = vP.y;
   float wear = 0.74 - 0.14 * (1.0 - smoothstep(0.3, 1.8, yy)) - 0.08 * (1.0 - smoothstep(0.0, 0.12, fy));
@@ -460,15 +461,20 @@ export const CM_SMOOTH = /* glsl */ `
 ${WALL_HEAD}
 void main() {
   ${WALL_MAIN}
-  vec4 g = CMT(tGrain, q * 0.9 + so, 0.9);
+  vec4 g = CMT(tGrain, q * 1.667 + so, 1.667);
+  vec4 st = CMT(tStones, q * 2.6 + so, 2.6);
   vec4 c = CMT(tCrack, q * 0.39 + so * 0.3, 0.39);
   vec2 fuv = vec2(q.y / 1.2, q.x / 0.3) + so;
   vec4 f = textureGrad(tFibre, fuv, vec2(gx.y * 0.833, gx.x * 3.33), vec2(gy.y * 0.833, gy.x * 3.33));
-  vec2 s = (g.rg - 0.5) * 0.1;
+  vec2 s = (g.rg - 0.5) * 0.18;
   vec3 ratio = vec3(cmLight(N, normalize(N - T * s.x - U * s.y)));
-  // film of city grime down the fall of the rain, rubbed scratches at hand height
-  ratio *= 1.0 + (c.b - 0.5) * 0.14 + (f.b - 0.5) * 0.08;
-  ratio *= 1.0 - 0.28 * smoothstep(0.6, 0.9, f.a) * (1.0 - smoothstep(0.8, 2.2, vP.y));
+  // honed stone or coated sheet: minerals in it, a film of grime down the fall of the rain, rubbed at hand height, nicks
+  ratio *= 1.0 + (st.g - 0.5) * 0.3 * smoothstep(0.1, 0.3, st.r);
+  ratio *= 1.0 + (c.b - 0.5) * 0.28 + (f.b - 0.5) * 0.2;
+  float hand = 1.0 - smoothstep(0.8, 2.2, vP.y);
+  ratio *= 1.0 + 0.22 * smoothstep(0.55, 0.9, f.a + c.a * 0.4) * hand;
+  float nick = smoothstep(0.76, 0.8, c.a * 0.7 + g.b * 0.3);
+  ratio = mix(ratio, vec3(1.7), nick * 0.7);
   gl_FragColor = vec4(max(mix(vec3(1.0), ratio, k), vec3(0.0)), 1.0);
 }
 `;
@@ -484,20 +490,24 @@ void main() {
   float fa = cmArea(gx, gy);
   if (fa >= CM_LIM) { gl_FragColor = vec4(1.0); return; }
   float k = 1.0 - smoothstep(CM_LIM * 0.45, CM_LIM, fa);
-  vec4 s0 = CMT(tStones, p * 1.25, 1.25);
-  // the stones' relief against the light: the same tile a little toward the sun
-  vec2 ld = uSunDir.xz / max(uSunDir.y, 0.25);
-  vec4 s1 = CMT(tStones, p * 1.25 + ld * 0.0035, 1.25);
   vec4 g = CMT(tGrain, p * 1.667, 1.667);
   vec4 c = CMT(tCrack, p * 0.39, 0.39);
-  float stone = smoothstep(0.1, 0.34, s0.r);
+  // (the grain pushes the lookup about: no straight polygon edges)
+  vec2 sq = p * 1.8 + (g.rg - 0.5) * 0.035;
+  vec4 s0 = CMT(tStones, sq, 1.8);
+  // the stones' relief against the light: the same tile a little toward the sun
+  vec2 ld = uSunDir.xz / max(uSunDir.y, 0.25);
+  vec4 s1 = CMT(tStones, sq + ld * 0.0035, 1.8);
   float id = s0.g;
+  // some stones lie under the binder, the road is not a mosaic
+  float buried = smoothstep(0.3, 0.36, fract(id * 5.7));
+  float stone = smoothstep(0.16, 0.42, s0.r) * buried;
   // limestone and basalt chippings: most grey, some warm, a few nearly white, in near-black binder; worn tops
-  vec3 tone = vec3(0.76 + 0.5 * id);
-  tone *= mix(vec3(1.0), vec3(1.14, 1.04, 0.9), step(0.72, fract(id * 7.3)));
-  tone = mix(tone, vec3(1.85, 1.8, 1.7), step(0.93, fract(id * 13.7)));
+  vec3 tone = vec3(0.92 + 0.4 * id);
+  tone *= mix(vec3(1.0), vec3(1.1, 1.03, 0.92), step(0.72, fract(id * 7.3)));
+  tone = mix(tone, vec3(1.7, 1.66, 1.58), step(0.95, fract(id * 13.7)));
   tone = mix(tone, vec3(0.5, 0.5, 0.52), step(0.82, fract(id * 3.1)) * step(fract(id * 13.7), 0.93));
-  float binder = 0.46 + 0.2 * g.b;
+  float binder = 0.56 + 0.22 * g.b;
   vec3 ratio = mix(vec3(binder), tone, stone);
   // sun on one side of each stone, shade on the other
   float rel = (s0.b - s1.b) * 2.6 * uDaylight * smoothstep(0.02, 0.3, uSunDir.y);
@@ -620,19 +630,19 @@ void main() {
   vec2 s = (g.rg - 0.5) * 0.62;
   float light = cmLight(N, normalize(N - TX * s.x - TZ * s.y));
   float clay = step(vCl.g * 1.5, vCl.r);
-  vec3 ratio = vec3(light * (1.0 + (g.b - 0.5) * 0.24) * (1.0 - 0.42 * g.a));
-  ratio *= 1.0 + (st.g - 0.5) * mix(0.36, 0.06, clay) * smoothstep(0.08, 0.3, st.r);
+  vec3 ratio = vec3(light * (1.0 + (g.b - 0.5) * 0.24) * (1.0 - 0.24 * g.a));
+  ratio *= 1.0 + (st.g - 0.5) * mix(0.3, 0.05, clay) * smoothstep(0.08, 0.3, st.r);
   ratio *= 0.92 + 0.16 * c.b;
   // the edge of each stone: worn, nibbled by frost and wheels; corners go first; a wide dirty margin
   vec2 sa = max(size, vec2(minS));
-  float e = edge - (c.a - 0.46) * 0.022 - (g.b - 0.5) * 0.008;
+  float e = edge - (c.a - 0.46) * 0.016 - (g.b - 0.5) * 0.006;
   float jw = max(vPp.z, 0.006);
   float nib = 1.0 - smoothstep(jw * 0.5, jw * 0.5 + 0.005 + fa, e);
   // joints: grit, dark at heart, here and there a line of moss in the shade
   vec3 jc = vec3(0.44 + 0.3 * g.b, 0.42 + 0.27 * g.b, 0.36 + 0.24 * g.b) * (0.62 + 0.3 * st.r);
   float moss = smoothstep(0.5, 0.74, c.b + (g.b - 0.5) * 0.4) * step(0.45, fract(rnd * 3.3));
   jc = mix(jc, vec3(0.42, 0.56, 0.18) * (0.5 + g.b), moss * 0.75);
-  jc = jc * vec3(0.2) / max(vCl, vec3(0.05));
+  jc = jc * vec3(0.3) / max(vCl, vec3(0.1));
   ratio = mix(ratio, jc, nib);
   ratio *= 1.0 - 0.18 * (1.0 - smoothstep(0.0, min(0.05, minS * 0.3), edge)) * (1.0 - nib);
   // a crack across some big slabs; the spot of old gum and the rust ring of a table leg belong to a town's floor
@@ -692,9 +702,9 @@ void main() {
   vec2 fu = vec2(uv.x / 1.2 + rnd * 7.0, uv.y / 0.3 + rnd * 11.0);
   vec4 f = textureGrad(tFibre, fu, gx * vec2(0.833, 3.33), gy * vec2(0.833, 3.33));
   vec4 c = CMT(tCrack, uv * 0.39 + rnd * 5.0, 0.39);
-  vec2 s = (f.rg - 0.5) * 1.15;
+  vec2 s = (f.rg - 0.5) * 0.85;
   float light = cmLight(N, normalize(N - TX * s.x - TZ * s.y));
-  vec3 ratio = vec3(light * (1.0 + (f.b - 0.5) * 0.5) * (1.0 - 0.5 * f.a));
+  vec3 ratio = vec3(light * (1.0 + (f.b - 0.5) * 0.38) * (1.0 - 0.38 * f.a));
   // weathered silver over the old brown, worn pale where people walk
   float grey = smoothstep(0.4, 0.68, c.b + (rnd - 0.5) * 0.5);
   float lum = dot(vCl, vec3(0.3, 0.59, 0.11));
@@ -734,27 +744,39 @@ void main() {
   float wood = step(0.28, sat) * step(col.b, col.g) * step(col.g, col.r) * step(0.03, lum) * step(lum, 0.42) * step(col.g, col.r * 0.82);
   float paint = (1.0 - wood) * max(step(0.3, sat), step(lum, 0.12));
   vec3 ratio;
-  vec4 c = CMT(tCrack, q * 0.39, 0.39);
+  vec4 c = CMT(tCrack, q * 0.39 + vGr.xz * 3.0, 0.39);
   if (wood > 0.5) {
     vec2 fu = vec2(q.x / 1.2, q.y / 0.3);
     vec4 f = textureGrad(tFibre, fu, gx * vec2(0.833, 3.33), gy * vec2(0.833, 3.33));
-    vec2 s = (f.rg - 0.5) * 1.0;
+    vec2 s = (f.rg - 0.5) * 0.7;
     float light = cmLight(N, normalize(N - G * s.x - C * s.y));
-    ratio = vec3(light * (1.0 + (f.b - 0.5) * 0.46) * (1.0 - 0.5 * f.a));
+    ratio = vec3(light * (1.0 + (f.b - 0.5) * 0.3) * (1.0 - 0.34 * f.a));
     ratio *= mix(vec3(1.0), vec3(1.1, 1.06, 1.0), smoothstep(0.45, 0.8, c.b));
   } else {
     vec4 g = CMT(tGrain, q * 1.667, 1.667);
     if (paint > 0.5) {
-      // enamel on steel: orange peel, brush marks, a scratch, rust where it has chipped
+      vec2 fu = vec2(q.x / 1.2, q.y / 0.3);
+      vec4 f = textureGrad(tFibre, fu, gx * vec2(0.833, 3.33), gy * vec2(0.833, 3.33));
+      float fl = c.a * 0.72 + c.b * 0.2 + g.b * 0.08;
+      float chip = smoothstep(0.71, 0.73 + fa, fl);
+      float rim = smoothstep(0.67, 0.71, fl) * (1.0 - chip);
+#ifdef CM_RUST
+      // enamel on steel: orange peel, a scratch, rust where it has chipped, weeping below
       vec2 s = (g.rg - 0.5) * 0.16;
       ratio = vec3(cmLight(N, normalize(N - G * s.x - C * s.y)));
-      float fl = c.a * 0.72 + c.b * 0.2 + g.b * 0.08;
-      float chip = smoothstep(0.7, 0.72 + fa, fl);
-      float rim = smoothstep(0.66, 0.7, fl) * (1.0 - chip);
-      vec3 rc = mix(vec3(0.17, 0.072, 0.03), vec3(0.36, 0.17, 0.06), g.b);
-      ratio = mix(ratio, rc / col, chip);
-      ratio *= 1.0 + 0.1 * rim;
-      ratio *= 1.0 - 0.2 * step(0.8, c.b) * smoothstep(0.72, 0.8, g.b);
+      ratio *= 1.0 + (f.b - 0.5) * 0.08;
+      vec3 rc = mix(vec3(0.17, 0.072, 0.03), vec3(0.36, 0.17, 0.06), g.b) * (1.0 - 0.3 * g.a);
+      ratio = mix(ratio, min(rc / col, vec3(3.0)), chip);
+      ratio *= mix(vec3(1.0), vec3(0.92, 0.82, 0.7), smoothstep(0.6, 0.71, fl) * (1.0 - chip));
+#else
+      // gloss paint on joinery: the grain and the brush show through; where it has chipped, the primer, then old wood
+      vec2 s = (f.rg - 0.5) * 0.4 + (g.rg - 0.5) * 0.06;
+      ratio = vec3(cmLight(N, normalize(N - G * s.x - C * s.y)));
+      ratio *= 1.0 + (f.b - 0.5) * 0.1;
+      vec3 under = vec3(0.3, 0.27, 0.22) * (0.6 + 0.8 * f.b);
+      ratio = mix(ratio, min(under / col, vec3(3.0)), chip);
+#endif
+      ratio *= 1.0 + 0.12 * rim;
     } else {
       vec2 s = (g.rg - 0.5) * 0.65;
       ratio = vec3(cmLight(N, normalize(N - G * s.x - C * s.y)) * (1.0 + (g.b - 0.5) * 0.22) * (1.0 - 0.44 * g.a));
