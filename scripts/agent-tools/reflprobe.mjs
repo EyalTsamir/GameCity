@@ -4,7 +4,7 @@
 import { launchBrowser, acquireLock, releaseLock } from 'file:///C:/Projects/GameCity/scripts/browser.mjs';
 import fs from 'node:fs';
 const [, , base, out, viewS, hourS, ...filters] = process.argv;
-const url = base + '?nofilm&nointro&noidle&adaptive=0&bdbg=refl';
+const url = base + '?nofilm&nointro&noidle&adaptive=0' + (process.env.REFLQ ?? '&bdbg=refl');
 const v = viewS.split(',').map(Number);
 fs.mkdirSync(out, { recursive: true });
 await acquireLock();

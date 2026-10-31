@@ -464,13 +464,13 @@ export class PlanarReflection {
     // the facades' window interiors, frames and mirrored street are sub-pixel in this 1/3-res, blurred mirror: the
     // facade shader's 'low' tier (averaged windows, wall weathering kept) for the pass, −0.4…0.7 ms in the overview /
     // harbour (?reflfacade keeps full detail)
-    // (in the glass mirror the opposite row stands close and sharp, and its windows are what makes it a street: full detail, without
-    // the painted street in its panes)
+    // (in the glass and wet-road mirrors the row stands close and sharp, and its windows are what makes it a street: full detail, without
+    // the painted street in its panes; the averaged windows of the low tier light the whole night road up cream)
     const bu = (this.ctx.services.buildings as { uniforms?: Record<string, { value: unknown }> } | undefined)?.uniforms;
-    const fd = this.facadeDetail || G ? null : (bu?.uDetail ?? null);
+    const fd = this.facadeDetail || G || this.street ? null : (bu?.uDetail ?? null);
     const prevDetail = fd ? (fd.value as number) : 1;
     if (fd) fd.value = Math.min(prevDetail, 0.4);
-    const wr = G ? (bu?.uWinRefl ?? null) : null;
+    const wr = G || this.street ? (bu?.uWinRefl ?? null) : null;
     const prevWR = wr ? (wr.value as number) : 0;
     if (wr) wr.value = 0;
     const bs = this.blendSave;
@@ -526,6 +526,11 @@ export class PlanarReflection {
         m.blendSrcAlpha = bs[bi++] as THREE.BlendingSrcFactor | null;
         m.blendDstAlpha = bs[bi++] as THREE.BlendingDstFactor | null;
       }
+      // (the debug list first, it overlaps the lists above and was saved after them)
+      if (dbgHidden) {
+        let di = n;
+        for (const o of this.dbgList) o.visible = vs[di++];
+      }
       n = 0;
       if (this.treesFar) this.treesFar.visible = vs[n++];
       for (const o of this.treesNear) o.visible = vs[n++];
@@ -533,7 +538,6 @@ export class PlanarReflection {
       for (const o of this.glassOnly) o.visible = vs[n++];
       for (const o of this.night) o.visible = vs[n++];
       for (const o of this.small) o.visible = vs[n++];
-      if (dbgHidden) for (const o of this.dbgList) o.visible = vs[n++];
       scene.background = prevBg;
       scene.matrixWorldAutoUpdate = prevMWAU;
       renderer.shadowMap.autoUpdate = prevShadow;
