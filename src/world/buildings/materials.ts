@@ -26,6 +26,7 @@
 // URL switches (read in buildings.ts): ?legacyfacade = the original shell shader (A/B).
 
 import * as THREE from 'three';
+import { FAR_BAKE_OUT, FAR_FRAG_MAIN, FAR_FRAG_PARS, FAR_VERT_MAIN, FAR_VERT_PARS, NEAR_VERT_MAIN, NEAR_VERT_PARS } from './farFacade';
 import type { GlobalUniforms } from '../../core/uniforms';
 import { LAMP_GLSL, lampUniforms } from '../../core/lampLight';
 import { LEGACY_SHELL_FRAG_PARS, LEGACY_SHELL_FRAG_MAIN } from './legacyShell';
@@ -136,6 +137,11 @@ export interface BuildingMaterials {
   shellShop: THREE.MeshStandardMaterial;
   /** roofs (SHELL_SPLIT) */
   shellRoof: THREE.MeshStandardMaterial;
+  /** far facades (farFacade.ts): a pass of the atlas's bake, the program that draws it, the shader text it depends on, the distance (m) walls hand over at; 0 = none */
+  shellBake: (pass: number) => THREE.MeshStandardMaterial;
+  shellFar: (textures: { tFF0: THREE.IUniform; tFF1: THREE.IUniform; tFF2: THREE.IUniform }) => THREE.MeshStandardMaterial;
+  shellText: string;
+  uFarD: { value: number };
   trim: THREE.MeshStandardMaterial;
   lights: THREE.MeshBasicMaterial;
   signs: THREE.MeshStandardMaterial;
@@ -329,6 +335,11 @@ float bhOccupancy(float h, float prof) {
 `;
 
 const SHELL_FRAG_PARS = /* glsl */ `
+#ifdef BH_BAKE
+uniform float uBakeLit;
+uniform float uBakeRefl;
+uniform float uBakePass;
+#endif
 varying vec2 vFac;
 varying vec4 vA;
 varying vec4 vB;
@@ -1625,6 +1636,9 @@ ${fg(`    bhDX = dFdx(rq); bhDY = dFdy(rq); // the return's own screen derivativ
   float nightF = clamp(uLights * (0.42 + 0.58 * uNight), 0.0, 1.0);
   // lit crown of tall office towers at night (uplight wash on the top floors of each tier)
   float crown = (curtain || ribbon) && prof > 0.5 && prof < 1.5 ? info * step(44.0, vD.z) * smoothstep(vD.z - 11.0, vD.z - 0.6, y) * nightF : 0.0;
+#ifdef BH_BAKE
+  crown = 0.0;
+#endif
 
   if (edge < 0.0) {
     // wall between the windows: per-floor tint drift + rain streaks below the sills
@@ -1741,6 +1755,9 @@ ${fg(`      float ew = max(0.09, fq.x * 1.25);
   float occ = bhOccupancy(hr, prof);
   float lit = step(u1, occ);
   if (office) lit *= step(r3, 0.9);
+#ifdef BH_BAKE
+  lit = uBakeLit;
+#endif
   // light colour
   vec3 lcol = vec3(1.0, 0.5, 0.17);
   if (r2 > 0.72) lcol = vec3(1.0, 0.62, 0.28);
@@ -1791,6 +1808,10 @@ ${fg(`      float ew = max(0.09, fq.x * 1.25);
   float envL = dot(env, vec3(0.2126, 0.7152, 0.0722));
   vec3 reflTint = mix(vec3(1.0), gtN, tintAmt) * (curtain ? 0.8 : 1.0); // (for the open-sash strip)
   vec3 refl = mix(env, envL * gtN, tintAmt) * (curtain ? mix(0.8, 0.92, uMirror) : 1.0) + uSunCol * glint;
+#ifdef BH_BAKE
+  env = vec3(uBakeRefl);
+  refl = vec3(uBakeRefl);
+#endif
   // curtain walls: every pane a slightly different tint and mirror strength (coating batches, pillowing)
   if (curtain) refl *= mix(vec3(1.0), mix(vec3(0.92, 1.0, 1.08), vec3(1.07, 1.02, 0.92), r3) * mix(0.72, 1.25, fract(r1 * 5.9)), 1.0 - smoothstep(0.3, 1.0, fFac.x));
   bool spPanel = curtain && bhHash12(vec2(seed, 31.7)) < 0.55;
@@ -2410,7 +2431,11 @@ float bhMetal = -1.0;
 vec3 bhEmit = vec3(0.0);
 {
   vec3 bN = normalize(vWNrm);
+#ifdef BH_BAKE
+  vec3 bV = normalize(-bN + vec3(0.11, -0.13, 0.09)); // (straight on the rooms' ray hits nothing: 1 / 0)
+#else
   vec3 bV = normalize(vWPos - cameraPosition);
+#endif
   vec3 alb = diffuseColor.rgb;
   float rgh = -1.0;
   float mtl = -1.0;
@@ -2539,6 +2564,7 @@ export function createMaterials(g: GlobalUniforms, opts: { legacy?: boolean; wea
   const glassCols = { value: GLASS_COLS.map((c) => new THREE.Color(c)) };
   const noise = makeNoiseTexture();
 
+  const uFarD = { value: 0 };
   const shell = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.86, metalness: 0.0 });
   shell.name = 'buildings-shell';
   const shellCompile = (shader: THREE.WebGLProgramParametersWithUniforms) => {
@@ -2580,9 +2606,10 @@ export function createMaterials(g: GlobalUniforms, opts: { legacy?: boolean; wea
         ...lampUniforms(),
       });
     }
+    Object.assign(shader.uniforms, { uFarD });
     shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', `#include <common>\n${SHELL_VERT_PARS}`)
-      .replace('#include <fog_vertex>', `#include <fog_vertex>\n${SHELL_VERT_MAIN}`);
+      .replace('#include <common>', `#include <common>\n${SHELL_VERT_PARS}\n#if BH_CLASS == 1\n${NEAR_VERT_PARS}\n#endif`)
+      .replace('#include <fog_vertex>', `#include <fog_vertex>\n${SHELL_VERT_MAIN}\n#if BH_CLASS == 1\n${NEAR_VERT_MAIN}\n#endif`);
     if (legacy) {
       shader.fragmentShader = shader.fragmentShader
         .replace('#include <common>', `#include <common>\n${LEGACY_SHELL_FRAG_PARS}`)
@@ -2615,6 +2642,81 @@ export function createMaterials(g: GlobalUniforms, opts: { legacy?: boolean; wea
   const shellRoof = shell.clone();
   shellRoof.name = 'buildings-shell-roof';
   shellVariant(shellRoof, SHELL_CLASS.ROOF);
+
+  /** the bake of the far facades: one of the atlas's passes (farFacade.ts) */
+  const shellBake = (pass: number): THREE.MeshStandardMaterial => {
+    const m = shell.clone();
+    m.name = 'buildings-shell-bake';
+    m.side = THREE.DoubleSide;
+    m.defines = { ...shell.defines, BH_CLASS: SHELL_CLASS.WALL, BH_BAKE: 1 };
+    m.onBeforeCompile = (shader) => {
+      shellCompile(shader);
+      Object.assign(shader.uniforms, {
+        uHours: { value: pass === 1 ? 21 : 12 },
+        uNight: { value: pass === 1 ? 1 : 0 },
+        uLights: { value: pass === 1 ? 1 : 0 },
+        uDusk: { value: 0 },
+        uDaylight: { value: pass === 1 ? 0 : 1 },
+        uSunDir: { value: new THREE.Vector3(0.35, 0.8, 0.45).normalize() },
+        uSunCol: { value: new THREE.Color(0, 0, 0) },
+        uBakeLit: { value: pass === 1 ? 1 : 0 },
+        uBakeRefl: { value: pass === 2 ? 1 : 0 },
+        uBakePass: { value: pass },
+      });
+      shader.vertexShader = shader.vertexShader
+        .replace('#include <common>', '#include <common>\nattribute vec2 aAtlas;')
+        .replace('#include <fog_vertex>', '#include <fog_vertex>\ngl_Position = vec4(aAtlas * 2.0 - 1.0, 0.0, 1.0);');
+      shader.fragmentShader = shader.fragmentShader.replace(SHELL_FRAG_MAIN, SHELL_FRAG_MAIN + FAR_BAKE_OUT);
+    };
+    m.customProgramCacheKey = () => `tinyhaven-buildings-shell-bake${FG_KEY}-${pass}`;
+    return m;
+  };
+  /** the far facades' program: textures from the bake */
+  const shellFar = (textures: { tFF0: THREE.IUniform; tFF1: THREE.IUniform; tFF2: THREE.IUniform }): THREE.MeshStandardMaterial => {
+    const m = new THREE.MeshStandardMaterial({ roughness: 0.86, metalness: 0.0 });
+    m.name = 'buildings-shell-far';
+    m.side = shell.side;
+    m.onBeforeCompile = (shader) => {
+      Object.assign(shader.uniforms, textures, {
+        uFarD,
+        uHours: uniforms.uHours,
+        uSkyZen: uniforms.uSkyZen,
+        uSkyHor: uniforms.uSkyHor,
+        uGround: uniforms.uGround,
+        uDetail: uniforms.uDetail,
+        uFrameCols: frameCols,
+        uGlassCols: glassCols,
+        uTime: g.uTime,
+        uRealTime: g.uRealTime,
+        uNight: g.uNight,
+        uDaylight: g.uDaylight,
+        uDusk: g.uDusk,
+        uLights: g.uLights,
+        uBhNoise: { value: noise },
+        uSkyGlow: uniforms.uSkyGlow,
+        uSunCol: uniforms.uSunCol,
+        uCityCol: uniforms.uCityCol,
+        uCloudCol: uniforms.uCloudCol,
+        uReflLift: uniforms.uReflLift,
+        uMirror: uniforms.uMirror,
+        uSunDir: g.uSunDir,
+        ...lampUniforms(),
+      });
+      shader.vertexShader = shader.vertexShader
+        .replace('#include <common>', `#include <common>\n${FAR_VERT_PARS}`)
+        .replace('#include <fog_vertex>', `#include <fog_vertex>\n${FAR_VERT_MAIN}`);
+      shader.fragmentShader = shader.fragmentShader
+        .replace('#include <common>', `#include <common>\n${COMMON_FRAG}\n${FAR_FRAG_PARS}\n${LAMP_GLSL}\n${SHELL_FRAG_PARS.slice(SHELL_FRAG_PARS.indexOf('vec3 bhEnv('), SHELL_FRAG_PARS.indexOf('// Texture headroom'))}`)
+        .replace('vec4 diffuseColor = vec4( diffuse, opacity );', FAR_FRAG_MAIN)
+        .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = ffRough;')
+        .replace('#include <metalnessmap_fragment>', '#include <metalnessmap_fragment>\nmetalnessFactor = ffMetal;')
+        .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += ffEmit;')
+        .replace('#include <lights_fragment_end>', '#include <lights_fragment_end>\nreflectedLight.indirectDiffuse += diffuseColor.rgb * thLampLight(vWPos, normalize(vWNrm));');
+    };
+    m.customProgramCacheKey = () => 'tinyhaven-buildings-shell-far-v1';
+    return m;
+  };
+  const shellText = SHELL_VERT_MAIN + COMMON_FRAG + SHELL_FRAG_PARS + SHELL_FRAG_MAIN + FAR_BAKE_OUT;
 
   const trim = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.8, metalness: 0.0 });
   trim.name = 'buildings-trim';
@@ -2654,5 +2756,5 @@ export function createMaterials(g: GlobalUniforms, opts: { legacy?: boolean; wea
   });
   signs.name = 'buildings-signs';
 
-  return { shell, shellShop, shellRoof, trim, lights, signs, noise, legacy, uniforms };
+  return { shell, shellShop, shellRoof, shellBake, shellFar, shellText, uFarD, trim, lights, signs, noise, legacy, uniforms };
 }

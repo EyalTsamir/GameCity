@@ -34,7 +34,7 @@ const RIVER_BOX = new THREE.Box3(new THREE.Vector3(SLAB.x0, WATER_LEVEL, RIVER.z
 // Budget ≲ 0.2 M triangles in harbour / overview views: facade trim chunks (~90k), railings, signs,
 // aircraft and waterfowl were tried and dropped — invisible in a blurred 1/3-res reflection.
 const BASE: RegExp[] = [
-  /^buildings-shell(-shop|-roof)?$/,
+  /^buildings-shell(-shop|-roof|-far)?$/,
   /^buildings-lights$/,
   /^harbor-(north|beach|river|animated|rides|glows)$/,
   // landmarks-glows dropped: all inland (bbox ≥16 m from the river, ≥27 m from the sea), 1 draw call

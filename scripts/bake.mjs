@@ -26,6 +26,9 @@ fs.mkdirSync(outDir, { recursive: true });
 const JOBS = {
   land0: { rt: `__city.ctx.services.landscape.renderBake(0)`, key: `__city.ctx.services.landscape.bakeKey()` },
   land1: { rt: `__city.ctx.services.landscape.renderBake(1)`, key: `__city.ctx.services.landscape.bakeKey()` },
+  fac0: { rt: `__city.ctx.services.buildings.renderFarBake(0)`, key: `__city.ctx.services.buildings.farBakeKey()` },
+  fac1: { rt: `__city.ctx.services.buildings.renderFarBake(1)`, key: `__city.ctx.services.buildings.farBakeKey()`, sharp: 0 },
+  fac2: { rt: `__city.ctx.services.buildings.renderFarBake(2)`, key: `__city.ctx.services.buildings.farBakeKey()`, sharp: 0, linear: true },
 };
 
 /** texels nothing was drawn on (alpha 0) take the colour of the nearest drawn one, so that no filter or mip sees a seam */
@@ -95,7 +98,7 @@ try {
     const t1 = Date.now();
     fillHoles(rgba, meta.w, meta.h);
     if (args.raw) fs.writeFileSync(path.join(args.raw, `${name}.rgba`), rgba);
-    const bct = encodeBCT(rgba, meta.w, meta.h, false, parseFloat(args.sharp ?? '0.8'));
+    const bct = encodeBCT(rgba, meta.w, meta.h, !!job.linear, job.sharp ?? parseFloat(args.sharp ?? '0.8'));
     const gz = zlib.gzipSync(bct, { level: 9 });
     const file = `${name}.bct.gz`;
     fs.writeFileSync(path.join(outDir, file), gz);

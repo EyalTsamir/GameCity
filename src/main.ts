@@ -427,6 +427,7 @@ const LATE_DRAWS: Record<string, number> = {
   'buildings-shell': 1,
   'buildings-shell-shop': 1,
   'buildings-shell-roof': 1,
+  'buildings-shell-far': 1,
   'roads-asphalt': 2,
   'roads-hardscape': 2,
   // the countryside impostor trees: behind the town's facades (street views) but in front of the land they stand on
