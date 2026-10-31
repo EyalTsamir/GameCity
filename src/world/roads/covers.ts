@@ -8,6 +8,7 @@
 
 import { geomOn } from '../../core/geomhunt';
 import type { CityContext } from '../../core/context';
+import { streetDetail } from '../../core/streetdetail';
 import type { Area, Block, CityPlan, WalkPath } from '../../core/plan';
 import type { P2, Rect } from '../../core/geom';
 import { OCC } from '../../core/occupancy';
@@ -117,6 +118,7 @@ function coverForBlock(b: Block): Cover | null {
 }
 
 export function buildCovers(ctx: CityContext, A: MeshBuilder, H: MeshBuilder): { stats: CoverStats; info: CoverInfo } {
+  const pathEdge = streetDetail(ctx, 'pathedge');
   const plan = ctx.plan;
   const occ = ctx.occupancy;
   const stats: CoverStats = { coverRects: 0, pathRibbons: 0, plots: 0, patios: 0, frontWalks: 0 };
@@ -537,7 +539,6 @@ export function buildCovers(ctx: CityContext, A: MeshBuilder, H: MeshBuilder): {
       H.quadUp(left[i], left[j], right[j], right[i]);
     }
     // low skirts along both edges
-    surf(H, HM.side, 2, 9, 0);
     for (let i = 0; i < segs; i++) {
       const j = (i + 1) % N;
       for (const [s, sgn] of [
@@ -552,7 +553,39 @@ export function buildCovers(ctx: CityContext, A: MeshBuilder, H: MeshBuilder): {
         // outward = left normal for the left edge, right normal for the right edge
         const onx = (-ez / l) * sgn,
           onz = (ex / l) * sgn;
-        H.wall(a.x, a.z, b.x, b.z, Y.ground, y, onx, onz);
+        if (!pathEdge) {
+          surf(H, HM.side, 2, 9, 0);
+          H.wall(a.x, a.z, b.x, b.z, Y.ground, y, onx, onz);
+          continue;
+        }
+        // (?nopathedge) the path used to stop in a dark wall above the sunken lawn (a black outline round every park
+        // path). Now: paved paths get a granite soldier course, then the skirt follows the real ground, and a low bank
+        // of trodden soil with grass creeping in runs out onto the lawn
+        const out = (q: P2, c: { x: number; z: number }) => {
+          const ol = Math.hypot(q.x - c.x, q.z - c.z) || 1;
+          return { x: (q.x - c.x) / ol, z: (q.z - c.z) / ol };
+        };
+        const oa = out(a, pts[i]),
+          ob = out(b, pts[j]);
+        const EW = paved ? 0.11 : 0;
+        const a1 = { x: a.x + oa.x * EW, z: a.z + oa.z * EW },
+          b1 = { x: b.x + ob.x * EW, z: b.z + ob.z * EW };
+        if (paved) {
+          surf(H, HM.setts, 0, 9, 0);
+          H.quadUp(H.v(a.x, y + 0.002, a.z), H.v(b.x, y + 0.002, b.z), H.v(b1.x, y + 0.002, b1.z), H.v(a1.x, y + 0.002, a1.z));
+        }
+        const BANK = 0.3 + 0.12 * hash01(Math.round(a.x * 7), Math.round(a.z * 7), 5);
+        const a2 = { x: a1.x + oa.x * BANK, z: a1.z + oa.z * BANK },
+          b2 = { x: b1.x + ob.x * BANK, z: b1.z + ob.z * BANK };
+        const ya = terrainH(a2.x, a2.z) - 0.012,
+          yb = terrainH(b2.x, b2.z) - 0.012;
+        const top = y + (paved ? 0.002 : -0.002);
+        surf(H, HM.side, 2, 9, 0);
+        H.wall(a1.x, a1.z, b1.x, b1.z, Math.min(ya, yb, Y.ground) - 0.06, top, onx, onz);
+        surf(H, HM.shoulder, 0, 9, 0);
+        const slope = Math.max(0, top - (ya + yb) / 2) / BANK;
+        const nl = Math.hypot(slope, 1);
+        H.quadUp(H.v(a1.x, top, a1.z, (onx * slope) / nl, 1 / nl, (onz * slope) / nl), H.v(b1.x, top, b1.z, (onx * slope) / nl, 1 / nl, (onz * slope) / nl), H.v(b2.x, yb, b2.z, (onx * slope) / nl, 1 / nl, (onz * slope) / nl), H.v(a2.x, ya, a2.z, (onx * slope) / nl, 1 / nl, (onz * slope) / nl));
       }
     }
   }

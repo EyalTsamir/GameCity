@@ -213,6 +213,8 @@ vec3 masonryColor(vec3 base) {
   } else if (kind < 1.5) {
     col = vMas.y < 0.0 ? th_setts(uv, base, fwUV) : th_ashlar(uv, vMas.y, base);
     col *= 0.93 + 0.12 * nf.g;
+    // decades of weather across the wall (metres, not blocks): a long wall must not be one even colour
+    col *= 0.84 + 0.3 * smoothstep(0.25, 0.75, nz.g * 0.65 + nz.a * 0.35);
     mRough = 0.88;
   } else if (kind < 2.5) {
     float L = 1.65;
@@ -328,7 +330,7 @@ function masonryMaterial(ctx: CityContext, flat: boolean): THREE.MeshStandardMat
         '#include <emissivemap_fragment>\nif (vMas.x > 4.5 && vMas.x < 5.5) totalEmissiveRadiance += diffuseColor.rgb * (1.1 + 2.6 * uLights);',
       );
   };
-  mat.customProgramCacheKey = () => (flat ? 'th-masonry-v6f' : 'th-masonry-v5');
+  mat.customProgramCacheKey = () => (flat ? 'th-masonry-v7f' : 'th-masonry-v6');
   return mat;
 }
 

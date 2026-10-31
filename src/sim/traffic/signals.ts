@@ -15,6 +15,7 @@ import { paint, merge } from '../../core/gfx';
 import { SIDEWALK_Y, XS, ZS } from '../../core/constants';
 import { NearCells, nearCell, type NearCell } from '../../world/lamps/nearCells';
 import { boxHunt } from '../../core/boxhunt';
+import { streetDetail } from '../../core/streetdetail';
 
 const POLE = '#3c4844';
 const HOUSING = '#2b3330';
@@ -314,6 +315,20 @@ export class SignalRenderer {
     place(box(0.62, 0.03, 0.012, hx, hy - 0.615, -0.125), head, y0, '#f2efe6');
     place(box(0.03, 1.26, 0.012, hx + 0.295, hy, -0.125), head, y0, '#f2efe6');
     place(box(0.03, 1.26, 0.012, hx - 0.295, hy, -0.125), head, y0, '#f2efe6');
+    // detail round (?nosignalback): from behind a head is a galvanised plate with its rails, clamps and a cable in
+    // conduit down the arm, not a black shape
+    const backs = streetDetail(this.ctx, 'signalback');
+    if (backs) {
+      place(box(0.6, 1.24, 0.004, hx, hy, -0.1625), head, y0, '#7d8385');
+      for (const dy of [-0.42, 0.42]) place(box(0.46, 0.04, 0.02, hx, hy + dy, -0.172), head, y0, '#60666a');
+      place(box(0.04, 0.9, 0.02, hx, hy, -0.178), head, y0, '#60666a', true);
+      place(box(0.08, 0.05, 0.004, hx + 0.16, hy - 0.22, -0.1655), head, y0, '#e6e4dc', true);
+      const conduit = new THREE.CylinderGeometry(0.014, 0.014, armL - 0.5, 6);
+      conduit.rotateZ(Math.PI / 2);
+      conduit.translate(-(armL - 0.5) / 2, 5.44, 0.05);
+      place(conduit, head, y0, '#2b3032', true);
+      place(cyl(0.014, 0.014, 5.3, 0.07, 0.12, 0.05, 6), head, y0, '#2b3032', true);
+    }
     place(box(0.38, 1.02, 0.26, hx, hy, 0), head, y0, HOUSING);
     const kinds = [Lamp.Red, Lamp.Yellow, Lamp.Green];
     const node = this.nodes.length - 1;
@@ -334,6 +349,7 @@ export class SignalRenderer {
     if (detail) {
       // its back plate (black, thin white retro-reflective border) between the housing and the pole
       place(box(0.5, 1.04, 0.014, 0, ry, 0.066), head, y0, PLATE);
+      if (backs) place(box(0.5, 1.04, 0.003, 0, ry, 0.0575), head, y0, '#7d8385');
       for (const sx of [-1, 1]) place(box(0.022, 1.04, 0.006, sx * 0.239, ry, 0.076), head, y0, '#f2efe6');
       for (const sy of [-1, 1]) place(box(0.5, 0.022, 0.006, 0, ry + sy * 0.509, 0.076), head, y0, '#f2efe6');
       // its two band clamps round the pole

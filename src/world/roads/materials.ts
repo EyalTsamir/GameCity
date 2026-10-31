@@ -6,6 +6,7 @@
 // Joint patterns are box-filtered analytically with fwidth so they fade out cleanly with distance.
 
 import * as THREE from 'three';
+import { streetDetail } from '../../core/streetdetail';
 import type { CityContext } from '../../core/context';
 import { XS, ZS } from '../../core/constants';
 import { LAMP_GLSL, lampUniforms } from '../../core/lampLight';
@@ -398,7 +399,14 @@ const PAINT_AFTER = /* glsl */ `
   diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * 0.82 + vB * 0.18, 0.6);   // dirty, sun-faded paint
   diffuseColor.rgb = mix(diffuseColor.rgb, vB, worn * 0.9);
   float fw = length(fwidth(vWP.xz));
-  diffuseColor.rgb = mix(vB, diffuseColor.rgb, clamp(vM.x / max(fw, 1e-4), 0.0, 1.0));
+  // (hairline tar and saw cuts: the derivatives of a sliver are meaningless, long triangles faded to the pale base while their
+  // short ones stayed dark, a row of black dots on a pale thread. Skip that fade, and stop drawing them once they are thinner
+  // than a pixel, from the true footprint: distance and grazing angle)
+  if (vM.y < -0.5 && vM.x < 0.045) {
+    vec3 tc = cameraPosition - vWP;
+    float tl = length(tc);
+    if (vM.x / (tl * 0.001 / max(tc.y / tl, 0.04)) < 1.0) discard;
+  } else diffuseColor.rgb = mix(vB, diffuseColor.rgb, clamp(vM.x / max(fw, 1e-4), 0.0, 1.0));
   diffuseColor.rgb *= mix(1.0, 0.7, uRain);
 }
 `;
@@ -449,6 +457,7 @@ export function createMaterials(ctx: CityContext, info: SurfaceInfo, atlas: THRE
       ...puddles,
       tRC: { value: cracks },
       uAsph: { value: asphaltColor },
+      uJuncWear: { value: streetDetail(ctx, 'junctionwear') ? 1 : 0 },
       uCourt: { value: court },
       uCourtA: { value: lin('#3d78ae') },
       uCourtB: { value: lin('#4b8c5e') },
