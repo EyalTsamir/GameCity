@@ -329,6 +329,6 @@ export function buildLighthouseRoom(rooms: Rooms, lx: number, lz: number, height
 
   // the keeper, out on the gallery looking the weather over
   const kTh = LH.exitTh + 0.9;
-  addActor({ x: lx + Math.sin(kTh) * 1.9, y: yL, z: lz + Math.cos(kTh) * 1.9, yaw: kTh, role: 'worker', idle: 5, shirt: 0x24374f, h0: 7, h1: 21, p: 0.7 });
+  addActor({ x: lx + Math.sin(kTh) * 1.9, y: yL, z: lz + Math.cos(kTh) * 1.9, yaw: kTh, role: 'fisher', idle: 5, shirt: 0x24374f, h0: 7, h1: 21, p: 0.7 });
   return room;
 }

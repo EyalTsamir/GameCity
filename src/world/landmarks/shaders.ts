@@ -64,6 +64,7 @@ uniform float uTime;
 uniform vec4 uCrane;
 uniform vec4 uSpin;
 uniform vec4 uVis;
+uniform vec2 uLift;
 uniform vec2 uWind;
 ${WIND_GLSL}
 vec3 lmRot(vec3 v, vec3 k, float a) {
@@ -146,6 +147,8 @@ void lmKin(inout vec3 p, inout vec3 n) {
     float a = (aAnim.z < 0.5 ? uSpin.x : aAnim.z < 1.5 ? uSpin.y : aAnim.z < 2.5 ? uSpin.z : uSpin.w) * aAnim.y + aAnim.w;
     p = piv + lmRot(p - piv, aAxis, a);
     n = lmRot(n, aAxis, a);
+  } else if (mode > 10.5) {
+    p.y += aAnim.z > 0.5 ? -aAnim.y * uLift.y * step(99.0, uLift.x) : uLift.x - aAnim.y * uLift.y * (aAnim.w > 0.5 ? step(uLift.x, 2.0) : 1.0);
   } else if (mode < 10.5) {
     // visibility group (uVis[a]) + gentle sway (b = amplitude, c = phase)
     float v = aAnim.y < 0.5 ? uVis.x : aAnim.y < 1.5 ? uVis.y : aAnim.y < 2.5 ? uVis.z : uVis.w;

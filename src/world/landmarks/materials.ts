@@ -18,6 +18,8 @@ export interface LmUniforms {
   uCrane: { value: THREE.Vector4 };
   /** accumulated angles for speed-varying spinners (TV ring, turbines, roundabout, spare) */
   uSpin: { value: THREE.Vector4 };
+  /** the tower's lift: height of the cage, gate open 0..1 */
+  uLift: { value: THREE.Vector2 };
   /** stadium floodlights 0..1 */
   uFlood: { value: number };
   /** visibility groups: x = construction work hours, y = bandstand concert, z = market open, w = spare */
@@ -133,6 +135,7 @@ function surfaceMaterial(g: GlobalUniforms, u: LmUniforms, kinetic: boolean, noO
       sh.uniforms.uTime = g.uTime;
       sh.uniforms.uCrane = u.uCrane;
       sh.uniforms.uSpin = u.uSpin;
+      sh.uniforms.uLift = u.uLift;
       sh.uniforms.uVis = u.uVis;
       sh.uniforms.uWind = g.uWind;
     }
@@ -203,6 +206,7 @@ function depthMaterial(g: GlobalUniforms, u: LmUniforms): THREE.MeshDepthMateria
     sh.uniforms.uTime = g.uTime;
     sh.uniforms.uCrane = u.uCrane;
     sh.uniforms.uSpin = u.uSpin;
+    sh.uniforms.uLift = u.uLift;
     sh.uniforms.uVis = u.uVis;
     sh.uniforms.uWind = g.uWind;
     sh.vertexShader = sh.vertexShader
@@ -234,6 +238,7 @@ export function createMaterials(g: GlobalUniforms): LmMaterials {
     uHours: { value: 12 },
     uCrane: { value: new THREE.Vector4(0, 10, 10, 1) },
     uSpin: { value: new THREE.Vector4() },
+    uLift: { value: new THREE.Vector2() },
     uFlood: { value: 0 },
     uVis: { value: new THREE.Vector4(1, 0, 1, 1) },
     uScore: { value: new THREE.Vector4(0, 0, 0, 0) },
@@ -258,6 +263,7 @@ export function createMaterials(g: GlobalUniforms): LmMaterials {
     uWind: g.uWind,
     uCrane: u.uCrane,
     uSpin: u.uSpin,
+    uLift: u.uLift,
     uVis: u.uVis,
     uFlood: u.uFlood,
     uHours: u.uHours,

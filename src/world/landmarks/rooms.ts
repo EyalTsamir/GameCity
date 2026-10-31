@@ -524,7 +524,9 @@ export class Room {
   /** world rectangle the walker asks this room about */
   bounds: Rect = { x0: 0, z0: 0, x1: 0, z1: 0 };
   readonly free: Rect[] = [];
-  readonly floors: { r: Rect; y: number | ((x: number, z: number) => number) }[] = [];
+  readonly floors: { r: Rect; y: number | ((x: number, z: number) => number); sticky?: boolean }[] = [];
+  /** feet above this: off the floors is solid (a room in mid-air over a city that still answers for the ground) */
+  skyFrom: number | undefined = undefined;
   readonly solids: Rect[] = [];
   readonly solidsY: { r: Rect; y0: number; y1: number }[] = [];
   /** floors overlap in plan: pick by the walker's feet; off the floors the footprint is solid and outside it the city answers */
@@ -611,7 +613,7 @@ export class Room {
       if (x < q.x0 || x > q.x1 || z < q.z0 || z > q.z1) continue;
       const y = typeof f.y === 'number' ? f.y : f.y(x, z);
       const d = Number.isNaN(feet) ? y : Math.abs(y - feet);
-      if (d < bd && (Number.isNaN(feet) || d <= 0.62)) {
+      if (d < bd && (Number.isNaN(feet) || d <= 0.62 || f.sticky)) {
         bd = d;
         best = y;
       }
@@ -1064,6 +1066,10 @@ export class Rooms {
   private inside: Room | null = null;
   /** the walker's feet (NaN: not walking), for rooms with storeys */
   feet = NaN;
+  /** the floor under the walker is rising at this rate (m/s): the lift */
+  carry = 0;
+  /** where the lift is (harness, the walk tests) */
+  liftY = 0;
 
   add(r: Room): Room {
     this.list.push(r);
@@ -1132,7 +1138,10 @@ export class Rooms {
     if (!r) return undefined;
     if (r.core) {
       const y = r.level(x, z, this.feet);
-      if (y === undefined) return x >= r.core.x0 && x <= r.core.x1 && z >= r.core.z0 && z <= r.core.z1 ? true : undefined;
+      if (y === undefined) {
+        if (r.skyFrom !== undefined) return this.feet > r.skyFrom ? true : undefined;
+        return x >= r.core.x0 && x <= r.core.x1 && z >= r.core.z0 && z <= r.core.z1 ? true : undefined;
+      }
       for (const s of r.solidsY) if (y >= s.y0 && y <= s.y1 && x >= s.r.x0 && x <= s.r.x1 && z >= s.r.z0 && z <= s.r.z1) return true;
       for (const s of r.solids) if (x >= s.x0 && x <= s.x1 && z >= s.z0 && z <= s.z1) return true;
       for (const d of r.discs) if ((x - d.x) ** 2 + (z - d.z) ** 2 < d.r * d.r) return true;

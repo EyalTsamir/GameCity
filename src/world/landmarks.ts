@@ -22,7 +22,8 @@ import { genTownHall } from './landmarks/townhall';
 import { genChurch } from './landmarks/church';
 import { genStadium, genFloodlight, StadiumInfo } from './landmarks/stadium';
 import { createStadiumLife } from './landmarks/stadiumLife';
-import { genTvTower, tvTowerUpdater } from './landmarks/tvtower';
+import { genTvTower, tvDeckY, tvTowerUpdater } from './landmarks/tvtower';
+import { buildTvLift, type TvLiftRuntime } from './landmarks/tvLift';
 import { genConstruction, genTowerCrane, craneUpdater, CraneTargets } from './landmarks/construction';
 import { genFountain } from './landmarks/fountain';
 import { genFlagpole, genMarketStall, genCourtHoops } from './landmarks/civic';
@@ -33,6 +34,8 @@ import { Rooms } from './landmarks/rooms';
 import { buildLighthouseRoom } from './landmarks/lighthouseRoom';
 import { breakwaterRoot } from './harbor/breakwater';
 import { lmDetail } from '../core/lmdetail';
+import { DIR_YAW } from '../core/geom';
+import type { Lot } from '../core/plan';
 
 export default function create(ctx: CityContext): CityModule {
   const t0 = performance.now();
@@ -40,6 +43,8 @@ export default function create(ctx: CityContext): CityModule {
   const mats = createMaterials(ctx.uniforms);
   const env = new Env(ctx, mats.u);
   const rooms = new Rooms();
+  let tvLot: Lot | null = null;
+  let tvLift: TvLiftRuntime | null = null;
   env.rooms = rooms;
   const counts: Record<string, number> = {};
   const count = (k: string) => (counts[k] = (counts[k] ?? 0) + 1);
@@ -92,6 +97,7 @@ export default function create(ctx: CityContext): CityModule {
         run(`tvtower ${lot.id}`, () => {
           genTvTower(env, lot);
           env.updaters.push(tvTowerUpdater(env));
+          tvLot = lot;
         });
         count('tvtower');
         break;
@@ -252,6 +258,10 @@ export default function create(ctx: CityContext): CityModule {
   if (lhF && bwF?.a && bwF.b && terrain && lmDetail(ctx, 'bwlife') && lmDetail(ctx, 'lhroom')) {
     buildLighthouseRoom(rooms, lhF.x, lhF.z, Number(lhF.params?.height ?? 24), breakwaterRoot(bwF.a.x, bwF.b.x, bwF.a.z, (x, z) => terrain.height(x, z)));
   }
+  if (tvLot && lmDetail(ctx, 'tvlift')) {
+    const fp = (tvLot as Lot).footprint;
+    tvLift = buildTvLift(ctx, rooms, mats.u.uLift, (fp.x0 + fp.x1) / 2, (fp.z0 + fp.z1) / 2, DIR_YAW[(tvLot as Lot).front], tvDeckY(tvLot as Lot), 0);
+  }
   for (const r of rooms.list) r.finish(ctx, group, ctx.uniforms);
   if (rooms.list.length) ctx.services.rooms = rooms;
   group.matrixAutoUpdate = false;
@@ -333,7 +343,8 @@ export default function create(ctx: CityContext): CityModule {
 
   return {
     name: 'landmarks',
-    frame(_realDt, c) {
+    frame(realDt, c) {
+      tvLift?.frame(realDt);
       const cp = c.camera.position;
       const lod = mats.u.uDetailDist.value;
       for (let i = 0; i < detailCells.length; i++) {
