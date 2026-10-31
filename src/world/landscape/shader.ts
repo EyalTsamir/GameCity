@@ -16,6 +16,7 @@ import { noiseTexture } from '../terrain/noise';
 import { WL } from './model';
 import { gcPalette, GC_PALETTE_GLSL } from '../groundcover/palette';
 import { perfOn } from '../../core/perfdeep';
+import { moonLift } from '../../core/nature';
 
 // perf-deep (docs/progress/perf-deep.md): FXC flattens an `if` holding an implicit-gradient fetch, so the sea-bed / field /
 // caustic early-outs only save work when every fetch inside is explicit. `landgates` hoists the footprint derivatives
@@ -769,9 +770,11 @@ export function landMaterial(uniforms: Record<string, THREE.IUniform>, fog: bool
       .replace('#include <normal_fragment_maps>', '#include <normal_fragment_maps>\nnormal = normalize((viewMatrix * vec4(lnN, 0.0)).xyz);')
       .replace(
         '#include <lights_fragment_end>',
-        '#include <lights_fragment_end>\nreflectedLight.indirectDiffuse += diffuseColor.rgb * thLampLight(vLW, lnN);',
+        `#include <lights_fragment_end>
+${moonLift('smoothstep(8.0, 80.0, vCov3.y)')}
+reflectedLight.indirectDiffuse += diffuseColor.rgb * thLampLight(vLW, lnN);`,
       );
   };
-  mat.customProgramCacheKey = () => LG ? 'th-land-v2' : 'th-land-v1';
+  mat.customProgramCacheKey = () => LG ? 'th-land-v3' : 'th-land-v1b';
   return mat;
 }

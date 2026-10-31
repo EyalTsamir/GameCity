@@ -7,6 +7,7 @@
 import * as THREE from 'three';
 import { WIND_GLSL } from '../../core/wind';
 import { hash2i } from './noise';
+import { moonLift } from '../../core/nature';
 
 export const B = { vine: 0, maize: 1, sunflower: 2, hedge: 3, canopy: 4, reed: 5, marram: 6, wire: 7, rail: 8, stone: 9, sandfence: 10, solid: 11, sunTop: 12, plastic: 13, straw: 14, fern: 15 } as const;
 /** height of each band in metres (u tiles every 8 × height: texels stay square) */
@@ -662,6 +663,7 @@ export function rowMaterial(atlas: THREE.Texture, uniforms: Record<string, THREE
   mat.onBeforeCompile = (sh) => {
     sh.uniforms.uTime = uniforms.uTime;
     sh.uniforms.uWind = uniforms.uWind;
+    sh.uniforms.uNight = uniforms.uNight;
     sh.vertexShader = sh.vertexShader
       .replace(
         '#include <common>',
@@ -681,6 +683,8 @@ if (aH > 0.0) {
 }`,
       );
     sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', '#include <common>\nuniform float uNight;')
+      .replace('#include <lights_fragment_end>', `#include <lights_fragment_end>\n${moonLift()}`)
       .replace(
         '#include <alphatest_fragment>',
         // a distant strip's coverage falls with the mip chain: ease the threshold with the footprint
@@ -696,7 +700,7 @@ normal *= faceDirection;
 #endif`,
       );
   };
-  mat.customProgramCacheKey = () => 'th-landrows-v1';
+  mat.customProgramCacheKey = () => 'th-landrows-v2';
   return mat;
 }
 

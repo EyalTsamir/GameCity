@@ -62,7 +62,8 @@ void main() {
   float d = -mv.z;
   // world size ~aSize m, but never smaller than ~1.6 px
   float px = aSize * 2.2 * projectionMatrix[1][1] * 0.5 * uVH / max(d, 1.0);
-  gl_PointSize = max(px, ${GLOW ? '2.3' : '1.6'} * uVH / 1025.0);
+  // (a lamp seen from a field away is a point with some bloom, not a moon on the farmhouse wall)
+  gl_PointSize = ${GLOW ? 'clamp(px, 2.3 * uVH / 1025.0, (aSize > 5.0 ? 60.0 : 8.0) * uVH / 1025.0)' : 'max(px, 1.6 * uVH / 1025.0)'};
   // distance dimming (aerial extinction) and the smallest sprites fainter
   float ext = exp(-d * 1.4e-4);
   vA = uLights * ext * min(1.0, px / 1.6 + 0.35);

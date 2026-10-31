@@ -8,6 +8,8 @@
 // ?nofarmdetail keeps the old instanced boxes (settlements.ts).
 
 import * as THREE from 'three';
+import { globalUniforms } from '../../core/uniforms';
+import { moonLift } from '../../core/nature';
 import { Sink, type RGB } from './tractor';
 import { natureOn } from '../../core/nature';
 
@@ -34,7 +36,8 @@ export interface FarmSite {
   blds: FarmBld[];
 }
 
-const S = { plain: 0, boards: 1, sheet: 2, tiles: 3, render: 4, brick: 5, galv: 6, wrap: 7, straw: 8, concrete: 9, gravel: 10 } as const;
+const LIT = natureOn('farmwindows');
+const S = { plain: 0, boards: 1, sheet: 2, tiles: 3, render: 4, brick: 5, galv: 6, wrap: 7, straw: 8, concrete: 9, gravel: 10, lit: 11, litCurtain: 12 } as const;
 
 function rnd(seed: number, i: number): number {
   const x = Math.sin(seed * 127.1 + i * 311.7) * 43758.5453;
@@ -116,6 +119,11 @@ function house(s: Sink, m: THREE.Matrix4, b: FarmBld, seed: number): void {
           s.add(new THREE.BoxGeometry(1.15, 2.25, 0.12), M(x, 1.12, z), frameC, 0.5, 0, 0.3);
           s.add(new THREE.BoxGeometry(0.95, 2.1, 0.1), M(x, 1.05, z + 0.03 * sz), shutC, 0.55, 0, 0.5);
           for (const py of [0.55, 1.45]) s.add(new THREE.BoxGeometry(0.66, 0.6, 0.03), M(x, py, z + 0.08 * sz), [shutC[0] * 0.8, shutC[1] * 0.8, shutC[2] * 0.8], 0.55, 0, 0.4);
+          if (LIT) {
+            s.surf = S.lit;
+            s.add(new THREE.BoxGeometry(0.14, 0.2, 0.14), M(x + 0.8, 2.05, z + 0.1 * sz), [0.5, 0.46, 0.36], 0.4, 0, 0);
+            s.surf = S.plain;
+          }
           s.add(new THREE.BoxGeometry(0.03, 0.03, 0.12), M(x + 0.35, 1.05, z + 0.12 * sz), [0.7, 0.6, 0.3], 0.3, 0.8, 0);
           s.surf = S.concrete;
           s.add(new THREE.BoxGeometry(1.6, 0.2, 0.7), M(x, 0.0, z + 0.35 * sz), [0.5, 0.48, 0.44], 0.9, 0, 1);
@@ -127,11 +135,16 @@ function house(s: Sink, m: THREE.Matrix4, b: FarmBld, seed: number): void {
         if (y + 0.8 > h) continue;
         const z = (d / 2) * sz;
         s.add(new THREE.BoxGeometry(1.0, 1.3, 0.1), M(x, y, z + 0.0 * sz), frameC, 0.45, 0, 0.2);
+        const home = LIT && rnd(seed, 60 + i + st * 9 + sz * 31) < 0.6;
+        if (home) s.surf = S.lit;
         s.add(new THREE.BoxGeometry(0.84, 1.14, 0.1), M(x, y, z + 0.03 * sz), [0.04, 0.05, 0.06], 0.05, 0, 0);
+        s.surf = S.plain;
         s.add(new THREE.BoxGeometry(0.05, 1.14, 0.12), M(x, y, z + 0.035 * sz), frameC, 0.45, 0, 0);
         s.add(new THREE.BoxGeometry(0.84, 0.05, 0.12), M(x, y + 0.2, z + 0.035 * sz), frameC, 0.45, 0, 0);
         // curtains: a pale band down each side behind the glass, varied per window
+        if (home) s.surf = S.litCurtain;
         if (rnd(seed, 20 + i + st * 9 + sz * 31) < 0.7) for (const k of [-1, 1]) s.add(new THREE.BoxGeometry(0.2, 1.05, 0.02), M(x + k * 0.3, y, z + 0.08 * sz), [0.75, 0.7, 0.6], 0.9, 0, 0);
+        s.surf = S.plain;
         s.surf = S.concrete;
         s.add(new THREE.BoxGeometry(1.15, 0.07, 0.22), M(x, y - 0.68, z + 0.06 * sz), [0.62, 0.6, 0.56], 0.8, 0, 0);
         s.surf = S.plain;
@@ -554,10 +567,17 @@ export function farmMaterial(fog: boolean): THREE.MeshStandardMaterial {
     sh.vertexShader = sh.vertexShader
       .replace('#include <common>', '#include <common>\nattribute vec2 aRM;\nattribute float aSurf;\nvarying vec2 vRM;\nvarying float vSurf;\nvarying vec3 vOP;\nvarying vec3 vON;')
       .replace('#include <begin_vertex>', '#include <begin_vertex>\nvRM = aRM; vSurf = aSurf; vOP = position; vON = normal;');
+    sh.uniforms.uNight = globalUniforms.uNight;
+    sh.uniforms.uLights = globalUniforms.uLights;
     sh.fragmentShader = sh.fragmentShader
+      .replace('#include <lights_fragment_end>', `#include <lights_fragment_end>\n${moonLift()}`)
+      // somebody is home: the same warm lamp colour as the far houses' shader windows
+      .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\nif (vSurf > 10.5) totalEmissiveRadiance += vec3(1.0, 0.68, 0.34) * uLights * (vSurf > 11.5 ? 1.0 : 2.2);')
       .replace(
         '#include <common>',
         `#include <common>
+uniform float uNight;
+uniform float uLights;
 varying vec2 vRM;
 varying float vSurf;
 varying vec3 vOP;
@@ -674,6 +694,6 @@ float gFsRough;`,
 }`,
       );
   };
-  m.customProgramCacheKey = () => 'th-farmstead-v2';
+  m.customProgramCacheKey = () => 'th-farmstead-v3';
   return m;
 }

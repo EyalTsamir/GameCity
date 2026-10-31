@@ -19,7 +19,7 @@ import { hash2i, vnoise, smooth } from './noise';
 import { WIND_GLSL } from '../../core/wind';
 import { SLAB } from '../../core/constants';
 import type { HedgeSink } from './farmkit';
-import { natureOn } from '../../core/nature';
+import { natureOn, moonLift } from '../../core/nature';
 
 /** country crowns: their shade was near black against the town's trees; more sky in it */
 const FILL = natureOn('treefill');
@@ -1024,10 +1024,11 @@ if (vCrown > 0.5) {
 #endif
   reflectedLight.indirectDiffuse *= ${FILL ? '1.0 + 0.4 * vCrown' : '1.0'};
   reflectedLight.indirectDiffuse += diffuseColor.rgb * sunC * vec3(1.0, 1.0, 0.5) * bt * 0.46;
+  ${moonLift()}
 }`,
       );
   };
-  mat.customProgramCacheKey = () => 'th-landtree-v6';
+  mat.customProgramCacheKey = () => 'th-landtree-v7';
   return mat;
 }
 
@@ -1308,10 +1309,11 @@ vec4 diffuseColor = vec4(treeAlbedo(vKind, vTint, tc.g, tc.b) * ${FILL ? '(0.72 
 #endif
   reflectedLight.indirectDiffuse *= ${FILL ? '1.0 + 0.3 * tc.g' : '1.0'};
   reflectedLight.indirectDiffuse += diffuseColor.rgb * sunC * vec3(1.0, 1.0, 0.5) * bt * 0.36;
+  ${moonLift()}
 }`,
       );
   };
-  mat.customProgramCacheKey = () => 'th-landimp-v5';
+  mat.customProgramCacheKey = () => 'th-landimp-v6';
   return mat;
 }
 

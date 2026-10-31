@@ -4,6 +4,7 @@
 // one instanced mesh. Walls get window rows (shader), lit at night.
 
 import * as THREE from 'three';
+import { moonLift } from '../../core/nature';
 import type { LandscapeModel, Site } from './model';
 import { FIELD_ROT } from './fields';
 import { hash2i } from './noise';
@@ -447,6 +448,7 @@ vec3 bAlbedo() {
 }`,
       )
       .replace('vec4 diffuseColor = vec4( diffuse, opacity );', 'vec4 diffuseColor = vec4( bAlbedo(), opacity );')
+      .replace('#include <lights_fragment_end>', `#include <lights_fragment_end>\n${moonLift()}`)
       .replace(
         '#include <emissivemap_fragment>',
         '#include <emissivemap_fragment>\ntotalEmissiveRadiance += vec3(1.0, 0.68, 0.34) * bWin * uLights * 2.2;',

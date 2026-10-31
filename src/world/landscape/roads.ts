@@ -5,6 +5,7 @@
 // small dynamic mesh (≈ 1 k vertices transformed on the CPU per frame).
 
 import * as THREE from 'three';
+import { moonLift } from '../../core/nature';
 import type { LandscapeModel, Road } from './model';
 import { WL } from './model';
 import { hash2i } from './noise';
@@ -70,7 +71,8 @@ function roadMaterial(uniforms: Record<string, THREE.IUniform>, fog: boolean): T
       .replace('#include <common>', '#include <common>\nattribute vec3 aRS;\nvarying vec2 vRS;\nvarying float vRK;\nvarying vec3 vRW;')
       .replace('#include <begin_vertex>', '#include <begin_vertex>\nvRS = aRS.xy;\nvRK = aRS.z;\nvRW = (modelMatrix * vec4(transformed, 1.0)).xyz;');
     shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', '#include <common>\nvarying vec3 vRW;\n' + ROAD_FRAG)
+      .replace('#include <common>', '#include <common>\nuniform float uNight;\nvarying vec3 vRW;\n' + ROAD_FRAG)
+      .replace('#include <lights_fragment_end>', `#include <lights_fragment_end>\n${moonLift()}`)
       .replace('vec4 diffuseColor = vec4( diffuse, opacity );', 'vec4 diffuseColor = vec4( roadAlbedo(vRW), opacity );');
   };
   mat.customProgramCacheKey = () => 'th-landroad-v2';
