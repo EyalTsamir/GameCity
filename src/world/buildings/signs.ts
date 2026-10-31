@@ -16,7 +16,8 @@ export interface SignRect {
 type Draw = (g: CanvasRenderingContext2D, w: number, h: number, glow: boolean) => void;
 
 const SIZE_W = 2048;
-const SIZE_H = 1024;
+// 1280, not 1024: the detail round's lobby names, pictures and bay numbers overflowed the old sheet (not a power of two: fine in WebGL 2)
+const SIZE_H = 1280;
 const PAD = 4;
 
 interface Shelf {

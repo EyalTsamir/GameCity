@@ -11,6 +11,9 @@ import {
 } from './gen';
 import { anchors } from './anchors';
 import { balconyLife, roofClutter, ironRail, acUnit, dish, downpipe } from './clutter';
+import { dB } from '../../core/detailbuildings';
+import { balconyAwning } from './services';
+import { Rng } from '../../core/rng';
 import { roofKit, MASS } from './massing';
 import { WIN, PROF, WALLPAT, ROOFPAT, FRAME, GLASS, LIGHT_MODE } from './materials';
 import { partitionSide } from './oldtown';
@@ -331,6 +334,7 @@ const APT_BALC = ['#d8cfc0', '#cfd6d2', '#e3d6c3', '#c9c2b6', '#d6dccf', '#e6e1d
 const APT_PARASOL = ['#efe9dc', '#e6e1d6', '#cfd6d2', '#d9c7a8', '#b9c4c8'];
 
 export function genApartment(g: Gen): void {
+  const awningRng = new Rng(((g.lot.seed * 53) ^ 0x1b873593) >>> 0 || 13);
   const { lot, rng, W, D } = g;
   const H = lot.height;
   const floors = Math.max(2, lot.floors);
@@ -576,6 +580,8 @@ export function genApartment(g: Gen): void {
     const r = rng.next();
     if (r >= 0.22) {
       balconyLife(g, sg, u - w / 2 + 0.1, u + w / 2 - 0.1, y, { rail: 1.0, depth: dep - 0.1, solid: balStyle !== 'bars', green: back ? 0.75 : 0.95 });
+      // ?noawnings: some tenants fitted a striped drop-arm awning
+      if (dB('awnings') && awningRng.chance(0.16)) balconyAwning(g, sg, u - w / 2 + 0.06, u + w / 2 - 0.06, y, dep - 0.05, awningRng);
       if (r > 0.9) {
         // parasol
         setCol(t, col(rng.pick(APT_PARASOL)));

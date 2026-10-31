@@ -321,3 +321,54 @@ export function towerPlant(g: Gen, r: LRect, y: number, s: PlantSpec): { x0: num
   if (ex - tx > 1.5 && pl.free(tx, ex, tz - 0.2, tz + 0.2)) cableTray(t, tx, tz, ex, tz, y);
   return { x0: bx0, z0: bz0, x1: bx1, z1: bz1, h: ph + (s.kind === 'masonry' ? 0.28 : 0.15) };
 }
+
+/**
+ * The roof itself (?noroofscape): membrane sheets laid in strips with a patch or two, concrete pavers from the plant
+ * room door to the edge and along the plant, cast drain outlets with their stain, lightning conductors on the corners.
+ * Membrane and pavers lie 3 cm / 6 cm over the roof slab.
+ */
+export function roofFloor(g: Gen, r: LRect, y: number, room: { x0: number; z0: number; x1: number; z1: number }): void {
+  const t = g.trim;
+  const rng = new Rng(((g.lot.seed * 2654435) ^ 0x51ed27) >>> 0 || 7);
+  const base = rng.pick(['#7f7e79', '#8a8880', '#6f706e', '#918d84']);
+  const w = r.x1 - r.x0;
+  const yM = y + 0.05;
+  const sheet = 1.9;
+  const n = Math.max(1, Math.round(w / sheet));
+  for (let i = 0; i < n; i++) {
+    const x0 = r.x0 + (i * w) / n,
+      x1 = r.x0 + ((i + 1) * w) / n - 0.025;
+    setCol(t, shade(col(base), 0.92 + rng.next() * 0.16));
+    t.hrect(x0, r.z0, x1, r.z1, yM);
+  }
+  // patches: somebody repaired it
+  const nPatch = rng.int(1, 4);
+  for (let k = 0; k < nPatch; k++) {
+    const pw = rng.range(0.8, 2.2),
+      pd = rng.range(0.6, 1.8);
+    const px = r.x0 + rng.next() * Math.max(0.1, w - pw),
+      pz = r.z0 + rng.next() * Math.max(0.1, r.z1 - r.z0 - pd);
+    setCol(t, shade(col(base), rng.chance(0.5) ? 0.68 : 1.14));
+    t.hrect(px, pz, px + pw, Math.min(r.z1, pz + pd), yM + 0.012);
+  }
+  // pavers from the door of the plant room towards the street edge, and along it
+  const paver = (x: number, z: number, along: boolean) => {
+    setCol(t, shade(col('#b2aea4'), 0.9 + rng.next() * 0.16));
+    const hw = along ? 0.32 : 0.44,
+      hd = along ? 0.44 : 0.32;
+    t.box(x - hw, y + 0.05, z - hd, x + hw, y + 0.09, z + hd);
+  };
+  const dx = room.x0 + 0.55;
+  for (let z = room.z1 + 0.4; z < r.z1 - 0.7; z += 0.72) paver(dx, z, false);
+  for (let x = dx + 0.8; x < r.x1 - 0.8; x += 0.72) paver(x, Math.min(r.z1 - 0.9, room.z1 + 1.1), true);
+  // drains with a dark stain round them
+  for (const [ex, ez] of [[r.x0 + 0.75, r.z0 + 0.75], [r.x1 - 0.75, r.z1 - 0.75], [r.x1 - 0.75, r.z0 + 0.75]]) {
+    setCol(t, shade(col(base), 0.62));
+    t.hrect(ex - 0.55, ez - 0.55, ex + 0.55, ez + 0.55, yM + 0.012);
+    setCol(t, col('#26282a'));
+    t.cylinder(ex, ez, 0.14, yM, yM + 0.08, 8, true, 0.1);
+  }
+  // lightning conductors on the corners
+  setCol(t, col('#b98a58'));
+  for (const [ex, ez] of [[r.x0 + 0.2, r.z0 + 0.2], [r.x1 - 0.2, r.z0 + 0.2], [r.x1 - 0.2, r.z1 - 0.2], [r.x0 + 0.2, r.z1 - 0.2]]) t.cylinder(ex, ez, 0.018, y + 1.0, y + 2.3, 4, false);
+}
