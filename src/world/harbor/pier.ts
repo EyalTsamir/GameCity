@@ -853,7 +853,7 @@ export function buildCarouselRotating(b: HB, x: number, z: number, r: number, de
       b.rig(RIG.HORSE, 0, (k / n + (n === 8 ? 0.5 : 0)) % 1);
       const bodyC = rng.pick(bodies);
       // lit by the canopy's bulbs at night: the horses glow faintly in their own colours
-      if (FINE) b.emit(bodyC === '#3b3330' ? '#a88a78' : bodyC, 0.34, EMIT.LIGHTS);
+      if (FINE) b.emit(bodyC === '#3b3330' ? '#a88a78' : bodyC, 0.24, EMIT.LIGHTS);
       (FINE ? horseFine : CARVED ? horseCarved : horse)(b, hx, pf + 1.0, hz, a + Math.PI / 2, bodyC, rng.pick(saddles));
       b.noEmit();
       horses++;

@@ -185,7 +185,7 @@ function terminalTractor(b: HB, x: number, y: number, z: number, rng: Rng): void
   for (const sx of [-1, 1]) b.boxMM(x + sx * 0.8 - 0.05, y + 0.15, z - 2.2, x + sx * 0.8 + 0.05, y + 1.05, z - 2.1);
   b.color('#a8201e');
   for (const sx of [-1, 1]) b.boxMM(x + sx * 1.05 - 0.09, y + 1.1, z - 11.51, x + sx * 1.05 + 0.09, y + 1.2, z - 11.49);
-  addContainer(b, x, y + 1.22, z - 5.2, 12.19, pickLook(rng), Math.PI / 2);
+  addContainer(b, x, y + 1.22, z - 5.2, 12.19, pickLook(rng), 0);
 }
 
 export function buildContainerQuayLife(b: HB, o: QuayLifeOpts): void {
