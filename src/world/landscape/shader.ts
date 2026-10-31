@@ -16,7 +16,7 @@ import { noiseTexture } from '../terrain/noise';
 import { WL } from './model';
 import { gcPalette, GC_PALETTE_GLSL } from '../groundcover/palette';
 import { perfOn } from '../../core/perfdeep';
-import { moonLift } from '../../core/nature';
+import { moonLift, natureOn } from '../../core/nature';
 
 // perf-deep (docs/progress/perf-deep.md): FXC flattens an `if` holding an implicit-gradient fetch, so the sea-bed / field /
 // caustic early-outs only save work when every fetch inside is explicit. `landgates` hoists the footprint derivatives
@@ -407,6 +407,23 @@ ${LG ? `    // (perf-deep) the rest of the block only shows where the field weig
       fc = cPlough * (0.88 + 0.24 * pv) * (1.0 + 0.32 * stri);
       fc *= 1.0 - 0.2 * lStripe(tr, 0.9, 0.45, fpt);
       fc *= 0.85 + 0.3 * nW.a;
+      ${natureOn('soilclods') ? `// close up: turned slices that catch the light on one side, clods, a pale stone here and there
+      if (fp < 0.25) {
+        float cf = 1.0 - smoothstep(0.08, 0.25, fp);
+        vec4 nC1 = ${lnTex('p.xz * (1.0 / 0.53)', '(1.0 / 0.53)')};
+        vec4 nC2 = ${lnTex('p.zx * (1.0 / 1.9)', '(1.0 / 1.9)', 'yx')};
+        float ph = 6.2832 * (tr + 0.45 * (nC2.r - 0.5)) / 0.9;
+        vec2 ax = mix(vec2(-0.1391731, 0.9902681), vec2(0.9902681, 0.1391731), along);
+        if (head > 0.5) ax = vec2(ax.y, -ax.x);
+        // (a low sun darkens anything tilted away from it: less relief then, or the field turns to leopard skin)
+        vec2 sl = (ax * cos(ph) * 0.3 + (nC1.rg - 0.5) * 0.5 + (nC2.gb - 0.5) * 0.25) * mix(0.25, 1.0, smoothstep(0.12, 0.5, uSunDir.y));
+        lnN = normalize(lnN + vec3(sl.x, 0.0, sl.y) * cf * fieldW);
+        fc *= mix(1.0, (0.62 + 0.8 * nC1.b) * (0.86 + 0.28 * nC2.a) * (0.84 + 0.16 * sin(ph)), cf);
+        vec2 sc2 = p.xz * 4.1;
+        vec2 sh2 = lhash22(floor(sc2));
+        float st2 = step(sh2.x, 0.035) * (1.0 - smoothstep(0.1, 0.1 + fp * 3.0, length(fract(sc2) - 0.5 - (sh2 - 0.5) * 0.6)));
+        fc = mix(fc, vec3(0.24, 0.22, 0.19) * (0.7 + 0.6 * sh2.y), st2 * cf);
+      }` : ''}
     } else if (ck == 6) {
       // fallow wildflower meadow
       fc = mix(meadow, cFallow, 0.4);

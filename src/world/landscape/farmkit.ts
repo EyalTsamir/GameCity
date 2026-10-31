@@ -563,10 +563,10 @@ function boat(s: RowSink, x: number, y: number, z: number, yaw: number, h: numbe
   }
   for (let i = 0; i < N; i++) {
     const a = i * 5;
-    tris.push(a, a + 5, a + 6, a, a + 6, a + 1);
-    tris.push(a + 1, a + 6, a + 8, a + 1, a + 8, a + 3);
-    tris.push(a, a + 2, a + 7, a, a + 7, a + 5);
-    tris.push(a + 2, a + 4, a + 9, a + 2, a + 9, a + 7);
+    tris.push(a, a + 6, a + 5, a, a + 1, a + 6);
+    tris.push(a + 1, a + 8, a + 6, a + 1, a + 3, a + 8);
+    tris.push(a, a + 7, a + 2, a, a + 5, a + 7);
+    tris.push(a + 2, a + 9, a + 4, a + 2, a + 7, a + 9);
   }
   const k = h < 0.34 ? [0.62, 0.66, 0.68] : h < 0.67 ? [0.12, 0.26, 0.4] : [0.5, 0.17, 0.11];
   s.solid(B.solid, x, z, verts, tris, k[0], k[1], k[2]);
@@ -621,7 +621,7 @@ function boat(s: RowSink, x: number, y: number, z: number, yaw: number, h: numbe
   }
 }
 
-/** a round bale lying on its side (8-sided, smooth) */
+/** a round bale lying on its side (12-sided, smooth) */
 function bale(s: RowSink, x: number, y: number, z: number, yaw: number, wrap: boolean, tone: number): void {
   const R = 0.72,
     Hb = 1.25;
@@ -629,7 +629,7 @@ function bale(s: RowSink, x: number, y: number, z: number, yaw: number, wrap: bo
     sn = Math.sin(yaw);
   const verts: number[] = [];
   const tris: number[] = [];
-  const N = 8;
+  const N = 12;
   const put = (ax: number, ay: number, az: number, nx: number, ny: number, nz: number, u: number, t: number) => {
     verts.push(x + ax * c + az * sn, y + ay, z - ax * sn + az * c, nx * c + nz * sn, ny, -nx * sn + nz * c, u, t);
   };
@@ -645,7 +645,7 @@ function bale(s: RowSink, x: number, y: number, z: number, yaw: number, wrap: bo
       b = i + 1,
       d = i + N + 1,
       e = i + N + 2;
-    tris.push(a, d, e, a, e, b);
+    tris.push(a, e, d, a, b, e);
   }
   // caps
   const base = verts.length / 8;
@@ -661,7 +661,7 @@ function bale(s: RowSink, x: number, y: number, z: number, yaw: number, wrap: bo
     }
   }
   void base;
-  if (wrap) s.solid(B.solid, x, z, verts, tris, 0.04, 0.05, 0.045);
+  if (wrap) s.solid(B.solid, x, z, verts, tris, 0.055, 0.065, 0.06);
   else s.solid(B.straw, x, z, verts, tris, tone, tone * 0.98, tone * 0.92);
 }
 

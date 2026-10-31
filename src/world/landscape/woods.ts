@@ -9,7 +9,7 @@ import { GROUND_DROP } from '../terrain/height';
 import { hash2i, vnoise } from './noise';
 
 /** how far from the slab undergrowth is planted (the free camera's reach at eye level) */
-const UNDER_R = 420;
+const UNDER_R = 320;
 const LATTICE = 5.5;
 const CAP = 9000;
 

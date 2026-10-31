@@ -60,7 +60,7 @@ function rod(s: RowSink, ax: number, ay: number, az: number, bx: number, by: num
       b = i * 2 + 1,
       d = ((i + 1) % 4) * 2,
       e = ((i + 1) % 4) * 2 + 1;
-    tris.push(a, d, e, a, e, b);
+    tris.push(a, e, d, a, b, e);
   }
   s.solid(B.solid, cx, cz, verts, tris, c, c, c);
 }

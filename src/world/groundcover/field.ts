@@ -24,6 +24,7 @@ import type { CityContext } from '../../core/context';
 import { WIND_GLSL } from '../../core/wind';
 import { LAMP_GLSL, lampUniforms } from '../../core/lampLight';
 import { SLAB } from '../../core/constants';
+import { natureOn } from '../../core/nature';
 import { noiseTexture } from '../terrain/noise';
 import { GC_PALETTE_GLSL, gcPalette } from './palette';
 import { CRES, FRES, CW, CH, FW, FH, type CoverMaps, type TileGrid } from './mask';
@@ -496,6 +497,8 @@ vGcRough = 0.85;
         float upK = 0.42 + 0.4 * smoothstep( 3.0, 22.0, dist ) + 0.48 * kept;   // short lawn blades lit like the sward around them
         objectNormal = normalize( mix( N, nUp, clamp( upK, 0.0, 0.92 ) ) );
         // colour: shaded roots → mid → tip; gusts press the blades and show the paler side
+        ${natureOn('fieldblades') ? `// out in the fields the blades stand sparse on sunlit ground: no sward to shade their roots, or they read as black ticks
+        if ( inO && headW <= 0.0 ) { aoRoot = max( aoRoot, 0.78 ); base *= 1.35; tip *= 1.2; }` : ''}
         float ao = mix( aoRoot, 1.0, smoothstep( 0.0, 0.55, hf ) );
         vec3 col = mix( base, tip, smoothstep( 0.35, 1.0, hf ) ) * ao;
         float press = smoothstep( 0.25, 0.7, wl * flexK * stiff ) * smoothstep( 0.3, 1.0, hf );
