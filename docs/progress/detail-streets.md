@@ -45,6 +45,14 @@ Within budget: all of the cost is the ground (hardscape vertices with their heav
 free. Whole-city static triangles (`__city.stats()`): roads +64 k (kerb stones 36 k, cover kit 19 k), props +35 k, near cells
 +28 k: about +127 k, half the budget. The triangle counter itself flips by 220 k between runs (shadow fit): never read it from
 one sample.
+Run 4, final, commit 5c81e25, frozen build, AC under power-guard, `hide=traffic,pedestrians`, `;nostreetdetail`, 3 repeats:
+| view | on ms | off ms | delta | triangles on / off, same shadow state |
+|---|---|---|---|---|
+| overview | 34.19, 34.82, 34.49 | 33.60, 34.11, 34.30 | +0.50 | 2.84 / 2.77 M (+77 k) |
+| downtown | 34.61, 34.82, 34.66 | 33.80, 33.99, 33.79 | +0.84 | 3.17 / 3.05 M (+118 k) |
+| street | 31.48, 31.48, 31.44 | 30.77, 30.73, 30.82 | +0.70 | 3.23 / 3.12 M (+103 k) |
+| market | 29.29, 29.24, 29.31 | 28.76, 28.78, 28.79 | +0.50 | 3.01 / 2.91 M (+101 k) |
+Within budget in all four. The on and off rows are paired by draw call count so that both have the same shadow fit.
 **Measuring a static feature: use `hide=traffic,pedestrians`.** Without it the figures near the camera outweigh the feature.
 
 ## Toggles (`src/core/streetdetail.ts`, master `?nostreetdetail`, all off on low unless noted)
@@ -97,3 +105,6 @@ gutter on a dry road, tar overbanding less mirror-like. The print material now a
   a sliver's derivatives faded its long triangles to the pale base and left its short ones dark; hairlines now skip that fade and
   stop at a pixel. Judge 2 (6.5/10, with weeds and facades out of scope): gutters and carriageway too clean: gutter drift, grimier
   band, more trench scars.
+- 2026-10-31 final checks on 5c81e25: typecheck and build clean (4.1 MB single file). Invariants `{}`, validate `[]`, no console
+  errors (7 D3D compile warnings from rail, boats, landscape, buildings and postfx shaders, none from these files). `hitch.mjs`: prog+0 geo+0 tex+0 in every window. `ui-test.mjs --q noidle`: 71 passed, 0 failed. `?diorama`,
+  `?quality=medium`, `?quality=low`: no errors, street view looked at. Opening film looked at (seek sheet; the dark frame at 45 s is the dip between shots). Perf run 4 above.
