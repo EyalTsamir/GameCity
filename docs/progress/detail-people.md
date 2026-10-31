@@ -3,7 +3,7 @@
 Branch `claude/detail-people-7b792a`, port 5205. Shared rules: `DETAIL-ROUND.md`. Master switch `?nodetailpeople`, one `?no<name>` per family (`src/core/detailPeople.ts`).
 
 ## Resume here
-Round 1 and most of round 2 committed. See "Rounds"; next: perf at church/wedding (`--views`, `;noclosebudget`), then the soak and final checks in `DETAIL-ROUND.md`; ideas left under "Left". Capture tool: a small driver in the session scratchpad (`lab.mjs`, shots as JS strings), rewrite if lost: one page, `setSpeed(0)`, `C.view(...)` per shot.
+Rounds 1 and 2 committed and checked (see "Checks at the head"). Ideas left under "Left". Capture tool: a small driver in the session scratchpad (`lab.mjs`, shots as JS strings), rewrite if lost: one page, `setSpeed(0)`, `C.view(...)` per shot.
 
 ## Audit (round 1, by eye at 2–30 m, noon + night)
 Ranked by wow per ms:
@@ -42,10 +42,16 @@ Ranked by wow per ms:
 
 Measured, round 1 at 1300x930, 2 repeats, AC, interleaved (ms/frame vs `?nodetailpeople`): overview +0.4 (noise ±0.3), downtown 0, street +0.15, market −0.3, plaza −0.2. Triangles unchanged within the crowd's variation. Below the budget of +1 ms.
 
+Measured at the head, 1920x1025, high, 10.76 h, 2 repeats, AC (ms/frame, head vs `?nodetailpeople`): street 33.4 vs 32.8 (+0.6), market 33.6 vs 33.2 (+0.4), park 37.0 vs 36.0 (+1.0), church 38.1 vs 38.0 (+0.1). Other sessions were using the machine, repeats differ by up to 1 ms. The close budget made no measurable difference in these windows (`?noclosebudget` church 37.4): the wedding was probably not in its crowded phase during the measurement, so its saving at the wedding is **unconfirmed**. Triangles did not change beyond the crowd's own variation.
+
+## Checks at the head
+`npm run typecheck` clean, `npm run build` OK. `shot.mjs --view overview --invariants --validate --speed 4 --wait 20000`: invariants `{}`, validate `[]`, console clean. `hitch.mjs`: prog+0 in all windows. `ui-test.mjs --q noidle`: 70 passed, `kinds` failed, then passed alone (the known flake). `?diorama`, `?quality=medium`, `?quality=low`: no errors, invariants `{}`; their images were not looked at. Not run: a long soak, the opening film. Motion was checked in short stepped sequences, not watched at 1x. Sheet: `detail/people/round1-2.jpg`.
+
 ## Left
 - Hair still reads a little as a helmet at 2–3 m; faces are good at ≥ 3 m.
 - Car body shapes share one face (grille + oval lamps): new front ends per model would be the next vehicle step.
-- Scenes: wedding / park perf to confirm with the close budget; café seat and park-corner overlaps unchanged.
+- Scenes: wedding / park perf to confirm with the close budget; café seat and park-corner overlaps unchanged. Guitar and applause still not listened to.
+- Boats: not changed. Trains: not changed.
 
 ## Hand-offs
 - **light-sky-water**: three's PCF noise rotation (`interleavedGradientNoise` in `shadowmap_pars_fragment`) is a visible halftone on the ground along every sun-shadow edge at eye level (`src/render/sky/shadowPatch.ts` could replace it near the camera: a fixed disc costs nothing, and figures here now use one). Grep the chunk for `interleavedGradientNoise( gl_FragCoord.xy ) * PI2`.
