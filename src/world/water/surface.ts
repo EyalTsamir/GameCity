@@ -34,6 +34,7 @@ import { MAX_HULLS } from './hulls';
 import type { WaterExtension } from './extension';
 import { WORLD_MODE } from '../../core/world';
 import { perfOn } from '../../core/perfdeep';
+import { detailLight } from '../../core/detaillight';
 
 // perf-deep (docs/progress/perf-deep.md): early-outs for terms whose weight is exactly 0 (fine ripples and sparkles at coarse
 // footprints, river-only fetches at sea, foam noise in the open sea). FXC flattens an `if` that holds an implicit-gradient
@@ -180,6 +181,7 @@ export function createSurface(
     uDusk: ctx.uniforms.uDusk,
     uLights: ctx.uniforms.uLights,
     uSunDir: ctx.uniforms.uSunDir,
+    uGlitter: { value: detailLight(ctx, 'glitter') ? 1.1 : 0 },
     uWind: ctx.uniforms.uWind,
     ...sky,
     ...refl,
@@ -225,6 +227,7 @@ uniform float uDaylight;
 uniform float uDusk;
 uniform float uLights;
 uniform vec3 uSunDir;
+uniform float uGlitter;
 uniform vec2 uWind;
 uniform vec3 uSkyZen;
 uniform vec3 uSkyHor;
@@ -738,7 +741,9 @@ reflectedLight.indirectDiffuse += diffuseColor.rgb * thLampLight(vWW, vec3(0.0, 
   float th_D = th_lobe / (PI * wGlintA2 * th_c2 * th_c2);
   float th_nl = max(dot(wN, wSunL), 0.0);
   float th_wide = exp(-th_t2 / (wGlintA2 * 5.0 + 0.004));
-  float th_sp = th_D * th_nl * 0.05 + wSparkle * 4.0 * th_wide;
+  float th_sp = th_D * mix(th_nl, max(th_nl, 0.5), TH_GOLD) * 0.05 + wSparkle * 4.0 * th_wide;
+  // low sun: the long broken column of light across the swell (the facets of a wider range of slopes, wN breaks it up)
+  th_sp += exp(-th_t2 / (wGlintA2 + 0.011)) * TH_GOLD * uGlitter;
   wGlint = uSkySunCol * th_sp * wGlintK * wShadow * (1.0 - wFoamA) * wDebug.z;
 }`,
       )

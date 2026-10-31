@@ -118,6 +118,7 @@ export default async function create(ctx: CityContext): Promise<CityModule> {
   const cloudCovParam = ctx.debug.params.has('clouds') ? Number(ctx.debug.params.get('clouds')) : NaN;
   const cloudDayRng = ctx.rng('cloud-days');
   const cloudDay = { day: -1, cu: 1, ci: 1 };
+  const sunsetOn = detailOn('sunsetsky');
   const dome = createSkyDome(world, physSky, cloudLayer);
   // the cumulus deck is raymarched at half resolution for the final camera of each frame: post-processing
   // calls renderClouds() right before the scene pass; without it the sky module renders it in frame()
@@ -520,7 +521,7 @@ export default async function create(ctx: CityContext): Promise<CityModule> {
       const h = clock.hours;
       // fair-weather cumulus build up after the morning and dissolve in the evening (convection stops):
       // the golden hour is mostly clear, a few clouds left to catch the sunset
-      let cov = (0.17 + 0.26 * smooth(8.5, 14, h) - 0.2 * smooth(15.5, 19.2, h)) * cloudDay.cu;
+      let cov = (0.17 + 0.26 * smooth(8.5, 14, h) - (sunsetOn ? 0.1 : 0.2) * smooth(15.5, 19.2, h)) * cloudDay.cu;
       if (Number.isFinite(cloudCovParam)) cov = cloudCovParam;
       if (!director) cov += (0.97 - cov) * overcast;
       cu.uCu.value.x = Math.min(1, Math.max(0, cov));
@@ -532,7 +533,9 @@ export default async function create(ctx: CityContext): Promise<CityModule> {
         cu.uCu.value.y = 1500 - 500 * near;
         cu.uCuSlab.value.x += (2400 - cu.uCuSlab.value.x) * near;
       }
-      cu.uCi.value.x = Math.min(0.85, 0.32 * cloudDay.ci) * (1 - (director ? cu.uStormK.value.w : overcast) * 0.6);
+      // (mares' tails catch the low sun long after and before the cumulus: what makes a sunset)
+      const ciLow = sunsetOn ? 1 + 1.3 * (1 - smooth(0.12, 0.42, _sunSky.y)) : 1;
+      cu.uCi.value.x = Math.min(0.85, 0.32 * cloudDay.ci * ciLow) * (1 - (director ? cu.uStormK.value.w : overcast) * 0.6);
       // light on the clouds: the sun after the atmosphere at deck height (pink after sunset), or the moon
       const comp = Math.pow(Math.max(1, atmo.comp), 0.6);
       if (usingMoon) {
