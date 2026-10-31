@@ -304,6 +304,9 @@ void pedPose(inout vec3 p, inout vec3 n) {
 //@if DET
   vPedFace = vec3(0.0);
   vPedFB = ((iC2.w >> 9u) & 63u) | (((iC2.w >> 8u) & 1u) << 6u); // face bits | shirt collar (64) | jacket (128, below)
+  // (what's printed on the cloth, by the person: 60 % plain, see pedPrint)
+  { uint ph = (iC0.y * 2654435761u) ^ (iC2.x * 40503u) ^ (iC1.x * 69069u); ph = ((ph ^ (ph >> 15u)) * 2246822519u) >> 24u;
+    vPedFB |= (ph < 30u ? 1u : ph < 50u ? 2u : ph < 72u ? 3u : ph < 82u ? 4u : ph < 100u ? 5u : 0u) << 8u; }
 //@endif
 //@if DET&!R
   vPedHairW = vec4(pedRGB(iC1.x), P_w);
@@ -785,6 +788,51 @@ vec3 pedLocks(vec3 r, float tip) {
   float prof = sqrt(clamp(1.0 - pow(abs(u - 0.5 - 0.08 * (rnd - 0.5)) * 2.0, 2.0), 0.0, 1.0));
   return vec3(prof, rnd, 1.0 - smoothstep(0.25, 0.6, fwidth(la)));
 }
+// what's on the cloth, so a crowd isn't all solid colours (near + close levels; fades before it can alias): breton
+// stripes, a check, a print on the chest, a contrast yoke, dots on dresses and blouses. The second colour comes from
+// the first: a dark shade of a light cloth, an off-white on a dark one.
+vec3 pedPrint(vec3 pc, float topK) {
+  uint pt = (vPedFB >> 8u) & 7u;
+  if (pt == 0u) return pc;
+  bool tail = abs(vPedReg - ${R.TAIL}.0) < 0.5;
+  bool torso = abs(vPedReg - ${R.TORSO}.0) < 0.5;
+  if (!tail && !torso && abs(vPedReg - ${R.ARM}.0) > 0.5) return pc;
+  float k = tail ? 1.0 : topK;
+  if (k <= 0.0) return pc;
+  float lum = dot(pc, vec3(0.3, 0.55, 0.15));
+  if (lum > 0.62) return pc; // (a bride, a white shirt)
+  vec3 c2 = lum > 0.16 ? pc * vec3(0.2, 0.24, 0.36) : mix(pc, vec3(0.74, 0.73, 0.69), 0.85);
+  vec3 r = vPedRest;
+  float px = max(fwidth(r.y), 1e-5);
+  float m = 0.0;
+  if (pt == 1u) {
+    if (tail) return pc;
+    float per = 0.034, d = abs(fract(r.y / per) - 0.5) * per - per * 0.25;
+    m = (1.0 - smoothstep(-px * 0.6, px * 0.6, d)) * (1.0 - smoothstep(0.18, 0.42, px / per));
+  } else if (pt == 2u) {
+    if (tail) return pc;
+    float per = 0.052, u = r.x + r.z * 0.7;
+    float f = 1.0 - smoothstep(0.14, 0.34, px / per);
+    float bx = smoothstep(0.42, 0.58, abs(fract(u / per) - 0.5) * 2.0), by = smoothstep(0.42, 0.58, abs(fract(r.y / per) - 0.5) * 2.0);
+    return pc * (1.0 - 0.46 * (bx + by) * 0.5 * f * k);
+  } else if (pt == 3u) {
+    if (!torso || r.z < 0.0) return pc;
+    vec2 q = vec2(r.x, r.y - vPedHgt * 0.75) / 0.055;
+    float pxq = px / 0.055;
+    float sh = fract(vPedHairW.r * 13.7 + vPedSkin.g * 5.3);
+    float d = sh < 0.34 ? abs(length(q) - 0.72) - 0.2 : sh < 0.67 ? max(abs(q.x) - 1.1, abs(abs(q.y) - 0.28) - 0.16) : max(abs(q.x) + abs(q.y) * 0.8 - 1.0, -(abs(q.x) + abs(q.y) * 0.8 - 0.55));
+    m = (1.0 - smoothstep(-pxq, pxq, d)) * (1.0 - smoothstep(0.25, 0.6, pxq));
+  } else if (pt == 4u) {
+    if (tail) return pc;
+    m = smoothstep(-px, px, r.y - vPedHgt * 0.765 + abs(r.x) * 0.12);
+  } else {
+    float per = 0.056, f = 1.0 - smoothstep(0.16, 0.4, px / per);
+    vec2 g = vec2(atan(r.x, r.z + 0.01) * 0.17, r.y) / per;
+    g.x += 0.5 * mod(floor(g.y), 2.0);
+    m = (1.0 - smoothstep(-px * 0.8, px * 0.8, length(fract(g) - 0.5) * per - 0.0095)) * f;
+  }
+  return mix(pc, c2, m * k);
+}
 // ── fabric (close range): seams, stitching, folds where the limb bends (knee / elbow creases deepen with
 // the bend), trouser breaks over the shoe, sleeve gathers, side drape at the waist, weave grain; denim
 // gets the orange twin stitching and back pockets. Fades out where a pixel covers > ~1 cm.
@@ -1140,6 +1188,9 @@ const FRAG_COLOR = /* glsl */ `
   {
     float fw = max(fwidth(vPedS), 1e-4);
     vec3 pc = mix(vPedB, vPedA, clamp(vPedS / fw + 0.5, 0.0, 1.0));
+#ifndef PED_FAR
+    ${detailPeople('clothprints') ? 'pc = pedPrint(pc, clamp(vPedS / fw + 0.5, 0.0, 1.0));' : ''}
+#endif
     if (vPedPat > 0.5) {
       // hi-vis reflective stripes (vest) / towel stripes
       float hh = vPedPat < 1.5 ? vPedH : abs(vPedH);
@@ -1434,7 +1485,7 @@ function peopleMaterial(far: boolean, pal: PalUniforms): THREE.MeshLambertMateri
       .replace('#include <shadowmap_pars_fragment>', SHADOW_LIFT ? THREE.ShaderChunk.shadowmap_pars_fragment.replace('interleavedGradientNoise( gl_FragCoord.xy ) * PI2', '0.7') : '#include <shadowmap_pars_fragment>')
       .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n  totalEmissiveRadiance += diffuseColor.rgb * 0.07 * uPedNight;');
   };
-  material.customProgramCacheKey = () => (far ? 'tinyhaven-people-4-far' : 'tinyhaven-people-4') + (VFAR ? '-v1' : '') + (pal ? '-pal' : '') + (SHADOW_LIFT ? '-sl' : '');
+  material.customProgramCacheKey = () => (far ? 'tinyhaven-people-4-far' : 'tinyhaven-people-4') + (VFAR ? '-v1' : '') + (pal ? '-pal' : '') + (SHADOW_LIFT ? '-sl' : '') + '-pr' + (detailPeople('clothprints') ? '1' : '0');
   return material;
 }
 
