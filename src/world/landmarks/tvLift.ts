@@ -126,7 +126,7 @@ export interface TvLiftRuntime {
 export function buildTvLift(ctx: CityContext, rooms: Rooms, uLift: { value: THREE.Vector2 }, cx: number, cz: number, yaw: number, yO: number, groundY: number): TvLiftRuntime {
   const room = rooms.add(new Room('tvdeck', 1024, 256));
   room.frame(cx, cz, yaw);
-  room.near = 130;
+  room.near = 70;
   const K = room.K;
   const yD = yO + TVL.deck;
   const yC = yD + 2.6;
