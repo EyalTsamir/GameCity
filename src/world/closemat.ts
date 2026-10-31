@@ -181,8 +181,11 @@ export default function create(ctx: CityContext): CityModule {
     const solid = (name: string, test: (n: string) => boolean, rust: boolean, radius: number, top: number) => {
       const geos = byName(test).filter((g) => g.getAttribute('normal') && g.getAttribute('color'));
       const grid = new TriGrid(geos, SOLID_ATTRS, cell, (g, a, b, c) => {
-        const sway = g.getAttribute('aSway') ?? g.getAttribute('aAnim');
-        if (sway && (sway.itemSize === 4 ? sway.getW(a) : sway.getX(a)) !== 0) return false;
+        // what moves does not stay under its copy
+        const sway = g.getAttribute('aSway');
+        if (sway && sway.getW(a) !== 0) return false;
+        const anim = g.getAttribute('aAnim');
+        if (anim && anim.getX(a) !== 0) return false;
         // a piece too small to have a surface
         const P = g.getAttribute('position');
         const dx = Math.abs(P.getX(a) - P.getX(b)) + Math.abs(P.getY(a) - P.getY(b)) + Math.abs(P.getZ(a) - P.getZ(b));
@@ -192,7 +195,7 @@ export default function create(ctx: CityContext): CityModule {
       layer(name, grid, SOLID_ATTRS, rust ? '#define CM_RUST\n' + CM_SOLID : CM_SOLID, 'CM_SOLID', radius, cell, top);
     };
     solid('cmTrim', (n) => n === 'buildings-trim', false, 12, 30);
-    solid('cmMasonry', (n) => n === 'terrain-masonry' || n.startsWith('harbor-north') || n.startsWith('harbor-yards') || n.startsWith('harbor-river') || n.startsWith('harbor-beach'), false, 12, 8);
+    solid('cmMasonry', (n) => n === 'terrain-masonry' || n.startsWith('landmarks-static') || n.startsWith('landmarks-detail') || n.startsWith('harbor-north') || n.startsWith('harbor-yards') || n.startsWith('harbor-river') || n.startsWith('harbor-beach'), false, 12, 8);
     solid('cmStreet', (n) => n === 'props-furniture-e' || n === 'props-furniture-w' || n === 'props-furniture-fine-e' || n === 'props-furniture-fine-w' || n === 'props-casters' || n === 'life-poles', false, 12, 6);
     solid('cmMetal', (n) => n === 'terrain-railings' || n === 'traffic-signal-poles' || n === 'rail-furniture', true, 12, 8);
   }

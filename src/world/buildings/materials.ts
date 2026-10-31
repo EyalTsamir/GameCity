@@ -1360,7 +1360,7 @@ void bhWall(inout vec3 albedo, inout float rough, inout float metal, inout vec3 
   vec4 nm = texture2D(uBhNoise, q * 0.031 + so);
   float stv = sqrt(nm.b); // the streak channel is stored squared (contrast); linearise for weights
   float grain = texture2D(uBhNoise, q * 0.3 + so.yx).a;                         // a: ~5 cm stucco grain
-  float sn = sqrt(texture2D(uBhNoise, vec2(q.x * 0.16, q.y * 0.09) + so.yx).b); // b: 10 cm wide, ~5 m long streaks
+  float sn = sqrt(texture2D(uBhNoise, vec2(q.x * 0.16 + (nm.g - 0.5) * 0.05, q.y * 0.09) + so.yx).b); // b: 10 cm wide, ~5 m long streaks (they wander: not ruled lines)
   vec4 np = texture2D(uBhNoise, q * 0.105 + so * 1.31);                       // g ~0.6 m blobs (peeling), r ~2.4 m
 
   // ── 1. surface pattern
