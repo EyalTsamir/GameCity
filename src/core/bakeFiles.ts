@@ -139,3 +139,11 @@ export async function bakeTexture(name: string, params: URLSearchParams, key: st
     return null;
   }
 }
+
+/** upload to the GPU, one texture a frame: the first use must not stall a frame on all of them */
+export async function uploadStaged(renderer: THREE.WebGLRenderer, textures: THREE.Texture[]): Promise<void> {
+  for (const t of textures) {
+    await new Promise((done) => requestAnimationFrame(done));
+    renderer.initTexture(t);
+  }
+}

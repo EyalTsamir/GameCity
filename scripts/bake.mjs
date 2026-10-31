@@ -26,7 +26,7 @@ fs.mkdirSync(outDir, { recursive: true });
 const JOBS = {
   land0: { rt: `__city.ctx.services.landscape.renderBake(0)`, key: `__city.ctx.services.landscape.bakeKey()` },
   land1: { rt: `__city.ctx.services.landscape.renderBake(1)`, key: `__city.ctx.services.landscape.bakeKey()` },
-  fac0: { rt: `__city.ctx.services.buildings.renderFarBake(0)`, key: `__city.ctx.services.buildings.farBakeKey()` },
+  fac0: { rt: `__city.ctx.services.buildings.renderFarBake(0)`, key: `__city.ctx.services.buildings.farBakeKey()`, sharp: 0.35 },
   fac1: { rt: `__city.ctx.services.buildings.renderFarBake(1)`, key: `__city.ctx.services.buildings.farBakeKey()`, sharp: 0 },
   fac2: { rt: `__city.ctx.services.buildings.renderFarBake(2)`, key: `__city.ctx.services.buildings.farBakeKey()`, sharp: 0, linear: true },
 };

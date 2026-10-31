@@ -19,7 +19,7 @@ import { buildRings, type RingTopology } from './landscape/rings';
 import { buildLand, buildIslandPatch, buildFieldMask, splatCover, makeSlabNormal, LAND_MAX_D, GROUND_DROP, type LandHeights, type LandHole } from './landscape/terrain';
 import { landUniforms, landMaterial } from './landscape/shader';
 import { landBakeKey, landFarMaterial, renderLandBake, LandTiles, LAND_SOFT, type LandBakeSource } from './landscape/bake';
-import { bakeOn, bakeTexture } from '../core/bakeFiles';
+import { bakeOn, bakeTexture, uploadStaged } from '../core/bakeFiles';
 import { buildMountains } from './landscape/mountains';
 import { placeTrees, createLandTrees, type LandTrees } from './landscape/trees';
 import { buildSettlements } from './landscape/settlements';
@@ -447,8 +447,10 @@ export default function create(ctx: CityContext): CityModule {
     if (params.get('landbake') === 'rt') useBake(renderLandBake(ctx.renderer, bakeSources, uniforms, 0).texture, renderLandBake(ctx.renderer, bakeSources, uniforms, 1).texture);
     else {
       const key = service.bakeKey();
-      void Promise.all([bakeTexture('land0', params, key), bakeTexture('land1', params, key)]).then(([t0b, t1b]) => {
-        if (t0b && t1b) useBake(t0b, t1b);
+      void Promise.all([bakeTexture('land0', params, key), bakeTexture('land1', params, key)]).then(async ([t0b, t1b]) => {
+        if (!t0b || !t1b) return;
+        await uploadStaged(ctx.renderer, [t0b, t1b]);
+        useBake(t0b, t1b);
       });
     }
   }

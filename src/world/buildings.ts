@@ -40,7 +40,7 @@ import { setRoofPlant } from './buildings/roofplant';
 import { setDetailB } from '../core/detailbuildings';
 import { createGlassMaterial } from './buildings/lobby';
 import { buildFarShell, farBakeKey, FAR_ATLAS, FAR_SOFT } from './buildings/farFacade';
-import { bakeOn, bakeTexture } from '../core/bakeFiles';
+import { bakeOn, bakeTexture, uploadStaged } from '../core/bakeFiles';
 
 /** edge (m) of the square trim chunks (≈ two city blocks), grid origin at the slab's NW corner */
 const TRIM_CHUNK = 110;
@@ -280,7 +280,7 @@ export default function create(ctx: CityContext): CityModule {
   const farTextures = { tFF0: { value: null as THREE.Texture | null }, tFF1: { value: null as THREE.Texture | null }, tFF2: { value: null as THREE.Texture | null } };
   const farSoft = Number(ctx.debug.params.get('facsoft')) || FAR_SOFT;
   let farOn = false;
-  let farGeoMesh: THREE.Mesh | null = null;
+  let farGeoMesh: THREE.Mesh | null = null; // (stays visible: collapsed until uFarD is set, and so compiled at boot with the rest)
   if (farShell && !ctx.debug.params.has('nofacbake') && bakeOn(ctx.debug.params)) {
     const far = new THREE.Mesh(farShell.geometry, mats.shellFar(farTextures));
     far.name = 'buildings-shell-far';
@@ -288,7 +288,6 @@ export default function create(ctx: CityContext): CityModule {
     far.matrixAutoUpdate = false;
     far.updateMatrix();
     far.frustumCulled = false;
-    far.visible = false;
     group.add(far);
     farGeoMesh = far;
   }
@@ -395,7 +394,7 @@ export default function create(ctx: CityContext): CityModule {
     const key = farBakeKey(mats.shellText, farShell.geometry);
     service.farBakeKey = () => key;
     service.renderFarBake = (pass) => {
-      const size = pass === 0 ? FAR_ATLAS : FAR_ATLAS / 2;
+      const size = pass === 1 ? FAR_ATLAS / 2 : FAR_ATLAS;
       const rt = new THREE.WebGLRenderTarget(size, size, { type: THREE.UnsignedByteType, format: THREE.RGBAFormat, colorSpace: pass === 2 ? THREE.NoColorSpace : THREE.SRGBColorSpace, depthBuffer: false });
       const mat = mats.shellBake(pass);
       const mesh = new THREE.Mesh(farShell.geometry, mat);
@@ -420,12 +419,12 @@ export default function create(ctx: CityContext): CityModule {
     };
     if (farGeoMesh) {
       const params = ctx.debug.params;
-      void Promise.all([bakeTexture('fac0', params, key), bakeTexture('fac1', params, key), bakeTexture('fac2', params, key, { linear: true })]).then(([t0, t1, t2]) => {
+      void Promise.all([bakeTexture('fac0', params, key), bakeTexture('fac1', params, key), bakeTexture('fac2', params, key, { linear: true })]).then(async ([t0, t1, t2]) => {
         if (!t0 || !t1 || !t2) return;
+        await uploadStaged(ctx.renderer, [t0, t1, t2]);
         farTextures.tFF0.value = t0;
         farTextures.tFF1.value = t1;
         farTextures.tFF2.value = t2;
-        farGeoMesh!.visible = true;
         farOn = true;
       });
     }

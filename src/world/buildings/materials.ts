@@ -1808,12 +1808,12 @@ ${fg(`      float ew = max(0.09, fq.x * 1.25);
   float envL = dot(env, vec3(0.2126, 0.7152, 0.0722));
   vec3 reflTint = mix(vec3(1.0), gtN, tintAmt) * (curtain ? 0.8 : 1.0); // (for the open-sash strip)
   vec3 refl = mix(env, envL * gtN, tintAmt) * (curtain ? mix(0.8, 0.92, uMirror) : 1.0) + uSunCol * glint;
+  // curtain walls: every pane a slightly different tint and mirror strength (coating batches, pillowing)
+  if (curtain) refl *= mix(vec3(1.0), mix(vec3(0.92, 1.0, 1.08), vec3(1.07, 1.02, 0.92), r3) * mix(0.72, 1.25, fract(r1 * 5.9)), 1.0 - smoothstep(0.3, 1.0, fFac.x));
 #ifdef BH_BAKE
   env = vec3(uBakeRefl);
   refl = vec3(uBakeRefl);
 #endif
-  // curtain walls: every pane a slightly different tint and mirror strength (coating batches, pillowing)
-  if (curtain) refl *= mix(vec3(1.0), mix(vec3(0.92, 1.0, 1.08), vec3(1.07, 1.02, 0.92), r3) * mix(0.72, 1.25, fract(r1 * 5.9)), 1.0 - smoothstep(0.3, 1.0, fFac.x));
   bool spPanel = curtain && bhHash12(vec2(seed, 31.7)) < 0.55;
 
   vec3 transTint = mix(vec3(1.0), gt, curtain ? 0.75 : 0.3);
