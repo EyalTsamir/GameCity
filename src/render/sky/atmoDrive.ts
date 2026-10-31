@@ -270,7 +270,8 @@ export class AtmosphereDriver {
     p.airColor.copy(this.zenith).multiplyScalar((lum(p.ring[0]) * 0.92) / zl);
     grey(p.airColor, 0.35 + overcast * 0.5);
 
-    p.haze = haze;
+    // (storm: spray and rain in the air, low down, as haze: the mist branch would be another noise fetch on every fragment, ~1 ms at the market)
+    p.haze = haze + (w ? w.storm * 0.0009 * (1 - smooth(30, 110, camY)) : 0);
     p.hazeScaleHeight = 1000;
     p.rayleigh.set(5.802e-6, 13.558e-6, 33.1e-6).multiplyScalar(BLUE_AIR * (1 + overcast));
     p.rayleighScaleHeight = 8000;
@@ -279,8 +280,8 @@ export class AtmosphereDriver {
     // ground mist: denser in calm air, colour = lit haze (dawn rose / dusk lilac), drifts downwind
     const ws = Math.sqrt(wind.x * wind.x + wind.y * wind.y);
     const calm = 1 / (1 + ws * 1.2);
-    p.mist = this.mistOn ? state.mist * calm * (1 + overcast * 0.5) + (w ? w.storm * 0.0011 * (1 - smooth(30, 110, camY)) : 0) : 0;
-    // (storm: spray and rain mist, a thicker layer)
+    p.mist = this.mistOn ? state.mist * calm * (1 + overcast * 0.5) : 0;
+    // (storm: a thicker layer, for what mist there is)
     p.mistScaleHeight = w ? state.mistH + (14 - state.mistH) * w.storm : state.mistH;
     p.mistColor.copy(p.ring[0]).lerp(_c.copy(state.hemiSky).multiplyScalar(state.hemiI * 1.1), 0.35);
     p.mistForward = 0.8;

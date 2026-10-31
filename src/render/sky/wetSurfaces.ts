@@ -20,9 +20,8 @@ const APPLY = /* glsl */ `
 #ifndef TH_NO_WET
 if (thWet[0].x > 0.002) {
   float thWu = dot(normal, viewMatrix[1].xyz);
-  // walls: bands of run-off (world x, z, a slight slant with y; rain pays for these few dot products per fragment)
-  vec3 thWo = -vViewPosition - viewMatrix[3].xyz;
-  float thWs = 0.5 + 0.5 * sin(dot(thWo, viewMatrix[0].xyz) * 2.3 + dot(thWo, viewMatrix[2].xyz) * 1.9 + dot(thWo, viewMatrix[1].xyz) * 0.3);
+  // walls: bands of run-off (a triangle wave along world x, z and a little y; one dot and a fract, rain pays for them on every fragment)
+  float thWs = abs(fract(dot(-vViewPosition - viewMatrix[3].xyz, viewMatrix[0].xyz * 0.37 + viewMatrix[2].xyz * 0.3 + viewMatrix[1].xyz * 0.05)) - 0.5) * 2.0;
   float thWk = thWet[0].x * mix(0.45 + 0.55 * thWs, 1.0, smoothstep(0.2, 0.75, thWu)) * smoothstep(-0.6, -0.1, thWu);
   material.diffuseColor *= 1.0 - 0.4 * thWk;
   material.roughness = mix(material.roughness, max(0.16, material.roughness * 0.42), thWk);

@@ -72,7 +72,6 @@ varying float vAlpha;
 varying vec3 vLit;
 varying float vAcross;
 void main() {
-  if (vAlpha < 0.004) discard;
   gl_FragColor = vec4(vLit, uOpacity * vAlpha * (1.0 - vAcross * vAcross));
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
@@ -123,7 +122,6 @@ varying vec2 vQ;
 varying float vLife;
 varying vec3 vLit;
 void main() {
-  if (vLife < 0.01) discard;
   // a thin, broken ring seen from the side
   float d = length(vec2(vQ.x, vQ.y * 0.55 + 0.42));
   float ring = smoothstep(0.55, 0.85, d) * (1.0 - smoothstep(0.85, 1.0, d));
@@ -208,7 +206,7 @@ export function createRain(density: number, seed: () => number): Rain {
   mesh.visible = false;
   mesh.renderOrder = 6;
 
-  const nSplash = Math.round(6000 * density);
+  const nSplash = Math.round(4000 * density);
   const sg = quads(nSplash, (_i, s) => {
     s[0] = seed();
     s[1] = seed();
