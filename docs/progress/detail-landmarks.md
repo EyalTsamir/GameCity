@@ -21,7 +21,7 @@ State:
 - DONE, seen (`shots/dl/x3`): `?noquaylife2` container quay clutter (`harbor/quayLife.ts`), `?nohorses` galloper horses + canopy bulbs, `?nobandroof`
   bandstand roof; always on: real-size bricks (25 × 9.5 cm, `shaders.ts`), hazard bands on the crane legs (`?nocranekit`), lifeguard rails, shutters, lifebuoy (`?nobeachkit`).
 - Real-key walks (`walk2.mjs`): church door → altar rail; town hall square → stair → gallery → balcony and back; station street → hall → platform.
-- Open checks: `scratchpad/final.sh` results below.
+- All checks done, see Results. Not done: seated figures in the nave, a café interior, breakwater armour stones (blocky at eye level), richer tractor cab.
 
 ## The room engine
 Near-only mesh per room (`Room.near`, nothing drawn in wide views), own ShaderMaterial, same surface patterns plus `RP.*` (flags, encaustic,
@@ -44,8 +44,29 @@ stars, plaster + stencil, oak, glass, pictures from the room atlas, flames, marb
 3. A few seated figures in the nave, near-only.
 4. Exteriors and harbour (not started): bandstand, lifeguard tower, harbour stairs slot (geometry-hunt #8 says fixed: check), film shots.
 
+## Results (2026-10-31, high, 1920x1025, on AC, power guard clean)
+| view | ms, this branch | ms, `?nolmdetail` | delta | triangles delta |
+|---|---|---|---|---|
+| overview | 35.77 | 35.45 | +0.32 | +124 k |
+| downtown | 35.31 | 34.95 | +0.36 | +71 k |
+| street | 33.18 | 32.83 | +0.35 | +22 k |
+| market | 32.85 | 32.94 | -0.09 | +52 k |
+
+Second repeat of each pair; the first baseline row of a run is cold (fewer triangles uploaded, 1-2 ms noisier), so it is not used. Budget: +1 ms, +250 k. Inside the station
+hall: 31.7 ms, 305 draws, 5.87 M triangles in that view (room plus the city behind it; the room's own share was not isolated).
+`hitch.mjs`: prog+0 geo+0 tex+0 in every window. `shot --invariants --validate`: {} and []. ui-test: 71 passed, 0 failed. `npm run build` fine. `?diorama`, `?quality=medium` (all rooms
+on), `?quality=low` (rooms off, old exteriors) seen. Opening film sheet seen (`--mode seek` only, not real time); no shot goes through a changed room.
+Sheets: `docs/progress/detail/landmarks/heroes.jpg`, `before-after.jpg`.
+
+## Best views
+Church nave 18.2 from the door; Town Hall stair from the door at noon, laylight from the gallery, the balcony at 18.2, the table model in the west wing; station from the street
+through the open door with a train behind it, compass floor and rib shadows at 11; carousel at 21.5; bandstand at noon; quay lane at 10-12.
+
+## Toggles
+`?nolmdetail` all; `?noherochurch`, `?noherotownhall`, `?noherostation`, `?noquaylife2`, `?nohorses`, `?nobandroof`. Always on: bricks 25 x 9.5 cm (`shaders.ts`, every brick landmark).
+
 ## Hand-offs
-None yet.
+None to other sessions. Walk mode still passes through small unmarked clutter on the fish quay (not added here).
 
 ## Edits outside my files
 `src/ui/camera/walkSurface.ts`: asks `ctx.services.rooms` first in `heightAt` and `solidAt`.
