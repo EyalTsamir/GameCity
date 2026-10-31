@@ -18,6 +18,7 @@
 // Colour regions are resolved in the shader from per-instance colours and hem parameters, so
 // sleeves / trousers / tops / skirts are continuous parameters instead of hidden meshes.
 
+import { detailPeople } from '../../core/detailPeople';
 import * as THREE from 'three';
 import { flatConvention } from '../../core/perfdeep';
 import { TARGETS, TORSO_H, type BodyRing, type Dims, type FootRing, type LimbRing, type V3 } from './rig';
@@ -106,6 +107,8 @@ export const FB = {
   FRINGE: 26,
   /** shown only when NO hat is worn (hair volume on the crown) */
   NOHAT: 27,
+  /** close level: separate locks over the cap (hair that isn't cropped, no hat) */
+  LOCKS: 28,
 } as const;
 
 /** 0 near (< 40 m), 1 lo, 2 tiny, 3 pin, 4 close (< ~15 m: sculpted face, fingers, fabric detail) */
@@ -1148,6 +1151,67 @@ function hairlineU(phi: number): number {
   return pts[pts.length - 1][1];
 }
 
+const HAIR_LOCKS = detailPeople('hairlocks');
+/** close level: 48 separate locks lying over the cap, combed down from the crown in three overlapping tiers, each its
+ *  own tone, standing off the scalp and tapering to a free tip past the hairline: the cap alone reads as a helmet */
+function buildHairLocks(b: MeshBuilder, d: Dims, vol: number, hk: number): void {
+  const chin = d.headRings[0].y - 0.006,
+    crown = d.crown;
+  const ss = (a: number, c: number, x: number) => {
+    const t = clamp((x - a) / (c - a), 0, 1);
+    return t * t * (3 - 2 * t);
+  };
+  // the cap's own surface (buildHair + the shader's lift), so a lock never sinks into it
+  const onCap = (phi: number, s: number, lift: number): P3 => {
+    const y0 = chin + (crown - chin) * hairlineU(phi);
+    const sp = Math.max(0, s);
+    const t = Math.pow(sp, 0.85);
+    const y = y0 + (crown - y0) * t + Math.min(0, s) * (crown - y0);
+    const cap = vol * (0.08 + 0.92 * Math.min(1, sp * 2.6)) * (1 - 0.35 * t);
+    const grow = ss(0.05, 0.45, sp) * (0.0045 + 0.007 * ss(0.3, 1, sp) * (0.6 - 0.4 * Math.cos(phi)));
+    return headSurface(d, phi, Math.min(y, crown - 0.004), cap + grow + lift * hk);
+  };
+  const centre: P3 = [0, chin + (crown - chin) * 0.62, d.headRings[5].cz];
+  let seed = 41;
+  const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  b.use(BONE.HEAD, REG.HAIR, FB.LOCKS, 1);
+  const lock = (phi: number, s0: number, s1: number, width: number, drift: number) => {
+    const tone = 0.82 + 0.26 * rnd();
+    const n = 3;
+    const ids: number[][] = [];
+    const C: P3[] = [];
+    for (let i = 0; i <= n; i++) {
+      const t = i / n;
+      const lift = 0.001 + 0.0052 * Math.sin(Math.PI * Math.min(1, t * 1.15)) + 0.0015 * t;
+      C.push(onCap(phi + drift * t * t, s0 + (s1 - s0) * t, lift));
+    }
+    for (let i = 0; i < n; i++) {
+      const t = i / n;
+      const tan = norm(sub(C[i + 1], C[i]));
+      const up = norm(sub(C[i], centre));
+      const side = norm(cross(tan, up));
+      const w = width * hk * (0.55 + 0.75 * Math.sin(Math.PI * (t * 0.8 + 0.1))) * (1 - 0.15 * t);
+      const tn = tone * (0.72 + 0.28 * Math.min(1, t * 2.5));
+      ids.push([b.v(add(C[i], mul(side, w)), 2, 0, 0, 0, tn * 0.92), b.v(add(C[i], mul(up, 0.0028 * hk)), 2, 0, 0, 0, tn), b.v(add(C[i], mul(side, -w)), 2, 0, 0, 0, tn * 0.92)]);
+    }
+    const tip = b.v(C[n], 2, 0, 0, 0, tone);
+    const up = norm(sub(C[1], centre));
+    for (let i = 0; i < n - 1; i++)
+      for (let k = 0; k < 2; k++) b.quadDir(ids[i][k], ids[i][k + 1], ids[i + 1][k + 1], ids[i + 1][k], norm(sub(C[i], centre)));
+    b.triDir(ids[n - 1][0], ids[n - 1][1], tip, up);
+    b.triDir(ids[n - 1][1], ids[n - 1][2], tip, up);
+  };
+  for (let k = 0; k < 14; k++) lock(((k + rnd() * 0.7) / 14) * Math.PI * 2, 0.97 - 0.04 * rnd(), 0.6 + 0.08 * rnd(), 0.017 + 0.007 * rnd(), (rnd() - 0.5) * 0.5);
+  for (let k = 0; k < 16; k++) lock(((k + 0.5 + rnd() * 0.6) / 16) * Math.PI * 2, 0.74 + 0.06 * rnd(), 0.3 + 0.1 * rnd(), 0.015 + 0.007 * rnd(), (rnd() - 0.5) * 0.45);
+  for (let k = 0; k < 18; k++) {
+    const phi = ((k + rnd() * 0.8) / 18) * Math.PI * 2;
+    const a = Math.abs(Math.atan2(Math.sin(phi), Math.cos(phi))); // 0 front … π back
+    // the front stops at the hairline (no curtain over the face), the sides and the nape run on past it
+    const tip = a < 1.0 ? 0.03 + 0.05 * rnd() : -0.015 - 0.06 * rnd() * ss(1.0, 1.6, a);
+    lock(phi, 0.42 + 0.08 * rnd(), tip, 0.012 + 0.007 * rnd(), (rnd() - 0.5) * 0.35);
+  }
+}
+
 function buildHair(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
   const n = cfg.hairSides ?? cfg.headSides;
   const chin = d.headRings[0].y - 0.006;
@@ -1174,6 +1238,7 @@ function buildHair(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
   bridge(b, rings);
   const apex = b.v([0, crown + vol * 0.75, d.headRings[d.headRings.length - 1].cz - 0.006], 2, 0, 0, 1);
   capFan(b, rings[rings.length - 1], apex, [0, crown - 0.06 * hk, 0]);
+  if (cfg.close && HAIR_LOCKS) buildHairLocks(b, d, vol, hk);
 
   if (cfg.hairLong.length === 0) return;
   // long hair sheet: hangs from the back / sides of the head behind the shoulders (aux1 = hang

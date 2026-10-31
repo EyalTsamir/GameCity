@@ -96,6 +96,7 @@ export function lookData(L: Look): LookCache {
   if (s.hair === 'ponytail') f |= bit(FB.PONY);
   if (s.hair === 'bun' || s.hair === 'manbun') f |= bit(FB.BUN);
   if (s.fringe) f |= bit(FB.FRINGE);
+  if (s.hair !== 'bald' && s.hair !== 'crop' && s.hat === 0 && !s.hood) f |= bit(FB.LOCKS);
   if (s.beard === 1) f |= bit(FB.BEARD);
   if (s.beard >= 1) f |= bit(FB.MOUSTACHE);
   if (s.hat > 0) {
@@ -790,7 +791,7 @@ export class CrowdRenderer {
 export function swimwear(L: Look, s: Style, flags: number, C: Uint32Array): number {
   const female = L.kind === 'woman' || L.kind === 'girl';
   const swim = L.swim || L.skin;
-  const keep = bit(FB.HAIR) | bit(FB.HAIRLONG) | bit(FB.PONY) | bit(FB.BUN) | bit(FB.FRINGE) | bit(FB.BEARD) | bit(FB.MOUSTACHE) | bit(FB.TOWEL) | bit(FB.HAT) | bit(FB.BRIM) | bit(FB.VISOR);
+  const keep = bit(FB.HAIR) | bit(FB.LOCKS) | bit(FB.HAIRLONG) | bit(FB.PONY) | bit(FB.BUN) | bit(FB.FRINGE) | bit(FB.BEARD) | bit(FB.MOUSTACHE) | bit(FB.TOWEL) | bit(FB.HAT) | bit(FB.BRIM) | bit(FB.VISOR);
   flags &= keep;
   C[0] = w(L.skin, q8(1.12)); // sleeveless
   if (female) {

@@ -410,6 +410,9 @@ void pedPose(inout vec3 p, inout vec3 n) {
       vPedFace = vec3(aux.y, 0.0, 3.0);
       float a = atan(p.x, p.z + 0.015);
       float lump = 0.55 * sin(a * 7.0 + p.y * 60.0 + float(iC1.x & 15u)) + 0.45 * sin(a * 13.0 - p.y * 90.0);
+      // (curls: bigger, closer lumps; every head a broader swell of its own as well)
+      float curl = float((iC1.y >> 27u) & 31u) * (1.0 / 31.0);
+      lump = lump * (1.0 + 1.6 * curl) + 0.5 * sin(a * 3.0 + p.y * 34.0 + float(iC1.x & 7u) * 1.7) + 0.9 * curl * sin(a * 19.0 + p.y * 130.0);
       // (not under a hat: the lumps and crown lift poked through caps as dark blotches)
       float grow = smoothstep(0.05, 0.45, aux.y) * (((iC1.y >> 24u) & 7u) != 0u ? 0.0 : 1.0);
       p += n * grow * (0.0045 * lump + 0.007 * smoothstep(0.3, 1.0, aux.y) * (0.6 + 0.4 * -n.z));
