@@ -293,11 +293,11 @@ export class AtmosphereDriver {
     if (w && w.fog > 0.001) {
       // sea fog: a dense layer tens of metres thick, the colour of the lit haze, thinner toward its top
       const f = w.fog;
-      p.mist += (0.016 - p.mist) * f;
-      p.mistScaleHeight += (30 - p.mistScaleHeight) * f;
+      p.mist += (0.0065 - p.mist) * f;
+      p.mistScaleHeight += (24 - p.mistScaleHeight) * f;
       p.mistPatchiness = 0.7 - 0.4 * f;
       p.mistFreq = 1 / (70 + 110 * f);
-      p.mistColor.lerp(_c.copy(p.ring[0]).multiplyScalar(1.05).add(_g.copy(state.hemiSky).multiplyScalar(state.hemiI * 0.28)), f);
+      p.mistColor.lerp(_c.copy(p.ring[0]).multiplyScalar(0.8).add(_g.copy(state.hemiSky).multiplyScalar(state.hemiI * 0.2)), f);
       p.mistForward = 1.1;
       p.bankX = w.fogX || 0.01;
     }

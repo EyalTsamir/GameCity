@@ -109,8 +109,9 @@ export class WorldClock {
     this.night = 1 - smoothstep(-0.2, 0.06, this.sunHeight);
     this.dusk = Math.exp(-(((this.sunHeight - 0.04) / 0.16) ** 2));
     const wasOn = this.lightsOn;
-    if (!this.lightsOn && this.sunHeight < 0.05) this.lightsOn = true;
-    else if (this.lightsOn && this.sunHeight > 0.09) this.lightsOn = false;
+    // (a little before sunset: dusk sensors, and the blue hour opens with the town already lit)
+    if (!this.lightsOn && this.sunHeight < 0.1) this.lightsOn = true;
+    else if (this.lightsOn && this.sunHeight > 0.14) this.lightsOn = false;
     if (wasOn !== this.lightsOn) this.events?.emit('lights', this.lightsOn);
     const hr = Math.floor(h);
     if (hr !== this.lastHour) {

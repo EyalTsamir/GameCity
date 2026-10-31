@@ -97,14 +97,18 @@ float atmNoise2(vec2 p) {
   f = f * f * (3.0 - 2.0 * f);
   return mix(mix(atmHash12(i), atmHash12(i + vec2(1.0, 0.0)), f.x), mix(atmHash12(i + vec2(0.0, 1.0)), atmHash12(i + vec2(1.0, 1.0)), f.x), f.y);
 }
-// sea fog: the share of this ray that runs inside the bank (east of its wavering edge); continuous as an end crosses it
-float thBankShare(vec3 ray, float n) {
-  if (thAtmo[11].w == 0.0) return 1.0;
-  float x0 = thAtmo[11].w + (n - 0.5) * 170.0;
-  float a = cameraPosition.x - x0, b = a + ray.x;
-  if (a >= 0.0 && b >= 0.0) return 1.0;
-  if (a < 0.0 && b < 0.0) return 0.0;
-  return (a > 0.0 ? a : b) / abs(a - b);
+// optical depth of the ground mist along camera → camera + ray. Sea fog: only the part of the ray inside the bank (east of
+// its wavering edge) counts, with the heights of that part: a low end outside the bank sees none of the fog above the sea
+float thMistOD(vec3 ray, float t, float n) {
+  float yc = cameraPosition.y;
+  float s0 = 0.0, s1 = 1.0;
+  if (thAtmo[11].w != 0.0) {
+    float a = cameraPosition.x - (thAtmo[11].w + (n - 0.5) * 170.0), b = a + ray.x;
+    if (a < 0.0 && b < 0.0) return 0.0;
+    if (a < 0.0) s0 = a / (a - b);
+    else if (b < 0.0) s1 = a / (a - b);
+  }
+  return atmOD(yc + ray.y * s0, yc + ray.y * s1, t * (s1 - s0), thAtmo[4].w, thAtmo[5].w);
 }
 // transmittances along camera → camera + ray: blue air (Rayleigh-like, per channel, ~8 km scale height:
 // far ridges turn blue) → TR; aerosol (grey, ~1 km: valleys haze, peaks clear) → TM; ground mist → Tmist
@@ -119,7 +123,7 @@ void thAtmoTs(vec3 ray, out vec3 TR, out float TM, out float Tmist) {
     vec2 q = (cameraPosition.xz + ray.xz + thAtmo[9].xy) * thAtmo[9].z;
     float n = atmNoise2(q) * 0.65 + atmNoise2(q * 2.7 + 5.3) * 0.35;
     float patchy = mix(1.0, smoothstep(0.25, 0.75, n) * 1.8, thAtmo[9].w);
-    Tm = exp(-thAtmo[8].w * patchy * thBankShare(ray, n) * atmOD(yc, yp, t, thAtmo[4].w, thAtmo[5].w));
+    Tm = exp(-thAtmo[8].w * patchy * thMistOD(ray, t, n));
   }
   Tmist = Tm;
 }
@@ -209,7 +213,7 @@ vec3 thAtmoApplyF(vec3 col, vec3 ray) {
     vec2 q = (cameraPosition.xz + ray.xz + thAtmo[9].xy) * thAtmo[9].z;
     float n = atmNoise2(q) * 0.65 + atmNoise2(q * 2.7 + 5.3) * 0.35;
     float patchy = mix(1.0, smoothstep(0.25, 0.75, n) * 1.8, thAtmo[9].w);
-    float Tmist = exp(-thAtmo[8].w * patchy * thBankShare(ray, n) * atmOD(yc, yp, t, thAtmo[4].w, thAtmo[5].w));
+    float Tmist = exp(-thAtmo[8].w * patchy * thMistOD(ray, t, n));
     float mm = max(mu, 0.0);
     vec3 mc = thAtmo[8].rgb + thAtmo[1].rgb * thAtmo[1].w * mm * mm * mm * mm;
     col = mix(mc, col, Tmist);

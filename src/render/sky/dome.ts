@@ -206,7 +206,7 @@ void main() {
   // sea fog: from inside or behind the bank the low sky goes the way the land does (the sky above the layer stays)
   if (thAtmo[11].w != 0.0) {
     vec3 fr = d * (min(40.0, thAtmo[5].w > 0.0 ? 2.5 / thAtmo[5].w : 40.0) / max(y, 0.012));
-    float fk = 1.0 - exp(-thAtmo[8].w * thBankShare(fr * 3.0, 0.5) * atmOD(cameraPosition.y, cameraPosition.y + fr.y, length(fr), thAtmo[4].w, thAtmo[5].w));
+    float fk = 1.0 - exp(-thAtmo[8].w * thMistOD(fr, length(fr), 0.5));
     col = mix(col, thAtmo[8].rgb + thAtmo[1].rgb * thAtmo[1].w * pow(max(dot(d, thAtmo[0].xyz), 0.0), 4.0), fk);
   }
 #endif
