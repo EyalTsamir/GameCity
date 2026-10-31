@@ -308,7 +308,7 @@ export default function create(ctx: CityContext): CityModule {
         <dt>${k('1', '…', '9')}${k('0')}</dt><dd>Places · overview</dd>
         <dt>${k('C')}</dt><dd>Chase view</dd>
         <dt>${k('G')}</dt><dd>Free / guided camera</dd>
-        <dt>${k('V')}</dt><dd>Walk from the spot under the cursor · Shift jogs, Esc frees the mouse</dd>
+        <dt>${k('V')}</dt><dd>Walk from the spot under the cursor · Shift jogs, scroll or ${k('+', '−')} magnifies, Esc frees the mouse</dd>
         <dt>${k('Esc')}</dt><dd>Let go · stop tour</dd>
       </dl></section>
       <section><h3>Time & view</h3><dl>

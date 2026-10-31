@@ -16,6 +16,7 @@ import { createShadowLod } from './render/shadowLod';
 import { cullHiddenTriangles } from './render/geomCull';
 import { createPvs } from './render/pvs';
 import { flatConvention, perfOn } from './core/perfdeep';
+import { NearDetail } from './core/nearDetail';
 
 // Load order matters: static world → simulations → post-processing → camera → UI.
 const MODULES: [string, () => Promise<{ default: ModuleFactory }>][] = [
@@ -33,6 +34,7 @@ const MODULES: [string, () => Promise<{ default: ModuleFactory }>][] = [
   ['groundcover', () => import('./world/groundcover')],
   ['life', () => import('./world/life')],
   ['lamps', () => import('./world/lamps')],
+  ['near', () => import('./world/near')],
   ['traffic', () => import('./sim/traffic')],
   ['pedestrians', () => import('./sim/pedestrians')],
   ['rail', () => import('./sim/rail')],
@@ -144,6 +146,9 @@ async function boot(): Promise<void> {
     rng: (label: string) => rootRng.fork(label),
     size: { width: window.innerWidth, height: window.innerHeight },
   };
+
+  const near = new NearDetail(ctx);
+  ctx.services.nearDetail = near;
 
   // Fallback lighting so any module can be inspected alone (?only=...). The sky
   // module removes these when it installs the real light rig.
@@ -313,6 +318,7 @@ async function boot(): Promise<void> {
       }
     }
     try {
+      near.update(realDt);
       shadowLod?.();
       pvs?.();
       ctx.render(realDt);
@@ -355,7 +361,9 @@ async function boot(): Promise<void> {
     frames: () => frameCount,
     setHours: (h: number) => clock.setHours(h),
     setSpeed: (s: number) => (clock.speed = s),
+    near,
     view: (v: Partial<CameraState> | string) => {
+      near.flush();
       const poi = typeof v === 'string' ? plan.pois.find((p) => p.id === v) : undefined;
       const state = poi ?? (v as Partial<CameraState>);
       if (ctx.services.camera) ctx.services.camera.flyTo(state, 0);

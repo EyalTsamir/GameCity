@@ -29,6 +29,10 @@ export const globalUniforms = {
   uLampXf: { value: new THREE.Vector4(0, 0, 1, 1) },
   /** overall lamp-light gain (0 by day, eases to 1 with the street lights) */
   uLampGain: { value: 0 },
+  /** the main camera, also during the shadow and reflection passes (core/nearDetail.ts) */
+  uNearEye: { value: new THREE.Vector3() },
+  /** the main camera's magnification against the walking view (core/nearDetail.ts) */
+  uNearLens: { value: 1 },
 };
 
 function blankLampMap(): THREE.DataTexture {

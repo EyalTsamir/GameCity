@@ -6,6 +6,7 @@
 //   for (const c of cells.list()) { mesh = build(c.item); gate: () => nearCell(ctx.camera, c) }
 
 import type * as THREE from 'three';
+import { nearLens } from '../../core/nearDetail';
 
 /** cell size (m) and default draw distance (m from the camera to the cell rectangle) */
 export const NEAR_CELL = 48;
@@ -48,5 +49,6 @@ export function nearCell(cam: THREE.Camera, c: { x0: number; z0: number; x1: num
   const dx = Math.max(c.x0 - p.x, 0, p.x - c.x1),
     dz = Math.max(c.z0 - p.z, 0, p.z - c.z1);
   const dy = Math.max(0, p.y - 4);
-  return dx * dx + dz * dz + dy * dy < cut * cut;
+  const r = cut * nearLens.zoom;
+  return dx * dx + dz * dz + dy * dy < r * r;
 }

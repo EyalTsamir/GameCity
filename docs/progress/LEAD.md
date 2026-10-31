@@ -3,6 +3,9 @@
 Read this first when resuming after an interruption (usage limits have cut runs before).
 Per-module logs live next to this file: `docs/progress/<module>.md`.
 
+## Close foundation (2026-10-31, stage 1 of the close-up round) — see docs/progress/close-foundation.md
+The tools the later sessions use: the near-detail bubble (`src/core/nearDetail.ts`), the test set (`scripts/closeset.mjs`), `scripts/walkhitch.mjs`. Zoom: a real lens for the walker (wheel, + −) and in photo mode, levels of detail by plain distance now follow it (`nearLens.zoom`). Close focus fixed: the autofocus could not focus nearer than 2.5 m; default aperture f/1.6 → f/2.8. Audit of what reads as fake up close, ranked by area, in that log. First layers: grit along kerbs and walls. Bubble cost not distinguishable from zero at the four views.
+
 ## Baking (2026-10-31, branch claude/hopeful-babbage-4a203f) — see docs/progress/baking.md
 The assumption "all computed in the browser, one file" is cancelled by the user. `npm run bake` now writes far land and far facade textures into `public/bake` (gitignored), 18 MB beside the 4.4 MB page. Noon: overview 38.6 → 31.9, downtown 37.4 → 29.9, the other far views −4; street and market unchanged. **Run `npm run bake` before any measurement: a stale bake costs up to 7 ms silently.** Deploy needs `dist/bake` too. Not merged, not deployed at the time of writing.
 

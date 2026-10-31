@@ -4,6 +4,7 @@
 // picket fence / low wall / hedge, allotment plots and sheds, bench heights), so those are
 // computed here from the plan + core graphs only, cached per plan, and read by both.
 
+import { nearLens } from '../../core/nearDetail';
 import * as THREE from 'three';
 import type { CityContext } from '../../core/context';
 import type { Lot, StreetSlot, WalkPath, DistrictKind } from '../../core/plan';
@@ -617,7 +618,7 @@ export class DistanceLod {
     const cam = this.ctx.camera;
     const svc = this.ctx.services.camera as { getState?: () => { distance: number } } | undefined;
     const st = svc?.getState?.();
-    if (st && Number.isFinite(st.distance)) return st.distance;
+    if (st && Number.isFinite(st.distance)) return st.distance / nearLens.zoom;
     cam.getWorldDirection(this.dir);
     return this.dir.y < -0.05 ? cam.position.y / -this.dir.y : 1e4;
   }

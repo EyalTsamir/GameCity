@@ -19,6 +19,7 @@
 // distance and frustum, and write the survivors into a preallocated instance buffer (front-to-back
 // for early-Z). No allocations.
 
+import { nearLens } from '../../core/nearDetail';
 import * as THREE from 'three';
 import type { CityContext } from '../../core/context';
 import { WIND_GLSL } from '../../core/wind';
@@ -71,6 +72,10 @@ export function ringSpecs(level: QualityLevel): RingSpec[] {
   ];
 }
 
+/** where the rings are centred: the camera, or through a lens where it seems to stand */
+const uGcEye = { value: new THREE.Vector3() };
+const _gcDir = new THREE.Vector3();
+
 /** max blade height + bend reach used for the tile bounds (m) */
 const BLADE_UP = 2.1;
 const BLADE_SIDE = 0.9;
@@ -105,6 +110,7 @@ uniform float uTime;
 uniform vec2 uWind;
 uniform vec4 uFade;
 uniform vec4 uBlade;
+uniform vec3 uGcEye;
 uniform vec4 uKind;
 uniform vec3 gcFl[ 10 ];
 uniform float uFlDetail;
@@ -257,7 +263,7 @@ vGcRough = 0.85;
       if ( abs( dr ) > 0.13 ) alive = false;
     }
     vec3 rw = vec3( root.x, y0, root.y );
-    float dist = distance( rw, cameraPosition );
+    float dist = distance( rw, uGcEye );
     float fin = uFade.x + ( uFade.y - uFade.x ) * rb.x;
     float fout = uFade.z + ( uFade.w - uFade.z ) * rb.y;
     float fade = smoothstep( fin - 1.2, fin, dist ) * ( 1.0 - smoothstep( fout - 1.5, fout, dist ) );
@@ -691,6 +697,7 @@ export function createField(ctx: CityContext, maps: CoverMaps, outer: OuterMaps 
       geo.setAttribute('iTile', inst);
       geo.instanceCount = 0;
       const u = {
+        uGcEye,
         uFade: { value: new THREE.Vector4(spec.in0, spec.in1, spec.out0, spec.out1) },
         uBlade: { value: new THREE.Vector4(spec.blades, spec.width, 1, 0.001) },
         uKind: { value: new THREE.Vector4(spec.flowers, spec.lawnFlowers, spec.litter, spec.index) },
@@ -753,6 +760,14 @@ export function createField(ctx: CityContext, maps: CoverMaps, outer: OuterMaps 
   const camPos = new THREE.Vector3();
   const update = (camera: THREE.PerspectiveCamera, drawHeightPx: number) => {
     camera.getWorldPosition(camPos);
+    // through a lens the rings centre where the same picture would be seen from without one: further along the view,
+    // short of the ground it looks at
+    if (nearLens.zoom > 1.01) {
+      camera.getWorldDirection(_gcDir);
+      const t = _gcDir.y < -0.01 ? Math.min(150, Math.max(0, camPos.y) / -_gcDir.y) : 60;
+      camPos.addScaledVector(_gcDir, t * (1 - 1 / nearLens.zoom));
+    }
+    uGcEye.value.copy(camPos);
     pv.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
     frustum.setFromProjectionMatrix(pv);
     const pxWorld = (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2)) / Math.max(200, drawHeightPx) / Math.max(0.2, camera.zoom);
