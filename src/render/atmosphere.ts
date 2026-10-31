@@ -29,6 +29,7 @@
 
 import * as THREE from 'three';
 import { perfOn } from '../core/perfdeep';
+import { detailOn } from '../core/detaillight';
 
 /** number of vec4 slots in the shared atmosphere uniform */
 export const ATMO_N = 12;
@@ -51,6 +52,11 @@ export const ATMO_N = 12;
 export const atmoData = new Float32Array(ATMO_N * 4);
 
 /** GLSL: atmosphere functions (needs `uniform vec4 thAtmo[ATMO_N]` declared and `cameraPosition`). */
+// ?nomistfast: the old mist (value noise on every fragment), to A/B
+const MIST_FAST = detailOn('mistfast');
+const MIST_SKIP = MIST_FAST ? '0.008' : '0.0';
+const MIST_NOISE = MIST_FAST ? '0.5 + 0.27 * (sin(q.x * 3.9 + 1.4 * sin(q.y * 2.3)) + sin(q.y * 4.4 - 1.2 * sin(q.x * 1.9)))' : 'atmNoise2(q) * 0.65 + atmNoise2(q * 2.7 + 5.3) * 0.35';
+
 export const ATMO_FUNCS = /* glsl */ `
 // optical depth of an exponential layer along a straight segment of length t whose ends are at
 // heights ha, hb ABOVE the layer base (density = 1 at the base, scale 1/k); overflow-safe
@@ -110,6 +116,18 @@ float thMistOD(vec3 ray, float t, float n) {
   }
   return atmOD(yc + ray.y * s0, yc + ray.y * s1, t * (s1 - s0), thAtmo[4].w, thAtmo[5].w);
 }
+// the mist's transmittance. It lies on every fragment from dusk to morning, and most of a town's see under 1 % of it: those
+// stop at the plain optical depth. The patches are warped sines (the hashes of two octaves of value noise cost 1.5–3.4 ms)
+float thMistT(vec3 ray, float t) {
+  float yc = cameraPosition.y;
+  float od = thAtmo[8].w * atmOD(yc, yc + ray.y, t, thAtmo[4].w, thAtmo[5].w) - ${MIST_SKIP};
+  if (od <= 0.0) return 1.0;
+  vec2 q = (cameraPosition.xz + ray.xz + thAtmo[9].xy) * thAtmo[9].z;
+  float n = ${MIST_NOISE};
+  float patchy = mix(1.0, smoothstep(0.25, 0.75, n) * 1.8, thAtmo[9].w);
+  if (thAtmo[11].w != 0.0) od = thAtmo[8].w * thMistOD(ray, t, n);
+  return exp(-od * patchy);
+}
 // transmittances along camera → camera + ray: blue air (Rayleigh-like, per channel, ~8 km scale height:
 // far ridges turn blue) → TR; aerosol (grey, ~1 km: valleys haze, peaks clear) → TM; ground mist → Tmist
 void thAtmoTs(vec3 ray, out vec3 TR, out float TM, out float Tmist) {
@@ -120,10 +138,7 @@ void thAtmoTs(vec3 ray, out vec3 TR, out float TM, out float Tmist) {
   TM = exp(-thAtmo[11].x * (atmOD(yc, yp, t, thAtmo[3].w, thAtmo[11].y) * ts));
   float Tm = 1.0;
   if (thAtmo[8].w > 0.0) {
-    vec2 q = (cameraPosition.xz + ray.xz + thAtmo[9].xy) * thAtmo[9].z;
-    float n = atmNoise2(q) * 0.65 + atmNoise2(q * 2.7 + 5.3) * 0.35;
-    float patchy = mix(1.0, smoothstep(0.25, 0.75, n) * 1.8, thAtmo[9].w);
-    Tm = exp(-thAtmo[8].w * patchy * thMistOD(ray, t, n));
+    Tm = thMistT(ray, t);
   }
   Tmist = Tm;
 }
@@ -210,10 +225,7 @@ vec3 thAtmoApplyF(vec3 col, vec3 ray) {
   }
   col = (col * TR + thAtmo[7].rgb * g * (1.0 - TR)) * TM + haze * g * (1.0 - TM);
   if (thAtmo[8].w > 0.0) {
-    vec2 q = (cameraPosition.xz + ray.xz + thAtmo[9].xy) * thAtmo[9].z;
-    float n = atmNoise2(q) * 0.65 + atmNoise2(q * 2.7 + 5.3) * 0.35;
-    float patchy = mix(1.0, smoothstep(0.25, 0.75, n) * 1.8, thAtmo[9].w);
-    float Tmist = exp(-thAtmo[8].w * patchy * thMistOD(ray, t, n));
+    float Tmist = thMistT(ray, t);
     float mm = max(mu, 0.0);
     vec3 mc = thAtmo[8].rgb + thAtmo[1].rgb * thAtmo[1].w * mm * mm * mm * mm;
     col = mix(mc, col, Tmist);
