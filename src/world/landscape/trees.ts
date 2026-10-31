@@ -21,6 +21,9 @@ import { SLAB } from '../../core/constants';
 import type { HedgeSink } from './farmkit';
 import { natureOn } from '../../core/nature';
 
+/** country crowns: their shade was near black against the town's trees; more sky in it */
+const FILL = natureOn('treefill');
+
 export const KIND = { broad: 0, conifer: 1, poplar: 2, small: 3, oak: 4, pine: 5, olive: 6, cypress: 7 } as const;
 const NK = 8;
 // (?notreekinds: every tree one of the first four, as before)
@@ -983,7 +986,7 @@ vLocalY0 = position.y;
         `vec4 lt = texture2D(tLeaf, vLeafUv);
 if (lt.a < 0.5) discard;
 vec4 nT = texture2D(tLN, vTW.xz * 0.37 + vTW.y * 0.21);
-float leafAO = mix(0.42, 1.0, vAO) * (0.78 + 0.44 * nT.r) * mix(1.0, lt.r * 1.3, vCrown);
+float leafAO = mix(${FILL ? '0.6' : '0.42'}, 1.0, vAO) * (0.78 + 0.44 * nT.r) * mix(1.0, lt.r * 1.3, vCrown);
 // bark: furrows along the stem, darker at the foot
 if (vCrown < 0.5) gTreeBark = (0.62 + 0.76 * texture2D(tLN, vec2((vTW.x + vTW.z) * 1.7, vTW.y * 0.19)).g) * mix(0.72, 1.0, smoothstep(0.0, 0.35, vLocalY0));
 vec4 diffuseColor = vec4(treeAlbedo(vKind, vTint, vCrown, vLocalY) * mix(1.0, leafAO, vCrown), opacity);`,
@@ -1019,11 +1022,12 @@ if (vCrown > 0.5) {
 #if NUM_DIR_LIGHTS > 0
   sunC = directionalLights[0].color;
 #endif
+  reflectedLight.indirectDiffuse *= ${FILL ? '1.0 + 0.4 * vCrown' : '1.0'};
   reflectedLight.indirectDiffuse += diffuseColor.rgb * sunC * vec3(1.0, 1.0, 0.5) * bt * 0.46;
 }`,
       );
   };
-  mat.customProgramCacheKey = () => 'th-landtree-v3';
+  mat.customProgramCacheKey = () => 'th-landtree-v4';
   return mat;
 }
 
@@ -1280,7 +1284,7 @@ varying vec3 vBF;
         `vec4 tc = texture2D(tTreeCol, vUv2);
 if (tc.a < 0.5) discard;
 
-vec4 diffuseColor = vec4(treeAlbedo(vKind, vTint, tc.g, tc.b) * (0.6 + 0.6 * tc.r), 1.0);`,
+vec4 diffuseColor = vec4(treeAlbedo(vKind, vTint, tc.g, tc.b) * ${FILL ? '(0.72 + 0.5 * tc.r)' : '(0.6 + 0.6 * tc.r)'}, 1.0);`,
       )
       .replace(
         '#include <normal_fragment_maps>',
@@ -1302,11 +1306,12 @@ vec4 diffuseColor = vec4(treeAlbedo(vKind, vTint, tc.g, tc.b) * (0.6 + 0.6 * tc.
 #if NUM_DIR_LIGHTS > 0
   sunC = directionalLights[0].color;
 #endif
+  reflectedLight.indirectDiffuse *= ${FILL ? '1.0 + 0.3 * tc.g' : '1.0'};
   reflectedLight.indirectDiffuse += diffuseColor.rgb * sunC * vec3(1.0, 1.0, 0.5) * bt * 0.36;
 }`,
       );
   };
-  mat.customProgramCacheKey = () => 'th-landimp-v3';
+  mat.customProgramCacheKey = () => 'th-landimp-v4';
   return mat;
 }
 

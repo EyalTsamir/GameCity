@@ -42,7 +42,7 @@ function log(s: RowSink, ax: number, ay: number, az: number, bx: number, by: num
       q = i * 2 + 1,
       d = ((i + 1) % N) * 2,
       e = ((i + 1) % N) * 2 + 1;
-    tris.push(p, d, e, p, e, q);
+    tris.push(p, e, d, p, q, e);
   }
   s.solid(B.solid, cx, cz, verts, tris, c[0], c[1], c[2]);
   // the two ends
@@ -56,7 +56,7 @@ function log(s: RowSink, ax: number, ay: number, az: number, bx: number, by: num
       const a = (i / N) * 6.283;
       ev.push(ex + (ux * Math.cos(a) + vx * Math.sin(a)) * er, ey + vy * Math.sin(a) * er, ez + (uz * Math.cos(a) + vz * Math.sin(a)) * er, (dx / l) * sg, (dy / l) * sg, (dz / l) * sg, 0.5, 0.4);
     }
-    for (let i = 1; i + 1 < N; i++) et.push(0, i, i + 1);
+    for (let i = 1; i + 1 < N; i++) sg < 0 ? et.push(0, i, i + 1) : et.push(0, i + 1, i);
     s.solid(B.solid, cx, cz, ev, et, 0.48, 0.38, 0.25);
   }
 }
@@ -169,6 +169,78 @@ export function buildRiverRocks(s: RowSink, model: LandscapeModel): void {
       const r = (0.28 + 0.8 * hash2i(key, 12 + k, 856) * hash2i(key, 17 + k, 857)) * (k ? 0.75 : 1);
       const t = hash2i(key, 22 + k, 858);
       boulder(s, x + Math.cos(a) * d, y + r * 0.12, z + Math.sin(a) * d, r, 0.62, key * 31 + k, [0.32 + 0.08 * t, 0.3 + 0.07 * t, 0.26 + 0.06 * t], y > WL + 0.25 ? 0.45 : 0);
+    }
+  }
+}
+
+/** driftwood on the upper beach, bleached, along the tide line; a few stones where the sand runs out */
+export function buildBeach(s: RowSink, model: LandscapeModel): void {
+  const H = (x: number, z: number) => model.height(x, z) + GROUND_DROP;
+  const L = model.coastLine;
+  const p = { x: 0, z: 0 },
+    p2 = { x: 0, z: 0 };
+  let s0 = 0;
+  for (let a = 0; a < L.length; a += 8) {
+    L.at(a, p);
+    if (p.z > 152) {
+      s0 = a;
+      break;
+    }
+  }
+  for (let a = 6; a < 1700 && s0 + a + 4 < L.length; a += 7) {
+    const key = Math.round(a);
+    if (hash2i(key, 1, 861) > 0.3) continue;
+    L.at(s0 + a, p);
+    if (model.cliffness(p.x, p.z) > 0.3) continue;
+    L.at(s0 + a + 4, p2);
+    const tl = Math.hypot(p2.x - p.x, p2.z - p.z) || 1;
+    let nx = -(p2.z - p.z) / tl,
+      nz = (p2.x - p.x) / tl;
+    if (nx > 0) {
+      nx = -nx;
+      nz = -nz;
+    }
+    // find the tide line on this section of beach: the first point inland a little above the water
+    let off = 4;
+    while (off < 60 && H(p.x + nx * off, p.z + nz * off) < WL + 0.7) off += 2;
+    if (off >= 60) continue;
+    off += hash2i(key, 2, 862) * 7;
+    const x = p.x + nx * off + ((p2.x - p.x) / tl) * 3 * hash2i(key, 3, 863),
+      z = p.z + nz * off + ((p2.z - p.z) / tl) * 3 * hash2i(key, 3, 863);
+    if (model.slabDist(x, z) < 3) continue;
+    const y = H(x, z);
+    const t = hash2i(key, 4, 864);
+    if (t < 0.72) {
+      const ang = hash2i(key, 5, 865) * 6.283;
+      const len = 0.9 + 3.6 * hash2i(key, 6, 866) * hash2i(key, 7, 867);
+      let r = 0.06 + 0.12 * hash2i(key, 8, 868);
+      const k = 0.5 + 0.2 * hash2i(key, 9, 869);
+      // a bough, not a pipe: it kinks at each joint and thins, with a broken side branch
+      const segs = len < 1.6 ? 2 : 3;
+      let ax = x,
+        az = z,
+        ay = y + r * 0.5,
+        dir = ang;
+      for (let g = 0; g < segs; g++) {
+        const sl = (len / segs) * (0.8 + 0.4 * hash2i(key, 20 + g, 871));
+        const bx = ax + Math.cos(dir) * sl,
+          bz = az + Math.sin(dir) * sl;
+        const by = H(bx, bz) + r * 0.45 + 0.1 * r * hash2i(key, 30 + g, 872);
+        log(s, ax, ay, az, bx, by, bz, r, [k, k * 0.94, k * 0.84], x, z);
+        if (g === 0 && r > 0.09) {
+          const sa = dir + (hash2i(key, 40, 873) < 0.5 ? -1 : 1) * (0.5 + 0.5 * hash2i(key, 41, 874));
+          const sb = 0.3 + 0.5 * hash2i(key, 42, 875);
+          log(s, bx, by, bz, bx + Math.cos(sa) * sb, by + 0.04 + 0.2 * hash2i(key, 43, 876), bz + Math.sin(sa) * sb, r * 0.45, [k, k * 0.94, k * 0.84], x, z);
+        }
+        ax = bx;
+        az = bz;
+        ay = by;
+        r *= 0.72;
+        dir += (hash2i(key, 50 + g, 877) - 0.5) * 0.9;
+      }
+    } else {
+      const r = 0.12 + 0.3 * hash2i(key, 10, 870);
+      boulder(s, x, y + r * 0.1, z, r, 0.6, key, [0.38, 0.36, 0.32], 0);
     }
   }
 }

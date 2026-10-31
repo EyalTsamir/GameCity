@@ -219,7 +219,7 @@ export function buildPowerLines(s: RowSink, model: LandscapeModel, fog: boolean)
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(wires, 3));
   g.computeBoundingSphere();
-  const mat = new THREE.LineBasicMaterial({ color: WIRE_DAY, fog, transparent: true, depthWrite: false });
+  const mat = new THREE.LineBasicMaterial({ color: WIRE_DAY, fog: false, transparent: true, depthWrite: false });
   // a wire a pixel wide overstates itself with distance: it fades out instead of drawing a white line across the plain
   mat.onBeforeCompile = (sh) => {
     sh.vertexShader = sh.vertexShader.replace('#include <common>', `#include <common>
@@ -227,9 +227,9 @@ varying float vWireD;`).replace('#include <project_vertex>', `#include <project_
 vWireD = -mvPosition.z;`);
     sh.fragmentShader = sh.fragmentShader.replace('#include <common>', `#include <common>
 varying float vWireD;`).replace('#include <color_fragment>', `#include <color_fragment>
-diffuseColor.a *= 0.12 + 0.78 * (1.0 - smoothstep(120.0, 1300.0, vWireD));`);
+diffuseColor.a *= 0.05 + 0.8 * (1.0 - smoothstep(90.0, 900.0, vWireD));`);
   };
-  mat.customProgramCacheKey = () => 'th-landwires-v1';
+  mat.customProgramCacheKey = () => 'th-landwires-v2';
   const m = new THREE.LineSegments(g, mat);
   m.name = 'land-wires';
   m.matrixAutoUpdate = false;

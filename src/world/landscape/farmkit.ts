@@ -539,11 +539,12 @@ function boat(s: RowSink, x: number, y: number, z: number, yaw: number, h: numbe
       ww = v * Math.sin(heel) + w * Math.cos(heel);
     return [x + vv * c + u * sn, y + ww + 0.28, z - vv * sn + u * c];
   };
-  // hull sections along the keel: half width and sheer rise at each station
-  const N = 6;
+  // hull sections along the keel: half width and sheer rise at each station (a pointed bow, a fuller stern)
+  const N = 10;
   const sec = (t: number): [number, number] => {
     const a = t * 2 - 1;
-    return [W * Math.pow(Math.max(0, 1 - a * a), 0.6), D * 0.45 + 0.32 * a * a];
+    const f = a > 0 ? 1 - Math.pow(a, 1.7) : 1 - Math.pow(-a, 3.2) * 0.72;
+    return [W * Math.pow(Math.max(0, f), 0.62), D * 0.45 + 0.34 * a * a];
   };
   const put = (p: [number, number, number], nx: number, ny: number, nz: number, u: number, t: number) => {
     const wx = nx * c + nz * sn,
@@ -555,13 +556,17 @@ function boat(s: RowSink, x: number, y: number, z: number, yaw: number, h: numbe
     const [w, top] = sec(t);
     const u = (t - 0.5) * 2 * L;
     put(P(u, 0, -D * 0.2), 0, -1, 0, t, 0.1);
-    put(P(u, w, top), 0.9, 0.2, 0, t, 0.5);
-    put(P(u, -w, top), -0.9, 0.2, 0, t, 0.5);
+    put(P(u, w * 0.78, top * 0.25 - D * 0.08), 0.75, -0.65, 0, t, 0.3);
+    put(P(u, -w * 0.78, top * 0.25 - D * 0.08), -0.75, -0.65, 0, t, 0.3);
+    put(P(u, w, top), 0.98, 0.2, 0, t, 0.5);
+    put(P(u, -w, top), -0.98, 0.2, 0, t, 0.5);
   }
   for (let i = 0; i < N; i++) {
-    const a = i * 3;
-    tris.push(a, a + 3, a + 4, a, a + 4, a + 1);
-    tris.push(a, a + 2, a + 5, a, a + 5, a + 3);
+    const a = i * 5;
+    tris.push(a, a + 5, a + 6, a, a + 6, a + 1);
+    tris.push(a + 1, a + 6, a + 8, a + 1, a + 8, a + 3);
+    tris.push(a, a + 2, a + 7, a, a + 7, a + 5);
+    tris.push(a + 2, a + 4, a + 9, a + 2, a + 9, a + 7);
   }
   const k = h < 0.34 ? [0.62, 0.66, 0.68] : h < 0.67 ? [0.12, 0.26, 0.4] : [0.5, 0.17, 0.11];
   s.solid(B.solid, x, z, verts, tris, k[0], k[1], k[2]);
@@ -581,6 +586,39 @@ function boat(s: RowSink, x: number, y: number, z: number, yaw: number, h: numbe
     lt.push(a, a + 2, a + 3, a, a + 3, a + 1);
   }
   s.solid(B.solid, x, z, lv, lt, 0.16, 0.13, 0.11);
+  // gunwale and two thwarts: the pale timber that makes it a boat from close by
+  const rail = (ax: [number, number, number], bx: [number, number, number], r: number, t: number) => {
+    const dx = bx[0] - ax[0],
+      dz = bx[2] - ax[2];
+    const dl = Math.hypot(dx, dz) || 1;
+    const qx = (-dz / dl) * r,
+      qz = (dx / dl) * r;
+    s.solid(
+      B.solid,
+      x,
+      z,
+      [ax[0] - qx, ax[1] + 0.02, ax[2] - qz, 0, 1, 0, 0.5, 0.4, ax[0] + qx, ax[1] + 0.02, ax[2] + qz, 0, 1, 0, 0.5, 0.4, bx[0] + qx, bx[1] + 0.02, bx[2] + qz, 0, 1, 0, 0.5, 0.4, bx[0] - qx, bx[1] + 0.02, bx[2] - qz, 0, 1, 0, 0.5, 0.4],
+      [0, 1, 2, 0, 2, 3],
+      t,
+      t * 0.92,
+      t * 0.8,
+    );
+  };
+  for (let i = 0; i < N; i++) {
+    const t0 = i / N,
+      t1 = (i + 1) / N;
+    const [w0, h0] = sec(t0),
+      [w1, h1] = sec(t1);
+    const u0 = (t0 - 0.5) * 2 * L,
+      u1 = (t1 - 0.5) * 2 * L;
+    rail(P(u0, w0, h0), P(u1, w1, h1), 0.035, 0.55);
+    rail(P(u0, -w0, h0), P(u1, -w1, h1), 0.035, 0.55);
+  }
+  for (const t of [0.34, 0.6]) {
+    const [w, top] = sec(t);
+    const u = (t - 0.5) * 2 * L;
+    rail(P(u, w * 0.94, top - 0.07), P(u, -w * 0.94, top - 0.07), 0.09, 0.5);
+  }
 }
 
 /** a round bale lying on its side (8-sided, smooth) */

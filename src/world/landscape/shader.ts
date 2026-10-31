@@ -672,7 +672,20 @@ ${LG ? '    }' : ''}
     sc = mix(sc, scr * (0.85 + 0.3 * nB.r), scrubA * mix(0.12, clump * 0.8, near));
   }
   // wrack line of dried seaweed along the last high tide
-  sc *= 1.0 - 0.18 * (1.0 - smoothstep(0.15, 0.45 + fp, abs(p.y - ${(WL + 0.75).toFixed(2)} - 0.12 * (nB.g - 0.5)))) * (1.0 - smoothstep(0.5, 2.0, fp));
+  sc *= 1.0 - 0.3 * (1.0 - smoothstep(0.1, 0.4 + fp, abs(p.y - ${(WL + 0.75).toFixed(2)} - 0.14 * (nB.g - 0.5)))) * (1.0 - smoothstep(0.5, 2.0, fp));
+  // close up: grain, scuffs of feet and wind, broken shell along the upper beach
+  if (fp < 0.3 && nearSlabS < 0.99) {
+    float gf = (1.0 - smoothstep(0.04, 0.3, fp)) * (1.0 - nearSlabS);
+    vec4 nS1 = ${lnTex('p.xz * (1.0 / 0.37)', '(1.0 / 0.37)')};
+    vec4 nS2 = ${lnTex('p.zx * (1.0 / 2.3)', '(1.0 / 2.3)', 'yx')};
+    sc *= 1.0 + gf * ((nS1.r - 0.5) * 0.2 + (nS2.g - 0.5) * 0.2);
+    sc *= 1.0 - gf * 0.08 * smoothstep(0.5, 0.85, nS2.b);
+    vec2 sc1 = p.xz * 5.0;
+    vec2 sh = lhash22(floor(sc1));
+    float sr = length(fract(sc1) - 0.5 - (sh - 0.5) * 0.6);
+    float sd1 = step(sh.x, 0.07) * (1.0 - smoothstep(0.05, 0.05 + fp * 3.0, sr));
+    sc = mix(sc, sh.y < 0.6 ? vec3(0.78, 0.75, 0.68) : vec3(0.16, 0.14, 0.12), sd1 * gf * 0.85);
+  }
   sc *= mix(0.94 + 0.08 * nB.g * midF, 1.0, nearSlabS);
   // wind ripples — not next to the town beach (its sand is smooth)
   if (fp < 0.4) sc *= 1.0 - 0.05 * lStripe(p.x * 0.8 + p.z * 0.6 + nB.r * 3.0, 0.7, 0.4, fp) * smoothstep(20.0, 70.0, vCov3.y);

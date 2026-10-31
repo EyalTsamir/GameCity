@@ -33,7 +33,7 @@ import { buildFarmKit, HedgeSink, type FarmKitStats } from './landscape/farmkit'
 import { hmix, toField, fromField, fieldAt, newField, cropKind } from './landscape/fields';
 import { nature } from '../core/nature';
 import { buildPowerLines, WIRE_DAY } from './landscape/powerlines';
-import { buildWoods, buildEdgeHedge, buildRiverRocks, type WoodsStats } from './landscape/woods';
+import { buildWoods, buildEdgeHedge, buildRiverRocks, buildBeach, type WoodsStats } from './landscape/woods';
 import type { SmokeService } from '../sim/ambient';
 
 export interface LandscapeService {
@@ -379,6 +379,7 @@ export default function create(ctx: CityContext): CityModule {
       sink.bucket = -1;
     }
     if (nature(ctx, 'riverrocks')) buildRiverRocks(sink, model);
+    if (nature(ctx, 'beachwood')) buildBeach(sink, model);
     const edge = ctx.plan.places?.edge;
     if (edge && nature(ctx, 'edgehedge')) buildEdgeHedge(sink, edge.hedgeX, edge.hedges);
     kitTris = sink.triangles;
