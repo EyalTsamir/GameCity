@@ -1,4 +1,4 @@
-// Baked files (docs/progress/bake.md): results computed at build time by scripts/bake.mjs, loaded by the page from bake/.
+// Baked files (docs/progress/baking.md): results computed at build time by scripts/bake.mjs, loaded by the page from bake/.
 // They only ever make the city cheaper: while a file is on its way, or when it is missing (no bake built, opened from
 // file://, ?nobake), the module stays on its procedural path and looks the same. So nothing here may throw or log.
 //

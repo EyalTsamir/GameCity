@@ -5,7 +5,23 @@ Dev server: `npx vite --port 5210 --strictPort --host 127.0.0.1`. Frozen baselin
 Every GPU number behind `scripts/power-guard.mjs`, from the main checkout. The charger flaps: wait for stable AC and retry.
 
 ## Resume here
-In progress: see the sections below; this log is updated at every milestone.
+Land bake from files works (WIP commit 5c06505): `npm`-less `node scripts/bake.mjs --url http://127.0.0.1:5210/` writes `public/bake/` (gitignored for now), `src/core/bakeFiles.ts` loads it, `src/world/landscape/bake.ts` holds the warp, the far program and the tile switch.
+Known problems at this point: a dark line along the slab edge (the land's skirt under the slab is baked; discard inside the slab), fields in the overview's foreground softer than procedural at `LAND_SOFT` 4.
+Then: facade far tier experiment, other candidates, build and deploy, CLAUDE.md, final checks, report. The shell split (`SHELL_SPLIT`) gave nothing per frame: keep only if boot compile benefits, otherwise revert.
+
+## Land: what was tried (overview / beach / westbrook / riverside, delta ms)
+| variant | overview | beach | westbrook | riverside |
+|---|---|---|---|---|
+| far-only program on all land, 4096, one log warp | -6.1 | -3.7 | -1.3 | |
+| + no lamp, no shadow in that program | -6.2 | -3.8 | -1.8 | |
+| near band by whole rings | -0.1 | -1.1 | 0 | |
+| one program with a per-pixel branch, 4096 soft 3 | -0.8 | +0.1 | -0.1 | |
+| same, soft 6 | -3.2 | -0.5 | -0.2 | |
+| same, 8192 soft 4 | -3.8 | -0.9 | -0.3 | -0.1 |
+| same, 8192 soft 100 (all baked) | -3.9 | -1.5 | -1.0 | -1.4 |
+
+So a branched program costs about 2 ms more than a far-only one even when every pixel takes the cheap side (ANGLE/Adreno: program size counts, not only the path taken), and rings are too coarse to select by. Hence tiles (band x sector, one index buffer per program) and a separate program.
+Against perf-deep: the land bake gives -6, not -3, and "two 2048 textures" is far too coarse: a 4096 log warp is visibly soft at the overview.
 
 ## Where the frame goes (5b70883, 1920x1025, high, noon, ms/frame, 2 interleaved runs, spread ±0.1)
 Baseline: overview 39.8, downtown 38.2, street 36.3, market 34.2.

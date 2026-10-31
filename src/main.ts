@@ -436,6 +436,8 @@ const LATE_DRAWS: Record<string, number> = {
   'land-ground-far': 3,
   'land-island': 3,
   'land-island-far': 3,
+  'land-ground-blend': 3,
+  'land-island-blend': 3,
 };
 function lateDraws(scene: THREE.Scene): void {
   scene.traverse((o) => {

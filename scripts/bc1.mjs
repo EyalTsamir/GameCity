@@ -210,15 +210,43 @@ export function halve(rgba, w, h, linear = false) {
   return { data: out, w: nw, h: nh };
 }
 
-/** the .bct container: header + BC1 of every mip */
-export function encodeBCT(rgba, w, h, linear = false) {
+/** unsharp mask (3x3), in the stored values: bilinear filtering softens every texture, this hands the edge back */
+export function sharpen(rgba, w, h, amount) {
+  const out = new Uint8Array(rgba.length);
+  for (let y = 0; y < h; y++) {
+    const ym = Math.max(0, y - 1),
+      yp = Math.min(h - 1, y + 1);
+    for (let x = 0; x < w; x++) {
+      const xm = Math.max(0, x - 1),
+        xp = Math.min(w - 1, x + 1);
+      const o = (y * w + x) * 4;
+      for (let k = 0; k < 3; k++) {
+        const c = rgba[o + k];
+        const blur =
+          (4 * c +
+            2 * (rgba[(y * w + xm) * 4 + k] + rgba[(y * w + xp) * 4 + k] + rgba[(ym * w + x) * 4 + k] + rgba[(yp * w + x) * 4 + k]) +
+            rgba[(ym * w + xm) * 4 + k] +
+            rgba[(ym * w + xp) * 4 + k] +
+            rgba[(yp * w + xm) * 4 + k] +
+            rgba[(yp * w + xp) * 4 + k]) /
+          16;
+        out[o + k] = Math.max(0, Math.min(255, Math.round(c + (c - blur) * amount)));
+      }
+      out[o + 3] = 255;
+    }
+  }
+  return out;
+}
+
+/** the .bct container: header + BC1 of every mip. sharp: the unsharp amount for level 0; the smaller mips get half of it */
+export function encodeBCT(rgba, w, h, linear = false, sharp = 0) {
   const parts = [];
   let cw = w,
     ch = h,
     cur = rgba,
     nm = 0;
   for (;;) {
-    parts.push(encodeBC1(cur, cw, ch));
+    parts.push(encodeBC1(sharp && cw > 4 ? sharpen(cur, cw, ch, nm ? sharp / 2 : sharp) : cur, cw, ch));
     nm++;
     if (cw === 1 && ch === 1) break;
     const n = halve(cur, cw, ch, linear);

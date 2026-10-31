@@ -180,7 +180,7 @@ export default function create(ctx: CityContext): CityModule {
   const black = new THREE.DataTexture(new Uint8Array(4), 1, 1);
   const bakeU = { tLB0: { value: black as THREE.Texture }, tLB1: { value: black as THREE.Texture }, uBakeOn: { value: 0 } };
   const tiles = bakeWanted ? new LandTiles(geo, GROUND_DROP) : null;
-  const land = new THREE.Mesh(tiles ? tiles.near : geo, landMaterial(uniforms, fog, bakeWanted ? { textures: bakeU, soft: bakeSoft } : undefined));
+  const land = new THREE.Mesh(tiles ? tiles.pure : geo, landMaterial(uniforms, fog));
   land.name = 'land-ground';
   land.position.y = GROUND_DROP;
   land.receiveShadow = true;
@@ -194,7 +194,7 @@ export default function create(ctx: CityContext): CityModule {
     const step = ctx.quality.level === 'low' ? 26 : ctx.quality.level === 'medium' ? 19 : 14;
     const ig = buildIslandPatch(model, islandBox, step);
     if (tiles) islandTiles = new LandTiles(ig, GROUND_DROP);
-    const island = new THREE.Mesh(islandTiles ? islandTiles.near : ig, land.material);
+    const island = new THREE.Mesh(islandTiles ? islandTiles.pure : ig, land.material);
     island.name = 'land-island';
     island.position.y = GROUND_DROP;
     island.receiveShadow = true;
@@ -418,8 +418,9 @@ export default function create(ctx: CityContext): CityModule {
   if (tiles) {
     const farMat = landFarMaterial(uniforms, fog, bakeU, moonLift('smoothstep(8.0, 80.0, vLMoon)'));
     const proxies = root.children.filter((o) => o.name === 'land-reflect-island' || o.name === 'land-reflect') as THREE.Mesh[];
-    const addFar = (t: LandTiles, name: string) => {
-      const m = new THREE.Mesh(t.far, farMat);
+    const blendMat = landMaterial(uniforms, fog, { textures: bakeU, soft: bakeSoft });
+    const addDraw = (g: THREE.BufferGeometry, mat: THREE.Material, name: string) => {
+      const m = new THREE.Mesh(g, mat);
       m.name = name;
       m.position.y = GROUND_DROP;
       m.receiveShadow = true;
@@ -429,8 +430,12 @@ export default function create(ctx: CityContext): CityModule {
       root.add(m);
     };
     land.frustumCulled = false;
-    addFar(tiles, 'land-ground-far');
-    if (islandTiles) addFar(islandTiles, 'land-island-far');
+    addDraw(tiles.blend, blendMat, 'land-ground-blend');
+    addDraw(tiles.far, farMat, 'land-ground-far');
+    if (islandTiles) {
+      addDraw(islandTiles.blend, blendMat, 'land-island-blend');
+      addDraw(islandTiles.far, farMat, 'land-island-far');
+    }
     const useBake = (t0b: THREE.Texture, t1b: THREE.Texture) => {
       bakeU.tLB0.value = t0b;
       bakeU.tLB1.value = t1b;

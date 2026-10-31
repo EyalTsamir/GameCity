@@ -1,4 +1,4 @@
-// Baked land albedo (docs/progress/bake.md): the land shader's procedural surface evaluated once, top down, into two
+// Baked land albedo (docs/progress/baking.md): the land shader's procedural surface evaluated once, top down, into two
 // textures. The land's fragment cost is nearly all procedural (8.7 ms at the overview), a texture fetch next to nothing,
 // and a separate small program beats a branch in the big one by 2 ms (measured).
 //
@@ -29,8 +29,19 @@ const RMAX = 46000;
 const LOG_K = (1 - RHO1) / Math.log(RMAX / R1);
 /** both textures are this size */
 export const LAND_BAKE_SIZE = 4096;
-/** how many screen pixels one texel may cover: 4 still looks the same from the overview (docs/progress/bake.md) */
+/**
+ * How many screen pixels one texel may cover, beyond the camera's foreground. In the foreground, where the eye rests and
+ * nothing hides softness, a little over half of that (LAND_NEAR_K): the haze and the distance take care of the rest.
+ */
 export const LAND_SOFT = 4;
+const LAND_NEAR_K = 0.55;
+const LAND_NEAR_D = [700, 1500] as const;
+/** GLSL float: the limit at a distance d, with `soft` substituted */
+export const landSoftGlsl = (soft: number, d: string) => `(${f(soft)} * mix(${f(LAND_NEAR_K)}, 1.0, smoothstep(${f(LAND_NEAR_D[0])}, ${f(LAND_NEAR_D[1])}, ${d})))`;
+function softAt(soft: number, d: number): number {
+  const t = Math.min(1, Math.max(0, (d - LAND_NEAR_D[0]) / (LAND_NEAR_D[1] - LAND_NEAR_D[0])));
+  return soft * (LAND_NEAR_K + (1 - LAND_NEAR_K) * t * t * (3 - 2 * t));
+}
 
 const f = (v: number) => v.toFixed(6);
 
@@ -176,6 +187,9 @@ uniform float uBakeSize;
 ${toXZ}
 ${LAND_FRAG_PARS.replace('vec3 p = vLW;', 'vec3 p = vec3(0.0, vLW.y, 0.0); p.xz = lbXZ(gl_FragCoord.xy / uBakeSize);')}
 void main() {
+  // (the mesh's skirt under the slab: nobody sees it, and a filter must not fetch it. scripts/bake.mjs fills the hole)
+  vec2 lbQ = lbXZ(gl_FragCoord.xy / uBakeSize);
+  if (lbQ.x > ${f(SLAB.x0)} && lbQ.x < ${f(SLAB.x1)} && lbQ.y > ${f(SLAB.z0)} && lbQ.y < ${f(SLAB.z1)}) discard;
   gl_FragColor = vec4(landAlbedo(), 1.0);
 }`,
   });
@@ -259,20 +273,39 @@ vec4 diffuseColor = vec4(lbA, opacity);`,
 const BANDS = [0, 150, 300, 500, 800, 1100, 1500, 2000, 3000, 4500, 7000, 10000, 15000, 25000, Infinity];
 const SECTORS = 32;
 
+/** the blend program (shader.ts) is all bake up to this many times the far limit, all procedural from the second */
+export const LAND_BLEND = [1.05, 1.35] as const;
+
 const tileV = new THREE.Vector3();
 const texel = { radial: 0, tangent: 0 };
 
+interface LandTile {
+  start: number;
+  count: number;
+  box: THREE.Box3;
+  /** the coarsest and finest texels in it */
+  radial: number;
+  tangent: number;
+  radial0: number;
+  tangent0: number;
+  /** 0 procedural, 1 blend, 2 far */
+  side: number;
+}
+
 /**
- * The land mesh's index, reordered tile by tile, and the two draws that share its vertices. near: the procedural program,
- * far: the bake. When a tile changes sides after a camera move, the tiles are sorted into the two index buffers again.
+ * The land mesh's triangles, grouped by tile, in one index buffer that three draws share with the mesh's vertices:
+ *   pure   no pixel of the tile can use the bake: the procedural program, exactly as without a bake
+ *   blend  some can: the procedural program with the melt into the bake (costs about 1 ms more per screen of it)
+ *   far    all can: the bake's small program
+ * When a tile changes sides after a camera move, the buffer is sorted again.
  */
 export class LandTiles {
-  readonly near: THREE.BufferGeometry;
+  readonly pure: THREE.BufferGeometry;
+  readonly blend: THREE.BufferGeometry;
   readonly far: THREE.BufferGeometry;
-  private readonly tiles: { start: number; count: number; box: THREE.Box3; radial: number; tangent: number; far: boolean }[] = [];
+  private readonly tiles: LandTile[] = [];
   private readonly order: Uint32Array;
-  private readonly nearIdx: Uint32Array;
-  private readonly farIdx: Uint32Array;
+  private readonly index: THREE.BufferAttribute;
   private lastX = 1e12;
   private lastY = 1e12;
   private lastZ = 1e12;
@@ -306,41 +339,43 @@ export class LandTiles {
     let n = 0;
     for (const l of lists.values()) {
       const box = new THREE.Box3();
-      let rm = 0,
-        radial = 0,
-        tangent = 0;
+      let radial = 0,
+        tangent = 0,
+        radial0 = 1e9,
+        tangent0 = 1e9;
       for (const w of l) {
         tileV.fromBufferAttribute(P, w);
         tileV.y += yOffset;
         box.expandByPoint(tileV);
         const dx = tileV.x - CX0,
           dz = tileV.z - CZ0;
-        rm = Math.max(rm, Math.hypot(dx, dz));
-        // the coarsest texel of the tile
         texelAt(Math.hypot(dx, dz), Math.max(Math.abs(dx), Math.abs(dz)) < H0 - 70, texel);
         radial = Math.max(radial, texel.radial);
         tangent = Math.max(tangent, texel.tangent);
+        radial0 = Math.min(radial0, texel.radial);
+        tangent0 = Math.min(tangent0, texel.tangent);
       }
-      this.tiles.push({ start: n, count: l.length, box, radial, tangent, far: false });
+      this.tiles.push({ start: n, count: l.length, box, radial, tangent, radial0, tangent0, side: 0 });
       this.order.set(l, n);
       n += l.length;
     }
-    this.nearIdx = this.order.slice();
-    this.farIdx = new Uint32Array(idx.length);
-    const mk = (index: Uint32Array) => {
+    this.index = new THREE.BufferAttribute(this.order.slice(), 1);
+    const mk = () => {
       const g = new THREE.BufferGeometry();
       for (const name of Object.keys(geo.attributes)) g.setAttribute(name, geo.getAttribute(name));
-      g.setIndex(new THREE.BufferAttribute(index, 1));
+      g.setIndex(this.index);
       g.boundingSphere = geo.boundingSphere?.clone() ?? null;
       g.boundingBox = geo.boundingBox?.clone() ?? null;
       return g;
     };
-    this.near = mk(this.nearIdx);
-    this.far = mk(this.farIdx);
+    this.pure = mk();
+    this.blend = mk();
+    this.far = mk();
+    this.blend.setDrawRange(0, 0);
     this.far.setDrawRange(0, 0);
   }
 
-  /** returns true when the tiles changed sides. pxAt1m: screen pixels per metre at 1 m distance */
+  /** returns true when tiles changed sides. pxAt1m: screen pixels per metre at 1 m distance */
   update(cam: THREE.Vector3, pxAt1m: number, soft: number): boolean {
     if (!this.enabled) return false;
     if (Math.abs(cam.x - this.lastX) + Math.abs(cam.y - this.lastY) + Math.abs(cam.z - this.lastZ) < 6 && pxAt1m === this.lastPx) return false;
@@ -364,39 +399,36 @@ export class LandTiles {
       const across = (vz * ex - vx * ez) / (el * d);
       const sr = Math.sqrt(Math.max(0, 1 - along * along));
       const st = Math.sqrt(Math.max(0, 1 - across * across));
-      const far = Math.max(t.radial * sr, t.tangent * st) * pxAt1m <= soft * d;
-      if (far !== t.far) {
-        t.far = far;
+      const worst = (Math.max(t.radial * sr, t.tangent * st) * pxAt1m) / d;
+      // the best pixel: the finest texel at the farthest corner
+      const fx = Math.max(Math.abs(t.box.min.x - cam.x), Math.abs(t.box.max.x - cam.x)),
+        fy = Math.max(Math.abs(t.box.min.y - cam.y), Math.abs(t.box.max.y - cam.y)),
+        fz = Math.max(Math.abs(t.box.min.z - cam.z), Math.abs(t.box.max.z - cam.z));
+      const df = Math.hypot(fx, fy, fz);
+      const best = (Math.max(t.radial0 * sr, t.tangent0 * st) * pxAt1m) / df;
+      const side = worst <= softAt(soft, d) ? 2 : best >= softAt(soft, df) * LAND_BLEND[1] ? 0 : 1;
+      if (side !== t.side) {
+        t.side = side;
         changed = true;
       }
     }
     if (!changed) return false;
-    let a = 0,
-      b = 0,
+    const out = this.index.array as Uint32Array;
+    let n = 0,
       nf = 0;
-    for (const t of this.tiles) {
-      const src = this.order.subarray(t.start, t.start + t.count);
-      if (t.far) {
-        this.farIdx.set(src, b);
-        b += t.count;
-        nf++;
-      } else {
-        this.nearIdx.set(src, a);
-        a += t.count;
+    const ranges = [this.pure, this.blend, this.far];
+    for (let side = 0; side < 3; side++) {
+      const from = n;
+      for (const t of this.tiles) {
+        if (t.side !== side) continue;
+        out.set(this.order.subarray(t.start, t.start + t.count), n);
+        n += t.count;
+        if (side === 2) nf++;
       }
+      ranges[side].setDrawRange(from, n - from);
     }
-    this.near.setDrawRange(0, a);
-    this.far.setDrawRange(0, b);
-    this.upload(this.near, a);
-    this.upload(this.far, b);
+    this.index.needsUpdate = true;
     this.farCount = nf;
     return true;
-  }
-
-  private upload(g: THREE.BufferGeometry, n: number): void {
-    const attr = g.index!;
-    attr.clearUpdateRanges();
-    attr.addUpdateRange(0, n);
-    attr.needsUpdate = true;
   }
 }

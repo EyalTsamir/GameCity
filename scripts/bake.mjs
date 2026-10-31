@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Bake: run the city's own shaders once in the real browser and store the results as files the page loads
-// (docs/progress/bake.md). Everything still comes from this repository's code; no external asset goes in.
+// (docs/progress/baking.md). Everything still comes from this repository's code; no external asset goes in.
 //
 //   node scripts/bake.mjs [--url http://127.0.0.1:5173/] [--only land0,land1] [--out public/bake]
 //
@@ -28,25 +28,31 @@ const JOBS = {
   land1: { rt: `__city.ctx.services.landscape.renderBake(1)`, key: `__city.ctx.services.landscape.bakeKey()` },
 };
 
-/** texels nothing was drawn on (alpha 0) take their nearest neighbour's colour, so that no filter or mip sees black */
+/** texels nothing was drawn on (alpha 0) take the colour of the nearest drawn one, so that no filter or mip sees a seam */
 function fillHoles(rgba, w, h) {
-  const sweep = (y0, y1, dy, x0, x1, dx) => {
-    for (let y = y0; y !== y1; y += dy)
-      for (let x = x0; x !== x1; x += dx) {
-        const o = (y * w + x) * 4;
-        if (rgba[o + 3]) continue;
-        const a = x - dx >= 0 && x - dx < w ? (y * w + x - dx) * 4 : -1,
-          b = y - dy >= 0 && y - dy < h ? ((y - dy) * w + x) * 4 : -1;
-        const from = a >= 0 && rgba[a + 3] ? a : b >= 0 && rgba[b + 3] ? b : -1;
-        if (from < 0) continue;
-        rgba[o] = rgba[from];
-        rgba[o + 1] = rgba[from + 1];
-        rgba[o + 2] = rgba[from + 2];
-        rgba[o + 3] = 255;
-      }
+  const dist = new Uint16Array(w * h);
+  for (let i = 0; i < w * h; i++) dist[i] = rgba[i * 4 + 3] ? 0 : 65535;
+  const take = (i, j) => {
+    if (dist[j] + 1 < dist[i]) {
+      dist[i] = dist[j] + 1;
+      rgba[i * 4] = rgba[j * 4];
+      rgba[i * 4 + 1] = rgba[j * 4 + 1];
+      rgba[i * 4 + 2] = rgba[j * 4 + 2];
+    }
   };
-  sweep(0, h, 1, 0, w, 1);
-  sweep(h - 1, -1, -1, w - 1, -1, -1);
+  for (let y = 0; y < h; y++)
+    for (let x = 0; x < w; x++) {
+      const i = y * w + x;
+      if (x > 0) take(i, i - 1);
+      if (y > 0) take(i, i - w);
+    }
+  for (let y = h - 1; y >= 0; y--)
+    for (let x = w - 1; x >= 0; x--) {
+      const i = y * w + x;
+      if (x < w - 1) take(i, i + 1);
+      if (y < h - 1) take(i, i + w);
+    }
+  for (let i = 0; i < w * h; i++) rgba[i * 4 + 3] = 255;
 }
 
 const manifestPath = path.join(outDir, 'manifest.json');
@@ -88,7 +94,8 @@ try {
     });
     const t1 = Date.now();
     fillHoles(rgba, meta.w, meta.h);
-    const bct = encodeBCT(rgba, meta.w, meta.h);
+    if (args.raw) fs.writeFileSync(path.join(args.raw, `${name}.rgba`), rgba);
+    const bct = encodeBCT(rgba, meta.w, meta.h, false, parseFloat(args.sharp ?? '0.8'));
     const gz = zlib.gzipSync(bct, { level: 9 });
     const file = `${name}.bct.gz`;
     fs.writeFileSync(path.join(outDir, file), gz);
