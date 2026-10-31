@@ -321,6 +321,10 @@ bool pedVisible(uint d0) {
     return ((hx >> 8u) & 255u) < (P_w > 0.5 ? 110u : 10u);
   }
 //@endif
+//@if CL
+  // (under a hat long hair is tucked up: the collapsed cap and a sheet standing off it made a torn bag behind the ears)
+  if (feat == ${FB.HAIRLONG + 1}u && ((iC1.y >> 24u) & 7u) != 0u) return false;
+//@endif
   bool has = (iC2.z & (1u << (feat - 1u))) != 0u;
   return ((d0 >> 16u) & 1u) == 1u ? !has : has;
 }
@@ -383,6 +387,11 @@ void pedPose(inout vec3 p, inout vec3 n) {
       vec3 nh = normalize((p - vec3(0.0, hipC.y + 0.05, hipC.z)) * vec3(1.0, 0.12, 1.0));
       n = normalize(mix(n, nh, hipK * 0.96));
     }
+  }
+  if (region == ${R.FACE} && aux.y < -0.03 && p.z < 0.0) {
+    // (the underside of the skull, behind the ears: shaded like the nape it runs into, or it draws a cap's edge round the neck)
+    float napeK = smoothstep(-0.03, -0.075, aux.y) * smoothstep(0.0, -0.035, p.z);
+    n = normalize(vec3(n.x, n.y * (1.0 - napeK), n.z));
   }
   if (region == ${R.FACE}) {
     vPedFace = vec3(aux, 1.0);
@@ -1367,8 +1376,8 @@ vec3 pedGrey(vec3 pc, vec3 r) {
 }
 // The face: the baked maps (fine relief, cavities, where the blood runs, wrinkles), then eyes, brows and lips, each the person's own.
 vec3 pedFaceClose(vec3 skin, vec2 F) {
-  // (behind the ears: plain skin. The column of triangles at the back runs from +X to -X, through the whole map)
-  if (vPedRest.z < -0.05) { pedSkinK = 1.0; pedSpecK = 0.16; pedGloss = 20.0; return skin; }
+  // (behind the ears: the column of triangles at the back runs from +X to -X, through the whole map)
+  if (vPedRest.z < -0.05 && abs(F.x) < ${FACE_U.toFixed(4)}) F.x = ${FACE_U.toFixed(4)};
   float px = max(max(fwidth(F.x), fwidth(F.y)), 1e-5);
   float det = 1.0 - smoothstep(0.006, 0.016, px);
   float w = vPedHairW.w;
@@ -1382,6 +1391,8 @@ vec3 pedFaceClose(vec3 skin, vec2 F) {
   vec2 uv = vec2(ax / ${FACE_U.toFixed(4)}, (F.y - (${FACE_Y0.toFixed(4)})) / ${(FACE_Y1 - FACE_Y0).toFixed(4)});
   vec4 A = texture2D(uPedFaceA, uv);
   vec4 B = texture2D(uPedFaceB, uv);
+  // (the same column would read the map's low mips, in dots)
+  if (vPedRest.z < -0.05) { A = vec4(0.5, 0.5, 1.0, 0.0); B = vec4(0.5, 0.5, 0.0, 0.0); }
   float wr = smoothstep(0.25, 1.0, ageK);
   float sg = F.x < 0.0 ? -1.0 : 1.0;
   vec2 gA = (A.rg * 2.0 - 1.0) * 1.2, gB = (B.rg * 2.0 - 1.0) * 1.2 * wr;
@@ -1456,7 +1467,7 @@ vec3 pedFaceClose(vec3 skin, vec2 F) {
   // the upper lid and lashes shade the eyeball; the ball turns away towards the corners
   eye *= 0.86 * (1.0 - 0.66 * (1.0 - smoothstep(0.0, 0.0044, dU))) * (1.0 - 0.22 * (1.0 - smoothstep(0.0, 0.0014, dL)));
   // the wet rim of the lower lid
-  float lw = (0.0008 + 0.0008 * w) * (1.0 + 0.6 * smoothstep(-0.004, 0.012, ex));
+  float lw = (0.0008 + 0.0008 * w) * (1.0 + 0.6 * smoothstep(-0.004, 0.012, ex)) * (1.0 - smoothstep(0.85, 1.07, abs(ex) / ew));
   float qL = step(0.0, 1.0 - (ex * ex) / (ew * ew * 1.15));
   float lash = smoothstep(-px * 0.5, px * 0.5, -dU) * (1.0 - smoothstep(lw - px * 0.5, lw + px * 0.5, -dU)) * qL;
   float lowL = smoothstep(-px * 0.5, px * 0.5, -dL) * (1.0 - smoothstep(0.0006 - px * 0.5, 0.0006 + px * 0.5, -dL)) * qL;
@@ -1478,7 +1489,7 @@ vec3 pedFaceClose(vec3 skin, vec2 F) {
   float bedge = smoothstep(bth + px * 0.6, bth * 0.45, abs(F.y - bcy)) * smoothstep(-0.0195, -0.0165, bx) * (1.0 - smoothstep(0.0145, 0.0195, bx));
   // (the hairs lean outwards and up along the arch, broken by a per-pixel stripe that fades before it aliases)
   float bs = bx * 1500.0 + (F.y - bcy) * 520.0;
-  float bstr = mix(0.78, 0.45 + 0.75 * pedN1(bs), 1.0 - smoothstep(0.35, 0.8, fwidth(bs)));
+  float bstr = mix(0.82, 0.62 + 0.5 * pedN1(bs), 1.0 - smoothstep(0.35, 0.8, fwidth(bs)));
   vec3 browC = mix(hair * 0.62, hair, smoothstep(0.25, 0.6, dot(hair, vec3(0.33))) * 0.6);
   pc = mix(pc, browC, clamp(bedge * bstr * mix(0.92, 0.7, ageK), 0.0, 1.0) * mix(0.5, 1.0, det));
   // lips, the bow on top, a fuller lower lip; kp.z: width and fullness
@@ -1673,6 +1684,7 @@ const FRAG_COLOR = /* glsl */ `
       // big locks all round (the back read as one black sheet): occluded gaps, a tone per lock
       vec3 lk = pedLocks(vPedRest, vPedFace.x);
 #ifdef PED_CLOSE
+      if (vPedFace.y > 2.5) lk.z *= 0.4;
       pc *= mix(1.0, (0.74 + 0.26 * lk.x) * (0.9 + 0.2 * lk.y), lk.z);
 #else
       pc *= mix(1.0, (0.55 + 0.45 * lk.x) * (0.85 + 0.3 * lk.y), lk.z);
@@ -1704,7 +1716,7 @@ const FRAG_COLOR = /* glsl */ `
 #endif
       float edgeK = 1.0 - smoothstep(1.17, 1.45, vPedFace.y);
 #ifdef PED_CLOSE
-      float need = max(tipK, (1.0 - smoothstep(0.98, 1.14, vPedFace.y)) * 0.75) * (1.0 - far);
+      float need = max(tipK, (1.0 - smoothstep(0.98, 1.14, vPedFace.y)) * 0.2) * (1.0 - far);
 #else
       float need = max(tipK, edgeK * 0.65) * (1.0 - far);
 #endif
@@ -1724,7 +1736,7 @@ const FRAG_COLOR = /* glsl */ `
 #ifdef PED_CLOSE
       pc = pedGrey(pc, vPedRest);
       // (black hair isn't a black hole: strands show their sky)
-      pc += vec3(0.012, 0.012, 0.014) * (1.0 - smoothstep(0.02, 0.12, dot(pc, vec3(0.33))));
+      if (vPedFC.x != 2u) pc += vec3(0.012, 0.012, 0.014) * (1.0 - smoothstep(0.02, 0.12, dot(pc, vec3(0.33))));
       if (vPedFC.x == 2u) {
         vec2 hfc = pedHairFlow(vPedRest);
         pc *= 0.86 + 0.32 * mix(pedN2(vec2(hfc.x * 15.0, hfc.y * 19.0)), 0.5, smoothstep(0.25, 0.6, fwidth(hfc.x * 15.0)));
@@ -1832,7 +1844,12 @@ const HAIR_NORMAL = /* glsl */ `
     if (vPedFace.z > 4.5) {
       // sheet: each big lock is a rounded bundle (its normal curves across it, so the sheen breaks per lock)
       vec3 lk = pedLocks(vPedRest, vPedFace.x);
+#ifdef PED_CLOSE
+      // (no corner where two locks meet: its 2×2 derivative glints as a row of dots)
+      hH += (lk.x * lk.x - 0.45) * (vPedFace.y > 2.5 ? 0.0012 : 0.0035) * lk.z;
+#else
       hH += (lk.x - 0.6) * 0.0035 * lk.z;
+#endif
     }
     vec3 hsx = dFdx(-vViewPosition), hsy = dFdy(-vViewPosition);
     vec3 hr1 = cross(hsy, normal), hr2 = cross(normal, hsx);

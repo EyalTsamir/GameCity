@@ -1591,17 +1591,20 @@ function buildHair(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
       const y6 = d.headRings[6].y,
         y5 = d.headRings[5].y;
       const rowsF: [number, number][] = [
-        [y6 + 0.022 * hk, vol * 0.75],
-        [y6 + 0.004 * hk, vol * 1.2],
-        [(y6 + y5) / 2, vol * 1.05],
+        [y6 + 0.022 * hk, vol * 0.5],
+        [y6 + 0.004 * hk, vol * 1.05],
+        [(y6 + y5) / 2, vol * 1.0],
         [y5 + 0.004 * hk, vol * 0.8],
       ];
       rowsF.forEach(([y, push], ri) => {
         const row: number[] = [];
         phis.forEach((phi, k) => {
           // (the tips are in the fragment shader, strand by strand: aux2 = height above the lowest row)
-          const jag = ri === 3 ? -0.006 * Math.abs(phi) * hk : 0;
-          row.push(b.v(headSurface(d, phi, y + jag, push), 2, 0, 0, [0.075, 0.05, 0.025, 0][ri]));
+          // (sweeps up at its ends and sinks under the cap: a flap pasted on the forehead had a wall at each side)
+          const ae = Math.abs(phi);
+          const jag = (ri === 3 ? -0.006 * ae * hk : 0) + (0.022 * hk * ae * ae * ae * ri) / 3;
+          const inCap = ae ** 4;
+          row.push(b.v(headSurface(d, phi, y + jag, push + (vol * 0.45 - push) * inCap), 2, 0, 0, [0.075, 0.05, 0.025, 0][ri]));
         });
         ids.push(row);
       });

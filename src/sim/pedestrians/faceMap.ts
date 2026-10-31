@@ -72,7 +72,7 @@ function fine(ax: number, Y: number): number {
     r -= 0.0007 * Math.exp(-((dU - 0.0044) ** 2) / 0.8e-6) * wide;
     r += 0.00018 * Math.exp(-((dL - 0.0007) ** 2) / 0.8e-6) * wide;
     r -= 0.0004 * Math.exp(-((dL - 0.0058) ** 2) / 5e-6) * wide;
-    if (dU < 0 && dL < 0) r -= 0.0005; // the eye sits behind its lids
+    r -= 0.0005 * sstep(0, 0.0012, -Math.max(dU, dL)) * (q > 0 ? 1 : 0); // the eye sits behind its lids (no step: the wet ball would show it as a bright jagged line)
   }
   // nose: the ball of the tip, its two lobes, the crease round each wing, the nostrils, the columella between them
   r += 0.0006 * gs(ax - 0.0032, Y + 0.0415, 0.0042, 0.0042);
