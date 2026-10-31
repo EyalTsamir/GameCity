@@ -1142,7 +1142,11 @@ function buildFingers(
   specs.push(handRing(0.36, pt * 0.95, pw * 0.99, -0.002, 0, 0));
   specs.push(handRing(0.47, pt * 0.84, pw * 0.97, -0.003, 0, 0.1));
   specs.push(handRing(0.54, pt * 0.58, pw * 0.82, -0.004, 0, 0.15));
-  buildLimb(b, specs, cfg.limbSides, side, true, 1);
+  const armRings = buildLimb(b, specs, cfg.limbSides, side, true, 1);
+  // (the arm's top ring now stands at the shoulder's surface: closed, or the sky shows through it)
+  b.use(side > 0 ? BONE.UPPER_L : BONE.UPPER_R, REG.ARM, -1, 1);
+  const aTop = armRings[0].c;
+  capFan(b, armRings[0], b.v([aTop[0], aTop[1] + 0.012, aTop[2]], 1.05, UPPER_W[0]), [aTop[0], aTop[1] - 0.03, aTop[2]]);
   // towards the palm (−x on the left hand, +x on the right) and across it (+z = index side)
   const palm: P3 = [-side, 0, 0];
   const across: P3 = [0, 0, 1];
