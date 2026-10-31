@@ -17,7 +17,7 @@ export type V3 = [number, number, number];
 /** NET: knotted netting cords over a heap (param = mesh size, m); RUST: painted steel with rust blooms and chips
  *  (param = rust amount 0..1); STAIN: an irregular ground decal (oil / wet / fish-water), edges cut by noise
  *  (param = blotch scale, m) — patterns in material.ts */
-export const PAT = { NONE: 0, CORRUGATED: 1, PLANKS_X: 2, PLANKS_Z: 3, HULL: 4, STONE: 5, GLASS: 6, NET: 7, RUST: 8, STAIN: 9, WET: 10, GRIME: 11 } as const;
+export const PAT = { NONE: 0, CORRUGATED: 1, PLANKS_X: 2, PLANKS_Z: 3, HULL: 4, STONE: 5, GLASS: 6, NET: 7, RUST: 8, STAIN: 9, WET: 10, GRIME: 11, ROCK: 12, } as const;
 /** night-light behaviours (aEmit.w integer part) */
 export const EMIT = {
   /** on with the street lights (windows, lamps) */
@@ -75,6 +75,12 @@ const _m = new THREE.Matrix4();
 let ARMOUR_SOFT = true;
 export function setArmourSoft(on: boolean): void {
   ARMOUR_SOFT = on;
+}
+
+/** ?norockskin: armour stones without the rock pattern */
+let ROCK_SKIN = true;
+export function setRockSkin(on: boolean): void {
+  ROCK_SKIN = on;
 }
 
 export class HB {
@@ -533,7 +539,10 @@ export class HB {
       f.dispose();
     } else f.computeVertexNormals();
     const base = this.count;
+    const pt = this.pt;
+    if (ROCK_SKIN) this.pt = [PAT.ROCK, wetY > -1e8 ? 1 : 0.5];
     this.geo(done);
+    this.pt = pt;
     done.dispose();
     for (let i = base; i < this.count; i++) {
       const y = this.P[i * 3 + 1];

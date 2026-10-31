@@ -147,10 +147,12 @@ function terminalTractor(b: HB, x: number, y: number, z: number, rng: Rng): void
     b.color('#1b1c1e');
     b.cyl([wx - w / 2, y + r, wz], [wx + w / 2, y + r, wz], r, r, 14, 3);
     b.color('#b8b9b4');
-    b.cyl([wx - w / 2 - 0.01, y + r, wz], [wx + w / 2 + 0.01, y + r, wz], r * 0.55, r * 0.55, 10, 3);
+    b.cyl([wx - w / 2 - 0.01, y + r, wz], [wx + w / 2 + 0.01, y + r, wz], r * 0.55, r * 0.55, 14, 3);
+    b.color('#62645f');
+    b.cyl([wx - w / 2 - 0.02, y + r, wz], [wx + w / 2 + 0.02, y + r, wz], r * 0.22, r * 0.22, 8, 3);
   };
   // cab offset to one side, as on the real thing
-  b.color('#e0a31c').pat(PAT.GRIME, 0.7);
+  b.color('#e0a31c');
   b.boxMM(x - 1.15, y + 0.55, z + 1.8, x + 1.15, y + 1.3, z + 4.5);
   b.boxMM(x - 1.15, y + 1.3, z + 3.1, x + 0.2, y + 3.2, z + 4.5);
   b.boxMM(x - 1.2, y + 3.2, z + 3.05, x + 0.25, y + 3.28, z + 4.55);
@@ -168,6 +170,34 @@ function terminalTractor(b: HB, x: number, y: number, z: number, rng: Rng): void
   for (const sx of [-1, 1]) b.boxMM(x + sx * 0.9 - 0.11, y + 0.95, z + 4.5, x + sx * 0.9 + 0.11, y + 1.13, z + 4.52);
   b.color('#f07f1c');
   b.vcyl(x - 0.5, y + 3.28, z + 3.8, 0.07, 0.13, 8, 2);
+  // frames round the glass, wipers, mirrors, steps and grab rail, mudguards, grille, a stencilled number
+  b.color('#c28a14');
+  for (const [z0, z1] of [[3.28, 3.32], [4.28, 4.32]]) b.boxMM(x - 1.17, y + 1.98, z + z0, x - 1.13, y + 3.07, z + z1);
+  b.boxMM(x - 1.17, y + 3.04, z + 3.28, x - 1.13, y + 3.08, z + 4.32);
+  b.boxMM(x - 1.17, y + 1.96, z + 3.28, x - 1.13, y + 2.0, z + 4.32);
+  b.boxMM(x - 1.07, y + 3.03, z + 4.5, x + 0.12, y + 3.07, z + 4.525);
+  b.boxMM(x - 1.07, y + 1.98, z + 4.5, x + 0.12, y + 2.02, z + 4.525);
+  b.color('#17181a');
+  for (const wx of [-0.75, -0.15]) b.beam([x + wx, y + 2.04, z + 4.525], [x + wx + 0.28, y + 2.72, z + 4.525], 0.012, 0.012);
+  b.boxMM(x - 1.75, y + 2.3, z + 4.1, x - 1.16, y + 2.33, z + 4.13);
+  b.boxMM(x - 1.92, y + 2.05, z + 4.08, x - 1.72, y + 2.6, z + 4.14);
+  b.boxMM(x + 0.2, y + 2.3, z + 4.1, x + 0.72, y + 2.33, z + 4.13);
+  b.boxMM(x + 0.7, y + 2.05, z + 4.08, x + 0.9, y + 2.6, z + 4.14);
+  b.color('#2a2b2c');
+  for (const q of [0.42, 0.86]) b.boxMM(x - 1.34, y + q, z + 3.2, x - 1.15, y + q + 0.05, z + 3.8);
+  b.color('#d8d8d0');
+  b.cyl([x - 1.2, y + 1.35, z + 3.14], [x - 1.2, y + 2.85, z + 3.14], 0.018, 0.018, 6, 0);
+  b.color('#e0a31c');
+  for (const sx of [-1, 1]) {
+    b.boxMM(x + sx * 1.0 - 0.27, y + 1.16, z + 3.05, x + sx * 1.0 + 0.27, y + 1.2, z + 4.35);
+    b.boxMM(x + sx * 1.0 - 0.27, y + 1.16, z + 1.1, x + sx * 1.0 + 0.27, y + 1.2, z + 2.3);
+  }
+  b.color('#17181a');
+  for (let q = 0; q < 4; q++) b.boxMM(x - 0.6, y + 0.93 + q * 0.07, z + 4.5, x + 0.6, y + 0.97 + q * 0.07, z + 4.52);
+  b.color('#2d2c28');
+  b.boxMM(x - 1.155, y + 1.4, z + 3.45, x - 1.15, y + 1.75, z + 3.56);
+  b.boxMM(x - 1.155, y + 1.4, z + 3.68, x - 1.15, y + 1.75, z + 3.79);
+  b.boxMM(x - 1.155, y + 1.54, z + 3.56, x - 1.15, y + 1.6, z + 3.68);
   // chassis rails, fifth wheel, rear axles
   b.color('#3b3e40');
   b.boxMM(x - 0.5, y + 0.9, z - 11.4, x - 0.25, y + 1.2, z + 2.4);

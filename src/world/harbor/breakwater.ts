@@ -2,6 +2,7 @@
 // walkway with a seaward crown wall, emerging from the rocky cliff; round head carrying the
 // red-and-white lighthouse (gallery, lantern room with a glowing lens, dome, vane).
 
+import { addLampLights } from '../../core/lampLight';
 import { addActor } from '../../sim/pedestrians/actorDefs';
 import * as THREE from 'three';
 import { WATER_LEVEL } from '../../core/constants';
@@ -233,26 +234,116 @@ export function buildBreakwater(
       r1 = 1.35;
     const rAt = (y: number) => r0 + (r1 - r0) * ((y - y0) / (yTop - y0));
     b.color('#8e8a82');
-    b.cyl([lx, y0, lz], [lx, y0 + 0.45, lz], r0 + 0.25, r0 + 0.2, 20, 2);
+    b.cyl([lx, y0, lz], [lx, y0 + 0.45, lz], r0 + 0.25, r0 + 0.2, LIFE ? 36 : 20, 2);
     const bands = 6;
     for (let k = 0; k < bands; k++) {
       const ya = y0 + 0.45 + ((yTop - y0 - 0.45) * k) / bands,
         yb = y0 + 0.45 + ((yTop - y0 - 0.45) * (k + 1)) / bands;
-      b.color(k % 2 === 0 ? '#f4f1ea' : '#d64541');
-      b.cyl([lx, ya, lz], [lx, yb, lz], rAt(ya), rAt(yb), 20, 0);
+      const white = k % 2 === 0;
+      b.color(white ? '#f4f1ea' : '#d64541');
+      // floodlit from its foot after dark: the paint itself, fading with height (each step hides on a colour change)
+      if (LIFE) b.emit(white ? '#ffe8c6' : '#d8574a', 0.42 * Math.pow(1 - k / bands, 1.5) + 0.02, EMIT.LIGHTS, 0.02);
+      b.cyl([lx, ya, lz], [lx, yb, lz], rAt(ya), rAt(yb), LIFE ? 36 : 20, 0);
+      b.noEmit();
     }
     // door (west, facing the walkway) + small windows
-    b.color('#2f5d4f');
-    b.box(lx - rAt(y0 + 1.2) + 0.02, y0 + 1.5, lz, 0.12, 2.0, 0.95, 0, 1);
-    b.color('#2e3a44').emit('#ffd59a', 1.2, EMIT.LIGHTS);
+    if (LIFE) {
+      const xd = lx - rAt(y0 + 1.2) + 0.1;
+      const yd = y0 + 0.45;
+      // stone surround, cornice, two steps
+      b.color('#b4ae9f');
+      for (const sz of [-1, 1]) b.boxMM(xd - 0.2, yd, lz + sz * 0.52 - (sz < 0 ? 0.16 : 0), xd + 0.1, yd + 2.05, lz + sz * 0.52 + (sz > 0 ? 0.16 : 0));
+      b.boxMM(xd - 0.24, yd + 2.05, lz - 0.78, xd + 0.1, yd + 2.3, lz + 0.78);
+      b.color('#9d978a');
+      b.boxMM(xd - 0.34, yd + 2.3, lz - 0.9, xd + 0.1, yd + 2.38, lz + 0.9);
+      b.boxMM(xd - 1.05, y0, lz - 0.9, xd - 0.1, y0 + 0.15, lz + 0.9);
+      b.boxMM(xd - 0.6, y0 + 0.15, lz - 0.8, xd - 0.1, y0 + 0.3, lz + 0.8);
+      b.boxMM(xd - 0.3, y0 + 0.3, lz - 0.7, xd - 0.1, yd, lz + 0.7);
+      // the door: boarded and ledged, fanlight, brass
+      b.color('#25493e');
+      b.boxMM(xd - 0.12, yd, lz - 0.52, xd + 0.05, yd + 1.72, lz + 0.52);
+      b.color('#2f5d4f');
+      for (let q = 0; q < 6; q++) b.boxMM(xd - 0.135, yd + 0.05, lz - 0.48 + q * 0.163, xd - 0.11, yd + 1.68, lz - 0.48 + q * 0.163 + 0.143);
+      for (const ly of [0.28, 0.85, 1.42]) b.boxMM(xd - 0.15, yd + ly, lz - 0.47, xd - 0.13, yd + ly + 0.11, lz + 0.42);
+      b.color('#c9a24e');
+      b.boxMM(xd - 0.19, yd + 0.95, lz + 0.33, xd - 0.13, yd + 1.1, lz + 0.37);
+      b.boxMM(xd - 0.155, yd + 0.72, lz + 0.31, xd - 0.145, yd + 0.8, lz + 0.39);
+      b.color('#22302a');
+      b.boxMM(xd - 0.12, yd + 1.72, lz - 0.52, xd + 0.05, yd + 2.05, lz + 0.52);
+      b.color('#3a4750').emit('#ffcf8a', 1.6, EMIT.LIGHTS);
+      b.boxMM(xd - 0.135, yd + 1.76, lz - 0.46, xd - 0.11, yd + 2.01, lz + 0.46);
+      b.noEmit();
+      // a ship's lamp over the door
+      b.color('#1e2422');
+      b.boxMM(xd - 0.42, yd + 2.62, lz - 0.02, xd - 0.05, yd + 2.65, lz + 0.02);
+      b.vcyl(xd - 0.42, yd + 2.56, lz, 0.1, 0.06, 8, 3);
+      b.color('#fff0cc').emit('#ffe2ad', 3.0, EMIT.LIGHTS);
+      b.vcyl(xd - 0.42, yd + 2.36, lz, 0.075, 0.2, 8, 2);
+      b.noEmit();
+      glows.push({ x: xd - 0.42, y: yd + 2.46, z: lz, size: 0.9, color: '#ffe2ad', intensity: 0.8 });
+      addLampLights([{ x: xd - 0.42, y: yd + 2.46, z: lz, pole: 2.9, radius: 4.5, color: '#ffdca6', intensity: 0.85, kind: 'street' }]);
+      // three uplighters in the plinth, a bench, a lifebuoy on the rail
+      for (const a of [0.95, 3.1, 5.2]) {
+        const px = lx + Math.sin(a) * (r0 + 0.55),
+          pz = lz + Math.cos(a) * (r0 + 0.55);
+        b.color('#2a2d2c');
+        b.boxMM(px - 0.12, y0, pz - 0.12, px + 0.12, y0 + 0.14, pz + 0.12);
+        b.color('#fff3d8').emit('#ffeccc', 2.6, EMIT.LIGHTS);
+        b.boxMM(px - 0.09, y0 + 0.14, pz - 0.09, px + 0.09, y0 + 0.155, pz + 0.09);
+        b.noEmit();
+      }
+      b.color('#6e5236');
+      b.boxMM(lx - 0.5, y0 + 0.42, lz - 3.55, lx + 0.8, y0 + 0.47, lz - 3.2);
+      b.boxMM(lx - 0.5, y0 + 0.5, lz - 3.62, lx + 0.8, y0 + 0.86, lz - 3.57);
+      b.color('#2c3230');
+      for (const qx of [-0.42, 0.72]) b.boxMM(lx + qx - 0.03, y0, lz - 3.6, lx + qx + 0.03, y0 + 0.86, lz - 3.25);
+      b.color('#ee6c2a');
+      const buoy: V3[] = [];
+      for (let k = 0; k <= 12; k++) {
+        const a = (k / 12) * Math.PI * 2;
+        buoy.push([lx + 3.97, crest + 0.72 + Math.sin(a) * 0.23, lz + 0.9 + Math.cos(a) * 0.23]);
+      }
+      b.tube(buoy, 0.05, 6, true);
+    } else {
+      b.color('#2f5d4f');
+      b.box(lx - rAt(y0 + 1.2) + 0.02, y0 + 1.5, lz, 0.12, 2.0, 0.95, 0, 1);
+    }
     for (let k = 0; k < 4; k++) {
       const y = y0 + 4.2 + k * 3.1;
       const ang = -Math.PI / 2 + (k % 2 ? 0.9 : -0.9) + k * 0.3;
       const r = rAt(y) + 0.01;
-      b.box(lx + Math.sin(ang) * r, y, lz + Math.cos(ang) * r, 0.5, 0.75, 0.5, ang, 1 | 2);
+      if (LIFE) {
+        // a recessed sash in a painted stone surround, with a sill
+        const sx = lx + Math.sin(ang) * r,
+          sz = lz + Math.cos(ang) * r;
+        b.color('#ebe6da');
+        b.box(sx, y, sz, 0.68, 0.93, 0.16, ang, 1 | 2);
+        b.color('#c8c2b4');
+        b.box(lx + Math.sin(ang) * (r + 0.03), y - 0.5, lz + Math.cos(ang) * (r + 0.03), 0.78, 0.06, 0.24, ang);
+      }
+      b.color('#2e3a44').emit('#ffd59a', 1.2, EMIT.LIGHTS);
+      const q = LIFE ? r + 0.035 : r;
+      b.box(lx + Math.sin(ang) * q, y, lz + Math.cos(ang) * q, 0.5, 0.75, LIFE ? 0.1 : 0.5, ang, 1 | 2);
+      b.noEmit();
+      if (LIFE) {
+        b.color('#ebe6da');
+        const q2 = r + 0.09;
+        b.box(lx + Math.sin(ang) * q2, y, lz + Math.cos(ang) * q2, 0.03, 0.75, 0.012, ang);
+        b.box(lx + Math.sin(ang) * q2, y, lz + Math.cos(ang) * q2, 0.5, 0.03, 0.012, ang);
+      }
     }
-    b.noEmit();
     // gallery
+    if (LIFE) {
+      // cast-iron brackets under the gallery
+      b.color('#2b3b36');
+      for (let k = 0; k < 18; k++) {
+        const a = (k / 18) * Math.PI * 2;
+        const sa = Math.sin(a),
+          ca = Math.cos(a);
+        const rb = rAt(yTop - 1.0);
+        b.beam([lx + sa * rb, yTop - 1.0, lz + ca * rb], [lx + sa * (r1 + 0.82), yTop - 0.25, lz + ca * (r1 + 0.82)], 0.05, 0.05);
+      }
+    }
     b.color('#2b3b36');
     b.cyl([lx, yTop - 0.25, lz], [lx, yTop + 0.05, lz], r1 + 0.95, r1 + 0.95, 20, 3);
     for (let k = 0; k < 24; k++) {

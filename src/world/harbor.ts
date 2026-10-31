@@ -18,7 +18,7 @@ import type { CityContext, CityModule } from '../core/context';
 import type { Feature } from '../core/plan';
 import { rect, type P2, type Rect } from '../core/geom';
 import { QUAY_X, RIVER, WATER_LEVEL } from '../core/constants';
-import { HB, RIG } from './harbor/geo';
+import { HB, RIG, setRockSkin } from './harbor/geo';
 import { createBeamMesh, createHarborMaterials, createGlowMesh, followCraneLamps, NMOB, type GlowPoint } from './harbor/material';
 import { buildBreakwater, setArmourStones, setBreakwaterLife } from './harbor/breakwater';
 import { setArmourSoft } from './harbor/geo';
@@ -187,6 +187,7 @@ export default function create(ctx: CityContext): CityModule {
     setArmourStones(boxHunt(ctx, 'armour'));
     setArmourSoft(geomHunt(ctx, 'armoursoft'));
     setBreakwaterLife(lmDetail(ctx, 'bwlife'));
+    setRockSkin(lmDetail(ctx, 'rockskin'));
     const info = buildBreakwater(north, bwF.a, bwF.b, ground, ctx.rng('harbor-breakwater'), lhF ? { x: lhF.x, z: lhF.z, height: Number(lhF.params?.height ?? 24) } : null, glows);
     if (lhF) lantern = info.lantern;
     obstacles.push(rect(info.rootX, bwF.a.z - 8.5, bwF.b.x, bwF.a.z + 7.5));
