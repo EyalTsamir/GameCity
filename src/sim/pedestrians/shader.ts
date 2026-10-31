@@ -899,7 +899,7 @@ vec3 pedFabric(vec3 pc, float reg, float h, float sHem) {
       float cr = smoothstep(0.64, 0.82, h) * (1.0 - smoothstep(0.9, 0.95, h)) * smoothstep(0.3, -0.5, ang) * smoothstep(-2.5, -1.7, ang);
       float wd = length(vec2((ang + 1.5) * 0.07, (0.92 - h) * L));
       float wP = (ang + 1.5) * 4.2 - (0.92 - h) * L * 26.0 + side;
-      fold += cr * 0.0032 * exp(-wd * 7.0) * pedRidge(wP) * (0.5 + pedN1(floor(wP) * 5.1));
+      fold += cr * 0.0018 * exp(-wd * 7.0) * pedRidge(wP) * (0.5 + pedN1(floor(wP) * 5.1));
       // under the seat: curved drag folds pulled from the buttock fold, stronger on the leg behind
       float sd = smoothstep(0.74, 0.85, h) * (1.0 - smoothstep(0.92, 0.96, h)) * back;
       float sP = (h - 0.85) * L / 0.065 + pow(aa - 3.1416, 2.0) * 1.6 + (aa - 3.1416) * 0.9 * side;

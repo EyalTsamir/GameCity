@@ -137,6 +137,8 @@ class MeshBuilder {
   /** stand-in positions for vertices whose rest position is degenerate (parametric skirt rings, the
    *  outer brim ring): used for the normals only (figureMesh) */
   standIn = new Map<number, P3>();
+  /** vertices whose normal leans towards a horizontal direction: (x, z, share) */
+  nHint = new Map<number, [number, number, number]>();
   d0: number[] = [];
   d1: number[] = [];
   d2: number[] = [];
@@ -402,7 +404,9 @@ const TORSO_BONE: [number, number][] = [
   [BONE.CHEST, 0],
   [BONE.CHEST, 0],
 ];
-const TORSO_TINT = [0.82, 0.92, 1, 1, 1, 1, 1, 1, 0.96, 1, 1.02, 1];
+// (hip blend: the dark rings at the bottom of the torso against a bright thigh drew a pair of briefs on light trousers)
+const HIP_BLEND = detailPeople('hipblend');
+const TORSO_TINT = [HIP_BLEND ? 0.93 : 0.82, HIP_BLEND ? 0.98 : 0.92, 1, 1, 1, 1, 1, 1, 0.96, 1, 1.02, 1];
 
 // ──────────────────────────────────────────────────────── body parts ──
 
@@ -1081,7 +1085,7 @@ function buildLeg(b: MeshBuilder, d: Dims, cfg: LodCfg, side: 1 | -1): void {
   const specs: LimbSpec[] = [];
   for (const i of cfg.thigh) {
     const r = d.thigh[i];
-    specs.push({ a: hp, b: kn, ring: r, bone: i === 5 ? SH : TH, w: THIGH_W[i], h: 1 - 0.5 * r.t, reg: REG.LEG, tint: i === 0 ? 0.86 : 1 });
+    specs.push({ a: hp, b: kn, ring: r, bone: i === 5 ? SH : TH, w: THIGH_W[i], h: 1 - 0.5 * r.t, reg: REG.LEG, tint: i === 0 ? (HIP_BLEND ? 0.93 : 0.86) : 1 });
   }
   for (const i of cfg.shin) {
     const r = d.shin[i];
@@ -1094,7 +1098,15 @@ function buildLeg(b: MeshBuilder, d: Dims, cfg: LodCfg, side: 1 | -1): void {
     buildLimb(b, specs, cfg.limbSides, side, false);
     return;
   }
-  buildLimb(b, specs, cfg.limbSides, side, true);
+  const legRings = buildLimb(b, specs, cfg.limbSides, side, true);
+  if (HIP_BLEND && cfg.details) {
+    // the thigh tube going into the pelvis is a crease all round the hip: its top rings take the pelvis's own outward
+    // normal, so cloth runs on over the join
+    cfg.thigh.forEach((i, j) => {
+      const k = i === 0 ? 1 : i === 1 ? 0.7 : i === 2 ? 0.22 : 0;
+      if (k > 0) for (const id of legRings[j].ids) b.nHint.set(id, [b.pos[id * 3], b.pos[id * 3 + 2] - hp[2], k]);
+    });
+  }
   // shoe last (foot frame: ankle at the origin, toes out 6°)
   const yaw = 0.105 * side;
   const cy = Math.cos(yaw),
@@ -2273,6 +2285,21 @@ function computeNormals(pos: number[], idx: number[]): Float32Array {
   return n;
 }
 
+function applyHints(n: Float32Array, b: MeshBuilder): Float32Array {
+  for (const [i, [x, z, k]] of b.nHint) {
+    const o = i * 3,
+      l = Math.hypot(x, z) || 1;
+    const nx = n[o] * (1 - k) + (x / l) * k,
+      ny = n[o + 1] * (1 - k),
+      nz = n[o + 2] * (1 - k) + (z / l) * k;
+    const m = Math.hypot(nx, ny, nz) || 1;
+    n[o] = nx / m;
+    n[o + 1] = ny / m;
+    n[o + 2] = nz / m;
+  }
+  return n;
+}
+
 const md16 = (v: number) => clamp(Math.round((v + 1) * 32768), 0, 65535);
 const n10 = (v: number) => clamp(Math.round((v + 1) * 511.5), 0, 1023);
 
@@ -2295,8 +2322,8 @@ export function figureMesh(lod: Lod): FigureMesh {
   const base = T[0];
   const nv = base.count;
   for (const t of T) if (t.count !== nv || t.idx.length !== base.idx.length) throw new Error(`figure LOD${lod}: morph targets differ in topology`);
-  const N0 = computeNormals(withStandIns(base), base.idx);
-  const N1 = computeNormals(withStandIns(T[1]), base.idx);
+  const N0 = applyHints(computeNormals(withStandIns(base), base.idx), base);
+  const N1 = applyHints(computeNormals(withStandIns(T[1]), base.idx), T[1]);
   const morph = new Uint32Array(nv * 4);
   const data = new Uint32Array(nv * 4);
   for (let i = 0; i < nv; i++) {
