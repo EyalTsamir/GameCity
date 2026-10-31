@@ -5,6 +5,8 @@
 // and beach kiosks (service windows, awnings, a giant ice-cream cone) and the
 // Rowing Club boathouse (timber, boat doors, crossed oars).
 
+import { dB } from '../../core/detailbuildings';
+import { realLobby } from './lobby';
 import * as THREE from 'three';
 import {
   Gen, LRect, Side, FRONT, RIGHT, BACK, LEFT, Grid, WallLook, SideGeom,
@@ -89,7 +91,10 @@ function grand(g: Gen): void {
         wallPlain(s, sg, p.a, p.b, 0, H + 1.2, { color: stone, pattern: WALLPAT.STONE, seed: g.seed });
         continue;
       }
-      const ops = doors.filter((u) => u >= p.a && u <= p.b).map((u) => ({ u, w: 2.6, h: 3.4 }));
+      // ?nolobby3d: the hotel's front door opens into a real foyer (lobby.ts)
+      const here = doors.filter((u) => u >= p.a && u <= p.b);
+      const foyer = sd === FRONT && here.length > 0 && dB('lobby3d') && here[0] - 3.5 > p.a + 0.3 && here[0] + 3.5 < p.b - 0.3 ? here[0] : -1;
+      const ops = here.map((u) => (u === foyer ? { u, w: 7, h: 4.1 } : { u, w: 2.6, h: 3.4 }));
       bandWithOpenings(sg, p.a, p.b, ops, (a, b) => {
         const n = Math.max(1, Math.round((b - a) / 3.4));
         const gr = makeGrid(a, b, 0, gH, 1, { spacing: (b - a) / n, cols: n, winW: 1.7, winH: 3.0, sill: 0.8, margin: 0.4 });
@@ -129,7 +134,8 @@ function grand(g: Gen): void {
       sideBox(t, sg, p.a, p.b, 0, 0.55, H - 0.2, H + 0.25, true);
       sideBox(t, sg, p.a, p.b, 0, 0.3, H + 1.2, H + 1.38, true);
       for (const u of doors.filter((d) => d >= p.a && d <= p.b)) {
-        doorNiche(g, sg, u, { w: 2.6, h: 3.4, depth: 0.45, wallColor: base, frameColor: col('#5a3d2b'), doorColor: col('#5a3d2b'), glass: true, profile: PROF.ALWAYS, seed: g.seed + 4, frameOut: 0.2 });
+        if (u === foyer) realLobby(g, sg, { a: u - 3.5, b: u + 3.5, head: 4.1, doors: [u], masonry: true, tall: true, arcade: false, name: 'GRAND HOTEL', palette: 3, canopy: false });
+        else doorNiche(g, sg, u, { w: 2.6, h: 3.4, depth: 0.45, wallColor: base, frameColor: col('#5a3d2b'), doorColor: col('#5a3d2b'), glass: true, profile: PROF.ALWAYS, seed: g.seed + 4, frameOut: 0.2 });
         if (sd === FRONT) marquee(sg, u);
         else {
           setCol(t, col('#2c3035'));

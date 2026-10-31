@@ -59,6 +59,10 @@ export interface LobbyOpts {
   tall: boolean;
   arcade: boolean;
   name?: string;
+  /** index into PALETTES (default: by building type and seed) */
+  palette?: number;
+  /** false: the caller builds its own entrance canopy */
+  canopy?: boolean;
 }
 
 /** Span of the side kept open for the real lobby, around door u (null when the side is too short). */
@@ -86,7 +90,7 @@ export function realLobby(g: Gen, sg: SideGeom, o: LobbyOpts): void {
     t = g.trim,
     gl = g.glass;
   const seed = g.seed;
-  const P = PALETTES[o.masonry ? (seed % 2 === 0 ? 3 : 0) : [1, 2, 0, 1][seed % 4]];
+  const P = PALETTES[o.palette ?? (o.masonry ? (seed % 2 === 0 ? 3 : 0) : [1, 2, 0, 1][seed % 4])];
   const { a, b, head } = o;
   const w = b - a;
   const GL = -0.32; // glass line
@@ -435,7 +439,7 @@ export function realLobby(g: Gen, sg: SideGeom, o: LobbyOpts): void {
     g.doorsBuilt++;
   }
 
-  canopy(g, sg, o, GL, main, P);
+  if (o.canopy !== false) canopy(g, sg, o, GL, main, P);
 }
 
 /** Pair of frameless-look glass leaves with long pull handles and a floor mat. */

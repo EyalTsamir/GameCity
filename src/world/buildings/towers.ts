@@ -475,8 +475,13 @@ export function genTower(g: Gen): void {
     // ?nocolonnade: behind an arcade the ground floor is always shopfronts (a lobby wall there read as blank)
     const arcadeShops = arcade && !lot.shopfront && MASS.colonnade;
     const shopT2 = arcadeShops ? shopType(SHOP_NAMES[(g.seed * 7) % SHOP_NAMES.length]) : shopT;
-    const lookL: WallLook = { color: shade(wallC, 0.75), pattern: WALLPAT.SMOOTH + 16 * shopT2, frame: FRAME.DARK, glass: sc.glass, style: lot.shopfront || arcadeShops ? WIN.SHOP : WIN.DOOR, profile: lot.shopfront || arcadeShops ? PROF.SHOP : PROF.ALWAYS, seed: g.seed + 11 };
+    // ?nogroundfit: the old look; otherwise every side is let to its own shop (one bookshop used to wrap all four
+    // sides, and the pale lobby-lit panes of the other towers read as blank cream slabs)
+    const shopsAll = dB('groundfit');
     for (const s of [FRONT, RIGHT, BACK, LEFT] as Side[]) {
+      const shopS = shopsAll && (s !== FRONT || !shopName) ? shopType(SHOP_NAMES[(g.seed * 7 + s * 3 + 1) % SHOP_NAMES.length]) : shopT2;
+      const asShop = lot.shopfront || arcadeShops || shopsAll;
+      const lookL: WallLook = { color: shade(wallC, 0.75), pattern: WALLPAT.SMOOTH + 16 * shopS, frame: FRAME.DARK, glass: sc.glass, style: asShop ? WIN.SHOP : WIN.DOOR, profile: asShop ? PROF.SHOP : PROF.ALWAYS, seed: g.seed + 11 + s };
       const sg = sideGeom(ar, s);
       // doors: plan door u is along the footprint side; map to this rect
       const shift = s === FRONT ? ar.x0 - fp.x0 : s === RIGHT ? fp.z1 - ar.z1 : s === BACK ? fp.x1 - ar.x1 : ar.z0 - fp.z0;
