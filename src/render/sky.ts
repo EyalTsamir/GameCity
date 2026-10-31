@@ -233,7 +233,6 @@ export default async function create(ctx: CityContext): Promise<CityModule> {
   let sunOver = 0;
   const lightning = director ? new Lightning(ctx.rng('lightning'), ctx.events) : null;
   if (lightning) scene.add(lightning.mesh);
-  if (lightning && ctx.debug.params.has('strike')) ctx.events.on('modules:ready', () => setTimeout(() => lightning.strike(ctx.camera, 1000, true), Number(ctx.debug.params.get('strike')) || 0));
   const planDay = (day: number) => {
     plannedDay = day;
     if (wRng.next() < 0.4) {
@@ -271,6 +270,10 @@ export default async function create(ctx: CityContext): Promise<CityModule> {
       applyStageVisibility();
     },
     tune,
+    /** a lightning strike now (tests) */
+    strike(bolt = true) {
+      lightning?.strike(ctx.camera, cloudLayer ? cloudLayer.uCu.value.y : 1000, bolt);
+    },
     /** world: render the raymarched cumulus deck for this frame's final camera (postfx calls it) */
     renderClouds,
   };
@@ -568,7 +571,7 @@ export default async function create(ctx: CityContext): Promise<CityModule> {
     if (director) {
       // rain is seen by the light around it: dim in a storm's shade, nearly black at night (the lamps light it)
       const skyL = lum(hemi.color) * hemi.intensity;
-      _tmpC.setRGB(0.72, 0.78, 0.88).multiplyScalar(Math.min(0.9, 0.05 + skyL * 0.42 + flash * 0.5));
+      _tmpC.setRGB(0.72, 0.78, 0.88).multiplyScalar(Math.min(0.9, 0.05 + skyL * 0.42 + flash * 0.15));
     }
     rain.update(clock.simTime, rainAmt, _focus, dist, ctx.camera, ctx.uniforms.uWind.value, _tmpC, _rs.x, _rs.y);
     if (lightning && cloudLayer) {

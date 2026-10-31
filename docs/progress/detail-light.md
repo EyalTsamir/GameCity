@@ -15,7 +15,7 @@ Next in order: tune the storm by eye, water in the storm, thunder hand-off, sea 
 Schedule: day 1 none; day 2 the showpiece (trail passes at 17.3 h, so sun under the deck and a rainbow); later days random.
 - Sky, deck and shadows share `uStorm` / `uStormK` / `clStorm()` (`sky/cloudLayer.ts`); the haze ring follows per azimuth (`atmoDrive.horizonAt`).
 - `sky/rain.ts`: streak quads, near box + wide box, lamp-lit per streak in the vertex shader; splashes on a baked 1 m ground map.
-- `sky/lightning.ts`: flash pulses, ribbon bolt, emits `'lightning'` ({ distance, power }). `?strike=<ms>` forces one.
+- `sky/lightning.ts`: flash pulses, ribbon bolt, emits `'lightning'` ({ distance, power }). `ctx.services.sky.strike()` forces one.
 - `sky/wetSurfaces.ts` (`?nowetfacade`): global patch of the physical chunk, gated by one uniform.
 - `water/streetMirror.ts` (`?nostreetmirror`): the water's planar pass moves to the road while wet, low and with no water in view.
 

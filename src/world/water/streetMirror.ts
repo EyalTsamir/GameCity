@@ -62,6 +62,6 @@ vec3 rdStreetMirror(vec3 wp, float pud, float film, vec2 nn) {
   float k = uSRefl.x * w * smoothstep(0.0, 0.03, min(ed.x, ed.y));
   // what the mirror covers, the sky sheen of the IBL no longer shows
   rdSpecOcc = 1.0 - clamp(r.a * k, 0.0, 1.0);
-  return min(r.rgb, vec3(6.0)) * F * k;
+  return min(r.rgb, vec3(6.0)) * F * k * 1.6;
 }
 `;

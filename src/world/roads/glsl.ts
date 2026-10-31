@@ -604,7 +604,7 @@ vec3 rdHard(inout float rough) {
     c = mix(c, lt.rgb, lt.a * 0.9);
   }
   float wetH = max(uRain, uWetH * 0.85);
-  rdEmit += rdStreetMirror(vWP, 0.0, wetH * 0.55, nS.rg);
+  rdEmit += rdStreetMirror(vWP, 0.0, wetH * 0.7, nS.rg);
   c *= mix(1.0, 0.76, wetH);
   rough = mix(rough, rough * 0.55, wetH);
   return c;
