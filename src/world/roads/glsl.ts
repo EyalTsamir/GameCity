@@ -197,7 +197,7 @@ vec3 rdAsphalt(inout float rough) {
     c *= 1.0 - 0.5 * seam;
     rough -= 0.2 * seam;
     // junction box (?nojunctionwear): where the wheels turn. Rubber arcs round the kerb returns (right turners hug
-    // them, left turners swing wide), the straight wheel paths crossing, a dark oily middle, a sealed crack map
+    // them, left turners swing wide), the straight wheel paths crossing, a dark oily middle (sealed cracks: tar snakes in markings.ts)
     if (dj < ${JBOX} && uJuncWear > 0.5) {
       vec2 aj = abs(lj);
       float rr = length(aj - 6.0);
@@ -209,9 +209,6 @@ vec3 rdAsphalt(inout float rough) {
       float thru = 1.0 - smoothstep(0.12, 0.42, min(min(abs(aj.x - 0.95), abs(aj.x - 2.55)), min(abs(aj.y - 0.95), abs(aj.y - 2.55))));
       c *= 1.0 + 0.05 * thru * (0.5 + nM.b);
       c *= 1.0 - 0.2 * (1.0 - smoothstep(1.0, 6.0, length(lj))) * (0.45 + 0.8 * nM.a);
-      float net = rdCrackNet(p + 7.3, 3.4, 0.05, fw) * smoothstep(0.46, 0.6, nL.a * 0.6 + nM.r * 0.4);
-      c = mix(c, vec3(0.05, 0.05, 0.052), net * 0.55);
-      rough -= 0.4 * net;
     }
     // overbanding: wide black sealant strips over old joints / crack repairs, meandering across the lanes
     {
