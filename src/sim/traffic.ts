@@ -192,6 +192,8 @@ export default function create(ctx: CityContext): CityModule {
     /** scenes: kerb stops (sim.ts KerbStop) */
     sim,
     busCount: () => sim.busCount(),
+    /** everything parked (scripts/closeset.mjs frames one) */
+    parked: () => parked,
     /** parked bicycles / mopeds / e-scooters on the pavement (keep-clear points for walkers) */
     parked2w: parked2w.map((p) => ({ x: p.x, z: p.z, yaw: p.yaw, len: p.model === 'moto' ? 1.9 : p.variant === 1 ? 1.2 : 1.8 })),
     /** number of moving vehicles within r of (x, z) — handy for ambient audio */
