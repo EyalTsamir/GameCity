@@ -5,8 +5,7 @@
 //   splashes     crowns on the ground round the eye (ground height from a small baked map; hidden by depth elsewhere)
 //
 // Every streak samples the street-lamp map at its own position, so at night the rain shows up as bright needles in the
-// lamps' pools and disappears in the dark between them: the look of a wet night. With ?norain2 the old 1 px lines
-// (createRain's `simple`) are not kept: this file is the only rain, its look is switched by the weather (uAmount).
+// lamps' pools and disappears in the dark between them: the look of a wet night.
 
 import * as THREE from 'three';
 import { LAMP_GLSL, lampUniforms } from '../../core/lampLight';
@@ -61,6 +60,7 @@ void main() {
   // thin drops carry less light than the pixels they cover; none right at the lens
   float on = step(aSeed.y, uAmount.x) * mix(uAmount.y, 1.0, aKind);
   vAlpha = on * (1.05 / px) * smoothstep(0.6, 2.2, dist) * (0.55 + 0.45 * position.y);
+  if (on <= 0.0) gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
   vLit = uColor + min(thLampLight(wp, vec3(0.0, 1.0, 0.0)), vec3(3.5)) * 1.1;
   #include <fog_vertex>
 }
@@ -116,6 +116,7 @@ void main() {
   vQ = position.xy;
   float on = step(aSeed.y, uAmount) * step(0.0, uv.x) * step(uv.x, 1.0) * step(0.0, uv.y) * step(uv.y, 1.0);
   vLife = on * (1.0 - life) * smoothstep(0.0, 0.08, life) * smoothstep(0.6, 3.0, -mvPosition.z);
+  if (on <= 0.0) gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
   vLit = uColor * 1.5 + min(thLampLight(wp, vec3(0.0, 1.0, 0.0)), vec3(3.0)) * 1.25;
   #include <fog_vertex>
 }

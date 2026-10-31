@@ -279,7 +279,7 @@ export class AtmosphereDriver {
     // ground mist: denser in calm air, colour = lit haze (dawn rose / dusk lilac), drifts downwind
     const ws = Math.sqrt(wind.x * wind.x + wind.y * wind.y);
     const calm = 1 / (1 + ws * 1.2);
-    p.mist = this.mistOn ? state.mist * calm * (1 + overcast * 0.5) + (w ? w.storm * 0.0011 : 0) : 0;
+    p.mist = this.mistOn ? state.mist * calm * (1 + overcast * 0.5) + (w ? w.storm * 0.0011 * (1 - smooth(30, 110, camY)) : 0) : 0;
     // (storm: spray and rain mist, a thicker layer)
     p.mistScaleHeight = w ? state.mistH + (14 - state.mistH) * w.storm : state.mistH;
     p.mistColor.copy(p.ring[0]).lerp(_c.copy(state.hemiSky).multiplyScalar(state.hemiI * 1.1), 0.35);

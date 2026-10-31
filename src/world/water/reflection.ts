@@ -344,7 +344,7 @@ export class PlanarReflection {
     // bank trees only when the view is about the river (not a river mouth glimpsed at the edge)
     if (st) this.target.set(st.target.x, WATER_LEVEL, st.target.z);
     const nearRiver = !st || RIVER_BOX.distanceToPoint(this.target) < 45;
-    const trees = this.street || (full && !far && nearRiver && this.frustum.intersectsBox(RIVER_BOX));
+    const trees = !this.street && full && !far && nearRiver && this.frustum.intersectsBox(RIVER_BOX);
     if (this.treesFar) {
       vs[n++] = this.treesFar.visible;
       this.treesFar.visible = trees;
