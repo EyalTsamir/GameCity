@@ -3,7 +3,20 @@
 Stage 2 of `CLOSE-ROUND.md`. Worktree `objective-proskuriakova-485af7`, port 5212. Owns close-range surface detail.
 
 ## Resume here
-Round 1 in progress. System built (`src/world/closemat*`, `src/core/closemat.ts`), first families on. See "What is left".
+Round 1 nearly closed. System built (`src/world/closemat*`, `src/core/closemat.ts`) and committed. Families on: walls (brick, plaster, timber, stone, panel, sheet, smooth, incl. window reveals), asphalt, slabs, loose ground, decks, solids (trim = joinery, masonry + landmarks + harbour, street furniture, metal), sills (`winGeo.ts`), real litter replacing the painted one (`closemat/litter.ts`, `RD_LITTER` in the road shaders). Autofocus now also raycasts these surfaces (`services.closeMat.rayHit`, used in `ui/camera.ts`).
+
+Harness notes for resuming:
+- Perf: `bash <scratchpad>/perf.sh <outdir> [views] [hours]` = bake to `public/bake` of this worktree (`--out`, the main-checkout script would otherwise write to the main checkout!) then `abprof` hiding every `near-cm*` object in one page, behind power-guard. Equivalent by hand: `abprof --ab "cm=<traverse scene, near-cm* visible=false>|<restore>"`.
+- Captures: `closeset.mjs --out shots/mN --ids ... --d 1,3 --hours 12 --tile 960 --cols 2 --rows 6`; 5–15 min in the queue with four sessions. Sheets are PNG8: their colours lie (red flakes that are not there), read the JPGs for colour.
+- Don't use `python3` in Bash here (a Store stub that hangs). Patch with a node script file in the scratchpad or Edit.
+
+Open items, in order:
+1. Read `shots/perf1/ab.txt` (first A/B: overview, downtown, street, market, wall 3 m, road 3 m). Budget +0.2 far, +0.7 street/market.
+2. Re-check at 1 m after the focus fix: wall-suburb, wall-house, wall-factory, door-house, ground-kerb were all blurred (stale pick, then porch). White joinery should no longer look like pumice (`CM_JOINERY`). Lamp post orange patches at `furn-lamp`: compare `?noclosemat`, may be the base's `pWear`.
+3. Sample walls of each pattern not yet seen: timber after fibre retune, stone, panel, corrugated (findwalls output in the background task; `wall-warehouse` is brick).
+4. Add `cmPaint`: road markings (`roads-markings`, position + normal) multiplied with aggregate relief and worn specks; polygon offset stronger than the markings' −2.
+5. Night (21.5) and dusk (18.2) pass; `walkhitch`, `hitch`; boot cost (stats of module `closemat`: `tilesMs`, `bootMs`, triangles per layer; the slowest cell in `__city.near.stats()`, keep under 2 ms).
+6. Final checks of CLOSE-ROUND.md; end with CLOSE-DONE.
 
 ## The idea
 A near-only copy of the wall, road, paving and trim triangles, cut to the cells of the bubble, is drawn **after** everything opaque with a small program whose output **multiplies** what the city's shader drew (`DST_COLOR, ZERO` on the scene's float target; ratios above 1 work). So:
