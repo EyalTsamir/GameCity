@@ -3,6 +3,9 @@
 Read this first when resuming after an interruption (usage limits have cut runs before).
 Per-module logs live next to this file: `docs/progress/<module>.md`.
 
+## Baking (2026-10-31, branch claude/hopeful-babbage-4a203f) — see docs/progress/baking.md
+The assumption "all computed in the browser, one file" is cancelled by the user. `npm run bake` now writes far land and far facade textures into `public/bake` (gitignored), 18 MB beside the 4.4 MB page. Noon: overview 38.6 → 31.9, downtown 37.4 → 29.9, the other far views −4; street and market unchanged. **Run `npm run bake` before any measurement: a stale bake costs up to 7 ms silently.** Deploy needs `dist/bake` too. Not merged, not deployed at the time of writing.
+
 ## Detail round (2026-10-31, six sessions) — see docs/progress/DETAIL-ROUND.md and detail-<session>.md
 Merged at 5b9f3e8, no conflicts: buildings, streets, people and vehicles, landmarks and harbour (hero interiors, lighthouse, tower lift, stadium), nature and the horizon, light and weather (storm with button and thunder, sun column, rain curtains, rainbow). Master switches `?nodetailb`, `?nostreetdetail`, `?nodetailpeople`, `?nolmdetail`, `?nonature`, `?nodetaillight`, each with `?no<feature>`.
 Checks on the merge, behind `scripts/power-guard.mjs`: typecheck + build OK (4.41 MB); overview at speed 4 and downtown on low and medium, diorama, street at night: invariants `{}`, validate `[]`, console errors none (8 D3D compile warnings, the known kind); ui-test 70/71, `kinds` passes alone; hitch overview 12 / 21.5 h 40.1 / 42.1 ms mean, 0 freezes, max 66.7 ms, 0 mid-run programs; film-hitch 0 new programs, 0 freezes; realtime film sheet looked right.
