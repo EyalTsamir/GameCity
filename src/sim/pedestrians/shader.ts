@@ -149,6 +149,7 @@ attribute uvec4 iC1;
 attribute uvec4 iC2;
 //@if CL
 float pedSunLift = 0.12;
+flat varying vec2 vPedGaze;
 flat varying uvec2 vPedFC; // the person's cut (x) and a hashed word for the paint (y) (no attribute free for it: the limit is 16 and instancing takes them)
 float pedDn;
 vec2 pedDg;
@@ -353,7 +354,20 @@ void pedPose(inout vec3 p, inout vec3 n) {
   uint h2 = h1 * 2654435761u; h2 ^= h2 >> 15u;
   uint h3 = h2 * 2246822519u; h3 ^= h3 >> 13u;
   vPedFC = uvec2(iC2.z >> 29u, h3);
+  {
+    // where the eyes look (render.ts eyeGaze), radians in the head's frame
+    uint gz = uint((P_spare1 + 8.0) * 4096.0 + 0.5);
+    vPedGaze = vec2((float(gz & 255u) / 127.5 - 1.0) * 0.62, (float((gz >> 8u) & 255u) / 127.5 - 1.0) * 0.42);
+  }
   if (bone == ${B.HEAD}) pedSunLift = 0.34;
+  if (region == ${R.TORSO} || region == ${R.LEG}) {
+    float hipK = region == ${R.TORSO} ? 1.0 - smoothstep(0.1, 0.34, h) : smoothstep(0.72, 0.88, h);
+    if (hipK > 0.0) {
+      vec3 hipC = pedPiv(${PIV.HIP});
+      vec3 nh = normalize((p - vec3(0.0, hipC.y + 0.05, hipC.z)) * vec3(1.0, 0.55, 1.0));
+      n = normalize(mix(n, nh, hipK * smoothstep(0.015, 0.07, abs(p.x)) * 0.92));
+    }
+  }
   if (region == ${R.FACE}) {
     vPedFace = vec3(aux, 1.0);
     vec2 q = vec2(abs(aux.x), aux.y);
@@ -467,6 +481,9 @@ void pedPose(inout vec3 p, inout vec3 n) {
       float a = atan(p.x, p.z);
       float sd = float(iC1.x & 15u);
       float L2 = len * (1.0 + 0.09 * sin(a * 7.0 + sd) + 0.06 * sin(a * 15.0 + 1.7 + sd * 0.5) - 0.12 * (1.0 - abs(sin(a * 0.5))));
+//@if CL
+      L2 *= mix(0.58, 1.0, smoothstep(1.0, 2.0, abs(a)));
+//@endif
       float lift = max(0.0, aux.x - L2);
       p.y += lift;
       // rows lifted to the hem tuck in under it (into the hair / body) instead of rolling out as a shelf
@@ -522,7 +539,7 @@ void pedPose(inout vec3 p, inout vec3 n) {
           lift = 0.0011 * lump - 0.003 * smoothstep(0.5, 1.0, aux.y);
         } else lift = 0.0045 * lump + 0.007 * smoothstep(0.3, 1.0, aux.y) * (0.6 + 0.4 * -n.z);
         p += n * grow * lift;
-        if (((iC1.y >> 24u) & 7u) != 0u) p -= n * 0.016 * smoothstep(0.12, 0.36, aux.y);
+        if (((iC1.y >> 24u) & 7u) != 0u) p -= n * 0.0086 * min(1.0, aux.y * 2.6);
       }
 //@else
       p += n * grow * (0.0045 * lump + 0.007 * smoothstep(0.3, 1.0, aux.y) * (0.6 + 0.4 * -n.z));
@@ -551,16 +568,31 @@ void pedPose(inout vec3 p, inout vec3 n) {
     bool visor = (d0 >> 10u & 63u) == ${FB.VISOR + 1}u;
     if (brim) {
       p.xz += rad * (ha.x + s * hb.x);
+//@if CL
+      p.y += -ha.z - s * s * hb.y;
+//@else
       p.y += -ha.z - s * hb.y;
+//@endif
     } else if (visor) {
       p.xz += rad * ha.x;
       p.z += s * (hb.z - 0.075);
+//@if CL
+      p.y += -ha.z;
+//@else
       p.y += -ha.z - s * 0.01 * hb.z / 0.075;
+//@endif
     } else {
       // dome: push out, lift the crown, drop the rim (beanie over the ears), flatten the top
+//@if CL
+      if (s < 0.0) { p.y -= ha.z; }
+      else {
+//@endif
       float top = smoothstep(0.15, 1.0, s);
       p.xz += rad * ha.x * (1.0 - 0.5 * top * hb.w);
       p.y += ha.y * top - ha.z * (1.0 - s) + ha.w * max(0.0, cos(phi)) * s * (1.0 - smoothstep(0.8, 1.0, s));
+//@if CL
+      }
+//@endif
     }
   }
   if (bone == ${B.TAIL}) {
@@ -865,6 +897,7 @@ float pedBayer4(vec2 a) { return pedBayer2(0.5 * a) * 0.25 + pedBayer2(a); }
 float pedN1(float x) { float i = floor(x), f = fract(x); f = f * f * (3.0 - 2.0 * f); return mix(fract(sin(i * 127.1) * 43758.5453), fract(sin((i + 1.0) * 127.1) * 43758.5453), f); }
 #ifdef PED_CLOSE
 flat varying uvec2 vPedFC;
+flat varying vec2 vPedGaze;
 float pedN2(vec2 p) {
   vec2 i = floor(p), f = fract(p);
   f = f * f * (3.0 - 2.0 * f);
@@ -981,7 +1014,12 @@ vec3 pedPrint(vec3 pc, float topK) {
 // a fold: a narrow crest, broad shallow troughs (−0.25 … 0.75)
 // (zero at the cell ends: each fold is scaled per cell, and a step in the height is a dotted line in the derivative bump)
 float pedRidge(float x) { float t = 1.0 - abs(fract(x) - 0.5) * 2.0; return t * t * t - 0.25 * sin(3.1416 * t); }
+#ifdef PED_CLOSE
+// (its own derivative: a thin line whose width was judged by another coordinate came out as dashes)
+float pedBand2(float d, float hw, float px) { float fw = max(px, fwidth(d)); return (1.0 - smoothstep(hw - fw * 0.5, hw + fw * 0.5, abs(d))) * min(1.0, 2.0 * hw / fw); }
+#else
 float pedBand2(float d, float hw, float px) { return 1.0 - smoothstep(hw - px * 0.5, hw + px * 0.5, abs(d)); }
+#endif
 // relief for the normal stage (FABRIC_NORMAL): fold / seam height + weave, and the fabric share (fuzz sheen)
 uniform float uPedFolds;
 uniform float uPedT;
@@ -1015,9 +1053,9 @@ vec3 pedFabric(vec3 pc, float reg, float h, float sHem) {
   float fold = 0.0; // fold relief height (m)
   if (reg > 2.5 && reg < 3.5) {
     // trousers: outer and inner leg seams
-    float seam = pedBand2(rn.z, 0.035, px * 12.0) * (1.0 - step(0.88, h));
+    float seam = pedBand2(rn.z, 0.035, px * 12.0) * (1.0 - smoothstep(0.85, 0.89, h));
     sh *= 1.0 - 0.18 * seam;
-    stitch += denim ? pedBand2(abs(rn.z) - 0.075, 0.012, px * 12.0) * step(0.0, -inner) * (1.0 - step(0.88, h)) : 0.0;
+    stitch += denim ? pedBand2(abs(rn.z) - 0.075, 0.012, px * 12.0) * step(0.0, -inner) * (1.0 - smoothstep(0.85, 0.89, h)) : 0.0;
     // knee: creases behind it deepen with the bend; the front pulls smooth and a little lighter
     float kz = exp(-pow((h - 0.5) / 0.07, 2.0));
     float bk = clamp(bend / 1.6, 0.0, 1.0);
@@ -1041,14 +1079,14 @@ vec3 pedFabric(vec3 pc, float reg, float h, float sHem) {
       float cr = smoothstep(0.64, 0.82, h) * (1.0 - smoothstep(0.9, 0.95, h)) * smoothstep(0.3, -0.5, ang) * smoothstep(-2.5, -1.7, ang);
       float wd = length(vec2((ang + 1.5) * 0.07, (0.92 - h) * L));
       float wP = (ang + 1.5) * 4.2 - (0.92 - h) * L * 26.0 + side;
-      fold += cr * 0.0018 * exp(-wd * 7.0) * pedRidge(wP) * (0.5 + pedN1(floor(wP) * 5.1));
+      fold += cr * 0.0012 * exp(-wd * 7.0) * pedRidge(wP) * (0.5 + pedN1(floor(wP) * 5.1)) * (1.0 - smoothstep(0.1, 0.3, fwidth(wP)));
       // under the seat: curved drag folds pulled from the buttock fold, stronger on the leg behind
       float sd = smoothstep(0.74, 0.85, h) * (1.0 - smoothstep(0.92, 0.96, h)) * back;
       float sP = (h - 0.85) * L / 0.065 + pow(aa - 3.1416, 2.0) * 1.6 + (aa - 3.1416) * 0.9 * side;
       fold += sd * 0.003 * pedRidge(sP) * smoothstep(0.35, 0.8, pedN1(floor(sP) * 2.3 + side * 1.7)) * 1.6;
       fold -= sd * 0.003 * exp(-pow((h - 0.925) / 0.014, 2.0));
       // the leg hangs in a few soft tube folds that wander down its length (loose cloth more)
-      float hang = (1.0 - kz) * (1.0 - cr) * (1.0 - sd) * (1.0 - step(0.88, h));
+      float hang = (1.0 - kz) * (1.0 - cr) * (1.0 - sd) * (1.0 - smoothstep(0.85, 0.89, h));
       float tP = ang * 0.9 + 0.35 * sin(h * 7.0 + side * 2.0) + 0.15 * sin(h * 19.0 - ang);
       fold += hang * 0.0045 * (pedN1(tP * 4.0 + side * 7.0) - 0.5) * (0.6 + 0.4 * sin(h * 5.0 + ang + side));
       // bagging below the knee: diagonal folds down the shin front
@@ -1057,7 +1095,7 @@ vec3 pedFabric(vec3 pc, float reg, float h, float sHem) {
       fold += bg * 0.0025 * pedRidge(bP) * (0.4 + pedN1(floor(bP) * 4.3 - side));
       // pressed side seam: the allowance lifts one side (a step), puckers along the stitch line
       float sn = rn.z * 0.07; // ≈ m across the seam line (7 cm leg radius)
-      float sk = 1.0 - step(0.88, h);
+      float sk = 1.0 - smoothstep(0.85, 0.89, h);
       fold += sk * (0.0006 * smoothstep(-0.001, 0.002, sn) * (1.0 - smoothstep(0.005, 0.01, sn)) + 0.00035 * sin(h * L * 420.0) * exp(-pow(sn / 0.005, 2.0)));
     }
     // the break: trousers stack in rings over the shoe
@@ -1176,7 +1214,7 @@ vec3 pedFabric(vec3 pc, float reg, float h, float sHem) {
   // dark cloth in shade: the crests catch the sky (a grey lift), so navy / black / olive trousers show folds too
   float darkC = 1.0 - smoothstep(0.08, 0.3, dot(pc, vec3(0.33)));
   pc += vec3(0.03, 0.032, 0.036) * clamp(fold / 0.0025, 0.0, 1.0) * darkC * det * cloth * uPedFolds;
-  pedFabH = ((sh - 1.0) * 0.0065 + wv * wvK * (knit ? 0.00018 : 0.0001) + fold * uPedFolds) * pedFabK;
+  pedFabH = ((sh - 1.0) * 0.0065 + wv * wvK * (knit ? 0.0001 : 0.00004) + fold * uPedFolds) * pedFabK;
   pc = mix(pc, thread, clamp(stitch, 0.0, 1.0) * det * (denim ? 0.7 : 0.35));
   return pc;
 }
@@ -1322,8 +1360,13 @@ vec3 pedFaceClose(vec3 skin, vec2 F) {
   float dU = upper - ey, dL = ey - lower;
   float open = smoothstep(-px * 0.5, px * 0.5, min(dU, dL)) * step(0.0, q);
   vec3 iris = eyeC == 0u ? vec3(0.055, 0.03, 0.018) : eyeC == 1u ? vec3(0.15, 0.08, 0.035) : eyeC == 2u ? vec3(0.17, 0.16, 0.08) : vec3(0.2, 0.27, 0.33);
-  // where the eyes look (iC3 has no room for it yet: straight ahead, a little down when old)
-  vec2 gz = vec2(0.0, -0.0003);
+  // where the eyes look: the iris slides over the ball, a little more of it under the lid looking down; the upper lid follows
+  vec2 gz = vec2(sin(vPedGaze.x), sin(vPedGaze.y)) * 0.0115;
+  upper += gz.y * 0.32;
+  lower += gz.y * 0.12;
+  dU = upper - ey;
+  dL = ey - lower;
+  open = smoothstep(-px * 0.5, px * 0.5, min(dU, dL)) * step(0.0, q);
   float eU = F.x - sg * ${EYE.x.toFixed(4)};
   float dI = length(vec2(eU - gz.x, ey - gz.y));
   vec3 scl = mix(vec3(0.62, 0.58, 0.53), skin * vec3(1.25, 1.15, 1.05), 0.2);
@@ -1568,7 +1611,7 @@ const FRAG_COLOR = /* glsl */ `
 #endif
       float edgeK = 1.0 - smoothstep(1.17, 1.45, vPedFace.y);
 #ifdef PED_CLOSE
-            float need = tipK * (1.0 - far);
+      float need = max(tipK, (1.0 - smoothstep(0.98, 1.14, vPedFace.y)) * 0.75) * (1.0 - far);
 #else
       float need = max(tipK, edgeK * 0.65) * (1.0 - far);
 #endif

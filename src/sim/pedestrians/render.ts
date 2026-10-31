@@ -7,6 +7,7 @@
 // plus prams, dogs and blob contact shadows as before.
 
 import * as THREE from 'three';
+import { closePeople } from '../../core/closePeople';
 import { detailPeople } from '../../core/detailPeople';
 import { DOG_OFFSET, F, buildBlobGeometry, buildDogGeometry, buildPramGeometry, makeBlobMaterial, makeDogMaterials, makePramMaterials } from './figure';
 import { BONE, FB, figureMesh, type Lod } from './body';
@@ -50,6 +51,40 @@ function packPose(p: Pose, o: Uint32Array): void {
     b = b < 0 ? 0 : b > 65535 ? 65535 : b;
     o[k] = (a | (b << 16)) >>> 0;
   }
+}
+const GAZE_EYES = closePeople('gaze');
+const eyeHash = (x: number) => {
+  const s = Math.sin(x * 127.1 + 3.7) * 43758.5453;
+  return s - Math.floor(s);
+};
+/** close level: where the eyes point, in the head's frame, packed into the shader's unused pose field spare1. Eyes move in jumps, so this needs no
+ *  state: a target per time slot. A person who has noticed the camera holds it; anyone it comes near may glance at it without turning the head. */
+function eyeGaze(m: Member, pose: Pose, stature: number, mx: number, mz: number, cam: THREE.Vector3, t: number, o: Uint32Array): void {
+  if (!GAZE_EYES) {
+    o[23] = ((o[23] & 0xffff0000) | 0x7f80) >>> 0;
+    return;
+  }
+  const seed = m.seed * 91.7;
+  const dx = cam.x - mx,
+    dz = cam.z - mz,
+    dy = cam.y - (m.y + stature * 0.92);
+  const dh = Math.hypot(dx, dz);
+  let a = Math.atan2(dx, dz) - (m.yaw + pose.headYaw);
+  a = Math.atan2(Math.sin(a), Math.cos(a));
+  const slot = Math.floor(t * (0.45 + 0.35 * eyeHash(seed)) + seed);
+  let yaw = (eyeHash(slot + seed) - 0.5) * 0.3;
+  let pitch = (eyeHash(slot * 1.7 + seed) - 0.62) * 0.14;
+  const glance = Math.floor(t * 0.28 + seed * 3.1);
+  if (Math.abs(a) < 1.25 && dh < 6 && (m.gazeCam || (dh < 3.6 && eyeHash(glance + seed) < 0.42))) {
+    yaw = a;
+    pitch = Math.atan2(dy, dh) + pose.headPitch;
+  }
+  yaw = yaw < -0.62 ? -0.62 : yaw > 0.62 ? 0.62 : yaw;
+  pitch = pitch < -0.42 ? -0.42 : pitch > 0.42 ? 0.42 : pitch;
+  const by = Math.round((yaw / 0.62 + 1) * 127.5),
+    bp = Math.round((pitch / 0.42 + 1) * 127.5);
+  // (spare1's word: the two bytes stand in for the prop code, which only the CPU reads)
+  o[23] = ((o[23] & 0xffff0000) | by | (bp << 8)) >>> 0;
 }
 /** pose word 0 with the scale and a given fade (LOD cross-fades) */
 function packScaleFade(scale: number, fade: number, o: Uint32Array): void {
@@ -614,6 +649,7 @@ export class CrowdRenderer {
         R[2] = mz;
         R[3] = m.yaw;
         packPose(pose, PP);
+        if (layer === this.close || out === this.close) eyeGaze(m, pose, r.stature, mx, mz, this.cam, t, PP);
         CC[10] = flags >>> 0;
         const row = palette !== null ? palette.add(PP) : 0;
         if (shadows && d2 < shadowD2 && this.shadow.n < this.shadow.capacity) this.shadow.put(R, PP, CC, row);

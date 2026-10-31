@@ -1060,7 +1060,8 @@ function buildFingers(
 ): void {
   specs.push(handRing(0.2, pt, pw * 0.92, -0.001, 0.12, 0));
   specs.push(handRing(0.36, pt * 0.95, pw * 0.99, -0.002, 0, 0));
-  specs.push(handRing(0.5, pt * 0.82, pw * 0.97, -0.003, 0, 0.12));
+  specs.push(handRing(0.47, pt * 0.84, pw * 0.97, -0.003, 0, 0.1));
+  specs.push(handRing(0.54, pt * 0.58, pw * 0.82, -0.004, 0, 0.15));
   buildLimb(b, specs, cfg.limbSides, side, true, 1);
   // towards the palm (−x on the left hand, +x on the right) and across it (+z = index side)
   const palm: P3 = [-side, 0, 0];
@@ -1073,7 +1074,7 @@ function buildFingers(
     [-0.22, 0.47, 0.18],
     [-0.62, 0.37, 0.155],
   ];
-  const SIDES = 6;
+  const SIDES = 7;
   for (let f = 0; f < 4; f++) {
     const [zo, fl, fr] = FING[f];
     const len = hlen * fl;
@@ -1115,12 +1116,15 @@ function buildFingers(
       const t = (s + 1) / 3;
       const taper = 1 - 0.2 * t;
       if (s < 2) ring(c, dir, rx * taper * 1.04, rz * taper * 1.04, 0.35 + 0.3 * s, t, false, s === 0 ? 0.6 : 0.2, true);
-      else ring(sub(c, mul(dir, len * lf * 0.25)), dir, rx * taper, rz * taper, 1, t, true);
+      else {
+        ring(sub(c, mul(dir, len * lf * 0.25)), dir, rx * taper, rz * taper, 1, t, true);
+        ring(add(c, mul(dir, rz * 0.12)), dir, rx * taper * 0.72, rz * taper * 0.72, 1, t, true);
+      }
     }
     bridge(b, rings);
     const last = rings[rings.length - 1];
     b.use(HA, REG.SKIN, -1, 1);
-    capFan(b, last, b.v(add(c, mul(dir, rz * 0.2)), -1, 0, 1), sub(last.c, mul(dir, 0.01)));
+    capFan(b, last, b.v(add(c, mul(dir, rz * 0.55)), -1, 0, 1), sub(last.c, mul(dir, 0.01)));
     // the first ring sits inside the palm: no cap needed
   }
   // thumb: from the index edge of the palm, down-forward, two joints bending across the palm
@@ -1645,22 +1649,80 @@ function buildHat(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
     rings.push({ ids, c: [0, rimY, -0.01 * hk] });
   }
   bridge(b, rings);
+  if (cfg.close) {
+    b.setTint(0.4);
+    const lin: number[] = [];
+    for (let k = 0; k < n; k++) {
+      const phi = (k / n) * Math.PI * 2;
+      lin.push(b.v(headSurface(d, phi, rimAt(phi) - 0.002, 0), 2, 0, -1, phi));
+    }
+    const cl: P3 = [0, rimY + 0.07, d.headRings[4].cz];
+    bridge(b, [
+      { ids: lin, c: cl },
+      { ids: rings[0].ids, c: cl },
+    ]);
+    b.setTint(1);
+  }
   const apex = b.v([0, crown + 0.0145 * hk * hatK, cfg.close ? d.headRings[4].cz : d.headRings[d.headRings.length - 1].cz - 0.004], 2, 0, 1, 0);
   capFan(b, rings[rings.length - 1], apex, [0, rimY, 0]);
   if (pin) return;
   // brim (both faces): inner ring on the hat band, outer ring pushed out by the shader
   b.use(BONE.HEAD, REG.HAT, FB.BRIM, 0.95);
+  if (cfg.close) {
+    // close: more sides, a middle ring so it can curve (the shader's droop goes with s²)
+    const nb = 40;
+    const ss2 = [0, 0.3, 0.65, 1];
+    const faces: [number, number][] = [
+      [0, 0.95],
+      [-0.002, 0.7],
+    ];
+    const P = b.pos;
+    const cz = d.headRings[4].cz;
+    faces.forEach(([dy, tint], fi) => {
+      b.setTint(tint);
+      const rows = ss2.map(() => [] as number[]);
+      for (let k = 0; k < nb; k++) {
+        const phi = (k / nb) * Math.PI * 2;
+        const p = headSurface(d, phi, rimAt(phi) + dy, 0.012 * hk);
+        ss2.forEach((s, i) => rows[i].push(b.v(p, 2, 0, s, phi)));
+      }
+      const up: P3 = fi === 0 ? [0, 1, 0] : [0, -1, 0];
+      // (the outer rings sit on the inner one at rest, so the winding test uses stand-ins further out, restored afterwards)
+      const saved = rows.map((r) => r.map((i) => [P[i * 3], P[i * 3 + 2]]));
+      rows.forEach((r, ri) =>
+        r.forEach((i) => {
+          const l = Math.hypot(P[i * 3], P[i * 3 + 2] - cz) || 1;
+          const o = 0.05 * ss2[ri];
+          P[i * 3] += (P[i * 3] / l) * o;
+          P[i * 3 + 2] += ((P[i * 3 + 2] - cz) / l) * o;
+        }),
+      );
+      for (let ri = 0; ri < rows.length - 1; ri++)
+        for (let k = 0; k < nb; k++) {
+          const k1 = (k + 1) % nb;
+          b.quadDir(rows[ri][k], rows[ri][k1], rows[ri + 1][k1], rows[ri + 1][k], up);
+        }
+      rows.forEach((r, ri) =>
+        r.forEach((i, j) => {
+          if (ri > 0) b.standIn.set(i, [P[i * 3], P[i * 3 + 1] - 0.01 * ss2[ri], P[i * 3 + 2]]);
+          P[i * 3] = saved[ri][j][0];
+          P[i * 3 + 2] = saved[ri][j][1];
+        }),
+      );
+    });
+  }
   const bi: number[] = [],
     bo: number[] = [],
     bi2: number[] = [],
     bo2: number[] = [];
+  if (!cfg.close)
   for (let k = 0; k < n; k++) {
     const phi = (k / n) * Math.PI * 2;
     const p = headSurface(d, phi, rimAt(phi), 0.012 * hk);
     bi.push(b.v(p, 2, 0, 0, phi));
     bo.push(b.v(p, 2, 0, 1, phi));
   }
-  const under = cfg === LODS[0] || !!cfg.close; // brim underside only at LOD0 (lo and below are seen from above)
+  const under = cfg === LODS[0]; // brim underside only at LOD0 (lo and below are seen from above)
   b.setTint(0.7);
   if (under)
     for (let k = 0; k < n; k++) {
@@ -1679,6 +1741,7 @@ function buildHat(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
     P[i * 3] += (P[i * 3] / l) * 0.05;
     P[i * 3 + 2] += ((P[i * 3 + 2] - d.headRings[4].cz) / l) * 0.05;
   }
+  if (!cfg.close)
   for (let k = 0; k < n; k++) {
     const k1 = (k + 1) % n;
     b.quadDir(bi[k], bi[k1], bo[k1], bo[k], [0, 1, 0]);
@@ -1693,7 +1756,34 @@ function buildHat(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
   // visor (front half-disc, both faces)
   b.use(BONE.HEAD, REG.HAT, FB.VISOR, 0.9);
   {
-    const phis = [-1.05, -0.36, 0.36, 1.05];
+    const phis = cfg.close ? [-1.15, -0.92, -0.69, -0.46, -0.23, 0, 0.23, 0.46, 0.69, 0.92, 1.15] : [-1.05, -0.36, 0.36, 1.05];
+    if (cfg.close) {
+      const rows: number[][] = [],
+        rows2: number[][] = [];
+      for (const s of [0, 0.35, 0.7, 1]) {
+        const r: number[] = [],
+          r2: number[] = [];
+        for (const phi of phis) {
+          const p = headSurface(d, phi, rimAt(phi) + 0.002 * hk, 0.0115 * hk);
+          const fo = Math.cos(phi * 1.3);
+          const L = 0.078 * hk * Math.max(0, fo) ** 0.6;
+          // (arched across, dropping towards the front edge)
+          const q: P3 = [p[0] * (1 + 0.03 * s) + Math.sin(phi) * 0.012 * hk * s, p[1] - 0.016 * hk * s * s - 0.007 * hk * (1 - fo * fo) * s, p[2] + L * s];
+          b.setTint(1);
+          r.push(b.v(q, 2, 0, s, phi));
+          b.setTint(0.6);
+          r2.push(b.v([q[0], q[1] - 0.003, q[2]], 2, 0, s, phi));
+        }
+        rows.push(r);
+        rows2.push(r2);
+      }
+      for (let i = 0; i < rows.length - 1; i++)
+        for (let k = 0; k < phis.length - 1; k++) {
+          b.quadDir(rows[i][k], rows[i][k + 1], rows[i + 1][k + 1], rows[i + 1][k], [0, 1, 0.2]);
+          b.quadDir(rows2[i][k], rows2[i][k + 1], rows2[i + 1][k + 1], rows2[i + 1][k], [0, -1, 0]);
+        }
+      return;
+    }
     const inner: number[] = [],
       outer: number[] = [],
       inner2: number[] = [],
