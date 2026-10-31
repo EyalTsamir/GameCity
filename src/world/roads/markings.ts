@@ -441,6 +441,25 @@ export function buildMarkings(ctx: CityContext, atlasGlyphs: Record<string, Glyp
     }
   };
 
+  /** one strip with shared joints (separate quads overlap at every bend, and the overlaps read as dots from afar) */
+  const strip = (pts: P2[], w: number, y: number) => {
+    if (pts.length < 2) return;
+    M.set('uv', (solid.u0 + solid.u1) / 2, (solid.v0 + solid.v1) / 2);
+    let oldL = -1,
+      oldR = -1;
+    for (let i = 0; i < pts.length; i++) {
+      const p0 = pts[Math.max(0, i - 1)],
+        p1 = pts[Math.min(pts.length - 1, i + 1)];
+      const L = Math.hypot(p1.x - p0.x, p1.z - p0.z) || 1;
+      const r = RIGHT({ x: (p1.x - p0.x) / L, z: (p1.z - p0.z) / L });
+      const hw = (w / 2) * rng.range(0.8, 1.2);
+      const nl = M.v(pts[i].x - r.x * hw, y, pts[i].z - r.z * hw),
+        nr = M.v(pts[i].x + r.x * hw, y, pts[i].z + r.z * hw);
+      if (i > 0) M.quadUp(nl, nr, oldR, oldL);
+      oldL = nl;
+      oldR = nr;
+    }
+  };
   /** tar snake: crack sealant poured by hand along a wandering crack, with the odd side branch */
   const snake = (x0: number, z0: number, a0: number, len: number, inside: (x: number, z: number) => boolean, branch = true) => {
     let x = x0,
@@ -449,20 +468,21 @@ export function buildMarkings(ctx: CityContext, atlasGlyphs: Record<string, Glyp
       left = len;
     const w = rng.range(0.022, 0.04);
     const curl = rng.range(0.25, 0.7);
-    setPaint(TAR, w, -1);
+    const pts: P2[] = [{ x, z }];
     while (left > 0) {
       const st = rng.range(0.25, 0.55);
       a += rng.range(-curl, curl);
       const nx = x + Math.cos(a) * st,
         nz = z + Math.sin(a) * st;
-      if (!inside(nx, nz)) return;
-      // (the piece runs a little past its end so that the bends close)
-      line({ x, z }, { x: nx + Math.cos(a) * w * 0.4, z: nz + Math.sin(a) * w * 0.4 }, w * rng.range(0.85, 1.15), yRoad - 0.001);
+      if (!inside(nx, nz)) break;
+      pts.push({ x: nx, z: nz });
       x = nx;
       z = nz;
       left -= st;
       if (branch && left > 0.8 && rng.chance(0.09)) snake(x, z, a + rng.pick([-1, 1]) * rng.range(0.7, 1.4), left * rng.range(0.3, 0.6), inside, false);
     }
+    setPaint(TAR, w, -1);
+    strip(pts, w, yRoad - 0.001);
   };
 
   // ── junctions: zebras, stop lines, STOP text, lane arrows, centre manhole

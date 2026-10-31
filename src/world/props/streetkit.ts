@@ -843,9 +843,9 @@ export function worksSign(k: Kit, kd: Kit, printer: Printer | null): void {
 export function worksSite(k: Kit, kd: Kit, L: number, rng: Rng): void {
   const sh = k.sh;
   // the opened bed: damp yellow sand where the paving is up
-  k.m('#b89a62', 'stone');
+  k.m('#8f7c58', 'stone');
   sh.box(0, 0.008, 0, L - 0.5, 0.012, 0.56, 1);
-  k.m('#c8ab72', 'stone');
+  k.m('#a08c64', 'stone');
   sh.ellipsoid(-L * 0.18, 0.02, 0.02, 0.5, 0.2, 0.26, 1);
   // stacked slabs on a pallet
   k.m('#8a6f4a', 'wood');

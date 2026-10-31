@@ -218,11 +218,11 @@ vec3 rdAsphalt(inout float rough) {
         if (hk < 0.55) {
           float tp = 6.0 + 40.0 * fract(hk * 13.3 + float(k) * 0.37);
           float wv = (t - tp) + 0.35 * sin(lat * 0.9 + hk * 7.0) + 0.6 * (lat / 3.5) * (fract(hk * 5.1) - 0.5);
-          ob = max(ob, rdLine(abs(wv), 0.09 + 0.05 * fract(hk * 9.7), fw) * onRoad * step(${JBOX}, dj));
+          ob = max(ob, rdLine(abs(wv), 0.05 + 0.03 * fract(hk * 9.7), fw) * onRoad * step(${JBOX}, dj));
         }
       }
-      c = mix(c, vec3(0.03, 0.03, 0.032), ob * 0.85);
-      rough -= 0.45 * ob;
+      c = mix(c, vec3(0.045, 0.045, 0.048), ob * 0.72);
+      rough -= 0.3 * ob;
     }
     // utility trench cut across one lane
     float tc = rdHash(sg + 8.8);
