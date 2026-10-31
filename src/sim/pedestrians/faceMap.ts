@@ -98,7 +98,7 @@ function fine(ax: number, Y: number): number {
   r -= 0.0003 * gs(ax, Y + 0.071, 0.0026, 0.0035);
   r += 0.0004 * gs(ax - 0.006, Y + 0.0602, 0.006, 0.0026);
   // chin: a soft pad
-  r += 0.0006 * gs(ax - 0.006, Y + 0.098, 0.01, 0.009);
+  r += 0.0006 * gs(ax - 0.006, Y + 0.103, 0.01, 0.009);
   // pores: fine, on the nose and cheeks; the forehead and the lids are smoother
   const pk = 0.45 + 0.55 * gs(ax - 0.03, Y + 0.035, 0.045, 0.035);
   r += 0.000045 * pk * (noise(ax * 1400, Y * 1400) - 0.5) + 0.00004 * (noise(ax * 500 + 9, Y * 500) - 0.5);

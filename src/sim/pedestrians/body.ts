@@ -570,7 +570,8 @@ function closeNeck(d: Dims, i: number): BodyRing {
   const kw = [1.03, 0.95, 0.9][i],
     kf = [1, 0.9, 0.84][i],
     kb = [1.03, 0.98, 0.94][i];
-  return { y: r.y, hw: r.hw * kw, f: r.f * kf, b: r.b * kb, cz: r.cz };
+  // (its top goes on up inside the skull: the nape meets the head well above the jaw)
+  return { y: r.y + (i === 2 ? 0.028 : 0), hw: r.hw * kw, f: r.f * kf, b: r.b * kb, cz: r.cz };
 }
 
 function buildNeckHead(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
@@ -585,7 +586,12 @@ function buildNeckHead(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
       // (the jaw's shade on the throat: the head is otherwise cut out against a neck of the same brightness)
       b.use(BONE.HEAD, REG.NECK, -1, ri === 0 ? 0.92 : ri === 1 ? 0.8 : 0.62);
       const ids: number[] = [];
-      for (let k = 0; k < n; k++) ids.push(b.v(torsoPoint(r, 0, (k / n) * Math.PI * 2, 2), H[ri], W[ri]));
+      const nTint = ri === 0 ? 0.92 : ri === 1 ? 0.8 : 0.62;
+      for (let k = 0; k < n; k++) {
+        // (close: the jaw's shade only in front; at the nape it drew a line round the head)
+        if (cfg.close) b.setTint(1 - (1 - nTint) * sstep(-0.3, 0.4, Math.cos((k / n) * Math.PI * 2)));
+        ids.push(b.v(torsoPoint(r, 0, (k / n) * Math.PI * 2, 2), H[ri], W[ri]));
+      }
       rings.push({ ids, c: [0, r.y, r.cz] });
     }
     bridge(b, rings);
@@ -656,13 +662,13 @@ const sstep = (a: number, b: number, x: number) => {
 
 // The head's form on the average man (Y up from the eye line, half width, depth in front of and behind the axis): a skull
 // that closes in a dome, widest above the ears; the back of the head swells over the occiput and runs into the neck instead of
-// meeting it in a shelf; the jaw narrows to the chin. The other targets scale it by their own rings.
+// meeting it in a shelf; the jaw narrows to the chin, its underside rising towards the back (no bag of head behind the throat). The other targets scale it by their own rings.
 const HEAD_FORM: [number, number, number, number][] = [
-  [-0.118, 0.037, 0.054, 0.05],
-  [-0.108, 0.048, 0.066, 0.058],
-  [-0.09, 0.0585, 0.075, 0.066],
-  [-0.06, 0.0685, 0.08, 0.08],
-  [-0.03, 0.0745, 0.084, 0.098],
+  [-0.118, 0.037, 0.054, 0.012],
+  [-0.108, 0.048, 0.066, 0.026],
+  [-0.09, 0.0585, 0.075, 0.046],
+  [-0.06, 0.0685, 0.08, 0.074],
+  [-0.03, 0.0745, 0.084, 0.094],
   [0, 0.0758, 0.0885, 0.109],
   [0.03, 0.0778, 0.0885, 0.113],
 ];
@@ -727,8 +733,8 @@ export function faceRelief(U: number, Y: number, nose: number): number {
   r += 0.0032 * gs(U, Y + 0.0722, 0.0185, 0.0056);
   r -= 0.0016 * gs(U, Y + 0.0666, 0.025, 0.0016);
   r -= 0.0009 * gs(ax - 0.0265, Y + 0.0668, 0.005, 0.006);
-  r -= 0.0016 * gs(U, Y + 0.0825, 0.018, 0.0045);
-  r += 0.0046 * gs(U, Y + 0.098, 0.0185, 0.0115);
+  r -= 0.0016 * gs(U, Y + 0.0855, 0.018, 0.0045);
+  r += 0.0046 * gs(U, Y + 0.103, 0.0185, 0.0115);
   return r;
 }
 

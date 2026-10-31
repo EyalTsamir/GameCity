@@ -1094,7 +1094,11 @@ vec3 pedFabric(vec3 pc, float reg, float h, float sHem) {
     // knee: creases behind it deepen with the bend; the front pulls smooth and a little lighter
     float kz = exp(-pow((h - 0.5) / 0.07, 2.0));
     float bk = clamp(bend / 1.6, 0.0, 1.0);
+#ifdef PED_CLOSE
+    float cre = sin((h - 0.5) * 210.0) * kz * mix(0.45, 1.0, smoothstep(-0.05, -0.35, rn.z));
+#else
     float cre = sin((h - 0.5) * 210.0 + rn.x * side * 4.0) * kz * mix(0.45, 1.0, step(rn.z, -0.2));
+#endif
 #ifdef PED_CLOSE
     sh *= 1.0 - (0.04 + 0.2 * bk) * max(cre, 0.0) + (0.015 + 0.07 * bk) * max(-cre, 0.0);
 #else
@@ -1363,6 +1367,8 @@ vec3 pedGrey(vec3 pc, vec3 r) {
 }
 // The face: the baked maps (fine relief, cavities, where the blood runs, wrinkles), then eyes, brows and lips, each the person's own.
 vec3 pedFaceClose(vec3 skin, vec2 F) {
+  // (behind the ears: plain skin. The column of triangles at the back runs from +X to -X, through the whole map)
+  if (vPedRest.z < -0.05) { pedSkinK = 1.0; pedSpecK = 0.16; pedGloss = 20.0; return skin; }
   float px = max(max(fwidth(F.x), fwidth(F.y)), 1e-5);
   float det = 1.0 - smoothstep(0.006, 0.016, px);
   float w = vPedHairW.w;
@@ -1717,6 +1723,8 @@ const FRAG_COLOR = /* glsl */ `
 #endif
 #ifdef PED_CLOSE
       pc = pedGrey(pc, vPedRest);
+      // (black hair isn't a black hole: strands show their sky)
+      pc += vec3(0.012, 0.012, 0.014) * (1.0 - smoothstep(0.02, 0.12, dot(pc, vec3(0.33))));
       if (vPedFC.x == 2u) {
         vec2 hfc = pedHairFlow(vPedRest);
         pc *= 0.86 + 0.32 * mix(pedN2(vec2(hfc.x * 15.0, hfc.y * 19.0)), 0.5, smoothstep(0.25, 0.6, fwidth(hfc.x * 15.0)));
@@ -1818,7 +1826,7 @@ const HAIR_NORMAL = /* glsl */ `
 #ifdef PED_CLOSE
     if (vPedFC.x == 2u) {
       float cuK = 1.0 - smoothstep(0.25, 0.6, fwidth(ha * 15.0));
-      hH += (pedN2(vec2(ha * 15.0, hf.y * 19.0)) + 0.5 * pedN2(vec2(ha * 31.0, hf.y * 37.0)) - 0.75) * 0.0065 * cuK;
+      hH += (pedN2(vec2(ha * 15.0, hf.y * 19.0)) + 0.5 * pedN2(vec2(ha * 31.0, hf.y * 37.0)) - 0.75) * 0.0028 * cuK;
     }
 #endif
     if (vPedFace.z > 4.5) {
