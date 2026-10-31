@@ -229,6 +229,7 @@ export function placeStreetKit(e: StreetKitEnv): { x: number; z: number }[] & { 
               axZ = -Math.sin(yaw);
             const [k, kd] = at(x, SIDEWALK_Y + 0.002, z, yaw);
             worksSite(k, kd, run, rng);
+            spot(x, SIDEWALK_Y, z, yaw, 0, 0.36, 2.6, 0.12, 0.08, 0.14, 0.45);
             // barriers: the long pavement side, the two ends; cones on the road side of the gutter
             for (const b of [-1.65, 0, 1.65]) {
               k.sh.push().local(b, 0, 0.36);
@@ -253,6 +254,7 @@ export function placeStreetKit(e: StreetKitEnv): { x: number; z: number }[] & { 
               k2.sh.frame(cx, 0.012, cz, c);
               kd2.sh.frame(cx, 0.012, cz, c);
               cone(k2, kd2);
+              spot(cx, 0.012, cz, c, 0, 0, 0.17, 0.17, 0.08, 0.12, 0.5);
             }
             // the sign faces the traffic, on the approach side of the works
             const sx = x - dx * sd * 3.1,

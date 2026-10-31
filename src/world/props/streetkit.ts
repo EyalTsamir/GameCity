@@ -766,7 +766,8 @@ export function barrier(k: Kit, kd: Kit, L: number, lamp: boolean): void {
   const n = Math.round(L / 0.3);
   k.m('#c8262c', 'plastic');
   for (let i = 0; i < n; i += 2) sh.box(-L / 2 + (i + 0.5) * (L / n), 0.92, 0, (L / n) * 0.96, 0.2, 0.022, 1 | 16 | 32);
-  sh.box(0, 0.26, 0, L - 0.05, 0.05, 0.016, 1 | 16 | 32);
+  k.m('#d8d6cf', 'plastic');
+  sh.box(0, 0.3, 0, L - 0.05, 0.09, 0.016, 1 | 16 | 32);
   k.m('#23252a', 'rubber');
   for (const s of [-1, 1]) sh.box((s * (L - 0.1)) / 2, 0.035, 0, 0.14, 0.07, 0.42, 1);
   if (lamp) {
@@ -847,6 +848,13 @@ export function worksSite(k: Kit, kd: Kit, L: number, rng: Rng): void {
   sh.box(0, 0.008, 0, L - 0.5, 0.012, 0.56, 1);
   k.m('#a08c64', 'stone');
   sh.ellipsoid(-L * 0.18, 0.02, 0.02, 0.5, 0.2, 0.26, 1);
+  // the trench itself: dug soil round a dark slot, the spoil thrown up beside it
+  k.m('#3a2f22', 'stone');
+  sh.box(-L * 0.12, 0.015, -0.1, L * 0.52, 0.006, 0.34, 1);
+  k.m('#14110d', 'stone');
+  sh.box(-L * 0.12, 0.0185, -0.1, L * 0.48, 0.002, 0.22, 1);
+  k.m('#4a3c2b', 'stone');
+  sh.ellipsoid(-L * 0.36, 0.02, 0.14, 0.32, 0.13, 0.17, 1);
   // stacked slabs on a pallet
   k.m('#8a6f4a', 'wood');
   sh.box(L * 0.28, 0.06, 0, 0.8, 0.12, 0.5, 1);
@@ -865,7 +873,7 @@ export function worksSite(k: Kit, kd: Kit, L: number, rng: Rng): void {
   sh.cyl(L * 0.02, 0.012, 0.12, 0.11, 0.14, 0.27, 8, 2);
   // the point of it all: the blue water pipe lying in the bed
   k.m('#2a5fa8', 'plastic');
-  sh.beam(-L * 0.42, 0.02, -0.12, L * 0.1, 0.02, -0.12, 0.055, 0.055);
+  sh.beam(-L * 0.36, 0.03, -0.1, L * 0.12, 0.03, -0.1, 0.055, 0.055);
 }
 
 /** Empties out for the brewery: stacked plastic crates with bottle necks showing (the necks near only). */
