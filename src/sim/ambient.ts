@@ -79,7 +79,7 @@ export default function create(ctx: CityContext): CityModule {
     const top = Math.max(0, ctx.plan.heightAt(f.x, f.z)) + h + 0.4;
     const x = f.x,
       z = f.z;
-    smokeService.addEmitter({ getPosition: (o) => void o.set(x, top, z), rate: 9, size: r * 1.15, life: 12, rise: 3.0, color: '#f2efea', glow: 0.8 });
+    smokeService.addEmitter({ getPosition: (o) => void o.set(x, top, z), rate: 6, size: r * 0.8, life: 30, rise: 1.8, color: '#f2efea', glow: 0.8, opacity: 0.32 });
     chimneys++;
   }
 

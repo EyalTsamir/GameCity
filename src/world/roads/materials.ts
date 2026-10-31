@@ -12,6 +12,7 @@ import { XS, ZS } from '../../core/constants';
 import { LAMP_GLSL, lampUniforms } from '../../core/lampLight';
 import { ASPHALT2, COMMON2, HARD2 } from './glsl';
 import { PUDDLE_GLSL } from './puddles';
+import { STREET_MIRROR_GLSL, streetMirror } from '../water/streetMirror';
 
 // ─────────────────────────────────────────────────────────────── noise ──
 
@@ -225,7 +226,7 @@ function inject(mat: THREE.MeshStandardMaterial, opts: { attrs: string; varyings
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', `#include <common>\n${opts.attrs}\n${opts.varyings}\nvarying vec3 vWP;`)
       .replace('#include <begin_vertex>', `#include <begin_vertex>\n${opts.assign}\nvWP = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
-    let fs = shader.fragmentShader.replace('#include <common>', `#include <common>\n${opts.varyings}\n${LAMP_GLSL}\n${COMMON}\n${opts.pars}`);
+    let fs = '#define TH_NO_WET\n' + shader.fragmentShader.replace('#include <common>', `#include <common>\n${opts.varyings}\n${LAMP_GLSL}\n${COMMON}\n${opts.pars}`);
     // night street-light map (black until the lamps module bakes it): light multiplies the albedo.
     // world normal from the view-space shading normal (rotation only: inverse = transpose)
     fs = fs.replace('#include <lights_fragment_end>', '#include <lights_fragment_end>\nreflectedLight.indirectDiffuse += diffuseColor.rgb * thLampLight(vWP, inverseTransformDirection(normal, viewMatrix));');
@@ -237,6 +238,8 @@ function inject(mat: THREE.MeshStandardMaterial, opts: { attrs: string; varyings
     if (opts.nrm) fs = fs.replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>\n${opts.nrm}`);
     if (opts.after) fs = fs.replace('#include <alphatest_fragment>', `#include <alphatest_fragment>\n${opts.after}`);
     if (opts.emit) fs = fs.replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>\ntotalEmissiveRadiance += ${opts.emit};`);
+    // wet streets (water/streetMirror.ts): where the mirror covers the view, the sky sheen does not show
+    if (opts.emit && opts.pars.includes('rdSpecOcc')) fs = fs.replace('#include <lights_fragment_end>', '#include <lights_fragment_end>\nreflectedLight.indirectSpecular *= rdSpecOcc;');
     shader.fragmentShader = fs;
   };
   mat.customProgramCacheKey = () => opts.key;
@@ -448,13 +451,14 @@ export function createMaterials(ctx: CityContext, info: SurfaceInfo, atlas: THRE
     attrs: 'attribute vec2 aA;',
     varyings: 'varying vec2 vA;',
     assign: 'vA = aA;',
-    pars: legacy ? ASPHALT : COMMON2 + PUDDLE_GLSL + ASPHALT2,
+    pars: legacy ? ASPHALT : COMMON2 + PUDDLE_GLSL + STREET_MIRROR_GLSL + ASPHALT2,
     color: flatA ? 'uAsph' : 'rdAsphalt(rdRough)',
     emit: legacy || flatA ? undefined : 'rdEmit',
     key: 'roads-asphalt-v4' + (flatA ? 'f' : '') + (legacy ? 'L' : ''),
     uniforms: {
       ...shared,
       ...puddles,
+      ...streetMirror,
       tRC: { value: cracks },
       uAsph: { value: asphaltColor },
       uJuncWear: { value: streetDetail(ctx, 'junctionwear') ? 1 : 0 },
@@ -474,11 +478,12 @@ export function createMaterials(ctx: CityContext, info: SurfaceInfo, atlas: THRE
     attrs: 'attribute vec4 aS;\nattribute vec4 aP;\nattribute vec4 aV;\nattribute vec3 aC;\nattribute vec4 aX;\nattribute vec4 aR;\nattribute vec4 aB;',
     varyings: 'varying vec4 vS;\nvarying vec4 vP;\nvarying vec4 vV;\nvarying vec3 vC;\nvarying vec4 vX;\nvarying vec4 vR;\nvarying vec4 vB;',
     assign: 'vS = aS; vP = aP; vV = aV; vC = aC; vX = aX; vR = aR; vB = aB;',
-    pars: legacy ? HARD : COMMON2 + HARD2,
+    pars: legacy ? HARD : COMMON2 + 'vec3 rdEmit = vec3(0.0);\n' + STREET_MIRROR_GLSL + HARD2,
+    emit: flat || legacy ? undefined : 'rdEmit',
     color: flat ? 'vec3(0.5)' : 'rdHard(rdRough)',
     nrm: flat || legacy ? undefined : 'normal = normalize(normal + (viewMatrix * vec4(rdN, 0.0)).xyz);',
     key: 'roads-hard-v6' + (flat ? 'f' : '') + (legacy ? 'L' : ''),
-    uniforms: { ...shared, tRC: { value: cracks }, uRad: { value: rad }, uTactile: { value: new THREE.Color('#c09c4e') }, uBandCol: { value: new THREE.Color(0.16, 0.165, 0.175) }, uWetH: puddles.uWet },
+    uniforms: { ...shared, tRC: { value: cracks }, uRad: { value: rad }, uTactile: { value: new THREE.Color('#c09c4e') }, uBandCol: { value: new THREE.Color(0.16, 0.165, 0.175) }, uWetH: puddles.uWet, ...streetMirror },
   });
 
   const paint = Std({

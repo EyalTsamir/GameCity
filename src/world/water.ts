@@ -6,6 +6,7 @@
 // URL switches: ?nowaterrefl (analytic sky only), ?waterrefl=0|1|2 (force a reflection level),
 // ?nohullfoam (no hull contact shadow / foam line).
 
+import { detailOn } from '../core/detaillight';
 import * as THREE from 'three';
 import type { CityContext, CityModule, QualityState } from '../core/context';
 import { getTerrainModel } from './terrain/height';
@@ -51,6 +52,7 @@ interface DomeUniforms {
   uMoonDir?: { value: THREE.Vector3 };
   uMoonVis?: { value: number };
   uOvercast?: { value: number };
+  uRainbow?: { value: THREE.Vector4 };
 }
 
 export default function create(ctx: CityContext): CityModule {
@@ -136,18 +138,49 @@ export default function create(ctx: CityContext): CityModule {
     if (d.uMoonDir) (sky.uSkyMoonDir.value as THREE.Vector3).copy(d.uMoonDir.value);
     if (d.uMoonVis) sky.uSkyMoonVis.value = d.uMoonVis.value;
     if (d.uOvercast) sky.uSkyOvercast.value = d.uOvercast.value;
+    if (d.uRainbow) (sky.uRainbowW.value as THREE.Vector4).copy(d.uRainbow.value);
+    const w = (ctx.services as { weather?: { rain: number; storm: number; flashNow: number; layer: { uStorm: { value: THREE.Vector4 }; uStormK: { value: THREE.Vector4 } } | null } }).weather;
+    if (w) {
+      sky.uRainW.value = w.rain;
+      sky.uStormW.value = w.storm;
+      sky.uSkyFlash.value = w.flashNow;
+      if (w.layer) {
+        (sky.uStorm.value as THREE.Vector4).copy(w.layer.uStorm.value);
+        (sky.uStormK.value as THREE.Vector4).copy(w.layer.uStormK.value);
+      }
+    }
   };
   if (!ctx.services.sky) {
     // no sky module (?only=…): moon from the clock, fixed day colours
     sky.uSkyMoonVis.value = 0;
   }
 
+  // wet streets: the pass moves up to the road while the ground is wet, the camera is down in the town and no water is in
+  // view (water/streetMirror.ts, ?nostreetmirror)
+  const streetOn = detailOn('streetmirror') && WORLD_MODE;
+  const _f = new THREE.Vector3();
+  const waterNear = (p: THREE.Vector3): boolean => {
+    ctx.camera.getWorldDirection(_f);
+    const lx = land && land.active ? land : null;
+    const isW = (x: number, z: number) => (lx ? lx.isWater(x, z) : ctx.plan.isWater(x, z));
+    for (const d of [0, 12, 30, 60, 110, 180]) if (isW(p.x + _f.x * d, p.z + _f.z * d)) return true;
+    return false;
+  };
+  const updateStreetMirror = (realDt: number) => {
+    if (!streetOn) return;
+    const wet = (ctx.services as { weather?: { wet: number } }).weather?.wet ?? 0;
+    const p = ctx.camera.position;
+    const k = wet > 0.08 && p.y < 70 && !waterNear(p) ? Math.min(1, wet * 1.4) * (1 - Math.max(0, (p.y - 35) / 35)) : 0;
+    reflection.setStreet(k, realDt);
+  };
+
   return {
     name: 'water',
-    frame() {
+    frame(realDt) {
       copyDome();
       if (!dome) (sky.uSkyMoonDir.value as THREE.Vector3).copy(ctx.clock.moonDir);
       if (hullsOn) hulls.update();
+      updateStreetMirror(realDt);
       reflection.request();
     },
     stats() {

@@ -568,6 +568,55 @@ export function firework(ac: BaseAudioContext, out: AudioNode, noise: NoiseBank,
   stopAfter([w, src, thump, cr], tb + 2, [w, wg, src, lp, g, thump, tg, cr, hp, cg]);
 }
 
+/** thunder at t (the caller adds the delay for the distance): a crack when close (near 0..1), then a long roll in a few swells */
+export function thunder(ac: BaseAudioContext, out: AudioNode, noise: NoiseBank, t: number, near: number, level = 1): void {
+  const dur = 4.5 + 3.5 * Math.random();
+  const roll = ac.createBufferSource();
+  roll.buffer = noise.brown;
+  roll.loop = true;
+  const lp = biquad(ac, 'lowpass', 260, 0.7);
+  lp.frequency.setValueAtTime(420 + 500 * near, t);
+  lp.frequency.exponentialRampToValueAtTime(110, t + dur);
+  const g = ac.createGain();
+  g.gain.setValueAtTime(0.0001, t);
+  // the swells: echoes off the deck and the hills, each weaker
+  let at = t,
+    peak = (0.55 + 0.45 * near) * level;
+  const swells = 3 + Math.floor(Math.random() * 3);
+  for (let i = 0; i < swells; i++) {
+    g.gain.exponentialRampToValueAtTime(peak, at + (i === 0 ? 0.03 + 0.25 * (1 - near) : 0.12));
+    at += (dur / swells) * (0.6 + 0.8 * Math.random());
+    g.gain.exponentialRampToValueAtTime(peak * 0.28, at);
+    peak *= 0.72;
+  }
+  const end = Math.max(at, t + dur) + 1.5;
+  g.gain.exponentialRampToValueAtTime(0.0001, end);
+  roll.connect(lp);
+  lp.connect(g);
+  g.connect(out);
+  roll.start(t, Math.random() * 3);
+  const sources: AudioScheduledSourceNode[] = [roll];
+  const nodes: AudioNode[] = [roll, lp, g];
+  if (near > 0.25) {
+    const cr = ac.createBufferSource();
+    cr.buffer = noise.pink;
+    const clp = biquad(ac, 'lowpass', 4200, 0.5);
+    clp.frequency.setValueAtTime(4200, t);
+    clp.frequency.exponentialRampToValueAtTime(300, t + 0.35);
+    const cg = ac.createGain();
+    cg.gain.setValueAtTime(0, t);
+    cg.gain.linearRampToValueAtTime(0.7 * near * level, t + 0.006);
+    cg.gain.exponentialRampToValueAtTime(0.0001, t + 0.5);
+    cr.connect(clp);
+    clp.connect(cg);
+    cg.connect(out);
+    cr.start(t, Math.random() * 3);
+    sources.push(cr);
+    nodes.push(cr, clp, cg);
+  }
+  stopAfter(sources, end + 0.1, nodes);
+}
+
 // ───────────────────────────────────────────── construction & misc
 
 export function clank(ac: BaseAudioContext, out: AudioNode, t: number, level = 1): void {

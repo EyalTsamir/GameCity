@@ -633,8 +633,8 @@ const WORLD_OVERRIDES: Record<string, Partial<KeyDef>> = {
 // the blue hour to day level; night has a darker, bluer ambient and a far weaker moon — moonlight is ~1/50 of a
 // lit street, the old moon painted bright hard-edged moonlit patches across the lamp-lit town (lamps own the night).
 const LIGHT_OVERRIDES: Record<string, Partial<KeyDef>> = {
-  '0': { sunI: 0.2, hemiSky: '#34426c', hemiI: 0.42 },
-  '4.6': { sunI: 0.2, hemiSky: '#34426c', hemiI: 0.42 },
+  '0': { sunI: 0.3, hemiSky: '#384a7c', hemiI: 0.52 },
+  '4.6': { sunI: 0.3, hemiSky: '#384a7c', hemiI: 0.52 },
   '5.3': { hemiSky: '#3f5486', hemiI: 0.6 },
   '6.7': { sun: '#ffab78', hemiSky: '#9cb0de', hemiI: 0.72 },
   '7.8': { sun: '#ffd09a', hemiSky: '#a3bde6', hemiGround: '#8c7a62', hemiI: 0.64, haze: 7e-5 },
@@ -646,8 +646,8 @@ const LIGHT_OVERRIDES: Record<string, Partial<KeyDef>> = {
   '19.3': { hemiSky: '#6e7fc0', hemiGround: '#5e4a44' },
   '19.8': { sun: '#8ea2dc', hemiSky: '#4a62aa', hemiGround: '#2f2f3c', hemiI: 0.6, exposure: 1.08 },
   '20.3': { sunI: 0.24, hemiSky: '#38508e', hemiGround: '#25262f', hemiI: 0.48, exposure: 1.06 },
-  '21.3': { sunI: 0.2, hemiSky: '#34426c', hemiI: 0.42 },
-  '24': { sunI: 0.2, hemiSky: '#34426c', hemiI: 0.42 },
+  '21.3': { sunI: 0.3, hemiSky: '#384a7c', hemiI: 0.52 },
+  '24': { sunI: 0.3, hemiSky: '#384a7c', hemiI: 0.52 },
 };
 const lightOld = typeof location !== 'undefined' && new URLSearchParams(location.search).has('lightold');
 const WORLD_KEYS: KeyDef[] = KEYS.map((k) => ({ ...k, ...(WORLD_OVERRIDES[String(k.h)] ?? {}), ...(lightOld ? {} : (LIGHT_OVERRIDES[String(k.h)] ?? {})) }));

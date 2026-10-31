@@ -27,6 +27,7 @@ import type { TerrainModel } from '../terrain/height';
 import type { WaterField } from './field';
 import { ampFrom } from './field';
 import { WAVES_GLSL } from './waves';
+import { RAINBOW_GLSL } from '../../render/sky/weather';
 import { rippleTexture, macroTexture } from './noise';
 import type { ReflectionUniforms } from './reflection';
 import type { HullContacts } from './hulls';
@@ -34,6 +35,7 @@ import { MAX_HULLS } from './hulls';
 import type { WaterExtension } from './extension';
 import { WORLD_MODE } from '../../core/world';
 import { perfOn } from '../../core/perfdeep';
+import { detailLight } from '../../core/detaillight';
 
 // perf-deep (docs/progress/perf-deep.md): early-outs for terms whose weight is exactly 0 (fine ripples and sparkles at coarse
 // footprints, river-only fetches at sea, foam noise in the open sea). FXC flattens an `if` that holds an implicit-gradient
@@ -74,6 +76,15 @@ export function createSkyUniforms(): Record<string, THREE.IUniform> {
     uSkyMoonDir: { value: new THREE.Vector3(0, 1, 0) },
     uSkyMoonVis: { value: 0 },
     uSkyOvercast: { value: 0 },
+    /** lightning brightness in the mirrored sky */
+    uSkyFlash: { value: 0 },
+    uRainbowW: { value: new THREE.Vector4(0, 0, 0, 0) },
+    /** the storm band (shared with the sky's cloud layer, sky/weather.ts) */
+    uStorm: { value: new THREE.Vector4(1, 0, -1e7, -1e7) },
+    uStormK: { value: new THREE.Vector4(0, 3500, 0, 0) },
+    /** rain and storm at the town */
+    uRainW: { value: 0 },
+    uStormW: { value: 0 },
   };
 }
 
@@ -172,6 +183,7 @@ export function createSurface(
     uDusk: ctx.uniforms.uDusk,
     uLights: ctx.uniforms.uLights,
     uSunDir: ctx.uniforms.uSunDir,
+    uGlitter: { value: detailLight(ctx, 'glitter') ? 1.1 : 0 },
     uWind: ctx.uniforms.uWind,
     ...sky,
     ...refl,
@@ -194,6 +206,7 @@ export function createSurface(
 attribute vec2 aWave;
 attribute vec4 aFld;
 uniform float uTime;
+uniform float uStormW;
 varying vec3 vWW;
 varying vec2 vWave;
 varying vec4 vFld;
@@ -216,6 +229,7 @@ uniform float uDaylight;
 uniform float uDusk;
 uniform float uLights;
 uniform vec3 uSunDir;
+uniform float uGlitter;
 uniform vec2 uWind;
 uniform vec3 uSkyZen;
 uniform vec3 uSkyHor;
@@ -226,6 +240,11 @@ uniform float uSkySunVis;
 uniform vec3 uSkyMoonDir;
 uniform float uSkyMoonVis;
 uniform float uSkyOvercast;
+uniform float uSkyFlash;
+uniform vec4 uStorm;
+uniform vec4 uStormK;
+uniform float uRainW;
+uniform float uStormW;
 uniform vec4 uHullA[${MAX_HULLS}];
 uniform vec4 uHullB[${MAX_HULLS}];
 uniform vec4 uHullC[${MAX_HULLS}];
@@ -275,6 +294,8 @@ float wGoldK() { return (1.0 - smoothstep(0.2, 0.45, uSunDir.y)) * (1.0 - uNight
 #define TH_GOLD uDusk
 #endif
 // the sky dome's painted gradient + sun-side glow (render/sky/dome.ts), without disc/stars
+uniform vec4 uRainbowW;
+${RAINBOW_GLSL}
 vec3 wSky(vec3 d) {
   float y = clamp(d.y, 0.0, 1.0);
   vec3 col = mix(uSkyHor, uSkyZen, smoothstep(0.0, 1.0, pow(y, 0.55)));
@@ -292,6 +313,19 @@ vec3 wSky(vec3 d) {
   col = mix(hz, col, smoothstep(0.02, 0.4, y));
 #endif
   float grey = dot(col, vec3(0.3, 0.55, 0.15));
+  if (uStormK.x > 0.0) {
+    // the storm band where this reflected ray meets the deck (as the dome: slate and dark)
+    float s = dot(cameraPosition.xz + d.xz * min(1500.0 / max(d.y, 0.05), 24000.0), uStorm.xy);
+    float oc = uStormK.x * (1.0 - smoothstep(uStorm.z - uStormK.y, uStorm.z + uStormK.y, s)) * smoothstep(uStorm.w - uStormK.y, uStorm.w + uStormK.y, s);
+    col = mix(col, vec3(grey) * vec3(0.8, 0.9, 1.08), oc * 0.95) * (1.0 - uStormK.z * oc) + vec3(0.62, 0.7, 0.92) * uSkyFlash * 0.2;
+    // the rainbow on the water (as the dome: where the band stands at 14 km in this azimuth); low rays only: steep ones are
+    // the near water, where ripples would break the bow into oil-slick colours
+    if (uRainbowW.w > 0.001) {
+      float sb = dot(cameraPosition.xz + normalize(d.xz + vec2(1e-5, 0.0)) * 14000.0, uStorm.xy);
+      col += thRainbow(d, uSunDir) * uRainbowW.rgb * uRainbowW.w * 0.6 * (1.0 - smoothstep(0.1, 0.28, d.y)) * uStormK.x * (1.0 - smoothstep(uStorm.z - uStormK.y, uStorm.z + uStormK.y, sb)) * smoothstep(uStorm.w - uStormK.y, uStorm.w + uStormK.y, sb);
+    }
+    return col;
+  }
   return mix(col, vec3(grey) * vec3(0.92, 0.96, 1.02), uSkyOvercast * 0.75);
 }
 
@@ -320,7 +354,7 @@ ${WG ? `  vec2 pdx = dFdx(p.xz), pdy = dFdy(p.xz);   // hoisted: the gated fetch
   float shore = fld.g;
   float beach = fld.b;
   float region = fld.a;
-  float amp = vWave.x;
+  float amp = vWave.x * (1.0 + 1.5 * uStormW);
   float mSea = 1.0 - smoothstep(0.15, 0.4, region);
   float mPond = smoothstep(0.75, 0.95, region);
   float mRiv = (1.0 - mSea) * (1.0 - mPond);
@@ -342,11 +376,13 @@ ${WG ? `  // (river streaks: its weights mRiv and smoothstep(0.15, 0.45, region)
   vec4 mR = vec4(0.0);
   if (region > 0.15) mR = textureGrad(tWM, pr * vec2(1.0 / 70.0, 1.0 / 16.0), pdx * vec2(1.0 / 70.0, 1.0 / 16.0), pdy * vec2(1.0 / 70.0, 1.0 / 16.0));` : `  vec4 mR = texture2D(tWM, pr * vec2(1.0 / 70.0, 1.0 / 16.0));`}
   // 0 glassy slick .. 1 ruffled: broad patches + long glassy wind slicks (lanes along the wind)
-  float slick = smoothstep(0.6, 0.78, mA.r) * mSea;
+  float slick = smoothstep(0.6, 0.78, mA.r) * mSea * (1.0 - uRainW);
   float ruff = clamp(0.55 + 1.5 * (mB.g - 0.5) + 0.5 * (mA.r - 0.5), 0.0, 1.0);
   ruff *= 1.0 - 0.85 * slick;
   ruff = mix(ruff, clamp(0.38 + 1.2 * (mR.r - 0.5), 0.0, 1.0), mRiv);
   ruff = mix(ruff, 0.12, mPond);
+  // rain roughens every surface, a storm's wind the open water most
+  ruff = mix(ruff, 1.0, max(uRainW * 0.45, uStormW * 0.9) * (1.0 - mPond * 0.5));
   float calm = 0.3 + 0.7 * smoothstep(0.05, 1.4, depth);
 
   // ── normals
@@ -367,7 +403,7 @@ ${WG ? `  // (river streaks: its weights mRiv and smoothstep(0.15, 0.45, region)
   // the finer octave fades with the pixel footprint (no distant 'dash' noise), the coarse one less
   float k1 = mix(0.1, 0.34, ruff) * calm * mix(1.0, 0.55, mRiv) * mix(1.0, 0.25, mPond) * (1.0 - 0.4 * smoothstep(0.15, 0.45, fp));
   float k2 = mix(0.06, 0.25, ruff) * calm * mix(1.0, 0.7, mRiv) * mix(1.0, 0.3, mPond) * (1.0 - 0.75 * smoothstep(0.07, 0.3, fp));
-  vec2 rt = s1 * k1 + s2 * k2;
+  vec2 rt = (s1 * k1 + s2 * k2) * (1.0 + 0.7 * uStormW);
   tilt += wdir * rt.x + wper * rt.y;
   // river: flow ripples drift east
 ${WG ? `  if (mRiv > 0.0) {   // (the term is multiplied by mRiv)
@@ -385,6 +421,16 @@ ${WG ? `  if (mRiv > 0.0) {   // (the term is multiplied by mRiv)
   vec2 gr = vec2(0.0);
   th_ripple(p.xz, t, gr);
   tilt -= gr * calm * (0.6 + 0.4 * amp) * (1.0 - smoothstep(0.12, 0.45, fp));`}
+  // rain rings on the surface, near the eye (one drop per cell, an expanding wave)
+  if (uRainW > 0.02 && fp < 0.25) {
+    vec2 rc0 = floor(p.xz / 0.5);
+    float rh = wHash12(rc0);
+    float rph = fract(t * (0.9 + rh) + rh * 7.0);
+    vec2 rd = (p.xz / 0.5 - rc0 - 0.5 - (vec2(rh, wHash12(rc0 + 3.7)) - 0.5) * 0.5) * 0.5;
+    float rr = length(rd) + 1e-4;
+    float rw = sin((rr - rph * 0.3) * 62.0) * exp(-rr * 9.0) * (1.0 - rph) * (1.0 - smoothstep(0.1, 0.24, rr));
+    tilt += rd / rr * rw * step(rh, 0.2 + 0.7 * uRainW) * 0.3 * (1.0 - smoothstep(0.1, 0.25, fp));
+  }
   wN = normalize(vec3(tilt.x, 1.0, tilt.y));
   // unresolved slope variance (mip + footprint) → roughness
   float wVar = var1 * k1 * k1 * 2.2 + var2 * k2 * k2 * 2.2 + smoothstep(0.1, 0.6, fp) * 0.004;
@@ -530,7 +576,7 @@ ${WG ? `  // open sea (no shore within 15 m, deeper than any edge band, no hull 
   // whatever the lace is (edge's band is <= 0.38 m, line / lap vanish at shore >= 15 / 0.95) and so is mPond * pondBank, so the
   // two lace fetches are skipped (the 0.5 stands in, never used)
   vec4 lc = vec4(0.5), lf = vec4(0.5);
-  if (!(depth >= 0.38 && shore >= 15.0 && hFoam <= 0.0 && mPond <= 0.0)) {
+  if (!(depth >= 0.38 && shore >= 15.0 && hFoam <= 0.0 && mPond <= 0.0 && uStormW <= 0.0)) {
     lc = textureGrad(tWM, p.xz * (1.0 / 9.0) + vec2(t * 0.011, -t * 0.007), pdx * (1.0 / 9.0), pdy * (1.0 / 9.0));
     lf = textureGrad(tWM, p.xz * (1.0 / 3.1) - vec2(t * 0.017, t * 0.023), pdx * (1.0 / 3.1), pdy * (1.0 / 3.1));
   }` : `  vec4 lc = texture2D(tWM, p.xz * (1.0 / 9.0) + vec2(t * 0.011, -t * 0.007));
@@ -548,6 +594,9 @@ ${WG ? `  // open sea (no shore within 15 m, deeper than any edge band, no hull 
   // river banks: no continuous white outline — the wet edge only flecks where ripples reach
   edge *= mix(1.0, 0.55 * smoothstep(0.52, 0.78, lace + 0.22 * sin(t * 1.3 + dot(p.xz, vec2(0.7, 1.1)))), mRiv);
   float foam = clamp(max(max(edge, line * 0.8), max(lap * 0.55, hFoam * 0.95)), 0.0, 1.0);
+  // whitecaps: breaking on the swell's crests where the wind is strongest, torn by the lace
+  float caps = smoothstep(0.54, 0.7, lace) * smoothstep(0.38, 0.62, mB.b) * smoothstep(0.02, 0.2, vDisp) * uStormW * mSea * smoothstep(1.5, 5.0, depth) * smoothstep(8.0, 45.0, shore);
+  foam = max(foam, caps * 0.7);
   foam *= mix(0.55, 1.0, smoothstep(0.25, 0.65, lace));
   foam *= 1.0 - 0.85 * mPond;
   foam *= wDebug.w;
@@ -662,8 +711,8 @@ ${WG ? `  if (fp < 0.2) {   // (weight (1 - smoothstep(0.05, 0.2, fp)) is exactl
         /* glsl */ `
 vec3 th_wp = (modelMatrix * vec4(position, 1.0)).xyz;
 vec2 th_g = vec2(0.0);
-th_disp = th_swellG(th_wp.xz, uTime, th_g) * aWave.x;
-th_g *= aWave.x;
+th_disp = th_swellG(th_wp.xz, uTime, th_g) * aWave.x * (1.0 + 1.5 * uStormW);
+th_g *= aWave.x * (1.0 + 1.5 * uStormW);
 vec3 objectNormal = normalize(vec3(-th_g.x, 1.0, -th_g.y));
 #ifdef USE_TANGENT
 vec3 objectTangent = vec3( tangent.xyz );
@@ -703,7 +752,9 @@ reflectedLight.indirectDiffuse += diffuseColor.rgb * thLampLight(vWW, vec3(0.0, 
   float th_D = th_lobe / (PI * wGlintA2 * th_c2 * th_c2);
   float th_nl = max(dot(wN, wSunL), 0.0);
   float th_wide = exp(-th_t2 / (wGlintA2 * 5.0 + 0.004));
-  float th_sp = th_D * th_nl * 0.05 + wSparkle * 4.0 * th_wide;
+  float th_sp = th_D * mix(th_nl, max(th_nl, 0.5), TH_GOLD) * 0.05 + wSparkle * 4.0 * th_wide;
+  // low sun: the long broken column of light across the swell (the facets of a wider range of slopes, wN breaks it up)
+  th_sp += exp(-th_t2 / (wGlintA2 + 0.011)) * TH_GOLD * uGlitter;
   wGlint = uSkySunCol * th_sp * wGlintK * wShadow * (1.0 - wFoamA) * wDebug.z;
 }`,
       )
@@ -728,6 +779,7 @@ reflectedLight.indirectDiffuse += diffuseColor.rgb * thLampLight(vWW, vec3(0.0, 
   const duskSea = WORLD_MODE && !ctx.debug.params.has('waterold');
   if (duskSea) defs.TH_DUSKSEA = 1;
   defs.TH_NO_LAMP_SPEC = 1; // (its lamp reflections are its own: the planar pass / lampR)
+  defs.TH_NO_WET = 1;
   // the atmosphere's fog chunks (thHazeColor / thAtmo) exist only when air installed them (not ?noatmo)
   const atmoActive = (ctx.services.atmosphere as { active?: boolean } | undefined)?.active === true;
   if (WORLD_MODE && atmoActive) defs.TH_ATMO = 1;

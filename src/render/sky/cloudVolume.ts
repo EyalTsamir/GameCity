@@ -34,6 +34,7 @@ uniform vec3 uCloudAmbTop;
 uniform vec3 uCloudAmbBot;
 uniform vec3 uCloudCity;
 uniform vec3 uCloudL;
+uniform vec4 uCloudFlash;
 uniform mat4 uVProjInv;
 uniform mat4 uVCamWorld;
 uniform vec3 uVCamPos;
@@ -68,6 +69,9 @@ void main() {
   // (gentle mip bias: coarse mips average the cloud cells away — the far deck toward the horizon vanished;
   // the haze and the temporal resolve hide what aliasing remains)
   float lod = clamp(log2(t0 / 7000.0), 0.0, 2.0);
+  // (a storm deck far off is one dark mass: no rows of cells in the slant view)
+  float stFar = uStormK.w * smoothstep(3500.0, 16000.0, t0);
+  lod += 2.5 * stFar;
   float mu = dot(dir, uCloudL);
   float phase = mix(hg(mu, 0.65), hg(mu, -0.2), 0.3) * 4.0 * 3.14159265;
   vec3 lstep = uCloudL / max(uCloudL.y, 0.15);
@@ -97,12 +101,20 @@ void main() {
     float l1 = length(o1), l2 = length(o2);
     float od = cuDens(q1.xz, h1, lod + 0.5, false) * l1 + cuDens(q2.xz, h2, lod + 1.0, false) * (l2 - l1);
     // Beer + a multiple-scattering octave (light diffusing through the cloud keeps bases grey, not black)
-    float Tl = exp(-sigma * od) + 0.32 * exp(-sigma * 0.08 * od);
+    // (inside a storm's deck the light does not get through: slate bases; its lit edges keep the floor)
+    float solid = uStormK.w > 0.0 ? clStorm(p.xz) * uStormK.w : 0.0;
+    float Tl = exp(-sigma * od * (1.0 + 2.0 * solid)) + 0.32 * (1.0 - 0.92 * solid) * exp(-sigma * 0.08 * od);
     float tau = d * sigma * dt;
     float a = 1.0 - exp(-tau);
     vec3 amb = mix(uCloudAmbBot, uCloudAmbTop, smoothstep(0.0, 0.85, h01)) * (0.65 + 0.35 * h01);
     amb += uCloudCity * (1.0 - h01) * smoothstep(9000.0, 1500.0, dxz);
-    vec3 L = uCloudSun * Tl * phase * (0.75 + 0.25 * h01) + amb;
+    // lightning: the deck lit from inside around the stroke, cold white, mostly from below
+    if (uCloudFlash.z > 0.0) {
+      vec2 fd = (p.xz - uCloudFlash.xy) / uCloudFlash.w;
+      amb += vec3(0.72, 0.8, 1.0) * uCloudFlash.z * exp(-dot(fd, fd)) * (1.0 - 0.6 * h01);
+    }
+    // (no low sun reaches in under a storm's deck, whatever the holes in the cells near this point)
+    vec3 L = uCloudSun * Tl * phase * (0.75 + 0.25 * h01) * (1.0 - 0.97 * solid) + amb;
     S += T * L * a;
     tw += t * T * a;
     ww += T * a;
@@ -113,8 +125,13 @@ void main() {
   if (alpha <= 0.001) return;
   // aerial perspective: distant clouds melt into the horizon haze in their direction
   float tm = tw / max(ww, 1e-4);
-  float far = 1.0 - exp(-tm / 38000.0);
-  S = mix(S, thHazeColor(dir) * thAtmo[10].y * alpha, far * 0.85);
+  float far = 1.0 - exp(-tm / mix(38000.0, 11000.0, uStormK.w));
+  S = mix(S, thHazeColor(dir) * thAtmo[10].y * alpha, far * mix(0.85, 1.0, uStormK.w));
+  // (the falling rain under the band's edge is in front of its deck)
+  if (uStormK.x > 0.0) {
+    float rk = clCurtain(cam, dir) * 0.85;
+    S = mix(S, thHazeColor(dir) * thAtmo[10].y * vec3(0.6, 0.67, 0.78) * alpha, rk);
+  }
   alpha *= smoothstep(-0.03, 0.02, dir.y);
   gl_FragColor = vec4(S * smoothstep(-0.03, 0.02, dir.y), alpha);
 }

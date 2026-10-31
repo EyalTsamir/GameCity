@@ -8,6 +8,7 @@ import { perfOn } from '../../core/perfdeep';
 import type { SkyState } from './palette';
 import { ATMO_FUNCS, ATMO_N, atmoData } from '../atmosphere';
 import { SKY_LUT_GLSL } from './physical';
+import { RAINBOW_GLSL } from './weather';
 import { CLOUD_LAYER_GLSL, CLOUD_SHADE_GLSL, type CloudLayerUniforms } from './cloudLayer';
 
 const VERT = /* glsl */ `
@@ -43,6 +44,8 @@ uniform float uStudio;
 uniform float uSunDisc;
 uniform float uMilky;
 uniform vec3 uCityGlow;
+uniform vec4 uRainbow;
+uniform vec4 uFlash;
 varying vec3 vDir;
 #ifdef TH_WORLD
 uniform vec4 thAtmo[${ATMO_N}];
@@ -124,6 +127,10 @@ vec3 starLayer(vec3 d, float scale, float threshold) {
   return tint * s * tw * (0.35 + 2.6 * mag);
 }
 
+// a rainbow around the anti-solar point: primary (red outside, 42 deg), Alexander's dark band, the fainter reversed
+// secondary (51 deg), and the milky light inside the bow
+${RAINBOW_GLSL}
+
 void main() {
   vec3 d = normalize(vDir);
   float y = d.y;
@@ -161,9 +168,18 @@ void main() {
   col += uGlow * uGlowI * glow;
 #endif
 
-  // overcast (rain): flatten toward a soft grey
+  // overcast (rain): flatten toward a soft grey; a storm band only where its deck is along this ray, darker
+#ifdef TH_CLOUDS
+  float thOc = uStormK.x > 0.0 ? clStorm(cameraPosition.xz + d.xz * min(uCu.y / max(y, 0.05), 24000.0)) : uOvercast;
+#else
+  float thOc = uOvercast;
+#endif
   float grey = dot(col, vec3(0.3, 0.55, 0.15));
-  col = mix(col, vec3(grey) * vec3(0.92, 0.96, 1.02), uOvercast * 0.75);
+  col = mix(col, vec3(grey) * vec3(0.92, 0.96, 1.02), thOc * 0.75);
+#ifdef TH_CLOUDS
+  // (slate, not beige)
+  if (uStormK.x > 0.0) col = mix(col, vec3(grey) * vec3(0.8, 0.9, 1.08), thOc * 0.85) * (1.0 - uStormK.z * thOc);
+#endif
 
 #ifdef TH_WORLD
   // world: the horizon band and everything below it is the atmosphere's haze at infinity (the
@@ -182,6 +198,19 @@ void main() {
   col = mix(col, groundCol, below);
 #endif
 
+#ifdef TH_WORLD
+  // sea fog: from inside or behind the bank the low sky goes the way the land does (the sky above the layer stays)
+  if (thAtmo[11].w != 0.0) {
+    vec3 fr = d * (min(40.0, thAtmo[5].w > 0.0 ? 2.5 / thAtmo[5].w : 40.0) / max(y, 0.012));
+    float fk = 1.0 - exp(-thAtmo[8].w * thMistOD(fr, length(fr), 0.5));
+    col = mix(col, thAtmo[8].rgb + thAtmo[1].rgb * thAtmo[1].w * pow(max(dot(d, thAtmo[0].xyz), 0.0), 4.0), fk);
+  }
+#endif
+
+#if defined(TH_WORLD) && defined(TH_CLOUDS)
+  if (uStormK.x > 0.0 && y > -0.01) col = mix(col, hz * vec3(0.6, 0.67, 0.78), clCurtain(cameraPosition, d) * 0.85);
+#endif
+
   float aboveH = smoothstep(-0.02, 0.06, y);
   vec3 skyBase = col;
 
@@ -194,10 +223,10 @@ void main() {
     float mw = milkyWay(d);
     vec3 st = starLayer(d, 240.0, 0.9965 - 0.004 * mw) + starLayer(d.zxy, 130.0, 0.9975) * 1.3 + starLayer(d.yzx, 420.0, 0.9955 - 0.006 * mw) * 0.45;
     float lp = 1.0 - smoothstep(0.0, 0.5, y) * 0.75; // light pollution near the horizon
-    col += (st + vec3(0.78, 0.84, 1.0) * mw * uMilky) * uStars * ext * (1.0 - uOvercast) * mix(1.0, 0.35, clamp(lp * uCityGlow.r * 12.0, 0.0, 1.0));
+    col += (st + vec3(0.78, 0.84, 1.0) * mw * uMilky) * uStars * ext * (1.0 - thOc) * mix(1.0, 0.35, clamp(lp * uCityGlow.r * 12.0, 0.0, 1.0));
 #else
     vec3 st = starLayer(d, 240.0, 0.9965) + starLayer(d.zxy, 130.0, 0.9975) * 1.3;
-    col += st * uStars * ext * (1.0 - uOvercast);
+    col += st * uStars * ext * (1.0 - thOc);
 #endif
   }
 #ifdef TH_WORLD
@@ -212,10 +241,10 @@ void main() {
   float disc = smoothstep(r2 * 1.25, r2 * 0.75, a);
 #ifdef TH_PHYS
   // physical sun: its colour after the atmosphere; the glare around it is the sun lobe (above)
-  col += uDiscCol * (disc * uSunDisc + exp(-a * 2500.0) * 0.6) * uSunVis * aboveH * (1.0 - uOvercast * 0.85);
+  col += uDiscCol * (disc * uSunDisc + exp(-a * 2500.0) * 0.6) * uSunVis * aboveH * (1.0 - thOc * 0.85);
 #else
   float halo = exp(-a * 900.0) * 0.5 + exp(-a * 90.0) * 0.18;
-  col += uSunCol * (disc * uSunDisc + halo) * uSunVis * aboveH * (1.0 - uOvercast * 0.85);
+  col += uSunCol * (disc * uSunDisc + halo) * uSunVis * aboveH * (1.0 - thOc * 0.85);
 #endif
 
   // moon: textured disc + faint halo
@@ -232,7 +261,7 @@ void main() {
     vec3 moonCol = vec3(1.0, 0.97, 0.9) * mix(0.62, 1.0, smoothstep(0.35, 0.65, maria));
     // a gentle terminator for a gibbous look
     float shade = smoothstep(-0.9, 0.2, lp.x + 0.25 * lp.y);
-    col = mix(col, moonCol * (1.6 + 1.2 * shade), mdisc * uMoonVis * aboveH * (1.0 - uOvercast));
+    col = mix(col, moonCol * (1.6 + 1.2 * shade), mdisc * uMoonVis * aboveH * (1.0 - thOc));
     col += vec3(0.55, 0.62, 0.85) * (exp(-am * 2500.0) * 0.25 + exp(-am * 160.0) * 0.06) * uMoonVis * aboveH;
   }
 
@@ -248,6 +277,10 @@ void main() {
     + (texture2D(tCloudVol, cuv + vec2(ct.x, 0.4 * ct.y)) + texture2D(tCloudVol, cuv - vec2(ct.x, 0.4 * ct.y))
      + texture2D(tCloudVol, cuv + vec2(-0.4 * ct.x, ct.y)) + texture2D(tCloudVol, cuv - vec2(-0.4 * ct.x, ct.y))) * 0.16;
   col = col * (1.0 - cv.a) + cv.rgb;
+  // the rainbow hangs in the rain in front of the deck
+  if (uRainbow.w > 0.001) col += thRainbow(d, uSunDir) * uRainbow.rgb * uRainbow.w * 0.6 * clStorm(cameraPosition.xz + normalize(d.xz + vec2(1e-5, 0.0)) * 14000.0) * smoothstep(-0.005, 0.05, y);
+  // a lightning flash: the whole deck flickers, brightest around the stroke's bearing
+  if (uFlash.w > 0.001) col += vec3(0.62, 0.7, 0.92) * uFlash.w * (0.06 + 0.5 * pow(max(dot(d, uFlash.xyz), 0.0), 4.0)) * max(thOc, 0.15) * smoothstep(-0.01, 0.03, y);
 #endif
 ${perfOn('r11') ? `  // the scene target is R11F_G11F_B10F (relative step 1/64–1/32, blue 1/32–1/16): one step of noise keeps the
   // big gradient from contouring
@@ -271,6 +304,10 @@ export interface SkyDome {
   setBelt(c: THREE.Color): void;
   /** world mode: extra saturation of the upper sky (golden hour) */
   setSkySat(k: number): void;
+  /** world mode: rainbow tint x strength (sky/weather.ts) */
+  setRainbow(c: THREE.Color, k: number): void;
+  /** world mode: lightning bearing and intensity */
+  setFlash(dir: THREE.Vector3, k: number): void;
   /** world mode: the raymarched cumulus image and the full-resolution size it maps to */
   setCloudVolume(tex: THREE.Texture, fullRes: THREE.Vector2): void;
   update(state: SkyState, sunDir: THREE.Vector3, moonDir: THREE.Vector3, sunVis: number, moonVis: number, time: number, overcast: number): void;
@@ -304,6 +341,10 @@ export function createSkyDome(world = false, phys = false, clouds: CloudLayerUni
     uSunDisc: { value: world ? 40 : 9 },
     uMilky: { value: 0.05 },
     uCityGlow: { value: new THREE.Color(0, 0, 0) },
+    /** rainbow: rgb tint, w strength */
+    uRainbow: { value: new THREE.Vector4(1, 1, 1, 0) },
+    /** lightning: xyz bearing, w intensity */
+    uFlash: { value: new THREE.Vector4(0, 1, 0, 0) },
     thAtmo: { value: atmoData },
     uSkyLUT: { value: null as THREE.Texture | null },
     uSkyScale: { value: 1 },
@@ -373,6 +414,12 @@ export function createSkyDome(world = false, phys = false, clouds: CloudLayerUni
       // what other modules read from the dome (water reflections): the sky actually shown
       uniforms.uZenith.value.copy(zenith);
       uniforms.uHorizon.value.copy(horizon);
+    },
+    setRainbow(c, k) {
+      uniforms.uRainbow.value.set(c.r, c.g, c.b, k);
+    },
+    setFlash(dir, k) {
+      uniforms.uFlash.value.set(dir.x, dir.y, dir.z, k);
     },
     setCityGlow(c) {
       uniforms.uCityGlow.value.copy(c);

@@ -23,6 +23,7 @@ import type { CityContext } from '../../core/context';
 import { LAYERS } from '../../core/layers';
 import { WATER_LEVEL, SLAB, RIVER } from '../../core/constants';
 import { perfOn } from '../../core/perfdeep';
+import { streetMirror, STREET_MIRROR_BLANK } from './streetMirror';
 
 export type ReflectionLevel = 0 | 1 | 2;
 
@@ -56,6 +57,8 @@ const SMALL = /^boats-small$/;
 /** emitter meshes skipped by day (their modules may keep them visible with zero intensity) */
 const NIGHT_ONLY = /-(glows|lights)$/;
 const TREES_NEAR = /^veg-trees-(w|e)$/;
+/** only in the street mirror (water/streetMirror.ts): what a wet road shows right in front of the eye */
+const STREET_ONLY = /^traffic-(.*-lod\d|flares)$/;
 
 export interface ReflectionUniforms {
   tRefl: { value: THREE.Texture | null };
@@ -76,6 +79,10 @@ export class PlanarReflection {
   private small: THREE.Object3D[] = [];
   private treesFar: THREE.Object3D | null = null;
   private treesNear: THREE.Object3D[] = [];
+  private streetOnly: THREE.Object3D[] = [];
+  /** the pass mirrors the road surface instead of the water (water/streetMirror.ts) */
+  private street = false;
+  private streetK = 0;
   private attached = false;
   private prevBefore: ((...args: unknown[]) => void) | null = null;
   // scratch
@@ -169,6 +176,10 @@ export class PlanarReflection {
         return;
       }
       if (TREES_NEAR.test(o.name)) this.treesNear.push(o);
+      if (STREET_ONLY.test(o.name)) {
+        o.layers.enable(LAYERS.REFLECT);
+        this.streetOnly.push(o);
+      }
     });
     this.meshes = this.base.length + (this.treesFar ? 1 : 0);
     // additive (glow) materials: in the pass they must not write coverage alpha (see render())
@@ -198,13 +209,34 @@ export class PlanarReflection {
       // the target is re-allocated by resize() when a level > 0 comes back
       this.uniforms.uReflInfo.value.x = 0;
       this.uniforms.tRefl.value = this.black;
+      streetMirror.tSRefl.value = STREET_MIRROR_BLANK;
+      streetMirror.uSRefl.value.x = 0;
       this.rt.dispose();
       this.width = this.height = 0;
-    } else this.uniforms.tRefl.value = this.rt.texture;
+    } else {
+      this.uniforms.tRefl.value = this.rt.texture;
+      streetMirror.tSRefl.value = this.rt.texture;
+    }
   }
 
   getLevel(): ReflectionLevel {
     return this.level;
+  }
+
+  /**
+   * the wet-street mode: wanted 0..1 (ground wet, camera in the streets, no water in view). Switches at once (a mirror of
+   * the other plane is useless), the road's strength eases; the water falls back on its analytic sky meanwhile.
+   */
+  setStreet(wanted: number, realDt: number): void {
+    const on = wanted > 0 && this.level > 0;
+    this.streetK += ((on ? wanted : 0) - this.streetK) * Math.min(1, realDt * 1.6);
+    if (on !== this.street && (on || this.streetK < 0.02)) {
+      this.street = on;
+      this.renders = 0; // redraw at once
+      if (!on) streetMirror.uSRefl.value.x = 0;
+    }
+    if (this.street) streetMirror.uSRefl.value.x = this.streetK;
+    streetMirror.uSRefl.value.y = this.ctx.uniforms.uTime.value;
   }
 
   /** arm the pass for this frame (module frame()) */
@@ -228,7 +260,8 @@ export class PlanarReflection {
   private resize(): void {
     const r = this.ctx.renderer;
     r.getDrawingBufferSize(this.sz);
-    const k = (this.level === 2 ? 1 / 3 : 1 / 4.5) * Math.max(0.5, Math.min(1, this.ctx.quality.renderScale || 1));
+    // (the street mirror is only ever read blurred: the lower resolution)
+    const k = (this.level === 2 && !this.street ? 1 / 3 : 1 / 4.5) * Math.max(0.5, Math.min(1, this.ctx.quality.renderScale || 1));
     const w = Math.max(64, Math.round(this.sz.x * k)),
       h = Math.max(36, Math.round(this.sz.y * k));
     if (w !== this.width || h !== this.height) {
@@ -244,7 +277,7 @@ export class PlanarReflection {
 
   private render(camera: THREE.PerspectiveCamera): void {
     const { renderer, scene } = this.ctx;
-    const L = WATER_LEVEL;
+    const L = this.street ? 0.02 : WATER_LEVEL;
     this.camPos.setFromMatrixPosition(camera.matrixWorld);
     if (this.camPos.y < L + 0.3) {
       this.uniforms.uReflInfo.value.x = 0;
@@ -312,7 +345,7 @@ export class PlanarReflection {
     // bank trees only when the view is about the river (not a river mouth glimpsed at the edge)
     if (st) this.target.set(st.target.x, WATER_LEVEL, st.target.z);
     const nearRiver = !st || RIVER_BOX.distanceToPoint(this.target) < 45;
-    const trees = full && !far && nearRiver && this.frustum.intersectsBox(RIVER_BOX);
+    const trees = !this.street && full && !far && nearRiver && this.frustum.intersectsBox(RIVER_BOX);
     if (this.treesFar) {
       vs[n++] = this.treesFar.visible;
       this.treesFar.visible = trees;
@@ -320,6 +353,10 @@ export class PlanarReflection {
     for (const o of this.treesNear) {
       vs[n++] = o.visible;
       o.visible = false;
+    }
+    for (const o of this.streetOnly) {
+      vs[n++] = o.visible;
+      o.visible = this.street && o.visible;
     }
     const day = this.ctx.uniforms.uLights.value < 0.02;
     for (const o of this.night) {
@@ -408,6 +445,7 @@ export class PlanarReflection {
       n = 0;
       if (this.treesFar) this.treesFar.visible = vs[n++];
       for (const o of this.treesNear) o.visible = vs[n++];
+      for (const o of this.streetOnly) o.visible = vs[n++];
       for (const o of this.night) o.visible = vs[n++];
       for (const o of this.small) o.visible = vs[n++];
       if (dbgHidden) for (const o of this.dbgList) o.visible = vs[n++];
@@ -421,7 +459,8 @@ export class PlanarReflection {
     }
     this.renders++;
     this.lastEye.copy(this.camPos);
-    this.uniforms.uReflInfo.value.x = 1;
+    this.uniforms.uReflInfo.value.x = this.street ? 0 : 1;
+    streetMirror.uSReflMat.value.copy(this.uniforms.uReflMat.value);
   }
 
   dispose(): void {

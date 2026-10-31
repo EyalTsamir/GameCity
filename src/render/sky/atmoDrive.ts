@@ -8,6 +8,7 @@
 //     exactly the same lobe above the horizon;
 //   * haze / mist densities from the palette, mist drifting with the wind.
 
+import type { WeatherDirector } from './weather';
 import * as THREE from 'three';
 import type { SkyState } from './palette';
 import { createAtmosphereParams, fitRing, writeAtmosphere, atmoDistanceFor, atmoTransmittance, type AtmosphereParams } from '../atmosphere';
@@ -108,6 +109,8 @@ export class AtmosphereDriver {
   private sd = new THREE.Vector3();
   private state: SkyState | null = null;
   private overcast = 0;
+  /** the storm band (sky/weather.ts), when the director runs the weather */
+  storm: WeatherDirector | null = null;
   private band0 = 1;
   lutUpdates = 0;
   golden = 0;
@@ -185,7 +188,16 @@ export class AtmosphereDriver {
       const az = Math.cos(phi) * 0.5 + 0.5;
       out.copy(s.horizon).add(_g.copy(s.glow).multiplyScalar(s.glowI * az * az * az * 0.85 * this.band0));
     }
-    if (this.overcast > 0) grey(out, this.overcast * 0.75);
+    if (this.storm && this.storm.amount > 0) {
+      // the storm band along this azimuth (the ring is symmetric about the sun: mean of both sides)
+      const w = this.storm;
+      const sa = Math.atan2(this.sd.z, this.sd.x);
+      const dc = Math.cos(sa + phi) * w.dir.x + Math.sin(sa + phi) * w.dir.y;
+      const dd = Math.cos(sa - phi) * w.dir.x + Math.sin(sa - phi) * w.dir.y;
+      const oc = 0.5 * (w.coverAt(dc * 24000) + w.coverAt(dd * 24000));
+      const g = lum(out);
+      out.lerp(_g.setRGB(g * 0.8, g * 0.9, g * 1.08), oc * 0.95).multiplyScalar(1 - w.dark * 0.62 * oc);
+    } else if (this.overcast > 0) grey(out, this.overcast * 0.75);
   };
 
   /**
@@ -199,7 +211,9 @@ export class AtmosphereDriver {
     this.sd.set(sunDir.x, Math.max(sunDir.y, -0.25), sunDir.z).normalize();
     this.band0 = Math.exp(-Math.abs(Math.max(this.sd.y, 0) * 0.35) * 5);
     this.golden = goldenHour(hours) * smooth(-0.06, 0.02, sunDir.y);
-    const haze = state.haze * (1 + overcast * 2.2) * this.hazeK;
+    // (rain thickens the air: a storm takes the far side of the bay away)
+    const w = this.storm;
+    const haze = state.haze * (1 + overcast * 2.2 + (w ? w.rain * 1.6 + w.storm * 4.5 : 0)) * this.hazeK;
 
     // ── physical sky: LUT + CPU twin (only when something moved)
     // night: the authored moonlit gradient takes over once the sun is ~2° below the horizon
@@ -232,7 +246,7 @@ export class AtmosphereDriver {
     // ── sun lobe: the glow of sunlit haze around the sun (authored light colour × intensity)
     p.sunDir.copy(this.sd);
     if (this.lut) {
-      const vis = sunVis * (1 - overcast * 0.7);
+      const vis = sunVis * (1 - (w ? w.sunBlock : overcast) * 0.7);
       p.lobeExp = 11;
       p.lobeColor.copy(state.sun).multiplyScalar(Math.min(4.5, state.sunI) * vis * (0.022 + 0.055 * state.glowI));
       p.lobe2 = 2.4;
@@ -244,9 +258,10 @@ export class AtmosphereDriver {
       p.lobeColor.add(_c.copy(state.sun).multiplyScalar(0.07 * sunVis));
       p.lobe2 = 0;
     }
-    if (overcast > 0) {
-      grey(p.lobeColor, overcast * 0.75);
-      p.lobeColor.multiplyScalar(1 - overcast * 0.6);
+    const lobeOver = w ? w.sunBlock : overcast;
+    if (lobeOver > 0) {
+      grey(p.lobeColor, lobeOver * 0.75);
+      p.lobeColor.multiplyScalar(1 - lobeOver * 0.6);
     }
 
     // the blue air's in-scatter: the zenith's hue at the brightness of the horizon haze, a little greyed
@@ -255,7 +270,8 @@ export class AtmosphereDriver {
     p.airColor.copy(this.zenith).multiplyScalar((lum(p.ring[0]) * 0.92) / zl);
     grey(p.airColor, 0.35 + overcast * 0.5);
 
-    p.haze = haze;
+    // (storm: spray and rain in the air, low down, as haze: the mist branch would be another noise fetch on every fragment, ~1 ms at the market)
+    p.haze = haze + (w ? w.storm * 0.0007 * (1 - smooth(8, 45, camY)) : 0);
     p.hazeScaleHeight = 1000;
     p.rayleigh.set(5.802e-6, 13.558e-6, 33.1e-6).multiplyScalar(BLUE_AIR * (1 + overcast));
     p.rayleighScaleHeight = 8000;
@@ -265,7 +281,8 @@ export class AtmosphereDriver {
     const ws = Math.sqrt(wind.x * wind.x + wind.y * wind.y);
     const calm = 1 / (1 + ws * 1.2);
     p.mist = this.mistOn ? state.mist * calm * (1 + overcast * 0.5) : 0;
-    p.mistScaleHeight = state.mistH;
+    // (storm: a thicker layer, for what mist there is)
+    p.mistScaleHeight = w ? state.mistH + (14 - state.mistH) * w.storm : state.mistH;
     p.mistColor.copy(p.ring[0]).lerp(_c.copy(state.hemiSky).multiplyScalar(state.hemiI * 1.1), 0.35);
     p.mistForward = 0.8;
     this.drift.x = (this.drift.x - wind.x * dt * 1.6) % 40000;
@@ -273,6 +290,18 @@ export class AtmosphereDriver {
     p.mistDrift.copy(this.drift);
     p.mistFreq = 1 / 70;
     p.mistPatchiness = 0.7;
+    p.bankX = 0;
+    if (w && w.fog > 0.001) {
+      // sea fog: a dense layer tens of metres thick, the colour of the lit haze, thinner toward its top
+      const f = w.fog;
+      p.mist += (0.0065 - p.mist) * f;
+      p.mistScaleHeight += (24 - p.mistScaleHeight) * f;
+      p.mistPatchiness = 0.7 - 0.4 * f;
+      p.mistFreq = 1 / (70 + 110 * f);
+      p.mistColor.lerp(_c.copy(p.ring[0]).multiplyScalar(0.8).add(_g.copy(state.hemiSky).multiplyScalar(state.hemiI * 0.2)), f);
+      p.mistForward = 1.1;
+      p.bankX = w.fogX || 0.01;
+    }
     p.startDist = 0;
     p.gain = 1;
     writeAtmosphere(p);

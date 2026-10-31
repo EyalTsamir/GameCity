@@ -554,11 +554,12 @@ export function createSmoke(ctx: CityContext): SmokeSystem {
       if (n > 0) {
         if (n > 40) n = 40;
         // far away: fewer, bigger, a little denser puffs so a plume still reads as a plume
-        emitOpts.size = (e.size * (1 + (1 - Math.min(1, rateScale * dens)) * 0.35)) / Math.pow(e.lod, 0.65);
+        // (far off: fewer puffs must overlap into one thin plume, not stay a string of dark blobs)
+        emitOpts.size = (e.size * (1 + (1 - Math.min(1, rateScale * dens)) * 0.35)) / Math.pow(e.lod, 0.95);
         emitOpts.life = e.life;
         emitOpts.rise = e.rise;
         emitOpts.glow = e.glow;
-        emitOpts.opacity = e.opacity * (1 + 0.6 * (1 - e.lod));
+        emitOpts.opacity = e.opacity * (1 - 0.4 * (1 - e.lod));
         emitOpts.color.copy(e.color);
         for (let k = 0; k < n; k++) {
           const f = (k + rng.next()) / n;
