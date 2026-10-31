@@ -96,7 +96,7 @@ const labels: string[] = [];
 const write = () => renderer.write(crowd as never, camera, T, 0, rig.night, 1025, null, 0);
 const heightOf = (m: Member) => {
   const st = rigOf(m.look).stature;
-  return part === 'hand' ? st * 0.47 : part === 'foot' ? 0.12 : part === 'body' ? st * 0.55 : part === 'neck' ? st * 0.81 : st * 0.925;
+  return part === 'hand' ? st * 0.47 : part === 'foot' ? 0.12 : part === 'body' ? st * 0.55 : part === 'hip' ? st * 0.53 : part === 'shin' ? st * 0.2 : part === 'shoulder' ? st * 0.76 : part === 'neck' ? st * 0.81 : st * 0.925;
 };
 function drawCell(i: number, m: Member, yaw: number, dist: number, h: number): void {
   const a = ((yaw + (m.yaw * 180) / Math.PI) * Math.PI) / 180;

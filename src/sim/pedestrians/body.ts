@@ -426,10 +426,21 @@ function torsoPoint(r: BodyRing, bust: number, phi: number, n = 2.3): P3 {
   return [r.hw * se(s, n), r.y, z];
 }
 
+/** close level: the shoulder's rings stay inside the arm's cap (a corner stood out above the sleeve), the pelvis goes in behind the thighs */
+function closeTorsoRing(d: Dims, i: number): BodyRing {
+  const r = d.torso[i];
+  if (i === 0) return { ...r, hw: r.hw * 0.82, f: r.f * 0.82, b: r.b * 0.82 };
+  if (i === 1) return { ...r, hw: r.hw * 0.8, f: r.f * 0.72, b: r.b * 0.82 };
+  if (i === 2) return { ...r, f: r.f * 0.86, b: r.b * 0.96 };
+  if (i === 9) return { ...r, hw: r.hw * 0.97 };
+  if (i === 10) return { ...r, hw: r.hw * 1.1, y: r.y - 0.006 };
+  return r;
+}
+
 const YOKE_T = [0.14, 0.28, 0.42, 0.56, 0.7, 0.82, 0.92, 1];
 /** close level: a ring of the yoke, t 0 (shoulder ring) … 1 (just inside the neck, about its first third) */
 function yokeRing(d: Dims, t: number): BodyRing {
-  const R = d.torso[10];
+  const R = closeTorsoRing(d, 10);
   const N = closeNeck(d, 0),
     N1 = closeNeck(d, 1);
   const k = 0.72;
@@ -451,7 +462,7 @@ function buildTorso(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
     if (cfg.close && ri >= 8) for (const f of [2 / 3, 1 / 3]) steps.push(ri - f);
     steps.push(ri);
   }
-  const T = d.torso;
+  const T = cfg.close ? d.torso.map((_, i) => closeTorsoRing(d, i)) : d.torso;
   const lerpR = (x: number) => {
     const i = Math.min(T.length - 2, Math.floor(x)),
       t = x - i;
@@ -472,8 +483,6 @@ function buildTorso(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
     const ri = Math.round(x);
     const exact = Math.abs(x - ri) < 1e-6;
     const q = exact ? { r: T[ri], bust: d.bust[ri], h: TORSO_H[ri], w: TORSO_BONE[ri][1], tint: TORSO_TINT[ri], bone: TORSO_BONE[ri][0] } : lerpR(x);
-    // close: the pelvis below the hip ring goes inside the thighs, which meet it under the shirt's hem and not as a pair of briefs below it
-    if (cfg.close && exact && ri < 2) q.r = { ...q.r, hw: q.r.hw * 0.82, f: q.r.f * 0.82, b: q.r.b * 0.82 };
     b.use(q.bone, REG.TORSO, -1, cfg.close && ri < 3 ? 1 : q.tint);
     const ids: number[] = [];
     for (let k = 0; k < n; k++) {
@@ -558,9 +567,9 @@ function headSurface(d: Dims, phi: number, y: number, push = 0): P3 {
 /** close level: the neck tapers to the skull and stays inside it (a tube of one width stood out behind the jaw as a post) */
 function closeNeck(d: Dims, i: number): BodyRing {
   const r = d.neckRings[i];
-  const kw = [0.98, 0.9, 0.86][i],
-    kf = [0.96, 0.86, 0.8][i],
-    kb = [1, 0.95, 0.92][i];
+  const kw = [1.03, 0.95, 0.9][i],
+    kf = [1, 0.9, 0.84][i],
+    kb = [1.03, 0.98, 0.94][i];
   return { y: r.y, hw: r.hw * kw, f: r.f * kf, b: r.b * kb, cz: r.cz };
 }
 
@@ -1039,9 +1048,11 @@ function buildArm(b: MeshBuilder, d: Dims, cfg: LodCfg, side: 1 | -1): void {
     tip = pv(d.tip, side);
   const specs: LimbSpec[] = [];
   for (const i of cfg.upper) {
-    const r = d.upper[i];
+    const r0 = d.upper[i];
+    // (close: a rounder cap, the deltoid goes on from the slope of the shoulder)
+    const r = cfg.close && i < 2 ? { ...r0, t: i === 0 ? -0.095 : r0.t, rx: r0.rx * (i === 0 ? 1.4 : 1.12), rz: r0.rz * (i === 0 ? 1.15 : 1.04), cx: r0.cx * (i === 0 ? 0.8 : 1) } : r0;
     // the 0.88 ring sits just above the elbow and already bends with the forearm (skinning)
-    specs.push({ a: sh, b: el, ring: r, bone: i === 5 ? FO : UP, w: UPPER_W[i], h: 1 - 0.5 * r.t, reg: REG.ARM, tint: i === 0 ? 0.9 : 1 });
+    specs.push({ a: sh, b: el, ring: r, bone: i === 5 ? FO : UP, w: UPPER_W[i], h: 1 - 0.5 * r.t, reg: REG.ARM, tint: i === 0 && !cfg.close ? 0.9 : 1 });
   }
   for (const i of cfg.fore) {
     const r = d.fore[i];
@@ -1235,7 +1246,9 @@ function buildLeg(b: MeshBuilder, d: Dims, cfg: LodCfg, side: 1 | -1): void {
   for (const i of cfg.thigh) {
     const r0 = d.thigh[i];
     const tk = cfg.close ? [0.68, 0.92, 0.98, 1, 1, 1][i] : 1;
-    const r = tk === 1 ? r0 : { ...r0, rx: r0.rx * tk, rz: r0.rz * tk };
+    // (close: the thigh's outer line runs on from the hip's; below it the hip's ring stood out as a corner)
+    const dOut = !cfg.close ? 0 : i === 0 ? Math.max(0, d.torso[3].hw - 0.014 - (Math.abs(hp[0]) + d.thigh[0].cx + d.thigh[0].rx * 0.68)) : Math.max(0, d.torso[2].hw - 0.006 - (Math.abs(hp[0]) + d.thigh[1].cx + d.thigh[1].rx * 0.92)) * [0, 1, 0.5, 0.14, 0, 0][i];
+    const r = tk === 1 && dOut === 0 ? r0 : { ...r0, t: cfg.close && i === 0 ? -0.06 : r0.t, rx: r0.rx * tk + dOut / 2, rz: r0.rz * tk, cx: r0.cx + dOut / 2 };
     specs.push({ a: hp, b: kn, ring: r, bone: i === 5 ? SH : TH, w: THIGH_W[i], h: 1 - 0.5 * r.t, reg: REG.LEG, tint: i === 0 && !cfg.close ? (HIP_BLEND ? 0.93 : 0.86) : 1 });
   }
   for (const i of cfg.shin) {

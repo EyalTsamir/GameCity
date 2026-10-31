@@ -377,11 +377,11 @@ void pedPose(inout vec3 p, inout vec3 n) {
   }
   if (bone == ${B.HEAD}) pedSunLift = 0.34;
   if (region == ${R.TORSO} || region == ${R.LEG}) {
-    float hipK = region == ${R.TORSO} ? 1.0 - smoothstep(0.1, 0.34, h) : smoothstep(0.72, 0.88, h);
+    float hipK = region == ${R.TORSO} ? 1.0 - smoothstep(0.26, 0.42, h) : smoothstep(0.72, 0.88, h);
     if (hipK > 0.0) {
       vec3 hipC = pedPiv(${PIV.HIP});
       vec3 nh = normalize((p - vec3(0.0, hipC.y + 0.05, hipC.z)) * vec3(1.0, 0.12, 1.0));
-      n = normalize(mix(n, nh, hipK * smoothstep(0.015, 0.07, abs(p.x)) * 0.92));
+      n = normalize(mix(n, nh, hipK * 0.96));
     }
   }
   if (region == ${R.FACE}) {
@@ -1043,7 +1043,12 @@ vec3 pedPrint(vec3 pc, float topK) {
 // gets the orange twin stitching and back pockets. Fades out where a pixel covers > ~1 cm.
 // a fold: a narrow crest, broad shallow troughs (−0.25 … 0.75)
 // (zero at the cell ends: each fold is scaled per cell, and a step in the height is a dotted line in the derivative bump)
+#ifdef PED_CLOSE
+// (no corner at the crest or the trough: the derivative bump shows one as a sawtooth up close)
+float pedRidge(float x) { float t = 1.0 - abs(fract(x) - 0.5) * 2.0; float s = sin(1.5708 * t), u = sin(3.1416 * t); s *= s; return s * s - 0.25 * u * u; }
+#else
 float pedRidge(float x) { float t = 1.0 - abs(fract(x) - 0.5) * 2.0; return t * t * t - 0.25 * sin(3.1416 * t); }
+#endif
 #ifdef PED_CLOSE
 // (its own derivative: a thin line whose width was judged by another coordinate came out as dashes)
 float pedBand2(float d, float hw, float px) { float fw = max(px, fwidth(d)); return (1.0 - smoothstep(hw - fw * 0.5, hw + fw * 0.5, abs(d))) * min(1.0, 2.0 * hw / fw); }
@@ -1090,7 +1095,11 @@ vec3 pedFabric(vec3 pc, float reg, float h, float sHem) {
     float kz = exp(-pow((h - 0.5) / 0.07, 2.0));
     float bk = clamp(bend / 1.6, 0.0, 1.0);
     float cre = sin((h - 0.5) * 210.0 + rn.x * side * 4.0) * kz * mix(0.45, 1.0, step(rn.z, -0.2));
+#ifdef PED_CLOSE
+    sh *= 1.0 - (0.04 + 0.2 * bk) * max(cre, 0.0) + (0.015 + 0.07 * bk) * max(-cre, 0.0);
+#else
     sh *= 1.0 - (0.12 + 0.3 * bk) * max(cre, 0.0) + (0.04 + 0.1 * bk) * max(-cre, 0.0);
+#endif
     // the fabric drapes in shallow diagonal folds down the shin / thigh fronts
     float dr = sin(h * 46.0 + ang * 1.3) * (0.5 + 0.5 * sin(h * 13.0 - ang * 2.0));
     sh *= 1.0 + 0.07 * dr;
@@ -1122,11 +1131,19 @@ vec3 pedFabric(vec3 pc, float reg, float h, float sHem) {
       // bagging below the knee: diagonal folds down the shin front
       float bg = exp(-pow((h - 0.37) / 0.1, 2.0)) * smoothstep(1.4, 0.4, aa);
       float bP = (h - 0.37) * L / 0.06 + ang * 1.1 * side;
+#ifdef PED_CLOSE
+      fold += bg * 0.0014 * pedRidge(bP) * (0.4 + pedN1(floor(bP) * 4.3 - side));
+#else
       fold += bg * 0.0025 * pedRidge(bP) * (0.4 + pedN1(floor(bP) * 4.3 - side));
+#endif
       // pressed side seam: the allowance lifts one side (a step), puckers along the stitch line
       float sn = rn.z * 0.07; // ≈ m across the seam line (7 cm leg radius)
       float sk = 1.0 - smoothstep(0.85, 0.89, h);
+#ifdef PED_CLOSE
+      fold += sk * 0.0002 * smoothstep(-0.001, 0.002, sn) * (1.0 - smoothstep(0.005, 0.01, sn));
+#else
       fold += sk * (0.0006 * smoothstep(-0.001, 0.002, sn) * (1.0 - smoothstep(0.005, 0.01, sn)) + 0.00035 * sin(h * L * 420.0) * exp(-pow(sn / 0.005, 2.0)));
+#endif
     }
     // the break: trousers stack in rings over the shoe
     float br = 1.0 - smoothstep(0.1, 0.17, h);
@@ -1244,7 +1261,12 @@ vec3 pedFabric(vec3 pc, float reg, float h, float sHem) {
   // dark cloth in shade: the crests catch the sky (a grey lift), so navy / black / olive trousers show folds too
   float darkC = 1.0 - smoothstep(0.08, 0.3, dot(pc, vec3(0.33)));
   pc += vec3(0.03, 0.032, 0.036) * clamp(fold / 0.0025, 0.0, 1.0) * darkC * det * cloth * uPedFolds;
+#ifdef PED_CLOSE
+  // (seams one or two pixels wide: as a height they came out as a row of dots from the 2×2 derivatives)
+  pedFabH = ((sh - 1.0) * 0.0014 + wv * wvK * (knit ? 0.0001 : 0.00004) + fold * uPedFolds) * pedFabK;
+#else
   pedFabH = ((sh - 1.0) * 0.0065 + wv * wvK * (knit ? 0.0001 : 0.00004) + fold * uPedFolds) * pedFabK;
+#endif
   pc = mix(pc, thread, clamp(stitch, 0.0, 1.0) * det * (denim ? 0.7 : 0.35));
   return pc;
 }
@@ -1301,8 +1323,8 @@ vec3 pedNeckline(vec3 pc) {
   // crew most often; a scoop or a V on women, a V or a loose crew on men
   float tN = 0.8;
   if (vPedFace.y < 0.25) {
-    if (hsh < (w > 0.5 ? 5u : 2u)) tN = mix(0.22, 0.8, smoothstep(0.0, 1.5, ang));
-    else if (hsh < (w > 0.5 ? 9u : 5u)) tN = mix(0.04, 0.8, smoothstep(0.0, 0.85, ang));
+    if (hsh < (w > 0.5 ? 5u : 2u)) tN = 0.8 - 0.58 * cos(min(ang / 1.5, 1.0) * 1.5708);
+    else if (hsh < (w > 0.5 ? 9u : 5u)) { float vT = 1.0 - min(ang / 0.85, 1.0); tN = 0.8 - 0.76 * vT * (1.0 - 0.3 * (1.0 - vT)); }
     else if (hsh < 11u) tN = 0.68 + 0.12 * smoothstep(0.4, 1.4, ang);
   }
   float m = t - tN;
