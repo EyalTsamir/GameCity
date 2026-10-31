@@ -1793,6 +1793,8 @@ const FRAG_COLOR = /* glsl */ `
       pc = pedFabric(pc, vPedReg, vPedH, vPedS);
 #ifdef PED_CLOSE
       if (abs(vPedReg - ${R.TORSO}.0) < 0.5 && vPedH > 0.94) pc = pedNeckline(pc);
+      // bare limbs are lit as the hand they run into is (the region is flat: at the wrist the two lights alternated triangle by triangle, in flames)
+      if (vPedReg > 1.5 && vPedReg < 3.5 && vPedS < 0.0) { pedSkinK = 1.0; pedSpecK = 0.16; pedGloss = 20.0; pedFabK = 0.0; }
       // where pelvis and thighs cut each other they are plain cloth with one normal field: no line shows
       float hipZ = abs(vPedReg - ${R.TORSO}.0) < 0.5 ? (vPedS < 0.0 ? 1.0 - smoothstep(0.14, 0.2, vPedH) : 0.0) : abs(vPedReg - ${R.LEG}.0) < 0.5 ? smoothstep(0.78, 0.85, vPedH) : 0.0;
       if (hipZ > 0.0) {
