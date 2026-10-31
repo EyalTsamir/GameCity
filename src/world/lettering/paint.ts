@@ -624,10 +624,10 @@ export function bluePlaque(s: LetterSink, seed: number, tier: Tier): void {
 }
 
 /** a board on a post, facing both ways. (x, z) is the foot of the post, (nx, nz) one way it faces */
-function standing(s: LetterSink, x: number, y: number, z: number, nx: number, nz: number, W: number, H: number, yb: number, face: (sgn: number) => void): void {
+function standing(s: LetterSink, x: number, y: number, z: number, nx: number, nz: number, W: number, H: number, yb: number, withPost: boolean, face: (sgn: number) => void): void {
   const top = yb + H + 0.04,
     hw = 0.03;
-  for (const [ax, az] of [[nx, nz], [nz, -nx], [-nx, -nz], [-nz, nx]]) s.wall(x + ax * hw, y, z + az * hw, ax, az, 0).solid(-hw, 0, hw, top, 0x5b5146);
+  if (withPost) for (const [ax, az] of [[nx, nz], [nz, -nx], [-nx, -nz], [-nz, nx]]) s.wall(x + ax * hw, y, z + az * hw, ax, az, 0).solid(-hw, 0, hw, top, 0x5b5146);
   for (const sgn of [1, -1]) {
     const ax = sgn * nx,
       az = sgn * nz;
@@ -643,7 +643,7 @@ export function estateBoard(s: LetterSink, x: number, y: number, z: number, nx: 
   const W = 0.72,
     H = 0.56;
   s.fadeAt(34);
-  standing(s, x, y, z, nx, nz, W, H, 1.45, () => {
+  standing(s, x, y, z, nx, nz, W, H, 1.45, true, () => {
     s.solid(0, 0, W, H, 0xf6f3ea);
     s.solid(0, H * 0.62, W, H, b.colour, 0.0004);
     const size = s.fit(b.deal, W - 0.08, 0.13, FACE.SANS_B);
@@ -661,7 +661,7 @@ export function councilBoard(s: LetterSink, x: number, y: number, z: number, nx:
   const col = water ? 0x1e4a78 : 0x2a5d4a;
   if (tier === 1) {
     s.fadeAt(30);
-    standing(s, x, y, z, nx, nz, W, H, 1.1, () => {
+    standing(s, x, y, z, nx, nz, W, H, 1.1, true, () => {
       s.solid(0, 0, W, H, 0xf2efe6);
       s.solid(0, H - 0.11, W, H, col, 0.0004);
       s.text(b.head, W / 2, H - 0.082, s.fit(b.head, W - 0.08, 0.062, FACE.SANS_B), { face: FACE.SANS_B, color: 0xf6f3ea, align: 'center', z: 0.0008 });
@@ -670,7 +670,7 @@ export function councilBoard(s: LetterSink, x: number, y: number, z: number, nx:
   }
   if (tier !== 2) return;
   s.fadeAt(fadeFor(0.012));
-  standing(s, x, y, z, nx, nz, W, H, 1.1, () => {
+  standing(s, x, y, z, nx, nz, W, H, 1.1, false, () => {
     let yy = H - 0.165;
     for (const l of b.lines) {
       s.text(l, W / 2, yy, 0.026, { face: FACE.SANS, color: INK, align: 'center', z: 0.0008, maxW: W - 0.06 });

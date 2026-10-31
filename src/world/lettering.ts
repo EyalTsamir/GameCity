@@ -517,6 +517,16 @@ export default function create(ctx: CityContext): CityModule {
     }
   }
 
+  /** over a door there is a canopy, a lamp or a number */
+  const doorsOfLot = new Map<number, LetterSpot[]>();
+  for (const p of spots) {
+    if (p.kind !== 'door') continue;
+    const list = doorsOfLot.get(p.lot);
+    if (list) list.push(p);
+    else doorsOfLot.set(p.lot, [p]);
+  }
+  const overDoor = (p: LetterSpot): boolean => (doorsOfLot.get(p.lot) ?? []).some((d) => Math.hypot(cx(d) - cx(p), cz(d) - cz(p)) < 1.3 + p.w / 2);
+
   // ── some old houses remember somebody: a round plaque where the wall is plain, between its windows
   if (closeText(ctx, 'streetlabels')) {
     let n = 0;
@@ -524,7 +534,7 @@ export default function create(ctx: CityContext): CityModule {
       if ((p.kind !== 'wall' && p.kind !== 'upper') || p.w < 0.8 || p.y > 2.4 || p.y + p.h < 2.95) continue;
       const lot = lotOf.get(p.lot);
       if (!lot || (lot.kind !== 'townhouse' && lot.kind !== 'apartment')) continue;
-      if (n++ % 2 !== 0 || !open(p, p.w / 2)) continue;
+      if (overDoor(p) || n++ % 2 !== 0 || !open(p, p.w / 2)) continue;
       const seed = p.lot * 37 + n;
       const u = (p.w - 0.44) / 2;
       for (const tier of [1, 2] as Tier[]) {
@@ -571,6 +581,8 @@ export default function create(ctx: CityContext): CityModule {
       if (occ.get(x, z) & (OCC.BUILDING | OCC.WATER | OCC.SOLID | OCC.ROAD | OCC.RAIL)) return;
       let water = false;
       for (const [dx, dz] of [[9, 0], [-9, 0], [0, 9], [0, -9]]) if (ctx.plan.isWater(x + dx, z + dz)) water = true;
+      // (a bench in a paved square or on a street has no rules of a park to tell)
+      if (!water && !(occ.get(b.ax, b.az) & OCC.PATH)) return;
       const y = groundAt(x, z);
       for (const tier of [1, 2] as Tier[]) put(tier, x, z, (s) => paint.councilBoard(s, x, y, z, fx, fz, i, water, tier));
       marks.push(['council', x, y + 1.3, z, fx, fz]);
@@ -582,7 +594,7 @@ export default function create(ctx: CityContext): CityModule {
     const seen = new Set<string>();
     const nodes = ctx.plan.roadNodes.filter((n) => n.kind === 'junction');
     for (const p of spots) {
-      if ((p.kind !== 'wall' && p.kind !== 'upper') || p.y + p.h < 3.05) continue;
+      if ((p.kind !== 'wall' && p.kind !== 'upper') || p.y + p.h < 3.05 || overDoor(p)) continue;
       const mx = cx(p),
         mz = cz(p);
       let bi = -1,
