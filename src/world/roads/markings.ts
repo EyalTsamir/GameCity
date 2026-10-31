@@ -391,6 +391,7 @@ export function buildMarkings(ctx: CityContext, atlasGlyphs: Record<string, Glyp
   // foot, a ragged collar of tar where the reinstatement was sealed, sometimes the square of the old excavation
   const coverKit = streetDetail(ctx, 'coverkit') && !legacy;
   const TAR = C('#28282b'),
+    TAR_OLD = C('#47474a'),
     SEAM = C('#343437'),
     FRAME = C('#6b675f');
   const ring = (c: P2, r0: (a: number) => number, r1: (a: number) => number, y0: number, y1: number, n: number, nup: number) => {
@@ -481,7 +482,8 @@ export function buildMarkings(ctx: CityContext, atlasGlyphs: Record<string, Glyp
       left -= st;
       if (branch && left > 0.8 && rng.chance(0.09)) snake(x, z, a + rng.pick([-1, 1]) * rng.range(0.7, 1.4), left * rng.range(0.3, 0.6), inside, false);
     }
-    setPaint(TAR, w, -1);
+    // (fresh sealant is nearly black, a few summers bleach it towards the road)
+    setPaint(TAR.clone().lerp(TAR_OLD, rng.next()), w, -1);
     strip(pts, w, yRoad - 0.001);
   };
 

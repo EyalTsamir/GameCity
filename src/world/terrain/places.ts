@@ -15,7 +15,8 @@
 import * as THREE from 'three';
 import type { CityContext } from '../../core/context';
 import type { Rect } from '../../core/geom';
-import { QUAY_X } from '../../core/constants';
+import { QUAY_X, WATER_LEVEL } from '../../core/constants';
+import { streetDetail } from '../../core/streetdetail';
 import { geomOn } from '../../core/geomhunt';
 import { stairY, islandBridgeY, type CuttingPlace, type IslandBridgePlace, type LanePlace, type PlaceStair, type QuayPlace, type StationPlace, type WaterStairs, type Slipway, type ClosePlace, type CloseStone, type YardGate, type EdgePlace } from '../../core/places';
 import type { GeoBuilder, V3 } from './builder';
@@ -109,7 +110,7 @@ function lantern(b: GeoBuilder, lights: GlowPoint[], wx: number, y: number, wz: 
 
 // ─────────────────────────────────────────────────────────── lower quay ──
 
-function quayStone(b: GeoBuilder, q: QuayPlace, model: TerrainModel, lights: GlowPoint[]): void {
+function quayStone(b: GeoBuilder, q: QuayPlace, model: TerrainModel, lights: GlowPoint[], wear: boolean): void {
   const bed = (x: number) => model.height(x, q.zEdge + 0.4) - 0.35;
   const cop = 0.45;
   const yC = q.y - 0.16;
@@ -117,8 +118,14 @@ function quayStone(b: GeoBuilder, q: QuayPlace, model: TerrainModel, lights: Glo
   b.color(COL.quayTop).set('aMas', KIND.ashlar, 0.75, 1, 0);
   top(b, { x0: q.x0, x1: q.x1, z0: q.zWall - 0.02, z1: q.zEdge - cop }, q.y);
   // coping along the water edge (light, jointed blocks), slightly proud of the face
-  b.color(COL.coping).set('aMas', KIND.coping, 0, 1, 0);
-  slab(b, { x0: q.x0 - 0.06, x1: q.x1 + 0.06, z0: q.zEdge - cop, z1: q.zEdge + 0.07 }, yC, q.y, 0);
+  if (wear) {
+    b.color(MORTAR).set('aMas', KIND.plain, 0, 1, 0);
+    slab(b, { x0: q.x0 - 0.06, x1: q.x1 + 0.06, z0: q.zEdge - cop, z1: q.zEdge + 0.05 }, yC, q.y - 0.012, 0);
+    copingBlocks(b, q, cop);
+  } else {
+    b.color(COL.coping).set('aMas', KIND.coping, 0, 1, 0);
+    slab(b, { x0: q.x0 - 0.06, x1: q.x1 + 0.06, z0: q.zEdge - cop, z1: q.zEdge + 0.07 }, yC, q.y, 0);
+  }
   // water face + ends (ashlar, the shader adds the wet band and algae at the waterline)
   b.color(COL.quayStone).set('aMas', KIND.ashlar, 0.52, 1, 0);
   const n = Math.ceil((q.x1 - q.x0) / 4);
@@ -183,9 +190,135 @@ function quayStone(b: GeoBuilder, q: QuayPlace, model: TerrainModel, lights: Glo
   b.color(COL.coping).set('aMas', KIND.coping, 0, 1, 0);
   const L = r.rect.x1 - r.rect.x0;
   b.beam(r.rect.x0 + 0.6, r.yBot + 0.05 + ((r.yTop - r.yBot) * 0.6) / L, r.rect.z1 - 0.1, r.rect.x1, r.yTop + 0.05, r.rect.z1 - 0.1, 0.2, 0.1);
+  if (wear) quayWeathering(b, q, yC);
 }
 
-function quayIron(b: GeoBuilder, q: QuayPlace): void {
+const MORTAR = C('#4c4840');
+const WETSTONE = C('#55524a');
+const SLIME = C('#37402a');
+const WEED = C('#55682f');
+const RUST = C('#6a4730');
+const RUSTFACE = C('#7c6a58');
+const TARRED = C('#2f2a25');
+/** a deterministic 0..1 hash (renderer-side weathering; no rng stream is touched) */
+const hh = (a: number): number => {
+  const v = Math.sin(a * 127.1 + 311.7) * 43758.5453;
+  return v - Math.floor(v);
+};
+
+/** the coping as laid: separate blocks with open joints, each its own stone, the odd corner knocked off by a hull */
+function copingBlocks(b: GeoBuilder, q: QuayPlace, cop: number): void {
+  const z0 = q.zEdge - cop,
+    z1 = q.zEdge + 0.07,
+    yb = q.y - 0.21;
+  let k = 0;
+  for (let x = q.x0 - 0.06; x < q.x1 + 0.06; k++) {
+    const L = 0.95 + 0.6 * hh(k * 1.37 + 2);
+    const xb = Math.min(q.x1 + 0.06, x + L);
+    const xe = xb >= q.x1 + 0.05 ? xb : xb - 0.012;
+    b.color(COL.coping.clone().multiplyScalar(0.9 + 0.16 * hh(k * 2.11 + 5))).set('aMas', KIND.coping, 0, 1, 0);
+    if (hh(k * 3.3 + 9) < 0.14 && xe - x > 0.6) {
+      const c = 0.14 + 0.2 * hh(k * 4.7),
+        d = 0.03 + 0.05 * hh(k * 5.9);
+      const left = hh(k * 6.1) < 0.5;
+      const xc = left ? x + c : xe - c;
+      slab(b, left ? { x0: xc, x1: xe, z0, z1 } : { x0: x, x1: xc, z0, z1 }, yb, q.y, 0);
+      slab(b, left ? { x0: x, x1: xc, z0, z1: z1 - d } : { x0: xc, x1: xe, z0, z1: z1 - d }, yb, q.y, 0);
+    } else slab(b, { x0: x, x1: xe, z0, z1 }, yb, q.y, 0);
+    x = xb;
+  }
+  // rust bled from the mooring bollards on to the stone
+  for (const p of q.bollards) {
+    b.color(RUST.clone().multiplyScalar(0.85 + 0.3 * hh(p.x))).set('aMas', KIND.plain, 0, 1, 0);
+    const y = q.y + 0.002,
+      w = 0.26 + 0.1 * hh(p.x * 2.3);
+    const x = p.x + (hh(p.x * 3.1) - 0.5) * 0.06;
+    b.quadFacing([x - w * 0.6, y, p.z + 0.22 + 0.12 * hh(p.x * 7.1)], [x + w * 0.5, y, p.z + 0.2], [x + w, y, p.z - 0.1], [x - w, y, p.z - 0.12], 0, 1, 0);
+  }
+}
+
+/**
+ * The water face, 1.2 cm proud of the masonry: a broken wet band, slime and a weed fringe where the river rises and falls,
+ * drip stains from the coping joints, rust under the bollards. Tarred timber rubbing posts where boats tie up.
+ */
+function quayWeathering(b: GeoBuilder, q: QuayPlace, yC: number): void {
+  const zf = q.zEdge + 0.012;
+  const band = (col: THREE.Color, zz: number, y0: number, top: (x: number) => number, s0: number, s1: number, seed: number) => {
+    let x = q.x0;
+    let k = 0;
+    while (x < q.x1) {
+      const xb = Math.min(q.x1, x + s0 + (s1 - s0) * hh(x * 1.31 + seed));
+      b.color(col.clone().multiplyScalar(0.93 + 0.14 * hh(k * 1.9 + seed))).set('aMas', KIND.plain, 0, 1, 0);
+      b.quadFacing([x, y0, zz], [xb, y0, zz], [xb, top(xb), zz], [x, top(x), zz], 0, 0, 1);
+      x = xb;
+      k++;
+    }
+  };
+  const W = WATER_LEVEL;
+  const slow = (x: number) => Math.sin(x * 0.31) * 0.5 + Math.sin(x * 0.83 + 1.3) * 0.3;
+  // the river rises and falls: tones stacked from damp stone down to slime, each edge torn on its own, so that no one line
+  // reads as a painted band
+  const st = COL.quayStone;
+  const layer = (col: THREE.Color, h: number, torn: number, s0: number, s1: number, seed: number, dz: number) =>
+    band(col, zf + dz, W - 0.3, (x) => W + h + 0.035 * slow(x + seed * 0.3) + torn * (hh(x * 3.7 + seed) - 0.5), s0, s1, seed);
+  layer(st.clone().multiplyScalar(0.8), 0.5, 0.1, 0.3, 0.8, 11, 0);
+  layer(st.clone().multiplyScalar(0.64).lerp(WETSTONE, 0.3), 0.37, 0.09, 0.26, 0.65, 17, 0.001);
+  layer(WETSTONE, 0.25, 0.08, 0.22, 0.55, 23, 0.002);
+  layer(SLIME.clone().lerp(WETSTONE, 0.4), 0.14, 0.07, 0.2, 0.5, 29, 0.003);
+  layer(SLIME, 0.07, 0.06, 0.18, 0.42, 37, 0.004);
+  // green where the wall stays wet: patches on the slime line
+  for (let x = q.x0 + 0.5, k = 0; x < q.x1 - 0.8; x += 0.4 + 3 * hh(x * 0.71 + 4) ** 2, k++) {
+    const w = 0.2 + 0.5 * hh(x * 1.9);
+    b.color(WEED.clone().multiplyScalar(0.65 + 0.4 * hh(k * 1.1))).set('aMas', KIND.plain, 0, 1, 0);
+    b.quadFacing([x, W - 0.1, zf + 0.005], [x + w, W - 0.1, zf + 0.005], [x + w, W + 0.015 + 0.05 * hh(x * 2.7), zf + 0.005], [x, W + 0.02 + 0.06 * hh(x * 3.3), zf + 0.005], 0, 0, 1);
+  }
+  // drip stains from the coping
+  for (let x = q.x0 + 0.4, k = 0; x < q.x1 - 0.4; x += 0.6 + 1.5 * hh(x * 0.43), k++) {
+    const len = 0.1 + 0.3 * hh(x * 1.7) ** 1.5;
+    const w = 0.05 + 0.12 * hh(x * 2.3);
+    b.color(MORTAR.clone().lerp(COL.quayStone, 0.45 + 0.3 * hh(k * 3.1))).set('aMas', KIND.plain, 0, 1, 0);
+    b.quadFacing([x - w * 0.35, yC - len, zf], [x + w * 0.35, yC - len, zf], [x + w / 2, yC, zf], [x - w / 2, yC, zf], 0, 0, 1);
+  }
+  // rust running down the face below some bollards: a broad faint stain, narrowing
+  for (const p of q.bollards) {
+    if (hh(p.x * 1.9) < 0.45) continue;
+    const w = 0.14 + 0.12 * hh(p.x * 1.3);
+    b.color(RUSTFACE).set('aMas', KIND.plain, 0, 1, 0);
+    b.quadFacing([p.x - w * 0.3, yC - 0.2, zf + 0.001], [p.x + w * 0.25, yC - 0.24, zf + 0.001], [p.x + w / 2, yC, zf + 0.001], [p.x - w / 2, yC, zf + 0.001], 0, 0, 1);
+  }
+  // rubbing posts, tarred, at every other bollard
+  q.bollards.forEach((p, i) => {
+    if (i % 2) return;
+    for (const dx of [-1.1, 1.1]) {
+      const x = p.x + dx + (hh(p.x + dx) - 0.5) * 0.1;
+      if (x < q.x0 + 0.3 || x > q.x1 - 0.3) continue;
+      b.color(TARRED).set('aMas', KIND.plain, 0, 0, 1);
+      slab(b, { x0: x - 0.08, x1: x + 0.08, z0: q.zEdge, z1: q.zEdge + 0.13 }, W - 0.4, yC - 0.03 + 0.05 * hh(x), 4 | 16);
+      b.color(SLIME).set('aMas', KIND.plain, 0, 0, 1);
+      slab(b, { x0: x - 0.083, x1: x + 0.083, z0: q.zEdge, z1: q.zEdge + 0.133 }, W - 0.4, W + 0.2 + 0.08 * hh(x * 2), 4 | 8 | 16);
+    }
+  });
+}
+
+/** iron ladder down the water face: stiles curling over the coping, rungs, a stand-off bracket */
+function quayLadder(b: GeoBuilder, q: QuayPlace, x: number): void {
+  const z = q.zEdge + 0.15,
+    zi = q.zEdge - 0.26,
+    top = q.y + 0.42,
+    foot = WATER_LEVEL - 0.45;
+  b.color(IRON);
+  for (const sx of [-0.2, 0.2]) {
+    b.beam(x + sx, foot, z, x + sx, q.y + 0.1, z, 0.03, 0.03);
+    b.beam(x + sx, q.y + 0.1, z, x + sx, top, q.zEdge + 0.05, 0.03, 0.03);
+    b.beam(x + sx, top, q.zEdge + 0.05, x + sx, top, zi + 0.08, 0.03, 0.03);
+    b.beam(x + sx, top, zi + 0.08, x + sx, q.y, zi, 0.03, 0.03);
+    for (const y of [q.y - 0.5, WATER_LEVEL + 0.15]) b.beam(x + sx, y, z, x + sx, y, q.zEdge, 0.03, 0.03);
+  }
+  for (let y = foot + 0.1; y < q.y + 0.05; y += 0.3) b.beam(x - 0.2, y, z, x + 0.2, y, z, 0.022, 0.022);
+}
+
+function quayIron(b: GeoBuilder, q: QuayPlace, wear = false): void {
+  if (wear) for (let i = 1; i + 1 < q.bollards.length; i += 3) quayLadder(b, q, (q.bollards[i].x + q.bollards[i + 1].x) / 2);
   const zr = q.zCheek - 0.06;
   for (let k = 0; k < q.stairs.length; k++) {
     const s = q.stairs[k];
@@ -659,9 +792,9 @@ function cuttingStone(b: GeoBuilder, K: CuttingPlace, hi: boolean): void {
   for (let i = 0; i <= nP; i++) {
     const x = K.x0 + ((K.x1 - K.x0) * i) / nP;
     b.color(CUT_STONE.clone().multiplyScalar(1.06)).set('aMas', KIND.ashlar, 0.4, 1, 0);
-    slab(b, { x0: x - 0.38, x1: x + 0.38, z0: z - 0.05, z1: z + 0.28 }, yb, K.top + 0.05, 4 | 16);
+    slab(b, { x0: x - 0.38, x1: x + 0.38, z0: z - 0.05, z1: z + 0.11 }, yb, K.top + 0.05, 4 | 16);
     b.color(COL.coping).set('aMas', KIND.coping, 0, 1, 0);
-    slab(b, { x0: x - 0.46, x1: x + 0.46, z0: z - 0.05, z1: z + 0.36 }, K.top + 0.05, K.top + 0.3, 4 | 16);
+    slab(b, { x0: x - 0.46, x1: x + 0.46, z0: z - 0.05, z1: z + 0.18 }, K.top + 0.05, K.top + 0.3, 4 | 16);
   }
   if (hi) {
     b.color(COL.window).set('aMas', KIND.dark, 0, 1, 0);
@@ -674,11 +807,6 @@ function cuttingStone(b: GeoBuilder, K: CuttingPlace, hi: boolean): void {
   }
 }
 
-/** a deterministic 0..1 hash (renderer-side weathering; no rng stream is touched) */
-const hh = (a: number): number => {
-  const v = Math.sin(a * 127.1 + 311.7) * 43758.5453;
-  return v - Math.floor(v);
-};
 const DAMP = C('#6d6656');
 const SOIL = C('#4a3a2c');
 const DRIP = C('#a39a87');
@@ -709,14 +837,32 @@ function cuttingWeathering(b: GeoBuilder, K: CuttingPlace, nP: number): void {
     const len = 0.3 + 1.1 * hh(x * 1.7) ** 1.5;
     strip(x, 0.07 + 0.12 * hh(x * 2.3), 0.05 + 0.06 * hh(x * 2.9), K.top - len, K.top, DRIP, k + 50);
   }
-  // damp / moss band at the foot, in pieces of varying height
-  for (let x = K.x0, k = 0; x < K.x1 - 0.3; k++) {
-    const w = 1.2 + 2.4 * hh(x * 0.61 + 7);
-    const xc = Math.min(K.x1, x + w);
-    const h = 0.12 + 0.3 * hh(x * 1.13 + 3);
-    b.color(FOOTMOSS.clone().multiplyScalar(0.85 + 0.3 * hh(k + 9))).set('aMas', KIND.plain, 0, 1, 0);
-    b.quadFacing([x, -0.05, zf], [xc, -0.05, zf], [xc, h * (0.6 + 0.4 * hh(xc)), zf], [x, h, zf], 0, 0, 1);
-    x = xc;
+  // damp at the foot and moss creeping up out of the soil: both edges follow a long swell with a torn fine edge (long
+  // straight-topped pieces read as a painted skirting board)
+  const footBand = (col: THREE.Color, zz: number, top: (x: number) => number, s0: number, s1: number, seed: number) => {
+    for (let x = K.x0, k = 0; x < K.x1 - 0.05; k++) {
+      const xc = Math.min(K.x1, x + s0 + (s1 - s0) * hh(x * 0.61 + seed));
+      const pil = ((x - K.x0) / ((K.x1 - K.x0) / nP)) % 1;
+      if (pil > 0.05 && pil < 0.95) {
+        b.color(col.clone().multiplyScalar(0.82 + 0.36 * hh(k + seed))).set('aMas', KIND.plain, 0, 1, 0);
+        b.quadFacing([x, -0.05, zz], [xc, -0.05, zz], [xc, Math.max(0.01, top(xc)), zz], [x, Math.max(0.01, top(x)), zz], 0, 0, 1);
+      }
+      x = xc;
+    }
+  };
+  const swell = (x: number) => 0.5 + 0.3 * Math.sin(x * 0.53) + 0.2 * Math.sin(x * 1.37 + 2);
+  footBand(CUT_STONE.clone().multiplyScalar(0.88), zf, (x) => 0.3 + 0.2 * swell(x) + 0.09 * (hh(x * 3.1) - 0.5), 0.3, 0.8, 7);
+  footBand(CUT_STONE.clone().multiplyScalar(0.76).lerp(DAMP, 0.4), zf + 0.001, (x) => 0.18 + 0.18 * swell(x + 2) + 0.09 * (hh(x * 3.7 + 3) - 0.5), 0.25, 0.7, 19);
+  footBand(DAMP.clone().lerp(FOOTMOSS, 0.5), zf + 0.002, (x) => 0.08 + 0.15 * swell(x + 5) + 0.09 * (hh(x * 4.3 + 1) - 0.5), 0.22, 0.6, 13);
+  footBand(FOOTMOSS, zf + 0.003, (x) => 0.01 + 0.12 * swell(x + 8) ** 2 + 0.08 * (hh(x * 5.1 + 4) - 0.5), 0.2, 0.5, 29);
+  // (the pilaster sides take the course lines end on, a black stripe from coping to foot: dress them plain)
+  for (let i = 0; i <= nP; i++) {
+    const x = K.x0 + ((K.x1 - K.x0) * i) / nP;
+    b.color(CUT_STONE.clone().multiplyScalar(0.72)).set('aMas', KIND.plain, 0, 1, 0);
+    for (const sx of [-1, 1]) {
+      const xs = x + sx * 0.382;
+      b.quadFacing([xs, -0.05, K.z - 0.03], [xs, -0.05, K.z + 0.11], [xs, K.top + 0.05, K.z + 0.11], [xs, K.top + 0.05, K.z - 0.03], sx, 0, 0);
+    }
   }
 }
 
@@ -1178,7 +1324,8 @@ function closeIron(b: GeoBuilder, P: ClosePlace): void {
 export function buildPlacesStone(b: GeoBuilder, ctx: CityContext, model: TerrainModel, lights: GlowPoint[]): void {
   const pl = ctx.plan.places;
   if (!pl) return;
-  if (pl.quay) quayStone(b, pl.quay, model, lights);
+  const quayWear = streetDetail(ctx, 'quaywear');
+  if (pl.quay) quayStone(b, pl.quay, model, lights, quayWear);
   if (pl.lane) laneStone(b, pl.lane, detail(ctx), lights);
   if (pl.island) islandStone(b, pl.island, detail(ctx));
   if (pl.station) stationStone(b, pl.station, lights);
@@ -1194,7 +1341,7 @@ export function buildPlacesStone(b: GeoBuilder, ctx: CityContext, model: Terrain
 export function buildPlacesIron(b: GeoBuilder, ctx: CityContext): void {
   const pl = ctx.plan.places;
   if (!pl) return;
-  if (pl.quay) quayIron(b, pl.quay);
+  if (pl.quay) quayIron(b, pl.quay, streetDetail(ctx, 'quaywear'));
   if (pl.lane) laneIron(b, pl.lane);
   for (const w of pl.waterStairs) waterStairsIron(b, w);
   if (pl.close) closeIron(b, pl.close);
