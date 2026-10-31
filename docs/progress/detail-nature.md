@@ -4,11 +4,12 @@ Owns `src/world/vegetation*`, `src/world/groundcover*`, `src/world/landscape*`. 
 Switch file: `src/core/nature.ts` (`?nonature`, `?no<feature>`).
 
 ## Resume here
-Three rounds done, final checks run (see the end of the Log). Nothing in progress. Left, in order of worth: clipped garden
-hedge tops are still smooth at under 3 m; beach sand beyond the slab is plain; bare hills at 1–4 km could take more copses
-(each costs impostors); reed plumes a little heavy and pink at eye level. Dev server: `npx vite --port 5204 --strictPort
---host 127.0.0.1` from this worktree. Captures from the main checkout with `--url http://127.0.0.1:5204/`, output into
-`shots/nat/` (ignored).
+Six rounds done, final checks run (end of the Log). Nothing in progress. Left, in order of worth: bare hills at 1–4 km could
+take more copses (each costs impostors); grass blades still a little dark against the ground at 18.2; country limbs are
+angular at under 15 m; a leaf card smears when the free camera sits inside a country crown. None is worth its cost now.
+Dev server: `npx vite --port 5204 --strictPort --host 127.0.0.1` from this worktree. Captures from the main checkout with
+`--url http://127.0.0.1:5204/`, output into `shots/nat/` (ignored). The shared browser lock can hold a capture for minutes: no
+`timeout` round the scripts, it kills the wait silently.
 
 ## Audit, round 0 (shots/nat/a0, a1: 25 views at 11 and 18.2)
 What reads as fake, ranked by how much of the first impression it costs:
@@ -77,6 +78,36 @@ Best views: farmland `farm=-340,4,300,70,30,14` at noon and 18.2; sunflowers and
 at noon; river at eye level `-520,0.5,160,16,250,5`; hill towns from `overview` at noon; farm yard `-382,3,97,34,60,14`; dune pines `330,2,420,60,70,8`.
 Files outside my folders: none. `src/core/nature.ts` is new.
 
+### Rounds 4 to 6
+Round 4 (audit `shots/nat/r4a`): country crowns near black, wires pale at 18.2, flat beach, smooth lanes, bare clipped hedge tops,
+pink reed plumes, crude boats. Added `treefill` (crown lighter, floor on the leaf AO), `hedgetops` (second row of top clusters),
+wires without fog and fading earlier, close sand (grain, scuffs, shell; a dark weed term made a honeycomb and was dropped), rutted
+gravel lanes, `beachwood` (driftwood as kinked boughs with a broken branch, stones on the tide line), boats with chine and thwarts.
+Round 5: `treefill` also lifts bark ×1.5; `RowSink.dome` (one rounded sheet with bowed shoulders) replaces the crossed strips of hazel
+(a vase, 3 sheets) and bracken (mound, 2 sheets).
+Night audit: past the last house the ground was black at 21.5. `moonlit` (`moonLift()` in `core/nature.ts`): land, trees, impostors, rows,
+buildings, roads and herds lit ×3.6 by uNight and shifted toward blue; the land fades it in over 8–80 m from the slab so there is no seam.
+No geometry and no extra texture fetch. `farmwindows`: 60 % of farmhouse windows lit, curtains glowing, a lamp by the door. Near lamp sprites clamped
+to 8 px (they read as a moon on the wall at 70 m).
+Round 6: `soilclods` (ploughed land under 0.25 m per pixel: turned slices as a normal, clods, a few stones; relief down at low sun, or it turns
+to leopard skin), `fieldblades` (blades beyond the slab: root occlusion floor 0.78, colour up: they read as black ticks).
+Bug found by a winding scan (`shots/nat/winding2.js`): the same frame maths in `log()`, `bale()`, the pylon `rod` and the boat hull wound faces inward, and a
+double-sided material then flips the normal, so all of them were lit from the wrong side, hence the black logs and bales. Fixed; 5 faces of 30 k still disagree (a boat's underside, never seen).
+Undergrowth reach 420 → 320 m to stay on the triangle budget.
+
+### Final state of the round
+Triangles swing ±240 k with the shadow cycle, so only compare samples in the same mode. Same-mode against `;nonature`, `perf11` (on AC, 3 repeats, high, 1920×1025), noon / 21.5:
+overview +153 k / +157 k; downtown +215 k / +250 k; street +215 k / +235 k; market +210 k / about +175 k (no same-mode pair at 21.5: read against the high mode of `perf8`).
+Undergrowth reach went from 420 to 320 m and the undergrowth (70 k) hides with the camera above 130 m (no visible pop: the canopy covers it from there).
+Timing is noisy and the means mix shadow modes. `perf11`, frame ms, noon / 21.5: overview +1.58 / +0.63, downtown +0.75 / +0.80, street +0.49 / +0.78, market +0.30 / +0.33. GPU timers: overview +0.07 / +0.81, downtown +0.37 / +1.00, street +0.81 / +0.36, market +0.31 / +0.39.
+The overview noon figure is the one over the line. Its samples are 36.78, 36.13 and 38.23 against 35.46, the GPU timer says +0.07, and the gap is on the CPU side. `hitch.mjs` on overview at noon shows why: steady window 36.71 vs 35.94 ms (+0.77), the window right after the camera cut 38.03 vs 36.18 (+1.85, cpu 13.55 vs 10.1). So the steady cost is under 1 ms and the excess is a transient after arrival, which `perf.mjs` catches in its short window. Not traced further.
+JS allocation is the same with nature on and off (35 vs 37 MB/s steady at overview): not from this work, see Hand-offs. Per-feature run `perf10` at overview: no feature of rounds 4 to 6 stands out above the noise (each within ±0.15 ms).
+Checks: see the last entry below.
+New toggles: `treefill`, `hedgetops`, `beachwood`, `moonlit`, `farmwindows`, `soilclods`, `fieldblades`. Sheet `docs/progress/detail/nature/night_soil_beach.jpg`.
+Best views: moonlit land `-1100,12,300,80,90,6` at 21.5; farmhouse `-382,3,97,70,200,6` at 21.5; wood edge `-420,1.6,-120,14,60,10` at 18.2; ploughed land `-560,1.6,60,10,90,6` at noon; beach `170,1.6,345,8,10,10` at noon.
+Files outside my folders: `src/core/nature.ts` only (already mine).
+
 ## Hand-offs
 - Streets / places: pale green ellipses on the gravel ruts of the west lane (`hedge_lane=-196.4,1.6,20,10,180,4`): read as stains.
 - Streets: weeds in pavement joints stand well proud of the paving at the market planter view; fine at distance.
+- Coordinator / whoever owns the frame loop: `hitch.mjs` reports 35 MB/s of JS allocation at overview and 12–19 MB/s at street, with `?nonature` too (rule: no per-frame allocations). I did not trace it; check it is not the harness.

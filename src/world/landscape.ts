@@ -56,6 +56,9 @@ export interface LandscapeService {
   heights: LandHeights | null;
 }
 
+/** the undergrowth is hidden with the camera above this (m) */
+const UNDER_MAX_Y = 130;
+
 export default function create(ctx: CityContext): CityModule {
   const t0 = performance.now();
   const params = ctx.debug.params;
@@ -353,6 +356,7 @@ export default function create(ctx: CityContext): CityModule {
   let wireNight = -1;
   let kitStats: FarmKitStats | null = null;
   let woodStats: WoodsStats | null = null;
+  let underMesh: THREE.Object3D | null = null;
   let kitTris = 0;
   let kitMs = 0;
   if (kitOn) {
@@ -385,7 +389,10 @@ export default function create(ctx: CityContext): CityModule {
     kitTris = sink.triangles;
     const mat = rowMaterial(atlas, uniforms, fog);
     const depth = rowDepthMaterial(atlas);
-    for (const m of sink.finish(mat, depth, ctx.quality.shadows && ctx.quality.level !== 'low')) root.add(m);
+    for (const m of sink.finish(mat, depth, ctx.quality.shadows && ctx.quality.level !== 'low')) {
+      root.add(m);
+      if (m.name === 'land-rows-under') underMesh = m;
+    }
     kitMs = performance.now() - tk0;
   }
   ctx.scene.add(root);
@@ -408,6 +415,8 @@ export default function create(ctx: CityContext): CityModule {
       }
       trees?.update(ctx.camera);
       farm?.select(ctx.camera);
+      // bracken and hazel say nothing from high up, and the whole undergrowth is in view from there: 70 k triangles for no pixels
+      if (underMesh) underMesh.visible = ctx.camera.position.y < UNDER_MAX_Y;
       if (lamps) lamps.frame(ctx.size.height * ctx.renderer.getPixelRatio() * ctx.quality.renderScale);
     },
     stats() {

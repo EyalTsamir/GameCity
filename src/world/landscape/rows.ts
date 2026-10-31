@@ -645,7 +645,7 @@ export class RowSink {
       g.setIndex(c.pos.length / 3 > 65000 ? new THREE.Uint32BufferAttribute(c.idx, 1) : new THREE.Uint16BufferAttribute(c.idx, 1));
       g.computeBoundingSphere();
       const m = new THREE.Mesh(g, mat);
-      m.name = 'land-rows';
+      m.name = k === 3 ? 'land-rows-under' : 'land-rows';
       m.castShadow = castShadow && k < 2;
       m.receiveShadow = true;
       m.customDepthMaterial = depth as THREE.MeshDepthMaterial;
