@@ -745,14 +745,14 @@ function kindGeometry(kind: number): THREE.BufferGeometry {
       const mx = sx + (b[0] - sx) * 0.52,
         my = h0 + (b[1] - h0) * (0.3 + 0.16 * rk(i, 3)),
         mz = sz + (b[2] - sz) * 0.52;
-      prism(sx, h0, sz, mx, my, mz, r0, r0 * 0.56, 4);
-      prism(mx, my, mz, b[0] * 1.14, b[1] + 0.02, b[2] * 1.14, r0 * 0.56, sh.trunkR * 0.05, 3);
+      prism(sx, h0, sz, mx, my, mz, r0, r0 * 0.56, 6);
+      prism(mx, my, mz, b[0] * 1.14, b[1] + 0.02, b[2] * 1.14, r0 * 0.56, sh.trunkR * 0.05, 4);
       const fa = a + (rk(i, 4) < 0.5 ? -1 : 1) * (0.5 + 0.5 * rk(i, 5));
       const fl = Math.hypot(b[0], b[2]) * 0.62;
       prism(mx, my, mz, mx + Math.cos(fa) * fl, my + (b[1] - my) * 0.9 + 0.03, mz + Math.sin(fa) * fl, r0 * 0.36, sh.trunkR * 0.04, 3);
     });
     // the leader carries on above the last fork, into the crown
-    prism(0, sh.trunkTop - 0.01, 0, 0.01, Math.min(0.9, sh.trunkTop + 0.34), -0.01, sh.trunkR * 0.68, sh.trunkR * 0.06, 4);
+    prism(0, sh.trunkTop - 0.01, 0, 0.01, Math.min(0.9, sh.trunkTop + 0.34), -0.01, sh.trunkR * 0.68, sh.trunkR * 0.06, 5);
   } else for (const b of sh.branches) {
     const len = Math.hypot(b[0], b[1] - sh.trunkTop, b[2]);
     const lk = sh.limb ?? 0.5;
@@ -927,7 +927,7 @@ vec3 treeAlbedo(float kind, float tint, float crown, float ly) {
     kind < 5.5 ? mix(vec3(0.03, 0.098, 0.04), vec3(0.046, 0.125, 0.045), tint) :                  // stone pine
     kind < 6.5 ? mix(vec3(0.115, 0.15, 0.085), vec3(0.15, 0.178, 0.105), tint) :                  // olive: silver-grey green
     mix(vec3(0.018, 0.06, 0.03), vec3(0.028, 0.08, 0.034), tint);                                 // cypress: near-black green
-  vec3 bark = (kind > 4.5 && kind < 5.5 ? vec3(0.17, 0.095, 0.06) : kind > 5.5 && kind < 6.5 ? vec3(0.2, 0.18, 0.15) : vec3(0.15, 0.125, 0.1)) * (crown > 0.5 ? 1.0 : gTreeBark);
+  vec3 bark = (kind > 4.5 && kind < 5.5 ? vec3(0.17, 0.095, 0.06) : kind > 5.5 && kind < 6.5 ? vec3(0.2, 0.18, 0.15) : vec3(0.15, 0.125, 0.1)) * (crown > 0.5 ? 1.0 : gTreeBark${FILL ? ' * 1.5' : ''});
   return mix(bark, c * (0.75 + 0.45 * ly), crown);
 }
 `;
@@ -1027,7 +1027,7 @@ if (vCrown > 0.5) {
 }`,
       );
   };
-  mat.customProgramCacheKey = () => 'th-landtree-v4';
+  mat.customProgramCacheKey = () => 'th-landtree-v6';
   return mat;
 }
 
@@ -1311,7 +1311,7 @@ vec4 diffuseColor = vec4(treeAlbedo(vKind, vTint, tc.g, tc.b) * ${FILL ? '(0.72 
 }`,
       );
   };
-  mat.customProgramCacheKey = () => 'th-landimp-v4';
+  mat.customProgramCacheKey = () => 'th-landimp-v5';
   return mat;
 }
 

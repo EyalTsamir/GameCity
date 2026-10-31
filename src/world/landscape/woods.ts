@@ -299,18 +299,13 @@ export function buildWoods(s: RowSink, model: LandscapeModel): WoodsStats {
         st.rocks++;
         n++;
       } else if (pick < 0.2 + 0.14 * patch) {
-        // hazel / young growth: two crossed strips, the hedge band read as a loose shrub
+        // hazel / young growth: stems that spring from one stool and open into a vase of leaves
         const a = hash2i(i, j, 832) * 3.14;
         const w = 0.8 + 0.8 * hash2i(i, j, 833);
         const hh = 1.5 + 1.6 * hash2i(i, j, 834);
-        const k = 1.15 + 0.55 * tone;
+        const k = 0.95 + 0.42 * tone;
         const s0 = (i * 7 + j * 3) % 24;
-        for (const da of [0, 1.45]) {
-          const cx = Math.cos(a + da) * w,
-            cz = Math.sin(a + da) * w;
-          s.wall(B.hedge, x - cx, H(x - cx, z - cz), z - cz, x, y, z, s0, hh * 0.6, k, k, k * 0.9, 0.6, 0.05, 0.5, hh);
-          s.wall(B.hedge, x, y, z, x + cx, H(x + cx, z + cz), z + cz, s0 + w, hh, k, k, k * 0.9, 0.6, 0.05, 0.5, hh * 0.6);
-        }
+        for (const da of [0, 1.05, 2.1]) s.dome(B.hedge, x, y, z, Math.cos(a + da) * w, Math.sin(a + da) * w, 0.22, hh, 0.62, w * 0.28, s0 + da * 5, k, k, k * 0.9, 0.5, 0.05, 0.5);
         st.shrubs++;
         n++;
       } else if (patch > 0.44 || pick > 0.88) {
@@ -320,13 +315,8 @@ export function buildWoods(s: RowSink, model: LandscapeModel): WoodsStats {
         const hh = 0.5 + 0.4 * patch + 0.2 * tone;
         const k = 0.72 + 0.34 * tone;
         const s0 = (i * 11 + j * 5) % 12;
-        for (const da of [0, 2.05]) {
-          const cx = Math.cos(a + da) * w,
-            cz = Math.sin(a + da) * w;
-          // a mound: nothing at the ends, its full height in the middle
-          s.wall(B.fern, x - cx, H(x - cx, z - cz), z - cz, x, y, z, s0, hh * 0.16, k, k, k, 0.7, 0.03, 0.35, hh);
-          s.wall(B.fern, x, y, z, x + cx, H(x + cx, z + cz), z + cz, s0 + w, hh, k, k, k, 0.7, 0.03, 0.35, hh * 0.16);
-        }
+        // a rounded mound: low at the ends, shoulders out of plane
+        for (const da of [0, 2.05]) s.dome(B.fern, x, y, z, Math.cos(a + da) * w, Math.sin(a + da) * w, 0.8, hh, 0.2, w * 0.35, s0 + da * 3, k, k, k, 0.7, 0.03, 0.35);
         st.ferns++;
         n++;
       }

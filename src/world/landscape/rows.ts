@@ -561,6 +561,41 @@ export class RowSink {
     this.triangles += 2;
   }
 
+  /** a plant as one rounded sheet: `footK` of its width at the ground, (ax, az) its half width at the top, height h in the
+   *  middle and h * e at the ends; `bow` pushes the shoulders out of the plane so that it never reads as a flat card */
+  dome(band: number, x: number, y: number, z: number, ax: number, az: number, footK: number, h: number, e: number, bow: number, s0: number, r: number, g: number, bl: number, foot = 0.62, sink = 0.05, plant = 0.5): void {
+    const c = this.ch(x, z);
+    const w = Math.hypot(ax, az) || 1;
+    const nx = -az / w,
+      nz = ax / w;
+    const tile = 8 * BAND_H[band];
+    const o = c.pos.length / 3;
+    const u = (t: number) => (s0 + (t + 1) * w) / tile;
+    const v0 = vBand(band, 0),
+      v1 = vBand(band, 1);
+    const fx = ax * footK,
+      fz = az * footK;
+    const by = y - sink;
+    c.pos.push(x - fx, by, z - fz, x + fx, by, z + fz);
+    c.uv.push(u(-footK), v0, u(footK), v0);
+    c.col.push(r * foot, g * foot, bl * foot, r * foot, g * foot, bl * foot);
+    c.hgt.push(0, 0);
+    // the top edge, right to left
+    for (let i = 0; i < 5; i++) {
+      const t = 1 - i * 0.5;
+      const shoulder = i === 1 || i === 3;
+      const hh = h * (shoulder ? 0.85 + 0.15 * e : i === 2 ? 1 : e);
+      const b = shoulder ? (t > 0 ? bow : -bow) : 0;
+      c.pos.push(x + ax * t + nx * b, by + hh, z + az * t + nz * b);
+      c.uv.push(u(t), v1);
+      c.col.push(r, g, bl);
+      c.hgt.push(hh * plant);
+    }
+    for (let i = 0; i < 7; i++) c.nrm.push(nx * 0.28, 0.96, nz * 0.28);
+    c.idx.push(o, o + 1, o + 2, o, o + 2, o + 3, o, o + 3, o + 4, o, o + 4, o + 5, o, o + 5, o + 6);
+    this.triangles += 5;
+  }
+
   /** a horizontal ragged strip (canopy from above) along a row, at height h, `wd` wide */
   top(band: number, x0: number, y0: number, z0: number, x1: number, y1: number, z1: number, s0: number, h: number, wd: number, r: number, g: number, bl: number, h1 = h): void {
     const c = this.ch((x0 + x1) / 2, (z0 + z1) / 2);
