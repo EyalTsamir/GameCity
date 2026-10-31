@@ -97,7 +97,7 @@ export function ropeEye(b: HB, x: number, y: number, z: number, tx: number, ty: 
   );
 }
 
-function torusTube(b: HB, cx: number, cy: number, cz: number, R: number, r: number, axis: 'x' | 'y' | 'z', seg = 14): void {
+export function torusTube(b: HB, cx: number, cy: number, cz: number, R: number, r: number, axis: 'x' | 'y' | 'z', seg = 14): void {
   const pts: V3[] = [];
   for (let k = 0; k <= seg; k++) {
     const a = (k / seg) * Math.PI * 2,
@@ -109,7 +109,7 @@ function torusTube(b: HB, cx: number, cy: number, cz: number, R: number, r: numb
 }
 
 /** wooden euro pallet (top boards, blocks, bottom boards) */
-function pallet(b: HB, x: number, y: number, z: number, yaw: number, col = '#b08a5a'): void {
+export function pallet(b: HB, x: number, y: number, z: number, yaw: number, col = '#b08a5a'): void {
   b.color(col).pat(PAT.NONE);
   b.pushT(x, y, z, yaw);
   for (let i = 0; i < 5; i++) b.box(-0.5 + i * 0.25, 0.132, 0, 0.1, 0.022, 0.8, 0, 1);
@@ -540,7 +540,7 @@ function wet(b: HB, x: number, y: number, z: number, w: number, d: number, scale
   b.pat(PAT.NONE);
 }
 
-function stain(b: HB, x: number, y: number, z: number, w: number, d: number, col: string, scale: number, lift = 0.015): void {
+export function stain(b: HB, x: number, y: number, z: number, w: number, d: number, col: string, scale: number, lift = 0.015): void {
   b.color(col).pat(PAT.STAIN, scale);
   b.quad([x - w / 2, y + lift, z - d / 2], [x - w / 2, y + lift, z + d / 2], [x + w / 2, y + lift, z + d / 2], [x + w / 2, y + lift, z - d / 2]);
   b.pat(PAT.NONE);

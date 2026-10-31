@@ -13,6 +13,8 @@ import { C, flagpole } from './parts';
 import type { Env } from './env';
 import { drawText, signQuad } from './signs';
 import { stadiumShell, roofTruss, genFloodlightMast } from './stadiumShell';
+import { lmDetail } from '../../core/lmdetail';
+import type { StadiumWalk } from './stadiumRoom';
 
 /** ?legacystadium / ?legacyterrain: the original plain shell + cylinder masts (A/B) */
 function legacyShell(env: Env): boolean {
@@ -44,6 +46,8 @@ export interface StadiumInfo {
   goals: { x: number; z: number; hw: number; side: number }[];
   name: string;
   lotId: number;
+  /** the way in, when it is on (stadiumRoom.ts) */
+  walk: StadiumWalk | null;
 }
 
 const ADS = [
@@ -86,6 +90,11 @@ export function genStadium(env: Env, lot: Lot): StadiumInfo {
   const navy = '#203a6b';
 
   const legacy = legacyShell(env);
+  // the way in (?nostadiumwalk): a players' tunnel through the east stand on the gate's line, aisles reached from the pitch
+  const WALK = !legacy && lmDetail(env.ctx, 'stadiumwalk');
+  const tun = 1.3,
+    tunH = 2.6,
+    hoodRow = 3;
   const seats: StandSeat[] = [];
   // stands: k = 0 N (outward -z), 1 E (+x), 2 S (+z), 3 W (-x)
   const standYaw = [Math.PI, Math.PI / 2, 0, -Math.PI / 2];
@@ -120,12 +129,19 @@ export function genStadium(env: Env, lot: Lot): StadiumInfo {
         if (sg === 1 && (i === 3 || i === 4)) col = white;
         if (k === 2 && sg === 2) col = navy;
         if (k === 0 && sg === 1 && i >= 5) col = white;
-        sbox(k, M(col, PAT.SEATS, 0.6, 0, 0, 0, 0.1), u1 - u0, top, depth, (u0 + u1) / 2, 0, d0 + depth / 2);
+        const seatM = M(col, PAT.SEATS, 0.6, 0, 0, 0, 0.1);
+        if (WALK && k === 1 && u0 < tun && u1 > -tun) {
+          // the tunnel goes through this block: either side of it, and over it where the row stands higher than its ceiling
+          sbox(k, seatM, -tun - u0, top, depth, (u0 - tun) / 2, 0, d0 + depth / 2);
+          sbox(k, seatM, u1 - tun, top, depth, (u1 + tun) / 2, 0, d0 + depth / 2);
+          if (i > hoodRow) sbox(k, seatM, 2 * tun, top - tunH - 0.05, depth, 0, tunH + 0.05, d0 + depth / 2);
+        } else sbox(k, seatM, u1 - u0, top, depth, (u0 + u1) / 2, 0, d0 + depth / 2);
       }
       // seat positions for the crowd (every 0.5 m)
       const n = Math.floor((2 * L) / 0.5);
       for (let j = 0; j < n; j++) {
         const u = -L + 0.25 + j * 0.5;
+        if (WALK && k === 1 && Math.abs(u) < tun + 0.25 && i <= hoodRow + 1) continue;
         const dep = d0 + rowD * 0.42;
         const lx = u * c + dep * s,
           lz = -u * s + dep * c;
@@ -149,15 +165,42 @@ export function genStadium(env: Env, lot: Lot): StadiumInfo {
     const backW = legacy ? W + 0.02 : W - 0.5;
     sbox(k, concreteD, 2 * L + 0.4, backTop, backW - (S0 + nRows * rowD), 0, 0, (S0 + nRows * rowD + backW) / 2);
     // front wall (perimeter) and advertising boards facing the pitch
-    sbox(k, concrete, 2 * L, 0.9, 0.25, 0, 0, S0 - 0.12);
-    for (let a = 0; a < 4; a++) {
+    const ua = L * 0.34;
+    // the east stand's front wall and boards leave gaps at the tunnel and the aisles; two steps up at each aisle
+    const runs: [number, number][] =
+      WALK && k === 1
+        ? [
+            [-L, -ua - 0.7],
+            [-ua + 0.7, -tun - 0.1],
+            [tun + 0.1, ua - 0.7],
+            [ua + 0.7, L],
+          ]
+        : [[-L, L]];
+    for (const [a, b] of runs) sbox(k, concrete, b - a, 0.9, 0.25, (a + b) / 2, 0, S0 - 0.12);
+    if (WALK && k === 1) {
+      for (const u of [-ua, ua]) {
+        sbox(k, concrete, 1.3, 0.23, 0.22, u, 0, S0 - 0.33);
+        sbox(k, concrete, 1.3, 0.46, 0.22, u, 0, S0 - 0.11);
+      }
+    }
+    const boards: [number, number][] = runs.length > 1 ? runs : [0, 1, 2, 3].map((a) => [-L + (2 * L * a) / 4, -L + (2 * L * (a + 1)) / 4] as [number, number]);
+    boards.forEach(([b0, b1], a) => {
       const ad = ADS[(k * 2 + a) % ADS.length];
       const r = adRect(env, ad[0], ad[1], ad[2]);
-      const u = -L + (2 * L * (a + 0.5)) / 4;
+      const u = (b0 + b1) / 2;
       const dep = F + 0.55;
-      signQuad(env.T, r, (2 * L) / 4 - 0.3, 0.75, u * c + dep * s, 0.02, -u * s + dep * c, ry + Math.PI, 0.6);
+      signQuad(env.T, r, b1 - b0 - 0.3, 0.75, u * c + dep * s, 0.02, -u * s + dep * c, ry + Math.PI, 0.6);
       // board body
-      sbox(k, M('#2b2f33', PAT.PLAIN, 0.6), (2 * L) / 4 - 0.25, 0.8, 0.14, u, 0, dep + 0.08);
+      sbox(k, M('#2b2f33', PAT.PLAIN, 0.6), b1 - b0 - 0.25, 0.8, 0.14, u, 0, dep + 0.08);
+    });
+    if (WALK && k === 1) {
+      // the hood over the tunnel's mouth, in the club's red, out over the first rows
+      const hood = M('#a3262c', PAT.PLAIN, 0.6, 0.2, 0, FLOOD.WARM, 0.3);
+      const dH0 = S0 - 0.2,
+        dH1 = S0 + (hoodRow + 1) * rowD;
+      for (const e of [-1, 1]) sbox(k, hood, 0.16, tunH + 0.05, dH1 - dH0, e * (tun + 0.06), 0, (dH0 + dH1) / 2);
+      sbox(k, hood, 2 * tun + 0.3, 0.14, dH1 - dH0 + 0.25, 0, tunH, (dH0 + dH1) / 2 - 0.1);
+      sbox(k, M('#f1efe9', PAT.PLAIN, 0.5), 2 * tun + 0.34, 0.1, 0.06, 0, tunH + 0.02, dH0 - 0.25);
     }
   }
   const facadeH = [9.4, 6.4, 6.4, 6.4];
@@ -222,7 +265,7 @@ export function genStadium(env: Env, lot: Lot): StadiumInfo {
       }
     }
   } else {
-    stadiumShell(env, { W, LEN, facadeH, standYaw, doors: doorsLocal });
+    stadiumShell(env, { W, LEN, facadeH, standYaw, doors: doorsLocal, openGate: WALK ? 1 : -1 });
   }
   // stadium name over the main gates (outside) + on the main stand roof fascia (inside)
   const nameR = env.atlas.add(1024, 96, (g, w, h) => {
@@ -397,7 +440,8 @@ export function genStadium(env: Env, lot: Lot): StadiumInfo {
     env.glow(gx, 0.1, gz, { size: 3.2, kind: 'pool', color: '#ffc77e', intensity: 0.28 });
 
   env.endChecks();
-  const info: StadiumInfo = { cx, cz, F, seats, goals, name: lot.name ?? 'Haven Stadium', lotId: lot.id };
+  const walk: StadiumWalk | null = WALK ? { F, S0, rowD, rise, nRows, L: LEN, W, tun, ua: LEN * 0.34, tunH, hoodRow } : null;
+  const info: StadiumInfo = { cx, cz, F, seats, goals, name: lot.name ?? 'Haven Stadium', lotId: lot.id, walk };
   return info;
 }
 

@@ -20,11 +20,29 @@ interface Part {
   z: number;
   part: number;
   joint: [number, number, number];
+  /** a round part: sides of a tube (top width = w * top), or a ball when top is 0; a box otherwise */
+  seg?: number;
+  top?: number;
+  /** box: width of the top face over the bottom's (shoulders over a waist) */
+  taper?: number;
 }
 
 function figureGeo(parts: Part[]): THREE.BufferGeometry {
   const geos = parts.map((p) => {
-    const g = new THREE.BoxGeometry(p.w, p.h, p.d);
+    let g: THREE.BufferGeometry;
+    if (p.seg && p.top === 0) {
+      g = new THREE.SphereGeometry(0.5, p.seg, Math.max(4, p.seg - 2));
+      g.scale(p.w, p.h, p.d);
+    } else if (p.seg) {
+      g = new THREE.CylinderGeometry((p.w / 2) * (p.top ?? 1), p.w / 2, p.h, p.seg, 1);
+      g.scale(1, 1, p.d / p.w);
+    } else {
+      g = new THREE.BoxGeometry(p.w, p.h, p.d);
+      if (p.taper) {
+        const a = g.attributes.position;
+        for (let i = 0; i < a.count; i++) if (a.getY(i) > 0) a.setX(i, a.getX(i) * p.taper);
+      }
+    }
     g.translate(p.x, p.y + p.h / 2, p.z);
     g.deleteAttribute('uv');
     const n = g.attributes.position.count;
@@ -43,8 +61,8 @@ function figureGeo(parts: Part[]): THREE.BufferGeometry {
 function seatedGeo(): THREE.BufferGeometry {
   return figureGeo([
     { w: 0.3, h: 0.14, d: 0.4, x: 0, y: 0, z: 0.12, part: 2, joint: [0, 0, 0] },
-    { w: 0.38, h: 0.5, d: 0.24, x: 0, y: 0.05, z: -0.06, part: 0, joint: [0, 0, 0] },
-    { w: 0.21, h: 0.23, d: 0.21, x: 0, y: 0.6, z: -0.05, part: 1, joint: [0, 0, 0] },
+    { w: 0.3, h: 0.5, d: 0.22, x: 0, y: 0.05, z: -0.06, part: 0, joint: [0, 0, 0], taper: 1.3 },
+    { w: 0.2, h: 0.24, d: 0.21, x: 0, y: 0.59, z: -0.05, part: 1, joint: [0, 0, 0], seg: 6, top: 0.82 },
     { w: 0.09, h: 0.44, d: 0.1, x: -0.24, y: 0.08, z: -0.05, part: 3, joint: [-0.24, 0.5, -0.05] },
     { w: 0.09, h: 0.44, d: 0.1, x: 0.24, y: 0.08, z: -0.05, part: 4, joint: [0.24, 0.5, -0.05] },
   ]);
@@ -53,18 +71,21 @@ function seatedGeo(): THREE.BufferGeometry {
 /** Standing player, origin at the feet, facing +Z. parts: 0 torso, 1 head, 2/3 legs, 4/5 arms. */
 function playerGeo(): THREE.BufferGeometry {
   return figureGeo([
-    { w: 0.14, h: 0.86, d: 0.16, x: -0.1, y: 0, z: 0, part: 2, joint: [0, 0.86, 0] },
-    { w: 0.14, h: 0.86, d: 0.16, x: 0.1, y: 0, z: 0, part: 3, joint: [0, 0.86, 0] },
-    { w: 0.4, h: 0.56, d: 0.24, x: 0, y: 0.84, z: 0, part: 0, joint: [0, 0, 0] },
-    { w: 0.22, h: 0.24, d: 0.22, x: 0, y: 1.43, z: 0, part: 1, joint: [0, 0, 0] },
-    { w: 0.1, h: 0.55, d: 0.11, x: -0.26, y: 0.85, z: 0, part: 4, joint: [-0.26, 1.38, 0] },
-    { w: 0.1, h: 0.55, d: 0.11, x: 0.26, y: 0.85, z: 0, part: 5, joint: [0.26, 1.38, 0] },
+    { w: 0.135, h: 0.86, d: 0.16, x: -0.1, y: 0, z: 0, part: 2, joint: [0, 0.86, 0], seg: 8, top: 1.5 },
+    { w: 0.135, h: 0.86, d: 0.16, x: 0.1, y: 0, z: 0, part: 3, joint: [0, 0.86, 0], seg: 8, top: 1.5 },
+    { w: 0.33, h: 0.58, d: 0.22, x: 0, y: 0.82, z: 0, part: 0, joint: [0, 0, 0], seg: 10, top: 1.4 },
+    { w: 0.2, h: 0.25, d: 0.22, x: 0, y: 1.42, z: 0, part: 1, joint: [0, 0, 0], seg: 8, top: 0 },
+    { w: 0.095, h: 0.56, d: 0.105, x: -0.26, y: 0.84, z: 0, part: 4, joint: [-0.26, 1.38, 0], seg: 6, top: 1.2 },
+    { w: 0.095, h: 0.56, d: 0.105, x: 0.26, y: 0.84, z: 0, part: 5, joint: [0.26, 1.38, 0], seg: 6, top: 1.2 },
   ]);
 }
 
 const SKIN = /* glsl */ `
 vec3 figSkin(float k) {
   return k < 0.3 ? vec3(0.94, 0.77, 0.63) : k < 0.55 ? vec3(0.84, 0.64, 0.48) : k < 0.8 ? vec3(0.66, 0.46, 0.32) : vec3(0.42, 0.29, 0.2);
+}
+vec3 figHair(float k) {
+  return k < 0.4 ? vec3(0.09, 0.07, 0.06) : k < 0.65 ? vec3(0.24, 0.15, 0.09) : k < 0.85 ? vec3(0.5, 0.36, 0.2) : vec3(0.6, 0.6, 0.6);
 }
 mat3 figRotX(float a) { float c = cos(a), s = sin(a); return mat3(1.0, 0.0, 0.0, 0.0, c, s, 0.0, -s, c); }
 `;
@@ -110,7 +131,7 @@ function crowdMaterial(g: GlobalUniforms, u: { uWave: { value: THREE.Vector2 }; 
         if (aPart < 1.5 || aPart > 2.5) fp.y += lift;
         float sw = sin(uTime * 1.3 + iInfo.y * 23.0) * (0.035 + 0.05 * ch);
         fp.x += fp.y * sw;
-        vFig = (aPart < 0.5 || aPart > 2.5) ? iShirt : (aPart < 1.5 ? figSkin(fract(iInfo.y * 7.31)) : vec3(0.16, 0.18, 0.24));`,
+        vFig = (aPart < 0.5 || aPart > 2.5) ? iShirt : (aPart < 1.5 ? (normal.y > 0.5 ? figHair(fract(iInfo.y * 3.17)) : figSkin(fract(iInfo.y * 7.31))) : vec3(0.16, 0.18, 0.24));`,
       )
       .replace('#include <begin_vertex>', 'vec3 transformed = fp;');
     sh.fragmentShader = sh.fragmentShader
@@ -118,7 +139,7 @@ function crowdMaterial(g: GlobalUniforms, u: { uWave: { value: THREE.Vector2 }; 
       .replace('#include <color_fragment>', '#include <color_fragment>\ndiffuseColor.rgb = vFig;')
       .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += vFig * uFloodL * 0.32;');
   };
-  m.customProgramCacheKey = () => 'lm-crowd-v1';
+  m.customProgramCacheKey = () => 'lm-crowd-v2';
   return m;
 }
 
@@ -155,7 +176,8 @@ function playerMaterial(g: GlobalUniforms, flood: { value: number }): THREE.Mesh
           objectNormal = R * objectNormal;
         }
         fp.y += abs(cos(iRun.x)) * iRun.y * 0.12;
-        vFig = aPart < 0.5 || aPart > 3.5 ? iShirt : (aPart < 1.5 ? figSkin(fract(float(gl_InstanceID) * 0.37)) : (fp.y > 0.45 ? iShorts : iShirt * 0.9));`,
+        float idk = float(gl_InstanceID);
+        vFig = aPart < 0.5 ? iShirt : aPart > 3.5 ? (position.y > 1.05 ? iShirt : figSkin(fract(idk * 0.37))) : (aPart < 1.5 ? (normal.y > 0.45 ? figHair(fract(idk * 0.61)) : figSkin(fract(idk * 0.37))) : (position.y > 0.5 ? iShorts : position.y > 0.1 ? iShirt * 0.9 : vec3(0.07, 0.07, 0.08)));`,
       )
       .replace('#include <begin_vertex>', 'vec3 transformed = fp;');
     sh.fragmentShader = sh.fragmentShader
@@ -163,7 +185,7 @@ function playerMaterial(g: GlobalUniforms, flood: { value: number }): THREE.Mesh
       .replace('#include <color_fragment>', '#include <color_fragment>\ndiffuseColor.rgb = vFig;')
       .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += vFig * uFloodL * 0.55;');
   };
-  m.customProgramCacheKey = () => 'lm-players-v1';
+  m.customProgramCacheKey = () => 'lm-players-v2';
   return m;
 }
 

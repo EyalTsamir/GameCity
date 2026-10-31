@@ -22,19 +22,31 @@ import { genTownHall } from './landmarks/townhall';
 import { genChurch } from './landmarks/church';
 import { genStadium, genFloodlight, StadiumInfo } from './landmarks/stadium';
 import { createStadiumLife } from './landmarks/stadiumLife';
-import { genTvTower, tvTowerUpdater } from './landmarks/tvtower';
+import { genTvTower, tvDeckY, tvTowerUpdater } from './landmarks/tvtower';
+import { buildTvLift, type TvLiftRuntime } from './landmarks/tvLift';
+import { buildStadiumRoom } from './landmarks/stadiumRoom';
 import { genConstruction, genTowerCrane, craneUpdater, CraneTargets } from './landmarks/construction';
 import { genFountain } from './landmarks/fountain';
 import { genFlagpole, genMarketStall, genCourtHoops } from './landmarks/civic';
 import { genWaterTower, genChimney, genTanks } from './landmarks/industry';
 import { genStatue, genGazebo, genBandstand, genKiosk, genPlayground, genPicnic } from './landmarks/park';
 import { genWindTurbine, turbineUpdater } from './landmarks/turbines';
+import { Rooms } from './landmarks/rooms';
+import { buildLighthouseRoom } from './landmarks/lighthouseRoom';
+import { breakwaterRoot } from './harbor/breakwater';
+import { lmDetail } from '../core/lmdetail';
+import { DIR_YAW } from '../core/geom';
+import type { Lot } from '../core/plan';
 
 export default function create(ctx: CityContext): CityModule {
   const t0 = performance.now();
   const plan = ctx.plan;
   const mats = createMaterials(ctx.uniforms);
   const env = new Env(ctx, mats.u);
+  const rooms = new Rooms();
+  let tvLot: Lot | null = null;
+  let tvLift: TvLiftRuntime | null = null;
+  env.rooms = rooms;
   const counts: Record<string, number> = {};
   const count = (k: string) => (counts[k] = (counts[k] ?? 0) + 1);
   const stadiums: StadiumInfo[] = [];
@@ -86,6 +98,7 @@ export default function create(ctx: CityContext): CityModule {
         run(`tvtower ${lot.id}`, () => {
           genTvTower(env, lot);
           env.updaters.push(tvTowerUpdater(env));
+          tvLot = lot;
         });
         count('tvtower');
         break;
@@ -239,6 +252,22 @@ export default function create(ctx: CityContext): CityModule {
   const glowMesh = buildGlows(env.glows, mats.glows);
   if (glowMesh) group.add(glowMesh);
   for (const o of env.extra) group.add(o);
+  // the lighthouse stands out on the breakwater, built by the harbour; only its inside (and the walk out to it) lives here
+  const lhF = ctx.plan.features.find((f) => f.kind === 'lighthouse');
+  const bwF = ctx.plan.features.find((f) => f.kind === 'breakwater');
+  const terrain = ctx.services.terrain as { height(x: number, z: number): number } | undefined;
+  if (lhF && bwF?.a && bwF.b && terrain && lmDetail(ctx, 'bwlife') && lmDetail(ctx, 'lhroom')) {
+    buildLighthouseRoom(rooms, lhF.x, lhF.z, Number(lhF.params?.height ?? 24), breakwaterRoot(bwF.a.x, bwF.b.x, bwF.a.z, (x, z) => terrain.height(x, z)));
+  }
+  if (tvLot && lmDetail(ctx, 'tvlift')) {
+    const fp = (tvLot as Lot).footprint;
+    tvLift = buildTvLift(ctx, rooms, mats.u.uLift, (fp.x0 + fp.x1) / 2, (fp.z0 + fp.z1) / 2, DIR_YAW[(tvLot as Lot).front], tvDeckY(tvLot as Lot), 0);
+  }
+  for (const st of stadiums) {
+    if (st.walk && terrain) buildStadiumRoom(rooms, st.cx, st.cz, st.walk, terrain.height(st.cx, st.cz), (x, z) => terrain.height(x, z));
+  }
+  for (const r of rooms.list) r.finish(ctx, group, ctx.uniforms);
+  if (rooms.list.length) ctx.services.rooms = rooms;
   group.matrixAutoUpdate = false;
   ctx.scene.add(group);
   // perf diagnostics: ?lmskip=static,kinetic,lights,signs,glows,fountain,crowd,players
@@ -318,13 +347,15 @@ export default function create(ctx: CityContext): CityModule {
 
   return {
     name: 'landmarks',
-    frame(_realDt, c) {
+    frame(realDt, c) {
+      tvLift?.frame(realDt);
       const cp = c.camera.position;
       const lod = mats.u.uDetailDist.value;
       for (let i = 0; i < detailCells.length; i++) {
         const sp = cellSpheres[i];
         detailCells[i].visible = detailOn && cp.distanceTo(sp.center) - sp.radius < lod;
       }
+      rooms.frame(c, c.camera);
       const day = c.uniforms.uDaylight.value;
       const dusk = c.uniforms.uDusk.value;
       zen.copy(nightZen).lerp(dayZen, day);

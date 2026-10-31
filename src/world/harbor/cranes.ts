@@ -97,11 +97,31 @@ export function buildCrane(b: HB, i: number, xc: number, z0: number, glows: Glow
   }
   // legs
   b.color(C_LEG);
+  if (KIT) b.pat(PAT.GRIME, 1.2);
   for (const x of [xL, xW])
     for (const sz of [-1, 1]) {
       const z = z0 + sz * g.legZ;
       b.box(x, (1.55 + g.boomY0) / 2, z, 0.95, g.boomY0 - 1.55, 0.95, 0, 1 | 2);
     }
+  b.pat(PAT.NONE);
+  if (KIT) {
+    // hazard bands at truck-mirror height, a stencilled number plate, bolted splice plates
+    for (const x of [xL, xW])
+      for (const sz of [-1, 1]) {
+        const z = z0 + sz * g.legZ;
+        for (let k = 0; k < 6; k++) {
+          b.color(k % 2 ? '#1e1f20' : '#e6b92c');
+          b.box(x, 1.75 + k * 0.28, z, 0.975, 0.28, 0.975, 0, 3);
+        }
+        b.color('#a9a596');
+        b.box(x, 4.9, z - sz * 0.485, 0.5, 0.62, 0.012, 0, 0);
+        b.color(C_LEG_DK);
+        for (const yy of [7.7, 15.9]) {
+          b.box(x, yy, z, 1.0, 0.7, 1.0, 0, 3);
+          for (const e of [-0.34, 0, 0.34]) for (const f of [-0.24, 0.24]) b.box(x + e, yy + f, z - sz * 0.505, 0.05, 0.05, 0.015, 0, 0);
+        }
+      }
+  }
   // portal beams (along x) at mid height and top, cross beams (along z) on top
   for (const sz of [-1, 1]) {
     const z = z0 + sz * g.legZ;

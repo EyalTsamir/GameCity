@@ -799,6 +799,35 @@ export function buildCarouselRotating(b: HB, x: number, z: number, r: number, de
     b.box(x + Math.sin(a) * (rc + 0.03), ceil - 0.2, z + Math.cos(a) * (rc + 0.03), 0.09, 0.09, 0.05, a, 0);
   }
   b.noEmit();
+  if (FINE) {
+    // the ceiling: rings of bulbs on gilt ribs, painted panels between, and the centre drum glowing with mirrors
+    for (let k = 0; k < 16; k++) {
+      const a = ((k + 0.5) / 16) * Math.PI * 2;
+      b.color('#d4a84a');
+      b.beam([x + Math.sin(a) * 0.82, ceil - 0.02, z + Math.cos(a) * 0.82], [x + Math.sin(a) * rc, ceil - 0.02, z + Math.cos(a) * rc], 0.05, 0.03);
+    }
+    for (const [rr, n] of [[1.45, 16], [2.25, 24], [3.05, 32]] as [number, number][])
+      for (let k = 0; k < n; k++) {
+        const a = ((k + 0.5) / n) * Math.PI * 2;
+        b.color('#fff1c9').emit('#ffd88a', 3.2, EMIT.MARQUEE, (k % 2) * 0.25);
+        b.sphere(x + Math.sin(a) * rr, ceil - 0.05, z + Math.cos(a) * rr, 0.045, 6, 4);
+      }
+    b.noEmit();
+    for (let k = 0; k < nC; k++) {
+      const a = (k / nC) * Math.PI * 2;
+      b.color('#d4a84a').emit('#ffc98a', 0.5, EMIT.LIGHTS);
+      b.beam([x + Math.sin(a) * 0.83, pf, z + Math.cos(a) * 0.83], [x + Math.sin(a) * 0.83, ceil, z + Math.cos(a) * 0.83], 0.05, 0.03);
+      const am = ((k + 0.5) / nC) * Math.PI * 2;
+      b.color('#dfe6ea').emit('#ffdca8', 0.9, EMIT.LIGHTS);
+      for (const [y0, y1] of [[pf + 0.35, pf + 1.35], [pf + 1.55, ceil - 0.5]] as [number, number][]) {
+        const P = (o: number, r2 = 0.815): V3 => [x + Math.sin(am + o) * r2, 0, z + Math.cos(am + o) * r2];
+        const a0 = P(-0.13),
+          a1 = P(0.13);
+        b.quad2([a0[0], y0, a0[2]], [a1[0], y0, a1[2]], [a1[0], y1, a1[2]], [a0[0], y1, a0[2]]);
+      }
+    }
+    b.noEmit();
+  }
   // finial
   b.color('#e9c46a');
   b.sphere(x, yc1 + 0.12, z, 0.2, 8, 5);
@@ -819,9 +848,14 @@ export function buildCarouselRotating(b: HB, x: number, z: number, r: number, de
         hz = z + Math.cos(a) * rr;
       b.rig(RIG.CAROUSEL);
       b.color('#d4a84a');
-      b.cyl([hx, pf, hz], [hx, ceil, hz], 0.035, 0.035, 5, 0);
+      b.cyl([hx, pf, hz], [hx, ceil, hz], 0.035, 0.035, FINE ? 10 : 5, 0);
+      if (FINE) for (const hh of [0.06, ceil - pf - 0.1]) b.cyl([hx, pf + hh - 0.05, hz], [hx, pf + hh + 0.05, hz], 0.07, 0.07, 10, 3);
       b.rig(RIG.HORSE, 0, (k / n + (n === 8 ? 0.5 : 0)) % 1);
-      (CARVED ? horseCarved : horse)(b, hx, pf + 1.0, hz, a + Math.PI / 2, rng.pick(bodies), rng.pick(saddles));
+      const bodyC = rng.pick(bodies);
+      // lit by the canopy's bulbs at night: the horses glow faintly in their own colours
+      if (FINE) b.emit(bodyC === '#3b3330' ? '#a88a78' : bodyC, 0.24, EMIT.LIGHTS);
+      (FINE ? horseFine : CARVED ? horseCarved : horse)(b, hx, pf + 1.0, hz, a + Math.PI / 2, bodyC, rng.pick(saddles));
+      b.noEmit();
       horses++;
     }
   }
@@ -831,8 +865,183 @@ export function buildCarouselRotating(b: HB, x: number, z: number, r: number, de
 
 /** box hunt (?nocarousel): carved carousel horses instead of stacked boxes */
 let CARVED = true;
-export function setCarouselDetail(on: boolean): void {
+let FINE = true;
+export function setCarouselDetail(on: boolean, fine = false): void {
   CARVED = on;
+  FINE = on && fine;
+}
+
+/** a smooth body along a curve in the horse's plane: rings of (y, z, half width x, half height) with normals from the rings */
+function loft(b: HB, sec: [number, number, number, number][], seg = 10): void {
+  const n = sec.length;
+  const base: number[] = [];
+  for (let i = 0; i < n; i++) {
+    const [y, z, rx, ry] = sec[i];
+    const p = sec[Math.max(0, i - 1)],
+      q = sec[Math.min(n - 1, i + 1)];
+    const tl = Math.hypot(q[0] - p[0], q[1] - p[1]) || 1;
+    const ty = (q[0] - p[0]) / tl,
+      tz = (q[1] - p[1]) / tl;
+    // perpendicular in the (y, z) plane
+    const ny = tz,
+      nz = -ty;
+    base.push(0);
+    for (let k = 0; k <= seg; k++) {
+      const a = (k / seg) * Math.PI * 2;
+      const c = Math.cos(a),
+        s = Math.sin(a);
+      const u = s * ry;
+      const l = Math.hypot(c / rx, s / ry) || 1;
+      const v = b.vtx(c * rx, y + ny * u, z + nz * u, c / rx / l, (ny * s) / ry / l, (nz * s) / ry / l);
+      if (k === 0) base[i] = v;
+    }
+  }
+  for (let i = 0; i + 1 < n; i++)
+    for (let k = 0; k < seg; k++) {
+      const a = base[i] + k,
+        c = base[i + 1] + k;
+      b.tri(a, a + 1, c);
+      b.tri(a + 1, c + 1, c);
+    }
+}
+
+/**
+ * A proper fairground galloper (?nohorses: the earlier one): one smooth barrel running into the neck, a shaped head with
+ * jowl and muzzle, a carved mane in locks falling to one side, a long tail, muscled legs at full gallop, a caparison with gilt
+ * edges and roses, a saddle with cantle and pommel, bridle and reins, painted eyes.
+ */
+function horseFine(b: HB, x: number, y: number, z: number, yaw: number, body: string, saddle: string): void {
+  b.pushT(x, y, z, yaw);
+  const dark = body === '#3b3330';
+  const hair = dark ? '#e6dfd0' : body === '#8a5a3c' ? '#2e221a' : '#c9a64e';
+  const gilt = '#d9ad4a';
+  b.color(body);
+  loft(b, [
+    [0.05, -0.55, 0.01, 0.01],
+    [0.05, -0.5, 0.075, 0.09],
+    [0.04, -0.42, 0.135, 0.16],
+    [0.03, -0.3, 0.165, 0.195],
+    [0.0, -0.14, 0.15, 0.178],
+    [-0.01, 0.04, 0.148, 0.175],
+    [0.02, 0.2, 0.158, 0.19],
+    [0.08, 0.31, 0.142, 0.19],
+    [0.2, 0.39, 0.105, 0.155],
+    [0.34, 0.46, 0.08, 0.118],
+    [0.47, 0.52, 0.066, 0.094],
+    [0.585, 0.57, 0.058, 0.078],
+    [0.64, 0.58, 0.03, 0.04],
+    [0.65, 0.58, 0.005, 0.005],
+  ], 12);
+  // head: poll, jowl, nose, muzzle, chin
+  loft(b, [
+    [0.625, 0.535, 0.01, 0.01],
+    [0.625, 0.56, 0.05, 0.06],
+    [0.6, 0.63, 0.06, 0.082],
+    [0.555, 0.71, 0.052, 0.068],
+    [0.505, 0.79, 0.043, 0.05],
+    [0.47, 0.85, 0.043, 0.047],
+    [0.45, 0.885, 0.034, 0.036],
+    [0.44, 0.9, 0.008, 0.008],
+  ], 10);
+  for (const s of [-1, 1]) {
+    // ears, eyes, nostrils
+    b.color(body);
+    b.cyl([s * 0.032, 0.66, 0.565], [s * 0.05, 0.765, 0.535], 0.024, 0.003, 6, 1);
+    b.color('#12100e');
+    b.sphere(s * 0.056, 0.615, 0.655, 0.016, 8, 6);
+    b.sphere(s * 0.03, 0.452, 0.885, 0.008, 6, 4);
+    b.color('#f4efe6');
+    b.sphere(s * 0.0585, 0.62, 0.65, 0.006, 5, 4);
+  }
+  // legs: shoulder → knee → fetlock → hoof. Forelegs flung forward and folded, hind legs reaching out behind
+  const leg = (p: V3[], r: number[]) => {
+    b.color(body);
+    for (let i = 0; i + 1 < p.length; i++) b.cyl(p[i], p[i + 1], r[i], r[i + 1], 9, i === 0 ? 1 : 0);
+    for (let i = 1; i + 1 < p.length; i++) b.sphere(p[i][0], p[i][1], p[i][2], r[i] * 1.02, 8, 6);
+    const h = p[p.length - 1];
+    const e = p[p.length - 2];
+    const L = Math.hypot(h[0] - e[0], h[1] - e[1], h[2] - e[2]) || 1;
+    const u: V3 = [(h[0] - e[0]) / L, (h[1] - e[1]) / L, (h[2] - e[2]) / L];
+    b.color(dark ? '#201d1b' : '#2a2522');
+    b.cyl(h, [h[0] + u[0] * 0.05, h[1] + u[1] * 0.05, h[2] + u[2] * 0.05], r[r.length - 1] * 1.05, r[r.length - 1] * 1.4, 8, 3);
+  };
+  for (const s of [-1, 1]) {
+    const fo = s > 0 ? 0.03 : 0; // one foreleg higher than the other
+    leg([[s * 0.085, -0.04, 0.27], [s * 0.09, -0.25 + fo, 0.45], [s * 0.09, -0.34 + fo * 2, 0.31], [s * 0.09, -0.46 + fo * 2, 0.26]], [0.078, 0.042, 0.03, 0.03]);
+    const ho = s > 0 ? 0 : 0.04;
+    leg([[s * 0.095, -0.03, -0.34], [s * 0.095, -0.29, -0.46], [s * 0.095, -0.42 + ho, -0.66], [s * 0.095, -0.5 + ho, -0.8]], [0.095, 0.052, 0.03, 0.03]);
+  }
+  // caparison round the barrel, gilt piping, roses on the quarter
+  b.color(saddle);
+  loft(b, [
+    [0.01, -0.27, 0.169, 0.191],
+    [0.0, -0.14, 0.16, 0.186],
+    [-0.005, 0.04, 0.158, 0.183],
+    [0.015, 0.17, 0.164, 0.192],
+  ], 14);
+  b.color(gilt);
+  for (const [yy, zz, rx, ry] of [[0.012, -0.27, 0.172, 0.194], [0.016, 0.17, 0.168, 0.196]]) {
+    const pts: V3[] = [];
+    for (let k = 0; k <= 16; k++) {
+      const a = (k / 16) * Math.PI * 2;
+      pts.push([Math.cos(a) * rx, yy + Math.sin(a) * ry, zz]);
+    }
+    b.tube(pts, 0.009, 4, true);
+  }
+  for (const s of [-1, 1]) {
+    b.color('#c8324a');
+    b.sphere(s * 0.158, -0.03, -0.17, 0.028, 7, 5);
+    b.sphere(s * 0.158, -0.03, 0.08, 0.028, 7, 5);
+    b.color(gilt);
+    b.sphere(s * 0.178, -0.03, -0.17, 0.011, 5, 4);
+    b.sphere(s * 0.178, -0.03, 0.08, 0.011, 5, 4);
+    // stirrup + leather
+    b.color('#4a2e1c');
+    b.cyl([s * 0.165, 0.11, -0.05], [s * 0.2, -0.13, -0.05], 0.008, 0.008, 4, 0);
+    b.color(gilt);
+    b.box(s * 0.2, -0.15, -0.05, 0.035, 0.02, 0.09, 0, 0);
+  }
+  // the saddle: seat dished between cantle and pommel
+  b.color('#5a3320');
+  ellipsoid(b, 0, 0.195, -0.07, 0.105, 0.04, 0.2, 10, 6);
+  b.color('#6d4128');
+  b.tube([[-0.09, 0.2, -0.26], [-0.05, 0.28, -0.28], [0.05, 0.28, -0.28], [0.09, 0.2, -0.26]], 0.024, 6);
+  b.tube([[-0.07, 0.2, 0.1], [-0.03, 0.26, 0.115], [0.03, 0.26, 0.115], [0.07, 0.2, 0.1]], 0.024, 6);
+  // mane: locks falling to the near side, forelock; a long tail with a lift in it
+  b.color(hair);
+  for (let i = 0; i < 8; i++) {
+    const t = i / 7;
+    const py = 0.64 - t * 0.48,
+      pz = 0.52 - t * 0.2;
+    b.tube([[0, py, pz - 0.02], [0.05, py - 0.02, pz - 0.075], [0.085, py - 0.08, pz - 0.095], [0.09, py - 0.15, pz - 0.075 + (i % 2) * 0.02]], 0.024 - t * 0.004, 5);
+  }
+  b.tube([[0, 0.665, 0.56], [0.015, 0.65, 0.64], [0.012, 0.6, 0.69]], 0.016, 5);
+  b.tube([[0, 0.09, -0.52], [0, 0.14, -0.64], [0.01, 0.06, -0.77], [0.035, -0.12, -0.86], [0.02, -0.34, -0.87], [0.04, -0.48, -0.82]], 0.038, 7);
+  // bridle, reins, breast collar with bells
+  b.color(gilt);
+  const band = (yy: number, zz: number, rx: number, ry: number, tilt: number) => {
+    const pts: V3[] = [];
+    for (let k = 0; k <= 12; k++) {
+      const a = (k / 12) * Math.PI * 2;
+      const u = Math.sin(a) * ry;
+      pts.push([Math.cos(a) * rx, yy + u * Math.cos(tilt), zz + u * Math.sin(tilt)]);
+    }
+    b.tube(pts, 0.006, 3, true);
+  };
+  band(0.492, 0.82, 0.047, 0.053, 0.72);
+  band(0.59, 0.66, 0.064, 0.086, 0.45);
+  for (const s of [-1, 1]) b.tube([[s * 0.05, 0.48, 0.82], [s * 0.1, 0.33, 0.56], [s * 0.095, 0.27, 0.13]], 0.006, 4);
+  const coll: V3[] = [];
+  for (let k = -4; k <= 4; k++) {
+    const a = (k / 4) * 1.45;
+    coll.push([Math.sin(a) * 0.16, 0.13 - Math.cos(a) * 0.17, 0.3 + Math.cos(a) * 0.06]);
+  }
+  b.tube(coll, 0.011, 4);
+  for (let k = -3; k <= 3; k += 2) {
+    const a = (k / 4) * 1.45;
+    b.sphere(Math.sin(a) * 0.168, 0.11 - Math.cos(a) * 0.18, 0.31 + Math.cos(a) * 0.06, 0.018, 6, 5);
+  }
+  b.pop();
 }
 
 /** an ellipsoid (radii rx, ry, rz) at (x, y, z) in the builder's current frame */

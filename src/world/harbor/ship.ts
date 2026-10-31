@@ -295,7 +295,29 @@ export function buildShip(
   const lv = 2.6;
   const top = SHIP.deckY + 4 * lv; // 12.0
   b.color(WHITE);
-  b.boxMM(-5.6, SHIP.deckY, z0, 5.6, top, z1, 1);
+  if (!KIT) b.boxMM(-5.6, SHIP.deckY, z0, 5.6, top, z1, 1);
+  else {
+    // one box a level: the hull pattern weeps rust from each deck edge down the white paint
+    for (let k = 0; k < 4; k++) {
+      const y1 = SHIP.deckY + (k + 1) * lv;
+      b.pat(PAT.HULL, y1);
+      b.boxMM(-5.6, y1 - lv, z0, 5.6, y1, z1, 1);
+    }
+  }
+  b.pat(PAT.NONE);
+  if (KIT) {
+    // welded plate seams, a door per level
+    b.color('#c3bdb0');
+    for (const s of [1, -1]) for (let wz = z0 + 0.55; wz < z1; wz += 1.4) b.boxMM(s * 5.6 - 0.006, SHIP.deckY, wz - 0.008, s * 5.6 + 0.006, top, wz + 0.008);
+    for (let wx = -5.0; wx <= 5.01; wx += 1.15) b.boxMM(wx - 0.008, SHIP.deckY, z1 - 0.006, wx + 0.008, top, z1 + 0.006);
+    for (let k = 0; k < 3; k++) {
+      const y = SHIP.deckY + k * lv + 0.1;
+      b.color('#8d9396');
+      b.boxMM(5.61, y, z1 - 2.6, 5.635, y + 1.9, z1 - 1.85);
+      b.color('#2b2f33');
+      b.boxMM(5.63, y + 1.2, z1 - 2.4, 5.64, y + 1.55, z1 - 2.05);
+    }
+  }
   // deck overhang slabs at each level
   b.color('#d8d2c5');
   for (let k = 1; k <= 4; k++) {
@@ -389,7 +411,10 @@ export function buildShip(
     b.color(WHITE);
     for (const s of [1, -1]) b.box(s * 1.37, fy1 - 1.95, fz - (fy1 - 1.95 - fy0) * 0.12, 0.05, 0.5, 0.5, 0, 0);
   }
-  if (KIT) shipKit(b, top, bz0, bz1);
+  if (KIT) {
+    shipKit(b, top, bz0, bz1);
+    hullKit(b);
+  }
   // free-fall lifeboat on its stern ramp (orange)
   b.color('#8f9599');
   b.beam([0, SHIP.deckY + 2.2, -33.0], [0, SHIP.deckY + 0.9, -36.6], 2.2, 0.15);
@@ -461,6 +486,105 @@ export function buildShip(
 
 /** world rest position (bottom centre) of a mobile 20ft box on the ship */
 /** the box-hunt fit-out of the superstructure (ship-local frame, rig SHIP; `top` = bridge-deck floor) */
+/** straight strokes of the letters of her name, in a unit cell */
+const STROKES: Record<string, [number, number, number, number][]> = {
+  T: [[0, 1, 1, 1], [0.5, 0, 0.5, 1]],
+  I: [[0.5, 0, 0.5, 1]],
+  N: [[0, 0, 0, 1], [0, 1, 1, 0], [1, 0, 1, 1]],
+  Y: [[0, 1, 0.5, 0.48], [1, 1, 0.5, 0.48], [0.5, 0, 0.5, 0.48]],
+  H: [[0, 0, 0, 1], [1, 0, 1, 1], [0, 0.5, 1, 0.5]],
+  A: [[0, 0, 0.5, 1], [0.5, 1, 1, 0], [0.18, 0.34, 0.82, 0.34]],
+  V: [[0, 1, 0.5, 0], [0.5, 0, 1, 1]],
+  E: [[0, 0, 0, 1], [0, 1, 0.9, 1], [0, 0.5, 0.75, 0.5], [0, 0, 0.9, 0]],
+};
+/** seven segments for the draught figures */
+const SEG: [number, number, number, number][] = [[0, 1, 1, 1], [0, 0.5, 0, 1], [1, 0.5, 1, 1], [0, 0.5, 1, 0.5], [0, 0, 0, 0.5], [1, 0, 1, 0.5], [0, 0, 1, 0]];
+const DIGIT: Record<string, number[]> = { '2': [0, 2, 3, 4, 6], '4': [1, 2, 3, 5], '6': [0, 1, 3, 4, 5, 6], '8': [0, 1, 2, 3, 4, 5, 6] };
+
+/** a stroke painted on a surface: `at(u, v)` maps paint coordinates (m) to the hull */
+function paint(b: HB, at: (u: number, v: number) => V3, x0: number, y0: number, x1: number, y1: number, t: number): void {
+  const dx = x1 - x0,
+    dy = y1 - y0,
+    L = Math.hypot(dx, dy) || 1;
+  const ex = (dx / L) * (t / 2),
+    ey = (dy / L) * (t / 2);
+  const nx = -ey,
+    ny = ex;
+  b.quad2(at(x0 - ex + nx, y0 - ey + ny), at(x1 + ex + nx, y1 + ey + ny), at(x1 + ex - nx, y1 + ey - ny), at(x0 - ex - nx, y0 - ey - ny));
+}
+
+function word(b: HB, at: (u: number, v: number) => V3, text: string, u0: number, v0: number, h: number, w: number, adv: number, t: number): void {
+  let u = u0;
+  for (const ch of text) {
+    for (const [a, c, d, f] of STROKES[ch]) paint(b, at, u + a * w, v0 + c * h, u + d * w, v0 + f * h, t);
+    u += adv;
+  }
+}
+
+/** seen from the quay: her name on the bows and across the transom, draught marks, load line, weld seams, the anchors */
+function hullKit(b: HB): void {
+  const beam = (s: number, off = 0.035) => (u: number, v: number): V3 => [s * (hb(u, v) + off), v, u];
+  for (const s of [1, -1]) {
+    const side = beam(s);
+    // on the port side the text runs towards the stern, to starboard towards the bow (s picks the reading direction)
+    const name = (u: number, v: number): V3 => {
+      const zz = 27 - s * (u - 3.5);
+      return side(zz, v);
+    };
+    b.color('#efe9dc');
+    word(b, name, 'TINYHAVEN', 0, 1.25, 0.95, 0.56, 0.78, 0.13);
+    // draught marks: fore and aft
+    for (const zm of [-30, 31]) {
+      const mark = (u: number, v: number): V3 => side(zm - s * u, v);
+      for (let m = 0; m < 4; m++) {
+        const y = -1.1 + m * 0.75;
+        const g = ['2', '4', '6', '8'][m];
+        for (const q of DIGIT[g]) {
+          const [a, c, d, f] = SEG[q];
+          paint(b, mark, a * 0.13, y + c * 0.26, d * 0.13, y + f * 0.26, 0.035);
+        }
+        paint(b, mark, 0.25, y + 0.13, 0.65, y + 0.13, 0.035);
+      }
+    }
+    // load line amidships
+    const pl = (u: number, v: number): V3 => side(1 - s * u, v);
+    const py = 0.1;
+    for (let k = 0; k < 16; k++) {
+      const a0 = (k / 16) * Math.PI * 2,
+        a1 = ((k + 1) / 16) * Math.PI * 2;
+      paint(b, pl, Math.cos(a0) * 0.25, py + Math.sin(a0) * 0.25, Math.cos(a1) * 0.25, py + Math.sin(a1) * 0.25, 0.03);
+    }
+    paint(b, pl, -0.42, py, 0.42, py, 0.04);
+    paint(b, pl, 0.62, py - 0.5, 0.62, py + 0.45, 0.035);
+    for (const [q, w] of [[0.45, 0.42], [0.2, 0.42], [-0.05, 0.42], [-0.3, 0.3]] as [number, number][]) paint(b, pl, 0.62, py + q, 0.62 + w, py + q, 0.035);
+    // weld seams along the plating
+    b.color('#32506a');
+    const flat = beam(s, 0.008);
+    for (const y of [-0.55, 0.45, 1.5]) paint(b, (u, v) => flat(u, v), -25, y, 15, y, 0.022);
+    for (let zz = -22; zz < 15; zz += 8.2) paint(b, (u, v) => flat(u, v), zz, -1.2, zz, 2.75, 0.022);
+    // hawse pipe + stowed anchor
+    const ay = 2.55,
+      az = 32.3;
+    const ax = s * (hb(az, ay) + 0.06);
+    b.color('#1a2026');
+    for (let k = 0; k < 10; k++) {
+      const a0 = (k / 10) * Math.PI * 2,
+        a1 = ((k + 1) / 10) * Math.PI * 2;
+      paint(b, (u, v) => side(u, v), az + Math.cos(a0) * 0.28 * 0.5, ay + Math.sin(a0) * 0.28 * 0.5, az + Math.cos(a1) * 0.28 * 0.5, ay + Math.sin(a1) * 0.28 * 0.5, 0.28);
+    }
+    b.color('#23272a');
+    const fy = ay - 1.15;
+    b.beam([ax, ay, az], [ax, fy, az], 0.05, 0.05);
+    b.beam([ax, fy, az], [ax, fy + 0.34, az + 0.36], 0.06, 0.05);
+    b.beam([ax, fy, az], [ax, fy + 0.34, az - 0.36], 0.06, 0.05);
+    b.beam([ax, ay - 0.18, az - 0.22], [ax, ay - 0.18, az + 0.22], 0.035, 0.035);
+  }
+  // transom: name, across
+  b.color('#efe9dc');
+  const tr = (u: number, v: number): V3 => [3.2 - u, v, -37.03];
+  word(b, tr, 'TINYHAVEN', 0, 0.75, 0.66, 0.42, 0.72, 0.09);
+}
+
 function shipKit(b: HB, top: number, bz0: number, bz1: number): void {
   const yR = top + 2.95;
   const RAIL = '#ece8de';

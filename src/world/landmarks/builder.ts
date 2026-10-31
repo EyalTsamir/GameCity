@@ -73,6 +73,8 @@ export const ANIM = {
   SPIN_U: 9,
   /** visible only while uVis[a] > .5; sways by c * sin(2.2 t + phase)… (a = group, b = amplitude, c = phase) */
   VIS: 10,
+  /** the tower's lift: rides up by uLift.x; a = how far this part drops (the gate) as uLift.y opens */
+  LIFT: 11,
 } as const;
 
 export interface Mat {

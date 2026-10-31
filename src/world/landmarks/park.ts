@@ -4,6 +4,7 @@
 // Every solid part stays inside the feature radius / rect (pedestrian paths run right next
 // to them).
 
+import { lmDetail } from '../../core/lmdetail';
 import * as THREE from 'three';
 import type { Feature } from '../../core/plan';
 import { ANIM, FLOOD, LM, LMODE, M, PAT } from './builder';
@@ -615,8 +616,43 @@ export function genBandstand(env: Env, f: Feature): void {
     0,
     24,
   );
-  finial(K, S_gold(), 0, ey + 2.0, 0, 0.6, 0.08);
-  K.box(S_gold(), 0.7, 0.18, 0.03, 0.15, ey + 2.75, 0);
+  if (lmDetail(env.ctx, 'bandroof')) {
+    const prof: [number, number][] = [[R + 0.07, ey + 0.2], [R - 0.27, ey + 0.57], [R * 0.625, ey + 0.97], [R * 0.365, ey + 1.52], [0.235, ey + 1.97]];
+    const ribM = M('#efe6cf', PAT.PLAIN, 0.5, 0.1, 0, FLOOD.SOFT);
+    for (let i = 0; i < 16; i++) {
+      const a = (i / 16) * Math.PI * 2;
+      for (let k = 0; k + 1 < prof.length; k++) {
+        const [r0, y0] = prof[k],
+          [r1, y1] = prof[k + 1];
+        K.beam(ribM, [Math.sin(a) * r0, y0, Math.cos(a) * r0], [Math.sin(a) * r1, y1, Math.cos(a) * r1], i % 2 ? 0.035 : 0.06, 0.04);
+      }
+    }
+    // scallops hanging from the fascia: a fretted valance all the way round
+    const nS = 36;
+    const rS = R - 0.03;
+    for (let i = 0; i < nS; i++) {
+      const a0 = (i / nS) * Math.PI * 2,
+        a1 = ((i + 1) / nS) * Math.PI * 2;
+      const fan: V3[] = [];
+      for (let k = 0; k <= 6; k++) {
+        const t = k / 6;
+        const a = a0 + (a1 - a0) * t;
+        fan.push([Math.sin(a) * rS, ey - 0.05 - Math.sin(t * Math.PI) * 0.17, Math.cos(a) * rS]);
+      }
+      fan.push([Math.sin(a1) * rS, ey - 0.05, Math.cos(a1) * rS], [Math.sin(a0) * rS, ey - 0.05, Math.cos(a0) * rS]);
+      K.poly(cream, fan, undefined, true);
+    }
+    // ring mouldings and a small louvred lantern at the crown
+    K.torus(cream, R - 0.04, 0.05, 0, ey + 0.2, 0, 5, 32);
+    K.cyl(cream, 0.26, 0.28, 0.08, 0, ey + 1.93, 0, 12);
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2;
+      K.box(iron, 0.03, 0.2, 0.03, Math.sin(a) * 0.2, ey + 2.0, Math.cos(a) * 0.2);
+    }
+    K.cone(M('#3f7a5c', PAT.SEAM, 0.5, 0.2, 0, 0, 0.5), 0.28, 0.2, 0, ey + 2.2, 0, 12);
+  }
+  finial(K, S_gold(), 0, ey + (lmDetail(env.ctx, 'bandroof') ? 2.36 : 2.0), 0, 0.6, 0.08);
+  K.box(S_gold(), 0.7, 0.18, 0.03, 0.15, ey + (lmDetail(env.ctx, 'bandroof') ? 3.11 : 2.75), 0);
   // fairy lights along the eave
   for (let i = 0; i < 24; i++) {
     const a = (i / 24) * Math.PI * 2;

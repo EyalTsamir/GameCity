@@ -109,6 +109,7 @@ const VERT_PAT = /* glsl */ `
   else if (pid > 1.5 && pid < 2.5) puv = position.xz;
   else if ((pid > 2.5 && pid < 3.5)) puv = position.zx;
   else if (pid > 8.5 && pid < 10.5) puv = position.xz;
+  else if (pid > 11.5 && pid < 12.5) puv = vec2(position.x + position.y * 0.62, position.z - position.y * 0.62);
   vPat = vec4(pid, aPat.y, puv);
   vEmit = aEmit;
 }
@@ -229,6 +230,20 @@ float hbRough = -1.0;
     float grime = (1.0 - smoothstep(0.0, 0.12, fract(p.y / 0.255))) * 0.35 + 0.25 * hbN2(p * 6.0 + vPat.y * 5.0);
     diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.2, 0.19, 0.17), clamp(grime * vPat.y * 2.0, 0.0, 0.6));
     diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * 1.25 + 0.06, scr * 0.7);
+  } else if (pid > 11.5 && pid < 12.5) {
+    // quarried rock (sheared xz + y so that no face of a stone stretches): banding, fractures, grain, lichen in patches
+    vec2 p = vPat.zw;
+    float n = hbN2(p * 0.9) * 0.5 + hbN2(p * 2.9 + 4.1) * 0.3 + hbN2(p * 8.3) * 0.2;
+    float fw = fwidth(p.x) + fwidth(p.y);
+    float fade = 1.0 - smoothstep(0.08, 0.3, fw);
+    float cr = abs(hbN2(p * 1.7 + 9.0) - 0.5) * 2.0 + 0.25 * hbN2(p * 7.0);
+    float crack = (1.0 - smoothstep(0.03, 0.09, cr)) * smoothstep(0.35, 0.6, hbN2(p * 0.6 + 2.0));
+    float grain = hbN2(p * 37.0);
+    diffuseColor.rgb *= (0.72 + 0.56 * n) * mix(1.0, (1.0 - 0.62 * crack) * (0.9 + 0.2 * grain), fade);
+    float li = smoothstep(0.6, 0.72, hbN2(p * 1.1 + 13.0) * 0.7 + hbN2(p * 5.3) * 0.3);
+    diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.5, 0.47, 0.27) * (0.8 + 0.4 * grain), li * 0.55 * vPat.y);
+    hbTilt = (n - 0.5) * 0.8 + (hbN2(p * 6.1 + 3.0) - 0.5) * 0.4;
+    hbRough = 0.92;
   }
 }
 `;
@@ -433,6 +448,7 @@ void main() {
     mvPosition = modelViewMatrix * vec4(c, 1.0);
     mvPosition.xy += aCorner * aInfo.x;
   }
+  if (mode > 5.5 && mode < 6.5) vCol *= smoothstep(3.0, 16.0, -mvPosition.z);
   if (k < 0.002) mvPosition = vec4(0.0, 0.0, 2.0, 1.0);
   gl_Position = projectionMatrix * mvPosition;
   #include <fog_vertex>
