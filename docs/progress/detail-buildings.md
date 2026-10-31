@@ -4,11 +4,10 @@ Branch `claude/detail-buildings-67bbbf`. Shared rules: `DETAIL-ROUND.md`. Switch
 `?nodetailb` all off, `?no<name>` one family.
 
 ## Resume here
-Round 1 and a short round 2 committed. Round 1 checks passed on 6015486: invariants `{}`, validate `[]`, hitch prog+0 (overview, downtown x 12, 21.5),
-ui-test 70 + `kinds` alone 1/1, diorama and quality medium / low clean, build 4.09 MB, sheet `detail/buildings/round1_before_after.jpg`.
-Since then (round 2): every tower side a shop of its own (blank cream panes gone, under `?nogroundfit`), party walls, Grand Hotel foyer.
-To do next: repeat perf (`;nodetailb`, 4 views) and hitch on the final code because shop bays replaced lobby-lit bays, then ui-test. Left, not
-built: house repetition (owners), apartment entrances, kiosk slab, L-shaped hall (footprint rule blocks docks and annexes outside the lot).
+Round 1 and a short round 2 committed. Round 2: every tower side a shop of its own (blank cream panes gone, under `?nogroundfit`), party walls, Grand Hotel foyer.
+Checks on f5da77b: perf below, hitch prog+0 geo+0 freeze 0 (overview, downtown, hotel x 12, 21.5), invariants `{}`, validate `[]`, ui-test 70 passed
++ `kinds` alone 1/1, build 4.09 MB, opening film sheet looks right (`--mode seek`, no building out of place), sheet `detail/buildings/round1_before_after.jpg`.
+Next round, ranked: house repetition (owners), apartment entrances, Seaview hotel foyer, kiosk slab. Blocked: L-shaped hall (footprint rule forbids docks and annexes outside the lot).
 Heredocs over ~7 KB are cut by the Bash tool: write patch scripts with Write.
 
 ## Audit (round 1, 84 views at noon: eye level, 45 m air, back; own look)
@@ -33,12 +32,12 @@ Also: sign atlas height 1024 → 1280 (always on), new mesh `buildings-glass`, `
 ## Cost (`perf.mjs`, 1920x1025, noon, `;nodetailb`, 2 repeats, power guard: on AC throughout)
 | view | on (ms) | `?nodetailb` (ms) | change | triangles |
 |---|---|---|---|---|
-| overview | 37.71, 37.05 | 37.32, 36.70 | +0.4 | +84 k |
-| downtown | 36.16, 36.39 | 36.17, 36.23 | +0.1 | +85 k |
-| street `5,1.5,-65,9,0,6` | 33.56, 33.57 | 34.61, 34.51 | **-1.0** (real lobby pixels replace facade pixels) | +117 k (first pass read +347 k, a different LOD state) |
-| market `27.5,1,78.5,16,200,28` | 33.35, 33.38 | 33.33, 33.36 | 0 | ~+40 k (first pass +183 k) |
+| overview | 36.94, 36.75 | 36.70, 36.65 | +0.2 | +88 k |
+| downtown | 36.09, 35.90 | 36.07, 36.12 | -0.1 | +87 k |
+| street `5,1.5,-65,9,0,6` | 33.53, 33.29 | 34.49, 34.55 | **-1.1** (real lobby pixels replace facade pixels) | +120 k (LOD state varies between passes) |
+| market `27.5,1,78.5,16,200,28` | 33.14, 32.98 | 33.18, 33.29 | -0.2 | +15 k |
 
-Within budget (+1 ms, +250 k). Draw calls +1 (glass) on most views.
+Final code, f5da77b. Within budget (+1 ms, +250 k). Draw calls +1 (glass) on most views.
 
 ## Best views
 Lobbies: `38.8,2.2,-58,8,215,-3` (office 31) and Haven Tower `-27.5,2.2,-32.5,8,30,-3` at 18.2 and 21.5.
