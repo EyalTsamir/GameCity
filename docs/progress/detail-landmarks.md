@@ -54,7 +54,7 @@ stars, plaster + stencil, oak, glass, pictures from the room atlas, flames, marb
 
 Second repeat of each pair; the first baseline row of a run is cold (fewer triangles uploaded, 1-2 ms noisier), so it is not used. Budget: +1 ms, +250 k. Inside the station
 hall: 31.7 ms, 305 draws, 5.87 M triangles in that view (room plus the city behind it; the room's own share was not isolated).
-`hitch.mjs`: prog+0 geo+0 tex+0 in every window. `shot --invariants --validate`: {} and []. ui-test: 71 passed, 0 failed. `npm run build` fine. `?diorama`, `?quality=medium` (all rooms
+`hitch.mjs`: prog+0 geo+0 tex+0 in every window (it flies the overview only); moving from far away into each room and the pier: `renderer.info.programs` stays at 150, so nothing compiles on entry. `shot --invariants --validate`: {} and []. ui-test: 71 passed, 0 failed. `npm run build` fine. `?diorama`, `?quality=medium` (all rooms
 on), `?quality=low` (rooms off, old exteriors) seen. Opening film sheet seen (`--mode seek` only, not real time); no shot goes through a changed room.
 Sheets: `docs/progress/detail/landmarks/heroes.jpg`, `before-after.jpg`.
 
@@ -66,7 +66,7 @@ through the open door with a train behind it, compass floor and rib shadows at 1
 `?nolmdetail` all; `?noherochurch`, `?noherotownhall`, `?noherostation`, `?noquaylife2`, `?nohorses`, `?nobandroof`. Always on: bricks 25 x 9.5 cm (`shaders.ts`, every brick landmark).
 
 ## Hand-offs
-None to other sessions. Walk mode still passes through small unmarked clutter on the fish quay (not added here).
+None to other sessions. In `quayLife.ts` the big pieces are solid for the walker; cones and the manhole are not.
 
 ## Edits outside my files
 `src/ui/camera/walkSurface.ts`: asks `ctx.services.rooms` first in `heightAt` and `solidAt`.
