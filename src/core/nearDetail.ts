@@ -42,8 +42,13 @@ const REF_TAN = Math.tan((REF_FOV * Math.PI) / 360);
 /** pixels one metre covers at 1 m in the reference view */
 const REF_PX = REF_HEIGHT / (2 * REF_TAN);
 
-/** the camera's magnification against the reference view (1 walking at 1025 px; 4 through a ×4 lens); read anywhere, updated per frame */
-export const nearLens = { value: 1 };
+/**
+ * How big things look. `value`: pixels per metre against the reference view, all in (0.72 walking at 1025 px, 1 orbiting
+ * close, 2.9 through a ×4 lens while walking); read it for a detail radius. `zoom`: only the magnification the user
+ * asked for (1 unless the lens is in use); multiply the limits of an older level of detail by it, so that it brings the
+ * detail in through a lens and changes nothing otherwise. Updated per frame.
+ */
+export const nearLens = { value: 1, zoom: 1 };
 
 /** how far (m, reference view) something `size` metres across still covers `px` pixels: the radius where it can appear unseen */
 export function nearRadiusFor(size: number, px = 1): number {

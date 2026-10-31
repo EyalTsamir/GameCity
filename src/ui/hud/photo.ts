@@ -27,6 +27,7 @@ const FOCUS_MIN = 1;
 const FOCUS_MAX = 800;
 const F_MIN = 0.5;
 const F_MAX = 22;
+const ZOOM_MAX = 8;
 /** the clock eases back to where it was over this long when leaving */
 const RESTORE_S = 0.9;
 
@@ -42,6 +43,8 @@ export class PhotoMode {
   private readonly timeVal: HTMLElement;
   private readonly expo: HTMLInputElement;
   private readonly expoVal: HTMLElement;
+  private readonly zoom: HTMLInputElement;
+  private readonly zoomVal: HTMLElement;
   private readonly aperture: HTMLInputElement;
   private readonly apertureVal: HTMLElement;
   private readonly focus: HTMLInputElement;
@@ -72,6 +75,7 @@ export class PhotoMode {
         <div class="th-chips" role="radiogroup" aria-label="Look">${lookHtml}</div>
         <label class="th-photo-row"><span>Time</span><input type="range" class="th-range" data-k="time" min="0" max="24" step="0.01" aria-label="Time of day"><b data-v="time"></b></label>
         <label class="th-photo-row"><span>Exposure</span><input type="range" class="th-range" data-k="expo" min="-2" max="2" step="0.05" aria-label="Exposure"><b data-v="expo"></b></label>
+        <label class="th-photo-row"><span>Zoom</span><input type="range" class="th-range" data-k="zoom" min="0" max="1" step="0.002" aria-label="Zoom"><b data-v="zoom"></b></label>
         <label class="th-photo-row"><span>Aperture</span><input type="range" class="th-range" data-k="aperture" min="0" max="1" step="0.005" aria-label="Aperture"><b data-v="aperture"></b></label>
         <label class="th-photo-row"><span>Focus</span><input type="range" class="th-range" data-k="focus" min="0" max="1" step="0.002" aria-label="Focus distance"><b data-v="focus"></b></label>
         <div class="th-photo-opts"><button type="button" class="th-chip" data-act="auto">Auto focus</button><button type="button" class="th-chip" data-act="freeze">Freeze the moment</button></div>
@@ -88,6 +92,8 @@ export class PhotoMode {
     this.timeVal = q('[data-v="time"]');
     this.expo = q('[data-k="expo"]');
     this.expoVal = q('[data-v="expo"]');
+    this.zoom = q('[data-k="zoom"]');
+    this.zoomVal = q('[data-v="zoom"]');
     this.aperture = q('[data-k="aperture"]');
     this.apertureVal = q('[data-v="aperture"]');
     this.focus = q('[data-k="focus"]');
@@ -105,6 +111,7 @@ export class PhotoMode {
     }
     this.time.addEventListener('input', () => this.applyTime());
     this.expo.addEventListener('input', () => this.applyExposure());
+    this.zoom.addEventListener('input', () => this.applyZoom());
     this.aperture.addEventListener('input', () => this.applyAperture());
     this.focus.addEventListener('input', () => this.applyFocus(logTo(parseFloat(this.focus.value), FOCUS_MIN, FOCUS_MAX)));
     this.focusAuto.addEventListener('click', () => this.applyFocus(null));
@@ -139,10 +146,12 @@ export class PhotoMode {
     fx?.holdQuality?.(true);
     this.time.value = String(ctx.clock.hours);
     this.expo.value = '0';
+    this.zoom.value = '0';
     this.aperture.value = String(logFrom(1.6, F_MIN, F_MAX));
     Object.assign(this.look, NEUTRAL, { exposure: 1 });
     this.setLook('natural');
     this.applyExposure();
+    this.applyZoom();
     this.applyAperture();
     this.applyFocus(null);
     this.applyTime();
@@ -162,6 +171,7 @@ export class PhotoMode {
     fx?.setPhoto?.(null);
     fx?.setFocus?.(null);
     fx?.setLens?.(null);
+    this.cam()?.setLens(1);
     fx?.holdQuality?.(false);
     if (s) {
       ctx.quality.dof = s.qualityDof;
@@ -190,6 +200,13 @@ export class PhotoMode {
       b.setAttribute('aria-checked', String(on));
     }
     this.ctx.services.postfx?.setPhoto?.(this.look);
+  }
+
+  private applyZoom(): void {
+    const k = logTo(parseFloat(this.zoom.value), 1, ZOOM_MAX);
+    this.cam()?.setLens(k);
+    this.zoomVal.textContent = `${k.toFixed(1)}×`;
+    this.setFill(this.zoom);
   }
 
   private applyTime(): void {

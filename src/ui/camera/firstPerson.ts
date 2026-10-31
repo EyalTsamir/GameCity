@@ -11,6 +11,7 @@
 // Feet follow the walking surface (curbs, stairs, decks, bridge arches) with a smooth step; the body slides
 // along walls; a subtle head bob, footsteps through the audio module ('walk:step' events).
 
+import { nearLens } from '../../core/nearDetail';
 import * as THREE from 'three';
 import type { CityContext, CameraState, PickHit } from '../../core/context';
 import type { PointerInfo } from '../shared';
@@ -38,6 +39,9 @@ const SUB = 0.18;
 /** vertical field of view at eye level (wider on portrait screens) */
 const FOV = 66;
 const FOV_TALL = 74;
+/** the lens: wheel and + − magnify the view, the walker stays where it is (`?nolens`: not at all) */
+const LENS_MAX = 8;
+const LENS_ON = !new URLSearchParams(location.search).has('nolens');
 const NEAR = 0.2;
 /** focus distance reported to the lens / shadow fit: far enough that the lens never blurs at eye level */
 const FOCUS = 30;
@@ -128,6 +132,8 @@ export class FirstPerson {
   private vz = 0;
   /** side (±1) the last blocked step veered to */
   private veer = 1;
+  private lens = 1;
+  private lensGoal = 1;
   private glide: Glide | null = null;
   // head bob / footsteps
   private phase = 0;
@@ -264,6 +270,8 @@ export class FirstPerson {
         /* ignore */
       }
     }
+    this.lens = this.lensGoal = 1;
+    nearLens.zoom = 1;
     this.host.release(cam.position.clone(), viewYaw, viewPitch, rise);
     this.host.emit('camera:walk', false);
   }
@@ -299,6 +307,8 @@ export class FirstPerson {
 
   frame(dt: number): void {
     if (!this.active) return;
+    this.lens = Math.exp(Math.log(this.lens) + (Math.log(this.lensGoal) - Math.log(this.lens)) * (1 - Math.exp(-dt * 9)));
+    nearLens.zoom = this.lens;
     const s = this.surface();
     if (this.glide) {
       this.updateGlide(dt);
@@ -308,8 +318,8 @@ export class FirstPerson {
     const k = (c: string) => (this.keys.has(c) ? 1 : 0);
     const turn = k('ArrowLeft') + k('KeyQ') - k('ArrowRight') - k('KeyE');
     const tilt = k('KeyR') - k('KeyF');
-    if (turn) this.yaw += turn * 1.9 * dt;
-    if (tilt) this.pitch = clamp(this.pitch + tilt * 1.2 * dt, -MAX_PITCH, MAX_PITCH);
+    if (turn) this.yaw += (turn * 1.9 * dt) / this.lens;
+    if (tilt) this.pitch = clamp(this.pitch + (tilt * 1.2 * dt) / this.lens, -MAX_PITCH, MAX_PITCH);
     // ── walk
     let fwd = k('KeyW') + k('ArrowUp') - k('KeyS') - k('ArrowDown');
     let side = k('KeyD') - k('KeyA');
@@ -484,16 +494,36 @@ export class FirstPerson {
 
   private fov(): number {
     const aspect = this.ctx.camera.aspect || 1.6;
-    return aspect >= 1.5 ? FOV : FOV + (FOV_TALL - FOV) * clamp((1.5 - aspect) / 0.8, 0, 1);
+    const f = aspect >= 1.5 ? FOV : FOV + (FOV_TALL - FOV) * clamp((1.5 - aspect) / 0.8, 0, 1);
+    return (2 * Math.atan(Math.tan((f * DEG) / 2) / this.lens)) / DEG;
+  }
+
+  /** magnify by this much (wheel, keys): relative to the present lens */
+  zoomLens(factor: number): void {
+    if (LENS_ON) this.lensGoal = clamp(this.lensGoal * factor, 1, LENS_MAX);
+  }
+
+  /** the lens directly (photo mode, the test set); seconds 0 snaps */
+  setLens(k: number, seconds?: number): void {
+    this.lensGoal = clamp(k, 1, LENS_MAX);
+    if (seconds === 0) {
+      this.lens = this.lensGoal;
+      nearLens.zoom = this.lens;
+    }
+  }
+
+  lensNow(): number {
+    return this.lens;
   }
 
   /** place the camera at the eye */
   private apply(): void {
     const cam = this.ctx.camera;
     // bob: lowest when a foot strikes, highest mid-stride; a little sway from foot to foot
-    const amp = this.bob * (0.022 + 0.026 * this.jogT);
+    // (a lens magnifies the shake of the step: it is held steadier)
+    const amp = (this.bob * (0.022 + 0.026 * this.jogT)) / this.lens;
     const bobY = -amp * Math.cos(2 * this.phase);
-    const sway = this.bob * (0.016 + 0.01 * this.jogT) * Math.sin(this.phase);
+    const sway = (this.bob * (0.016 + 0.01 * this.jogT) * Math.sin(this.phase)) / this.lens;
     const rx = -Math.cos(this.yaw),
       rz = Math.sin(this.yaw);
     cam.position.set(this.x + rx * sway, this.feet + EYE + bobY, this.z + rz * sway);
@@ -511,9 +541,11 @@ export class FirstPerson {
     const cam = this.ctx.camera;
     cam.getWorldDirection(_v);
     const p = cam.position;
+    // (through a lens the shadow fit and the rest follow what is magnified)
+    const F = FOCUS * this.lens;
     return {
-      target: { x: p.x + _v.x * FOCUS, y: p.y + _v.y * FOCUS, z: p.z + _v.z * FOCUS },
-      distance: FOCUS,
+      target: { x: p.x + _v.x * F, y: p.y + _v.y * F, z: p.z + _v.z * F },
+      distance: F,
       // orbit convention: yaw of the camera seen from the target, pitch of the camera above it
       yaw: wrapPi(Math.atan2(-_v.x, -_v.z)) / DEG,
       pitch: -Math.asin(clamp(_v.y, -1, 1)) / DEG,
@@ -540,8 +572,15 @@ export class FirstPerson {
     }
     if (c === 'ShiftLeft' || c === 'ShiftRight') return true;
     if (!down) return false;
-    // zoom keys mean nothing at eye level
-    if (c === 'Equal' || c === 'Minus' || c === 'NumpadAdd' || c === 'NumpadSubtract' || c === 'PageUp' || c === 'PageDown') return true;
+    // zoom keys: the lens
+    if (c === 'Equal' || c === 'NumpadAdd' || c === 'PageUp') {
+      this.zoomLens(1.2);
+      return true;
+    }
+    if (c === 'Minus' || c === 'NumpadSubtract' || c === 'PageDown') {
+      this.zoomLens(1 / 1.2);
+      return true;
+    }
     if (c === 'Escape') {
       if (e.repeat) return true;
       // the Esc that released the captured mouse is not also a request to stop walking
@@ -588,8 +627,8 @@ export class FirstPerson {
     if (this.locked) {
       // captured mouse: turn with the raw movement (right = turn right, down = look down)
       if (!this.glide) {
-        this.yaw -= (e.movementX || 0) * LOCK_SENS;
-        this.pitch = clamp(this.pitch - (e.movementY || 0) * LOCK_SENS, -MAX_PITCH, MAX_PITCH);
+        this.yaw -= ((e.movementX || 0) * LOCK_SENS) / this.lens;
+        this.pitch = clamp(this.pitch - ((e.movementY || 0) * LOCK_SENS) / this.lens, -MAX_PITCH, MAX_PITCH);
       }
       return;
     }

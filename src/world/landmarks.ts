@@ -11,6 +11,7 @@
 // Surfaces use a shared procedural shader (brick, stone, tiles, glazing, windows, clock
 // faces showing the live time, flags…) — see landmarks/shaders.ts.
 
+import { nearLens } from '../core/nearDetail';
 import * as THREE from 'three';
 import type { CityContext, CityModule, PickHit } from '../core/context';
 import { createMaterials } from './landmarks/materials';
@@ -350,6 +351,7 @@ export default function create(ctx: CityContext): CityModule {
     frame(realDt, c) {
       tvLift?.frame(realDt);
       const cp = c.camera.position;
+      mats.u.uDetailDist.value = 100 * nearLens.zoom;
       const lod = mats.u.uDetailDist.value;
       for (let i = 0; i < detailCells.length; i++) {
         const sp = cellSpheres[i];

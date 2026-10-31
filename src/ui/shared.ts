@@ -28,6 +28,9 @@ export interface TourShotInfo {
 }
 
 export interface CameraServiceExt extends CoreCameraService {
+  /** magnify the view without moving (1..8; photo mode, the test set, the walker's wheel); seconds 0 snaps */
+  setLens(k: number, seconds?: number): void;
+  lensNow(): number;
   /** entity currently followed (or null) */
   following(): PickHit | null;
   /** low chase view behind the followed entity */

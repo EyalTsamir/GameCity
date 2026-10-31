@@ -12,6 +12,7 @@
 //
 // Service: ctx.services.vegetation = { trees: { x, z, r, h }[] }
 
+import { nearLens } from '../core/nearDetail';
 import { nature } from '../core/nature';
 import * as THREE from 'three';
 import type { CityContext, CityModule } from '../core/context';
@@ -1410,7 +1411,7 @@ export default function create(ctx: CityContext): CityModule {
         m.renderOrder = -1;
         root.add(m);
         const cell = geo.boundingBox!;
-        culler.add(m, () => near && cell.distanceToPoint(ctx.camera.position) < 180);
+        culler.add(m, () => near && cell.distanceToPoint(ctx.camera.position) < 180 * nearLens.zoom);
       }
     }
   } else FC.forEach((c, i) => culler.add(mk(c.s, `veg-plants-fine-${sides[i]}`, pm.mat, false, 'plants'), () => near));
@@ -1432,7 +1433,7 @@ export default function create(ctx: CityContext): CityModule {
   const NEAR_CAP = { high: 70000, medium: 36000, low: 4000 };
   const DIST = { high: 75, medium: 42, low: 0 };
   let leafOverride: number | null = null;
-  const leafDist = (): number => leafOverride ?? DIST[ctx.quality.level] ?? 75;
+  const leafDist = (): number => (leafOverride ?? DIST[ctx.quality.level] ?? 75) * nearLens.zoom;
   if (cardsOn && atlas) {
     const farCards = newCardBuf(plants.length * 30);
     const farWood = newWoodBuf(plants.length * 14);

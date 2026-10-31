@@ -4,6 +4,7 @@
 //
 // Registers ctx.services.camera (core type + the extras in ./shared.ts).
 
+import { nearLens } from '../core/nearDetail';
 import * as THREE from 'three';
 import type { CityContext, CityModule, CameraState, PickHit } from '../core/context';
 import type { Poi } from '../core/plan';
@@ -232,6 +233,8 @@ export default function create(ctx: CityContext): CityModule {
   const dbg = { want: 0, lim: 0, d: 0, need: 0 };
   let craneLift = 0;
   let fov = BASE_FOV;
+  /** the lens of the orbit camera (photo mode, the test set; the wheel moves the camera instead); the walker has its own */
+  let orbitLens = 1;
 
   // input state
   const keys = new Set<string>();
@@ -1304,13 +1307,16 @@ export default function create(ctx: CityContext): CityModule {
 
   const onWheel = (e: WheelEvent) => {
     e.preventDefault();
-    if (walk.active) return;
-    userTakesOver();
     let dy = e.deltaY;
     if (e.deltaMode === 1) dy *= 18;
     else if (e.deltaMode === 2) dy *= 120;
     if (e.ctrlKey) dy *= 2.5; // trackpad pinch arrives as ctrl+wheel with small deltas
     dy = clamp(dy, -260, 260);
+    if (walk.active) {
+      walk.zoomLens(Math.exp(-dy * 0.0016));
+      return;
+    }
+    userTakesOver();
     const p = canvasXY(e);
     zoomAt(p.x, p.y, Math.exp(dy * 0.0013));
     movingUntil = performance.now() + 500;
@@ -1815,7 +1821,7 @@ export default function create(ctx: CityContext): CityModule {
     const baseFov = WORLD_MODE ? worldFov(effDist) : BASE_FOV;
     const wantFov = follow?.chase ? Math.max(CHASE_FOV, baseFov) : baseFov;
     fov += (wantFov - fov) * (dt > 0 ? damp(3, dt) : 1);
-    camera.fov = fov;
+    camera.fov = orbitLens > 1 ? (2 * Math.atan(Math.tan((fov * DEG) / 2) / orbitLens)) / DEG : fov;
     // free camera: a room around it inside a building (facades are single-sided), a near plane that lets it
     // pass a wall without cutting into it, and the lens focused on what is ahead once the pivot is a step away
     explore.update(_pos, noLift && !follow);
@@ -1866,6 +1872,13 @@ export default function create(ctx: CityContext): CityModule {
 
   const service: CameraServiceExt = {
     flyTo,
+    setLens(k, seconds) {
+      if (walk.active) return walk.setLens(k, seconds);
+      orbitLens = clamp(k, 1, 8);
+      nearLens.zoom = orbitLens;
+      if (seconds === 0) applyCamera(0);
+    },
+    lensNow: () => (walk.active ? walk.lensNow() : orbitLens),
     follow: (hit) => {
       if (walk.active) {
         // walking: the info card's Stop / close just closes the card
