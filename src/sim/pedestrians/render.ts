@@ -61,7 +61,7 @@ const eyeHash = (x: number) => {
  *  state: a target per time slot. A person who has noticed the camera holds it; anyone it comes near may glance at it without turning the head. */
 function eyeGaze(m: Member, pose: Pose, stature: number, mx: number, mz: number, cam: THREE.Vector3, t: number, o: Uint32Array): void {
   if (!GAZE_EYES) {
-    o[23] = ((o[23] & 0xffff0000) | 0x7f80) >>> 0;
+    o[23] = ((o[23] & 0xffff0000) | 32 | (16 << 6)) >>> 0;
     return;
   }
   const seed = m.seed * 91.7;
@@ -81,10 +81,23 @@ function eyeGaze(m: Member, pose: Pose, stature: number, mx: number, mz: number,
   }
   yaw = yaw < -0.62 ? -0.62 : yaw > 0.62 ? 0.62 : yaw;
   pitch = pitch < -0.42 ? -0.42 : pitch > 0.42 ? 0.42 : pitch;
-  const by = Math.round((yaw / 0.62 + 1) * 127.5),
-    bp = Math.round((pitch / 0.42 + 1) * 127.5);
-  // (spare1's word: the two bytes stand in for the prop code, which only the CPU reads)
-  o[23] = ((o[23] & 0xffff0000) | by | (bp << 8)) >>> 0;
+  // whoever's turn it is in a party talks: the jaw in syllables, with pauses
+  let jaw = 0;
+  const party = m.party;
+  const n = party ? party.members.length : 1;
+  if (n > 1 && m.lie < 0.3) {
+    const turn = t * 0.21 + party.members[0].seed * 17;
+    const fl = Math.floor(turn);
+    if (Math.floor(eyeHash(fl) * n) === m.idx && turn - fl > 0.08 && turn - fl < 0.9) {
+      const sy = Math.sin(t * 8.3 + seed) * Math.sin(t * 3.1 + seed * 2);
+      jaw = sy > 0 ? Math.min(1, sy * 1.5) : 0;
+    }
+  }
+  const by = Math.round((yaw / 0.62 + 1) * 31.5),
+    bp = Math.round((pitch / 0.42 + 1) * 15.5),
+    bj = Math.round(jaw * 31);
+  // (spare1's word: these stand in for the prop code, which only the CPU reads)
+  o[23] = ((o[23] & 0xffff0000) | by | (bp << 6) | (bj << 11)) >>> 0;
 }
 /** pose word 0 with the scale and a given fade (LOD cross-fades) */
 function packScaleFade(scale: number, fade: number, o: Uint32Array): void {

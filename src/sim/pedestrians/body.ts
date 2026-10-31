@@ -112,6 +112,9 @@ export const FB = {
   LOCKS: 28,
 } as const;
 
+/** close level only, decided in the vertex shader from the person's hash (no bits left in the mask) */
+export const FX = { GLASSES: 29, EARRINGS: 30 } as const;
+
 /** 0 near (< 40 m), 1 lo, 2 tiny, 3 pin, 4 close (< ~15 m: sculpted face, fingers, fabric detail) */
 export type Lod = 0 | 1 | 2 | 3 | 4;
 
@@ -469,7 +472,9 @@ function buildTorso(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
     const ri = Math.round(x);
     const exact = Math.abs(x - ri) < 1e-6;
     const q = exact ? { r: T[ri], bust: d.bust[ri], h: TORSO_H[ri], w: TORSO_BONE[ri][1], tint: TORSO_TINT[ri], bone: TORSO_BONE[ri][0] } : lerpR(x);
-    b.use(q.bone, REG.TORSO, -1, q.tint);
+    // close: the pelvis below the hip ring goes inside the thighs, which meet it under the shirt's hem and not as a pair of briefs below it
+    if (cfg.close && exact && ri < 2) q.r = { ...q.r, hw: q.r.hw * 0.82, f: q.r.f * 0.82, b: q.r.b * 0.82 };
+    b.use(q.bone, REG.TORSO, -1, cfg.close && ri < 3 ? 1 : q.tint);
     const ids: number[] = [];
     for (let k = 0; k < n; k++) {
       const phi = (k / n) * Math.PI * 2;
@@ -905,6 +910,62 @@ function buildCloseHead(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
       b.quadDir(fold[i], fold[i1], bowl[i1], bowl[i], out);
       b.triDir(bowl[i], bowl[i1], concha, out);
     }
+    if (closePeople('earrings')) {
+      b.use(BONE.HEAD, REG.ACCENT, FX.EARRINGS, 1);
+      const lobe = add(base, add(mul(up, -hgt * 0.92), mul(out, 0.002 * k)));
+      blob(b, add(lobe, mul(up, -0.004 * k)), [0.0028, 0.0028, 0.0028], 5, 2);
+      blob(b, add(lobe, mul(up, -0.0115 * k)), [0.0035, 0.005, 0.0024], 5, 2);
+    }
+  }
+  if (closePeople('glasses')) {
+    // spectacles: two rims in the plane of the eyes, a bridge, arms back to the ears
+    b.use(BONE.HEAD, REG.DARK, FX.GLASSES, 1);
+    const X0 = 0.0315,
+      rx = 0.0235,
+      ry = 0.0185,
+      rimW = 0.0022;
+    const C = (s: number) => closeHeadPoint(d, (s * X0) / 0.0775, 0, 0.0095 * k).p;
+    const rim: number[][] = [];
+    for (const s of [1, -1]) {
+      const c = C(s);
+      const ph = (s * X0) / 0.0775 * 0.7;
+      const ux: P3 = [Math.cos(ph), 0, -Math.sin(ph)],
+        uz: P3 = [Math.sin(ph), 0, Math.cos(ph)];
+      const NR = 18;
+      const ringAt = (dr: number, dz: number): number[] => {
+        const ids: number[] = [];
+        for (let i = 0; i < NR; i++) {
+          const a = (i / NR) * Math.PI * 2;
+          // a soft rounded rectangle
+          const e = 0.72;
+          const lx = Math.sign(Math.cos(a)) * Math.abs(Math.cos(a)) ** e,
+            ly = Math.sign(Math.sin(a)) * Math.abs(Math.sin(a)) ** e;
+          ids.push(b.v(add(add(c, add(mul(ux, (rx + dr) * k * lx), [0, (ry + dr) * k * ly - (ly < 0 ? 0.001 : 0), 0])), mul(uz, dz)), 2, 0));
+        }
+        return ids;
+      };
+      const of = ringAt(0, 0),
+        inf = ringAt(-rimW, 0),
+        ob = ringAt(0, -0.0024);
+      rim.push(of);
+      for (let i = 0; i < NR; i++) {
+        const j = (i + 1) % NR;
+        b.quadDir(of[i], of[j], inf[j], inf[i], uz);
+        b.quadOut(of[i], of[j], ob[j], ob[i], sub(c, mul(uz, 0.01)));
+      }
+    }
+    const pL = C(1),
+      pR = C(-1);
+    const yB = 0.008 * k;
+    stick(b, add(pL, [-rx * k * 0.98, yB, -0.001]), add([0, (pL[1] + pR[1]) / 2 + yB + 0.002, (pL[2] + pR[2]) / 2 + 0.002] as P3, [0, 0, 0]), 0.0013, 4);
+    stick(b, add(pR, [rx * k * 0.98, yB, -0.001]), [0, (pL[1] + pR[1]) / 2 + yB + 0.002, (pL[2] + pR[2]) / 2 + 0.002], 0.0013, 4);
+    for (const s of [1, -1]) {
+      const hinge = add(s > 0 ? pL : pR, [s * rx * k, 0.006 * k, -0.002]);
+      const m1 = closeHeadPoint(d, s * 1.25, 0.006, 0.0035 * k).p;
+      const m2 = closeHeadPoint(d, s * 1.72, -0.006, 0.0025 * k).p;
+      stick(b, hinge, m1, 0.0011, 4);
+      stick(b, m1, m2, 0.0011, 4);
+    }
   }
 }
 
@@ -1171,9 +1232,9 @@ function buildLeg(b: MeshBuilder, d: Dims, cfg: LodCfg, side: 1 | -1): void {
   const specs: LimbSpec[] = [];
   for (const i of cfg.thigh) {
     const r0 = d.thigh[i];
-    const tk = cfg.close ? [0.68, 0.84, 0.97, 1, 1, 1][i] : 1;
+    const tk = cfg.close ? [0.68, 0.92, 0.98, 1, 1, 1][i] : 1;
     const r = tk === 1 ? r0 : { ...r0, rx: r0.rx * tk, rz: r0.rz * tk };
-    specs.push({ a: hp, b: kn, ring: r, bone: i === 5 ? SH : TH, w: THIGH_W[i], h: 1 - 0.5 * r.t, reg: REG.LEG, tint: i === 0 ? (HIP_BLEND ? 0.93 : 0.86) : 1 });
+    specs.push({ a: hp, b: kn, ring: r, bone: i === 5 ? SH : TH, w: THIGH_W[i], h: 1 - 0.5 * r.t, reg: REG.LEG, tint: i === 0 && !cfg.close ? (HIP_BLEND ? 0.93 : 0.86) : 1 });
   }
   for (const i of cfg.shin) {
     const r = d.shin[i];

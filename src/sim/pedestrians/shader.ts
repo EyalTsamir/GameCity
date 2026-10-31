@@ -13,7 +13,7 @@ import * as THREE from 'three';
 import { detailPeople } from '../../core/detailPeople';
 import { globalUniforms } from '../../core/uniforms';
 import { perfOn } from '../../core/perfdeep';
-import { BONE, FB, REG } from './body';
+import { BONE, FB, FX, REG } from './body';
 import { PIV, PIV_COUNT, pivotTable } from './rig';
 import { closePeople } from '../../core/closePeople';
 import { EYE, FACE_U, FACE_Y0, FACE_Y1, faceMaps } from './faceMap';
@@ -149,7 +149,7 @@ attribute uvec4 iC1;
 attribute uvec4 iC2;
 //@if CL
 float pedSunLift = 0.12;
-flat varying vec2 vPedGaze;
+flat varying vec3 vPedGaze;
 flat varying uvec2 vPedFC; // the person's cut (x) and a hashed word for the paint (y) (no attribute free for it: the limit is 16 and instancing takes them)
 float pedDn;
 vec2 pedDg;
@@ -309,6 +309,17 @@ void pedSkin(inout vec3 p, inout vec3 n, int bone, float w) {
 bool pedVisible(uint d0) {
   uint feat = (d0 >> 10u) & 63u;
   if (feat == 0u) return true;
+//@if CL
+  if (feat > ${FB.LOCKS + 1}u) {
+    uint hx = ((iC0.x & 0xFFFFFFu) * 40503u) ^ ((iC1.x & 0xFFFFFFu) * 2654435761u) ^ ((iC0.w & 0xFFFFFFu) * 3266489917u);
+    hx ^= hx >> 15u; hx *= 2246822519u; hx ^= hx >> 13u;
+    if (feat == ${FX.GLASSES + 1}u) {
+      uint ag = (iC2.w >> 9u) & 3u;
+      return (hx & 255u) < (ag == 0u ? 20u : ag == 1u ? 40u : ag == 2u ? 80u : 120u);
+    }
+    return ((hx >> 8u) & 255u) < (P_w > 0.5 ? 110u : 10u);
+  }
+//@endif
   bool has = (iC2.z & (1u << (feat - 1u))) != 0u;
   return ((d0 >> 16u) & 1u) == 1u ? !has : has;
 }
@@ -357,14 +368,14 @@ void pedPose(inout vec3 p, inout vec3 n) {
   {
     // where the eyes look (render.ts eyeGaze), radians in the head's frame
     uint gz = uint((P_spare1 + 8.0) * 4096.0 + 0.5);
-    vPedGaze = vec2((float(gz & 255u) / 127.5 - 1.0) * 0.62, (float((gz >> 8u) & 255u) / 127.5 - 1.0) * 0.42);
+    vPedGaze = vec3((float(gz & 63u) / 31.5 - 1.0) * 0.62, (float((gz >> 6u) & 31u) / 15.5 - 1.0) * 0.42, float((gz >> 11u) & 31u) / 31.0);
   }
   if (bone == ${B.HEAD}) pedSunLift = 0.34;
   if (region == ${R.TORSO} || region == ${R.LEG}) {
     float hipK = region == ${R.TORSO} ? 1.0 - smoothstep(0.1, 0.34, h) : smoothstep(0.72, 0.88, h);
     if (hipK > 0.0) {
       vec3 hipC = pedPiv(${PIV.HIP});
-      vec3 nh = normalize((p - vec3(0.0, hipC.y + 0.05, hipC.z)) * vec3(1.0, 0.55, 1.0));
+      vec3 nh = normalize((p - vec3(0.0, hipC.y + 0.05, hipC.z)) * vec3(1.0, 0.12, 1.0));
       n = normalize(mix(n, nh, hipK * smoothstep(0.015, 0.07, abs(p.x)) * 0.92));
     }
   }
@@ -408,6 +419,7 @@ void pedPose(inout vec3 p, inout vec3 n) {
       pedBump(q, 0.0042 * age, 0.056, -0.09, 0.022, 0.016);
       pedBump(q, -0.0028 * age, 0.058, -0.045, 0.02, 0.02);
       pedBump(q, -0.002 * age, 0.078, 0.018, 0.016, 0.022);
+      p.y -= vPedGaze.z * 0.0062 * smoothstep(-0.0655, -0.0745, q.y) * (1.0 - 0.45 * smoothstep(-0.09, -0.12, q.y)) * exp(-q.x * q.x / 0.0022);
       float kc = 1.0 - 0.45 * P_c;
       float sg = aux.x < 0.0 ? -1.0 : 1.0;
       vec3 tU = normalize(vec3(n.z, 0.0, -n.x) + vec3(1e-5, 0.0, 0.0));
@@ -550,7 +562,7 @@ void pedPose(inout vec3 p, inout vec3 n) {
 //@endif
     }
 //@if CL
-    else if (((d0 >> 10u) & 63u) == ${FB.FRINGE + 1}u) vPedFace = vec3(aux.y, abs(atan(p.x, p.z)), 5.0);
+    else if (((d0 >> 10u) & 63u) == ${FB.FRINGE + 1}u) vPedFace = vec3(aux.y, 3.0, 5.0);
 //@endif
     // volume (curly / full hair): scale about the head centre
     float vol = float((iC1.y >> 27u) & 31u) * (1.0 / 31.0);
@@ -905,7 +917,7 @@ float pedBayer4(vec2 a) { return pedBayer2(0.5 * a) * 0.25 + pedBayer2(a); }
 float pedN1(float x) { float i = floor(x), f = fract(x); f = f * f * (3.0 - 2.0 * f); return mix(fract(sin(i * 127.1) * 43758.5453), fract(sin((i + 1.0) * 127.1) * 43758.5453), f); }
 #ifdef PED_CLOSE
 flat varying uvec2 vPedFC;
-flat varying vec2 vPedGaze;
+flat varying vec3 vPedGaze;
 float pedN2(vec2 p) {
   vec2 i = floor(p), f = fract(p);
   f = f * f * (3.0 - 2.0 * f);
@@ -942,7 +954,11 @@ float pedStrands(vec3 r) {
   float c = mix(pedN1(a * 26.0 + wob), 0.5, smoothstep(0.4, 0.9, fwidth(a * 26.0)));
   float fA = a * 85.0 + wob * 2.0;
   float fw = fwidth(fA);
+#ifdef PED_CLOSE
+  float f = mix(pedN1(fA) - 0.5, 0.0, smoothstep(0.15, 0.4, fw));
+#else
   float f = mix(pedN1(fA) - 0.5, 0.0, smoothstep(0.35, 0.8, fw));
+#endif
   float ff = mix(pedN1(a * 240.0 + wob * 4.0) - 0.5, 0.0, smoothstep(0.25, 0.6, fwidth(a * 240.0)));
   // (clumps break along their length: no continuous corrugation round the cap)
   float brk = 0.6 + 0.4 * pedN1(fl.y * 15.0 + a * 4.0 + 3.0);
@@ -1296,14 +1312,25 @@ vec3 pedNeckline(vec3 pc) {
   sc *= 1.0 - 0.1 * (1.0 - smoothstep(0.02, 0.09, abs(cb - 0.07))) * (1.0 - smoothstep(0.9, 1.2, ang));
   sc *= 1.0 - 0.14 * exp(-ang * ang / 0.03 - (t - 0.72) * (t - 0.72) / 0.012);
   if (sk > 0.5) { pedSkinK = 1.0; pedSpecK = 0.16; pedGloss = 20.0; pedFabK = 0.0; }
-  return mix(cl, sc, sk);
+  vec3 outC = mix(cl, sc, sk);
+  uint nk = (vPedFC.y >> 3u) & 7u;
+  if (nk < (w > 0.5 ? 3u : 1u) && ang < 1.9) {
+    float tc = 0.3 + 0.3 * smoothstep(0.0, 1.5, ang);
+    float dc = abs(t - tc);
+    float fc = max(fwidth(t - tc), 1e-4);
+    float ch = (1.0 - smoothstep(0.012, 0.012 + fc, dc)) * min(1.0, 0.024 / fc);
+    float pend = (1.0 - smoothstep(0.02, 0.02 + fc, length(vec2(ang * 0.3, (t - tc + 0.025) * 0.8)))) * step(ang, 0.25);
+    outC = mix(outC, vec3(0.58, 0.44, 0.2), clamp(max(ch, pend), 0.0, 1.0));
+    if (max(ch, pend) > 0.5) { pedSkinK = 1.0; pedSpecK = 1.4; pedGloss = 120.0; pedFabK = 0.0; }
+  }
+  return outC;
 }
 // grey comes in strand by strand
 vec3 pedGrey(vec3 pc, vec3 r) {
   float k = smoothstep(0.3, 0.85, float((vPedFB & 3u) * 2u + ((vPedFB >> 11u) & 1u)) / 7.0);
   if (k <= 0.0) return pc;
   float a = atan(r.x, r.z + 0.015);
-  float s = mix(pedN1(a * 120.0 + r.y * 40.0), 0.5, smoothstep(0.3, 0.8, fwidth(a * 120.0)));
+  float s = mix(pedN1(a * 120.0 + r.y * 40.0), 0.5, smoothstep(0.15, 0.4, fwidth(a * 120.0)));
   return mix(pc, vec3(0.5, 0.49, 0.47), k * 0.9 * smoothstep(0.62 - 0.4 * k, 0.8 - 0.3 * k, s));
 }
 // The face: the baked maps (fine relief, cavities, where the blood runs, wrinkles), then eyes, brows and lips, each the person's own.
@@ -1354,6 +1381,12 @@ vec3 pedFaceClose(vec3 skin, vec2 F) {
   }
   pedSpecK = 0.2 + 0.3 * exp(-F.x * F.x / 0.00025 - pow(F.y + 0.02, 2.0) / 0.0012) + 0.14 * smoothstep(0.012, 0.04, F.y) - 0.12 * ageK;
   pedGloss = 26.0;
+  if (det > 0.0 && (pa & 0x700u) == 0u) {
+    vec2 mp = vec2(0.012 + 0.05 * kp.z, -0.075 + 0.075 * kp.x);
+    if (sg * (kp.y - 0.5) < 0.0) mp.x = 9.0;
+    float md = length(vec2(ax - mp.x, F.y - mp.y));
+    pc = mix(pc, skin * 0.34, (1.0 - smoothstep(0.0009, 0.0016, md)) * det * 0.85);
+  }
   // eyes
   float eS = 1.0 + 0.09 * w + 0.1 * (1.0 - smoothstep(0.0, 0.2, ageK));
   float ex = (ax - ${EYE.x.toFixed(4)}) / eS, ey = (F.y - 0.0004) / eS;
@@ -1429,8 +1462,11 @@ vec3 pedFaceClose(vec3 skin, vec2 F) {
   pc = mix(pc, lipC, lip * mix(0.5, 1.0, det));
   pedSpecK = mix(pedSpecK, 0.32, lip);
   pedGloss = mix(pedGloss, 46.0, lip);
-  float mouthL = pedBand(ly - 0.0009 * exp(-(F.x * F.x) / 0.000016) + 0.0004 * (F.x * F.x) / (lhw * lhw), 0.00032, px) * step(0.002, lq);
-  pc = mix(pc, skin * 0.3, mouthL * 0.8 * det);
+  float mo = vPedGaze.z * sqrt(max(lq, 0.0));
+  float mly = ly - 0.0009 * exp(-(F.x * F.x) / 0.000016) + 0.0004 * (F.x * F.x) / (lhw * lhw);
+  float mouthL = pedBand(mly + 0.0012 * mo, 0.00032 + 0.0026 * mo, px) * step(0.002, lq);
+  vec3 mouthC = mix(skin * 0.3, mix(vec3(0.04, 0.012, 0.012), vec3(0.42, 0.4, 0.36), smoothstep(-0.0003, 0.0009, mly + 0.0012 * mo) * smoothstep(0.1, 0.5, vPedGaze.z)), smoothstep(0.03, 0.2, mo));
+  pc = mix(pc, mouthC, mouthL * mix(0.8, 1.0, smoothstep(0.03, 0.2, mo)) * det);
   // nostrils
   vec2 nd = vec2((ax - 0.0062) / 0.0024, (F.y + 0.05) / 0.00105);
   pc = mix(pc, skin * 0.3, (1.0 - smoothstep(0.4, 1.0, length(nd))) * 0.75 * det);
@@ -1633,7 +1669,7 @@ const FRAG_COLOR = /* glsl */ `
       pc *= pedStrands(vPedRest);
       float a = atan(vPedRest.x, vPedRest.z + 0.015);
 #ifdef PED_CLOSE
-      float e = vPedFace.x + (pedN1(a * 38.0) - 0.5) * 0.05 + (pedN1(a * 120.0) - 0.5) * 0.05 + (pedN1(a * 340.0 + vPedRest.y * 300.0) - 0.5) * 0.07 * (1.0 - smoothstep(0.3, 0.7, fwidth(a * 340.0)));
+      float e = vPedFace.x + (pedN1(a * 38.0) - 0.5) * 0.06 + (pedN1(a * 120.0) - 0.5) * 0.05 * (1.0 - smoothstep(0.25, 0.6, fwidth(a * 120.0))) + (pedN1(a * 340.0 + vPedRest.y * 300.0) - 0.5) * 0.07 * (1.0 - smoothstep(0.25, 0.6, fwidth(a * 340.0)));
 #else
       float e = vPedFace.x + (pedN1(a * 55.0) - 0.5) * 0.14 + (pedN1(a * 170.0 + vPedRest.y * 300.0) - 0.5) * 0.08 * (1.0 - smoothstep(0.3, 0.7, fwidth(a * 170.0)));
 #endif
@@ -1683,9 +1719,19 @@ const FRAG_COLOR = /* glsl */ `
 #endif
     else if (abs(vPedReg - ${R.HAIR}.0) < 0.5 || abs(vPedReg - ${R.BEARD}.0) < 0.5) pc *= pedStrands(vPedRest);
     else if (vPedReg > 0.5 && vPedReg < 3.5 || abs(vPedReg - ${R.OUTER}.0) < 0.5 || abs(vPedReg - ${R.TAIL}.0) < 0.5) {
+#ifdef PED_CLOSE
+      vec3 pc0 = pc;
+#endif
       pc = pedFabric(pc, vPedReg, vPedH, vPedS);
 #ifdef PED_CLOSE
       if (abs(vPedReg - ${R.TORSO}.0) < 0.5 && vPedH > 0.94) pc = pedNeckline(pc);
+      // where pelvis and thighs cut each other they are plain cloth with one normal field: no line shows
+      float hipZ = abs(vPedReg - ${R.TORSO}.0) < 0.5 ? (vPedS < 0.0 ? 1.0 - smoothstep(0.14, 0.2, vPedH) : 0.0) : abs(vPedReg - ${R.LEG}.0) < 0.5 ? smoothstep(0.78, 0.85, vPedH) : 0.0;
+      if (hipZ > 0.0) {
+        pc = mix(pc, pc0, hipZ);
+        pedFabH *= 1.0 - hipZ;
+        pedFabK *= 1.0 - hipZ;
+      }
 #endif
     }
 #endif
