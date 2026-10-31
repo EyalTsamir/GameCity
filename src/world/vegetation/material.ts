@@ -26,6 +26,7 @@
 //     the lit side of the crown is what the camera cannot see);
 //   • night street light (core/lampLight.ts) on trunks, foliage and canopy undersides.
 
+import { natureOn } from '../../core/nature';
 import * as THREE from 'three';
 import type { GlobalUniforms } from '../../core/uniforms';
 import { LAMP_GLSL, lampUniforms } from '../../core/lampLight';
@@ -171,6 +172,21 @@ void thCell8( vec3 p, out vec3 d, out float edge, out float id ) {
 }
 `;
 
+// a clipped hedge or a needle mass seen from a few metres: the core drops back into shade behind the leaf cards, single
+// leaves in it, dark gaps between them (no clay)
+const HEDGE_LEAF = natureOn('hedgeleaf')
+  ? /* glsl */ `
+      float f3 = 1.0 - smoothstep( 0.12, 0.4, foot * 3.1 );
+      if ( f3 > 0.001 ) {
+        vec4 n3 = thNoised( p * 3.1 + vec3( 3.1, 8.7, 1.3 ) );
+        float lv = smoothstep( -0.2, 0.16, n3.x );
+        diffuseColor.rgb *= mix( vec3( 1.0 ), ( 0.26 + 0.52 * lv ) * vec3( 1.0 + 0.1 * n3.y, 1.0, 1.0 - 0.14 * n3.y ), f3 );
+        thAO *= mix( 1.0, 0.45 + 0.55 * lv, f3 );
+        g += n3.yzw * ( 0.9 * f3 );
+      }
+`
+  : '';
+
 // after normal_fragment_maps: clump relief, crease occlusion, tone drift
 const LEAF_FRAG_NORMAL = /* glsl */ `
 float thAmt = vThLeaf.z;
@@ -197,7 +213,7 @@ if ( thAmt > 0.02 && uThFx > 0.5 ) {
       g += s1 * n1.yzw * f1;
       thAO *= mix( 1.0, smoothstep( 0.0, 0.2, abs( n1.x ) ), f1 * uThCrease );
       t = s1 * smoothstep( 0.02, 0.22, abs( n1.x ) ) * f1 * uThTone * toneAmp;
-    } else {
+${HEDGE_LEAF}    } else {
       // leaf clumps: every cell is a little dome (normal tilts away from its centre), creases between
       vec3 cd;
       float edge, cid;

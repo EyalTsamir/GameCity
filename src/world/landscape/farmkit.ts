@@ -271,7 +271,7 @@ export function buildFarmKit(
   // ── hedges: a wall each side and a ragged top; a run breaks where the hedge has a gap
   if (hedges) {
     for (const r of hedges.runs) {
-      if (r.x.length < 4) continue; // a stub of hedge is a box
+      if (r.x.length < 7) continue; // a stub of hedge is a box
       const stepN = 2; // two points ≈ 5.4 m
       const endK = (i: number) => Math.min(1, (0.35 + Math.min(i, r.x.length - 1 - i) * 0.3)); // the ends sink away
       let s0 = r.tone * 31;

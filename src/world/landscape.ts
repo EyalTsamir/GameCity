@@ -33,6 +33,7 @@ import { buildFarmKit, HedgeSink, type FarmKitStats } from './landscape/farmkit'
 import { hmix, toField, fromField, fieldAt, newField, cropKind } from './landscape/fields';
 import { nature } from '../core/nature';
 import { buildPowerLines, WIRE_DAY } from './landscape/powerlines';
+import { buildWoods, buildEdgeHedge, buildRiverRocks, type WoodsStats } from './landscape/woods';
 import type { SmokeService } from '../sim/ambient';
 
 export interface LandscapeService {
@@ -351,6 +352,7 @@ export default function create(ctx: CityContext): CityModule {
   const wireDay = new THREE.Color(WIRE_DAY);
   let wireNight = -1;
   let kitStats: FarmKitStats | null = null;
+  let woodStats: WoodsStats | null = null;
   let kitTris = 0;
   let kitMs = 0;
   if (kitOn) {
@@ -371,6 +373,10 @@ export default function create(ctx: CityContext): CityModule {
       wires = buildPowerLines(sink, model, fog);
       root.add(wires);
     }
+    if (nature(ctx, 'woodfloor')) woodStats = buildWoods(sink, model);
+    if (nature(ctx, 'riverrocks')) buildRiverRocks(sink, model);
+    const edge = ctx.plan.places?.edge;
+    if (edge && nature(ctx, 'edgehedge')) buildEdgeHedge(sink, edge.hedgeX, edge.hedges);
     kitTris = sink.triangles;
     const mat = rowMaterial(atlas, uniforms, fog);
     const depth = rowDepthMaterial(atlas);
@@ -423,6 +429,7 @@ export default function create(ctx: CityContext): CityModule {
         kitTris,
         kitMs: Math.round(kitMs),
         ...(kitStats ? { kitRows: kitStats.rows, kitBales: kitStats.bales, kitTunnels: kitStats.tunnels, kitFences: kitStats.fences, kitHedges: kitStats.hedges, kitReeds: kitStats.reeds, kitDune: kitStats.dune, kitStone: kitStats.stone } : {}),
+        ...(woodStats ? { woodFerns: woodStats.ferns, woodShrubs: woodStats.shrubs, woodLogs: woodStats.logs, woodRocks: woodStats.rocks } : {}),
       };
     },
     invariants() {

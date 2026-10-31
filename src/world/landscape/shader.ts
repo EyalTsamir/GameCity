@@ -214,7 +214,7 @@ ${LG ? `  vec4 nM = ${lnTex('p.xz * (1.0 / 1900.0)', '(1.0 / 1900.0)')};   // (t
     // 5–15 m mottling (clover, rushes, sorrel patches) visible from the town edge
     vec4 nT3 = ${lnTex('p.xz * (1.0 / 29.0) + 0.37', '(1.0 / 29.0)')};
     meadow *= 1.0 + (nT3.a - 0.5) * 0.3 * (1.0 - smoothstep(2.0, 8.0, fp));
-    meadow = mix(meadow, meadow * vec3(0.86, 1.04, 0.9), smoothstep(0.6, 0.75, nT3.r) * 0.6);
+    meadow = mix(meadow, meadow * vec3(0.86, 1.04, 0.9), smoothstep(0.42, 0.82, nT3.r) * 0.45);
   }
   meadow = mix(meadow, meadow * vec3(1.12, 1.13, 1.05), gust * 0.5);
   // under the near blade rings (groundcover's roaming window) the ground is the shaded thatch between
@@ -523,9 +523,19 @@ ${LG ? '    }' : ''}
     // lattices), broken gaps, domes only where the wood is closed, gentle relief (the low sun exaggerates it)
     float treeBand = 1.0 - smoothstep(760.0, 830.0, vCov3.y);
     if (treeBand > 0.01) {
-      vec3 floorC = mix(vec3(0.07, 0.058, 0.038), vec3(0.065, 0.095, 0.035), smoothstep(0.4, 0.65, nB.g));
-      floorC = mix(floorC, vec3(0.11, 0.08, 0.045), smoothstep(0.62, 0.8, ${LG ? lnTex('p.xz * (1.0 / 6.3)', '(1.0 / 6.3)') + '.r' : 'nP2r(p.xz)'}) * 0.6);   // needle / leaf litter
+      vec3 floorC = mix(vec3(0.088, 0.066, 0.042), vec3(0.058, 0.098, 0.034), smoothstep(0.42, 0.62, nB.g));
+      floorC = mix(floorC, vec3(0.13, 0.095, 0.054), smoothstep(0.62, 0.8, ${LG ? lnTex('p.xz * (1.0 / 6.3)', '(1.0 / 6.3)') + '.r' : 'nP2r(p.xz)'}) * 0.6);   // needle / leaf litter
       floorC *= 0.8 + 0.35 * nB.r * midF;
+      // close up: single fallen leaves, dark gaps, twigs, a pale dry drift (the land's noise at leaf scale)
+      if (fp < 0.22) {
+        float lf = 1.0 - smoothstep(0.05, 0.22, fp);
+        vec4 nL = ${lnTex('p.xz * (1.0 / 0.41)', '(1.0 / 0.41)')};
+        vec4 nK = ${lnTex('p.zx * (1.0 / 1.7)', '(1.0 / 1.7)', 'yx')};
+        floorC *= 1.0 + lf * ((nL.r - 0.5) * 0.8 + (nK.g - 0.5) * 0.6);
+        floorC = mix(floorC, vec3(0.17, 0.1, 0.045), lf * smoothstep(0.6, 0.66, nL.b) * 0.6);
+        floorC = mix(floorC, vec3(0.14, 0.115, 0.07), lf * smoothstep(0.62, 0.68, nL.a) * smoothstep(0.45, 0.6, nK.r) * 0.55);
+        floorC = mix(floorC, vec3(0.025, 0.018, 0.012), lf * smoothstep(0.68, 0.72, nK.a) * 0.6);
+      }
       // far off, the gaps between the instanced crowns average out to the canopy tone
       floorC = mix(floorC, fcol * 0.8, smoothstep(2.0, 10.0, fp));
       fcol = mix(fcol, floorC, treeBand);

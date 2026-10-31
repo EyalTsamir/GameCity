@@ -22,7 +22,7 @@ const LINE: [number, number][] = [
 ];
 const SPAN = 300;
 /** wire colour by day (the frame scales it down with the night) */
-export const WIRE_DAY = 0x7d8284;
+export const WIRE_DAY = 0x565a5c;
 
 /** a thin square prism between two points (solid band, shaded by its own normals) */
 function rod(s: RowSink, ax: number, ay: number, az: number, bx: number, by: number, bz: number, r: number, c: number, cx: number, cz: number): void {
@@ -219,7 +219,17 @@ export function buildPowerLines(s: RowSink, model: LandscapeModel, fog: boolean)
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(wires, 3));
   g.computeBoundingSphere();
-  const mat = new THREE.LineBasicMaterial({ color: WIRE_DAY, fog });
+  const mat = new THREE.LineBasicMaterial({ color: WIRE_DAY, fog, transparent: true, depthWrite: false });
+  // a wire a pixel wide overstates itself with distance: it fades out instead of drawing a white line across the plain
+  mat.onBeforeCompile = (sh) => {
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', `#include <common>
+varying float vWireD;`).replace('#include <project_vertex>', `#include <project_vertex>
+vWireD = -mvPosition.z;`);
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', `#include <common>
+varying float vWireD;`).replace('#include <color_fragment>', `#include <color_fragment>
+diffuseColor.a *= 0.12 + 0.78 * (1.0 - smoothstep(120.0, 1300.0, vWireD));`);
+  };
+  mat.customProgramCacheKey = () => 'th-landwires-v1';
   const m = new THREE.LineSegments(g, mat);
   m.name = 'land-wires';
   m.matrixAutoUpdate = false;

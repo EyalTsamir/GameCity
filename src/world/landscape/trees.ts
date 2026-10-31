@@ -717,8 +717,40 @@ function kindGeometry(kind: number): THREE.BufferGeometry {
     tr.computeVertexNormals();
   }
   addGeo(tr, 0, null, [0, 0, 0]);
-  // branches: thin 3-sided prisms from the trunk top toward the clumps
-  for (const b of sh.branches) {
+  // branches: thin prisms from the trunk top toward the clumps; with ?treelimbs on, limbs leave the bole at different
+  // heights, bow on the way out, thin to nothing inside their leaf mass and fork once (no starfish on a post)
+  const LIMBS = natureOn('treelimbs');
+  const prism = (ax: number, ay: number, az: number, bx: number, by: number, bz: number, r0: number, r1: number, sides: number) => {
+    const d = new THREE.Vector3(bx - ax, by - ay, bz - az);
+    const len = d.length() || 1e-3;
+    const g = new THREE.CylinderGeometry(r1, r0, len, sides, 1, true);
+    g.translate(0, len / 2, 0);
+    g.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.normalize()));
+    g.translate(ax, ay, az);
+    addGeo(g, 0, null, [0, 0, 0]);
+  };
+  if (LIMBS && sh.branches.length) {
+    const lk = sh.limb ?? 0.5;
+    const rk = (i: number, k: number) => hash2i(kind * 100 + i, k, 4431);
+    sh.branches.forEach((b, i) => {
+      const a = Math.atan2(b[2], b[0]);
+      const h0 = sh.trunkTop * (0.68 + 0.34 * rk(i, 1));
+      const r0 = sh.trunkR * lk * (0.72 + 0.34 * rk(i, 2));
+      const sx = Math.cos(a) * sh.trunkR * 0.42,
+        sz = Math.sin(a) * sh.trunkR * 0.42;
+      // out first, then rising: the bow of a limb carrying its own weight
+      const mx = sx + (b[0] - sx) * 0.52,
+        my = h0 + (b[1] - h0) * (0.3 + 0.16 * rk(i, 3)),
+        mz = sz + (b[2] - sz) * 0.52;
+      prism(sx, h0, sz, mx, my, mz, r0, r0 * 0.56, 4);
+      prism(mx, my, mz, b[0] * 1.14, b[1] + 0.02, b[2] * 1.14, r0 * 0.56, sh.trunkR * 0.05, 3);
+      const fa = a + (rk(i, 4) < 0.5 ? -1 : 1) * (0.5 + 0.5 * rk(i, 5));
+      const fl = Math.hypot(b[0], b[2]) * 0.62;
+      prism(mx, my, mz, mx + Math.cos(fa) * fl, my + (b[1] - my) * 0.9 + 0.03, mz + Math.sin(fa) * fl, r0 * 0.36, sh.trunkR * 0.04, 3);
+    });
+    // the leader carries on above the last fork, into the crown
+    prism(0, sh.trunkTop - 0.01, 0, 0.01, Math.min(0.9, sh.trunkTop + 0.34), -0.01, sh.trunkR * 0.68, sh.trunkR * 0.06, 4);
+  } else for (const b of sh.branches) {
     const len = Math.hypot(b[0], b[1] - sh.trunkTop, b[2]);
     const lk = sh.limb ?? 0.5;
     const g = new THREE.CylinderGeometry(sh.trunkR * 0.25, sh.trunkR * lk, len, 4, 1, true);
@@ -821,6 +853,7 @@ function kindGeometry(kind: number): THREE.BufferGeometry {
   });
   sh.tiers.forEach((t, i) => {
     // conifer tier: a dark core cone (no gaps through the trunk zone) + drooping branch sprays round it
+    const noCone = natureOn('treelimbs');
     const g = new THREE.ConeGeometry(t[2] * 0.55, t[1] - t[0], 7, 1, true);
     g.translate(0, (t[0] + t[1]) / 2, 0);
     const p = g.getAttribute('position') as THREE.BufferAttribute;
@@ -829,15 +862,16 @@ function kindGeometry(kind: number): THREE.BufferGeometry {
     for (let v = 0; v < p.count; v++) {
       pos.push(p.getX(v), p.getY(v), p.getZ(v));
       nrm.push(nb.getX(v), nb.getY(v), nb.getZ(v));
-      ao.push(0.25);
+      ao.push(0.14);
       crown.push(1);
       uvs.push(SOLID_UV, SOLID_UV);
     }
-    for (let k = 0; k < g.index!.count; k++) idx.push(g.index!.getX(k) + base);
-    const m = 9 + i;
+    if (!noCone) for (let k = 0; k < g.index!.count; k++) idx.push(g.index!.getX(k) + base);
+    // (a smooth core cone reads as a lampshade from below: more sprays, an inner ring of them, no cone)
+    const m = noCone ? 19 + i : 9 + i;
     for (let k = 0; k < m; k++) {
       const a = ((k + 0.5 * (i % 2)) / m) * Math.PI * 2 + (rnd() - 0.5) * 0.4;
-      const u = 0.45 + 0.5 * rnd();
+      const u = noCone && k % 3 === 0 ? 0.2 + 0.25 * rnd() : 0.45 + 0.5 * rnd();
       const r = t[2] * u;
       const y = t[1] - (t[1] - t[0]) * (0.25 + 0.75 * u) * 0.85;
       const ca = Math.cos(a),

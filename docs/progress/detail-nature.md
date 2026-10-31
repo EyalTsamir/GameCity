@@ -4,8 +4,10 @@ Owns `src/world/vegetation*`, `src/world/groundcover*`, `src/world/landscape*`. 
 Switch file: `src/core/nature.ts` (`?nonature`, `?no<feature>`).
 
 ## Resume here
-Round 1 started. Dev server: `npx vite --port 5204 --strictPort --host 127.0.0.1`. Captures from the main checkout with
-`--url http://127.0.0.1:5204/`, output into `shots/nat/` of this worktree (ignored).
+Round 1 committed (8d33e7c, 73cb1ba). Round 2 (woods, hedges, limbs, wires) in progress: see Log. Next: farm yards,
+mountains' tree line, river rocks check, tiers (medium/low, diorama), final checks. Dev server: `npx vite --port 5204
+--strictPort --host 127.0.0.1` from this worktree. Captures from the main checkout with `--url http://127.0.0.1:5204/`,
+output into `shots/nat/` of this worktree (ignored). `shots/nat/brk.mjs <view> <query> <js>` is a one-off probe (ignored).
 
 ## Audit, round 0 (shots/nat/a0, a1: 25 views at 11 and 18.2)
 What reads as fake, ranked by how much of the first impression it costs:
@@ -32,3 +34,26 @@ Good already: park planting, city trees, mountains' silhouette, hamlet from 120 
 - G. Forest floor, hedges, kerb planters, river banks.
 
 ## Log
+### Round 1 (8d33e7c, 73cb1ba)
+Added: row strips and farm kit (vines, maize, sunflowers, hedges, bales, polytunnels, wire and stone fences, reeds, dune
+fences, marram, duckboards, boats), crop blades, eight tree species with new shapes, bark and backlight, hill towns with
+campanile, abbey, lane out of town, high-voltage line, telephone poles, dune belt, hill copses, cypress avenues.
+Perf (`perf1`, on AC, overview / downtown / street / market vs `?nonature`): +1.3 / +0.35 / +0.4 / 0 ms, draw calls +72 / +12 / +18 / +19.
+The overview's +1.3 ms is in `msPerFrame` only (GPU total unchanged): the kit's 512 m chunks were 60 draw calls.
+Trim: chunks 1400 m (10 meshes). Triangles over 40 frames: +230 k in the overview (kit ~115 k, its shadows ~100 k).
+
+### Round 2
+Audit (w1, w2): wood interiors had a smooth tan floor, lampshade conifer cones, starfish limbs on a post; west-lane
+hedge a clay bank; pale wires drawn across the plain at 18.2; clipped hedges clay at 2 m.
+Added: forest floor litter (`shader.ts`), `landscape/woods.ts` (bracken mounds, hazel, logs, stumps, mossy boulders within
+420 m of the slab; river boulders; cut-out strips over the west hedge, core shrunk), limbs that bow, taper and fork
+(`treelimbs`, also removes the conifer cone), leaf-scale detail on clipped hedges (`hedgeleaf`), wires fade with distance,
+second row of flowers in kerb planters (`fullplanters`), meadow mottling softened, hedge stubs dropped.
+
+Toggles so far: `?nonature`, `?nofarmkit`, `?nostriphedges`, `?nofarmrows`, `?nobales`, `?nofarmfences`, `?noreedbeds`,
+`?nodunekit`, `?nopowerlines`, `?notreekinds`, `?noskyline`, `?nohillscatter`, `?noavenues`, `?nocropblades`,
+`?nowoodfloor`, `?noriverrocks`, `?noedgehedge`, `?notreelimbs`, `?nohedgeleaf`, `?nofullplanters`.
+
+## Hand-offs
+- Streets / places: pale green ellipses on the gravel ruts of the west lane (`hedge_lane=-196.4,1.6,20,10,180,4`): read as stains.
+- Streets: weeds in pavement joints stand well proud of the paving at the market planter view; fine at distance.

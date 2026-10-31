@@ -8,9 +8,9 @@ import * as THREE from 'three';
 import { WIND_GLSL } from '../../core/wind';
 import { hash2i } from './noise';
 
-export const B = { vine: 0, maize: 1, sunflower: 2, hedge: 3, canopy: 4, reed: 5, marram: 6, wire: 7, rail: 8, stone: 9, sandfence: 10, solid: 11, sunTop: 12, plastic: 13, straw: 14 } as const;
+export const B = { vine: 0, maize: 1, sunflower: 2, hedge: 3, canopy: 4, reed: 5, marram: 6, wire: 7, rail: 8, stone: 9, sandfence: 10, solid: 11, sunTop: 12, plastic: 13, straw: 14, fern: 15 } as const;
 /** height of each band in metres (u tiles every 8 × height: texels stay square) */
-export const BAND_H = [1.75, 2.5, 2.1, 3.0, 2.0, 2.3, 0.95, 1.3, 1.25, 1.15, 1.25, 1, 2, 3.2, 1.5];
+export const BAND_H = [1.75, 2.5, 2.1, 3.0, 2.0, 2.3, 0.95, 1.3, 1.25, 1.15, 1.25, 1, 2, 3.2, 1.5, 1.0];
 const NB = BAND_H.length;
 const BW = 1024,
   BH = 128;
@@ -166,20 +166,20 @@ function drawBand(c: Ctx, b: number, R: (k: number) => number): void {
         c.lineTo(x + 18 * (R(x) - 0.5), G - 0.7 * pxm);
         c.stroke();
       }
-      for (let i = 0; i < 4200; i++) {
+      for (let i = 0; i < 6600; i++) {
         const x = R(i * 3 + 11) * BW;
         // a billowing top: two sines + noise; thin and leggy at the foot
         const top = (2.25 + 0.34 * Math.sin((x / BW) * 6.283 * 3 + 1) + 0.2 * Math.sin((x / BW) * 6.283 * 7)) * pxm;
         const u = Math.pow(R(i * 3 + 12), 0.8);
         const y = G - (0.1 + u * 0.97) * top;
-        const t = R(i * 3 + 13) * (0.35 + 0.65 * (i / 4200));
-        leaf(c, x, y, 6.5 + 5 * R(i + 91), 3 + 1.6 * R(i + 92), R(i + 93) * 6.28, green(t, 0.74 + 0.22 * (i / 4200)));
+        const t = R(i * 3 + 13) * (0.35 + 0.65 * (i / 6600));
+        leaf(c, x, y, 4.4 + 4 * R(i + 91), 2.2 + 1.3 * R(i + 92), R(i + 93) * 6.28, green(t, 0.72 + 0.26 * (i / 6600)));
       }
       // hawthorn blossom / dog rose here and there, an old-man's-beard straggler
-      for (let i = 0; i < 90; i++) {
-        c.fillStyle = R(i + 700) < 0.6 ? rgb(226, 222, 200) : rgb(214, 160, 170);
+      for (let i = 0; i < 60; i++) {
+        c.fillStyle = R(i + 700) < 0.7 ? rgb(214, 212, 192) : rgb(196, 150, 158);
         c.beginPath();
-        c.arc(R(i + 701) * BW, G - (0.8 + 1.5 * R(i + 702)) * pxm, 1.5, 0, 6.3);
+        c.arc(R(i + 701) * BW, G - (0.8 + 1.5 * R(i + 702)) * pxm, 1.1, 0, 6.3);
         c.fill();
       }
       break;
@@ -339,6 +339,43 @@ function drawBand(c: Ctx, b: number, R: (k: number) => number): void {
       }
       break;
     }
+    case B.fern: {
+      // bracken in drifts: arching fronds with paired leaflets, a dark tangle low down, a few bramble canes
+      for (let cl = 0; cl < 54; cl++) {
+        const cx = R(cl * 19 + 81) * BW;
+        const tall = 0.55 + 0.45 * R(cl * 19 + 82);
+        for (let i = 0; i < 9; i++) {
+          const k = cl * 97 + i * 11;
+          const t = R(k + 1);
+          let ang = -Math.PI / 2 + (R(k + 2) - 0.5) * 2.2;
+          const turn = (Math.cos(ang) > 0 ? 1 : -1) * 0.15;
+          const len = (0.5 + 0.48 * R(k + 3)) * pxm * tall;
+          let px = cx + (R(k + 4) - 0.5) * 34,
+            py = G;
+          const col = rgb(58 + 58 * t, 96 + 50 * t, 32 + 18 * t);
+          const n = 9;
+          for (let j = 0; j < n; j++) {
+            const nx = px + (Math.cos(ang) * len) / n,
+              ny = py + (Math.sin(ang) * len) / n;
+            c.strokeStyle = rgb(86 + 40 * t, 96 + 30 * t, 44);
+            c.lineWidth = 1.2;
+            c.beginPath();
+            c.moveTo(px, py);
+            c.lineTo(nx, ny);
+            c.stroke();
+            if (j > 1) {
+              const ll = 5 + (1 - j / n) * 13;
+              leaf(c, nx, ny, ll, 2.1, ang + 1.25, col);
+              leaf(c, nx, ny, ll, 2.1, ang - 1.25, col);
+            }
+            px = nx;
+            py = ny;
+            ang += turn;
+          }
+        }
+      }
+      break;
+    }
     case B.straw: {
       c.fillStyle = rgb(190, 158, 92);
       c.fillRect(0, PAD, BW, H);
@@ -479,7 +516,7 @@ class Chunk {
   idx: number[] = [];
 }
 
-const CHUNK = 512;
+const CHUNK = 1400;
 const vBand = (b: number, t: number) => (b + (PAD + (1 - t) * (BH - 2 * PAD)) / BH) / NB;
 
 /** the merged kit: chunks of static geometry in world coordinates */
