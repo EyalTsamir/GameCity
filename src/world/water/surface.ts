@@ -27,6 +27,7 @@ import type { TerrainModel } from '../terrain/height';
 import type { WaterField } from './field';
 import { ampFrom } from './field';
 import { WAVES_GLSL } from './waves';
+import { RAINBOW_GLSL } from '../../render/sky/weather';
 import { rippleTexture, macroTexture } from './noise';
 import type { ReflectionUniforms } from './reflection';
 import type { HullContacts } from './hulls';
@@ -77,6 +78,7 @@ export function createSkyUniforms(): Record<string, THREE.IUniform> {
     uSkyOvercast: { value: 0 },
     /** lightning brightness in the mirrored sky */
     uSkyFlash: { value: 0 },
+    uRainbowW: { value: new THREE.Vector4(0, 0, 0, 0) },
     /** the storm band (shared with the sky's cloud layer, sky/weather.ts) */
     uStorm: { value: new THREE.Vector4(1, 0, -1e7, -1e7) },
     uStormK: { value: new THREE.Vector4(0, 3500, 0, 0) },
@@ -292,6 +294,8 @@ float wGoldK() { return (1.0 - smoothstep(0.2, 0.45, uSunDir.y)) * (1.0 - uNight
 #define TH_GOLD uDusk
 #endif
 // the sky dome's painted gradient + sun-side glow (render/sky/dome.ts), without disc/stars
+uniform vec4 uRainbowW;
+${RAINBOW_GLSL}
 vec3 wSky(vec3 d) {
   float y = clamp(d.y, 0.0, 1.0);
   vec3 col = mix(uSkyHor, uSkyZen, smoothstep(0.0, 1.0, pow(y, 0.55)));
@@ -313,7 +317,14 @@ vec3 wSky(vec3 d) {
     // the storm band where this reflected ray meets the deck (as the dome: slate and dark)
     float s = dot(cameraPosition.xz + d.xz * min(1500.0 / max(d.y, 0.05), 24000.0), uStorm.xy);
     float oc = uStormK.x * (1.0 - smoothstep(uStorm.z - uStormK.y, uStorm.z + uStormK.y, s)) * smoothstep(uStorm.w - uStormK.y, uStorm.w + uStormK.y, s);
-    return mix(col, vec3(grey) * vec3(0.8, 0.9, 1.08), oc * 0.95) * (1.0 - uStormK.z * oc) + vec3(0.62, 0.7, 0.92) * uSkyFlash * 0.2;
+    col = mix(col, vec3(grey) * vec3(0.8, 0.9, 1.08), oc * 0.95) * (1.0 - uStormK.z * oc) + vec3(0.62, 0.7, 0.92) * uSkyFlash * 0.2;
+    // the rainbow on the water (as the dome: where the band stands at 14 km in this azimuth); low rays only: steep ones are
+    // the near water, where ripples would break the bow into oil-slick colours
+    if (uRainbowW.w > 0.001) {
+      float sb = dot(cameraPosition.xz + normalize(d.xz + vec2(1e-5, 0.0)) * 14000.0, uStorm.xy);
+      col += thRainbow(d, uSunDir) * uRainbowW.rgb * uRainbowW.w * 0.6 * (1.0 - smoothstep(0.1, 0.28, d.y)) * uStormK.x * (1.0 - smoothstep(uStorm.z - uStormK.y, uStorm.z + uStormK.y, sb)) * smoothstep(uStorm.w - uStormK.y, uStorm.w + uStormK.y, sb);
+    }
+    return col;
   }
   return mix(col, vec3(grey) * vec3(0.92, 0.96, 1.02), uSkyOvercast * 0.75);
 }

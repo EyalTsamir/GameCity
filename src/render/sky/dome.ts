@@ -8,6 +8,7 @@ import { perfOn } from '../../core/perfdeep';
 import type { SkyState } from './palette';
 import { ATMO_FUNCS, ATMO_N, atmoData } from '../atmosphere';
 import { SKY_LUT_GLSL } from './physical';
+import { RAINBOW_GLSL } from './weather';
 import { CLOUD_LAYER_GLSL, CLOUD_SHADE_GLSL, type CloudLayerUniforms } from './cloudLayer';
 
 const VERT = /* glsl */ `
@@ -128,12 +129,7 @@ vec3 starLayer(vec3 d, float scale, float threshold) {
 
 // a rainbow around the anti-solar point: primary (red outside, 42 deg), Alexander's dark band, the fainter reversed
 // secondary (51 deg), and the milky light inside the bow
-vec3 thRainbow(vec3 d, vec3 sun) {
-  float th = acos(clamp(-dot(d, sun), -1.0, 1.0)) * 57.29578;
-  vec3 a = (vec3(th) - vec3(42.0, 41.3, 40.6)) / 0.72;
-  vec3 b = (vec3(th) - vec3(50.3, 51.2, 52.1)) / 1.15;
-  return exp(-a * a) + 0.2 * exp(-b * b) + vec3(0.1, 0.1, 0.11) * (1.0 - smoothstep(37.0, 40.5, th)) * smoothstep(18.0, 36.0, th);
-}
+${RAINBOW_GLSL}
 
 void main() {
   vec3 d = normalize(vDir);
