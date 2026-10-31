@@ -9,13 +9,15 @@
 import * as THREE from 'three';
 import type { CityContext, CityModule } from '../core/context';
 import { closeMat } from '../core/closemat';
+import { WATER_LEVEL } from '../core/constants';
 import { globalUniforms } from '../core/uniforms';
 import { nearOf } from '../core/nearDetail';
 import { interleaved, TriGrid, type SourceAttr } from './closemat/source';
 import { makeCloseTiles } from './closemat/textures';
 import { addLitter } from './closemat/litter';
-import { CM_ASPHALT, CM_BRICK, CM_PAINT, CM_COMMON, CM_DECK, CM_LOOSE, CM_PANEL, CM_PLASTER, CM_SHEET, CM_SLAB, CM_SMOOTH, CM_SOLID, CM_STONE, CM_TIMBER, CM_VERT } from './closemat/glsl';
+import { CM_ASPHALT, CM_BRICK, CM_PAINT, CM_SAND, CM_COMMON, CM_DECK, CM_LOOSE, CM_PANEL, CM_PLASTER, CM_SHEET, CM_SLAB, CM_SMOOTH, CM_SOLID, CM_STONE, CM_TIMBER, CM_VERT } from './closemat/glsl';
 import { WALLPAT } from './buildings/materials';
+import { groundMaskInfo } from './terrain/ground';
 import { roadNoise } from './roads/materials';
 
 /** pixels one metre covers at 1 m in the bubble's reference view */
@@ -52,6 +54,11 @@ export interface CloseMatService {
   /** distance to the nearest surface along a ray (normalised), or -1 within maxT */
   rayHit(p: THREE.Vector3, d: THREE.Vector3, maxT: number): number;
 }
+
+const PLAIN_ATTRS: SourceAttr[] = [
+  { name: 'position', size: 3 },
+  { name: 'normal', size: 3 },
+];
 
 const SOLID_ATTRS: SourceAttr[] = [
   { name: 'position', size: 3 },
@@ -192,6 +199,24 @@ export default function create(ctx: CityContext): CityModule {
     layer('cmLoose', hg('loose'), HARD_ATTRS, CM_LOOSE, 'CM_HARD', GROUND_R, cell, 0.5);
     layer('cmDeck', hg('deck'), HARD_ATTRS, CM_DECK, 'CM_HARD', 14, cell, 1.2);
   }
+  if (on.paving && groundMaskInfo) {
+    // the beaches: the ground mesh where the ground mask says sand (a triangle a little over the edge shows nothing but grain)
+    const gm = groundMaskInfo;
+    const slab = ctx.plan.slab;
+    const sx = gm.w / (slab.x1 - slab.x0);
+    const sand = (x: number, z: number): boolean => {
+      const u = Math.floor((x - slab.x0) * sx),
+        v = Math.floor((z - slab.z0) * sx);
+      return u >= 0 && v >= 0 && u < gm.w && v < gm.h && gm.data[(v * gm.w + u) * 4] > 127;
+    };
+    const cell = 8;
+    const grid = new TriGrid(byName((n) => n === 'terrain-ground'), PLAIN_ATTRS, cell, (g, a, b, c) => {
+      const P = g.getAttribute('position');
+      if (P.getY(a) < WATER_LEVEL && P.getY(b) < WATER_LEVEL && P.getY(c) < WATER_LEVEL) return false;
+      return sand(P.getX(a), P.getZ(a)) || sand(P.getX(b), P.getZ(b)) || sand(P.getX(c), P.getZ(c));
+    });
+    layer('cmSand', grid, PLAIN_ATTRS, CM_SAND, 'CM_PLAIN', GROUND_R, cell, 3);
+  }
   if (on.solid) {
     // only what is drawn whenever it is near: a level of detail hidden up close would leave its copy on the air
     const cell = 8;
@@ -212,7 +237,7 @@ export default function create(ctx: CityContext): CityModule {
       layer(name, grid, SOLID_ATTRS, (kind ? `#define ${kind}\n` : '') + CM_SOLID, 'CM_SOLID', radius, cell, top);
     };
     solid('cmTrim', (n) => n === 'buildings-trim', 'CM_JOINERY', 12, 30);
-    solid('cmMasonry', (n) => n === 'terrain-masonry' || n.startsWith('landmarks-static') || n.startsWith('landmarks-detail') || n.startsWith('harbor-north') || n.startsWith('harbor-yards') || n.startsWith('harbor-river') || n.startsWith('harbor-beach'), '', 12, 8);
+    solid('cmMasonry', (n) => n === 'terrain-masonry' || n.startsWith('landmarks-static') || n.startsWith('landmarks-detail') || n.startsWith('harbor-north') || n.startsWith('harbor-yards') || n.startsWith('harbor-river') || n.startsWith('harbor-beach') || n === 'rail-bed', '', 12, 8);
     solid('cmStreet', (n) => n === 'props-furniture-e' || n === 'props-furniture-w' || n === 'props-furniture-fine-e' || n === 'props-furniture-fine-w' || n === 'props-casters' || n === 'life-poles', '', 12, 6);
     solid('cmMetal', (n) => n === 'terrain-railings' || n === 'traffic-signal-poles' || n === 'rail-furniture', 'CM_RUST', 12, 8);
   }

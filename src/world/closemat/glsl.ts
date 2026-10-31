@@ -874,3 +874,44 @@ void main() {
   gl_FragColor = vec4(max(mix(vec3(1.0), ratio, k), vec3(0.0)), 1.0);
 }
 `;
+
+/** sand: grains, wind ripples, the marks of feet and the odd bit of shell. The wet edge and its colour stay with the base */
+export const CM_SAND = /* glsl */ `
+void main() {
+  vec3 N = normalize(vN);
+  vec2 p = vP.xz;
+  gx = dFdx(p);
+  gy = dFdy(p);
+  float fa = cmArea(gx, gy);
+  if (fa >= CM_LIM) discard;
+  float k = 1.0 - smoothstep(CM_LIM * 0.45, CM_LIM, fa);
+  float fine = 1.0 - smoothstep(CM_LIM * 0.3, CM_LIM * 0.5, fa);
+  vec4 c = CMT(tCrack, p * 0.39, 0.39);
+  vec4 g = CMT(tGrain, p * 1.667, 1.667);
+  // the ripples run across the wind and wander; trampled where people go
+  float trod = smoothstep(0.42, 0.64, c.b);
+  vec2 rq = p + (c.gb - 0.5) * 1.6;
+  float ph = dot(rq, vec2(0.86, 0.5)) * 7.5 + g.b * 1.4;
+  float rip = cos(ph) * (1.0 - trod);
+  // the grain, in two sizes: sand is not one colour
+  vec2 sl = (g.rg - 0.5) * 0.9 + vec2(0.86, 0.5) * rip * 0.16;
+  // dimples of old footprints
+  sl += (c.gb - 0.5) * 0.35 * trod;
+  vec3 ratio = vec3(cmLight(N, normalize(N - vec3(sl.x, 0.0, sl.y))));
+  ratio *= 1.0 + (g.b - 0.5) * 0.14;
+  if (fine > 0.0) {
+    vec4 s0 = CMT(tStones, p * 9.0, 9.0);
+    float id = s0.g;
+    vec3 tone = vec3(0.86 + 0.3 * id);
+    tone *= mix(vec3(1.0), vec3(1.08, 1.0, 0.86), step(0.5, fract(id * 7.3)));
+    tone = mix(tone, vec3(0.5, 0.46, 0.42), step(0.9, fract(id * 3.1)));
+    tone = mix(tone, vec3(1.3), step(0.94, fract(id * 13.7)));
+    ratio *= mix(vec3(1.0), mix(vec3(0.84), tone, smoothstep(0.05, 0.3, s0.r)), fine);
+    // a shell, a bit of weed
+    vec4 s1 = CMT(tStones, p * 1.1 + 3.7, 1.1);
+    float shell = step(0.965, fract(s1.g * 11.3)) * smoothstep(0.32, 0.4, s1.r) * fine;
+    ratio = mix(ratio, vec3(1.35, 1.3, 1.2) * (0.7 + 0.6 * s1.b), shell);
+  }
+  gl_FragColor = vec4(max(mix(vec3(1.0), ratio, k), vec3(0.0)), 1.0);
+}
+`;
