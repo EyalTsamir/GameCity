@@ -14,7 +14,7 @@ import { nearOf } from '../core/nearDetail';
 import { interleaved, TriGrid, type SourceAttr } from './closemat/source';
 import { makeCloseTiles } from './closemat/textures';
 import { addLitter } from './closemat/litter';
-import { CM_ASPHALT, CM_BRICK, CM_COMMON, CM_DECK, CM_LOOSE, CM_PANEL, CM_PLASTER, CM_SHEET, CM_SLAB, CM_SMOOTH, CM_SOLID, CM_STONE, CM_TIMBER, CM_VERT } from './closemat/glsl';
+import { CM_ASPHALT, CM_BRICK, CM_PAINT, CM_COMMON, CM_DECK, CM_LOOSE, CM_PANEL, CM_PLASTER, CM_SHEET, CM_SLAB, CM_SMOOTH, CM_SOLID, CM_STONE, CM_TIMBER, CM_VERT } from './closemat/glsl';
 import { WALLPAT } from './buildings/materials';
 import { roadNoise } from './roads/materials';
 
@@ -70,7 +70,7 @@ export default function create(ctx: CityContext): CityModule {
   if (!on.walls && !on.road && !on.paving && !on.solid) return { name: 'closemat', stats: () => stats };
 
   const t0 = performance.now();
-  const tiles = makeCloseTiles(ctx.quality.level === 'high' ? 8 : 4);
+  const tiles = makeCloseTiles();
   stats.tilesMs = Math.round(tiles.ms);
   const rK = Number(ctx.debug.params.get('cmr')) || 1;
 
@@ -93,7 +93,7 @@ export default function create(ctx: CityContext): CityModule {
     uWinDepth: (ctx.services.buildings as { uniforms?: { uWinDepth: THREE.IUniform } } | undefined)?.uniforms?.uWinDepth ?? { value: 0 },
   };
 
-  const material = (name: string, frag: string, define: string, radius: number): THREE.ShaderMaterial =>
+  const material = (name: string, frag: string, define: string, radius: number, offset: number): THREE.ShaderMaterial =>
     new THREE.ShaderMaterial({
       name: `closemat-${name}`,
       defines: { [define]: 1, CM_LIM: (radius / REF_PX).toFixed(5) },
@@ -109,14 +109,14 @@ export default function create(ctx: CityContext): CityModule {
       blendSrcAlpha: THREE.ZeroFactor,
       blendDstAlpha: THREE.OneFactor,
       polygonOffset: true,
-      polygonOffsetFactor: -1,
-      polygonOffsetUnits: -2,
+      polygonOffsetFactor: offset,
+      polygonOffsetUnits: offset * 2,
       fog: false,
       toneMapped: false,
     });
 
   const grids: TriGrid[] = [];
-  const layer = (name: string, grid: TriGrid, attrs: SourceAttr[], frag: string, define: string, radius: number, cell: number, top: number): void => {
+  const layer = (name: string, grid: TriGrid, attrs: SourceAttr[], frag: string, define: string, radius: number, cell: number, top: number, offset = -1): void => {
     stats[name] = grid.triangles;
     if (grid.triangles === 0) return;
     grids.push(grid);
@@ -127,7 +127,7 @@ export default function create(ctx: CityContext): CityModule {
       cell,
       top,
       margin: cell * 0.5,
-      material: material(name, frag, define, R),
+      material: material(name, frag, define, R, offset),
       renderOrder: -80,
       receiveShadow: false,
       standIn: interleaved(new Float32Array(grid.stride * 3), attrs),
@@ -160,6 +160,13 @@ export default function create(ctx: CityContext): CityModule {
     const road = byName((n) => n === 'roads-asphalt');
     const cell = 8;
     layer('cmRoad', new TriGrid(road, ROAD_ATTRS, cell, () => true), ROAD_ATTRS, CM_ASPHALT, 'CM_GROUND', 14, cell, 0.3);
+  }
+  if (on.road) {
+    // the markings' own offset is stronger than a plain layer's: above it
+    const road = byName((n) => n === 'roads-markings');
+    const cell = 8;
+    const grid = new TriGrid(road, ROAD_ATTRS, cell, () => true);
+    layer('cmPaint', grid, ROAD_ATTRS, CM_PAINT, 'CM_GROUND', 14, cell, 0.3, -4);
   }
   if (on.paving) {
     const hard = byName((n) => n === 'roads-hardscape');

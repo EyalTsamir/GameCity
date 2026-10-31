@@ -130,7 +130,7 @@ const WALL_MAIN = /* glsl */ `
   gx = dFdx(q);
   gy = dFdy(q);
   float fa = cmArea(gx, gy);
-  if (fa >= CM_LIM) { gl_FragColor = vec4(1.0); return; }
+  if (fa >= CM_LIM) discard;
   float k = 1.0 - smoothstep(CM_LIM * 0.45, CM_LIM, fa);
   float seed = floor(vB.z + 0.5);
   float open = cmOpen(fa);
@@ -140,7 +140,7 @@ const WALL_MAIN = /* glsl */ `
     vec2 pm = (vFac - cell) * vC.xy;
     float style = floor(mod(floor(vB.w + 0.5), 64.0) / 8.0 + 0.01);
     float revD = (style > 6.5 ? 0.07 : (style > 5.5 ? 0.09 : (style > 2.5 && style < 3.5 ? 0.06 : (style > 3.5 && style < 4.5 ? 0.1 : 0.14)))) * uWinDepth;
-    if (revD < 0.001) { gl_FragColor = vec4(1.0); return; }
+    if (revD < 0.001) discard;
     float uSign = dot(vec2(dFdx(vFac.x), dFdy(vFac.x)), vec2(gx.x, gy.x)) < 0.0 ? -1.0 : 1.0;
     vec3 Tu = T * uSign;
     vec3 V = normalize(vP - cameraPosition);
@@ -150,7 +150,7 @@ const WALL_MAIN = /* glsl */ `
     float sHit = min(min(sEx.x, sEx.y), 1.0);
     bool jamb = sEx.x < sEx.y;
     // (the inner sill is drawn as stone by the base: left to it)
-    if (sHit >= 1.0 || (!jamb && kd.y <= 0.0)) { gl_FragColor = vec4(1.0); return; }
+    if (sHit >= 1.0 || (!jamb && kd.y <= 0.0)) discard;
     vec2 dQ = q + kd * sHit * vec2(uSign, 1.0);
     q = jamb ? vec2(sHit * revD + 0.37, dQ.y) : vec2(dQ.x, sHit * revD + 0.21);
     gx = dFdx(q);
@@ -522,7 +522,7 @@ void main() {
   gx = dFdx(p);
   gy = dFdy(p);
   float fa = cmArea(gx, gy);
-  if (fa >= CM_LIM) { gl_FragColor = vec4(1.0); return; }
+  if (fa >= CM_LIM) discard;
   float k = 1.0 - smoothstep(CM_LIM * 0.45, CM_LIM, fa);
   vec4 g = CMT(tGrain, p * 1.667, 1.667);
   vec4 c = CMT(tCrack, p * 0.39, 0.39);
@@ -638,7 +638,7 @@ const HARD_MAIN = /* glsl */ `
   gx = ug;
   gy = uh;
   float fa = cmArea(gx, gy);
-  if (fa >= CM_LIM) { gl_FragColor = vec4(1.0); return; }
+  if (fa >= CM_LIM) discard;
   float k = 1.0 - smoothstep(CM_LIM * 0.45, CM_LIM, fa);
   vec3 TX = normalize(vec3(1.0 - N.x * N.x, -N.x * N.y, -N.x * N.z) + vec3(1e-4));
   vec3 TZ = normalize(cross(TX, N));
@@ -768,7 +768,7 @@ void main() {
   gx = dFdx(q);
   gy = dFdy(q);
   float fa = cmArea(gx, gy);
-  if (fa >= CM_LIM) { gl_FragColor = vec4(1.0); return; }
+  if (fa >= CM_LIM) discard;
   float k = 1.0 - smoothstep(CM_LIM * 0.45, CM_LIM, fa);
   vec3 col = max(vCol, vec3(0.01));
   float lum = dot(col, vec3(0.3, 0.59, 0.11));
@@ -827,6 +827,36 @@ void main() {
       ratio *= 1.0 - 0.5 * smoothstep(0.6, 0.72, c.b) * (1.0 - smoothstep(0.0008, 0.0022 + fa * 0.8, dist));
     }
   }
+  gl_FragColor = vec4(max(mix(vec3(1.0), ratio, k), vec3(0.0)), 1.0);
+}
+`;
+
+/** road paint: thin on the stones, gone from their tops where the wheels run */
+export const CM_PAINT = /* glsl */ `
+void main() {
+  vec3 N = normalize(vN);
+  vec2 p = vP.xz;
+  gx = dFdx(p);
+  gy = dFdy(p);
+  float fa = cmArea(gx, gy);
+  if (fa >= CM_LIM) discard;
+  float k = 1.0 - smoothstep(CM_LIM * 0.45, CM_LIM, fa);
+  vec4 g = CMT(tGrain, p * 1.667, 1.667);
+  vec4 c = CMT(tCrack, p * 0.39, 0.39);
+  vec2 sq = p * 1.8 + (g.rg - 0.5) * 0.035;
+  vec4 s0 = CMT(tStones, sq, 1.8);
+  vec2 ld = uSunDir.xz / max(uSunDir.y, 0.25);
+  vec4 s1 = CMT(tStones, sq + ld * 0.0035, 1.8);
+  float rel = (s0.b - s1.b) * 1.5 * uDaylight * smoothstep(0.02, 0.3, uSunDir.y);
+  vec3 ratio = vec3(1.0 + clamp(-rel, -0.2, 0.2));
+  ratio *= 0.9 + 0.2 * smoothstep(0.1, 0.4, s0.r);
+  // worn: dark where the binder shows through, in patches
+  float wear = smoothstep(0.42, 0.72, c.b + (g.b - 0.5) * 0.5);
+  float gone = wear * smoothstep(0.42, 0.2, s0.r + (0.5 - s0.b) * 0.3);
+  ratio *= 1.0 - 0.72 * gone;
+  ratio *= 1.0 - 0.3 * g.a;
+  float dist = c.r * 0.04;
+  ratio *= 1.0 - 0.5 * smoothstep(0.56, 0.72, c.b) * (1.0 - smoothstep(0.0008, 0.002 + fa * 0.8, dist));
   gl_FragColor = vec4(max(mix(vec3(1.0), ratio, k), vec3(0.0)), 1.0);
 }
 `;
