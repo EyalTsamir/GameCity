@@ -142,7 +142,7 @@ export function buildTvLift(ctx: CityContext, rooms: Rooms, uLift: { value: THRE
   const lamp = M('#ffe6bd', RP.EMIT, 0, 0, 4, 0, 0.7);
 
   // ── floor, the star ceiling, the core in walnut, a brass compass ring in the floor
-  room.grid(floorM, (th, r) => [Math.sin(th) * r, yD, Math.cos(th) * r], 0, TAU, rCore, TVL.balcony - 1.42, 0.13, 0.5, true);
+  room.grid(floorM, (th, r) => [Math.sin(th) * r, yD + 0.012, Math.cos(th) * r], 0, TAU, rCore, TVL.balcony - 0.01, 0.13, 0.5, true);
   room.grid(stars, (th, r) => [Math.sin(th) * r, yC, Math.cos(th) * r], 0, TAU, rCore, 5.75, 0.13, 0.5);
   room.grid(walnut, (th, y) => [Math.sin(th) * rCore, y, Math.cos(th) * rCore], 0, TAU, yD, yC, 0.1, 0.5);
   K.torus(brass, 3.3, 0.018, 0, yD + 0.004, 0, 5, 64);

@@ -4,10 +4,10 @@ Branch `claude/detail-landmarks-28de6d`. Shared rules: `DETAIL-ROUND.md`. Switch
 `?no<name>` one family).
 
 ## Resume here
-Rounds 1 to 5 are committed (2cbd27c the lighthouse, the commit after it the tower lift). Each round from a fresh look at eye level:
+Rounds 1 to 6 are committed. Each round from a fresh look at eye level:
 1. hero interiors (church, Town Hall, station); 2. the working quay lit at night, the ship's house, the breakwater as a walk; 3. rock skin on the armour stones, the ship's
-name and marks, the lighthouse floodlit, the tractor up close; 4. up the lighthouse on foot; 5. up the Skyline Tower by lift.
-Candidates left, in order of wow per ms: the stadium from the stands (no way in yet), a café interior, station platform door panels, the pier's ferris wheel as a ride, the
+name and marks, the lighthouse floodlit, the tractor up close; 4. up the lighthouse on foot; 5. up the Skyline Tower by lift; 6. into the stadium, onto the pitch and up the stand.
+Candidates left, in order of wow per ms: a café interior, station platform door panels, the pier's ferris wheel as a ride, the
 film in real time. Dev server: `npx vite --port 5202 --strictPort --host 127.0.0.1`.
 Scratch tools (session scratchpad, may be gone): `ev.mjs` (named eye to look captures through the shared browser lock), `walk2.mjs` (real keys in walk mode),
 `walk3.mjs` / `walk4.mjs` (the lighthouse climb and the lift, with real mouse drags to look round), `sheet.py`, `shoot.sh`. Run captures in the background: the browser queue is
@@ -93,15 +93,25 @@ telescopes and people looking out; through the doors, a deck round a walnut core
 - The balcony went from r 6.6 to r 7.2 (a walker's body is 0.84 wide), so its overhang is excused from the footprint check (`env.endChecks` / `checkLot` round it).
 - The glazing has real door openings; through one you see the walnut core (static, drawn from any distance), so no sky shows through from far away.
 
+## Stadium (round 6, `?nostadiumwalk`)
+`landmarks/stadiumRoom.ts`, with the gaps in `stadium.ts`. In at the east gate between the turnstiles, down a tunnel on the gate's line, out under a red hood onto the pitch among the
+players; two steps at each aisle of the east stand, up the half steps to the back row under the canopy. Walked there and back at 18.1 (empty, low sun through the gap) and 20.1 (match).
+- Stand rows are solid boxes from the ground up: a tunnel has to split them, not just pass through (a box's back face hides the pitch from inside). Rows above the ceiling sit on it.
+- A row is 0.52 m high, more than the walker climbs: along any row, up only by the aisles' half steps; down anywhere.
+- Lining stands 3 cm inside the rows' cut faces, or it fights them.
+- Players are now tubes and a ball with hair and boots, the crowd a tapered torso and a 6-sided head with hair: you can stand next to them now. Crowd +19 k triangles, always.
+- Bug fixed, always on (`sim/ambient/vehicles.ts`, numbers only): the balloon landed on the pitch at 19:45 in the middle of the 19:30 match. It now comes home 17:45 to 18:45 and is packed by 18:57.
+
 ## Best views
 Church nave 18.2 from the door; Town Hall stair from the door at noon, laylight from the gallery, the balcony at 18.2, the table model in the west wing; station from the street
 through the open door with a train behind it, compass floor and rib shadows at 11; carousel at 21.5; bandstand at noon; quay lane at 10-12.
+Stadium: the back row of the east stand at 18.2 (the sun through the corner) and at 20 under the floods; the tunnel from the gate at 20 with the match at the end of it; the pitch at 20.
 Lift: ride at 18.2 looking south and slightly down, at about 40 m and 80 m; again at 21.5 with the quay lit below. Balcony at 18.2, and through the door from the deck with the balloon.
 Lighthouse: the gallery at 18.2 looking at the ship and cranes (`gallery_city`, 182.3,19.8,-141.2 to 100,4,-55), the lens at 21.5, the stair from the door at noon; from outside `lh_night` 160,3,-138 to 184,12,-142 at 21.5, and the door at noon.
 Harbour: the ship's name on the transom reflected in the water at noon (135,6,-14 to 145,1,-28); container quay under its masts at 21.5.
 
 ## Toggles
-`?nolmdetail` all; `?noherochurch`, `?noherotownhall`, `?noherostation`, `?noquaylife2`, `?nohorses`, `?nobandroof`. Rounds 2 to 5: `?noshipkit`, `?nobwlife` (also takes the lighthouse room), `?norockskin`, `?nolhroom`, `?notvlift`. Always on: bricks 25 x 9.5 cm (`shaders.ts`, every brick landmark).
+`?nolmdetail` all; `?noherochurch`, `?noherotownhall`, `?noherostation`, `?noquaylife2`, `?nohorses`, `?nobandroof`. Rounds 2 to 5: `?noshipkit`, `?nobwlife` (also takes the lighthouse room), `?norockskin`, `?nolhroom`, `?notvlift`, `?nostadiumwalk`. Always on: bricks 25 x 9.5 cm (`shaders.ts`, every brick landmark).
 
 ## Hand-offs
 None to other sessions. In `quayLife.ts` the big pieces are solid for the walker; cones and the manhole are not.
@@ -109,3 +119,4 @@ None to other sessions. In `quayLife.ts` the big pieces are solid for the walker
 ## Edits outside my files
 `src/ui/camera/walkSurface.ts`: asks `ctx.services.rooms` first in `heightAt` and `solidAt`.
 `src/ui/camera/firstPerson.ts`: tells `ctx.services.rooms.feet` where the feet are (on entering, and before each move); adds `rooms.carry` (the lift's rate) to the feet.
+`src/sim/ambient/vehicles.ts`: the balloon's evening times (a bug: it landed in the match).

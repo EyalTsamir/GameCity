@@ -24,6 +24,7 @@ import { genStadium, genFloodlight, StadiumInfo } from './landmarks/stadium';
 import { createStadiumLife } from './landmarks/stadiumLife';
 import { genTvTower, tvDeckY, tvTowerUpdater } from './landmarks/tvtower';
 import { buildTvLift, type TvLiftRuntime } from './landmarks/tvLift';
+import { buildStadiumRoom } from './landmarks/stadiumRoom';
 import { genConstruction, genTowerCrane, craneUpdater, CraneTargets } from './landmarks/construction';
 import { genFountain } from './landmarks/fountain';
 import { genFlagpole, genMarketStall, genCourtHoops } from './landmarks/civic';
@@ -261,6 +262,9 @@ export default function create(ctx: CityContext): CityModule {
   if (tvLot && lmDetail(ctx, 'tvlift')) {
     const fp = (tvLot as Lot).footprint;
     tvLift = buildTvLift(ctx, rooms, mats.u.uLift, (fp.x0 + fp.x1) / 2, (fp.z0 + fp.z1) / 2, DIR_YAW[(tvLot as Lot).front], tvDeckY(tvLot as Lot), 0);
+  }
+  for (const st of stadiums) {
+    if (st.walk && terrain) buildStadiumRoom(rooms, st.cx, st.cz, st.walk, terrain.height(st.cx, st.cz), (x, z) => terrain.height(x, z));
   }
   for (const r of rooms.list) r.finish(ctx, group, ctx.uniforms);
   if (rooms.list.length) ctx.services.rooms = rooms;

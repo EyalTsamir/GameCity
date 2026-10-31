@@ -292,7 +292,7 @@ export function createVehicles(ctx: CityContext, sparks: SparkSystem, skyline: S
       const wave = 112 + 18 * Math.sin(ss * 0.0071 + 0.6) + 7 * Math.sin(ss * 0.019 + 1.3);
       return Math.max(wave, lookupFloor(bFloor, bLoop, ss));
     };
-    if (h < 5.75 || h >= 20.2) {
+    if (h < 5.75 || h >= 18.95) {
       visible = false;
     } else if (h < 6.4) {
       // inflating lying on the pitch, then standing up
@@ -300,7 +300,7 @@ export function createVehicles(ctx: CityContext, sparks: SparkSystem, skyline: S
       tilt = (1 - smooth(6.0, 6.3, h)) * (Math.PI / 2) * 0.96;
       radial = 0.25 + 0.75 * k;
       phase = h < 6.3 ? 'inflating' : 'ready';
-    } else if (h < 19.0) {
+    } else if (h < 17.75) {
       const alt = cruiseAlt(s);
       // drift from the stadium out to the cruising loop while climbing
       const out = smooth(6.4, 7.6, h);
@@ -309,19 +309,19 @@ export function createVehicles(ctx: CityContext, sparks: SparkSystem, skyline: S
       const up = smooth(6.4, 7.3, h);
       y = siteY + B_BASKET + (alt - siteY - B_BASKET) * (1 - (1 - up) * (1 - up));
       phase = h < 7.3 ? 'ascending' : 'cruising';
-    } else if (h < 19.75) {
+    } else if (h < 18.5) {
       const alt = cruiseAlt(s);
-      const k = smooth(19.0, 19.7, h);
+      const k = smooth(17.75, 18.45, h);
       x = P.x + (site.x - P.x) * k;
       z = P.z + (site.z - P.z) * k;
       y = alt + (siteY + 55 - alt) * k;
       phase = 'returning';
-    } else if (h < 20.0) {
-      const k = smooth(19.75, 20.0, h);
+    } else if (h < 18.75) {
+      const k = smooth(18.5, 18.75, h);
       y = siteY + 55 + (siteY + B_BASKET - siteY - 55) * (1 - (1 - k) * (1 - k));
       phase = 'landing';
     } else {
-      const k = smooth(20.0, 20.18, h);
+      const k = smooth(18.75, 18.93, h);
       tilt = k * (Math.PI / 2) * 0.96;
       radial = 1 - 0.75 * k;
       phase = 'packing';

@@ -28,6 +28,8 @@ export interface ShellSpec {
   standYaw: number[];
   /** plan doors in stadium-local coordinates */
   doors: { x: number; z: number; dir: string }[];
+  /** the stand whose gate stands open onto a tunnel (-1 none) */
+  openGate: number;
 }
 
 const SIDE_DIR = ['N', 'E', 'S', 'W'];
@@ -196,8 +198,14 @@ export function stadiumShell(env: Env, sp: ShellSpec): void {
           const [x, z] = L(uu, dep);
           D.box(m, w, h, d, x, y, z, ry);
         };
-        dbox(concrete, 3.8, 4.4, 0.04, u, 0, W - 0.47);
-        dbox(M('#202326', PAT.PLAIN, 0.9), 1.3, 2.2, 0.02, u, 0, W - 0.445);
+        if (k === sp.openGate) {
+          // this one is open: only the panel over the tunnel's head
+          dbox(concrete, 3.8, 4.4 - 2.65, 0.04, u, 2.65, W - 0.47);
+          for (const e of [-1, 1]) dbox(concrete, 1.9 - 1.35, 2.65, 0.04, u + e * (1.9 + 1.35) / 2, 0, W - 0.47);
+        } else {
+          dbox(concrete, 3.8, 4.4, 0.04, u, 0, W - 0.47);
+          dbox(M('#202326', PAT.PLAIN, 0.9), 1.3, 2.2, 0.02, u, 0, W - 0.445);
+        }
         dbox(conFloor, 3.6, 0.03, 0.5, u, 0, W - 0.24);
         for (const e of [-1, 1]) {
           dbox(steel, 0.3, 1.0, 0.32, u + e * 1.05, 0, W - 0.28);
