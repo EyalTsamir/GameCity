@@ -796,6 +796,9 @@ void pedPose(inout vec3 p, inout vec3 n) {
     A = Bc = ((prm >> 8u) & 1u) == 1u ? vec3(0.72, 0.71, 0.68) : (jacket ? outer : top);
   } else if (region == ${R.LIPS}) {
     A = Bc = skin * vec3(0.86, 0.72, 0.7);
+  } else if (region == ${R.SKIN}) {
+    // (the strip from the forearm's last ring to the hand: s must not cross the hem on the way, it drew the sleeve's cloth as a bracelet)
+    s = -1.0;
   }
   // painted miniature: per-figure garment jitter (±4 %), lighter up-facing / darker undersides and
   // lower legs (drybrush value ramp), faces and hands a touch warmer and lighter than the arms
