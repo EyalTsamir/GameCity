@@ -211,6 +211,10 @@ void main() {
   }
 #endif
 
+#if defined(TH_WORLD) && defined(TH_CLOUDS)
+  if (uStormK.x > 0.0 && y > -0.01) col = mix(col, hz * vec3(0.6, 0.67, 0.78), clCurtain(cameraPosition, d) * 0.85);
+#endif
+
   float aboveH = smoothstep(-0.02, 0.06, y);
   vec3 skyBase = col;
 

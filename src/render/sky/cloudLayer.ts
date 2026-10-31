@@ -159,6 +159,20 @@ float clStorm(vec2 xz) {
   float s = dot(xz, uStorm.xy);
   return uStormK.x * (1.0 - smoothstep(uStorm.z - uStormK.y, uStorm.z + uStormK.y, s)) * smoothstep(uStorm.w - uStormK.y, uStorm.w + uStormK.y, s);
 }
+// rain curtains: from outside a band, a low ray crosses the falling rain under the deck's edge, in front of any cloud.
+// 0..1 along unit dir; the dome paints it over the sky, the volume over the deck behind it
+float clCurtain(vec3 cam, vec3 d) {
+  float s0 = dot(cam.xz, uStorm.xy);
+  if (s0 <= uStorm.z && s0 >= uStorm.w) return 0.0;
+  float k = dot(d.xz, uStorm.xy);
+  float tn = ((s0 > uStorm.z ? uStorm.z : uStorm.w) - s0) / (abs(k) < 1e-3 ? 1e-3 : k);
+  if (tn <= 0.0 || tn > 48000.0) return 0.0;
+  float hh = cam.y + d.y * tn;
+  if (hh > uCu.y) return 0.0;
+  float lat = dot(cam.xz + d.xz * tn, vec2(-uStorm.y, uStorm.x));
+  float sh = textureLod(tCloudNoise, vec2(lat / 5200.0 + hh * 6e-5, uCu.w / 40000.0), 0.0).r * 0.72 + textureLod(tCloudNoise, vec2(lat / 1900.0 + hh * 12e-5, uCu.w / 16000.0 + 0.4), 0.0).g * 0.28;
+  return uStormK.x * smoothstep(0.3, 0.6, sh) * (1.0 - smoothstep(uCu.y * 0.7, uCu.y * 1.02, hh)) * (1.0 - smoothstep(22000.0, 48000.0, tn));
+}
 // cumulus thickness field 0..1 at world xz (m): which ~1.7 km noise cells host a cloud (coverage, varied by
 // large weather patches), its rounded body (~1 km across), and (full) billowy cauliflower rims. Fair-weather
 // cumulus are separate ~0.5–2 km clouds with clear gaps, never a scatter of tiny flakes.

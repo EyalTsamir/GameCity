@@ -127,6 +127,11 @@ void main() {
   float tm = tw / max(ww, 1e-4);
   float far = 1.0 - exp(-tm / mix(38000.0, 11000.0, uStormK.w));
   S = mix(S, thHazeColor(dir) * thAtmo[10].y * alpha, far * mix(0.85, 1.0, uStormK.w));
+  // (the falling rain under the band's edge is in front of its deck)
+  if (uStormK.x > 0.0) {
+    float rk = clCurtain(cam, dir) * 0.85;
+    S = mix(S, thHazeColor(dir) * thAtmo[10].y * vec3(0.6, 0.67, 0.78) * alpha, rk);
+  }
   alpha *= smoothstep(-0.03, 0.02, dir.y);
   gl_FragColor = vec4(S * smoothstep(-0.03, 0.02, dir.y), alpha);
 }
