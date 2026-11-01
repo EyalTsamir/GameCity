@@ -1,6 +1,8 @@
-// The diorama base: soil cross-section on the four slab faces (procedural strata with
-// roots and pebbles), the varnished wooden plinth with its brass nameplate, and a soft
-// contact shadow underneath.
+// The diorama base (?diorama only): soil cross-section on the four slab faces (procedural strata
+// with roots and pebbles), the varnished wooden plinth with its brass nameplate, and the studio
+// table it stands on (src/render/stage/table.ts: oak top fading into the cyclorama, analytic
+// slab shadow + contact occlusion). ?legacylight shows the original blurred contact decal instead.
+// World mode (default): nothing — the landscape module continues the ground beyond the edge.
 
 import * as THREE from 'three';
 import type { CityContext } from '../../core/context';
@@ -10,6 +12,9 @@ import type { TerrainModel } from './height';
 import { GROUND_DROP } from './height';
 import type { EdgeProfile, SlabEdges } from './layout';
 import { noiseTexture, GLSL_HASH } from './noise';
+import { WATER_LEVEL } from '../../core/constants';
+import { createStageUniforms, createTable, type StageService } from '../../render/stage/table';
+import { WORLD_MODE } from '../../core/world';
 
 export const PLINTH = {
   /** ledge width around the slab */
@@ -406,7 +411,8 @@ function buildPlinth(rng: Rng): THREE.Mesh {
   const mat = new THREE.MeshStandardMaterial({ map: woodTexture(rng), color: '#ffffff', roughness: 0.4, metalness: 0.0 });
   const m = new THREE.Mesh(g, mat);
   m.name = 'terrain-plinth';
-  m.receiveShadow = false;
+  // receives: trees / buildings at the slab edge shadow the ledge and face at low sun
+  m.receiveShadow = true;
   m.castShadow = false;
   return m;
 }
@@ -498,7 +504,7 @@ function nameplateTexture(): THREE.CanvasTexture {
   return t;
 }
 
-function buildNameplate(): THREE.Mesh {
+function buildNameplate(lights?: { value: number }): THREE.Mesh {
   const w = 30,
     h = 3.75;
   const tex = nameplateTexture();
@@ -511,6 +517,10 @@ function buildNameplate(): THREE.Mesh {
   const m = new THREE.Mesh(geo, front);
   m.position.set(0, (PLINTH.faceTop + PLINTH.faceBottom) / 2, SLAB.z1 + PLINTH.out + 0.08);
   m.name = 'terrain-nameplate';
+  // a museum-style display light on the brass at night (follows the city lights)
+  if (lights) m.onBeforeRender = () => {
+    front.emissiveIntensity = 0.06 + 0.32 * lights.value;
+  };
   return m;
 }
 
@@ -548,20 +558,80 @@ export interface SlabResult {
   faces: THREE.Mesh;
   plinth: THREE.Mesh;
   nameplate: THREE.Mesh;
-  shadow: THREE.Mesh;
+  /** the studio table (+ the legacy contact decal, hidden unless ?legacylight) */
+  shadow: THREE.Object3D;
   triangles: number;
 }
 
+/** resample an edge profile's face-top heights uniformly over [a, b] */
+function sampleEdge(prof: EdgeProfile, a: number, b: number, n: number): Float32Array {
+  const out = new Float32Array(n);
+  let j = 0;
+  for (let i = 0; i < n; i++) {
+    const u = a + ((b - a) * i) / (n - 1);
+    while (j < prof.u.length - 2 && prof.u[j + 1] < u) j++;
+    const u0 = prof.u[j],
+      u1 = prof.u[Math.min(j + 1, prof.u.length - 1)];
+    const t = u1 > u0 ? Math.min(1, Math.max(0, (u - u0) / (u1 - u0))) : 0;
+    const h = prof.h[j] + (prof.h[Math.min(j + 1, prof.h.length - 1)] - prof.h[j]) * t;
+    out[i] = Math.max(h, WATER_LEVEL) + GROUND_DROP;
+  }
+  return out;
+}
+
 export function createSlab(ctx: CityContext, model: TerrainModel, edges: SlabEdges): SlabResult {
+  if (WORLD_MODE) {
+    // world mode: no soil faces, plinth, nameplate or studio table — the landscape module continues
+    // the ground beyond the slab edge (placeholders keep the terrain module's wiring unchanged;
+    // ctx.services.stage.table stays null, so the sky module's table code is skipped)
+    const empty = (name: string) => {
+      const m = new THREE.Mesh();
+      m.name = name;
+      m.visible = false;
+      m.matrixAutoUpdate = false;
+      return m;
+    };
+    const shadow = new THREE.Group();
+    shadow.name = 'stage';
+    shadow.visible = false;
+    return { faces: empty('terrain-slab-faces'), plinth: empty('terrain-plinth'), nameplate: empty('terrain-nameplate'), shadow, triangles: 0 };
+  }
   const fg = buildFaces(model, edges);
   const faces = new THREE.Mesh(fg, facesMaterial());
   faces.name = 'terrain-slab-faces';
   faces.receiveShadow = true;
   faces.castShadow = false;
   const plinth = buildPlinth(ctx.rng('terrain-wood'));
-  const nameplate = buildNameplate();
-  const shadow = buildContactShadow();
-  for (const m of [faces, plinth, nameplate, shadow]) {
+  const nameplate = buildNameplate(ctx.uniforms.uLights);
+  const contact = buildContactShadow();
+  // the studio table (dynamic uniforms owned by the sky module; static fallback without it)
+  let stage = ctx.services.stage as StageService | undefined;
+  if (!stage) stage = { uniforms: createStageUniforms(), table: null, legacyContact: null };
+  const NE = 256;
+  const table = createTable(
+    ctx.rng('stage-table'),
+    {
+      slab: SLAB,
+      y: PLINTH.bottom - 0.03,
+      plinthOut: PLINTH.out + 0.36,
+      plinthTop: PLINTH.top - 0.3,
+      plinthFace: PLINTH.out,
+      edgeN: sampleEdge(edges.north, SLAB.x0, SLAB.x1, NE),
+      edgeS: sampleEdge(edges.south, SLAB.x0, SLAB.x1, NE),
+      edgeW: sampleEdge(edges.west, SLAB.z0, SLAB.z1, NE),
+      edgeE: sampleEdge(edges.east, SLAB.z0, SLAB.z1, NE),
+    },
+    stage.uniforms,
+  );
+  stage.table = table;
+  stage.legacyContact = contact;
+  const legacy = ctx.debug.params.has('legacylight') || ctx.debug.params.has('notable');
+  table.visible = !legacy;
+  contact.visible = legacy;
+  const shadow = new THREE.Group();
+  shadow.name = 'stage';
+  shadow.add(table, contact);
+  for (const m of [faces, plinth, nameplate, contact, shadow]) {
     m.matrixAutoUpdate = false;
     m.updateMatrix();
   }

@@ -12,6 +12,9 @@ import { wall, bays, moulding, Opening } from './facade';
 import { C, S, mansard, quoins, chimney, finial, dormer, wallLantern, flagpole, railing } from './parts';
 import type { Env } from './env';
 import { drawText, signQuad } from './signs';
+import { boxHunt } from '../../core/boxhunt';
+import { lmDetail } from '../../core/lmdetail';
+import { buildStationRoom } from './stationRoom';
 
 /** Glazed segmental barrel vault spanning x0..x1 along z0..z1. */
 export function barrelVault(K: Kit, glass: Mat, rib: Mat, x0: number, x1: number, z0: number, z1: number, ySpring: number, rise: number, segs: number, ribEvery: number): void {
@@ -123,13 +126,14 @@ export function genStation(env: Env, lot: Lot): void {
   const winY = 5.6;
   const winH = 7.6;
   const arcadeX = [-3.5, 0, 3.5];
+  const hero = !!env.rooms && lmDetail(env.ctx, 'herostation');
   const frontOpenings: Opening[] = arcadeX.map((ax, i) => ({
     x: fw / 2 + ax,
     y: 0,
     w: 2.6,
     h: 4.0,
     arch: 1.3,
-    fill: 'door' as const,
+    fill: hero && i === 1 ? ('none' as const) : ('door' as const),
     glow: 0.95,
     seed: 0.2,
     inset: 0.32,
@@ -154,7 +158,8 @@ export function genStation(env: Env, lot: Lot): void {
   wall(K, { w: fw, h: arcCy + arcR, depth: 0.55, x: 0, y: 0, z: zF, ry: 0, mat: stone, openings: frontOpenings, outline });
   // archivolt crest + mouldings
   moulding(K, trim, 0, zF, 0, fw, 4.2, 0.22, 0.16);
-  moulding(K, granite, 0, zF, 0, fw, 0, 0.55, 0.1);
+  if (hero) for (const s of [-1, 1]) moulding(K, granite, (s * (fw / 2 + 1.3)) / 2, zF, 0, fw / 2 - 1.3, 0, 0.55, 0.1);
+  else moulding(K, granite, 0, zF, 0, fw, 0, 0.55, 0.1);
   for (const s of [-1, 1]) {
     K.box(trim, 0.9, 0.3, 0.5, s * (fw / 2 - 0.45), arcCy, zF - 0.2);
     finial(K, gold, s * (fw / 2 - 0.45), arcCy + 0.3, zF - 0.2, 0.9, 0.12);
@@ -243,7 +248,7 @@ export function genStation(env: Env, lot: Lot): void {
 
   // back gable (platform side) with a glazed lunette and a second clock
   const backOutline = vaultOutline(fw, ySpring, rise, 0.45);
-  const backOpenings: Opening[] = [-3.6, 0, 3.6].map((ax) => ({ x: fw / 2 + ax, y: 0, w: 2.8, h: 4.2, arch: 1.4, fill: 'door' as const, glow: 0.95, inset: 0.3, surround: trim, surroundW: 0.2, infill: M('#3b4a3f', PAT.DOOR, 0.5, 0.1, 0.95, 0, 0.15) }));
+  const backOpenings: Opening[] = [-3.6, 0, 3.6].map((ax) => ({ x: fw / 2 + ax, y: 0, w: hero && ax === 0 ? 2.6 : 2.8, h: hero && ax === 0 ? 4.0 : 4.2, arch: hero && ax === 0 ? 1.3 : 1.4, fill: hero && ax === 0 ? ('none' as const) : ('door' as const), glow: 0.95, inset: 0.3, surround: trim, surroundW: 0.2, infill: M('#3b4a3f', PAT.DOOR, 0.5, 0.1, 0.95, 0, 0.15) }));
   backOpenings.push({ x: fw / 2, y: 5.6, w: fw - 2.4, h: ySpring + rise - 0.7 - 5.6, arch: rise + 0.6, fill: 'glass', glow: 0.95, inset: 0.3, surround: trim, surroundW: 0.3, infill: M(C.ironGreen, PAT.GLAZING, 0.3, 0.3, 0.95, 0, 0.2) });
   wall(K, { w: fw, h: ySpring + rise + 0.45, depth: 0.5, x: 0, y: 0, z: zB, ry: Math.PI, mat: stone, openings: backOpenings, outline: backOutline });
   moulding(K, trim, 0, zB, Math.PI, fw, 4.5, 0.22, 0.15);
@@ -441,6 +446,14 @@ export function genStation(env: Env, lot: Lot): void {
     wallLantern(env, K, s * (x1 - 0.6), 3.2, zP + 0.02, 0, 0.75);
   }
 
+  if (hero)
+    buildStationRoom(env, env.rooms!, {
+      HX, zF, zB, ySpring, rise, cx, cz, yaw,
+      winF: { w: winW, y: winY, h: winH, arch: winW / 2 },
+      winB: { w: fw - 2.4, y: 5.6, h: ySpring + rise - 0.7 - 5.6, arch: rise + 0.6 },
+    });
+  else if (boxHunt(env.ctx, 'interiors')) stationInterior(env, HX, zB, zF - 0.55, ySpring);
+
   // ── uplight pools in front of the facade (night)
   for (const gx of [-HW + 3.5, -11, 11, HW - 3.5]) env.glow(gx * sx, 0.1, HD + 0.6, { size: 2.6, kind: 'pool', color: '#ffbf75', intensity: 0.22 });
   env.glow(0, 9.2, HD + 0.3, { size: 6.0, kind: 'halo', color: '#ffcf8f', intensity: 0.16 });
@@ -455,3 +468,199 @@ export function genStation(env: Env, lot: Lot): void {
   });
 }
 
+
+/**
+ * Box hunt (?nointeriors): the booking hall furnished for the free camera — a mosaic floor with a compass rose, the
+ * timber booking office with three windows under a TICKETS board, a departures board hanging over the platform
+ * doors, a two-faced clock, back-to-back benches, the station café with its counter and tables, globe pendants.
+ */
+function stationInterior(env: Env, HX: number, zB: number, zFr: number, ySpring: number): void {
+  const D = env.D;
+  const iw = HX - 0.27;
+  const z0 = zB + 0.27,
+    z1 = zFr - 0.05;
+  const zc = (z0 + z1) / 2;
+  const L = z1 - z0;
+  const wood = M('#5b3a22', PAT.PLANKS, 0.7);
+  const woodDark = M('#3c2617', PAT.PLAIN, 0.7);
+  const brass = M('#c49a45', PAT.PLAIN, 0.35, 0.8);
+  const marble = M('#e3ddd0', PAT.PLAIN, 0.35);
+  const glass = M('#2b3a3f', PAT.PLAIN, 0.1, 0.3);
+  const iron = S.iron();
+  // floor + compass rose
+  D.box(M('#d3cab8', PAT.TILES, 0.6, 0, 0, 0, 0.5), iw * 2, 0.03, L, 0, 0, zc);
+  D.cyl(M('#7d5a3c', PAT.PLAIN, 0.5), 1.7, 1.7, 0.012, 0, 0.03, zc, 32);
+  D.cyl(M('#e9e1cf', PAT.PLAIN, 0.5), 1.45, 1.45, 0.014, 0, 0.03, zc, 32);
+  D.cyl(M('#2f4a5a', PAT.PLAIN, 0.5), 0.5, 0.5, 0.016, 0, 0.03, zc, 24);
+  for (let i = 0; i < 4; i++) D.box(M('#2f4a5a', PAT.PLAIN, 0.5), 0.18, 0.016, 2.7, 0, 0.03, zc, (i * Math.PI) / 4);
+  // booking office along the west wall: timber front, three windows with brass grilles and marble ledges
+  const ox = -iw + 0.85;
+  D.box(wood, 1.7, 2.8, 5.2, ox, 0, zc);
+  D.box(woodDark, 1.8, 0.2, 5.3, ox, 2.8, zc);
+  const fx = ox + 0.86;
+  for (let i = -1; i <= 1; i++) {
+    const z = zc + i * 1.6;
+    D.box(glass, 0.02, 0.85, 1.05, fx, 1.1, z);
+    for (let k = -2; k <= 2; k++) D.box(brass, 0.015, 0.85, 0.012, fx + 0.015, 1.1, z + k * 0.2);
+    D.box(marble, 0.34, 0.05, 1.2, fx + 0.1, 1.02, z);
+    D.box(woodDark, 0.04, 0.06, 1.25, fx + 0.01, 1.98, z);
+  }
+  const tickets = env.atlas.add(256, 48, (g, w, h) => {
+    g.fillStyle = '#1f3a2c';
+    g.fillRect(0, 0, w, h);
+    drawText(g, 'TICKETS', w / 2, h / 2 + 1, 'bold 32px Georgia, serif', '#f2d27a', 4);
+  });
+  signQuad(env.T, tickets, 2.4, 2.4 * (48 / 256), fx + 0.02, 2.45, zc, Math.PI / 2, 0.6);
+  // departures board hanging over the platform doors, facing the entrance
+  const bz = z0 + 1.6;
+  D.box(M('#151719', PAT.PLAIN, 0.5), 3.6, 1.25, 0.14, 0, 3.9, bz);
+  for (const sx of [-1.4, 1.4]) D.box(iron, 0.03, ySpring - 5.15, 0.03, sx, 5.15, bz);
+  const board = env.atlas.add(512, 176, (g, w) => {
+    g.fillStyle = '#0d0f10';
+    g.fillRect(0, 0, w, 176);
+    drawText(g, 'DEPARTURES', w / 2, 20, 'bold 24px Arial, sans-serif', '#f4f1e6', 2);
+    const rows = [
+      ['10:42', 'Harbour & Beach', '1'],
+      ['10:51', 'Westbrook', '2'],
+      ['11:05', 'Riverside', '1'],
+      ['11:12', 'Old Town', '2'],
+      ['11:20', 'Stadium', '1'],
+    ];
+    g.font = 'bold 21px Consolas, monospace';
+    g.textBaseline = 'middle';
+    rows.forEach(([t, dest, pl], i) => {
+      const y = 50 + i * 26;
+      g.fillStyle = '#ffb43a';
+      g.textAlign = 'left';
+      g.fillText(t, 14, y);
+      g.fillText(dest, 96, y);
+      g.textAlign = 'right';
+      g.fillText(pl, w - 16, y);
+    });
+    g.textAlign = 'left';
+  });
+  signQuad(env.T, board, 3.4, 3.4 * (176 / 512), 0, 4.53, bz + 0.075, 0, 0.9);
+  // two-faced clock hanging in the middle of the hall
+  D.box(iron, 0.04, ySpring - 4.8, 0.04, 0, 4.8, zc);
+  D.cyl(brass, 0.62, 0.62, 0.22, 0, 3.9, zc, 28);
+  for (const f of [1, -1]) {
+    const face = new THREE.CircleGeometry(0.56, 28);
+    env.S.geo(M(C.cream, PAT.CLOCK, 0.5, 0, 1.15), face, 0, 4.15, zc + f * 0.115, f > 0 ? 0 : Math.PI, 'native');
+    face.dispose();
+  }
+  // benches back to back between the door axes (wood slats on iron ends)
+  for (const sx of [-1.75, 1.75])
+    for (const side of [-1, 1]) {
+      const bx2 = sx + side * 0.33;
+      for (let k = 0; k < 4; k++) D.box(wood, 0.09, 0.03, 3.2, bx2 + side * (k * 0.1 - 0.15), 0.44, zc + 0.6);
+      D.box(wood, 0.03, 0.42, 3.2, sx + side * 0.06, 0.5, zc + 0.6);
+      for (const e of [-1.4, 0, 1.4]) D.box(iron, 0.5, 0.44, 0.05, bx2, 0, zc + 0.6 + e);
+    }
+  // station café on the east wall: counter with a marble top, coffee machine, cake dome, striped awning, tables
+  const cx = iw - 0.75;
+  D.box(wood, 0.7, 1.02, 3.4, cx, 0, zc);
+  D.box(marble, 0.8, 0.05, 3.5, cx, 1.02, zc);
+  D.box(M('#a9aeb2', PAT.PLAIN, 0.3, 0.8), 0.45, 0.45, 0.6, cx + 0.05, 1.07, zc - 1.0);
+  D.cyl(glass, 0.22, 0.22, 0.3, cx - 0.05, 1.07, zc + 0.6, 12);
+  D.box(M('#2e5b44', PAT.STRIPES, 0.8), 1.1, 0.04, 3.6, cx - 0.1, 2.55, zc, 0);
+  D.box(woodDark, 0.06, 1.2, 3.5, iw - 0.05, 1.3, zc);
+  const cafe = env.atlas.add(256, 48, (g, w, h) => {
+    g.fillStyle = '#2e5b44';
+    g.fillRect(0, 0, w, h);
+    drawText(g, 'STATION CAFE', w / 2, h / 2 + 1, 'bold 26px Georgia, serif', '#f6efe0', 2);
+  });
+  signQuad(env.T, cafe, 2.2, 2.2 * (48 / 256), iw - 0.02, 2.9, zc, -Math.PI / 2, 0.6);
+  for (const tz of [zc - 1.1, zc + 1.2]) {
+    const tx = cx - 1.7;
+    D.cyl(iron, 0.05, 0.2, 0.72, tx, 0, tz, 8);
+    D.cyl(marble, 0.36, 0.36, 0.04, tx, 0.72, tz, 16);
+    for (const a of [1.2, 1.2 + Math.PI]) {
+      const chx = tx + Math.sin(a) * 0.6,
+        chz = tz + Math.cos(a) * 0.6;
+      D.box(woodDark, 0.38, 0.04, 0.38, chx, 0.45, chz, a);
+      D.box(woodDark, 0.36, 0.45, 0.04, chx + Math.sin(a) * 0.18, 0.47, chz + Math.cos(a) * 0.18, a);
+      for (const lx of [-0.15, 0.15]) for (const lz of [-0.15, 0.15]) D.box(iron, 0.025, 0.45, 0.025, chx + lx, 0, chz + lz);
+    }
+  }
+  // globe pendants on long rods from the vault
+  for (const px of [-3.6, 3.6])
+    for (const pz of [z0 + 2.4, zc + 0.2, z1 - 2.2]) {
+      D.box(iron, 0.02, ySpring - 5.4, 0.02, px, 5.4, pz);
+      env.L.sphere(LM('#ffe2b0', LMODE.ALWAYS, 1.3, px * 0.1), 0.26, px, 5.2, pz, 10, 8);
+      env.glow(px, 5.2, pz, { size: 1.5, kind: 'halo', color: '#ffe2b0', intensity: 0.35 });
+      env.glow(px, 0.14, pz, { size: 4.0, kind: 'pool', color: '#ffd9a0', intensity: 0.16 });
+    }
+  // a direction sign over the platform doors
+  const plat = env.atlas.add(256, 40, (g, w, h) => {
+    g.fillStyle = '#1d2d4a';
+    g.fillRect(0, 0, w, h);
+    drawText(g, 'TO THE TRAINS', w / 2, h / 2 + 1, 'bold 22px Arial, sans-serif', '#ffffff', 2);
+  });
+  signQuad(env.T, plat, 2.0, 2.0 * (40 / 256), 3.6, 4.7, z0 + 0.05, 0, 0.5);
+  // railway travel posters in gilt frames on the entrance wall, a WAY OUT sign over the doors
+  const poster = (sky: string, sea: string, land: string, title: string, sub: string, sail: boolean) =>
+    env.atlas.add(80, 120, (g, w, h) => {
+      const gr = g.createLinearGradient(0, 0, 0, h * 0.6);
+      gr.addColorStop(0, sky);
+      gr.addColorStop(1, '#fbe3b0');
+      g.fillStyle = gr;
+      g.fillRect(0, 0, w, h);
+      g.fillStyle = '#f7c948';
+      g.beginPath();
+      g.arc(w * 0.7, h * 0.3, 9, 0, Math.PI * 2);
+      g.fill();
+      g.fillStyle = sea;
+      g.fillRect(0, h * 0.52, w, h * 0.2);
+      g.fillStyle = land;
+      g.beginPath();
+      g.moveTo(0, h * 0.72);
+      g.quadraticCurveTo(w * 0.35, h * 0.5, w * 0.55, h * 0.62);
+      g.lineTo(w, h * 0.58);
+      g.lineTo(w, h * 0.8);
+      g.lineTo(0, h * 0.8);
+      g.fill();
+      if (sail) {
+        g.fillStyle = '#ffffff';
+        g.beginPath();
+        g.moveTo(w * 0.3, h * 0.36);
+        g.lineTo(w * 0.3, h * 0.55);
+        g.lineTo(w * 0.42, h * 0.55);
+        g.fill();
+      } else {
+        g.fillStyle = '#f4efe2';
+        g.fillRect(w * 0.18, h * 0.38, 6, h * 0.2);
+        g.fillStyle = '#c0392b';
+        g.fillRect(w * 0.18, h * 0.44, 6, 4);
+      }
+      g.fillStyle = '#1d2d4a';
+      g.fillRect(0, h * 0.8, w, h * 0.2);
+      drawText(g, title, w / 2, h * 0.86, 'bold 11px Georgia, serif', '#f6efe0', 1);
+      drawText(g, sub, w / 2, h * 0.95, '7px Arial, sans-serif', '#f2d27a', 1);
+    });
+  const posters = [
+    poster('#7fb6d9', '#2f6f9e', '#d8c38a', 'TINYHAVEN', 'by the sea', true),
+    poster('#9ac3cf', '#356b85', '#6f8f4e', 'LIGHTHOUSE', 'cliff walks', false),
+  ];
+  const pz = z1 - 0.03;
+  [-1, 1].forEach((sx, i) => {
+    const px = sx * (iw - 2.6);
+    D.box(brass, 1.08, 1.56, 0.04, px, 1.25, pz);
+    signQuad(env.T, posters[i], 0.96, 1.44, px, 2.03, pz - 0.03, Math.PI, 0);
+  });
+  const wayOut = env.atlas.add(192, 40, (g, w, h) => {
+    g.fillStyle = '#f2c94c';
+    g.fillRect(0, 0, w, h);
+    drawText(g, 'WAY OUT', w / 2, h / 2 + 1, 'bold 24px Arial, sans-serif', '#1a1a1a', 2);
+  });
+  signQuad(env.T, wayOut, 1.5, 1.5 * (40 / 192), 0, 4.2, z1 - 0.06, Math.PI, 0.5);
+  // ticket machines beside the booking office: housing, lit screen, card slot, a brass name plate
+  for (const dz of [-3.3, 3.3]) {
+    const mx = ox + 0.45,
+      mz = zc + dz;
+    D.box(M('#b8322b', PAT.PLAIN, 0.4, 0.2), 0.6, 1.65, 0.55, mx, 0, mz);
+    D.box(M('#2a2d30', PAT.PLAIN, 0.3), 0.04, 0.4, 0.38, mx + 0.31, 1.15, mz);
+    env.L.box(LM('#bfe3ff', LMODE.ALWAYS, 0.9, dz), 0.012, 0.32, 0.3, mx + 0.335, 1.19, mz);
+    D.box(M('#1b1d20', PAT.PLAIN, 0.4), 0.05, 0.08, 0.2, mx + 0.31, 0.8, mz);
+    D.boxC(M('#2a2d30', PAT.PLAIN, 0.4), 0.18, 0.05, 0.44, mx + 0.26, 1.45, mz, 0, 0, 0.4);
+  }
+}

@@ -39,8 +39,179 @@ function mound(s: GeoSink, x: number, y: number, z: number, r: number, h: number
   for (let i = 0; i < 6; i++) s.tri(base, base + 1 + ((i + 1) % 6), base + 1 + i);
 }
 
+// ── flower heads (W8): species by petal colour, built as real heads — ray petals round a raised disc, a
+// pompom of frilled petals, an umbel of five-petalled florets, a five-lobed trumpet, a tulip cup — on stems,
+// nodding, over a rosette of leaves. ?noflowerdetail = the old star-petal clumps.
+const FLOWER_DETAIL = typeof location === 'undefined' || !new URLSearchParams(location.search).has('noflowerdetail');
+type Species = 'daisy' | 'marigold' | 'geranium' | 'petunia';
+const _hsl = { h: 0, s: 0, l: 0 };
+function speciesOf(c: THREE.Color): Species {
+  c.getHSL(_hsl);
+  if (_hsl.s < 0.3 && _hsl.l > 0.6) return 'daisy';
+  if (_hsl.h > 0.06 && _hsl.h < 0.2) return 'marigold';
+  if (_hsl.h < 0.03 || _hsl.h > 0.97) return 'geranium';
+  return 'petunia';
+}
+const _q = new THREE.Quaternion();
+const _f = new THREE.Vector3();
+const _e1 = new THREE.Vector3();
+const _e2 = new THREE.Vector3();
+const _up = new THREE.Vector3(0, 1, 0);
+const _hc = new THREE.Color();
+/** head frame: facing _f (tilted `tilt` toward azimuth `az`), petal plane _e1/_e2 (same handedness as x/z) */
+function frame(tilt: number, az: number): void {
+  _f.set(Math.sin(tilt) * Math.cos(az), Math.cos(tilt), Math.sin(tilt) * Math.sin(az));
+  _q.setFromUnitVectors(_up, _f);
+  _e1.set(1, 0, 0).applyQuaternion(_q);
+  _e2.set(0, 0, 1).applyQuaternion(_q);
+}
+/** point on the head: p + e1*(cos a·r) + e2*(sin a·r) + f*h */
+function hv(s: GeoSink, x: number, y: number, z: number, a: number, r: number, h: number, nk = 0.4): number {
+  const ca = Math.cos(a) * r,
+    sa = Math.sin(a) * r;
+  const px = x + _e1.x * ca + _e2.x * sa + _f.x * h,
+    py = y + _e1.y * ca + _e2.y * sa + _f.y * h,
+    pz = z + _e1.z * ca + _e2.z * sa + _f.z * h;
+  const nx = _f.x + (_e1.x * Math.cos(a) + _e2.x * Math.sin(a)) * nk,
+    ny = _f.y + (_e1.y * Math.cos(a) + _e2.y * Math.sin(a)) * nk,
+    nz = _f.z + (_e1.z * Math.cos(a) + _e2.z * Math.sin(a)) * nk;
+  const l = Math.hypot(nx, ny, nz) || 1;
+  return s.vert(px, py, pz, nx / l, ny / l, nz / l);
+}
+/** ring of n pointed / rounded petals from r0 to r1, tips lifted by cup·r1 (2 tris each) */
+function petalRing(s: GeoSink, x: number, y: number, z: number, n: number, r0: number, r1: number, wid: number, cup: number, lift: number, c: THREE.Color, rng: Rng, rot: number): void {
+  for (let i = 0; i < n; i++) {
+    const a = rot + (i / n) * Math.PI * 2 + rng.range(-0.12, 0.12);
+    const L = r1 * rng.range(0.85, 1.1);
+    const hw = (wid / Math.max(r1, 1e-3)) * 0.5;
+    s.colorObj(c, 0.78);
+    const b0 = hv(s, x, y, z, a, r0, lift);
+    s.colorObj(c, rng.range(0.95, 1.1));
+    const l = hv(s, x, y, z, a - hw / 0.6, L * 0.6, lift + cup * L * 0.45);
+    const r = hv(s, x, y, z, a + hw / 0.6, L * 0.6, lift + cup * L * 0.45);
+    const t = hv(s, x, y, z, a, L, lift + cup * L);
+    s.tri(b0, t, l);
+    s.tri(b0, r, t);
+  }
+}
+/** low dome (disc florets, pompom centre): n tris */
+function dome(s: GeoSink, x: number, y: number, z: number, r: number, h: number, n: number, c: THREE.Color, k = 1): void {
+  s.colorObj(c, k * 1.1);
+  const top = hv(s, x, y, z, 0, 0, h, 0);
+  s.colorObj(c, k * 0.8);
+  const ring: number[] = [];
+  for (let i = 0; i < n; i++) ring.push(hv(s, x, y, z, (i / n) * Math.PI * 2, r, h * 0.2, 0.8));
+  for (let i = 0; i < n; i++) s.tri(top, ring[(i + 1) % n], ring[i]);
+}
+const DISC = col('#d9a516');
+const THROAT = col('#3a1430');
+function flowerHead(s: GeoSink, sp: Species, x: number, y: number, z: number, r: number, c: THREE.Color, rng: Rng): void {
+  frame(rng.range(0.05, 0.55), rng.range(0, 6.28));
+  const rot = rng.range(0, 6.28);
+  if (sp === 'daisy') {
+    petalRing(s, x, y, z, rng.int(11, 14), r * 0.16, r, r * 0.22, rng.range(0.05, 0.25), 0.004, c, rng, rot);
+    dome(s, x, y, z, r * 0.24, r * 0.16, 6, DISC);
+  } else if (sp === 'marigold') {
+    _hc.copy(c);
+    const edge = rng.chance(0.5);
+    petalRing(s, x, y, z, 7, r * 0.2, r, r * 0.55, 0.15, 0, edge ? _hc.clone().lerp(col('#8a2a0c'), 0.45) : _hc, rng, rot);
+    petalRing(s, x, y, z, 6, r * 0.12, r * 0.68, r * 0.5, 0.5, r * 0.12, c, rng, rot + 0.5);
+    dome(s, x, y, z, r * 0.25, r * 0.32, 4, c, 0.85);
+  } else if (sp === 'geranium') {
+    // umbel: four florets round a top one, each a five-petalled disc
+    for (let k = 0; k < 5; k++) {
+      const a = rot + (k / 4) * Math.PI * 2;
+      const d = k === 4 ? 0 : r * 0.48;
+      const ox = Math.cos(a) * d,
+        oz = Math.sin(a) * d;
+      const px = x + _e1.x * ox + _e2.x * oz + _f.x * (k === 4 ? r * 0.3 : 0),
+        py = y + _e1.y * ox + _e2.y * oz + _f.y * (k === 4 ? r * 0.3 : 0),
+        pz = z + _e1.z * ox + _e2.z * oz + _f.z * (k === 4 ? r * 0.3 : 0);
+      const fr = r * 0.42;
+      s.colorObj(c, 1.15);
+      const cc = hv(s, px, py, pz, 0, 0, fr * 0.1, 0);
+      s.colorObj(c, rng.range(0.85, 1.0));
+      const ring: number[] = [];
+      for (let i = 0; i < 5; i++) ring.push(hv(s, px, py, pz, a + (i / 5) * Math.PI * 2, fr * rng.range(0.9, 1.1), fr * 0.15, 0.3));
+      for (let i = 0; i < 5; i++) s.tri(cc, ring[(i + 1) % 5], ring[i]);
+    }
+  } else {
+    // petunia: a funnel with five rounded lobes and a dark veined throat
+    s.colorObj(THROAT, 1);
+    const th = hv(s, x, y, z, 0, 0, -r * 0.35, 0);
+    const ring: number[] = [];
+    for (let i = 0; i < 10; i++) {
+      const lobe = i % 2 === 0;
+      s.colorObj(c, lobe ? rng.range(0.95, 1.1) : 0.8);
+      ring.push(hv(s, x, y, z, rot + (i / 10) * Math.PI * 2, r * (lobe ? 1 : 0.78), lobe ? r * 0.08 : 0, 0.5));
+    }
+    for (let i = 0; i < 10; i++) s.tri(th, ring[(i + 1) % 10], ring[i]);
+  }
+}
+/** a stem: one thin blade from (x,y,z) to the head */
+function stem(s: GeoSink, x: number, y: number, z: number, hx: number, hy: number, hz: number, w: number, c: THREE.Color): void {
+  const dx = hz - z,
+    dz = -(hx - x);
+  const l = Math.hypot(dx, dz) || 1;
+  const ox = (dx / l) * w,
+    oz = (dz / l) * w;
+  s.colorObj(c, 0.7);
+  const a = s.vert(x - ox, y, z - oz, 0, 0.3, 1),
+    b = s.vert(x + ox, y, z + oz, 0, 0.3, 1);
+  s.colorObj(c, 1);
+  const t = s.vert(hx, hy, hz, 0, 0.6, 1);
+  s.tri(a, b, t);
+  s.tri(a, t, b);
+}
+/** rosette of n arching leaves (2 tris each) */
+function rosette(s: GeoSink, x: number, y: number, z: number, n: number, L: number, wid: number, c: THREE.Color, rng: Rng): void {
+  const rot = rng.range(0, 6.28);
+  for (let i = 0; i < n; i++) {
+    const a = rot + (i / n) * Math.PI * 2 + rng.range(-0.3, 0.3);
+    const ll = L * rng.range(0.75, 1.15);
+    const ca = Math.cos(a),
+      sa = Math.sin(a);
+    const hw = wid * rng.range(0.8, 1.2);
+    s.colorObj(c, 0.6);
+    const b0 = s.vert(x + ca * ll * 0.05, y + ll * 0.15, z + sa * ll * 0.05, ca * 0.2, 1, sa * 0.2);
+    s.colorObj(c, rng.range(0.9, 1.15));
+    const m1 = s.vert(x + ca * ll * 0.5 - sa * hw, y + ll * 0.38, z + sa * ll * 0.5 + ca * hw, ca * 0.3, 1, sa * 0.3);
+    const m2 = s.vert(x + ca * ll * 0.5 + sa * hw, y + ll * 0.38, z + sa * ll * 0.5 - ca * hw, ca * 0.3, 1, sa * 0.3);
+    s.colorObj(c, 0.85);
+    const t = s.vert(x + ca * ll, y + ll * 0.12, z + sa * ll, ca * 0.6, 0.8, sa * 0.6);
+    s.tri(b0, m1, t);
+    s.tri(b0, t, m2);
+  }
+}
+
 /** A clump of flowers: leafy mound with a few blossoms on top. */
 export function flowerClump(s: GeoSink, w: Wind, x: number, y: number, z: number, size: number, petalCol: THREE.Color, rng: Rng, leaf = '#4f8f3c'): void {
+  if (!FLOWER_DETAIL) return flowerClumpOld(s, w, x, y, z, size, petalCol, rng, leaf);
+  w.at(x, y, z, 0.3, 0.9, 0);
+  const sp = speciesOf(petalCol);
+  const lc = col(sp === 'marigold' ? '#3e6f2c' : sp === 'geranium' ? '#4d7f36' : leaf);
+  _c.copy(lc);
+  mound(s, x, y, z, size * 0.8, size * 0.45, _c, rng);
+  rosette(s, x, y, z, 5, size * 1.05, size * 0.28, _c, rng);
+  // heads: daisies and petunias many and small, marigolds and geraniums few and big
+  const n = sp === 'petunia' ? rng.int(4, 6) : sp === 'daisy' ? rng.int(3, 5) : rng.int(2, 3);
+  const hr = size * (sp === 'petunia' ? 0.26 : sp === 'daisy' ? 0.3 : sp === 'marigold' ? 0.3 : 0.36);
+  const stemC = col('#4a7d33');
+  for (let i = 0; i < n; i++) {
+    const a = rng.range(0, 6.28),
+      d = rng.range(0.1, 0.7) * size;
+    const hx = x + Math.cos(a) * d,
+      hz = z + Math.sin(a) * d;
+    const hy = y + size * (sp === 'geranium' ? rng.range(1.0, 1.35) : sp === 'petunia' ? rng.range(0.45, 0.65) : rng.range(0.6, 0.95)) - d * 0.25;
+    _hc.copy(petalCol).multiplyScalar(rng.range(0.88, 1.08));
+    // small hue shifts between heads (sun-faded, younger / older blooms)
+    _hc.offsetHSL(rng.range(-0.015, 0.015), rng.range(-0.08, 0.02), rng.range(-0.04, 0.03));
+    if (sp !== 'petunia') stem(s, x + Math.cos(a) * d * 0.3, y + size * 0.3, z + Math.sin(a) * d * 0.3, hx, hy, hz, 0.0035, stemC);
+    flowerHead(s, sp, hx, hy, hz, hr, _hc.clone(), rng);
+  }
+}
+
+function flowerClumpOld(s: GeoSink, w: Wind, x: number, y: number, z: number, size: number, petalCol: THREE.Color, rng: Rng, leaf = '#4f8f3c'): void {
   w.at(x, y, z, 0.3, 0.9, 0);
   _c.copy(col(leaf));
   mound(s, x, y, z, size, size * 0.7, _c, rng);
@@ -53,13 +224,61 @@ export function flowerClump(s: GeoSink, w: Wind, x: number, y: number, z: number
   }
 }
 
-/** taller flower (tulip / lupin / hollyhock style): stalk + coloured head */
+/** taller flower (tulip): stalk with two broad leaves, a cup of six petals */
 export function tallFlower(s: GeoSink, w: Wind, sh: Shaper, x: number, y: number, z: number, h: number, c: THREE.Color, rng: Rng): void {
   w.at(x, y, z, 0.45, 1.0, 0);
-  sh.frame(x, y, z, rng.range(0, 6.28));
-  sh.color('#4f8a3a').cyl(0, 0, 0, 0.025, 0.018, h, 3, 0, true);
-  s.colorObj(c, 1);
-  sh.cyl(0, h * 0.72, 0, 0.07, 0.03, h * 0.32, 4, 2, false);
+  if (!FLOWER_DETAIL) {
+    sh.frame(x, y, z, rng.range(0, 6.28));
+    sh.color('#4f8a3a').cyl(0, 0, 0, 0.025, 0.018, h, 3, 0, true);
+    s.colorObj(c, 1);
+    sh.cyl(0, h * 0.72, 0, 0.07, 0.03, h * 0.32, 4, 2, false);
+    return;
+  }
+  const lean = rng.range(0, 0.12),
+    az = rng.range(0, 6.28);
+  const hx = x + Math.cos(az) * lean * h,
+    hz = z + Math.sin(az) * lean * h,
+    hy = y + h * 0.82;
+  const g = col('#4f8a3a');
+  stem(s, x, y, z, hx, hy, hz, 0.006, g);
+  // two broad lance leaves clasping the stem
+  for (let k = 0; k < 2; k++) {
+    const a = az + k * Math.PI + rng.range(-0.4, 0.4);
+    const ca = Math.cos(a),
+      sa = Math.sin(a),
+      L = h * rng.range(0.45, 0.6),
+      wd = 0.035;
+    s.colorObj(g, 0.7);
+    const b0 = s.vert(x, y + 0.02, z, ca, 0.3, sa);
+    s.colorObj(g, 1.05);
+    const m1 = s.vert(x + ca * L * 0.25 - sa * wd, y + L * 0.5, z + sa * L * 0.25 + ca * wd, ca, 0.4, sa);
+    const m2 = s.vert(x + ca * L * 0.25 + sa * wd, y + L * 0.5, z + sa * L * 0.25 - ca * wd, ca, 0.4, sa);
+    const t = s.vert(x + ca * L * 0.5, y + L * 0.8, z + sa * L * 0.5, ca, 0.6, sa);
+    s.tri(b0, m1, t);
+    s.tri(b0, t, m1);
+    s.tri(b0, m2, t);
+    s.tri(b0, t, m2);
+  }
+  // the cup: three outer + three inner petals, each a curved strip bulging out and closing at the tips
+  const r = 0.035 * (0.9 + 0.2 * rng.next()),
+    ph = 0.085;
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 6) * Math.PI * 2 + (i % 2 ? 0.1 : 0);
+    const ro = i % 2 ? 0.88 : 1;
+    const ca = Math.cos(a),
+      sa = Math.sin(a),
+      wd = r * 0.85;
+    s.colorObj(c, 0.75);
+    const b0 = s.vert(hx + ca * r * 0.3, hy, hz + sa * r * 0.3, ca, -0.3, sa);
+    s.colorObj(c, rng.range(0.95, 1.1));
+    const m1 = s.vert(hx + ca * r * ro - sa * wd, hy + ph * 0.45, hz + sa * r * ro + ca * wd, ca, 0, sa);
+    const m2 = s.vert(hx + ca * r * ro + sa * wd, hy + ph * 0.45, hz + sa * r * ro - ca * wd, ca, 0, sa);
+    s.colorObj(c, 1.12);
+    const t = s.vert(hx + ca * r * 0.75 * ro, hy + ph, hz + sa * r * 0.75 * ro, ca, 0.4, sa);
+    // outward faces (seen from outside the cup)
+    s.tri(b0, m2, t);
+    s.tri(b0, t, m1);
+  }
 }
 
 export interface BedOpts {
@@ -300,45 +519,388 @@ export function lily(s: GeoSink, w: Wind, x: number, y: number, z: number, r: nu
 
 // ──────────────────────────────────────────────────── tree surrounds ──
 
-export type Surround = 'grate' | 'roundgrate' | 'verge' | 'planter' | 'roundplanter' | 'none';
+const STONES = ['#cbc3b4', '#bdb3a3', '#c7bfb2', '#b3aa9b', '#d0c8ba'];
+const LITTER = ['#7a5a30', '#a07a3a', '#6b6a34', '#5a4428', '#b08840', '#8a4a2a', '#4f5a2c'];
+
+/**
+ * Weathered precast planter on the polygon `pts` (local xz, counter-clockwise seen from above), wall height
+ * hgt: splash grime and green algae at the foot, per-panel tone drift, a worn lighter rim with chipped edges,
+ * damp dark soil with fallen leaves. Returns the soil height above the base.
+ */
+function stonePlanter(sh: Shaper, rng: Rng, pts: [number, number][], hgt: number): number {
+  const s = sh.s;
+  const base = new THREE.Color(rng.pick(STONES));
+  const n = pts.length;
+  const soilY = hgt - 0.05;
+  const levels: [number, number][] = [
+    [0, 0.58],
+    [0.07, 0.72],
+    [0.16, 0.9],
+    [hgt, 1.0],
+  ];
+  const algae = rng.range(0, 6.28);
+  for (let i = 0; i < n; i++) {
+    const [ax, az] = pts[i],
+      [bx, bz] = pts[(i + 1) % n];
+    const ex = bx - ax,
+      ez = bz - az;
+    const el = Math.hypot(ex, ez) || 1;
+    // outward normal of a counter-clockwise polygon in local xz (+x right, +z towards the viewer)
+    const nx = ez / el,
+      nz = -ex / el;
+    const jit = rng.range(0.92, 1.06);
+    // algae / moss on the shaded side of the foot
+    const green = Math.max(0, Math.cos(Math.atan2(nz, nx) - algae)) * rng.range(0.4, 1);
+    const idx: number[] = [];
+    for (const [ly, k] of levels) {
+      const g = ly < 0.1 ? green : 0;
+      s.rgb(base.r * k * jit * (1 - 0.25 * g), base.g * k * jit * (1 - 0.08 * g), base.b * k * jit * (1 - 0.4 * g));
+      idx.push(sh.v(ax, ly, az, nx, 0, nz), sh.v(bx, ly, bz, nx, 0, nz));
+    }
+    for (let k = 0; k < levels.length - 1; k++) s.quad(idx[k * 2], idx[k * 2 + 2], idx[k * 2 + 3], idx[k * 2 + 1]);
+  }
+  // rim: outer lip + worn top band + inner edge, edge heights chipped a few mm
+  const rimO = 1.05,
+    rimI = 0.86;
+  for (let i = 0; i < n; i++) {
+    const [ax, az] = pts[i],
+      [bx, bz] = pts[(i + 1) % n];
+    const ex = bx - ax,
+      ez = bz - az;
+    const el = Math.hypot(ex, ez) || 1;
+    const nx = ez / el,
+      nz = -ex / el;
+    const ca = rng.range(-0.006, 0.004),
+      cb = rng.range(-0.006, 0.004);
+    const wear = rng.range(1.02, 1.12);
+    s.rgb(base.r * 0.88, base.g * 0.88, base.b * 0.86);
+    const l0 = sh.v(ax * rimO, hgt - 0.02, az * rimO, nx, 0, nz),
+      l1 = sh.v(bx * rimO, hgt - 0.02, bz * rimO, nx, 0, nz);
+    const l2 = sh.v(ax * rimO, hgt + 0.045 + ca, az * rimO, nx, 0.2, nz),
+      l3 = sh.v(bx * rimO, hgt + 0.045 + cb, bz * rimO, nx, 0.2, nz);
+    s.quad(l0, l2, l3, l1);
+    s.rgb(base.r * wear, base.g * wear, base.b * wear * 0.98);
+    const t0 = sh.v(ax * rimO, hgt + 0.045 + ca, az * rimO, 0, 1, 0),
+      t1 = sh.v(bx * rimO, hgt + 0.045 + cb, bz * rimO, 0, 1, 0);
+    s.rgb(base.r * 0.9, base.g * 0.9, base.b * 0.88);
+    const t2 = sh.v(ax * rimI, hgt + 0.045, az * rimI, 0, 1, 0),
+      t3 = sh.v(bx * rimI, hgt + 0.045, bz * rimI, 0, 1, 0);
+    s.quad(t2, t3, t1, t0);
+    // inner wall down to the soil (shaded)
+    s.rgb(base.r * 0.5, base.g * 0.48, base.b * 0.45);
+    const i0 = sh.v(ax * rimI, hgt + 0.045, az * rimI, -nx, 0, -nz),
+      i1 = sh.v(bx * rimI, hgt + 0.045, bz * rimI, -nx, 0, -nz);
+    const i2 = sh.v(ax * rimI, soilY, az * rimI, -nx, 0, -nz),
+      i3 = sh.v(bx * rimI, soilY, bz * rimI, -nx, 0, -nz);
+    s.quad(i0, i2, i3, i1);
+  }
+  // soil: damp dark earth, darker towards the rim
+  s.rgb(0.13, 0.085, 0.055);
+  const c = sh.v(0, soilY + 0.01, 0, 0, 1, 0);
+  const ring: number[] = [];
+  for (let i = 0; i < n; i++) {
+    const d = rng.range(0.8, 1.05);
+    s.rgb(0.09 * d, 0.06 * d, 0.04 * d);
+    ring.push(sh.v(pts[i][0] * rimI, soilY, pts[i][1] * rimI, 0, 1, 0));
+  }
+  for (let i = 0; i < n; i++) s.tri(c, ring[(i + 1) % n], ring[i]);
+  // fallen leaves on the soil
+  let rmin = 1e9;
+  for (const [px, pz] of pts) rmin = Math.min(rmin, Math.hypot(px, pz));
+  for (let k = 0; k < 26; k++) {
+    const a = rng.range(0, 6.28),
+      d = Math.sqrt(rng.next()) * rmin * rimI * 0.85;
+    if (d < 0.18) continue;
+    const lx = Math.cos(a) * d,
+      lz = Math.sin(a) * d;
+    const lc = new THREE.Color(rng.pick(LITTER)).multiplyScalar(rng.range(0.75, 1.05));
+    s.rgb(lc.r, lc.g, lc.b);
+    const r0 = rng.range(0.025, 0.05),
+      r1 = r0 * rng.range(0.45, 0.65),
+      rot = rng.range(0, 6.28);
+    const yy = soilY + 0.006 + rng.range(0, 0.006);
+    const cs = Math.cos(rot),
+      sn = Math.sin(rot);
+    const p0 = sh.v(lx + cs * r0, yy, lz + sn * r0, 0, 1, 0),
+      p1 = sh.v(lx - sn * r1, yy, lz + cs * r1, 0, 1, 0),
+      p2 = sh.v(lx - cs * r0, yy, lz - sn * r0, 0, 1, 0),
+      p3 = sh.v(lx + sn * r1, yy, lz - cs * r1, 0, 1, 0);
+    s.quad(p0, p3, p2, p1);
+  }
+  return soilY;
+}
+
+export type Surround = 'grate' | 'roundgrate' | 'kerbgrate' | 'verge' | 'planter' | 'roundplanter' | 'none';
 
 /**
  * Ground treatment at the foot of a tree. (x,z) trunk, y ground (sidewalk top for street trees),
  * yaw = along the street. Returns the height of the soil surface the trunk should start from.
  */
-export function surround(sh: Shaper, w: Wind, kind: Surround, x: number, y: number, z: number, yaw: number, rng: Rng): number {
+// ─────────────────────────────────────────────────────── tree grates ──
+// Cast-iron tree grates as built: a frame flush with the paving, open slots over dark soil, a collar round
+// the trunk hole with mulch and fallen leaves in it, rust on some bars; litter blown onto the grate.
+// The paving is not cut: the whole grate stands ≤ 3.2 cm proud of it (soil 1.2 cm, bars 2.9, frame 3.2).
+
+const IRON = ['#36312c', '#3b342e', '#2f2d2b', '#3a3632'];
+const GRATE_LITTER = ['#7a5a2e', '#8f6a32', '#6a4a2a', '#a07a3a', '#5e4a30', '#9a8a4a'];
+
+/** flat annulus r0..r1 at height y (normal up), optionally with an outer side face down to yb */
+function annulus(sh: Shaper, r0: number, r1: number, y: number, n: number, yb?: number): void {
+  const s = sh.s;
+  const inn: number[] = [],
+    out: number[] = [],
+    sid: number[] = [],
+    bot: number[] = [];
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * Math.PI * 2,
+      c = Math.cos(a),
+      sn = Math.sin(a);
+    inn.push(sh.v(c * r0, y, sn * r0, 0, 1, 0));
+    out.push(sh.v(c * r1, y, sn * r1, 0, 1, 0));
+    if (yb !== undefined) {
+      sid.push(sh.v(c * r1, y, sn * r1, c, 0, sn));
+      bot.push(sh.v(c * r1, yb, sn * r1, c, 0, sn));
+    }
+  }
+  for (let i = 0; i < n; i++) {
+    const j = (i + 1) % n;
+    s.tri(inn[i], out[j], out[i]);
+    s.tri(inn[i], inn[j], out[j]);
+    if (yb !== undefined) s.quad(bot[i], bot[j], sid[j], sid[i]);
+  }
+}
+
+function ironCol(sh: Shaper, base: THREE.Color, rng: Rng, rustK: number): void {
+  const k = rng.range(0.85, 1.1),
+    r = rng.chance(rustK) ? rng.range(0.25, 0.7) : 0;
+  sh.s.rgb((base.r * (1 - r) + 0.36 * r) * k, (base.g * (1 - r) + 0.2 * r) * k, (base.b * (1 - r) + 0.1 * r) * k);
+}
+
+/** leaves, a paper bit or a butt on the grate / in the mulch (flat quads, tilted a little) */
+function litter(sh: Shaper, rng: Rng, R: number, n: number, y: number): void {
+  for (let i = 0; i < n; i++) {
+    const a = rng.range(0, 6.28),
+      r = Math.sqrt(rng.next()) * R;
+    const x = Math.cos(a) * r,
+      z = Math.sin(a) * r;
+    const sz = rng.range(0.03, 0.06);
+    sh.color(rng.chance(0.12) ? '#d8d2c4' : rng.pick(GRATE_LITTER));
+    sh.push().local(x, y + rng.range(0, 0.006), z, rng.range(-0.25, 0.25), rng.range(0, 6.28), rng.range(-0.25, 0.25));
+    const v0 = sh.v(-sz, 0, -sz * 0.55, 0, 1, 0),
+      v1 = sh.v(sz, 0, -sz * 0.4, 0, 1, 0),
+      v2 = sh.v(sz * 0.8, 0, sz * 0.5, 0, 1, 0),
+      v3 = sh.v(-sz * 0.9, 0, sz * 0.4, 0, 1, 0);
+    sh.s.quad(v0, v3, v2, v1);
+    sh.pop();
+  }
+}
+
+/** trunk-hole radius of each grate surround (crowns.ts fits the trunk foot into it) */
+export const GRATE_HOLE: Partial<Record<Surround, number>> = { kerbgrate: 0.24, roundgrate: 0.31, grate: 0.24 };
+
+/** round cast-iron grate of outer radius R (trunk hole = R / 2) */
+function roundGrate(sh: Shaper, rng: Rng, R: number, nsh: Shaper = sh): void {
+  const iron = new THREE.Color(rng.pick(IRON));
+  const rustK = rng.range(0, 0.35);
+  const hole = R * 0.5;
+  // dark soil seen through the slots, a little sunken; mulch + leaves in the trunk hole
+  sh.color('#251b13').disc(0, 0.012, 0, R, 14, 1);
+  sh.color(rng.pick(['#3e2c1e', '#4a3422', '#33261a'])).disc(0, 0.016, 0, hole, 10, 1);
+  litter(nsh, rng, hole * 0.9, 5 + Math.floor(rng.range(0, 5)), 0.018);
+  // frame ring flush with the paving (its outer face hides the pit wall), collar round the hole
+  ironCol(sh, iron, rng, 0);
+  annulus(sh, R - 0.035, R, 0.032, 16, 0);
+  annulus(sh, hole, hole + 0.03, 0.03, 10);
+  // concentric rings + radial ribs: slots ≈ 2 cm wide (near-only: nsh)
+  const rings = Math.max(2, Math.round((R - hole) / 0.075));
+  for (let i = 1; i < rings; i++) {
+    ironCol(nsh, iron, rng, rustK);
+    const r = hole + ((R - hole) * i) / rings;
+    annulus(nsh, r - 0.012, r + 0.012, 0.028, 12 + i * 2);
+  }
+  const ribs = R > 0.55 ? 16 : 12;
+  for (let i = 0; i < ribs; i++) {
+    const a = (i / ribs) * Math.PI * 2;
+    ironCol(nsh, iron, rng, rustK);
+    nsh.push().local(0, 0, 0, 0, -a, 0);
+    nsh.box((hole + R) / 2, 0.021, 0, R - hole - 0.02, 0.016, 0.016, 1 | 16 | 32);
+    nsh.pop();
+  }
+  litter(nsh, rng, R, 3 + Math.floor(rng.range(0, 4)), 0.031);
+}
+
+/** rectangular grate 2hx × 2hz: frame, transverse bars, the trunk hole in a square collar */
+function rectGrate(sh: Shaper, rng: Rng, hx: number, hz: number, nsh: Shaper = sh): void {
+  const iron = new THREE.Color(rng.pick(IRON));
+  const rustK = rng.range(0, 0.35);
+  const hole = 0.24;
+  sh.color('#251b13').box(0, 0.012, 0, hx * 2, 0.002, hz * 2, 1);
+  sh.color(rng.pick(['#3e2c1e', '#4a3422', '#33261a'])).box(0, 0.016, 0, hole * 2, 0.002, hole * 2, 1);
+  litter(nsh, rng, hole * 0.9, 5, 0.018);
+  ironCol(sh, iron, rng, 0);
+  sh.box(0, 0.016, -hz + 0.02, hx * 2, 0.032, 0.04, 0);
+  sh.box(0, 0.016, hz - 0.02, hx * 2, 0.032, 0.04, 0);
+  sh.box(-hx + 0.02, 0.016, 0, 0.04, 0.032, hz * 2 - 0.08, 0);
+  sh.box(hx - 0.02, 0.016, 0, 0.04, 0.032, hz * 2 - 0.08, 0);
+  // collar
+  sh.box(0, 0.021, -hole, hole * 2 + 0.06, 0.018, 0.03, 1);
+  sh.box(0, 0.021, hole, hole * 2 + 0.06, 0.018, 0.03, 1);
+  sh.box(-hole, 0.021, 0, 0.03, 0.018, hole * 2, 1);
+  sh.box(hole, 0.021, 0, 0.03, 0.018, hole * 2, 1);
+  // bars across the short side, 4.5 cm pitch, interrupted by the hole (near-only: nsh)
+  for (let x = -hx + 0.06; x < hx - 0.04; x += 0.045) {
+    ironCol(nsh, iron, rng, rustK);
+    if (Math.abs(x) < hole + 0.01) {
+      const l = hz - hole - 0.04;
+      nsh.box(x, 0.021, -(hole + hz) / 2, 0.016, 0.016, l, 1);
+      nsh.box(x, 0.021, (hole + hz) / 2, 0.016, 0.016, l, 1);
+    } else nsh.box(x, 0.021, 0, 0.016, 0.016, hz * 2 - 0.06, 1);
+  }
+  litter(nsh, rng, Math.min(hx, hz), 4, 0.031);
+}
+
+/**
+ * Open tree pit in the footway (2hx × 2hz): a granite sett edging, trodden soil with patchy grass (greener at the
+ * edges, worn bare round the trunk), mulch and leaves. ≤ 4 cm proud of the paving.
+ */
+function vergePit(sh: Shaper, rng: Rng, hx: number, hz: number): void {
+  const s = sh.s;
+  // soil bed
+  sh.color(rng.pick(['#4a3a2a', '#45372a', '#3f3326'])).box(0, 0.012, 0, hx * 2 - 0.08, 0.004, hz * 2 - 0.08, 1);
+  // grass patches: irregular flat blobs, none within ~22 cm of the trunk
+  const greens = ['#5b7f38', '#62873c', '#557634', '#6d8a40'];
+  for (let i = 0; i < 9; i++) {
+    let px = 0,
+      pz = 0;
+    for (let t = 0; t < 6; t++) {
+      px = rng.range(-hx + 0.12, hx - 0.12);
+      pz = rng.range(-hz + 0.1, hz - 0.1);
+      if (Math.hypot(px, pz) > 0.3) break;
+    }
+    if (Math.hypot(px, pz) <= 0.3) continue;
+    const r = rng.range(0.07, 0.15);
+    sh.color(rng.pick(greens));
+    const c = sh.v(px, 0.017, pz, 0, 1, 0);
+    const ring: number[] = [];
+    const n = 7;
+    for (let k = 0; k < n; k++) {
+      const a = (k / n) * Math.PI * 2;
+      const rr = r * rng.range(0.6, 1.25);
+      ring.push(sh.v(Math.max(-hx + 0.05, Math.min(hx - 0.05, px + Math.cos(a) * rr)), 0.016, Math.max(-hz + 0.05, Math.min(hz - 0.05, pz + Math.sin(a) * rr)), 0, 1, 0));
+    }
+    for (let k = 0; k < n; k++) s.tri(c, ring[(k + 1) % n], ring[k]);
+  }
+  litter(sh, rng, Math.min(hx, hz) * 0.9, 8, 0.018);
+  // sett edging: 10 cm granite setts with joints, slightly irregular heights and tones
+  const sett = (x: number, z: number, w: number, d: number) => {
+    const k = rng.range(0.85, 1.08);
+    s.rgb(0.42 * k, 0.41 * k, 0.4 * k);
+    sh.box(x, 0.02 + rng.range(-0.004, 0.004), z, w, 0.04, d, 1);
+  };
+  const pitch = 0.105;
+  for (const sz of [-1, 1]) for (let x = -hx + pitch / 2; x < hx - 0.01; x += pitch) sett(x, sz * (hz - 0.05), pitch - 0.012, 0.09);
+  for (const sx of [-1, 1]) for (let z = -hz + 0.1 + pitch / 2; z < hz - 0.1; z += pitch) sett(sx * (hx - 0.05), z, 0.09, pitch - 0.012);
+}
+
+/** tree guard round a young street tree: 4 flat steel uprights set in the pit, 3 hoops, a rubber tie to the trunk */
+export function treeGuard(sh: Shaper, w: Wind, x: number, y: number, z: number, yaw: number, rng: Rng): void {
+  w.at(x, y, z, 0, 0, 0);
+  sh.frame(x, y, z, yaw + Math.PI / 4);
+  const paint = rng.pick(['#232628', '#2b3a33', '#3a3d40']);
+  const r = 0.27,
+    H = rng.range(1.45, 1.7);
+  sh.color(paint);
+  for (let i = 0; i < 4; i++) {
+    const a = (i / 4) * Math.PI * 2;
+    sh.push().local(Math.cos(a) * r, 0, Math.sin(a) * r, 0, -a, 0);
+    sh.box(0, H / 2 - 0.05, 0, 0.012, H + 0.1, 0.045, 1);
+    sh.pop();
+  }
+  for (const hy of [0.42, H * 0.62, H - 0.03]) sh.cyl(0, hy, 0, r + 0.008, r + 0.008, 0.035, 14, 0);
+  // rubber tie across to the trunk at ~1.2 m
+  sh.color('#1a1a1a').box(0, H * 0.62 + 0.017, 0, r * 2, 0.025, 0.03, 0);
+}
+
+/**
+ * Trodden ground at the foot of a park tree (people sit against it, the mower turns round it): a ragged disc of
+ * bare compacted earth following the ground, two or three surface roots running out of the flare, leaf litter.
+ * `gy` = ground height; drawn 1.5 cm above it.
+ */
+export function wornPatch(sh: Shaper, w: Wind, x: number, z: number, r: number, gy: (x: number, z: number) => number, rng: Rng): void {
+  const s = sh.s;
+  w.at(x, gy(x, z), z, 0, 0, 0);
+  sh.frame(0, 0, 0, 0);
+  const n = 14;
+  const earth = rng.pick(['#5a4632', '#4e3e2c', '#625038']);
+  sh.color(earth);
+  const c = sh.v(x, gy(x, z) + 0.016, z, 0, 1, 0);
+  const ring: number[] = [];
+  const edge = new THREE.Color(earth).lerp(new THREE.Color('#6f7a3c'), 0.45);
+  for (let k = 0; k < n; k++) {
+    const a = (k / n) * Math.PI * 2;
+    const rr = r * rng.range(0.7, 1.15);
+    const px = x + Math.cos(a) * rr,
+      pz = z + Math.sin(a) * rr;
+    s.colorObj(edge, 1);
+    ring.push(sh.v(px, gy(px, pz) + 0.014, pz, 0, 1, 0));
+  }
+  for (let k = 0; k < n; k++) s.tri(c, ring[(k + 1) % n], ring[k]);
+  // surface roots: half-buried tapering tubes from the flare out across the patch
+  const nr = rng.int(2, 3);
+  const a0 = rng.range(0, 6.28);
+  sh.color(rng.pick(['#5a4a3c', '#4e4238', '#625040']));
+  for (let i = 0; i < nr; i++) {
+    const a = a0 + (i / nr) * 6.28 + rng.range(-0.4, 0.4);
+    const l = r * rng.range(0.7, 1.05);
+    const ax = x + Math.cos(a) * 0.18,
+      az = z + Math.sin(a) * 0.18,
+      bx = x + Math.cos(a + rng.range(-0.2, 0.2)) * l,
+      bz = z + Math.sin(a + rng.range(-0.2, 0.2)) * l;
+    sh.tube(ax, gy(ax, az) + 0.02, az, bx, gy(bx, bz) + 0.0, bz, 0.05, 0.012, 6);
+  }
+  sh.frame(x, gy(x, z), z, 0);
+  litter(sh, rng, r * 0.9, 6, 0.018);
+}
+
+export function surround(sh: Shaper, w: Wind, kind: Surround, x: number, y: number, z: number, yaw: number, rng: Rng, near?: { sh: Shaper; w: Wind }): number {
   w.at(x, y, z, 0, 0, 0);
   sh.frame(x, y, z, yaw);
+  // grate bars / rings / ribs and litter go to the near-only cells when given (frame, collar and soil stay)
+  if (near) {
+    near.w.at(x, y, z, 0, 0, 0);
+    near.sh.frame(x, y, z, yaw);
+  }
+  const nsh = near?.sh ?? sh;
   switch (kind) {
-    case 'grate': {
-      sh.color('#3d3a36').box(0, 0.006, 0, 1.36, 0.032, 0.76, 1);
-      sh.color('#4a3426').box(0, 0.012, 0, 0.62, 0.03, 0.42, 1);
-      sh.color('#2c2b29');
-      for (const dx of [-0.48, -0.36, 0.36, 0.48]) sh.box(dx, 0.016, 0, 0.04, 0.03, 0.66, 1);
+    case 'grate':
+      rectGrate(sh, rng, 0.68, 0.38, nsh);
+      return y + 0.012;
+    case 'roundgrate':
+      roundGrate(sh, rng, 0.62, nsh);
+      return y + 0.012;
+    case 'kerbgrate':
+      // the round grate sized for the 0.8 m furniture band of a street (plazas keep the wide one)
+      roundGrate(sh, rng, 0.48, nsh);
+      return y + 0.012;
+    case 'verge':
+      vergePit(sh, rng, 0.75, 0.33);
       return y + 0.02;
-    }
-    case 'roundgrate': {
-      sh.color('#33302c').cyl(0, -0.01, 0, 0.62, 0.62, 0.035, 10, 2, false);
-      sh.color('#4a3426').cyl(0, 0, 0, 0.3, 0.3, 0.032, 8, 2, false);
-      return y + 0.02;
-    }
-    case 'verge': {
-      sh.color('#7fae4e').box(0, 0.004, 0, 1.5, 0.03, 0.66, 1);
-      return y + 0.02;
-    }
     case 'planter': {
-      const c = rng.chance(0.5) ? '#c9c3b8' : '#a8a198';
-      sh.color(c).box(0, 0.23, 0, 1.5, 0.46, 0.7, 1);
-      sh.color('#d8d2c6').box(0, 0.47, 0, 1.56, 0.04, 0.76, 1);
-      sh.color('#4e3828').box(0, 0.44, 0, 1.38, 0.03, 0.58, 3);
-      return y + 0.45;
+      const pts: [number, number][] = [
+        [-0.75, -0.35],
+        [0.75, -0.35],
+        [0.75, 0.35],
+        [-0.75, 0.35],
+      ];
+      return y + stonePlanter(sh, rng, pts, 0.46);
     }
     case 'roundplanter': {
-      const r = 0.95;
-      sh.color(rng.chance(0.5) ? '#cfc6b6' : '#b9ab95').cyl(0, 0, 0, r, r * 1.04, 0.5, 12, 0, false);
-      sh.color('#ddd5c6').cyl(0, 0.5, 0, r * 1.06, r * 1.06, 0.05, 12, 2, false);
-      sh.color('#4e3828').disc(0, 0.53, 0, r * 0.92, 10, 1);
-      return y + 0.52;
+      const pts: [number, number][] = [];
+      for (let i = 0; i < 8; i++) {
+        const a = (i / 8) * Math.PI * 2 + Math.PI / 8;
+        pts.push([Math.cos(a) * 0.98, Math.sin(a) * 0.98]);
+      }
+      return y + stonePlanter(sh, rng, pts, 0.5);
     }
     default:
       return y;

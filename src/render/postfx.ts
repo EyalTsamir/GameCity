@@ -10,14 +10,34 @@
 import * as THREE from 'three';
 import { BlendFunction, BloomEffect, EdgeDetectionMode, Effect, EffectAttribute, EffectComposer, EffectPass, FXAAEffect, RenderPass, SMAAEffect, SMAAPreset } from 'postprocessing';
 import { N8AOPostPass } from 'n8ao';
-import type { CityContext, CityModule } from '../core/context';
+import type { CityContext, CityModule, PhotoLook } from '../core/context';
 import { cameraFocus } from './focus';
 import { TONE_MAPPING } from './look';
 import { TiltShiftEffect } from './postfx/tiltShift';
 import { LookEffect } from './postfx/look';
 import { CloudShadowEffect, cloudShadowUniforms, type CloudShadowData } from './postfx/cloudShadow';
 import { AOApplyEffect, aoUniforms } from './postfx/aoApply';
+import { contactUniforms, updateContact } from './postfx/contact';
+import { closeLight } from '../core/closelight';
 import { AdaptiveController, GpuTimer, buildLadder, type QualityStep } from './postfx/adaptive';
+import { WORLD_MODE } from '../core/world';
+import { SunShaftsEffect } from './postfx/sunShafts';
+import { setAtmoCamera } from './atmosphere';
+import { perfOn } from '../core/perfdeep';
+import type { AtmosphereService } from './sky/atmoDrive';
+
+/** previous frame's scene depth for soft particles (see ctx.services.postfx.softDepth) */
+export interface SoftDepth {
+  /** full-resolution depth texture (raw depth-buffer values, perspective) of the previous frame */
+  texture: THREE.Texture;
+  /** false: raw [0,1] depth — linear view depth = near·far / (far − d·(far − near)) */
+  linear: boolean;
+  near: number;
+  far: number;
+  /** size in pixels: uv = gl_FragCoord.xy / (width, height) in the main view */
+  width: number;
+  height: number;
+}
 
 const _focus = new THREE.Vector3();
 const _fwd = new THREE.Vector3();
@@ -33,6 +53,17 @@ type FxName = 'dof' | 'bloom' | 'ao';
 export default function create(ctx: CityContext): CityModule {
   const { renderer, scene, camera, quality } = ctx;
   const params = ctx.debug.params;
+  // world mode: natural optics — a thin-lens DOF that only shows at close focus instead of the
+  // tilt-shift miniature blur (?tiltshift forces the miniature DOF back for comparison), and a natural
+  // grade (AgX + time-of-day CDL look; ?gradeold = the diorama grade)
+  const world = WORLD_MODE;
+  const lensMode = world && !params.has('tiltshift');
+  const lensBase = Math.max(0.7, Number(params.get('lensN') ?? 2.8) || 2.8);
+  let lensN = lensBase;
+  /** photo mode's picture settings */
+  let photo: PhotoLook | null = null;
+  const worldGrade = world && !params.has('gradeold');
+  const atmo = () => ctx.services.atmosphere as AtmosphereService | undefined;
 
   const fbType = params.get('fbtype') === 'u8' ? THREE.UnsignedByteType : THREE.HalfFloatType;
   const composer = new EffectComposer(renderer, { frameBufferType: fbType, multisampling: 0, stencilBuffer: false });
@@ -45,6 +76,11 @@ export default function create(ctx: CityContext): CityModule {
   let aoFused = false;
   let setAOPath: (fused: boolean) => void = () => {};
   const wantAO = quality.ao && !params.has('noao');
+  // ?aork / ?aoik: AO radius / intensity scale (tuning)
+  const aoRK = Number(params.get('aork') ?? 1) || 1;
+  const aoIK = Number(params.get('aoik') ?? 1) || 1;
+  const aoOld = params.has('aoold');
+  const lookOld = params.has('lookold');
   if (wantAO) {
     ao = new N8AOPostPass(scene, camera, _sz.x, _sz.y);
     const c = ao.configuration;
@@ -119,10 +155,13 @@ export default function create(ctx: CityContext): CityModule {
 
   const cloudU = cloudShadowUniforms();
   const sl = ctx.plan.slab;
-  const clouds = new CloudShadowEffect(cloudU, camera, { x0: sl.x0 - 260, z0: sl.z0 - 260, x1: sl.x1 + 260, z1: sl.z1 + 260 });
+  const cloudField = (ctx.services.cloudShadows as CloudShadowData | undefined)?.field ?? null;
+  const clouds = new CloudShadowEffect(cloudU, camera, { x0: sl.x0 - 260, z0: sl.z0 - 260, x1: sl.x1 + 260, z1: sl.z1 + 260 }, 256, cloudField);
   // ambient occlusion applied in the effect pass (and in the tilt-shift prefilter), see postfx/aoApply.ts
   const aoU = aoUniforms();
-  const aoFx = new AOApplyEffect(aoU, params.has('aoexact'));
+  // contact shadows (postfx/contact.ts, ?nocontact): computed with the half-res AO, so they go with it (high tier, first to step down)
+  const contactU = world && wantAO && closeLight(ctx, 'contact', 'high') ? contactUniforms() : null;
+  const aoFx = new AOApplyEffect(aoU, params.has('aoexact'), contactU);
   const aoTint = new THREE.Color();
   aoFx.onUpdate = () => {
     const on = !!ao && ao.enabled && aoFused;
@@ -137,14 +176,31 @@ export default function create(ctx: CityContext): CityModule {
     aoU.uAOTint.value.copy(aoTint.copy(c.color).convertSRGBToLinear());
     aoU.uAOProjInv.value.copy(camera.projectionMatrixInverse);
     aoU.uAORes.value.set(composer.inputBuffer.width, composer.inputBuffer.height);
+    if (contactU) updateContact(contactU, aoU.uCTint.value, ctx, composer.inputBuffer.height * 0.5);
+    const at = atmo();
     const fog = scene.fog as THREE.Fog | null;
-    if (fog && (fog as THREE.Fog).isFog) aoU.uAOFog.value.set(fog.near, fog.far);
+    if (at && at.active) {
+      // AO multiplies the final colour (incl. the haze in front): fade it out as the haze takes over
+      const y = Math.max(0, camera.position.y);
+      aoU.uAOFog.value.set(at.distanceFor(0.9, y), at.distanceFor(0.35, y));
+    } else if (fog && (fog as THREE.Fog).isFog) aoU.uAOFog.value.set(fog.near, fog.far);
     else aoU.uAOFog.value.set(0, 0);
   };
   const tilt = new TiltShiftEffect(camera, cloudU, aoU);
   const bloom = new BloomEffect({ blendFunction: BlendFunction.ADD, mipmapBlur: true, luminanceThreshold: 1.0, luminanceSmoothing: 0.35, intensity: 0.6, radius: 0.7, levels: +(params.get('bloomlv') ?? 6) });
   bloom.luminancePass.resolution.scale = +(params.get('bloomres') ?? 0.5);
-  const look = new LookEffect(TONE_MAPPING);
+  // NaN/Inf guard where scene colour enters the bloom chain: a single bad pixel would otherwise be
+  // spread by the mip downsample/upsample into big black blocks (seen in full-city frames)
+  {
+    const lm = bloom.luminanceMaterial;
+    const src = 'vec4 texel=texture2D(inputBuffer,vUv);';
+    if (lm.fragmentShader.includes(src)) {
+      lm.fragmentShader = lm.fragmentShader.replace(src, src + 'texel.rgb=min(max(texel.rgb,vec3(0.0)),vec3(64000.0));if(any(isnan(texel))||any(isinf(texel)))texel=vec4(0.0);');
+      lm.needsUpdate = true;
+    }
+  }
+  // ?nanviz (debug): NaN/Inf scene pixels show up magenta in the final image instead of black
+  const look = new LookEffect(TONE_MAPPING, params.has('nanviz'), worldGrade);
   const aaMode = params.get('aa') ?? 'smaa';
   let smaa: Effect;
   if (aaMode === 'fxaa') {
@@ -157,13 +213,23 @@ export default function create(ctx: CityContext): CityModule {
     sm.edgeDetectionMaterial.edgeDetectionThreshold = 0.06;
     smaa = sm;
   }
-  // ?fx=smaa,ao,clouds,tilt,bloom,look (debug: build the chain from a subset). SMAA's blending
+  // world: golden-hour sun shafts (?noshafts) — only rendered while a low sun is on / near the screen
+  const shafts = world && !params.has('noshafts') ? new SunShaftsEffect() : null;
+  // ?fx=smaa,ao,clouds,tilt,shafts,bloom,look (debug: build the chain from a subset). SMAA's blending
   // samples the input buffer itself, so the AO step comes right after it.
-  const fxList = (params.get('fx') ?? (aaMode === 'none' ? 'ao,clouds,tilt,bloom,look' : 'smaa,ao,clouds,tilt,bloom,look')).split(',').filter((k) => k !== 'ao' || !!ao);
-  const all = { smaa, ao: aoFx, clouds, tilt, bloom, look } as const;
+  const fxList = (params.get('fx') ?? (aaMode === 'none' ? 'ao,clouds,tilt,shafts,bloom,look' : 'smaa,ao,clouds,tilt,shafts,bloom,look')).split(',').filter((k) => (k !== 'ao' || !!ao) && (k !== 'shafts' || !!shafts));
+  const all = { smaa, ao: aoFx, clouds, tilt, shafts: shafts as SunShaftsEffect, bloom, look } as const;
   const fxPass = new EffectPass(camera, ...(Object.keys(all) as (keyof typeof all)[]).filter((k) => fxList.includes(k)).map((k) => all[k]));
   fxPass.dithering = true;
   composer.addPass(fxPass);
+  // The scene target as R11F_G11F_B10F (32 bpp, nothing reads its alpha): half the bandwidth of RGBA16F on this tiler,
+  // 3–5 ms a frame (perf-deep, ?nor11). After addPass: the effects' own buffers follow the composer's type at addPass.
+  if (perfOn('r11') && fbType === THREE.HalfFloatType) {
+    const t = composer.inputBuffer.texture;
+    t.format = THREE.RGBFormat;
+    t.type = THREE.UnsignedInt101111Type;
+    t.internalFormat = 'R11F_G11F_B10F';
+  }
 
   // bloom passes are skipped entirely while bloom is off
   const bloomUpdate = bloom.update.bind(bloom);
@@ -179,17 +245,48 @@ export default function create(ctx: CityContext): CityModule {
   let aoUser = true;
   let focusOverride: number | null = null;
   let step: QualityStep;
+  /** world lens: blur too small to see this frame → the DOF passes are skipped */
+  let lensIdle = false;
+  let warmNext = false;
+  let dofWanted = true;
 
   const applyEnabled = () => {
     const dofOn = enabledAll && dofUser && quality.dof;
-    tilt.enabled = dofOn;
+    dofWanted = dofOn;
+    tilt.enabled = dofOn && !lensIdle;
     bloomOn = enabledAll && bloomUser && quality.bloom;
     bloom.intensity = bloomOn ? bloom.intensity : 0;
     if (ao) ao.enabled = enabledAll && aoUser && quality.ao;
   };
 
+  // world round: expensive features of other modules, thinned through their setters
+  type Grass = { setDensity?(k: number): void; getDensity?(): number };
+  type Leaves = { setLeafDistance?(m: number | null): void; getLeafDistance?(): number };
+  const grassSvc = ctx.services.groundcover as Grass | undefined;
+  const leafSvc = ctx.services.vegetation as Leaves | undefined;
+  type Land = { active?: boolean; setTreeDetail?(k: number): void };
+  const landSvc = ctx.services.landscape as Land | undefined;
+  const landTrees = !!landSvc?.active && !!landSvc.setTreeDetail;
+  const grassBase = grassSvc?.getDensity?.() ?? 0;
+  const leafBase = leafSvc?.getLeafDistance?.() ?? 0;
+  let grassK = 1,
+    leafK = 1;
+  const applyDetail = (s: QualityStep) => {
+    if (grassSvc?.setDensity && grassBase > 0 && s.grass !== grassK) {
+      grassK = s.grass;
+      grassSvc.setDensity(Math.max(0.25, grassBase * grassK));
+    }
+    if (s.leaf !== leafK) {
+      leafK = s.leaf;
+      // tree detail: near leaf cards in town (vegetation) and the 3D countryside trees (landscape)
+      if (leafSvc?.setLeafDistance && leafBase > 0) leafSvc.setLeafDistance(leafK >= 1 ? null : leafBase * leafK);
+      if (landTrees) landSvc!.setTreeDetail!(leafK);
+    }
+  };
+
   const applyStep = (s: QualityStep) => {
     step = s;
+    applyDetail(s);
     const changedScale = Math.abs(quality.renderScale - s.renderScale) > 1e-3;
     quality.renderScale = s.renderScale;
     quality.ao = wantAO && s.ao;
@@ -198,17 +295,34 @@ export default function create(ctx: CityContext): CityModule {
     if (changedScale) resize(ctx.size.width, ctx.size.height);
   };
 
-  const ladder = buildLadder(wantAO, quality.dof);
+  // water planar reflections (water module, loaded before us): the ladder caps their level
+  type WaterRefl = { setReflectionQuality?(l: 0 | 1 | 2): void; reflectionQuality?(): number };
+  const water = () => ctx.services.water as WaterRefl | undefined;
+  const reflAtLoad = (water()?.reflectionQuality?.() ?? 0) > 0;
+  /** apply the step's reflection cap — AFTER the 'quality' event (the water module resets to its preset on it) */
+  const applyRefl = (s: QualityStep) => {
+    const w = water();
+    if (!w?.setReflectionQuality || !w.reflectionQuality) return;
+    const cur = w.reflectionQuality();
+    if (cur > s.refl) w.setReflectionQuality(s.refl);
+  };
+  // any 'quality' event (ours, or a preset change in the UI) makes the water module restore its
+  // preset level; re-apply the current step's cap right after (water's handler was registered first)
+  ctx.events.on('quality', () => applyRefl(step));
+  const ladder = buildLadder(wantAO, quality.dof, reflAtLoad, grassBase > 0 && !!grassSvc?.setDensity, (leafBase > 0 && !!leafSvc?.setLeafDistance) || landTrees);
   const adaptive = new AdaptiveController(
     ladder,
     (s) => {
       applyStep(s);
       ctx.events.emit('quality', quality);
+      applyRefl(s);
       if (ctx.debug.enabled) console.info(`[postfx] quality → ${s.name}`);
     },
     params.get('adaptive') !== '0',
+    perfOn('adapt30'),
   );
   step = ladder[0];
+  if (ctx.debug.enabled) ctx.services.postfxInternals = { composer, ao, aoFx, clouds, tilt, bloom, look, smaa, fxPass, renderPass, setAOPath, adaptive, ladder };
   // per-frame GPU time for the adaptive controller (only while it is enabled: no queries otherwise)
   const gpuTimer = new GpuTimer(renderer.getContext() as WebGL2RenderingContext);
   const gpuSample = (ms: number) => adaptive.gpuSample(ms);
@@ -220,9 +334,24 @@ export default function create(ctx: CityContext): CityModule {
   const resize = (w: number, h: number) => {
     renderer.setPixelRatio(quality.pixelRatio * quality.renderScale);
     composer.setSize(w, h, false);
+    // RenderTarget.setSize resizes its colour textures but not its depth texture's image. The stable depth
+    // texture is sampled (soft particles, softDepth) in the next scene pass BEFORE its target re-attaches it,
+    // so three would allocate its immutable storage at the OLD size and the per-frame depth blit would then
+    // fail for good (FRAMEBUFFER_INCOMPLETE_DIMENSIONS: ~120 "glBlitFramebuffer … not all the same size"
+    // warnings, stale depth for DOF / shafts / soft particles after any resize or adaptive scale step)
+    const bw = composer.inputBuffer.width,
+      bh = composer.inputBuffer.height;
+    const c = composer as unknown as { stableDepthTexture: THREE.Texture | null };
+    for (const t of [c.stableDepthTexture, composer.inputBuffer.depthTexture, composer.outputBuffer.depthTexture]) {
+      if (t) {
+        const img = t.image as { width: number; height: number };
+        img.width = bw;
+        img.height = bh;
+      }
+    }
   };
 
-  if (ctx.debug.enabled) ctx.services.postfxInternals = { composer, ao, aoFx, clouds, tilt, bloom, look, smaa, fxPass, renderPass, setAOPath };
+
 
   ctx.services.postfx = {
     setEnabled(effect, on) {
@@ -241,7 +370,40 @@ export default function create(ctx: CityContext): CityModule {
     setFocus(distance) {
       focusOverride = distance !== null && Number.isFinite(distance) && distance > 0 ? distance : null;
     },
+    softDepth(): SoftDepth | null {
+      return softDepth.texture && enabledAll ? softDepth : null;
+    },
+    warmUp() {
+      warmNext = true;
+    },
+    setLens(n) {
+      lensN = n !== null && Number.isFinite(n) && n > 0 ? n : lensBase;
+    },
+    holdQuality(on, stepDown) {
+      adaptive.hold(on, stepDown);
+    },
+    startQuality(frameMs) {
+      adaptive.startAt(frameMs);
+    },
+    setPhoto(p) {
+      photo = p;
+      if (!p) look.set('uPhotoExp', 1);
+    },
+    capture(type) {
+      // top quality for the picture: the resolution and AO come back in the same call (nothing is presented in
+      // between); the canvas is read in the task that drew it, so no preserveDrawingBuffer
+      const keep = step;
+      const top = ladder[0];
+      if (keep !== top) applyStep({ ...keep, renderScale: top.renderScale, ao: top.ao, dof: top.dof });
+      ctx.render(0);
+      const done = new Promise<Blob | null>((resolve) => renderer.domElement.toBlob(resolve, type));
+      if (keep !== top) applyStep(keep);
+      return done;
+    },
   };
+  // the composer's "stable" depth target is blitted right after the RenderPass every frame; during the
+  // next frame's scene pass it still holds the previous frame (a separate FBO: legal to sample)
+  const softDepth: SoftDepth = { texture: null as unknown as THREE.Texture, linear: false, near: camera.near, far: camera.far, width: 1, height: 1 };
 
   applyStep(ladder[0]);
 
@@ -256,6 +418,9 @@ export default function create(ctx: CityContext): CityModule {
   ctx.render = (realDt: number) => {
     renderer.info.reset();
     camera.updateMatrixWorld();
+    setAtmoCamera(camera.position.y);
+    // world: the raymarched cumulus deck for this frame's final camera (the dome composites it)
+    (ctx.services.sky as { renderClouds?(r: THREE.WebGLRenderer, c: THREE.PerspectiveCamera): void } | undefined)?.renderClouds?.(renderer, camera);
     if (!enabledAll) {
       const ac = renderer.autoClear;
       renderer.autoClear = true;
@@ -277,42 +442,187 @@ export default function create(ctx: CityContext): CityModule {
     firstFrame = false;
 
     renderer.getDrawingBufferSize(_sz);
-    const hScale = _sz.y / 930;
-    const zoom = smooth(30, 560, camDist);
     const lite = step.dof === 'lite';
-    kPx = (4.5 + 14.5 * zoom) * hScale * (lite ? 0.8 : 1);
-    tilt.params.focus = focusPlanar;
-    tilt.params.k = kPx;
-    tilt.params.band = 0.035 + 0.03 * (1 - zoom);
-    tilt.params.skyCoc = Math.min(kPx * 0.35, 4 * hScale);
+    if (lensMode && !photo?.miniature) {
+      // thin lens, 35 mm full-frame equivalent (24 mm sensor height, focal length from the vertical
+      // FOV), aperture f/lensN: blur-circle radius at infinity in output pixels. coc(z) = K·(1 − F/z)
+      // is exactly the tilt-shift model with no sharp band. Beyond ~40 m focus it is sub-pixel → skipped.
+      const fmm = 12 / Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2);
+      const Fmm = Math.max(focusPlanar * 1000, fmm * 2);
+      kPx = 0.5 * ((fmm * fmm) / (lensN * (Fmm - fmm)) / 24) * _sz.y * (lite ? 0.8 : 1);
+      kPx = Math.min(kPx, 24);
+      tilt.params.focus = focusPlanar;
+      tilt.params.k = kPx;
+      tilt.params.band = 0.004;
+      tilt.params.skyCoc = kPx;
+      const idle = kPx < 0.6;
+      if (idle !== lensIdle) {
+        lensIdle = idle;
+        tilt.enabled = dofWanted && !lensIdle;
+      }
+    } else {
+      const hScale = _sz.y / 930;
+      const zoom = smooth(30, 560, camDist);
+      kPx = (4.5 + 14.5 * zoom) * hScale * (lite ? 0.8 : 1);
+      tilt.params.focus = focusPlanar;
+      tilt.params.k = kPx;
+      tilt.params.band = 0.035 + 0.03 * (1 - zoom);
+      tilt.params.skyCoc = Math.min(kPx * 0.35, 4 * hScale);
+    }
 
     // ── bloom & grade by time of day
     const night = ctx.clock.night;
     const dusk = ctx.clock.dusk;
-    if (bloomOn) {
-      bloom.intensity = 0.32 + 0.85 * night;
-      bloom.luminanceMaterial.threshold = 1.15 - 0.45 * night;
+    const skySvc = ctx.services.sky as { isLegacy?: () => boolean } | undefined;
+    const legacy = skySvc?.isLegacy ? skySvc.isLegacy() : params.has('legacylight');
+    if (legacy) {
+      if (bloomOn) {
+        bloom.intensity = 0.32 + 0.85 * night;
+        bloom.luminanceMaterial.threshold = 1.15 - 0.45 * night;
+      }
+      look.set('uWarm', 0.012 * (1 - night) + 0.018 * dusk - 0.025 * night);
+      look.set('uSat', 1.2 - 0.08 * night);
+      look.set('uVignette', 0.28);
+      look.setVec('uShadowTint', -0.01, 0.0, 0.018);
+    } else if (worldGrade) {
+      // world: natural grade — AgX with a time-of-day look: neutral by day, a partial "Golden" CDL
+      // when the sun is low (warm, slightly compressed highlights), cool and calm at night; little
+      // extra saturation (saturation comes from the light), clean blacks, a faint lens vignette
+      if (bloomOn) {
+        bloom.intensity = 0.26 + 0.74 * night;
+        bloom.luminanceMaterial.threshold = 1.45 - 0.57 * night;
+        bloom.luminanceMaterial.smoothing = 0.32 - 0.08 * night;
+      }
+      const gold = Math.max(dusk * (1 - night), atmo()?.golden() ?? 0);
+      // (a whisper of the CDL: at full strength it cuts blue by half in log space — sepia, not golden)
+      const gk = 0.14 * gold;
+      look.setVec('uLookSlope', 1, 1 - 0.1 * gk, 1 - 0.5 * gk);
+      look.set('uLookPower', 1 - 0.2 * gk);
+      look.set('uLookSat', 1 + 0.06 * gold - 0.08 * night);
+      // a little punch back (the studio grade ran at 1.2): warm sunlit faces should glow, not grey out
+      look.set('uSat', 1.08 + 0.07 * gold - 0.04 * night);
+      // (light round: a little more S-curve and cleaner blacks — base AgX is flat, the judges found no true
+      // black anywhere; ?lookold = before)
+      look.set('uContrast', lookOld ? 0.17 : 0.21);
+      if (lookOld) look.setVec('uLift', 0.006, 0.007, 0.011);
+      else look.setVec('uLift', 0.0045, 0.005, 0.0088);
+      look.set('uWarm', 0.006 * (1 - night) + 0.008 * dusk - 0.012 * night);
+      look.set('uVignette', lookOld ? 0.16 + 0.12 * night : 0.19 + 0.12 * night);
+      look.setVec('uShadowTint', -0.003, 0.0, 0.006);
+    } else {
+      // studio key: sunlit whites sit higher (stronger sun), so the day threshold rises to keep
+      // daylight crisp; at night only real emitters (lamps, windows, neon) cross it — the dark
+      // moonlit city never feeds the bloom, so there is no veil
+      if (bloomOn) {
+        bloom.intensity = 0.26 + 0.74 * night;
+        bloom.luminanceMaterial.threshold = 1.45 - 0.57 * night;
+        bloom.luminanceMaterial.smoothing = 0.32 - 0.08 * night;
+      }
+      look.set('uWarm', 0.014 * (1 - night) + 0.02 * dusk - 0.012 * night);
+      look.set('uSat', 1.2 - 0.1 * night);
+      // a deeper vignette at night: the lit town sits in a soft pool, the backdrop sinks to indigo
+      look.set('uVignette', 0.28 + 0.14 * night);
+      look.setVec('uShadowTint', -0.004, 0.0, 0.007);
     }
-    look.set('uWarm', 0.012 * (1 - night) + 0.018 * dusk - 0.025 * night);
-    look.set('uSat', 1.2 - 0.08 * night);
+
+    // ── photo mode: its picture settings on top of the grade above
+    if (photo) {
+      look.set('uPhotoExp', photo.exposure);
+      const u = look.uniforms;
+      look.set('uSat', (u.get('uSat')!.value as number) * photo.saturation);
+      look.set('uWarm', (u.get('uWarm')!.value as number) + photo.warm);
+      look.set('uVignette', (u.get('uVignette')!.value as number) + photo.vignette);
+      // (only the world grade sets these two every frame)
+      if (worldGrade) {
+        look.set('uContrast', (u.get('uContrast')!.value as number) + photo.contrast);
+        (u.get('uLift')!.value as THREE.Vector3).addScalar(photo.lift);
+      }
+    }
 
     // ── cloud shadows (data published by the sky module)
     clouds.source = ctx.services.cloudShadows as CloudShadowData | undefined;
 
+    // ── sun shafts: a low sun in or near the frame (fades with elevation, off-screen distance, rain)
+    if (shafts) {
+      const sd = ctx.uniforms.uSunDir.value; // the visual sun (sky module)
+      camera.getWorldDirection(_fwd);
+      const facing = _fwd.dot(sd);
+      let k = 0;
+      if (facing > 0.05 && sd.y > 0) {
+        _tmp.copy(sd).multiplyScalar(1000).add(camera.position).project(camera);
+        shafts.sunUv.set(_tmp.x * 0.5 + 0.5, _tmp.y * 0.5 + 0.5);
+        const off = Math.max(0, Math.max(Math.abs(_tmp.x), Math.abs(_tmp.y)) - 1);
+        k = (1 - smooth(0, 0.6, off)) * smooth(0.05, 0.35, facing) * smooth(0.0, 0.04, sd.y) * (1 - smooth(0.3, 0.55, sd.y)) * (1 - ctx.uniforms.uRain.value);
+      }
+      shafts.active = k > 0.002;
+      shafts.strength = 0.55 * k;
+      const skySun = (ctx.services.sky as { sun?: THREE.DirectionalLight } | undefined)?.sun;
+      if (skySun) {
+        const c = skySun.color;
+        const m = Math.max(c.r, c.g, c.b, 1e-3);
+        shafts.tint.setRGB(c.r / m, c.g / m, c.b / m);
+      }
+    }
+
     // ── AO radius follows the zoom (contact shadows in close-ups, broad grounding from afar)
     if (ao && ao.enabled) {
       const c = ao.configuration;
-      const r = THREE.MathUtils.clamp(camDist * 0.02, 1.6, 9);
+      // studio key: a neutral, barely cool occlusion tint (the legacy navy tint turned every
+      // contact shadow blue on top of the blue sky fill)
+      c.color.copy(legacy ? aoTintLegacy : aoTintStudio);
+      // world (light round): a wider, stronger AO from street level — cars, kerbs, benches and wall bases
+      // sit on the ground; the old 1.6 m / ×2.4 left eye-level views ungrounded (?aoold = the old values)
+      const strong = world && !aoOld;
+      const r = (legacy ? THREE.MathUtils.clamp(camDist * 0.02, 1.6, 9) : strong ? THREE.MathUtils.clamp(camDist * 0.03, 2.6, 12) : THREE.MathUtils.clamp(camDist * 0.022, 1.6, 10)) * aoRK;
       if (Math.abs(c.aoRadius - r) > 0.05) c.aoRadius = r;
+      // (the wide radius on surfaces right in front of the camera — walk mode, inside things — is blotchy noise)
+      if (strong) aoU.uAONear.value.set(0.5 * r, 1.4 * r);
+      else aoU.uAONear.value.set(0, 0);
+      // studio: contact shading a little stronger from POI distance outwards, where the sun-dominated
+      // key leaves less fill for AO to darken (it multiplies the final colour)
+      const ai = (legacy ? 2.4 : strong ? 3.3 + 0.5 * smooth(80, 420, camDist) : 2.4 + 0.7 * smooth(80, 420, camDist)) * aoIK;
+      if (Math.abs(c.intensity - ai) > 0.02) c.intensity = ai;
       const f = 1.0;
       if (c.distanceFalloff !== f) c.distanceFalloff = f;
+    }
+
+    // boot warm-up frame (main.ts warmUp): every optional pass runs once, so its programs compile behind the
+    // loading screen instead of on the first close-up / low sun (DOF passes alone stalled ~0.3 s)
+    const warm = warmNext;
+    warmNext = false;
+    const keepShafts = shafts ? shafts.active : false;
+    const keepShaftI = shafts ? shafts.strength : 0;
+    if (warm) {
+      tilt.enabled = true;
+      if (shafts) {
+        // (a strength of 0 skips the mask and blur passes: their programs would compile on the first low sun)
+        shafts.active = true;
+        shafts.strength = 0.5;
+      }
     }
 
     // the whole frame's GPU time (shadow map + scene + post), read back asynchronously
     gpuTimer.poll(gpuSample);
     gpuTimer.begin();
+
     composer.render(realDt);
     gpuTimer.end();
+    if (warm) {
+      tilt.enabled = dofWanted && !lensIdle;
+      if (shafts) {
+        shafts.active = keepShafts;
+        shafts.strength = keepShaftI;
+      }
+    }
+    // what softDepth() hands out during the next frame
+    const sd = (composer as unknown as { stableDepthTexture: THREE.Texture | null }).stableDepthTexture;
+    if (sd) {
+      softDepth.texture = sd;
+      softDepth.near = camera.near;
+      softDepth.far = camera.far;
+      softDepth.width = composer.inputBuffer.width;
+      softDepth.height = composer.inputBuffer.height;
+    }
   };
 
   return {
@@ -326,10 +636,14 @@ export default function create(ctx: CityContext): CityModule {
     stats() {
       return {
         step: step.name,
+        grassK,
+        leafK,
+        refl: water()?.reflectionQuality?.() ?? -1,
         renderScale: quality.renderScale,
         ao: ao && ao.enabled ? 'on' : 'off',
-        dof: tilt.enabled ? 'on' : 'off',
+        dof: tilt.enabled ? 'on' : lensMode && dofWanted ? 'lens-idle' : 'off',
         bloom: bloomOn ? 'on' : 'off',
+        shafts: shafts && shafts.active ? Math.round(shafts.strength * 100) / 100 : 0,
         focus: Math.round(focusPlanar),
         cocPx: Math.round(kPx * 10) / 10,
         fpsWin: Math.round(adaptive.fps),
@@ -354,3 +668,5 @@ export default function create(ctx: CityContext): CityModule {
 }
 
 const _tmp = new THREE.Vector3();
+const aoTintLegacy = new THREE.Color('#1c2433');
+const aoTintStudio = new THREE.Color('#25262c');

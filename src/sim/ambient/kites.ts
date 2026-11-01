@@ -6,12 +6,15 @@
 import * as THREE from 'three';
 import type { CityContext } from '../../core/context';
 import { smooth } from './shared';
+import { boxHunt } from '../../core/boxhunt';
 
 const PART = { BODY: 0, KITE: 1, TAIL: 2, STRING: 3, BOW: 4 } as const;
 const TAIL_SEG = 12;
 const STR_SEG = 14;
 
-function buildKiteGeometry(): THREE.BufferGeometry {
+type V3 = [number, number, number];
+
+function buildKiteGeometry(figure: boolean): THREE.BufferGeometry {
   const pos: number[] = [];
   const part: number[] = [];
   const prm: number[] = []; // per-vertex parameter (along tail / string, or material slot for body)
@@ -55,7 +58,102 @@ function buildKiteGeometry(): THREE.BufferGeometry {
   };
   const skin = [0.94, 0.78, 0.64],
     white = [1, 1, 1];
-  // flyer (faces +Z, towards the kite), ~1.55 m; slot 0 skin, 1 shirt (instance), 2 shorts (instance)
+  // box hunt (?nokiteflyer): the flyer built as a person — tapered limbs with knees and elbows, hips, a torso
+  // narrowing to the waist, neck, head with a hair cap, shoes; smooth normals (written over the flat ones)
+  const bodyN: number[] = [];
+  const vtx = (p: V3, n: V3, slot: number, c: number[]) => {
+    bodyN.push(pos.length / 3, n[0], n[1], n[2]);
+    push(p[0], p[1], p[2], PART.BODY, slot, c);
+  };
+  /** tapered 8-sided tube a → b (radii ra, rb; x / z ellipse factors ex, ez), capped */
+  const tube = (a: V3, b: V3, ra: number, rb: number, c: number[], slot: number, ex = 1, ez = 1) => {
+    const d = new THREE.Vector3(b[0] - a[0], b[1] - a[1], b[2] - a[2]).normalize();
+    const u = new THREE.Vector3().crossVectors(d, Math.abs(d.z) > 0.9 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 0, 1)).normalize();
+    if (u.x < 0) u.negate();
+    const v = new THREE.Vector3().crossVectors(u, d).normalize();
+    const n = 8;
+    const ring = (o: V3, r: number, k: number): { p: V3; nn: V3 } => {
+      const t = (k / n) * Math.PI * 2;
+      const cu = Math.cos(t) * ex,
+        cv = Math.sin(t) * ez;
+      const nx = u.x * cu + v.x * cv,
+        ny = u.y * cu + v.y * cv,
+        nz = u.z * cu + v.z * cv;
+      const l = Math.hypot(nx, ny, nz) || 1;
+      return { p: [o[0] + nx * r, o[1] + ny * r, o[2] + nz * r], nn: [nx / l, ny / l, nz / l] };
+    };
+    for (let k = 0; k < n; k++) {
+      const a0 = ring(a, ra, k),
+        a1 = ring(a, ra, k + 1),
+        b0 = ring(b, rb, k),
+        b1 = ring(b, rb, k + 1);
+      for (const q of [a0, b0, b1, a0, b1, a1]) vtx(q.p, q.nn, slot, c);
+      const nd: V3 = [d.x, d.y, d.z],
+        nu: V3 = [-d.x, -d.y, -d.z];
+      vtx(b, nd, slot, c);
+      vtx(b1.p, nd, slot, c);
+      vtx(b0.p, nd, slot, c);
+      vtx(a, nu, slot, c);
+      vtx(a0.p, nu, slot, c);
+      vtx(a1.p, nu, slot, c);
+    }
+  };
+  /** ellipsoid (8 x 6) round o, radii r; `top` keeps only the upper part down to that latitude (hair cap) */
+  const ell = (o: V3, r: V3, c: number[], slot: number, top = -1) => {
+    const W = 8,
+      H = 6;
+    const P = (i: number, j: number): { p: V3; nn: V3 } => {
+      const th = (i / W) * Math.PI * 2,
+        ph = Math.PI / 2 - (j / H) * Math.PI;
+      const nx = Math.cos(ph) * Math.sin(th),
+        ny = Math.sin(ph),
+        nz = Math.cos(ph) * Math.cos(th);
+      const l = Math.hypot(nx / r[0], ny / r[1], nz / r[2]);
+      return { p: [o[0] + nx * r[0], o[1] + ny * r[1], o[2] + nz * r[2]], nn: [nx / r[0] / l, ny / r[1] / l, nz / r[2] / l] };
+    };
+    for (let j = 0; j < H; j++) {
+      if (top > -1 && Math.sin(Math.PI / 2 - ((j + 1) / H) * Math.PI) < top) break;
+      for (let i = 0; i < W; i++) {
+        const p00 = P(i, j),
+          p10 = P(i + 1, j),
+          p01 = P(i, j + 1),
+          p11 = P(i + 1, j + 1);
+        for (const q of [p00, p01, p11, p00, p11, p10]) vtx(q.p, q.nn, slot, c);
+      }
+    }
+  };
+  if (figure) {
+    const hair = [0.25, 0.18, 0.12],
+      shoe = [0.92, 0.92, 0.9];
+    // legs: thigh in the shorts, bare knee to ankle, a sneaker
+    for (const sd of [1, -1]) {
+      const hx = sd * 0.085,
+        kx = sd * 0.1,
+        ax = sd * 0.115;
+      tube([hx, 0.84, 0], [kx, 0.6, 0.015], 0.085, 0.074, white, 2, 1, 0.95);
+      tube([kx, 0.62, 0.015], [kx, 0.46, 0.02], 0.062, 0.055, skin, 0);
+      tube([kx, 0.46, 0.02], [ax, 0.1, -0.005], 0.055, 0.04, skin, 0);
+      ell([ax, 0.055, 0.04], [0.05, 0.05, 0.12], shoe, 0);
+    }
+    // hips (shorts), torso narrowing to the waist then out to the chest and in to the shoulders
+    tube([0, 0.78, 0], [0, 0.98, 0], 0.16, 0.15, white, 2, 1.05, 0.72);
+    tube([0, 0.96, 0], [0, 1.2, 0.01], 0.145, 0.165, white, 1, 1.05, 0.68);
+    tube([0, 1.2, 0.01], [0, 1.38, 0], 0.165, 0.11, white, 1, 1.12, 0.66);
+    // neck, head, hair cap
+    tube([0, 1.36, 0], [0, 1.47, 0.01], 0.045, 0.042, skin, 0);
+    ell([0, 1.56, 0.01], [0.094, 0.115, 0.104], skin, 0);
+    ell([0, 1.575, -0.008], [0.1, 0.115, 0.108], hair, 3, 0.15);
+    // arms: the right one up and forward with the string (hand at the string anchor), the left one relaxed
+    const arm = (sh: V3, el: V3, ha: V3) => {
+      const m: V3 = [sh[0] + (el[0] - sh[0]) * 0.45, sh[1] + (el[1] - sh[1]) * 0.45, sh[2] + (el[2] - sh[2]) * 0.45];
+      tube(sh, m, 0.062, 0.056, white, 1);
+      tube(m, el, 0.046, 0.042, skin, 0);
+      tube(el, ha, 0.04, 0.033, skin, 0);
+      ell(ha, [0.04, 0.05, 0.035], skin, 0);
+    };
+    arm([0.19, 1.33, 0], [0.24, 1.46, 0.19], [0.24, 1.62, 0.35]);
+    arm([-0.19, 1.33, 0], [-0.23, 1.07, 0.02], [-0.215, 0.84, 0.07]);
+  } else {
   box(-0.09, 0.4, 0, 0.13, 0.8, 0.14, skin, 0);
   box(0.09, 0.4, 0, 0.13, 0.8, 0.14, skin, 0);
   box(0, 0.86, 0, 0.36, 0.24, 0.2, white, 2);
@@ -77,6 +175,7 @@ function buildKiteGeometry(): THREE.BufferGeometry {
   };
   arm(0.24, 2.3);
   arm(-0.24, 0.25);
+  }
   // kite: diamond in kite space (x across, y up along the spine), double sided via two faces
   const K = (x: number, y: number, c: number[], s: number) => push(x, y, 0, PART.KITE, s, c);
   const kc = [
@@ -170,6 +269,8 @@ function buildKiteGeometry(): THREE.BufferGeometry {
   g.setAttribute('aPrm', new THREE.Float32BufferAttribute(prm, 1));
   g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
   g.computeVertexNormals();
+  const na = g.getAttribute('normal') as THREE.BufferAttribute;
+  for (let i = 0; i < bodyN.length; i += 4) na.setXYZ(bodyN[i], bodyN[i + 1], bodyN[i + 2], bodyN[i + 3]);
   return g;
 }
 
@@ -237,8 +338,14 @@ void kitePose(inout vec3 p, inout vec3 n) {
   vec3 b = C + B * vec3(0.0, 0.05, -0.05);
   vec3 c = mix(a, b, s) + vec3(0.0, -iKite2.z * 4.0 * s * (1.0 - s), 0.0);
   n = normalize(vec3(p.x * 0.3, 1.0, 0.0));
-  p = c + vec3(p.x, p.y, 0.0) * 0.025;
-  vKiteCol = vec3(0.95, 0.93, 0.88);
+  // a real kite line is a ~2 mm cord, darker than the sky: it only shows within a few metres, vanishes
+  // smoothly once it would be thinner than ~0.6 px, and never crosses the frame as a ribbon when it
+  // passes right by the camera (segments within 1.5 m fade out)
+  vec3 wc = (modelMatrix * instanceMatrix * vec4(c, 1.0)).xyz;
+  float cd = length(cameraPosition - wc);
+  float pxw = 0.002 * projectionMatrix[1][1] * 500.0 / max(cd, 0.05);
+  p = c + vec3(p.x, p.y, 0.0) * 0.002 * smoothstep(0.35, 0.9, pxw) * smoothstep(0.8, 1.5, cd);
+  vKiteCol = vec3(0.6, 0.58, 0.53);
 }
 `;
 
@@ -251,7 +358,7 @@ function makeKiteMaterial(): THREE.MeshLambertMaterial {
       .replace('#include <begin_vertex>', 'vec3 transformed = kiteP;\nvColor.rgb = vKiteCol;');
     shader.fragmentShader = shader.fragmentShader.replace('#include <common>', '#include <common>');
   };
-  m.customProgramCacheKey = () => 'tinyhaven-ambient-kite-1';
+  m.customProgramCacheKey = () => 'tinyhaven-ambient-kite-3';
   return m;
 }
 
@@ -282,7 +389,7 @@ export function createKites(ctx: CityContext): KiteSystem {
     anchors.push({ x, y: ground(x, z), z });
   }
   const N = anchors.length;
-  const geo = buildKiteGeometry();
+  const geo = buildKiteGeometry(boxHunt(ctx, 'kiteflyer'));
   const mk = (n: number, dyn = false) => {
     const a = new THREE.InstancedBufferAttribute(new Float32Array(N * n), n);
     if (dyn) a.setUsage(THREE.DynamicDrawUsage);

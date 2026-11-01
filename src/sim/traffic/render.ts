@@ -15,7 +15,9 @@ import * as THREE from 'three';
 import type { CityContext } from '../../core/context';
 import { glowTexture } from '../../core/gfx';
 import { MODEL_KINDS, ModelKind, SPECS } from './specs';
-import { buildModel, makeAtlas, BusRouteSign, MODEL_LODS } from './models';
+import { buildCloseModel, buildModel, LAMP_AT, makeAtlas, BusRouteSign, MODEL_LODS, setLorryDetail, setTwoWheelDetail } from './models';
+import { closeVeh, closeVehOn } from '../../core/closeVehicles';
+import { boxHunt } from '../../core/boxhunt';
 import { createVehicleMaterial } from './vehicleMaterial';
 import { TrafficSim, Vehicle, St } from './sim';
 
@@ -26,9 +28,13 @@ export interface ParkedCar {
   x: number;
   z: number;
   yaw: number;
+  /** two-wheelers on the pavement: lean on the stand / lying on the side (rad), height, card label */
+  roll?: number;
+  y?: number;
+  label?: string;
 }
 
-const MOVING_CAP: Record<ModelKind, number> = { compact: 70, hatch: 80, sedan: 90, suv: 60, delivery: 40, lorry: 30, bus: 10, icecream: 4 };
+const MOVING_CAP: Record<ModelKind, number> = { compact: 70, hatch: 80, sedan: 90, suv: 60, delivery: 40, lorry: 30, bus: 10, icecream: 4, bike: 70, moto: 70, estate: 40, mpv: 30 };
 const ROAD_Y = 0.012;
 /** beyond this camera distance a car popping in/out is a sub-4-pixel event */
 const POP_DIST = 290;
@@ -38,6 +44,11 @@ const POP_DIST = 290;
  * ~62 m (a car ≥ 115 px long), level 1 out to ~150 m (≥ 47 px), level 2 beyond.
  */
 const LOD_DIST = [62, 150];
+/** inside this distance (same reference view: about 12 m in the usual lens, further through a longer one) a vehicle is drawn
+ *  at its close level: real glass, a built cabin, lens lamps */
+const CLOSE_DIST = 18;
+/** at most this many vehicles of one kind at the close level; further ones stay on level 0, which looks the same from there */
+const CLOSE_CAP = 12;
 const REF_HEIGHT = 930;
 const REF_TAN = Math.tan((32 * Math.PI) / 360);
 /** cap on how far (m) a vehicle's shadow can reach into the view from off-screen */
@@ -50,12 +61,19 @@ interface Layer {
   a2: THREE.InstancedBufferAttribute;
   tris: number;
   n: number;
+  /** close level: its panes, a mesh of their own on the same instance buffers */
+  glass?: THREE.InstancedMesh;
 }
 
 export class VehicleRenderer {
   readonly group = new THREE.Group();
   /** [model index][level] */
   private layers: Layer[][] = [];
+  /** [model index]: the close level, null for two-wheelers or when off */
+  private closeRow: (Layer | null)[] = [];
+  private closeLim = 0;
+  /** vehicles at the close level last frame */
+  closeDrawn = 0;
   readonly parked: ParkedCar[];
   /** parked cars: model index, precomputed instance data */
   private pModel: Int32Array;
@@ -99,8 +117,13 @@ export class VehicleRenderer {
       color: r.color,
     }));
     const atlas = makeAtlas(signs);
-    const { material, depth } = createVehicleMaterial(ctx.uniforms, atlas);
+    const { material, far, close, closeBus, glass, depth, detail } = createVehicleMaterial(ctx.uniforms, atlas);
+    this.detail = detail.value;
+    const q = ctx.debug.params;
+    this.detailOff = [q.has('nocarinterior'), q.has('nopanelgaps'), q.has('novehiclewear'), q.has('nocarpaint')];
 
+    setTwoWheelDetail(boxHunt(ctx, '2wdetail'));
+    setLorryDetail(boxHunt(ctx, 'lorrykit'));
     MODEL_KINDS.forEach((kind) => {
       const cap = parked.filter((p) => p.model === kind).length + MOVING_CAP[kind];
       const row: Layer[] = [];
@@ -112,7 +135,8 @@ export class VehicleRenderer {
         a2.setUsage(THREE.DynamicDrawUsage);
         geo.setAttribute('aInst', a1);
         geo.setAttribute('aInst2', a2);
-        const mesh = new THREE.InstancedMesh(geo, material, cap);
+        // LOD0 only: seated occupants (≤ 38 m) need the glass depth trick; ?vehfd=1 keeps it on every level (A/B)
+        const mesh = new THREE.InstancedMesh(geo, lod === 0 || q.has('vehfd') ? material : far, cap);
         mesh.name = `traffic-${kind}-lod${lod}`;
         mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
         mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(cap * 3), 3);
@@ -127,6 +151,46 @@ export class VehicleRenderer {
         this.group.add(mesh);
       }
       this.layers.push(row);
+      const cm = close && glass && closeVeh(ctx, 'vehclose') ? buildCloseModel(kind) : null;
+      if (cm && close && glass) {
+        const cc = Math.min(CLOSE_CAP, cap);
+        const a1 = new THREE.InstancedBufferAttribute(new Float32Array(cc * 4), 4);
+        const a2 = new THREE.InstancedBufferAttribute(new Float32Array(cc * 4), 4);
+        a1.setUsage(THREE.DynamicDrawUsage);
+        a2.setUsage(THREE.DynamicDrawUsage);
+        cm.body.setAttribute('aInst', a1);
+        cm.body.setAttribute('aInst2', a2);
+        const mesh = new THREE.InstancedMesh(cm.body, kind === 'bus' && closeBus ? closeBus : close, cc);
+        mesh.name = `traffic-${kind}-close-lod0`;
+        mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+        mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(cc * 3), 3);
+        mesh.instanceColor.setUsage(THREE.DynamicDrawUsage);
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        mesh.frustumCulled = false;
+        mesh.customDepthMaterial = depth;
+        mesh.count = 0;
+        mesh.visible = false;
+        this.group.add(mesh);
+        const L: Layer = { mesh, a1, a2, tris: (cm.body.index ? cm.body.index.count : cm.body.attributes.position.count) / 3, n: 0 };
+        if (cm.glass) {
+          cm.glass.setAttribute('aInst', a1);
+          cm.glass.setAttribute('aInst2', a2);
+          const gm = new THREE.InstancedMesh(cm.glass, glass, cc);
+          gm.name = `traffic-${kind}-glass-lod0`;
+          gm.instanceMatrix = mesh.instanceMatrix;
+          gm.instanceColor = mesh.instanceColor;
+          gm.receiveShadow = true;
+          gm.frustumCulled = false;
+          gm.count = 0;
+          gm.visible = false;
+          gm.renderOrder = 1;
+          this.group.add(gm);
+          L.glass = gm;
+          L.tris += (cm.glass.index ? cm.glass.index.count : cm.glass.attributes.position.count) / 3;
+        }
+        this.closeRow.push(L);
+      } else this.closeRow.push(null);
     });
 
     // parked instances: static data computed once
@@ -138,9 +202,9 @@ export class VehicleRenderer {
     this.pCol = new Float32Array(P * 3);
     parked.forEach((p, i) => {
       this.pModel[i] = MODEL_KINDS.indexOf(p.model);
-      this.eul.set(0, p.yaw, 0);
+      this.eul.set(0, p.yaw, p.roll ?? 0);
       this.q.setFromEuler(this.eul);
-      this.pos.set(p.x, ROAD_Y + 0.005, p.z);
+      this.pos.set(p.x, p.y ?? ROAD_Y + 0.005, p.z);
       this.m4.compose(this.pos, this.q, this.scl);
       this.m4.toArray(this.pMat, i * 16);
       const c = this.colorOf(p.color);
@@ -148,7 +212,10 @@ export class VehicleRenderer {
       this.pCol[i * 3 + 1] = c.g;
       this.pCol[i * 3 + 2] = c.b;
       this.pA1.set([0, 0, (p.x * 7.13) % 6.28, 0], i * 4);
-      this.pA2.set([p.variant, 0, Math.abs(p.x * 0.37 + p.z * 0.11) % 1, 0], i * 4);
+      // phase (plates, wear, dents, roof box) from a hash of the position: the old linear mix of x and z gave
+      // neighbours along an east-west row nearly the same phase (5.5 m × 0.37 ≈ 2.03 → +0.03), hence twin cars
+      const hp = Math.sin(p.x * 12.9898 + p.z * 78.233) * 43758.5453;
+      this.pA2.set([p.variant, 0, hp - Math.floor(hp), 0], i * 4);
     });
 
     // headlight pools + tail glows on the road (night only)
@@ -243,29 +310,87 @@ export class VehicleRenderer {
     const cam = this.ctx.camera;
     const h = Math.max(200, this.ctx.size.height * this.ctx.renderer.getPixelRatio());
     const k = (h / REF_HEIGHT) * (REF_TAN / Math.tan((cam.fov * Math.PI) / 360));
-    out[0] = (LOD_DIST[0] * k) ** 2;
+    // ?novehlod0: no LOD 0 (measures the close-up geometry's cost with perf.mjs)
+    out[0] = this.noLod0 ? 0 : (LOD_DIST[0] * k) ** 2;
     out[1] = (LOD_DIST[1] * k) ** 2;
+    this.closeLim = (CLOSE_DIST * k) ** 2;
   }
   private lim = [0, 0];
+  private flareAtLamps = closeVehOn('vehflare');
+  private noLod0 = typeof location !== 'undefined' && new URLSearchParams(location.search).has('novehlod0');
+  /** close-up detail switches (vehicleMaterial.ts uVehDetail: interior, panel lines, wear) */
+  private detail: THREE.Vector4;
+  private detailOff: boolean[];
 
   /** the layer (model mi, level for squared camera distance d2) a new instance goes to; null when full */
-  private slot(mi: number, d2: number): Layer | null {
-    const lod = d2 < this.lim[0] ? 0 : d2 < this.lim[1] ? 1 : 2;
+  private slot(mi: number, d2: number, seated = false): Layer | null {
+    const C = this.closeRow[mi];
+    if (C && d2 < this.closeLim && C.n < C.mesh.instanceMatrix.count) {
+      this.lodCounts[0]++;
+      return C;
+    }
+    // a cabin with seated figures stays on level 0 (the only far level with the glass depth trick)
+    const lod = seated || d2 < this.lim[0] ? 0 : d2 < this.lim[1] ? 1 : 2;
     const L = this.layers[mi][lod];
     if (L.n >= L.mesh.instanceMatrix.count) return null;
     this.lodCounts[lod]++;
     return L;
   }
 
+  /** the first thing a ray hits among the vehicles (their boxes), for the lens: parked cars are nobody's click target, so a
+   *  walker's autofocus would otherwise look through them. Infinity when nothing is hit within maxT. */
+  rayHit(o: THREE.Vector3, d: THREE.Vector3, maxT: number): number {
+    let best = maxT;
+    const test = (x: number, z: number, yaw: number, L: number, W: number, H: number) => {
+      const px = o.x - x,
+        pz = o.z - z;
+      if (px * px + pz * pz > (maxT + L) ** 2) return;
+      const s = Math.sin(yaw),
+        c = Math.cos(yaw);
+      // the ray in the vehicle's frame: u across (+X left), v along (+Z forward)
+      const ou = px * c - pz * s,
+        ov = px * s + pz * c,
+        du = d.x * c - d.z * s,
+        dv = d.x * s + d.z * c;
+      let t0 = 0,
+        t1 = best;
+      const slab = (or: number, dr: number, h0: number, h1: number) => {
+        if (Math.abs(dr) < 1e-6) {
+          if (or < h0 || or > h1) t1 = -1;
+          return;
+        }
+        const a = (h0 - or) / dr,
+          b = (h1 - or) / dr;
+        t0 = Math.max(t0, Math.min(a, b));
+        t1 = Math.min(t1, Math.max(a, b));
+      };
+      slab(ou, du, -W / 2, W / 2);
+      slab(ov, dv, -L / 2, L / 2);
+      slab(o.y, d.y, 0.1, H);
+      if (t0 < t1 && t0 > 0) best = t0;
+    };
+    for (const V of this.sim.vehicles) if (!V.twoWheel) test(V.x, V.z, V.yaw, V.spec.len, V.spec.width, V.spec.height);
+    for (const p of this.parked) {
+      if (p.roll !== undefined) continue;
+      const sp = SPECS[p.model];
+      test(p.x, p.z, p.yaw, sp.len, sp.width, sp.height);
+    }
+    return best < maxT ? best : Infinity;
+  }
+
   /** per-frame: poses → instance buffers */
   frame(realDt: number): void {
     this.updateFrustum();
     this.lodLimits(this.lim);
+    // tiers: the ray-traced cabin is skipped on low; panel lines and wear are a few ALU everywhere
+    const off = this.detailOff;
+    this.detail.set(off[0] || this.ctx.quality.level === 'low' ? 0 : 1, off[1] ? 0 : 1, off[2] ? 0 : 1, off[3] ? 0 : 1);
     const sim = this.sim;
     const night = this.ctx.uniforms.uLights.value;
     const k = 1 - Math.exp(-Math.min(realDt, 0.1) * 7);
     const kb = 1 - Math.exp(-Math.min(realDt, 0.1) * 14);
     for (const row of this.layers) for (const L of row) L.n = 0;
+    for (const L of this.closeRow) if (L) L.n = 0;
     this.lodCounts[0] = this.lodCounts[1] = this.lodCounts[2] = 0;
     const reach = this.ctx.renderer.shadowMap.enabled ? this.shadowReachPerM() : 0;
     const cp = this.ctx.camera.position;
@@ -273,8 +398,10 @@ export class VehicleRenderer {
     let np = 0,
       nf = 0;
     const poolCol = this.col;
-    for (const V of sim.vehicles) {
-      sim.computePose(V);
+    const drawList = sim.drawList();
+    for (let vi = 0; vi < drawList.length; vi++) {
+      const V = drawList[vi];
+      if (!V.offLane) sim.computePose(V);
       const sp = V.spec;
       // body pitch (braking dips the nose) and roll (lean out of turns)
       let pitchT = Math.max(-0.035, Math.min(0.035, -V.a * 0.0085));
@@ -283,8 +410,30 @@ export class VehicleRenderer {
         rollT = -0.022; // the bus kneels towards the kerb
         pitchT = 0;
       }
+      if (V.offLane) {
+        rollT = V.offRoll;
+        pitchT = 0;
+      }
+      if (V.twoWheel) {
+        // two-wheelers lean into turns (curvature from the heading change per metre ridden); stopped,
+        // the rider has a foot down and the bike tips a little to the left
+        const ds = V.odo - V.lastOdo;
+        if (ds > 0.04 || ds < 0) {
+          let dy = V.yaw - V.lastYaw;
+          dy -= Math.PI * 2 * Math.round(dy / (Math.PI * 2));
+          const kap = ds > 0 ? Math.max(-0.5, Math.min(0.5, dy / ds)) : 0;
+          V.kappa += (kap - V.kappa) * Math.min(1, ds * 0.9);
+          V.lastOdo = V.odo;
+          V.lastYaw = V.yaw;
+        }
+        rollT = V.v < 0.35 ? -0.1 : -Math.atan((V.v * V.v * V.kappa) / 9.81);
+        rollT = Math.max(-0.5, Math.min(0.5, rollT));
+        pitchT *= 0.3;
+        V.lean += (rollT - V.lean) * k;
+        V.roll = V.lean;
+      }
       V.pitch += (pitchT - V.pitch) * k;
-      V.roll += (rollT - V.roll) * k;
+      if (!V.twoWheel) V.roll += (rollT - V.roll) * k;
       const braking = V.a < -0.6 || (V.v < 0.25 && V.status !== St.Cruise) || V.dwell > 0;
       V.brakeVis += ((braking ? 1 : 0) - V.brakeVis) * kb;
       this.sphere.center.set(V.x, 1.5, V.z);
@@ -299,17 +448,19 @@ export class VehicleRenderer {
         this.sphere.radius += Math.min(MAX_SHADOW_REACH, sp.height * reach);
         draw = this.frustum.intersectsSphere(this.sphere);
       }
-      const L = draw ? this.slot(sp.modelIndex, d2) : null;
+      const L = draw ? this.slot(sp.modelIndex, d2, V.seated) : null;
       if (L) {
         const idx = L.n++;
         this.eul.set(V.pitch, V.yaw, V.roll);
         this.q.setFromEuler(this.eul);
-        this.pos.set(V.x, ROAD_Y, V.z);
+        this.pos.set(V.x, ROAD_Y + (V.offLane ? V.offY : 0), V.z);
         this.m4.compose(this.pos, this.q, this.scl);
         L.mesh.setMatrixAt(idx, this.m4);
         L.mesh.setColorAt(idx, this.colorOf(V.color));
         L.a1.setXYZW(idx, V.brakeVis, this.blinker(V), (V.odo / sp.wheelR) % (Math.PI * 2), V.steer);
-        L.a2.setXYZW(idx, V.variant, V.siren, V.phase, 1);
+        // bus doors: fold open once it has stopped, close before it pulls away (shader: aInst2.y = 10 + open)
+      if (sp.model === 'bus') V.doorK = Math.max(0, Math.min(1, V.doorK + (V.dwell > 0.9 && V.v < 0.2 ? realDt * 1.5 : -realDt * 1.6)));
+      L.a2.setXYZW(idx, V.variant, V.twoWheel ? V.crank : sp.model === 'bus' ? 10 + V.doorK : V.siren, V.phase, V.seated ? 2 : 1);
       }
 
       if (showLights && V.onScreen) {
@@ -321,7 +472,7 @@ export class VehicleRenderer {
         if (np + 2 <= this.maxPools) {
           // headlight pool ahead
           const L = V.spec.model === 'bus' ? 9 : 7.5,
-            W = sp.width * 1.9;
+            W = Math.max(sp.width * 1.9, 2.8); // (a scooter's low beam spreads like a car's, not a torch streak)
           this.eul.set(0, V.yaw, 0);
           this.q.setFromEuler(this.eul);
           this.pos.set(V.x + fx * (hl + L * 0.42), 0.03, V.z + fz * (hl + L * 0.42));
@@ -346,21 +497,25 @@ export class VehicleRenderer {
           this.scl.set(1, 1, 1);
         }
         if (nf + 4 <= this.maxFlares) {
-          const hy = sp.model === 'bus' ? 0.8 : sp.model === 'lorry' || sp.model === 'delivery' ? 0.72 : sp.model === 'suv' ? 0.92 : 0.72;
-          const hx = sp.width / 2 - 0.3;
-          for (let side = 1; side >= -1; side -= 2) {
+          // at the lamps themselves; beside the camera the lens glows by itself, a metre-wide sprite would be a ball of haze
+          const lp = this.flareAtLamps ? LAMP_AT[sp.model] : undefined;
+          const hy = lp ? lp.hy : V.twoWheel ? 0.92 : sp.model === 'bus' ? 0.8 : sp.model === 'lorry' || sp.model === 'delivery' ? 0.72 : sp.model === 'suv' ? 0.92 : 0.72;
+          const hx = lp ? lp.hx : V.twoWheel ? 0 : sp.width / 2 - 0.3;
+          const fd2 = (cp.x - V.x) ** 2 + (cp.y - 1) ** 2 + (cp.z - V.z) ** 2;
+          const fN = this.flareAtLamps ? Math.min(1, Math.max(0, (fd2 - 36) / (324 - 36))) : 1;
+          for (let side = 1; side >= (V.twoWheel ? 1 : -1); side -= 2) {
             let o = nf * 3;
             this.flarePos[o] = V.x + fx * (hl + 0.05) + rx * hx * side;
             this.flarePos[o + 1] = hy;
             this.flarePos[o + 2] = V.z + fz * (hl + 0.05) + rz * hx * side;
-            this.flareCol[o] = 1.0;
-            this.flareCol[o + 1] = 0.88;
-            this.flareCol[o + 2] = 0.66;
+            this.flareCol[o] = 1.0 * fN;
+            this.flareCol[o + 1] = 0.88 * fN;
+            this.flareCol[o + 2] = 0.66 * fN;
             nf++;
             o = nf * 3;
-            const b = 0.45 + V.brakeVis * 0.8;
+            const b = (0.45 + V.brakeVis * 0.8) * fN;
             this.flarePos[o] = V.x - fx * (hl + 0.05) + rx * hx * side;
-            this.flarePos[o + 1] = hy + 0.02;
+            this.flarePos[o + 1] = lp ? lp.ty : hy + 0.02;
             this.flarePos[o + 2] = V.z - fz * (hl + 0.05) + rz * hx * side;
             this.flareCol[o] = b;
             this.flareCol[o + 1] = b * 0.08;
@@ -406,6 +561,27 @@ export class VehicleRenderer {
           a.needsUpdate = true;
         }
       }
+    let cn = 0;
+    for (const L of this.closeRow) {
+      if (!L) continue;
+      const n = L.n;
+      L.mesh.count = n;
+      L.mesh.visible = n > 0;
+      if (L.glass) {
+        L.glass.count = n;
+        L.glass.visible = n > 0;
+      }
+      if (n === 0) continue;
+      cn += n;
+      tris += n * L.tris;
+      drawn += n;
+      for (const a of [L.mesh.instanceMatrix, L.mesh.instanceColor!, L.a1, L.a2]) {
+        a.clearUpdateRanges();
+        a.addUpdateRange(0, n * a.itemSize);
+        a.needsUpdate = true;
+      }
+    }
+    this.closeDrawn = cn;
     this.triangles = tris;
     this.drawn = drawn;
 
@@ -436,6 +612,7 @@ export class VehicleRenderer {
 
   private blinker(V: Vehicle): number {
     if (V.progT > 45) return 3;
+    if (V.hazard) return 3;
     if (V.departBlink > 0) return 1;
     const sim = this.sim;
     if (V.elem >= sim.NL) {
@@ -459,6 +636,8 @@ export class VehicleRenderer {
       { kind: 'sedan', variant: 1, color: '#f5c518' },
       { kind: 'sedan', variant: 2, color: '#f7f7f4', siren: 1 },
       { kind: 'suv', variant: 0, color: '#2a9d8f' },
+      { kind: 'estate', variant: 0, color: '#6b7078' },
+      { kind: 'mpv', variant: 0, color: '#8c1c13' },
       { kind: 'delivery', variant: 0, color: '#f4f2ec' },
       { kind: 'delivery', variant: 1, color: '#e63946' },
       { kind: 'delivery', variant: 2, color: '#457b9d' },
@@ -472,11 +651,11 @@ export class VehicleRenderer {
     for (let lod = 0; lod < (allLods ? MODEL_LODS : 1); lod++) {
       let x = x0;
       let z = z0 + lod * 28;
-      for (const it of items) {
+      items.forEach((it, i) => {
         const src = this.layers[MODEL_KINDS.indexOf(it.kind)][lod].mesh;
         const geo = src.geometry.clone();
         const a1 = new THREE.InstancedBufferAttribute(new Float32Array([it.brake ?? 0, it.blink ?? 0, 0.3, 0]), 4);
-        const a2 = new THREE.InstancedBufferAttribute(new Float32Array([it.variant, it.siren ?? 0, 0.2, 1]), 4);
+        const a2 = new THREE.InstancedBufferAttribute(new Float32Array([it.variant, it.siren ?? 0, (0.07 + i * 0.381) % 1, 1]), 4);
         geo.setAttribute('aInst', a1);
         geo.setAttribute('aInst2', a2);
         const mesh = new THREE.InstancedMesh(geo, src.material, 1);
@@ -496,20 +675,21 @@ export class VehicleRenderer {
         mesh.frustumCulled = false;
         this.group.add(mesh);
         x += sp.width + 1.6;
-      }
+      });
     }
   }
 
   /** triangles of one instance of each model at each level (debug / stats) */
   modelTris(): Record<string, number[]> {
     const out: Record<string, number[]> = {};
-    MODEL_KINDS.forEach((k, mi) => (out[k] = this.layers[mi].map((L) => L.tris)));
+    MODEL_KINDS.forEach((k, mi) => (out[k] = [...this.layers[mi].map((L) => L.tris), this.closeRow[mi]?.tris ?? 0]));
     return out;
   }
 
   drawCallsEstimate(): number {
     let n = 0;
     for (const row of this.layers) for (const L of row) if (L.n > 0) n += 2;
+    for (const L of this.closeRow) if (L && L.n > 0) n += L.glass ? 3 : 2;
     if (this.pools.visible) n++;
     if (this.flares.visible) n++;
     return n;
@@ -531,9 +711,11 @@ function poolTexture(): THREE.Texture {
     for (let i = 0; i < w; i++) {
       const u = (i + 0.5) / w - 0.5; // -0.5..0.5 across
       const v = (j + 0.5) / h; // 0 at the car end (texture top → local -Z) .. 1 far
-      const spread = 0.18 + v * 0.32;
-      const lat = Math.max(0, 1 - (Math.abs(u) / spread) ** 2);
-      const lon = Math.sin(Math.min(1, v * 1.15) * Math.PI) ** 0.8 * (1 - v * 0.35);
+      // light round: a real low-beam footprint — gaussian across (no flat plateau with an edge), bright a few
+      // metres ahead of the bumper, then a long inverse-square-ish fade (the old sine profile read as a lit quad)
+      const spread = 0.15 + v * 0.3;
+      const lat = Math.exp(-3.2 * (u / spread) ** 2) * Math.min(1, (0.5 - Math.abs(u)) * 12);
+      const lon = Math.min(1, v / 0.16) ** 1.5 * (1 - v) ** 1.6 * 1.25;
       const a = Math.max(0, Math.min(1, lat * lon));
       const k = (j * w + i) * 4;
       img.data[k] = img.data[k + 1] = img.data[k + 2] = 255;
@@ -547,9 +729,11 @@ function poolTexture(): THREE.Texture {
 }
 
 export function pickParkedModel(r: number): ModelKind {
-  if (r < 0.22) return 'compact';
-  if (r < 0.5) return 'hatch';
-  if (r < 0.78) return 'sedan';
+  if (r < 0.17) return 'compact';
+  if (r < 0.37) return 'hatch';
+  if (r < 0.55) return 'sedan';
+  if (r < 0.68) return 'estate';
+  if (r < 0.8) return 'mpv';
   return 'suv';
 }
 

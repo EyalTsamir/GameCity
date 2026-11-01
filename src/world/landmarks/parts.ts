@@ -5,6 +5,11 @@ import * as THREE from 'three';
 import { ANIM, FLOOD, LM, LMODE, M, Mat, PAT, withM } from './builder';
 import { Kit, V3 } from './kit';
 import type { Env } from './env';
+import { actorsOff, addActor, type ActorDef, type ActorRole } from '../../sim/pedestrians/actorDefs';
+
+const _pv = new THREE.Vector3();
+const _pp = new THREE.Vector3();
+const _pa = new THREE.Vector3();
 
 export const C = {
   stoneLight: '#e6dcc6',
@@ -199,7 +204,27 @@ export function flagpole(env: Env, x: number, y: number, z: number, h: number, f
  * Low-poly person (for static scenes: musicians, workers, statue groups). Built standing
  * on (x, y, z) facing ry. Returns nothing; colours: shirt, trousers, skin, hat (optional).
  */
-export function person(K: Kit, x: number, y: number, z: number, ry: number, shirt: THREE.ColorRepresentation, trousers: THREE.ColorRepresentation, skin: THREE.ColorRepresentation, hat?: THREE.ColorRepresentation, seated = false, armsUp = 0, k = 1): void {
+export function person(K: Kit, x: number, y: number, z: number, ry: number, shirt: THREE.ColorRepresentation, trousers: THREE.ColorRepresentation, skin: THREE.ColorRepresentation, hat?: THREE.ColorRepresentation, seated = false, armsUp = 0, k = 1, role: ActorRole = k < 0.8 ? 'kid' : armsUp > 0 ? 'conductor' : seated ? 'band' : 'worker'): void {
+  if (!actorsOff) {
+    // F2: a real posed figure of the pedestrians' crowd renderer stands here instead (sim/pedestrians/actorDefs.ts)
+    const b = K.b;
+    _pv.set(x, y, z).applyMatrix4(b.frame);
+    const an = b.anim;
+    let rot: ActorDef['rot'] = null;
+    let vis = -1;
+    if (an && (an.mode === ANIM.SWING || an.mode === ANIM.VIS)) {
+      if (an.mode === ANIM.VIS) vis = an.a;
+      const amp = an.mode === ANIM.SWING ? an.a : an.b;
+      if (Math.abs(amp) > 0.1) {
+        _pp.copy(an.pivot).applyMatrix4(b.frame);
+        _pa.copy(an.axis).transformDirection(b.frame);
+        rot = { px: _pp.x, py: _pp.y, pz: _pp.z, ax: _pa.x, ay: _pa.y, az: _pa.z, amp, freq: an.mode === ANIM.SWING ? an.b : 2.2, ph: an.c };
+      }
+    }
+    const sc = new THREE.Color(shirt);
+    addActor({ x: _pv.x, y: _pv.y, z: _pv.z, yaw: b.yaw + ry, role, seated, seatY: 0.45 * k, shirt: role === 'worker' ? -1 : sc.getHex(), vis, rot, child: k < 0.8 });
+    return;
+  }
   const c = Math.cos(ry),
     s = Math.sin(ry);
   const P = (lx: number, lz: number): [number, number] => [x + lx * k * c + lz * k * s, z - lx * k * s + lz * k * c];

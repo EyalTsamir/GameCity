@@ -10,17 +10,32 @@ import { samplePalette, SkyState } from './sky/palette';
 import { createSkyDome } from './sky/dome';
 import { createClouds, type HeroView, type Obstacle } from './sky/clouds';
 import { ShadowFitter } from './sky/shadowFit';
-import { EnvironmentBaker } from './sky/env';
+import { EnvironmentBaker, type EnvPhysical } from './sky/env';
 import { patchShadowChunk } from './sky/shadowPatch';
+import { patchIBLChunk, IBL_DIFFUSE, ENV_SPEC } from './sky/iblPatch';
+import { installSkyVis, type SkyVisStats } from './sky/skyVis';
+import { patchLampSpecular } from '../core/lampLight';
 import { createRain } from './sky/rain';
+import { Lightning } from './sky/lightning';
 import { cameraFocus } from './focus';
 import { TONE_MAPPING } from './look';
 import type { RenderTest } from './sky/renderTest';
 import { MAX_CLOUDS, type CloudShadowData } from './postfx/cloudShadow';
+import { createStageUniforms, type StageService } from './stage/table';
+import { PLINTH_BOTTOM_Y } from './stage/constants';
+import { WORLD_MODE } from '../core/world';
+import { installAtmosphere, evalRing } from './atmosphere';
+import { AtmosphereDriver, skyElevationDeg } from './sky/atmoDrive';
+import { cloudLayerUniforms } from './sky/cloudLayer';
+import { CloudVolume } from './sky/cloudVolume';
+import { WeatherDirector } from './sky/weather';
+import { detailOn } from '../core/detaillight';
+import { patchWetChunk, wetData } from './sky/wetSurfaces';
 
 const _focus = new THREE.Vector3();
 const _L = new THREE.Vector3();
 const _sunSky = new THREE.Vector3();
+const _sunVisual = new THREE.Vector3();
 const _tmpC = new THREE.Color();
 const _grey = new THREE.Color();
 
@@ -46,7 +61,36 @@ function liftElevation(src: THREE.Vector3, minSin: number, out: THREE.Vector3): 
 
 export default async function create(ctx: CityContext): Promise<CityModule> {
   const { renderer, scene, clock, plan } = ctx;
+  // world mode (default): real sky to the horizon + aerial perspective replacing three's fog chunks
+  // (installed before ANY material compiles); ?diorama keeps the studio tabletop exactly as it was.
+  // ?noatmo = world sky but three's linear fog (A/B of the atmosphere alone)
+  const world = WORLD_MODE;
+  const atmoOn = world && !ctx.debug.params.has('noatmo');
+  if (atmoOn) installAtmosphere();
+  // world sky: physical single scattering (?paintsky = the painted gradient instead)
+  const physSky = world && !ctx.debug.params.has('paintsky');
+  const atmo = new AtmosphereDriver(physSky);
+  const atmoParam = Number(ctx.debug.params.get('atmo'));
+  if (Number.isFinite(atmoParam) && ctx.debug.params.has('atmo')) atmo.hazeK = Math.max(0, atmoParam);
+  atmo.mistOn = !ctx.debug.params.has('nomist');
+  const atmoSvc = atmo.service(atmoOn);
+  if (world) ctx.services.atmosphere = atmoSvc;
+  // ?legacylight = the original light rig (palette, shadow filtering, IBL) for A/B runs
+  const legacyParam = ctx.debug.params.has('legacylight');
+  const shadowOld = ctx.debug.params.has('shadowold');
+  const noMeter = ctx.debug.params.has('noexpmeter');
+  let meterEV = 1;
+  let legacy = legacyParam;
   patchShadowChunk();
+  // light round: reflections at the sky's own brightness, diffuse ambient unchanged (?envold)
+  const envSpec = world && !legacyParam && !ctx.debug.params.has('envold') ? ENV_SPEC : 1;
+  if (!legacyParam) patchIBLChunk(IBL_DIFFUSE / envSpec);
+  // light round: street-canyon sky visibility for the ambient light (?noskyvis; off on the low tier)
+  let skyVis: SkyVisStats | null = null;
+  if (world && !legacyParam && !ctx.debug.params.has('noskyvis') && ctx.quality.level !== 'low') skyVis = installSkyVis(ctx.plan);
+  // light round: street lamps' specular sheen — opt-in (?lampspec, never on the low tier): measured 1.1–2.3 ms at night
+  // on the Adreno (it keeps the lamp term alive in every uber-shader) for a faint streak on the asphalt
+  if (!legacyParam && ctx.debug.params.has('lampspec') && ctx.quality.level !== 'low') patchLampSpecular();
   renderer.toneMapping = TONE_MAPPING;
   renderer.shadowMap.enabled = ctx.quality.shadows;
   renderer.shadowMap.type = THREE.PCFShadowMap;
@@ -69,7 +113,28 @@ export default async function create(ctx: CityContext): Promise<CityModule> {
   scene.add(hemi);
 
   // ── backdrop, clouds, rain
-  const dome = createSkyDome();
+  // world: the high cloud sky (cumulus deck + cirrus), shared with the cloud-shadow map (?noclouds)
+  const cloudLayer = world && !ctx.debug.params.has('noclouds') ? cloudLayerUniforms() : null;
+  const cloudCovParam = ctx.debug.params.has('clouds') ? Number(ctx.debug.params.get('clouds')) : NaN;
+  const cloudDayRng = ctx.rng('cloud-days');
+  const cloudDay = { day: -1, cu: 1, ci: 1 };
+  const sunsetOn = detailOn('sunsetsky');
+  const dome = createSkyDome(world, physSky, cloudLayer);
+  // the cumulus deck is raymarched at half resolution for the final camera of each frame: post-processing
+  // calls renderClouds() right before the scene pass; without it the sky module renders it in frame()
+  const cloudVol = cloudLayer ? new CloudVolume(cloudLayer) : null;
+  cloudVol?.setQuality(ctx.quality.level);
+  ctx.events.on('quality', () => cloudVol?.setQuality(ctx.quality.level));
+  // a time jump changes the light on every cloud at once: start the temporal history afresh
+  ctx.events.on('timejump', () => cloudVol?.reset());
+  let cloudVolFrame = -1;
+  let frameNo = 0;
+  const renderClouds = (r: THREE.WebGLRenderer, cam: THREE.PerspectiveCamera) => {
+    if (!cloudVol || cloudVolFrame === frameNo) return;
+    cloudVolFrame = frameNo;
+    cloudVol.render(r, cam);
+    dome.setCloudVolume(cloudVol.texture, cloudVol.fullRes);
+  };
   scene.add(dome.mesh);
 
   const obstacles: Obstacle[] = [];
@@ -96,21 +161,60 @@ export default async function create(ctx: CityContext): Promise<CityModule> {
     hero = { target, position: target.clone().addScaledVector(dir, heroPoi.distance) };
   }
   const clouds = createClouds(ctx.rng('clouds'), plan.slab, obstacles, cloudCount, hero, ctx.uniforms.uWind.value);
-  clouds.setShadows(ctx.quality.shadows);
+  // world mode: the low cotton puffs are a tabletop prop (the high cloud sky replaces them)
+  const cottonClouds = !world;
+  clouds.setShadows(ctx.quality.shadows && cottonClouds);
+  clouds.mesh.visible = cottonClouds;
   scene.add(clouds.mesh);
 
   const rainRng = ctx.rng('rain-streaks');
-  const rain = createRain(Math.round(6000 * Math.max(0.5, ctx.quality.density)), () => rainRng.next());
-  scene.add(rain.mesh);
+  const rain = createRain(Math.max(0.5, ctx.quality.density), () => rainRng.next());
+  scene.add(rain.mesh, rain.splash);
+  // the ground under the splashes (1 m map of the rendered ground over the slab: kerbs stay where they are)
+  ctx.events.on('modules:ready', () => {
+    const t = ctx.services.terrain as { height?(x: number, z: number): number } | undefined;
+    if (!t?.height) return;
+    const s = plan.slab;
+    const w = Math.ceil(s.x1 - s.x0),
+      d = Math.ceil(s.z1 - s.z0);
+    const data = new Float32Array(w * d);
+    for (let j = 0; j < d; j++) for (let i = 0; i < w; i++) data[j * w + i] = t.height(s.x0 + i + 0.5, s.z0 + j + 0.5);
+    const tex = new THREE.DataTexture(data, w, d, THREE.RedFormat, THREE.FloatType);
+    tex.needsUpdate = true;
+    rain.setGround(tex, new THREE.Vector4(s.x0, s.z0, 1 / w, 1 / d));
+  });
 
   // ── fog, background, environment
   const fog = new THREE.Fog('#d4e2ec', 800, 4000);
   scene.fog = fog;
   scene.background = new THREE.Color('#d8e8f2');
-  const env = new EnvironmentBaker(renderer, 128);
+  const env = new EnvironmentBaker(renderer, 128, physSky);
+  const envPhys: EnvPhysical | null = atmo.lut ? { lut: atmo.lut.texture, scale: 1, nightZen: new THREE.Color(), nightHor: new THREE.Color(), nightW: 0, lobe: new THREE.Color(), lobeExp: 7, sat: 0.7 } : null;
+  env.phys = envPhys;
+  env.studio = !legacy;
   scene.environmentIntensity = 0.7;
 
-  const fitter = new ShadowFitter({ slab: plan.slab, minY: -8, maxY: Math.max(maxStructure + 10, 175), sampleHeights: [0, 28] });
+  // world: the ground continues beyond the slab (landscape near ring) — the visible region is limited
+  // by the radius around the focus instead of by the slab
+  const shadowArea = world ? { x0: plan.slab.x0 - 1400, x1: plan.slab.x1 + 1400, z0: plan.slab.z0 - 1400, z1: plan.slab.z1 + 1400 } : plan.slab;
+  const fitter = new ShadowFitter({ slab: shadowArea, minY: -8, maxY: Math.max(maxStructure + 10, 175), sampleHeights: [0, 28] });
+  const fitStudio = () => {
+    // studio: the table (y ≈ plinth bottom) is a receiver and a strip of it around the plinth is covered
+    fitter.params.minY = legacy || world ? -8 : PLINTH_BOTTOM_Y - 2;
+    fitter.params.margin = legacy || world ? 6 : 14;
+  };
+  fitStudio();
+
+  // ── studio set: table uniforms (the terrain slab builds the table mesh after us)
+  const stage: StageService = { uniforms: createStageUniforms(), table: null, legacyContact: null };
+  ctx.services.stage = stage;
+  const _cyc = new THREE.Color();
+  // ?notable: studio key without the table (perf A/B of the table alone; the dome floor stays)
+  let noTable = ctx.debug.params.has('notable');
+  const applyStageVisibility = () => {
+    if (stage.table) stage.table.visible = !legacy && !noTable;
+    if (stage.legacyContact) stage.legacyContact.visible = legacy || noTable;
+  };
   const state = new SkyState();
 
   // ── weather (rare light showers; ?weather=rain|clear overrides)
@@ -121,6 +225,15 @@ export default async function create(ctx: CityContext): Promise<CityModule> {
   let plannedDay = clock.day; // no shower on the first day
   let rainAmt = forced ?? 0;
   const absHours = () => (clock.day - 1) * 24 + clock.hours;
+  // detail round: a storm band crossing the town (sky/weather.ts, ?nostorm = the old even shower)
+  const director = world && cloudLayer && detailOn('storm') ? new WeatherDirector(wRng, clock.day, ctx.debug.params) : null;
+  atmo.storm = director;
+  if (director) director.layer = cloudLayer;
+  if (director) (ctx.services as { weather?: WeatherDirector }).weather = director;
+  const wetOn = !!director && detailOn('wetfacade') && patchWetChunk();
+  let sunOver = 0;
+  const lightning = director ? new Lightning(ctx.rng('lightning'), ctx.events) : null;
+  if (lightning) scene.add(lightning.mesh);
   const planDay = (day: number) => {
     plannedDay = day;
     if (wRng.next() < 0.4) {
@@ -130,17 +243,44 @@ export default async function create(ctx: CityContext): Promise<CityModule> {
   };
 
   // soft cloud shadows are drawn by post-processing from this shared data
-  const cloudShadows: CloudShadowData = { data: new Float32Array(MAX_CLOUDS * 8), count: 0, light: new THREE.Vector3(0, 1, 0), strength: 0, tint: new THREE.Color(0.6, 0.64, 0.74) };
+  const cloudShadows: CloudShadowData = { data: new Float32Array(MAX_CLOUDS * 8), count: 0, light: new THREE.Vector3(0, 1, 0), strength: 0, tint: new THREE.Color(0.6, 0.64, 0.74), field: cloudLayer ?? undefined };
   ctx.services.cloudShadows = cloudShadows;
   const _shTint = new THREE.Color();
 
-  ctx.services.sky = {
+  /** live multipliers on top of the palette (debug / tuning sessions only) */
+  const tune = { sun: 1, hemi: 1, env: 1, exposure: 1, pcf: 1, bias: 1 };
+  const skyService = {
     sun,
     hemi,
+    /** 0..1: how much of the light is direct sun now (0 by night, under cloud) */
+    keyShare: 0,
     setWeather(r: number) {
       forced = Number.isFinite(r) ? Math.min(1, Math.max(0, r)) : null;
+      director?.setForced(forced);
     },
+    /** A/B: switch palette + shadow filtering to the original rig at runtime (IBL patch stays as loaded) */
+    setLegacy(on: boolean) {
+      legacy = !!on;
+      env.studio = !legacy;
+      fitStudio();
+      applyStageVisibility();
+      lastJump = true;
+    },
+    isLegacy: () => legacy,
+    /** A/B: show / hide the studio table at runtime (same as ?notable) */
+    setTable(on: boolean) {
+      noTable = !on;
+      applyStageVisibility();
+    },
+    tune,
+    /** a lightning strike now (tests) */
+    strike(bolt = true) {
+      lightning?.strike(ctx.camera, cloudLayer ? cloudLayer.uCu.value.y : 1000, bolt);
+    },
+    /** world: render the raymarched cumulus deck for this frame's final camera (postfx calls it) */
+    renderClouds,
   };
+  ctx.services.sky = skyService;
 
   let test: RenderTest | null = null;
   if (ctx.debug.params.has('rendertest')) {
@@ -161,12 +301,36 @@ export default async function create(ctx: CityContext): Promise<CityModule> {
 
   const frameUpdate = (realDt: number) => {
     realTime += realDt;
-    samplePalette(clock.hours, state);
-    const sh = clock.sunHeight;
+    frameNo++;
+    // no post-processing to call renderClouds() with the final camera: render with last frame's camera
+    if (cloudVol && !ctx.services.postfx) renderClouds(renderer, ctx.camera);
+    samplePalette(clock.hours, state, legacy);
+    // world: the rendered sun follows the authored golden key — the clock's sine path keeps the sun ~17° up
+    // 1.3 h before sunset, a real late-afternoon sun sinks almost linearly (~10–12°) — so light, shadows
+    // (long and raking), disc, glow, sky and clouds all use one lower "visual" sun at golden hour
+    _sunVisual.copy(clock.sunDir);
+    if (world) {
+      const elT = THREE.MathUtils.radToDeg(Math.asin(THREE.MathUtils.clamp(clock.sunDir.y, -1, 1)));
+      const elV = THREE.MathUtils.degToRad(skyElevationDeg(elT, clock.hours));
+      const hz = Math.hypot(clock.sunDir.x, clock.sunDir.z);
+      if (hz > 1e-6) _sunVisual.set((clock.sunDir.x / hz) * Math.cos(elV), Math.sin(elV), (clock.sunDir.z / hz) * Math.cos(elV));
+      // shared with every shader (backlight / translucency): the sun they light by is the one shown
+      ctx.uniforms.uSunDir.value.copy(_sunVisual);
+    }
+    // (sun height of the rendered sun: direct light, disc, clouds and twilight follow the visual sunset)
+    const sh = world ? _sunVisual.y : clock.sunHeight;
 
     // ── weather envelope
     let target = 0;
-    if (forced !== null) target = forced;
+    if (director) {
+      director.update(realDt, realDt * clock.speed * clock.rate, clock.day, absHours(), lastJump, _sunVisual, ctx.uniforms.uWind.value);
+      // a storm's wind: every tree, flag and wave in town reads it
+      if (director.storm > 0.001) {
+        const w = ctx.uniforms.uWind.value;
+        const l = Math.hypot(w.x, w.y) || 1;
+        w.multiplyScalar((l + (1.5 - Math.min(1.5, l)) * director.storm) / l);
+      }
+    } else if (forced !== null) target = forced;
     else {
       const now = absHours();
       if (clock.day > plannedDay) planDay(clock.day);
@@ -177,8 +341,19 @@ export default async function create(ctx: CityContext): Promise<CityModule> {
         if (now > ep.end) episode = null;
       }
     }
-    rainAmt += (target - rainAmt) * Math.min(1, realDt * (lastJump ? 100 : 0.6));
-    overcast = Math.min(1, rainAmt * 1.25);
+    if (director) {
+      rainAmt = director.rain;
+      overcast = director.overhead;
+      sunOver = director.sunBlock;
+      const stormNear = director.amount * (1 - smooth(9000, 50000, director.trail)) * smooth(-60000, -20000, director.lead);
+      const cu = cloudLayer!;
+      cu.uStorm.value.set(director.dir.x, director.dir.y, director.lead, director.trail);
+      cu.uStormK.value.set(director.amount, 3500, director.dark * 0.62, stormNear);
+    } else {
+      rainAmt += (target - rainAmt) * Math.min(1, realDt * (lastJump ? 100 : 0.6));
+      overcast = Math.min(1, rainAmt * 1.25);
+      sunOver = overcast;
+    }
     ctx.uniforms.uRain.value = rainAmt;
 
     // ── direct light: sun by day, moon by night, crossfading through ~zero at twilight
@@ -186,16 +361,23 @@ export default async function create(ctx: CityContext): Promise<CityModule> {
     const moonW = smooth(0.0, -0.12, sh);
     usingMoon = moonW > sunW;
     if (usingMoon) liftElevation(clock.moonDir, Math.sin(THREE.MathUtils.degToRad(14)), _L);
-    else liftElevation(clock.sunDir, Math.sin(THREE.MathUtils.degToRad(6.5)), _L);
-    lightI = state.sunI * Math.max(sunW, moonW) * (1 - overcast * 0.72);
+    else liftElevation(_sunVisual, Math.sin(THREE.MathUtils.degToRad(6.5)), _L);
+    lightI = state.sunI * Math.max(sunW, moonW) * (1 - sunOver * (director ? 0.9 : 0.72)) * tune.sun;
     sun.color.copy(state.sun);
-    if (overcast > 0) sun.color.lerp(_grey.setRGB(0.85, 0.88, 0.95), overcast * 0.6);
+    if (sunOver > 0) sun.color.lerp(_grey.setRGB(0.85, 0.88, 0.95), sunOver * 0.6);
     sun.intensity = lightI;
-    sun.shadow.radius = usingMoon ? 3.5 : 2.2 + 1.2 * state.glowI * 0.5 + overcast * 2;
+    if (legacy) sun.shadow.radius = usingMoon ? 3.5 : 2.2 + 1.2 * state.glowI * 0.5 + overcast * 2;
 
     hemi.color.copy(state.hemiSky);
     hemi.groundColor.copy(state.hemiGround);
-    hemi.intensity = state.hemiI * (1 + overcast * 0.12);
+    hemi.intensity = state.hemiI * (1 + overcast * (legacy ? 0.12 : 0.5)) * (director ? 1 - director.dark * 0.5 * overcast : 1) * tune.hemi;
+    // the flash lights the whole town from the sky
+    const flash = lightning ? lightning.value : 0;
+    if (flash > 0.01) {
+      hemi.intensity += flash * 1.5;
+      hemi.color.lerp(_grey.setRGB(0.72, 0.8, 1.0), Math.min(1, flash));
+      hemi.groundColor.lerp(_grey.setRGB(0.4, 0.44, 0.52), Math.min(1, flash));
+    }
     if (overcast > 0) {
       const g = lum(hemi.color);
       hemi.color.lerp(_grey.setRGB(g, g * 1.02, g * 1.08), overcast * 0.55);
@@ -204,8 +386,47 @@ export default async function create(ctx: CityContext): Promise<CityModule> {
     // ── backdrop
     sunVis = smooth(-0.06, 0.03, sh);
     moonVis = smooth(0.06, -0.1, sh);
-    _sunSky.copy(clock.sunDir);
-    dome.update(state, _sunSky, clock.moonDir, sunVis, moonVis, clock.realTime, overcast);
+    _sunSky.copy(_sunVisual);
+    // (with a storm band the dome reads the band itself; what others copy from it is the sun's cover: the water's glitter)
+    dome.update(state, _sunSky, clock.moonDir, sunVis, moonVis, clock.realTime, sunOver);
+    if (world) {
+      // sky glow of the lit town (and the villages around): warm, low, only with the street lights on
+      atmo.cityGlow.setRGB(1.0, 0.6, 0.32).multiplyScalar(0.045 * ctx.uniforms.uLights.value * (1 - overcast * 0.3) + 0.03 * overcast * ctx.uniforms.uLights.value);
+      dome.setCityGlow(atmo.cityGlow);
+      atmo.update(renderer, state, _sunSky, sunVis, overcast, ctx.camera.position.y, ctx.uniforms.uWind.value, clock.speed > 0 ? realDt * clock.speed : 0, clock.hours);
+      // the horizon other modules mirror (water): the haze ~120° from the sun — the sea mostly reflects
+      // the sky away from the sun; the sun side is the palette glow they already add
+      // Belt of Venus: strongest with the (visual) sun from ~+3° to −5°, a faint pink arch at golden hour
+      {
+        const el = THREE.MathUtils.radToDeg(Math.asin(THREE.MathUtils.clamp(_sunVisual.y, -1, 1)));
+        const k = smooth(-9, -3, el) * (1 - smooth(4, 16, el) * 0.7) * (1 - smooth(16, 22, el));
+        const l = THREE.MathUtils.clamp(lum(atmo.params.ring[0]), 0, 2);
+        _belt.setRGB(1.0, 0.6, 0.66).multiplyScalar(0.32 * k * l * (1 - overcast));
+        dome.setBelt(_belt);
+        dome.setSkySat(0.4 * atmo.golden);
+      }
+      // (35 % toward the blue air: the sea's body reads blue/teal, not lilac, under the earth-shadow band)
+      evalRing(atmo.params.ring, 2.1, _hor).lerp(atmo.params.airColor, 0.35);
+      if (atmo.lut) dome.setPhysical(atmo.lut.texture, atmo.skyScale, state.zenith, state.horizon, atmo.nightW, atmo.sunColor, atmo.zenith, _hor);
+      if (envPhys) {
+        envPhys.scale = atmo.skyScale;
+        envPhys.nightZen.copy(state.zenith);
+        envPhys.nightHor.copy(state.horizon);
+        envPhys.nightW = atmo.nightW;
+        // the broad part of the sun lobe only (the direct light owns the highlight)
+        envPhys.lobe.copy(atmo.params.lobeColor).multiplyScalar(0.35);
+        envPhys.lobeExp = atmo.params.lobeExp;
+      }
+    }
+    if (!legacy && !world) {
+      _cyc.copy(state.cyc);
+      if (overcast > 0) {
+        const g = lum(_cyc);
+        _cyc.lerp(_grey.setRGB(g * 0.92, g * 0.96, g * 1.02), overcast * 0.75);
+      }
+      dome.setStudio(_cyc);
+      stage.uniforms.uCyc.value.copy(_cyc);
+    } else dome.setStudio(null);
 
     // ── camera-dependent: focus, fog, shadows, clouds, rain
     const dist = cameraFocus(ctx, _focus);
@@ -215,23 +436,56 @@ export default async function create(ctx: CityContext): Promise<CityModule> {
       const g = lum(_tmpC);
       _tmpC.lerp(_grey.setRGB(g * 1.05, g * 1.08, g * 1.14), overcast * 0.6);
     }
-    fog.color.copy(_tmpC);
     (scene.background as THREE.Color).copy(state.horizon);
-    const camH = Math.max(1, camPos.y);
-    fog.near = (dist * 1.1 + 160) * (1 - overcast * 0.45);
-    fog.far = (dist * 3.2 + 1700 + camH * 1.5) * (1 - overcast * 0.5);
+    if (world) {
+      // the atmosphere owns the look; these values only serve CPU consumers (reflection horizons)
+      // and the ?noatmo A/B (three's linear fog over the same distances)
+      atmo.fogColor(fog.color);
+      fog.near = atmoSvc.distanceFor(0.97, Math.max(0, camPos.y));
+      fog.far = Math.max(fog.near + 10, atmoSvc.distanceFor(0.08, Math.max(0, camPos.y)));
+    } else {
+      fog.color.copy(_tmpC);
+      const camH = Math.max(1, camPos.y);
+      fog.near = (dist * 1.1 + 160) * (1 - overcast * 0.45);
+      fog.far = (dist * 3.2 + 1700 + camH * 1.5) * (1 - overcast * 0.5);
+    }
 
-    renderer.toneMappingExposure = state.exposure * (1 + overcast * 0.12);
-    scene.environmentIntensity = state.env * (1 - overcast * 0.2);
+    // light round: metering — a camera down in a street canyon (little sky around it) exposes up to ~+0.3 EV more,
+    // as a photographer / auto-exposure would; eased, so walking past a gap never pumps (?noexpmeter)
+    if (skyVis && !noMeter) {
+      const v = skyVis.at(camPos.x, camPos.y, camPos.z);
+      const target = Math.min(1.3, Math.pow(1 / (0.5 + 0.5 * v), 0.62));
+      meterEV += (target - meterEV) * (lastJump ? 1 : Math.min(1, realDt * 1.5));
+    }
+    renderer.toneMappingExposure = state.exposure * (1 + overcast * 0.12) * tune.exposure * meterEV;
+    scene.environmentIntensity = state.env * (1 - overcast * 0.2) * tune.env * envSpec * (1 + flash * 2);
 
     if (sun.castShadow) {
-      const maxR = THREE.MathUtils.clamp(dist * 1.55 + 30, 70, 420);
-      const minR = THREE.MathUtils.clamp(dist * 0.55, 28, 200);
-      fitter.fit(ctx.camera, sun, _L, _focus, maxR, minR);
+      // world: no tilt-shift blur hides the distance → a wider shadowed region, not trimmed behind the focus
+      // (overview distances: the long golden-hour shadows of trees, hedgerows and towers across the fields
+      // around the town need the map out to ~1 km; texels stay ≈ 1 m there, ≈ 0.3 m at POI distances)
+      // (light round: from street level a 105 m disc — texels ≈ 10 cm instead of 14 at the eye-level views, where
+      // contact shadows of bikes, benches and people live; the overview distances are unchanged; ?shadowold)
+      const maxR = world ? (shadowOld ? THREE.MathUtils.clamp(dist * 1.6 + 120, 140, 950) : THREE.MathUtils.clamp(dist * 1.75 + 90, 105, 950)) : legacy ? THREE.MathUtils.clamp(dist * 1.55 + 30, 70, 420) : THREE.MathUtils.clamp(dist * 1.2 + 24, 60, 420);
+      const minR = legacy ? THREE.MathUtils.clamp(dist * 0.55, 28, 200) : THREE.MathUtils.clamp(dist * 0.45, 22, 200);
+      fitter.fit(ctx.camera, sun, _L, _focus, maxR, minR, legacy || world ? 1 : 0.62);
       const cam = sun.shadow.camera;
       const range = Math.max(10, cam.far - cam.near);
-      sun.shadow.normalBias = fitter.texel * 1.1;
-      sun.shadow.bias = -(fitter.texel * 0.35 + 0.02) / range;
+      const texel = fitter.texel;
+      if (legacy) {
+        sun.shadow.normalBias = texel * 1.1;
+        sun.shadow.bias = -(texel * 0.35 + 0.02) / range;
+      } else {
+        // penumbra in WORLD units (a small sun-disc softness that grows a little at low sun and
+        // for the moon), converted to texels of the fitted map: close views get soft-but-crisp
+        // edges, far views stay at ~1 texel instead of smearing over several texels
+        const world = usingMoon ? 0.42 : 0.15 + 0.12 * state.glowI + overcast * 0.9;
+        sun.shadow.radius = THREE.MathUtils.clamp((world / texel) * tune.pcf, 1.0, 3.2);
+        // normal offset scaled with the texel (acne) but smaller than before: it shortens small
+        // casters' shadows by bias·cot(elevation) at low sun
+        sun.shadow.normalBias = texel * 0.8 * tune.bias;
+        sun.shadow.bias = -(texel * 0.3 + 0.02) / range;
+      }
       lastShadowHs = fitter.halfSize;
     } else {
       sun.position.copy(_focus).addScaledVector(_L, 400);
@@ -241,14 +495,97 @@ export default async function create(ctx: CityContext): Promise<CityModule> {
     }
 
     const lights = ctx.uniforms.uLights.value;
+    // studio table: analytic slab shadow follows the shadow-casting light; city spill at night
+    stage.uniforms.uStageL.value.copy(_L);
+    stage.uniforms.uStageShadow.value = (usingMoon ? 0.6 * moonW : sunW) * (1 - overcast * 0.85);
+    stage.uniforms.uCityGlow.value = lights;
+    // at night the table gives way to the indigo backdrop sooner (the lit town sits in a pool)
+    const nightK = clock.night;
+    stage.uniforms.uFade.value.set(60 - 28 * nightK, 560 - 200 * nightK);
+    stage.uniforms.uTableSpec.value = 1 - 0.7 * nightK;
+    if (stage.table && stage.table.visible !== (!legacy && !noTable)) applyStageVisibility();
     // clouds go dim + translucent only after the afterglow / blue hour (dusk keeps its pink glow)
     const cloudNight = smooth(-0.07, -0.3, sh);
-    clouds.frame(ctx.camera, state, _L, sun.color, lightI, sunVis, lights * (1 - sunVis * 0.8), overcast, cloudNight);
-    const shStrength = (usingMoon ? 0.3 * moonW : sunW) * (1 - overcast * 0.85);
+    if (cottonClouds) clouds.frame(ctx.camera, state, _L, sun.color, lightI, sunVis, lights * (1 - sunVis * 0.8), overcast, cloudNight);
+    const shStrength = (usingMoon ? 0.3 * moonW : sunW) * (1 - sunOver * 0.85);
+    skyService.keyShare = usingMoon ? 0 : sunW * (1 - sunOver * 0.85); // (contact shadows, postfx/contact.ts)
     _shTint.setRGB(0.6, 0.645, 0.75);
     clouds.writeShadows(cloudShadows, _L, shStrength, _shTint);
+    if (cloudLayer) {
+      const cu = cloudLayer;
+      if (director) dome.setRainbow(_rb.copy(atmo.sunColor).multiplyScalar(0.6), director.rainbow);
+      // fair-weather cumulus: few in the morning, building up by early afternoon, thinning at dusk;
+      // every day a little different; rain fills the sky
+      if (cloudDay.day !== clock.day) {
+        cloudDay.day = clock.day;
+        cloudDay.cu = cloudDayRng.range(0.65, 1.3);
+        cloudDay.ci = cloudDayRng.range(0.4, 1.4);
+      }
+      const h = clock.hours;
+      // fair-weather cumulus build up after the morning and dissolve in the evening (convection stops):
+      // the golden hour is mostly clear, a few clouds left to catch the sunset
+      let cov = (0.17 + 0.26 * smooth(8.5, 14, h) - (sunsetOn ? 0.1 : 0.2) * smooth(15.5, 19.2, h)) * cloudDay.cu;
+      if (Number.isFinite(cloudCovParam)) cov = cloudCovParam;
+      if (!director) cov += (0.97 - cov) * overcast;
+      cu.uCu.value.x = Math.min(1, Math.max(0, cov));
+      // humilis (~0.4–0.6 km) when sparse, mediocris (~1 km) when the deck fills in
+      cu.uCuSlab.value.x = 380 + 700 * Math.min(1, cu.uCu.value.x * 1.6); // wider than tall
+      if (director) {
+        // a storm's deck: lower and thick, towering where its edge is lit from the side
+        const near = cu.uStormK.value.w;
+        cu.uCu.value.y = 1500 - 500 * near;
+        cu.uCuSlab.value.x += (2400 - cu.uCuSlab.value.x) * near;
+      }
+      // (mares' tails catch the low sun long after and before the cumulus: what makes a sunset)
+      const ciLow = sunsetOn ? 1 + 1.3 * (1 - smooth(0.12, 0.42, _sunSky.y)) : 1;
+      cu.uCi.value.x = Math.min(0.85, 0.32 * cloudDay.ci * ciLow) * (1 - (director ? cu.uStormK.value.w : overcast) * 0.6);
+      // light on the clouds: the sun after the atmosphere at deck height (pink after sunset), or the moon
+      const comp = Math.pow(Math.max(1, atmo.comp), 0.6);
+      if (usingMoon) {
+        cu.uCloudL.value.copy(clock.moonDir);
+        cu.uCloudSun.value.copy(state.sun).multiplyScalar(0.16 * moonW);
+      } else {
+        cu.uCloudL.value.copy(_sunSky);
+        cu.uCloudSun.value.copy(atmo.cloudSunT).multiplyScalar(2.5 * comp * (director ? 1 : 1 - overcast * 0.7));
+      }
+      // ambient from the (blue) sky dome above the deck — not from the horizon haze (warm at golden hour)
+      cu.uCloudAmbTop.value.copy(atmo.zenith).lerp(atmo.params.ring[0], 0.3).multiplyScalar(1.15);
+      cu.uCloudAmbBot.value.copy(state.hemiGround).multiplyScalar(state.hemiI * 0.55).add(_tmpC.copy(state.sun).multiplyScalar(lightI * 0.04));
+      if (overcast > 0) {
+        const g = lum(cu.uCloudAmbTop.value);
+        cu.uCloudAmbTop.value.lerp(_grey.setRGB(g, g * 1.02, g * 1.06), overcast * 0.7).multiplyScalar(1 - overcast * 0.35);
+      }
+      if (director && director.amount > 0) {
+        // storm bases are slate: little light comes up from the shaded ground under them
+        const dk = director.dark * cu.uStormK.value.w;
+        cu.uCloudAmbBot.value.multiplyScalar(1 - 0.75 * dk);
+        cu.uCloudAmbTop.value.multiplyScalar(1 - 0.5 * dk);
+      }
+      cu.uCloudCity.value.setRGB(1.0, 0.62, 0.34).multiplyScalar(0.1 * lights);
+      // shadows on the ground from the same field (soft, faded by the haze in front of them)
+      cloudShadows.light.copy(_L);
+      // at a low sun the deck's shadows land far away, smeared over long slant paths: weaker
+      const lowSun = smooth(0.1, 0.45, _L.y);
+      cloudShadows.strength = shStrength * smooth(0.0, 0.1, cu.uCu.value.x) * (0.55 + 0.45 * lowSun);
+      // under a real cloud only the (blue) sky light remains: darker and cooler than the toy puffs' shade
+      cloudShadows.tint.setRGB(0.48, 0.53, 0.65);
+      cloudShadows.haze = atmo.params.haze + atmo.params.rayleigh.y;
+    }
     _tmpC.copy(state.cloudShade).lerp(state.fog, 0.4).multiplyScalar(1.3);
-    rain.update(clock.simTime, rainAmt, _focus, dist, ctx.uniforms.uWind.value, _tmpC);
+    renderer.getDrawingBufferSize(_rs);
+    if (wetOn) wetData[0] = director!.wet;
+    if (director) {
+      // rain is seen by the light around it: dim in a storm's shade, nearly black at night (the lamps light it)
+      const skyL = lum(hemi.color) * hemi.intensity;
+      _tmpC.setRGB(0.72, 0.78, 0.88).multiplyScalar(Math.min(0.9, 0.05 + skyL * 0.42 + flash * 0.15));
+    }
+    rain.update(clock.simTime, rainAmt, _focus, dist, ctx.camera, ctx.uniforms.uWind.value, _tmpC, _rs.x, _rs.y);
+    if (lightning && cloudLayer) {
+      lightning.update(realDt, director!.storm, ctx.camera, cloudLayer.uCu.value.y, _rs.x, _rs.y);
+      cloudLayer.uCloudFlash.value.set(lightning.at.x, lightning.at.z, flash * 2.4, 3400);
+      dome.setFlash(lightning.dir, flash);
+      director!.flashNow = flash;
+    }
 
     // ── environment (only when the palette drifted noticeably)
     env.maybeBake(scene, state, _sunSky, sunVis, lights, realTime, lastJump);
@@ -263,7 +600,14 @@ export default async function create(ctx: CityContext): Promise<CityModule> {
   return {
     name: 'sky',
     update(dt) {
-      clouds.step(dt, ctx.uniforms.uWind.value);
+      if (cottonClouds) clouds.step(dt, ctx.uniforms.uWind.value);
+      if (cloudLayer && dt > 0) {
+        // the deck drifts with the (veering) wind, ~12 m/s at full strength; cirrus faster (in the shader)
+        const w = ctx.uniforms.uWind.value;
+        const ws = Math.hypot(w.x, w.y);
+        cloudLayer.uCu.value.w = (cloudLayer.uCu.value.w + (4 + 9 * ws) * dt) % 1e7;
+        if (ws > 1e-3) cloudLayer.uCloudWind.value.lerp(_w2.set(w.x / ws, w.y / ws), Math.min(1, dt * 0.02)).normalize();
+      }
     },
     frame(realDt) {
       frameUpdate(realDt);
@@ -276,11 +620,27 @@ export default async function create(ctx: CityContext): Promise<CityModule> {
         exposure: Math.round(renderer.toneMappingExposure * 100) / 100,
         shadowHalf: Math.round(lastShadowHs),
         shadowTexelCm: Math.round(fitter.texel * 1000) / 10,
-        clouds: clouds.count,
-        cloudsActive: clouds.stats().active,
-        cloudsOverCity: clouds.stats().overCity,
+        shadowRadius: Math.round(sun.shadow.radius * 100) / 100,
+        hemiI: Math.round(hemi.intensity * 100) / 100,
+        envI: Math.round(scene.environmentIntensity * 100) / 100,
+        key: legacy ? 'legacy' : world ? 'world' : 'studio',
+        skyVisMs: skyVis ? skyVis.ms : -1,
+        meterEV: Math.round(meterEV * 100) / 100,
+        hazeKm: world ? Math.round(3.912 / Math.max(1e-6, atmo.params.haze + atmo.params.rayleigh.y) / 100) / 10 : -1,
+        mist: world ? Math.round(atmo.params.mist * 1e4) / 1e4 : 0,
+        clouds: cloudLayer ? Math.round(cloudLayer.uCu.value.x * 100) / 100 : clouds.count,
+        cloudVolRenders: cloudVol ? cloudVol.renders : 0,
+        cloudsActive: cottonClouds ? clouds.stats().active : 0,
+        cloudsOverCity: cottonClouds ? clouds.stats().overCity : 0,
         envBakes: env.bakes,
+        skyLut: atmo.lutUpdates,
+        skyScale: Math.round(atmo.skyScale * 10) / 10,
         rain: Math.round(rainAmt * 100) / 100,
+        storm: director ? Math.round(director.storm * 100) / 100 : 0,
+        wet: director ? Math.round(director.wet * 100) / 100 : 0,
+        rainbow: director ? Math.round(director.rainbow * 100) / 100 : 0,
+        overhead: Math.round(overcast * 100) / 100,
+        sunBlock: Math.round(sunOver * 100) / 100,
       };
     },
     invariants() {
@@ -309,3 +669,8 @@ export default async function create(ctx: CityContext): Promise<CityModule> {
 }
 
 const _tmpV = new THREE.Vector3();
+const _w2 = new THREE.Vector2();
+const _hor = new THREE.Color();
+const _belt = new THREE.Color();
+const _rb = new THREE.Color();
+const _rs = new THREE.Vector2();

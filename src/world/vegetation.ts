@@ -2,24 +2,37 @@
 // forest on the northern hills, palms along the beach, bushes, garden hedges, flower beds,
 // allotment crops, pond reeds and lily pads.
 //
-// Everything is baked at start-up into TWO merged, vertex-coloured meshes:
-//   trees  — casts shadows (custom depth material so shadows sway with the wind)
-//   plants — bushes, hedges, flowers, crops, reeds, grates/planters (no shadows)
-// Wind sway is done in the vertex shader (see vegetation/material.ts), deterministic from uTime.
+// Everything is baked at start-up into a few merged, vertex-coloured meshes:
+//   trees (near) / trees-far (LOD beyond ~300 m) / forest — cast shadows (custom depth material so
+//   shadows sway with the wind); plants (bushes, hedges, soil rows) + fine plants (flowers, crops,
+//   reeds, grates/planters) — no shadows.
+// Wind sway and the painted foliage shading (leaf-clump relief, wrap, backlit translucency, crown
+// occlusion, night lamp light) live in vegetation/material.ts; per-vertex data in aWind + aLeaf.
+// A/B: ?legacyveg = pre-overhaul generators + material (vegetation/legacy/), same placement.
 //
 // Service: ctx.services.vegetation = { trees: { x, z, r, h }[] }
 
+import { nearLens } from '../core/nearDetail';
+import { nature } from '../core/nature';
 import * as THREE from 'three';
 import type { CityContext, CityModule } from '../core/context';
 import { OCC } from '../core/occupancy';
 import { Rng, hash01 } from '../core/rng';
 import { SIDEWALK_Y, RIVER, QUAY_X } from '../core/constants';
 import type { Area, DistrictKind } from '../core/plan';
-import { GeoSink, Shaper, staticMesh } from './vegetation/geo';
-import { windMaterials } from './vegetation/material';
-import { buildTree, bush, hedge, Wind, col, LEAF, type Species, type TreeSpec } from './vegetation/species';
-import { flowerBed, flowerClump, crop, soilRow, reeds, lily, surround, FLOWERS, type Surround } from './vegetation/plants';
-import { getLayout, occAny, PLANTER, hrand, MASK_WALK, DistanceLod, ChunkCuller, chunkOf, type Layout } from './props/layout';
+import { GeoSink, Shaper, staticMesh, type ExtraDef } from './vegetation/geo';
+import { windMaterials, foliageKnobs } from './vegetation/material';
+import { windMaterials as legacyWindMaterials } from './vegetation/legacy/material';
+import * as NEW from './vegetation/species';
+import * as OLD from './vegetation/legacy/species';
+import { Wind, col, LEAF, type Species, type TreeSpec } from './vegetation/species';
+import { NearCells, nearCell } from './lamps/nearCells';
+import { flowerBed, flowerClump, crop, soilRow, surround, treeGuard, wornPatch, GRATE_HOLE, FLOWERS, type Surround } from './vegetation/plants';
+import { getLayout, occAny, PLANTER, hrand, MASK_WALK, DistanceLod, ChunkCuller, chunkOf, splitByCells, type Layout } from './props/layout';
+import { geomHunt } from '../core/geomhunt';
+import { getLeafAtlas } from './vegetation/atlas';
+import { FoliageLayer, LodTexture, cardMaterials, woodMaterials, cardKnobs, type InstBuf, type PlantRef } from './vegetation/foliage';
+import { structure, emitFar, emitNear, newCardBuf, newWoodBuf, type PlantDef, type KindName } from './vegetation/crowns';
 
 interface TerrainSvc {
   height(x: number, z: number): number;
@@ -29,7 +42,22 @@ interface TerrainSvc {
 }
 
 export interface VegetationService {
-  trees: { x: number; z: number; r: number; h: number }[];
+  /** worn: radius of the trodden bare patch at the foot (W5) — ground cover should keep grass off it */
+  trees: { x: number; z: number; r: number; h: number; worn?: number }[];
+  /** foliage shading knobs (uniform objects; for tuning from the console / test scripts) */
+  knobs: typeof foliageKnobs;
+  /** leaf-card shading / wind knobs */
+  cardKnobs: typeof cardKnobs;
+  /**
+   * Leaf-card LOD distance (m) for the adaptive quality ladder: plants within it get leaf clusters and
+   * branches, beyond it the far cards. `null` restores the quality preset (high 75, medium 42, low 0).
+   */
+  setLeafDistance(m: number | null): void;
+  getLeafDistance(): number;
+  /** the procedural leaf atlas (debug / inspection) */
+  atlasTex: THREE.Texture | null;
+  /** debug: plants within rad of (x, z) with kind, near weight, LOD texel and near detail counts */
+  debugPlants(x: number, z: number, rad: number): string[];
 }
 
 interface Planted extends TreeSpec {
@@ -94,6 +122,39 @@ export default function create(ctx: CityContext): CityModule {
   const layout: Layout = getLayout(ctx);
   const slab = plan.slab;
   const density = ctx.quality.density;
+  // A/B: ?legacyveg = the pre-overhaul generators + material (same placement)
+  const legacy = ctx.debug.params.has('legacyveg') && ctx.debug.params.get('legacyveg') !== '0';
+  // leaf-card trees (default) vs the lobed-hull trees (?noleafcards — A/B + fallback)
+  const cardsOn = !legacy && !ctx.debug.params.has('noleafcards');
+  // W5 tree bases: bark relief + soil-stained trunk foot (shader), real tree-pit surrounds (geometry)
+  const noTreeBase = ctx.debug.params.has('notreebase');
+  const noFenceDetail = ctx.debug.params.has('nofencedetail') || ctx.quality.level === 'low';
+  const buildTree: (s: GeoSink, w: Wind, t: TreeSpec) => unknown = legacy ? OLD.buildTree : NEW.buildTree;
+  const bush = legacy ? OLD.bush : NEW.bush;
+  const hedge = legacy ? OLD.hedge : NEW.hedge;
+  const EXTRAS: ExtraDef[] = [
+    { name: 'aWind', size: 4 },
+    { name: 'aLeaf', size: 4, u8: true },
+  ];
+  // shading knobs for tuning / A/B: ?vegbump=0.9&vegtrans=0.9&vegwrap=0.45&vegtone=1 (vegfx=0 → plain shading)
+  for (const [k, u] of [
+    ['vegbump', foliageKnobs.bump],
+    ['vegtrans', foliageKnobs.trans],
+    ['vegwrap', foliageKnobs.wrap],
+    ['vegtone', foliageKnobs.tone],
+    ['vegscale', foliageKnobs.scale],
+    ['vegcrease', foliageKnobs.crease],
+    ['vegfine', foliageKnobs.fine],
+    ['vegnight', foliageKnobs.night],
+  ] as const) {
+    const v = parseFloat(ctx.debug.params.get(k) ?? '');
+    if (Number.isFinite(v)) u.value = v;
+  }
+  const fx = ctx.debug.params.get('vegfx') !== '0';
+  // clump search: full 3x3x3 on high, 2x2x2 on medium/low (?vegcells=8|27 forces one)
+  const cellsParam = ctx.debug.params.get('vegcells');
+  let qLevel = '';
+  if (ctx.debug.params.get('vegclump') === 'billow') foliageKnobs.model.value = 1;
 
   // ── obstacles for anything planted
   const furn = new DiscHash(6);
@@ -145,7 +206,13 @@ export default function create(ctx: CityContext): CityModule {
 
   function plant(t: Omit<Planted, 'seed' | 'detail'> & { seed?: number; detail?: number }): Planted {
     const broad = t.sp !== 'conifer' && t.sp !== 'palm';
-    const p = { ...t, seed: t.seed ?? Math.floor(hash01(t.x * 7.31, t.z * 3.17, 11) * 1e9), detail: t.detail ?? (broad && t.r >= 3.4 ? 3 : 2) } as Planted;
+    const p = {
+      ...t,
+      seed: t.seed ?? Math.floor(hash01(t.x * 7.31, t.z * 3.17, 11) * 1e9),
+      detail: t.detail ?? (broad && t.r >= 3.4 ? 3 : 2),
+      // per-tree macro tone (lighter/yellower ↔ darker/bluer) so groves never read as one colour
+      tone: t.tone ?? 0.5 + (hash01(t.x * 1.7, t.z * 2.3, 23) - 0.5) * 0.55,
+    } as Planted;
     planted.push(p);
     trees.add(p.x, p.z, p.r);
     return p;
@@ -200,7 +267,7 @@ export default function create(ctx: CityContext): CityModule {
         case 'market':
         case 'civic':
           sp = rng.chance(0.16) ? 'blossom' : 'round';
-          sur = 'roundgrate';
+          sur = 'kerbgrate';
           maxR = 2.1;
           break;
         case 'industrial':
@@ -212,7 +279,7 @@ export default function create(ctx: CityContext): CityModule {
           break;
         case 'beach':
           sp = 'palm';
-          sur = 'roundgrate';
+          sur = 'kerbgrate';
           break;
         case 'park':
         case 'riverside':
@@ -227,7 +294,12 @@ export default function create(ctx: CityContext): CityModule {
       let R = Math.max(1.3, Math.min(maxR, dB - 0.9));
       if (sp === 'column') R = Math.min(R, rng.range(1.15, 1.4));
       if (sp === 'birch') R = Math.min(R, 1.9);
-      const yaw = s.yaw + Math.PI / 2;
+      // surrounds are long along local x: the slot yaw faces away from the road, so x runs along the kerb.
+      // The tree sits a little behind the band centre so its pit keeps a strip of kerb stone in front.
+      const yaw = s.yaw;
+      const back = sur === 'kerbgrate' ? 0.14 : 0.06;
+      const tx = s.x + Math.sin(yaw) * back,
+        tz = s.z + Math.cos(yaw) * back;
       const clear = 3.4 + rng.range(0, 0.4);
       let h: number;
       if (sp === 'palm') h = rng.range(7.5, 9.5);
@@ -235,7 +307,7 @@ export default function create(ctx: CityContext): CityModule {
       else if (sp === 'blossom') h = clear + R * 1.55;
       else h = clear + R * rng.range(1.75, 2.0);
       if (sp === 'palm') R = 3.0;
-      plant({ sp, x: s.x, z: s.z, y: SIDEWALK_Y, h, r: R, clear: sp === 'palm' ? undefined : clear, surround: sur, syaw: yaw, tag: 'street' });
+      plant({ sp, x: tx, z: tz, y: SIDEWALK_Y, h, r: R, clear: sp === 'palm' ? undefined : clear, surround: sur, syaw: yaw, tag: 'street' });
     }
   }
 
@@ -349,8 +421,11 @@ export default function create(ctx: CityContext): CityModule {
     }
   };
 
+  // (the churchyard — core/places.ts close — is planted below, not as a courtyard)
+  const close = plan.places?.close ?? null;
   for (const a of plan.areas) {
     if (a.greenery <= 0) continue;
+    if (close && a.id === close.areaId) continue;
     const m = mix(a);
     if (!m) continue;
     const rng = ctx.rng(`veg-area-${a.id}`);
@@ -465,6 +540,8 @@ export default function create(ctx: CityContext): CityModule {
 
   // ─────────────────────────────────────────────────────────── forest ──
   let forestCount = 0;
+  /** forest trees on the lower rim (the edge the city looks at) — get undergrowth below */
+  const forestEdge: Planted[] = [];
   {
     const rng = ctx.rng('veg-forest');
     const turbines = plan.features.filter((f) => f.kind === 'windturbine');
@@ -496,11 +573,21 @@ export default function create(ctx: CityContext): CityModule {
       if (bad) continue;
       if (turbines.some((t) => Math.hypot(t.x - x, t.z - z) < 4.5)) continue;
       const crest = smooth(4, 15, h0);
+      // rim of the forest the city looks at — the low fringe, or the first row above a cut / cliff
+      // (a steep step within 6 m to the south): more broadleaf, birch and young trees, finer crowns,
+      // undergrowth. (~20 % of the forest; a plain slope does not count)
+      let step = 0;
+      for (const d of [2, 4, 6]) step = Math.max(step, H(x, z + d - 2) - H(x, z + d));
+      const edge = legacy ? 0 : Math.max(1 - smooth(1.2, 4.5, h0), smooth(1.5, 2.5, step));
       // patches: conifer-dominated stands vs. broadleaf stands (low-frequency noise), more conifers up high
       const stand = Math.sin(x * 0.043 + 0.7) * Math.sin(z * 0.11 + 2.1) + 0.5 * Math.sin(x * 0.11 - z * 0.07);
-      const conP = Math.min(0.9, Math.max(0.12, 0.38 + 0.3 * crest + 0.32 * stand));
-      const sp: Species = rng.chance(conP) ? 'conifer' : rng.weighted<Species>(['round', 'birch', 'autumn', 'column'], [12, 1.4, 1.2, 0.5]);
-      const sz = sp === 'conifer' ? size('conifer', rng, rng.chance(0.25 + crest * 0.4) ? 2 : 1) : size(sp, rng, rng.chance(0.5) ? 2 : 1);
+      const conP = Math.min(0.9, Math.max(0.12, 0.38 + 0.3 * crest + 0.32 * stand - 0.3 * edge));
+      const sp: Species = rng.chance(conP) ? 'conifer' : rng.weighted<Species>(['round', 'birch', 'autumn', 'column'], [12, 1.4 + 1.6 * edge, 1.2 + 0.6 * edge, 0.5]);
+      const young = !legacy && hash01(x * 3.1, z * 1.9, 41) < 0.12 + 0.3 * edge;
+      const sz = sp === 'conifer' ? size('conifer', rng, rng.chance(0.25 + crest * 0.4) ? 2 : young ? 0 : 1) : size(sp, rng, rng.chance(0.5) ? 2 : young ? 0 : 1);
+      // stand tone: dark spruce stands vs lighter mixed groves, plus per-tree jitter
+      const toneN = 0.5 + 0.3 * Math.sin(x * 0.067 + 2.3) * Math.sin(z * 0.091 + 0.6) + 0.16 * Math.sin(x * 0.19 - z * 0.13) - 0.12 * crest;
+      const tone = Math.min(1, Math.max(0, toneN + (hash01(x * 5.3, z * 4.7, 43) - 0.5) * 0.4));
       if (sp === 'conifer') sz.r *= rng.range(0.82, 1.12);
       if (x > slab.x1 - sz.r || x > QUAY_X - 4) continue;
       if (z < slab.z0 + sz.r * 0.85) continue;
@@ -509,25 +596,104 @@ export default function create(ctx: CityContext): CityModule {
       if (occAny(occ, x, z, sz.r + 0.6, blockers)) continue;
       if (rocks.any(x, z, 6, (id, d) => d < rocks.r[id] + 1.2)) continue;
       if (trees.any(x, z, sz.r + 4.5, (id, d) => d < Math.max(1.6, (sz.r + trees.r[id]) * 0.58))) continue;
-      plant({ sp, x, z, y: h0 - 0.1 - slope * 0.25, h: sz.h, r: sz.r, surround: 'none', syaw: 0, tag: 'forest', detail: 1 });
+      // broadleaf crowns on the visible rim get a finer surface (the faceting showed there)
+      const det = !legacy && edge > 0.35 && sp !== 'conifer' ? 2 : 1;
+      const p = plant({ sp, x, z, y: h0 - 0.1 - slope * 0.25, h: sz.h, r: sz.r, surround: 'none', syaw: 0, tag: 'forest', detail: det, tone });
+      if (edge > 0.35 && slope < 0.5) forestEdge.push(p);
       forestCount++;
+    }
+  }
+
+  // forest mantle (leaf-card mode): the rim the city looks at steps down in layers — young birches / oaks in
+  // front of the mature edge trees (shrubs follow below), so the wood does not start with a wall of trunks
+  let mantleCount = 0;
+  if (cardsOn) {
+    const rng = ctx.rng('veg-forest-mantle');
+    const edgeNow = forestEdge.slice();
+    for (const t of edgeNow) {
+      if (!rng.chance(0.5)) continue;
+      const x = t.x + rng.range(-2.5, 2.5),
+        z = t.z + t.r * rng.range(0.85, 1.4) + rng.range(0.5, 1.5);
+      const h0 = H(x, z);
+      if (h0 < 0.35) continue;
+      const g = Math.hypot(H(x + 0.7, z) - H(x - 0.7, z), H(x, z + 0.7) - H(x, z - 0.7)) / 1.4;
+      if (g > 0.75) continue;
+      const sp: Species = rng.chance(0.45) ? 'birch' : 'round';
+      const sz = { h: rng.range(3.4, 5.6), r: rng.range(1.15, 1.7) };
+      if (occAny(occ, x, z, sz.r + 0.4, OCC.ROAD | OCC.SIDEWALK | OCC.PAVED | OCC.RAIL | OCC.BUILDING | OCC.SOLID | OCC.WATER | OCC.PATH)) continue;
+      if (rocks.any(x, z, 6, (id, d) => d < rocks.r[id] + 1.0)) continue;
+      if (trees.any(x, z, sz.r + 4.5, (id, d) => d < Math.max(1.4, (sz.r + trees.r[id]) * 0.55))) continue;
+      const p = plant({ sp, x, z, y: h0 - 0.08, h: sz.h, r: sz.r, surround: 'none', syaw: 0, tag: 'forest', detail: 1, tone: 0.62 + rng.range(0, 0.25) });
+      forestEdge.push(p);
+      mantleCount++;
+    }
+  }
+
+  // forest band beyond the slab (world mode): the hill forest continues ~45 m into the landscape so the
+  // camera never sees where our trees stop; world's landscape trees start further out (z < −225).
+  let bandCount = 0;
+  {
+    const land = ctx.services.landscape as
+      | { active: boolean; height(x: number, z: number): number; cover(x: number, z: number): { forest: number; water: number } }
+      | undefined;
+    if (cardsOn && land?.active) {
+      const rng = ctx.rng('veg-forest-band');
+      const BAND = 45;
+      const zs = slab.z0 - BAND,
+        ze = slab.z0 + 1;
+      const xs = slab.x0 - BAND,
+        xe = slab.x1 + BAND;
+      const N = Math.round(((xe - xs) * (ze - zs) + 2 * BAND * 80) * 0.45 * Math.max(0.5, density));
+      for (let k = 0; k < N; k++) {
+        // north band + short strips down the W and E sides of the ridge
+        let x: number, z: number;
+        const u = rng.next();
+        if (u < 0.82) {
+          x = rng.range(xs, xe);
+          z = rng.range(zs, ze);
+        } else {
+          x = u < 0.91 ? rng.range(xs, slab.x0 + 1) : rng.range(slab.x1 - 1, xe);
+          z = rng.range(slab.z0, slab.z0 + 80);
+        }
+        const inside = x > slab.x0 + 1 && x < slab.x1 - 1 && z > slab.z0 + 1;
+        if (inside) continue;
+        const cov = land.cover(x, z);
+        if (cov.water > 0.05) continue;
+        const out = Math.max(slab.z0 - z, slab.x0 - x, x - slab.x1, 0);
+        if (rng.next() > cov.forest * (1 - 0.45 * smooth(BAND * 0.5, BAND, out))) continue;
+        const h0 = land.height(x, z);
+        const gx = (land.height(x + 0.8, z) - land.height(x - 0.8, z)) / 1.6,
+          gz = (land.height(x, z + 0.8) - land.height(x, z - 0.8)) / 1.6;
+        const slope = Math.hypot(gx, gz);
+        if (slope > 0.8) continue;
+        const stand = Math.sin(x * 0.043 + 0.7) * Math.sin(z * 0.11 + 2.1) + 0.5 * Math.sin(x * 0.11 - z * 0.07);
+        const sp: Species = rng.chance(Math.min(0.85, Math.max(0.25, 0.55 + 0.3 * stand))) ? 'conifer' : 'round';
+        const sz = size(sp, rng, rng.chance(0.4) ? 2 : rng.chance(0.15) ? 0 : 1);
+        if (trees.any(x, z, sz.r + 4.5, (id, d) => d < Math.max(1.6, (sz.r + trees.r[id]) * 0.6))) continue;
+        const toneN = 0.5 + 0.3 * Math.sin(x * 0.067 + 2.3) * Math.sin(z * 0.091 + 0.6) + 0.16 * Math.sin(x * 0.19 - z * 0.13);
+        const tone = Math.min(1, Math.max(0, toneN + (hash01(x * 5.3, z * 4.7, 43) - 0.5) * 0.4));
+        plant({ sp, x, z, y: h0 - 0.1 - slope * 0.25, h: sz.h, r: sz.r, surround: 'none', syaw: 0, tag: 'forest', detail: 1, tone });
+        bandCount++;
+      }
     }
   }
 
   // ─────────────────────────────────────────────────────────── build trees ──
   const mkTree = () => {
-    const sk = new GeoSink([{ name: 'aWind', size: 4 }]);
+    const sk = new GeoSink(EXTRAS);
     return { s: sk, w: new Wind(sk), sh: new Shaper(sk) };
   };
   // near meshes come in west/east chunks (culled per frame); far trees + forest are single meshes
   const TC = [mkTree(), mkTree()];
-  const forestSink = new GeoSink([{ name: 'aWind', size: 4 }]);
+  const forestSink = new GeoSink(EXTRAS);
   const fw = new Wind(forestSink);
-  const farSink = new GeoSink([{ name: 'aWind', size: 4 }]);
+  const farSink = new GeoSink(EXTRAS);
   const tfw = new Wind(farSink);
   // plants: coarse (bushes, hedges, soil rows: visible from afar) + fine (flowers, crops, reeds, grates)
   const PC = [mkTree(), mkTree()];
   const FC = [mkTree(), mkTree()];
+  // W5 near-only detail (grate bars, ribs, litter): 48 m cells drawn within ~30 m of the camera (lamps/nearCells.ts)
+  const NC = new NearCells(mkTree);
   let plantSink = PC[0].s,
     pw = PC[0].w,
     psh = PC[0].sh;
@@ -548,15 +714,178 @@ export default function create(ctx: CityContext): CityModule {
     fsh = c.sh;
   };
   const bySpecies: Record<string, number> = {};
+  // ── leaf-card plant registry (defs only; far LOD emitted below, near LOD generated lazily)
+  const plants: PlantDef[] = [];
+  /**
+   * Species by role and district — a Mediterranean city: planes, ficus and Washingtonia palms on the
+   * avenues, olives / jacarandas / cypresses in the old town and on squares, date / Canary palms on the
+   * front, citrus and olives in gardens, oaks + stone pines in the park, spruce / fir / pine on the hills.
+   */
+  const kindFor = (t: { sp: Species; x: number; z: number; tag: string }): KindName => {
+    const hh = hash01(t.x * 1.31, t.z * 2.07, 77);
+    const dk: DistrictKind = (plan.districtAt(t.x, t.z)?.kind ?? 'park') as DistrictKind;
+    const pick = (ks: KindName[], ws: number[]): KindName => {
+      let tot = 0;
+      for (const w of ws) tot += w;
+      let u = hh * tot;
+      for (let i = 0; i < ks.length; i++) {
+        u -= ws[i];
+        if (u <= 0) return ks[i];
+      }
+      return ks[ks.length - 1];
+    };
+    const forest = t.tag === 'forest';
+    switch (t.sp) {
+      case 'palm':
+        return t.tag === 'beach' ? pick(['datepalm', 'fanpalm', 'canarypalm'], [5, 3.5, 1.5]) : pick(['datepalm', 'fanpalm'], [1, 1]);
+      case 'conifer':
+        if (forest) return pick(['spruce', 'fir', 'pine', 'stonepine'], [4.5, 2.5, 2, 1]);
+        return pick(['cypress', 'stonepine', 'spruce', 'pine'], [3, 2.5, 2.5, 2]);
+      case 'column':
+        if (t.tag === 'river' || dk === 'riverside') return 'poplar';
+        if (dk === 'downtown' || dk === 'midtown') return pick(['fanpalm', 'cypress'], [6, 4]);
+        if (dk === 'industrial' || dk === 'harbor' || dk === 'station') return pick(['poplar', 'fanpalm'], [7, 3]);
+        return pick(['cypress', 'poplar'], [7, 3]);
+      case 'blossom':
+        return dk === 'civic' || dk === 'park' ? pick(['jacaranda', 'blossom'], [1, 1]) : pick(['blossom', 'jacaranda'], [6, 4]);
+      case 'fruit':
+        return pick(['fruit', 'olive'], [6, 4]);
+      case 'autumn':
+        return 'autumn';
+      case 'birch':
+        return 'birch';
+      case 'willow':
+        return 'willow';
+      default:
+        if (forest) return pick(['oak', 'linden', 'maple'], [5.5, 3, 1.5]);
+        switch (dk) {
+          case 'downtown':
+          case 'midtown':
+          case 'station':
+          case 'harbor':
+          case 'industrial':
+            return pick(['plane', 'ficus', 'linden'], [4.5, 3, 2.5]);
+          case 'oldtown':
+          case 'market':
+          case 'civic':
+            return pick(['plane', 'olive', 'jacaranda', 'ficus'], [3.5, 2.5, 2, 2]);
+          case 'beach':
+            return pick(['ficus', 'olive'], [6, 4]);
+          case 'residential':
+          case 'suburb':
+            return pick(['jacaranda', 'linden', 'maple', 'olive', 'fruit'], [2.5, 2.5, 2, 2, 1]);
+          case 'riverside':
+            return pick(['linden', 'plane', 'oak', 'maple'], [3.5, 3, 2, 1.5]);
+          default:
+            return pick(['oak', 'linden', 'plane', 'maple', 'jacaranda'], [3, 2.5, 2, 1.5, 1]);
+        }
+    }
+  };
+  /** growth bias: crowns lean away from close neighbours and walls, toward light */
+  const biasFor = (x: number, z: number, r: number): [number, number] => {
+    let bx = 0,
+      bz = 0;
+    trees.any(x, z, r * 2.6 + 4, (id, d) => {
+      if (d < 0.05) return false;
+      const w = 1 - d / (r * 2.6 + 4);
+      bx += ((x - trees.x[id]) / d) * w;
+      bz += ((z - trees.z[id]) / d) * w;
+      return false;
+    });
+    for (let k = 0; k < 8; k++) {
+      const a = (k / 8) * Math.PI * 2;
+      const ca = Math.cos(a),
+        sa = Math.sin(a);
+      for (const dd of [r * 0.8 + 0.5, r * 1.3 + 1]) {
+        if (occ.has(x + ca * dd, z + sa * dd, OCC.BUILDING)) {
+          bx -= ca * 0.6;
+          bz -= sa * 0.6;
+          break;
+        }
+      }
+    }
+    const l = Math.hypot(bx, bz);
+    const k = l > 0.8 ? 0.8 / l : 1;
+    return [bx * k, bz * k];
+  };
+  function addPlant(t: Planted, y: number, clear: number | undefined): void {
+    const [bx, bz] = t.tag === 'forest' ? [0, 0.35] : biasFor(t.x, t.z, t.r);
+    const kind = kindFor(t);
+    let h = t.h - (y - t.y),
+      r = t.r;
+    const street = t.tag === 'street';
+    // species proportions (placement checked the generic size; grow only where it is not tight)
+    switch (kind) {
+      case 'fanpalm':
+        h *= 1.4;
+        r = 1.7;
+        break;
+      case 'canarypalm':
+        h *= 0.85;
+        r = 3.6;
+        break;
+      case 'cypress':
+        r = Math.min(r, 1.15);
+        h *= 1.1;
+        break;
+      case 'stonepine':
+        if (!street) r *= 1.3;
+        h *= 1.05;
+        break;
+      case 'olive':
+        h = Math.max(Math.min(h, (clear ?? 1.4) + 3.6), (clear ?? 0) + 2.2);
+        if (!street) r *= 1.05;
+        break;
+      case 'jacaranda':
+        if (!street) r *= 1.12;
+        h *= 0.92;
+        break;
+      case 'ficus':
+        if (!street) r *= 1.12;
+        break;
+    }
+    // a forest is a closed canopy: crowns reach their neighbours
+    if (t.tag === 'forest') r *= 1.18;
+    plants.push({
+      kind,
+      x: t.x,
+      y,
+      z: t.z,
+      h,
+      r,
+      seed: t.seed,
+      clear,
+      tone: t.tone,
+      bx,
+      bz,
+      forest: t.tag === 'forest',
+      age: hash01(t.x * 0.7, t.z * 1.9, 5),
+      // street trees spread along the street (the gap between facades), not into them
+      stretch: street ? [Math.cos(t.syaw), -Math.sin(t.syaw), 1.4] : undefined,
+      planter: t.surround === 'planter' || t.surround === 'roundplanter' ? { round: t.surround === 'roundplanter', yaw: t.syaw } : undefined,
+      paved: noTreeBase ? undefined : GRATE_HOLE[t.surround],
+    });
+  }
   // build near-to-far for the usual camera direction (south → north) so early-z rejects hidden canopies
   const order = planted.slice().sort((a, b) => b.z - a.z);
+  /** trees with a trodden patch at the foot (radius): published on the service for the ground cover */
+  const worn = new Map<(typeof planted)[number], number>();
   for (const t of order) {
     const srng = new Rng(t.seed ^ 0x5bd1e995);
     let y = t.y;
     selF(t.x);
-    if (t.surround !== 'none') y = surround(fsh, fpw, t.surround, t.x, t.y, t.z, t.syaw, srng);
+    if (t.surround !== 'none') y = surround(fsh, fpw, t.surround, t.x, t.y, t.z, t.syaw, srng, NC.at(t.x, t.z));
+    // park / square lawn trees: trodden bare earth and surface roots at the foot on ~45 % (W5)
+    if (!noTreeBase && t.surround === 'none' && (t.tag === 'park' || t.tag === 'civic' || t.tag === 'copse') && hash01(t.x * 0.9, t.z * 1.7, 13) < 0.45) {
+      const wr = Math.min(1.1, 0.5 + t.h * 0.04);
+      wornPatch(fsh, fpw, t.x, t.z, wr, H, srng);
+      worn.set(t, wr);
+    }
+    // a young street tree keeps its guard for a few years (W5)
+    if (!noTreeBase && (t.surround === 'kerbgrate' || t.surround === 'grate') && t.h < 8 && hash01(t.x * 1.3, t.z * 0.7, 11) < 0.3) treeGuard(fsh, fpw, t.x, y, t.z, t.syaw, srng);
     const clear = t.clear !== undefined ? t.clear - (y - t.y) : undefined;
-    if (t.tag === 'forest') buildTree(forestSink, fw, { ...t, y, h: t.h - (y - t.y), clear });
+    if (cardsOn) addPlant(t, y, clear);
+    else if (t.tag === 'forest') buildTree(forestSink, fw, { ...t, y, h: t.h - (y - t.y), clear });
     else {
       const T = TC[chunkOf(t.x)];
       buildTree(T.s, T.w, { ...t, y, h: t.h - (y - t.y), clear });
@@ -581,10 +910,12 @@ export default function create(ctx: CityContext): CityModule {
 
   // ─────────────────────────────────────────────────────────── plants ──
   let bushCount = 0;
-  const bushOk = (x: number, z: number, r: number): boolean => {
+  // (`hill`: on the hill above a tunnel bore — the road / rail occupancy below does not block)
+  const bushOk = (x: number, z: number, r: number, hill = false): boolean => {
     if (x < slab.x0 + r + 0.2 || x > slab.x1 - r - 0.2 || z < slab.z0 + r + 0.2 || z > slab.z1 - r - 0.2) return false;
-    if (occAny(occ, x, z, r * 0.75, HARD | OCC.PATH)) return false;
-    if (layout.walk.anyInCircle(x, z, r * 0.7, MASK_WALK)) return false;
+    if (!hill && occAny(occ, x, z, r * 0.75, HARD | OCC.PATH)) return false;
+    if (close && x > close.bounds.x0 - r && x < close.bounds.x1 + r && z > close.bounds.z0 - r && z < close.bounds.z1 + r) return false;
+    if (!hill && layout.walk.anyInCircle(x, z, r * 0.7, MASK_WALK)) return false;
     if (furn.any(x, z, 3, (id, d) => d < furn.r[id] + r * 0.8)) return false;
     if (lampHash.any(x, z, r + 0.5, () => true)) return false;
     if (rocks.any(x, z, 5, (id, d) => d < rocks.r[id] + r * 0.6)) return false;
@@ -592,10 +923,17 @@ export default function create(ctx: CityContext): CityModule {
     if (bushes.any(x, z, r + 2.5, (id, d) => d < (r + bushes.r[id]) * 0.85)) return false;
     return true;
   };
-  const addBush = (x: number, z: number, r: number, h: number, seed: number, flower?: THREE.Color, detail = 1): boolean => {
-    if (!bushOk(x, z, r)) return false;
-    selP(x);
-    bush(plantSink, pw, x, H(x, z), z, r, h, seed, { flower, detail });
+  const addBush = (x: number, z: number, r: number, h: number, seed: number, flower?: THREE.Color, detail = 1, hill = false): boolean => {
+    if (!bushOk(x, z, r, hill)) return false;
+    if (cardsOn) {
+      // leaf-card shrub: oleander / bougainvillea when flowering, else a leafy evergreen
+      const fh = hash01(x * 2.3, z * 1.7, 31);
+      const kind: KindName = flower ? (fh < 0.55 ? 'oleander' : 'bougain') : 'shrub';
+      plants.push({ kind, x, y: H(x, z), z, h, r, seed, tone: 0.35 + 0.3 * fh, age: 0.5 });
+    } else {
+      selP(x);
+      bush(plantSink, pw, x, H(x, z), z, r, h, seed, { flower, detail });
+    }
     bushes.add(x, z, r);
     bushCount++;
     return true;
@@ -696,6 +1034,112 @@ export default function create(ctx: CityContext): CityModule {
     }
   }
 
+  // forest rim undergrowth: low shrubs between the edge trees so the forest sits in its floor (leaf-card
+  // mode: a denser mantle on the side facing the city)
+  {
+    const rng = ctx.rng('veg-forest-under');
+    for (const t of forestEdge) {
+      const n = cardsOn ? 1 + (rng.chance(0.6) ? 1 : 0) + (rng.chance(0.3) ? 1 : 0) : rng.chance(0.6) ? 1 : 0;
+      for (let i = 0; i < n; i++) {
+        const a = cardsOn ? Math.PI / 2 + rng.range(-1.3, 1.3) : rng.range(0, 6.28),
+          d = t.r * rng.range(0.85, 1.35);
+        const rr = rng.range(0.5, 0.95);
+        addBush(t.x + Math.cos(a) * d, t.z + Math.sin(a) * d, rr, rr * rng.range(0.85, 1.15), rng.int(0, 1e9), undefined);
+      }
+    }
+  }
+
+  // forest floor (leaf-card mode): shrubs and fern clumps under the canopy so the hills read as woodland,
+  // not as trees standing on a lawn
+  let fernCount = 0;
+  if (cardsOn) {
+    const rng = ctx.rng('veg-forest-floor');
+    for (const t of planted) {
+      if (t.tag !== 'forest') continue;
+      if (rng.chance(0.42)) {
+        const a = rng.range(0, 6.28),
+          d = t.r * rng.range(0.6, 1.2);
+        const rr = rng.range(0.55, 1.05);
+        addBush(t.x + Math.cos(a) * d, t.z + Math.sin(a) * d, rr, rr * rng.range(0.9, 1.3), rng.int(0, 1e9), undefined);
+      }
+      const nf = rng.int(0, 3);
+      for (let i = 0; i < nf; i++) {
+        const a = rng.range(0, 6.28),
+          d = t.r * rng.range(0.3, 1.1) + 0.4;
+        const x = t.x + Math.cos(a) * d,
+          z = t.z + Math.sin(a) * d;
+        if (x < slab.x0 + 1 || x > slab.x1 - 1 || z < slab.z0 + 1 || z > slab.z1 - 1) continue;
+        if (occAny(occ, x, z, 0.5, HARD | OCC.PATH)) continue;
+        if (rocks.any(x, z, 4, (id, dd) => dd < rocks.r[id] + 0.3)) continue;
+        if (trees.any(x, z, 1.5, (_id, dd) => dd < 0.45)) continue;
+        const rr = rng.range(0.45, 0.75);
+        plants.push({ kind: 'fern', x, y: H(x, z), z, h: rr * rng.range(0.9, 1.2), r: rr, seed: rng.int(0, 1e9), tone: rng.range(0.35, 0.7), age: 0.5 });
+        fernCount++;
+      }
+    }
+  }
+
+  // portal hoods: the bank above each tunnel headwall (kept clear of forest trees) gets scrub — shrubs, ferns
+  // and a few young birches / oaks — so the headwall sits in a wooded hillside, not on a bald shelf
+  // (`?noportalcut` off)
+  let hoodCount = 0;
+  if (!ctx.debug.params.has('noportalcut')) {
+    const rng = ctx.rng('veg-portal-hood');
+    for (const p of terrain?.portals ?? []) {
+      const c = Math.cos(p.yaw),
+        s = Math.sin(p.yaw);
+      const road = p.kind === 'road';
+      const hw = (road ? p.width / 2 + 6 : p.width / 2 + 3.2) + 2.5;
+      // (wing-wall reach as terrain/height.ts) the steep strip right behind the coping, bare rock-coloured soil
+      // otherwise: low scrub clinging to it, along the headwall and the wings
+      const reach = road ? 19 : 10.5;
+      const nb = Math.round((road ? 46 : 18) * Math.max(0.5, density));
+      for (let k = 0; k < nb; k++) {
+        const lx = rng.range(-reach + 0.8, reach - 0.8),
+          lz = -rng.range(1.45, 3.3);
+        const x = p.x + lx * c + lz * s,
+          z = p.z - lx * s + lz * c;
+        const h0 = H(x, z);
+        if (h0 < 1.0) continue;
+        const g = Math.hypot(H(x + 0.7, z) - H(x - 0.7, z), H(x, z + 0.7) - H(x, z - 0.7)) / 1.4;
+        if (g > 2.6) continue;
+        const rr = rng.range(0.42, 0.78);
+        if (addBush(x, z, rr, rr * rng.range(0.8, 1.15), rng.int(0, 1e9), undefined, 1, true)) hoodCount++;
+        else if (cardsOn && !trees.any(x, z, 1.5, (_id, dd) => dd < 0.45)) {
+          plants.push({ kind: 'fern', x, y: h0, z, h: rr * 0.85, r: rr * 0.85, seed: rng.int(0, 1e9), tone: rng.range(0.35, 0.7), age: 0.5 });
+          hoodCount++;
+        }
+      }
+      const n = Math.round((road ? 26 : 16) * Math.max(0.5, density));
+      for (let k = 0; k < n; k++) {
+        const lx = rng.range(-hw, hw),
+          lz = -rng.range(1.9, 7.5);
+        const x = p.x + lx * c + lz * s,
+          z = p.z - lx * s + lz * c;
+        const h0 = H(x, z);
+        if (h0 < p.height + 1.2) continue;
+        const g = Math.hypot(H(x + 0.7, z) - H(x - 0.7, z), H(x, z + 0.7) - H(x, z - 0.7)) / 1.4;
+        if (g > 0.85) continue;
+        // a young tree now and then, well back from the parapet
+        if (lz < -4.2 && rng.chance(0.16)) {
+          const sp: Species = rng.chance(0.5) ? 'birch' : 'round';
+          const sz = { h: rng.range(3.6, 5.8), r: rng.range(1.1, 1.6) };
+          if (rocks.any(x, z, 6, (id, d) => d < rocks.r[id] + 1.0)) continue;
+          if (trees.any(x, z, sz.r + 4.5, (id, d) => d < Math.max(1.6, (sz.r + trees.r[id]) * 0.6))) continue;
+          plant({ sp, x, z, y: h0 - 0.08, h: sz.h, r: sz.r, surround: 'none', syaw: 0, tag: 'forest', detail: 1, tone: 0.55 + rng.range(0, 0.3) });
+          hoodCount++;
+          continue;
+        }
+        const rr = rng.range(0.5, 1.05);
+        if (addBush(x, z, rr, rr * rng.range(0.85, 1.25), rng.int(0, 1e9), undefined, 1, true)) hoodCount++;
+        else if (cardsOn && !trees.any(x, z, 1.5, (_id, dd) => dd < 0.45)) {
+          plants.push({ kind: 'fern', x, y: h0, z, h: rr * 0.8, r: rr * 0.8, seed: rng.int(0, 1e9), tone: rng.range(0.35, 0.7), age: 0.5 });
+          hoodCount++;
+        }
+      }
+    }
+  }
+
   // hedges (front hedges + shared side/back boundaries)
   let hedgeLen = 0;
   for (const b of layout.borders) {
@@ -706,6 +1150,20 @@ export default function create(ctx: CityContext): CityModule {
     selP((b.ax + b.bx) / 2);
     hedge(plantSink, pw, b.ax, b.az, b.bx, b.bz, H(b.ax, b.az), b.street ? 0.6 : 0.66, height, leaf, b.lot * 7 + 3);
     hedgeLen += L;
+    // near LOD: a skin of small leaf clusters over the clipped faces (the solid hedge stays as the core / far LOD)
+    if (cardsOn && L > 0.4)
+      plants.push({
+        kind: 'hedge',
+        x: (b.ax + b.bx) / 2,
+        y: H(b.ax, b.az),
+        z: (b.az + b.bz) / 2,
+        h: height,
+        r: L / 2,
+        seed: b.lot * 7919 + Math.round(b.ax * 13 + b.az * 7),
+        color: '#' + leaf.getHexString(),
+        seg: [b.ax, b.az, b.bx, b.bz, b.street ? 0.6 : 0.66],
+        noStems: noFenceDetail,
+      });
   }
 
   // flower beds: park hub, civic square
@@ -766,6 +1224,7 @@ export default function create(ctx: CityContext): CityModule {
   }
 
   // planter slots: flowers + a small shrub (props draws the planter box)
+  const fullBox = nature(ctx, 'fullplanters');
   for (const s of plan.slots) {
     if (s.kind !== 'planter') continue;
     const rng = new Rng(Math.floor(hash01(s.x, s.z, 3) * 1e9));
@@ -778,10 +1237,15 @@ export default function create(ctx: CityContext): CityModule {
     for (let i = -2; i <= 2; i++) {
       const u = i * 0.3;
       if (i === 0) {
-        bush(fineSink, fpw, s.x, y, s.z, 0.32, 0.5, rng.int(0, 1e9), { leaf: col('#4f8f3e') });
+        const bseed = rng.int(0, 1e9);
+        // leaf-card mode: an irregular leafy shrub (box / pittosporum), not a smooth ball
+        if (cardsOn) plants.push({ kind: 'shrub', x: s.x, y, z: s.z, h: rng.range(0.5, 0.75), r: rng.range(0.34, 0.46), seed: bseed, tone: 0.4 + 0.3 * hash01(s.x, s.z, 17), age: 0.5 });
+        else bush(fineSink, fpw, s.x, y, s.z, 0.32, 0.5, bseed, { leaf: col('#4f8f3e') });
         continue;
       }
       flowerClump(fineSink, fpw, s.x + ux * u, y, s.z + uz * u, 0.17, i % 2 ? pc : pc2, rng);
+      // a full box: a second row along each long side (fewer gaps of bare soil)
+      if (fullBox) for (const sd of [-1, 1]) flowerClump(fineSink, fpw, s.x + ux * (u + 0.08 * sd) - uz * 0.15 * sd, y, s.z + uz * (u + 0.08 * sd) + ux * 0.15 * sd, 0.13, sd > 0 ? pc2 : pc, rng);
     }
   }
 
@@ -835,71 +1299,72 @@ export default function create(ctx: CityContext): CityModule {
       const tx = p.tree.x,
         tz = p.tree.z;
       const ft: TreeSpec = { sp: 'fruit', x: tx, y: H(tx, tz), z: tz, h: 4, r: 1.6, seed: Math.floor(hash01(tx, tz) * 1e9), detail: 2 };
-      const T = TC[chunkOf(tx)];
-      buildTree(T.s, T.w, ft);
-      buildTree(farSink, tfw, { ...ft, far: true });
+      if (cardsOn) plants.push({ kind: 'fruit', x: tx, y: ft.y, z: tz, h: 4, r: 1.6, seed: ft.seed, age: 0.5 });
+      else {
+        const T = TC[chunkOf(tx)];
+        buildTree(T.s, T.w, ft);
+        buildTree(farSink, tfw, { ...ft, far: true });
+      }
       bySpecies.fruit = (bySpecies.fruit ?? 0) + 1;
       trees.add(tx, tz, 1.6);
     }
   }
 
-  // pond: reeds along the shore, lily pads on the water
-  let reedCount = 0;
+  // pond: reeds, cattails and lily pads are drawn by groundcover (ground agent) — only the island shrubs here
+  const reedCount = 0;
   {
     const pond = plan.water.ponds[0];
     if (pond) {
-      const rng = ctx.rng('veg-pond');
-      const level = pond.level;
-      const n = 90;
-      for (let k = 0; k < n; k++) {
-        const a = (k / n) * Math.PI * 2;
-        // patches
-        const patch = Math.sin(a * 3 + 1.1) + 0.6 * Math.sin(a * 7 + 0.3);
-        if (patch < 0.35) continue;
-        const rho = rng.range(0.93, 1.03);
-        const x = pond.cx + Math.cos(a) * pond.rx * rho,
-          z = pond.cz + Math.sin(a) * pond.rz * rho;
-        if (rocks.any(x, z, 3, (id, d) => d < rocks.r[id] + 0.25)) continue;
-        if (furn.any(x, z, 3, (id, d) => d < furn.r[id] + 0.6)) continue;
-        selF(x);
-        reeds(fineSink, fpw, fsh, x, Math.min(H(x, z), level - 0.05), z, rng);
-        reedCount++;
-      }
-      if (island) {
-        for (let k = 0; k < 7; k++) {
-          const a = rng.range(0, 6.28);
-          const rr = Number(island.params?.radius ?? 2.6) * rng.range(0.92, 1.08);
-          const x = island.x + Math.cos(a) * rr,
-            z = island.z + Math.sin(a) * rr;
-          if (rocks.any(x, z, 3, (id, d) => d < rocks.r[id] + 0.2)) continue;
-          selF(x);
-          reeds(fineSink, fpw, fsh, x, Math.min(H(x, z), level - 0.05), z, rng, 0.8);
-          reedCount++;
-        }
-      }
-      // lily pads in a few clusters
-      for (let c = 0; c < 5; c++) {
-        const a = rng.range(0, 6.28),
-          rho = rng.range(0.45, 0.78);
-        const cx = pond.cx + Math.cos(a) * pond.rx * rho,
-          cz = pond.cz + Math.sin(a) * pond.rz * rho;
-        if (island && Math.hypot(cx - island.x, cz - island.z) < 4.5) continue;
-        for (let i = 0; i < rng.int(4, 8); i++) {
-          const x = cx + rng.range(-1.6, 1.6),
-            z = cz + rng.range(-1.2, 1.2);
-          const ex = (x - pond.cx) / pond.rx,
-            ez = (z - pond.cz) / pond.rz;
-          if (ex * ex + ez * ez > 0.8) continue;
-          selF(x);
-          lily(fineSink, fpw, x, level + 0.03, z, rng.range(0.22, 0.42), rng);
-        }
-      }
       // island shrubs
       if (island) {
         addBush(island.x + 0.9, island.z + 1.0, 0.55, 0.6, 77, undefined);
         addBush(island.x - 1.3, island.z - 0.9, 0.5, 0.55, 78, undefined);
       }
     }
+  }
+
+  // the field hedgerow along the town's west edge (core/places.ts edge): an untrimmed hawthorn / blackthorn hedge,
+  // taller and looser than a garden hedge, with oaks standing out of it and brambly shrubs at its foot
+  const edge = plan.places?.edge ?? null;
+  if (edge) {
+    const rng = ctx.rng('veg-edge');
+    const edgeStrips = nature(ctx, 'farmkit') && nature(ctx, 'edgehedge');
+    const leaf = col('#4f6a33');
+    for (const [z0, z1] of edge.hedges) {
+      // untrimmed: 4–7 m overlapping pieces, each its own height, width, tone and wander, a lumpy crown (wild)
+      for (let a = z0; a < z1 - 0.3; ) {
+        const b = Math.min(z1, a + rng.range(4, 7));
+        // the landscape's cut-out strips (landscape/woods.ts) carry the outline: the core stays inside them
+        const coreK = edgeStrips ? 0.68 : 1;
+        const hgt = rng.range(1.6, 2.5) * coreK;
+        const xa = edge.hedgeX + rng.range(-0.2, 0.2);
+        const wd = rng.range(1.15, 1.6) * (edgeStrips ? 0.88 : 1);
+        const lc = leaf.clone().multiplyScalar(rng.range(0.82, 1.12));
+        selP(xa);
+        if (legacy) hedge(plantSink, pw, xa, a, xa, b, H(xa, a), wd, hgt, lc, rng.int(0, 1e6));
+        else NEW.hedge(plantSink, pw, xa, Math.max(z0, a - 0.35), xa, b, H(xa, a), wd, hgt, lc, rng.int(0, 1e6), H, 1);
+        if (cardsOn)
+          plants.push({ kind: 'hedge', x: xa, y: H(xa, a), z: (a + b) / 2, h: hgt, r: (b - a) / 2, seed: rng.int(0, 1e9), color: '#' + leaf.getHexString(), seg: [xa, a, xa, b, 1.25], noStems: noFenceDetail });
+        hedgeLen += b - a;
+        a = b;
+      }
+    }
+    for (const t of edge.trees) plant({ sp: t.sp, x: t.x, z: t.z, y: H(t.x, t.z), h: t.h, r: t.r, surround: 'none', syaw: 0, tag: 'lawn' });
+    // shrubs at the hedge foot on the lane side, now and then
+    for (let z = edge.z0 + 2; z < edge.z1 - 2; z += rng.range(3, 7)) {
+      if (rng.chance(0.45)) continue;
+      const rr = rng.range(0.45, 0.8);
+      addBush(edge.hedgeX + 0.95, z, rr, rr * rng.range(0.9, 1.3), rng.int(0, 1e9), rng.chance(0.15) ? col('#f4efe6') : undefined, 1, true);
+    }
+  }
+
+  // churchyard yews and a lime (core/places.ts close) — appended last, so no other planting's rng shifts
+  for (const t of close?.trees ?? []) plant({ sp: t.sp, x: t.x, z: t.z, y: H(t.x, t.z), h: t.h, r: t.r, surround: 'none', syaw: 0, tag: 'courtyard' });
+  // station forecourt planters (places round 3): three shrubs each, rooted in the soil at 0.47 (terrain service height)
+  {
+    const rng = ctx.rng('veg-station-planters');
+    for (const p of plan.places?.station?.planters ?? [])
+      for (let k = 0; k < 3; k++) addBush(p.x0 + ((p.x1 - p.x0) * (k + 0.5)) / 3, (p.z0 + p.z1) / 2, 0.42, rng.range(0.75, 1.05), rng.int(0, 1e9), undefined, 1, true);
   }
 
   // ─────────────────────────────────────────────────────────── meshes ──
@@ -909,8 +1374,8 @@ export default function create(ctx: CityContext): CityModule {
   const parts = (ctx.debug.params.get('vegparts') ?? 'trees,forest,plants').split(',');
   const shadows = ctx.debug.params.get('vegshadow') !== '0';
   const vmat = ctx.debug.params.get('vegmat') ?? 'standard';
-  const tm = windMaterials(ctx.uniforms, 'veg-trees', 0.9, vmat);
-  const pm = windMaterials(ctx.uniforms, 'veg-plants', 0.92, vmat);
+  const tm = legacy ? legacyWindMaterials(ctx.uniforms, 'veg-trees', 0.9, vmat) : windMaterials(ctx.uniforms, 'veg-trees', 0.9, vmat, fx);
+  const pm = legacy ? legacyWindMaterials(ctx.uniforms, 'veg-plants', 0.92, vmat) : windMaterials(ctx.uniforms, 'veg-plants', 0.92, vmat, fx);
   const geos: THREE.BufferGeometry[] = [];
   const mk = (sink: GeoSink, name: string, mat: THREE.Material, shadow: boolean, part: string): THREE.Mesh => {
     const geo = sink.build();
@@ -934,26 +1399,252 @@ export default function create(ctx: CityContext): CityModule {
   const farMesh = mk(farSink, 'veg-trees-far', tm.mat, true, 'trees');
   mk(forestSink, 'veg-forest', tm.mat, true, 'forest');
   PC.forEach((c, i) => culler.add(mk(c.s, `veg-plants-${sides[i]}`, pm.mat, false, 'plants')));
-  FC.forEach((c, i) => culler.add(mk(c.s, `veg-plants-fine-${sides[i]}`, pm.mat, false, 'plants'), () => near));
+  if (geomHunt(ctx, 'finecut')) {
+    // geometry hunt: flowers, crops and reeds per 150 m cell, drawn within 180 m (one city-wide mesh of 100 k triangles)
+    for (const [i, c] of FC.entries()) {
+      if (c.s.vcount === 0 || !parts.includes('plants')) continue;
+      const whole = c.s.build();
+      geos.push(whole);
+      for (const geo of splitByCells(whole, 150)) {
+        const m = staticMesh(geo, pm.mat, `veg-plants-fine-${sides[i]}`);
+        m.receiveShadow = true;
+        m.renderOrder = -1;
+        root.add(m);
+        const cell = geo.boundingBox!;
+        culler.add(m, () => near && cell.distanceToPoint(ctx.camera.position) < 180 * nearLens.zoom);
+      }
+    }
+  } else FC.forEach((c, i) => culler.add(mk(c.s, `veg-plants-fine-${sides[i]}`, pm.mat, false, 'plants'), () => near));
+  for (const c of NC.list()) if (c.item.s.vcount > 0) culler.add(mk(c.item.s, 'veg-plants-near-detail', pm.mat, false, 'plants'), () => nearCell(ctx.camera, c));
   farMesh.visible = false;
   const sum = (a: { s: GeoSink }[], key: 'tcount' | 'vcount') => a.reduce((acc, c) => acc + c.s[key], 0);
+
+  // ───────────────────────────────────────────── leaf-card trees (far static + near dynamic) ──
+  const atlas = cardsOn ? getLeafAtlas() : null;
+  const lodTex = new LodTexture(Math.max(1, plants.length));
+  const refs: PlantRef[] = plants.map((p, i) => ({ x: p.x, y: p.y, z: p.z, h: p.h, id: i }));
+  let cardLayer: FoliageLayer | null = null;
+  let woodLayer: FoliageLayer | null = null;
+  let woodNear: FoliageLayer | null = null;
+  let cm: ReturnType<typeof cardMaterials> | null = null;
+  let wm: ReturnType<typeof woodMaterials> | null = null;
+  const farMs0 = performance.now();
+  // near capacity per quality (instances)
+  const NEAR_CAP = { high: 70000, medium: 36000, low: 4000 };
+  const DIST = { high: 75, medium: 42, low: 0 };
+  let leafOverride: number | null = null;
+  const leafDist = (): number => (leafOverride ?? DIST[ctx.quality.level] ?? 75) * nearLens.zoom;
+  if (cardsOn && atlas) {
+    const farCards = newCardBuf(plants.length * 30);
+    const farWood = newWoodBuf(plants.length * 14);
+    plants.forEach((p, i) => emitFar(structure(p), refs[i], farCards, farWood));
+    cm = cardMaterials(ctx.uniforms, atlas.texture, lodTex.tex);
+    wm = woodMaterials(ctx.uniforms, lodTex.tex);
+    cardLayer = new FoliageLayer('cards', farCards, NEAR_CAP.high, cm, 'veg-cards');
+    woodLayer = new FoliageLayer('wood', farWood, 0, wm, 'veg-wood-far', 6);
+    woodNear = new FoliageLayer('wood', newWoodBuf(1), Math.round(NEAR_CAP.high / 2.5), wm, 'veg-wood-near', 12);
+    cardLayer.mesh.castShadow = woodLayer.mesh.castShadow = woodNear.mesh.castShadow = shadows;
+    if (parts.includes('trees')) root.add(cardLayer.mesh, woodLayer.mesh, woodNear.mesh);
+  }
+  const farMs = performance.now() - farMs0;
+
+  // near set: per-plant weights eased in/out, detail generated lazily (bounded per frame)
+  const GRID = 16;
+  const grid = new Map<number, number[]>();
+  plants.forEach((p, i) => {
+    const k = Math.floor(p.x / GRID) * 4096 + Math.floor(p.z / GRID);
+    let a = grid.get(k);
+    if (!a) grid.set(k, (a = []));
+    a.push(i);
+  });
+  const detail: ({ cards: InstBuf; wood: InstBuf } | null)[] = plants.map(() => null);
+  const weight = new Float32Array(plants.length);
+  const target = new Uint8Array(plants.length);
+  const dist = new Float32Array(plants.length);
+  const members: number[] = [];
+  const next: number[] = [];
+  const byDist = (a: number, b: number): number => dist[a] - dist[b];
+  const wantA: number[] = [];
+  const keepA: number[] = [];
+  const memberSet = new Uint8Array(plants.length);
+  let genMs = 0,
+    genCount = 0,
+    rebuilds = 0,
+    nearCards = 0,
+    nearWood = 0;
+  const camPos = new THREE.Vector3();
+  const lastCam = new THREE.Vector3(1e9, 0, 0);
+  const sunLight: { l: THREE.DirectionalLight | null } = { l: ctx.services.sky?.sun ?? null };
+  if (!sunLight.l)
+    ctx.scene.traverse((o) => {
+      if (!sunLight.l && (o as THREE.DirectionalLight).isDirectionalLight && o.castShadow) sunLight.l = o as THREE.DirectionalLight;
+    });
+  const lightDir = new THREE.Vector3();
+  const partsC: InstBuf[] = [];
+  const partsW: InstBuf[] = [];
+
+  function updateNear(dt: number): void {
+    if (!cardLayer || !woodNear) return;
+    const cam = ctx.camera;
+    cam.getWorldPosition(camPos);
+    const D = leafDist();
+    const cap = NEAR_CAP[ctx.quality.level] ?? NEAR_CAP.high;
+    // 1. candidates around the camera → targets
+    next.length = 0;
+    if (D > 1) {
+      const R = D + 6;
+      const i0 = Math.floor((camPos.x - R) / GRID),
+        i1 = Math.floor((camPos.x + R) / GRID);
+      const j0 = Math.floor((camPos.z - R) / GRID),
+        j1 = Math.floor((camPos.z + R) / GRID);
+      for (let i = i0; i <= i1; i++) {
+        for (let j = j0; j <= j1; j++) {
+          const a = grid.get(i * 4096 + j);
+          if (!a) continue;
+          for (const id of a) {
+            const p = plants[id];
+            const d = Math.hypot(p.x - camPos.x, p.y + p.h * 0.55 - camPos.y, p.z - camPos.z) - p.r * 0.5;
+            dist[id] = d;
+            const lim = weight[id] > 0.5 ? D + 4 : D;
+            if (d < lim) next.push(id);
+          }
+        }
+      }
+    }
+    next.sort(byDist);
+    // 2. generate missing detail (bounded) and apply the capacity budget; after a camera jump (view change,
+    //    teleport) generate a big batch at once rather than showing far crowns for many frames
+    const jumped = lastCam.distanceToSquared(camPos) > 400;
+    lastCam.copy(camPos);
+    let budget = jumped ? 60 : 4;
+    let usedC = 0,
+      usedW = 0;
+    for (const id of members) target[id] = 0;
+    const want = wantA;
+    want.length = 0;
+    for (const id of next) {
+      if (!detail[id]) {
+        if (budget <= 0) continue;
+        budget--;
+        const g0 = performance.now();
+        const c = newCardBuf(256),
+          w = newWoodBuf(64);
+        emitNear(structure(plants[id]), refs[id], c, w);
+        detail[id] = { cards: c.trim(), wood: w.trim() };
+        genMs += performance.now() - g0;
+        genCount++;
+      }
+      const dd = detail[id]!;
+      if (usedC + dd.cards.n > cap || usedW + dd.wood.n > woodNear.dynCap) break;
+      usedC += dd.cards.n;
+      usedW += dd.wood.n;
+      target[id] = 1;
+      want.push(id);
+    }
+    // 3. ease weights; members = wanted ∪ still fading out (if they still fit)
+    const k = jumped ? 1 : Math.min(1, dt / 0.6);
+    let changed = false;
+    for (const id of want) if (!memberSet[id]) changed = true;
+    const keep = keepA;
+    keep.length = 0;
+    for (const id of members) {
+      if (target[id]) continue;
+      weight[id] = Math.max(0, weight[id] - k);
+      if (weight[id] > 0) {
+        const dd = detail[id]!;
+        if (usedC + dd.cards.n <= cap && usedW + dd.wood.n <= woodNear.dynCap) {
+          usedC += dd.cards.n;
+          usedW += dd.wood.n;
+          keep.push(id);
+          continue;
+        }
+        weight[id] = 0;
+      }
+      lodTex.set(id, 0);
+      changed = true;
+    }
+    for (const id of want) {
+      weight[id] = Math.min(1, weight[id] + k);
+      lodTex.set(id, weight[id]);
+    }
+    for (const id of keep) lodTex.set(id, weight[id]);
+    if (changed) {
+      for (const id of members) memberSet[id] = 0;
+      members.length = 0;
+      for (const id of want) members.push(id);
+      for (const id of keep) members.push(id);
+      for (const id of members) memberSet[id] = 1;
+      partsC.length = 0;
+      partsW.length = 0;
+      for (const id of members) {
+        partsC.push(detail[id]!.cards);
+        partsW.push(detail[id]!.wood);
+      }
+      nearCards = cardLayer.setDynamic(partsC);
+      nearWood = woodNear.setDynamic(partsW);
+      rebuilds++;
+    }
+    lodTex.flush();
+    // received-shadow lookup shifted toward the light
+    const L = sunLight.l;
+    if (L) {
+      lightDir.subVectors(L.position, L.target.position).normalize();
+      cardKnobs.shadowShift.value.copy(lightDir).multiplyScalar(cardKnobs.shadowShiftLen.value);
+    }
+  }
   ctx.scene.add(root);
 
-  const service: VegetationService = { trees: planted.map((t) => ({ x: t.x, z: t.z, r: t.r, h: t.h })) };
+  const service: VegetationService = {
+    trees: planted.map((t) => ({ x: t.x, z: t.z, r: t.r, h: t.h, worn: worn.get(t) })),
+    knobs: foliageKnobs,
+    cardKnobs,
+    setLeafDistance(m) {
+      leafOverride = m === null ? null : Math.max(0, m);
+    },
+    getLeafDistance: () => leafDist(),
+    atlasTex: atlas?.texture ?? null,
+    debugPlants(x: number, z: number, rad: number) {
+      const out: string[] = [];
+      plants.forEach((p, i) => {
+        const d = Math.hypot(p.x - x, p.z - z);
+        if (d > rad) return;
+        const dd = detail[i];
+        out.push(`${i} ${p.kind} (${p.x.toFixed(1)},${p.z.toFixed(1)}) h${p.h.toFixed(1)} r${p.r.toFixed(1)} w${weight[i].toFixed(2)} lod${lodTex.data[i]} near${dd ? dd.cards.n + '/' + dd.wood.n : '-'}`);
+      });
+      return out;
+    },
+  };
   ctx.services.vegetation = service;
   const buildMs = performance.now() - t0;
+  let lastT = performance.now();
 
   return {
     name: 'vegetation',
     frame() {
+      if (ctx.quality.level !== qLevel) {
+        // (only on quality changes, so the knob stays editable at runtime)
+        qLevel = ctx.quality.level;
+        foliageKnobs.cheap.value = cellsParam === '8' ? 1 : cellsParam === '27' ? 0 : qLevel === 'high' ? 0 : 1;
+        cardKnobs.farKeep.value = qLevel === 'high' ? 1 : qLevel === 'medium' ? 0.85 : 0.6;
+        cardKnobs.base.value = noTreeBase || qLevel === 'low' ? 0 : 1;
+        foliageKnobs.bark.value = ctx.debug.params.has('nobarkrelief') || qLevel === 'low' ? 0 : 1;
+      }
       near = lod.near();
       farMesh.visible = !near;
       culler.update();
+      const now = performance.now();
+      const dt = Math.min(0.25, (now - lastT) / 1000);
+      lastT = now;
+      updateNear(dt);
     },
     stats() {
       return {
         trees: planted.length,
         forest: forestCount,
+        forestBand: bandCount,
+        forestMantle: mantleCount,
+        portalHood: hoodCount,
+        ferns: fernCount,
         street: planted.filter((t) => t.tag === 'street').length,
         bushes: bushCount,
         hedgeM: Math.round(hedgeLen),
@@ -971,6 +1662,14 @@ export default function create(ctx: CityContext): CityModule {
           .filter((c) => c.visible)
           .map((c) => c.name.replace('veg-', ''))
           .join(' '),
+        cards: cardLayer ? `${cardLayer.staticCount}+${nearCards}` : 'off',
+        wood: woodLayer ? `${woodLayer.staticCount}+${nearWood}` : 'off',
+        nearPlants: members.length,
+        leafDist: leafDist(),
+        atlasMs: atlas ? `${Math.round(atlas.buildMs)} (paint ${Math.round(atlas.paintMs)})` : 0,
+        farMs: Math.round(farMs),
+        nearGen: `${genCount} in ${Math.round(genMs)} ms`,
+        rebuilds,
         species: Object.entries(bySpecies)
           .map(([k, v]) => `${k}:${v}`)
           .join(' '),
@@ -994,6 +1693,14 @@ export default function create(ctx: CityContext): CityModule {
       tm.depth.dispose();
       pm.mat.dispose();
       pm.depth.dispose();
+      cardLayer?.dispose();
+      woodLayer?.dispose();
+      woodNear?.dispose();
+      cm?.mat.dispose();
+      cm?.depth.dispose();
+      wm?.mat.dispose();
+      wm?.depth.dispose();
+      lodTex.tex.dispose();
     },
   };
 }

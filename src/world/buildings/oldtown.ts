@@ -10,9 +10,17 @@ import {
   gableRoof, roofLook, roofPoly, flatRoof, chimney, doorNiche, bandWithOpenings, railing,
   signOnSide, col, shade, setCol, mixCol, lightBox,
 } from './gen';
-import { WIN, PROF, WALLPAT, ROOFPAT, FRAME, GLASS, LIGHT_MODE } from './materials';
+import { WIN, PROF, WALLPAT, ROOFPAT, FRAME, GLASS, LIGHT_MODE, shopType } from './materials';
 import { boardSign, bladeSign } from './signs';
+import { shopSign } from '../lettering/shopname';
 import { PALETTE } from '../../core/gfx';
+import { anchors } from './anchors';
+import { dB } from '../../core/detailbuildings';
+import { homeBack, partyWall } from './services';
+import { Rng } from '../../core/rng';
+import { windowBox, balconyLife, shutterPair, shutterState, julietBalcony, acUnit, dish, downpipe, potPlant, ironRail, climber, facadeCable, roofClutter as clutterRoof } from './clutter';
+import { GREEN } from './green';
+import { MASS, massRng, oriel, turret, crossGable, roofKit } from './massing';
 
 const SHOPS: { name: string; blade: string }[] = [
   { name: 'Bakery', blade: 'B' },
@@ -107,9 +115,21 @@ function ghostPainter(ad: GhostAd) {
   };
 }
 
-let shopCounter = 0;
+// shop names are dealt from a deck (no repeats until all have been used; the old stride 7 over 35 names hit
+// only 5 residues per seed offset → two "Fish & Chips" in one street)
+let shopDeck: number[] = [];
+
 export function resetOldtown(): void {
-  shopCounter = 0;
+  shopDeck = [];
+}
+
+function dealShop(seed: number): number {
+  if (!shopDeck.length) shopDeck = SHOPS.map((_, i) => i);
+  const k = (seed >>> 0) % shopDeck.length;
+  const i = shopDeck[k];
+  shopDeck[k] = shopDeck[shopDeck.length - 1];
+  shopDeck.pop();
+  return i;
 }
 
 interface Part {
@@ -138,8 +158,11 @@ export function partitionSide(g: Gen, s: Side, L: number, shift: number): Part[]
 }
 
 const PREV: Side[] = [LEFT, FRONT, RIGHT, BACK];
+/** side at the far end (u = L) of each side */
+const NEXT: Side[] = [RIGHT, BACK, LEFT, FRONT];
 
 export function genTownhouse(g: Gen): void {
+  g.roofPipes = false;
   const { lot, rng, W, D } = g;
   const shop = lot.shopfront;
   const floors = Math.max(2, lot.floors);
@@ -155,12 +178,34 @@ export function genTownhouse(g: Gen): void {
   if (gH + fH * (floors - 1) > eave - 0.3) fH = (eave - gH - 0.3) / (floors - 1);
   const topOfWindows = gH + fH * (floors - 1);
 
+  // ── massing (own RNG stream: the ?no… switches leave the rest of the house as it was)
+  const mr = massRng(g);
+  // corner turret on a corner house: front corner on an exposed side, from the first floor up
+  const turretSide: Side | -1 =
+    MASS.turrets && floors >= 3 && W >= 6.5 && (exposed[LEFT] || exposed[RIGHT]) && mr.chance(0.7) ? (exposed[LEFT] && exposed[RIGHT] ? (mr.chance(0.5) ? LEFT : RIGHT) : exposed[LEFT] ? LEFT : RIGHT) : -1;
+  const turretR = Math.min(1.3, Math.max(1.05, W * 0.14));
+  /** window-free span (m) at the start / end of each side's upper floors (turret) */
+  const clear: [number, number][] = [[0, 0], [0, 0], [0, 0], [0, 0]];
+  if (turretSide === RIGHT) (clear[FRONT][1] = turretR + 0.15), (clear[RIGHT][0] = turretR + 0.15);
+  if (turretSide === LEFT) (clear[FRONT][0] = turretR + 0.15), (clear[LEFT][1] = turretR + 0.15);
+  // an oriel (box or canted bay) on the front: shops keep their fascia clear and start it a floor higher
+  const orielRow0 = shop ? 1 : 0;
+  const wantOriel = MASS.oriels && floors - 1 - orielRow0 >= (lot.roof === 'flat' ? 1 : 2) && mr.chance(turretSide >= 0 ? 0.25 : 0.6);
+  /** front window cells (row:col) covered by the oriel, and its centre (local x) for a cross gable above it */
+  const orielCells = new Set<string>();
+  let orielX: number | null = null,
+    orielW = 0;
+  let orielGrid: Grid | null = null;
+  const orielCols = new Set<number>();
+
   // ── look
   const wallC = g.wallColor;
   const trimC = rng.chance(0.7) ? col(rng.pick(['#f4efe4', '#efe6d2', '#f7f3ea'])) : shade(wallC, rng.chance(0.5) ? 0.78 : 1.12);
-  const shutters = rng.chance(0.45);
+  const shutters = rng.chance(0.5);
   const shutterC = col(rng.pick(SHUTTER));
-  const flowers = rng.chance(0.55);
+  const flowers = rng.chance(0.72);
+  // how lived-in the upper floors look (plants, balconies) — varies per house
+  const lived = rng.range(0.55, 1.25);
   const surrounds = rng.chance(0.45);
   const pediments = rng.chance(0.25);
   const arched = rng.chance(0.2);
@@ -185,23 +230,48 @@ export function genTownhouse(g: Gen): void {
     });
   };
 
+  /** inset of the body from the footprint on the side sg lies on (room for things below 2.4 m) */
+  const sideIns = (sg: SideGeom): number => (sg.nz > 0.5 ? ins[FRONT] : sg.nz < -0.5 ? ins[BACK] : sg.nx > 0.5 ? ins[RIGHT] : ins[LEFT]);
+  let shopName: string | null = null;
+  /** windows (row:col) that already carry a balcony — no window box there */
+  let skipBox = new Set<string>();
   // ── sides
   for (const s of [FRONT, RIGHT, BACK, LEFT] as Side[]) {
     const sg = sideGeom(body, s);
     const parts = partitionSide(g, s, sg.L, ins[PREV[s]]);
     for (const p of parts) {
+      // facade-shader corner darkening only at real building corners (not at flush party walls)
+      g.shell.cornerMask = (p.a > 0.05 || exposed[PREV[s]] ? 1 : 0) | (p.b < sg.L - 0.05 || exposed[NEXT[s]] ? 2 : 0);
       if (p.covered) {
         wallPlain(g.shell, sg, p.a, p.b, 0, eave, wallLook);
         // painted advertisement on a tall blank party wall above a lower neighbour
         const free = eave - p.h;
-        if ((s === LEFT || s === RIGHT) && free > 3.6 && p.b - p.a > 6 && rng.chance(free > 5 ? 0.85 : 0.5)) ghostSign(sg, p.a, p.b, p.h, eave);
+        const painted = (s === LEFT || s === RIGHT) && free > 3.6 && p.b - p.a > 6 && rng.chance(free > 5 ? 0.85 : 0.5);
+        if (painted) ghostSign(sg, p.a, p.b, p.h, eave);
+        // ?nopartywalls: the history of a wall that used to have a neighbour
+        if (free > 2.2 && p.b - p.a > 3.5 && (s === LEFT || s === RIGHT) && dB('partywalls')) partyWall(g, sg, p.a, p.b, Math.max(2.5, p.h), eave, wallLook.color, painted, new Rng(((lot.seed * 59 + s) ^ 0x2f6e2b) >>> 0 || 17));
         continue;
       }
       const len = p.b - p.a;
       if (s === FRONT) buildFront(sg, p.a, p.b);
       else if (len < 2.2) wallPlain(g.shell, sg, p.a, p.b, 0, eave, wallLook);
-      else buildSecondary(sg, p.a, p.b, s === BACK, exposed[s]);
+      else buildSecondary(sg, p.a, p.b, s === BACK, exposed[s], clear[s]);
     }
+  }
+  g.shell.cornerMask = 3;
+
+  if (turretSide >= 0) {
+    const right = turretSide === RIGHT;
+    const capKind = mr.weighted(['cone', 'bell', 'dome'] as const, [0.5, 0.3, 0.2]);
+    const top = lot.roof === 'flat' ? eave + 1.35 : lot.roof === 'hip' ? eave + 0.9 : eave + 0.55;
+    turret(g, right ? body.x1 - 0.1 : body.x0 + 0.1, body.z1 - 0.1, {
+      R: turretR, n: 8, y0: gH, yTop: top, v0: gH, ch: fH, rows: floors - 1,
+      winW: 0.8, winH: Math.min(fH * 0.58, 1.75), sill: Math.min(0.92, fH * 0.3),
+      look: look(PROF.HOME), plain: wallLook, trimC,
+      capC: col(capKind === 'cone' ? mr.pick(['#4f5a66', '#5b6470', '#3f4a55']) : mr.pick(['#6fa596', '#5f9686', '#7bb09f'])),
+      cap: capKind, capH: capKind === 'cone' ? mr.range(2.6, 3.6) : capKind === 'bell' ? mr.range(2.0, 2.6) : mr.range(1.4, 1.8),
+      body, corbel: shop ? 0.55 : 1.0,
+    });
   }
 
   function ghostSign(sg: SideGeom, uA: number, uB: number, yLow: number, yTop: number): void {
@@ -219,6 +289,7 @@ export function genTownhouse(g: Gen): void {
     const t = g.trim;
     for (let j = 0; j < gr.m; j++) {
       for (let i = 0; i < gr.n; i++) {
+        if (gr === orielGrid && orielCells.has(`${j}:${i}`)) continue;
         const u = gridU(gr, i);
         const ww = gr.wx1 - gr.wx0;
         const y0 = gridY0(gr, j),
@@ -253,37 +324,13 @@ export function genTownhouse(g: Gen): void {
           // keystone on arched windows
           sideBox(t, sg, u - 0.1, u + 0.1, 0, 0.07, y1 - 0.12, y1 + 0.16);
         }
-        if (shutters) {
-          setCol(t, shutterC);
-          const sw = ww * 0.5;
-          sideBox(t, sg, u - ww / 2 - sw - 0.05, u - ww / 2 - 0.05, 0, 0.05, y0 + 0.02, y1 - (arched ? ww * 0.5 : 0.02));
-          sideBox(t, sg, u + ww / 2 + 0.05, u + ww / 2 + sw + 0.05, 0, 0.05, y0 + 0.02, y1 - (arched ? ww * 0.5 : 0.02));
-          setCol(t, shade(shutterC, 0.7));
-          for (let k = 1; k <= 3; k++) {
-            const yy = y0 + ((y1 - y0) * k) / 4;
-            sideBox(t, sg, u - ww / 2 - sw - 0.03, u - ww / 2 - 0.07, 0.05, 0.065, yy - 0.025, yy + 0.025);
-            sideBox(t, sg, u + ww / 2 + 0.07, u + ww / 2 + sw + 0.03, 0.05, 0.065, yy - 0.025, yy + 0.025);
-          }
-        }
-        if (flowers && rng.chance(0.6)) flowerBox(sg, u, ww, y0);
+        // shutters in different positions: open, closed against the sun, one leaf, ajar
+        if (shutters) shutterPair(g, sg, u, ww, y0, y1, shutterC, shutterState(g, sg.nz > 0.5 || sg.nx < -0.5), arched ? ww * 0.5 : 0);
+        if (skipBox.has(`${j}:${i}`)) continue;
+        if (flowers && rng.chance(0.62 * lived)) windowBox(g, sg, u, ww, y0);
+        else if (y0 > 3 && rng.chance(0.14 * lived)) julietBalcony(g, sg, u, ww, y0);
+        else if (!shutters && y0 > 3 && rng.chance(0.08)) acUnit(g, sg, u + ww / 2 + 0.55, y0 + 0.1, 0);
       }
-    }
-  }
-
-  function flowerBox(sg: SideGeom, u: number, ww: number, y0: number): void {
-    const t = g.trim;
-    setCol(t, rng.chance(0.5) ? col('#7a4b2a') : col('#3f5f3a'));
-    sideBox(t, sg, u - ww / 2, u + ww / 2, 0.12, 0.36, y0 - 0.02, y0 + 0.2, true);
-    setCol(t, col(rng.pick(['#4f8a3c', '#5c9a45', '#3f7a35'])));
-    sideBox(t, sg, u - ww / 2 + 0.03, u + ww / 2 - 0.03, 0.14, 0.34, y0 + 0.2, y0 + 0.3);
-    const fc = col(rng.pick(FLOWERS));
-    setCol(t, fc);
-    const n = Math.max(3, Math.round(ww / 0.2));
-    for (let k = 0; k < n; k++) {
-      const fu = u - ww / 2 + 0.08 + ((ww - 0.16) * (k + 0.5)) / n;
-      const fo = 0.18 + (k % 2) * 0.1;
-      const fh = 0.3 + ((k * 37) % 5) * 0.025;
-      sideBox(t, sg, fu - 0.06, fu + 0.06, fo, fo + 0.1, y0 + fh, y0 + fh + 0.1);
     }
   }
 
@@ -300,13 +347,25 @@ export function genTownhouse(g: Gen): void {
     if (shop) {
       const fasciaY0 = gH - 0.82,
         fasciaY1 = gH - 0.14;
+      const shopDef = SHOPS[dealShop(lot.seed)];
+      shopName = shopDef.name;
+      const shopT = shopType(shopDef.name);
+      anchors.shop(sx(sg, uA, 0), sz(sg, uA, 0), sx(sg, uB, 0), sz(sg, uB, 0), sg.nx, sg.nz, sx(sg, doorU, 0), sz(sg, doorU, 0), shopDef.name, shopT);
       bandWithOpenings(
         sg, uA, uB, ops,
         (a, b) => {
           const len = b - a;
           const n = len > 4.6 ? 2 : 1;
           const gr = makeGrid(a, b, 0, gH, 1, { spacing: len / n, cols: n, winW: (len - 0.5) / n - 0.25, winH: fasciaY0 - 0.12 - 0.3, sill: 0.3, margin: 0.22 });
-          wallGrid(g.shell, sg, a, b, 0, groundTop, gr, { ...look(PROF.SHOP, WIN.SHOP), color: shopC, pattern: WALLPAT.SMOOTH, frame: FRAME.DARK });
+          wallGrid(g.shell, sg, a, b, 0, groundTop, gr, { ...look(PROF.SHOP, WIN.SHOP), color: shopC, pattern: WALLPAT.SMOOTH + 16 * shopT, frame: FRAME.DARK });
+          anchors.spot(sg, 'window', a + 0.42, b - 0.42, 0.34, fasciaY0 - 0.14, 0, { word: shopDef.name });
+          // ?noshopfront: a panelled stall riser under the display windows and a projecting sill on it
+          if (MASS.shopfronts && gr.n > 0) {
+            setCol(t, shade(shopC, 0.82));
+            sideBox(t, sg, a + 0.22, b - 0.22, 0, 0.06, 0.04, 0.27, true);
+            setCol(t, shade(shopC, 0.7));
+            sideBox(t, sg, a + 0.18, b - 0.18, 0, 0.13, 0.27, 0.33, true);
+          }
         },
         (a, b, y0) => wallPlain(g.shell, sg, a, b, y0, groundTop, { color: shopC, pattern: WALLPAT.SMOOTH, seed: g.seed }),
       );
@@ -323,19 +382,53 @@ export function genTownhouse(g: Gen): void {
       sideBox(t, sg, uA + 0.3, uB - 0.3, 0, 0.16, fasciaY0, fasciaY1, true);
       setCol(t, trimC);
       sideBox(t, sg, uA + 0.2, uB - 0.2, 0, 0.22, fasciaY1, fasciaY1 + 0.08, true);
-      const shopDef = SHOPS[(shopCounter++ * 7 + (lot.seed % 5)) % SHOPS.length];
+      if (MASS.shopfronts) {
+        // a capped cornice over the fascia and a carved console at each end (deep scroll block over a smaller
+        // drop), the classic shopfront's frame
+        sideBox(t, sg, uA + 0.08, uB - 0.08, 0, 0.3, fasciaY1 + 0.08, fasciaY1 + 0.13, true);
+        setCol(t, shade(trimC, 0.94));
+        for (const [c0, c1] of [[uA + 0.02, uA + 0.3], [uB - 0.3, uB - 0.02]]) {
+          sideBox(t, sg, c0, c1, 0, 0.27, fasciaY0 + 0.1, fasciaY1, true);
+          sideBox(t, sg, c0 + 0.04, c1 - 0.04, 0, 0.21, fasciaY0 - 0.12, fasciaY0 + 0.1, true);
+          sideBox(t, sg, c0 + 0.08, c1 - 0.08, 0, 0.17, fasciaY0 - 0.22, fasciaY0 - 0.12, true);
+        }
+      }
       const gold = rng.chance(0.6) ? '#f2d27a' : '#f6f0e0';
-      const signRect = g.atlas.add(`shop:${shopDef.name}:${shopC.getHexString()}`, 256, 48, boardSign(shopDef.name, { bg: `#${shopC.getHexString()}`, fg: gold, border: gold, glow: 0.75, glowColor: '#ffd9a0' }));
+      const sign = shopSign(lot, shopDef.name);
+      const signRect = g.atlas.add(`shop:${sign.text}:${shopC.getHexString()}`, 256, 48, boardSign(sign.text, { bg: `#${shopC.getHexString()}`, fg: gold, border: gold, glow: 0.75, glowColor: '#ffd9a0', font: sign.family, weight: sign.weight }));
       const sLen = Math.min(uB - uA - 0.9, (fasciaY1 - fasciaY0 - 0.1) * 5.3);
       const sc = (uA + uB) / 2;
-      signOnSide(g, sg, sc - sLen / 2, sc + sLen / 2, 0.195, fasciaY0 + 0.05, fasciaY1 - 0.05, signRect);
-      // small lamps over the sign
+      // the signboard: a panel standing proud of the fascia in a moulded frame (gilt or trim colour), the
+      // lettered face recessed 2.5 cm behind the frame — a board with depth and shadow lines, not a painted plane
+      const fy0 = fasciaY0 + 0.06,
+        fy1 = fasciaY1 - 0.06,
+        sA = sc - sLen / 2,
+        sB = sc + sLen / 2,
+        fw = 0.045;
+      setCol(t, shade(shopC, 0.85));
+      sideBox(t, sg, sA, sB, 0.16, 0.205, fy0, fy1);
+      signOnSide(g, sg, sA, sB, 0.21, fy0, fy1, signRect);
+      anchors.spot(sg, 'fascia', sA, sB, fy0, fy1, 0.21, { word: shopDef.name, bg: shopC.getHex(), fg: parseInt(gold.slice(1), 16) });
+      setCol(t, gold === '#f2d27a' ? shade(col(gold), 0.8) : trimC);
+      sideBox(t, sg, sA - fw, sB + fw, 0.16, 0.235, fy1, fy1 + fw);
+      sideBox(t, sg, sA - fw, sB + fw, 0.16, 0.235, fy0 - fw, fy0, true);
+      sideBox(t, sg, sA - fw, sA, 0.16, 0.235, fy0, fy1);
+      sideBox(t, sg, sB, sB + fw, 0.16, 0.235, fy0, fy1);
+      // drip moulding along the fascia's lower edge
+      setCol(t, trimC);
+      sideBox(t, sg, uA + 0.3, uB - 0.3, 0.16, 0.2, fasciaY0 - 0.035, fasciaY0, true);
+      // two swan-neck lamps over the board: wall plate, riser, arm, a cone shade lit underneath
       for (const lu of [sc - sLen * 0.3, sc + sLen * 0.3]) {
         setCol(t, col('#2b2b2b'));
-        sideBox(t, sg, lu - 0.03, lu + 0.03, 0.16, 0.42, fasciaY1 + 0.05, fasciaY1 + 0.1);
-        const lx = sx(sg, lu, 0.45),
-          lz = sz(sg, lu, 0.45);
-        lightBox(g, lx - 0.06, fasciaY1 - 0.02, lz - 0.06, lx + 0.06, fasciaY1 + 0.08, lz + 0.06, '#ffd59a', LIGHT_MODE.STEADY, 3.0);
+        sideBox(t, sg, lu - 0.04, lu + 0.04, 0.22, 0.24, fasciaY1 + 0.02, fasciaY1 + 0.14);
+        sideBox(t, sg, lu - 0.012, lu + 0.012, 0.24, 0.27, fasciaY1 + 0.06, fasciaY1 + 0.2);
+        sideBox(t, sg, lu - 0.012, lu + 0.012, 0.24, 0.5, fasciaY1 + 0.17, fasciaY1 + 0.195, true);
+        sideBox(t, sg, lu - 0.012, lu + 0.012, 0.48, 0.505, fasciaY1 + 0.12, fasciaY1 + 0.19);
+        sideBox(t, sg, lu - 0.085, lu + 0.085, 0.42, 0.58, fasciaY1 + 0.05, fasciaY1 + 0.13, true);
+        sideBox(t, sg, lu - 0.05, lu + 0.05, 0.46, 0.54, fasciaY1 + 0.13, fasciaY1 + 0.16);
+        const lx = sx(sg, lu, 0.5),
+          lz = sz(sg, lu, 0.5);
+        lightBox(g, lx - 0.06, fasciaY1 + 0.035, lz - 0.06, lx + 0.06, fasciaY1 + 0.055, lz + 0.06, '#ffd59a', LIGHT_MODE.STEADY, 3.0);
       }
       // awning
       if (rng.chance(0.78)) awning(sg, uA + 0.38, uB - 0.38, fasciaY0 - 0.04);
@@ -368,43 +461,102 @@ export function genTownhouse(g: Gen): void {
     if (doorU + dw / 2 + 0.14 < uB) sideBox(t, sg, doorU + dw / 2 + 0.14, uB, 0, 0.06, 0, shop ? 0.3 : 0.45);
 
     // ── upper floors
-    const gr = upperGrid(uA, uB);
+    const gr = upperGrid(uA + clear[FRONT][0], uB - clear[FRONT][1]);
     wallGrid(g.shell, sg, uA, uB, gH, eave, gr, look(PROF.HOME));
+    if (wantOriel) planOriel(sg, gr, doorU);
+    skipBox = planBalconies(gr);
     windowTrim(sg, gr, true);
+    skipBox = new Set();
     // string course + cornice
     setCol(t, trimC);
     sideBox(t, sg, uA, uB, 0, 0.12, gH - 0.02, gH + 0.16, true);
     if (lot.roof !== 'flat') {
       sideBox(t, sg, uA, uB, 0, 0.2, eave - 0.32, eave - 0.12, true);
     }
-    // balcony on the first floor
-    if (floors >= 3 && rng.chance(0.32) && gr.n >= 2) {
-      const i = Math.floor(gr.n / 2) - (gr.n % 2 === 0 ? 1 : 0);
-      const i2 = gr.n % 2 === 0 ? i + 1 : i;
-      const u0 = gridU(gr, i) - (gr.wx1 - gr.wx0) / 2 - 0.4,
-        u1 = gridU(gr, i2) + (gr.wx1 - gr.wx0) / 2 + 0.4;
-      const yb = gridY0(gr, 0) - 0.1;
-      setCol(t, trimC);
-      sideBox(t, sg, u0, u1, 0, 0.78, yb - 0.14, yb, true);
-      const c0x = sx(sg, u0, 0.74),
-        c0z = sz(sg, u0, 0.74),
-        c1x = sx(sg, u1, 0.74),
-        c1z = sz(sg, u1, 0.74);
-      railing(t, c0x, c0z, c1x, c1z, yb, 0.95, col('#2c3035'), 0.13, 1);
-      railing(t, sx(sg, u0 + 0.03, 0.02), sz(sg, u0 + 0.03, 0.02), sx(sg, u0 + 0.03, 0.72), sz(sg, u0 + 0.03, 0.72), yb, 0.95, col('#2c3035'), 0.13, 1);
-      railing(t, sx(sg, u1 - 0.03, 0.02), sz(sg, u1 - 0.03, 0.02), sx(sg, u1 - 0.03, 0.72), sz(sg, u1 - 0.03, 0.72), yb, 0.95, col('#2c3035'), 0.13, 1);
-      if (rng.chance(0.7)) {
-        // potted plants on the balcony
-        for (const pu of [u0 + 0.3, u1 - 0.3]) {
-          setCol(t, col('#b5653f'));
-          const px = sx(sg, pu, 0.5),
-            pz = sz(sg, pu, 0.5);
-          t.cylinder(px, pz, 0.14, yb, yb + 0.28, 6, true, 0.17);
-          setCol(t, col('#4f8a3c'));
-          t.sphere(px, yb + 0.48, pz, 0.24, 6, 4);
+
+    /** balconies (with life) across one or two window columns; returns the windows they serve */
+    function planBalconies(grd: Grid): Set<string> {
+      const used = new Set<string>();
+      if (grd.n < 1 || grd.m < 1) return used;
+      const ironC = col(rng.pick(['#2c3035', '#2c3035', '#3b4a40', '#5a3a2a', '#e9e4d8']));
+      const wide = rng.chance(0.55);
+      for (let j = 0; j < grd.m; j++) {
+        // first floor: a central balcony on about half the houses; higher floors: fewer
+        const p = (j === 0 ? 0.5 : j === grd.m - 1 ? 0.18 : 0.3) * lived;
+        if (floors < 3 || !rng.chance(p)) continue;
+        let i: number, i2: number;
+        if (wide && grd.n >= 2) {
+          i = Math.floor(grd.n / 2) - (grd.n % 2 === 0 ? 1 : 0);
+          i2 = grd.n % 2 === 0 ? i + 1 : i;
+        } else {
+          i = i2 = rng.int(0, grd.n - 1);
         }
+        if (orielCols.has(i) || orielCols.has(i2)) continue;
+        const u0 = gridU(grd, i) - (grd.wx1 - grd.wx0) / 2 - 0.4,
+          u1 = gridU(grd, i2) + (grd.wx1 - grd.wx0) / 2 + 0.4;
+        const yb = gridY0(grd, j) - 0.1;
+        const dep = j === 0 ? 0.78 : 0.62;
+        setCol(t, trimC);
+        sideBox(t, sg, u0, u1, 0, dep, yb - 0.14, yb, true);
+        // corbels under the slab
+        setCol(t, shade(trimC, 0.9));
+        for (const cu of [u0 + 0.15, u1 - 0.15]) sideBox(t, sg, cu - 0.08, cu + 0.08, 0, dep - 0.1, yb - 0.42, yb - 0.14, true);
+        ironRail(g, sg, u0 + 0.03, u1 - 0.03, dep - 0.05, yb, 0.95, ironC, true);
+        anchors.balcony(sx(sg, (u0 + u1) / 2, dep / 2), yb, sz(sg, (u0 + u1) / 2, dep / 2), sg.nx, sg.nz, u1 - u0, dep, 0.95);
+        balconyLife(g, sg, u0 + 0.06, u1 - 0.06, yb, { rail: 0.95, depth: dep - 0.06, green: 1.1 * lived });
+        for (let k = i; k <= i2; k++) used.add(`${j}:${k}`);
       }
+      return used;
     }
+
+    // a climber on some fronts: ivy / jasmine up one end, or bougainvillea framing the door
+    if (!shop && rng.chance(0.3 * lived)) {
+      const kind = rng.weighted([GREEN.IVY_WALL, GREEN.BOUGAIN, GREEN.JASMINE], [2, 1.6, 0.8]);
+      const atDoor = kind === GREEN.BOUGAIN && !shop;
+      const cu = atDoor ? doorU + (rng.chance(0.5) ? -1 : 1) * (dw / 2 + 0.45) : rng.chance(0.5) ? uA + 0.7 : uB - 0.7;
+      climber(g, sg, cu, rng.range(1.0, 2.4), Math.min(eave - 0.6, gH + rng.range(0.5, 1.6) * fH), ins[FRONT], kind);
+    }
+    // cable run above the shop fascias / ground floor
+    if (rng.chance(0.55) && uB - uA > 2) facadeCable(g, sg, uA + 0.05, uB - 0.05, gH + 0.22);
+    // services on the front: a downpipe at one end of the gutter, maybe an AC unit or a dish up top
+    if (lot.roof !== 'flat' && ins[FRONT] > 0.1 && rng.chance(0.75)) {
+      // (not down the turret's corner)
+      const left = rng.chance(0.5) ? clear[FRONT][0] === 0 : clear[FRONT][1] > 0;
+      downpipe(g, sg, left ? uA + 0.18 : uB - 0.18, eave - 0.15, undefined, ins[FRONT]);
+    }
+    if (gr.n > 0 && gr.m > 1 && rng.chance(0.22)) dish(g, sg, rng.chance(0.5) ? uA + 0.5 : uB - 0.5, eave - 1.2, 0.02);
+  }
+
+  /** oriel over one or two window columns of the front's upper floors */
+  function planOriel(sg: SideGeom, gr: Grid, doorU: number): void {
+    if (gr.n < 1 || gr.m < 1) return;
+    const two = gr.n >= 4 && mr.chance(0.35);
+    let i = gr.n % 2 === 1 ? (gr.n - 1) / 2 : mr.chance(0.5) ? gr.n / 2 - 1 : gr.n / 2;
+    if (two) i = Math.min(gr.n - 2, i);
+    const i2 = two ? i + 1 : i;
+    const ww = gr.wx1 - gr.wx0;
+    const half = Math.min(gr.cw * 0.46, ww / 2 + 0.5);
+    const u0 = two ? gridU(gr, i) - gr.cw / 2 + 0.12 : gridU(gr, i) - half,
+      u1 = two ? gridU(gr, i2) + gr.cw / 2 - 0.12 : gridU(gr, i) + half;
+    const w = u1 - u0;
+    const j0 = orielRow0;
+    const rowsN = (lot.roof === 'flat' ? gr.m : gr.m - 1) - j0;
+    const rows = rowsN > 2 && mr.chance(0.35) ? 2 : rowsN;
+    if (rows < 1 || w < 1.2) return;
+    const canted = w >= 1.9 && mr.chance(0.5);
+    const cap = j0 + rows >= gr.m ? 'flat' : mr.weighted(['hip', 'lean', 'flat'] as const, [0.5, 0.3, 0.2]);
+    const capC = cap === 'hip' ? col(mr.pick(['#4f5a66', '#5b6470', '#6fa596'])) : col('#7d858b');
+    const uc = (u0 + u1) / 2;
+    oriel(g, sg, uc, w, {
+      canted, dep: canted ? 0.72 : 0.6, o0: 0, v0: gH + j0 * fH, ch: fH, rows,
+      winW: ww, winH: gr.wy1 - gr.wy0, sill: gr.wy0, look: look(PROF.HOME), trimC, capC, cap,
+      corbel: j0 === 0 && Math.abs(uc - doorU) < w / 2 + 0.7 ? 0.25 : 0.5,
+    });
+    for (let j = j0; j < j0 + rows; j++) for (let k = i; k <= i2; k++) orielCells.add(`${j}:${k}`);
+    for (let k = i; k <= i2; k++) orielCols.add(k);
+    orielGrid = gr;
+    orielX = sg.x0 + sg.tx * uc;
+    orielW = w;
   }
 
   function awning(sg: SideGeom, uA: number, uB: number, yTop: number): void {
@@ -415,23 +567,50 @@ export function genTownhouse(g: Gen): void {
     const yF = Math.max(2.72, yTop - 0.55);
     const stripes = Math.max(3, Math.round((uB - uA) / 0.34));
     const sw = (uB - uA) / stripes;
+    // the canvas sags between the arms (most in the middle of the span and of the slope), the front roller bar
+    // keeps the front edge straight; a scalloped valance hangs from the bar
+    const NS = 4;
+    const sag = Math.min(0.07, 0.025 + (uB - uA) * 0.008);
+    const P = (u: number, sl: number, dy = 0): [number, number, number] => {
+      const o = 0.02 + (out - 0.02) * sl;
+      const lat = Math.sin((Math.PI * (u - uA)) / (uB - uA));
+      return [sx(sg, u, o), yTop + (yF - yTop) * sl - sag * lat * Math.sin(Math.PI * sl) + dy, sz(sg, u, o)];
+    };
     for (let k = 0; k < stripes; k++) {
       const a = uA + k * sw,
         b = a + sw;
-      setCol(t, k % 2 === 0 ? ac : white);
-      const p0x = sx(sg, a, 0.02), p0z = sz(sg, a, 0.02);
-      const p1x = sx(sg, b, 0.02), p1z = sz(sg, b, 0.02);
-      const q0x = sx(sg, a, out), q0z = sz(sg, a, out);
-      const q1x = sx(sg, b, out), q1z = sz(sg, b, out);
-      // sloped canvas (faces up/out) + underside
-      t.quadAway(q0x, yF, q0z, q1x, yF, q1z, p1x, yTop, p1z, p0x, yTop, p0z, sx(sg, (a + b) / 2, 0.2), yF - 1, sz(sg, (a + b) / 2, 0.2));
-      setCol(t, k % 2 === 0 ? shade(ac, 0.6) : shade(white, 0.62));
-      t.quadAway(q0x, yF - 0.005, q0z, q1x, yF - 0.005, q1z, p1x, yTop - 0.005, p1z, p0x, yTop - 0.005, p0z, sx(sg, (a + b) / 2, 0.8), yTop + 1, sz(sg, (a + b) / 2, 0.8));
-      // valance (scalloped look via alternating heights)
-      setCol(t, k % 2 === 0 ? ac : white);
-      const vh = 0.2 + (k % 2) * 0.04;
-      t.quadAway(q0x, yF - vh, q0z, q1x, yF - vh, q1z, q1x, yF, q1z, q0x, yF, q0z, sx(sg, (a + b) / 2, 0), yF, sz(sg, (a + b) / 2, 0));
+      const top = k % 2 === 0 ? ac : white;
+      for (let i = 0; i < NS; i++) {
+        const s0 = i / NS,
+          s1 = (i + 1) / NS;
+        const p0 = P(a, s0), p1 = P(b, s0), q0 = P(a, s1), q1 = P(b, s1);
+        // sloped canvas (faces up/out) + underside (darker: light through the cloth)
+        setCol(t, shade(top, 1 - 0.04 * Math.sin(Math.PI * s0)));
+        t.quadAway(q0[0], q0[1], q0[2], q1[0], q1[1], q1[2], p1[0], p1[1], p1[2], p0[0], p0[1], p0[2], sx(sg, (a + b) / 2, 0.2), yF - 1, sz(sg, (a + b) / 2, 0.2));
+        setCol(t, shade(top, k % 2 === 0 ? 0.6 : 0.62));
+        t.quadAway(q0[0], q0[1] - 0.005, q0[2], q1[0], q1[1] - 0.005, q1[2], p1[0], p1[1] - 0.005, p1[2], p0[0], p0[1] - 0.005, p0[2], sx(sg, (a + b) / 2, 0.8), yTop + 1, sz(sg, (a + b) / 2, 0.8));
+      }
+      // valance: one scallop per stripe (half-round lobe), both faces
+      setCol(t, top);
+      const NV = 4;
+      for (let j = 0; j < NV; j++) {
+        const f0 = j / NV,
+          f1 = (j + 1) / NV;
+        const lobe = (f: number) => 0.17 + 0.07 * Math.sqrt(Math.max(0, 1 - (2 * f - 1) * (2 * f - 1)));
+        const u0 = a + sw * f0,
+          u1 = a + sw * f1;
+        const ox = out + 0.01;
+        const x0 = sx(sg, u0, ox), z0 = sz(sg, u0, ox), x1 = sx(sg, u1, ox), z1 = sz(sg, u1, ox);
+        t.quadAway(x0, yF - lobe(f0), z0, x1, yF - lobe(f1), z1, x1, yF, z1, x0, yF, z0, sx(sg, (u0 + u1) / 2, 0), yF, sz(sg, (u0 + u1) / 2, 0));
+        setCol(t, shade(top, 0.7));
+        t.quadAway(x0, yF - lobe(f0), z0, x1, yF - lobe(f1), z1, x1, yF, z1, x0, yF, z0, sx(sg, (u0 + u1) / 2, out + 1), yF, sz(sg, (u0 + u1) / 2, out + 1));
+        setCol(t, top);
+      }
     }
+    anchors.spot(sg, 'awning', uA, uB, yF - 0.17, yF, out + 0.012, { bg: ac.getHex() });
+    // front roller bar
+    setCol(t, col('#4a4a48'));
+    t.beam(sx(sg, uA, out), yF + 0.01, sz(sg, uA, out), sx(sg, uB, out), yF + 0.01, sz(sg, uB, out), 0.045, 0.045);
     // side cheeks
     setCol(t, ac);
     for (const [u, sgn] of [
@@ -477,18 +656,37 @@ export function genTownhouse(g: Gen): void {
     sideBox(t, sg, u - 0.03, u + 0.03, o0 + 0.05, o1 - 0.05, yb + 0.26, yb + 0.34, true);
   }
 
-  function buildSecondary(sg: SideGeom, uA: number, uB: number, isBack: boolean, fullSide: boolean): void {
+  function buildSecondary(sg: SideGeom, uA: number, uB: number, isBack: boolean, fullSide: boolean, cl: [number, number]): void {
     const t = g.trim;
     const len = uB - uA;
+    // old ivy on exposed side / back walls
+    if (rng.chance(isBack ? 0.3 : 0.22) && len > 3) {
+      const w = rng.range(1.6, Math.min(5, len - 0.6));
+      climber(g, sg, uA + 0.3 + w / 2 + rng.next() * Math.max(0, len - w - 0.6), w, rng.range(3.5, Math.max(4, eave - 0.8)), sideIns(sg), rng.chance(0.75) ? GREEN.IVY_WALL : GREEN.JASMINE);
+    }
     // ground floor
     const n0 = Math.max(1, Math.min(4, Math.round((len - 0.8) / 2.7)));
     const gr0 = makeGrid(uA, uB, 0, gH, 1, { spacing: 2.7, cols: n0, winW: 1.0, winH: Math.min(1.7, gH - 1.4), sill: 0.95, margin: 0.5 });
     wallGrid(g.shell, sg, uA, uB, 0, gH, gr0, look(isBack ? PROF.HOME : PROF.HOME));
     if (fullSide) windowTrim(sg, gr0, false);
     // upper floors
-    const gr = upperGrid(uA, uB, Math.max(1, Math.min(4, Math.round((len - 0.9) / (isBack ? 2.9 : 2.6)))));
+    const gr = upperGrid(uA + cl[0], uB - cl[1], Math.max(1, Math.min(4, Math.round((len - cl[0] - cl[1] - 0.9) / (isBack ? 2.9 : 2.6)))));
     wallGrid(g.shell, sg, uA, uB, gH, eave, gr, look(PROF.HOME));
     windowTrim(sg, gr, !isBack);
+    // the back of the house: AC condensers under windows, a dish, a downpipe
+    if (gr.n > 0) {
+      for (let j = 0; j < gr.m; j++) {
+        if (!rng.chance(isBack ? 0.45 : 0.2)) continue;
+        const i = rng.int(0, gr.n - 1);
+        const side = rng.chance(0.5) ? -1 : 1;
+        const uu = gridU(gr, i) + side * ((gr.wx1 - gr.wx0) / 2 + 0.55);
+        if (uu > uA + 0.5 && uu < uB - 0.5) acUnit(g, sg, uu, gridY0(gr, j) - 0.05, 0);
+      }
+      if (isBack && rng.chance(0.3)) dish(g, sg, rng.chance(0.5) ? uA + 0.45 : uB - 0.45, eave - 1.0, 0.02);
+    }
+    if (isBack && lot.roof !== 'flat' && sideIns(sg) > 0.1 && rng.chance(0.6)) downpipe(g, sg, rng.chance(0.5) ? uA + 0.18 : uB - 0.18, eave - 0.15, undefined, sideIns(sg));
+    // ?noservices: the back of a townhouse carries its plumbing
+    if (isBack && dB('services') && sideIns(sg) > 0.08) homeBack(g, sg, uA, uB, eave - 0.1, gH, sideIns(sg), new Rng(((lot.seed * 37) ^ 0x7f4a7c) >>> 0 || 9));
     setCol(t, trimC);
     if (!isBack || fullSide) sideBox(t, sg, uA, uB, 0, 0.12, gH - 0.02, gH + 0.16, true);
     if (lot.roof !== 'flat') sideBox(t, sg, uA, uB, 0, 0.18, eave - 0.3, eave - 0.12, true);
@@ -496,6 +694,31 @@ export function genTownhouse(g: Gen): void {
 
   // ── roof
   buildRoof();
+  if (shopName && exposed[BACK]) kitchenFlue(shopName);
+
+  /** stainless extract duct up the back wall of cafés / bakeries / pubs, with a rain cowl */
+  function kitchenFlue(name: string): void {
+    const bakery = /Bakery|Pâtisserie|Pizzeria/.test(name);
+    const kitchen = /Café|Bistro|Fish|Tea Room|Pub|Anchor|Delicatessen|Butcher/.test(name);
+    if (!bakery && !kitchen) return;
+    const t = g.trim;
+    const sg = sideGeom(body, BACK);
+    const u = rng.chance(0.5) ? 0.42 : sg.L - 0.42;
+    const top = eave + (lot.roof === 'flat' ? 1.9 : 1.45);
+    setCol(t, col('#b9bfc3'));
+    // fan box where the duct leaves the wall, then the riser with a couple of brackets
+    sideBox(t, sg, u - 0.3, u + 0.3, 0, 0.24, 2.45, 2.95, true);
+    const px = sx(sg, u, 0.13),
+      pz = sz(sg, u, 0.13);
+    t.cylinder(px, pz, 0.1, 2.95, top, 8, false);
+    setCol(t, col('#8d9397'));
+    for (let y = 4.5; y < top - 1; y += 2.6) sideBox(t, sg, u - 0.13, u + 0.13, 0, 0.2, y, y + 0.05, true);
+    // cowl
+    setCol(t, col('#a6acb0'));
+    t.cylinder(px, pz, 0.025, top, top + 0.16, 4, false);
+    t.cone(px, pz, 0.2, top + 0.14, top + 0.3, 8);
+    anchors.vent(px, top + 0.1, pz, bakery ? 'bakery' : 'kitchen', name);
+  }
 
   function buildRoof(): void {
     const roofKind = lot.roof;
@@ -530,10 +753,12 @@ export function genTownhouse(g: Gen): void {
       setCol(g.trim, col('#cfc8bb'));
       g.trim.box(body.x0, yTop, body.z0, body.x1, yTop + 0.08, body.z0 + 0.27, 0b111111);
       g.trim.box(body.x0, yTop, body.z1 - 0.27, body.x1, yTop + 0.08, body.z1, 0b111111);
+      anchors.perch(body.x0 + 0.3, yTop + 0.08, body.z1 - 0.13, body.x1 - 0.3, yTop + 0.08, body.z1 - 0.13, 'parapet');
       g.trim.box(body.x0, yTop, body.z0 + 0.27, body.x0 + 0.27, yTop + 0.08, body.z1 - 0.27, 0b110111);
       g.trim.box(body.x1 - 0.27, yTop, body.z0 + 0.27, body.x1, yTop + 0.08, body.z1 - 0.27, 0b110111);
       flatRoof(g.shell, inner, eave + 0.02, col('#8d8a84'), ROOFPAT.FLAT, g.seed);
-      if (rng.chance(0.5)) roofTerrace(inner, eave + 0.02);
+      const keep: LRect[] = [];
+      if (rng.chance(0.5) && turretSide < 0) keep.push(roofTerrace(inner, eave + 0.02));
       else {
         // roof hatch / stair hut
         const hx = (inner.x0 + inner.x1) / 2 + rng.range(-1, 1),
@@ -542,8 +767,14 @@ export function genTownhouse(g: Gen): void {
         g.trim.box(hx - 1.1, eave, hz - 1.0, hx + 1.1, eave + 2.3, hz + 1.0);
         setCol(g.trim, col('#6e6a64'));
         g.trim.box(hx - 1.2, eave + 2.3, hz - 1.1, hx + 1.2, eave + 2.42, hz + 1.1);
-        roofClutter(inner, eave + 0.02, hz + 1.3);
+        keep.push({ x0: hx - 1.5, x1: hx + 1.5, z0: hz - 1.4, z1: hz + 1.4 });
+        keep.push(skylight(inner, eave + 0.02, hz + 1.3));
       }
+      // chimney stack position stays clear too
+      keep.push({ x0: body.x0, x1: body.x0 + 1.2, z0: body.z0, z1: body.z1 });
+      if (turretSide >= 0) keep.push(turretSide === RIGHT ? { x0: body.x1 - 2.7, x1: body.x1, z0: body.z1 - 2.7, z1: body.z1 } : { x0: body.x0, x1: body.x0 + 2.7, z0: body.z1 - 2.7, z1: body.z1 });
+      const kept = roofKit(g, inner, eave + 0.02, { keep, garden: 0.12, tank: 0.3, solar: 0.3, plant: 0, wall: shade(wallC, 0.92) });
+      clutterRoof(g, inner.x0, inner.z0, inner.x1, inner.z1, eave + 0.02, { keep: kept, density: 1.1 });
       chimney(g, body.x0 + 0.5, (body.z0 + body.z1) / 2 + rng.range(-2, 2), eave, yTop + rng.range(1.0, 1.8));
       return;
     }
@@ -592,6 +823,7 @@ export function genTownhouse(g: Gen): void {
       const ogR = exposed[RIGHT] ? 0.25 : 0,
         ogL = exposed[LEFT] ? 0.25 : 0;
       gableRoof(g, body, true, eave, yr, 0.38, 0, roofC, pat, trimC, 0.38, 0.38, ogL, ogR);
+      if (MASS.crowns && mr.chance(0.7)) eaveBrackets(eave - 0.38 * (rise / half), 0.34);
       for (const s of [RIGHT, LEFT] as Side[]) {
         const sg = sideGeom(body, s);
         if (exposed[s]) {
@@ -599,13 +831,14 @@ export function genTownhouse(g: Gen): void {
           wallTri(g.shell, sg, 0, sg.L, sg.L / 2, eave, yr, wallLook, attic, WIN.MUNTIN, PROF.HOME, frameIdx, GLASS.NEUTRAL);
         } else wallTri(g.shell, sg, 0, sg.L, sg.L / 2, eave, yr, wallLook);
       }
-      // dormers on the front slope, aligned with the window columns
-      const gr = upperGrid(0, body.x1 - body.x0);
+      // dormers on the front slope, aligned with the window columns — or a cross gable (over the oriel if any)
+      const gr = upperGrid(clear[FRONT][0], body.x1 - body.x0 - clear[FRONT][1]);
       const pitch = rise / half;
+      const cg = MASS.crossGables && body.x1 - body.x0 >= 6 && mr.chance(orielX !== null ? 0.8 : 0.55) && buildCrossGable(pitch, yr, roofC, pat);
       if (rng.chance(0.65)) {
         const nD = gr.n >= 3 ? (rng.chance(0.5) ? 2 : 1) : 1;
         const cols = nD === 1 ? [Math.floor((gr.n - 1) / 2) + (gr.n % 2 === 0 ? 0.5 : 0)] : [0.0 + (gr.n > 3 ? 0.5 : 0), gr.n - 1 - (gr.n > 3 ? 0.5 : 0)];
-        for (const ci of cols) {
+        if (!cg) for (const ci of cols) {
           const u = gr.u0 + (ci + 0.5) * gr.cw;
           dormer(body.x0 + u, body.z1 - 1.25, eave + 1.25 * pitch, pitch, roofC, pat);
         }
@@ -613,6 +846,34 @@ export function genTownhouse(g: Gen): void {
       if (rng.chance(0.9)) chimney(g, rng.chance(0.5) ? body.x0 + 0.6 : body.x1 - 0.6, (body.z0 + body.z1) / 2 + rng.range(-0.8, 0.8), yr - 1.0, yr + rng.range(0.6, 1.2));
       if (rng.chance(0.35)) chimney(g, (body.x0 + body.x1) / 2 + rng.range(-1.5, 1.5), body.z0 + 1.5, eave + 0.8, yr + 0.3);
     }
+  }
+
+  /** ?nocrowns: carved brackets (modillions) under the front eave / cornice, top at y, projecting `dep` */
+  function eaveBrackets(y: number, dep: number): void {
+    const t = g.trim;
+    const sg = sideGeom(body, FRONT);
+    const u0 = 0.3 + clear[FRONT][0],
+      u1 = sg.L - 0.3 - clear[FRONT][1];
+    const n = Math.max(2, Math.round((u1 - u0) / 0.7));
+    setCol(t, shade(trimC, 0.94));
+    const yb = y - 0.34;
+    for (let k = 0; k <= n; k++) {
+      const u = u0 + ((u1 - u0) * k) / n;
+      const P = (du: number, yy: number, o: number) => [sx(sg, u + du, o), yy, sz(sg, u + du, o)];
+      t.hexa([P(-0.05, yb, 0), P(0.05, yb, 0), P(0.05, yb, 0.07), P(-0.05, yb, 0.07), P(-0.05, y, 0), P(0.05, y, 0), P(0.05, y, dep), P(-0.05, y, dep)], 2);
+    }
+  }
+
+  /** cross gable on the front slope of a side-gabled roof: centred on the oriel, clear of the turret */
+  function buildCrossGable(pitch: number, yr: number, roofC: THREE.Color, pat: number): boolean {
+    const bw = body.x1 - body.x0;
+    let w = orielX !== null ? Math.max(orielW + 0.9, 2.6) : Math.min(5.2, Math.max(3.0, bw * mr.range(0.38, 0.5)));
+    const lo = body.x0 + 0.5 + clear[FRONT][0],
+      hi = body.x1 - 0.5 - clear[FRONT][1];
+    w = Math.min(w, hi - lo);
+    if (w < 2.4) return false;
+    const cx = Math.min(hi - w / 2, Math.max(lo + w / 2, orielX ?? (body.x0 + body.x1) / 2));
+    return crossGable(g, { r: body, cx, w, eave, pitch, yRidge: yr, knee: mr.range(0.6, 1.4), look: look(PROF.HOME), plain: wallLook, roofC, pat, trimC, style: arched ? WIN.ARCHED : WIN.MUNTIN });
   }
 
   /** Front gable as a Dutch stepped gable rising above the roof line. */
@@ -681,7 +942,7 @@ export function genTownhouse(g: Gen): void {
     const ridge = yBase + wh + 0.65;
     wallTri(s, sgF, 0, w, w / 2, yBase + wh, ridge, wallLook);
     // cheeks back to where the main roof rises above them
-    const depth = (yBase + wh - yBase) / pitch + 0.5;
+    const depth = Math.max(wh / pitch + 0.5, (ridge - yBase) / pitch + 0.03); // (else the roof stays open at the back under 45°)
     const zb = zFront - depth;
     setCol(s, wallC);
     s.A[0] = s.A[1] = s.A[2] = s.A[3] = 0;
@@ -716,6 +977,7 @@ export function genTownhouse(g: Gen): void {
     setCol(g.trim, trimC);
     const sgF = sideGeom(body, FRONT);
     sideBox(g.trim, sgF, 0, sgF.L, 0, 0.3, eave - 0.3, eave + 0.02, true);
+    if (MASS.crowns && mr.chance(0.7)) eaveBrackets(eave - 0.3, 0.28);
     // steep front/back slopes
     roofLook(s, roofC, pat, g.seed);
     const z1i = body.z1 - inset,
@@ -746,7 +1008,7 @@ export function genTownhouse(g: Gen): void {
     g.trim.box(body.x0, yTop - 0.02, z1i - 0.08, body.x1, yTop + 0.1, z1i + 0.06, 0b111111);
     g.trim.box(body.x0, yTop - 0.02, z0i - 0.06, body.x1, yTop + 0.1, z0i + 0.08, 0b111111);
     // dormers in the steep slope
-    const gr = upperGrid(0, body.x1 - body.x0);
+    const gr = upperGrid(clear[FRONT][0], body.x1 - body.x0 - clear[FRONT][1]);
     for (let i = 0; i < gr.n; i++) {
       const cx = body.x0 + gridU(gr, i);
       const w = 1.2,
@@ -769,7 +1031,8 @@ export function genTownhouse(g: Gen): void {
     chimney(g, body.x0 + 0.55, (body.z0 + body.z1) / 2, yTop - 0.5, yTop + rng.range(0.8, 1.4));
   }
 
-  function roofClutter(r: LRect, y: number, zMin: number): void {
+  /** skylight on a flat roof; returns its keep-clear rect */
+  function skylight(r: LRect, y: number, zMin: number): LRect {
     const t = g.trim;
     // skylight
     const sxm = r.x0 + (r.x1 - r.x0) * rng.range(0.3, 0.7),
@@ -782,44 +1045,26 @@ export function genTownhouse(g: Gen): void {
     setCol(t, col('#d8d2c4'));
     t.triangle(sxm - 0.8, y + 0.35, szm - 0.6, sxm - 0.8, y + 0.35, szm + 0.6, sxm - 0.8, y + 0.75, szm);
     t.triangle(sxm + 0.8, y + 0.35, szm + 0.6, sxm + 0.8, y + 0.35, szm - 0.6, sxm + 0.8, y + 0.75, szm);
-    // vent pipes + an AC unit + a satellite dish
-    setCol(t, col('#a9adb0'));
-    for (let k = 0; k < 2; k++) {
-      const vx = r.x0 + 0.6 + rng.next() * (r.x1 - r.x0 - 1.2),
-        vz = r.z0 + 0.6 + rng.next() * (r.z1 - r.z0 - 1.2);
-      t.cylinder(vx, vz, 0.09, y, y + 0.7, 6, true);
-    }
-    if (rng.chance(0.6)) {
-      const ax = r.x1 - 1.0,
-        az = r.z1 - 1.0;
-      setCol(t, col('#d6d8d6'));
-      t.box(ax - 0.5, y, az - 0.35, ax + 0.5, y + 0.7, az + 0.35);
-      setCol(t, col('#3a3f44'));
-      t.cylinder(ax, az + 0.36, 0.25, y + 0.1, y + 0.6, 8, false);
-    }
-    if (rng.chance(0.5)) {
-      const dx = r.x0 + 0.8,
-        dz = r.z1 - 0.9;
-      setCol(t, col('#e9e9e6'));
-      t.cylinder(dx, dz, 0.04, y, y + 0.7, 4, false);
-      t.cone(dx, dz, 0.42, y + 0.62, y + 0.9, 8);
-    }
+    return { x0: sxm - 1.2, x1: sxm + 1.2, z0: szm - 1.0, z1: szm + 1.0 };
   }
 
-  function roofTerrace(r: LRect, y: number): void {
+  /** roof terrace (decking, planters, parasol); returns its keep-clear rect */
+  function roofTerrace(r: LRect, y: number): LRect {
     const t = g.trim;
     // decking
     setCol(t, col('#a87f58'));
     const dx0 = r.x0 + 0.2, dx1 = r.x1 - 0.2, dz0 = r.z0 + (r.z1 - r.z0) * 0.45, dz1 = r.z1 - 0.2;
     t.box(dx0, y, dz0, dx1, y + 0.06, dz1, 0b111111);
-    // planters + plants
+    anchors.balcony((dx0 + dx1) / 2, y + 0.06, (dz0 + dz1) / 2, 0, 1, dx1 - dx0, dz1 - dz0, 0.8, 'terrace');
+    // planters + plants along the parapet, pot plants in the corners
     for (let k = 0; k < 3; k++) {
       const px = dx0 + 0.4 + ((dx1 - dx0 - 0.8) * k) / 2;
       setCol(t, col('#b5653f'));
       t.box(px - 0.3, y, dz1 - 0.6, px + 0.3, y + 0.4, dz1 - 0.1);
-      setCol(t, col(rng.pick(['#4f8a3c', '#5c9a45', '#6aa84f'])));
-      t.sphere(px, y + 0.7, dz1 - 0.35, 0.38, 6, 4);
+      g.green.clump(px, y + 0.36, dz1 - 0.35, 0.4, rng.range(0.7, 1.3), rng.weighted([GREEN.SHRUB, GREEN.PALM, GREEN.LAVENDER, GREEN.GRASS], [3, 2, 1, 1]), 3);
     }
+    const sgT = sideGeom({ x0: dx0, x1: dx1, z0: dz0, z1: dz1 }, BACK);
+    for (const pu of [0.35, sgT.L - 0.35]) if (rng.chance(0.7)) potPlant(g, sgT, pu, -0.35, y + 0.06, rng.range(1.0, 1.7));
     // parasol + table
     const cx = (dx0 + dx1) / 2 + rng.range(-0.8, 0.8),
       cz = (dz0 + dz1) / 2;
@@ -830,6 +1075,7 @@ export function genTownhouse(g: Gen): void {
     setCol(t, col('#f4f1ea'));
     t.cylinder(cx, cz, 0.38, y + 0.68, y + 0.74, 8, true);
     t.cylinder(cx, cz, 0.04, y, y + 0.7, 4, false);
+    return { x0: dx0 - 0.3, x1: dx1 + 0.3, z0: dz0 - 0.3, z1: dz1 + 0.3 };
   }
 }
 

@@ -5,6 +5,8 @@
 // and beach kiosks (service windows, awnings, a giant ice-cream cone) and the
 // Rowing Club boathouse (timber, boat doors, crossed oars).
 
+import { dB } from '../../core/detailbuildings';
+import { realLobby, kioskRoom } from './lobby';
 import * as THREE from 'three';
 import {
   Gen, LRect, Side, FRONT, RIGHT, BACK, LEFT, Grid, WallLook, SideGeom,
@@ -12,9 +14,13 @@ import {
   gableRoof, hipRoof, flatRoof, roofLook, roofPoly, chimney, doorNiche, bandWithOpenings, railing, signOnSide,
   col, shade, setCol, lightBox, wallLamp,
 } from './gen';
-import { WIN, PROF, WALLPAT, ROOFPAT, FRAME, GLASS, LIGHT_MODE } from './materials';
-import { letterSign, boardSign, clockFace } from './signs';
+import { anchors } from './anchors';
+import { balconyLife, potPlant, roofClutter } from './clutter';
+import { GREEN } from './green';
+import { WIN, PROF, WALLPAT, ROOFPAT, FRAME, GLASS, LIGHT_MODE, shopType } from './materials';
+import { letterSign, boardSign, clockFace, noticeBoard } from './signs';
 import { partitionSide } from './oldtown';
+import { MASS, massRng, turret } from './massing';
 
 const PREV: Side[] = [LEFT, FRONT, RIGHT, BACK];
 
@@ -69,23 +75,35 @@ function grand(g: Gen): void {
   const s = g.shell,
     t = g.trim;
   const look = (style: number, color = stone, pattern: number = WALLPAT.STONE): WallLook => ({ color, pattern, frame: FRAME.WOOD, glass: GLASS.NEUTRAL, style, profile: PROF.HOTEL, seed: g.seed });
+  // ?noturrets: domed corner pavilions on the exposed front corners (window grids keep clear of them)
+  const tR = 1.45;
+  const domeL = MASS.turrets && floors >= 4 && f.exposed[LEFT] && massRng(g).chance(0.9),
+    domeR = MASS.turrets && floors >= 4 && f.exposed[RIGHT] && massRng(g).chance(0.9);
+  const tc = tR + 0.45;
+  const clr = (sd: Side): [number, number] => (sd === FRONT ? [domeL ? tc : 0, domeR ? tc : 0] : sd === RIGHT ? [domeR ? tc : 0, 0] : sd === LEFT ? [0, domeL ? tc : 0] : [0, 0]);
   for (const sd of [FRONT, RIGHT, BACK, LEFT] as Side[]) {
     const sg = sideGeom(body, sd);
     const parts = partitionSide(g, sd, sg.L, f.ins[PREV[sd]]);
     const doors = doorsOn(g, f, sd, sg.L);
+    const [cA, cB] = clr(sd);
     for (const p of parts) {
       if (p.covered) {
         wallPlain(s, sg, p.a, p.b, 0, H + 1.2, { color: stone, pattern: WALLPAT.STONE, seed: g.seed });
         continue;
       }
-      const ops = doors.filter((u) => u >= p.a && u <= p.b).map((u) => ({ u, w: 2.6, h: 3.4 }));
+      // ?nolobby3d: the hotel's front door opens into a real foyer (lobby.ts)
+      const here = doors.filter((u) => u >= p.a && u <= p.b);
+      const foyer = sd === FRONT && here.length > 0 && dB('lobby3d') && here[0] - 3.5 > p.a + 0.3 && here[0] + 3.5 < p.b - 0.3 ? here[0] : -1;
+      const ops = here.map((u) => (u === foyer ? { u, w: 7, h: 4.1 } : { u, w: 2.6, h: 3.4 }));
       bandWithOpenings(sg, p.a, p.b, ops, (a, b) => {
         const n = Math.max(1, Math.round((b - a) / 3.4));
         const gr = makeGrid(a, b, 0, gH, 1, { spacing: (b - a) / n, cols: n, winW: 1.7, winH: 3.0, sill: 0.8, margin: 0.4 });
         wallGrid(s, sg, a, b, 0, gH, gr, { ...look(WIN.ARCHED, base), profile: PROF.HOTEL });
       }, (a, b, y0) => wallPlain(s, sg, a, b, y0, gH, { color: base, pattern: WALLPAT.STONE, seed: g.seed }));
-      const n = Math.max(1, Math.round((p.b - p.a - 1.0) / 3.0));
-      const gr = makeGrid(p.a, p.b, gH, fH, floors - 1, { spacing: 3.0, cols: n, winW: 1.3, winH: fH * 0.6, sill: 0.8, margin: 0.8 });
+      const ga = p.a + (p.a < 0.05 ? cA : 0),
+        gb = p.b - (p.b > sg.L - 0.05 ? cB : 0);
+      const n = Math.max(1, Math.round((gb - ga - 1.0) / 3.0));
+      const gr = makeGrid(ga, gb, gH, fH, floors - 1, { spacing: 3.0, cols: n, winW: 1.3, winH: fH * 0.6, sill: 0.8, margin: 0.8 });
       wallGrid(s, sg, p.a, p.b, gH, H + 1.2, gr, look(WIN.MUNTIN));
       // window trims + iron balconies on the first floor and every third
       for (let j = 0; j < gr.m; j++) {
@@ -100,6 +118,13 @@ function grand(g: Gen): void {
             setCol(t, col('#efe4cc'));
             sideBox(t, sg, u - ww / 2 - 0.3, u + ww / 2 + 0.3, 0, 0.55, yb - 0.12, yb, true);
             railing(t, sx(sg, u - ww / 2 - 0.28, 0.52), sz(sg, u - ww / 2 - 0.28, 0.52), sx(sg, u + ww / 2 + 0.28, 0.52), sz(sg, u + ww / 2 + 0.28, 0.52), yb, 0.9, col('#2c3035'), 0.14, 1);
+            anchors.balcony(sx(sg, u, 0.27), yb, sz(sg, u, 0.27), sg.nx, sg.nz, ww + 0.6, 0.55, 0.9);
+            // flower troughs / pots behind the iron railing
+            if (rng.chance(0.55)) {
+              const c = rng.weighted([GREEN.GERANIUM, GREEN.PETUNIA, GREEN.IVY_HANG], [3, 2, 1]);
+              if (c === GREEN.GERANIUM) for (const du of [-ww * 0.3, ww * 0.3]) potPlant(g, sg, u + du, 0.22, yb, 0.85, c);
+              else g.green.hang(sg, u - ww / 2 - 0.2, u + ww / 2 + 0.2, 0.55, yb + 0.9, 0.35, 0.9, c, 0.08);
+            }
           }
         }
       }
@@ -109,7 +134,8 @@ function grand(g: Gen): void {
       sideBox(t, sg, p.a, p.b, 0, 0.55, H - 0.2, H + 0.25, true);
       sideBox(t, sg, p.a, p.b, 0, 0.3, H + 1.2, H + 1.38, true);
       for (const u of doors.filter((d) => d >= p.a && d <= p.b)) {
-        doorNiche(g, sg, u, { w: 2.6, h: 3.4, depth: 0.45, wallColor: base, frameColor: col('#5a3d2b'), doorColor: col('#5a3d2b'), glass: true, profile: PROF.ALWAYS, seed: g.seed + 4, frameOut: 0.2 });
+        if (u === foyer) realLobby(g, sg, { a: u - 3.5, b: u + 3.5, head: 4.1, doors: [u], masonry: true, tall: true, arcade: false, name: 'GRAND HOTEL', palette: 3, canopy: false });
+        else doorNiche(g, sg, u, { w: 2.6, h: 3.4, depth: 0.45, wallColor: base, frameColor: col('#5a3d2b'), doorColor: col('#5a3d2b'), glass: true, profile: PROF.ALWAYS, seed: g.seed + 4, frameOut: 0.2 });
         if (sd === FRONT) marquee(sg, u);
         else {
           setCol(t, col('#2c3035'));
@@ -118,12 +144,21 @@ function grand(g: Gen): void {
       }
     }
   }
+  for (const [on, x] of [[domeL, body.x0 + 0.1], [domeR, body.x1 - 0.1]] as [boolean, number][]) {
+    if (!on) continue;
+    turret(g, x, body.z1 - 0.1, {
+      R: tR, n: 8, y0: gH, yTop: H + 1.75, v0: gH, ch: fH, rows: floors - 1, winW: 0.95, winH: fH * 0.58, sill: 0.8,
+      look: look(WIN.MUNTIN), plain: { color: stone, pattern: WALLPAT.STONE, seed: g.seed }, trimC: col('#efe4cc'),
+      capC: col('#6fa596'), cap: 'dome', capH: 2.5, body, corbel: 1.1,
+    });
+  }
   // flat roof + penthouse + rooftop sign
   const inner: LRect = { x0: body.x0 + 0.3, x1: body.x1 - 0.3, z0: body.z0 + 0.3, z1: body.z1 - 0.3 };
   flatRoof(s, inner, H + 0.02, col('#8d8a84'), ROOFPAT.FLAT, g.seed);
   innerParapet(g, inner, H, H + 1.2, shade(stone, 0.9));
   setCol(t, col('#cfc4ae'));
   t.box(inner.x0 + 3, H, inner.z0 + 2, inner.x1 - 3, H + 3.0, inner.z0 + 6);
+  roofClutter(g, inner.x0, inner.z0, inner.x1, inner.z1, H + 0.02, { keep: [{ x0: inner.x0 + 2.6, x1: inner.x1 - 2.6, z0: inner.z0 + 1.6, z1: inner.z0 + 6.4 }, { x0: inner.x0, x1: inner.x1, z0: inner.z1 - 2.5, z1: inner.z1 }], density: 1.2 });
   setCol(t, col('#8f8c85'));
   t.box(inner.x0 + 2.8, H + 3.0, inner.z0 + 1.8, inner.x1 - 2.8, H + 3.15, inner.z0 + 6.2);
   // rooftop letters on a steel frame, facing the front
@@ -161,15 +196,49 @@ function grand(g: Gen): void {
       void px;
       void pz;
     }
-    // three flags
-    const flagC = ['#d94a3d', '#f4f1ea', '#2f6fd0'];
-    for (let k = 0; k < 3; k++) {
-      const fu = u - 2.2 + k * 2.2;
-      setCol(t, col('#d8d8d8'));
-      t.beam(sx(sg, fu, 0.1), gH + 0.6, sz(sg, fu, 0.1), sx(sg, fu, 1.15), gH + 1.5, sz(sg, fu, 1.15), 0.05, 0.05);
-      setCol(t, col(flagC[k]));
-      const fx = sx(sg, fu, 0.95), fz = sz(sg, fu, 0.95);
-      t.box(fx - 0.02 - Math.abs(sg.tx) * 0.5, gH + 0.45, fz - 0.02 - Math.abs(sg.tz) * 0.5, fx + 0.02, gH + 1.35, fz + 0.02, 0b111111);
+    // three flags on raked poles over the canopy: bracket, pole, finial, cloth hanging from the pole
+    const designs = [
+      ['#d94a3d', '#f4f1ea', '#2f6fd0'],
+      ['#1f3a5f', '#c9a24a', '#1f3a5f'],
+      ['#2e7d4f', '#f4f1ea', '#d94a3d'],
+    ];
+    for (let k = 0; k < 3; k++) hotelFlag(sg, u - 2.2 + k * 2.2, designs[k], k);
+  }
+
+  function hotelFlag(sg: SideGeom, fu: number, bands: string[], k: number): void {
+    const o0 = 0.1,
+      y0 = gH + 0.35,
+      o1 = 1.16,
+      y1 = gH + 1.45;
+    const yAt = (o: number) => y0 + ((o - o0) / (o1 - o0)) * (y1 - y0);
+    setCol(t, col('#2c3035'));
+    sideBox(t, sg, fu - 0.07, fu + 0.07, 0, 0.12, y0 - 0.12, y0 + 0.12);
+    setCol(t, col('#d8d8d8'));
+    t.beam(sx(sg, fu, o0), y0, sz(sg, fu, o0), sx(sg, fu, o1), y1, sz(sg, fu, o1), 0.035, 0.035);
+    setCol(t, col('#c9a24a'));
+    const fx = sx(sg, fu, o1 - 0.01), fz = sz(sg, fu, o1 - 0.01);
+    t.box(fx - 0.04, y1 - 0.02, fz - 0.04, fx + 0.04, y1 + 0.06, fz + 0.04, 0b111111);
+    // cloth: hoist along the pole, hanging straight down; ripples run from hoist to fly
+    const h0 = 0.3,
+      h1 = 1.1,
+      drop = 0.62;
+    const NU = 6,
+      NV = bands.length;
+    const ph = k * 1.7;
+    const P = (i: number, j: number): [number, number, number] => {
+      const f = i / NU;
+      const o = h0 + (h1 - h0) * f;
+      const side = 0.07 * f * Math.sin(f * 7.5 + ph) + 0.02 * (j / NV) * f;
+      const y = yAt(o) - 0.03 - drop * (j / NV) - 0.04 * f * f;
+      return [sx(sg, fu + side, o), y, sz(sg, fu + side, o)];
+    };
+    for (let j = 0; j < NV; j++) {
+      setCol(t, col(bands[j]));
+      for (let i = 0; i < NU; i++) {
+        const a = P(i, j), b = P(i + 1, j), c = P(i + 1, j + 1), d = P(i, j + 1);
+        t.quad(a[0], a[1], a[2], b[0], b[1], b[2], c[0], c[1], c[2], d[0], d[1], d[2]);
+        t.quad(b[0], b[1], b[2], a[0], a[1], a[2], d[0], d[1], d[2], c[0], c[1], c[2]);
+      }
     }
   }
 }
@@ -214,14 +283,18 @@ function seaview(g: Gen): void {
         wallPlain(s, sg, p.a, p.b, 0, H, { color: white, pattern: WALLPAT.PLASTER, seed: g.seed });
         continue;
       }
-      const ops = doors.filter((u) => u >= p.a && u <= p.b).map((u) => ({ u, w: 2.4, h: 3.1 }));
+      // ?nolobby3d: the front door opens into a real foyer (lobby.ts)
+      const here = doors.filter((u) => u >= p.a && u <= p.b);
+      const foyer = sd === FRONT && here.length > 0 && dB('lobby3d') && here[0] - 3.2 > p.a + 0.3 && here[0] + 3.2 < p.b - 0.3 ? here[0] : -1;
+      const ops = here.map((u) => (u === foyer ? { u, w: 6.4, h: 3.4 } : { u, w: 2.4, h: 3.1 }));
       bandWithOpenings(sg, p.a, p.b, ops, (a, b) => {
         const n = Math.max(1, Math.round((b - a) / 3.2));
         const gr = makeGrid(a, b, 0, gH, 1, { spacing: (b - a) / n, cols: n, winW: 1.8, winH: 2.7, sill: 0.7, margin: 0.4 });
         wallGrid(s, sg, a, b, 0, gH, gr, look(WIN.ARCHED, accent, PROF.SHOP));
       }, (a, b, y0) => wallPlain(s, sg, a, b, y0, gH, { color: accent, pattern: WALLPAT.PLASTER, seed: g.seed }));
       for (const u of doors.filter((d) => d >= p.a && d <= p.b)) {
-        doorNiche(g, sg, u, { w: 2.4, h: 3.1, depth: 0.35, wallColor: accent, frameColor: col('#f6f1e4'), doorColor: col('#2a6f74'), glass: true, profile: PROF.ALWAYS, seed: g.seed + 2, frameOut: 0.2 });
+        if (u === foyer) realLobby(g, sg, { a: u - 3.2, b: u + 3.2, head: 3.4, doors: [u], masonry: false, tall: false, arcade: false, name: 'SEAVIEW HOTEL', palette: 1, canopy: false });
+        else doorNiche(g, sg, u, { w: 2.4, h: 3.1, depth: 0.35, wallColor: accent, frameColor: col('#f6f1e4'), doorColor: col('#2a6f74'), glass: true, profile: PROF.ALWAYS, seed: g.seed + 2, frameOut: 0.2 });
         setCol(t, col('#2a6f74'));
         sideBox(t, sg, u - 2.0, u + 2.0, 0, 1.2, 3.5, 3.75, true);
         for (const lu of [u - 1.2, u, u + 1.2]) lightBox(g, sx(sg, lu, 0.8) - 0.1, 3.42, sz(sg, lu, 0.8) - 0.1, sx(sg, lu, 0.8) + 0.1, 3.5, sz(sg, lu, 0.8) + 0.1, '#fff1d6', LIGHT_MODE.STEADY, 3.5);
@@ -241,8 +314,12 @@ function seaview(g: Gen): void {
             setCol(t, white);
             sideBox(t, sg, u - 1.1, u + 1.1, 0, 0.9, yb - 0.14, yb, true);
             railing(t, sx(sg, u - 1.08, 0.86), sz(sg, u - 1.08, 0.86), sx(sg, u + 1.08, 0.86), sz(sg, u + 1.08, 0.86), yb, 0.95, col('#ffffff'), 0.16, 2);
-            if (rng.chance(0.3)) {
-              setCol(t, col(rng.pick(['#e63946', '#2a9d8f', '#f4a261', '#457b9d'])));
+            anchors.balcony(sx(sg, u, 0.45), yb, sz(sg, u, 0.45), sg.nx, sg.nz, 2.2, 0.9, 0.95);
+            // seafront hotel: mostly clean balconies with sparse personal touches
+            if (rng.chance(0.4)) balconyLife(g, sg, u - 1.04, u + 1.04, yb, { rail: 0.95, depth: 0.82, green: 0.7, hotel: true });
+            if (rng.chance(0.14)) {
+              // pale canvas parasols (a few personal touches, no confetti from the beach)
+              setCol(t, col(rng.pick(['#f1efe9', '#ece4d4', '#e2e6e4', '#cfdbe0'])));
               const px = sx(sg, u + 0.6, 0.5), pz = sz(sg, u + 0.6, 0.5);
               t.cone(px, pz, 0.6, yb + 1.6, yb + 1.9, 8);
               setCol(t, col('#dddddd'));
@@ -313,6 +390,12 @@ function seaview(g: Gen): void {
 
 // ─────────────────────────────────────────────────────────── school ──
 
+let schoolKit = true;
+/** ?noschoolkit: no door pulls / kick plates / noticeboard / intercom / sign bolts on the school (A/B). */
+export function setSchoolKit(on: boolean): void {
+  schoolKit = on;
+}
+
 export function genSchool(g: Gen): void {
   const { lot, rng } = g;
   const f = makeBody(g, 0.3);
@@ -335,16 +418,27 @@ export function genSchool(g: Gen): void {
         wallPlain(s, sg, p.a, p.b, 0, H + 0.8, { color: brick, pattern: WALLPAT.BRICK, seed: g.seed });
         continue;
       }
-      const ops = doors.filter((u) => u >= p.a && u <= p.b).map((u) => ({ u, w: 2.2, h: 2.6 }));
+      // the main entrance keeps a plain wall bay each side for the noticeboard / intercom (under the canopy)
+      const wide = (u: number): boolean => schoolKit && main && sd === FRONT && u - 2.7 >= p.a && u + 2.7 <= p.b;
+      const ops = doors.filter((u) => u >= p.a && u <= p.b).map((u) => ({ u, w: wide(u) ? 5.4 : 2.2, h: 2.6 }));
       bandWithOpenings(sg, p.a, p.b, ops, (a, b) => {
         const n = Math.max(1, Math.round((b - a) / 3.4));
         const gr = makeGrid(a, b, 0, gH, 1, { spacing: (b - a) / n, cols: n, winW: Math.min(2.6, (b - a) / n - 0.8), winH: gH - 1.5, sill: 0.95, margin: 0.4 });
         wallGrid(s, sg, a, b, 0, gH, gr, look);
-      }, (a, b, y0) => wallPlain(s, sg, a, b, y0, gH, { color: brick, pattern: WALLPAT.BRICK, seed: g.seed }));
+        dressings(sg, gr);
+      }, (a, b, y0) => {
+        const wl = { color: brick, pattern: WALLPAT.BRICK, seed: g.seed };
+        if (b - a < 3) return wallPlain(s, sg, a, b, y0, gH, wl);
+        const m = (a + b) / 2;
+        wallPlain(s, sg, a, m - 1.1, 0, gH, wl);
+        wallPlain(s, sg, m + 1.1, b, 0, gH, wl);
+        wallPlain(s, sg, m - 1.1, m + 1.1, y0, gH, wl);
+      });
       if (floors > 1) {
         const n = Math.max(1, Math.round((p.b - p.a - 0.8) / 3.4));
         const gr = makeGrid(p.a, p.b, gH, gH, floors - 1, { spacing: 3.4, cols: n, winW: 2.6, winH: gH - 1.4, sill: 0.9, margin: 0.4 });
         wallGrid(s, sg, p.a, p.b, gH, H + 0.8, gr, look);
+        dressings(sg, gr);
       }
       // white bands at each floor + coping
       setCol(t, band);
@@ -354,8 +448,8 @@ export function genSchool(g: Gen): void {
       const segs: [number, number][] = [];
       let cur = p.a;
       for (const o of ops.sort((x, y) => x.u - y.u)) {
-        if (o.u - o.w / 2 - 0.2 > cur) segs.push([cur, o.u - o.w / 2 - 0.2]);
-        cur = o.u + o.w / 2 + 0.2;
+        if (o.u - 1.3 > cur) segs.push([cur, o.u - 1.3]);
+        cur = o.u + 1.3;
       }
       if (p.b > cur) segs.push([cur, p.b]);
       for (const [a, b] of segs) sideBox(t, sg, a, b, 0, 0.1, 0, 0.6);
@@ -365,11 +459,15 @@ export function genSchool(g: Gen): void {
         setCol(t, band);
         sideBox(t, sg, u - 2.2, u + 2.2, 0, 1.45, 3.0, 3.3, true);
         lightBox(g, sx(sg, u, 1.0) - 0.15, 2.92, sz(sg, u, 1.0) - 0.15, sx(sg, u, 1.0) + 0.15, 3.0, sz(sg, u, 1.0) + 0.15, '#fff1d6', LIGHT_MODE.STEADY, 3);
+        if (schoolKit) entranceKit(sg, u, wide(u));
         if (sd === FRONT && main) {
-          const r = g.atlas.add('school', 512, 64, boardSign('WESTBROOK SCHOOL', { bg: '#efe9dc', fg: '#7a2e2a', glow: 0.35, weight: 'bold' }));
-          signOnSide(g, sg, u - 4.2, u + 4.2, 0.24, 3.5, 4.2, r);
+          // carved name panel: a dressed-stone tablet with a moulded border, letters cut dark into it
+          const r = g.atlas.add('school-carved', 512, 64, letterSign('WESTBROOK SCHOOL', '#5b4a3a', '#000000', 'Georgia, "Times New Roman", serif', 0, '#e9e1d0'));
+          setCol(t, shade(band, 0.86));
+          sideBox(t, sg, u - 4.45, u + 4.45, 0, 0.06, 3.38, 4.32, true);
           setCol(t, band);
-          sideBox(t, sg, u - 4.4, u + 4.4, 0, 0.2, 3.4, 4.3, true);
+          sideBox(t, sg, u - 4.3, u + 4.3, 0.06, 0.09, 3.48, 4.22, true);
+          signOnSide(g, sg, u - 4.0, u + 4.0, 0.093, 3.55, 4.15, r);
         }
       }
     }
@@ -377,6 +475,86 @@ export function genSchool(g: Gen): void {
   const inner: LRect = { x0: body.x0 + 0.3, x1: body.x1 - 0.3, z0: body.z0 + 0.3, z1: body.z1 - 0.3 };
   flatRoof(s, inner, H + 0.02, col('#8d8a84'), ROOFPAT.FLAT, g.seed);
   innerParapet(g, inner, H, H + 0.8, shade(brick, 0.9));
+
+  /**
+   * Entrance hardware at a double glazed door at u (niche depth 0.35): stainless D-pull bars on both leaves at
+   * the meeting stiles, kick plates, a rubber seal line; on the main entrance (`bays`) a glazed noticeboard with
+   * pinned papers on the left bay and an intercom + visitors plaque on the right one.
+   */
+  function entranceKit(sg: SideGeom, u: number, bays: boolean): void {
+    const d = 0.35;
+    const steel = col('#b8bdc0');
+    setCol(t, col('#2a2c2e'));
+    sideBox(t, sg, u - 0.012, u + 0.012, -d, -d + 0.014, 0.14, 2.56);
+    for (const sgn of [-1, 1]) {
+      const hu = u + sgn * 0.16;
+      setCol(t, steel);
+      sideBox(t, sg, hu - 0.016, hu + 0.016, -d + 0.05, -d + 0.075, 0.82, 1.68);
+      for (const y of [0.88, 1.62]) sideBox(t, sg, hu - 0.012, hu + 0.012, -d, -d + 0.05, y - 0.012, y + 0.012);
+      setCol(t, shade(steel, 0.92));
+      sideBox(t, sg, sgn < 0 ? u - 1.08 : u + 0.03, sgn < 0 ? u - 0.03 : u + 1.08, -d, -d + 0.006, 0.15, 0.44);
+    }
+    // the cantilevered canopy gets steel knee braces back to the wall, with wall plates
+    for (const bu of [u - 2.0, u + 2.0]) {
+      setCol(t, col('#5d6266'));
+      t.beam(sx(sg, bu, 1.15), 3.0, sz(sg, bu, 1.15), sx(sg, bu, 0.03), 2.35, sz(sg, bu, 0.03), 0.05, 0.05);
+      sideBox(t, sg, bu - 0.06, bu + 0.06, 0, 0.02, 2.26, 2.5, true);
+    }
+    if (!bays) return;
+    // noticeboard: green aluminium case, papers recessed 4 cm behind the lip, a pale glazing edge, header plaque
+    const a = u - 2.6,
+      b = u - 1.45,
+      y0 = 1.05,
+      y1 = 2.0;
+    const frame = col('#2f5d50');
+    setCol(t, shade(frame, 0.8));
+    sideBox(t, sg, a, b, 0, 0.02, y0, y1);
+    setCol(t, frame);
+    sideBox(t, sg, a, a + 0.05, 0.02, 0.075, y0, y1, true);
+    sideBox(t, sg, b - 0.05, b, 0.02, 0.075, y0, y1, true);
+    sideBox(t, sg, a + 0.05, b - 0.05, 0.02, 0.075, y0, y0 + 0.05, true);
+    sideBox(t, sg, a + 0.05, b - 0.05, 0.02, 0.075, y1 - 0.05, y1, true);
+    setCol(t, col('#dfe8ea'));
+    sideBox(t, sg, a + 0.05, b - 0.05, 0.068, 0.072, y1 - 0.065, y1 - 0.05);
+    sideBox(t, sg, b - 0.065, b - 0.05, 0.068, 0.072, y0 + 0.05, y1 - 0.05);
+    setCol(t, col('#c8ccce'));
+    sideBox(t, sg, b - 0.035, b - 0.015, 0.075, 0.085, (y0 + y1) / 2 - 0.03, (y0 + y1) / 2 + 0.03); // lock
+    const nr = g.atlas.add(`school-notices:${g.seed % 7}`, 128, 96, noticeBoard(g.seed));
+    signOnSide(g, sg, a + 0.05, b - 0.05, 0.022, y0 + 0.05, y1 - 0.05, nr);
+    const hr = g.atlas.add('school-noticehead', 192, 40, boardSign('NOTICES', { bg: '#2f5d50', fg: '#f4f1ea', glow: 0 }));
+    signOnSide(g, sg, a + 0.2, b - 0.2, 0.012, y1 + 0.05, y1 + 0.2, hr);
+    // intercom: stainless panel with a speaker grille, call button and camera eye
+    const iu = u + 1.5;
+    setCol(t, steel);
+    sideBox(t, sg, iu - 0.08, iu + 0.08, 0, 0.03, 1.22, 1.52, true);
+    setCol(t, col('#2b2d2f'));
+    for (let k = 0; k < 4; k++) sideBox(t, sg, iu - 0.05, iu + 0.05, 0.03, 0.034, 1.4 + k * 0.022, 1.41 + k * 0.022);
+    sideBox(t, sg, iu - 0.012, iu + 0.012, 0.03, 0.036, 1.47, 1.494);
+    setCol(t, col('#4f86c6'));
+    sideBox(t, sg, iu - 0.03, iu + 0.03, 0.03, 0.04, 1.28, 1.34);
+    // visitors plaque: two lines on a steel-edged board (one line was unreadable at 3 m)
+    const v1 = g.atlas.add('school-visitors1', 256, 64, boardSign('ALL VISITORS', { bg: '#2f5d50', fg: '#f4f1ea', glow: 0, font: 'Arial, sans-serif' }));
+    const v2 = g.atlas.add('school-visitors2', 320, 64, boardSign('PLEASE REPORT TO RECEPTION', { bg: '#f4f1ea', fg: '#2f5d50', glow: 0, font: 'Arial, sans-serif' }));
+    setCol(t, col('#c8ccce'));
+    sideBox(t, sg, u + 1.74, u + 2.6, 0, 0.012, 1.28, 1.74, true);
+    signOnSide(g, sg, u + 1.76, u + 2.58, 0.014, 1.53, 1.72, v1);
+    signOnSide(g, sg, u + 1.76, u + 2.58, 0.014, 1.3, 1.5, v2);
+  }
+
+  /** Stone lintels (with a soldier-course look: a dark joint line under them) and keyed corners per window. */
+  function dressings(sg: SideGeom, gr: Grid): void {
+    const ww = gr.wx1 - gr.wx0;
+    for (let j = 0; j < gr.m; j++) {
+      const yt = gridY1(gr, j);
+      for (let i = 0; i < gr.n; i++) {
+        const u = gridU(gr, i);
+        setCol(t, shade(band, 0.97 - ((g.seed + i * 3 + j * 7) % 4) * 0.02));
+        sideBox(t, sg, u - ww / 2 - 0.18, u + ww / 2 + 0.18, 0, 0.035, yt + 0.02, yt + 0.27, true);
+        setCol(t, shade(band, 0.7));
+        sideBox(t, sg, u - ww / 2 - 0.18, u + ww / 2 + 0.18, 0, 0.012, yt, yt + 0.02, true);
+      }
+    }
+  }
   if (main) {
     // clock over the entrance gable + cupola with a bell + flagpole
     const sgF = sideGeom(body, FRONT);
@@ -413,6 +591,13 @@ export function genSchool(g: Gen): void {
     const sgF = sideGeom(body, FRONT);
     const r = g.atlas.add('gym', 192, 64, boardSign('GYM', { bg: '#efe9dc', fg: '#2f5d50', glow: 0.3 }));
     signOnSide(g, sgF, sgF.L / 2 - 1.3, sgF.L / 2 + 1.3, 0.14, H - 1.5, H - 0.6, r);
+    if (schoolKit) {
+      // the board is bolted through spacers: a dark backing edge and four bolt heads
+      setCol(t, col('#3b3f42'));
+      sideBox(t, sgF, sgF.L / 2 - 1.32, sgF.L / 2 + 1.32, 0.1, 0.135, H - 1.52, H - 0.58);
+      setCol(t, col('#c4c8ca'));
+      for (const du of [-1.18, 1.18]) for (const y of [H - 1.4, H - 0.7]) sideBox(t, sgF, sgF.L / 2 + du - 0.02, sgF.L / 2 + du + 0.02, 0.14, 0.152, y - 0.02, y + 0.02);
+    }
   }
   void rng;
 }
@@ -435,21 +620,29 @@ export function genHarbormaster(g: Gen): void {
     const sg = sideGeom(body, sd);
     const doors = doorsOn(g, f, sd, sg.L);
     const ops = doors.map((u) => ({ u, w: 1.3, h: 2.4 }));
-    bandWithOpenings(sg, 0, sg.L, ops, (a, b) => {
-      if (b - a < 1.6) return wallPlain(s, sg, a, b, 0, gH, look);
-      const n = Math.max(1, Math.round((b - a) / 2.6));
-      const gr = makeGrid(a, b, 0, gH, 1, { spacing: (b - a) / n, cols: n, winW: 1.2, winH: 1.6, sill: 0.9, margin: 0.35 });
-      wallGrid(s, sg, a, b, 0, gH, gr, look);
-    }, (a, b, y0) => wallPlain(s, sg, a, b, y0, gH, look));
+    // ?noporch: the front door sits in a porch recessed under the upper floor (columns, deck, steps)
+    const porch = MASS.porches && sd === FRONT && doors.length > 0 ? porchSpan(doors[0], sg.L) : null;
+    const groundBand = (sgB: SideGeom, uA: number, uB: number, opsB: { u: number; w: number; h: number }[]) =>
+      bandWithOpenings(sgB, uA, uB, opsB, (a, b) => {
+        if (b - a < 1.6) return wallPlain(s, sgB, a, b, 0, gH, look);
+        const n = Math.max(1, Math.round((b - a) / 2.6));
+        const gr = makeGrid(a, b, 0, gH, 1, { spacing: (b - a) / n, cols: n, winW: 1.2, winH: 1.6, sill: 0.9, margin: 0.35 });
+        wallGrid(s, sgB, a, b, 0, gH, gr, look);
+      }, (a, b, y0) => wallPlain(s, sgB, a, b, y0, gH, look));
+    if (porch) {
+      groundBand(sg, 0, porch[0], []);
+      groundBand(sg, porch[1], sg.L, []);
+      buildPorch(sg, porch[0], porch[1], doors[0]);
+    } else groundBand(sg, 0, sg.L, ops);
     const gr = makeGrid(0, sg.L, gH, fH, 1, { spacing: 2.6, cols: 3, winW: 1.15, winH: 1.5, sill: 0.8, margin: 0.8 });
     wallGrid(s, sg, 0, sg.L, gH, H, gr, look);
     setCol(t, navy);
-    for (const [a, b] of around(0, sg.L, ops)) sideBox(t, sg, a, b, 0, 0.12, 0, 0.5);
+    for (const [a, b] of around(0, sg.L, porch ? [{ u: (porch[0] + porch[1]) / 2, w: porch[1] - porch[0] + 0.3 }] : ops)) sideBox(t, sg, a, b, 0, 0.12, 0, 0.5);
     sideBox(t, sg, 0, sg.L, 0, 0.14, gH - 0.08, gH + 0.1, true);
     sideBox(t, sg, 0, 0.18, 0, 0.12, 0, H);
     sideBox(t, sg, sg.L - 0.18, sg.L, 0, 0.12, 0, H);
     for (const u of doors) {
-      doorNiche(g, sg, u, { w: 1.3, h: 2.4, depth: 0.25, wallColor: white, frameColor: navy, doorColor: navy, glass: false, transom: true, lamp: true, seed: g.seed, frameOut: 0.12 });
+      if (!porch) doorNiche(g, sg, u, { w: 1.3, h: 2.4, depth: 0.25, wallColor: white, frameColor: navy, doorColor: navy, glass: false, transom: true, lamp: true, seed: g.seed, frameOut: 0.12 });
       const r = g.atlas.add('harbourmaster', 384, 64, boardSign('HARBOUR MASTER', { bg: '#263a5c', fg: '#f4f1ea', glow: 0.6, border: '#c9a24a' }));
       setCol(t, navy);
       sideBox(t, sg, u - 2.3, u + 2.3, 0, 0.12, gH + 0.15, gH + 0.95, true);
@@ -461,6 +654,63 @@ export function genHarbormaster(g: Gen): void {
       signOnSide(g, sg, sg.L / 2 - 0.55, sg.L / 2 + 0.55, 0.06, H - 1.25, H - 0.15, ck);
     }
   }
+  /** porch span around the door (clear of the corner posts) */
+  function porchSpan(u: number, L: number): [number, number] | null {
+    const a = Math.max(0.6, u - 2.3),
+      b = Math.min(L - 0.6, u + 2.3);
+    return b - a > 3.2 ? [a, b] : null;
+  }
+
+  /** recessed porch: back wall with the door 1.5 m in, return walls, soffit, deck with two steps, columns, balustrade */
+  function buildPorch(sg: SideGeom, pa: number, pb: number, du: number): void {
+    const dep = 1.5,
+      deck = 0.45;
+    const sgIn: SideGeom = { ...sg, x0: sg.x0 - sg.nx * dep, z0: sg.z0 - sg.nz * dep };
+    // back wall with the door
+    bandWithOpenings(sgIn, pa, pb, [{ u: du, w: 1.3, h: 2.4 + deck }], (a, b) => {
+      if (b - a < 1.4) return wallPlain(s, sgIn, a, b, 0, gH, look);
+      const gr = makeGrid(a, b, 0, gH, 1, { spacing: b - a, cols: 1, winW: Math.min(1.1, b - a - 0.5), winH: 1.5, sill: 1.05, margin: 0.25 });
+      wallGrid(s, sgIn, a, b, 0, gH, gr, look);
+    }, (a, b, y0) => wallPlain(s, sgIn, a, b, y0, gH, look));
+    doorNiche(g, sgIn, du, { w: 1.3, h: 2.4 + deck, depth: 0.2, wallColor: white, frameColor: navy, doorColor: navy, glass: false, transom: true, lamp: true, seed: g.seed, frameOut: 0.1 });
+    // return walls (facing into the porch)
+    wallSeg(s, sx(sg, pa, 0), sz(sg, pa, 0), sx(sg, pa, -dep), sz(sg, pa, -dep), 0, gH, null, look);
+    wallSeg(s, sx(sg, pb, -dep), sz(sg, pb, -dep), sx(sg, pb, 0), sz(sg, pb, 0), 0, gH, null, look);
+    // soffit (painted boards) under the upper floor
+    setCol(t, col('#e9e4d8'));
+    const c0x = sx(sg, pa, 0), c0z = sz(sg, pa, 0), c1x = sx(sg, pb, 0), c1z = sz(sg, pb, 0);
+    const c2x = sx(sg, pb, -dep), c2z = sz(sg, pb, -dep), c3x = sx(sg, pa, -dep), c3z = sz(sg, pa, -dep);
+    t.quadAway(c0x, gH - 0.08, c0z, c1x, gH - 0.08, c1z, c2x, gH - 0.08, c2z, c3x, gH - 0.08, c3z, (c0x + c2x) / 2, gH + 1, (c0z + c2z) / 2);
+    // timber deck with a fascia, two steps up to it in front of the door
+    setCol(t, col('#9a8a74'));
+    sideBox(t, sg, pa, pb, -dep, -0.6, 0, deck, false, true);
+    setCol(t, col('#b5b0a6'));
+    sideBox(t, sg, du - 1.0, du + 1.0, -0.6, -0.33, 0, deck - 0.15, false, true);
+    sideBox(t, sg, du - 1.0, du + 1.0, -0.33, -0.06, 0, deck - 0.3, false, true);
+    sideBox(t, sg, pa, du - 1.0, -0.6, -0.06, 0, deck, false, true);
+    sideBox(t, sg, du + 1.0, pb, -0.6, -0.06, 0, deck, false, true);
+    // columns: base, shaft, capital (white), at the ends and between
+    const nC = Math.max(2, Math.round((pb - pa) / 1.9) + 1);
+    for (let k = 0; k < nC; k++) {
+      const u = pa + 0.22 + ((pb - pa - 0.44) * k) / (nC - 1);
+      if (Math.abs(u - du) < 0.9) continue;
+      const px = sx(sg, u, -0.3),
+        pz = sz(sg, u, -0.3);
+      setCol(t, col('#e2ddd2'));
+      t.box(px - 0.2, deck, pz - 0.2, px + 0.2, deck + 0.22, pz + 0.2);
+      setCol(t, white);
+      t.cylinder(px, pz, 0.13, deck + 0.22, gH - 0.38, 10, false, 0.11);
+      setCol(t, col('#e2ddd2'));
+      t.cylinder(px, pz, 0.15, gH - 0.38, gH - 0.3, 10, false, 0.15);
+      t.box(px - 0.22, gH - 0.3, pz - 0.22, px + 0.22, gH - 0.08, pz + 0.22);
+    }
+    // balustrade along the deck edge, open at the steps
+    for (const [a, b] of [[pa + 0.22, du - 1.0], [du + 1.0, pb - 0.22]]) {
+      if (b - a < 0.4) continue;
+      railing(t, sx(sg, a, -0.55), sz(sg, a, -0.55), sx(sg, b, -0.55), sz(sg, b, -0.55), deck, 0.9, white, 0.12, 1);
+    }
+  }
+
   // hip roof + lookout lantern + signal mast
   const yr = H + 3.0;
   hipRoof(g, body, H, yr, 0.45, col('#4d5560'), ROOFPAT.SLATE, white);
@@ -516,14 +766,27 @@ export function genKiosk(g: Gen): void {
   const trimC = ice ? col('#a8e6cf') : col('#e6dbc2');
   const s = g.shell,
     t = g.trim;
-  const look: WallLook = { color: wallC, pattern: ice ? WALLPAT.SIDING : WALLPAT.PLASTER, frame: FRAME.WHITE, glass: GLASS.NEUTRAL, style: WIN.SHOP, profile: PROF.SHOP, seed: g.seed };
+  const look: WallLook = { color: wallC, pattern: (ice ? WALLPAT.SIDING : WALLPAT.PLASTER) + 16 * shopType(ice ? 'Ice Cream' : 'Coffee'), frame: FRAME.WHITE, glass: GLASS.NEUTRAL, style: WIN.SHOP, profile: PROF.SHOP, seed: g.seed };
   const wallTop = H - 0.5;
   for (const sd of [FRONT, RIGHT, BACK, LEFT] as Side[]) {
     const sg = sideGeom(body, sd);
     if (sd === FRONT) {
       // service window with counter
-      const gr = makeGrid(0, sg.L, 0, wallTop, 1, { spacing: sg.L, cols: 1, winW: sg.L - 1.0, winH: 1.15, sill: 1.05, margin: 0 });
-      wallGrid(s, sg, 0, sg.L, 0, wallTop, gr, look);
+      if (dB('kiosks')) {
+        // ?nokiosks: the hatch opens into a real little shop (lobby.ts)
+        const plain = { color: wallC, pattern: ice ? WALLPAT.SIDING : WALLPAT.PLASTER, seed: g.seed };
+        const hA = 0.5,
+          hB = sg.L - 0.5,
+          hY = Math.min(wallTop - 0.1, 2.3);
+        wallPlain(s, sg, 0, sg.L, 0, 1.05, plain);
+        wallPlain(s, sg, 0, hA, 1.05, hY, plain);
+        wallPlain(s, sg, hB, sg.L, 1.05, hY, plain);
+        wallPlain(s, sg, 0, sg.L, hY, wallTop, plain);
+        kioskRoom(g, sg, hA, hB, 1.05, hY, Math.min(2.2, g.D - 0.9), ice, trimC);
+      } else {
+        const gr = makeGrid(0, sg.L, 0, wallTop, 1, { spacing: sg.L, cols: 1, winW: sg.L - 1.0, winH: 1.15, sill: 1.05, margin: 0 });
+        wallGrid(s, sg, 0, sg.L, 0, wallTop, gr, look);
+      }
       setCol(t, trimC);
       sideBox(t, sg, 0.4, sg.L - 0.4, 0, 0.18, 0.98, 1.06, true);
       g.doorsBuilt += g.doors.filter((d) => d.side === FRONT).length;

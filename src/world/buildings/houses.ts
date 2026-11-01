@@ -9,6 +9,12 @@ import {
   gableRoof, hipRoof, flatRoof, roofLook, roofPoly, chimney, doorNiche, bandWithOpenings, railing,
   col, shade, setCol, lightBox, wallLamp,
 } from './gen';
+import { anchors } from './anchors';
+import { balconyLife, roofClutter, ironRail, acUnit, dish, downpipe } from './clutter';
+import { dB } from '../../core/detailbuildings';
+import { balconyAwning } from './services';
+import { Rng } from '../../core/rng';
+import { roofKit, MASS } from './massing';
 import { WIN, PROF, WALLPAT, ROOFPAT, FRAME, GLASS, LIGHT_MODE } from './materials';
 import { partitionSide } from './oldtown';
 
@@ -18,7 +24,8 @@ const DOORS = ['#b23a32', '#263a5c', '#2f5d50', '#e0b33c', '#2a6f74', '#5b3b5e',
 const SHUTTERS = ['#2f5d50', '#263a5c', '#5f6b73', '#7a2e2a', '#2a6f74', '#3b2a20'];
 const FLOWERS = ['#e63946', '#ff7aa2', '#f1faee', '#f4a261', '#b05bd6', '#ffd23f'];
 
-export function genHouse(g: Gen): void {
+/** The original single-massing house (kept for ?legacyhouses A/B). */
+export function genHouseLegacy(g: Gen): void {
   const { lot, rng, W, D } = g;
   const INS = 0.12;
   const body: LRect = { x0: -W / 2 + INS, x1: W / 2 - INS, z0: -D / 2 + INS, z1: D / 2 - INS };
@@ -89,6 +96,7 @@ export function genHouse(g: Gen): void {
     const lx = pa + du + 0.85;
     setCol(g.trim, col('#2b2b2b'));
     lightBox(g, lx - 0.08, 2.0, zP + 0.06, lx + 0.08, 2.28, zP + 0.2, '#ffc979', LIGHT_MODE.STEADY, 3);
+    anchors.doorLamp(lx, 2.14, zP + 0.13, 0, 1);
   }
   // side walls (garage on the driveway side, near the front)
   const sideWall = (sd: Side) => {
@@ -272,7 +280,7 @@ export function genHouse(g: Gen): void {
     wallGrid(s, sgF, 0, w, yBase - 0.3, yBase + wh, gr, look());
     const ridge = yBase + wh + 0.6;
     wallTri(s, sgF, 0, w, w / 2, yBase + wh, ridge, plainLook);
-    const depth = wh / pitch + 0.6;
+    const depth = Math.max(wh / pitch + 0.6, (ridge - yBase) / pitch + 0.03); // (else the roof stays open at the back under 45°)
     const zb = zFront - depth;
     wallSeg(s, cx + w / 2, zFront, cx + w / 2, zb, yBase - 0.3, yBase + wh, null, plainLook);
     wallSeg(s, cx - w / 2, zb, cx - w / 2, zFront, yBase - 0.3, yBase + wh, null, plainLook);
@@ -321,9 +329,13 @@ function jitPick(rng: Gen['rng'], list: string[]): THREE.Color {
 // ───────────────────────────────────────────────────────── apartments ──
 
 const APT_WALLS = ['#e9e1d0', '#d9e2e4', '#efd9b8', '#dcd3e3', '#e2e8d4'];
-const APT_ACCENT = ['#e76f51', '#2a9d8f', '#e9c46a', '#457b9d', '#f4a261', '#8d6cab'];
+/** muted, weathered painted-concrete tones for balcony fronts (one per building, ± per balcony) */
+const APT_BALC = ['#d8cfc0', '#cfd6d2', '#e3d6c3', '#c9c2b6', '#d6dccf', '#e6e1d6', '#c6cdd0', '#dccbb8'];
+/** muted parasol canvases */
+const APT_PARASOL = ['#efe9dc', '#e6e1d6', '#cfd6d2', '#d9c7a8', '#b9c4c8'];
 
 export function genApartment(g: Gen): void {
+  const awningRng = new Rng(((g.lot.seed * 53) ^ 0x1b873593) >>> 0 || 13);
   const { lot, rng, W, D } = g;
   const H = lot.height;
   const floors = Math.max(2, lot.floors);
@@ -333,9 +345,14 @@ export function genApartment(g: Gen): void {
   const gH = 3.3;
   const fH = (H - gH - 0.2) / (floors - 1);
   const wallC = col(rng.pick(APT_WALLS));
-  const accent = [col(rng.pick(APT_ACCENT)), col(rng.pick(APT_ACCENT))];
-  const look = (profile: number = PROF.HOME): WallLook => ({ color: wallC, pattern: WALLPAT.PANELS, frame: FRAME.ALU, glass: GLASS.NEUTRAL, style: WIN.PLAIN, profile, seed: g.seed });
-  const plain = { color: wallC, pattern: WALLPAT.PANELS, seed: g.seed };
+  // balcony fronts: weathered painted concrete in a muted tone, frosted glass, or slim metal railings (per building)
+  const balTone = col(rng.pick(APT_BALC)).lerp(wallC, 0.3);
+  const accent = [balTone, shade(balTone, 0.94)];
+  const balStyle = rng.weighted(['solid', 'glass', 'bars'] as const, [0.5, 0.25, 0.25]);
+  const railC = col(rng.pick(['#9aa3a8', '#e9e6dd', '#3a3f44']));
+  const aptPat = Math.abs(Math.sin(g.seed * 7.31) * 1e4) % 1 < 0.55 ? WALLPAT.PLASTER : WALLPAT.PANELS; // rendered (ETICS) or precast panels
+  const look = (profile: number = PROF.HOME): WallLook => ({ color: wallC, pattern: aptPat, frame: FRAME.ALU, glass: GLASS.NEUTRAL, style: WIN.PLAIN, profile, seed: g.seed });
+  const plain = { color: wallC, pattern: aptPat, seed: g.seed };
   const s = g.shell,
     t = g.trim;
   const coreW = 3.2;
@@ -346,10 +363,18 @@ export function genApartment(g: Gen): void {
     const sg = sideGeom(body, sd);
     const long = sd === FRONT || sd === BACK;
     if (!long) {
-      // gable ends: a column of small windows
-      const gr = makeGrid(0, sg.L, gH, fH, floors - 1, { spacing: 3.0, cols: 2, winW: 0.9, winH: 1.3, sill: 0.95, margin: 1.6 });
+      // rainwater from the roof scuppers: downpipes near both corners of the gable ends (side inset INS)
+      const pc = col(rng.pick(['#8d9497', '#5a5f62', '#e9e6dd']));
+      downpipe(g, sg, 0.3, H + 0.3, pc, INS);
+      if (rng.chance(0.5)) downpipe(g, sg, sg.L - 0.3, H + 0.3, pc, INS);
+      // gable ends: a column of small windows; ?noendwalls off: the corner flats' rooms look out here too — a window
+      // every ~2.7 m (living rooms at the corners, kitchens / baths between)
+      const full = MASS.endWalls;
+      const ec = full ? Math.max(3, Math.round((sg.L - 1.8) / 2.7)) : 2;
+      const eo = full ? { spacing: 2.7, cols: ec, winW: 1.15, winH: 1.4, margin: 0.9 } : { spacing: 3.0, cols: 2, winW: 0.9, winH: 1.3, margin: 1.6 };
+      const gr = makeGrid(0, sg.L, gH, fH, floors - 1, { ...eo, sill: 0.95 });
       wallGrid(s, sg, 0, sg.L, gH, H, gr, look());
-      const gr0 = makeGrid(0, sg.L, 0, gH, 1, { spacing: 3.0, cols: 2, winW: 0.9, winH: 1.3, sill: 1.0, margin: 1.6 });
+      const gr0 = makeGrid(0, sg.L, 0, gH, 1, { ...eo, sill: 1.0 });
       wallGrid(s, sg, 0, sg.L, 0, gH, gr0, look());
       continue;
     }
@@ -358,18 +383,42 @@ export function genApartment(g: Gen): void {
     bandWithOpenings(sg, 0, sg.L, ops, (a, b) => {
       const n = Math.max(1, Math.round((b - a - 0.6) / 3.0));
       const gr = makeGrid(a, b, gH, fH, floors - 1, { spacing: 3.0, cols: n, winW: 1.5, winH: 1.5, sill: 0.85, margin: 0.4 });
-      wallGrid(s, sg, a, b, gH, H, gr, look());
+      // ?nologgias: the back's balcony columns are loggias cut into the block (wall split around them)
+      const logg = MASS.loggias && sd === BACK;
+      const lhw = Math.min(gr.cw / 2 - 0.2, 1.35);
+      const lcols: number[] = [];
+      if (logg) for (let i = 0; i < gr.n; i++) if ((i + 1) % 2 === 0) lcols.push(gridU(gr, i));
+      if (lcols.length) {
+        let cur = a;
+        for (const u of lcols) {
+          wallGrid(s, sg, cur, u - lhw, gH, H, gr, look());
+          loggia(sg, u - lhw, u + lhw, accent[lcols.indexOf(u) % 2]);
+          cur = u + lhw;
+        }
+        wallGrid(s, sg, cur, b, gH, H, gr, look());
+      } else wallGrid(s, sg, a, b, gH, H, gr, look());
       const gr0 = makeGrid(a, b, 0, gH, 1, { spacing: 3.0, cols: n, winW: 1.5, winH: 1.45, sill: 1.0, margin: 0.4 });
       wallGrid(s, sg, a, b, 0, gH, gr0, look());
       // balconies on every other column, from the first floor up
       for (let i = 0; i < gr.n; i++) {
         if ((i + (sd === BACK ? 1 : 0)) % 2 === 1) continue;
+        if (lcols.length) continue;
         const u = gridU(gr, i);
         for (let j = 0; j < gr.m; j++) balcony(sg, u, gr.v0 + j * gr.ch, accent[(i + j) % 2], sd === BACK);
       }
-      // ground floor plinth band
-      setCol(t, shade(wallC, 0.78));
-      sideBox(t, sg, a, b, 0, 0.12, 0, 0.5);
+      // (the plinth course is the facade shader's: render / stone band with ledge, splash dirt and damp — a flat
+      // trim box here hid all of that)
+      // signs of life on the back: AC condensers on brackets beside windows without a balcony, a few dishes
+      if (sd === BACK) {
+        for (let i = 0; i < gr.n; i++) {
+          if ((i + 1) % 2 === 1) continue; // balcony column
+          for (let j = 0; j < gr.m; j++) {
+            const y = gr.v0 + j * gr.ch + 0.35;
+            if (rng.chance(0.22)) acUnit(g, sg, gridU(gr, i) + (rng.chance(0.5) ? 1.25 : -1.25), y, 0);
+            else if (rng.chance(0.08)) dish(g, sg, gridU(gr, i) + 1.1, y + 1.6, 0);
+          }
+        }
+      }
     }, () => {});
     if (sd === FRONT) for (const u of cores) stairCore(sg, u);
     // floor bands
@@ -384,6 +433,7 @@ export function genApartment(g: Gen): void {
   setCol(t, shade(wallC, 0.8));
   t.box(body.x0, H + 0.6, body.z0, body.x1, H + 0.68, body.z0 + 0.25, 0b111111);
   t.box(body.x0, H + 0.6, body.z1 - 0.25, body.x1, H + 0.68, body.z1, 0b111111);
+  anchors.perch(body.x0 + 0.3, H + 0.68, body.z0 + 0.12, body.x1 - 0.3, H + 0.68, body.z0 + 0.12, 'parapet');
   t.box(body.x0, H + 0.6, body.z0 + 0.25, body.x0 + 0.25, H + 0.68, body.z1 - 0.25, 0b110111);
   t.box(body.x1 - 0.25, H + 0.6, body.z0 + 0.25, body.x1, H + 0.68, body.z1 - 0.25, 0b110111);
   const inner: LRect = { x0: body.x0 + 0.25, x1: body.x1 - 0.25, z0: body.z0 + 0.25, z1: body.z1 - 0.25 };
@@ -395,16 +445,15 @@ export function genApartment(g: Gen): void {
   }
   flatRoof(s, inner, H + 0.02, col('#8e8b84'), ROOFPAT.FLAT, g.seed);
   railing(t, inner.x0 + 0.1, inner.z1 - 0.1, inner.x1 - 0.1, inner.z1 - 0.1, H + 0.68, 0.5, col('#9aa3aa'), 2.0, 0);
-  // TV aerials
-  for (let k = 0; k < 4; k++) {
-    const ax = inner.x0 + 2 + rng.next() * (inner.x1 - inner.x0 - 4),
-      az = inner.z0 + 1 + rng.next() * (inner.z1 - inner.z0 - 2);
-    setCol(t, col('#b9bec2'));
-    t.cylinder(ax, az, 0.03, H, H + 2.2, 4, false);
-    for (let q = 0; q < 3; q++) t.box(ax - 0.5 + q * 0.12, H + 1.7 + q * 0.15, az - 0.02, ax + 0.5 - q * 0.12, H + 1.74 + q * 0.15, az + 0.02, 0b111111);
-  }
+  // lived-in roof: solar water heaters, tanks, AC condensers, aerials (stair-core roofs + PV strip kept clear)
+  const keep = cores.map((u) => ({ x0: body.x0 + u - coreW / 2 - 0.4, x1: body.x0 + u + coreW / 2 + 0.4, z0: body.z1 - 1.2, z1: body.z1 + 1 }));
+  const pv = rng.chance(0.3);
+  if (pv) keep.push({ x0: inner.x0, x1: inner.x1, z0: inner.z0, z1: inner.z0 + 2.7 });
+  // roof furniture of a real slab: a lift / plant room, a tank, maybe a residents' garden (?noroofkit)
+  const kept = roofKit(g, { x0: inner.x0, z0: inner.z0, x1: inner.x1, z1: inner.z1 - 0.3 }, H + 0.02, { keep, plant: 0.9, tank: 0.45, garden: 0.3, solar: pv ? 0 : 0.35, wall: shade(wallC, 0.9) });
+  roofClutter(g, inner.x0, inner.z0, inner.x1, inner.z1 - 0.3, H + 0.02, { keep: kept, density: 1.3 });
   // solar panels
-  if (rng.chance(0.7)) {
+  if (pv) {
     for (let k = 0; k < 3; k++) {
       const px = inner.x0 + 3 + k * 3.2;
       if (px + 2.4 > inner.x1 - 2) break;
@@ -414,6 +463,39 @@ export function genApartment(g: Gen): void {
       t.box(px + 0.2, H, inner.z0 + 1.0, px + 0.3, H + 0.4, inner.z0 + 1.1, 0b111111);
       t.box(px + 2.1, H, inner.z0 + 1.0, px + 2.2, H + 0.4, inner.z0 + 1.1, 0b111111);
     }
+  }
+
+  /** a loggia bay from the first floor up: back wall 1.3 m in with a French window per storey, cheeks, slabs,
+   *  a parapet front (solid / glass / bars like the balconies), a little life on some floors */
+  function loggia(sg: SideGeom, la: number, lb: number, front: THREE.Color): void {
+    const dep = 1.3;
+    const sgIn: SideGeom = { ...sg, x0: sg.x0 - sg.nx * dep, z0: sg.z0 - sg.nz * dep };
+    const grL = makeGrid(la, lb, gH, fH, floors - 1, { spacing: lb - la, cols: 1, winW: Math.min(1.7, lb - la - 0.6), winH: Math.min(fH - 0.35, 2.3), sill: 0.06, margin: 0.2 });
+    wallGrid(s, sg, la, lb, gH, H, grL, look(), -dep);
+    wallSeg(s, sx(sg, la, 0), sz(sg, la, 0), sx(sg, la, -dep), sz(sg, la, -dep), gH, H, null, plain);
+    wallSeg(s, sx(sg, lb, -dep), sz(sg, lb, -dep), sx(sg, lb, 0), sz(sg, lb, 0), gH, H, null, plain);
+    for (let j = 0; j < floors - 1; j++) {
+      const y = gH + j * fH;
+      // slab (its soffit is the ceiling of the loggia below)
+      setCol(t, shade(wallC, 0.86));
+      sideBox(t, sg, la, lb, -dep, 0.06, y - 0.2, y, true, true);
+      // parapet front
+      if (balStyle === 'bars') {
+        setCol(t, shade(front, 0.95));
+        sideBox(t, sg, la, lb, -0.02, 0.06, y, y + 0.12, true);
+        railing(t, sx(sg, la + 0.05, 0.02), sz(sg, la + 0.05, 0.02), sx(sg, lb - 0.05, 0.02), sz(sg, lb - 0.05, 0.02), y, 1.0, railC, 0.12, 1);
+      } else {
+        setCol(t, balStyle === 'glass' ? col('#7f97a6') : front);
+        sideBox(t, sg, la, lb, -0.04, 0.06, y, y + 1.0, false, true);
+        setCol(t, shade(front, 0.85));
+        sideBox(t, sg, la - 0.02, lb + 0.02, -0.06, 0.08, y + 1.0, y + 1.06, true, true);
+      }
+      anchors.balcony(sx(sg, (la + lb) / 2, -dep / 2), y, sz(sg, (la + lb) / 2, -dep / 2), sg.nx, sg.nz, lb - la, dep, 1.0);
+      // plants, laundry, chairs: the balcony kit, on a side geometry whose wall is the loggia's back wall
+      balconyLife(g, sgIn, la + 0.1, lb - 0.1, y, { rail: 1.0, depth: dep - 0.06, solid: balStyle !== 'bars', green: 0.8 });
+    }
+    setCol(t, shade(wallC, 0.86));
+    sideBox(t, sg, la, lb, -dep, 0.0, H - 0.2, H, true, true);
   }
 
   function stairCore(sg: SideGeom, u: number): void {
@@ -431,11 +513,30 @@ export function genApartment(g: Gen): void {
         // entrance with canopy
         bandWithOpenings(cg, 0, cg.L, [{ u: cg.L / 2, w: 1.6, h: 2.4 }], (aa, bb) => wallPlain(s, cg, aa, bb, 0, gH, { color: coreC, pattern: WALLPAT.PANELS, seed: g.seed }), (aa, bb, y0) => wallPlain(s, cg, aa, bb, y0, gH, { color: coreC, pattern: WALLPAT.PANELS, seed: g.seed }));
         doorNiche(g, cg, cg.L / 2, { w: 1.6, h: 2.4, depth: 0.25, wallColor: coreC, frameColor: col('#5a6066'), doorColor: col('#5a6066'), glass: true, profile: PROF.ALWAYS, seed: g.seed + 3, frameOut: 0.0 });
+        // intercom / bell panel beside the entrance (flush: the core front sits on the footprint line)
+        setCol(t, col('#9aa0a4'));
+        sideBox(t, cg, cg.L / 2 + 1.0, cg.L / 2 + 1.2, 0, 0.018, 1.15, 1.5, true);
+        setCol(t, col('#26292c'));
+        for (let k = 0; k < 6; k++) sideBox(t, cg, cg.L / 2 + 1.03, cg.L / 2 + 1.17, 0.018, 0.024, 1.19 + k * 0.045, 1.215 + k * 0.045);
+        sideBox(t, cg, cg.L / 2 + 1.05, cg.L / 2 + 1.15, 0.018, 0.026, 1.45, 1.48);
         setCol(t, col('#5a6066'));
         sideBox(t, cg, -0.3, cg.L + 0.3, 0, 1.1, 2.75, 2.95, true);
         lightBox(g, sx(cg, cg.L / 2, 0.6) - 0.15, 2.7, sz(cg, cg.L / 2, 0.6) - 0.15, sx(cg, cg.L / 2, 0.6) + 0.15, 2.75, sz(cg, cg.L / 2, 0.6) + 0.15, '#fff1d6', LIGHT_MODE.STEADY, 3.5);
       } else {
         wallPlain(s, cg, 0, cg.L, 0, H + 1.6, { color: coreC, pattern: WALLPAT.PANELS, seed: g.seed });
+        if (sd === RIGHT) {
+          // a bank of letter boxes on the side of the stair core, near the entrance
+          const mc = col(rng.pick(['#3f4a52', '#8c949a', '#6b4a32']));
+          for (let r = 0; r < 3; r++)
+            for (let c2 = 0; c2 < 2; c2++) {
+              const u0 = 0.06 + c2 * 0.31,
+                y0 = 0.95 + r * 0.3;
+              setCol(t, mc);
+              sideBox(t, cg, u0, u0 + 0.3, 0, 0.22, y0, y0 + 0.28, true);
+              setCol(t, col('#141618'));
+              sideBox(t, cg, u0 + 0.05, u0 + 0.25, 0.22, 0.226, y0 + 0.2, y0 + 0.225);
+            }
+        }
       }
     }
     // core roof (lift motor room)
@@ -450,41 +551,62 @@ export function genApartment(g: Gen): void {
     const y = yFloor;
     setCol(t, shade(wallC, 0.95));
     sideBox(t, sg, u - w / 2, u + w / 2, 0, dep, y - 0.16, y, true);
-    // solid parapet panel in the accent colour
-    setCol(t, ac);
-    sideBox(t, sg, u - w / 2, u + w / 2, dep - 0.08, dep, y, y + 1.0, true);
-    sideBox(t, sg, u - w / 2, u - w / 2 + 0.08, 0, dep - 0.08, y, y + 1.0, true);
-    sideBox(t, sg, u + w / 2 - 0.08, u + w / 2, 0, dep - 0.08, y, y + 1.0, true);
-    setCol(t, col('#e8e8e4'));
-    sideBox(t, sg, u - w / 2 - 0.02, u + w / 2 + 0.02, dep - 0.1, dep + 0.02, y + 1.0, y + 1.06, true);
+    // dirty drip edge under the slab
+    setCol(t, shade(wallC, 0.62));
+    sideBox(t, sg, u - w / 2 + 0.01, u + w / 2 - 0.01, dep - 0.01, dep + 0.005, y - 0.24, y - 0.16, true);
+    const jitter = 0.95 + rng.next() * 0.08;
+    if (balStyle === 'solid') {
+      // painted concrete parapet: weathered tone, a darker run-off band along its foot
+      setCol(t, shade(ac, jitter));
+      sideBox(t, sg, u - w / 2, u + w / 2, dep - 0.08, dep, y + 0.16, y + 1.0, true);
+      sideBox(t, sg, u - w / 2, u - w / 2 + 0.08, 0, dep - 0.08, y, y + 1.0, true);
+      sideBox(t, sg, u + w / 2 - 0.08, u + w / 2, 0, dep - 0.08, y, y + 1.0, true);
+      setCol(t, shade(ac, jitter * 0.78));
+      sideBox(t, sg, u - w / 2, u + w / 2, dep - 0.08, dep, y, y + 0.16, true);
+      setCol(t, shade(ac, 1.04));
+      sideBox(t, sg, u - w / 2 - 0.02, u + w / 2 + 0.02, dep - 0.1, dep + 0.02, y + 1.0, y + 1.06, true);
+    } else if (balStyle === 'glass') {
+      // frosted glass panels between slim posts, metal handrail
+      setCol(t, col('#b9c6c9').multiplyScalar(jitter));
+      sideBox(t, sg, u - w / 2 + 0.04, u + w / 2 - 0.04, dep - 0.05, dep - 0.03, y + 0.08, y + 0.95, true, true);
+      for (const e of [-1, 1]) sideBox(t, sg, u + e * (w / 2 - 0.04) - 0.02, u + e * (w / 2 - 0.04) + 0.02, 0.02, dep - 0.03, y + 0.08, y + 0.95, true, true);
+      setCol(t, railC);
+      sideBox(t, sg, u - w / 2, u + w / 2, dep - 0.07, dep - 0.01, y + 0.95, y + 1.0, true);
+      for (const e of [-1, 0, 1]) sideBox(t, sg, u + e * (w / 2 - 0.03) - 0.02, u + e * (w / 2 - 0.03) + 0.02, dep - 0.06, dep - 0.02, y, y + 0.96, true);
+    } else {
+      ironRail(g, sg, u - w / 2 + 0.03, u + w / 2 - 0.03, dep - 0.05, y, 1.0, railC, true);
+    }
+    anchors.balcony(sx(sg, u, dep / 2), y, sz(sg, u, dep / 2), sg.nx, sg.nz, w - 0.16, dep - 0.08, 1.0);
     // life on the balcony
     const r = rng.next();
-    if (r < 0.3) {
-      setCol(t, col('#b5653f'));
-      const px = sx(sg, u + w / 2 - 0.45, 0.5), pz = sz(sg, u + w / 2 - 0.45, 0.5);
-      t.cylinder(px, pz, 0.16, y, y + 0.35, 6, true, 0.2);
-      setCol(t, col('#4f8a3c'));
-      t.sphere(px, y + 0.7, pz, 0.32, 6, 4);
-    } else if (r < 0.5) {
+    if (r >= 0.22) {
+      balconyLife(g, sg, u - w / 2 + 0.1, u + w / 2 - 0.1, y, { rail: 1.0, depth: dep - 0.1, solid: balStyle !== 'bars', green: back ? 0.75 : 0.95 });
+      // ?noawnings: some tenants fitted a striped drop-arm awning
+      if (dB('awnings') && awningRng.chance(0.16)) balconyAwning(g, sg, u - w / 2 + 0.06, u + w / 2 - 0.06, y, dep - 0.05, awningRng);
+      if (r > 0.9) {
+        // parasol
+        setCol(t, col(rng.pick(APT_PARASOL)));
+        const px = sx(sg, u, 0.6), pz = sz(sg, u, 0.6);
+        t.cone(px, pz, 0.85, y + 1.7, y + 2.05, 8);
+        setCol(t, col('#dddddd'));
+        t.cylinder(px, pz, 0.025, y, y + 1.72, 4, false);
+      }
+    } else {
       // laundry line
       setCol(t, col('#dddddd'));
       const ax = sx(sg, u - w / 2 + 0.3, 0.55), az = sz(sg, u - w / 2 + 0.3, 0.55);
       const bx = sx(sg, u + w / 2 - 0.3, 0.55), bz = sz(sg, u + w / 2 - 0.3, 0.55);
       t.beam(ax, y + 1.25, az, bx, y + 1.25, bz, 0.02, 0.02);
+      anchors.laundryLine(ax, y + 1.24, az, bx, y + 1.24, bz, sg.nx, sg.nz);
+      // static cloth (separate mesh; life replaces it with flapping cloth)
       const cols = ['#e63946', '#f1faee', '#457b9d', '#e9c46a'];
+      const c = g.cloth;
       for (let k = 0; k < 3; k++) {
         const f = 0.2 + k * 0.28;
-        setCol(t, col(cols[(k + Math.floor(r * 10)) % 4]));
+        setCol(c, col(cols[(k + Math.floor(r * 10)) % 4]));
         const cx = ax + (bx - ax) * f, cz = az + (bz - az) * f;
-        t.box(cx - 0.18 * Math.abs(sg.tx) - 0.01, y + 0.85, cz - 0.18 * Math.abs(sg.tz) - 0.01, cx + 0.18 * Math.abs(sg.tx) + 0.01, y + 1.24, cz + 0.18 * Math.abs(sg.tz) + 0.01, 0b111111);
+        c.box(cx - 0.18 * Math.abs(sg.tx) - 0.01, y + 0.85, cz - 0.18 * Math.abs(sg.tz) - 0.01, cx + 0.18 * Math.abs(sg.tx) + 0.01, y + 1.24, cz + 0.18 * Math.abs(sg.tz) + 0.01, 0b111111);
       }
-    } else if (r < 0.6) {
-      // parasol
-      setCol(t, col(rng.pick(APT_ACCENT)));
-      const px = sx(sg, u, 0.6), pz = sz(sg, u, 0.6);
-      t.cone(px, pz, 0.85, y + 1.7, y + 2.05, 8);
-      setCol(t, col('#dddddd'));
-      t.cylinder(px, pz, 0.025, y, y + 1.72, 4, false);
     }
   }
 }

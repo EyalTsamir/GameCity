@@ -5,6 +5,7 @@
 
 import type { CityPlan } from '../../core/plan';
 import type { Rng } from '../../core/rng';
+import type { V3 } from './geo';
 import { Geo } from './geo';
 import { K } from './staticMaterial';
 import { GAUGE, PANEL_TOP, RAIL_H, BALLAST_DROP, XING_HALF, XING_RAMP, WIRE_H, RAIL_TOP, type RailProfile } from './profile';
@@ -18,6 +19,8 @@ export interface SignalDef {
 }
 
 export interface TrackBuild {
+  /** sleeper centres along x (for the near-only fixings, buildTrackFixings) */
+  sleepers: number[];
   wires: number[];
   masts: number[];
   signals: SignalDef[];
@@ -27,6 +30,9 @@ const COL = {
   ballast: '#8b8478',
   ballastEdge: '#7d766b',
   sleeper: '#5b4a3d',
+  sleeperOld: '#6b6158',
+  basePlate: '#4a3c33',
+  clip: '#5d554c',
   railSide: '#6c5649',
   railHead: '#cfd1d2',
   panel: '#9d998f',
@@ -43,6 +49,17 @@ const COL = {
   plate: '#f1efe8',
   plateRed: '#c8372d',
   cabinet: '#a9aea5',
+};
+
+const NO_BED_RELIEF = typeof location !== 'undefined' && new URLSearchParams(location.search).has('nobedrelief');
+/** bed cross-section (G2): [z offset from the track centre, height relative to the sleeper tops] (edges = ±bedHalfTop) */
+const BED_PROFILE: [number, number][] = [
+  [-1.62, -0.035], [-1.42, 0.02], [-1.3, 0.005], [-1.0, -0.028], [-0.55, -0.04], [0, -0.05],
+  [0.55, -0.04], [1.0, -0.028], [1.3, 0.005], [1.42, 0.02], [1.62, -0.035],
+];
+const hash2 = (a: number, b: number): number => {
+  const h = Math.sin(a * 127.1 + b * 311.7) * 43758.5453;
+  return h - Math.floor(h);
 };
 
 /**
@@ -67,6 +84,7 @@ export function buildTrack(g: Geo, gt: Geo, gd: Geo, plan: CityPlan, prof: RailP
   const xs = [...new Set(xsSet.map((v) => Math.round(v * 1000) / 1000))].sort((a, b) => a - b);
 
   // ── ballast bed (trapezoid), cut at the crossing decks
+  const bedRelief = !NO_BED_RELIEF;
   const bedHalfTop = 1.62,
     bedHalfBot = 2.4;
   for (let i = 0; i < xs.length - 1; i++) {
@@ -80,6 +98,33 @@ export function buildTrack(g: Geo, gt: Geo, gd: Geo, plan: CityPlan, prof: RailP
     g.kind(K.BALLAST);
     g.color(COL.ballast, j);
     // top
+    if (bedRelief) {
+      // (G2, ?nobedrelief) a real bed is not a table top: the cribs sag a few cm below the sleeper tops (their
+      // sides show), the shoulders are heaped over the sleeper ends and roll off to the slopes, and every crib
+      // is filled a little differently. Cross-section rows × ~0.33 m steps along the track (≈ 14 tris per metre).
+      const n = Math.max(1, Math.round((xb - xa) / 0.33));
+      const row = (x: number, k: number): V3[] => {
+        const t = prof.top(x), yEdge = Math.max(0.03, t - BALLAST_DROP);
+        return BED_PROFILE.map(([dz, dy], m) => {
+          const edge = m === 0 || m === BED_PROFILE.length - 1;
+          const jit = edge ? 0 : (hash2(k + xa * 7.1, m) - 0.5) * 0.022;
+          return [x, edge ? yEdge : Math.max(0.03, t - RAIL_H + dy + jit), zc + dz] as V3;
+        });
+      };
+      let r0 = row(xa, 0);
+      for (let k = 1; k <= n; k++) {
+        const r1 = row(xa + ((xb - xa) * k) / n, k);
+        g.color(COL.ballast, j);
+        for (let m = 0; m < r0.length - 1; m++) g.quad(r0[m + 1], r1[m + 1], r1[m], r0[m]);
+        // shoulders stepped with the top (no T-junction cracks along the bed edge)
+        const L = r0.length - 1;
+        g.color(COL.ballastEdge);
+        g.quad([r0[0][0], -0.02, zc + bedHalfBot], [r1[0][0], -0.02, zc + bedHalfBot], r1[L], r0[L]);
+        g.quad([r1[0][0], -0.02, zc - bedHalfBot], [r0[0][0], -0.02, zc - bedHalfBot], r0[0], r1[0]);
+        r0 = r1;
+      }
+      continue;
+    }
     g.quad([xa, ya, zc + bedHalfTop], [xb, yb, zc + bedHalfTop], [xb, yb, zc - bedHalfTop], [xa, ya, zc - bedHalfTop]);
     g.color(COL.ballastEdge);
     // shoulders
@@ -99,14 +144,19 @@ export function buildTrack(g: Geo, gt: Geo, gd: Geo, plan: CityPlan, prof: RailP
     }
   }
 
-  // ── sleepers
-  g.kind(K.WOOD);
+  // ── sleepers: hand-laid timber, a little irregular in spacing and squareness, each its own weathered tone
+  g.kind(K.SLEEPER);
+  const sleepers: number[] = [];
   for (let x = x0 + 0.35; x < x1 - 0.3; x += 0.65) {
     if (xings.some((xc) => Math.abs(x - xc) < XING_HALF + 0.2)) continue;
-    const top = prof.top(x) - RAIL_H;
-    const j = 0.85 + rng.next() * 0.25;
-    g.color(COL.sleeper, j);
-    g.box(x, top - 0.06, zc, 0.24, 0.12, 2.5, 8);
+    const sx = x + (rng.next() - 0.5) * 0.05;
+    const top = prof.top(sx) - RAIL_H;
+    const j = 0.8 + rng.next() * 0.32;
+    g.color(rng.next() < 0.18 ? COL.sleeperOld : COL.sleeper, j);
+    g.push().at(sx, 0, zc + (rng.next() - 0.5) * 0.04, (rng.next() - 0.5) * 0.022);
+    g.box(0, top - 0.06, 0, 0.24 + rng.next() * 0.03, 0.12, 2.5 + rng.next() * 0.1, 8);
+    g.pop();
+    sleepers.push(sx);
   }
 
   // ── rails (head + web/foot), following the vertical profile
@@ -373,5 +423,45 @@ export function buildTrack(g: Geo, gt: Geo, gd: Geo, plan: CityPlan, prof: RailP
     gt.block(x, 0, zc + 2.95, 0.8, 1.1, 0.55);
   }
 
-  return { wires, masts, signals };
+  return { sleepers, wires, masts, signals };
+}
+
+/**
+ * Rail fastenings for the near track only: per sleeper and rail a steel baseplate, a cast chair hugging the rail foot
+ * on each side, a spring clip over the foot and two screw heads. Split into chunks of `CHUNK` m along x so the rail
+ * module can show only the ones near the camera (they are invisible beyond ~40 m and would cost ~0.15 M vertices
+ * over the whole line).
+ */
+export const FIX_CHUNK = 24;
+export function buildTrackFixings(prof: RailProfile, sleepers: number[], rng: Rng): { x: number; geo: Geo }[] {
+  const zc = prof.z;
+  const out = new Map<number, Geo>();
+  for (const sx of sleepers) {
+    const ci = Math.floor(sx / FIX_CHUNK);
+    let g = out.get(ci);
+    if (!g) out.set(ci, (g = new Geo()));
+    const top = prof.top(sx) - RAIL_H;
+    for (const side of [-1, 1]) {
+      const rz = zc + side * (GAUGE / 2);
+      const rust = 0.8 + rng.next() * 0.35;
+      g.kind(K.PLAIN).color(COL.basePlate, rust);
+      // baseplate (sole plate) under the foot, its shoulders proud of the sleeper top
+      g.box(sx, top + 0.004, rz, 0.19, 0.016, 0.38, 8);
+      for (const s of [-1, 1]) {
+        // chair jaw against the foot / web
+        g.color(COL.basePlate, rust * 0.92);
+        g.box(sx, top + 0.03, rz + s * 0.088, 0.15, 0.04, 0.03, 8);
+        // spring clip: a bent bar over the foot flange (toe on the foot, heel in the chair shoulder)
+        g.color(COL.clip, 0.85 + rng.next() * 0.3);
+        g.box(sx + 0.035, top + 0.024, rz + s * 0.072, 0.018, 0.018, 0.05, 8);
+        g.box(sx - 0.035, top + 0.024, rz + s * 0.072, 0.018, 0.018, 0.05, 8);
+        g.box(sx, top + 0.036, rz + s * 0.098, 0.088, 0.016, 0.018, 8);
+        // coach-screw heads outside the jaw
+        g.color(COL.basePlate, rust * 0.75);
+        g.box(sx + s * 0.045, top + 0.02, rz + s * 0.155, 0.035, 0.02, 0.035, 8);
+        g.box(sx - s * 0.045, top + 0.02, rz + s * 0.155, 0.035, 0.02, 0.035, 8);
+      }
+    }
+  }
+  return [...out.entries()].map(([ci, geo]) => ({ x: (ci + 0.5) * FIX_CHUNK, geo }));
 }

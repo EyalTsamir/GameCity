@@ -20,6 +20,8 @@
 import { Rng, hashString } from './rng';
 import { CORRIDOR_HALF, FURN_OFFSET, QUAY_X, RAIL_Z, RIVER, SLAB, WATER_LEVEL, XS, ZS, SIDEWALK_Y } from './constants';
 import { P2, Rect, Dir, rect, rectInset, rectContains, rectsOverlap, clamp, smoothstep, DIR_YAW } from './geom';
+import { DIORAMA } from './world';
+import { buildPlaces, type PlacesDef } from './places';
 
 // ───────────────────────────────────────────────────────────── types ──
 
@@ -345,9 +347,11 @@ export interface WalkPath {
   kind: WalkKind;
   pts: P2[];
   width: number;
-  surface: 'gravel' | 'paving' | 'deck' | 'sand' | 'stone';
+  surface: 'gravel' | 'paving' | 'deck' | 'sand' | 'stone' | 'track'; // track: a farm-lane wheel rut (earthy grit, grass creeping in)
   /** walking surface height (bridges arch up to yMid in the middle) */
   y: number;
+  /** per-vertex walking heights (stairs, terraces — core/places.ts); overrides `y` */
+  ys?: number[];
   yMid?: number;
   /** should the ground renderer draw this path? (false when it lies on an already paved / decked area) */
   draw: boolean;
@@ -394,6 +398,8 @@ export interface CityPlan {
   rail: RailDef;
   water: WaterDef;
   pois: Poi[];
+  /** stairs, terraces, passages, the lower quay (core/places.ts) */
+  places: PlacesDef;
   /** ground height of the natural terrain (city zone = 0, hills > 0, water beds < 0). */
   heightAt(x: number, z: number): number;
   /** true where open water (sea, river, pond) covers the ground */
@@ -445,6 +451,7 @@ export function generatePlan(seed = 'tinyhaven'): CityPlan {
     rail: null as unknown as RailDef,
     water: null as unknown as WaterDef,
     pois: [],
+    places: null as unknown as PlacesDef,
     heightAt,
     isWater: (x, z) => isWaterAt(plan, x, z),
     districtAt: (x, z) => districtAt(plan, x, z),
@@ -460,6 +467,7 @@ export function generatePlan(seed = 'tinyhaven'): CityPlan {
   buildBusLines(plan);
   buildStreetSlots(plan, rng.fork('slots'));
   buildPois(plan);
+  plan.places = buildPlaces(plan);
   return plan;
 }
 
@@ -707,6 +715,7 @@ function buildBlocks(plan: CityPlan, rng: Rng): void {
   genNorthStrip(c);
   genQuay(c);
   genRiverside(c);
+  genQuayApron(c);
 }
 
 // ── district generators ────────────────────────────────────────────────
@@ -1174,7 +1183,11 @@ function genApartments(c: Ctx, blk: Block): void {
   });
   addArea(c, blk, { kind: 'lawn', surface: 'grass', rect: r, greenery: 0.7 });
   const pk = rect(r.x0 + 4, r.z0 + 16, r.x1 - 4, r.z1 - 16);
-  addArea(c, blk, { kind: 'parking', surface: 'asphalt', rect: pk, greenery: 0, layer: 1, stalls: makeStalls(rng, pk, 'EW', 0.6) });
+  // one row of stalls along the north edge (noses south), the aisle along the south edge, and an
+  // asphalt access from the aisle across the lawn to the east street (dropped kerb: roads/streets.ts)
+  const row = rect(pk.x0, pk.z0, pk.x1, pk.z0 + 5.2);
+  addArea(c, blk, { kind: 'parking', surface: 'asphalt', rect: pk, greenery: 0, layer: 1, stalls: makeStalls(rng, row, 'EW', 0.6) });
+  addArea(c, blk, { kind: 'driveway', surface: 'asphalt', rect: rect(pk.x1 - 0.5, pk.z1 - 5, r.x1, pk.z1), greenery: 0, layer: 1 });
 }
 
 function makeStalls(rng: Rng, area: Rect, orient: 'EW' | 'NS', fill: number): Stall[] {
@@ -1540,6 +1553,15 @@ function genNorthStrip(c: Ctx): void {
   }
 }
 
+/** Concrete apron between the container yard, the quay and the harbour cliff (was left as town lawn). Generated
+ *  last so the ids of all other blocks stay as they were. */
+function genQuayApron(c: Ctx): void {
+  const yard = c.plan.areas.find((a) => a.kind === 'containeryard');
+  if (!yard) return;
+  const r = rect(yard.rect.x1, -137, QUAY_X, yard.rect.z1);
+  addBlock(c.plan, { col: -1, row: -7, rect: r, districtId: 'harbor', kind: 'harbor', surface: 'concrete' });
+}
+
 function genQuay(c: Ctx): void {
   const plan = c.plan;
   const xA = XS[NX - 1] + CORRIDOR_HALF; // 116.5
@@ -1813,17 +1835,46 @@ function buildStreetSlots(plan: CityPlan, rng: Rng): void {
       const spacing = 11;
       const n = Math.floor((end - start) / spacing) + 1;
       const offset = (end - start - (n - 1) * spacing) / 2;
+      // stretches of kerb where a driveway meets this pavement (+ a car's clearance): cars cross the furniture band there
+      const cuts: [number, number][] = [];
+      for (const d of driveways) {
+        const r = d.rect;
+        let u0 = Infinity,
+          u1 = -Infinity,
+          v0 = Infinity,
+          v1 = -Infinity;
+        for (const [px, pz] of [[r.x0, r.z0], [r.x1, r.z0], [r.x0, r.z1], [r.x1, r.z1]]) {
+          const u = (px - A.x) * tx + (pz - A.z) * tz,
+            v = (px - A.x) * rx + (pz - A.z) * rz;
+          u0 = Math.min(u0, u);
+          u1 = Math.max(u1, u);
+          v0 = Math.min(v0, v);
+          v1 = Math.max(v1, v);
+        }
+        if (v0 > CORRIDOR_HALF + 1.5 || v1 < CORRIDOR_HALF || u1 < 0 || u0 > L) continue;
+        cuts.push([u0 - 1.6, u1 + 1.6]);
+      }
+      const cutAt = (u: number) => cuts.find(([a, b]) => u > a && u < b);
       for (let k = 0; k < n; k++) {
-        const u = start + offset + k * spacing;
-        const x = A.x + tx * u + rx * FURN_OFFSET;
-        const z = A.z + tz * u + rz * FURN_OFFSET;
+        let u = start + offset + k * spacing;
+        const at = (u: number) => ({ x: A.x + tx * u + rx * FURN_OFFSET, z: A.z + tz * u + rz * FURN_OFFSET });
+        const nearStop = (p: { x: number; z: number }) => plan.busStops.some((b) => Math.hypot(b.x - p.x, b.z - p.z) < 7);
         const probe = { x: A.x + tx * u + rx * (CORRIDOR_HALF + 2), z: A.z + tz * u + rz * (CORRIDOR_HALF + 2) };
         const dk: DistrictKind = plan.districtAt(probe.x, probe.z)?.kind ?? 'riverside';
-        if (plan.busStops.some((b) => Math.hypot(b.x - x, b.z - z) < 7)) continue;
-        const dw = driveways.some((d) => rectContains(d.rect, x + rx * 3.2, z + rz * 3.2, 1.6));
+        if (nearStop(at(u))) continue;
         const lampTurn = (k + (side === 'L' ? 1 : 0)) % 2 === 0;
         let kind: SlotKind = lampTurn ? 'lamp' : pickFurniture(rng, dk);
-        if (dw && kind !== 'lamp') kind = 'empty';
+        const cut = cutAt(u);
+        if (cut) {
+          // a lamp steps aside to the nearer end of the driveway; anything else gives way
+          const alt =
+            kind === 'lamp'
+              ? [cut[0], cut[1]].sort((a, b) => Math.abs(a - u) - Math.abs(b - u)).find((c) => c >= 9 && c <= L - 9 && !cutAt(c) && !nearStop(at(c)))
+              : undefined;
+          if (alt !== undefined) u = alt;
+          else kind = 'empty';
+        }
+        const { x, z } = at(u);
         plan.slots.push({ x, z, yaw: Math.atan2(rx, rz), kind, segment: seg.id, side, district: dk });
       }
     }
@@ -1872,6 +1923,18 @@ function buildPois(plan: CityPlan): void {
     { id: 'westbrook', name: 'Westbrook', target: { x: -150, y: 0, z: 20 }, distance: 140, yaw: -35, pitch: 36 },
     { id: 'industry', name: 'Northgate Works', target: { x: -135, y: 0, z: -115 }, distance: 140, yaw: -30, pitch: 34 },
   ];
+  if (DIORAMA) return;
+  // world mode: the hero overview lowers toward the horizon (mountains and sky in frame), and views of the
+  // landscape around the town (proposed by the world agent; no number keys — they are in the Places menu)
+  const ov = plan.pois[0];
+  ov.distance = 640;
+  ov.pitch = 13;
+  plan.pois.push(
+    { id: 'vista', name: 'Tinyhaven & the mountains', target: { x: -10, y: 15, z: -90 }, distance: 720, yaw: 12, pitch: 12 },
+    { id: 'country', name: 'Westbrook fields', target: { x: -230, y: 2, z: 30 }, distance: 150, yaw: 70, pitch: 8 },
+    { id: 'coast', name: 'Lighthouse & open sea', target: { x: 230, y: 3, z: -40 }, distance: 140, yaw: -40, pitch: 6 },
+    { id: 'riverbend', name: 'River west', target: { x: -300, y: 1, z: 118 }, distance: 52, yaw: 95, pitch: 7 },
+  );
 }
 
 // ─────────────────────────────────────────────────────── terrain queries ──
@@ -1924,6 +1987,7 @@ export function heightAt(x: number, z: number): number {
 }
 
 function isWaterAt(plan: CityPlan, x: number, z: number): boolean {
+  if (plan.places?.dry(x, z)) return false;
   if (heightAt(x, z) < WATER_LEVEL - 0.02) return true;
   for (const p of plan.water?.ponds ?? []) {
     const dx = (x - p.cx) / p.rx,

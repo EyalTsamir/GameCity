@@ -12,21 +12,36 @@
 // spatial chunks so the main and the shadow pass frustum-cull what they can't see.
 
 import * as THREE from 'three';
+import { perfOn } from '../core/perfdeep';
 import type { CityContext, CityModule, PickHit } from '../core/context';
 import type { Lot, BuildingKind, Area } from '../core/plan';
 import { DIR_YAW } from '../core/geom';
 import { Rng } from '../core/rng';
 import { PALETTE } from '../core/gfx';
 import { Builder } from './buildings/mesh';
-import { createMaterials } from './buildings/materials';
+import { createMaterials, shellClassOf, SHELL_CLASS, SHELL_SPLIT } from './buildings/materials';
 import { SignAtlas } from './buildings/signs';
-import { Gen, Interval, LocalDoor, Side, col, jit } from './buildings/gen';
+import { Gen, Interval, LocalDoor, Side, col, jit, setDoorLife, setGutters } from './buildings/gen';
 import { genTownhouse, resetOldtown } from './buildings/oldtown';
 import { genFallback } from './buildings/fallback';
-import { genTower, resetTowers } from './buildings/towers';
-import { genHouse, genApartment } from './buildings/houses';
+import { genTower, resetTowers, setColumnDetail } from './buildings/towers';
+import { genApartment } from './buildings/houses';
+import { genHouse, setLegacyHouses, resetHomes, houseStats, houseLog } from './buildings/homes';
 import { genIndustrial } from './buildings/industry';
-import { genHotel, genSchool, genHarbormaster, genKiosk, genBoathouse } from './buildings/special';
+import { genHotel, genSchool, genHarbormaster, genKiosk, genBoathouse, setSchoolKit } from './buildings/special';
+import { samplePalette, SkyState } from '../render/sky/palette';
+import { initAddresses, signedTitle } from './lettering/shopname';
+import { anchors, collectFacades, collectSpans, type BuildingsService } from './buildings/anchors';
+import { GreenKit, makeGreenTexture, createGreenMaterial } from './buildings/green';
+import { setClutter } from './buildings/clutter';
+import { createWinGeo } from './buildings/winGeo';
+import { setMassing, resetMassing, massTiers } from './buildings/massing';
+import { boxHunt } from '../core/boxhunt';
+import { setRoofPlant } from './buildings/roofplant';
+import { setDetailB } from '../core/detailbuildings';
+import { createGlassMaterial } from './buildings/lobby';
+import { buildFarShell, farBakeKey, FAR_ATLAS, FAR_SOFT } from './buildings/farFacade';
+import { bakeOn, bakeTexture, uploadStaged } from '../core/bakeFiles';
 
 /** edge (m) of the square trim chunks (≈ two city blocks), grid origin at the slab's NW corner */
 const TRIM_CHUNK = 110;
@@ -78,13 +93,30 @@ interface BuiltLot {
 export default function create(ctx: CityContext): CityModule {
   const t0 = performance.now();
   const plan = ctx.plan;
-  const mats = createMaterials(ctx.uniforms);
-  const shell = new Builder({ normal: true, color: true, uv: true, facade: true });
+  // A/B switches: ?legacyfacade = original shell shader
+  const mats = createMaterials(ctx.uniforms, { legacy: ctx.debug.params.has('legacyfacade'), wear: !ctx.debug.params.has('nowear'), winDepth: !ctx.debug.params.has('nowinreveal'), winRefl: !ctx.debug.params.has('nowinrefl'), wallRelief: !ctx.debug.params.has('nowallrelief'), plinth: !ctx.debug.params.has('noplinth'), glassVar: !ctx.debug.params.has('noglassvar'), interiors: boxHunt(ctx, 'interiors') });
+  // ?nowingeo = no near-LOD sill / surround geometry (the shader sill everywhere)
+  const winGeoOn = !ctx.debug.params.has('nowingeo');
+  const winRec: number[] | null = winGeoOn ? [] : null;
+  const chunkKey = (x: number, z: number) => Math.max(0, Math.min(3, Math.floor((x + 220) / TRIM_CHUNK))) * 4 + Math.max(0, Math.min(3, Math.floor((z + 200) / TRIM_CHUNK)));
+  // the facade shell is chunked on the trim grid as well: culled per chunk, and drawn nearest chunk first (frame())
+  // so the near facades' depth rejects the (expensive) facade pixels of the buildings behind them
+  const shellChunks = new Map<number, Builder>();
+  // light round: ?glassold = curtain walls with the old coating tint (no street mirrored in them)
+  if (ctx.debug.params.has('glassold')) mats.uniforms.uMirror.value = 0;
+  const shellOf = (x: number, z: number): Builder => {
+    const key = chunkKey(x, z);
+    let b = shellChunks.get(key);
+    if (!b) {
+      b = new Builder({ normal: true, color: true, uv: true, facade: true });
+      b.winRec = winRec;
+      shellChunks.set(key, b);
+    }
+    return b;
+  };
   const trimChunks = new Map<number, Builder>();
   const trimOf = (x: number, z: number): Builder => {
-    const kx = Math.max(0, Math.min(3, Math.floor((x + 220) / TRIM_CHUNK)));
-    const kz = Math.max(0, Math.min(3, Math.floor((z + 200) / TRIM_CHUNK)));
-    const key = kx * 4 + kz;
+    const key = chunkKey(x, z);
     let b = trimChunks.get(key);
     if (!b) {
       b = new Builder({ normal: true, color: true });
@@ -94,9 +126,31 @@ export default function create(ctx: CityContext): CityModule {
   };
   const lights = new Builder({ color: true, light: true });
   const signs = new Builder({ normal: true, uv: true });
+  const cloth = new Builder({ normal: true, color: true });
+  const glassB = new Builder({ normal: true });
+  // ?nogreen = no leaf cards (A/B)
+  const noGreen = ctx.debug.params.has('nogreen');
+  const greenB = new Builder({ normal: true, color: true, uv: true, aux: true });
+  const greenKit = new GreenKit(greenB, new Rng('buildings:green'));
   const atlas = new SignAtlas();
+  setDetailB(ctx.debug.params, ctx.quality.level);
   resetOldtown();
   resetTowers();
+  resetHomes();
+  anchors.reset();
+  initAddresses(ctx.plan);
+  setClutter(!ctx.debug.params.has('noclutter'));
+  // massing: ?nomassing / ?nooriels ?noturrets ?nocrossgables ?nosetbacks ?nocrowns ?noroofkit (buildings/massing.ts)
+  setMassing(ctx.debug.params, ctx.quality.level);
+  // ?noroofplant (or quality low): the simple tower rooftop instead of roofplant.ts
+  setRoofPlant(!ctx.debug.params.has('noroofplant') && !ctx.debug.params.has('nomassing') && ctx.quality.level !== 'low');
+  resetMassing();
+  setDoorLife(!ctx.debug.params.has('nodoorlife'));
+  setGutters(!ctx.debug.params.has('nogutters'));
+  setSchoolKit(!ctx.debug.params.has('noschoolkit'));
+  setColumnDetail(!ctx.debug.params.has('nocolumndetail'));
+  // ?legacyhouses = original single house massing (A/B)
+  setLegacyHouses(ctx.debug.params.has('legacyhouses'));
 
   const lots = plan.lots.filter((l) => MY_KINDS.has(l.kind));
   const colors = assignColors(lots, plan.lots);
@@ -117,7 +171,8 @@ export default function create(ctx: CityContext): CityModule {
     const W = ns ? fp.x1 - fp.x0 : fp.z1 - fp.z0;
     const D = ns ? fp.z1 - fp.z0 : fp.x1 - fp.x0;
     const trim = trimOf(cx, cz);
-    for (const b of [shell, trim, lights, signs]) b.frame(yaw, cx, 0, cz);
+    const shell = shellOf(cx, cz);
+    for (const b of [shell, trim, lights, signs, cloth, glassB, greenB]) b.frame(yaw, cx, 0, cz);
     const g: Gen = {
       lot,
       rng: new Rng(lot.seed >>> 0 || 1),
@@ -128,6 +183,9 @@ export default function create(ctx: CityContext): CityModule {
       trim,
       lights,
       signs,
+      cloth,
+      glass: glassB,
+      green: greenKit,
       atlas,
       cover: computeCover(lot, plan.lots, yaw, cx, cz, W, D),
       doors: localDoors(lot, yaw, cx, cz, W, D),
@@ -149,15 +207,17 @@ export default function create(ctx: CityContext): CityModule {
         if (bad++ === 0) firstBad = `(${x.toFixed(2)}, ${y.toFixed(2)}, ${z.toFixed(2)}) is ${d.toFixed(2)} m outside`;
       }
     };
-    for (const b of [shell, trim, lights, signs]) b.check = check;
+    for (const b of [shell, trim, lights, signs, cloth, glassB, greenB]) b.check = check;
     const gen = GENERATORS[lot.kind] ?? genFallback;
+    anchors.begin(lot, trim);
     try {
       gen(g);
     } catch (err) {
       problems.push(`lot ${lot.id} (${lot.kind}) generator threw: ${err instanceof Error ? err.message : String(err)}`);
       if (ctx.debug.enabled) console.error('[buildings]', lot.id, err);
     }
-    for (const b of [shell, trim, lights, signs]) b.check = null;
+    anchors.end();
+    for (const b of [shell, trim, lights, signs, cloth, glassB, greenB]) b.check = null;
     if (bad > 0) {
       violations++;
       problems.push(`lot ${lot.id} (${lot.kind}): ${bad} vertices break the footprint rule, e.g. ${firstBad}`);
@@ -170,7 +230,7 @@ export default function create(ctx: CityContext): CityModule {
     built.push({
       lot,
       box: new THREE.Box3(new THREE.Vector3(fp.x0, 0, fp.z0), new THREE.Vector3(fp.x1, top, fp.z1)),
-      label: lot.name ?? KIND_LABEL[lot.kind] ?? lot.kind,
+      label: lot.name ?? signedTitle(lot.id) ?? KIND_LABEL[lot.kind] ?? lot.kind,
     });
   }
 
@@ -195,25 +255,184 @@ export default function create(ctx: CityContext): CityModule {
     group.add(mesh);
     meshes.push(mesh);
   };
-  let trimTris = 0;
+  let trimTris = 0,
+    shellTris = 0;
   for (const b of trimChunks.values()) trimTris += b.triangleCount;
-  const triCounts = { shell: shell.triangleCount, trim: trimTris, lights: lights.triangleCount, signs: signs.triangleCount };
-  add(shell, mats.shell, 'buildings-shell', true, true);
+  for (const b of shellChunks.values()) shellTris += b.triangleCount;
+  const triCounts = { shell: shellTris, trim: trimTris, lights: lights.triangleCount, signs: signs.triangleCount, green: greenB.triangleCount };
+  for (const b of shellChunks.values()) add(b, mats.shell, 'buildings-shell', true, true);
+  // shop fronts and roofs out of the wall chunks: programs of their own (materials.ts SHELL_SPLIT), one mesh each
+  if (SHELL_SPLIT && !mats.legacy) {
+    const chunks = meshes.filter((m) => m.name === 'buildings-shell').map((m) => m.geometry);
+    for (const [cls, mat, name] of [[SHELL_CLASS.SHOP, mats.shellShop, 'buildings-shell-shop'], [SHELL_CLASS.ROOF, mats.shellRoof, 'buildings-shell-roof']] as const) {
+      const g = extractShellClass(chunks, cls);
+      if (!g) continue;
+      const mesh = new THREE.Mesh(g, mat);
+      mesh.name = name;
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      mesh.matrixAutoUpdate = false;
+      mesh.updateMatrix();
+      group.add(mesh);
+      meshes.push(mesh);
+    }
+  }
+  // the walls' far program (farFacade.ts): procedural until the atlas has arrived. ?nofacbake: procedural always
+  const farShell = SHELL_SPLIT && !mats.legacy ? buildFarShell(meshes.filter((m) => m.name === 'buildings-shell').map((m) => m.geometry)) : null;
+  const farTextures = { tFF0: { value: null as THREE.Texture | null }, tFF1: { value: null as THREE.Texture | null }, tFF2: { value: null as THREE.Texture | null } };
+  const farSoft = Number(ctx.debug.params.get('facsoft')) || FAR_SOFT;
+  let farOn = false;
+  let farGeoMesh: THREE.Mesh | null = null; // (stays visible: collapsed until uFarD is set, and so compiled at boot with the rest)
+  if (farShell && !ctx.debug.params.has('nofacbake') && bakeOn(ctx.debug.params)) {
+    const far = new THREE.Mesh(farShell.geometry, mats.shellFar(farTextures));
+    far.name = 'buildings-shell-far';
+    far.receiveShadow = true;
+    far.matrixAutoUpdate = false;
+    far.updateMatrix();
+    far.frustumCulled = false;
+    group.add(far);
+    farGeoMesh = far;
+  }
+  const shellMeshes = meshes.filter((m) => m.name.startsWith('buildings-shell'));
+  const shellBoxes = shellMeshes.map((m) => {
+    m.geometry.computeBoundingBox();
+    return m.geometry.boundingBox!;
+  });
+  // depth-only pre-pass of the (few thousand) facade triangles, first of the frame: everything behind a building is
+  // rejected before it is shaded, also the small objects drawn before the facades. Trivial program and pushed back a
+  // little so that nothing changes on the facade itself. Own trivial program: the old attempt (colorWrite = false on
+  // the facade material) still ran the whole facade shader. Main view only (not in the reflection layer).
+  if (perfOn('shellprepass') && ctx.quality.level === 'high') {
+    const depthOnly = new THREE.ShaderMaterial({
+      name: 'buildings-prepass',
+      vertexShader: 'void main() { gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 ); }',
+      fragmentShader: 'void main() {}',
+      colorWrite: false,
+      side: mats.shell.side,
+      polygonOffset: true,
+      polygonOffsetFactor: 1,
+      polygonOffsetUnits: 1,
+    });
+    for (const m of shellMeshes) {
+      const p = new THREE.Mesh(m.geometry, depthOnly);
+      p.name = 'buildings-prepass';
+      p.matrixAutoUpdate = false;
+      p.updateMatrix();
+      p.renderOrder = -100;
+      group.add(p);
+    }
+  }
   for (const b of trimChunks.values()) add(b, mats.trim, 'buildings-trim', true, true);
   add(lights, mats.lights, 'buildings-lights', false, false);
   add(signs, mats.signs, 'buildings-signs', false, true);
+  // static balcony laundry (no shadow; life hides it once its animated cloth hangs on service.laundry)
+  add(cloth, mats.trim, 'buildings-laundry', false, true);
+  const clothMesh = meshes.find((m) => m.name === 'buildings-laundry') ?? null;
+  const glassMat = glassB.vertexCount > 0 ? createGlassMaterial(mats.uniforms) : null;
+  if (glassMat) add(glassB, glassMat, 'buildings-glass', false, false);
+  // plants: alpha-tested leaf cards (one draw call + shadow pass on medium/high)
+  const greenTex = noGreen ? null : makeGreenTexture();
+  const greenMat = greenTex ? createGreenMaterial(ctx.uniforms, greenTex) : null;
+  if (greenMat) add(greenB, greenMat, 'buildings-green', ctx.quality.level !== 'low', true);
+  else greenB.dispose();
   group.matrixAutoUpdate = false;
   ctx.scene.add(group);
 
   if (ctx.quality.level === 'low') mats.uniforms.uDetail.value = 0.4;
+  // ?facadelod=a,b (opt-in trade-off, measured in docs/progress/PERF.md): the near window detail (interiors, frames,
+  // mirrored street) fades to the far average between a and b cells per pixel (default 0.3,0.8 = 3.3 → 1.25 px a bay)
+  const flod = (ctx.debug.params.get('facadelod') ?? '').split(',').map(Number);
+  if (flod.length === 2 && flod.every((v) => v > 0) && flod[0] < flod[1]) mats.uniforms.uDetailPx.value.set(flod[0], flod[1]);
+  const winGeo = winRec ? createWinGeo(winRec, ctx.quality.level === 'low' ? 22 : ctx.quality.level === 'medium' ? 32 : 42) : null;
+  if (winGeo) group.add(winGeo.group);
   // debug (perf analysis): ?bdbg=noshell,notrim,nocast,nodetail
   const bdbg = (ctx.debug.params.get('bdbg') ?? '').split(',');
   for (const m of meshes) {
-    if (bdbg.includes('noshell') && m.name === 'buildings-shell') m.visible = false;
+    if (bdbg.includes('noshell') && m.name.startsWith('buildings-shell')) m.visible = false;
     if (bdbg.includes('notrim') && m.name === 'buildings-trim') m.visible = false;
     if (bdbg.includes('nocast')) m.castShadow = false;
   }
   if (bdbg.includes('nodetail')) mats.uniforms.uDetail.value = 0;
+  if (bdbg.includes('weather')) mats.uniforms.uBhDebug.value = 1;
+  if (bdbg.includes('wallinfo')) mats.uniforms.uBhDebug.value = 2;
+  if (bdbg.includes('reveal')) mats.uniforms.uBhDebug.value = 3;
+  if (bdbg.includes('nan')) mats.uniforms.uBhDebug.value = 4;
+  if (bdbg.includes('ret')) mats.uniforms.uBhDebug.value = 7;
+  if (bdbg.includes('src')) mats.uniforms.uBhDebug.value = 5;
+  if (bdbg.includes('refl')) mats.uniforms.uBhDebug.value = 6;
+  if (bdbg.includes('galb')) mats.uniforms.uBhDebug.value = 8;
+  if (bdbg.includes('gem')) mats.uniforms.uBhDebug.value = 9;
+  if (bdbg.includes('opp')) mats.uniforms.uBhDebug.value = 10;
+  // anchors for other modules (life: smoke, laundry, bunting, birds; streetlife) + diagnostics for the
+  // harness: __city.ctx.services.buildings.setDebug(0 | 1 | 2). Types: src/world/buildings/anchors.ts
+  const facades = collectFacades(lots);
+  const service: BuildingsService = {
+    shops: anchors.shops,
+    letterSpots: anchors.letterSpots,
+    chimneys: anchors.chimneys,
+    balconies: anchors.balconies,
+    facades,
+    // (no washing line across the churchyard — core/places.ts close)
+    spans: collectSpans(lots, facades, (d) => d === 'oldtown' || d === 'market').filter((s) => {
+      const b = ctx.plan.places?.close?.bounds;
+      const mx = (s.ax + s.bx) / 2,
+        mz = (s.az + s.bz) / 2;
+      return !b || s.kind === 'street' || mx < b.x0 || mx > b.x1 || mz < b.z0 || mz > b.z1;
+    }),
+    perches: anchors.perches,
+    doorLamps: anchors.doorLamps,
+    laundry: anchors.laundry,
+    vents: anchors.vents,
+    setStaticLaundry(on: boolean) {
+      if (clothMesh) clothMesh.visible = on;
+    },
+    setDebug(n: number) {
+      mats.uniforms.uBhDebug.value = n;
+    },
+    houses: () => houseLog,
+    uniforms: mats.uniforms,
+    massTiers,
+  };
+  ctx.services.buildings = service;
+  if (farShell) {
+    const key = farBakeKey(mats.shellText, farShell.geometry);
+    service.farBakeKey = () => key;
+    service.renderFarBake = (pass) => {
+      const size = pass === 1 ? FAR_ATLAS / 2 : FAR_ATLAS;
+      const rt = new THREE.WebGLRenderTarget(size, size, { type: THREE.UnsignedByteType, format: THREE.RGBAFormat, colorSpace: pass === 2 ? THREE.NoColorSpace : THREE.SRGBColorSpace, depthBuffer: false });
+      const mat = mats.shellBake(pass);
+      const mesh = new THREE.Mesh(farShell.geometry, mat);
+      mesh.frustumCulled = false;
+      const scene = new THREE.Scene();
+      scene.add(mesh);
+      const r = ctx.renderer;
+      const prevRT = r.getRenderTarget();
+      const prevClear = r.getClearColor(new THREE.Color());
+      const prevA = r.getClearAlpha();
+      const prevShadow = r.shadowMap.autoUpdate;
+      r.shadowMap.autoUpdate = false;
+      r.setRenderTarget(rt);
+      r.setClearColor(0x000000, 0);
+      r.clear();
+      r.render(scene, ctx.camera);
+      r.setRenderTarget(prevRT);
+      r.setClearColor(prevClear, prevA);
+      r.shadowMap.autoUpdate = prevShadow;
+      mat.dispose();
+      return rt;
+    };
+    if (farGeoMesh) {
+      const params = ctx.debug.params;
+      void Promise.all([bakeTexture('fac0', params, key), bakeTexture('fac1', params, key), bakeTexture('fac2', params, key, { linear: true })]).then(async ([t0, t1, t2]) => {
+        if (!t0 || !t1 || !t2) return;
+        await uploadStaged(ctx.renderer, [t0, t1, t2]);
+        farTextures.tFF0.value = t0;
+        farTextures.tFF1.value = t1;
+        farTextures.tFF2.value = t2;
+        farOn = true;
+      });
+    }
+  }
 
   // ── picking (ray vs building boxes)
   const tmpV = new THREE.Vector3();
@@ -256,7 +475,8 @@ export default function create(ctx: CityContext): CityModule {
   const buildMs = performance.now() - t0;
   if (ctx.debug.enabled) console.info(`[buildings] ${built.length} buildings in ${buildMs.toFixed(0)} ms`, triCounts);
 
-  // sky reflection colours (follow the fog / background when the sky module provides them)
+  // sky reflection colours: the sky module's own time-of-day palette (zenith / horizon / sun glow /
+  // clouds) + the live sun and hemisphere lights for the reflected city and the sun glints
   const zen = new THREE.Color();
   const hor = new THREE.Color();
   const dayZen = new THREE.Color('#4f86c6');
@@ -264,6 +484,11 @@ export default function create(ctx: CityContext): CityModule {
   const duskHor = new THREE.Color('#f2a272');
   const nightZen = new THREE.Color('#0b1426');
   const nightHor = new THREE.Color('#1c2740');
+  const sky = new SkyState();
+  const legacyLight = ctx.debug.params.has('legacylight');
+  const camDir = new THREE.Vector3();
+  const tmpC = new THREE.Color();
+  const cityAlb = new THREE.Color(0.4, 0.39, 0.38);
 
   return {
     name: 'buildings',
@@ -271,16 +496,60 @@ export default function create(ctx: CityContext): CityModule {
       mats.uniforms.uHours.value = c.clock.hours;
     },
     frame(_realDt, c) {
+      if (winGeo) winGeo.frame(c.camera.position, mats.uniforms.uGeoWin.value);
+      if (farOn && farShell) {
+        // a texel of the atlas at this distance is farSoft pixels
+        const pxAt1m = (c.size.height * c.renderer.getPixelRatio()) / (2 * Math.tan(THREE.MathUtils.degToRad(c.camera.fov) / 2));
+        mats.uFarD.value = (farShell.texel * pxAt1m) / farSoft;
+      }
+      // facade chunks nearest first inside their late-draw slot (main.ts lateDraws: renderOrder 1; 0 = ?drawsort=0)
+      if (shellMeshes.length > 1 && shellMeshes[0].renderOrder >= 1) {
+        const cp = c.camera.position;
+        for (let i = 0; i < shellMeshes.length; i++) shellMeshes[i].renderOrder = 1 + Math.min(0.9, shellBoxes[i].distanceToPoint(cp) * 1e-4);
+      }
       const u = c.uniforms;
       const day = u.uDaylight.value;
       const dusk = u.uDusk.value;
-      zen.copy(nightZen).lerp(dayZen, day);
-      hor.copy(nightHor).lerp(dayHor, day).lerp(duskHor, dusk * 0.55);
       const fog = c.scene.fog as THREE.Fog | THREE.FogExp2 | null;
-      if (fog && (fog as THREE.Fog).color) hor.lerp((fog as THREE.Fog).color, 0.6);
-      mats.uniforms.uSkyZen.value.copy(zen);
-      mats.uniforms.uSkyHor.value.copy(hor);
-      mats.uniforms.uGround.value.setRGB(0.18 * day + 0.015, 0.17 * day + 0.015, 0.15 * day + 0.02);
+      const mu = mats.uniforms;
+      if (mats.legacy) {
+        zen.copy(nightZen).lerp(dayZen, day);
+        hor.copy(nightHor).lerp(dayHor, day).lerp(duskHor, dusk * 0.55);
+        if (fog && (fog as THREE.Fog).color) hor.lerp((fog as THREE.Fog).color, 0.6);
+        mu.uSkyZen.value.copy(zen);
+        mu.uSkyHor.value.copy(hor);
+        mu.uGround.value.setRGB(0.18 * day + 0.015, 0.17 * day + 0.015, 0.15 * day + 0.02);
+      } else {
+        samplePalette(c.clock.hours, sky, legacyLight);
+        mu.uSkyZen.value.copy(sky.zenith);
+        hor.copy(sky.horizon);
+        if (fog && (fog as THREE.Fog).color) hor.lerp((fog as THREE.Fog).color, 0.25);
+        mu.uSkyHor.value.copy(hor);
+        mu.uSkyGlow.value.copy(sky.glow).multiplyScalar(sky.glowI * 0.55);
+        mu.uCloudCol.value.copy(sky.cloudLit).lerp(hor, 0.25);
+        // live lights (sun / moon + hemisphere) → glints, reflected city, reflected ground
+        const sunDirY = u.uSunDir.value.y;
+        const sunUp = THREE.MathUtils.smoothstep(sunDirY, -0.03, 0.06);
+        const L = c.services.sky;
+        const sunI = L ? L.sun.intensity : 2;
+        const hemiI = L ? L.hemi.intensity : 1;
+        if (L) mu.uSunCol.value.copy(L.sun.color).multiplyScalar(sunI * sunUp * 0.9);
+        else mu.uSunCol.value.setRGB(0, 0, 0);
+        const city = mu.uCityCol.value;
+        if (L) city.copy(L.hemi.color).multiplyScalar(hemiI * 0.85).add(tmpC.copy(L.sun.color).multiplyScalar(sunI * 0.42 * sunUp));
+        else city.setRGB(1, 1, 1);
+        city.multiply(cityAlb).multiplyScalar(1 / Math.PI);
+        const gnd = mu.uGround.value;
+        if (L) gnd.copy(L.hemi.groundColor).multiplyScalar(hemiI * 0.5).add(tmpC.copy(L.sun.color).multiplyScalar(sunI * 0.3 * sunUp));
+        else gnd.setRGB(0.5, 0.5, 0.5);
+        gnd.multiplyScalar(0.3 / Math.PI);
+        // the studio backdrop (cyclorama) closes the reflected lower hemisphere like the sky dome does
+        const cyc = (sky as SkyState & { cyc?: THREE.Color }).cyc;
+        if (cyc) gnd.lerp(tmpC.copy(cyc).multiplyScalar(0.8), 0.45);
+        // stylised horizon lift: the reflected horizon crosses the facades in view at any camera tilt
+        c.camera.getWorldDirection(camDir);
+        mu.uReflLift.value = THREE.MathUtils.clamp(-camDir.y * 0.8 + 0.06, 0.08, 0.72);
+      }
       const night = THREE.MathUtils.clamp(u.uLights.value * (0.45 + 0.55 * u.uNight.value), 0, 1);
       mats.signs.emissiveIntensity = night * 2.2;
     },
@@ -291,16 +560,26 @@ export default function create(ctx: CityContext): CityModule {
         trimTris: triCounts.trim,
         lightTris: triCounts.lights,
         signTris: triCounts.signs,
+        greenTris: triCounts.green,
         meshes: meshes.length,
         buildMs: Math.round(buildMs),
+        chimneys: service.chimneys.length,
+        balconies: service.balconies.length,
+        spans: service.spans.length,
+        perches: service.perches.length,
+        laundryLines: service.laundry.length,
+        vents: service.vents.length,
+        shops: service.shops.length,
+        ...(winGeo ? winGeo.stats() : {}),
         ...Object.fromEntries(Object.entries(kindCounts).map(([k, v]) => [`n_${k}`, v])),
+        ...Object.fromEntries(Object.entries(houseStats).map(([k, v]) => [`house_${k}`, v])),
       };
     },
     invariants() {
       const out = [...problems];
       if (built.length !== lots.length) out.push(`built ${built.length} of ${lots.length} building lots`);
       if (doorsBuilt < doorsWanted) out.push(`${doorsWanted - doorsBuilt} of ${doorsWanted} doors missing`);
-      if (meshes.length > 6 + MAX_TRIM_CHUNKS) out.push(`too many building meshes (${meshes.length})`);
+      if (meshes.length > 8 + 2 * MAX_TRIM_CHUNKS) out.push(`too many building meshes (${meshes.length})`);
       if (violations > 0) out.push(`${violations} building(s) violate the footprint rule`);
       if (atlas.full) out.push('sign atlas overflowed');
       return out;
@@ -309,9 +588,13 @@ export default function create(ctx: CityContext): CityModule {
       ctx.scene.remove(group);
       for (const m of meshes) m.geometry.dispose();
       mats.shell.dispose();
+      mats.shellShop.dispose();
+      mats.shellRoof.dispose();
       mats.trim.dispose();
       mats.lights.dispose();
       mats.signs.dispose();
+      greenMat?.dispose();
+      glassMat?.dispose();
       tex.map.dispose();
       tex.glow.dispose();
     },
@@ -319,6 +602,49 @@ export default function create(ctx: CityContext): CityModule {
 }
 
 // ───────────────────────────────────────────────────────── helpers ──
+
+/** Move the triangles of one program class out of the wall chunks into one new geometry (the chunks keep the rest). */
+function extractShellClass(chunks: THREE.BufferGeometry[], cls: number): THREE.BufferGeometry | null {
+  const names = Object.keys(chunks[0].attributes);
+  const out: Record<string, number[]> = Object.fromEntries(names.map((n) => [n, []]));
+  const index: number[] = [];
+  let nv = 0;
+  for (const g of chunks) {
+    const idx = g.index!.array;
+    const kw = g.getAttribute('aB');
+    const keep: number[] = [];
+    const remap = new Map<number, number>();
+    for (let t = 0; t < idx.length; t += 3) {
+      if (shellClassOf(kw.getW(idx[t])) === cls) {
+        for (let k = 0; k < 3; k++) {
+          const v = idx[t + k];
+          let w = remap.get(v);
+          if (w === undefined) {
+            w = nv++;
+            remap.set(v, w);
+            for (const n of names) {
+              const a = g.getAttribute(n);
+              for (let c = 0; c < a.itemSize; c++) out[n].push(a.array[v * a.itemSize + c]);
+            }
+          }
+          index.push(w);
+        }
+      } else keep.push(idx[t], idx[t + 1], idx[t + 2]);
+    }
+    if (keep.length !== idx.length) {
+      g.setIndex(new THREE.BufferAttribute(idx instanceof Uint16Array ? Uint16Array.from(keep) : Uint32Array.from(keep), 1));
+      g.computeBoundingBox();
+      g.computeBoundingSphere();
+    }
+  }
+  if (index.length === 0) return null;
+  const g = new THREE.BufferGeometry();
+  for (const n of names) g.setAttribute(n, new THREE.BufferAttribute(Float32Array.from(out[n]), chunks[0].getAttribute(n).itemSize));
+  g.setIndex(new THREE.BufferAttribute(Uint32Array.from(index), 1));
+  g.computeBoundingBox();
+  g.computeBoundingSphere();
+  return g;
+}
 
 function estimateTop(lot: Lot): number {
   switch (lot.roof) {

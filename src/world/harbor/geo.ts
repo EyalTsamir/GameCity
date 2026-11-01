@@ -8,12 +8,16 @@
 // Everything accumulates into ONE BufferGeometry (one draw call).
 
 import * as THREE from 'three';
+import { toCreasedNormals } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { Rng } from '../../core/rng';
 
 export type V3 = [number, number, number];
 
 /** surface patterns evaluated in the fragment shader */
-export const PAT = { NONE: 0, CORRUGATED: 1, PLANKS_X: 2, PLANKS_Z: 3, HULL: 4, STONE: 5, GLASS: 6 } as const;
+/** NET: knotted netting cords over a heap (param = mesh size, m); RUST: painted steel with rust blooms and chips
+ *  (param = rust amount 0..1); STAIN: an irregular ground decal (oil / wet / fish-water), edges cut by noise
+ *  (param = blotch scale, m) — patterns in material.ts */
+export const PAT = { NONE: 0, CORRUGATED: 1, PLANKS_X: 2, PLANKS_Z: 3, HULL: 4, STONE: 5, GLASS: 6, NET: 7, RUST: 8, STAIN: 9, WET: 10, GRIME: 11, ROCK: 12, } as const;
 /** night-light behaviours (aEmit.w integer part) */
 export const EMIT = {
   /** on with the street lights (windows, lamps) */
@@ -67,6 +71,17 @@ const _d = new THREE.Vector3();
 const _s = new THREE.Vector3();
 const _u = new THREE.Vector3();
 const _m = new THREE.Matrix4();
+
+let ARMOUR_SOFT = true;
+export function setArmourSoft(on: boolean): void {
+  ARMOUR_SOFT = on;
+}
+
+/** ?norockskin: armour stones without the rock pattern */
+let ROCK_SKIN = true;
+export function setRockSkin(on: boolean): void {
+  ROCK_SKIN = on;
+}
 
 export class HB {
   readonly rigged: boolean;
@@ -469,6 +484,74 @@ export class HB {
     g.computeVertexNormals(); // non-indexed → flat facets
     this.geo(g);
     g.dispose();
+  }
+
+  /**
+   * Quarried armour stone (box hunt): a chamfered block, jittered and cut by three fracture planes (flat broken
+   * faces), flat-shaded; vertices below the wet line `wetY` (world y) darkened and greened (wet rock, weed).
+   */
+  stone(cx: number, cy: number, cz: number, rx: number, ry: number, rz: number, rng: Rng, yaw = 0, wetY = -1e9): void {
+    const g = new THREE.BoxGeometry(2, 2, 2, 2, 2, 2);
+    const pos = g.getAttribute('position') as THREE.BufferAttribute;
+    const cuts: [THREE.Vector3, number][] = [];
+    for (let k = 0; k < 3; k++) cuts.push([new THREE.Vector3(rng.range(-1, 1), rng.range(-0.5, 1), rng.range(-1, 1)).normalize(), rng.range(0.62, 0.88)]);
+    const moved = new Map<string, [number, number, number]>();
+    for (let i = 0; i < pos.count; i++) {
+      const key = `${pos.getX(i).toFixed(2)},${pos.getY(i).toFixed(2)},${pos.getZ(i).toFixed(2)}`;
+      let p = moved.get(key);
+      if (!p) {
+        _a.set(pos.getX(i), pos.getY(i), pos.getZ(i));
+        _a.multiplyScalar(1 + 0.42 * (1.12 / _a.length() - 1));
+        _a.x += rng.range(-0.11, 0.11);
+        _a.y += rng.range(-0.11, 0.11);
+        _a.z += rng.range(-0.11, 0.11);
+        for (const [n, off] of cuts) {
+          const d = _a.dot(n);
+          if (d > off) _a.addScaledVector(n, off - d);
+        }
+        p = [_a.x, _a.y, _a.z];
+        moved.set(key, p);
+      }
+      pos.setXYZ(i, p[0], p[1], p[2]);
+    }
+    const f = g.toNonIndexed();
+    g.dispose();
+    f.scale(rx / 1.1, ry / 1.1, rz / 1.1);
+    f.rotateY(yaw);
+    f.translate(cx, cy, cz);
+    let done = f;
+    if (ARMOUR_SOFT && wetY > -1e8) {
+      // geometry hunt (?noarmoursoft): stones in the splash zone reach into the water (a flat one at the waterline read as
+      // a plate lying on the surface, its underside in view); broken faces meet with soft creases, not knife edges
+      const water = wetY - 0.75;
+      const fp = f.getAttribute('position') as THREE.BufferAttribute;
+      // barely awash, its flat top would still be a plate: a stone either stands out of the water or stays under it
+      f.computeBoundingBox();
+      if (f.boundingBox!.max.y < water + 0.38) {
+        f.dispose();
+        return;
+      }
+      for (let i = 0; i < fp.count; i++) {
+        const y = fp.getY(i);
+        if (y < cy) fp.setY(i, Math.min(y, water - 0.7 - (cy - y) * 0.25));
+      }
+      done = toCreasedNormals(f, 0.75);
+      f.dispose();
+    } else f.computeVertexNormals();
+    const base = this.count;
+    const pt = this.pt;
+    if (ROCK_SKIN) this.pt = [PAT.ROCK, wetY > -1e8 ? 1 : 0.5];
+    this.geo(done);
+    this.pt = pt;
+    done.dispose();
+    for (let i = base; i < this.count; i++) {
+      const y = this.P[i * 3 + 1];
+      const w = Math.min(1, Math.max(0, (wetY + 0.25 - y) / 0.7));
+      if (w <= 0) continue;
+      this.C[i * 3] *= 1 - 0.5 * w;
+      this.C[i * 3 + 1] *= 1 - 0.36 * w;
+      this.C[i * 3 + 2] *= 1 - 0.52 * w;
+    }
   }
 
   build(): THREE.BufferGeometry {

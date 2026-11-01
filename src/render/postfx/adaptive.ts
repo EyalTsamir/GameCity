@@ -19,17 +19,46 @@ export interface QualityStep {
   renderScale: number;
   ao: boolean;
   dof: 'full' | 'lite' | 'off';
+  /** cap on the water's planar reflection level (0 off, 1 low, 2 full); the preset may be lower */
+  refl: 0 | 1 | 2;
+  /** grass blade density relative to the preset (groundcover.setDensity) */
+  grass: number;
+  /** leaf-card LOD distance relative to the preset (vegetation.setLeafDistance) */
+  leaf: number;
 }
 
-export function buildLadder(ao: boolean, dof: boolean): QualityStep[] {
+/**
+ * The ladder, cheapest visual loss per saved millisecond first:
+ *   full → refl-low (planar reflection at ~1/4.5 res without trees/trim: big saving, small loss)
+ *   → no-ao (N8AO ≈ 2 ms) → scale-0.85 → dof-lite → scale-0.72
+ *   → refl-off (analytic sky only: the water loses the mirrored town — kept as long as possible)
+ *   → scale-0.6.
+ * World round: grass-0.7 / leaf-0.65 after refl-low and detail-low (0.45 / 0.4) after scale-0.85, when
+ * the groundcover / vegetation services offer their setters.
+ * Reflection steps exist only when the water module renders reflections at load (`refl`).
+ */
+export function buildLadder(ao: boolean, dof: boolean, refl = false, grass = false, leaf = false): QualityStep[] {
   const steps: QualityStep[] = [];
   const d = dof ? 'full' : 'off';
-  steps.push({ name: 'full', renderScale: 1, ao, dof: d });
-  if (ao) steps.push({ name: 'no-ao', renderScale: 1, ao: false, dof: d });
-  steps.push({ name: 'scale-0.85', renderScale: 0.85, ao: false, dof: d });
-  if (dof) steps.push({ name: 'dof-lite', renderScale: 0.85, ao: false, dof: 'lite' });
-  steps.push({ name: 'scale-0.72', renderScale: 0.72, ao: false, dof: dof ? 'lite' : 'off' });
-  steps.push({ name: 'scale-0.6', renderScale: 0.6, ao: false, dof: dof ? 'lite' : 'off' });
+  const lite = dof ? 'lite' : 'off';
+  const r1: 0 | 1 | 2 = refl ? 1 : 2;
+  // world round: the grass blades (groundcover) and the near leaf cards (vegetation) are the expensive
+  // new vertex work — thinned early (barely visible in motion), then once more before the bigger losses
+  const g1 = grass ? 0.7 : 1,
+    g2 = grass ? 0.45 : 1;
+  const l1 = leaf ? 0.65 : 1,
+    l2 = leaf ? 0.4 : 1;
+  steps.push({ name: 'full', renderScale: 1, ao, dof: d, refl: 2, grass: 1, leaf: 1 });
+  if (refl) steps.push({ name: 'refl-low', renderScale: 1, ao, dof: d, refl: 1, grass: 1, leaf: 1 });
+  if (grass) steps.push({ name: 'grass-0.7', renderScale: 1, ao, dof: d, refl: r1, grass: g1, leaf: 1 });
+  if (leaf) steps.push({ name: 'leaf-0.65', renderScale: 1, ao, dof: d, refl: r1, grass: g1, leaf: l1 });
+  if (ao) steps.push({ name: 'no-ao', renderScale: 1, ao: false, dof: d, refl: r1, grass: g1, leaf: l1 });
+  steps.push({ name: 'scale-0.85', renderScale: 0.85, ao: false, dof: d, refl: r1, grass: g1, leaf: l1 });
+  if (grass || leaf) steps.push({ name: 'detail-low', renderScale: 0.85, ao: false, dof: d, refl: r1, grass: g2, leaf: l2 });
+  if (dof) steps.push({ name: 'dof-lite', renderScale: 0.85, ao: false, dof: 'lite', refl: r1, grass: g2, leaf: l2 });
+  steps.push({ name: 'scale-0.72', renderScale: 0.72, ao: false, dof: lite, refl: r1, grass: g2, leaf: l2 });
+  if (refl) steps.push({ name: 'refl-off', renderScale: 0.72, ao: false, dof: lite, refl: 0, grass: g2, leaf: l2 });
+  steps.push({ name: 'scale-0.6', renderScale: 0.6, ao: false, dof: lite, refl: refl ? 0 : 2, grass: g2, leaf: l2 });
   return steps;
 }
 
@@ -41,6 +70,19 @@ const FAST_FPS = 57;
 const GPU_HEAVY = 14;
 /** predicted GPU ms per frame at the higher level must stay below this to step up */
 const GPU_UP = 13.5;
+/** a held shot slower than this per frame steps down at the next fade (the film's cadence is 33 ms) */
+const HELD_SLOW_MS = 37;
+/**
+ * perf-deep (?noadapt30): above this GPU time per frame no step of the ladder reaches 60 fps, so the next cadence a
+ * step can buy is 30 fps. A steady 30 is not "slow": quality only goes down below HOLD30_FPS, and comes back whenever
+ * the step's measured saving still fits the 33 ms. Before, a 25–33 ms GPU walked the ladder (AO, then resolution) for
+ * a frame rate it could never reach.
+ */
+const HOLD30_GPU = 24;
+const HOLD30_FPS = 28;
+const HOLD30_UP = 30.5;
+/** the film's curtain: the top step keeps going up to this much GPU time per frame */
+const START_FULL_MS = 31;
 
 /** Asynchronous per-frame GPU timing (TIME_ELAPSED queries), results arrive a few frames late. */
 export class GpuTimer {
@@ -108,15 +150,23 @@ export class AdaptiveController {
   private verify: { from: number; fps: number; gpu: number } | null = null;
   /** measured GPU ms saved by stepping from level i to i + 1 */
   private saving: number[] = [];
+  /** film shots / photo mode: see hold() */
+  private held = false;
+  private heldTime = 0;
+  private heldFrames = 0;
+  /** recent GPU ms per frame whatever the state (-1 = no timer) */
+  private rawGpu = -1;
 
   constructor(
     public readonly ladder: QualityStep[],
     private onChange: (step: QualityStep, level: number) => void,
     public enabled = true,
+    private hold30 = false,
   ) {}
 
   /** one GPU timing result (ms) for a frame drawn at the current level */
   gpuSample(ms: number): void {
+    this.rawGpu = this.rawGpu < 0 ? ms : this.rawGpu + (ms - this.rawGpu) * 0.2;
     if (this.warmup > 0) return;
     this.gpuSum += ms;
     this.gpuN++;
@@ -126,6 +176,10 @@ export class AdaptiveController {
   frame(realDt: number): boolean {
     this.clock += realDt;
     if (!this.enabled) return false;
+    if (this.held) {
+      this.heldTime += realDt;
+      this.heldFrames++;
+    }
     if (this.warmup > 0) {
       this.warmup -= realDt;
       return false;
@@ -146,7 +200,44 @@ export class AdaptiveController {
     this.fps = fps;
     this.gpuMs = gpu;
     if (this.capped && this.clock >= this.cappedUntil) this.capped = false;
+    if (this.held) return false;
+    return this.decide(fps, gpu);
+  }
 
+  /**
+   * Hold quality changes (film shots, photo mode): the frames go on being timed but nothing changes. Released with
+   * stepDown (the film's fades, while the picture is black): a shot that ran slower than HELD_SLOW_MS steps down, once,
+   * without the usual verification — the next shot is another view, so a before / after would say nothing.
+   */
+  hold(on: boolean, stepDown = false): void {
+    if (this.held === on) return;
+    this.held = on;
+    if (on) {
+      this.heldTime = 0;
+      this.heldFrames = 0;
+      return;
+    }
+    const slow = this.heldFrames >= 12 && this.heldTime / this.heldFrames > HELD_SLOW_MS / 1000;
+    if (stepDown && slow && this.enabled && this.level < this.ladder.length - 1) {
+      this.verify = null;
+      this.set(this.level + 1);
+    }
+    this.winTime = this.winFrames = this.winMax = 0;
+  }
+
+  /**
+   * The film's curtain: one measured frame cost (GPU time where timers exist, else the median frame interval) picks the
+   * starting step, so the first shot does not have to find it out in front of the visitor. Only from the top.
+   */
+  startAt(frameMs: number): void {
+    if (!this.enabled || this.level !== 0) return;
+    const ms = this.rawGpu > 0 ? this.rawGpu : frameMs;
+    const want = ms <= START_FULL_MS ? '' : ms <= 36 ? 'no-ao' : ms <= 44 ? 'scale-0.85' : ms <= 58 ? 'scale-0.72' : 'scale-0.6';
+    const i = this.ladder.findIndex((s) => s.name === want);
+    if (i > 0) this.set(i);
+  }
+
+  private decide(fps: number, gpu: number): boolean {
     // did the last step down help? (first clean window after it settled)
     if (this.verify) {
       const v = this.verify;
@@ -164,14 +255,18 @@ export class AdaptiveController {
     }
 
     const gpuHeavy = gpu < 0 || gpu >= GPU_HEAVY;
-    if (fps < SLOW_FPS) {
+    const hold30 = this.hold30 && gpu >= HOLD30_GPU;
+    // (a step back up that still fits the 30 fps cadence)
+    const upSaving = this.level > 0 ? this.saving[this.level - 1] : undefined;
+    const fits30 = this.hold30 && fps >= HOLD30_FPS && gpu > 0 && upSaving !== undefined && gpu + upSaving <= HOLD30_UP;
+    if (fps < (hold30 ? HOLD30_FPS : SLOW_FPS)) {
       this.slowWins = gpuHeavy ? this.slowWins + 1 : 0;
       this.fastWins = 0;
       if (!gpuHeavy && !this.capped) {
         this.capped = true; // slow, but our GPU work is light: external cap
         this.cappedUntil = this.clock + 30;
       }
-    } else if (fps >= FAST_FPS) {
+    } else if (fps >= FAST_FPS || fits30) {
       this.fastWins++;
       this.slowWins = 0;
     } else {
@@ -189,7 +284,7 @@ export class AdaptiveController {
     if (this.fastWins >= this.upWait && this.level > 0) {
       const s = this.saving[this.level - 1];
       // with GPU timing: only climb when the predicted cost fits
-      if (gpu > 0 && s !== undefined && gpu + s > GPU_UP) {
+      if (gpu > 0 && s !== undefined && gpu + s > (fits30 ? HOLD30_UP : GPU_UP)) {
         this.fastWins = 0;
         return false;
       }

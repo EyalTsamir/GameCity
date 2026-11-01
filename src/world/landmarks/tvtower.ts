@@ -11,6 +11,9 @@ import { ANIM, FLOOD, LM, LMODE, M, PAT } from './builder';
 import { C, S, railing } from './parts';
 import type { Env } from './env';
 import { drawText, signQuad } from './signs';
+import { boxHunt } from '../../core/boxhunt';
+import { lmDetail } from '../../core/lmdetail';
+import { deckGlazing, liftKit, TVL } from './tvLift';
 
 export function genTvTower(env: Env, lot: Lot): void {
   const fp = lot.footprint;
@@ -53,17 +56,24 @@ export function genTvTower(env: Env, lot: Lot): void {
 
   // ── shaft (smooth tapering lathe) with lift rails
   const yPod = H * 0.635; // ~95 m
-  const rB = 2.9,
-    rT = 1.75;
+  // box hunt (?notvshaft): a real tower's proportions — a much stouter foot flaring out like a trumpet onto the
+  // pavilion roof and a stronger taper; the old 5.8 m shaft read as a pipe from every high view
+  const stout = boxHunt(env.ctx, 'tvshaft');
+  const rB = stout ? Math.min(3.85, R0 - 1.4) : 2.9,
+    rT = stout ? 2.3 : 1.75,
+    ex = stout ? 0.6 : 0.75,
+    flare = stout ? 0.9 : 0;
+  const rAt = (t: number) => rB + (rT - rB) * Math.pow(t, ex) + flare * Math.pow(1 - t, 10);
+  const ns = stout ? 14 : 8;
   const prof: [number, number][] = [];
-  for (let i = 0; i <= 8; i++) {
-    const t = i / 8;
-    prof.push([rB + (rT - rB) * Math.pow(t, 0.75), 4.6 + t * (yPod - 4.6)]);
+  for (let i = 0; i <= ns; i++) {
+    const t = stout ? Math.pow(i / ns, 1.6) : i / ns; // denser rings near the foot (the flare)
+    prof.push([rAt(t), 4.6 + t * (yPod - 4.6)]);
   }
-  K.lathe(concrete, prof, 0, 0, 0, 28);
+  K.lathe(concrete, prof, 0, 0, 0, stout ? 36 : 28);
   for (const a of [0, Math.PI]) {
     // two lift rails as slim vertical strips following the taper
-    for (let i = 0; i < 8; i++) {
+    for (let i = 0; i < ns; i++) {
       const [r0, y0] = prof[i],
         [r1, y1] = prof[i + 1];
       env.S.beam(M('#a9aeb2', PAT.PLAIN, 0.5, 0.5), [Math.sin(a + 0.3) * (r0 + 0.08), y0, Math.cos(a + 0.3) * (r0 + 0.08)], [Math.sin(a + 0.3) * (r1 + 0.08), y1, Math.cos(a + 0.3) * (r1 + 0.08)], 0.22, 0.12);
@@ -72,7 +82,7 @@ export function genTvTower(env: Env, lot: Lot): void {
   // service rings on the shaft
   for (const yy of [32, 64]) {
     const t = (yy - 4.6) / (yPod - 4.6);
-    const r = rB + (rT - rB) * Math.pow(t, 0.75);
+    const r = rAt(t);
     K.cyl(white, r + 0.35, r + 0.35, 0.5, 0, yy, 0, 28);
     env.L.cyl(LM('#ff2a1a', LMODE.BLINK, 4.0, yy * 0.013, 0.25), r + 0.38, r + 0.38, 0.12, 0, yy + 0.19, 0, 16, true);
   }
@@ -119,13 +129,24 @@ export function genTvTower(env: Env, lot: Lot): void {
   }
   // observation deck (static) with a balcony and railing
   const yO = yR + 3.35;
-  K.cyl(glass, 5.6, 5.75, 2.9, 0, yO, 0, 40, true);
-  K.cyl(white, 6.6, 6.6, 0.22, 0, yO - 0.02, 0, 48);
+  const LIFT = lmDetail(env.ctx, 'tvlift');
+  if (LIFT) {
+    // doors in the glazing, a balcony wide enough to walk on, the rail open where the lift stops; through a door you see the core
+    deckGlazing(env, glass, yO, 2.9, 5.6, 5.75);
+    K.cyl(white, 2.5, 2.5, 2.9, 0, yO, 0, 16, true);
+  } else K.cyl(glass, 5.6, 5.75, 2.9, 0, yO, 0, 40, true);
+  // the wider balcony is the one overhang the lift needs, 100 m up
+  if (LIFT) env.endChecks();
+  const rBal = LIFT ? TVL.balcony : 6.6;
+  const rRail = LIFT ? TVL.rail : 6.52;
+  K.cyl(white, rBal, rBal, 0.22, 0, yO - 0.02, 0, 48);
   for (let i = 0; i < 24; i++) {
+    if (LIFT && i === TVL.railGap) continue;
     const a0 = (i / 24) * Math.PI * 2,
       a1 = ((i + 1) / 24) * Math.PI * 2;
-    railing(env, [Math.sin(a0) * 6.52, yO + 0.2, Math.cos(a0) * 6.52], [Math.sin(a1) * 6.52, yO + 0.2, Math.cos(a1) * 6.52], 1.05, '#e3e6e8');
+    railing(env, [Math.sin(a0) * rRail, yO + 0.2, Math.cos(a0) * rRail], [Math.sin(a1) * rRail, yO + 0.2, Math.cos(a1) * rRail], 1.05, '#e3e6e8');
   }
+  if (LIFT) env.checkLot(fp, 'tvtower');
   // domed cap
   K.lathe(
     white,
@@ -184,12 +205,18 @@ export function genTvTower(env: Env, lot: Lot): void {
   }
 
   env.endChecks();
+  if (LIFT) liftKit(env, yO, (y) => rAt(Math.max(0, (y - 4.6) / (yPod - 4.6))), 0);
   env.pick(lot.id, lot.name ?? 'Skyline Tower', env.boxLocal(-7, 0, -7, 7, H, 7), () => {
     const h = env.hours();
     const open = h >= 10 && h < 23;
     return [`${Math.round(H)} m TV tower · observation deck at ${Math.round(yO)} m`, open ? 'Revolving restaurant open · one turn every 90 s' : 'Closed · opens 10:00', 'Blinking aviation lights on the mast'];
   });
   void S;
+}
+
+/** the observation deck's height (the lift stops here) */
+export function tvDeckY(lot: Lot): number {
+  return (lot.height || 150) * 0.635 + 4.9 + 3.35;
 }
 
 /** Restaurant ring rotation (uSpin.x): one turn every 90 sim seconds. */

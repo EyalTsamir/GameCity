@@ -11,6 +11,7 @@
 // Surfaces use a shared procedural shader (brick, stone, tiles, glazing, windows, clock
 // faces showing the live time, flags…) — see landmarks/shaders.ts.
 
+import { nearLens } from '../core/nearDetail';
 import * as THREE from 'three';
 import type { CityContext, CityModule, PickHit } from '../core/context';
 import { createMaterials } from './landmarks/materials';
@@ -22,19 +23,31 @@ import { genTownHall } from './landmarks/townhall';
 import { genChurch } from './landmarks/church';
 import { genStadium, genFloodlight, StadiumInfo } from './landmarks/stadium';
 import { createStadiumLife } from './landmarks/stadiumLife';
-import { genTvTower, tvTowerUpdater } from './landmarks/tvtower';
+import { genTvTower, tvDeckY, tvTowerUpdater } from './landmarks/tvtower';
+import { buildTvLift, type TvLiftRuntime } from './landmarks/tvLift';
+import { buildStadiumRoom } from './landmarks/stadiumRoom';
 import { genConstruction, genTowerCrane, craneUpdater, CraneTargets } from './landmarks/construction';
 import { genFountain } from './landmarks/fountain';
 import { genFlagpole, genMarketStall, genCourtHoops } from './landmarks/civic';
 import { genWaterTower, genChimney, genTanks } from './landmarks/industry';
 import { genStatue, genGazebo, genBandstand, genKiosk, genPlayground, genPicnic } from './landmarks/park';
 import { genWindTurbine, turbineUpdater } from './landmarks/turbines';
+import { Rooms } from './landmarks/rooms';
+import { buildLighthouseRoom } from './landmarks/lighthouseRoom';
+import { breakwaterRoot } from './harbor/breakwater';
+import { lmDetail } from '../core/lmdetail';
+import { DIR_YAW } from '../core/geom';
+import type { Lot } from '../core/plan';
 
 export default function create(ctx: CityContext): CityModule {
   const t0 = performance.now();
   const plan = ctx.plan;
   const mats = createMaterials(ctx.uniforms);
   const env = new Env(ctx, mats.u);
+  const rooms = new Rooms();
+  let tvLot: Lot | null = null;
+  let tvLift: TvLiftRuntime | null = null;
+  env.rooms = rooms;
   const counts: Record<string, number> = {};
   const count = (k: string) => (counts[k] = (counts[k] ?? 0) + 1);
   const stadiums: StadiumInfo[] = [];
@@ -42,15 +55,20 @@ export default function create(ctx: CityContext): CityModule {
 
   const triBy: Record<string, number> = {};
   const totalTris = () => {
-    let t = env.K.b.triangleCount + env.L.b.triangleCount + env.T.b.triangleCount + env.O.b.triangleCount + env.D.b.triangleCount;
+    let t = env.K.b.triangleCount + env.L.b.triangleCount + env.T.b.triangleCount + env.O.b.triangleCount;
     for (const b of env.regions.values()) t += b.triangleCount;
+    for (const b of env.details.values()) t += b.triangleCount;
     return t;
   };
   // perf diagnostics: ?lmnokinds=stadium,townhall,… skips those generators
   const noKinds = new Set((ctx.debug.params.get('lmnokinds') ?? '').split(',').filter(Boolean));
+  // the big landmarks get static + detail meshes of their own (culled as one): in a shared cell the stadium's
+  // seating detail was drawn whenever the market next to it was in view
+  const OWN_REGION = new Set(['station', 'townhall', 'church', 'tvtower', 'construction', 'stadium']);
   const run = (label: string, fn: () => void) => {
     if (noKinds.has(label.split(' ')[0])) return;
     const t0 = totalTris();
+    env.regionTag = OWN_REGION.has(label.split(' ')[0]) ? label.replace(' ', '-') : null;
     try {
       fn();
       const k = label.split(' ')[0];
@@ -60,6 +78,7 @@ export default function create(ctx: CityContext): CityModule {
       if (ctx.debug.enabled) console.error('[landmarks]', label, err);
     }
     env.endChecks();
+    env.regionTag = null;
   };
 
   for (const lot of plan.lots) {
@@ -80,6 +99,7 @@ export default function create(ctx: CityContext): CityModule {
         run(`tvtower ${lot.id}`, () => {
           genTvTower(env, lot);
           env.updaters.push(tvTowerUpdater(env));
+          tvLot = lot;
         });
         count('tvtower');
         break;
@@ -217,12 +237,13 @@ export default function create(ctx: CityContext): CityModule {
     meshTris[name.replace('landmarks-', '')] = `${Math.round(t)}t/${geo.attributes.position.count}v` as unknown as number;
     return mesh;
   };
+  // static + detail meshes per REGION_CELL cell (frustum-culled; detail cells beyond the LOD distance are skipped)
+  const detailCells: THREE.Mesh[] = [];
   for (const [key, b] of env.regions) {
-    if (b.vertexCount === 0) continue;
-    addMesh(b.toGeometry(), mats.solid, `landmarks-${key}`, true, true);
+    if (b.vertexCount > 0) addMesh(b.toGeometry(), mats.solid, `landmarks-static-${key}`, true, true);
   }
+  for (const [key, d] of env.details) if (d.vertexCount > 0) detailCells.push(addMesh(d.toGeometry(), mats.detail, `landmarks-detail-${key}`, false, true));
   if (env.O.b.vertexCount > 0) addMesh(env.O.b.toGeometry(), mats.ornament, 'landmarks-ornament', true, true);
-  if (env.D.b.vertexCount > 0) addMesh(env.D.b.toGeometry(), mats.detail, 'landmarks-detail', false, true);
   if (env.K.b.vertexCount > 0) {
     const km = addMesh(env.K.b.toGeometry(), mats.kinetic, 'landmarks-kinetic', true, true, false);
     km.customDepthMaterial = mats.kineticDepth;
@@ -232,6 +253,22 @@ export default function create(ctx: CityContext): CityModule {
   const glowMesh = buildGlows(env.glows, mats.glows);
   if (glowMesh) group.add(glowMesh);
   for (const o of env.extra) group.add(o);
+  // the lighthouse stands out on the breakwater, built by the harbour; only its inside (and the walk out to it) lives here
+  const lhF = ctx.plan.features.find((f) => f.kind === 'lighthouse');
+  const bwF = ctx.plan.features.find((f) => f.kind === 'breakwater');
+  const terrain = ctx.services.terrain as { height(x: number, z: number): number } | undefined;
+  if (lhF && bwF?.a && bwF.b && terrain && lmDetail(ctx, 'bwlife') && lmDetail(ctx, 'lhroom')) {
+    buildLighthouseRoom(rooms, lhF.x, lhF.z, Number(lhF.params?.height ?? 24), breakwaterRoot(bwF.a.x, bwF.b.x, bwF.a.z, (x, z) => terrain.height(x, z)));
+  }
+  if (tvLot && lmDetail(ctx, 'tvlift')) {
+    const fp = (tvLot as Lot).footprint;
+    tvLift = buildTvLift(ctx, rooms, mats.u.uLift, (fp.x0 + fp.x1) / 2, (fp.z0 + fp.z1) / 2, DIR_YAW[(tvLot as Lot).front], tvDeckY(tvLot as Lot), 0);
+  }
+  for (const st of stadiums) {
+    if (st.walk && terrain) buildStadiumRoom(rooms, st.cx, st.cz, st.walk, terrain.height(st.cx, st.cz), (x, z) => terrain.height(x, z));
+  }
+  for (const r of rooms.list) r.finish(ctx, group, ctx.uniforms);
+  if (rooms.list.length) ctx.services.rooms = rooms;
   group.matrixAutoUpdate = false;
   ctx.scene.add(group);
   // perf diagnostics: ?lmskip=static,kinetic,lights,signs,glows,fountain,crowd,players
@@ -239,7 +276,7 @@ export default function create(ctx: CityContext): CityModule {
   if (lmskip.length) {
     for (const o of group.children) {
       const n = o.name;
-      const tag = n.startsWith('landmarks-fountain') ? 'fountain' : n === 'landmarks-kinetic' ? 'kinetic' : n === 'landmarks-lights' ? 'lights' : n === 'landmarks-signs' ? 'signs' : n === 'landmarks-glows' ? 'glows' : n === 'landmarks-crowd' ? 'crowd' : n === 'landmarks-players' || n === 'landmarks-ball' ? 'players' : n === 'landmarks-detail' ? 'detail' : 'static';
+      const tag = n.startsWith('landmarks-fountain') ? 'fountain' : n === 'landmarks-kinetic' ? 'kinetic' : n === 'landmarks-lights' ? 'lights' : n === 'landmarks-signs' ? 'signs' : n === 'landmarks-glows' ? 'glows' : n === 'landmarks-crowd' ? 'crowd' : n === 'landmarks-players' || n === 'landmarks-ball' ? 'players' : n.startsWith('landmarks-detail') ? 'detail' : 'static';
       if (lmskip.includes(tag)) o.visible = false;
     }
   }
@@ -305,9 +342,22 @@ export default function create(ctx: CityContext): CityModule {
   const nightZen = new THREE.Color('#0b1426');
   const nightHor = new THREE.Color('#1c2740');
 
+  // detail cells entirely beyond the LOD distance are not drawn at all (their vertices would only collapse)
+  const detailOn = !lmskip.includes('detail');
+  const cellSpheres = detailCells.map((m) => m.geometry.boundingSphere!);
+
   return {
     name: 'landmarks',
-    frame(_realDt, c) {
+    frame(realDt, c) {
+      tvLift?.frame(realDt);
+      const cp = c.camera.position;
+      mats.u.uDetailDist.value = 100 * nearLens.zoom;
+      const lod = mats.u.uDetailDist.value;
+      for (let i = 0; i < detailCells.length; i++) {
+        const sp = cellSpheres[i];
+        detailCells[i].visible = detailOn && cp.distanceTo(sp.center) - sp.radius < lod;
+      }
+      rooms.frame(c, c.camera);
       const day = c.uniforms.uDaylight.value;
       const dusk = c.uniforms.uDusk.value;
       zen.copy(nightZen).lerp(dayZen, day);

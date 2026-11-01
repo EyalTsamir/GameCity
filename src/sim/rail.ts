@@ -17,7 +17,7 @@ import type { CityContext, CityModule, PickHit } from '../core/context';
 import { Geo } from './rail/geo';
 import { makeProfile } from './rail/profile';
 import { createRailStaticMaterial } from './rail/staticMaterial';
-import { buildTrack } from './rail/track';
+import { buildTrack, buildTrackFixings, FIX_CHUNK } from './rail/track';
 import { buildStation } from './rail/station';
 import { buildCrossingGear } from './rail/crossingGear';
 import { createSigns } from './rail/signs';
@@ -25,6 +25,7 @@ import { Glows } from './rail/glows';
 import { RailSim, type Train } from './rail/trains';
 import { TrainRenderer } from './rail/trainRender';
 import { ROAD_HALF } from '../core/constants';
+import { addLampLights } from '../core/lampLight';
 
 export interface RailService {
   trains(): number;
@@ -67,6 +68,20 @@ export default function create(ctx: CityContext): CityModule {
   }
   root.add(flatMesh, tallMesh);
 
+  // near-only rail fastenings (baseplates, chairs, clips, screws) in chunks along the line (F3; ?notrackfix)
+  const fixDist = ctx.debug.params.has('notrackfix') ? 0 : ctx.quality.level === 'low' ? 0 : ctx.quality.level === 'medium' ? 22 : 38;
+  const fixChunks = fixDist > 0
+    ? buildTrackFixings(prof, track.sleepers, rng.fork('fix')).map(({ x, geo }) => {
+        const m = new THREE.Mesh(geo.build(), bedMat);
+        m.name = 'rail-fixings';
+        m.receiveShadow = true;
+        m.matrixAutoUpdate = false;
+        m.visible = false;
+        root.add(m);
+        return { x, m };
+      })
+    : [];
+
   // overhead wires
   const wireGeo = new THREE.BufferGeometry();
   wireGeo.setAttribute('position', new THREE.Float32BufferAttribute(track.wires, 3));
@@ -86,17 +101,22 @@ export default function create(ctx: CityContext): CityModule {
   const nStatic = st.lamps.length * 2 + st.strips.length + gear.reduce((n, g) => n + g.lamps.length + g.boomLamps.length, 0) + track.signals.length * 2;
   const glows = new Glows(ctx, nStatic + TrainRenderer.glowSlots(), 'rail-glows', { uXing: su.uXing, uSig: su.uSig });
   let gi = 0;
+  // platform lamps + canopy strips light the platform through the shared lamp light map (night
+  // agent); the old flat additive pools only come back with ?legacylamps
+  const legacyLamps = ctx.debug.params.has('legacylamps');
   for (const l of st.lamps) {
     glows.setup(gi, '#ffd08c', 0.95, 1.0);
     glows.move(gi++, l.x, l.y, l.z);
-    glows.setup(gi, '#ffbe72', 3.2, 0.28, true);
+    glows.setup(gi, '#ffbe72', 3.2, legacyLamps ? 0.28 : 0, true);
     glows.move(gi++, l.x, station.platformY + 0.03, l.z + 0.3);
   }
   // canopy strip lights → soft pools on the platform
   for (const sl of st.strips) {
-    glows.setup(gi, '#fff0d2', 3.4, 0.26, true);
+    glows.setup(gi, '#fff0d2', 3.4, legacyLamps ? 0.26 : 0, true);
     glows.move(gi++, sl.x, station.platformY + 0.03, sl.z);
   }
+  addLampLights(st.lamps.map((l) => ({ x: l.x, y: l.y, z: l.z, pole: l.y - station.platformY, radius: 3.8, color: '#ffc979', intensity: 1.15, kind: 'path' as const })));
+  addLampLights(st.strips.map((sl) => ({ x: sl.x, y: sl.y, z: sl.z, pole: Math.max(1, sl.y - station.platformY), radius: 3.6, color: '#fff0d2', intensity: 0.8, kind: 'plaza' as const })));
   for (const g of gear) {
     for (const l of g.lamps) {
       glows.setup(gi, '#ff3018', 0.42, 1.6, false, 0.6, 1 + l.id * 2 + l.phase);
@@ -169,6 +189,7 @@ export default function create(ctx: CityContext): CityModule {
     return `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
   };
   let boardT = 0;
+  let boardNear = false;
   const refreshBoard = () => {
     const rows = sim.boardRows().map((r) => ({ time: fmt(r.time), dest: r.dest, info: r.info, hot: r.hot }));
     const h = ctx.clock.hours;
@@ -191,6 +212,14 @@ export default function create(ctx: CityContext): CityModule {
     },
     frame(realDt) {
       const a = performance.now();
+      if (fixChunks.length) {
+        const cp = ctx.camera.position;
+        const dzc = Math.abs(cp.z - prof.z), hy = Math.max(0, cp.y - 1);
+        for (const f of fixChunks) {
+          const dx = Math.max(0, Math.abs(cp.x - f.x) - FIX_CHUNK / 2);
+          f.m.visible = Math.hypot(dx, dzc, hy) < fixDist;
+        }
+      }
       // uniforms: crossings, signals, clock
       const c0 = sim.crossings[0],
         c1 = sim.crossings[1];
@@ -213,14 +242,18 @@ export default function create(ctx: CityContext): CityModule {
       glows.commit();
       // sign faces are unreadable (sub-pixel text) from far away: skip their draw call
       const cam = ctx.camera.position;
-      signs.mesh.visible = Math.hypot(cam.x - signCentre.x, cam.y, cam.z - signCentre.z) < 260;
+      const signD = Math.hypot(cam.x - signCentre.x, cam.y, cam.z - signCentre.z);
+      signs.mesh.visible = signD < 260;
       // the glow batch only matters at night or while a crossing flashes
       glows.mesh.visible = ctx.uniforms.uLights.value > 0.01 || !!c0?.flash || !!c1?.flash;
+      // the departure board re-uploads its whole 1024x512 sign texture (+ mipmaps) when its text changes — the clock
+      // minute changes every refresh: only while it is legible (≲ 45 m; beyond, its rows are a few pixels tall)
       boardT -= realDt;
-      if (boardT <= 0) {
+      if (signD < 45 && (boardT <= 0 || !boardNear)) {
         boardT = 0.5;
         refreshBoard();
       }
+      boardNear = signD < 45;
       cpuMs = cpuMs * 0.95 + (performance.now() - a) * 0.05;
     },
     stats() {

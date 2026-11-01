@@ -4,13 +4,18 @@
 // picket fence / low wall / hedge, allotment plots and sheds, bench heights), so those are
 // computed here from the plan + core graphs only, cached per plan, and read by both.
 
+import { nearLens } from '../../core/nearDetail';
 import * as THREE from 'three';
 import type { CityContext } from '../../core/context';
 import type { Lot, StreetSlot, WalkPath, DistrictKind } from '../../core/plan';
 import { OCC, type OccupancyGrid } from '../../core/occupancy';
 import { SIDEWALK_Y, WALK_OFFSET, FURN_OFFSET } from '../../core/constants';
 import { hashString } from '../../core/rng';
+import { closeLightOn } from '../../core/closelight';
 import type { Rect } from '../../core/geom';
+import { planGardens, itemDiscs, type GardenPlan } from './gardenPlan';
+
+export type { GardenPlan, GardenItem, GardenItemKind } from './gardenPlan';
 
 // ─────────────────────────────────────────────────────────────── raster ──
 
@@ -167,6 +172,11 @@ export interface Layout {
   plots: Plot[];
   /** keep-clear discs for anything standing at ground level (props + vegetation) */
   furniture: { x: number; z: number; r: number }[];
+  /**
+   * Back-garden kits per house lot (patio, shed, pool, trampoline…). Roads draws the patios and
+   * stepping stones, props the furniture; every item is also in `furniture` (trees/bushes keep off).
+   */
+  gardens: GardenPlan[];
 }
 
 export const MASK_WALK = 1;
@@ -246,7 +256,29 @@ function buildLayout(ctx: CityContext): Layout {
   }
   const borders = buildBorders(ctx, walk);
   const plots = buildPlots(ctx);
-  return { walk, lamps, benches, borders, plots, furniture };
+  const gardens = ctx.debug.params.has('nogardens')
+    ? []
+    : planGardens({
+        plan,
+        occ,
+        walkAt: (x, z) => (walk.get(x, z) & MASK_WALK) !== 0,
+        borders: borders.map((b) => ({ ax: b.ax, az: b.az, bx: b.bx, bz: b.bz, half: b.style === 'hedge' ? (b.street ? 0.3 : 0.33) : b.style === 'wall' ? 0.21 : 0.07 })),
+      });
+  for (const g of gardens) {
+    for (const it of g.items) for (const d of itemDiscs(it)) furniture.push(d);
+    if (g.patio) {
+      const p = g.patio;
+      const w = p.x1 - p.x0,
+        d = p.z1 - p.z0;
+      const n = Math.max(1, Math.round(Math.max(w, d) / Math.min(w, d)));
+      for (let k = 0; k < n; k++) {
+        const t = (k + 0.5) / n;
+        furniture.push({ x: w >= d ? p.x0 + w * t : (p.x0 + p.x1) / 2, z: w >= d ? (p.z0 + p.z1) / 2 : p.z0 + d * t, r: Math.min(2.8, Math.min(w, d) / 2 + 0.3) });
+      }
+    }
+    for (const s of g.stones) furniture.push({ x: s.x, z: s.z, r: 0.3 });
+  }
+  return { walk, lamps, benches, borders, plots, furniture, gardens };
 }
 
 function districtAt(ctx: CityContext, x: number, z: number): DistrictKind {
@@ -322,6 +354,30 @@ function buildLamps(ctx: CityContext, benches: BenchPlace[]): LampSpot[] {
   for (const s of plan.slots) {
     if (s.kind !== 'lamp') continue;
     out.push({ x: s.x, z: s.z, y: SIDEWALK_Y, yaw: s.yaw, style: streetLampStyle(s.district), street: true });
+  }
+  // car parks had no light at all: lamps along their long edges, behind the stalls, arms reaching in (?noparklamps)
+  if (closeLightOn('parklamps')) {
+    for (const a of plan.areas) {
+      if (a.kind !== 'parking' || !a.stalls?.length) continue;
+      const r = a.rect;
+      const alongX = r.x1 - r.x0 >= r.z1 - r.z0;
+      const [a0, a1] = alongX ? [r.x0, r.x1] : [r.z0, r.z1];
+      const L = a1 - a0;
+      const n = Math.max(1, Math.round(L / 18));
+      for (let e = 0; e < 2; e++) {
+        for (let i = 0; i < n; i++) {
+          // (the far edge halfway between the lamps of the near one)
+          const v = a0 + (L * (i + (e ? 0.75 : 0.25))) / n;
+          const u = alongX ? (e ? r.z1 - 0.12 : r.z0 + 0.12) : e ? r.x1 - 0.12 : r.x0 + 0.12;
+          const x = alongX ? v : u,
+            z = alongX ? u : v;
+          if (occAny(occ, x, z, 0.1, OCC.ROAD | OCC.SIDEWALK | OCC.BUILDING | OCC.WATER | OCC.SOLID | OCC.RAIL | OCC.PATH)) continue;
+          if (plan.slots.some((s) => s.kind !== 'empty' && Math.hypot(s.x - x, s.z - z) < 1.5)) continue;
+          // (a lamp's arm reaches against its yaw)
+          out.push({ x, z, y: 0, yaw: alongX ? (e ? 0 : Math.PI) : e ? Math.PI / 2 : -Math.PI / 2, style: 'simple', street: false });
+        }
+      }
+    }
   }
   // terrain's promenade lamps (only to keep distance)
   const prom = (ctx.services.terrain as { promenadeLamps?: { x: number; z: number }[] } | undefined)?.promenadeLamps ?? [];
@@ -587,7 +643,7 @@ export class DistanceLod {
     const cam = this.ctx.camera;
     const svc = this.ctx.services.camera as { getState?: () => { distance: number } } | undefined;
     const st = svc?.getState?.();
-    if (st && Number.isFinite(st.distance)) return st.distance;
+    if (st && Number.isFinite(st.distance)) return st.distance / nearLens.zoom;
     cam.getWorldDirection(this.dir);
     return this.dir.y < -0.05 ? cam.position.y / -this.dir.y : 1e4;
   }
@@ -632,6 +688,42 @@ export class ChunkCuller {
     this.frustum.setFromProjectionMatrix(this.m);
     for (const it of this.items) it.mesh.visible = it.gate() && !it.box.isEmpty() && this.frustum.intersectsBox(it.box);
   }
+}
+
+/**
+ * Split a merged static geometry into square world cells by triangle centroid (shared vertex buffers, one index
+ * per cell), so each cell is culled on its own. The west/east split above never culled from the aerial views, but
+ * at street level a city-wide mesh of fine furniture drew every bench of the town each frame.
+ */
+export function splitByCells(geo: THREE.BufferGeometry, cell: number): THREE.BufferGeometry[] {
+  const pos = geo.getAttribute('position');
+  const index = geo.index;
+  const n = index ? index.count : pos.count;
+  const buckets = new Map<number, number[]>();
+  for (let t = 0; t + 2 < n; t += 3) {
+    const a = index ? index.getX(t) : t,
+      b = index ? index.getX(t + 1) : t + 1,
+      c = index ? index.getX(t + 2) : t + 2;
+    const cx = (pos.getX(a) + pos.getX(b) + pos.getX(c)) / 3,
+      cz = (pos.getZ(a) + pos.getZ(b) + pos.getZ(c)) / 3;
+    const key = (Math.floor(cx / cell) + 512) * 1024 + (Math.floor(cz / cell) + 512);
+    let list = buckets.get(key);
+    if (!list) buckets.set(key, (list = []));
+    list.push(a, b, c);
+  }
+  return [...buckets.values()].map((ids) => {
+    const g = new THREE.BufferGeometry();
+    for (const [name, attr] of Object.entries(geo.attributes)) g.setAttribute(name, attr);
+    g.setIndex(ids);
+    // (from the cell's own vertices: computeBoundingBox() reads the whole shared position buffer, every cell got the
+    // city's box and neither the frustum nor any distance gate ever dropped one)
+    const box = new THREE.Box3();
+    const v = new THREE.Vector3();
+    for (const i of ids) box.expandByPoint(v.fromBufferAttribute(pos, i));
+    g.boundingBox = box;
+    g.boundingSphere = box.getBoundingSphere(new THREE.Sphere());
+    return g;
+  });
 }
 
 // ─────────────────────────────────────────────────────────────── misc ──

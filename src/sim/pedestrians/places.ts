@@ -9,6 +9,9 @@ import { OCC } from '../../core/occupancy';
 import { DIR_VEC } from '../../core/geom';
 import { SIDEWALK_Y, WATER_LEVEL } from '../../core/constants';
 import type { Rng } from '../../core/rng';
+import { buildCafes, type CafePlace, type Terrace } from './cafes';
+import { SEAT_TOP } from './animate';
+import { planStalls, marketStalls, type Stall } from './vendors';
 
 export type DoorCat = 'home' | 'shop' | 'office' | 'hotel' | 'industry' | 'civic' | 'school' | 'station' | 'stadium' | 'kiosk' | 'club';
 
@@ -53,6 +56,8 @@ export interface BenchPlace {
   seats: Spot[];
   district: string;
   sidewalk: boolean;
+  /** a seat without a backrest this much higher than a bench (fountain rim), m */
+  rim?: number;
 }
 
 export interface StopPlace extends SpotPlace {
@@ -87,6 +92,10 @@ export interface Places {
   benches: BenchPlace[];
   beaches: SpotPlace[];
   views: SpotPlace[];
+  /** standing about on plazas: pairs and trios chatting (themes 'pair' / 'trio'), someone on the phone ('lean') */
+  hangouts: SpotPlace[];
+  /** street vendors' carts (ice cream, orange juice, flowers, pretzels) with customer spots */
+  vendors: Stall[];
   stops: StopPlace[];
   stopById: Map<number, StopPlace>;
   stationDoors: DoorPlace[];
@@ -97,6 +106,10 @@ export interface Places {
   marketNodes: number[];
   facades: Facade[];
   stalls: { x: number; z: number }[];
+  /** café tables (terraces, kiosk tables): seats, walkway node, approach paths */
+  cafes: CafePlace[];
+  /** clusters of café tables with a service point for waiters */
+  terraces: Terrace[];
   bridgeEdges: Set<number>;
   districtName(x: number, z: number): string;
   surfaceY(x: number, z: number, fallback: number): number;
@@ -238,6 +251,27 @@ export function buildPlaces(ctx: CityContext, rng: Rng): Places {
   }
 
   const freeCell = (x: number, z: number, r: number, flags: number) => !occ.anyInCircle(x, z, r, flags);
+
+  // ── sitting on the rim of a fountain (seat 0.6 m, facing out), in arcs of three between the walkways
+  for (const f of plan.features) {
+    if (f.kind !== 'fountain' || ctx.debug.params.has('norim')) continue;
+    const R = Math.min(Number(f.params?.radius ?? f.radius ?? 5), f.radius || 5);
+    const rSpot = R - 0.06 - 0.22 + 0.175; // hips over the outer rim, the spot 0.175 m in front of them
+    const n = Math.max(3, Math.round((Math.PI * 2 * R) / 5.2));
+    for (let k = 0; k < n; k++) {
+      const a0 = (k / n) * Math.PI * 2 + 0.26;
+      const seats: Spot[] = [];
+      for (const j of [-1, 0, 1]) {
+        const a = a0 + (j * 0.64) / rSpot;
+        seats.push({ x: f.x + Math.sin(a) * rSpot, z: f.z + Math.cos(a) * rSpot, y: 0, yaw: a, taken: -1 });
+      }
+      const sx = f.x + Math.sin(a0) * (R + 1.2),
+        sz = f.z + Math.cos(a0) * (R + 1.2);
+      const node = peds.nearestNode(sx, sz, (nd) => nd.kind === 'path' && nd.edges.length >= 2 && Math.hypot(nd.x - sx, nd.z - sz) < 6);
+      if (node < 0) continue;
+      benches.push({ node, x: f.x + Math.sin(a0) * rSpot, z: f.z + Math.cos(a0) * rSpot, y: 0, yaw: a0, seats, district: districtName(f.x, f.z), sidewalk: false, rim: 0.6 - SEAT_TOP });
+    }
+  }
 
   // ── beach towel spots around each beach dead end
   const beaches: SpotPlace[] = [];
@@ -435,10 +469,10 @@ export function buildPlaces(ctx: CityContext, rng: Rng): Places {
     const facing = Math.atan2(rx, rz);
     const spots: Spot[] = [];
     // Waiting spots stay off the walking band so passers-by never have to push through
-    // the queue: under the shelter roof (in front of its bench), along its open front at
-    // the kerb-side edge of the band, and beside it in the furniture band. Shelter frame
-    // (props/furniture.ts busShelter): local +Z away from the road, glass back at z −0.28,
-    // open front at z 0.78, 3.8 m long, bench along the back, stop pole at x +2.45.
+    // the queue: under the shelter roof (in front of its bench) and beside it in the furniture
+    // band. Shelter frame (props/furniture.ts busShelter): local +Z away from the road, open
+    // front at z −0.28 (road side), glass back at z 0.78, 3.8 m long, bench along the back,
+    // stop pole at x +2.45.
     const slot = plan.slots.find((s) => s.kind === 'busstop' && s.busStop === bs.id);
     const syaw = slot ? slot.yaw : Math.atan2(-rx, -rz);
     const sx = slot ? slot.x : bs.x,
@@ -449,18 +483,18 @@ export function buildPlaces(ctx: CityContext, rng: Rng): Places {
       Zz = Math.cos(syaw);
     // (nobody in the middle of the open side: people inside must be able to walk out)
     const local: [number, number][] = [
-      [-1.25, 0.45],
-      [-0.4, 0.45],
-      [0.45, 0.45],
-      [1.3, 0.45],
-      [-2.5, 0.3],
-      [2.65, 0.3],
-      [-3.3, 0.3],
-      [3.4, 0.3],
-      [-1.75, 0.98],
-      [1.75, 0.98],
-      [-4.1, 0.3],
-      [4.2, 0.3],
+      [-1.25, 0.05],
+      [-0.4, 0.05],
+      [0.45, 0.05],
+      [1.3, 0.05],
+      [-2.5, 0.2],
+      [2.65, 0.2],
+      [-3.3, 0.2],
+      [3.4, 0.2],
+      [-4.1, 0.2],
+      [4.2, 0.2],
+      [-4.9, 0.2],
+      [5.0, 0.2],
     ];
     for (const [lx, lz] of local) {
       const x = sx + Xx * lx + Zx * lz,
@@ -556,6 +590,15 @@ export function buildPlaces(ctx: CityContext, rng: Rng): Places {
     return true;
   };
   for (const v of views) v.spots = v.spots.filter((sp) => dry(sp.x, sp.z));
+  // two neighbouring attractions (the statue's ring from two nodes, the duck pond's shore) can offer the same ground:
+  // a spot on top of another's would put two strangers in one place
+  const taken: { x: number; z: number; v: SpotPlace }[] = [];
+  for (const v of views)
+    v.spots = v.spots.filter((sp) => {
+      for (const t of taken) if (t.v !== v && (t.x - sp.x) ** 2 + (t.z - sp.z) ** 2 < 0.55 * 0.55) return false;
+      taken.push({ x: sp.x, z: sp.z, v });
+      return true;
+    });
   for (let i = views.length - 1; i >= 0; i--) if (!views[i].spots.length) views.splice(i, 1);
   // benches are sat down on from the front: skip any whose front is over the water (sea-facing pier benches)
   for (let i = benches.length - 1; i >= 0; i--) {
@@ -600,6 +643,13 @@ export function buildPlaces(ctx: CityContext, rng: Rng): Places {
     else furn.set(k, [x, z]);
   };
   for (const sl of plan.slots) if (sl.kind !== 'empty' && sl.kind !== 'busstop') addFurn(sl.x, sl.z);
+  // bicycles / mopeds / e-scooters parked on the pavement (traffic module): points along each
+  const p2w = (ctx.services.traffic as { parked2w?: { x: number; z: number; yaw: number; len: number }[] } | undefined)?.parked2w ?? [];
+  for (const b of p2w) {
+    const fx = Math.sin(b.yaw),
+      fz = Math.cos(b.yaw);
+    for (const k of [-0.35, 0, 0.35]) addFurn(b.x + fx * b.len * k, b.z + fz * b.len * k);
+  }
   for (const I of ctx.roads.intersections) {
     for (const hd of I.signals) addFurn(hd.x, hd.z);
     for (const hd of I.stopSigns) addFurn(hd.x, hd.z);
@@ -619,6 +669,10 @@ export function buildPlaces(ctx: CityContext, rng: Rng): Places {
     return false;
   };
 
+  const { cafes, terraces } = ctx.debug.params.has('nocafe') ? { cafes: [], terraces: [] } : buildCafes(ctx, districtName);
+  const vendors = ctx.debug.params.has('novendors') ? [] : [...planStalls(ctx, rng, []), ...marketStalls(ctx)];
+  const hangouts = ctx.debug.params.has('nohang') ? [] : buildHangouts(ctx, rng, districtName, vendors);
+
   return {
     doors,
     doorByNode,
@@ -626,6 +680,8 @@ export function buildPlaces(ctx: CityContext, rng: Rng): Places {
     benches,
     beaches,
     views,
+    hangouts,
+    vendors,
     stops,
     stopById,
     stationDoors,
@@ -636,6 +692,8 @@ export function buildPlaces(ctx: CityContext, rng: Rng): Places {
     marketNodes,
     facades,
     stalls,
+    cafes,
+    terraces,
     bridgeEdges,
     districtName,
     surfaceY,
@@ -644,4 +702,103 @@ export function buildPlaces(ctx: CityContext, rng: Rng): Places {
     insideBuilding,
     furnitureNear,
   };
+}
+
+/**
+ * Places to stand about on the plazas, a few metres off the walkways (so passers-by never meet them):
+ * a pair facing each other, a trio in a little circle, a single spot where somebody talks on the phone.
+ * Each is reached by a straight walk from a walkway node with a clear line of sight.
+ */
+function buildHangouts(ctx: CityContext, rng: Rng, districtName: (x: number, z: number) => string, stalls: Stall[]): SpotPlace[] {
+  const { plan, peds, occupancy: occ } = ctx;
+  const out: SpotPlace[] = [];
+  const keep: { x: number; z: number; r: number }[] = ((ctx.services.props as { discs?: { x: number; z: number; r: number }[] } | undefined)?.discs ?? []).slice();
+  for (const t of (ctx.services.vegetation as { trees?: { x: number; z: number }[] } | undefined)?.trees ?? []) keep.push({ x: t.x, z: t.z, r: 0.6 });
+  for (const f of plan.features) if (f.radius > 0) keep.push({ x: f.x, z: f.z, r: f.radius });
+  for (const st of stalls) keep.push({ x: st.x + Math.sin(st.yaw) * 0.6, z: st.z + Math.cos(st.yaw) * 0.6, r: 2.0 });
+  const segD = (ax: number, az: number, bx: number, bz: number, px: number, pz: number): number => {
+    const dx = bx - ax,
+      dz = bz - az;
+    const l2 = dx * dx + dz * dz;
+    let t = l2 > 0 ? ((px - ax) * dx + (pz - az) * dz) / l2 : 0;
+    t = t < 0 ? 0 : t > 1 ? 1 : t;
+    return Math.hypot(px - (ax + t * dx), pz - (az + t * dz));
+  };
+  const hard = OCC.BUILDING | OCC.SOLID | OCC.ROAD | OCC.WATER | OCC.RAIL;
+  for (const a of plan.areas) {
+    if (a.kind !== 'plaza' && a.kind !== 'market') continue;
+    const r = a.rect;
+    const area = (r.x1 - r.x0) * (r.z1 - r.z0);
+    const maxN = Math.min(8, Math.max(1, Math.round(area / 75)));
+    const edges = peds.edges.filter((e) => {
+      const A = peds.nodes[e.a],
+        B = peds.nodes[e.b];
+      return Math.max(A.x, B.x) > r.x0 - 8 && Math.min(A.x, B.x) < r.x1 + 8 && Math.max(A.z, B.z) > r.z0 - 8 && Math.min(A.z, B.z) < r.z1 + 8;
+    });
+    const lKeep = keep.filter((d) => d.x > r.x0 - 4 - d.r && d.x < r.x1 + 4 + d.r && d.z > r.z0 - 4 - d.r && d.z < r.z1 + 4 + d.r);
+    const cands: { x: number; z: number; band: number; key: number }[] = [];
+    for (let z = r.z0 + 1.2; z < r.z1 - 1.2; z += 1) {
+      for (let x = r.x0 + 1.2; x < r.x1 - 1.2; x += 1) {
+        if (occ.anyInCircle(x, z, 1.0, hard)) continue;
+        let band = Infinity;
+        for (const e of edges) {
+          const A = peds.nodes[e.a],
+            B = peds.nodes[e.b];
+          band = Math.min(band, segD(A.x, A.z, B.x, B.z, x, z) - e.halfWidth);
+        }
+        // close enough to the walkers to read as street life, never in their way
+        if (band < 1.0 || band > 7) continue;
+        if (lKeep.some((d) => Math.hypot(d.x - x, d.z - z) < d.r + 1.05)) continue;
+        cands.push({ x, z, band, key: band + rng.next() * 3 });
+      }
+    }
+    cands.sort((p, q) => p.key - q.key);
+    let n = 0;
+    for (const c of cands) {
+      if (n >= maxN) break;
+      if (out.some((o) => Math.hypot(o.x - c.x, o.z - c.z) < 4.6)) continue;
+      // a walkway node with a clear straight walk to it
+      let best = -1,
+        bd = 10;
+      for (const nd of peds.nodes) {
+        if (nd.kind === 'door' || Math.abs(nd.x - c.x) > bd || Math.abs(nd.z - c.z) > bd) continue;
+        if (nd.edges.some((eid) => peds.edges[eid].kind === 'crosswalk' || peds.edges[eid].kind === 'door')) continue;
+        const d = Math.hypot(nd.x - c.x, nd.z - c.z);
+        if (d >= bd) continue;
+        let clear = true;
+        for (let t = 0.1; t < 1 && clear; t += 0.5 / d) {
+          const x = nd.x + (c.x - nd.x) * t,
+            z = nd.z + (c.z - nd.z) * t;
+          if (occ.has(x, z, hard)) clear = false;
+          else if (lKeep.some((k) => Math.hypot(k.x - x, k.z - z) < k.r + 0.3)) clear = false;
+        }
+        if (clear) {
+          bd = d;
+          best = nd.id;
+        }
+      }
+      if (best < 0) continue;
+      const r0 = rng.next();
+      const theme = r0 < 0.42 ? 'pair' : r0 < 0.72 ? 'trio' : 'lean';
+      const a0 = rng.range(0, Math.PI * 2);
+      const spots: Spot[] = [];
+      const y = 0;
+      if (theme === 'pair') {
+        for (const k of [0, 1]) {
+          const ang = a0 + k * Math.PI;
+          spots.push({ x: c.x + Math.sin(ang) * 0.43, z: c.z + Math.cos(ang) * 0.43, y, yaw: ang + Math.PI + rng.range(-0.25, 0.25), taken: -1 });
+        }
+      } else if (theme === 'trio') {
+        for (const k of [0, 1, 2]) {
+          const ang = a0 + (k * Math.PI * 2) / 3 + rng.range(-0.2, 0.2);
+          spots.push({ x: c.x + Math.sin(ang) * 0.5, z: c.z + Math.cos(ang) * 0.5, y, yaw: ang + Math.PI + rng.range(-0.15, 0.15), taken: -1 });
+        }
+      } else spots.push({ x: c.x, z: c.z, y, yaw: a0, taken: -1 });
+      const label = theme === 'lean' ? 'On the phone' : theme === 'pair' ? 'Chatting on the square' : 'Catching up with friends';
+      out.push({ kind: 'view', node: best, label, theme, spots, x: c.x, z: c.z });
+      void districtName;
+      n++;
+    }
+  }
+  return out;
 }

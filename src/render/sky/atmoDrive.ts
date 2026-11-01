@@ -1,0 +1,325 @@
+// Drives the world sky + atmosphere every frame (no allocations per frame):
+//   * physical sky (sky/physical.ts): the LUT is re-rendered and the CPU twin re-evaluated only when
+//     the sun / haze / camera height moved noticeably; brightness is normalised against the
+//     art-directed light rig (the palette's exposure does the rest), so a low sun keeps a glowing sky;
+//   * the fog's in-scatter colours (render/atmosphere.ts): the horizon ring is the sky's own horizon
+//     (physical twin or the painted gradient) → distant land melts into the sky with no seam;
+//   * the sun lobe (glowing haze / aureole) from the authored sun colour & intensity — the dome draws
+//     exactly the same lobe above the horizon;
+//   * haze / mist densities from the palette, mist drifting with the wind.
+
+import type { WeatherDirector } from './weather';
+import * as THREE from 'three';
+import type { SkyState } from './palette';
+import { createAtmosphereParams, fitRing, writeAtmosphere, atmoDistanceFor, atmoTransmittance, type AtmosphereParams } from '../atmosphere';
+import { SkyLUT, skyRadiance, sunTransmittance, type PhysSkyParams } from './physical';
+import { WATER_LEVEL } from '../../core/constants';
+
+export interface AtmosphereService {
+  params: AtmosphereParams;
+  /** luminance-weighted haze transmittance camera (height yc) → point at distance t, height yp */
+  transmittance(t: number, yc: number, yp: number): number;
+  /** distance (m, horizontal at height y) where the haze transmittance falls to T */
+  distanceFor(T: number, y: number): number;
+  /** true when the fog chunks were replaced (false with ?noatmo / ?diorama) */
+  active: boolean;
+  /** 0..1 golden-hour weight of the authored key (evening 17–20 h, dawn) — for the grade */
+  golden(): number;
+}
+
+const RING_N = 12;
+/** sky aerosol relative to the fog's boundary-layer haze (vertical AOD is far smaller than the
+ *  horizontal haze suggests; a 1:1 sky turns the noon zenith white) */
+const SKY_HAZE = 0.45;
+/** "blue air": the fog's Rayleigh-like part relative to pure Rayleigh (humid air scatters more, still
+ *  bluish) — far ridges step lighter AND bluer instead of milky grey */
+const BLUE_AIR = 1.8;
+/** Mie phase in the LUT: isotropic — the forward peak depends on the TRUE scattering angle, so it lives
+ *  in the analytic sun lobe (dome and fog alike), never in the azimuth-only horizon ring */
+const SKY_G = 0;
+const SKY_MS = 0.55;
+/** scene-unit luminance of the clear noon sky 3° above the horizon, 90° from the sun */
+const SKY_HORIZON_L = 0.52;
+/** exposure of the noon key the sky brightness is calibrated against */
+const EXPOSURE_REF = 1.06;
+/** elevation of the horizon ring: the sky ~3° up (the true horizon is a long, reddened, yellowish path) */
+const RING_EL = 0.052;
+
+const _c = new THREE.Color();
+const _g = new THREE.Color();
+const _t = [0, 0, 0];
+
+function smooth(a: number, b: number, x: number): number {
+  const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
+  return t * t * (3 - 2 * t);
+}
+
+/**
+ * Elevation (deg) the sky model uses. The key light of the palette is authored as a LOW golden sun from
+ * ~17.5 h (and a rose dawn) while the true sun is still 15–25° up; the sky follows the authored light so
+ * light, sky colour, clouds and sun-disc colour tell one story. The disc and the glow stay at the true sun.
+ */
+export function goldenHour(hours: number): number {
+  const eve = smooth(16.8, 17.8, hours) * (1 - smooth(19.45, 20.0, hours));
+  const morn = smooth(5.4, 6.0, hours) * (1 - smooth(6.9, 7.7, hours));
+  return Math.max(eve, morn * 0.7);
+}
+export function skyElevationDeg(trueDeg: number, hours: number): number {
+  return trueDeg - goldenHour(hours) * Math.min(7, 0.6 * Math.max(0, trueDeg));
+}
+
+function grey(c: THREE.Color, k: number): void {
+  const g = c.r * 0.3 + c.g * 0.55 + c.b * 0.15;
+  c.r += (g * 0.92 - c.r) * k;
+  c.g += (g * 0.96 - c.g) * k;
+  c.b += (g * 1.02 - c.b) * k;
+}
+function lum(c: THREE.Color): number {
+  return 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b;
+}
+
+export class AtmosphereDriver {
+  readonly params: AtmosphereParams = createAtmosphereParams();
+  /** multiplier on the haze (?atmo=k) */
+  hazeK = 1;
+  mistOn = true;
+  /** physical sky (null = painted gradient) */
+  readonly lut: SkyLUT | null;
+  readonly phys: PhysSkyParams = { sunSin: 1, sunCos: 0, camH: 50, haze: 1e-4, g: SKY_G, ms: SKY_MS };
+  /** current scale from LUT radiance to scene units (normalised per time of day) */
+  skyScale = 1;
+  /** physical zenith colour (scene units, incl. the night sky) — for the water / reflections */
+  readonly zenith = new THREE.Color();
+  /** physical sun colour after the atmosphere (normalised to max 1) — the sun disc */
+  readonly sunColor = new THREE.Color(1, 1, 1);
+  /** sunlight reaching the cumulus deck (absolute transmittance incl. the earth shadow) */
+  readonly cloudSunT = new THREE.Color(1, 1, 1);
+  /** night gradient weight (authored moonlit sky) */
+  nightW = 0;
+  /** the lit town's sky glow at the horizon (set by the sky module; part of the night haze) */
+  readonly cityGlow = new THREE.Color(0, 0, 0);
+  /** brightness compensation of the sky at this time of day (skyScale / noon scale, ≥ 1) */
+  comp = 1;
+  private s0 = 1;
+  private ringRaw = new Float32Array(RING_N * 3);
+  private zenRaw = new THREE.Color();
+  private refL = 1;
+  private refNoon = 1;
+  private drift = new THREE.Vector2();
+  private sd = new THREE.Vector3();
+  private state: SkyState | null = null;
+  private overcast = 0;
+  /** the storm band (sky/weather.ts), when the director runs the weather */
+  storm: WeatherDirector | null = null;
+  private band0 = 1;
+  lutUpdates = 0;
+  golden = 0;
+
+  constructor(physical: boolean) {
+    this.params.waterY = WATER_LEVEL;
+    this.lut = physical ? new SkyLUT(64) : null;
+    if (physical) {
+      // calibration: noon, clear — the horizon 90° from the sun maps to the authored noon horizon
+      const p = this.phys;
+      const e = THREE.MathUtils.degToRad(58);
+      p.sunSin = Math.sin(e);
+      p.sunCos = Math.cos(e);
+      p.camH = 60;
+      p.haze = 4.5e-5 * SKY_HAZE;
+      this.evalCPU();
+      this.refNoon = this.refL;
+      skyRadiance(p, 0, Math.sin(RING_EL), Math.cos(RING_EL), _c);
+      // a sunlit white wall is ~0.9 in scene units; a clear horizon is ~half of that (brighter skies get
+      // pushed into AgX's desaturating shoulder and read milky)
+      this.s0 = SKY_HORIZON_L / Math.max(1e-6, lum(_c));
+      p.sunSin = NaN; // force the first real update
+    }
+  }
+
+  /** CPU twin: horizon ring, zenith, reference luminance, sun colour */
+  private evalCPU(): void {
+    const p = this.phys;
+    const ce = Math.cos(RING_EL),
+      se = Math.sin(RING_EL);
+    for (let j = 0; j < RING_N; j++) {
+      const phi = ((j + 0.5) / RING_N) * Math.PI;
+      skyRadiance(p, ce * Math.cos(phi), se, ce * Math.sin(phi), _c);
+      this.ringRaw[j * 3] = _c.r;
+      this.ringRaw[j * 3 + 1] = _c.g;
+      this.ringRaw[j * 3 + 2] = _c.b;
+    }
+    skyRadiance(p, 0.02, 0.9998, 0, this.zenRaw);
+    // reference brightness away from the sun (its Mie side varies wildly): zenith, side and anti-sun
+    let L = lum(this.zenRaw);
+    skyRadiance(p, 0, 0.5, 0.866, _c);
+    L += lum(_c);
+    skyRadiance(p, -0.866, 0.5, 0, _c);
+    L += lum(_c);
+    const j90 = Math.floor(RING_N / 2);
+    L += 0.2126 * this.ringRaw[j90 * 3] + 0.7152 * this.ringRaw[j90 * 3 + 1] + 0.0722 * this.ringRaw[j90 * 3 + 2];
+    this.refL = L / 4;
+    sunTransmittance(Math.max(1, p.camH), p.sunSin, p.haze, _t);
+    const m = Math.max(_t[0], _t[1], _t[2], 1e-6);
+    this.sunColor.setRGB(_t[0] / m, _t[1] / m, _t[2] / m);
+    // clouds at ~1.8 km stay lit (reddening) after the ground has lost the sun
+    sunTransmittance(1800, p.sunSin, p.haze, _t);
+    this.cloudSunT.setRGB(_t[0], _t[1], _t[2]);
+  }
+
+  /**
+   * dome horizon colour (y = 0) at azimuth φ from the sun, without the sun lobe — painted mode: the
+   * CPU twin of dome.ts; physical mode: the physical twin at the current normalisation + night sky
+   */
+  private horizonAt = (phi: number, out: THREE.Color): void => {
+    const s = this.state!;
+    if (this.lut) {
+      const j = Math.min(RING_N - 1, Math.max(0, Math.round((phi / Math.PI) * RING_N - 0.5)));
+      const k = this.skyScale;
+      out.setRGB(this.ringRaw[j * 3] * k, this.ringRaw[j * 3 + 1] * k, this.ringRaw[j * 3 + 2] * k);
+      // golden hour: the aerosol glows toward the sun (forward scattering, + the lobe); away from it the
+      // haze (and the earth-shadow band at the anti-solar horizon) is cool blue-grey, not warm
+      const w = this.golden * 0.62 * smooth(0.25 * Math.PI, Math.PI, phi);
+      if (w > 0) {
+        const l = lum(out);
+        out.lerp(_g.setRGB(l * 0.92, l * 0.93, l * 1.22), w); // lavender-blue earth-shadow side
+      }
+      out.add(_g.copy(s.horizon).multiplyScalar(this.nightW)).add(this.cityGlow);
+    } else {
+      const az = Math.cos(phi) * 0.5 + 0.5;
+      out.copy(s.horizon).add(_g.copy(s.glow).multiplyScalar(s.glowI * az * az * az * 0.85 * this.band0));
+    }
+    if (this.storm && this.storm.amount > 0) {
+      // the storm band along this azimuth (the ring is symmetric about the sun: mean of both sides)
+      const w = this.storm;
+      const sa = Math.atan2(this.sd.z, this.sd.x);
+      const dc = Math.cos(sa + phi) * w.dir.x + Math.sin(sa + phi) * w.dir.y;
+      const dd = Math.cos(sa - phi) * w.dir.x + Math.sin(sa - phi) * w.dir.y;
+      const oc = 0.5 * (w.coverAt(dc * 24000) + w.coverAt(dd * 24000));
+      const g = lum(out);
+      out.lerp(_g.setRGB(g * 0.8, g * 0.9, g * 1.08), oc * 0.95).multiplyScalar(1 - w.dark * 0.62 * oc);
+    } else if (this.overcast > 0) grey(out, this.overcast * 0.75);
+  };
+
+  /**
+   * @param sunDir true sun direction (not the lifted light direction)
+   * @param sunVis 0..1 sun above the horizon
+   */
+  update(renderer: THREE.WebGLRenderer, state: SkyState, sunDir: THREE.Vector3, sunVis: number, overcast: number, camY: number, wind: THREE.Vector2, dt: number, hours: number): void {
+    const p = this.params;
+    this.state = state;
+    this.overcast = overcast;
+    this.sd.set(sunDir.x, Math.max(sunDir.y, -0.25), sunDir.z).normalize();
+    this.band0 = Math.exp(-Math.abs(Math.max(this.sd.y, 0) * 0.35) * 5);
+    this.golden = goldenHour(hours) * smooth(-0.06, 0.02, sunDir.y);
+    // (rain thickens the air: a storm takes the far side of the bay away)
+    const w = this.storm;
+    const haze = state.haze * (1 + overcast * 2.2 + (w ? w.rain * 1.6 + w.storm * 4.5 : 0)) * this.hazeK;
+
+    // ── physical sky: LUT + CPU twin (only when something moved)
+    // night: the authored moonlit gradient takes over once the sun is ~2° below the horizon
+    const sh = sunDir.y;
+    const tn = Math.min(1, Math.max(0, (sh + 0.03) / -0.15));
+    this.nightW = tn * tn * (3 - 2 * tn);
+    if (this.lut) {
+      const ph = this.phys;
+      // (the caller passes the visual sun — already lowered at golden hour, see skyElevationDeg)
+      ph.sunSin = sh;
+      ph.sunCos = Math.sqrt(Math.max(0, 1 - sh * sh));
+      ph.camH = Math.min(3000, Math.max(1, camY));
+      ph.haze = haze * SKY_HAZE;
+      if (this.lut.update(renderer, ph)) {
+        this.evalCPU();
+        this.lutUpdates++;
+      }
+      // brightness normalisation: the key light stays strong at a low sun, so the sky must too
+      // (partial: twilight still darkens; exposure in the palette does the rest)
+      const r = this.refNoon / Math.max(1e-9, this.refL);
+      const k = 0.85 - 0.25 * (1 - Math.min(1, Math.max(0, (sh + 0.06) / 0.16)));
+      // …and the authored exposure rises at golden hour / dusk: keep the SHOWN sky (and the haze derived
+      // from it) from climbing into AgX's desaturating shoulder — a golden sky stays blue away from the sun
+      this.skyScale = this.s0 * Math.min(2000, Math.pow(Math.max(1, r), k)) * Math.min(1, EXPOSURE_REF / Math.max(0.5, state.exposure));
+      this.comp = this.skyScale / this.s0;
+      this.zenith.copy(this.zenRaw).multiplyScalar(this.skyScale).add(_g.copy(state.zenith).multiplyScalar(this.nightW));
+    } else this.zenith.copy(state.zenith);
+    fitRing(p.ring, this.horizonAt, this.lut ? RING_N : 16);
+
+    // ── sun lobe: the glow of sunlit haze around the sun (authored light colour × intensity)
+    p.sunDir.copy(this.sd);
+    if (this.lut) {
+      const vis = sunVis * (1 - (w ? w.sunBlock : overcast) * 0.7);
+      p.lobeExp = 11;
+      p.lobeColor.copy(state.sun).multiplyScalar(Math.min(4.5, state.sunI) * vis * (0.022 + 0.055 * state.glowI));
+      p.lobe2 = 2.4;
+      p.lobe2Exp = 140;
+    } else {
+      // painted sky: its narrow glow toward the sun (pow 24, 0.6·band at the horizon) + a little haze
+      p.lobeExp = 18;
+      p.lobeColor.copy(state.glow).multiplyScalar(state.glowI * 0.6 * this.band0);
+      p.lobeColor.add(_c.copy(state.sun).multiplyScalar(0.07 * sunVis));
+      p.lobe2 = 0;
+    }
+    const lobeOver = w ? w.sunBlock : overcast;
+    if (lobeOver > 0) {
+      grey(p.lobeColor, lobeOver * 0.75);
+      p.lobeColor.multiplyScalar(1 - lobeOver * 0.6);
+    }
+
+    // the blue air's in-scatter: the zenith's hue at the brightness of the horizon haze, a little greyed
+    // (distant ridges step bluer and lighter in every direction — never warm away from the sun)
+    const zl = Math.max(1e-5, lum(this.zenith));
+    p.airColor.copy(this.zenith).multiplyScalar((lum(p.ring[0]) * 0.92) / zl);
+    grey(p.airColor, 0.35 + overcast * 0.5);
+
+    // (storm: spray and rain in the air, low down, as haze: the mist branch would be another noise fetch on every fragment, ~1 ms at the market)
+    p.haze = haze + (w ? w.storm * 0.0007 * (1 - smooth(8, 45, camY)) : 0);
+    p.hazeScaleHeight = 1000;
+    p.rayleigh.set(5.802e-6, 13.558e-6, 33.1e-6).multiplyScalar(BLUE_AIR * (1 + overcast));
+    p.rayleighScaleHeight = 8000;
+    p.desat = 0.3;
+
+    // ground mist: denser in calm air, colour = lit haze (dawn rose / dusk lilac), drifts downwind
+    const ws = Math.sqrt(wind.x * wind.x + wind.y * wind.y);
+    const calm = 1 / (1 + ws * 1.2);
+    p.mist = this.mistOn ? state.mist * calm * (1 + overcast * 0.5) : 0;
+    // (storm: a thicker layer, for what mist there is)
+    p.mistScaleHeight = w ? state.mistH + (14 - state.mistH) * w.storm : state.mistH;
+    p.mistColor.copy(p.ring[0]).lerp(_c.copy(state.hemiSky).multiplyScalar(state.hemiI * 1.1), 0.35);
+    p.mistForward = 0.8;
+    this.drift.x = (this.drift.x - wind.x * dt * 1.6) % 40000;
+    this.drift.y = (this.drift.y - wind.y * dt * 1.6) % 40000;
+    p.mistDrift.copy(this.drift);
+    p.mistFreq = 1 / 70;
+    p.mistPatchiness = 0.7;
+    p.bankX = 0;
+    if (w && w.fog > 0.001) {
+      // sea fog: a dense layer tens of metres thick, the colour of the lit haze, thinner toward its top
+      const f = w.fog;
+      p.mist += (0.0065 - p.mist) * f;
+      p.mistScaleHeight += (24 - p.mistScaleHeight) * f;
+      p.mistPatchiness = 0.7 - 0.4 * f;
+      p.mistFreq = 1 / (70 + 110 * f);
+      p.mistColor.lerp(_c.copy(p.ring[0]).multiplyScalar(0.8).add(_g.copy(state.hemiSky).multiplyScalar(state.hemiI * 0.2)), f);
+      p.mistForward = 1.1;
+      p.bankX = w.fogX || 0.01;
+    }
+    p.startDist = 0;
+    p.gain = 1;
+    writeAtmosphere(p);
+  }
+
+  /** a representative fog colour for CPU consumers (scene.fog.color): the mean horizon haze */
+  fogColor(out: THREE.Color): THREE.Color {
+    return out.copy(this.params.ring[0]);
+  }
+
+  service(active: boolean): AtmosphereService {
+    const p = this.params;
+    return {
+      params: p,
+      transmittance: (t, yc, yp) => atmoTransmittance(p, t, yc, yp),
+      distanceFor: (T, y) => atmoDistanceFor(p, T, y),
+      active,
+      golden: () => this.golden,
+    };
+  }
+}

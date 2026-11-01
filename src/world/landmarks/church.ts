@@ -6,11 +6,16 @@
 import * as THREE from 'three';
 import type { Lot } from '../../core/plan';
 import { DIR_YAW } from '../../core/geom';
-import { FLOOD, M, PAT } from './builder';
-import { V3 } from './kit';
-import { wall, moulding, Opening } from './facade';
+import { FLOOD, M, PAT, Mat } from './builder';
+import { V3, Kit, pointedPoints } from './kit';
+import { wall as wallBase, moulding, Opening, WallSpec } from './facade';
 import { C, S, finial } from './parts';
 import type { Env } from './env';
+import { LM, LMODE } from './builder';
+import { boxHunt } from '../../core/boxhunt';
+import { signQuad } from './signs';
+import { lmDetail } from '../../core/lmdetail';
+import { buildChurchRoom } from './churchRoom';
 
 export function genChurch(env: Env, lot: Lot): void {
   const fp = lot.footprint;
@@ -20,6 +25,14 @@ export function genChurch(env: Env, lot: Lot): void {
   env.begin(cx, 0, cz, yaw);
   env.checkLot(fp, 'church');
   const K = env.S;
+  // ?noherochurch: the closed nave of the box hunt (walls + filler volumes, nothing to walk into)
+  const hero = !!env.rooms && lmDetail(env.ctx, 'herochurch');
+  // ?nochurchmould: no hood moulds / archivolts / rose tracery / gablet dressing (A/B); off on low quality
+  const mould = !env.ctx.debug.params.has('nochurchmould') && env.ctx.quality.level !== 'low';
+  const wall = (k: Kit, spec: WallSpec): void => {
+    wallBase(k, spec);
+    if (mould) for (const o of spec.openings ?? []) dressOpening(k, spec, o);
+  };
   const ns = lot.front === 'N' || lot.front === 'S';
   const HW = (ns ? fp.x1 - fp.x0 : fp.z1 - fp.z0) / 2; // 7
   const HD = (ns ? fp.z1 - fp.z0 : fp.x1 - fp.x0) / 2; // 13
@@ -43,11 +56,12 @@ export function genChurch(env: Env, lot: Lot): void {
     const c = w / 2;
     const o: Opening[] = [];
     if (face === 'front') {
-      o.push({ x: c, y: 0, w: 2.3, h: 4.3, arch: 1.7, pointed: true, fill: 'door', inset: 0.45, surround: trim, surroundW: 0.32, infill: M('#5a3420', PAT.DOOR, 0.6, 0, 0.6, 0, 0.8) });
+      o.push({ x: c, y: 0, w: 2.3, h: 4.3, arch: 1.7, pointed: true, fill: hero ? 'none' : 'door', inset: 0.45, surround: trim, surroundW: 0.32, infill: M('#5a3420', PAT.DOOR, 0.6, 0, 0.6, 0, 0.8) });
       o.push({ x: c, y: 6.1, w: 2.7, h: 2.7, round: true, fill: 'stained', inset: 0.3, surround: trim, surroundW: 0.26, infill: M('#d8ccb0', PAT.ROSE, 0.5, 0, 0.95, 0, 0.3) });
     } else if (face === 'side') {
       o.push({ x: c, y: 6.4, w: 0.65, h: 2.2, arch: 0.45, pointed: true, fill: 'stained', glow: 0.8, seed: 0.3, inset: 0.25, surround: trim, surroundW: 0.12, infill: stained(0.31) });
     }
+    if (face === 'back' && hero) o.push({ x: c, y: 0, w: 2.1, h: 3.6, arch: 1.2, pointed: true, fill: 'none' });
     if (face !== 'back') o.push({ x: c, y: 11.3, w: 0.6, h: 1.9, arch: 0.4, pointed: true, fill: 'dark', inset: 0.25, surround: trim, surroundW: 0.1 });
     // clock (round opening holding the face) — not on the back (hidden by the nave roof)
     if (face !== 'back') o.push({ x: c, y: 15.4, w: 2.0, h: 2.0, round: true, fill: 'none' });
@@ -59,7 +73,8 @@ export function genChurch(env: Env, lot: Lot): void {
   wall(K, { w: TW * 2, h: tTop, depth: 0.7, x: 0, y: 0, z: tz0, ry: Math.PI, mat: stone, openings: towerOpen('back') });
   for (const s of [-1, 1]) wall(K, { w: tD, h: tTop, depth: 0.7, x: s * TW, y: 0, z: tzc, ry: (s * Math.PI) / 2, mat: stone, openings: towerOpen('side') });
   // floors inside the tower openings (hide the void behind the clock holes)
-  K.coreBox(dark, TW * 2 - 1.4, tTop - 1.0, tD - 1.4, 0, 0.5, tzc);
+  if (hero) K.coreBox(dark, TW * 2 - 1.4, tTop - 1.0 - 4.4, tD - 1.4, 0, 4.9, tzc);
+  else K.coreBox(dark, TW * 2 - 1.4, tTop - 1.0, tD - 1.4, 0, 0.5, tzc);
   // clock faces (front + both sides + back)
   for (const [fx, fz, ry] of [
     [0, tz1, 0],
@@ -93,6 +108,51 @@ export function genChurch(env: Env, lot: Lot): void {
     [0, 5.7, tz1 + 0.34],
   ]);
   finial(K, trim, 0, 5.75, tz1 + 0.12, 0.45, 0.08);
+  if (mould) {
+    // gablet dressing: a moulded base course, a trefoil oculus in the tympanum, crockets up both slopes
+    const prev = K.b.forceDetail;
+    K.b.forceDetail = true;
+    K.box(trim, 3.3, 0.13, 0.1, 0, 4.25, tz1 + 0.38);
+    K.box(trim, 3.1, 0.06, 0.05, 0, 4.38, tz1 + 0.36);
+    const oz = tz1 + 0.36;
+    K.torus(trim, 0.27, 0.04, 0, 4.88, oz, 4, 24, Math.PI * 2, 0);
+    for (let k = 0; k < 3; k++) {
+      const a = Math.PI / 2 + (k * Math.PI * 2) / 3;
+      K.torus(trim, 0.085, 0.022, Math.cos(a) * 0.12, 4.88 + Math.sin(a) * 0.12, oz, 4, 12, Math.PI * 2, 0);
+    }
+    const disc = new THREE.CircleGeometry(0.25, 16);
+    K.geo(dark, disc, 0, 4.88, oz - 0.012, 0);
+    disc.dispose();
+    for (const sg of [-1, 1])
+      for (const t of [0.3, 0.55, 0.8]) K.sphere(trim, 0.08, sg * 1.75 * (1 - t), 4.25 + 1.5 * t + 0.07, tz1 + 0.2, 6, 4);
+    K.b.forceDetail = prev;
+  }
+  // portal door: boarded leaves (PAT.DOOR) dressed with wrought-iron strap hinges ending in fleur tips, a
+  // meeting stile, ring pulls on round back plates, a stone threshold; a darker plinth course round the base
+  const iron = M('#1f1d1b', PAT.PLAIN, 0.55, 0.6);
+  const dz = tz1 - 0.45 + 0.013;
+  if (!hero) K.box(M('#3e2516', PAT.PLAIN, 0.7), 0.07, 3.0, 0.03, 0, 0, dz + 0.004);
+  if (!hero) for (const sgn of [-1, 1]) {
+    for (const yy of [0.55, 1.55, 2.55]) {
+      K.box(iron, 0.95, 0.075, 0.022, sgn * 0.6, yy, dz);
+      K.box(iron, 0.07, 0.16, 0.024, sgn * 0.11, yy - 0.042, dz, Math.PI / 4);
+      for (let k = 0; k < 3; k++) K.cyl(iron, 0.018, 0.018, 0.02, sgn * (1.0 - k * 0.28), yy + 0.028, dz + 0.012, 6);
+    }
+    K.cyl(iron, 0.07, 0.07, 0.02, sgn * 0.2, 1.2, dz + 0.004, 12, false, 'cyl', 0, Math.PI * 2, 0);
+    K.torus(iron, 0.075, 0.012, sgn * 0.2, 1.1, dz + 0.03, 6, 16, Math.PI * 2, 0, 0);
+  }
+  K.box(M(C.granite, PAT.STONE, 0.8, 0, 0, 0, 0.1), 2.3, 0.05, 0.44, 0, 0, tz1 - 0.23);
+  const plinth = M('#a39377', PAT.STONE, 0.92, 0, 0, FLOOD.CHURCH, 0.7);
+  const plinthRun = (x: number, z: number, ry: number, len: number) => {
+    moulding(K, plinth, x, z, ry, len, 0, 0.62, 0.08);
+    moulding(K, trim, x, z, ry, len, 0.62, 0.07, 0.05);
+  };
+  for (const sgn of [-1, 1]) {
+    const a = 1.55,
+      b = TW + 0.1;
+    plinthRun(sgn * (a + b) / 2, tz1, 0, b - a);
+    plinthRun(sgn * TW, tzc, (sgn * Math.PI) / 2, tD + 0.16);
+  }
   // string courses
   for (const yy of [4.9, 10.6, 15.0, 18.9]) {
     moulding(K, trim, 0, tz1, 0, TW * 2 + 0.2, yy, 0.22, 0.14);
@@ -179,6 +239,7 @@ export function genChurch(env: Env, lot: Lot): void {
       ops.push({ x: bayW * (i + 0.5), y: 2.4, w: 1.35, h: 5.4, arch: 1.0, pointed: true, fill: 'stained', glow: 0.9, inset: 0.3, surround: trim, surroundW: 0.14, sill: trim, infill: stained(0.1 + i * 0.21 + (s > 0 ? 0.05 : 0)) });
     }
     wall(K, { w: nL, h: eave, depth: 0.6, x: s * NW, y: 0, z: (nz0 + nz1) / 2, ry: (s * Math.PI) / 2, mat: stone, openings: ops });
+    plinthRun(s * NW, (nz0 + nz1) / 2, (s * Math.PI) / 2, nL);
     moulding(K, trim, s * NW, (nz0 + nz1) / 2, (s * Math.PI) / 2, nL, eave - 0.35, 0.35, 0.3);
     moulding(K, M(C.granite, PAT.STONE, 0.8, 0, 0, 0, 0.1), s * NW, (nz0 + nz1) / 2, (s * Math.PI) / 2, nL, 0, 0.6, 0.08);
     // buttresses between bays
@@ -225,10 +286,11 @@ export function genChurch(env: Env, lot: Lot): void {
     openings: [
       { x: 1.2, y: 2.6, w: 0.8, h: 3.0, arch: 0.6, pointed: true, fill: 'stained', glow: 0.85, inset: 0.25, infill: stained(0.8) },
       { x: NW * 2 - 1.2, y: 2.6, w: 0.8, h: 3.0, arch: 0.6, pointed: true, fill: 'stained', glow: 0.85, inset: 0.25, infill: stained(0.66) },
+      ...(hero ? [{ x: NW, y: 0, w: 2.1, h: 3.6, arch: 1.2, pointed: true, fill: 'none' as const }] : []),
     ],
   });
-  wall(K, { w: NW * 2, h: ridge, depth: 0.6, x: 0, y: 0, z: nz0, ry: Math.PI, mat: stone, outline: gableOutline(NW * 2), openings: [{ x: NW, y: 9.8, w: 1.6, h: 1.6, round: true, fill: 'stained', glow: 0.85, inset: 0.25, surround: trim, surroundW: 0.15, infill: M('#d8ccb0', PAT.ROSE, 0.5, 0, 0.9, 0, 0.6) }] });
-  K.coreBox(dark, NW * 2 - 1.2, eave - 0.3, nL - 1.2, 0, 0, (nz0 + nz1) / 2);
+  wall(K, { w: NW * 2, h: ridge, depth: 0.6, x: 0, y: 0, z: nz0, ry: Math.PI, mat: stone, outline: gableOutline(NW * 2), openings: [{ x: NW, y: 9.8, w: 1.6, h: 1.6, round: true, fill: 'stained', glow: 0.85, inset: 0.25, surround: trim, surroundW: 0.15, infill: M('#d8ccb0', PAT.ROSE, 0.5, 0, 0.9, 0, 0.6) }, ...(hero ? [{ x: NW, y: 0, w: 5.0, h: 7.2, arch: 3.0, pointed: true, fill: 'none' as const }] : [])] });
+  if (!hero) K.coreBox(dark, NW * 2 - 1.2, eave - 0.3, nL - 1.2, 0, 0, (nz0 + nz1) / 2);
   K.gableRoof(slate, -NW, NW, nz0 - 0.15, nz1 + 0.45, eave, ridge, 'z', 0.45, 0.2, trim);
   // ridge cresting + gable crosses
   K.box(M('#3f4750', PAT.PLAIN, 0.5, 0.4), 0.12, 0.2, nL + 0.4, 0, ridge - 0.05, (nz0 + nz1) / 2);
@@ -278,8 +340,10 @@ export function genChurch(env: Env, lot: Lot): void {
       openings: i === 0 || i === 3 ? [] : [{ x: L / 2, y: 2.6, w: 1.0, h: 4.0, arch: 0.75, pointed: true, fill: 'stained', glow: 0.9, inset: 0.3, surround: trim, surroundW: 0.12, infill: stained(0.2 + i * 0.3) }],
     });
   }
-  K.coreBox(dark, CW * 2 - 1.2, cEave - 0.3, cz1 - az, 0, 0, (az + cz1) / 2 - 0.3);
-  K.cyl(dark, 2.1, 2.1, cEave - 0.3, 0, 0, az, 6);
+  if (!hero) {
+    K.coreBox(dark, CW * 2 - 1.2, cEave - 0.3, cz1 - az, 0, 0, (az + cz1) / 2 - 0.3);
+    K.cyl(dark, 2.1, 2.1, cEave - 0.3, 0, 0, az, 6);
+  }
   // chancel roof: gable part + apse fan
   K.gableRoof(slate, -CW, CW, az, cz1 + 0.2, cEave, cRidge, 'z', 0.35, 0.16, trim);
   const ridgeEnd: V3 = [0, cRidge, az];
@@ -296,6 +360,9 @@ export function genChurch(env: Env, lot: Lot): void {
   K.box(gold, 0.1, 1.0, 0.1, 0, cRidge - 0.1, az);
   K.box(gold, 0.55, 0.1, 0.1, 0, cRidge + 0.55, az);
 
+  if (hero) buildChurchRoom(env, env.rooms!, { NW, nz0, nz1, eave, ridge, nBays, CW, cz0, cz1, az, cEave, cRidge, TW, tz0, tz1, apse: apsePts, cx, cz, yaw, fp });
+  else if (boxHunt(env.ctx, 'interiors')) churchInterior(env, { NW, nz0, nz1, eave, ridge, nBays, CW, cz1, az });
+
   // ── night: tower beams and ground pools
   for (const s of [-1, 1]) env.glow(s * 2.2, 0.3, tz1 + 1.2, { size: 0.6, kind: 'beam', color: '#ffe0b0', intensity: 0.2, dir: [s * -0.6, 22, -1.0], endSize: 3.0 });
   env.glow(0, 0.1, HD + 0.8, { size: 3.5, kind: 'pool', color: '#ffc27a', intensity: 0.3 });
@@ -307,4 +374,246 @@ export function genChurch(env: Env, lot: Lot): void {
     const service = (h >= 9.5 && h < 11) || (h >= 18 && h < 19);
     return ['Gothic-revival parish church · 1868', service ? 'Service in progress' : 'Open for visitors 9:00–18:00', `Spire ${Math.round(apex + 2)} m · the bells ring on the hour`];
   });
+}
+
+const _wm = new THREE.Matrix4();
+const _rm = new THREE.Matrix4();
+
+/** Wall-local (u along from the left end seen outside, v up, z out) → landmark-local, as facade.ts wallMatrix. */
+function wallMat(s: WallSpec): THREE.Matrix4 {
+  _wm.makeRotationY(s.ry);
+  _wm.setPosition(s.x - (s.w / 2) * Math.cos(s.ry), s.y, s.z + (s.w / 2) * Math.sin(s.ry));
+  return _wm;
+}
+
+/**
+ * Band following a pointed opening's outline, grown outward by g0..g1 (negative = into the opening), extruded
+ * z0..z1 (wall-local, + = out). `jambs`: run down the jambs to the sill; else the arch only (from the springing).
+ */
+function archBand(K: Kit, m: Mat, wm: THREE.Matrix4, o: Opening, g0: number, g1: number, z0: number, z1: number, jambs: boolean): void {
+  const ring = (g: number): [number, number][] => {
+    const p = pointedPoints(o.w + 2 * g, o.h + g, (o.arch ?? 0) + g, 7);
+    const arc = p.slice(jambs ? 1 : 2);
+    if (jambs) arc.push([p[0][0], p[0][1]]);
+    return arc.map(([x, y]) => [x + o.x, y + o.y]);
+  };
+  const outer = ring(g1),
+    inner = ring(g0).reverse();
+  const sh = new THREE.Shape([...outer, ...inner].map(([x, y]) => new THREE.Vector2(x, y)));
+  const geo = new THREE.ExtrudeGeometry(sh, { depth: z1 - z0, bevelEnabled: false, curveSegments: 2 });
+  geo.translate(0, 0, z0);
+  K.geoM(m, geo, wm, 'box');
+  geo.dispose();
+}
+
+function ringAt(K: Kit, m: Mat, wm: THREE.Matrix4, x: number, y: number, z: number, R: number, r: number, rs: number, ts: number): void {
+  const geo = new THREE.TorusGeometry(R, r, rs, ts);
+  geo.translate(x, y, z);
+  K.geoM(m, geo, wm, 'box');
+  geo.dispose();
+}
+
+/**
+ * Stone dressing of one opening (near-detail mesh): pointed stained/door openings get a hood mould over the arch
+ * (a back fillet + a proud roll) ending in label stops; the portal also gets two archivolt rolls stepping into
+ * the reveal. Round rose windows get an outer roll and plate tracery: rim, hub, 12 spokes, cusped foils, matched to the painted glass.
+ */
+function dressOpening(K: Kit, s: WallSpec, o: Opening): void {
+  const sur = o.surround;
+  if (!sur || (o.fill !== 'stained' && o.fill !== 'door')) return;
+  const sw = o.surroundW ?? 0.18;
+  const wm = wallMat(s);
+  const prev = K.b.forceDetail;
+  K.b.forceDetail = true;
+  if (o.pointed && o.arch) {
+    const big = o.fill === 'door';
+    const bw = big ? 0.16 : 0.1;
+    archBand(K, sur, wm, o, sw - 0.01, sw + bw, 0, big ? 0.1 : 0.08, false);
+    archBand(K, sur, wm, o, sw + bw * 0.25, sw + bw * 0.8, 0, big ? 0.16 : 0.12, false);
+    // label stops: short blocks under the hood ends, chamfered by a smaller block below
+    const spring = o.y + o.h - o.arch;
+    const ux = o.w / 2 + sw + bw / 2;
+    for (const sg of [-1, 1]) {
+      // (≤ 0.12 out: the stops reach below 2.4 m, where nothing may leave the footprint)
+      const b1 = new THREE.BoxGeometry(bw + 0.04, 0.22, 0.12);
+      b1.translate(o.x + sg * ux, spring - 0.11, 0.06);
+      K.geoM(sur, b1, wm, 'box');
+      b1.dispose();
+      const b2 = new THREE.BoxGeometry(bw - 0.02, 0.1, big ? 0.1 : 0.07);
+      b2.translate(o.x + sg * ux, spring - 0.27, (big ? 0.1 : 0.07) / 2);
+      K.geoM(sur, b2, wm, 'box');
+      b2.dispose();
+    }
+    if (big) {
+      const ins = o.inset ?? 0.3;
+      archBand(K, sur, wm, o, -0.07, 0, -0.16, -0.06, true);
+      archBand(K, sur, wm, o, -0.13, -0.06, -ins + 0.1, -ins + 0.18, true);
+    }
+  } else if (o.round && o.w > 1.2) {
+    const R = o.w / 2,
+      cx = o.x,
+      cy = o.y + R;
+    ringAt(K, sur, wm, cx, cy, 0.09, R + sw + 0.05, 0.065, 6, 40);
+    const z = -(o.inset ?? 0.3) + 0.045;
+    ringAt(K, sur, wm, cx, cy, z, R - 0.05, 0.055, 4, 40);
+    // tracery radii follow the painted glass (landmarks/shaders.ts pat 19): hub ring 0.31, foils at 0.62 (r 0.19)
+    ringAt(K, sur, wm, cx, cy, z, R * 0.31, 0.05, 4, 20);
+    const hub = new THREE.CircleGeometry(R * 0.28, 16);
+    hub.translate(cx, cy, z + 0.02);
+    K.geoM(sur, hub, wm, 'box');
+    hub.dispose();
+    const n = 12;
+    const r0 = R * 0.31,
+      r1 = R - 0.05;
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2;
+      const sp = new THREE.BoxGeometry(0.065, r1 - r0, 0.07);
+      sp.translate(0, (r0 + r1) / 2, 0);
+      sp.applyMatrix4(_rm.makeRotationZ(a));
+      sp.translate(cx, cy, z);
+      K.geoM(sur, sp, wm, 'box');
+      sp.dispose();
+      const ah = a + Math.PI / n;
+      const rf = R * 0.62;
+      ringAt(K, sur, wm, cx + Math.sin(ah) * rf, cy + Math.cos(ah) * rf, z, R * 0.19, 0.03, 4, 16);
+    }
+  }
+  K.b.forceDetail = prev;
+}
+
+/**
+ * Box hunt (?nointeriors): the nave furnished for the free camera — flagstone floor, a raised chancel with its step,
+ * a dressed altar with candles and a cross, pulpit and lectern, two banks of pews with kneelers either side of a red
+ * runner, three candle chandeliers, open timber trusses under a planked ceiling, organ pipes over the entrance.
+ * Everything in the detail kit (collapsed far away: only ever seen from inside).
+ */
+function churchInterior(env: Env, d: { NW: number; nz0: number; nz1: number; eave: number; ridge: number; nBays: number; CW: number; cz1: number; az: number }): void {
+  const { NW, nz0, nz1, eave, ridge, nBays, CW, cz1, az } = d;
+  const D = env.D;
+  const iw = NW - 0.32;
+  const nL = nz1 - nz0;
+  const flags = M('#b9ae98', PAT.TILES, 0.75, 0, 0, 0, 0.2);
+  const marble = M('#d9d2c4', PAT.TILES, 0.45, 0, 0, 0, 0.7);
+  const oak = M('#6a4529', PAT.PLANKS, 0.7);
+  const oakDark = M('#4a2f1c', PAT.PLAIN, 0.7);
+  const red = M('#7d1f24', PAT.PLAIN, 0.95);
+  const linen = M('#efeae0', PAT.PLAIN, 0.9);
+  const gilt = S.gold();
+  // floors: nave flags, chancel + apse raised a step in pale stone
+  D.box(flags, iw * 2, 0.03, nL, 0, 0, (nz0 + nz1) / 2);
+  D.box(marble, (CW - 0.32) * 2, 0.2, cz1 - az, 0, 0, (az + cz1) / 2);
+  D.cyl(marble, 2.25, 2.25, 0.2, 0, 0, az, 6, false, 'cyl', 0, Math.PI * 2, Math.PI / 6);
+  D.box(marble, (CW - 0.32) * 2, 0.1, 0.42, 0, 0, cz1 + 0.21);
+  // sanctuary at the nave's east wall (the chancel behind it is closed off): a two-step marble dais with a
+  // communion rail, the altar on it and a gilt-framed painted reredos on the wall
+  const ay = 0.3;
+  D.box(marble, 4.6, 0.15, 1.6, 0, 0, nz0 + 1.25);
+  D.box(marble, 4.2, 0.15, 1.35, 0, 0.15, nz0 + 1.25);
+  for (const sx of [-1, 1]) {
+    D.box(oakDark, 1.5, 0.06, 0.1, sx * 1.4, 0.82, nz0 + 2.12);
+    for (let k = 0; k < 6; k++) D.cyl(gilt, 0.025, 0.025, 0.76, sx * (0.75 + k * 0.26), 0.03, nz0 + 2.12, 6);
+  }
+  const reredos = env.atlas.add(96, 120, (g, w, h) => {
+    const gr = g.createLinearGradient(0, 0, 0, h);
+    gr.addColorStop(0, '#d9b04a');
+    gr.addColorStop(1, '#9c7424');
+    g.fillStyle = gr;
+    g.fillRect(0, 0, w, h);
+    const panel = (x0: number, pw: number, robe: string, top: number) => {
+      g.fillStyle = '#2d4f7c';
+      g.fillRect(x0, top, pw, h - top - 8);
+      g.fillStyle = '#f0d27a';
+      g.beginPath();
+      g.arc(x0 + pw / 2, top + 16, 9, 0, Math.PI * 2);
+      g.fill();
+      g.fillStyle = '#e2bf9c';
+      g.beginPath();
+      g.arc(x0 + pw / 2, top + 16, 5, 0, Math.PI * 2);
+      g.fill();
+      g.fillStyle = robe;
+      g.beginPath();
+      g.moveTo(x0 + pw / 2 - 4, top + 22);
+      g.lineTo(x0 + pw / 2 + 4, top + 22);
+      g.lineTo(x0 + pw / 2 + pw * 0.34, h - 10);
+      g.lineTo(x0 + pw / 2 - pw * 0.34, h - 10);
+      g.fill();
+    };
+    panel(6, 24, '#7d1f24', 30);
+    panel(36, 24, '#efeae0', 14);
+    panel(66, 24, '#3f6b35', 30);
+  });
+  D.box(gilt, 2.5, 3.1, 0.08, 0, ay + 1.2, nz0 + 0.64);
+  D.boxC(gilt, 1.5, 0.12, 0.1, -0.62, ay + 4.48, nz0 + 0.65, 0, 0, 0.5);
+  D.boxC(gilt, 1.5, 0.12, 0.1, 0.62, ay + 4.48, nz0 + 0.65, 0, 0, -0.5);
+  signQuad(env.T, reredos, 2.2, 2.75, 0, ay + 2.75, nz0 + 0.69, 0, 0);
+  // altar: stone table, linen with a front drape and a red frontal, candles, a gilt cross
+  const ax = nz0 + 1.15;
+  D.box(M('#cfc6b4', PAT.STONE, 0.8, 0, 0, 0, 0.4), 2.0, 0.92, 0.8, 0, ay, ax);
+  D.box(linen, 2.1, 0.03, 0.9, 0, ay + 0.92, ax);
+  D.box(linen, 2.1, 0.4, 0.02, 0, ay + 0.54, ax + 0.45);
+  D.box(red, 0.9, 0.62, 0.025, 0, ay + 0.22, ax + 0.455);
+  for (const sx of [-0.7, 0.7]) {
+    D.cyl(gilt, 0.05, 0.07, 0.42, sx, ay + 0.95, ax - 0.1, 8);
+    D.cyl(linen, 0.025, 0.025, 0.26, sx, ay + 1.37, ax - 0.1, 6);
+    env.L.sphere(LM('#ffd38a', LMODE.ALWAYS, 2.4, sx), 0.022, sx, ay + 1.66, ax - 0.1, 5, 4);
+  }
+  D.box(gilt, 0.05, 0.62, 0.05, 0, ay + 0.95, ax - 0.2);
+  D.box(gilt, 0.34, 0.05, 0.05, 0, ay + 1.4, ax - 0.2);
+  // pulpit (octagonal drum on a stem, stairs) on the north side of the chancel arch, lectern opposite
+  const px = -(iw - 1.0),
+    pz = nz0 + 1.1;
+  D.cyl(oakDark, 0.14, 0.18, 1.0, px, 0, pz, 8);
+  D.cyl(oak, 0.62, 0.48, 1.05, px, 1.0, pz, 8);
+  D.cyl(oakDark, 0.66, 0.66, 0.07, px, 2.05, pz, 8);
+  for (let i = 0; i < 5; i++) D.box(oakDark, 0.6, 0.2 * (i + 1), 0.3, px + 0.9, 0, pz + 1.55 - i * 0.28);
+  D.cyl(gilt, 0.04, 0.12, 1.1, iw - 1.2, 0.03, pz, 8);
+  D.boxC(gilt, 0.5, 0.04, 0.36, iw - 1.2, 1.18, pz, 0.35, Math.PI, 0);
+  // pews: two banks either side of the aisle, facing the altar (−z); seat, back, ends, kneeler; a runner between
+  const aisle = 0.78,
+    pL = iw - 0.35 - aisle,
+    pc = aisle + pL / 2;
+  for (let z = nz0 + 2.7; z < nz1 - 1.4; z += 0.96)
+    for (const sx of [-1, 1]) {
+      const cx = sx * pc;
+      D.box(oak, pL, 0.05, 0.4, cx, 0.42, z);
+      D.box(oak, pL, 0.48, 0.05, cx, 0.5, z + 0.22);
+      for (const e of [-1, 1]) D.box(oakDark, 0.07, 0.96, 0.56, cx + (e * pL) / 2, 0.03, z + 0.02);
+      D.box(red, pL - 0.12, 0.07, 0.13, cx, 0.06, z - 0.42);
+    }
+  D.box(red, aisle * 2 - 0.3, 0.012, nL - 0.9, 0, 0.03, (nz0 + nz1) / 2 + 0.3);
+  // chandeliers: chain, a gilt ring of candles (lit), a boss underneath
+  for (let i = 0; i < 3; i++) {
+    const cz = nz0 + nL * (0.22 + i * 0.28);
+    D.box(oakDark, 0.03, eave + 0.6 - 5.3, 0.03, 0, 5.3, cz);
+    D.torus(gilt, 0.55, 0.025, 0, 5.25, cz, 4, 20);
+    D.sphere(gilt, 0.09, 0, 5.12, cz, 8, 6);
+    for (let k = 0; k < 8; k++) {
+      const a = (k / 8) * Math.PI * 2;
+      const x = Math.sin(a) * 0.55,
+        z = cz + Math.cos(a) * 0.55;
+      D.cyl(linen, 0.02, 0.02, 0.14, x, 5.27, z, 5);
+      env.L.sphere(LM('#ffd38a', LMODE.ALWAYS, 2.2, k * 0.37), 0.022, x, 5.45, z, 5, 4);
+    }
+    // night: the candle ring's glow and the warm pool it throws on the aisle and pews
+    env.glow(0, 5.42, cz, { size: 1.7, kind: 'halo', color: '#ffd08a', intensity: 0.32 });
+    env.glow(0, 0.12, cz, { size: 4.6, kind: 'pool', color: '#ffc27a', intensity: 0.2 });
+  }
+  // roof inside: a planked ceiling under the slates, tie beams, principal rafters and king posts at the bays
+  const yE = eave - 0.25,
+    yR = ridge - 0.75;
+  for (const sx of [-1, 1])
+    D.quad(M('#5d3f27', PAT.PLANKS, 0.8), [sx * iw, yE, nz0 + 0.3], [0, yR, nz0 + 0.3], [0, yR, nz1], [sx * iw, yE, nz1], nL, Math.hypot(iw, yR - yE), true);
+  for (let i = 0; i <= nBays; i++) {
+    const z = Math.min(nz1 - 0.2, Math.max(nz0 + 0.45, nz0 + (nL * i) / nBays));
+    D.box(oakDark, iw * 2, 0.28, 0.24, 0, eave - 0.9, z);
+    for (const sx of [-1, 1]) D.beam(oakDark, [sx * iw, eave - 0.75, z], [0, yR - 0.1, z], 0.2, 0.22);
+    D.box(oakDark, 0.18, yR - (eave - 0.62), 0.18, 0, eave - 0.62, z);
+  }
+  // organ over the entrance: a dark case and a fan of gilt pipes
+  const oz = nz1 - 0.5;
+  D.box(oakDark, 4.6, 2.4, 0.7, 0, 3.4, oz);
+  for (let i = -7; i <= 7; i++) {
+    const h = 1.6 + 1.3 * Math.cos((i / 7) * 1.2);
+    D.cyl(gilt, 0.09, 0.09, h, i * 0.28, 5.8, oz - 0.1, 8);
+  }
 }

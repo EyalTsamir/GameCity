@@ -18,15 +18,23 @@ import type { CityContext, CityModule } from '../core/context';
 import type { Feature } from '../core/plan';
 import { rect, type P2, type Rect } from '../core/geom';
 import { QUAY_X, RIVER, WATER_LEVEL } from '../core/constants';
-import { HB, RIG } from './harbor/geo';
-import { createBeamMesh, createHarborMaterials, createGlowMesh, NMOB, type GlowPoint } from './harbor/material';
-import { buildBreakwater } from './harbor/breakwater';
-import { buildCarouselRotating, buildCarouselStatic, buildPier, buildWheelRotating, buildWheelStatic, type WheelSpec } from './harbor/pier';
-import { buildFerryDock, lifeguardTower, scatterBeach } from './harbor/beach';
-import { bridgeProfile, buildFootbridge, buildJetty, type BridgeInfo } from './harbor/river';
-import { buildCrane, buildCraneRails, CraneSim, type MobileBox } from './harbor/cranes';
-import { buildMooring, buildQuayEdge, buildShip, mobileShipPos, SHIP, type MobileSlot } from './harbor/ship';
-import { addContainer, CH, CW, fillYard, L20, pickLook, yardRows } from './harbor/containers';
+import { HB, RIG, setRockSkin } from './harbor/geo';
+import { createBeamMesh, createHarborMaterials, createGlowMesh, followCraneLamps, NMOB, type GlowPoint } from './harbor/material';
+import { buildBreakwater, setArmourStones, setBreakwaterLife, setLighthouseRoom } from './harbor/breakwater';
+import { setArmourSoft } from './harbor/geo';
+import { geomHunt } from '../core/geomhunt';
+import { buildFishQuay, setQuayDetail } from './harbor/quay';
+import { buildCarouselRotating, buildCarouselStatic, buildPier, buildWheelRotating, buildWheelStatic, setGondolaDetail, setCarouselDetail, setBoothDetail, setKioskDetail, setWheelHubDetail, type WheelSpec } from './harbor/pier';
+import { buildFerryDock, lifeguardTower, scatterBeach, setBeachDetail, setBeachToys, setFerryDockDetail } from './harbor/beach';
+import { boxHunt } from '../core/boxhunt';
+import { lmDetail } from '../core/lmdetail';
+import { buildContainerQuayLife } from './harbor/quayLife';
+import { bridgeProfile, buildFootbridge, buildJetty, type BridgeInfo, setRiverLanterns } from './harbor/river';
+import { buildCrane, buildCraneRails, CraneSim, setCraneDetail, type MobileBox } from './harbor/cranes';
+import { buildMooring, buildQuayEdge, buildShip, mobileShipPos, setShipDetail, SHIP, type MobileSlot } from './harbor/ship';
+import { addContainer, CH, CW, fillYard, L20, pickLook, setContainerDetail, yardRows } from './harbor/containers';
+import { buildHarborFloodlights } from './lamps/harborLights';
+import { addLampLights } from '../core/lampLight';
 
 export interface HarborService {
   /** current crane states (world): gantry z, trolley x, spreader bottom y, busy phase */
@@ -44,7 +52,8 @@ export interface HarborService {
 export default function create(ctx: CityContext): CityModule {
   const t0 = performance.now();
   const plan = ctx.plan;
-  const mats = createHarborMaterials(ctx.uniforms, ctx.debug.params.get('harborStandard') !== '1');
+  const mats = createHarborMaterials(ctx.uniforms, ctx.debug.params.get('harborStandard') !== '1', boxHunt(ctx, 'containerkit'));
+  setContainerDetail(boxHunt(ctx, 'containerkit'));
   const rig = mats.rig;
   const glows: GlowPoint[] = [];
   const north = new HB();
@@ -73,6 +82,7 @@ export default function create(ctx: CityContext): CityModule {
   slotPairs.slice(0, craneF.length).forEach(([a, b], i) => {
     mobSlots.push({ slot: a, row: rowsFor[i * 2] }, { slot: b, row: rowsFor[i * 2 + 1] });
   });
+  setShipDetail(boxHunt(ctx, 'shipkit'));
   const ship = shipF ? buildShip(anim, shipF.x, shipF.z, shipF.yaw, ctx.rng('harbor-ship'), mobSlots, glows) : null;
 
   // ───────────────────────────────────────────── quay, cranes, containers
@@ -87,7 +97,11 @@ export default function create(ctx: CityContext): CityModule {
       mobs.push({ id: i, state: i % 2 === 0 ? 'ship' : 'quay', ship: sp, quay: new THREE.Vector3(quayX, 0.03, sp.z) });
     });
     const rail = craneF[0];
-    buildCraneRails(north, rail.x, Math.min(rail.a?.z ?? -122, rail.b?.z ?? -24), Math.max(rail.a?.z ?? -122, rail.b?.z ?? -24));
+    // (the rails + their buffers stop short of the harbour water stairs — places-between; the last crane is far north)
+    const hs = ctx.plan.places?.waterStairs.find((w) => w.id === 'harbour');
+    const zEnd = Math.max(rail.a?.z ?? -122, rail.b?.z ?? -24);
+    buildCraneRails(north, rail.x, Math.min(rail.a?.z ?? -122, rail.b?.z ?? -24), hs ? Math.min(zEnd, hs.body.z0 - 1.6) : zEnd);
+    setCraneDetail(boxHunt(ctx, 'cranekit'));
     craneF.forEach((f, i) => {
       const m0 = mobs[i * 2],
         m1 = mobs[i * 2 + 1];
@@ -125,6 +139,21 @@ export default function create(ctx: CityContext): CityModule {
   const ladderZ = [-131, -97, -58, -31, -2];
   const shipZ: [number, number] = shipF ? [shipF.z - SHIP.half, shipF.z + SHIP.half] : [0, 0];
   const edge = buildQuayEdge(north, QX, -140, -6, ladderZ, shipZ);
+  // the fish quay at the north end (crabber + tender moored by the boats module)
+  if (!ctx.debug.params.has('noquaylife')) {
+    setQuayDetail(boxHunt(ctx, 'quaykit'));
+    buildFishQuay(north, {
+      ground,
+      rng: ctx.rng('harbor-fishquay'),
+      quayX: QX,
+      low: ctx.quality.level === 'low',
+      lines: [
+        { bollard: new THREE.Vector3(QX - 0.2, 0.12, -138), boat: new THREE.Vector3(QX + 0.06, 0.155, -138) },
+        { bollard: new THREE.Vector3(QX - 0.2, 0.12, -125), boat: new THREE.Vector3(QX + 0.06, 0.155, -125) },
+        { bollard: new THREE.Vector3(QX - 0.2, 0.12, -112), boat: new THREE.Vector3(QX + 0.06, 0.155, -112) },
+      ],
+    });
+  }
   if (ship && shipF) {
     const near = (z: number) => edge.bollards.reduce((best, b) => (Math.abs(b - z) < Math.abs(best - z) ? b : best), edge.bollards[0]);
     // fairleads (local) bow → stern; bollards spread fore and aft of the ship
@@ -141,11 +170,25 @@ export default function create(ctx: CityContext): CityModule {
     obstacles.push(rect(QX, shipF.z - SHIP.half - 1, QX + 16, shipF.z + SHIP.half + 1));
   }
 
+  if (lmDetail(ctx, 'quaylife2')) {
+    const hs = ctx.plan.places?.waterStairs.find((w) => w.id === 'harbour');
+    buildContainerQuayLife(north, { ctx, ground, rng: ctx.rng('harbor-quaylife2'), x0: 130.9, x1: 134.45, z0: -118, z1: hs ? hs.body.z0 - 3 : -24, edgeX: QX, ladders: ladderZ, glows });
+  }
+
+  // night work lighting (night agent): floodlight masts on the quay apron + in the container yard
+  const flood = buildHarborFloodlights(north, ground, ctx.occupancy, glows);
+  problems.push(...flood.skipped);
+
   // ───────────────────────────────────────────── breakwater + lighthouse
   const bwF = feats('breakwater')[0];
   const lhF = feats('lighthouse')[0];
   let lantern: THREE.Vector3 | null = null;
   if (bwF?.a && bwF.b) {
+    setArmourStones(boxHunt(ctx, 'armour'));
+    setArmourSoft(geomHunt(ctx, 'armoursoft'));
+    setBreakwaterLife(lmDetail(ctx, 'bwlife'));
+    setLighthouseRoom(lmDetail(ctx, 'bwlife') && lmDetail(ctx, 'lhroom'));
+    setRockSkin(lmDetail(ctx, 'rockskin'));
     const info = buildBreakwater(north, bwF.a, bwF.b, ground, ctx.rng('harbor-breakwater'), lhF ? { x: lhF.x, z: lhF.z, height: Number(lhF.params?.height ?? 24) } : null, glows);
     if (lhF) lantern = info.lantern;
     obstacles.push(rect(info.rootX, bwF.a.z - 8.5, bwF.b.x, bwF.a.z + 7.5));
@@ -156,6 +199,7 @@ export default function create(ctx: CityContext): CityModule {
   let ferryBerth: HarborService['ferryBerth'] = null;
   const fdF = feats('ferrydock')[0];
   if (fdF?.rect) {
+    setFerryDockDetail(boxHunt(ctx, 'ferrydock'));
     const fd = buildFerryDock(north, fdF.rect, QUAY_X, glows);
     ferryBerth = fd.berth;
     obstacles.push(fd.rect);
@@ -174,12 +218,17 @@ export default function create(ctx: CityContext): CityModule {
     const x0 = Math.min(pierF.a.x, pierF.b.x),
       x1 = Math.max(pierF.a.x, pierF.b.x);
     const benchX = plan.benches.filter((bb) => Math.abs(bb.z - pz) < width / 2 + 0.5 && bb.x > x0).map((bb) => bb.x);
+    setKioskDetail(boxHunt(ctx, 'pierkiosk'));
     buildPier(beach, { xa: x0, xb: x1, z: pz, width, deckY, benchX }, ground, ctx.rng('harbor-pier'), glows);
     obstacles.push(rect(x0, pz - width / 2 - 0.2, x1 + 0.3, pz + width / 2 + 0.2));
     const wf = feats('ferriswheel')[0];
     if (wf?.rect) {
       wheel = { x: wf.x, z: wf.z, radius: Number(wf.params?.radius ?? 15), hubY: deckY + Number(wf.params?.hub ?? 17.5), rect: wf.rect, deckY };
+      setBoothDetail(boxHunt(ctx, 'pierbooth'));
+      setWheelHubDetail(boxHunt(ctx, 'wheelhub'));
       buildWheelStatic(beach, wheel, glows);
+      setGondolaDetail(boxHunt(ctx, 'gondola'));
+      setCarouselDetail(boxHunt(ctx, 'carousel'), lmDetail(ctx, 'horses'));
       gondolas = buildWheelRotating(rides, wheel);
     }
     const cf = feats('carousel')[0];
@@ -188,10 +237,14 @@ export default function create(ctx: CityContext): CityModule {
       carousel = { x: cf.x, z: cf.z };
       buildCarouselStatic(beach, cf.x, cf.z, r, deckY);
       horses = buildCarouselRotating(rides, cf.x, cf.z, r, deckY, ctx.rng('harbor-carousel'));
+      // night agent: the carousel's marquee bulbs light the deck around it (lamp light map)
+      addLampLights([{ x: cf.x, y: deckY + 3.3, z: cf.z, pole: 3.3, radius: r + 2.2, color: '#ffd08a', intensity: 0.6, kind: 'plaza' }]);
     }
   }
 
   // ───────────────────────────────────────────── beach
+  setBeachDetail(boxHunt(ctx, 'beachkit'));
+  setBeachToys(boxHunt(ctx, 'beachtoys'));
   for (const f of feats('lifeguard')) lifeguardTower(beach, f.x, f.z, f.yaw, ground);
   const beachPaths = plan.paths.filter((p) => p.kind === 'beach' || p.kind === 'boardwalk' || p.kind === 'pier');
   const spots: P2[] = plan.paths.filter((p) => p.kind === 'beach').map((p) => p.pts[p.pts.length - 1]);
@@ -224,6 +277,7 @@ export default function create(ctx: CityContext): CityModule {
     },
   );
 
+  setRiverLanterns(boxHunt(ctx, 'promlamp'));
   // ───────────────────────────────────────────── river: footbridges + jetty
   const bridges: { x: number; info: BridgeInfo; profileFromGraph: boolean; profile: (z: number) => number; zN: number; zS: number }[] = [];
   for (const f of feats('footbridge')) {
@@ -457,6 +511,8 @@ export default function create(ctx: CityContext): CityModule {
       const u = ctx.uniforms;
       // the glows are night lights (blinking aviation bulbs stay emissive by day)
       glowMesh.visible = u.uLights.value > 0.01 || u.uNight.value > 0.05;
+      // crane work lights (lamp light map spots) travel with their gantries
+      followCraneLamps(glowMesh, rig);
       if (!beam || !lantern) return;
       const lightsF = Math.min(1, Math.max(0, u.uLights.value * (0.45 + 0.55 * u.uNight.value)));
       beam.uniforms.uBeam.value = lightsF * 0.32;
@@ -476,6 +532,7 @@ export default function create(ctx: CityContext): CityModule {
         triangles: tris,
         meshes: meshes.length + animMeshes.length + 2,
         glows: glows.length,
+        floodMasts: flood.masts,
         containers: containerCount + (ship?.containers ?? 0) + mobs.length,
         craneJobs: sims.reduce((a, s) => a + s.jobs, 0),
         cranePhases: sims.map((s) => s.phase).join(','),

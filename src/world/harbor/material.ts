@@ -14,6 +14,9 @@
 
 import * as THREE from 'three';
 import type { GlobalUniforms } from '../../core/uniforms';
+import { LAMP_APPLY_VIEW, LAMP_GLSL, addLampLights, lampUniforms, type LampLight } from '../../core/lampLight';
+
+const LEGACY_LAMPS = typeof location !== 'undefined' && new URLSearchParams(location.search).has('legacylamps');
 
 export const NMOB = 6;
 
@@ -104,7 +107,9 @@ const VERT_PAT = /* glsl */ `
   vec2 puv = vec2(position.x + position.z, position.y);
   if (pid > 0.5 && pid < 1.5) puv = vec2(position.x * -normal.z + position.z * normal.x, position.y);
   else if (pid > 1.5 && pid < 2.5) puv = position.xz;
-  else if (pid > 2.5 && pid < 3.5) puv = position.zx;
+  else if ((pid > 2.5 && pid < 3.5)) puv = position.zx;
+  else if (pid > 8.5 && pid < 10.5) puv = position.xz;
+  else if (pid > 11.5 && pid < 12.5) puv = vec2(position.x + position.y * 0.62, position.z - position.y * 0.62);
   vPat = vec4(pid, aPat.y, puv);
   vEmit = aEmit;
 }
@@ -118,6 +123,12 @@ uniform float uNight;
 uniform float uRealTime;
 uniform vec4 uFx;
 float hbHash(float n) { return fract(sin(n * 12.9898) * 43758.5453); }
+float hbN2(vec2 p) {
+  vec2 i = floor(p), f = fract(p);
+  f = f * f * (3.0 - 2.0 * f);
+  float a = hbHash(i.x + i.y * 57.0), b = hbHash(i.x + 1.0 + i.y * 57.0), c = hbHash(i.x + (i.y + 1.0) * 57.0), d = hbHash(i.x + 1.0 + (i.y + 1.0) * 57.0);
+  return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+}
 vec3 hbHue(float h) { return clamp(abs(mod(h * 6.0 + vec3(0.0, 4.0, 2.0), 6.0) - 3.0) - 1.0, 0.0, 1.0); }
 `;
 
@@ -131,9 +142,21 @@ float hbRough = -1.0;
     float x = vPat.z / max(vPat.y, 0.05);
     float fw = fwidth(x);
     float fade = 1.0 - smoothstep(0.3, 0.85, fw);
+#ifdef HB_TRAP
+    // box hunt (?nocontainerkit): trapezoidal box corrugation — flat outer and inner panels joined by slanted
+    // webs, so the sun draws crisp light / dark stripes; the recessed panel is a touch darker
+    float f = fract(x);
+    float aa = fw * 1.5 + 0.01;
+    float webIn = smoothstep(0.3 - aa, 0.3 + aa, f) - smoothstep(0.44 - aa, 0.44 + aa, f);
+    float webOut = smoothstep(0.8 - aa, 0.8 + aa, f) - smoothstep(0.94 - aa, 0.94 + aa, f);
+    float inner = smoothstep(0.44 - aa, 0.44 + aa, f) - smoothstep(0.8 - aa, 0.8 + aa, f);
+    diffuseColor.rgb *= 1.0 - (0.07 * inner + 0.05 * (webIn + webOut)) * fade;
+    hbTilt = (webOut - webIn) * 0.9 * fade;
+#else
     float ph = x * 6.2832;
     diffuseColor.rgb *= 1.0 + 0.08 * sin(ph) * fade;
     hbTilt = cos(ph) * 0.5 * fade;
+#endif
   } else if (pid > 1.5 && pid < 3.5) {
     float x = vPat.z / max(vPat.y, 0.05);
     float fi = floor(x);
@@ -167,6 +190,60 @@ float hbRough = -1.0;
     diffuseColor.rgb *= mix(1.0, tone * (1.0 - 0.3 * j), fade);
   } else if (pid > 5.5 && pid < 6.5) {
     hbRough = 0.12;
+  } else if (pid > 6.5 && pid < 7.5) {
+    // netting: diagonal knotted mesh, cords lighter than the gaps, a little tonal drift
+    vec2 q = vec2(vPat.z + vPat.w, vPat.z - vPat.w) / max(vPat.y, 0.02);
+    vec2 f = abs(fract(q) - 0.5);
+    float fw = fwidth(q.x);
+    float fade = 1.0 - smoothstep(0.25, 0.7, fw);
+    float cord = smoothstep(0.32, 0.42, max(f.x, f.y));
+    diffuseColor.rgb *= mix(0.78, mix(0.45, 1.12, cord), fade) * (0.85 + 0.3 * hbN2(vPat.zw * 1.7));
+  } else if (pid > 7.5 && pid < 8.5) {
+    // painted steel: rust blooms at the bottom and along edges, chipped paint
+    vec2 p = vPat.zw;
+    float n = hbN2(p * 3.1) * 0.6 + hbN2(p * 9.3) * 0.4;
+    float r = smoothstep(1.0 - vPat.y, 1.05 - vPat.y * 0.6, n + (0.35 - p.y * 0.25));
+    diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.33, 0.16, 0.07) * (0.8 + 0.4 * hbN2(p * 31.0)), clamp(r, 0.0, 1.0) * 0.85);
+  } else if (pid > 8.5 && pid < 9.5) {
+    // ground stain: irregular blotch cut from the quad, darker centre
+    vec2 p = vPat.zw / max(vPat.y, 0.1);
+    float n = hbN2(p) * 0.55 + hbN2(p * 2.3 + 5.1) * 0.3 + hbN2(p * 6.1) * 0.15;
+    if (n < 0.52) discard;
+    diffuseColor.rgb *= 1.0 - 0.25 * smoothstep(0.52, 0.75, n);
+  } else if (pid > 9.5 && pid < 10.5) {
+    // wet patch (melt water, hosed concrete): an irregular dark glossy pool with a ragged rim and loose drops
+    // around it, the colour of the quad is the wet tint of the ground
+    vec2 p = vPat.zw / max(vPat.y, 0.1);
+    float n = hbN2(p) * 0.5 + hbN2(p * 2.7 + 3.3) * 0.32 + hbN2(p * 7.9) * 0.18;
+    vec2 dc = vPat.zw / 0.07;
+    vec2 di = floor(dc);
+    float dh = hbHash(di.x * 7.13 + di.y * 3.71);
+    float drop = step(0.86, dh) * (1.0 - step(0.32 + 0.12 * hbHash(dh * 9.0), length(fract(dc) - 0.5)));
+    float pool = smoothstep(0.5, 0.56, n);
+    if (pool + drop * step(0.4, n) < 0.5) discard;
+    diffuseColor.a = 1.0;
+    hbRough = mix(0.22, 0.06, smoothstep(0.56, 0.7, n));
+  } else if (pid > 10.5 && pid < 11.5) {
+    // moulded plastic (fish boxes): handling scuffs and scratches, grime gathering low down, a faded upper rim
+    vec2 p = vPat.zw;
+    float scr = smoothstep(0.92, 1.0, hbN2(vec2(p.x * 40.0, p.y * 3.0) + vPat.y * 17.0));
+    float grime = (1.0 - smoothstep(0.0, 0.12, fract(p.y / 0.255))) * 0.35 + 0.25 * hbN2(p * 6.0 + vPat.y * 5.0);
+    diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.2, 0.19, 0.17), clamp(grime * vPat.y * 2.0, 0.0, 0.6));
+    diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * 1.25 + 0.06, scr * 0.7);
+  } else if (pid > 11.5 && pid < 12.5) {
+    // quarried rock (sheared xz + y so that no face of a stone stretches): banding, fractures, grain, lichen in patches
+    vec2 p = vPat.zw;
+    float n = hbN2(p * 0.9) * 0.5 + hbN2(p * 2.9 + 4.1) * 0.3 + hbN2(p * 8.3) * 0.2;
+    float fw = fwidth(p.x) + fwidth(p.y);
+    float fade = 1.0 - smoothstep(0.08, 0.3, fw);
+    float cr = abs(hbN2(p * 1.7 + 9.0) - 0.5) * 2.0 + 0.25 * hbN2(p * 7.0);
+    float crack = (1.0 - smoothstep(0.03, 0.09, cr)) * smoothstep(0.35, 0.6, hbN2(p * 0.6 + 2.0));
+    float grain = hbN2(p * 37.0);
+    diffuseColor.rgb *= (0.72 + 0.56 * n) * mix(1.0, (1.0 - 0.62 * crack) * (0.9 + 0.2 * grain), fade);
+    float li = smoothstep(0.6, 0.72, hbN2(p * 1.1 + 13.0) * 0.7 + hbN2(p * 5.3) * 0.3);
+    diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.5, 0.47, 0.27) * (0.8 + 0.4 * grain), li * 0.55 * vPat.y);
+    hbTilt = (n - 0.5) * 0.8 + (hbN2(p * 6.1 + 3.0) - 0.5) * 0.4;
+    hbRough = 0.92;
   }
 }
 `;
@@ -238,11 +315,12 @@ export interface HarborMaterials {
   rig: RigUniforms;
 }
 
-export function createHarborMaterials(g: GlobalUniforms, lambert = false): HarborMaterials {
+export function createHarborMaterials(g: GlobalUniforms, lambert = false, trap = false): HarborMaterials {
   const rig = createRigUniforms();
   const make = (rigged: boolean): THREE.MeshStandardMaterial | THREE.MeshLambertMaterial => {
     const m = lambert ? new THREE.MeshLambertMaterial({ vertexColors: true }) : new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.8, metalness: 0.0 });
     m.name = rigged ? 'harbor-rigged' : 'harbor-solid';
+    if (trap) m.defines = { ...m.defines, HB_TRAP: '' };
     m.onBeforeCompile = (shader) => {
       Object.assign(shader.uniforms, {
         uLights: g.uLights,
@@ -250,6 +328,8 @@ export function createHarborMaterials(g: GlobalUniforms, lambert = false): Harbo
         uRealTime: g.uRealTime,
         uFx: rig.uFx,
       });
+      // night street lights / floodlights / crane work lights (shared lamp light map)
+      Object.assign(shader.uniforms, lampUniforms());
       if (rigged) {
         Object.assign(shader.uniforms, {
           uTime: g.uTime,
@@ -265,13 +345,14 @@ export function createHarborMaterials(g: GlobalUniforms, lambert = false): Harbo
         .replace('#include <beginnormal_vertex>', `#include <beginnormal_vertex>\n${rigged ? 'rigSetup();\nobjectNormal = rigR * objectNormal;' : ''}`)
         .replace('#include <begin_vertex>', `#include <begin_vertex>\n${rigged ? 'transformed = rigR * transformed + rigT;' : ''}\n${VERT_PAT}`);
       shader.fragmentShader = shader.fragmentShader
-        .replace('#include <common>', `#include <common>\n${FRAG_PARS}`)
+        .replace('#include <common>', `#include <common>\n${FRAG_PARS}\n${LAMP_GLSL}`)
+        .replace('#include <lights_fragment_end>', `#include <lights_fragment_end>\n${LAMP_APPLY_VIEW}`)
         .replace('#include <color_fragment>', `#include <color_fragment>\n${FRAG_COLOR}`)
         .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>\nif (hbRough >= 0.0) roughnessFactor = hbRough;`)
         .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>\n${FRAG_NORMAL}`)
         .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>\n${FRAG_EMIT}`);
     };
-    m.customProgramCacheKey = () => (rigged ? 'tinyhaven-harbor-rigged-v1' : 'tinyhaven-harbor-solid-v1') + (lambert ? '-l' : '');
+    m.customProgramCacheKey = () => (rigged ? 'tinyhaven-harbor-rigged-v2' : 'tinyhaven-harbor-solid-v2') + (lambert ? '-l' : '') + (trap ? '-t' : '');
     return m;
   };
   const solid = make(false);
@@ -367,6 +448,7 @@ void main() {
     mvPosition = modelViewMatrix * vec4(c, 1.0);
     mvPosition.xy += aCorner * aInfo.x;
   }
+  if (mode > 5.5 && mode < 6.5) vCol *= smoothstep(3.0, 16.0, -mvPosition.z);
   if (k < 0.002) mvPosition = vec4(0.0, 0.0, 2.0, 1.0);
   gl_Position = projectionMatrix * mvPosition;
   #include <fog_vertex>
@@ -394,7 +476,112 @@ void main() {
 }
 `;
 
-export function createGlowMesh(g: GlobalUniforms, rig: RigUniforms, points: GlowPoint[]): THREE.Mesh {
+/** crane floodlights hang under the boom (cranes.ts: CRANE.boomY0 − 0.2) */
+const CRANE_LIGHT_Y = 21.8;
+/** cool LED work / floodlight colour (night palette) */
+export const HARBOR_FLOOD_COL = '#d6e6ff';
+
+interface CraneLamp {
+  l: LampLight;
+  z: number;
+  crane: number;
+}
+
+/**
+ * Light pools are registered as real lights in the shared lamp light map instead of being drawn:
+ * quay / pier / bridge lamp pools pair with their lamp's halo (aimed from the head at the old pool
+ * centre); the crane work-light pools become moving spot lights (channel 'lights') that follow the
+ * gantries (followCraneLamps). Returns the glows that are still drawn (halos, beacons, lanterns).
+ */
+function registerHarborPools(points: GlowPoint[]): { keep: GlowPoint[]; cranes: CraneLamp[] } {
+  const keep: GlowPoint[] = [];
+  const out: LampLight[] = [];
+  const cranes: CraneLamp[] = [];
+  const heads = points.filter((p) => !p.pool && (p.mode ?? 0) === GLOW.LIGHTS && p.crane === undefined && p.size < 2.5);
+  const c = new THREE.Color();
+  // crane pools: merge the two ship-side pools of each crane into one spot
+  const groups = new Map<string, GlowPoint[]>();
+  for (const p of points) {
+    if (!p.pool) {
+      keep.push(p);
+      // the lit ferris wheel washes the pier deck and the beach around it in its warm-pink glow
+      if (p.mode === GLOW.FERRIS) out.push({ x: p.x, y: p.y, z: p.z, pole: p.y - 0.3, radius: 15, color: '#ffc9c0', intensity: 0.34, kind: 'plaza' });
+      continue;
+    }
+    if (p.crane !== undefined) {
+      const key = `${p.crane}:${p.y.toFixed(2)}`;
+      const arr = groups.get(key) ?? [];
+      arr.push(p);
+      groups.set(key, arr);
+      continue;
+    }
+    c.set(p.color);
+    const color = '#' + c.getHexString();
+    const intensity = (p.intensity / 0.22) * 0.95;
+    let best: GlowPoint | null = null,
+      bd = 3;
+    for (const h of heads) {
+      if (h.y < p.y + 1.2) continue;
+      const d = Math.hypot(h.x - p.x, h.z - p.z);
+      if (d < bd) {
+        bd = d;
+        best = h;
+      }
+    }
+    if (best) {
+      const pole = best.y - p.y;
+      const l: LampLight = { x: best.x, y: best.y, z: best.z, pole, radius: p.size * 1.1, color, intensity, kind: 'path' };
+      if (bd > 0.3) {
+        l.aim = [p.x, p.y, p.z];
+        l.cone = Math.atan2(p.size * 1.1, Math.hypot(bd, pole)) + 0.25;
+      }
+      out.push(l);
+    } else out.push({ x: p.x, y: p.y + 2.8, z: p.z, pole: 2.8, radius: p.size * 1.1, color, intensity: intensity * 0.75, kind: 'spill' });
+  }
+  for (const arr of groups.values()) {
+    let x = 0;
+    for (const p of arr) x += p.x / arr.length;
+    const spread = Math.max(...arr.map((p) => Math.abs(p.x - x)));
+    const p0 = arr[0];
+    const l: LampLight = {
+      x,
+      y: CRANE_LIGHT_Y,
+      z: p0.z,
+      pole: CRANE_LIGHT_Y - p0.y,
+      radius: p0.size * 1.15 + spread,
+      color: HARBOR_FLOOD_COL,
+      intensity: 1.1,
+      kind: 'flood',
+      aim: [x, p0.y, p0.z],
+      cone: Math.atan2(p0.size * 1.15 + spread, CRANE_LIGHT_Y - p0.y),
+      channel: 'lights',
+    };
+    out.push(l);
+    cranes.push({ l, z: p0.z, crane: p0.crane! });
+  }
+  addLampLights(out);
+  return { keep, cranes };
+}
+
+/** Move the crane work lights with their gantries (call every frame). */
+export function followCraneLamps(mesh: THREE.Mesh, rig: RigUniforms): void {
+  const list = mesh.userData.craneLamps as CraneLamp[] | undefined;
+  if (!list) return;
+  for (const c of list) {
+    const z = c.z + rig.uCrane.value[c.crane].x;
+    c.l.z = z;
+    if (c.l.aim) c.l.aim[2] = z;
+  }
+}
+
+export function createGlowMesh(g: GlobalUniforms, rig: RigUniforms, allPoints: GlowPoint[]): THREE.Mesh {
+  let points = allPoints;
+  let craneLamps: CraneLamp[] | undefined;
+  if (!LEGACY_LAMPS) {
+    const r = registerHarborPools(allPoints);
+    points = r.keep;
+    craneLamps = r.cranes;
+  }
   const n = points.length;
   const pos = new Float32Array(n * 12);
   const corner = new Float32Array(n * 8);
@@ -451,6 +638,7 @@ export function createGlowMesh(g: GlobalUniforms, rig: RigUniforms, points: Glow
   mat.uniforms.uCrane = rig.uCrane;
   mat.uniforms.uFx = rig.uFx;
   const mesh = new THREE.Mesh(geo, mat);
+  mesh.userData.craneLamps = craneLamps;
   mesh.name = 'harbor-glows';
   mesh.renderOrder = 3;
   mesh.frustumCulled = false;

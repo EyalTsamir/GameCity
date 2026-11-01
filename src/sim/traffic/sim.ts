@@ -11,8 +11,9 @@ import type { CityContext } from '../../core/context';
 import type { Lane, Movement, RoadNetwork, Intersection } from '../../core/roadNetwork';
 import type { IntersectionManager } from '../../core/intersections';
 import { Path2, P2 } from '../../core/geom';
+import { OCC } from '../../core/occupancy';
 import type { Rng } from '../../core/rng';
-import { MIX, SPECS, SEDAN_POLICE, VehicleSpec, BODY_COLORS, TAXI_COLOR, POLICE_COLOR, ICECREAM_COLORS, LORRY_CAB_COLORS, DELIVERY_LOGOS, SEDAN_TAXI } from './specs';
+import { MIX, SPECS, SEDAN_POLICE, VehicleSpec, BODY_COLORS, TAXI_COLOR, POLICE_COLOR, ICECREAM_COLORS, LORRY_CAB_COLORS, DELIVERY_LOGOS, SEDAN_TAXI, MIX_2W, TWO_WHEELERS, COLORS_2W, isTwoWheeler } from './specs';
 
 export const STEP = 0.05;
 const S0 = 2.0; // jam distance (bumper to bumper)
@@ -42,7 +43,9 @@ export const St = {
 } as const;
 export type St = (typeof St)[keyof typeof St];
 
-const BASE_POPULATION = 100;
+const BASE_POPULATION = 128;
+/** share of ordinary traffic on two wheels (?no2w: none) */
+const SHARE_2W = 0.27;
 const DAY_PROFILE: [number, number][] = [
   [0, 0.3],
   [4.5, 0.26],
@@ -89,6 +92,8 @@ export class Vehicle {
   route = -1;
   ridx = 0;
   dwell = 0;
+  /** bus doors: 0 shut … 1 folded open (render.ts, a real-time ease) */
+  doorK = 0;
   dwellStop = -1;
   served = -1;
   departBlink = 0;
@@ -97,6 +102,16 @@ export class Vehicle {
   siren = 0;
   sirenT = 0;
   icecream = false;
+  /** kerb stop this vehicle is heading for or standing at (scenes: deliveries, the market van, the wedding car) */
+  kerb: KerbStop | null = null;
+  /** braked to the kerb stop's spot: leaves the lane at the end of this step */
+  kerbGo = false;
+  /** drawn beside the lanes (not in sim.vehicles): pose set by updateKerbs, body roll from the kerb */
+  offLane = false;
+  offRoll = 0;
+  offY = 0;
+  /** hazard lights while stopped at the kerb */
+  hazard = false;
   // driver
   T: number;
   A: number;
@@ -133,6 +148,21 @@ export class Vehicle {
   /** inside the view frustum */
   onScreen = true;
   phase: number;
+  /** two-wheelers: pedal crank angle (bicycles), lean into turns (rad, + = right), lateral offset in use,
+   * path curvature estimate (render) */
+  readonly twoWheel: boolean;
+  crank = 0;
+  lean = 0;
+  lat = 0;
+  kappa = 0;
+  lastYaw = 0;
+  lastOdo = 0;
+  /** the rider figure and a passenger (pedestrians/riders.ts keeps them here) */
+  rider: unknown = null;
+  pillion: unknown = null;
+  /** people seated in the cabin (pedestrians/occupants.ts) and whether they are drawn (render: aInst2.w = 2) */
+  occupants: unknown = null;
+  seated = false;
 
   constructor(id: number, spec: VehicleSpec, variant: number, color: string, rng: Rng) {
     this.id = id;
@@ -146,6 +176,8 @@ export class Vehicle {
     this.B = spec.decel * rng.range(0.9, 1.1);
     this.vf = spec.speedFactor * rng.range(0.9, 1.06);
     this.phase = rng.next();
+    this.twoWheel = isTwoWheeler(spec);
+    if (this.twoWheel) this.vf = spec.speedFactor * rng.range(0.85, 1.15);
   }
 
   get isBus(): boolean {
@@ -154,6 +186,45 @@ export class Vehicle {
   get special(): boolean {
     return this.route >= 0 || this.police || this.icecream;
   }
+}
+
+/**
+ * A place beside a lane where a vehicle leaves the lane and stands off it: half on the pavement, or along a driven path
+ * into a square. The vehicle brakes to `s` like a bus, then drops out of the lane lists, so traffic flows past: it can
+ * never hold up a junction or stand on a level crossing, whatever a scene does with it. It rejoins (on `outLane`) only
+ * when that lane has a gap, as a normal driver. The owner (scenes) opens it and watches `state`.
+ */
+export interface KerbStop {
+  id: number;
+  /** lane it brakes on; the vehicle's front stops at `s` */
+  lane: number;
+  s: number;
+  /** vehicle centre-line path from the lane to where it stands (forward, world x,z points) */
+  pathIn: Path2;
+  /** from where it stands back to the lane it rejoins (forward), ends on `outLane` at `outS` (front) */
+  pathOut: Path2;
+  outLane: number;
+  outS: number;
+  /** body roll while standing (two wheels up the kerb) */
+  roll: number;
+  /** drive speed off the lane (m/s) */
+  speed: number;
+  /** pathOut is driven backwards (reversing out of a dead-end aisle): the nose keeps pointing against the path */
+  reverseOut: boolean;
+  /** accepts this model */
+  model: string;
+  /** open for one claim (the owner sets it; cleared when claimed) */
+  open: boolean;
+  V: Vehicle | null;
+  /** 0 free, 1 vehicle approaching, 2 driving in, 3 standing, 4 waiting for a gap, 5 driving out */
+  state: number;
+  /** progress on the off-lane path (m) */
+  u: number;
+  /** owner: time to go */
+  release: boolean;
+  /** seconds standing (safety release after holdMax) */
+  held: number;
+  holdMax: number;
 }
 
 interface Entry {
@@ -195,6 +266,11 @@ export class TrafficSim {
   private ctx: CityContext;
   private nextId = 1;
   private spawnT: number[] = [];
+  /** kerb stops per lane (empty with ?noscenes: no cost), vehicles standing off the lanes */
+  kerbStops: KerbStop[] = [];
+  private kerbByLane = new Map<number, KerbStop[]>();
+  offLane: Vehicle[] = [];
+  private drawn: Vehicle[] = [];
   private hiddenT = 0;
   private busCountByRoute: number[] = [];
   private pendingBus: number[] = [];
@@ -204,9 +280,11 @@ export class TrafficSim {
   target = 0;
   stats = { spawned: 0, despawned: 0, tunnelIn: 0, tunnelOut: 0, watchdog: 0, reroutes: 0, hiddenSpawns: 0, hiddenDespawns: 0, steps: 0 };
   private tNow = 0;
+  private share2w: number;
 
   constructor(ctx: CityContext) {
     this.ctx = ctx;
+    this.share2w = ctx.debug.params.has('no2w') ? 0 : SHARE_2W;
     this.net = ctx.roads;
     this.mgr = ctx.intersections;
     this.rng = ctx.rng('traffic');
@@ -306,6 +384,14 @@ export class TrafficSim {
 
   private pickRegular(): { spec: VehicleSpec; variant: number; color: string } {
     const rng = this.rng;
+    if (this.share2w > 0 && rng.chance(this.share2w)) {
+      const t = rng.weighted(
+        MIX_2W,
+        MIX_2W.map((m) => m.w),
+      ).type;
+      const sp = TWO_WHEELERS[t];
+      return { spec: sp, variant: sp.variant ?? 0, color: rng.pick(COLORS_2W[t]) };
+    }
     const pick = rng.weighted(
       MIX,
       MIX.map((m) => m.w),
@@ -861,6 +947,8 @@ export class TrafficSim {
   // ───────────────────────────────────────────────────────── control ──
 
   private control(V: Vehicle, h: number): void {
+    // rejoining from a kerb stop: holds its place on the lane (followers brake behind it), the pose follows pathOut
+    if (V.offLane) return;
     const NL = this.NL;
     const e = V.elem;
     let v0: number;
@@ -944,6 +1032,31 @@ export class TrafficSim {
           break;
         }
       }
+      // kerb stops: claim one coming up, brake to it (pulled off the lane at the end of the step)
+      if (this.kerbByLane.size > 0) {
+        if (V.kerb === null) {
+          const ks = this.kerbByLane.get(e);
+          if (ks && !V.special && !V.leaving) {
+            for (let i = 0; i < ks.length; i++) {
+              const st = ks[i];
+              const d = st.s - V.s;
+              if (st.open && st.V === null && st.model === V.spec.model && d > 12 && d < 70) {
+                st.open = false;
+                st.V = V;
+                st.state = 1;
+                V.kerb = st;
+                break;
+              }
+            }
+          }
+        }
+        if (V.kerb !== null && V.kerb.lane === e) {
+          const d = V.kerb.s - V.s;
+          dStop = Math.min(dStop, Math.max(0, d));
+          hard = Math.min(hard, Math.max(0, d));
+          if (d < 0.7 && V.v < 0.5) V.kerbGo = true;
+        }
+      }
     } else {
       const mv = this.movs[e - NL];
       v0 = Math.min(mv.speed * (mv.turn === 'straight' ? V.vf : turnF), this.lanes[mv.toLane].speed);
@@ -992,6 +1105,10 @@ export class TrafficSim {
   // ─────────────────────────────────────────────────────── integrate ──
 
   private integrate(V: Vehicle, h: number): void {
+    if (V.offLane) {
+      V.progT = 0;
+      return;
+    }
     const a = V.aCmd;
     let v1 = V.v + a * h;
     let ds: number;
@@ -1009,6 +1126,8 @@ export class TrafficSim {
     V.v = v1;
     V.s += ds;
     V.odo += ds;
+    // bicycles: pedal while riding on (≈ 0.42 crank turns per wheel turn), freewheel when braking
+    if (V.spec.model === 'bike' && V.spec.variant !== 1 && V.a > -0.35) V.crank = (V.crank + (ds / V.spec.wheelR) * 0.42) % (Math.PI * 2);
     // watchdog progress
     if (V.dwell > 0) {
       V.dwell -= h;
@@ -1173,6 +1292,198 @@ export class TrafficSim {
       if (V.dead) anyDead = true;
     }
     if (anyDead) this.vehicles = this.vehicles.filter((V) => !V.dead);
+    if (this.kerbByLane.size > 0) this.updateKerbs(h);
+  }
+
+  // ─────────────────────────────────────────────────────── kerb stops ──
+
+  addKerbStop(o: Pick<KerbStop, 'lane' | 's' | 'pathIn' | 'pathOut' | 'outLane' | 'outS' | 'roll' | 'speed' | 'reverseOut' | 'model' | 'holdMax'>): KerbStop {
+    const st: KerbStop = { ...o, id: this.kerbStops.length, open: false, V: null, state: 0, u: 0, release: false, held: 0 };
+    this.kerbStops.push(st);
+    const l = this.kerbByLane.get(o.lane);
+    if (l) l.push(st);
+    else this.kerbByLane.set(o.lane, [st]);
+    return st;
+  }
+
+  /** send a vehicle of this spec to a stop now, spawned out of sight (the market van, the wedding car) */
+  /** a vehicle still on its way to the stop is called off: it just drives on */
+  cancelKerb(st: KerbStop): void {
+    if (st.state !== 1 || st.V === null) return;
+    st.V.kerb = null;
+    st.V.kerbGo = false;
+    st.V = null;
+    st.state = 0;
+    st.release = false;
+  }
+
+  sendTo(st: KerbStop, spec: VehicleSpec, variant: number, color: string): boolean {
+    if (st.V !== null) return false;
+    const V = this.makeVehicle(spec, variant, color);
+    // somewhere upstream on the stop's lane, unseen; else half way along a lane feeding it
+    const lane = this.lanes[st.lane];
+    const front = Math.max(V.len + 1, st.s - 40);
+    let placed = false;
+    if (this.laneFree(st.lane, front - V.len - 5, front + 6)) {
+      const p = lane.path.at(front - V.len / 2);
+      if (!this.isVisible(p.x, p.z, 8)) {
+        this.placeOnLane(V, st.lane, front, Math.min(4, lane.speed));
+        placed = true;
+      }
+    }
+    if (!placed) {
+      for (const mid of lane.in) {
+        const from = this.movs[mid].fromLane;
+        const L = this.lanes[from];
+        if (L.sink || L.crossing || L.length < 30) continue;
+        const f2 = L.length * 0.5;
+        const p = L.path.at(f2);
+        if (this.isVisible(p.x, p.z, 8) || !this.laneFree(from, f2 - V.len - 5, f2 + 6)) continue;
+        this.placeOnLane(V, from, f2, 4);
+        V.m1 = mid;
+        V.m2 = this.plan(V, st.lane, this.movs[mid].node);
+        placed = true;
+        break;
+      }
+    }
+    if (!placed) return false;
+    V.kerb = st;
+    st.V = V;
+    st.state = 1;
+    st.open = false;
+    this.vehicles.push(V);
+    this.stats.spawned++;
+    this.rebuildLists();
+    return true;
+  }
+
+  private updateKerbs(h: number): void {
+    // a vehicle on its way to a stop may be taken off the road (hidden despawn, watchdog, end of its trip): free the stop
+    for (let i = 0; i < this.kerbStops.length; i++) {
+      const st = this.kerbStops[i];
+      if (st.V !== null && st.V.dead) {
+        const k = this.offLane.indexOf(st.V);
+        if (k >= 0) this.offLane.splice(k, 1);
+        st.V = null;
+        st.state = 0;
+        st.release = false;
+      }
+    }
+    // brakes done: out of the lane (traffic flows past from now on)
+    let any = false;
+    for (let i = 0; i < this.vehicles.length; i++) {
+      const V = this.vehicles[i];
+      if (!V.kerbGo) continue;
+      V.kerbGo = false;
+      any = true;
+      this.mgr.forgetVehicle(V.id);
+      V.resNode = -1;
+      V.entered = false;
+      V.offLane = true;
+      V.departBlink = 2.4;
+      V.status = St.BusStop;
+      const st = V.kerb!;
+      st.state = 2;
+      st.u = 0;
+      st.held = 0;
+      st.release = false;
+      this.offLane.push(V);
+    }
+    if (any) {
+      this.vehicles = this.vehicles.filter((V) => !V.offLane);
+      this.rebuildLists();
+    }
+    for (let i = this.offLane.length - 1; i >= 0; i--) {
+      const V = this.offLane[i];
+      const st = V.kerb!;
+      V.a = 0;
+      if (st.state === 2 || st.state === 5) {
+        const P = st.state === 2 ? st.pathIn : st.pathOut;
+        const remain = P.length - st.u;
+        // ease in from the lane speed, ease to a stop at the end (driving in) / keep rolling (driving out)
+        const vT = st.state === 2 ? Math.min(st.speed, 0.4 + remain * 0.7) : st.speed;
+        V.v += Math.max(-2.5 * h, Math.min(1.2 * h, vT - V.v));
+        const ds = V.v * h;
+        st.u += ds;
+        V.odo += ds;
+        const f = Math.min(1, st.u / Math.max(0.1, P.length));
+        const k = st.state === 2 ? f : 1 - f;
+        V.offRoll = st.roll * (k * k * (3 - 2 * k));
+        const U = Math.min(st.u, P.length);
+        const q = P.at(U, this._q);
+        V.x = q.x;
+        V.z = q.z;
+        const rev = st.state === 5 && st.reverseOut;
+        V.yaw = P.yaw(U) + (rev ? Math.PI : 0);
+        const gY = this.ctx.occupancy.get(q.x, q.z) & OCC.SIDEWALK ? 0.15 : 0;
+        V.offY += ((st.roll !== 0 ? 0.08 * (st.state === 2 ? f : 1 - f) : gY) - V.offY) * Math.min(1, h * 4);
+        const yA = P.yaw(Math.min(P.length, U + 2));
+        let dy = yA - V.yaw;
+        while (dy > Math.PI) dy -= Math.PI * 2;
+        while (dy < -Math.PI) dy += Math.PI * 2;
+        V.steer = Math.max(-0.6, Math.min(0.6, dy * 1.25));
+        if (st.state === 2 && st.u >= P.length - 0.03) {
+          st.state = 3;
+          V.v = 0;
+          V.steer = 0;
+          V.hazard = true;
+        } else if (st.state === 5 && st.u >= P.length - 0.03) {
+          // back on the road (it has held this lane place since it set off)
+          this.offLane.splice(i, 1);
+          V.offLane = false;
+          V.offRoll = 0;
+          V.offY = 0;
+          V.hazard = false;
+          V.kerb = null;
+          V.v = rev ? 0 : V.v;
+          st.V = null;
+          st.state = 0;
+          st.release = false;
+          V.progT = 0;
+        }
+      } else if (st.state === 3) {
+        st.held += h;
+        V.brakeVis = 1;
+        if (st.release || st.held > st.holdMax) st.state = 4;
+      } else if (st.state === 4) {
+        // indicate and wait for a gap on the lane we rejoin
+        V.departBlink = 1;
+        if (this.kerbGap(st.outLane, st.outS, V.len)) {
+          st.state = 5;
+          st.u = 0;
+          V.hazard = false;
+          // from now on it occupies its place on the lane: anyone coming up brakes behind it
+          const v0 = V.v;
+          this.placeOnLane(V, st.outLane, st.outS, 0);
+          V.v = v0;
+          V.progT = 0;
+          this.vehicles.push(V);
+          this.rebuildLists();
+        }
+      }
+    }
+  }
+
+  /** room to pull out at front position s: the place itself free, and anyone behind able to stop for us */
+  private kerbGap(lane: number, s: number, len: number): boolean {
+    const l = this.lists[lane];
+    for (let i = 0; i < l.length; i++) {
+      const en = l[i];
+      if (en.rear < s + 3 && en.front > s - len - 1.5) return false;
+      if (en.front <= s - len && s - len - en.front < 4 + en.v.v * 1.6) return false;
+    }
+    return true;
+  }
+
+  /** every vehicle to draw: the lanes' and the ones standing off them (reused array) */
+  drawList(): Vehicle[] {
+    if (this.offLane.length === 0) return this.vehicles;
+    const d = this.drawn;
+    d.length = 0;
+    for (let i = 0; i < this.vehicles.length; i++) d.push(this.vehicles[i]);
+    // (rejoining ones are in both lists)
+    for (let i = 0; i < this.offLane.length; i++) if (this.offLane[i].kerb?.state !== 5) d.push(this.offLane[i]);
+    return d;
   }
 
   private updateCrossings(): void {
@@ -1320,6 +1631,14 @@ export class TrafficSim {
     V.x = R.x + ux * k;
     V.z = R.z + uz * k;
     V.yaw = Math.atan2(ux, uz);
+    if (V.twoWheel) {
+      // ridden on the right of the lane: eases in after a junction, back to the centre line through the next
+      const off = sp.offset ?? 0;
+      const lk = V.elem < this.NL ? Math.min(1, V.s / 5) : Math.max(0, 1 - V.s / 5);
+      V.lat = off * lk * lk * (3 - 2 * lk);
+      V.x += -uz * V.lat;
+      V.z += ux * V.lat;
+    }
     // steering: direction from the front axle to a point a little further on
     const A = this.pointAhead(V, 1.6 - sp.frontOverhang, this._q);
     const sx = A.x - fx,
@@ -1397,6 +1716,7 @@ export class TrafficSim {
     // off-road: body centre and both axle points must be on ROAD/PAVED
     const P: P2 = { x: 0, z: 0 };
     for (const V of vs) {
+      if (V.offLane) continue; // (pulling out from a kerb stop: on the kerb by design)
       const pts: [number, number][] = [[V.x, V.z]];
       this.pointBehind(V, V.spec.frontOverhang, P);
       pts.push([P.x, P.z]);

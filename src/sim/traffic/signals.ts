@@ -6,17 +6,50 @@
 // at night and feed the bloom pass). Lenses are frustum-culled and drawn with a
 // coarser dome beyond ~70 m (re-bucketed only when the camera moves).
 
+import { EW_NAMES, NS_NAMES } from '../../core/streets';
 import * as THREE from 'three';
 import type { CityContext } from '../../core/context';
 import type { Intersection, SignalHead } from '../../core/roadNetwork';
 import type { Aspect, PedAspect } from '../../core/intersections';
 import { DIR_VEC } from '../../core/geom';
 import { paint, merge } from '../../core/gfx';
-import { SIDEWALK_Y } from '../../core/constants';
+import { SIDEWALK_Y, XS, ZS } from '../../core/constants';
+import { NearCells, nearCell, type NearCell } from '../../world/lamps/nearCells';
+import { boxHunt } from '../../core/boxhunt';
+import { streetDetail } from '../../core/streetdetail';
 
 const POLE = '#3c4844';
 const HOUSING = '#2b3330';
 const PLATE = '#16191b';
+
+/**
+ * Box hunt (?nosigvisor): a tunnel visor round a signal lens — a deep open hood (outer + inner shell) wrapping the
+ * top and the sides, as on real signal heads. Built along local +Z from z = 0 (the housing face), then turned by
+ * `face` about Y and moved to (x, y, z).
+ */
+function tunnelVisor(r: number, depth: number, x: number, y: number, z: number, face: number): THREE.BufferGeometry {
+  const arc = Math.PI * 1.2; // top + sides, open underneath
+  const shell = (rr: number, flip: boolean): THREE.BufferGeometry => {
+    const g = new THREE.CylinderGeometry(rr, rr, depth, 8, 1, true, Math.PI - arc / 2, arc);
+    g.rotateX(Math.PI / 2); // axis along Z, the arc centred on +Y
+    if (flip) {
+      const ix = g.index!;
+      for (let i = 0; i < ix.count; i += 3) {
+        const b = ix.getX(i + 1);
+        ix.setX(i + 1, ix.getX(i + 2));
+        ix.setX(i + 2, b);
+      }
+      const n = g.getAttribute('normal') as THREE.BufferAttribute;
+      for (let i = 0; i < n.count; i++) n.setXYZ(i, -n.getX(i), -n.getY(i), -n.getZ(i));
+    }
+    return g;
+  };
+  const g = merge([shell(r, false), shell(r - 0.012, true)]);
+  g.translate(0, 0, depth / 2);
+  g.rotateY(face);
+  g.translate(x, y, z);
+  return g;
+}
 
 const enum Lamp {
   Red,
@@ -49,6 +82,42 @@ interface LampInst {
   kind: Lamp;
 }
 
+// street names for the grid lines (N–S streets by XS index, E–W streets by ZS index); off-grid → hashed
+const NAME_ROWS = NS_NAMES.length + EW_NAMES.length;
+const nearestIdx = (a: readonly number[], v: number) => a.reduce((b, x, i) => (Math.abs(x - v) < Math.abs(a[b] - v) ? i : b), 0);
+const STREET_ROWS = {
+  ns: (x: number) => nearestIdx(XS, x),
+  ew: (z: number) => NS_NAMES.length + nearestIdx(ZS, z),
+};
+/** name atlas: one row per street — white enamel blade, black border and lettering */
+function nameAtlas(): THREE.Texture {
+  const W = 512,
+    RH = 86;
+  const cv = document.createElement('canvas');
+  cv.width = W;
+  cv.height = RH * NAME_ROWS;
+  const g = cv.getContext('2d')!;
+  g.fillStyle = '#8d949a';
+  g.fillRect(0, 0, W, cv.height);
+  [...NS_NAMES, ...EW_NAMES].forEach((n, i) => {
+    const y = i * RH;
+    g.fillStyle = '#f1efe8';
+    g.fillRect(4, y + 4, W - 8, RH - 8);
+    g.strokeStyle = '#1b1c1e';
+    g.lineWidth = 4;
+    g.strokeRect(12, y + 11, W - 24, RH - 22);
+    g.fillStyle = '#1b1c1e';
+    g.font = 'bold 44px Arial, Helvetica, sans-serif';
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    g.fillText(n.toUpperCase(), W / 2, y + RH / 2 + 2, W - 60);
+  });
+  const t = new THREE.CanvasTexture(cv);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = 4;
+  return t;
+}
+
 /** camera distance (m, at the reference 930 px / 32° view) beyond which lenses use the coarse dome */
 const LAMP_LOD_DIST = 70;
 
@@ -72,6 +141,10 @@ export class SignalRenderer {
   private lastCam = new Float32Array(17).fill(NaN);
   poleCount = 0;
   stopSignCount = 0;
+  /** W5 street-name blades (one textured mesh, world space) */
+  private blades: THREE.BufferGeometry[] = [];
+  /** W5 fine fixings (bolts, clamps, hatches, visor cheeks, push buttons): drawn only near the camera */
+  private nearMeshes: { mesh: THREE.Mesh; cell: NearCell<THREE.BufferGeometry[]> }[] = [];
 
   constructor(private ctx: CityContext) {
     this.group.name = 'traffic-signals';
@@ -83,12 +156,13 @@ export class SignalRenderer {
     const e = new THREE.Euler();
     const up = new THREE.Vector3(0, 1, 0);
 
-    const place = (g: THREE.BufferGeometry, head: SignalHead, baseY: number, color: string): void => {
+    const near = new NearCells<THREE.BufferGeometry[]>(() => []);
+    const place = (g: THREE.BufferGeometry, head: SignalHead, baseY: number, color: string, fine = false): void => {
       paint(g, color);
       q.setFromAxisAngle(up, head.yaw);
       m.compose(new THREE.Vector3(head.x, baseY, head.z), q, new THREE.Vector3(1, 1, 1));
       g.applyMatrix4(m);
-      statics.push(g);
+      (fine ? near.at(head.x, head.z) : statics).push(g);
     };
     const box = (w: number, h: number, d: number, x: number, y: number, z: number): THREE.BufferGeometry => {
       const g = new THREE.BoxGeometry(w, h, d);
@@ -134,6 +208,24 @@ export class SignalRenderer {
       mesh.castShadow = true;
       mesh.receiveShadow = true;
       this.group.add(mesh);
+      for (const cell of near.list()) {
+        const ng = merge(cell.item);
+        for (const g of cell.item) g.dispose();
+        const nm = new THREE.Mesh(ng, mat);
+        nm.name = 'traffic-signal-fixings';
+        nm.receiveShadow = true;
+        this.group.add(nm);
+        this.nearMeshes.push({ mesh: nm, cell });
+      }
+    }
+    if (this.blades.length) {
+      const bg = merge(this.blades);
+      for (const g of this.blades) g.dispose();
+      const bm = new THREE.MeshStandardMaterial({ map: nameAtlas(), roughness: 0.5, metalness: 0.1 });
+      const mesh = new THREE.Mesh(bg, bm);
+      mesh.name = 'traffic-street-names';
+      mesh.receiveShadow = true;
+      this.group.add(mesh);
     }
     if (lampM.length) {
       // front half-domes (local +Z): the back half is hidden inside the housing. Seen from the front the
@@ -169,7 +261,7 @@ export class SignalRenderer {
   private buildSignal(
     I: Intersection,
     head: SignalHead,
-    place: (g: THREE.BufferGeometry, head: SignalHead, baseY: number, color: string) => void,
+    place: (g: THREE.BufferGeometry, head: SignalHead, baseY: number, color: string, fine?: boolean) => void,
     box: (w: number, h: number, d: number, x: number, y: number, z: number) => THREE.BufferGeometry,
     cyl: (r0: number, r1: number, h: number, x: number, y: number, z: number, seg?: number) => THREE.BufferGeometry,
     lamp: (head: SignalHead, baseY: number, lx: number, ly: number, lz: number, face: number, r: number, info: LampInst) => void,
@@ -177,13 +269,35 @@ export class SignalRenderer {
     const y0 = this.baseY(I, head.arm);
     const ns = head.arm === 'N' || head.arm === 'S';
     this.poleCount++;
+    // W5 (?nosigndetail): round tapered mast arm, bolted plinth, hatch, push button, visors with cheeks, clamps
+    const detail = !this.ctx.debug.params.has('nosigndetail');
     // pole, plinth, cap
-    place(cyl(0.17, 0.19, 0.32, 0, -0.12, 0, 10), head, y0, '#4a4f52');
-    place(cyl(0.07, 0.085, 5.62, 0, 0.0, 0, 10), head, y0, POLE);
-    place(cyl(0.1, 0.1, 0.08, 0, 5.62, 0, 10), head, y0, POLE);
+    // (detail: fixings go to the near-only cells — `fine` — the base keeps 12-sided shafts and the round arm)
+    place(cyl(0.17, 0.19, 0.32, 0, -0.12, 0, detail ? 12 : 10), head, y0, '#4a4f52');
+    place(cyl(0.07, 0.085, 5.62, 0, 0.0, 0, detail ? 12 : 10), head, y0, POLE);
+    place(cyl(0.1, 0.1, 0.08, 0, 5.62, 0, detail ? 12 : 10), head, y0, POLE);
     // mast arm over the lane (the road lies towards local -X)
     const armL = 2.55;
-    place(box(armL, 0.1, 0.1, -armL / 2, 5.5, 0), head, y0, POLE);
+    if (detail) {
+      const arm = new THREE.CylinderGeometry(0.042, 0.06, armL, 8);
+      arm.rotateZ(Math.PI / 2);
+      arm.translate(-armL / 2, 5.5, 0);
+      place(arm, head, y0, POLE);
+      // arm end cap, the clamp collar where it meets the pole
+      place(cyl(0.05, 0.05, 0.03, 0, 0, 0, 8).rotateZ(Math.PI / 2).translate(-armL - 0.01, 5.5, 0), head, y0, '#3a3f42', true);
+      place(cyl(0.09, 0.09, 0.16, 0, 5.42, 0, 12), head, y0, POLE, true);
+      // plinth: bolt heads round the top, a service hatch on the pole (footway side, local +X)
+      for (let i = 0; i < 6; i++) {
+        const a = (i / 6) * Math.PI * 2;
+        place(cyl(0.014, 0.014, 0.018, Math.cos(a) * 0.14, 0.2, Math.sin(a) * 0.14, 6), head, y0, '#2c3033', true);
+      }
+      place(box(0.012, 0.32, 0.075, 0.084, 0.75, 0), head, y0, POLE, true);
+      place(box(0.004, 0.012, 0.012, 0.091, 0.82, 0), head, y0, '#a0a5aa', true);
+      // pedestrian push button on the footway side, facing the waiting walker (local +X), with its arrow
+      place(box(0.09, 0.16, 0.08, 0.11, 1.12, 0), head, y0, '#e9c21b');
+      place(box(0.006, 0.05, 0.05, 0.158, 1.14, 0), head, y0, '#1d1d1d', true);
+      place(box(0.007, 0.012, 0.04, 0.159, 1.08, 0), head, y0, '#f4f1ea', true);
+    } else place(box(armL, 0.1, 0.1, -armL / 2, 5.5, 0), head, y0, POLE);
     {
       const br = new THREE.BoxGeometry(1.15, 0.055, 0.055);
       br.rotateZ(-0.5);
@@ -200,25 +314,61 @@ export class SignalRenderer {
     place(box(0.62, 0.03, 0.012, hx, hy - 0.615, -0.125), head, y0, '#f2efe6');
     place(box(0.03, 1.26, 0.012, hx + 0.295, hy, -0.125), head, y0, '#f2efe6');
     place(box(0.03, 1.26, 0.012, hx - 0.295, hy, -0.125), head, y0, '#f2efe6');
+    // detail round (?nosignalback): from behind a head is a galvanised plate with its rails, clamps and a cable in
+    // conduit down the arm, not a black shape
+    const backs = streetDetail(this.ctx, 'signalback');
+    if (backs) {
+      place(box(0.6, 1.24, 0.004, hx, hy, -0.1625), head, y0, '#7d8385');
+      for (const dy of [-0.42, 0.42]) place(box(0.46, 0.04, 0.02, hx, hy + dy, -0.172), head, y0, '#60666a');
+      place(box(0.04, 0.9, 0.02, hx, hy, -0.178), head, y0, '#60666a', true);
+      place(box(0.08, 0.05, 0.004, hx + 0.16, hy - 0.22, -0.1655), head, y0, '#e6e4dc', true);
+      const conduit = new THREE.CylinderGeometry(0.014, 0.014, armL - 0.5, 6);
+      conduit.rotateZ(Math.PI / 2);
+      conduit.translate(-(armL - 0.5) / 2, 5.44, 0.05);
+      place(conduit, head, y0, '#2b3032', true);
+      place(cyl(0.014, 0.014, 5.3, 0.07, 0.12, 0.05, 6), head, y0, '#2b3032', true);
+    }
     place(box(0.38, 1.02, 0.26, hx, hy, 0), head, y0, HOUSING);
     const kinds = [Lamp.Red, Lamp.Yellow, Lamp.Green];
     const node = this.nodes.length - 1;
+    const visor = boxHunt(this.ctx, 'sigvisor');
     for (let i = 0; i < 3; i++) {
       const ly = hy + 0.32 - i * 0.32;
-      place(box(0.32, 0.035, 0.18, hx, ly + 0.15, 0.2), head, y0, HOUSING);
+      if (visor) place(tunnelVisor(0.148, 0.24, hx, ly, 0.13, 0), head, y0, HOUSING);
+      else {
+        place(box(0.32, 0.035, 0.18, hx, ly + 0.15, 0.2), head, y0, HOUSING);
+        // visor cheeks: the hood wraps down the sides of the lens
+        if (detail) for (const sx of [-1, 1]) place(box(0.012, 0.16, 0.16, hx + sx * 0.155, ly + 0.06, 0.21), head, y0, HOUSING, true);
+      }
       lamp(head, y0, hx, ly, 0.13, 0, 0.12, { node, ns, kind: kinds[i] });
     }
     // pole-mounted repeater facing traffic
     const ry = 2.72;
     place(box(0.3, 0.86, 0.22, 0, ry, 0.17), head, y0, HOUSING);
+    if (detail) {
+      // its back plate (black, thin white retro-reflective border) between the housing and the pole
+      place(box(0.5, 1.04, 0.014, 0, ry, 0.066), head, y0, PLATE);
+      if (backs) place(box(0.5, 1.04, 0.003, 0, ry, 0.0575), head, y0, '#7d8385');
+      for (const sx of [-1, 1]) place(box(0.022, 1.04, 0.006, sx * 0.239, ry, 0.076), head, y0, '#f2efe6');
+      for (const sy of [-1, 1]) place(box(0.5, 0.022, 0.006, 0, ry + sy * 0.509, 0.076), head, y0, '#f2efe6');
+      // its two band clamps round the pole
+      for (const dy of [-0.3, 0.3]) place(cyl(0.085, 0.085, 0.04, 0, ry + dy - 0.02, 0, 12), head, y0, '#3a3f42', true);
+      // street-name blades above the repeater on every other pole
+      if ((this.poleCount & 1) === 0) this.nameBlades(I, head, y0, 3.55, 0.09);
+    }
     for (let i = 0; i < 3; i++) {
       const ly = ry + 0.27 - i * 0.27;
-      place(box(0.26, 0.03, 0.14, 0, ly + 0.125, 0.33), head, y0, HOUSING);
+      if (visor) place(tunnelVisor(0.118, 0.19, 0, ly, 0.28, 0), head, y0, HOUSING);
+      else {
+        place(box(0.26, 0.03, 0.14, 0, ly + 0.125, 0.33), head, y0, HOUSING);
+        if (detail) for (const sx of [-1, 1]) place(box(0.01, 0.13, 0.13, sx * 0.125, ly + 0.055, 0.335), head, y0, HOUSING, true);
+      }
       lamp(head, y0, 0, ly, 0.28, 0, 0.095, { node, ns, kind: kinds[i] });
     }
     // pedestrian head on this pole, facing across the crosswalk (local -X)
     const py = 2.0;
     place(box(0.24, 0.56, 0.3, -0.19, py, 0), head, y0, HOUSING);
+    if (visor) for (const dy of [0.13, -0.13]) place(tunnelVisor(0.108, 0.15, -0.31, py + dy, 0, -Math.PI / 2), head, y0, HOUSING, true);
     lamp(head, y0, -0.31, py + 0.13, 0, -Math.PI / 2, 0.085, { node, ns, kind: Lamp.PedDont });
     lamp(head, y0, -0.31, py - 0.13, 0, -Math.PI / 2, 0.085, { node, ns, kind: Lamp.PedWalk });
     // post at the other end of the crosswalk, head facing back across (local +X)
@@ -227,6 +377,7 @@ export class SignalRenderer {
     place(cyl(0.11, 0.12, 0.22, px, -0.1, pz, 8), head, y0, '#4a4f52');
     place(cyl(0.05, 0.055, 2.55, px, 0, pz, 8), head, y0, POLE);
     place(box(0.24, 0.56, 0.3, px + 0.15, py, pz), head, y0, HOUSING);
+    if (visor) for (const dy of [0.13, -0.13]) place(tunnelVisor(0.108, 0.15, px + 0.27, py + dy, pz, Math.PI / 2), head, y0, HOUSING, true);
     lamp(head, y0, px + 0.27, py + 0.13, pz, Math.PI / 2, 0.085, { node, ns, kind: Lamp.PedDont });
     lamp(head, y0, px + 0.27, py - 0.13, pz, Math.PI / 2, 0.085, { node, ns, kind: Lamp.PedWalk });
     void DIR_VEC;
@@ -235,13 +386,29 @@ export class SignalRenderer {
   private buildStopSign(
     I: Intersection,
     head: SignalHead,
-    place: (g: THREE.BufferGeometry, head: SignalHead, baseY: number, color: string) => void,
+    place: (g: THREE.BufferGeometry, head: SignalHead, baseY: number, color: string, fine?: boolean) => void,
     box: (w: number, h: number, d: number, x: number, y: number, z: number) => THREE.BufferGeometry,
     cyl: (r0: number, r1: number, h: number, x: number, y: number, z: number, seg?: number) => THREE.BufferGeometry,
   ): void {
     const y0 = this.baseY(I, head.arm);
     this.stopSignCount++;
-    place(cyl(0.05, 0.05, 2.62, 0, 0, 0, 8), head, y0, '#9aa1a7');
+    // W5 (?nosigndetail): some poles knocked a little off plumb; a grout collar, a cap, band clamps and bolts,
+    // a sticker on some poles
+    const detail = !this.ctx.debug.params.has('nosigndetail');
+    const hs = Math.abs(Math.sin(head.x * 12.9898 + head.z * 78.233) * 43758.5453) % 1;
+    const tx = detail && hs < 0.35 ? (hs - 0.17) * 0.12 : 0,
+      tz = detail && hs < 0.35 ? (0.2 - hs) * 0.08 : 0;
+    const place0 = place;
+    const placeT = (g: THREE.BufferGeometry, h: SignalHead, by: number, color: string, fine = false) => {
+      if (tx || tz) g.rotateX(tx).rotateZ(tz);
+      place0(g, h, by, color, fine);
+    };
+    place = placeT;
+    // street-name blades on top of some stop-sign poles (the pole runs up past the plate)
+    const blades = detail && hs > 0.3 && hs < 0.8;
+    const poleH = blades ? 3.02 : 2.62;
+    placeT(cyl(0.05, 0.05, poleH, 0, 0, 0, detail ? 10 : 8), head, y0, '#9aa1a7');
+    if (blades) this.nameBlades(I, head, y0, poleH + 0.09, 0, tx, tz);
     const sy = 2.32;
     const oct = (r: number, z: number, back = false) => {
       const g = new THREE.CircleGeometry(r, 8);
@@ -250,11 +417,89 @@ export class SignalRenderer {
       g.translate(0, sy, z);
       return g;
     };
-    place(oct(0.47, 0.055), head, y0, '#f4f1ea');
-    place(oct(0.42, 0.062), head, y0, '#c8232c');
-    place(oct(0.47, 0.045, true), head, y0, '#8d949a');
-    place(box(0.5, 0.11, 0.012, 0, sy, 0.068), head, y0, '#f4f1ea');
+    if (detail) {
+      // a real plate: 2 mm aluminium blank with a rolled-back rim (the flange reads as the plate's thickness from
+      // the side), white border, red face; on the back two horizontal channel rails the clamps bolt to
+      const blank = new THREE.CylinderGeometry(0.47, 0.47, 0.006, 8, 1, false, Math.PI / 8).rotateX(Math.PI / 2).translate(0, sy, 0.059);
+      place(blank, head, y0, '#f4f1ea');
+      const rim = new THREE.CylinderGeometry(0.472, 0.472, 0.026, 8, 1, true, Math.PI / 8).rotateX(Math.PI / 2).translate(0, sy, 0.05);
+      place(rim, head, y0, '#a9afb4');
+      place(oct(0.415, 0.0625), head, y0, '#c8232c');
+      // the back face of the blank is grey (galvanised): a slightly smaller octagon just behind it
+      place(oct(0.466, 0.0555, true), head, y0, '#8d949a');
+      for (const dy of [-0.26, 0.26]) place(box(0.74, 0.04, 0.022, 0, sy + dy, 0.044), head, y0, '#7d848a');
+    } else {
+      place(oct(0.47, 0.055), head, y0, '#f4f1ea');
+      place(oct(0.42, 0.062), head, y0, '#c8232c');
+      place(oct(0.47, 0.045, true), head, y0, '#8d949a');
+    }
+    // "STOP" in white block letters (a plain bar reads as the round No Entry sign)
+    const lw = 0.098,
+      lh = 0.17,
+      t = 0.03,
+      hw = lw / 2,
+      hh = lh / 2;
+    const bar = (cx: number, x: number, y: number, w: number, h: number) =>
+      place(box(w, h, 0.004, cx + x, sy + y, 0.0645), head, y0, '#f4f1ea');
+    const top = (cx: number) => bar(cx, 0, hh - t / 2, lw, t);
+    const mid = (cx: number) => bar(cx, 0, 0, lw, t);
+    const bot = (cx: number) => bar(cx, 0, -hh + t / 2, lw, t);
+    const side = (cx: number, right: boolean, y: number, h: number) => bar(cx, right ? hw - t / 2 : -hw + t / 2, y, t, h);
+    const [cS, cT, cO, cP] = [-0.192, -0.064, 0.064, 0.192];
+    top(cS); mid(cS); bot(cS); side(cS, false, hh / 2, hh); side(cS, true, -hh / 2, hh);
+    top(cT); bar(cT, 0, -t / 2, t, lh - t);
+    top(cO); bot(cO); side(cO, false, 0, lh); side(cO, true, 0, lh);
+    top(cP); mid(cP); side(cP, false, 0, lh); side(cP, true, hh / 2, hh);
     place(box(0.12, 0.2, 0.04, 0, sy, 0.025), head, y0, '#9aa1a7');
+    if (detail) {
+      // pole cap, grout collar at the foot
+      place(cyl(0.056, 0.052, 0.03, 0, poleH, 0, 12), head, y0, '#4d5257', true);
+      place(cyl(0.085, 0.095, 0.025, 0, -0.005, 0, 12), head, y0, '#6f6b64', true);
+      // two band clamps behind the plate (band round the pole + a bracket to the plate back) and their bolts
+      for (const dy of [-0.26, 0.26]) {
+        place(cyl(0.058, 0.058, 0.04, 0, sy + dy - 0.02, 0, 12), head, y0, '#7d848a', true);
+        place(box(0.09, 0.04, 0.02, 0, sy + dy, 0.04), head, y0, '#7d848a', true);
+        place(box(0.02, 0.012, 0.03, -0.068, sy + dy, -0.0), head, y0, '#5e6368', true);
+        place(box(0.02, 0.012, 0.03, 0.068, sy + dy, -0.0), head, y0, '#5e6368', true);
+        // the carriage-bolt heads on the face
+        place(cyl(0.012, 0.012, 0.006, 0, 0, 0, 8).rotateX(Math.PI / 2).translate(0, sy + dy + 0.06, 0.068), head, y0, '#d9d4cc', true);
+      }
+      // a sticker / faded tag on some poles
+      if (hs > 0.55) {
+        const sc = ['#f2e64a', '#3a9ad9', '#f4f1ea', '#e85d9e'][Math.floor(hs * 97) % 4];
+        place(box(0.07, 0.09, 0.004, 0, 1.45 + hs * 0.3, 0.05), head, y0, sc, true);
+      }
+    }
+  }
+
+  /**
+   * Two crossed street-name blades on a pole at local height `yl` (poleR 0: centred on the pole top; else flag
+   * blades clamped to the side of a taller pole, sticking out by poleR + half their length): the lower one runs along the N–S street
+   * (named by the junction x), the upper one along the E–W street (junction z). Text on both faces.
+   */
+  private nameBlades(I: Intersection, head: SignalHead, y0: number, yl: number, poleR: number, tx = 0, tz = 0): void {
+    const names: [number, number][] = [
+      [STREET_ROWS.ns(I.x), -Math.PI / 2],
+      [STREET_ROWS.ew(I.z), 0],
+    ];
+    names.forEach(([row, ang], k) => {
+      const g = new THREE.BoxGeometry(0.8, 0.15, 0.014);
+      const uv = g.attributes.uv as THREE.BufferAttribute;
+      const v0 = 1 - (row + 1) / NAME_ROWS,
+        v1 = 1 - row / NAME_ROWS;
+      for (let i = 0; i < uv.count; i++) {
+        const face = Math.floor(i / 4);
+        if (face >= 4) uv.setY(i, v0 + uv.getY(i) * (v1 - v0));
+        else uv.setXY(i, 0.004, v0 + 0.004);
+      }
+      if (poleR > 0) g.translate(0.4 + poleR, 0, 0);
+      g.rotateY(ang - head.yaw);
+      g.translate(0, yl + k * 0.17, 0);
+      if (tx || tz) g.rotateX(tx).rotateZ(tz);
+      g.rotateY(head.yaw);
+      g.translate(head.x, y0, head.z);
+      this.blades.push(g);
+    });
   }
 
   /** lens culling + level per lamp; only when the camera moved */
@@ -304,6 +549,7 @@ export class SignalRenderer {
 
   /** per frame: visible lenses, their colours from the live signal state */
   update(): void {
+    for (const n of this.nearMeshes) n.mesh.visible = nearCell(this.ctx.camera, n.cell);
     if (!this.lampLayers.length) return;
     this.bucket();
     const mgr = this.ctx.intersections;

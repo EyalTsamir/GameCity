@@ -16,6 +16,7 @@ import { buildVehicleGeometry, makeBlimpTexture, MODEL } from './vehicleModels';
 import type { SparkSystem } from './sparks';
 import { absHours, clamp, smooth, type SkylineGrid } from './shared';
 import { SECONDS_PER_GAME_HOUR } from '../../core/constants';
+import { boxHunt } from '../../core/boxhunt';
 
 const VEH_GLSL_V = /* glsl */ `
 attribute float aModel;
@@ -48,13 +49,27 @@ function makeMaterials(tex: THREE.Texture): { material: THREE.MeshStandardMateri
       );
   };
   material.customProgramCacheKey = () => 'tinyhaven-ambient-vehicles-1';
+  // Aircraft shadows fade out with height (dithered discard, smoothed by the shadow PCF): the balloon
+  // keeps its contact shadow on the pitch at launch / landing, but at cruising height (~95–140 m) the
+  // crisp shadow map turned it into a hard dark blot drifting over the town. The barge always casts.
   const depth = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking });
   depth.onBeforeCompile = (shader) => {
     shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', '#include <common>\nattribute float aModel;\nattribute float iModel;')
-      .replace('#include <begin_vertex>', '#include <begin_vertex>\nif (abs(aModel - iModel) > 0.5) transformed = vec3(0.0);');
+      .replace('#include <common>', '#include <common>\nattribute float aModel;\nattribute float iModel;\nvarying float vShadowFade;')
+      .replace(
+        '#include <begin_vertex>',
+        `#include <begin_vertex>
+        if (abs(aModel - iModel) > 0.5) transformed = vec3(0.0);
+        vShadowFade = abs(iModel - ${MODEL.BARGE}.0) < 0.5 ? 0.0 : smoothstep(12.0, 40.0, (modelMatrix * instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0)).y);`,
+      );
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', '#include <common>\nvarying float vShadowFade;')
+      .replace(
+        'void main() {',
+        'void main() {\n  if (vShadowFade > 0.0 && fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715)))) < vShadowFade) discard;',
+      );
   };
-  depth.customProgramCacheKey = () => 'tinyhaven-ambient-vehicles-depth-1';
+  depth.customProgramCacheKey = () => 'tinyhaven-ambient-vehicles-depth-2';
   return { material, depth };
 }
 
@@ -164,7 +179,7 @@ export interface VehicleSystem {
 
 export function createVehicles(ctx: CityContext, sparks: SparkSystem, skyline: SkylineGrid, bargeSite: { x: number; z: number }): VehicleSystem {
   const { plan } = ctx;
-  const geo = buildVehicleGeometry();
+  const geo = buildVehicleGeometry(boxHunt(ctx, 'barge'));
   const N = 4;
   const iModel = new THREE.InstancedBufferAttribute(new Float32Array([MODEL.BALLOON, MODEL.PLANE, MODEL.BLIMP, MODEL.BARGE]), 1);
   const iGlow = new THREE.InstancedBufferAttribute(new Float32Array(N * 4), 4).setUsage(THREE.DynamicDrawUsage);
@@ -185,37 +200,41 @@ export function createVehicles(ctx: CityContext, sparks: SparkSystem, skyline: S
   const water = () => ctx.services.water as { surfaceY(x: number, z: number): number } | undefined;
   const ground = (x: number, z: number) => (ctx.services.terrain as { height(x: number, z: number): number } | undefined)?.height(x, z) ?? plan.heightAt(x, z);
 
-  // ── balloon route
+  // Composition (stage agent): the hero overview camera sits high in the south-east looking NNW
+  // with a strong tilt-shift; anything flying between it and the town (the old routes looped over
+  // the southern half at ~100–140 m, ~180 m in front of the focus plane) became a big grey /
+  // rainbow blur smudge. The cruising loops now lie over the northern / western part of the slab,
+  // where an aircraft at its cruising height sits at (or just beyond) the hero focus distance — a
+  // crisp little silhouette over the hills and the backdrop instead of a smudge over the city.
+
+  // ── balloon route (launches from / lands in the stadium, cruises over the north-west)
   const field = plan.areas.find((a) => a.kind === 'field');
   const site = field ? { x: (field.rect.x0 + field.rect.x1) / 2, z: (field.rect.z0 + field.rect.z1) / 2 } : { x: -27.5, z: 72.5 };
   const siteY = ground(site.x, site.z) + 0.02;
   const bLoop = buildLoop([
-    { x: site.x, z: site.z },
-    { x: -72, z: 32 },
-    { x: -140, z: 12 },
-    { x: -165, z: 78 },
-    { x: -95, z: 132 },
-    { x: 0, z: 130 },
-    { x: 88, z: 112 },
-    { x: 142, z: 62 },
-    { x: 104, z: 6 },
-    { x: 44, z: 14 },
-    { x: 4, z: 48 },
+    { x: -95, z: -60 },
+    { x: -150, z: -30 },
+    { x: -168, z: -98 },
+    { x: -98, z: -148 },
+    { x: -22, z: -152 },
+    { x: 30, z: -124 },
+    { x: -30, z: -94 },
   ]);
   const bFloor = floorTable(bLoop, skyline, 16, 18);
   const B_SPEED = 3.0;
   const B_BASKET = 4.32; // basket bottom below the envelope mouth
 
-  // ── blimp route
+  // ── blimp route (wide loop over the north-west half, partly out over the table behind the hills)
   const mLoop = buildLoop([
-    { x: -140, z: 40 },
-    { x: -120, z: -20 },
-    { x: -40, z: 8 },
-    { x: 60, z: -12 },
-    { x: 150, z: 20 },
-    { x: 140, z: 105 },
-    { x: 20, z: 128 },
-    { x: -100, z: 120 },
+    { x: -185, z: 10 },
+    { x: -170, z: -80 },
+    { x: -110, z: -150 },
+    { x: -20, z: -200 },
+    { x: 80, z: -215 },
+    { x: 120, z: -175 },
+    { x: 40, z: -140 },
+    { x: -60, z: -110 },
+    { x: -130, z: -40 },
   ]);
   const mFloor = floorTable(mLoop, skyline, 26, 22);
   const M_SPEED = 6.5;
@@ -273,7 +292,7 @@ export function createVehicles(ctx: CityContext, sparks: SparkSystem, skyline: S
       const wave = 112 + 18 * Math.sin(ss * 0.0071 + 0.6) + 7 * Math.sin(ss * 0.019 + 1.3);
       return Math.max(wave, lookupFloor(bFloor, bLoop, ss));
     };
-    if (h < 5.75 || h >= 20.2) {
+    if (h < 5.75 || h >= 18.95) {
       visible = false;
     } else if (h < 6.4) {
       // inflating lying on the pitch, then standing up
@@ -281,26 +300,28 @@ export function createVehicles(ctx: CityContext, sparks: SparkSystem, skyline: S
       tilt = (1 - smooth(6.0, 6.3, h)) * (Math.PI / 2) * 0.96;
       radial = 0.25 + 0.75 * k;
       phase = h < 6.3 ? 'inflating' : 'ready';
-    } else if (h < 19.0) {
+    } else if (h < 17.75) {
       const alt = cruiseAlt(s);
-      x = P.x;
-      z = P.z;
+      // drift from the stadium out to the cruising loop while climbing
+      const out = smooth(6.4, 7.6, h);
+      x = site.x + (P.x - site.x) * out;
+      z = site.z + (P.z - site.z) * out;
       const up = smooth(6.4, 7.3, h);
       y = siteY + B_BASKET + (alt - siteY - B_BASKET) * (1 - (1 - up) * (1 - up));
       phase = h < 7.3 ? 'ascending' : 'cruising';
-    } else if (h < 19.75) {
+    } else if (h < 18.5) {
       const alt = cruiseAlt(s);
-      const k = smooth(19.0, 19.7, h);
+      const k = smooth(17.75, 18.45, h);
       x = P.x + (site.x - P.x) * k;
       z = P.z + (site.z - P.z) * k;
       y = alt + (siteY + 55 - alt) * k;
       phase = 'returning';
-    } else if (h < 20.0) {
-      const k = smooth(19.75, 20.0, h);
+    } else if (h < 18.75) {
+      const k = smooth(18.5, 18.75, h);
       y = siteY + 55 + (siteY + B_BASKET - siteY - 55) * (1 - (1 - k) * (1 - k));
       phase = 'landing';
     } else {
-      const k = smooth(20.0, 20.18, h);
+      const k = smooth(18.75, 18.93, h);
       tilt = k * (Math.PI / 2) * 0.96;
       radial = 1 - 0.75 * k;
       phase = 'packing';
@@ -338,13 +359,15 @@ export function createVehicles(ctx: CityContext, sparks: SparkSystem, skyline: S
       mats[1].copy(ZERO);
       return;
     }
-    // straight crossing at ~200 m over the southern half of the town (that is where the usual
-    // camera views — overview, beach, park, stadium — can actually see the sky above the table)
-    const hd = hash01(k, 11) * Math.PI * 2;
+    // straight crossing at ~200 m over the northern half of the town, roughly left↔right as seen
+    // from the hero overview (perpendicular to its view azimuth ±25°), so it passes near the
+    // focus distance instead of flying through the near-camera blur band
+    const side = hash01(k, 11);
+    const hd = THREE.MathUtils.degToRad((side < 0.5 ? 122 : 302) + (((side * 2) % 1) - 0.5) * 50);
     const dx = Math.sin(hd),
       dz = Math.cos(hd);
-    const cx = -50 + hash01(k, 12) * 150,
-      cz = 25 + hash01(k, 14) * 95;
+    const cx = -120 + hash01(k, 12) * 140,
+      cz = -170 + hash01(k, 14) * 90;
     const s = (u - 0.5) * PASS_LEN;
     p.on = true;
     p.pass = k;
@@ -372,7 +395,8 @@ export function createVehicles(ctx: CityContext, sparks: SparkSystem, skyline: S
       dx = P.dx,
       dz = P.dz;
     const alt = Math.max(140 + 6 * Math.sin(s * 0.004), lookupFloor(mFloor, mLoop, s));
-    // arrive from / leave to the west, far beyond the table edge
+    // arrive from the west and leave to the north, far beyond the table edge (both away from
+    // the hero camera, so it recedes into the backdrop instead of crossing in front of the town)
     const inK = 1 - smooth(9.5, 10.6, h);
     const outK = smooth(22.4, 23.5, h);
     if (inK > 0) {
@@ -384,10 +408,10 @@ export function createVehicles(ctx: CityContext, sparks: SparkSystem, skyline: S
       dz = dz * (1 - inK);
     }
     if (outK > 0) {
-      const far = 950;
-      x = x + (far - x) * outK * outK;
-      dx = dx * (1 - outK) + outK;
-      dz = dz * (1 - outK);
+      const far = -950;
+      z = z + (far - z) * outK * outK;
+      dx = dx * (1 - outK);
+      dz = dz * (1 - outK) - outK;
     }
     m.on = true;
     m.x = x;

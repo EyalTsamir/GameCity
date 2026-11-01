@@ -3,7 +3,241 @@
 Read this first when resuming after an interruption (usage limits have cut runs before).
 Per-module logs live next to this file: `docs/progress/<module>.md`.
 
+## Close-up stage 2 merged (2026-11-01) — see close-people.md, close-materials.md, close-light.md, close-text.md
+Merged at a499c28, no conflicts: figures up close (`?noclosepeople`), surfaces from one metre (`?noclosemat`), real street in shop glass, door and car-park lamps, contact shadows, clean shadow edges (`?noclosel`), readable lettering across the city (`?nolettering`).
+Checks on the merge, behind `scripts/power-guard.mjs`: typecheck + build OK (4.67 MB + bake); overview at speed 4 invariants `{}`, validate `[]`, console clean; ui-test 73/74, `kinds` passes alone; hitch 0 mid-run programs, 0 freezes, max 66.7 ms; walkhitch 85 m at 38.9 ms mean, p99 50 ms, 0 freezes, near builds at most 1.9 ms a frame, 28.8 MB/s allocated (not compared with the head before).
+Cost, same session, interleaved, 2 + 2 runs, production builds with their own bake, 1920×1025, high, ms per frame, 674f661 → merged:
+| hour | overview | downtown | street | market |
+|---|---|---|---|---|
+| 12 | 32.4 → 32.5 | 31.2 → 31.4 | 35.7 → 37.4 | 35.1 → 35.8 |
+| 18.2 | 31.8 → 32.3 | 30.2 → 30.5 | 35.3 → 35.1 | 33.0 → 32.8 |
+| 21.5 | 33.7 → 33.8 | 32.8 → 33.0 | 34.4 → 35.7 | 37.6 → 37.4 |
+Mean +0.36 ms. Draw calls at street 253 → 326. Decision: nothing cut. The four sessions' summed budget is +0.8 at far views and +2.8 at street and market, and the merge stays inside both. Street at noon is 26.7 fps: the user chose detail over 30 fps at street level for now (2026-11-01).
+**`?noclosel` is no measure of cost at far views:** in this production build it reads +7 ms at overview and downtown, probably because its changed lamp and shadow shader chunks fail the facade bake's fingerprint. Close-light measured +0.31 and +0.35 there on its own dev server. Compare frozen builds instead (scratchpad `m10.sh` pattern: copy `dist/` before rebuilding, serve both).
+**`scripts/bake.mjs` writes next to the script, not to the current folder:** running the main checkout's copy with `--url` overwrites the main checkout's `public/bake` and leaves the worktree's bake stale. Use `npm run bake` inside the worktree. Rebake in main before each merge's build.
+Seen by eye at 3 m (noon, 21.5), left for later stages: unlit door lamps by day read as flat beige rectangles; shop interiors are one repeated shelf picture on every wall; parked cars show a lamp-like glint at night. Each session's Left list is in its log.
+
+## Close foundation (2026-10-31, stage 1 of the close-up round) — see docs/progress/close-foundation.md
+The tools the later sessions use: the near-detail bubble (`src/core/nearDetail.ts`), the test set (`scripts/closeset.mjs`), `scripts/walkhitch.mjs`. Zoom: a real lens for the walker (wheel, + −) and in photo mode, levels of detail by plain distance now follow it (`nearLens.zoom`). Close focus fixed: the autofocus could not focus nearer than 2.5 m; default aperture f/1.6 → f/2.8. Audit of what reads as fake up close, ranked by area, in that log. First layers: grit along kerbs and walls. Bubble cost not distinguishable from zero at the four views.
+
+## Baking (2026-10-31, branch claude/hopeful-babbage-4a203f) — see docs/progress/baking.md
+The assumption "all computed in the browser, one file" is cancelled by the user. `npm run bake` now writes far land and far facade textures into `public/bake` (gitignored), 18 MB beside the 4.4 MB page. Noon: overview 38.6 → 31.9, downtown 37.4 → 29.9, the other far views −4; street and market unchanged. **Run `npm run bake` before any measurement: a stale bake costs up to 7 ms silently.** Deploy needs `dist/bake` too. Not merged, not deployed at the time of writing.
+
+## Close-up round pipeline (2026-10-31 evening, user away until about 2026-11-01 21:00)
+Baking merged locally at a81efd9: invariants `{}`, validate `[]`, noon overview 32.4, downtown 30.5, street 35.7, market 34.0 ms. Ten sessions wait and start in stages by the coordinator: rules and stages in `CLOSE-ROUND.md`. Local merges only; nothing since 5b70883 is published. Publishing needs `npm run bake && npm run build` and all of `dist/`, including `dist/bake/`, on both sites, and the user's decision (baking.md lists the choices taken in their absence).
+Tooling note: never run `npm ci` in the main checkout while the dev server is up. It fails on a locked binary after it has already emptied `node_modules`, which also breaks every harness run from there.
+
+## Detail round (2026-10-31, six sessions) — see docs/progress/DETAIL-ROUND.md and detail-<session>.md
+Merged at 5b9f3e8, no conflicts: buildings, streets, people and vehicles, landmarks and harbour (hero interiors, lighthouse, tower lift, stadium), nature and the horizon, light and weather (storm with button and thunder, sun column, rain curtains, rainbow). Master switches `?nodetailb`, `?nostreetdetail`, `?nodetailpeople`, `?nolmdetail`, `?nonature`, `?nodetaillight`, each with `?no<feature>`.
+Checks on the merge, behind `scripts/power-guard.mjs`: typecheck + build OK (4.41 MB); overview at speed 4 and downtown on low and medium, diorama, street at night: invariants `{}`, validate `[]`, console errors none (8 D3D compile warnings, the known kind); ui-test 70/71, `kinds` passes alone; hitch overview 12 / 21.5 h 40.1 / 42.1 ms mean, 0 freezes, max 66.7 ms, 0 mid-run programs; film-hitch 0 new programs, 0 freezes; realtime film sheet looked right.
+Cost, same session, interleaved, 2 + 2 runs, 1920×1025, high, ms per frame, pre-round f364487 → merged (all six switches off):
+| hour | overview | downtown | street | market |
+|---|---|---|---|---|
+| 12 | 35.8 → 39.2 (36.3) | 35.5 → 37.5 (35.5) | 33.9 → 34.9 (34.4) | 32.5 → 33.8 (33.6) |
+| 18.2 | 35.3 → 38.2 (36.2) | 34.2 → 36.8 (34.8) | 32.0 → 34.3 (32.9) | 30.8 → 31.9 (31.7) |
+| 21.5 | 39.2 → 40.1 (39.4) | 38.4 → 39.8 (38.8) | 33.7 → 33.6 (34.4) | 36.5 → 35.9 (36.7) |
+Mean +1.5 ms, of which +0.6 stays with all switches off (always-on fixes, or noise). Triangles overview +0.5 M, downtown +0.5–0.77 M. Live at 1920×1025 and noon, adaptive stays on `full` over 45 s: overview 28 → 25 fps, downtown 28 → 25, street 31 → 29.
+Decision: nothing visible cut. No session clearly exceeds its +1 ms (per-session columns are noisy, ±1 ms: nature at the overview at noon +1.57 in frame time, its steady window +0.77). The steady 30 fps target is missed by day at the overview and downtown, as it was before this round (28 fps). The baking session is meant to win that back. If it does not, perf-deep "What remains" and adaptive `scale-0.9` (the user's call) are next.
+Not verified: nobody has watched the storm, the street mirror or walking in real motion with a human eye; the thunder has not been heard (the user does not want sound work, see below).
+User direction for what follows: (1) baking session, Opus 5.5 at max: the assumption "everything computed in the browser, one file" is cancelled, sources stay our own code; (2) a second massive detail wave judged up close (walk view, zoom) as much as far, built as systems across the city, no hand-made one-off places; faces realistic-stylised first, then towards realism while it holds. No sound work. Left lists: each detail-<session>.md.
+
+## Perf-deep round (2026-10-30, branch claude/perf-deep-cf97ce) — see docs/progress/perf-deep.md
+10–18 ms a frame recovered in the hero views (noon: overview 47 → 35.5, downtown 53 → 35, street 45 → 33.5, market 46 → 32), no visible change. Master switch `?noperfdeep`.
+Merged at d65a1f8. Checks on the merge, behind `scripts/power-guard.mjs`: typecheck + build OK (4.06 MB); overview shot invariants `{}`, validate `[]`, console clean; ui-test 70/71 with the known `kinds` flake (rerun alone); hitch overview 12 / 21.5 h: 36.6 / 40.0 ms mean, 0 freezes, max 66.8 ms, 0 mid-run programs. Not judged: motion (half-rate water mirror, adaptive holding 25–29 fps at the overview).
+Power: from 18:27 to 23:15 on 2026-10-30 the charger flapped about 3,100 times, battery 97 % → 33 %. Replace or check it before unattended runs.
+
+## Lead state (2026-10-30 afternoon) — living-scenes, director-mode, geometry-hunt merged at e449579
+* Merged: living-scenes (market day, deliveries, wedding, musician, park, balconies, `?noscenes` — living-scenes.md),
+  director-mode (opening film `?film` / `?nofilm`, photo mode `P`, Places moved to `O` — director.md), geometry-hunt
+  (triangle + defect cleanup, `scripts/geomaudit.mjs`, `?nogeomhunt` — geometry-hunt.md).
+* Checks on e449579, AC power, quiet machine: typecheck + build OK (4.04 MB); overview shot invariants `{}`, validate `[]`,
+  console clean; ui-test full run 69/71 on battery, the 2 failures (click-follow flake, film wheel hand-back) pass on AC
+  (`--steps film,kinds` 11/11); hitch overview 12 / 21.5 h: 0 freezes, max 83.5 ms, 0 mid-run programs.
+* Perf (`perf.mjs`, 1920×1025, high, 2 interleaved repeats, ms/frame at 12 h and 21.5 h):
+  all on: overview 47.4 / 49.9, downtown 54.1 / 56.3, street 45.7 / 44.3, market 46.4 / 44.0. `?nogeomhunt` costs +2.2 / +1.4,
+  +3.6 / +4.7, 0 / −1.2, +3.9 / +5.5 (triangles 3.1 M → 4.7 M overview). `?noscenes` saves 0 / 0.1, 1.2 / 0.2, 0.6 / 1.0, 0.3 / 0.6.
+  `?nomassing&noplaces&noboxhunt` saves 2.2 / 2.2, 3.3 / 3.2, 4.8 / 3.4, 2.1 / 1.5. Headless, so ~18–23 fps here; the
+  street view gets nothing from geometry-hunt and is the most expensive to detail.
+* Power: the charger contact is unreliable and battery doubles frame times (100 ms vs 49 ms). Run perf / hitch only
+  behind a loop that polls `PowerStatus.PowerLineStatus` and kills the run when it leaves `Online`.
+* Published copies: Netlify (see below) and GitHub Pages https://eyaltsamir.github.io/GameCity/ (`gh-pages` holds only the
+  built `index.html` + `.nojekyll`; Pages source = that branch). Two old Pages workflows on remote `main` would run on a push
+  to `main` and could replace the page: remove them first if `main` is ever pushed.
+
+## Lead state (parallel-sessions round, 2026-10-29 evening) — six worktree sessions, all merged here
+* Merged into `claude/pensive-gates-bim12i`: camera-explore (free camera goes inside things, never lifted —
+  camera-explore.md), fpv-walk (first-person walk, `V` — fpv.md), perf-wins (stutter + boot — PERF.md quick-wins
+  section), buildings-massing (oriels, turrets, cross gables, tower setbacks, roof kit, `?nomassing` —
+  buildings-massing.md), places-between (lower river quay, old-town archway lane, pond-island bridge, `?noplaces`
+  — places-between.md), box-hunt (30-item ranked audit, 10 fixes, `?noboxhunt` — box-hunt.md), living scenes (market day, deliveries, wedding, musician's audience, park life, balcony life, `?noscenes` — living-scenes.md).
+* Next detail work: box-hunt.md "Handoff" (rooftop plant on the downtown towers is the biggest box left; industrial
+  sheds; station entrance steps / platform edge) and "Still open"; buildings-massing.md "not done" (industrial halls,
+  loggias, glass-tower crowns).
+* Known: resizing the window logs ~120 `glBlitFramebuffer … not all the same size` WebGL warnings (ui-test `resize`);
+  not caused by this round's branches, not yet traced. Once (2026-10-30 03:20, overview ×4 for 20 s, not reproduced
+  in 2 reruns): two pedestrians overlapping 18.9 s at (-160, 109.3), "student:promenade/act vs stroller:promenade/leave"
+  — an activity spot on the west promenade that a leaving stroller walks through. Live build: https://tinyhaven-496.netlify.app (Netlify,
+  `.netlify/` links this folder; `npm run build && npx -y netlify-cli deploy --prod --dir dist`).
+
+## Lead state (world round, 2026-10-19 → 10-24) — see docs/progress/WORLD.md (its "Resume here" is the live resume point)
+* "A world, not a model": the tabletop frame was replaced by a landscape to the horizon (`?diorama` keeps the
+  model); 7 workstreams (world, air, ground, foliage, streetlife, life, wear) each with a final report in
+  docs/progress/world-<name>.md; lead integration QA in WORLD.md (int2 captures shots/world/lead/int2).
+
+## Lead state (graphics overhaul) — keep current; the watchdog resumes from here
+* GRAPHICS OVERHAUL DONE (2026-10-19 07:05 UTC): all 10 audit items + realistic figures implemented, verified and
+  pushed; integration QA complete; report in docs/progress/GFX-REPORT.md. Open for the user: real-GPU perf.mjs run
+  (commands in the report), then strip the legacy A/B copies. Watchdog deleted, autocheckpoint stopped.
+* Updated 2026-10-18 22:08 UTC. Phase 2: workstream agents finishing (verify → fixes/polish →
+  final sheets → "## Final report" in their gfx-*.md).
+  - DONE: hardscape (16:20; lead spot-checked ab_court_quay.png ✔). Note for QA: camera pulls views
+    < 100 m into close-ups (LOS_DIST in src/ui/camera.ts) — use ≥ 105 m for quay views.
+  - DONE: people (16:35; lead spot-checked sheet_lineups + sheet_city_day ✔ — big close-up gain,
+    modest but real at city distance; faces still mannequin-like < 8 m).
+  - 16:40: people-review `a224fa07f1ef5777b` resumed for the independent re-review → writes
+    "## Re-review (2026-10-18)" / "## Re-review final" in people-review.md. If it asks for a fix round,
+    resume people `a1dd73a4100e0d9b6` with its ranked list.
+  - ~16:50 UTC usage limit hit (reset 20:10); the 20:03 watchdog fired 7 min too early, so work resumed
+    at the 22:04 firing (container had rebooted; auto-checkpoint 14d484c had saved everything).
+    22:06: stage, night, water, buildings, vegetation, terrain + people-review resumed from their logs;
+    watchdog switched to hourly so a reset never idles the team for more than ~1 h.
+  - DONE: terrain (22:12; stadium uFlood snap on 'timejump' added after its report, browser-verified: sheet_flood_jump.png),
+    vegetation (22:20; lead spot-checked final_close.png ✔ — clump relief, crown variety, stepped conifers).
+    QA notes: backlit poplars at 18.2 look over-yellow (autumnal); station forest median at night still
+    below adjacent ground (crown tops brighter); vegetation high = 27 clump cells pending the perf A/B.
+  - Relayed 22:10: water — PRIORITY moon-glint blowout at 2 h (shots/night/final2/beach_2.png).
+  - DONE: buildings (22:35; lead spot-checked ba_gold_18.png ✔ — glass keeps tower identity at sunset,
+    weathering reads). QA notes: Haven Tower reflections look blotchy at 18.2 downtown (check closer);
+    GPU estimate +0.2–0.4 ms in glass-heavy views (may exceed 0.3) — decide from the perf A/B.
+  - DONE: night (22:55; lead spot-checked ba_night_C.png ✔ — lit street grid, floodlit stadium, dark at 2 h).
+    QA note: lit tree crowns still read as soft blobs in the blurred overview foreground (vegetation
+    canopy-underside lamp term) — check, tone down in vegetation/material.ts if needed.
+  - DONE: water (23:10; lead spot-checked moon/moon_check.png ✔ — moon path narrow/silvery, 13.6 % → 0.07 %
+    clipped; sheets_final/ba_harbor.png ✔ — ship/crane reflections, lit night harbour). Reflection pass
+    +4–9 calls day / +9–15 night, < 0.2 M tris; GPU est. 0.6–1.2 ms (budget 1.5, high only + adaptive).
+  - 22:45 people re-review DONE: verdict ship (people-review.md "## Re-review final"). Lead decided to do
+    the fix round anyway (quality bar + project rule): people `a1dd73a4100e0d9b6` resumed for (1) corner
+    gait drag/split strides (visible at 15–30 m), (2) 2 KB/figure-frame garbage → < 100 B, (3) trousers +
+    rounder shoe toes without new vertices. Reports under "### Fix round (re-review)".
+  - 23:00 stage NaN hunt: source not reproduced; NaN/Inf guards at bloom luminance, tilt-shift prefilter and
+    merged-pass input (+ ?nanviz debug). Found 2 water bugs → water `ab69acb77de46c492` resumed (priority):
+    (1) reflection level 0 (?nowaterrefl = medium/low preset + adaptive refl-off) renders beige/rainbow
+    garbage (shots/stage/nan/refl_off_20.png); (2) dark ~30 m square near (178,−98) from 19.4 h with
+    reflections on (sweep_14.png); (3, secondary) flat lilac dusk sea at overview.
+    QA must re-check: quality=medium/low water, runtime reflection-quality switches.
+  - DONE: stage (23:15; lead spot-checked sheets/ba_overview.png ✔ — table + time-of-day backdrop, warm
+    golden hour, lit night city). Perf variants `;legacylight;notable`. All 8 workstreams have final reports.
+  - DONE: water fix round (23:40; lead checked fix/medlow_sheet.png ✔ — medium/low/nowaterrefl water correct
+    at 11/18.2/20/21.5 h; dusk square = additive harbor-glows alpha in the reflection target, fixed).
+  - DONE: people fix round (04:20). No agent is working any more; Phase 3 is lead-only.
+* Safety nets (user request: never lose state, never trade quality for speed):
+  - watchdog scheduled task `trig_01SEZGVfPdGEXrjuBsEYFnkw` (hourly at :06 UTC since 22:06, fires into this
+    session even with the user's computer off): resumes agents cut off by the usage limit / restarts.
+    Delete it when the overhaul is done.
+  - `shots/tools/autocheckpoint.sh 15` (detached loop): checkpoint + push every 15 min.
+  - lead check-in every 45 min while agents work (send_later, re-armed each time).
+* Open cross-module items: stage bisects the NaN-style black blocks (night/buildings/hardscape frames);
+  vegetation forest + terrain cliffs night readability; reflection draw calls at night (water).
+* Next (lead): when people reports → resume people-review `a224fa07f1ef5777b` (re-review vs
+  people-review.md §4/§7). When all 8 report → Phase 3 integration QA: full before/after matrix
+  5174 vs 5173 (all POIs × 6.5/11/18.2/21.5/2 h), ONE consolidated perf A/B on a quiet machine from
+  each log's "Perf variants for lead", soak, ui-test, typecheck, single-file build, cross-module fixes,
+  decide legacy toggles/folders → Phase 4: short Hebrew report to the user, write
+  "GRAPHICS OVERHAUL DONE" here, delete the watchdog, stop autocheckpoint, push.
+* Phase-3 plan (written 22:40 UTC; tick items off below as they complete):
+  1. Before/after matrix: `scripts/agent-tools/qa_matrix.sh base|new` (resumable; 8 chunks per side:
+     11 POIs × 11/18.2/21.5 h + overview/downtown/harbor/beach/oldtown × 6.5/2 h; 1600×900;
+     out shots/lead/qa/<side>/<chunk>/, log shots/lead/qa/<side>.log). The base side (5174) can't change,
+     so it runs while stage finishes; the new side runs once stage has reported.
+     Then build sheets (shots/tools/sheet.py) per hour, then Read and judge every view.
+  2. Typecheck + `npm run build` (single file; record dist size vs before, ~2.2 MB) + dist smoke test.
+  3. Consolidated perf A/B (machine quiet: no agent jobs) with perf.mjs, same-run variants, repeated ×2:
+     views downtown/overview/westbrook/station 12 h, overview/harbor/stadium 21.5 h, people square 12 h;
+     variants from every log's "Perf variants for lead" + an all-legacy variant. Note: `?legacyground`
+     is shared by hardscape (roads/props ground) and terrain (lawns) — it reverts both.
+     SwiftShader = relative only; the report tells the user to run perf.mjs on the Adreno.
+  4. soak.mjs --minutes 4 --speed 4 (invariants, heap, fps); ui-test.mjs (all steps).
+  5. Cross-module fixes from the QA notes above + whatever the matrix shows (small fixes by lead;
+     larger ones go back to the owning agent).
+  6. Legacy toggles/folders: decision after the perf A/B (they are the user's real-GPU A/B switch;
+     weigh bundle size).
+* Phase-3 progress: 22:33–23:20 base side of the matrix done (8 chunks, clean reports). 23:41 new side started
+  (qa_matrix.sh new; check each chunk's report.json failedModules — people may be mid-edit; redo such chunks).
+  23:31 typecheck ✔ (clean). Build ✔: dist/index.html 2,597.7 kB vs baseline 2,202.4 kB (+395 kB, +18 %;
+  legacy A/B copies ≈ 126 kB of source of that). file:// smoke test of the single file ✔ (overview 21.5 h:
+  failedModules [], 0 errors/warnings, invariants {}, frameErrors []; shots/lead/dist_smoke.png).
+  23:45 matrix sheets 11a/11b/18a built (scripts/agent-tools/qa_sheets.sh → shots/lead/qa/sheets/) and judged:
+  11a ✔ 18a ✔ (consistent integration, no defects; 'ghost' ferris wheel was a downscale artefact —
+  wheel_crop.png identical). New-side reports clean so far (failedModules [], 0 errors, invariants {}).
+  23:50 FIX (lead, integration): balloon at cruise height cast a crisp dark blot over industry (stage's NW
+  route + crisper shadows; shots/lead/qa/industry_air_ab.png). src/sim/ambient/vehicles.ts depth material:
+  aircraft shadows fade out with height 12→40 m (dithered discard smoothed by PCF), barge always casts.
+  Verified: shots/lead/qa/airshadow_check.png, 0 errors. ~23:50–03:00 usage-limit stop + container reboot;
+  03:07 resumed (servers + autocheckpoint restarted, people resumed for its fix round). New-side matrix
+  finished 00:00 (ALL DONE).
+  03:10 ALL matrix sheets judged ✔ (11a/11b/18a/18b/21a/21b/06k/02k; all 16 chunk reports clean). Night set
+  excellent; 2 h beach moon blowout of the ORIGINAL is gone; floodlit quay not clipped (max mean 203).
+  Golden-hour forest yellow = warm light + birches, OK (station_forest18.png). Minor: one conifer near the
+  station renders near-black at 11 and 18.2 h (vegetation crown AO?) — low priority.
+  03:10 soak + ui-test started (scripts/agent-tools/qa_soak_ui.sh, resumable; log shots/lead/qa/soak_ui.log).
+  Remaining: consolidated perf A/B = scripts/agent-tools/qa_perf.sh 1 then 2 (resumable; 4 views × new / ALL-legacy /
+  per-feature toggles + original-build reference; out shots/lead/qa/perf/; start ONLY when people is done and
+  soak/ui-test finished — machine must be quiet); legacy decision; final report.
+  03:15 soak ✔ (4 min at 4×, full city): heap flat 285–291 MB (no leak), fps steady, 0 console/page/frame errors,
+  failedModules []; ONE invariant sample at t=50 s: 2 pedestrians overlapping 3.2 s (couple 'act' vs elderly
+  walking). Movement code unchanged by people (only stride/phase) ⇒ likely pre-existing crowd behaviour;
+  base soak on 5174 queued to confirm (shots/lead/qa/soak_base.json). ui-test running since 03:15.
+  04:00 base soak (5174): invariants {} in 4 min ⇒ the one overlap is inconclusive (rare event) — rerun longer
+  soaks for both builds after the perf A/B. 03:58 ui-test full city (5173): 18 ok / 18 fail — every instant
+  step passes (drag, pan, zoom, clamps, hover, click-follow + card, building framing, Esc, help, slider,
+  speed), every time-based step fails (W/D/Q/R keys, POI flights, double-click flights, tour, chase, audio
+  levels) + harness screenshot timeout ⇒ looks like SwiftShader full-city slowness (~10 fps) vs the test's
+  time windows. Cross-check running (scripts/agent-tools/qa_ui2.sh; ui-test.mjs got --url): (1) new build,
+  default stand-in city; (2) ORIGINAL build, full city. 04:20 people fix round DONE (corners median
+  6.3→1.8 cm, max 61→11 cm; garbage 2.1 KB→2 B bench / 50–140 B in Chrome; trousers + toe box; sheet ✔).
+  ALL agent work complete.
+  04:12 ui-test DEFAULT mode (stand-in city, new build): 34 ok / 1 fail ('kinds': bus framing + no pedestrian
+  on screen in the stand-in city) ⇒ camera/UI logic works. ~04:15–04:42 container reclaimed AGAIN (no agent
+  running ⇒ idle session ⇒ reclaim kills setsid jobs). LESSON: run long lead jobs as harness-tracked
+  background Bash tasks (run_in_background, ≤ 2 h each). 04:43 restarted; running (tracked): ui-test on the
+  ORIGINAL — default mode (uitest_default_base.json) then full city (uitest_full_base.json). Then perf A/B.
+  05:07 ui-test verdict ✔ NO REGRESSION: default mode identical (new 34/35 = base 34/35, same step); full city
+  the original fails the same time-based steps under SwiftShader (base 23/40, new 18/36 incl. a harness
+  screenshot timeout); only diff 'T starts the auto-tour' = flaky 1.5 s window: probe
+  (scripts/agent-tools/qa_tourprobe.mjs) shows the tour identical on both builds (same slow opening orbit
+  ~0.1–0.4°/2 s at ~12 fps, same 'Tinyhaven' caption). 05:25 perf A/B rep 1 started (tracked).
+  Perf rep 1 (SwiftShader, relative only; shots/lead/qa/perf/1_*.json): downtown 12 h new 506 ms vs all-legacy
+  321; legacylight&notable alone 257 (?!) ⇒ stage lighting/table suspect; harbour 21.5 h new 341 vs
+  nowaterrefl 154 (consistent across the 5 variants ⇒ reflection ≈ 2× in SwiftShader although the pass is
+  only ~140k tris at 1/3 res and the water shader adds 3 taps). Page-to-page noise is large ⇒ next:
+  in-page runtime A/B probe (scripts/agent-tools/qa_toggleprobe.mjs --probe refl|light|table|veg|vegcheap)
+  and round 2 with alternating variants (scripts/agent-tools/qa_perf2.sh), both after rep 1 ends.
+  06:00 rep 1 done. Original build (5174) vs new, same views, SwiftShader ms/frame: downtown 199→506, westbrook
+  177→438, overview 718→1087, harbour 21.5 h 241→341 (draw calls +7–9, tris +15–20 %). In-page probe:
+  reflections on/off at harbour 21.5 h 932/509 ms (+83 %). Pass probe (qa_passprobe.mjs): JS time per frame
+  main render 12.4 ms + reflection 2.0 ms of a 181 ms frame ⇒ the rest is SwiftShader raster (CPU-emulated
+  fragment work, half-float targets, mip generation). CONCLUSION: SwiftShader cannot measure GPU cost; the CPU
+  side is small. Report must say so + give the user exact perf.mjs commands for the Adreno. Round-2 page A/B
+  skipped (noise, not representative); in-page probes for light/table/veg/vegcheap running for a ranking.
+  06:30 in-page probes unusable after round 1 (runtime toggles recompile shaders ⇒ 4–17 s SwiftShader stalls).
+  Round-1 signals only: overview table on/off 804/184 ms, downtown light on/off 342/196 ms ⇒ the table (a PBR +
+  shadowed surface over up to half the screen where the void was) is the largest SwiftShader-visible add after
+  reflections; GPU estimate 0.2–0.5 ms — to be verified on the Adreno. Attribution stopped here (limits stated).
+  LEGACY DECISION: keep all legacy toggles/copies for now — they are the user's one-build A/B for the real-GPU
+  measurement (~100 kB bundle, zero runtime cost unless switched); strip in a follow-up after measuring.
+  06:32 8-min soaks of new + original running (tracked) for the pedestrian-overlap question.
+  07:01 8-min soaks: the overlap hit is identical on the ORIGINAL (pre-existing); new build also had one
+  'pedestrian inside a building' at t=300 s — movement code + plan data unchanged, runs diverge via
+  frame-time sub-stepping ⇒ pre-existing crowd edge case; listed as a follow-up in GFX-REPORT.md.
+  07:05 Phase 3 complete. Final report: docs/progress/GFX-REPORT.md.
+
 ## History
+* 2026-10-19 (after the overhaul) — user feedback: the camera felt jumpy. Free camera is now the default
+  (src/ui/camera.ts): plain orbit with no spring-arm / line-of-sight / roof-lift / escape rules (only the
+  ground stops it), min distance 3 m and pitch 2°, pan follows the ground (no roof riding), no idle
+  auto-tour. G (or ?guidedcam) restores the guided camera; remembered in localStorage. Follow cams, flights
+  and the tour keep their framing. ui-test pins ?guidedcam for its contract steps + new 'freecam' step
+  (default mode 35/36, same pre-existing 'kinds' step as the original).
 * 2026-10-16 ~19:20 — Round 1: 12 builders launched via a Workflow; the account hit its 5-hour usage
   limit at 20:48–20:51. Six builders had worked ~1.5 h (traffic, pedestrians, buildings, render =
   sky+postfx, terrain(+water), camera/ui/audio); the other six died on start (stubs only).
@@ -76,6 +310,32 @@ Per-module logs live next to this file: `docs/progress/<module>.md`.
   ~25 ms — cost spread across modules (buildings ~2, terrain+water ~2.4); adaptive (fixed) drops AO
   first. Final build dist/index.html 2.2 MB runs from file:// (18 modules, 0 errors/warnings).
   DONE — launched for the user via scripts/serve.mjs.
+
+* 2026-10-17 evening — GRAPHICS OVERHAUL (all 10 items of the visual audit). Plan, ownership, contracts,
+  budgets and test protocol: `docs/progress/GFX-PLAN.md`. Harness now runs without a GPU (SwiftShader
+  fallback, `scripts/browser.mjs`, `TH_LOCK_SLOTS=2`); frozen baseline worktree `/home/user/GameCity-baseline`
+  served on 5174 (`shots/servers.sh`). Seven background agents launched ~18:40: stage (items 1+3, night
+  ambient), night (item 2: lamp light map + emitters), water (4), buildings (5, 8, house massing of 9,
+  far-field windows), vegetation (6), hardscape (7, gardens of 9), terrain (10). Each logs to
+  `docs/progress/gfx-<agent>.md`; agent ids in the session scratchpad (agents-gfx.json). If the session
+  is lost: respawn each agent from its log + GFX-PLAN.md. Next for the lead: relay stage S1 (new lighting)
+  to all, relay cross-area requests, commit checkpoints, then integration QA (before/after matrix
+  5174 vs 5173, perf A/B, soak, ui-test, build).
+
+* 2026-10-17 ~23:10 — account usage limit: all 8 agents stopped mid-task (work saved; container
+  later restarted). 2026-10-18 03:02 — limit reset: dev servers restarted, checkpoint 01b96a3 pushed,
+  all 8 agents resumed via SendMessage with their context. Earlier coordination fixes (lead):
+  LAMP_GLSL textureLod compile error, uLights not reaching 1 in captures (negative frame delta, no
+  snap on clock jumps), FIFO screenshot queue + 45-min lock watchdog, ≲15-min-per-run fair-share rule.
+
+* 2026-10-18 10:25–15:43 UTC — user-requested ~5 h usage pause. All 8 agents paused cleanly (state
+  under "PAUSED"/"Resume here" in each gfx-*.md; checkpoint afdbf92). 15:43 — resumed (container had
+  rebooted: servers restarted, lock queue cleared). Resume brief: finishing only (verify → fixes/polish
+  → final sheets → report); no more per-agent SwiftShader perf A/Bs: the lead runs ONE consolidated A/B
+  on a quiet machine from each log's "Perf variants for lead". Cross-module assignments: stage bisects
+  the NaN-style black blocks seen in full-city night/dusk frames (night, buildings, hardscape) and adds
+  a NaN/Inf guard at the bloom/merge input; vegetation (forest) and terrain (cliffs) make night
+  silhouettes readable (median ≳ adjacent unlit lawn, moonlit tops); legacy toggles kept until QA.
 
 ## Module status (round 1 work, verified by the lead 23:30)
 | module | state | open items |

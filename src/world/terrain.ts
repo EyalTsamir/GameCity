@@ -9,11 +9,12 @@ import type { CityContext, CityModule } from '../core/context';
 import { getTerrainModel } from './terrain/height';
 import { createGround } from './terrain/ground';
 import { createSlab } from './terrain/slab';
-import { createMasonry } from './terrain/masonry';
+import { createMasonry, MOON_DIR } from './terrain/masonry';
 import { createGlows, type GlowPoint } from './terrain/glow';
 
 export interface TerrainService {
-  /** rendered ground height (plan.heightAt + local refinements: pond, portals, river mouth, cliff) */
+  /** rendered ground height (plan.heightAt + local refinements: pond, portals, river mouth, cliff; terraces,
+   *  stairs and the lower quay of core/places.ts) */
   height(x: number, z: number): number;
   /** rock outcrop footprints (vegetation should avoid them) */
   rocks: { x: number; z: number; r: number }[];
@@ -27,11 +28,11 @@ export default function create(ctx: CityContext): CityModule {
   const model = getTerrainModel(ctx.plan);
   const root = new THREE.Group();
   root.name = 'terrain';
-  const ground = createGround(ctx, model);
+  const masonry = createMasonry(ctx, model);
+  const ground = createGround(ctx, model, masonry.cliffs?.feet ?? []);
   root.add(ground.mesh);
   const slab = createSlab(ctx, model, ground.edges);
   root.add(slab.faces, slab.plinth, slab.nameplate, slab.shadow);
-  const masonry = createMasonry(ctx, model);
   root.add(masonry.mesh, masonry.veils, masonry.railings.mesh);
   // night glows: promenade lamp halos + light pools, portal lanterns, tunnel lamps
   const glowPts: GlowPoint[] = [...masonry.lights];
@@ -43,8 +44,13 @@ export default function create(ctx: CityContext): CityModule {
   root.add(glows);
   ctx.scene.add(root);
 
+  // terraces, stairs and the lower quay (core/places.ts) stand on top of the ground mesh: the walking surface
+  const places = ctx.plan.places;
   const service: TerrainService = {
-    height: model.height,
+    height: places ? (x, z) => {
+      const p = places.height(x, z);
+      return p === p ? p : model.height(x, z);
+    } : model.height,
     rocks: masonry.rocks,
     portals: model.portals.map((p) => ({ kind: p.kind, x: p.x, z: p.z, yaw: p.yaw, width: p.width, height: p.height })),
     promenadeLamps: masonry.railings.lampPosts,
@@ -55,6 +61,10 @@ export default function create(ctx: CityContext): CityModule {
 
   return {
     name: 'terrain',
+    frame() {
+      // moonlit-rock term in the masonry shader (no allocation)
+      MOON_DIR.value.copy(ctx.clock.moonDir);
+    },
     stats() {
       return {
         groundTris: ground.triangles,
@@ -63,6 +73,8 @@ export default function create(ctx: CityContext): CityModule {
         masonryTris: masonry.triangles,
         railingTris: masonry.railings.triangles,
         rocks: masonry.rocks.length,
+        cliffTris: masonry.cliffs?.triangles ?? 0,
+        cliffBlocks: masonry.cliffs?.blocks ?? 0,
         buildMs: Math.round(buildMs),
       };
     },

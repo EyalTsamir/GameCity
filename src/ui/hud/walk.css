@@ -1,0 +1,113 @@
+/* First-person walk overlay (src/ui/hud/walkHud.ts): controls hint, crosshair, touch stick.
+   Lives in #ui next to .th-ui and never takes the pointer. */
+
+#ui > .th-walk,
+.th-walk {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  font-family: 'Bahnschrift', 'DIN Alternate', 'Segoe UI Variable Text', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  font-size: 12.5px;
+  color: #f6f0e3;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.th-walk-hint {
+  position: absolute;
+  left: 50%;
+  top: 74px;
+  transform: translateX(-50%) translateY(-6px);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: calc(100vw - 32px);
+  padding: 8px 16px;
+  border-radius: 999px;
+  background: rgba(37, 49, 58, 0.86);
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity 0.9s ease, transform 0.9s ease;
+  box-shadow: 0 12px 26px -12px rgba(0, 0, 0, 0.6);
+}
+
+.th-walk-hint.show {
+  opacity: 1;
+  transform: translateX(-50%);
+}
+
+.th-walk-hint span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.th-walk-hint em {
+  font-style: normal;
+  color: #ffc08a;
+  font-weight: 600;
+}
+
+.th-walk-hint .dot {
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.45;
+}
+
+@media (max-width: 760px) {
+  .th-walk-hint {
+    white-space: normal;
+    flex-wrap: wrap;
+    justify-content: center;
+    border-radius: 14px;
+    top: 64px;
+  }
+}
+
+.th-walk-cross {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 6px;
+  height: 6px;
+  margin: -3px 0 0 -3px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.85);
+  box-shadow: 0 0 0 1.5px rgba(20, 28, 36, 0.45);
+  opacity: 0;
+  transition: opacity 0.25s ease;
+}
+
+.th-walk-cross.show {
+  opacity: 0.9;
+}
+
+.th-walk-stick {
+  position: absolute;
+  width: 112px;
+  height: 112px;
+  margin: -56px 0 0 -56px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.55);
+  background: rgba(37, 49, 58, 0.22);
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.th-walk-stick.show {
+  opacity: 1;
+}
+
+.th-walk-knob {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 46px;
+  height: 46px;
+  margin: -23px 0 0 -23px;
+  border-radius: 50%;
+  background: rgba(248, 243, 233, 0.8);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}

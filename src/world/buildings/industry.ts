@@ -12,10 +12,17 @@ import {
   roofLook, roofPoly, flatRoof, doorNiche, bandWithOpenings, signOnSide,
   col, shade, setCol, lightBox, wallLamp,
 } from './gen';
+import { anchors } from './anchors';
 import { WIN, PROF, WALLPAT, ROOFPAT, FRAME, GLASS, LIGHT_MODE } from './materials';
 import { letterSign, boardSign } from './signs';
 import { PALETTE } from '../../core/gfx';
+import { geomOn } from '../../core/geomhunt';
 import { partitionSide } from './oldtown';
+import { MASS, massRng, upFacet, roofKit } from './massing';
+import { downpipe } from './clutter';
+import { dB } from '../../core/detailbuildings';
+import { dockSeal, shedServices } from './services';
+import { Rng } from '../../core/rng';
 
 const METAL_WALLS = ['#9aa6ad', '#7f98a3', '#b9c3c9', '#6f8f86', '#c9c1a6', '#8d9aa5'];
 const PREV: Side[] = [LEFT, FRONT, RIGHT, BACK];
@@ -46,7 +53,40 @@ export function genIndustrial(g: Gen): void {
   const pdW = 1.1,
     pdH = 2.25;
 
+  // -- massing (own RNG): a head office at an exposed end of a long shed (?noannex)
+  const mr = massRng(g);
+  const serviceRng = new Rng(((lot.seed * 41) ^ 0x3c6ef3) >>> 0 || 11);
+  const hallAlongX = body.x1 - body.x0 >= body.z1 - body.z0;
+  let office: Side | -1 = -1;
+  let officeR: LRect = { x0: 0, x1: 0, z0: 0, z1: 0 };
+  let officeN = 0;
+  if (MASS.annex && !customs && !brickworks && (lot.roof === 'barrel' || lot.roof === 'gable') && hallAlongX && W > 24 && exposed[FRONT]) {
+    const span = Math.min(9, Math.max(6.5, W * 0.2));
+    const doorsAt = (sd: Side, lo: number, hi: number) => g.doors.some((d) => d.side === sd && d.u > lo && d.u < hi);
+    const leftOk = exposed[LEFT] && !g.doors.some((d) => d.side === LEFT) && !doorsAt(FRONT, 0, span + 1.2) && !doorsAt(BACK, W - span - 1.2, W);
+    const rightOk = exposed[RIGHT] && !g.doors.some((d) => d.side === RIGHT) && !doorsAt(FRONT, W - span - 1.2, W) && !doorsAt(BACK, 0, span + 1.2);
+    if ((leftOk || rightOk) && mr.chance(0.75)) {
+      office = leftOk && (!rightOk || mr.chance(0.5)) ? LEFT : RIGHT;
+      // walls 5 mm inside the footprint: the shed's pilasters / bands (≤ 0.23 m proud of its walls) stay inside
+      const zb = -D / 2 + (exposed[BACK] ? 0.005 : 0);
+      officeR = office === LEFT ? { x0: -W / 2 + 0.005, x1: -W / 2 + span, z0: zb, z1: D / 2 - 0.005 } : { x0: W / 2 - span, x1: W / 2 - 0.005, z0: zb, z1: D / 2 - 0.005 };
+      const half = (body.z1 - body.z0) / 2;
+      const peak = H + (lot.roof === 'barrel' ? half * 2 * 0.17 : half * 0.32);
+      officeN = Math.max(2, Math.ceil((peak + 0.6) / 3.6));
+    }
+  }
+  /** part [a, b] of a body side's u range that the head office covers (null: none) */
+  const officeCover = (sd: Side, L: number): [number, number] | null => {
+    if (office < 0 || (sd !== FRONT && sd !== BACK)) return null;
+    const xs: [number, number] = office === LEFT ? [body.x0, officeR.x1] : [officeR.x0, body.x1];
+    // FRONT runs +x from body.x0; BACK runs -x from body.x1
+    const a = sd === FRONT ? xs[0] - body.x0 : body.x1 - xs[1],
+      b = sd === FRONT ? xs[1] - body.x0 : body.x1 - xs[0];
+    return [Math.max(0, a - 0.35), Math.min(L, b + 0.35)];
+  };
+
   for (const sd of [FRONT, RIGHT, BACK, LEFT] as Side[]) {
+    if (sd === office) continue;
     const sg = sideGeom(body, sd);
     const parts = partitionSide(g, sd, sg.L, ins[PREV[sd]]);
     const pdoors = g.doors.filter((d) => d.side === sd).map((d) => Math.min(sg.L - 0.9, Math.max(0.9, d.u - ins[PREV[sd]])));
@@ -75,6 +115,8 @@ export function genIndustrial(g: Gen): void {
         if (pdoors.some((d) => Math.abs(d - u) < doorW / 2 + pdW / 2 + 0.5)) continue;
         if (u - doorW / 2 < uA + 0.6 || u + doorW / 2 > uB - 0.6) continue;
         if (!depot && !customs && i % 3 === 2) continue;
+        const oc = officeCover(sd, sg.L);
+        if (oc && u + doorW / 2 + 0.6 > oc[0] && u - doorW / 2 - 0.6 < oc[1]) continue;
         rollups.push(u);
       }
     }
@@ -109,7 +151,13 @@ export function genIndustrial(g: Gen): void {
       }
       setCol(t, trimC);
       sideBox(t, sg, uA, uB, 0, INS - 0.02, lowTop - 0.15, lowTop + 0.1, true);
-      sideBox(t, sg, uA, uB, 0, 0.35, H - 0.45, H, true);
+      const oc = officeCover(sd, sg.L);
+      for (const [ca, cb] of oc ? [[uA, Math.min(uB, oc[0])], [Math.max(uA, oc[1]), uB]] : [[uA, uB]]) if (cb - ca > 0.05) sideBox(t, sg, ca, cb, 0, 0.35, H - 0.45, H, true);
+      // ?nomonitor: a dark engineering-brick plinth
+      if (MASS.monitor) {
+        setCol(t, shade(wallC, 0.62));
+        for (const [a, b] of splitAround(uA, uB, ops)) sideBox(t, sg, a, b, 0, INS - 0.05, 0, 0.7);
+      }
     } else if (fullyExposed) {
       // concrete base course + top flashing
       setCol(t, col('#b9b4aa'));
@@ -120,12 +168,41 @@ export function genIndustrial(g: Gen): void {
       // corner trims
       sideBox(t, sg, uA, uA + 0.15, 0, 0.12, 0, H);
       sideBox(t, sg, uB - 0.15, uB, 0, 0.12, 0, H);
+      // ?nomonitor: the portal frame's steel columns expressed as cover strips at the bay lines
+      if (MASS.monitor && !customs) {
+        setCol(t, shade(wallC, 0.8));
+        for (let i = 1; i < nb; i++) {
+          const u = uA + i * bw;
+          if (ops.some((o) => Math.abs(o.u - u) < o.w / 2 + 0.3)) continue;
+          sideBox(t, sg, u - 0.13, u + 0.13, 0, 0.11, 0.9, H - 0.25);
+        }
+      }
     }
     for (const u of rollups) rollupDoor(sg, u);
+    // ?noservices: dock seals, conduit, cabinets, louvres
+    if (dB('services') && fullyExposed && !customs) {
+      rollups.forEach((u, i) => dockSeal(g, sg, u - doorW / 2, u + doorW / 2, doorH, INS - 0.02, i + 1));
+      const oc = officeCover(sd, sg.L);
+      const opsS = oc ? [...ops, { u: (oc[0] + oc[1]) / 2, w: oc[1] - oc[0] }] : ops;
+      shedServices(g, sg, uA, uB, opsS, H, brick ? lowTop + 0.2 : lowTop - 0.17, brick, serviceRng);
+    }
+    // ?nomonitor: downpipes from the eaves gutter at every second bay line of the long sides
+    const eaveSide = (lot.roof === 'gable' || lot.roof === 'barrel') && (hallAlongX ? sd === FRONT || sd === BACK : sd === LEFT || sd === RIGHT);
+    if (MASS.monitor && eaveSide && fullyExposed && !customs) {
+      const oc = officeCover(sd, sg.L);
+      const pc = brick ? col('#4a4f52') : shade(wallC, 0.7);
+      for (let i = 1; i < nb; i += 2) {
+        const u = uA + i * bw;
+        if (ops.some((o) => Math.abs(o.u - u) < o.w / 2 + 0.7)) continue;
+        if (oc && u > oc[0] - 0.3 && u < oc[1] + 0.3) continue;
+        downpipe(g, sg, u, H - 0.12, pc, INS);
+      }
+    }
     for (const u of pdoors) {
       doorNiche(g, sg, u, { w: pdW, h: pdH, depth: 0.15, wallColor: wallC, frameColor: col('#3a3f44'), doorColor: col(brick ? '#2f4a3a' : '#5e6a72'), glass: false, seed: g.seed, frameOut: Math.min(0.1, (fullyExposed ? INS : 0) - 0.02 + 0.02) });
       setCol(t, col('#3a3f44'));
       sideBox(t, sg, u - 1.0, u + 1.0, 0, 0.9, 2.75, 2.88, true);
+      if (geomOn('canopyplates')) for (const bu of [u - 0.98, u + 0.94]) sideBox(t, sg, bu, bu + 0.04, 0, 0.6, 2.45, 2.75);
       lightBox(g, sx(sg, u, 0.5) - 0.12, 2.68, sz(sg, u, 0.5) - 0.12, sx(sg, u, 0.5) + 0.12, 2.75, sz(sg, u, 0.5) + 0.12, '#fff1d6', LIGHT_MODE.STEADY, 3.2);
     }
     void isEnd;
@@ -157,22 +234,175 @@ export function genIndustrial(g: Gen): void {
     t.quad(bxi, 0, bzi, bx, 0, bz, bx, doorH, bz, bxi, doorH, bzi);
     t.quad(axi, doorH, azi, bxi, doorH, bzi, bx, doorH, bz, ax, doorH, az);
     // door leaf with ribs (or wooden double doors for the customs house)
-    setCol(t, dc);
+    setCol(t, customs ? dc : shade(dc, 0.5)); // sectional doors: seen only in the joints between sections
     sideBox(t, sg, a, b, -d, -d + 0.02, 0, doorH, false, true);
     setCol(t, shade(dc, 0.8));
     if (customs) {
       sideBox(t, sg, u - 0.04, u + 0.04, -d + 0.02, -d + 0.06, 0, doorH);
       for (const yy of [0.6, doorH * 0.5, doorH - 0.5]) sideBox(t, sg, a + 0.1, b - 0.1, -d + 0.02, -d + 0.05, yy - 0.06, yy + 0.06);
-    } else {
-      const n = Math.round(doorH / 0.32);
-      for (let k = 1; k < n; k++) sideBox(t, sg, a + 0.04, b - 0.04, -d + 0.02, -d + 0.04, (doorH * k) / n - 0.02, (doorH * k) / n + 0.02);
-      // a row of small windows in the door
-      setCol(t, col('#37434d'));
-      const wy = doorH * 0.62;
-      for (let k = 0; k < 4; k++) {
-        const wu = a + 0.35 + ((b - a - 0.7) * (k + 0.5)) / 4;
-        sideBox(t, sg, wu - 0.3, wu + 0.3, -d + 0.02, -d + 0.045, wy, wy + 0.32);
+    } else if (rng.chance(0.5)) {
+      // roller shutter: 77 mm curved steel slats (each a raised roll: lit top, shaded underside) running in deep
+      // guide channels, an aluminium bottom bar with a rubber lip, the coil hood under the lintel; the lower
+      // slats scuffed and a few dented by fork-lift tines
+      const hood = 0.34;
+      const top = doorH - hood;
+      const n = Math.max(8, Math.round((top - 0.1) / 0.077));
+      const sh = (top - 0.1) / n;
+      const ua = a + 0.09,
+        ub = b - 0.09;
+      const P = (uu: number, o: number, y: number): [number, number, number] => [sx(sg, uu, o), y, sz(sg, uu, o)];
+      const rx = sx(sg, u, -d - 1), rz = sz(sg, u, -d - 1);
+      for (let k = 0; k < n; k++) {
+        const y0 = 0.1 + k * sh,
+          ym = y0 + sh * 0.55,
+          y1 = y0 + sh;
+        const dent = k < 9 && (g.seed * 7 + k * 13) % 11 === 0 ? 0.012 : 0;
+        const c0 = shade(dc, (k < 6 ? 0.8 : 0.94) + ((g.seed + k * 3) % 5) * 0.012);
+        const oB = -d + 0.022,
+          oT = -d + 0.042 - dent;
+        const nseg = dent ? 3 : 1;
+        for (let j = 0; j < nseg; j++) {
+          const u0 = ua + ((ub - ua) * j) / nseg,
+            u1 = ua + ((ub - ua) * (j + 1)) / nseg;
+          const oT2 = j === 1 ? oT - dent : oT;
+          setCol(t, c0);
+          const p0 = P(u0, oT2, ym), p1 = P(u1, oT2, ym), q0 = P(u0, oB, y1), q1 = P(u1, oB, y1);
+          t.quadAway(p0[0], p0[1], p0[2], p1[0], p1[1], p1[2], q1[0], q1[1], q1[2], q0[0], q0[1], q0[2], rx, ym - 0.4, rz);
+          setCol(t, shade(c0, 0.78));
+          const b0 = P(u0, oB, y0), b1 = P(u1, oB, y0);
+          t.quadAway(b0[0], b0[1], b0[2], b1[0], b1[1], b1[2], p1[0], p1[1], p1[2], p0[0], p0[1], p0[2], rx, ym + 0.4, rz);
+        }
       }
+      // bottom bar + rubber lip, lock in the bar
+      setCol(t, col('#a9afb3'));
+      sideBox(t, sg, ua, ub, -d + 0.02, -d + 0.07, 0.025, 0.1, true);
+      setCol(t, col('#151617'));
+      sideBox(t, sg, ua, ub, -d + 0.025, -d + 0.06, 0, 0.025, true);
+      setCol(t, col('#3a3d40'));
+      sideBox(t, sg, u - 0.05, u + 0.05, -d + 0.07, -d + 0.078, 0.04, 0.085, true);
+      // guide channels (U section: two cheeks and a dark slot)
+      for (const [u0, u1] of [[a + 0.005, a + 0.1], [b - 0.1, b - 0.005]]) {
+        setCol(t, col('#1d1f21'));
+        sideBox(t, sg, u0 + 0.02, u1 - 0.02, -d, -d + 0.06, 0, top, false);
+        setCol(t, col('#9aa1a6'));
+        sideBox(t, sg, u0, u0 + 0.022, -d, -d + 0.1, 0, top + 0.02, false);
+        sideBox(t, sg, u1 - 0.022, u1, -d, -d + 0.1, 0, top + 0.02, false);
+      }
+      // coil hood (folded sheet box) under the lintel
+      setCol(t, shade(dc, 0.72));
+      sideBox(t, sg, a, b, -d, -d + 0.2, top, doorH, false, true);
+      setCol(t, shade(dc, 0.6));
+      sideBox(t, sg, a, b, -d + 0.2, -d + 0.215, top - 0.02, top + 0.05, true);
+    } else {
+      // sectional door: ~0.55 m insulated steel sections, each a profiled panel — a rounded nose at the top
+      // joint (lit), a bevel at the foot (shaded), two pressed ribs as sloped faces so they catch the light —
+      // running between galvanised guide tracks; one section glazed with real openings (gasket frame, glass
+      // 2 cm behind the face); an aluminium bottom bar with a flared rubber lip; the lowest section scuffed
+      const n = Math.max(5, Math.round(doorH / 0.55));
+      const sh = doorH / n;
+      const ua = a + 0.09,
+        ub = b - 0.09;
+      const oF = -d + 0.045, // panel face
+        oK = -d + 0.03; // panel core behind the bevels
+      const P = (uu: number, o: number, y: number): [number, number, number] => [sx(sg, uu, o), y, sz(sg, uu, o)];
+      const rx = sx(sg, u, -d - 1), rz = sz(sg, u, -d - 1);
+      // quad across u0..u1 from (yA, oA) to (yB, oB), facing out (and up / down by `tilt`)
+      const strip = (u0: number, u1: number, yA: number, oA: number, yB: number, oB: number, tilt = 0): void => {
+        const p0 = P(u0, oA, yA), p1 = P(u1, oA, yA), q1 = P(u1, oB, yB), q0 = P(u0, oB, yB);
+        t.quadAway(p0[0], p0[1], p0[2], p1[0], p1[1], p1[2], q1[0], q1[1], q1[2], q0[0], q0[1], q0[2], rx, (yA + yB) / 2 - tilt, rz);
+      };
+      const kw = Math.min(n - 2, Math.max(1, Math.round(n * 0.62))); // glazed section
+      const nw = Math.max(2, Math.round((ub - ua) / 0.95));
+      const wpitch = (ub - ua) / nw;
+      for (let k = 0; k < n; k++) {
+        const y0 = k * sh + 0.008,
+          y1 = (k + 1) * sh - 0.008;
+        const c0 = shade(dc, k === 0 ? 0.8 : 0.93 + ((g.seed + k * 5) % 4) * 0.025);
+        // core (fills the joints' depth) + foot bevel (faces down) + nose (faces up)
+        setCol(t, shade(c0, 0.55));
+        sideBox(t, sg, ua, ub, -d + 0.02, oK, y0, y1, true);
+        setCol(t, shade(c0, 0.7));
+        strip(ua, ub, y0, oK, y0 + 0.022, oF, -0.4);
+        setCol(t, shade(c0, 1.12));
+        strip(ua, ub, y1 - 0.03, oF, y1, oK, 0.4);
+        // face, cut around the windows on the glazed section; ribs on the others
+        setCol(t, c0);
+        const fy0 = y0 + 0.022,
+          fy1 = y1 - 0.03;
+        if (k === kw) {
+          const wy0 = fy0 + 0.07,
+            wy1 = fy1 - 0.07;
+          strip(ua, ub, fy0, oF, wy0, oF);
+          strip(ua, ub, wy1, oF, fy1, oF);
+          for (let i = 0; i <= nw; i++) {
+            const e0 = i === 0 ? ua : ua + i * wpitch - wpitch * 0.18,
+              e1 = i === nw ? ub : ua + i * wpitch + wpitch * 0.18;
+            setCol(t, c0);
+            sideBox(t, sg, e0, e1, oK, oF, wy0, wy1, false);
+          }
+          for (let i = 0; i < nw; i++) {
+            const w0 = ua + i * wpitch + wpitch * 0.18,
+              w1 = ua + (i + 1) * wpitch - wpitch * 0.18;
+            // window reveal sills (the panel's thickness), glass 2 cm back: dark room, sky in the upper part
+            setCol(t, shade(c0, 0.62));
+            strip(w0, w1, wy0, oF, wy0, oK + 0.003, 0.4);
+            setCol(t, col('#2b3238'));
+            strip(w0, w1, wy0, oK + 0.003, (wy0 + wy1) / 2, oK + 0.003);
+            setCol(t, col('#56646f'));
+            strip(w0, w1, (wy0 + wy1) / 2, oK + 0.003, wy1, oK + 0.003);
+            // black gasket frame, proud of the face
+            setCol(t, col('#151719'));
+            sideBox(t, sg, w0 - 0.025, w1 + 0.025, oF, oF + 0.009, wy0 - 0.025, wy0 + 0.006, true);
+            sideBox(t, sg, w0 - 0.025, w1 + 0.025, oF, oF + 0.009, wy1 - 0.006, wy1 + 0.025, true);
+            sideBox(t, sg, w0 - 0.025, w0 + 0.006, oF, oF + 0.009, wy0, wy1);
+            sideBox(t, sg, w1 - 0.006, w1 + 0.025, oF, oF + 0.009, wy0, wy1);
+          }
+        } else {
+          const r0 = fy0 + (fy1 - fy0) / 3,
+            r1 = fy0 + ((fy1 - fy0) * 2) / 3;
+          strip(ua, ub, fy0, oF, r0 - 0.016, oF);
+          strip(ua, ub, r0 + 0.016, oF, r1 - 0.016, oF);
+          strip(ua, ub, r1 + 0.016, oF, fy1, oF);
+          for (const r of [r0, r1]) {
+            // pressed rib: 9 mm proud, lit upper slope, shaded lower slope
+            setCol(t, shade(c0, 1.14));
+            strip(ua, ub, r + 0.005, oF + 0.009, r + 0.016, oF, 0.4);
+            setCol(t, shade(c0, 1.02));
+            strip(ua, ub, r - 0.005, oF + 0.009, r + 0.005, oF + 0.009);
+            setCol(t, shade(c0, 0.68));
+            strip(ua, ub, r - 0.016, oF, r - 0.005, oF + 0.009, -0.4);
+          }
+        }
+      }
+      // scuffs on the lowest section (pallets, boots): darker rubbed patches
+      setCol(t, shade(dc, 0.6));
+      for (let i = 0; i < 3; i++) {
+        const su = ua + 0.3 + ((g.seed * (i + 3) * 37) % 100) / 100 * (ub - ua - 0.9);
+        sideBox(t, sg, su, su + 0.25 + i * 0.12, oF, oF + 0.001, 0.12 + i * 0.05, 0.16 + i * 0.06);
+      }
+      // guide tracks: galvanised angle with a dark slot, bolt heads every ~0.45 m
+      for (const [u0, u1, s] of [[a + 0.005, ua, 1], [ub, b - 0.005, -1]] as const) {
+        setCol(t, col('#202224'));
+        sideBox(t, sg, u0, u1, -d, -d + 0.05, 0, doorH, false);
+        setCol(t, col('#a4abb0'));
+        const ce = s > 0 ? u0 : u1 - 0.035;
+        sideBox(t, sg, ce, ce + 0.035, -d, -d + 0.085, 0, doorH, false);
+        setCol(t, col('#6d7378'));
+        for (let y = 0.25; y < doorH - 0.1; y += 0.45) sideBox(t, sg, ce + 0.01, ce + 0.025, -d + 0.085, -d + 0.092, y, y + 0.015);
+      }
+      // aluminium bottom bar + flared rubber lip on the ground
+      setCol(t, col('#b3b8bb'));
+      sideBox(t, sg, ua, ub, oK, oF + 0.006, 0.03, 0.075, true);
+      setCol(t, col('#141516'));
+      sideBox(t, sg, ua, ub, oK, oF + 0.006, 0.0, 0.03, false);
+      strip(ua, ub, 0.0, oF + 0.022, 0.012, oF + 0.006, 0.4);
+      // lift handle + lock on the bottom section
+      setCol(t, col('#2a2c2e'));
+      sideBox(t, sg, u - 0.12, u + 0.12, oF, oF + 0.035, 0.32, 0.35, true);
+      sideBox(t, sg, u - 0.12, u - 0.1, oF, oF + 0.035, 0.29, 0.35, true);
+      sideBox(t, sg, u + 0.1, u + 0.12, oF, oF + 0.035, 0.29, 0.35, true);
+      setCol(t, col('#b9a46a'));
+      sideBox(t, sg, u + 0.3, u + 0.34, oF, oF + 0.012, 0.3, 0.36, true);
     }
     // frame (safety yellow posts on modern sheds), bumpers, canopy + dock light
     setCol(t, brick ? trimC : col('#e0b33c'));
@@ -180,12 +410,26 @@ export function genIndustrial(g: Gen): void {
     sideBox(t, sg, b, b + 0.16, 0, INS - 0.03, 0, doorH + 0.15);
     sideBox(t, sg, a - 0.16, b + 0.16, 0, INS - 0.03, doorH, doorH + 0.18);
     if (!customs) {
-      setCol(t, col('#22262a'));
-      sideBox(t, sg, a + 0.25, a + 0.6, 0, INS - 0.03, 0.75, 1.15);
-      sideBox(t, sg, b - 0.6, b - 0.25, 0, INS - 0.03, 0.75, 1.15);
+      // steel bollards guarding the door posts (yellow, black bands, domed cap) — within the wall inset
+      if (INS > 0.2) {
+        for (const bu of [a - 0.42, b + 0.42]) {
+          const bx = sx(sg, bu, 0.12),
+            bz = sz(sg, bu, 0.12);
+          setCol(t, col('#d9a92a'));
+          t.cylinder(bx, bz, 0.07, 0.0, 1.0, 10, false);
+          setCol(t, col('#1d1f21'));
+          t.cylinder(bx, bz, 0.073, 0.62, 0.72, 10, false);
+          t.cylinder(bx, bz, 0.073, 0.84, 0.94, 10, false);
+          setCol(t, col('#d9a92a'));
+          t.cone(bx, bz, 0.07, 1.0, 1.06, 10);
+        }
+      }
       setCol(t, col('#4a5056'));
       sideBox(t, sg, a - 0.4, b + 0.4, 0, 1.15, doorH + 0.35, doorH + 0.5, true);
+      // (geometry hunt ?nocanopyplates: the slab hung from nothing)
+      if (geomOn('canopyplates')) for (const bu of [a - 0.38, b + 0.34]) sideBox(t, sg, bu, bu + 0.04, 0, 0.75, doorH + 0.02, doorH + 0.35);
       lightBox(g, sx(sg, u, 0.7) - 0.15, doorH + 0.28, sz(sg, u, 0.7) - 0.15, sx(sg, u, 0.7) + 0.15, doorH + 0.35, sz(sg, u, 0.7) + 0.15, '#fff1d6', LIGHT_MODE.STEADY, 3);
+      anchors.doorLamp(sx(sg, u, 0.7), doorH + 0.28, sz(sg, u, 0.7), sg.nx, sg.nz);
     } else {
       // arched head over the customs doors
       setCol(t, trimC);
@@ -195,6 +439,8 @@ export function genIndustrial(g: Gen): void {
   }
 
   // ───────────────────────────────────────────────────────────── roof ──
+  let monBand: { alongX: boolean; c: number; half: number } | null = null;
+  if (office >= 0) headOffice();
   const roof = lot.roof;
   if (roof === 'sawtooth') sawtooth();
   else if (roof === 'barrel') barrel();
@@ -243,6 +489,29 @@ export function genIndustrial(g: Gen): void {
         const ref = mk((a + b) / 2, H + th * 0.3, (m0 + m1) / 2);
         triAway(q0, q1, q2, ref);
       }
+      // ?noroofscape: standing seams down each slope, a ridge capping, glazing bars on the north lights
+      if (dB('roofscape')) {
+        const nRib = Math.round((m1 - m0) / 1.6);
+        setCol(t, shade(roofC, 1.16));
+        for (let k = 1; k < nRib; k++) {
+          const m = m0 + ((m1 - m0) * k) / nRib;
+          const pa = mk(a + 0.08, H + 0.03, m),
+            pb = mk(b - gl - 0.03, H + th + 0.03, m);
+          t.beam(pa[0], pa[1], pa[2], pb[0], pb[1], pb[2], 0.05, 0.05);
+        }
+        setCol(t, shade(roofC, 0.8));
+        const ra = mk(b - gl, H + th + 0.03, m0),
+          rb = mk(b - gl, H + th + 0.03, m1);
+        t.beam(ra[0], ra[1], ra[2], rb[0], rb[1], rb[2], 0.18, 0.09);
+        setCol(t, col('#2c3238'));
+        const nBar = Math.round((m1 - m0) / 1.2);
+        for (let k = 1; k < nBar; k++) {
+          const m = m0 + ((m1 - m0) * k) / nBar;
+          const pa = mk(b - 0.02, H + 0.03, m),
+            pb = mk(b - gl - 0.01, H + th, m);
+          t.beam(pa[0], pa[1], pa[2], pb[0], pb[1], pb[2], 0.04, 0.05);
+        }
+      }
       // gutter between teeth
       setCol(t, col('#5a5f64'));
       const ga = mk(b - 0.15, H - 0.05, m0), gb = mk(b + 0.15, H + 0.12, m1);
@@ -279,8 +548,8 @@ export function genIndustrial(g: Gen): void {
     const rise = span * 0.17;
     const n = 10;
     const c0 = alongX ? (body.z0 + body.z1) / 2 : (body.x0 + body.x1) / 2;
-    const a0 = alongX ? body.x0 - 0.3 : body.z0 - 0.3,
-      a1 = alongX ? body.x1 + 0.3 : body.z1 + 0.3;
+    const a0 = alongX ? body.x0 - (office === LEFT ? 0 : 0.3) : body.z0 - 0.3,
+      a1 = alongX ? body.x1 + (office === RIGHT ? 0 : 0.3) : body.z1 + 0.3;
     const roofC = col(rng.pick(['#7d878f', '#9aa3aa', '#6f8f86', '#a24c36']));
     roofLook(s, roofC, ROOFPAT.CORRUGATED, g.seed);
     const prof = (k: number): [number, number] => {
@@ -324,10 +593,57 @@ export function genIndustrial(g: Gen): void {
       setCol(t, col('#3a4650'));
       const lx = alongX ? m + (end ? 0.03 : -0.03) : c0,
         lz = alongX ? c0 : m + (end ? 0.03 : -0.03);
-      if (alongX) t.box(lx - 0.02, H + 0.2, lz - span * 0.18, lx + 0.02, H + rise * 0.75, lz + span * 0.18, 0b111111);
+      if (geomOn('lunette')) {
+        // geometry hunt: a real lunette under the arc, framed, with bars (it was a bare dark rectangle on the wall)
+        const W = span * 0.24,
+          Ht = rise * 0.62,
+          y0 = H + 0.22;
+        const P = (u: number, y: number, o: number): [number, number, number] => (alongX ? [m + (end ? o : -o), y, c0 + u] : [c0 + u, y, m + (end ? o : -o)]);
+        const arc = (scale: number, o: number) => {
+          const N = 8;
+          for (let k = 0; k < N; k++) {
+            const a0 = Math.PI * (k / N),
+              a1 = Math.PI * ((k + 1) / N);
+            const u0 = -Math.cos(a0) * W * scale,
+              u1 = -Math.cos(a1) * W * scale;
+            const h0 = Math.sin(a0) * Ht * scale,
+              h1 = Math.sin(a1) * Ht * scale;
+            const A = P(u0, y0, o),
+              B = P(u1, y0, o),
+              C = P(u1, y0 + h1, o),
+              D = P(u0, y0 + h0, o);
+            const flip = alongX ? !end : !!end;
+            if (flip) t.quad(A[0], A[1], A[2], B[0], B[1], B[2], C[0], C[1], C[2], D[0], D[1], D[2]);
+            else t.quad(B[0], B[1], B[2], A[0], A[1], A[2], D[0], D[1], D[2], C[0], C[1], C[2]);
+          }
+        };
+        setCol(t, trimC);
+        arc(1.09, 0.03);
+        setCol(t, col('#2b353d'));
+        arc(1, 0.05);
+        setCol(t, trimC);
+        for (const f of [-0.5, 0, 0.5]) {
+          const yT = y0 + Math.sqrt(1 - f * f) * Ht;
+          const A = P(W * f - 0.035, y0, 0.05),
+            B = P(W * f + 0.035, yT, 0.07);
+          t.box(Math.min(A[0], B[0]), y0, Math.min(A[2], B[2]), Math.max(A[0], B[0]), yT, Math.max(A[2], B[2]), 0b110111);
+        }
+        const A = P(-W * 1.09, y0 - 0.1, 0.03),
+          B = P(W * 1.09, y0, 0.09);
+        t.box(Math.min(A[0], B[0]), y0 - 0.1, Math.min(A[2], B[2]), Math.max(A[0], B[0]), y0, Math.max(A[2], B[2]), 0b111111);
+      } else if (alongX) t.box(lx - 0.02, H + 0.2, lz - span * 0.18, lx + 0.02, H + rise * 0.75, lz + span * 0.18, 0b111111);
       else t.box(lx - span * 0.18, H + 0.2, lz - 0.02, lx + span * 0.18, H + rise * 0.75, lz + 0.02, 0b111111);
     }
-    vents(H + rise * 0.8, 2);
+    if (MASS.rooflights) {
+      const pts: [number, number][] = [];
+      for (let k = 1; k < n; k++) pts.push(prof(k));
+      rooflights(alongX, a0, a1, pts, 0, roofC);
+    }
+    // barrel section: height above the eaves ≈ rise·(1 − (d/half)²) across the span
+    vents((x, z) => {
+      const d = (alongX ? z : x) - c0;
+      return H + rise * Math.max(0, 1 - (d / (span / 2)) ** 2) + 0.3;
+    }, 2);
   }
 
   function orientedRoofUV(p: number[][], ref: number[], v0: number, segL: number): void {
@@ -355,7 +671,7 @@ export function genIndustrial(g: Gen): void {
       const zc = (body.z0 + body.z1) / 2;
       const p = rise / half;
       const zf = body.z1 + oe, yf = H - oe * p, zb = body.z0 - oe, yb = H - oe * p;
-      const x0 = body.x0 - og, x1 = body.x1 + og;
+      const x0 = body.x0 - (office === LEFT ? 0 : og), x1 = body.x1 + (office === RIGHT ? 0 : og);
       const sl = Math.hypot(zf - zc, yr - yf);
       roofPoly(s, [[x0, yf, zf], [x1, yf, zf], [x1, yr, zc], [x0, yr, zc]], [1, 0, 0], [0, (yr - yf) / sl, (zc - zf) / sl]);
       roofPoly(s, [[x1, yb, zb], [x0, yb, zb], [x0, yr, zc], [x1, yr, zc]], [-1, 0, 0], [0, (yr - yb) / sl, (zc - zb) / sl]);
@@ -364,6 +680,13 @@ export function genIndustrial(g: Gen): void {
       t.box(x0, yf - 0.18, zf - 0.04, x1, yf + 0.02, zf + 0.04, 0b111111);
       t.box(x0, yb - 0.18, zb - 0.04, x1, yb + 0.02, zb + 0.04, 0b111111);
       for (const sd of [RIGHT, LEFT] as Side[]) gableEnd(sideGeom(body, sd), rise);
+      if (MASS.monitor && !customs && mr.chance(0.65)) monitor(true, zc, yr, p);
+      if (MASS.rooflights && !customs) {
+        const f1 = monBand ? 1 - (monBand.half + 0.5) / half : 0.88;
+        rooflights(true, x0, x1, [[zf, yf], [zf + (zc - zf) * f1, yf + (yr - yf) * f1]], 0.12, roofC);
+        rooflights(true, x0, x1, [[zb, yb], [zb + (zc - zb) * f1, yb + (yr - yb) * f1]], 0.12, roofC);
+        if (!monBand) ridgeVent(true, zc, yr, x0, x1, roofC);
+      }
     } else {
       const xc = (body.x0 + body.x1) / 2;
       const p = rise / half;
@@ -375,11 +698,17 @@ export function genIndustrial(g: Gen): void {
       setCol(t, shade(roofC, 0.75));
       t.box(xc - 0.15, yr - 0.05, z0, xc + 0.15, yr + 0.12, z1);
       for (const sd of [FRONT, BACK] as Side[]) gableEnd(sideGeom(body, sd), rise);
+      if (MASS.monitor && !customs && mr.chance(0.65)) monitor(false, xc, yr, p);
+      if (MASS.rooflights && !customs) {
+        const f1 = monBand ? 1 - (monBand.half + 0.5) / half : 0.88;
+        rooflights(false, z0, z1, [[xr, yR], [xr + (xc - xr) * f1, yR + (yr - yR) * f1]], 0.12, roofC);
+        rooflights(false, z0, z1, [[xl, yR], [xl + (xc - xl) * f1, yR + (yr - yR) * f1]], 0.12, roofC);
+        if (!monBand) ridgeVent(false, xc, yr, z0, z1, roofC);
+      }
     }
-    if (customs) {
-      // skylights along the slopes
-      vents(H + rise * 0.55, 2);
-    } else vents(H + rise * 0.5, 2);
+    // the slope's height at the vent (+0.3: the collar sits in the roofing)
+    const slopeY = (x: number, z: number) => H + rise * Math.max(0, 1 - Math.abs(alongX ? z - (body.z0 + body.z1) / 2 : x - (body.x0 + body.x1) / 2) / half) + 0.3;
+    vents(slopeY, 2);
   }
 
   function gableEnd(sg: SideGeom, rise: number): void {
@@ -404,15 +733,261 @@ export function genIndustrial(g: Gen): void {
     }
   }
 
-  function vents(y: number, n: number): void {
+  /** ?norooflights: translucent rooflight strips down the roof every few bays; `pts` is the roof's cross
+   *  section (across the hall) as [across, y] from the eave up, `f0` trims the first segment at the eave */
+  function rooflights(alongX: boolean, A0: number, A1: number, pts: [number, number][], f0: number, roofC: THREE.Color): void {
+    let a0 = A0 + 1.6,
+      a1 = A1 - 1.6;
+    if (office === LEFT && alongX) a0 = Math.max(a0, officeR.x1 + 1.2);
+    if (office === RIGHT && alongX) a1 = Math.min(a1, officeR.x0 - 1.2);
+    const L = a1 - a0;
+    if (L < 4 || pts.length < 2) return;
+    const n = Math.max(2, Math.round(L / 5.0));
+    const w = 0.95;
+    // translucent sheeting: a pale, slightly green-white version of the roof colour
+    const c0 = roofC.clone().lerp(col('#e3ece8'), 0.46),
+      c1 = roofC.clone().lerp(col('#e3ece8'), 0.4);
+    const sec = pts.slice();
+    if (f0 > 0) sec[0] = [sec[0][0] + (sec[1][0] - sec[0][0]) * f0, sec[0][1] + (sec[1][1] - sec[0][1]) * f0];
+    const P = (a: number, c: number, y: number): [number, number, number] => (alongX ? [a, y + 0.035, c] : [c, y + 0.035, a]);
+    for (let i = 0; i < n; i++) {
+      const am = a0 + (L * (i + 0.5)) / n;
+      setCol(t, i % 2 ? c1 : c0);
+      for (let k = 0; k + 1 < sec.length; k++) {
+        const [ca, ya] = sec[k];
+        const [cb, yb] = sec[k + 1];
+        const p0 = P(am - w / 2, ca, ya), p1 = P(am + w / 2, ca, ya), p2 = P(am + w / 2, cb, yb), p3 = P(am - w / 2, cb, yb);
+        const rc = alongX ? [am, Math.min(ya, yb) - 6, (ca + cb) / 2] : [(ca + cb) / 2, Math.min(ya, yb) - 6, am];
+        t.quadAway(p0[0], p0[1], p0[2], p1[0], p1[1], p1[2], p2[0], p2[1], p2[2], p3[0], p3[1], p3[2], rc[0], rc[1], rc[2]);
+      }
+    }
+  }
+
+  /** continuous louvred ridge ventilator over the middle of a gable shed's ridge */
+  function ridgeVent(alongX: boolean, c: number, yr: number, A0: number, A1: number, roofC: THREE.Color): void {
+    let a0 = A0 + (A1 - A0) * 0.22,
+      a1 = A1 - (A1 - A0) * 0.22;
+    if (office === LEFT && alongX) a0 = Math.max(a0, officeR.x1 + 1.5);
+    if (office === RIGHT && alongX) a1 = Math.min(a1, officeR.x0 - 1.5);
+    if (a1 - a0 < 3) return;
+    const B = (aa: number, ab: number, h0: number, h1: number, hw: number, faces = 0b111111) =>
+      alongX ? t.box(aa, h0, c - hw, ab, h1, c + hw, faces) : t.box(c - hw, h0, aa, c + hw, h1, ab, faces);
+    setCol(t, shade(roofC, 0.62));
+    B(a0, a1, yr - 0.1, yr + 0.42, 0.36, 0b111111 & ~8);
+    setCol(t, shade(roofC, 0.95));
+    B(a0 - 0.1, a1 + 0.1, yr + 0.42, yr + 0.5, 0.55, 0b111111);
+    // louvre ribs on the housing every 1.5 m
+    setCol(t, shade(roofC, 0.85));
+    const nr = Math.max(2, Math.round((a1 - a0) / 1.5));
+    for (let k = 0; k <= nr; k++) {
+      const a = a0 + ((a1 - a0) * k) / nr;
+      B(a - 0.05, a + 0.05, yr - 0.05, yr + 0.42, 0.4, 0b111111 & ~8 & ~4);
+    }
+  }
+
+  /** roof vents; on a pitched / barrel roof `y` is a function of the spot: a fixed height put vents near the
+   * ridge inside the roof, smoking from a bare roof (real-bugs-3 #4) */
+  /** a glazed roof monitor (lantern) along the ridge of a gable shed, with its own low gable roof */
+  function monitor(alongX: boolean, c: number, yr: number, pitch: number): void {
+    const half = 1.3,
+      mh = 1.15;
+    const A0 = alongX ? body.x0 : body.z0,
+      A1 = alongX ? body.x1 : body.z1;
+    let a0 = A0 + (A1 - A0) * 0.16,
+      a1 = A1 - (A1 - A0) * 0.16;
+    if (office === LEFT) a0 = Math.max(a0, officeR.x1 + 1.5);
+    if (office === RIGHT) a1 = Math.min(a1, officeR.x0 - 1.5);
+    if (a1 - a0 < 6) return;
+    monBand = { alongX, c, half };
+    const P = (a: number, cc: number): [number, number] => (alongX ? [a, cc] : [cc, a]);
+    const yb = yr - half * pitch;
+    const top = yr + mh;
+    const mlook: WallLook = { color: shade(wallC, 0.95), pattern, frame: FRAME.DARK, glass: GLASS.NEUTRAL, style: WIN.INDUSTRIAL, profile: PROF.INDUSTRIAL, seed: g.seed + 13 };
+    const cx = alongX ? (a0 + a1) / 2 : c,
+      cz = alongX ? c : (a0 + a1) / 2;
+    const wallOut = (p: [number, number], q: [number, number], y0: number, y1: number, gr: Grid | null) => {
+      const nx = -(q[1] - p[1]),
+        nz = q[0] - p[0];
+      const mx = (p[0] + q[0]) / 2 - cx,
+        mz = (p[1] + q[1]) / 2 - cz;
+      if (nx * mx + nz * mz >= 0) wallSeg(s, p[0], p[1], q[0], q[1], y0, y1, gr, gr ? mlook : plain);
+      else wallSeg(s, q[0], q[1], p[0], p[1], y0, y1, gr, gr ? mlook : plain);
+    };
+    const L = a1 - a0;
+    const n = Math.max(2, Math.round(L / 2.2));
+    const gr = makeGrid(0, L, yr + 0.08, mh - 0.12, 1, { spacing: L / n, cols: n, winW: L / n - 0.35, winH: mh - 0.35, sill: 0.1, margin: 0.15 });
+    wallOut(P(a0, c + half), P(a1, c + half), yb, top, gr);
+    wallOut(P(a0, c - half), P(a1, c - half), yb, top, gr);
+    wallOut(P(a0, c - half), P(a0, c + half), yb, top, null);
+    wallOut(P(a1, c - half), P(a1, c + half), yb, top, null);
+    // end gables of the lantern roof
+    const yR = top + 0.5;
+    setWallAttrs(s, null, plain);
+    for (const a of [a0, a1]) {
+      const p = P(a, c - half),
+        q = P(a, c + half),
+        m = P(a, c);
+      const out = a === a0 ? -1 : 1;
+      const ref = alongX ? [a - out * 3, top, c] : [c, top, a - out * 3];
+      triAway([p[0], top, p[1]], [q[0], top, q[1]], [m[0], yR, m[1]], ref);
+    }
+    // lantern roof + ridge, flashing where the cheeks meet the main slopes
+    roofLook(s, shade(wallC, 0.8), ROOFPAT.SEAM, g.seed + 3);
+    const o = 0.28;
+    const e1 = P(a0 - 0.2, c + half + o),
+      e2 = P(a1 + 0.2, c + half + o),
+      r1 = P(a0 - 0.2, c),
+      r2 = P(a1 + 0.2, c),
+      f1 = P(a0 - 0.2, c - half - o),
+      f2 = P(a1 + 0.2, c - half - o);
+    const ye = top - o * 0.38;
+    upFacet(s, [[e1[0], ye, e1[1]], [e2[0], ye, e2[1]], [r2[0], yR, r2[1]], [r1[0], yR, r1[1]]]);
+    upFacet(s, [[f1[0], ye, f1[1]], [f2[0], ye, f2[1]], [r2[0], yR, r2[1]], [r1[0], yR, r1[1]]]);
+    setCol(t, shade(wallC, 0.6));
+    t.beam(r1[0], yR + 0.02, r1[1], r2[0], yR + 0.02, r2[1], 0.22, 0.1);
+    t.beam(e1[0], ye - 0.06, e1[1], e2[0], ye - 0.06, e2[1], 0.08, 0.14);
+    t.beam(f1[0], ye - 0.06, f1[1], f2[0], ye - 0.06, f2[1], 0.08, 0.14);
+    setCol(t, col('#6d7377'));
+    for (const cc of [c + half, c - half]) {
+      const p = P(a0, cc),
+        q = P(a1, cc);
+      t.beam(p[0], yb + 0.05, p[1], q[0], yb + 0.05, q[1], 0.12, 0.12);
+    }
+  }
+
+  /** the head office: a 2-3 storey block at one end, taller than the shed's roof, entrance with a canopy */
+  function headOffice(): void {
+    const r = officeR;
+    const oH = officeN * 3.6,
+      top = oH + 0.8;
+    const offC = brick ? col(mr.pick(['#e4ddd0', '#d8cfc0'])) : col(mr.pick(['#e6e2d8', '#d9d4c7', '#c8ced2', '#e9e1cf']));
+    const lookO: WallLook = { color: offC, pattern: WALLPAT.PLASTER, frame: FRAME.DARK, glass: GLASS.BLUE, style: WIN.RIBBON, profile: PROF.OFFICE, seed: g.seed + 21 };
+    const plainO = { color: offC, pattern: WALLPAT.PLASTER, seed: g.seed + 21 };
+    const inner: Side = office === LEFT ? RIGHT : LEFT;
+    const outer: Side = office === LEFT ? LEFT : RIGHT;
+    // a glazed stair tower at the outer front corner (flush, one pane per half landing), rising over the roof
+    const sw = 2.6;
+    const stair = r.x1 - r.x0 > 9.5 && r.z1 - r.z0 > 6;
+    const sr: LRect = office === LEFT ? { x0: r.x0, x1: r.x0 + sw, z0: r.z1 - sw, z1: r.z1 } : { x0: r.x1 - sw, x1: r.x1, z0: r.z1 - sw, z1: r.z1 };
+    const yS = top + 1.7;
+    const stairSpan = (sd: Side, L: number): [number, number] | null => {
+      if (!stair) return null;
+      if (sd === FRONT) return office === LEFT ? [0, sw] : [L - sw, L];
+      if (sd === outer) return office === LEFT ? [L - sw, L] : [0, sw];
+      return null;
+    };
+    const lookG: WallLook = { color: shade(offC, 0.9), pattern: WALLPAT.SMOOTH, frame: FRAME.DARK, glass: GLASS.BLUE, style: WIN.CURTAIN, profile: PROF.OFFICE, seed: g.seed + 23 };
+    for (const sd of [FRONT, RIGHT, BACK, LEFT] as Side[]) {
+      const sg = sideGeom(r, sd);
+      const L = sg.L;
+      if (sd === BACK && !exposed[BACK]) {
+        wallPlain(s, sg, 0, L, 0, top, plainO);
+        continue;
+      }
+      const st = stairSpan(sd, L);
+      const ua = st && st[0] === 0 ? st[1] : 0,
+        ub = st && st[1] === L ? st[0] : L;
+      const W = ub - ua;
+      const nC = Math.max(1, Math.round((W - 1.0) / 2.7));
+      const up = makeGrid(ua, ub, 3.6, 3.6, officeN - 1, { spacing: W / nC, cols: nC, winW: Math.min(2.1, W / nC - 0.6), winH: 1.55, sill: 0.95, margin: 0.55 });
+      // the face towards the shed shows only above its roof: windows there, plain inside
+      wallGrid(s, sg, ua, ub, 3.6, oH, up, lookO);
+      wallPlain(s, sg, ua, ub, oH, top, plainO);
+      if (st) {
+        const nG = Math.max(2, Math.floor((yS - 0.3) / 1.8));
+        const ch = (yS - 0.3) / nG;
+        const gs = makeGrid(st[0], st[1], 0.3, ch, nG, { spacing: sw, cols: 1, winW: sw - 0.4, winH: ch - 0.16, sill: 0.08, margin: 0.2 });
+        wallGrid(s, sg, st[0], st[1], 0, yS, gs, lookG);
+      }
+      if (sd === inner) {
+        wallPlain(s, sg, 0, L, 0, 3.6, plainO);
+        continue;
+      }
+      const g0 = makeGrid(ua, ub, 0, 3.6, 1, { spacing: W / nC, cols: nC, winW: Math.min(2.1, W / nC - 0.6), winH: 1.7, sill: 0.9, margin: 0.55 });
+      if (sd === FRONT) {
+        const du = office === LEFT ? L * 0.66 : L * 0.34;
+        bandWithOpenings(sg, ua, ub, [{ u: du, w: 1.9, h: 2.6 }], (a, b) => {
+          const n0 = Math.max(1, Math.round((b - a - 0.8) / 2.6));
+          const gg = makeGrid(a, b, 0, 3.6, 1, { spacing: (b - a) / n0, cols: n0, winW: Math.min(2.0, (b - a) / n0 - 0.6), winH: 1.7, sill: 0.9, margin: 0.4 });
+          wallGrid(s, sg, a, b, 0, 3.6, gg, lookO);
+        }, (a, b, y0) => wallPlain(s, sg, a, b, y0, 3.6, plainO));
+        doorNiche(g, sg, du, { w: 1.9, h: 2.6, depth: 0.25, wallColor: offC, frameColor: col('#3a3f44'), doorColor: col('#3a3f44'), glass: true, profile: PROF.ALWAYS, seed: g.seed + 5, frameOut: 0 });
+        setCol(t, col('#4a5056'));
+        sideBox(t, sg, du - 1.6, du + 1.6, 0, 1.05, 2.95, 3.1, true);
+        lightBox(g, sx(sg, du, 0.6) - 0.15, 2.88, sz(sg, du, 0.6) - 0.15, sx(sg, du, 0.6) + 0.15, 2.95, sz(sg, du, 0.6) + 0.15, '#fff1d6', LIGHT_MODE.STEADY, 3);
+      } else wallGrid(s, sg, ua, ub, 0, 3.6, g0, lookO);
+      // floor bands + coping
+      setCol(t, shade(offC, 0.88));
+      for (let k = 1; k < officeN; k++) sideBox(t, sg, ua, ub, 0, 0.08, k * 3.6 - 0.14, k * 3.6, true);
+      // the firm's name in raised letters across the top of the front, over the last window row (lit at night)
+      const yL0 = (officeN - 1) * 3.6 + 2.62,
+        yL1 = Math.min(top - 0.12, yL0 + 0.85);
+      if (sd === FRONT && yL1 - yL0 > 0.45) {
+        const firm = depot ? 'TINYHAVEN TRANSIT' : FIRMS[(lot.id * 7) % FIRMS.length];
+        const ink = depot ? '#23405c' : ['#2c3a46', '#7c2a22', '#2f4a3a'][lot.id % 3];
+        const lr = g.atlas.add(`indL:${firm}:${ink}`, 512, 56, letterSign(firm, ink, '#ffe6b8', '"Arial Black", "Segoe UI", sans-serif', 0.5));
+        const lw = Math.min(W * 0.86, (yL1 - yL0) * (512 / 56));
+        const uc = (ua + ub) / 2;
+        signOnSide(g, sg, uc - lw / 2, uc + lw / 2, 0.03, yL0, yL1, lr);
+      }
+      setCol(t, shade(offC, 1.06));
+      sideBox(t, sg, ua > 0 ? ua : -0.05, ub < L ? ub : L + 0.05, 0, 0.1, top, top + 0.1, true);
+    }
+    if (stair) {
+      // stair head over the roof: plain inner faces, slab, coping
+      for (const sd of [BACK, inner] as Side[]) {
+        const sg = sideGeom(sr, sd);
+        wallPlain(s, sg, 0, sg.L, oH, yS, plainO);
+      }
+      flatRoof(s, sr, yS, col('#8a8780'), ROOFPAT.FLAT, g.seed);
+      setCol(t, shade(offC, 1.06));
+      t.box(sr.x0 - 0.05, yS, sr.z0 - 0.05, sr.x1 + 0.05, yS + 0.14, sr.z0 + 0.2, 0b111111);
+      t.box(sr.x0 - 0.05, yS, sr.z1 - 0.2, sr.x1 + 0.05, yS + 0.14, sr.z1 + 0.05, 0b111111);
+      t.box(sr.x0 - 0.05, yS, sr.z0 + 0.2, sr.x0 + 0.2, yS + 0.14, sr.z1 - 0.2, 0b111111);
+      t.box(sr.x1 - 0.2, yS, sr.z0 + 0.2, sr.x1 + 0.05, yS + 0.14, sr.z1 - 0.2, 0b111111);
+    }
+    // roof: inner parapet faces, flat roof, plant
+    const ir: LRect = { x0: r.x0 + 0.25, x1: r.x1 - 0.25, z0: r.z0 + 0.25, z1: r.z1 - 0.25 };
+    for (const sd of [FRONT, RIGHT, BACK, LEFT] as Side[]) {
+      const sg = sideGeom(ir, sd);
+      const ax = sx(sg, 0, 0), az = sz(sg, 0, 0), bx = sx(sg, sg.L, 0), bz = sz(sg, sg.L, 0);
+      setCol(t, shade(offC, 0.86));
+      t.quad(bx, oH, bz, ax, oH, az, ax, top, az, bx, top, bz);
+    }
+    setCol(t, shade(offC, 1.06));
+    // parapet copings (clear of the stair head)
+    const fx0 = stair && office === LEFT ? sr.x1 : r.x0,
+      fx1 = stair && office === RIGHT ? sr.x0 : r.x1;
+    const sz1L = stair && office === LEFT ? sr.z0 : r.z1 - 0.26,
+      sz1R = stair && office === RIGHT ? sr.z0 : r.z1 - 0.26;
+    t.box(r.x0, top, r.z0, r.x1, top + 0.1, r.z0 + 0.26, 0b111111);
+    t.box(fx0, top, r.z1 - 0.26, fx1, top + 0.1, r.z1, 0b111111);
+    t.box(r.x0, top, r.z0 + 0.26, r.x0 + 0.26, top + 0.1, sz1L, 0b111111);
+    t.box(r.x1 - 0.26, top, r.z0 + 0.26, r.x1, top + 0.1, sz1R, 0b111111);
+    flatRoof(s, ir, oH + 0.02, col('#8a8780'), ROOFPAT.FLAT, g.seed);
+    roofKit(g, ir, oH + 0.02, { rng: mr, plant: 0.5, tank: 0.25, solar: 0.45, garden: 0.05, wall: shade(offC, 0.92), keep: stair ? [{ x0: sr.x0 - 0.6, z0: sr.z0 - 0.6, x1: sr.x1 + 0.6, z1: sr.z1 + 0.6 }] : [] });
+  }
+
+  function vents(yAt: number | ((x: number, z: number) => number), n: number): void {
     const t2 = g.trim;
     for (let k = 0; k < n; k++) {
-      const vx = body.x0 + 2 + rng.next() * (body.x1 - body.x0 - 4),
+      let vx = body.x0 + 2 + rng.next() * (body.x1 - body.x0 - 4),
         vz = body.z0 + 2 + rng.next() * (body.z1 - body.z0 - 4);
+      if (monBand) {
+        const d = (monBand.alongX ? vz : vx) - monBand.c;
+        if (Math.abs(d) < monBand.half + 0.6) {
+          const v = monBand.c + Math.sign(d || 1) * (monBand.half + 0.75);
+          if (monBand.alongX) vz = v;
+          else vx = v;
+        }
+      }
+      if (office >= 0 && vx > officeR.x0 - 1.2 && vx < officeR.x1 + 1.2) vx = office === LEFT ? officeR.x1 + 1.5 : officeR.x0 - 1.5;
+      const y = typeof yAt === 'number' ? yAt : yAt(vx, vz);
       setCol(t2, col('#a9b0b5'));
       t2.cylinder(vx, vz, 0.35, y - 1.2, y + 0.8, 8, false);
       setCol(t2, col('#7d858b'));
       t2.cone(vx, vz, 0.55, y + 0.8, y + 1.15, 8);
+      anchors.chimney(vx, vz, y + 0.9, 0.7, 0.7);
     }
   }
 
@@ -420,19 +995,28 @@ export function genIndustrial(g: Gen): void {
   const sgF = sideGeom(body, FRONT);
   if (brickworks) {
     const r = g.atlas.add('brickworks', 640, 80, letterSign('HAVEN BRICKWORKS', '#efe6d4', '#ffe7b0', '"Arial Black", Impact, sans-serif', 0.55));
-    signOnSide(g, sgF, sgF.L * 0.5 - 9.5, sgF.L * 0.5 + 9.5, INS - 0.0 + 0.06, H - 2.55, H - 0.65, r);
+    // (geometry hunt: the letters hung in the air across the window heads; a painted board carries them, proud of the piers)
+    const bo = geomOn('brickboard') ? INS + 0.08 : INS - 0.0 + 0.03;
+    if (bo > INS + 0.05) {
+      setCol(t, col('#33261f'));
+      sideBox(t, sgF, sgF.L * 0.5 - 9.8, sgF.L * 0.5 + 9.8, 0, bo, H - 2.62, H - 0.58, true);
+    }
+    signOnSide(g, sgF, sgF.L * 0.5 - 9.5, sgF.L * 0.5 + 9.5, bo + 0.03, H - 2.55, H - 0.65, r);
   } else if (customs) {
     const r = g.atlas.add('customs', 900, 72, letterSign('OLD CUSTOMS WAREHOUSE', '#ece2c6', '#ffe1a8', 'Georgia, "Times New Roman", serif', 0.45));
     signOnSide(g, sgF, sgF.L * 0.5 - 14, sgF.L * 0.5 + 14, INS + 0.06, H - 1.85, H - 0.55, r);
   } else {
-    const names = depot ? ['TRANSIT DEPOT'] : ['NORTHGATE FREIGHT', 'HARBOUR STORES', 'NORTHGATE LOGISTICS', 'BRICKWORKS STORE', 'KESTREL & SONS'];
-    const nm = depot ? names[0] : names[(lot.id * 7) % names.length];
+    const nm = depot ? 'TRANSIT DEPOT' : FIRMS[(lot.id * 7) % FIRMS.length];
     const r = g.atlas.add(`ind:${nm}`, 420, 64, boardSign(nm, { bg: '#f1ede4', fg: '#2c3a46', font: '"Arial Black", "Segoe UI", sans-serif', weight: '900', glow: 0.25, glowColor: '#ffffff', border: '#2c3a46' }));
-    const w = Math.min(sgF.L * 0.55, 11);
+    // the board stays clear of the dock canopies (top at doorH + 0.5): it shrinks rather than overlapping them
     const yS = Math.min(H - 0.5, Math.max(doorH + 1.0, H - 2.0));
+    const yB = Math.min(yS - 0.55, Math.max(yS - 1.65, doorH + 0.75));
+    const w = Math.min(sgF.L * 0.55, 11, (yS - yB - 0.15) * 7.2); // keep the lettering's aspect
+    // the board stands proud of the brick pilasters / string course (they used to cut through it)
+    const bo = brick ? INS + 0.08 : 0.1;
     setCol(t, col('#2c3a46'));
-    sideBox(t, sgF, sgF.L / 2 - w / 2 - 0.1, sgF.L / 2 + w / 2 + 0.1, 0, 0.1, yS - 1.65, yS + 0.05, true);
-    signOnSide(g, sgF, sgF.L / 2 - w / 2, sgF.L / 2 + w / 2, 0.135, yS - 1.55, yS - 0.05, r);
+    sideBox(t, sgF, sgF.L / 2 - w / 2 - 0.1, sgF.L / 2 + w / 2 + 0.1, 0, bo, yB, yS + 0.05, true);
+    signOnSide(g, sgF, sgF.L / 2 - w / 2, sgF.L / 2 + w / 2, bo + 0.035, yB + 0.1, yS - 0.05, r);
     if (depot) {
       // floodlights over the yard
       for (const u of [1.0, sgF.L - 1.0]) {
@@ -443,6 +1027,9 @@ export function genIndustrial(g: Gen): void {
     }
   }
 }
+
+/** firm names on the industrial halls (name board; the head office carries the same name in letters) */
+const FIRMS = ['NORTHGATE FREIGHT', 'HARBOUR STORES', 'NORTHGATE LOGISTICS', 'BRICKWORKS STORE', 'KESTREL & SONS'];
 
 function yawOf(front: string): number {
   return front === 'S' ? 0 : front === 'E' ? Math.PI / 2 : front === 'N' ? Math.PI : -Math.PI / 2;

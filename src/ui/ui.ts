@@ -7,12 +7,17 @@ import './ui.css';
 import * as THREE from 'three';
 import type { CityContext, CityModule, PickHit, QualityLevel, QualityState } from '../core/context';
 import { CITY_NAME } from '../core/constants';
+import { DIORAMA, TAGLINE } from '../core/world';
 import { ICONS, SKY_DIAL, type IconName } from './hud/icons';
 import { Minimap, type LiveDot } from './hud/minimap';
 import { DistrictLabels, type ScreenRect } from './hud/labels';
+import { PhotoMode } from './hud/photo';
 import { cameraExt, audioExt, type TourShotInfo } from './shared';
 
 type QualityMode = 'auto' | QualityLevel;
+
+/** the depth-of-field control: tilt-shift in the tabletop diorama, a natural lens in world mode */
+const DOF_NAME = DIORAMA ? 'Tilt-shift focus' : 'Depth of field';
 
 const SPEEDS = [1, 2, 4, 8];
 
@@ -37,6 +42,10 @@ const POI_NOTES: Record<string, string> = {
   stadium: 'Floodlights & stalls',
   westbrook: 'Quiet suburban streets',
   industry: 'Chimneys & warehouses',
+  vista: 'The town, forest & mountains',
+  country: 'Farmland, hedgerows & villages',
+  coast: 'Headland, island & open sea',
+  riverbend: 'Eye level on the riverbank',
 };
 
 const KIND_WORD: Record<PickHit['kind'], string> = {
@@ -115,7 +124,7 @@ export default function create(ctx: CityContext): CityModule {
   const title = el(
     'header',
     'th-title th-card',
-    `<div class="th-brand"><div class="th-name">${CITY_NAME.slice(0, 4)}<b>${CITY_NAME.slice(4)}</b></div><div class="th-tag">A living miniature city</div></div>
+    `<div class="th-brand"><div class="th-name">${CITY_NAME.slice(0, 4)}<b>${CITY_NAME.slice(4)}</b></div><div class="th-tag">${TAGLINE}</div></div>
      <div class="th-sep"></div>
      <div class="th-clock">${SKY_DIAL}<div class="th-clock-text"><div class="th-time">--:--</div><div class="th-day">Day 1</div></div></div>`,
   );
@@ -204,8 +213,11 @@ export default function create(ctx: CityContext): CityModule {
   g2.append(timeLabel, slider, scrub);
 
   const g3 = el('div', 'th-group');
-  const dofBtn = btn('tiltshift', 'Tilt-shift focus (B)');
+  const dofBtn = btn('tiltshift', `${DOF_NAME} (B)`);
   const tourBtn = btn('tour', 'Auto-tour (T)');
+  const walkBtn = btn('walk', 'Walk at street level (V)');
+  const filmBtn = btn('film', 'Play the film');
+  const photoBtn = btn('photo', 'Photo mode (P)');
   const weatherBtn = btn('weatherAuto', 'Weather: automatic');
   const soundBtn = btn('soundOff', 'Sound');
   const volWrap = el('div', 'th-vol-wrap');
@@ -217,11 +229,11 @@ export default function create(ctx: CityContext): CityModule {
   vol.setAttribute('aria-label', 'Volume');
   volWrap.appendChild(vol);
   const labelsBtn = btn('labels', 'District labels (L)');
-  const placesBtn = btn('places', 'Places (P)');
+  const placesBtn = btn('places', 'Places (O)');
   const mapBtn = btn('map', 'Minimap (M)');
   const qualityBtn = btn('quality', 'Quality');
   const helpBtn = btn('help', 'Controls & help (H)');
-  g3.append(dofBtn, tourBtn, weatherBtn, soundBtn, volWrap, labelsBtn, placesBtn, mapBtn, qualityBtn, helpBtn);
+  g3.append(dofBtn, tourBtn, walkBtn, filmBtn, photoBtn, weatherBtn, soundBtn, volWrap, labelsBtn, placesBtn, mapBtn, qualityBtn, helpBtn);
   tb.append(g1, el('div', 'th-divider'), g2, el('div', 'th-divider'), g3);
 
   // menus
@@ -254,7 +266,7 @@ export default function create(ctx: CityContext): CityModule {
   const qualityItems: Record<QualityMode, HTMLButtonElement> = {} as Record<QualityMode, HTMLButtonElement>;
   const qualityNotes: Record<QualityMode, string> = {
     auto: 'Adapts to your device',
-    low: 'Fast · no AO, no tilt-shift',
+    low: `Fast · no AO, no ${DOF_NAME.toLowerCase()}`,
     medium: 'Balanced',
     high: 'All effects',
   };
@@ -282,8 +294,8 @@ export default function create(ctx: CityContext): CityModule {
       <section><h3>Mouse</h3><dl>
         <dt>${gst('Left-drag')}</dt><dd>Rotate around the city</dd>
         <dt>${gst('Right-drag')}</dt><dd>Pan (also middle or Shift-drag)</dd>
-        <dt>${gst('Scroll')}</dt><dd>Zoom towards the cursor</dd>
-        <dt>${gst('Click')}</dt><dd>Follow anything that moves — even the balloon and the plane — or take a look at a building; drag to circle it, right-drag to let go</dd>
+        <dt>${gst('Scroll')}</dt><dd>Zoom towards the cursor — up close it carries you on, through doors and into rooms</dd>
+        <dt>${gst('Click')}</dt><dd>Follow anything that moves — even the balloon and the plane — or see what a building is; right-drag to let go</dd>
         <dt>${gst('Double-click')}</dt><dd>Fly to that spot, or in close to what is there</dd>
         <dt>${gst('Minimap')}</dt><dd>Click to fly, drag to pan</dd>
       </dl></section>
@@ -295,15 +307,18 @@ export default function create(ctx: CityContext): CityModule {
         <dt>${k('+', '−')}</dt><dd>Zoom</dd>
         <dt>${k('1', '…', '9')}${k('0')}</dt><dd>Places · overview</dd>
         <dt>${k('C')}</dt><dd>Chase view</dd>
+        <dt>${k('G')}</dt><dd>Free / guided camera</dd>
+        <dt>${k('V')}</dt><dd>Walk from the spot under the cursor · Shift jogs, scroll or ${k('+', '−')} magnifies, Esc frees the mouse</dd>
         <dt>${k('Esc')}</dt><dd>Let go · stop tour</dd>
       </dl></section>
       <section><h3>Time & view</h3><dl>
         <dt>${k('Space')}</dt><dd>Pause / play</dd>
         <dt>${k(',', '.')}</dt><dd>Slower / faster</dd>
         <dt>${k('T')}</dt><dd>Cinematic auto-tour</dd>
-        <dt>${k('B')}</dt><dd>Tilt-shift focus</dd>
+        <dt>${k('B')}</dt><dd>${DOF_NAME}</dd>
         <dt>${k('L')}${k('M')}</dt><dd>Labels · minimap</dd>
-        <dt>${k('P')}${k('H')}</dt><dd>Places · this help</dd>
+        <dt>${k('O')}${k('H')}</dt><dd>Places · this help</dd>
+        <dt>${k('P')}</dt><dd>Photo mode · save a picture</dd>
         <dt>${k('U')}</dt><dd>Hide the controls</dd>
         <dt>${k('`')}</dt><dd>Frame-rate meter</dd>
       </dl></section>
@@ -334,7 +349,7 @@ export default function create(ctx: CityContext): CityModule {
     const t = e.currentTarget as HTMLElement | null;
     if (t && typeof t.blur === 'function') setTimeout(() => t.blur(), 0);
   };
-  for (const b of [playBtn, ...speedBtns, dofBtn, tourBtn, weatherBtn, soundBtn, labelsBtn, placesBtn, mapBtn, qualityBtn, helpBtn]) b.addEventListener('click', blurSoon);
+  for (const b of [playBtn, ...speedBtns, dofBtn, tourBtn, walkBtn, filmBtn, photoBtn, weatherBtn, soundBtn, labelsBtn, placesBtn, mapBtn, qualityBtn, helpBtn]) b.addEventListener('click', blurSoon);
 
   const setPaused = (p: boolean) => {
     if (p) {
@@ -403,14 +418,14 @@ export default function create(ctx: CityContext): CityModule {
   dofBtn.addEventListener('click', () => {
     const p = postfx();
     if (!p) {
-      toast('Tilt-shift needs the post-processing module');
+      toast(`${DOF_NAME} needs the post-processing module`);
       return;
     }
     dofPref = !safeIsEnabled('dof');
     if (dofPref && !ctx.quality.dof) ctx.quality.dof = true;
     applyDof(dofPref);
     save('dof', dofPref);
-    toast(dofPref ? 'Tilt-shift focus on' : 'Tilt-shift focus off');
+    toast(`${DOF_NAME} ${dofPref ? 'on' : 'off'}`);
     syncToolbar();
   });
   const safeIsEnabled = (e: 'dof' | 'bloom' | 'ao'): boolean => {
@@ -430,22 +445,64 @@ export default function create(ctx: CityContext): CityModule {
     syncToolbar();
   });
 
-  // weather: automatic showers (sky decides) → always clear → rain
-  type Weather = 'auto' | 'clear' | 'rain';
+  // first-person walk (camera/firstPerson.ts)
+  walkBtn.addEventListener('click', () => {
+    cam()?.toggleWalk?.();
+    syncToolbar();
+  });
+
+  // the film (camera/film.ts) and photo mode (hud/photo.ts)
+  filmBtn.addEventListener('click', () => cam()?.film.play());
+  photoBtn.addEventListener('click', () => photo.toggle());
+  const photo = new PhotoMode(ctx, cam, root, toast, () => dofPref);
+  let filming = false;
+  events.on('film', (on: boolean) => {
+    filming = on;
+    root.classList.toggle('th-filming', on);
+    if (on) {
+      closeMenus();
+      setHelp(false);
+      showCaption(null);
+      tooltip.classList.remove('show');
+    } else {
+      // the film held the sky clear: back to what the visitor had chosen
+      setWeather(weather, false);
+      hintAt = t + 1.5;
+      layout();
+    }
+    syncToolbar();
+  });
+  // (the first load's film started before this module existed)
+  if (cam()?.film.active()) {
+    filming = true;
+    root.classList.add('th-filming');
+  }
+  events.on('photo', (on: boolean) => {
+    if (on) {
+      closeMenus();
+      setHelp(false);
+      showCaption(null);
+      tooltip.classList.remove('show');
+    }
+    syncToolbar();
+  });
+
+  // weather: automatic (sky decides) → always clear → rain → a storm
+  type Weather = 'auto' | 'clear' | 'rain' | 'storm';
   let weather: Weather = 'auto';
   const sky = () => ctx.services.sky;
   const setWeather = (w: Weather, announce: boolean) => {
     weather = w;
     const s = sky();
     try {
-      s?.setWeather?.(w === 'auto' ? NaN : w === 'clear' ? 0 : 0.85);
+      s?.setWeather?.(w === 'auto' ? NaN : w === 'clear' ? 0 : w === 'rain' ? 0.85 : 1);
     } catch {
       /* ignore */
     }
-    if (announce) toast(w === 'auto' ? 'Weather: the sky decides' : w === 'clear' ? 'Weather: clear skies' : 'Weather: rain showers');
+    if (announce) toast(w === 'auto' ? 'Weather: the sky decides' : w === 'clear' ? 'Weather: clear skies' : w === 'rain' ? 'Weather: rain showers' : 'Weather: a storm is coming');
     syncToolbar();
   };
-  weatherBtn.addEventListener('click', () => setWeather(weather === 'auto' ? 'clear' : weather === 'clear' ? 'rain' : 'auto', true));
+  weatherBtn.addEventListener('click', () => setWeather(weather === 'auto' ? 'clear' : weather === 'clear' ? 'rain' : weather === 'rain' ? 'storm' : 'auto', true));
 
   // sound (the click is the user gesture that unlocks WebAudio)
   const toggleSound = () => {
@@ -689,13 +746,19 @@ export default function create(ctx: CityContext): CityModule {
     dofBtn.classList.toggle('on', hasPost && safeIsEnabled('dof'));
     const canWeather = typeof sky()?.setWeather === 'function';
     weatherBtn.disabled = !canWeather;
-    weatherBtn.innerHTML = ICONS[weather === 'auto' ? 'weatherAuto' : weather === 'clear' ? 'weatherClear' : 'weatherRain'];
+    weatherBtn.innerHTML = ICONS[weather === 'auto' ? 'weatherAuto' : weather === 'clear' ? 'weatherClear' : weather === 'rain' ? 'weatherRain' : 'weatherStorm'];
     weatherBtn.classList.toggle('on', weather !== 'auto');
-    weatherBtn.dataset.tip = weather === 'auto' ? 'Weather: automatic' : weather === 'clear' ? 'Weather: clear' : 'Weather: rain';
+    weatherBtn.dataset.tip = weather === 'auto' ? 'Weather: automatic' : weather === 'clear' ? 'Weather: clear' : weather === 'rain' ? 'Weather: rain' : 'Weather: storm';
     const c = cam();
     tourBtn.disabled = !c;
     tourBtn.classList.toggle('on', !!c?.touring());
     tourBtn.classList.toggle('th-touring', !!c?.touring());
+    const walking = !!c?.walking?.();
+    walkBtn.disabled = !c?.toggleWalk;
+    walkBtn.classList.toggle('on', walking);
+    walkBtn.dataset.tip = walking ? 'Stop walking (V)' : 'Walk at street level (V)';
+    filmBtn.disabled = !c;
+    photoBtn.disabled = !ctx.services.postfx?.capture;
     const a = audio();
     const sOn = !!a?.enabled();
     soundBtn.innerHTML = sOn ? ICONS.soundOn : ICONS.soundOff;
@@ -726,6 +789,7 @@ export default function create(ctx: CityContext): CityModule {
     const movable = isMovable(hit);
     let kicker = KIND_WORD[hit.kind] ?? 'Following';
     if (hit.kind === 'other') kicker = !movable ? 'Viewing' : isAirborne(hit) ? 'Following · aircraft' : 'Following';
+    if (c?.walking?.()) kicker = kicker.replace(/^(Following|Viewing)/, 'Looking at');
     infoKicker.textContent = kicker;
     infoLabel.textContent = hit.label;
     chaseBtn.style.display = movable ? '' : 'none';
@@ -749,6 +813,11 @@ export default function create(ctx: CityContext): CityModule {
 
   events.on('camera:follow', () => syncInfo());
   events.on('camera:chase', () => syncInfo());
+  events.on('camera:walk', (on: boolean) => {
+    syncToolbar();
+    syncInfo();
+    if (on) hideHint();
+  });
   events.on('camera:tour', (on: boolean) => {
     syncToolbar();
     if (on) toast('Auto-tour — move the camera to take over');
@@ -808,6 +877,11 @@ export default function create(ctx: CityContext): CityModule {
   };
   const onKey = (e: KeyboardEvent) => {
     if (e.code === 'Escape') {
+      if (photo.active) {
+        photo.exit();
+        e.stopImmediatePropagation();
+        return;
+      }
       if (helpOpen) {
         setHelp(false);
         e.stopImmediatePropagation();
@@ -851,6 +925,9 @@ export default function create(ctx: CityContext): CityModule {
         setMap(!mapOn);
         break;
       case 'KeyP':
+        photo.toggle();
+        break;
+      case 'KeyO':
         toggleMenu(placesMenu, placesBtn);
         break;
       case 'KeyB':
@@ -863,7 +940,8 @@ export default function create(ctx: CityContext): CityModule {
         setFps(!fpsOn);
         break;
       case 'KeyU':
-        setHud(!hudHidden);
+        if (photo.active) photo.togglePanel();
+        else setHud(!hudHidden);
         break;
       case 'Slash':
         if (e.shiftKey) setHelp(!helpOpen);
@@ -962,7 +1040,7 @@ export default function create(ctx: CityContext): CityModule {
     const c = cam();
     if (!c) return;
     const p = c.pointer;
-    const active = p.inside && !p.dragging && !helpOpen && now - p.movedAt < 4000 && !c.touring();
+    const active = p.inside && !p.dragging && !helpOpen && now - p.movedAt < 4000 && !c.touring() && !photo.active;
     if (!active) {
       labels.setHover(null);
       if (hoverHit || hoverFlag) {
@@ -1070,6 +1148,7 @@ export default function create(ctx: CityContext): CityModule {
   const camForHook = cam();
   if (camForHook)
     camForHook.clickHook = (x, y) => {
+      if (photo.click(x, y)) return true;
       const d = labels.hitTest(x, y);
       if (!d) return false;
       labels.fly(d);
@@ -1100,6 +1179,8 @@ export default function create(ctx: CityContext): CityModule {
     fpsShown = 60,
     msEma = 16;
   let t = 0;
+  /** the first-run hint waits for this moment (and for the film to end) */
+  let hintAt = 4.2;
   let lastToolbarSync = 0;
   let frameStart = 0;
   let uiMs = 0;
@@ -1110,10 +1191,14 @@ export default function create(ctx: CityContext): CityModule {
       const now = performance.now();
       t += realDt;
       frameStart = now;
+      photo.frame(realDt);
       updateClock();
-      labels.update(realDt);
-      minimap.draw(now);
-      updateHover(now);
+      // (nothing of this shows during the film)
+      if (!filming) {
+        labels.update(realDt);
+        minimap.draw(now);
+        updateHover(now);
+      }
       perf.update(realDt);
       // info lines refresh at 4 Hz
       infoTimer += realDt;
@@ -1130,7 +1215,7 @@ export default function create(ctx: CityContext): CityModule {
         if ((c?.following() ?? null) !== followHit) syncInfo();
       }
       // first-run hint after the establishing shot
-      if (hintState === 'wait' && t > 4.2) {
+      if (hintState === 'wait' && t > hintAt && !filming && !photo.active) {
         if (automated && !ctx.debug.params.has('hint')) hintState = 'done';
         else {
           hintState = 'show';
@@ -1175,6 +1260,7 @@ export default function create(ctx: CityContext): CityModule {
     dispose() {
       if (camForHook && camForHook.clickHook) camForHook.clickHook = null;
       window.removeEventListener('keydown', onKey, true);
+      photo.dispose();
       document.removeEventListener('pointerdown', onDocDown, true);
       ctx.canvas.removeEventListener('pointerdown', onCanvasInteract);
       ctx.canvas.removeEventListener('wheel', onCanvasInteract);

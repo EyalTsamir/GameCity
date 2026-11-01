@@ -52,7 +52,7 @@ void main() {
 `;
 
 const FRAG = /* glsl */ `
-uniform float uDay;
+uniform vec3 uFoamLight;
 varying vec2 vUv;
 varying float vA;
 varying float vSeed;
@@ -68,13 +68,13 @@ float wkNoise(vec2 p) {
 void main() {
   float r = length(vUv);
   if (r > 1.0 || vA <= 0.002) discard;
-  float edge = 1.0 - smoothstep(0.45, 1.0, r);
-  // lacy, breaking foam: fresh foam is solid, older foam tears into streaks
+  float edge = 1.0 - smoothstep(0.25, 1.0, r);
+  // churned water: a soft aerated halo with lacy foam inside that tears open as it ages
   float n = wkNoise(vUv * 2.7 + vSeed * 31.0) * 0.62 + wkNoise(vUv * 6.5 - vSeed * 17.0) * 0.38;
-  float th = mix(0.18, 0.56, vAge);
-  float lace = smoothstep(th, th + 0.2, n * (0.55 + 0.45 * edge)) * edge;
-  float a = clamp(vA * lace * 1.15, 0.0, 0.95);
-  vec3 col = vec3(1.0, 1.0, 1.0) * (0.09 + 1.0 * uDay);
+  float th = mix(0.22, 0.62, vAge);
+  float lace = smoothstep(th, th + 0.16, n * (0.5 + 0.5 * edge)) * edge;
+  float a = clamp(vA * (lace * 0.95 + edge * edge * 0.18), 0.0, 0.9);
+  vec3 col = uFoamLight;
   gl_FragColor = vec4(col, a);
   #ifdef USE_FOG
     #ifdef FOG_EXP2
@@ -99,7 +99,7 @@ export class Wakes {
   private wrapped = false;
   spawned = 0;
 
-  constructor(ctx: CityContext, cap = 1024) {
+  constructor(ctx: CityContext, cap = 1024, foamLight: THREE.Color = new THREE.Color(1, 1, 1)) {
     this.cap = cap;
     const base = new THREE.PlaneGeometry(2, 2, 1, 1);
     base.rotateX(-Math.PI / 2);
@@ -125,7 +125,7 @@ export class Wakes {
       fog: true,
     });
     mat.uniforms.uTime = ctx.uniforms.uTime;
-    mat.uniforms.uDay = ctx.uniforms.uDaylight;
+    mat.uniforms.uFoamLight = { value: foamLight };
     this.mesh = new THREE.Mesh(geo, mat);
     this.mesh.name = 'boats-wakes';
     this.mesh.frustumCulled = false;

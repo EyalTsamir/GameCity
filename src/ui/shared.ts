@@ -28,6 +28,9 @@ export interface TourShotInfo {
 }
 
 export interface CameraServiceExt extends CoreCameraService {
+  /** magnify the view without moving (1..8; photo mode, the test set, the walker's wheel); seconds 0 snaps */
+  setLens(k: number, seconds?: number): void;
+  lensNow(): number;
   /** entity currently followed (or null) */
   following(): PickHit | null;
   /** low chase view behind the followed entity */
@@ -57,6 +60,33 @@ export interface CameraServiceExt extends CoreCameraService {
   liveEntities(): { x: number; z: number; kind: PickHit['kind']; color: string }[];
   /** UI hook: a plain click at canvas (x, y) — return true when the UI handled it (e.g. a district flag) */
   clickHook?: ((x: number, y: number) => boolean) | null;
+  /** first-person walk (camera/firstPerson.ts) is on */
+  walking?(): boolean;
+  /** start walking from the camera focus, or stop (the HUD button; the V key walks from the cursor) */
+  toggleWalk?(): void;
+  /** tests: the walker's body (feet, walking-surface height under it, view yaw / pitch in radians), null when not walking */
+  walkDebug?(): { x: number; z: number; feet: number; ground: number; yaw: number; pitch: number; locked: boolean; gliding: boolean } | null;
+  /** the opening film (camera/film.ts) */
+  film: {
+    play(): void;
+    stop(): void;
+    active(): boolean;
+    playing(): boolean;
+    /** film seconds */
+    time(): number;
+    total(): number;
+    shot(): string;
+    /** storyboard: jump within the film */
+    seek(t: number): void;
+    /** tests: eye positions inside buildings / below ground along the film */
+    check(): string[];
+    /** photo mode takes over the picture settings */
+    dropPrint(): void;
+  };
+  /** ends the tour, a walk, a follow and flights where the camera is (no rise, no re-framing) */
+  releaseAll(): void;
+  /** photo mode: the free camera's rules for now, whatever G says */
+  setFreeOverride(on: boolean): void;
 }
 
 export interface AudioServiceExt {

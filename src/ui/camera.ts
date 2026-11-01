@@ -4,6 +4,7 @@
 //
 // Registers ctx.services.camera (core type + the extras in ./shared.ts).
 
+import { nearLens } from '../core/nearDetail';
 import * as THREE from 'three';
 import type { CityContext, CityModule, CameraState, PickHit } from '../core/context';
 import type { Poi } from '../core/plan';
@@ -11,7 +12,11 @@ import { SurfaceField } from './camera/surface';
 import { Scout, type LiveEntity } from './camera/scout';
 import { TourDirector, type Pose, type TourRig } from './camera/tour';
 import { buildDebugProxy } from './camera/debugProxy';
+import { FirstPerson } from './camera/firstPerson';
+import { ExploreAid, FLOOR_CLEAR } from './camera/explore';
+import { FilmDirector, filmWanted } from './camera/film';
 import type { CameraServiceExt, PointerInfo, TourShotInfo } from './shared';
+import { WORLD_MODE } from '../core/world';
 
 const DEG = Math.PI / 180;
 const MIN_PITCH = 10 * DEG;
@@ -19,9 +24,22 @@ const MAX_PITCH = 85 * DEG;
 const MIN_DIST = 12;
 const MAX_DIST = 750;
 const CHASE_MIN_DIST = 5;
-const TARGET_MARGIN = 30;
+/** how far the orbit pivot may leave the slab: the tabletop's edge, or the countryside in world mode */
+const DIORAMA_TARGET_MARGIN = 30;
+const WORLD_TARGET_MARGIN = 320;
 const BASE_FOV = 32;
 const CHASE_FOV = 42;
+// world mode (world agent's grant): the far plane reaches the sea horizon and the mountain layers;
+// a wider lens at eye level easing to a longer one toward the overview (diorama keeps BASE_FOV)
+const WORLD_FAR = 60000;
+const WORLD_FOV_NEAR = 50;
+const WORLD_FOV_FAR = 34;
+const WORLD_FOV_D0 = 12;
+const WORLD_FOV_D1 = 380;
+function worldFov(d: number): number {
+  const t = Math.min(1, Math.max(0, (Math.log(Math.max(d, 1)) - Math.log(WORLD_FOV_D0)) / (Math.log(WORLD_FOV_D1) - Math.log(WORLD_FOV_D0))));
+  return WORLD_FOV_NEAR + (WORLD_FOV_FAR - WORLD_FOV_NEAR) * t * t * (3 - 2 * t);
+}
 
 const CLICK_PX = 5;
 const DBL_MS = 380;
@@ -43,6 +61,13 @@ const ROOF_MARGIN = 0.3;
 const ARM_HORIZON = 0.62;
 /** below this orbit distance the camera keeps a line of sight to the pivot */
 const LOS_DIST = 100;
+/** free camera (default): the orbit may come this close / this low — below the pivot, looking up (guided: MIN_DIST / MIN_PITCH) */
+const FREE_MIN_DIST = 0.5;
+const FREE_MIN_PITCH = -55 * DEG;
+/** free camera this close: the wheel moves it forward along the cursor ray (through doorways, into rooms) */
+const DOLLY_DIST = 6;
+/** free camera this close: panning keeps the pivot's height (a storey, under a bridge) instead of settling on the ground */
+const HOLD_Y_DIST = 40;
 
 interface Flight {
   from: Pose;
@@ -148,8 +173,12 @@ const AIR_PARAMS = { dist: 70, pitch: 18 * DEG, aim: 0, follow: 115 };
 
 export default function create(ctx: CityContext): CityModule {
   const { plan, canvas, camera } = ctx;
-  const field = new SurfaceField(plan);
+  // world mode: the pivot may roam the countryside around the town, standing on the landscape there
+  const land = WORLD_MODE ? (ctx.services.landscape as { active: boolean; height(x: number, z: number): number } | undefined) : undefined;
+  const field = new SurfaceField(plan, land?.active ? (x, z) => land.height(x, z) : undefined);
+  const TARGET_MARGIN = land?.active ? WORLD_TARGET_MARGIN : DIORAMA_TARGET_MARGIN;
   const scout = new Scout(ctx);
+  const explore = new ExploreAid(ctx, field);
   const raycaster = new THREE.Raycaster();
   const ndc = new THREE.Vector2();
   const _v = new THREE.Vector3();
@@ -204,6 +233,8 @@ export default function create(ctx: CityContext): CityModule {
   const dbg = { want: 0, lim: 0, d: 0, need: 0 };
   let craneLift = 0;
   let fov = BASE_FOV;
+  /** the lens of the orbit camera (photo mode, the test set; the wheel moves the camera instead); the walker has its own */
+  let orbitLens = 1;
 
   // input state
   const keys = new Set<string>();
@@ -227,12 +258,60 @@ export default function create(ctx: CityContext): CityModule {
   const touches = new Map<number, { x: number; y: number }>();
   let pinch: { mx: number; my: number; dist: number; angle: number; n: number } | null = null;
   let lastClick: { t: number; x: number; y: number; hit: PickHit | null } = { t: 0, x: 0, y: 0, hit: null };
+  /** the press in progress ended the film / when the auto-tour may follow it */
+  let filmPress = false;
+  let filmFov = BASE_FOV;
+  let filmTourAt = Infinity;
   let hoverCursor = false;
 
   const pointer: PointerInfo = { x: -1, y: -1, inside: false, dragging: false, movedAt: 0 };
 
   const toast = (msg: string) => (ctx.services.ui as { toast?: (m: string) => void } | undefined)?.toast?.(msg);
   const emit = (name: string, payload?: unknown) => ctx.events.emit(name, payload);
+
+  // First-person walk (./camera/firstPerson.ts). While it is active it owns the camera: canvas pointer
+  // input and its keys are routed to it and the orbit update is skipped; flights, follows and the tour end
+  // it first. Leaving hands the eye pose back to the orbit (leaveWalk), so the switch never jumps.
+  const walk = new FirstPerson(ctx, {
+    pointer,
+    pickAt: (x, y) => pickAt(x, y),
+    release: (eye, viewYaw, viewPitch, rise) => leaveWalk(eye, viewYaw, viewPitch, rise),
+    toast,
+    emit,
+    bounds,
+    far: WORLD_MODE ? WORLD_FAR : 4000,
+  });
+
+  // Camera feel. FREE (default): the orbit camera goes exactly where it is steered — through facades and
+  // roofs, into buildings (a room is drawn around it there, see ./camera/explore), under bridges; only the
+  // ground / water surface stops it — and never starts touring by itself. Nothing lifts it: no roof lift, no
+  // crane-up, no take-off rise in flights, no re-framing flight when a building is clicked (that only shows
+  // its card). Follow cams keep their line of sight (the arm slides in front of walls). GUIDED (G key,
+  // ?guidedcam): the original spring arm that keeps the orbit out of buildings (slides in front of
+  // facades, keeps a line of sight, lifts over roofs) plus the idle auto-tour. The tour keeps its own
+  // framing rules in both modes. The choice is remembered (?freecam forces free).
+  /** photo mode: the free camera for now, the visitor's choice kept here */
+  let guidedSaved: boolean | null = null;
+  let guided = ctx.debug.params.has('guidedcam')
+    ? true
+    : ctx.debug.params.has('freecam')
+      ? false
+      : (() => {
+          try {
+            return localStorage.getItem('tinyhaven.guidedCam') === 'true';
+          } catch {
+            return false;
+          }
+        })();
+  /** free-camera rules apply (nothing lifts or re-frames the camera); the tour keeps its own */
+  const freeRules = () => !guided && !tour.active;
+  /** free camera: a building / landmark clicked for its info card (the camera stays where it is) */
+  let inspect: PickHit | null = null;
+  let focusSet = false;
+  let focusPick = Infinity;
+  let focusReal = -1;
+  let focusPickAt = -1e9;
+  const _focusFrom = new THREE.Vector3(1e9, 0, 0);
 
   // ───────────────────────────────────────────── helpers
   const canvasXY = (e: { clientX: number; clientY: number }) => {
@@ -253,7 +332,9 @@ export default function create(ctx: CityContext): CityModule {
 
   const pickAt = (x: number, y: number): PickHit | null => {
     const ray = setRay(x, y);
-    const hit = scout.pick(ray);
+    // from inside a building its own box would catch every click: look past it
+    const inLot = explore.lotAt(camera.position.x, camera.position.y, camera.position.z, 0.3);
+    const hit = scout.pick(ray, inLot ? (h) => h.kind === 'building' && h.id === inLot.id : undefined);
     if (!hit) return null;
     // ignore things hidden behind hills / under the slab
     const tGround = field.raycast(ray.origin, ray.direction, camera.far, _hit, false);
@@ -267,7 +348,7 @@ export default function create(ctx: CityContext): CityModule {
   };
 
   let lastMode = 'orbit';
-  const modeNow = (): string => (tour.active ? 'tour' : follow && !follow.tour ? 'follow' : 'orbit');
+  const modeNow = (): string => (film?.active ? 'film' : walk.active ? 'walk' : tour.active ? 'tour' : follow && !follow.tour ? 'follow' : 'orbit');
   const checkMode = () => {
     const m = modeNow();
     if (m !== lastMode) {
@@ -276,10 +357,12 @@ export default function create(ctx: CityContext): CityModule {
     }
   };
 
-  const minDistNow = () => (!follow ? MIN_DIST : follow.chase || follow.tour ? Math.max(CHASE_MIN_DIST, follow.cls === 'air' ? 24 : 0) : follow.minDist);
-  const minPitchNow = () => (follow?.cls === 'air' ? AIR_MIN_PITCH : follow?.chase ? 4 * DEG : MIN_PITCH);
+  const minDistNow = () => (!follow ? (guided ? MIN_DIST : FREE_MIN_DIST) : follow.chase || follow.tour ? Math.max(CHASE_MIN_DIST, follow.cls === 'air' ? 24 : 0) : follow.minDist);
+  /** the film may hand over a pose outside the orbit's limits: they close in on it gently instead of pulling it back */
+  const handback = { pitch: 0, margin: 0 };
+  const minPitchNow = () => (follow?.cls === 'air' ? AIR_MIN_PITCH : follow?.chase ? 4 * DEG : follow || guided ? MIN_PITCH - handback.pitch : FREE_MIN_PITCH);
   /** how far the pivot may leave the slab (following an aircraft lets it roam much further) */
-  const boundsMargin = () => (follow?.cls === 'air' ? AIR_MARGIN : 0);
+  const boundsMargin = () => (follow?.cls === 'air' ? AIR_MARGIN : handback.margin);
 
   const clampGoal = () => {
     const m = boundsMargin();
@@ -287,7 +370,14 @@ export default function create(ctx: CityContext): CityModule {
     goal.tz = clamp(goal.tz, bounds.z0 - m, bounds.z1 + m);
     goal.ty = clamp(goal.ty, -2, follow?.cls === 'air' ? AIR_MAX_Y : 140);
     goal.dist = clamp(goal.dist, minDistNow(), MAX_DIST);
-    goal.pitch = clamp(goal.pitch, minPitchNow(), MAX_PITCH);
+    let pMin = minPitchNow();
+    if (pMin < 0) {
+      // free camera looking up from below its pivot: the ground under the pivot stops the arm
+      const g = field.groundAt(goal.tx, goal.tz);
+      goal.ty = Math.max(goal.ty, g + 0.25);
+      pMin = Math.max(pMin, Math.asin(clamp((g + FLOOR_CLEAR + 0.1 - goal.ty) / goal.dist, -1, 1)));
+    }
+    goal.pitch = clamp(goal.pitch, Math.min(pMin, MAX_PITCH), MAX_PITCH);
   };
 
   const stopMotion = () => {
@@ -311,8 +401,10 @@ export default function create(ctx: CityContext): CityModule {
     // rise above the city between distant points (cinematic flights to entities always lift a little)
     let arc = Math.max(0, travel * 0.55 - Math.max(from.dist, toP.dist) * 0.35);
     if (kind === 'follow' || kind === 'tour') arc = Math.max(arc, travel * 0.32 - Math.min(from.dist, toP.dist) * 0.15);
+    // free camera: the flight goes the straight way through whatever is in it — no climb over roofs, no take-off
+    const free = kind !== 'tour' && kind !== 'intro' && freeRules();
     // never skim along roofs: make sure the mid-flight camera clears what lies under the path
-    if (travel > 30) {
+    if (travel > 30 && !free) {
       let top = 0;
       for (let k = 1; k < 8; k++) {
         const u = k / 8;
@@ -327,7 +419,7 @@ export default function create(ctx: CityContext): CityModule {
     // take-off: a camera low between buildings first rises clear of the roofs it would otherwise fly
     // into (holding its distance), then the flight extends — like a drone leaving a street
     let rise = 0;
-    if (toP.dist > from.dist * 1.3) {
+    if (toP.dist > from.dist * 1.3 && !free) {
       const c = Math.cos(from.pitch),
         sx = Math.sin(from.yaw) * c,
         sz = Math.cos(from.yaw) * c,
@@ -364,7 +456,7 @@ export default function create(ctx: CityContext): CityModule {
     // plan a clear path: sample where the camera will be and raise the arc until every sample clears the
     // roofs by 3 m (a flight leaving street level used to cut through the towers it started between)
     const f = flight;
-    for (let it = 0; it < 4; it++) {
+    for (let it = 0; it < (free ? 0 : 4); it++) {
       let worst = 0;
       let lever = 1;
       for (let k = 1; k < 16; k++) {
@@ -412,7 +504,7 @@ export default function create(ctx: CityContext): CityModule {
     // (turning during the low final approach swings the arm through the buildings beside it)
     const ey = f.track ? smoother(e / 0.65) : e;
     out.yaw = a.yaw + (b.yaw - a.yaw) * ey;
-    out.pitch = clamp(a.pitch + (b.pitch - a.pitch) * e + f.pitchArc * bump, 4 * DEG, MAX_PITCH);
+    out.pitch = clamp(a.pitch + (b.pitch - a.pitch) * e + f.pitchArc * bump, Math.min(4 * DEG, a.pitch, b.pitch), MAX_PITCH);
     return u;
   };
 
@@ -431,6 +523,9 @@ export default function create(ctx: CityContext): CityModule {
       return null;
     }
   }
+
+  /** buildings, landmarks and things without a heading stay put */
+  const isStill = (hit: PickHit): boolean => hit.kind === 'building' || hit.kind === 'landmark' || (hit.kind === 'other' && typeof hit.getHeading !== 'function');
 
   /** chase / follow parameters for the current target (aircraft get their own) */
   const paramsFor = (f: FollowState) => (f.cls === 'air' ? AIR_PARAMS : chaseParams(f.hit.kind));
@@ -502,14 +597,16 @@ export default function create(ctx: CityContext): CityModule {
     copyPose(goal, cur);
     // settle the pivot back towards the ground so orbiting continues naturally
     goal.ty = Math.max(field.groundAt(goal.tx, goal.tz), cur.ty - 0.5);
-    if (f.chase) {
+    // (the free camera stays where it is when a follow ends: no rise to a settle pose)
+    const stay = freeRules();
+    if (f.chase && !stay) {
       goal.pitch = Math.max(goal.pitch, 24 * DEG);
       goal.dist = Math.max(goal.dist, 30);
     }
     if (f.cls === 'air' || reason === 'away') {
       // back to the town: the pivot is high up (or far out) — glide home to the overview
       flyHome(reason === 'away' ? 4 : 3);
-    } else if (reason === 'gone' || reason === 'tunnel') settleAfter(f.pos);
+    } else if ((reason === 'gone' || reason === 'tunnel') && !stay) settleAfter(f.pos);
     if (!f.tour) {
       emit('camera:follow', null);
       if (f.chase) emit('camera:chase', false);
@@ -521,7 +618,14 @@ export default function create(ctx: CityContext): CityModule {
     checkMode();
   };
 
+  const clearInspect = () => {
+    if (!inspect) return;
+    inspect = null;
+    emit('camera:follow', null);
+  };
+
   const startFollow = (hit: PickHit, opts: { tour: boolean; dist?: number; pitch?: number; yawOffset?: number }) => {
+    inspect = null;
     const p = new THREE.Vector3();
     let ok = false;
     try {
@@ -530,7 +634,7 @@ export default function create(ctx: CityContext): CityModule {
       ok = false;
     }
     if (!ok || !isFinite(p.x) || !isFinite(p.y) || !isFinite(p.z)) return;
-    const isStatic = hit.kind === 'building' || hit.kind === 'landmark' || (hit.kind === 'other' && typeof hit.getHeading !== 'function');
+    const isStatic = isStill(hit);
     const alt = p.y - field.groundAt(p.x, p.z);
     const cls: TargetClass = isStatic ? 'static' : hit.kind === 'other' && alt > AIR_ON ? 'air' : 'ground';
     const heading = safeHeading(hit) ?? cur.yaw + Math.PI;
@@ -571,7 +675,8 @@ export default function create(ctx: CityContext): CityModule {
       f.aim = cp.aim;
       if (cls === 'air') f.minDist = 28;
       dist = opts.dist ?? clamp(cur.dist, cp.follow * 0.55, cp.follow * 1.6);
-      pitch = opts.pitch ?? (cls === 'air' ? clamp(cur.pitch, 8 * DEG, 22 * DEG) : clamp(cur.pitch, 20 * DEG, 52 * DEG));
+      // (the free camera keeps a low view low)
+      pitch = opts.pitch ?? (cls === 'air' ? clamp(cur.pitch, 8 * DEG, 22 * DEG) : clamp(cur.pitch, freeRules() ? 8 * DEG : 20 * DEG, 52 * DEG));
     }
     follow = f;
     craneLift = 0;
@@ -728,6 +833,9 @@ export default function create(ctx: CityContext): CityModule {
 
   const startTour = () => {
     if (tour.active) return;
+    if (film?.active) film.stop();
+    if (walk.active) walk.exit(false);
+    clearInspect();
     if (follow && !follow.tour) releaseFollow();
     cancelFlight();
     tour.start();
@@ -753,11 +861,16 @@ export default function create(ctx: CityContext): CityModule {
 
   // ───────────────────────────────────────────── public flyTo
   const flyTo = (view: Partial<CameraState> | Poi, seconds?: number) => {
+    if (film?.active) film.stop();
+    if (walk.active) walk.exit(false);
     if (tour.active) stopTour();
     if (follow) releaseFollow();
+    clearInspect();
     const to = poiPose(view, goal);
-    to.pitch = clamp(to.pitch, MIN_PITCH, MAX_PITCH);
-    to.dist = clamp(to.dist, MIN_DIST, MAX_DIST * 1.5);
+    // a snap (automation: __city.view, the object bench) and the free camera may use the free close limits
+    const close = seconds === 0 || freeRules();
+    to.pitch = clamp(to.pitch, close ? FREE_MIN_PITCH : MIN_PITCH, MAX_PITCH);
+    to.dist = clamp(to.dist, close ? FREE_MIN_DIST : MIN_DIST, MAX_DIST * 1.5);
     to.tx = clamp(to.tx, bounds.x0, bounds.x1);
     to.tz = clamp(to.tz, bounds.z0, bounds.z1);
     if (seconds === 0) {
@@ -797,6 +910,79 @@ export default function create(ctx: CityContext): CityModule {
     }
   };
 
+  // ───────────────────────────────────────────── first-person walk hooks
+  /** V / the HUD button: walk from the point under the cursor (V) or the camera focus — or stop walking */
+  const toggleWalk = (fromCursor: boolean) => {
+    if (film?.active) film.stop();
+    if (walk.active) {
+      walk.exit(true);
+      return;
+    }
+    let x = eff.tx,
+      z = eff.tz;
+    if (fromCursor && pointer.inside && !pointer.dragging && surfacePoint(pointer.x, pointer.y, _hit)) {
+      x = _hit.x;
+      z = _hit.z;
+    }
+    // face the way the camera was looking at that spot
+    const cp = camera.position;
+    const viewYaw = Math.hypot(x - cp.x, z - cp.z) > 2 ? Math.atan2(x - cp.x, z - cp.z) : cur.yaw + Math.PI;
+    if (tour.active) stopTour();
+    if (follow) releaseFollow();
+    cancelFlight();
+    clearInput();
+    stopMotion();
+    kbVel.x = kbVel.z = kbVel.yaw = kbVel.pitch = kbVel.zoom = 0;
+    clearInspect();
+    explore.update(camera.position, false); // no free-camera room while walking (the walker stays out of buildings)
+    walk.enter(x, z, viewYaw, !automatedInput);
+    checkMode();
+  };
+  const automatedInput = (navigator as Navigator & { webdriver?: boolean }).webdriver === true;
+
+  /** the orbit takes over from the walker's eye: a pose that reproduces it, then (rise) a glide up and back */
+  const leaveWalk = (eye: THREE.Vector3, viewYaw: number, viewPitch: number, rise: boolean) => {
+    const yaw = viewYaw + Math.PI;
+    const p = Math.max(-viewPitch, 4 * DEG); // the orbit looks down on its pivot (flights keep ≥ 4°)
+    const d = 8;
+    const c = Math.cos(p);
+    cur.tx = eye.x - Math.sin(yaw) * c * d;
+    cur.ty = eye.y - Math.sin(p) * d;
+    cur.tz = eye.z - Math.cos(yaw) * c * d;
+    cur.dist = d;
+    cur.yaw = yaw;
+    cur.pitch = p;
+    copyPose(goal, cur);
+    flight = null;
+    stopMotion();
+    kbVel.x = kbVel.z = kbVel.yaw = kbVel.pitch = kbVel.zoom = 0;
+    roofLift = roofLiftVel = 0;
+    craneLift = craneShown = 0;
+    armLen = Infinity;
+    armLenVel = 0;
+    armShown = Infinity;
+    motion.valid = false;
+    fov = camera.fov;
+    if (rise) {
+      const ax = eye.x + Math.sin(viewYaw) * 12,
+        az = eye.z + Math.cos(viewYaw) * 12;
+      startFlight({ tx: ax, ty: field.groundAt(ax, az), tz: az, dist: 42, yaw, pitch: 24 * DEG }, 1.9, 'user');
+    }
+    checkMode();
+  };
+
+  /** C while walking: leave the walk and chase what was clicked */
+  const chaseFromWalk = () => {
+    const hit = walk.inspected;
+    if (!hit) {
+      toast('Click something that moves first — then C toggles the chase view');
+      return;
+    }
+    walk.exit(false);
+    startFollow(hit, { tour: false });
+    if (follow) setChase(true);
+  };
+
   // ───────────────────────────────────────────── gestures
   const panByPixels = (dx: number, dy: number, pose: Pose) => {
     const h = ctx.size.height || 720;
@@ -813,14 +999,39 @@ export default function create(ctx: CityContext): CityModule {
   };
 
   const relaxTargetY = (dt: number) => {
+    // free camera up close: the pivot keeps its height — inside a storey, under a bridge (clampGoal keeps it
+    // above the ground)
+    if (!guided && !follow && goal.dist < HOLD_Y_DIST) return;
     let g = field.groundAt(goal.tx, goal.tz);
     // close to the city the pivot rides over the roofs it crosses instead of sinking into the buildings
-    // (an orbit pivot inside a block leaves the camera nothing to look at but that block's roof)
-    if (goal.dist < 240) {
+    // (an orbit pivot inside a block leaves the camera nothing to look at but that block's roof);
+    // the free camera pans along the ground instead — riding every roof made the view bob up and down
+    if (goal.dist < 240 && (guided || follow)) {
       const top = field.topSmoothAt(goal.tx, goal.tz) - 0.6;
       if (top > g + 1) g = top;
     }
     goal.ty += (g - goal.ty) * damp(2.5, dt);
+  };
+
+  /**
+   * Free camera up close: zooming in moves the camera along the ray under (x, y) and shortens the arm to `nd`;
+   * the pivot goes along, so the view direction holds. Zooming out pulls the camera back along its arm.
+   */
+  const dollyAlong = (x: number, y: number, factor: number, nd: number) => {
+    if (factor < 1) {
+      const cp = Math.cos(goal.pitch);
+      _dir.set(Math.sin(goal.yaw) * cp, Math.sin(goal.pitch), Math.cos(goal.yaw) * cp);
+      _pos.set(goal.tx, goal.ty, goal.tz).addScaledVector(_dir, goal.dist);
+      // a wheel notch moves ~0.7 m up close (more while the arm is still long); a near-level view keeps its
+      // eye height (walking in through a door), a clearly raised / lowered one climbs or descends
+      _v2.copy(setRay(x, y).direction);
+      _v2.y *= THREE.MathUtils.smoothstep(Math.abs(_v2.y), 0.1, 0.3);
+      _pos.addScaledVector(_v2, (1 - factor) * Math.max(goal.dist, 3) * 2);
+      goal.tx = _pos.x - _dir.x * nd;
+      goal.ty = clamp(_pos.y - _dir.y * nd, -2, 140);
+      goal.tz = _pos.z - _dir.z * nd;
+    }
+    goal.dist = nd;
   };
 
   const zoomAt = (x: number | null, y: number | null, factor: number) => {
@@ -828,6 +1039,12 @@ export default function create(ctx: CityContext): CityModule {
     const minD = minDistNow();
     const nd = clamp(old * factor, minD, MAX_DIST);
     const r = nd / old;
+    if (!follow && !guided && (old < DOLLY_DIST || explore.roomLot)) {
+      // free camera up close (or inside a building, where the height field has nothing to aim at): the camera
+      // moves along the cursor ray — through a doorway, between stalls, up a storey — and the arm shortens
+      dollyAlong(x ?? (ctx.size.width || canvas.clientWidth) / 2, y ?? (ctx.size.height || canvas.clientHeight) / 2, factor, nd);
+      return;
+    }
     if (!follow && x !== null && y !== null && surfacePoint(x, y, _hit)) {
       // keep the point under the cursor fixed on screen
       goal.tx = _hit.x + (goal.tx - _hit.x) * r;
@@ -850,7 +1067,7 @@ export default function create(ctx: CityContext): CityModule {
 
   const applyRotate = (dx: number, dy: number) => {
     const h = ctx.size.height || 720;
-    const k = (Math.PI * 1.15) / h; // a full-height drag ≈ 200°
+    const k = (Math.PI * 1.15) / h / orbitLens; // a full-height drag ≈ 200° (through a lens the picture moves as fast as ever)
     const dYaw = -dx * k;
     const dPitch = dy * k * 0.75;
     if (follow && follow.relative) {
@@ -888,6 +1105,7 @@ export default function create(ctx: CityContext): CityModule {
       /* ignore */
     }
     const p = canvasXY(e);
+    if (walk.active) return walk.pointerDown(e, p.x, p.y);
     pointer.x = p.x;
     pointer.y = p.y;
     if (e.pointerType === 'touch') {
@@ -925,6 +1143,7 @@ export default function create(ctx: CityContext): CityModule {
 
   const onPointerMove = (e: PointerEvent) => {
     const p = canvasXY(e);
+    if (walk.active) return walk.pointerMove(e, p.x, p.y);
     pointer.x = p.x;
     pointer.y = p.y;
     pointer.movedAt = performance.now();
@@ -993,6 +1212,7 @@ export default function create(ctx: CityContext): CityModule {
 
   const onPointerUp = (e: PointerEvent) => {
     const p = canvasXY(e);
+    if (walk.active) return walk.pointerUp(e, p.x, p.y);
     try {
       if (canvas.hasPointerCapture(e.pointerId)) canvas.releasePointerCapture(e.pointerId);
     } catch {
@@ -1028,9 +1248,12 @@ export default function create(ctx: CityContext): CityModule {
     updateCursor();
     if (!d.moved) {
       stopMotion();
-      if (e.type === 'pointerup' && (d.mode === 'rotate' || d.touch)) handleClick(p.x, p.y);
+      // (the press that ended the film only took the camera: it follows nothing)
+      if (e.type === 'pointerup' && (d.mode === 'rotate' || d.touch) && !filmPress) handleClick(p.x, p.y);
+      filmPress = false;
       return;
     }
+    filmPress = false;
     // keep the inertia only if the pointer was still moving at release
     if (performance.now() - d.lt > 70) stopMotion();
     movingUntil = performance.now() + 700;
@@ -1048,10 +1271,20 @@ export default function create(ctx: CityContext): CityModule {
     const hit = dbl ? lastClick.hit : pickAt(x, y);
     lastClick = { t: dbl ? 0 : now, x, y, hit: dbl ? null : hit };
     const same = hit && follow && follow.hit.id === hit.id && follow.hit.kind === hit.kind;
+    const still = !!hit && isStill(hit);
     if (dbl) {
       if (same) {
         goal.dist = Math.max(goal.dist * 0.6, minDistNow());
         return;
+      }
+      if (freeRules() && (still || !hit)) {
+        // free camera: glide in close to the spot on the building / ground (no re-framing from outside)
+        const ray = setRay(x, y);
+        const at = hit ? _hit.copy(ray.origin).addScaledVector(ray.direction, hit.distance) : surfacePoint(x, y, _hit) ? _hit : null;
+        if (at) {
+          flyTo({ target: { x: at.x, y: at.y, z: at.z }, distance: clamp(Math.min(goal.dist, at.distanceTo(camera.position)) * 0.5, 3, 12), yaw: cur.yaw / DEG, pitch: cur.pitch / DEG });
+          return;
+        }
       }
       if (!hit && surfacePoint(x, y, _hit)) {
         flyToPoint(_hit.x, _hit.z);
@@ -1059,23 +1292,35 @@ export default function create(ctx: CityContext): CityModule {
       }
     }
     emit('select', hit);
+    if (hit && still && freeRules()) {
+      // free camera: a building / landmark shows its card; the camera stays where it is
+      if (follow) releaseFollow();
+      inspect = hit;
+      emit('camera:follow', hit);
+      return;
+    }
     if (hit) {
       if (same) return;
       if (follow) releaseFollow();
       startFollow(hit, { tour: false });
-    } else if (follow) {
-      releaseFollow();
+    } else {
+      clearInspect();
+      if (follow) releaseFollow();
     }
   };
 
   const onWheel = (e: WheelEvent) => {
     e.preventDefault();
-    userTakesOver();
     let dy = e.deltaY;
     if (e.deltaMode === 1) dy *= 18;
     else if (e.deltaMode === 2) dy *= 120;
     if (e.ctrlKey) dy *= 2.5; // trackpad pinch arrives as ctrl+wheel with small deltas
     dy = clamp(dy, -260, 260);
+    if (walk.active) {
+      walk.zoomLens(Math.exp(-dy * 0.0016));
+      return;
+    }
+    userTakesOver();
     const p = canvasXY(e);
     zoomAt(p.x, p.y, Math.exp(dy * 0.0013));
     movingUntil = performance.now() + 500;
@@ -1102,6 +1347,7 @@ export default function create(ctx: CityContext): CityModule {
   const onKeyDown = (e: KeyboardEvent) => {
     shiftHeld = e.shiftKey;
     if (isTyping(e.target) || e.ctrlKey || e.metaKey || e.altKey) return;
+    if (walk.key(e, true)) return;
     const code = e.code;
     if (MOVE_KEYS.has(code)) {
       if (!keys.has(code)) userTakesOver();
@@ -1122,16 +1368,32 @@ export default function create(ctx: CityContext): CityModule {
       case 'Home':
         if (overview) flyToPoi(overview.id);
         break;
+      case 'KeyV':
+        toggleWalk(true);
+        break;
       case 'KeyC':
-        if (follow && !follow.tour) setChase(!follow.chase);
+        if (walk.active) chaseFromWalk();
+        else if (follow && !follow.tour) setChase(!follow.chase);
+        else if (inspect) toast(`${inspect.label} stays put — the chase cam is for things on the move`);
         else toast('Click something that moves first — then C toggles the chase view');
         break;
       case 'KeyT':
         if (tour.active) stopTour();
         else startTour();
         break;
+      case 'KeyG':
+        guided = !guided;
+        try {
+          localStorage.setItem('tinyhaven.guidedCam', String(guided));
+        } catch {
+          /* storage unavailable */
+        }
+        clampGoal();
+        toast(guided ? 'Guided camera — keeps out of buildings, tours when idle (G: free)' : 'Free camera — goes wherever you steer it, even inside (G: guided)');
+        break;
       case 'Escape':
         if (tour.active) stopTour();
+        else if (inspect) clearInspect();
         else if (follow) releaseFollow();
         else if (flight) cancelFlight();
         break;
@@ -1143,9 +1405,11 @@ export default function create(ctx: CityContext): CityModule {
   const onKeyUp = (e: KeyboardEvent) => {
     shiftHeld = e.shiftKey;
     keys.delete(e.code);
+    walk.key(e, false);
   };
 
   const clearInput = () => {
+    walk.clearInput();
     keys.clear();
     shiftHeld = false;
     if (drag) {
@@ -1175,7 +1439,7 @@ export default function create(ctx: CityContext): CityModule {
   window.addEventListener('wheel', onActivity, { capture: true, passive: true });
   window.addEventListener('pointermove', onActivity, { capture: true, passive: true });
   const automated = (navigator as Navigator & { webdriver?: boolean }).webdriver === true;
-  const idleTourAfter = ctx.debug.params.has('noidle') || automated ? Infinity : 120_000;
+  const idleTourAfter = () => (ctx.debug.params.has('noidle') || automated || !guided ? Infinity : 120_000);
 
   canvas.tabIndex = 0;
   canvas.addEventListener('pointerdown', onPointerDown);
@@ -1200,7 +1464,8 @@ export default function create(ctx: CityContext): CityModule {
     const tilt = k('KeyR') - k('KeyF');
     const zoom = k('Minus') + k('NumpadSubtract') + k('PageDown') - k('Equal') - k('NumpadAdd') - k('PageUp');
     const fast = shiftHeld ? 2.2 : 1;
-    const speed = goal.dist * 0.65 * fast;
+    // (the free camera up close keeps a walking pace instead of crawling with its short arm)
+    const speed = (!guided && !follow ? Math.max(goal.dist, 5) : goal.dist) * 0.65 * fast;
     const sy = Math.sin(goal.yaw),
       cy = Math.cos(goal.yaw);
     const wantX = (side * cy - fwd * sy) * speed;
@@ -1224,7 +1489,10 @@ export default function create(ctx: CityContext): CityModule {
       else goal.yaw += kbVel.yaw * dt;
     }
     if (Math.abs(kbVel.pitch) > 1e-4) goal.pitch += kbVel.pitch * dt;
-    if (Math.abs(kbVel.zoom) > 1e-4) goal.dist *= Math.exp(kbVel.zoom * dt);
+    if (Math.abs(kbVel.zoom) > 1e-4) {
+      if (!follow && !guided && (goal.dist < DOLLY_DIST || explore.roomLot)) zoomAt(null, null, Math.exp(kbVel.zoom * dt));
+      else goal.dist *= Math.exp(kbVel.zoom * dt);
+    }
     if (fwd || side || rot || tilt || zoom) movingUntil = performance.now() + 300;
   };
 
@@ -1357,7 +1625,9 @@ export default function create(ctx: CityContext): CityModule {
     // flying to a followed thing from an unobstructed view, the crane-up blends in over the second half
     // (at once it would yank the pitch mid-flight); the arm itself never needs a blend (see below)
     const occW = flight && flight.track && flight.occFree ? smoother((flight.t / flight.dur - 0.5) / 0.5) : 1;
-    if (follow && !follow.chase && d < 200) {
+    // (free camera: nothing lifts it — no crane-up, no roof lift below)
+    const noLift = freeRules();
+    if (follow && !follow.chase && d < 200 && !noLift) {
       // elevated follow cams first crane up a little over buildings that would hide the entity…
       const need = clearPitch(cur.tx, cur.ty, cur.tz, cur.yaw, pitch, d, ownSkip) + 2 * DEG;
       const extra = clamp(need - pitch, 0, Math.max(0, 60 * DEG - pitch));
@@ -1374,7 +1644,24 @@ export default function create(ctx: CityContext): CityModule {
     _pos.copy(_tgt).addScaledVector(_dir, d);
     let liftAll = false;
     const looking = dt > 0 && motion.valid;
-    {
+    // free camera (see `guided`): plain orbit, no collision rules — follow cams and flights keep theirs
+    const freeOrbit = !guided && !follow && !flight;
+    if (freeOrbit) {
+      // the arm runs to its full length, through facades if need be; one left shorter by a follow, a
+      // flight or the guided mode eases back out (ω 3.2 ≈ 1.5 s) instead of snapping
+      let L = isFinite(armLen) ? Math.min(armLen, d) : d;
+      if (dt <= 0 || L >= d - 0.01) {
+        L = d;
+        armLenVel = 0;
+      } else [L, armLenVel] = spring(L, armLenVel, d, 3.2, dt);
+      armLen = L;
+      armPrevD = d;
+      if (L < d - 0.01) {
+        d = L;
+        _pos.copy(_tgt).addScaledVector(_dir, d);
+      }
+      armShown = d;
+    } else {
       // Between buildings the camera slides along its arm (pivot → camera) like a spring arm.
       //  * it heads for the full arm length, or for the front of the block the arm ends in;
       //  * it never slides *through* a building — it waits in front of one until the arm swings clear;
@@ -1499,12 +1786,13 @@ export default function create(ctx: CityContext): CityModule {
       armShown = d;
     }
     // never inside hills / water; glide over (low) roofs — rising ahead of the roofs the arm is sweeping towards
-    const hard = field.groundMaxAt(_pos.x, _pos.z) + 2;
+    // (free camera: only the ground / water surface stops it — a lift left from a guided view eases out)
+    const hard = noLift ? explore.floorAt(_pos.x, _pos.z) : field.groundMaxAt(_pos.x, _pos.z) + 2;
     const soft = field.roofAt(_pos.x, _pos.z, ROOF_MARGIN) + 1.6;
-    let need = Math.max(0, soft - _pos.y);
+    let need = noLift ? 0 : Math.max(0, soft - _pos.y);
     if (!liftAll && need > LIFT_MAX + 2) need = 0;
     const needNow = need;
-    if (looking) {
+    if (looking && !noLift) {
       const nl = lookSamples(4, 16);
       for (let k = 1; k <= nl; k++) {
         const p = lookAhead((ARM_HORIZON * k) / nl, pitch, d);
@@ -1534,13 +1822,45 @@ export default function create(ctx: CityContext): CityModule {
     camera.up.set(0, 1, 0);
     camera.lookAt(_tgt);
     const effDist = _pos.distanceTo(_tgt);
-    const wantFov = follow?.chase ? CHASE_FOV : BASE_FOV;
+    const baseFov = WORLD_MODE ? worldFov(effDist) : BASE_FOV;
+    const wantFov = follow?.chase ? Math.max(CHASE_FOV, baseFov) : baseFov;
     fov += (wantFov - fov) * (dt > 0 ? damp(3, dt) : 1);
-    camera.fov = fov;
-    camera.near = clamp(effDist * 0.02, 0.3, 20);
-    camera.far = effDist * 6 + 2500;
+    camera.fov = orbitLens > 1 ? (2 * Math.atan(Math.tan((fov * DEG) / 2) / orbitLens)) / DEG : fov;
+    // free camera: a room around it inside a building (facades are single-sided), a near plane that lets it
+    // pass a wall without cutting into it, and the lens focused on what is ahead once the pivot is a step away
+    explore.update(_pos, noLift && !follow);
+    camera.near = noLift ? explore.nearPlane(_pos, effDist) : clamp(effDist * 0.02, 0.3, 20);
+    camera.far = WORLD_MODE ? WORLD_FAR : effDist * 6 + 2500;
     camera.updateProjectionMatrix();
     camera.updateMatrixWorld();
+    const fx = ctx.services.postfx;
+    if (noLift && effDist < 2.5 && fx?.setFocus) {
+      _dir.subVectors(_tgt, _pos).normalize();
+      let f = explore.focusAt(_pos, _dir);
+      // what moves stands on nothing the height field knows: twice a second, only this close, a look along the ray at the people and the cars
+      const now = performance.now();
+      // (a cut, or a good step since the last look: look now)
+      if (now - focusPickAt > 500 || _focusFrom.distanceToSquared(_pos) > 0.25) {
+        focusPickAt = now;
+        _focusFrom.copy(_pos);
+        const hit = scout.pick(raycaster.ray.set(_pos, _dir));
+        focusPick = hit && hit.kind !== 'building' ? hit.distance : Infinity;
+        // (parked cars are no click target, but the lens must not look through them)
+        focusPick = Math.min(focusPick, (ctx.services.traffic as { rayHit?(p: THREE.Vector3, d: THREE.Vector3, maxT: number): number } | undefined)?.rayHit?.(_pos, _dir, 14) ?? Infinity);
+        // the surfaces themselves, where the near materials know them: a bench, a post, the wall at the back of a porch
+        focusReal = (ctx.services.closeMat as { rayHit(p: THREE.Vector3, d: THREE.Vector3, maxT: number): number } | undefined)?.rayHit(_pos, _dir, 12) ?? -1;
+      }
+      // (better than the lot's box, which stands in front of a porch)
+      if (focusReal >= 0 && !explore.roomLot) f = Math.max(0.5, focusReal);
+      if (focusPick < f) f = Math.max(0.5, focusPick);
+      const read = (ctx.services.lettering as { focusOn?(ox: number, oy: number, oz: number, dx: number, dy: number, dz: number): number } | undefined)?.focusOn?.(_pos.x, _pos.y, _pos.z, _dir.x, _dir.y, _dir.z) ?? Infinity;
+      if (read < f) f = Math.max(0.5, read);
+      fx.setFocus(f);
+      focusSet = true;
+    } else if (focusSet) {
+      fx?.setFocus?.(null);
+      focusSet = false;
+    }
     eff.tx = _tgt.x;
     eff.ty = _tgt.y;
     eff.tz = _tgt.z;
@@ -1576,22 +1896,41 @@ export default function create(ctx: CityContext): CityModule {
 
   const service: CameraServiceExt = {
     flyTo,
+    setLens(k, seconds) {
+      if (walk.active) return walk.setLens(k, seconds);
+      orbitLens = clamp(k, 1, 8);
+      nearLens.zoom = orbitLens;
+      if (seconds === 0) applyCamera(0);
+    },
+    lensNow: () => (walk.active ? walk.lensNow() : orbitLens),
     follow: (hit) => {
+      if (walk.active) {
+        // walking: the info card's Stop / close just closes the card
+        if (!hit) return walk.setInspected(null);
+        walk.exit(false);
+      }
       if (tour.active) stopTour();
       if (!hit) {
+        clearInspect();
         releaseFollow();
         return;
       }
       if (follow) releaseFollow();
       startFollow(hit, { tour: false });
     },
-    getState: () => ({ target: { x: eff.tx, y: eff.ty, z: eff.tz }, distance: eff.dist, yaw: eff.yaw / DEG, pitch: eff.pitch / DEG }),
-    busy: () => !!(drag && drag.moved) || pinch !== null || flight !== null || performance.now() < movingUntil,
+    getState: () => (walk.active ? walk.state() : { target: { x: eff.tx, y: eff.ty, z: eff.tz }, distance: eff.dist, yaw: eff.yaw / DEG, pitch: eff.pitch / DEG }),
+    busy: () => (walk.active ? walk.busy() : !!(drag && drag.moved) || pinch !== null || flight !== null || performance.now() < movingUntil),
     mode: () => modeNow(),
     startTour,
     stopTour,
-    following: () => (follow && !follow.tour ? follow.hit : null),
-    setChase,
+    following: () => (walk.active ? walk.inspected : follow && !follow.tour ? follow.hit : inspect),
+    setChase: (on) => {
+      if (!walk.active) setChase(on);
+      else if (on) chaseFromWalk();
+    },
+    walking: () => walk.active,
+    toggleWalk: () => toggleWalk(false),
+    walkDebug: () => (walk.active ? walk.debug() : null),
     chasing: () => !!follow?.chase,
     touring: () => tour.active,
     pickAt,
@@ -1609,11 +1948,43 @@ export default function create(ctx: CityContext): CityModule {
     },
     caption: () => captionInfo,
     liveEntities: () => scout.live(liveList),
+    film: {
+      play: () => playFilm(),
+      stop: () => film?.stop(),
+      active: () => !!film?.active,
+      playing: () => !!film?.playing,
+      time: () => film?.time ?? 0,
+      total: () => film?.total ?? 0,
+      shot: () => film?.shotId ?? '',
+      seek: (t) => film?.seek(t),
+      check: () => film?.check() ?? [],
+      dropPrint: () => film?.dropPrint(),
+    },
+    releaseAll: () => {
+      if (walk.active) walk.exit(false);
+      if (tour.active) stopTour();
+      if (follow) releaseFollow();
+      clearInspect();
+      cancelFlight();
+      stopMotion();
+    },
+    setFreeOverride: (on) => {
+      if (on === (guidedSaved !== null)) return;
+      if (on) {
+        guidedSaved = guided;
+        guided = false;
+      } else {
+        guided = guidedSaved ?? guided;
+        guidedSaved = null;
+      }
+      clampGoal();
+    },
   };
   ctx.services.camera = service;
   if (ctx.debug.params.has('camdebug')) {
     const ext = service as unknown as Record<string, unknown>;
     ext.debugState = () => ({ ...dbg, armLen, armLenVel, roofLift, my: motion.yaw, mld: motion.ld });
+    ext.walkProbe = (x: number, z: number) => walk.probe(x, z);
     // blocked stretches of an arm from the current pivot (degrees, metres)
     ext.debugScan = (yawDeg: number, pitchDeg: number, len: number) => {
       const buf = new Float32Array(SCAN_MAX * 2);
@@ -1626,7 +1997,129 @@ export default function create(ctx: CityContext): CityModule {
   const params = ctx.debug.params;
   // the stand-in city is only for isolated tests: with the real world loaded it would double everything
   const proxy = params.has('camdebug') && ctx.pickers.length === 0 ? buildDebugProxy(ctx) : null;
-  if (overview && !params.has('nointro')) {
+  // ───────────────────────────────────────────── the film (./camera/film.ts)
+  const leaveFilm = (eye: THREE.Vector3, look: THREE.Vector3, carry: THREE.Vector3) => {
+    // a pivot on the view line, within reach of the orbit's limits: the first orbit frame shows exactly this pose
+    _dir.subVectors(eye, look);
+    let d = _dir.length();
+    if (d < 1e-3) d = 1;
+    _dir.divideScalar(d);
+    d = clamp(d, FREE_MIN_DIST, MAX_DIST * 0.95);
+    cur.tx = eye.x - _dir.x * d;
+    cur.ty = clamp(eye.y - _dir.y * d, -2, 140);
+    cur.tz = eye.z - _dir.z * d;
+    cur.dist = _v.set(cur.tx, cur.ty, cur.tz).distanceTo(eye);
+    _dir.subVectors(eye, _v).divideScalar(Math.max(cur.dist, 1e-3));
+    cur.yaw = Math.atan2(_dir.x, _dir.z);
+    cur.pitch = Math.asin(clamp(_dir.y, -1, 1));
+    copyPose(goal, cur);
+    handback.pitch = handback.margin = 0;
+    handback.pitch = Math.max(0, minPitchNow() - cur.pitch);
+    handback.margin = Math.max(0, bounds.x0 - cur.tx, cur.tx - bounds.x1, bounds.z0 - cur.tz, cur.tz - bounds.z1);
+    flight = null;
+    stopMotion();
+    // the camera glides out of the film's last move instead of stopping dead (a drag or a press cancels it)
+    const carrySpeed = Math.hypot(carry.x, carry.z);
+    const carryScale = carrySpeed > 40 ? 40 / carrySpeed : 1;
+    inertia.px = carry.x * carryScale;
+    inertia.pz = carry.z * carryScale;
+    kbVel.x = kbVel.z = kbVel.yaw = kbVel.pitch = kbVel.zoom = 0;
+    roofLift = roofLiftVel = 0;
+    craneLift = craneShown = 0;
+    armLen = Infinity;
+    armLenVel = 0;
+    armShown = Infinity;
+    motion.valid = false;
+    // (the film's whole-window lens: the picture only gains what the bars hid. The next frame goes on from here —
+    // applyCamera(0) would snap the lens to the orbit's own)
+    fov = filmFov;
+    camera.fov = fov;
+    camera.updateProjectionMatrix();
+    armPrevD = cur.dist;
+    checkMode();
+  };
+
+  const film: FilmDirector | null =
+    plan.pois.length > 0 && !params.has('only')
+      ? new FilmDirector(ctx, {
+          place(eye, look, lens, focus) {
+            camera.position.copy(eye);
+            camera.up.set(0, 1, 0);
+            camera.lookAt(look);
+            filmFov = lens;
+            // only the band between the letterbox bars is rendered
+            camera.fov = (2 * Math.atan((Math.tan((lens * DEG) / 2) * ctx.size.height) / window.innerHeight)) / DEG;
+            explore.update(eye, false);
+            const d = eye.distanceTo(look);
+            camera.near = explore.nearPlane(eye, d);
+            camera.far = WORLD_MODE ? WORLD_FAR : d * 6 + 2500;
+            camera.updateProjectionMatrix();
+            camera.updateMatrixWorld();
+            ctx.services.postfx?.setFocus?.(focus);
+            eff.tx = cur.tx = look.x;
+            eff.ty = cur.ty = look.y;
+            eff.tz = cur.tz = look.z;
+            eff.dist = cur.dist = d;
+            _v.subVectors(eye, look);
+            eff.yaw = cur.yaw = Math.atan2(_v.x, _v.z);
+            eff.pitch = cur.pitch = Math.asin(clamp(_v.y / Math.max(d, 1e-6), -1, 1));
+            copyPose(goal, cur);
+          },
+          release: leaveFilm,
+          releaseToOverview() {
+            if (!overview) return;
+            copyPose(cur, poiPose(overview, cur));
+            copyPose(goal, cur);
+            motion.valid = false;
+            fov = WORLD_MODE ? worldFov(cur.dist) : BASE_FOV;
+            applyCamera(0);
+            checkMode();
+          },
+          floorAt: (x, z) => explore.floorAt(x, z),
+          lotAt: (x, y, z) => explore.lotAt(x, y, z),
+          aspect: () => window.innerWidth / Math.max(1, window.innerHeight),
+        })
+      : null;
+
+  /** the toolbar's replay, or the first load (curtain already closed) */
+  const playFilm = (first = false) => {
+    if (!film || film.active) return;
+    if (walk.active) walk.exit(false);
+    if (tour.active) stopTour();
+    if (follow) releaseFollow();
+    clearInspect();
+    cancelFlight();
+    clearInput();
+    stopMotion();
+    kbVel.x = kbVel.z = kbVel.yaw = kbVel.pitch = kbVel.zoom = 0;
+    film.play(!first);
+    checkMode();
+  };
+
+  // any key, press or wheel takes the camera (seen first: capture on window, registered before the UI's)
+  const FILM_PASS_KEYS = new Set([...MOVE_KEYS, 'KeyP']);
+  const filmInput = (e: Event) => {
+    if (!film?.active) return;
+    film.stop();
+    filmTourAt = Infinity;
+    filmPress = e.type === 'pointerdown';
+    if (e instanceof KeyboardEvent && !FILM_PASS_KEYS.has(e.code)) {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+    }
+  };
+  window.addEventListener('pointerdown', filmInput, true);
+  window.addEventListener('keydown', filmInput, true);
+  window.addEventListener('wheel', filmInput, { capture: true, passive: true });
+  if (film) {
+    film.onFinished = () => {
+      // nobody took the camera: the city goes on showing itself
+      filmTourAt = performance.now() + 14000;
+    };
+  }
+
+  if (film && filmWanted(params)) playFilm(true);
+  else if (overview && !params.has('nointro')) {
     const end = poiPose(overview, cur);
     const start: Pose = { tx: end.tx + 40, ty: end.ty, tz: end.tz - 30, dist: end.dist * 1.75, yaw: end.yaw - 78 * DEG, pitch: 66 * DEG };
     copyPose(cur, start);
@@ -1649,6 +2142,25 @@ export default function create(ctx: CityContext): CityModule {
       frames++;
       scout.update();
       scout.updateCensus(0.35);
+      if (film?.active) {
+        film.frame(dt);
+        checkMode();
+        camMs = camMs * 0.95 + (performance.now() - t0) * 0.05;
+        return;
+      }
+      film?.idle(dt);
+      handback.pitch = Math.max(0, handback.pitch - 0.1 * dt);
+      handback.margin = Math.max(0, handback.margin - 70 * dt);
+      if (t0 > filmTourAt) {
+        filmTourAt = Infinity;
+        if (t0 - lastActivity > 12000 && !tour.active && !follow && !flight && !walk.active) startTour();
+      }
+      if (walk.active) {
+        walk.frame(dt);
+        checkMode();
+        camMs = camMs * 0.95 + (performance.now() - t0) * 0.05;
+        return;
+      }
       integrateKeys(dt);
       integrateInertia(dt);
       updateFollow(dt);
@@ -1713,33 +2225,42 @@ export default function create(ctx: CityContext): CityModule {
       applyCamera(dt);
       checkMode();
       // attract mode: a quiet city starts showing itself off
-      if (!tour.active && !follow && !flight && !document.hidden && t0 - lastActivity > idleTourAfter) {
+      if (!tour.active && !follow && !flight && !document.hidden && t0 - lastActivity > idleTourAfter()) {
         startTour();
         lastActivity = t0;
       }
       camMs = camMs * 0.95 + (performance.now() - t0) * 0.05;
     },
     resize() {
-      applyCamera(0);
+      film?.layout();
+      if (!walk.active && !film?.active && !film?.leaving) applyCamera(0);
     },
     stats() {
       return {
+        ...(walk.active ? walk.stats() : {}),
         mode: modeNow() + (follow?.chase ? '+chase' : ''),
         distance: Math.round(eff.dist),
         yaw: Math.round(eff.yaw / DEG),
         pitch: Math.round(eff.pitch / DEG),
         flying: flight ? flight.kind : 'no',
+        room: explore.roomLot ? explore.roomLot.id : 'no',
         frameMs: Math.round(camMs * 1000) / 1000,
       };
     },
     invariants() {
       const out: string[] = [];
+      if (walk.active) {
+        out.push(...walk.invariants());
+        if (camera.near <= 0 || camera.far <= camera.near) out.push('bad near/far planes');
+        return out;
+      }
       const p = camera.position;
       if (![p.x, p.y, p.z, eff.tx, eff.ty, eff.tz].every(isFinite)) out.push('camera position / target is not finite');
-      const floor = field.groundAt(p.x, p.z) + 1.9;
+      // (the free camera may come down to the ground / water surface)
+      const floor = freeRules() ? Math.min(field.groundAt(p.x, p.z), explore.floorAt(p.x, p.z) - FLOOR_CLEAR) + 0.2 : field.groundAt(p.x, p.z) + 1.9;
       if (p.y < floor) out.push(`camera below the terrain/water floor (y=${p.y.toFixed(2)} < ${floor.toFixed(2)})`);
       const m = boundsMargin() + 1;
-      if (eff.tx < bounds.x0 - m || eff.tx > bounds.x1 + m || eff.tz < bounds.z0 - m || eff.tz > bounds.z1 + m) out.push('camera target outside the slab bounds');
+      if (!film?.active && (eff.tx < bounds.x0 - m || eff.tx > bounds.x1 + m || eff.tz < bounds.z0 - m || eff.tz > bounds.z1 + m)) out.push('camera target outside the slab bounds');
       if (!flight && goal.pitch < minPitchNow() - 1e-3) out.push('pitch below the limit');
       if (follow && follow.cls === 'static' && !flight && eff.dist < follow.minDist * 0.5) out.push(`too close to the viewed ${follow.hit.kind} (${eff.dist.toFixed(1)} m)`);
       if (camera.near <= 0 || camera.far <= camera.near) out.push('bad near/far planes');
@@ -1748,6 +2269,7 @@ export default function create(ctx: CityContext): CityModule {
       return out;
     },
     dispose() {
+      walk.dispose();
       canvas.removeEventListener('pointerdown', onPointerDown);
       canvas.removeEventListener('pointermove', onPointerMove);
       canvas.removeEventListener('pointerup', onPointerUp);
@@ -1764,6 +2286,11 @@ export default function create(ctx: CityContext): CityModule {
       window.removeEventListener('keydown', onActivity, true);
       window.removeEventListener('wheel', onActivity, true);
       window.removeEventListener('pointermove', onActivity, true);
+      window.removeEventListener('pointerdown', filmInput, true);
+      window.removeEventListener('keydown', filmInput, true);
+      window.removeEventListener('wheel', filmInput, true);
+      film?.dispose();
+      explore.dispose();
     },
   };
 }

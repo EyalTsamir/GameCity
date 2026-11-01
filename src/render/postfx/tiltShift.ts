@@ -13,6 +13,7 @@ import { Effect, EffectAttribute } from 'postprocessing';
 import { FS_VERT, FullscreenPass } from './fullscreen';
 import { CLOUD_SHADOW_GLSL, type CloudShadowUniforms } from './cloudShadow';
 import { AO_HALF_GLSL, aoUniforms, type AOUniforms } from './aoApply';
+import { SAFE_COLOR_GLSL } from './look';
 
 const MAX_TAPS = 8; // taps per side, 2 half-res texels apart (=> up to ~32 full-res px blur radius)
 const MAX_R = MAX_TAPS * 2;
@@ -40,6 +41,7 @@ float cocOf(float depth) {
 `;
 
 const PREFILTER_FRAG = /* glsl */ `
+${SAFE_COLOR_GLSL}
 uniform sampler2D tColor;
 uniform sampler2D tDepth;
 uniform vec2 uTexel;
@@ -49,7 +51,8 @@ ${CLOUD_SHADOW_GLSL}
 ${AO_HALF_GLSL}
 varying vec2 vUv;
 void main() {
-  vec3 col = texture2D(tColor, vUv).rgb; // bilinear at the 2x2 centre = box filter
+  // bilinear at the 2x2 centre = box filter; NaN/Inf-guarded (the blur would smear one bad pixel into a block)
+  vec3 col = thSafeColor(texture2D(tColor, vUv).rgb);
   vec2 o = uTexel * 0.5;
   float d0 = texture2D(tDepth, vUv + vec2(-o.x, -o.y)).r;
   float d1 = texture2D(tDepth, vUv + vec2(o.x, -o.y)).r;

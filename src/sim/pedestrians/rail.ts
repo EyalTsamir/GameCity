@@ -53,6 +53,10 @@ export interface RailSample {
   leg: number;
   /** along-leg distance */
   u: number;
+  /** unit tangent smoothed across polyline vertices (continuous in s): offset sideways along its normal, a
+   *  member walking abreast moves continuously round corners instead of jumping by lateral × turn angle */
+  sx: number;
+  sz: number;
 }
 
 /**
@@ -221,6 +225,41 @@ function clamp(v: number, a: number, b: number): number {
   return v < a ? a : v > b ? b : v;
 }
 
+/** distance from a polyline vertex over which the smoothed tangent turns (m) */
+const TAN_BLEND = 0.6;
+const smooth01 = (t: number) => (t >= 1 ? 1 : t * t * (3 - 2 * t));
+
+/** Blend out.sx/sz (= the segment tangent tx,tz) by `w` towards the tangent at vertex `v` (mean of the segment
+ *  on our side, running from `o` to `v`, and the next non-zero segment beyond `v`). */
+function blendVertexTangent(r: Rail, v: number, o: number, tx: number, tz: number, w: number, out: RailSample): void {
+  // the neighbouring segment beyond v (skip zero-length ones)
+  let ox: number, oz: number;
+  if (o < v) {
+    let k = v + 1;
+    while (k < r.n - 1 && r.cum[k] - r.cum[v] < 1e-6) k++;
+    ox = r.x[k] - r.x[v];
+    oz = r.z[k] - r.z[v];
+  } else {
+    let k = v - 1;
+    while (k > 0 && r.cum[v] - r.cum[k] < 1e-6) k--;
+    ox = r.x[v] - r.x[k];
+    oz = r.z[v] - r.z[k];
+  }
+  const ol = Math.hypot(ox, oz);
+  if (ol < 1e-9) return;
+  let vx = tx + ox / ol,
+    vz = tz + oz / ol;
+  const vl = Math.hypot(vx, vz);
+  if (vl < 1e-6) return; // reversal: no mean direction
+  vx /= vl;
+  vz /= vl;
+  let sx = tx + (vx - tx) * w,
+    sz = tz + (vz - tz) * w;
+  const sl = Math.hypot(sx, sz) || 1;
+  out.sx = sx / sl;
+  out.sz = sz / sl;
+}
+
 /** Sample the rail at arc length s (extrapolates beyond the ends). */
 export function sampleRail(r: Rail, s: number, out: RailSample): RailSample {
   const n = r.n;
@@ -254,6 +293,16 @@ export function sampleRail(r: Rail, s: number, out: RailSample): RailSample {
   out.tx = tx;
   out.tz = tz;
   out.leg = r.seg[i];
+  // smoothed tangent: within W of a vertex, blend towards the vertex tangent (mean of the adjacent segments)
+  out.sx = tx;
+  out.sz = tz;
+  if (segLen > 1e-9) {
+    const W = Math.min(TAN_BLEND, segLen * 0.5);
+    const a = s - r.cum[i],
+      b = r.cum[j] - s;
+    if (a < W && i > 0) blendVertexTangent(r, i, j, tx, tz, 1 - smooth01(Math.max(0, a) / W), out);
+    else if (b < W && j < n - 1) blendVertexTangent(r, j, i, tx, tz, 1 - smooth01(Math.max(0, b) / W), out);
+  }
   const tc = t < 0 ? 0 : t > 1 ? 1 : t;
   out.u = r.uA[i] + (r.uB[i] - r.uA[i]) * tc;
   if (s < 0) out.u = r.uA[0] + s;

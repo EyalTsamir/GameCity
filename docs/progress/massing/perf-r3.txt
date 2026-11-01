@@ -1,0 +1,14 @@
+perf.mjs (main checkout, shared lock) --views overview;oldst=98,2,-59,12,215,6;downtown;industry --hours 12 --repeat 2 --gpu 1
+(adaptive=0, 1300x930, Adreno X1-45) — variant | view | ms/frame (2 passes) | GPU ms total (2 passes) | draw calls | triangles
+(baseline)   | overview@12  | 38.54 / 38.24  | 38.99 / 38.38  | 249 | 4371334
+(baseline)   | oldst@12     | 36.43 / 36.78  | 31.09 / 31.2   | 216 | 4240189
+(baseline)   | downtown@12  | 44.55 / 44.69  | 37.73 / 37.67  | 235 | 4355718
+(baseline)   | industry@12  | 29.12 / 29.81  | 23.6 / 23.64   | 216 | 3298836
+noshopfront  | overview@12  | 40.33 / 35.85  | 39.21 / 38.74  | 249 | 4364842
+noshopfront  | oldst@12     | 36.56 / 36.24  | 31.09 / 31.3   | 216 | 4232911
+noshopfront  | downtown@12  | 44.15 / 44.47  | 37.91 / 37.88  | 235 | 4345954
+noshopfront  | industry@12  | 29.8 / 29.97   | 23.34 / 23.35  | 214 | 3292944
+nomassing    | overview@12  | 36.66 / 36.66  | 38.23 / 38.34  | 249 | 4351235
+nomassing    | oldst@12     | 35.65 / 36.62  | 31.09 / 30.59  | 216 | 4222876
+nomassing    | downtown@12  | 44.43 / 43.81  | 37.47 / 37.28  | 235 | 4335807
+nomassing    | industry@12  | 29.46 / 29.26  | 23.29 / 23.14  | 214 | 3292786

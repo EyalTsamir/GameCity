@@ -568,6 +568,55 @@ export function firework(ac: BaseAudioContext, out: AudioNode, noise: NoiseBank,
   stopAfter([w, src, thump, cr], tb + 2, [w, wg, src, lp, g, thump, tg, cr, hp, cg]);
 }
 
+/** thunder at t (the caller adds the delay for the distance): a crack when close (near 0..1), then a long roll in a few swells */
+export function thunder(ac: BaseAudioContext, out: AudioNode, noise: NoiseBank, t: number, near: number, level = 1): void {
+  const dur = 4.5 + 3.5 * Math.random();
+  const roll = ac.createBufferSource();
+  roll.buffer = noise.brown;
+  roll.loop = true;
+  const lp = biquad(ac, 'lowpass', 260, 0.7);
+  lp.frequency.setValueAtTime(420 + 500 * near, t);
+  lp.frequency.exponentialRampToValueAtTime(110, t + dur);
+  const g = ac.createGain();
+  g.gain.setValueAtTime(0.0001, t);
+  // the swells: echoes off the deck and the hills, each weaker
+  let at = t,
+    peak = (0.55 + 0.45 * near) * level;
+  const swells = 3 + Math.floor(Math.random() * 3);
+  for (let i = 0; i < swells; i++) {
+    g.gain.exponentialRampToValueAtTime(peak, at + (i === 0 ? 0.03 + 0.25 * (1 - near) : 0.12));
+    at += (dur / swells) * (0.6 + 0.8 * Math.random());
+    g.gain.exponentialRampToValueAtTime(peak * 0.28, at);
+    peak *= 0.72;
+  }
+  const end = Math.max(at, t + dur) + 1.5;
+  g.gain.exponentialRampToValueAtTime(0.0001, end);
+  roll.connect(lp);
+  lp.connect(g);
+  g.connect(out);
+  roll.start(t, Math.random() * 3);
+  const sources: AudioScheduledSourceNode[] = [roll];
+  const nodes: AudioNode[] = [roll, lp, g];
+  if (near > 0.25) {
+    const cr = ac.createBufferSource();
+    cr.buffer = noise.pink;
+    const clp = biquad(ac, 'lowpass', 4200, 0.5);
+    clp.frequency.setValueAtTime(4200, t);
+    clp.frequency.exponentialRampToValueAtTime(300, t + 0.35);
+    const cg = ac.createGain();
+    cg.gain.setValueAtTime(0, t);
+    cg.gain.linearRampToValueAtTime(0.7 * near * level, t + 0.006);
+    cg.gain.exponentialRampToValueAtTime(0.0001, t + 0.5);
+    cr.connect(clp);
+    clp.connect(cg);
+    cg.connect(out);
+    cr.start(t, Math.random() * 3);
+    sources.push(cr);
+    nodes.push(cr, clp, cg);
+  }
+  stopAfter(sources, end + 0.1, nodes);
+}
+
 // ───────────────────────────────────────────── construction & misc
 
 export function clank(ac: BaseAudioContext, out: AudioNode, t: number, level = 1): void {
@@ -596,6 +645,40 @@ export function clank(ac: BaseAudioContext, out: AudioNode, t: number, level = 1
     nodes.push(o, og);
   }
   stopAfter(oscs, t + 0.4, nodes);
+}
+
+// ───────────────────────────────────────────── footsteps (first-person walk)
+
+const STEP_TONE: Record<string, { thump: number; band: number; q: number; scuff: number; len: number; gain: number }> = {
+  paving: { thump: 95, band: 1500, q: 0.9, scuff: 0.5, len: 0.07, gain: 1 },
+  deck: { thump: 150, band: 900, q: 2.2, scuff: 0.35, len: 0.09, gain: 1.1 },
+  grass: { thump: 70, band: 650, q: 0.6, scuff: 0.8, len: 0.12, gain: 0.6 },
+  sand: { thump: 60, band: 480, q: 0.5, scuff: 0.9, len: 0.14, gain: 0.45 },
+};
+
+/** one footfall: a soft heel thump and a filtered scuff, coloured by what the feet are on */
+export function footstep(ac: BaseAudioContext, out: AudioNode, noise: NoiseBank, t: number, surface: string, level = 1): void {
+  const s = STEP_TONE[surface] ?? STEP_TONE.paving;
+  const v = level * s.gain * (0.85 + Math.random() * 0.3);
+  const src = ac.createBufferSource();
+  src.buffer = noise.white;
+  const bp = biquad(ac, 'bandpass', s.band * (0.9 + Math.random() * 0.2), s.q);
+  const ng = ac.createGain();
+  env(ng.gain, t, 0.09 * v * s.scuff, 0.006, s.len);
+  src.connect(bp);
+  bp.connect(ng);
+  ng.connect(out);
+  const o = ac.createOscillator();
+  o.type = 'sine';
+  o.frequency.setValueAtTime(s.thump * 1.6, t);
+  o.frequency.exponentialRampToValueAtTime(s.thump, t + 0.05);
+  const og = ac.createGain();
+  env(og.gain, t, 0.16 * v, 0.004, 0.07);
+  o.connect(og);
+  og.connect(out);
+  src.start(t, Math.random() * Math.max(0, noise.white.duration - 0.5));
+  o.start(t);
+  stopAfter([src, o], t + s.len + 0.15, [src, bp, ng, o, og]);
 }
 
 // ───────────────────────────────────────────── carousel music box
@@ -661,4 +744,63 @@ export function musicBoxPhrase(ac: BaseAudioContext, out: AudioNode, t: number, 
       }
     };
   return tt - t;
+}
+
+// ───────────────────────────────────────────── street musician
+/** one bar of finger-picked guitar (plucked triangle + a soft body resonance); returns its duration */
+export function guitarPhrase(ac: BaseAudioContext, out: AudioNode, t: number, chord: number[], level = 1): number {
+  const beat = 0.34;
+  const pat = [0, 2, 1, 3, 2, 1, 3, 2];
+  for (let i = 0; i < pat.length; i++) {
+    const f = chord[pat[i] % chord.length];
+    const t0 = t + i * beat + Math.random() * 0.012;
+    const o = ac.createOscillator();
+    o.type = 'triangle';
+    o.frequency.value = f;
+    const o2 = ac.createOscillator();
+    o2.type = 'sine';
+    o2.frequency.value = f * 2.003;
+    const g = ac.createGain();
+    const vel = (i % 4 === 0 ? 0.11 : 0.075) * level * (0.85 + Math.random() * 0.3);
+    g.gain.setValueAtTime(0, t0);
+    g.gain.linearRampToValueAtTime(vel, t0 + 0.006);
+    g.gain.exponentialRampToValueAtTime(vel * 0.25, t0 + 0.28);
+    g.gain.exponentialRampToValueAtTime(0.0003, t0 + 1.1);
+    const lp = ac.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.setValueAtTime(3200, t0);
+    lp.frequency.exponentialRampToValueAtTime(900, t0 + 0.5);
+    o.connect(lp);
+    const g2 = ac.createGain();
+    g2.gain.value = 0.28;
+    o2.connect(g2).connect(lp);
+    lp.connect(g).connect(out);
+    o.start(t0);
+    o2.start(t0);
+    o.stop(t0 + 1.15);
+    o2.stop(t0 + 1.15);
+  }
+  return pat.length * beat;
+}
+
+/** a small crowd clapping for `dur` s: short bursts of band-passed noise */
+export function clapping(ac: BaseAudioContext, out: AudioNode, t: number, noise: AudioBuffer, people: number, dur: number, level = 1): void {
+  const n = Math.min(70, Math.round(people * 3.2 * dur));
+  for (let i = 0; i < n; i++) {
+    const t0 = t + Math.random() * dur * (Math.random() < 0.8 ? 0.7 : 1);
+    const s = ac.createBufferSource();
+    s.buffer = noise;
+    s.loop = true;
+    const bp = ac.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.value = 900 + Math.random() * 1500;
+    bp.Q.value = 1.1;
+    const g = ac.createGain();
+    const v = 0.05 * level * (0.5 + Math.random());
+    g.gain.setValueAtTime(v, t0);
+    g.gain.exponentialRampToValueAtTime(0.0004, t0 + 0.05);
+    s.connect(bp).connect(g).connect(out);
+    s.start(t0, Math.random());
+    s.stop(t0 + 0.06);
+  }
 }

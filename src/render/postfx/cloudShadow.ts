@@ -12,6 +12,7 @@
 import * as THREE from 'three';
 import { Effect, EffectAttribute } from 'postprocessing';
 import { FS_VERT, FullscreenPass } from './fullscreen';
+import { CLOUD_LAYER_GLSL, CLOUD_SHADOW_FIELD_GLSL, type CloudLayerUniforms } from '../sky/cloudLayer';
 
 export const MAX_CLOUDS = 16;
 
@@ -26,7 +27,25 @@ export interface CloudShadowData {
   strength: number;
   /** colour multiplier deep inside a cloud shadow (direct light removed) */
   tint: THREE.Color;
+  /** world mode: haze extinction (1/m) — distant shadows fade into the aerial perspective */
+  haze?: number;
+  /** world mode: the high cloud layer whose density field casts the shadows (ellipses unused) */
+  field?: CloudLayerUniforms;
 }
+
+/** world mode: the map is rendered from the high cloud layer's density field around the camera */
+const MAP_FIELD_FRAG = /* glsl */ `
+${CLOUD_LAYER_GLSL}
+${CLOUD_SHADOW_FIELD_GLSL}
+uniform vec3 uL;
+uniform vec4 uMapRect;
+varying vec2 vUv;
+void main() {
+  vec2 g = uMapRect.xy + vUv * uMapRect.zw;
+  float lit = thCloudLit(g, uL);
+  gl_FragColor = vec4(lit, lit, lit, 1.0);
+}
+`;
 
 const MAP_FRAG = /* glsl */ `
 uniform vec4 uCloudA[${MAX_CLOUDS}];
@@ -70,6 +89,8 @@ export function cloudShadowUniforms() {
     uCloudTint: new THREE.Uniform(new THREE.Color(0.6, 0.65, 0.75)),
     uProjInv: new THREE.Uniform(new THREE.Matrix4()),
     uCamWorld: new THREE.Uniform(new THREE.Matrix4()),
+    /** haze extinction (1/m) for the distance fade (0 = none) */
+    uCloudHaze: new THREE.Uniform(0),
   };
 }
 export type CloudShadowUniforms = ReturnType<typeof cloudShadowUniforms>;
@@ -83,6 +104,7 @@ uniform float uCloudStrength;
 uniform vec3 uCloudTint;
 uniform mat4 uProjInv;
 uniform mat4 uCamWorld;
+uniform float uCloudHaze;
 vec3 cloudShadowMul(vec2 uv, float depth) {
   if (uCloudStrength <= 0.001 || depth >= 0.999999) return vec3(1.0);
   vec4 vp = uProjInv * vec4(uv * 2.0 - 1.0, depth * 2.0 - 1.0, 1.0);
@@ -90,7 +112,14 @@ vec3 cloudShadowMul(vec2 uv, float depth) {
   vec2 g = wp.xz - uCloudL.xz * (wp.y / max(uCloudL.y, 0.08));
   vec2 m = (g - uCloudRect.xy) / uCloudRect.zw;
   float lit = texture2D(tCloudMap, m).r;
-  return mix(vec3(1.0), uCloudTint, (1.0 - lit) * uCloudStrength);
+  float k = 1.0;
+  if (uCloudHaze > 0.0) {
+    // world mode: unshadowed outside the camera-centred map, and the shadow fades with the haze in front
+    vec2 em = min(m, 1.0 - m);
+    lit = mix(1.0, lit, smoothstep(0.0, 0.04, min(em.x, em.y)));
+    k = exp(-uCloudHaze * length(wp - uCamWorld[3].xyz));
+  }
+  return mix(vec3(1.0), uCloudTint, (1.0 - lit) * uCloudStrength * k);
 }
 `;
 
@@ -110,11 +139,18 @@ export class CloudShadowEffect extends Effect {
   source: CloudShadowData | undefined;
   enabled = true;
 
+  /** world mode: the cloud layer field (map follows the camera) */
+  private field: CloudLayerUniforms | null;
+  private fieldPass: FullscreenPass | null = null;
+  /** world map extent (m) */
+  fieldSize = 9000;
+
   constructor(
     private u: CloudShadowUniforms,
     private camera: THREE.PerspectiveCamera,
     rect: { x0: number; z0: number; x1: number; z1: number },
     size = 256,
+    field: CloudLayerUniforms | null = null,
   ) {
     super('CloudShadowEffect', FRAG, {
       attributes: EffectAttribute.DEPTH,
@@ -146,6 +182,21 @@ export class CloudShadowEffect extends Effect {
         toneMapped: false,
       }),
     );
+    this.field = field;
+    if (field) {
+      this.fieldPass = new FullscreenPass(
+        new THREE.ShaderMaterial({
+          name: 'CloudShadowFieldMap',
+          uniforms: { ...field, uL: u.uCloudL, uMapRect: u.uCloudRect },
+          vertexShader: FS_VERT,
+          fragmentShader: MAP_FIELD_FRAG,
+          depthTest: false,
+          depthWrite: false,
+          blending: THREE.NoBlending,
+          toneMapped: false,
+        }),
+      );
+    }
   }
 
   override update(renderer: THREE.WebGLRenderer): void {
@@ -153,6 +204,24 @@ export class CloudShadowEffect extends Effect {
     u.uProjInv.value.copy(this.camera.projectionMatrixInverse);
     u.uCamWorld.value.copy(this.camera.matrixWorld);
     const src = this.source;
+    if (this.fieldPass) {
+      // world: shadows of the cloud layer in a camera-centred map (snapped to texels: no swimming)
+      if (!src || !this.enabled || src.strength <= 0.001) {
+        u.uCloudStrength.value = 0;
+        return;
+      }
+      const size = this.fieldSize;
+      const texel = size / this.map.width;
+      const cx = Math.round(this.camera.position.x / texel) * texel,
+        cz = Math.round(this.camera.position.z / texel) * texel;
+      u.uCloudRect.value.set(cx - size / 2, cz - size / 2, size, size);
+      u.uCloudL.value.copy(src.light);
+      u.uCloudStrength.value = src.strength;
+      u.uCloudTint.value.copy(src.tint);
+      u.uCloudHaze.value = src.haze ?? 0;
+      this.fieldPass.render(renderer, this.map);
+      return;
+    }
     if (!src || !this.enabled || src.strength <= 0.001 || src.count === 0) {
       u.uCloudStrength.value = 0;
       return;
@@ -180,5 +249,6 @@ export class CloudShadowEffect extends Effect {
     super.dispose();
     this.map.dispose();
     this.pass.dispose();
+    this.fieldPass?.dispose();
   }
 }

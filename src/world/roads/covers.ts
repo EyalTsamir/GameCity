@@ -6,7 +6,9 @@
 // beach and pond cells are left to the terrain. Cells are merged into rectangles per surface, so
 // covers never overlap (no z-fighting) and all sit at one height.
 
+import { geomOn } from '../../core/geomhunt';
 import type { CityContext } from '../../core/context';
+import { streetDetail } from '../../core/streetdetail';
 import type { Area, Block, CityPlan, WalkPath } from '../../core/plan';
 import type { P2, Rect } from '../../core/geom';
 import { OCC } from '../../core/occupancy';
@@ -14,7 +16,8 @@ import { hash01 } from '../../core/rng';
 import { SIDEWALK_Y } from '../../core/constants';
 import type { MeshBuilder } from './builder';
 import { Y } from './streets';
-import { HM, surf } from './surfaces';
+import { HM, surf, band, coverRect } from './surfaces';
+import { getLayout } from '../props/layout';
 
 interface Cover {
   key: string;
@@ -23,12 +26,17 @@ interface Cover {
   mat: number;
   variant: number;
   area?: Area;
+  /** rectangle the band layout / specials align to, and the bands [period, width, border, macro] (macro < 0: no slot drain) */
+  rect?: Rect;
+  bands?: [number, number, number, number];
 }
 
 export interface CoverStats {
   coverRects: number;
   pathRibbons: number;
   plots: number;
+  patios: number;
+  frontWalks: number;
 }
 
 export interface CoverInfo {
@@ -49,27 +57,34 @@ function coverForArea(a: Area, plan: CityPlan): Cover | null {
       return null;
     case 'plaza': {
       const radial = plan.features.some((f) => f.kind === 'fountain' && f.x > a.rect.x0 && f.x < a.rect.x1 && f.z > a.rect.z0 && f.z < a.rect.z1);
-      return { key: `plaza${radial ? 'R' : ''}`, mesh: 'H', mat: HM.plaza, variant: radial ? 1 : 0 };
+      const dk = plan.blocks[a.blockId]?.kind;
+      if (radial) return { key: `plazaR${a.id}`, mesh: 'H', mat: HM.plaza, variant: 1, rect: a.rect, bands: [0, 0, 0.9, 0.04] };
+      if (dk === 'downtown') return { key: `plazaD${a.id}`, mesh: 'H', mat: HM.plaza, variant: 3, rect: a.rect, bands: [7.5, 0.42, 0.7, 0.06] };
+      if (dk === 'station') return { key: `plazaS${a.id}`, mesh: 'H', mat: HM.plaza, variant: 4, rect: a.rect, bands: [6.3, 0.45, 0.8, 0.05] };
+      if (dk === 'midtown') return { key: `plazaM${a.id}`, mesh: 'H', mat: HM.plaza, variant: 5, rect: a.rect, bands: [6.0, 0.36, 0.6, 0.06] };
+      return { key: `plaza${a.id}`, mesh: 'H', mat: HM.plaza, variant: 0, rect: a.rect, bands: [0, 0, 0.6, 0.05] };
     }
     case 'market':
-      return { key: 'market', mesh: 'H', mat: HM.setts, variant: 1 };
+      return { key: 'market', mesh: 'H', mat: HM.setts, variant: 1, rect: a.rect, bands: [0, 0, 0.6, 0.05] };
     case 'yard':
-      return { key: 'yard', mesh: 'H', mat: HM.concrete, variant: 0 };
+      return { key: `yard${a.id}`, mesh: 'H', mat: HM.concrete, variant: 0, rect: a.rect, bands: [0, 0, 0, 0.06] };
     case 'containeryard':
-      return { key: 'cyard', mesh: 'H', mat: HM.concrete, variant: 1 };
+      return { key: 'cyard', mesh: 'H', mat: HM.concrete, variant: 1, rect: a.rect, bands: [0, 0, 0, 0.05] };
     case 'construction':
       return { key: 'constr', mesh: 'H', mat: HM.gravel, variant: 0 };
     case 'freightyard':
       return { key: 'freight', mesh: 'H', mat: HM.gravel, variant: 1 };
     case 'quay':
-      return { key: 'quay', mesh: 'H', mat: HM.quay, variant: 0 };
+      return { key: 'quay', mesh: 'H', mat: HM.quay, variant: 0, rect: a.rect, bands: [0, 0, 0, 0.05] };
     case 'platform':
-      return { key: 'platform', mesh: 'H', mat: HM.platform, variant: 0 };
+      return { key: 'platform', mesh: 'H', mat: HM.platform, variant: 0, rect: a.rect, bands: [8.0, 0.36, 0.6, 0.06] };
     case 'parking':
       return { key: 'parking', mesh: 'A', mat: 0, variant: 1 };
     case 'schoolyard':
       return { key: 'school', mesh: 'A', mat: 0, variant: 2 };
     case 'driveway':
+      // house driveways are pavers; a car park access (surface asphalt) continues the car park's asphalt
+      if (a.surface === 'asphalt') return { key: 'parking', mesh: 'A', mat: 0, variant: 1 };
       return { key: 'drive', mesh: 'H', mat: HM.pavers, variant: 0 };
     case 'playground':
       return { key: 'sand', mesh: 'H', mat: HM.sand, variant: 0 };
@@ -89,10 +104,10 @@ function coverForArea(a: Area, plan: CityPlan): Cover | null {
 function coverForBlock(b: Block): Cover | null {
   switch (b.surface) {
     case 'paving':
-      if (b.kind === 'oldtown' || b.kind === 'market') return { key: 'bsetts', mesh: 'H', mat: HM.setts, variant: 0 };
-      return { key: 'bpave', mesh: 'H', mat: HM.plaza, variant: 2 };
+      if (b.kind === 'oldtown' || b.kind === 'market') return { key: 'bsetts', mesh: 'H', mat: HM.setts, variant: 0, rect: b.rect, bands: [0, 0, 0, 0.06] };
+      return { key: 'bpave', mesh: 'H', mat: HM.plaza, variant: 2, rect: b.rect, bands: [10.5, 0.3, 0.5, -0.05] };
     case 'concrete':
-      return { key: 'yard', mesh: 'H', mat: HM.concrete, variant: 0 };
+      return { key: 'byard', mesh: 'H', mat: HM.concrete, variant: 0, rect: b.rect, bands: [0, 0, 0, 0.06] };
     case 'asphalt':
       return { key: 'basph', mesh: 'A', mat: 0, variant: 1 };
     case 'gravel':
@@ -103,14 +118,17 @@ function coverForBlock(b: Block): Cover | null {
 }
 
 export function buildCovers(ctx: CityContext, A: MeshBuilder, H: MeshBuilder): { stats: CoverStats; info: CoverInfo } {
+  const pathEdge = streetDetail(ctx, 'pathedge');
   const plan = ctx.plan;
   const occ = ctx.occupancy;
-  const stats: CoverStats = { coverRects: 0, pathRibbons: 0, plots: 0 };
+  const stats: CoverStats = { coverRects: 0, pathRibbons: 0, plots: 0, patios: 0, frontWalks: 0 };
   const info: CoverInfo = { radial: [], field: null, court: null };
   const terrainH = (ctx.services.terrain as { height?: (x: number, z: number) => number } | undefined)?.height ?? plan.heightAt;
   const deckArea = plan.areas.find((a) => a.kind === 'boardwalk');
   const promArea = plan.areas.find((a) => a.kind === 'promenade');
   const inRect = (r: Rect | undefined, x: number, z: number, m = 0) => !!r && x > r.x0 - m && x < r.x1 + m && z > r.z0 - m && z < r.z1 + m;
+  // parking lots inside a block meet the lawn at a concrete edging kerb (audit: asphalt ran straight into the grass)
+  const parkKerbs = !ctx.debug.params.has('noparkkerb');
 
   for (const f of plan.features) {
     if (f.kind === 'fountain') info.radial.push({ x: f.x, z: f.z, r: 11.5 });
@@ -186,6 +204,16 @@ export function buildCovers(ctx: CityContext, A: MeshBuilder, H: MeshBuilder): {
             if (lower(i - 1, jj)) skirtRun(xs[i], zs[jj], xs[i], zs[jj + 1], -1, 0, i === 0);
             if (lower(i1 + 1, jj)) skirtRun(xs[i1 + 1], zs[jj], xs[i1 + 1], zs[jj + 1], 1, 0, i1 === nx - 1);
           }
+          if (parkKerbs && c.key === 'parking') {
+            for (let k = i; k <= i1; k++) {
+              if (j > 0 && lower(k, j - 1)) edgeKerb(xs[k], zs[j], xs[k + 1], zs[j], 0, -1);
+              if (j1 < nz - 1 && lower(k, j1 + 1)) edgeKerb(xs[k], zs[j1 + 1], xs[k + 1], zs[j1 + 1], 0, 1);
+            }
+            for (let jj = j; jj <= j1; jj++) {
+              if (i > 0 && lower(i - 1, jj)) edgeKerb(xs[i], zs[jj], xs[i], zs[jj + 1], -1, 0);
+              if (i1 < nx - 1 && lower(i1 + 1, jj)) edgeKerb(xs[i1 + 1], zs[jj], xs[i1 + 1], zs[jj + 1], 1, 0);
+            }
+          }
         }
       }
     }
@@ -194,7 +222,11 @@ export function buildCovers(ctx: CityContext, A: MeshBuilder, H: MeshBuilder): {
   function emitGridCover(c: Cover, gx: number[], gz: number[]): void {
     const B = c.mesh === 'A' ? A : H;
     if (c.mesh === 'A') A.set('aA', 0, c.variant);
-    else surf(H, c.mat, c.variant, 9, 0);
+    else {
+      surf(H, c.mat, c.variant, 9, 0);
+      if (c.rect && c.bands) band(H, c.rect, ...c.bands);
+      else if (c.rect) coverRect(H, c.rect);
+    }
     if (c.mat === HM.field && c.mesh === 'H') info.field = { x0: gx[0], z0: gz[0], x1: gx[gx.length - 1], z1: gz[gz.length - 1] };
     const ids: number[] = [];
     for (const z of gz) for (const x of gx) ids.push(B.v(x, Y.cover, z));
@@ -207,6 +239,7 @@ export function buildCovers(ctx: CityContext, A: MeshBuilder, H: MeshBuilder): {
     switch (c.mesh) {
       case 'H':
         surf(H, c.mat, c.variant, 9, 0);
+        if (c.rect && c.bands) band(H, c.rect, ...c.bands);
         H.rect(r.x0, r.z0, r.x1, r.z1, Y.cover);
         if (c.mat === HM.field) info.field = r;
         return;
@@ -227,6 +260,19 @@ export function buildCovers(ctx: CityContext, A: MeshBuilder, H: MeshBuilder): {
   }
 
   /** Skirt from the ground up to the cover height along an edge; on block edges only where no sidewalk adjoins. */
+  /** a 15 cm concrete edging kerb on the lawn side of a cover edge (outward normal nx,nz), 9 cm proud of the cover */
+  function edgeKerb(x0: number, z0: number, x1: number, z1: number, nx: number, nz: number): void {
+    if (Math.hypot(x1 - x0, z1 - z0) < 0.2) return;
+    const w = 0.15,
+      top = Y.cover + 0.09;
+    surf(H, HM.side, 0, 9, 0);
+    const ox = nx * w,
+      oz = nz * w;
+    H.rect(Math.min(x0, x1 + ox), Math.min(z0, z1 + oz), Math.max(x0, x1 + ox), Math.max(z0, z1 + oz), top);
+    H.wall(x0 + ox, z0 + oz, x1 + ox, z1 + oz, Y.ground - 0.03, top, nx, nz);
+    H.wall(x0, z0, x1, z1, Y.cover, top, -nx, -nz);
+  }
+
   function skirtRun(x0: number, z0: number, x1: number, z1: number, nx: number, nz: number, blockEdge: boolean): void {
     const L = Math.hypot(x1 - x0, z1 - z0);
     if (L < 1e-3) return;
@@ -316,6 +362,9 @@ export function buildCovers(ctx: CityContext, A: MeshBuilder, H: MeshBuilder): {
     // north end (quay concrete) and south end (river wall)
     H.wall(r.x0, r.z0, r.x1, r.z0, Y.ground, y, 0, -1);
     H.wall(r.x1, r.z1, r.x0, r.z1, Y.ground, y, 0, 1);
+    deckLip(r.x0, r.z1, r.x0, r.z0, -1, 0);
+    deckLip(r.x0, r.z0, r.x1, r.z0, 0, -1);
+    deckLip(r.x1, r.z1, r.x0, r.z1, 0, 1);
     // east fascia down to the sand, broken around the bump-out
     const bw = plan.paths.find((p) => p.kind === 'boardwalk' && p.pts.length > 3);
     const bump = bw ? bumpOut(bw, r.x1) : null;
@@ -337,7 +386,25 @@ export function buildCovers(ctx: CityContext, A: MeshBuilder, H: MeshBuilder): {
     }
   }
 
+  /** geometry hunt (?nodecklip): the deck boards stand 3.5 cm proud of the fascia, an edge board with a shadow under it (a razor-sharp slab edge) */
+  function deckLip(ax: number, az: number, bx: number, bz: number, nx: number, nz: number): void {
+    if (!geomOn('decklip')) return;
+    const p = 0.035,
+      y1 = Y.deck,
+      y0 = Y.deck - 0.08;
+    const qx = ax + nx * p,
+      qz = az + nz * p,
+      rx = bx + nx * p,
+      rz = bz + nz * p;
+    surf(H, HM.deck, 0, 9, 0);
+    H.wall(qx, qz, rx, rz, y0, y1, nx, nz);
+    H.quadFacing(H.v(ax, y1, az, 0, 1, 0), H.v(bx, y1, bz, 0, 1, 0), H.v(rx, y1, rz, 0, 1, 0), H.v(qx, y1, qz, 0, 1, 0), 0, 1, 0);
+    H.quadFacing(H.v(ax, y0, az, 0, -1, 0), H.v(bx, y0, bz, 0, -1, 0), H.v(rx, y0, rz, 0, -1, 0), H.v(qx, y0, qz, 0, -1, 0), 0, -1, 0);
+    surf(H, HM.side, 3, 9, 0);
+  }
+
   function fascia(ax: number, az: number, bx: number, bz: number, nx: number, nz: number): void {
+    deckLip(ax, az, bx, bz, nx, nz);
     const L = Math.hypot(bx - ax, bz - az);
     const n = Math.max(1, Math.ceil(L / 3));
     surf(H, HM.side, 3, 9, 0);
@@ -461,7 +528,7 @@ export function buildCovers(ctx: CityContext, A: MeshBuilder, H: MeshBuilder): {
       sl.push({ x: c.x + mx * (half * scale + jl), z: c.z + mz * (half * scale + jl) });
       sr.push({ x: c.x - mx * (half * scale + jr), z: c.z - mz * (half * scale + jr) });
     }
-    surf(H, paved ? HM.pathPaved : HM.pathGravel, 0, 9, 0);
+    surf(H, paved ? HM.pathPaved : HM.pathGravel, p.surface === 'track' ? 1 : 0, 9, 0);
     for (let i = 0; i < N; i++) {
       left.push(H.v(sl[i].x, y, sl[i].z));
       right.push(H.v(sr[i].x, y, sr[i].z));
@@ -472,7 +539,6 @@ export function buildCovers(ctx: CityContext, A: MeshBuilder, H: MeshBuilder): {
       H.quadUp(left[i], left[j], right[j], right[i]);
     }
     // low skirts along both edges
-    surf(H, HM.side, 2, 9, 0);
     for (let i = 0; i < segs; i++) {
       const j = (i + 1) % N;
       for (const [s, sgn] of [
@@ -487,9 +553,72 @@ export function buildCovers(ctx: CityContext, A: MeshBuilder, H: MeshBuilder): {
         // outward = left normal for the left edge, right normal for the right edge
         const onx = (-ez / l) * sgn,
           onz = (ex / l) * sgn;
-        H.wall(a.x, a.z, b.x, b.z, Y.ground, y, onx, onz);
+        if (!pathEdge) {
+          surf(H, HM.side, 2, 9, 0);
+          H.wall(a.x, a.z, b.x, b.z, Y.ground, y, onx, onz);
+          continue;
+        }
+        // (?nopathedge) the path used to stop in a dark wall above the sunken lawn (a black outline round every park
+        // path). Now: paved paths get a granite soldier course, then the skirt follows the real ground, and a low bank
+        // of trodden soil with grass creeping in runs out onto the lawn
+        const out = (q: P2, c: { x: number; z: number }) => {
+          const ol = Math.hypot(q.x - c.x, q.z - c.z) || 1;
+          return { x: (q.x - c.x) / ol, z: (q.z - c.z) / ol };
+        };
+        const oa = out(a, pts[i]),
+          ob = out(b, pts[j]);
+        const EW = paved ? 0.11 : 0;
+        const a1 = { x: a.x + oa.x * EW, z: a.z + oa.z * EW },
+          b1 = { x: b.x + ob.x * EW, z: b.z + ob.z * EW };
+        if (paved) {
+          surf(H, HM.setts, 0, 9, 0);
+          H.quadUp(H.v(a.x, y + 0.002, a.z), H.v(b.x, y + 0.002, b.z), H.v(b1.x, y + 0.002, b1.z), H.v(a1.x, y + 0.002, a1.z));
+        }
+        const BANK = 0.3 + 0.12 * hash01(Math.round(a.x * 7), Math.round(a.z * 7), 5);
+        const a2 = { x: a1.x + oa.x * BANK, z: a1.z + oa.z * BANK },
+          b2 = { x: b1.x + ob.x * BANK, z: b1.z + ob.z * BANK };
+        const ya = terrainH(a2.x, a2.z) - 0.012,
+          yb = terrainH(b2.x, b2.z) - 0.012;
+        const top = y + (paved ? 0.002 : -0.002);
+        surf(H, HM.side, 2, 9, 0);
+        H.wall(a1.x, a1.z, b1.x, b1.z, Math.min(ya, yb, Y.ground) - 0.06, top, onx, onz);
+        surf(H, HM.shoulder, 0, 9, 0);
+        const slope = Math.max(0, top - (ya + yb) / 2) / BANK;
+        const nl = Math.hypot(slope, 1);
+        H.quadUp(H.v(a1.x, top, a1.z, (onx * slope) / nl, 1 / nl, (onz * slope) / nl), H.v(b1.x, top, b1.z, (onx * slope) / nl, 1 / nl, (onz * slope) / nl), H.v(b2.x, yb, b2.z, (onx * slope) / nl, 1 / nl, (onz * slope) / nl), H.v(a2.x, ya, a2.z, (onx * slope) / nl, 1 / nl, (onz * slope) / nl));
       }
     }
+  }
+
+  // ── garden patios (layout shared with props / vegetation): flags, pavers, brick at 4.5 cm, decking raised
+  for (const gp of getLayout(ctx).gardens) {
+    const p = gp.patio;
+    if (!p) continue;
+    const deck = gp.patioMat === 2;
+    const y = deck ? 0.13 : 0.045;
+    const alongX = p.x1 - p.x0 >= p.z1 - p.z0;
+    surf(H, HM.patio, gp.patioMat, 9, 0, alongX ? 0 : 1);
+    H.rect(p.x0, p.z0, p.x1, p.z1, y);
+    surf(H, deck ? HM.side : HM.side, deck ? 3 : 0, 9, 0);
+    H.wall(p.x0, p.z0, p.x1, p.z0, Y.ground, y, 0, -1);
+    H.wall(p.x1, p.z1, p.x0, p.z1, Y.ground, y, 0, 1);
+    H.wall(p.x0, p.z1, p.x0, p.z0, Y.ground, y, -1, 0);
+    H.wall(p.x1, p.z0, p.x1, p.z1, Y.ground, y, 1, 0);
+    stats.patios++;
+  }
+  // front walks (gate → door) in the patio's slabs / pavers / brick (decking houses get slabs)
+  for (const gp of getLayout(ctx).gardens) {
+    const p = gp.front;
+    if (!p) continue;
+    const y = 0.045;
+    surf(H, HM.patio, gp.patioMat === 2 ? 0 : gp.patioMat, 9, 0, p.x1 - p.x0 >= p.z1 - p.z0 ? 0 : 1);
+    H.rect(p.x0, p.z0, p.x1, p.z1, y);
+    surf(H, HM.side, 0, 9, 0);
+    H.wall(p.x0, p.z0, p.x1, p.z0, Y.ground, y, 0, -1);
+    H.wall(p.x1, p.z1, p.x0, p.z1, Y.ground, y, 0, 1);
+    H.wall(p.x0, p.z1, p.x0, p.z0, Y.ground, y, -1, 0);
+    H.wall(p.x1, p.z0, p.x1, p.z1, Y.ground, y, 1, 0);
+    stats.frontWalks++;
   }
 
   return { stats, info };

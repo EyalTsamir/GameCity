@@ -1,363 +1,475 @@
-// Writes the crowd into instanced meshes every frame: culls against the camera
-// frustum, computes each figure's joint angles (walk / run / idle / sit / sit on
-// the sand / lie / wave / push a pram / hold a leash or umbrella) and packs the
-// per-instance attributes the figure shaders read.
+// Writes the crowd into the figure layers every frame: culls against the camera frustum, picks a
+// level of detail (with hysteresis), computes each figure's pose (animate.ts) and packs the
+// per-instance data the people shader reads (shader.ts): root position / yaw, 48 pose values as
+// 16-bit fixed pairs, 12 colour words with garment parameters and the feature mask.
+//
+// Draw calls: LOD0 + lo + tiny (main pass only) + one shadow proxy (tiny mesh, shadow pass only),
+// plus prams, dogs and blob contact shadows as before.
 
 import * as THREE from 'three';
-import { F, buildBlobGeometry, buildDogGeometry, buildPersonGeometry, buildPramGeometry, buildTinyPersonGeometry, makeBlobMaterial, makeDogMaterials, makePersonMaterials, makePramMaterials, RIG } from './figure';
+import { closePeople } from '../../core/closePeople';
+import { detailPeople } from '../../core/detailPeople';
+import { DOG_OFFSET, F, buildBlobGeometry, buildDogGeometry, buildPramGeometry, makeBlobMaterial, makeDogMaterials, makePramMaterials } from './figure';
+import { BONE, FB, figureMesh, type Lod } from './body';
+import { HAT_STYLES, POSE_KEYS, POSE_UINTS, makeInvisibleMaterial, makePeopleMaterials } from './shader';
+import { computePoseA, poseIn } from './animate';
+import { newGaitState, type GaitState } from './gait';
+import { fkPoint, gripPoint, newPose, type Pose } from './pose';
+import { rigOf, type Rig } from './rig';
+import { styleFromFlags, type Look, type Style } from './looks';
 import type { Crowd, Member } from './crowd';
+import { patchLampMaterial } from '../../world/lamps/integrate';
+import { Tableware, HELD_CUP, HELD_GLASS } from './tableware';
+import { createPalette, type PedPalette } from './palette';
 
-const SEAT_H = 0.45;
+const clamp = (x: number, a: number, b: number) => (x < a ? a : x > b ? b : x);
+const q8 = (h: number) => clamp(Math.round(((h + 0.1) / 1.275) * 255), 0, 255);
+const bit = (b: number) => (1 << b) >>> 0;
+/** colour word: rgb24 + parameter byte (module level: a closure made per call is an allocation) */
+const w = (rgb: number, p: number) => ((rgb & 0xffffff) | ((p & 255) << 24)) >>> 0;
 
-const smooth = (t: number) => t * t * (3 - 2 * t);
-const mix = (a: number, b: number, t: number) => a + (b - a) * t;
-
-/** joint angles, see figure.ts shader for the meaning of each slot */
-export interface Pose {
-  hipL: number;
-  kneeL: number;
-  hipR: number;
-  kneeR: number;
-  shL: number;
-  elL: number;
-  shR: number;
-  elR: number;
-  rollL: number;
-  rollR: number;
-  pitch: number;
-  rootY: number;
-  lean: number;
-  head: number;
+// Per-figure hot path without garbage: the pose is packed from named field reads (a keyed read with a varying
+// key, pose[POSE_KEYS[k]], is megamorphic and boxes every double it returns), and instance matrices are written
+// element by element (three's setters take doubles as arguments, boxed when the call is not inlined).
+const PV = new Float64Array(POSE_KEYS.length);
+const PACK_ORDER = 'scale fade w c b bodyPitch rootX rootY rootZ pelvisYaw pelvisRoll waistBend waistTwist chestBend chestTwist headYaw headPitch hipFlexL hipAbdL kneeL ankleL hipFlexR hipAbdR kneeR ankleR shFlexL shAbdL shTwistL elbowL wristL shFlexR shAbdR shTwistR elbowR wristR gripL gripR caneX caneZ bagSwingL bagSwingR tailFloor headRoll chestRoll footYawL footYawR spare1 spare2';
+if (PACK_ORDER !== POSE_KEYS.join(' ')) throw new Error('render.ts packPose: field order differs from POSE_KEYS');
+function packPose(p: Pose, o: Uint32Array): void {
+  const v = PV;
+  v[0] = p.scale; v[1] = p.fade; v[2] = p.w; v[3] = p.c; v[4] = p.b; v[5] = p.bodyPitch; v[6] = p.rootX; v[7] = p.rootY;
+  v[8] = p.rootZ; v[9] = p.pelvisYaw; v[10] = p.pelvisRoll; v[11] = p.waistBend; v[12] = p.waistTwist; v[13] = p.chestBend;
+  v[14] = p.chestTwist; v[15] = p.headYaw; v[16] = p.headPitch; v[17] = p.hipFlexL; v[18] = p.hipAbdL; v[19] = p.kneeL;
+  v[20] = p.ankleL; v[21] = p.hipFlexR; v[22] = p.hipAbdR; v[23] = p.kneeR; v[24] = p.ankleR; v[25] = p.shFlexL;
+  v[26] = p.shAbdL; v[27] = p.shTwistL; v[28] = p.elbowL; v[29] = p.wristL; v[30] = p.shFlexR; v[31] = p.shAbdR;
+  v[32] = p.shTwistR; v[33] = p.elbowR; v[34] = p.wristR; v[35] = p.gripL; v[36] = p.gripR; v[37] = p.caneX; v[38] = p.caneZ;
+  v[39] = p.bagSwingL; v[40] = p.bagSwingR; v[41] = p.tailFloor; v[42] = p.headRoll; v[43] = p.chestRoll; v[44] = p.footYawL;
+  v[45] = p.footYawR; v[46] = p.spare1; v[47] = p.spare2;
+  for (let k = 0; k < POSE_UINTS; k++) {
+    let a = Math.round((v[2 * k] + 8) * 4096),
+      b = Math.round((v[2 * k + 1] + 8) * 4096);
+    a = a < 0 ? 0 : a > 65535 ? 65535 : a;
+    b = b < 0 ? 0 : b > 65535 ? 65535 : b;
+    o[k] = (a | (b << 16)) >>> 0;
+  }
+}
+const GAZE_EYES = closePeople('gaze');
+const eyeHash = (x: number) => {
+  const s = Math.sin(x * 127.1 + 3.7) * 43758.5453;
+  return s - Math.floor(s);
+};
+/** close level: where the eyes point, in the head's frame, packed into the shader's unused pose field spare1. Eyes move in jumps, so this needs no
+ *  state: a target per time slot. A person who has noticed the camera holds it; anyone it comes near may glance at it without turning the head. */
+function eyeGaze(m: Member, pose: Pose, stature: number, mx: number, mz: number, cam: THREE.Vector3, t: number, o: Uint32Array): void {
+  if (!GAZE_EYES) {
+    o[23] = ((o[23] & 0xffff0000) | 32 | (16 << 6)) >>> 0;
+    return;
+  }
+  const seed = m.seed * 91.7;
+  const dx = cam.x - mx,
+    dz = cam.z - mz,
+    dy = cam.y - (m.y + stature * 0.92);
+  const dh = Math.hypot(dx, dz);
+  let a = Math.atan2(dx, dz) - (m.yaw + pose.headYaw);
+  a = Math.atan2(Math.sin(a), Math.cos(a));
+  const slot = Math.floor(t * (0.45 + 0.35 * eyeHash(seed)) + seed);
+  let yaw = (eyeHash(slot + seed) - 0.5) * 0.3;
+  let pitch = (eyeHash(slot * 1.7 + seed) - 0.62) * 0.14;
+  const glance = Math.floor(t * 0.28 + seed * 3.1);
+  if (Math.abs(a) < 1.25 && dh < 6 && (m.gazeCam || (dh < 3.6 && eyeHash(glance + seed) < 0.42))) {
+    yaw = a;
+    pitch = Math.atan2(dy, dh) + pose.headPitch;
+  }
+  yaw = yaw < -0.62 ? -0.62 : yaw > 0.62 ? 0.62 : yaw;
+  pitch = pitch < -0.42 ? -0.42 : pitch > 0.42 ? 0.42 : pitch;
+  // whoever's turn it is in a party talks: the jaw in syllables, with pauses
+  let jaw = 0;
+  const party = m.party;
+  const n = party ? party.members.length : 1;
+  if (n > 1 && m.lie < 0.3) {
+    const turn = t * 0.21 + party.members[0].seed * 17;
+    const fl = Math.floor(turn);
+    if (Math.floor(eyeHash(fl) * n) === m.idx && turn - fl > 0.08 && turn - fl < 0.9) {
+      const sy = Math.sin(t * 8.3 + seed) * Math.sin(t * 3.1 + seed * 2);
+      jaw = sy > 0 ? Math.min(1, sy * 1.5) : 0;
+    }
+  }
+  const by = Math.round((yaw / 0.62 + 1) * 31.5),
+    bp = Math.round((pitch / 0.42 + 1) * 15.5),
+    bj = Math.round(jaw * 31);
+  // (spare1's word: these stand in for the prop code, which only the CPU reads)
+  o[23] = ((o[23] & 0xffff0000) | by | (bp << 6) | (bj << 11)) >>> 0;
+}
+/** pose word 0 with the scale and a given fade (LOD cross-fades) */
+function packScaleFade(scale: number, fade: number, o: Uint32Array): void {
+  PV[0] = scale;
+  PV[1] = fade;
+  let a = Math.round((PV[0] + 8) * 4096),
+    b = Math.round((PV[1] + 8) * 4096);
+  a = a < 0 ? 0 : a > 65535 ? 65535 : a;
+  b = b < 0 ? 0 : b > 65535 ? 65535 : b;
+  o[0] = (a | (b << 16)) >>> 0;
+}
+// instance matrix inputs: x, y, z, yaw, sx, sy, sz (written by the caller)
+const MI = new Float64Array(7);
+/** how far behind a sitter the parked pram stands (m) */
+const PRAM_BACK = 0.72;
+/** m ← T(x, y, z) · Ry(yaw) · S(sx, sy, sz) from MI (what compose(pos, quatY(yaw), scl) gives) */
+function yawMatrix(m: THREE.Matrix4): void {
+  const e = m.elements;
+  const c = Math.cos(MI[3]),
+    s = Math.sin(MI[3]);
+  e[0] = c * MI[4]; e[1] = 0; e[2] = -s * MI[4]; e[3] = 0;
+  e[4] = 0; e[5] = MI[5]; e[6] = 0; e[7] = 0;
+  e[8] = s * MI[6]; e[9] = 0; e[10] = c * MI[6]; e[11] = 0;
+  e[12] = MI[0]; e[13] = MI[1]; e[14] = MI[2]; e[15] = 1;
 }
 
-export function computePose(m: Member, t: number, umbrella: boolean, o: Pose): Pose {
-  const L = m.look;
-  const a = m.amp;
-  const walk = Math.min(1, a);
-  const run = Math.max(0, a - 1);
-  const ph = m.phase;
-  const s = Math.sin(ph),
-    c = Math.cos(ph);
-  const elderly = L.age >= 70;
-  const kid = L.kind === 'boy' || L.kind === 'girl';
-  const hipA = (0.4 * walk + 0.3 * run) * (elderly ? 0.78 : 1);
-  let hipL = -hipA * s,
-    hipR = hipA * s;
-  const kneeA = 0.55 * walk + 0.95 * run;
-  let kneeL = 0.05 + kneeA * Math.max(0, c) + 0.32 * run,
-    kneeR = 0.05 + kneeA * Math.max(0, -c) + 0.32 * run;
-  const armA = (0.34 * walk + 0.32 * run) * (elderly ? 0.55 : kid ? 1.15 : 1);
-  let shL = armA * s,
-    shR = -armA * s;
-  const elBase = -0.12 - 0.14 * walk - 1.25 * Math.min(1, run * 2.5);
-  let elL = elBase,
-    elR = elBase;
-  let rollL = 0.07,
-    rollR = -0.07;
-  let lean = 0.035 * walk + 0.16 * run + (elderly ? 0.1 : 0);
-  let rootY = (0.022 * walk + 0.05 * run) * (Math.abs(c) - 0.6);
-  let pitch = 0;
-  let head = m.headYaw;
-  // idle: weight shifts and small fidgets
-  const idle = 1 - Math.min(1, a / 0.25);
-  if (idle > 0 && m.sit < 0.5 && m.lie < 0.5 && m.ground < 0.5) {
-    const w = Math.sin(t * 0.55 + m.seed * 20);
-    lean += 0.012 * Math.sin(t * 0.9 + m.seed * 7) * idle;
-    hipL += 0.04 * w * idle;
-    hipR -= 0.025 * w * idle;
-    kneeL += 0.05 * Math.max(0, w) * idle;
-    kneeR += 0.05 * Math.max(0, -w) * idle;
-    shL += 0.035 * Math.sin(t * 0.6 + m.seed * 3) * idle;
-    shR += 0.035 * Math.sin(t * 0.52 + m.seed * 5) * idle;
-  }
-  // props held in the hands
+/** per-look static render data (colours with garment parameters, feature mask) */
+interface LookCache {
+  style: Style;
+  col: Uint32Array; // 12 words
+  flags: number;
+}
+
+const lookCache = new WeakMap<Look, LookCache>();
+
+export function lookData(L: Look): LookCache {
+  let c = lookCache.get(L);
+  if (c && c.style === (L.style ?? c.style)) return c;
+  const s = styleFromFlags(L);
+  const col = new Uint32Array(12);
   const fl = L.flags;
-  if (L.pram) {
-    shL = shR = -0.8 + 0.02 * s;
-    elL = elR = -0.5;
-    rollL = -0.05;
-    rollR = 0.05;
-    lean += 0.07;
+  let f = 0;
+  if (s.hair !== 'bald') f |= bit(FB.HAIR);
+  // (a ponytail's 2 cm would hang the sheet as a ledge beside the ears: only real lengths get one)
+  if (s.hairLen > 0.03) f |= bit(FB.HAIRLONG);
+  if (s.hair === 'ponytail') f |= bit(FB.PONY);
+  if (s.hair === 'bun' || s.hair === 'manbun') f |= bit(FB.BUN);
+  if (s.fringe && s.hat === 0) f |= bit(FB.FRINGE);
+  if (s.hair !== 'bald' && s.hair !== 'crop' && s.hat === 0 && !s.hood) f |= bit(FB.LOCKS);
+  if (s.beard === 1) f |= bit(FB.BEARD);
+  if (s.beard >= 1) f |= bit(FB.MOUSTACHE);
+  if (s.hat > 0) {
+    f |= bit(FB.HAT);
+    if (s.hat === HAT_STYLES.SUNHAT || s.hat === HAT_STYLES.FEDORA || s.hat === HAT_STYLES.HARDHAT || s.hat === HAT_STYLES.BUCKET) f |= bit(FB.BRIM);
+    if (s.hat === HAT_STYLES.CAP || s.hat === HAT_STYLES.FLATCAP) f |= bit(FB.VISOR);
+    if (s.hair === 'bun') f &= ~bit(FB.BUN);
   }
-  if (L.dog) {
-    shL = -0.42 + 0.12 * shL;
-    elL = -0.42;
-    rollL = 0.13;
-  }
-  if (fl & (F.SHOPBAG | F.CANE)) {
-    shR *= 0.55;
-    rollR = -0.1;
-  }
-  if (fl & F.CANE) elR = -0.18;
-  if (fl & F.BRIEFCASE) {
-    shL *= 0.5;
-    rollL = 0.1;
-  }
-  if (fl & F.ROD) {
-    shR = -0.5;
-    elR = -0.6;
-    shL = -0.7;
-    elL = -0.95;
-    rollL = -0.2;
-  }
-  if (umbrella) {
-    shR = -0.55;
-    elR = -1.25;
-    rollR = -0.02;
-  }
-  if (m.wave > 0) {
-    const w = smooth(Math.min(1, m.wave));
-    const osc = Math.sin(t * 9 + m.seed * 6);
-    shR = mix(shR, -0.25, w);
-    elR = mix(elR, -0.5 + 0.28 * osc, w);
-    rollR = mix(rollR, -2.55 - 0.2 * osc, w);
-  }
-  // sitting on a bench
-  if (m.sit > 0) {
-    const k = smooth(Math.min(1, m.sit));
-    hipL = mix(hipL, -1.52, k);
-    hipR = mix(hipR, -1.46, k);
-    kneeL = mix(kneeL, 1.5, k);
-    kneeR = mix(kneeR, 1.4, k);
-    let sL = -0.42,
-      eL = -0.9,
-      sR = -0.4,
-      eR = -0.86,
-      rl = 0.03,
-      rr = -0.03;
-    if (m.reading) {
-      sL = sR = -1.0;
-      eL = eR = -1.05;
-      rl = -0.2;
-      rr = 0.2;
-    }
-    shL = mix(shL, sL, k);
-    elL = mix(elL, eL, k);
-    rollL = mix(rollL, rl, k);
-    if (m.wave <= 0) {
-      shR = mix(shR, sR, k);
-      elR = mix(elR, eR, k);
-      rollR = mix(rollR, rr, k);
-    }
-    lean = mix(lean, m.reading ? -0.03 : -0.1, k);
-    rootY = mix(rootY, SEAT_H / L.scale + 0.075 - RIG.hipY, k);
-  }
-  // sitting on the sand / a towel
-  if (m.ground > 0) {
-    const k = smooth(Math.min(1, m.ground));
-    hipL = mix(hipL, -1.42, k);
-    hipR = mix(hipR, -1.2, k);
-    kneeL = mix(kneeL, 0.3, k);
-    kneeR = mix(kneeR, 1.0, k);
-    shL = mix(shL, 0.55, k);
-    shR = mix(shR, 0.5, k);
-    elL = mix(elL, -0.05, k);
-    elR = mix(elR, -0.05, k);
-    rollL = mix(rollL, 0.22, k);
-    rollR = mix(rollR, -0.22, k);
-    lean = mix(lean, -0.3, k);
-    rootY = mix(rootY, 0.13 - RIG.hipY, k);
-  }
-  // lying on the back
-  if (m.lie > 0) {
-    const k = smooth(Math.min(1, m.lie));
-    pitch = (-Math.PI / 2) * k;
-    const kneeUp = m.lieVariant === 2;
-    hipL = mix(hipL, kneeUp ? -0.85 : 0.0, k);
-    kneeL = mix(kneeL, kneeUp ? 1.55 : 0.04, k);
-    hipR = mix(hipR, 0.02, k);
-    kneeR = mix(kneeR, 0.04, k);
-    if (m.lieVariant === 0) {
-      shL = mix(shL, -2.85, k);
-      shR = mix(shR, -2.85, k);
-      elL = mix(elL, -1.9, k);
-      elR = mix(elR, -1.9, k);
-      rollL = mix(rollL, 0.3, k);
-      rollR = mix(rollR, -0.3, k);
-    } else {
-      shL = mix(shL, 0.04, k);
-      shR = mix(shR, 0.04, k);
-      elL = mix(elL, -0.08, k);
-      elR = mix(elR, -0.08, k);
-      rollL = mix(rollL, 0.14, k);
-      rollR = mix(rollR, -0.14, k);
-    }
-    lean = mix(lean, 0, k);
-    rootY = mix(rootY, 0.12 - RIG.hipY, k);
-    head *= 1 - 0.7 * k;
-  }
-  o.hipL = hipL;
-  o.kneeL = kneeL;
-  o.hipR = hipR;
-  o.kneeR = kneeR;
-  o.shL = shL;
-  o.elL = elL;
-  o.shR = shR;
-  o.elR = elR;
-  o.rollL = rollL;
-  o.rollR = rollR;
-  o.pitch = pitch;
-  o.rootY = rootY;
-  o.lean = lean;
-  o.head = head;
-  return o;
+  if (fl & F.BACKPACK) f |= bit(FB.BACKPACK);
+  if (fl & F.HANDBAG) f |= bit(FB.SHOULDERBAG);
+  if (fl & F.SHOPBAG) f |= bit(FB.SHOPBAG);
+  if (fl & F.BRIEFCASE) f |= bit(FB.BRIEFCASE);
+  if (fl & F.CANE) f |= bit(FB.CANE);
+  if (fl & F.ROD) f |= bit(FB.ROD);
+  if (s.tail > 0) f |= bit(FB.TAIL);
+  if (s.tie) f |= bit(FB.TIE);
+  if (s.collar > 0) f |= bit(FB.COLLAR);
+  if (s.lapels) f |= bit(FB.LAPELS);
+  if (s.hood) f |= bit(FB.HOOD);
+  if (s.vest) f |= bit(FB.VEST);
+  // (the close level: how this person's hair is cut, in the mask's top bits)
+  f |= (s.hair === 'side' ? 1 : s.hair === 'curly' ? 2 : s.hair === 'long' || s.hair === 'bob' ? 3 : s.hair === 'pixie' ? 4 : s.hair === 'ponytail' || s.hair === 'bun' || s.hair === 'manbun' ? 5 : 0) << 29;
+  writeColours(col, L, s, L.top, L.bottom);
+  c = { style: s, col, flags: f >>> 0 };
+  lookCache.set(L, c);
+  return c;
 }
 
-/** Left hand position in the figure's local (unscaled) frame — where the dog's leash starts. */
-function leftHand(p: Pose, girth: number, out: THREE.Vector3): THREE.Vector3 {
-  const sx = 0.215 + (girth - 1) * 0.17;
-  let hx = 0,
-    hy = -0.29 * Math.cos(p.elL),
-    hz = -0.29 * Math.sin(p.elL);
-  hx += 0.007;
-  hy += -0.27;
-  const cs = Math.cos(p.shL),
-    ss = Math.sin(p.shL);
-  const y1 = cs * hy - ss * hz,
-    z1 = ss * hy + cs * hz,
-    x1 = hx;
-  const cr = Math.cos(p.rollL),
-    sr = Math.sin(p.rollL);
-  const x2 = cr * x1 - sr * y1,
-    y2 = sr * x1 + cr * y1;
-  const px = sx + x2,
-    py = RIG.shoulderY + y2,
-    pz = z1;
-  const cl = Math.cos(p.lean),
-    sl = Math.sin(p.lean);
-  const ry = py - RIG.leanY;
-  return out.set(px, RIG.leanY + cl * ry - sl * pz + p.rootY, sl * ry + cl * pz);
+/** close-level face bits: age lines 2 | eye colour 2 | lipstick 1 | stubble 1 | older half of the age tier 1 (deterministic per look) */
+function faceBits(L: Look, s: Style): number {
+  let h = (L.skin * 2654435761) ^ (L.hair * 40503) ^ (L.top * 2246822519) ^ (L.age * 3266489917);
+  h = Math.imul(h ^ (h >>> 15), 2246822519) >>> 0;
+  const r = (k: number) => ((h >>> k) & 255) / 255;
+  const age = L.age >= 72 ? 3 : L.age >= 58 ? 2 : L.age >= 44 ? 1 : 0;
+  // darker skin: dark brown eyes; lighter: brown / hazel / blue-grey
+  const sk = ((L.skin >> 16) & 255) + ((L.skin >> 8) & 255) + (L.skin & 255);
+  const light = sk > 420;
+  const eye = !light ? (r(0) < 0.8 ? 0 : 1) : r(0) < 0.3 ? 1 : r(0) < 0.55 ? 2 : r(0) < 0.85 ? 3 : 0;
+  const female = L.kind === 'woman' || L.kind === 'girl';
+  const lip = female && L.age >= 17 && L.age < 75 && r(8) < 0.3 ? 1 : 0;
+  const stub = !female && L.age >= 19 && s.beard === 0 && r(16) < 0.4 ? 1 : 0;
+  return age | (eye << 2) | (lip << 4) | (stub << 5) | ((L.age >= (age === 3 ? 80 : age === 2 ? 65 : age === 1 ? 51 : 31) ? 1 : 0) << 6);
 }
 
-function makeAttr(geo: THREE.BufferGeometry, name: string, cap: number, size: number): THREE.InstancedBufferAttribute {
-  const a = new THREE.InstancedBufferAttribute(new Float32Array(cap * size), size);
+function writeColours(col: Uint32Array, L: Look, s: Style, top: number, bottom: number): void {
+  const tailSrc = s.tail === 2 ? 1 : s.tail === 3 ? 2 : 0;
+  col[0] = w(L.skin, q8(s.sleeve));
+  col[1] = w(top, q8(s.topHem));
+  col[2] = w(bottom, q8(s.trouserEnd));
+  col[3] = w(L.shoes, (Math.round(clamp(s.bootTop, 0, 0.63) * 100) & 63) | (s.sole << 6));
+  col[4] = w(L.hair, Math.round(clamp(s.hairLen / 0.5, 0, 1) * 255));
+  col[5] = w(L.hat, (s.hat & 7) | ((s.hat > 0 ? 0 : Math.round(clamp(s.hairVol ?? 0, 0, 1) * 31)) << 3));
+  col[6] = w(L.bag, Math.round(clamp(s.tailHem, 0, 1) * 255));
+  col[7] = w(s.outer, tailSrc << 5);
+  col[8] = w(L.accent, (s.legwear & 3) | (Math.round(clamp(s.trouserFit ?? 0, 0, 1) * 15) << 2));
+  col[9] = w(L.towel, s.jacketHem < -0.05 ? 0 : q8(s.jacketHem));
+  col[10] = 0;
+  col[11] = ((q8((s.neckTop - 0.95) / 0.4 * 1.275 - 0.1) << 24) | (q8(-0.1) << 16) | ((s.collar === 1 ? 1 : 0) << 8) | (faceBits(L, s) << 9) | Math.round(clamp(s.tailFlare * 1000, 0, 255))) >>> 0;
+}
+
+function makeAttr(geo: THREE.BufferGeometry, name: string, arr: Float32Array | Uint32Array, size: number): THREE.InstancedBufferAttribute {
+  const a = new THREE.InstancedBufferAttribute(arr, size);
   a.setUsage(THREE.DynamicDrawUsage);
   geo.setAttribute(name, a);
   return a;
 }
 
-function flush(attr: THREE.BufferAttribute | THREE.InstancedBufferAttribute, count: number): void {
-  attr.clearUpdateRanges();
+// one persistent update range per attribute (three's addUpdateRange pushes a new object every call; the
+// renderer only empties the array after the upload, so the same range object can be pushed again each frame)
+const ranges = new WeakMap<object, { start: number; count: number }>();
+function flush(attr: THREE.BufferAttribute | THREE.InstancedBufferAttribute | THREE.InterleavedBuffer, count: number, itemSize: number): void {
+  attr.updateRanges.length = 0;
   if (count > 0) {
-    attr.addUpdateRange(0, count * attr.itemSize);
+    let r = ranges.get(attr);
+    if (!r) {
+      r = { start: 0, count: 0 };
+      ranges.set(attr, r);
+    }
+    r.start = 0;
+    r.count = count * itemSize;
+    attr.updateRanges.push(r);
     attr.needsUpdate = true;
   }
 }
 
-/** One LOD level of the figure mesh with its per-instance attributes. */
-class PersonLayer {
-  readonly mesh: THREE.InstancedMesh;
-  readonly pa: THREE.InstancedBufferAttribute;
-  readonly pb: THREE.InstancedBufferAttribute;
-  readonly pc: THREE.InstancedBufferAttribute;
-  readonly pd: THREE.InstancedBufferAttribute;
-  readonly ca: THREE.InstancedBufferAttribute;
-  readonly cb: THREE.InstancedBufferAttribute;
-  readonly cc: THREE.InstancedBufferAttribute;
+/** One level of detail of the figure mesh with its per-instance data. */
+class Layer {
+  readonly mesh: THREE.Mesh;
+  readonly geo: THREE.InstancedBufferGeometry;
+  readonly root: Float32Array;
+  readonly pose: Uint32Array;
+  readonly col: Uint32Array;
+  private rootAttr: THREE.InstancedBufferAttribute;
+  private poseBuf: THREE.InstancedInterleavedBuffer;
+  private colBuf: THREE.InstancedInterleavedBuffer;
+  /** each instance's row in the bone palette (null: the per-vertex chain) */
+  private row: Uint32Array | null = null;
+  private rowAttr: THREE.InstancedBufferAttribute | null = null;
   readonly capacity: number;
   readonly tris: number;
+  readonly verts: number;
   n = 0;
-  constructor(geo: THREE.BufferGeometry, mats: { material: THREE.Material; depth: THREE.Material }, capacity: number) {
+  constructor(lod: Lod, material: THREE.Material, depth: THREE.Material | null, capacity: number, palette: boolean) {
     this.capacity = capacity;
-    this.mesh = new THREE.InstancedMesh(geo, mats.material, capacity);
-    this.mesh.customDepthMaterial = mats.depth;
-    this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-    this.pa = makeAttr(geo, 'iPoseA', capacity, 4);
-    this.pb = makeAttr(geo, 'iPoseB', capacity, 4);
-    this.pc = makeAttr(geo, 'iPoseC', capacity, 4);
-    this.pd = makeAttr(geo, 'iPoseD', capacity, 4);
-    this.ca = makeAttr(geo, 'iColA', capacity, 4);
-    this.cb = makeAttr(geo, 'iColB', capacity, 4);
-    this.cc = makeAttr(geo, 'iColC', capacity, 4);
-    this.tris = (geo.index?.count ?? 0) / 3;
+    const fm = figureMesh(lod);
+    const base = fm.geometry;
+    const g = new THREE.InstancedBufferGeometry();
+    for (const k of ['position', 'normal', 'aMorph', 'aData']) g.setAttribute(k, base.getAttribute(k));
+    g.setIndex(base.index);
+    g.boundingSphere = base.boundingSphere;
+    this.root = new Float32Array(capacity * 4);
+    this.pose = new Uint32Array(capacity * POSE_UINTS);
+    this.col = new Uint32Array(capacity * 12);
+    this.rootAttr = makeAttr(g, 'iRoot', this.root, 4);
+    this.poseBuf = new THREE.InstancedInterleavedBuffer(this.pose, POSE_UINTS);
+    this.poseBuf.setUsage(THREE.DynamicDrawUsage);
+    for (let i = 0; i < POSE_UINTS / 4; i++) g.setAttribute(`iP${i}`, new THREE.InterleavedBufferAttribute(this.poseBuf, 4, i * 4));
+    this.colBuf = new THREE.InstancedInterleavedBuffer(this.col, 12);
+    this.colBuf.setUsage(THREE.DynamicDrawUsage);
+    for (let i = 0; i < 3; i++) g.setAttribute(`iC${i}`, new THREE.InterleavedBufferAttribute(this.colBuf, 4, i * 4));
+    if (palette) {
+      this.row = new Uint32Array(capacity);
+      this.rowAttr = makeAttr(g, 'iPalRow', this.row, 1);
+    }
+    g.instanceCount = 0;
+    this.geo = g;
+    this.mesh = new THREE.Mesh(g, material);
+    if (depth) this.mesh.customDepthMaterial = depth;
+    this.tris = fm.triangles;
+    this.verts = fm.vertices;
+  }
+  put(root: Float32Array, pose: Uint32Array, col: Uint32Array, row: number): void {
+    const n = this.n++;
+    this.root.set(root, n * 4);
+    this.pose.set(pose, n * POSE_UINTS);
+    this.col.set(col, n * 12);
+    if (this.row !== null) this.row[n] = row;
   }
   finish(): void {
     const n = this.n;
-    this.mesh.count = n;
-    for (const a of [this.pa, this.pb, this.pc, this.pd, this.ca, this.cb, this.cc]) flush(a, n);
-    flush(this.mesh.instanceMatrix, n);
+    this.geo.instanceCount = n;
+    flush(this.rootAttr, n, 4);
+    flush(this.poseBuf, n, POSE_UINTS);
+    flush(this.colBuf, n, 12);
+    if (this.rowAttr !== null) flush(this.rowAttr, n, 1);
     this.mesh.visible = n > 0;
   }
 }
 
+/** per-member render state (LOD hysteresis; later: foot plants, idle variants) */
+interface RenderState {
+  lod: number;
+  gait: GaitState;
+  /** level being faded out (−1 none) and the cross-fade progress 0…1 */
+  prev: number;
+  xf: number;
+}
+const states = new WeakMap<Member, RenderState>();
+
 /**
  * Camera distances (m) for the reference view (930 px tall drawing buffer, 32° vertical fov):
- * figures closer than LOD_NEAR use the detailed mesh, beyond LOD_TINY the tiny one (≤ ~22 px tall);
- * both scale with the drawing-buffer height and the field of view.
+ * LOD0 closer than LOD_NEAR, tiny beyond LOD_TINY; both scale with the drawing-buffer height and the
+ * field of view; ±HYST m hysteresis so figures do not flicker between levels.
  */
-const LOD_NEAR = 55;
-const LOD_TINY = 130;
+/** close level (sculpted face, fingers); 0 turns it off (`?nopeopledetail`) */
+const LOD_CLOSE = 15;
+/** foot contact shadows (?nofootcontact), the close-level budget (?noclosebudget): detail-people.md */
+const FOOT_CONTACT = detailPeople('footcontact');
+const CLOSE_BUDGET = detailPeople('closebudget');
+const FOOT_A = 0.5;
+const LOD_NEAR = 40;
+const LOD_TINY = 110;
+const LOD_PIN = 300;
+const HYST = 3;
+/** level switch cross-fade time (s, real time) */
+const XFADE = 0.4;
+const SHADOW_FAR = 150;
 const REF_HEIGHT = 930;
 const REF_TAN = Math.tan((32 * Math.PI) / 360);
 
 export class CrowdRenderer {
-  readonly near: PersonLayer;
-  readonly far: PersonLayer;
-  readonly tiny: PersonLayer;
-  /** debug: force every figure to one level (0 near, 1 far, 2 tiny), -1 = by distance */
+  readonly close: Layer;
+  readonly near: Layer;
+  readonly far: Layer;
+  readonly tiny: Layer;
+  /** pin figures for the hero overview (beyond LOD_PIN) */
+  readonly pin: Layer;
+  /** shadow-only proxy: every figure near the camera, drawn with the tiny mesh into the shadow map */
+  readonly shadow: Layer;
+  /** debug: force every figure to one level (0 close, 1 near, 2 far, 3 tiny, 4 pin), -1 = by distance */
   forceLod = -1;
+  /** debug hook (tests): called with every posed figure — (member, pose, rig, level 0 close / 1 near / 2 other) */
+  probe: ((m: Member, o: Pose, r: Rig, lv: number) => void) | null = null;
+  /** cross-fade level switches (tools turn it off for synchronous censuses) */
+  xfade = true;
   readonly pram: THREE.InstancedMesh;
   readonly dog: THREE.InstancedMesh;
   readonly blob: THREE.InstancedMesh;
+  /** cups, plates and glasses on the café tables in front of seated patrons */
+  readonly tableware = new Tableware(256);
   readonly group = new THREE.Group();
   private pramMisc: THREE.InstancedBufferAttribute;
   private dogA: THREE.InstancedBufferAttribute;
   private dogCol: THREE.InstancedBufferAttribute;
   private dogHand: THREE.InstancedBufferAttribute;
   private blobA: THREE.InstancedBufferAttribute;
-  private frustum = new THREE.Frustum();
+  readonly frustum = new THREE.Frustum();
   private pv = new THREE.Matrix4();
   private m4 = new THREE.Matrix4();
-  private q = new THREE.Quaternion();
-  private pos = new THREE.Vector3();
-  private scl = new THREE.Vector3();
-  private sph = new THREE.Sphere();
-  private hand = new THREE.Vector3();
+  readonly sph = new THREE.Sphere();
+  private fPlanes = new Float64Array(24);
+  private hand = { x: 0, y: 0, z: 0 };
+  private fpA = { x: 0, y: 0, z: 0 };
+  private fpB = { x: 0, y: 0, z: 0 };
+  /** close-level budget: this many figures (the nearest), however many stand within reach of it (a wedding) */
+  private closeBudget = CLOSE_BUDGET ? 14 : 1e9;
+  private closeK = 1;
+  private closeWanted = 0;
   private cam = new THREE.Vector3();
-  private up = new THREE.Vector3(0, 1, 0);
-  private pose: Pose = { hipL: 0, kneeL: 0, hipR: 0, kneeR: 0, shL: 0, elL: 0, shR: 0, elR: 0, rollL: 0, rollR: 0, pitch: 0, rootY: 0, lean: 0, head: 0 };
+  private pose: Pose = newPose();
+  private sRoot = new Float32Array(4);
+  private sPose = new Uint32Array(POSE_UINTS);
+  private sCol = new Uint32Array(12);
   readonly capacity: number;
   visible = 0;
   triangles = 0;
+  vertices = 0;
+  shadowVertices = 0;
+  private frame = 0;
+  private lastNow = 0;
+  private lastCam = new THREE.Vector3(1e9, 0, 0);
+  private layers: Layer[] = [];
+  private levels: Layer[] = [];
+  /** members drawn this frame (reused, no garbage) */
+  private list: Member[] = [];
+  private edges = [0, 0, 0, 0];
+  /** close-level distance (m at the reference view); 0 = off */
+  closeDist = LOD_CLOSE;
+  private camRef: THREE.PerspectiveCamera | null = null;
+  /** the figures' bone matrices, computed once per frame on the GPU (null: per vertex, ?nopedpalette) */
+  private palette: PedPalette | null;
 
-  constructor(scene: THREE.Scene, capacity: number, castShadow: boolean) {
+  constructor(scene: THREE.Scene, capacity: number, castShadow: boolean, gl: THREE.WebGLRenderer) {
     this.capacity = capacity;
-    const pm = makePersonMaterials();
-    this.near = new PersonLayer(buildPersonGeometry(false), pm, Math.min(capacity, 260));
-    this.far = new PersonLayer(buildPersonGeometry(true), pm, capacity);
-    this.tiny = new PersonLayer(buildTinyPersonGeometry(), pm, capacity);
+    const capClose = Math.min(capacity, 48),
+      capNear = Math.min(capacity, 96);
+    // one palette row per figure, and a figure takes a place in the level it is drawn at
+    this.palette = createPalette(gl, capClose + capNear + capacity * 3);
+    const pal = this.palette !== null;
+    const pm = makePeopleMaterials(this.palette ? this.palette.uniforms : null);
+    patchLampMaterial(pm.material);
+    patchLampMaterial(pm.far);
+    // ?pedfar=0: tiny / pin figures with the full shader (A/B of the far variant)
+    const farMat = new URLSearchParams(location.search).get('pedfar') === '0' ? pm.material : pm.far;
+    // ?pednear=far (debug A/B): the near level drawn with the far program — the upper bound of a leaner near shader
+    const nearMat = new URLSearchParams(location.search).get('pednear') === 'far' ? pm.far : pm.material;
+    this.close = new Layer(4, pm.close, null, capClose, pal);
+    this.near = new Layer(0, nearMat, null, capNear, pal);
+    this.far = new Layer(1, pm.material, null, capacity, pal);
+    this.tiny = new Layer(2, farMat, null, capacity, pal);
+    this.pin = new Layer(3, farMat, null, capacity, pal);
+    this.shadow = new Layer(2, makeInvisibleMaterial(), pm.depth, capacity, pal);
+    this.shadow.mesh.castShadow = true;
+    this.shadow.mesh.receiveShadow = false;
+    this.levels = [this.close, this.near, this.far, this.tiny, this.pin];
+    this.layers = [this.close, this.near, this.far, this.tiny, this.pin, this.shadow];
+    ['peds-close', 'peds-near', 'peds-far', 'peds-tiny', 'peds-pin', 'peds-shadow'].forEach((n, i) => (this.layers[i].mesh.name = n));
+    // the proxy only draws into shadow maps: decline the main camera's frustum (same planes as the
+    // culling frustum computed in write()), accept every other (shadow cameras)
+    const mainFr = new THREE.Frustum(),
+      mainM = new THREE.Matrix4();
+    const mainPlanes = mainFr.planes;
+    this.shadow.mesh.intersectsFrustum = (f: THREE.Frustum) => {
+      const cam = this.camRef;
+      if (!cam) return true;
+      mainM.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse);
+      mainFr.setFromProjectionMatrix(mainM);
+      for (let i = 0; i < 6; i += 2) {
+        const a = f.planes[i],
+          b = mainPlanes[i];
+        if (Math.abs(a.constant - b.constant) > 1e-3 || a.normal.distanceToSquared(b.normal) > 1e-6) return true;
+      }
+      return false;
+    };
 
     const prg = buildPramGeometry();
     const prm = makePramMaterials();
+    patchLampMaterial(prm.material);
     const pcap = Math.max(16, Math.round(capacity * 0.08));
     this.pram = new THREE.InstancedMesh(prg, prm.material, pcap);
     this.pram.customDepthMaterial = prm.depth;
     this.pram.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-    this.pramMisc = makeAttr(prg, 'iMisc', pcap, 4);
+    this.pramMisc = makeAttr(prg, 'iMisc', new Float32Array(pcap * 4), 4);
 
     const dg = buildDogGeometry();
     const dm = makeDogMaterials();
+    patchLampMaterial(dm.material);
     const dcap = Math.max(16, Math.round(capacity * 0.1));
     this.dog = new THREE.InstancedMesh(dg, dm.material, dcap);
     this.dog.customDepthMaterial = dm.depth;
     this.dog.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-    this.dogA = makeAttr(dg, 'iDog', dcap, 4);
-    this.dogCol = makeAttr(dg, 'iDogCol', dcap, 4);
-    this.dogHand = makeAttr(dg, 'iHand', dcap, 4);
+    this.dogA = makeAttr(dg, 'iDog', new Float32Array(dcap * 4), 4);
+    this.dogCol = makeAttr(dg, 'iDogCol', new Float32Array(dcap * 4), 4);
+    this.dogHand = makeAttr(dg, 'iHand', new Float32Array(dcap * 4), 4);
 
     const bg = buildBlobGeometry();
-    const bcap = capacity + pcap + dcap;
+    const bcap = capacity + pcap + dcap + (capClose + capNear) * 2;
     this.blob = new THREE.InstancedMesh(bg, makeBlobMaterial(), bcap);
     this.blob.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-    this.blobA = makeAttr(bg, 'iBlobA', bcap, 1);
+    this.blobA = makeAttr(bg, 'iBlobA', new Float32Array(bcap), 1);
     this.blob.renderOrder = 2;
+    this.group.add(this.tableware.mesh);
 
-    for (const mesh of [this.near.mesh, this.far.mesh, this.tiny.mesh, this.pram, this.dog, this.blob]) {
-      mesh.frustumCulled = false;
-      mesh.count = 0;
+    for (const mesh of [this.close.mesh, this.near.mesh, this.far.mesh, this.tiny.mesh, this.pin.mesh, this.shadow.mesh, this.pram, this.dog, this.blob]) {
+      mesh.frustumCulled = mesh === this.shadow.mesh;
+      if ((mesh as THREE.InstancedMesh).isInstancedMesh) (mesh as THREE.InstancedMesh).count = 0;
       mesh.matrixAutoUpdate = false;
       mesh.updateMatrix();
       this.group.add(mesh);
+    }
+    for (const l of [this.close, this.near, this.far, this.tiny, this.pin]) {
+      l.mesh.castShadow = false;
+      l.mesh.receiveShadow = true;
     }
     this.setShadows(castShadow);
     this.blob.castShadow = false;
@@ -370,25 +482,30 @@ export class CrowdRenderer {
 
   setShadows(on: boolean): void {
     this.shadowsOn = on;
-    for (const mesh of [this.near.mesh, this.far.mesh, this.tiny.mesh, this.pram, this.dog]) {
+    this.shadow.mesh.castShadow = on;
+    for (const mesh of [this.pram, this.dog]) {
       mesh.castShadow = on;
       mesh.receiveShadow = true;
     }
   }
 
   /** @param pxHeight drawing-buffer height (px): level distances scale with it */
-  write(crowd: Crowd, camera: THREE.PerspectiveCamera, t: number, rain: number, night: number, pxHeight = REF_HEIGHT): void {
+  write(crowd: Crowd, camera: THREE.PerspectiveCamera, t: number, rain: number, night: number, pxHeight = REF_HEIGHT, extra: Member[] | null = null, nExtra = 0): void {
+    this.frame++;
+    this.camRef = camera;
     this.pv.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
     this.frustum.setFromProjectionMatrix(this.pv);
     camera.getWorldPosition(this.cam);
     // from high up the figures' shadows are sub-pixel: skip them in the shadow pass
     const high = this.cam.y > 150;
-    this.far.mesh.castShadow = this.tiny.mesh.castShadow = this.shadowsOn && !high;
-    this.pram.castShadow = this.dog.castShadow = this.shadowsOn && !high;
+    const shadows = this.shadowsOn && !high;
+    this.shadow.mesh.castShadow = shadows;
+    this.pram.castShadow = this.dog.castShadow = shadows;
     const raining = rain > 0.15;
-    this.near.n = 0;
-    this.far.n = 0;
-    this.tiny.n = 0;
+    const all = this.layers;
+    for (let i = 0; i < all.length; i++) all[i].n = 0;
+    const palette = this.palette;
+    if (palette !== null) palette.begin();
     let np = 0,
       nd = 0,
       nb = 0;
@@ -397,103 +514,238 @@ export class CrowdRenderer {
       DC = this.dogCol.array as Float32Array,
       DH = this.dogHand.array as Float32Array;
     const BA = this.blobA.array as Float32Array;
-    const blobAlpha = 0.36 * (1 - 0.45 * night);
+    const blobAlpha = (shadows ? 0.28 : 0.36) * (1 - 0.45 * night);
     const pose = this.pose;
     const ls = (Math.max(200, pxHeight) / REF_HEIGHT) * (REF_TAN / Math.tan((camera.fov * Math.PI) / 360));
-    const nearD2 = (LOD_NEAR * ls) ** 2;
-    const tinyD2 = (LOD_TINY * ls) ** 2;
-    const levels = [this.near, this.far, this.tiny];
+    const nearD = LOD_NEAR * ls,
+      tinyD = LOD_TINY * ls,
+      pinD = LOD_PIN * ls,
+      shadowD2 = (SHADOW_FAR * ls) ** 2;
+    const levels = this.levels;
+    const edges = this.edges;
+    // table settings only where a 5–15 cm object still covers a few pixels
+    const tableD = 70 * ls;
+    this.tableware.begin();
+    // the budget pulls the close radius in while too many figures stand inside it, slowly so nobody flips
+    // back and forth; 13 k triangles each at 20 ns: a crowd at 15 m is otherwise 5 ms
+    const cw = this.closeWanted;
+    this.closeWanted = 0;
+    const budget = this.closeBudget;
+    if (cw > budget) this.closeK = Math.max(0.35, this.closeK * 0.985);
+    else if (cw < budget * 0.8) this.closeK = Math.min(1, this.closeK * 1.01);
+    const closeD = this.closeDist * ls * this.closeK;
+    edges[0] = closeD;
+    edges[1] = nearD;
+    edges[2] = tinyD;
+    edges[3] = pinD;
     const bcap = this.blob.instanceMatrix.count;
-    for (const p of crowd.parties) {
+    const now = performance.now() * 0.001;
+    const xfStep = clamp((now - this.lastNow) / XFADE, 0, 1);
+    this.lastNow = now;
+    // no cross-fades on camera jumps (view snaps, tools placing the camera): the whole view changes
+    const xfOn = this.xfade && this.forceLod < 0 && this.cam.distanceToSquared(this.lastCam) < 16;
+    this.lastCam.copy(this.cam);
+    const R = this.sRoot,
+      PP = this.sPose,
+      CC = this.sCol;
+    // frustum planes as plain numbers (the sphere test is inlined: three's Plane.distanceToPoint returns a
+    // double through an un-inlined call — garbage per figure; index loops for the same reason as for-of)
+    const FP = this.fPlanes;
+    for (let i = 0; i < 6; i++) {
+      const pl = this.frustum.planes[i];
+      FP[i * 4] = pl.normal.x;
+      FP[i * 4 + 1] = pl.normal.y;
+      FP[i * 4 + 2] = pl.normal.z;
+      FP[i * 4 + 3] = pl.constant;
+    }
+    // the crowd's members, then the extra figures (riders of the two-wheelers)
+    const list = this.list;
+    let nl = 0;
+    const parties = crowd.parties;
+    for (let pi = 0; pi < parties.length; pi++) {
+      const p = parties[pi];
       if (p.state === 'gone') continue;
-      for (const m of p.members) {
+      const members = p.members;
+      for (let mi = 0; mi < members.length; mi++) list[nl++] = members[mi];
+    }
+    for (let i = 0; i < nExtra; i++) list[nl++] = extra![i];
+    for (let li = 0; li < nl; li++) {
+      const m = list[li];
+      const p = m.party;
+      {
         if (!m.present || m.fade <= 0.01) continue;
         const L = m.look;
-        const extra = L.pram || L.dog ? 1.4 : L.flags & F.ROD ? 2.2 : 0;
-        this.sph.center.set(m.x, m.y + 0.9, m.z);
-        this.sph.radius = 1.4 + extra;
-        if (!this.frustum.intersectsSphere(this.sph)) continue;
+        const rad = 1.4 + (L.pram || L.dog ? 1.4 : L.flags & F.ROD ? 2.2 : 0);
+        const cyS = m.y + 0.9;
+        let inside = true;
+        for (let i = 0; i < 24; i += 4) {
+          if (FP[i] * m.x + FP[i + 1] * cyS + FP[i + 2] * m.z + FP[i + 3] < -rad) {
+            inside = false;
+            break;
+          }
+        }
+        if (!inside) continue;
         const d2 = (m.x - this.cam.x) ** 2 + (m.y - this.cam.y) ** 2 + (m.z - this.cam.z) ** 2;
-        let layer = this.forceLod >= 0 ? levels[this.forceLod] : d2 < nearD2 ? this.near : d2 < tinyD2 ? this.far : this.tiny;
+        const d = Math.sqrt(d2);
+        let st = states.get(m);
+        if (!st) {
+          st = { lod: -1, gait: newGaitState(), prev: -1, xf: 1 };
+          states.set(m, st);
+        }
+        // level with hysteresis around each switch distance
+        let lv = d < closeD ? 0 : d < nearD ? 1 : d < tinyD ? 2 : d < pinD ? 3 : 4;
+        if (lv === 0) this.closeWanted++;
+        if (st.lod >= 0 && Math.abs(lv - st.lod) === 1) {
+          const edge = edges[Math.min(lv, st.lod)];
+          if (Math.abs(d - edge) < HYST * Math.max(0.5, Math.min(lv, st.lod))) lv = st.lod;
+        }
+        // level switches cross-fade (complementary dither, XFADE s) unless the figure is fading anyway
+        if (st.lod >= 0 && lv !== st.lod && xfOn && m.fade > 0.99) {
+          st.prev = st.lod;
+          st.xf = 0;
+        }
+        st.lod = lv;
+        if (st.prev >= 0) {
+          st.xf += xfStep;
+          if (st.xf >= 1 || !xfOn || m.fade <= 0.99) st.prev = -1;
+        }
+        let layer = this.forceLod >= 0 ? levels[this.forceLod] : levels[lv];
+        if (layer.n >= layer.capacity) layer = layer === this.close ? this.near : this.far;
         if (layer.n >= layer.capacity) layer = this.far;
         if (layer.n >= layer.capacity) continue;
+        const out = st.prev >= 0 ? levels[st.prev] : null;
+        const r = rigOf(L);
         const umbrella = raining && L.umbrellaOwner && m.sit < 0.3 && m.lie < 0.1 && m.ground < 0.1 && !L.pram;
-        computePose(m, t + m.seed * 10, umbrella, pose);
-        // root transform
-        this.q.setFromAxisAngle(this.up, m.yaw);
-        this.pos.set(m.x, m.y, m.z);
-        this.scl.setScalar(L.scale);
-        this.m4.compose(this.pos, this.q, this.scl);
-        const n = layer.n;
-        layer.mesh.setMatrixAt(n, this.m4);
-        const i4 = n * 4;
-        const PA = layer.pa.array as Float32Array,
-          PB = layer.pb.array as Float32Array,
-          PC = layer.pc.array as Float32Array,
-          PD = layer.pd.array as Float32Array,
-          CA = layer.ca.array as Float32Array,
-          CB = layer.cb.array as Float32Array,
-          CC = layer.cc.array as Float32Array;
-        PA[i4] = pose.hipL;
-        PA[i4 + 1] = pose.kneeL;
-        PA[i4 + 2] = pose.hipR;
-        PA[i4 + 3] = pose.kneeR;
-        PB[i4] = pose.shL;
-        PB[i4 + 1] = pose.elL;
-        PB[i4 + 2] = pose.shR;
-        PB[i4 + 3] = pose.elR;
-        PC[i4] = pose.rollL;
-        PC[i4 + 1] = pose.rollR;
-        PC[i4 + 2] = pose.pitch;
-        PC[i4 + 3] = pose.rootY;
-        PD[i4] = pose.lean;
-        PD[i4 + 1] = pose.head;
-        PD[i4 + 2] = m.fade;
-        PD[i4 + 3] = L.girth;
-        let flags = L.flags;
-        let top = L.top;
-        let bottom = L.bottom;
-        if (m.towel) flags |= F.TOWEL;
-        if (umbrella) flags |= F.UMBRELLA;
-        if (m.reading && m.sit > 0.75) flags |= F.NEWSPAPER;
-        if (m.sunbathing && (m.lie > 0.3 || m.ground > 0.3)) {
-          // into swimwear
-          top = L.swim || L.skin;
-          bottom = L.swim || L.bottom;
-          flags = (flags | F.SHORTS | F.SHORTSLEEVE) & ~(F.SKIRT | F.TIGHTS | F.BACKPACK | F.HANDBAG | F.SHOPBAG | F.BRIEFCASE | F.VEST | F.SUIT | F.CANE);
+        const gaitOn = m.rideG === null && (layer === this.close || layer === this.near || layer === this.far || out === this.close || out === this.near || out === this.far);
+        poseIn.t = t + m.seed * 10;
+        computePoseA(m, umbrella, r, pose, gaitOn ? st.gait : null, this.frame);
+        if (this.probe !== null) this.probe(m, pose, r, layer === this.close ? 0 : layer === this.near ? 1 : 2);
+        // drawn at the gait's smoothed root when the gait ran this frame (corners: the feet were planned
+        // around it), else at the crowd's root
+        const gs = gaitOn && st.gait.frame === this.frame;
+        const mx = gs ? st.gait.sx : m.x,
+          mz = gs ? st.gait.sz : m.z;
+        pose.scale = r.s;
+        pose.fade = m.fade;
+        pose.w = r.w;
+        pose.c = r.c;
+        pose.b = r.b;
+        // garments & runtime props
+        const ld = lookData(L);
+        const s = ld.style;
+        let flags = ld.flags;
+        CC.set(ld.col);
+        if (m.towel) flags |= bit(FB.TOWEL);
+        if (m.bag) flags |= bit(FB.SHOPBAG);
+        if (umbrella) {
+          flags |= bit(FB.UMBRELLA);
+          CC[9] = ((L.umbrella & 0xffffff) | (CC[9] & 0xff000000)) >>> 0;
         }
-        if (m.sit > 0.5 || m.lie > 0.3 || m.ground > 0.3) flags &= ~F.ROD;
-        CA[i4] = L.skin;
-        CA[i4 + 1] = top;
-        CA[i4 + 2] = bottom;
-        CA[i4 + 3] = L.shoes;
-        CB[i4] = L.hair;
-        CB[i4 + 1] = L.hat;
-        CB[i4 + 2] = L.bag;
-        CB[i4 + 3] = flags;
-        CC[i4] = L.towel;
-        CC[i4 + 1] = L.umbrella;
-        CC[i4 + 2] = L.accent;
-        CC[i4 + 3] = 0;
-        layer.n++;
+        if ((m.reading && m.sit > 0.75 && m.cafe === 0) || (pose.spare1 > 2.5 && pose.spare1 < 3.5)) flags |= bit(FB.NEWSPAPER);
+        else if (pose.spare1 > 0.5 && pose.spare1 < 2.5) flags |= bit(pose.spare1 < 1.5 ? FB.PHONE : FB.CUP);
+        // café: what stands on the table in front of a seated patron (the cup / glass not while in the hand)
+        if (m.cafe > 0 && m.sit > 0.85 && d < tableD && p.state === 'act' && ((p.goal?.cafe?.served ?? 2) >= 2 || p.timer > 50)) {
+          const held = pose.spare1 > 1.5 && pose.spare1 < 2.5 ? HELD_CUP : pose.spare1 > 3.5 ? HELD_GLASS : 0;
+          const fxT = Math.sin(m.yaw),
+            fzT = Math.cos(m.yaw);
+          const off = m.tabD + 0.05;
+          this.tableware.add(m.x + fxT * off, m.y + m.tabH, m.z + fzT * off, m.yaw, m.order & ~held);
+        }
+        if (m.sit > 0.5 || m.lie > 0.3 || m.ground > 0.3) flags &= ~(bit(FB.ROD) | bit(FB.CANE) | bit(FB.SHOPBAG) | bit(FB.BRIEFCASE));
+        if (m.lie > 0.3) flags &= ~(bit(FB.HAT) | bit(FB.BRIM) | bit(FB.VISOR) | bit(FB.BACKPACK));
+        if (m.sunbathing && (m.lie > 0.3 || m.ground > 0.3)) {
+          flags = swimwear(L, s, flags, CC);
+        }
+        // pack
+        R[0] = mx;
+        R[1] = m.y;
+        R[2] = mz;
+        R[3] = m.yaw;
+        packPose(pose, PP);
+        if (layer === this.close || out === this.close) eyeGaze(m, pose, r.stature, mx, mz, this.cam, t, PP);
+        CC[10] = flags >>> 0;
+        const row = palette !== null ? palette.add(PP) : 0;
+        if (shadows && d2 < shadowD2 && this.shadow.n < this.shadow.capacity) this.shadow.put(R, PP, CC, row);
+        if (out && out !== layer && out.n < out.capacity) {
+          // incoming level keeps the dither cells below xf, the outgoing one (negative fade) the rest
+          packScaleFade(pose.scale, -Math.max(0.002, st.xf), PP);
+          out.put(R, PP, CC, row);
+          packScaleFade(pose.scale, Math.min(0.994, st.xf), PP);
+        }
+        layer.put(R, PP, CC, row);
         // blob shadow
         const fx = Math.sin(m.yaw),
           fz = Math.cos(m.yaw);
+        MI[3] = m.yaw;
         const lying = Math.max(m.lie, m.ground * 0.6);
-        const bw = (0.62 + 0.18 * Math.max(m.sit, lying)) * L.scale;
-        const bl = (0.62 + 0.25 * m.sit + 1.4 * lying) * L.scale;
+        const ms = Math.min(1, m.sit);
+        const sitK = ms * ms * (3 - 2 * ms);
+        const bw = (0.56 + 0.18 * Math.max(sitK, lying)) * r.stature / 1.76;
+        const bl = (0.56 + 0.12 * m.amp + 0.25 * sitK + 1.4 * lying) * r.stature / 1.76;
         if (nb < bcap) {
-          this.pos.set(m.x + fx * (0.12 * m.sit + 0.1 * lying), m.y + 0.018, m.z + fz * (0.12 * m.sit + 0.1 * lying));
-          this.scl.set(bw, 1, bl);
-          this.m4.compose(this.pos, this.q, this.scl);
+          const off = 0.08 * sitK + 0.1 * lying;
+          MI[0] = mx + fx * off;
+          MI[1] = m.y + 0.018;
+          MI[2] = mz + fz * off;
+          MI[4] = bw;
+          MI[5] = 1;
+          MI[6] = bl;
+          yawMatrix(this.m4);
           this.blob.setMatrixAt(nb, this.m4);
           BA[nb++] = blobAlpha * m.fade;
         }
+        // each shoe's own contact shadow, close up: the sun shadow's texels are far coarser than a sole, and
+        // without it the feet hover. It fades as the foot lifts.
+        if (FOOT_CONTACT && (layer === this.close || layer === this.near) && m.rideG === null && lying < 0.05 && m.sit < 0.5) {
+          for (let side = 0; side < 2; side++) {
+            const left = side === 0;
+            const bone = left ? BONE.FOOT_L : BONE.FOOT_R;
+            const aX = (left ? 1 : -1) * r.ankle.x;
+            // mid-sole, then the toe: the two give the foot's position and heading
+            const FP0 = this.fpA,
+              FP1 = this.fpB;
+            FP0.x = aX;
+            FP0.y = 0;
+            FP0.z = r.ankle.z + 0.06;
+            FP1.x = aX;
+            FP1.y = 0;
+            FP1.z = r.ankle.z + 0.16;
+            fkPoint(r, pose, bone, FP0);
+            fkPoint(r, pose, bone, FP1);
+            const lift = Math.max(0, FP0.y * r.s);
+            if (lift > 0.11 || nb >= bcap) continue;
+            const a = FOOT_A * (1 - lift / 0.11) * m.fade;
+            // figure frame → world
+            const wx = mx + (fz * FP0.x + fx * FP0.z) * r.s,
+              wz = mz + (-fx * FP0.x + fz * FP0.z) * r.s;
+            MI[0] = wx;
+            MI[1] = m.y + 0.019;
+            MI[2] = wz;
+            MI[3] = m.yaw + Math.atan2(FP1.x - FP0.x, FP1.z - FP0.z);
+            MI[4] = 0.21 * r.stature / 1.76;
+            MI[5] = 1;
+            MI[6] = 0.46 * r.stature / 1.76;
+            yawMatrix(this.m4);
+            this.blob.setMatrixAt(nb, this.m4);
+            BA[nb++] = a;
+          }
+          MI[3] = m.yaw;
+        }
         // pram
-        if (L.pram && np < this.pram.instanceMatrix.count) {
-          this.pos.set(m.x, m.y, m.z);
-          this.scl.setScalar(Math.min(1.05, Math.max(0.95, L.scale)));
-          this.m4.compose(this.pos, this.q, this.scl);
+        // (fabric < 0: hands on a push bar, but what is pushed is someone else's: a trolley, a crate carried)
+        if (L.pram && L.pram.fabric >= 0 && np < this.pram.instanceMatrix.count) {
+          // sitting down, the pram is parked across behind the chair (it stayed pushed out in front: through the table,
+          // with the sitter inside it)
+          const pk = Math.min(1, m.sit * 1.25);
+          const pcx = fx * (1 - pk) * 0.9 - fx * pk * PRAM_BACK,
+            pcz = fz * (1 - pk) * 0.9 - fz * pk * PRAM_BACK;
+          MI[0] = mx - pk * (fx * PRAM_BACK + fz * 0.85);
+          MI[1] = m.y;
+          MI[2] = mz - pk * (fz * PRAM_BACK - fx * 0.85);
+          MI[3] = m.yaw + pk * (Math.PI / 2);
+          MI[4] = MI[5] = MI[6] = Math.min(1.05, Math.max(0.95, L.scale));
+          yawMatrix(this.m4);
+          MI[3] = m.yaw;
           this.pram.setMatrixAt(np, this.m4);
           PM[np * 4] = L.pram.fabric;
           PM[np * 4 + 1] = m.fade;
@@ -501,76 +753,123 @@ export class CrowdRenderer {
           PM[np * 4 + 3] = 0;
           np++;
           if (nb < bcap) {
-            this.pos.set(m.x + fx * 0.9, m.y + 0.016, m.z + fz * 0.9);
-            this.scl.set(0.55, 1, 0.95);
-            this.m4.compose(this.pos, this.q, this.scl);
+            MI[0] = mx + pcx;
+            MI[1] = m.y + 0.016;
+            MI[2] = mz + pcz;
+            MI[3] = m.yaw + pk * (Math.PI / 2);
+            MI[4] = 0.55;
+            MI[5] = 1;
+            MI[6] = 0.95;
+            yawMatrix(this.m4);
             this.blob.setMatrixAt(nb, this.m4);
             BA[nb++] = blobAlpha * 0.9 * m.fade;
+            MI[3] = m.yaw;
           }
         }
         // dog
         if (L.dog && nd < this.dog.instanceMatrix.count) {
-          this.pos.set(m.x, m.y, m.z);
-          this.scl.setScalar(L.scale);
-          this.m4.compose(this.pos, this.q, this.scl);
+          MI[0] = mx;
+          MI[1] = m.y;
+          MI[2] = mz;
+          MI[4] = MI[5] = MI[6] = L.scale;
+          yawMatrix(this.m4);
           this.dog.setMatrixAt(nd, this.m4);
           const d4 = nd * 4;
           const dogAmp = Math.min(1.5, m.speed / (0.95 * L.dog.size));
           DA[d4] = m.dogPhase;
           DA[d4 + 1] = dogAmp;
-          DA[d4 + 2] = smooth(m.dogSit);
+          DA[d4 + 2] = m.dogSit * m.dogSit * (3 - 2 * m.dogSit);
           DA[d4 + 3] = m.fade;
           DC[d4] = L.dog.fur;
           DC[d4 + 1] = L.dog.fur2;
           DC[d4 + 2] = L.dog.collar;
           DC[d4 + 3] = L.dog.size;
-          leftHand(pose, L.girth, this.hand);
-          DH[d4] = this.hand.x;
-          DH[d4 + 1] = this.hand.y - 0.02;
-          DH[d4 + 2] = this.hand.z;
+          // leash from the posed left grip (figure units × figure scale → dog-mesh units of look.scale)
+          gripPoint(r, pose, true, this.hand);
+          const k = r.s / L.scale;
+          DH[d4] = this.hand.x * k;
+          DH[d4 + 1] = this.hand.y * k - 0.01;
+          DH[d4 + 2] = this.hand.z * k;
           DH[d4 + 3] = m.seed;
           nd++;
           if (nb < bcap) {
-            // left of the walker: (fz, -fx)
-            const s = L.scale;
-            this.pos.set(m.x + (fz * 0.44 + fx * 0.6) * s, m.y + 0.017, m.z + (-fx * 0.44 + fz * 0.6) * s);
-            this.scl.set(0.32 * L.dog.size, 1, 0.6 * L.dog.size);
-            this.m4.compose(this.pos, this.q, this.scl);
+            const sc = L.scale;
+            MI[0] = mx + (fz * DOG_OFFSET.x + fx * DOG_OFFSET.z) * sc;
+            MI[1] = m.y + 0.017;
+            MI[2] = mz + (-fx * DOG_OFFSET.x + fz * DOG_OFFSET.z) * sc;
+            MI[4] = 0.32 * L.dog.size;
+            MI[5] = 1;
+            MI[6] = 0.6 * L.dog.size;
+            yawMatrix(this.m4);
             this.blob.setMatrixAt(nb, this.m4);
             BA[nb++] = blobAlpha * 0.85 * m.fade;
           }
         }
       }
     }
-    this.near.finish();
-    this.far.finish();
-    this.tiny.finish();
-    this.visible = this.near.n + this.far.n + this.tiny.n;
-    this.triangles = this.near.n * this.near.tris + this.far.n * this.far.tris + this.tiny.n * this.tiny.tris;
+    for (let i = 0; i < all.length; i++) all[i].finish();
+    this.tableware.finish();
+    this.visible = this.close.n + this.near.n + this.far.n + this.tiny.n + this.pin.n;
+    this.triangles = this.close.n * this.close.tris + this.near.n * this.near.tris + this.far.n * this.far.tris + this.tiny.n * this.tiny.tris + this.pin.n * this.pin.tris;
+    this.vertices = this.close.n * this.close.verts + this.near.n * this.near.verts + this.far.n * this.far.verts + this.tiny.n * this.tiny.verts + this.pin.n * this.pin.verts;
+    this.shadowVertices = this.shadow.n * this.shadow.verts;
     this.pram.count = np;
     this.dog.count = nd;
     this.blob.count = nb;
-    flush(this.pramMisc, np);
-    flush(this.pram.instanceMatrix, np);
-    flush(this.dogA, nd);
-    flush(this.dogCol, nd);
-    flush(this.dogHand, nd);
-    flush(this.dog.instanceMatrix, nd);
-    flush(this.blobA, nb);
-    flush(this.blob.instanceMatrix, nb);
+    flush(this.pramMisc, np, 4);
+    flush(this.pram.instanceMatrix, np, 16);
+    flush(this.dogA, nd, 4);
+    flush(this.dogCol, nd, 4);
+    flush(this.dogHand, nd, 4);
+    flush(this.dog.instanceMatrix, nd, 16);
+    flush(this.blobA, nb, 1);
+    flush(this.blob.instanceMatrix, nb, 16);
     this.pram.visible = np > 0;
     this.dog.visible = nd > 0;
     this.blob.visible = nb > 0;
+    if (palette !== null && this.group.visible) palette.render();
   }
 
   dispose(): void {
+    if (this.palette !== null) this.palette.dispose();
     const mats = new Set<THREE.Material>();
-    for (const mesh of [this.near.mesh, this.far.mesh, this.tiny.mesh, this.pram, this.dog, this.blob]) {
+    for (const l of [this.close, this.near, this.far, this.tiny, this.pin, this.shadow]) {
+      l.geo.dispose();
+      mats.add(l.mesh.material as THREE.Material);
+      if (l.mesh.customDepthMaterial) mats.add(l.mesh.customDepthMaterial);
+    }
+    for (const mesh of [this.pram, this.dog, this.blob]) {
       mesh.geometry.dispose();
       mats.add(mesh.material as THREE.Material);
       if (mesh.customDepthMaterial) mats.add(mesh.customDepthMaterial);
     }
     for (const m of mats) m.dispose();
+    this.tableware.dispose();
     this.group.removeFromParent();
   }
+}
+
+/** sunbathing: swimwear colours / hems, accessories off */
+export function swimwear(L: Look, s: Style, flags: number, C: Uint32Array): number {
+  const female = L.kind === 'woman' || L.kind === 'girl';
+  const swim = L.swim || L.skin;
+  const keep = 0xe0000000 | bit(FB.HAIR) | bit(FB.LOCKS) | bit(FB.HAIRLONG) | bit(FB.PONY) | bit(FB.BUN) | bit(FB.FRINGE) | bit(FB.BEARD) | bit(FB.MOUSTACHE) | bit(FB.TOWEL) | bit(FB.HAT) | bit(FB.BRIM) | bit(FB.VISOR);
+  flags &= keep;
+  C[0] = w(L.skin, q8(1.12)); // sleeveless
+  if (female) {
+    // one-piece (L.swim) or bikini (swim colour with a bare midriff)
+    const bikini = (L.swim & 1) === 1;
+    C[1] = w(swim, q8(0.12));
+    C[2] = w(swim, q8(0.86));
+    C[11] = ((q8(-0.1) << 24) | ((bikini ? q8(0.5) : q8(-0.1)) << 16) | (C[11] & 255)) >>> 0;
+  } else {
+    // trunks; bare chest unless a swim shirt colour
+    C[1] = w(L.skin, q8(0.12));
+    C[2] = w(swim === L.skin ? 0x2f4566 : swim, q8(0.74));
+    C[11] = ((q8(-0.1) << 24) | (q8(-0.1) << 16) | (C[11] & 255)) >>> 0;
+  }
+  C[7] = w(0, 0);
+  C[9] = (C[9] & 0xffffff) >>> 0; // no jacket
+  C[3] = w(L.shoes, 0);
+  return flags >>> 0;
 }

@@ -11,6 +11,8 @@
 //
 // Pattern ids are listed in builder.ts (PAT); keep both in sync.
 
+import { WIND_GLSL } from '../../core/wind';
+
 export const LM_COMMON = /* glsl */ `
 float lmH12(vec2 p) {
   vec3 p3 = fract(vec3(p.xyx) * 0.1031);
@@ -62,7 +64,9 @@ uniform float uTime;
 uniform vec4 uCrane;
 uniform vec4 uSpin;
 uniform vec4 uVis;
+uniform vec2 uLift;
 uniform vec2 uWind;
+${WIND_GLSL}
 vec3 lmRot(vec3 v, vec3 k, float a) {
   float c = cos(a), s = sin(a);
   return v * c + cross(k, v) * s + k * dot(k, v) * (1.0 - c);
@@ -79,6 +83,22 @@ void lmKin(inout vec3 p, inout vec3 n) {
     float a = aAnim.y * sin(aAnim.z * uTime + aAnim.w);
     p = piv + lmRot(p - piv, aAxis, a);
     n = lmRot(n, aAxis, a);
+  } else if (mode < 3.5) {
+    // [W6] stall canopy cloth in the shared wind: billows inside the rails (zero on them: a = half width
+    // along aAxis, b = half depth between the rails), the overhang + valance beyond the rails flaps; c = phase
+    vec3 cx = aAxis;
+    vec3 cz = normalize(cross(cx, vec3(0.0, 1.0, 0.0)));
+    float sx = dot(p - piv, cx), sz = dot(p - piv, cz);
+    float wx = clamp(1.0 - (sx * sx) / (aAnim.y * aAnim.y), 0.0, 1.0);
+    float wz = clamp(1.0 - (sz * sz) / (aAnim.z * aAnim.z), 0.0, 1.0);
+    float ov = max(abs(sz) - aAnim.z, 0.0);
+    vec2 lw = thWindAt(piv.xz);
+    float ws = clamp(length(lw), 0.0, 1.5);
+    float t = uTime * (1.6 + 1.4 * ws) + aAnim.w;
+    float bil = (0.012 + 0.022 * ws) * wx * wz * (0.6 + 0.4 * sin(t + sx * 1.7) * sin(t * 0.63 + sz * 2.3));
+    float flap = (0.05 + 0.12 * ws) * ov * (0.5 + 0.5 * wx) * sin(t * 2.3 + sx * 3.1 + aAnim.w);
+    p.y += bil + flap;
+    p += cz * sign(sz) * flap * 0.5;
   } else if (mode < 4.5) {
     // reserved
   } else if (mode < 5.5) {
@@ -97,29 +117,38 @@ void lmKin(inout vec3 p, inout vec3 n) {
     p = piv + lmRot(p - piv, vec3(0.0, 1.0, 0.0), a);
     n = lmRot(n, vec3(0.0, 1.0, 0.0), a);
   } else if (mode < 8.5) {
-    // flag: rest pose extends from the pole along aAxis (horizontal), cloth in the vertical plane
+    // flag: rest pose extends from the pole along aAxis (horizontal), cloth in the vertical plane.
+    // [life agent, flag-cloth grant] local wind from the shared gust field (core/wind.ts): the flag
+    // flies out and flutters faster as a gust passes, droops along the pole and folds in a calm.
     float L = aAnim.y;
     vec3 d = aAxis;
     vec3 sd = normalize(cross(vec3(0.0, 1.0, 0.0), d));
     float s = dot(p - piv, d);
     float u = clamp(s / L, 0.0, 1.0);
-    float ws = clamp(length(uWind), 0.15, 1.5);
-    float amp = L * (0.05 + 0.06 * ws);
-    float ph = 7.0 * u - uTime * (4.0 + 3.0 * ws) + aAnim.z;
+    vec2 lw = thWindAt(piv.xz);
+    float wl = length(lw);
+    float ws = clamp(wl, 0.05, 1.5);
+    float lift = smoothstep(0.06, 0.6, wl);
+    float amp = L * (0.045 + 0.07 * ws) * (1.0 + 0.9 * (1.0 - lift));
+    float ph = 7.0 * u - uTime * (3.2 + 6.0 * ws) + aAnim.z;
     float w = amp * u * sin(ph) + amp * 0.35 * u * sin(ph * 1.7 + 1.3);
     float dw = (amp * (sin(ph) + u * 7.0 * cos(ph)) + amp * 0.35 * (sin(ph * 1.7 + 1.3) + u * 11.9 * cos(ph * 1.7 + 1.3))) / L;
     p += sd * w;
-    p.y -= L * 0.06 * u * u * (1.6 - ws);
+    // droop: the fly end swings down towards the pole (shear keeps the hoist on the mast)
+    float droop = (1.0 - lift) * 1.0 + 0.05 + 0.04 * sin(uTime * 0.9 + aAnim.z);
+    p += d * (s * (cos(droop) - 1.0)) - vec3(0.0, s * sin(droop), 0.0);
     n = normalize(n - d * dot(n, sd) * dw);
-    // turn down-wind
-    vec3 wd = length(uWind) > 0.01 ? normalize(vec3(uWind.x, 0.0, uWind.y)) : d;
-    float a = atan(d.z * wd.x - d.x * wd.z, dot(d, wd)) + 0.12 * sin(uTime * 0.7 + aAnim.z);
+    // turn down-wind (local wind; keeps its heading in a dead calm)
+    vec3 wd = wl > 0.01 ? normalize(vec3(lw.x, 0.0, lw.y)) : d;
+    float a = atan(d.z * wd.x - d.x * wd.z, dot(d, wd)) + (0.06 + 0.1 * lift) * sin(uTime * 0.7 + aAnim.z);
     p = piv + lmRot(p - piv, vec3(0.0, 1.0, 0.0), a);
     n = lmRot(n, vec3(0.0, 1.0, 0.0), a);
   } else if (mode < 9.5) {
     float a = (aAnim.z < 0.5 ? uSpin.x : aAnim.z < 1.5 ? uSpin.y : aAnim.z < 2.5 ? uSpin.z : uSpin.w) * aAnim.y + aAnim.w;
     p = piv + lmRot(p - piv, aAxis, a);
     n = lmRot(n, aAxis, a);
+  } else if (mode > 10.5) {
+    p.y += aAnim.z > 0.5 ? -aAnim.y * uLift.y * step(99.0, uLift.x) : uLift.x - aAnim.y * uLift.y * (aAnim.w > 0.5 ? step(uLift.x, 2.0) : 1.0);
   } else if (mode < 10.5) {
     // visibility group (uVis[a]) + gentle sway (b = amplitude, c = phase)
     float v = aAnim.y < 0.5 ? uVis.x : aAnim.y < 1.5 ? uVis.y : aAnim.y < 2.5 ? uVis.z : uVis.w;
@@ -291,14 +320,14 @@ void lmSurface(inout vec3 albedo, inout float rough, inout float metal, inout ve
     albedo *= 0.95 + 0.07 * lmNoise(q * 0.6 + seed * 13.0);
   } else if (pat == 1.0) {
     // brick
-    float bh = 0.19, bw = 0.42;
+    float bh = 0.095, bw = 0.25;
     float row = floor(q.y / bh);
     float bx = q.x / bw + mod(row, 2.0) * 0.5;
     float col = floor(bx);
     float det = lmDetail(FQ.y, bh);
     float h = lmH12(vec2(col, row) + seed * 37.0);
     albedo *= mix(1.0, 0.86 + 0.24 * h - (h > 0.94 ? 0.18 : 0.0), det);
-    float mort = max(lmLines(q.y, bh, 0.011, FQ.y), lmLines(q.x + mod(row, 2.0) * bw * 0.5, bw, 0.011, FQ.x) * det);
+    float mort = max(lmLines(q.y, bh, 0.007, FQ.y), lmLines(q.x + mod(row, 2.0) * bw * 0.5, bw, 0.007, FQ.x) * det);
     albedo = mix(albedo, mix(base, vec3(0.8, 0.77, 0.72), 0.7), mort * 0.85);
     albedo *= 0.93 + 0.1 * lmNoise(q * 0.5 + 3.0);
   } else if (pat == 2.0) {
@@ -522,6 +551,31 @@ void lmSurface(inout vec3 albedo, inout float rough, inout float metal, inout ve
   } else if (pat == 26.0) {
     // roller shutter
     albedo *= 1.0 - 0.18 * lmLines(q.y, 0.09, 0.012, FQ.y);
+  }
+
+  // ── church weathering (flood CHURCH = only the church's stone + dressings): a century of town air on
+  // sandstone — blotchy soot that settles where rain does not wash, pale rain-washed runs and dark drip
+  // streaks down the walls, green algae + damp in the splash zone at the foot. Walls only (not caps / sills).
+  if (flood > 2.5 && flood < 3.5 && (pat == 2.0 || pat < 0.5) && abs(yn.y) < 0.5) {
+    float y = yn.x;
+    float n1 = lmNoise(q * vec2(0.35, 0.22) + 11.0), n2 = lmNoise(q * vec2(1.3, 0.9) + 4.0);
+    // soot: patches grow with height (less rain-wash under the eaves / buttress offsets)
+    float soot = smoothstep(0.42, 0.78, n1 * 0.75 + n2 * 0.35 + 0.12 * smoothstep(3.0, 14.0, y));
+    // vertical run streaks: dark drips and pale washed lanes (column noise stretched along y)
+    float sx = lmNoise(vec2(q.x * 2.6, q.y * 0.07 + 3.0));
+    float drip = smoothstep(0.62, 0.86, sx) * (0.6 + 0.4 * n2);
+    float wash = smoothstep(0.66, 0.9, lmNoise(vec2(q.x * 1.9 + 5.0, q.y * 0.05)));
+    vec3 sootC = vec3(0.24, 0.22, 0.2);
+    albedo = mix(albedo, albedo * 0.45 + sootC * 0.25, soot * 0.55);
+    albedo = mix(albedo, albedo * 0.62, drip * 0.45);
+    albedo = mix(albedo, min(albedo * 1.12, vec3(0.9)), wash * 0.35 * (1.0 - soot));
+    // foot: damp darkening up to ~1.1 m with a ragged tide line, algae green in the lowest ~60 cm
+    float edge = 0.75 + 0.35 * lmNoise(vec2(q.x * 1.7, 2.0)) + 0.2 * n2;
+    float damp = 1.0 - smoothstep(edge - 0.25, edge + 0.08, y);
+    float alg = (1.0 - smoothstep(0.15, 0.55 + 0.25 * n1, y)) * (0.55 + 0.45 * lmNoise(q * 2.4 + 1.0));
+    albedo *= 1.0 - 0.32 * damp;
+    albedo = mix(albedo, vec3(0.2, 0.27, 0.14), alg * 0.55);
+    rough = min(1.0, rough + 0.05 * soot);
   }
 
   // ── night uplighting of facades (flood type in the integer part of aMat.w)

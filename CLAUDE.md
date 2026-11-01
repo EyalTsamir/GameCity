@@ -4,12 +4,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-**Tinyhaven** — a self-running miniature-city diorama (traffic, pedestrians, trains, boats, day/night) in
-Three.js r186 + TypeScript, built with Vite 8. Everything is procedural (geometry, canvas textures, WebAudio
-synthesis): no external assets, URLs or CDNs. Runtime deps are only `three`, `postprocessing`, `n8ao`.
+**Tinyhaven** — a self-running city (traffic, pedestrians, trains, boats, day/night) set in a landscape that runs to
+the horizon (farmland, forest, mountains, sea), in Three.js r186 + TypeScript, built with Vite 8. `?diorama` shows the
+original tabletop model (slab on a plinth on an oak table, tilt-shift) — `src/core/world.ts` (`DIORAMA` / `WORLD_MODE`). Everything is procedural (geometry, canvas textures, WebAudio
+synthesis), or baked by our own code at build time (`scripts/bake.mjs`, see below): no external assets, scans, photos, URLs or CDNs. Runtime deps are only `three`, `postprocessing`, `n8ao`.
 
 Deeper reference: `docs/ARCHITECTURE.md`. Project history and per-module status / next steps:
-`docs/progress/LEAD.md` and `docs/progress/<module>.md` — read these first when resuming work, and keep them
+`docs/progress/LEAD.md`, `docs/progress/WORLD.md` (the "world" realism round: plan, contracts, per-feature toggles and
+costs; agent logs `world-*.md`) and `docs/progress/<module>.md` — read these first when resuming work, and keep them
 updated after each milestone (work here has repeatedly been cut off by account usage limits; the logs are how
 an interrupted task is resumed without loss).
 
@@ -17,7 +19,8 @@ an interrupted task is resumed without loss).
 
 - `npm run dev` — dev server at http://127.0.0.1:5173 (strict port). The verification scripts below expect it running.
 - `npm run typecheck` — `tsc --noEmit` (TypeScript 7 native compiler). The only static check: no linter, no unit-test framework.
-- `npm run build` — Vite + `vite-plugin-singlefile` → one self-contained `dist/index.html` (~2.2 MB) that also runs from `file://`.
+- `npm run build` — Vite + `vite-plugin-singlefile` → `dist/index.html` (~4.5 MB, JS and CSS inlined; runs from `file://`) + the baked files from `public/bake` in `dist/bake`.
+- `npm run bake` — `scripts/bake.mjs`: runs the city's own shaders in Chrome and writes `public/bake/` (gitignored): land albedo, far-facade atlas. Only what changed is redone (fingerprints); run it before `build` for a deploy and **before any perf measurement**, see "Baked files" below.
 - `npm start` — `scripts/serve.mjs`: serve `dist/` on 127.0.0.1:4173 (next free port) and open the browser.
   `Launch Tinyhaven.cmd` = build if `dist/` is missing, then serve (or open the file directly when Node is absent).
 
@@ -36,9 +39,13 @@ and swallow Vite's HMR websocket so a test page never reloads mid-run. Always Re
   (vsync and frame cap disabled, adaptive quality off); the difference between variants is a module's cost.
   The fps reported by shot.mjs is capped at 60 and says nothing about cost. GPU clocks make numbers noisy:
   compare variants within one run and repeat.
+- `node scripts/abprof.mjs --views downtown --ab "label=apply code|restore code"` — A/B in one page with alternating windows, ±0.1–0.4 ms where reloads give ±1–2; `scripts/splitprof.mjs` — fragment vs vertex, overdraw, per-draw vertices; `scripts/power-guard.mjs` — stops a run when the charger drops.
 - `node scripts/soak.mjs --minutes 4 --speed 4` — long run sampling fps, heap, module stats and invariant violations
   (4 min at 4× ≈ one game day).
+- `node scripts/closeset.mjs --area walls --d 3 --hours 12 --out shots/close [--ab "noxxx"] [--lens 4]` — the close-up test set: fixed ordinary viewpoints at 1, 3, 10 m, noon / 18.2 / 21.5, contact sheets (`docs/progress/close-foundation.md`). `node scripts/walkhitch.mjs [--q noxxx]` — stutter while walking with real keys.
 - `node scripts/ui-test.mjs` — real mouse/keyboard tests of camera/UI/audio; run one step with `--steps follow` (see its header for the list).
+- `node scripts/film-sheet.mjs --out shots/film/sheet.png [--mode realtime|seek] [--every 6 | --stamps 3,25]` — contact sheet of the opening film
+  (`seek` scouts a path fast; only `realtime` has the train on cue). `node scripts/film-hitch.mjs` — frame intervals and new shader programs per shot.
 
 "Running a single test" = `shot.mjs --q "only=<module>" --invariants`, a single `ui-test.mjs --steps <name>`, or `?validate`.
 
@@ -48,7 +55,10 @@ and swallow Vite's HMR websocket so a test page never reloads mid-run. Always Re
 `?validate` (static world checks → console), `?planview[=x0,z0,x1,z1][&layers=lots,peds,lanes,…]` (2D map of the
 plan and graphs), `?time=21.5`, `?speed=4`, `?quality=low|medium|high`, `?seed=…`, `?adaptive=0` (freeze adaptive
 quality), `?nointro` (skip the opening camera glide), `?noidle` (no auto-tour after 2 idle minutes),
-`?hide=traffic,pedestrians` (simulate without drawing). Modules have more debug switches, listed in their progress logs.
+`?hide=traffic,pedestrians` (simulate without drawing), `?nonear` / `?no<layer>` / `?nearr=<k>` / `?neardebug` (near-detail bubble), `?nolens` (the walker's zoom), `?lensN=<f>` (default aperture), `?diorama` (tabletop presentation), `?wind=<0..1.5>` /
+`?winddir=<deg>` (pin the wind), `?film` / `?nofilm` (force / skip the opening film; every automated browser and any
+start-state parameter already skip it, see `filmWanted()` in `src/ui/camera/film.ts`), `?filmfps=30|60`. Modules have more debug switches (one per world-round feature, e.g. `?noland`,
+`?nograss`, `?noleafcards`, `?nocloth`, `?noatmo`) — listed in `docs/progress/WORLD.md` and their progress logs.
 In the page, `window.__city` exposes `view()`, `setHours()`, `setSpeed()`, `stats()`, `invariants()`, `validate()`, `frameErrors`, `ctx`.
 
 ## Architecture
@@ -71,17 +81,21 @@ In the page, `window.__city` exposes `view()`, `setHours()`, `setSpeed()`, `stat
 **Modules.** Each subsystem is a file default-exporting `create(ctx) → CityModule`
 (`update(simDt)`, `frame(realDt)`, `stats()`, `invariants()`), with helpers in a same-named folder. `main.ts` loads
 them by dynamic import in this order, each fault-isolated (a module that throws is skipped and the city still runs):
-sky, terrain, water, ambient, roads, buildings, landmarks, harbor, vegetation, props, traffic, pedestrians, rail,
-boats, postfx, camera, ui, audio. A module may rely only on services of modules loaded before it; anything from
+sky, terrain, landscape, water, ambient, roads, buildings, landmarks, harbor, vegetation, props, groundcover, life, lamps, near,
+traffic, pedestrians, rail, boats, scenes, postfx, camera, ui, audio. A module may rely only on services of modules loaded before it; anything from
 later modules (e.g. camera state used by sky/postfx) is looked up lazily every frame and null-checked.
 `simDt` is scaled by `clock.speed` (0 when paused, up to ~0.8 s at 8×): simulations sub-step.
 
 **Cross-module contracts**
 
 - `ctx.services`: `terrain.height(x,z)` (rendered ground incl. local refinements — prefer it over `plan.heightAt`),
+  `landscape.height/isWater/cover(x,z)` (anywhere, also beyond the slab), `buildings` (chimneys, balconies, spans,
+  laundry wires) and `props.cafes` (terrace tables/seats) from `buildings/anchors.ts` / `props/service.ts`,
+  `groundcover` (flower patches, density), `vegetation.setLeafDistance`, `postfx.softDepth()`,
   `terrain.portals/rocks/promenadeLamps`; `water.waveHeight/surfaceY`; `smoke.addEmitter` (ambient — signature at the
   top of `src/sim/ambient.ts`); `camera` (`flyTo(view, 0)` snaps — used by `__city.view`); `postfx.setEnabled`;
   `boats.fleet.boats`; harbour obstacles for boat navigation.
+- `ctx.services.nearDetail` (`nearOf(ctx)`, `src/core/nearDetail.ts`, exists before any module): fine detail only around the camera, built per cell by a budgeted queue; `nearLens` in the same file for levels of detail through the lens. How to use it: top of `docs/progress/close-foundation.md`.
 - Level crossings (`ctx.roads.crossings`): rail writes `closed`/`gate`, traffic writes `occupied`; trains hold for an
   occupied crossing, vehicles never stop inside `[s0, s1]`.
 - Events: `bus:stop`, `train:arrive` / `train:depart` (pedestrian crowds, audio), `crossing`, `hour` (bells),
@@ -90,13 +104,20 @@ later modules (e.g. camera state used by sky/postfx) is looked up lazily every f
 - Hard-coded couplings: the fireworks barge footprint at (180, −58) is a nav obstacle in `boats.ts`; chimney smoke
   plumes start at plan height + 0.4 (the landmark stacks end at + 0.35).
 
+**Baked files** (`docs/progress/baking.md`). Allowed for anything worthwhile, as long as our code generates them. Rules: a baked file only ever makes the city cheaper. With a file missing, late, or made from other inputs (`?nobake`, `file://`, a shader or mesh changed since) the module draws the same picture procedurally, so a stale bake costs frame time and never looks wrong, and it costs it silently: **rebake before measuring**. Nothing baked may look soft close up: it is drawn only where a texel is about a pixel, and the procedural path stays the near path. What depends on the hour, the camera or the wind stays live. `src/core/bakeFiles.ts` loads (gzip inside the file, BC1, GPUs without S3TC stay procedural, staged uploads); land `src/world/landscape/bake.ts` (`?nolandbake`, `?landsoft`), facades `src/world/buildings/farFacade.ts` (`?nofacbake`, `?facsoft`), visibility `src/render/pvs.ts` (off, `?pvs`: the log says why).
+
 **Rendering.** `postfx` replaces `ctx.render` with a pmndrs postprocessing pipeline on HalfFloat targets (kept for HDR
 bloom and a banding-free sky): N8AO computed at half resolution but applied inside the final merged effect pass
-(`postfx/aoApply.ts`), a custom depth-aware tilt-shift DOF (focus = camera target distance), bloom, SMAA, grading.
+(`postfx/aoApply.ts`), depth of field (world mode: a natural lens that only acts at close focus; `?diorama`: the
+depth-aware tilt-shift, focus = camera target distance), sun shafts, bloom, SMAA, AgX grading.
 `postfx/adaptive.ts` steps quality down (AO first, then render scale) from async GPU timer queries — never a
 synchronous `readPixels` probe (that once forced the image to 0.6 scale). `sky` owns the sun/moon light, shadow-frustum
-fitting around the camera focus, and clouds on planned paths that frame (not cover) the hero overview, with
-screen-space cloud shadows. three r186 removed `PCFSoftShadowMap`: use `PCFShadowMap` + `light.shadow.radius`.
+fitting around the camera focus, and the sky: world mode installs a global aerial-perspective fog override
+(`render/atmosphere.ts`, blue air + aerosol, coloured from the physical sky in each direction), a physical sky LUT
+(`sky/physical.ts`), a raymarched half-res cumulus deck + cirrus with matching cloud shadows, and a lowered golden-hour
+"visual sun" written into `globalUniforms.uSunDir` (`clock.sunDir` stays physical); `?diorama` keeps the cotton-ball
+clouds on planned paths that frame the hero overview. One wind for everything: `src/core/wind.ts` (`thGust` /
+`thWindAt` in GLSL, `gustAt` / `windAt` in JS; prevailing wind updated per frame in `main.ts`). three r186 removed `PCFSoftShadowMap`: use `PCFShadowMap` + `light.shadow.radius`.
 
 ## Conventions
 
@@ -110,7 +131,9 @@ screen-space cloud shadows. three r186 removed `PCFSoftShadowMap`: use `PCFShado
   lanes/movements; both are checked by `invariants()` against the occupancy grid. Lots: building geometry stays inside
   `footprint` (overhangs ≤ 1.2 m and only above 2.4 m).
 - Performance target is an integrated Qualcomm Adreno X1-45 at ~1920×1025 device px. The scene pass is largely
-  vertex-bound: merge/instance (≈145 draw calls total), distance LODs, few shadow casters, no per-frame allocations.
-  Measure with `perf.mjs` before and after.
-- Keep the console clean (diagnostics only behind `?debug`) and keep the build single-file: no web workers, no
-  runtime-fetched assets, no new dependencies.
+  vertex-bound: merge/instance (≈165–190 draw calls in full-city views since the world round, 2.3–2.8 M triangles), distance LODs, few shadow casters, no per-frame allocations.
+  Measure with `perf.mjs` before and after. Perf-deep findings (`docs/progress/perf-deep.md`, switches `?noperfdeep`, `?no<name>`): a `flat` varying costs a geometry shader unless the provoking vertex is first (`main.ts`), `invalidateFramebuffer` is very expensive here, static triangles cost 2.5 ns each. The world round (2026-10) exceeds the old ≤ +2 ms rule on high by design
+  (estimated +4–6 ms at eye level / +3.5–4.5 ms overview, unmeasured on the target): every feature has a quality
+  tier and a URL toggle so the budget can be decided from real measurements — see `docs/progress/WORLD.md`.
+- Keep the console clean (diagnostics only behind `?debug`). No new runtime dependencies, no fetches from other hosts. The page must
+  keep working from `file://` without its baked files.

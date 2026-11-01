@@ -6,8 +6,14 @@
 // Joint patterns are box-filtered analytically with fwidth so they fade out cleanly with distance.
 
 import * as THREE from 'three';
+import { streetDetail } from '../../core/streetdetail';
+import { closeMat } from '../../core/closemat';
 import type { CityContext } from '../../core/context';
 import { XS, ZS } from '../../core/constants';
+import { LAMP_GLSL, lampUniforms } from '../../core/lampLight';
+import { ASPHALT2, COMMON2, HARD2 } from './glsl';
+import { PUDDLE_GLSL } from './puddles';
+import { STREET_MIRROR_GLSL, streetMirror } from '../water/streetMirror';
 
 // ─────────────────────────────────────────────────────────────── noise ──
 
@@ -76,6 +82,93 @@ export function roadNoise(): THREE.DataTexture {
   return t;
 }
 
+/**
+ * 256² RGBA tileable Voronoi of 8 x 8 jittered cells: R = distance to the nearest cell border
+ * (cell units, / 0.5), G = random id of the nearest cell, B = distance to its point (cell units),
+ * A = border distance of a 16 x 16 Voronoi. Crack networks, oil spots, stains.
+ */
+let _cracks: THREE.DataTexture | null = null;
+export function roadCracks(): THREE.DataTexture {
+  if (_cracks) return _cracks;
+  const S = 256;
+  const data = new Uint8Array(S * S * 4);
+  const vor = (N: number, seed: number, out: (i: number, edge: number, id: number, f1: number) => void) => {
+    const px = new Float32Array(N * N),
+      py = new Float32Array(N * N),
+      pid = new Float32Array(N * N);
+    for (let j = 0; j < N; j++)
+      for (let i = 0; i < N; i++) {
+        px[j * N + i] = i + 0.1 + 0.8 * hashLattice(i, j, seed);
+        py[j * N + i] = j + 0.1 + 0.8 * hashLattice(i, j, seed + 7);
+        pid[j * N + i] = hashLattice(i, j, seed + 13);
+      }
+    for (let y = 0; y < S; y++)
+      for (let x = 0; x < S; x++) {
+        const fx = ((x + 0.5) / S) * N,
+          fy = ((y + 0.5) / S) * N;
+        const ci = Math.floor(fx),
+          cj = Math.floor(fy);
+        let d1 = 1e9,
+          d2 = 1e9,
+          b1x = 0,
+          b1y = 0,
+          id = 0;
+        const cand: [number, number][] = [];
+        for (let dj = -2; dj <= 2; dj++)
+          for (let di = -2; di <= 2; di++) {
+            const ii = ci + di,
+              jj = cj + dj;
+            const wi = ((ii % N) + N) % N,
+              wj = ((jj % N) + N) % N;
+            const qx = px[wj * N + wi] + (ii - wi),
+              qy = py[wj * N + wi] + (jj - wj);
+            cand.push([qx, qy]);
+            const d = Math.hypot(qx - fx, qy - fy);
+            if (d < d1) {
+              d2 = d1;
+              d1 = d;
+              b1x = qx;
+              b1y = qy;
+              id = pid[wj * N + wi];
+            } else if (d < d2) d2 = d;
+          }
+        // exact distance to the nearest bisector
+        let e = 1e9;
+        for (const [qx, qy] of cand) {
+          if (qx === b1x && qy === b1y) continue;
+          const mx = (qx + b1x) / 2,
+            my = (qy + b1y) / 2;
+          let nx = qx - b1x,
+            ny = qy - b1y;
+          const l = Math.hypot(nx, ny) || 1;
+          nx /= l;
+          ny /= l;
+          const dd = (mx - fx) * nx + (my - fy) * ny;
+          if (dd < e) e = dd;
+        }
+        void d2;
+        out(y * S + x, Math.max(0, e), id, d1);
+      }
+  };
+  vor(8, 101, (i, e, id, f1) => {
+    data[i * 4] = Math.round(Math.min(1, e / 0.5) * 255);
+    data[i * 4 + 1] = Math.round(id * 255);
+    data[i * 4 + 2] = Math.round(Math.min(1, f1) * 255);
+  });
+  vor(16, 211, (i, e) => {
+    data[i * 4 + 3] = Math.round(Math.min(1, e / 0.5) * 255);
+  });
+  const t = new THREE.DataTexture(data, S, S, THREE.RGBAFormat);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.magFilter = THREE.LinearFilter;
+  t.minFilter = THREE.LinearMipmapLinearFilter;
+  t.generateMipmaps = true;
+  t.colorSpace = THREE.NoColorSpace;
+  t.needsUpdate = true;
+  _cracks = t;
+  return t;
+}
+
 // ──────────────────────────────────────────────────────────── shared GLSL ──
 
 const XS0 = XS[0],
@@ -127,19 +220,30 @@ vec2 rdStreet(vec2 p) {
 }
 `;
 
-function inject(mat: THREE.MeshStandardMaterial, opts: { attrs: string; varyings: string; assign: string; pars: string; color: string; key: string; uniforms: Record<string, THREE.IUniform>; after?: string }): void {
+let litterPainted = true;
+
+function inject(mat: THREE.MeshStandardMaterial, opts: { attrs: string; varyings: string; assign: string; pars: string; color: string; key: string; uniforms: Record<string, THREE.IUniform>; after?: string; emit?: string; nrm?: string }): void {
+  mat.userData.rdUniforms = opts.uniforms;
   mat.onBeforeCompile = (shader) => {
-    Object.assign(shader.uniforms, opts.uniforms);
+    Object.assign(shader.uniforms, opts.uniforms, lampUniforms());
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', `#include <common>\n${opts.attrs}\n${opts.varyings}\nvarying vec3 vWP;`)
       .replace('#include <begin_vertex>', `#include <begin_vertex>\n${opts.assign}\nvWP = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
-    let fs = shader.fragmentShader.replace('#include <common>', `#include <common>\n${opts.varyings}\n${COMMON}\n${opts.pars}`);
+    // the flat litter painted into the ground: real scraps and leaves lie there instead (closemat/litter.ts) on the tiers that have them
+    let fs = '#define TH_NO_WET\n' + (litterPainted ? '#define RD_LITTER\n' : '') + shader.fragmentShader.replace('#include <common>', `#include <common>\n${opts.varyings}\n${LAMP_GLSL}\n${COMMON}\n${opts.pars}`);
+    // night street-light map (black until the lamps module bakes it): light multiplies the albedo.
+    // world normal from the view-space shading normal (rotation only: inverse = transpose)
+    fs = fs.replace('#include <lights_fragment_end>', '#include <lights_fragment_end>\nreflectedLight.indirectDiffuse += diffuseColor.rgb * thLampLight(vWP, inverseTransformDirection(normal, viewMatrix));');
     if (opts.color) {
       fs = fs
         .replace('vec4 diffuseColor = vec4( diffuse, opacity );', `float rdRough = 0.9;\nvec4 diffuseColor = vec4( ${opts.color}, opacity );`)
         .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = rdRough;');
     }
+    if (opts.nrm) fs = fs.replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>\n${opts.nrm}`);
     if (opts.after) fs = fs.replace('#include <alphatest_fragment>', `#include <alphatest_fragment>\n${opts.after}`);
+    if (opts.emit) fs = fs.replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>\ntotalEmissiveRadiance += ${opts.emit};`);
+    // wet streets (water/streetMirror.ts): where the mirror covers the view, the sky sheen does not show
+    if (opts.emit && opts.pars.includes('rdSpecOcc')) fs = fs.replace('#include <lights_fragment_end>', '#include <lights_fragment_end>\nreflectedLight.indirectSpecular *= rdSpecOcc;');
     shader.fragmentShader = fs;
   };
   mat.customProgramCacheKey = () => opts.key;
@@ -290,12 +394,26 @@ const PAINT_AFTER = /* glsl */ `
   vec2 st = rdStreet(vWP.xz);
   float lat = abs(st.x);
   float wheel = max(1.0 - smoothstep(0.15, 0.5, abs(lat - 0.95)), 1.0 - smoothstep(0.15, 0.5, abs(lat - 2.55)));
-  float wearAmt = vM.y * (0.4 + 0.6 * wheel);
-  float nw = texture2D(tRN, vWP.xz * 0.8).a * 0.6 + texture2D(tRN, vWP.xz * 0.21).b * 0.4;
-  float worn = smoothstep(0.74 - 0.42 * wearAmt, 0.8 - 0.42 * wearAmt, nw) * rdDetail(vWP.xz, 0.1);
-  diffuseColor.rgb = mix(diffuseColor.rgb, vB, worn * 0.85);
+  float wearAmt = max(vM.y, 0.35) * (0.3 + 0.8 * wheel);
+  // tyre-worn, not blotchy (audit: the zebra stripes read as leopard print): the wear noise is stretched along the
+  // street (streaks in the direction of travel), plus a fine chip octave
+  float nw = texture2D(tRN, vec2(st.x * 1.9, st.y * 0.28)).a * 0.55 + texture2D(tRN, vec2(st.x * 0.7, st.y * 0.09) + 0.37).b * 0.25 + texture2D(tRN, vWP.xz * 2.3 + 0.61).g * 0.2;
+  // (detail fade from the geometric-mean pixel footprint: at eye level the paint is seen at grazing angles)
+  vec2 fwq = fwidth(vWP.xz);
+  float detq = 1.0 - smoothstep(0.1, 0.35, sqrt(fwq.x * fwq.y) / 0.1);
+  // (wear < 0 flags cast iron — manholes, gullies, lids: no paint to wear off; dirt sits in the recesses instead)
+  float worn = smoothstep(0.7 - 0.5 * wearAmt, 0.76 - 0.5 * wearAmt, nw) * detq * step(-0.5, vM.y);
+  diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * 0.82 + vB * 0.18, 0.6);   // dirty, sun-faded paint
+  diffuseColor.rgb = mix(diffuseColor.rgb, vB, worn * 0.9);
   float fw = length(fwidth(vWP.xz));
-  diffuseColor.rgb = mix(vB, diffuseColor.rgb, clamp(vM.x / max(fw, 1e-4), 0.0, 1.0));
+  // (hairline tar and saw cuts: the derivatives of a sliver are meaningless, long triangles faded to the pale base while their
+  // short ones stayed dark, a row of black dots on a pale thread. Skip that fade, and stop drawing them once they are thinner
+  // than a pixel, from the true footprint: distance and grazing angle)
+  if (vM.y < -0.5 && vM.x < 0.045) {
+    vec3 tc = cameraPosition - vWP;
+    float tl = length(tc);
+    if (vM.x / (tl * 0.001 / max(tc.y / tl, 0.04)) < 1.0) discard;
+  } else diffuseColor.rgb = mix(vB, diffuseColor.rgb, clamp(vM.x / max(fw, 1e-4), 0.0, 1.0));
   diffuseColor.rgb *= mix(1.0, 0.7, uRain);
 }
 `;
@@ -307,25 +425,53 @@ export interface RoadMaterials {
   asphaltColor: THREE.Color;
 }
 
-export function createMaterials(ctx: CityContext, radial: { x: number; z: number; r: number }[], atlas: THREE.Texture): RoadMaterials {
+export interface SurfaceInfo {
+  radial: { x: number; z: number; r: number }[];
+  court: { x0: number; z0: number; x1: number; z1: number } | null;
+}
+
+/** ?legacyground: the original (pre-overhaul) asphalt + hardscape shaders, for A/B. */
+export function legacyGround(ctx: CityContext): boolean {
+  return ctx.debug.params.has('legacyground');
+}
+
+export function createMaterials(ctx: CityContext, info: SurfaceInfo, atlas: THREE.Texture, puddles: Record<string, THREE.IUniform>): RoadMaterials {
+  const radial = info.radial;
+  litterPainted = !closeMat(ctx, 'cmlitter');
+  const legacy = legacyGround(ctx);
   const noise = roadNoise();
+  const cracks = roadCracks();
   // perf experiments (debug only): roadsFlat=1 constant colours, roadsLambert=1 Lambert lighting
   const flatQ = ctx.debug.params.get('roadsFlat') ?? '';
   const flatA = flatQ === '1' || flatQ.includes('a');
   const flat = flatQ === '1' || flatQ.includes('h');
   const Std = (p: THREE.MeshStandardMaterialParameters) => (ctx.debug.params.get('roadsLambert') === '1' ? (new THREE.MeshLambertMaterial(p as THREE.MeshLambertMaterialParameters) as unknown as THREE.MeshStandardMaterial) : new THREE.MeshStandardMaterial(p));
   const asphaltColor = new THREE.Color('#4a4d52');
-  const shared = { tRN: { value: noise }, uRain: ctx.uniforms.uRain };
+  const shared = { tRN: { value: noise }, uRain: ctx.uniforms.uRain, uRdWear: { value: ctx.debug.params.has('nowear') ? 0 : 1 }, uKerbD: { value: ctx.debug.params.has('nokerbdetail') || ctx.quality.level === 'low' ? 0 : 1 }, uRdHand: { value: ctx.debug.params.has('nohandlaid') ? 0 : 1 } };
 
+  const lin = (h: string) => new THREE.Color(h);
+  const court = info.court ? new THREE.Vector4(info.court.x0, info.court.z0, info.court.x1, info.court.z1) : new THREE.Vector4(0, 0, 0, 0);
   const asphalt = Std({ color: 0xffffff, roughness: 0.9, metalness: 0 });
   inject(asphalt, {
     attrs: 'attribute vec2 aA;',
     varyings: 'varying vec2 vA;',
     assign: 'vA = aA;',
-    pars: ASPHALT,
+    pars: legacy ? ASPHALT : COMMON2 + PUDDLE_GLSL + STREET_MIRROR_GLSL + ASPHALT2,
     color: flatA ? 'uAsph' : 'rdAsphalt(rdRough)',
-    key: 'roads-asphalt-v1' + (flatA ? 'f' : ''),
-    uniforms: { ...shared, uAsph: { value: asphaltColor } },
+    emit: legacy || flatA ? undefined : 'rdEmit',
+    key: 'roads-asphalt-v4' + (flatA ? 'f' : '') + (legacy ? 'L' : ''),
+    uniforms: {
+      ...shared,
+      ...puddles,
+      ...streetMirror,
+      tRC: { value: cracks },
+      uAsph: { value: asphaltColor },
+      uJuncWear: { value: streetDetail(ctx, 'junctionwear') ? 1 : 0 },
+      uCourt: { value: court },
+      uCourtA: { value: lin('#3d78ae') },
+      uCourtB: { value: lin('#4b8c5e') },
+      uCourtC: { value: lin('#c25a40') },
+    },
   });
 
   const rad = [0, 1, 2].map((i) => {
@@ -334,13 +480,15 @@ export function createMaterials(ctx: CityContext, radial: { x: number; z: number
   });
   const hard = Std({ color: 0xffffff, roughness: 0.92, metalness: 0 });
   inject(hard, {
-    attrs: 'attribute vec4 aS;\nattribute vec4 aP;\nattribute vec4 aV;\nattribute vec3 aC;\nattribute vec4 aX;',
-    varyings: 'varying vec4 vS;\nvarying vec4 vP;\nvarying vec4 vV;\nvarying vec3 vC;\nvarying vec4 vX;',
-    assign: 'vS = aS; vP = aP; vV = aV; vC = aC; vX = aX;',
-    pars: HARD,
+    attrs: 'attribute vec4 aS;\nattribute vec4 aP;\nattribute vec4 aV;\nattribute vec3 aC;\nattribute vec4 aX;\nattribute vec4 aR;\nattribute vec4 aB;',
+    varyings: 'varying vec4 vS;\nvarying vec4 vP;\nvarying vec4 vV;\nvarying vec3 vC;\nvarying vec4 vX;\nvarying vec4 vR;\nvarying vec4 vB;',
+    assign: 'vS = aS; vP = aP; vV = aV; vC = aC; vX = aX; vR = aR; vB = aB;',
+    pars: legacy ? HARD : COMMON2 + 'vec3 rdEmit = vec3(0.0);\n' + STREET_MIRROR_GLSL + HARD2,
+    emit: flat || legacy ? undefined : 'rdEmit',
     color: flat ? 'vec3(0.5)' : 'rdHard(rdRough)',
-    key: 'roads-hard-v2' + (flat ? 'f' : ''),
-    uniforms: { ...shared, uRad: { value: rad }, uTactile: { value: new THREE.Color('#c09c4e') } },
+    nrm: flat || legacy ? undefined : 'normal = normalize(normal + (viewMatrix * vec4(rdN, 0.0)).xyz);',
+    key: 'roads-hard-v6' + (flat ? 'f' : '') + (legacy ? 'L' : ''),
+    uniforms: { ...shared, tRC: { value: cracks }, uRad: { value: rad }, uTactile: { value: new THREE.Color('#c09c4e') }, uBandCol: { value: new THREE.Color(0.16, 0.165, 0.175) }, uWetH: puddles.uWet, ...streetMirror },
   });
 
   const paint = Std({
@@ -361,7 +509,7 @@ export function createMaterials(ctx: CityContext, radial: { x: number; z: number
     pars: '',
     color: '',
     after: PAINT_AFTER,
-    key: 'roads-paint-v1',
+    key: 'roads-paint-v5',
     uniforms: shared,
   });
   return { asphalt, hard, paint, asphaltColor };

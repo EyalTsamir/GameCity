@@ -6,15 +6,19 @@
 import * as THREE from 'three';
 import { mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { CityContext } from '../../core/context';
-import { RIVER, QUAY_X, SLAB, SIDEWALK_Y } from '../../core/constants';
+import { RIVER, QUAY_X, SLAB, SIDEWALK_Y, WATER_LEVEL as WATER_LEVEL_M } from '../../core/constants';
 import { RIDGE_FOOT_Z } from '../../core/plan';
 import type { Rng } from '../../core/rng';
 import { GeoBuilder, type V3 } from './builder';
 import { type TerrainModel, type PortalDef, RIVER_WALL_END_X, SEA_WALL_Z0, SEA_WALL_Z1, RIVER_WALL_T, SEA_WALL_T } from './height';
 import { noiseTexture, GLSL_HASH, vnoise } from './noise';
+import { LAMP_GLSL, lampUniforms } from '../../core/lampLight';
 import { KIND, type LadderSpot } from './kinds';
-import { createRailings, type RailingResult } from './railings';
+import { boxHunt } from '../../core/boxhunt';
+import { createRailings, setRiverRailDetail, type RailingResult } from './railings';
+import { buildCliffs, type CliffResult } from './cliffs';
 import type { GlowPoint } from './glow';
+import { buildPlacesStone, buildPlacesIron } from './places';
 
 export { KIND };
 export type { LadderSpot };
@@ -46,6 +50,8 @@ export interface MasonryResult {
   triangles: number;
   /** tunnel bore roof checks for invariants: sample points (x, z, roofY) */
   boreSamples: { x: number; z: number; roof: number }[];
+  /** stratified rock skin on the steep faces (null with ?legacyterrain / ?nocliffs) */
+  cliffs: CliffResult | null;
 }
 
 const C = (h: string) => new THREE.Color(h);
@@ -67,12 +73,18 @@ const COL = {
 
 // ─────────────────────────────────────────────────────────── shader ──
 
+/** shared moon direction (terrain module copies ctx.clock.moonDir every frame) */
+export const MOON_DIR = { value: new THREE.Vector3(0, 1, 0) };
+/** night lift strength (?nightrock=0 turns it off for A/B) */
+const NIGHT_K = typeof location !== 'undefined' ? parseFloat(new URLSearchParams(location.search).get('nightrock') ?? '0.07') || 0 : 0.07;
+
 const MASONRY_PARS = /* glsl */ `
 uniform sampler2D tNoise;
 uniform float uLights;
 uniform vec3 mMortar;
 uniform vec3 mAlgae;
 uniform vec3 mMoss;
+uniform vec3 mGrass;
 varying vec4 vMas;
 varying vec3 vMW;
 varying vec3 vMN;
@@ -98,13 +110,100 @@ vec3 th_ashlar(vec2 uv, float ch, vec3 base) {
   return mix(c, mMortar * (0.9 + 0.2 * bh), joint);
 }
 
+// granite setts (ashlar kind with a negative course: places-between old-town square): 13 cm rows of 17–23 cm stones
+// in running bond, domed tops (lighter crowns, darker shoulders), gritty dark joints, a few warm / blue stones.
+// Stones and joints fade to their mean tone once a stone is under ~4 px (no moire on the oblique view)
+vec3 th_setts(vec2 uv, vec3 base, float fw) {
+  float ch = 0.13;
+  float row = floor(uv.y / ch);
+  float rh = th_hash12(vec2(row, 3.7));
+  float bl = 0.17 + 0.06 * rh;
+  float uu = uv.x / bl + rh * 5.3;
+  float cid = floor(uu);
+  float fu = fract(uu), fv = fract(uv.y / ch);
+  float dmin = min(min(fu, 1.0 - fu) * bl, min(fv, 1.0 - fv) * ch);
+  float det = 1.0 - smoothstep(0.012, 0.035, fw);
+  float joint = 1.0 - smoothstep(0.007, 0.015 + fw, dmin);
+  float crown = smoothstep(0.0, 0.055, dmin);
+  float bh = th_hash12(vec2(cid, row));
+  float bh2 = th_hash12(vec2(cid + 7.1, row - 3.3));
+  vec3 c = base * (0.78 + 0.38 * bh) * (0.8 + 0.26 * crown);
+  c *= bh2 < 0.14 ? vec3(1.07, 0.98, 0.88) : (bh2 > 0.88 ? vec3(0.9, 0.95, 1.05) : vec3(1.0));
+  c = mix(c, base * 0.4, joint * 0.92);
+  return mix(base * 0.86, c, det);
+}
+
+vec3 mN = vec3(0.0, 1.0, 0.0);
+// bump-perturbed world normal for rock (cliff skin, boulders) — replaces the flat facet normal for lighting
+vec3 mNb = vec3(0.0);
+float mTerr = -1.0;
+uniform float uNight;
+uniform vec3 uMoonDir;
+// Moonlit stone: the dark night key barely reaches the steep, mostly south-facing faces, so rock
+// (cliffs, boulders) and, less, the walls get a soft wrap-lit moon + sky term — upper facets and
+// ledges brightest, creases and undersides stay dark — so the forms still read at night.
+vec3 mNightLift() {
+  if (uNight < 0.01) return vec3(0.0);
+  float kind = vMas.x;
+  float k = kind > 5.5 ? 1.0 : (kind > 2.5 && kind < 3.5 ? 0.8 : (kind < 2.5 ? 0.35 : 0.0));
+  float up = clamp(mN.y * 0.5 + 0.5, 0.0, 1.0);
+  float wrapM = clamp((dot(mN, uMoonDir) + 0.5) / 1.5, 0.0, 1.0);
+  float shape = 0.25 + 0.55 * wrapM + 0.6 * up * up;
+  return vec3(0.39, 0.46, 0.67) * (uNight * TH_NIGHT_K * k * shape);
+}
 vec3 masonryColor(vec3 base) {
   float kind = vMas.x;
   vec3 p = vMW;
+#ifdef TH_FLATN
+  vec3 n = normalize(cross(dFdx(vMW), dFdy(vMW)));
+#else
   vec3 n = normalize(vMN);
+#endif
+  mN = n;
+  // cliff face coordinates (u along the face, y up) + derivatives taken outside the kind branches
+  vec2 cuv = vec2(dot(p.xz, vMas.zw), p.y);
+  vec2 cdx = dFdx(cuv), cdy = dFdy(cuv);
+  vec2 pdx = dFdx(p.xz), pdy = dFdy(p.xz);
+  float fwY = fwidth(p.y);
   vec2 uv;
   if (abs(n.y) < 0.7) uv = vec2(dot(p.xz, normalize(vec2(-n.z, n.x))), p.y);
   else uv = vec2(dot(p.xz, vMas.zw), dot(p.xz, vec2(-vMas.w, vMas.z)));
+  float fwUV = max(fwidth(uv.x), fwidth(uv.y));
+  // rock relief (F3): fractured, chipped surface on the cliff skin and boulders so a facet is never a flat plane.
+  // Height in metres from ridged noise (sharp fracture creases) + two finer octaves; normal from its screen
+  // derivatives (Mikkelsen's surface-gradient bump), faded out once a 0.3 m feature is under ~3 px.
+#ifdef TH_FLATN
+  if (kind > 2.5 && kind < 3.5 || kind > 5.5) {
+    vec2 bq = kind > 5.5 ? cuv : uv;
+    // octaves sized so each is a real feature (0.2–0.75 m fractures, 4–14 cm chips), each faded by its own pixel
+    // footprint: a derivative bump finer than ~3 px turns into per-pixel speckle (session-1 version did)
+    float fp = max(length(dFdx(p)), length(dFdy(p)));
+    vec4 b1 = texture2D(tNoise, bq * vec2(0.33, 0.47) + vMas.y * 1.7);
+    vec4 b2 = texture2D(tNoise, bq * vec2(0.9, 1.05) + 0.37);
+    vec4 b3 = texture2D(tNoise, bq * 0.35 + 0.71);
+    // chipped, not pitted: the fracture field is terraced (flat broken planes, steep risers = sharp edges), with
+    // thin bedding laminae stepping along the strata on the cliff (cuv.y = height)
+    float t1 = (b1.r * 0.8 + b2.b * 0.2) * 5.0;
+    float ft = fract(t1);
+    float hterr = (floor(t1) + smoothstep(0.72, 1.0, ft) + 0.12 * ft) * 0.2;
+    float lam = kind > 5.5 ? fract(bq.y * 5.5 + b2.r * 1.6) : 0.0;
+    float fine = 1.0 - smoothstep(0.006, 0.016, fp);
+    float hb = 0.16 * hterr + (0.018 * lam * lam + 0.02 * b2.g + 0.008 * b3.b) * fine;
+    mTerr = floor(t1);
+    // soften the facets: lean the flat normal toward the shared-vertex normal (rounded boulders, no flat triangles)
+    vec3 sn = normalize(vMN);
+    if (dot(sn, n) > 0.15) n = normalize(mix(n, sn, 0.7));
+    vec3 dpx = dFdx(p), dpy = dFdy(p);
+    float fade = 1.0 - smoothstep(0.03, 0.1, fp);
+    vec3 r1 = cross(dpy, n), r2 = cross(n, dpx);
+    float det = dot(dpx, r1);
+    vec3 grad = sign(det) * (dFdx(hb) * r1 + dFdy(hb) * r2);
+    vec3 bn = abs(det) * n - grad * fade;
+    if (dot(bn, bn) > 1e-20) n = normalize(bn);
+    mNb = n;
+    mN = n;
+  }
+#endif
   vec4 nz = texture2D(tNoise, (p.xz + p.y * 0.7) * 0.21);
   vec4 nf = texture2D(tNoise, (p.xz * 1.3 + vec2(p.y * 1.1, -p.y * 0.9)) * 0.9);
   vec3 col = base;
@@ -112,8 +211,10 @@ vec3 masonryColor(vec3 base) {
     col *= 0.9 + 0.16 * nf.r;
     mRough = 0.86;
   } else if (kind < 1.5) {
-    col = th_ashlar(uv, vMas.y, base);
+    col = vMas.y < 0.0 ? th_setts(uv, base, fwUV) : th_ashlar(uv, vMas.y, base);
     col *= 0.93 + 0.12 * nf.g;
+    // decades of weather across the wall (metres, not blocks): a long wall must not be one even colour
+    col *= 0.84 + 0.3 * smoothstep(0.25, 0.75, nz.g * 0.65 + nz.a * 0.35);
     mRough = 0.88;
   } else if (kind < 2.5) {
     float L = 1.65;
@@ -134,11 +235,58 @@ vec3 masonryColor(vec3 base) {
     mRough = 0.93;
   } else if (kind < 4.5) {
     mRough = 1.0;
-  } else {
+  } else if (kind < 5.5) {
     mRough = 0.5;
+  } else {
+    // stratified cliff rock (cliffs.ts): vMas.y = stratum tone seed
+    vec2 su = cuv * vec2(0.045, 0.11);
+    vec4 nu = textureGrad(tNoise, su, cdx * vec2(0.045, 0.11), cdy * vec2(0.045, 0.11));
+    vec2 sv = cuv * vec2(0.31, 0.62) + vMas.y * 3.1;
+    vec4 nv = textureGrad(tNoise, sv, cdx * vec2(0.31, 0.62), cdy * vec2(0.31, 0.62));
+    vec2 ss = cuv * vec2(0.21, 0.016);
+    float streak = textureGrad(tNoise, ss, cdx * vec2(0.21, 0.016), cdy * vec2(0.21, 0.016)).b;
+    float side = 1.0 - smoothstep(0.55, 0.9, n.y);
+    // sub-bedding: thin dark lines every ~0.4 m that fade out (instead of shimmering) with distance
+    float bed = p.y * 2.6 + nu.r * 1.3 + vMas.y * 5.0;
+    float fw = fwY * 2.6 + 1e-4;
+    float fb = fract(bed);
+    float line = (1.0 - smoothstep(0.0, 0.1 + fw, min(fb, 1.0 - fb))) * (1.0 - smoothstep(0.25, 0.7, fw));
+    col *= 1.0 - 0.17 * line * side;
+    // vertical weathering streaks (water stains) + damp dark seeps + grain + lichen (ochre, grey-green)
+    vec4 st4 = textureGrad(tNoise, ss, cdx * vec2(0.21, 0.016), cdy * vec2(0.21, 0.016));
+    col *= mix(1.0, 0.64 + 0.44 * smoothstep(0.15, 0.85, streak), side);
+    col = mix(col, col * vec3(0.5, 0.53, 0.55), smoothstep(0.6, 0.78, st4.a) * side * 0.75);
+    col *= 0.86 + 0.26 * nv.g;
+    // each broken plane of the fracture terraces its own weathering: fresher (paler, warmer) or older (greyer)
+    if (mTerr >= 0.0) { float ht = th_hash12(vec2(mTerr, floor(cuv.x * 0.7 + mTerr * 0.37))); col *= mix(vec3(0.88, 0.9, 0.92), vec3(1.1, 1.06, 0.98), ht); }
+    col = mix(col, col * vec3(1.1, 1.04, 0.86) + vec3(0.035, 0.028, 0.0), smoothstep(0.6, 0.8, nu.a) * 0.55 * side);
+    col = mix(col, vec3(0.5, 0.52, 0.44) * (0.85 + 0.3 * nv.b), smoothstep(0.64, 0.8, nv.a) * 0.22 * side);
+    // hairline cracks across the strata + vertical joints that split the beds into blocks
+    float ck = 1.0 - smoothstep(0.0, 0.03 + fw * 0.2, abs(nv.r - 0.5));
+    col *= 1.0 - 0.1 * ck * side * (1.0 - smoothstep(0.15, 0.5, fw));
+    float fwu = length(vec2(cdx.x, cdy.x)) * 0.37 + 1e-4;
+    float ju = abs(fract(cuv.x * 0.37 + nu.b * 0.9 + vMas.y * 2.3) - 0.5);
+    float joint = (1.0 - smoothstep(0.012, 0.03 + fwu, 0.5 - ju)) * (1.0 - smoothstep(0.08, 0.3, fwu));
+    col *= 1.0 - 0.45 * joint * side;
+    // ledges: moss and grass tufts on everything facing up, the edge broken by noise
+    float up = smoothstep(0.6, 0.92, n.y);
+    vec2 mp = p.xz * 0.55;
+    float mossN = textureGrad(tNoise, mp, pdx * 0.55, pdy * 0.55).g * 0.6 + nv.b * 0.4;
+    // patchy: soil, grit and bare rock show between the cushions on a ledge
+    float moss = up * smoothstep(0.32, 0.55, mossN + 0.25 * (nf.r - 0.5));
+    col = mix(col, vec3(0.3, 0.26, 0.2) * (0.8 + 0.4 * nf.g), up * (1.0 - moss) * 0.45);
+    vec3 mossC = mix(mMoss, mGrass, smoothstep(0.35, 0.7, nu.g)) * (0.85 + 0.3 * nv.r) * vec3(0.8, 0.82, 0.72);
+    col = mix(col, mossC, moss * 0.88);
+    // shrubs and tufts rooting in the ledges (darker clumps in the moss)
+    col = mix(col, mGrass * vec3(0.42, 0.48, 0.36), up * smoothstep(0.6, 0.74, nv.r * 0.6 + mossN * 0.4) * 0.85);
+    // a little green creeping over the lip of each ledge
+    col = mix(col, mMoss * 0.8, smoothstep(0.12, 0.45, n.y) * (1.0 - up) * 0.5 * smoothstep(0.35, 0.6, mossN));
+    // undersides / creases in shade (overhanging lips throw a dark band)
+    col *= 0.6 + 0.4 * smoothstep(-0.7, 0.1, n.y);
+    mRough = 0.94;
   }
   // waterline: wet band + algae, darker below
-  if (kind > 0.5 && kind < 3.5) {
+  if ((kind > 0.5 && kind < 3.5) || kind > 5.5) {
     float wetb = 1.0 - smoothstep(-1.62, -1.15, p.y);
     col *= 1.0 - 0.3 * wetb;
     float alg = (1.0 - smoothstep(-1.75, -1.5, p.y)) * (0.6 + 0.4 * nz.r);
@@ -149,30 +297,40 @@ vec3 masonryColor(vec3 base) {
 }
 `;
 
-function masonryMaterial(ctx: CityContext): THREE.MeshStandardMaterial {
+function masonryMaterial(ctx: CityContext, flat: boolean): THREE.MeshStandardMaterial {
   const uniforms = {
     tNoise: { value: noiseTexture() },
     uLights: ctx.uniforms.uLights,
+    uNight: ctx.uniforms.uNight,
+    uMoonDir: MOON_DIR,
     mMortar: { value: C('#8a8276') },
     mAlgae: { value: C('#4e5a3a') },
     mMoss: { value: C('#6f8a45') },
+    mGrass: { value: C('#86a54e') },
+    ...lampUniforms(),
   };
-  const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9, metalness: 0 });
+  // flat: faceted shading from screen-space derivatives, so the rock skin and boulders can share
+  // vertices (indexed) — ~3–5x fewer vertices than per-triangle normals on a vertex-bound GPU
+  const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9, metalness: 0, flatShading: flat });
+  // (legacy look: no night lift either)
+  mat.defines = flat ? { TH_FLATN: '', TH_NIGHT_K: NIGHT_K.toFixed(4) } : { TH_NIGHT_K: '0.0' };
   mat.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, uniforms);
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', '#include <common>\nattribute vec4 aMas;\nvarying vec4 vMas;\nvarying vec3 vMW;\nvarying vec3 vMN;')
       .replace('#include <begin_vertex>', '#include <begin_vertex>\nvMas = aMas;\nvMW = (modelMatrix * vec4(transformed, 1.0)).xyz;\nvMN = normalize(mat3(modelMatrix) * objectNormal);');
     shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', '#include <common>\n' + MASONRY_PARS)
+      .replace('#include <common>', '#include <common>\n' + LAMP_GLSL + MASONRY_PARS)
+      .replace('#include <lights_fragment_end>', '#include <lights_fragment_end>\nreflectedLight.indirectDiffuse += diffuseColor.rgb * (thLampLight(vMW, mN) + mNightLift());')
       .replace('#include <color_fragment>', '#include <color_fragment>\ndiffuseColor.rgb = masonryColor(diffuseColor.rgb);')
       .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = mRough;')
+      .replace('#include <normal_fragment_maps>', '#include <normal_fragment_maps>\nif (mNb.x != 0.0 || mNb.y != 0.0 || mNb.z != 0.0) normal = normalize((viewMatrix * vec4(mNb, 0.0)).xyz);')
       .replace(
         '#include <emissivemap_fragment>',
-        '#include <emissivemap_fragment>\nif (vMas.x > 4.5) totalEmissiveRadiance += diffuseColor.rgb * (1.1 + 2.6 * uLights);',
+        '#include <emissivemap_fragment>\nif (vMas.x > 4.5 && vMas.x < 5.5) totalEmissiveRadiance += diffuseColor.rgb * (1.1 + 2.6 * uLights);',
       );
   };
-  mat.customProgramCacheKey = () => 'th-masonry-v1';
+  mat.customProgramCacheKey = () => (flat ? 'th-masonry-v7f' : 'th-masonry-v6');
   return mat;
 }
 
@@ -190,6 +348,8 @@ interface WallSpec {
   pillarA?: boolean;
   pillarB?: boolean;
   course: number;
+  /** openings through the whole wall (arc-length ranges): a slipway (core/places.ts) */
+  holes?: [number, number][];
 }
 
 function buildWall(b: GeoBuilder, w: WallSpec): void {
@@ -207,19 +367,26 @@ function buildWall(b: GeoBuilder, w: WallSpec): void {
     s += Math.abs(t1 - t0) > 0.05 ? 0.5 : 2;
   }
   st.push(L);
+  const holes = w.holes ?? [];
+  for (const [h0, h1] of holes) st.push(h0, h1);
+  st.sort((a, c) => a - c);
+  const inHole = (s0: number, s1: number) => holes.some(([h0, h1]) => (s0 + s1) / 2 > h0 && (s0 + s1) / 2 < h1);
   const back = -thick;
   // water face (ashlar)
   b.color(w.stone).set('aMas', KIND.ashlar, w.course, tx, tz);
   for (let i = 0; i < st.length - 1; i++) {
     const s0 = st[i],
       s1 = st[i + 1];
+    if (s1 - s0 < 1e-4 || inHole(s0, s1)) continue;
     b.quadFacing(P(s0, 0, w.bottom(s0)), P(s1, 0, w.bottom(s1)), P(s1, 0, w.top(s1)), P(s0, 0, w.top(s0)), nx, 0, nz);
   }
   // end cross-sections (at slab edges / free ends)
-  for (const [s, sign] of [
+  const ends: [number, number][] = [
     [0, -1],
     [L, 1],
-  ] as [number, number][]) {
+  ];
+  for (const [h0, h1] of holes) ends.push([h0, 1], [h1, -1]);
+  for (const [s, sign] of ends) {
     const t = w.top(s),
       bt = w.bottom(s);
     b.quadFacing(P(s, 0, bt), P(s, back, bt), P(s, back, t), P(s, 0, t), tx * sign, 0, tz * sign);
@@ -231,6 +398,7 @@ function buildWall(b: GeoBuilder, w: WallSpec): void {
   for (let i = 0; i < st.length - 1; i++) {
     const s0 = st[i],
       s1 = st[i + 1];
+    if (s1 - s0 < 1e-4 || inHole(s0, s1)) continue;
     const y0 = w.top(s0),
       y1 = w.top(s1);
     const h = w.capH;
@@ -239,10 +407,7 @@ function buildWall(b: GeoBuilder, w: WallSpec): void {
     b.quadFacing(P(s0, c1, y0), P(s1, c1, y1), P(s1, c1, y1 + h), P(s0, c1, y0 + h), -nx, 0, -nz);
     b.quadFacing(P(s0, 0, y0), P(s1, 0, y1), P(s1, c0, y1), P(s0, c0, y0), 0, -1, 0);
   }
-  for (const [s, sign] of [
-    [0, -1],
-    [L, 1],
-  ] as [number, number][]) {
+  for (const [s, sign] of ends) {
     const y = w.top(s);
     b.quadFacing(P(s, c0, y), P(s, c1, y), P(s, c1, y + w.capH), P(s, c0, y + w.capH), tx * sign, 0, tz * sign);
   }
@@ -300,6 +465,69 @@ function buildWall(b: GeoBuilder, w: WallSpec): void {
   };
   if (w.pillarA) pillar(0);
   if (w.pillarB) pillar(L);
+}
+
+/**
+ * Box hunt (?noquaywall): furniture on the water faces of the quay walls — iron mooring rings hanging from
+ * staple plates under the coping, drain outfalls with a rust stain down to the water, and (sea wall) timber
+ * fender baulks — kept clear of the ladders, footbridges and the jetty.
+ */
+function wallFurniture(b: GeoBuilder, info: WallInfo, top: (s: number) => number, avoid: number[], sea: boolean): void {
+  const { ax, az, bx, bz, nx, nz } = info;
+  const L = Math.hypot(bx - ax, bz - az);
+  const tx = (bx - ax) / L,
+    tz = (bz - az) / L;
+  const P = (s: number, off: number, y: number): V3 => [ax + tx * s + nx * off, y, az + tz * s + nz * off];
+  const yaw = Math.atan2(nx, nz);
+  const clear = (s: number, r: number) => s > r && s < L - r && avoid.every((a) => Math.abs(a - s) > r);
+  const m = new THREE.Matrix4();
+  const ring = new THREE.TorusGeometry(0.11, 0.018, 4, 10);
+  const pipe = new THREE.CylinderGeometry(0.13, 0.13, 0.14, 8, 1, true);
+  pipe.rotateX(Math.PI / 2);
+  const bore = new THREE.CircleGeometry(0.115, 8);
+  b.set('aMas', KIND.plain, 0, tx, tz);
+  // mooring rings every 12 m
+  for (let s = 6; s < L; s += 12) {
+    if (!clear(s, 1.8)) continue;
+    const y = top(s);
+    const [px, , pz] = P(s, 0.02, 0);
+    b.color('#2b2724');
+    b.box(px, y - 0.28, pz, 0.07, 0.07, 0.02, yaw);
+    const [rx, , rz] = P(s, 0.05, 0);
+    m.makeRotationY(yaw).setPosition(rx, y - 0.42, rz);
+    b.color('#3a302a');
+    b.geometry(ring, m);
+  }
+  // drain outfalls every 30 m with a stain down the face
+  for (let s = 15; s < L; s += 30) {
+    if (!clear(s, 2.5)) continue;
+    const y = WATER_LEVEL_M + 0.75;
+    const [px, , pz] = P(s, 0.06, 0);
+    m.makeRotationY(yaw).setPosition(px, y, pz);
+    b.color('#3d3630');
+    b.geometry(pipe, m);
+    const [qx, , qz] = P(s, 0.1, 0);
+    m.makeRotationY(yaw).setPosition(qx, y, qz);
+    b.color('#0e0d0c');
+    b.geometry(bore, m);
+    b.color('#4a4034');
+    b.quadFacing(P(s - 0.16, 0.012, WATER_LEVEL_M - 0.1), P(s + 0.16, 0.012, WATER_LEVEL_M - 0.1), P(s + 0.11, 0.012, y - 0.05), P(s - 0.11, 0.012, y - 0.05), nx, 0, nz);
+  }
+  // sea wall: timber fender baulks every 7 m from below the water to the coping
+  if (sea)
+    for (let s = 3.5; s < L; s += 7) {
+      if (!clear(s, 1.2)) continue;
+      const y1 = top(s) - 0.05,
+        y0 = WATER_LEVEL_M - 0.8;
+      const [px, , pz] = P(s, 0.1, 0);
+      b.color('#4a3b2c');
+      b.box(px, (y0 + y1) / 2, pz, 0.12, (y1 - y0) / 2, 0.1, yaw);
+      b.color('#2b2724');
+      for (const y of [y1 - 0.35, WATER_LEVEL_M + 0.5]) b.box(px, y, pz, 0.135, 0.03, 0.115, yaw);
+    }
+  ring.dispose();
+  pipe.dispose();
+  bore.dispose();
 }
 
 // ───────────────────────────────────────────────────────── portals ──
@@ -601,6 +829,9 @@ const _e = new THREE.Euler();
 const _s = new THREE.Vector3();
 const _p = new THREE.Vector3();
 
+/** set by createMasonry: masonry material is flat-shaded (new look) */
+let flatMasonry = false;
+
 function rockGeometry(rng: Rng, detail: number): THREE.BufferGeometry {
   let g: THREE.BufferGeometry = new THREE.IcosahedronGeometry(1, detail);
   g.deleteAttribute('uv');
@@ -619,24 +850,35 @@ function rockGeometry(rng: Rng, detail: number): THREE.BufferGeometry {
     _p.multiplyScalar(r);
     pos.setXYZ(i, _p.x, _p.y, _p.z);
   }
-  if (facet) {
+  if (facet && !flatMasonry) {
     // chiselled facets on the smaller stones
     const ng = g.toNonIndexed();
     g.dispose();
     ng.computeVertexNormals();
     return ng;
   }
+  // (flat-shaded masonry: the facets come from the fragment derivatives, vertices stay shared)
   g.computeVertexNormals();
   return g;
 }
 
-function addRock(b: GeoBuilder, rng: Rng, model: TerrainModel, x: number, z: number, size: number, embed: number, out: { x: number; z: number; r: number }[], yOverride?: number, tint = 1): void {
+interface RockStyle {
+  /** masonry kind for the shader (KIND.cliff: strata lines + mossy tops like the cliffs) */
+  kind?: number;
+  /** always chiselled facets (no smooth detail-2 blobs) */
+  facet?: boolean;
+  /** vertical squash (slabby stones) */
+  squash?: number;
+}
+
+function addRock(b: GeoBuilder, rng: Rng, model: TerrainModel, x: number, z: number, size: number, embed: number, out: { x: number; z: number; r: number }[], yOverride?: number, tint = 1, style: RockStyle = {}): void {
   // never poke out through the cut faces of the slab
   const m = size * 1.25 + 0.3;
   x = Math.min(SLAB.x1 - m, Math.max(SLAB.x0 + m, x));
   z = Math.min(SLAB.z1 - m, Math.max(SLAB.z0 + m, z));
-  const g = rockGeometry(rng, size > 1.6 ? 2 : 1);
-  const sy = size * (0.55 + rng.next() * 0.3);
+  // (new look: small stones are 20-facet chunks — scree is numerous, keep it cheap)
+  const g = rockGeometry(rng, size > 1.6 && !style.facet ? 2 : flatMasonry && size < 0.75 ? 0 : 1);
+  const sy = size * (0.55 + rng.next() * 0.3) * (style.squash ?? 1);
   _s.set(size * (0.85 + rng.next() * 0.35), sy, size * (0.85 + rng.next() * 0.35));
   _e.set((rng.next() - 0.5) * 0.35, rng.next() * Math.PI * 2, (rng.next() - 0.5) * 0.35);
   _q.setFromEuler(_e);
@@ -644,7 +886,7 @@ function addRock(b: GeoBuilder, rng: Rng, model: TerrainModel, x: number, z: num
   _p.set(x, y + sy * (1 - 2 * embed) * 0.9, z);
   _m.compose(_p, _q, _s);
   const c = ROCK_COLS[Math.floor(rng.next() * ROCK_COLS.length)].clone().multiplyScalar((0.9 + rng.next() * 0.18) * tint);
-  b.color(c).set('aMas', KIND.rock, 0, 1, 0);
+  b.color(c).set('aMas', style.kind ?? KIND.rock, style.kind === KIND.cliff ? 0.31 : 0, 1, 0);
   b.geometry(g, _m);
   g.dispose();
   out.push({ x, z, r: size * 1.05 });
@@ -652,6 +894,9 @@ function addRock(b: GeoBuilder, rng: Rng, model: TerrainModel, x: number, z: num
 
 function placeRocks(b: GeoBuilder, ctx: CityContext, model: TerrainModel, rng: Rng): { x: number; z: number; r: number }[] {
   const out: { x: number; z: number; r: number }[] = [];
+  const prm = ctx.debug.params;
+  const tors = !prm.has('legacyterrain') && !prm.has('nocliffs');
+  const torRng = ctx.rng('terrain-tors');
   const turbines = ctx.plan.features.filter((f) => f.kind === 'windturbine');
   const nearPortal = (x: number, z: number, m: number) =>
     model.portals.some((p) => {
@@ -691,7 +936,26 @@ function placeRocks(b: GeoBuilder, ctx: CityContext, model: TerrainModel, rng: R
         d = k === 0 ? 0 : base * (0.9 + rng.next() * 1.2);
       const rx = x + Math.cos(a) * d,
         rz = z + Math.sin(a) * d;
-      addRock(b, rng, model, rx, rz, base * (k === 0 ? 1 : 0.45 + rng.next() * 0.5), 0.52, out);
+      const sz = base * (k === 0 ? 1 : 0.45 + rng.next() * 0.5);
+      if (!tors) {
+        addRock(b, rng, model, rx, rz, sz, 0.52, out);
+        continue;
+      }
+      // the same stones as chiselled, slabby tors in the cliff rock's language, the big one stacked
+      addRock(b, rng, model, rx, rz, sz, 0.5, out, undefined, 1, { kind: KIND.cliff, facet: true, squash: 0.78 });
+      if (k === 0) {
+        const ground = model.height(rx, rz);
+        let y = ground + sz * 0.42;
+        let s2 = sz * 0.72;
+        const nStack = 1 + Math.floor(torRng.next() * 2);
+        for (let j = 0; j < nStack; j++) {
+          const ox = (torRng.next() - 0.5) * s2 * 0.5,
+            oz = (torRng.next() - 0.5) * s2 * 0.5;
+          addRock(b, torRng, model, rx + ox, rz + oz, s2, 0.5, [], y + s2 * 0.25, 1.02, { kind: KIND.cliff, facet: true, squash: 0.62 });
+          y += s2 * 0.42;
+          s2 *= 0.7;
+        }
+      }
     }
   }
   // spurs
@@ -759,6 +1023,7 @@ function placeRocks(b: GeoBuilder, ctx: CityContext, model: TerrainModel, rng: R
 export function createMasonry(ctx: CityContext, model: TerrainModel): MasonryResult {
   const b = new GeoBuilder({ aMas: 4 });
   const veils = new GeoBuilder({ aAlpha: 1 });
+  flatMasonry = !ctx.debug.params.has('legacyterrain');
   const rng = ctx.rng('terrain-masonry');
   const plan = ctx.plan;
   const bed = (x: number, z: number) => model.height(x, z) - 0.35;
@@ -794,7 +1059,8 @@ export function createMasonry(ctx: CityContext, model: TerrainModel): MasonryRes
     capOut: 0.12,
     top: () => 0,
     bottom: (s) => bed(SLAB.x0 + s, RIVER.z1 - 0.4),
-    parapet: { h: 0.42, w: 0.34, gaps: sGaps },
+    parapet: { h: 0.42, w: 0.34, gaps: [...sGaps, ...(plan.places?.southParapetGaps ?? []).map(([a, c]) => [a - SLAB.x0, c - SLAB.x0] as [number, number])] },
+    holes: (plan.places?.southWallHoles ?? []).map(([a, c]) => [a - SLAB.x0, c - SLAB.x0] as [number, number]),
     pillarB: true,
     course: 0.52,
   });
@@ -813,9 +1079,22 @@ export function createMasonry(ctx: CityContext, model: TerrainModel): MasonryRes
 
   // ladders (positions shared with the railings module)
   const ladders: LadderSpot[] = [];
-  for (const x of [-144, -48, 48, 104]) ladders.push({ x, z: RIVER.z0, nx: 0, nz: 1, top: SIDEWALK_Y + 0.2 });
-  for (const x of [-168, -112, -20, 62]) ladders.push({ x, z: RIVER.z1, nx: 0, nz: -1, top: 0.2 });
-  for (const z of [-131, -97, -58, -31, -2]) ladders.push({ x: QUAY_X, z, nx: 1, nz: 0, top: 0.12 });
+  for (const x of [-144, -48, 48, 104]) if (!plan.places?.dropLadder(x, RIVER.z0)) ladders.push({ x, z: RIVER.z0, nx: 0, nz: 1, top: SIDEWALK_Y + 0.2 });
+  for (const x of [-168, -112, -20, 62]) if (!plan.places?.dropLadder(x, RIVER.z1)) ladders.push({ x, z: RIVER.z1, nx: 0, nz: -1, top: 0.2 });
+  for (const z of [-131, -97, -58, -31, -2]) if (!plan.places?.dropLadder(QUAY_X, z)) ladders.push({ x: QUAY_X, z, nx: 1, nz: 0, top: 0.12 });
+  if (boxHunt(ctx, 'quaywall')) {
+    const gx = gaps.map((g) => g.x - SLAB.x0);
+    const lad = (z: number) => ladders.filter((l) => l.z === z).map((l) => l.x - SLAB.x0);
+    // (places-between: no rings / outfalls / fenders over the water stairs and the slipway — span points every metre)
+    const span = (a: number, c: number) => Array.from({ length: Math.ceil(c - a) + 2 }, (_, i) => a - 0.5 + i);
+    const pl = plan.places;
+    const onRiver = (z: number) => (pl?.waterStairs ?? []).filter((w) => Math.abs(w.body.z0 - z) < 4 || Math.abs(w.body.z1 - z) < 4).flatMap((w) => span(w.body.x0 - SLAB.x0, w.body.x1 - SLAB.x0));
+    const onSea = (pl?.waterStairs ?? []).filter((w) => Math.abs(w.body.x0 - QUAY_X) < 4 || Math.abs(w.body.x1 - QUAY_X) < 4).flatMap((w) => span(w.body.z0 - SEA_WALL_Z0, w.body.z1 - SEA_WALL_Z0));
+    const holes = (pl?.southWallHoles ?? []).flatMap(([a, c]) => span(a - SLAB.x0, c - SLAB.x0));
+    wallFurniture(b, walls[0], () => SIDEWALK_Y, [...gx, ...lad(RIVER.z0), ...onRiver(RIVER.z0)], false);
+    wallFurniture(b, walls[1], () => 0, [...gx, ...lad(RIVER.z1), ...onRiver(RIVER.z1), ...holes], false);
+    wallFurniture(b, walls[2], (s) => Math.max(0, model.natural(QUAY_X - 0.9, SEA_WALL_Z0 + s) - 0.1), [...ladders.filter((l) => l.x === QUAY_X).map((l) => l.z - SEA_WALL_Z0), ...onSea], true);
+  }
 
   // portals
   const boreSamples: { x: number; z: number; roof: number }[] = [];
@@ -825,11 +1104,31 @@ export function createMasonry(ctx: CityContext, model: TerrainModel): MasonryRes
   // rocks
   const rocks = placeRocks(b, ctx, model, ctx.rng('terrain-rocks'));
 
-  // iron railings / ladders (their lamp globes are emissive masonry)
-  const railings = createRailings(ladders, gaps, b);
+  // stratified rock skin on the cliffs + scree stones at their feet
+  const prm = ctx.debug.params;
+  let cliffs: CliffResult | null = null;
+  if (!prm.has('legacyterrain') && !prm.has('nocliffs')) {
+    const srng = ctx.rng('terrain-scree');
+    const sink: { x: number; z: number; r: number }[] = [];
+    cliffs = buildCliffs(ctx, model, b, ctx.rng('terrain-cliffs'), (x, z, size, embed, y) => {
+      if (rocks.some((q) => Math.hypot(q.x - x, q.z - z) < q.r + size * 0.6)) return false;
+      const cut = plan.places?.cutting; // no scree in front of the cutting's retaining wall
+      if (cut && x > cut.x0 - 1.5 && x < cut.x1 + 1.5 && z > cut.z - cut.t - 3) return false;
+      addRock(b, srng, model, x, z, size, embed, sink, y, 0.92);
+      return true;
+    });
+    rocks.push(...cliffs.stones);
+  }
+
+  // places between buildings (core/places.ts): lower quay, old-town lane, terrace, gatehouse
+  buildPlacesStone(b, ctx, model, lights);
+
+  // iron railings / ladders (their lamp globes are emissive masonry); the places' stair landings are railing gaps
+  setRiverRailDetail(boxHunt(ctx, 'riverrail'));
+  const railings = createRailings(ladders, plan.places ? [...gaps, ...plan.places.railGaps] : gaps, b, (ib) => buildPlacesIron(ib, ctx), boxHunt(ctx, 'promlamp'));
 
   const geo = b.build(true);
-  const mesh = new THREE.Mesh(geo, masonryMaterial(ctx));
+  const mesh = new THREE.Mesh(geo, masonryMaterial(ctx, flatMasonry));
   mesh.name = 'terrain-masonry';
   mesh.castShadow = true;
   mesh.receiveShadow = true;
@@ -844,11 +1143,14 @@ export function createMasonry(ctx: CityContext, model: TerrainModel): MasonryRes
   vg.setAttribute('color', new THREE.BufferAttribute(rgba, 4));
   vg.deleteAttribute('aAlpha');
   const vmat = new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, depthWrite: false, side: THREE.DoubleSide });
+  // one pass for both sides: three otherwise draws a transparent double-sided material twice (back, then front),
+  // flipping .side + needsUpdate — the program re-derived twice per frame. Black layers blend the same in any order.
+  vmat.forceSinglePass = true;
   const vmesh = new THREE.Mesh(vg, vmat);
   vmesh.name = 'terrain-tunnel-veils';
   vmesh.renderOrder = 1;
   vmesh.matrixAutoUpdate = false;
   vmesh.updateMatrix();
 
-  return { mesh, veils: vmesh, rocks, ladders, walls, gaps, railings, lights, triangles: b.triangles + veils.triangles, boreSamples };
+  return { mesh, veils: vmesh, rocks, ladders, walls, gaps, railings, lights, triangles: b.triangles + veils.triangles, boreSamples, cliffs };
 }

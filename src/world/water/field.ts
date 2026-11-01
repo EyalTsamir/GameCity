@@ -86,7 +86,15 @@ function bake(model: TerrainModel): WaterField {
         } else {
           depth[k] = Math.max(depth[k], d);
           let r = 0;
-          if (z > RIVER.z0 - 3 && z < RIVER.z1 + 3) r = x < RIVER_WALL_END_X ? 0.5 : 0.5 * (1 - smoothstep(RIVER_WALL_END_X, 152, x));
+          const dz = Math.abs(z - (RIVER.z0 + RIVER.z1) / 2),
+            hz = (RIVER.z1 - RIVER.z0) / 2 + 3;
+          if (x < RIVER_WALL_END_X) r = dz < hz ? 0.5 : 0;
+          else {
+            // past the walls the river water spreads into the sea as a widening plume, soft on every side
+            // (a hard cut in z drew a straight dark band through the surf)
+            const t = x - RIVER_WALL_END_X;
+            r = 0.5 * (1 - smoothstep(RIVER_WALL_END_X, 152, x)) * (1 - smoothstep(hz - 1 + t * 0.2, hz + 2 + t * 0.8, dz));
+          }
           region[k] = r;
         }
       }

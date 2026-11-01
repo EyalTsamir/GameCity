@@ -2,15 +2,22 @@
 // Capture a matrix of views x times of day in ONE browser session (fast review sets).
 //
 //   node scripts/capture-set.mjs [--out shots/review] [--q "extra=query"] [--views a,b,c] [--hours 11,18,21.5]
-//                                [--width 1600 --height 900] [--settle 2500] [--warmup 6000]
+//                                [--width 1600 --height 900] [--settle 2500] [--warmup 6000] [--hideui 1]
 //
 // Views: POI ids from plan.pois, or "name=x,y,z,distance,yaw,pitch" entries separated by ';'.
 // Writes <out>/<view>_<hours>.png and <out>/report.json (stats per capture + console errors).
 
-import { chromium } from 'playwright-core';
+import { launchBrowser, acquireLock, releaseLock } from './browser.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+// Headless Chromium only renders while a screenshot is taken (frames() stays constant through waitForTimeout), so a
+// capture right after a camera jump is the FIRST frame — anything selected a frame late (near herds, near cells, LOD)
+// looks wrong. Pump a few throw-away frames before every real capture.
+async function pumpFrames(page, n = 4) {
+  for (let i = 0; i < n; i++) await page.screenshot({ type: 'jpeg', quality: 1 }).catch(() => {});
+}
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, '..');
@@ -29,7 +36,7 @@ let url = args.url ?? 'http://127.0.0.1:5173/';
 if (args.q) url += (url.includes('?') ? '&' : '?') + args.q;
 const hoursList = (args.hours ?? '11,18.2,21.5').split(',').map(Number);
 const viewSpecs = (args.views ?? 'overview,downtown,oldtown,harbor,beach,park,station,riverside,stadium,westbrook,industry')
-  .split(/[;,](?=[a-z])/i)
+  .split(/;|,(?=[a-z])/i)
   .map((s) => s.trim())
   .filter(Boolean)
   .map((s) => {
@@ -38,36 +45,10 @@ const viewSpecs = (args.views ?? 'overview,downtown,oldtown,harbor,beach,park,st
     return { name: s.slice(0, eq), spec: s.slice(eq + 1) };
   });
 
-const lockDir = path.join(here, '.shotlock');
-async function acquire() {
-  const t0 = Date.now();
-  for (;;) {
-    try {
-      fs.mkdirSync(lockDir);
-      return;
-    } catch {
-      try {
-        if (Date.now() - fs.statSync(lockDir).mtimeMs > 600_000) fs.rmSync(lockDir, { recursive: true, force: true });
-      } catch {
-        /* */
-      }
-      if (Date.now() - t0 > 900_000) throw new Error('lock timeout');
-      await new Promise((r) => setTimeout(r, 500));
-    }
-  }
-}
-const release = () => {
-  try {
-    fs.rmSync(lockDir, { recursive: true, force: true });
-  } catch {
-    /* */
-  }
-};
-process.on('exit', release);
-
 const report = { url, consoleErrors: [], consoleWarnings: [], pageErrors: [], captures: [] };
-await acquire();
-const browser = await chromium.launch({ channel: 'chrome', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist', '--disable-background-timer-throttling', '--disable-renderer-backgrounding'] });
+await acquireLock();
+const { browser, software } = await launchBrowser();
+report.softwareGL = software;
 try {
   const page = await browser.newPage({ viewport: { width, height }, deviceScaleFactor: 1 });
   // Freeze the page against other agents' file edits: swallow Vite's HMR websocket so no mid-run reloads happen.
@@ -77,9 +58,10 @@ try {
     else if (m.type() === 'warning') report.consoleWarnings.push(m.text());
   });
   page.on('pageerror', (e) => report.pageErrors.push(String(e?.stack ?? e)));
-  await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 120000 });
-  await page.waitForFunction(() => window.__city && window.__city.ready && window.__city.frames() > 3, null, { timeout: 120000, polling: 250 });
+  await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 300000 });
+  await page.waitForFunction(() => window.__city && window.__city.ready && window.__city.frames() > 3, null, { timeout: 300000, polling: 250 });
   report.failedModules = await page.evaluate(() => window.__city.failed);
+  if (args.hideui !== undefined) await page.addStyleTag({ content: '#ui{display:none!important}' });
   await page.waitForTimeout(warmup);
   for (const h of hoursList) {
     for (const v of viewSpecs) {
@@ -95,8 +77,9 @@ try {
         [v.spec, h],
       );
       await page.waitForTimeout(settle);
+      await pumpFrames(page);
       const file = path.join(outDir, `${v.name}_${String(h).replace('.', 'h')}.png`);
-      await page.screenshot({ path: file });
+      await page.screenshot({ path: file, timeout: 240000 });
       const stats = await page.evaluate(() => window.__city.stats());
       report.captures.push({ view: v.name, hours: h, file: path.relative(root, file), fps: stats.fps, drawCalls: stats.drawCalls, triangles: stats.triangles });
     }
@@ -108,7 +91,7 @@ try {
   report.harnessError = String(e?.stack ?? e);
 } finally {
   await browser.close().catch(() => {});
-  release();
+  releaseLock();
 }
 fs.writeFileSync(path.join(outDir, 'report.json'), JSON.stringify(report, null, 2));
 console.log(JSON.stringify({ ...report, captures: report.captures.map((c) => `${c.view}@${c.hours}: ${c.fps}fps ${c.drawCalls}dc ${Math.round(c.triangles / 1000)}k`) }, null, 2));

@@ -21,7 +21,7 @@ export const XING_RAMP = 10.5;
 /** rail head → sleeper top */
 export const RAIL_H = 0.1;
 /** ballast shoulder top below the rail head */
-export const BALLAST_DROP = 0.15;
+export const BALLAST_DROP = 0.125; // ballast filled almost to the sleeper tops (sleepers 2.5 cm proud)
 /** contact wire height above the rail head */
 export const WIRE_H = 5.05;
 /** distance from track centre line to the train's body side */
