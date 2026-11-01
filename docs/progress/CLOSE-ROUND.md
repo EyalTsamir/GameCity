@@ -31,7 +31,8 @@ Target: a steady 30 fps on the Adreno X1-45 at 1920×1025 on high. Baking's log 
 - Every feature has a master switch in your own `src/core/close<name>.ts` (style of `src/core/nature.ts`) and a quality tier.
 
 Baking is merged (a81efd9); read `docs/progress/baking.md`, "Rules for anyone working after this". In short:
-- **Run `npm run bake` in your worktree after `npm ci` and before any perf measurement**, and again after changing a shader or geometry a bake depends on. A missing or stale bake is silent and costs up to 7 ms.
+- **Run `npm run bake` in your worktree after `npm ci` and before any perf measurement**, and again after changing a shader or geometry a bake depends on. A missing or stale bake is silent and costs up to 7 ms. Use your worktree's own `npm run bake`, never the main checkout's script: `scripts/bake.mjs` writes next to itself.
+- A switch that changes a shader chunk the facade bake depends on can lose the bake and read as +7 ms at far views (`?noclosel` did after stage 2). If your switch shows that, the switch is not a measure: compare against a copy of your build from before the feature.
 - A new term that changes with the hour or the camera in `bhWall` must also go into `FAR_FRAG_MAIN` in `src/world/buildings/farFacade.ts`, or it stops at the hand-over at about 100 m.
 - Frames at noon after the merge: overview 32.4, downtown 30.5, street 35.7, market 34.0 ms. **Baking gained nothing at street and market, where walls stand 15–25 m away (5–6 ms there), and these are the views this round cares about most.** Near-camera savings are as welcome as new detail: a session that finds one should take it and report it.
 - Don't rely on `?pvs`: it is off because of GPU context losses.

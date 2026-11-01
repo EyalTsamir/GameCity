@@ -3,6 +3,20 @@
 Read this first when resuming after an interruption (usage limits have cut runs before).
 Per-module logs live next to this file: `docs/progress/<module>.md`.
 
+## Close-up stage 2 merged (2026-11-01) — see close-people.md, close-materials.md, close-light.md, close-text.md
+Merged at a499c28, no conflicts: figures up close (`?noclosepeople`), surfaces from one metre (`?noclosemat`), real street in shop glass, door and car-park lamps, contact shadows, clean shadow edges (`?noclosel`), readable lettering across the city (`?nolettering`).
+Checks on the merge, behind `scripts/power-guard.mjs`: typecheck + build OK (4.67 MB + bake); overview at speed 4 invariants `{}`, validate `[]`, console clean; ui-test 73/74, `kinds` passes alone; hitch 0 mid-run programs, 0 freezes, max 66.7 ms; walkhitch 85 m at 38.9 ms mean, p99 50 ms, 0 freezes, near builds at most 1.9 ms a frame, 28.8 MB/s allocated (not compared with the head before).
+Cost, same session, interleaved, 2 + 2 runs, production builds with their own bake, 1920×1025, high, ms per frame, 674f661 → merged:
+| hour | overview | downtown | street | market |
+|---|---|---|---|---|
+| 12 | 32.4 → 32.5 | 31.2 → 31.4 | 35.7 → 37.4 | 35.1 → 35.8 |
+| 18.2 | 31.8 → 32.3 | 30.2 → 30.5 | 35.3 → 35.1 | 33.0 → 32.8 |
+| 21.5 | 33.7 → 33.8 | 32.8 → 33.0 | 34.4 → 35.7 | 37.6 → 37.4 |
+Mean +0.36 ms. Draw calls at street 253 → 326. Decision: nothing cut. The four sessions' summed budget is +0.8 at far views and +2.8 at street and market, and the merge stays inside both. Street at noon is 26.7 fps: the user chose detail over 30 fps at street level for now (2026-11-01).
+**`?noclosel` is no measure of cost at far views:** in this production build it reads +7 ms at overview and downtown, probably because its changed lamp and shadow shader chunks fail the facade bake's fingerprint. Close-light measured +0.31 and +0.35 there on its own dev server. Compare frozen builds instead (scratchpad `m10.sh` pattern: copy `dist/` before rebuilding, serve both).
+**`scripts/bake.mjs` writes next to the script, not to the current folder:** running the main checkout's copy with `--url` overwrites the main checkout's `public/bake` and leaves the worktree's bake stale. Use `npm run bake` inside the worktree. Rebake in main before each merge's build.
+Seen by eye at 3 m (noon, 21.5), left for later stages: unlit door lamps by day read as flat beige rectangles; shop interiors are one repeated shelf picture on every wall; parked cars show a lamp-like glint at night. Each session's Left list is in its log.
+
 ## Close foundation (2026-10-31, stage 1 of the close-up round) — see docs/progress/close-foundation.md
 The tools the later sessions use: the near-detail bubble (`src/core/nearDetail.ts`), the test set (`scripts/closeset.mjs`), `scripts/walkhitch.mjs`. Zoom: a real lens for the walker (wheel, + −) and in photo mode, levels of detail by plain distance now follow it (`nearLens.zoom`). Close focus fixed: the autofocus could not focus nearer than 2.5 m; default aperture f/1.6 → f/2.8. Audit of what reads as fake up close, ranked by area, in that log. First layers: grit along kerbs and walls. Bubble cost not distinguishable from zero at the four views.
 
