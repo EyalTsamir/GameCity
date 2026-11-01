@@ -919,7 +919,7 @@ export function genIndustrial(g: Gen): void {
           const gg = makeGrid(a, b, 0, 3.6, 1, { spacing: (b - a) / n0, cols: n0, winW: Math.min(2.0, (b - a) / n0 - 0.6), winH: 1.7, sill: 0.9, margin: 0.4 });
           wallGrid(s, sg, a, b, 0, 3.6, gg, lookO);
         }, (a, b, y0) => wallPlain(s, sg, a, b, y0, 3.6, plainO));
-        doorNiche(g, sg, du, { w: 1.9, h: 2.6, depth: 0.25, wallColor: offC, frameColor: col('#3a3f44'), doorColor: col('#3a3f44'), glass: true, profile: PROF.ALWAYS, seed: g.seed + 5, frameOut: 0 });
+        doorNiche(g, sg, du, { w: 1.9, h: 2.6, depth: 0.06, wallColor: offC, frameColor: col('#3a3f44'), doorColor: col('#3a3f44'), glass: true, profile: PROF.ALWAYS, seed: g.seed + 5, frameOut: 0 });
         setCol(t, col('#4a5056'));
         sideBox(t, sg, du - 1.6, du + 1.6, 0, 1.05, 2.95, 3.1, true);
         lightBox(g, sx(sg, du, 0.6) - 0.15, 2.88, sz(sg, du, 0.6) - 0.15, sx(sg, du, 0.6) + 0.15, 2.95, sz(sg, du, 0.6) + 0.15, '#fff1d6', LIGHT_MODE.STEADY, 3);

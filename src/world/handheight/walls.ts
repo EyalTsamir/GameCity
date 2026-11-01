@@ -374,3 +374,60 @@ export function brickJoints(s: HandSink, f: { w: number; h: number; y: number; o
     }
   }
 }
+
+/** the sheets of a smooth cladding: the joints between them, as a ratio on the wall */
+export function panelJoints(s: HandSink, L: number, top: number): void {
+  const pw = L / Math.max(1, Math.round(L / 1.2)),
+    ph = 2.4;
+  s.ink(0x77767a);
+  for (let u = pw; u < L - 0.1; u += pw) s.plate(u - 0.005, u + 0.005, 0, top, 0.0012);
+  for (let y = ph; y < top; y += ph) s.plate(0, L, y - 0.005, y + 0.005, 0.0012);
+}
+
+/** and the fixings at their corners, each a washer and a head */
+export function panelBolts(s: HandSink, L: number, top: number, c: number): void {
+  const pw = L / Math.max(1, Math.round(L / 1.2)),
+    ph = 2.4;
+  for (let u = 0; u < L + 0.01; u += pw) {
+    for (let y = 0; y < top + 0.01; y += ph) {
+      for (const su of [-0.04, 0.04]) {
+        for (const sy of [-0.04, 0.04]) {
+          const a = u + su,
+            b = y + sy;
+          if (a < 0.02 || a > L - 0.02 || b < 0.08 || b > top) continue;
+          s.ink(c, 1.5).rough(0.42).disc(a, b, 0, 0.0014, 0.0085, 8, 0.2);
+          s.ink(c, 0.86).rough(0.42).disc(a, b, 0.0014, 0.0042, 0.0052, 6, 0.3);
+        }
+      }
+    }
+  }
+}
+
+/** a roller door's controls on the wall beside it: up, stop, down, and the conduit to the motor */
+export function rollerControl(s: HandSink, u: number, top: number, seed: number): void {
+  const y = 1.32;
+  s.ink(0xb6b8b4).rough(0.46).box(u - 0.055, u + 0.055, y - 0.09, y + 0.09, 0, 0.05, 0.006);
+  s.ink(0x2f7a43).rough(0.4).disc(u, y + 0.05, 0.05, 0.056, 0.016, 10, 0.3);
+  s.ink(0xa82119).rough(0.4).disc(u, y, 0.05, 0.056, 0.018, 10, 0.3);
+  s.ink(0x1b1c1d).rough(0.4).disc(u, y - 0.05, 0.05, 0.056, 0.016, 10, 0.3);
+  s.ink(0x8f908d).rough(0.5).tube([u, y + 0.09, 0.016, u, top, 0.016], 0.009, 6);
+  for (let c = y + 0.4; c < top - 0.1; c += 0.65) s.ink(0x6d6e6c).metal(0.46).box(u - 0.016, u + 0.016, c - 0.008, c + 0.008, 0, 0.0185, 0.002);
+  if (seed % 2 === 0) s.ink(0xdcd9ce).rough(0.45).plate(u - 0.04, u + 0.04, y - 0.085, y - 0.074, 0.0502);
+}
+
+/** a fire point's board: its two extinguishers on their hooks, each with a hose, a head and a gauge */
+export function firePoint(s: HandSink, f: { w: number; y: number; o: number; color: number }): void {
+  for (const [c, band] of [[f.w * 0.27, 0xb3261f], [f.w * 0.73, 0x17181a]] as const) {
+    const o = f.o + 0.062,
+      y0 = f.y + 0.02,
+      y1 = f.y + 0.3;
+    s.ink(0x8d8f90).metal(0.42).box(c - 0.02, c + 0.02, y1 + 0.03, y1 + 0.06, f.o, f.o + 0.02, 0.003);
+    s.ink(0xb72a20).rough(0.32).tube([c, y0, o, c, y1, o], 0.056, 14);
+    s.ball(c, y1, o, 0.056, 12, 0.5);
+    s.ink(band).rough(0.34).tube([c, y1 - 0.075, o, c, y1 - 0.03, o], 0.0572, 14);
+    s.ink(0xeee9dc).rough(0.5).plate(c - 0.028, c + 0.028, y0 + 0.07, y0 + 0.16, o + 0.0572);
+    s.ink(0x24262a).rough(0.45).tube([c, y1 + 0.028, o, c, y1 + 0.058, o], 0.016, 8);
+    s.ink(0x18191b).rough(0.5).tube([c - 0.012, y1 + 0.05, o, c - 0.05, y1 + 0.03, o + 0.012, c - 0.066, y1 - 0.08, o + 0.012, c - 0.066, y1 - 0.2, o + 0.012], 0.0065, 6);
+    s.ink(0xe9e6de).rough(0.25).disc(c + 0.014, y1 + 0.052, o + 0.012, o + 0.018, 0.009, 8, 0.2);
+  }
+}

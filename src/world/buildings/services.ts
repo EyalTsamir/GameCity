@@ -93,6 +93,8 @@ export function shedServices(g: Gen, sg: SideGeom, uA: number, uB: number, ops: 
         t.cylinder(sx(sg, u, 0.05), sz(sg, u, 0.05), 0.035, 0, 1.1, 8, false);
         setCol(t, col('#efe9dc'));
         sideBox(t, sg, u - 0.2, u + 0.2, 0.14, 0.143, 1.55, 1.66);
+        const hf = anchors.handFrame(sg, u - 0.28);
+        if (hf) anchors.handSpots.push({ ...hf, kind: 'firepoint', w: 0.56, h: 0.65, y: 1.1, o: 0.14, color: 0xb3261f, seed: g.seed });
         u += 1.4;
       } else if (!brick) {
         // gas / water riser: painted pipe from a meter box to the conduit level

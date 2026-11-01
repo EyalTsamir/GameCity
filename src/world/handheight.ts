@@ -345,10 +345,19 @@ export default function create(ctx: CityContext): CityModule {
         }
       }
       if (f.kind === 'rollup') {
+        const cu = f.w + 0.2;
+        const top = Math.min(f.h + 0.3, 5.5);
+        put(MID, cx, cz, (s) => W.rollerControl(on(s), cu, top, f.seed));
+        mark('roller', f, cu, 1.3);
         sign(f, f.w * 0.72, 1.7, f.o + 0.012, 0.4, 0.2, 'KEEP CLEAR|24 HR ACCESS', 1);
         mark('rollup', f, f.w * 0.7, 1.3);
       }
       if (f.kind === 'garage') mark('garage', f, f.w / 2, 1.1);
+      if (f.kind === 'firepoint') {
+        put(MID, cx, cz, (s) => W.firePoint(on(s), f));
+        sign(f, f.w / 2, 1.605, f.o + 0.0032, 0.36, 0.09, 'FIRE POINT', 0);
+        mark('firepoint', f, f.w / 2, 1.35);
+      }
       if (f.kind === 'brickface' && closeHand(ctx, 'handstains')) {
         put(STAIN, cx, cz, (s) => W.brickJoints(on(s), f));
         mark('brickface', f, f.w / 2, 1.2);
@@ -656,6 +665,19 @@ export default function create(ctx: CityContext): CityModule {
               if (stains) put(STAIN, x, z, (s) => onWall(w, s).ink(0xa59e90).streak(u - 0.06, u + 0.06, y - 0.42, y - 0.05, 0.0014));
             }
           }
+        }
+      }
+
+      // smooth cladding on what was built in sheets
+      if (office || works) {
+        for (const w of out) {
+          if ((w.pattern & 15) !== WALLPAT.SMOOTH || w.grid || w.L < 1.2) continue;
+          const top = Math.min(w.y1, 4.9);
+          const [x, z] = pos(w, w.L / 2);
+          const c = w.color;
+          if (stains) put(STAIN, x, z, (s) => W.panelJoints(onWall(w, s), w.L, top));
+          put(FINE, x, z, (s) => W.panelBolts(onWall(w, s), w.L, top, c));
+          mark('panels', w, w.L / 2, 1.3);
         }
       }
 

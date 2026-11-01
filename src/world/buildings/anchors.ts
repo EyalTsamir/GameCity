@@ -236,7 +236,7 @@ export interface HandStep {
 
 /** A fitting a generator made that wants its hardware close up. */
 export interface HandSpot extends HandFrame {
-  kind: 'garage' | 'rollup' | 'lobby' | 'meter' | 'cabinet' | 'shutter' | 'riser' | 'winder' | 'brickface';
+  kind: 'garage' | 'rollup' | 'lobby' | 'meter' | 'cabinet' | 'shutter' | 'riser' | 'winder' | 'brickface' | 'firepoint';
   /** u = 0 at its left edge */
   w: number;
   h: number;
