@@ -3,6 +3,19 @@
 Read this first when resuming after an interruption (usage limits have cut runs before).
 Per-module logs live next to this file: `docs/progress/<module>.md`.
 
+## Close-up stage 3 merged, not yet measured (2026-11-01) — see close-hand.md, close-windows.md, close-nature.md, close-vehicles.md, close-life.md
+Merged at 43c9e5d: things at hand height (`?nohand`), a generated room behind every window within 34 m (`?noclosewin`), trunks, plants and ground at ankle height (`?noclosenature`), road vehicles and trains up close (`?noclosevehicles`), birds, cats, dogs, gestures and street moments (`?nosmalllife`). Conflicts only in the module list of `src/main.ts`, all kept. Typecheck passes.
+**Nothing is checked on the merge yet:** no bake, build, ui-test, hitch or perf. The machine was off AC and in the user's hands, and it ran flat at about 12:00. The sessions' limit was moved from 14:00 to 11:45 for this, so hand's and nature's last commits and life's final state have no timing of their own.
+To do at the merge's measurement, on steady AC: `npm run bake`, build, the checks and the same-session A/B in the stage 2 entry below. Also:
+- Train door at 1 m on high: +3 to +5 ms, from a subagent's reading, not profiled. Kept for now, close trains are high only.
+- Window atlas about 86 MB on high: check memory.
+- The bigger facade program is compiled even with `?noclosewin`, so only a frozen build shows its full cost.
+- Two sessions each saw a first overview run report two pedestrians overlapping near a crosswalk (4.3 s in one), gone on rerun. Check whether it is new: neither touched the crowd code.
+- `kinds` fails in every full ui-test and passes alone. Nature's final code hasn't had it rerun.
+- The close dog model and fur have no switch or tier: close-life's log.
+- A 110–160 ms freeze on a camera change was seen by hand and vehicles, with and without their features: source unknown.
+Then, by the user's order: send the five sessions back for their Left lists, merge and measure again, and only then stage 4. Close-nature's cheapest large win for grass: half-resolution AO causes dark dots on stems (`?noao` removes them), in `postfx/aoApply.ts`.
+
 ## Close-up stage 2 merged (2026-11-01) — see close-people.md, close-materials.md, close-light.md, close-text.md
 Merged at a499c28, no conflicts: figures up close (`?noclosepeople`), surfaces from one metre (`?noclosemat`), real street in shop glass, door and car-park lamps, contact shadows, clean shadow edges (`?noclosel`), readable lettering across the city (`?nolettering`).
 Checks on the merge, behind `scripts/power-guard.mjs`: typecheck + build OK (4.67 MB + bake); overview at speed 4 invariants `{}`, validate `[]`, console clean; ui-test 73/74, `kinds` passes alone; hitch 0 mid-run programs, 0 freezes, max 66.7 ms; walkhitch 85 m at 38.9 ms mean, p99 50 ms, 0 freezes, near builds at most 1.9 ms a frame, 28.8 MB/s allocated (not compared with the head before).
