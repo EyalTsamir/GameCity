@@ -7,7 +7,7 @@ import * as THREE from 'three';
 import { box, merge, paint } from '../../core/gfx';
 import { patchLampMaterial } from '../../world/lamps/integrate';
 
-export type PartName = 'crate' | 'produce' | 'trolley' | 'ball' | 'blanket' | 'basket' | 'ladder' | 'cradle' | 'cable' | 'can' | 'vanrear' | 'confetti' | 'bouquet' | 'ribbon' | 'squeegee' | 'plate';
+export type PartName = 'crate' | 'produce' | 'trolley' | 'ball' | 'blanket' | 'basket' | 'ladder' | 'cradle' | 'cable' | 'can' | 'vanrear' | 'confetti' | 'bouquet' | 'ribbon' | 'squeegee' | 'plate' | 'broom' | 'cig';
 
 const cyl = (r0: number, r1: number, h: number, x: number, y: number, z: number, col: string, seg = 8, rotX = 0, rotZ = 0): THREE.BufferGeometry => {
   const g = new THREE.CylinderGeometry(r1, r0, h, seg);
@@ -167,6 +167,10 @@ const GEOS: Record<PartName, () => THREE.BufferGeometry> = {
   // bucket-less squeegee on a pole held out of the hands
   squeegee: () => merge([box(0.018, 1.4, 0.018, 0, 0, 0, '#c8ccd0'), box(0.34, 0.03, 0.03, 0, 1.4, 0, '#2a2c30')]),
   plate: () => merge([cyl(0.09, 0.11, 0.015, 0, 0.012, 0, '#f4f0e8', 10), sph(0.04, 0.02, 0.04, 0, '#c8884a', 0)]),
+  // a yard broom, 1.3 m, its bristles on the root
+  broom: () => merge([cyl(0.012, 0.012, 1.2, 0, 0.7, 0, '#b89a6a', 6), box(0.34, 0.04, 0.06, 0, 0.11, 0, '#7a5a38'), box(0.32, 0.11, 0.05, 0, 0, 0, '#c2a468')]),
+  // a cigarette: paper, filter
+  cig: () => merge([cyl(0.0035, 0.0035, 0.055, 0, 0.012, 0, '#eeeae2', 5), cyl(0.0036, 0.0036, 0.022, 0, -0.026, 0, '#c8965a', 5)]),
 };
 
 interface Part {
@@ -175,7 +179,7 @@ interface Part {
   n: number;
 }
 
-const CAPS: Record<PartName, number> = { crate: 120, produce: 120, trolley: 6, ball: 6, blanket: 6, basket: 6, ladder: 3, cradle: 3, cable: 12, can: 8, vanrear: 6, confetti: 420, bouquet: 3, ribbon: 2, squeegee: 6, plate: 12 };
+const CAPS: Record<PartName, number> = { crate: 120, produce: 120, trolley: 6, ball: 6, blanket: 6, basket: 6, ladder: 3, cradle: 3, cable: 12, can: 8, vanrear: 6, confetti: 420, bouquet: 3, ribbon: 2, squeegee: 6, plate: 12, broom: 3, cig: 3 };
 /** kinds worth a shadow: the small ones aren't */
 const SHADOW = new Set<PartName>(['crate', 'trolley', 'blanket', 'basket', 'ladder', 'cradle', 'vanrear', 'ball']);
 

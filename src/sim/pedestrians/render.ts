@@ -114,6 +114,10 @@ const MI = new Float64Array(7);
 /** how far behind a sitter the parked pram stands (m) */
 const PRAM_BACK = 0.72;
 /** m ← T(x, y, z) · Ry(yaw) · S(sx, sy, sz) from MI (what compose(pos, quatY(yaw), scl) gives) */
+/** dogs nearer than this use the finer model (m); more than this many at once fall back to the plain one */
+const DOG_CLOSE_DIST = 14;
+const DOG_CLOSE_CAP = 6;
+
 function yawMatrix(m: THREE.Matrix4): void {
   const e = m.elements;
   const c = Math.cos(MI[3]),
@@ -344,6 +348,13 @@ export class CrowdRenderer {
   xfade = true;
   readonly pram: THREE.InstancedMesh;
   readonly dog: THREE.InstancedMesh;
+  /** the dogs near the camera (a finer model, same program) */
+  readonly dogClose: THREE.InstancedMesh;
+  private dogHead: THREE.InstancedBufferAttribute;
+  private dcA: THREE.InstancedBufferAttribute;
+  private dcCol: THREE.InstancedBufferAttribute;
+  private dcHand: THREE.InstancedBufferAttribute;
+  private dcHead: THREE.InstancedBufferAttribute;
   readonly blob: THREE.InstancedMesh;
   /** cups, plates and glasses on the café tables in front of seated patrons */
   readonly tableware = new Tableware(256);
@@ -451,6 +462,15 @@ export class CrowdRenderer {
     this.dogA = makeAttr(dg, 'iDog', new Float32Array(dcap * 4), 4);
     this.dogCol = makeAttr(dg, 'iDogCol', new Float32Array(dcap * 4), 4);
     this.dogHand = makeAttr(dg, 'iHand', new Float32Array(dcap * 4), 4);
+    this.dogHead = makeAttr(dg, 'iDogHead', new Float32Array(dcap * 4), 4);
+    const dcg = buildDogGeometry(true);
+    this.dogClose = new THREE.InstancedMesh(dcg, dm.material, DOG_CLOSE_CAP);
+    this.dogClose.customDepthMaterial = dm.depth;
+    this.dogClose.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    this.dcA = makeAttr(dcg, 'iDog', new Float32Array(DOG_CLOSE_CAP * 4), 4);
+    this.dcCol = makeAttr(dcg, 'iDogCol', new Float32Array(DOG_CLOSE_CAP * 4), 4);
+    this.dcHand = makeAttr(dcg, 'iHand', new Float32Array(DOG_CLOSE_CAP * 4), 4);
+    this.dcHead = makeAttr(dcg, 'iDogHead', new Float32Array(DOG_CLOSE_CAP * 4), 4);
 
     const bg = buildBlobGeometry();
     const bcap = capacity + pcap + dcap + (capClose + capNear) * 2;
@@ -460,7 +480,7 @@ export class CrowdRenderer {
     this.blob.renderOrder = 2;
     this.group.add(this.tableware.mesh);
 
-    for (const mesh of [this.close.mesh, this.near.mesh, this.far.mesh, this.tiny.mesh, this.pin.mesh, this.shadow.mesh, this.pram, this.dog, this.blob]) {
+    for (const mesh of [this.close.mesh, this.near.mesh, this.far.mesh, this.tiny.mesh, this.pin.mesh, this.shadow.mesh, this.pram, this.dog, this.dogClose, this.blob]) {
       mesh.frustumCulled = mesh === this.shadow.mesh;
       if ((mesh as THREE.InstancedMesh).isInstancedMesh) (mesh as THREE.InstancedMesh).count = 0;
       mesh.matrixAutoUpdate = false;
@@ -483,7 +503,7 @@ export class CrowdRenderer {
   setShadows(on: boolean): void {
     this.shadowsOn = on;
     this.shadow.mesh.castShadow = on;
-    for (const mesh of [this.pram, this.dog]) {
+    for (const mesh of [this.pram, this.dog, this.dogClose]) {
       mesh.castShadow = on;
       mesh.receiveShadow = true;
     }
@@ -500,7 +520,7 @@ export class CrowdRenderer {
     const high = this.cam.y > 150;
     const shadows = this.shadowsOn && !high;
     this.shadow.mesh.castShadow = shadows;
-    this.pram.castShadow = this.dog.castShadow = shadows;
+    this.pram.castShadow = this.dog.castShadow = this.dogClose.castShadow = shadows;
     const raining = rain > 0.15;
     const all = this.layers;
     for (let i = 0; i < all.length; i++) all[i].n = 0;
@@ -508,6 +528,7 @@ export class CrowdRenderer {
     if (palette !== null) palette.begin();
     let np = 0,
       nd = 0,
+      ndc = 0,
       nb = 0;
     const PM = this.pramMisc.array as Float32Array;
     const DA = this.dogA.array as Float32Array,
@@ -618,6 +639,7 @@ export class CrowdRenderer {
         const umbrella = raining && L.umbrellaOwner && m.sit < 0.3 && m.lie < 0.1 && m.ground < 0.1 && !L.pram;
         const gaitOn = m.rideG === null && (layer === this.close || layer === this.near || layer === this.far || out === this.close || out === this.near || out === this.far);
         poseIn.t = t + m.seed * 10;
+        poseIn.near = layer === this.close || layer === this.near;
         computePoseA(m, umbrella, r, pose, gaitOn ? st.gait : null, this.frame);
         if (this.probe !== null) this.probe(m, pose, r, layer === this.close ? 0 : layer === this.near ? 1 : 2);
         // drawn at the gait's smoothed root when the gait ran this frame (corners: the feet were planned
@@ -768,35 +790,61 @@ export class CrowdRenderer {
         }
         // dog
         if (L.dog && nd < this.dog.instanceMatrix.count) {
-          MI[0] = mx;
+          // the dog's own place on its lead: the walker's frame, moved by (side, -lag) and turned about the dog's middle
+          const sc = L.scale;
+          const dYaw = m.dogYaw,
+            cy = Math.cos(dYaw),
+            sy = Math.sin(dYaw);
+          const dox = DOG_OFFSET.x,
+            doz = DOG_OFFSET.z;
+          // where the mesh's origin must go for its (ox, oz) to land at (ox + side, oz - lag) in the walker's frame
+          const lx = dox + m.dogSide - (cy * dox + sy * doz),
+            lz = doz - m.dogLag - (-sy * dox + cy * doz);
+          const wx = fz * lx + fx * lz,
+            wz = -fx * lx + fz * lz;
+          MI[0] = mx + wx * sc;
           MI[1] = m.y;
-          MI[2] = mz;
-          MI[4] = MI[5] = MI[6] = L.scale;
+          MI[2] = mz + wz * sc;
+          MI[3] = m.yaw + dYaw;
+          MI[4] = MI[5] = MI[6] = sc;
           yawMatrix(this.m4);
-          this.dog.setMatrixAt(nd, this.m4);
-          const d4 = nd * 4;
-          const dogAmp = Math.min(1.5, m.speed / (0.95 * L.dog.size));
-          DA[d4] = m.dogPhase;
-          DA[d4 + 1] = dogAmp;
-          DA[d4 + 2] = m.dogSit * m.dogSit * (3 - 2 * m.dogSit);
-          DA[d4 + 3] = m.fade;
-          DC[d4] = L.dog.fur;
-          DC[d4 + 1] = L.dog.fur2;
-          DC[d4 + 2] = L.dog.collar;
-          DC[d4 + 3] = L.dog.size;
-          // leash from the posed left grip (figure units × figure scale → dog-mesh units of look.scale)
+          MI[3] = m.yaw;
+          const nearDog = d < DOG_CLOSE_DIST && ndc < DOG_CLOSE_CAP;
+          if (nearDog) this.dogClose.setMatrixAt(ndc, this.m4);
+          else this.dog.setMatrixAt(nd, this.m4);
+          const d4 = (nearDog ? ndc : nd) * 4;
+          const dA = nearDog ? (this.dcA.array as Float32Array) : DA,
+            dC = nearDog ? (this.dcCol.array as Float32Array) : DC,
+            dH = nearDog ? (this.dcHand.array as Float32Array) : DH,
+            dX = nearDog ? (this.dcHead.array as Float32Array) : (this.dogHead.array as Float32Array);
+          const dogAmp = m.dogSniff > 0.5 ? 0.25 * Math.min(1, m.speed) : Math.min(1.5, (m.speed + Math.max(0, -m.dogLagV)) / (0.95 * L.dog.size));
+          dA[d4] = m.dogPhase;
+          dA[d4 + 1] = dogAmp;
+          dA[d4 + 2] = m.dogSit * m.dogSit * (3 - 2 * m.dogSit);
+          dA[d4 + 3] = m.fade;
+          dC[d4] = L.dog.fur;
+          dC[d4 + 1] = L.dog.fur2;
+          dC[d4 + 2] = L.dog.collar;
+          dC[d4 + 3] = L.dog.size;
+          // leash from the posed left grip (figure units × figure scale → dog-mesh units of look.scale), into the dog's frame
           gripPoint(r, pose, true, this.hand);
           const k = r.s / L.scale;
-          DH[d4] = this.hand.x * k;
-          DH[d4 + 1] = this.hand.y * k - 0.01;
-          DH[d4 + 2] = this.hand.z * k;
-          DH[d4 + 3] = m.seed;
-          nd++;
+          const hxw = this.hand.x * k - lx,
+            hzw = this.hand.z * k - lz;
+          dH[d4] = cy * hxw - sy * hzw;
+          dH[d4 + 1] = this.hand.y * k - 0.01;
+          dH[d4 + 2] = sy * hxw + cy * hzw;
+          dH[d4 + 3] = m.seed;
+          dX[d4] = m.dogHead;
+          dX[d4 + 1] = m.dogTurn;
+          dX[d4 + 2] = (m.seed * 13.7) % 1 < 0.55 ? 1 : 0.12;
+          dX[d4 + 3] = m.dogWag;
+          if (nearDog) ndc++;
+          else nd++;
           if (nb < bcap) {
-            const sc = L.scale;
-            MI[0] = mx + (fz * DOG_OFFSET.x + fx * DOG_OFFSET.z) * sc;
+            MI[0] = mx + (fz * (DOG_OFFSET.x + m.dogSide) + fx * (DOG_OFFSET.z - m.dogLag)) * sc;
             MI[1] = m.y + 0.017;
-            MI[2] = mz + (-fx * DOG_OFFSET.x + fz * DOG_OFFSET.z) * sc;
+            MI[2] = mz + (-fx * (DOG_OFFSET.x + m.dogSide) + fz * (DOG_OFFSET.z - m.dogLag)) * sc;
             MI[4] = 0.32 * L.dog.size;
             MI[5] = 1;
             MI[6] = 0.6 * L.dog.size;
@@ -815,6 +863,13 @@ export class CrowdRenderer {
     this.shadowVertices = this.shadow.n * this.shadow.verts;
     this.pram.count = np;
     this.dog.count = nd;
+    this.dogClose.count = ndc;
+    this.dogClose.visible = ndc > 0;
+    if (ndc > 0) {
+      this.dogClose.instanceMatrix.needsUpdate = true;
+      this.dcA.needsUpdate = this.dcCol.needsUpdate = this.dcHand.needsUpdate = this.dcHead.needsUpdate = true;
+    }
+    this.dogHead.needsUpdate = true;
     this.blob.count = nb;
     flush(this.pramMisc, np, 4);
     flush(this.pram.instanceMatrix, np, 16);

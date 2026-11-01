@@ -23,7 +23,7 @@ try {
   });
   page.on('pageerror', (e) => errs.push(String(e?.stack ?? e)));
   const t0 = Date.now();
-  await page.goto(`${base}scripts/lab/people.html?${args.q ?? ''}`, { waitUntil: 'domcontentloaded', timeout: 120000 });
+  await page.goto(`${base}scripts/lab/${args.page ?? 'people'}.html?${args.q ?? ''}`, { waitUntil: 'domcontentloaded', timeout: 120000 });
   // (an error in the page never sets __done: stop as soon as one shows, not at the timeout)
   for (let i = 0; i < 300 && !errs.some((e) => /Error|error:/.test(e)); i++) {
     if (await page.evaluate(() => window.__done === true)) break;

@@ -10,6 +10,7 @@ import { gaitIn, gaitPose, newGaitOut, type GaitState, type IdleShift } from './
 import { AIK, armIKa, fkPoint, legIKa, LIK, toChestFrame, type ArmSolve, type LegSolve, type Pose } from './pose';
 import type { Rig } from './rig';
 import { BONE } from './body';
+import { GESTURES, GI, GO, G_CY, G_HK, G_HY, G_HZ, G_PID, G_S, G_SEED, G_T, G_TIN, G_WY, M_FEED, O_CB, O_CR, O_CT, O_HP, O_HR, O_HY, O_L, O_PROP, O_R, feedPose, fidget, listenerGestures, momentPose, speakerGestures } from '../smalllife/gestures';
 
 // (mix / smooth / clamp / hash are written out inline in this file: see computePoseA)
 
@@ -170,7 +171,7 @@ export function computePose(m: Member, t: number, umbrella: boolean, r: Rig, o: 
   return computePoseA(m, umbrella, r, o, gs, frame);
 }
 /** computePoseA's time input (s): a field, as a computed double argument would be boxed per call */
-export const poseIn = { t: 0.5 };
+export const poseIn = { t: 0.5, near: false };
 /** computePose with the time in poseIn.t (the renderer's per-figure path: no garbage) */
 export function computePoseA(m: Member, umbrella: boolean, r: Rig, o: Pose, gs: GaitState | null, frame: number): Pose {
   const t = poseIn.t;
@@ -248,7 +249,7 @@ export function computePoseA(m: Member, umbrella: boolean, r: Rig, o: Pose, gs: 
     waistBend += (s3 - 0.45) * 0.035 * gw;
     headPitch += (s4 * s4 * 0.2 - 0.04) * gw;
   }
-  const headRoll = -0.25 * chestRoll;
+  let headRoll = -0.25 * chestRoll;
   // working in place (actors.ts): stooped over a low task, or leaning a little over a bench / counter
   const wk = m.rideG === null && m.sit < 0.05 ? m.work : 0;
   const wkK = wk > 0 ? (1 - gw) * upright : 0;
@@ -568,7 +569,8 @@ export function computePoseA(m: Member, umbrella: boolean, r: Rig, o: Pose, gs: 
         }
         break;
       case IDLE.TALK: {
-        // talking with a hand from the elbow, a little nod
+        // (near: real gestures, see below) talking with a hand from the elbow, a little nod
+        if (GESTURES && poseIn.near) break;
         const left = (m.seed * 7.31) % 1 < 0.3 ? handL : false;
         const arm = left ? armL : armR;
         if (left || handR) {
@@ -613,6 +615,61 @@ export function computePoseA(m: Member, umbrella: boolean, r: Rig, o: Pose, gs: 
           if (k > 0.3) prop = PROP.CUP;
         }
         break;
+    }
+  }
+  // near enough to see them: hands that say something, people who listen, small things done while waiting (smalllife/gestures.ts)
+  if ((GESTURES && poseIn.near && idleK > 0.3 && m.forceIdle < 0) || (m.moment > 0 && m.moment !== M_FEED && RG === null)) {
+    const iv2 = idleVariant(m, r);
+    GI[G_T] = t - m.seed * 10;
+    GI[G_SEED] = m.seed;
+    GI[G_PID] = m.party.id;
+    GI[G_CY] = r.chest.y;
+    GI[G_WY] = r.waist.y;
+    GI[G_HY] = r.head.y;
+    GI[G_HZ] = r.head.z;
+    GI[G_HK] = hk;
+    GI[G_S] = r.s;
+    let on = false;
+    if (m.moment > 0) {
+      GI[G_T] = t;
+      momentPose(m.moment, m.momentK);
+      on = true;
+    } else if (m.chat > 0 && iv2.v === IDLE.TALK) {
+      const tg = t - m.seed * 10;
+      GI[G_TIN] = tg + m.party.id * 7.3 - Math.floor((tg + m.party.id * 7.3) / 5.5) * 5.5;
+      speakerGestures(iv2.k * idleK);
+      on = true;
+    } else if (m.chat > 0) {
+      listenerGestures(idleK);
+      on = true;
+    } else if (r.c < 0.5 && iv2.v !== IDLE.PHONE && iv2.v !== IDLE.CUP && iv2.v !== IDLE.GUITAR) {
+      on = fidget((handR ? 1 : 0) | (handL ? 2 : 0));
+    }
+    if (on) {
+      if (handR && GO[O_R + 3] > 0.001) {
+        RT[0] = GO[O_R];
+        RT[1] = GO[O_R + 1];
+        RT[2] = GO[O_R + 2];
+        RT[3] = GO[O_R + 3];
+        reach(r, armR, false, GO[O_R + 4], GO[O_R + 5], GO[O_R + 6], GO[O_R + 7]);
+      }
+      if (handL && GO[O_L + 3] > 0.001) {
+        RT[0] = GO[O_L];
+        RT[1] = GO[O_L + 1];
+        RT[2] = GO[O_L + 2];
+        RT[3] = GO[O_L + 3];
+        reach(r, armL, true, GO[O_L + 4], GO[O_L + 5], GO[O_L + 6], GO[O_L + 7]);
+      }
+      headYaw += GO[O_HY];
+      headPitch += GO[O_HP];
+      headRoll += GO[O_HR];
+      chestBend += GO[O_CB];
+      chestTwist += GO[O_CT];
+      chestRoll += GO[O_CR];
+      if (GO[O_PROP] > 0.5) prop = PROP.PHONE;
+      o.chestBend = chestBend;
+      o.chestTwist = chestTwist;
+      o.chestRoll = chestRoll;
     }
   }
   // walking with a takeaway coffee (a sip now and then) or eyes on the phone
@@ -1050,6 +1107,25 @@ export function computePoseA(m: Member, umbrella: boolean, r: Rig, o: Pose, gs: 
       RT[2] = 0.345 * hk;
       RT[3] = k;
       reach(r, armR, false, -1, -1, -0.3, 0.9);
+    } else if (m.moment === M_FEED && poseIn.near && handL && handR) {
+      GI[G_T] = t;
+      GI[G_SEED] = m.seed;
+      GI[G_HK] = hk;
+      GI[G_WY] = r.hip.y + rootY;
+      GI[G_HZ] = rootZ;
+      feedPose(k);
+      RT[0] = GO[O_L];
+      RT[1] = GO[O_L + 1];
+      RT[2] = GO[O_L + 2];
+      RT[3] = GO[O_L + 3];
+      reachFig(r, o, armL, true, GO[O_L + 4], GO[O_L + 5], GO[O_L + 6], GO[O_L + 7]);
+      RT[0] = GO[O_R];
+      RT[1] = GO[O_R + 1];
+      RT[2] = GO[O_R + 2];
+      RT[3] = GO[O_R + 3];
+      reachFig(r, o, armR, false, GO[O_R + 4], GO[O_R + 5], GO[O_R + 6], GO[O_R + 7]);
+      headPitch += GO[O_HP];
+      headYaw += GO[O_HY];
     } else {
       for (let li = 0; li < 2; li++) {
         const left = li === 0;

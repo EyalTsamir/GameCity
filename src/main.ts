@@ -45,6 +45,7 @@ const MODULES: [string, () => Promise<{ default: ModuleFactory }>][] = [
   ['closemat', () => import('./world/closemat')],
   ['buildingrooms', () => import('./world/buildingrooms')],
   ['closenature', () => import('./world/closenature')],
+  ['smalllife', () => import('./sim/smalllife')],
   ['postfx', () => import('./render/postfx')],
   ['camera', () => import('./ui/camera')],
   ['ui', () => import('./ui/ui')],
