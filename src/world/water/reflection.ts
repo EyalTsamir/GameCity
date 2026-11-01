@@ -23,7 +23,9 @@ import type { CityContext } from '../../core/context';
 import { LAYERS } from '../../core/layers';
 import { WATER_LEVEL, SLAB, RIVER } from '../../core/constants';
 import { perfOn } from '../../core/perfdeep';
-import { streetMirror, STREET_MIRROR_BLANK } from './streetMirror';
+import { streetMirror, STREET_MIRROR_BLANK, STREAK_FRAG, STREAKS_ON } from './streetMirror';
+import { FS_VERT, FullscreenPass } from '../../render/postfx/fullscreen';
+import { glassMirror, GLASS_MIRROR_BLANK, type GlassPlane } from './glassMirror';
 
 export type ReflectionLevel = 0 | 1 | 2;
 
@@ -59,6 +61,10 @@ const NIGHT_ONLY = /-(glows|lights)$/;
 const TREES_NEAR = /^veg-trees-(w|e)$/;
 /** only in the street mirror (water/streetMirror.ts): what a wet road shows right in front of the eye */
 const STREET_ONLY = /^traffic-(.*-lod\d|flares)$/;
+/** only in the glass mirror (water/glassMirror.ts): the street itself, from the eye of a shop window */
+const GLASS_ONLY = /^(roads-(asphalt|hardscape|markings)|terrain-ground|props-casters|traffic-signal-poles|peds-(close|near|far)|veg-(wood-near|cards)|landmarks-static.*)$/;
+/** what the water mirrors and a shop window down in the streets does not (about 390 k triangles, a third of the pass) */
+const NOT_GLASS = /^(harbor-.*|land-reflect(-island)?|terrain-masonry)$/;
 
 export interface ReflectionUniforms {
   tRefl: { value: THREE.Texture | null };
@@ -80,6 +86,13 @@ export class PlanarReflection {
   private treesFar: THREE.Object3D | null = null;
   private treesNear: THREE.Object3D[] = [];
   private streetOnly: THREE.Object3D[] = [];
+  private glassOnly: THREE.Object3D[] = [];
+  /** the pass mirrors a plane of shop fronts (water/glassMirror.ts) */
+  private glass: GlassPlane | null = null;
+  private glassK = 0;
+  private glassN = new THREE.Vector3();
+  private streakRT: THREE.WebGLRenderTarget | null = null;
+  private streakPass: FullscreenPass | null = null;
   /** the pass mirrors the road surface instead of the water (water/streetMirror.ts) */
   private street = false;
   private streetK = 0;
@@ -107,10 +120,12 @@ export class PlanarReflection {
   private pm = new THREE.Matrix4();
   private dbg: boolean;
   private dbgList: THREE.Object3D[] = [];
+  private notGlass: THREE.Object3D[] = [];
+  private skipN = 0;
+  private lastZ = new THREE.Vector3(0, 0, 1);
   /** ?reflfacade: facades at full detail in the pass (A/B) */
   private facadeDetail: boolean;
   private halfRate = perfOn('reflhalf');
-  private skip = false;
   private lastEye = new THREE.Vector3();
   // stats
   calls = 0;
@@ -143,6 +158,11 @@ export class PlanarReflection {
     this.cam.matrixAutoUpdate = true;
     this.black = new THREE.DataTexture(new Uint8Array([0, 0, 0, 0]), 1, 1);
     this.black.needsUpdate = true;
+    // (setLevel only runs when the adaptive ladder moves: with it frozen the wet road and the glass would read the blank texel)
+    if (initial > 0) {
+      streetMirror.tSRefl.value = this.rt.texture;
+      glassMirror.tGM.value = this.rt.texture;
+    }
     this.uniforms = {
       tRefl: { value: initial > 0 ? this.rt.texture : this.black },
       uReflMat: { value: new THREE.Matrix4() },
@@ -166,6 +186,7 @@ export class PlanarReflection {
       if (BASE.some((r) => r.test(o.name))) {
         o.layers.enable(LAYERS.REFLECT);
         this.base.push(o);
+        if (NOT_GLASS.test(o.name)) this.notGlass.push(o);
         if (NIGHT_ONLY.test(o.name)) this.night.push(o);
         if (SMALL.test(o.name)) this.small.push(o);
         return;
@@ -180,14 +201,23 @@ export class PlanarReflection {
         o.layers.enable(LAYERS.REFLECT);
         this.streetOnly.push(o);
       }
+      if (GLASS_ONLY.test(o.name)) {
+        o.layers.enable(LAYERS.REFLECT);
+        this.glassOnly.push(o);
+      }
     });
     this.meshes = this.base.length + (this.treesFar ? 1 : 0);
+    // (compiled behind the loading screen, not at the first shower)
+    if (STREAKS_ON && this.level > 0) {
+      this.renderStreaks();
+      this.ctx.renderer.setRenderTarget(null);
+    }
     // additive (glow) materials: in the pass they must not write coverage alpha (see render())
     for (const o of this.base) {
       const mm = (o as THREE.Mesh).material;
       for (const m of Array.isArray(mm) ? mm : [mm]) if (m && m.blending === THREE.AdditiveBlending && !this.additive.includes(m)) this.additive.push(m);
     }
-    this.dbgList = [...this.base, ...(this.treesFar ? [this.treesFar] : [])];
+    this.dbgList = [...this.base, ...this.glassOnly, ...(this.treesFar ? [this.treesFar] : [])];
     // render from inside the main scene pass (see the header)
     this.prevBefore = scene.onBeforeRender as unknown as (...args: unknown[]) => void;
     const self = this;
@@ -211,11 +241,16 @@ export class PlanarReflection {
       this.uniforms.tRefl.value = this.black;
       streetMirror.tSRefl.value = STREET_MIRROR_BLANK;
       streetMirror.uSRefl.value.x = 0;
+      glassMirror.tGM.value = GLASS_MIRROR_BLANK;
+      glassMirror.uGM.value.x = 0;
+      this.glass = null;
+      this.glassK = 0;
       this.rt.dispose();
       this.width = this.height = 0;
     } else {
       this.uniforms.tRefl.value = this.rt.texture;
       streetMirror.tSRefl.value = this.rt.texture;
+      glassMirror.tGM.value = this.rt.texture;
     }
   }
 
@@ -239,29 +274,56 @@ export class PlanarReflection {
     streetMirror.uSRefl.value.y = this.ctx.uniforms.uTime.value;
   }
 
+  /**
+   * the shop-glass mode: the plane the eye is on (null: none). A change of plane fades out, switches, fades in; a camera cut
+   * (`snap`) goes at once. While the wet street has the pass, glass stays out.
+   */
+  setGlass(plane: GlassPlane | null, realDt: number, snap: boolean): void {
+    const want = this.level > 0 && !this.street ? plane : null;
+    // (the road reads the same target and matrix: the wet street takes the pass at once, no fade)
+    if (this.glass !== want && (snap || this.street || !this.glass || this.glassK < 0.03)) {
+      this.glass = want;
+      this.glassK = 0;
+      this.renders = 0; // redraw at once
+    }
+    const target = want && this.glass === want ? 1 : 0;
+    this.glassK = snap ? target : this.glassK + (target - this.glassK) * Math.min(1, realDt * 5);
+    const u = glassMirror.uGM.value;
+    if (this.glass) u.set(this.glassK, this.glass.nx, this.glass.nz, this.glass.d);
+    else u.x = 0;
+  }
+
+  /** down in the streets with no water ahead and neither glass nor a wet road to mirror: no pass, the water falls back on its analytic sky */
+  noWater = false;
+
   /** arm the pass for this frame (module frame()) */
   request(): void {
-    this.pending = this.level > 0 && this.attached;
+    this.pending = this.level > 0 && this.attached && !(this.noWater && !this.street && !this.glass);
     if (!this.pending) {
       this.uniforms.uReflInfo.value.x = 0;
       return;
     }
-    // every other frame (?noreflhalf: every frame): the lookup uses the matrix of the camera that drew the mirror, so a
-    // frame-old mirror stays in place on the water; only a camera cut redraws at once
+    // every other frame, every fourth on glass (?noreflhalf: every frame): the lookup uses the matrix of the camera that drew the mirror, so a
+    // frame-old mirror stays in place on the water; only a camera cut redraws at once, and on glass a turn of the head (past the edge of the old picture there is nothing to read)
     if (this.halfRate) {
       const cp = this.ctx.camera.position;
       const moved = this.lastEye.distanceToSquared(cp);
       const cut = moved > 25 && moved > 0.0025 * cp.y * cp.y;
-      if (!cut && this.renders > 0 && this.skip) this.pending = false;
-      this.skip = this.pending;
+      const e = this.ctx.camera.matrixWorld.elements;
+      const turned = !!this.glass && e[8] * this.lastZ.x + e[9] * this.lastZ.y + e[10] * this.lastZ.z < 0.9986;
+      if (!cut && !turned && this.renders > 0 && ++this.skipN < (this.glass ? 4 : 2)) this.pending = false;
+      else {
+        this.skipN = 0;
+        this.lastZ.set(e[8], e[9], e[10]);
+      }
     }
   }
 
   private resize(): void {
     const r = this.ctx.renderer;
     r.getDrawingBufferSize(this.sz);
-    // (the street mirror is only ever read blurred: the lower resolution)
-    const k = (this.level === 2 && !this.street ? 1 / 3 : 1 / 4.5) * Math.max(0.5, Math.min(1, this.ctx.quality.renderScale || 1));
+    // (the street mirror is only ever read blurred: the lower resolution; glass shows it at a quarter strength)
+    const k = (this.level === 2 && !this.street ? (this.glass ? 1 / 4 : 1 / 3) : 1 / 4.5) * Math.max(0.5, Math.min(1, this.ctx.quality.renderScale || 1));
     const w = Math.max(64, Math.round(this.sz.x * k)),
       h = Math.max(36, Math.round(this.sz.y * k));
     if (w !== this.width || h !== this.height) {
@@ -278,8 +340,13 @@ export class PlanarReflection {
   private render(camera: THREE.PerspectiveCamera): void {
     const { renderer, scene } = this.ctx;
     const L = this.street ? 0.02 : WATER_LEVEL;
+    const G = this.glass;
     this.camPos.setFromMatrixPosition(camera.matrixWorld);
-    if (this.camPos.y < L + 0.3) {
+    if (G) {
+      // (behind the plane: nothing to mirror; the lookup keeps the last image while uGM fades it)
+      this.glassN.set(G.nx, 0, G.nz);
+      if (this.glassN.dot(this.camPos) + G.d < 0.05) return;
+    } else if (this.camPos.y < L + 0.3) {
       this.uniforms.uReflInfo.value.x = 0;
       return;
     }
@@ -296,9 +363,16 @@ export class PlanarReflection {
     this.rot.extractRotation(camera.matrixWorld);
     this.dir.set(0, 0, -1).applyMatrix4(this.rot);
     this.up.set(0, 1, 0).applyMatrix4(this.rot);
-    cam.position.set(this.camPos.x, 2 * L - this.camPos.y, this.camPos.z);
-    this.dir.y = -this.dir.y;
-    this.up.y = -this.up.y;
+    if (G) {
+      const n = this.glassN;
+      cam.position.copy(this.camPos).addScaledVector(n, -2 * (n.dot(this.camPos) + G.d));
+      this.dir.addScaledVector(n, -2 * n.dot(this.dir));
+      this.up.addScaledVector(n, -2 * n.dot(this.up));
+    } else {
+      cam.position.set(this.camPos.x, 2 * L - this.camPos.y, this.camPos.z);
+      this.dir.y = -this.dir.y;
+      this.up.y = -this.up.y;
+    }
     cam.up.copy(this.up);
     this.target.copy(cam.position).add(this.dir);
     cam.lookAt(this.target);
@@ -311,7 +385,8 @@ export class PlanarReflection {
     tm.set(0.5, 0, 0, 0.5, 0, 0.5, 0, 0.5, 0, 0, 0.5, 0.5, 0, 0, 0, 1);
     tm.multiply(cam.projectionMatrix).multiply(cam.matrixWorldInverse);
     // oblique near plane = water plane (Lengyel), in the mirrored camera's view space
-    this.plane.set(this.up.set(0, 1, 0), -L).applyMatrix4(cam.matrixWorldInverse);
+    if (G) this.plane.set(this.glassN, G.d).applyMatrix4(cam.matrixWorldInverse);
+    else this.plane.set(this.up.set(0, 1, 0), -L).applyMatrix4(cam.matrixWorldInverse);
     this.clip.set(this.plane.normal.x, this.plane.normal.y, this.plane.normal.z, this.plane.constant);
     const e = cam.projectionMatrix.elements;
     this.q.set((Math.sign(this.clip.x) + e[8]) / e[0], (Math.sign(this.clip.y) + e[9]) / e[5], -1, (1 + e[10]) / e[14]);
@@ -345,7 +420,7 @@ export class PlanarReflection {
     // bank trees only when the view is about the river (not a river mouth glimpsed at the edge)
     if (st) this.target.set(st.target.x, WATER_LEVEL, st.target.z);
     const nearRiver = !st || RIVER_BOX.distanceToPoint(this.target) < 45;
-    const trees = !this.street && full && !far && nearRiver && this.frustum.intersectsBox(RIVER_BOX);
+    const trees = !!G || (!this.street && full && !far && nearRiver && this.frustum.intersectsBox(RIVER_BOX));
     if (this.treesFar) {
       vs[n++] = this.treesFar.visible;
       this.treesFar.visible = trees;
@@ -356,7 +431,15 @@ export class PlanarReflection {
     }
     for (const o of this.streetOnly) {
       vs[n++] = o.visible;
-      o.visible = this.street && o.visible;
+      o.visible = (this.street || !!G) && o.visible;
+    }
+    for (const o of this.glassOnly) {
+      vs[n++] = o.visible;
+      o.visible = !!G && o.visible;
+    }
+    for (const o of this.notGlass) {
+      vs[n++] = o.visible;
+      o.visible = !G && o.visible;
     }
     const day = this.ctx.uniforms.uLights.value < 0.02;
     for (const o of this.night) {
@@ -398,9 +481,15 @@ export class PlanarReflection {
     // the facades' window interiors, frames and mirrored street are sub-pixel in this 1/3-res, blurred mirror: the
     // facade shader's 'low' tier (averaged windows, wall weathering kept) for the pass, −0.4…0.7 ms in the overview /
     // harbour (?reflfacade keeps full detail)
-    const fd = this.facadeDetail ? null : ((this.ctx.services.buildings as { uniforms?: Record<string, { value: unknown }> } | undefined)?.uniforms?.uDetail ?? null);
+    // (in the glass and wet-road mirrors the row stands close and sharp, and its windows are what makes it a street: full detail, without
+    // the painted street in its panes; the averaged windows of the low tier light the whole night road up cream)
+    const bu = (this.ctx.services.buildings as { uniforms?: Record<string, { value: unknown }> } | undefined)?.uniforms;
+    const fd = this.facadeDetail || G || this.street ? null : (bu?.uDetail ?? null);
     const prevDetail = fd ? (fd.value as number) : 1;
     if (fd) fd.value = Math.min(prevDetail, 0.4);
+    const wr = G || this.street ? (bu?.uWinRefl ?? null) : null;
+    const prevWR = wr ? (wr.value as number) : 0;
+    if (wr) wr.value = 0;
     const bs = this.blendSave;
     let bi = 0;
     for (const m of this.additive) {
@@ -419,6 +508,13 @@ export class PlanarReflection {
       m.blendSrcAlpha = THREE.ZeroFactor;
       m.blendDstAlpha = THREE.OneFactor;
     }
+    // the pass draws materials that read this very target: unbound for its length
+    const prevGM = glassMirror.tGM.value;
+    const prevSR = streetMirror.tSRefl.value;
+    const prevGK = glassMirror.uGM.value.x;
+    glassMirror.tGM.value = GLASS_MIRROR_BLANK;
+    streetMirror.tSRefl.value = STREET_MIRROR_BLANK;
+    glassMirror.uGM.value.x = 0;
     try {
       scene.background = null;
       scene.matrixWorldAutoUpdate = false;
@@ -427,11 +523,16 @@ export class PlanarReflection {
       renderer.autoClear = true;
       renderer.setRenderTarget(this.rt);
       renderer.render(scene, cam);
+      if (this.street && STREAKS_ON) this.renderStreaks();
     } finally {
       this.calls = renderer.info.render.calls - c0;
       this.tris = renderer.info.render.triangles - t0;
       // ── state restore
+      glassMirror.tGM.value = prevGM;
+      streetMirror.tSRefl.value = prevSR;
+      glassMirror.uGM.value.x = prevGK;
       if (fd) fd.value = prevDetail;
+      if (wr) wr.value = prevWR;
       bi = 0;
       for (const m of this.additive) {
         m.blending = bs[bi++] as THREE.Blending;
@@ -442,13 +543,19 @@ export class PlanarReflection {
         m.blendSrcAlpha = bs[bi++] as THREE.BlendingSrcFactor | null;
         m.blendDstAlpha = bs[bi++] as THREE.BlendingDstFactor | null;
       }
+      // (the debug list first, it overlaps the lists above and was saved after them)
+      if (dbgHidden) {
+        let di = n;
+        for (const o of this.dbgList) o.visible = vs[di++];
+      }
       n = 0;
       if (this.treesFar) this.treesFar.visible = vs[n++];
       for (const o of this.treesNear) o.visible = vs[n++];
       for (const o of this.streetOnly) o.visible = vs[n++];
+      for (const o of this.glassOnly) o.visible = vs[n++];
+      for (const o of this.notGlass) o.visible = vs[n++];
       for (const o of this.night) o.visible = vs[n++];
       for (const o of this.small) o.visible = vs[n++];
-      if (dbgHidden) for (const o of this.dbgList) o.visible = vs[n++];
       scene.background = prevBg;
       scene.matrixWorldAutoUpdate = prevMWAU;
       renderer.shadowMap.autoUpdate = prevShadow;
@@ -459,11 +566,40 @@ export class PlanarReflection {
     }
     this.renders++;
     this.lastEye.copy(this.camPos);
-    this.uniforms.uReflInfo.value.x = this.street ? 0 : 1;
+    this.uniforms.uReflInfo.value.x = this.street || G ? 0 : 1;
     streetMirror.uSReflMat.value.copy(this.uniforms.uReflMat.value);
+    glassMirror.uGMMat.value.copy(this.uniforms.uReflMat.value);
+  }
+
+  /** the mirror drawn out along its vertical, for the rough wet surface (streetMirror.ts); the target exists from the first wet frame on */
+  private renderStreaks(): void {
+    const renderer = this.ctx.renderer;
+    if (!this.streakRT || !this.streakPass) {
+      this.streakRT = new THREE.WebGLRenderTarget(4, 4, { type: THREE.HalfFloatType, depthBuffer: false, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, generateMipmaps: false });
+      this.streakRT.texture.name = 'street-streaks';
+      this.streakPass = new FullscreenPass(
+        new THREE.ShaderMaterial({
+          name: 'StreetStreaks',
+          uniforms: { tSrc: { value: this.rt.texture } },
+          vertexShader: FS_VERT,
+          fragmentShader: STREAK_FRAG,
+          depthTest: false,
+          depthWrite: false,
+          blending: THREE.NoBlending,
+          toneMapped: false,
+        }),
+      );
+      streetMirror.tSStreak.value = this.streakRT.texture;
+    }
+    const w = Math.max(32, this.width >> 1),
+      h = Math.max(18, this.height >> 1);
+    if (this.streakRT.width !== w || this.streakRT.height !== h) this.streakRT.setSize(w, h);
+    this.streakPass.render(renderer, this.streakRT);
   }
 
   dispose(): void {
+    this.streakRT?.dispose();
+    this.streakPass?.dispose();
     if (this.attached && this.prevBefore) this.ctx.scene.onBeforeRender = this.prevBefore as unknown as THREE.Scene['onBeforeRender'];
     this.rt.dispose();
     this.black.dispose();

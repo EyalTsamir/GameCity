@@ -429,6 +429,7 @@ export function genIndustrial(g: Gen): void {
       // (geometry hunt ?nocanopyplates: the slab hung from nothing)
       if (geomOn('canopyplates')) for (const bu of [a - 0.38, b + 0.34]) sideBox(t, sg, bu, bu + 0.04, 0, 0.75, doorH + 0.02, doorH + 0.35);
       lightBox(g, sx(sg, u, 0.7) - 0.15, doorH + 0.28, sz(sg, u, 0.7) - 0.15, sx(sg, u, 0.7) + 0.15, doorH + 0.35, sz(sg, u, 0.7) + 0.15, '#fff1d6', LIGHT_MODE.STEADY, 3);
+      anchors.doorLamp(sx(sg, u, 0.7), doorH + 0.28, sz(sg, u, 0.7), sg.nx, sg.nz);
     } else {
       // arched head over the customs doors
       setCol(t, trimC);

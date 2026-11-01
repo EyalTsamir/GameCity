@@ -16,6 +16,8 @@ import { createSurface, createSkyUniforms } from './water/surface';
 import { createCutaway } from './water/cutaway';
 import { swell } from './water/waves';
 import { PlanarReflection, type ReflectionLevel } from './water/reflection';
+import { createGlassPicker, type GlassPlane } from './water/glassMirror';
+import { closeLight, closeLightOn } from '../core/closelight';
 import { HullContacts } from './water/hulls';
 import { buildWaterExtension, type WaterExtension } from './water/extension';
 import { WORLD_MODE } from '../core/world';
@@ -174,6 +176,32 @@ export default function create(ctx: CityContext): CityModule {
     reflection.setStreet(k, realDt);
   };
 
+  // shop glass: the pass moves onto the shop fronts in view while the camera is low and no water is near (water/glassMirror.ts)
+  const picker = WORLD_MODE && closeLight(ctx, 'glassmirror', 'high') ? createGlassPicker(ctx) : null;
+  const _gm = new THREE.Vector3();
+  let gmEvery = 0;
+  let gmPlane: GlassPlane | null = null;
+  const waterClose = (p: THREE.Vector3): boolean => {
+    ctx.camera.getWorldDirection(_f);
+    const lx = land && land.active ? land : null;
+    const isW = (x: number, z: number) => (lx ? lx.isWater(x, z) : ctx.plan.isWater(x, z));
+    for (const d of [0, 10, 25, 50]) if (isW(p.x + _f.x * d, p.z + _f.z * d)) return true;
+    return false;
+  };
+  const noWaterOn = closeLightOn('waterskip');
+  const updateGlassMirror = (realDt: number) => {
+    const p = ctx.camera.position;
+    const cut = _gm.distanceToSquared(p) > 25;
+    _gm.copy(p);
+    if (cut || gmEvery-- <= 0) {
+      gmEvery = 6;
+      const street = p.y < 16 && !waterClose(p);
+      reflection.noWater = noWaterOn && street;
+      gmPlane = street && picker ? picker.pick() : null;
+    }
+    if (picker) reflection.setGlass(gmPlane, realDt, cut);
+  };
+
   return {
     name: 'water',
     frame(realDt) {
@@ -181,6 +209,7 @@ export default function create(ctx: CityContext): CityModule {
       if (!dome) (sky.uSkyMoonDir.value as THREE.Vector3).copy(ctx.clock.moonDir);
       if (hullsOn) hulls.update();
       updateStreetMirror(realDt);
+      updateGlassMirror(realDt);
       reflection.request();
     },
     stats() {

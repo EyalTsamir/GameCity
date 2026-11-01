@@ -173,8 +173,9 @@ vec3 rdPuddleLamps(vec3 wp, vec3 V) {
       float el = R.y - Ld.y;
       // crisp lamp head (~0.4 m at 30–50 m) + a narrow vertical glare streak, broken by the water's ripples
       float core = exp(-(az * az + el * el * 0.6) / 0.00012);
-      float rip = 0.55 + 0.45 * sin(el * 260.0 + wp.x * 3.1 + wp.z * 2.3);
-      float streak = exp(-(az * az) / 0.00035 - (el * el) / 0.018) * rip;
+      // (a sine in the elevation alone read as a dotted column: two slow ones in the ground's coordinates only break it up)
+      float rip = 0.8 + 0.12 * sin(wp.x * 5.3 + wp.z * 3.7 + uPdXf.w) + 0.08 * sin(wp.x * 13.1 - wp.z * 11.3);
+      float streak = exp(-(az * az) / 0.00035 - (el * el) / 0.03) * rip;
       acc += vec3(1.0, 0.78, 0.5) * L.w * (core * 7.0 + streak * 0.9);
     }
   }

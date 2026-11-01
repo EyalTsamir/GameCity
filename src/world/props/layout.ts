@@ -11,6 +11,7 @@ import type { Lot, StreetSlot, WalkPath, DistrictKind } from '../../core/plan';
 import { OCC, type OccupancyGrid } from '../../core/occupancy';
 import { SIDEWALK_Y, WALK_OFFSET, FURN_OFFSET } from '../../core/constants';
 import { hashString } from '../../core/rng';
+import { closeLightOn } from '../../core/closelight';
 import type { Rect } from '../../core/geom';
 import { planGardens, itemDiscs, type GardenPlan } from './gardenPlan';
 
@@ -353,6 +354,30 @@ function buildLamps(ctx: CityContext, benches: BenchPlace[]): LampSpot[] {
   for (const s of plan.slots) {
     if (s.kind !== 'lamp') continue;
     out.push({ x: s.x, z: s.z, y: SIDEWALK_Y, yaw: s.yaw, style: streetLampStyle(s.district), street: true });
+  }
+  // car parks had no light at all: lamps along their long edges, behind the stalls, arms reaching in (?noparklamps)
+  if (closeLightOn('parklamps')) {
+    for (const a of plan.areas) {
+      if (a.kind !== 'parking' || !a.stalls?.length) continue;
+      const r = a.rect;
+      const alongX = r.x1 - r.x0 >= r.z1 - r.z0;
+      const [a0, a1] = alongX ? [r.x0, r.x1] : [r.z0, r.z1];
+      const L = a1 - a0;
+      const n = Math.max(1, Math.round(L / 18));
+      for (let e = 0; e < 2; e++) {
+        for (let i = 0; i < n; i++) {
+          // (the far edge halfway between the lamps of the near one)
+          const v = a0 + (L * (i + (e ? 0.75 : 0.25))) / n;
+          const u = alongX ? (e ? r.z1 - 0.12 : r.z0 + 0.12) : e ? r.x1 - 0.12 : r.x0 + 0.12;
+          const x = alongX ? v : u,
+            z = alongX ? u : v;
+          if (occAny(occ, x, z, 0.1, OCC.ROAD | OCC.SIDEWALK | OCC.BUILDING | OCC.WATER | OCC.SOLID | OCC.RAIL | OCC.PATH)) continue;
+          if (plan.slots.some((s) => s.kind !== 'empty' && Math.hypot(s.x - x, s.z - z) < 1.5)) continue;
+          // (a lamp's arm reaches against its yaw)
+          out.push({ x, z, y: 0, yaw: alongX ? (e ? 0 : Math.PI) : e ? Math.PI / 2 : -Math.PI / 2, style: 'simple', street: false });
+        }
+      }
+    }
   }
   // terrain's promenade lamps (only to keep distance)
   const prom = (ctx.services.terrain as { promenadeLamps?: { x: number; z: number }[] } | undefined)?.promenadeLamps ?? [];

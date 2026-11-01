@@ -16,14 +16,19 @@ import * as THREE from 'three';
 import type { CityContext, CityModule } from '../core/context';
 import { LAMP_MAP, TH_LAMP_SPOTS, addLampLights, bindLampChannel, lampChannel, lampLights, lampSpotUniforms, type LampLight } from '../core/lampLight';
 import { bakeLampMap, type BakeResult } from './lamps/bake';
-import { patchLampScene } from './lamps/integrate';
+import { patchLampMaterial, patchLampScene } from './lamps/integrate';
+import { closeLightOn } from '../core/closelight';
 import { shopSpillLights } from './lamps/spill';
+import type { DoorLamp } from './buildings/anchors';
 
 export interface LampsService {
   baked: boolean;
   /** PNG data URL of the baked map (debug, ?lampdebug only) */
   preview(): string;
 }
+
+/** street furniture of modules that don't integrate the lamp light themselves */
+const UNLIT = /^(traffic-signal-(poles|fixings)|traffic-street-names|terrain-railings|rail-(furniture|fixings|signs)|props-print|life-night-market|buildings-signs)$/;
 
 interface Spot {
   l: LampLight;
@@ -33,6 +38,9 @@ interface Spot {
   /** spatial group (0/1): each group gets its own early-out box in the shader */
   group: number;
 }
+
+/** the lantern's light stands this far off the wall (m): the wall has to face it to catch any */
+const DOOR_LAMP_OUT = 0.45;
 
 export default function create(ctx: CityContext): CityModule {
   const params = ctx.debug.params;
@@ -47,6 +55,18 @@ export default function create(ctx: CityContext): CityModule {
     const spill = shopSpillLights(ctx.plan, ground);
     spillCount = spill.length;
     addLampLights(spill);
+  }
+
+  // the lanterns beside doors light what is around them: the wall behind, the step, the ground (?nodoorlamps). Baked: no frame cost
+  const doorLamps = (ctx.services.buildings as { doorLamps?: DoorLamp[] } | undefined)?.doorLamps;
+  if (!legacy && doorLamps && closeLightOn('doorlamps')) {
+    addLampLights(
+      doorLamps.map((l) => {
+        const x = l.x + l.nx * DOOR_LAMP_OUT,
+          z = l.z + l.nz * DOOR_LAMP_OUT;
+        return { x, y: l.y, z, pole: Math.max(0.8, l.y - ground(x + l.nx, z + l.nz)), radius: 3.6, color: '#ffc979', intensity: 0.5, kind: 'path' as const };
+      }),
+    );
   }
 
   // built-in channel: street-light state (for moving lights that follow the street-light schedule)
@@ -87,6 +107,14 @@ export default function create(ctx: CityContext): CityModule {
     service.baked = true;
     if (ctx.debug.enabled) console.info(`[lamps] baked ${result.lights} lights (${spots.length} dynamic) in ${result.ms.toFixed(0)} ms, peak ${result.peak.toFixed(2)}`);
     if (params.has('lampall')) autoPatched = patchLampScene(ctx.scene);
+    // (these had no lamp light at all: black silhouettes against the lit street at night; small on screen, so they cost little. ?nosignallit)
+    if (closeLightOn('signallit')) {
+      ctx.scene.traverse((o) => {
+        if (!UNLIT.test(o.name)) return;
+        const m = (o as THREE.Mesh).material;
+        for (const x of Array.isArray(m) ? m : m ? [m] : []) if (patchLampMaterial(x)) autoPatched++;
+      });
+    }
   };
   ctx.events.on('modules:ready', bake);
 

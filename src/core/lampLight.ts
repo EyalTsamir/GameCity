@@ -35,6 +35,7 @@
 
 import * as THREE from 'three';
 import { globalUniforms } from './uniforms';
+import { closeLightOn } from './closelight';
 
 export type LampKind = 'street' | 'path' | 'plaza' | 'flood' | 'spill' | 'portal';
 
@@ -164,6 +165,11 @@ export function lampUniforms(): LampUniforms {
 
 const f = (v: number) => v.toFixed(8);
 
+// the lit ground lights what stands on it: poles, signal boxes, bins, the backs of people and the foot of every wall get the
+// pavement's light from below and a little from all around (ground albedo about 0.2; half the hemisphere of a vertical surface
+// sees the ground, less the higher it stands above it). No fetch of its own: E0 is already there. ?nolampbounce
+const LAMP_BOUNCE = closeLightOn('lampbounce') ? 'float thBh = max(wp.y - headY + pole, 0.0); acc += E0 * (4.0 * uLampGain) * (0.03 + 0.16 * (0.5 - 0.5 * wn.y)) / (1.0 + thBh * thBh * 0.09);' : '';
+
 /**
  * Fragment chunk. Declares its own uniforms (guarded against double inclusion) and
  *   vec3 thLampLight(vec3 worldPos, vec3 worldNormal)
@@ -229,6 +235,7 @@ vec3 thLampLight(vec3 wp, vec3 wn) {
           thLampSE = acc;
           thLampSL = L;
         }
+        ${LAMP_BOUNCE}
       }
     }
   }
