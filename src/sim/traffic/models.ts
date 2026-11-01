@@ -2178,7 +2178,10 @@ function buildCab(b: Builder, cabin: Det, x: number, wsTop: number, nose?: EndFn
         const pos = g.getAttribute('position');
         for (let i = 0; i < pos.count; i++) {
           const z = pos.getZ(i);
-          if (z > a[3] - 0.7) pos.setZ(i, Math.min(z, nose(pos.getX(i), pos.getY(i), 1).z - 0.04));
+          if (z > a[3] - 0.7) {
+            pos.setZ(i, Math.min(z, nose(pos.getX(i), pos.getY(i), 1).z - 0.1));
+            pos.setX(i, pos.getX(i) * 0.93);
+          }
         }
         add0(g, o);
       };
@@ -3225,7 +3228,7 @@ function bus(): THREE.BufferGeometry {
       c = s > 0 ? 0.98 : -0.62;
     b.add(onEnd(surf, 1, a - 0.015, c + 0.015, 0.71, 0.895, 0.004, 3), { color: '#16181b', rough: 0.9 });
     b.add(onEnd(surf, 1, a, c, 0.725, 0.88, 0.009, CLOSE ? 6 : 3), lensO({ color: '#ffffff', light: LIGHT_HEAD, rough: 0.15, decal: R_BUS_HEAD }, lensAt((a + c) / 2, 0.8, surf((a + c) / 2, 0.8, 1).z, (c - a) / 2, 0.08, 1)));
-    b.add(onEnd(surf, 1, s > 0 ? 1.02 : -1.2, s > 0 ? 1.2 : -1.02, 0.74, 0.85, 0.006, 3), { color: AMBER, light: s > 0 ? LIGHT_BLINK_L : LIGHT_BLINK_R });
+    b.add(onEnd(surf, 1, s > 0 ? 1.02 : -1.2, s > 0 ? 1.2 : -1.02, 0.74, 0.85, 0.006, 3), lensO({ color: AMBER, light: s > 0 ? LIGHT_BLINK_L : LIGHT_BLINK_R, rough: 0.3 }, lensAt(s * 1.11, 0.795, surf(s * 1.11, 0.795, 1).z, 0.09, 0.055, 4, 1)));
     // rear clusters wrapping the corners: tail + brake lens, blinker above, reverse lamp below, in dark housings
     endLamp(b, surf, -1, s, 0.97, 1.18, 0.78, 1.12, { color: '#ffffff', light: LIGHT_TAIL, rough: 0.2, decal: R_TAIL });
     endLamp(b, surf, -1, s, 0.97, 1.18, 1.16, 1.3, { color: AMBER, light: s > 0 ? LIGHT_BLINK_L : LIGHT_BLINK_R, rough: 0.3 }, 0.01);

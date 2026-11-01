@@ -221,7 +221,7 @@ export const CLOSE_FRAG_DETAIL = /* glsl */ `
       vec3 red = ( amb > 0.5 ? vec3( 0.95, 0.47, 0.05 ) * 1.5 : vec3( 0.8, 0.03, 0.022 ) ) * ( 0.42 + 1.5 * spark );
       vec3 clear = vec3( 0.45 ) * ( 0.1 + 1.3 * spark ) + vec3( 0.12 ) * ( 0.5 + 0.5 * sin( h.y * 180.0 ) );
       col = mix( red, clear, rev );
-      float bx0 = hx * 0.5, br = max( min( hx, hy ) * 0.5, 0.03 );
+      float bx0 = hx * 0.5, br = max( min( hx, hy ) * 0.34, 0.025 );
       float g = exp( -dot( h.xy - vec2( bx0, 0.0 ), h.xy - vec2( bx0, 0.0 ) ) / ( br * br ) );
       if ( hx > 0.14 ) g += exp( -dot( h.xy - vec2( -bx0 * 0.1, 0.0 ), h.xy - vec2( -bx0 * 0.1, 0.0 ) ) / ( br * br ) );
       float on = vEmit.r;

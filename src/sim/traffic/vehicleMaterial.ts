@@ -246,9 +246,16 @@ float thBaseSpec = 1.0;
         // a dent in a door
         vec2 c = vec2( mix( vDetA.y, vDetA.x, 0.25 + 0.5 * thH1( ph * 3.1 ) ), vDetB.w - 0.22 - 0.15 * thH1( ph * 4.7 ) );
         vec2 o = vec2( p.z, p.y ) - c;
+        #ifdef VEH_NEAR
+        o.x *= 0.5;
+        #endif
         float r = length( o );
         float k = side * step( 0.0, p.x * ( hd > 0.89 ? 1.0 : -1.0 ) ) * step( r, 0.15 );
+        #ifdef VEH_NEAR
+        thTiltN -= ( vFwdV * o.x + vUpV * o.y ) / max( r, 1e-3 ) * ( 0.09 * k * sin( 3.14159 * r / 0.15 ) );
+        #else
         thTiltN -= ( vFwdV * o.x + vUpV * o.y ) / max( r, 1e-3 ) * ( 0.32 * k * sin( 3.14159 * r / 0.15 ) );
+        #endif
       }
       if ( thH1( ph * 23.9 ) > 0.92 && side > 0.5 && p.z < vDetA.x && p.z > vDetA.y && p.y < vDetB.w )
         diffuseColor.rgb *= vec3( 1.07, 1.02, 0.9 ); // a replacement door, never quite the same paint
