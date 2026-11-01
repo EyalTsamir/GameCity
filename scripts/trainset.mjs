@@ -46,7 +46,8 @@ const FRAMES = {
   locoNose: { car: 'head', z: 8.4, y: 2.2, x: 0, d: 3.2, nose: 1, yaw: 24, pitch: 3 },
   locoCab: { car: 'head', z: 8.0, y: 2.9, x: 0.2, d: 1.2, nose: 1, yaw: 10, pitch: 0 },
   locoBogie: { car: 'head', z: 5.2, y: 0.9, x: 1, d: 1.6, yaw: 18, pitch: 6 },
-  wagon3: { car: 'mid', z: 0, y: 1.6, x: 1, d: 3.0, yaw: 18, pitch: 3 },
+  wagon3: { car: 'mid', z: 2.0, y: 1.5, x: 1, d: 3.0, yaw: 18, pitch: 3 },
+  wagonSill: { car: 'mid', z: 3.2, y: 1.25, x: 0.92, d: 1.1, yaw: 12, pitch: 2 },
   wagonBogie: { car: 'mid', z: 4.55, y: 0.75, x: 1, d: 1.3, yaw: 18, pitch: 6 },
   wagonTail: { car: 'tail', z: 6.6, y: 1.4, x: 0.75, d: 1.2, nose: 1, yaw: 20, pitch: 3 },
 };

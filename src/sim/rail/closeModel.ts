@@ -468,6 +468,27 @@ export function closeDoors(g: Geo, glass: Geo, z: number, color: string): void {
 
 // ───────────────────────────────────────────── lamps
 
+/** a wagon's sills from a metre: the long channel with welded stiffeners, gussets at the cross members, data stencilled on it */
+export function closeSill(g: Geo, zF: number): void {
+  for (const s of [-1, 1]) {
+    steel(g, FIN.paint, '#3d3734');
+    g.box(s * 1.25, 1.12, 0, 0.12, 0.3, zF * 2, 0);
+    g.color('#47403c');
+    g.box(s * 1.31, 1.255, 0, 0.012, 0.03, zF * 2, 0);
+    g.box(s * 1.31, 0.985, 0, 0.012, 0.03, zF * 2, 0);
+    g.color('#37322f');
+    for (let k = -3; k <= 3; k++) {
+      g.box(s * 1.31, 1.12, k * 1.75, 0.014, 0.24, 0.05, 0);
+      for (const e of [-1, 1]) g.rod([s * 1.318, 1.12 + e * 0.09, k * 1.75 + 0.012], [s * 1.324, 1.12 + e * 0.09, k * 1.75 + 0.012], 0.009, 6, 1);
+    }
+    // a stencil, the wagon's number and tare on the sill
+    g.kind(T.STEEL).extra(FIN.paint, 1, s * 3.2, 0).color('#3d3734');
+    const x = s * 1.3115;
+    g.quadFacing([x, 1.05, s * 3.2 - 0.355], [x, 1.05, s * 3.2 + 0.355], [x, 1.21, s * 3.2 + 0.355], [x, 1.21, s * 3.2 - 0.355], [s, 0, 0]);
+    g.extra(0, 0, 0, 0);
+  }
+}
+
 /** the moulded plate a pair of lamps sits on: edges that catch the light, four screws */
 export function closeLampPlate(g: Geo, x: number, y: number, z: number, w: number, h: number): void {
   g.kind(T.PLAIN).extra(0, 0, 0, 0).color('#1b1d1f');
@@ -880,13 +901,16 @@ export function emuCab(g: Geo, spec: CabSpec): void {
     oq(g, s0[0], s0[1], s0[2], s0[3], dn);
   }
   // on the desk's far edge, seen from outside through the screen: the backs of two monitors on their arms, the vent over the demister
-  inner(g, MODE.rubber, '#15161a', 0, 1);
+  inner(g, MODE.rubber, '#15161a', 1, 1);
   for (const cx of [-0.62, 0.62]) {
     const b = onDesk(cx, 0.8, 0.02);
+    // (the screen rakes back over them: clear of the glass at their top edge)
+    const yc = b[1] + 0.2;
+    const zc = Math.min(b[2] - 0.06, zf(yc + 0.13) - 0.12);
     addBG(g, softBox(0.36, 0.26, 0.05, 2, 2, 1, 0.012, (p, _u, v) => {
       p.z += 0.04 * v;
-    }).translate(cx, b[1] + 0.2, b[2] - 0.06));
-    g.rod([cx, b[1], b[2]], [cx, b[1] + 0.12, b[2] - 0.04], 0.018, 6);
+    }).translate(cx, yc, zc));
+    g.rod([cx, b[1], b[2]], [cx, b[1] + 0.12, zc + 0.02], 0.018, 6);
   }
   inner(g, MODE.plastic, '#1c1e21', 0, 1);
   const vent = onDesk(0, 0.97, 0.01);
@@ -1000,10 +1024,11 @@ export interface CloseHooks {
   doors: typeof closeDoors;
   lamp: typeof closeLamp;
   plate: typeof closeLampPlate;
+  sill: typeof closeSill;
   saloon: typeof emuInterior;
   cab: typeof emuCab;
 }
 
 export function makeHooks(): CloseHooks {
-  return { glass: new Geo(), inner: new Geo(), bogie: closeBogie, doors: closeDoors, lamp: closeLamp, plate: closeLampPlate, saloon: emuInterior, cab: emuCab };
+  return { glass: new Geo(), inner: new Geo(), bogie: closeBogie, doors: closeDoors, lamp: closeLamp, plate: closeLampPlate, sill: closeSill, saloon: emuInterior, cab: emuCab };
 }

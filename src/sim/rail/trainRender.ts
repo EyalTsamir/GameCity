@@ -35,6 +35,7 @@ interface Pool {
   /** close level only: the saloon behind the openings (no shadow caster) and the panes, sharing the instance buffers */
   inner?: THREE.InstancedMesh;
   glass?: THREE.InstancedMesh;
+  paneDepth?: THREE.InstancedMesh;
 }
 
 /** local light positions (model space, +Z = model front) */
@@ -157,6 +158,17 @@ export class TrainRenderer {
         };
         pool.inner = extra(hk.inner, this.mats.close, 'inner', 0);
         pool.glass = extra(hk.glass, this.mats.glass, 'glass', 1);
+        if (pool.glass && this.mats.paneDepth) {
+          // the panes once more, depth only, after every transparent thing behind them has been drawn
+          const m = new THREE.InstancedMesh(pool.glass.geometry, this.mats.paneDepth, cap);
+          m.name = `rail-${type}-panedepth`;
+          m.instanceMatrix = mesh.instanceMatrix;
+          m.count = 0;
+          m.visible = false;
+          m.renderOrder = 50;
+          this.group.add(m);
+          pool.paneDepth = m;
+        }
         this.close.set(type, pool);
       }
     }
@@ -283,6 +295,10 @@ export class TrainRenderer {
         p.glass.count = p.n;
         p.glass.visible = p.n > 0;
       }
+      if (p.paneDepth) {
+        p.paneDepth.count = p.n;
+        p.paneDepth.visible = p.n > 0;
+      }
       if (p.n > 0) {
         p.mesh.instanceMatrix.needsUpdate = true;
         p.mesh.instanceColor!.needsUpdate = true;
@@ -292,6 +308,7 @@ export class TrainRenderer {
         p.mesh.computeBoundingSphere();
         if (p.inner) p.inner.boundingSphere = p.mesh.boundingSphere;
         if (p.glass) p.glass.boundingSphere = p.mesh.boundingSphere;
+        if (p.paneDepth) p.paneDepth.boundingSphere = p.mesh.boundingSphere;
       }
     }
   }

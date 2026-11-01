@@ -186,10 +186,16 @@ export class Occupants {
     // close level, whose screen is real glass: the farther level's opaque one hides the figure
     if (c.type === 'cab' && c.role === 1) {
       const hip = 6.84;
-      this.add(o, null, rng, 0, hip, drive(1.8, hip, 2.09, 6.98, 0.2, 1.25, 0.52), false);
-      const m = o.ms[o.ms.length - 1];
-      m.look.top = 0x2c3a55;
-      m.look.bottom = 0x20242e;
+      this.add(o, null, rng, 0, hip, drive(1.8, hip, 2.09, 6.98, 0.2, 1.25, 0.52), false, (l) => {
+        // the operator's shirt and tie, short hair
+        l.top = 0x9fb8d6;
+        l.bottom = 0x20242e;
+        l.hair = 0x2a211b;
+        const st = l.style;
+        if (st) {
+          Object.assign(st, { hair: 'crop', hairLen: 0, hairVol: 0, hat: HAT_STYLES.NONE, tail: 0, jacketHem: -1, tie: true, collar: 1, hood: false, sleeve: 0.5, trouserEnd: 0.08, legwear: 0, vest: false });
+        }
+      });
     }
     for (let k = -5; k <= 5; k++) {
       const zn = k * 1.9;
@@ -249,7 +255,7 @@ export class Occupants {
     return o;
   }
 
-  private add(o: Occ, V: Vehicle | null, rng: Rng, x: number, z: number, g: RideGeom, shade = true): void {
+  private add(o: Occ, V: Vehicle | null, rng: Rng, x: number, z: number, g: RideGeom, shade = true, dress?: (l: ReturnType<typeof makeLook>) => void): void {
     o.seats.push({ x, z, g, f: 1 });
     const persona = PERSONA[rng.int(0, PERSONA.length - 1)];
     const p = new Party(-2000 - (this.nextUid - 980000), persona);
@@ -271,6 +277,7 @@ export class Occupants {
       look.bottom = 0x2a3140;
       if (st) st.hat = HAT_STYLES.NONE;
     }
+    dress?.(look);
     // in the cabin's shade and seen through tinted glass (the pane's own reflection is not drawn over them); a train
     // saloon is daylit through both window bands (only a light tint)
     if (shade) {

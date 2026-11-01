@@ -1232,7 +1232,9 @@ export function buildWagon(hk?: CloseHooks): THREE.BufferGeometry {
   // frame: deck sills + headstocks
   g.kind(T.PLAIN).color(C.frame);
   g.box(0, 1.08, 0, 0.5, 0.36, zF * 2, 0);
-  for (const sx of [-1, 1]) g.box(sx * 1.25, 1.12, 0, 0.12, 0.3, zF * 2, 0);
+  if (hk) hk.sill(g, zF);
+  else for (const sx of [-1, 1]) g.box(sx * 1.25, 1.12, 0, 0.12, 0.3, zF * 2, 0);
+  g.kind(T.PLAIN).color(C.frame);
   for (const z of [-zF, zF]) g.box(0, 1.08, z, 2.7, 0.38, 0.22, 0);
   // cross members
   g.color('#3f3a37');

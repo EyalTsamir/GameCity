@@ -476,6 +476,8 @@ export interface TrainMaterials {
   close: THREE.MeshStandardMaterial | null;
   glass: THREE.MeshStandardMaterial | null;
   depth: THREE.MeshDepthMaterial;
+  /** close level: writes the panes' depth after everything is drawn, so that AO and the lens treat the glass as a surface */
+  paneDepth: THREE.MeshDepthMaterial | null;
   clip: { value: THREE.Vector2 };
   /** saloon interior behind the glass: 1 on, 0 off (URL off → stays 0; quality low → 0, set by trainRender) */
   interior: { value: number };
@@ -756,9 +758,14 @@ if (vCar.x > 1.5 && trHitT > 0.0 && abs(vDoorZ) > 1e3) {
     shader.uniforms.uClip = clip;
     shader.uniforms.uGrime = grime;
     shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', `#include <common>\nattribute float aKind;\nattribute vec4 aInst2;\nvarying float vWX;\nbool trHidden(int tg) { int load = int(aInst2.x + 0.5); if (tg == ${T.CONT40}) return load != 0; if (tg == ${T.CONT20A}) return !(load == 1 || load == 2); if (tg == ${T.CONT20B}) return load != 1; return false; }
+      .replace('#include <common>', `#include <common>\nattribute float aKind;\nattribute vec4 aInst2;\n#ifdef TR_PANE\nattribute vec4 aInst;\nattribute vec4 aExtra;\n#endif\nvarying float vWX;\nbool trHidden(int tg) { int load = int(aInst2.x + 0.5); if (tg == ${T.CONT40}) return load != 0; if (tg == ${T.CONT20A}) return !(load == 1 || load == 2); if (tg == ${T.CONT20B}) return load != 1; return false; }
 bool trVariantHidden(float k) { int vm = int(k + 0.5) / 100; if (vm == 1) return aInst2.z < 0.5; if (vm == 2) return aInst2.z > 0.5; return false; }`)
-      .replace('#include <begin_vertex>', '#include <begin_vertex>\n{ int r = int(aKind + 0.5); if (trHidden(r - (r / 100) * 100) || trVariantHidden(aKind)) transformed = vec3(0.0); }')
+      .replace('#include <begin_vertex>', `#include <begin_vertex>\n{ int r = int(aKind + 0.5); if (trHidden(r - (r / 100) * 100) || trVariantHidden(aKind)) transformed = vec3(0.0);
+        #ifdef TR_PANE
+        // the pane of a leaf that has begun to slide: nothing here that the far level's body depth does not already say
+        if (r - (r / 100) * 100 == ${T.DOORWIN} && aInst.z > 0.01 && abs(aExtra.w - aInst.w) < 0.5) transformed = vec3(0.0);
+        #endif
+      }`)
       .replace(
         '#include <project_vertex>',
         `#include <project_vertex>
@@ -775,5 +782,18 @@ bool trVariantHidden(float k) { int vm = int(k + 0.5) / 100; if (vm == 1) return
       .replace('#include <clipping_planes_fragment>', '#include <clipping_planes_fragment>\nif (vWX < uClip.x || vWX > uClip.y) discard;');
   };
   depth.customProgramCacheKey = () => 'rail-train-depth-v2';
-  return { material, close, glass, depth, clip, interior, interiorUrlOff: interior.value === 0 };
+  // AO is computed from the depth buffer afterwards: without this it darkens the pane's own reflection with a noisy print of whatever lies
+  // behind it, and a dark cab seen through its windscreen is nothing but that print
+  let paneDepth: THREE.MeshDepthMaterial | null = null;
+  if (tiles) {
+    paneDepth = new THREE.MeshDepthMaterial();
+    paneDepth.name = 'rail-train-panedepth';
+    paneDepth.defines = { ...paneDepth.defines, TR_PANE: 1 };
+    paneDepth.onBeforeCompile = depth.onBeforeCompile;
+    paneDepth.customProgramCacheKey = () => 'rail-train-panedepth-v1';
+    paneDepth.colorWrite = false;
+    paneDepth.transparent = true;
+    paneDepth.side = THREE.DoubleSide;
+  }
+  return { material, close, glass, depth, paneDepth, clip, interior, interiorUrlOff: interior.value === 0 };
 }

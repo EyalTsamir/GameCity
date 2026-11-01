@@ -69,7 +69,8 @@ export const CLOSE_FRAG = /* glsl */ `
   if (tg == ${T.INNER} || tg == ${T.LEAF}) {
     int mode = tg == ${T.LEAF} ? ${MODE.plastic} : int(vExtra.x + 0.5);
     float a = vExtra.y, cab = tg == ${T.LEAF} ? 0.0 : vExtra.w;
-    if (mode == ${MODE.fixed} && a > 0.5) trLensEmit += vec3(1.0, 0.8, 0.56) * 0.55 * vEmit.y; // a pane with the lit saloon behind it
+    // a pane with the lit saloon behind it: the lamps show at its head, the far end of the saloon fades below them
+    if (mode == ${MODE.fixed} && a > 0.5) trLensEmit += vec3(1.0, 0.8, 0.56) * (0.012 + 0.05 * smoothstep(2.6, 2.95, p.y)) * vEmit.y;
     float hT = clamp((p.y - 1.13) / 2.07, 0.0, 1.0);
     vec3 base = diffuseColor.rgb;
     float rough = 0.62;
@@ -99,6 +100,7 @@ export const CLOSE_FRAG = /* glsl */ `
       c *= 1.0 - 0.3 * trLine(p.y - 2.1, 0.002, pix);
       float scuff = smoothstep(0.62, 0.86, cr.a) * (1.0 - smoothstep(1.2, 1.6, p.y));
       c = mix(c, c * 0.78, scuff * 0.6);
+      c *= 0.72 + 0.28 * smoothstep(1.2, 1.75, p.y); // the shade of the seats along the foot of the wall
       diffuseColor.rgb = c;
       rough = 0.5 + 0.2 * gr.b;
     } else if (mode == ${MODE.floor}) {
@@ -109,7 +111,8 @@ export const CLOSE_FRAG = /* glsl */ `
       c += vec3(0.1) * smoothstep(0.72, 0.82, g2.b) + vec3(0.02, 0.04, 0.08) * smoothstep(0.76, 0.84, g2.a);
       float aisle = 1.0 - smoothstep(0.22, 0.55, abs(p.x));
       c = mix(c, c * 1.35 + 0.015, aisle * (0.45 + 0.4 * cr.b));
-      c *= 0.86 + 0.14 * smoothstep(0.25, 0.6, cr.r); // a little dirt in the creases
+      c *= 0.9 + 0.1 * cr.b; // a little dirt ground in
+      c *= 1.0 - 0.4 * smoothstep(0.55, 0.8, abs(p.x)) * (1.0 - smoothstep(1.25, 1.36, abs(p.x)) * 0.4); // the dark under the seats
       diffuseColor.rgb = c;
       rough = 0.55 - 0.2 * aisle;
     } else if (mode == ${MODE.ceiling}) {
@@ -176,7 +179,7 @@ export const CLOSE_FRAG = /* glsl */ `
       rough = 0.3;
     } else if (mode == ${MODE.rubber}) {
       diffuseColor.rgb = base * (0.8 + 0.4 * gr.b);
-      rough = 0.85;
+      rough = a > 0.5 ? 0.42 : 0.85;
     } else if (mode == ${MODE.plate}) {
       // chequer plate at the door sills, its diamonds catching the light, rubbed bright where feet go
       vec2 d = vec2(p.x + p.z, p.x - p.z) / 0.03;
@@ -206,15 +209,17 @@ export const CLOSE_FRAG = /* glsl */ `
     }
     // a closed saloon: darker at the floor, lighter by the windows; what faces up sees the sky through them. Direct sun comes in by the
     // shadow map, through the real openings
-    float ao = mix(0.2, 0.42, hT * hT) * (0.8 + 0.3 * on.y);
+    float swapK = smoothstep(6.0, 17.0, length(vLocDir));
+    float ao = mix(0.2, 0.42, hT * hT) * (0.8 + 0.3 * on.y) * (1.0 + 0.6 * swapK);
     ao += 0.09 * smoothstep(0.7, 1.36, abs(p.x)) * step(2.1, p.y);
     trAO = ao * (cab > 0.5 ? 1.5 : 1.0);
     // the lamps on, after dark: a warm pool from the middle of the ceiling
     float lk = (cab > 0.5 ? 0.05 : 1.0) * (0.72 + 0.34 * on.y) * (1.0 - 0.22 * smoothstep(0.3, 1.36, abs(p.x)));
-    trLensEmit += diffuseColor.rgb * vec3(1.0, 0.8, 0.56) * (1.75 * vEmit.y * lk + 0.08 * (cab > 0.5 ? 0.0 : 1.0) * (1.0 - uLights));
+    if (mode == ${MODE.floor}) lk *= 0.55; // the lamps are far from the floor; the seats and legs take most of it
+    if (mode == ${MODE.moquette}) lk *= mix(0.6, 1.0, swapK); // cloth drinks light: only farther off, where the farther level's flat seats begin
+    trLensEmit += diffuseColor.rgb * vec3(1.0, 0.8, 0.56) * ((1.75 + 2.0 * swapK) * vEmit.y * lk + 0.08 * (cab > 0.5 ? 0.0 : 1.0) * (1.0 - uLights));
     trEmK = 0.0;
-    trRough = rough;
-  } else if (tg == ${T.STEEL}) {
+    trRough = rough;  } else if (tg == ${T.STEEL}) {
     int fin = int(vExtra.x + 0.5);
     vec4 g2 = texture2D(tGrain, puv * 5.3 + 0.3);
     vec4 cr = texture2D(tCrack, puv * 0.7);
@@ -246,6 +251,12 @@ export const CLOSE_FRAG = /* glsl */ `
     }
     diffuseColor.rgb = mix(base, vec3(0.3, 0.24, 0.19), clamp(dust, 0.0, 0.85));
     trRough = rough + dust * 0.25;
+    if (vExtra.y > 0.5) {
+      // stencilled data on a sill: y = 1 marks it, z its centre along the car
+      vec2 l = vec2((vExtra.z - p.z) * sign(p.x) / 0.71 + 0.5, (p.y - 1.13) / 0.16 + 0.5);
+      vec4 dc = trDec(vec4(8.0, 392.0, 496.0, 112.0), l, dFdx(l), dFdy(l));
+      diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.75, 0.73, 0.68), dc.a * 0.85);
+    }
   } else if (tg == ${T.WHEEL}) {
     vec3 base = diffuseColor.rgb;
     float R = max(vExtra.x, 0.1);
@@ -356,10 +367,11 @@ export const CLOSE_FRAG = /* glsl */ `
     float fr = fract(along / 0.28);
     float d = 1.0 - smoothstep(0.012, 0.04, pix);
     if (an.x > 0.5) trTilt += vAxZ * (fr < 0.14 ? -0.5 : fr > 0.5 && fr < 0.64 ? 0.5 : 0.0) * d;
-    float rust = smoothstep(0.55, 0.78, cr2.a) * smoothstep(0.35, 0.75, cr.b);
-    float low = (1.0 - smoothstep(1.3, 2.3, p.y)) * 0.4;
-    vec3 c = diffuseColor.rgb * (0.82 + 0.34 * gr.b);
-    c = mix(c, vec3(0.22, 0.12, 0.07) * (0.75 + 0.5 * g2.b), clamp(rust + low * cr2.a * 0.8, 0.0, 0.85));
+    float edgeR = max(1.0 - smoothstep(0.0, 0.16, abs(p.y - 1.33)), 1.0 - smoothstep(0.0, 0.16, abs(p.y - 3.8)));
+    float rust = smoothstep(0.72, 0.86, cr2.a) * smoothstep(0.5, 0.8, cr.b) * 0.7;
+    rust = max(rust, smoothstep(0.42, 0.68, cr2.a) * edgeR);
+    vec3 c = diffuseColor.rgb * (0.88 + 0.24 * gr.b);
+    c = mix(c, vec3(0.13, 0.075, 0.05) * (0.75 + 0.5 * g2.b), clamp(rust, 0.0, 0.85));
     vec4 fb = texture2D(tFibre, vec2(p.y * 0.4, along * 2.1));
     c = mix(c, c * 0.72 + 0.03, smoothstep(0.55, 0.9, fb.b) * 0.5);
     diffuseColor.rgb = c;
@@ -448,9 +460,9 @@ export const CLOSE_FRAG = /* glsl */ `
     // windscreen: the wipers have cleared two fans in the film of the line, insects below them
     vec2 q0 = vec2(p.x - 0.62, p.y - 2.28), q1 = vec2(p.x + 0.62, p.y - 2.28);
     float fan = max(1.0 - smoothstep(0.82, 0.86, length(q0)), 1.0 - smoothstep(0.82, 0.86, length(q1)));
-    dust = mix(0.05 + 0.1 * blot.b, 0.006, fan);
-    float bug = smoothstep(0.93, 0.96, gr.a) * smoothstep(0.35, 0.75, blot.b) * (1.0 - smoothstep(2.5, 2.9, p.y));
-    dust += bug * 0.7;
+    dust = mix(0.035 + 0.05 * blot.b, 0.004, fan);
+    float bug = smoothstep(0.975, 0.99, gr.a) * smoothstep(0.35, 0.75, blot.b) * (1.0 - 0.85 * fan);
+    dust += bug * 0.6;
     tint = 0.84;
   } else if (an.x > 0.5) {
     // side glass: dried runs under the top seal, a bloom of dirt at the bottom corners
@@ -462,7 +474,7 @@ export const CLOSE_FRAG = /* glsl */ `
   // the pane: no colour of its own but what lies on it; it mirrors the street, more at a grazing angle
   diffuseColor.rgb = mix(vec3(0.42, 0.39, 0.34) * dust, diffuseColor.rgb, clamp(trDecA, 0.0, 1.0));
   trEmK = 0.0;
-  trIntE = trEnv(R) * max(Fr, 0.075) * (1.0 - 0.9 * uLights);
+  trIntE = trEnv(R) * max(Fr, tg == ${T.GLASS} && on.z > 0.3 ? 0.05 : 0.075) * (1.0 - 0.9 * uLights);
   // a sticker on the door's pane takes the light as a sticker; the pane under it stops
   if (trDecA > 0.01) {
     trIntE *= 1.0 - trDecA;
