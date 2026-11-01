@@ -15,6 +15,7 @@ import { PROF, WIN, GLASS_COLS } from './buildings/materials';
 import { WIN_REC } from './buildings/winGeo';
 import { glassMirror } from './water/glassMirror';
 import type { LetterSpot } from './buildings/anchors';
+import { blankShadowMap } from '../core/shadowBlank';
 import { buildRoomAtlas } from './buildingrooms/atlas';
 import { ROOM_FRAG, ROOM_VERT } from './buildingrooms/glsl';
 import { hex, rng } from './buildingrooms/kit';
@@ -267,7 +268,7 @@ export default function create(ctx: CityContext): CityModule {
   };
   const sunOn = closeWin(ctx, 'cwsun', 'high');
   if (sunOn) {
-    uniforms.tCwShadow = { value: null };
+    uniforms.tCwShadow = { value: blankShadowMap(ctx.renderer) };
     uniforms.uCwSunM = { value: new THREE.Matrix4() };
   }
   const material = new THREE.ShaderMaterial({
@@ -394,7 +395,7 @@ export default function create(ctx: CityContext): CityModule {
         day.add((uniforms.uCwSun.value as THREE.Color).copy(sunC).multiplyScalar(0.1));
         (uniforms.uCwSun.value as THREE.Color).copy(sunC);
         if (sunOn) {
-          uniforms.tCwShadow.value = L.sun.shadow.map?.depthTexture ?? null;
+          uniforms.tCwShadow.value = L.sun.shadow.map?.depthTexture ?? blankShadowMap(c.renderer);
           uniforms.uCwSunM.value = L.sun.shadow.matrix;
         }
       }
