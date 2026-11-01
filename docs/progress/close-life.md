@@ -41,12 +41,22 @@ Everything of mine hidden against shown (delta = the cost of it, ms, noon, momen
 | plaza by the kiosk | 35.0 | -0.09 ±0.21 | |
 Page code: `__city.ctx.scene.getObjectByName('smalllife').visible=false`, and `on=false; timejump()` on the `moments` scene (`__city.ctx.services.scenes.scenes.find(q=>q.name==='moments')`). End every expression with `;0`, or playwright dies on the returned object.
 
-## Left to do (in this order)
-1. **Feeding not seen working:** at the kiosk bench the man's hands go right but no birds came in 10 s. New stats `birdsFed`, `feeders` in `lifeseq` output: find out why (`serveFeeders`, `blocked` of the spot in front of the bench, groups away). Capture: `--at "-27,0.5,-23,14,70,8" --pre "void 0" --find feed --follow --yaw 25 --dist 3 --pitch 14`.
-2. Waiter capture found no one (`--find waiter`: the test in `lifeseq` for staff may be wrong). Look at a waiter by eye.
-3. Litter in motion: stills are fine, no paper seen flying yet. Birds taking off in sequence: `--find birds:1` found no pigeons at the market at the time; try the plaza.
-4. Third round: fresh walk at 18.2 and 21.5 along a real pavement (the straight walk in `lifeseq` goes through buildings: pick a target along the street). `mStarted`/`mOut` in the output show whether moments start on a real walk without `momentforce`.
-5. Final checks: typecheck, build, `ui-test --q noidle`, `shot --view overview --invariants --validate --speed 4 --wait 20000`, `hitch`, `walkhitch`, `?diorama`, `?quality=medium|low`. Then stop the dev server on 5220, last message ends CLOSE-DONE.
+Those figures predate the last two commits (fed flocks stay closer, a little more bird movement near a bench): no geometry changed since. The coordinator measures everything at the merge: perf pending for the final state.
+
+## Final checks (2026-11-01, stopped early by the user's schedule)
+- `typecheck`, `build`: pass.
+- `shot --view overview --invariants --validate --speed 4 --wait 20000`: first run had two crowd walkers overlapping for 4.3 s at (-103.9, -4.9), a stroller and an elderly walker on a sidewalk, neither of them mine; second run `{}`, validate `[]`.
+- `ui-test --q noidle`: 73 passed, `kinds` failed, `kinds` alone passes (the known flake).
+- `?diorama`, `?quality=medium`, `?quality=low`: no failed module, no frame error, invariants `{}`, picture fine in the diorama and low sheets. No console errors; the shader-compiler warnings are the ones every session sees.
+- `hitch`: 0 new programs in the overview windows, one 116 ms frame at overview@12 on a shared machine. Allocation in those windows 14–25 MB/s: not compared with `?nosmalllife` unless noted below.
+
+## Left to do
+Not done, by the schedule:
+1. Third round: a fresh walk at 18.2 and 21.5 along a real pavement (the straight walk in `lifeseq` goes through buildings: pick a target along the street). `mStarted`/`mOut` in the output show whether moments start on a real walk without `momentforce`. Moments and the feeding were forced or found at one place, so how often you meet one on a plain walk is unjudged.
+2. A waiter by eye: `--find waiter` found no one (the test in `lifeseq` for staff may be wrong). Waiters themselves were not changed.
+3. Litter in motion: stills are fine, 26 to 39 of about 60 pieces moving at `?wind=1.3`, but no paper was seen flying by eye. A flock's take-off in sequence was not seen either, only single pigeons flying in. Gull and blackbird close up not seen.
+4. Birds in the feeding test are round the bench at 1.5 to 3 m. The flock's patch was tightened after that capture and not looked at again.
+5. Perf of the final state, and `?nosmalllife` against on for allocation.
 
 ## Seen and not mine
 The street tree trunk at 1–3 m is still low poly with a pale oval patch, and the grass tufts round a tree pit are flat blades on a flat green mat (`-3.9,0.3,34,1.3,-55,18`).
