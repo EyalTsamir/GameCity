@@ -13,6 +13,7 @@
 // see pedestrians/render.ts. ?legacypeople restores the original figures (A/B, before/after).
 
 import type { CityContext, CityModule } from '../core/context';
+import { closeLife } from '../core/closeLife';
 import { buildPlaces } from './pedestrians/places';
 import { Crowd, type BusEvent } from './pedestrians/crowd';
 import { CrowdRenderer } from './pedestrians/render';
@@ -31,6 +32,7 @@ export default function create(ctx: CityContext): CityModule {
   const places = buildPlaces(ctx, rng.fork('places'));
   const crowd = new Crowd(ctx, places, rng.fork('crowd'));
   const renderer = legacy ? new LegacyRenderer(ctx.scene, 720, ctx.quality.shadows) : new CrowdRenderer(ctx.scene, 720, ctx.quality.shadows, ctx.renderer);
+  if (renderer instanceof CrowdRenderer) renderer.closeDogs = closeLife(ctx, 'closedog');
   // ?hide=pedestrians: simulate but draw nothing (isolates the rendering cost in perf runs)
   if ((ctx.debug.params.get('hide') ?? '').split(',').includes('pedestrians')) renderer.group.visible = false;
   if (ctx.debug.params.has('pedlod')) {

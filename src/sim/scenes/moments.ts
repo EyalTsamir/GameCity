@@ -168,7 +168,12 @@ export class StreetMoments implements Scene {
     if (this.force) return this.force;
     const u = (s.hash * 7.13 + Math.floor(this.time / 300) * 0.37) % 1;
     const room = s.room0 + s.room1;
-    if (s.office) return h < 8 || h > 20 ? 0 : u < 0.5 ? M_SMOKE : room >= 2 ? M_PHONE : M_AIR;
+    if (s.office) {
+      if (h < 8 || h > 22.5) return 0;
+      // late: most doors are shut, someone still at work comes out for a smoke or a call
+      if (h > 19.5) return u < 0.3 ? M_SMOKE : u < 0.42 && room >= 2 ? M_PHONE : 0;
+      return u < 0.5 ? M_SMOKE : room >= 2 ? M_PHONE : M_AIR;
+    }
     const morning = h > 6.8 && h < 11.5;
     const later = h > 15 && h < 18;
     if ((morning || later) && room >= 2 && u < 0.3) return M_SWEEP;

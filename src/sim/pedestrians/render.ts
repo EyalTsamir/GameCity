@@ -350,6 +350,8 @@ export class CrowdRenderer {
   readonly dog: THREE.InstancedMesh;
   /** the dogs near the camera (a finer model, same program) */
   readonly dogClose: THREE.InstancedMesh;
+  /** the finer dog within DOG_CLOSE_DIST (?noclosedog, off below the medium tier: pedestrians.ts); off, every dog is the crowd's own */
+  closeDogs = true;
   private dogHead: THREE.InstancedBufferAttribute;
   private dcA: THREE.InstancedBufferAttribute;
   private dcCol: THREE.InstancedBufferAttribute;
@@ -809,7 +811,7 @@ export class CrowdRenderer {
           MI[4] = MI[5] = MI[6] = sc;
           yawMatrix(this.m4);
           MI[3] = m.yaw;
-          const nearDog = d < DOG_CLOSE_DIST && ndc < DOG_CLOSE_CAP;
+          const nearDog = this.closeDogs && d < DOG_CLOSE_DIST && ndc < DOG_CLOSE_CAP;
           if (nearDog) this.dogClose.setMatrixAt(ndc, this.m4);
           else this.dog.setMatrixAt(nd, this.m4);
           const d4 = (nearDog ? ndc : nd) * 4;
