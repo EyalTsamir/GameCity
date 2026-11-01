@@ -11,9 +11,9 @@ The trains branch had picked up two commits from `origin/main` by the user (e305
 
 ### The four things the trains' report flagged
 1. **Person lit on a level crossing: real, fixed.** The term was a fixed strip across the city at the track's z. Shown: laying the strip on a real walker, clock stopped, one page: before the fix he brightens (trousers dark to pale grey), after it the two pictures match. The term now also needs `P_rootY > 0.3` (hips raised: riding). `tailFloor` could not be used: riders have it at 0. Passengers still look lit at night in the train set, by eye; there is no A/B of the term on them.
-2. **Console warnings:** see "Final checks".
+2. **Console warning: fixed.** The merge added 3 x X4000 `f_trLivery` on high and in diorama. `trLivery` had early returns; with one exit all copies are gone, the far level's too (overview 15 warnings to 11, 12 before the merge). Livery and the unit number still draw (looked at, 12 h).
 3. **+3 to +5 ms at 1 m into an open door: not fixed, for the coordinator to decide.** Not profiled, and a smaller reach does not help at 1 m. Conservative step: the train close level is now on `high` only (`closeVeh(ctx, 'vehtrain', 'high')`), so medium never pays it; high still does. The figure is the subagent's, measured before this merge. `?novehtrain` turns the level off.
-4. **hitch on trains:** see "Final checks".
+4. **hitch on trains: run**, views station, overview, street at 12 and 21.5: 0 new programs in all 13 windows (200 programs), no freeze in any window, no errors, invariants {}. It ran on AC behind the guard, before the livery fix. Walking past a train was not tested; walkhitch was not run.
 
 Left, not fixed: wheel arches and hubcaps still show facets at 1 m (loft has 9 stations per arch; more would cost every vehicle at level 0); tyre lettering reads upside down at the top of the wheel (real tyres read upright there); unlit ambers are tan rather than amber; two-wheelers have no close level; lorry bulkhead reads mottled through the screen; the cream bezel on the compact stays visible at night, lit like the paint.
 Other sessions: hard dark rectangles in the blue reflection of ground-floor windows at `veh-parked` 21.5, with and without `?noparklamps` (for close-light). The 110-160 ms freeze on a camera cut, see Numbers.
@@ -22,6 +22,11 @@ Road vehicles draw glass as the trains did before their depth fix, so they may c
 
 Seen on trains: a dark blurry smudge on the far door, through the open doorway at noon (door1, 12 h), not at night. Not looked into.
 Not seen by this session: freight close up, wagon tail lamps.
+
+## Final checks (merged branch)
+typecheck 0, build 0. ui-test 73 passed, 1 failed: `kinds`, which passed when rerun alone (known flake). diorama, medium, low at downtown: no errors, invariants {}, validate [], pictures looked at and fine.
+Overview at speed 4, three runs: (1) before the livery fix: invariants not {}: two ordinary pedestrians overlapping 3.1 s at a crosswalk (-103.9, -4.8), parent and beachgoer. crowd.ts and animate.ts have not changed in this round. Did not repeat in the later runs, so a rare event in the crowd, not shown to be unrelated. (2) invariants {} but not valid: the machine's network changed during load (ERR_NETWORK_CHANGED), module harbor did not load. (3) on the head commit: 0 errors, no failed modules, invariants {}, validate [], 11 warnings, none for f_trLivery.
+**Perf pending for the merged state:** the user needed the machine and timing runs had to stop. The road-vehicle numbers below are from 2e595b7, before the merge. The trains' numbers are the subagent's. The coordinator measures at the merge.
 
 ## What
 - A **close level**: one more InstancedMesh per kind (`traffic-<kind>-close-lod0`) and its panes (`traffic-<kind>-glass-lod0`), same instance buffers, within `CLOSE_DIST` 18 x lens k (about 12 m in the usual lens), at most 12 per kind. Two-wheelers have none (level 0 only).
