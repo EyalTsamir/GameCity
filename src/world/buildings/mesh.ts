@@ -367,19 +367,30 @@ export class Builder {
       dz = -this.sn * ldx + this.cs * ldz;
     const n = this.B[0],
       m = this.B[1];
-    const i0 = Math.max(0, Math.ceil(ua - A[0] / gw - 1e-4)),
-      i1 = Math.min(n - 1, Math.floor(ub - A[1] / gw + 1e-4));
-    const j0 = Math.max(0, Math.ceil(va - A[2] / gh - 1e-4)),
-      j1 = Math.min(m - 1, Math.floor(vb - A[3] / gh + 1e-4));
+    // every window this quad shows any of; one it shows only part of says so in its last four numbers (metres from the window's lower left)
+    const i0 = Math.max(0, Math.ceil(ua - A[1] / gw + 1e-4)),
+      i1 = Math.min(n - 1, Math.floor(ub - A[0] / gw - 1e-4));
+    const j0 = Math.max(0, Math.ceil(va - A[3] / gh + 1e-4)),
+      j1 = Math.min(m - 1, Math.floor(vb - A[2] / gh - 1e-4));
+    const W = A[1] - A[0],
+      H = A[3] - A[2];
+    if (W <= 0 || H <= 0) return;
     for (let i = i0; i <= i1; i++) {
       const um = i * gw + gu - u0 + A[0]; // metres from p0 to the window's left edge
       const lx = x0 + ldx * um,
         lz = z0 + ldz * um;
       const wx = this.cs * lx + this.sn * lz + this.tx,
         wz = -this.sn * lx + this.cs * lz + this.tz;
+      const cx0 = Math.max(0, -um),
+        cx1 = Math.min(W, L - um);
+      if (cx1 <= cx0) continue;
       for (let j = j0; j <= j1; j++) {
         const wy = j * gh + gv + A[2] + this.ty;
-        rec.push(wx, wy, wz, dx, dz, A[1] - A[0], A[3] - A[2], A[2], this.B[2], this.B[3], this.C[2], this.r, this.g, this.b, i, j);
+        const vm = j * gh + A[2]; // from the grid's origin to the window's foot, in the quad's own v (metres)
+        const cy0 = Math.max(0, va * gh - vm),
+          cy1 = Math.min(H, vb * gh - vm);
+        if (cy1 <= cy0) continue;
+        rec.push(wx, wy, wz, dx, dz, W, H, A[2], this.B[2], this.B[3], this.C[2], this.r, this.g, this.b, i, j, gw, gh, this.C[3], A[0], cx0, cx1, cy0, cy1);
       }
     }
   }

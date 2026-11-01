@@ -490,6 +490,10 @@ export class PlanarReflection {
     const wr = G || this.street ? (bu?.uWinRefl ?? null) : null;
     const prevWR = wr ? (wr.value as number) : 0;
     if (wr) wr.value = 0;
+    // (the near-only rooms aren't drawn in this pass: the facades here keep their own interiors)
+    const cw = bu?.uCloseWin ?? null;
+    const prevCW = cw ? (cw.value as number) : 0;
+    if (cw) cw.value = 0;
     const bs = this.blendSave;
     let bi = 0;
     for (const m of this.additive) {
@@ -533,6 +537,7 @@ export class PlanarReflection {
       glassMirror.uGM.value.x = prevGK;
       if (fd) fd.value = prevDetail;
       if (wr) wr.value = prevWR;
+      if (cw) cw.value = prevCW;
       bi = 0;
       for (const m of this.additive) {
         m.blending = bs[bi++] as THREE.Blending;

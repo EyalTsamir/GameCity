@@ -14,8 +14,8 @@ import * as THREE from 'three';
 import { LAMP_GLSL, lampUniforms } from '../../core/lampLight';
 import { WIN, WALLPAT } from './materials';
 
-/** floats per window record: wx, wy, wz, dx, dz, w, h, wy0(in cell), seed, kind, pattern, r, g, b, col, row */
-export const WIN_REC = 16;
+/** floats per window record: wx, wy, wz, dx, dz, w, h, wy0(in cell), seed, kind, pattern, r, g, b, col, row, cell w, cell h, frame + 8 * glass, x0(in cell), shown part of the window: x0, x1, y0, y1 */
+export const WIN_REC = 24;
 const BIN = 16;
 const MAX_SILL = 4096;
 const MAX_BOX = 8192;
@@ -204,6 +204,8 @@ export function createWinGeo(rec: number[], range: number): WinGeo {
     const seed = Math.round(R[o + 8]);
     const sillW = (style === WIN.PLAIN || style === WIN.MUNTIN || style === WIN.INDUSTRIAL || style === WIN.ARCHED) && pat !== WALLPAT.CORRUGATED;
     if (!sillW || R[o + 7] <= 0.2) continue;
+    // (a window cut by the end of its wall quad has no sill of its own)
+    if (R[o + 20] > 1e-3 || R[o + 21] < R[o + 5] - 1e-3 || R[o + 22] > 1e-3 || R[o + 23] < R[o + 6] - 1e-3) continue;
     let f = 1;
     const rendered = pat === WALLPAT.PLASTER || pat === WALLPAT.SMOOTH || pat === WALLPAT.STONE;
     if (rendered && style !== WIN.INDUSTRIAL && hash(seed, 3.7) < 0.62) f |= style === WIN.ARCHED ? 2 : 6; // 2 jambs, 4 head

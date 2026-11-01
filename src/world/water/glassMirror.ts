@@ -38,7 +38,9 @@ float bhGlassMirror(vec3 wp, vec3 N, vec2 wob, float lod, vec3 sky, out vec4 res
   // the mirror lies on the plane, and a door or pane set back from it would look outside the picture: read where the view ray crosses the plane
   vec3 ey = cameraPosition - wp;
   vec4 c = uGMMat * vec4(wp - ey * off / dot(ey.xz, uGM.yz), 1.0);
-  vec4 r = textureLod(tGM, c.xy / c.w + wob, lod);
+  vec2 uvM = c.xy / c.w + wob;
+  vec2 tx = 0.7 / vec2(textureSize(tGM, 0));
+  vec4 r = 0.25 * (textureLod(tGM, uvM + tx, lod) + textureLod(tGM, uvM - tx, lod) + textureLod(tGM, uvM + vec2(tx.x, -tx.y), lod) + textureLod(tGM, uvM + vec2(-tx.x, tx.y), lod));
   res = vec4(r.rgb + sky * (1.0 - r.a), 1.0 - r.a);
   return k;
 }
