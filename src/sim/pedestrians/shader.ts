@@ -2046,6 +2046,9 @@ export function pedPivUniform(): THREE.IUniform {
 }
 
 let shared: Record<string, THREE.IUniform> | null = null;
+/** world z of the railway, set by the occupants (a train's passengers are lit by its lamps: see the emissive line in the material) */
+export const PED_RAIL_Z = { value: 1e6 };
+
 function sharedUniforms(): Record<string, THREE.IUniform> {
   return (shared ??= uniformsFor());
 }
@@ -2109,6 +2112,8 @@ function peopleMaterial(far: boolean, pal: PalUniforms, close = false): THREE.Me
     Object.assign(shader.uniforms, sharedUniforms());
     if (pal) Object.assign(shader.uniforms, pal);
     shader.uniforms.uPedNight = globalUniforms.uNight;
+    shader.uniforms.uPedLights = globalUniforms.uLights;
+    shader.uniforms.uPedRailZ = PED_RAIL_Z;
     shader.vertexShader = injectVertex(shader.vertexShader, true, far ? 'far' : close ? 'close' : 'full', pal !== null);
     // the figure's shadow lookup starts 12 cm towards the sun: the coarse proxy (the tiny level, its own hems and
     // elbows) no longer shadows the detailed figure it stands in for. That self-shadow was a speckled band along
@@ -2120,7 +2125,7 @@ function peopleMaterial(far: boolean, pal: PalUniforms, close = false): THREE.Me
         .replace('#include <shadowmap_vertex>', `#ifdef USE_SHADOWMAP\n  vec3 pedWP0 = worldPosition.xyz;\n  worldPosition.xyz += uPedSun * ${close ? 'pedSunLift' : '0.12'};\n#endif\n#include <shadowmap_vertex>\n#ifdef USE_SHADOWMAP\n  worldPosition.xyz = pedWP0;\n#endif`);
     }
     shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', `#include <common>\n${FRAG_PARS}\nuniform float uPedNight;`)
+      .replace('#include <common>', `#include <common>\n${FRAG_PARS}\nuniform float uPedNight;\nuniform float uPedLights;\nuniform float uPedRailZ;`)
       .replace(/void main\(\)\s*\{/, (m) => `${m}\n${FRAG_FADE}`)
       .replace('#include <color_fragment>', `#include <color_fragment>\n${FRAG_COLOR}`)
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>\n${HAIR_NORMAL}\n${FABRIC_NORMAL}`)
@@ -2128,7 +2133,7 @@ function peopleMaterial(far: boolean, pal: PalUniforms, close = false): THREE.Me
       // the sun shadow's per-pixel noise rotation (three's PCF) stipples a figure's small surfaces in a dot grid
       // wherever a penumbra crosses them: a fixed disc, same taps
       .replace('#include <shadowmap_pars_fragment>', SHADOW_LIFT ? THREE.ShaderChunk.shadowmap_pars_fragment.replace('interleavedGradientNoise( gl_FragCoord.xy ) * PI2', '0.7') : '#include <shadowmap_pars_fragment>')
-      .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n  totalEmissiveRadiance += diffuseColor.rgb * 0.07 * uPedNight;');
+      .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n  totalEmissiveRadiance += diffuseColor.rgb * 0.07 * uPedNight;\n  // inside the width of a train (nobody else stands between the rails but for the moment of a level crossing): its saloon lamps\n  totalEmissiveRadiance += diffuseColor.rgb * vec3(1.0, 0.82, 0.62) * 0.42 * uPedLights * step(abs(cameraPosition.z - dot(viewMatrix[2].xyz, vViewPosition) - uPedRailZ), 1.38);');
   };
   material.customProgramCacheKey = () => (far ? 'tinyhaven-people-4-far' : close ? 'tinyhaven-people-4-close' : 'tinyhaven-people-4') + (CLOSE ? '-nf' : '') + (VFAR ? '-v1' : '') + (pal ? '-pal' : '') + (SHADOW_LIFT ? '-sl' : '') + '-pr' + (detailPeople('clothprints') ? '1' : '0');
   return material;
