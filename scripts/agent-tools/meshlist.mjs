@@ -12,14 +12,15 @@ try {
   await page.routeWebSocket(/.*/, () => {});
   await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 300000 });
   await page.waitForFunction(() => window.__city && window.__city.ready && window.__city.frames() > 3, null, { timeout: 300000, polling: 250 });
-  const res = await page.evaluate(async ([v, h]) => {
+  const res = await page.evaluate(async ([v, h, l]) => {
     const c = window.__city;
+    c.layer = l;
     c.setHours(h);
     c.view({ target: { x: v[0], y: v[1], z: v[2] }, distance: v[3], yaw: v[4], pitch: v[5] });
     await new Promise((d) => setTimeout(d, 1500));
     const out = [];
     c.ctx.scene.traverse((o) => {
-      if (!o.isMesh || !o.visible) return;
+      if (!o.isMesh || !o.visible || (c.layer !== undefined && !o.layers.isEnabled(c.layer))) return;
       let vis = true;
       for (let p = o; p; p = p.parent) if (!p.visible) vis = false;
       if (!vis) return;
@@ -30,7 +31,7 @@ try {
     });
     out.sort((a, b) => b[1] - a[1]);
     return { stats: c.stats().water ?? null, out };
-  }, [view, hour]);
+  }, [view, hour, process.env.MESHLAYER ? Number(process.env.MESHLAYER) : undefined]);
   console.log(JSON.stringify(res.stats));
   for (const r of res.out) console.log(r.join('  '));
 } finally {

@@ -17,7 +17,7 @@ import { createCutaway } from './water/cutaway';
 import { swell } from './water/waves';
 import { PlanarReflection, type ReflectionLevel } from './water/reflection';
 import { createGlassPicker, type GlassPlane } from './water/glassMirror';
-import { closeLight } from '../core/closelight';
+import { closeLight, closeLightOn } from '../core/closelight';
 import { HullContacts } from './water/hulls';
 import { buildWaterExtension, type WaterExtension } from './water/extension';
 import { WORLD_MODE } from '../core/world';
@@ -188,16 +188,18 @@ export default function create(ctx: CityContext): CityModule {
     for (const d of [0, 10, 25, 50]) if (isW(p.x + _f.x * d, p.z + _f.z * d)) return true;
     return false;
   };
+  const noWaterOn = closeLightOn('waterskip');
   const updateGlassMirror = (realDt: number) => {
-    if (!picker) return;
     const p = ctx.camera.position;
     const cut = _gm.distanceToSquared(p) > 25;
     _gm.copy(p);
     if (cut || gmEvery-- <= 0) {
       gmEvery = 6;
-      gmPlane = p.y < 16 && !waterClose(p) ? picker.pick() : null;
+      const street = p.y < 16 && !waterClose(p);
+      reflection.noWater = noWaterOn && street;
+      gmPlane = street && picker ? picker.pick() : null;
     }
-    reflection.setGlass(gmPlane, realDt, cut);
+    if (picker) reflection.setGlass(gmPlane, realDt, cut);
   };
 
   return {

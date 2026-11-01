@@ -62,7 +62,9 @@ const TREES_NEAR = /^veg-trees-(w|e)$/;
 /** only in the street mirror (water/streetMirror.ts): what a wet road shows right in front of the eye */
 const STREET_ONLY = /^traffic-(.*-lod\d|flares)$/;
 /** only in the glass mirror (water/glassMirror.ts): the street itself, from the eye of a shop window */
-const GLASS_ONLY = /^(roads-(asphalt|hardscape|markings)|terrain-ground|props-casters|traffic-signal-poles|peds-(close|near|far)|veg-(wood-near|wood-far|cards)|landmarks-(static|detail).*)$/;
+const GLASS_ONLY = /^(roads-(asphalt|hardscape|markings)|terrain-ground|props-casters|traffic-signal-poles|peds-(close|near|far)|veg-(wood-near|cards)|landmarks-static.*)$/;
+/** what the water mirrors and a shop window down in the streets does not (about 390 k triangles, a third of the pass) */
+const NOT_GLASS = /^(harbor-.*|land-reflect(-island)?|terrain-masonry)$/;
 
 export interface ReflectionUniforms {
   tRefl: { value: THREE.Texture | null };
@@ -118,10 +120,12 @@ export class PlanarReflection {
   private pm = new THREE.Matrix4();
   private dbg: boolean;
   private dbgList: THREE.Object3D[] = [];
+  private notGlass: THREE.Object3D[] = [];
+  private skipN = 0;
+  private lastZ = new THREE.Vector3(0, 0, 1);
   /** ?reflfacade: facades at full detail in the pass (A/B) */
   private facadeDetail: boolean;
   private halfRate = perfOn('reflhalf');
-  private skip = false;
   private lastEye = new THREE.Vector3();
   // stats
   calls = 0;
@@ -182,6 +186,7 @@ export class PlanarReflection {
       if (BASE.some((r) => r.test(o.name))) {
         o.layers.enable(LAYERS.REFLECT);
         this.base.push(o);
+        if (NOT_GLASS.test(o.name)) this.notGlass.push(o);
         if (NIGHT_ONLY.test(o.name)) this.night.push(o);
         if (SMALL.test(o.name)) this.small.push(o);
         return;
@@ -288,29 +293,37 @@ export class PlanarReflection {
     else u.x = 0;
   }
 
+  /** down in the streets with no water ahead and neither glass nor a wet road to mirror: no pass, the water falls back on its analytic sky */
+  noWater = false;
+
   /** arm the pass for this frame (module frame()) */
   request(): void {
-    this.pending = this.level > 0 && this.attached;
+    this.pending = this.level > 0 && this.attached && !(this.noWater && !this.street && !this.glass);
     if (!this.pending) {
       this.uniforms.uReflInfo.value.x = 0;
       return;
     }
-    // every other frame (?noreflhalf: every frame): the lookup uses the matrix of the camera that drew the mirror, so a
-    // frame-old mirror stays in place on the water; only a camera cut redraws at once
+    // every other frame, every fourth on glass (?noreflhalf: every frame): the lookup uses the matrix of the camera that drew the mirror, so a
+    // frame-old mirror stays in place on the water; only a camera cut redraws at once, and on glass a turn of the head (past the edge of the old picture there is nothing to read)
     if (this.halfRate) {
       const cp = this.ctx.camera.position;
       const moved = this.lastEye.distanceToSquared(cp);
       const cut = moved > 25 && moved > 0.0025 * cp.y * cp.y;
-      if (!cut && this.renders > 0 && this.skip) this.pending = false;
-      this.skip = this.pending;
+      const e = this.ctx.camera.matrixWorld.elements;
+      const turned = !!this.glass && e[8] * this.lastZ.x + e[9] * this.lastZ.y + e[10] * this.lastZ.z < 0.9986;
+      if (!cut && !turned && this.renders > 0 && ++this.skipN < (this.glass ? 4 : 2)) this.pending = false;
+      else {
+        this.skipN = 0;
+        this.lastZ.set(e[8], e[9], e[10]);
+      }
     }
   }
 
   private resize(): void {
     const r = this.ctx.renderer;
     r.getDrawingBufferSize(this.sz);
-    // (the street mirror is only ever read blurred: the lower resolution)
-    const k = (this.level === 2 && !this.street ? 1 / 3 : 1 / 4.5) * Math.max(0.5, Math.min(1, this.ctx.quality.renderScale || 1));
+    // (the street mirror is only ever read blurred: the lower resolution; glass shows it at a quarter strength)
+    const k = (this.level === 2 && !this.street ? (this.glass ? 1 / 4 : 1 / 3) : 1 / 4.5) * Math.max(0.5, Math.min(1, this.ctx.quality.renderScale || 1));
     const w = Math.max(64, Math.round(this.sz.x * k)),
       h = Math.max(36, Math.round(this.sz.y * k));
     if (w !== this.width || h !== this.height) {
@@ -424,6 +437,10 @@ export class PlanarReflection {
       vs[n++] = o.visible;
       o.visible = !!G && o.visible;
     }
+    for (const o of this.notGlass) {
+      vs[n++] = o.visible;
+      o.visible = !G && o.visible;
+    }
     const day = this.ctx.uniforms.uLights.value < 0.02;
     for (const o of this.night) {
       vs[n++] = o.visible;
@@ -536,6 +553,7 @@ export class PlanarReflection {
       for (const o of this.treesNear) o.visible = vs[n++];
       for (const o of this.streetOnly) o.visible = vs[n++];
       for (const o of this.glassOnly) o.visible = vs[n++];
+      for (const o of this.notGlass) o.visible = vs[n++];
       for (const o of this.night) o.visible = vs[n++];
       for (const o of this.small) o.visible = vs[n++];
       scene.background = prevBg;
