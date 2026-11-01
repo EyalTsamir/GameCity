@@ -1,5 +1,5 @@
 // A cat, seen from a metre: one skin in three poses (standing, sitting up, loafing with its paws tucked), blended in the
-// vertex shader, with legs that walk, a head that turns and a tail that lives its own life. About 700 triangles. Coat,
+// vertex shader, with legs that walk, a head that turns and a tail that lives its own life. About 1500 triangles (three cats at most). Coat,
 // eyes, nose and inner ears painted in the fragment shader from the standing pose, so a stripe stays on its rib whatever
 // the cat is doing. Feet at the origin, +Z forward.
 
@@ -53,14 +53,16 @@ const POSES: Record<'stand' | 'sit' | 'loaf', PoseShape> = {
       [-0.305, 0.49, 0.0075, 0.0075, 1],
     ],
     fl: [
-      [0.075, 0.2, 0.03, 0.04, 0],
+      [0.066, 0.245, 0.008, 0.016, 0],
+      [0.075, 0.2, 0.024, 0.038, 0],
       [0.08, 0.13, 0.019, 0.022, 0.42],
       [0.08, 0.06, 0.0135, 0.0145, 0.74],
       [0.086, 0.018, 0.016, 0.0165, 1],
       [0.103, 0.011, 0.015, 0.011, 1],
     ],
     bl: [
-      [-0.165, 0.205, 0.036, 0.055, 0],
+      [-0.175, 0.25, 0.01, 0.022, 0],
+      [-0.165, 0.2, 0.03, 0.055, 0],
       [-0.145, 0.13, 0.026, 0.03, 0.42],
       [-0.19, 0.07, 0.0145, 0.0165, 0.74],
       [-0.165, 0.018, 0.0165, 0.0165, 1],
@@ -91,14 +93,16 @@ const POSES: Record<'stand' | 'sit' | 'loaf', PoseShape> = {
       [0.092, 0.016, 0.0075, 0.0075, 1],
     ],
     fl: [
-      [0.012, 0.235, 0.028, 0.034, 0],
+      [-0.004, 0.28, 0.008, 0.014, 0],
+      [0.012, 0.235, 0.024, 0.032, 0],
       [0.042, 0.15, 0.018, 0.021, 0.42],
       [0.058, 0.07, 0.0135, 0.0145, 0.74],
       [0.062, 0.018, 0.016, 0.0165, 1],
       [0.08, 0.011, 0.015, 0.011, 1],
     ],
     bl: [
-      [-0.085, 0.105, 0.04, 0.056, 0, 0.012],
+      [-0.105, 0.15, 0.012, 0.024, 0, 0.004],
+      [-0.085, 0.105, 0.036, 0.056, 0, 0.012],
       [-0.03, 0.078, 0.03, 0.034, 0.42, 0.026],
       [-0.085, 0.032, 0.0165, 0.018, 0.74, 0.03],
       [-0.01, 0.017, 0.0165, 0.0155, 1, 0.024],
@@ -129,14 +133,16 @@ const POSES: Record<'stand' | 'sit' | 'loaf', PoseShape> = {
       [0.03, 0.016, 0.0075, 0.0075, 1, 0.08],
     ],
     fl: [
-      [0.07, 0.08, 0.026, 0.03, 0],
+      [0.055, 0.118, 0.008, 0.014, 0],
+      [0.07, 0.08, 0.024, 0.03, 0],
       [0.09, 0.05, 0.018, 0.02, 0.42],
       [0.1, 0.028, 0.0135, 0.0145, 0.74],
       [0.105, 0.02, 0.014, 0.015, 1],
       [0.118, 0.016, 0.012, 0.01, 1],
     ],
     bl: [
-      [-0.12, 0.08, 0.04, 0.056, 0, 0.016],
+      [-0.14, 0.125, 0.012, 0.024, 0, 0.006],
+      [-0.12, 0.08, 0.036, 0.056, 0, 0.016],
       [-0.07, 0.065, 0.03, 0.036, 0.42, 0.028],
       [-0.11, 0.03, 0.016, 0.018, 0.74, 0.03],
       [-0.05, 0.018, 0.016, 0.015, 1, 0.026],
@@ -145,6 +151,37 @@ const POSES: Record<'stand' | 'sit' | 'loaf', PoseShape> = {
     head: [0.208, 0.214, 0],
   },
 };
+
+/** the rings with sub - 1 more between each pair, on a Catmull-Rom curve through all their numbers */
+function refine(rings: Ring[], sub: number): Ring[] {
+  const out: Ring[] = [];
+  for (let i = 0; i < rings.length - 1; i++) {
+    const a = rings[Math.max(0, i - 1)],
+      b = rings[i],
+      c = rings[i + 1],
+      d = rings[Math.min(rings.length - 1, i + 2)];
+    for (let s = 0; s < sub; s++) {
+      const t = s / sub,
+        t2 = t * t,
+        t3 = t2 * t;
+      const r: number[] = [];
+      for (let k = 0; k < 6; k++) {
+        const A = a[k] ?? 0,
+          B = b[k] ?? 0,
+          C = c[k] ?? 0,
+          D = d[k] ?? 0;
+        r.push(0.5 * (2 * B + (C - A) * t + (2 * A - 5 * B + 4 * C - D) * t2 + (3 * B - A - 3 * C + D) * t3));
+      }
+      // radii never go negative, and a weight stays in its range
+      r[2] = Math.max(0.003, r[2]);
+      r[3] = Math.max(0.003, r[3]);
+      r[4] = Math.min(1, Math.max(0, r[4]));
+      out.push(r as Ring);
+    }
+  }
+  out.push(rings[rings.length - 1]);
+  return out;
+}
 
 /** topology shared by all poses; each pose fills the same vertices */
 class Skin {
@@ -211,7 +248,7 @@ function buildAll(): THREE.BufferGeometry {
       const apex0 = v(x0 + mirror * (start[5] ?? 0), start[1] + (start[1] - o2[1]) * 0.25, start[0] + (start[0] - o2[0]) * 0.25, part, mat, start[4], px, py, pz);
       for (let k = 0; k < sides; k++) S.idx.push(rows[0][k], rows[0][(k + 1) % sides], apex0);
     };
-    loft(P.body, 12, PART.BODY, MAT.FUR, 0, 0);
+    loft(refine(P.body, 2), 14, PART.BODY, MAT.FUR, 0, 0);
     // nose: a small pad on the end of the muzzle
     const [hz, hy] = P.head;
     loft(
@@ -227,16 +264,22 @@ function buildAll(): THREE.BufferGeometry {
     );
     // ears: a shell, fur outside and pink inside
     for (const s of [1, -1]) {
-      const bx = s * 0.026,
-        by = hy + 0.032,
+      const bx = s * 0.027,
+        by = hy + 0.028,
         bz = hz - 0.022;
-      const a = v(bx - s * 0.018, by - 0.004, bz + 0.006, PART.BODY, MAT.EAR, 1),
-        b = v(bx + s * 0.022, by - 0.006, bz + 0.002, PART.BODY, MAT.EAR, 1),
-        c = v(bx + s * 0.012, by + 0.05, bz - 0.006, PART.BODY, MAT.EAR, 1),
-        d = v(bx + s * 0.002, by, bz - 0.022, PART.BODY, MAT.FUR, 1);
-      // inner face towards the front; the shell closes behind it
-      if (s > 0) S.idx.push(a, b, c, b, d, c, d, a, c);
-      else S.idx.push(a, c, b, b, c, d, d, c, a);
+      const A = [bx - s * 0.018, by - 0.004, bz + 0.006],
+        B = [bx + s * 0.022, by - 0.008, bz + 0.002],
+        C = [bx + s * 0.012, by + 0.036, bz - 0.005];
+      const a = v(A[0], A[1], A[2], PART.BODY, MAT.EAR, 1),
+        b = v(B[0], B[1], B[2], PART.BODY, MAT.EAR, 1),
+        c = v(C[0], C[1], C[2], PART.BODY, MAT.EAR, 1);
+      // inner face towards the front; the shell closes behind it in fur, with vertices of its own
+      const a2 = v(A[0], A[1], A[2], PART.BODY, MAT.FUR, 1),
+        b2 = v(B[0], B[1], B[2], PART.BODY, MAT.FUR, 1),
+        c2 = v(C[0], C[1], C[2], PART.BODY, MAT.FUR, 1),
+        d = v(bx + s * 0.002, by, bz - 0.02, PART.BODY, MAT.FUR, 1);
+      if (s > 0) S.idx.push(a, b, c, b2, d, c2, d, a2, c2);
+      else S.idx.push(a, c, b, b2, c2, d, d, c2, a2);
     }
     // whiskers: slim triangles from the muzzle
     for (const s of [1, -1]) {
@@ -252,15 +295,15 @@ function buildAll(): THREE.BufferGeometry {
       }
     }
     // legs: the pivot (for the walk) is always the standing hip, the walk is only ever seen standing
-    const FL = POSES.stand.fl[0],
-      BL = POSES.stand.bl[0];
+    const FL = POSES.stand.fl[1],
+      BL = POSES.stand.bl[1];
     for (const s of [1, -1]) {
-      const fx = s * 0.033,
-        bx = s * 0.036;
-      loft(P.fl, 7, s > 0 ? PART.FL : PART.FR, MAT.FUR, fx, s, fx, FL[1], FL[0]);
-      loft(P.bl, 7, s > 0 ? PART.BL : PART.BR, MAT.FUR, bx, s, bx, BL[1], BL[0]);
+      const fx = s * 0.03,
+        bx = s * 0.033;
+      loft(refine(P.fl, 2), 7, s > 0 ? PART.FL : PART.FR, MAT.FUR, fx, s, fx, FL[1], FL[0]);
+      loft(refine(P.bl, 2), 7, s > 0 ? PART.BL : PART.BR, MAT.FUR, bx, s, bx, BL[1], BL[0]);
     }
-    loft(P.tail, 7, PART.TAIL, MAT.FUR, 0, 1);
+    loft(refine(P.tail, 2), 6, PART.TAIL, MAT.FUR, 0, 1);
     positions[name] = S.pos;
     topo = S;
   }
@@ -365,28 +408,36 @@ vec3 slCatPaint() {
   float m = vCMat;
   if (m > 2.5) return vec3(0.85);
   if (m > 1.5) return vec3(0.42, 0.2, 0.2);
-  if (m > 0.5) return vec3(0.62, 0.38, 0.36);
+  if (m > 0.5) return vec3(0.46, 0.3, 0.27);
   float coat = vCat.x;
   // 0 brown tabby, 1 ginger tabby, 2 grey tabby, 3 black, 4 tuxedo, 5 tortoiseshell
-  vec3 base = coat < 0.5 ? vec3(0.34, 0.25, 0.16) : coat < 1.5 ? vec3(0.66, 0.39, 0.16) : coat < 2.5 ? vec3(0.42, 0.42, 0.42) : coat < 4.5 ? vec3(0.028, 0.026, 0.03) : vec3(0.12, 0.08, 0.06);
-  vec3 stripe = coat < 0.5 ? vec3(0.07, 0.05, 0.035) : coat < 1.5 ? vec3(0.38, 0.17, 0.05) : vec3(0.1, 0.1, 0.11);
+  vec3 base = coat < 0.5 ? vec3(0.31, 0.24, 0.165) : coat < 1.5 ? vec3(0.62, 0.38, 0.17) : coat < 2.5 ? vec3(0.37, 0.37, 0.365) : coat < 4.5 ? vec3(0.04, 0.037, 0.04) : vec3(0.12, 0.08, 0.06);
+  vec3 stripe = coat < 0.5 ? vec3(0.1, 0.075, 0.05) : coat < 1.5 ? vec3(0.42, 0.2, 0.07) : vec3(0.13, 0.13, 0.14);
   vec3 c = base;
   float head = smoothstep(0.17, 0.2, r.z) * smoothstep(0.27, 0.3, r.y);
   float tailK = smoothstep(-0.2, -0.235, r.z);
   if (coat < 2.5) {
     // mackerel stripes down the flank, bands on the legs and rings on the tail, the M on the forehead
-    float wob = 0.012 * sin(r.y * 40.0 + vCat.y * 9.0);
-    float rib = smoothstep(0.1, 0.55, sin((r.z + wob) * 88.0)) * smoothstep(0.1, 0.18, r.y) * (1.0 - head) * (1.0 - tailK);
-    float back = smoothstep(0.24, 0.272, r.y + 0.05 * (1.0 - abs(r.x) * 20.0)) * (1.0 - head);
-    float leg = smoothstep(0.2, 0.6, sin(r.y * 110.0)) * smoothstep(0.18, 0.12, r.y) * step(0.02, abs(r.x));
-    float tail = smoothstep(0.15, 0.6, sin((r.y + r.z) * 90.0)) * tailK;
-    float fore = head * smoothstep(0.34, 0.352, r.y) * smoothstep(0.15, 0.5, sin(r.x * 190.0));
-    float cheek = head * smoothstep(0.2, 0.5, sin((r.y - abs(r.x) * 0.8) * 150.0)) * smoothstep(0.016, 0.03, abs(r.x)) * smoothstep(0.33, 0.315, r.y);
-    c = mix(c, stripe, max(max(max(rib, back * 0.85), max(leg, tail)), max(fore, cheek * 0.7)));
+    // (thin, broken and uneven, as stripes in fur are: never hoops. Ticked hairs between them)
+    float wob = 0.03 * (slCatV(r.zy * 22.0 + vCat.y * 9.0) - 0.5) + 0.25 * (r.y - 0.2);
+    float brk = slCatV(vec2(r.z * 38.0, r.y * 62.0) + vCat.y * 17.0);
+    float rib = smoothstep(0.25, 0.8, sin((r.z + wob) * 140.0 + vCat.y * 6.0)) * smoothstep(0.25, 0.65, brk) * smoothstep(0.135, 0.2, r.y) * (1.0 - head) * (1.0 - tailK);
+    float back = smoothstep(0.026, 0.01, abs(r.x) + 0.012 * (brk - 0.5)) * smoothstep(0.245, 0.262, r.y) * step(r.z, 0.14) * (1.0 - head) * (1.0 - tailK);
+    float leg = smoothstep(0.35, 0.8, sin(r.y * 125.0 + r.z * 40.0)) * smoothstep(0.17, 0.11, r.y) * smoothstep(0.03, 0.06, r.y) * step(0.02, abs(r.x)) * 0.75;
+    float tail = smoothstep(0.2, 0.7, sin((r.y + r.z) * 105.0)) * tailK * 0.8;
+    tail = max(tail, tailK * smoothstep(0.455, 0.48, r.y));
+    float fore = head * smoothstep(0.342, 0.356, r.y) * smoothstep(0.25, 0.6, sin(r.x * 210.0));
+    float cheek = head * smoothstep(0.3, 0.6, sin((r.y - abs(r.x) * 0.8) * 170.0)) * smoothstep(0.022, 0.034, abs(r.x)) * smoothstep(0.33, 0.315, r.y);
+    float ticks = slCatV(vec2(r.z * 420.0, r.y * 300.0 + r.x * 280.0));
+    c *= 0.82 + 0.36 * ticks;
+    c = mix(c, stripe, max(max(max(rib, back) * 0.8, max(leg, tail)), max(fore, cheek * 0.6) * 0.85));
     // pale under the chin and on the belly
-    float belly = smoothstep(0.155, 0.13, r.y) * (1.0 - step(0.02, abs(r.x)) * 0.0) * step(r.z, 0.13) * smoothstep(0.035, 0.02, abs(r.x));
-    c = mix(c, base * 1.7 + 0.08, belly);
+    float belly = smoothstep(0.17, 0.135, r.y) * step(r.z, 0.13) * smoothstep(0.027, 0.012, abs(r.x));
+    c = mix(c, base * 1.5 + 0.09, belly * 0.85);
+    c = mix(c, base * 1.5 + 0.1, smoothstep(0.035, 0.018, r.y) * 0.7);
     c = mix(c, base * 1.6 + 0.1, head * smoothstep(0.3, 0.29, r.y) * smoothstep(0.025, 0.012, abs(r.x)));
+    // a pale muzzle
+    c = mix(c, base * 1.45 + 0.12, head * smoothstep(0.262, 0.28, r.z) * smoothstep(0.33, 0.318, r.y) * 0.8);
   } else if (coat > 3.5 && coat < 4.5) {
     // tuxedo: white bib and socks and a little white on the muzzle
     float w = smoothstep(0.03, 0.02, abs(r.x)) * smoothstep(0.26, 0.24, r.y) * step(0.06, r.z);
@@ -404,16 +455,16 @@ vec3 slCatPaint() {
   c *= 0.78 + 0.44 * fur;
   // eyes, in the shape of an almond: iris, slit, and a lid that comes down
   if (head > 0.01) {
-    vec2 e = vec2(abs(r.x) - 0.0235, r.y - 0.3395);
+    vec2 e = vec2(abs(r.x) - 0.0215, r.y - 0.3395);
     float front = step(0.24, r.z);
     float alm = length(e * vec2(1.0, 1.55));
-    if (front > 0.5 && alm < 0.0135) {
+    if (front > 0.5 && alm < 0.0115) {
       vec3 iris = fract(vCat.y * 7.3) < 0.5 ? vec3(0.62, 0.52, 0.1) : fract(vCat.y * 7.3) < 0.8 ? vec3(0.3, 0.5, 0.15) : vec3(0.75, 0.42, 0.06);
-      float slit = smoothstep(0.0034, 0.0022, abs(e.x)) ;
+      float slit = smoothstep(0.0028, 0.0017, abs(e.x));
       vec3 eye = mix(iris, vec3(0.008), slit);
-      eye = mix(eye, c * 0.35, smoothstep(0.0115, 0.0135, alm));
+      eye = mix(eye, c * 0.3, smoothstep(0.0095, 0.0115, alm));
       // the lid: fur from the top as it blinks
-      float lid = step(e.y, 0.0135 - 0.027 * vCat.z);
+      float lid = step(e.y, 0.0115 - 0.023 * vCat.z);
       c = mix(c, eye, lid);
     }
   }

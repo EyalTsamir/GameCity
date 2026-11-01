@@ -9,6 +9,7 @@ import { Member, Party } from '/src/sim/pedestrians/crowd';
 import { CrowdRenderer } from '/src/sim/pedestrians/render';
 import { rigOf } from '/src/sim/pedestrians/rig';
 import { figureMesh } from '/src/sim/pedestrians/body';
+import { DOG_OFFSET } from '/src/sim/pedestrians/figure';
 import { globalUniforms } from '/src/core/uniforms';
 
 const q = new URLSearchParams(location.search);
@@ -79,7 +80,9 @@ for (let i = 0; members.length < (onlyIdx ? onlyIdx.length : n); i++) {
   const persona = PERSONAS[i % PERSONAS.length];
   const age = i % 11 === 9 ? 'child' : undefined;
   const look = makeLook(rng, { persona, warm: q.get('warm') !== '0', age } as Parameters<typeof makeLook>[1]);
-  look.dog = null;
+  // &dog=1 a dog of each coat beside the figure, framed on the dog (&dogsit=1 sitting, &dogwag, &doghead, &dogturn)
+  const FUR = [[0x8a5a33, 0x5a3b26], [0x2a2522, 0x151312], [0xefe6d8, 0xc9b8a0], [0xd2a35c, 0xa8783c], [0x8d8a86, 0x5e5b58], [0xf2efe9, 0x2a2522], [0xb5703a, 0xf2efe9]];
+  look.dog = q.has('dog') ? { fur: FUR[members.length % 7][0], fur2: FUR[members.length % 7][1], collar: 0xc8323c, size: num('dogsize', 1) } : null;
   look.pram = null;
   const p = new Party(i, persona as never);
   const m = new Member(i, p, 0, look, rng.next());
@@ -101,8 +104,18 @@ const heightOf = (m: Member) => {
 function drawCell(i: number, m: Member, yaw: number, dist: number, h: number): void {
   const a = ((yaw + (m.yaw * 180) / Math.PI) * Math.PI) / 180;
   const pitch = ((part === 'foot' ? 25 : 2) * Math.PI) / 180;
-  camera.position.set(m.x + Math.sin(a) * Math.cos(pitch) * dist, m.y + h + Math.sin(pitch) * dist, m.z + Math.cos(a) * Math.cos(pitch) * dist);
-  camera.lookAt(m.x, m.y + h, m.z);
+  const dg = q.has('dog');
+  if (dg) {
+    m.dogSit = num('dogsit', 0);
+    m.dogWag = num('dogwag', 0.6);
+    m.dogHead = num('doghead', 0);
+    m.dogTurn = num('dogturn', 0);
+  }
+  const tx = m.x + (dg ? DOG_OFFSET.x : 0),
+    tz = m.z + (dg ? DOG_OFFSET.z : 0),
+    ty = m.y + (dg ? 0.3 : h);
+  camera.position.set(tx + Math.sin(a) * Math.cos(pitch) * dist, ty + Math.sin(pitch) * dist, tz + Math.cos(a) * Math.cos(pitch) * dist);
+  camera.lookAt(tx, ty, tz);
   camera.updateMatrixWorld();
   sun.position.copy(sunDir).multiplyScalar(60).add(new THREE.Vector3(m.x, 0, m.z));
   sun.target.position.set(m.x, 0, m.z);
