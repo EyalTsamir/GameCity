@@ -485,7 +485,7 @@ vGcRough = 0.85;
             else if ( lv >= 0.5 && lv < 0.9 ) { hf = 0.9; wp = 0.0; }
           }
         }
-        W *= uBlade.y;
+        W *= ${closeNatureOn('closeweeds') ? 'weedH > 0.5 ? 1.0 : uBlade.y' : 'uBlade.y'};   // (a ring's fattened blade is a shard of glass as a weed on paving)
         W = max( W, pxw * 0.75 );
         // edge-on blades turn a little toward the camera (no vanishing hairlines)
         float edgeOn = abs( dot( wd, toCam ) );
