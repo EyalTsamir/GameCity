@@ -488,8 +488,6 @@ export function setGroundBladeFade(lawnA0: number, lawnA1: number, lawnB0: numbe
   gcUniforms.uGcPresL.value.set(long0, long1);
 }
 
-const CWEB = closeNatureOn('caustweb') ? '1.0' : '0.0';
-
 const GROUND_UNIFORMS = /* glsl */ `
 uniform sampler2D tNoise;
 uniform sampler2D tMask;
@@ -498,6 +496,7 @@ uniform vec4 uPondXf;
 uniform vec4 uStripe;
 uniform float uTime;
 uniform float uDaylight;
+uniform float uCWeb;
 uniform vec3 gGrassA;
 uniform vec3 gGrassB;
 uniform vec3 gLawn;
@@ -555,7 +554,7 @@ const GROUND_BEDS = /* glsl */ `
     float c1 = texture2D(tNoise, cp + vec2(uTime * 0.011, uTime * 0.007)).g;
     float c2 = texture2D(tNoise, cp * 1.37 + vec2(-uTime * 0.009, uTime * 0.012)).g;
     float cSun = smoothstep(0.05, 0.45, depth) * (1.0 - smoothstep(0.8, 3.8, depth)) * smoothstep(0.55, 0.95, uDaylight) * (1.0 - inPond * 0.6);
-    float cWeb = ${CWEB} * (1.0 - smoothstep(0.02, 0.06, length(fwidth(p.xz))));
+    float cWeb = uCWeb * (1.0 - smoothstep(0.02, 0.06, length(fwidth(p.xz))));
     float caus = (1.0 - smoothstep(0.0, 0.07, abs(c1 - c2))) * cSun * (1.0 - cWeb);
     bed += vec3(0.85, 1.0, 0.95) * caus * 0.3;
     if (cWeb > 0.0) bed += vec3(0.9, 1.0, 0.92) * thCausticWeb(p.xz, uTime * 0.5 + 23.0) * cSun * cWeb * 0.3;
@@ -906,6 +905,7 @@ export function createGround(ctx: CityContext, model: TerrainModel, feet: readon
     uStripe: { value: park ? new THREE.Vector4(park.rect.x0, park.rect.z0, park.rect.x1, park.rect.z1) : new THREE.Vector4(0, 0, -1, -1) },
     uTime: ctx.uniforms.uTime,
     uDaylight: ctx.uniforms.uDaylight,
+    uCWeb: { value: closeNatureOn('caustweb') ? 1 : 0 },
     ...lampUniforms(),
     ...gcUniforms,
     ...gcPalette(),

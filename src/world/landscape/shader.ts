@@ -30,12 +30,12 @@ const lnTex = (uv: string, k: string, swz = 'xy') => (LG ? `textureGrad(tLN, ${u
 
 const C = (hex: string) => ({ value: new THREE.Color(hex) });
 
-const CWEB = closeNatureOn('caustweb') ? '1.0' : '0.0';
 export function landUniforms(globals: { uTime: { value: number }; uWind: { value: THREE.Vector2 }; uNight: { value: number }; uSunDir: { value: THREE.Vector3 } }) {
   return {
     uTime: globals.uTime,
     uWind: globals.uWind,
     uNight: globals.uNight,
+    uCWeb: { value: closeNatureOn('caustweb') ? 1 : 0 },
     uSunDir: globals.uSunDir,
     tLN: { value: noiseTexture() },
     ...lampUniforms(),
@@ -104,6 +104,7 @@ export const LAND_FRAG_PARS = /* glsl */ `
 uniform float uTime;
 uniform vec2 uWind;
 uniform float uNight;
+uniform float uCWeb;
 uniform vec3 uSunDir;
 uniform sampler2D tLN;
 uniform vec3 cWheat, cStubble, cGreens, cSoil, cPasture, cHay, cPlough, cFallow, cSunfl;
@@ -186,7 +187,7 @@ ${LG ? `      // caustics: weight exactly 0 from 3.8 m deep (1 - smoothstep(0.8,
         float c2 = ${lnTex('cp * 1.37 + vec2(-uTime * 0.009, uTime * 0.012)', '(0.23 * 1.37)')}.g;
         float cSun = smoothstep(0.05, 0.45, depth) * (1.0 - smoothstep(0.8, 3.8, depth)) * (1.0 - uNight) * smoothstep(0.1, 0.45, uSunDir.y);
         // (from close by these contour lines are a scribble: a web of light takes over)
-        float cWeb = ${CWEB} * (1.0 - smoothstep(0.02, 0.06, fp));
+        float cWeb = uCWeb * (1.0 - smoothstep(0.02, 0.06, fp));
         float caus = (1.0 - smoothstep(0.0, 0.07, abs(c1 - c2))) * cSun * (1.0 - cWeb);
         if (cWeb > 0.0) bed += vec3(0.9, 1.0, 0.92) * thCausticWeb(p.xz, uTime * 0.5 + 23.0) * cSun * cWeb * 0.3;
         bed += vec3(0.85, 1.0, 0.95) * caus * 0.3 * (1.0 - smoothstep(0.5, 2.0, fp));
@@ -195,7 +196,7 @@ ${LG ? `      // caustics: weight exactly 0 from 3.8 m deep (1 - smoothstep(0.8,
       float c2 = texture2D(tLN, cp * 1.37 + vec2(-uTime * 0.009, uTime * 0.012)).g;
       float cSun = smoothstep(0.05, 0.45, depth) * (1.0 - smoothstep(0.8, 3.8, depth)) * (1.0 - uNight) * smoothstep(0.1, 0.45, uSunDir.y);
         // (from close by these contour lines are a scribble: a web of light takes over)
-        float cWeb = ${CWEB} * (1.0 - smoothstep(0.02, 0.06, fp));
+        float cWeb = uCWeb * (1.0 - smoothstep(0.02, 0.06, fp));
         float caus = (1.0 - smoothstep(0.0, 0.07, abs(c1 - c2))) * cSun * (1.0 - cWeb);
         if (cWeb > 0.0) bed += vec3(0.9, 1.0, 0.92) * thCausticWeb(p.xz, uTime * 0.5 + 23.0) * cSun * cWeb * 0.3;
       bed += vec3(0.85, 1.0, 0.95) * caus * 0.3 * (1.0 - smoothstep(0.5, 2.0, fp));`}
@@ -770,7 +771,7 @@ ${LG ? `      // caustic weight is exactly 0 at depth <= 0.05 m, from 3.8 m down
         float c2 = ${lnTex('cp * 1.37 + vec2(-uTime * 0.009, uTime * 0.012)', '(0.23 * 1.37)')}.g;
         float cSun = smoothstep(0.05, 0.45, depth) * (1.0 - smoothstep(0.8, 3.8, depth)) * (1.0 - uNight) * smoothstep(0.1, 0.45, uSunDir.y);
         // (from close by these contour lines are a scribble: a web of light takes over)
-        float cWeb = ${CWEB} * (1.0 - smoothstep(0.02, 0.06, fp));
+        float cWeb = uCWeb * (1.0 - smoothstep(0.02, 0.06, fp));
         float caus = (1.0 - smoothstep(0.0, 0.07, abs(c1 - c2))) * cSun * (1.0 - cWeb);
         if (cWeb > 0.0) bed += vec3(0.9, 1.0, 0.92) * thCausticWeb(p.xz, uTime * 0.5 + 23.0) * cSun * cWeb * 0.3;
         bed += vec3(0.85, 1.0, 0.95) * caus * 0.3 * (1.0 - smoothstep(0.5, 2.0, fp));
@@ -779,7 +780,7 @@ ${LG ? `      // caustic weight is exactly 0 at depth <= 0.05 m, from 3.8 m down
       float c2 = texture2D(tLN, cp * 1.37 + vec2(-uTime * 0.009, uTime * 0.012)).g;
       float cSun = smoothstep(0.05, 0.45, depth) * (1.0 - smoothstep(0.8, 3.8, depth)) * (1.0 - uNight) * smoothstep(0.1, 0.45, uSunDir.y);
         // (from close by these contour lines are a scribble: a web of light takes over)
-        float cWeb = ${CWEB} * (1.0 - smoothstep(0.02, 0.06, fp));
+        float cWeb = uCWeb * (1.0 - smoothstep(0.02, 0.06, fp));
         float caus = (1.0 - smoothstep(0.0, 0.07, abs(c1 - c2))) * cSun * (1.0 - cWeb);
         if (cWeb > 0.0) bed += vec3(0.9, 1.0, 0.92) * thCausticWeb(p.xz, uTime * 0.5 + 23.0) * cSun * cWeb * 0.3;
       bed += vec3(0.85, 1.0, 0.95) * caus * 0.3 * (1.0 - smoothstep(0.5, 2.0, fp));`}
