@@ -483,9 +483,16 @@ export class StreetBirds {
       if (!still) g.fed = false;
     }
     for (let k = 0; k < M.nFeeders; k++) {
-      const x = F[k * 4] + F[k * 4 + 2] * 1.15,
-        z = F[k * 4 + 1] + F[k * 4 + 3] * 1.15;
-      if (this.blocked(x, z)) continue;
+      // in front of them, as far out as there is room
+      let x = 0,
+        z = 0,
+        room = false;
+      for (let d = 1.4; d > 0.75 && !room; d -= 0.2) {
+        x = F[k * 4] + F[k * 4 + 2] * d;
+        z = F[k * 4 + 1] + F[k * 4 + 3] * d;
+        room = !this.blocked(x, z);
+      }
+      if (!room) continue;
       let best: Group | null = null;
       let bd = 26 * 26;
       let taken = false;
@@ -493,7 +500,7 @@ export class StreetBirds {
         const g = this.groups[i];
         const d = (g.x - x) ** 2 + (g.z - z) ** 2;
         if (g.fed && d < 9) taken = true;
-        if (g.fed || g.away || g.kind === KIND.GULL || g.kind === KIND.BLACKBIRD) continue;
+        if (g.fed || g.kind === KIND.GULL || g.kind === KIND.BLACKBIRD) continue;
         if (d < bd) {
           bd = d;
           best = g;
@@ -503,8 +510,10 @@ export class StreetBirds {
       best.fed = true;
       best.x = x;
       best.z = z;
-      best.r = 0.75 + best.birds.length * 0.13;
+      best.r = 0.55 + best.birds.length * 0.09;
       best.perch = null;
+      // (a flock that has flown off comes back here, and soon)
+      if (best.away) best.backT = Math.min(best.backT, rnd(1, 4));
       for (let i = 0; i < best.birds.length; i++) {
         const b = best.birds[i];
         if (b.state !== S.Down) continue;
@@ -560,7 +569,7 @@ export class StreetBirds {
       for (let k = 0; k < g.birds.length; k++) if (g.birds[k].state !== S.Away) allAway = false;
       if (allAway && g.backT <= 0 && this.dayK > 0.5) {
         const near = this.nearest(g.x, g.z, 3.5);
-        if (near > 7) {
+        if (near > (g.fed ? 2.5 : 7)) {
           g.away = false;
           for (let k = 0; k < g.birds.length; k++) {
             const b = g.birds[k];
@@ -700,17 +709,19 @@ export class StreetBirds {
         b.phase -= h * 4;
         if (b.phase < 0) {
           b.phase = rnd(0.8, 1.2);
-          const near = this.nearest(b.x, b.z, spec.flush);
-          if (near < spec.flush && g.sinceShow > 1) {
+          // (with food about they let you come much closer)
+          const flush = spec.flush * (g.fed ? 0.45 : 1);
+          const near = this.nearest(b.x, b.z, flush);
+          if (near < flush && g.sinceShow > 1) {
             this.flee(g, this.threat.x, this.threat.z);
             if (b.alarm < 0) b.alarm = 0;
-          } else if (near < spec.flush * 2.2 && b.act !== A.Move && !b.perched) {
+          } else if (near < flush * 2.2 && b.act !== A.Move && !b.perched) {
             // it has seen you: head up, and a pigeon walks off rather than fly
             b.headGoal = -0.3;
             b.act = A.Look;
             b.actT = rnd(0.5, 1.2);
             b.turnGoal = clamp(angleDiff(b.yaw, Math.atan2(this.threat.x - b.x, this.threat.z - b.z)), -1.1, 1.1);
-            if (b.kind === KIND.PIGEON && near < spec.flush * 1.7) {
+            if (b.kind === KIND.PIGEON && near < flush * 1.7) {
               const a = Math.atan2(b.x - this.threat.x, b.z - this.threat.z) + rnd(-0.6, 0.6);
               const x = b.x + Math.sin(a) * 1.2,
                 z = b.z + Math.cos(a) * 1.2;
@@ -788,7 +799,7 @@ export class StreetBirds {
         b.tz = b.z;
       }
       // something moved in while it was coming down
-      if (this.nearest(b.tx, b.tz, spec.flush) < spec.flush * 0.8 && !g.away) this.flee(g, this.threat.x, this.threat.z);
+      if (this.nearest(b.tx, b.tz, spec.flush) < spec.flush * (g.fed ? 0.36 : 0.8) && !g.away) this.flee(g, this.threat.x, this.threat.z);
     }
   }
 
