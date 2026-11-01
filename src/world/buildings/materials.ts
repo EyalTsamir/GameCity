@@ -2269,7 +2269,7 @@ ${fg(`      float ew = max(0.09, fq.x * 1.25);
   // interior: per window a different balance (dark room / bright net curtain / sun on the glass across)
   float roomK = mix(0.62, 1.0, fract(r1 * 3.71));
   float reflK = (curtain || ribbon) ? mix(0.82, 1.18, fract(r2 * 2.93)) : mix(0.75, 1.9, fract(r2 * 2.93)) * (1.15 - 0.3 * roomK);
-  vec3 glass = interior * (1.0 - Fs) * transTint + refl * Fs * mix(mix(0.65, 1.0, recess) * paneGrad * reflK * ((curtain || ribbon) ? 1.0 : (homey ? 0.72 : 1.6)), 1.0, gmK);
+  vec3 glass = interior * (1.0 - Fs) * transTint + refl / (1.0 + cwK * nightF * 1.6 * max(refl.r, max(refl.g, refl.b))) * Fs * mix(mix(0.65, 1.0, recess) * paneGrad * reflK * ((curtain || ribbon) ? 1.0 : (homey ? 0.72 : 1.6)), 1.0, gmK);
   vec3 glassAlb = dayA * (1.0 - Fs) * transTint * (curtain ? 0.4 : (ribbon ? 0.7 : (homey ? mix(0.62 * roomK, 1.0, nearL) : mix(roomK, 1.0, nearL)))); // a room seen through glass by day is far darker than the facade around it
   // open sash: the swung pane shows a strip of darker, skewed reflection at the hinge side
   glass = mix(glass, env * 0.35 * reflTint, openW * (1.0 - smoothstep(0.62, 0.66, wx)));

@@ -21,7 +21,6 @@ import { hex, rng } from './buildingrooms/kit';
 import { kindIndex, ROOM_KINDS, type RoomKind } from './buildingrooms/pages';
 
 /** floats per vertex of a window's quad */
-const STRIDE = 3 + 2 + 4 + 4 + 4 + 4 + 4 + 4 + 3 + 3;
 /** how far (m) a room's quad shows; the facade hands over across the outer 30 % */
 const RADIUS = 34;
 const CELL = 16;
@@ -35,7 +34,7 @@ const ATTRS: [string, number][] = [
   ['aWalls', 4],
   ['aCards', 4],
   ['aMisc', 4],
-  ['aDir', 4 - 0],
+  ['aDir', 4],
   ['aPaint', 3],
   ['aGlass', 3],
 ];
@@ -83,6 +82,7 @@ export default function create(ctx: CityContext): CityModule {
 
   const atlas = buildRoomAtlas(ctx.renderer, ctx.quality.level === 'high' ? 1 : 0.5);
   stats.atlasMs = Math.round(atlas.ms);
+  if (ctx.debug.params.has('cwatlas')) (window as unknown as { __cwAtlas: unknown }).__cwAtlas = atlas;
 
   // the room of every window: windows side by side on one floor of one wall share a room
   const nRec = Math.floor(rec.length / WIN_REC);
@@ -265,8 +265,14 @@ export default function create(ctx: CityContext): CityModule {
     uNight: globalUniforms.uNight,
     uLights: globalUniforms.uLights,
   };
+  const sunOn = closeWin(ctx, 'cwsun', 'high');
+  if (sunOn) {
+    uniforms.tCwShadow = { value: null };
+    uniforms.uCwSunM = { value: new THREE.Matrix4() };
+  }
   const material = new THREE.ShaderMaterial({
     name: 'buildingrooms',
+    defines: sunOn ? { CW_SUN: 1 } : {},
     uniforms,
     vertexShader: ROOM_VERT,
     fragmentShader: ROOM_FRAG,
@@ -279,8 +285,8 @@ export default function create(ctx: CityContext): CityModule {
     blendSrcAlpha: THREE.ZeroFactor,
     blendDstAlpha: THREE.OneFactor,
     polygonOffset: true,
-    polygonOffsetFactor: -2,
-    polygonOffsetUnits: -4,
+    polygonOffsetFactor: -3,
+    polygonOffsetUnits: -8,
     fog: false,
     toneMapped: false,
   });
@@ -293,9 +299,9 @@ export default function create(ctx: CityContext): CityModule {
     const room = rooms[roomOf[i]];
     const wLeft = rec[w] * dx + rec[w + 2] * dz;
     const bottom = rec[w + 1];
-    a[o++] = rec[w] + dx * cx - dz * 0.001;
+    a[o++] = rec[w] + dx * cx - dz * 0.006;
     a[o++] = bottom + cy;
-    a[o++] = rec[w + 2] + dz * cx + dx * 0.001;
+    a[o++] = rec[w + 2] + dz * cx + dx * 0.006;
     a[o++] = wLeft + cx - room.t0;
     a[o++] = bottom + cy - room.y0;
     a[o++] = room.W;
@@ -327,7 +333,6 @@ export default function create(ctx: CityContext): CityModule {
     return o;
   };
 
-  void STRIDE;
   near.addMeshes({
     name: 'closeRooms',
     radius: cwR,
@@ -388,6 +393,10 @@ export default function create(ctx: CityContext): CityModule {
         sunC.copy(L.sun.color).multiplyScalar((L.sun.intensity / Math.PI) * Math.max(0, Math.min(1, c.uniforms.uSunDir.value.y * 8)));
         day.add((uniforms.uCwSun.value as THREE.Color).copy(sunC).multiplyScalar(0.1));
         (uniforms.uCwSun.value as THREE.Color).copy(sunC);
+        if (sunOn) {
+          uniforms.tCwShadow.value = L.sun.shadow.map?.depthTexture ?? null;
+          uniforms.uCwSunM.value = L.sun.shadow.matrix;
+        }
       }
       uniforms.uCwGm.value = glassMirror.uGM.value.x;
     },

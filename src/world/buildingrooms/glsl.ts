@@ -126,6 +126,10 @@ uniform float uCwRadius;
 uniform float uCwGm;   // the street mirror is on
 uniform vec3 uNearEye;
 uniform float uNearLens;
+#ifdef CW_SUN
+uniform highp sampler2DShadow tCwShadow;
+uniform mat4 uCwSunM;
+#endif
 varying vec3 vW;
 varying vec2 vQ;
 varying vec4 vRoom;
@@ -166,8 +170,8 @@ vec3 bhPal(float h) {
 // A ray through a bay of shelving meets what stands out of the wall first: 6 steps down the height stored in alpha
 vec4 rmWall(vec2 q, vec2 dqx, vec2 dqy, vec2 dir, float face, out float outH) {
   float mi = floor(q.x / MOD_W);
-  float h = rmHash(vec2(mi + face * 37.0, vRoom.w + face * 5.0));
-  float id = vWalls[int(h * 4.0)];
+  float h = rmHash(vec2(mi + face * 37.0, floor(vRoom.w + 0.5) + face * 5.0));
+  float id = floor(vWalls[int(h * 4.0)] + 0.5);
   float flip = step(0.5, fract(h * 7.31));
   float lx = q.x - mi * MOD_W;
   float sx = 1.0;
@@ -204,12 +208,13 @@ vec4 rmCard(vec3 ro, vec3 rd, float z, float S, float idA, float idB, float chan
   float tz = (z - ro.z) / rd.z;
   p = ro + rd * tz;
   vec2 q = vec2(p.x, p.y - yoff);
-  float off = vRoom.w * 3.7 + salt;
+  float rq = floor(vRoom.w + 0.5);
+  float off = rq * 3.7 + salt;
   float sl = (q.x + off) / S;
   float mi = floor(sl);
-  float h = rmHash(vec2(mi, vRoom.w + salt));
+  float h = rmHash(vec2(mi, rq + salt));
   if (h > chance || q.y < 0.0 || q.y > S || idA < 0.0) return vec4(0.0);
-  float id = fract(h * 13.7) < 0.5 || idB < 0.0 ? idA : idB;
+  float id = floor((fract(h * 13.7) < 0.5 || idB < 0.0 ? idA : idB) + 0.5);
   float lx = fract(sl);
   float sx = 1.0;
   if (fract(h * 5.13) < 0.5) { lx = 1.0 - lx; sx = -1.0; }
@@ -222,6 +227,35 @@ vec4 rmCard(vec3 ro, vec3 rd, float z, float S, float idA, float idB, float chan
   vec3 rgb = c.rgb / max(c.a, 0.02);
   return vec4(rgb * rgb, c.a);
 }
+// how much of a card stands over the floor at x along its plane: its silhouette from a small mip
+float rmCardFoot(float x, float S, float idA, float idB, float chance, float salt) {
+  float rq = floor(vRoom.w + 0.5);
+  float sl = (x + rq * 3.7 + salt) / S;
+  float h = rmHash(vec2(floor(sl), rq + salt));
+  if (h > chance || idA < 0.0) return 0.0;
+  float id = floor((fract(h * 13.7) < 0.5 || idB < 0.0 ? idA : idB) + 0.5);
+  float lx = fract(sl);
+  if (fract(h * 5.13) < 0.5) lx = 1.0 - lx;
+  vec2 cell = vec2(mod(id, uGridC.x), floor(id / uGridC.x));
+  vec2 scale = (1.0 - 2.0 * uGridC.zw) / uGridC.xy;
+  return textureLod(tCard, (cell + uGridC.zw) / uGridC.xy + vec2(lx, 0.14) * scale, 4.5).a;
+}
+#ifdef CW_SUN
+// the sun on a point of the room: back along the sun's ray to the plane of the glass, is that inside the pane, and does the sun reach it there
+float rmSunAt(vec3 p, vec3 Lr, vec4 wr, vec3 W0, vec3 Tu, vec3 N, float cross) {
+  vec2 q = p.xy + Lr.xy * (p.z / -Lr.z);
+  float w = 0.012 + 0.02 * p.z;
+  float k = smoothstep(0.07 - w, 0.07 + w, min(min(q.x - wr.x, wr.y - q.x), min(q.y - wr.z, wr.w - q.y)));
+  if (k <= 0.0) return 0.0;
+  if (cross > 0.5) {
+    k *= smoothstep(0.025 - w, 0.025 + w, abs(q.x - (wr.x + wr.y) * 0.5));
+    k *= smoothstep(0.025 - w, 0.025 + w, abs(q.y - (wr.z + (wr.w - wr.z) * 0.62)));
+  }
+  vec4 S = uCwSunM * vec4(W0 + Tu * q.x + vec3(0.0, q.y, 0.0) + N * 0.15, 1.0);
+  if (S.x > 0.0 && S.y > 0.0 && S.x < 1.0 && S.y < 1.0 && S.z < 1.0) k *= textureLod(tCwShadow, vec3(S.xy, S.z - 0.0006), 0.0);
+  return k;
+}
+#endif
 
 void main() {
   vec2 T2 = vDir.xy;
@@ -320,7 +354,8 @@ void main() {
   vec3 n = onBack ? vec3(0.0, 0.0, -1.0) : (onFlat ? vec3(0.0, rd.y < 0.0 ? 1.0 : -1.0, 0.0) : vec3(rd.x > 0.0 ? -1.0 : 1.0, 0.0, 0.0));
 
   float floorK = floor(vMisc.x + 0.5), lampK = floor(vMisc.y + 0.5);
-  float rs = vRoom.w;
+  float rs = floor(vRoom.w + 0.5);
+  float zMid = D * (0.34 + 0.26 * fract(rs * 1.91));
   vec3 c;
   float selfL = 0.0;
   vec3 relief = vec3(0.0);
@@ -374,6 +409,9 @@ void main() {
         float bord = 1.0 - smoothstep(-0.14, -0.12, max(rg.x, rg.y));
         c = mix(c, mix(rc * 0.6, vec3(0.75, 0.68, 0.55) * 0.75, bord * 0.0 + (1.0 - bord) * 0.85), rug);
       }
+      // what stands in the room stands on the floor: its soft shadow
+      float dz = abs(fq.y - zMid);
+      if (dz < 0.8) c *= 1.0 - 0.62 * (1.0 - smoothstep(0.05, 0.8, dz)) * rmCardFoot(fq.x, 3.0, vCards.x, vCards.y, vMisc.z, 0.0);
     } else {
       // ceiling
       c = vec3(0.82, 0.8, 0.76);
@@ -407,7 +445,6 @@ void main() {
   }
 
   // ── what stands in the room
-  float zMid = D * (0.34 + 0.26 * fract(rs * 1.91));
   float zDisp = 0.5;
   vec3 pMid, pDisp;
   vec4 cm = vec4(0.0), cd = vec4(0.0);
@@ -424,47 +461,67 @@ void main() {
   // (a shade hangs: 0.6 m under the ceiling; fittings are on it)
   float ly = H - (lampK < 0.5 ? 0.62 : 0.04);
   LP = vec3((floor(lq.x / g.x) + 0.5) * g.x, ly, lampK < 0.5 ? D * (0.34 + 0.3 * fract(rs * 2.3)) : (floor(lq.z / g.y) + 0.5) * g.y);
+  // half the homes have no ceiling light on but a lamp standing in a corner: a pool of light, dark corners
+  bool cornerL = lampK < 0.5 && homey && fract(rs * 9.13) > 0.45;
+  vec3 LC = vec3(fract(rs * 4.7) > 0.5 ? W - 0.42 : 0.42, 1.42, D * (0.5 + 0.35 * fract(rs * 6.1)));
+  if (cornerL) LP = LC;
   vec3 toL = LP - lq;
   float d2 = dot(toL, toL);
   float ndl = max(dot(n, toL) / sqrt(max(d2, 1e-3)), 0.0);
   float ex = min(h.x, W - h.x), ey3 = min(h.y, H - h.y), ez = D - h.z;
   float ao = onBack ? smoothstep(0.0, 0.5, min(ex, ey3)) : (onFlat ? smoothstep(0.0, 0.45, min(ex, ez)) : smoothstep(0.0, 0.45, min(ey3, ez)));
   ao = 0.42 + 0.58 * ao;
-  float att = (lampK < 0.5 ? 2.6 : 1.5) / (1.0 + d2 * (lampK < 0.5 ? 0.55 : 0.75));
+  float att = cornerL ? 3.6 / (1.0 + d2 * 0.95) : (lampK < 0.5 ? 2.6 : 1.5) / (1.0 + d2 * (lampK < 0.5 ? 0.55 : 0.75));
   // (the far look of a lit room is a glow for the whole district to read; from close by, the walls of a room in lamplight)
   float nearCalm = mix(0.58, 1.0, smoothstep(cwR * 0.3, cwR * 0.85, length(ey)));
   vec3 lit = vLit.rgb * nearCalm;
-  vec3 lamp = lit * (0.24 + ndl * att) * ao;
+  vec3 lamp = lit * ((cornerL ? 0.09 : 0.16) + ndl * att) * ao;
   // daylight comes through the pane: bright by the glass, falling off into the room
   float fall = 1.0 / (1.0 + h.z * h.z * 0.28) + 0.1;
   vec3 dayA = c * fall * ao * (onFlat && rd.y > 0.0 ? 0.55 : (onBack ? 0.9 : 0.75));
   vec3 interior = c * lamp + lit * selfL;
+  // the sun through this pane: a patch on the floor or up the wall, crossed by the glazing bars
+  vec3 sunA = vec3(0.0);
+#ifdef CW_SUN
+  vec3 Lr = vec3(dot(uSunDir, Tu), uSunDir.y, -dot(uSunDir, N));
+  bool sunIn = Lr.z < -0.04 && Lr.y > 0.03 && dot(uCwSun, uCwSun) > 1e-4;
+  vec3 W0 = vW - Tu * vQ.x - vec3(0.0, vQ.y, 0.0);
+  float sunCross = (style > 0.5 && style < 1.5 || style > 4.5 && style < 5.5) ? 1.0 : 0.0;
+  if (sunIn) sunA = c * uCwSun * max(dot(n, Lr), 0.0) * rmSunAt(h, Lr, wrR, W0, Tu, N, sunCross);
+#endif
 
   // a card is lit where it stands, facing the window
   if (cm.a > 0.0) {
-    vec3 toM = (lampK < 0.5 ? vec3((floor(pMid.x / g.x) + 0.5) * g.x, ly, LP.z) : vec3((floor(pMid.x / g.x) + 0.5) * g.x, ly, zMid - 0.4)) - pMid;
+    vec3 toM = (cornerL ? LC : (lampK < 0.5 ? vec3((floor(pMid.x / g.x) + 0.5) * g.x, ly, LP.z) : vec3((floor(pMid.x / g.x) + 0.5) * g.x, ly, zMid - 0.4))) - pMid;
     float dm = dot(toM, toM);
     vec3 lm = lit * (0.3 + 0.75 * max(-toM.z + 0.7, 0.3) / sqrt(dm + 0.3) * (lampK < 0.5 ? 2.2 : 1.3) / (1.0 + dm * 0.55));
     float fm = 1.0 / (1.0 + zMid * zMid * 0.28) + 0.1;
     interior = mix(interior, cm.rgb * lm, cm.a);
     dayA = mix(dayA, cm.rgb * fm, cm.a);
+#ifdef CW_SUN
+    sunA = mix(sunA, sunIn ? cm.rgb * uCwSun * -Lr.z * rmSunAt(pMid, Lr, wrR, W0, Tu, N, sunCross) : vec3(0.0), cm.a);
+#endif
     t = mix(t, tMid, step(0.5, cm.a));
     selfL *= 1.0 - cm.a;
   }
   // the shade of a hanging lamp, in front of whatever lies behind it (a ball on a cord)
   if (lampK < 0.5) {
     float lxi = floor((ro.x + rd.x * (LP.z / rd.z)) / g.x);
-    vec3 C0 = vec3((lxi + 0.5) * g.x, ly, LP.z);
+    vec3 C0 = cornerL ? LC : vec3((lxi + 0.5) * g.x, ly, LP.z);
     float tl = dot(C0 - ro, rd);
     if (tl > 0.0 && tl < t) {
       vec3 cl = ro + rd * tl - C0;
       float dl = length(cl);
-      float kind = fract(rs * 5.7);
+      float kind = cornerL ? 1.0 : fract(rs * 5.7);
       float rl = 0.15 + 0.06 * fract(rs * 2.9);
       float shade = 1.0 - smoothstep(rl - 0.012, rl + 0.012, kind < 0.5 ? dl : length(cl * vec3(1.0, cl.y > 0.0 ? 1.8 : 40.0, 1.0)));
-      float cord = (1.0 - smoothstep(0.004, 0.012, length(cl.xz))) * step(0.0, cl.y) * step(cl.y, 0.7);
-      vec3 sc = kind < 0.5 ? vec3(0.95, 0.9, 0.78) : bhPal(fract(rs * 3.3)) * 0.6 + 0.2;
-      interior = mix(interior, sc * lit * 2.2 + lit * step(kind, 0.5) * 1.4, shade);
+      // (a cord up to the ceiling, a corner lamp's stem down to the floor)
+      float cord = (1.0 - smoothstep(0.004, 0.012, length(cl.xz))) * (cornerL ? step(cl.y, 0.0) * step(-1.42, cl.y) : step(0.0, cl.y) * step(cl.y, 0.7));
+      vec3 sc = kind < 0.5 ? vec3(0.95, 0.9, 0.78) : (cornerL ? vec3(0.95, 0.86, 0.68) : bhPal(fract(rs * 3.3)) * 0.6 + 0.2);
+      // (a glass globe burns brightest in the middle and has no outline; a fabric shade glows evenly, brighter low down)
+      float dq = clamp(dl / rl, 0.0, 1.0);
+      vec3 sg = kind < 0.5 ? sc * lit * (1.3 + 2.2 * (1.0 - dq * dq)) : sc * lit * (cornerL ? 2.6 - 1.2 * smoothstep(-0.02, 0.1, cl.y) : 2.2);
+      interior = mix(interior, sg, shade);
       dayA = mix(dayA, sc * 0.5, shade);
       interior = mix(interior, vec3(0.01), cord);
       dayA = mix(dayA, vec3(0.03), cord);
@@ -475,6 +532,9 @@ void main() {
     float dk = shopWin ? 1.25 : 0.55;
     interior = mix(interior, cd.rgb * lit * dk, cd.a);
     dayA = mix(dayA, cd.rgb * 1.05, cd.a);
+#ifdef CW_SUN
+    sunA = mix(sunA, sunIn ? cd.rgb * uCwSun * -Lr.z * rmSunAt(pDisp, Lr, wrR, W0, Tu, N, sunCross) : vec3(0.0), cd.a);
+#endif
   }
 
   // ── curtains, blinds, what stands on the sill and is taped to the glass: the facade's own (bhWall), a hand's breadth behind the glass
@@ -509,8 +569,10 @@ void main() {
       c2 = mix(c2, cc * 0.7, pel);
       side = max(side, pel);
       float netB = step(0.75, fract(r1 * 2.71)) * (1.0 - side);
-      interior = mix(interior, vec3(0.95, 0.92, 0.86) * lcol * litI * 0.5, netB * 0.7);
-      dayA = mix(dayA, vec3(0.56, 0.56, 0.54) * (0.92 + 0.08 * bhStripe(wx * (wr.y - wr.x) * 30.0, fpx * 30.0)), netB * 0.7);
+      // (a net curtain: the room shows through it, it hangs in shallow folds)
+      float netF = (0.4 + 0.2 * sin(wx * (wr.y - wr.x) * 19.0 + r1 * 9.0)) * (0.92 + 0.08 * bhStripe(wx * (wr.y - wr.x) * 30.0, fpx * 30.0));
+      interior = mix(interior, vec3(0.95, 0.92, 0.86) * lcol * litI * 0.5, netB * netF);
+      dayA = mix(dayA, vec3(0.56, 0.56, 0.54), netB * netF);
       interior = mix(interior, c2 * lcol * litI * 0.75, side);
       dayA = mix(dayA, c2 * 0.7, side);
       nearL = max(side, netB * 0.7);
@@ -518,7 +580,7 @@ void main() {
       float netTop = cr > 0.45 ? 1.0 : 0.55;
       float hem = (1.0 - smoothstep(0.0, 0.03, abs(wy - netTop + 0.04))) * fa;
       float lace = 0.9 + 0.1 * bhStripe(wx * (wr.y - wr.x) * 24.0, fpx * 24.0) * fa;
-      float net = step(wy, netTop) * (0.6 + 0.15 * hem);
+      float net = step(wy, netTop) * (0.42 + 0.14 * sin(wx * (wr.y - wr.x) * 19.0 + r1 * 9.0) + 0.3 * hem);
       interior = mix(interior, vec3(0.95, 0.9, 0.8) * lcol * litI * 0.55, net);
       dayA = mix(dayA, vec3(0.68, 0.68, 0.65) * lace, net);
       nearL = net;
@@ -629,7 +691,7 @@ void main() {
   }
   float roomK = mix(0.62, 1.0, fract(r1 * 3.71));
   float albK = curtain ? 0.4 : (ribbon ? 0.7 : (homey ? mix(0.62 * roomK, 1.0, nearL) : mix(roomK, 1.0, nearL)));
-  vec3 col = (interior + dayA * albK * uCwDay) * (1.0 - Fs) * transTint;
+  vec3 col = (interior + dayA * albK * uCwDay + sunA * (1.0 - nearL * 0.8) * 0.6) * (1.0 - Fs) * transTint;
   gl_FragColor = vec4(col * gk * near * (1.0 - spandrel), 1.0);
 }
 `;

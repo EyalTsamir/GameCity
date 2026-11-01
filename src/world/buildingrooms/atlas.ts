@@ -76,8 +76,9 @@ void main() {
   float ao = 1.0 - 0.62 * clamp(occ / 12.8, 0.0, 1.0);
   // the shadow from a light above and a little in front: climb towards it, anything in the way shades this point
   float sh = 0.0;
-  for (int i = 1; i <= 10; i++) {
-    float dy = float(i) * float(i) * 0.0035;
+  // (steps finer than a shelf board, or a board shows up as stripes)
+  for (int i = 1; i <= 18; i++) {
+    float dy = float(i) * 0.022;
     float s = heightAt(uv + vec2(0.0, dy) / uPageM);
     sh = max(sh, smoothstep(0.0, 0.03 + dy * 0.3, s - H - dy * 0.75));
   }
@@ -101,6 +102,8 @@ export interface RoomAtlas {
   wallIndex: Map<string, number>;
   cardIndex: Map<string, number>;
   ms: number;
+  /** (for ?cwatlas) */
+  rts: THREE.WebGLRenderTarget[];
 }
 
 const hashName = (s: string): number => {
@@ -150,7 +153,7 @@ export function buildRoomAtlas(renderer: THREE.WebGLRenderer, scale = 1): RoomAt
     blending: THREE.NoBlending,
     depthTest: true,
     depthWrite: true,
-    side: THREE.FrontSide,
+    side: THREE.DoubleSide,
     toneMapped: false,
     fog: false,
   });
@@ -251,5 +254,5 @@ export function buildRoomAtlas(renderer: THREE.WebGLRenderer, scale = 1): RoomAt
   pageMat.dispose();
   postMat.dispose();
   tri.dispose();
-  return { walls: wallRT.texture, cards: cardRT.texture, gridW, gridC, wallIndex, cardIndex, ms: performance.now() - t0 };
+  return { walls: wallRT.texture, cards: cardRT.texture, gridW, gridC, wallIndex, cardIndex, ms: performance.now() - t0, rts: [wallRT, cardRT] };
 }

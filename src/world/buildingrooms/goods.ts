@@ -361,13 +361,13 @@ export function floorPlant(k: Kit, r: R, x: number, z: number, size = 1): void {
     const h = (1.15 + r() * 0.35) * size;
     const lean = (r() - 0.5) * 0.14;
     k.bar(x, potTop, x + lean, h, z, 0.012, hex(0x4a3a24));
-    const n = 22;
+    const n = 30;
     for (let i = 0; i < n; i++) {
       const s = i / n;
       const side = i % 2 ? 1 : -1;
       const a = Math.PI / 2 - side * (1.25 - s * 0.7) + (r() - 0.5) * 0.35;
       const L = (0.42 - s * 0.18 + r() * 0.1) * size;
-      k.leaf(x + lean * s, potTop + (h - potTop) * (0.25 + s * 0.8), z + 0.02 + s * 0.05, a, L, (0.075 + r() * 0.03) * size, shade(pick(r, PAL.leaf), 0.65 + s * 0.45 + r() * 0.2), side * -0.4);
+      k.leaf(x + lean * s, potTop + (h - potTop) * (0.25 + s * 0.8), z + 0.02 + s * 0.05, a, L, (0.05 + r() * 0.025) * size, shade(pick(r, PAL.leaf), 0.38 + s * 0.4 + r() * 0.26), side * -0.4);
     }
   }
 }

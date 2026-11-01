@@ -44,7 +44,7 @@ function bay(k: Kit, r: R, o: BayOpt, fill: Fill): void {
     d = o.depth ?? 0.34;
   const t = 0.028;
   const ux = 0.022;
-  if (o.back) k.rect(0, o.base === false ? y0 : 0, MOD_W, y1, 0.012, o.back);
+  k.rect(0, o.base === false ? y0 : 0, MOD_W, y1, 0.022, o.back ?? shade(o.wood, 0.62));
   if (o.base !== false) k.box(0, 0, 0, MOD_W, y0, d, shade(o.wood, 0.55), 0.004);
   k.box(0, 0, 0, ux, y1 + t, d + 0.01, o.wood, 0.004);
   k.box(MOD_W - ux, 0, 0, MOD_W, y1 + t, d + 0.01, o.wood, 0.004);
@@ -526,7 +526,7 @@ const W: Record<string, (k: Kit, r: R) => void> = {
   },
   // workshops and stores
   rackBoxes(k, r) {
-    bay(k, r, { wood: hex(0x2f4a7a), y1: 3.0, rows: 4, depth: 0.42 }, (kk, rr, a, b, y, h, z) => {
+    bay(k, r, { wood: hex(0x2f4a7a), back: hex(0x8f8f88), y1: 3.0, rows: 4, depth: 0.42 }, (kk, rr, a, b, y, h, z) => {
       for (let x = a; x < b - 0.2; x += 0.38 + rr() * 0.1) {
         const hh = h * (0.45 + rr() * 0.45);
         const c = shade(hex(0xa8865a), 0.8 + rr() * 0.3);
