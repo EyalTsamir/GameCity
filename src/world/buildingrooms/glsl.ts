@@ -479,6 +479,7 @@ void main() {
   // (a shade hangs: 0.6 m under the ceiling; fittings are on it)
   float ly = H - (lampK < 0.5 ? 0.62 : 0.04);
   LP = vec3((floor(lq.x / g.x) + 0.5) * g.x, ly, lampK < 0.5 ? D * (0.34 + 0.3 * fract(rs * 2.3)) : (floor(lq.z / g.y) + 0.5) * g.y);
+  LP.xz = clamp(LP.xz, vec2(0.4), vec2(W, D) - 0.4); // (the grid's nearest fitting can lie beyond the wall, which would leave that wall black)
   // half the homes have no ceiling light on but a lamp standing in a corner: a pool of light, dark corners
   bool cornerL = lampK < 0.5 && homey && fract(rs * 9.13) > 0.45;
   vec3 LC = vec3(fract(rs * 4.7) > 0.5 ? W - 0.42 : 0.42, 1.42, D * (0.5 + 0.35 * fract(rs * 6.1)));

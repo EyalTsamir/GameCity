@@ -526,7 +526,7 @@ const W: Record<string, (k: Kit, r: R) => void> = {
   },
   // workshops and stores
   rackBoxes(k, r) {
-    bay(k, r, { wood: hex(0x2f4a7a), back: hex(0x8f8f88), y1: 3.0, rows: 4, depth: 0.42 }, (kk, rr, a, b, y, h, z) => {
+    bay(k, r, { wood: hex(0x6a8aa8), back: hex(0x8f8f88), y1: 3.0, rows: 4, depth: 0.42 }, (kk, rr, a, b, y, h, z) => {
       for (let x = a; x < b - 0.2; x += 0.38 + rr() * 0.1) {
         const hh = h * (0.45 + rr() * 0.45);
         const c = shade(hex(0xa8865a), 0.8 + rr() * 0.3);
