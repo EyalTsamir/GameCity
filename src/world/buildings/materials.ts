@@ -25,6 +25,7 @@
 //
 // URL switches (read in buildings.ts): ?legacyfacade = the original shell shader (A/B).
 
+import { handDoorsLive } from '../../core/closehand';
 import * as THREE from 'three';
 import { FAR_BAKE_OUT, FAR_FRAG_MAIN, FAR_FRAG_PARS, FAR_VERT_MAIN, FAR_VERT_PARS, NEAR_VERT_MAIN, NEAR_VERT_PARS } from './farFacade';
 import type { GlobalUniforms } from '../../core/uniforms';
@@ -180,6 +181,7 @@ export interface BuildingMaterials {
     uPlinth: { value: number };
     /** G1: glass as a material — per-bay shop / lobby interiors, per-pane tint + thin edge; ?noglassvar sets 0 */
     uGlassVar: { value: number };
+    uHandPaint: { value: number };
     /** box hunt: furnished shop interiors (deli goods + counter); ?nointeriors / low quality sets 0 */
     uBhInt: { value: number };
     /** near-LOD sill geometry: (centre of its range, range m); the shader drops its own sill box inside */
@@ -364,6 +366,7 @@ uniform float uMirror;
 uniform float uWallRelief;
 uniform float uPlinth;
 uniform float uGlassVar;
+uniform float uHandPaint;
 uniform float uBhInt;
 // near-window detail fades to the far average between these cell sizes (cells per pixel: 0.3 = 3.3 px per bay)
 uniform vec2 uDetailPx;
@@ -1965,6 +1968,7 @@ ${fg(`      float ew = max(0.09, fq.x * 1.25);
   if (uGlassVar > 0.5 && style > 6.5 && detail > 0.5 && wr.y - wr.x < 2.3) { // (door-width openings only: not the lobby panes)
     float hx = abs(abs(pm.x - wc.x) - 0.11);
     hdl = (1.0 - smoothstep(0.011, 0.019, hx)) * (1.0 - smoothstep(0.2, 0.215, abs(pm.y - wr.z - 1.05)));
+    hdl *= max(uHandPaint, smoothstep(0.018, 0.026, px)); // (close up: real bars, world/handheight)
     frame = max(frame, hdl);
   }
   vec3 fcol = mix(uFrameCols[frameIdx], vec3(0.74, 0.74, 0.72), hdl);
@@ -2522,7 +2526,7 @@ const LIGHTS_FRAG_MAIN = /* glsl */ `
   float inten = vL.w;
   float nightF = clamp(uLights * (0.45 + 0.55 * uNight), 0.0, 1.0);
   float on = nightF;
-  float dayLook = 0.55;
+  float dayLook = 0.2;
   if (mode > 0.5 && mode < 1.5) {
     float c = fract(uRealTime * rate + ph);
     float flash = 1.0 - smoothstep(0.0, 0.12, c) * (1.0 - smoothstep(0.85, 1.0, c));
@@ -2582,6 +2586,7 @@ export function createMaterials(g: GlobalUniforms, opts: { legacy?: boolean; wea
     uWallRelief: { value: opts.wallRelief === false ? 0 : 1 },
     uPlinth: { value: opts.plinth === false ? 0 : 1 },
     uGlassVar: { value: opts.glassVar === false ? 0 : 1 },
+    uHandPaint: { value: handDoorsLive() ? 0 : 1 },
     uBhInt: { value: opts.interiors === false ? 0 : 1 },
     uGeoWin: { value: new THREE.Vector4(0, -1e5, 0, 0) },
     uDetailPx: { value: new THREE.Vector2(0.3, 0.8) },
@@ -2626,6 +2631,7 @@ export function createMaterials(g: GlobalUniforms, opts: { legacy?: boolean; wea
         uWallRelief: uniforms.uWallRelief,
         uPlinth: uniforms.uPlinth,
         uGlassVar: uniforms.uGlassVar,
+        uHandPaint: uniforms.uHandPaint,
         uBhInt: uniforms.uBhInt,
         uGeoWin: uniforms.uGeoWin,
         uDetailPx: uniforms.uDetailPx,

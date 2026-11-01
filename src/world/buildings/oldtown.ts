@@ -365,6 +365,8 @@ export function genTownhouse(g: Gen): void {
             sideBox(t, sg, a + 0.22, b - 0.22, 0, 0.06, 0.04, 0.27, true);
             setCol(t, shade(shopC, 0.7));
             sideBox(t, sg, a + 0.18, b - 0.18, 0, 0.13, 0.27, 0.33, true);
+            const hf = anchors.handFrame(sg, a + 0.22);
+            if (hf) anchors.handSpots.push({ ...hf, kind: 'riser', w: b - a - 0.44, h: 0.23, y: 0.04, o: 0.06, color: shade(shopC, 0.82).getHex(), seed: g.seed });
           }
         },
         (a, b, y0) => wallPlain(g.shell, sg, a, b, y0, groundTop, { color: shopC, pattern: WALLPAT.SMOOTH, seed: g.seed }),
@@ -431,7 +433,11 @@ export function genTownhouse(g: Gen): void {
         lightBox(g, lx - 0.06, fasciaY1 + 0.035, lz - 0.06, lx + 0.06, fasciaY1 + 0.055, lz + 0.06, '#ffd59a', LIGHT_MODE.STEADY, 3.0);
       }
       // awning
-      if (rng.chance(0.78)) awning(sg, uA + 0.38, uB - 0.38, fasciaY0 - 0.04);
+      if (rng.chance(0.78)) {
+        awning(sg, uA + 0.38, uB - 0.38, fasciaY0 - 0.04);
+        const hf = anchors.handFrame(sg, uB - 0.16);
+        if (hf) anchors.handSpots.push({ ...hf, kind: 'winder', w: 0, h: fasciaY0 - 0.04, y: 0, o: 0.14, color: 0, seed: g.seed });
+      }
       // blade sign
       if (rng.chance(0.45)) {
         const bu = rng.chance(0.5) ? uA + 0.18 : uB - 0.18;

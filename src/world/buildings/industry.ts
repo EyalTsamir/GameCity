@@ -148,6 +148,8 @@ export function genIndustrial(g: Gen): void {
           b = Math.min(uB, u + 0.3);
         if (ops.some((o) => b > o.u - o.w / 2 - 0.05 && a < o.u + o.w / 2 + 0.05)) continue;
         sideBox(t, sg, a, b, 0, INS - 0.03, 0, H - 0.3);
+        const hf = anchors.handFrame(sg, a);
+        if (hf) anchors.handSpots.push({ ...hf, kind: 'brickface', w: b - a, h: H - 0.3, y: 0, o: INS - 0.03, color: 0, seed: g.seed + i });
       }
       setCol(t, trimC);
       sideBox(t, sg, uA, uB, 0, INS - 0.02, lowTop - 0.15, lowTop + 0.1, true);
@@ -156,7 +158,11 @@ export function genIndustrial(g: Gen): void {
       // ?nomonitor: a dark engineering-brick plinth
       if (MASS.monitor) {
         setCol(t, shade(wallC, 0.62));
-        for (const [a, b] of splitAround(uA, uB, ops)) sideBox(t, sg, a, b, 0, INS - 0.05, 0, 0.7);
+        for (const [a, b] of splitAround(uA, uB, ops)) {
+          sideBox(t, sg, a, b, 0, INS - 0.05, 0, 0.7);
+          const hf = anchors.handFrame(sg, a);
+          if (hf) anchors.handSpots.push({ ...hf, kind: 'brickface', w: b - a, h: 0.7, y: 0, o: INS - 0.05, color: 0, seed: g.seed });
+        }
       }
     } else if (fullyExposed) {
       // concrete base course + top flashing
@@ -403,6 +409,8 @@ export function genIndustrial(g: Gen): void {
       sideBox(t, sg, u + 0.1, u + 0.12, oF, oF + 0.035, 0.29, 0.35, true);
       setCol(t, col('#b9a46a'));
       sideBox(t, sg, u + 0.3, u + 0.34, oF, oF + 0.012, 0.3, 0.36, true);
+      const hf = anchors.handFrame(sg, a);
+      if (hf) anchors.handSpots.push({ ...hf, kind: 'rollup', w: doorW, h: doorH, y: 0, o: oF, color: dc.getHex(), seed: g.seed });
     }
     // frame (safety yellow posts on modern sheds), bumpers, canopy + dock light
     setCol(t, brick ? trimC : col('#e0b33c'));
@@ -911,7 +919,7 @@ export function genIndustrial(g: Gen): void {
           const gg = makeGrid(a, b, 0, 3.6, 1, { spacing: (b - a) / n0, cols: n0, winW: Math.min(2.0, (b - a) / n0 - 0.6), winH: 1.7, sill: 0.9, margin: 0.4 });
           wallGrid(s, sg, a, b, 0, 3.6, gg, lookO);
         }, (a, b, y0) => wallPlain(s, sg, a, b, y0, 3.6, plainO));
-        doorNiche(g, sg, du, { w: 1.9, h: 2.6, depth: 0.25, wallColor: offC, frameColor: col('#3a3f44'), doorColor: col('#3a3f44'), glass: true, profile: PROF.ALWAYS, seed: g.seed + 5, frameOut: 0 });
+        doorNiche(g, sg, du, { w: 1.9, h: 2.6, depth: 0.06, wallColor: offC, frameColor: col('#3a3f44'), doorColor: col('#3a3f44'), glass: true, profile: PROF.ALWAYS, seed: g.seed + 5, frameOut: 0 });
         setCol(t, col('#4a5056'));
         sideBox(t, sg, du - 1.6, du + 1.6, 0, 1.05, 2.95, 3.1, true);
         lightBox(g, sx(sg, du, 0.6) - 0.15, 2.88, sz(sg, du, 0.6) - 0.15, sx(sg, du, 0.6) + 0.15, 2.95, sz(sg, du, 0.6) + 0.15, '#fff1d6', LIGHT_MODE.STEADY, 3);

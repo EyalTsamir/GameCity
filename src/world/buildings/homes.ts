@@ -266,6 +266,7 @@ export function genHouse(g: Gen): void {
     porchLamp(pa + du + 0.85, zP + 0.06, 2.0);
     // deck, posts, railing, ceiling
     porchDeck(pa, pb, zP, M.z1, 0.16, col(['#a87f58', '#9a8f80', '#8d6e52'][Math.abs(Math.floor(g.seed)) % 3]));
+    anchors.handStep(pa + du, zP, 0.16, M.z1 - zP);
     setCol(t, trimC);
     const postH = gH;
     // posts 15 cm square on a 22 cm plinth block, moulded cap under a 26 cm header beam with a drip board;
@@ -326,6 +327,7 @@ export function genHouse(g: Gen): void {
     if (plan === 'lplan' || plan === 'bay') {
       setCol(t, col('#b9b2a6'));
       t.box(doorX - 0.75, 0, M.z1, doorX + 0.75, 0.16, M.z1 + 0.45, 0b110111);
+      anchors.handStep(doorX, M.z1, 0.16, 0.45);
     }
   }
   // sides of the main body (the L wing's outer side continues flush to the front)
@@ -449,6 +451,7 @@ export function genHouse(g: Gen): void {
     leanTo(va, vb, M.z1, F.z1 - 0.05, yA, 2.55, false);
     // deck, posts, railing with an opening at the steps
     porchDeck(va, vb, M.z1, F.z1 - 0.02, 0.22, col(rng.pick(['#a87f58', '#9a8f80', '#8d6e52'])));
+    anchors.handStep(doorX, M.z1, 0.22, F.z1 - 0.02 - M.z1);
     setCol(t, trimC);
     const n = Math.max(2, Math.round((vb - va) / 2.3));
     const zp = F.z1 - 0.2;
@@ -712,7 +715,7 @@ export function genHouse(g: Gen): void {
 
   function porchLamp(x: number, z: number, y: number): void {
     lightBox(g, x - 0.08, y, z, x + 0.08, y + 0.28, z + 0.14, '#ffc979', LIGHT_MODE.STEADY, 3);
-    anchors.doorLamp(x, y + 0.14, z + 0.07, 0, 1);
+    anchors.doorLamp(x, y + 0.14, z + 0.07, 0, 1, 0.16, 0.28, 0.14, 0.06);
   }
 
   /** Turned-look porch post at (x, z) from the deck y0 to y1: plinth block + chamfer step, 15 cm shaft, a
@@ -1115,6 +1118,8 @@ export function genHouse(g: Gen): void {
     sideBox(t, sg, u - w / 2 - 0.12, u - w / 2, 0, 0.08, 0, h);
     sideBox(t, sg, u + w / 2, u + w / 2 + 0.12, 0, 0.08, 0, h);
     if (lamp) wallLamp(g, sg, u + w / 2 + 0.4, 2.42, 0);
+    const hf = anchors.handFrame(sg, u - w / 2);
+    if (hf) anchors.handSpots.push({ ...hf, kind: 'garage', w, h, y: 0, o: -d + 0.04, color: gcol.getHex(), seed: g.seed });
   }
 
   function patioDoor(sg: SideGeom, u: number, w: number, h: number): void {

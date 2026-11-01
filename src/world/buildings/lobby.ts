@@ -7,6 +7,7 @@
 //
 // ?nolobby3d = the old shader lobby, ?nogroundfit = no stall risers / mullions on the shader bays (core/detailbuildings.ts).
 
+import { anchors } from './anchors';
 import * as THREE from 'three';
 import type { Builder } from './mesh';
 import { Gen, SideGeom, Grid, sx, sz, sideBox, sideQuad, col, shade, setCol, signOnSide, lightBox } from './gen';
@@ -464,6 +465,8 @@ function glassDoors(g: Gen, sg: SideGeom, u: number, GL: number, trY: number, fC
     t.cylinder(X(hu, GL + 0.09), Z(hu, GL + 0.09), 0.018, 0.85, 2.05, 6, true);
     for (const yy of [1.0, 1.9]) sideBox(t, sg, hu - 0.012, hu + 0.012, GL + 0.03, GL + 0.09, yy, yy + 0.02);
   }
+  const hf = anchors.handFrame(sg, u - hw);
+  if (hf) anchors.handSpots.push({ ...hf, kind: 'lobby', w: hw * 2, h: trY, y: 0, o: GL, color: col(P.metal).getHex(), seed: g.seed });
   // recessed mat in the threshold
   setCol(t, col('#2a2b2c'));
   sideBox(t, sg, u - hw + 0.1, u + hw - 0.1, GL + 0.02, -0.04, 0, FLOOR_Y + 0.006);

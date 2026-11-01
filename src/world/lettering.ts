@@ -492,6 +492,23 @@ export default function create(ctx: CityContext): CityModule {
           s.text('POST', p.w / 2, p.h * 0.28, p.h * 0.56, { face: FACE.SERIF_B, color: 0x4a3510, align: 'center', maxW: p.w * 0.9 });
         });
         break;
+      case 'wallsign':
+        if (!closeText(ctx, 'streetlabels')) break;
+        put(2, pcx(p), pcz(p), (s) => {
+          onProp(s, p);
+          paint.wallSign(s, p.w, p.h, p.word ?? '', p.part ?? 0);
+        });
+        break;
+      case 'bellplate': {
+        // the names beside the buttons of an entry panel (world/handheight)
+        const flats = p.part ?? 4;
+        if (!closeText(ctx, 'doorwords')) break;
+        put(2, pcx(p), pcz(p), (s) => {
+          onProp(s, p);
+          paint.panelNames(s, flats, p.seed);
+        });
+        break;
+      }
       case 'plaque':
         if (!closeText(ctx, 'streetlabels')) break;
         put(2, pcx(p), pcz(p), (s) => {

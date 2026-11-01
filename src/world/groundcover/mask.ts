@@ -312,6 +312,8 @@ export function buildCoverMaps(ctx: CityContext): CoverMaps {
     if (s.kind === 'tree') weed.ellipse(s.x, s.z, 0.66, 0.66, 0, 255, 'max', 0.68);
     else if ((s.kind === 'lamp' || s.kind === 'hydrant' || s.kind === 'bin') && wr.next() < 0.5) weed.disc(s.x + wr.range(-0.12, 0.12), s.z + wr.range(-0.12, 0.12), wr.range(0.1, 0.18), 255, 'max');
   }
+  const doors = (ctx.services.buildings as { handDoors?: { x: number; z: number; tx: number; tz: number; nx: number; nz: number; w: number }[] } | undefined)?.handDoors ?? [];
+  for (const d of doors) weed.disc(d.x + d.tx * d.w * 0.5 + d.nx * 0.35, d.z + d.tz * d.w * 0.5 + d.nz * 0.35, 0.8, 0);
   mark('weeds');
 
   // ── 5. leaf litter under the trees (additive radial falloff)

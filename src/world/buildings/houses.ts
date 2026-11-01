@@ -10,6 +10,7 @@ import {
   col, shade, setCol, lightBox, wallLamp,
 } from './gen';
 import { anchors } from './anchors';
+import { handDoorsLive } from '../../core/closehand';
 import { balconyLife, roofClutter, ironRail, acUnit, dish, downpipe } from './clutter';
 import { dB } from '../../core/detailbuildings';
 import { balconyAwning } from './services';
@@ -96,7 +97,7 @@ export function genHouseLegacy(g: Gen): void {
     const lx = pa + du + 0.85;
     setCol(g.trim, col('#2b2b2b'));
     lightBox(g, lx - 0.08, 2.0, zP + 0.06, lx + 0.08, 2.28, zP + 0.2, '#ffc979', LIGHT_MODE.STEADY, 3);
-    anchors.doorLamp(lx, 2.14, zP + 0.13, 0, 1);
+    anchors.doorLamp(lx, 2.14, zP + 0.13, 0, 1, 0.16, 0.28, 0.14, 0.06);
   }
   // side walls (garage on the driveway side, near the front)
   const sideWall = (sd: Side) => {
@@ -514,17 +515,19 @@ export function genApartment(g: Gen): void {
         bandWithOpenings(cg, 0, cg.L, [{ u: cg.L / 2, w: 1.6, h: 2.4 }], (aa, bb) => wallPlain(s, cg, aa, bb, 0, gH, { color: coreC, pattern: WALLPAT.PANELS, seed: g.seed }), (aa, bb, y0) => wallPlain(s, cg, aa, bb, y0, gH, { color: coreC, pattern: WALLPAT.PANELS, seed: g.seed }));
         doorNiche(g, cg, cg.L / 2, { w: 1.6, h: 2.4, depth: 0.25, wallColor: coreC, frameColor: col('#5a6066'), doorColor: col('#5a6066'), glass: true, profile: PROF.ALWAYS, seed: g.seed + 3, frameOut: 0.0 });
         // intercom / bell panel beside the entrance (flush: the core front sits on the footprint line)
-        setCol(t, col('#9aa0a4'));
-        sideBox(t, cg, cg.L / 2 + 1.0, cg.L / 2 + 1.2, 0, 0.018, 1.15, 1.5, true);
-        setCol(t, col('#26292c'));
-        for (let k = 0; k < 6; k++) sideBox(t, cg, cg.L / 2 + 1.03, cg.L / 2 + 1.17, 0.018, 0.024, 1.19 + k * 0.045, 1.215 + k * 0.045);
-        sideBox(t, cg, cg.L / 2 + 1.05, cg.L / 2 + 1.15, 0.018, 0.026, 1.45, 1.48);
+        if (!handDoorsLive()) {
+          setCol(t, col('#9aa0a4'));
+          sideBox(t, cg, cg.L / 2 + 1.0, cg.L / 2 + 1.2, 0, 0.018, 1.15, 1.5, true);
+          setCol(t, col('#26292c'));
+          for (let k = 0; k < 6; k++) sideBox(t, cg, cg.L / 2 + 1.03, cg.L / 2 + 1.17, 0.018, 0.024, 1.19 + k * 0.045, 1.215 + k * 0.045);
+          sideBox(t, cg, cg.L / 2 + 1.05, cg.L / 2 + 1.15, 0.018, 0.026, 1.45, 1.48);
+        }
         setCol(t, col('#5a6066'));
         sideBox(t, cg, -0.3, cg.L + 0.3, 0, 1.1, 2.75, 2.95, true);
         lightBox(g, sx(cg, cg.L / 2, 0.6) - 0.15, 2.7, sz(cg, cg.L / 2, 0.6) - 0.15, sx(cg, cg.L / 2, 0.6) + 0.15, 2.75, sz(cg, cg.L / 2, 0.6) + 0.15, '#fff1d6', LIGHT_MODE.STEADY, 3.5);
       } else {
         wallPlain(s, cg, 0, cg.L, 0, H + 1.6, { color: coreC, pattern: WALLPAT.PANELS, seed: g.seed });
-        if (sd === RIGHT) {
+        if (sd === RIGHT && !handDoorsLive()) {
           // a bank of letter boxes on the side of the stair core, near the entrance
           const mc = col(rng.pick(['#3f4a52', '#8c949a', '#6b4a32']));
           for (let r = 0; r < 3; r++)

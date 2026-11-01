@@ -3,6 +3,7 @@
 // balconies, shutters in different positions (open, closed, one leaf, ajar), wall-mounted AC units
 // with their pipes, satellite dishes, downpipes. All in the lot's LOCAL frame (trim / green builders).
 
+import { handDoorsLive } from '../../core/closehand';
 import * as THREE from 'three';
 import type { Gen, SideGeom } from './gen';
 import { sideBox, sx, sz, setCol, col, shade } from './gen';
@@ -351,11 +352,15 @@ export function downpipe(g: Gen, sg: SideGeom, u: number, yTop: number, c?: THRE
   const px = sx(sg, u, po),
     pz = sz(sg, u, po);
   t.cylinder(px, pz, 0.05, 0.25, yTop, 6, false);
+  // (close up the near kit draws the shoe and the clips: world/handheight)
+  const live = handDoorsLive();
+  const hf = anchors.handFrame(sg, u);
+  if (hf) anchors.handPipes.push({ ...hf, r: 0.05, po, y0: 0.25, y1: yTop - 0.05, color: pc.getHex(), room: oMax });
   // shoe at the bottom (kicks out over the gully)
   const so = Math.min(0.12, oMax - 0.055);
-  t.beam(px, 0.32, pz, sx(sg, u, so), 0.08, sz(sg, u, so), 0.09, 0.09);
+  if (!live) t.beam(px, 0.32, pz, sx(sg, u, so), 0.08, sz(sg, u, so), 0.09, 0.09);
   setCol(t, shade(pc, 0.75));
-  for (let y = 1.6; y < yTop - 0.4; y += 1.9) sideBox(t, sg, u - 0.07, u + 0.07, 0, Math.min(0.16, oMax - 0.01), y, y + 0.05, true);
+  if (!live) for (let y = 1.6; y < yTop - 0.4; y += 1.9) sideBox(t, sg, u - 0.07, u + 0.07, 0, Math.min(0.16, oMax - 0.01), y, y + 0.05, true);
   // hopper head under the gutter
   setCol(t, pc);
   sideBox(t, sg, u - 0.12, u + 0.12, 0.0, 0.2, yTop - 0.05, yTop + 0.18, true);
@@ -415,6 +420,9 @@ export function shutterPair(g: Gen, sg: SideGeom, u: number, ww: number, y0: num
     if (mode === 'open' || mode === 'closed') {
       const a = mode === 'open' ? (side < 0 ? u - ww / 2 - sw - 0.05 : u + ww / 2 + 0.05) : side < 0 ? u - ww / 2 : u;
       louvredLeaf(a, a + sw, mode === 'open' ? 0.0 : 0.02, y0 + (mode === 'open' ? 0.02 : 0.01), mode === 'open' ? yt - 0.02 : yt);
+      const hf = anchors.handFrame(sg, a);
+      // seed: bit 0 the hinge is at its right end, bit 1 it stands open
+      if (hf) anchors.handSpots.push({ ...hf, kind: 'shutter', w: sw, h: yt - y0 - 0.04, y: y0 + 0.02, o: mode === 'open' ? 0.045 : 0.065, color: c.getHex(), seed: (mode === 'open' ? 2 : 0) + ((mode === 'open') === side < 0 ? 1 : 0) });
     } else {
       // ajar: hinged at the window edge, swung out by ~35–60°
       const ang = g.rng.range(0.6, 1.05);

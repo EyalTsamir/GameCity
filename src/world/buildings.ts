@@ -21,6 +21,7 @@ import { PALETTE } from '../core/gfx';
 import { Builder } from './buildings/mesh';
 import { createMaterials, shellClassOf, SHELL_CLASS, SHELL_SPLIT } from './buildings/materials';
 import { SignAtlas } from './buildings/signs';
+import { setHandLevel } from '../core/closehand';
 import { Gen, Interval, LocalDoor, Side, col, jit, setDoorLife, setGutters } from './buildings/gen';
 import { genTownhouse, resetOldtown } from './buildings/oldtown';
 import { genFallback } from './buildings/fallback';
@@ -94,6 +95,7 @@ export default function create(ctx: CityContext): CityModule {
   const t0 = performance.now();
   const plan = ctx.plan;
   // A/B switches: ?legacyfacade = original shell shader
+  setHandLevel(ctx.quality.level);
   const mats = createMaterials(ctx.uniforms, { legacy: ctx.debug.params.has('legacyfacade'), wear: !ctx.debug.params.has('nowear'), winDepth: !ctx.debug.params.has('nowinreveal'), winRefl: !ctx.debug.params.has('nowinrefl'), wallRelief: !ctx.debug.params.has('nowallrelief'), plinth: !ctx.debug.params.has('noplinth'), glassVar: !ctx.debug.params.has('noglassvar'), interiors: boxHunt(ctx, 'interiors') });
   // ?nowingeo = no near-LOD sill / surround geometry (the shader sill everywhere)
   const winGeoOn = !ctx.debug.params.has('nowingeo');
@@ -138,6 +140,7 @@ export default function create(ctx: CityContext): CityModule {
   resetTowers();
   resetHomes();
   anchors.reset();
+  setHandLevel(ctx.quality.level);
   initAddresses(ctx.plan);
   setClutter(!ctx.debug.params.has('noclutter'));
   // massing: ?nomassing / ?nooriels ?noturrets ?nocrossgables ?nosetbacks ?nocrowns ?noroofkit (buildings/massing.ts)
@@ -381,6 +384,12 @@ export default function create(ctx: CityContext): CityModule {
     }),
     perches: anchors.perches,
     doorLamps: anchors.doorLamps,
+    handDoors: anchors.handDoors,
+    handWalls: anchors.handWalls,
+    handPipes: anchors.handPipes,
+    handSpots: anchors.handSpots,
+    handSteps: anchors.handSteps,
+    handTops: anchors.handTops,
     laundry: anchors.laundry,
     vents: anchors.vents,
     setStaticLaundry(on: boolean) {

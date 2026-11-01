@@ -164,6 +164,90 @@ export interface LetterSpot {
   style?: number;
 }
 
+/** A place on a wall in the world, for the near fittings (world/handheight): u runs along the wall from here, o out of it. */
+export interface HandFrame {
+  lot: number;
+  x: number;
+  z: number;
+  tx: number;
+  tz: number;
+  nx: number;
+  nz: number;
+}
+
+/** A door as doorNiche built it. u = 0 is the left edge of the opening; the leaf stands at o = -d. */
+export interface HandDoor extends HandFrame {
+  w: number;
+  /** the opening's height and the leaf's (lower with a fanlight); the leaf starts on the threshold at 0.14 */
+  h: number;
+  leafH: number;
+  d: number;
+  /** how far the architrave stands out of the wall */
+  fo: number;
+  glass: boolean;
+  plain: boolean;
+  transom: boolean;
+  seed: number;
+  /** joinery: 0 four panels, 1 six panels, 2 half glazed, 3 ledged boards */
+  v: number;
+  /** panel rectangles u0, u1, y0, y1 */
+  panels: number[];
+  /** y of the letter plate's middle; 0 = this door has none */
+  letterY: number;
+  kick: boolean;
+  doorCol: number;
+  frameCol: number;
+  metal: number;
+  /** a step the generator built in front: its top and how deep it is out of the wall */
+  stepY?: number;
+  stepO?: number;
+}
+
+/** A stretch of wall standing on the ground. u = 0 is its left end. Its windows, if any, are given by the grid (in its own u). */
+export interface HandWall extends HandFrame {
+  L: number;
+  y1: number;
+  /** left edge of the first window cell, cell width, cells, rows' bottom, row height, rows; window inside a cell */
+  grid: { u0: number; cw: number; n: number; v0: number; ch: number; m: number; wx0: number; wx1: number; wy0: number; wy1: number } | null;
+  pattern: number;
+  color: number;
+}
+
+/** A rainwater pipe on a wall: u = 0 at the pipe, po out of the wall. */
+export interface HandPipe extends HandFrame {
+  r: number;
+  po: number;
+  y0: number;
+  y1: number;
+  color: number;
+  /** room out from the wall at the foot */
+  room: number;
+  /** draw a hopper head at the top (near only: world/handheight added this pipe) */
+  hopper?: boolean;
+}
+
+/** A step a generator built in front of a door: its top, how deep it is. */
+export interface HandStep {
+  x: number;
+  z: number;
+  y: number;
+  d: number;
+}
+
+/** A fitting a generator made that wants its hardware close up. */
+export interface HandSpot extends HandFrame {
+  kind: 'garage' | 'rollup' | 'lobby' | 'meter' | 'cabinet' | 'shutter' | 'riser' | 'winder' | 'brickface' | 'firepoint';
+  /** u = 0 at its left edge */
+  w: number;
+  h: number;
+  /** bottom */
+  y: number;
+  /** where its face is, out of the wall */
+  o: number;
+  color: number;
+  seed: number;
+}
+
 export interface BuildingsService {
   /** the far facades' atlas (farFacade.ts, scripts/bake.mjs): one pass, and the fingerprint of what it depends on */
   renderFarBake?: (pass: number) => import('three').WebGLRenderTarget;
@@ -177,6 +261,12 @@ export interface BuildingsService {
   spans: LineSpan[];
   perches: Perch[];
   doorLamps: DoorLamp[];
+  handDoors: HandDoor[];
+  handWalls: HandWall[];
+  handPipes: HandPipe[];
+  handSpots: HandSpot[];
+  handSteps: HandStep[];
+  handTops: Map<number, number>;
   laundry: LaundryLine[];
   vents: VentTop[];
   /**
@@ -201,11 +291,25 @@ export interface DoorLamp {
   /** outward from the wall */
   nx: number;
   nz: number;
+  /** the size of its lit box (m): across, high, out; 0 = no box of this shape (a flat light under a canopy) */
+  w: number;
+  h: number;
+  d: number;
+  /** from the box's back to the wall */
+  back: number;
+  lot: number;
 }
 
 /** Module-level collector (reset per module creation). */
 class AnchorSink {
   doorLamps: DoorLamp[] = [];
+  handDoors: HandDoor[] = [];
+  handWalls: HandWall[] = [];
+  handPipes: HandPipe[] = [];
+  handSpots: HandSpot[] = [];
+  handSteps: HandStep[] = [];
+  /** the top of a lot's walls, without the gables: where a gutter can be */
+  handTops = new Map<number, number>();
   chimneys: ChimneyTop[] = [];
   balconies: BalconyAnchor[] = [];
   perches: Perch[] = [];
@@ -218,6 +322,12 @@ class AnchorSink {
 
   reset(): void {
     this.doorLamps = [];
+    this.handDoors = [];
+    this.handWalls = [];
+    this.handPipes = [];
+    this.handSpots = [];
+    this.handSteps = [];
+    this.handTops = new Map();
     this.chimneys = [];
     this.balconies = [];
     this.perches = [];
@@ -241,12 +351,29 @@ class AnchorSink {
   }
 
   /** local position, local outward normal */
-  doorLamp(x: number, y: number, z: number, nx: number, nz: number): void {
+  doorLamp(x: number, y: number, z: number, nx: number, nz: number, w = 0, h = 0, d = 0, back = 0): void {
     const { b } = this;
     if (!b) return;
     const wx = b.toWorldX(x, z),
       wz = b.toWorldZ(x, z);
-    this.doorLamps.push({ x: wx, y, z: wz, nx: b.toWorldX(x + nx, z + nz) - wx, nz: b.toWorldZ(x + nx, z + nz) - wz });
+    this.doorLamps.push({ x: wx, y, z: wz, nx: b.toWorldX(x + nx, z + nz) - wx, nz: b.toWorldZ(x + nx, z + nz) - wz, w, h, d, back, lot: this.lot?.id ?? -1 });
+  }
+
+  /** a step in front of a door, local centre of its front edge on the wall */
+  handStep(x: number, z: number, y: number, d: number): void {
+    const { b } = this;
+    if (b) this.handSteps.push({ x: b.toWorldX(x, z), z: b.toWorldZ(x, z), y, d });
+  }
+
+  /** the world frame of a side at u */
+  handFrame(sg: { x0: number; z0: number; tx: number; tz: number; nx: number; nz: number }, u: number): HandFrame | null {
+    const { lot, b } = this;
+    if (!lot || !b) return null;
+    const lx = sg.x0 + sg.tx * u,
+      lz = sg.z0 + sg.tz * u;
+    const ox = b.toWorldX(0, 0),
+      oz = b.toWorldZ(0, 0);
+    return { lot: lot.id, x: b.toWorldX(lx, lz), z: b.toWorldZ(lx, lz), tx: b.toWorldX(sg.tx, sg.tz) - ox, tz: b.toWorldZ(sg.tx, sg.tz) - oz, nx: b.toWorldX(sg.nx, sg.nz) - ox, nz: b.toWorldZ(sg.nx, sg.nz) - oz };
   }
 
   chimney(x: number, z: number, yTop: number, w: number, d: number): void {

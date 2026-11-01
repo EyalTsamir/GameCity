@@ -4,7 +4,7 @@
 import * as THREE from 'three';
 
 export interface PropSpot {
-  kind: 'notice' | 'bill' | 'timetable' | 'stopflag' | 'cover' | 'placard' | 'mailplate' | 'mailcrest' | 'plaque' | 'cablabel' | 'cabwarn' | 'signplate' | 'adpanel' | 'binlabel' | 'aboard' | 'pricecard';
+  kind: 'notice' | 'bill' | 'timetable' | 'stopflag' | 'cover' | 'placard' | 'mailplate' | 'mailcrest' | 'plaque' | 'cablabel' | 'cabwarn' | 'signplate' | 'adpanel' | 'binlabel' | 'aboard' | 'pricecard' | 'bellplate' | 'wallsign';
   /** world position of the lower left corner */
   x: number;
   y: number;
