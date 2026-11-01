@@ -618,6 +618,7 @@ export class CrowdRenderer {
         const umbrella = raining && L.umbrellaOwner && m.sit < 0.3 && m.lie < 0.1 && m.ground < 0.1 && !L.pram;
         const gaitOn = m.rideG === null && (layer === this.close || layer === this.near || layer === this.far || out === this.close || out === this.near || out === this.far);
         poseIn.t = t + m.seed * 10;
+        poseIn.near = layer === this.close || layer === this.near;
         computePoseA(m, umbrella, r, pose, gaitOn ? st.gait : null, this.frame);
         if (this.probe !== null) this.probe(m, pose, r, layer === this.close ? 0 : layer === this.near ? 1 : 2);
         // drawn at the gait's smoothed root when the gait ran this frame (corners: the feet were planned

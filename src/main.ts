@@ -42,6 +42,7 @@ const MODULES: [string, () => Promise<{ default: ModuleFactory }>][] = [
   ['boats', () => import('./sim/boats')],
   ['scenes', () => import('./sim/scenes')],
   ['closemat', () => import('./world/closemat')],
+  ['smalllife', () => import('./sim/smalllife')],
   ['postfx', () => import('./render/postfx')],
   ['camera', () => import('./ui/camera')],
   ['ui', () => import('./ui/ui')],
