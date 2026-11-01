@@ -55,16 +55,25 @@ All within noise and budget; those rows predate the third pass (pit tufts, lanes
 
 Final checks at a212800 (2026-11-01): typecheck and build pass, invariants `{}`, validate `[]`, `hitch` 0 mid-run compiles, `walkhitch` 0 new programs and 0 freezes, `?diorama`, `?quality=medium`, `?quality=low` without errors, `ui-test` 73 passed, `kinds` failed in the full run. It passed alone at 5da51d8, before the third pass; the rerun alone at a212800 hit my 5-minute limit on battery with the machine in use, so **`kinds` is unconfirmed on the last commits**: rerun it at the merge.
 
+## Second round (2026-11-01, the coordinator's Left list)
+
+- Plane bark at 1 m: flakes torn at the edges by the second tile, weathered in clouds, a dark line where one lifts off the next (`trunks.ts`). Reads as bark from a metre; the tile is still magnified, it just no longer shows steps.
+- Ring seam: it was a real shoulder. The stem shrank to 0.69 r0 at its top while the central leader came out at 0.56 r0, because the limb's first ring was thin and the next ring is more than a metre up. The stem now ends as wide as what grows out of it (`neck`, from the thickest limb within 4 rTop of its top) and the limb's hidden first ring is nearly full width.
+- Pink river bank: the far reed strips' pale plumes, and a ruled foot. Plumes are browner, the strip's foot goes into the water or mud (`rows.ts`, `farmkit.ts`).
+- Shrub stems: 6 rows and a bow, no elbows (`sprigs.ts`). River boulders: smooth normals, no extra triangles; the silhouette is still angular.
+- Birch at 1 m was ink rings right round the stem: lenticels now start and stop, with fine ones between, dark brown rather than black. Pine plates weather in patches.
+- The street tree's pit from `-3.9,0.3,34,1.3,-55,18`: greyer soil with lumps, pebbles and mulch (`pitClods`, 5 triangles each, near cells only), weeds on paving stand up instead of lying as shards.
+- Puddles: only one dry-noon look (a corner with no puddle in it), so **their edges are still not audited**.
+- Near-black shade: a floor on AO for cards and wood within 3-10 m (`foliage.ts`). It did **not** cure the nearest conifer crown at `-165,1.4,142,6,-30,6`: still near black at noon. See Left.
+
 ## Left
 
 Worth doing, biggest first:
-- Plane bark at 1 m: the plates' edges step, the tile is magnified (512² over about 1.5 m). Plates read as camouflage from a metre.
-- `medium` and `low`: the shaded side of the nearest trunks and leaf cards is close to pure black, large at eye level in the park. Same with `noclosenature`, so not this stage's; it looks like the missing AO/ambient on those tiers. For whoever owns light.
-- Blades at 3 m on thin meadow show dark beads along their length ("bamboo"): it is the half-resolution AO on sub-pixel blades, `?noao` clears it completely and the grass looks far better (`country-forest`, 3 m). Needs a depth-aware fix in `postfx/aoApply.ts` or a way to keep blades out of AO. This is the cheapest big win left for grass everywhere.
+- The nearest crown goes near black at eye level at every tier (`-165,1.4,142,6,-30,6`, noon). SHADE_NOTE
+- Blades at 3 m on thin meadow show dark beads along their length ("bamboo"), and stems have AO dots: half-resolution AO on sub-pixel blades, `?noao` clears it. With sweep-fix-d, which owns `postfx/aoApply.ts`.
 - Lane and woodland floor blades are sparse, single hairs on bare ground rather than tufts.
-- A ring-like seam on some park trunks, about 2 m up, where the skin meets the leader (`tree-park`, 3 m).
-- Water: the river bank's pink ragged polygon and a pale grey band at the edge (`water-riverbank`, 3 m). Thin ripples look like hairs.
-- Woodland shrub stems: sharp elbows. Trailing plants on planters shatter at 1 m (`green.hang`).
+- Water at 1 m: thin ripples read as hairs. A straight diagonal in the river bed from coarse land triangles; the waterline is polygonal.
+- River boulders have an angular silhouette; a near layer of rocks was not built. Trailing plants on planters shatter at 1 m (`green.hang`).
 - Night: hot spot on trunks near a lamp (`tree-park`, 3 m, 21.5). Lawn shade very dark at noon.
-- Weed blades on mid-slab inside a weed spot (needs the slab layout in JS). Birch and pine not looked at closely; puddle edges not audited.
+- Weed blades on mid-slab inside a weed spot (needs the slab layout in JS). Puddle edges not audited.
 - Not nature, for other owners: barcode stripes on a slab edge at `-8.8,0.2,-58.6` (closemat/paving), bin bags are black low-poly, a thin bright sliver at the wall foot in `ground-garden`.

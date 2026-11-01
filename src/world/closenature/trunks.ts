@@ -352,9 +352,9 @@ function buildTrunk(s: Soup, t: TrunkSpec, gy: (x: number, z: number) => number,
     const rootK = hp / sc;
     let rb = t.r0 + (t.rTop - t.r0) * f;
     rb *= t.lite ? 1 + 0.72 * Math.pow(1 - Math.min(1, hp / tall), 6) : 1 + (t.flare - 1) * flareK;
-    if (t.neck && t.neck * 1.04 < t.rTop * 0.86) {
+    if (t.neck) {
       const nk = Math.max(0, Math.min(1, (f - 0.45) / 0.55));
-      rb *= 1 + ((t.neck * 1.04) / t.rTop - 1) * nk * nk * (3 - 2 * nk);
+      rb *= 1 + (Math.min(t.rTop, t.neck * 1.04) / t.rTop - 1) * nk * nk * (3 - 2 * nk);
     } else rb *= 1 - (t.lite ? 0.2 : 0.14) * Math.max(0, f - 0.8) / 0.2;
     if (closing) rb *= 0.22;
     const lobeK = 0.55 + 0.45 * Math.min(1, Math.exp(-hp * 0.5) + 0.25);
@@ -527,9 +527,10 @@ function buildLimb(s: Soup, t: TrunkSpec, seed: number): void {
     lx = x;
     ly = y;
     lz = z;
-    // it starts inside the stem and thinner, so it grows out of it instead of showing a lip like a collar
+    // it starts inside the stem, so it grows out of it instead of showing a lip like a collar; as wide as it will be
+    // where it comes out (the next ring is a metre or more up: a thinner first ring here is a shoulder on the stem)
     const back = k === 0 ? t.r0 * 2.2 : 0;
-    if (k === 0) rr *= 0.72;
+    if (k === 0) rr *= 0.94;
     for (let i = 0; i <= cols; i++) {
       const th = ((i % cols) / cols) * 6.283185;
       const c = Math.cos(th),
