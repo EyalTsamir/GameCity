@@ -155,6 +155,13 @@ export class Geo {
     this.I.push(i0, i0 + 1, i0 + 2, i0, i0 + 2, i0 + 3);
     return this;
   }
+  /** flat quad facing the side of hint h, whatever the order of its corners */
+  quadFacing(a: V3, b: V3, c: V3, d: V3, h: V3): this {
+    const ux = b[0] - a[0], uy = b[1] - a[1], uz = b[2] - a[2];
+    const vx = d[0] - a[0], vy = d[1] - a[1], vz = d[2] - a[2];
+    const nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
+    return nx * h[0] + ny * h[1] + nz * h[2] >= 0 ? this.quad(a, b, c, d) : this.quad(a, d, c, b);
+  }
   /** quad with both faces */
   quad2(a: V3, b: V3, c: V3, d: V3): this {
     this.quad(a, b, c, d);

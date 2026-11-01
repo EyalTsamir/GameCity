@@ -11,27 +11,12 @@
 import * as THREE from 'three';
 import type { GlobalUniforms } from '../../core/uniforms';
 import { patchLampMaterial } from '../../world/lamps/integrate';
+import { makeCloseTiles } from '../../world/closemat/textures';
+import { closeVehOn } from '../../core/closeVehicles';
+import { T } from './tags';
+import { CLOSE_FRAG, NEAR_FRAG_PARS, NEAR_VERT_BEGIN, NEAR_VERT_PARS } from './closeGlsl';
 
-export const T = {
-  PLAIN: 0,
-  LIVERY: 1,
-  WHEEL: 2,
-  DOOR: 3,
-  WINDOW: 4,
-  HEAD: 5,
-  TAIL: 6,
-  DEST: 7,
-  CONT40: 8,
-  CONT20A: 9,
-  CONT20B: 10,
-  DOORWIN: 11,
-  GLASS: 12,
-  /** the open doorway's back (vestibule seen through it): ray-traced like the windows, aExtra.x = door centre z */
-  VESTIB: 13,
-  /** the open-door push button on a leaf: slides with it, its ring lit green while the doors are released */
-  DOORBTN: 14,
-  /** container corrugated faces (same visibility as CONT*, plus ribs) handled via CONT tags */
-} as const;
+export { T };
 
 // livery decal atlas cells (px; drawn by decalTexture below)
 export const DECAL = {
@@ -63,6 +48,9 @@ varying float vDoorZ;
 varying vec3 vCar;
 varying vec3 vAxY;
 varying vec3 vAxZ;
+#ifdef TR_NEAR
+${NEAR_VERT_PARS}
+#endif
 vec3 trWheel(vec3 p) {
   float c = cos(aInst.x), s = sin(aInst.x);
   vec2 q = p.yz - aExtra.xy;
@@ -106,7 +94,12 @@ const VERT_BEGIN = /* glsl */ `
 {
   int tg = trTagOf(aKind);
   if (tg == ${T.WHEEL}) transformed = trWheel(transformed);
-  if ((tg == ${T.DOOR} || tg == ${T.DOORWIN} || tg == ${T.DOORBTN}) && abs(aExtra.w - aInst.w) < 0.5) {
+  #ifdef TR_NEAR
+  bool trSlides = tg == ${T.DOOR} || tg == ${T.DOORWIN} || tg == ${T.DOORBTN} || tg == ${T.LEAF};
+  #else
+  bool trSlides = tg == ${T.DOOR} || tg == ${T.DOORWIN} || tg == ${T.DOORBTN};
+  #endif
+  if (trSlides && abs(aExtra.w - aInst.w) < 0.5) {
     float o = clamp(aInst.z, 0.0, 1.0);
     transformed.z += aExtra.z * 0.64 * smoothstep(0.15, 1.0, o);
     transformed.x += aExtra.w * 0.035 * smoothstep(0.0, 0.2, o);
@@ -125,6 +118,9 @@ const VERT_BEGIN = /* glsl */ `
   else if (tg == ${T.TAIL} && role == 2) e = vec3(1.0, 0.07, 0.03) * (0.7 + 2.6 * lit);
   else if (tg == ${T.DOORBTN} && color.g > color.r * 2.0) e = vec3(0.15, 1.0, 0.3) * (aInst.z > 0.05 ? 1.6 + 2.0 * lit : 0.0);
   else if (tg == ${T.DEST} && role == 1) e = vec3(1.0, 0.62, 0.16) * (0.9 + 0.6 * lit);
+  #ifdef TR_NEAR
+  ${NEAR_VERT_BEGIN}
+  #endif
   vEmit = e;
 }
 `;
@@ -145,6 +141,9 @@ varying vec3 vCar;
 varying vec3 vAxY;
 varying vec3 vAxZ;
 float trPaint = 0.0;
+#ifdef TR_NEAR
+${NEAR_FRAG_PARS}
+#endif
 uniform sampler2D uTrDecal;
 uniform float uTrDec;
 vec3 trIntE = vec3(0.0);
@@ -211,6 +210,7 @@ float trH(float n) { n = fract(n * 0.1031); n *= n + 33.33; n *= n + n; return f
 // window band, floor, ceiling with the light strip, seat backs in 1.9 m bays with a few seated heads, yellow
 // grab poles in the vestibule. Returns the colour lit as daylight / cabin light, darkened with depth.
 // distance to the interior surface the window shows (cars with real seated passengers write its depth: F2)
+#ifndef TR_NEAR
 float trHitT = -1.0;
 uniform mat4 projectionMatrix;
 vec3 trInterior(vec3 o, vec3 d, float doorZ) {
@@ -275,6 +275,7 @@ vec3 trInterior(vec3 o, vec3 d, float doorZ) {
   trHitT = t;
   return col * (1.0 - 0.45 * clamp((t - 0.5) / 3.0, 0.0, 1.0));
 }
+#endif
 `;
 
 // ───────────────────────────────────────────── livery decals (W2 s6)
@@ -471,6 +472,9 @@ function decalTexture(): THREE.Texture {
 
 export interface TrainMaterials {
   material: THREE.MeshStandardMaterial;
+  /** the close level: body and built saloon, and its panes (null with ?novehtrain / ?noclosevehicles) */
+  close: THREE.MeshStandardMaterial | null;
+  glass: THREE.MeshStandardMaterial | null;
   depth: THREE.MeshDepthMaterial;
   clip: { value: THREE.Vector2 };
   /** saloon interior behind the glass: 1 on, 0 off (URL off → stays 0; quality low → 0, set by trainRender) */
@@ -488,9 +492,29 @@ export function createTrainMaterials(globals: GlobalUniforms, clipX0: number, cl
   const decals = { value: typeof location !== 'undefined' && new URLSearchParams(location.search).has('notraindecals') ? 0 : 1 };
   // ?notrainglass: the cab glass without its G1 reflection / cab / wipers
   const glassOn = { value: typeof location !== 'undefined' && new URLSearchParams(location.search).has('notrainglass') ? 0 : 1 };
+  const tiles = closeVehOn('vehtrain') ? makeCloseTiles() : null;
+  const make = (near: '' | 'close' | 'glass'): THREE.MeshStandardMaterial => {
   const material = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.48, metalness: 0.08 });
-  material.name = 'rail-train';
+  material.name = 'rail-train' + (near ? '-' + near : '');
+  if (near) {
+    material.defines = { ...material.defines, TR_NEAR: 1, ...(near === 'glass' ? { TR_GLASSPASS: 1 } : { TR_CLOSE: 1 }) };
+    if (near === 'glass') {
+      // what the pane adds, over what it lets through (alpha): one blend for reflection and tint alike
+      material.transparent = true;
+      material.depthWrite = false;
+      material.side = THREE.DoubleSide;
+      material.blending = THREE.CustomBlending;
+      material.blendEquation = THREE.AddEquation;
+      material.blendSrc = THREE.OneFactor;
+      material.blendDst = THREE.SrcAlphaFactor;
+    }
+  }
   material.onBeforeCompile = (shader) => {
+    if (near && tiles) {
+      shader.uniforms.tFibre = { value: tiles.fibre };
+      shader.uniforms.tGrain = { value: tiles.grain };
+      shader.uniforms.tCrack = { value: tiles.crack };
+    }
     shader.uniforms.uLights = globals.uLights;
     shader.uniforms.uTime = globals.uTime;
     shader.uniforms.uClip = clip;
@@ -563,11 +587,19 @@ export function createTrainMaterials(globals: GlobalUniforms, clipX0: number, cl
             float top = step(2.6, vLoc.y - 1.2) * step(abs(vLoc.x), 1.18);
             diffuseColor.rgb *= 1.0 - (0.16 * rib * amp) * (1.0 - top);
           }
-          if (uGrime > 0.5 && tg != ${T.WINDOW} && tg != ${T.DOORWIN} && tg != ${T.GLASS}) {
+          #ifdef TR_NEAR
+          bool trGrimed = tg != ${T.INNER} && tg != ${T.LEAF} && tg != ${T.HEAD} && tg != ${T.TAIL};
+          #else
+          bool trGrimed = true;
+          #endif
+          if (trGrimed && uGrime > 0.5 && tg != ${T.WINDOW} && tg != ${T.DOORWIN} && tg != ${T.GLASS}) {
             // brake dust and track dirt: running gear rust-brown, a film up the lower body that fades with a noisy
             // edge, dust on the roof; weathering ages the rolling stock with the street around it
             vec3 q = vLoc;
             float n = fract(sin(dot(floor(q * vec3(3.0, 9.0, 1.3)), vec3(12.9898, 78.233, 37.719))) * 43758.5453);
+            #ifdef TR_CLOSE
+            n = texture2D(tCrack, q.zy * 0.37 + q.x * 0.21).b; // (the far level's cells are half-metre blocks from a metre away)
+            #endif
             float gear = (1.0 - smoothstep(0.9, 1.05, q.y)) * step(abs(q.x), 1.3);
             float low = (1.0 - smoothstep(0.95, 1.55 + 0.15 * n, q.y)) * (1.0 - gear);
             // roof: brake / catenary dust in soft blotches (strong colours — insulators, lamps — keep theirs)
@@ -601,6 +633,7 @@ export function createTrainMaterials(globals: GlobalUniforms, clipX0: number, cl
               diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * 0.62 + vec3(0.05, 0.045, 0.04), st * 0.45);
             }
           }
+          #ifndef TR_NEAR
           if ((tg == ${T.WINDOW} || tg == ${T.DOORWIN} || tg == ${T.VESTIB}) && uTrInt > 0.5) {
             vec3 d = normalize(vLocDir);
             if (d.x * vLoc.x < 0.0 && vDoorZ > -1e4) {
@@ -637,13 +670,20 @@ export function createTrainMaterials(globals: GlobalUniforms, clipX0: number, cl
             diffuseColor.rgb = mix(cab, vec3(0.015), wip);
             trIntE += env * Fr * (1.0 - 0.88 * uLights) * (1.0 - wip);
           }
+          #endif
+          ${CLOSE_FRAG}
         }`,
       )
       .replace(
         '#include <roughnessmap_fragment>',
         `#include <roughnessmap_fragment>
-        { int tg = int(vTagF + 0.5); tg -= (tg / 100) * 100; if (tg == ${T.GLASS} || tg == ${T.WINDOW} || tg == ${T.DOORWIN}) roughnessFactor = 0.18; if (tg == ${T.VESTIB}) roughnessFactor = 1.0; if (tg == ${T.WHEEL}) roughnessFactor = 0.62; if (trPaint > 0.5) roughnessFactor = 0.26 + 0.3 * (1.0 - smoothstep(1.0, 2.0, vLoc.y)) * uGrime; }`,
+        { int tg = int(vTagF + 0.5); tg -= (tg / 100) * 100; if (tg == ${T.GLASS} || tg == ${T.WINDOW} || tg == ${T.DOORWIN}) roughnessFactor = 0.18; if (tg == ${T.VESTIB}) roughnessFactor = 1.0; if (tg == ${T.WHEEL}) roughnessFactor = 0.62; if (trPaint > 0.5) roughnessFactor = 0.26 + 0.3 * (1.0 - smoothstep(1.0, 2.0, vLoc.y)) * uGrime; }
+        #ifdef TR_NEAR
+        if (trRough >= 0.0) roughnessFactor = trRough;
+        roughnessFactor = clamp(roughnessFactor + trRoughAdd, 0.04, 1.0);
+        #endif`,
       )
+      .replace('#include <metalnessmap_fragment>', '#include <metalnessmap_fragment>\n#ifdef TR_NEAR\nmetalnessFactor = max(metalnessFactor, trMetal);\n#endif')
       .replace(
         '#include <normal_fragment_maps>',
         `#include <normal_fragment_maps>
@@ -656,24 +696,55 @@ export function createTrainMaterials(globals: GlobalUniforms, clipX0: number, cl
           float sz = 0.016 * k * sin(6.2832 * vLoc.z / P) * (1.0 - smoothstep(0.03, 0.12, pz));
           float sy = 0.008 * sin(6.2832 * (vLoc.y - 1.15) / 1.1) * (1.0 - smoothstep(0.03, 0.12, pz));
           if (trPaint > 0.5) normal = normalize(normal + vAxZ * sz + vAxY * sy);
+          #ifdef TR_NEAR
+          normal = normalize(normal + trTilt);
+          #endif
         }`,
       )
       .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += vEmit * trEmK + trIntE;')
+      .replace(
+        '#include <lights_fragment_maps>',
+        `#include <lights_fragment_maps>
+        #if defined( TR_NEAR ) && defined( RE_IndirectSpecular )
+        totalEmissiveRadiance += trLensEmit + trLensAlb * ( irradiance + iblIrradiance ) * RECIPROCAL_PI;
+        #endif`,
+      )
+      .replace(
+        '#include <aomap_fragment>',
+        `#include <aomap_fragment>
+        #ifdef TR_NEAR
+        if (trAO >= 0.0) {
+          reflectedLight.indirectDiffuse *= trAO;
+          reflectedLight.indirectSpecular *= trAO;
+        }
+        #endif`,
+      )
       // cars with real seated passengers (aInst2.y = 2, pedestrians/occupants.ts): the window takes the depth of the
       // saloon surface behind it, so the figures inside show through the glass; every other fragment keeps its own
       .replace(
         '#include <dithering_fragment>',
         `#include <dithering_fragment>
+#ifdef TR_GLASSPASS
+gl_FragColor.a = clamp(trTrans, 0.0, 1.0);
+#endif
+#ifndef TR_NEAR
 gl_FragDepth = gl_FragCoord.z;
-if (vCar.x > 1.5 && trHitT > 0.0) {
+// (an open doorway keeps its own depth: pushed back, the body panel behind it would show through)
+if (vCar.x > 1.5 && trHitT > 0.0 && abs(vDoorZ) > 1e3) {
   vec3 trMv = -vViewPosition;
   vec4 trCp = projectionMatrix * vec4(trMv * (1.0 + trHitT / length(trMv)), 1.0);
   gl_FragDepth = clamp(0.5 * trCp.z / trCp.w + 0.5, 0.0, 1.0);
-}`,
+}
+#endif`,
       );
   };
-  material.customProgramCacheKey = () => 'rail-train-v8';
+  material.customProgramCacheKey = () => 'rail-train-v9' + near;
   patchLampMaterial(material); // night street-light map (night agent)
+  return material;
+  };
+  const material = make('');
+  const close = tiles ? make('close') : null;
+  const glass = tiles ? make('glass') : null;
 
   const depth = new THREE.MeshDepthMaterial();
   depth.name = 'rail-train-depth';
@@ -700,5 +771,5 @@ bool trVariantHidden(float k) { int vm = int(k + 0.5) / 100; if (vm == 1) return
       .replace('#include <clipping_planes_fragment>', '#include <clipping_planes_fragment>\nif (vWX < uClip.x || vWX > uClip.y) discard;');
   };
   depth.customProgramCacheKey = () => 'rail-train-depth-v2';
-  return { material, depth, clip, interior, interiorUrlOff: interior.value === 0 };
+  return { material, close, glass, depth, clip, interior, interiorUrlOff: interior.value === 0 };
 }

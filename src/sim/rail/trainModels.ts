@@ -7,7 +7,8 @@
 
 import * as THREE from 'three';
 import { Geo, type V3 } from './geo';
-import { T } from './trainMaterial';
+import { T } from './tags';
+import type { CloseHooks } from './closeModel';
 
 export const EMU = {
   /** body length (cab and middle cars share one geometry) */
@@ -406,7 +407,7 @@ function emuUnderframe(g: Geo, z0: number, z1: number): void {
 
 /** rounded rectangle contour in the side plane (z, y), counter-clockwise in (z, y); n segments per corner.
  *  Also returns each point's outward direction (for offset contours and gasket normals). */
-function rrect(za: number, zb: number, ya: number, yb: number, r: number, n: number): { p: [number, number][]; d: [number, number][] } {
+export function rrect(za: number, zb: number, ya: number, yb: number, r: number, n: number): { p: [number, number][]; d: [number, number][] } {
   const p: [number, number][] = [],
     d: [number, number][] = [];
   const cs: [number, number, number][] = [
@@ -436,7 +437,7 @@ function sideTri(g: Geo, side: number, a: V3, b: V3, c: V3): void {
  * opening (strips + corner fillets), a rubber gasket with a lip proud of the panel and a reveal sloping in, and the
  * glass set 2.5 cm back in it (ray-traced saloon behind). `wins` = glass [za, zb] spans, glass y wy0..wy1.
  */
-function piercedSide(g: Geo, z0: number, z1: number, y0: number, y1: number, wins: [number, number][], wy0: number, wy1: number, color: string): void {
+function piercedSide(g: Geo, z0: number, z1: number, y0: number, y1: number, wins: [number, number][], wy0: number, wy1: number, color: string, pg: Geo = g): void {
   const X = 1.45,
     m = 0.045, // gasket width round the glass
     R = 0.13, // opening corner radius
@@ -510,16 +511,16 @@ function piercedSide(g: Geo, z0: number, z1: number, y0: number, y1: number, win
         }
       }
       // glass, set back in the gasket
-      g.kind(T.WINDOW).color(C.glass);
+      pg.kind(T.WINDOW).color(C.glass);
       const gl = cont[2].p;
       const gx = side * (X - 0.024);
-      const c0 = g.vert(gx, (wy0 + wy1) / 2, (wa + wb) / 2, side, 0, 0);
-      const gb = g.vertexCount;
-      for (const [pz, py] of gl) g.vert(gx, py, pz, side, 0, 0);
+      const c0 = pg.vert(gx, (wy0 + wy1) / 2, (wa + wb) / 2, side, 0, 0);
+      const gb = pg.vertexCount;
+      for (const [pz, py] of gl) pg.vert(gx, py, pz, side, 0, 0);
       for (let i = 0; i < gl.length; i++) {
         const j = (i + 1) % gl.length;
-        if (side > 0) g.I.push(c0, gb + j, gb + i);
-        else g.I.push(c0, gb + i, gb + j);
+        if (side > 0) pg.I.push(c0, gb + j, gb + i);
+        else pg.I.push(c0, gb + i, gb + j);
       }
       g.kind(T.PLAIN).color(color);
     }
@@ -637,37 +638,61 @@ function gangway(g: Geo, z: number, dir: 1 | -1): void {
  * windshield, lamps) + middle-only parts (variant 2: front end/gangway, pantograph); the
  * shader collapses the parts of the other variant (aInst2.z = 1 for cab cars).
  */
-export function buildEmu(): THREE.BufferGeometry {
+export function buildEmu(hk?: CloseHooks): THREE.BufferGeometry {
   const g = new Geo();
+  // the close level: the panes go to a mesh of their own, the doors have real openings behind them
+  const pg = hk ? hk.glass : g;
+  const setVariant = (v: number) => {
+    g.variant(v);
+    pg.variant(v);
+  };
+  const bogieFn = hk ? hk.bogie : bogie;
   const L = EMU.len;
   const zr = -L / 2;
   const zF = L / 2;
   const zJ = zF - 1.3;
-  g.variant(0);
+  setVariant(0);
+  const doorZ = [-L / 4 - 0.1, L / 4 - 0.75];
   // the window band (band 2) is built per variant by piercedSide (rounded openings in rubber, glass set back)
   const bandsNoWin = EMU_BANDS.map((b, i) => (i === 2 ? { ...b, tag: -1 } : b));
-  shell(g, EMU_PROF, bandsNoWin, zr, zJ, 5);
+  const DOOR_W = 0.66;
+  if (hk) {
+    // the lower band stops at the door openings
+    shell(g, EMU_PROF, bandsNoWin.map((b, i) => (i === 1 ? { ...b, tag: -1 } : b)), zr, zJ, 5);
+    const low = bandsNoWin.map((b, i) => (i === 1 ? b : { ...b, tag: -1 }));
+    for (const [a, b] of [[zr, doorZ[0] - DOOR_W], [doorZ[0] + DOOR_W, doorZ[1] - DOOR_W], [doorZ[1] + DOOR_W, zJ]]) shell(g, EMU_PROF, low, a, b, 5);
+  } else shell(g, EMU_PROF, bandsNoWin, zr, zJ, 5);
   emuUnderframe(g, zr, zF - 0.25);
   endWall(g, EMU_PROF, zr, -1, C.endWall);
   gangway(g, zr, -1);
   // bogies
   const bz = L / 2 - 2.6;
-  bogie(g, -bz, EMU.wheelR, 2.3);
-  bogie(g, bz - 0.1, EMU.wheelR, 2.3);
+  bogieFn(g, -bz, EMU.wheelR, 2.3);
+  bogieFn(g, bz - 0.1, EMU.wheelR, 2.3);
   // doors & windows (shared side layout; the front section differs per variant)
-  const doorZ = [-L / 4 - 0.1, L / 4 - 0.75];
-  for (const dz of doorZ) doors(g, dz, C.door);
+  for (const dz of doorZ) {
+    if (hk) hk.doors(g, hk.glass, dz, C.door);
+    else doors(g, dz, C.door);
+  }
   const pillar = 0.24;
   const span = (out: [number, number][], a: number, b: number, n: number) => {
     const w = (b - a - pillar * (n - 1)) / n;
     for (let i = 0; i < n; i++) out.push([a + i * (w + pillar), a + i * (w + pillar) + w]);
   };
   const dw = 0.72;
-  const wins: [number, number][] = [];
-  span(wins, doorZ[0] + dw + 0.22, doorZ[1] - dw - 0.22, 3);
-  span(wins, zr + 0.45, doorZ[0] - dw - 0.22, 2);
+  const wins3: [number, number][] = [];
+  const wins2: [number, number][] = [];
+  span(wins3, doorZ[0] + dw + 0.22, doorZ[1] - dw - 0.22, 3);
+  span(wins2, zr + 0.45, doorZ[0] - dw - 0.22, 2);
   const zA = doorZ[1] + dw + 0.1;
-  piercedSide(g, zr, zA, 2.05, 3.15, wins, 2.2, 2.98, C.cream);
+  if (hk) {
+    piercedSide(g, zr, doorZ[0] - DOOR_W, 2.05, 3.15, wins2, 2.2, 2.98, C.cream, pg);
+    piercedSide(g, doorZ[0] + DOOR_W, doorZ[1] - DOOR_W, 2.05, 3.15, wins3, 2.2, 2.98, C.cream, pg);
+    piercedSide(g, doorZ[1] + DOOR_W, zA, 2.05, 3.15, [], 2.2, 2.98, C.cream, pg);
+    // over the openings
+    g.kind(T.PLAIN).color(C.cream);
+    for (const dz of doorZ) for (const sd of [-1, 1]) sideQuad(g, sd, sd * 1.45, 3.12, 3.15, dz - DOOR_W, dz + DOOR_W);
+  } else piercedSide(g, zr, zA, 2.05, 3.15, [...wins3, ...wins2], 2.2, 2.98, C.cream);
   boxRoofUnit(g, -3.2, ROOF_Y - 0.04, 2.4);
   // rain gutters along the cant rail (a lip that catches the roof's run-off), roof drain spouts at the ends
   g.kind(T.PLAIN).color('#6e7375');
@@ -677,13 +702,13 @@ export function buildEmu(): THREE.BufferGeometry {
   }
 
   // ── middle car only: body up to the front end, front gangway, front windows, pantograph
-  g.variant(2);
+  setVariant(2);
   shell(g, EMU_PROF, bandsNoWin, zJ, zF, 5);
   endWall(g, EMU_PROF, zF, 1, C.endWall);
   gangway(g, zF, 1);
   const winsM: [number, number][] = [];
   span(winsM, doorZ[1] + dw + 0.22, zF - 0.45, 2);
-  piercedSide(g, zA, zF, 2.05, 3.15, winsM, 2.2, 2.98, C.cream);
+  piercedSide(g, zA, zF, 2.05, 3.15, winsM, 2.2, 2.98, C.cream, pg);
   pantograph(g, 2.9, ROOF_Y - 0.03, true);
   g.kind(T.PLAIN).color(C.insulator);
   g.cyl(0, ROOF_Y - 0.03, 0.8, 0.07, 0.06, 0.3, 6, 1);
@@ -703,10 +728,10 @@ export function buildEmu(): THREE.BufferGeometry {
   boxRoofUnit(g, 5.6, ROOF_Y - 0.04, 1.7, 1.3);
 
   // ── cab car only
-  g.variant(1);
+  setVariant(1);
   const winsC: [number, number][] = [];
   span(winsC, doorZ[1] + dw + 0.22, zJ - 0.25, 1);
-  piercedSide(g, zA, zJ, 2.05, 3.15, winsC, 2.2, 2.98, C.cream);
+  piercedSide(g, zA, zJ, 2.05, 3.15, winsC, 2.2, 2.98, C.cream, pg);
   boxRoofUnit(g, 3.4, ROOF_Y - 0.04, 1.3, 1.1);
   g.kind(T.PLAIN).color('#2a2d30');
   for (const [az, ax, ah] of [[1.2, 0.35, 0.26], [1.9, -0.3, 0.2], [0.4, 0.0, 0.42]] as const) {
@@ -769,14 +794,19 @@ export function buildEmu(): THREE.BufferGeometry {
       zHigh = zJ + 0.05;
     const zFront = (y: number) => zLow + ((zHigh - zLow) * (y - yTop)) / (yCrown - yTop);
     const upperBands = EMU_BANDS.slice(EMU_BANDS.length - (upper.length - 1));
-    shell(g, upper, upperBands, zJ, zJ, 3, zFront);
+    shell(g, upper, hk ? upperBands.map((b, i) => (i === 0 ? { ...b, tag: -1 } : b)) : upperBands, zJ, zJ, 3, zFront);
     // front plane polygon (livery), then windshield glass and fittings on it
     const fp: V3[] = [];
     for (const [x, y] of upper) fp.push([x, y, zFront(y)]);
     for (let i = upper.length - 2; i >= 0; i--) fp.push([-upper[i][0], upper[i][1], zFront(upper[i][1])]);
     const pn = new THREE.Vector3(0, zHigh - zLow, yCrown - yTop).normalize(); // plane normal (forward-up)
     // fan from the centroid; the list runs up the right side then down the left (clockwise seen from the front) → reverse
-    {
+    const onPlane = (x: number, y: number, off: number): V3 => [x, y + pn.y * off, zFront(y) + pn.z * off];
+    if (hk) {
+      // the front plane with a real opening for the screen
+      g.kind(T.LIVERY).color('#ffffff');
+      planeWithHole(g, upper, onPlane, { y0: 2.25, y1: 3.32, x0: 1.22, x1: 1.18 });
+    } else {
       g.kind(T.LIVERY).color('#ffffff');
       const poly = fp.slice().reverse();
       let cx = 0,
@@ -795,12 +825,17 @@ export function buildEmu(): THREE.BufferGeometry {
       for (const p of poly) g.vert(p[0], p[1], p[2], pn.x, pn.y, pn.z);
       for (let i = 0; i < poly.length; i++) g.I.push(c0, b0 + ((i + 1) % poly.length), b0 + i);
     }
-    const onPlane = (x: number, y: number, off: number): V3 => [x, y + pn.y * off, zFront(y) + pn.z * off];
     // windshield (dark glass with a black surround)
     g.kind(T.PLAIN).color('#15191c');
-    g.quad(onPlane(-1.3, 2.17, 0.008), onPlane(1.3, 2.17, 0.008), onPlane(1.27, 3.5, 0.008), onPlane(-1.27, 3.5, 0.008));
-    g.kind(T.GLASS).color('#1f2b33');
-    g.quad(onPlane(-1.22, 2.25, 0.016), onPlane(1.22, 2.25, 0.016), onPlane(1.18, 3.32, 0.016), onPlane(-1.18, 3.32, 0.016));
+    if (hk) {
+      frameQuad(g, onPlane, 0.008, 1.3, 1.27, 2.17, 3.5, 1.22, 1.18, 2.25, 3.32);
+      pg.kind(T.GLASS).color('#1f2b33');
+      pg.quad(onPlane(-1.22, 2.25, -0.006), onPlane(1.22, 2.25, -0.006), onPlane(1.18, 3.32, -0.006), onPlane(-1.18, 3.32, -0.006));
+    } else {
+      g.quad(onPlane(-1.3, 2.17, 0.008), onPlane(1.3, 2.17, 0.008), onPlane(1.27, 3.5, 0.008), onPlane(-1.27, 3.5, 0.008));
+      g.kind(T.GLASS).color('#1f2b33');
+      g.quad(onPlane(-1.22, 2.25, 0.016), onPlane(1.22, 2.25, 0.016), onPlane(1.18, 3.32, 0.016), onPlane(-1.18, 3.32, 0.016));
+    }
     // centre pillar
     g.kind(T.PLAIN).color('#15191c');
     g.quad(onPlane(-0.035, 2.25, 0.02), onPlane(0.035, 2.25, 0.02), onPlane(0.035, 3.32, 0.02), onPlane(-0.035, 3.32, 0.02));
@@ -809,12 +844,29 @@ export function buildEmu(): THREE.BufferGeometry {
     g.quad(onPlane(-0.62, 3.36, 0.02), onPlane(0.62, 3.36, 0.02), onPlane(0.62, 3.47, 0.02), onPlane(-0.62, 3.47, 0.02));
     g.kind(T.PLAIN).color(C.lampRim);
     g.quad(onPlane(-0.12, 3.55, 0.012), onPlane(0.12, 3.55, 0.012), onPlane(0.12, 3.7, 0.012), onPlane(-0.12, 3.7, 0.012));
-    g.kind(T.HEAD).color(C.headOff);
-    g.quad(onPlane(-0.08, 3.58, 0.02), onPlane(0.08, 3.58, 0.02), onPlane(0.08, 3.67, 0.02), onPlane(-0.08, 3.67, 0.02));
+    if (hk) hk.lamp(g, T.HEAD, 0, 3.625, zFront(3.625) + 0.012, 0.062);
+    else {
+      g.kind(T.HEAD).color(C.headOff);
+      g.quad(onPlane(-0.08, 3.58, 0.02), onPlane(0.08, 3.58, 0.02), onPlane(0.08, 3.67, 0.02), onPlane(-0.08, 3.67, 0.02));
+    }
     // wipers
     // parked along the bottom of the screen: pivot outboard, arm, blade with its spine
     g.kind(T.PLAIN).color('#111315');
-    for (const s of [-1, 1]) {
+    if (hk) {
+      for (const s of [-1, 1]) {
+        // a real arm and blade: a spindle in a boss, a tapered arm, a blade with its yoke
+        const px = s * 1.05;
+        const inb = s * 0.14;
+        g.color('#1b1d1f');
+        g.rod(onPlane(px, 2.262, 0.0), onPlane(px, 2.262, 0.03), 0.018, 8, 1);
+        g.color('#111315');
+        g.rod(onPlane(px, 2.262, 0.03), onPlane((px + inb) / 2, 2.3, 0.034), 0.0075, 5);
+        g.color('#26292c');
+        g.rod(onPlane(inb, 2.305, 0.03), onPlane(px - s * 0.06, 2.3, 0.03), 0.006, 4);
+        g.color('#0c0d0e');
+        g.rod(onPlane(inb, 2.303, 0.018), onPlane(px - s * 0.06, 2.298, 0.018), 0.0045, 4);
+      }
+    } else for (const s of [-1, 1]) {
       const px = s * 1.05;
       g.quad(onPlane(px - 0.03, 2.27, 0.024), onPlane(px + 0.03, 2.27, 0.024), onPlane(px + 0.03, 2.3, 0.024), onPlane(px - 0.03, 2.3, 0.024));
       const [a, b] = s < 0 ? [px, -0.12] : [0.12, px];
@@ -834,7 +886,31 @@ export function buildEmu(): THREE.BufferGeometry {
       g.color('#b9bdc0');
     }
     // cab side windows (dark, trapezoids following the slope)
-    for (const side of [-1, 1]) {
+    const cabZw = (y: number) => zFront(2.32) - 0.18 + ((zFront(3.0) - 0.15 - (zFront(2.32) - 0.18)) * (y - 2.32)) / 0.68;
+    if (hk) {
+      for (const side of [-1, 1]) {
+        // the wall round a real opening, a rubber frame on it, the pane set back
+        const X = side * 1.45;
+        const ya = 2.28,
+          yb = 3.04,
+          zh = zJ + 0.11;
+        g.kind(T.PLAIN).color(C.cream);
+        const P = (y0: number, y1: number, z00: number, z01: number, z11: number, z10: number) => g.quadFacing([X, y0, z00], [X, y0, z01], [X, y1, z11], [X, y1, z10], [side, 0, 0]);
+        P(2.05, ya, zJ, zFront(2.05), zFront(ya), zJ);
+        P(yb, 3.15, zJ, zFront(yb), zFront(3.15), zJ);
+        P(ya, yb, zJ, zh, zh, zJ);
+        P(ya, yb, cabZw(ya) + 0.05, zFront(ya), zFront(yb), cabZw(yb) + 0.05);
+        g.color('#16191b');
+        const R = side * 1.456;
+        const F = (y0: number, y1: number, z00: number, z01: number, z11: number, z10: number) => g.quadFacing([R, y0, z00], [R, y0, z01], [R, y1, z11], [R, y1, z10], [side, 0, 0]);
+        F(ya, 2.32, zh, cabZw(ya) + 0.05, cabZw(2.32) + 0.05, zh);
+        F(3.0, yb, zh, cabZw(3.0) + 0.05, cabZw(yb) + 0.05, zh);
+        F(2.32, 3.0, zh, zJ + 0.15, zJ + 0.15, zh);
+        F(2.32, 3.0, cabZw(2.32), cabZw(2.32) + 0.05, cabZw(3.0) + 0.05, cabZw(3.0));
+        pg.kind(T.GLASS).color(C.glass);
+        pg.quadFacing([side * 1.44, 2.32, zJ + 0.15], [side * 1.44, 2.32, cabZw(2.32)], [side * 1.44, 3.0, cabZw(3.0)], [side * 1.44, 3.0, zJ + 0.15], [side, 0, 0]);
+      }
+    } else for (const side of [-1, 1]) {
       const x = side * 1.462;
       const zb0 = zFront(2.32) - 0.18,
         zb1 = zFront(3.0) - 0.15;
@@ -849,14 +925,19 @@ export function buildEmu(): THREE.BufferGeometry {
     for (const sx of [-1, 1]) {
       g.kind(T.PLAIN).color(C.lampRim);
       g.box(sx * 0.9, 1.6, zF + 0.004, 0.62, 0.3, 0.01, 0);
-      g.kind(T.HEAD).color(C.headOff);
-      g.push().at(sx * 0.78, 1.6, zF + 0.01).rotX(Math.PI / 2);
-      g.cyl(0, 0, 0, 0.1, 0.1, 0.012, 10, 1);
-      g.pop();
-      g.kind(T.TAIL).color(C.tailOff);
-      g.push().at(sx * 1.08, 1.6, zF + 0.01).rotX(Math.PI / 2);
-      g.cyl(0, 0, 0, 0.065, 0.065, 0.012, 8, 1);
-      g.pop();
+      if (hk) {
+        hk.lamp(g, T.HEAD, sx * 0.78, 1.6, zF + 0.009, 0.1);
+        hk.lamp(g, T.TAIL, sx * 1.08, 1.6, zF + 0.009, 0.065);
+      } else {
+        g.kind(T.HEAD).color(C.headOff);
+        g.push().at(sx * 0.78, 1.6, zF + 0.01).rotX(Math.PI / 2);
+        g.cyl(0, 0, 0, 0.1, 0.1, 0.012, 10, 1);
+        g.pop();
+        g.kind(T.TAIL).color(C.tailOff);
+        g.push().at(sx * 1.08, 1.6, zF + 0.01).rotX(Math.PI / 2);
+        g.cyl(0, 0, 0, 0.065, 0.065, 0.012, 8, 1);
+        g.pop();
+      }
     }
     // coupler, skirt / snowplough
     // automatic (Scharfenberg-type) coupler: draft gear housing, shank, a square head with the cone and funnel
@@ -880,8 +961,60 @@ export function buildEmu(): THREE.BufferGeometry {
     g.color('#2b2f32');
     g.quad([-1.15, 0.62, zF - 0.02], [1.15, 0.62, zF - 0.02], [1.2, 0.95, zF - 0.12], [-1.2, 0.95, zF - 0.12]);
     g.box(0, 0.78, zF - 0.4, 2.3, 0.34, 0.5, 4);
-  g.variant(0);
+    if (hk) {
+      hk.saloon(hk.inner, hk.glass, {
+        wins2,
+        wins3,
+        winsM,
+        winsC,
+        doorZ,
+        zr,
+        zF,
+        rrect,
+        cab: { zFront, cz: zJ - 0.03, zNose: zF - ch - 0.02, yScreen: 2.25, yf: 1.25, X: 1.385, yC: 3.37, hx0: 1.22, hx1: 1.18, yTop: 3.32, win: { y0: 2.32, y1: 3.0, zr: zJ + 0.15, zw: cabZw } },
+      });
+    }
+  setVariant(0);
   return g.build({ anim: false, extra: true });
+}
+
+/** a front plane (upper profile, onPlane) with a trapezoid opening: slices between the profile's corners, a strip each side where the opening is */
+function planeWithHole(g: Geo, upper: Prof, onPlane: (x: number, y: number, off: number) => V3, h: { y0: number; y1: number; x0: number; x1: number }): void {
+  const ys = [...new Set([...upper.map((p) => p[1]), h.y0, h.y1])].sort((a, b) => a - b);
+  const outer = (y: number) => {
+    for (let i = 0; i < upper.length - 1; i++) {
+      const [xa, ya] = upper[i],
+        [xb, yb] = upper[i + 1];
+      if (y >= ya - 1e-6 && y <= yb + 1e-6) return yb > ya ? xa + ((xb - xa) * (y - ya)) / (yb - ya) : xa;
+    }
+    return 0;
+  };
+  const hx = (y: number) => h.x0 + ((h.x1 - h.x0) * (y - h.y0)) / (h.y1 - h.y0);
+  for (let i = 0; i < ys.length - 1; i++) {
+    const ya = ys[i],
+      yb = ys[i + 1];
+    const xa = outer(ya),
+      xb = outer(yb);
+    if (ya >= h.y0 - 1e-6 && yb <= h.y1 + 1e-6) {
+      g.quad(onPlane(hx(ya), ya, 0), onPlane(xa, ya, 0), onPlane(xb, yb, 0), onPlane(hx(yb), yb, 0));
+      g.quad(onPlane(-xa, ya, 0), onPlane(-hx(ya), ya, 0), onPlane(-hx(yb), yb, 0), onPlane(-xb, yb, 0));
+    } else g.quad(onPlane(-xa, ya, 0), onPlane(xa, ya, 0), onPlane(xb, yb, 0), onPlane(-xb, yb, 0));
+  }
+}
+
+/** the black frame round a screen on its plane: outer half widths at foot and head over inner ones */
+function frameQuad(g: Geo, onPlane: (x: number, y: number, off: number) => V3, off: number, ox0: number, ox1: number, oy0: number, oy1: number, ix0: number, ix1: number, iy0: number, iy1: number): void {
+  const ox = (y: number) => ox0 + ((ox1 - ox0) * (y - oy0)) / (oy1 - oy0);
+  g.quad(onPlane(-ox0, oy0, off), onPlane(ox0, oy0, off), onPlane(ox(iy0), iy0, off), onPlane(-ox(iy0), iy0, off));
+  g.quad(onPlane(-ox(iy1), iy1, off), onPlane(ox(iy1), iy1, off), onPlane(ox1, oy1, off), onPlane(-ox1, oy1, off));
+  for (const s of [-1, 1]) {
+    const a = onPlane(s * ix0, iy0, off),
+      b = onPlane(s * ox(iy0), iy0, off),
+      c = onPlane(s * ox(iy1), iy1, off),
+      d = onPlane(s * ix1, iy1, off);
+    if (s > 0) g.quad(a, b, c, d);
+    else g.quad(b, a, d, c);
+  }
 }
 
 // ───────────────────────────────────────────── electric locomotive
@@ -906,8 +1039,10 @@ const LOCO_BANDS: Band[] = [
   { color: C.roof, tag: T.PLAIN },
 ];
 
-export function buildLoco(): THREE.BufferGeometry {
+export function buildLoco(hk?: CloseHooks): THREE.BufferGeometry {
   const g = new Geo();
+  const pg = hk ? hk.glass : g;
+  const bogieFn = hk ? hk.bogie : bogie;
   const L = FREIGHT.locoLen;
   const zF = L / 2;
   const cab = 1.0; // windshield setback
@@ -923,6 +1058,8 @@ export function buildLoco(): THREE.BufferGeometry {
     // lower block sides
     g.push();
     if (end < 0) g.rotY(Math.PI);
+    pg.frame.copy(g.frame);
+    if (hk) hk.inner.frame.copy(g.frame);
     shell(g, lower, [LOCO_BANDS[0], LOCO_BANDS[1], LOCO_BANDS[2], LOCO_BANDS[3]], zJ, zF - 0.05, 99);
     // front face (yellow) + top ledge
     g.kind(T.PLAIN).color(C.yellow);
@@ -945,6 +1082,9 @@ export function buildLoco(): THREE.BufferGeometry {
       for (const [x, y] of upper) fp.push([x, y, zFront(y)]);
       for (let i = upper.length - 2; i >= 0; i--) fp.push([-upper[i][0], upper[i][1], zFront(upper[i][1])]);
       g.kind(T.PLAIN).color(C.yellow);
+      const onP = (x: number, y: number, off: number): V3 => [x, y + pn.y * off, zFront(y) + pn.z * off];
+      if (hk) planeWithHole(g, upper, onP, { y0: 2.5, y1: 3.32, x0: 1.18, x1: 1.14 });
+      else {
       const poly = fp.slice().reverse();
       let cx = 0,
         cy = 0,
@@ -961,17 +1101,33 @@ export function buildLoco(): THREE.BufferGeometry {
       const b0 = g.vertexCount;
       for (const p of poly) g.vert(p[0], p[1], p[2], pn.x, pn.y, pn.z);
       for (let i = 0; i < poly.length; i++) g.I.push(c0, b0 + ((i + 1) % poly.length), b0 + i);
+      }
     }
     const onPlane = (x: number, y: number, off: number): V3 => [x, y + pn.y * off, zFront(y) + pn.z * off];
     g.kind(T.PLAIN).color('#15191c');
-    g.quad(onPlane(-1.28, 2.42, 0.008), onPlane(1.28, 2.42, 0.008), onPlane(1.24, 3.42, 0.008), onPlane(-1.24, 3.42, 0.008));
-    g.kind(T.GLASS).color('#1f2b33');
-    g.quad(onPlane(-1.18, 2.5, 0.016), onPlane(-0.06, 2.5, 0.016), onPlane(-0.06, 3.32, 0.016), onPlane(-1.14, 3.32, 0.016));
-    g.quad(onPlane(0.06, 2.5, 0.016), onPlane(1.18, 2.5, 0.016), onPlane(1.14, 3.32, 0.016), onPlane(0.06, 3.32, 0.016));
+    if (hk) {
+      frameQuad(g, onPlane, 0.008, 1.28, 1.24, 2.42, 3.42, 1.18, 1.14, 2.5, 3.32);
+      // the post between the two panes
+      g.quad(onPlane(-0.06, 2.5, 0.008), onPlane(0.06, 2.5, 0.008), onPlane(0.06, 3.32, 0.008), onPlane(-0.06, 3.32, 0.008));
+      pg.kind(T.GLASS).color('#1f2b33');
+      pg.quad(onPlane(-1.18, 2.5, -0.006), onPlane(-0.06, 2.5, -0.006), onPlane(-0.06, 3.32, -0.006), onPlane(-1.14, 3.32, -0.006));
+      pg.quad(onPlane(0.06, 2.5, -0.006), onPlane(1.18, 2.5, -0.006), onPlane(1.14, 3.32, -0.006), onPlane(0.06, 3.32, -0.006));
+      hk.cab(hk.inner, { zFront, cz: zJ - 0.97, zNose: zFront(2.3) - 0.02, yScreen: 2.5, yf: 1.55, X: 1.4, yC: 3.4, hx0: 1.18, hx1: 1.14, yTop: 3.32, win: null });
+    } else {
+      g.quad(onPlane(-1.28, 2.42, 0.008), onPlane(1.28, 2.42, 0.008), onPlane(1.24, 3.42, 0.008), onPlane(-1.24, 3.42, 0.008));
+      g.kind(T.GLASS).color('#1f2b33');
+      g.quad(onPlane(-1.18, 2.5, 0.016), onPlane(-0.06, 2.5, 0.016), onPlane(-0.06, 3.32, 0.016), onPlane(-1.14, 3.32, 0.016));
+      g.quad(onPlane(0.06, 2.5, 0.016), onPlane(1.18, 2.5, 0.016), onPlane(1.14, 3.32, 0.016), onPlane(0.06, 3.32, 0.016));
+    }
     // lamps (head inboard, tail outboard) on the yellow face
     for (const sx of [-1, 1]) {
       g.kind(T.PLAIN).color(C.lampRim);
       g.box(sx * 0.95, 1.72, zF - 0.045, 0.55, 0.26, 0.01, 0);
+      if (hk && end > 0) {
+        hk.lamp(g, T.HEAD, sx * 0.83, 1.72, zF - 0.04, 0.09);
+        hk.lamp(g, T.TAIL, sx * 1.1, 1.72, zF - 0.04, 0.06);
+        continue;
+      }
       g.kind(end > 0 ? T.HEAD : T.PLAIN).color(C.headOff);
       g.push().at(sx * 0.83, 1.72, zF - 0.04).rotX(Math.PI / 2);
       g.cyl(0, 0, 0, 0.09, 0.09, 0.012, 10, 1);
@@ -1003,12 +1159,14 @@ export function buildLoco(): THREE.BufferGeometry {
         zb = zJ - 0.15;
       if (side > 0) g.quad([x, 1.3, zb], [x, 1.3, za], [x, 3.05, za], [x, 3.05, zb]);
       else g.quad([x, 1.3, za], [x, 1.3, zb], [x, 3.05, zb], [x, 3.05, za]);
-      g.kind(T.GLASS).color(C.glass);
+      pg.kind(T.GLASS).color(C.glass);
       const xx = x + side * 0.004;
-      if (side > 0) g.quad([xx, 2.45, zb - 0.08], [xx, 2.45, za + 0.08], [xx, 3.0, za + 0.08], [xx, 3.0, zb - 0.08]);
-      else g.quad([xx, 2.45, za + 0.08], [xx, 2.45, zb - 0.08], [xx, 3.0, zb - 0.08], [xx, 3.0, za + 0.08]);
+      if (side > 0) pg.quad([xx, 2.45, zb - 0.08], [xx, 2.45, za + 0.08], [xx, 3.0, za + 0.08], [xx, 3.0, zb - 0.08]);
+      else pg.quad([xx, 2.45, za + 0.08], [xx, 2.45, zb - 0.08], [xx, 3.0, zb - 0.08], [xx, 3.0, za + 0.08]);
     }
     g.pop();
+    pg.frame.copy(g.frame);
+    if (hk) hk.inner.frame.copy(g.frame);
   }
   // side grilles (machine room)
   for (const side of [-1, 1]) {
@@ -1032,8 +1190,8 @@ export function buildLoco(): THREE.BufferGeometry {
   // underframe tanks / boxes
   g.kind(T.PLAIN).color('#2d3033');
   g.box(0, 0.85, 0, 2.0, 0.42, 3.4, 4);
-  bogie(g, -5.2, FREIGHT.locoWheelR, 2.6, true, 1.05);
-  bogie(g, 5.2, FREIGHT.locoWheelR, 2.6, true, 1.05);
+  bogieFn(g, -5.2, FREIGHT.locoWheelR, 2.6, true, 1.05);
+  bogieFn(g, 5.2, FREIGHT.locoWheelR, 2.6, true, 1.05);
   // roof: two pantographs (rear raised), main breaker, roof line
   pantograph(g, -4.6, 3.79, true, true);
   pantograph(g, 4.6, 3.79, false);
@@ -1064,8 +1222,9 @@ function container(g: Geo, z0: number, z1: number, tag: number): void {
   for (const sx of [-0.75, -0.3, 0.3, 0.75]) g.box(sx, y0 + h / 2, z0 - 0.012, 0.04, h - 0.3, 0.02, 0);
 }
 
-export function buildWagon(): THREE.BufferGeometry {
+export function buildWagon(hk?: CloseHooks): THREE.BufferGeometry {
   const g = new Geo();
+  const bogieFn = hk ? hk.bogie : bogie;
   const L = FREIGHT.wagonLen;
   const zF = L / 2 - 0.45;
   // frame: deck sills + headstocks
@@ -1092,7 +1251,13 @@ export function buildWagon(): THREE.BufferGeometry {
   }
   // end-of-train marker lamps (+Z end, lit when trailing)
   g.kind(T.TAIL).color(C.tailOff);
-  for (const sx of [-1.05, 1.05]) g.box(sx, 1.42, zF + 0.12, 0.14, 0.14, 0.06, 0);
+  for (const sx of [-1.05, 1.05]) {
+    if (hk) {
+      g.kind(T.PLAIN).color('#1a1b1d');
+      g.box(sx, 1.42, zF + 0.1, 0.17, 0.17, 0.05, 0);
+      hk.lamp(g, T.TAIL, sx, 1.42, zF + 0.125, 0.06);
+    } else g.box(sx, 1.42, zF + 0.12, 0.14, 0.14, 0.06, 0);
+  }
   g.kind(T.PLAIN).color('#2a2a2a');
   for (const sx of [-1.05, 1.05]) g.box(sx, 1.25, zF + 0.1, 0.04, 0.2, 0.04, 0);
   // brake cylinder / air tank
@@ -1100,8 +1265,8 @@ export function buildWagon(): THREE.BufferGeometry {
   g.push().at(0.6, 0.78, 0).rotX(Math.PI / 2);
   g.cyl(0, -1.0, 0, 0.18, 0.18, 2.0, 8, 3);
   g.pop();
-  bogie(g, -4.55, FREIGHT.wagonWheelR, 1.8, false, 0.9, true);
-  bogie(g, 4.55, FREIGHT.wagonWheelR, 1.8, false, 0.9, true);
+  bogieFn(g, -4.55, FREIGHT.wagonWheelR, 1.8, false, 0.9, true);
+  bogieFn(g, 4.55, FREIGHT.wagonWheelR, 1.8, false, 0.9, true);
   // loads
   container(g, -6.1, 6.1, T.CONT40);
   container(g, -6.1, -0.04, T.CONT20A);
