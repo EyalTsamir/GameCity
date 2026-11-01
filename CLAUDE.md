@@ -81,7 +81,7 @@ In the page, `window.__city` exposes `view()`, `setHours()`, `setSpeed()`, `stat
 **Modules.** Each subsystem is a file default-exporting `create(ctx) → CityModule`
 (`update(simDt)`, `frame(realDt)`, `stats()`, `invariants()`), with helpers in a same-named folder. `main.ts` loads
 them by dynamic import in this order, each fault-isolated (a module that throws is skipped and the city still runs):
-sky, terrain, landscape, water, ambient, roads, buildings, landmarks, harbor, vegetation, props, groundcover, life, lamps, near,
+sky, terrain, landscape, water, ambient, roads, buildings, landmarks, harbor, vegetation, props, groundcover, life, lamps, near, handheight, lettering,
 traffic, pedestrians, rail, boats, scenes, closemat, buildingrooms, closenature, smalllife, postfx, camera, ui, audio. A module may rely only on services of modules loaded before it; anything from
 later modules (e.g. camera state used by sky/postfx) is looked up lazily every frame and null-checked.
 `simDt` is scaled by `clock.speed` (0 when paused, up to ~0.8 s at 8×): simulations sub-step.
