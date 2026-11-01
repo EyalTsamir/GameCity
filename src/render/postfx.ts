@@ -24,6 +24,8 @@ import { WORLD_MODE } from '../core/world';
 import { SunShaftsEffect } from './postfx/sunShafts';
 import { setAtmoCamera } from './atmosphere';
 import { perfOn } from '../core/perfdeep';
+import { flickerFix } from '../core/sweepflicker';
+import { TemporalAA } from './postfx/taa';
 import type { AtmosphereService } from './sky/atmoDrive';
 
 /** previous frame's scene depth for soft particles (see ctx.services.postfx.softDepth) */
@@ -200,8 +202,10 @@ export default function create(ctx: CityContext): CityModule {
     }
   }
   // ?nanviz (debug): NaN/Inf scene pixels show up magenta in the final image instead of black
-  const look = new LookEffect(TONE_MAPPING, params.has('nanviz'), worldGrade);
-  const aaMode = params.get('aa') ?? 'smaa';
+  // temporal AA at the end of the chain (postfx/taa.ts, ?notaa = SMAA as before; the tabletop model keeps SMAA)
+  const taa = world && flickerFix(quality.level, 'taa') ? new TemporalAA(camera, { alpha: Number(params.get('taaa') ?? 0.07), sharp: Number(params.get('taas') ?? 0.6), jitter: Number(params.get('taaj') ?? 0.6), neverRest: params.has('taamove') }) : null;
+  const look = new LookEffect(TONE_MAPPING, params.has('nanviz'), worldGrade, !!taa);
+  const aaMode = taa ? 'none' : (params.get('aa') ?? 'smaa');
   let smaa: Effect;
   if (aaMode === 'fxaa') {
     const fx = new FXAAEffect();
@@ -220,8 +224,15 @@ export default function create(ctx: CityContext): CityModule {
   const fxList = (params.get('fx') ?? (aaMode === 'none' ? 'ao,clouds,tilt,shafts,bloom,look' : 'smaa,ao,clouds,tilt,shafts,bloom,look')).split(',').filter((k) => (k !== 'ao' || !!ao) && (k !== 'shafts' || !!shafts));
   const all = { smaa, ao: aoFx, clouds, tilt, shafts: shafts as SunShaftsEffect, bloom, look } as const;
   const fxPass = new EffectPass(camera, ...(Object.keys(all) as (keyof typeof all)[]).filter((k) => fxList.includes(k)).map((k) => all[k]));
-  fxPass.dithering = true;
+  fxPass.dithering = !taa;
   composer.addPass(fxPass);
+  if (taa) {
+    // the pass still believes it is the last one in the composer; it draws into TAA's input, and TAA draws the screen
+    fxPass.renderToScreen = false;
+    fxPass.needsSwap = false;
+    const fxRender = fxPass.render.bind(fxPass);
+    fxPass.render = (r, i, _o, dt, st) => fxRender(r, i, taa.input, dt, st);
+  }
   // The scene target as R11F_G11F_B10F (32 bpp, nothing reads its alpha): half the bandwidth of RGBA16F on this tiler,
   // 3–5 ms a frame (perf-deep, ?nor11). After addPass: the effects' own buffers follow the composer's type at addPass.
   if (perfOn('r11') && fbType === THREE.HalfFloatType) {
@@ -422,6 +433,7 @@ export default function create(ctx: CityContext): CityModule {
     // world: the raymarched cumulus deck for this frame's final camera (the dome composites it)
     (ctx.services.sky as { renderClouds?(r: THREE.WebGLRenderer, c: THREE.PerspectiveCamera): void } | undefined)?.renderClouds?.(renderer, camera);
     if (!enabledAll) {
+      taa?.reset();
       const ac = renderer.autoClear;
       renderer.autoClear = true;
       renderer.setRenderTarget(null);
@@ -605,7 +617,15 @@ export default function create(ctx: CityContext): CityModule {
     gpuTimer.poll(gpuSample);
     gpuTimer.begin();
 
+    if (taa) {
+      taa.setSize(composer.inputBuffer.width, composer.inputBuffer.height);
+      taa.jitter();
+    }
     composer.render(realDt);
+    if (taa) {
+      taa.unjitter();
+      taa.draw(renderer, (composer as unknown as { stableDepthTexture: THREE.Texture | null }).stableDepthTexture);
+    }
     gpuTimer.end();
     if (warm) {
       tilt.enabled = dofWanted && !lensIdle;
@@ -663,6 +683,7 @@ export default function create(ctx: CityContext): CityModule {
     },
     dispose() {
       composer.dispose();
+      taa?.dispose();
     },
   };
 }

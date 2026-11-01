@@ -95,16 +95,22 @@ void mainImage(const in vec4 inputColor, const in vec2 uv, out vec4 outputColor)
   vec2 d = (uv - 0.5) * vec2(aspect, 1.0);
   float v = smoothstep(uVigStart, uVigStart + 0.75, length(d));
   g *= 1.0 - v * uVignette;
+#ifdef TH_GAMMA_OUT
+  // (temporal AA averages display values and goes back to linear itself, postfx/taa.ts)
+  outputColor = vec4(max(g, vec3(0.0)), inputColor.a);
+#else
   outputColor = vec4(pow(max(g, vec3(0.0)), vec3(2.2)), inputColor.a);
+#endif
 }
 `;
 
 export class LookEffect extends Effect {
   /** @param worldLook AgX with a time-of-day CDL look (world mode); false = three's tone map (diorama) */
-  constructor(toneMapping: THREE.ToneMapping, nanViz = false, worldLook = false) {
+  constructor(toneMapping: THREE.ToneMapping, nanViz = false, worldLook = false, gammaOut = false) {
     const fn = toneMapping === THREE.ACESFilmicToneMapping ? 'ACESFilmicToneMapping' : toneMapping === THREE.NeutralToneMapping ? 'NeutralToneMapping' : 'AgXToneMapping';
     const defines = new Map([['TONE_FN', fn]]);
     if (nanViz) defines.set('TH_NAN_VIZ', '1');
+    if (gammaOut) defines.set('TH_GAMMA_OUT', '1');
     if (worldLook && toneMapping === THREE.AgXToneMapping) defines.set('TH_WORLD_LOOK', '1');
     super('LookEffect', FRAG, {
       defines,

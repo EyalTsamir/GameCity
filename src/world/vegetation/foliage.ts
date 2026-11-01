@@ -22,6 +22,7 @@
 import * as THREE from 'three';
 import type { GlobalUniforms } from '../../core/uniforms';
 import { WIND_GLSL } from '../../core/wind';
+import { flickerOn } from '../../core/sweepflicker';
 import { closeNatureOn } from '../../core/closenature';
 import { LAMP_GLSL, lampUniforms } from '../../core/lampLight';
 import { wrappedPhysicalPars, NOISE_GLSL } from './material';
@@ -308,7 +309,13 @@ uniform vec2 uWind;
 uniform sampler2D uThLod;
 uniform vec4 uThWindK;
 uniform float uThFarKeep;
+uniform vec3 uNearEye;
+uniform float uNearLens;
 ${WIND_GLSL}
+/** how much of a back-and-forth of amp metres at p to keep: under a pixel it can't be seen as motion, only as shimmer (?nowindfade) */
+float thMotionKeep( vec3 p, float amp ) {
+  ${flickerOn('windfade') ? 'return smoothstep( 0.35, 1.2, amp * 1400.0 * uNearLens / max( distance( p, uNearEye ), 0.5 ) );' : 'return 1.0;'}
+}
 /** near weight of plant #id (LOD texture, 1024 texels per row) */
 float thLodW( float id ) {
   int i = int( id + 0.5 );
@@ -319,9 +326,10 @@ vec3 thMainBend( vec3 p, vec3 r, float H, vec2 w, float ph ) {
   float hy = max( 0.0, p.y - r.y );
   float f = hy / max( 1.0, H );
   float bf = f * f * ( 1.6 - 0.6 * f );
-  float sway = 0.62 + 0.26 * sin( uTime * ( 0.95 + 0.3 * ph ) + ph * 6.2831 ) + 0.12 * sin( uTime * 1.83 + ph * 11.0 );
+  float keep = thMotionKeep( r + vec3( 0.0, H * 0.6, 0.0 ), 0.38 * H * uThWindK.x * length( w ) );
+  float sway = 0.62 + keep * ( 0.26 * sin( uTime * ( 0.95 + 0.3 * ph ) + ph * 6.2831 ) + 0.12 * sin( uTime * 1.83 + ph * 11.0 ) );
   vec2 d = w * ( sway * bf * H * uThWindK.x );
-  d += vec2( -w.y, w.x ) * ( sin( uTime * 0.77 + ph * 4.0 ) * 0.14 * bf * H * uThWindK.x );
+  d += vec2( -w.y, w.x ) * ( keep * sin( uTime * 0.77 + ph * 4.0 ) * 0.14 * bf * H * uThWindK.x );
   return vec3( d.x, -dot( d, d ) / max( 1.0, 2.0 * hy ), d.y );
 }
 /** two-level branch bob: br = (ph1, w1, ph2, w2) */
@@ -342,7 +350,7 @@ float thPlantPhase( vec3 r ) {
 
 /** the vertex functions of a plant's bend, for what must move with its tube (world/closenature/trunks.ts) */
 export const woodBendVertex = (): string => VERT_COMMON;
-export const woodBendUniforms = (u: GlobalUniforms): Record<string, THREE.IUniform> => ({ uTime: u.uTime, uWind: u.uWind, uThWindK: cardKnobs.windK, uThFarKeep: cardKnobs.farKeep, uThLod: { value: null } });
+export const woodBendUniforms = (u: GlobalUniforms): Record<string, THREE.IUniform> => ({ uNearEye: u.uNearEye, uNearLens: u.uNearLens, uTime: u.uTime, uWind: u.uWind, uThWindK: cardKnobs.windK, uThFarKeep: cardKnobs.farKeep, uThLod: { value: null } });
 
 const CARD_VERT_PARS = /* glsl */ `
 attribute vec4 iC;
@@ -384,10 +392,10 @@ void thCard( out vec3 P, out vec3 N ) {
     float ph = thPlantPhase( iR.xyz );
     float vph = dot( P, vec3( 2.13, 1.71, 2.97 ) );
     P += thMainBend( P, iR.xyz, iC.w, w, ph );
-    P += thBob( iB, w );
+    P += thBob( iB, w ) * thMotionKeep( P, 0.04 );
     float g = thGust( iR.xz );
     float fl = sin( uTime * 7.3 + vph ) * 0.6 + sin( uTime * 11.1 + vph * 1.37 ) * 0.4;
-    P += N * ( fl * iU.w * uThWindK.w * ( 0.3 + g ) * length( uWind ) );
+    P += N * ( fl * iU.w * uThWindK.w * ( 0.3 + g ) * length( uWind ) * thMotionKeep( P, 0.02 ) );
   }
 #ifndef TH_DEPTH
   // cards seen edge-on dissolve (their leaves would smear into streaks); the others cover for them
@@ -473,7 +481,7 @@ void thWood( out vec3 P, out vec3 N ) {
     float ph = thPlantPhase( iR.xyz );
     vec3 disp = thMainBend( C, iR.xyz, iX.x, w, ph );
     vec4 br = vec4( iW.x, mix( iW.y, iW.z, t ), iW.w, mix( iW2.x, iW2.y, t ) );
-    disp += thBob( br, w );
+    disp += thBob( br, w ) * thMotionKeep( C, 0.04 );
     P += disp;
   }
 #ifndef TH_DEPTH
@@ -718,7 +726,7 @@ export interface FoliageMaterials {
 }
 
 function commonUniforms(u: GlobalUniforms, lod: THREE.Texture): Record<string, THREE.IUniform> {
-  return { uTime: u.uTime, uWind: u.uWind, uThLod: { value: lod }, uThWindK: cardKnobs.windK, uThFarKeep: cardKnobs.farKeep };
+  return { uTime: u.uTime, uWind: u.uWind, uThLod: { value: lod }, uThWindK: cardKnobs.windK, uThFarKeep: cardKnobs.farKeep, uNearEye: u.uNearEye, uNearLens: u.uNearLens };
 }
 
 export function cardMaterials(u: GlobalUniforms, atlas: THREE.Texture, lod: THREE.Texture): FoliageMaterials {
