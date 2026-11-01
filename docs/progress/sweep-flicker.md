@@ -80,7 +80,7 @@ Sweep was slightly worse because of sharpening on frames without history, which 
 | sweep | 21.5 | 1043 → 1128 | 70.2 → 70.1 | 51.8 → 52.2 | 2.84 → 3.35 |
 Nudge is the measured win. Fast sweep is level on area and a little higher on d2: at that speed there is no history by design, so it is sharper and no steadier than SMAA.
 Other checks: overview at 4× speed, invariants `{}`, validate `[]`, no failed modules, no console errors; diorama, medium and low clean; hitch 0 new shader programs mid-run.
-`ui-test.mjs --q noidle` 15 passed, 3 failed (tooltip, follow, kinds), then a harness error: **not from this work**. It stubs `/@vite/client`, and in dev the `__BUILD_ID__` define from 8d7fe8c arrives through that client, so the `ui` module doesn't load in that test. Published builds aren't affected.
+`ui-test.mjs --q noidle` 15 passed, 3 failed (tooltip, follow, kinds), then a harness error: **not from this work**. It stubs `/@vite/client`, and in dev the `__BUILD_ID__` define from 8d7fe8c arrives through that client, so the `ui` module doesn't load in that test. Published builds aren't affected. Rerun on the real Vite client (`--hmr 1 --steps follow,kinds`, with both fixes): 4 passed, 0 failed. The harness itself still needs fixing: without `--hmr` every `ui-test.mjs` run on the full city loses the `ui` module.
 
 ## Cost, ms per frame, 1920×1025, high, dev server, behind the power guard, 2 + 2 interleaved, hour 12, SMAA → TAA
 | view | at rest | camera moving (`?taamove`, before the depth check) |
@@ -102,9 +102,11 @@ Wind condition, hour 12, TAA on, off → on (`shots/flick/wind1`):
 | overview | 25.4 → 23.3 | 5.5 → 4.3 | 1.4 → 1.2 | 0.7 → 0.6 | 3.80 → 3.76 |
 | lawn at 3 m | 252 → 206 | 60.6 → 57.4 | 37.8 → 34.0 | 17.2 → 14.2 | 5.44 → 5.40 |
 | tree at 3 m | 29.9 → 30.5 | 13.0 → 13.2 | 5.2 → 5.2 | 1.4 → 1.4 | 2.45 → 2.46 |
-The tree at 3 m is unchanged, as intended: real wind up close stays. A clear help, not a cure: about a quarter off in town, and what remains hasn't been traced. Numbers and heat maps only, one run, no frames judged in motion, no cost measured when this was committed.
+The tree at 3 m is unchanged, as intended: real wind up close stays. A clear help, not a cure: about a quarter off in town, and what remains hasn't been traced. Numbers and heat maps only, one run, no frames judged in motion, no cost measured.
 
 ## What is left
+- **Cost not measured, the limit came first (00:45 on 2026-11-02, the browser queue was busy):** the depth check on the moving path, the street moving +1.5 ms (over the +0.7 budget, cause unknown), and the wind fade (a little vertex work per plant vertex, in a vertex-bound scene). To measure, after `npm run bake`: `perf.mjs --views overview,downtown,street,market --hours 12 --variants "taamove;notaa;;nowindfade"` behind the power guard.
+- Heat maps of the wind condition show bright zig-zag patches that land in different places from run to run: something moving, not wind. Not identified.
 - Wind tremble that remains: not attributed. Half-res AO re-rolling on leaves (`noao` was the largest suspect before these fixes) isn't touched: frozen TAA lets small changes through unfiltered. Far trees (`landscape/trees.ts`), props sway (`props/material.ts`), wall green (`buildings/green.ts`) and rows (`landscape/rows.ts`) don't have the fade yet.
 - **Walking at full speed near the ground has no AA from history, and no SMAA either**, by choice: `walk` is still better than before on the numbers and crisp in the frames. If raw edges read as harsh in real walking, lower `nearPx`'s effect first.
 - A person's own pixels keep some history while overlapping their last position. Frames look solid; not watched in real motion.
