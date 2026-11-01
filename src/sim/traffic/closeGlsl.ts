@@ -217,7 +217,7 @@ export const CLOSE_FRAG_DETAIL = /* glsl */ `
       float spark = pow( max( Rt.y * 0.8 + 0.25, 0.0 ), 5.0 );
       float rev = ( st < 3.5 && hx > 0.14 && vDetB.z < 0.5 ) ? 1.0 - smoothstep( -0.47, -0.44, q.x / hx ) : 0.0;
       float amb = step( 0.5, vDetB.z );
-      vec3 red = ( amb > 0.5 ? vec3( 0.85, 0.42, 0.05 ) : vec3( 0.8, 0.03, 0.022 ) ) * ( 0.42 + 1.5 * spark );
+      vec3 red = ( amb > 0.5 ? vec3( 0.95, 0.47, 0.05 ) * 1.5 : vec3( 0.8, 0.03, 0.022 ) ) * ( 0.42 + 1.5 * spark );
       vec3 clear = vec3( 0.45 ) * ( 0.1 + 1.3 * spark ) + vec3( 0.12 ) * ( 0.5 + 0.5 * sin( h.y * 180.0 ) );
       col = mix( red, clear, rev );
       float bx0 = hx * 0.5, br = max( min( hx, hy ) * 0.5, 0.03 );
@@ -226,7 +226,7 @@ export const CLOSE_FRAG_DETAIL = /* glsl */ `
       float on = vEmit.r;
       float prism = 0.55 + 0.45 * ( 1.0 - fine * 0.7 * smoothstep( 0.25, 0.5, max( abs( f.x ), abs( f.y ) ) ) );
       vec3 glow = amb > 0.5 ? vec3( 1.0, 0.48, 0.06 ) : vec3( 1.0, 0.045, 0.03 );
-      em += ( 1.0 - rev ) * glow * max( on - 0.18 * ( 1.0 - uLights ) * ( 1.0 - amb ), 0.0 ) * prism * ( 0.42 + 3.2 * g );
+      em += ( 1.0 - rev ) * glow * max( min( on, 1.5 ) - 0.18 * ( 1.0 - uLights ) * ( 1.0 - amb ), 0.0 ) * prism * ( 0.32 + 1.9 * g );
       // the blinker a cluster carries in itself is the separate amber pane; the stop lamp's hot middle goes orange
       em += ( 1.0 - rev ) * vec3( 1.0, 0.3, 0.1 ) * max( on - 2.0, 0.0 ) * g * 1.2;
     }
@@ -234,7 +234,7 @@ export const CLOSE_FRAG_DETAIL = /* glsl */ `
     thLensAlb = col;
     thLensEmit = em;
     thCabinK = 0.0;
-    thCoatK = 0.45; // (the cover mirrors less than a window: at glass strength the sky washes the colour out)
+    thCoatK = st > 2.5 ? 0.25 : 0.45; // (the cover mirrors less than a window: at glass strength the sky washes the colour out)
   } else if ( abs( cls - 9.0 ) < 0.5 ) {
     // a door mirror's or the cabin mirror's glass: bright sky over a dark road, the street between
     thCabinK = 0.0;

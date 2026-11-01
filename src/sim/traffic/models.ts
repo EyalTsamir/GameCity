@@ -2542,6 +2542,7 @@ function delivery(): THREE.BufferGeometry {
     if (s > 0) flipU(tl);
     b.add(tl, lensO({ color: '#ffffff', light: LIGHT_TAIL, rough: 0.2, decal: R_TAIL }, lensAt(s * 0.9, 0.77, -L / 2 - 0.037, 0.095, 0.14, 4)));
     b.add(bx(0.2, 0.1, 0.05, s * 0.9, 0.94, -L / 2 - 0.01), { color: AMBER, light: s > 0 ? LIGHT_BLINK_L : LIGHT_BLINK_R });
+    if (CLOSE) b.add(decalPlane(0.19, 0.09, s * 0.9, 0.99, -L / 2 - 0.037, 'nz'), lensO({ color: AMBER, light: s > 0 ? LIGHT_BLINK_L : LIGHT_BLINK_R, rough: 0.3 }, lensAt(s * 0.9, 0.99, -L / 2 - 0.037, 0.095, 0.045, 4, 1)));
     // mirror on an arm from the door's front corner
     b.add(tube(s * 0.99, 1.44, 2.25, s * 1.15, 1.47, 2.3, 0.018), { color: DARK });
     b.add(rbox(0.1, 0.3, 0.17, 0.03, s * 1.17, 1.3, 2.33), { color: DARK });
@@ -3241,7 +3242,7 @@ function icecream(): THREE.BufferGeometry {
   const axF = L / 2 - 0.9,
     axR = axF - 3.0;
   b.add(archedSlab(L, 0.38, 2.3, W, [axF, axR], 0.36, 0.45, 0.3, 0.4, 0.08), { color: '#ffffff', paint: true, rough: 0.8 });
-  b.add(archedSlab(L + 0.02, 0.36, 0.7, W + 0.03, [axF, axR], 0.36, 0.45, 0.2, 0.05, 0.04), { color: '#f7f4ee', rough: 0.9 });
+  b.add(archedSlab(L + 0.02, 0.36, 0.86, W + 0.03, [axF, axR], 0.36, 0.45, 0.2, 0.05, 0.04), { color: '#f7f4ee', rough: 0.9 });
   for (const az of [axF, axR]) archLiner(b, az, 0.36, 0.44, W - 0.12);
   // windscreen + cab side windows in seals, over a cab interior
   const glass: PartOpts = { color: GLASS, rough: 0.2, det: { c: 5, a: [0.88, 1.36, 2.1, L / 2 - 0.3], b: [L / 2 - 1.6, L / 2 - 1.4, -9, 0] } };
@@ -3253,7 +3254,7 @@ function icecream(): THREE.BufferGeometry {
   // serving hatch (kerb side) with striped awning
   b.add(bx(0.03, 0.74, 1.95, -W / 2 - 0.005, 1.18, -0.55), { color: '#3a2a22', light: LIGHT_CABIN, rough: 0.3 });
   for (let i = 0; i < 6; i++) b.add(bx(0.62, 0.05, 0.36, -W / 2 - 0.27, 1.98 - 0.0, -1.45 + i * 0.36), { color: i % 2 === 0 ? '#e9547e' : '#ffffff' });
-  b.add(decalPlane(2.1, 0.42, -W / 2 - 0.012, 0.86, -0.55, 'nx'), { color: '#ffffff', decal: R_ICECREAM });
+  b.add(decalPlane(2.1, 0.42, -W / 2 - 0.022, 0.97, -0.55, 'nx'), { color: '#ffffff', decal: R_ICECREAM });
   b.add(decalPlane(3.2, 1.0, W / 2 + 0.012, 1.42, -0.5, 'px'), { color: '#ffffff', decal: R_ICECREAM });
   for (const e of [1, -1]) {
     b.add(bx(0.49, 0.12, 0.012, 0, 0.44, e * (L / 2 + 0.05)), { color: '#16171a', rough: 1.2 });
@@ -3282,6 +3283,7 @@ function icecream(): THREE.BufferGeometry {
     b.add(rbox(0.2, 0.26, 0.06, 0.06, s * 0.75, 0.7, -L / 2 + 0.0), { color: TAIL, light: LIGHT_TAIL, rough: 0.5 });
     if (CLOSE) b.add(decalPlane(0.17, 0.23, s * 0.75, 0.83, -L / 2 - 0.032, 'nz'), lensO({ color: TAIL, light: LIGHT_TAIL, rough: 0.2 }, lensAt(s * 0.75, 0.83, -L / 2 - 0.032, 0.085, 0.115, 4)));
     b.add(bx(0.1, 0.09, 0.06, s * 0.92, 1.02, -L / 2 + 0.02), { color: AMBER, light: s > 0 ? LIGHT_BLINK_L : LIGHT_BLINK_R });
+    if (CLOSE) b.add(decalPlane(0.09, 0.08, s * 0.92, 1.065, -L / 2 - 0.012, 'nz'), lensO({ color: AMBER, light: s > 0 ? LIGHT_BLINK_L : LIGHT_BLINK_R, rough: 0.3 }, lensAt(s * 0.92, 1.065, -L / 2 - 0.012, 0.045, 0.04, 4, 1)));
   }
   for (const s of [1, -1]) {
     wheel(b, s * 0.88, 0.36, axF, 0.36, 0.26, true);

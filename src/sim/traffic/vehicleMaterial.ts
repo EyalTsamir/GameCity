@@ -624,7 +624,7 @@ export function createVehicleMaterial(
     #endif
     #ifdef VEH_NEAR
     // (from a metre away the sketched street turns to blocks on a thin strip of chrome: half of it, half an even grey)
-    if ( vMetal > 0.5 ) radiance *= vGain * mix( thStreetRefl( geometryViewDir, geometryNormal, material.roughness * 0.3 ), 0.62, 0.55 );
+    if ( vMetal > 0.5 ) radiance *= vGain * mix( thStreetRefl( geometryViewDir, geometryNormal, material.roughness * 0.3 ), 0.62 * ( 1.0 - 0.8 * uLights ), 0.55 );
     #else
     if ( vMetal > 0.5 ) radiance *= vGain * thStreetRefl( geometryViewDir, geometryNormal, material.roughness * 0.3 );
     #endif
