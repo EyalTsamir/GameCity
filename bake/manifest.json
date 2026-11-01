@@ -1,0 +1,29 @@
+{
+ "files": {
+  "land0": {
+   "file": "land0-bt3nrf.bct.gz",
+   "bytes": 6851702,
+   "key": "bt3nrf"
+  },
+  "land1": {
+   "file": "land1-bt3nrf.bct.gz",
+   "bytes": 4609042,
+   "key": "bt3nrf"
+  },
+  "fac0": {
+   "file": "fac0-1hbnzie.bct.gz",
+   "bytes": 5105652,
+   "key": "1hbnzie"
+  },
+  "fac1": {
+   "file": "fac1-1hbnzie.bct.gz",
+   "bytes": 605531,
+   "key": "1hbnzie"
+  },
+  "fac2": {
+   "file": "fac2-1hbnzie.bct.gz",
+   "bytes": 1021575,
+   "key": "1hbnzie"
+  }
+ }
+}
