@@ -4,20 +4,24 @@ Any vehicle has to hold up at 1 and 3 m: seats, dashboard and wheel through the 
 lenses, tyres and arches, door lines, dirt and small dents. By system, fine detail only near the camera. Trains: `close-vehicles-trains.md`.
 
 ## Resume here
-Paused for quota at 10:08 on 2026-11-01 (5-hour limit 95 %). Nothing uncommitted in code. Branch `claude/cool-davinci-ad96c9`, dev server port 5219, harness from the main checkout. Don't merge to main, push or deploy: the coordinator merges.
+Branch `claude/cool-davinci-ad96c9`. Trains merged. Don't merge to main, push or deploy: the coordinator merges. Final check results: see "Final checks" below.
 
-Next, in this order:
-1. Merge the trains into this branch: `worktree-agent-a5f7c964b54e7ba16`, head `54f6230` (log `close-vehicles-trains.md`). Not merged yet, and not yet checked by this session: the subagent's report is only its report.
-2. Check what that report flags: +3 to +5 ms at 1 m into an open door (not profiled); `src/sim/pedestrians/shader.ts` gains a term on every person's pixels and may light anyone on a level crossing at night (read from the shader, not seen); `hitch.mjs` and walking never run on trains (use view `station`); wagon tail lamps never seen. Look at the train pictures at 1 and 3 m, 12 and 21.5.
-3. After the merge repeat the final checks: typecheck, build, `ui-test.mjs --q noidle`, overview shot, diorama, medium, low, hitch. Rerun the `kinds` step alone (below). Rebake before any perf. Walkhitch is optional and has not been run.
-4. Stop the dev server on 5219, delete `shots/veh`, final report ending in CLOSE-DONE.
+### Trains merged as a squash, on purpose
+The trains branch had picked up two commits from `origin/main` by the user (e3056c0, 9caef6a: GitHub Actions workflows that deploy to Pages on every push to main). A plain merge would have brought them in; deleting them after would have removed the user's files on a later merge. So: squash of `54f6230` (9b0c8ee), 12 files, neither adds nor removes them. Local `main` does not have them and `origin/main` does: whoever pushes `main` should know that a push deploys.
 
-Final checks on this branch before the trains (4a549a3): typecheck 0, build 0; overview at speed 4: invariants {}, validate [], no console, page or frame errors; diorama, medium, low the same at downtown (exit codes and reports only: nobody has looked at those three pictures). ui-test 73 passed, 1 failed: "cars, buses, people, boats and trains: click follows" (`kinds`, the known flake, not yet rerun alone, so not yet cleared).
-Console warnings: X4000 for `f_trLivery` and `f_boatSurface` are there on this branch without the train work, so the subagent's work did not start them (it may add programs that repeat them).
+### The four things the trains' report flagged
+1. **Person lit on a level crossing: real, fixed.** The term was a fixed strip across the city at the track's z. Shown: laying the strip on a real walker, clock stopped, one page: before the fix he brightens (trousers dark to pale grey), after it the two pictures match. The term now also needs `P_rootY > 0.3` (hips raised: riding). `tailFloor` could not be used: riders have it at 0. Passengers still look lit at night in the train set, by eye; there is no A/B of the term on them.
+2. **Console warnings:** see "Final checks".
+3. **+3 to +5 ms at 1 m into an open door: not fixed, for the coordinator to decide.** Not profiled, and a smaller reach does not help at 1 m. Conservative step: the train close level is now on `high` only (`closeVeh(ctx, 'vehtrain', 'high')`), so medium never pays it; high still does. The figure is the subagent's, measured before this merge. `?novehtrain` turns the level off.
+4. **hitch on trains:** see "Final checks".
 
 Left, not fixed: wheel arches and hubcaps still show facets at 1 m (loft has 9 stations per arch; more would cost every vehicle at level 0); tyre lettering reads upside down at the top of the wheel (real tyres read upright there); unlit ambers are tan rather than amber; two-wheelers have no close level; lorry bulkhead reads mottled through the screen; the cream bezel on the compact stays visible at night, lit like the paint.
 Other sessions: hard dark rectangles in the blue reflection of ground-floor windows at `veh-parked` 21.5, with and without `?noparklamps` (for close-light). The 110-160 ms freeze on a camera cut, see Numbers.
 Road vehicles draw glass as the trains did before their depth fix, so they may carry the same AO mottle on panes (the subagent's guess, not checked).
+
+
+Seen on trains: a dark blurry smudge on the far door, through the open doorway at noon (door1, 12 h), not at night. Not looked into.
+Not seen by this session: freight close up, wagon tail lamps.
 
 ## What
 - A **close level**: one more InstancedMesh per kind (`traffic-<kind>-close-lod0`) and its panes (`traffic-<kind>-glass-lod0`), same instance buffers, within `CLOSE_DIST` 18 x lens k (about 12 m in the usual lens), at most 12 per kind. Two-wheelers have none (level 0 only).
