@@ -3,6 +3,7 @@
 // raised planters. All vertex-coloured; wind data via the shared Wind writer.
 
 import * as THREE from 'three';
+import { closeNatureOn } from '../../core/closenature';
 import { Rng } from '../../core/rng';
 import { GeoSink, Shaper } from './geo';
 import { Wind, col, blob } from './species';
@@ -780,12 +781,46 @@ function rectGrate(sh: Shaper, rng: Rng, hx: number, hz: number, nsh: Shaper = s
   litter(nsh, rng, Math.min(hx, hz), 4, 0.031);
 }
 
+/** triangles of bare soil at tree feet, world space (x, y, z × 3): closenature/earth.ts lays its crumbs on them */
+export const soilTriangles: number[] = [];
+
+/** a tuft of real blades in a pit (a flat green blob reads as painted paper from a metre) */
+function pitTuft(sh: Shaper, rng: Rng, px: number, pz: number): void {
+  const s = sh.s;
+  const n = rng.int(5, 9);
+  for (let k = 0; k < n; k++) {
+    sh.color(rng.pick(['#5b7f38', '#4f7030', '#6d8a40', '#7d8c48']));
+    const a = rng.range(0, 6.283),
+      d = rng.range(0, 0.05);
+    const bx = px + Math.cos(a) * d,
+      bz = pz + Math.sin(a) * d;
+    const h = rng.range(0.05, 0.14),
+      w = rng.range(0.005, 0.01),
+      la = rng.range(0, 6.283),
+      l = h * rng.range(0.15, 0.7);
+    const dx = Math.cos(la),
+      dz = Math.sin(la);
+    const v0 = sh.v(bx + dz * w, 0.012, bz - dx * w, 0, 1, 0);
+    const v1 = sh.v(bx - dz * w, 0.012, bz + dx * w, 0, 1, 0);
+    const v2 = sh.v(bx + dx * l * 0.35 + dz * w * 0.7, h * 0.6, bz + dz * l * 0.35 - dx * w * 0.7, 0, 1, 0);
+    const v3 = sh.v(bx + dx * l * 0.35 - dz * w * 0.7, h * 0.6, bz + dz * l * 0.35 + dx * w * 0.7, 0, 1, 0);
+    const v4 = sh.v(bx + dx * l, h, bz + dz * l, 0, 1, 0);
+    s.tri(v0, v1, v2);
+    s.tri(v2, v1, v3);
+    s.tri(v2, v3, v4);
+    s.tri(v2, v1, v0);
+    s.tri(v3, v1, v2);
+    s.tri(v4, v3, v2);
+  }
+}
+
 /**
  * Open tree pit in the footway (2hx × 2hz): a granite sett edging, trodden soil with patchy grass (greener at the
  * edges, worn bare round the trunk), mulch and leaves. ≤ 4 cm proud of the paving.
  */
-function vergePit(sh: Shaper, rng: Rng, hx: number, hz: number): void {
+function vergePit(sh: Shaper, rng: Rng, hx: number, hz: number, nsh: Shaper): void {
   const s = sh.s;
+  const tufts = closeNatureOn('closeweeds');
   // soil bed
   sh.color(rng.pick(['#4a3a2a', '#45372a', '#3f3326'])).box(0, 0.012, 0, hx * 2 - 0.08, 0.004, hz * 2 - 0.08, 1);
   // grass patches: irregular flat blobs, none within ~22 cm of the trunk
@@ -799,6 +834,10 @@ function vergePit(sh: Shaper, rng: Rng, hx: number, hz: number): void {
       if (Math.hypot(px, pz) > 0.3) break;
     }
     if (Math.hypot(px, pz) <= 0.3) continue;
+    if (tufts) {
+      pitTuft(nsh, rng, px, pz);
+      continue;
+    }
     const r = rng.range(0.07, 0.15);
     sh.color(rng.pick(greens));
     const c = sh.v(px, 0.017, pz, 0, 1, 0);
@@ -856,6 +895,7 @@ export function wornPatch(sh: Shaper, w: Wind, x: number, z: number, r: number, 
   sh.color(earth);
   const c = sh.v(x, gy(x, z) + 0.016, z, 0, 1, 0);
   const ring: number[] = [];
+  const soilAt: number[][] = [];
   const edge = new THREE.Color(earth).lerp(new THREE.Color('#6f7a3c'), 0.45);
   for (let k = 0; k < n; k++) {
     const a = (k / n) * Math.PI * 2;
@@ -864,8 +904,10 @@ export function wornPatch(sh: Shaper, w: Wind, x: number, z: number, r: number, 
       pz = z + Math.sin(a) * rr;
     s.colorObj(edge, 1);
     ring.push(sh.v(px, gy(px, pz) + 0.014, pz, 0, 1, 0));
+    soilAt.push([px, gy(px, pz) + 0.017, pz]);
   }
   for (let k = 0; k < n; k++) s.tri(c, ring[(k + 1) % n], ring[k]);
+  for (let k = 0; k < n; k++) soilTriangles.push(x, gy(x, z) + 0.019, z, ...soilAt[(k + 1) % n], ...soilAt[k]);
   // surface roots: half-buried tapering tubes from the flare out across the patch
   const nr = rng.int(2, 3);
   const a0 = rng.range(0, 6.28);
@@ -904,7 +946,17 @@ export function surround(sh: Shaper, w: Wind, kind: Surround, x: number, y: numb
       roundGrate(sh, rng, 0.48, nsh);
       return y + 0.012;
     case 'verge':
-      vergePit(sh, rng, 0.75, 0.33);
+      vergePit(sh, rng, 0.75, 0.33, nsh);
+      {
+        // (the soil's top, inside the setts)
+        const c = Math.cos(yaw),
+          n = Math.sin(yaw),
+          hx = 0.65,
+          hz = 0.24,
+          sy = y + 0.017;
+        const q = (a: number, b: number) => [x + a * c + b * n, sy, z - a * n + b * c];
+        soilTriangles.push(...q(-hx, -hz), ...q(-hx, hz), ...q(hx, hz), ...q(-hx, -hz), ...q(hx, hz), ...q(hx, -hz));
+      }
       return y + 0.02;
     case 'planter': {
       const pts: [number, number][] = [

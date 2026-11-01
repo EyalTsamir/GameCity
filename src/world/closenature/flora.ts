@@ -513,6 +513,8 @@ export interface CoverReader {
 function vnoise(x: number, z: number): number {
   const h = (i: number, j: number): number => {
     let t = (Math.imul(i, 374761393) ^ Math.imul(j, 668265263)) >>> 0;
+    t = Math.imul(t ^ (t >>> 15), 0x2c1b3c6d) >>> 0;
+    t = (t ^ (t >>> 13)) >>> 0;
     t = Math.imul(t ^ (t >>> 13), 1274126177);
     return ((t ^ (t >>> 16)) >>> 0) / 4294967296;
   };
@@ -695,12 +697,15 @@ export function addFlora(ctx: CityContext, reader: CoverReader | null): void {
               ci = rnd();
             if (!coverAt(x, z) || cs.lit <= 0.01) continue;
             // drifts: against what stops the wind, in hollows; bare between
-            const drift = sstep(0.34, 0.72, vnoise(x * 0.62, z * 0.62) * 0.65 + vnoise(x * 2.3, z * 2.3) * 0.35);
+            // (warped, or the noise's lattice lays the leaves out in rows)
+            const wx = x + (vnoise(z * 1.1 + 5.3, x * 1.1) - 0.5) * 1.4,
+              wz = z + (vnoise(x * 1.1 - 2.1, z * 1.1 + 9.7) - 0.5) * 1.4;
+            const drift = sstep(0.34, 0.72, vnoise(wx * 0.62, wz * 0.62) * 0.65 + vnoise(wx * 2.3, wz * 2.3) * 0.35);
             if (pick > cs.lit * ((cs.lit > 0.6 ? 0.42 : 0.1) + 1.25 * drift)) continue;
             const col = LEAVES[Math.floor(ci * ci * LEAVES.length)];
             const v = 0.62 + 0.46 * tone;
             const s = 0.045 + 0.075 * sz;
-            out.put(x, cs.y + 0.004 + 0.006 * drift * tone, z, yaw, s, s, s, (ta - 0.5) * 0.55, (tb - 0.5) * 0.55, col[0] * v, col[1] * v, col[2] * v);
+            out.put(x, cs.y + 0.004 + 0.006 * drift * tone, z, yaw, s, s, s, (ta - 0.5) * 0.8, (tb - 0.5) * 0.8, col[0] * v, col[1] * v, col[2] * v);
           }
         },
       });

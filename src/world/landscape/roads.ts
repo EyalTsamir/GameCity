@@ -56,18 +56,21 @@ vec3 roadAlbedo(vec3 wp) {
     vec4 n3 = texture2D(tLN, wp.xz * 0.53);
     // near: single stones; the wheel tracks are packed darker, damp in patches
     float nearG = 1.0 - smoothstep(0.03, 0.25, fp);
+    float grit = 0.5;
     if (nearG > 0.0) {
       // grit, and the odd stone big enough to see
       vec2 s1 = rStones(wp.xz * 88.0 + n3.rg * 3.0);
       vec2 s2 = rStones(wp.zx * 21.0 + n3.gb * 2.0);
       float big = step(0.9, s2.x) * s2.y;
+      grit = s1.x;
       grav *= 1.0 + nearG * ((s1.x - 0.5) * 0.34 - 0.1 * (1.0 - s1.y) + big * (fract(s2.x * 31.0) - 0.42) * 0.7);
     }
     grav *= 1.0 - 0.24 * (1.0 - smoothstep(0.08, 0.22, abs(a - 0.52))) * (0.7 + 0.6 * n1.r);
-    grav = mix(grav, grav * vec3(0.66, 0.68, 0.66), smoothstep(0.58, 0.72, n3.b) * (1.0 - smoothstep(0.1, 0.3, abs(a - 0.52))));
-    float crown = 1.0 - smoothstep(0.08, 0.3, a + (n3.r - 0.5) * 0.2);
-    float edge = smoothstep(0.72 - 0.2 * n1.b - 0.12 * n3.g, 1.0, a);
-    vec3 grass = vec3(0.085, 0.125, 0.04) * (0.8 + 0.4 * n2.r) * (1.0 + nearG * (n3.a - 0.5) * 0.5);
+    grav = mix(grav, grav * vec3(0.66, 0.68, 0.66), smoothstep(0.52, 0.74, n3.b * 0.5 + n1.a * 0.5) * (1.0 - smoothstep(0.1, 0.3, abs(a - 0.52))));
+    float crown = 1.0 - smoothstep(mix(0.08, 0.16, nearG), mix(0.3, 0.22, nearG), a + (n1.b * 0.65 + n3.r * 0.35 - 0.5) * 0.24 + nearG * (grit - 0.5) * 0.06);
+    float e0 = 0.72 - 0.2 * n1.b - 0.12 * n3.g + nearG * (grit - 0.5) * 0.08;
+    float edge = smoothstep(mix(e0, e0 + (1.0 - e0) * 0.35, nearG), mix(1.0, e0 + (1.0 - e0) * 0.65, nearG), a);
+    vec3 grass = vec3(0.085, 0.125, 0.04) * (0.8 + 0.4 * n2.r) * mix(1.0, 0.62 + 0.5 * n3.a + (grit - 0.5) * 0.55, nearG);
     return mix(grav, grass, max(crown * 0.85, edge));
   }
   // asphalt: patched, darker wheel paths, crumbling edge, dashed centre line

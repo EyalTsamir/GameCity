@@ -12,6 +12,7 @@ import { CM_COMMON } from '../closemat/glsl';
 import { interleaved, TriGrid, type SourceAttr } from '../closemat/source';
 import { makeCloseTiles } from '../closemat/textures';
 import { groundMaskInfo } from '../terrain/ground';
+import { soilTriangles } from '../vegetation/plants';
 
 const ATTRS: SourceAttr[] = [
   { name: 'position', size: 3 },
@@ -160,6 +161,15 @@ export function addEarth(ctx: CityContext, landGround: { geometry: THREE.BufferG
     -1,
     duffAt.town,
   );
+  // bare soil at tree feet lies a little above the ground, so it has its own copy
+  if (soilTriangles.length) {
+    const g = new THREE.BufferGeometry();
+    const nor = new Float32Array(soilTriangles.length);
+    for (let i = 1; i < nor.length; i += 3) nor[i] = 1;
+    g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(soilTriangles), 3));
+    g.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
+    layer('closepitsoil', new TriGrid([g], ATTRS, CELL, () => true), 0, 3, -2, () => 0);
+  }
   // the land beyond it, as far as anyone can walk: its big triangles cut to cells
   if (landGround) {
     layer(
