@@ -22,6 +22,8 @@ export interface TrunkSpec {
   /** radius above the flare and at the top (m) */
   r0: number;
   rTop: number;
+  /** the radius of the thickest limb out of the top of this stem (a stem narrows to it, or it wears a collar) */
+  neck?: number;
   flare: number;
   roots: number;
   /** a limb from the fork: rings across its own axis, no foot */
@@ -111,13 +113,15 @@ const FRAG_COLOR = /* glsl */ `
     // no flake is one flat colour: it weathers in soft clouds, the drift pulling neighbours together
     vec4 t2 = texture2D(tBarkF, vBUv * vec2(1.7, 2.3) + 0.21);
     vec4 t3 = texture2D(tBarkF, vBUv * vec2(0.37, 0.53) + 0.63);
-    m = mix(m, mix(olive, cream, clamp(0.45 + drift * 0.55, 0.0, 1.0)), 0.32);
-    m *= (0.74 + 0.52 * t3.a) * (0.82 + 0.36 * t2.a);
+    m = mix(m, mix(olive, cream, clamp(0.45 + drift * 0.55, 0.0, 1.0)), 0.22);
+    m *= (0.86 + 0.34 * t3.a) * (0.84 + 0.36 * t2.a) * 1.12;
+    // the dark line where a flake lifts off the one under it
+    m *= 1.0 - 0.55 * (1.0 - smoothstep(0.38, 0.47, tj.b));
     m = mix(m, m * vec3(1.06, 1.0, 0.86), smoothstep(0.35, 0.75, t2.a));
     m *= 1.0 + 0.22 * clamp(drift, -1.0, 1.0);
     float step0 = smoothstep(0.42, 0.66, tj.b);
     c = m * clamp(c.g / 0.23, 0.3, 1.15) * (0.9 + 0.2 * tf.a) * (0.82 + 0.18 * step0);
-    bkSlope = (tj.rg - 0.5) * 2.0 * 0.7 + (t2.rg - 0.5) * 0.22 + (tf.rg - 0.5) * 0.1;
+    bkSlope = (tj.rg - 0.5) * 2.0 * 1.0 + (t2.rg - 0.5) * 0.22 + (tf.rg - 0.5) * 0.1;
     bkCav = 0.78 + 0.22 * step0;
   } else if (pat > 0.4) {
     // pine: thick long plates, red-brown in the crack, weathered grey on the face
@@ -187,7 +191,7 @@ function barkMaterial(ctx: CityContext, tiles: BarkTiles): THREE.MeshStandardMat
       .replace('#include <normal_fragment_maps>', FRAG_NORMAL)
       .replace('#include <aomap_fragment>', FRAG_AO);
   };
-  mat.customProgramCacheKey = () => 'closenature-bark-7';
+  mat.customProgramCacheKey = () => 'closenature-bark-8';
   patchLampMaterial(mat);
   nearDither(mat, RADIUS);
   return mat;
@@ -344,7 +348,10 @@ function buildTrunk(s: Soup, t: TrunkSpec, gy: (x: number, z: number) => number,
     const rootK = hp / sc;
     let rb = t.r0 + (t.rTop - t.r0) * f;
     rb *= t.lite ? 1 + 0.72 * Math.pow(1 - Math.min(1, hp / tall), 6) : 1 + (t.flare - 1) * flareK;
-    rb *= 1 - (t.lite ? 0.2 : 0.14) * Math.max(0, f - 0.8) / 0.2;
+    if (t.neck && t.neck * 1.04 < t.rTop * 0.86) {
+      const nk = Math.max(0, Math.min(1, (f - 0.45) / 0.55));
+      rb *= 1 + ((t.neck * 1.04) / t.rTop - 1) * nk * nk * (3 - 2 * nk);
+    } else rb *= 1 - (t.lite ? 0.2 : 0.14) * Math.max(0, f - 0.8) / 0.2;
     if (closing) rb *= 0.22;
     const lobeK = 0.55 + 0.45 * Math.min(1, Math.exp(-hp * 0.5) + 0.25);
     for (let i = 0; i <= cols; i++) {
@@ -590,6 +597,16 @@ export function addTrunks(ctx: CityContext, tiles: BarkTiles, specs: TrunkSpec[]
     if (terrain && x > x0 && x < x1 && z > z0 && z < z1) return terrain.height(x, z);
     return land ? land.height(x, z) : (terrain?.height(x, z) ?? 0);
   };
+  // each stem's thickest limb from its top
+  {
+    const stems = new Map<number, TrunkSpec>();
+    for (const t of specs) if (!t.limb) stems.set(t.id, t);
+    for (const t of specs) {
+      if (!t.limb) continue;
+      const m = stems.get(t.id);
+      if (m && Math.hypot(t.base[0] - m.top[0], t.base[1] - m.top[1], t.base[2] - m.top[2]) < m.rTop * 4) m.neck = Math.max(m.neck ?? 0, t.r0);
+    }
+  }
   // the trunks by cell
   const key = (i: number, j: number) => (i + 32768) * 65536 + (j + 32768);
   const byCell = new Map<number, TrunkSpec[]>();

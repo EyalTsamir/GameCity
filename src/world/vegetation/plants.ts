@@ -784,6 +784,30 @@ function rectGrate(sh: Shaper, rng: Rng, hx: number, hz: number, nsh: Shaper = s
 /** triangles of bare soil at tree feet, world space (x, y, z × 3): closenature/earth.ts lays its crumbs on them */
 export const soilTriangles: number[] = [];
 
+/** lumps of soil, pebbles and bits of bark mulch on a pit's surface (the overlay only gives grain) */
+function pitClods(sh: Shaper, rng: Rng, hx: number, hz: number): void {
+  const s = sh.s;
+  const n = Math.round(hx * hz * 170);
+  for (let i = 0; i < n; i++) {
+    const x = rng.range(-hx, hx),
+      z = rng.range(-hz, hz);
+    const k = rng.next();
+    sh.color(k < 0.62 ? rng.pick(['#3a3128', '#2f2820', '#463b2e']) : k < 0.86 ? rng.pick(['#5a4a38', '#4f3d2a']) : rng.pick(['#77706a', '#8a8378']));
+    const r = rng.range(0.008, 0.022) * (k < 0.86 ? 1 : 0.7);
+    const h = r * rng.range(0.5, 0.9);
+    const y = 0.014;
+    const a0 = rng.range(0, 6.28);
+    const top = sh.v(x + rng.range(-0.3, 0.3) * r, y + h, z + rng.range(-0.3, 0.3) * r, 0, 1, 0);
+    const ring: number[] = [];
+    for (let j = 0; j < 5; j++) {
+      const a = a0 + (j / 5) * 6.28,
+        rr = r * rng.range(0.75, 1.2);
+      ring.push(sh.v(x + Math.cos(a) * rr, y, z + Math.sin(a) * rr, Math.cos(a) * 0.8, 0.6, Math.sin(a) * 0.8));
+    }
+    for (let j = 0; j < 5; j++) s.tri(top, ring[(j + 1) % 5], ring[j]);
+  }
+}
+
 /** a tuft of real blades in a pit (a flat green blob reads as painted paper from a metre) */
 function pitTuft(sh: Shaper, rng: Rng, px: number, pz: number): void {
   const s = sh.s;
@@ -821,8 +845,9 @@ function pitTuft(sh: Shaper, rng: Rng, px: number, pz: number): void {
 function vergePit(sh: Shaper, rng: Rng, hx: number, hz: number, nsh: Shaper): void {
   const s = sh.s;
   const tufts = closeNatureOn('closeweeds');
+  if (tufts) pitClods(nsh, rng, hx - 0.1, hz - 0.09);
   // soil bed
-  sh.color(rng.pick(['#4a3a2a', '#45372a', '#3f3326'])).box(0, 0.012, 0, hx * 2 - 0.08, 0.004, hz * 2 - 0.08, 1);
+  sh.color(rng.pick(tufts ? ['#3f382e', '#3a342b', '#443c31'] : ['#4a3a2a', '#45372a', '#3f3326'])).box(0, 0.012, 0, hx * 2 - 0.08, 0.004, hz * 2 - 0.08, 1);
   // grass patches: irregular flat blobs, none within ~22 cm of the trunk
   const greens = ['#5b7f38', '#62873c', '#557634', '#6d8a40'];
   for (let i = 0; i < 9; i++) {

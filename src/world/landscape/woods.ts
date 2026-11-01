@@ -107,7 +107,18 @@ export function boulder(s: RowSink, x: number, y: number, z: number, r: number, 
     nz /= nl;
     const up = moss > 0 && ny > 0.55;
     const arr = up ? hi : lo;
-    arr.push(a[0], a[1], a[2], nx, ny, nz, 0.5, 0.4, b[0], b[1], b[2], nx, ny, nz, 0.5, 0.4, d[0], d[1], d[2], nx, ny, nz, 0.5, 0.4);
+    // shaded round: the normals of the ball it was made from, leaning a little to the facet so it is not a smooth egg
+    const vn = (q: number[]): [number, number, number] => {
+      const ex = (q[0] - x) / r + nx * 0.45,
+        ey = (q[1] - y) / (r * squash) + ny * 0.45,
+        ez = (q[2] - z) / r + nz * 0.45;
+      const l = Math.hypot(ex, ey, ez) || 1;
+      return [ex / l, ey / l, ez / l];
+    };
+    const na = vn(a),
+      nb = vn(b),
+      nd = vn(d);
+    arr.push(a[0], a[1], a[2], na[0], na[1], na[2], 0.5, 0.4, b[0], b[1], b[2], nb[0], nb[1], nb[2], 0.5, 0.4, d[0], d[1], d[2], nd[0], nd[1], nd[2], 0.5, 0.4);
   }
   const idx = (arr: number[]) => {
     const t: number[] = [];
