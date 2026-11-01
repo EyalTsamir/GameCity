@@ -178,6 +178,7 @@ varying vec3 vPedB;
 varying float vPedS;
 varying float vPedH;
 flat varying float vPedFade;
+flat varying float vPedRide; // hips raised off the road plane: somebody riding
 flat varying float vPedPat;
 flat varying vec2 vPedMat; // (wrap, sheen)
 varying vec3 vPedFace; // close-level face coords (X, Y, 1) — 0 elsewhere
@@ -334,6 +335,7 @@ bool pedVisible(uint d0) {
 float pedShrink = 1.0;
 void pedPose(inout vec3 p, inout vec3 n) {
   vPedFade = P_fade;
+  vPedRide = P_rootY;
 //@if DET
   vPedFace = vec3(0.0);
   vPedFB = ((iC2.w >> 9u) & 63u) | (((iC2.w >> 8u) & 1u) << 6u) | (((iC2.w >> 15u) & 1u) << 11u); // face bits | shirt collar (64) | jacket (128, below) | older half of the age tier (2048)
@@ -912,6 +914,7 @@ varying vec3 vPedB;
 varying float vPedS;
 varying float vPedH;
 flat varying float vPedFade;
+flat varying float vPedRide;
 flat varying float vPedPat;
 flat varying vec2 vPedMat;
 varying vec3 vPedFace;
@@ -2133,7 +2136,7 @@ function peopleMaterial(far: boolean, pal: PalUniforms, close = false): THREE.Me
       // the sun shadow's per-pixel noise rotation (three's PCF) stipples a figure's small surfaces in a dot grid
       // wherever a penumbra crosses them: a fixed disc, same taps
       .replace('#include <shadowmap_pars_fragment>', SHADOW_LIFT ? THREE.ShaderChunk.shadowmap_pars_fragment.replace('interleavedGradientNoise( gl_FragCoord.xy ) * PI2', '0.7') : '#include <shadowmap_pars_fragment>')
-      .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n  totalEmissiveRadiance += diffuseColor.rgb * 0.07 * uPedNight;\n  // inside the width of a train (nobody else stands between the rails but for the moment of a level crossing): its saloon lamps\n  totalEmissiveRadiance += diffuseColor.rgb * vec3(1.0, 0.82, 0.62) * 0.42 * uPedLights * step(abs(cameraPosition.z - dot(viewMatrix[2].xyz, vViewPosition) - uPedRailZ), 1.38);');
+      .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n  totalEmissiveRadiance += diffuseColor.rgb * 0.07 * uPedNight;\n  // riding inside the width of a train: its saloon lamps (someone walking over a level crossing has their hips at the usual height)\n  totalEmissiveRadiance += diffuseColor.rgb * vec3(1.0, 0.82, 0.62) * 0.42 * uPedLights * step(0.3, vPedRide) * step(abs(cameraPosition.z - dot(viewMatrix[2].xyz, vViewPosition) - uPedRailZ), 1.38);');
   };
   material.customProgramCacheKey = () => (far ? 'tinyhaven-people-4-far' : close ? 'tinyhaven-people-4-close' : 'tinyhaven-people-4') + (CLOSE ? '-nf' : '') + (VFAR ? '-v1' : '') + (pal ? '-pal' : '') + (SHADOW_LIFT ? '-sl' : '') + '-pr' + (detailPeople('clothprints') ? '1' : '0');
   return material;

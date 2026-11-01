@@ -117,7 +117,7 @@ export class TrainRenderer {
       this.group.add(mesh);
       this.pools.set(type, { mesh, inst, inst2, col2, n: 0 });
     }
-    if (this.mats.close && this.mats.glass && closeVeh(ctx, 'vehtrain')) {
+    if (this.mats.close && this.mats.glass && closeVeh(ctx, 'vehtrain', 'high')) {
       for (const type of POOLS) {
         const hk = makeHooks();
         const body = type === 'emu' ? buildEmu(hk) : type === 'loco' ? buildLoco(hk) : buildWagon(hk);
