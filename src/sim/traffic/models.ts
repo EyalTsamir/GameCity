@@ -2550,8 +2550,8 @@ function delivery(): THREE.BufferGeometry {
   if (LOD === 0)
     for (const x of [-0.6, 0.15]) {
       const e0 = surf(x, 1.36, 1),
-        e1 = surf(x + 0.42, 1.62, 1);
-      b.add(tube(x, 1.36, e0.z + 0.025, x + 0.42, 1.62, e1.z + 0.025, 0.011), { color: '#141518', rough: 1.4 });
+        e1 = surf(x + 0.42, 1.39, 1);
+      b.add(tube(x, 1.36, e0.z + 0.025, x + 0.42, 1.39, e1.z + 0.025, 0.009), { color: '#141518', rough: 1.4 });
     }
   for (const s of [1, -1]) {
     wheel(b, s * 0.93, 0.42, axF, 0.42, 0.3, true);
@@ -2848,8 +2848,9 @@ function lorry(): THREE.BufferGeometry {
     b.add(bx(0.24, 0.16, 0.05, s * 0.95, 0.8, -L / 2 - 0.01), { color: TAIL, light: LIGHT_TAIL, rough: 0.5 });
     const tl = decalPlane(0.22, 0.14, s * 0.95, 0.88, -L / 2 - 0.037, 'nz');
     if (s > 0) flipU(tl);
-    b.add(tl, { color: '#ffffff', light: LIGHT_TAIL, rough: 0.2, decal: R_TAIL });
+    b.add(tl, lensO({ color: '#ffffff', light: LIGHT_TAIL, rough: 0.2, decal: R_TAIL }, lensAt(s * 0.95, 0.88, -L / 2 - 0.037, 0.11, 0.07, 3)));
     b.add(bx(0.12, 0.16, 0.05, s * 0.72, 0.8, -L / 2 - 0.01), { color: AMBER, light: s > 0 ? LIGHT_BLINK_L : LIGHT_BLINK_R });
+    if (CLOSE) b.add(decalPlane(0.1, 0.14, s * 0.72, 0.88, -L / 2 - 0.037, 'nz'), lensO({ color: AMBER, light: s > 0 ? LIGHT_BLINK_L : LIGHT_BLINK_R, rough: 0.3 }, lensAt(s * 0.72, 0.88, -L / 2 - 0.037, 0.05, 0.07, 4, 1)));
     // main mirror on an arm from the roof corner, wide-angle mirror below it
     b.add(tube(s * 1.1, 2.32, zf - 0.22, s * 1.3, 2.34, zf - 0.12, 0.02), { color: DARK });
     b.add(tube(s * 1.3, 2.34, zf - 0.12, s * 1.3, 1.62, zf - 0.12, 0.018), { color: DARK });
@@ -3247,7 +3248,7 @@ function icecream(): THREE.BufferGeometry {
   buildCab(b, glass.det!, 0.95, L / 2 - 0.1);
   b.add(roundPane(1.84, 0.68, 0.1, 0, 1.69, L / 2 + 0.004, 'pz', [1.73, 0.57, 0.07]), { color: '#1a1c1f', rough: 1.1 });
   b.add(roundPane(1.76, 0.6, 0.08, 0, 1.69, L / 2 + 0.009, 'pz'), glass);
-  if (LOD === 0) for (const x of [-0.45, 0.4]) b.add(tube(x - 0.05, 1.42, L / 2 + 0.025, x + 0.25, 1.85, L / 2 + 0.025, 0.011), { color: '#141518', rough: 1.4 });
+  if (LOD === 0) for (const x of [-0.6, 0.1]) b.add(tube(x, 1.41, L / 2 + 0.025, x + 0.5, 1.44, L / 2 + 0.025, 0.009), { color: '#141518', rough: 1.4 });
   cabSide(b, W / 2, 0.82, 0.5, 1.7, L / 2 - 0.72, L / 2 - 1.2, 0.75, glass);
   // serving hatch (kerb side) with striped awning
   b.add(bx(0.03, 0.74, 1.95, -W / 2 - 0.005, 1.18, -0.55), { color: '#3a2a22', light: LIGHT_CABIN, rough: 0.3 });
@@ -3275,10 +3276,11 @@ function icecream(): THREE.BufferGeometry {
   b.add(rbox(W + 0.03, 0.2, 0.22, 0.07, 0, 0.36, L / 2 - 0.07), { color: CHROME, rough: 0.5 });
   b.add(rbox(W + 0.03, 0.2, 0.22, 0.07, 0, 0.36, -L / 2 + 0.07), { color: CHROME, rough: 0.5 });
   for (const s of [1, -1]) {
-    b.add(rbox(0.3, 0.26, 0.08, 0.12, s * 0.66, 0.66, L / 2 - 0.0), { color: HEAD, light: LIGHT_HEAD, rough: 0.4 });
-    b.add(decalPlane(0.24, 0.22, s * 0.66, 0.79, L / 2 + 0.042, 'pz'), { color: '#ffffff', light: LIGHT_HEAD, rough: 0.15, decal: R_HEAD_ROUND });
+    b.add(rbox(0.3, 0.26, 0.08, 0.12, s * 0.66, 0.66, L / 2 - 0.0), CLOSE && closeVehOn('vehlens') ? { color: '#16181b', rough: 0.9 } : { color: HEAD, light: LIGHT_HEAD, rough: 0.4 });
+    b.add(decalPlane(0.24, 0.22, s * 0.66, 0.79, L / 2 + 0.042, 'pz'), lensO({ color: '#ffffff', light: LIGHT_HEAD, rough: 0.15, decal: R_HEAD_ROUND }, lensAt(s * 0.66, 0.79, L / 2 + 0.042, 0.12, 0.11, 0)));
     b.add(bx(0.1, 0.09, 0.06, s * 0.92, 0.62, L / 2 - 0.04), { color: AMBER, light: s > 0 ? LIGHT_BLINK_L : LIGHT_BLINK_R });
     b.add(rbox(0.2, 0.26, 0.06, 0.06, s * 0.75, 0.7, -L / 2 + 0.0), { color: TAIL, light: LIGHT_TAIL, rough: 0.5 });
+    if (CLOSE) b.add(decalPlane(0.17, 0.23, s * 0.75, 0.83, -L / 2 - 0.032, 'nz'), lensO({ color: TAIL, light: LIGHT_TAIL, rough: 0.2 }, lensAt(s * 0.75, 0.83, -L / 2 - 0.032, 0.085, 0.115, 4)));
     b.add(bx(0.1, 0.09, 0.06, s * 0.92, 1.02, -L / 2 + 0.02), { color: AMBER, light: s > 0 ? LIGHT_BLINK_L : LIGHT_BLINK_R });
   }
   for (const s of [1, -1]) {

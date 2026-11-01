@@ -599,7 +599,11 @@ export function createVehicleMaterial(
     { vec3 thRw = reflect( -geometryViewDir, geometryNormal ); thReflDet = clamp( 1.6 - length( fwidth( thRw ) ) * 9.0, 0.0, 1.0 ) * step( 0.5, uVehDetail.w ); }
     #ifdef USE_CLEARCOAT
       // body paint (vCoat > 1.5) gets the street at more contrast: a lacquered panel mirrors it clearly
+      #ifdef VEH_GLASSPASS
+      clearcoatRadiance *= vGain * 0.7 * thStreetRefl( geometryViewDir, geometryClearcoatNormal, 0.22 );
+      #else
       clearcoatRadiance *= vGain * thStreetRefl( geometryViewDir, geometryClearcoatNormal, 0.0 ) * ( vCoat > 1.5 && uVehDetail.w > 0.5 ? thPaintGain( geometryViewDir, geometryClearcoatNormal ) : 1.0 );
+      #endif
       // G1: glass (gain 3.6) mirrors the street at about 60 %: at full gain the grey sky veil hid the cabin (smoked plastic)
       if ( uVehGlass > 0.5 && vGain > 3.0 ) clearcoatRadiance *= 0.6;
     #endif
@@ -612,7 +616,7 @@ export function createVehicleMaterial(
         float thAz = atan( thRn.x, thRn.z );
         float thBand = smoothstep( 0.0, 0.1, thE ) * smoothstep( 0.62, 0.22, thE );
         float thW = thVN( vec3( thAz * 9.0, thE * 14.0, 2.0 ) );
-        clearcoatRadiance += uLights * vec3( 1.0, 0.76, 0.48 ) * thBand * ( 0.05 + 0.3 * smoothstep( 0.45, 0.85, thW ) ) * ( vGain > 3.0 ? 1.0 : 0.85 );
+        clearcoatRadiance += uLights * vec3( 1.0, 0.76, 0.48 ) * thBand * ( 0.09 + 0.08 * smoothstep( 0.35, 0.75, thW ) ) * ( vGain > 3.0 ? 1.0 : 0.85 );
       }
     #endif
     #ifdef VEH_CLOSE

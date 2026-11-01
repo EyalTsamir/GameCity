@@ -153,6 +153,7 @@ export const CLOSE_FRAG_DETAIL = /* glsl */ `
     float ao = mix( 0.22, 0.62, hT * hT ) * ( 0.75 + 0.35 * on.y );
     ao += 0.18 * smoothstep( hw * 0.55, hw, abs( p.x ) ) * step( belt, p.y );
     if ( vDetB.w > 0.5 ) ao = ao * 1.5 + 0.1;
+    else if ( hw > 0.86 ) ao = ao * 1.4 + 0.06;
     thCabAO = clamp( ao, 0.0, 1.0 );
     thCoatK = 0.0;
     // a saloon's strip lamps, on after dark while it runs
@@ -264,11 +265,12 @@ ${WEAR}
   float dust = dirt * ( 0.05 + 0.13 * blot.b + 0.02 * gr.b );
   if ( on.z > 0.3 ) {
     // windscreen: wipers have cleared two fans in the film; a tint band across the top, the black frit round its head
-    vec2 q0 = vec2( p.x - 0.32, length( vec2( p.y - ( belt - 0.02 ), p.z - ( vDetA.w + 0.04 ) ) ) );
-    vec2 q1 = vec2( p.x + 0.18, q0.y );
+    float fanK = max( vDetA.x / 0.7, 1.0 );
+    vec2 q0 = vec2( p.x - 0.32 * fanK, length( vec2( p.y - ( belt - 0.02 ), p.z - ( vDetA.w + 0.04 ) ) ) );
+    vec2 q1 = vec2( p.x + 0.18 * fanK, q0.y );
     float r0 = length( q0 ), r1 = length( q1 );
-    float fan = max( 1.0 - smoothstep( 0.6, 0.63, r0 ), 1.0 - smoothstep( 0.6, 0.63, r1 ) );
-    dust *= mix( 3.0, 0.22, fan );
+    float fan = max( 1.0 - smoothstep( 0.6, 0.63, r0 / fanK ), 1.0 - smoothstep( 0.6, 0.63, r1 / fanK ) );
+    dust *= mix( 1.8, 0.22, fan );
     float y01 = ( p.y - belt ) / max( roofY - belt, 0.1 );
     thTrans *= 1.0 - 0.45 * smoothstep( 0.72, 0.9, y01 );
     float cell = 1.0 - smoothstep( 0.0, 0.03, abs( fract( p.x * 90.0 ) - 0.5 ) - 0.2 * step( 0.5, fract( y01 * 30.0 ) ) );
