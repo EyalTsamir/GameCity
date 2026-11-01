@@ -1,0 +1,345 @@
+// Temporal anti-aliasing at the very end of the chain: what makes the city stop trembling (docs/progress/sweep-flicker.md).
+//
+// Without it every pixel takes one sample, so an edge, a window bar, a leaf or a far fence that moves by a tenth of a pixel
+// makes whole pixels jump. Here the camera is offset by a different fraction of a pixel each frame and each pixel keeps a
+// running mean of what it saw, carried across camera moves with the depth buffer:
+//
+//   final effect pass ──▶ tInput (gamma, 10 bit) ──▶ resolve (+ previous history) ──▶ history ──▶ present ──▶ canvas
+//
+// It replaces SMAA, whose edge and weight passes cost about the same, and at rest it resolves more than SMAA could: a detail
+// finer than a pixel is averaged in instead of hit or missed. Runs after grading because the running mean belongs in display
+// values, and so AO, contact shadows, bloom and shafts are steadied with everything else.
+//
+// There are no motion vectors. What moves by itself (people, cars, leaves) is held in by clipping history to the spread of this
+// frame's 3×3 neighbourhood, which also removes ghosts.
+//
+// A jitter that never stops makes a still picture shimmer by a little, everywhere, and a still camera used to give a perfectly
+// still picture. So once the camera stops the mean settles (about a second, each frame counting less), then the jitter stops:
+//   settling  the mean of many offsets, weights falling as 1/n
+//   frozen    a pixel whose own sample did not change keeps its value exactly; a small change (the sun, a cloud's shadow) is
+//             added as it is, so the edge's blend survives; a large one (a leaf, a person) is followed with the clip above
+
+import * as THREE from 'three';
+import { FS_VERT, FullscreenPass } from './fullscreen';
+
+const RESOLVE_FRAG = /* glsl */ `
+uniform sampler2D tInput;
+uniform sampler2D tHistory;
+uniform sampler2D tPrev;
+uniform highp sampler2D tDepth;
+uniform mat4 uReproject;
+uniform vec2 uRes;
+uniform float uAlpha;
+uniform float uReset;
+/** 0 moving, 1 settling, 2 the first frame without jitter, 3 frozen */
+uniform float uMode;
+varying vec2 vUv;
+
+vec3 toY(vec3 c) { return vec3(dot(c, vec3(0.25, 0.5, 0.25)), dot(c, vec3(0.5, 0.0, -0.5)), dot(c, vec3(-0.25, 0.5, -0.25))); }
+vec3 fromY(vec3 c) { return vec3(c.x + c.y - c.z, c.x + c.z, c.x - c.y - c.z); }
+
+// Catmull-Rom in five bilinear taps (the corners barely count): history moved by a fraction of a pixel stays sharp
+vec3 historyCR(vec2 uv) {
+  vec2 p = uv * uRes - 0.5;
+  vec2 f = fract(p);
+  vec2 c0 = (floor(p) + 0.5) / uRes;
+  vec2 w0 = f * (-0.5 + f * (1.0 - 0.5 * f));
+  vec2 w1 = 1.0 + f * f * (-2.5 + 1.5 * f);
+  vec2 w2 = f * (0.5 + f * (2.0 - 1.5 * f));
+  vec2 w3 = f * f * (-0.5 + 0.5 * f);
+  vec2 w12 = w1 + w2;
+  vec2 o12 = w2 / w12;
+  vec2 t0 = c0 - 1.0 / uRes;
+  vec2 t3 = c0 + 2.0 / uRes;
+  vec2 t12 = c0 + o12 / uRes;
+  vec3 s = texture2D(tHistory, vec2(t12.x, t0.y)).rgb * (w12.x * w0.y);
+  s += texture2D(tHistory, vec2(t0.x, t12.y)).rgb * (w0.x * w12.y);
+  s += texture2D(tHistory, t12).rgb * (w12.x * w12.y);
+  s += texture2D(tHistory, vec2(t3.x, t12.y)).rgb * (w3.x * w12.y);
+  s += texture2D(tHistory, vec2(t12.x, t3.y)).rgb * (w12.x * w3.y);
+  float w = w12.x * w0.y + w0.x * w12.y + w12.x * w12.y + w3.x * w12.y + w12.x * w3.y;
+  return s / w;
+}
+
+void main() {
+  ivec2 p = ivec2(gl_FragCoord.xy);
+  vec3 cur = texelFetch(tInput, p, 0).rgb;
+  if (uReset > 0.5) {
+    gl_FragColor = vec4(cur, 0.0);
+    return;
+  }
+  vec2 huv = vUv;
+  float speed = 0.0;
+  float a = uAlpha;
+  float mark = 0.0;
+  bool frozen = uMode > 1.5;
+  vec4 h0 = vec4(0.0);
+  if (frozen) {
+    h0 = texelFetch(tHistory, p, 0);
+    if (uMode < 2.5) {
+      gl_FragColor = vec4(h0.rgb, 0.0);
+      return;
+    }
+    vec3 change = cur - texelFetch(tPrev, p, 0).rgb;
+    float m = max(abs(change.r), max(abs(change.g), abs(change.b)));
+    if (m < 0.012 && h0.a < 0.01) {
+      // (nothing happened: exactly the old value. Light moving: the same step, the blend of the edge stays)
+      gl_FragColor = vec4(h0.rgb + change, 0.0);
+      return;
+    }
+    // something moves here; alpha counts three more frames after it stops, so the pixel lands on what is there now
+    mark = m >= 0.012 ? 1.0 : max(0.0, h0.a - 0.34);
+    // (a leaf's flicker is calmed; a person crossing is a large change, and stays solid)
+    a = mix(0.25, 0.7, smoothstep(0.04, 0.2, m));
+  } else {
+    float d = texelFetch(tDepth, p, 0).x;
+    vec4 clip = uReproject * vec4(vUv * 2.0 - 1.0, d * 2.0 - 1.0, 1.0);
+    huv = clip.xy / clip.w * 0.5 + 0.5;
+    if (huv.x < 0.0 || huv.x > 1.0 || huv.y < 0.0 || huv.y > 1.0) {
+      gl_FragColor = vec4(cur, 0.0);
+      return;
+    }
+    speed = length((huv - vUv) * uRes);
+    // history is for what moves by less than a few pixels a frame. Faster than that aliasing can't be seen and every resampling
+    // softens: lettering on a sign passing the walker doubled and blurred, people smeared under a quick look round. So it fades out.
+    a = mix(uAlpha, 1.0, smoothstep(1.0, 5.0, speed));
+  }
+  // the spread of this frame around the pixel, in luma + chroma
+  vec3 cy = toY(cur);
+  vec3 m1 = cy, m2 = cy * cy, s;
+  s = toY(textureLodOffset(tInput, vUv, 0.0, ivec2(-1, 0)).rgb); m1 += s; m2 += s * s;
+  s = toY(textureLodOffset(tInput, vUv, 0.0, ivec2(1, 0)).rgb); m1 += s; m2 += s * s;
+  s = toY(textureLodOffset(tInput, vUv, 0.0, ivec2(0, -1)).rgb); m1 += s; m2 += s * s;
+  s = toY(textureLodOffset(tInput, vUv, 0.0, ivec2(0, 1)).rgb); m1 += s; m2 += s * s;
+  s = toY(textureLodOffset(tInput, vUv, 0.0, ivec2(-1, -1)).rgb); m1 += s; m2 += s * s;
+  s = toY(textureLodOffset(tInput, vUv, 0.0, ivec2(1, -1)).rgb); m1 += s; m2 += s * s;
+  s = toY(textureLodOffset(tInput, vUv, 0.0, ivec2(-1, 1)).rgb); m1 += s; m2 += s * s;
+  s = toY(textureLodOffset(tInput, vUv, 0.0, ivec2(1, 1)).rgb); m1 += s; m2 += s * s;
+  vec3 mean = m1 / 9.0;
+  vec3 sigma = sqrt(max(m2 / 9.0 - mean * mean, vec3(0.0)));
+  // while the camera rests a wider window: a detail finer than a pixel is in some frames' neighbourhood only
+  float gamma = frozen ? 1.0 : uMode > 0.5 ? 2.5 : mix(1.5, 0.8, smoothstep(0.0, 2.0, speed));
+  vec3 lo = mean - gamma * sigma - 0.002;
+  vec3 hi = mean + gamma * sigma + 0.002;
+  vec3 h = toY(frozen ? h0.rgb : speed < 0.01 ? texelFetch(tHistory, p, 0).rgb : historyCR(huv));
+  // clip towards the mean: keeps the hue, unlike a box clamp per channel
+  vec3 cen = 0.5 * (hi + lo), ext = max(0.5 * (hi - lo), vec3(1e-4));
+  vec3 off = h - cen;
+  vec3 un = abs(off / ext);
+  float k = max(un.x, max(un.y, un.z));
+  if (k > 1.0) h = cen + off / k;
+  gl_FragColor = vec4(clamp(fromY(mix(h, cy, a)), 0.0, 1.0), mark);
+}
+`;
+
+const PRESENT_FRAG = /* glsl */ `
+#include <common>
+#include <dithering_pars_fragment>
+uniform sampler2D tHistory;
+uniform float uSharp;
+varying vec2 vUv;
+void main() {
+  vec3 c = texelFetch(tHistory, ivec2(gl_FragCoord.xy), 0).rgb;
+  // the running mean is a box over the pixel: a touch of contrast back, only for the screen (never fed back into history)
+  if (uSharp > 0.0) {
+    vec3 a = textureLodOffset(tHistory, vUv, 0.0, ivec2(-1, 0)).rgb;
+    vec3 b = textureLodOffset(tHistory, vUv, 0.0, ivec2(1, 0)).rgb;
+    vec3 u = textureLodOffset(tHistory, vUv, 0.0, ivec2(0, -1)).rgb;
+    vec3 v = textureLodOffset(tHistory, vUv, 0.0, ivec2(0, 1)).rgb;
+    vec3 lo = min(c, min(a, min(b, min(u, v))));
+    vec3 hi = max(c, max(a, max(b, max(u, v))));
+    c = clamp(c + uSharp * (c - 0.25 * (a + b + u + v)), lo, hi);
+  }
+  gl_FragColor = vec4(pow(max(c, vec3(0.0)), vec3(2.2)), 1.0);
+  #include <colorspace_fragment>
+  #include <dithering_fragment>
+}
+`;
+
+/** 10 bit in display values: 8 would stop the mean short of its target and put the sky's bands back */
+function target(w: number, h: number, name: string): THREE.WebGLRenderTarget {
+  const rt = new THREE.WebGLRenderTarget(w, h, { depthBuffer: false, stencilBuffer: false, generateMipmaps: false, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, format: THREE.RGBAFormat });
+  const t = rt.texture;
+  t.name = name;
+  t.internalFormat = 'RGB10_A2';
+  // (three hands a string type to GL as it is: its fallback for packed formats)
+  t.type = 'UNSIGNED_INT_2_10_10_10_REV' as unknown as THREE.TextureDataType;
+  return rt;
+}
+
+/** frames from the camera stopping to the jitter stopping */
+const SETTLE = 24;
+/** Halton (2, 3), centred: fractions of a pixel, each frame another (long enough for a whole settling) */
+const JITTER: [number, number][] = [];
+{
+  const halton = (i: number, b: number) => {
+    let f = 1,
+      r = 0;
+    for (let k = i; k > 0; k = Math.floor(k / b)) {
+      f /= b;
+      r += f * (k % b);
+    }
+    return r;
+  };
+  for (let i = 1; i <= 32; i++) JITTER.push([halton(i, 2) - 0.5, halton(i, 3) - 0.5]);
+}
+
+const _vp = new THREE.Matrix4();
+const _vpInv = new THREE.Matrix4();
+
+export class TemporalAA {
+  /** the final effect pass draws into this */
+  input: THREE.WebGLRenderTarget;
+  private inputPrev: THREE.WebGLRenderTarget;
+  private hist: [THREE.WebGLRenderTarget, THREE.WebGLRenderTarget];
+  private resolve: FullscreenPass;
+  private present: FullscreenPass;
+  private prevVP = new THREE.Matrix4();
+  private frame = 0;
+  private fresh = true;
+  private pe8 = 0;
+  private pe9 = 0;
+  private lastView = new THREE.Matrix4();
+  private lastP5 = 0;
+  /** frames the camera has not moved */
+  private rest = 0;
+  private jittered = false;
+  private alpha: number;
+  private neverRest: boolean;
+
+  constructor(
+    private camera: THREE.PerspectiveCamera,
+    opts: { alpha: number; sharp: number; jitter: number; neverRest?: boolean },
+  ) {
+    this.input = target(4, 4, 'TAA.Input');
+    this.inputPrev = target(4, 4, 'TAA.InputPrev');
+    this.alpha = opts.alpha;
+    // (?taamove, for measuring: the moving path's cost with a still camera)
+    this.neverRest = !!opts.neverRest;
+    this.hist = [target(4, 4, 'TAA.HistoryA'), target(4, 4, 'TAA.HistoryB')];
+    this.jitterK = opts.jitter;
+    this.resolve = new FullscreenPass(
+      new THREE.ShaderMaterial({
+        name: 'TAAResolve',
+        uniforms: {
+          tInput: { value: this.input.texture },
+          tHistory: { value: null },
+          tPrev: { value: null },
+          uMode: { value: 0 },
+          tDepth: { value: null },
+          uReproject: { value: new THREE.Matrix4() },
+          uRes: { value: new THREE.Vector2(4, 4) },
+          uAlpha: { value: opts.alpha },
+          uReset: { value: 1 },
+        },
+        vertexShader: FS_VERT,
+        fragmentShader: RESOLVE_FRAG,
+        depthTest: false,
+        depthWrite: false,
+        blending: THREE.NoBlending,
+        toneMapped: false,
+      }),
+    );
+    this.present = new FullscreenPass(
+      new THREE.ShaderMaterial({
+        name: 'TAAPresent',
+        uniforms: { tHistory: { value: null }, uSharp: { value: opts.sharp } },
+        vertexShader: FS_VERT,
+        fragmentShader: PRESENT_FRAG,
+        depthTest: false,
+        depthWrite: false,
+        blending: THREE.NoBlending,
+        toneMapped: false,
+        dithering: true,
+      }),
+    );
+  }
+  private jitterK: number;
+
+  setSize(w: number, h: number): void {
+    if (this.input.width === w && this.input.height === h) return;
+    this.input.setSize(w, h);
+    this.inputPrev.setSize(w, h);
+    this.hist[0].setSize(w, h);
+    this.hist[1].setSize(w, h);
+    this.fresh = true;
+  }
+
+  /** the next frame takes no history (a cut, a resize, the first frame after the chain was off) */
+  reset(): void {
+    this.fresh = true;
+  }
+
+  /** offset the projection for this frame's scene and post passes; call `unjitter` right after them */
+  jitter(): void {
+    const c = this.camera;
+    const e = c.projectionMatrix.elements;
+    // (against where it stopped, with a tolerance far below a pixel: some views' camera eases towards its place for ever)
+    const v = c.matrixWorldInverse.elements,
+      l = this.lastView.elements;
+    let moved = this.fresh || this.neverRest || this.lastP5 !== e[5];
+    for (let i = 0; i < 12 && !moved; i++) moved = Math.abs(v[i] - l[i]) > 2e-5;
+    for (let i = 12; i < 15 && !moved; i++) moved = Math.abs(v[i] - l[i]) > 5e-5;
+    if (moved) {
+      this.rest = 0;
+      this.lastView.copy(c.matrixWorldInverse);
+      this.lastP5 = e[5];
+    } else this.rest++;
+    this.jittered = this.rest < SETTLE;
+    if (!this.jittered) return;
+    const j = JITTER[this.frame++ % JITTER.length];
+    this.pe8 = e[8];
+    this.pe9 = e[9];
+    // (the jitter-free matrix is the one reprojection uses)
+    e[8] += (2 * j[0] * this.jitterK) / this.input.width;
+    e[9] += (2 * j[1] * this.jitterK) / this.input.height;
+    c.projectionMatrixInverse.copy(c.projectionMatrix).invert();
+  }
+
+  unjitter(): void {
+    if (!this.jittered) return;
+    const c = this.camera;
+    const e = c.projectionMatrix.elements;
+    e[8] = this.pe8;
+    e[9] = this.pe9;
+    c.projectionMatrixInverse.copy(c.projectionMatrix).invert();
+  }
+
+  /** after the final effect pass (projection already restored): fold the frame into history and show it */
+  draw(renderer: THREE.WebGLRenderer, depth: THREE.Texture | null): void {
+    const c = this.camera;
+    const u = this.resolve.material.uniforms;
+    _vp.multiplyMatrices(c.projectionMatrix, c.matrixWorldInverse);
+    _vpInv.copy(_vp).invert();
+    (u.uReproject.value as THREE.Matrix4).multiplyMatrices(this.prevVP, _vpInv);
+    this.prevVP.copy(_vp);
+    u.tDepth.value = depth;
+    u.tHistory.value = this.hist[0].texture;
+    u.tInput.value = this.input.texture;
+    u.tPrev.value = this.inputPrev.texture;
+    const r = this.rest;
+    u.uMode.value = r === 0 ? 0 : r < SETTLE ? 1 : r === SETTLE ? 2 : 3;
+    u.uAlpha.value = r === 0 ? this.alpha : Math.min(this.alpha, 1 / (r + 1 / this.alpha));
+    u.uReset.value = this.fresh || !depth ? 1 : 0;
+    (u.uRes.value as THREE.Vector2).set(this.input.width, this.input.height);
+    this.resolve.render(renderer, this.hist[1]);
+    this.fresh = false;
+    this.present.material.uniforms.tHistory.value = this.hist[1].texture;
+    this.present.render(renderer, null);
+    const t = this.hist[0];
+    this.hist[0] = this.hist[1];
+    this.hist[1] = t;
+    const i = this.input;
+    this.input = this.inputPrev;
+    this.inputPrev = i;
+  }
+
+  dispose(): void {
+    this.input.dispose();
+    this.inputPrev.dispose();
+    this.hist[0].dispose();
+    this.hist[1].dispose();
+    this.resolve.dispose();
+    this.present.dispose();
+  }
+}
