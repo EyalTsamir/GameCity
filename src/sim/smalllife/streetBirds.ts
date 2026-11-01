@@ -635,7 +635,6 @@ export class StreetBirds {
 
   private stepBird(b: Bird, g: Group, h: number): void {
     const spec = SPEC[b.kind];
-    const ease = (k: number) => Math.min(1, h * k);
     if (b.state === S.Down) {
       // alarmed?
       if (b.alarm >= 0) {
@@ -671,11 +670,11 @@ export class StreetBirds {
         }
         this.stepDown(b, g, h);
       }
-      b.flapAmp += (0 - b.flapAmp) * ease(10);
-      b.open += (0 - b.open) * ease(14);
-      b.tuck += (0 - b.tuck) * ease(12);
-      b.pitch += (0 - b.pitch) * ease(8);
-      b.roll += (0 - b.roll) * ease(8);
+      b.flapAmp += (0 - b.flapAmp) * Math.min(1, h * 10);
+      b.open += (0 - b.open) * Math.min(1, h * 14);
+      b.tuck += (0 - b.tuck) * Math.min(1, h * 12);
+      b.pitch += (0 - b.pitch) * Math.min(1, h * 8);
+      b.roll += (0 - b.roll) * Math.min(1, h * 8);
       b.fade = Math.min(1, b.fade + h * 3);
     } else if (b.state === S.Flee) {
       const dx = g.hideX - b.x,
@@ -721,8 +720,8 @@ export class StreetBirds {
       this.flyPose(b, h, spec.flap, d < 1.2 ? 1.2 : 0.8);
       if (d < 1) {
         // flare: body up, tail fanned, legs out
-        b.pitch += (-0.75 - b.pitch) * ease(8);
-        b.tuck += (0 - b.tuck) * ease(10);
+        b.pitch += (-0.75 - b.pitch) * Math.min(1, h * 8);
+        b.tuck += (0 - b.tuck) * Math.min(1, h * 10);
       }
       if (d < 0.1 && b.y < gy + 0.1) {
         b.state = S.Down;
@@ -967,7 +966,8 @@ export class StreetBirds {
       mesh.instanceMatrix.clearUpdateRanges();
       mesh.instanceMatrix.addUpdateRange(0, n * 16);
       mesh.instanceMatrix.needsUpdate = true;
-      for (const a of [this.a1, this.a2, this.a3, this.aT]) {
+      for (let i = 0; i < 4; i++) {
+        const a = i === 0 ? this.a1 : i === 1 ? this.a2 : i === 2 ? this.a3 : this.aT;
         a.clearUpdateRanges();
         a.addUpdateRange(0, n * 4);
         a.needsUpdate = true;

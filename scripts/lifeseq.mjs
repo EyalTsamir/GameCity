@@ -9,6 +9,7 @@
 //     --find cat | dog | talk | litter    the nearest of those
 //     --walk 1.3            the camera walks at this speed (m/s) towards what it looks at, as someone would
 //     --shots 3             the sequence again at other places (--find only: the next nearest), one sheet per shot
+//     --follow              the camera stays on what it found (--find only), --yaw d fixes its side (else random)
 //     --pre "js"            run once after load, --eval "js" after each framing
 //     --size 900x500 --cols 4 --dist 3 --pitch 8
 //     --scripts <dir>       where browser.mjs lives (the main checkout's, for its shared browser lock)
@@ -19,7 +20,12 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const args = {};
-for (let i = 2; i < process.argv.length; i++) if (process.argv[i].startsWith('--')) args[process.argv[i].slice(2)] = process.argv[++i];
+for (let i = 2; i < process.argv.length; i++) {
+  if (!process.argv[i].startsWith('--')) continue;
+  const k = process.argv[i].slice(2);
+  // a flag has no value
+  args[k] = k === 'follow' ? '1' : process.argv[++i];
+}
 const scripts = args.scripts ?? 'C:/Projects/GameCity/scripts';
 const { launchBrowser, acquireLock, releaseLock } = await import(pathToFileURL(path.join(scripts, 'browser.mjs')).href);
 const base = (args.url ?? 'http://127.0.0.1:5220/').replace(/\/?$/, '/');
@@ -33,7 +39,9 @@ const frames = +(args.frames ?? 12),
   hours = +(args.hours ?? 12),
   walk = +(args.walk ?? 0),
   dist0 = +(args.dist ?? 3),
-  pitch0 = +(args.pitch ?? 8);
+  pitch0 = +(args.pitch ?? 8),
+  yaw0 = args.yaw === undefined ? null : +args.yaw,
+  follow = args.follow !== undefined;
 const at = (args.at ?? '5,1.5,-65,9,0,6').split(',').map(Number);
 
 await acquireLock();
@@ -62,13 +70,13 @@ try {
     let label = args.at ?? '';
     if (args.find) {
       const found = await page.evaluate(
-        ([what, x, z, used, dist, pitch]) => {
+        ([what, x, z, used, dist, pitch, yaw0, follow]) => {
           const c = window.__city;
           const L = c.ctx.services.smalllife;
           const [w, sub] = what.split(':');
           const list = [];
           if (w === 'birds') for (const g of L?.birds?.allGroups ?? []) if (sub === undefined || g.kind === +sub) if (g.birds[0]) list.push({ x: g.birds[0].x, z: g.birds[0].z, y: g.birds[0].y + 0.1, id: `${w}${Math.round(g.x)},${Math.round(g.z)}`, info: `kind ${g.kind} n ${g.birds.length}` });
-          if (w === 'cat') for (const g of L?.cats?.all ?? []) list.push({ x: g.x, z: g.z, y: g.y + 0.2, id: `cat${g.i}`, info: g.info });
+          if (w === 'cat') for (const g of L?.cats?.cats ?? []) if (g.spot) list.push({ x: g.x, z: g.z, y: g.y + 0.2, id: `cat${L.cats.cats.indexOf(g)}`, info: `${g.spot.kind} coat ${g.spot.coat}`, ref: g, up: 0.2 });
           if (w === 'litter') for (const g of L?.litter?.spots ?? []) list.push({ x: g.x, z: g.z, y: 0.2, id: `lit${Math.round(g.x)},${Math.round(g.z)}`, info: g.info });
           if (w === 'dog' || w === 'talk') {
             for (const p of c.ctx.services.pedestrians._crowd.parties) {
@@ -77,16 +85,24 @@ try {
               if (!m.present) continue;
               if (w === 'dog' && !m.look.dog) continue;
               if (w === 'talk' && !(p.members.length > 1 && m.chat > 0)) continue;
-              list.push({ x: m.x, z: m.z, y: m.y + 1.1, id: `p${p.id}`, info: p.persona ?? '' });
+              list.push({ x: m.x, z: m.z, y: m.y + 1.1, id: `p${p.id}`, info: p.persona ?? '', ref: m, up: w === 'dog' ? 0.35 : 1.1 });
             }
           }
           list.sort((a, b) => Math.hypot(a.x - x, a.z - z) - Math.hypot(b.x - x, b.z - z));
           const f = list.find((q) => !used.includes(q.id));
           if (!f) return null;
-          c.view({ target: { x: f.x, y: f.y, z: f.z }, distance: dist, yaw: Math.random() * 360, pitch });
-          return f;
+          const yaw = yaw0 ?? Math.random() * 360;
+          c.view({ target: { x: f.x, y: f.y, z: f.z }, distance: dist, yaw, pitch });
+          clearInterval(window.__followI);
+          if (follow && f.ref) {
+            const r = f.ref,
+              up = f.up;
+            window.__followI = setInterval(() => c.ctx.services.camera.flyTo({ target: { x: r.x, y: r.y + up, z: r.z }, distance: dist, yaw, pitch }, 0), 30);
+          }
+          const { ref, ...plain } = f;
+          return plain;
         },
-        [args.find, at[0], at[2], [...taken], dist0, pitch0],
+        [args.find, at[0], at[2], [...taken], dist0, pitch0, yaw0, follow],
       );
       if (!found) {
         console.log(`shot ${s}: nothing found for ${args.find}`);

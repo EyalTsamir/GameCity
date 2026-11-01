@@ -54,10 +54,11 @@ function clearOut(): void {
   GO.fill(0);
 }
 
-/** set one arm of slot `a` (O_R or O_L) from values in the scratch W: x y z weight pole xyz grip */
-const W = new Float64Array(8);
-function arm(a: number, k: number): void {
-  const w = W[3] * k;
+/** set one arm of slot `a` (O_R or O_L) from values in the scratch W: x y z weight pole xyz grip, how much */
+const W = new Float64Array(9);
+const W_K = 8;
+function arm(a: number): void {
+  const w = W[3] * W[W_K];
   if (w <= 0.001) return;
   // blend with what is there: two gestures in a crossfade add up their weights
   const old = GO[a + 3];
@@ -75,15 +76,29 @@ function arm(a: number, k: number): void {
 
 const GESTURE_COUNT = 8;
 
-/** one conversational gesture, f = 0..1 through its phrase, s = the side it starts from, added to GO with weight k */
-function gesture(g: number, f: number, s: number, k: number, size: number): void {
+/** phrase scratch: f = 0..1 through its phrase, s = the side it starts from, weight k, size of the person's gestures */
+const A = new Float64Array(7);
+const A_F = 0,
+  A_S = 1,
+  A_K = 2,
+  A_SIZE = 3,
+  A_TURN = 4,
+  A_SIDE = 5,
+  A_TALKY = 6;
+
+/** one conversational gesture, inputs in A, added to GO */
+function gesture(g: number): void {
+  const f = A[A_F],
+    s = A[A_S],
+    k = A[A_K],
+    size = A[A_SIZE];
   const t = GI[G_T],
     hk = GI[G_HK],
     cy = GI[G_CY],
     wy = GI[G_WY],
     seed = GI[G_SEED];
-  const main = s > 0 ? O_L : O_R,
-    other = s > 0 ? O_R : O_L;
+  const main = s > 0 ? O_L : O_R;
+  W[W_K] = k;
   // the stress of what is said: a pulse or two through the phrase
   const beat = Math.pow(Math.max(0, Math.sin(f * 6.283 * (1.5 + (g & 1)) + seed * 6)), 3);
   W[4] = s * 0.3;
@@ -97,14 +112,14 @@ function gesture(g: number, f: number, s: number, k: number, size: number): void
       W[2] = (0.28 + 0.03 * beat) * hk;
       W[3] = 1;
       W[7] = 0.3;
-      arm(main, k);
+      arm(main);
       GO[O_HP] += 0.045 * beat * k;
       break;
     }
     case 1: {
       // both hands open and held apart, moving out as it is explained
       const open = 0.15 + 0.07 * size * smooth(f * 2.5) + 0.012 * Math.sin(t * 3.1);
-      for (const q of [1, -1]) {
+      for (let q = 1; q >= -1; q -= 2) {
         W[0] = q * open * hk;
         W[1] = cy - (0.09 + 0.03 * beat) * hk;
         W[2] = 0.27 * hk;
@@ -112,7 +127,7 @@ function gesture(g: number, f: number, s: number, k: number, size: number): void
         W[4] = q * 0.3;
         W[6] = -0.3;
         W[7] = 0.12;
-        arm(q > 0 ? O_L : O_R, k);
+        arm(q > 0 ? O_L : O_R);
       }
       GO[O_CB] += 0.02 * k;
       break;
@@ -120,7 +135,7 @@ function gesture(g: number, f: number, s: number, k: number, size: number): void
     case 2: {
       // a shrug: hands up and out, the head on one side, and down again
       const up = Math.sin(Math.min(1, f * 1.4) * 3.14159);
-      for (const q of [1, -1]) {
+      for (let q = 1; q >= -1; q -= 2) {
         W[0] = q * (0.2 + 0.08 * up * size) * hk;
         W[1] = wy + (0.03 + 0.1 * up) * hk;
         W[2] = (0.18 + 0.05 * up) * hk;
@@ -129,7 +144,7 @@ function gesture(g: number, f: number, s: number, k: number, size: number): void
         W[5] = -1;
         W[6] = 0.1;
         W[7] = 0.08;
-        arm(q > 0 ? O_L : O_R, k);
+        arm(q > 0 ? O_L : O_R);
       }
       GO[O_HR] += s * 0.16 * up * k;
       GO[O_HP] -= 0.05 * up * k;
@@ -146,7 +161,7 @@ function gesture(g: number, f: number, s: number, k: number, size: number): void
       W[5] = -0.6;
       W[6] = -0.6;
       W[7] = 0.55;
-      arm(main, k);
+      arm(main);
       GO[O_HY] += s * 0.55 * out * k;
       GO[O_CT] += s * 0.12 * out * k;
       break;
@@ -161,7 +176,7 @@ function gesture(g: number, f: number, s: number, k: number, size: number): void
       W[5] = -1;
       W[6] = 0.1;
       W[7] = 0.15;
-      arm(main, k);
+      arm(main);
       GO[O_HP] += 0.04 * on * k;
       break;
     }
@@ -173,20 +188,20 @@ function gesture(g: number, f: number, s: number, k: number, size: number): void
       W[2] = (0.29 + 0.04 * size * Math.cos(a)) * hk;
       W[3] = 1;
       W[7] = 0.35;
-      arm(main, k);
+      arm(main);
       break;
     }
     case 6: {
       // on the one hand, on the other: the hands weigh it up
       const w = Math.sin(f * 6.283 + seed);
-      for (const q of [1, -1]) {
+      for (let q = 1; q >= -1; q -= 2) {
         W[0] = q * 0.16 * hk;
         W[1] = cy - (0.11 - 0.05 * q * w * size) * hk;
         W[2] = 0.27 * hk;
         W[3] = 1;
         W[4] = q * 0.3;
         W[7] = 0.2;
-        arm(q > 0 ? O_L : O_R, k);
+        arm(q > 0 ? O_L : O_R);
       }
       GO[O_HR] += 0.07 * w * k;
       break;
@@ -194,11 +209,20 @@ function gesture(g: number, f: number, s: number, k: number, size: number): void
     default: {
       // nothing for the hands: words alone, the head doing it
       GO[O_HP] += 0.05 * Math.sin(t * 3.4 + seed * 4) * k;
-      W[3] = 0;
-      void other;
       break;
     }
   }
+}
+
+/** which gesture phrase i of a turn is */
+function pickGesture(i: number): number {
+  const h = hash(A[A_TURN] + i * 3.17 + GI[G_SEED] * 17);
+  // a quiet talker rests most of the time
+  if (A[A_TALKY] < 0.25 && h < 0.5) return GESTURE_COUNT - 1;
+  return Math.floor(hash(h * 91.7 + i) * GESTURE_COUNT);
+}
+function sideOfPhrase(i: number): number {
+  return hash(A[A_TURN] * 1.7 + i * 5.1 + GI[G_SEED]) < 0.28 + 0.4 * A[A_SIDE] ? 1 : -1;
 }
 
 /**
@@ -212,28 +236,27 @@ export function speakerGestures(k: number): void {
     tin = GI[G_TIN];
   // each person's own measure: some talk with their whole arms, some hardly at all
   const talky = hash(seed * 311.7 + 1.3);
-  const size = 0.45 + 0.75 * talky;
+  A[A_SIZE] = 0.45 + 0.75 * talky;
+  A[A_TALKY] = talky;
+  A[A_SIDE] = hash(seed * 7.31);
   const SLOT = 1.25 + 0.75 * hash(seed * 91.3);
   const n = Math.floor(tin / SLOT);
   const f = (tin - n * SLOT) / SLOT;
-  const sideHash = hash(seed * 7.31);
   // the turn's phrases come from the party and the turn, so that everyone has different ones
-  const seedTurn = pid * 12.9898 + Math.floor(GI[G_T] / 5.5) * 7.233;
-  const pick = (i: number): number => {
-    const h = hash(seedTurn + i * 3.17 + seed * 17);
-    // a quiet talker rests most of the time
-    if (talky < 0.25 && h < 0.5) return GESTURE_COUNT - 1;
-    return Math.floor(hash(h * 91.7 + i) * GESTURE_COUNT);
-  };
-  const sideOf = (i: number): number => (hash(seedTurn * 1.7 + i * 5.1 + seed) < 0.28 + 0.4 * sideHash ? 1 : -1);
-  const g1 = pick(n),
-    s1 = sideOf(n);
+  A[A_TURN] = pid * 12.9898 + Math.floor(GI[G_T] / 5.5) * 7.233;
   const X = 0.3;
+  let b = 1;
   if (f < X) {
-    const b = smooth(f / X);
-    gesture(pick(n - 1), 1, sideOf(n - 1), k * (1 - b), size);
-    gesture(g1, f, s1, k * b, size);
-  } else gesture(g1, f, s1, k, size);
+    b = smooth(f / X);
+    A[A_F] = 1;
+    A[A_S] = sideOfPhrase(n - 1);
+    A[A_K] = k * (1 - b);
+    gesture(pickGesture(n - 1));
+  }
+  A[A_F] = f;
+  A[A_S] = sideOfPhrase(n);
+  A[A_K] = k * b;
+  gesture(pickGesture(n));
   // normalise: the arms' weights in a crossfade summed to at most k
   if (GO[O_R + 3] > 1) GO[O_R + 3] = 1;
   if (GO[O_L + 3] > 1) GO[O_L + 3] = 1;
@@ -307,6 +330,7 @@ export function fidget(free: number): boolean {
   if (s > 0 && !(free & 2)) s = -1;
   const can = s < 0 ? free & 1 : free & 2;
   clearOut();
+  W[W_K] = env;
   W[4] = s;
   W[5] = -1;
   W[6] = -0.3;
@@ -323,7 +347,7 @@ export function fidget(free: number): boolean {
       W[5] = -1;
       W[6] = -0.1;
       W[7] = 0.25;
-      arm(O_L, env);
+      arm(O_L);
       GO[O_HP] += 0.44 * env;
       GO[O_HY] += 0.2 * env;
       break;
@@ -338,7 +362,7 @@ export function fidget(free: number): boolean {
       W[5] = 0.25;
       W[6] = 0.35;
       W[7] = 0.45;
-      arm(main, env);
+      arm(main);
       GO[O_HP] += 0.12 * env;
       break;
     case 2:
@@ -352,7 +376,7 @@ export function fidget(free: number): boolean {
       W[5] = -1;
       W[6] = -0.1;
       W[7] = 0.6;
-      arm(main, env);
+      arm(main);
       GO[O_HP] += 0.05 * env;
       GO[O_HY] += s * 0.1 * env;
       break;
@@ -367,13 +391,13 @@ export function fidget(free: number): boolean {
       W[5] = -1;
       W[6] = -0.5;
       W[7] = 0.75;
-      arm(main, env);
+      arm(main);
       GO[O_HR] -= s * 0.05 * env;
       break;
     case 4:
       // rubbing the hands
       if ((free & 3) !== 3) return false;
-      for (const q of [1, -1]) {
+      for (let q = 1; q >= -1; q -= 2) {
         W[0] = q * (0.012 + 0.012 * Math.sin(t * 11 + q)) * hk;
         W[1] = wy + (0.09 + 0.008 * q * Math.sin(t * 11)) * hk;
         W[2] = 0.21 * hk;
@@ -382,7 +406,7 @@ export function fidget(free: number): boolean {
         W[5] = -1;
         W[6] = -0.3;
         W[7] = 0.5;
-        arm(q > 0 ? O_L : O_R, env);
+        arm(q > 0 ? O_L : O_R);
       }
       GO[O_HP] += 0.1 * env;
       break;
@@ -407,7 +431,7 @@ export function fidget(free: number): boolean {
       W[5] = -1;
       W[6] = -0.2;
       W[7] = 0.6;
-      arm(O_R, env);
+      arm(O_R);
       GO[O_HP] += 0.4 * env;
       if (env > 0.4) GO[O_PROP] = 1;
       break;

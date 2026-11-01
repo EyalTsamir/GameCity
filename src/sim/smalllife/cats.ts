@@ -93,6 +93,7 @@ class Cat {
 }
 
 const clamp = (v: number, a: number, b: number) => (v < a ? a : v > b ? b : v);
+const byD2 = (a: { d2: number }, b: { d2: number }) => a.d2 - b.d2;
 const rnd = (a: number, b: number) => a + (b - a) * Math.random();
 const angleDiff = (a: number, b: number): number => {
   let d = (b - a) % (Math.PI * 2);
@@ -271,12 +272,13 @@ export class Cats {
   private assign(): void {
     const p = this.ctx.camera.position;
     for (const s of this.spots) s.d2 = (s.x - p.x) ** 2 + (s.z - p.z) ** 2;
-    this.spots.sort((a, b) => a.d2 - b.d2);
+    this.spots.sort(byD2);
     // a free cat goes to the nearest spot without one; a far cat gives way only while out of sight behind the camera's reach
     for (let i = 0; i < this.spots.length && i < POOL; i++) {
       const s = this.spots[i];
       if (s.cat) continue;
-      let c = this.cats.find((q) => q.spot === null);
+      let c: Cat | null = null;
+      for (let j = 0; j < POOL && !c; j++) if (this.cats[j].spot === null) c = this.cats[j];
       if (!c) {
         for (const q of this.cats) {
           const d = (q.x - p.x) ** 2 + (q.z - p.z) ** 2;
