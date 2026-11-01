@@ -66,6 +66,11 @@ Final checks at a212800 (2026-11-01): typecheck and build pass, invariants `{}`,
 - Puddles: only one dry-noon look (a corner with no puddle in it), so **their edges are still not audited**.
 - Near-black shade: a floor on AO for cards and wood within 3-10 m (`foliage.ts`). It did **not** cure the nearest conifer crown at `-165,1.4,142,6,-30,6`: still near black at noon, and no benefit was seen anywhere else, so this floor is a candidate to take out. See Left.
 
+Final checks of the second round (limit 23:30, the shared browser queue took 10-18 minutes a run):
+- At cd3d9d4: typecheck and build pass; invariants `{}`, validate `[]`; `hitch` 0 mid-run compiles; `?diorama`, `?quality=medium`, `?quality=low` no errors. `walkhitch` finished at about the time of 4a0e139 with 0 new programs and 0 freezes. 4a0e139 itself changes only the trunk geometry.
+- **`ui-test` not confirmed.** The one full run failed (15 passed; hover, click-to-follow and `kinds` failed, then a harness error): the page reloaded mid-run and module `ui` failed with `__BUILD_ID__ is not defined`. That run overlapped my source edit at 22:57, and every other page in the same period had a working `ui`, so the edit is the likely cause, but the rerun never got the browser before the limit and was stopped. **Run it in full at the merge.**
+- **Perf pending, for the third pass and all of round 2.** The timing run waited 12 minutes in the queue and was stopped at the limit without a number. New geometry is near-only (pit clods 5 tris each, limb rows 6, stem rows 6) and bark gained 2 texture fetches for birch, 1 for pine. Measure at the merge on `;noclosenature`, after a rebake.
+
 ## Left
 
 Worth doing, biggest first:
