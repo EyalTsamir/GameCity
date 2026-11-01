@@ -10,7 +10,7 @@ import { gaitIn, gaitPose, newGaitOut, type GaitState, type IdleShift } from './
 import { AIK, armIKa, fkPoint, legIKa, LIK, toChestFrame, type ArmSolve, type LegSolve, type Pose } from './pose';
 import type { Rig } from './rig';
 import { BONE } from './body';
-import { GESTURES, GI, GO, G_CY, G_HK, G_HY, G_HZ, G_PID, G_SEED, G_T, G_TIN, G_WY, O_CB, O_CR, O_CT, O_HP, O_HR, O_HY, O_L, O_PROP, O_R, fidget, listenerGestures, speakerGestures } from '../smalllife/gestures';
+import { GESTURES, GI, GO, G_CY, G_HK, G_HY, G_HZ, G_PID, G_S, G_SEED, G_T, G_TIN, G_WY, M_FEED, O_CB, O_CR, O_CT, O_HP, O_HR, O_HY, O_L, O_PROP, O_R, feedPose, fidget, listenerGestures, momentPose, speakerGestures } from '../smalllife/gestures';
 
 // (mix / smooth / clamp / hash are written out inline in this file: see computePoseA)
 
@@ -618,7 +618,7 @@ export function computePoseA(m: Member, umbrella: boolean, r: Rig, o: Pose, gs: 
     }
   }
   // near enough to see them: hands that say something, people who listen, small things done while waiting (smalllife/gestures.ts)
-  if (GESTURES && poseIn.near && idleK > 0.3 && m.forceIdle < 0) {
+  if ((GESTURES && poseIn.near && idleK > 0.3 && m.forceIdle < 0) || (m.moment > 0 && m.moment !== M_FEED && RG === null)) {
     const iv2 = idleVariant(m, r);
     GI[G_T] = t - m.seed * 10;
     GI[G_SEED] = m.seed;
@@ -628,8 +628,13 @@ export function computePoseA(m: Member, umbrella: boolean, r: Rig, o: Pose, gs: 
     GI[G_HY] = r.head.y;
     GI[G_HZ] = r.head.z;
     GI[G_HK] = hk;
+    GI[G_S] = r.s;
     let on = false;
-    if (m.chat > 0 && iv2.v === IDLE.TALK) {
+    if (m.moment > 0) {
+      GI[G_T] = t;
+      momentPose(m.moment, m.momentK);
+      on = true;
+    } else if (m.chat > 0 && iv2.v === IDLE.TALK) {
       const tg = t - m.seed * 10;
       GI[G_TIN] = tg + m.party.id * 7.3 - Math.floor((tg + m.party.id * 7.3) / 5.5) * 5.5;
       speakerGestures(iv2.k * idleK);
@@ -1102,6 +1107,25 @@ export function computePoseA(m: Member, umbrella: boolean, r: Rig, o: Pose, gs: 
       RT[2] = 0.345 * hk;
       RT[3] = k;
       reach(r, armR, false, -1, -1, -0.3, 0.9);
+    } else if (m.moment === M_FEED && poseIn.near && handL && handR) {
+      GI[G_T] = t;
+      GI[G_SEED] = m.seed;
+      GI[G_HK] = hk;
+      GI[G_WY] = r.hip.y + rootY;
+      GI[G_HZ] = rootZ;
+      feedPose(k);
+      RT[0] = GO[O_L];
+      RT[1] = GO[O_L + 1];
+      RT[2] = GO[O_L + 2];
+      RT[3] = GO[O_L + 3];
+      reachFig(r, o, armL, true, GO[O_L + 4], GO[O_L + 5], GO[O_L + 6], GO[O_L + 7]);
+      RT[0] = GO[O_R];
+      RT[1] = GO[O_R + 1];
+      RT[2] = GO[O_R + 2];
+      RT[3] = GO[O_R + 3];
+      reachFig(r, o, armR, false, GO[O_R + 4], GO[O_R + 5], GO[O_R + 6], GO[O_R + 7]);
+      headPitch += GO[O_HP];
+      headYaw += GO[O_HY];
     } else {
       for (let li = 0; li < 2; li++) {
         const left = li === 0;

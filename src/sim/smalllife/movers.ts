@@ -3,15 +3,20 @@
 // without searching the whole crowd or allocating anything.
 
 import type { CityContext } from '../../core/context';
+import { closeLifeOn } from '../../core/closeLife';
+import { M_FEED } from './gestures';
+
+const FEEDING = closeLifeOn('feeding');
 
 /** snapshot radius around the camera (m) */
 const REACH = 46;
 const MAX_PEOPLE = 40;
 const MAX_CARS = 12;
 const PERIOD = 0.16;
+const MAX_FEEDERS = 3;
 
 interface CrowdView {
-  parties: { state: string; members: { present: boolean; x: number; z: number; vx: number; vz: number; speed: number; sit: number }[] }[];
+  parties: { state: string; members: { present: boolean; x: number; z: number; vx: number; vz: number; speed: number; sit: number; seed: number; yaw: number; reading: boolean; cafe: number; seatH: number; moment: number; momentK: number; look: { flags: number } }[] }[];
 }
 interface CarView {
   x: number;
@@ -28,6 +33,9 @@ export class Movers {
   /** x, z, vx, vz per moving vehicle */
   readonly cars = new Float32Array(MAX_CARS * 4);
   nCars = 0;
+  /** someone on a bench with crumbs: x, z, and which way they face */
+  readonly feeders = new Float32Array(MAX_FEEDERS * 4);
+  nFeeders = 0;
   /** the camera on the ground: where and how fast; `low` false when it is up in the air and nothing down here cares */
   camX = 0;
   camZ = 0;
@@ -83,15 +91,30 @@ export class Movers {
     if (crowd) {
       const P = crowd.parties,
         out = this.people;
-      let n = 0;
+      let n = 0,
+        nf = 0;
       for (let i = 0; i < P.length && n < MAX_PEOPLE; i++) {
         if (P[i].state === 'gone') continue;
         const ms = P[i].members;
         for (let k = 0; k < ms.length && n < MAX_PEOPLE; k++) {
           const m = ms[k];
-          if (!m.present || m.sit > 0.5) continue;
+          if (!m.present) continue;
           const dx = m.x - p.x,
             dz = m.z - p.z;
+          if (m.sit > 0.5) {
+            // some of those on a bench have brought something for the birds, by day
+            if (FEEDING && nf < MAX_FEEDERS && m.sit > 0.85 && ms.length === 1 && !m.reading && m.cafe === 0 && m.seatH < 0.05 && dx * dx + dz * dz < 900 && (m.seed * 57.31) % 1 < 0.4 && this.ctx.uniforms.uDaylight.value > 0.4) {
+              m.moment = M_FEED;
+              const o = nf * 4;
+              this.feeders[o] = m.x;
+              this.feeders[o + 1] = m.z;
+              this.feeders[o + 2] = Math.sin(m.yaw);
+              this.feeders[o + 3] = Math.cos(m.yaw);
+              nf++;
+            }
+            continue;
+          }
+          if (m.moment === M_FEED) m.moment = 0;
           if (dx * dx + dz * dz > r2) continue;
           out[n * 4] = m.x;
           out[n * 4 + 1] = m.z;
@@ -101,6 +124,7 @@ export class Movers {
         }
       }
       this.nPeople = n;
+      this.nFeeders = nf;
     }
     const tr = this.ctx.services.traffic as { vehicles?(): CarView[] } | undefined;
     if (tr?.vehicles) {

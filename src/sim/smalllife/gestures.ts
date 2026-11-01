@@ -15,7 +15,7 @@ import { closeLifeOn } from '../../core/closeLife';
 export const GESTURES = closeLifeOn('gestures');
 
 /** t (s, shared with the party), seed, party id, seconds into the speaker's turn, chest y, waist y, head y, head z */
-export const GI = new Float64Array(9);
+export const GI = new Float64Array(10);
 export const G_T = 0,
   G_SEED = 1,
   G_PID = 2,
@@ -24,7 +24,9 @@ export const G_T = 0,
   G_WY = 5,
   G_HY = 6,
   G_HZ = 7,
-  G_HK = 8;
+  G_HK = 8,
+  /** figure unit in metres */
+  G_S = 9;
 
 /**
  * right target x y z weight, pole x y z, grip;  left target x y z weight, pole x y z, grip;
@@ -299,6 +301,172 @@ export function listenerGestures(k: number): void {
   partyLaugh(k);
 }
 
+// ── street moments (scenes/moments.ts): what the hands do
+
+export const M_SWEEP = 1,
+  M_SMOKE = 2,
+  M_PHONE = 3,
+  M_AIR = 4,
+  M_TALK = 5,
+  /** on a bench, crumbs for the birds */
+  M_FEED = 6;
+
+/** crumbs for the birds, seated: into GO, right hand from a bag on the lap out in front of the knees, a flick, back. GI G_WY = hip height with the root's drop, G_HZ = root z */
+export function feedPose(k: number): void {
+  clearOut();
+  const hk = GI[G_HK],
+    seed = GI[G_SEED],
+    t = GI[G_T];
+  const hip = GI[G_WY],
+    rz = GI[G_HZ];
+  const P = 4.5 + 3 * seed;
+  const tt = t + seed * 37;
+  const tc = tt - Math.floor(tt / P) * P;
+  W[W_K] = k;
+  // the left hand keeps the bag on the lap
+  W[0] = 0.05 * hk;
+  W[1] = hip + 0.08 * hk;
+  W[2] = rz + 0.24 * hk;
+  W[3] = 1;
+  W[4] = 1;
+  W[5] = -0.3;
+  W[6] = -0.6;
+  W[7] = 0.75;
+  arm(O_L);
+  // the right: in the bag, out, the flick of the wrist, and back to the bag
+  const out = smooth((tc - 1) / 0.7) * smooth((3.1 - tc) / 0.8);
+  const flick = tc > 1.7 && tc < 2.25 ? Math.sin(((tc - 1.7) / 0.55) * 3.14159) : 0;
+  W[0] = (0.01 - 0.17 * out) * hk;
+  W[1] = hip + (0.1 + 0.17 * out - 0.05 * flick) * hk;
+  W[2] = rz + (0.24 + 0.2 * out + 0.07 * flick) * hk;
+  W[3] = 1;
+  W[4] = -1;
+  W[5] = -0.3;
+  W[6] = -0.6;
+  W[7] = 0.75 - 0.6 * flick;
+  arm(O_R);
+  // watching them, the head going from one to another
+  GO[O_HP] = 0.3 * k;
+  GO[O_HY] = 0.35 * Math.sin(t * 0.31 + seed * 11) * k;
+}
+
+/** a broom in hand: its foot and its top (x y z, metres in the figure's frame, x+ = left, z+ = forward), from GI time, seed, size */
+export const BR = new Float64Array(6);
+export function broomEnds(): void {
+  const hk = GI[G_HK];
+  const a = (GI[G_T] + GI[G_SEED] * 40) * (6.283 / (1.5 + 0.5 * GI[G_SEED]));
+  const sn = Math.sin(a),
+    cs = Math.cos(a);
+  BR[0] = (0.02 + 0.3 * sn) * hk;
+  BR[1] = 0.012 + 0.03 * Math.max(0, cs);
+  BR[2] = (0.68 + 0.1 * cs) * hk;
+  BR[3] = (-0.07 - 0.07 * sn) * hk;
+  BR[4] = 1.38 * hk;
+  BR[5] = (0.2 + 0.03 * cs) * hk;
+}
+
+/** a cigarette: where the hand has it (x y z, metres in the figure's frame), and 0..1 how far a drag has gone (CG[3]) */
+export const CG = new Float64Array(4);
+export function cigAt(): void {
+  const hk = GI[G_HK],
+    seed = GI[G_SEED];
+  const P = 9 + 5 * seed;
+  const tt = GI[G_T] + seed * 61;
+  const tc = tt - Math.floor(tt / P) * P;
+  const up = smooth(tc / 0.7) * smooth((2.3 - tc) / 0.7);
+  const hx = -0.15 * hk,
+    hy = 1.02 * hk,
+    hz = 0.2 * hk;
+  const mx = -0.01 * hk,
+    my = GI[G_HY] + 0.025 * hk,
+    mz = GI[G_HZ] + 0.125 * hk;
+  CG[0] = hx + (mx - hx) * up;
+  CG[1] = hy + (my - hy) * up;
+  CG[2] = hz + (mz - hz) * up;
+  // the breath out comes just after the hand has gone down
+  CG[3] = tc > 2.3 && tc < 3.4 ? 1 : 0;
+}
+
+/** arms and head for a moment, GO filled; k = how far into it. G_HY, G_HZ here in figure units as everywhere in this file */
+export function momentPose(kind: number, k: number): void {
+  clearOut();
+  const s = GI[G_S],
+    hk = GI[G_HK],
+    t = GI[G_T],
+    seed = GI[G_SEED];
+  W[W_K] = k;
+  switch (kind) {
+    case M_SWEEP: {
+      // both hands on the handle: one up by the chest, one lower. broomEnds is in metres and sized by the same hk
+      GI[G_HK] = hk * s;
+      broomEnds();
+      GI[G_HK] = hk;
+      const u1 = 0.8,
+        u2 = 0.52;
+      W[0] = (BR[0] + (BR[3] - BR[0]) * u1) / s;
+      W[1] = (BR[1] + (BR[4] - BR[1]) * u1) / s;
+      W[2] = (BR[2] + (BR[5] - BR[2]) * u1) / s;
+      W[3] = 1;
+      W[4] = -1;
+      W[5] = -1;
+      W[6] = -0.3;
+      W[7] = 0.85;
+      arm(O_R);
+      W[0] = (BR[0] + (BR[3] - BR[0]) * u2) / s;
+      W[1] = (BR[1] + (BR[4] - BR[1]) * u2) / s;
+      W[2] = (BR[2] + (BR[5] - BR[2]) * u2) / s;
+      W[4] = 1;
+      arm(O_L);
+      const a = (t + seed * 40) * (6.283 / (1.5 + 0.5 * seed));
+      GO[O_CB] += 0.14 * k;
+      GO[O_CT] += 0.16 * Math.sin(a) * k;
+      GO[O_HP] += 0.22 * k;
+      GO[O_HY] += 0.1 * Math.sin(a - 0.5) * k;
+      break;
+    }
+    case M_SMOKE: {
+      GI[G_HY] *= s;
+      GI[G_HZ] *= s;
+      GI[G_HK] = hk * s;
+      cigAt();
+      GI[G_HY] /= s;
+      GI[G_HZ] /= s;
+      GI[G_HK] = hk;
+      W[0] = CG[0] / s;
+      W[1] = CG[1] / s;
+      W[2] = CG[2] / s;
+      W[3] = 1;
+      W[4] = -1;
+      W[5] = -1;
+      W[6] = -0.25;
+      W[7] = 0.55;
+      arm(O_R);
+      // the head goes up a little as the smoke comes out
+      GO[O_HP] -= 0.2 * CG[3] * k;
+      GO[O_HY] += 0.3 * Math.sin(t * 0.23 + seed * 9) * k;
+      break;
+    }
+    case M_PHONE: {
+      // (the rig's head point is at the level of the chin: the ear is well above it)
+      W[0] = -0.098 * hk;
+      W[1] = GI[G_HY] + 0.085 * hk;
+      W[2] = GI[G_HZ] + 0.03 * hk;
+      W[3] = 1;
+      W[4] = -0.55;
+      W[5] = -1;
+      W[6] = 0.35;
+      W[7] = 0.75;
+      arm(O_R);
+      GO[O_PROP] = k > 0.6 ? 1 : 0;
+      GO[O_HR] += 0.13 * k;
+      GO[O_HP] += (0.09 + 0.06 * Math.sin(t * 0.7 + seed * 5)) * k;
+      break;
+    }
+    default:
+      break;
+  }
+}
+
 const FIDGETS = 8;
 
 /**
@@ -369,7 +537,7 @@ export function fidget(free: number): boolean {
       // thinking: a hand at the chin
       if (!can) return false;
       W[0] = s * 0.018 * hk;
-      W[1] = hy - 0.075 * hk;
+      W[1] = hy - 0.012 * hk;
       W[2] = hz + 0.105 * hk;
       W[3] = 1;
       W[4] = s;

@@ -184,6 +184,13 @@ if (mode === 'grid') {
   const m = members[num('who', 0)];
   const dt = num('dt', 0.4);
   m.chat = q.get('chat') === '1' ? 1 : 0;
+  // &moment=1..5 a street moment's arms (scenes/moments.ts), &idle= its stance, &sitm=1 on a bench
+  if (q.has('moment')) {
+    m.moment = num('moment', 0);
+    m.momentK = 1;
+  }
+  if (q.has('idle')) m.forceIdle = num('idle', -1);
+  if (q.has('sitm')) m.sit = m.sitGoal = 1;
   m.speed = 0;
   m.amp = 0;
   T = num('t0', 100);

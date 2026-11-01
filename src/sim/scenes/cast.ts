@@ -24,6 +24,8 @@ const FAR = 170;
 
 export class Person {
   readonly m: Member;
+  /** the party it was made with (a scene may lend it to another's) */
+  readonly party0: Party;
   on = false;
   /** walking: flat array x, z of the points still to reach */
   route: number[] = [];
@@ -41,6 +43,7 @@ export class Person {
 
   constructor(m: Member) {
     this.m = m;
+    this.party0 = m.party;
   }
 
   get walking(): boolean {
@@ -66,6 +69,8 @@ export class Person {
     m.sitGoal = m.groundGoal = m.lieGoal = 0;
     m.work = 0;
     m.forceIdle = -1;
+    m.moment = 0;
+    m.momentK = 0;
     m.carry = 0;
     m.waveT = 0;
     m.headGoal = 0;

@@ -6,7 +6,7 @@
 //     --hours 12            the time of day
 //     --q "nosmalllife"     extra URL parameters
 //     --find birds[:kind]   frame the nearest group of birds to --at (kind 0 sparrow, 1 pigeon, 2 gull, 3 blackbird)
-//     --find cat | dog | talk | litter    the nearest of those
+//     --find cat | dog | talk | litter | moment    the nearest of those
 //     --walk 1.3            the camera walks at this speed (m/s) towards what it looks at, as someone would
 //     --shots 3             the sequence again at other places (--find only: the next nearest), one sheet per shot
 //     --follow              the camera stays on what it found (--find only), --yaw d fixes its side (else random)
@@ -63,7 +63,10 @@ try {
   }, [at[0], at[1], at[2], at[3], at[4], at[5], hours]);
   await page.addStyleTag({ content: '#ui{display:none!important}' });
   await page.waitForTimeout(3000);
-  if (args.pre) await page.evaluate(args.pre);
+  if (args.pre) {
+    await page.evaluate(args.pre);
+    await page.waitForTimeout(6000);
+  }
   const sheetPage = await browser.newPage({ viewport: { width: 800, height: 600 } });
   const taken = new Set();
   for (let s = 0; s < shots; s++) {
@@ -77,6 +80,10 @@ try {
           const list = [];
           if (w === 'birds') for (const g of L?.birds?.allGroups ?? []) if (sub === undefined || g.kind === +sub) if (g.birds[0]) list.push({ x: g.birds[0].x, z: g.birds[0].z, y: g.birds[0].y + 0.1, id: `${w}${Math.round(g.x)},${Math.round(g.z)}`, info: `kind ${g.kind} n ${g.birds.length}` });
           if (w === 'cat') for (const g of L?.cats?.cats ?? []) if (g.spot) list.push({ x: g.x, z: g.z, y: g.y + 0.2, id: `cat${L.cats.cats.indexOf(g)}`, info: `${g.spot.kind} coat ${g.spot.coat}`, ref: g, up: 0.2 });
+          if (w === 'moment') {
+            const S = c.ctx.services.scenes?.scenes?.find((q) => q.name === 'moments');
+            for (const q of S?.live ?? []) list.push({ x: q.a.m.x, z: q.a.m.z, y: q.a.m.y + 1, id: `mo${Math.round(q.x)},${Math.round(q.z)}`, info: q.a.doing, ref: q.a.m, up: 1, yawBase: (Math.atan2(q.spot.nx, q.spot.nz) * 180) / Math.PI });
+          }
           if (w === 'litter') for (const g of L?.litter?.spots ?? []) list.push({ x: g.x, z: g.z, y: 0.2, id: `lit${Math.round(g.x)},${Math.round(g.z)}`, info: g.info });
           if (w === 'dog' || w === 'talk') {
             for (const p of c.ctx.services.pedestrians._crowd.parties) {
@@ -91,7 +98,7 @@ try {
           list.sort((a, b) => Math.hypot(a.x - x, a.z - z) - Math.hypot(b.x - x, b.z - z));
           const f = list.find((q) => !used.includes(q.id));
           if (!f) return null;
-          const yaw = yaw0 ?? Math.random() * 360;
+          const yaw = (yaw0 ?? Math.random() * 360) + (f.yawBase ?? 0);
           c.view({ target: { x: f.x, y: f.y, z: f.z }, distance: dist, yaw, pitch });
           clearInterval(window.__followI);
           if (follow && f.ref) {

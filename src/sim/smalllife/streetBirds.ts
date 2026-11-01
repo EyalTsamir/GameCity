@@ -125,6 +125,8 @@ interface Group {
   /** another flit about */
   flitT: number;
   sinceShow: number;
+  /** gathered round someone on a bench with crumbs */
+  fed: boolean;
 }
 
 const angleDiff = (a: number, b: number): number => {
@@ -261,6 +263,8 @@ export class StreetBirds {
     const veg = this.ctx.services.vegetation as { trees?: { x: number; z: number; r: number; h: number }[] } | undefined;
     for (const t of veg?.trees ?? []) {
       if (t.h < 3.5) continue;
+      // sparrows feed under the street trees
+      if (this.ctx.occupancy.anyInCircle(t.x, t.z, 2.5, OCC.SIDEWALK)) add(t.x, t.z, 2.2, 0.45);
       const k = this.key(t.x, t.z, 24);
       let l = this.tGrid.get(k);
       if (!l) this.tGrid.set(k, (l = []));
@@ -319,7 +323,7 @@ export class StreetBirds {
     const f = occ.get(x, z);
     const paved = (f & (OCC.SIDEWALK | OCC.PAVED | OCC.PATH)) !== 0;
     const nearWater = occ.anyInCircle(x, z, 5, OCC.WATER);
-    let want = lure ? lure.w : paved ? 0.16 : 0.2;
+    let want = lure ? lure.w : paved ? 0.32 : 0.2;
     if (nearWater) want = Math.max(want, 0.3);
     if (roll > want) return null;
     let kind: number;
@@ -345,6 +349,7 @@ export class StreetBirds {
       hideZ: z,
       flitT: rnd(8, 30),
       sinceShow: 0,
+      fed: false,
     };
   }
 
@@ -450,6 +455,11 @@ export class StreetBirds {
     // up at dawn, gone at dusk; rain sends them in
     const want = clamp((u.uDaylight.value - 0.22) / 0.2, 0, 1) * (u.uRain.value > 0.35 ? 0 : 1);
     this.dayK += (want - this.dayK) * Math.min(1, dt * 0.5);
+    this.feedT -= dt;
+    if (this.feedT <= 0) {
+      this.feedT = 2;
+      this.serveFeeders();
+    }
     const h = Math.min(dt, 0.08);
     const steps = Math.min(4, Math.ceil(dt / 0.08));
     for (let i = 0; i < this.groups.length; i++) {
@@ -457,6 +467,51 @@ export class StreetBirds {
       g.sinceShow += dt;
       this.stepGroup(g, dt);
       for (let k = 0; k < g.birds.length; k++) for (let s = 0; s < steps; s++) this.stepBird(g.birds[k], g, h);
+    }
+  }
+
+  /** someone on a bench is throwing crumbs: the nearest flock comes over, in ones and twos, and stays round their feet */
+  private feedT = 3;
+  private serveFeeders(): void {
+    const M = this.movers,
+      F = M.feeders;
+    for (let i = 0; i < this.groups.length; i++) {
+      const g = this.groups[i];
+      if (!g.fed) continue;
+      let still = false;
+      for (let k = 0; k < M.nFeeders; k++) if ((F[k * 4] - g.x) ** 2 + (F[k * 4 + 1] - g.z) ** 2 < 9) still = true;
+      if (!still) g.fed = false;
+    }
+    for (let k = 0; k < M.nFeeders; k++) {
+      const x = F[k * 4] + F[k * 4 + 2] * 1.15,
+        z = F[k * 4 + 1] + F[k * 4 + 3] * 1.15;
+      if (this.blocked(x, z)) continue;
+      let best: Group | null = null;
+      let bd = 26 * 26;
+      let taken = false;
+      for (let i = 0; i < this.groups.length; i++) {
+        const g = this.groups[i];
+        const d = (g.x - x) ** 2 + (g.z - z) ** 2;
+        if (g.fed && d < 9) taken = true;
+        if (g.fed || g.away || g.kind === KIND.GULL || g.kind === KIND.BLACKBIRD) continue;
+        if (d < bd) {
+          bd = d;
+          best = g;
+        }
+      }
+      if (taken || !best) continue;
+      best.fed = true;
+      best.x = x;
+      best.z = z;
+      best.r = 0.75 + best.birds.length * 0.13;
+      best.perch = null;
+      for (let i = 0; i < best.birds.length; i++) {
+        const b = best.birds[i];
+        if (b.state !== S.Down) continue;
+        this.spot(best, b);
+        this.shortFlight(b, b.tx, this.groundY(b.tx, b.tz), b.tz);
+        b.wait = rnd(0, 7);
+      }
     }
   }
 

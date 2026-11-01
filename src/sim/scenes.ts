@@ -8,7 +8,7 @@
 //
 // One game hour = 40 s at 1× : scenes are scheduled in hours and timed in sim seconds.
 //
-// URL switches: ?noscenes (all), ?nomarketday, ?nodelivery, ?nowedding, ?nomusician, ?noparklife, ?nobalconylife.
+// URL switches: ?noscenes (all), ?nomarketday, ?nodelivery, ?nowedding, ?nomusician, ?noparklife, ?nobalconylife, ?nomoments.
 // Quality: low runs only the market (tarps + van, no crates) and deliveries.
 
 import * as THREE from 'three';
@@ -21,6 +21,7 @@ import { Wedding } from './scenes/wedding';
 import { Musician } from './scenes/musician';
 import { ParkLife } from './scenes/park';
 import { BalconyLife } from './scenes/balcony';
+import { StreetMoments } from './scenes/moments';
 
 export interface Scene {
   readonly name: string;
@@ -63,6 +64,7 @@ export default function create(ctx: CityContext): CityModule {
   build('nomusician', false, () => (musician = new Musician(ctx, cast, ctx.rng('scenes-musician'))));
   build('noparklife', false, () => new ParkLife(ctx, cast, ctx.rng('scenes-park')));
   build('nobalconylife', false, () => new BalconyLife(ctx, cast, ctx.rng('scenes-balcony')));
+  build('nomoments', false, () => new StreetMoments(ctx, cast, ctx.rng('scenes-moments')));
 
   // a scene that throws is switched off, the rest play on
   const drop = (s: Scene, err: unknown) => {

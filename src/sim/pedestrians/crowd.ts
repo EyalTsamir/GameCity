@@ -243,6 +243,9 @@ export class Member {
   /** café: what is on the table in front of them (tableware.ts part bits); 1 if that includes a cup */
   order = 0;
   cupOrder = 0;
+  /** a street moment under way (smalllife/gestures.ts M_*) and how far into it */
+  moment = 0;
+  momentK = 0;
   /** waiter: 0 hands free, 1 order pad, 2 carrying an order (cup / plate) */
   carry = 0;
   /** walking with something in the right hand: 0 nothing, 1 a takeaway coffee, 2 looking at the phone */
