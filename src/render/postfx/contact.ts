@@ -19,7 +19,7 @@ export function contactUniforms() {
     /** xyz view-space direction to the sun, w its share of the light on a sunlit surface (0: the lamps instead) */
     uCKey: new THREE.Uniform(new THREE.Vector4(0, 1, 0, 0)),
     /** x fade start, y fade end (m), z lamp gain, w half-res pixel size in m at 1 m */
-    uCFar: new THREE.Uniform(new THREE.Vector4(14, 26, 0, 0.002)),
+    uCFar: new THREE.Uniform(new THREE.Vector4(11, 20, 0, 0.002)),
     uCProj: new THREE.Uniform(new THREE.Matrix4()),
     uCV2W: new THREE.Uniform(new THREE.Matrix4()),
     uCW2V: new THREE.Uniform(new THREE.Matrix4()),
@@ -114,8 +114,8 @@ float thContact(ivec2 c, float d, float zc, vec3 n) {
   float thick = 0.3 + 0.04 * zc + eps;
   float hit = 0.0;
   P += n * (0.01 + 0.001 * zc);
-  for (int i = 1; i <= 8; i++) {
-    float s = float(i) / 8.0;
+  for (int i = 1; i <= 6; i++) {
+    float s = float(i) / 6.0;
     vec3 Q = P + L * (len * s * sqrt(s));
     float w = -Q.z;
     if (w <= 0.05) break;
@@ -169,8 +169,8 @@ export function updateContact(u: ContactUniforms, tint: THREE.Vector3, ctx: City
   u.uCV2W.value.copy(cam.matrixWorld);
   u.uCW2V.value.copy(cam.matrixWorldInverse);
   const h = u.uCFar.value;
-  h.x = 14 * zoom;
-  h.y = 26 * zoom;
+  h.x = 11 * zoom;
+  h.y = 20 * zoom;
   u.uCOn.value.x = cam.position.y > h.y + 12 ? 0 : h.y;
   h.z = key > 0.02 ? 0 : gain;
   // half-res pixel at 1 m
