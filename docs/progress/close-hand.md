@@ -42,5 +42,17 @@ Where the old merged trim had the same thing, `handDoorsLive()` leaves it out of
 ## How it was judged
 Sampling scripts in the session scratchpad, not kept: `handset.mjs` (the test set with extra viewpoints), `mkmarks.mjs` (two places for each kind from `?handspots`), `mkrandom.mjs` (doors and walls drawn at random). Doing it again takes `?handspots` and a few lines round `closeset.mjs`.
 
+## Cost (behind the power guard, baked, same page A/B hiding the layers, base = hidden)
+Overview +0.05 ±0.23 ms, downtown +0.02 ±0.09, street 5,1.5,-65 -0.16 ±0.77 (base 34.8), market -0.21 ±0.22 (base 33.8): nothing measurable, inside the budget. Walking 25 s with real keys: 38.97 ms with, 38.96 with `?nohand`, 0 freezes either way, slowest cell 4.2 ms once in an earlier run, 2.2 frame build in the last. Triangles in view: overview and downtown 0, market 92 K, old town at 3 m 128 K, on the track 9 K. `hitch.mjs`: 0 new programs mid-run. Far views draw nothing of this.
+
+## Checks at the last commit
+typecheck and build pass. `shot.mjs --view overview --speed 4 --wait 20000`: invariants {}, validate []. `?diorama`, `?quality=medium`, `?quality=low` at downtown: no console, frame or module errors, invariants {}. `ui-test --q noidle`: 73 passed, 1 failed, `kinds` (click follows), the known flake. **Not yet rerun alone: `node scripts/ui-test.mjs --steps kinds`** (session paused at the 5-hour quota limit).
+
+## Left
+- Rerun `kinds` alone. Glanced at low and medium only for errors, not by eye.
+- Not looked at by eye after the last changes: scraper, broom, sand bucket, panel bolts (the sample of the last round did not reach them: few of each, or none at the sampled places). Cables are on only a handful of terrace fronts.
+- The pale mullion on `hd-house-0` at 3 m and not at 1 m was not explained.
+- Not done: roofs up close, crates and pallets at works (flat at 1 m, another module), gutter brackets at the eaves.
+
 ## Log
 Round 1: kits, then door fields, ballast, painted pulls. Round 2: fresh sample of ordinary places, then life, irons, flaps, cables, every kind looked at once. Round 3: doors and walls at random, then the leaf coat, brick joints, cladding, fire points, the hidden office door.
