@@ -15,7 +15,7 @@ import { EMU } from '../rail/trainModels';
 import { composeMatrix } from '../rail/geo';
 import { Member, Party } from './crowd';
 import { makeLook, type Persona } from './looks';
-import { HAT_STYLES } from './shader';
+import { HAT_STYLES, PED_RAIL_Z } from './shader';
 import { F } from './figure';
 
 interface TrafficSvc {
@@ -60,6 +60,7 @@ export class Occupants {
   n = 0;
 
   constructor(ctx: CityContext) {
+    PED_RAIL_Z.value = ctx.plan.rail?.z ?? 1e6;
     this.ctx = ctx;
     this.svc = (ctx.services.traffic as TrafficSvc | undefined) ?? null;
   }
@@ -191,6 +192,12 @@ export class Occupants {
         l.top = 0x9fb8d6;
         l.bottom = 0x20242e;
         l.hair = 0x2a211b;
+        // his lamp is off after dark: only the desk and the pane behind him; the lamps of the saloon that light a train's passengers do not reach him
+        if (h > 18.5 || h < 6.3) {
+          l.top = dim(dim(l.top));
+          l.skin = dim(dim(l.skin));
+          l.bottom = dim(l.bottom);
+        }
         const st = l.style;
         if (st) {
           Object.assign(st, { hair: 'crop', hairLen: 0, hairVol: 0, hat: HAT_STYLES.NONE, tail: 0, jacketHem: -1, tie: true, collar: 1, hood: false, sleeve: 0.5, trouserEnd: 0.08, legwear: 0, vest: false });
