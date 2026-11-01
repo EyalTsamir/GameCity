@@ -89,6 +89,7 @@ void main() {
   bool lobbyWin = style > 6.5 && aDir.w > 2.6 && prof > 4.5 && prof < 5.5;
   if (shopWin) litI = lit * mix(0.62 + 0.25 * r2, 0.9 + 0.25 * r2, nightF);
   if (lobbyWin) { litI = lit * mix(0.55 + 0.2 * r2, 0.85 + 0.2 * r2, nightF); lcol = vec3(1.0, 0.82, 0.6); }
+  else if (style > 6.5) litI = lit * mix(0.5 + 0.2 * r2, 1.0 + 0.3 * r2, nightF);
   vLit = vec4(lcol * litI, lit);
   vRnd = vec4(r1, r2, r3, u1);
   // closed shops pull the roller shutter down (bhWall): nothing of the room shows on it
@@ -226,6 +227,22 @@ vec4 rmCard(vec3 ro, vec3 rd, float z, float S, float idA, float idB, float chan
   vec4 c = textureGrad(tCard, uv, gx, gy);
   vec3 rgb = c.rgb / max(c.a, 0.02);
   return vec4(rgb * rgb, c.a);
+}
+// the light fittings on a ceiling, at a point of it
+float rmFitting(vec2 cq, float lampK) {
+  if (lampK > 1.5 && lampK < 2.5) {
+    vec2 lp = abs(fract(cq / vec2(1.8, 2.4)) - 0.5) * vec2(1.8, 2.4);
+    return step(lp.x, 0.29) * step(lp.y, 0.59) * 1.6;
+  }
+  if (lampK > 2.5) {
+    vec2 lp = abs(fract(cq / vec2(2.4, 1.6)) - 0.5) * vec2(2.4, 1.6);
+    return step(lp.x, 0.05) * step(lp.y, 0.62) * 2.2;
+  }
+  if (lampK > 0.5) {
+    vec2 lp = (fract(cq / vec2(1.6, 1.8)) - 0.5) * vec2(1.6, 1.8);
+    return (1.0 - smoothstep(0.045, 0.07, length(lp))) * 2.6;
+  }
+  return 0.0;
 }
 // how much of a card stands over the floor at x along its plane: its silhouette from a small mip
 float rmCardFoot(float x, float S, float idA, float idB, float chance, float salt) {
@@ -409,6 +426,12 @@ void main() {
         float bord = 1.0 - smoothstep(-0.14, -0.12, max(rg.x, rg.y));
         c = mix(c, mix(rc * 0.6, vec3(0.75, 0.68, 0.55) * 0.75, bord * 0.0 + (1.0 - bord) * 0.85), rug);
       }
+      // a polished floor (tile, stone, lino, parquet) mirrors the fittings over it, more the flatter it is seen
+      if (floorK > 0.5 && floorK != 2.0 && lampK > 0.5) {
+        vec2 mq = fq + rd.xz / max(-rd.y, 0.05) * H;
+        float gl = (floorK > 4.5 ? 0.09 : 0.14) + 0.5 * pow(1.0 - min(-rd.y * 1.6, 1.0), 3.0);
+        selfL += rmFitting(mq, lampK) * gl * step(mq.y, D) * step(0.0, mq.x) * step(mq.x, W);
+      }
       // what stands in the room stands on the floor: its soft shadow
       float dz = abs(fq.y - zMid);
       if (dz < 0.8) c *= 1.0 - 0.62 * (1.0 - smoothstep(0.05, 0.8, dz)) * rmCardFoot(fq.x, 3.0, vCards.x, vCards.y, vMisc.z, 0.0);
@@ -416,17 +439,12 @@ void main() {
       // ceiling
       c = vec3(0.82, 0.8, 0.76);
       vec2 cq = hF.xz;
+      selfL = rmFitting(cq, lampK);
       if (lampK > 1.5 && lampK < 2.5) {
         vec2 cg = abs(fract(cq / 0.6) - 0.5);
         c *= 1.0 - 0.12 * step(0.46, max(cg.x, cg.y));
-        vec2 lp = abs(fract(cq / vec2(1.8, 2.4)) - 0.5) * vec2(1.8, 2.4);
-        selfL = step(lp.x, 0.29) * step(lp.y, 0.59) * 1.6;
-      } else if (lampK > 2.5) {
-        vec2 lp = abs(fract(cq / vec2(2.4, 1.6)) - 0.5) * vec2(2.4, 1.6);
-        selfL = step(lp.x, 0.05) * step(lp.y, 0.62) * 2.2;
-      } else if (lampK > 0.5) {
+      } else if (lampK > 0.5 && lampK < 1.5) {
         vec2 lp = (fract(cq / vec2(1.6, 1.8)) - 0.5) * vec2(1.6, 1.8);
-        selfL = (1.0 - smoothstep(0.045, 0.07, length(lp))) * 2.6;
         c *= 1.0 - 0.25 * (1.0 - smoothstep(0.07, 0.09, length(lp)));
       }
     }

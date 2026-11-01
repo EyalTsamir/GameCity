@@ -458,13 +458,13 @@ export function vase(k: Kit, r: R, x: number, y: number, z: number, h: number): 
 /** a person from the waist or thighs up (the card puts the counter or the chair in front) */
 export function person(k: Kit, r: R, x: number, y: number, z: number, h: number): void {
   const skin = pick(r, [0xe0b090, 0xc69070, 0x8c5a3c, 0xf0c8a8, 0x6a452e].map(hex));
-  const top = pick(r, PAL.cloth);
+  const top = pick(r, [0x2f3f5a, 0x6a2a2a, 0x3a4a3a, 0xd8d4c8, 0x444448, 0x7a6a4a, 0x1f2a38, 0x8c8c90].map(hex));
   const hair = pick(r, [0x1a1412, 0x3a2418, 0x6b4528, 0xb09060, 0x8a8a8a].map(hex));
   const headY = y + h - 0.12;
   // shoulders tapering down to the waist, arms, a neck, a head with hair
-  k.lathe(x, z, [[0.14, y], [0.16, y + (h - 0.3) * 0.5], [0.2, y + h - 0.34], [0.1, y + h - 0.27], [0.05, y + h - 0.24]], top, 7);
-  k.bar(x - 0.2, y + h - 0.32, x - 0.23, y + (h - 0.3) * 0.25, z + 0.02, 0.042, shade(top, 0.88));
-  k.bar(x + 0.2, y + h - 0.32, x + 0.23, y + (h - 0.3) * 0.25, z + 0.02, 0.042, shade(top, 0.88));
+  k.lathe(x, z, [[0.13, y], [0.14, y + (h - 0.3) * 0.5], [0.165, y + h - 0.36], [0.1, y + h - 0.28], [0.05, y + h - 0.25]], top, 7);
+  k.bar(x - 0.17, y + h - 0.33, x - 0.22, y + (h - 0.3) * 0.3, z + 0.04, 0.042, shade(top, 0.82));
+  k.bar(x + 0.17, y + h - 0.33, x + 0.22, y + (h - 0.3) * 0.3, z + 0.04, 0.042, shade(top, 0.82));
   k.cyl(x, y + h - 0.27, z, 0.042, 0.08, skin, 6);
   k.ball(x, headY, z + 0.01, 0.092, 0.115, 0.1, skin, 7);
   k.ball(x, headY + 0.05, z - 0.004, 0.1, 0.092, 0.098, hair, 7);
