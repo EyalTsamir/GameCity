@@ -6,7 +6,7 @@
 //     --hours 12            the time of day
 //     --q "nosmalllife"     extra URL parameters
 //     --find birds[:kind]   frame the nearest group of birds to --at (kind 0 sparrow, 1 pigeon, 2 gull, 3 blackbird)
-//     --find cat | dog | talk | litter | moment    the nearest of those
+//     --find cat | dog | talk | litter | moment | feed | waiter    the nearest of those
 //     --walk 1.3            the camera walks at this speed (m/s) towards what it looks at, as someone would
 //     --shots 3             the sequence again at other places (--find only: the next nearest), one sheet per shot
 //     --follow              the camera stays on what it found (--find only), --yaw d fixes its side (else random)
@@ -85,6 +85,17 @@ try {
             for (const q of S?.live ?? []) list.push({ x: q.a.m.x, z: q.a.m.z, y: q.a.m.y + 1, id: `mo${Math.round(q.x)},${Math.round(q.z)}`, info: q.a.doing, ref: q.a.m, up: 1, yawBase: (Math.atan2(q.spot.nx, q.spot.nz) * 180) / Math.PI });
           }
           if (w === 'litter') for (const g of L?.litter?.spots ?? []) list.push({ x: g.x, z: g.z, y: 0.2, id: `lit${Math.round(g.x)},${Math.round(g.z)}`, info: g.info });
+          if (w === 'feed' || w === 'waiter') {
+            for (const p of c.ctx.services.pedestrians._crowd.parties) {
+              if (p.state === 'gone') continue;
+              for (const m of p.members) {
+                if (!m.present) continue;
+                if (w === 'feed' && m.moment !== 6) continue;
+                if (w === 'waiter' && !(p.staff && p.stall === undefined && m.carry > 0)) continue;
+                list.push({ x: m.x, z: m.z, y: m.y + 0.8, id: `p${p.id}`, info: `carry ${m.carry}`, ref: m, up: 0.8, yawBase: (m.yaw * 180) / Math.PI });
+              }
+            }
+          }
           if (w === 'dog' || w === 'talk') {
             for (const p of c.ctx.services.pedestrians._crowd.parties) {
               if (p.state === 'gone') continue;
@@ -176,7 +187,8 @@ try {
   }
   const st = await page.evaluate(() => {
     const c = window.__city;
-    return { stats: c.stats().smalllife ?? c.stats(), inv: c.invariants(), frameErrors: c.frameErrors?.length ?? 0 };
+    const sc = c.stats().scenes ?? {};
+    return { stats: { ...(c.stats().smalllife ?? {}), mOut: sc.momentsOut, mStarted: sc.momentsStarted, mSpots: sc.momentSpots }, inv: c.invariants(), frameErrors: c.frameErrors?.length ?? 0 };
   });
   console.log(JSON.stringify({ stats: st.stats, inv: st.inv, frameErrors: st.frameErrors, errors: errs.slice(0, 6) }).slice(0, 1500));
 } finally {

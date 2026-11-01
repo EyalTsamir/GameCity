@@ -1064,7 +1064,9 @@ export class StreetBirds {
   }
 
   stats(): Record<string, number> {
-    return { birdGroups: this.groups.length, birds: this.drawn, birdFlushes: this.flushes };
+    let fed = 0;
+    for (let i = 0; i < this.groups.length; i++) if (this.groups[i].fed) fed++;
+    return { birdGroups: this.groups.length, birds: this.drawn, birdFlushes: this.flushes, birdsFed: fed, feeders: this.movers.nFeeders };
   }
 
   get allGroups(): readonly { kind: number; x: number; z: number; birds: readonly unknown[] }[] {
