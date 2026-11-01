@@ -73,6 +73,8 @@ export class TrainRenderer {
   private closeLim = 0;
   /** cars at the close level last frame */
   closeDrawn = 0;
+  /** false: every car on the far level (for measuring: abprof flips it in one page, `__city.ctx.services.rail.render.closeOn`) */
+  closeOn = true;
   private m4 = new THREE.Matrix4();
   private v = new THREE.Vector3();
   private glowBase: number;
@@ -219,7 +221,7 @@ export class TrainRenderer {
           // the nearest point of the car; a car half in a tunnel mouth stays on the far level (the close programs have no discard)
           const dx = Math.max(0, Math.abs(c.x - cp.x) - c.half);
           const d2 = dx * dx + (rz - cp.z) ** 2 + (c.y + 2 - cp.y) ** 2;
-          if (d2 < this.closeLim && cl.n < CLOSE_CAP[pid] && c.x - c.half > this.sim.opt.clipX0 && c.x + c.half < this.sim.opt.clipX1) p = cl;
+          if (this.closeOn && d2 < this.closeLim && cl.n < CLOSE_CAP[pid] && c.x - c.half > this.sim.opt.clipX0 && c.x + c.half < this.sim.opt.clipX1) p = cl;
         }
         if (p.n >= CAP[pid]) continue;
         const i = p.n++;

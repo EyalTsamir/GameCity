@@ -30,6 +30,7 @@ import { addLampLights } from '../core/lampLight';
 export interface RailService {
   trains(): number;
   sim: RailSim;
+  render: TrainRenderer;
 }
 
 export default function create(ctx: CityContext): CityModule {
@@ -151,7 +152,7 @@ export default function create(ctx: CityContext): CityModule {
   ctx.scene.add(root);
 
   const emit = (name: string, payload: unknown) => ctx.events.emit(name, payload);
-  const service: RailService = { trains: () => sim.trains.length, sim };
+  const service: RailService = { trains: () => sim.trains.length, sim, render: trains };
   ctx.services.rail = service;
 
   // ── picker
