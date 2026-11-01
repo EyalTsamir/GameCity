@@ -375,34 +375,6 @@ export function brickJoints(s: HandSink, f: { w: number; h: number; y: number; o
   }
 }
 
-/** the sheets of a smooth cladding: the joints between them, as a ratio on the wall */
-export function panelJoints(s: HandSink, L: number, top: number): void {
-  const pw = L / Math.max(1, Math.round(L / 1.2)),
-    ph = 2.4;
-  s.ink(0x77767a);
-  for (let u = pw; u < L - 0.1; u += pw) s.plate(u - 0.005, u + 0.005, 0, top, 0.0012);
-  for (let y = ph; y < top; y += ph) s.plate(0, L, y - 0.005, y + 0.005, 0.0012);
-}
-
-/** and the fixings at their corners, each a washer and a head */
-export function panelBolts(s: HandSink, L: number, top: number, c: number): void {
-  const pw = L / Math.max(1, Math.round(L / 1.2)),
-    ph = 2.4;
-  for (let u = 0; u < L + 0.01; u += pw) {
-    for (let y = 0; y < top + 0.01; y += ph) {
-      for (const su of [-0.04, 0.04]) {
-        for (const sy of [-0.04, 0.04]) {
-          const a = u + su,
-            b = y + sy;
-          if (a < 0.02 || a > L - 0.02 || b < 0.08 || b > top) continue;
-          s.ink(c, 1.5).rough(0.42).disc(a, b, 0, 0.0014, 0.0085, 8, 0.2);
-          s.ink(c, 0.86).rough(0.42).disc(a, b, 0.0014, 0.0042, 0.0052, 6, 0.3);
-        }
-      }
-    }
-  }
-}
-
 /** a roller door's controls on the wall beside it: up, stop, down, and the conduit to the motor */
 export function rollerControl(s: HandSink, u: number, top: number, seed: number): void {
   const y = 1.32;

@@ -154,6 +154,20 @@ export default function create(ctx: CityContext): CityModule {
     return f & OCC.SIDEWALK ? SIDEWALK_Y : f & (OCC.PAVED | OCC.PATH) && terrain ? terrain.height(x, z) : NaN;
   };
 
+  /** the same for something standing right against a wall, whose own cell (0.5 m) counts as the building: ask a little further out */
+  const pavedOut = (x: number, z: number, nx: number, nz: number): number => {
+    const y = paved(x + nx * 0.55, z + nz * 0.55);
+    return Number.isNaN(y) ? paved(x + nx * 0.8, z + nz * 0.8) : y;
+  };
+  /** a yard or a garden counts too, for what can stand on anything: the terrain, unless something else is there */
+  const groundOut = (x: number, z: number, nx: number, nz: number): number => {
+    const gx = x + nx * 0.55,
+      gz = z + nz * 0.55;
+    const f = occ.get(gx, gz);
+    if (f & (OCC.BUILDING | OCC.WATER | OCC.SOLID | OCC.ROAD | OCC.RAIL) || !terrain) return NaN;
+    return f & OCC.SIDEWALK ? SIDEWALK_Y : terrain.height(gx, gz);
+  };
+
   // ── doors
   const doorsOfLot = new Map<number, HandDoor[]>();
   for (const d of buildings.handDoors) {
@@ -174,7 +188,7 @@ export default function create(ctx: CityContext): CityModule {
         if (life && (lot.kind === 'office' || lot.kind === 'tower' || lot.kind === 'hotel') && hash(d.seed, d.lot, 3) % 3 !== 0) {
           const ou = -0.55,
             oo = 0.32;
-          const y = paved(d.x + d.tx * ou + d.nx * oo, d.z + d.tz * ou + d.nz * oo);
+          const y = pavedOut(d.x + d.tx * ou, d.z + d.tz * ou, d.nx, d.nz);
           if (!Number.isNaN(y)) {
             put(MID, cx, cz, (s) => K.ashStand(on(s), ou, y, oo));
             mark('ash', d, ou, y + 0.6);
@@ -186,10 +200,8 @@ export default function create(ctx: CityContext): CityModule {
       put(FINE, cx, cz, (s) => D.solidDoorFine(on(s), d));
       // the mat, where there is something to lie on
       if (!d.plain) {
-        const mx = cx + d.nx * 0.28,
-          mz = cz + d.nz * 0.28;
         const st = buildings.handSteps.find((q) => Math.hypot(q.x - cx, q.z - cz) < 0.9);
-        const y = st ? st.y : paved(mx, mz);
+        const y = st ? st.y : pavedOut(cx, cz, d.nx, d.nz);
         const depth = st ? st.d - 0.03 : 0.5;
         if (!Number.isNaN(y) && d.seed % 8 !== 7 && depth > 0.3) {
           const yaw = (((d.seed * 37) % 11) - 5) * 0.006;
@@ -217,16 +229,16 @@ export default function create(ctx: CityContext): CityModule {
           const r = hash(d.seed, d.lot, 11) % 100;
           const old = lot.district === 'oldtown' || lot.kind === 'townhouse';
           const gap = 0.2;
-          const floor = (u: number, o: number): number => (st ? st.y : paved(d.x + d.tx * u + d.nx * o, d.z + d.tz * u + d.nz * o));
+          const floor = (u: number): number => (st ? st.y : pavedOut(d.x + d.tx * u, d.z + d.tz * u, d.nx, d.nz));
           if (old && r < 24 && !st) {
-            const fy = floor(-gap, 0.09);
+            const fy = floor(-gap);
             if (!Number.isNaN(fy)) {
               put(MID, cx, cz, (s) => K.bootScraper(on(s), -gap, fy, 0.09));
               mark('scraper', d, -gap, fy + 0.15);
             }
           } else if (r >= 24 && r < 40 && lot.kind !== 'kiosk') {
             const u = st && !deck ? -0.12 : -gap,
-              fy = floor(u, 0.17);
+              fy = floor(u);
             if (!Number.isNaN(fy)) {
               put(FINE, cx, cz, (s) => K.milkBottles(on(s), u - 0.05, fy, 0.17, 2 + (d.seed % 2)));
               mark('milk', d, u, fy + 0.15);
@@ -237,13 +249,13 @@ export default function create(ctx: CityContext): CityModule {
             mark('boots', d, -0.36, st.y + 0.2);
           } else if (!st && r >= 66 && r < 76) {
             const u = d.w + 0.3,
-              fy = floor(u, 0.2);
+              fy = floor(u);
             if (!Number.isNaN(fy)) {
               put(MID, cx, cz, (s) => K.broom(on(s), u, fy, 0));
               mark('broom', d, u, fy + 0.6);
             }
           } else if (r >= 76 && r < 84 && (deck || !st)) {
-            const fy = floor(-0.3, 0.3);
+            const fy = floor(-0.3);
             if (!Number.isNaN(fy)) {
               put(FINE, cx, cz, (s) => K.parcel(on(s), -0.3, fy, 0.18, d.seed));
               mark('parcel', d, -0.3, fy + 0.2);
@@ -254,10 +266,24 @@ export default function create(ctx: CityContext): CityModule {
           }
         }
       }
+      // the back door of a home is where the broom and the boots live
+      if (life && d.plain && HOMES.has(lot.kind)) {
+        const r = hash(d.seed, d.lot, 17) % 100;
+        if (r < 60) {
+          const u = r < 35 ? d.w + 0.3 : -0.42;
+          const y = groundOut(d.x + d.tx * u, d.z + d.tz * u, d.nx, d.nz);
+          if (!Number.isNaN(y)) {
+            const c = [0x25402d, 0x1a1b1d, 0x3b2c20][d.seed % 3];
+            if (r < 35) put(MID, cx, cz, (s) => K.broom(on(s), u, y, 0));
+            else put(MID, cx, cz, (s) => K.boots(on(s), u, y, 0.14, c));
+            mark(r < 35 ? 'broom' : 'backboots', d, u, y + 0.3);
+          }
+        }
+      }
       if (life && WORKS.has(lot.kind) && hash(d.seed, d.lot, 5) % 2 === 0) {
         const ou = d.w + 0.42,
           oo = 0.2;
-        const y = paved(d.x + d.tx * ou + d.nx * oo, d.z + d.tz * ou + d.nz * oo);
+        const y = groundOut(d.x + d.tx * ou, d.z + d.tz * ou, d.nx, d.nz);
         if (!Number.isNaN(y)) {
           put(MID, cx, cz, (s) => K.sandBucket(on(s), ou, y, oo));
           mark('bucket', d, ou, y + 0.2);
@@ -668,19 +694,6 @@ export default function create(ctx: CityContext): CityModule {
         }
       }
 
-      // smooth cladding on what was built in sheets
-      if (office || works) {
-        for (const w of out) {
-          if ((w.pattern & 15) !== WALLPAT.SMOOTH || w.grid || w.L < 1.2) continue;
-          const top = Math.min(w.y1, 4.9);
-          const [x, z] = pos(w, w.L / 2);
-          const c = w.color;
-          if (stains) put(STAIN, x, z, (s) => W.panelJoints(onWall(w, s), w.L, top));
-          put(FINE, x, z, (s) => W.panelBolts(onWall(w, s), w.L, top, c));
-          mark('panels', w, w.L / 2, 1.3);
-        }
-      }
-
       // air bricks: the floor of an old house breathes through them, low down and at even steps
       if ((home || kind === 'school' || kind === 'church' || kind === 'townhall') && !(shop && kind !== 'townhouse')) {
         for (const w of out) {
@@ -759,7 +772,7 @@ export default function create(ctx: CityContext): CityModule {
       }
 
       // the older streets' cables, clipped along the front above the ground floor windows
-      if (kind === 'townhouse' && !shop && lot.seed % 2 === 0 && lot.height > 4.5) {
+      if (kind === 'townhouse' && !shop && hash(lotId, 9) % 2 === 0 && lot.height > 4.5) {
         const doorTop = Math.max(0, ...(doorsOfLot.get(lotId) ?? []).map((d) => d.h)) + 0.22;
         for (const w of out) {
           if (!isFront(w) || w.L < 1.2) continue;
