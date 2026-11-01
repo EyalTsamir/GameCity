@@ -102,14 +102,22 @@ const FRAG_COLOR = /* glsl */ `
   } else if (pat > 0.5) {
     // plane: flaking jigsaw of cream, olive and grey-brown in soft drifts, each flake a little proud of the one under it
     // each flake its own colour, so every edge in the colour is a flake's; over that a soft drift (the same numbers averaged by the mipmaps)
+    // (the edges torn by the other tile: one texel is 1-2 px from a metre, and a threshold shows them as steps)
+    vec4 tj = texture2D(tBarkP, vBUv + vB.w + (tf.rg - 0.5) * vec2(0.014, 0.022));
     float drift = (texture2D(tBarkP, vBUv * 0.31 + vB.w * 1.7, 3.5).a - 0.5) * 2.6;
-    float id = tp.a;
+    float id = tj.a;
     vec3 cream = vec3(0.5, 0.48, 0.34), olive = vec3(0.26, 0.27, 0.165), grey = vec3(0.3, 0.27, 0.215), tan = vec3(0.4, 0.345, 0.225);
     vec3 m = id < 0.3 ? mix(grey, olive, smoothstep(0.1, 0.3, id)) : id < 0.62 ? mix(olive, tan, smoothstep(0.34, 0.6, id)) : mix(tan, cream, smoothstep(0.64, 0.84, id));
+    // no flake is one flat colour: it weathers in soft clouds, the drift pulling neighbours together
+    vec4 t2 = texture2D(tBarkF, vBUv * vec2(1.7, 2.3) + 0.21);
+    vec4 t3 = texture2D(tBarkF, vBUv * vec2(0.37, 0.53) + 0.63);
+    m = mix(m, mix(olive, cream, clamp(0.45 + drift * 0.55, 0.0, 1.0)), 0.32);
+    m *= (0.74 + 0.52 * t3.a) * (0.82 + 0.36 * t2.a);
+    m = mix(m, m * vec3(1.06, 1.0, 0.86), smoothstep(0.35, 0.75, t2.a));
     m *= 1.0 + 0.22 * clamp(drift, -1.0, 1.0);
-    float step0 = smoothstep(0.42, 0.66, tp.b);
+    float step0 = smoothstep(0.42, 0.66, tj.b);
     c = m * clamp(c.g / 0.23, 0.3, 1.15) * (0.9 + 0.2 * tf.a) * (0.82 + 0.18 * step0);
-    bkSlope = (tp.rg - 0.5) * 2.0 * 0.8 + (tf.rg - 0.5) * 0.1;
+    bkSlope = (tj.rg - 0.5) * 2.0 * 0.7 + (t2.rg - 0.5) * 0.22 + (tf.rg - 0.5) * 0.1;
     bkCav = 0.78 + 0.22 * step0;
   } else if (pat > 0.4) {
     // pine: thick long plates, red-brown in the crack, weathered grey on the face
@@ -179,7 +187,7 @@ function barkMaterial(ctx: CityContext, tiles: BarkTiles): THREE.MeshStandardMat
       .replace('#include <normal_fragment_maps>', FRAG_NORMAL)
       .replace('#include <aomap_fragment>', FRAG_AO);
   };
-  mat.customProgramCacheKey = () => 'closenature-bark-6';
+  mat.customProgramCacheKey = () => 'closenature-bark-7';
   patchLampMaterial(mat);
   nearDither(mat, RADIUS);
   return mat;
@@ -503,19 +511,22 @@ function buildLimb(s: Soup, t: TrunkSpec, seed: number): void {
     const e2x = dy * e1z - dz * e1y,
       e2y = dz * e1x - dx * e1z,
       e2z = dx * e1y - dy * e1x;
-    const rr = t.r0 + (t.rTop - t.r0) * f;
+    let rr = t.r0 + (t.rTop - t.r0) * f;
     arc += Math.hypot(x - lx, y - ly, z - lz);
     lx = x;
     ly = y;
     lz = z;
+    // it starts inside the stem and thinner, so it grows out of it instead of showing a lip like a collar
+    const back = k === 0 ? t.r0 * 2.2 : 0;
+    if (k === 0) rr *= 0.72;
     for (let i = 0; i <= cols; i++) {
       const th = ((i % cols) / cols) * 6.283185;
       const c = Math.cos(th),
         sn = Math.sin(th);
       const w = q * 3;
-      P[w] = x + (e1x * c + e2x * sn) * rr;
-      P[w + 1] = y + (e1y * c + e2y * sn) * rr;
-      P[w + 2] = z + (e1z * c + e2z * sn) * rr;
+      P[w] = x - dx * back + (e1x * c + e2x * sn) * rr;
+      P[w + 1] = y - dy * back + (e1y * c + e2y * sn) * rr;
+      P[w + 2] = z - dz * back + (e1z * c + e2z * sn) * rr;
       C[w] = t.r;
       C[w + 1] = t.g;
       C[w + 2] = t.b;

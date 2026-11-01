@@ -146,7 +146,7 @@ function needleGeometry(): THREE.BufferGeometry {
   return g;
 }
 
-/** a thin stem, unit height, leaning nowhere: three sides, two lengths */
+/** a thin stem, unit height, leaning nowhere: three sides, six lengths, so it bows instead of kinking */
 function stemGeometry(): THREE.BufferGeometry {
   const P: number[] = [],
     N: number[] = [],
@@ -154,20 +154,22 @@ function stemGeometry(): THREE.BufferGeometry {
     A: number[] = [],
     L: number[] = [],
     I: number[] = [];
-  for (let k = 0; k <= 2; k++) {
-    const f = k / 2;
+  const LEN = 6;
+  for (let k = 0; k <= LEN; k++) {
+    const f = k / LEN;
     const r = 0.012 * (1 - 0.65 * f);
-    const bow = 0.06 * f * f;
+    const bow = 0.09 * f * f + 0.012 * Math.sin(f * 8.5);
+    const wan = 0.016 * Math.sin(f * 5.3 + 1);
     for (let i = 0; i < 3; i++) {
       const a = (i / 3) * 6.283;
-      P.push(Math.cos(a) * r + bow, f, Math.sin(a) * r);
+      P.push(Math.cos(a) * r + bow, f, Math.sin(a) * r + wan - 0.016 * Math.sin(1));
       N.push(Math.cos(a), 0.1, Math.sin(a));
       C.push(1, 1, 1);
       A.push(1, 0.8 + 0.3 * f);
       L.push(0, 0.5);
     }
   }
-  for (let k = 0; k < 2; k++) {
+  for (let k = 0; k < LEN; k++) {
     for (let i = 0; i < 3; i++) {
       const a = k * 3 + i,
         b = k * 3 + (i + 1) % 3;
