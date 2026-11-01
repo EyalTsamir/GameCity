@@ -32,6 +32,9 @@ const FRAMES = {
   head: { yaw: 28, z: 1, x: 0.72, y: 0.72, d: 1.0, pitch: 12 },
   tail: { yaw: 155, z: -1, x: 0.72, y: 0.85, d: 1.0, pitch: 10 },
   door: { yaw: 88, z: -0.05, x: 1, y: 0.72, d: 1.2, pitch: 10 },
+  mirror: { yaw: 150, z: 0.4, x: 1.1, y: 1.0, d: 0.9, pitch: 6 },
+  inside: { yaw: 90, z: 0.1, x: 0.2, y: 0.8, d: 1.1, pitch: 28 },
+  under: { yaw: 80, z: 0.0, x: 1, y: 0.12, d: 2.2, pitch: 2 },
 };
 const kinds = list(args.kinds ?? 'compact,hatch,sedan,suv,estate,mpv,delivery,lorry,bus,icecream');
 const frames = list(args.shots ?? 'front,rear,win,screen,wheel,head,tail,door');
@@ -39,7 +42,7 @@ const hours = list(args.hours ?? '12,21.5').map(Number);
 const width = parseInt(args.width ?? '1920', 10);
 const height = parseInt(args.height ?? '1025', 10);
 const tile = parseInt(args.tile ?? '480', 10);
-const settle = parseInt(args.settle ?? '350', 10);
+const settle = parseInt(args.settle ?? '1100', 10);
 const outDir = path.resolve(args.out ?? 'shots/veh');
 fs.mkdirSync(outDir, { recursive: true });
 const base = (args.url ?? 'http://127.0.0.1:5173/').replace(/\/?$/, '/');

@@ -152,6 +152,7 @@ export const CLOSE_FRAG_DETAIL = /* glsl */ `
     float hT = clamp( ( p.y - floorY ) / max( roof - floorY, 0.1 ), 0.0, 1.0 );
     float ao = mix( 0.22, 0.62, hT * hT ) * ( 0.75 + 0.35 * on.y );
     ao += 0.18 * smoothstep( hw * 0.55, hw, abs( p.x ) ) * step( belt, p.y );
+    if ( vDetB.w > 0.5 ) ao = ao * 1.5 + 0.1;
     thCabAO = clamp( ao, 0.0, 1.0 );
     thCoatK = 0.0;
     // a saloon's strip lamps, on after dark while it runs
@@ -240,7 +241,7 @@ export const CLOSE_FRAG_DETAIL = /* glsl */ `
     vec3 rd9 = normalize( p - vCamObj.xyz );
     vec3 r9 = reflect( rd9, normalize( vObjN.xyz ) );
     float y9 = r9.y + 0.05 * sin( r9.x * 37.0 + ph * 40.0 ) * 0.4;
-    thLensAlb = mix( vec3( 0.12, 0.11, 0.1 ), mix( vec3( 0.32, 0.31, 0.3 ), vec3( 0.95, 1.05, 1.15 ), smoothstep( 0.06, 0.24, y9 ) ), smoothstep( -0.04, 0.01, y9 ) );
+    thLensAlb = mix( vec3( 0.26, 0.25, 0.24 ) + 0.04 * sin( r9.z * 31.0 ), mix( vec3( 0.32, 0.31, 0.3 ), vec3( 0.95, 1.05, 1.15 ), smoothstep( 0.06, 0.24, y9 ) ), smoothstep( -0.04, 0.01, y9 ) );
     thLensEmit = thLensAlb * vec3( 0.0 );
   }
   if ( vCoat > 0.5 && vCoat < 1.5 && vGain < 3.0 ) thCoatK *= 0.55; // satin black trim: its sheen, not a mirror of the sky
@@ -274,6 +275,13 @@ ${WEAR}
     float frit = smoothstep( 0.93, 0.945, y01 + 0.02 * cell );
     thTrans *= 1.0 - frit;
     diffuseColor.rgb *= 1.0 - frit;
+    // the road tax disc in the passenger's corner, a paper square seen from outside
+    vec2 sk = vec2( p.x + vDetA.x * 0.72, y01 - 0.74 );
+    if ( abs( sk.x ) < 0.035 && abs( sk.y ) < 0.05 ) {
+      thTrans *= 0.05;
+      float ring = 1.0 - smoothstep( 0.0, 0.004, abs( length( sk * vec2( 1.0, 0.62 ) ) - 0.02 ) );
+      diffuseColor.rgb = mix( vec3( 0.62, 0.66, 0.6 ), vec3( 0.1, 0.25, 0.42 ), ring );
+    }
   } else if ( abs( on.x ) > 0.5 ) {
     // side glass: rain has dried in runs under the top seal, the rear panes darker on some
     if ( p.z < vDetB.y && thH1( ph * 17.9 ) > 0.55 && cls < 2.5 ) thTrans *= 0.55;

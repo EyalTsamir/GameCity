@@ -603,6 +603,18 @@ export function createVehicleMaterial(
       // G1: glass (gain 3.6) mirrors the street at about 60 %: at full gain the grey sky veil hid the cabin (smoked plastic)
       if ( uVehGlass > 0.5 && vGain > 3.0 ) clearcoatRadiance *= 0.6;
     #endif
+    #ifdef VEH_NEAR
+      // after dark the lacquer holds the street's glow: a warm band at the height of the lit windows, broken into their rows, soft
+      // (a sharp pattern on a flat door magnifies into polka dots)
+      if ( vCoat > 1.5 || vGain > 3.0 ) {
+        vec3 thRn = inverseTransformDirection( reflect( -geometryViewDir, geometryClearcoatNormal ), viewMatrix );
+        float thE = thRn.y + 0.12;
+        float thAz = atan( thRn.x, thRn.z );
+        float thBand = smoothstep( 0.0, 0.1, thE ) * smoothstep( 0.62, 0.22, thE );
+        float thW = thVN( vec3( thAz * 9.0, thE * 14.0, 2.0 ) );
+        clearcoatRadiance += uLights * vec3( 1.0, 0.76, 0.48 ) * thBand * ( 0.05 + 0.3 * smoothstep( 0.45, 0.85, thW ) ) * ( vGain > 3.0 ? 1.0 : 0.85 );
+      }
+    #endif
     #ifdef VEH_CLOSE
       totalEmissiveRadiance += thLensEmit + thLensAlb * ( irradiance + iblIrradiance ) * RECIPROCAL_PI;
     #endif

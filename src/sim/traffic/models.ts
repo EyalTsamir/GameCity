@@ -1595,7 +1595,8 @@ const lensO = (o: PartOpts, det: Det | undefined): PartOpts => (det ? { ...o, de
  *  corner radius r): conformed to the surface as a grid, `off` proud, u running from the car's centre outwards.
  *  With sd = 1 and a negative inner x it spans the centre line. */
 function endQuad(s: CarShape, sign: number, sd: number, ib: Pt, ob: Pt, ot: Pt, it: Pt, off: number, nu = 6, nv = 2, r = 0): THREE.BufferGeometry {
-  const g = new THREE.PlaneGeometry(1, 1, LOD === 0 ? nu : Math.min(nu, 3), LOD === 0 ? nv : 1);
+  const dense = CLOSE ? 3 : 1;
+  const g = new THREE.PlaneGeometry(1, 1, LOD === 0 ? nu * dense : Math.min(nu, 3), LOD === 0 ? nv : 1);
   const pos = g.attributes.position,
     nor = g.attributes.normal,
     uv = g.attributes.uv;
@@ -2022,6 +2023,7 @@ function loftBody(b: Builder, s: CarShape, doors4: boolean, chrome = false, bump
     b.add(p.bumper, bumper === 'paint' ? { color: '#ffffff', paint: true, rough: 0.8 } : bumper === 'chrome' ? { color: CHROME, rough: 0.3 } : { color: '#3a3d42', rough: 1.25 });
   if (p.gap) b.add(p.gap, { color: '#0b0c0e', rough: 1.8 });
   if (CLOSE && closeVehOn('vehcabin')) buildCarCabin(b, s, cabin, doors4);
+  if (CLOSE && closeVehOn('vehwear')) bodyKit(b, s, doors4);
   for (const sd of [1, -1]) {
     // door mirror at the base of the A pillar: a dark sail on the door, a stalk out and up, a painted shell
     // rounded at the front and open at the back, where the glass sits in a black rim
@@ -2073,6 +2075,65 @@ function loftBody(b: Builder, s: CarShape, doors4: boolean, chrome = false, bump
   }
   const topZ = (s.wsTop + s.rwTop) / 2;
   return { topY: topAt(s, topZ) + 0.033, topZ, topW: 2 * (s.W / 2 - s.tumble - 0.07), topD: s.wsTop - s.rwTop };
+}
+
+/** close level: what you only notice standing beside a car: side repeater, fuel flap, washer jets, roof gutters, a lock, a rear wiper */
+function bodyKit(b: Builder, s: CarShape, doors4: boolean): void {
+  const hw = s.W / 2;
+  const ra = s.wheelR + 0.075;
+  const DK: PartOpts = { color: '#0d0e10', rough: 1.5 };
+  for (const sd of [1, -1] as const) {
+    // repeater on the front wing
+    const rz = s.axF - ra - 0.1,
+      ry = s.belt - 0.11;
+    b.add(flankDecal(s, sd, rz - 0.024, rz + 0.024, ry - 0.009, ry + 0.009, 0.0045), { color: AMBER, light: sd > 0 ? LIGHT_BLINK_L : LIGHT_BLINK_R, rough: 0.3 });
+    b.add(flankDecal(s, sd, rz - 0.03, rz + 0.03, ry - 0.014, ry + 0.014, 0.003), DK);
+    // the lock barrel beside the front door handle
+    const lz = s.pillarB + 0.28;
+    const lk = new THREE.CircleGeometry(0.011, 8);
+    lk.rotateY((sd * Math.PI) / 2);
+    lk.translate(sd * (flankX(s, lz, s.belt - 0.105).x + 0.006), s.belt - 0.105, lz);
+    b.add(lk, { color: '#9a9ea3', rough: 0.4, finish: 'chrome' });
+    // the roof gutter: a black moulding along the top of the door frames
+    const zt0 = s.rwTop + 0.08,
+      zt1 = s.wsTop - 0.02;
+    const nSeg = 8;
+    let px = 0,
+      py = 0,
+      pz = 0;
+    for (let k = 0; k <= nSeg; k++) {
+      const z = zt0 + ((zt1 - zt0) * k) / nSeg;
+      const x = hw - s.tumble - 0.012;
+      const y = topSurfaceY(s, x, z) + 0.002;
+      if (k > 0) b.add(tube(sd * px, py, pz, sd * x, y, z, 0.0055), { color: '#111214', rough: 1 });
+      px = x;
+      py = y;
+      pz = z;
+    }
+  }
+  // fuel flap on the driver's side, over the rear arch: its shut line and a finger recess
+  const fz = s.axR + 0.02,
+    fy = s.belt - 0.16,
+    fw = 0.085,
+    fh = 0.08,
+    t = 0.0022;
+  for (const [z0, z1, y0, y1] of [[fz - fw, fz + fw, fy - fh - t, fy - fh + t], [fz - fw, fz + fw, fy + fh - t, fy + fh + t], [fz - fw - t, fz - fw + t, fy - fh, fy + fh], [fz + fw - t, fz + fw + t, fy - fh, fy + fh]] as const) b.add(flankDecal(s, 1, z0, z1, y0, y1, 0.0028), DK);
+  b.add(flankDecal(s, 1, fz + fw - 0.05, fz + fw - 0.012, fy - 0.014, fy + 0.014, 0.0028), DK);
+  // washer jets on the bonnet
+  for (const x of [0.24, -0.24]) {
+    const z = s.wsBase + 0.13;
+    const jet = new THREE.SphereGeometry(0.011, 6, 4);
+    jet.scale(1.3, 0.7, 1.7);
+    jet.translate(x, topSurfaceY(s, x, z) + 0.004, z);
+    b.add(jet, { color: '#141517', rough: 0.8 });
+  }
+  // a rear wiper where the rear screen stands upright
+  if (s.rwBase < -s.L / 2 + 0.55) {
+    const y0 = topAt(s, s.rwBase + 0.02) + 0.06,
+      z0 = s.rwBase - 0.03;
+    b.add(tube(0, y0, z0, 0.36, y0 + 0.2, z0 + 0.012, 0.007), { color: '#17181a', rough: 1.1 });
+  }
+  void doors4;
 }
 
 /** close level: an adder for cabin parts, detail class 7 with the cabin's numbers */
@@ -3151,7 +3212,7 @@ function bus(): THREE.BufferGeometry {
     const a = s > 0 ? 0.62 : -0.98,
       c = s > 0 ? 0.98 : -0.62;
     b.add(onEnd(surf, 1, a - 0.015, c + 0.015, 0.71, 0.895, 0.004, 3), { color: '#16181b', rough: 0.9 });
-    b.add(onEnd(surf, 1, a, c, 0.725, 0.88, 0.009, 3), lensO({ color: '#ffffff', light: LIGHT_HEAD, rough: 0.15, decal: R_BUS_HEAD }, lensAt((a + c) / 2, 0.8, surf((a + c) / 2, 0.8, 1).z, (c - a) / 2, 0.08, 1)));
+    b.add(onEnd(surf, 1, a, c, 0.725, 0.88, 0.009, CLOSE ? 6 : 3), lensO({ color: '#ffffff', light: LIGHT_HEAD, rough: 0.15, decal: R_BUS_HEAD }, lensAt((a + c) / 2, 0.8, surf((a + c) / 2, 0.8, 1).z, (c - a) / 2, 0.08, 1)));
     b.add(onEnd(surf, 1, s > 0 ? 1.02 : -1.2, s > 0 ? 1.2 : -1.02, 0.74, 0.85, 0.006, 3), { color: AMBER, light: s > 0 ? LIGHT_BLINK_L : LIGHT_BLINK_R });
     // rear clusters wrapping the corners: tail + brake lens, blinker above, reverse lamp below, in dark housings
     endLamp(b, surf, -1, s, 0.97, 1.18, 0.78, 1.12, { color: '#ffffff', light: LIGHT_TAIL, rough: 0.2, decal: R_TAIL });

@@ -192,6 +192,11 @@ export default function create(ctx: CityContext): CityModule {
     /** scenes: kerb stops (sim.ts KerbStop) */
     sim,
     busCount: () => sim.busCount(),
+    /** the close level on or off, for A/B in one page; closeStats: vehicles at it, triangles of one of each kind */
+    closeLevel: (on: boolean) => {
+      renderer.closeOn = on;
+    },
+    closeStats: () => ({ drawn: renderer.closeDrawn, tris: renderer.modelTris() }),
     /** the lens: distance to the first vehicle along a ray (ui/camera.ts autofocus) */
     rayHit: (o: THREE.Vector3, d: THREE.Vector3, maxT: number) => renderer.rayHit(o, d, maxT),
     /** everything parked (scripts/closeset.mjs frames one) */

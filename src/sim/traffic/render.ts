@@ -74,6 +74,8 @@ export class VehicleRenderer {
   private closeLim = 0;
   /** vehicles at the close level last frame */
   closeDrawn = 0;
+  /** false: nothing goes to the close level (A/B in one page, scripts/abprof.mjs) */
+  closeOn = true;
   readonly parked: ParkedCar[];
   /** parked cars: model index, precomputed instance data */
   private pModel: Int32Array;
@@ -82,6 +84,8 @@ export class VehicleRenderer {
   private pA2: Float32Array;
   private pCol: Float32Array;
   private pools: THREE.InstancedMesh;
+  private ground: THREE.InstancedMesh | null = null;
+  private nGround = 0;
   private poolMat: THREE.MeshBasicMaterial;
   private flares: THREE.Points;
   private flareMat: THREE.PointsMaterial;
@@ -244,6 +248,56 @@ export class VehicleRenderer {
     this.pools.visible = false;
     this.group.add(this.pools);
 
+    // the soft dark on the ground under each nearby vehicle (and at its wheels): a multiply over whatever it stands on. Lamp light
+    // on the ground has no shadows of its own, and by day a car standing in another's shade otherwise floats
+    if (closeVeh(ctx, 'vehground')) {
+      const gg = new THREE.PlaneGeometry(1, 1);
+      gg.rotateX(-Math.PI / 2);
+      const gm = new THREE.ShaderMaterial({
+        name: 'traffic-ground',
+        transparent: true,
+        depthWrite: false,
+        blending: THREE.CustomBlending,
+        blendEquation: THREE.AddEquation,
+        blendSrc: THREE.DstColorFactor,
+        blendDst: THREE.ZeroFactor,
+        polygonOffset: true,
+        polygonOffsetFactor: -3,
+        polygonOffsetUnits: -3,
+        fog: false,
+        vertexShader: /* glsl */ `
+          varying vec2 vQ;
+          varying vec2 vH;
+          void main() {
+            vQ = position.xz;
+            vH = 0.5 * vec2( length( instanceMatrix[0].xyz ), length( instanceMatrix[2].xyz ) );
+            gl_Position = projectionMatrix * viewMatrix * instanceMatrix * vec4( position, 1.0 );
+          }`,
+        fragmentShader: /* glsl */ `
+          varying vec2 vQ;
+          varying vec2 vH;
+          void main() {
+            vec2 h = vH - 0.34; // the body's half size in plan (the quad is 34 cm bigger all round)
+            vec2 p = vQ * 2.0 * vH;
+            vec2 d = abs( p ) - h + 0.25;
+            float s = length( max( d, 0.0 ) ) + min( max( d.x, d.y ), 0.0 ) - 0.25;
+            float k = 1.0 - smoothstep( -0.42, 0.3, s );
+            // the wheels press a darker line into it
+            vec2 w = vec2( abs( p.x ) - ( h.x - 0.12 ), abs( abs( p.y ) - h.y * 0.62 ) );
+            float t = exp( -( w.x * w.x / 0.012 + w.y * w.y / 0.05 ) );
+            gl_FragColor = vec4( vec3( 1.0 - clamp( 0.56 * k + 0.3 * t, 0.0, 0.86 ) ), 1.0 );
+          }`,
+      });
+      this.ground = new THREE.InstancedMesh(gg, gm, 90);
+      this.ground.name = 'traffic-ground';
+      this.ground.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+      this.ground.frustumCulled = false;
+      this.ground.renderOrder = 1;
+      this.ground.count = 0;
+      this.ground.visible = false;
+      this.group.add(this.ground);
+    }
+
     // point-sprite flares at the lamps (night only)
     this.maxFlares = 4 * 260;
     this.flarePos = new Float32Array(this.maxFlares * 3);
@@ -325,7 +379,7 @@ export class VehicleRenderer {
   /** the layer (model mi, level for squared camera distance d2) a new instance goes to; null when full */
   private slot(mi: number, d2: number, seated = false): Layer | null {
     const C = this.closeRow[mi];
-    if (C && d2 < this.closeLim && C.n < C.mesh.instanceMatrix.count) {
+    if (C && this.closeOn && d2 < this.closeLim && C.n < C.mesh.instanceMatrix.count) {
       this.lodCounts[0]++;
       return C;
     }
@@ -391,6 +445,7 @@ export class VehicleRenderer {
     const kb = 1 - Math.exp(-Math.min(realDt, 0.1) * 14);
     for (const row of this.layers) for (const L of row) L.n = 0;
     for (const L of this.closeRow) if (L) L.n = 0;
+    this.nGround = 0;
     this.lodCounts[0] = this.lodCounts[1] = this.lodCounts[2] = 0;
     const reach = this.ctx.renderer.shadowMap.enabled ? this.shadowReachPerM() : 0;
     const cp = this.ctx.camera.position;
@@ -449,6 +504,7 @@ export class VehicleRenderer {
         draw = this.frustum.intersectsSphere(this.sphere);
       }
       const L = draw ? this.slot(sp.modelIndex, d2, V.seated) : null;
+      if (V.onScreen && !V.twoWheel && !V.offLane && d2 < this.lim[0]) this.putGround(V.x, V.z, V.yaw, sp.width, sp.len);
       if (L) {
         const idx = L.n++;
         this.eul.set(V.pitch, V.yaw, V.roll);
@@ -537,6 +593,10 @@ export class VehicleRenderer {
       const d2 = (cp.x - p.x) ** 2 + (cp.y - 1) ** 2 + (cp.z - p.z) ** 2;
       const L = this.slot(this.pModel[i], d2);
       if (!L) continue;
+      if (p.roll === undefined && d2 < this.lim[0]) {
+        const sp = SPECS[p.model];
+        this.putGround(p.x, p.z, p.yaw, sp.width, sp.len);
+      }
       const idx = L.n++;
       (L.mesh.instanceMatrix.array as Float32Array).set(this.pMat.subarray(i * 16, i * 16 + 16), idx * 16);
       (L.mesh.instanceColor!.array as Float32Array).set(this.pCol.subarray(i * 3, i * 3 + 3), idx * 3);
@@ -561,6 +621,16 @@ export class VehicleRenderer {
           a.needsUpdate = true;
         }
       }
+    if (this.ground) {
+      this.ground.count = this.nGround;
+      this.ground.visible = this.nGround > 0;
+      if (this.nGround > 0) {
+        const a = this.ground.instanceMatrix;
+        a.clearUpdateRanges();
+        a.addUpdateRange(0, this.nGround * 16);
+        a.needsUpdate = true;
+      }
+    }
     let cn = 0;
     for (const L of this.closeRow) {
       if (!L) continue;
@@ -608,6 +678,33 @@ export class VehicleRenderer {
         a.needsUpdate = true;
       }
     }
+  }
+
+  /** one vehicle's patch of dark on the ground */
+  private putGround(x: number, z: number, yaw: number, w: number, l: number): void {
+    if (!this.ground || this.nGround >= 90) return;
+    const a = this.ground.instanceMatrix.array as Float32Array;
+    const o = this.nGround++ * 16;
+    const c = Math.cos(yaw),
+      s = Math.sin(yaw),
+      W = w + 0.68,
+      L = l + 0.68;
+    a[o] = c * W;
+    a[o + 1] = 0;
+    a[o + 2] = -s * W;
+    a[o + 3] = 0;
+    a[o + 4] = 0;
+    a[o + 5] = 1;
+    a[o + 6] = 0;
+    a[o + 7] = 0;
+    a[o + 8] = s * L;
+    a[o + 9] = 0;
+    a[o + 10] = c * L;
+    a[o + 11] = 0;
+    a[o + 12] = x;
+    a[o + 13] = ROAD_Y + 0.016;
+    a[o + 14] = z;
+    a[o + 15] = 1;
   }
 
   private blinker(V: Vehicle): number {
