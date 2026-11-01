@@ -349,6 +349,10 @@ export default function create(ctx: CityContext): CityModule {
         mark('rollup', f, f.w * 0.7, 1.3);
       }
       if (f.kind === 'garage') mark('garage', f, f.w / 2, 1.1);
+      if (f.kind === 'brickface' && closeHand(ctx, 'handstains')) {
+        put(STAIN, cx, cz, (s) => W.brickJoints(on(s), f));
+        mark('brickface', f, f.w / 2, 1.2);
+      }
     }
   }
 

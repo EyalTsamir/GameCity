@@ -148,6 +148,8 @@ export function genIndustrial(g: Gen): void {
           b = Math.min(uB, u + 0.3);
         if (ops.some((o) => b > o.u - o.w / 2 - 0.05 && a < o.u + o.w / 2 + 0.05)) continue;
         sideBox(t, sg, a, b, 0, INS - 0.03, 0, H - 0.3);
+        const hf = anchors.handFrame(sg, a);
+        if (hf) anchors.handSpots.push({ ...hf, kind: 'brickface', w: b - a, h: H - 0.3, y: 0, o: INS - 0.03, color: 0, seed: g.seed + i });
       }
       setCol(t, trimC);
       sideBox(t, sg, uA, uB, 0, INS - 0.02, lowTop - 0.15, lowTop + 0.1, true);
@@ -156,7 +158,11 @@ export function genIndustrial(g: Gen): void {
       // ?nomonitor: a dark engineering-brick plinth
       if (MASS.monitor) {
         setCol(t, shade(wallC, 0.62));
-        for (const [a, b] of splitAround(uA, uB, ops)) sideBox(t, sg, a, b, 0, INS - 0.05, 0, 0.7);
+        for (const [a, b] of splitAround(uA, uB, ops)) {
+          sideBox(t, sg, a, b, 0, INS - 0.05, 0, 0.7);
+          const hf = anchors.handFrame(sg, a);
+          if (hf) anchors.handSpots.push({ ...hf, kind: 'brickface', w: b - a, h: 0.7, y: 0, o: INS - 0.05, color: 0, seed: g.seed });
+        }
       }
     } else if (fullyExposed) {
       // concrete base course + top flashing

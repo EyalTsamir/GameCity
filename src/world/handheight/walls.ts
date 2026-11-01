@@ -347,3 +347,30 @@ export function stickers(s: HandSink, u: number, y: number, o: number, seed: num
     }
   }
 }
+
+/** the joints of a brick face whose base is one flat colour, as a ratio on it: courses, perpends and some darker bricks. Only up to where a walker sees them. */
+export function brickJoints(s: HandSink, f: { w: number; h: number; y: number; o: number; seed: number }): void {
+  const course = 0.075,
+    brick = 0.225,
+    o = f.o + 0.0012;
+  const top = Math.min(f.y + f.h, 3.6);
+  const n = Math.floor((top - f.y) / course);
+  for (let i = 0; i < n; i++) {
+    const y = f.y + i * course;
+    s.ink(0xb3ab9f);
+    s.plate(0, f.w, y, y + 0.0085, o);
+    let u = (i % 2) * brick * 0.5 - brick;
+    let k = 0;
+    while (u < f.w) {
+      const a = Math.max(0, u),
+        b = Math.min(f.w, u + brick);
+      if (b > a) {
+        if (u > 0) s.ink(0xb3ab9f).plate(u - 0.0045, u + 0.0045, y, y + course, o);
+        const h = Math.imul(f.seed + i * 131 + k * 17, 2654435761) >>> 24;
+        if (h < 46) s.ink(h < 16 ? 0xc0b8ac : 0xd9d3c9).plate(a + 0.005, b - 0.005, y + 0.009, y + course - 0.001, o);
+      }
+      u += brick;
+      k++;
+    }
+  }
+}
