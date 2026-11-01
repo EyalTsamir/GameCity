@@ -328,7 +328,7 @@ export function endRing(s: CarShape, sign: number): Float64Array {
   return P;
 }
 
-export function loftCar(s: CarShape, lod: number): LoftParts {
+export function loftCar(s: CarShape, lod: number, fine = false): LoftParts {
   const h = s.L / 2;
   const ra = s.wheelR + 0.075;
   // stations: uniform + the edges the window outlines and the arches run along + dense end zones
@@ -340,7 +340,7 @@ export function loftCar(s: CarShape, lod: number): LoftParts {
     keys.push(s.pillarB - 0.05, s.pillarB + 0.05);
     if (s.pillarC !== undefined) keys.push(s.pillarC - 0.035, s.pillarC + 0.035);
   }
-  const arch = lod === 0 ? [-1, -0.82, -0.58, -0.3, 0, 0.3, 0.58, 0.82, 1] : lod === 1 ? [-1, -0.62, 0, 0.62, 1] : [-1, 0, 1];
+  const arch = fine ? [-1, -0.98, -0.92, -0.83, -0.71, -0.56, -0.38, -0.2, 0, 0.2, 0.38, 0.56, 0.71, 0.83, 0.92, 0.98, 1] : lod === 0 ? [-1, -0.82, -0.58, -0.3, 0, 0.3, 0.58, 0.82, 1] : lod === 1 ? [-1, -0.62, 0, 0.62, 1] : [-1, 0, 1];
   for (const az of [s.axF, s.axR]) for (const d of arch) keys.push(az + d * ra);
   const ends = lod === 0 ? [0.006, 0.02, 0.04, 0.065, 0.1, 0.14, 0.19, 0.25, 0.32, 0.4] : lod === 1 ? [0.03, 0.1, 0.22, 0.38] : [0.08, 0.25];
   for (const d of ends) keys.push(h - d, -h + d);
