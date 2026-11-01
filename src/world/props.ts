@@ -7,6 +7,7 @@
 // Draw calls: furniture (1, merged, per-vertex roughness/metalness + night emission),
 // glass (1, transparent), light pools + halos (1, additive). No shadow casters.
 
+import { closeHand } from '../core/closehand';
 import { binSimple, bollardSimple, newsstandSimple, phoneboxSimple, planterBoxSimple } from './props/legacy';
 import * as THREE from 'three';
 import type { CityContext, CityModule } from './../core/context';
@@ -104,6 +105,8 @@ export default function create(ctx: CityContext): CityModule {
     return kd;
   };
   SK.setYardDetail(boxHunt(ctx, 'yardkit'));
+  // what yard goods are made of up close (?nohandyard): boards of a crate, film over a load, bricks in a pack, turns on a reel
+  const yardGoods = closeHand(ctx, 'handyard') ? yardNear : (): undefined => undefined;
   GK.setBinDetail(boxHunt(ctx, 'wheeliebin'));
   SK.setCourtTableDetail(boxHunt(ctx, 'courttable'));
   setHydrantDetail(boxHunt(ctx, 'hydrantkit'));
@@ -342,6 +345,7 @@ export default function create(ctx: CityContext): CityModule {
     const vegTrees = (ctx.services.vegetation as { trees?: { x: number; z: number; r: number; h: number }[] } | undefined)?.trees ?? [];
     scatter = planScatter({ plan, occ, walkAt: (x, z) => (layout.walk.get(x, z) & MASK_WALK) !== 0, trees: vegTrees, discs: layout.furniture });
     const stationBlock = plan.lots.find((l) => l.kind === 'station')?.blockId ?? -1;
+    if (ctx.debug.params.has('handspots')) (ctx.services as Record<string, unknown>).yardspots = scatter;
     for (const it of scatter) {
       const srng = new Rng(it.seed || 1);
       const y = H(it.x, it.z) + 0.02;
@@ -416,7 +420,7 @@ export default function create(ctx: CityContext): CityModule {
           break;
         case 'palletGoods':
           at(kf);
-          SK.palletGoods(kf, srng);
+          SK.palletGoods(kf, srng, yardGoods(it.x, y, it.z, it.yaw));
           break;
         case 'drums':
           at(kf);
@@ -432,11 +436,11 @@ export default function create(ctx: CityContext): CityModule {
           break;
         case 'crates':
           at(kf);
-          SK.crates(kf, srng);
+          SK.crates(kf, srng, yardGoods(it.x, y, it.z, it.yaw));
           break;
         case 'cableReel':
           at(kf);
-          SK.cableReel(kf, srng);
+          SK.cableReel(kf, srng, yardGoods(it.x, y, it.z, it.yaw));
           break;
         case 'gasCage':
           at(kf);

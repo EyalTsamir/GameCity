@@ -53,6 +53,7 @@ export function shedServices(g: Gen, sg: SideGeom, uA: number, uB: number, ops: 
     cur = Math.max(cur, o.u + o.w / 2 + 0.8);
   }
   if (uB - 0.5 > cur + 1.3) spans.push([cur, uB - 0.5]);
+  let fireDone = false;
   for (const [a, b] of spans) {
     let u = a + 0.5 + rng.next() * 0.4;
     while (u < b - 0.5) {
@@ -87,14 +88,17 @@ export function shedServices(g: Gen, sg: SideGeom, uA: number, uB: number, ops: 
         sideBox(t, sg, u - 0.42, u + 0.42, 0, 0.004, Math.max(0.9, y - 1.0), y);
         u += 1.9;
       } else if (kind === 2) {
-        // fire point: red box with a white stripe, standpipe to the ground
-        setCol(t, col('#b3261f'));
-        sideBox(t, sg, u - 0.28, u + 0.28, 0, 0.14, 1.1, 1.75);
-        t.cylinder(sx(sg, u, 0.05), sz(sg, u, 0.05), 0.035, 0, 1.1, 8, false);
-        setCol(t, col('#efe9dc'));
-        sideBox(t, sg, u - 0.2, u + 0.2, 0.14, 0.143, 1.55, 1.66);
-        const hf = anchors.handFrame(sg, u - 0.28);
-        if (hf) anchors.handSpots.push({ ...hf, kind: 'firepoint', w: 0.56, h: 0.65, y: 1.1, o: 0.14, color: 0xb3261f, seed: g.seed });
+        // fire point: red box with a white stripe, standpipe to the ground; one to a wall (four in a row read as a shop display)
+        if (!fireDone) {
+          fireDone = true;
+          setCol(t, col('#b3261f'));
+          sideBox(t, sg, u - 0.28, u + 0.28, 0, 0.14, 1.1, 1.75);
+          t.cylinder(sx(sg, u, 0.05), sz(sg, u, 0.05), 0.035, 0, 1.1, 8, false);
+          setCol(t, col('#efe9dc'));
+          sideBox(t, sg, u - 0.2, u + 0.2, 0.14, 0.143, 1.55, 1.66);
+          const hf = anchors.handFrame(sg, u - 0.28);
+          if (hf) anchors.handSpots.push({ ...hf, kind: 'firepoint', w: 0.56, h: 0.65, y: 1.1, o: 0.14, color: 0xb3261f, seed: g.seed });
+        }
         u += 1.4;
       } else if (!brick) {
         // gas / water riser: painted pipe from a meter box to the conduit level

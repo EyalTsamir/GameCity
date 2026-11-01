@@ -395,6 +395,7 @@ export default function create(ctx: CityContext): CityModule {
     handSpots: anchors.handSpots,
     handSteps: anchors.handSteps,
     handTops: anchors.handTops,
+    handGutters: anchors.handGutters,
     laundry: anchors.laundry,
     vents: anchors.vents,
     setStaticLaundry(on: boolean) {

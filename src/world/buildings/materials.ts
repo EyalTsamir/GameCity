@@ -25,7 +25,7 @@
 //
 // URL switches (read in buildings.ts): ?legacyfacade = the original shell shader (A/B).
 
-import { handDoorsLive } from '../../core/closehand';
+import { handDoorsLive, handRoofsLive } from '../../core/closehand';
 import * as THREE from 'three';
 import { FAR_BAKE_OUT, FAR_FRAG_MAIN, FAR_FRAG_PARS, FAR_VERT_MAIN, FAR_VERT_PARS, NEAR_VERT_MAIN, NEAR_VERT_PARS } from './farFacade';
 import type { GlobalUniforms } from '../../core/uniforms';
@@ -182,6 +182,7 @@ export interface BuildingMaterials {
     /** G1: glass as a material — per-bay shop / lobby interiors, per-pane tint + thin edge; ?noglassvar sets 0 */
     uGlassVar: { value: number };
     uHandPaint: { value: number };
+    uHandRoof: { value: number };
     /** box hunt: furnished shop interiors (deli goods + counter); ?nointeriors / low quality sets 0 */
     uBhInt: { value: number };
     /** near-LOD sill geometry: (centre of its range, range m); the shader drops its own sill box inside */
@@ -373,6 +374,7 @@ uniform float uWallRelief;
 uniform float uPlinth;
 uniform float uGlassVar;
 uniform float uHandPaint;
+uniform float uHandRoof;
 uniform float uBhInt;
 // near-window detail fades to the far average between these cell sizes (cells per pixel: 0.3 = 3.3 px per bay)
 uniform vec2 uDetailPx;
@@ -2416,6 +2418,33 @@ void bhRoof(inout vec3 albedo, inout float rough, inout vec3 emit, vec3 N, vec3 
     moss = max(moss, northR * (1.0 - smoothstep(0.0, 1.4, p.y)) * 0.55 * age); // damp eaves
     albedo = mix(albedo, mix(vec3(0.17, 0.21, 0.09), vec3(0.3, 0.32, 0.14), grain), clamp(moss * (slate ? 0.6 : 0.85), 0.0, 0.85));
     rough = slate ? 0.7 : 0.88;
+    // up close (a pixel under a centimetre) what a tile is made of: grit, an edge that is not ruled, the dark lap, moss in it, lichen rings
+    float nearT = (uWallRelief > 0.5 && uDetail > 0.5 && uHandRoof > 0.5) ? 1.0 - smoothstep(0.004, 0.011, max(fp.x, fp.y)) : 0.0;
+    if (nearT > 0.001) {
+      vec4 n1 = texture2D(uBhNoise, p * 1.9 + so);     // a ~8 mm, g ~13 cm
+      vec4 n2 = texture2D(uBhNoise, p * 0.71 + so.yx); // a ~2 cm, g ~35 cm
+      float wob = (n1.g - 0.5) * 0.09 + (n2.a - 0.5) * 0.05;
+      float butt = 1.0 - smoothstep(0.9 + wob, 0.975 + wob, fy);
+      float side = min(fx, 1.0 - fx) * tw;
+      float joint = smoothstep(0.002, 0.009 + 0.008 * n2.a, side);
+      vec3 tint = mix(vec3(0.95, 1.0, 1.06), vec3(1.07, 1.0, 0.92), fract(tn * 7.31));
+      vec3 cN = albedo * tint * (0.82 + 0.36 * n1.a) * (0.9 + 0.2 * n2.a) * mix(0.5, 1.0, butt) * mix(0.42, 1.0, joint);
+      // the lower edge of a tile is paler where the weather gets it
+      cN *= 1.0 + 0.16 * (1.0 - smoothstep(0.0, 0.05 + 0.04 * n2.a, fy));
+      // moss cushions where the courses lap, thicker on older and shaded slopes
+      float cush = smoothstep(0.54, 0.7, n2.g * 0.3 + n1.a * 0.2 + nF.g * 0.3 + nM.g * 0.2 + 0.08 * age + 0.1 * northR) * smoothstep(0.72, 0.95, fy + wob * 2.0);
+      cN = mix(cN, vec3(0.085, 0.125, 0.045) * (0.7 + 0.9 * n1.a), cush * 0.75);
+      // lichen in patches: small flat rings a shade off the tile, gathered where the slope stays damp
+      vec2 lc = p * 4.3;
+      vec2 lcl = floor(lc);
+      float lh = bhHash12(lcl + seed);
+      float lr = length(fract(lc) - 0.5 - (vec2(lh, fract(lh * 9.1)) - 0.5) * 0.5);
+      float lr0 = 0.06 + 0.15 * fract(lh * 3.7) + (n2.a - 0.5) * 0.1;
+      float ringL = step(0.8, lh) * smoothstep(0.5, 0.66, nF.g * 0.55 + nM.g * 0.45) * (1.0 - smoothstep(lr0 - 0.05, lr0, lr)) * (0.3 + 0.7 * smoothstep(lr0 * 0.3, lr0 * 0.85, lr));
+      cN = mix(cN, cN * 0.55 + (slate ? vec3(0.26, 0.27, 0.23) : vec3(0.3, 0.27, 0.14)), ringL * (0.25 + 0.55 * n1.a));
+      albedo = mix(albedo, cN, nearT);
+      rough = mix(rough, clamp(rough + 0.18 * (n1.a - 0.5) + 0.2 * cush + 0.1 * ringL, 0.3, 1.0), nearT);
+    }
     if (uWallRelief > 0.5 && uDetail > 0.5) {
       // each course leans out toward its butt (the visible thickness of the overlap), clay pantiles roll
       // across their width; a per-tile tilt so no two tiles catch the light alike
@@ -2609,6 +2638,7 @@ export function createMaterials(g: GlobalUniforms, opts: { legacy?: boolean; wea
     uPlinth: { value: opts.plinth === false ? 0 : 1 },
     uGlassVar: { value: opts.glassVar === false ? 0 : 1 },
     uHandPaint: { value: handDoorsLive() ? 0 : 1 },
+    uHandRoof: { value: handRoofsLive() ? 1 : 0 },
     uBhInt: { value: opts.interiors === false ? 0 : 1 },
     uCloseWin: { value: 0 },
     uGeoWin: { value: new THREE.Vector4(0, -1e5, 0, 0) },
@@ -2655,6 +2685,7 @@ export function createMaterials(g: GlobalUniforms, opts: { legacy?: boolean; wea
         uPlinth: uniforms.uPlinth,
         uGlassVar: uniforms.uGlassVar,
         uHandPaint: uniforms.uHandPaint,
+        uHandRoof: uniforms.uHandRoof,
         uBhInt: uniforms.uBhInt,
         uGeoWin: uniforms.uGeoWin,
         uCloseWin: uniforms.uCloseWin,

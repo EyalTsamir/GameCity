@@ -579,8 +579,139 @@ export function pallets(k: Kit, rng: Rng): void {
   }
 }
 
-/** Pallet with goods: shrink-wrapped load, sacks or brick packs (sometimes double stacked). */
-export function palletGoods(k: Kit, rng: Rng): void {
+/** the four faces of a block w × h × d standing at y: `face` draws one, given its width; origin at the middle of the face's foot, facing +Z */
+function round4(kd: Kit, y: number, w: number, d: number, face: (W: number, side: number) => void): void {
+  for (let i = 0; i < 4; i++) {
+    const W = i & 1 ? d : w,
+      out = i & 1 ? w / 2 : d / 2;
+    kd.sh.push().local(0, y, 0, 0, (i * Math.PI) / 2);
+    kd.sh.push().local(0, 0, out);
+    face(W, i);
+    kd.sh.pop();
+    kd.sh.pop();
+  }
+}
+
+/** one plate on a face: only its front is drawn */
+const FRONT = 1 | 2 | 4 | 16 | 32;
+
+/** a plate on a top: only its upper side is drawn */
+const UP = 1 | 4 | 8 | 16 | 32;
+
+/** cartons under stretch film: their joints show through, the film lies in paler overlapping bands, tight over the corners */
+function wrapNear(kd: Kit, y: number, w: number, d: number, h: number, col: string, seed: number): void {
+  const c = new THREE.Color(col);
+  const joint = '#' + c.clone().multiplyScalar(0.58).getHexString(),
+    film = '#' + c.clone().lerp(new THREE.Color('#f4f7f8'), 0.45).getHexString(),
+    film2 = '#' + c.clone().lerp(new THREE.Color('#ffffff'), 0.7).getHexString();
+  const rows = Math.max(2, Math.round(h / 0.27));
+  round4(kd, y, w, d, (W, side) => {
+    const sh = kd.sh;
+    kd.m(joint, 'plastic');
+    for (let r = 1; r < rows; r++) sh.box(0, (h * r) / rows, 0.0012, W - 0.01, 0.005, 0.0024, FRONT);
+    const cols = Math.max(2, Math.round(W / 0.38));
+    for (let r = 0; r < rows; r++)
+      for (let i = 1; i < cols; i++) sh.box(-W / 2 + (W * (i + (r & 1 ? 0.5 : 0))) / cols, (h * (r + 0.5)) / rows, 0.0012, 0.005, h / rows - 0.004, 0.0024, FRONT);
+    // the film: bands from the machine's turns
+    let fy = 0.02 + ((seed + side) % 5) * 0.012;
+    let n = 0;
+    while (fy < h - 0.04) {
+      const bh = Math.min(0.05 + ((seed * 3 + n * 7 + side) % 5) * 0.012, h - fy);
+      kd.m(n % 2 ? film : film2, 'plastic');
+      sh.box(0, fy + bh / 2, 0.003, W + 0.004, bh, 0.002, FRONT);
+      fy += bh + 0.05 + ((seed + n * 5) % 7) * 0.016;
+      n++;
+    }
+    // where the film goes tight round the corner
+    kd.m(film2, 'plastic');
+    for (const u of [-W / 2 + 0.008, W / 2 - 0.008]) sh.box(u, h / 2, 0.0044, 0.016, h - 0.01, 0.002, FRONT);
+    // the delivery note, under the film on one side
+    if (side === seed % 4) {
+      kd.m('#f1efe6', 'plastic');
+      sh.box(-W * 0.18, h * 0.62, 0.0052, 0.21, 0.15, 0.0012, FRONT);
+      kd.m('#26282a', 'plastic');
+      for (let i = 0; i < 4; i++) sh.box(-W * 0.18 - 0.02, h * 0.62 + 0.05 - i * 0.03, 0.0062, 0.14, 0.008, 0.0006, FRONT);
+    }
+  });
+  // on top: the cartons' joints and tape under the last turns of film
+  const sh = kd.sh;
+  kd.m(joint, 'plastic');
+  for (const x of [-w / 6, w / 6]) sh.box(x, y + h + 0.001, 0, 0.006, 0.002, d - 0.02, UP);
+  sh.box(0, y + h + 0.001, 0, w - 0.02, 0.002, 0.006, UP);
+  kd.m(film, 'plastic');
+  for (const x of [-w / 3, 0, w / 3]) sh.box(x, y + h + 0.0024, 0, 0.05, 0.0012, d - 0.03, UP);
+  kd.m(film2, 'plastic');
+  sh.box(0, y + h + 0.0036, -d * 0.36, w - 0.01, 0.0012, 0.14, UP);
+  sh.box(0, y + h + 0.0036, d * 0.36, w - 0.01, 0.0012, 0.14, UP);
+}
+
+/** a strapped pack of bricks or blocks: every one a little different, dark between them, two steel straps round it */
+function packNear(kd: Kit, y: number, w: number, d: number, h: number, col: string, seed: number): void {
+  const c = new THREE.Color(col);
+  const block = col === '#c9c3b7';
+  const bh = block ? 0.19 : 0.078,
+    bl = block ? 0.39 : 0.232;
+  round4(kd, y, w, d, (W, side) => {
+    const sh = kd.sh;
+    kd.m('#' + c.clone().multiplyScalar(0.34).getHexString(), 'stone');
+    sh.box(0, h / 2, 0.0012, W, h, 0.0024, FRONT);
+    const rows = Math.floor(h / bh);
+    const cols = Math.floor(W / bl);
+    const left = (-cols * bl) / 2;
+    for (let r = 0; r < rows; r++) {
+      for (let i = 0; i < cols; i++) {
+        const h0 = (seed * 31 + r * 17 + i * 13 + side * 5) >>> 0;
+        const t = 0.82 + (h0 % 11) * 0.036;
+        kd.m('#' + c.clone().multiplyScalar(t).getHexString(), 'stone');
+        sh.box(left + (i + 0.5) * bl, (r + 0.5) * bh, 0.0036 + (h0 % 3) * 0.001, bl - 0.006, bh - 0.006, 0.002, FRONT);
+      }
+    }
+    if (side & 1) return;
+    kd.m('#31363a', 'steel');
+    for (const u of [-W * 0.28, W * 0.28]) sh.box(u, h / 2, 0.0078, 0.016, h + 0.004, 0.0012, FRONT);
+    kd.m('#8a8f92', 'steel');
+    sh.box(-W * 0.28, h * 0.62, 0.0092, 0.024, 0.05, 0.0014, FRONT);
+  });
+  kd.m('#31363a', 'steel');
+  for (const u of [-w * 0.28, w * 0.28]) kd.sh.box(u, y + h + 0.0014, 0, 0.016, 0.0014, d, 1);
+}
+
+/** a full sack: a pillow, its corners pulled out, sewn across each end */
+function sackNear(kd: Kit, x: number, y: number, z: number, col: string): void {
+  const sh = kd.sh;
+  kd.m(col, 'rubber');
+  cbox(sh, x, y, z, 0.62, 0.205, 0.92, 0.09, 0);
+  kd.m('#8c8473', 'rubber');
+  for (const e of [-1, 1]) sh.box(x, y + 0.0635, z + e * 0.395, 0.42, 0.003, 0.006, 1);
+}
+
+/** a carton at (x, y, z), its foot at y: tape down its middle, the flap's edge, a printed square and a label */
+function cartonNear(kd: Kit, x: number, y: number, z: number, w: number, h: number, d: number, seed: number): void {
+  const sh = kd.sh;
+  sh.push().local(x, y, z);
+  round4(kd, 0, w, d, (W, side) => {
+    kd.m('#8a6b45', 'wood');
+    sh.box(0, h - 0.002, 0.001, W, 0.004, 0.002, FRONT);
+    if (side === 0) {
+      kd.m('#c2a578', 'plastic');
+      sh.box(0, h - 0.035, 0.0022, 0.05, 0.07, 0.0012, FRONT);
+    }
+    if (side === seed % 4) {
+      kd.m('#55412b', 'wood');
+      sh.box(-W * 0.2, h * 0.5, 0.0016, 0.12, 0.12, 0.0008, FRONT);
+      kd.m('#ecebe4', 'plastic');
+      sh.box(W * 0.2, h * 0.5, 0.0016, 0.1, 0.07, 0.0008, FRONT);
+    }
+  });
+  kd.m('#c2a578', 'plastic');
+  sh.box(0, h + 0.0008, 0, 0.05, 0.0014, d, 1);
+  kd.m('#8a6b45', 'wood');
+  sh.box(0, h + 0.0005, 0, w, 0.001, 0.004, 1);
+  sh.pop();
+}
+
+/** Pallet with goods: shrink-wrapped load, sacks or brick packs (sometimes double stacked). `kd` (same frame) = near-only cells for what they are made of. */
+export function palletGoods(k: Kit, rng: Rng, kd?: Kit): void {
   const sh = k.sh;
   const levels = rng.chance(0.35) ? 2 : 1;
   let y = 0;
@@ -589,14 +720,23 @@ export function palletGoods(k: Kit, rng: Rng): void {
     const kind = rng.int(0, 3);
     const h = rng.range(0.6, 1.0);
     if (kind === 0) {
-      k.m(rng.pick(['#e6eef0', '#d7e3ea', '#2f5f9e', '#e8d9b8']), 'plastic');
+      const col = rng.pick(['#e6eef0', '#d7e3ea', '#2f5f9e', '#e8d9b8']);
+      k.m(col, 'plastic');
       sh.box(0, y + 0.15 + h / 2, 0, 1.15, h, 0.95, 1);
+      if (kd) wrapNear(kd, y + 0.15, 1.15, 0.95, h, col, Math.floor(h * 977));
     } else if (kind === 1) {
-      k.m(rng.pick(['#e8dcc0', '#cfc3a8', '#b8b0a0']), 'rubber');
-      for (let r = 0; r < 3; r++) for (let c = 0; c < 2; c++) sh.ellipsoid(-0.28 + c * 0.56, y + 0.24 + r * 0.17, rng.range(-0.05, 0.05), 0.3, 0.1, 0.45, 0);
+      const col = rng.pick(['#e8dcc0', '#cfc3a8', '#b8b0a0']);
+      k.m(col, 'rubber');
+      for (let r = 0; r < 3; r++) for (let c = 0; c < 2; c++) {
+        const z = rng.range(-0.05, 0.05);
+        sh.ellipsoid(-0.28 + c * 0.56, y + 0.24 + r * 0.17, z, 0.3, 0.1, 0.45, 0);
+        if (kd) sackNear(kd, -0.28 + c * 0.56, y + 0.24 + r * 0.17, z, col);
+      }
     } else if (kind === 2) {
-      k.m(rng.pick(['#a65d43', '#b8643f', '#c9c3b7']), 'stone');
+      const col = rng.pick(['#a65d43', '#b8643f', '#c9c3b7']);
+      k.m(col, 'stone');
       sh.box(0, y + 0.15 + h / 2, 0, 1.1, h, 0.9, 1);
+      if (kd) packNear(kd, y + 0.15, 1.1, 0.9, h, col, Math.floor(h * 977));
       k.m('#3a3f44', 'steel');
       sh.box(0, y + 0.15 + h / 2, 0, 1.12, h * 0.9, 0.04, 0);
     } else {
@@ -605,6 +745,13 @@ export function palletGoods(k: Kit, rng: Rng): void {
       sh.box(0.29, y + 0.15 + 0.22, -0.24, 0.55, 0.44, 0.46, 1);
       sh.box(-0.29, y + 0.15 + 0.22, 0.24, 0.55, 0.44, 0.46, 1);
       sh.box(0.2, y + 0.15 + 0.66, 0.0, 0.55, 0.44, 0.46, 1);
+      if (kd) {
+        const sd = Math.floor(h * 977);
+        cartonNear(kd, -0.29, y + 0.15, -0.24, 0.55, 0.44, 0.46, sd);
+        cartonNear(kd, 0.29, y + 0.15, -0.24, 0.55, 0.44, 0.46, sd + 1);
+        cartonNear(kd, -0.29, y + 0.15, 0.24, 0.55, 0.44, 0.46, sd + 2);
+        cartonNear(kd, 0.2, y + 0.59, 0, 0.55, 0.44, 0.46, sd + 3);
+      }
     }
     y += 0.15 + h;
   }
@@ -635,9 +782,12 @@ export function drums(k: Kit, rng: Rng, kd?: Kit): void {
       const kk = kd ?? k,
         ds = kk.sh;
       kk.m(dc, 'paint');
-      ds.cyl(x, y0 + 0.85, z, 0.297, 0.297, 0.04, 14, 0);
-      ds.cyl(x, y0, z, 0.297, 0.297, 0.03, 14, 0);
-      for (const hy of [0.29, 0.58]) ds.cyl(x, y0 + hy, z, 0.302, 0.302, 0.035, 14, 0);
+      // up close a round skin over the 14 sides
+      const seg = kd ? 36 : 14;
+      if (kd) ds.cyl(x, y0, z, 0.2915, 0.2915, 0.8665, seg, 2);
+      ds.cyl(x, y0 + 0.85, z, 0.297, 0.297, 0.04, seg, 0);
+      ds.cyl(x, y0, z, 0.297, 0.297, 0.03, seg, 0);
+      for (const hy of [0.29, 0.58]) ds.cyl(x, y0 + hy, z, 0.302, 0.302, 0.035, seg, 0);
       kk.m('#3a3d40', 'steel');
       ds.cyl(x + 0.17, y0 + 0.865, z + 0.05, 0.038, 0.038, 0.018, 8, 2);
       ds.cyl(x - 0.18, y0 + 0.865, z - 0.06, 0.026, 0.026, 0.018, 8, 2);
@@ -776,8 +926,40 @@ export function forklift(ks: Kit, rng: Rng, kd?: Kit): void {
   sh.box(0, 2.32, -0.6, 0.1, 0.08, 0.1, 0);
 }
 
-/** Stack of wooden crates. */
-export function crates(k: Kit, rng: Rng): void {
+/** a crate up close: boards with dark between them, corner posts, a lid of boards, nails and sometimes a label */
+function crateNear(kd: Kit, s: number, seed: number): void {
+  const sh = kd.sh;
+  const tones = ['#b08a5a', '#a07a4a', '#c09a68', '#9a7548', '#b89060', '#a5824f'];
+  kd.m('#1d150e', 'wood');
+  sh.box(0, s / 2, 0, s + 0.002, s - 0.004, s + 0.002, 1);
+  const n = 4,
+    gap = 0.012,
+    bh = (s - 0.02 - gap * (n - 1)) / n;
+  round4(kd, 0, s, s, (W, side) => {
+    for (let r = 0; r < n; r++) {
+      kd.m(tones[(seed + r * 5 + side * 3) % tones.length], 'wood');
+      sh.box(0, 0.01 + bh / 2 + r * (bh + gap), 0.006, W - 0.004, bh, 0.012, 1 | 4);
+      kd.m('#2a2622', 'iron');
+      for (const u of [-W / 2 + 0.03, W / 2 - 0.03]) for (const dy of [-bh * 0.25, bh * 0.25]) sh.box(u, 0.01 + bh / 2 + r * (bh + gap) + dy, 0.0125, 0.006, 0.006, 0.001, FRONT);
+    }
+    if (side === seed % 4) {
+      kd.m('#e9e6d8', 'plastic');
+      sh.box(W * 0.12, s * 0.56, 0.0128, 0.15, 0.1, 0.0012, FRONT);
+      kd.m('#222222', 'plastic');
+      for (let i = 0; i < 3; i++) sh.box(W * 0.12 - 0.015, s * 0.56 + 0.028 - i * 0.026, 0.0136, 0.1, 0.007, 0.0006, FRONT);
+    }
+  });
+  kd.m('#8d6d44', 'wood');
+  for (const x of [-1, 1]) for (const z of [-1, 1]) sh.box((x * s) / 2 + x * 0.002, s / 2, (z * s) / 2 + z * 0.002, 0.042, s, 0.042, 1);
+  const lid = 5;
+  for (let i = 0; i < lid; i++) {
+    kd.m(tones[(seed + i * 2) % tones.length], 'wood');
+    sh.box(((i + 0.5) / lid - 0.5) * s, s + 0.006, 0, s / lid - 0.01, 0.012, s + 0.01, 1);
+  }
+}
+
+/** Stack of wooden crates. `kd` (same frame) = near-only cells for their boards. */
+export function crates(k: Kit, rng: Rng, kd?: Kit): void {
   const sh = k.sh;
   const spots: [number, number, number][] = [
     [-0.4, 0, -0.2],
@@ -789,9 +971,15 @@ export function crates(k: Kit, rng: Rng): void {
   for (let i = 0; i < n; i++) {
     const [x, y, z] = spots[i];
     const s = rng.range(0.55, 0.7);
-    sh.push().local(x, y, z, 0, rng.range(-0.2, 0.2));
+    const turn = rng.range(-0.2, 0.2);
+    sh.push().local(x, y, z, 0, turn);
     k.m(rng.pick(['#b08a5a', '#a07a4a', '#c09a68']), 'wood');
     sh.box(0, s / 2, 0, s, s, s, 1);
+    if (kd) {
+      kd.sh.push().local(x, y, z, 0, turn);
+      crateNear(kd, s, Math.floor(s * 977) + i);
+      kd.sh.pop();
+    }
     k.m('#7a5a38', 'wood');
     sh.box(0, s / 2, s / 2 + 0.005, s * 1.01, 0.06, 0.012, 0);
     sh.box(0, s / 2, -s / 2 - 0.005, s * 1.01, 0.06, 0.012, 0);
@@ -800,22 +988,43 @@ export function crates(k: Kit, rng: Rng): void {
 }
 
 /** Wooden cable reels (one standing, one on its side). */
-export function cableReel(k: Kit, rng: Rng): void {
+export function cableReel(k: Kit, rng: Rng, kd?: Kit): void {
   const sh = k.sh;
   const R = rng.range(0.45, 0.6);
   k.m('#a8885a', 'wood');
   sh.push().local(-0.25, R, 0, Math.PI / 2, 0, 0);
   sh.cyl(0, -0.4, 0, R, R, 0.06, 12, 3);
   sh.cyl(0, 0.34, 0, R, R, 0.06, 12, 3);
-  k.m(rng.pick(['#1d1f22', '#c9302c', '#2f5f9e', '#3a3a3a']), 'rubber');
+  const cable = rng.pick(['#1d1f22', '#c9302c', '#2f5f9e', '#3a3a3a']);
+  k.m(cable, 'rubber');
   sh.cyl(0, -0.34, 0, R * 0.8, R * 0.8, 0.68, 12, 0);
   sh.pop();
+  // up close: round flanges with their bolts and the turns of the cable
+  const reelNear = (x: number, y: number, z: number, r: number, wr: number, w: number, axis: boolean, col: string): void => {
+    if (!kd) return;
+    const ds = kd.sh;
+    ds.push().local(x, y, z, axis ? Math.PI / 2 : 0, 0, 0);
+    kd.m(axis ? '#ab8b5d' : '#9d7d4d', 'wood');
+    ds.cyl(0, -w / 2 - 0.0605, 0, r + 0.0025, r + 0.0025, 0.061, 40, 3);
+    ds.cyl(0, w / 2 - 0.0005, 0, r + 0.0025, r + 0.0025, 0.061, 40, 3);
+    kd.m(col, 'rubber');
+    const turns = Math.round(w / 0.028);
+    for (let i = 0; i < turns; i++) ds.cyl(0, -w / 2 + (i * w) / turns, 0, wr + (i & 1 ? 0.0065 : 0.0015), wr + (i & 1 ? 0.0015 : 0.0065), w / turns, 28, 0);
+    kd.m('#3f4245', 'steel');
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2;
+      ds.cyl(Math.cos(a) * r * 0.6, w / 2 + 0.0605, Math.sin(a) * r * 0.6, 0.012, 0.012, 0.006, 6, 2);
+    }
+    ds.pop();
+  };
+  reelNear(-0.25, R, 0, R, R * 0.8, 0.68, true, cable);
   if (rng.chance(0.6)) {
     k.m('#9a7a4a', 'wood');
     sh.cyl(0.5, 0, 0.1, 0.4, 0.4, 0.06, 10, 2);
     sh.cyl(0.5, 0.5, 0.1, 0.4, 0.4, 0.06, 10, 2);
     k.m('#1d1f22', 'rubber');
     sh.cyl(0.5, 0.06, 0.1, 0.28, 0.28, 0.44, 10, 0);
+    reelNear(0.5, 0.28, 0.1, 0.4, 0.28, 0.44, false, '#1d1f22');
   }
 }
 

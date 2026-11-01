@@ -375,6 +375,29 @@ export function brickJoints(s: HandSink, f: { w: number; h: number; y: number; o
   }
 }
 
+/** what holds a gutter up: a strap under it every 80 cm screwed to the fascia and hooked over its front lip, a sleeve at each joint, stop ends, dirt run from the joints */
+export function gutterFixings(s: HandSink, L: number, o0: number, o1: number, y: number, c: number, seed: number): void {
+  const belly = y - 0.127;
+  s.ink(c, 0.86).rough(0.6);
+  const n = Math.max(2, Math.round(L / 0.8));
+  for (let i = 0; i <= n; i++) {
+    const u = 0.09 + ((L - 0.18) * i) / n;
+    s.box(u - 0.009, u + 0.009, belly - 0.003, belly, o0 - 0.002, o1 + 0.002, 0);
+    s.box(u - 0.009, u + 0.009, belly, y - 0.02, o1 + 0.0, o1 + 0.0025, 0);
+    s.box(u - 0.014, u + 0.014, belly - 0.003, y - 0.05, o0 - 0.004, o0 + 0.001, 0);
+    s.box(u - 0.004, u + 0.004, y + 0.002, y + 0.005, o0, o1 + 0.006, 0);
+  }
+  s.ink(c, 0.9).rough(0.45);
+  const joints = Math.floor(L / 3);
+  for (let i = 1; i <= joints; i++) {
+    const u = (L * i) / (joints + 1) + ((seed + i * 7) % 5) * 0.03;
+    s.box(u - 0.04, u + 0.04, belly - 0.002, belly + 0.001, o0 + 0.002, o1 - 0.002, 0);
+    s.box(u - 0.04, u + 0.04, belly, y + 0.009, o1 + 0.006, o1 + 0.009, 0);
+  }
+  s.ink(c, 0.8);
+  for (const u of [0, L]) s.box(u - 0.004, u + 0.004, belly, y + 0.012, o0 + 0.002, o1 + 0.006, 0);
+}
+
 /** a roller door's controls on the wall beside it: up, stop, down, and the conduit to the motor */
 export function rollerControl(s: HandSink, u: number, top: number, seed: number): void {
   const y = 1.32;
