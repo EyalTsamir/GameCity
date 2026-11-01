@@ -23,6 +23,7 @@ import {
 } from './gen';
 import { WIN, PROF, WALLPAT, ROOFPAT, FRAME, GLASS, LIGHT_MODE } from './materials';
 import { genHouseLegacy } from './houses';
+import { anchors } from './anchors';
 import { windowBox, shutterPair, shutterState, downpipe, acUnit, climber, potPlant, aerial, dish } from './clutter';
 import { dB } from '../../core/detailbuildings';
 import { homeSide, homeBack } from './services';
@@ -711,6 +712,7 @@ export function genHouse(g: Gen): void {
 
   function porchLamp(x: number, z: number, y: number): void {
     lightBox(g, x - 0.08, y, z, x + 0.08, y + 0.28, z + 0.14, '#ffc979', LIGHT_MODE.STEADY, 3);
+    anchors.doorLamp(x, y + 0.14, z + 0.07, 0, 1);
   }
 
   /** Turned-look porch post at (x, z) from the deck y0 to y1: plinth block + chamfer step, 15 cm shaft, a

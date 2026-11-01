@@ -96,6 +96,7 @@ export function genHouseLegacy(g: Gen): void {
     const lx = pa + du + 0.85;
     setCol(g.trim, col('#2b2b2b'));
     lightBox(g, lx - 0.08, 2.0, zP + 0.06, lx + 0.08, 2.28, zP + 0.2, '#ffc979', LIGHT_MODE.STEADY, 3);
+    anchors.doorLamp(lx, 2.14, zP + 0.13, 0, 1);
   }
   // side walls (garage on the driveway side, near the front)
   const sideWall = (sd: Side) => {

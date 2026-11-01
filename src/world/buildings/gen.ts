@@ -622,6 +622,7 @@ export function wallLamp(g: Gen, sg: SideGeom, u: number, y: number, o: number):
   const cx = sx(sg, u, o + 0.18),
     cz = sz(sg, u, o + 0.18);
   l.box(cx - 0.075, y, cz - 0.075, cx + 0.075, y + 0.36, cz + 0.075, 0b111111);
+  anchors.doorLamp(cx, y + 0.18, cz, sg.nx, sg.nz);
 }
 
 export interface DoorOpts {

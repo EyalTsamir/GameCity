@@ -144,6 +144,7 @@ export interface BuildingsService {
   facades: FacadeSpan[];
   spans: LineSpan[];
   perches: Perch[];
+  doorLamps: DoorLamp[];
   laundry: LaundryLine[];
   vents: VentTop[];
   /**
@@ -160,8 +161,19 @@ export interface BuildingsService {
   massTiers: Map<number, { y0: number; x0: number; z0: number; x1: number; z1: number }[]>;
 }
 
+/** A lantern on a wall or porch beside a door (lamps: its light in the night light map). */
+export interface DoorLamp {
+  x: number;
+  y: number;
+  z: number;
+  /** outward from the wall */
+  nx: number;
+  nz: number;
+}
+
 /** Module-level collector (reset per module creation). */
 class AnchorSink {
+  doorLamps: DoorLamp[] = [];
   chimneys: ChimneyTop[] = [];
   balconies: BalconyAnchor[] = [];
   perches: Perch[] = [];
@@ -172,6 +184,7 @@ class AnchorSink {
   private b: Builder | null = null;
 
   reset(): void {
+    this.doorLamps = [];
     this.chimneys = [];
     this.balconies = [];
     this.perches = [];
@@ -191,6 +204,15 @@ class AnchorSink {
   end(): void {
     this.lot = null;
     this.b = null;
+  }
+
+  /** local position, local outward normal */
+  doorLamp(x: number, y: number, z: number, nx: number, nz: number): void {
+    const { b } = this;
+    if (!b) return;
+    const wx = b.toWorldX(x, z),
+      wz = b.toWorldZ(x, z);
+    this.doorLamps.push({ x: wx, y, z: wz, nx: b.toWorldX(x + nx, z + nz) - wx, nz: b.toWorldZ(x + nx, z + nz) - wz });
   }
 
   chimney(x: number, z: number, yTop: number, w: number, d: number): void {

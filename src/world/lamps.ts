@@ -19,6 +19,7 @@ import { bakeLampMap, type BakeResult } from './lamps/bake';
 import { patchLampMaterial, patchLampScene } from './lamps/integrate';
 import { closeLightOn } from '../core/closelight';
 import { shopSpillLights } from './lamps/spill';
+import type { DoorLamp } from './buildings/anchors';
 
 export interface LampsService {
   baked: boolean;
@@ -38,6 +39,9 @@ interface Spot {
   group: number;
 }
 
+/** the lantern's light stands this far off the wall (m): the wall has to face it to catch any */
+const DOOR_LAMP_OUT = 0.45;
+
 export default function create(ctx: CityContext): CityModule {
   const params = ctx.debug.params;
   const legacy = params.has('legacylamps');
@@ -51,6 +55,18 @@ export default function create(ctx: CityContext): CityModule {
     const spill = shopSpillLights(ctx.plan, ground);
     spillCount = spill.length;
     addLampLights(spill);
+  }
+
+  // the lanterns beside doors light what is around them: the wall behind, the step, the ground (?nodoorlamps). Baked: no frame cost
+  const doorLamps = (ctx.services.buildings as { doorLamps?: DoorLamp[] } | undefined)?.doorLamps;
+  if (!legacy && doorLamps && closeLightOn('doorlamps')) {
+    addLampLights(
+      doorLamps.map((l) => {
+        const x = l.x + l.nx * DOOR_LAMP_OUT,
+          z = l.z + l.nz * DOOR_LAMP_OUT;
+        return { x, y: l.y, z, pole: Math.max(0.8, l.y - ground(x + l.nx, z + l.nz)), radius: 3.6, color: '#ffc979', intensity: 0.5, kind: 'path' as const };
+      }),
+    );
   }
 
   // built-in channel: street-light state (for moving lights that follow the street-light schedule)

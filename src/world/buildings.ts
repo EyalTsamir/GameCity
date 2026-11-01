@@ -377,6 +377,7 @@ export default function create(ctx: CityContext): CityModule {
       return !b || s.kind === 'street' || mx < b.x0 || mx > b.x1 || mz < b.z0 || mz > b.z1;
     }),
     perches: anchors.perches,
+    doorLamps: anchors.doorLamps,
     laundry: anchors.laundry,
     vents: anchors.vents,
     setStaticLaundry(on: boolean) {
