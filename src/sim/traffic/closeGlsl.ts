@@ -115,17 +115,17 @@ export const CLOSE_FRAG_DETAIL = /* glsl */ `
       float dx = abs( p.x - vSeat.x );
       float seam = thLine( dx - 0.125, 0.0025, pix );
       float insert = 1.0 - smoothstep( 0.118, 0.13, dx );
-      vec4 cl = texture2D( tFibre, puv * vec2( 3.3, 13.0 ) );
+      vec4 cl = texture2D( tFibre, puv * vec2( 7.0, 27.0 ) );
       float rib = insert * ( 0.5 + 0.5 * sin( ( p.y + p.z * 0.6 ) * 150.0 ) ) * ( 1.0 - smoothstep( 0.002, 0.006, pix ) );
-      vec3 c = trimC * mix( 2.4, 3.0, insert ) * ( 0.72 + 0.56 * cl.b ) * ( 1.0 - 0.14 * rib );
+      vec3 c = trimC * mix( 2.0, 2.7, insert ) * ( 0.88 + 0.24 * cl.b ) * ( 1.0 - 0.14 * rib );
       if ( thH1( ph * 11.1 ) > 0.72 ) c = mix( c, c * vec3( 1.3, 0.72, 0.62 ) * 1.1, insert ); // a coloured cloth in some
       c *= 1.0 - 0.75 * seam;
       diffuseColor.rgb = c;
-      thTiltN += ( vUpV * ( cl.g - 0.5 ) + vFwdV * ( cl.r - 0.5 ) ) * 0.25;
+      thTiltN += ( vUpV * ( cl.g - 0.5 ) + vFwdV * ( cl.r - 0.5 ) ) * 0.07;
     } else if ( mode < 2.5 && mode > 1.5 ) {
       // plastic: fine leather-like grain on the trim's darker tone
       vec4 g = texture2D( tGrain, puv * 4.5 );
-      diffuseColor.rgb = trimC * 0.95 * ( 0.82 + 0.36 * g.b );
+      diffuseColor.rgb = mix( vec3( 0.045 ), trimC, 0.35 ) * ( 0.82 + 0.36 * g.b );
       thTiltN += ( vUpV * ( g.g - 0.5 ) + vFwdV * ( g.r - 0.5 ) ) * 0.2;
     } else if ( mode < 3.5 && mode > 2.5 ) {
       // roof lining: pale felt
@@ -261,7 +261,7 @@ ${WEAR}
   thTrans = 0.8;
   vec4 blot = texture2D( tCrack, p.zy * 0.7 + p.x * 0.31 );
   vec4 gr = texture2D( tGrain, ( abs( on.x ) > 0.5 ? p.zy : p.xy + p.zz ) * 2.3 );
-  float dust = dirt * ( 0.05 + 0.12 * blot.b + 0.1 * gr.a * blot.b );
+  float dust = dirt * ( 0.05 + 0.13 * blot.b + 0.02 * gr.b );
   if ( on.z > 0.3 ) {
     // windscreen: wipers have cleared two fans in the film; a tint band across the top, the black frit round its head
     vec2 q0 = vec2( p.x - 0.32, length( vec2( p.y - ( belt - 0.02 ), p.z - ( vDetA.w + 0.04 ) ) ) );

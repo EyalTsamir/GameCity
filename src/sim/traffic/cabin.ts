@@ -108,9 +108,10 @@ const BLACK = { color: '#141517', rough: 0.8 };
 /** one front seat: back reclining and bolstered, a dished cushion on a base, a head rest on two posts */
 export function frontSeat(add: CabinAdd, cx: number, hw: number, z: number, cy: number, ty: number, hy: number): void {
   const seat = [cx, cy, z] as const;
-  const cus = softBox(2 * hw, 0.14, 0.5, 6, 2, 6, 0.05, (p, u, v, t) => {
-    // dished between its bolsters, the front edge lifted under the thigh
-    p.y += 0.03 * Math.abs(u) ** 3 * (v > 0 ? 1 : 0.3) + 0.018 * Math.max(0, t) ** 2 * (v > 0 ? 1 : 0) - 0.01 * (1 - u * u) * (v > 0 ? 1 : 0);
+  const cus = softBox(2 * hw, 0.14, 0.5, 8, 2, 7, 0.06, (p, u, v, t) => {
+    // dished between its bolsters, the front edge lifted under the thigh, plump towards the middle of each side
+    const top = v > 0 ? 1 : 0;
+    p.y += 0.042 * Math.abs(u) ** 3 * top + 0.03 * Math.max(0, t) ** 2 * top - 0.012 * (1 - u * u) * top + 0.016 * (1 - t * t) * (1 - u * u) * top;
     p.x *= 1 - 0.06 * Math.max(0, t);
   });
   cus.translate(cx, cy - 0.07, z + 0.24);
@@ -140,8 +141,8 @@ function rearBench(add: CabinAdd, hw: number, sx: number, z: number, cy: number,
   const w = 2 * (hw - 0.03);
   const seat = [sx, cy, z] as const;
   add(
-    softBox(w, 0.16, 0.46, 10, 2, 4, 0.055, (p, _u, v, t) => {
-      p.y += v > 0 ? 0.016 * Math.cos(p.x * 8) * (1 - t * t) : 0;
+    softBox(w, 0.16, 0.46, 12, 2, 5, 0.06, (p, _u, v, t) => {
+      p.y += v > 0 ? (0.018 * Math.cos(p.x * 8) + 0.012) * (1 - t * t) : 0;
     }).translate(0, cy - 0.08, z + 0.22),
     { ...SEAT, seat },
   );
@@ -180,9 +181,9 @@ function dashboard(add: CabinAdd, c: CabinDims, sx: number, x: number): void {
   );
   // binnacle hood
   add(
-    softBox(0.44, 0.1, 0.22, 4, 2, 3, 0.04, (p, u, _v, t) => {
-      p.y += -0.02 * u * u + 0.012 * (1 - t * t);
-    }).translate(sx, yT + 0.025, zb + 0.05),
+    softBox(0.4, 0.06, 0.2, 4, 2, 3, 0.028, (p, u, _v, t) => {
+      p.y += -0.016 * u * u + 0.012 * (1 - t * t);
+    }).translate(sx, yT + 0.012, zb + 0.05),
     PLASTIC,
   );
   // the dials under it

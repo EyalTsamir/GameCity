@@ -70,13 +70,15 @@ const place = ([kind, fr, moving, skip]) => {
     fz = Math.cos(V.yaw),
     rx = Math.cos(V.yaw),
     rz = -Math.sin(V.yaw);
-  const az = (fr.z * len) / 2,
+  // the cabin of a cab vehicle sits at its nose
+  const cabFrame = ['delivery', 'lorry', 'icecream'].includes(kind) && Math.abs(fr.z) < 0.5 && fr.d < 3;
+  const az = cabFrame ? len / 2 - 1.3 : (fr.z * len) / 2,
     ax = fr.x * hw;
   const x = V.x + fx * az + rx * ax,
     z = V.z + fz * az + rz * ax;
   const tall = (V.spec?.height ?? 1.5) / 1.5;
   window.__city.setSpeed(0);
-  window.__city.view({ target: { x, y: fr.y * (fr.z === 1 || fr.z === -1 ? 1 : Math.min(1.8, tall)), z }, distance: fr.d, yaw: (V.yaw * 180) / Math.PI + fr.yaw, pitch: fr.pitch });
+  window.__city.view({ target: { x, y: cabFrame ? fr.y + 0.45 : fr.y * (fr.z === 1 || fr.z === -1 ? 1 : Math.min(1.8, tall)), z }, distance: fr.d, yaw: (V.yaw * 180) / Math.PI + fr.yaw, pitch: fr.pitch });
   return { x: +V.x.toFixed(1), z: +V.z.toFixed(1), kind, moving: fromRoad.includes(V), seated: !!V.seated };
 };
 
