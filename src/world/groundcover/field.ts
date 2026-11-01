@@ -23,6 +23,7 @@ import { nearLens } from '../../core/nearDetail';
 import * as THREE from 'three';
 import type { CityContext } from '../../core/context';
 import { WIND_GLSL } from '../../core/wind';
+import { flickerOn } from '../../core/sweepflicker';
 import { LAMP_GLSL, lampUniforms } from '../../core/lampLight';
 import { SLAB } from '../../core/constants';
 import { natureOn } from '../../core/nature';
@@ -432,11 +433,12 @@ vGcRough = 0.85;
         // wind: local wind (gust fronts) + per-blade flutter, length-preserving bend
         vec2 wv = thWindAt( root );
         float wl = length( wv );
-        float ph = rb.x * 6.2831853;
+        // (?nowindfade) neighbours sway as a wave, not as noise; calm air is calm; a sway under a pixel is only shimmer, so it fades with distance
+        float ph = rb.x * ${flickerOn('windfade') ? '1.2' : '6.2831853'};
         float osc = sin( uTime * ( 2.6 + 1.9 * rc.y ) + ph + dot( root, vec2( 0.9, 0.7 ) ) );
         vec2 wdir = wl > 1e-4 ? wv / wl : vec2( 1.0, 0.0 );
         float flexK = fk >= 0 ? 0.3 : 0.4;
-        vec2 B = lean + wv * flexK * stiff + ( wdir * 0.6 + vec2( -wdir.y, wdir.x ) * 0.8 ) * osc * 0.07 * ( 0.3 + wl ) * stiff;
+        vec2 B = lean + wv * flexK * stiff + ( wdir * 0.6 + vec2( -wdir.y, wdir.x ) * 0.8 ) * osc * 0.07 * ( ${flickerOn('windfade') ? '0.12' : '0.3'} + wl ) * stiff${flickerOn('windfade') ? ' * smoothstep( 0.35, 1.2, 0.07 * ( 0.12 + wl ) * stiff * len / ( dist * uBlade.w ) )' : ''};
         float bl = length( B );
         if ( bl > 0.92 ) B *= 0.92 / bl;
         float lift = sqrt( max( 0.0, 1.0 - dot( B, B ) ) );

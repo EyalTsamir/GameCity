@@ -91,7 +91,21 @@ Other checks: overview at 4× speed, invariants `{}`, validate `[]`, no failed m
 | market | 37.4 → 37.4 | 37.4 → 37.5 |
 Street moving is +1.5, over the +0.7 budget, repeatable (39.45, 39.6), unexplained, and only at that view. The depth check adds one pass and five fetches while moving: **not measured**, the limit came first. Night, an earlier setting (jitter 0.7), 2 + 2, TAA vs SMAA at rest: overview −0.35, downtown −0.5, market −0.33, street +1.3 with one outlier run (393 draws, 4.8 M triangles): not a clean number.
 
+## Fix 2: wind that can't be seen as motion fades out (`?nowindfade`, all tiers)
+A back-and-forth under about a pixel can't be read as motion, only as shimmer. Plants (`vegetation/foliage.ts`, `thMotionKeep`): the oscillating part of the main sway, branch bob and leaf flutter fade once their amplitude falls from 1.2 to 0.35 px at that distance, so flutter is whole within about 23 m and gone by 80 m, bob 47 and 160 m. The mean lean stays, and it uses `uNearEye` / `uNearLens`, so shadows match and zooming in brings it back. Grass (`groundcover/field.ts`): the same fade on `osc` using the pixel size it already knows; neighbours now sway as a wave (phase `rb.x * 1.2`, was `* 6.28`); calm air is calmer (floor 0.12, was 0.3).
+
+Wind condition, hour 12, TAA on, off → on (`shots/flick/wind1`):
+| view | d2 | area3 % | area8 % | area24 % | sharp |
+|---|---|---|---|---|---|
+| downtown | 36.9 → 29.3 | 11.9 → 8.0 | 4.0 → 2.9 | 1.9 → 1.6 | 7.23 → 7.20 |
+| market | 37.5 → 29.1 | 11.9 → 7.8 | 4.1 → 2.9 | 2.1 → 1.7 | 7.25 → 7.23 |
+| overview | 25.4 → 23.3 | 5.5 → 4.3 | 1.4 → 1.2 | 0.7 → 0.6 | 3.80 → 3.76 |
+| lawn at 3 m | 252 → 206 | 60.6 → 57.4 | 37.8 → 34.0 | 17.2 → 14.2 | 5.44 → 5.40 |
+| tree at 3 m | 29.9 → 30.5 | 13.0 → 13.2 | 5.2 → 5.2 | 1.4 → 1.4 | 2.45 → 2.46 |
+The tree at 3 m is unchanged, as intended: real wind up close stays. A clear help, not a cure: about a quarter off in town, and what remains hasn't been traced. Numbers and heat maps only, one run, no frames judged in motion, no cost measured when this was committed.
+
 ## What is left
+- Wind tremble that remains: not attributed. Half-res AO re-rolling on leaves (`noao` was the largest suspect before these fixes) isn't touched: frozen TAA lets small changes through unfiltered. Far trees (`landscape/trees.ts`), props sway (`props/material.ts`), wall green (`buildings/green.ts`) and rows (`landscape/rows.ts`) don't have the fade yet.
 - **Walking at full speed near the ground has no AA from history, and no SMAA either**, by choice: `walk` is still better than before on the numbers and crisp in the frames. If raw edges read as harsh in real walking, lower `nearPx`'s effect first.
 - A person's own pixels keep some history while overlapping their last position. Frames look solid; not watched in real motion.
 - Nobody has watched this with human eyes at real speed. Numbers and single frames only.
