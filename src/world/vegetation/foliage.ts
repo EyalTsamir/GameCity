@@ -539,6 +539,8 @@ const CARD_FRAG_AO = /* glsl */ `
 {
   float ao = vThAO;
   float aoN = mix( ao, 1.0 - ( 1.0 - ao ) * 0.35, uNight );
+  // from inside a crown the eye sees into its shade: green, never the black it may be from afar
+  aoN = max( aoN, 0.5 * ( 1.0 - smoothstep( 3.0, 10.0, length( vViewPosition ) ) ) );
   vec3 wN = normalize( ( vec4( normal, 0.0 ) * viewMatrix ).xyz );
   // sky fill: thin leaves also pass and scatter skylight, so a crown in shade stays dark GREEN, not black;
   // strongest on the outer, sky-facing leaves
@@ -667,7 +669,7 @@ const WOOD_FRAG_NORMAL = /* glsl */ `
 
 const WOOD_FRAG_AO = /* glsl */ `
 {
-  float ao = vThAO;
+  float ao = max( vThAO, 0.55 * ( 1.0 - smoothstep( 3.0, 10.0, length( vViewPosition ) ) ) );
   reflectedLight.indirectDiffuse *= ao;
   reflectedLight.directDiffuse *= mix( 1.0, ao, 0.3 );
   reflectedLight.indirectSpecular *= ao * 0.5;

@@ -337,10 +337,11 @@ export function buildFarmKit(
             az = cz - Math.sin(ang) * ll,
             bx = cx + Math.cos(ang) * ll,
             bz = cz + Math.sin(ang) * ll;
-          const ya = Math.max(WL + 0.03, H(ax, az)),
-            yb = Math.max(WL + 0.03, H(bx, bz));
+          // (the foot goes on down into the water or mud: a strip that stops on it has a ruled edge)
+          const ya = Math.max(WL + 0.03, H(ax, az)) - 0.3,
+            yb = Math.max(WL + 0.03, H(bx, bz)) - 0.3;
           const tt = 0.84 + 0.3 * vnoise(sa / 30, side * row, 873);
-          const hh = (1.25 + 1.0 * hash2i(si, row, 882)) * (0.8 + 0.3 * g);
+          const hh = (1.25 + 1.0 * hash2i(si, row, 882)) * (0.8 + 0.3 * g) + 0.3;
           s.wall(B.reed, ax, ya, az, bx, yb, bz, sa * 1.7 + row * 9 + side * 31, hh, tt, tt, tt * 0.92, 0.55, 0.12, 1, hh, true);
           s.under.push({ x: ax, y: Math.min(ya, yb), z: az, ex: bx, ez: bz, w: 0, h: hh, k: tt, kind: 2 });
           st.reeds += 2;

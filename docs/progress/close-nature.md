@@ -5,7 +5,7 @@ nothing here is drawn from the air. Master switch `?noclosenature`, one feature 
 
 ## Resume here
 
-Stopped at the coordinator's limit, committed, not merged. Read "Left" below, then capture with:
+Second round stopped at the coordinator's limit (23:30), committed, not merged. Read "Second round" and "Left" below. Capture with:
 `node C:/Projects/GameCity/scripts/closeset.mjs --url http://127.0.0.1:5218/ --out <abs path> --ids tree-park,tree-street,furn-planter,country-forest,ground-lawn,ground-garden,country-field --d 1,3 --hours 12`
 Read `report.json` errors before the images.
 
@@ -55,16 +55,31 @@ All within noise and budget; those rows predate the third pass (pit tufts, lanes
 
 Final checks at a212800 (2026-11-01): typecheck and build pass, invariants `{}`, validate `[]`, `hitch` 0 mid-run compiles, `walkhitch` 0 new programs and 0 freezes, `?diorama`, `?quality=medium`, `?quality=low` without errors, `ui-test` 73 passed, `kinds` failed in the full run. It passed alone at 5da51d8, before the third pass; the rerun alone at a212800 hit my 5-minute limit on battery with the machine in use, so **`kinds` is unconfirmed on the last commits**: rerun it at the merge.
 
+## Second round (2026-11-01, the coordinator's Left list)
+
+- Plane bark at 1 m: flakes torn at the edges by the second tile, weathered in clouds, a dark line where one lifts off the next (`trunks.ts`). Reads as bark from a metre; the tile is still magnified, it just no longer shows steps.
+- Ring seam: it was a real shoulder. The stem shrank to 0.69 r0 at its top while the central leader came out at 0.56 r0, because the limb's first ring was thin and the next ring is more than a metre up. The stem now ends as wide as what grows out of it (`neck`, from the thickest limb within 4 rTop of its top) and the limb's hidden first ring is nearly full width. **Smaller but not gone** (`tree-park`, 3 m, 4a0e139): the stem ends at 0.81 r0 where the leader is about 0.72 r0, because the leader's rows are 1.6 m apart and it tapers from its own start. Next try: `Math.min(t.rTop, t.neck * 0.95)` in `buildTrunk`, or a short extra row in `buildLimb` so it holds its width past the fork. Not tried: no time to verify it before the limit.
+- Pink river bank: the far reed strips' pale plumes, and a ruled foot. Plumes are browner, the strip's foot goes into the water or mud (`rows.ts`, `farmkit.ts`).
+- Shrub stems: 6 rows and a bow, no elbows (`sprigs.ts`). River boulders: smooth normals, no extra triangles; the silhouette is still angular.
+- Birch at 1 m was ink rings right round the stem: lenticels now start and stop, with fine ones between, dark brown rather than black. Pine plates weather in patches.
+- The street tree's pit from `-3.9,0.3,34,1.3,-55,18`: greyer soil with lumps, pebbles and mulch (`pitClods`, 5 triangles each, near cells only), weeds on paving stand up instead of lying as shards.
+- Puddles: only one dry-noon look (a corner with no puddle in it), so **their edges are still not audited**.
+- Near-black shade: a floor on AO for cards and wood within 3-10 m (`foliage.ts`). It did **not** cure the nearest conifer crown at `-165,1.4,142,6,-30,6`: still near black at noon, and no benefit was seen anywhere else, so this floor is a candidate to take out. See Left.
+
+Final checks of the second round (limit 23:30, the shared browser queue took 10-18 minutes a run):
+- At cd3d9d4: typecheck and build pass; invariants `{}`, validate `[]`; `hitch` 0 mid-run compiles; `?diorama`, `?quality=medium`, `?quality=low` no errors. `walkhitch` finished at about the time of 4a0e139 with 0 new programs and 0 freezes. 4a0e139 itself changes only the trunk geometry.
+- **`ui-test` not confirmed.** The one full run failed (15 passed; hover, click-to-follow and `kinds` failed, then a harness error): the page reloaded mid-run and module `ui` failed with `__BUILD_ID__ is not defined`. That run overlapped my source edit at 22:57, and every other page in the same period had a working `ui`, so the edit is the likely cause, but the rerun never got the browser before the limit and was stopped. **Run it in full at the merge.**
+- **Perf pending, for the third pass and all of round 2.** The timing run waited 12 minutes in the queue and was stopped at the limit without a number. New geometry is near-only (pit clods 5 tris each, limb rows 6, stem rows 6) and bark gained 2 texture fetches for birch, 1 for pine. Measure at the merge on `;noclosenature`, after a rebake.
+
 ## Left
 
 Worth doing, biggest first:
-- Plane bark at 1 m: the plates' edges step, the tile is magnified (512² over about 1.5 m). Plates read as camouflage from a metre.
-- `medium` and `low`: the shaded side of the nearest trunks and leaf cards is close to pure black, large at eye level in the park. Same with `noclosenature`, so not this stage's; it looks like the missing AO/ambient on those tiers. For whoever owns light.
-- Blades at 3 m on thin meadow show dark beads along their length ("bamboo"): it is the half-resolution AO on sub-pixel blades, `?noao` clears it completely and the grass looks far better (`country-forest`, 3 m). Needs a depth-aware fix in `postfx/aoApply.ts` or a way to keep blades out of AO. This is the cheapest big win left for grass everywhere.
+- The nearest crown goes near black at eye level at every tier (`-165,1.4,142,6,-30,6`, noon). Still near black with `?noao`, so it is not the AO pass: look at the crown's own ambient under its own shadow.
+- Blades at 3 m on thin meadow show dark beads along their length ("bamboo"), and stems have AO dots: half-resolution AO on sub-pixel blades, `?noao` clears it. With sweep-fix-d, which owns `postfx/aoApply.ts`.
+- A console warning on high in every full page: `GL_INVALID_OPERATION: glDrawArrays: Mismatch between texture format and sampler type`. Absent from the medium and low runs. Owner unknown, cause not looked into; nothing of this stage binds a shadow or integer texture to the bark.
 - Lane and woodland floor blades are sparse, single hairs on bare ground rather than tufts.
-- A ring-like seam on some park trunks, about 2 m up, where the skin meets the leader (`tree-park`, 3 m).
-- Water: the river bank's pink ragged polygon and a pale grey band at the edge (`water-riverbank`, 3 m). Thin ripples look like hairs.
-- Woodland shrub stems: sharp elbows. Trailing plants on planters shatter at 1 m (`green.hang`).
+- Water at 1 m: thin ripples read as hairs. A straight diagonal in the river bed from coarse land triangles; the waterline is polygonal.
+- River boulders have an angular silhouette; a near layer of rocks was not built. Trailing plants on planters shatter at 1 m (`green.hang`).
 - Night: hot spot on trunks near a lamp (`tree-park`, 3 m, 21.5). Lawn shade very dark at noon.
-- Weed blades on mid-slab inside a weed spot (needs the slab layout in JS). Birch and pine not looked at closely; puddle edges not audited.
+- Weed blades on mid-slab inside a weed spot (needs the slab layout in JS). Puddle edges not audited.
 - Not nature, for other owners: barcode stripes on a slab edge at `-8.8,0.2,-58.6` (closemat/paving), bin bags are black low-poly, a thin bright sliver at the wall foot in `ground-garden`.

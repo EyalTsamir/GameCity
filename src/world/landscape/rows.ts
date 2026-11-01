@@ -234,7 +234,7 @@ function drawBand(c: Ctx, b: number, R: (k: number) => number): void {
           c.stroke();
           const r = R(k + 15);
           if (r < 0.3) {
-            for (let j = 0; j < 7; j++) leaf(c, x + lean, G - h + 3, 13 + 5 * R(k + 16 + j), 2.6, -Math.PI / 2 + (j - 3) * 0.17, rgb(158, 136, 104));
+            for (let j = 0; j < 7; j++) leaf(c, x + lean, G - h + 3, 13 + 5 * R(k + 16 + j), 2.6, -Math.PI / 2 + (j - 3) * 0.17, rgb(122, 102, 72));
           } else if (r < 0.37) {
             c.fillStyle = rgb(58, 38, 24);
             c.fillRect(x + lean - 2.1, G - h + 5, 4.2, 15);

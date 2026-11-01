@@ -355,7 +355,7 @@ vGcRough = 0.85;
           // pavement weed: broad leaves splayed from a joint (rosette), fresh green
           L = ${closeNatureOn('closeweeds') ? 'mix( 0.03, 0.11, rc.y * rc.y )' : 'mix( 0.08, 0.24, rc.y )'};
           W = ${closeNatureOn('closeweeds') ? 'mix( 0.005, 0.012, fract( rc.z * 5.3 ) )' : 'mix( 0.016, 0.03, fract( rc.z * 5.3 ) )'};
-          lean = outw * mix( 0.3, 0.65, fract( rc.z * 9.7 ) );
+          lean = outw * ${closeNatureOn('closeweeds') ? 'mix( 0.12, 0.42, fract( rc.z * 9.7 ) )' : 'mix( 0.3, 0.65, fract( rc.z * 9.7 ) )'};
           base = vec3( 0.17, 0.32, 0.06 ) * ( 0.8 + 0.4 * cl.y );
           tip = base * vec3( 1.25, 1.2, 1.0 );
           aoRoot = 0.55;
