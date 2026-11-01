@@ -1576,16 +1576,17 @@ ${fg(`    float spd = 0.0; // weight (1 - smoothstep(0.003, 0.01, fq.y)) is 0 fr
     }
     if (dSurf == 0 && all(greaterThan(pm, wr.xz)) && all(lessThan(pm, wr.yw))) {
       vec2 kd = k * revD;
-      vec2 kdS = mix(vec2(1e-5), sign(kd) * max(abs(kd), vec2(1e-5)), abs(sign(kd)));
+      vec2 kdP = step(vec2(0.0), kd);
+      vec2 kdS = (kdP * 2.0 - 1.0) * max(abs(kd), vec2(1e-5));
       // fraction of the depth at which the ray leaves the opening through a side
-      vec2 sEx = vec2(kd.x > 0.0 ? (wr.y - pm.x) : (wr.x - pm.x), kd.y > 0.0 ? (wr.w - pm.y) : (wr.z - pm.y)) / kdS;
+      vec2 sEx = (mix(wr.xz, wr.yw, kdP) - pm) / kdS;
       float sHit = min(min(sEx.x, sEx.y), 1.0);
       vec2 hp = pm + kd * sHit;
       dQ = q + (hp - pm) * vec2(uSign, 1.0);
       if (sHit < 1.0) {
-        dSurf = sEx.x < sEx.y ? 1 : (kd.y > 0.0 ? 2 : 3);
+        dSurf = sEx.x < sEx.y ? 1 : (kd.y >= 0.0 ? 2 : 3);
         dDepth = sHit;
-        dN = dSurf == 1 ? -Tu * sign(kd.x) : vec3(0.0, dSurf == 2 ? -1.0 : 1.0, 0.0);
+        dN = dSurf == 1 ? -Tu * (kdP.x * 2.0 - 1.0) : vec3(0.0, dSurf == 2 ? -1.0 : 1.0, 0.0);
       } else {
         pm = hp; // the glass plane: frame, panes, curtains and the room shift with the view
         f = pm / csz;

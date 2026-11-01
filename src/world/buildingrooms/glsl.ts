@@ -455,7 +455,7 @@ void main() {
   if (tDisp < t) cd = rmCard(ro, rd, zDisp, 2.0, vCards.z, vCards.w, vMisc.w, 11.0, homey ? wrR.z - 0.82 : 0.0, pDisp);
 
   // ── the light
-  vec3 lq = h;
+  vec3 lq = h + n * 0.03;
   vec3 LP;
   vec2 g = lampK < 0.5 ? vec2(3.6, 100.0) : (lampK < 1.5 ? vec2(1.6, 1.8) : (lampK < 2.5 ? vec2(1.8, 2.4) : vec2(2.4, 3.2)));
   // (a shade hangs: 0.6 m under the ceiling; fittings are on it)
