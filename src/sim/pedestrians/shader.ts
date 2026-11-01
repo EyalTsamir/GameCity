@@ -13,8 +13,11 @@ import * as THREE from 'three';
 import { detailPeople } from '../../core/detailPeople';
 import { globalUniforms } from '../../core/uniforms';
 import { perfOn } from '../../core/perfdeep';
-import { BONE, FB, REG } from './body';
+import { BONE, FB, FX, REG } from './body';
 import { PIV, PIV_COUNT, pivotTable } from './rig';
+import { closePeople } from '../../core/closePeople';
+import { EYE, FACE_U, FACE_Y0, FACE_Y1, faceMaps } from './faceMap';
+import { faceRelief } from './body';
 
 /** Per-instance pose values, packed two per uint (16-bit fixed, range ±8, 1/4096). Order = layout. */
 export const POSE_KEYS = [
@@ -144,6 +147,21 @@ attribute uvec4 iP5;
 attribute uvec4 iC0;
 attribute uvec4 iC1;
 attribute uvec4 iC2;
+//@if CL
+float pedSunLift = 0.12;
+flat varying vec3 vPedGaze;
+flat varying float vPedBrim;
+flat varying uvec2 vPedFC; // the person's cut (x) and a hashed word for the paint (y) (no attribute free for it: the limit is 16 and instancing takes them)
+float pedDn;
+vec2 pedDg;
+// a soft bump on the head (metres, face coordinates) and its slope, so the shading follows the person's shape
+void pedBump(vec2 q, float a, float cx, float cy, float sx, float sy) {
+  vec2 d = (q - vec2(cx, cy)) / vec2(sx, sy);
+  float e = a * exp(-dot(d, d));
+  pedDn += e;
+  pedDg -= 2.0 * e * d / vec2(sx, sy);
+}
+//@endif
 //@if PAL
 attribute uint iPalRow; // the figure's palette row (palette.ts)
 uniform sampler2D uPedPal0;
@@ -292,6 +310,21 @@ void pedSkin(inout vec3 p, inout vec3 n, int bone, float w) {
 bool pedVisible(uint d0) {
   uint feat = (d0 >> 10u) & 63u;
   if (feat == 0u) return true;
+//@if CL
+  if (feat > ${FB.LOCKS + 1}u) {
+    uint hx = ((iC0.x & 0xFFFFFFu) * 40503u) ^ ((iC1.x & 0xFFFFFFu) * 2654435761u) ^ ((iC0.w & 0xFFFFFFu) * 3266489917u);
+    hx ^= hx >> 15u; hx *= 2246822519u; hx ^= hx >> 13u;
+    if (feat == ${FX.GLASSES + 1}u) {
+      uint ag = (iC2.w >> 9u) & 3u;
+      return (hx & 255u) < (ag == 0u ? 20u : ag == 1u ? 40u : ag == 2u ? 80u : 120u);
+    }
+    return ((hx >> 8u) & 255u) < (P_w > 0.5 ? 110u : 10u);
+  }
+//@endif
+//@if CL
+  // (under a hat long hair is tucked up: the collapsed cap and a sheet standing off it made a torn bag behind the ears)
+  if (feat == ${FB.HAIRLONG + 1}u && ((iC1.y >> 24u) & 7u) != 0u) return false;
+//@endif
   bool has = (iC2.z & (1u << (feat - 1u))) != 0u;
   return ((d0 >> 16u) & 1u) == 1u ? !has : has;
 }
@@ -303,7 +336,7 @@ void pedPose(inout vec3 p, inout vec3 n) {
   vPedFade = P_fade;
 //@if DET
   vPedFace = vec3(0.0);
-  vPedFB = ((iC2.w >> 9u) & 63u) | (((iC2.w >> 8u) & 1u) << 6u); // face bits | shirt collar (64) | jacket (128, below)
+  vPedFB = ((iC2.w >> 9u) & 63u) | (((iC2.w >> 8u) & 1u) << 6u) | (((iC2.w >> 15u) & 1u) << 11u); // face bits | shirt collar (64) | jacket (128, below) | older half of the age tier (2048)
   // (what's printed on the cloth, by the person: 60 % plain, see pedPrint)
   { uint ph = (iC0.y * 2654435761u) ^ (iC2.x * 40503u) ^ (iC1.x * 69069u); ph = ((ph ^ (ph >> 15u)) * 2246822519u) >> 24u;
     vPedFB |= (ph < 30u ? 1u : ph < 50u ? 2u : ph < 72u ? 3u : ph < 82u ? 4u : ph < 100u ? 5u : 0u) << 8u; }
@@ -329,7 +362,91 @@ void pedPose(inout vec3 p, inout vec3 n) {
   float h = float(aData.y & 0xFFFFu) * (4.0 / 65535.0) - 2.0;
   float w = float(aData.y >> 16u) * (1.0 / 65535.0);
   vec2 aux = pedU2(aData.z);
-//@if !F
+//@if CL
+  // (from what stays with the person: skin, hair, bag, shoes, accent. Not the clothes' parameters, a sunbather changes those)
+  uint h0 = ((iC0.x & 0xFFFFFFu) * 2654435761u) ^ ((iC1.x & 0xFFFFFFu) * 40503u) ^ ((iC1.z & 0xFFFFFFu) * 2246822519u) ^ ((iC0.w & 0xFFFFFFu) * 69069u) ^ ((iC2.x & 0xFFFFFFu) * 3266489917u);
+  h0 ^= h0 >> 15u; h0 *= 2246822519u; h0 ^= h0 >> 13u;
+  uint h1 = h0 * 3266489917u; h1 ^= h1 >> 16u;
+  uint h2 = h1 * 2654435761u; h2 ^= h2 >> 15u;
+  uint h3 = h2 * 2246822519u; h3 ^= h3 >> 13u;
+  vPedFC = uvec2(iC2.z >> 29u, h3);
+  {
+    uint hatSt = (iC1.y >> 24u) & 7u;
+    vPedBrim = hatSt == 0u ? 0.0 : (iC2.z & ${1 << FB.VISOR}u) != 0u ? uPedHatB[int(hatSt)].z : uPedHatB[int(hatSt)].x + 0.012;
+  }
+  {
+    // where the eyes look (render.ts eyeGaze), radians in the head's frame
+    uint gz = uint((P_spare1 + 8.0) * 4096.0 + 0.5);
+    vPedGaze = vec3((float(gz & 63u) / 31.5 - 1.0) * 0.62, (float((gz >> 6u) & 31u) / 15.5 - 1.0) * 0.42, float((gz >> 11u) & 31u) / 31.0);
+  }
+  if (bone == ${B.HEAD}) pedSunLift = 0.34;
+  if (region == ${R.TORSO} || region == ${R.LEG}) {
+    float hipK = region == ${R.TORSO} ? 1.0 - smoothstep(0.26, 0.42, h) : smoothstep(0.72, 0.88, h);
+    if (hipK > 0.0) {
+      vec3 hipC = pedPiv(${PIV.HIP});
+      vec3 nh = normalize((p - vec3(0.0, hipC.y + 0.05, hipC.z)) * vec3(1.0, 0.12, 1.0));
+      n = normalize(mix(n, nh, hipK * 0.96));
+    }
+  }
+  if (region == ${R.FACE} && aux.y < -0.03 && p.z < 0.0) {
+    // (the underside of the skull, behind the ears: shaded like the nape it runs into, or it draws a cap's edge round the neck)
+    float napeK = smoothstep(-0.03, -0.075, aux.y) * smoothstep(0.0, -0.035, p.z);
+    n = normalize(vec3(n.x, n.y * (1.0 - napeK), n.z));
+  }
+  if (region == ${R.FACE}) {
+    vPedFace = vec3(aux, 1.0);
+    vec2 q = vec2(abs(aux.x), aux.y);
+    if (q.x < 0.15 && q.y < 0.1) {
+      // the person's own face: signed knobs from the look (render.ts), each a broad form of the head. Adds nothing to the mesh.
+      vec4 fa = vec4(float(h0 & 255u), float((h0 >> 8u) & 255u), float((h0 >> 16u) & 255u), float(h0 >> 24u)) / 127.5 - 1.0;
+      vec4 fb = vec4(float(h1 & 255u), float((h1 >> 8u) & 255u), float((h1 >> 16u) & 255u), float(h1 >> 24u)) / 127.5 - 1.0;
+      // (mostly near the middle, sometimes strong: a real crowd has a few noses you remember)
+      fa = fa * (0.45 + 0.55 * abs(fa));
+      fb = fb * (0.45 + 0.55 * abs(fb));
+      float age = float(((iC2.w >> 9u) & 3u) * 2u + ((iC2.w >> 15u) & 1u)) / 7.0;
+      pedDn = 0.0;
+      pedDg = vec2(0.0);
+      pedBump(q, 0.005 * fa.x, 0.0, -0.022, 0.0078, 0.024);  // a long, high nose / a short, flat one
+      pedBump(q, 0.0024 * fa.y, 0.0135, -0.041, 0.0065, 0.0075); // its wings
+      pedBump(q, 0.0028 * fa.z, 0.0, -0.046, 0.0085, 0.0052);  // the tip droops or tilts
+      pedBump(q, 0.0028 * fa.w, 0.0, -0.009, 0.0062, 0.01);   // a hooked bridge
+      pedBump(q, 0.0065 * fb.x, 0.0, -0.101, 0.021, 0.012);   // the chin
+      pedBump(q, 0.0075 * fb.y, 0.088, -0.082, 0.036, 0.03); // the jaw's width
+      pedBump(q, 0.005 * fb.z, 0.056, -0.02, 0.025, 0.018);   // cheekbones
+      pedBump(q, 0.0055 * fb.w + 0.003 * (P_b - age), 0.05, -0.062, 0.028, 0.026); // full or lean cheeks (build, age)
+      vec3 fc = vec3(float(h2 & 255u), float((h2 >> 8u) & 255u), float((h2 >> 16u) & 255u)) / 127.5 - 1.0;
+      pedBump(q, 0.003 * fc.x, 0.03, 0.017, 0.028, 0.0085);   // the brow
+      pedBump(q, 0.0022 * fc.y, 0.0, -0.0612, 0.02, 0.0056);  // the lips
+      pedBump(q, 0.0028 * fc.y, 0.0, -0.0722, 0.018, 0.006);
+      pedBump(q, 0.0032 * fc.z, 0.0, -0.066, 0.031, 0.022);   // how far the mouth comes forward
+      // a woman's face: a narrower jaw, a smaller chin, a smoother brow, fuller cheeks high up. A child's: round cheeks, no brow, a small chin.
+      pedBump(q, -0.008 * P_w, 0.086, -0.086, 0.042, 0.036);
+      pedBump(q, -0.0048 * P_w, 0.0, -0.104, 0.02, 0.012);
+      pedBump(q, -0.0034 * P_w, 0.0, -0.03, 0.0085, 0.024);
+      pedBump(q, 0.0012 * P_w, 0.0, -0.0612, 0.02, 0.0056);
+      pedBump(q, 0.0014 * P_w, 0.0, -0.0722, 0.018, 0.006);
+      pedBump(q, -0.0026 * P_w, 0.03, 0.017, 0.028, 0.0085);
+      pedBump(q, 0.0018 * P_w, 0.048, -0.022, 0.02, 0.016);
+      pedBump(q, 0.0055 * P_c, 0.05, -0.052, 0.03, 0.028);
+      pedBump(q, -0.0024 * P_c, 0.03, 0.017, 0.03, 0.009);
+      // age: the jowl, the hollow under the cheekbone, the temple
+      pedBump(q, 0.0042 * age, 0.056, -0.09, 0.022, 0.016);
+      pedBump(q, -0.0028 * age, 0.058, -0.045, 0.02, 0.02);
+      pedBump(q, -0.002 * age, 0.078, 0.018, 0.016, 0.022);
+      p.y -= vPedGaze.z * 0.0062 * smoothstep(-0.0655, -0.0745, q.y) * (1.0 - 0.45 * smoothstep(-0.09, -0.12, q.y)) * exp(-q.x * q.x / 0.0022);
+      float kc = 1.0 - 0.45 * P_c;
+      float sg = aux.x < 0.0 ? -1.0 : 1.0;
+      vec3 tU = normalize(vec3(n.z, 0.0, -n.x) + vec3(1e-5, 0.0, 0.0));
+      vec3 tY = cross(n, tU);
+      p += n * pedDn * kc;
+      n = normalize(n - (tU * pedDg.x * sg + tY * pedDg.y) * kc);
+    }
+  }
+  else if (region == ${R.FOOT}) vPedFace = vec3(aux, 2.0);
+  else if (region == ${R.TORSO}) vPedFace = vec3(aux.x, pedP8(iC2.w) * 0.4 + 0.95 > 1.02 ? 1.0 : (iC2.z & ${1 << FB.COLLAR}u) != 0u ? 0.5 : 0.0, 0.0);
+  else if (region == ${R.BEARD}) vPedFace = vec3(aux, ((d0 >> 10u) & 63u) == ${FB.BEARD + 1}u ? 7.0 : 8.0);
+//@endif
+//@if !F&!CL&!NF
   if (region == ${R.FACE}) {
     vPedFace = vec3(aux, 1.0);
     // per-person face shape: nose length / bridge, chin, cheeks, lip fullness (stable hash of the look)
@@ -345,6 +462,9 @@ void pedPose(inout vec3 p, inout vec3 n) {
     p += n * dn * (1.0 - 0.4 * P_c);
   }
   else if (region == ${R.FOOT}) vPedFace = vec3(aux, 2.0);
+//@endif
+//@if !F&!CL&NF
+  if (region == ${R.FOOT}) vPedFace = vec3(aux, 2.0);
 //@endif
   pedW = vec3(P_w, P_c, P_b);
   // ── morph
@@ -390,13 +510,17 @@ void pedPose(inout vec3 p, inout vec3 n) {
       float a = atan(p.x, p.z);
       float sd = float(iC1.x & 15u);
       float L2 = len * (1.0 + 0.09 * sin(a * 7.0 + sd) + 0.06 * sin(a * 15.0 + 1.7 + sd * 0.5) - 0.12 * (1.0 - abs(sin(a * 0.5))));
+//@if CL
+      L2 = len * (1.0 + 0.07 * sin(a * 5.0 + sd) - 0.12 * (1.0 - abs(sin(a * 0.5)))) * mix(0.58, 1.0, smoothstep(1.0, 2.0, abs(a)));
+//@endif
       float lift = max(0.0, aux.x - L2);
       p.y += lift;
       // rows lifted to the hem tuck in under it (into the hair / body) instead of rolling out as a shelf
       p.xz = mix(p.xz, vec2(0.0, -0.01), 0.3 * smoothstep(0.0, 0.03, lift));
       float dep = min(aux.x, L2);
       // FS: distance from the tips (locks separate and thin there) + angle (the front edges thin out)
-      vPedFace = vec3(L2 - dep, abs(a), 5.0); // |a|: no ±π seam down the back
+      // (only hair long enough to have ends of its own breaks up: on a short bob all of the sheet is near the tips)
+      vPedFace = vec3(L2 - dep + 1.0 - smoothstep(0.03, 0.09, len), abs(a), 5.0); // |a|: no ±π seam down the back
       float g = smoothstep(0.0, 0.1, dep) * (0.6 + 0.4 * smoothstep(0.1, 0.35, dep));
       float ph = a * 9.0 + sd + dep * 6.0;
       float rip = 0.6 * sin(ph) + 0.4 * sin(a * 17.0 - sd);
@@ -418,12 +542,45 @@ void pedPose(inout vec3 p, inout vec3 n) {
       lump = lump * (1.0 + 1.6 * curl) + 0.5 * sin(a * 3.0 + p.y * 34.0 + float(iC1.x & 7u) * 1.7) + 0.9 * curl * sin(a * 19.0 + p.y * 130.0);
       // (not under a hat: the lumps and crown lift poked through caps as dark blotches)
       float grow = smoothstep(0.05, 0.45, aux.y) * (((iC1.y >> 24u) & 7u) != 0u ? 0.0 : 1.0);
+//@if CL
+      {
+        // how it's cut: 0 short back and sides, 1 side parting, 2 curls, 3 long or bob, 4 pixie, 5 pulled back
+        uint hs = iC2.z >> 29u;
+        lump = clamp(lump, -1.3, 1.3) * (1.0 - smoothstep(0.8, 0.98, aux.y));
+        float px = float((h3 >> 8u) & 255u) / 255.0 - 0.5;
+        float sideK = smoothstep(0.35, 0.95, abs(n.x)) * (1.0 - smoothstep(0.4, 0.95, n.y));
+        float frontK = smoothstep(0.1, 0.8, n.z);
+        float lift = 0.0;
+        if (hs == 0u || hs == 4u) {
+          // the sides clipped, more on top, combed up at the front
+          lift = 0.0035 * lump * (1.0 - 0.6 * sideK) + (0.006 + 0.005 * px) * smoothstep(0.35, 0.8, aux.y) * (1.0 - sideK) + (0.004 + 0.008 * abs(px)) * frontK * smoothstep(0.3, 0.7, aux.y) - 0.004 * sideK;
+        } else if (hs == 1u) {
+          // a parting on one side, the hair lifting away from it and falling over to the other
+          float pX = (px < 0.0 ? -0.034 : 0.034) - p.x;
+          float over = pX * (px < 0.0 ? -1.0 : 1.0);
+          lift = 0.0035 * lump * (1.0 - 0.5 * sideK) - 0.0035 * exp(-pX * pX / 0.00002) * smoothstep(0.25, 0.5, aux.y) + 0.011 * smoothstep(0.0, 0.05, -over) * (1.0 - smoothstep(0.08, 0.14, -over)) * smoothstep(0.25, 0.6, aux.y) - 0.003 * sideK;
+        } else if (hs == 3u) {
+          // a parting down the middle or to one side, close to the skull over the crown, full round the sides
+          float pX = p.x - px * 0.05;
+          lift = 0.002 * lump - 0.0035 * exp(-pX * pX / 0.000018) * smoothstep(0.1, 0.4, aux.y) * smoothstep(-0.05, 0.03, p.z) + 0.004 * sideK;
+        } else if (hs == 5u) {
+          // pulled back tight, nothing standing up
+          lift = 0.0011 * lump - 0.0012 * smoothstep(0.5, 0.8, aux.y) * (1.0 - smoothstep(0.85, 0.98, aux.y));
+        } else lift = 0.0045 * lump + 0.007 * smoothstep(0.3, 1.0, aux.y) * (0.6 + 0.4 * -n.z);
+        p += n * grow * lift;
+        if (((iC1.y >> 24u) & 7u) != 0u) p -= n * 0.0086 * min(1.0, aux.y * 2.6);
+      }
+//@else
       p += n * grow * (0.0045 * lump + 0.007 * smoothstep(0.3, 1.0, aux.y) * (0.6 + 0.4 * -n.z));
 //@endif
+//@endif
     }
+//@if CL
+    else if (((d0 >> 10u) & 63u) == ${FB.FRINGE + 1}u) vPedFace = vec3(aux.y, 3.0, 5.0);
+//@endif
     // volume (curly / full hair): scale about the head centre
     float vol = float((iC1.y >> 27u) & 31u) * (1.0 / 31.0);
-    if (vol > 0.0 && bone == ${B.HEAD}) {
+    if (vol > 0.0 && bone == ${B.HEAD} && ((iC1.y >> 24u) & 7u) == 0u) {
       vec3 hc = pedPiv(${PIV.HEAD}) + vec3(0.0, 0.1, 0.012);
       p = hc + (p - hc) * (1.0 + 0.11 * vol);
     }
@@ -440,16 +597,36 @@ void pedPose(inout vec3 p, inout vec3 n) {
     bool visor = (d0 >> 10u & 63u) == ${FB.VISOR + 1}u;
     if (brim) {
       p.xz += rad * (ha.x + s * hb.x);
+//@if CL
+      p.y += -ha.z - s * s * hb.y;
+//@else
       p.y += -ha.z - s * hb.y;
+//@endif
     } else if (visor) {
       p.xz += rad * ha.x;
       p.z += s * (hb.z - 0.075);
+//@if CL
+      p.y += -ha.z;
+//@else
       p.y += -ha.z - s * 0.01 * hb.z / 0.075;
+//@endif
     } else {
       // dome: push out, lift the crown, drop the rim (beanie over the ears), flatten the top
+//@if CL
+      if (s < 0.0) { p.y -= ha.z; }
+      else {
+//@endif
       float top = smoothstep(0.15, 1.0, s);
       p.xz += rad * ha.x * (1.0 - 0.5 * top * hb.w);
-      p.y += ha.y * top - ha.z * (1.0 - s) + ha.w * max(0.0, cos(phi)) * s;
+//@if CL
+      float hatLift = max(ha.y, -0.003);
+//@else
+      float hatLift = ha.y;
+//@endif
+      p.y += hatLift * top - ha.z * (1.0 - s) + ha.w * max(0.0, cos(phi)) * s * (1.0 - smoothstep(0.8, 1.0, s));
+//@if CL
+      }
+//@endif
     }
   }
   if (bone == ${B.TAIL}) {
@@ -689,6 +866,9 @@ void pedPose(inout vec3 p, inout vec3 n) {
     A = Bc = ((prm >> 8u) & 1u) == 1u ? vec3(0.72, 0.71, 0.68) : (jacket ? outer : top);
   } else if (region == ${R.LIPS}) {
     A = Bc = skin * vec3(0.86, 0.72, 0.7);
+  } else if (region == ${R.SKIN}) {
+    // (the strip from the forearm's last ring to the hand: s must not cross the hem on the way, it drew the sleeve's cloth as a bracelet)
+    s = -1.0;
   }
   // painted miniature: per-figure garment jitter (±4 %), lighter up-facing / darker undersides and
   // lower legs (drybrush value ramp), faces and hands a touch warmer and lighter than the arms
@@ -749,13 +929,33 @@ float pedBayer4(vec2 a) { return pedBayer2(0.5 * a) * 0.25 + pedBayer2(a); }
 // ── hair: strands as clumps and fine fibres running from the crown down (rest-pose angle about the
 // head axis), darker between clumps; the fine octave fades out where it would alias
 float pedN1(float x) { float i = floor(x), f = fract(x); f = f * f * (3.0 - 2.0 * f); return mix(fract(sin(i * 127.1) * 43758.5453), fract(sin((i + 1.0) * 127.1) * 43758.5453), f); }
+#ifdef PED_CLOSE
+flat varying uvec2 vPedFC;
+flat varying vec3 vPedGaze;
+flat varying float vPedBrim;
+float pedN2(vec2 p) {
+  vec2 i = floor(p), f = fract(p);
+  f = f * f * (3.0 - 2.0 * f);
+  float a = fract(sin(dot(i, vec2(127.1, 311.7))) * 43758.5453), b = fract(sin(dot(i + vec2(1.0, 0.0), vec2(127.1, 311.7))) * 43758.5453);
+  float c = fract(sin(dot(i + vec2(0.0, 1.0), vec2(127.1, 311.7))) * 43758.5453), d = fract(sin(dot(i + vec2(1.0), vec2(127.1, 311.7))) * 43758.5453);
+  return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+}
+#endif
 // hair flow on the cap: strands radiate from a crown whorl (back of the top, a little to one side per person)
 // and are combed down / forward from it, swirling round the whorl itself; x = angle about the whorl axis
 // (seam at the nape), y = angular distance from the whorl. Elsewhere (sheets, tails, beards) strands hang.
 vec2 pedHairFlow(vec3 r) {
   if (vPedFace.z < 2.5 || vPedFace.z > 4.5) return vec2(atan(r.x, r.z + 0.015), r.y * 1.4);
+#ifdef PED_CLOSE
+  // where it's combed from, by the cut: a whorl behind the crown (clipped, curls), the side parting, the middle of the top
+  // (long, bob), towards a point at the back (pulled back into a tail or a bun)
+  float hs = float((vPedFC.y >> 8u) & 255u) / 255.0;
+  vec3 ax = vPedFC.x == 1u ? vec3(hs < 0.5 ? -0.5 : 0.5, 0.8, -0.2) : vPedFC.x == 3u ? vec3((hs - 0.5) * 0.5, 0.95, 0.3) : vPedFC.x == 5u ? vec3((hs - 0.5) * 0.1, 0.25, -1.0) : vec3((hs - 0.5) * 0.8, 0.8, -0.55);
+  ax = normalize(ax);
+#else
   float hs = fract(sin(dot(vPedHairW.rgb, vec3(12.9898, 78.233, 37.719))) * 43758.5453);
   vec3 ax = normalize(vec3((hs - 0.5) * 0.8, 0.8, -0.55));
+#endif
   vec3 d = normalize(r - vec3(0.0, vPedHgt * 0.943, 0.0));
   vec3 u = normalize(cross(ax, vec3(0.0, 0.0, 1.0)));
   vec3 v = cross(ax, u);
@@ -769,16 +969,30 @@ float pedStrands(vec3 r) {
   float c = mix(pedN1(a * 26.0 + wob), 0.5, smoothstep(0.4, 0.9, fwidth(a * 26.0)));
   float fA = a * 85.0 + wob * 2.0;
   float fw = fwidth(fA);
+#ifdef PED_CLOSE
+  float f = mix(pedN1(fA) - 0.5, 0.0, smoothstep(0.15, 0.4, fw));
+#else
   float f = mix(pedN1(fA) - 0.5, 0.0, smoothstep(0.35, 0.8, fw));
+#endif
   float ff = mix(pedN1(a * 240.0 + wob * 4.0) - 0.5, 0.0, smoothstep(0.25, 0.6, fwidth(a * 240.0)));
   // (clumps break along their length: no continuous corrugation round the cap)
   float brk = 0.6 + 0.4 * pedN1(fl.y * 15.0 + a * 4.0 + 3.0);
+#ifdef PED_CLOSE
+  return 0.84 + 0.3 * c * brk + 0.16 * f;
+#endif
   return 0.8 + 0.32 * c * brk + 0.3 * f + 0.2 * ff;
 }
 // long-hair sheet: big locks (~1.5–2 cm wide) that wave as they fall, each with its own tone; x = rounded
 // lock profile (0 in the gap between two locks … 1 on its crest), y = per-lock random, z = fade (1 near)
 vec3 pedLocks(vec3 r, float tip) {
   float a = atan(r.x, r.z + 0.015);
+#ifdef PED_CLOSE
+  // (broad soft locks, each its own width: fine regular ones read as a bead curtain)
+  float lc = a * 3.4 + 1.6 * pedN1(a * 1.9 + 4.0) + sin(r.y * 8.0 + a * 2.0) * 0.45 + sin(r.y * 23.0 - a * 3.0) * 0.1;
+  float idc = floor(lc);
+  float uc = fract(lc) * 2.0 - 1.0;
+  return vec3(1.0 - uc * uc, fract(sin(idc * 57.31 + 1.3) * 43758.5453), 1.0 - smoothstep(0.25, 0.6, fwidth(lc)));
+#endif
   // (uneven widths: a low-frequency warp bunches some locks and spreads others)
   float la = a * 7.5 + 1.1 * pedN1(a * 2.3 + 4.0) + sin(r.y * 22.0 + a * 3.0) * 0.35 + sin(r.y * 51.0 - a * 5.0) * 0.12;
   float id = floor(la);
@@ -838,8 +1052,18 @@ vec3 pedPrint(vec3 pc, float topK) {
 // gets the orange twin stitching and back pockets. Fades out where a pixel covers > ~1 cm.
 // a fold: a narrow crest, broad shallow troughs (−0.25 … 0.75)
 // (zero at the cell ends: each fold is scaled per cell, and a step in the height is a dotted line in the derivative bump)
+#ifdef PED_CLOSE
+// (no corner at the crest or the trough: the derivative bump shows one as a sawtooth up close)
+float pedRidge(float x) { float t = 1.0 - abs(fract(x) - 0.5) * 2.0; float s = sin(1.5708 * t), u = sin(3.1416 * t); s *= s; return s * s - 0.25 * u * u; }
+#else
 float pedRidge(float x) { float t = 1.0 - abs(fract(x) - 0.5) * 2.0; return t * t * t - 0.25 * sin(3.1416 * t); }
+#endif
+#ifdef PED_CLOSE
+// (its own derivative: a thin line whose width was judged by another coordinate came out as dashes)
+float pedBand2(float d, float hw, float px) { float fw = max(px, fwidth(d)); return (1.0 - smoothstep(hw - fw * 0.5, hw + fw * 0.5, abs(d))) * min(1.0, 2.0 * hw / fw); }
+#else
 float pedBand2(float d, float hw, float px) { return 1.0 - smoothstep(hw - px * 0.5, hw + px * 0.5, abs(d)); }
+#endif
 // relief for the normal stage (FABRIC_NORMAL): fold / seam height + weave, and the fabric share (fuzz sheen)
 uniform float uPedFolds;
 uniform float uPedT;
@@ -873,14 +1097,22 @@ vec3 pedFabric(vec3 pc, float reg, float h, float sHem) {
   float fold = 0.0; // fold relief height (m)
   if (reg > 2.5 && reg < 3.5) {
     // trousers: outer and inner leg seams
-    float seam = pedBand2(rn.z, 0.035, px * 12.0) * (1.0 - step(0.88, h));
+    float seam = pedBand2(rn.z, 0.035, px * 12.0) * (1.0 - smoothstep(0.85, 0.89, h));
     sh *= 1.0 - 0.18 * seam;
-    stitch += denim ? pedBand2(abs(rn.z) - 0.075, 0.012, px * 12.0) * step(0.0, -inner) * (1.0 - step(0.88, h)) : 0.0;
+    stitch += denim ? pedBand2(abs(rn.z) - 0.075, 0.012, px * 12.0) * step(0.0, -inner) * (1.0 - smoothstep(0.85, 0.89, h)) : 0.0;
     // knee: creases behind it deepen with the bend; the front pulls smooth and a little lighter
     float kz = exp(-pow((h - 0.5) / 0.07, 2.0));
     float bk = clamp(bend / 1.6, 0.0, 1.0);
+#ifdef PED_CLOSE
+    float cre = sin((h - 0.5) * 210.0) * kz * mix(0.45, 1.0, smoothstep(-0.05, -0.35, rn.z));
+#else
     float cre = sin((h - 0.5) * 210.0 + rn.x * side * 4.0) * kz * mix(0.45, 1.0, step(rn.z, -0.2));
+#endif
+#ifdef PED_CLOSE
+    sh *= 1.0 - (0.04 + 0.2 * bk) * max(cre, 0.0) + (0.015 + 0.07 * bk) * max(-cre, 0.0);
+#else
     sh *= 1.0 - (0.12 + 0.3 * bk) * max(cre, 0.0) + (0.04 + 0.1 * bk) * max(-cre, 0.0);
+#endif
     // the fabric drapes in shallow diagonal folds down the shin / thigh fronts
     float dr = sin(h * 46.0 + ang * 1.3) * (0.5 + 0.5 * sin(h * 13.0 - ang * 2.0));
     sh *= 1.0 + 0.07 * dr;
@@ -899,24 +1131,32 @@ vec3 pedFabric(vec3 pc, float reg, float h, float sHem) {
       float cr = smoothstep(0.64, 0.82, h) * (1.0 - smoothstep(0.9, 0.95, h)) * smoothstep(0.3, -0.5, ang) * smoothstep(-2.5, -1.7, ang);
       float wd = length(vec2((ang + 1.5) * 0.07, (0.92 - h) * L));
       float wP = (ang + 1.5) * 4.2 - (0.92 - h) * L * 26.0 + side;
-      fold += cr * 0.0018 * exp(-wd * 7.0) * pedRidge(wP) * (0.5 + pedN1(floor(wP) * 5.1));
+      fold += cr * 0.0012 * exp(-wd * 7.0) * pedRidge(wP) * (0.5 + pedN1(floor(wP) * 5.1)) * (1.0 - smoothstep(0.1, 0.3, fwidth(wP)));
       // under the seat: curved drag folds pulled from the buttock fold, stronger on the leg behind
       float sd = smoothstep(0.74, 0.85, h) * (1.0 - smoothstep(0.92, 0.96, h)) * back;
       float sP = (h - 0.85) * L / 0.065 + pow(aa - 3.1416, 2.0) * 1.6 + (aa - 3.1416) * 0.9 * side;
       fold += sd * 0.003 * pedRidge(sP) * smoothstep(0.35, 0.8, pedN1(floor(sP) * 2.3 + side * 1.7)) * 1.6;
       fold -= sd * 0.003 * exp(-pow((h - 0.925) / 0.014, 2.0));
       // the leg hangs in a few soft tube folds that wander down its length (loose cloth more)
-      float hang = (1.0 - kz) * (1.0 - cr) * (1.0 - sd) * (1.0 - step(0.88, h));
+      float hang = (1.0 - kz) * (1.0 - cr) * (1.0 - sd) * (1.0 - smoothstep(0.85, 0.89, h));
       float tP = ang * 0.9 + 0.35 * sin(h * 7.0 + side * 2.0) + 0.15 * sin(h * 19.0 - ang);
       fold += hang * 0.0045 * (pedN1(tP * 4.0 + side * 7.0) - 0.5) * (0.6 + 0.4 * sin(h * 5.0 + ang + side));
       // bagging below the knee: diagonal folds down the shin front
       float bg = exp(-pow((h - 0.37) / 0.1, 2.0)) * smoothstep(1.4, 0.4, aa);
       float bP = (h - 0.37) * L / 0.06 + ang * 1.1 * side;
+#ifdef PED_CLOSE
+      fold += bg * 0.0014 * pedRidge(bP) * (0.4 + pedN1(floor(bP) * 4.3 - side));
+#else
       fold += bg * 0.0025 * pedRidge(bP) * (0.4 + pedN1(floor(bP) * 4.3 - side));
+#endif
       // pressed side seam: the allowance lifts one side (a step), puckers along the stitch line
       float sn = rn.z * 0.07; // ≈ m across the seam line (7 cm leg radius)
-      float sk = 1.0 - step(0.88, h);
+      float sk = 1.0 - smoothstep(0.85, 0.89, h);
+#ifdef PED_CLOSE
+      fold += sk * 0.0002 * smoothstep(-0.001, 0.002, sn) * (1.0 - smoothstep(0.005, 0.01, sn));
+#else
       fold += sk * (0.0006 * smoothstep(-0.001, 0.002, sn) * (1.0 - smoothstep(0.005, 0.01, sn)) + 0.00035 * sin(h * L * 420.0) * exp(-pow(sn / 0.005, 2.0)));
+#endif
     }
     // the break: trousers stack in rings over the shoe
     float br = 1.0 - smoothstep(0.1, 0.17, h);
@@ -1034,7 +1274,12 @@ vec3 pedFabric(vec3 pc, float reg, float h, float sHem) {
   // dark cloth in shade: the crests catch the sky (a grey lift), so navy / black / olive trousers show folds too
   float darkC = 1.0 - smoothstep(0.08, 0.3, dot(pc, vec3(0.33)));
   pc += vec3(0.03, 0.032, 0.036) * clamp(fold / 0.0025, 0.0, 1.0) * darkC * det * cloth * uPedFolds;
-  pedFabH = ((sh - 1.0) * 0.0065 + wv * wvK * (knit ? 0.00018 : 0.0001) + fold * uPedFolds) * pedFabK;
+#ifdef PED_CLOSE
+  // (seams one or two pixels wide: as a height they came out as a row of dots from the 2×2 derivatives)
+  pedFabH = ((sh - 1.0) * 0.0014 + wv * wvK * (knit ? 0.0001 : 0.00004) + fold * uPedFolds) * pedFabK;
+#else
+  pedFabH = ((sh - 1.0) * 0.0065 + wv * wvK * (knit ? 0.0001 : 0.00004) + fold * uPedFolds) * pedFabK;
+#endif
   pc = mix(pc, thread, clamp(stitch, 0.0, 1.0) * det * (denim ? 0.7 : 0.35));
   return pc;
 }
@@ -1071,6 +1316,208 @@ vec3 pedShoe(vec3 pc, vec2 uv, float sHem) {
 // eye line). Eyes (almond opening, sclera, iris, pupil, lash line, lid crease), brows, lips with the
 // mouth line, nostrils, age lines, stubble. Fades to soft tones where a pixel covers > ~5 mm.
 float pedBand(float d, float hw, float px) { return 1.0 - smoothstep(hw - px * 0.5, hw + px * 0.5, abs(d)); }
+#ifdef PED_CLOSE
+uniform sampler2D uPedFaceA;
+uniform sampler2D uPedFaceB;
+// what the skin passes on to the normal and light stages
+float pedSkinK = 0.0;
+float pedAO = 1.0;
+float pedSpecK = 0.0;
+float pedGloss = 30.0;
+vec2 pedFaceG = vec2(0.0);
+vec2 pedFaceP = vec2(0.0);
+// The neckline, on the yoke: t 0 … 1 towards the neck, the angle from the front. A ribbed band, the skin above it in the band's shadow, the collarbones.
+vec3 pedNeckline(vec3 pc) {
+  float t = (vPedH - 0.94) / 0.06;
+  float ang = vPedFace.x;
+  if (vPedFace.y > 0.75) return pc;
+  uint hsh = vPedFC.y >> 28u;
+  float w = vPedHairW.w;
+  // crew most often; a scoop or a V on women, a V or a loose crew on men
+  float tN = 0.8;
+  if (vPedFace.y < 0.25) {
+    if (hsh < (w > 0.5 ? 5u : 2u)) tN = 0.8 - 0.58 * cos(min(ang / 1.5, 1.0) * 1.5708);
+    else if (hsh < (w > 0.5 ? 9u : 5u)) { float vT = 1.0 - min(ang / 0.85, 1.0); tN = 0.8 - 0.76 * vT * (1.0 - 0.3 * (1.0 - vT)); }
+    else if (hsh < 11u) tN = 0.68 + 0.12 * smoothstep(0.4, 1.4, ang);
+  }
+  float m = t - tN;
+  float fw = max(fwidth(m), 1e-4);
+  float sk = smoothstep(-fw * 0.5, fw * 0.5, m);
+  float bandW = 0.095;
+  float band = smoothstep(-bandW - fw, -bandW, m) * (1.0 - sk);
+  float ridges = mix(sin(ang * 64.0), 0.0, smoothstep(0.2, 0.5, fwidth(ang * 10.0)));
+  vec3 cl = pc * (1.0 - band * (0.1 - 0.05 * ridges)) * (1.0 - 0.28 * smoothstep(-bandW - fw, -bandW + 0.02, m) * (1.0 - smoothstep(-bandW + 0.02, -bandW + 0.05, m)));
+  vec3 sc = vPedSkin * (1.0 - 0.42 * exp(-m * 16.0));
+  // the collarbones run out from the pit of the throat
+  float cb = abs(t - 0.48 + 0.34 * (ang - 0.75) * (ang - 0.75));
+  sc *= 1.0 - 0.1 * (1.0 - smoothstep(0.02, 0.09, abs(cb - 0.07))) * (1.0 - smoothstep(0.9, 1.2, ang));
+  sc *= 1.0 - 0.14 * exp(-ang * ang / 0.03 - (t - 0.72) * (t - 0.72) / 0.012);
+  if (sk > 0.5) { pedSkinK = 1.0; pedSpecK = 0.16; pedGloss = 20.0; pedFabK = 0.0; }
+  vec3 outC = mix(cl, sc, sk);
+  uint nk = (vPedFC.y >> 3u) & 7u;
+  if (nk < (w > 0.5 ? 3u : 1u) && ang < 1.9) {
+    float tc = 0.3 + 0.3 * smoothstep(0.0, 1.5, ang);
+    float dc = abs(t - tc);
+    float fc = max(fwidth(t - tc), 1e-4);
+    float ch = (1.0 - smoothstep(0.012, 0.012 + fc, dc)) * min(1.0, 0.024 / fc);
+    float pend = (1.0 - smoothstep(0.02, 0.02 + fc, length(vec2(ang * 0.3, (t - tc + 0.025) * 0.8)))) * step(ang, 0.25);
+    outC = mix(outC, vec3(0.58, 0.44, 0.2), clamp(max(ch, pend), 0.0, 1.0));
+    if (max(ch, pend) > 0.5) { pedSkinK = 1.0; pedSpecK = 1.4; pedGloss = 120.0; pedFabK = 0.0; }
+  }
+  return outC;
+}
+// grey comes in strand by strand
+vec3 pedGrey(vec3 pc, vec3 r) {
+  float k = smoothstep(0.3, 0.85, float((vPedFB & 3u) * 2u + ((vPedFB >> 11u) & 1u)) / 7.0);
+  if (k <= 0.0) return pc;
+  float a = atan(r.x, r.z + 0.015);
+  float s = mix(pedN1(a * 120.0 + r.y * 40.0), 0.5, smoothstep(0.15, 0.4, fwidth(a * 120.0)));
+  return mix(pc, vec3(0.5, 0.49, 0.47), k * 0.9 * smoothstep(0.62 - 0.4 * k, 0.8 - 0.3 * k, s));
+}
+// The face: the baked maps (fine relief, cavities, where the blood runs, wrinkles), then eyes, brows and lips, each the person's own.
+vec3 pedFaceClose(vec3 skin, vec2 F) {
+  // (behind the ears: the column of triangles at the back runs from +X to -X, through the whole map)
+  if (vPedRest.z < -0.05 && abs(F.x) < ${FACE_U.toFixed(4)}) F.x = ${FACE_U.toFixed(4)};
+  float px = max(max(fwidth(F.x), fwidth(F.y)), 1e-5);
+  float det = 1.0 - smoothstep(0.006, 0.016, px);
+  float w = vPedHairW.w;
+  uint eyeC = (vPedFB >> 2u) & 3u;
+  vec3 hair = vPedHairW.rgb;
+  float ax = abs(F.x);
+  float ageK = float((vPedFB & 3u) * 2u + ((vPedFB >> 11u) & 1u)) / 7.0;
+  uint pa = vPedFC.y;
+  vec3 kp = vec3(float(pa & 255u), float((pa >> 8u) & 255u), float((pa >> 16u) & 255u)) / 255.0; // brow, eye, lips
+  float kq = float(pa >> 24u) / 255.0; // freckles, blush
+  vec2 uv = vec2(ax / ${FACE_U.toFixed(4)}, (F.y - (${FACE_Y0.toFixed(4)})) / ${(FACE_Y1 - FACE_Y0).toFixed(4)});
+  vec4 A = texture2D(uPedFaceA, uv);
+  vec4 B = texture2D(uPedFaceB, uv);
+  // (the same column would read the map's low mips, in dots)
+  if (vPedRest.z < -0.05) { A = vec4(0.5, 0.5, 1.0, 0.0); B = vec4(0.5, 0.5, 0.0, 0.0); }
+  float wr = smoothstep(0.25, 1.0, ageK);
+  float sg = F.x < 0.0 ? -1.0 : 1.0;
+  vec2 gA = (A.rg * 2.0 - 1.0) * 1.2, gB = (B.rg * 2.0 - 1.0) * 1.2 * wr;
+  pedFaceG = vec2((gA.x + gB.x) * sg, gA.y + gB.y);
+  pedFaceP = F;
+  pedAO = A.b * (1.0 - 0.4 * smoothstep(0.0, 0.1, vPedBrim) * smoothstep(-0.12, 0.03, F.y));
+  pedSkinK = 1.0;
+  float lum = dot(skin, vec3(0.3, 0.55, 0.15));
+  // the skin's colour isn't one colour: blood in the cheeks, the nose and round the mouth, thin bluish skin round the eyes, the
+  // beard's shadow, a little yellow on the forehead
+  vec3 pc = skin;
+  float blood = A.a * (0.55 + 0.6 * kq) * mix(0.55, 1.0, smoothstep(0.08, 0.4, lum));
+  pc *= mix(vec3(1.0), vec3(1.05, 0.93, 0.9), blood);
+  pc *= mix(vec3(1.0), vec3(0.85, 0.8, 0.84), B.a * 0.62 * (0.6 + 0.6 * ageK));
+  pc *= 1.0 + vec3(0.02, 0.012, -0.03) * smoothstep(0.012, 0.05, F.y);
+  if ((vPedFB & 32u) != 0u || w < 0.5) {
+    // the beard's shadow on a man's jaw and upper lip, heavier with the stubble bit
+    float jaw = smoothstep(-0.04, -0.062, F.y) * (1.0 - smoothstep(0.075, 0.11, ax)) * (1.0 - 0.75 * exp(-((ax - 0.0) * (ax - 0.0)) / 0.0004 - (F.y + 0.067) * (F.y + 0.067) / 0.00012));
+    float st = (vPedFB & 32u) != 0u ? 0.42 : 0.1;
+    float grit = det > 0.0 ? 0.6 + 0.8 * (pedN2(F * 1500.0) - 0.5) * det : 0.6;
+    pc = mix(pc, pc * vec3(0.74, 0.76, 0.8) + hair * 0.03, jaw * st * (1.0 - w) * grit * 1.6);
+  }
+  pc *= 1.0 - B.b * wr * 0.3;
+  // freckles on a few fair faces, age spots on old ones
+  if (det > 0.0) {
+    float fk = max(smoothstep(0.72, 1.0, kq) * smoothstep(0.25, 0.5, lum), smoothstep(0.7, 1.0, ageK) * 0.5);
+    if (fk > 0.0) {
+      float sp = smoothstep(0.66, 0.78, pedN2(F * 620.0) * 0.6 + pedN2(F * 170.0) * 0.45);
+      pc *= 1.0 - sp * fk * det * 0.3 * exp(-pow(ax - 0.03, 2.0) / 0.0025 - pow(F.y + 0.018, 2.0) / 0.0014);
+    }
+  }
+  pedSpecK = 0.2 + 0.3 * exp(-F.x * F.x / 0.00025 - pow(F.y + 0.02, 2.0) / 0.0012) + 0.14 * smoothstep(0.012, 0.04, F.y) - 0.12 * ageK;
+  pedGloss = 26.0;
+  if (det > 0.0 && (pa & 0x700u) == 0u) {
+    vec2 mp = vec2(0.012 + 0.05 * kp.z, -0.075 + 0.075 * kp.x);
+    if (sg * (kp.y - 0.5) < 0.0) mp.x = 9.0;
+    float md = length(vec2(ax - mp.x, F.y - mp.y));
+    pc = mix(pc, skin * 0.34, (1.0 - smoothstep(0.0009, 0.0016, md)) * det * 0.85);
+  }
+  // eyes
+  float eS = 1.0 + 0.09 * w + 0.1 * (1.0 - smoothstep(0.0, 0.2, ageK));
+  float ex = (ax - ${EYE.x.toFixed(4)}) / eS, ey = (F.y - 0.0004) / eS;
+  float ew = ${EYE.w.toFixed(4)};
+  float q = 1.0 - (ex * ex) / (ew * ew);
+  float qa = pow(max(q, 0.0), 0.75);
+  // (kp.y: how open: wide awake to heavy-lidded; old lids hang lower)
+  float upper = ${EYE.up.toFixed(4)} * (0.82 + 0.36 * kp.y - 0.16 * ageK) * qa + 0.0007 * ex / ew;
+  float lower = -${EYE.lo.toFixed(4)} * pow(max(q, 0.0), 0.9) + 0.0005 * ex / ew;
+  float blH = fract(dot(vPedHairW.rgb, vec3(3.1, 7.7, 5.3)));
+  float blT = fract(uPedT * (0.17 + 0.14 * blH) + blH * 13.0);
+  upper = mix(upper, lower, smoothstep(0.0, 0.012, blT) * (1.0 - smoothstep(0.018, 0.034, blT)));
+  float dU = upper - ey, dL = ey - lower;
+  float open = smoothstep(-px * 0.5, px * 0.5, min(dU, dL)) * step(0.0, q);
+  vec3 iris = eyeC == 0u ? vec3(0.055, 0.03, 0.018) : eyeC == 1u ? vec3(0.15, 0.08, 0.035) : eyeC == 2u ? vec3(0.17, 0.16, 0.08) : vec3(0.2, 0.27, 0.33);
+  // where the eyes look: the iris slides over the ball, a little more of it under the lid looking down; the upper lid follows
+  vec2 gz = vec2(sin(vPedGaze.x), sin(vPedGaze.y)) * 0.0115;
+  upper += gz.y * 0.32;
+  lower += gz.y * 0.12;
+  dU = upper - ey;
+  dL = ey - lower;
+  open = smoothstep(-px * 0.5, px * 0.5, min(dU, dL)) * step(0.0, q);
+  float eU = (F.x - sg * ${EYE.x.toFixed(4)}) / eS;
+  float dI = length(vec2(eU - gz.x, ey - gz.y));
+  vec3 scl = mix(vec3(0.62, 0.58, 0.53), skin * vec3(1.25, 1.15, 1.05), 0.2);
+  vec3 eye = mix(scl, scl * vec3(0.8, 0.68, 0.64), smoothstep(0.003, 0.0115, abs(ex)));
+  float ir = dI / ${EYE.iris.toFixed(4)};
+  float ia = atan(ey - gz.y, eU - gz.x);
+  float fib = 0.5 + 0.25 * sin(ia * 11.0 + float(eyeC)) + 0.25 * sin(ia * 23.0 + 1.7);
+  vec3 irisC = iris * mix(1.5, 0.5, smoothstep(0.45, 1.0, ir)) * mix(1.0, 0.75 + 0.5 * fib, det);
+  eye = mix(eye, irisC, 1.0 - smoothstep(${EYE.iris.toFixed(4)} - px * 0.5, ${EYE.iris.toFixed(4)} + px * 0.5, dI));
+  eye = mix(eye, vec3(0.008), 1.0 - smoothstep(${EYE.pupil.toFixed(4)} - px * 0.5, ${EYE.pupil.toFixed(4)} + px * 0.5, dI));
+  // the upper lid and lashes shade the eyeball; the ball turns away towards the corners
+  eye *= 0.86 * (1.0 - 0.66 * (1.0 - smoothstep(0.0, 0.0044, dU))) * (1.0 - 0.22 * (1.0 - smoothstep(0.0, 0.0014, dL)));
+  // the wet rim of the lower lid
+  float lw = (0.0008 + 0.0008 * w) * (1.0 + 0.6 * smoothstep(-0.004, 0.012, ex)) * (1.0 - smoothstep(0.85, 1.07, abs(ex) / ew));
+  float qL = step(0.0, 1.0 - (ex * ex) / (ew * ew * 1.15));
+  float lash = smoothstep(-px * 0.5, px * 0.5, -dU) * (1.0 - smoothstep(lw - px * 0.5, lw + px * 0.5, -dU)) * qL;
+  float lowL = smoothstep(-px * 0.5, px * 0.5, -dL) * (1.0 - smoothstep(0.0006 - px * 0.5, 0.0006 + px * 0.5, -dL)) * qL;
+  vec3 eyes = mix(pc, eye, open);
+  eyes = mix(eyes, mix(vec3(0.03, 0.025, 0.022), hair * 0.4, 0.3), lash * 0.9);
+  eyes = mix(eyes, skin * vec3(0.95, 0.72, 0.68), lowL * 0.5);
+  float socket = exp(-(ex * ex) / 0.00022 - (ey * ey) / 0.00005);
+  pc = mix(pc * (1.0 - 0.45 * socket), eyes, det);
+  // wet: a real glint where the sun or sky catches the ball, not a painted dot
+  pedSpecK = mix(pedSpecK, 2.4, open * det);
+  pedGloss = mix(pedGloss, 420.0, open * det);
+  pedAO = mix(pedAO, max(pedAO, 0.72), open);
+  // brows: hairs, not a band. kp.x: thin … heavy
+  float bx = ax - 0.0292;
+  float bt = clamp((bx + 0.0175) / 0.0375, 0.0, 1.0);
+  float arch = mix(0.0026, 0.0052, fract(kp.x * 7.0));
+  float bcy = 0.0155 + arch * sin(bt * 2.7) - 0.0018 * bt;
+  float bth = mix(0.0031, 0.0011, bt) * mix(1.1, 0.62, w) * (0.72 + 0.56 * kp.x);
+  float bedge = smoothstep(bth + px * 0.6, bth * 0.45, abs(F.y - bcy)) * smoothstep(-0.0195, -0.0165, bx) * (1.0 - smoothstep(0.0145, 0.0195, bx));
+  // (the hairs lean outwards and up along the arch, broken by a per-pixel stripe that fades before it aliases)
+  float bs = bx * 1500.0 + (F.y - bcy) * 520.0;
+  float bstr = mix(0.82, 0.62 + 0.5 * pedN1(bs), 1.0 - smoothstep(0.35, 0.8, fwidth(bs)));
+  vec3 browC = mix(hair * 0.62, hair, smoothstep(0.25, 0.6, dot(hair, vec3(0.33))) * 0.6);
+  pc = mix(pc, browC, clamp(bedge * bstr * mix(0.92, 0.7, ageK), 0.0, 1.0) * mix(0.5, 1.0, det));
+  // lips, the bow on top, a fuller lower lip; kp.z: width and fullness
+  float ly = F.y + 0.0665;
+  float lhw = 0.0215 * (0.9 + 0.2 * kp.z) * (1.0 - 0.08 * w) * (1.0 - 0.1 * ageK);
+  float lq = max(1.0 - (F.x * F.x) / (lhw * lhw), 0.0);
+  float fullL = (0.82 + 0.36 * fract(kp.z * 5.0)) * (1.0 - 0.3 * ageK);
+  float upT = 0.0052 * fullL * pow(lq, 0.55) - 0.0011 * exp(-(F.x * F.x) / 0.000012);
+  float loB = -0.0064 * fullL * pow(lq, 0.7);
+  float lip = smoothstep(-px * 0.5, px * 0.5, min(upT - ly, ly - loB)) * step(0.0005, lq);
+  vec3 lipN = mix(skin * vec3(0.8, 0.54, 0.52), skin * vec3(0.72, 0.44, 0.47) + vec3(0.02, 0.0, 0.004), w);
+  lipN = mix(lipN, skin * vec3(1.02, 0.66, 0.66), smoothstep(0.2, 0.05, lum) * 0.8);
+  vec3 lipC = (vPedFB & 16u) != 0u ? mix(vec3(0.3, 0.035, 0.05), vec3(0.42, 0.11, 0.1), fract(kp.z * 11.0)) : lipN;
+  lipC *= mix(1.0, 0.82, step(0.0, ly));
+  pc = mix(pc, lipC, lip * mix(0.5, 1.0, det));
+  pedSpecK = mix(pedSpecK, 0.32, lip);
+  pedGloss = mix(pedGloss, 46.0, lip);
+  float mo = vPedGaze.z * sqrt(max(lq, 0.0));
+  float mly = ly - 0.0009 * exp(-(F.x * F.x) / 0.000016) + 0.0004 * (F.x * F.x) / (lhw * lhw);
+  float mouthL = pedBand(mly + 0.0012 * mo, 0.00032 + 0.0026 * mo, px) * step(0.002, lq);
+  vec3 mouthC = mix(skin * 0.3, mix(vec3(0.04, 0.012, 0.012), vec3(0.42, 0.4, 0.36), smoothstep(-0.0003, 0.0009, mly + 0.0012 * mo) * smoothstep(0.1, 0.5, vPedGaze.z)), smoothstep(0.03, 0.2, mo));
+  pc = mix(pc, mouthC, mouthL * mix(0.8, 1.0, smoothstep(0.03, 0.2, mo)) * det);
+  // nostrils
+  vec2 nd = vec2((ax - 0.0062) / 0.0024, (F.y + 0.05) / 0.00105);
+  pc = mix(pc, skin * 0.34, (1.0 - smoothstep(0.3, 1.0, length(nd))) * 0.55 * det);
+  return pc;
+}
+#endif
 vec3 pedFacePaint(vec3 skin, vec2 F) {
   float px = max(max(fwidth(F.x), fwidth(F.y)), 1e-5);
   float det = 1.0 - smoothstep(0.006, 0.016, px);
@@ -1199,29 +1646,80 @@ const FRAG_COLOR = /* glsl */ `
       pc = mix(pc, vec3(0.78, 0.78, 0.76), st);
     }
 #ifndef PED_FAR
+#ifdef PED_CLOSE
+    if (vPedFace.z > 7.5) {
+      // MOUSTACHE: aux y runs -1 … 1 over its height; its edge breaks into hairs
+      float mh = 1.0 - abs(vPedFace.y);
+      float mp = mix(pedN1(vPedFace.x * 1300.0), 0.5, smoothstep(0.3, 0.7, fwidth(vPedFace.x * 1300.0)));
+      if (mh + (mp - 0.5) * 0.7 < 0.04) discard;
+      pc *= pedStrands(vPedRest) * (0.84 + 0.16 * smoothstep(0.0, 0.4, mh));
+      pc = pedGrey(pc, vPedRest);
+    }
+    else if (vPedFace.z > 6.5) {
+      // BEARD: the shell covers the lower face, where it grows is the person's own: 0 full, 1 goatee, 2 along the jaw, 3 close and boxed.
+      // Ends in single hairs. Strands hang.
+      vec2 F = vPedFace.xy;
+      float ax = abs(F.x);
+      uint st = (vPedFC.y >> 24u) & 3u;
+      float m = mix(-0.06, st == 3u ? -0.042 : -0.026, smoothstep(0.03, 0.085, ax)) - F.y;
+      m = min(m, (length(vec2(ax / 0.033, (F.y + 0.0665) / 0.0135)) - 1.0) * 0.012);
+      if (st == 1u) m = min(m, 0.037 - ax);
+      else if (st == 2u) m = min(m, mix(-0.088, -0.05, smoothstep(0.03, 0.08, ax)) - F.y);
+      float np = mix(pedN1(F.x * 1100.0 + F.y * 200.0), 0.5, smoothstep(0.3, 0.7, fwidth(F.x * 1100.0)));
+      m += (np - 0.5) * 0.0065 + (pedN1(F.x * 240.0) - 0.5) * 0.003;
+      if (m < 0.0) discard;
+      pc *= pedStrands(vPedRest) * (0.82 + 0.18 * smoothstep(0.0, 0.007, m));
+      pc = pedGrey(pc, vPedRest);
+    }
+    else
+#endif
     if (vPedFace.z > 4.5) {
       // LONG HAIR ENDS: over the last ~7 cm the sheet breaks into separate locks (gaps open between the
       // strand clumps, each clump ends at its own length, fine strands straggle), and it thins out along its
       // front edges by the cheeks; thin ends let light through (a little lighter). Fades out with distance.
       pc *= pedStrands(vPedRest);
+#ifdef PED_CLOSE
+      pc = pedGrey(pc, vPedRest);
+#endif
       // big locks all round (the back read as one black sheet): occluded gaps, a tone per lock
       vec3 lk = pedLocks(vPedRest, vPedFace.x);
+#ifdef PED_CLOSE
+      if (vPedFace.y > 2.5) lk.z *= 0.4;
+      pc *= mix(1.0, (0.74 + 0.26 * lk.x) * (0.9 + 0.2 * lk.y), lk.z);
+#else
       pc *= mix(1.0, (0.55 + 0.45 * lk.x) * (0.85 + 0.3 * lk.y), lk.z);
+#endif
       // sky sheen on each lock's crest: black hair in shade still shows its locks (a grey-blue lift that
       // the albedo carries into the ambient light — the direct-light sheen alone only shows in the sun)
+#ifndef PED_CLOSE
       pc += vec3(0.022, 0.021, 0.021) * pow(lk.x, 6.0) * (0.5 + lk.y) * lk.z * (1.0 - smoothstep(0.15, 0.4, dot(pc, vec3(0.33))));
+#endif
       vec2 hf = pedHairFlow(vPedRest);
+#ifdef PED_CLOSE
+      float ca = hf.x * 44.0 + sin(hf.y * 9.0) * 0.8;
+#else
       float ca = hf.x * 26.0 + sin(hf.y * 9.0) * 0.8;
+#endif
       float far = smoothstep(0.35, 0.9, fwidth(ca));
       // each lock (one clump wide) tapers to a point and has its own length; fine strands straggle past it
       float li = floor(ca);
       float lr = fract(sin(li * 91.7 + 3.1) * 43758.5453);
       float tri = 1.0 - abs(fract(ca) - 0.5) * 2.0;
       float fine = pedN1(hf.x * 90.0 + hf.y * 3.0) * (1.0 - smoothstep(0.35, 0.8, fwidth(hf.x * 90.0)));
+#ifdef PED_CLOSE
+      // (rounded ends: points read as a torn edge)
+      float clump = sqrt(tri) * 0.85 + fine * 0.3;
+      float tipK = 1.0 - smoothstep(0.0, 0.016, vPedFace.x - lr * 0.012);
+#else
       float clump = tri * 0.85 + fine * 0.3;
       float tipK = 1.0 - smoothstep(0.0, 0.06, vPedFace.x - lr * 0.03);
+#endif
       float edgeK = 1.0 - smoothstep(1.17, 1.45, vPedFace.y);
+#ifdef PED_CLOSE
+      float need = max(tipK, (1.0 - smoothstep(0.98, 1.14, vPedFace.y)) * 0.2) * (1.0 - far);
+#else
       float need = max(tipK, edgeK * 0.65) * (1.0 - far);
+#endif
       if (clump < need) discard;
       pc *= 1.0 + 0.18 * max(tipK, edgeK) * (1.0 - far);
     }
@@ -1230,19 +1728,82 @@ const FRAG_COLOR = /* glsl */ `
       // along the hairline (two noise octaves round the head), a soft root shadow on the skin side
       pc *= pedStrands(vPedRest);
       float a = atan(vPedRest.x, vPedRest.z + 0.015);
+#ifdef PED_CLOSE
+      float e = vPedFace.x + (pedN1(a * 38.0) - 0.5) * 0.04 + (pedN1(a * 120.0) - 0.5) * 0.02 * (1.0 - smoothstep(0.25, 0.6, fwidth(a * 120.0))) + (pedN1(a * 340.0 + vPedRest.y * 300.0) - 0.5) * 0.03 * (1.0 - smoothstep(0.25, 0.6, fwidth(a * 340.0)));
+#else
       float e = vPedFace.x + (pedN1(a * 55.0) - 0.5) * 0.14 + (pedN1(a * 170.0 + vPedRest.y * 300.0) - 0.5) * 0.08 * (1.0 - smoothstep(0.3, 0.7, fwidth(a * 170.0)));
+#endif
+#ifdef PED_CLOSE
+      pc = pedGrey(pc, vPedRest);
+      // (black hair isn't a black hole: strands show their sky)
+      if (vPedFC.x != 2u) pc += vec3(0.012, 0.012, 0.014) * (1.0 - smoothstep(0.02, 0.12, dot(pc, vec3(0.33))));
+      if (vPedFC.x == 2u) {
+        vec2 hfc = pedHairFlow(vPedRest);
+        pc *= 0.86 + 0.32 * mix(pedN2(vec2(hfc.x * 15.0, hfc.y * 19.0)), 0.5, smoothstep(0.25, 0.6, fwidth(hfc.x * 15.0)));
+      }
+      float aA = abs(a);
+      float hk0 = float((vPedFC.y >> 8u) & 255u) / 255.0, hk1 = float((vPedFC.y >> 16u) & 255u) / 255.0;
+      float ageH = float((vPedFB & 3u) * 2u + ((vPedFB >> 11u) & 1u)) / 7.0;
+      // a forehead of its own; men's temples go back with age
+      e -= (hk1 - 0.5) * 0.09 * (1.0 - smoothstep(0.9, 1.5, aA));
+      e -= (1.0 - vPedHairW.w) * (0.2 * ageH * (0.4 + hk1) + 0.04) * smoothstep(0.14, 0.55, aA) * (1.0 - smoothstep(0.95, 1.45, aA));
+      if (e < 0.03) discard;
+      float cov = 1.0;
+      pc *= 0.84 + 0.16 * smoothstep(0.03, 0.12, e);
+      vec3 skinSide = pc;
+      // short back and sides: the scalp shows through low down
+      if (vPedFC.x == 0u || vPedFC.x == 4u) {
+        float grain = mix(pedN1(a * 340.0 + vPedRest.y * 90.0), 0.5, smoothstep(0.3, 0.7, fwidth(a * 340.0)));
+        if (grain < smoothstep(0.85, 1.3, aA) * (1.0 - smoothstep(0.05, 0.4, vPedFace.x)) * 0.95) discard;
+      }
+      // the parting, a fine line of scalp, from the front to the whorl
+      if (vPedFC.x == 1u || vPedFC.x == 3u) {
+        float pX = vPedFC.x == 1u ? (hk0 < 0.5 ? -0.034 : 0.034) : (hk0 - 0.5) * 0.05;
+        float wob = (pedN1(vPedRest.z * 240.0) - 0.5) * 0.0012;
+        // (scalp in the hair's shade, soft-edged: skin in the sun read as a white thread on dark hair)
+        float pW = max(fwidth(vPedRest.x), 1e-4);
+        pc = mix(pc, vPedSkin * 0.62 * (0.75 + 0.25 * vPedHairW.r), (1.0 - smoothstep(0.0004, 0.0009 + pW, abs(vPedRest.x - pX + wob))) * smoothstep(-0.02, -0.008, vPedRest.z) * 0.85);
+      }
+#else
       float cov = smoothstep(0.0, 0.17, e);
       vec3 skinSide = mix(vPedSkin, vPedSkin * 0.8 + pc * 0.12, 0.6);
+#endif
       pc = mix(skinSide, pc, cov);
     }
     else if (vPedFace.z > 1.5) pc = pedShoe(pc, vPedFace.xy, vPedS);
+#ifdef PED_CLOSE
+    else if (vPedFace.z > 0.02 && vPedFace.z < 1.01 && (abs(vPedReg - ${R.FACE}.0) < 0.5 || abs(vPedReg - ${R.SKIN}.0) < 0.5)) {
+      // (the last row under the jaw: fades into the plain SKIN region, its coordinates are 0)
+      pc = mix(pc, pedFaceClose(pc, vPedFace.xy / vPedFace.z), smoothstep(0.02, 0.7, vPedFace.z));
+    }
+    else if (abs(vPedReg - ${R.SKIN}.0) < 0.5 || abs(vPedReg - ${R.NECK}.0) < 0.5 && vPedS > 0.0) { pedSkinK = 1.0; pedSpecK = 0.16; pedGloss = 20.0; }
+#endif
+#ifndef PED_NOFACE
     else if (vPedFace.z > 0.02 && vPedFace.z < 1.01 && (abs(vPedReg - ${R.FACE}.0) < 0.5 || abs(vPedReg - ${R.SKIN}.0) < 0.5)) {
       // the face paint fades out across the last row of triangles into the head's SKIN region (face coords
       // there are 0: divide by the interpolated face share) — a hard cut drew a tone line round the face
       pc = mix(pc, pedFacePaint(pc, vPedFace.xy / vPedFace.z), smoothstep(0.02, 0.7, vPedFace.z));
     }
+#endif
     else if (abs(vPedReg - ${R.HAIR}.0) < 0.5 || abs(vPedReg - ${R.BEARD}.0) < 0.5) pc *= pedStrands(vPedRest);
-    else if (vPedReg > 0.5 && vPedReg < 3.5 || abs(vPedReg - ${R.OUTER}.0) < 0.5 || abs(vPedReg - ${R.TAIL}.0) < 0.5) pc = pedFabric(pc, vPedReg, vPedH, vPedS);
+    else if (vPedReg > 0.5 && vPedReg < 3.5 || abs(vPedReg - ${R.OUTER}.0) < 0.5 || abs(vPedReg - ${R.TAIL}.0) < 0.5) {
+#ifdef PED_CLOSE
+      vec3 pc0 = pc;
+#endif
+      pc = pedFabric(pc, vPedReg, vPedH, vPedS);
+#ifdef PED_CLOSE
+      if (abs(vPedReg - ${R.TORSO}.0) < 0.5 && vPedH > 0.94) pc = pedNeckline(pc);
+      // bare limbs are lit as the hand they run into is (the region is flat: at the wrist the two lights alternated triangle by triangle, in flames)
+      if (vPedReg > 1.5 && vPedReg < 3.5 && vPedS < 0.0) { pedSkinK = 1.0; pedSpecK = 0.16; pedGloss = 20.0; pedFabK = 0.0; }
+      // where pelvis and thighs cut each other they are plain cloth with one normal field: no line shows
+      float hipZ = abs(vPedReg - ${R.TORSO}.0) < 0.5 ? (vPedS < 0.0 ? 1.0 - smoothstep(0.14, 0.2, vPedH) : 0.0) : abs(vPedReg - ${R.LEG}.0) < 0.5 ? smoothstep(0.78, 0.85, vPedH) : 0.0;
+      if (hipZ > 0.0) {
+        pc = mix(pc, pc0, hipZ);
+        pedFabH *= 1.0 - hipZ;
+        pedFabK *= 1.0 - hipZ;
+      }
+#endif
+    }
 #endif
     diffuseColor.rgb *= pc;
   }
@@ -1250,6 +1811,17 @@ const FRAG_COLOR = /* glsl */ `
 
 /** hair: strand ridges tilt the normal across the strands (view space; fades where it would alias) */
 const HAIR_NORMAL = /* glsl */ `
+#ifdef PED_CLOSE
+  if (dot(pedFaceG, pedFaceG) > 0.0) {
+    // the face's slopes from the map, with the exact screen derivatives of its coordinates
+    vec3 esx = dFdx(-vViewPosition), esy = dFdy(-vViewPosition);
+    vec3 er1 = cross(esy, normal), er2 = cross(normal, esx);
+    float edet = dot(esx, er1);
+    float ehx = pedFaceG.x * dFdx(pedFaceP.x) + pedFaceG.y * dFdx(pedFaceP.y);
+    float ehy = pedFaceG.x * dFdy(pedFaceP.x) + pedFaceG.y * dFdy(pedFaceP.y);
+    normal = normalize(abs(edet) * normal - sign(edet) * (ehx * er1 + ehy * er2));
+  }
+#endif
 #ifndef PED_FAR
   if (abs(vPedReg - ${R.HAIR}.0) < 0.5) {
     // strand ridges across the flow as a derivative bump (screen-space height gradient), so the shading
@@ -1257,16 +1829,31 @@ const HAIR_NORMAL = /* glsl */ `
     vec2 hf = pedHairFlow(vPedRest);
     float ha = hf.x;
     float hq = ha * 70.0 + sin(hf.y * 13.0 + ha * 2.0) * 0.6;
+#ifdef PED_CLOSE
+    float hk = 1.0 - smoothstep(0.12, 0.3, fwidth(hq));
+#else
     float hk = 1.0 - smoothstep(0.3, 0.7, fwidth(hq));
+#endif
     // fine strands (fade below ~2 px per ridge) + clumps of strands, which break the sheen into locks at 1–3 m
     float hc2 = ha * 26.0 + sin(hf.y * 9.0) * 0.8;
     float hk2 = 1.0 - smoothstep(0.35, 0.8, fwidth(hc2));
     float hbrk = 0.55 + 0.45 * pedN1(hf.y * 16.0 + ha * 5.0);
     float hH = 0.55 * sin(hq * 6.2832) * 0.00009 * hk + (pedN1(hc2) + 0.5 * pedN1(hc2 * 2.3 + 7.0) - 0.75) * 0.0006 * hk2 * hbrk;
+#ifdef PED_CLOSE
+    if (vPedFC.x == 2u) {
+      float cuK = 1.0 - smoothstep(0.25, 0.6, fwidth(ha * 15.0));
+      hH += (pedN2(vec2(ha * 15.0, hf.y * 19.0)) + 0.5 * pedN2(vec2(ha * 31.0, hf.y * 37.0)) - 0.75) * 0.0028 * cuK;
+    }
+#endif
     if (vPedFace.z > 4.5) {
       // sheet: each big lock is a rounded bundle (its normal curves across it, so the sheen breaks per lock)
       vec3 lk = pedLocks(vPedRest, vPedFace.x);
+#ifdef PED_CLOSE
+      // (no corner where two locks meet: its 2×2 derivative glints as a row of dots)
+      hH += (lk.x * lk.x - 0.45) * (vPedFace.y > 2.5 ? 0.0012 : 0.0035) * lk.z;
+#else
       hH += (lk.x - 0.6) * 0.0035 * lk.z;
+#endif
     }
     vec3 hsx = dFdx(-vViewPosition), hsy = dFdy(-vViewPosition);
     vec3 hr1 = cross(hsy, normal), hr2 = cross(normal, hsx);
@@ -1275,9 +1862,16 @@ const HAIR_NORMAL = /* glsl */ `
     normal = normalize(abs(hdet) * normal - hgrad);
     // strand direction (view space) = gradient of the distance along the flow, in the surface plane
     vec3 hT = sign(hdet) * (dFdx(hf.y) * hr1 + dFdy(hf.y) * hr2);
+#ifdef PED_CLOSE
+    if (vPedFace.z > 4.5) hT = viewMatrix[1].xyz;
+#endif
     hT -= normal * dot(hT, normal);
     pedHairT = dot(hT, hT) > 1e-20 ? normalize(hT) : vec3(0.0);
+#ifdef PED_CLOSE
+    pedHairSh = (pedN1(hc2) - 0.5) * 0.16 * hk2 + (pedN1(hf.y * 7.0 + ha * 3.0) - 0.5) * 0.1;
+#else
     pedHairSh = (pedN1(hc2) - 0.5) * 0.35 * hk2 + (pedN1(hf.y * 7.0 + ha * 3.0) - 0.5) * 0.15;
+#endif
   }
 #endif
 `;
@@ -1304,6 +1898,32 @@ struct LambertMaterial {
   float specularStrength;
 };
 void RE_Direct_Lambert( const in IncidentLight directLight, const in vec3 geometryPosition, const in vec3 geometryNormal, const in vec3 geometryViewDir, const in vec3 geometryClearcoatNormal, const in LambertMaterial material, inout ReflectedLight reflectedLight ) {
+#ifdef PED_CLOSE
+  if ( pedSkinK > 0.0 ) {
+    // skin: light soaks in and comes out redder round the shadow's edge; a soft oil sheen on top, strongest on the nose and brow;
+    // the eye's own glint and the lips' come through the same lobe
+    // (a film's fill: under a high sun the lower face, a few degrees further from it than the forehead, went dark in one step)
+    float sNL = dot( normalize( geometryNormal + viewMatrix[ 1 ].xyz * 0.3 ), directLight.direction );
+    vec3 sW = vec3( 0.27, 0.18, 0.15 );
+    vec3 sD = saturate( ( vec3( sNL ) + sW ) / ( vec3( 1.0 ) + sW ) );
+    vec3 sI = sD * sD * ( 3.0 - 2.0 * sD ) * 0.35 + sD * 0.65;
+    float vis = mix( 1.0, pedAO, 0.55 );
+    if ( vPedBrim > 0.0 && pedFaceP.y != 0.0 ) {
+      // under a hat's brim: the shadow's edge drops down the face as the sun climbs
+      vec3 sUp = viewMatrix[ 1 ].xyz;
+      vec3 sF0 = geometryNormal - sUp * dot( geometryNormal, sUp );
+      float sEl = dot( directLight.direction, sUp ) / max( 0.08, dot( directLight.direction, normalize( sF0 + vec3( 1e-4 ) ) ) );
+      float sY = 0.047 - vPedBrim * sEl;
+      vis *= 1.0 - 0.85 * smoothstep( sY - 0.014, sY + 0.014, pedFaceP.y );
+    }
+    reflectedLight.directDiffuse += sI * directLight.color * vis * BRDF_Lambert( material.diffuseColor );
+    vec3 sH = normalize( directLight.direction + geometryViewDir );
+    float sN = saturate( dot( geometryNormal, sH ) ), sV = saturate( dot( geometryViewDir, sH ) );
+    float sF = 0.04 + 0.96 * pow( 1.0 - sV, 5.0 );
+    reflectedLight.directDiffuse += directLight.color * pedSpecK * sF * pow( sN, pedGloss ) * ( pedGloss + 2.0 ) * 0.04 * smoothstep( 0.0, 0.25, sNL ) * vis;
+    return;
+  }
+#endif
   float wrap = vPedMat.x;
   float dotNL = saturate( ( dot( geometryNormal, directLight.direction ) + wrap ) / ( 1.0 + wrap ) );
   vec3 irradiance = dotNL * directLight.color;
@@ -1325,7 +1945,11 @@ void RE_Direct_Lambert( const in IncidentLight directLight, const in vec3 geomet
     float s2 = pow( sqrt( max( 1.0 - d2 * d2, 0.0 ) ), 24.0 );
     float vis = smoothstep( -0.1, 0.35, dot( geometryNormal, directLight.direction ) );
     vec3 hc = min( material.diffuseColor * 4.0 + 0.04, vec3( 1.0 ) );
+#ifdef PED_CLOSE
+    reflectedLight.directDiffuse += directLight.color * vis * ( 0.016 * s1 + 0.034 * s2 * hc );
+#else
     reflectedLight.directDiffuse += directLight.color * vis * ( 0.035 * s1 + 0.05 * s2 * hc );
+#endif
   } else if ( vPedMat.y > 0.0 ) {
     float nh = saturate( dot( geometryNormal, normalize( directLight.direction + geometryViewDir ) ) );
     reflectedLight.directDiffuse += directLight.color * vPedMat.y * pow( nh, 18.0 ) * saturate( dot( geometryNormal, directLight.direction ) * 4.0 );
@@ -1336,7 +1960,18 @@ void RE_IndirectDiffuse_Lambert( const in vec3 irradiance, const in vec3 geometr
   // shadow are black cut-outs on a bright street. More fill, and warm light from below.
   vec3 upV = normalize( viewMatrix[ 1 ].xyz );
   float below = 0.5 - 0.5 * dot( geometryNormal, upV );
-  reflectedLight.indirectDiffuse += irradiance * uPedFill * ( 1.0 + below * vec3( 0.9, 0.82, 0.72 ) ) * BRDF_Lambert( material.diffuseColor );
+  float pedAmb = 1.0;
+#ifdef PED_CLOSE
+  // skin in the shade: the cavities keep what the sky can't reach; grazing angles catch the sky on the skin's oil
+  pedAmb = pedAO;
+  if ( pedSkinK > 0.0 ) {
+    float nv = 1.0 - saturate( dot( geometryNormal, geometryViewDir ) );
+    reflectedLight.indirectDiffuse += irradiance * (0.05 + 0.06 * uPedNight) * pedAO * nv * nv * nv;
+    float sLum = dot( material.diffuseColor, vec3( 0.3, 0.55, 0.15 ) );
+    pedAmb *= 1.0 + ( 0.45 + 2.5 * uPedNight ) * ( 1.0 - smoothstep( 0.02, 0.2, sLum ) );
+  }
+#endif
+  reflectedLight.indirectDiffuse += irradiance * pedAmb * uPedFill * ( 1.0 + below * vec3( 0.9, 0.82, 0.72 ) ) * BRDF_Lambert( material.diffuseColor );
 }
 #define RE_Direct RE_Direct_Lambert
 #define RE_IndirectDiffuse RE_IndirectDiffuse_Lambert
@@ -1369,8 +2004,14 @@ export interface PersonMaterials {
   /** tiny / pin levels (figures ≲ 28 px): the same shader with the hair, face, shoe and fabric detail compiled out —
    *  all of it fades to nothing below a few pixels, but the full program cost 5–7 ms on the overview's crowd */
   far: THREE.MeshLambertMaterial;
+  /** close level only */
+  close: THREE.MeshLambertMaterial;
   depth: THREE.MeshDepthMaterial;
 }
+
+/** the close level's own program: the face and the skin (?nocloseface: the old painted face in the shared program) */
+const CLOSE = closePeople('closeface');
+export const PED_CLOSE_ON = CLOSE;
 
 function uniformsFor(): Record<string, THREE.IUniform> {
   const piv = pivotTable();
@@ -1384,6 +2025,8 @@ function uniformsFor(): Record<string, THREE.IUniform> {
     uPedFolds: { value: 1 },
     uPedT: globalUniforms.uTime,
     uPedFill: { value: detailPeople('pedfill') ? 1.25 : 1 },
+    uPedFaceA: { value: CLOSE ? faceMaps(faceRelief).a : null },
+    uPedFaceB: { value: CLOSE ? faceMaps(faceRelief).b : null },
   };
 }
 
@@ -1414,13 +2057,14 @@ function sharedUniforms(): Record<string, THREE.IUniform> {
 //   PAL the skeleton comes from the bone palette (palette.ts; ?nopedpalette, or no float target: the per-vertex chain)
 const VFAR = perfOn('pedvfar');
 const SHADOW_LIFT = detailPeople('pedshadowlift');
-type VertVariant = 'full' | 'far' | 'depth';
+type VertVariant = 'full' | 'far' | 'depth' | 'close';
 const vertParsCache: Record<string, string> = {};
 function vertParsFor(v: VertVariant, pal: boolean): string {
   const key = pal ? v + '-pal' : v;
   const cached = vertParsCache[key];
   if (cached) return cached;
-  const flags = new Set<string>(!VFAR ? ['C', 'DET'] : v === 'full' ? ['R', 'C', 'DET'] : v === 'far' ? ['R', 'C', 'F'] : ['R', 'D']);
+  const flags = new Set<string>(!VFAR ? ['C', 'DET'] : v === 'full' || v === 'close' ? ['R', 'C', 'DET'] : v === 'far' ? ['R', 'C', 'F'] : ['R', 'D']);
+  if (v === 'close') flags.add('CL');
   if (pal) flags.add('PAL');
   const on: boolean[] = [true]; // nesting: a line is live when every open guard holds
   const stack: boolean[] = [];
@@ -1457,14 +2101,15 @@ function injectVertex(src: string, normals: boolean, variant: VertVariant, pal: 
 
 type PalUniforms = Record<string, THREE.IUniform> | null;
 
-function peopleMaterial(far: boolean, pal: PalUniforms): THREE.MeshLambertMaterial {
+function peopleMaterial(far: boolean, pal: PalUniforms, close = false): THREE.MeshLambertMaterial {
   const material = new THREE.MeshLambertMaterial();
   if (far) material.defines = { PED_FAR: '' };
+  else if (close) material.defines = { PED_CLOSE: '', PED_NOFACE: '' };
   material.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, sharedUniforms());
     if (pal) Object.assign(shader.uniforms, pal);
     shader.uniforms.uPedNight = globalUniforms.uNight;
-    shader.vertexShader = injectVertex(shader.vertexShader, true, far ? 'far' : 'full', pal !== null);
+    shader.vertexShader = injectVertex(shader.vertexShader, true, far ? 'far' : close ? 'close' : 'full', pal !== null);
     // the figure's shadow lookup starts 12 cm towards the sun: the coarse proxy (the tiny level, its own hems and
     // elbows) no longer shadows the detailed figure it stands in for. That self-shadow was a speckled band along
     // every hem and across the torso; buildings, trees and other people still shadow the figure.
@@ -1472,7 +2117,7 @@ function peopleMaterial(far: boolean, pal: PalUniforms): THREE.MeshLambertMateri
       shader.uniforms.uPedSun = globalUniforms.uSunDir;
       shader.vertexShader = shader.vertexShader
         .replace('#include <common>', '#include <common>\nuniform vec3 uPedSun;')
-        .replace('#include <shadowmap_vertex>', '#ifdef USE_SHADOWMAP\n  vec3 pedWP0 = worldPosition.xyz;\n  worldPosition.xyz += uPedSun * 0.12;\n#endif\n#include <shadowmap_vertex>\n#ifdef USE_SHADOWMAP\n  worldPosition.xyz = pedWP0;\n#endif');
+        .replace('#include <shadowmap_vertex>', `#ifdef USE_SHADOWMAP\n  vec3 pedWP0 = worldPosition.xyz;\n  worldPosition.xyz += uPedSun * ${close ? 'pedSunLift' : '0.12'};\n#endif\n#include <shadowmap_vertex>\n#ifdef USE_SHADOWMAP\n  worldPosition.xyz = pedWP0;\n#endif`);
     }
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>\n${FRAG_PARS}\nuniform float uPedNight;`)
@@ -1485,7 +2130,7 @@ function peopleMaterial(far: boolean, pal: PalUniforms): THREE.MeshLambertMateri
       .replace('#include <shadowmap_pars_fragment>', SHADOW_LIFT ? THREE.ShaderChunk.shadowmap_pars_fragment.replace('interleavedGradientNoise( gl_FragCoord.xy ) * PI2', '0.7') : '#include <shadowmap_pars_fragment>')
       .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n  totalEmissiveRadiance += diffuseColor.rgb * 0.07 * uPedNight;');
   };
-  material.customProgramCacheKey = () => (far ? 'tinyhaven-people-4-far' : 'tinyhaven-people-4') + (VFAR ? '-v1' : '') + (pal ? '-pal' : '') + (SHADOW_LIFT ? '-sl' : '') + '-pr' + (detailPeople('clothprints') ? '1' : '0');
+  material.customProgramCacheKey = () => (far ? 'tinyhaven-people-4-far' : close ? 'tinyhaven-people-4-close' : 'tinyhaven-people-4') + (CLOSE ? '-nf' : '') + (VFAR ? '-v1' : '') + (pal ? '-pal' : '') + (SHADOW_LIFT ? '-sl' : '') + '-pr' + (detailPeople('clothprints') ? '1' : '0');
   return material;
 }
 
@@ -1501,7 +2146,7 @@ export function makePeopleMaterials(pal: PalUniforms = null): PersonMaterials {
     shader.fragmentShader = shader.fragmentShader.replace('#include <common>', `#include <common>\n${FRAG_PARS}`).replace(/void main\(\)\s*\{/, (m) => `${m}\n${FRAG_FADE}`);
   };
   depth.customProgramCacheKey = () => 'tinyhaven-people-depth-2' + (VFAR ? '-v1' : '') + (pal ? '-pal' : '');
-  return { material, far, depth };
+  return { material, far, close: CLOSE ? peopleMaterial(false, pal, true) : material, depth };
 }
 
 /** Main-pass material of the shadow proxy: draws nothing (the proxy only casts shadows). */

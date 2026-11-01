@@ -7,6 +7,7 @@
 // plus prams, dogs and blob contact shadows as before.
 
 import * as THREE from 'three';
+import { closePeople } from '../../core/closePeople';
 import { detailPeople } from '../../core/detailPeople';
 import { DOG_OFFSET, F, buildBlobGeometry, buildDogGeometry, buildPramGeometry, makeBlobMaterial, makeDogMaterials, makePramMaterials } from './figure';
 import { BONE, FB, figureMesh, type Lod } from './body';
@@ -50,6 +51,53 @@ function packPose(p: Pose, o: Uint32Array): void {
     b = b < 0 ? 0 : b > 65535 ? 65535 : b;
     o[k] = (a | (b << 16)) >>> 0;
   }
+}
+const GAZE_EYES = closePeople('gaze');
+const eyeHash = (x: number) => {
+  const s = Math.sin(x * 127.1 + 3.7) * 43758.5453;
+  return s - Math.floor(s);
+};
+/** close level: where the eyes point, in the head's frame, packed into the shader's unused pose field spare1. Eyes move in jumps, so this needs no
+ *  state: a target per time slot. A person who has noticed the camera holds it; anyone it comes near may glance at it without turning the head. */
+function eyeGaze(m: Member, pose: Pose, stature: number, mx: number, mz: number, cam: THREE.Vector3, t: number, o: Uint32Array): void {
+  if (!GAZE_EYES) {
+    o[23] = ((o[23] & 0xffff0000) | 32 | (16 << 6)) >>> 0;
+    return;
+  }
+  const seed = m.seed * 91.7;
+  const dx = cam.x - mx,
+    dz = cam.z - mz,
+    dy = cam.y - (m.y + stature * 0.92);
+  const dh = Math.hypot(dx, dz);
+  let a = Math.atan2(dx, dz) - (m.yaw + pose.headYaw);
+  a = Math.atan2(Math.sin(a), Math.cos(a));
+  const slot = Math.floor(t * (0.45 + 0.35 * eyeHash(seed)) + seed);
+  let yaw = (eyeHash(slot + seed) - 0.5) * 0.3;
+  let pitch = (eyeHash(slot * 1.7 + seed) - 0.62) * 0.14;
+  const glance = Math.floor(t * 0.28 + seed * 3.1);
+  if (Math.abs(a) < 1.25 && dh < 6 && (m.gazeCam || (dh < 3.6 && eyeHash(glance + seed) < 0.42))) {
+    yaw = a;
+    pitch = Math.atan2(dy, dh) + pose.headPitch;
+  }
+  yaw = yaw < -0.62 ? -0.62 : yaw > 0.62 ? 0.62 : yaw;
+  pitch = pitch < -0.42 ? -0.42 : pitch > 0.42 ? 0.42 : pitch;
+  // whoever's turn it is in a party talks: the jaw in syllables, with pauses
+  let jaw = 0;
+  const party = m.party;
+  const n = party ? party.members.length : 1;
+  if (n > 1 && m.lie < 0.3) {
+    const turn = t * 0.21 + party.members[0].seed * 17;
+    const fl = Math.floor(turn);
+    if (Math.floor(eyeHash(fl) * n) === m.idx && turn - fl > 0.08 && turn - fl < 0.9) {
+      const sy = Math.sin(t * 8.3 + seed) * Math.sin(t * 3.1 + seed * 2);
+      jaw = sy > 0 ? Math.min(1, sy * 1.5) : 0;
+    }
+  }
+  const by = Math.round((yaw / 0.62 + 1) * 31.5),
+    bp = Math.round((pitch / 0.42 + 1) * 15.5),
+    bj = Math.round(jaw * 31);
+  // (spare1's word: these stand in for the prop code, which only the CPU reads)
+  o[23] = ((o[23] & 0xffff0000) | by | (bp << 6) | (bj << 11)) >>> 0;
 }
 /** pose word 0 with the scale and a given fade (LOD cross-fades) */
 function packScaleFade(scale: number, fade: number, o: Uint32Array): void {
@@ -97,7 +145,7 @@ export function lookData(L: Look): LookCache {
   if (s.hairLen > 0.03) f |= bit(FB.HAIRLONG);
   if (s.hair === 'ponytail') f |= bit(FB.PONY);
   if (s.hair === 'bun' || s.hair === 'manbun') f |= bit(FB.BUN);
-  if (s.fringe) f |= bit(FB.FRINGE);
+  if (s.fringe && s.hat === 0) f |= bit(FB.FRINGE);
   if (s.hair !== 'bald' && s.hair !== 'crop' && s.hat === 0 && !s.hood) f |= bit(FB.LOCKS);
   if (s.beard === 1) f |= bit(FB.BEARD);
   if (s.beard >= 1) f |= bit(FB.MOUSTACHE);
@@ -119,13 +167,15 @@ export function lookData(L: Look): LookCache {
   if (s.lapels) f |= bit(FB.LAPELS);
   if (s.hood) f |= bit(FB.HOOD);
   if (s.vest) f |= bit(FB.VEST);
+  // (the close level: how this person's hair is cut, in the mask's top bits)
+  f |= (s.hair === 'side' ? 1 : s.hair === 'curly' ? 2 : s.hair === 'long' || s.hair === 'bob' ? 3 : s.hair === 'pixie' ? 4 : s.hair === 'ponytail' || s.hair === 'bun' || s.hair === 'manbun' ? 5 : 0) << 29;
   writeColours(col, L, s, L.top, L.bottom);
   c = { style: s, col, flags: f >>> 0 };
   lookCache.set(L, c);
   return c;
 }
 
-/** close-level face bits: age lines 2 | eye colour 2 | lipstick 1 | stubble 1 (deterministic per look) */
+/** close-level face bits: age lines 2 | eye colour 2 | lipstick 1 | stubble 1 | older half of the age tier 1 (deterministic per look) */
 function faceBits(L: Look, s: Style): number {
   let h = (L.skin * 2654435761) ^ (L.hair * 40503) ^ (L.top * 2246822519) ^ (L.age * 3266489917);
   h = Math.imul(h ^ (h >>> 15), 2246822519) >>> 0;
@@ -138,7 +188,7 @@ function faceBits(L: Look, s: Style): number {
   const female = L.kind === 'woman' || L.kind === 'girl';
   const lip = female && L.age >= 17 && L.age < 75 && r(8) < 0.3 ? 1 : 0;
   const stub = !female && L.age >= 19 && s.beard === 0 && r(16) < 0.4 ? 1 : 0;
-  return age | (eye << 2) | (lip << 4) | (stub << 5);
+  return age | (eye << 2) | (lip << 4) | (stub << 5) | ((L.age >= (age === 3 ? 80 : age === 2 ? 65 : age === 1 ? 51 : 31) ? 1 : 0) << 6);
 }
 
 function writeColours(col: Uint32Array, L: Look, s: Style, top: number, bottom: number): void {
@@ -353,7 +403,7 @@ export class CrowdRenderer {
     const farMat = new URLSearchParams(location.search).get('pedfar') === '0' ? pm.material : pm.far;
     // ?pednear=far (debug A/B): the near level drawn with the far program — the upper bound of a leaner near shader
     const nearMat = new URLSearchParams(location.search).get('pednear') === 'far' ? pm.far : pm.material;
-    this.close = new Layer(4, pm.material, null, capClose, pal);
+    this.close = new Layer(4, pm.close, null, capClose, pal);
     this.near = new Layer(0, nearMat, null, capNear, pal);
     this.far = new Layer(1, pm.material, null, capacity, pal);
     this.tiny = new Layer(2, farMat, null, capacity, pal);
@@ -612,6 +662,7 @@ export class CrowdRenderer {
         R[2] = mz;
         R[3] = m.yaw;
         packPose(pose, PP);
+        if (layer === this.close || out === this.close) eyeGaze(m, pose, r.stature, mx, mz, this.cam, t, PP);
         CC[10] = flags >>> 0;
         const row = palette !== null ? palette.add(PP) : 0;
         if (shadows && d2 < shadowD2 && this.shadow.n < this.shadow.capacity) this.shadow.put(R, PP, CC, row);
@@ -802,7 +853,7 @@ export class CrowdRenderer {
 export function swimwear(L: Look, s: Style, flags: number, C: Uint32Array): number {
   const female = L.kind === 'woman' || L.kind === 'girl';
   const swim = L.swim || L.skin;
-  const keep = bit(FB.HAIR) | bit(FB.LOCKS) | bit(FB.HAIRLONG) | bit(FB.PONY) | bit(FB.BUN) | bit(FB.FRINGE) | bit(FB.BEARD) | bit(FB.MOUSTACHE) | bit(FB.TOWEL) | bit(FB.HAT) | bit(FB.BRIM) | bit(FB.VISOR);
+  const keep = 0xe0000000 | bit(FB.HAIR) | bit(FB.LOCKS) | bit(FB.HAIRLONG) | bit(FB.PONY) | bit(FB.BUN) | bit(FB.FRINGE) | bit(FB.BEARD) | bit(FB.MOUSTACHE) | bit(FB.TOWEL) | bit(FB.HAT) | bit(FB.BRIM) | bit(FB.VISOR);
   flags &= keep;
   C[0] = w(L.skin, q8(1.12)); // sleeveless
   if (female) {
