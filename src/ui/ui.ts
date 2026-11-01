@@ -14,7 +14,8 @@ import { DistrictLabels, type ScreenRect } from './hud/labels';
 import { PhotoMode } from './hud/photo';
 import { cameraExt, audioExt, type TourShotInfo } from './shared';
 
-declare const __BUILD_ID__: string; // vite.config.ts
+// vite.config.ts; in dev Vite's client defines it, and the harness swaps that client out, so it can be missing
+declare const __BUILD_ID__: string | undefined;
 
 type QualityMode = 'auto' | QualityLevel;
 
@@ -126,7 +127,7 @@ export default function create(ctx: CityContext): CityModule {
   const title = el(
     'header',
     'th-title th-card',
-    `<div class="th-brand"><div class="th-name">${CITY_NAME.slice(0, 4)}<b>${CITY_NAME.slice(4)}</b></div><div class="th-tag">${TAGLINE}</div><div class="th-ver">${__BUILD_ID__}</div></div>
+    `<div class="th-brand"><div class="th-name">${CITY_NAME.slice(0, 4)}<b>${CITY_NAME.slice(4)}</b></div><div class="th-tag">${TAGLINE}</div><div class="th-ver">${typeof __BUILD_ID__ === 'undefined' ? 'dev' : __BUILD_ID__}</div></div>
      <div class="th-sep"></div>
      <div class="th-clock">${SKY_DIAL}<div class="th-clock-text"><div class="th-time">--:--</div><div class="th-day">Day 1</div></div></div>`,
   );
