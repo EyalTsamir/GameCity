@@ -21,6 +21,8 @@ import { propSpots } from './lettering/spots';
 import { HandSink, handStandIn } from './handheight/sink';
 import * as D from './handheight/doors';
 import * as W from './handheight/walls';
+import * as E from './handheight/entry';
+import { addBallast } from './handheight/ballast';
 
 type Draw = (s: HandSink) => void;
 const BIG = 0,
@@ -291,6 +293,10 @@ export default function create(ctx: CityContext): CityModule {
       t.push(u0 - 0.05, u1 + 0.05, y0 - 0.05, y1 + 0.05);
     };
     const onWall = (w: HandWall, s: HandSink): HandSink => s.frame(w.x, 0, w.z, w.tx, w.tz, w.nx, w.nz);
+    /** a plate with words, centred at (u, y) on the plane o of a wall */
+    const sign = (w: HandWall, u: number, y: number, o: number, sw: number, sh: number, word: string, style: number): void => {
+      propSpots.push({ kind: 'wallsign', x: w.x + w.tx * (u - sw / 2) + w.nx * o, y: y - sh / 2, z: w.z + w.tz * (u - sw / 2) + w.nz * o, rx: w.tx, ry: 0, rz: w.tz, ux: 0, uy: 1, uz: 0, w: sw, h: sh, seed: 0, part: style, word });
+    };
     const pos = (w: HandWall, u: number): [number, number] => [w.x + w.tx * u, w.z + w.tz * u];
     const stains = closeHand(ctx, 'handstains');
     const FRONT: Record<string, [number, number]> = { N: [0, -1], S: [0, 1], E: [1, 0], W: [-1, 0] };
@@ -328,11 +334,165 @@ export default function create(ctx: CityContext): CityModule {
         return NaN;
       };
 
+      // ── by the door: for callers, the post, the fire brigade
+      for (const d of doorsOfLot.get(lotId) ?? []) {
+        const dc = (u: number): [number, number] => [d.x + d.tx * u, d.z + d.tz * u];
+        /** the wall this door stands in, at a position counted from the door's left edge */
+        const wallBeside = (u: number): { w: HandWall; wu: number } | null => {
+          const [px, pz] = dc(u);
+          for (const w of walls) {
+            if (w.nx * d.nx + w.nz * d.nz < 0.99) continue;
+            if (Math.abs((px - w.x) * w.nx + (pz - w.z) * w.nz) > 0.03) continue;
+            const wu = (px - w.x) * w.tx + (pz - w.z) * w.tz;
+            if (wu > 0.05 && wu < w.L - 0.05) return { w, wu };
+          }
+          return null;
+        };
+        const clear = (b: { w: HandWall; wu: number }, hw: number, y0: number, y1: number): boolean => {
+          const { w, wu } = b;
+          if (!isOut(w, wu) || wu - hw < 0.06 || wu + hw > w.L - 0.06) return false;
+          const g = w.grid;
+          if (g) {
+            for (let j = 0; j < g.m; j++) {
+              if (y1 < g.v0 + j * g.ch + g.wy0 - 0.12 || y0 > g.v0 + j * g.ch + g.wy1 + 0.1) continue;
+              for (let i = 0; i < g.n; i++) if (wu + hw > g.u0 + i * g.cw + g.wx0 - 0.08 && wu - hw < g.u0 + i * g.cw + g.wx1 + 0.08) return false;
+            }
+          }
+          for (const p of pipesOfLot.get(lotId) ?? []) {
+            const pc = (p.x - w.x) * w.tx + (p.z - w.z) * w.tz;
+            if (Math.abs((p.x - w.x) * w.nx + (p.z - w.z) * w.nz) < 0.7 && wu + hw > pc - 0.14 && wu - hw < pc + 0.14) return false;
+          }
+          return true;
+        };
+        const [cxd, czd] = dc(d.w / 2);
+        const flats = kind === 'apartment' ? Math.min(8, Math.max(4, lot.floors * 2)) : kind === 'hotel' ? 2 : 0;
+        if (flats > 0 && d.glass) {
+          // the entry panel on the handle side, the bank of letter boxes on the other
+          const iu = d.w + 0.14 + 0.1;
+          const hit = wallBeside(iu);
+          if (hit && clear(hit, 0.1, 1.0, 1.7)) {
+            const { w, wu } = hit;
+            take(w, wu - 0.1, wu + 0.1, 1.0, 1.7);
+            const y = 1.08;
+            put(MID, cxd, czd, (s) => void E.intercom(onWall(w, s), wu, y, flats, d.seed));
+            const px = w.x + w.tx * (wu - 0.085 + 0.014),
+              pz = w.z + w.tz * (wu - 0.085 + 0.014);
+            propSpots.push({ kind: 'bellplate', x: px + w.nx * 0.0118, y: y + 0.015, z: pz + w.nz * 0.0118, rx: w.tx, ry: 0, rz: w.tz, ux: 0, uy: 1, uz: 0, w: 0.114, h: flats * 0.045, seed: d.seed + lotId * 131, part: flats });
+            if (stains) put(STAIN, cxd, czd, (s) => onWall(w, s).ink(0xb7b0a2).soft(wu + 0.05, y + flats * 0.022, 0.0013, 0.14, 0.2));
+          }
+          if (kind === 'apartment') {
+            const cols = Math.min(4, Math.ceil(flats / 2)),
+              rows = 2;
+            const bw = cols * 0.26 + 0.02;
+            const hit2 = wallBeside(-0.14 - 0.12 - bw / 2);
+            if (hit2 && clear(hit2, bw / 2, 0.75, 0.75 + rows * 0.2 + 0.02)) {
+              const { w, wu } = hit2;
+              take(w, wu - bw / 2, wu + bw / 2, 0.75, 0.75 + rows * 0.2 + 0.02);
+              put(BIG, cxd, czd, (s) => E.mailBank(onWall(w, s), wu, 0.75, cols, rows, lot.seed));
+            }
+          }
+        }
+        if ((office || kind === 'school') && d.glass) {
+          const hit = wallBeside(d.w + 0.14 + 0.12);
+          if (hit && clear(hit, 0.06, 1.1, 1.4)) {
+            const { w, wu } = hit;
+            take(w, wu - 0.06, wu + 0.06, 1.1, 1.4);
+            const pad = lot.seed % 2 === 0;
+            put(MID, cxd, czd, (s) => E.reader(onWall(w, s), wu, 1.25, pad));
+          }
+        }
+        if (works && !d.glass) {
+          const hit = wallBeside(-0.14 - 0.16);
+          if (hit && clear(hit, 0.06, 1.1, 1.4)) {
+            const { w, wu } = hit;
+            take(w, wu - 0.06, wu + 0.06, 1.1, 1.4);
+            put(MID, cxd, czd, (s) => E.reader(onWall(w, s), wu, 1.25, true));
+          }
+        }
+        // a door with no plate has its letter box on the wall
+        if (!d.glass && !d.plain && d.letterY === 0 && !works) {
+          const hit = wallBeside(d.w + 0.14 + 0.22);
+          if (hit && clear(hit, 0.16, 1.05, 1.5)) {
+            const { w, wu } = hit;
+            take(w, wu - 0.16, wu + 0.16, 1.05, 1.5);
+            put(MID, cxd, czd, (s) => E.wallBox(onWall(w, s), wu, 1.08, d.seed));
+          }
+        }
+        // the water's stop tap and the gas valve, in the first paving out from the door
+        if (!d.plain && kind !== 'kiosk') {
+          let found = -1;
+          for (let o = 0.5; o < 12; o += 0.5) {
+            const q = occ.get(cxd + d.nx * o, czd + d.nz * o);
+            if (q & OCC.SIDEWALK) {
+              found = o + 0.55;
+              break;
+            }
+            if (q & (OCC.ROAD | OCC.WATER | OCC.BUILDING)) break;
+          }
+          if (found > 0 && occ.get(cxd + d.nx * found, czd + d.nz * found) & OCC.SIDEWALK) {
+            const u0 = 0.25 + (d.seed % 5) * 0.2;
+            const kindLid = lot.seed % 3;
+            put(MID, cxd, czd, (s) => {
+              s.frame(cxd, 0, czd, d.tx, d.tz, d.nx, d.nz);
+              E.serviceLid(s, u0, found, SIDEWALK_Y + 0.002, 0);
+              if (kindLid > 0) E.serviceLid(s, u0 + 0.42, found + 0.05, SIDEWALK_Y + 0.002, kindLid);
+            });
+          }
+        }
+      }
+
+      // the fire brigade's inlet on what is tall
+      if (office || kind === 'hotel') {
+        const w = out.find((q) => isFront(q) && q.L > 2) ?? out.find((q) => q.L > 2);
+        if (w) {
+          const u = seek(w, w.L * 0.75, 0.28, 0.5, 1.0);
+          if (!Number.isNaN(u)) {
+            take(w, u - 0.28, u + 0.28, 0.5, 1.0);
+            const [x, z] = pos(w, u);
+            put(BIG, x, z, (s) => E.fireInlet(onWall(w, s), u, 0.74));
+            sign(w, u, 0.74 + 0.1275, 0.0203, 0.38, 0.05, 'DRY RISER INLET', 0);
+          }
+        }
+      }
+
+      // rain has to come down somewhere: a wall of a block or a terrace with no pipe gets one at a corner
+      if ((kind === 'apartment' || kind === 'townhouse' || kind === 'hotel' || kind === 'school') && closeHand(ctx, 'handpipes')) {
+        for (const w of out) {
+          if (w.L < 6 || lot.height < 4) continue;
+          const others = pipesOfLot.get(lotId) ?? [];
+          if (others.some((p) => p.nx * w.nx + p.nz * w.nz > 0.9 && Math.abs((p.x - w.x) * w.nx + (p.z - w.z) * w.nz) < 1)) continue;
+          const right = (lot.seed + Math.round(w.x)) % 2 === 0;
+          const u = right ? w.L - 0.26 : 0.26;
+          if (!free(w, u - 0.14, u + 0.14, 0.2, Math.min(lot.height - 0.2, w.y1))) continue;
+          take(w, u - 0.14, u + 0.14, 0.2, lot.height - 0.2);
+          const [x, z] = pos(w, u);
+          const p: HandPipe = { lot: lotId, x, z, tx: w.tx, tz: w.tz, nx: w.nx, nz: w.nz, r: 0.048, po: 0.075, y0: 0.25, y1: lot.height - 0.34, color: [0x4a4d50, 0x8a7a6a, 0xe6e3da, 0x37393c, 0x6f4a3a][lot.seed % 5], room: 0.2, hopper: true };
+          let l = pipesOfLot.get(lotId);
+          if (!l) pipesOfLot.set(lotId, (l = []));
+          l.push(p);
+          const on = (s: HandSink): HandSink => s.frame(x, 0, z, w.tx, w.tz, w.nx, w.nz);
+          put(BIG, x, z, (s) => W.rainPipe(on(s), p));
+          const gx = x + w.nx * 0.2,
+            gz = z + w.nz * 0.2;
+          const f = occ.get(gx, gz);
+          const y = f & OCC.SIDEWALK ? SIDEWALK_Y : f & (OCC.PAVED | OCC.PATH) && terrain ? terrain.height(gx, gz) : NaN;
+          if (!Number.isNaN(y)) put(MID, x, z, (s) => W.gully(on(s), p, y));
+          if (stains) {
+            put(STAIN, x, z, (s) => {
+              on(s);
+              s.ink(0x8d8a84).soft(0, 0.18, 0.0015, 0.24, 0.42);
+              s.ink(0xbeb9af).streak(-0.09, 0.09, Math.max(0.5, p.y1 - 1.8), p.y1, 0.0015);
+            });
+          }
+        }
+      }
+
       // air bricks: the floor of an old house breathes through them, low down and at even steps
       if ((home || kind === 'school' || kind === 'church' || kind === 'townhall') && !(shop && kind !== 'townhouse')) {
         for (const w of out) {
-          const masonry = w.pattern === WALLPAT.BRICK || w.pattern === WALLPAT.STONE;
-          if (!masonry && w.pattern !== WALLPAT.PLASTER) continue;
+          const pat = w.pattern & 15;
+          const masonry = pat === WALLPAT.BRICK || pat === WALLPAT.STONE;
+          if (!masonry && pat !== WALLPAT.PLASTER) continue;
           const iron = lot.district === 'oldtown' || lot.seed % 3 === 0;
           const step = masonry ? 1.7 + (lot.seed % 5) * 0.12 : 2.6;
           for (let u = 0.55 + (lot.seed % 7) * 0.08; u < w.L - 0.3; u += step) {
@@ -364,6 +524,7 @@ export default function create(ctx: CityContext): CityModule {
           const c = big ? 0x8a9094 : seed % 2 ? 0xd7d4ca : 0xc7c5bb;
           const [x, z] = pos(w, u);
           put(BIG, x, z, (s) => W.meterCupboard(onWall(w, s), u, y0, mw, mh, c, true, seed));
+          sign(w, u, y0 + 0.13, 0.1468, 0.2, 0.03, 'ELECTRICITY', 0);
           // on its door: the warning, the supplier's label
           const dx = w.x + w.tx * (u - 0.045) + w.nx * 0.1465,
             dz = w.z + w.tz * (u - 0.045) + w.nz * 0.1465;
@@ -380,6 +541,7 @@ export default function create(ctx: CityContext): CityModule {
               take(w, gu - 0.22, gu + 0.22, 0.12, 0.56);
               const [gx, gz] = pos(w, gu);
               put(BIG, gx, gz, (s) => W.gasBox(onWall(w, s), gu, 0.13, seed));
+              sign(w, gu, 0.13 + 0.09, 0.1755, 0.1, 0.03, 'GAS', 0);
             }
           }
           break;
@@ -429,7 +591,7 @@ export default function create(ctx: CityContext): CityModule {
               if (stains) put(STAIN, x, z, (s) => onWall(w, s).ink(0x968f82).streak(u - 0.1, u + 0.1, y - 0.75, y - 0.06, 0.0014));
             }
           }
-          if (w.pattern !== WALLPAT.SIDING && rnd() < 0.3) {
+          if ((w.pattern & 15) !== WALLPAT.SIDING && rnd() < 0.3) {
             const y = 1.65 + rnd() * 0.3;
             const u = seek(w, w.L * (0.3 + rnd() * 0.4), 0.09, y - 0.09, y + 0.09);
             if (!Number.isNaN(u)) {
@@ -474,6 +636,7 @@ export default function create(ctx: CityContext): CityModule {
           const [x, z] = pos(w, u);
           put(BIG, x, z, (s) => W.worksConduit(onWall(w, s), u, y, yTop, seed));
           if (stains) put(STAIN, x, z, (s) => onWall(w, s).ink(0x7d6e5d).streak(u - 0.06, u + 0.06, y - 0.6, y - 0.13, 0.0014));
+          sign(w, u, y + 0.1, 0.0928, 0.09, 0.05, 'DANGER|415 V', 2);
         }
       }
 
@@ -486,6 +649,14 @@ export default function create(ctx: CityContext): CityModule {
         if (w.L > 2 && free(w, u - 0.1, u + 0.1, y - 0.1, y + 0.1)) {
           const [x, z] = pos(w, u);
           put(BIG, x, z, (s) => W.camera(onWall(w, s), u, y, left ? 1 : -1));
+          // it has to say so, at eye level near the door or the corner
+          const su = left ? 0.32 : w.L - 0.32;
+          if (free(w, su - 0.13, su + 0.13, 1.7, 1.94)) {
+            take(w, su - 0.13, su + 0.13, 1.7, 1.94);
+            const [cx2, cz2] = pos(w, su);
+            put(FINE, cx2, cz2, (s) => onWall(w, s).ink(0xdfc12e).rough(0.45).box(su - 0.11, su + 0.11, 1.74, 1.9, 0, 0.002, 0.0005));
+            sign(w, su, 1.82, 0.0022, 0.21, 0.15, 'CCTV|IN OPERATION', 2);
+          }
         }
       }
 
@@ -505,6 +676,8 @@ export default function create(ctx: CityContext): CityModule {
       }
     }
   }
+
+  if (closeHand(ctx, 'handballast') && ctx.plan.rail) addBallast(ctx);
 
   // ── the layers
   const sink = new HandSink();

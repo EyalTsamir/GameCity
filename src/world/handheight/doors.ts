@@ -18,7 +18,7 @@ const SCREW = 0x9a9488;
 
 /** how a metal is finished: brass polished by hands, iron dull, chrome bright */
 function hardware(s: HandSink, metal: number, k = 1): HandSink {
-  if (metal === BRASS) return s.ink(0xd4ad5a, k).metal(0.3);
+  if (metal === BRASS) return s.ink(0xbfa266, k).metal(0.3);
   if (metal === IRON) return s.ink(0x34363a, k).metal(0.52);
   return s.ink(0xc2c6c9, k).metal(0.26);
 }
@@ -42,9 +42,11 @@ function panelMoulds(s: HandSink, d: HandDoor, oL: number): void {
       y0 = P[k + 2],
       y1 = P[k + 3];
     const a = oL + 0.0125,
-      b = oL + 0.0225;
+      b = oL + 0.0238;
     const i = 0.035;
     s.rough(0.5);
+    // the field itself, one coat of the door's paint with the brush marks of the tile
+    s.ink(c, 1.03).rough(0.46).plate(u0 + i, u1 - i, y0 + i, y1 - i, b, 1.02);
     // a sloped band from the frame up to the field, on all four sides
     s.ink(c, 1.0);
     s.quad([u0 + i, y1 - i, b], [u1 - i, y1 - i, b], [u1 - 0.006, y1 - 0.006, a], [u0 + 0.006, y1 - 0.006, a]);
@@ -228,7 +230,7 @@ export function glassDoor(s: HandSink, d: HandDoor, _p: DoorPlace): void {
   const wide = w >= 2.3;
   const off = wide ? 0.16 : 0.11;
   const brass = d.seed % 3 === 0;
-  const steel = (k = 1): HandSink => (brass ? s.ink(0xcaa75a, k).metal(0.3) : s.ink(0xc4c7c9, k).metal(0.28));
+  const steel = (k = 1): HandSink => (brass ? s.ink(0xb89d64, k).metal(0.3) : s.ink(0xc4c7c9, k).metal(0.28));
   const y0 = 0.92,
     y1 = wide ? 1.72 : 1.42;
   for (const sg of [-1, 1]) {

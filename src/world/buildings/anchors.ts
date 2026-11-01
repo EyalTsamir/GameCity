@@ -222,6 +222,8 @@ export interface HandPipe extends HandFrame {
   color: number;
   /** room out from the wall at the foot */
   room: number;
+  /** draw a hopper head at the top (near only: world/handheight added this pipe) */
+  hopper?: boolean;
 }
 
 /** A step a generator built in front of a door: its top, how deep it is. */

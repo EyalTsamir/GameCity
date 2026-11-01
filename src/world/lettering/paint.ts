@@ -223,6 +223,23 @@ export function homeBells(s: LetterSink, flats: number, seed: number, tier: Tier
   for (let k = 0; k < flats; k++) s.text(names[k], 0.012, 0.021 + k * rowH, 0.011, { face: FACE.MONO, color: INK, z: 0.0066, maxW: pw - 0.05 });
 }
 
+/** a small plate on a wall or a box saying what it is: 0 engraved words on what is there, 1 white with black, 2 yellow warning, 3 red with white. Lines split on |. */
+export function wallSign(s: LetterSink, w: number, h: number, words: string, style: number): void {
+  const ink = style === 3 ? 0xf4f1ea : INK;
+  s.fadeAt(fadeFor(0.009));
+  if (style > 0) s.solid(0, 0, w, h, style === 1 ? 0xf0ede2 : style === 2 ? 0xe6c52e : 0xb0261d, 0.0002);
+  const lines = words.split('|');
+  const size = Math.min((h * 0.72) / lines.length, 0.05);
+  lines.forEach((t, k) => s.text(t, w / 2, h / 2 + ((lines.length - 1) / 2 - k) * size * 1.15 - size * 0.34, size, { face: FACE.SANS_B, color: ink, align: 'center', z: 0.0005, maxW: w - 0.01 }));
+}
+
+/** the names on an entry panel's cards, one a row */
+export function panelNames(s: LetterSink, flats: number, seed: number): void {
+  const names = residents(seed, flats);
+  s.fadeAt(fadeFor(0.008));
+  for (let k = 0; k < flats; k++) s.text(names[k], 0.004, 0.015 + k * 0.045, 0.0115, { face: FACE.MONO, color: INK, z: 0.0003, maxW: 0.1 });
+}
+
 /** a slate or ceramic name by the door of a house */
 export function housePlate(s: LetterSink, seed: number): void {
   const r = stream(seed + 4441);

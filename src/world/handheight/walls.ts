@@ -26,6 +26,12 @@ export function rainPipe(s: HandSink, p: HandPipe): void {
   const r = p.r + 0.0022;
   const lit = p.color;
   s.ink(lit).rough(0.42);
+  // a hopper under the roof, where a generator did not build one
+  if (p.hopper) {
+    s.ink(lit, 0.97).box(-0.1, 0.1, p.y1 - 0.02, p.y1 + 0.13, p.po - 0.06, p.po + 0.09, 0.008);
+    s.ink(lit, 0.9).box(-0.11, 0.11, p.y1 + 0.13, p.y1 + 0.15, p.po - 0.07, p.po + 0.1, 0.004);
+    s.ink(lit).tube([0, p.y1 - 0.02, p.po, 0, p.y1 - 0.09, p.po], r + 0.01, 14, r);
+  }
   // the plain pipe from the top down to the shoe
   s.tube([0, p.y1, p.po, 0, 0.36, p.po], r, 14);
   // sockets: a thicker short length every length of pipe
