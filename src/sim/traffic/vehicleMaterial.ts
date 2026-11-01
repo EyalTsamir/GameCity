@@ -26,6 +26,9 @@ import * as THREE from 'three';
 import type { GlobalUniforms } from '../../core/uniforms';
 import { patchLampMaterial } from '../../world/lamps/integrate';
 import { PLATE_CELLS } from './models';
+import { CLOSE_AO, CLOSE_FRAG_DETAIL, GLASS_FRAG_END, NEAR_FRAG_PARS } from './closeGlsl';
+import { makeCloseTiles } from '../../world/closemat/textures';
+import { closeVehOn } from '../../core/closeVehicles';
 
 const VERT_PARS = /* glsl */ `
 attribute vec4 aMeta;
@@ -52,11 +55,15 @@ varying float vGain;
 // 1 = real occupants sit in this cabin (pedestrians/occupants.ts, aInst2.w = 2): the shader draws none of its own
 // and the glass writes the depth of the cabin surface behind it, so the figures inside show through
 varying float vSeated;
+#ifdef VEH_NEAR
+varying vec3 vSeat;
+#endif
 // variant parts: n = only for variant n - 1; 16 + bits = for the variants whose bit is set
 bool thHidden(float part, float variant, float phase) {
   part -= 100.0 * floor( part * 0.01 + 0.001 );
   if (part < 0.5) return false;
-  // 90: an accessory a few vehicles carry (roof box), picked by the phase
+  // 90: an accessory a few vehicles carry (roof box), picked by the phase; 91 and up: things left in a cabin, each its own
+  if (part > 90.5) return fract( phase * part * 1.37 + part * 0.113 ) < 0.68;
   if (part > 89.5) return fract( phase * 7.31 ) < 0.8;
   if (part > 15.5) return mod(floor((part - 16.0) / exp2(floor(variant + 0.5))), 2.0) < 0.5;
   return abs(part - variant - 1.0) > 0.25;
@@ -108,6 +115,9 @@ if ( aInst2.y > 9.5 && aInst2.y > 10.001 && transformed.x < -1.253 && transforme
   }
 }
 vObj = vec4( transformed, aDetC );
+#ifdef VEH_NEAR
+vSeat = aWheel.xyz;
+#endif
 vObjN = vec4( objectNormal, aInst2.z );
 vDetA = aDetA;
 vDetB = aDetB;
@@ -128,8 +138,8 @@ vDetB = aDetB;
   int bl = int( aInst.y + 0.5 );
   vec3 e = vec3( 0.0 );
   float useD = 1.0;
-  if ( lt == 1 ) e = vec3( 0.35 + 3.6 * lon );
-  else if ( lt == 2 ) e = vec3( 0.18 + 1.6 * lon + 3.2 * aInst.x );
+  if ( lt == 1 ) e = vec3( 0.35 * ( 1.0 - uLights ) + 3.6 * lon );
+  else if ( lt == 2 ) e = vec3( 0.18 * ( 1.0 - uLights ) + 1.6 * lon + 3.2 * aInst.x );
   else if ( lt == 3 ) e = vec3( ( bl == 1 || bl == 3 ) ? bOn * 4.5 : 0.0 );
   else if ( lt == 4 ) e = vec3( ( bl == 2 || bl == 3 ) ? bOn * 4.5 : 0.0 );
   else if ( lt == 5 || lt == 6 ) {
@@ -140,6 +150,8 @@ vDetB = aDetB;
   else if ( lt == 7 ) e = vec3( 0.25 + 2.2 * uLights );
   else if ( lt == 8 ) e = vec3( 0.3 + 2.0 * uLights );
   else if ( lt == 9 ) { e = vec3( 1.0, 0.8, 0.55 ) * ( 0.9 * uLights * min( aInst2.w, 1.0 ) ); useD = 0.0; }
+  else if ( lt == 11 ) { e = vec3( 1.0, 0.92, 0.78 ) * min( aInst2.w, 1.0 ) * ( 0.25 + 4.5 * uLights ); useD = 0.0; } // a saloon's strip lamps
+  else if ( lt == 10 ) e = vec3( min( aInst2.w, 1.0 ) * ( 0.25 + 1.4 * uLights ) ); // dials and radio, in a vehicle somebody drives
   vEmit = vec4( e, useD );
   float fin = floor( aMeta.w * 0.25 );
   vRough = aMeta.w - fin * 4.0;
@@ -169,6 +181,7 @@ float thBaseSpec = 1.0;
   bool glass = cls > 1.5 && ( cls < 2.5 || ( cls > 3.5 && cls < 5.5 ) );
   // bus body (class 6) inside the flank window runs: with real seated passengers its depth goes behind the cabin
   // (the kerb-side doors, 1.2 m wide, are glazed down to vDetA.w)
+  #ifndef VEH_NEAR
   if ( abs( cls - 6.0 ) < 0.5 && vSeated > 0.5 && abs( p.x ) > vDetA.x - 0.06 && p.z > vDetB.x && p.z < vDetB.y && p.y < vDetA.z ) {
     bool door = p.x < 0.0 && ( abs( p.z - vDetB.z ) < 0.6 || abs( p.z - vDetB.w ) < 0.6 );
     vec3 rdb = normalize( p - vCamObj.xyz );
@@ -177,6 +190,8 @@ float thBaseSpec = 1.0;
     // so the far-side wheels and arches no longer show through the seat rows
     if ( uVehGlass > 0.5 && thHitT > 0.0 && rdb.y < -0.02 ) thHitT = min( thHitT, max( ( vDetA.y - 0.62 - p.y ) / rdb.y, 0.05 ) );
   }
+  #endif
+  #ifndef VEH_NEAR
   if ( glass && uVehDetail.x > 0.5 ) {
     vec3 rd = normalize( p - vCamObj.xyz );
     // the cabin is lit by daylight through all its windows, not by the light on this pane: emitted, under the
@@ -195,6 +210,7 @@ float thBaseSpec = 1.0;
     }
     diffuseColor.rgb *= uVehGlass > 0.5 ? 0.05 : 0.25;
   }
+  #endif
   if ( abs( cls - 1.0 ) < 0.5 ) {
     if ( uVehDetail.y > 0.5 ) {
       // panel gaps: door cuts on the flanks, door bottoms, bonnet (cowl + fender seams), boot lid. Each gap is a
@@ -230,9 +246,16 @@ float thBaseSpec = 1.0;
         // a dent in a door
         vec2 c = vec2( mix( vDetA.y, vDetA.x, 0.25 + 0.5 * thH1( ph * 3.1 ) ), vDetB.w - 0.22 - 0.15 * thH1( ph * 4.7 ) );
         vec2 o = vec2( p.z, p.y ) - c;
+        #ifdef VEH_NEAR
+        o.x *= 0.5;
+        #endif
         float r = length( o );
         float k = side * step( 0.0, p.x * ( hd > 0.89 ? 1.0 : -1.0 ) ) * step( r, 0.15 );
+        #ifdef VEH_NEAR
+        thTiltN -= ( vFwdV * o.x + vUpV * o.y ) / max( r, 1e-3 ) * ( 0.09 * k * sin( 3.14159 * r / 0.15 ) );
+        #else
         thTiltN -= ( vFwdV * o.x + vUpV * o.y ) / max( r, 1e-3 ) * ( 0.32 * k * sin( 3.14159 * r / 0.15 ) );
+        #endif
       }
       if ( thH1( ph * 23.9 ) > 0.92 && side > 0.5 && p.z < vDetA.x && p.z > vDetA.y && p.y < vDetB.w )
         diffuseColor.rgb *= vec3( 1.07, 1.02, 0.9 ); // a replacement door, never quite the same paint
@@ -279,6 +302,9 @@ float thBaseSpec = 1.0;
 `;
 
 const FRAG_PARS = /* glsl */ `
+#ifdef VEH_NEAR
+${NEAR_FRAG_PARS}
+#endif
 uniform vec4 uVehDetail;
 uniform float uVehGlass;
 uniform float uLights;
@@ -364,6 +390,7 @@ float thLine( float d, float w, float pix ) {
   float lw = max( w, pix * 0.5 );
   return clamp( ( lw - abs( d ) ) / pix + 0.5, 0.0, 1.0 ) * ( w / lw );
 }
+#ifndef VEH_NEAR
 // nearest ray / box hit in front of the ray (cabin interior)
 void thBox( vec3 ro, vec3 rd, vec3 ird, vec3 b0, vec3 b1, vec3 col, inout float tb, inout vec3 nb, inout vec3 cb ) {
   vec3 t0 = ( b0 - ro ) * ird, t1 = ( b1 - ro ) * ird;
@@ -503,18 +530,21 @@ vec3 thInterior( vec3 ro, vec3 rd, float style, float occupied, float ph ) {
   thHitT = tb;
   return cb * lit * mix( 1.0, 0.55, clamp( ( tb - 0.3 ) * 0.5, 0.0, 1.0 ) );
 }
+#endif
 `;
 
 export function createVehicleMaterial(
   uniforms: GlobalUniforms,
   atlas: THREE.Texture,
-): { material: THREE.MeshPhysicalMaterial; far: THREE.MeshPhysicalMaterial; depth: THREE.MeshDepthMaterial; detail: { value: THREE.Vector4 } } {
+): { material: THREE.MeshPhysicalMaterial; far: THREE.MeshPhysicalMaterial; close: THREE.MeshPhysicalMaterial | null; closeBus: THREE.MeshPhysicalMaterial | null; glass: THREE.MeshPhysicalMaterial | null; depth: THREE.MeshDepthMaterial; detail: { value: THREE.Vector4 } } {
   const detail = { value: new THREE.Vector4(1, 1, 1, 0) };
   // ?novehglass: the vehicle glass without its G1 changes (clear pane, tint, bus floor clamp)
   const vehGlass = { value: typeof location !== 'undefined' && new URLSearchParams(location.search).has('novehglass') ? 0 : 1 };
   // two programs: the seated-cabin depth trick (gl_FragDepth turns early-z off for every fragment of the draw)
   // only where real occupants can be seated — LOD0; the far levels use the same shader without it
-  const make = (seatDepth: boolean): THREE.MeshPhysicalMaterial => {
+  // (and the close level's two: `close` the body and built cabin, `glass` the panes over them, see closeGlsl.ts)
+  const tiles = closeVehOn('vehclose') ? makeCloseTiles() : null;
+  const make = (seatDepth: boolean, near: '' | 'close' | 'closebus' | 'glass' = ''): THREE.MeshPhysicalMaterial => {
     const material = new THREE.MeshPhysicalMaterial({
       color: 0xffffff,
       vertexColors: true,
@@ -525,11 +555,28 @@ export function createVehicleMaterial(
       clearcoatRoughness: 0.1,
     });
     material.name = 'traffic-vehicle';
+    if (near) {
+      material.defines = { ...material.defines, VEH_NEAR: 1, ...(near === 'glass' ? { VEH_GLASSPASS: 1 } : { VEH_CLOSE: 1 }), ...(near === 'closebus' ? { VEH_BUSHOLES: 1 } : {}) };
+      if (near === 'glass') {
+        // what the pane adds, over what it lets through (alpha): one blend for reflection and tint alike
+        material.transparent = true;
+        material.depthWrite = false;
+        material.blending = THREE.CustomBlending;
+        material.blendEquation = THREE.AddEquation;
+        material.blendSrc = THREE.OneFactor;
+        material.blendDst = THREE.SrcAlphaFactor;
+      }
+    }
     material.onBeforeCompile = (shader) => {
       shader.uniforms.uTime = uniforms.uTime;
       shader.uniforms.uLights = uniforms.uLights;
       shader.uniforms.uVehDetail = detail;
       shader.uniforms.uVehGlass = vehGlass;
+      if (near && tiles) {
+        shader.uniforms.tFibre = { value: tiles.fibre };
+        shader.uniforms.tGrain = { value: tiles.grain };
+        shader.uniforms.tCrack = { value: tiles.crack };
+      }
       shader.vertexShader = shader.vertexShader
         .replace('#include <common>', `#include <common>\n${VERT_PARS}`)
         .replace(
@@ -544,7 +591,9 @@ export function createVehicleMaterial(
       shader.fragmentShader = shader.fragmentShader
         .replace('#include <shadowmap_pars_fragment>', THREE.ShaderChunk.shadowmap_pars_fragment.replace('interleavedGradientNoise( gl_FragCoord.xy ) * PI2', '0.7'))
         .replace('#include <common>', `#include <common>\n${FRAG_PARS}`)
-        .replace('#include <color_fragment>', `#include <color_fragment>\n${FRAG_DETAIL}`)
+        .replace('#include <color_fragment>', `#include <color_fragment>\n${FRAG_DETAIL}\n${CLOSE_FRAG_DETAIL}`)
+        // (the moon is a light like the sun to the lacquer: on a mirror-smooth pane its highlight blows out into a lamp-like spot)
+        .replace('#include <aomap_fragment>', `#include <aomap_fragment>\n#ifdef USE_CLEARCOAT\n  clearcoatSpecularDirect *= 1.0 - 0.95 * uLights;\n#endif\nreflectedLight.directSpecular *= 1.0 - 0.9 * uLights;\n${CLOSE_AO}`)
         .replace('#include <roughnessmap_fragment>', 'float roughnessFactor = clamp( roughness * vRough + thRoughAdd, 0.04, 1.0 );')
         .replace('#include <normal_fragment_maps>', '#include <normal_fragment_maps>\nnormal = normalize( normal + thTiltN );')
         .replace('#include <clearcoat_normal_fragment_begin>', '#include <clearcoat_normal_fragment_begin>\n#ifdef USE_CLEARCOAT\n  clearcoatNormal = normalize( clearcoatNormal + thTiltN );\n#endif')
@@ -557,11 +606,35 @@ export function createVehicleMaterial(
     { vec3 thRw = reflect( -geometryViewDir, geometryNormal ); thReflDet = clamp( 1.6 - length( fwidth( thRw ) ) * 9.0, 0.0, 1.0 ) * step( 0.5, uVehDetail.w ); }
     #ifdef USE_CLEARCOAT
       // body paint (vCoat > 1.5) gets the street at more contrast: a lacquered panel mirrors it clearly
+      #ifdef VEH_GLASSPASS
+      clearcoatRadiance *= vGain * 0.7 * thStreetRefl( geometryViewDir, geometryClearcoatNormal, 0.22 );
+      #else
       clearcoatRadiance *= vGain * thStreetRefl( geometryViewDir, geometryClearcoatNormal, 0.0 ) * ( vCoat > 1.5 && uVehDetail.w > 0.5 ? thPaintGain( geometryViewDir, geometryClearcoatNormal ) : 1.0 );
+      #endif
       // G1: glass (gain 3.6) mirrors the street at about 60 %: at full gain the grey sky veil hid the cabin (smoked plastic)
       if ( uVehGlass > 0.5 && vGain > 3.0 ) clearcoatRadiance *= 0.6;
     #endif
+    #ifdef VEH_NEAR
+      // after dark the lacquer holds the street's glow: a warm band at the height of the lit windows, broken into their rows, soft
+      // (a sharp pattern on a flat door magnifies into polka dots)
+      if ( vCoat > 1.5 || vGain > 3.0 ) {
+        vec3 thRn = inverseTransformDirection( reflect( -geometryViewDir, geometryClearcoatNormal ), viewMatrix );
+        float thE = thRn.y + 0.12;
+        float thAz = atan( thRn.x, thRn.z );
+        float thBand = smoothstep( 0.0, 0.1, thE ) * smoothstep( 0.62, 0.22, thE );
+        float thW = thVN( vec3( thAz * 9.0, thE * 14.0, 2.0 ) );
+        clearcoatRadiance += uLights * vec3( 1.0, 0.76, 0.48 ) * thBand * ( 0.09 + 0.08 * smoothstep( 0.35, 0.75, thW ) ) * ( vGain > 3.0 ? 1.0 : 0.85 );
+      }
+    #endif
+    #ifdef VEH_CLOSE
+      totalEmissiveRadiance += thLensEmit + thLensAlb * ( irradiance + iblIrradiance ) * RECIPROCAL_PI;
+    #endif
+    #ifdef VEH_NEAR
+    // (from a metre away the sketched street turns to blocks on a thin strip of chrome: half of it, half an even grey)
+    if ( vMetal > 0.5 ) radiance *= vGain * mix( thStreetRefl( geometryViewDir, geometryNormal, material.roughness * 0.3 ), 0.62 * ( 1.0 - 0.8 * uLights ), 0.55 );
+    #else
     if ( vMetal > 0.5 ) radiance *= vGain * thStreetRefl( geometryViewDir, geometryNormal, material.roughness * 0.3 );
+    #endif
   #endif`,
         )
         .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += vEmit.rgb * mix( vec3( 1.0 ), diffuseColor.rgb, vEmit.a ) * thCabinK + thGlassEmit;')
@@ -577,15 +650,19 @@ export function createVehicleMaterial(
     vec4 thCp = projectionMatrix * vec4( thMv * ( 1.0 + thHitT / length( thMv ) ), 1.0 );
     gl_FragDepth = clamp( 0.5 * thCp.z / thCp.w + 0.5, 0.0, 1.0 );
   }`
-            : '#include <dithering_fragment>',
+            : `#include <dithering_fragment>\n${GLASS_FRAG_END}`,
         );
     };
-    material.customProgramCacheKey = () => (seatDepth ? 'traffic-vehicle-v15' : 'traffic-vehicle-v15-nd');
+    material.customProgramCacheKey = () => (seatDepth ? 'traffic-vehicle-v16' : 'traffic-vehicle-v16-nd') + near;
     patchLampMaterial(material); // night street-light map (night agent)
     return material;
   };
   const material = make(true);
   const far = make(false);
+  const close = tiles ? make(false, 'close') : null;
+  const glass = tiles ? make(false, 'glass') : null;
+  // (its own program: a discard turns early-z off for every pixel of a draw, and only the bus needs one)
+  const closeBus = tiles ? make(false, 'closebus') : null;
 
   const depth = new THREE.MeshDepthMaterial();
   depth.name = 'traffic-vehicle-depth';
@@ -593,10 +670,10 @@ export function createVehicleMaterial(
     shader.vertexShader = shader.vertexShader
       .replace(
         '#include <common>',
-        '#include <common>\nattribute float aPart;\nattribute vec4 aInst2;\nbool thHidden(float part, float variant, float phase) {\n  part -= 100.0 * floor( part * 0.01 + 0.001 );\n  if (part < 0.5) return false;\n  if (part > 89.5) return fract( phase * 7.31 ) < 0.8;\n  if (part > 15.5) return mod(floor((part - 16.0) / exp2(floor(variant + 0.5))), 2.0) < 0.5;\n  return abs(part - variant - 1.0) > 0.25;\n}',
+        '#include <common>\nattribute float aPart;\nattribute vec4 aInst2;\nbool thHidden(float part, float variant, float phase) {\n  part -= 100.0 * floor( part * 0.01 + 0.001 );\n  if (part < 0.5) return false;\n  if (part > 90.5) return fract( phase * part * 1.37 + part * 0.113 ) < 0.68;\n  if (part > 89.5) return fract( phase * 7.31 ) < 0.8;\n  if (part > 15.5) return mod(floor((part - 16.0) / exp2(floor(variant + 0.5))), 2.0) < 0.5;\n  return abs(part - variant - 1.0) > 0.25;\n}',
       )
       .replace('#include <begin_vertex>', '#include <begin_vertex>\nif ( thHidden( aPart, aInst2.x, aInst2.z ) ) transformed = vec3( 0.0 );');
   };
-  depth.customProgramCacheKey = () => 'traffic-vehicle-depth-v4';
-  return { material, far, depth, detail };
+  depth.customProgramCacheKey = () => 'traffic-vehicle-depth-v5';
+  return { material, far, close, closeBus, glass, depth, detail };
 }

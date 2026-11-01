@@ -568,3 +568,84 @@ export function loftCar(s: CarShape, lod: number): LoftParts {
     gap: mk(out.gap),
   };
 }
+
+export interface LinerParts {
+  door: THREE.BufferGeometry | null;
+  head: THREE.BufferGeometry | null;
+  pillar: THREE.BufferGeometry | null;
+}
+
+/** The inside of a lofted car between z0 and z1 (close level): the same rings a few centimetres in, facing in, with the glass
+ *  left open: door cards up to the sill of the windows, pillars, roof lining. */
+export function linerCar(s: CarShape, z0: number, z1: number): LinerParts {
+  const zs: number[] = [];
+  for (let z = z0; z < z1; z += 0.14) zs.push(z);
+  zs.push(z1);
+  const ks = [s.wsTop, s.rwTop, s.rwBase, s.glassRear, s.pillarB - 0.05, s.pillarB + 0.05];
+  if (s.pillarC !== undefined) ks.push(s.pillarC - 0.035, s.pillarC + 0.035);
+  for (const k of ks) if (k > z0 + 0.01 && k < z1 - 0.01) zs.push(k);
+  zs.sort((a, b) => a - b);
+  for (let i = zs.length - 2; i > 0; i--) if (zs[i] - zs[i - 1] < 0.02) zs.splice(i, 1);
+  const P = new Float64Array(RING * 3);
+  const rings: number[][] = [];
+  const Ts: number[] = [];
+  for (const z of zs) {
+    Ts.push(ringAt(s, z, P));
+    const r: number[] = [];
+    for (let k = 0; k < RING; k++) r.push(Math.max(0, P[k * 3] - 0.032), P[k * 3 + 1] - (k >= 7 ? 0.035 : 0), z);
+    rings.push(r);
+  }
+  const out: Record<keyof LinerParts, number[]> = { door: [], head: [], pillar: [] };
+  const tall = s.belt + 0.12;
+  const a = new THREE.Vector3(),
+    b = new THREE.Vector3(),
+    c = new THREE.Vector3(),
+    n = new THREE.Vector3(),
+    m = new THREE.Vector3();
+  const tri = (o: number[], A: number[], B: number[], C: number[], cz: number) => {
+    a.set(A[0], A[1], A[2]);
+    b.set(B[0], B[1], B[2]).sub(a);
+    c.set(C[0], C[1], C[2]).sub(a);
+    n.copy(b).cross(c);
+    // facing the middle of the cabin
+    m.set(-a.x, s.belt - a.y, cz - a.z);
+    if (n.dot(m) < 0) o.push(...A, ...C, ...B);
+    else o.push(...A, ...B, ...C);
+  };
+  for (let j = 0; j < zs.length - 1; j++) {
+    const zc = (zs[j] + zs[j + 1]) / 2;
+    const screen = zc > s.wsTop + 0.02 && zc < s.wsBase - 0.02;
+    const rear = zc > s.rwBase + 0.02 && zc < s.rwTop - 0.02;
+    const sideGlass = Ts[j] > tall && Ts[j + 1] > tall && zc > s.glassRear && zc < s.wsBase;
+    const pillar = Math.abs(zc - s.pillarB) < 0.05 || (s.pillarC !== undefined && Math.abs(zc - s.pillarC) < 0.035);
+    for (let k = 2; k < 9; k++) {
+      let g: keyof LinerParts;
+      if (k <= 5) g = 'door';
+      else if (k === 6) {
+        if (sideGlass && !pillar) continue;
+        g = 'pillar';
+      } else if (k === 7) g = 'head';
+      else {
+        if (screen || rear) continue;
+        g = 'head';
+      }
+      for (const e of [1, -1]) {
+        const p = (r: number[], q: number) => [e * r[q * 3], r[q * 3 + 1], r[q * 3 + 2]];
+        const A = p(rings[j], k),
+          B = p(rings[j], k + 1),
+          C = p(rings[j + 1], k + 1),
+          D = p(rings[j + 1], k);
+        tri(out[g], A, B, C, zc);
+        tri(out[g], A, C, D, zc);
+      }
+    }
+  }
+  const mk = (p: number[]): THREE.BufferGeometry | null => {
+    if (p.length === 0) return null;
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(p, 3));
+    g.computeVertexNormals();
+    return g;
+  };
+  return { door: mk(out.door), head: mk(out.head), pillar: mk(out.pillar) };
+}

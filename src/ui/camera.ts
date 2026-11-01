@@ -1845,6 +1845,8 @@ export default function create(ctx: CityContext): CityModule {
         _focusFrom.copy(_pos);
         const hit = scout.pick(raycaster.ray.set(_pos, _dir));
         focusPick = hit && hit.kind !== 'building' ? hit.distance : Infinity;
+        // (parked cars are no click target, but the lens must not look through them)
+        focusPick = Math.min(focusPick, (ctx.services.traffic as { rayHit?(p: THREE.Vector3, d: THREE.Vector3, maxT: number): number } | undefined)?.rayHit?.(_pos, _dir, 14) ?? Infinity);
         // the surfaces themselves, where the near materials know them: a bench, a post, the wall at the back of a porch
         focusReal = (ctx.services.closeMat as { rayHit(p: THREE.Vector3, d: THREE.Vector3, maxT: number): number } | undefined)?.rayHit(_pos, _dir, 12) ?? -1;
       }

@@ -30,6 +30,7 @@ import { addLampLights } from '../core/lampLight';
 export interface RailService {
   trains(): number;
   sim: RailSim;
+  render: TrainRenderer;
 }
 
 export default function create(ctx: CityContext): CityModule {
@@ -151,7 +152,7 @@ export default function create(ctx: CityContext): CityModule {
   ctx.scene.add(root);
 
   const emit = (name: string, payload: unknown) => ctx.events.emit(name, payload);
-  const service: RailService = { trains: () => sim.trains.length, sim };
+  const service: RailService = { trains: () => sim.trains.length, sim, render: trains };
   ctx.services.rail = service;
 
   // ── picker
@@ -262,6 +263,7 @@ export default function create(ctx: CityContext): CityModule {
         trains: sim.trains.length,
         cpuMs: Math.round(cpuMs * 1000) / 1000,
         carsDrawn: trains.drawn,
+        carsClose: trains.closeDrawn,
         train: tr ? `${tr.number} ${tr.kind} ${tr.phase} x=${sim.headX(tr).toFixed(1)} v=${tr.v.toFixed(1)}` : '-',
         nextIn: sim.queue[0] ? Math.max(0, sim.queue[0].spawnAt - sim.now).toFixed(0) + ' s' : '-',
         spawned: sim.stats.spawned,

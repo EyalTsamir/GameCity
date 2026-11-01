@@ -8,14 +8,23 @@ import type { CityContext } from '../../core/context';
 import { composeMatrix } from './geo';
 import { createTrainMaterials, type TrainMaterials } from './trainMaterial';
 import { buildEmu, buildLoco, buildWagon, EMU } from './trainModels';
+import { makeHooks } from './closeModel';
+import { closeVeh } from '../../core/closeVehicles';
 import type { RailSim, CarType, Train } from './trains';
 import type { Glows } from './glows';
+import type { Geo } from './geo';
 
 /** instanced pools: cab and middle cars share one geometry ('emu') */
 type PoolId = 'emu' | 'loco' | 'wagon';
 const POOLS: PoolId[] = ['emu', 'loco', 'wagon'];
 const POOL_OF: Record<CarType, PoolId> = { cab: 'emu', mid: 'emu', loco: 'loco', wagon: 'wagon' };
 const CAP: Record<PoolId, number> = { emu: 10, loco: 2, wagon: 20 };
+/** the close level (real glass, a built saloon, machined bogies): at most this many cars of a kind, the nearest ones as they come */
+const CLOSE_CAP: Record<PoolId, number> = { emu: 4, loco: 1, wagon: 4 };
+/** inside this distance (m, for the reference view: 930 px tall, 32° vertical fov; same logic as the road vehicles) a car is at its close level */
+const CLOSE_DIST = 18;
+const REF_HEIGHT = 930;
+const REF_TAN = Math.tan((32 * Math.PI) / 360);
 
 interface Pool {
   mesh: THREE.InstancedMesh;
@@ -23,6 +32,10 @@ interface Pool {
   inst2: THREE.InstancedBufferAttribute;
   col2: THREE.InstancedBufferAttribute;
   n: number;
+  /** close level only: the saloon behind the openings (no shadow caster) and the panes, sharing the instance buffers */
+  inner?: THREE.InstancedMesh;
+  glass?: THREE.InstancedMesh;
+  paneDepth?: THREE.InstancedMesh;
 }
 
 /** local light positions (model space, +Z = model front) */
@@ -56,6 +69,12 @@ export class TrainRenderer {
   readonly group = new THREE.Group();
   readonly mats: TrainMaterials;
   private pools = new Map<PoolId, Pool>();
+  private close = new Map<PoolId, Pool>();
+  private closeLim = 0;
+  /** cars at the close level last frame */
+  closeDrawn = 0;
+  /** false: every car on the far level (for measuring: abprof flips it in one page, `__city.ctx.services.rail.render.closeOn`) */
+  closeOn = true;
   private m4 = new THREE.Matrix4();
   private v = new THREE.Vector3();
   private glowBase: number;
@@ -98,6 +117,63 @@ export class TrainRenderer {
       this.group.add(mesh);
       this.pools.set(type, { mesh, inst, inst2, col2, n: 0 });
     }
+    if (this.mats.close && this.mats.glass && closeVeh(ctx, 'vehtrain', 'high')) {
+      for (const type of POOLS) {
+        const hk = makeHooks();
+        const body = type === 'emu' ? buildEmu(hk) : type === 'loco' ? buildLoco(hk) : buildWagon(hk);
+        const cap = CLOSE_CAP[type];
+        const inst = new THREE.InstancedBufferAttribute(new Float32Array(cap * 4), 4);
+        const inst2 = new THREE.InstancedBufferAttribute(new Float32Array(cap * 4), 4);
+        const col2 = new THREE.InstancedBufferAttribute(new Float32Array(cap * 3), 3);
+        for (const a of [inst, inst2, col2]) a.setUsage(THREE.DynamicDrawUsage);
+        const share = (g: THREE.BufferGeometry) => {
+          g.setAttribute('aInst', inst);
+          g.setAttribute('aInst2', inst2);
+          g.setAttribute('aCol2', col2);
+          return g;
+        };
+        const mesh = new THREE.InstancedMesh(share(body), this.mats.close, cap);
+        mesh.name = `rail-${type}-close`;
+        mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+        mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(cap * 3).fill(1), 3);
+        mesh.instanceColor.setUsage(THREE.DynamicDrawUsage);
+        mesh.customDepthMaterial = this.mats.depth;
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        mesh.count = 0;
+        mesh.visible = false;
+        this.group.add(mesh);
+        const pool: Pool = { mesh, inst, inst2, col2, n: 0 };
+        const extra = (geo: Geo, mat: THREE.Material, name: string, order: number): THREE.InstancedMesh | undefined => {
+          if (geo.triangles === 0) return undefined;
+          const m = new THREE.InstancedMesh(share(geo.build({ anim: false, extra: true })), mat, cap);
+          m.name = `rail-${type}-${name}`;
+          m.instanceMatrix = mesh.instanceMatrix;
+          m.instanceColor = mesh.instanceColor;
+          m.receiveShadow = true;
+          m.castShadow = false;
+          m.count = 0;
+          m.visible = false;
+          m.renderOrder = order;
+          this.group.add(m);
+          return m;
+        };
+        pool.inner = extra(hk.inner, this.mats.close, 'inner', 0);
+        pool.glass = extra(hk.glass, this.mats.glass, 'glass', 1);
+        if (pool.glass && this.mats.paneDepth) {
+          // the panes once more, depth only, after every transparent thing behind them has been drawn
+          const m = new THREE.InstancedMesh(pool.glass.geometry, this.mats.paneDepth, cap);
+          m.name = `rail-${type}-panedepth`;
+          m.instanceMatrix = mesh.instanceMatrix;
+          m.count = 0;
+          m.visible = false;
+          m.renderOrder = 50;
+          this.group.add(m);
+          pool.paneDepth = m;
+        }
+        this.close.set(type, pool);
+      }
+    }
     this.glowBase = glowBase;
     // 2 trains × (3 head + 2 tail + 1 pool)
     this.glowCount = 12;
@@ -123,6 +199,15 @@ export class TrainRenderer {
   update(): void {
     this.mats.interior.value = this.mats.interiorUrlOff || this.ctx.quality.level === 'low' ? 0 : 1;
     for (const p of this.pools.values()) p.n = 0;
+    for (const p of this.close.values()) p.n = 0;
+    const cp = this.ctx.camera.position;
+    const rz = this.ctx.plan.rail.z;
+    if (this.close.size) {
+      const cam = this.ctx.camera;
+      const h = Math.max(200, this.ctx.size.height * this.ctx.renderer.getPixelRatio());
+      const kl = (h / REF_HEIGHT) * (REF_TAN / Math.tan((cam.fov * Math.PI) / 360));
+      this.closeLim = (CLOSE_DIST * kl) ** 2;
+    }
     let gi = 0;
     for (const tr of this.sim.trains) {
       this.sim.place(tr);
@@ -130,7 +215,14 @@ export class TrainRenderer {
         const c = tr.cars[ci];
         if (!c.visible) continue;
         const pid = POOL_OF[c.type];
-        const p = this.pools.get(pid)!;
+        let p = this.pools.get(pid)!;
+        const cl = this.close.get(pid);
+        if (cl) {
+          // the nearest point of the car; a car half in a tunnel mouth stays on the far level (the close programs have no discard)
+          const dx = Math.max(0, Math.abs(c.x - cp.x) - c.half);
+          const d2 = dx * dx + (rz - cp.z) ** 2 + (c.y + 2 - cp.y) ** 2;
+          if (this.closeOn && d2 < this.closeLim && cl.n < CLOSE_CAP[pid] && c.x - c.half > this.sim.opt.clipX0 && c.x + c.half < this.sim.opt.clipX1) p = cl;
+        }
         if (p.n >= CAP[pid]) continue;
         const i = p.n++;
         // model +Z points along s (world x direction)
@@ -160,6 +252,11 @@ export class TrainRenderer {
           this.v.set(L[0], L[1], L[2] + 0.06).applyMatrix4(this.m4);
           if (this.v.x < clip0 || this.v.x > clip1) continue;
           this.slot(gi, c.role === 1 ? 1 : 2);
+          // beside the camera the lens glows by itself: a metre-wide halo would be a ball of haze
+          if (this.close.size) {
+            const fd2 = this.v.distanceToSquared(cp);
+            this.glows.intensity(this.glowBase + gi, (c.role === 1 ? 1.1 : 0.9) * Math.min(1, Math.max(0, (fd2 - 25) / (225 - 25))));
+          }
           this.glows.move(this.glowBase + gi, this.v.x, this.v.y, this.v.z);
           gi++;
         }
@@ -185,6 +282,35 @@ export class TrainRenderer {
         p.inst2.needsUpdate = true;
         p.col2.needsUpdate = true;
         p.mesh.computeBoundingSphere();
+      }
+    }
+    this.closeDrawn = 0;
+    for (const p of this.close.values()) {
+      this.closeDrawn += p.n;
+      p.mesh.count = p.n;
+      p.mesh.visible = p.n > 0;
+      if (p.inner) {
+        p.inner.count = p.n;
+        p.inner.visible = p.n > 0;
+      }
+      if (p.glass) {
+        p.glass.count = p.n;
+        p.glass.visible = p.n > 0;
+      }
+      if (p.paneDepth) {
+        p.paneDepth.count = p.n;
+        p.paneDepth.visible = p.n > 0;
+      }
+      if (p.n > 0) {
+        p.mesh.instanceMatrix.needsUpdate = true;
+        p.mesh.instanceColor!.needsUpdate = true;
+        p.inst.needsUpdate = true;
+        p.inst2.needsUpdate = true;
+        p.col2.needsUpdate = true;
+        p.mesh.computeBoundingSphere();
+        if (p.inner) p.inner.boundingSphere = p.mesh.boundingSphere;
+        if (p.glass) p.glass.boundingSphere = p.mesh.boundingSphere;
+        if (p.paneDepth) p.paneDepth.boundingSphere = p.mesh.boundingSphere;
       }
     }
   }
