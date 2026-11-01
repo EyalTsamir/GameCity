@@ -24,13 +24,13 @@ export const glassMirror = {
 /** how far (m) a pane may stand off the plane and still read the mirror */
 const TOL = 1.6;
 
-/** GLSL (facade, shop fronts): the mirror over the sky `sky`, into `out`; returns how much it applies */
+/** GLSL (facade, shop fronts): the mirror over the sky `sky`, into `res` (a: how open to the sky that reflection is); returns how much it applies */
 export const GLASS_MIRROR_GLSL = /* glsl */ `
 uniform sampler2D tGM;
 uniform mat4 uGMMat;
 uniform vec4 uGM;
-float bhGlassMirror(vec3 wp, vec3 N, vec2 wob, float lod, vec3 sky, out vec3 res) {
-  res = sky;
+float bhGlassMirror(vec3 wp, vec3 N, vec2 wob, float lod, vec3 sky, out vec4 res) {
+  res = vec4(sky, 1.0);
   if (uGM.x < 0.004 || dot(N.xz, uGM.yz) < 0.9) return 0.0;
   float off = dot(wp.xz, uGM.yz) + uGM.w;
   float k = uGM.x * (1.0 - smoothstep(${(TOL * 0.7).toFixed(2)}, ${TOL.toFixed(2)}, abs(off)));
@@ -39,7 +39,7 @@ float bhGlassMirror(vec3 wp, vec3 N, vec2 wob, float lod, vec3 sky, out vec3 res
   vec3 ey = cameraPosition - wp;
   vec4 c = uGMMat * vec4(wp - ey * off / dot(ey.xz, uGM.yz), 1.0);
   vec4 r = textureLod(tGM, c.xy / c.w + wob, lod);
-  res = r.rgb + sky * (1.0 - r.a);
+  res = vec4(r.rgb + sky * (1.0 - r.a), 1.0 - r.a);
   return k;
 }
 `;

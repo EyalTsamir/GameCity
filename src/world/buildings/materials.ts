@@ -1788,7 +1788,7 @@ ${fg(`      float ew = max(0.09, fq.x * 1.25);
   vec3 env = bhEnv(R, y, seed, fR, lodC, nightF);
 #if BH_CLASS == 0 || BH_CLASS == 2
   // shop fronts and lobbies: the real street, while the mirror is on their plane (water/glassMirror.ts)
-  vec3 envM = env;
+  vec4 envM = vec4(env, 0.0);
   // (where the pass drew nothing it is sky: the plain gradient, since bhEnv paints a town of its own into the horizon)
   float gmK = (style > 5.5 && uDetail > 0.5) ? bhGlassMirror(vWPos, N, (vec2(r1, r2) - 0.5) * 0.004, 0.0, mix(uSkyHor, uSkyZen, smoothstep(0.0, 0.6, R.y)), envM) : 0.0;
 #else
@@ -1802,7 +1802,7 @@ ${fg(`      float ew = max(0.09, fq.x * 1.25);
     env = mix(env, op.rgb, op.a * (1.0 - smoothstep(0.08, 0.25, fq.x)));
   }
 #if BH_CLASS == 0 || BH_CLASS == 2
-  env = mix(env, envM, gmK);
+  env = mix(env, envM.rgb, gmK);
 #endif
   if (uBhDebug > 5.5 && uBhDebug < 6.5 || uBhDebug > 9.5) { albedo = vec3(0.0); emit = env; return; } // ?bdbg=refl: the reflected scene alone
   // sun glint: panels whose reflected azimuth lines up with the sun flash in a vertical streak
@@ -1810,6 +1810,14 @@ ${fg(`      float ew = max(0.09, fq.x * 1.25);
   float hAl = dot(normalize(R.xz + vec2(1e-5, 0.0)), sh);
   float vAl = 1.0 - smoothstep(0.05, 0.7, abs(R.y + uReflLift - uSunDir.y));
   float glint = smoothstep(0.972, 0.9985, hAl) * (0.25 + 0.75 * vAl) * (curtain ? 1.6 : (ribbon ? 1.1 : 0.7));
+#if BH_CLASS == 0 || BH_CLASS == 2
+  // a pane that mirrors the street shows the sun itself, where nothing across the street stands in front of it: a glare, no painted streak
+  if (gmK > 0.0) {
+    float gmS = max(dot(R, uSunDir), 0.0);
+    gmS *= gmS; gmS *= gmS; gmS *= gmS; gmS *= gmS; gmS *= gmS; // ^32
+    glint = mix(glint, envM.a * (gmS * 0.5 + gmS * gmS * gmS * gmS * gmS * gmS * 3.0), gmK);
+  }
+#endif
   float cosv = clamp(-dot(V, Np), 0.0, 1.0);
   // light round (uMirror): coated curtain / ribbon glass mirrors more and tints its reflection less — the glass
   // hue had swallowed the reflected sky and neighbours (towers read as flat teal); ?glassold = before
