@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite';
 import { viteSingleFile } from 'vite-plugin-singlefile';
+// @ts-ignore the project has no node types, and this file only runs in node
 import { execSync } from 'node:child_process';
 
 // Shown under the title, so a published copy can be told apart from the last one: build date and time, commit.

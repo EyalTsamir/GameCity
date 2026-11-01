@@ -9,12 +9,12 @@ import type { CityContext, CityModule, PickHit, QualityLevel, QualityState } fro
 import { CITY_NAME } from '../core/constants';
 import { DIORAMA, TAGLINE } from '../core/world';
 import { ICONS, SKY_DIAL, type IconName } from './hud/icons';
-
-declare const __BUILD_ID__: string; // vite.config.ts
 import { Minimap, type LiveDot } from './hud/minimap';
 import { DistrictLabels, type ScreenRect } from './hud/labels';
 import { PhotoMode } from './hud/photo';
 import { cameraExt, audioExt, type TourShotInfo } from './shared';
+
+declare const __BUILD_ID__: string; // vite.config.ts
 
 type QualityMode = 'auto' | QualityLevel;
 
