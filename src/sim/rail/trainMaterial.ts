@@ -105,6 +105,9 @@ const VERT_BEGIN = /* glsl */ `
     transformed.x += aExtra.w * 0.035 * smoothstep(0.0, 0.2, o);
   }
   if (trHidden(tg) || trVariantHidden(aKind)) transformed = vec3(0.0);
+  #ifdef TR_GLASSPASS
+  if (tg == ${T.DOORPLANE}) transformed = vec3(0.0);
+  #endif
   vLoc = position;
   vTagF = aKind;
   vCar = vec3(aInst2.y, aInst2.z, aInst2.w);
@@ -762,8 +765,12 @@ if (vCar.x > 1.5 && trHitT > 0.0 && abs(vDoorZ) > 1e3) {
 bool trVariantHidden(float k) { int vm = int(k + 0.5) / 100; if (vm == 1) return aInst2.z < 0.5; if (vm == 2) return aInst2.z > 0.5; return false; }`)
       .replace('#include <begin_vertex>', `#include <begin_vertex>\n{ int r = int(aKind + 0.5); if (trHidden(r - (r / 100) * 100) || trVariantHidden(aKind)) transformed = vec3(0.0);
         #ifdef TR_PANE
-        // the pane of a leaf that has begun to slide: nothing here that the far level's body depth does not already say
-        if (r - (r / 100) * 100 == ${T.DOORWIN} && aInst.z > 0.01 && abs(aExtra.w - aInst.w) < 0.5) transformed = vec3(0.0);
+        // a leaf that has begun to slide takes its pane out of here and, once open, the doorway's plane in: the screen-space AO then treats the
+        // saloon the same seen through a window or through a door, and draws no halo of a pole on the far wall
+        int tgp = r - (r / 100) * 100;
+        bool opened = aInst.z > 0.5 && abs(aExtra.w - aInst.w) < 0.5;
+        if (tgp == ${T.DOORWIN} && aInst.z > 0.01 && abs(aExtra.w - aInst.w) < 0.5) transformed = vec3(0.0);
+        if (tgp == ${T.DOORPLANE} && !opened) transformed = vec3(0.0);
         #endif
       }`)
       .replace(

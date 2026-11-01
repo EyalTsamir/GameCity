@@ -454,8 +454,7 @@ export const CLOSE_FRAG = /* glsl */ `
   vec2 uvS = an.x > 0.5 ? p.zy : (an.z > 0.5 ? p.xy : p.xz);
   vec4 blot = texture2D(tCrack, uvS * 0.7 + p.x * 0.31);
   vec4 gr = texture2D(tGrain, uvS * 1.67);
-  float dust = 0.012 + 0.05 * blot.b * blot.b;
-  float tint = 0.66;
+  float dust = 0.012 + 0.05 * blot.b * blot.b;  float tint = 0.66;
   if (tg == ${T.GLASS} && on.z > 0.3) {
     // windscreen: the wipers have cleared two fans in the film of the line, insects below them
     vec2 q0 = vec2(p.x - 0.62, p.y - 2.28), q1 = vec2(p.x + 0.62, p.y - 2.28);

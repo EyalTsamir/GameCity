@@ -357,6 +357,9 @@ export function closeDoors(g: Geo, glass: Geo, z: number, color: string): void {
     y1 = 3.12;
   const X = 1.468;
   for (const side of [-1, 1] as const) {
+    // the plane of the doorway, for depth only (no colour pass draws it)
+    glass.kind(T.DOORPLANE).color('#000000').extra(0, 0, 0, side);
+    oq(glass, [side * 1.46, y0, z - w], [side * 1.46, y0, z + w], [side * 1.46, y1, z + w], [side * 1.46, y1, z - w], [side, 0, 0]);
     for (const leaf of [-1, 1] as const) {
       const za = leaf < 0 ? z - w : z + 0.005,
         zb = leaf < 0 ? z - 0.005 : z + w;

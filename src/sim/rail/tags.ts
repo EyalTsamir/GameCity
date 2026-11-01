@@ -24,4 +24,6 @@ export const T = {
   LEAF: 16,
   /** close level: running gear, aExtra.x = finish */
   STEEL: 17,
+  /** close level: an open doorway's plane in the panes' depth pass (trainMaterial paneDepth); no colour */
+  DOORPLANE: 18,
 } as const;
