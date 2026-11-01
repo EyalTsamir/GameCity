@@ -539,7 +539,7 @@ export class Litter {
         const g = gustAt(b.x, b.z, t, wind);
         // a gust: strong enough for what it is, with a chance per look so a whole drift does not jump at once
         const strength = wl * (0.45 + 1.1 * g);
-        if (g > 0.5 && strength > 0.62 * b.sens && Math.random() < 0.25 + 0.5 * g) {
+        if (g > 0.55 && strength * 3.4 > 1.3 + 1.5 * b.sens && Math.random() < 0.1 + 0.5 * g * g) {
           windAt(b.x, b.z, t, wind, _w);
           this.wake(b, _w.x * 1.2, _w.y * 1.2, Math.random() < 0.3 * g ? 0.9 + Math.random() : 0);
           continue;
@@ -627,8 +627,8 @@ export class Litter {
     }
     // on the ground: friction against what the air wants
     const sp = Math.hypot(ax, az);
-    const grip = b.kind === LEAF ? 0.95 : b.kind === SHEET ? 0.8 : b.kind === BALL ? 0.5 : 0.55;
-    const pull = Math.max(0, sp - grip * (0.6 + 0.8 * b.sens));
+    const grip = (b.kind === LEAF ? 1.3 : b.kind === SHEET ? 1.25 : 1.05) + 1.5 * b.sens;
+    const pull = Math.max(0, sp - grip);
     const k = 1 - Math.exp(-h * 2.5);
     const wantX = sp > 0 ? (ax / sp) * pull * 0.75 : 0,
       wantZ = sp > 0 ? (az / sp) * pull * 0.75 : 0;
@@ -669,7 +669,7 @@ export class Litter {
       if (v > 0.7 && Math.random() < h * 0.6) this.wake(b, 0, 0, 0.4 + Math.random() * 0.4);
     }
     // settled?
-    b.still = v < 0.07 && sp < grip * 1.4 ? b.still + h : 0;
+    b.still = v < 0.07 ? b.still + h : 0;
     if (b.still > 0.5) {
       if (b.kind === LEAF) {
         b.rx = (b.phase % 1) * 0.22 - 0.11;

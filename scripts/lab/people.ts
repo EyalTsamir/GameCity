@@ -166,6 +166,23 @@ if (mode === 'grid') {
     drawCell(i, m, angle, d, heightOf(m));
     labels.push(`${i}`);
   }
+} else if (mode === 'stand') {
+  // someone standing through time: &chat=1 talking (a party of one is always the speaker), &chat=0 waiting; &t0=start; &dt=seconds a cell
+  const m = members[num('who', 0)];
+  const dt = num('dt', 0.4);
+  m.chat = q.get('chat') === '1' ? 1 : 0;
+  m.speed = 0;
+  m.amp = 0;
+  T = num('t0', 100);
+  crowd.parties = [m.party];
+  for (let i = 0; i < n; i++) {
+    for (let k = 0; k < 4; k++) {
+      T += dt / 4;
+      write();
+    }
+    drawCell(i, m, angle, d, heightOf(m));
+    labels.push(`${T.toFixed(1)}`);
+  }
 }
 labels.push(`tris ${figureMesh(4).triangles} verts ${figureMesh(4).vertices}`);
 (window as unknown as Record<string, unknown>).__labels = labels;

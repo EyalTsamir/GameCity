@@ -86,7 +86,7 @@ function gesture(g: number, f: number, s: number, k: number, size: number): void
     other = s > 0 ? O_R : O_L;
   // the stress of what is said: a pulse or two through the phrase
   const beat = Math.pow(Math.max(0, Math.sin(f * 6.283 * (1.5 + (g & 1)) + seed * 6)), 3);
-  W[4] = s;
+  W[4] = s * 0.3;
   W[5] = -1;
   W[6] = -0.4;
   switch (g) {
@@ -109,7 +109,7 @@ function gesture(g: number, f: number, s: number, k: number, size: number): void
         W[1] = cy - (0.09 + 0.03 * beat) * hk;
         W[2] = 0.27 * hk;
         W[3] = 1;
-        W[4] = q;
+        W[4] = q * 0.3;
         W[6] = -0.3;
         W[7] = 0.12;
         arm(q > 0 ? O_L : O_R, k);
@@ -184,7 +184,7 @@ function gesture(g: number, f: number, s: number, k: number, size: number): void
         W[1] = cy - (0.11 - 0.05 * q * w * size) * hk;
         W[2] = 0.27 * hk;
         W[3] = 1;
-        W[4] = q;
+        W[4] = q * 0.3;
         W[7] = 0.2;
         arm(q > 0 ? O_L : O_R, k);
       }

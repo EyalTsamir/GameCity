@@ -146,7 +146,7 @@ function buildGeometry(): THREE.BufferGeometry {
         const th = (1.15 - 1.45 * v * narrow) * (1 - 0.12 * u);
         const lift = 1.06 + 0.1 * u * (1 - v);
         const fx = s * (rx * Math.cos(th) * lift + 0.0035 + 0.006 * u);
-        const fy = yc + ry * Math.sin(th) * lift + 0.006 + 0.012 * u;
+        const fy = yc + ry * Math.sin(th) * lift + 0.006 - 0.012 * u * u;
         row.push(b.v(x, y, z, PART.WING, MAT.WING, 0, fx, fy, fz));
       }
       ids.push(row);
@@ -340,12 +340,15 @@ vec3 slBirdPaint(vec3 N, vec3 V) {
     vec3 back = mix(vec3(0.3, 0.19, 0.1), vec3(0.42, 0.29, 0.16), vTone.x);
     vec3 pale = vec3(0.58, 0.54, 0.47);
     if (m > 1.5 && m < 2.5) {
-      c = mix(vec3(0.3, 0.2, 0.11), vec3(0.09, 0.06, 0.05), slStreak(r.x * 150.0 + r.z * 60.0, 0.3));
-      c = mix(c, vec3(0.75, 0.71, 0.62), smoothstep(0.012, 0.0, abs(r.z - 0.012 + 0.03 * abs(r.x)) - 0.004) * 0.85);
+      // chestnut coverts, dark centres to the long feathers, one thin pale bar
+      float u = (abs(r.x) - 0.045) / 0.29;
+      c = mix(vec3(0.33, 0.21, 0.11), vec3(0.2, 0.135, 0.085), 0.5 + 0.5 * sin(r.z * 260.0));
+      c = mix(c, vec3(0.13, 0.095, 0.07), smoothstep(0.55, 0.8, u));
+      c = mix(c, vec3(0.62, 0.58, 0.5), smoothstep(0.03, 0.012, abs(u - 0.32 + 0.3 * (r.z - 0.02))) * 0.8);
     } else if (m > 2.5) {
       c = vec3(0.16, 0.11, 0.08);
     } else {
-      c = mix(back * (0.72 + 0.5 * slStreak(r.x * 240.0 + 3.0 * sin(r.z * 90.0), 0.45)), pale, belly);
+      c = mix(back * (0.88 + 0.2 * slStreak(r.x * 240.0 + 3.0 * sin(r.z * 90.0), 0.45)), pale, belly);
       c = mix(c, vTone.z > 0.45 ? vec3(0.34, 0.33, 0.32) : mix(back, pale, 0.3), head * smoothstep(0.17, 0.182, r.y));
       c = mix(c, vTone.z > 0.45 ? vec3(0.34, 0.17, 0.09) : c, head * smoothstep(0.16, 0.172, r.y) * smoothstep(0.122, 0.108, r.z) * (1.0 - smoothstep(0.176, 0.186, r.y)));
       c = mix(c, pale * 1.1, head * smoothstep(0.172, 0.158, r.y));
@@ -365,8 +368,8 @@ vec3 slBirdPaint(vec3 N, vec3 V) {
       // two dark bars across the inner wing, rows of coverts, long primaries going dark to the tip
       float w = u + 0.45 * (0.05 - r.z);
       float bars = max(smoothstep(0.024, 0.012, abs(w - 0.47)), smoothstep(0.024, 0.012, abs(w - 0.63)));
-      c *= 0.9 + 0.1 * smoothstep(-0.4, 0.6, sin(u * 62.0 + r.z * 30.0));
-      c *= 0.94 + 0.06 * sin(r.z * 320.0);
+      c *= 0.94 + 0.06 * smoothstep(-0.4, 0.6, sin(u * 62.0 + r.z * 30.0));
+      c *= 0.975 + 0.025 * sin(r.z * 320.0);
       c = mix(c, vec3(0.055, 0.055, 0.065), bars);
       c = mix(c, vec3(0.13, 0.13, 0.15), smoothstep(0.72, 0.92, u));
     } else {
@@ -389,7 +392,7 @@ vec3 slBirdPaint(vec3 N, vec3 V) {
     // blackbird: coal cock, dark brown hen
     c = vTone.z > 0.4 ? vec3(0.03, 0.03, 0.035) : mix(vec3(0.16, 0.11, 0.07), vec3(0.22, 0.16, 0.11), belly);
   }
-  c *= 0.88 + 0.24 * scale * step(m, 0.5);
+  c *= 0.93 + 0.14 * scale * step(m, 0.5);
   c *= 0.92 + 0.16 * vTone.y;
   // the eye
   if (m < 0.5) {

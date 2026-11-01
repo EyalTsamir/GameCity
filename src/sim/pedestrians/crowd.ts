@@ -30,6 +30,7 @@ import type { Rng } from '../../core/rng';
 import { buildRail, railSAt, sampleRail, Router, type Rail, type RailSample } from './rail';
 import type { BenchPlace, DoorCat, DoorPlace, Places, Spot, SpotPlace, StopPlace } from './places';
 import { makeLook, type Look, type Persona } from './looks';
+import { DOGLIFE, stepDog } from '../smalllife/dogs';
 import { F, DOG_OFFSET } from './figure';
 import { gaitConfig, gaitCycleOf, GC } from './rig';
 import type { CafePlace, CafeSeat, Terrace } from './cafes';
@@ -274,6 +275,15 @@ export class Member {
   overlapT = 0;
   overlapInfo = '';
   dogSit = 0;
+  /** a dog's own life on its lead (smalllife/dogs.ts): how far behind and to the side, its heading off the walker's, head down, head turn, wag */
+  dogLag = 0;
+  dogLagV = 0;
+  dogSide = 0;
+  dogYaw = 0;
+  dogHead = 0;
+  dogTurn = 0;
+  dogWag = 0.6;
+  dogSniff = 0;
   stillT = 0;
   /** seconds spent waiting for someone in the way of a free walk */
   yieldT = 0;
@@ -3163,6 +3173,7 @@ export class Crowd {
       m.stillT = m.speed < 0.08 ? m.stillT + h : 0;
       const dogGoal = m.stillT > 1.2 ? 1 : 0;
       m.dogSit += clamp(dogGoal - m.dogSit, -h * 3, h * 1.3);
+      if (DOGLIFE && m.look.dog) stepDog(m, this.ctx.uniforms.uTime.value as number, h);
       // waving
       if (m.waveT > 0) {
         m.waveT -= h;
