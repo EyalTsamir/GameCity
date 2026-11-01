@@ -798,6 +798,19 @@ void main() {
 #endif
   vec3 ratio;
   vec4 c = CMT(tCrack, q * 0.39 + vGr.xz * 3.0, 0.39);
+#if !defined(CM_JOINERY) && !defined(CM_RUST)
+  // planter soil (props/furniture.ts gives it away with blue just over green): crumbs and damp, and the brown it was meant to be
+  if (col.b > col.g && col.b < col.r * 0.85) {
+    vec4 s0 = CMT(tStones, q * 3.1, 3.1);
+    vec4 s2 = CMT(tStones, q.yx * 7.3 + 0.37, 7.3);
+    float tone = mix(0.66, 0.76 + 0.56 * s0.g, smoothstep(0.02, 0.3, s0.a)) * mix(0.5, 0.74 + 0.6 * s2.g, smoothstep(0.05, 0.34, s2.r));
+    ratio = vec3(0.98, 1.0, 0.72) * tone * (0.8 + 0.36 * c.b);
+    vec2 sl = (CMT(tGrain, q * 1.667, 1.667).rg - 0.5) * 0.8;
+    ratio *= cmLight(N, normalize(N - vec3(sl.x, 0.0, sl.y)));
+    gl_FragColor = vec4(max(mix(vec3(1.0), ratio, k), vec3(0.0)), 1.0);
+    return;
+  }
+#endif
   if (wood > 0.5) {
     vec2 fu = vec2(q.x / 1.2, q.y / 0.3);
     vec4 f = textureGrad(tFibre, fu, gx * vec2(0.833, 3.33), gy * vec2(0.833, 3.33));

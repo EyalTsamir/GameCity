@@ -25,6 +25,18 @@ varying vec2 vRS;   // (arc length m, across -1..1)
 varying float vRK;  // 0 asphalt road, 1 gravel lane, 2 stone (portal / bridge)
 uniform sampler2D tLN;
 float rHash(vec2 p) { vec3 p3 = fract(vec3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
+/** loose stones: the tone of the nearest, a dark gap at its rim */
+vec2 rStones(vec2 q) {
+  vec2 b = floor(q);
+  float d1 = 9.0, d2 = 9.0, id = 0.0;
+  for (int j = -1; j <= 1; j++) for (int i = -1; i <= 1; i++) {
+    vec2 c = b + vec2(float(i), float(j));
+    vec2 o = vec2(rHash(c), rHash(c + 7.3));
+    float d = length(q - c - o);
+    if (d < d1) { d2 = d1; d1 = d; id = rHash(c + 3.1); } else if (d < d2) d2 = d;
+  }
+  return vec2(id, smoothstep(0.0, 0.22, d2 - d1));
+}
 vec3 roadAlbedo(vec3 wp) {
   float fp = length(fwidth(wp.xz));
   vec4 n1 = texture2D(tLN, wp.xz * 0.11);
@@ -44,8 +56,11 @@ vec3 roadAlbedo(vec3 wp) {
     vec4 n3 = texture2D(tLN, wp.xz * 0.53);
     // near: single stones; the wheel tracks are packed darker, damp in patches
     float nearG = 1.0 - smoothstep(0.03, 0.25, fp);
-    grav *= 1.0 + nearG * (rHash(floor(wp.xz * 11.0)) - 0.5) * 0.6;
-    grav *= 1.0 + nearG * (rHash(floor(wp.xz * 31.0)) - 0.5) * 0.3;
+    if (nearG > 0.0) {
+      vec2 s1 = rStones(wp.xz * 19.0 + n3.rg * 3.0);
+      vec2 s2 = rStones(wp.zx * 47.0);
+      grav *= 1.0 + nearG * ((s1.x - 0.5) * 0.5 + (s2.x - 0.5) * 0.25 - 0.42 * (1.0 - s1.y) - 0.12 * (1.0 - s2.y));
+    }
     grav *= 1.0 - 0.24 * (1.0 - smoothstep(0.08, 0.22, abs(a - 0.52))) * (0.7 + 0.6 * n1.r);
     grav = mix(grav, grav * vec3(0.66, 0.68, 0.66), smoothstep(0.58, 0.72, n3.b) * (1.0 - smoothstep(0.1, 0.3, abs(a - 0.52))));
     float crown = 1.0 - smoothstep(0.08, 0.3, a + (n3.r - 0.5) * 0.2);

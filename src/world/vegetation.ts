@@ -31,6 +31,8 @@ import { flowerBed, flowerClump, crop, soilRow, surround, treeGuard, wornPatch, 
 import { getLayout, occAny, PLANTER, hrand, MASK_WALK, DistanceLod, ChunkCuller, chunkOf, splitByCells, type Layout } from './props/layout';
 import { geomHunt } from '../core/geomhunt';
 import { getLeafAtlas } from './vegetation/atlas';
+import { barkOf, type TrunkSpec } from './closenature/trunks';
+import { TIP_STRIDE, type CloseTips } from './closenature/sprigs';
 import { FoliageLayer, LodTexture, cardMaterials, woodMaterials, cardKnobs, type InstBuf, type PlantRef } from './vegetation/foliage';
 import { structure, emitFar, emitNear, newCardBuf, newWoodBuf, type PlantDef, type KindName } from './vegetation/crowns';
 
@@ -56,6 +58,12 @@ export interface VegetationService {
   getLeafDistance(): number;
   /** the procedural leaf atlas (debug / inspection) */
   atlasTex: THREE.Texture | null;
+  /** every trunk, for its skin in the bubble (world/closenature/trunks.ts); the tube of plant `id` goes while it is swapped */
+  closeTrunks: TrunkSpec[];
+  /** the card tips of low foliage, for real leaves up close */
+  closeTips: CloseTips;
+  setTrunkSwapped(id: number, on: boolean): void;
+  flushTrunks(): void;
   /** debug: plants within rad of (x, z) with kind, near weight, LOD texel and near detail counts */
   debugPlants(x: number, z: number, rad: number): string[];
 }
@@ -1422,6 +1430,9 @@ export default function create(ctx: CityContext): CityModule {
   // ───────────────────────────────────────────── leaf-card trees (far static + near dynamic) ──
   const atlas = cardsOn ? getLeafAtlas() : null;
   const lodTex = new LodTexture(Math.max(1, plants.length));
+  const trunkTex = new LodTexture(Math.max(1, plants.length));
+  const closeTrunks: TrunkSpec[] = [];
+  const tipData: number[] = [];
   const refs: PlantRef[] = plants.map((p, i) => ({ x: p.x, y: p.y, z: p.z, h: p.h, id: i }));
   let cardLayer: FoliageLayer | null = null;
   let woodLayer: FoliageLayer | null = null;
@@ -1437,9 +1448,24 @@ export default function create(ctx: CityContext): CityModule {
   if (cardsOn && atlas) {
     const farCards = newCardBuf(plants.length * 30);
     const farWood = newWoodBuf(plants.length * 14);
-    plants.forEach((p, i) => emitFar(structure(p), refs[i], farCards, farWood));
+    plants.forEach((p, i) => {
+      const st = structure(p);
+      emitFar(st, refs[i], farCards, farWood);
+      if (st.form !== 'palm' && st.form !== 'fan' && st.form !== 'fern') {
+        const needle = st.kind.tile === 'needle' || st.kind.tile === 'cypress' || st.kind.tile === 'pine';
+        for (const t of st.tips) {
+          // within reach of someone standing, and of a camera a little above them
+          if (t.p[1] - p.y > 4.2) continue;
+          tipData.push(t.p[0], t.p[1], t.p[2], t.d[0], t.d[1], t.d[2], st.cardHalf * t.s, st.leaf.r, st.leaf.g, st.leaf.b, needle ? 1 : 0);
+        }
+      }
+      for (const t of st.trunks) {
+        const paved = !!p.paved;
+        closeTrunks.push({ id: i, base: t.base, ctl: t.ctl, top: t.top, r0: t.r0, rTop: t.rTop, flare: t.flare, roots: t.roots, limb: t.limb, H: p.h, root: [p.x, p.y, p.z], paved, limit: paved ? (p.paved as number) - 0.03 : 0, bark: barkOf(p.kind, st.kind.pattern), moss: st.kind.moss ?? 0, r: st.bark.r, g: st.bark.g, b: st.bark.b });
+      }
+    });
     cm = cardMaterials(ctx.uniforms, atlas.texture, lodTex.tex);
-    wm = woodMaterials(ctx.uniforms, lodTex.tex);
+    wm = woodMaterials(ctx.uniforms, lodTex.tex, trunkTex.tex);
     cardLayer = new FoliageLayer('cards', farCards, NEAR_CAP.high, cm, 'veg-cards');
     woodLayer = new FoliageLayer('wood', farWood, 0, wm, 'veg-wood-far', 6);
     woodNear = new FoliageLayer('wood', newWoodBuf(1), Math.round(NEAR_CAP.high / 2.5), wm, 'veg-wood-near', 12);
@@ -1603,6 +1629,10 @@ export default function create(ctx: CityContext): CityModule {
     },
     getLeafDistance: () => leafDist(),
     atlasTex: atlas?.texture ?? null,
+    closeTrunks,
+    closeTips: { data: Float32Array.from(tipData), n: tipData.length / TIP_STRIDE },
+    setTrunkSwapped: (id, on) => trunkTex.set(id, on ? 1 : 0),
+    flushTrunks: () => trunkTex.flush(),
     debugPlants(x: number, z: number, rad: number) {
       const out: string[] = [];
       plants.forEach((p, i) => {

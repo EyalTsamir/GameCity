@@ -1319,6 +1319,17 @@ vec4 diffuseColor = vec4(treeAlbedo(vKind, vTint, tc.g, tc.b) * ${FILL ? '(0.72 
 
 // ───────────────────────────────────────────────────── the system ──
 
+/** the trunk of one country tree, for its near skin (the instanced trunk stays, inside it). In tree units the old one leans by `bend` */
+export function landTrunk(list: TreeList, t: number): { top: number; r: number; dx: number; dz: number; kind: number } {
+  const sh = trunkShapes[list.kind[t]] ?? (trunkShapes[list.kind[t]] = shapeOf(list.kind[t]));
+  const w = list.w[t];
+  const lean = (sh.bend ?? 0.012) * w;
+  const c = Math.cos(list.yaw[t]),
+    s = Math.sin(list.yaw[t]);
+  return { top: sh.trunkTop * list.h[t], r: sh.trunkR * w, dx: lean * c + lean * 0.5 * s, dz: -lean * s + lean * 0.5 * c, kind: list.kind[t] };
+}
+const trunkShapes: Shape[] = [];
+
 export interface LandTrees {
   group: THREE.Group;
   /** call every frame (cheap unless the camera moved NEAR_STEP) */

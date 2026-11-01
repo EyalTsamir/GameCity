@@ -193,6 +193,8 @@ export interface NearMeshSpec extends LayerBase {
   /** a geometry with the attributes of a built cell, for the shader compile at boot; default position + normal + uv + rgb colour */
   standIn?: THREE.BufferGeometry;
   keep?: number;
+  /** a built cell comes on show or goes */
+  onShow?(cell: NearCell, on: boolean): void;
 }
 
 export interface NearEmit {
@@ -481,7 +483,10 @@ export class NearDetail {
         group.add(m);
         return m;
       },
-      show: (m, on) => (m.visible = on),
+      show: (m, on, c) => {
+        m.visible = on;
+        spec.onShow?.(c, on);
+      },
       drop: (m) => {
         group.remove(m);
         m.geometry.dispose();

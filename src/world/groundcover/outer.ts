@@ -324,7 +324,7 @@ export function createCoverWindow(ctx: CityContext): CoverWindow | null {
           q = p * 4;
         if (cover[q] < 6) continue;
         const x = x0 + (i + 0.5) * RES;
-        const fl = 1 | (cover[q + 1] > 70 || cover[q + 2] > 0 ? 2 | 4 : 0);
+        const fl = 1 | (cover[q + 1] > 70 || cover[q + 2] > 0 ? 2 | 4 : 0) | (cover[q] >= 77 ? 16 : 0);
         const y = height[p];
         for (const g of o.grids) {
           const t = Math.floor((z - z0) / g.size) * g.nx + Math.floor((x - x0) / g.size);

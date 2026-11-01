@@ -22,6 +22,7 @@
 import * as THREE from 'three';
 import type { GlobalUniforms } from '../../core/uniforms';
 import { WIND_GLSL } from '../../core/wind';
+import { closeNatureOn } from '../../core/closenature';
 import { LAMP_GLSL, lampUniforms } from '../../core/lampLight';
 import { wrappedPhysicalPars, NOISE_GLSL } from './material';
 
@@ -222,6 +223,8 @@ export interface WoodIn {
   b: Sway;
   /** bark pattern code (see WOOD shader): 0.1 furrow, 0.3 smooth/grey, 0.5 plane, 0.7 palm rings, 0.9 birch */
   pattern: number;
+  /** part of a trunk: goes while the bubble's skin of this trunk is on show */
+  trunk?: boolean;
   r: number;
   g: number;
   bl: number;
@@ -261,7 +264,7 @@ export function pushWood(buf: InstBuf, p: PlantRef, w: WoodIn): void {
   W2[i] = enc.u8(w.a.w2);
   W2[i + 1] = enc.u8(w.b.w2);
   W2[i + 2] = enc.u8(w.pattern);
-  W2[i + 3] = 0;
+  W2[i + 3] = w.trunk ? 255 : 0;
   K[i] = enc.u8(Math.sqrt(w.r));
   K[i + 1] = enc.u8(Math.sqrt(w.g));
   K[i + 2] = enc.u8(Math.sqrt(w.bl));
@@ -337,6 +340,10 @@ float thPlantPhase( vec3 r ) {
 }
 `;
 
+/** the vertex functions of a plant's bend, for what must move with its tube (world/closenature/trunks.ts) */
+export const woodBendVertex = (): string => VERT_COMMON;
+export const woodBendUniforms = (u: GlobalUniforms): Record<string, THREE.IUniform> => ({ uTime: u.uTime, uWind: u.uWind, uThWindK: cardKnobs.windK, uThFarKeep: cardKnobs.farKeep, uThLod: { value: null } });
+
 const CARD_VERT_PARS = /* glsl */ `
 attribute vec4 iC;
 attribute vec4 iR;
@@ -391,7 +398,7 @@ void thCard( out vec3 P, out vec3 N ) {
   float sF = smoothstep( 8.0, 25.0, camD );
   vThVis *= mix( 1.0, smoothstep( mix( 0.14, 0.04, sF ), mix( 0.4, 0.22, sF ), abs( dot( fN, toCam ) ) ), uThEdgeFade );
   // cards right at the lens dissolve (a free camera inside a crown would otherwise see huge flat leaves)
-  vThVis *= smoothstep( 0.7, 1.9, length( cameraPosition - iC.xyz ) - length( U + V ) * 0.35 );
+  vThVis *= ${closeNatureOn('closecards') ? 'smoothstep( 0.22, 0.6, length( cameraPosition - iC.xyz ) - length( U + V ) * 0.35 )' : 'smoothstep( 0.7, 1.9, length( cameraPosition - iC.xyz ) - length( U + V ) * 0.35 )'};
   vThK = iK;
   vThF = iF;
   vThAO = iV.w;
@@ -403,6 +410,9 @@ void thCard( out vec3 P, out vec3 N ) {
 `;
 
 const WOOD_VERT_PARS = /* glsl */ `
+#ifndef TH_DEPTH
+uniform sampler2D uThTrunk;
+#endif
 attribute vec4 iA;
 attribute vec4 iE;
 attribute vec4 iR;
@@ -438,13 +448,16 @@ void thWood( out vec3 P, out vec3 N ) {
   vec3 ref = abs( d.y ) > 0.95 ? vec3( 1.0, 0.0, 0.0 ) : vec3( 0.0, 1.0, 0.0 );
   vec3 s1 = normalize( cross( ref, d ) );
   vec3 s2 = cross( d, s1 );
-  float r = mix( iA.w, iE.w, t );
+  float rawT = ( t * L - iA.w * 0.3 ) / max( 1e-4, L - iA.w * 0.3 - iE.w * 0.3 );
+  float r = max( 0.002, mix( iA.w, iE.w, rawT ) );
   vec3 ring = s1 * position.x + s2 * position.z;
   vec3 C = mix( A, B, t );
   P = C + ring * r;
   float slope = ( iA.w - iE.w ) / L;
   N = normalize( ring + d * slope );
 #ifndef TH_DEPTH
+  // the bubble's skin of this trunk is on show (the shadow pass keeps the tube)
+  if ( iW2.w > 0.5 && texelFetch( uThTrunk, ivec2( int( iR.w + 0.5 ) % 1024, int( iR.w + 0.5 ) / 1024 ), 0 ).r > 0.5 ) hide = true;
   vThRest = P;
   vThK = iK;
   vThAO = mix( iX.z, iX.w, t );
@@ -601,7 +614,7 @@ thBarkG = vec3( 0.0 );
     } else if ( pat > 0.4 ) {
       // plane: camouflage mottling (cream, olive, grey-brown plates)
       float fade = 1.0 - smoothstep( 0.04, 0.16, foot );
-      float n = thNoised( vThRest * 1.6 ).x + 0.5 * thNoised( vThRest * 3.7 + 7.1 ).x;
+      float n = thNoised( vThRest * 5.2 ).x + 0.5 * thNoised( vThRest * 11.0 + 7.1 ).x;
       vec3 cream = vec3( 0.62, 0.6, 0.48 ), olive = vec3( 0.36, 0.37, 0.27 ), grey = vec3( 0.42, 0.38, 0.33 );
       vec3 mc = n > 0.18 ? cream : n > -0.12 ? olive : grey;
       bc = mix( bc, mc * mc, 0.85 * mix( 0.4, 1.0, fade ) );
@@ -758,11 +771,11 @@ export function cardMaterials(u: GlobalUniforms, atlas: THREE.Texture, lod: THRE
   return { mat, depth };
 }
 
-export function woodMaterials(u: GlobalUniforms, lod: THREE.Texture): FoliageMaterials {
+export function woodMaterials(u: GlobalUniforms, lod: THREE.Texture, trunk: THREE.Texture): FoliageMaterials {
   const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.92, metalness: 0 });
   mat.name = 'veg-wood';
   mat.onBeforeCompile = (sh) => {
-    Object.assign(sh.uniforms, commonUniforms(u, lod), lampUniforms(), { uNight: u.uNight, uThFx: cardKnobs.fx, uThBase: cardKnobs.base });
+    Object.assign(sh.uniforms, commonUniforms(u, lod), lampUniforms(), { uNight: u.uNight, uThFx: cardKnobs.fx, uThBase: cardKnobs.base, uThTrunk: { value: trunk } });
     sh.vertexShader = sh.vertexShader
       .replace('#include <common>', `#include <common>\n${WOOD_VERT_PARS}\nvec3 thP; vec3 thN;`)
       .replace('#include <beginnormal_vertex>', 'thWood( thP, thN );\nvec3 objectNormal = thN;')
@@ -774,7 +787,7 @@ export function woodMaterials(u: GlobalUniforms, lod: THREE.Texture): FoliageMat
       .replace('#include <normal_fragment_maps>', WOOD_FRAG_NORMAL)
       .replace('#include <aomap_fragment>', `#include <aomap_fragment>\n${WOOD_FRAG_AO}`);
   };
-  mat.customProgramCacheKey = () => 'veg-wood-2';
+  mat.customProgramCacheKey = () => 'veg-wood-3';
   const depth = new THREE.MeshDepthMaterial();
   depth.name = 'veg-wood-depth';
   depth.onBeforeCompile = (sh) => {
@@ -783,7 +796,7 @@ export function woodMaterials(u: GlobalUniforms, lod: THREE.Texture): FoliageMat
       .replace('#include <common>', `#include <common>\n#define TH_DEPTH\n${WOOD_VERT_PARS}`)
       .replace('#include <begin_vertex>', 'vec3 thP; vec3 thN;\nthWood( thP, thN );\nvec3 transformed = thP;');
   };
-  depth.customProgramCacheKey = () => 'veg-wood-depth-1';
+  depth.customProgramCacheKey = () => 'veg-wood-depth-2';
   return { mat, depth };
 }
 

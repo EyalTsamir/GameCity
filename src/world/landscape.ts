@@ -21,7 +21,8 @@ import { landUniforms, landMaterial } from './landscape/shader';
 import { landBakeKey, landFarMaterial, renderLandBake, LandTiles, LAND_SOFT, type LandBakeSource } from './landscape/bake';
 import { bakeOn, bakeTexture, uploadStaged } from '../core/bakeFiles';
 import { buildMountains } from './landscape/mountains';
-import { placeTrees, createLandTrees, type LandTrees } from './landscape/trees';
+import { placeTrees, createLandTrees, type LandTrees, type TreeList } from './landscape/trees';
+import type { UnderPlant } from './closenature/sprigs';
 import { buildSettlements } from './landscape/settlements';
 import { boxHunt } from '../core/boxhunt';
 import { createShips, type Ships } from './landscape/ships';
@@ -49,6 +50,12 @@ export interface LandscapeService {
   /** signed distance to the sea coast (> 0 land) */
   coastSD(x: number, z: number): number;
   model: LandscapeModel;
+  /** the countryside trees (null: none) */
+  treeList?: TreeList | null;
+  /** the woods' shrubs and bracken */
+  closeUnder?: UnderPlant[] | null;
+  /** the land mesh, for the ground up close */
+  closeGround?: { geometry: THREE.BufferGeometry; drop: number } | null;
   /** countryside tree detail 0..1 (3D near-set radius; 0 = impostors only) — for the adaptive ladder */
   setTreeDetail(k: number): void;
   /** crop at a field point: kind · 2 + row axis (fields.ts), −1 off the crop (margins, meadow plots, outside the mask) */
@@ -182,6 +189,7 @@ export default function create(ctx: CityContext): CityModule {
   const tiles = bakeWanted ? new LandTiles(geo, GROUND_DROP) : null;
   const land = new THREE.Mesh(tiles ? tiles.pure : geo, landMaterial(uniforms, fog));
   land.name = 'land-ground';
+  service.closeGround = { geometry: geo, drop: GROUND_DROP };
   land.position.y = GROUND_DROP;
   land.receiveShadow = true;
   land.castShadow = false;
@@ -348,6 +356,7 @@ export default function create(ctx: CityContext): CityModule {
     const fg = splatCover(topo, heights, 0, CX, CZ, 1300, 12);
     const placed = placeTrees(model, ctx.quality.density, (x, z) => fg.at(x, z), bldBlocked, hedgeSink);
     treeMs = placed.ms;
+    service.treeList = placed.list;
     trees = createLandTrees(placed.list, uniforms, fog, ctx.quality.shadows && ctx.quality.level !== 'low');
     root.add(trees.group);
     const t = trees;
@@ -396,6 +405,7 @@ export default function create(ctx: CityContext): CityModule {
     if (nature(ctx, 'woodfloor')) {
       sink.bucket = 3;
       woodStats = buildWoods(sink, model);
+      service.closeUnder = sink.under;
       sink.bucket = -1;
     }
     if (nature(ctx, 'riverrocks')) buildRiverRocks(sink, model);

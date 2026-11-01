@@ -760,7 +760,7 @@ vec3 groundColor() {
     float rr = length( fract( fq1 ) - 0.5 - off );
     float present = step( hh.x, meadowF * 0.8 * fClump );
     float dotM = present * ( 1.0 - smoothstep( size - pxc1 * 0.35, size + pxc1 * 0.35, rr ) );
-    float dotsVis = smoothstep( 0.6, 1.6, size / max( pxc1, 1e-4 ) );
+    float dotsVis = smoothstep( 0.6, 1.6, size / max( pxc1, 1e-4 ) ) * ( 1.0 - smoothstep( 2.0, 3.2, size / max( pxc1, 1e-4 ) ) );   // (larger than that a real flower stands there)
     int sp = h2.x > 0.66 ? int( h2.y * 5.99 ) : spPatch;
     vec3 tintC = gFlowerCol[ spPatch ];
     grass = mix( grass, tintC, meadowF * fClump * 0.13 * ( 1.0 - dotsVis ) );
@@ -776,7 +776,7 @@ vec3 groundColor() {
     float rr = length( fract( fq2 ) - 0.5 - off );
     float present = step( hh.x, lawnF * 0.3 * ( 0.35 + 0.65 * fClump ) );
     float dotM = present * ( 1.0 - smoothstep( size - pxc2 * 0.35, size + pxc2 * 0.35, rr ) );
-    float dotsVis = smoothstep( 0.6, 1.6, size / max( pxc2, 1e-4 ) );
+    float dotsVis = smoothstep( 0.6, 1.6, size / max( pxc2, 1e-4 ) ) * ( 1.0 - smoothstep( 2.0, 3.2, size / max( pxc2, 1e-4 ) ) );
     vec3 fcol = h2.y < 0.42 ? gFlowerCol[ 6 ] : gFlowerCol[ 7 ];
     grass = mix( grass, mix( gFlowerCol[ 7 ], gFlowerCol[ 6 ], 0.4 ), lawnF * 0.035 * ( 1.0 - dotsVis ) );
     grass = mix( grass, fcol, dotM * dotsVis );

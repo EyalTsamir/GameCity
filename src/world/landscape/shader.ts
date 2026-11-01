@@ -238,7 +238,8 @@ ${LG ? `  vec4 nM = ${lnTex('p.xz * (1.0 / 1900.0)', '(1.0 / 1900.0)')};   // (t
       float rr = length(fract(fc) - 0.5 - (hh - 0.5) * 0.6);
       float dotM = step(hh.x, fl * 0.35) * (1.0 - smoothstep(0.06, 0.06 + fp * 3.0, rr));
       vec3 fcol = hh.y < 0.3 ? vec3(0.55, 0.08, 0.05) : hh.y < 0.5 ? vec3(0.28, 0.34, 0.65) : hh.y < 0.8 ? vec3(0.75, 0.74, 0.68) : vec3(0.72, 0.6, 0.12);
-      meadow = mix(meadow, fcol, dotM * (1.0 - smoothstep(0.08, 0.25, fp)) * 0.7);
+      // (under a few centimetres a pixel real flowers stand here)
+      meadow = mix(meadow, fcol, dotM * smoothstep(0.03, 0.06, fp) * (1.0 - smoothstep(0.08, 0.25, fp)) * 0.7);
     }
     meadow *= 1.0 + fl * 0.06 * smoothstep(0.08, 0.4, fp);
   }

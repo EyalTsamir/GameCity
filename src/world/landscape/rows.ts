@@ -6,6 +6,8 @@
 
 import * as THREE from 'three';
 import { WIND_GLSL } from '../../core/wind';
+import { closeNatureOn } from '../../core/closenature';
+import type { UnderPlant } from '../closenature/sprigs';
 import { hash2i } from './noise';
 import { moonLift } from '../../core/nature';
 
@@ -525,6 +527,8 @@ const vBand = (b: number, t: number) => (b + (PAD + (1 - t) * (BH - 2 * PAD)) / 
 /** the merged kit: chunks of static geometry in world coordinates */
 export class RowSink {
   private chunks = new Map<number, Chunk>();
+  /** the woods' shrubs and bracken, for the real ones up close */
+  readonly under: UnderPlant[] = [];
   /** ≥ 0: everything goes into this mesh until reset (3 = undergrowth under the canopy: no shadow pass) */
   bucket = -1;
   private ch(x: number, z: number): Chunk {
@@ -564,7 +568,7 @@ export class RowSink {
 
   /** a plant as one rounded sheet: `footK` of its width at the ground, (ax, az) its half width at the top, height h in the
    *  middle and h * e at the ends; `bow` pushes the shoulders out of the plane so that it never reads as a flat card */
-  dome(band: number, x: number, y: number, z: number, ax: number, az: number, footK: number, h: number, e: number, bow: number, s0: number, r: number, g: number, bl: number, foot = 0.62, sink = 0.05, plant = 0.5): void {
+  dome(band: number, x: number, y: number, z: number, ax: number, az: number, footK: number, h: number, e: number, bow: number, s0: number, r: number, g: number, bl: number, foot = 0.62, sink = 0.05, plant = 0.5, nearGone = false): void {
     const c = this.ch(x, z);
     const w = Math.hypot(ax, az) || 1;
     const nx = -az / w,
@@ -590,7 +594,8 @@ export class RowSink {
       c.pos.push(x + ax * t + nx * b, by + hh, z + az * t + nz * b);
       c.uv.push(u(t), v1);
       c.col.push(r, g, bl);
-      c.hgt.push(hh * plant);
+      // (1000 up: real plants stand here up close, world/closenature/sprigs.ts, and this strip lies down for them)
+      c.hgt.push(hh * plant + (nearGone ? 1000 : 0));
     }
     for (let i = 0; i < 7; i++) c.nrm.push(nx * 0.28, 0.96, nz * 0.28);
     c.idx.push(o, o + 1, o + 2, o, o + 2, o + 3, o, o + 3, o + 4, o, o + 4, o + 5, o, o + 5, o + 6);
@@ -678,8 +683,13 @@ ${WIND_GLSL}`,
         `#include <begin_vertex>
 if (aH > 0.0) {
   float d = distance(position.xz, cameraPosition.xz);
-  transformed.y -= aH * smoothstep(1050.0, 1350.0, d);
-  transformed.xz += thWindAt(position.xz) * aH * 0.05 * (1.0 + 0.35 * sin(uTime * 1.9 + dot(position.xz, vec2(0.6, 0.8))));
+  float ah = aH;
+  if (ah > 500.0) {
+    ah -= 1000.0;
+    ${closeNatureOn('closesprigs') ? 'transformed.y -= ah * 2.4 * (1.0 - smoothstep(6.5, 10.0, d));' : ''}
+  }
+  transformed.y -= ah * smoothstep(1050.0, 1350.0, d);
+  transformed.xz += thWindAt(position.xz) * ah * 0.05 * (1.0 + 0.35 * sin(uTime * 1.9 + dot(position.xz, vec2(0.6, 0.8))));
 }`,
       );
     sh.fragmentShader = sh.fragmentShader
@@ -700,7 +710,7 @@ normal *= faceDirection;
 #endif`,
       );
   };
-  mat.customProgramCacheKey = () => 'th-landrows-v2';
+  mat.customProgramCacheKey = () => 'th-landrows-v3';
   return mat;
 }
 

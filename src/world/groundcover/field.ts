@@ -26,6 +26,7 @@ import { WIND_GLSL } from '../../core/wind';
 import { LAMP_GLSL, lampUniforms } from '../../core/lampLight';
 import { SLAB } from '../../core/constants';
 import { natureOn } from '../../core/nature';
+import { closeNatureOn } from '../../core/closenature';
 import { noiseTexture } from '../terrain/noise';
 import { GC_PALETTE_GLSL, gcPalette } from './palette';
 import { CRES, FRES, CW, CH, FW, FH, type CoverMaps, type TileGrid } from './mask';
@@ -171,7 +172,7 @@ if ( vGcHead.w > 0.5 && vGcHead.y > -1.0 ) {
   float th = atan( q.y, q.x ) + vGcHead.w * 6.2831;
   float aa = fwidth( r ) * 1.2 + 1e-3;
   // between the petals: the shadowed foliage behind the head (not a pale paper square)
-  vec3 gap = vGcPet * 0.08 + vec3( 0.035, 0.055, 0.02 );
+  vec3 gap = ${closeNatureOn('closeflowers') ? 'vGcPet * 0.62' : 'vGcPet * 0.08 + vec3( 0.035, 0.055, 0.02 )'};
   vec3 c;
   if ( np < 0.5 ) {
     // umbel (wild carrot / yarrow): a lacy dome of small umbellets on rays, gaps between them, the
@@ -255,6 +256,9 @@ vGcRough = 0.85;
     float leafCl = cov.a > 0.01 ? smoothstep( 0.35, 0.75, textureLod( tNoise, root * 0.37, 0.0 ).g ) * 1.9 + 0.08 : 0.0;
     bool leaf = rc.x < cov.a * uKind.z * leafCl;
     bool alive = ra.z < cov.r * uBlade.z && ( len > 0.22 || wet > 0.0 || lawnOK > 0.5 );
+    // the sward ring: the low grass a lawn and a meadow are mostly made of
+    if ( uKind.w > 2.5 && ( cov.r < 0.3 || wet > 0.0 || weedH > 0.5 || dune > 0.0 || cropK >= 0.0 ) ) alive = false;
+    ${closeNatureOn('closeweeds') ? '// (rosettes and moss do the rest: world/closenature/flora.ts)\n    if ( weedH > 0.5 && fract( rb.x * 17.1 ) > 0.5 ) alive = false;' : ''}
     if ( cropK > 1.5 && cropK != 5.0 ) {
       // drilled rows: same frame as the land shader's (fields.ts, field rotation 8 degrees)
       float rowT = mod( hab - 101.0, 2.0 ) < 0.5 ? dot( root, vec2( 0.9902681, 0.1391731 ) ) : dot( root, vec2( -0.1391731, 0.9902681 ) );
@@ -325,7 +329,8 @@ vGcRough = 0.85;
         vec3 tip = gcTipColor( base, nA, len );
         float aoRoot = mix( mix( 0.66, 0.84, kept ), 0.46, smoothstep( 0.2, 0.6, len ) );
         // long grass has a dense low layer under the tall stems (no dark gaps at the base)
-        bool lowLayer = len > 0.45 && cropK < 0.0 && fract( rb.x * 7.31 + rc.y * 0.7 ) < 0.38;
+        bool lowLayer = len > 0.45 && cropK < 0.0 && ( fract( rb.x * 7.31 + rc.y * 0.7 ) < 0.38 || uKind.w > 2.5 );
+        if ( uKind.w > 2.5 && !lowLayer ) L = min( L, 0.14 );
         if ( lowLayer ) {
           L *= mix( 0.28, 0.45, fract( rc.z * 3.7 ) );
           W *= 1.25;
@@ -348,8 +353,8 @@ vGcRough = 0.85;
           aoRoot = 0.45;
         } else if ( weedH > 0.5 ) {
           // pavement weed: broad leaves splayed from a joint (rosette), fresh green
-          L = mix( 0.08, 0.24, rc.y );
-          W = mix( 0.016, 0.03, fract( rc.z * 5.3 ) );
+          L = ${closeNatureOn('closeweeds') ? 'mix( 0.03, 0.11, rc.y * rc.y )' : 'mix( 0.08, 0.24, rc.y )'};
+          W = ${closeNatureOn('closeweeds') ? 'mix( 0.005, 0.012, fract( rc.z * 5.3 ) )' : 'mix( 0.016, 0.03, fract( rc.z * 5.3 ) )'};
           lean = outw * mix( 0.3, 0.65, fract( rc.z * 9.7 ) );
           base = vec3( 0.17, 0.32, 0.06 ) * ( 0.8 + 0.4 * cl.y );
           tip = base * vec3( 1.25, 1.2, 1.0 );
@@ -631,7 +636,7 @@ export interface Field {
   dispose(): void;
 }
 
-export function createField(ctx: CityContext, maps: CoverMaps, outer: OuterMaps | null, level: QualityLevel, opts: { rings?: string; flowers?: boolean; litter?: boolean }): Field {
+export function createField(ctx: CityContext, maps: CoverMaps, outer: OuterMaps | null, level: QualityLevel, opts: { rings?: string; flowers?: boolean; litter?: boolean; near?: { flowers: boolean; leaves: boolean; sward: boolean } }): Field {
   const group = new THREE.Group();
   group.name = 'groundcover-field';
   const pal = gcPalette();
@@ -669,8 +674,17 @@ export function createField(ctx: CityContext, maps: CoverMaps, outer: OuterMaps 
       (r.mesh.material as THREE.Material).dispose();
     }
     rings = [];
-    for (const spec of ringSpecs(lvl)) {
-      if (ringFilter && !ringFilter.has('ABC'[spec.index])) continue;
+    const specs = ringSpecs(lvl);
+    // the sward: within a few metres a lawn is thick with low blades, on the tiles of ring A (`?noclosesward`)
+    if (opts.near?.sward) specs.push({ index: 3, tile: 2, levels: 3, blades: 1000, in0: -10, in1: -10, out0: 4.2, out1: 7, width: 0.72, flowers: 0, lawnFlowers: 0, litter: 0 });
+    for (const spec of specs) {
+      if (ringFilter && !ringFilter.has('ABCD'[spec.index])) continue;
+      // near the camera real plants and leaves take over (world/closenature/flora.ts)
+      if (spec.index === 0 && opts.near?.flowers) {
+        spec.flowers = 0;
+        spec.lawnFlowers = 0;
+      }
+      if (spec.index === 0 && opts.near?.leaves) spec.litter = 0;
       if (opts.flowers === false) {
         spec.flowers = 0;
         spec.lawnFlowers = 0;
@@ -719,14 +733,14 @@ export function createField(ctx: CityContext, maps: CoverMaps, outer: OuterMaps 
       };
       mat.customProgramCacheKey = () => `gc-blades-${spec.index}`;
       const mesh = new THREE.Mesh(geo, mat);
-      mesh.name = `groundcover-ring-${'ABC'[spec.index]}`;
+      mesh.name = `groundcover-ring-${'ABCD'[spec.index]}`;
       mesh.frustumCulled = false;
       mesh.castShadow = false;
       mesh.receiveShadow = true;
       mesh.matrixAutoUpdate = false;
       mesh.visible = false;
       group.add(mesh);
-      rings.push({ spec, mesh, geo, inst, grid: maps.grids[spec.index], offsets, maxTiles, uniforms: u, count: 0, trisPerBlade: (spec.levels - 1) * 2 + 1 });
+      rings.push({ spec, mesh, geo, inst, grid: maps.grids[spec.index === 3 ? 0 : spec.index], offsets, maxTiles, uniforms: u, count: 0, trisPerBlade: (spec.levels - 1) * 2 + 1 });
     }
     applyDensity();
   };
@@ -783,7 +797,8 @@ export function createField(ctx: CityContext, maps: CoverMaps, outer: OuterMaps 
       let n = 0;
       const offs = r.offsets;
       // the roaming landscape window's grid for this ring (same global 8 m lattice as the slab's)
-      const wg = win ? win.grids[r.spec.index] : null;
+      const sward = r.spec.index === 3;
+      const wg = win ? win.grids[sward ? 0 : r.spec.index] : null;
       const wdi = wg ? Math.round((g.x0 - wg.x0) / S) : 0,
         wdj = wg ? Math.round((g.z0 - wg.z0) / S) : 0;
       for (let k = 0; k < offs.length; k += 2) {
@@ -813,7 +828,7 @@ export function createField(ctx: CityContext, maps: CoverMaps, outer: OuterMaps 
             }
           }
         }
-        if (fl === 0) continue;
+        if (fl === 0 || (sward && !(fl & 16))) continue;
         y1 += BLADE_UP;
         const x0 = g.x0 + ti * S,
           z0 = g.z0 + tj * S;
@@ -832,7 +847,7 @@ export function createField(ctx: CityContext, maps: CoverMaps, outer: OuterMaps 
         }
         // which content this ring draws here
         let lawn = 1;
-        if (r.spec.index >= 1) {
+        if (r.spec.index >= 1 && !sward) {
           const camH = Math.max(0.5, camPos.y - y0);
           const horiz = Math.max(1, Math.hypot(x0 + S / 2 - camPos.x, z0 + S / 2 - camPos.z));
           lawn = r.spec.index === 1 && camH / horiz < 0.22 ? 1 : 0;
@@ -887,7 +902,7 @@ export function createField(ctx: CityContext, maps: CoverMaps, outer: OuterMaps 
         const nb = Math.round(r.uniforms.uBlade.value.x);
         blades += r.count * nb;
         verts += r.count * nb * (r.spec.levels * 2 + 1);
-        tiles.push(`${'ABC'[r.spec.index]}${r.count}`);
+        tiles.push(`${'ABCD'[r.spec.index]}${r.count}`);
       }
       return { tiles: tiles.join(' '), blades, verts };
     },
