@@ -173,12 +173,10 @@ vec4 trLivery(vec3 q, float unit) {
     float d = mod(floor(unit / pow(10.0, 2.0 - ci)), 10.0);
     vec2 sc = vec2(3.0 * 64.0 / 60.0 / 0.62, 1.0 / 0.13);
     if (l.x >= 0.0 && l.x < 1.0) o = trDec(vec4(${DECAL.digit0[0]}.0 + d * 64.0, ${DECAL.digit0[1]}.0, 60.0, 104.0), vec2(fract(l.x * 3.0) * 64.0 / 60.0, l.y), fx * sc, fy * sc);
-    return o;
-  }
+  } else if (abs(q.x) >= 1.44 && abs(q.x) <= 1.52) {
   // a decal of height h centred at (zc, yc): local coords from the side position
   #define TR_L(zc, yc, w, h) (vec2((-(q.z - (zc)) * sd) / (w) + 0.5, (q.y - (yc)) / (h) + 0.5))
   #define TR_G(w, h) gx / vec2(w, h), gy / vec2(w, h)
-  if (abs(q.x) < 1.44 || abs(q.x) > 1.52) return o;
   // operator name between the doors on the lower band
   o = trOver(o, trDec(vec4(${DECAL.logo.join('.0, ')}.0), TR_L(-0.425, 1.6, 3.24, 0.36), TR_G(3.24, 0.36)));
   // fleet number "442 nnn" + technical data at the rear end
@@ -204,6 +202,8 @@ vec4 trLivery(vec3 q, float unit) {
     o = trOver(o, trDec(vec4(${DECAL.hv.join('.0, ')}.0), TR_L(k == 0 ? -7.35 : 7.35, 3.03, 0.16, 0.16), TR_G(0.16, 0.16)));
   #undef TR_L
   #undef TR_G
+  }
+  // (one exit: HLSL called the early returns a use of an uninitialized variable)
   return o;
 }
 float trEmK = 1.0;
