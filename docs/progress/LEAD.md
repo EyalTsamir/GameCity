@@ -5,8 +5,18 @@ Per-module logs live next to this file: `docs/progress/<module>.md`.
 
 ## Close-up stage 3 merged, not yet measured (2026-11-01) — see close-hand.md, close-windows.md, close-nature.md, close-vehicles.md, close-life.md
 Merged at 43c9e5d: things at hand height (`?nohand`), a generated room behind every window within 34 m (`?noclosewin`), trunks, plants and ground at ankle height (`?noclosenature`), road vehicles and trains up close (`?noclosevehicles`), birds, cats, dogs, gestures and street moments (`?nosmalllife`). Conflicts only in the module list of `src/main.ts`, all kept. Typecheck passes.
-**Nothing is checked on the merge yet:** no bake, build, ui-test, hitch or perf. The machine was off AC and in the user's hands, and it ran flat at about 12:00. The sessions' limit was moved from 14:00 to 11:45 for this, so hand's and nature's last commits and life's final state have no timing of their own.
-To do at the merge's measurement, on steady AC: `npm run bake`, build, the checks and the same-session A/B in the stage 2 entry below. Also:
+Checks on the merge (a940ce6), behind `scripts/power-guard.mjs`: typecheck + build OK (5.1 MB + bake); overview at speed 4, twice, invariants `{}`, validate `[]`, console clean, no pedestrian overlap; medium, low, diorama clean; ui-test 74/74, `kinds` included; hitch 0 mid-run programs, one 117 ms frame at boot, one 150 ms frame arriving at 21.5; walkhitch 41.5 ms mean, p99 66.7 ms, 0 freezes, 31 MB/s allocated; film-hitch ran, result not read.
+Cost, same session, interleaved, 2 + 2 runs, production builds with their own bake, 1920×1025, high, ms per frame, a499c28 → merged:
+| hour | overview | downtown | street | market |
+|---|---|---|---|---|
+| 12 | 33.4 → 33.5 | 31.8 → 32.1 | 37.2 → 38.3 | 37.0 → 38.8 |
+| 18.2 | 32.6 → 32.5 | 30.9 → 31.0 | 36.0 → 35.9 | 34.1 → 35.8 |
+| 21.5 | 34.7 → 34.4 | 33.6 → 33.5 | 36.8 → 36.2 | 37.4 → 38.6 |
+Mean +0.42 ms. Market +1.25 to +1.73 is the one to look at: draw calls 255 → 298. The per-switch run is one pass and too noisy to name a session. Nothing cut. Baselines read about 1 ms higher than in the stage 2 run: machine state, so compare only within a run.
+By eye at 3 m, noon and 21.5: a real step in depth, rooms behind windows, flowers behind the florist's glass. Left: the door lamp washes a whole wall cream at night (`wall-oldtown`), a restaurant's back wall is brown with blocky patches (`person-street` 21.5).
+The user reports, not from this round, that almost everywhere something trembles, with the camera moving and still. It's sweep-fix-d's job in the second round: stills can't show it, so the sweep won't find it.
+Build stamp from b249a97: `.th-ver` under the title shows the build's date, time and commit (`vite.config.ts`), at the user's request. Published: Netlify 6ae7728c2e6100f87f1f873b from a940ce6, unstamped.
+Still open on this merge:
 - Train door at 1 m on high: +3 to +5 ms, from a subagent's reading, not profiled. Kept for now, close trains are high only.
 - Window atlas about 86 MB on high: check memory.
 - The bigger facade program is compiled even with `?noclosewin`, so only a frozen build shows its full cost.
