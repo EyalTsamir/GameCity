@@ -10,7 +10,7 @@ import { patchLampMaterial } from '../lamps/integrate';
 const R = 7.5;
 const CELL = 3;
 /** stones per m² */
-const DENSITY = 150;
+const DENSITY = 260;
 const BED: [number, number][] = [
   [0, -0.05], [0.55, -0.04], [1.0, -0.028], [1.3, 0.005], [1.42, 0.02], [1.62, -0.035],
 ];
@@ -28,6 +28,13 @@ function stone(): THREE.BufferGeometry {
     p.setXYZ(i, x * k * (1 + 0.28 * Math.sign(x)), y * k * 0.72, z * k);
   }
   g.computeVertexNormals();
+  // the sky lights the tops; between the stones it is dark
+  const c = new Float32Array(p.count * 3);
+  for (let i = 0; i < p.count; i++) {
+    const v = THREE.MathUtils.clamp(0.28 + 0.9 * (p.getY(i) + 0.55), 0.22, 1.05);
+    c[i * 3] = c[i * 3 + 1] = c[i * 3 + 2] = v;
+  }
+  g.setAttribute('color', new THREE.BufferAttribute(c, 3));
   return g;
 }
 
@@ -35,7 +42,7 @@ export function addBallast(ctx: CityContext): void {
   const near = nearOf(ctx);
   const prof = makeProfile(ctx.plan);
   const zc = prof.z;
-  const material = new THREE.MeshStandardMaterial({ roughness: 0.92, metalness: 0 });
+  const material = new THREE.MeshStandardMaterial({ roughness: 0.92, metalness: 0, vertexColors: true });
   patchLampMaterial(material);
   nearGrow(material, R);
   near.addScatter({
@@ -45,8 +52,8 @@ export function addBallast(ctx: CityContext): void {
     top: 2.5,
     geometry: stone(),
     material,
-    capacity: 7000,
-    perCell: 1400,
+    capacity: 11000,
+    perCell: 2400,
     colors: true,
     fill: (c, out) => {
       if (c.z1 < zc - 2.4 || c.z0 > zc + 2.4 || c.x1 < prof.x0 || c.x0 > prof.x1) return;
@@ -82,7 +89,7 @@ export function addBallast(ctx: CityContext): void {
         }
         const s = 0.016 + 0.024 * size * size + 0.008 * size;
         // limestone grey, some darker, a few warm; brown from the brakes by the rails
-        let g = 0.3 + 0.3 * tone * tone;
+        let g = 0.2 + 0.26 * tone * tone;
         if (warm > 0.92) g *= 0.72;
         const rust = dz > 0.45 && dz < 1.05 ? 0.09 * (1 - Math.abs(dz - 0.75) / 0.3) : 0;
         const r = g * (1 + Math.max(0, rust) * 2.2 + (warm > 0.8 ? 0.06 : 0.015)),

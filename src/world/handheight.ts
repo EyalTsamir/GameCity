@@ -63,15 +63,20 @@ function handMaterial(grain: THREE.Texture): THREE.MeshStandardMaterial {
   { vec3 an = abs(vHandN);
     vec2 tuv = an.y > 0.7 ? vHandP.xz : an.x > 0.7 ? vHandP.zy : vHandP.xy;
     handTile = texture2D(uHandGrain, tuv * 2.3).r;
-    diffuseColor.rgb *= vHandS.y > 1.5 ? 0.3 + 0.5 * uLights : mix(0.8 + 0.4 * handTile, 0.9 + 0.2 * handTile, vHandS.y);
+    diffuseColor.rgb *= vHandS.y > 1.5 ? 0.3 + 0.5 * uLights : mix(0.93 + 0.14 * handTile, 0.9 + 0.2 * handTile, vHandS.y);
     // coir and rough cloth: a coarse tile, deep in between the fibres
     if (vHandS.x > 0.97 && vHandS.y < 0.5) { float c2 = texture2D(uHandGrain, tuv * 17.0).r; diffuseColor.rgb *= 0.45 + 1.1 * c2 * c2 + 0.3 * handTile; } }`,
       )
       .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>\n  roughnessFactor = clamp(vHandS.x + (handTile - 0.5) * 0.22, 0.04, 1.0);`)
       .replace('#include <metalnessmap_fragment>', `#include <metalnessmap_fragment>\n  metalnessFactor = vHandS.y > 1.5 ? 0.55 - 0.5 * uLights : vHandS.y > 0.5 ? 1.0 : 0.0;`)
+      .replace(
+        '#include <normal_fragment_maps>',
+        `#include <normal_fragment_maps>
+  if (vHandS.y > 0.5 && vHandS.y < 1.5) { float nv = clamp(dot(normal, normalize(vViewPosition)), 0.0, 1.0); diffuseColor.rgb *= 0.42 + 0.78 * nv * nv * nv + 0.22 * smoothstep(0.16, 0.0, nv); }`,
+      )
       .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>\n  if (vHandS.y > 1.5) totalEmissiveRadiance += vColor.rgb * uLights * 3.2;`);
   };
-  m.customProgramCacheKey = () => 'handheight-v1';
+  m.customProgramCacheKey = () => 'handheight-v2';
   patchLampMaterial(m);
   return m;
 }
@@ -97,6 +102,8 @@ function stainMaterial(): THREE.MeshBasicMaterial {
   m.name = 'handheight-stain';
   return m;
 }
+
+const w0vents = (seed: number): boolean => seed % 3 !== 0;
 
 const hash = (a: number, b: number, c = 0): number => {
   let h = Math.imul(a | 0, 73856093) ^ Math.imul(b | 0, 19349663) ^ Math.imul(c | 0, 83492791);
@@ -462,7 +469,12 @@ export default function create(ctx: CityContext): CityModule {
           const others = pipesOfLot.get(lotId) ?? [];
           if (others.some((p) => p.nx * w.nx + p.nz * w.nz > 0.9 && Math.abs((p.x - w.x) * w.nx + (p.z - w.z) * w.nz) < 1)) continue;
           const right = (lot.seed + Math.round(w.x)) % 2 === 0;
-          const u = right ? w.L - 0.26 : 0.26;
+          const many = Math.max(1, Math.round(w.L / 12));
+          for (let pk = 0; pk < many; pk++) {
+          // one at the corner, then every ten metres or so on a line between two windows
+          let u = many === 1 ? (right ? w.L - 0.26 : 0.26) : ((pk + 0.5) * w.L) / many;
+          const g = w.grid;
+          if (many > 1 && g && g.n > 0) u = g.u0 + Math.max(1, Math.min(g.n - 1, Math.round((u - g.u0) / g.cw))) * g.cw;
           if (!free(w, u - 0.14, u + 0.14, 0.2, Math.min(lot.height - 0.2, w.y1))) continue;
           take(w, u - 0.14, u + 0.14, 0.2, lot.height - 0.2);
           const [x, z] = pos(w, u);
@@ -483,6 +495,26 @@ export default function create(ctx: CityContext): CityModule {
               s.ink(0x8d8a84).soft(0, 0.18, 0.0015, 0.24, 0.42);
               s.ink(0xbeb9af).streak(-0.09, 0.09, Math.max(0.5, p.y1 - 1.8), p.y1, 0.0015);
             });
+          }
+          }
+        }
+      }
+
+      // a block of flats breathes through a row of grilles, one by each kitchen window
+      if ((kind === 'apartment' || kind === 'hotel') && w0vents(lot.seed)) {
+        for (const w of out) {
+          const g = w.grid;
+          if (!g) continue;
+          for (let i = 0; i < g.n; i += 2) {
+            for (let j = 0; j < Math.max(1, g.m); j++) {
+              const u = g.u0 + i * g.cw + g.wx1 + 0.24;
+              const y = g.v0 + j * g.ch + g.wy1 - 0.06;
+              if (!free(w, u - 0.075, u + 0.075, y - 0.075, y + 0.075)) continue;
+              take(w, u - 0.075, u + 0.075, y - 0.075, y + 0.075);
+              const [x, z] = pos(w, u);
+              put(MID, x, z, (s) => W.roundVent(onWall(w, s), u, y, 0.065, 0xd9d6cc));
+              if (stains) put(STAIN, x, z, (s) => onWall(w, s).ink(0xa59e90).streak(u - 0.06, u + 0.06, y - 0.42, y - 0.05, 0.0014));
+            }
           }
         }
       }

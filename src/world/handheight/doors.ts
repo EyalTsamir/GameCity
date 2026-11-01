@@ -33,6 +33,20 @@ function screw(s: HandSink, u: number, y: number, o: number, r = 0.0035): void {
 }
 
 /** bevels round the raised field of a panel, so that it turns in the light; the top edge no longer glints as a dashed line */
+/** closemat's dust on dark joinery (CM_SOLID) worked out once for a colour at a height: it settles more towards the foot */
+function dusted(c: number, y: number): number {
+  const lin = [(c >> 16) & 255, (c >> 8) & 255, c & 255].map((v) => Math.pow(v / 255, 2.2));
+  const lum = 0.3 * lin[0] + 0.59 * lin[1] + 0.11 * lin[2];
+  const step = (a: number, b: number, v: number): number => {
+    const t = Math.min(1, Math.max(0, (v - a) / (b - a)));
+    return t * t * (3 - 2 * t);
+  };
+  const k = (1 - step(0.08, 0.3, lum)) * (0.12 + 0.16 * (1 - step(0, 1.4, y)));
+  const dust = [0.24, 0.23, 0.215];
+  const out = lin.map((v, i) => Math.round(255 * Math.pow(v * (1 - k) + dust[i] * k, 1 / 2.2)));
+  return (out[0] << 16) | (out[1] << 8) | out[2];
+}
+
 function panelMoulds(s: HandSink, d: HandDoor, oL: number): void {
   const c = d.doorCol;
   const P = d.panels;
@@ -45,17 +59,18 @@ function panelMoulds(s: HandSink, d: HandDoor, oL: number): void {
       b = oL + 0.0238;
     const i = 0.035;
     s.rough(0.5);
-    // the field itself, one coat of the door's paint with the brush marks of the tile
-    s.ink(c, 1.03).rough(0.46).plate(u0 + i, u1 - i, y0 + i, y1 - i, b, 1.02);
+    // the field itself, one coat of the door's paint, as dusty as the stiles round it
+    const painted = dusted(c, (y0 + y1) / 2);
+    s.ink(painted, 1.02).rough(0.48).plate(u0 + i, u1 - i, y0 + i, y1 - i, b, 1.02);
     // a sloped band from the frame up to the field, on all four sides
-    s.ink(c, 1.0);
+    s.ink(painted, 1.0);
     s.quad([u0 + i, y1 - i, b], [u1 - i, y1 - i, b], [u1 - 0.006, y1 - 0.006, a], [u0 + 0.006, y1 - 0.006, a]);
     s.quad([u0 + 0.006, y0 + 0.006, a], [u1 - 0.006, y0 + 0.006, a], [u1 - i, y0 + i, b], [u0 + i, y0 + i, b]);
     s.quad([u0 + 0.006, y0 + 0.006, a], [u0 + i, y0 + i, b], [u0 + i, y1 - i, b], [u0 + 0.006, y1 - 0.006, a]);
     s.quad([u1 - i, y0 + i, b], [u1 - 0.006, y0 + 0.006, a], [u1 - 0.006, y1 - 0.006, a], [u1 - i, y1 - i, b]);
     // the small sloped lip where the frame leaves the stiles, instead of a sharp ledge
     const q = oL + 0.0005;
-    s.ink(c, 0.92);
+    s.ink(painted, 0.92);
     s.quad([u0 + 0.006, y1 - 0.006, a], [u1 - 0.006, y1 - 0.006, a], [u1 + 0.008, y1 + 0.008, q], [u0 - 0.008, y1 + 0.008, q]);
     s.quad([u0 - 0.008, y0 - 0.008, q], [u1 + 0.008, y0 - 0.008, q], [u1 - 0.006, y0 + 0.006, a], [u0 + 0.006, y0 + 0.006, a]);
     s.quad([u0 - 0.008, y0 - 0.008, q], [u0 + 0.006, y0 + 0.006, a], [u0 + 0.006, y1 - 0.006, a], [u0 - 0.008, y1 + 0.008, q]);
