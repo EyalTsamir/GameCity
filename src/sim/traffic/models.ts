@@ -265,15 +265,20 @@ function drawDetailAtlas(g: CanvasRenderingContext2D, font: (px: number, w?: str
     }
     g.fillRect(r.x, t0 + (t1 - t0) * 0.3, r.w, 2);
     g.fillRect(r.x, t0 + (t1 - t0) * 0.68, r.w, 2);
-    // lettering (twice around) on both sidewalls, upside-down on the inner one is invisible anyway
+    // lettering (twice around) on both sidewalls, the top of the letters towards the tread
     g.fillStyle = '#5a5d61';
     g.font = font(9);
     g.textAlign = 'center';
     g.textBaseline = 'middle';
     for (const v of [0.14, 0.86])
       for (const u of [0.25, 0.75]) {
-        g.fillText('TINYHAVEN  ALLGRIP', r.x + u * r.w - 60, vy(v));
-        g.fillText('205/55 R16  91V', r.x + u * r.w + 60, vy(v));
+        for (const [t, dx] of [['TINYHAVEN  ALLGRIP', -60], ['205/55 R16  91V', 60]] as const) {
+          g.save();
+          g.translate(r.x + u * r.w + dx, vy(v));
+          if (v > 0.5) g.rotate(Math.PI);
+          g.fillText(t, 0, 0);
+          g.restore();
+        }
       }
   }
   // wheel faces (middle level: one textured disc): tyre ring, rim lip, spokes / cap / steel disc
@@ -1341,7 +1346,7 @@ function wheel(b: Builder, x: number, y: number, z: number, r: number, w: number
   b.add(ty, { color: '#ffffff', rough: 1.7, wheel: wh, decal: R_TYRE, det: { c: 3, a: [r, w] } });
   if (CLOSE && closeVehOn('vehwheel')) wheelKit(b, x, y, z, r, rr, w, side, style, wh, rim);
   // rim barrel (seen from outside through the spokes) and the dark inner dish
-  const bar = inward(new THREE.CylinderGeometry(rr, rr, w * 0.9, 20, 1, true));
+  const bar = inward(new THREE.CylinderGeometry(rr, rr, w * 0.9, CLOSE ? 44 : 20, 1, true));
   bar.rotateZ(Math.PI / 2);
   bar.translate(x, y, z);
   b.add(bar, { color: '#2a2d31', rough: 1.1, wheel: wh });
@@ -1373,11 +1378,11 @@ function wheel(b: Builder, x: number, y: number, z: number, r: number, w: number
       nut.translate(face + side * 0.004, y + Math.cos(a) * r * 0.2, z + Math.sin(a) * r * 0.2);
       b.add(nut, { color: '#8d939a', rough: 0.6, finish: 'chrome', wheel: wh });
     }
-    const lip = new THREE.TorusGeometry(rr - 0.004, 0.011, 5, 28);
+    const lip = new THREE.TorusGeometry(rr - 0.004, 0.011, 5, CLOSE ? 56 : 28);
     lip.rotateY(Math.PI / 2);
     lip.translate(face - side * 0.006, y, z);
     b.add(lip, { color: rim, rough: 0.45, wheel: wh });
-    const cap = new THREE.CylinderGeometry(r * 0.12, r * 0.14, 0.03, 14, 1);
+    const cap = new THREE.CylinderGeometry(r * 0.12, r * 0.14, 0.03, CLOSE ? 28 : 14, 1);
     cap.rotateZ((-side * Math.PI) / 2);
     cap.translate(face + side * 0.008, y, z);
     b.add(cap, { color: '#9aa1a8', rough: 0.4, finish: 'chrome', wheel: wh });
@@ -1394,7 +1399,7 @@ function wheel(b: Builder, x: number, y: number, z: number, r: number, w: number
     fy = R_FACE_STEEL.y + R_FACE_STEEL.h / 2,
     fr = (R_FACE_STEEL.w / 2 - 1) * 0.64;
   b.add(sideDisc(rr, 20, side, face - side * 0.03, y, z), { color: rim, rough: 0.9, wheel: wh, decal: { x: fx - fr, y: fy - fr, w: 2 * fr, h: 2 * fr } });
-  const boss = new THREE.CylinderGeometry(r * 0.2, r * 0.26, 0.07, 14, 1);
+  const boss = new THREE.CylinderGeometry(r * 0.2, r * 0.26, 0.07, CLOSE ? 28 : 14, 1);
   boss.rotateZ((-side * Math.PI) / 2);
   boss.translate(face, y, z);
   b.add(boss, { color: '#6f757b', rough: 0.8, finish: 'chrome', wheel: wh });
@@ -1441,7 +1446,7 @@ function underKit(b: Builder, s: CarShape, W: number, axF: number, axR: number, 
   for (const az of [axF, axR]) {
     archLiner(b, az, r, ra - 0.012, W - 0.14);
     for (const sd of [1, -1]) {
-      const n = 14;
+      const n = 28;
       let px = 0,
         py = 0,
         pz = 0;
@@ -2005,7 +2010,7 @@ type BumperFinish = 'dark' | 'paint' | 'chrome';
 
 /** Lofted body shell (paint, glass, trim, wheel wells, bumpers, cladding) + mirrors, handles, wipers. Returns the roof top. */
 function loftBody(b: Builder, s: CarShape, doors4: boolean, chrome = false, bumper: BumperFinish = 'dark'): { topY: number; topZ: number; topW: number; topD: number } {
-  const p = loftCar(s, LOD);
+  const p = loftCar(s, LOD, CLOSE);
   const hw = s.W / 2;
   const ra = s.wheelR + 0.075;
   // panel lines and the cabin are drawn by the shader (vehicleMaterial.ts, classes 1 and 2)
@@ -2350,7 +2355,7 @@ function cabSide(b: Builder, x: number, w: number, h: number, yc: number, zc: nu
 
 /** a wheel-arch liner (inward half cylinder) across the body at axle z */
 function archLiner(b: Builder, z: number, y: number, r: number, w: number): void {
-  const lin = inward(new THREE.CylinderGeometry(r, r, w, LOD === 0 ? 12 : 6, 1, true, -Math.PI / 2, Math.PI));
+  const lin = inward(new THREE.CylinderGeometry(r, r, w, CLOSE ? 28 : LOD === 0 ? 12 : 6, 1, true, -Math.PI / 2, Math.PI));
   lin.rotateZ(Math.PI / 2);
   lin.translate(0, y, z);
   b.add(lin, { color: WELL, rough: 1.6 });
@@ -2358,7 +2363,7 @@ function archLiner(b: Builder, z: number, y: number, r: number, w: number): void
 
 /** a lofted cab (busBody.ts shell with its own nose) centred at z = zc: paint body, dark bumper, wells, glass, seals */
 function cabShell(b: Builder, sh: BusShape, zc: number, glass: PartOpts): EndFn {
-  const r = loftBus(sh, LOD);
+  const r = loftBus(sh, LOD, CLOSE);
   const paint: PartOpts = { color: '#ffffff', paint: true, rough: 0.85 };
   if (r.body) b.add(r.body.translate(0, 0, zc), paint);
   if (r.skirt) b.add(r.skirt.translate(0, 0, zc), paint);
@@ -2979,7 +2984,7 @@ function archedSlab(L: number, y0: number, y1: number, w: number, arches: number
     bevelThickness: bevel,
     bevelSize: bevel,
     bevelSegments: LOD === 0 ? 3 : 1,
-    curveSegments: LOD === 0 ? 10 : LOD === 1 ? 5 : 3,
+    curveSegments: CLOSE ? 24 : LOD === 0 ? 10 : LOD === 1 ? 5 : 3,
   });
   g.rotateY(-Math.PI / 2);
   g.translate(depth / 2, 0, 0);
@@ -3044,7 +3049,7 @@ function bus(): THREE.BufferGeometry {
   const ra = 0.6;
   const shape: BusShape = { L, W, y0: 0.35, bump: 0.62, skirt: 0.95, ws0: 1.12, ws1: 2.62, roof: 3.05, axles: [axF, axR], ra, ay: 0.48 };
   const surf: EndFn = (x, y, sg) => busEndSurface(shape, x, y, sg);
-  const sh = loftBus(shape, LOD);
+  const sh = loftBus(shape, LOD, CLOSE);
   const cabin: Det = { c: 4, a: [W / 2 - 0.1, 1.3, 2.86, L / 2 - 0.35], b: [-L / 2 + 0.3, L / 2 - 2.55, 0, 0] };
   if (CLOSE && closeVehOn('vehcabin')) {
     const a = cabin.a!,

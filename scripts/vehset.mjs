@@ -29,6 +29,7 @@ const FRAMES = {
   win: { yaw: 72, z: 0.12, x: 0.75, y: 1.08, d: 1.15, pitch: 12 },
   screen: { yaw: 18, z: 0.42, x: 0, y: 1.1, d: 1.7, pitch: 14 },
   wheel: { yaw: 70, z: 0.62, x: 1, y: 0.38, d: 1.1, pitch: 18 },
+  wheelL: { yaw: -70, z: 0.62, x: -1, y: 0.38, d: 1.1, pitch: 18 },
   head: { yaw: 28, z: 1, x: 0.72, y: 0.72, d: 1.0, pitch: 12 },
   tail: { yaw: 155, z: -1, x: 0.72, y: 0.85, d: 1.0, pitch: 10 },
   door: { yaw: 88, z: -0.05, x: 1, y: 0.72, d: 1.2, pitch: 10 },

@@ -147,12 +147,12 @@ export function busEndSurface(s: BusShape, x: number, y: number, sign: number): 
   return { z, n: n.normalize() };
 }
 
-export function loftBus(s: BusShape, lod: number): Record<BusRegion, THREE.BufferGeometry | null> {
+export function loftBus(s: BusShape, lod: number, fine = false): Record<BusRegion, THREE.BufferGeometry | null> {
   const h = s.L / 2;
   const zs: number[] = [];
   const nU = lod === 0 ? 24 : lod === 1 ? 10 : 4;
   for (let i = 0; i <= nU; i++) zs.push(-h + (s.L * i) / nU);
-  const arch = lod === 0 ? [-1, -0.85, -0.6, -0.3, 0, 0.3, 0.6, 0.85, 1] : lod === 1 ? [-1, -0.6, 0, 0.6, 1] : [-1, 0, 1];
+  const arch = fine ? [-1, -0.93, -0.83, -0.71, -0.56, -0.38, -0.2, 0, 0.2, 0.38, 0.56, 0.71, 0.83, 0.93, 1] : lod === 0 ? [-1, -0.85, -0.6, -0.3, 0, 0.3, 0.6, 0.85, 1] : lod === 1 ? [-1, -0.6, 0, 0.6, 1] : [-1, 0, 1];
   for (const az of s.axles) for (const a of arch) zs.push(az + a * s.ra);
   const ends = lod === 0 ? [0.005, 0.015, 0.03, 0.05, 0.08, 0.12, 0.17, 0.23, 0.32] : lod === 1 ? [0.03, 0.1, 0.25] : [0.1];
   const nz = (s.nose ?? NOSE).zone / ZONE,

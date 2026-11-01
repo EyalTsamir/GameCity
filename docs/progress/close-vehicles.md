@@ -3,6 +3,21 @@
 Any vehicle has to hold up at 1 and 3 m: seats, dashboard and wheel through the glass, a driver who is one of the city's people, lamps with real
 lenses, tyres and arches, door lines, dirt and small dents. By system, fine detail only near the camera. Trains: `close-vehicles-trains.md`.
 
+## Second round (2026-11-02, on bfd0206)
+Done: wheel arches and rims round at a metre, on the close level only (`fine` in `loftCar`/`loftBus`: 15 stations per arch instead of 9, more segments on liner, lip, rim, cap); tyre lettering upright and not mirrored on both sides (looked at on a suv, both sides); unlit indicators read amber.
+
+**The train door: "+3 to +5 ms" was a sign error, as far as can be shown here.** abprof prints with - base, and with `apply = closeOn=false`, `with` is the close level OFF. Measured with the camera held on an open door at 1.25 m, clock stopped, on AC behind the guard, 4 cycles:
+| | 12 h | 21.5 h |
+|---|---|---|
+| close level off, against on | +4.15 +-1.88 | +3.67 +-0.09 |
+So the close level is about 4 ms CHEAPER than the far level here (the far level ray-traces its interior and writes gl_FragDepth). The subagent's command was not logged, so its reversal is inferred, not seen.
+What the close level does cost at that door, each set hidden in one page (with - base): glass -2.06 +-0.11 / -2.26 +-0.39, inner -1.58 +-0.72 / -2.47 +-0.43, body -0.45 +-0.64 / -2.82 +-0.8, pane depth +1.94 +-0.39 / -0.11 +-0.52 (no cost). The depth figure at noon has the wrong sign for a cost, a sign of how noisy this was. Nothing was cut: there is no overrun, and cutting would lose detail.
+3 m at a door, off against on: +1.42 +-4.43 / +4.02 +-0.23: cheaper at night, noon unresolved.
+1 m at a window: -8.21 +-5.06 / -0.22 +-7.69: **unresolved**, the machine was loaded. If the reversal is real this is the view that may cost something (the subagent's -0.9 flips to +0.9).
+**Decision for the coordinator:** the train close level is still on `high` only. That was set because of the wrong figure; put `closeVeh(ctx, 'vehtrain')` back in `trainRender.ts` to give medium the trains' close-up, after measuring the window on a quiet machine. `medium` with it has not been looked at since that change.
+Freight looked at, 12 h (loco nose, cab, bogie, wagon, wagon bogie): holds up. Wagon tail lamps still unseen: the `wagonTail` frame lands in the forest. Night sheet not looked at.
+**Perf pending** for arches and rims (more triangles on the close level only, not counted), and for the merged state.
+
 ## Resume here
 Branch `claude/cool-davinci-ad96c9`. Trains merged. Don't merge to main, push or deploy: the coordinator merges. Final check results: see "Final checks" below.
 
@@ -12,10 +27,10 @@ The trains branch had picked up two commits from `origin/main` by the user (e305
 ### The four things the trains' report flagged
 1. **Person lit on a level crossing: real, fixed.** The term was a fixed strip across the city at the track's z. Shown: laying the strip on a real walker, clock stopped, one page: before the fix he brightens (trousers dark to pale grey), after it the two pictures match. The term now also needs `P_rootY > 0.3` (hips raised: riding). `tailFloor` could not be used: riders have it at 0. Passengers still look lit at night in the train set, by eye; there is no A/B of the term on them.
 2. **Console warning: fixed.** The merge added 3 x X4000 `f_trLivery` on high and in diorama. `trLivery` had early returns; with one exit all copies are gone, the far level's too (overview 15 warnings to 11, 12 before the merge). Livery and the unit number still draw (looked at, 12 h).
-3. **+3 to +5 ms at 1 m into an open door: not fixed, for the coordinator to decide.** Not profiled, and a smaller reach does not help at 1 m. Conservative step: the train close level is now on `high` only (`closeVeh(ctx, 'vehtrain', 'high')`), so medium never pays it; high still does. The figure is the subagent's, measured before this merge. `?novehtrain` turns the level off.
+3. **+3 to +5 ms at 1 m into an open door: see "Second round": it looks like a sign error.** What was written at the time: Not profiled, and a smaller reach does not help at 1 m. Conservative step: the train close level is now on `high` only (`closeVeh(ctx, 'vehtrain', 'high')`), so medium never pays it; high still does. The figure is the subagent's, measured before this merge. `?novehtrain` turns the level off.
 4. **hitch on trains: run**, views station, overview, street at 12 and 21.5: 0 new programs in all 13 windows (200 programs), no freeze in any window, no errors, invariants {}. It ran on AC behind the guard, before the livery fix. Walking past a train was not tested; walkhitch was not run.
 
-Left, not fixed: wheel arches and hubcaps still show facets at 1 m (loft has 9 stations per arch; more would cost every vehicle at level 0); tyre lettering reads upside down at the top of the wheel (real tyres read upright there); unlit ambers are tan rather than amber; two-wheelers have no close level; lorry bulkhead reads mottled through the screen; the cream bezel on the compact stays visible at night, lit like the paint.
+Left, not fixed: more would cost every vehicle at level 0); two-wheelers have no close level; lorry bulkhead reads mottled through the screen; the cream bezel on the compact stays visible at night, lit like the paint.
 Other sessions: hard dark rectangles in the blue reflection of ground-floor windows at `veh-parked` 21.5, with and without `?noparklamps` (for close-light). The 110-160 ms freeze on a camera cut, see Numbers.
 Road vehicles draw glass as the trains did before their depth fix, so they may carry the same AO mottle on panes (the subagent's guess, not checked).
 

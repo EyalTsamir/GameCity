@@ -218,7 +218,8 @@ export const CLOSE_FRAG_DETAIL = /* glsl */ `
       float spark = pow( max( Rt.y * 0.8 + 0.25, 0.0 ), 5.0 );
       float rev = ( st < 3.5 && hx > 0.14 && vDetB.z < 0.5 ) ? 1.0 - smoothstep( -0.47, -0.44, q.x / hx ) : 0.0;
       float amb = step( 0.5, vDetB.z );
-      vec3 red = ( amb > 0.5 ? vec3( 0.95, 0.47, 0.05 ) * 1.5 : vec3( 0.8, 0.03, 0.022 ) ) * ( 0.42 + 1.5 * spark );
+      vec3 red = amb > 0.5 ? vec3( 1.0, 0.5, 0.05 ) * ( 0.95 + 1.3 * spark ) : vec3( 0.8, 0.03, 0.022 ) * ( 0.42 + 1.5 * spark );
+      em += amb * vec3( 1.0, 0.46, 0.04 ) * 0.1 * ( 1.0 - uLights );
       vec3 clear = vec3( 0.45 ) * ( 0.1 + 1.3 * spark ) + vec3( 0.12 ) * ( 0.5 + 0.5 * sin( h.y * 180.0 ) );
       col = mix( red, clear, rev );
       float bx0 = hx * 0.5, br = max( min( hx, hy ) * 0.34, 0.025 );
