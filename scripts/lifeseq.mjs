@@ -10,6 +10,8 @@
 //     --walk 1.3            the camera walks at this speed (m/s) towards what it looks at, as someone would
 //     --shots 3             the sequence again at other places (--find only: the next nearest), one sheet per shot
 //     --follow              the camera stays on what it found (--find only), --yaw d fixes its side (else random)
+//     --pedwalk <poi>       a real walk: the camera at eye height along the walkway graph, from the node nearest that POI to one
+//                           60-90 m off (--walk speed, default 1.4), --walkseed n picks another way; nothing else is touched
 //     --pre "js"            run once after load, --eval "js" after each framing
 //     --size 900x500 --cols 4 --dist 3 --pitch 8
 //     --scripts <dir>       where browser.mjs lives (the main checkout's, for its shared browser lock)
@@ -149,10 +151,134 @@ try {
         }, 40);
       }, walk);
     }
+    if (args.pedwalk) {
+      const r = await page.evaluate(
+        ([poi, seed, sp]) => {
+          const c = window.__city;
+          const { peds, plan } = c.ctx;
+          const P = plan.pois.find((q) => q.id === poi) ?? plan.pois[0];
+          const px = P.x ?? P.target?.x ?? P.view?.target?.x ?? 0,
+            pz = P.z ?? P.target?.z ?? P.view?.target?.z ?? 0;
+          let a = 0,
+            bd = 1e18;
+          peds.nodes.forEach((n, i) => {
+            const d = (n.x - px) ** 2 + (n.z - pz) ** 2;
+            if (d < bd) {
+              bd = d;
+              a = i;
+            }
+          });
+          const far = [];
+          peds.nodes.forEach((n, i) => {
+            const d = Math.hypot(n.x - peds.nodes[a].x, n.z - peds.nodes[a].z);
+            if (d > 60 && d < 90) far.push(i);
+          });
+          const b = far[(seed * 7919) % far.length];
+          const route = peds.route(a, b);
+          if (!route) return null;
+          const pts = route.map((i) => [peds.nodes[i].x, peds.nodes[i].z]);
+          let i = 0,
+            x = pts[0][0],
+            z = pts[0][1],
+            yaw = null;
+          let t0 = performance.now();
+          const ter = c.ctx.services.terrain;
+          clearInterval(window.__walkI);
+          window.__walkI = setInterval(() => {
+            const t = performance.now();
+            let left = (sp * (t - t0)) / 1000;
+            t0 = t;
+            while (left > 0 && i < pts.length - 1) {
+              const dx = pts[i + 1][0] - x,
+                dz = pts[i + 1][1] - z,
+                d = Math.hypot(dx, dz);
+              if (d <= left) {
+                x = pts[i + 1][0];
+                z = pts[i + 1][1];
+                i++;
+                left -= d;
+              } else {
+                x += (dx / d) * left;
+                z += (dz / d) * left;
+                left = 0;
+              }
+            }
+            const q = pts[Math.min(i + 1, pts.length - 1)];
+            const want = (Math.atan2(-(q[0] - x), -(q[1] - z)) * 180) / Math.PI;
+            if (yaw === null) yaw = want;
+            let dy = ((want - yaw + 540) % 360) - 180;
+            yaw += dy * 0.04;
+            const yr = (yaw * Math.PI) / 180;
+            c.ctx.services.camera.flyTo({ target: { x: x - Math.sin(yr) * 8, y: (ter?.height?.(x, z) ?? 0) + 1.2, z: z - Math.cos(yr) * 8 }, distance: 8, yaw, pitch: 3 }, 0);
+          }, 40);
+          return { from: pts[0], to: pts[pts.length - 1], n: pts.length };
+        },
+        [args.pedwalk, +(args.walkseed ?? 1), walk || 1.4],
+      );
+      label = `pedwalk ${args.pedwalk} ${JSON.stringify(r)}`;
+      await page.waitForTimeout(1500);
+      // what a walker meets, in front of them, sampled once a second: printed as seconds with each thing in sight
+      await page.evaluate(() => {
+        const c = window.__city;
+        const M = (window.__meet = { secs: 0, moment: 0, birds: 0, birdsNear: 0, cat: 0, dog: 0, talk: 0, people: 0, litter: 0, kinds: {} });
+        const see = (x, z, r) => {
+          const cam = c.ctx.camera;
+          const e = cam.matrixWorld.elements;
+          const dx = x - cam.position.x,
+            dz = z - cam.position.z,
+            d = Math.hypot(dx, dz);
+          return d < r && (dx * -e[8] + dz * -e[10]) / (d || 1) > 0.72;
+        };
+        window.__meetNow = () => {
+          const L = c.ctx.services.smalllife;
+          const S = c.ctx.services.scenes?.scenes?.find((q) => q.name === 'moments');
+          const cam = c.ctx.camera.position;
+          const o = [];
+          for (const q of S?.live ?? []) if (see(q.a.m.x, q.a.m.z, 25)) o.push(`${q.a.doing?.split(' ').slice(0, 2).join(' ')} ${Math.round(Math.hypot(q.a.m.x - cam.x, q.a.m.z - cam.z))}m`);
+          let bn = 0,
+            b = 0;
+          for (const g of L?.birds?.allGroups ?? []) for (const k of g.birds ?? []) if (see(k.x, k.z, 25)) (b++, see(k.x, k.z, 10) && bn++);
+          if (b) o.push(`birds ${b}/${bn}`);
+          let cat = 0;
+          for (const g of L?.cats?.cats ?? []) if (g.spot && see(g.x, g.z, 15)) cat++;
+          if (cat) o.push('cat');
+          let dog = 0,
+            talk = 0,
+            ppl = 0;
+          for (const p of c.ctx.services.pedestrians._crowd.parties) {
+            if (p.state === 'gone') continue;
+            const m = p.members[0];
+            if (!m?.present || !see(m.x, m.z, 15)) continue;
+            ppl += p.members.length;
+            if (m.look.dog) dog++;
+            if (p.members.length > 1 && m.chat > 0) talk++;
+          }
+          if (dog) o.push('dog');
+          if (talk) o.push('talk');
+          o.push(`p${ppl}`);
+          return o.join(' · ');
+        };
+        clearInterval(window.__meetI);
+        window.__meetI = setInterval(() => {
+          const t = window.__meetNow();
+          M.secs++;
+          if (/m( |$)/.test(t) && /(Sweep|Hav|On the|Talking|Getting)/.test(t)) M.moment++;
+          if (t.includes('birds')) M.birds++;
+          if (/birds \d+\/[1-9]/.test(t)) M.birdsNear++;
+          if (t.includes('cat')) M.cat++;
+          if (t.includes('dog')) M.dog++;
+          if (t.includes('talk')) M.talk++;
+          if (!t.endsWith('p0')) M.people++;
+        }, 1000);
+        void 0;
+      });
+    }
     const imgs = [];
+    const notes = [];
     for (let i = 0; i < frames; i++) {
       const t0 = Date.now();
       imgs.push((await page.screenshot({ type: 'jpeg', quality: 86 })).toString('base64'));
+      if (args.pedwalk) notes.push(await page.evaluate(() => window.__meetNow()));
       const left = every - (Date.now() - t0);
       if (left > 0) await page.waitForTimeout(left);
     }
@@ -161,7 +287,7 @@ try {
     const cw = Math.round(1920 / cols),
       ch = Math.round((cw * H) / W);
     const b64 = await sheetPage.evaluate(
-      async ([imgs, cols, rows, cw, ch, label]) => {
+      async ([imgs, cols, rows, cw, ch, label, notes]) => {
         const c = document.createElement('canvas');
         c.width = cols * cw;
         c.height = rows * ch;
@@ -171,6 +297,13 @@ try {
           im.src = `data:image/jpeg;base64,${imgs[i]}`;
           await im.decode();
           g.drawImage(im, (i % cols) * cw, Math.floor(i / cols) * ch, cw, ch);
+          if (notes[i]) {
+            g.font = '13px sans-serif';
+            g.fillStyle = '#000a';
+            g.fillRect((i % cols) * cw, (Math.floor(i / cols) + 1) * ch - 18, cw, 18);
+            g.fillStyle = '#ff8';
+            g.fillText(notes[i], (i % cols) * cw + 5, (Math.floor(i / cols) + 1) * ch - 5);
+          }
         }
         g.font = '14px sans-serif';
         g.fillStyle = '#000a';
@@ -179,11 +312,12 @@ try {
         g.fillText(label, 6, 15);
         return c.toDataURL('image/png').split(',')[1];
       },
-      [imgs, cols, rows, cw, ch, label],
+      [imgs, cols, rows, cw, ch, label, notes],
     );
     const file = shots > 1 ? out.replace(/\.png$/, `_${s + 1}.png`) : out;
     fs.writeFileSync(file, Buffer.from(b64, 'base64'));
     console.log(`shot ${s}: ${file}  ${label}`);
+    if (args.pedwalk) console.log('seconds in sight', JSON.stringify(await page.evaluate(() => window.__meet)));
   }
   const st = await page.evaluate(() => {
     const c = window.__city;
