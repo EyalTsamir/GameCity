@@ -21,6 +21,7 @@ import { PALETTE } from '../core/gfx';
 import { Builder } from './buildings/mesh';
 import { createMaterials, shellClassOf, SHELL_CLASS, SHELL_SPLIT } from './buildings/materials';
 import { SignAtlas } from './buildings/signs';
+import { setHandLevel } from '../core/closehand';
 import { Gen, Interval, LocalDoor, Side, col, jit, setDoorLife, setGutters } from './buildings/gen';
 import { genTownhouse, resetOldtown } from './buildings/oldtown';
 import { genFallback } from './buildings/fallback';
@@ -138,6 +139,7 @@ export default function create(ctx: CityContext): CityModule {
   resetTowers();
   resetHomes();
   anchors.reset();
+  setHandLevel(ctx.quality.level);
   initAddresses(ctx.plan);
   setClutter(!ctx.debug.params.has('noclutter'));
   // massing: ?nomassing / ?nooriels ?noturrets ?nocrossgables ?nosetbacks ?nocrowns ?noroofkit (buildings/massing.ts)
@@ -381,6 +383,11 @@ export default function create(ctx: CityContext): CityModule {
     }),
     perches: anchors.perches,
     doorLamps: anchors.doorLamps,
+    handDoors: anchors.handDoors,
+    handWalls: anchors.handWalls,
+    handPipes: anchors.handPipes,
+    handSpots: anchors.handSpots,
+    handSteps: anchors.handSteps,
     laundry: anchors.laundry,
     vents: anchors.vents,
     setStaticLaundry(on: boolean) {

@@ -11,6 +11,7 @@ import type { Rng } from '../../core/rng';
 import { Builder } from './mesh';
 import { SignAtlas, SignRect } from './signs';
 import { LIGHT_MODE, ROOFPAT, WIN } from './materials';
+import { handDoorsLive } from '../../core/closehand';
 import { anchors } from './anchors';
 import { houseNumberOf } from '../lettering/shopname';
 import type { GreenKit } from './green';
@@ -258,9 +259,18 @@ export function wallSeg(b: Builder, x0: number, z0: number, x1: number, z1: numb
   else b.wall(x0, z0, x1, z1, y0, y1);
 }
 
+/** Note a stretch of wall standing on the ground, for the near fittings. */
+function handWall(sg: SideGeom, uA: number, uB: number, y0: number, y1: number, look: { color: THREE.Color; pattern: number }, gr: Grid | null, o: number): void {
+  if (y0 > 0.5 || y1 < 2 || uB - uA < 0.6 || o !== 0) return;
+  const f = anchors.handFrame(sg, uA);
+  if (!f) return;
+  anchors.handWalls.push({ ...f, L: uB - uA, y1, grid: gr && gr.n > 0 ? { u0: gr.u0 - uA, cw: gr.cw, n: gr.n, v0: gr.v0, ch: gr.ch, m: gr.m, wx0: gr.wx0, wx1: gr.wx1, wy0: gr.wy0, wy1: gr.wy1 } : null, pattern: look.pattern, color: look.color.getHex() });
+}
+
 /** Emit a wall quad with a window grid on a side (offset `o` outward from the side line). */
 export function wallGrid(b: Builder, sg: SideGeom, uA: number, uB: number, y0: number, y1: number, gr: Grid, look: WallLook, o = 0): void {
   if (uB - uA < 1e-3 || y1 - y0 < 1e-3) return;
+  handWall(sg, uA, uB, y0, y1, look, gr, o);
   setCol(b, look.color);
   b.A[0] = gr.wx0;
   b.A[1] = gr.wx1;
@@ -280,6 +290,7 @@ export function wallGrid(b: Builder, sg: SideGeom, uA: number, uB: number, y0: n
 /** Plain wall (no windows). */
 export function wallPlain(b: Builder, sg: SideGeom, uA: number, uB: number, y0: number, y1: number, look: { color: THREE.Color; pattern: number; seed: number }, o = 0): void {
   if (uB - uA < 1e-3 || y1 - y0 < 1e-3) return;
+  handWall(sg, uA, uB, y0, y1, look, null, o);
   if (y0 < 0.5 && y1 > 2.2 && uB - uA > 1.4 && o === 0) anchors.spot(sg, 'wall', uA, uB, y0, y1, 0);
   else if (y0 < 2.6 && y1 > 3.05 && uB - uA > 0.85 && o === 0) anchors.spot(sg, 'upper', uA, uB, y0, y1, 0);
   setCol(b, look.color);
@@ -573,11 +584,15 @@ export function eaveGutter(g: Gen, r: LRect, s: Side, uA: number, uB: number, oe
     const px = sx(sg, u, po),
       pz = sz(sg, u, po);
     t.cylinder(px, pz, 0.038, 0.22, yb, 8, false);
+    // (close up the near kit draws the shoe and the clips: world/handheight)
+    const live = handDoorsLive();
+    const hf = anchors.handFrame(sg, u);
+    if (hf) anchors.handPipes.push({ ...hf, r: 0.038, po, y0: 0.22, y1: yb, color: c.getHex(), room: room() });
     // shoe at the foot, kicking out over the gully
-    t.beam(px, 0.3, pz, sx(sg, u, Math.min(0.12, room() - 0.01)), 0.06, sz(sg, u, Math.min(0.12, room() - 0.01)), 0.08, 0.08);
+    if (!live) t.beam(px, 0.3, pz, sx(sg, u, Math.min(0.12, room() - 0.01)), 0.06, sz(sg, u, Math.min(0.12, room() - 0.01)), 0.08, 0.08);
     // brackets every ~1.8 m
     setCol(t, shade(c, 0.7));
-    for (let yy = 1.2; yy < yb - 0.3; yy += 1.8) sideBox(t, sg, u - 0.05, u + 0.05, 0, 0.11, yy, yy + 0.035, true);
+    if (!live) for (let yy = 1.2; yy < yb - 0.3; yy += 1.8) sideBox(t, sg, u - 0.05, u + 0.05, 0, 0.11, yy, yy + 0.035, true);
     // a gully grate / dark damp patch at the foot
     setCol(t, col('#2b2b29'));
     sideBox(t, sg, u - 0.13, u + 0.13, 0, Math.min(0.2, room() - 0.01), 0.0, 0.015, false);
@@ -625,7 +640,7 @@ export function wallLamp(g: Gen, sg: SideGeom, u: number, y: number, o: number):
   const cx = sx(sg, u, o + 0.18),
     cz = sz(sg, u, o + 0.18);
   l.box(cx - 0.075, y, cz - 0.075, cx + 0.075, y + 0.36, cz + 0.075, 0b111111);
-  anchors.doorLamp(cx, y + 0.18, cz, sg.nx, sg.nz);
+  anchors.doorLamp(cx, y + 0.18, cz, sg.nx, sg.nz, 0.15, 0.36, 0.15, o + 0.105);
 }
 
 export interface DoorOpts {
@@ -644,6 +659,9 @@ export interface DoorOpts {
   lamp?: boolean;
   /** secondary door (side / back entrance): no house number or bell */
   plain?: boolean;
+  /** a step built in front of it: the height of its top and how deep it is out of the wall */
+  stepY?: number;
+  stepO?: number;
   /** outward protrusion of the frame (must stay within the footprint below 2.4 m) */
   frameOut?: number;
   seed: number;
@@ -722,6 +740,8 @@ export function doorNiche(g: Gen, sg: SideGeom, u: number, o: DoorOpts): void {
   // door leaf
   const leafH = o.transom ? o.h - 0.5 : o.h;
   const metal = col(['#c9a54e', '#26282b', '#b7bbbe'][(o.seed >>> 3) % 3]);
+  const panels: number[] = [];
+  let letterY = 0;
   if (o.glass) {
     const s = g.shell;
     setCol(s, o.frameColor);
@@ -746,6 +766,7 @@ export function doorNiche(g: Gen, sg: SideGeom, u: number, o: DoorOpts): void {
     const v = o.seed % 4;
     const lw = o.w - 0.04;
     const pnl = (u0: number, u1: number, y0: number, y1: number): void => {
+      panels.push(u0 - ua, u1 - ua, y0, y1);
       setCol(t, shade(o.doorColor, 0.9));
       sideBox(t, sg, u0, u1, -d, -d + 0.012, y0, y1);
       setCol(t, shade(o.doorColor, 1.06));
@@ -802,12 +823,16 @@ export function doorNiche(g: Gen, sg: SideGeom, u: number, o: DoorOpts): void {
     // rail, a kick plate on some
     const hu = ub - 0.1;
     setCol(t, metal);
-    sideBox(t, sg, hu - 0.022, hu + 0.022, -d, -d + 0.014, 0.93, 1.15);
-    sideBox(t, sg, hu - 0.13, hu + 0.012, -d + 0.045, -d + 0.065, 1.03, 1.05);
-    sideBox(t, sg, hu - 0.007, hu + 0.007, -d + 0.01, -d + 0.05, 1.03, 1.05);
-    sideBox(t, sg, hu - 0.012, hu + 0.012, -d, -d + 0.016, 0.86, 0.9); // key escutcheon
+    // (close up the near kit draws these: world/handheight)
+    if (!handDoorsLive()) {
+      sideBox(t, sg, hu - 0.022, hu + 0.022, -d, -d + 0.014, 0.93, 1.15);
+      sideBox(t, sg, hu - 0.13, hu + 0.012, -d + 0.045, -d + 0.065, 1.03, 1.05);
+      sideBox(t, sg, hu - 0.007, hu + 0.007, -d + 0.01, -d + 0.05, 1.03, 1.05);
+      sideBox(t, sg, hu - 0.012, hu + 0.012, -d, -d + 0.016, 0.86, 0.9); // key escutcheon
+    }
     if (v !== 3) {
       const ly = v === 1 ? h0 + H * 0.395 : h0 + H * 0.46;
+      letterY = ly;
       const lu = (ua + ub) / 2;
       sideBox(t, sg, lu - 0.15, lu + 0.15, -d, -d + 0.012, ly - 0.035, ly + 0.035);
       setCol(t, col('#141414'));
@@ -844,10 +869,12 @@ export function doorNiche(g: Gen, sg: SideGeom, u: number, o: DoorOpts): void {
   if (o.lamp) wallLamp(g, sg, ub + 0.45, Math.min(o.h - 0.2, 2.05), 0);
   if (!o.glass && !o.plain && doorLife) {
     // bell push on the architrave, and a legible house number above the door
-    setCol(t, col('#e8e4da'));
-    sideBox(t, sg, ub + 0.045, ub + 0.095, fo, fo + 0.018, 1.22, 1.3);
-    setCol(t, metal);
-    sideBox(t, sg, ub + 0.06, ub + 0.08, fo + 0.018, fo + 0.026, 1.25, 1.27);
+    if (!handDoorsLive()) {
+      setCol(t, col('#e8e4da'));
+      sideBox(t, sg, ub + 0.045, ub + 0.095, fo, fo + 0.018, 1.22, 1.3);
+      setCol(t, metal);
+      sideBox(t, sg, ub + 0.06, ub + 0.08, fo + 0.018, fo + 0.026, 1.25, 1.27);
+    }
     const num = houseNumberOf(g.lot, 1 + (o.seed % 58));
     const sty = (o.seed >>> 7) % 3;
     const r = g.atlas.add(`hn:${sty}:${num}`, 72, 48, houseNumber(num, sty));
@@ -856,6 +883,10 @@ export function doorNiche(g: Gen, sg: SideGeom, u: number, o: DoorOpts): void {
     anchors.spot(sg, 'number', u - nw / 2, u + nw / 2, o.h + 0.24, o.h + 0.24 + nw * (48 / 72), 0.012, { num, style: sty });
   }
   anchors.spot(sg, 'door', ua, ub, 0, leafH, -d, { glass: !!o.glass, seed: o.seed, style: o.seed % 4, depth: d });
+  const hf = anchors.handFrame(sg, ua);
+  if (hf) {
+    anchors.handDoors.push({ ...hf, w: o.w, h: o.h, leafH, d, fo, glass: !!o.glass, plain: !!o.plain, transom: !!o.transom, seed: o.seed, v: o.seed % 4, panels, letterY, kick: !o.glass && (o.seed >>> 5) % 3 === 0, doorCol: o.doorColor.getHex(), frameCol: o.frameColor.getHex(), metal: metal.getHex(), stepY: o.stepY, stepO: o.stepO });
+  }
   g.doorsBuilt++;
 }
 

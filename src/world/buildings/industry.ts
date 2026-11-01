@@ -403,6 +403,8 @@ export function genIndustrial(g: Gen): void {
       sideBox(t, sg, u + 0.1, u + 0.12, oF, oF + 0.035, 0.29, 0.35, true);
       setCol(t, col('#b9a46a'));
       sideBox(t, sg, u + 0.3, u + 0.34, oF, oF + 0.012, 0.3, 0.36, true);
+      const hf = anchors.handFrame(sg, a);
+      if (hf) anchors.handSpots.push({ ...hf, kind: 'rollup', w: doorW, h: doorH, y: 0, o: oF, color: dc.getHex(), seed: g.seed });
     }
     // frame (safety yellow posts on modern sheds), bumpers, canopy + dock light
     setCol(t, brick ? trimC : col('#e0b33c'));

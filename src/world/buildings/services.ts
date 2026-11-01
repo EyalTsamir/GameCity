@@ -6,6 +6,7 @@ import type * as THREE from 'three';
 import type { Rng } from '../../core/rng';
 import { Gen, SideGeom, sideBox, sx, sz, col, shade, setCol, signOnSide } from './gen';
 import { letterSign } from './signs';
+import { anchors } from './anchors';
 
 /** Foam dock seal round a roll-up door, rubber bumpers at its foot, black and yellow chevrons on the posts. */
 export function dockSeal(g: Gen, sg: SideGeom, a: number, b: number, doorH: number, o: number, bay: number): void {
@@ -118,6 +119,8 @@ export function homeSide(g: Gen, sg: SideGeom, L: number, yTop: number, o: numbe
   sideBox(t, sg, u - 0.24, u + 0.24, 0, oo, 0.35, 1.0);
   setCol(t, col('#a9a69c'));
   sideBox(t, sg, u - 0.21, u + 0.21, oo, oo + 0.004, 0.4, 0.95);
+  const hf = anchors.handFrame(sg, u - 0.24);
+  if (hf) anchors.handSpots.push({ ...hf, kind: 'meter', w: 0.48, h: 0.65, y: 0.35, o: oo, color: 0xd7d4ca, seed: g.seed });
   setCol(t, col('#c9a22a'));
   t.cylinder(sx(sg, u - 0.12, 0.04), sz(sg, u - 0.12, 0.04), 0.014, 0.0, 0.35, 5, false);
   setCol(t, col('#23252a'));
