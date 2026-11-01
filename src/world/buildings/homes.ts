@@ -266,6 +266,7 @@ export function genHouse(g: Gen): void {
     porchLamp(pa + du + 0.85, zP + 0.06, 2.0);
     // deck, posts, railing, ceiling
     porchDeck(pa, pb, zP, M.z1, 0.16, col(['#a87f58', '#9a8f80', '#8d6e52'][Math.abs(Math.floor(g.seed)) % 3]));
+    anchors.handStep(pa + du, zP, 0.16, M.z1 - zP);
     setCol(t, trimC);
     const postH = gH;
     // posts 15 cm square on a 22 cm plinth block, moulded cap under a 26 cm header beam with a drip board;
@@ -450,6 +451,7 @@ export function genHouse(g: Gen): void {
     leanTo(va, vb, M.z1, F.z1 - 0.05, yA, 2.55, false);
     // deck, posts, railing with an opening at the steps
     porchDeck(va, vb, M.z1, F.z1 - 0.02, 0.22, col(rng.pick(['#a87f58', '#9a8f80', '#8d6e52'])));
+    anchors.handStep(doorX, M.z1, 0.22, F.z1 - 0.02 - M.z1);
     setCol(t, trimC);
     const n = Math.max(2, Math.round((vb - va) / 2.3));
     const zp = F.z1 - 0.2;

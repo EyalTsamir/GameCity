@@ -216,3 +216,134 @@ export function homeMeter(s: HandSink, f: HandSpot): void {
   s.ink(0x0a0a0a).rough(1);
   for (let k = 0; k < 4; k++) s.plate(u - 0.08, u + 0.08, f.y + 0.07 + k * 0.016, f.y + 0.078 + k * 0.016, f.o + 0.0094);
 }
+
+/** the irons of a shutter: strap hinges on the leaf, the pins at the window, and when it stands open the dog on the wall that holds it */
+export function shutterIron(s: HandSink, f: { w: number; h: number; y: number; o: number; seed: number }): void {
+  const right = (f.seed & 1) === 1;
+  const open = (f.seed & 2) === 2;
+  const hu = right ? f.w : 0;
+  const dir = right ? -1 : 1;
+  s.ink(0x1d1e20).rough(0.5);
+  for (const y of [f.y + 0.17, f.y + f.h - 0.17]) {
+    s.box(Math.min(hu + dir * 0.005, hu + dir * 0.2), Math.max(hu + dir * 0.005, hu + dir * 0.2), y - 0.008, y + 0.008, f.o, f.o + 0.0028, 0.001);
+    s.ball(hu + dir * 0.2, y, f.o + 0.002, 0.011, 6, 0.6);
+    s.tube([hu, y - 0.03, f.o - 0.018, hu, y + 0.03, f.o - 0.018], 0.0085, 7);
+    s.disc(hu + dir * 0.08, y, f.o + 0.0026, f.o + 0.0044, 0.004, 6, 0.3);
+    s.disc(hu + dir * 0.14, y, f.o + 0.0026, f.o + 0.0044, 0.004, 6, 0.3);
+  }
+  if (open) {
+    // an S of iron on a rosette, turned over the leaf's outer stile
+    const eu = right ? -0.022 : f.w + 0.022;
+    const y = f.y + 0.28;
+    s.disc(eu, y, 0, 0.006, 0.019, 8, 0.3);
+    const b = eu - dir * 0.05,
+      m = eu - dir * 0.012;
+    s.tube([eu, y, 0.006, m, y + 0.018, f.o + 0.008, b, y + 0.012, f.o + 0.01, b - dir * 0.02, y - 0.012, f.o + 0.006], 0.0052, 5);
+  }
+}
+
+/** a vent in a shop's stall riser and the screws of the panel it is let into */
+export function riserVent(s: HandSink, u: number, f: { y: number; o: number; h: number }, c: number): void {
+  const w = 0.13,
+    y0 = f.y + 0.05,
+    y1 = f.y + f.h - 0.05;
+  s.ink(c, 0.55).metal(0.46).box(u - w, u + w, y0, y1, f.o, f.o + 0.005, 0.0015);
+  s.ink(0x060606).rough(1);
+  for (let k = 0; k < 5; k++) s.plate(u - w + 0.014, u + w - 0.014, y0 + 0.012 + k * 0.021, y0 + 0.019 + k * 0.021, f.o + 0.0052);
+  s.ink(0x8e8e88).metal(0.42);
+  for (const a of [-1, 1]) s.disc(u + a * (w - 0.007), (y0 + y1) / 2, f.o + 0.005, f.o + 0.0066, 0.0038, 6, 0.3);
+}
+
+/** a cellar flap in the pavement: two leaves of chequered steel, the hinges, a ring to lift each by */
+export function cellarHatch(s: HandSink, u0: number, u1: number, o0: number, o1: number, y: number, seed: number): void {
+  const m = (u0 + u1) / 2;
+  s.ink(0x37362f).rough(0.8);
+  s.floor(u0 - 0.03, u1 + 0.03, o0 - 0.03, o1 + 0.03, y + 0.0025);
+  const tone = 0.82 + (seed % 3) * 0.1;
+  for (const [a, b] of [[u0, m - 0.006], [m + 0.006, u1]]) {
+    s.ink(0x55544c, tone).rough(0.72).box(a, b, y + 0.0025, y + 0.006, o0, o1, 0.0008);
+    s.floor(a, b, o0, o1, y + 0.006);
+    s.ink(0x7d7c72, tone).rough(0.5);
+    const nu = Math.max(4, Math.round((b - a) / 0.05)),
+      no = Math.max(4, Math.round((o1 - o0) / 0.05));
+    for (let i = 0; i < nu; i++) {
+      for (let j = 0; j < no; j++) {
+        const cu = a + ((i + 0.5) * (b - a)) / nu,
+          co = o0 + ((j + 0.5) * (o1 - o0)) / no;
+        if ((i + j) % 2) s.floor(cu - 0.017, cu + 0.017, co - 0.0055, co + 0.0055, y + 0.0072);
+        else s.floor(cu - 0.0055, cu + 0.0055, co - 0.017, co + 0.017, y + 0.0072);
+      }
+    }
+    // the hinge along the outer edge, the ring's recess
+    s.ink(0x2c2c29).rough(0.65);
+    for (const h of [o0 + 0.09, o1 - 0.09]) s.box(a === u0 ? a - 0.028 : b - 0.012, a === u0 ? a + 0.012 : b + 0.028, y + 0.002, y + 0.0095, h - 0.024, h + 0.024, 0.002);
+    const rc = a === u0 ? b - 0.06 : a + 0.06;
+    s.ink(0x070707).rough(1).floor(rc - 0.024, rc + 0.024, (o0 + o1) / 2 - 0.034, (o0 + o1) / 2 + 0.034, y + 0.0074);
+    s.ink(0x4a4a44).rough(0.5).tube([rc - 0.016, y + 0.0092, (o0 + o1) / 2 - 0.022, rc + 0.016, y + 0.0092, (o0 + o1) / 2 - 0.022], 0.0032, 5);
+  }
+}
+
+/** the hook under the fascia the awning is wound from, and its pole clipped to the pilaster */
+export function awningWinder(s: HandSink, top: number, o: number): void {
+  s.ink(0x3a3c3e).metal(0.46);
+  s.box(-0.016, 0.016, top - 0.05, top, o + 0.02, o + 0.052, 0.003);
+  s.ink(0x9b9d9e).metal(0.3).tube([0, top - 0.05, o + 0.036, 0, top - 0.085, o + 0.036], 0.0058, 6);
+  s.tube([0, top - 0.085, o + 0.036, 0.012, top - 0.096, o + 0.036, 0, top - 0.108, o + 0.036, -0.012, top - 0.096, o + 0.036, 0, top - 0.085, o + 0.036], 0.0026, 5);
+  // the pole: two clips, the hook at the top, a worn grip low down
+  const b = o + 0.02;
+  s.ink(0xb9bbbc).metal(0.3).tube([0, 0.42, b, 0, top - 0.42, b], 0.0095, 7);
+  s.tube([0, top - 0.42, b, 0.012, top - 0.385, b, 0.015, top - 0.365, b, 0.002, top - 0.35, b], 0.0048, 5);
+  s.ink(0x1e1e1e).rough(0.8).tube([0, 0.42, b, 0, 0.62, b], 0.0118, 7);
+  s.ink(0x4a4b4c).metal(0.48);
+  for (const y of [0.9, top - 0.72]) s.box(-0.022, 0.022, y - 0.012, y + 0.012, o, o + 0.032, 0.002);
+}
+
+/** a cable clipped along a wall, sagging a little between the clips */
+export function cableRun(s: HandSink, u0: number, u1: number, y: number, c: number, clip: number): void {
+  const path: number[] = [];
+  const step = 0.36;
+  const n = Math.max(1, Math.round((u1 - u0) / step));
+  for (let k = 0; k <= n * 2; k++) {
+    const u = u0 + ((u1 - u0) * k) / (n * 2);
+    path.push(u, y - (k % 2 ? 0.0035 : 0), 0.0072 + (k % 2 ? 0.0012 : 0));
+  }
+  s.ink(c).rough(0.5).tube(path, 0.0034, 4);
+  s.ink(clip).rough(0.5);
+  for (let k = 0; k <= n; k++) {
+    const u = u0 + ((u1 - u0) * k) / n;
+    s.box(u - 0.0062, u + 0.0062, y - 0.0048, y + 0.0048, 0, 0.0108, 0.002);
+    s.ink(0x77746c).metal(0.46).disc(u, y, 0.0108, 0.0119, 0.0018, 5, 0.3);
+    s.ink(clip).rough(0.5);
+  }
+}
+
+/** a few stickers, each from someone with a reason: a barcode label, a contractor's, a band's, some half picked off. */
+export function stickers(s: HandSink, u: number, y: number, o: number, seed: number, n: number): void {
+  for (let k = 0; k < n; k++) {
+    const h = (seed * 31 + k * 97) >>> 0;
+    const a = u + ((h % 17) - 8) * 0.014 + k * 0.015,
+      b = y + (((h >>> 5) % 19) - 9) * 0.014;
+    const w = 0.03 + ((h >>> 3) % 4) * 0.012,
+      t = 0.02 + ((h >>> 7) % 3) * 0.008;
+    const z = o + 0.0003 * (k + 1);
+    const type = (h >>> 9) % 4;
+    if (type === 0) {
+      s.ink(0xefece2).rough(0.42).plate(a, a + w, b, b + t, z);
+      s.ink(0x101010).rough(0.5);
+      for (let q = 0; q < 7; q++) s.plate(a + 0.004 + q * (w - 0.008) * 0.14, a + 0.004 + q * (w - 0.008) * 0.14 + (q % 3 === 0 ? 0.0028 : 0.0014), b + 0.004, b + t * 0.62, z + 0.0002);
+    } else if (type === 1) {
+      s.ink([0x1f5aa0, 0xd5a01f, 0x2f7a4d][(h >>> 11) % 3]).rough(0.36).plate(a, a + w, b, b + t, z);
+      s.ink(0xf4f1e6).rough(0.4).plate(a + 0.004, a + w - 0.004, b + t * 0.58, b + t * 0.74, z + 0.0002);
+      s.ink(0xf4f1e6).rough(0.4).plate(a + 0.004, a + w * 0.65, b + t * 0.3, b + t * 0.42, z + 0.0002);
+    } else if (type === 2) {
+      s.ink([0xc8352a, 0x18191b, 0xe8e4d6][(h >>> 11) % 3]).rough(0.34).plate(a, a + w, b, b + t, z);
+      const fg = [0xf4f1e6, 0xe2c23a, 0x18191b][(h >>> 11) % 3];
+      s.ink(fg).rough(0.4).ball(a + w * 0.3, b + t / 2, z + 0.0002, t * 0.26, 7, 0.02);
+      s.ink(fg).rough(0.4).plate(a + w * 0.52, a + w - 0.004, b + t * 0.42, b + t * 0.6, z + 0.0002);
+    } else {
+      // what's left when someone has picked at it: paper ghost, torn edge
+      const c = 0xd9d4c6;
+      s.ink(c).rough(0.75).quad([a, b, z], [a + w, b + t * 0.25, z], [a + w * 0.72, b + t * 0.8, z], [a + w * 0.14, b + t, z]);
+    }
+  }
+}

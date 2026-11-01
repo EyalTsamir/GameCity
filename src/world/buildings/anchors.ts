@@ -236,7 +236,7 @@ export interface HandStep {
 
 /** A fitting a generator made that wants its hardware close up. */
 export interface HandSpot extends HandFrame {
-  kind: 'garage' | 'rollup' | 'lobby' | 'meter' | 'cabinet';
+  kind: 'garage' | 'rollup' | 'lobby' | 'meter' | 'cabinet' | 'shutter' | 'riser' | 'winder';
   /** u = 0 at its left edge */
   w: number;
   h: number;
@@ -266,6 +266,7 @@ export interface BuildingsService {
   handPipes: HandPipe[];
   handSpots: HandSpot[];
   handSteps: HandStep[];
+  handTops: Map<number, number>;
   laundry: LaundryLine[];
   vents: VentTop[];
   /**
@@ -307,6 +308,8 @@ class AnchorSink {
   handPipes: HandPipe[] = [];
   handSpots: HandSpot[] = [];
   handSteps: HandStep[] = [];
+  /** the top of a lot's walls, without the gables: where a gutter can be */
+  handTops = new Map<number, number>();
   chimneys: ChimneyTop[] = [];
   balconies: BalconyAnchor[] = [];
   perches: Perch[] = [];
@@ -324,6 +327,7 @@ class AnchorSink {
     this.handPipes = [];
     this.handSpots = [];
     this.handSteps = [];
+    this.handTops = new Map();
     this.chimneys = [];
     this.balconies = [];
     this.perches = [];

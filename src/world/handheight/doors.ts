@@ -244,8 +244,9 @@ export function glassDoor(s: HandSink, d: HandDoor, _p: DoorPlace): void {
   const c = w / 2;
   const wide = w >= 2.3;
   const off = wide ? 0.16 : 0.11;
-  const brass = d.seed % 3 === 0;
-  const steel = (k = 1): HandSink => (brass ? s.ink(0xb89d64, k).metal(0.3) : s.ink(0xc4c7c9, k).metal(0.28));
+  const brass = d.metal === BRASS;
+  const dark = d.metal === 0x26282b;
+  const steel = (k = 1): HandSink => (brass ? s.ink(0xb89d64, k).metal(0.3) : dark ? s.ink(0x2a2c2f, k).rough(0.42) : s.ink(0xc4c7c9, k).metal(0.28));
   const y0 = 0.92,
     y1 = wide ? 1.72 : 1.42;
   for (const sg of [-1, 1]) {

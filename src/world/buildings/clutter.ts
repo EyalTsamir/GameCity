@@ -420,6 +420,9 @@ export function shutterPair(g: Gen, sg: SideGeom, u: number, ww: number, y0: num
     if (mode === 'open' || mode === 'closed') {
       const a = mode === 'open' ? (side < 0 ? u - ww / 2 - sw - 0.05 : u + ww / 2 + 0.05) : side < 0 ? u - ww / 2 : u;
       louvredLeaf(a, a + sw, mode === 'open' ? 0.0 : 0.02, y0 + (mode === 'open' ? 0.02 : 0.01), mode === 'open' ? yt - 0.02 : yt);
+      const hf = anchors.handFrame(sg, a);
+      // seed: bit 0 the hinge is at its right end, bit 1 it stands open
+      if (hf) anchors.handSpots.push({ ...hf, kind: 'shutter', w: sw, h: yt - y0 - 0.04, y: y0 + 0.02, o: mode === 'open' ? 0.045 : 0.065, color: c.getHex(), seed: (mode === 'open' ? 2 : 0) + ((mode === 'open') === side < 0 ? 1 : 0) });
     } else {
       // ajar: hinged at the window edge, swung out by ~35–60°
       const ang = g.rng.range(0.6, 1.05);

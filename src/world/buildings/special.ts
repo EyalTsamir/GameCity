@@ -684,6 +684,7 @@ export function genHarbormaster(g: Gen): void {
     // timber deck with a fascia, two steps up to it in front of the door
     setCol(t, col('#9a8a74'));
     sideBox(t, sg, pa, pb, -dep, -0.6, 0, deck, false, true);
+    anchors.handStep(sx(sgIn, du, 0), sz(sgIn, du, 0), deck, dep - 0.6);
     setCol(t, col('#b5b0a6'));
     sideBox(t, sg, du - 1.0, du + 1.0, -0.6, -0.33, 0, deck - 0.15, false, true);
     sideBox(t, sg, du - 1.0, du + 1.0, -0.33, -0.06, 0, deck - 0.3, false, true);

@@ -35,16 +35,16 @@ export function mailBank(s: HandSink, u: number, y: number, cols: number, rows: 
   const W = cols * bw + 0.02,
     H = rows * bh + 0.02;
   const c = [0x6f767a, 0x3d4a44, 0xa9acab, 0x2f3236][seed % 4];
-  s.ink(c, 0.86).metal(0.5).box(u - W / 2, u + W / 2, y, y + H, 0, d, 0.006);
+  s.ink(c, 0.86).rough(0.42).box(u - W / 2, u + W / 2, y, y + H, 0, d, 0.006);
   for (let i = 0; i < cols; i++) {
     for (let j = 0; j < rows; j++) {
       const a = u - W / 2 + 0.01 + i * bw,
         b = y + 0.01 + j * bh;
       const tone = 0.96 + ((seed + i * 5 + j * 3) % 5) * 0.025;
-      s.ink(c, tone).metal(0.46).box(a + 0.005, a + bw - 0.005, b + 0.005, b + bh - 0.005, d, d + 0.006, 0.002);
+      s.ink(c, tone).rough(0.36).box(a + 0.005, a + bw - 0.005, b + 0.005, b + bh - 0.005, d, d + 0.006, 0.002);
       // slot with a sprung flap
       s.ink(0x050505).rough(1).plate(a + 0.03, a + bw - 0.03, b + bh - 0.058, b + bh - 0.03, d + 0.0062);
-      s.ink(c, tone * 1.08).metal(0.42).box(a + 0.03, a + bw - 0.03, b + bh - 0.056, b + bh - 0.03, d + 0.0062, d + 0.009, 0.0012);
+      s.ink(c, tone * 1.08).rough(0.34).box(a + 0.03, a + bw - 0.03, b + bh - 0.056, b + bh - 0.03, d + 0.0062, d + 0.009, 0.0012);
       // name card, lock
       s.ink(0xefeada).rough(0.6).plate(a + 0.03, a + 0.145, b + 0.06, b + 0.09, d + 0.0064);
       s.ink(0xb9bcbd).metal(0.34).disc(a + bw - 0.05, b + 0.075, d + 0.006, d + 0.009, 0.0095, 10, 0.35);
@@ -59,16 +59,16 @@ export function wallBox(s: HandSink, u: number, y: number, seed: number): void {
   const w = 0.3,
     h = 0.36,
     d = 0.12;
-  s.ink(c).metal(0.5).box(u - w / 2, u + w / 2, y, y + h, 0, d, 0.01);
+  s.ink(c).rough(0.4).box(u - w / 2, u + w / 2, y, y + h, 0, d, 0.01);
   // a pitched lid that keeps the rain out
-  s.ink(c, 1.06).metal(0.46);
+  s.ink(c, 1.06).rough(0.38);
   s.quad([u - w / 2 - 0.008, y + h, d + 0.02], [u + w / 2 + 0.008, y + h, d + 0.02], [u + w / 2 + 0.008, y + h + 0.05, 0.01], [u - w / 2 - 0.008, y + h + 0.05, 0.01]);
   s.quad([u - w / 2 - 0.008, y + h + 0.05, 0.01], [u - w / 2 - 0.008, y + h, d + 0.02], [u - w / 2 - 0.008, y + h, 0], [u - w / 2 - 0.008, y + h + 0.05, 0]);
   s.quad([u + w / 2 + 0.008, y + h, d + 0.02], [u + w / 2 + 0.008, y + h + 0.05, 0.01], [u + w / 2 + 0.008, y + h + 0.05, 0], [u + w / 2 + 0.008, y + h, 0]);
   // the door, the slot under the lid, a lock
   s.ink(0x050505).rough(1).plate(u - w / 2 + 0.03, u + w / 2 - 0.03, y + h - 0.06, y + h - 0.03, d + 0.0002);
-  s.ink(c, 1.05).metal(0.45).box(u - w / 2 + 0.03, u + w / 2 - 0.03, y + h - 0.059, y + h - 0.03, d, d + 0.003, 0.001);
-  s.ink(c, 0.82).metal(0.5).plate(u - w / 2 + 0.03, u + w / 2 - 0.03, y + h - 0.066, y + h - 0.0635, d + 0.0002);
+  s.ink(c, 1.05).rough(0.36).box(u - w / 2 + 0.03, u + w / 2 - 0.03, y + h - 0.059, y + h - 0.03, d, d + 0.003, 0.001);
+  s.ink(c, 0.82).rough(0.5).plate(u - w / 2 + 0.03, u + w / 2 - 0.03, y + h - 0.066, y + h - 0.0635, d + 0.0002);
   s.ink(0xc2b278).metal(0.34).disc(u + w / 2 - 0.05, y + 0.1, d, d + 0.004, 0.011, 10, 0.3);
   s.ink(0x060606).rough(1).plate(u + w / 2 - 0.051, u + w / 2 - 0.049, y + 0.093, y + 0.107, d + 0.0044);
 }
@@ -103,17 +103,21 @@ export function fireInlet(s: HandSink, u: number, y: number): void {
 /** a lid in the pavement: the water's stop tap, the gas valve. On a level y; (u, o) its middle */
 export function serviceLid(s: HandSink, u: number, o: number, y: number, kind: number): void {
   const hw = kind === 0 ? 0.075 : 0.055;
-  s.ink(kind === 0 ? 0x2a4d78 : kind === 1 ? 0xb99a24 : 0x41423f).metal(kind === 2 ? 0.62 : 0.0).rough(0.75);
-  if (kind === 2) s.metal(0.62);
+  s.ink(0x4b4a44).rough(0.78);
   s.box(u - hw, u + hw, y, y + 0.006, o - hw, o + hw, 0.0);
   s.floor(u - hw, u + hw, o - hw, o + hw, y + 0.006);
+  // what's left of the paint, in the low parts
+  if (kind < 2) s.ink(kind === 0 ? 0x3d5470 : 0x8d7c38).rough(0.85).floor(u - hw * 0.8, u + hw * 0.8, o - hw * 0.8, o + hw * 0.8, y + 0.0062);
+  // the cast studs, worn bright on top
+  s.ink(0x77766c).rough(0.5);
+  for (let i = -2; i <= 2; i++) for (let j = -2; j <= 1; j++) s.floor(u + i * hw * 0.34 - 0.0045, u + i * hw * 0.34 + 0.0045, o - hw * 0.1 + j * hw * 0.3 - 0.0045, o - hw * 0.1 + j * hw * 0.3 + 0.0045, y + 0.0068);
   // the frame it sits in and two slots to lift it by
-  s.ink(0x3b3c39).metal(0.65);
+  s.ink(0x34342f).rough(0.8);
   s.floor(u - hw - 0.012, u + hw + 0.012, o + hw, o + hw + 0.012, y + 0.0045);
   s.floor(u - hw - 0.012, u + hw + 0.012, o - hw - 0.012, o - hw, y + 0.0045);
   s.floor(u - hw - 0.012, u - hw, o - hw, o + hw, y + 0.0045);
   s.floor(u + hw, u + hw + 0.012, o - hw, o + hw, y + 0.0045);
   s.ink(0x060606).rough(1);
-  s.floor(u - hw * 0.45, u - hw * 0.15, o + hw * 0.5, o + hw * 0.62, y + 0.0064);
-  s.floor(u + hw * 0.15, u + hw * 0.45, o + hw * 0.5, o + hw * 0.62, y + 0.0064);
+  s.floor(u - hw * 0.45, u - hw * 0.15, o + hw * 0.78, o + hw * 0.92, y + 0.0064);
+  s.floor(u + hw * 0.15, u + hw * 0.45, o + hw * 0.78, o + hw * 0.92, y + 0.0064);
 }

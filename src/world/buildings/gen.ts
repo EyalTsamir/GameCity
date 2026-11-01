@@ -261,9 +261,10 @@ export function wallSeg(b: Builder, x0: number, z0: number, x1: number, z1: numb
 
 /** Note a stretch of wall standing on the ground, for the near fittings. */
 function handWall(sg: SideGeom, uA: number, uB: number, y0: number, y1: number, look: { color: THREE.Color; pattern: number }, gr: Grid | null, o: number): void {
-  if (y0 > 0.5 || y1 < 2 || uB - uA < 0.6 || o !== 0) return;
   const f = anchors.handFrame(sg, uA);
   if (!f) return;
+  anchors.handTops.set(f.lot, Math.max(anchors.handTops.get(f.lot) ?? 0, y1));
+  if (y0 > 0.5 || y1 < 2 || uB - uA < 0.6 || o !== 0) return;
   anchors.handWalls.push({ ...f, L: uB - uA, y1, grid: gr && gr.n > 0 ? { u0: gr.u0 - uA, cw: gr.cw, n: gr.n, v0: gr.v0, ch: gr.ch, m: gr.m, wx0: gr.wx0, wx1: gr.wx1, wy0: gr.wy0, wy1: gr.wy1 } : null, pattern: look.pattern, color: look.color.getHex() });
 }
 
