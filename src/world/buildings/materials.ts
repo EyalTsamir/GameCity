@@ -587,9 +587,9 @@ ${fg('    }\n', '')}  } else if (pat < 5.5) { // precast concrete panels (one ba
     vec3 tone = vec3(0.9 + 0.16 * pn) * mix(vec3(1.0), vec3(1.03, 1.0, 0.95), step(0.6, pn2)) * mix(vec3(1.0), vec3(0.96, 0.98, 1.02), step(pn2, 0.25));
     float near = 1.0 - smoothstep(0.002, 0.006, max(fq.x, fq.y));
     float spk = texture2D(uBhNoise, q * 1.9 + vec2(seed * 0.37, 0.0)).a;
-    float hole = step(0.84, bhHash12(floor(q / 0.035) + seed * 3.1)) * (1.0 - smoothstep(0.003, 0.006, length(fract(q / 0.035) - 0.5) * 0.035));
+    float hole = step(0.97, bhHash12(floor(q / 0.035) + seed * 3.1)) * (1.0 - smoothstep(0.003, 0.006, length(fract(q / 0.035) - 0.5) * 0.035));
     float mot = texture2D(uBhNoise, q * 0.55 + vec2(seed * 0.29, 0.0)).g;
-    tone *= 1.0 + near * ((spk - 0.5) * 0.22 - 0.45 * hole) + (mot - 0.5) * 0.14 * (1.0 - smoothstep(0.015, 0.05, max(fq.x, fq.y)));
+    tone *= 1.0 + near * ((spk - 0.5) * 0.22 - 0.32 * hole) + (mot - 0.5) * 0.14 * (1.0 - smoothstep(0.015, 0.05, max(fq.x, fq.y)));
     // drip line + soiling under each panel's top joint (rain runs off the joint above)
     float under = 1.0 - smoothstep(0.0, 0.18 + 0.35 * nm.b, bhPG.w - fg.y);
     tone *= 1.0 - 0.1 * under * (0.6 + 0.4 * nm.g);
@@ -1360,7 +1360,7 @@ void bhWall(inout vec3 albedo, inout float rough, inout float metal, inout vec3 
   vec4 nm = texture2D(uBhNoise, q * 0.031 + so);
   float stv = sqrt(nm.b); // the streak channel is stored squared (contrast); linearise for weights
   float grain = texture2D(uBhNoise, q * 0.3 + so.yx).a;                         // a: ~5 cm stucco grain
-  float sn = sqrt(texture2D(uBhNoise, vec2(q.x * 0.16, q.y * 0.09) + so.yx).b); // b: 10 cm wide, ~5 m long streaks
+  float sn = sqrt(texture2D(uBhNoise, vec2(q.x * 0.16 + (nm.g - 0.5) * 0.05, q.y * 0.09) + so.yx).b); // b: 10 cm wide, ~5 m long streaks (they wander: not ruled lines)
   vec4 np = texture2D(uBhNoise, q * 0.105 + so * 1.31);                       // g ~0.6 m blobs (peeling), r ~2.4 m
 
   // ── 1. surface pattern
@@ -1654,12 +1654,12 @@ ${fg(`    bhDX = dFdx(rq); bhDY = dFdy(rq); // the return's own screen derivativ
       float amt = smoothstep(0.25, 0.75, hw1);                  // ~half the windows streak visibly
       float lenK = 0.35 + 1.4 * hw2;                            // short drips … long runs
       float drk = 0.35 + 0.6 * fract(hw1 * 7.31);
-      float inX = smoothstep(wr.x - 0.1, wr.x + 0.06, pm.x) * (1.0 - smoothstep(wr.y - 0.06, wr.y + 0.1, pm.x));
+      float inX = smoothstep(wr.x - 0.2, wr.x + 0.14 + 0.12 * hw2, pm.x) * (1.0 - smoothstep(wr.y - 0.14 - 0.12 * hw1, wr.y + 0.2, pm.x));
 ${fg(`      float ew = max(0.09, fq.x * 1.25);
       float ends = (1.0 - smoothstep(0.0, ew, abs(pm.x - wr.x - 0.05))) * step(0.3, fract(hw2 * 3.7)) + (1.0 - smoothstep(0.0, ew, abs(pm.x - wr.y + 0.05))) * step(0.3, fract(hw2 * 5.3));
       ends *= 0.09 / ew;
       // rivulet noise: derivatives before the branch, the fetch itself (textureGrad) inside it
-      vec2 ruv = vec2(pm.x * 2.6 + seed * 0.11 + cell.x * 0.37, dS * 0.05 + cell.y * 0.21);
+      vec2 ruv = vec2(pm.x * 2.6 + seed * 0.11 + cell.x * 0.37 + sin(dS * 3.1 + pm.x * 9.0) * 0.05 + sin(dS * 7.3 + pm.x * 23.0) * 0.022, dS * 0.05 + cell.y * 0.21);
       vec2 ruvx = dFdx(ruv), ruvy = dFdy(ruv);
       float rs = 0.0;
       if (inX > 0.0 || ends > 0.0) { // the piers beside the window: every term below is 0
@@ -1670,7 +1670,7 @@ ${fg(`      float ew = max(0.09, fq.x * 1.25);
         float nearS = 1.0 - smoothstep(0.004, 0.014, fq.x);
         if (nearS > 0.0) {
           float riv = textureGrad(uBhNoise, ruv, ruvx, ruvy).g;
-          rs *= mix(1.0, 0.35 + 1.3 * smoothstep(0.38, 0.68, riv), nearS);
+          rs *= mix(1.0, 0.55 + 0.9 * smoothstep(0.34, 0.74, riv), nearS);
         }
         rs += inX * (1.0 - smoothstep(0.0, 0.14, dS)) * step(dS, 0.5) * step(wr.z, pm.y + 0.5) * 0.35 * float(sillW) * smoothstep(0.2, 0.6, hw1);
       }`, `      float run = 1.0 - smoothstep(0.0, (0.5 + 2.2 * sn * sn) * lenK, dS);
@@ -1681,8 +1681,8 @@ ${fg(`      float ew = max(0.09, fq.x * 1.25);
       // near the camera the stain splits into rivulets (2–5 cm wide runs that wander a little) and is darkest in
       // the 10–15 cm right under the sill where the water leaves the drip
       float nearS = 1.0 - smoothstep(0.004, 0.014, fq.x);
-      float riv = texture2D(uBhNoise, vec2(pm.x * 2.6 + seed * 0.11 + cell.x * 0.37, dS * 0.05 + cell.y * 0.21)).g;
-      rs *= mix(1.0, 0.35 + 1.3 * smoothstep(0.38, 0.68, riv), nearS);
+      float riv = texture2D(uBhNoise, vec2(pm.x * 2.6 + seed * 0.11 + cell.x * 0.37 + sin(dS * 3.1 + pm.x * 9.0) * 0.05 + sin(dS * 7.3 + pm.x * 23.0) * 0.022, dS * 0.05 + cell.y * 0.21)).g;
+      rs *= mix(1.0, 0.55 + 0.9 * smoothstep(0.34, 0.74, riv), nearS);
       rs += inX * (1.0 - smoothstep(0.0, 0.14, dS)) * step(dS, 0.5) * step(wr.z, pm.y + 0.5) * 0.35 * float(sillW) * smoothstep(0.2, 0.6, hw1);`)}
       albedo *= mix(vec3(1.0), dirtTint * 0.9, clamp(rs, 0.0, 1.0) * 0.82 * drk * wStr);
       if (pat > 4.5 && pat < 5.5 && prof > 0.5 && prof < 1.5) {

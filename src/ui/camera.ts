@@ -309,7 +309,9 @@ export default function create(ctx: CityContext): CityModule {
   let inspect: PickHit | null = null;
   let focusSet = false;
   let focusPick = Infinity;
+  let focusReal = -1;
   let focusPickAt = -1e9;
+  const _focusFrom = new THREE.Vector3(1e9, 0, 0);
 
   // ───────────────────────────────────────────── helpers
   const canvasXY = (e: { clientX: number; clientY: number }) => {
@@ -1837,11 +1839,17 @@ export default function create(ctx: CityContext): CityModule {
       let f = explore.focusAt(_pos, _dir);
       // what moves stands on nothing the height field knows: twice a second, only this close, a look along the ray at the people and the cars
       const now = performance.now();
-      if (now - focusPickAt > 500) {
+      // (a cut, or a good step since the last look: look now)
+      if (now - focusPickAt > 500 || _focusFrom.distanceToSquared(_pos) > 0.25) {
         focusPickAt = now;
+        _focusFrom.copy(_pos);
         const hit = scout.pick(raycaster.ray.set(_pos, _dir));
         focusPick = hit && hit.kind !== 'building' ? hit.distance : Infinity;
+        // the surfaces themselves, where the near materials know them: a bench, a post, the wall at the back of a porch
+        focusReal = (ctx.services.closeMat as { rayHit(p: THREE.Vector3, d: THREE.Vector3, maxT: number): number } | undefined)?.rayHit(_pos, _dir, 12) ?? -1;
       }
+      // (better than the lot's box, which stands in front of a porch)
+      if (focusReal >= 0 && !explore.roomLot) f = Math.max(0.5, focusReal);
       if (focusPick < f) f = Math.max(0.5, focusPick);
       fx.setFocus(f);
       focusSet = true;
