@@ -29,16 +29,19 @@ Text on/off in one page (`abprof`, layers hidden; delta = hidden minus shown, so
 
 | view | noon | night |
 |---|---|---|
-| overview | no cell drawn above 9 m | no cell drawn |
-| downtown | no cell drawn | no cell drawn |
-| street `5,1.5,-65,9,0,6` | +0.07 ±0.26, +0.18 ±0.62 | −0.01 ±0.32, −0.07 ±0.66 |
-| market `27.5,1,78.5,16,200,28` | +0.17 ±0.35, +0.21 ±0.33, +0.30 ±0.83 | −0.11 ±0.50, −0.37 ±0.57, −0.42 ±0.42 |
+| overview (6 cycles) | +0.07 ±0.16 | −0.70 ±0.53 |
+| overview (8 cycles, repeat) | | −0.02 ±0.10 |
+| downtown (6 cycles) | +0.02 ±0.09 | −0.30 ±0.20 |
+| downtown (8 cycles, repeat) | | −0.13 ±0.31 |
+| street `5,1.5,-65,9,0,6` | −0.15 ±0.30 | +0.07 ±0.31 |
+| market `27.5,1,78.5,16,200,28` | −0.17 ±0.42 | −0.24 ±0.43 |
 
-Inside the noise everywhere, at worst about 0.4 ms at the market at night; budget 0.7. One night street run read −2.6 ±3.31: no information.
-Overview and downtown at night read −0.45 and −0.55 while `near.stats()` shows 0 letter cells shown and 0 triangles: nothing of this module is drawn there, so that difference is not text. Not explained. Page-reload `perf.mjs` at overview, noon: 25.32 / 26.11 with, 25.80 / 25.94 with `?nolettering`, the same triangles once settled (3.2 M). The first row, 3.64 M, was the page before the first view had settled.
+All from 2026-11-01 01:56–02:46, after the disk scan ended; the earlier runs overlapped it and are dropped. Budget 0.2 at overview and downtown, 0.7 at street and market: inside at every view.
+Overview and downtown at night read high twice (6 cycles) although `near.stats()` shows 0 letter cells and 0 triangles there. A placebo in the same page (same traversal, nothing changed) read +0.05 ±0.16 and +0.04 ±0.21, the repeat at 8 cycles above came down to nothing, and page reloads agree: overview 33.04 / 33.41 with, 33.41 / 33.44 with `?nolettering`; downtown 32.08 / 32.14 with, 32.24 / 32.31 without (night, 1920×1025). So those two reads were short runs, not text. Page reloads at overview, noon, 1300×930: 25.84 / 25.72 with, 25.85 / 25.77 without.
+`perf.mjs` rows swing between about 3.2 M and 3.7 M triangles (225–271 draws), with and without text alike at noon and downtown at night. At overview at night the swing happened to line up with the variant (271 with, 234 without, both repeats), frame time no higher. Letter cells are 0 there, so that is not this module; what flips it was not looked into.
 - Triangles: about 6 200 in the street view (a letter is 2). Draw calls: one per visible cell, 13 + 11 + 6 = 30 in the street view, one program.
-- `hitch.mjs`: 0 new programs in every window. Maxima of 350 ms (overview steady, noon) and 267 ms (street arrive, noon) occurred once, with other sessions on the machine; the same windows at night stayed at 51 ms. Not shown to be this module.
-- `walkhitch.mjs` 85 m: max 51.0 ms with, 50.2 ms without; 0 new programs; 16 new geometries (one per built cell); slowest cell build 1.3 ms.
+- `hitch.mjs`: 0 new programs in every window. Maxima 83 ms (street arrive, noon) and 67 ms (market arrive, noon), elsewhere 50 ms; not compared against a run without text. The 350 and 267 ms spikes of the run during the scan did not come back.
+- `walkhitch.mjs` 85 m: max 50.8 ms with, 50.2 ms without; mean 37.79 and 37.99; 0 new programs; 16 new geometries (one per built cell); slowest cell build 2.4 ms, worst build in one frame 1.3 ms (0.6 without).
 - Boot: 278 ms for the atlas and the items (measured once, on the first version, with fewer items). GPU: one 2048² R8 atlas with mips, about 5.6 MB.
 - Quality: `medium` keeps it, `low` has none (far atlas names stay).
 
