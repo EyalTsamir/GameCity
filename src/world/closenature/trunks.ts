@@ -94,12 +94,15 @@ const FRAG_COLOR = /* glsl */ `
   if (pat > 0.8) {
     // birch: chalk white, dark lenticels lying across the stem, peeling warm in places, black and furrowed at the foot
     float d = texture2D(tBarkF, vec2(vBUv.y * 0.9 + vB.w, vBUv.x * 0.21)).b;
-    float dash = 1.0 - smoothstep(0.0, 0.2, d);
+    // short dashes that start and stop, not rings drawn right round the stem; fine ones between them
+    float brk = smoothstep(0.4, 0.56, texture2D(tBarkP, vec2(vBUv.x * 0.8, vBUv.y * 0.3) + vB.w * 1.3, 1.5).a);
+    float d2 = texture2D(tBarkF, vec2(vBUv.y * 2.7 + vB.w * 0.6, vBUv.x * 0.73)).b;
+    float dash = max((1.0 - smoothstep(0.0, 0.2, d)) * brk, (1.0 - smoothstep(0.0, 0.1, d2)) * 0.55);
     c *= mix(vec3(1.0), vec3(0.97, 0.88, 0.74), smoothstep(0.62, 0.9, tp.a) * 0.75) * (0.9 + 0.2 * tf.a);
-    c = mix(c, vec3(0.05, 0.045, 0.04), dash * 0.9);
+    c = mix(c, vec3(0.085, 0.07, 0.058), dash * 0.9);
     float low = 1.0 - smoothstep(0.1, 0.7, foot + 0.3 * (tf.a - 0.5) + 0.3 * (tp.a - 0.5));
     c = mix(c, vec3(0.055, 0.05, 0.045) * (0.45 + 1.6 * tf.b), low);
-    bkSlope = (tf.rg - 0.5) * 2.0 * (0.06 + 1.3 * low);
+    bkSlope = (tf.rg - 0.5) * 2.0 * (0.14 + 1.3 * low);
     bkCav = mix(1.0 - 0.25 * dash, 0.5 + 0.5 * tf.b, low);
   } else if (pat > 0.5) {
     // plane: flaking jigsaw of cream, olive and grey-brown in soft drifts, each flake a little proud of the one under it
@@ -129,7 +132,8 @@ const FRAG_COLOR = /* glsl */ `
     float e = smoothstep(0.05, 0.5, t2.b);
     c *= mix(0.62, 1.55, e) * grain;
     c = mix(c, c * 0.8 + vec3(0.06, 0.056, 0.05), smoothstep(0.55, 0.9, t2.b) * 0.6);
-    bkSlope = (t2.rg - 0.5) * 2.0 * 0.8;
+    c = mix(c, c * 0.72 + vec3(0.075, 0.066, 0.056), smoothstep(0.42, 0.72, texture2D(tBarkP, vBUv * 0.7 + vB.w, 1.0).a) * e * 0.6);
+    bkSlope = (t2.rg - 0.5) * 2.0 * 0.8 + (tf.rg - 0.5) * 0.35;
     bkCav = 0.5 + 0.5 * e;
   } else if (pat > 0.2) {
     // smooth grey bark: shallow fissures that run together, fine pores
@@ -191,7 +195,7 @@ function barkMaterial(ctx: CityContext, tiles: BarkTiles): THREE.MeshStandardMat
       .replace('#include <normal_fragment_maps>', FRAG_NORMAL)
       .replace('#include <aomap_fragment>', FRAG_AO);
   };
-  mat.customProgramCacheKey = () => 'closenature-bark-8';
+  mat.customProgramCacheKey = () => 'closenature-bark-9';
   patchLampMaterial(mat);
   nearDither(mat, RADIUS);
   return mat;
