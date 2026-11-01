@@ -3,11 +3,12 @@
 Stage 3 of `CLOSE-ROUND.md`. Branch `claude/great-nightingale-12938a`, port 5216. Switches: `src/core/closehand.ts`.
 
 ## Resume here
+Work is complete for this round and waits for the coordinator's merge. `materials.ts` shell text changed: rebake before measuring.
 Dev server: `npx vite --port 5216 --strictPort --host 127.0.0.1`. System: `src/world/handheight.ts` (placement by kind of building, layers, materials), `src/world/handheight/{sink,doors,walls,entry,ballast}.ts`. The generators note doors, walls, lamps, pipes and fittings in `buildings/anchors.ts` (`handDoors`, `handWalls`, `handPipes`, `handSpots`, `handSteps`, `doorLamps`).
 Sampling views: scratchpad `handviews.json`/`handset.mjs` (the test set's script, browser lock from the main checkout), area `hand`: doors and walls of every kind of building.
 
 ## What it is
-A module loaded before `lettering` (it hands it word plates through `propSpots`). All geometry lives in the near bubble: five merged layers per cell (`handBig` R 42, `handMid`, `handFine`, `handStain` a multiply pass at renderOrder -79, `handCoat` the door's paint with a stronger polygon offset), plus instanced ballast stones (`handBallast` R 7.5). Nothing is drawn from afar. Placement comes from the building's own data, not scatter: a pipe's foot gets a gully because the pipe ends there, a mat lies where a door meets paving, a block of flats gets a panel with one button per flat, a letter box goes on the wall only when the door has no plate.
+A module loaded before `lettering` (it hands it word plates through `propSpots`). All geometry lives in the near bubble: four merged layers per cell (`handBig` R 42 cell 28, which since round 2 also holds what `handMid` held; `handFine` cell 8; `handStain` a multiply pass at renderOrder -79, cell 40; `handCoat` the door's paint with a stronger polygon offset, cell 28), plus instanced ballast stones (`handBallast` R 7.5). Nothing is drawn from afar. Placement comes from the building's own data, not scatter: a pipe's foot gets a gully because the pipe ends there, a mat lies where a door meets paving, a block of flats gets a panel with one button per flat, a letter box goes on the wall only when the door has no plate.
 
 Where the old merged trim had the same thing, `handDoorsLive()` leaves it out of the merge (lever, escutcheon, bell, pipe shoes and brackets), and `uHandPaint` fades the painted pull bars of glass doors up close.
 
@@ -40,23 +41,40 @@ Where the old merged trim had the same thing, `handDoorsLive()` leaves it out of
 - Panel cladding was removed: no wall of that kind exists (every smooth office or works wall has windows).
 
 ## Switches
-`?nohand` all; `?nohanddoors ?nohandlamps ?nohandpipes ?nohandwalls ?nohandstains ?nohandballast ?nohandlife`; layers `?nohandBig ?nohandMid ?nohandFine ?nohandStain ?nohandCoat`. Quality: off on low (the old boxes stay), full on medium and high. `?handspots`: `__city.ctx.services.handspots` lists where each kind of thing went: how every kind gets looked at.
+`?nohand` all; `?nohanddoors ?nohandlamps ?nohandpipes ?nohandwalls ?nohandstains ?nohandballast ?nohandlife ?nohandroofs ?nohandyard`; layers `?nohandBig ?nohandFine ?nohandStain ?nohandCoat`. Quality: off on low (the old boxes stay), full on medium and high. `?handspots`: `__city.ctx.services.handspots` lists where each kind of thing went: how every kind gets looked at.
 
 ## How it was judged
 Sampling scripts in the session scratchpad, not kept: `handset.mjs` (the test set with extra viewpoints), `mkmarks.mjs` (two places for each kind from `?handspots`), `mkrandom.mjs` (doors and walls drawn at random). Doing it again takes `?handspots` and a few lines round `closeset.mjs`.
 
-## Cost (behind the power guard, baked, same page A/B hiding the layers, base = hidden)
-Overview +0.05 ±0.23 ms, downtown +0.02 ±0.09, street 5,1.5,-65 -0.16 ±0.77 (base 34.8), market -0.21 ±0.22 (base 33.8): nothing measurable, inside the budget. Walking 25 s with real keys: 38.97 ms with, 38.96 with `?nohand`, 0 freezes either way, slowest cell 4.2 ms once in an earlier run, 2.2 frame build in the last. Triangles in view: overview and downtown 0, market 92 K, old town at 3 m 128 K, on the track 9 K. `hitch.mjs`: 0 new programs mid-run. Far views draw nothing of this. **Perf pending for the last commits:** these numbers are from `759310f`. After it came a few more items at back doors and the coat layer (one more draw per near cell with a door, so up to a few draws at a street), not timed: the coordinator measures at the merge.
+## Cost (round 2, `d244ceb`, behind the power guard, baked; abprof in one page, hidden minus shown, so -0.26 means the layers cost 0.26 ms)
+All layers: overview -0.10 ±0.31 ms, downtown +0.37 ±0.73 (noise), market -0.26 ±0.11 (base 35.6), street 5,1.5,-65 -0.36 ±0.29 (base 35.2). Stains alone at market -0.27 ±0.19: nearly all of it. `perf.mjs` market: 37.04 ms, 36.67 with `?nohand`. All inside the budget.
+Draw calls (`bfd0206` then now): market 298 to 290, of which hand 17 to 9; old town at 3 m 457 to 400, of which hand 19 to 12; street 348 and 348, hand 1; overview and downtown hand 0. Triangles in view: market about 103 K, old town at 3 m about 124 K, street 1.3 K, far views 0. `perf.mjs` counts 99 K for hand at market.
+Walking 85 m with real keys: 40.99 ms, 41.02 with `?nohand`, 0 freezes and 0 long tasks both ways, no new programs. Slowest `handBig` cell 10.7 ms after cuts through street, market and old town, 7.2 ms while walking (a cell is built in one go, and the merge made them bigger; `cmMasonry` has 20.9 ms).
+`hitch.mjs` at 12 and 21.5: 0 new programs. A cut to street or market holds one long task of about 370 to 475 ms; with `?nohand` it is 337 to 366, so it is not this layer's (about +30 ms of it may be), and walking never meets it.
 
 ## Checks at the last commit
-On the last commit: typecheck and build pass. `shot.mjs --view overview --speed 4 --wait 20000`: no console, frame or module errors, invariants {}, validate []. `?diorama` and `?quality=medium` at downtown: the same, invariants {}. A few commits back (`4343f05`): `?quality=low` no errors, invariants {}; `ui-test --q noidle` 73 passed, `kinds` failed. `ui-test --q noidle --steps kinds` alone, rerun just before the last commit (on the coat layer, before the panels moved into it): passed 1, failed 0, so it was the known flake. The full ui-test was not rerun on the last commit; the last changes touch only door geometry and two polygon offsets.
+Typecheck and build pass. `shot.mjs --view overview --speed 4 --wait 20000`: no console, frame or module errors, invariants {}, validate []. `?diorama`, `?quality=medium` and `?quality=low`: the same, invariants {} (on `d244ceb`; the last commit only adds the one fire point to a wall and this log). `ui-test --q noidle --hmr 1`: 74 passed, 0 failed.
+
+**Without `--hmr 1`, `ui-test` fails here:** since the build stamp (`8d7fe8c`), `ui.ts` reads `__BUILD_ID__`, which in dev comes from `/@vite/env`. `ui-test.mjs` replaces `/@vite/client` with a stub unless `--hmr` has a value, so `ui` throws on load, and the hover, click and `kinds` steps fail with a `getComputedStyle` harness error that stops the run after 15 passes. That comes from the stamp and the script, not this module; it is not fixed here.
 
 ## Left
+- Sacks: rounder than before, but from 3 m and 1 m they read as faceted pillows with flat bevels, not filled cloth. Replacing them means real rounding across the sack, not a larger chamfer.
+- Moss: its last darkening was not seen in a usable view (the one try landed a hand from the slope, out of focus). The version before it was fine at 3 m.
+- Yard wrapped loads have square brass marks on their sides that read as studs; not chased.
 - Low and medium were checked only for errors, not by eye.
-- A very faint dashed line can still show at the edge of a door's panels from 3 m; gone at 1 m. Not chased, the user's machine went off AC. The stronger `handStain` offset was looked at on doors only, not on every stain over a thin fitting.
-- The boot scraper (2 in the city) was not seen by eye. Cables are on only a handful of terrace fronts.
-- An earlier walk under other load showed 46.85 ms and 24 freezes, and `hitch.mjs` one 116.7 ms freeze on the cut to street; not investigated, the later clean runs showed neither.
-- Not done: roofs up close, crates and pallets at works (flat at 1 m, another module), gutter brackets at the eaves.
+- The stronger `handStain` offset was looked at on doors only, not on every stain over a thin fitting. Cables are on only a handful of terrace fronts.
+- Rooftop kit on flat roofs (AC units, water tanks) is still low-poly, and parapets were not looked at.
+- The cream wash at `wall-oldtown` 3 m, 21.5: A/B with `?nodoorlamps` is nearly the same picture and the hand lanterns are emissive only, so it is the street lamp about 3 m from that wall. Not changed: it would alter the whole night look. Door lamps: `lamps.ts` radius 3.6, intensity 0.5.
+- Seen, not this module's: white star-like sparkles in the blue noon sky near the sun (`eave-house-hip` 3 m); a jagged stepped edge where paving meets a plinth (`m-scraper-1` 1 m).
+
+## Round 2
+- Draws: `handMid` went into `handBig` (one mesh per cell; `?nohandMid` no longer exists), stains went to cells of 40 and the coat to 28.
+- The dashed line at panel edges from 3 m: the old far door's box edge in the merged trim stood just under the new lip and won the depth test in steps. The lip is now two rings that clear it.
+- Gutters: straps every 80 cm, a sleeve every 3 m, stop ends, streak stains at the joints (`buildings.handGutters`, skipped above 12 m).
+- Tiles and slate up close (`uHandRoof`, `?nohandroofs`, a shader term in `bhRoof`, faded in where a pixel is under about a centimetre): grit, a butt edge that is not ruled, the dark lap, moss in it, sparse lichen. The first lichen was polka dots: rarer, smaller, gathered.
+- Yard goods (`?nohandyard`, in `props/kit.ts` through `yardNear`): crates of boards, film over loads, packs of bricks, cartons, sacks, drums with a round shell, reels.
+- Boot scraper: moved clear of the architrave, rough paint instead of metal (it rendered black).
+- A wall could get several fire points in a row (`services.ts`, four on one wall in the works yard): one to a wall now. The random stream is unchanged, so nothing else moved.
 
 ## Log
-Round 1: kits, then door fields, ballast, painted pulls. Round 2: fresh sample of ordinary places, then life, irons, flaps, cables, every kind looked at once. Round 3: doors and walls at random, then the leaf coat, brick joints, fire points, the hidden office door. Round 4: every kind found by its marks, which showed the zero placements above, then the brown stiles.
+Round 1: kits, then door fields, ballast, painted pulls. Round 2: fresh sample of ordinary places, then life, irons, flaps, cables, every kind looked at once. Round 3: doors and walls at random, then the leaf coat, brick joints, fire points, the hidden office door. Round 4: every kind found by its marks, which showed the zero placements above, then the brown stiles. Second assignment: fewer draws first, then roofs, yard goods, gutters, the lip and the scraper.

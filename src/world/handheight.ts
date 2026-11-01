@@ -3,7 +3,7 @@
 // decides by the kind of building what belongs there and writes it into the near-detail bubble: nothing built or drawn from
 // afar, one program per layer. Four layers: large things, the ring that shows at hand size, what only shows from a metre, and
 // the stains: dirt where hands go, runs under vents, a multiply pass with no light of its own.
-// Switches (core/closehand.ts): ?nohand all; ?nohanddoors ?nohandlamps ?nohandpipes ?nohandwalls ?nohandstains; layers ?nohandBig ?nohandMid ?nohandFine ?nohandStain.
+// Switches (core/closehand.ts): ?nohand all; ?nohanddoors ?nohandlamps ?nohandpipes ?nohandwalls ?nohandstains; layers ?nohandBig ?nohandFine ?nohandStain.
 
 import * as THREE from 'three';
 import type { CityContext, CityModule } from '../core/context';
