@@ -10,6 +10,26 @@ Second round finished 2026-11-02, on branch `claude/quizzical-greider-ce4b00`, n
 
 ## Status and cost
 
+**Second round, OVER BUDGET at street level, cause not found.** Same page, on minus off, baked, on AC, behind the power guard, 2026-11-02, after
+the merge of bfd0206 and after commit 9ceac08 (ms, ± between cycles):
+
+| view | noon | 21.5 | budget |
+|---|---|---|---|
+| overview | 0.14 ±0.28 | | 0.2 |
+| downtown | -0.08 ±0.13 | | 0.2 |
+| street `5,1.5,-65,9,0,6` | **2.08 ±0.81** | **1.77 ±0.21** | 0.7 |
+| market `27.5,1,78.5,16,200,28` | 0.76 ±0.53 | 0.91 ±0.70 | 0.7 |
+| shop from 4 m `6.5,1.7,-100.9,4,-110,2` | 1.42 ±0.48 | 5.42 ±0.51 | |
+
+The first round's table below was measured before the merge, so this jump can come from my second-round work (the walker, the near glint, more
+different wall pages per room) or from how the rooms sit with what the merge brought. No run separates them: the walker needs a reload to switch off
+(`?nocwwalk`), and reloads give ±1-2 ms. Next step: make `CW_WALK` a uniform for one A/B in a page, or compare frozen builds of df10458 and 9ceac08.
+Other checks of the second round: typecheck and build pass, bake redone, `shot --view overview` invariants `{}` validate `[]`, 0 GL warnings in five
+start states, `hitch` prog+0 in every window, one freeze flag in `overview@21.5 arrive` (116 ms max, the arrival). Not rerun: `walkhitch`, `ui-test`,
+`?diorama`.
+
+First round, 2026-11-01:
+
 Final checks 2026-11-01: typecheck and build pass, `shot --view overview` invariants `{}` validate `[]`, `?diorama` and `?quality=medium|low`
 clean, `hitch` prog+0 in every window, walk of 85 m no new programs, no freeze, slowest bubble build 1.7 ms. `ui-test --q noidle` 73 passed;
 only `kinds` failed, the known flake, and it passed when rerun alone. The checks and the table below predate two last small edits, seen only
