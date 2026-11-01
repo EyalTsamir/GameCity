@@ -20,7 +20,7 @@ void main() {
   vN = normal;
   vC = aCol;
   vZ = position.z / uRelief;
-  gl_Position = vec4((position.x - uBox.x) * uBox.z * 2.0 - 1.0, (position.y - uBox.y) * uBox.w * 2.0 - 1.0, 1.0 - clamp(vZ, 0.0, 1.0) * 1.9, 1.0);
+  gl_Position = vec4((position.x - uBox.x) * uBox.z * 2.0 - 1.0, (position.y - uBox.y) * uBox.w * 2.0 - 1.0, 0.95 - clamp(vZ, 0.0, 1.0) * 1.9, 1.0);
 }
 `;
 const PAGE_FRAG = /* glsl */ `

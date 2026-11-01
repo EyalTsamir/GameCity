@@ -164,6 +164,32 @@ export class Kit {
     this.quad([x0, y0, z + r, x1, y1, z + r, x1 - px * r, y1 - py * r, z, x0 - px * r, y0 - py * r, z], nM, nM, nB, nB, c);
   }
 
+  /** a leaf in the page's plane: tapered, turned about its midrib so one half catches more light, a pale rib */
+  leaf(x: number, y: number, z: number, angle: number, len: number, wid: number, c: Col, droop = 0): void {
+    const n = 5;
+    let px = x,
+      py = y,
+      a = angle,
+      w0 = 0;
+    const nA = [0.25, 0.3, 0.92],
+      nB = [-0.25, -0.15, 0.95];
+    for (let i = 1; i <= n; i++) {
+      const s = i / n;
+      a -= droop / n;
+      const qx = px + (Math.cos(a) * len) / n,
+        qy = py + (Math.sin(a) * len) / n;
+      const w1 = wid * Math.sin(Math.min(1, s * 1.06) * Math.PI) * (1 - 0.25 * s);
+      const ox = -Math.sin(a),
+        oy = Math.cos(a);
+      const zm = z + 0.008 * Math.sin(s * Math.PI);
+      this.quad([px, py, zm, qx, qy, zm, qx + ox * w1, qy + oy * w1, z, px + ox * w0, py + oy * w0, z], nA, nA, nA, nA, c);
+      this.quad([px - ox * w0, py - oy * w0, z, qx - ox * w1, qy - oy * w1, z, qx, qy, zm, px, py, zm], nB, nB, nB, nB, shade(c, 0.82));
+      px = qx;
+      py = qy;
+      w0 = w1;
+    }
+  }
+
   /** a ring in the page's plane (a wheel, a mirror's frame, a hoop) */
   ring(x: number, y: number, z: number, r: number, t: number, c: Col, seg = 20): void {
     for (let s = 0; s < seg; s++) {

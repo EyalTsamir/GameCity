@@ -80,6 +80,24 @@ export function books(k: Kit, r: R, x0: number, x1: number, y: number, h: number
   }
 }
 
+/** a book or magazine facing out: a printed cover */
+export function bookCover(k: Kit, r: R, x0: number, y0: number, x1: number, y1: number, z: number, c: Col): void {
+  k.box(x0, y0, z - 0.018, x1, y1, z, c, 0.002);
+  const w = x1 - x0,
+    h = y1 - y0;
+  const kind = r();
+  if (kind < 0.4) {
+    k.rect(x0 + w * 0.12, y0 + h * 0.3, x1 - w * 0.12, y0 + h * 0.74, z + 0.001, mixc(c, pick(r, PAL.pale), 0.7));
+    k.disc(x0 + w * (0.3 + r() * 0.4), y0 + h * 0.52, z + 0.002, w * 0.17, pick(r, PAL.packs), 0, 8);
+  } else if (kind < 0.7) {
+    k.rect(x0, y0 + h * 0.62, x1, y0 + h * 0.84, z + 0.001, pick(r, PAL.pale));
+  } else {
+    k.rect(x0 + w * 0.15, y0 + h * 0.72, x1 - w * 0.15, y0 + h * 0.78, z + 0.001, hex(0xe8d9a8));
+    k.rect(x0 + w * 0.15, y0 + h * 0.6, x1 - w * 0.3, y0 + h * 0.64, z + 0.001, hex(0xe8d9a8));
+  }
+  k.rect(x0 + w * 0.2, y0 + h * 0.1, x1 - w * 0.2, y0 + h * 0.15, z + 0.001, shade(pick(r, PAL.pale), 0.85));
+}
+
 export function magazines(k: Kit, r: R, x0: number, x1: number, y: number, h: number, zf: number): void {
   run(r, x0, x1, () => 0.2 + r() * 0.03, (x, w) => {
     const c = pick(r, PAL.packs);
@@ -305,15 +323,15 @@ export function pegTools(k: Kit, r: R, x0: number, x1: number, y0: number, y1: n
 }
 
 export function leaves(k: Kit, r: R, x: number, y: number, z: number, rw: number, rh: number, n: number): void {
-  // a loose bush: leaf ellipses in depth order, darker inside
+  // a loose bush: leaves from the middle out, the outer and upper ones in front and lighter
   for (let i = 0; i < n; i++) {
+    const s = i / n;
     const a = r() * Math.PI * 2,
-      d = Math.sqrt(r());
-    const lx = x + Math.cos(a) * d * rw,
-      ly = y + Math.sin(a) * d * rh;
-    const rr = 0.024 + r() * 0.03;
-    const t = r();
-    k.ball(lx, ly, z + d * 0 + i * 0.0006, rr * (0.6 + r() * 0.6), rr * (0.6 + r() * 0.6), 0.015, shade(pick(r, PAL.leaf), 0.6 + t * 0.7), 4);
+      d = Math.sqrt(s) * (0.85 + r() * 0.15);
+    const lx = x + Math.cos(a) * d * rw * 0.8,
+      ly = y + Math.sin(a) * d * rh * 0.8;
+    const size = 0.05 + r() * 0.05;
+    k.leaf(lx, ly, z + s * 0.05, a + (r() - 0.5) * 1.2, size * 1.8, size * 0.42, shade(pick(r, PAL.leaf), 0.55 + s * 0.55 + r() * 0.2), 0.5);
   }
 }
 
@@ -329,15 +347,28 @@ export function potPlant(k: Kit, r: R, x: number, y: number, z: number, size: nu
 /** a tall plant in a pot on the floor */
 export function floorPlant(k: Kit, r: R, x: number, z: number, size = 1): void {
   pot(k, x, 0, z, 0.15 * size, pick(r, [0xe0ddd2, 0x3a3f46, 0xa8552e].map(hex)));
-  k.bar(x, 0.25 * size, x + 0.02, 0.9 * size, z, 0.012, hex(0x4a3a24));
-  const n = 16;
-  for (let i = 0; i < n; i++) {
-    const a = 0.3 + (i / n) * 2.5 + (r() - 0.5) * 0.4;
-    const L = (0.3 + r() * 0.34) * size;
-    const y0 = (0.55 + (i % 6) * 0.13) * size;
-    const ex = x + Math.cos(a) * L,
-      ey = y0 + Math.sin(a) * L * 0.8;
-    k.ball((x + ex) / 2, (y0 + ey) / 2, z + 0.02 + i * 0.002, Math.max(0.05, Math.abs(ex - x) * 0.55), Math.max(0.05, Math.abs(ey - y0) * 0.6), 0.03, shade(pick(r, PAL.leaf), 0.7 + r() * 0.6), 5);
+  const potTop = 0.25 * size;
+  const kind = r();
+  if (kind < 0.35) {
+    // blades from the soil, like a snake plant or a palm's young fronds
+    const n = 16;
+    for (let i = 0; i < n; i++) {
+      const a = Math.PI / 2 + (i / (n - 1) - 0.5) * 1.5 + (r() - 0.5) * 0.15;
+      k.leaf(x + (i / n - 0.5) * 0.14 * size, potTop, z + r() * 0.05, a, (0.75 + r() * 0.6) * size, 0.045 * size, shade(pick(r, PAL.leaf), 0.7 + r() * 0.6), (a - Math.PI / 2) * 0.7);
+    }
+  } else {
+    // a stem with broad leaves all the way up, the lower ones longer and drooping
+    const h = (1.15 + r() * 0.35) * size;
+    const lean = (r() - 0.5) * 0.14;
+    k.bar(x, potTop, x + lean, h, z, 0.012, hex(0x4a3a24));
+    const n = 22;
+    for (let i = 0; i < n; i++) {
+      const s = i / n;
+      const side = i % 2 ? 1 : -1;
+      const a = Math.PI / 2 - side * (1.25 - s * 0.7) + (r() - 0.5) * 0.35;
+      const L = (0.42 - s * 0.18 + r() * 0.1) * size;
+      k.leaf(x + lean * s, potTop + (h - potTop) * (0.25 + s * 0.8), z + 0.02 + s * 0.05, a, L, (0.075 + r() * 0.03) * size, shade(pick(r, PAL.leaf), 0.65 + s * 0.45 + r() * 0.2), side * -0.4);
+    }
   }
 }
 

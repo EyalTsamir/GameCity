@@ -200,10 +200,10 @@ vec4 rmWall(vec2 q, vec2 dqx, vec2 dqy, vec2 dir, float face, out float outH) {
   return textureGrad(tWall, org + clamp(hit, vec2(0.0), vec2(MOD_W, MOD_H)) * scale, gx, gy);
 }
 // a card standing in the room on the plane z, one every S metres; returns rgb (linear, not premultiplied), a
-vec4 rmCard(vec3 ro, vec3 rd, float z, float S, float idA, float idB, float chance, float salt, out vec3 p) {
+vec4 rmCard(vec3 ro, vec3 rd, float z, float S, float idA, float idB, float chance, float salt, float yoff, out vec3 p) {
   float tz = (z - ro.z) / rd.z;
   p = ro + rd * tz;
-  vec2 q = p.xy;
+  vec2 q = vec2(p.x, p.y - yoff);
   float off = vRoom.w * 3.7 + salt;
   float sl = (q.x + off) / S;
   float mi = floor(sl);
@@ -399,6 +399,10 @@ void main() {
     vec3 alb = pg.rgb * pg.rgb;
     float bare = 1.0 - smoothstep(0.0, 0.03, pg.a);
     c = mix(alb, alb * vPaint, bare);
+    // a plain cornice where the wall meets the ceiling
+    float top = H - (onBack ? hB.y : hS.y);
+    float corn = 1.0 - smoothstep(0.08, 0.09, top);
+    c = mix(c, vec3(0.78, 0.76, 0.72) * (0.8 + 0.5 * smoothstep(0.0, 0.08, top)), corn);
     h -= n * -hgt; // what stands out of the wall stands nearer the room
   }
 
@@ -408,8 +412,10 @@ void main() {
   vec3 pMid, pDisp;
   vec4 cm = vec4(0.0), cd = vec4(0.0);
   float tMid = zMid / rd.z, tDisp = zDisp / rd.z;
-  if (tMid < t) cm = rmCard(ro, rd, zMid, 3.0, vCards.x, vCards.y, vMisc.z, 0.0, pMid);
-  if (tDisp < t) cd = rmCard(ro, rd, zDisp, 2.0, vCards.z, vCards.w, vMisc.w, 11.0, pDisp);
+  if (tMid < t) cm = rmCard(ro, rd, zMid, 3.0, vCards.x, vCards.y, vMisc.z, 0.0, 0.0, pMid);
+  // (at home what stands in the window stands on its sill, a hand behind the glass)
+  if (homey) { zDisp = 0.16; tDisp = zDisp / rd.z; }
+  if (tDisp < t) cd = rmCard(ro, rd, zDisp, 2.0, vCards.z, vCards.w, vMisc.w, 11.0, homey ? wrR.z - 0.82 : 0.0, pDisp);
 
   // ── the light
   vec3 lq = h;
@@ -425,17 +431,20 @@ void main() {
   float ao = onBack ? smoothstep(0.0, 0.5, min(ex, ey3)) : (onFlat ? smoothstep(0.0, 0.45, min(ex, ez)) : smoothstep(0.0, 0.45, min(ey3, ez)));
   ao = 0.42 + 0.58 * ao;
   float att = (lampK < 0.5 ? 2.6 : 1.5) / (1.0 + d2 * (lampK < 0.5 ? 0.55 : 0.75));
-  vec3 lamp = vLit.rgb * (0.24 + ndl * att) * ao;
+  // (the far look of a lit room is a glow for the whole district to read; from close by, the walls of a room in lamplight)
+  float nearCalm = mix(0.58, 1.0, smoothstep(cwR * 0.3, cwR * 0.85, length(ey)));
+  vec3 lit = vLit.rgb * nearCalm;
+  vec3 lamp = lit * (0.24 + ndl * att) * ao;
   // daylight comes through the pane: bright by the glass, falling off into the room
   float fall = 1.0 / (1.0 + h.z * h.z * 0.28) + 0.1;
   vec3 dayA = c * fall * ao * (onFlat && rd.y > 0.0 ? 0.55 : (onBack ? 0.9 : 0.75));
-  vec3 interior = c * lamp + vLit.rgb * selfL;
+  vec3 interior = c * lamp + lit * selfL;
 
   // a card is lit where it stands, facing the window
   if (cm.a > 0.0) {
     vec3 toM = (lampK < 0.5 ? vec3((floor(pMid.x / g.x) + 0.5) * g.x, ly, LP.z) : vec3((floor(pMid.x / g.x) + 0.5) * g.x, ly, zMid - 0.4)) - pMid;
     float dm = dot(toM, toM);
-    vec3 lm = vLit.rgb * (0.3 + 0.75 * max(-toM.z + 0.7, 0.3) / sqrt(dm + 0.3) * (lampK < 0.5 ? 2.2 : 1.3) / (1.0 + dm * 0.55));
+    vec3 lm = lit * (0.3 + 0.75 * max(-toM.z + 0.7, 0.3) / sqrt(dm + 0.3) * (lampK < 0.5 ? 2.2 : 1.3) / (1.0 + dm * 0.55));
     float fm = 1.0 / (1.0 + zMid * zMid * 0.28) + 0.1;
     interior = mix(interior, cm.rgb * lm, cm.a);
     dayA = mix(dayA, cm.rgb * fm, cm.a);
@@ -455,7 +464,7 @@ void main() {
       float shade = 1.0 - smoothstep(rl - 0.012, rl + 0.012, kind < 0.5 ? dl : length(cl * vec3(1.0, cl.y > 0.0 ? 1.8 : 40.0, 1.0)));
       float cord = (1.0 - smoothstep(0.004, 0.012, length(cl.xz))) * step(0.0, cl.y) * step(cl.y, 0.7);
       vec3 sc = kind < 0.5 ? vec3(0.95, 0.9, 0.78) : bhPal(fract(rs * 3.3)) * 0.6 + 0.2;
-      interior = mix(interior, sc * vLit.rgb * 2.2 + vLit.rgb * step(kind, 0.5) * 1.4, shade);
+      interior = mix(interior, sc * lit * 2.2 + lit * step(kind, 0.5) * 1.4, shade);
       dayA = mix(dayA, sc * 0.5, shade);
       interior = mix(interior, vec3(0.01), cord);
       dayA = mix(dayA, vec3(0.03), cord);
@@ -464,13 +473,13 @@ void main() {
   if (cd.a > 0.0) {
     // (shops light their windows: spots right over the display; a sill at home stands in the window's own light)
     float dk = shopWin ? 1.25 : 0.55;
-    interior = mix(interior, cd.rgb * vLit.rgb * dk, cd.a);
+    interior = mix(interior, cd.rgb * lit * dk, cd.a);
     dayA = mix(dayA, cd.rgb * 1.05, cd.a);
   }
 
   // ── curtains, blinds, what stands on the sill and is taped to the glass: the facade's own (bhWall), a hand's breadth behind the glass
-  vec3 lcol = vLit.rgb / max(max(vLit.r, max(vLit.g, vLit.b)), 1e-3);
-  float litI = max(vLit.r, max(vLit.g, vLit.b));
+  vec3 lcol = lit / max(max(lit.r, max(lit.g, lit.b)), 1e-3);
+  float litI = max(lit.r, max(lit.g, lit.b));
   vec4 wr = wrR;
   vec2 pc = pm + rd.xy / rd.z * 0.07;
   float wx = (pc.x - wr.x) / max(wr.y - wr.x, 1e-3);

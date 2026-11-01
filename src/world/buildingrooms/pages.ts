@@ -87,7 +87,7 @@ const dado = (k: Kit, c: Col): void => {
   for (let i = 0; i < 2; i++) k.box(0.06 + i * 0.58, 0.14, 0.02, 0.56 + i * 0.58, 0.84, 0.03, shade(c, 0.94), 0.008);
 };
 
-const door = (k: Kit, r: R, c: Col, knob: Col): void => {
+const door = (k: Kit, c: Col, knob: Col, sign = false): void => {
   const x0 = 0.12,
     x1 = 1.04,
     y1 = 2.1;
@@ -95,7 +95,7 @@ const door = (k: Kit, r: R, c: Col, knob: Col): void => {
   k.box(x0, 0, 0.02, x1, y1, 0.045, c, 0.006);
   for (const [a, b] of [[0.14, 0.9], [1.02, 1.95]]) k.box(x0 + 0.1, a, 0.045, x1 - 0.1, b, 0.05, shade(c, 0.92), 0.012);
   k.ball(x1 - 0.07, 1.02, 0.07, 0.024, 0.024, 0.024, knob, 5);
-  if (r() < 0.5) k.box(x0 + 0.3, 2.3, 0.01, x1 - 0.3, 2.42, 0.02, hex(0x2f7d4f), 0.003); // an exit sign
+  if (sign) k.box(x0 + 0.28, 2.32, 0.01, x1 - 0.28, 2.46, 0.02, hex(0x2f7d4f), 0.003); // an exit sign
 };
 
 const radiator = (k: Kit, x0: number, x1: number): void => {
@@ -474,7 +474,7 @@ const W: Record<string, (k: Kit, r: R) => void> = {
   },
   homeDoor(k, r) {
     skirting(k);
-    door(k, r, G.pick(r, [hex(0xe8e4da), hex(0x8a5e36), hex(0xc9b28d)]), hex(0xb8b0a0));
+    door(k, G.pick(r, [hex(0xe8e4da), hex(0x8a5e36), hex(0xc9b28d)]), hex(0xb8b0a0));
   },
   homePlain(k, r) {
     skirting(k);
@@ -505,7 +505,7 @@ const W: Record<string, (k: Kit, r: R) => void> = {
     radiator(k, 0.15, 1.05);
   },
   officeDoor(k, r) {
-    door(k, r, hex(0xb8a080), hex(0x9a9ea2));
+    door(k, hex(0xb8a080), hex(0x9a9ea2), r() < 0.6);
   },
   // school
   blackboard(k) {
@@ -879,17 +879,25 @@ const C: Record<string, { size: number; draw(k: Kit, r: R): void }> = {
   dispBooks: {
     size: 2,
     draw(k, r) {
-      // stepped risers with covers facing out
+      // stepped risers: covers facing out on little stands, stacks between them
+      const riser = G.pick(r, [hex(0x6b4528), hex(0xd8cdb4), hex(0x3a3f46)]);
       for (let i = 0; i < 3; i++) {
-        const y = i * 0.22,
-          z = 0.45 - i * 0.14;
-        k.box(0.08, y, 0.05, 1.92, y + 0.22, z, hex(0xd8cdb4), 0.005);
-        let x = 0.12;
-        while (x < 1.75) {
+        const y = 0.12 + i * 0.26,
+          z = 0.5 - i * 0.13;
+        k.box(0.06, 0, 0.05, 1.94, y, z, shade(riser, 0.9 + i * 0.06), 0.005);
+        let x = 0.1;
+        while (x < 1.76) {
           const c = G.pick(r, G.PAL.book);
-          k.box(x, y + 0.22, z - 0.05, x + 0.2, y + 0.22 + 0.27, z - 0.03, c, 0.002);
-          k.rect(x + 0.03, y + 0.36, x + 0.17, y + 0.42, z - 0.029, G.pick(r, G.PAL.pale));
-          x += 0.25 + r() * 0.04;
+          if (r() < 0.3) {
+            const n = 2 + Math.floor(r() * 5);
+            for (let b = 0; b < n; b++) k.box(x + (r() - 0.5) * 0.01, y + b * 0.028, z - 0.12, x + 0.15, y + b * 0.028 + 0.026, z - 0.02, G.pick(r, G.PAL.book), 0.003);
+            x += 0.17;
+          } else {
+            const w = 0.12 + r() * 0.04,
+              h = w * (1.35 + r() * 0.2);
+            G.bookCover(k, r, x, y, x + w, y + h, z - 0.04, c);
+            x += w + 0.015 + r() * 0.02;
+          }
         }
       }
     },

@@ -14,6 +14,7 @@ import { nearOf } from '../core/nearDetail';
 import { PROF, WIN, GLASS_COLS } from './buildings/materials';
 import { WIN_REC } from './buildings/winGeo';
 import { glassMirror } from './water/glassMirror';
+import type { LetterSpot } from './buildings/anchors';
 import { buildRoomAtlas } from './buildingrooms/atlas';
 import { ROOM_FRAG, ROOM_VERT } from './buildingrooms/glsl';
 import { hex, rng } from './buildingrooms/kit';
@@ -100,9 +101,46 @@ export default function create(ctx: CityContext): CityModule {
   const rooms: Room[] = [];
   const glassTint = GLASS_COLS.map(linear);
 
-  const chooseKind = (style: number, prof: number, shopT: number, r: () => number, row: number): RoomKind => {
+  // the word on the shop's sign (the lettering module writes its name and wares from the same word)
+  const spots = ((ctx.services.buildings as { letterSpots?: LetterSpot[] }).letterSpots ?? []).filter((s) => s.kind === 'window' && s.word);
+  const wordAt = (i: number): string | undefined => {
+    const o = i * WIN_REC;
+    const dx = rec[o + 3],
+      dz = rec[o + 4];
+    const px = rec[o] + dx * rec[o + 5] * 0.5,
+      pz = rec[o + 2] + dz * rec[o + 5] * 0.5;
+    let best: string | undefined;
+    let bestD = 1.2;
+    for (const s of spots) {
+      if (s.nx * -dz + s.nz * dx < 0.9) continue;
+      const u = (px - s.x) * s.tx + (pz - s.z) * s.tz;
+      const n = (px - s.x) * s.nx + (pz - s.z) * s.nz;
+      const off = Math.max(0, -u, u - s.w);
+      const d = off + Math.abs(n);
+      if (d < bestD) {
+        bestD = d;
+        best = s.word;
+      }
+    }
+    return best;
+  };
+  const kindOfWord = (word: string): string | null => {
+    const w = word.toLowerCase();
+    const rules: [RegExp, string][] = [
+      [/bakery|pâtisserie/, 'bakery'], [/books|bookbinder|stationery/, 'books'], [/florist/, 'florist'], [/deli|cheese|butcher|chocolate/, 'deli'], [/greengrocer/, 'grocer'],
+      [/pharmacy/, 'pharmacy'], [/barber/, 'barber'], [/toy/, 'toys'], [/optic/, 'optician'], [/hardware/, 'hardware'], [/antiques/, 'antiques'], [/records/, 'records'],
+      [/bike/, 'bikes'], [/gallery/, 'gallery'], [/shoes/, 'shoes'], [/hat/, 'hats'], [/post/, 'post'], [/bank/, 'lobby'], [/boutique|tailor/, 'fashion'],
+      [/café|espresso|coffee|bistro|pizzeria|fish|tea room|anchor|pub|wine|gelato|^ice/, 'cafe'],
+    ];
+    for (const [re, id] of rules) if (re.test(w)) return id;
+    return null;
+  };
+
+  const chooseKind = (style: number, prof: number, shopT: number, r: () => number, row: number, word?: string): RoomKind => {
     const named = (...names: string[]) => ROOM_KINDS[kindIndex(names[Math.floor(r() * names.length) % names.length])];
     if (style === WIN.SHOP) {
+      const byWord = word ? kindOfWord(word) : null;
+      if (byWord) return named(byWord);
       const T = shopT === 0 ? 1 + Math.floor(r() * 7) : shopT;
       if (T === 1) return named('cafe');
       if (T === 2) return named('bakery');
@@ -160,7 +198,7 @@ export default function create(ctx: CityContext): CityModule {
         last++;
       }
       const span = along(members[last]) + gw - startT;
-      const kind = chooseKind(style, prof, shopT, r, row);
+      const kind = chooseKind(style, prof, shopT, r, row, style === WIN.SHOP ? wordAt(first) : undefined);
       // a room is wider than a narrow window: it runs on behind the wall beside it
       const minW = style === WIN.SHOP ? 3.6 : kind.lamp === 2 ? 4 : 3;
       const W = Math.max(span, minW);
