@@ -1,9 +1,9 @@
 # Close life: small movements anywhere you walk
 
-Stage 3 of `CLOSE-ROUND.md`. Port 5220, branch `claude/suspicious-goldstine-2c9651`. Time limit 14:00 on 2026-11-01. End the last message with CLOSE-DONE. Master switch `?nosmalllife`, one `?no<name>` per feature (`src/core/closeLife.ts`).
+Stage 3 of `CLOSE-ROUND.md`. Port 5220, branch `claude/suspicious-goldstine-2c9651`. Second limit 23:30 on 2026-11-01. End the last message with CLOSE-DONE. Master switch `?nosmalllife`, one `?no<name>` per feature (`src/core/closeLife.ts`).
 
 ## Resume here
-Closed by the schedule on 2026-11-01 at 11:40: all committed, dev server stopped. Second of the three rounds finished, third not done: see "Left to do".
+Closed at about 23:58 on 2026-11-01, about 30 minutes past the limit: one capture batch waited 2.5 hours for the shared browser lock. All committed, dev server stopped. See "Second round" and "Left to do".
 Dev server: `npx vite --port 5220 --strictPort --host 127.0.0.1` from this worktree (`npm ci` done). `npm run bake` run after the moments commit: run it again before perf if a facade or land shader changes.
 Tools:
 - `node scripts/lifeseq.mjs --out <abs>.png --at "x,y,z,d,yaw,pitch" [--find birds:1|talk|dog|cat|litter|moment|feed|waiter] [--follow] [--yaw d] [--pre js] [--eval js] [--walk 1.3] --frames 12 --every 300`: sheets of frames in real time in the city, shared browser lock. Header lists the options. Expressions must return nothing or a primitive (`void …`).
@@ -24,9 +24,34 @@ The city holds up at 3 m but pavements are dead: nothing lives below knee height
 | Cats on garden walls, doorsteps, benches; stand, walk, sit, loaf; head follows you, blink, get up and go when you are close | `?nonearCats` | `smalllife/cats.ts`, `catBody.ts` | about 1500 tris each, at most 3 |
 | Dogs: sniff, lag, catch up, look up at the walker, wag by mood; close model with fur, on a lead that hangs in a whole curve | `?nodoglife` (the model stays) | `smalllife/dogs.ts`, `pedestrians/figure.ts`, `render.ts` | close model at most 6 within 14 m |
 | Street moments: from a door near you someone sweeps the step, smokes, paces with a phone at the ear, takes the air, two neighbours talk. At most 3 out, 8 people in the pool, in the same figure budget | `?nomoments` | `scenes/moments.ts`, `gestures.ts` `momentPose`, `kit.ts` broom and cigarette | figures only while out |
+| The finer dog within 14 m (model only, separate from `?nodoglife`), off below medium | `?noclosedog` | `pedestrians.ts`, `render.ts` | see the dog row |
 | Someone on a bench feeds the birds: hand from a bag on the lap, a flick; the nearest flock comes over in ones and twos and stays round their feet | `?nofeeding` | `gestures.ts` `feedPose`, `movers.ts`, `streetBirds.ts` `serveFeeders` | CPU only |
 
 Test views: pigeons and a cat on a bench: plaza by the kiosk `-27,0.5,-23,8,70,8` at noon.
+
+## Second round (2026-11-01, evening)
+Synced to the stage 3 merge (`bfd0206`), fresh bake. Walks: `lifeseq --pedwalk <poi>`, camera at eye height along the walkway graph, nothing forced, 42 s each, with a once-a-second log of what is in sight in front of the walker.
+
+Seconds of 42 with a moment in sight within 25 m:
+| walk | hour | moments in sight | started |
+|---|---|---|---|
+| westbrook | 18.2 | 14 | 6 |
+| industry | 18.2 | 12 | 5 |
+| park | 18.2 | 0 (no doors on the way) | 2 |
+| oldtown | 21.5 | 2 | 4 |
+| westbrook | 21.5 | 14 | 4 |
+| downtown | 21.5 | 0 | 0 |
+| station | 12 | 12 | 6 |
+
+Judged from the sheets: a plain walk does meet someone on the phone or taking the air, at a rate that reads as ordinary, and they pass for neighbours and not for a feature. Moments were not looked at up close on these walks. The downtown walk at night had none because office doors stopped at 20:00: they now go on until 22:30, few of them, smoke or phone only. **That change has passed typecheck and build only: it has not run in a browser.**
+
+The `birds` counts in that log include roosting and away groups, so they mean nothing at night, and the sheets at 640x360 are too small to judge sparrows. `cat`, `dog`, `talk` were rare in these seven walks: 0 to 5 seconds of 42.
+
+Feeding after the last edit, by eye (plaza by the kiosk, noon): **works**. The man flicks from a bag on his lap, sparrows peck in front of the bench, pigeons at its side, one pigeon flies in across the frame. The best thing to show of this session.
+
+Litter: in the feeding sheet, at the ordinary wind, a cup and paper balls roll across the plaza (stats: 27 of 40 pieces moving at the end). The sheet at `?wind=1.4` (13 of 41 moving) framed a spot where nothing visibly moved. No sheet of paper was seen in the air in any frame, so flying paper remains unconfirmed.
+
+Close dog: `?noclosedog`, off below medium, committed.
 
 ## Corrected by eye
 Cat: hoop stripes and a faceted back (first look) became thin broken stripes, ticked hairs, a Catmull-Rom body, legs that come to a point inside the flank. Dog: a hole at the chest, one black silhouette, a lead like a bar through the ground: closed the chest, fur streaks, a countershade, welded joints, a parabola for the lead. Sparrow: too zebra, softened. Phone and smoke: the rig's head point is at the chin, not the middle of the head; targets lifted.
@@ -53,14 +78,18 @@ Those figures predate the last two commits (fed flocks stay closer, a little mor
 - `walkhitch`: mean 40.1 ms, 28 frames over 50 ms, 0 over 100 ms, no new programs. No baseline run to compare with. The near layers build in at most 0.3 ms (`streetBirds`, `nearLitter`, `nearCats`).
 - None of the `hitch` or `walkhitch` runs were behind `power-guard`, and the machine was unplugged at about that time: read their frame times as indicative only. Programs and allocation are not affected.
 
+## Final checks tonight (final state, 23:55)
+- `typecheck`, `build`: pass.
+- `shot --view overview --invariants --validate` and one walk at 20.5 to check the late office change: **did not run**. Both hit their caps (10 and 5 minutes) waiting for the shared browser lock.
+- `ui-test`, `hitch`, `walkhitch`, `?diorama`, `?quality=medium|low`, perf: **not rerun on this state.** The results below in "Final checks (2026-11-01, stopped early…)" are from commit `5f79417`, before the merge. The seven walks ran on the merged code before the late office change, with invariants `{}`, no frame errors and no console errors.
+- Commits since `5f79417`: the close dog switch, the walk tool, the late office moments. No geometry or shader changed.
+
 ## Left to do
-Not done, by the schedule:
-1. Third round: a fresh walk at 18.2 and 21.5 along a real pavement (the straight walk in `lifeseq` goes through buildings: pick a target along the street). `mStarted`/`mOut` in the output show whether moments start on a real walk without `momentforce`. Moments and the feeding were forced or found at one place, so how often you meet one on a plain walk is unjudged.
-2. A waiter by eye: `--find waiter` found no one (the test in `lifeseq` for staff may be wrong). Waiters themselves were not changed.
-3. Litter in motion: stills are fine, 26 to 39 of about 60 pieces moving at `?wind=1.3`, but no paper was seen flying by eye. A flock's take-off in sequence was not seen either, only single pigeons flying in. Gull and blackbird close up not seen.
-4. Birds in the feeding test are round the bench at 1.5 to 3 m. The flock's patch was tightened after that capture and not looked at again.
-5. Perf of the final state: pending, the coordinator measures at the merge.
-6. The close dog model, its fur and the lighter black coat are not behind `?nosmalllife` or a quality tier (`?nodoglife` only stops the behaviour). They should get a switch if the dogs turn out to cost anything.
+Not done: the browser queue ran out the time.
+1. **Not seen by eye:** the waiter, the whole-flock take-off, gull and blackbird up close. The batch for these got "nothing found" for `--find waiter:1`, `birds:1`, `birds:2`, `birds:3`, and the cause was not looked into. `waiter:1` needs a waiter mid-round, so empty is plausible; `birds:<kind>` failing while pigeons were on screen points at the finder (`lifeseq.mjs`), not at the birds. Try `--find waiter` and `--find birds` without a kind.
+2. **Perf of the final state not measured.** Market went up 1.25 to 1.73 ms in the merge; my share of it is unknown this round. Before the merge my delta at market was 0.30 ±0.61 ms (budget 0.7), and nothing costly has been added since except the close dog switch, which can only lower it. To measure: `perf1.sh` method above, fresh bake, on AC.
+3. **Final checks not rerun in full** on this state: see "Final checks" for what ran tonight.
+4. Sum with the other sessions, seen on the walks and not fixed, not mine: at 640x360 the stars read as large white dots like snow in a night sky (check at full resolution before calling it a bug); shop window pictures look blurred and blocky at 1 to 3 m on the station walk (noon, right side); orange sparks round a bookshop at 18.2 in old town, in strong sun (`ambient/fireflies` or `sparks`, not confirmed which).
 
 ## Seen and not mine
 The street tree trunk at 1–3 m is still low poly with a pale oval patch, and the grass tufts round a tree pit are flat blades on a flat green mat (`-3.9,0.3,34,1.3,-55,18`).

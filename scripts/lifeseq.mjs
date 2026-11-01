@@ -93,7 +93,7 @@ try {
               for (const m of p.members) {
                 if (!m.present) continue;
                 if (w === 'feed' && m.moment !== 6) continue;
-                if (w === 'waiter' && !(p.staff && p.stall === undefined && m.carry > 0)) continue;
+                if (w === 'waiter' && !(p.staff && !p.stall && (sub === undefined || p.servePhase > 0))) continue;
                 list.push({ x: m.x, z: m.z, y: m.y + 0.8, id: `p${p.id}`, info: `carry ${m.carry}`, ref: m, up: 0.8, yawBase: (m.yaw * 180) / Math.PI });
               }
             }
