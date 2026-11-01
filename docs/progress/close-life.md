@@ -3,6 +3,7 @@
 Stage 3 of `CLOSE-ROUND.md`. Port 5220, branch `claude/suspicious-goldstine-2c9651`. Time limit 14:00 on 2026-11-01. End the last message with CLOSE-DONE. Master switch `?nosmalllife`, one `?no<name>` per feature (`src/core/closeLife.ts`).
 
 ## Resume here
+Closed by the schedule on 2026-11-01 at 11:40: all committed, dev server stopped. Second of the three rounds finished, third not done: see "Left to do".
 Dev server: `npx vite --port 5220 --strictPort --host 127.0.0.1` from this worktree (`npm ci` done). `npm run bake` run after the moments commit: run it again before perf if a facade or land shader changes.
 Tools:
 - `node scripts/lifeseq.mjs --out <abs>.png --at "x,y,z,d,yaw,pitch" [--find birds:1|talk|dog|cat|litter|moment|feed|waiter] [--follow] [--yaw d] [--pre js] [--eval js] [--walk 1.3] --frames 12 --every 300`: sheets of frames in real time in the city, shared browser lock. Header lists the options. Expressions must return nothing or a primitive (`void …`).
@@ -48,7 +49,9 @@ Those figures predate the last two commits (fed flocks stay closer, a little mor
 - `shot --view overview --invariants --validate --speed 4 --wait 20000`: first run had two crowd walkers overlapping for 4.3 s at (-103.9, -4.9), a stroller and an elderly walker on a sidewalk, neither of them mine; second run `{}`, validate `[]`.
 - `ui-test --q noidle`: 73 passed, `kinds` failed, `kinds` alone passes (the known flake).
 - `?diorama`, `?quality=medium`, `?quality=low`: no failed module, no frame error, invariants `{}`, picture fine in the diorama and low sheets. No console errors; the shader-compiler warnings are the ones every session sees.
-- `hitch`: 0 new programs in the overview windows, one 116 ms frame at overview@12 on a shared machine. Allocation in those windows 14–25 MB/s: not compared with `?nosmalllife` unless noted below.
+- `hitch`: 0 new programs in the overview windows. On: one 116 ms frame at overview@12, allocation 20.7 and 14.4 MB/s (overview@12, @21.5). `?nosmalllife`: no such frame, allocation 20.5 and 15.8 MB/s, so the allocation at overview is not mine. One run each on a shared machine, so the single long frame says little either way.
+- `walkhitch`: mean 40.1 ms, 28 frames over 50 ms, 0 over 100 ms, no new programs. No baseline run to compare with. The near layers build in at most 0.3 ms (`streetBirds`, `nearLitter`, `nearCats`).
+- None of the `hitch` or `walkhitch` runs were behind `power-guard`, and the machine was unplugged at about that time: read their frame times as indicative only. Programs and allocation are not affected.
 
 ## Left to do
 Not done, by the schedule:
@@ -56,7 +59,8 @@ Not done, by the schedule:
 2. A waiter by eye: `--find waiter` found no one (the test in `lifeseq` for staff may be wrong). Waiters themselves were not changed.
 3. Litter in motion: stills are fine, 26 to 39 of about 60 pieces moving at `?wind=1.3`, but no paper was seen flying by eye. A flock's take-off in sequence was not seen either, only single pigeons flying in. Gull and blackbird close up not seen.
 4. Birds in the feeding test are round the bench at 1.5 to 3 m. The flock's patch was tightened after that capture and not looked at again.
-5. Perf of the final state, and `?nosmalllife` against on for allocation.
+5. Perf of the final state: pending, the coordinator measures at the merge.
+6. The close dog model, its fur and the lighter black coat are not behind `?nosmalllife` or a quality tier (`?nodoglife` only stops the behaviour). They should get a switch if the dogs turn out to cost anything.
 
 ## Seen and not mine
 The street tree trunk at 1–3 m is still low poly with a pale oval patch, and the grass tufts round a tree pit are flat blades on a flat green mat (`-3.9,0.3,34,1.3,-55,18`).
