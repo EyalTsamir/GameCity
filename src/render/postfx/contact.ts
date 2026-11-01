@@ -13,6 +13,7 @@ import * as THREE from 'three';
 import type { CityContext } from '../../core/context';
 import { LAMP_MAP } from '../../core/lampLight';
 import { nearLens } from '../../core/nearDetail';
+import { blankShadowMap } from '../../core/shadowBlank';
 
 export function contactUniforms() {
   return {
@@ -180,13 +181,14 @@ export function updateContact(u: ContactUniforms, tint: THREE.Vector3, ctx: City
     _T.setFromMatrixPosition(_sun.target.matrixWorld);
     _L.sub(_T).normalize().transformDirection(cam.matrixWorldInverse);
     u.uCKey.value.set(_L.x, _L.y, _L.z, key);
-    u.tCShadow.value = _sun.shadow.map?.depthTexture ?? null;
     u.uCV2S.value.multiplyMatrices(_sun.shadow.matrix, cam.matrixWorld);
     tint.set(0.3, 0.33, 0.42);
   } else {
     u.uCKey.value.w = 0;
     tint.set(0.42, 0.4, 0.42);
   }
+  // (bound every frame, day or not: the pass runs at night too, and a page opened at night has no shadow map yet)
+  u.tCShadow.value = _sun?.shadow.map?.depthTexture ?? blankShadowMap(ctx.renderer);
   u.uLampMap.value = ctx.uniforms.uLampMap.value;
   u.uLampXf.value.copy(ctx.uniforms.uLampXf.value);
 }
