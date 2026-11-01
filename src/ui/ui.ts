@@ -9,6 +9,8 @@ import type { CityContext, CityModule, PickHit, QualityLevel, QualityState } fro
 import { CITY_NAME } from '../core/constants';
 import { DIORAMA, TAGLINE } from '../core/world';
 import { ICONS, SKY_DIAL, type IconName } from './hud/icons';
+
+declare const __BUILD_ID__: string; // vite.config.ts
 import { Minimap, type LiveDot } from './hud/minimap';
 import { DistrictLabels, type ScreenRect } from './hud/labels';
 import { PhotoMode } from './hud/photo';
@@ -124,7 +126,7 @@ export default function create(ctx: CityContext): CityModule {
   const title = el(
     'header',
     'th-title th-card',
-    `<div class="th-brand"><div class="th-name">${CITY_NAME.slice(0, 4)}<b>${CITY_NAME.slice(4)}</b></div><div class="th-tag">${TAGLINE}</div></div>
+    `<div class="th-brand"><div class="th-name">${CITY_NAME.slice(0, 4)}<b>${CITY_NAME.slice(4)}</b></div><div class="th-tag">${TAGLINE}</div><div class="th-ver">${__BUILD_ID__}</div></div>
      <div class="th-sep"></div>
      <div class="th-clock">${SKY_DIAL}<div class="th-clock-text"><div class="th-time">--:--</div><div class="th-day">Day 1</div></div></div>`,
   );

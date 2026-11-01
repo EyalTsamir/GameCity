@@ -106,6 +106,14 @@
   font-weight: 600;
 }
 
+.th-ver {
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  color: var(--ink-soft);
+  opacity: 0.75;
+  white-space: nowrap;
+}
+
 .th-tag {
   font-size: 9.5px;
   letter-spacing: 0.24em;
