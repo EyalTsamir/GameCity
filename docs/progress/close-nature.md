@@ -5,7 +5,7 @@ nothing here is drawn from the air. Master switch `?noclosenature`, one feature 
 
 ## Resume here
 
-Read "Left" below, then capture with:
+Stopped at the coordinator's limit, committed, not merged. Read "Left" below, then capture with:
 `node C:/Projects/GameCity/scripts/closeset.mjs --url http://127.0.0.1:5218/ --out <abs path> --ids tree-park,tree-street,furn-planter,country-forest,ground-lawn,ground-garden,country-field --d 1,3 --hours 12`
 Read `report.json` errors before the images.
 
@@ -51,7 +51,9 @@ Planter soil was being read by `CM_SOLID` as timber: its colours now carry blue 
 | forest `-350,1.5,-150,6,40,4` | 30.18 / 30.51 | 39.16 / 40.33 | 1.80 M / 2.00 M (off is costlier, cause not looked into) |
 | park `-165,1.4,142,6,-30,6` | 45.14 / 41.83 / 41.68 | 44.87 / 45.01 / 45.99 | 5.7-6.1 M / 5.1-5.6 M (off is no cheaper) |
 
-All within noise and budget; those rows predate the third pass (pit tufts, lanes, roots), which adds near-only geometry and a little lane shader.
+All within noise and budget; those rows predate the third pass (pit tufts, lanes, roots), which adds near-only geometry and a little lane shader. **Perf pending for the third pass**: the market run at 931734a lost the charger and was discarded (the coordinator measures at the merge, after a rebake).
+
+Final checks at a212800 (2026-11-01): typecheck and build pass, invariants `{}`, validate `[]`, `hitch` 0 mid-run compiles, `walkhitch` 0 new programs and 0 freezes, `?diorama`, `?quality=medium`, `?quality=low` without errors, `ui-test` 73 passed, `kinds` failed in the full run. It passed alone at 5da51d8, before the third pass; the rerun alone at a212800 hit my 5-minute limit on battery with the machine in use, so **`kinds` is unconfirmed on the last commits**: rerun it at the merge.
 
 ## Left
 
