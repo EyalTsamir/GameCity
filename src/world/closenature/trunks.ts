@@ -325,7 +325,7 @@ function buildTrunk(s: Soup, t: TrunkSpec, gy: (x: number, z: number) => number,
   for (let k = 0; k < rows; k++) {
     // the last ring closes over the fork
     const closing = k === rows - 1;
-    const h = closing ? tall + t.rTop * 0.35 : hs[k];
+    const h = closing ? tall + t.rTop * (t.lite ? 1.3 : 0.35) : hs[k];
     const f = Math.max(0, Math.min(1, h / tall));
     const u1 = 1 - f;
     const qx = u1 * u1 * ax + 2 * u1 * f * cx + f * f * bx,
@@ -336,7 +336,7 @@ function buildTrunk(s: Soup, t: TrunkSpec, gy: (x: number, z: number) => number,
     const rootK = hp / sc;
     let rb = t.r0 + (t.rTop - t.r0) * f;
     rb *= t.lite ? 1 + 0.72 * Math.pow(1 - Math.min(1, hp / tall), 6) : 1 + (t.flare - 1) * flareK;
-    if (!t.lite) rb *= 1 - 0.14 * Math.max(0, f - 0.8) / 0.2;
+    rb *= 1 - (t.lite ? 0.2 : 0.14) * Math.max(0, f - 0.8) / 0.2;
     if (closing) rb *= 0.22;
     const lobeK = 0.55 + 0.45 * Math.min(1, Math.exp(-hp * 0.5) + 0.25);
     for (let i = 0; i <= cols; i++) {
@@ -398,7 +398,7 @@ function buildTrunk(s: Soup, t: TrunkSpec, gy: (x: number, z: number) => number,
 /** the root goes on past the flute, half in the ground, flat, thinner, wandering as it goes */
 function surfaceRoot(s: Soup, t: TrunkSpec, gy: (x: number, z: number) => number, a: number, k: number, rnd: () => number): void {
   const SEG = 7,
-    SIDES = 6;
+    SIDES = 8;
   const rows = SEG + 1;
   if (!s.room(rows * (SIDES + 1))) return;
   const v0 = s.nv;
@@ -411,9 +411,9 @@ function surfaceRoot(s: Soup, t: TrunkSpec, gy: (x: number, z: number) => number
   let px = t.base[0] + Math.cos(a) * r0 * (0.5 + k * 0.5),
     pz = t.base[2] + Math.sin(a) * r0 * (0.5 + k * 0.5);
   let dir = a;
-  const w1 = 1.5 + rnd() * 2,
+  const w1 = 0.6 + rnd() * 0.8,
     w2 = rnd() * 6.28,
-    wa = 0.35 + rnd() * 0.5;
+    wa = 0.25 + rnd() * 0.35;
   const rr0 = r0 * (0.16 + 0.1 * k);
   let q = v0;
   const uOff = rnd() * 4;
@@ -424,7 +424,7 @@ function surfaceRoot(s: Soup, t: TrunkSpec, gy: (x: number, z: number) => number
       sa = Math.cos(dir);
     const g = gy(px, pz);
     // lies half in the ground, then dives
-    const cy = g + rr * 0.05 - f * f * f * rr0 * 1.6;
+    const cy = g - rr * 0.2 - f * f * f * rr0 * 1.6;
     for (let i = 0; i <= SIDES; i++) {
       const th = ((i % SIDES) / SIDES) * 6.283185;
       const ox = Math.cos(th) * rr * 1.25,

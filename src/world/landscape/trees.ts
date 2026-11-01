@@ -670,6 +670,7 @@ function kindGeometry(kind: number): THREE.BufferGeometry {
   const ao: number[] = [];
   const uvs: number[] = [];
   const idx: number[] = [];
+  let woodAo = 0.6;
   const addGeo = (g: THREE.BufferGeometry, isCrown: number, centre: [number, number, number] | null, crownC: [number, number, number]) => {
     const p = g.getAttribute('position') as THREE.BufferAttribute;
     const n = g.getAttribute('normal') as THREE.BufferAttribute;
@@ -697,7 +698,7 @@ function kindGeometry(kind: number): THREE.BufferGeometry {
         ao.push(Math.min(1, Math.max(0, (gl - 0.08) / 0.32)));
       } else {
         nrm.push(n.getX(i), n.getY(i), n.getZ(i));
-        ao.push(isCrown ? Math.min(1, Math.max(0.2, (y - 0.1) / 0.8)) : 0.6);
+        ao.push(isCrown ? Math.min(1, Math.max(0.2, (y - 0.1) / 0.8)) : woodAo);
       }
       crown.push(isCrown);
       uvs.push(SOLID_UV, SOLID_UV);
@@ -720,6 +721,7 @@ function kindGeometry(kind: number): THREE.BufferGeometry {
     tr.computeVertexNormals();
   }
   addGeo(tr, 0, null, [0, 0, 0]);
+  woodAo = 0; // (limbs: tells the shader not to run the bole's furrows along them)
   // branches: thin prisms from the trunk top toward the clumps; with ?treelimbs on, limbs leave the bole at different
   // heights, bow on the way out, thin to nothing inside their leaf mass and fork once (no starfish on a post)
   const LIMBS = natureOn('treelimbs');
@@ -988,7 +990,7 @@ if (lt.a < 0.5) discard;
 vec4 nT = texture2D(tLN, vTW.xz * 0.37 + vTW.y * 0.21);
 float leafAO = mix(${FILL ? '0.6' : '0.42'}, 1.0, vAO) * (0.78 + 0.44 * nT.r) * mix(1.0, lt.r * 1.3, vCrown);
 // bark: furrows along the stem, darker at the foot
-if (vCrown < 0.5) gTreeBark = (0.62 + 0.76 * texture2D(tLN, vec2((vTW.x + vTW.z) * 1.7, vTW.y * 0.19)).g) * mix(0.72, 1.0, smoothstep(0.0, 0.35, vLocalY0));
+if (vCrown < 0.5) gTreeBark = (vAO < 0.3 ? 0.84 + 1.0 * texture2D(tLN, vTW.xz * 1.9 + vTW.y * vec2(1.4, -1.1)).g : 0.62 + 0.76 * texture2D(tLN, vec2((vTW.x + vTW.z) * 1.7, vTW.y * 0.19)).g) * mix(0.72, 1.0, smoothstep(0.0, 0.35, vLocalY0));
 vec4 diffuseColor = vec4(treeAlbedo(vKind, vTint, vCrown, vLocalY) * mix(1.0, leafAO, vCrown), opacity);`,
       )
       .replace(

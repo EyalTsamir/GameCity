@@ -57,10 +57,10 @@ void main() {
     // grains of soil; here and there a clod or a pale stone standing out of them
     vec4 s0 = CMT(tStones, p * 2.3 + c.gb * 0.03, 2.3);
     vec4 s1 = CMT(tStones, p.yx * 6.1 + 0.37, 6.1);
-    vec3 crumb = vec3(0.76 + 0.46 * s1.g) * vec3(1.02, 0.98, 0.9) * (0.88 + 0.24 * g.b);
-    float clod = step(0.8, s0.g) * smoothstep(0.02, 0.14, s0.a);
-    crumb *= mix(1.0, 0.56 + 0.5 * fract(s0.g * 9.7), clod);
-    crumb = mix(crumb, vec3(1.5, 1.46, 1.36), step(0.965, fract(s0.g * 11.3)) * smoothstep(0.16, 0.3, s0.a));
+    vec3 crumb = vec3(1.02, 0.98, 0.9) * (0.78 + 0.44 * g.b);
+    crumb *= 1.0 + step(0.62, s1.g) * smoothstep(0.1, 0.55, s1.b) * (fract(s1.g * 17.3) - 0.45) * 0.62;
+    crumb *= mix(1.0, 0.6 + 0.5 * fract(s0.g * 9.7), step(0.87, s0.g) * smoothstep(0.12, 0.6, s0.b));
+    crumb = mix(crumb, vec3(1.42, 1.38, 1.3), step(0.975, fract(s0.g * 11.3)) * smoothstep(0.25, 0.6, s0.b));
     // dead grass lying on it: fibres in two directions, each window its own way
     vec2 d1 = vec2(p.x * 0.8 + p.y * 0.6, -p.x * 0.6 + p.y * 0.8);
     vec2 d2 = vec2(p.x * 0.37 - p.y * 0.93, p.x * 0.93 + p.y * 0.37);
