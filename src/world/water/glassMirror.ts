@@ -67,7 +67,8 @@ interface Group extends GlassPlane {
 export function createGlassPicker(ctx: CityContext) {
   const groups: Group[] = [];
   for (const lot of ctx.plan.lots) {
-    if (!lot.shopfront) continue;
+    // (the fronts of towers and offices: a lobby behind real glass, buildings/lobby.ts)
+    if (!lot.shopfront && lot.kind !== 'tower' && lot.kind !== 'office') continue;
     const f = lot.footprint;
     const n = DIR_VEC[lot.front];
     const alongZ = n.x !== 0;

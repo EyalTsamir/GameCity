@@ -14,6 +14,7 @@ import { Rng } from '../../core/rng';
 import { LIGHT_MODE } from './materials';
 import { letterSign, boardSign } from './signs';
 import { GREEN } from './green';
+import { GLASS_MIRROR_GLSL, glassMirror } from '../water/glassMirror';
 
 interface Palette {
   floorA: string;
@@ -702,7 +703,7 @@ export function createGlassMaterial(u: { uSkyZen: { value: THREE.Color }; uSkyHo
     name: 'buildings-glass',
     transparent: true,
     depthWrite: false,
-    uniforms: { uSkyZen: u.uSkyZen, uSkyHor: u.uSkyHor, uCityCol: u.uCityCol, uGround: u.uGround },
+    uniforms: { uSkyZen: u.uSkyZen, uSkyHor: u.uSkyHor, uCityCol: u.uCityCol, uGround: u.uGround, ...glassMirror },
     vertexShader: /* glsl */ `
 varying vec3 vW;
 varying vec3 vN;
@@ -719,6 +720,7 @@ uniform vec3 uCityCol;
 uniform vec3 uGround;
 varying vec3 vW;
 varying vec3 vN;
+${GLASS_MIRROR_GLSL}
 void main() {
   vec3 V = normalize(cameraPosition - vW);
   vec3 N = normalize(vN);
@@ -728,7 +730,13 @@ void main() {
   // sky above a skyline of the city opposite, pavement below
   float h = R.y;
   vec3 env = mix(mix(uGround * 1.6, uCityCol * 1.8, smoothstep(-0.12, 0.02, h)), mix(uSkyHor, uSkyZen, smoothstep(0.2, 0.8, h)), smoothstep(0.1, 0.24, h));
-  gl_FragColor = vec4(min(env, vec3(1.2)), clamp(F * 0.9 + 0.015, 0.0, 0.34));
+  float al = clamp(F * 0.9 + 0.015, 0.0, 0.34);
+  // the real street, while the mirror is on this plane: stronger where what it shows is bright, so a lit lobby still reads through a dark street at night
+  vec4 gm;
+  float gk = bhGlassMirror(vW, N, vec2(0.0), 0.0, mix(uSkyHor, uSkyZen, smoothstep(0.0, 0.6, R.y)), gm);
+  env = mix(env, gm.rgb, gk);
+  al = mix(al, max(al, min(0.3, 0.05 + 0.35 * dot(gm.rgb, vec3(0.2126, 0.7152, 0.0722)))), gk);
+  gl_FragColor = vec4(min(env, vec3(1.2)), al);
 }`,
   });
   return m;
