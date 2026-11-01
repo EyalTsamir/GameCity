@@ -6,7 +6,7 @@ import type { HandSink } from './sink';
 /** a boot scraper by an old door: a blade between two irons, on a small tray let into the paving */
 export function bootScraper(s: HandSink, u: number, y: number, o: number): void {
   const hw = 0.12;
-  s.ink(0x1b1c1d).metal(0.55);
+  s.ink(0x34302b).rough(0.62);
   s.box(u - hw - 0.012, u + hw + 0.012, y, y + 0.007, o - 0.055, o + 0.055, 0.002);
   s.floor(u - hw - 0.012, u + hw + 0.012, o - 0.055, o + 0.055, y + 0.007);
   s.box(u - hw, u + hw, y + 0.088, y + 0.098, o - 0.004, o + 0.004, 0.001);

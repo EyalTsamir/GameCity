@@ -566,6 +566,8 @@ export function eaveGutter(g: Gen, r: LRect, s: Side, uA: number, uB: number, oe
   sideBox(t, sg, uA, uB, o1 - 0.012, o1 + 0.006, y - 0.02, y + 0.008, true, true);
   setCol(t, shade(c, 0.3));
   sideBox(t, sg, uA + 0.01, uB - 0.01, o0 + 0.012, o1 - 0.014, y - 0.004, y + 0.001, false, true);
+  const gf = anchors.handFrame(sg, uA);
+  if (gf) anchors.handGutters.push({ ...gf, L: uB - uA, o0, o1, y, color: c.getHex() });
   if (!pipes || g.roofPipes === false) return;
   // downpipes: the pipe stands 6 cm off the wall; below 2.4 m the footprint must have room for it
   const room = (): number => {

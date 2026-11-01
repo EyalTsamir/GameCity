@@ -109,13 +109,23 @@ function panelMoulds(s: HandSink, d: HandDoor, oL: number): void {
     s.quad([u0 + 0.006, y0 + 0.006, a], [u1 - 0.006, y0 + 0.006, a], [u1 - i, y0 + i, b], [u0 + i, y0 + i, b]);
     s.quad([u0 + 0.006, y0 + 0.006, a], [u0 + i, y0 + i, b], [u0 + i, y1 - i, b], [u0 + 0.006, y1 - 0.006, a]);
     s.quad([u1 - i, y0 + i, b], [u1 - 0.006, y0 + 0.006, a], [u1 - 0.006, y1 - 0.006, a], [u1 - i, y1 - i, b]);
-    // the small sloped lip where the frame leaves the stiles, instead of a sharp ledge
-    const q = oL + 0.0009;
-    s.ink(painted, 0.92);
-    s.quad([u0 + 0.006, y1 - 0.006, a], [u1 - 0.006, y1 - 0.006, a], [u1 + 0.008, y1 + 0.008, q], [u0 - 0.008, y1 + 0.008, q]);
-    s.quad([u0 - 0.008, y0 - 0.008, q], [u1 + 0.008, y0 - 0.008, q], [u1 - 0.006, y0 + 0.006, a], [u0 + 0.006, y0 + 0.006, a]);
-    s.quad([u0 - 0.008, y0 - 0.008, q], [u0 + 0.006, y0 + 0.006, a], [u0 + 0.006, y1 - 0.006, a], [u0 - 0.008, y1 + 0.008, q]);
-    s.quad([u1 - 0.006, y0 + 0.006, a], [u1 + 0.008, y0 - 0.008, q], [u1 + 0.008, y1 + 0.008, q], [u1 - 0.006, y1 - 0.006, a]);
+    // the frame leaves the stiles in a small sloped lip, instead of a sharp ledge. The old box of the far door is 12 mm proud with its edge
+    // at u0: the lip has to clear that edge, or a strip of it shows through as a dashed line from a few metres
+    const q = oL + 0.0009,
+      t = oL + 0.0131,
+      o = 0.008,
+      m = -0.001,
+      n = 0.006;
+    const ring = (ou: number, oz: number, iu: number, iz: number, shade: number): void => {
+      s.ink(painted, shade);
+      s.quad([u0 - iu, y1 + iu, iz], [u1 + iu, y1 + iu, iz], [u1 + ou, y1 + ou, oz], [u0 - ou, y1 + ou, oz]);
+      s.quad([u0 - ou, y0 - ou, oz], [u1 + ou, y0 - ou, oz], [u1 + iu, y0 - iu, iz], [u0 - iu, y0 - iu, iz]);
+      s.quad([u0 - ou, y0 - ou, oz], [u0 - iu, y0 - iu, iz], [u0 - iu, y1 + iu, iz], [u0 - ou, y1 + ou, oz]);
+      s.quad([u1 + iu, y0 - iu, iz], [u1 + ou, y0 - ou, oz], [u1 + ou, y1 + ou, oz], [u1 + iu, y1 + iu, iz]);
+    };
+    s.rough(0.72);
+    ring(o, q, -m, t, 0.88);
+    ring(-m, t, -n, a, 0.95);
   }
 }
 
@@ -209,7 +219,7 @@ export function solidDoor(s: HandSink, d: HandDoor, p: DoorPlace): void {
 
   // a weather bar along the foot, its drip hiding the gap on the threshold
   if (!d.kick) {
-    s.ink(d.doorCol, 0.97).rough(0.5).box(0.035, w - 0.035, 0.148, 0.2, oL, oL + 0.024, 0.008);
+    s.ink(d.doorCol, 0.92).rough(0.74).box(0.035, w - 0.035, 0.148, 0.2, oL, oL + 0.024, 0.008);
   }
   s.ink(0x0c0c0b).rough(0.9).plate(0.035, w - 0.035, 0.14, 0.149, oL + 0.001);
 

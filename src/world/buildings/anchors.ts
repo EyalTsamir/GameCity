@@ -214,6 +214,15 @@ export interface HandWall extends HandFrame {
 }
 
 /** A rainwater pipe on a wall: u = 0 at the pipe, po out of the wall. */
+/** an eave gutter, from its start along the wall: L long, hung o0..o1 off the wall, its top at y */
+export interface HandGutter extends HandFrame {
+  L: number;
+  o0: number;
+  o1: number;
+  y: number;
+  color: number;
+}
+
 export interface HandPipe extends HandFrame {
   r: number;
   po: number;
@@ -264,6 +273,7 @@ export interface BuildingsService {
   handDoors: HandDoor[];
   handWalls: HandWall[];
   handPipes: HandPipe[];
+  handGutters: HandGutter[];
   handSpots: HandSpot[];
   handSteps: HandStep[];
   handTops: Map<number, number>;
@@ -306,6 +316,7 @@ class AnchorSink {
   handDoors: HandDoor[] = [];
   handWalls: HandWall[] = [];
   handPipes: HandPipe[] = [];
+  handGutters: HandGutter[] = [];
   handSpots: HandSpot[] = [];
   handSteps: HandStep[] = [];
   /** the top of a lot's walls, without the gables: where a gutter can be */
@@ -325,6 +336,7 @@ class AnchorSink {
     this.handDoors = [];
     this.handWalls = [];
     this.handPipes = [];
+    this.handGutters = [];
     this.handSpots = [];
     this.handSteps = [];
     this.handTops = new Map();

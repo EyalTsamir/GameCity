@@ -23,6 +23,11 @@ export function handDoorsLive(): boolean {
   return handOn('handdoors') && !(params && params.has('nonear')) && RANK[level] >= RANK.medium;
 }
 
+/** do the roofs' tiles show what they are made of up close? (shader term, ?nohandroofs) */
+export function handRoofsLive(): boolean {
+  return handOn('handroofs') && RANK[level] >= RANK.medium;
+}
+
 /** is family `name` on (`?no<name>` / `?nohand` off; below quality tier `min` off)? */
 export function closeHand(ctx: Pick<CityContext, 'quality'>, name?: string, min: QualityLevel = 'medium'): boolean {
   return handOn(name) && RANK[ctx.quality.level] >= RANK[min];

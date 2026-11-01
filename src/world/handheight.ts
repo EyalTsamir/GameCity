@@ -26,20 +26,20 @@ import * as K from './handheight/life';
 import { addBallast } from './handheight/ballast';
 
 type Draw = (s: HandSink) => void;
+// Big and mid share one mesh per cell (fewer draws: what cost most at the market): a mid thing just comes into view a little earlier
 const BIG = 0,
-  MID = 1,
-  FINE = 2,
-  STAIN = 3,
-  COAT = 4;
+  MID = 0,
+  FINE = 1,
+  STAIN = 2,
+  COAT = 3;
 
 const BIG_R = 42;
 const LAYERS = [
   { name: 'handBig', radius: BIG_R, cell: 28, top: 9 },
-  { name: 'handMid', radius: nearRadiusFor(0.022), cell: 16, top: 5 },
   { name: 'handFine', radius: nearRadiusFor(0.008), cell: 8, top: 3.5 },
-  { name: 'handStain', radius: nearRadiusFor(0.03), cell: 16, top: 5 },
+  { name: 'handStain', radius: nearRadiusFor(0.03), cell: 40, top: 5 },
   // a door's coat of paint: closemat's wear on the leaf behind it is pulled forward by a polygon offset that grows with distance, so a coat a millimetre proud loses to it from 2 m on. This layer pulls harder.
-  { name: 'handCoat', radius: nearRadiusFor(0.022), cell: 16, top: 5 },
+  { name: 'handCoat', radius: BIG_R, cell: 28, top: 5 },
 ];
 
 /** one surface program: the colour's alpha carries the surface (sink.ts), a shared grain tile breaks up the factory finish */
@@ -235,10 +235,10 @@ export default function create(ctx: CityContext): CityModule {
           const gap = 0.2;
           const floor = (u: number): number => (st ? st.y : pavedOut(d.x + d.tx * u, d.z + d.tz * u, d.nx, d.nz));
           if (old && r < 24 && !st) {
-            const fy = floor(-gap);
+            const fy = floor(-gap - 0.14);
             if (!Number.isNaN(fy)) {
-              put(MID, cx, cz, (s) => K.bootScraper(on(s), -gap, fy, 0.09));
-              mark('scraper', d, -gap, fy + 0.15);
+              put(MID, cx, cz, (s) => K.bootScraper(on(s), -gap - 0.14, fy, 0.09));
+              mark('scraper', d, -gap - 0.14, fy + 0.15);
             }
           } else if (r >= 24 && r < 40 && lot.kind !== 'kiosk') {
             const u = st && !deck ? -0.12 : -gap,
@@ -341,6 +341,27 @@ export default function create(ctx: CityContext): CityModule {
           s.ink(0xbeb9af).streak(-0.08, 0.08, Math.max(0.5, p.y1 - 1.6), p.y1, 0.0015);
         });
       }
+    }
+  }
+
+  // ── what holds the gutters up
+  if (closeHand(ctx, 'handpipes')) {
+    for (const g of buildings.handGutters) {
+      if (g.y > 12) continue;
+      const on = (s: HandSink): HandSink => s.frame(g.x, 0, g.z, g.tx, g.tz, g.nx, g.nz);
+      const seed = hash(Math.round(g.x * 7), Math.round(g.z * 7));
+      put(BIG, g.x + (g.tx * g.L) / 2, g.z + (g.tz * g.L) / 2, (s) => W.gutterFixings(on(s), g.L, g.o0, g.o1, g.y, g.color, seed));
+      if (closeHand(ctx, 'handstains')) {
+        put(STAIN, g.x + (g.tx * g.L) / 2, g.z + (g.tz * g.L) / 2, (s) => {
+          on(s);
+          const joints = Math.floor(g.L / 3);
+          for (let i = 1; i <= joints; i++) {
+            const u = (g.L * i) / (joints + 1) + ((seed + i * 7) % 5) * 0.03;
+            s.ink(0xb9b4a8).streak(u - 0.03, u + 0.03, g.y - 0.112, g.y - 0.012, g.o1 + 0.0105);
+          }
+        });
+      }
+      mark('gutter', g, g.L / 2, g.y);
     }
   }
 
@@ -938,10 +959,11 @@ export default function create(ctx: CityContext): CityModule {
     return sink.finish();
   };
   const grain = makeCloseTiles().grain;
-  const mid = handMaterial(grain);
+  const fine = handMaterial(grain);
   const big = handMaterial(grain);
   nearDither(big, BIG_R);
   const coat = handMaterial(grain);
+  nearDither(coat, BIG_R);
   coat.polygonOffset = true;
   coat.polygonOffsetFactor = -4;
   coat.polygonOffsetUnits = -8;
@@ -950,7 +972,7 @@ export default function create(ctx: CityContext): CityModule {
     if (grids[t].size === 0) continue;
     near.addMeshes({
       ...L,
-      material: t === STAIN ? stainMaterial() : t === BIG ? big : t === COAT ? coat : mid,
+      material: t === STAIN ? stainMaterial() : t === BIG ? big : t === COAT ? coat : fine,
       build: build(t),
       standIn: handStandIn(),
       receiveShadow: t !== STAIN,
