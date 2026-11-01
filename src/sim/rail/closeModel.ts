@@ -176,8 +176,8 @@ export function closeBogie(g: Geo, z: number, r: number, wheelbase: number, heav
     yHi = r + 0.17,
     yLo = r - 0.03,
     fh = heavy ? 0.3 : 0.24;
-  const paint = '#33373a',
-    edge = '#3e4347';
+  const paint = '#23262a',
+    edge = '#2b2e32';
   for (const s of [-1, 1]) {
     const x = s * fx;
     const web = 0.09,
@@ -199,6 +199,16 @@ export function closeBogie(g: Geo, z: number, r: number, wheelbase: number, heav
     // stiffeners welded across the web, the end plate of each arm
     g.color(edge);
     for (const dz of [-0.38, -0.13, 0.13, 0.38]) g.box(x + s * 0.03, yLo, z + dz, 0.07, fh - 0.04, 0.012, 0);
+    // a lightening hole in the web either side of the middle: a ring welded round a dark oval
+    for (const dz of [-0.255, 0.255]) {
+      const xw = x + s * (web / 2 + 0.002);
+      g.push().at(xw, yLo, z + dz).rotZ(s > 0 ? -Math.PI / 2 : Math.PI / 2);
+      steel(g, FIN.paint, edge);
+      g.cyl(0, 0, 0, 0.062, 0.058, 0.006, 14, 1);
+      steel(g, FIN.grease, '#0a0a0b');
+      g.cyl(0, 0.006, 0, 0.046, 0.046, 0.0005, 14, 1);
+      g.pop();
+    }
     for (const e of [-1, 1]) {
       g.box(x, yHi, z + e * (len / 2), fw, fh, 0.014, 0);
       g.box(x + s * 0.03, yHi, z + e * (len / 2 - 0.25), 0.07, fh - 0.04, 0.012, 0);
@@ -273,12 +283,12 @@ export function closeBogie(g: Geo, z: number, r: number, wheelbase: number, heav
       // air spring: a rubber bellows with two bulges between a steel piston and a top plate
       const y0 = yLo + fh / 2,
         H = bodyY - y0 - 0.02,
-        n = 6;
+        n = 10;
       steel(g, FIN.cast, '#2f3234');
       g.cyl(s * 1.0, y0, z, 0.17, 0.17, 0.03, 16, 1);
       steel(g, FIN.rubber, '#17181a');
       for (let k = 0; k < n; k++) {
-        const b = (t: number) => 0.21 + 0.045 * Math.sin(t * Math.PI * 2 - 1.2);
+        const b = (t: number) => 0.215 + 0.022 * Math.abs(Math.sin(t * Math.PI * 2));
         g.cyl(s * 1.0, y0 + 0.03 + (k / n) * (H - 0.03), z, b(k / n), b((k + 1) / n), (H - 0.03) / n, 16, 0);
       }
       steel(g, FIN.cast, '#2b2d30');
@@ -458,6 +468,14 @@ export function closeDoors(g: Geo, glass: Geo, z: number, color: string): void {
 
 // ───────────────────────────────────────────── lamps
 
+/** the moulded plate a pair of lamps sits on: edges that catch the light, four screws */
+export function closeLampPlate(g: Geo, x: number, y: number, z: number, w: number, h: number): void {
+  g.kind(T.PLAIN).extra(0, 0, 0, 0).color('#1b1d1f');
+  addBG(g, softBox(w, h, 0.034, 2, 1, 1, 0.013).translate(x, y, z));
+  g.color('#4a4d50');
+  for (const ex of [-1, 1]) for (const ey of [-1, 1]) g.rod([x + ex * (w / 2 - 0.022), y + ey * (h / 2 - 0.022), z + 0.015], [x + ex * (w / 2 - 0.022), y + ey * (h / 2 - 0.022), z + 0.021], 0.0065, 6, 1);
+}
+
 /** a lamp with a domed clear cover in a chrome bezel, facing +Z. T.HEAD / T.TAIL with aExtra = (centre, radius): closeGlsl.ts draws
  *  what is behind the cover by a ray from the eye, so the bowl and the bulb move against the cover as you walk past. */
 export function closeLamp(g: Geo, tag: number, x: number, y: number, z: number, r: number): void {
@@ -559,7 +577,7 @@ function seatRow(g: Geo, zn: number, f: number): void {
     addBG(g, softBox(0.07, 0.34, 0.11, 1, 1, 1, 0.012).translate(s * 1.2, FL + 0.17, zc));
     // the aisle-end arm of the seat
     inner(g, MODE.plastic, '#6a6d70');
-    addBG(g, softBox(0.03, 0.2, 0.34, 1, 1, 2, 0.012).translate(s * 0.4, FL + 0.56, zn + f * 0.3));
+    addBG(g, softBox(0.024, 0.12, 0.3, 1, 1, 2, 0.01).translate(s * 0.4, FL + 0.6, zn + f * 0.3));
   }
 }
 
@@ -721,9 +739,9 @@ export function saloonPart(g: Geo, rrect: RRect, z0: number, z1: number, parts: 
     for (const s of [-1, 1]) {
       inner(g, MODE.plastic, '#55585b');
       addBG(g, softBox(0.2, 0.024, 0.42, 1, 1, 2, 0.01).translate(s * 1.25, FL + 0.74, zc));
-      g.color('#3a3c3e');
-      g.box(s * 1.33, FL + 0.66, zc, 0.04, 0.14, 0.09, 0);
-      addBG(g, softBox(0.06, 0.2, 0.16, 1, 1, 1, 0.01).translate(s * 1.325, FL + 0.48, zc));
+      g.color('#6a6d70');
+      g.box(s * 1.345, FL + 0.67, zc, 0.03, 0.12, 0.06, 0);
+      addBG(g, softBox(0.05, 0.16, 0.14, 1, 1, 1, 0.01).translate(s * 1.335, FL + 0.5, zc));
       // the coat hook on the pillar
       inner(g, MODE.metal, '#a9adb0', 1);
       g.rod([s * WX, 2.96, zc - 0.02], [s * (WX - 0.05), 2.98, zc - 0.02], 0.006, 4);
@@ -768,7 +786,7 @@ export function emuCab(g: Geo, spec: CabSpec): void {
   const zf = (y: number) => zFront(y) - 0.015;
   const hxAt = (y: number) => hx0 + ((hx1 - hx0) * (y - yScreen)) / (yTop - yScreen);
   // floor, raised on a platform over the bogie
-  inner(g, MODE.floor, '#666666', 0, 1);
+  inner(g, MODE.floor, '#3a3a3a', 0, 1);
   oq(g, [-X, yf, cz], [X, yf, cz], [X, yf, zNose], [-X, yf, zNose], [0, 1, 0]);
   // the ceiling, with its lamp and a vent
   inner(g, MODE.ceiling, '#ffffff', 2, 1);
@@ -805,24 +823,34 @@ export function emuCab(g: Geo, spec: CabSpec): void {
     }
   }
   // bulkhead with its door and a small pane into the saloon
-  inner(g, MODE.wall, '#c2c0b6', 0, 1);
+  inner(g, MODE.plastic, '#3b3f44', 0, 1);
   oq(g, [-X, yf, cz], [X, yf, cz], [X, yC, cz], [-X, yC, cz], [0, 0, 1]);
-  inner(g, MODE.plastic, '#83847f', 0, 1);
+  inner(g, MODE.plastic, '#2b2e32', 0, 1);
   oq(g, [-0.42, yf, cz + 0.008], [0.42, yf, cz + 0.008], [0.42, 3.1, cz + 0.008], [-0.42, 3.1, cz + 0.008], [0, 0, 1]);
-  inner(g, MODE.fixed, '#0c0e10', 0, 1);
+  inner(g, MODE.fixed, '#141a20', 1, 1);
   oq(g, [-0.2, 2.5, cz + 0.012], [0.2, 2.5, cz + 0.012], [0.2, 2.95, cz + 0.012], [-0.2, 2.95, cz + 0.012], [0, 0, 1]);
+  inner(g, MODE.metal, '#a9adb0', 1, 1);
+  g.rod([0.34, 2.05, cz + 0.05], [0.34, 2.3, cz + 0.05], 0.012, 6, 1);
+  // the breaker cabinet on the bulkhead: a grey door with rows of switches and a warning label
+  inner(g, MODE.plastic, '#55595d', 0, 1);
+  g.box(-0.92, 2.55, cz + 0.03, 0.72, 1.0, 0.06, 0);
+  for (let r = 0; r < 5; r++)
+    for (let k = 0; k < 8; k++) {
+      inner(g, MODE.fixed, '#141517', 0, 1);
+      g.box(-1.17 + k * 0.07, 2.84 - r * 0.13, cz + 0.065, 0.032, 0.05, 0.012, 0);
+      if ((r * 3 + k * 5) % 7 === 0) {
+        inner(g, MODE.pilot, '#2fa84f', 0.75, 1);
+        g.box(-1.17 + k * 0.07, 2.875 - r * 0.13, cz + 0.062, 0.009, 0.009, 0.006, 0);
+      }
+    }
+  inner(g, MODE.fixed, '#d9a81c', 0, 1);
+  g.box(-0.92, 2.22, cz + 0.062, 0.2, 0.1, 0.004, 0);
   // a fire extinguisher, its bracket
   inner(g, MODE.plastic, '#b0241c', 0, 1);
   g.cyl(0.9, yf + 0.06, cz + 0.1, 0.06, 0.06, 0.42, 10, 1);
   inner(g, MODE.fixed, '#17181a', 0, 1);
   g.cyl(0.9, yf + 0.48, cz + 0.1, 0.02, 0.02, 0.05, 6, 1);
   g.box(0.82, yf + 0.5, cz + 0.1, 0.11, 0.02, 0.02, 0);
-  // a coat on a hook on the bulkhead
-  inner(g, MODE.moquette, '#ffffff', 0.9, 1);
-  addBG(g, softBox(0.36, 0.72, 0.09, 2, 4, 1, 0.04, (p, _u, v) => {
-    p.x *= 0.75 + 0.25 * (1 - v) * 0.5;
-    p.z += 0.02 * Math.sin(p.x * 18 + p.y * 7);
-  }).translate(-0.9, 2.38, cz + 0.065));
   // desk: a sloped top towards the screen over a front panel, returns at the walls
   const yd0 = yf + 0.74,
     zd0 = zf(yScreen) - 0.5;
@@ -851,6 +879,18 @@ export function emuCab(g: Geo, spec: CabSpec): void {
     const s0 = box(0, 0.26, 0.016);
     oq(g, s0[0], s0[1], s0[2], s0[3], dn);
   }
+  // on the desk's far edge, seen from outside through the screen: the backs of two monitors on their arms, the vent over the demister
+  inner(g, MODE.rubber, '#15161a', 0, 1);
+  for (const cx of [-0.62, 0.62]) {
+    const b = onDesk(cx, 0.8, 0.02);
+    addBG(g, softBox(0.36, 0.26, 0.05, 2, 2, 1, 0.012, (p, _u, v) => {
+      p.z += 0.04 * v;
+    }).translate(cx, b[1] + 0.2, b[2] - 0.06));
+    g.rod([cx, b[1], b[2]], [cx, b[1] + 0.12, b[2] - 0.04], 0.018, 6);
+  }
+  inner(g, MODE.plastic, '#1c1e21', 0, 1);
+  const vent = onDesk(0, 0.97, 0.01);
+  addBG(g, softBox(2 * hx0 - 0.1, 0.03, 0.09, 4, 1, 1, 0.01).translate(0, vent[1] + 0.012, vent[2] - 0.02));
   // the speed dial between them: a ring of LEDs, a real needle
   inner(g, MODE.pilot, '#d9a81c', 0.5, 1);
   for (let k = 0; k < 18; k++) {
@@ -959,10 +999,11 @@ export interface CloseHooks {
   bogie: typeof closeBogie;
   doors: typeof closeDoors;
   lamp: typeof closeLamp;
+  plate: typeof closeLampPlate;
   saloon: typeof emuInterior;
   cab: typeof emuCab;
 }
 
 export function makeHooks(): CloseHooks {
-  return { glass: new Geo(), inner: new Geo(), bogie: closeBogie, doors: closeDoors, lamp: closeLamp, saloon: emuInterior, cab: emuCab };
+  return { glass: new Geo(), inner: new Geo(), bogie: closeBogie, doors: closeDoors, lamp: closeLamp, plate: closeLampPlate, saloon: emuInterior, cab: emuCab };
 }

@@ -238,6 +238,11 @@ export class TrainRenderer {
           this.v.set(L[0], L[1], L[2] + 0.06).applyMatrix4(this.m4);
           if (this.v.x < clip0 || this.v.x > clip1) continue;
           this.slot(gi, c.role === 1 ? 1 : 2);
+          // beside the camera the lens glows by itself: a metre-wide halo would be a ball of haze
+          if (this.close.size) {
+            const fd2 = this.v.distanceToSquared(cp);
+            this.glows.intensity(this.glowBase + gi, (c.role === 1 ? 1.1 : 0.9) * Math.min(1, Math.max(0, (fd2 - 25) / (225 - 25))));
+          }
           this.glows.move(this.glowBase + gi, this.v.x, this.v.y, this.v.z);
           gi++;
         }

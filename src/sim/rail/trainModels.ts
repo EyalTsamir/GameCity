@@ -924,10 +924,11 @@ export function buildEmu(hk?: CloseHooks): THREE.BufferGeometry {
     // front lamps on the lower nose face: headlights inboard, tail lights outboard (dark surrounds)
     for (const sx of [-1, 1]) {
       g.kind(T.PLAIN).color(C.lampRim);
-      g.box(sx * 0.9, 1.6, zF + 0.004, 0.62, 0.3, 0.01, 0);
+      if (!hk) g.box(sx * 0.9, 1.6, zF + 0.004, 0.62, 0.3, 0.01, 0);
       if (hk) {
-        hk.lamp(g, T.HEAD, sx * 0.78, 1.6, zF + 0.009, 0.1);
-        hk.lamp(g, T.TAIL, sx * 1.08, 1.6, zF + 0.009, 0.065);
+        hk.plate(g, sx * 0.9, 1.6, zF + 0.002, 0.62, 0.3);
+        hk.lamp(g, T.HEAD, sx * 0.78, 1.6, zF + 0.019, 0.1);
+        hk.lamp(g, T.TAIL, sx * 1.08, 1.6, zF + 0.019, 0.065);
       } else {
         g.kind(T.HEAD).color(C.headOff);
         g.push().at(sx * 0.78, 1.6, zF + 0.01).rotX(Math.PI / 2);
@@ -1122,12 +1123,13 @@ export function buildLoco(hk?: CloseHooks): THREE.BufferGeometry {
     // lamps (head inboard, tail outboard) on the yellow face
     for (const sx of [-1, 1]) {
       g.kind(T.PLAIN).color(C.lampRim);
-      g.box(sx * 0.95, 1.72, zF - 0.045, 0.55, 0.26, 0.01, 0);
       if (hk && end > 0) {
-        hk.lamp(g, T.HEAD, sx * 0.83, 1.72, zF - 0.04, 0.09);
-        hk.lamp(g, T.TAIL, sx * 1.1, 1.72, zF - 0.04, 0.06);
+        hk.plate(g, sx * 0.95, 1.72, zF - 0.048, 0.55, 0.26);
+        hk.lamp(g, T.HEAD, sx * 0.83, 1.72, zF - 0.031, 0.09);
+        hk.lamp(g, T.TAIL, sx * 1.1, 1.72, zF - 0.031, 0.06);
         continue;
       }
+      g.box(sx * 0.95, 1.72, zF - 0.045, 0.55, 0.26, 0.01, 0);
       g.kind(end > 0 ? T.HEAD : T.PLAIN).color(C.headOff);
       g.push().at(sx * 0.83, 1.72, zF - 0.04).rotX(Math.PI / 2);
       g.cyl(0, 0, 0, 0.09, 0.09, 0.012, 10, 1);

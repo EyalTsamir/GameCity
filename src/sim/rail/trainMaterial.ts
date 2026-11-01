@@ -553,6 +553,7 @@ export function createTrainMaterials(globals: GlobalUniforms, clipX0: number, cl
           vAxZ = normalize(mv * vec3(0.0, 0.0, 1.0));
         }`,
       );
+    if (near) shader.fragmentShader = shader.fragmentShader.replace('#include <shadowmap_pars_fragment>', THREE.ShaderChunk.shadowmap_pars_fragment.replace('interleavedGradientNoise( gl_FragCoord.xy ) * PI2', '0.7'));
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>\n${FRAG_PARS}`)
       .replace(
@@ -630,7 +631,10 @@ export function createTrainMaterials(globals: GlobalUniforms, clipX0: number, cl
               float sl = trH(floor(q.z * 2.3) + 7.0);
               float sill = (1.0 - smoothstep(0.0, 0.1 + 0.6 * sn, 2.15 - q.y)) * step(q.y, 2.15) * step(0.45, sl) * step(0.35, sn);
               float st = clamp(gut * (0.5 + 0.5 * sn) + sill * 0.8, 0.0, 1.0);
+              #ifndef TR_CLOSE
+              // (from a metre away these are half-metre blocks; the close level has its own runs)
               diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * 0.62 + vec3(0.05, 0.045, 0.04), st * 0.45);
+              #endif
             }
           }
           #ifndef TR_NEAR

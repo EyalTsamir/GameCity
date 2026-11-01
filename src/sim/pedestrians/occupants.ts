@@ -182,6 +182,15 @@ export class Occupants {
     const h = this.ctx.clock.hours;
     const busy = h > 7 && h < 9.5 ? 0.28 : h > 16 && h < 19 ? 0.26 : h > 6 && h < 22 ? 0.2 : 0.06;
     const FL = 1.13;
+    // the driver, in the leading cab (trainModels / closeModel: seat on the cab's raised floor, a hand on each controller). Only seen at the
+    // close level, whose screen is real glass: the farther level's opaque one hides the figure
+    if (c.type === 'cab' && c.role === 1) {
+      const hip = 6.84;
+      this.add(o, null, rng, 0, hip, drive(1.8, hip, 2.09, 6.98, 0.2, 1.25, 0.52), false);
+      const m = o.ms[o.ms.length - 1];
+      m.look.top = 0x2c3a55;
+      m.look.bottom = 0x20242e;
+    }
     for (let k = -5; k <= 5; k++) {
       const zn = k * 1.9;
       if (doors.some((d) => Math.abs(zn - d) < 0.9)) continue;

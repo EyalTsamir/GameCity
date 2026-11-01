@@ -262,6 +262,7 @@ export default function create(ctx: CityContext): CityModule {
         trains: sim.trains.length,
         cpuMs: Math.round(cpuMs * 1000) / 1000,
         carsDrawn: trains.drawn,
+        carsClose: trains.closeDrawn,
         train: tr ? `${tr.number} ${tr.kind} ${tr.phase} x=${sim.headX(tr).toFixed(1)} v=${tr.v.toFixed(1)}` : '-',
         nextIn: sim.queue[0] ? Math.max(0, sim.queue[0].spawnAt - sim.now).toFixed(0) + ' s' : '-',
         spawned: sim.stats.spawned,

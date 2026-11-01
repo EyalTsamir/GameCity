@@ -40,8 +40,9 @@ const FRAMES = {
   cabside: { car: 'head', z: 6.95, y: 2.65, x: 1, d: 1.05, yaw: -10, pitch: 2 },
   head1: { car: 'head', z: 7.75, y: 1.6, x: 0.54, d: 0.8, nose: 1, yaw: 20, pitch: 3 },
   tail1: { car: 'tail', z: 7.75, y: 1.6, x: 0.74, d: 0.8, nose: 1, yaw: 20, pitch: 3 },
-  far18: { car: 'mid', z: 0, y: 2.3, x: 1, d: 17.5, yaw: 20, pitch: 3 },
-  far20: { car: 'mid', z: 0, y: 2.3, x: 1, d: 20, yaw: 20, pitch: 3 },
+  // either side of the hand-over: along the platform, looking back at the car (the close level starts at about 18 m in this lens)
+  far18: { car: 'mid', z: 0, y: 2.3, x: 1, d: 19, yaw: 72, pitch: 2 },
+  far20: { car: 'mid', z: 0, y: 2.3, x: 1, d: 30, yaw: 72, pitch: 2 },
   locoNose: { car: 'head', z: 8.4, y: 2.2, x: 0, d: 3.2, nose: 1, yaw: 24, pitch: 3 },
   locoCab: { car: 'head', z: 8.0, y: 2.9, x: 0.2, d: 1.2, nose: 1, yaw: 10, pitch: 0 },
   locoBogie: { car: 'head', z: 5.2, y: 0.9, x: 1, d: 1.6, yaw: 18, pitch: 6 },
