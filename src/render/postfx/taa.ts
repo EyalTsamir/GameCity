@@ -10,8 +10,10 @@
 // finer than a pixel is averaged in instead of hit or missed. Runs after grading because the running mean belongs in display
 // values, and so AO, contact shadows, bloom and shafts are steadied with everything else.
 //
-// There are no motion vectors. What moves by itself (people, cars, leaves) is held in by clipping history to the spread of this
-// frame's 3×3 neighbourhood, which also removes ghosts.
+// There are no motion vectors. What moves by itself is found by depth: a point that is not where last frame's depth says it should
+// be (compared with a small neighbourhood, so an edge isn't caught) takes no history, or walkers would turn translucent under a slowly
+// moving camera. The rest is held in by clipping history to the spread of this frame's 3×3 neighbourhood. A camera travelling fast
+// near the ground takes no history and no jitter at all: there aliasing can't be seen and resampling only softens.
 //
 // A jitter that never stops makes a still picture shimmer by a little, everywhere, and a still camera used to give a perfectly
 // still picture. So once the camera stops the mean settles (about a second, each frame counting less), then the jitter stops:
@@ -27,6 +29,11 @@ uniform sampler2D tInput;
 uniform sampler2D tHistory;
 uniform sampler2D tPrev;
 uniform highp sampler2D tDepth;
+uniform highp sampler2D tPrevZ;
+/** projection's [10], [14]: raw depth to distance */
+uniform vec2 uP;
+/** how much of this frame counts whatever else is true: the camera's own travel */
+uniform float uFloor;
 uniform mat4 uReproject;
 uniform vec2 uRes;
 uniform float uAlpha;
@@ -99,10 +106,21 @@ void main() {
       gl_FragColor = vec4(cur, 0.0);
       return;
     }
+    // moved by itself, or uncovered: last frame's depth around where this point was doesn't hold it
+    float was = uP.y / (clip.z / clip.w + uP.x);
+    float z0 = textureLod(tPrevZ, huv, 0.0).r;
+    float z1 = textureLodOffset(tPrevZ, huv, 0.0, ivec2(-1, 0)).r;
+    float z2 = textureLodOffset(tPrevZ, huv, 0.0, ivec2(1, 0)).r;
+    float z3 = textureLodOffset(tPrevZ, huv, 0.0, ivec2(0, -1)).r;
+    float z4 = textureLodOffset(tPrevZ, huv, 0.0, ivec2(0, 1)).r;
+    if (was < min(z0, min(z1, min(z2, min(z3, z4)))) * 0.985 || was > max(z0, max(z1, max(z2, max(z3, z4)))) * 1.015) {
+      gl_FragColor = vec4(cur, 0.0);
+      return;
+    }
     speed = length((huv - vUv) * uRes);
     // history is for what moves by less than a few pixels a frame. Faster than that aliasing can't be seen and every resampling
     // softens: lettering on a sign passing the walker doubled and blurred, people smeared under a quick look round. So it fades out.
-    a = mix(uAlpha, 1.0, smoothstep(1.0, 5.0, speed));
+    a = max(uFloor, mix(uAlpha, 1.0, smoothstep(1.0, 5.0, speed)));
   }
   // the spread of this frame around the pixel, in luma + chroma
   vec3 cy = toY(cur);
@@ -129,6 +147,15 @@ void main() {
   float k = max(un.x, max(un.y, un.z));
   if (k > 1.0) h = cen + off / k;
   gl_FragColor = vec4(clamp(fromY(mix(h, cy, a)), 0.0, 1.0), mark);
+}
+`;
+
+/** this frame's distance per pixel, for the next frame's check */
+const ZCOPY_FRAG = /* glsl */ `
+uniform highp sampler2D tDepth;
+uniform vec2 uP;
+void main() {
+  gl_FragColor = vec4(uP.y / (texelFetch(tDepth, ivec2(gl_FragCoord.xy), 0).x * 2.0 - 1.0 + uP.x), 0.0, 0.0, 1.0);
 }
 `;
 
@@ -184,6 +211,8 @@ const JITTER: [number, number][] = [];
   for (let i = 1; i <= 32; i++) JITTER.push([halton(i, 2) - 0.5, halton(i, 3) - 0.5]);
 }
 
+const _pos = new THREE.Vector3();
+const _fwd = new THREE.Vector3();
 const _vp = new THREE.Matrix4();
 const _vpInv = new THREE.Matrix4();
 
@@ -191,6 +220,15 @@ export class TemporalAA {
   /** the final effect pass draws into this */
   input: THREE.WebGLRenderTarget;
   private inputPrev: THREE.WebGLRenderTarget;
+  private prevZ: THREE.WebGLRenderTarget;
+  private zcopy: FullscreenPass;
+  private lastPos = new THREE.Vector3();
+  private lastFwd = new THREE.Vector3(0, 0, -1);
+  private sharp: number;
+  /** pixels a frame the picture turns by */
+  private turnPx = 0;
+  /** pixels a frame a point 4 m off moves through the camera's travel (further off for a camera high up) */
+  private nearPx = 0;
   private hist: [THREE.WebGLRenderTarget, THREE.WebGLRenderTarget];
   private resolve: FullscreenPass;
   private present: FullscreenPass;
@@ -213,7 +251,11 @@ export class TemporalAA {
   ) {
     this.input = target(4, 4, 'TAA.Input');
     this.inputPrev = target(4, 4, 'TAA.InputPrev');
+    this.prevZ = new THREE.WebGLRenderTarget(4, 4, { depthBuffer: false, stencilBuffer: false, generateMipmaps: false, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter, format: THREE.RedFormat, type: THREE.FloatType });
+    this.prevZ.texture.name = 'TAA.PrevZ';
+    this.zcopy = new FullscreenPass(new THREE.ShaderMaterial({ name: 'TAAZ', uniforms: { tDepth: { value: null }, uP: { value: new THREE.Vector2() } }, vertexShader: FS_VERT, fragmentShader: ZCOPY_FRAG, depthTest: false, depthWrite: false, blending: THREE.NoBlending, toneMapped: false }));
     this.alpha = opts.alpha;
+    this.sharp = opts.sharp;
     // (?taamove, for measuring: the moving path's cost with a still camera)
     this.neverRest = !!opts.neverRest;
     this.hist = [target(4, 4, 'TAA.HistoryA'), target(4, 4, 'TAA.HistoryB')];
@@ -225,6 +267,9 @@ export class TemporalAA {
           tInput: { value: this.input.texture },
           tHistory: { value: null },
           tPrev: { value: null },
+          tPrevZ: { value: this.prevZ.texture },
+          uP: { value: new THREE.Vector2() },
+          uFloor: { value: 0 },
           uMode: { value: 0 },
           tDepth: { value: null },
           uReproject: { value: new THREE.Matrix4() },
@@ -260,6 +305,7 @@ export class TemporalAA {
     if (this.input.width === w && this.input.height === h) return;
     this.input.setSize(w, h);
     this.inputPrev.setSize(w, h);
+    this.prevZ.setSize(w, h);
     this.hist[0].setSize(w, h);
     this.hist[1].setSize(w, h);
     this.fresh = true;
@@ -285,7 +331,13 @@ export class TemporalAA {
       this.lastView.copy(c.matrixWorldInverse);
       this.lastP5 = e[5];
     } else this.rest++;
-    this.jittered = this.rest < SETTLE;
+    _pos.setFromMatrixPosition(c.matrixWorld);
+    this.nearPx = ((_pos.distanceTo(this.lastPos) / Math.max(4, _pos.y * 0.7)) * this.input.height * 0.5 * e[5]);
+    this.lastPos.copy(_pos);
+    _fwd.set(-v[2], -v[6], -v[10]);
+    this.turnPx = Math.acos(Math.min(1, _fwd.dot(this.lastFwd))) * this.input.height * 0.5 * e[5];
+    this.lastFwd.copy(_fwd);
+    this.jittered = this.rest < SETTLE && this.nearPx < 8;
     if (!this.jittered) return;
     const j = JITTER[this.frame++ % JITTER.length];
     this.pe8 = e[8];
@@ -319,12 +371,25 @@ export class TemporalAA {
     u.tPrev.value = this.inputPrev.texture;
     const r = this.rest;
     u.uMode.value = r === 0 ? 0 : r < SETTLE ? 1 : r === SETTLE ? 2 : 3;
+    const n = THREE.MathUtils.smoothstep(this.nearPx, 2, 8);
+    u.uFloor.value = n;
+    const e = c.projectionMatrix.elements;
+    (u.uP.value as THREE.Vector2).set(e[10], e[14]);
     u.uAlpha.value = r === 0 ? this.alpha : Math.min(this.alpha, 1 / (r + 1 / this.alpha));
     u.uReset.value = this.fresh || !depth ? 1 : 0;
     (u.uRes.value as THREE.Vector2).set(this.input.width, this.input.height);
     this.resolve.render(renderer, this.hist[1]);
+    // (a frozen picture doesn't read it, and the first frame after one is no worse for a stale one)
+    if (depth && r <= SETTLE) {
+      const z = this.zcopy.material.uniforms;
+      z.tDepth.value = depth;
+      (z.uP.value as THREE.Vector2).set(e[10], e[14]);
+      this.zcopy.render(renderer, this.prevZ);
+    }
     this.fresh = false;
     this.present.material.uniforms.tHistory.value = this.hist[1].texture;
+    // (the sharpening makes up for the running mean: without history, in fast motion, it would only sharpen the aliasing)
+    this.present.material.uniforms.uSharp.value = this.sharp * (1 - THREE.MathUtils.smoothstep(Math.max(this.nearPx, this.turnPx), 1, 5));
     this.present.render(renderer, null);
     const t = this.hist[0];
     this.hist[0] = this.hist[1];
@@ -337,6 +402,8 @@ export class TemporalAA {
   dispose(): void {
     this.input.dispose();
     this.inputPrev.dispose();
+    this.prevZ.dispose();
+    this.zcopy.dispose();
     this.hist[0].dispose();
     this.hist[1].dispose();
     this.resolve.dispose();
