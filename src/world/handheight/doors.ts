@@ -48,7 +48,8 @@ function dusted(c: number, y: number): number {
 }
 
 /** one coat over the whole leaf round its panels and its glass, so that stiles and fields are the same door up close */
-function leafCoat(s: HandSink, d: HandDoor, oL: number): void {
+export function leafCoat(s: HandSink, d: HandDoor): void {
+  const oL = -d.d;
   const P = d.panels;
   if (P.length === 0) return;
   const holes: number[][] = [];
@@ -72,6 +73,18 @@ function leafCoat(s: HandSink, d: HandDoor, oL: number): void {
       u = Math.max(u, q[1]);
     }
     if (b > u) s.plate(u, b, y0, y1, oL + 0.0009);
+  }
+  panelMoulds(s, d, oL);
+  // chips where a door gets knocked: by the lock and at the foot
+  s.ink(0x74685a).rough(0.8);
+  for (let k = 0; k < 7; k++) {
+    const h = (d.seed * 17 + k * 131) >>> 0;
+    const low = k < 3;
+    const cu = low ? 0.06 + ((h % 97) / 97) * (d.w - 0.12) : d.w - 0.045 - ((h % 7) / 7) * 0.03;
+    const cy = low ? 0.21 + ((h >>> 4) % 11) * 0.009 : 0.9 + ((h >>> 4) % 13) * 0.05;
+    const r = 0.0022 + ((h >>> 8) % 5) * 0.0011;
+    const o = oL + 0.0014;
+    s.quad([cu - r, cy - r * 0.6, o], [cu + r * 0.7, cy - r, o], [cu + r, cy + r * 0.5, o], [cu - r * 0.5, cy + r * 0.9, o]);
   }
 }
 
@@ -97,7 +110,7 @@ function panelMoulds(s: HandSink, d: HandDoor, oL: number): void {
     s.quad([u0 + 0.006, y0 + 0.006, a], [u0 + i, y0 + i, b], [u0 + i, y1 - i, b], [u0 + 0.006, y1 - 0.006, a]);
     s.quad([u1 - i, y0 + i, b], [u1 - 0.006, y0 + 0.006, a], [u1 - 0.006, y1 - 0.006, a], [u1 - i, y1 - i, b]);
     // the small sloped lip where the frame leaves the stiles, instead of a sharp ledge
-    const q = oL + 0.0016;
+    const q = oL + 0.0009;
     s.ink(painted, 0.92);
     s.quad([u0 + 0.006, y1 - 0.006, a], [u1 - 0.006, y1 - 0.006, a], [u1 + 0.008, y1 + 0.008, q], [u0 - 0.008, y1 + 0.008, q]);
     s.quad([u0 - 0.008, y0 - 0.008, q], [u1 + 0.008, y0 - 0.008, q], [u1 - 0.006, y0 + 0.006, a], [u0 + 0.006, y0 + 0.006, a]);
@@ -194,8 +207,6 @@ export function solidDoor(s: HandSink, d: HandDoor, p: DoorPlace): void {
   s.plate(w - 0.0345, w - 0.03, 0.145, d.leafH - 0.03, oL + 0.0012);
   s.plate(0.03, w - 0.03, d.leafH - 0.0345, d.leafH - 0.03, oL + 0.0012);
 
-  leafCoat(s, d, oL);
-
   // a weather bar along the foot, its drip hiding the gap on the threshold
   if (!d.kick) {
     s.ink(d.doorCol, 0.97).rough(0.5).box(0.035, w - 0.035, 0.148, 0.2, oL, oL + 0.024, 0.008);
@@ -248,7 +259,6 @@ export function solidDoor(s: HandSink, d: HandDoor, p: DoorPlace): void {
 
   // the bell on the architrave
   if (!d.plain && !works(p.kind)) bellPush(s, w + 0.07, 1.26, d.fo, m, seed);
-  panelMoulds(s, d, oL);
 }
 
 /** what you only see from a metre: screws, a hairline in the paint at the arrises */
@@ -258,18 +268,6 @@ export function solidDoorFine(s: HandSink, d: HandDoor): void {
   const lu = w / 2;
   if (d.letterY > 0) {
     for (const u of [lu - 0.14, lu + 0.14]) screw(s, u, d.letterY, oL + 0.0145);
-  }
-  if (d.panels.length > 0) {
-    s.ink(0x74685a).rough(0.8);
-    for (let k = 0; k < 7; k++) {
-      const h = (d.seed * 17 + k * 131) >>> 0;
-      const low = k < 3;
-      const cu = low ? 0.06 + ((h % 97) / 97) * (w - 0.12) : w - 0.045 - ((h % 7) / 7) * 0.03;
-      const cy = low ? 0.21 + ((h >>> 4) % 11) * 0.009 : 0.9 + ((h >>> 4) % 13) * 0.05;
-      const r = 0.0022 + ((h >>> 8) % 5) * 0.0011;
-      const o = oL + 0.0014;
-      s.quad([cu - r, cy - r * 0.6, o], [cu + r * 0.7, cy - r, o], [cu + r, cy + r * 0.5, o], [cu - r * 0.5, cy + r * 0.9, o]);
-    }
   }
   if (d.kick) {
     for (const u of [0.07, w / 2, w - 0.07]) for (const y of [0.165, 0.325]) screw(s, u, y, oL + 0.0062, 0.003);

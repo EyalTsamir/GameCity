@@ -29,7 +29,8 @@ type Draw = (s: HandSink) => void;
 const BIG = 0,
   MID = 1,
   FINE = 2,
-  STAIN = 3;
+  STAIN = 3,
+  COAT = 4;
 
 const BIG_R = 42;
 const LAYERS = [
@@ -37,6 +38,8 @@ const LAYERS = [
   { name: 'handMid', radius: nearRadiusFor(0.022), cell: 16, top: 5 },
   { name: 'handFine', radius: nearRadiusFor(0.008), cell: 8, top: 3.5 },
   { name: 'handStain', radius: nearRadiusFor(0.03), cell: 16, top: 5 },
+  // a door's coat of paint: closemat's wear on the leaf behind it is pulled forward by a polygon offset that grows with distance, so a coat a millimetre proud loses to it from 2 m on. This layer pulls harder.
+  { name: 'handCoat', radius: nearRadiusFor(0.022), cell: 16, top: 5 },
 ];
 
 /** one surface program: the colour's alpha carries the surface (sink.ts), a shared grain tile breaks up the factory finish */
@@ -97,8 +100,8 @@ function stainMaterial(): THREE.MeshBasicMaterial {
     blendSrcAlpha: THREE.ZeroFactor,
     blendDstAlpha: THREE.OneFactor,
     polygonOffset: true,
-    polygonOffsetFactor: -2,
-    polygonOffsetUnits: -4,
+    polygonOffsetFactor: -5,
+    polygonOffsetUnits: -10,
   });
   m.name = 'handheight-stain';
   return m;
@@ -197,6 +200,7 @@ export default function create(ctx: CityContext): CityModule {
         continue;
       }
       put(MID, cx, cz, (s) => D.solidDoor(on(s), d, p));
+      if (d.panels.length > 0) put(COAT, cx, cz, (s) => D.leafCoat(on(s), d));
       put(FINE, cx, cz, (s) => D.solidDoorFine(on(s), d));
       // the mat, where there is something to lie on
       if (!d.plain) {
@@ -937,12 +941,16 @@ export default function create(ctx: CityContext): CityModule {
   const mid = handMaterial(grain);
   const big = handMaterial(grain);
   nearDither(big, BIG_R);
+  const coat = handMaterial(grain);
+  coat.polygonOffset = true;
+  coat.polygonOffsetFactor = -4;
+  coat.polygonOffsetUnits = -8;
   for (let t = 0; t < LAYERS.length; t++) {
     const L = LAYERS[t];
     if (grids[t].size === 0) continue;
     near.addMeshes({
       ...L,
-      material: t === STAIN ? stainMaterial() : t === BIG ? big : mid,
+      material: t === STAIN ? stainMaterial() : t === BIG ? big : t === COAT ? coat : mid,
       build: build(t),
       standIn: handStandIn(),
       receiveShadow: t !== STAIN,
