@@ -1807,9 +1807,11 @@ ${fg(`      float ew = max(0.09, fq.x * 1.25);
   // punched windows at street level mirror the street and the buildings across it (per pane, with parallax)
   // (fq.x >= 0.25: the blend weight below is exactly 0 — skip the trace)
   // (light round: curtain walls too, up to ~10 storeys — the street across is what a glass tower mirrors at eye level)
+  float oppA = 0.0; // (how much of what the pane mirrors is the street across: it stands in front of the sun)
   if ((!curtain || uMirror > 0.5 && y < 32.0) && !ribbon && uDetail > 0.5 && uWinRefl > 0.5 && fq.x < 0.25 && gmK < 0.999) {
     vec4 op = bhOpp(vWPos, R, N, Tu, seed, fq.x, nightF);
-    env = mix(env, op.rgb, op.a * (1.0 - smoothstep(0.08, 0.25, fq.x)));
+    oppA = op.a * (1.0 - smoothstep(0.08, 0.25, fq.x));
+    env = mix(env, op.rgb, oppA);
   }
 #if BH_CLASS == 0 || BH_CLASS == 2
   env = mix(env, envM.rgb, gmK);
@@ -1820,6 +1822,15 @@ ${fg(`      float ew = max(0.09, fq.x * 1.25);
   float hAl = dot(normalize(R.xz + vec2(1e-5, 0.0)), sh);
   float vAl = 1.0 - smoothstep(0.05, 0.7, abs(R.y + uReflLift - uSunDir.y));
   float glint = smoothstep(0.972, 0.9985, hAl) * (0.25 + 0.75 * vAl) * (curtain ? 1.6 : (ribbon ? 1.1 : 0.7));
+#ifndef BH_BAKE
+  // (made to read on a far facade, this streak is 27 degrees wide, a whole pane from 3 m: near the camera, where a pane is seen as a pane, only the sun itself)
+  if (uCloseWin > 0.0 && vD.w > 0.5 && uDetail > 0.5) {
+    float cwG = 1.0 - smoothstep(uCloseWin * uNearLens * 0.7, uCloseWin * uNearLens, distance(vWPos, uNearEye));
+    float cwS = max(dot(R, uSunDir), 0.0);
+    cwS *= cwS; cwS *= cwS; cwS *= cwS; cwS *= cwS; cwS *= cwS; // ^32
+    glint = mix(glint, (cwS * 0.25 + cwS * cwS * cwS * cwS * cwS * cwS * 2.0) * (1.0 - oppA), cwG);
+  }
+#endif
 #if BH_CLASS == 0 || BH_CLASS == 2
   // a pane that mirrors the street shows the sun itself, where nothing across the street stands in front of it: a glare, no painted streak
   if (gmK > 0.0) {

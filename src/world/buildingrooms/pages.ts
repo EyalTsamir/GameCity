@@ -132,8 +132,31 @@ const W: Record<string, (k: Kit, r: R) => void> = {
   },
   cafeWall(k, r) {
     dado(k, shade(WOOD.oak, 0.8));
-    pictureWall(k, r, 2);
-    k.bar(0.1, 2.6, 1.1, 2.6, 0.03, 0.01, hex(0x777777));
+    pictureWall(k, r, 1, true);
+    k.box(0, 2.58, 0, MOD_W, 2.62, 0.025, shade(WOOD.oak, 0.9), 0.004);
+  },
+  cafeMirror(k) {
+    dado(k, shade(WOOD.walnut, 1.2));
+    const fr = hex(0x3a2a1c);
+    k.box(0.14, 1.2, 0, 1.06, 2.4, 0.03, fr, 0.008);
+    k.box(0.2, 1.26, 0.03, 1.0, 2.34, 0.034, hex(0x8e9694), 0.002);
+    k.lathe(0.6, 0.1, [[0.02, 2.5], [0.07, 2.56], [0.1, 2.68]], hex(0xe8dcc0), 8);
+  },
+  cafeShelf(k, r) {
+    dado(k, hex(0x5a6a5a));
+    const w = shade(WOOD.oak, 0.9);
+    k.box(0, 1.58, 0, MOD_W, 1.62, 0.2, w, 0.004);
+    G.crockery(k, r, 0.04, MOD_W - 0.04, 1.62, 0.34, 0.18);
+    k.box(0, 2.14, 0, MOD_W, 2.18, 0.2, w, 0.004);
+    G.bottles(k, r, 0.04, MOD_W - 0.04, 2.18, 0.34, 0.18);
+  },
+  cafeBench(k, r) {
+    const c = G.pick(r, [hex(0x6a2a2a), hex(0x2f4a44), hex(0x7a5a2a)]);
+    k.box(0, 0, 0, MOD_W, 0.42, 0.5, shade(WOOD.walnut, 0.9), 0.006);
+    k.box(0, 0.42, 0, MOD_W, 0.52, 0.52, c, 0.03);
+    for (let i = 0; i < 4; i++) k.box(0.01 + i * 0.3, 0.52, 0, 0.29 + i * 0.3, 1.12, 0.1, shade(c, 0.94 + 0.08 * (i % 2)), 0.03);
+    k.box(0, 1.12, 0, MOD_W, 1.16, 0.08, shade(WOOD.walnut, 1.1), 0.006);
+    pictureWall(k, r, 1);
   },
   wineRack(k, r) {
     bay(k, r, { wood: WOOD.walnut, back: hex(0x20150e), rows: 4, depth: 0.36 }, (kk, rr, a, b, y, h, z, i) => (i < 3 ? G.wineEnds(kk, rr, a, b, y, h, z) : G.bottles(kk, rr, a, b, y, h, z)));
@@ -665,6 +688,13 @@ const C: Record<string, { size: number; draw(k: Kit, r: R): void }> = {
       k.box(2.1, 0.74, 0.46, 2.34, 0.76, 0.5, hex(0xf0ece0), 0.002);
     },
   },
+  // someone walking behind the counter, side-on: two frames of a stride each, in this order (ROOM_FRAG picks by the ground covered)
+  walk0a: { size: 2, draw: (k) => G.walker(k, 1, 0.5, 1.74, 0.2, hex(0xe0b090), hex(0xd8d4c8), hex(0x24262c), hex(0x3a2418)) },
+  walk0b: { size: 2, draw: (k) => G.walker(k, 1, 0.5, 1.74, 0.045, hex(0xe0b090), hex(0xd8d4c8), hex(0x24262c), hex(0x3a2418)) },
+  walk1a: { size: 2, draw: (k) => G.walker(k, 1, 0.5, 1.63, 0.18, hex(0x8c5a3c), hex(0x2f3f5a), hex(0x4a4a50), hex(0x1a1412)) },
+  walk1b: { size: 2, draw: (k) => G.walker(k, 1, 0.5, 1.63, 0.04, hex(0x8c5a3c), hex(0x2f3f5a), hex(0x4a4a50), hex(0x1a1412)) },
+  walk2a: { size: 2, draw: (k) => G.walker(k, 1, 0.5, 1.68, 0.19, hex(0xf0c8a8), hex(0x6a2a2a), hex(0x2a2a34), hex(0xb09060)) },
+  walk2b: { size: 2, draw: (k) => G.walker(k, 1, 0.5, 1.68, 0.042, hex(0xf0c8a8), hex(0x6a2a2a), hex(0x2a2a34), hex(0xb09060)) },
   shopCounter: {
     size: 3,
     draw(k, r) {
@@ -1195,7 +1225,7 @@ export interface RoomKind {
 
 const WARM = [0xe8dcc4, 0xd8c8a8, 0xe0d0c0, 0xc8d0c0, 0xc0ccd4, 0xe8d8c8, 0xd0b8a0, 0xf0ece0];
 export const ROOM_KINDS: RoomKind[] = [
-  { name: 'cafe', walls: ['barBottles', 'barMachine', 'cafeWall', 'wineRack', 'cafeWall'], mid: ['cafeTables', 'cafeGuests', 'cafeGuests'], disp: ['dispSign', 'dispBottles'], paints: [0xb09070, 0x8a6a4a, 0xc8b090, 0x7a5a42, 0x5a6a5a], floors: [FLOOR.BOARDS, FLOOR.TILE, FLOOR.PARQUET], lamp: LAMP.PENDANT, depth: [5, 8], midK: 0.95, dispK: 0.35 },
+  { name: 'cafe', walls: ['barBottles', 'barMachine', 'cafeWall', 'wineRack', 'cafeMirror', 'cafeShelf', 'cafeBench'], mid: ['cafeTables', 'cafeGuests', 'cafeGuests'], disp: ['dispSign', 'dispBottles'], paints: [0xd8c8a8, 0xc89878, 0xe4d8c0, 0xb8bca0, 0x8a9a90], floors: [FLOOR.BOARDS, FLOOR.TILE, FLOOR.PARQUET], lamp: LAMP.PENDANT, depth: [5, 8], midK: 0.95, dispK: 0.35 },
   { name: 'bakery', walls: ['breadRack', 'breadBaskets', 'cakeShelf'], mid: ['bakeryCounter'], disp: ['dispBread'], paints: [0xe8d8b8, 0xf0e4cc, 0xd8c8a8], floors: [FLOOR.TILE, FLOOR.STONE], lamp: LAMP.PENDANT, depth: [4.2, 6], midK: 1, dispK: 0.85 },
   { name: 'deli', walls: ['deliJars', 'deliCheese', 'deliBottles'], mid: ['deliCounter'], disp: ['dispFruit', 'dispBottles'], paints: [0xf0ece0, 0xe8e4d8], floors: [FLOOR.TILE, FLOOR.STONE], lamp: LAMP.SPOTS, depth: [4.2, 6], midK: 1, dispK: 0.7 },
   { name: 'books', walls: ['bookcaseDark', 'bookcaseWhite', 'bookcaseDark', 'magRack'], mid: ['bookTable', 'shopCounter2', 'bookTable'], disp: ['dispBooks'], paints: [0x8a7a68, 0xc8c0b0, 0x5a6a60], floors: [FLOOR.BOARDS, FLOOR.CARPET, FLOOR.PARQUET], lamp: LAMP.PENDANT, depth: [5, 9], midK: 0.8, dispK: 0.9 },

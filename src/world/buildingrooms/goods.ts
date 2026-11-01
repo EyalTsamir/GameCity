@@ -456,6 +456,22 @@ export function vase(k: Kit, r: R, x: number, y: number, z: number, h: number): 
 }
 
 /** a person from the waist or thighs up (the card puts the counter or the chair in front) */
+/** someone walking, seen from the side, facing +x: stride = how far each foot is from under the hips */
+export function walker(k: Kit, x: number, z: number, h: number, stride: number, skin: Col, top: Col, legs: Col, hair: Col): void {
+  const hip = h * 0.52;
+  k.bar(x, hip, x + stride, 0.06, z + 0.05, 0.058, legs);
+  k.bar(x, hip, x - stride, 0.06, z - 0.05, 0.058, shade(legs, 0.8));
+  k.box(x + stride - 0.05, 0, z, x + stride + 0.15, 0.07, z + 0.1, hex(0x1c1814), 0.01);
+  k.box(x - stride - 0.05, 0, z - 0.1, x - stride + 0.15, 0.07, z, hex(0x16120e), 0.01);
+  const chest = h - 0.28;
+  k.ball(x, (hip + chest) * 0.5, z, 0.115, (chest - hip) * 0.5 + 0.07, 0.16, top, 8);
+  k.bar(x, chest - 0.04, x - stride * 0.7, hip - 0.04, z + 0.15, 0.04, shade(top, 0.86));
+  k.bar(x, chest - 0.04, x + stride * 0.7, hip - 0.04, z - 0.15, 0.04, shade(top, 0.7));
+  k.cyl(x + 0.005, chest, z, 0.042, 0.08, skin, 6);
+  k.ball(x + 0.012, h - 0.12, z, 0.098, 0.115, 0.088, skin, 7);
+  k.ball(x - 0.014, h - 0.072, z, 0.098, 0.09, 0.094, hair, 7);
+}
+
 export function person(k: Kit, r: R, x: number, y: number, z: number, h: number): void {
   const skin = pick(r, [0xe0b090, 0xc69070, 0x8c5a3c, 0xf0c8a8, 0x6a452e].map(hex));
   const top = pick(r, [0x2f3f5a, 0x6a2a2a, 0x3a4a3a, 0xd8d4c8, 0x444448, 0x7a6a4a, 0x1f2a38, 0x8c8c90].map(hex));

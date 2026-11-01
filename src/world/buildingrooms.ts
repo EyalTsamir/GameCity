@@ -216,7 +216,13 @@ export default function create(ctx: CityContext): CityModule {
         misc: [pick(kind.floors), kind.lamp, kind.midK, kind.dispK],
         paint: hex(pick(kind.paints)),
       };
-      for (let w = 0; w < 4; w++) room.walls[w] = atlas.wallIndex.get(pick(kind.walls)) ?? 0;
+      // (dealt, not drawn: four draws could fill a whole room with one page, and one page tiled along a wall reads as a grid)
+      const deck = kind.walls.slice();
+      for (let w = deck.length - 1; w > 0; w--) {
+        const q = Math.floor(r() * (w + 1)) % (w + 1);
+        [deck[w], deck[q]] = [deck[q], deck[w]];
+      }
+      for (let w = 0; w < 4; w++) room.walls[w] = atlas.wallIndex.get(deck[w % deck.length]) ?? 0;
       if (kind.mid.length) {
         room.cards[0] = atlas.cardIndex.get(pick(kind.mid)) ?? -1;
         room.cards[1] = atlas.cardIndex.get(pick(kind.mid)) ?? -1;
@@ -267,13 +273,14 @@ export default function create(ctx: CityContext): CityModule {
     uLights: globalUniforms.uLights,
   };
   const sunOn = closeWin(ctx, 'cwsun', 'high');
+  const walkOn = closeWin(ctx, 'cwwalk') && atlas.cardIndex.has('walk0a');
   if (sunOn) {
     uniforms.tCwShadow = { value: blankShadowMap(ctx.renderer) };
     uniforms.uCwSunM = { value: new THREE.Matrix4() };
   }
   const material = new THREE.ShaderMaterial({
     name: 'buildingrooms',
-    defines: sunOn ? { CW_SUN: 1 } : {},
+    defines: { ...(sunOn ? { CW_SUN: 1 } : {}), ...(walkOn ? { CW_WALK: atlas.cardIndex.get('walk0a')! } : {}) },
     uniforms,
     vertexShader: ROOM_VERT,
     fragmentShader: ROOM_FRAG,

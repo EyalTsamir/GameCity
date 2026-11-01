@@ -373,6 +373,19 @@ void main() {
   float floorK = floor(vMisc.x + 0.5), lampK = floor(vMisc.y + 0.5);
   float rs = floor(vRoom.w + 0.5);
   float zMid = D * (0.34 + 0.26 * fract(rs * 1.91));
+#ifdef CW_WALK
+  // an open shop has someone in it: over to one end, a pause, back again, on the plane behind what stands mid-room
+  float zWalk = -1.0, xWalk = 0.0, dirW = 1.0, stepW = 1.0;
+  if (shopWin && vLit.a > 0.5 && W > 2.4 && fract(rs * 3.77) < 0.75) {
+    float uw = fract(uTime / (15.0 + 11.0 * fract(rs * 1.37)) + fract(rs * 0.613));
+    float gw = smoothstep(0.06, 0.4, uw) - smoothstep(0.56, 0.9, uw);
+    xWalk = mix(W * (0.14 + 0.18 * fract(rs * 2.17)), W * (0.86 - 0.18 * fract(rs * 4.91)), gw);
+    dirW = uw < 0.48 ? 1.0 : -1.0;
+    zWalk = min(zMid + 0.7, D - 0.55);
+    // (a frame per step, by the ground covered; standing still, the feet together)
+    stepW = gw > 0.004 && gw < 0.996 ? step(0.5, fract(xWalk / 1.15)) : 1.0;
+  }
+#endif
   vec3 c;
   float selfL = 0.0;
   vec3 relief = vec3(0.0);
@@ -432,6 +445,9 @@ void main() {
         float gl = (floorK > 4.5 ? 0.09 : 0.14) + 0.5 * pow(1.0 - min(-rd.y * 1.6, 1.0), 3.0);
         selfL += rmFitting(mq, lampK) * gl * step(mq.y, D) * step(0.0, mq.x) * step(mq.x, W);
       }
+#ifdef CW_WALK
+      if (zWalk > 0.0) c *= 1.0 - 0.5 * (1.0 - smoothstep(0.06, 0.5, length((fq - vec2(xWalk, zWalk)) * vec2(1.0, 1.8))));
+#endif
       // what stands in the room stands on the floor: its soft shadow
       float dz = abs(fq.y - zMid);
       if (dz < 0.8) c *= 1.0 - 0.62 * (1.0 - smoothstep(0.05, 0.8, dz)) * rmCardFoot(fq.x, 3.0, vCards.x, vCards.y, vMisc.z, 0.0);
@@ -509,6 +525,32 @@ void main() {
   if (sunIn) sunA = c * uCwSun * max(dot(n, Lr), 0.0) * rmSunAt(h, Lr, wrR, W0, Tu, N, sunCross);
 #endif
 
+#ifdef CW_WALK
+  if (zWalk > 0.0 && zWalk / rd.z < t) {
+    float tW = zWalk / rd.z;
+    vec3 pW = ro + rd * tW;
+    vec2 qW = vec2((pW.x - xWalk) * dirW * 0.5 + 0.5, pW.y * 0.5);
+    if (qW.x > 0.2 && qW.x < 0.8 && qW.y > 0.0 && qW.y < 1.0) {
+      float idW = float(CW_WALK) + 2.0 * floor(fract(rs * 7.19) * 3.0) + stepW;
+      vec2 scW = (1.0 - 2.0 * uGridC.zw) / uGridC.xy;
+      vec2 uvW = (vec2(mod(idW, uGridC.x), floor(idW / uGridC.x)) + uGridC.zw) / uGridC.xy + qW * scW;
+      vec4 cw = textureGrad(tCard, uvW, dFdx(qW) * scW, dFdy(qW) * scW);
+      if (cw.a > 0.0) {
+        vec3 rgbW = cw.rgb / max(cw.a, 0.02);
+        rgbW *= rgbW;
+        vec3 toW = (cornerL ? LC : vec3((floor(pW.x / g.x) + 0.5) * g.x, ly, zWalk - 0.4)) - pW;
+        float dw = dot(toW, toW);
+        interior = mix(interior, rgbW * lit * (0.3 + 0.75 * max(-toW.z + 0.7, 0.3) / sqrt(dw + 0.3) * (lampK < 0.5 ? 2.2 : 1.3) / (1.0 + dw * 0.55)), cw.a);
+        dayA = mix(dayA, rgbW * (1.0 / (1.0 + zWalk * zWalk * 0.28) + 0.1), cw.a);
+#ifdef CW_SUN
+        sunA *= 1.0 - cw.a;
+#endif
+        t = mix(t, tW, step(0.5, cw.a));
+        selfL *= 1.0 - cw.a;
+      }
+    }
+  }
+#endif
   // a card is lit where it stands, facing the window
   if (cm.a > 0.0) {
     vec3 toM = (cornerL ? LC : (lampK < 0.5 ? vec3((floor(pMid.x / g.x) + 0.5) * g.x, ly, LP.z) : vec3((floor(pMid.x / g.x) + 0.5) * g.x, ly, zMid - 0.4))) - pMid;
