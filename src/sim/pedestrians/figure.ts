@@ -583,10 +583,11 @@ export function buildDogGeometry(close = false): THREE.BufferGeometry {
   // body: rump → hips → waist (tucked) → deep chest → shoulders
   b.pivot(ox, 0.3, oz);
   b.use(0, 0);
-  tube(close ? [Rg(0, 0.372, -0.235, 0.03, 0.034), Rg(0, 0.372, -0.215, 0.054, 0.058), Rg(0, 0.368, -0.185, 0.069, 0.074), Rg(0, 0.362, -0.12, 0.066, 0.072), Rg(0, 0.36, -0.05, 0.06, 0.066), Rg(0, 0.35, 0.02, 0.064, 0.08), Rg(0, 0.345, 0.075, 0.07, 0.09), Rg(0, 0.362, 0.145, 0.068, 0.085), Rg(0, 0.395, 0.195, 0.052, 0.062)] : [Rg(0, 0.37, -0.23, 0.04, 0.045), Rg(0, 0.365, -0.19, 0.068, 0.072), Rg(0, 0.36, -0.06, 0.06, 0.066), Rg(0, 0.345, 0.07, 0.07, 0.09), Rg(0, 0.365, 0.15, 0.068, 0.085), Rg(0, 0.4, 0.2, 0.05, 0.06)], close ? 14 : 8, true, false);
+  tube(close ? [Rg(0, 0.372, -0.235, 0.03, 0.034), Rg(0, 0.372, -0.215, 0.054, 0.058), Rg(0, 0.368, -0.185, 0.069, 0.074), Rg(0, 0.362, -0.12, 0.066, 0.072), Rg(0, 0.36, -0.05, 0.06, 0.066), Rg(0, 0.35, 0.02, 0.064, 0.08), Rg(0, 0.345, 0.075, 0.07, 0.09), Rg(0, 0.362, 0.145, 0.068, 0.085), Rg(0, 0.395, 0.195, 0.052, 0.062)] : [Rg(0, 0.37, -0.23, 0.04, 0.045), Rg(0, 0.365, -0.19, 0.068, 0.072), Rg(0, 0.36, -0.06, 0.06, 0.066), Rg(0, 0.345, 0.07, 0.07, 0.09), Rg(0, 0.365, 0.15, 0.068, 0.085), Rg(0, 0.4, 0.2, 0.05, 0.06)], close ? 14 : 8, true, true);
   // collar
   b.use(0, 2);
-  tube([Rg(0, 0.425, 0.198, 0.055, 0.06), Rg(0, 0.445, 0.215, 0.055, 0.058)], 8, false, false);
+  if (close) tube([Rg(0, 0.43, 0.2, 0.05, 0.056), Rg(0, 0.446, 0.216, 0.049, 0.054)], 12, false, false);
+  else tube([Rg(0, 0.425, 0.198, 0.055, 0.06), Rg(0, 0.445, 0.215, 0.055, 0.058)], 8, false, false);
   // neck + head (head part: bobs about the neck base)
   b.pivot(ox, 0.43, oz + 0.2);
   b.use(7, 0);
@@ -605,7 +606,7 @@ export function buildDogGeometry(close = false): THREE.BufferGeometry {
     for (const sx of [1, -1]) {
       b.pivot(ox + sx * 0.042, 0.545, oz + 0.276);
       b.use(8, 1);
-      tube([Rg(sx * 0.04, 0.54, 0.277, 0.019, 0.01), Rg(sx * 0.05, 0.575, 0.273, 0.023, 0.008), Rg(sx * 0.056, 0.61, 0.27, 0.017, 0.006), Rg(sx * 0.06, 0.635, 0.268, 0.007, 0.003)], 6, false, true);
+      tube([Rg(sx * 0.04, 0.54, 0.277, 0.019, 0.01), Rg(sx * 0.047, 0.565, 0.274, 0.023, 0.008), Rg(sx * 0.052, 0.59, 0.271, 0.017, 0.006), Rg(sx * 0.055, 0.61, 0.269, 0.007, 0.003)], 6, false, true);
     }
     b.use(7, 0);
   } else {
@@ -630,12 +631,19 @@ export function buildDogGeometry(close = false): THREE.BufferGeometry {
     const rear = lz < 0;
     b.pivot(ox + lx, 0.3, oz + lz);
     b.use(up, 0);
-    tube([Rg(lx * 0.9, 0.34, lz, rear ? 0.032 : 0.028, rear ? 0.045 : 0.034), Rg(lx, 0.25, lz + (rear ? -0.01 : 0), rear ? 0.024 : 0.022, rear ? 0.03 : 0.024), Rg(lx, 0.155, lz, 0.019, 0.02)], close ? 8 : 5, false, false);
+    if (close) tube([Rg(lx * 0.72, rear ? 0.415 : 0.395, lz - 0.008, rear ? 0.012 : 0.01, rear ? 0.028 : 0.02), Rg(lx * 0.9, 0.34, lz, rear ? 0.033 : 0.028, rear ? 0.066 : 0.05), Rg(lx, 0.25, lz + (rear ? -0.01 : 0), rear ? 0.026 : 0.024, rear ? 0.04 : 0.03), Rg(lx, 0.155, lz, 0.02, 0.022)], 8, true, false);
+    else tube([Rg(lx * 0.9, 0.34, lz, rear ? 0.032 : 0.028, rear ? 0.045 : 0.034), Rg(lx, 0.25, lz + (rear ? -0.01 : 0), rear ? 0.024 : 0.022, rear ? 0.03 : 0.024), Rg(lx, 0.155, lz, 0.019, 0.02)], 5, false, false);
     b.pivot(ox + lx, 0.155, oz + lz);
     b.use(lo, 0);
-    tube([Rg(lx, 0.155, lz, 0.019, 0.02), Rg(lx, 0.06, lz + (rear ? -0.012 : 0.004), 0.015, 0.016), Rg(lx, 0.022, lz + 0.012, 0.02, 0.016)], close ? 8 : 5, false, false);
-    b.use(lo, 1);
-    tube([Rg(lx, 0.022, lz + 0.012, 0.02, 0.016), Rg(lx, 0.012, lz + 0.03, 0.019, 0.011)], close ? 8 : 5, false, true);
+    if (close) {
+      tube([Rg(lx, 0.155, lz, 0.02, 0.022), Rg(lx, 0.105, lz + (rear ? -0.006 : 0.002), 0.017, 0.019), Rg(lx, 0.06, lz + (rear ? -0.012 : 0.004), 0.016, 0.017), Rg(lx, 0.026, lz + 0.01, 0.021, 0.019)], 8, false, false);
+      b.use(lo, 1);
+      tube([Rg(lx, 0.026, lz + 0.01, 0.021, 0.019), Rg(lx, 0.017, lz + 0.03, 0.023, 0.014), Rg(lx, 0.012, lz + 0.046, 0.016, 0.008)], 8, false, true);
+    } else {
+      tube([Rg(lx, 0.155, lz, 0.019, 0.02), Rg(lx, 0.06, lz + (rear ? -0.012 : 0.004), 0.015, 0.016), Rg(lx, 0.022, lz + 0.012, 0.02, 0.016)], 5, false, false);
+      b.use(lo, 1);
+      tube([Rg(lx, 0.022, lz + 0.012, 0.02, 0.016), Rg(lx, 0.012, lz + 0.03, 0.019, 0.011)], 5, false, true);
+    }
   }
   // tail
   b.pivot(ox, 0.385, oz - 0.21);
@@ -670,7 +678,34 @@ export function buildDogGeometry(close = false): THREE.BufferGeometry {
   }
   const g = b.build(true);
   g.computeVertexNormals();
+  if (close) weldNormals(g);
   return g;
+}
+
+/** one normal for vertices in the same place, so that a joint between two tubes has no crease */
+function weldNormals(g: THREE.BufferGeometry): void {
+  const P = g.getAttribute('position') as THREE.BufferAttribute,
+    N = g.getAttribute('normal') as THREE.BufferAttribute;
+  const groups = new Map<string, number[]>();
+  for (let i = 0; i < P.count; i++) {
+    const k = `${Math.round(P.getX(i) * 2e4)},${Math.round(P.getY(i) * 2e4)},${Math.round(P.getZ(i) * 2e4)}`;
+    const l = groups.get(k);
+    if (l) l.push(i);
+    else groups.set(k, [i]);
+  }
+  for (const l of groups.values()) {
+    if (l.length < 2) continue;
+    let x = 0,
+      y = 0,
+      z = 0;
+    for (const i of l) {
+      x += N.getX(i);
+      y += N.getY(i);
+      z += N.getZ(i);
+    }
+    const m = Math.hypot(x, y, z) || 1;
+    for (const i of l) N.setXYZ(i, x / m, y / m, z / m);
+  }
 }
 
 // ───────────────────────────────────────────────────── blob shadows ──
@@ -755,6 +790,7 @@ attribute vec4 iHand;   // walker's hand position (walker frame) + wag seed
 attribute vec4 iDogHead; // head down, head turn, ears (0 stand .. 1 hang), wag speed
 uniform float uPedTime;
 varying float vPedFade;
+varying vec4 vDogFur;
 ${COMMON_GLSL}
 vec3 dogColor() {
   int slot = int(aInfo.y + 0.5);
@@ -775,8 +811,9 @@ void dogPose(inout vec3 p, inout vec3 n) {
     float t = p.z;
     // the lead's own length hangs in a curve when the two ends are nearer than that
     float span = length(iHand.xyz - collar);
-    float sag = max(0.03 + 0.05 * (1.0 - clamp(iDog.y, 0.0, 1.0)), 0.55 * sqrt(max(0.0, 1.32 * 1.32 - span * span))) * 4.0 * t * (1.0 - t);
-    p = mix(iHand.xyz, collar, t) + vec3(p.x, p.y - min(sag, min(iHand.y, collar.y) - 0.02), 0.0);
+    float peak = max(0.03 + 0.05 * (1.0 - clamp(iDog.y, 0.0, 1.0)), sqrt(0.375 * 1.15 * max(0.0, 1.15 - span)));
+    peak = min(peak, 0.5 * (iHand.y + collar.y) - 0.08);
+    p = mix(iHand.xyz, collar, t) + vec3(p.x, p.y - peak * 4.0 * t * (1.0 - t), 0.0);
     return;
   }
   p = o + (p - o) * size;
@@ -834,6 +871,17 @@ void dogPose(inout vec3 p, inout vec3 n) {
 }
 `;
 
+// short hair lying along the body: fine streaks, with a slower unevenness over them
+const DOG_FUR_GLSL = /* glsl */ `
+float dogN(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float dogV(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f); return mix(mix(dogN(i), dogN(i + vec2(1.0, 0.0)), f.x), mix(dogN(i + vec2(0.0, 1.0)), dogN(i + vec2(1.0, 1.0)), f.x), f.y); }
+float dogFur(vec3 r) {
+  float fine = dogV(vec2(r.x * 330.0 + r.y * 260.0, r.z * 70.0));
+  float broad = dogV(vec2(r.z * 16.0, r.y * 16.0 + r.x * 16.0));
+  return (0.84 + 0.32 * fine) * (0.92 + 0.16 * broad);
+}
+`;
+
 export function makeDogMaterials(): PersonMaterials {
   const uPedTime = globalUniforms.uTime;
   const material = new THREE.MeshLambertMaterial({ vertexColors: true });
@@ -842,15 +890,14 @@ export function makeDogMaterials(): PersonMaterials {
     shader.uniforms.uPedTime = uPedTime;
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', `#include <common>\n${DOG_VERT_PARS}`)
-      .replace('#include <color_vertex>', '#include <color_vertex>\n  vColor.rgb *= dogColor();')
+      .replace('#include <color_vertex>', '#include <color_vertex>\n  vColor.rgb *= dogColor();\n  vDogFur = vec4(position, aInfo.y < 1.5 ? 1.0 : 0.0);\n  vColor.rgb *= aInfo.y < 1.5 ? 0.8 + 0.3 * smoothstep(0.26, 0.44, position.y) : 1.0;')
       .replace('#include <beginnormal_vertex>', 'vec3 objectNormal = vec3( normal );\n  vec3 dogP = vec3( position );\n  dogPose( dogP, objectNormal );')
       .replace('#include <begin_vertex>', 'vec3 transformed = dogP;');
-    shader.fragmentShader = injectFragmentFade(shader.fragmentShader, 'uniform float uPedNight;\n').replace(
-      '#include <emissivemap_fragment>',
-      '#include <emissivemap_fragment>\n  totalEmissiveRadiance += diffuseColor.rgb * 0.07 * uPedNight;',
-    );
+    shader.fragmentShader = injectFragmentFade(shader.fragmentShader, `uniform float uPedNight;\nvarying vec4 vDogFur;\n${DOG_FUR_GLSL}`)
+      .replace('#include <color_fragment>', '#include <color_fragment>\n  if (vDogFur.w > 0.5) diffuseColor.rgb *= dogFur(vDogFur.xyz);')
+      .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n  totalEmissiveRadiance += diffuseColor.rgb * 0.07 * uPedNight;');
   };
-  material.customProgramCacheKey = () => 'tinyhaven-dog-2';
+  material.customProgramCacheKey = () => 'tinyhaven-dog-3';
   const depth = new THREE.MeshDepthMaterial();
   depth.onBeforeCompile = (shader) => {
     shader.uniforms.uPedTime = uPedTime;
