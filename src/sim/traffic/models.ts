@@ -1334,7 +1334,7 @@ function wheel(b: Builder, x: number, y: number, z: number, r: number, w: number
   ];
   const ty = new THREE.LatheGeometry(
     prof.map(([a, h]) => new THREE.Vector2(a, h * hw)),
-    28,
+    CLOSE ? 48 : 28,
   );
   ty.rotateZ(-Math.PI / 2);
   ty.translate(x, y, z);
@@ -2167,11 +2167,21 @@ function buildCarCabin(b: Builder, s: CarShape, cabin: Det, doors4: boolean): vo
 }
 
 /** close level: the cabin of a cab vehicle (x: half width of its walls, wsTop: where the windscreen meets the roof) */
-function buildCab(b: Builder, cabin: Det, x: number, wsTop: number): void {
+function buildCab(b: Builder, cabin: Det, x: number, wsTop: number, nose?: EndFn): void {
   if (!CLOSE || !closeVehOn('vehcabin')) return;
   const a = cabin.a!,
     bb = cabin.b!;
-  const add = cabinAdder(b, cabin);
+  const add0 = cabinAdder(b, cabin);
+  const add: CabinAdd = !nose
+    ? add0
+    : (g, o) => {
+        const pos = g.getAttribute('position');
+        for (let i = 0; i < pos.count; i++) {
+          const z = pos.getZ(i);
+          if (z > a[3] - 0.7) pos.setZ(i, Math.min(z, nose(pos.getX(i), pos.getY(i), 1).z - 0.04));
+        }
+        add0(g, o);
+      };
   const dims = { hw: a[0], belt: a[1], roof: a[2], zd: a[3], zr: bb[0], fz: bb[1], rz: bb[2] };
   cabCabin(add, dims, { wsTop, x, liner: (g, trim) => add(g, { color: '#ffffff', rough: 1, trim }) });
 }
@@ -2469,7 +2479,7 @@ function delivery(): THREE.BufferGeometry {
   };
   const glass: PartOpts = { color: GLASS, rough: 0.2, det: { c: 5, a: [0.92, 1.3, 2.0, 2.62], b: [1.25, 1.42, -9, 0] } };
   const surf = cabShell(b, cab, zc, glass);
-  buildCab(b, glass.det!, 0.96, 2.04);
+  buildCab(b, glass.det!, 0.96, 2.04, surf);
   archLiner(b, axF, 0.42, 0.49, 1.9);
   // door glass (front edge along the A-pillar), shut lines, handle
   flankPane(b, cab, [[2.24 - zc, 1.36], [1.38 - zc, 1.36], [1.38 - zc, 1.89], [1.93 - zc, 1.89]].map(([z, y]) => [z + zc, y] as [number, number]), glass);
@@ -2546,7 +2556,7 @@ function delivery(): THREE.BufferGeometry {
     // mirror on an arm from the door's front corner
     b.add(tube(s * 0.99, 1.44, 2.25, s * 1.15, 1.47, 2.3, 0.018), { color: DARK });
     b.add(rbox(0.1, 0.3, 0.17, 0.03, s * 1.17, 1.3, 2.33), { color: DARK });
-    if (LOD === 0) b.add(decalPlane(0.08, 0.26, s * 1.17, 1.45, 2.244, 'nz'), { color: '#8c9aa6', rough: 0.15, finish: 'chrome' });
+    if (LOD === 0) b.add(decalPlane(0.08, 0.26, s * 1.17, 1.45, 2.239, 'nz'), { color: '#8c9aa6', rough: 0.15, finish: 'chrome', det: CLOSE ? { c: 9 } : undefined });
   }
   if (LOD === 0)
     for (const x of [-0.6, 0.15]) {
@@ -2822,7 +2832,7 @@ function lorry(): THREE.BufferGeometry {
   };
   const glass: PartOpts = { color: GLASS, rough: 0.2, det: { c: 5, a: [1.05, 1.58, 2.5, L / 2 - 0.25], b: [zCab - 0.9, zCab - 0.55, -9, 0] } };
   const surf = cabShell(b, cab, zCab, glass);
-  buildCab(b, glass.det!, 1.1, 3.5);
+  buildCab(b, glass.det!, 1.1, 3.5, surf);
   archLiner(b, axF, 0.48, 0.57, 2.16);
   flankPane(b, cab, [[3.45, 1.64], [2.62, 1.64], [2.62, 2.3], [3.4, 2.3]], glass);
   flankSeam(b, cab, 2.52, 1.08, 2.52, 2.42);
@@ -2858,8 +2868,8 @@ function lorry(): THREE.BufferGeometry {
     b.add(rbox(0.1, 0.36, 0.18, 0.03, s * 1.34, 1.86, zf - 0.08), { color: DARK });
     b.add(rbox(0.09, 0.2, 0.16, 0.03, s * 1.33, 1.6, zf - 0.08), { color: DARK });
     if (LOD === 0) {
-      b.add(decalPlane(0.08, 0.32, s * 1.34, 2.04, zf - 0.171, 'nz'), { color: '#8c9aa6', rough: 0.15, finish: 'chrome' });
-      b.add(decalPlane(0.07, 0.17, s * 1.33, 1.7, zf - 0.161, 'nz'), { color: '#8c9aa6', rough: 0.15, finish: 'chrome' });
+      b.add(decalPlane(0.08, 0.32, s * 1.34, 2.04, zf - 0.176, 'nz'), { color: '#8c9aa6', rough: 0.15, finish: 'chrome', det: CLOSE ? { c: 9 } : undefined });
+      b.add(decalPlane(0.07, 0.17, s * 1.33, 1.7, zf - 0.166, 'nz'), { color: '#8c9aa6', rough: 0.15, finish: 'chrome', det: CLOSE ? { c: 9 } : undefined });
       // boarding steps ahead of the front wheel, under the door; a grab handle beside the door
       for (const y of [0.42, 0.8]) b.add(bx(0.24, 0.035, 0.36, s * 1.06, y, 3.3), { color: '#4a4e53', rough: 0.9 });
       b.add(tube(s * 1.17, 1.2, 3.58, s * 1.17, 2.0, 3.56, 0.015), { color: '#2a2c30', rough: 0.8 });
@@ -3226,7 +3236,7 @@ function bus(): THREE.BufferGeometry {
     b.add(tube(xa, 2.76, zf - 0.3, xb, 2.82, zf + 0.22, 0.025), { color: DARK });
     b.add(tube(xb, 2.82, zf + 0.22, xb, 2.5, zf + 0.36, 0.025), { color: DARK });
     b.add(rbox(0.1, 0.38, 0.2, 0.04, xb, 2.12, zf + 0.38), { color: DARK });
-    if (LOD === 0) b.add(decalPlane(0.08, 0.34, xb, 2.31, zf + 0.277, 'nz'), { color: '#8c9aa6', rough: 0.15, finish: 'chrome' });
+    if (LOD === 0) b.add(decalPlane(0.08, 0.34, xb, 2.31, zf + 0.272, 'nz'), { color: '#8c9aa6', rough: 0.15, finish: 'chrome', det: CLOSE ? { c: 9 } : undefined });
   }
   for (const s of [1, -1]) {
     wheel(b, s * 1.07, 0.48, axF, 0.48, 0.32, true, '#d9dcdf', 'steel');

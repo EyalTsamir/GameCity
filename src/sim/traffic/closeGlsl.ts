@@ -20,9 +20,10 @@ const WEAR = /* glsl */ `
     float dirtH = thH1( ph * 91.3 );
     // chips: the pits of the grain tile, thick on the nose, the lower doors and behind the wheels
     float nose = smoothstep( 0.0, 1.0, ( p.z - 0.3 ) * 0.7 ) * ( 0.45 + 0.55 * step( abs( on.z ), 0.9 ) );
+    nose *= mix( 1.0, 1.0 - smoothstep( 0.7, 1.4, p.y ), sideK );
     float zone = clamp( nose + 0.5 * sideK * ( 1.0 - smoothstep( 0.35, 0.7, p.y ) ), 0.0, 1.0 );
     float ch = smoothstep( 0.9 - 0.05 * zone * dirtH, 0.95, gr2.a ) * smoothstep( 0.45, 0.7, crk.b + 0.3 * zone ) * zone * ( 0.25 + dirtH );
-    diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 0.42, 0.42, 0.41 ), clamp( ch * 1.5, 0.0, 1.0 ) * 0.85 );
+    diffuseColor.rgb = mix( diffuseColor.rgb, diffuseColor.rgb * 0.45 + vec3( 0.13, 0.13, 0.125 ), clamp( ch * 1.5, 0.0, 1.0 ) * 0.85 );
     thCoatK *= 1.0 - clamp( ch * 2.0, 0.0, 1.0 );
     thRoughAdd += 0.4 * ch;
     // scratches: long fibres, only just below the belt line where keys and bags go
@@ -187,7 +188,7 @@ export const CLOSE_FRAG_DETAIL = /* glsl */ `
       // outside the bowl: the dark housing with its moulded ribs
       float rib = step( 0.5, fract( h.x * 55.0 ) );
       col = mix( vec3( 0.03 + 0.018 * rib ), vec3( 0.85 ) * bowl, inB );
-      col += vec3( 0.55 ) * ( 1.0 - smoothstep( 0.0, 0.05, abs( r - 1.0 ) ) );
+      col += vec3( 0.55 ) * ( 1.0 - 0.75 * uLights ) * ( 1.0 - smoothstep( 0.0, 0.05, abs( r - 1.0 ) ) );
       // bulb light fills the bowl
       em += lon * vec3( 1.0, 0.93, 0.8 ) * 2.4 * inB * ( 0.35 + bowl * 1.5 ) * exp( -r * 1.3 );
       // the projector ball, standing forward of the bowl
@@ -202,7 +203,7 @@ export const CLOSE_FRAG_DETAIL = /* glsl */ `
       }
       // daytime running light: a slim light guide along the top of the housing
       float bar = st < 0.5 ? 1.0 - smoothstep( 0.0, 0.05, abs( r - 1.04 ) ) : ( 1.0 - smoothstep( 0.0, 0.007, abs( q.y - hy * 0.74 ) ) ) * step( abs( q.x ), hx * 0.94 );
-      col += vec3( 0.3 ) * bar;
+      col += vec3( 0.3 ) * ( 1.0 - 0.75 * uLights ) * bar;
       em += bar * vec3( 1.0, 0.98, 0.93 ) * vCamObj.w * ( 1.2 + 2.6 * uLights );
     } else {
       // a tail lamp: red prisms on the cover, a clear reversing lamp inboard, bulbs glowing behind by parallax
