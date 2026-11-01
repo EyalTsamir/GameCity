@@ -67,9 +67,11 @@ const R_BUS_SIDE: AtlasRect = { x: 0, y: 240, w: 256, h: 48 };
 const R_TARP: AtlasRect = { x: 0, y: 288, w: 256, h: 96 };
 // close-up detail (W2): number plates (4 × 4 cells, one per vehicle by its phase), lamp lenses, tyre strip,
 // wheel faces for the middle level, grilles
-const R_PLATE: AtlasRect = { x: 512, y: 0, w: 128, h: 28 };
-const PLATE_GRID = 4;
-export const PLATE_CELLS = { n: PLATE_GRID, du: R_PLATE.w / ATLAS_SIZE, dv: R_PLATE.h / ATLAS_SIZE };
+// (close-up round: twice the size, 24 registrations, at the foot of the atlas)
+const R_PLATE: AtlasRect = { x: 0, y: 640, w: 256, h: 56 };
+const PLATE_COLS = 4;
+const PLATE_ROWS = 6;
+export const PLATE_CELLS = { cols: PLATE_COLS, rows: PLATE_ROWS, du: R_PLATE.w / ATLAS_SIZE, dv: R_PLATE.h / ATLAS_SIZE };
 const R_HEAD: AtlasRect = { x: 512, y: 112, w: 128, h: 64 };
 const R_HEAD_ROUND: AtlasRect = { x: 640, y: 112, w: 64, h: 64 };
 const R_TAIL: AtlasRect = { x: 704, y: 112, w: 128, h: 64 };
@@ -97,32 +99,41 @@ const R_T_BLOCK: AtlasRect = { x: 768, y: 528, w: 128, h: 64 };
 
 /** close-up detail textures (plates, lamps, tyres, wheel faces, grilles) */
 function drawDetailAtlas(g: CanvasRenderingContext2D, font: (px: number, w?: string) => string): void {
-  // number plates: white reflective, blue band with "TH", black letters; 16 different registrations
+  // number plates: white reflective, blue band with the town's mark and "TH", black letters in the town's format (area
+  // letters, year, three letters), the garage that sold it along the foot. 24 different registrations
   let seed = 7;
   const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
   const L = 'ABCDEFGHJKLMNPRSTUVWXYZ';
-  for (let k = 0; k < PLATE_GRID * PLATE_GRID; k++) {
-    const x = R_PLATE.x + (k % PLATE_GRID) * R_PLATE.w,
-      y = R_PLATE.y + Math.floor(k / PLATE_GRID) * R_PLATE.h;
+  const AREA = ['HV', 'HN', 'TH', 'WB', 'QY', 'NG', 'KS'];
+  const DEALERS = ['HARBOUR MOTORS', 'QUAY STREET GARAGE', 'WESTBROOK AUTOS', 'PRYCE & SON', 'KING STREET CARS', 'NORTHGATE MOTORS'];
+  for (let k = 0; k < PLATE_COLS * PLATE_ROWS; k++) {
+    const x = R_PLATE.x + (k % PLATE_COLS) * R_PLATE.w,
+      y = R_PLATE.y + Math.floor(k / PLATE_COLS) * R_PLATE.h;
     g.fillStyle = '#1b1c1e';
     g.fillRect(x, y, R_PLATE.w, R_PLATE.h);
     g.fillStyle = '#f2f0ea';
-    g.fillRect(x + 2, y + 2, R_PLATE.w - 4, R_PLATE.h - 4);
+    g.fillRect(x + 3, y + 3, R_PLATE.w - 6, R_PLATE.h - 6);
     g.fillStyle = '#1f4fb4';
-    g.fillRect(x + 2, y + 2, 14, R_PLATE.h - 4);
+    g.fillRect(x + 3, y + 3, 26, R_PLATE.h - 6);
     g.fillStyle = '#ffd23f';
-    g.beginPath();
-    g.arc(x + 9, y + 9, 3.2, 0, Math.PI * 2);
-    g.fill();
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2;
+      g.beginPath();
+      g.arc(x + 16 + Math.cos(a) * 8, y + 19 + Math.sin(a) * 8, 1.5, 0, Math.PI * 2);
+      g.fill();
+    }
     g.fillStyle = '#ffffff';
-    g.font = font(7);
+    g.font = font(13);
     g.textAlign = 'center';
     g.textBaseline = 'middle';
-    g.fillText('TH', x + 9, y + R_PLATE.h - 8);
-    const reg = `${L[(rnd() * L.length) | 0]}${L[(rnd() * L.length) | 0]}-${100 + ((rnd() * 900) | 0)}-${L[(rnd() * L.length) | 0]}${L[(rnd() * L.length) | 0]}`;
+    g.fillText('TH', x + 16, y + R_PLATE.h - 13);
+    const reg = `${AREA[(rnd() * AREA.length) | 0]}${10 + ((rnd() * 16) | 0)} ${L[(rnd() * L.length) | 0]}${L[(rnd() * L.length) | 0]}${L[(rnd() * L.length) | 0]}`;
     g.fillStyle = '#141414';
-    g.font = font(19);
-    g.fillText(reg, x + 18 + (R_PLATE.w - 20) / 2, y + R_PLATE.h / 2 + 1, R_PLATE.w - 24);
+    g.font = font(37);
+    g.fillText(reg, x + 32 + (R_PLATE.w - 36) / 2, y + R_PLATE.h / 2 - 3, R_PLATE.w - 44);
+    g.font = font(7);
+    g.fillStyle = '#3a3a3a';
+    g.fillText(DEALERS[(rnd() * DEALERS.length) | 0], x + 32 + (R_PLATE.w - 36) / 2, y + R_PLATE.h - 8, R_PLATE.w - 44);
   }
   // headlamp cluster: dark housing, two reflector bowls with chrome rings, an LED strip along the bottom
   {

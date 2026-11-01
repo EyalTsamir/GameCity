@@ -14,6 +14,8 @@ import {
 } from './gen';
 import { WIN, PROF, WALLPAT, ROOFPAT, FRAME, GLASS, LIGHT_MODE, shopType } from './materials';
 import { letterSign, helipadMark, boardSign } from './signs';
+import { shopSign } from '../lettering/shopname';
+import { anchors } from './anchors';
 import { GREEN } from './green';
 import { MASS, massRng, recordTier, notchPoly, notchCap, crownCornice, roofKit } from './massing';
 import { towerPlant, roofPlantOn, roofFloor } from './roofplant';
@@ -510,6 +512,7 @@ export function genTower(g: Gen): void {
           const n = Math.max(1, Math.round(len / 2.6));
           const gr = makeGrid(a, b, 0, gH, 1, { spacing: len / n, cols: n, winW: len / n - 0.18, winH: gH - 0.9, sill: 0.12, margin: 0.06 });
           wallGrid(g.shell, sg, a, b, 0, gH, gr, lookL);
+          if (asShop) anchors.spot(sg, 'window', a + 0.25, b - 0.25, 0.3, gH - 0.9, 0, { word: s === FRONT && shopName ? shopName : SHOP_NAMES[(g.seed * 7 + s * 3 + 1) % SHOP_NAMES.length] });
           if (fit) groundFit(g, sg, a, b, gr, gH, sc.frame === FRAME.ALU ? '#7f868c' : sc.frame === FRAME.CREAM ? '#3f3a33' : '#24282c', masonry ? '#7d7668' : '#3f4245', !arcade);
         },
         (a, b, y0) => wallPlain(g.shell, sg, a, b, y0, gH, { color: shade(wallC, 0.7), pattern: WALLPAT.SMOOTH, seed: g.seed }),
@@ -542,6 +545,7 @@ export function genTower(g: Gen): void {
         if (sg.L - (u + 1.62) > 1.1) {
           setCol(g.trim, col('#15191d'));
           sideBox(g.trim, sg, iu + 0.3, iu + 0.82, 0, 0.03, 1.05, 1.85);
+          anchors.spot(sg, 'tenants', iu + 0.3, iu + 0.82, 1.05, 1.85, 0.03, { seed: g.seed, num: lot.floors });
           setCol(g.trim, col('#c9ced2'));
           for (let k = 0; k < 7; k++) sideBox(g.trim, sg, iu + 0.36, iu + 0.36 + 0.26 + ((g.seed + k * 5) % 3) * 0.06, 0.03, 0.034, 1.7 - k * 0.085, 1.718 - k * 0.085);
         }
@@ -558,7 +562,8 @@ export function genTower(g: Gen): void {
       sideBox(g.trim, sg, 0, sg.L, 0, arcade ? 0.05 : 0.1, gH - 0.55, gH, true);
       if (s === FRONT && shopName) {
         const nm = shopName;
-        const rr = g.atlas.add(`dshop:${nm}`, 256, 40, boardSign(nm.toUpperCase(), { bg: '#20262c', fg: '#f4f1ea', font: '"Segoe UI", Arial, sans-serif', weight: '600', glow: 0.9, glowColor: '#ffffff' }));
+        const signText = shopSign(lot, nm).text.toUpperCase();
+        const rr = g.atlas.add(`dshop:${signText}`, 256, 40, boardSign(signText, { bg: '#20262c', fg: '#f4f1ea', font: '"Segoe UI", Arial, sans-serif', weight: '600', glow: 0.9, glowColor: '#ffffff' }));
         let w = Math.min(6, sg.L * 0.4);
         let uc = sg.L * 0.25;
         if (arcade) {
@@ -572,6 +577,10 @@ export function genTower(g: Gen): void {
           w = Math.min(w, sp - 1.0);
         }
         signOnSide(g, sg, uc - w / 2, uc + w / 2, arcade ? 0.085 : 0.135, gH - 0.5, gH - 0.05, rr);
+        anchors.spot(sg, 'fascia', uc - w / 2, uc + w / 2, gH - 0.5, gH - 0.05, arcade ? 0.085 : 0.135, { word: nm, bg: 0x20262c, fg: 0xf4f1ea, style: 1 });
+      } else if (asShop && sg.L > 6) {
+        // the other sides are let to their own shops: their names are on the band, near only (lettering)
+        anchors.spot(sg, 'band', sg.L * 0.5 - 2.5, sg.L * 0.5 + 2.5, gH - 0.5, gH - 0.05, arcade ? 0.055 : 0.105, { word: SHOP_NAMES[(g.seed * 7 + s * 3 + 1) % SHOP_NAMES.length], fg: 0xf4f1ea, style: 1 });
       }
     }
     if (arcade) {

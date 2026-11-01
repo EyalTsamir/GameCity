@@ -10,6 +10,7 @@ import type { GreenKit } from '../buildings/green';
 import { GREEN } from '../buildings/green';
 import type { Kit } from './furniture';
 import type { Printer } from './print';
+import { markProp } from '../lettering/spots';
 import { boltZ, cbox, lathe } from './shapes';
 
 type Draw = (g: CanvasRenderingContext2D, w: number, h: number) => void;
@@ -305,10 +306,17 @@ export function cabinet(k: Kit, kd: Kit, rng: Rng, kind: number, printer: Printe
   shk.box(-W * 0.25, top - 0.17, zf + 0.0014, 0.07, 0.07, 0.0016, 55);
   kd.m('#e9e7df', 'plastic');
   shk.box(W * 0.25, top - 0.15, zf + 0.0014, 0.11, 0.05, 0.0016, 55);
+  markProp(shk, 'cablabel', W * 0.25, top - 0.15, zf + 0.0024, 0.11, 0.05, seed, kind);
+  markProp(shk, 'cabwarn', -W * 0.25, top - 0.17, zf + 0.0024, 0.07, 0.07, seed, kind);
   if (!printer) return;
   // tag across the door, stickers, a torn bill
   if (rng.chance(0.62)) printer.quad(sh, `tag:${col}:${seed % 9}`, rng.range(-0.08, 0.08), rng.range(0.42, top * 0.62), zf + 0.003, W * 0.82, rng.range(0.2, 0.34), 96, 40, tagDraw(col, seed % 9));
-  if (rng.chance(0.5)) printer.quad(sh, `notice:${seed % 12}`, rng.range(-0.12, 0.12), rng.range(top * 0.55, top - 0.25), zf + 0.0032, 0.21, 0.3, 42, 60, noticeDraw(seed % 12));
+  if (rng.chance(0.5)) {
+    const nx = rng.range(-0.12, 0.12),
+      ny = rng.range(top * 0.55, top - 0.25);
+    printer.quad(sh, `notice:${seed % 12}`, nx, ny, zf + 0.0032, 0.21, 0.3, 42, 60, noticeDraw(seed % 12));
+    markProp(sh, 'notice', nx, ny, zf + 0.0036, 0.21, 0.3, seed);
+  }
   // back and side get their share (seen when you walk the kerb)
   if (rng.chance(0.5)) {
     sh.push().local(0, 0, 0, 0, Math.PI, 0);
@@ -368,6 +376,7 @@ export function signPost(k: Kit, kd: Kit, rng: Rng, kind: SignKind, printer: Pri
       k.m('#a4a9ab', 'steel');
       sh.box(0, py, zF - 0.004, 0.46, 0.2, 0.006, 0);
       printer.quad(sh, `plate:${plate[0]}${plate[1]}`, 0, py, zF + 0.0006, 0.45, 0.19, 72, 30, plateDraw(plate[0], plate[1]));
+      markProp(sh, 'signplate', 0, py, zF + 0.0012, 0.45, 0.19, 0, 0, `${plate[0]}|${plate[1]}`);
     }
     // stickers round the post at hand height
     if (rng.chance(0.45)) {
@@ -406,6 +415,7 @@ export function posterColumn(ks: Kit, k: Kit, kd: Kit, rng: Rng, printer: Printe
       const a = ((i + s) / F) * Math.PI * 2 + Math.PI / F;
       sh.push().local(0, 0, 0, 0, a, 0);
       printer.quad(sh, `bill:${bill}:${s}`, 0, y0 + hh / 2, apo, facetW, hh, 56, 200, posterDraw(bill, s === 0 ? 1 : 2));
+      markProp(sh, 'bill', 0, y0 + hh / 2, apo, facetW, hh, seed + i, s);
       sh.pop();
     }
   }
@@ -441,6 +451,7 @@ export function postNotice(kd: Kit, printer: Printer | null, r: number, y: numbe
   kd.m('#7a7468', 'wood');
   sh.box(0, y, r + 0.005, 0.22, 0.31, 0.004, 1 | 4);
   printer?.quad(sh, `notice:${seed % 12}`, 0, y, r + 0.0075, 0.21, 0.3, 42, 60, noticeDraw(seed % 12));
+  markProp(sh, 'notice', 0, y, r + 0.0078, 0.21, 0.3, seed);
 }
 
 // ──────────────────────────────────────────────────────── shop-front life ──

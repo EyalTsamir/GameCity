@@ -30,6 +30,7 @@ import { genHouse, setLegacyHouses, resetHomes, houseStats, houseLog } from './b
 import { genIndustrial } from './buildings/industry';
 import { genHotel, genSchool, genHarbormaster, genKiosk, genBoathouse, setSchoolKit } from './buildings/special';
 import { samplePalette, SkyState } from '../render/sky/palette';
+import { initAddresses, signedTitle } from './lettering/shopname';
 import { anchors, collectFacades, collectSpans, type BuildingsService } from './buildings/anchors';
 import { GreenKit, makeGreenTexture, createGreenMaterial } from './buildings/green';
 import { setClutter } from './buildings/clutter';
@@ -137,6 +138,7 @@ export default function create(ctx: CityContext): CityModule {
   resetTowers();
   resetHomes();
   anchors.reset();
+  initAddresses(ctx.plan);
   setClutter(!ctx.debug.params.has('noclutter'));
   // massing: ?nomassing / ?nooriels ?noturrets ?nocrossgables ?nosetbacks ?nocrowns ?noroofkit (buildings/massing.ts)
   setMassing(ctx.debug.params, ctx.quality.level);
@@ -228,7 +230,7 @@ export default function create(ctx: CityContext): CityModule {
     built.push({
       lot,
       box: new THREE.Box3(new THREE.Vector3(fp.x0, 0, fp.z0), new THREE.Vector3(fp.x1, top, fp.z1)),
-      label: lot.name ?? KIND_LABEL[lot.kind] ?? lot.kind,
+      label: lot.name ?? signedTitle(lot.id) ?? KIND_LABEL[lot.kind] ?? lot.kind,
     });
   }
 
@@ -366,6 +368,7 @@ export default function create(ctx: CityContext): CityModule {
   const facades = collectFacades(lots);
   const service: BuildingsService = {
     shops: anchors.shops,
+    letterSpots: anchors.letterSpots,
     chimneys: anchors.chimneys,
     balconies: anchors.balconies,
     facades,

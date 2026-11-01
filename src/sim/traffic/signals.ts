@@ -6,6 +6,7 @@
 // at night and feed the bloom pass). Lenses are frustum-culled and drawn with a
 // coarser dome beyond ~70 m (re-bucketed only when the camera moves).
 
+import { EW_NAMES, NS_NAMES } from '../../core/streets';
 import * as THREE from 'three';
 import type { CityContext } from '../../core/context';
 import type { Intersection, SignalHead } from '../../core/roadNetwork';
@@ -82,8 +83,6 @@ interface LampInst {
 }
 
 // street names for the grid lines (N–S streets by XS index, E–W streets by ZS index); off-grid → hashed
-const NS_NAMES = ['Mill Lane', 'Church Street', 'Elm Road', 'King Street', 'Station Road', 'Quay Street'];
-const EW_NAMES = ['Foundry Road', 'Market Street', 'High Street', 'Park Avenue', 'Harbour Road'];
 const NAME_ROWS = NS_NAMES.length + EW_NAMES.length;
 const nearestIdx = (a: readonly number[], v: number) => a.reduce((b, x, i) => (Math.abs(x - v) < Math.abs(a[b] - v) ? i : b), 0);
 const STREET_ROWS = {
