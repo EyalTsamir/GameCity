@@ -243,7 +243,7 @@ export function planter(k: Kit, rng: Rng, round: boolean, green?: GreenKit): voi
   k.m(body, body === '#8a4a2e' ? 'iron' : 'stone');
   if (round) sh.cyl(0, 0, 0, 0.62, 0.58, 0.55, 12, 2);
   else sh.box(0, 0.3, 0, 1.3, 0.6, 1.3, 1);
-  k.m('#4a3424', 'stone');
+  k.m('#4a3233', 'stone');
   if (round) sh.disc(0, 0.56, 0, 0.55, 10, 1);
   else sh.box(0, 0.6, 0, 1.18, 0.02, 1.18, 1);
   if (green) {

@@ -3,6 +3,7 @@
 // rock on steep slopes, sandy -> muddy beds under water with animated caustics.
 
 import * as THREE from 'three';
+import { CAUSTIC_WEB_GLSL, closeNatureOn } from '../../core/closenature';
 import type { CityContext } from '../../core/context';
 import { SLAB } from '../../core/constants';
 import { PALETTE } from '../../core/gfx';
@@ -495,6 +496,7 @@ uniform vec4 uPondXf;
 uniform vec4 uStripe;
 uniform float uTime;
 uniform float uDaylight;
+uniform float uCWeb;
 uniform vec3 gGrassA;
 uniform vec3 gGrassB;
 uniform vec3 gLawn;
@@ -522,7 +524,7 @@ uniform vec3 gGorse;
 varying vec3 vGW;
 varying vec3 vGN;
 float gRough = 0.95;
-`;
+${CAUSTIC_WEB_GLSL}`;
 
 /** shared tail: water level, sand, beds + caustics (identical in both versions) */
 const GROUND_WATER = /* glsl */ `
@@ -551,9 +553,11 @@ const GROUND_BEDS = /* glsl */ `
     vec2 cp = p.xz * 0.23;
     float c1 = texture2D(tNoise, cp + vec2(uTime * 0.011, uTime * 0.007)).g;
     float c2 = texture2D(tNoise, cp * 1.37 + vec2(-uTime * 0.009, uTime * 0.012)).g;
-    float caus = 1.0 - smoothstep(0.0, 0.07, abs(c1 - c2));
-    caus *= smoothstep(0.05, 0.45, depth) * (1.0 - smoothstep(0.8, 3.8, depth)) * uDaylight * (1.0 - inPond * 0.6);
+    float cSun = smoothstep(0.05, 0.45, depth) * (1.0 - smoothstep(0.8, 3.8, depth)) * smoothstep(0.55, 0.95, uDaylight) * (1.0 - inPond * 0.6);
+    float cWeb = uCWeb * (1.0 - smoothstep(0.02, 0.06, length(fwidth(p.xz))));
+    float caus = (1.0 - smoothstep(0.0, 0.07, abs(c1 - c2))) * cSun * (1.0 - cWeb);
     bed += vec3(0.85, 1.0, 0.95) * caus * 0.3;
+    if (cWeb > 0.0) bed += vec3(0.9, 1.0, 0.92) * thCausticWeb(p.xz, uTime * 0.5 + 23.0) * cSun * cWeb * 0.3;
     col = mix(col, bed, smoothstep(0.0, 0.3, depth));
   }
   gRough = mix(0.96, 0.72, wet * sand);
@@ -760,7 +764,7 @@ vec3 groundColor() {
     float rr = length( fract( fq1 ) - 0.5 - off );
     float present = step( hh.x, meadowF * 0.8 * fClump );
     float dotM = present * ( 1.0 - smoothstep( size - pxc1 * 0.35, size + pxc1 * 0.35, rr ) );
-    float dotsVis = smoothstep( 0.6, 1.6, size / max( pxc1, 1e-4 ) );
+    float dotsVis = smoothstep( 0.6, 1.6, size / max( pxc1, 1e-4 ) ) * ( 1.0 - smoothstep( 2.0, 3.2, size / max( pxc1, 1e-4 ) ) );   // (larger than that a real flower stands there)
     int sp = h2.x > 0.66 ? int( h2.y * 5.99 ) : spPatch;
     vec3 tintC = gFlowerCol[ spPatch ];
     grass = mix( grass, tintC, meadowF * fClump * 0.13 * ( 1.0 - dotsVis ) );
@@ -776,7 +780,7 @@ vec3 groundColor() {
     float rr = length( fract( fq2 ) - 0.5 - off );
     float present = step( hh.x, lawnF * 0.3 * ( 0.35 + 0.65 * fClump ) );
     float dotM = present * ( 1.0 - smoothstep( size - pxc2 * 0.35, size + pxc2 * 0.35, rr ) );
-    float dotsVis = smoothstep( 0.6, 1.6, size / max( pxc2, 1e-4 ) );
+    float dotsVis = smoothstep( 0.6, 1.6, size / max( pxc2, 1e-4 ) ) * ( 1.0 - smoothstep( 2.0, 3.2, size / max( pxc2, 1e-4 ) ) );
     vec3 fcol = h2.y < 0.42 ? gFlowerCol[ 6 ] : gFlowerCol[ 7 ];
     grass = mix( grass, mix( gFlowerCol[ 7 ], gFlowerCol[ 6 ], 0.4 ), lawnF * 0.035 * ( 1.0 - dotsVis ) );
     grass = mix( grass, fcol, dotM * dotsVis );
@@ -901,6 +905,7 @@ export function createGround(ctx: CityContext, model: TerrainModel, feet: readon
     uStripe: { value: park ? new THREE.Vector4(park.rect.x0, park.rect.z0, park.rect.x1, park.rect.z1) : new THREE.Vector4(0, 0, -1, -1) },
     uTime: ctx.uniforms.uTime,
     uDaylight: ctx.uniforms.uDaylight,
+    uCWeb: { value: closeNatureOn('caustweb') ? 1 : 0 },
     ...lampUniforms(),
     ...gcUniforms,
     ...gcPalette(),

@@ -136,6 +136,8 @@ interface Seg {
   near: boolean;
   /** simplified stand-in drawn by the far layer only (e.g. one straight scaffold for its curved near arc) */
   farOnly?: boolean;
+  /** part of the trunk or its roots: hidden while the bubble's skin of this trunk is on show (world/closenature/trunks.ts) */
+  trunk?: boolean;
   aoA: number;
   aoB: number;
 }
@@ -160,6 +162,18 @@ interface Frond {
   fan: boolean;
 }
 
+/** a trunk from foot to fork, for its near skin */
+export interface TrunkShape {
+  base: V3;
+  ctl: V3;
+  top: V3;
+  r0: number;
+  rTop: number;
+  flare: number;
+  roots: number;
+  limb?: boolean;
+}
+
 export interface Struct {
   def: PlantDef;
   kind: Kind;
@@ -170,6 +184,8 @@ export interface Struct {
   cry: number;
   lobes: Lobe3[];
   segs: Seg[];
+  /** the trunks as the bubble wants them */
+  trunks: TrunkShape[];
   tips: Tip[];
   fronds: Frond[];
   leaf: THREE.Color;
@@ -259,7 +275,7 @@ export function structure(def: PlantDef): Struct {
   const leaf = def.color ? new THREE.Color(def.color) : pickColor(rng, kind.leaf, tone, 0.06);
   const bark = pickColor(rng, kind.bark, 0.5, 0.04);
   const flower = kind.flowers ? new THREE.Color(rng.pick(kind.flowers)) : null;
-  const st: Struct = { def, kind, form, c: [def.x, def.y + def.h * 0.6, def.z], cr: def.r, cry: def.h * 0.3, lobes: [], segs: [], tips: [], fronds: [], leaf, bark, flower, cardHalf: kind.card, tiers: [] };
+  const st: Struct = { def, kind, form, c: [def.x, def.y + def.h * 0.6, def.z], cr: def.r, cry: def.h * 0.3, lobes: [], segs: [], trunks: [], tips: [], fronds: [], leaf, bark, flower, cardHalf: kind.card, tiers: [] };
   if (form === 'palm' || form === 'fan') palmStruct(st, rng);
   else if (form === 'cone') coneStruct(st, rng);
   else if (form === 'bush') bushStruct(st, rng);
@@ -341,7 +357,8 @@ function nearTrunk(st: Struct, rng: Rng, base: V3, top: V3, r0: number, h: numbe
   const R = [r0 * flare, r0 * 1.04, r0 * 0.95, r0 * 0.87, r0 * 0.8];
   const P = T.map((t) => bez(t));
   P[0] = [P[0][0], P[0][1] - 0.15, P[0][2]];
-  for (let k = 0; k < 4; k++) st.segs.push({ a: P[k], b: P[k + 1], ra: R[k], rb: R[k + 1], sa: STILL, sb: STILL, near: true, aoA: k === 0 ? 0.5 : 0.75 + 0.05 * k, aoB: 0.78 + 0.04 * k });
+  for (let k = 0; k < 4; k++) st.segs.push({ a: P[k], b: P[k + 1], ra: R[k], rb: R[k + 1], sa: STILL, sb: STILL, near: true, trunk: true, aoA: k === 0 ? 0.5 : 0.75 + 0.05 * k, aoB: 0.78 + 0.04 * k });
+  st.trunks.push({ base, ctl, top, r0: r0 * 1.04, rTop: r0 * 0.8, flare, roots });
   if (roots > 0) buttress(st, rng, base, r0, roots);
 }
 
@@ -356,8 +373,8 @@ function buttress(st: Struct, rng: Rng, base: V3, r0: number, n: number): void {
     const A: V3 = [base[0] + ca * r0 * 0.35, base[1] + r0 * rng.range(0.9, 1.6), base[2] + sn * r0 * 0.35];
     const M: V3 = [base[0] + ca * reach * 0.55, base[1] + r0 * 0.25, base[2] + sn * reach * 0.55];
     const B: V3 = [base[0] + ca * reach, base[1] - 0.12, base[2] + sn * reach];
-    st.segs.push({ a: A, b: M, ra: r0 * 0.5, rb: r0 * 0.3, sa: STILL, sb: STILL, near: true, aoA: 0.6, aoB: 0.5 });
-    st.segs.push({ a: M, b: B, ra: r0 * 0.3, rb: r0 * 0.06, sa: STILL, sb: STILL, near: true, aoA: 0.5, aoB: 0.4 });
+    st.segs.push({ a: A, b: M, ra: r0 * 0.5, rb: r0 * 0.3, sa: STILL, sb: STILL, near: true, trunk: true, aoA: 0.6, aoB: 0.5 });
+    st.segs.push({ a: M, b: B, ra: r0 * 0.3, rb: r0 * 0.06, sa: STILL, sb: STILL, near: true, trunk: true, aoA: 0.5, aoB: 0.4 });
   }
 }
 
@@ -420,11 +437,12 @@ function broadStruct(st: Struct, rng: Rng): void {
       const wob = (multi > 1 ? 0.06 : 0.022) * h;
       mid[0] += rng.range(-wob, wob);
       mid[2] += rng.range(-wob, wob);
-      st.segs.push({ a: [base[0], base[1] - 0.2, base[2]], b: mid, ra: sr * 1.38, rb: sr * 0.88, sa: sway0, sb: sway0, near: false, farOnly: true, aoA: 0.5, aoB: 0.9 });
-      st.segs.push({ a: mid, b: top, ra: sr * 0.88, rb: sr * 0.64, sa: sway0, sb: sway0, near: false, farOnly: true, aoA: 0.9, aoB: 0.72 });
+      st.segs.push({ a: [base[0], base[1] - 0.2, base[2]], b: mid, ra: sr * 1.38, rb: sr * 0.88, sa: sway0, sb: sway0, near: false, farOnly: true, trunk: true, aoA: 0.5, aoB: 0.9 });
+      st.segs.push({ a: mid, b: top, ra: sr * 0.88, rb: sr * 0.64, sa: sway0, sb: sway0, near: false, farOnly: true, trunk: true, aoA: 0.9, aoB: 0.72 });
       nearTrunk(st, rng, base, top, sr * 0.8, h, paved ? 0 : multi > 1 ? 3 : 4, paved ? 1.12 : 1.32);
       const lead: V3 = [top[0] + (c[0] - top[0]) * 0.5, c[1] + Rv * (form === 'column' ? 0.75 : 0.35), top[2] + (c[2] - top[2]) * 0.5];
-      st.segs.push({ a: top, b: lead, ra: sr * 0.64, rb: Math.max(0.012, sr * 0.12), sa: sway0, sb: { ph1: 0, w1: 0.3, ph2: 0, w2: 0 }, near: false, aoA: 0.72, aoB: 0.6 });
+      st.segs.push({ a: top, b: lead, ra: sr * 0.64, rb: Math.max(0.012, sr * 0.12), sa: sway0, sb: { ph1: 0, w1: 0.3, ph2: 0, w2: 0 }, near: false, trunk: true, aoA: 0.72, aoB: 0.6 });
+      st.trunks.push({ base: top, ctl: lerp3(top, lead, 0.5), top: lead, r0: sr * 0.64, rTop: Math.max(0.012, sr * 0.12), flare: 1, roots: 0, limb: true });
       anchors.push({ p: top, r: sr * 0.64, ph: rng.next(), w: 0, dirx: Math.cos(a), dirz: Math.sin(a) });
       anchors.push({ p: lerp3(top, lead, 0.55), r: sr * 0.38, ph: rng.next(), w: 0.15, dirx: Math.cos(a), dirz: Math.sin(a) });
     }
@@ -434,8 +452,8 @@ function broadStruct(st: Struct, rng: Rng): void {
     const fork: V3 = [x + lx * 0.45, y + Math.max(1.6, clear * rng.range(0.74, 0.86)), z + lz * 0.45];
     const mid = lerp3([x, y, z], fork, 0.5);
     // far layer: straight two-segment stand-in
-    st.segs.push({ a: [x, y - 0.2, z], b: mid, ra: r0 * 1.38, rb: r0 * 0.96, sa: sway0, sb: sway0, near: false, farOnly: true, aoA: 0.5, aoB: 0.88 });
-    st.segs.push({ a: mid, b: fork, ra: r0 * 0.96, rb: r0 * 0.82, sa: sway0, sb: sway0, near: false, farOnly: true, aoA: 0.88, aoB: 0.8 });
+    st.segs.push({ a: [x, y - 0.2, z], b: mid, ra: r0 * 1.38, rb: r0 * 0.96, sa: sway0, sb: sway0, near: false, farOnly: true, trunk: true, aoA: 0.5, aoB: 0.88 });
+    st.segs.push({ a: mid, b: fork, ra: r0 * 0.96, rb: r0 * 0.82, sa: sway0, sb: sway0, near: false, farOnly: true, trunk: true, aoA: 0.88, aoB: 0.8 });
     // near layer: a gently swept trunk (quadratic arc, 4 segments, flaring at the foot) + buttress roots
     nearTrunk(st, rng, [x, y, z], fork, r0, h, paved ? 0 : 4, paved ? 1.12 : 1.32);
     const nS = form === 'vase' || form === 'spread' || form === 'umbrella' ? rng.int(3, 4) : form === 'weep' ? 3 : rng.int(2, 3);
@@ -462,18 +480,21 @@ function broadStruct(st: Struct, rng: Rng): void {
       const P = [fork, bez(1 / 3), bez(2 / 3), end];
       const R = [sr, sr * 0.74, sr * 0.54, sr * 0.36];
       const W = [0, 0.08, 0.18, 0.3];
+      st.trunks.push({ base: fork, ctl, top: end, r0: sr * 1.02, rTop: sr * 0.38, flare: 1, roots: 0, limb: true });
       for (let q = 0; q < 3; q++) {
-        st.segs.push({ a: P[q], b: P[q + 1], ra: R[q], rb: R[q + 1], sa: { ph1: ph, w1: W[q], ph2: 0, w2: 0 }, sb: { ph1: ph, w1: W[q + 1], ph2: 0, w2: 0 }, near: true, aoA: 0.8 - q * 0.05, aoB: 0.75 - q * 0.05 });
+        st.segs.push({ a: P[q], b: P[q + 1], ra: R[q], rb: R[q + 1], sa: { ph1: ph, w1: W[q], ph2: 0, w2: 0 }, sb: { ph1: ph, w1: W[q + 1], ph2: 0, w2: 0 }, near: true, trunk: true, aoA: 0.8 - q * 0.05, aoB: 0.75 - q * 0.05 });
       }
       // far layer: one straight, slightly shorter stand-in (hidden in the far crown except at its foot)
-      if (!forest) st.segs.push({ a: fork, b: lerp3(fork, end, 0.92), ra: sr, rb: sr * 0.45, sa: sway0, sb: { ph1: ph, w1: 0.25, ph2: 0, w2: 0 }, near: false, farOnly: true, aoA: 0.8, aoB: 0.7 });
+      if (!forest) st.segs.push({ a: fork, b: lerp3(fork, end, 0.92), ra: sr, rb: sr * 0.45, sa: sway0, sb: { ph1: ph, w1: 0.25, ph2: 0, w2: 0 }, near: false, farOnly: true, trunk: true, aoA: 0.8, aoB: 0.7 });
       anchors.push({ p: end, r: R[3], ph, w: 0.3, dirx: Math.cos(az), dirz: Math.sin(az) });
       anchors.push({ p: P[2], r: R[2], ph, w: 0.18, dirx: Math.cos(az), dirz: Math.sin(az) });
     }
     if (form === 'dome' || form === 'oval') {
       // central leader up into the top of the crown
       const lead: V3 = [c[0], c[1] + Rv * 0.4, c[2]];
-      st.segs.push({ a: fork, b: lead, ra: r0 * 0.5, rb: Math.max(0.012, r0 * 0.1), sa: sway0, sb: { ph1: 0, w1: 0.3, ph2: 0, w2: 0 }, near: forest, aoA: 0.8, aoB: 0.6 });
+      // (starts as wide as the trunk ends: no shoulder at the fork)
+      st.trunks.push({ base: lerp3(fork, lead, -0.04), ctl: lerp3(fork, lead, 0.35), top: lead, r0: r0 * 0.78, rTop: Math.max(0.012, r0 * 0.11), flare: 1, roots: 0, limb: true });
+      st.segs.push({ a: fork, b: lead, ra: r0 * 0.5, rb: Math.max(0.012, r0 * 0.1), sa: sway0, sb: { ph1: 0, w1: 0.3, ph2: 0, w2: 0 }, near: forest, trunk: true, aoA: 0.8, aoB: 0.6 });
       anchors.push({ p: lerp3(fork, lead, 0.6), r: r0 * 0.3, ph: rng.next(), w: 0.2, dirx: 0, dirz: 0 });
     }
   }
@@ -559,8 +580,10 @@ function coneStruct(st: Struct, rng: Rng): void {
   const lean: V3 = [rng.range(-0.02, 0.02) * h, 0, rng.range(-0.02, 0.02) * h];
   const T: V3 = [x + lean[0], top, z + lean[2]];
   const m1 = lerp3([x, y, z], T, 0.45);
-  st.segs.push({ a: [x, y - 0.15, z], b: m1, ra: r0 * 1.3, rb: r0 * 0.68, sa: STILL, sb: STILL, near: false, aoA: 0.5, aoB: 0.6 });
-  st.segs.push({ a: m1, b: T, ra: r0 * 0.68, rb: 0.015, sa: STILL, sb: STILL, near: false, aoA: 0.6, aoB: 0.9 });
+  st.segs.push({ a: [x, y - 0.15, z], b: m1, ra: r0 * 1.3, rb: r0 * 0.68, sa: STILL, sb: STILL, near: false, trunk: true, aoA: 0.5, aoB: 0.6 });
+  st.trunks.push({ base: [x, y, z], ctl: lerp3([x, y, z], m1, 0.5), top: m1, r0: r0 * 1.1, rTop: r0 * 0.7, flare: 1.2, roots: 3 });
+  st.trunks.push({ base: m1, ctl: lerp3(m1, T, 0.5), top: T, r0: r0 * 0.7, rTop: 0.016, flare: 1, roots: 0, limb: true });
+  st.segs.push({ a: m1, b: T, ra: r0 * 0.68, rb: 0.015, sa: STILL, sb: STILL, near: false, trunk: true, aoA: 0.6, aoB: 0.9 });
   buttress(st, rng, [x, y, z], r0, rng.int(3, 5));
   // whorls
   const span = top - y0;
@@ -869,6 +892,7 @@ function wood(buf: InstBuf, ref: PlantRef, st: Struct, s: Seg, lod: number): voi
     a: s.sa,
     b: s.sb,
     pattern: st.kind.pattern,
+    trunk: !!s.trunk,
     r: b.r,
     g: b.g,
     bl: b.b,

@@ -1005,29 +1005,18 @@ export function planterBox(k: Kit, kind: 'concrete' | 'terracotta' | 'wood' | 's
   }
   // soil 5 cm below the rim: dark damp band along the walls, lighter dry middle, clods, bark-mulch chips, a
   // dropped leaf or cigarette end, soil splashed on the rim top (watering)
-  k.m('#3a2a1e', 'stone');
+  k.m('#3a2627', 'stone');
   poly(sh, [-ix, ys, -iz, ix, ys, -iz, ix, ys, iz, -ix, ys, iz], 0, 1, 0);
-  k.m('#5a4330', 'stone');
+  k.m('#4a3132', 'stone');
   poly(sh, [-ix + 0.06, ys + 0.002, -iz + 0.06, ix - 0.06, ys + 0.002, -iz + 0.06, ix - 0.06, ys + 0.002, iz - 0.06, -ix + 0.06, ys + 0.002, iz - 0.06], 0, 1, 0);
   const hr = (i: number) => Math.abs(Math.sin(i * 12.9898 + along * 7.1 + across * 3.3) * 43758.5453) % 1;
-  k.m('#3f2d20', 'stone');
-  for (let i = 0; i < 8; i++) sh.ellipsoid((hr(i) - 0.5) * ix * 1.6, ys + 0.006, (hr(i + 40) - 0.5) * iz * 1.6, 0.035, 0.018, 0.03, 0);
-  k.m('#8a5a36', 'wood');
-  for (let i = 0; i < 14; i++) {
-    sh.push().local((hr(i + 7) - 0.5) * ix * 1.7, ys + 0.004, (hr(i + 19) - 0.5) * iz * 1.7, 0, hr(i + 3) * 3, 0);
-    sh.box(0, 0, 0, 0.045, 0.006, 0.022, 1);
-    sh.pop();
-  }
+  k.m('#3f2a2b', 'stone');
+  for (let i = 0; i < 8; i++) sh.ellipsoid((hr(i) - 0.5) * ix * 1.6, ys + 0.003, (hr(i + 40) - 0.5) * iz * 1.6, 0.016 + 0.014 * hr(i + 80), 0.008, 0.012 + 0.012 * hr(i + 90), 1);
+  k.m('#5a3f40', 'stone');
+  for (let i = 0; i < 14; i++) sh.ellipsoid((hr(i + 7) - 0.5) * ix * 1.7, ys + 0.004, (hr(i + 19) - 0.5) * iz * 1.7, 0.012 + 0.012 * hr(i + 3), 0.004, 0.008 + 0.008 * hr(i + 5), 0);
   if (hr(77) < 0.5) {
     k.m('#e9e4d6', 'plastic');
     sh.push().local(ix * 0.4, ys + 0.007, -iz * 0.3, 0, hr(5) * 3, 0).box(0, 0, 0, 0.03, 0.006, 0.006, 1).pop();
-  }
-  k.m('#4e3828', 'stone');
-  for (let i = 0; i < 6; i++) {
-    const onX = i % 2 === 0, sgn = hr(i + 50) < 0.5 ? -1 : 1;
-    const u = (hr(i + 60) - 0.5) * (onX ? along : across) * 0.8;
-    const rx2 = onX ? u : sgn * (ax - t / 2), rz2 = onX ? sgn * (az - t / 2) : u;
-    sh.box(rx2, h + 0.001, rz2, 0.05 + hr(i) * 0.06, 0.002, 0.03, 1);
   }
 }
 

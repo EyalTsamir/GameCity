@@ -48,7 +48,7 @@ export interface TileGrid {
   size: number;
   nx: number;
   nz: number;
-  /** per tile: bit 0 any blades · bit 1 long grass / edges / habitat · bit 2 flowers · bit 3 litter */
+  /** per tile: bit 0 any blades · bit 1 long grass / edges / habitat · bit 2 flowers · bit 3 litter · bit 4 thick grass */
   flags: Uint8Array;
   /** per tile: min / max surface height (m) for frustum tests */
   ymin: Float32Array;
@@ -648,6 +648,7 @@ export function buildCoverMaps(ctx: CityContext): CoverMaps {
       let fl = d >= 6 ? 1 : 0;
       if (d >= 6 && (cover[q + 1] > 70 || cover[q + 2] > 0)) fl |= 2;
       if (lt >= 20) fl |= 8;
+      if (d >= 77) fl |= 16;
       const fq = ((j >> 1) * FW + (i >> 1)) * 4;
       if (flower[fq] > 20 || flower[fq + 2] > 30) fl |= 4;
       const y = height[p];

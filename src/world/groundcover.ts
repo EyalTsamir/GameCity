@@ -15,6 +15,7 @@
 //      ?nolitter · ?nolilies · ?nogcouter (no blades beyond the slab: no roaming landscape window)
 
 import type * as THREE from 'three';
+import { closeNature } from '../core/closenature';
 import type { CityContext, CityModule } from '../core/context';
 import { buildCoverMaps, type FlowerPatch } from './groundcover/mask';
 import { createCoverWindow } from './groundcover/outer';
@@ -22,6 +23,9 @@ import { createField, type Field, type QualityLevel } from './groundcover/field'
 import { gcPalette, type GcPalette } from './groundcover/palette';
 import { setGroundCover, groundCoverOn } from './terrain/ground';
 import { createLilies } from './groundcover/lily';
+import { CRES, CW, CH, FRES, FW, FH } from './groundcover/mask';
+import { SLAB } from '../core/constants';
+import type { CoverReader, CoverSample } from './closenature/flora';
 
 export interface GroundcoverService {
   density(x: number, z: number): number;
@@ -29,6 +33,8 @@ export interface GroundcoverService {
   setDensity(k: number): void;
   getDensity(): number;
   palette: GcPalette;
+  /** what the cover maps say at a point of the town (world/closenature/flora.ts) */
+  cover: CoverReader;
 }
 
 export default function create(ctx: CityContext): CityModule {
@@ -46,6 +52,7 @@ export default function create(ctx: CityContext): CityModule {
   let level = ctx.quality.level as QualityLevel;
   if (!prm.has('nograss')) {
     field = createField(ctx, maps, null, level, {
+      near: { flowers: closeNature(ctx, 'closeflowers'), leaves: closeNature(ctx, 'closeleaves'), sward: closeNature(ctx, 'closesward', 'high') },
       rings: prm.get('gcrings') ?? undefined,
       flowers: prm.get('gcflowers') !== '0',
       litter: !prm.has('nolitter'),
@@ -84,7 +91,27 @@ export default function create(ctx: CityContext): CityModule {
   };
   ctx.events.on('quality', onQuality);
 
+  const reader: CoverReader = {
+    sample(x: number, z: number, out: CoverSample): boolean {
+      const ci = Math.floor((x - SLAB.x0) / CRES),
+        cj = Math.floor((z - SLAB.z0) / CRES);
+      if (ci < 0 || cj < 0 || ci >= CW || cj >= CH) return false;
+      const q = (cj * CW + ci) * 4;
+      const c = maps.cover;
+      out.d = c[q] / 255;
+      out.len = c[q + 1] / 255;
+      out.hab = c[q + 2];
+      out.lit = c[q + 3] / 255;
+      const f = (Math.min(FH - 1, Math.floor((z - SLAB.z0) / FRES)) * FW + Math.min(FW - 1, Math.floor((x - SLAB.x0) / FRES))) * 4;
+      out.fl = maps.flower[f] / 255;
+      out.sp = Math.min(5, Math.floor((maps.flower[f + 1] / 255) * 6));
+      out.lawn = maps.flower[f + 2] / 255;
+      out.y = maps.height[cj * CW + ci];
+      return true;
+    },
+  };
   const service: GroundcoverService = {
+    cover: reader,
     density: maps.densityAt,
     flowerPatches: maps.patches,
     setDensity: (k: number) => field?.setDensity(k),

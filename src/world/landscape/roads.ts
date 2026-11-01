@@ -25,6 +25,18 @@ varying vec2 vRS;   // (arc length m, across -1..1)
 varying float vRK;  // 0 asphalt road, 1 gravel lane, 2 stone (portal / bridge)
 uniform sampler2D tLN;
 float rHash(vec2 p) { vec3 p3 = fract(vec3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
+/** loose stones: the tone of the nearest, a dark gap at its rim */
+vec2 rStones(vec2 q) {
+  vec2 b = floor(q);
+  float d1 = 9.0, d2 = 9.0, id = 0.0;
+  for (int j = -1; j <= 1; j++) for (int i = -1; i <= 1; i++) {
+    vec2 c = b + vec2(float(i), float(j));
+    vec2 o = vec2(rHash(c), rHash(c + 7.3));
+    float d = length(q - c - o);
+    if (d < d1) { d2 = d1; d1 = d; id = rHash(c + 3.1); } else if (d < d2) d2 = d;
+  }
+  return vec2(id, smoothstep(0.0, 0.22, d2 - d1));
+}
 vec3 roadAlbedo(vec3 wp) {
   float fp = length(fwidth(wp.xz));
   vec4 n1 = texture2D(tLN, wp.xz * 0.11);
@@ -44,13 +56,21 @@ vec3 roadAlbedo(vec3 wp) {
     vec4 n3 = texture2D(tLN, wp.xz * 0.53);
     // near: single stones; the wheel tracks are packed darker, damp in patches
     float nearG = 1.0 - smoothstep(0.03, 0.25, fp);
-    grav *= 1.0 + nearG * (rHash(floor(wp.xz * 11.0)) - 0.5) * 0.6;
-    grav *= 1.0 + nearG * (rHash(floor(wp.xz * 31.0)) - 0.5) * 0.3;
+    float grit = 0.5;
+    if (nearG > 0.0) {
+      // grit, and the odd stone big enough to see
+      vec2 s1 = rStones(wp.xz * 88.0 + n3.rg * 3.0);
+      vec2 s2 = rStones(wp.zx * 21.0 + n3.gb * 2.0);
+      float big = step(0.9, s2.x) * s2.y;
+      grit = s1.x;
+      grav *= 1.0 + nearG * ((s1.x - 0.5) * 0.34 - 0.1 * (1.0 - s1.y) + big * (fract(s2.x * 31.0) - 0.42) * 0.7);
+    }
     grav *= 1.0 - 0.24 * (1.0 - smoothstep(0.08, 0.22, abs(a - 0.52))) * (0.7 + 0.6 * n1.r);
-    grav = mix(grav, grav * vec3(0.66, 0.68, 0.66), smoothstep(0.58, 0.72, n3.b) * (1.0 - smoothstep(0.1, 0.3, abs(a - 0.52))));
-    float crown = 1.0 - smoothstep(0.08, 0.3, a + (n3.r - 0.5) * 0.2);
-    float edge = smoothstep(0.72 - 0.2 * n1.b - 0.12 * n3.g, 1.0, a);
-    vec3 grass = vec3(0.12, 0.17, 0.06) * (0.8 + 0.4 * n2.r);
+    grav = mix(grav, grav * vec3(0.66, 0.68, 0.66), smoothstep(0.52, 0.74, n3.b * 0.5 + n1.a * 0.5) * (1.0 - smoothstep(0.1, 0.3, abs(a - 0.52))));
+    float crown = 1.0 - smoothstep(mix(0.08, 0.16, nearG), mix(0.3, 0.22, nearG), a + (n1.b * 0.65 + n3.r * 0.35 - 0.5) * 0.24 + nearG * (grit - 0.5) * 0.06);
+    float e0 = 0.72 - 0.2 * n1.b - 0.12 * n3.g + nearG * (grit - 0.5) * 0.08;
+    float edge = smoothstep(mix(e0, e0 + (1.0 - e0) * 0.35, nearG), mix(1.0, e0 + (1.0 - e0) * 0.65, nearG), a);
+    vec3 grass = vec3(0.085, 0.125, 0.04) * (0.8 + 0.4 * n2.r) * mix(1.0, 0.62 + 0.5 * n3.a + (grit - 0.5) * 0.55, nearG);
     return mix(grav, grass, max(crown * 0.85, edge));
   }
   // asphalt: patched, darker wheel paths, crumbling edge, dashed centre line
