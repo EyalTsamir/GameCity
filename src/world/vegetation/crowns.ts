@@ -492,7 +492,8 @@ function broadStruct(st: Struct, rng: Rng): void {
     if (form === 'dome' || form === 'oval') {
       // central leader up into the top of the crown
       const lead: V3 = [c[0], c[1] + Rv * 0.4, c[2]];
-      st.trunks.push({ base: fork, ctl: lerp3(fork, lead, 0.5), top: lead, r0: r0 * 0.52, rTop: Math.max(0.012, r0 * 0.11), flare: 1, roots: 0, limb: true });
+      // (starts as wide as the trunk ends: no shoulder at the fork)
+      st.trunks.push({ base: lerp3(fork, lead, -0.04), ctl: lerp3(fork, lead, 0.35), top: lead, r0: r0 * 0.78, rTop: Math.max(0.012, r0 * 0.11), flare: 1, roots: 0, limb: true });
       st.segs.push({ a: fork, b: lead, ra: r0 * 0.5, rb: Math.max(0.012, r0 * 0.1), sa: sway0, sb: { ph1: 0, w1: 0.3, ph2: 0, w2: 0 }, near: forest, trunk: true, aoA: 0.8, aoB: 0.6 });
       anchors.push({ p: lerp3(fork, lead, 0.6), r: r0 * 0.3, ph: rng.next(), w: 0.2, dirx: 0, dirz: 0 });
     }

@@ -33,7 +33,14 @@ export default function create(ctx: CityContext): CityModule {
   addSprigs(ctx, veg?.closeTips ?? null, land?.closeUnder ?? null);
   if (closeNature(ctx, 'closeearth')) {
     const t0 = performance.now();
-    addEarth(ctx, land?.closeGround ?? null);
+    const reader = (ctx.services.groundcover as { cover?: CoverReader } | undefined)?.cover ?? null;
+    const landCover = ctx.services.landscape as { cover?: (x: number, z: number) => { forest: number } } | undefined;
+    const cs = { d: 0, len: 0, hab: 0, lit: 0, fl: 0, sp: 0, lawn: 0, y: 0 };
+    addEarth(ctx, land?.closeGround ?? null, {
+      // (a lawn under a tree stays a lawn)
+      town: (x, z) => (reader?.sample(x, z, cs) ? Math.max(0, cs.lit - 0.6) * 1.6 : 0),
+      land: (x, z) => Math.min(1, (landCover?.cover?.(x, z).forest ?? 0) * 2),
+    });
     stats.earthMs = Math.round(performance.now() - t0);
   }
   return {

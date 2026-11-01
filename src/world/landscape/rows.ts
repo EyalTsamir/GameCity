@@ -543,7 +543,7 @@ export class RowSink {
    * a vertical strip along (x0,z0) → (x1,z1) on the ground heights y0, y1: `band` textured from foot to top, `h` metres tall.
    * u runs on from `s0` (metres along the row). The lighting normal is mostly up, like a foliage mass.
    */
-  wall(band: number, x0: number, y0: number, z0: number, x1: number, y1: number, z1: number, s0: number, h: number, r: number, g: number, bl: number, foot = 0.62, sink = 0.08, plant = 1, h1 = h): void {
+  wall(band: number, x0: number, y0: number, z0: number, x1: number, y1: number, z1: number, s0: number, h: number, r: number, g: number, bl: number, foot = 0.62, sink = 0.08, plant = 1, h1 = h, nearGone = false): void {
     const c = this.ch((x0 + x1) / 2, (z0 + z1) / 2);
     const len = Math.hypot(x1 - x0, z1 - z0) || 1;
     const nx = -(z1 - z0) / len,
@@ -561,7 +561,8 @@ export class RowSink {
     for (let i = 0; i < 4; i++) c.nrm.push(lx, ly, lz);
     c.uv.push(su0, vBand(band, 0), su1, vBand(band, 0), su1, vBand(band, 1), su0, vBand(band, 1));
     c.col.push(r * foot, g * foot, bl * foot, r * foot, g * foot, bl * foot, r, g, bl, r, g, bl);
-    c.hgt.push(0, 0, h1 * plant, h * plant);
+    // (see dome)
+    c.hgt.push(0, 0, h1 * plant + (nearGone ? 1000 : 0), h * plant + (nearGone ? 1000 : 0));
     c.idx.push(o, o + 1, o + 2, o, o + 2, o + 3);
     this.triangles += 2;
   }

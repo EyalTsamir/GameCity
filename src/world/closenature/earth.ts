@@ -24,16 +24,20 @@ const LAND_REACH = 1400;
 
 const VERT = /* glsl */ `
 uniform float uDrop;
+attribute float aF;
 varying vec3 vP;
 varying vec3 vN;
+varying float vF;
 void main() {
   vP = position;
   vN = normal;
+  vF = aF;
   gl_Position = projectionMatrix * viewMatrix * vec4(position.x, position.y + uDrop, position.z, 1.0);
 }
 `;
 
 const FRAG = /* glsl */ `
+varying float vF;
 void main() {
   vec3 N = normalize(vN);
   vec2 p = vP.xz;
@@ -50,12 +54,12 @@ void main() {
   // damp, shade of old leaves, thin places: slow patches
   ratio *= mix(vec3(0.78, 0.74, 0.68), vec3(1.08, 1.06, 1.02), smoothstep(0.3, 0.7, c.b));
   if (fine > 0.0) {
-    // crumbs, big and small, with dark gaps; a pale stone now and then
+    // grains of soil; here and there a clod or a pale stone standing out of them
     vec4 s0 = CMT(tStones, p * 2.3 + c.gb * 0.03, 2.3);
     vec4 s1 = CMT(tStones, p.yx * 6.1 + 0.37, 6.1);
-    float st0 = smoothstep(0.03, 0.26, s0.a), st1 = smoothstep(0.05, 0.3, s1.r);
-    vec3 crumb = mix(vec3(0.42, 0.36, 0.3), vec3(0.72 + 0.56 * s0.g) * vec3(1.02, 0.98, 0.9), st0);
-    crumb *= mix(0.68, 0.86 + 0.34 * s1.g, st1);
+    vec3 crumb = vec3(0.76 + 0.46 * s1.g) * vec3(1.02, 0.98, 0.9) * (0.88 + 0.24 * g.b);
+    float clod = step(0.8, s0.g) * smoothstep(0.02, 0.14, s0.a);
+    crumb *= mix(1.0, 0.56 + 0.5 * fract(s0.g * 9.7), clod);
     crumb = mix(crumb, vec3(1.5, 1.46, 1.36), step(0.965, fract(s0.g * 11.3)) * smoothstep(0.16, 0.3, s0.a));
     // dead grass lying on it: fibres in two directions, each window its own way
     vec2 d1 = vec2(p.x * 0.8 + p.y * 0.6, -p.x * 0.6 + p.y * 0.8);
@@ -66,11 +70,22 @@ void main() {
     crumb = mix(crumb, vec3(1.22, 1.12, 0.82) * (0.8 + 0.4 * s1.g), th * 0.72);
     ratio *= mix(vec3(1.0), crumb, fine);
   }
+  // under trees: the dark brown under last year's leaves (the leaves themselves are real, flora.ts)
+  ratio *= mix(vec3(1.0), vec3(0.62, 0.47, 0.34) * (0.82 + 0.36 * c.b), vF);
   gl_FragColor = vec4(max(mix(vec3(1.0), ratio, k), vec3(0.0)), 1.0);
 }
 `;
 
-export function addEarth(ctx: CityContext, landGround: { geometry: THREE.BufferGeometry; drop: number } | null): void {
+/** how much of last year's leaves, per vertex */
+function withDuff(g: THREE.BufferGeometry, at: (x: number, z: number) => number): THREE.BufferGeometry {
+  const P = g.getAttribute('position');
+  const F = new Float32Array(P.count);
+  for (let i = 0; i < P.count; i++) F[i] = at(P.getX(i), P.getZ(i));
+  g.setAttribute('aF', new THREE.BufferAttribute(F, 1));
+  return g;
+}
+
+export function addEarth(ctx: CityContext, landGround: { geometry: THREE.BufferGeometry; drop: number } | null, duffAt: { town: (x: number, z: number) => number; land: (x: number, z: number) => number }): void {
   const near = nearOf(ctx);
   const tiles = makeCloseTiles();
   const shared = {
@@ -81,7 +96,7 @@ export function addEarth(ctx: CityContext, landGround: { geometry: THREE.BufferG
     uSunDir: globalUniforms.uSunDir,
     uDaylight: globalUniforms.uDaylight,
   };
-  const layer = (name: string, grid: TriGrid, drop: number, top: number, offset: number): void => {
+  const layer = (name: string, grid: TriGrid, drop: number, top: number, offset: number, duff: (x: number, z: number) => number): void => {
     if (grid.triangles === 0) return;
     near.addMeshes({
       name,
@@ -111,8 +126,11 @@ export function addEarth(ctx: CityContext, landGround: { geometry: THREE.BufferG
       }),
       renderOrder: -80,
       receiveShadow: false,
-      standIn: interleaved(new Float32Array(grid.stride * 3), ATTRS),
-      build: (c) => grid.build(c.i, c.j, (data) => interleaved(data, ATTRS)),
+      standIn: withDuff(interleaved(new Float32Array(grid.stride * 3), ATTRS), duff),
+      build: (c) => {
+        const g = grid.build(c.i, c.j, (data) => interleaved(data, ATTRS));
+        return g ? withDuff(g, duff) : g;
+      },
     });
   };
   // the town's ground wherever it isn't sand
@@ -140,6 +158,7 @@ export function addEarth(ctx: CityContext, landGround: { geometry: THREE.BufferG
     0,
     3,
     -1,
+    duffAt.town,
   );
   // the land beyond it, as far as anyone can walk: its big triangles cut to cells
   if (landGround) {
@@ -156,6 +175,7 @@ export function addEarth(ctx: CityContext, landGround: { geometry: THREE.BufferG
       landGround.drop,
       3,
       -1,
+      duffAt.land,
     );
   }
 }

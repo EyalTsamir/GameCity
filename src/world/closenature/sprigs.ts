@@ -184,6 +184,84 @@ function stemGeometry(): THREE.BufferGeometry {
   return g;
 }
 
+/** one reed: a stem, long lance leaves that bow, a dark brown plume; unit height */
+function reedGeometry(): THREE.BufferGeometry {
+  const P: number[] = [],
+    N: number[] = [],
+    C: number[] = [],
+    A: number[] = [],
+    L: number[] = [],
+    I: number[] = [];
+  const v = (x: number, y: number, z: number, nx: number, ny: number, nz: number, shade: number, petal = 1, u = 0, w = 0.5): number => {
+    P.push(x, y, z);
+    N.push(nx, ny, nz);
+    C.push(0.085 * shade, 0.05 * shade, 0.035 * shade);
+    A.push(petal, shade);
+    L.push(u, w);
+    return P.length / 3 - 1;
+  };
+  // stem
+  for (let k = 0; k <= 3; k++) {
+    const f = k / 3;
+    const r = 0.0075 * (1 - 0.6 * f);
+    for (let i = 0; i < 3; i++) {
+      const a = (i / 3) * 6.283;
+      v(Math.cos(a) * r + 0.03 * f * f, f * 0.95, Math.sin(a) * r, Math.cos(a), 0.15, Math.sin(a), 0.72 + 0.34 * f);
+    }
+  }
+  for (let k = 0; k < 3; k++) {
+    for (let i = 0; i < 3; i++) {
+      const a = k * 3 + i,
+        b = k * 3 + (i + 1) % 3;
+      I.push(a, a + 3, b, b, a + 3, b + 3);
+    }
+  }
+  // leaves: out of the stem, up, over
+  for (let j = 0; j < 5; j++) {
+    const az = j * 2.4 + 0.7;
+    const ca = Math.cos(az),
+      sa = Math.sin(az);
+    const y0 = 0.08 + j * 0.13;
+    const len = 0.52 - j * 0.04,
+      w = 0.011;
+    const SEG = 4;
+    const base = P.length / 3;
+    for (let k = 0; k <= SEG; k++) {
+      const f = k / SEG;
+      const out = len * f * 0.62 * (0.35 + 0.65 * f);
+      const up = len * (f * 0.85 - f * f * 0.45);
+      const hw = w * Math.sin(Math.min(1, f + 0.12) * 3.14) ** 0.6 * (k === SEG ? 0 : 1);
+      v(ca * out - sa * hw, y0 + up, sa * out + ca * hw, ca * 0.5, 1, sa * 0.5, 0.82 + 0.3 * f, 1, -1, f);
+      v(ca * out + sa * hw, y0 + up, sa * out - ca * hw, ca * 0.5, 1, sa * 0.5, 0.82 + 0.3 * f, 1, 1, f);
+    }
+    for (let k = 0; k < SEG; k++) {
+      const a = base + k * 2;
+      I.push(a, a + 2, a + 1, a + 1, a + 2, a + 3);
+    }
+  }
+  // the plume: a slim spindle of three crossed blades, its own brown
+  const top = 0.95,
+    cx = 0.03;
+  for (let i = 0; i < 3; i++) {
+    const a = (i / 3) * 3.14;
+    const dx = Math.cos(a) * 0.011,
+      dz = Math.sin(a) * 0.011;
+    const b0 = v(cx, top - 0.13, 0, 0, 1, 0, 1, 0);
+    const b1 = v(cx - dx, top - 0.06, -dz, 0, 1, 0, 1.15, 0);
+    const b2 = v(cx + dx, top - 0.06, dz, 0, 1, 0, 1.15, 0);
+    const b3 = v(cx + 0.008, top + 0.03, 0, 0, 1, 0, 1.3, 0);
+    I.push(b0, b2, b1, b1, b2, b3);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3));
+  g.setAttribute('normal', new THREE.Float32BufferAttribute(N, 3));
+  g.setAttribute('aC', new THREE.Float32BufferAttribute(C, 3));
+  g.setAttribute('aA', new THREE.Float32BufferAttribute(A, 2));
+  g.setAttribute('aL', new THREE.Float32BufferAttribute(L, 2));
+  g.setIndex(I);
+  return g;
+}
+
 /** a live leaf: a pale rib, a darker heart, a little of the sky in the upper side */
 const LIVE_FRAG = /* glsl */ `
 {
@@ -196,7 +274,7 @@ const LIVE_FRAG = /* glsl */ `
 }
 `;
 
-/** what a woodland plant the far strips only hint at is: 0 shrub (a stool of stems opening into leaves), 1 bracken */
+/** what a plant the far strips only hint at is: 0 shrub (a stool of stems opening into leaves), 1 bracken, 2 a stand of reeds from (x, z) to (ex, ez) */
 export interface UnderPlant {
   x: number;
   y: number;
@@ -205,6 +283,8 @@ export interface UnderPlant {
   h: number;
   k: number;
   kind: number;
+  ex?: number;
+  ez?: number;
 }
 
 export function addSprigs(ctx: CityContext, tips: CloseTips | null, under: UnderPlant[] | null): void {
@@ -222,7 +302,7 @@ export function addSprigs(ctx: CityContext, tips: CloseTips | null, under: Under
     }
   }
   const leafMat = plantMaterial(ctx, 'sprig', RADIUS, LIVE_FRAG);
-  leafMat.roughness = 0.58;
+  leafMat.roughness = 0.82;
   const layer = (name: string, geometry: THREE.BufferGeometry, wantKind: number, capacity: number, perTip: number, reach: number) => {
     near.addScatter({
       name,
@@ -272,7 +352,7 @@ export function addSprigs(ctx: CityContext, tips: CloseTips | null, under: Under
     if (!a) underCell.set(k, (a = []));
     a.push(p);
   }
-  const LEAF: readonly [number, number, number] = [0.085, 0.2, 0.05];
+  const LEAF: readonly [number, number, number] = [0.1, 0.2, 0.04];
   near.addScatter({
     name: 'closeshrubleaf',
     radius: RADIUS,
@@ -290,7 +370,7 @@ export function addSprigs(ctx: CityContext, tips: CloseTips | null, under: Under
       for (const p of a) {
         if (p.kind !== 0) continue;
         // leaves over a vase: more at the top, none at the foot
-        const n = Math.round(46 * p.w);
+        const n = Math.round(130 * p.w);
         for (let k = 0; k < n; k++) {
           const th = rnd() * 6.283;
           const f = 0.32 + 0.68 * Math.sqrt(rnd());
@@ -298,7 +378,7 @@ export function addSprigs(ctx: CityContext, tips: CloseTips | null, under: Under
           const x = p.x + Math.cos(th) * rr,
             z = p.z + Math.sin(th) * rr,
             y = p.y + p.h * f;
-          const s = 0.2 * (0.8 + 0.6 * rnd());
+          const s = 0.26 * (0.8 + 0.6 * rnd());
           const v = (0.72 + 0.42 * rnd()) * p.k;
           out.put(x, y, z, Math.atan2(Math.cos(th), Math.sin(th)) + (rnd() - 0.5) * 1.4, s, s, s, -0.1 - rnd() * 0.6 + 0.7 * (f - 0.6), (rnd() - 0.5) * 0.9, LEAF[0] * v, LEAF[1] * v, LEAF[2] * v);
         }
@@ -325,14 +405,74 @@ export function addSprigs(ctx: CityContext, tips: CloseTips | null, under: Under
         for (let k = 0; k < n; k++) {
           const th = rnd() * 6.283;
           const v = 0.8 + 0.5 * rnd();
-          const h = p.h * (0.7 + 0.35 * rnd());
+          const h = p.h * (0.55 + 0.35 * rnd());
           const t = 0.2 + 0.32 * rnd();
           const w = 0.7 + 0.5 * rnd();
-          out.put(p.x + Math.cos(th) * 0.08, p.y - 0.03, p.z + Math.sin(th) * 0.08, th + 1.57, w, h, w, Math.cos(th) * t, Math.sin(th) * t, 0.075 * v, 0.058 * v, 0.042 * v);
+          out.put(p.x + Math.cos(th) * 0.08, p.y - 0.03, p.z + Math.sin(th) * 0.08, 0, w, h, w, Math.sin(th) * t, -Math.cos(th) * t, 0.13 * v, 0.1 * v, 0.075 * v);
         }
       }
     },
   });
+  // reeds, by the strip they replace: a strip may cross cells, so each stem is judged by its own place
+  const reeds = under.filter((p) => p.kind === 2);
+  if (reeds.length) {
+    const reedCell = new Map<number, UnderPlant[]>();
+    const REED_CELL = 8;
+    for (const p of reeds) {
+      const seen = new Set<number>();
+      const L = Math.hypot((p.ex ?? p.x) - p.x, (p.ez ?? p.z) - p.z);
+      const N = Math.ceil(L / 2);
+      for (let q = 0; q <= N; q++) {
+        const f = q / N;
+        const k = key(Math.floor((p.x + ((p.ex ?? p.x) - p.x) * f) / REED_CELL), Math.floor((p.z + ((p.ez ?? p.z) - p.z) * f) / REED_CELL));
+        if (seen.has(k)) continue;
+        seen.add(k);
+        let a = reedCell.get(k);
+        if (!a) reedCell.set(k, (a = []));
+        a.push(p);
+      }
+    }
+    near.addScatter({
+      name: 'closereed',
+      radius: RADIUS,
+      cell: REED_CELL,
+      top: 3,
+      geometry: reedGeometry(),
+      material: leafMat,
+      capacity: 2200,
+      perCell: 700,
+      colors: true,
+      fill(c: NearCell, out: NearEmit) {
+        const a = reedCell.get(key(c.i, c.j));
+        if (!a) return;
+        const rnd = nearRandom(c.seed);
+        for (const p of a) {
+          const ex = p.ex ?? p.x,
+            ez = p.ez ?? p.z;
+          const L = Math.hypot(ex - p.x, ez - p.z);
+          const n = Math.round(L * 26);
+          for (let k = 0; k < n; k++) {
+            const f = rnd(),
+              sx = (rnd() - 0.5) * 0.9,
+              sz = (rnd() - 0.5) * 0.9,
+              yaw = rnd() * 6.283,
+              hk = rnd(),
+              ta = rnd(),
+              tb = rnd(),
+              tone = rnd(),
+              clump = Math.sin(f * L * 2.1 + p.x) * 0.5 + 0.5;
+            const x = p.x + (ex - p.x) * f + sx,
+              z = p.z + (ez - p.z) * f + sz;
+            if (x < c.x0 || x >= c.x0 + REED_CELL || z < c.z0 || z >= c.z0 + REED_CELL) continue;
+            if (hk > 0.35 + 0.65 * clump) continue;
+            const h = p.h * (0.75 + 0.5 * hk);
+            const v = (0.72 + 0.5 * tone) * p.k;
+            out.put(x, p.y - 0.05, z, yaw, h, h, h, (ta - 0.5) * 0.14, (tb - 0.5) * 0.14, 0.14 * v, 0.2 * v, 0.06 * v);
+          }
+        }
+      },
+    });
+  }
   near.addScatter({
     name: 'closebracken',
     radius: RADIUS,

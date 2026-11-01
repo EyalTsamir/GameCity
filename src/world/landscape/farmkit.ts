@@ -341,7 +341,8 @@ export function buildFarmKit(
             yb = Math.max(WL + 0.03, H(bx, bz));
           const tt = 0.84 + 0.3 * vnoise(sa / 30, side * row, 873);
           const hh = (1.25 + 1.0 * hash2i(si, row, 882)) * (0.8 + 0.3 * g);
-          s.wall(B.reed, ax, ya, az, bx, yb, bz, sa * 1.7 + row * 9 + side * 31, hh, tt, tt, tt * 0.92, 0.55, 0.12);
+          s.wall(B.reed, ax, ya, az, bx, yb, bz, sa * 1.7 + row * 9 + side * 31, hh, tt, tt, tt * 0.92, 0.55, 0.12, 1, hh, true);
+          s.under.push({ x: ax, y: Math.min(ya, yb), z: az, ex: bx, ez: bz, w: 0, h: hh, k: tt, kind: 2 });
           st.reeds += 2;
         }
       }

@@ -559,7 +559,7 @@ export function addFlora(ctx: CityContext, reader: CoverReader | null): void {
     cs.d = Math.min(1, mead + c.field * 0.4);
     cs.len = 0.6;
     cs.hab = 0;
-    cs.lit = c.forest * 0.9;
+    cs.lit = sstep(0.05, 0.4, c.forest) * 0.9;
     // the same kind of patches as the map in town: a field for each species, the strongest wins
     let best = 0,
       bv = 0;
@@ -696,7 +696,7 @@ export function addFlora(ctx: CityContext, reader: CoverReader | null): void {
             if (!coverAt(x, z) || cs.lit <= 0.01) continue;
             // drifts: against what stops the wind, in hollows; bare between
             const drift = sstep(0.34, 0.72, vnoise(x * 0.62, z * 0.62) * 0.65 + vnoise(x * 2.3, z * 2.3) * 0.35);
-            if (pick > cs.lit * (0.1 + 1.25 * drift)) continue;
+            if (pick > cs.lit * ((cs.lit > 0.6 ? 0.42 : 0.1) + 1.25 * drift)) continue;
             const col = LEAVES[Math.floor(ci * ci * LEAVES.length)];
             const v = 0.62 + 0.46 * tone;
             const s = 0.045 + 0.075 * sz;

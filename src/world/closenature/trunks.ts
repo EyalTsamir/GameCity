@@ -115,7 +115,7 @@ const FRAG_COLOR = /* glsl */ `
     // pine: thick long plates, red-brown in the crack, weathered grey on the face
     vec4 t2 = texture2D(tBarkF, vBUv * vec2(0.5, 0.62) + 0.31);
     float e = smoothstep(0.05, 0.5, t2.b);
-    c *= mix(0.5, 1.3, e) * grain;
+    c *= mix(0.62, 1.55, e) * grain;
     c = mix(c, c * 0.8 + vec3(0.06, 0.056, 0.05), smoothstep(0.55, 0.9, t2.b) * 0.6);
     bkSlope = (t2.rg - 0.5) * 2.0 * 0.8;
     bkCav = 0.5 + 0.5 * e;
@@ -129,10 +129,10 @@ const FRAG_COLOR = /* glsl */ `
   } else {
     // furrowed: lit plate tops, deep dark furrows
     float e = smoothstep(0.03, 0.42, tf.b);
-    c *= vec3(1.76, 1.7, 1.6) * mix(0.32, 1.1, e) * (0.58 + 0.84 * tf.a);
+    c *= vec3(2.3, 2.2, 2.05) * mix(0.34, 1.1, e) * (0.58 + 0.84 * tf.a);
     c = mix(c, c * 1.1 + vec3(0.03, 0.028, 0.024), smoothstep(0.6, 0.95, tf.b) * 0.6);
     bkSlope = (tf.rg - 0.5) * 2.0 * 0.85;
-    bkCav = 0.46 + 0.54 * e;
+    bkCav = 0.56 + 0.44 * e;
   }
   // green algae and moss on the wet side, in the cracks first, thick near the ground; grey lichen on a flake here and there
   float side = smoothstep(0.35, -0.75, wn.z);
@@ -140,11 +140,11 @@ const FRAG_COLOR = /* glsl */ `
   float mossF = smoothstep(0.08, 0.46, mossK + 0.2 * (tf.a - 0.5) + (1.0 - smoothstep(0.0, 0.4, foot)) * 0.16 * side);
   c = mix(c, vec3(0.05, 0.08, 0.022) * (0.7 + 0.6 * tf.a), mossF * 0.9);
   float blot = texture2D(tBarkP, vBUv * 1.37 + vB.w, 2.0).a;
-  float lichen = smoothstep(0.02, 0.1, blot - 0.74 + 0.42 * (tf.a - 0.5)) * smoothstep(0.3, 0.6, foot) * (1.0 - smoothstep(2.0, 3.0, foot));
+  float lichen = smoothstep(0.02, 0.1, blot - 0.84 + 0.42 * (tf.a - 0.5)) * smoothstep(0.3, 0.6, foot) * (1.0 - smoothstep(2.0, 3.0, foot));
   c = mix(c, vec3(0.3, 0.31, 0.22) * (0.5 + 0.9 * tf.a), lichen * 0.5 * step(pat, 0.5));
   // soil splash and damp at the foot, with a ragged edge
   float st = 1.0 - smoothstep(0.02, 0.26 + 0.26 * (tf.a - 0.3), foot);
-  c = mix(c, c * vec3(0.62, 0.55, 0.46) + vec3(0.007, 0.005, 0.003), st * 0.85);
+  c = mix(c, c * vec3(0.72, 0.64, 0.54) + vec3(0.012, 0.009, 0.006), st * 0.7);
   diffuseColor.rgb = c;
 }
 `;
@@ -179,7 +179,7 @@ function barkMaterial(ctx: CityContext, tiles: BarkTiles): THREE.MeshStandardMat
       .replace('#include <normal_fragment_maps>', FRAG_NORMAL)
       .replace('#include <aomap_fragment>', FRAG_AO);
   };
-  mat.customProgramCacheKey = () => 'closenature-bark-5';
+  mat.customProgramCacheKey = () => 'closenature-bark-6';
   patchLampMaterial(mat);
   nearDither(mat, RADIUS);
   return mat;
@@ -335,7 +335,8 @@ function buildTrunk(s: Soup, t: TrunkSpec, gy: (x: number, z: number) => number,
     const flareK = Math.exp(-hp / (0.26 * sc));
     const rootK = hp / sc;
     let rb = t.r0 + (t.rTop - t.r0) * f;
-    rb *= 1 + (t.flare - 1) * flareK;
+    rb *= t.lite ? 1 + 0.72 * Math.pow(1 - Math.min(1, hp / tall), 6) : 1 + (t.flare - 1) * flareK;
+    if (!t.lite) rb *= 1 - 0.14 * Math.max(0, f - 0.8) / 0.2;
     if (closing) rb *= 0.22;
     const lobeK = 0.55 + 0.45 * Math.min(1, Math.exp(-hp * 0.5) + 0.25);
     for (let i = 0; i <= cols; i++) {
@@ -432,7 +433,7 @@ function surfaceRoot(s: Soup, t: TrunkSpec, gy: (x: number, z: number) => number
       P[w] = px + ca * ox;
       P[w + 1] = cy + oy;
       P[w + 2] = pz + sa * ox;
-      const ao = 0.5 + 0.45 * Math.max(0, Math.sin(th));
+      const ao = 0.34 + 0.36 * Math.max(0, Math.sin(th));
       C[w] = t.r * ao;
       C[w + 1] = t.g * ao;
       C[w + 2] = t.b * ao;
@@ -541,7 +542,7 @@ function landSpec(list: TreeList, i: number, gy: (x: number, z: number) => numbe
   const x = list.x[i],
     z = list.z[i],
     y = gy(x, z);
-  const r = t.r * 1.14;
+  const r = t.r * 1.2;
   const bark = t.kind === KIND.pine || t.kind === KIND.conifer ? BARK.PINE : t.kind === KIND.small || t.kind === KIND.olive ? BARK.SMOOTH : BARK.FURROW;
   const pine = t.kind === KIND.pine;
   const olive = t.kind === KIND.olive;
@@ -561,9 +562,9 @@ function landSpec(list: TreeList, i: number, gy: (x: number, z: number) => numbe
     bark,
     moss: t.kind === KIND.oak || t.kind === KIND.broad ? 0.35 : 0.15,
     lite: true,
-    r: (pine ? 0.19 : olive ? 0.14 : 0.1) * v,
-    g: (pine ? 0.105 : olive ? 0.125 : 0.083) * v,
-    b: (pine ? 0.066 : olive ? 0.105 : 0.064) * v,
+    r: (pine ? 0.21 : olive ? 0.2 : 0.16) * v,
+    g: (pine ? 0.12 : olive ? 0.18 : 0.133) * v,
+    b: (pine ? 0.075 : olive ? 0.15 : 0.105) * v,
   };
 }
 

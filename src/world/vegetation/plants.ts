@@ -869,7 +869,7 @@ export function wornPatch(sh: Shaper, w: Wind, x: number, z: number, r: number, 
   // surface roots: half-buried tapering tubes from the flare out across the patch
   const nr = rng.int(2, 3);
   const a0 = rng.range(0, 6.28);
-  sh.color(rng.pick(['#5a4a3c', '#4e4238', '#625040']));
+  sh.color(rng.pick(['#40352b', '#3a3028', '#463a2e']));
   for (let i = 0; i < nr; i++) {
     const a = a0 + (i / nr) * 6.28 + rng.range(-0.4, 0.4);
     const l = r * rng.range(0.7, 1.05);
