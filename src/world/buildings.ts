@@ -99,7 +99,7 @@ export default function create(ctx: CityContext): CityModule {
   const mats = createMaterials(ctx.uniforms, { legacy: ctx.debug.params.has('legacyfacade'), wear: !ctx.debug.params.has('nowear'), winDepth: !ctx.debug.params.has('nowinreveal'), winRefl: !ctx.debug.params.has('nowinrefl'), wallRelief: !ctx.debug.params.has('nowallrelief'), plinth: !ctx.debug.params.has('noplinth'), glassVar: !ctx.debug.params.has('noglassvar'), interiors: boxHunt(ctx, 'interiors') });
   // ?nowingeo = no near-LOD sill / surround geometry (the shader sill everywhere)
   const winGeoOn = !ctx.debug.params.has('nowingeo');
-  const winRec: number[] | null = winGeoOn ? [] : null;
+  const winRec: number[] = [];
   const chunkKey = (x: number, z: number) => Math.max(0, Math.min(3, Math.floor((x + 220) / TRIM_CHUNK))) * 4 + Math.max(0, Math.min(3, Math.floor((z + 200) / TRIM_CHUNK)));
   // the facade shell is chunked on the trim grid as well: culled per chunk, and drawn nearest chunk first (frame())
   // so the near facades' depth rejects the (expensive) facade pixels of the buildings behind them
@@ -346,8 +346,13 @@ export default function create(ctx: CityContext): CityModule {
   // mirrored street) fades to the far average between a and b cells per pixel (default 0.3,0.8 = 3.3 → 1.25 px a bay)
   const flod = (ctx.debug.params.get('facadelod') ?? '').split(',').map(Number);
   if (flod.length === 2 && flod.every((v) => v > 0) && flod[0] < flod[1]) mats.uniforms.uDetailPx.value.set(flod[0], flod[1]);
-  const winGeo = winRec ? createWinGeo(winRec, ctx.quality.level === 'low' ? 22 : ctx.quality.level === 'medium' ? 32 : 42) : null;
+  const winGeo = winGeoOn ? createWinGeo(winRec, ctx.quality.level === 'low' ? 22 : ctx.quality.level === 'medium' ? 32 : 42) : null;
   if (winGeo) group.add(winGeo.group);
+  // every window's record, for the near-only rooms behind them (buildingrooms.ts)
+  const winRecNode = new THREE.Group();
+  winRecNode.name = 'buildings-winrec';
+  winRecNode.userData.rec = new Float32Array(winRec);
+  group.add(winRecNode);
   // debug (perf analysis): ?bdbg=noshell,notrim,nocast,nodetail
   const bdbg = (ctx.debug.params.get('bdbg') ?? '').split(',');
   for (const m of meshes) {

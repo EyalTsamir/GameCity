@@ -129,7 +129,7 @@ export const FRAME = { WHITE: 0, DARK: 1, GREEN: 2, WOOD: 3, BLACK: 4, CREAM: 5,
 export const GLASS = { NEUTRAL: 0, BLUE: 1, LIGHT: 2, DEEP: 3, GREEN: 4, STEEL: 5, BRONZE: 6, DARK: 7 } as const;
 
 const FRAME_COLS = ['#f3efe6', '#2e3a44', '#2f4a3a', '#5a3d2b', '#1f2226', '#e6dbc2', '#2a6f74', '#aab3ba'];
-const GLASS_COLS = ['#a3b9c6', '#6aa6d6', '#8cc4e0', '#4a84b8', '#6cbcae', '#7395b5', '#b88f5c', '#465868'];
+export const GLASS_COLS = ['#a3b9c6', '#6aa6d6', '#8cc4e0', '#4a84b8', '#6cbcae', '#7395b5', '#b88f5c', '#465868'];
 
 export const LIGHT_MODE = { STEADY: 0, BLINK: 1, NEON: 2, ALWAYS: 3, PULSE: 4 } as const;
 
@@ -186,6 +186,8 @@ export interface BuildingMaterials {
     uBhInt: { value: number };
     /** near-LOD sill geometry: (centre of its range, range m); the shader drops its own sill box inside */
     uGeoWin: { value: THREE.Vector4 };
+    /** near-only rooms (buildingrooms.ts): their range (m); inside it the facade drops its own interior. 0 = none */
+    uCloseWin: { value: number };
     uDetailPx: { value: THREE.Vector2 };
   };
 }
@@ -294,7 +296,7 @@ vWPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
 vWNrm = normalize(mat3(modelMatrix) * objectNormal);
 `;
 
-const COMMON_FRAG = /* glsl */ `
+export const COMMON_FRAG = /* glsl */ `
 uniform float uHours;
 uniform float uTime;
 uniform float uRealTime;
@@ -342,6 +344,10 @@ const SHELL_FRAG_PARS = /* glsl */ `
 uniform float uBakeLit;
 uniform float uBakeRefl;
 uniform float uBakePass;
+#else
+uniform float uCloseWin;
+uniform vec3 uNearEye;
+uniform float uNearLens;
 #endif
 varying vec2 vFac;
 varying vec4 vA;
@@ -1573,16 +1579,17 @@ ${fg(`    float spd = 0.0; // weight (1 - smoothstep(0.003, 0.01, fq.y)) is 0 fr
     }
     if (dSurf == 0 && all(greaterThan(pm, wr.xz)) && all(lessThan(pm, wr.yw))) {
       vec2 kd = k * revD;
-      vec2 kdS = mix(vec2(1e-5), sign(kd) * max(abs(kd), vec2(1e-5)), abs(sign(kd)));
+      vec2 kdP = step(vec2(0.0), kd);
+      vec2 kdS = (kdP * 2.0 - 1.0) * max(abs(kd), vec2(1e-5));
       // fraction of the depth at which the ray leaves the opening through a side
-      vec2 sEx = vec2(kd.x > 0.0 ? (wr.y - pm.x) : (wr.x - pm.x), kd.y > 0.0 ? (wr.w - pm.y) : (wr.z - pm.y)) / kdS;
+      vec2 sEx = (mix(wr.xz, wr.yw, kdP) - pm) / kdS;
       float sHit = min(min(sEx.x, sEx.y), 1.0);
       vec2 hp = pm + kd * sHit;
       dQ = q + (hp - pm) * vec2(uSign, 1.0);
       if (sHit < 1.0) {
-        dSurf = sEx.x < sEx.y ? 1 : (kd.y > 0.0 ? 2 : 3);
+        dSurf = sEx.x < sEx.y ? 1 : (kd.y >= 0.0 ? 2 : 3);
         dDepth = sHit;
-        dN = dSurf == 1 ? -Tu * sign(kd.x) : vec3(0.0, dSurf == 2 ? -1.0 : 1.0, 0.0);
+        dN = dSurf == 1 ? -Tu * (kdP.x * 2.0 - 1.0) : vec3(0.0, dSurf == 2 ? -1.0 : 1.0, 0.0);
       } else {
         pm = hp; // the glass plane: frame, panes, curtains and the room shift with the view
         f = pm / csz;
@@ -1990,6 +1997,13 @@ ${fg(`      float ew = max(0.09, fq.x * 1.25);
   vec3 rd = vec3(dot(V, T), V.y, -dot(V, N));
   rd.z = max(rd.z, 0.04);
   float litI = lit * glowI;
+  // the near-only rooms take over from here in (buildingrooms.ts): this draws frames, reveal and reflection, they add the room
+#ifdef BH_BAKE
+  const float cwK = 0.0;
+#else
+  float cwK = uCloseWin > 0.0 && vD.w > 0.5 && uDetail > 0.5 ? 1.0 - smoothstep(uCloseWin * uNearLens * 0.7, uCloseWin * uNearLens, distance(vWPos, uNearEye)) : 0.0;
+#endif
+  bool cwOff = cwK >= 0.999;
 #if BH_CLASS == 0 || BH_CLASS == 2
   bool shopWin = style > 5.5 && style < 6.5;
 #else
@@ -2018,6 +2032,10 @@ ${fg(`      float ew = max(0.09, fq.x * 1.25);
     rsShop += floor(bayH * 97.0) * 1.913;
     rsLobby = mod(seed, 613.0) * 1.37 + floor(bayH * 97.0) * 1.913;
   }
+  if (cwOff) {
+    interior = vec3(0.0);
+    dayA = vec3(0.0);
+  } else
   // (one bhShop call site for shops and lobbies: the D3D compiler inlines each one — it is the biggest function)
 #if BH_CLASS == 0 || BH_CLASS == 2
   if (uDetail > 0.5 && (shopWin || lobbyWin)) interior = bhShop(pm, csz, normalize(rd), shopWin ? rsShop : rsLobby, shopWin ? shopTR : 8.0, litI, shopWin ? lcol : vec3(1.0, 0.82, 0.6), dayA);
@@ -2041,6 +2059,7 @@ ${fg(`      float ew = max(0.09, fq.x * 1.25);
   float nearL = 0.0; // coverage of things right behind the glass (fabric, blinds, plants): lit by the window, not the room depth
   bool homey = prof < 0.5 || prof > 2.5 && prof < 3.5;
   if (homey) {
+    if (!cwOff) {
     float cr = fract(r3 * 7.13 + r1 * 0.37);
     vec3 cc = mix(vec3(0.86, 0.8, 0.68), vec3(0.76, 0.42, 0.38), step(0.7, r2));
     cc = mix(cc, vec3(0.42, 0.55, 0.66), step(0.9, r2));
@@ -2112,6 +2131,7 @@ ${fg(`      float ew = max(0.09, fq.x * 1.25);
       dayA = mix(dayA, vec3(0.5, 0.26, 0.15), pot * detail);
       nearL = max(nearL, max(leaf, pot) * detail);
     }
+    }
     // a few windows stand open in fine weather (no glass reflection in the opening)
     openW = step(0.94, fract(r2 * 13.7 + r1 * 3.1)) * smoothstep(0.55, 0.85, uDaylight) * step(0.5, wx);
   } else if (office) {
@@ -2120,7 +2140,7 @@ ${fg(`      float ew = max(0.09, fq.x * 1.25);
     // a plant on the sill; a few top-hung vents stand open (below). Box-filtered (no moiré).
     float os = fract(r2 * 7.13 + r3 * 3.31);
     float fo = 1.0 - smoothstep(0.15, 0.6, fpx * 60.0 / max(wr.y - wr.x, 0.3) / 6.2832);
-    if (fract(u1 * 3.71 + cell.y * 0.37) < 0.4 || os < 0.12) {
+    if (cwOff) {} else if (fract(u1 * 3.71 + cell.y * 0.37) < 0.4 || os < 0.12) {
       float blindTo = fract(r1 * 11.3) < 0.15 ? 0.97 : 1.0 - clamp(0.2 + 0.65 * fract(u2 * 5.3) + (r1 - 0.5) * 0.4 * step(0.45, r3), 0.08, 0.92);
       float shut = step(0.75, fract(r3 * 5.7)); // slats closed: a flat pale screen; open: dark gaps between the slats
       float slat = mix(0.75 + 0.25 * bhStripe(pm.y * 9.0, fpy * 9.0), 0.92 + 0.08 * bhStripe(pm.y * 18.0, fpy * 18.0), shut);
@@ -2161,7 +2181,7 @@ ${fg(`      float ew = max(0.09, fq.x * 1.25);
     }
     // a top-hung vent in the transom swung open (by day)
     ventO = step(0.9, fract(r1 * 17.3 + r2 * 2.1)) * step(wr.w - 0.42, pm.y) * smoothstep(0.5, 0.8, uDaylight);
-  } else if (prof > 5.5 && prof < 6.5) {
+  } else if (prof > 5.5 && prof < 6.5 && !cwOff) {
     // school: children's paintings taped to the glass (a row of A3 sheets at child height, each its own
     // picture: a sun, a house, a crayon scribble, a figure on coloured sugar paper), a paper chain across the
     // top on some windows, roller blinds part-drawn on others
@@ -2210,6 +2230,8 @@ ${fg(`      float ew = max(0.09, fq.x * 1.25);
       nearL = bl;
     }
   }
+  interior *= 1.0 - cwK;
+  dayA *= 1.0 - cwK;
   // recess shadow under the lintel and beside the jambs
   float recess = curtain ? 1.0 : smoothstep(0.0, 0.22, wr.w - pm.y) * mix(0.75, 1.0, smoothstep(0.0, 0.12, min(pm.x - wr.x, wr.y - pm.x)));
   interior *= mix(0.45, 1.0, recess);
@@ -2238,7 +2260,7 @@ ${fg(`      float ew = max(0.09, fq.x * 1.25);
       Fs = max(Fs, mix(0.04, 0.11 + 0.05 * r3, dayK) * (1.0 - openW));
       interior *= mix(1.0, 0.82, dayK);
       // (with the real street to show: a bright street over a dim shop, as a window reads by day)
-      Fs = mix(Fs, max(Fs, 0.26 * (1.0 - openW)), gmK * dayK);
+      Fs = mix(Fs, max(Fs, mix(0.26, 0.14, cwK) * (1.0 - openW)), gmK * dayK);
       interior *= 1.0 - 0.3 * gmK * dayK;
     }
     transTint *= mix(vec3(0.93, 1.0, 0.97), vec3(1.0, 0.98, 0.95), fract(r3 * 4.7 + r1 * 0.3)) * mix(0.92, 1.04, fract(r2 * 6.1));
@@ -2252,7 +2274,7 @@ ${fg(`      float ew = max(0.09, fq.x * 1.25);
   // interior: per window a different balance (dark room / bright net curtain / sun on the glass across)
   float roomK = mix(0.62, 1.0, fract(r1 * 3.71));
   float reflK = (curtain || ribbon) ? mix(0.82, 1.18, fract(r2 * 2.93)) : mix(0.75, 1.9, fract(r2 * 2.93)) * (1.15 - 0.3 * roomK);
-  vec3 glass = interior * (1.0 - Fs) * transTint + refl * Fs * mix(mix(0.65, 1.0, recess) * paneGrad * reflK * ((curtain || ribbon) ? 1.0 : (homey ? 0.72 : 1.6)), 1.0, gmK);
+  vec3 glass = interior * (1.0 - Fs) * transTint + refl / (1.0 + cwK * nightF * 4.0 * max(refl.r, max(refl.g, refl.b))) * Fs * mix(mix(0.65, 1.0, recess) * paneGrad * reflK * ((curtain || ribbon) ? 1.0 : (homey ? 0.72 : 1.6)), 1.0, gmK);
   vec3 glassAlb = dayA * (1.0 - Fs) * transTint * (curtain ? 0.4 : (ribbon ? 0.7 : (homey ? mix(0.62 * roomK, 1.0, nearL) : mix(roomK, 1.0, nearL)))); // a room seen through glass by day is far darker than the facade around it
   // open sash: the swung pane shows a strip of darker, skewed reflection at the hinge side
   glass = mix(glass, env * 0.35 * reflTint, openW * (1.0 - smoothstep(0.62, 0.66, wx)));
@@ -2588,6 +2610,7 @@ export function createMaterials(g: GlobalUniforms, opts: { legacy?: boolean; wea
     uGlassVar: { value: opts.glassVar === false ? 0 : 1 },
     uHandPaint: { value: handDoorsLive() ? 0 : 1 },
     uBhInt: { value: opts.interiors === false ? 0 : 1 },
+    uCloseWin: { value: 0 },
     uGeoWin: { value: new THREE.Vector4(0, -1e5, 0, 0) },
     uDetailPx: { value: new THREE.Vector2(0.3, 0.8) },
   };
@@ -2634,6 +2657,9 @@ export function createMaterials(g: GlobalUniforms, opts: { legacy?: boolean; wea
         uHandPaint: uniforms.uHandPaint,
         uBhInt: uniforms.uBhInt,
         uGeoWin: uniforms.uGeoWin,
+        uCloseWin: uniforms.uCloseWin,
+        uNearEye: g.uNearEye,
+        uNearLens: g.uNearLens,
         uDetailPx: uniforms.uDetailPx,
         uSunDir: g.uSunDir,
         ...lampUniforms(),
