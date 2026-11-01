@@ -3,20 +3,30 @@
 Stage 2 of `CLOSE-ROUND.md`. Worktree `objective-proskuriakova-485af7`, port 5212. Owns close-range surface detail.
 
 ## Resume here
-Three rounds done; final checks next (item 6). System built (`src/world/closemat*`, `src/core/closemat.ts`) and committed. Families on: walls (brick, plaster, timber, stone, panel, sheet, smooth, incl. window reveals), asphalt, slabs, loose ground, decks, solids (trim = joinery, masonry + landmarks + harbour, street furniture, metal), sills (`winGeo.ts`), real litter replacing the painted one (`closemat/litter.ts`, `RD_LITTER` in the road shaders). Autofocus now also raycasts these surfaces (`services.closeMat.rayHit`, used in `ui/camera.ts`).
+Finished: three rounds and the final checks are done (2026-11-01). Not merged: that is the coordinator's. What is left is under "Left for later".
 
-Harness notes for resuming:
-- Perf: `bash <scratchpad>/perf.sh <outdir> [views] [hours]` = bake to `public/bake` of this worktree (`--out`, the main-checkout script would otherwise write to the main checkout!) then `abprof` hiding every `near-cm*` object in one page, behind power-guard. Equivalent by hand: `abprof --ab "cm=<traverse scene, near-cm* visible=false>|<restore>"`.
-- Captures: `closeset.mjs --out shots/mN --ids ... --d 1,3 --hours 12 --tile 960 --cols 2 --rows 6`; 5–15 min in the queue with four sessions. Sheets are PNG8: their colours lie (red flakes that are not there), read the JPGs for colour.
-- Don't use `python3` in Bash here (a Store stub that hangs). Patch with a node script file in the scratchpad or Edit.
+System: `src/world/closemat*`, `src/core/closemat.ts`. Families: walls (brick, plaster, timber, stone, panel, sheet, smooth, incl. window reveals), asphalt, road paint, slabs, loose ground, decks, sand, solids (trim = joinery, masonry + landmarks + harbour + rail bed, street furniture, metal), sills (`winGeo.ts`), real litter replacing the painted one (`closemat/litter.ts`, `RD_LITTER` in the road shaders). Autofocus raycasts these surfaces (`services.closeMat.rayHit`, `ui/camera.ts`).
 
-Open items, in order:
-1. Cost so far (AC, fresh bake, overlay hidden in the page): overview none, downtown none, street 0.45 ±0.52, market 0.84 ±0.49, 3 m from a brick wall 1.58 ±0.17. Budget +0.2 far, +0.7 street/market. By family at street the ground is nearly all of it (road ≈ 1.0, paving ≈ 0.7 before the cuts, walls and solids ≈ 0), so: `GROUND_R` 10, relief and crack fetches only in the first metres. Sorting draws by layer: nothing. Writing 1 instead of `discard`: nothing. Market still to pin down (repeat; family split in `scratchpad/perf3.sh`).
-2. Focus fixed: the lot's box in front of a porch pulled the lens to 0.5 m; now the exact ray wins outside rooms (`explore.focusAt` remains the fallback).
-3. Retuned after looking: timber, joinery paint, plaster and stone relief, rust colour (the light is HDR and AgX kind: rust needs albedo ≈ 0.05–0.1 and low saturation), base blow holes (`materials.ts`), iron rust and rust chips on furniture (`props/material.ts`). Round 2 captures: `shots/m5`.
-4. `cmPaint` is in (`roads-markings`, offset −4 so it sits above the markings' −2): look at it, `ground-road`.
-5. Night (21.5) and dusk (18.2) pass; `walkhitch`, `hitch`; boot cost (stats of module `closemat`: `tilesMs`, `bootMs`, triangles per layer; the slowest cell in `__city.near.stats()`, keep under 2 ms).
-6. Final checks of CLOSE-ROUND.md; end with CLOSE-DONE.
+## Final numbers (AC, fresh bake, overlay hidden in one page, after the disk scan)
+| view | cost | budget |
+|---|---|---|
+| overview | 0.02 ±0.08 ms | +0.2 |
+| downtown | 0.13 ±0.16 ms | +0.2 |
+| street | 0.45 ±0.08 ms | +0.7 |
+| market | 0.57 ±0.3 ms | +0.7 |
+| 3 m from a brick wall (no budget set) | 1.18 ±0.33 ms | |
+| 3 m over a road (no budget set) | 0.95 ±0.61 ms | |
+
+Measured earlier: the ground is nearly all of the cost at street, hence `GROUND_R` 10 and one fetch in the outer band. Sorting draws by layer: nothing. Writing 1 instead of `discard`: nothing. That table does not include the saving from removing the painted litter (`rdLitter`), which was not measured.
+
+Triangles drawn by the overlay: 0 at overview, 7,392 in 46 meshes at street, 39,035 in 32 at market (dense landmark detail), about 0.1 ms at 2.5 ns each. Vertex data of the meshes on show: 5.4 MB at street, 22.9 MB at market; built but hidden cells come on top, not measured. Boot: tiles 831 ms (paid by `winGeo`, first caller), grids 288 ms when last read, before sand and rail bed were added. Slowest cell seen 1.3 ms (`cmSlab`), budget 2 ms.
+
+Checks: typecheck, build (`dist/index.html` 4.5 MB) clean; invariants {} and validate [] at overview, 4x, 20 s; `hitch.mjs` prog+0, freeze 0; `walkhitch` freeze 0, 33 hitches with the overlay against 48 without (noise, not a gain); `ui-test` 73 passed, `kinds` failed in the full run and passed alone (the known flake); `?diorama`, `?quality=medium`, `?quality=low` looked fine (low has no overlay).
+
+Harness notes:
+- Perf: bake with `--out <worktree>/public/bake` (the main-checkout script otherwise writes to the main checkout), then `abprof` hiding every `near-cm*` object in one page, behind power-guard.
+- `shot.mjs` resolves a relative `--out` against the main checkout: pass an absolute path. `closeset.mjs` has no `--help`: it runs the whole set. Contact sheets are PNG8 and their colours lie: read the JPGs for colour.
+- Don't use `python3` in Bash here (a Store stub that hangs).
 
 ## Rounds
 - Round 1: the system, walls, ground, solids, litter. Round 2: focus (the lot's box pulled the lens to 0.5 m in front of every porch), then a look at every wall family: timber, joinery, plaster, stone, rust, blow holes, cost split by family. Round 3: audit of doors, ground, furniture at 1 and 3 m: sand layer from the ground mask, rail bed, dust on dark paint, runs under sills.
