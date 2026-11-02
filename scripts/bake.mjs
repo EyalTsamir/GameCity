@@ -16,6 +16,7 @@ import path from 'node:path';
 import zlib from 'node:zlib';
 import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
+import net from 'node:net';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const args = {};
@@ -23,9 +24,17 @@ for (let i = 2; i < process.argv.length; i++) if (process.argv[i].startsWith('--
 let baseUrl = args.url;
 let server = null;
 if (!baseUrl) {
-  // our own dev server, on a port of its own
-  baseUrl = 'http://127.0.0.1:5198/';
-  server = spawn(process.execPath, [path.join(here, '..', 'node_modules', 'vite', 'bin', 'vite.js'), '--port', '5198', '--strictPort', '--host', '127.0.0.1'], { cwd: path.join(here, '..'), stdio: 'ignore' });
+  // our own dev server, on a free port: whatever already listens on a fixed one may be another build, and its fingerprints would pass for ours
+  const port = await new Promise((done, fail) => {
+    const probe = net.createServer();
+    probe.on('error', fail);
+    probe.listen(0, '127.0.0.1', () => {
+      const { port: free } = probe.address();
+      probe.close(() => done(free));
+    });
+  });
+  baseUrl = `http://127.0.0.1:${port}/`;
+  server = spawn(process.execPath, [path.join(here, '..', 'node_modules', 'vite', 'bin', 'vite.js'), '--port', String(port), '--strictPort', '--host', '127.0.0.1'], { cwd: path.join(here, '..'), stdio: 'ignore' });
   for (let i = 0; ; i++) {
     const up = await fetch(baseUrl).then((r) => r.ok).catch(() => false);
     if (up) break;
