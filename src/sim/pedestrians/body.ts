@@ -2413,7 +2413,7 @@ function strapPath(b: MeshBuilder, d: Dims, cfg: LodCfg, p0: P3, p1: P3, wdt: nu
     const phi = Math.atan2(p[0] / r.hw, (p[2] - r.cz) / (p[2] >= r.cz ? r.f : r.b));
     const sp = torsoPoint(r, bust, phi);
     const rp = Math.hypot(p[0], p[2] - r.cz),
-      rs = Math.hypot(sp[0], sp[2] - r.cz) + wdt * 0.9 + 0.003;
+      rs = Math.hypot(sp[0], sp[2] - r.cz) + wdt * 0.9 + (sweepPeople('lapels') ? 0.0065 : 0.003);
     // (up on the shoulder a radial push goes sideways: there only out of the body, never onto it)
     if (rp < 1e-4 || (p[1] > T[9].y && rp >= rs)) return p;
     const k = rs / rp;

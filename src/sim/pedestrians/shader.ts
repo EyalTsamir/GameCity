@@ -461,6 +461,16 @@ void pedPose(inout vec3 p, inout vec3 n) {
     n = normalize(mix(n, normalize(hb0 * vec3(1.0, 0.6, 1.0)), 0.94 * smoothstep(-0.2 * hs0, -0.11 * hs0, hb0.y)));
   }
   ` : ''}
+  ${sweepPeople('neckfoot') ? `
+  // the neck into the shoulders: its upright normals met the yoke's skyward ones in a line, a paler ring round the foot of every neck. One field: the slope comes on gradually
+  if (region == ${R.NECK} || (region == ${R.TORSO} && h > 0.955)) {
+    vec3 nkC = pedPiv(${PIV.NECK});
+    float nkY = (p.y - nkC.y) / (nkC.y / 1.465) - 0.0216;
+    vec2 nkR = normalize(p.xz - vec2(0.0, nkC.z - 0.008) + vec2(1e-5));
+    float nkW = smoothstep(-0.06, -0.022, nkY);
+    n = normalize(mix(n, normalize(vec3(nkR.x, 0.6 * smoothstep(0.014, -0.05, nkY), nkR.y)), nkW));
+  }
+  ` : ''}
   if (region == ${R.TORSO} || region == ${R.LEG}) {
     float hipK = region == ${R.TORSO} ? 1.0 - smoothstep(0.26, 0.42, h) : smoothstep(0.72, 0.88, h);
     if (hipK > 0.0) {
@@ -1044,6 +1054,7 @@ void pedPose(inout vec3 p, inout vec3 n) {
   }
 //@if CL
   vPedTop = vec4(0.0, 0.0, 0.0, -1.0);
+  ${sweepPeople('vestarm') ? `if (region == ${R.TORSO} && (iC2.z & ${1 << FB.VEST}u) != 0u && !jacket) vPedTop = vec4(top * (0.96 + 0.08 * fract(sin(dot(iRoot.xz, vec2(12.9898, 78.233))) * 43758.5453)), -2.0);` : ''}
   ${JKHEM ? `
   if (region == ${R.LEG} && (iC2.z & ${1 << FB.TAIL}u) == 0u) {
     float bdT = jacket ? jacketHem : pedP8(iC0.y) * 1.275 - 0.1;
@@ -1603,7 +1614,7 @@ vec3 pedFabric(vec3 pc, float reg, float h, float sHem) {
       float ar = length(apt);
       float apA = atan(apt.y, -apt.x);
       fold += 0.00095 * (1.0 - smoothstep(0.05, 0.17, ar)) * smoothstep(0.03, 0.06, ar) * pedRidge(apA * 1.5 + pk * 7.0);
-      if (sHem > 0.0) fold += 0.0012 * smoothstep(0.0, 0.015, sHem) * (1.0 - smoothstep(0.02, 0.1, sHem)) * sf * sin(nx * 9.0 + 1.5 * f1 + pid);
+      if (sHem > 0.0 && h < 0.45) fold += 0.0012 * smoothstep(0.0, 0.015, sHem) * (1.0 - smoothstep(0.02, 0.1, sHem)) * sf * sin(nx * 9.0 + 1.5 * f1 + pid);
       ` : `
       fold += upper * (0.0034 * f1 * f1 * f1 + 0.0026 * (0.35 + 0.65 * wst) * f2 * f2 * f2);
       fold += 0.0012 * wst * sin(ny * 11.0 + nx * 1.2 + 2.0 * f1) * smoothstep(0.2, 0.8, abs(rn.x));
@@ -2064,6 +2075,16 @@ const FRAG_COLOR = /* glsl */ `
       }
 #endif
     }
+#ifdef PED_CLOSE
+    if (vPedTop.w < -1.5) {
+      // a vest has an armhole: its shoulder is cut back in a curve (where torso and sleeve cut each other, its colour against the sleeve's made a torn edge)
+      float vk = vPedHgt / 1.76;
+      vec2 vq = vec2((abs(vPedRest.x) - 0.195 * vk) / (0.092 * vk), (vPedRest.y - 1.36 * vk) / (0.15 * vk));
+      float vd = length(vq) - 1.0;
+      float vA = clamp(-vd / max(fwidth(vd), 1e-4) + 0.5, 0.0, 1.0);
+      pc = mix(pc, vPedTop.rgb, vA);
+    }
+#endif
 #ifndef PED_FAR
 #ifdef PED_CLOSE
     if (vPedFace.z > 7.5) {
