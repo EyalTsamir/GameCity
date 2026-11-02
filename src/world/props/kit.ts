@@ -1476,9 +1476,11 @@ export function courtTable(k: Kit, rng: Rng): void {
 /** Two bikes leaning against a wall (wall behind, at -Z). */
 export function leaningBikes(k: Kit, rng: Rng): void {
   const sh = k.sh;
+  // (?nobikepair) 0.9 m apart in one plane, 1.7 m long: the wheels ran through each other. The second leans on the first, a handlebar's width out
+  const pair = bugOn('bikepair');
   for (const x of [-0.45, 0.45]) {
     if (x > 0 && rng.chance(0.3)) continue;
-    sh.push().local(x, 0, -0.1, 0, rng.range(-0.1, 0.1), 0.12);
+    sh.push().local(pair ? x * 0.5 : x, 0, pair && x > 0 ? 0.42 : -0.1, 0, rng.range(-0.1, 0.1), 0.12);
     bikeLite(k, rng.pick(BIKE_COLS));
     sh.pop();
   }

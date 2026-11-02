@@ -208,7 +208,8 @@ export function genStation(env: Env, lot: Lot): void {
   K.box(iron, cw, 0.08, 0.14, 0, cy0 + 0.12, cz1 - 0.07);
   for (let i = 0; i <= 6; i++) {
     const x = -cw / 2 + (cw * i) / 6;
-    K.beam(iron, [x, 2.65, zF], [x, cy0 + 0.1, cz1 - 0.1], 0.07);
+    // (?nocanopyties: a prop over an arch landed on nothing, in the air in front of the opening, through the lamp and the departures board; the tie above holds these)
+    if (!bugOn('canopyties') || !arcadeX.some((a) => Math.abs(x - a) < 1.4)) K.beam(iron, [x, 2.65, zF], [x, cy0 + 0.1, cz1 - 0.1], 0.07);
     K.beam(iron, [x, cy0 + 0.45, zF], [x, cy0 + 0.15, cz1 - 0.1], 0.07);
     // scalloped valance drops
     if (i < 6) for (let k = 0; k < 4; k++) K.box(iron, 0.06, 0.16, 0.05, x + (cw / 6) * ((k + 0.5) / 4), cy0 - 0.28, cz1 - 0.04);
