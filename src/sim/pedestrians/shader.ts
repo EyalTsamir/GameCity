@@ -941,7 +941,7 @@ void pedPose(inout vec3 p, inout vec3 n) {
     if (jacket && h > bd + 0.12) {
       A = outer; Bc = top; s = aux.x - (h - 0.5) * 1.6;
 //@if CL
-      ${sweepPeople('lapels') ? `if ((iC2.z & ${1 << FB.LAPELS}u) != 0u) { float hq = max(h - 0.8, 0.0); s = aux.x - ((h - 0.5) * 0.77 + 23.0 * hq * hq); }` : ''}
+      ${sweepPeople('lapels') ? `if ((iC2.z & ${1 << FB.LAPELS}u) != 0u) { float hq = max(h - 0.9, 0.0); s = aux.x - ((h - 0.5) * 0.77 + 90.0 * hq * hq); }` : ''}
 //@endif
     }
     if ((iC2.z & ${1 << FB.VEST}u) != 0u) { A = pedRGB(iC2.x); pat = 1.0; }
@@ -1529,7 +1529,8 @@ vec3 pedFabric(vec3 pc, float reg, float h, float sHem) {
     // a sleeve twists and falls in a few soft diagonal folds, tighter in the crook of the arm
     {
       float pidS = pk * 6.2832;
-      float sP = h * vPedHgt * 0.33 / 0.045 + ang * 1.1 * side + 0.9 * sin(h * 7.0 + pidS);
+      // (the angle jumps by 2π down the back of the arm: a step in the fold's height, dots all down the sleeve)
+      float sP = h * vPedHgt * 0.33 / 0.045 + ${sweepPeople('seamdots') ? 'rn.x * 2.2' : 'ang * 1.1 * side'} + 0.9 * sin(h * 7.0 + pidS);
       float sF = sin(sP * 3.1416 * 0.5);
       fold += 0.0018 * sF * sF * sF * (0.6 + 0.8 * ez + 0.5 * be * ez);
     }

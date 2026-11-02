@@ -2058,66 +2058,141 @@ function buildTail(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
 
 // ────────────────────────────────────────────────── collar / lapels / tie ──
 
-/** close level: a real lapel down each side of the opening (a roll, a notch where it meets the collar, its edge standing off the chest), and a shirt collar with two points */
+/** close level: a real lapel down each side of the opening (a roll, a notch where it meets the collar, its edge standing off the chest), a shirt collar with two points, a tie from a knot */
 function buildCloseLapels(b: MeshBuilder, d: Dims): void {
   const hk = d.H / 1.76;
   const T = d.torso.map((_, i) => closeTorsoRing(d, i));
-  const at = (h: number) => {
+  // the torso's surface as buildTorso makes it: straight between the lower rings, Catmull-Rom from ring 8, the yoke above ring 10
+  const at = (h: number): { r: BodyRing; bust: number; n: number; bone: number; w: number } => {
+    if (h > TORSO_H[10]) {
+      const t = (h - TORSO_H[10]) / (1 - TORSO_H[10]);
+      return { r: yokeRing(d, t), bust: 0, n: 2.3 - 0.3 * t, bone: TORSO_BONE[10][0], w: TORSO_BONE[10][1] };
+    }
     let i = 0;
     while (i < T.length - 2 && TORSO_H[i + 1] <= h) i++;
     const t = (h - TORSO_H[i]) / (TORSO_H[i + 1] - TORSO_H[i]);
-    const L = (a: number, c: number) => a + (c - a) * t;
-    return { r: { y: L(T[i].y, T[i + 1].y), hw: L(T[i].hw, T[i + 1].hw), f: L(T[i].f, T[i + 1].f), b: L(T[i].b, T[i + 1].b), cz: L(T[i].cz, T[i + 1].cz) } as BodyRing, bust: L(d.bust[i], d.bust[i + 1]), bone: TORSO_BONE[i + (t > 0.5 ? 1 : 0)][0], w: L(TORSO_BONE[i][1], TORSO_BONE[i + 1][1]) };
+    const g = (k: number) => T[Math.max(0, Math.min(T.length - 1, k))];
+    const F = (f: (r: BodyRing) => number) => {
+      if (i < 8) return f(T[i]) + (f(T[i + 1]) - f(T[i])) * t;
+      const a0 = f(g(i - 1)),
+        b0 = f(g(i)),
+        c0 = f(g(i + 1)),
+        e0 = f(g(i + 2));
+      return 0.5 * (2 * b0 + (-a0 + c0) * t + (2 * a0 - 5 * b0 + 4 * c0 - e0) * t * t + (-a0 + 3 * b0 - 3 * c0 + e0) * t * t * t);
+    };
+    const r: BodyRing = { y: F((r) => r.y), hw: F((r) => r.hw), f: F((r) => r.f), b: F((r) => r.b), cz: F((r) => r.cz) };
+    return { r, bust: d.bust[i] + (d.bust[i + 1] - d.bust[i]) * t, n: 2.3, bone: TORSO_BONE[i + (t > 0.5 ? 1 : 0)][0], w: TORSO_BONE[i][1] + (TORSO_BONE[i + 1][1] - TORSO_BONE[i][1]) * t };
+  };
+  const P = (h: number, phi: number, out: number): P3 => {
+    const q = at(h);
+    return torsoPoint({ ...q.r, hw: q.r.hw + out, f: q.r.f + out, b: q.r.b + out }, q.bust, phi, q.n);
   };
   // the opening, as the shader cuts it on the torso (s of a jacket with lapels)
-  const open = (h: number) => (h - 0.5) * 0.77 + 23 * Math.max(0, h - 0.8) ** 2;
-  // up the opening: how wide the lapel is there. It widens to its point, steps in at the notch, and the collar's leaf goes on to the neck
-  const W: [number, number][] = [[0, 0.004], [0.12, 0.09], [0.3, 0.2], [0.5, 0.3], [0.62, 0.36], [0.625, 0.17], [0.72, 0.2], [0.86, 0.22], [1, 0.16]];
+  const open = (h: number) => (h - 0.5) * 0.77 + 90 * Math.max(0, h - 0.9) ** 2;
+  // up the opening: how wide the lapel is there. It widens to its point, steps in at the notch, and the collar's leaf goes on round the neck
+  const W: [number, number][] = [[0, 0.004], [0.12, 0.08], [0.3, 0.18], [0.5, 0.27], [0.62, 0.33], [0.625, 0.15], [0.72, 0.18], [0.84, 0.2], [0.93, 0.26], [1, 0.34]];
   for (const side of [1, -1]) {
     const rows: number[][] = [];
     for (const [t, w] of W) {
-      const h = 0.5 + 0.43 * t;
+      const h = 0.5 + 0.46 * t;
       const q = at(h);
       const ph = Math.max(0, open(h) - 0.012);
-      const up = 0.003 * Math.max(0, h - 0.8) / 0.13;
       b.use(q.bone, REG.OUTER, FB.LAPELS, 1.14);
-      const P = (phi: number, out: number) => torsoPoint({ ...q.r, hw: q.r.hw + out + up, f: q.r.f + out + up, b: q.r.b + out + up }, q.bust, phi * side);
-      const row = [b.v(P(ph, 0.0045), h, q.w), b.v(P(ph + w * 0.4, 0.0085), h, q.w), b.v(P(ph + w, 0.0062), h, q.w)];
+      const row = [b.v(P(h, ph * side, 0.0045), h, q.w), b.v(P(h, (ph + w * 0.4) * side, 0.0085), h, q.w), b.v(P(h, (ph + w) * side, 0.0062), h, q.w)];
       // (under its edge the lapel's shadow on the chest)
       b.setTint(0.62);
-      row.push(b.v(P(ph + w + 0.018, -0.001), h, q.w));
+      row.push(b.v(P(h, (ph + w + 0.018) * side, -0.0005), h, q.w));
       b.setTint(1.14);
       rows.push(row);
     }
     for (let j = 0; j < rows.length - 1; j++) for (let k = 0; k < 3; k++) b.quadDir(rows[j][k], rows[j][k + 1], rows[j + 1][k + 1], rows[j + 1][k], [0, 0, 1]);
   }
-  // shirt collar: a band round the neck's own outline, open at the throat, with two points lying on the chest
+  // shirt collar: a band from the yoke up the neck, open at the throat, with two points lying on the chest
   b.use(BONE.CHEST, REG.COLLAR, FB.COLLAR, 1);
-  const n0 = closeNeck(d, 0),
-    n1 = closeNeck(d, 1);
-  const r0 = { ...n0, y: n0.y + 0.006 * hk, hw: n0.hw + 0.008, f: n0.f + 0.01, b: n0.b + 0.008 };
-  const r1 = { ...n1, y: n1.y - 0.012 * hk, hw: n1.hw + 0.006, f: n1.f + 0.007, b: n1.b + 0.006 };
+  const hLo = 0.982;
+  const N0 = closeNeck(d, 0),
+    N1 = closeNeck(d, 1);
+  const rHi: BodyRing = { y: N0.y + (N1.y - N0.y) * 0.98, hw: N0.hw + (N1.hw - N0.hw) * 0.98 + 0.0075, f: N0.f + (N1.f - N0.f) * 0.98 + 0.0085, b: N0.b + (N1.b - N0.b) * 0.98 + 0.0075, cz: N0.cz + (N1.cz - N0.cz) * 0.98 };
   const n = 16;
-  const lo: number[] = [],
+  const un: number[] = [],
+    lo: number[] = [],
     hi: number[] = [];
   for (let k = 0; k < n; k++) {
     const phi = ((k + 0.5) / n) * Math.PI * 2;
     const c = Math.cos(phi);
-    const drop = 0.03 * hk * Math.max(0, (c - 0.6) / 0.4) ** 1.5;
-    lo.push(b.v(torsoPoint(r0, 0, phi, 2), 1.02, 0.6));
-    hi.push(b.v(torsoPoint({ ...r1, y: r1.y - drop }, 0, phi, 2), 1.08, 0.4));
+    const drop = 0.026 * hk * Math.max(0, (c - 0.75) / 0.25) ** 1.5;
+    // (its foot goes down into the yoke at a steep angle: two nearly parallel surfaces cross in a scalloped line)
+    un.push(b.v(P(hLo - 0.012, phi, -0.006), 1.0, 0.6));
+    lo.push(b.v(P(hLo + 0.004, phi, 0.0045), 1.02, 0.6));
+    hi.push(b.v(torsoPoint({ ...rHi, y: rHi.y - drop }, 0, phi, 2), 1.08, 0.4));
   }
-  for (let k = 0; k < n; k++) b.quadOut(lo[k], lo[(k + 1) % n], hi[(k + 1) % n], hi[k], [0, n0.y, n0.cz]);
+  for (let k = 0; k < n; k++) {
+    b.quadOut(un[k], un[(k + 1) % n], lo[(k + 1) % n], lo[k], [0, N0.y, N0.cz]);
+    b.quadOut(lo[k], lo[(k + 1) % n], hi[(k + 1) % n], hi[k], [0, N0.y, N0.cz]);
+  }
   for (const side of [1, -1]) {
-    const pt = (r: BodyRing, phi: number, out: number, dy = 0): P3 => {
-      const q = torsoPoint({ ...r, hw: r.hw + out, f: r.f + out, b: r.b + out }, 0, phi * side, 2);
+    const hp = (phi: number, out: number, dy: number): P3 => {
+      const q = torsoPoint({ ...rHi, hw: rHi.hw + out, f: rHi.f + out, b: rHi.b + out }, 0, phi * side, 2);
       return [q[0], q[1] + dy, q[2]];
     };
-    const a = b.v(pt(r1, 0.42, 0.003, -0.012 * hk), 1.06, 0.4),
-      e = b.v(pt(r1, 1.5, 0.004), 1.06, 0.4),
-      f = b.v(pt(r0, 1.35, 0.008, -0.008 * hk), 1.02, 0.6),
-      tip = b.v(pt(r0, 0.42, 0.014, -0.03 * hk), 1.0, 0.6);
-    b.quadDir(a, e, f, tip, [0.3 * side, 0.2, 1]);
+    const a0 = b.v(hp(0.42, 0.0015, -0.018 * hk), 1.06, 0.4),
+      e0 = b.v(hp(1.3, 0.002, 0), 1.06, 0.4),
+      f0 = b.v(P(0.985, 1.2 * side, 0.0065), 1.02, 0.6),
+      tip = b.v(P(0.94, 0.3 * side, 0.0075), 1.0, 0.6);
+    b.quadDir(a0, e0, f0, tip, [0.3 * side, 0.2, 1]);
+  }
+  // a hood down: a soft bag of cloth round the back of the neck, resting on the shoulders, its opening rolled towards the nape
+  {
+    const NC = 15,
+      rowsH: number[][] = [];
+    const ROWS = 6;
+    for (let j = 0; j < ROWS; j++) {
+      const row: number[] = [];
+      for (let i = 0; i < NC; i++) {
+        const u = (i / (NC - 1)) * 2 - 1;
+        const au = Math.abs(u);
+        const phi = Math.PI + u * 2.1;
+        const bk = 1 - au * au;
+        const et = 1 - Math.max(0, (au - 0.62) / 0.38) ** 2;
+        let p: P3;
+        let tint = 1.14;
+        if (j < 3) {
+          const hj = [0.915 + 0.05 * au, 0.935 + 0.035 * au, 0.968 + 0.012 * au][j];
+          const out = [-0.002, 0.02, 0.042][j] * et * (0.45 + 0.55 * bk) + [0, 0.004, 0.012][j] * et;
+          p = P(hj, phi, out);
+          if (j > 0) p = [p[0], p[1] + [0, 0.002, 0.012][j] * et * hk, p[2]];
+        } else {
+          // up over the roll to the rim, and in towards the neck
+          const k = [0.42, 0.72, 0.9][j - 3];
+          const out = [0.03, 0.021, 0.0125][j - 3] * (0.5 + 0.5 * bk) * et + 0.004;
+          const r: BodyRing = { y: N0.y + (N1.y - N0.y) * k * (0.55 + 0.45 * et), hw: N0.hw + (N1.hw - N0.hw) * k + out, f: N0.f + (N1.f - N0.f) * k + out, b: N0.b + (N1.b - N0.b) * k + out, cz: N0.cz + (N1.cz - N0.cz) * k };
+          const q0 = torsoPoint(r, 0, phi, 2);
+          const yBase = P(0.97, phi, 0.0)[1];
+          p = [q0[0], Math.max(q0[1], yBase + 0.004) - (1 - et) * 0.006, q0[2]];
+          if (j === 5) tint = 0.92;
+        }
+        b.use(BONE.CHEST, REG.OUTER, FB.HOOD, tint);
+        // (a crease where two panels meet, down the middle of the back)
+        b.setTint(tint * (1 - 0.12 * Math.exp(-u * u * 90) * (j > 0 ? 1 : 0)));
+        row.push(b.v(p, 1.05, 0));
+      }
+      rowsH.push(row);
+    }
+    for (let j = 0; j < ROWS - 1; j++) for (let i = 0; i < NC - 1; i++) b.quadOut(rowsH[j][i], rowsH[j][i + 1], rowsH[j + 1][i + 1], rowsH[j + 1][i], [0, N0.y - 0.01, N0.cz + 0.02]);
+  }
+  // tie: a knot at the throat, the blade down the shirt to a point, on the surface all the way down
+  b.use(BONE.CHEST, REG.ACCENT, FB.TIE, 1);
+  const TIE: [number, number][] = [[0.968, 0.012], [0.948, 0.019], [0.935, 0.011], [0.86, 0.018], [0.76, 0.024], [0.7, 0.03], [0.64, 0.03], [0.58, 0.03], [0.52, 0.03], [0.505, 0.03]];
+  let prev: number[] | null = null;
+  for (const [h, w] of TIE) {
+    const q = at(h);
+    b.use(q.bone, REG.ACCENT, FB.TIE, 1);
+    const c = P(h, 0, 0.005 + (h > 0.93 ? 0.0055 : 0));
+    // (it goes in under the jacket where the opening closes: never wider than the opening, down to nothing at the button)
+    const wo = h > 0.9 ? w * hk : Math.min(w * hk, Math.max(0.0008, P(h, Math.max(0, open(h) - 0.018), 0)[0]));
+    const row = [b.v([-wo, c[1], c[2] - 0.0008], 0.7, q.w), b.v([0, c[1], c[2] + 0.001], 0.7, q.w), b.v([wo, c[1], c[2] - 0.0008], 0.7, q.w)];
+    if (prev) for (let k = 0; k < 2; k++) b.quadDir(prev[k], prev[k + 1], row[k + 1], row[k], [0, 0, 1]);
+    prev = row;
   }
 }
 
@@ -2165,7 +2240,7 @@ function buildUpperGarments(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
   }
   // tie: from the collar knot down the chest to the belt
   b.use(BONE.CHEST, REG.ACCENT, FB.TIE, 1);
-  {
+  if (!closeLapels) {
     const r9 = d.torso[9],
       r7 = d.torso[7],
       r5 = d.torso[5];
@@ -2183,7 +2258,7 @@ function buildUpperGarments(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
   }
   // hood (bump at the back of the neck)
   b.use(BONE.CHEST, REG.OUTER, FB.HOOD, 0.92);
-  {
+  if (!closeLapels) {
     const r10 = d.torso[10];
     blob(b, [0, r10.y + 0.035 * hk, r10.cz - r10.b - 0.005 * hk], [0.085 * hk, 0.05 * hk, 0.04 * hk], 7, 4);
   }
