@@ -119,6 +119,8 @@ export interface Services {
     setWeather?(rain: number): void;
   };
   postfx?: {
+    /** corners and seams near the camera (postfx/edgeWear.ts); `live` for a same-page A/B */
+    edgeWear?: { live: boolean } | null;
     setEnabled(effect: 'dof' | 'bloom' | 'ao' | 'all', on: boolean): void;
     isEnabled(effect: 'dof' | 'bloom' | 'ao'): boolean;
     /** focus distance override (world units) or null for automatic */

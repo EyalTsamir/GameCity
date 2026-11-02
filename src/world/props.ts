@@ -7,6 +7,7 @@
 // Draw calls: furniture (1, merged, per-vertex roughness/metalness + night emission),
 // glass (1, transparent), light pools + halos (1, additive). No shadow casters.
 
+import { shapeOn } from '../core/sweepshape';
 import { closeHand } from '../core/closehand';
 import { binSimple, bollardSimple, newsstandSimple, phoneboxSimple, planterBoxSimple } from './props/legacy';
 import * as THREE from 'three';
@@ -472,15 +473,15 @@ export default function create(ctx: CityContext): CityModule {
           break;
         case 'ticketMachine':
           at(kf);
-          SK.ticketMachine(kf);
+          SK.ticketMachine(kf, shapeOn('shapemachines') ? yardNear(it.x, y, it.z, it.yaw) : undefined);
           break;
         case 'evCharger':
           at(kf);
-          SK.evCharger(kf);
+          SK.evCharger(kf, shapeOn('shapemachines') ? yardNear(it.x, y, it.z, it.yaw) : undefined);
           break;
         case 'bottleBank':
           at(KS);
-          SK.bottleBank(KS, srng);
+          SK.bottleBank(KS, srng, shapeOn('shapemachines') ? yardNear(it.x, y, it.z, it.yaw) : undefined);
           break;
         case 'pingpong':
           at(kf);
@@ -508,7 +509,7 @@ export default function create(ctx: CityContext): CityModule {
           break;
         case 'container':
           at(KS);
-          SK.container(KS, srng);
+          SK.container(KS, srng, shapeOn('shapecontainer') ? yardNear(it.x, y, it.z, it.yaw) : undefined);
           break;
         case 'pipes':
           at(kf);

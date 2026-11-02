@@ -201,3 +201,46 @@ export function pixelText(sh: Shaper, text: string, cx: number, cy: number, z: n
   }
   return w;
 }
+
+/**
+ * A filled soft thing: a superellipsoid with smooth normals and a few slow dents. ex shapes the outline seen from above and ey the side
+ * (1 a plain ellipsoid, under 1 a fuller, squarer pillow). Rings x sides x 2 triangles.
+ */
+export function softBlob(sh: Shaper, cx: number, cy: number, cz: number, rx: number, ry: number, rz: number, ex: number, ey: number, dent: number, seed: number, rings = 9, sides = 16): void {
+  const pw = (a: number, e: number) => Math.sign(a) * Math.pow(Math.abs(a), e);
+  const s1 = (seed * 12.9898) % 6.283, s2 = (seed * 78.233) % 6.283, s3 = (seed * 37.719) % 6.283;
+  const at = (i: number, j: number): [number, number, number] => {
+    const th = (i / rings) * Math.PI - Math.PI / 2;
+    const ph = (j / sides) * Math.PI * 2;
+    const cy0 = pw(Math.cos(th), ey), sy0 = pw(Math.sin(th), ey);
+    let x = cy0 * pw(Math.cos(ph), ex), y = sy0, z = cy0 * pw(Math.sin(ph), ex);
+    // slow lumps, stronger on the top and sides than where it lies
+    const d = Math.sin(x * 3.1 + s1) * Math.sin(z * 2.7 + s2) + 0.5 * Math.sin(x * 6.3 + z * 4.1 + s3);
+    y += d * dent * (0.35 + 0.65 * Math.max(0, y));
+    x *= 1 + d * dent * 0.45;
+    z *= 1 + d * dent * 0.45;
+    return [x * rx, y * ry, z * rz];
+  };
+  const ids: number[] = [];
+  for (let i = 0; i <= rings; i++)
+    for (let j = 0; j < sides; j++) {
+      const p = at(i, j);
+      // central differences; the poles use the ring next to them
+      const a = at(Math.max(i - 1, 0), j), b = at(Math.min(i + 1, rings), j), c = at(i === 0 ? 1 : i === rings ? rings - 1 : i, j + 1), e = at(i === 0 ? 1 : i === rings ? rings - 1 : i, j - 1);
+      const ux = b[0] - a[0], uy = b[1] - a[1], uz = b[2] - a[2];
+      const vx = c[0] - e[0], vy = c[1] - e[1], vz = c[2] - e[2];
+      let nx = uz * vy - uy * vz, ny = ux * vz - uz * vx, nz = uy * vx - ux * vy;
+      if (nx * p[0] / (rx * rx) + ny * p[1] / (ry * ry) + nz * p[2] / (rz * rz) < 0) {
+        nx = -nx;
+        ny = -ny;
+        nz = -nz;
+      }
+      ids.push(sh.v(cx + p[0], cy + p[1], cz + p[2], nx, ny, nz));
+    }
+  for (let i = 0; i < rings; i++)
+    for (let j = 0; j < sides; j++) {
+      const a = ids[i * sides + j], b = ids[i * sides + (j + 1) % sides], c = ids[(i + 1) * sides + j], d = ids[(i + 1) * sides + (j + 1) % sides];
+      sh.s.tri(a, c, b);
+      sh.s.tri(b, c, d);
+    }
+}
