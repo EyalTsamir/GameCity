@@ -1541,7 +1541,7 @@ vec3 pedFabric(vec3 pc, float reg, float h, float sHem) {
       float ar = length(apt);
       float apA = atan(apt.y, -apt.x);
       fold += 0.00095 * (1.0 - smoothstep(0.05, 0.17, ar)) * smoothstep(0.03, 0.06, ar) * pedRidge(apA * 1.5 + pk * 7.0);
-      if (sHem > 0.0) fold += 0.0012 * (1.0 - smoothstep(0.0, 0.1, sHem)) * sf * sin(nx * 9.0 + 1.5 * f1 + pid);
+      if (sHem > 0.0) fold += 0.0012 * smoothstep(0.0, 0.015, sHem) * (1.0 - smoothstep(0.02, 0.1, sHem)) * sf * sin(nx * 9.0 + 1.5 * f1 + pid);
       ` : `
       fold += upper * (0.0034 * f1 * f1 * f1 + 0.0026 * (0.35 + 0.65 * wst) * f2 * f2 * f2);
       fold += 0.0012 * wst * sin(ny * 11.0 + nx * 1.2 + 2.0 * f1) * smoothstep(0.2, 0.8, abs(rn.x));
@@ -2062,8 +2062,8 @@ const FRAG_COLOR = /* glsl */ `
       // (rounded ends: points read as a torn edge)
       float clump = sqrt(tri) * 0.85 + fine * 0.3;
       // (the hem wanders in long curves as well, each clump a little past or short of it: one level line of tips is a saw)
-      float hemL = ${HEMC} ? lr * lr * 0.018 + (0.5 + 0.5 * sin(hf.x * 7.0 + 1.3 * sin(hf.x * 3.1))) * 0.016 : lr * 0.012;
-      float tipK = 1.0 - smoothstep(0.0, vPedFace.y > 2.5 ? 0.007 : 0.016, vPedFace.x - hemL);
+      float hemL = ${HEMC} ? lr * lr * 0.012 + (0.5 + 0.5 * sin(hf.x * 7.0 + 1.3 * sin(hf.x * 3.1))) * 0.009 : lr * 0.012;
+      float tipK = 1.0 - smoothstep(0.0, vPedFace.y > 2.5 ? 0.007 : 0.011, vPedFace.x - hemL);
 #else
       float clump = tri * 0.85 + fine * 0.3;
       float tipK = 1.0 - smoothstep(0.0, 0.06, vPedFace.x - lr * 0.03);

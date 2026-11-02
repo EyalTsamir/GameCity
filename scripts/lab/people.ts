@@ -204,6 +204,7 @@ if (mode === 'grid') {
   }
   if (q.has('idle')) m.forceIdle = num('idle', -1);
   if (q.has('sitm')) m.sit = m.sitGoal = 1;
+  if (q.has('reading')) m.reading = true;
   m.speed = 0;
   m.amp = 0;
   T = num('t0', 100);

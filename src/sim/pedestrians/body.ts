@@ -2480,8 +2480,14 @@ function buildProps(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
       if (cfg.close) {
         // (over the shoulder ring by ring, the diagonals hugging the body from there)
         const over = strapOver(b, d, -0.1 * hk, 8, 8, 0.011 * hk);
-        strapPath(b, d, cfg, [x + 0.07 * hk, y + 0.07 * hk, z - 0.01], over.front, 0.011 * hk);
+        strapPath(b, d, cfg, [x + 0.07 * hk, y + 0.07 * hk, z - 0.01], over.front, 0.011 * hk, sweepPeople('straps') ? [over.front[0] + 0.012 * hk, over.front[1] - 0.075 * hk, over.front[2]] : undefined);
         strapPath(b, d, cfg, over.back, [0.14 * hk, r6.y - 0.06 * hk, r6.cz - r6.b - 0.01], 0.011 * hk);
+        if (sweepPeople('straps')) {
+          // (where the shoulder piece meets the diagonal: the strap's adjuster)
+          b.use(BONE.CHEST, REG.DARK, FB.SHOULDERBAG, 1);
+          softBox(b, add(over.front, [0.001 * hk, -0.004 * hk, 0.0045]), [0.03 * hk, 0.012 * hk, 0.005]);
+          b.use(BONE.CHEST, REG.STRAP, FB.SHOULDERBAG, 0.7);
+        }
       } else {
         strapPath(b, d, cfg, [x + 0.07 * hk, y + 0.07 * hk, z - 0.01], [-0.02 * hk, r7.y, r7.cz + r7.f + 0.008 + d.bust[7]], 0.011 * hk);
         strapPath(b, d, cfg, [-0.02 * hk, r7.y, r7.cz + r7.f + 0.008 + d.bust[7]], top, 0.011 * hk);
