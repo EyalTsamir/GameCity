@@ -8,8 +8,8 @@
 //   ... --follow 0                               leave when nothing is ready, instead of waiting for the capture
 //
 // Stop: touch <out>/STOP-JUDGES. It's checked before every new judge, and those running finish.
-// Writes <out>/judged/<part>/<id>__<hour>.json (the answer, usage, cost), resumes by those files, and keeps totals in
-// <out>/judged/summary.json. An error like a usage limit stops the run, and no result file is written for it.
+// Writes <out>/judged2/<part>/<id>__<hour>.json (the answer, usage, cost), resumes by those files, and keeps totals in
+// <out>/judged2/summary.json. An error like a usage limit stops the run, and no result file is written for it.
 // RAM here is often under 2 GB: it drops to 2 judges under 1.2 GB free and starts none under 0.6 GB.
 
 import fs from 'node:fs';
@@ -29,7 +29,8 @@ for (let i = 2; i < process.argv.length; i++) {
   else args[a.slice(2)] = process.argv[++i];
 }
 const outDir = path.resolve(root, args.out ?? 'shots/sweep');
-const judgedDir = path.join(outDir, 'judged');
+// (judged2: answers under the brief with tags. Those under the first brief stay in judged/ and are never read again)
+const judgedDir = path.join(outDir, args.judged ?? 'judged2');
 const stopFile = path.join(outDir, 'STOP-JUDGES');
 const model = args.model ?? 'claude-sonnet-5-5';
 const maxJobs = parseInt(args.jobs ?? '3', 10);
