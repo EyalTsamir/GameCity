@@ -21,6 +21,7 @@
 import { shapeOn } from '../../core/sweepshape';
 import { detailPeople } from '../../core/detailPeople';
 import { closePeople } from '../../core/closePeople';
+import { sweepPeople } from '../../core/sweepPeople';
 import * as THREE from 'three';
 import { flatConvention } from '../../core/perfdeep';
 import { TARGETS, TORSO_H, type BodyRing, type Dims, type FootRing, type LimbRing, type V3 } from './rig';
@@ -1763,12 +1764,14 @@ function buildHat(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
     // close: more sides, a middle ring so it can curve (the shader's droop goes with s²)
     const nb = 40;
     const ss2 = [0, 0.3, 0.65, 1];
+    const form = sweepPeople('hatform');
     const faces: [number, number][] = [
       [0, 0.95],
-      [-0.002, 0.7],
+      [form ? -0.0048 : -0.002, 0.7],
     ];
     const P = b.pos;
     const cz = d.headRings[4].cz;
+    const lastRows: number[][] = [];
     faces.forEach(([dy, tint], fi) => {
       b.setTint(tint);
       const rows = ss2.map(() => [] as number[]);
@@ -1793,6 +1796,7 @@ function buildHat(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
           const k1 = (k + 1) % nb;
           b.quadDir(rows[ri][k], rows[ri][k1], rows[ri + 1][k1], rows[ri + 1][k], up);
         }
+      lastRows.push(rows[rows.length - 1]);
       rows.forEach((r, ri) =>
         r.forEach((i, j) => {
           if (ri > 0) b.standIn.set(i, [P[i * 3], P[i * 3 + 1] - 0.01 * ss2[ri], P[i * 3 + 2]]);
@@ -1801,6 +1805,37 @@ function buildHat(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
         }),
       );
     });
+    // the brim's edge: a rolled lip joining its two faces (two sheets a hair apart read as a blade, edge on)
+    if (form) {
+      b.setTint(0.82);
+      const lip: number[] = [];
+      for (let k = 0; k < nb; k++) {
+        const phi = (k / nb) * Math.PI * 2;
+        lip.push(b.v(headSurface(d, phi, rimAt(phi) - 0.0024, 0.012 * hk), 2, 0, 1.012, phi));
+      }
+      const saved2: [number, number[]][] = [];
+      for (const ring of [lastRows[0], lip, lastRows[1]])
+        for (const i of ring) saved2.push([i, [P[i * 3], P[i * 3 + 1], P[i * 3 + 2]]]);
+      const push = (ring: number[], o: number, dy: number) =>
+        ring.forEach((i) => {
+          const l = Math.hypot(P[i * 3], P[i * 3 + 2] - cz) || 1;
+          P[i * 3] += (P[i * 3] / l) * o;
+          P[i * 3 + 2] += ((P[i * 3 + 2] - cz) / l) * o;
+          P[i * 3 + 1] += dy;
+        });
+      for (const i of [...lastRows[0], ...lastRows[1]]) { const st = b.standIn.get(i); if (st) { P[i * 3] = st[0]; P[i * 3 + 1] = st[1]; P[i * 3 + 2] = st[2]; } }
+      push(lip, 0.051, -0.01);
+      for (let k = 0; k < nb; k++) {
+        const k1 = (k + 1) % nb;
+        const phi = ((k + 0.5) / nb) * Math.PI * 2;
+        const o: P3 = [Math.sin(phi), 0, Math.cos(phi)];
+        b.quadDir(lastRows[0][k], lastRows[0][k1], lip[k1], lip[k], o);
+        b.quadDir(lip[k], lip[k1], lastRows[1][k1], lastRows[1][k], o);
+      }
+      lip.forEach((i) => b.standIn.set(i, [P[i * 3], P[i * 3 + 1], P[i * 3 + 2]]));
+      for (const [i, q] of saved2) { P[i * 3] = q[0]; P[i * 3 + 1] = q[1]; P[i * 3 + 2] = q[2]; }
+      b.setTint(1);
+    }
   }
   const bi: number[] = [],
     bo: number[] = [],
@@ -1847,7 +1882,8 @@ function buildHat(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
   // visor (front half-disc, both faces)
   b.use(BONE.HEAD, REG.HAT, FB.VISOR, 0.9);
   {
-    const phis = cfg.close ? [-1.15, -0.92, -0.69, -0.46, -0.23, 0, 0.23, 0.46, 0.69, 0.92, 1.15] : [-1.05, -0.36, 0.36, 1.05];
+    const vform = sweepPeople('hatform');
+    const phis = cfg.close ? (vform ? [-1.2, -1.08, -0.92, -0.69, -0.46, -0.23, 0, 0.23, 0.46, 0.69, 0.92, 1.08, 1.2] : [-1.15, -0.92, -0.69, -0.46, -0.23, 0, 0.23, 0.46, 0.69, 0.92, 1.15]) : [-1.05, -0.36, 0.36, 1.05];
     if (cfg.close) {
       const rows: number[][] = [],
         rows2: number[][] = [];
@@ -1857,13 +1893,14 @@ function buildHat(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
         for (const phi of phis) {
           const p = headSurface(d, phi, rimAt(phi) + 0.002 * hk, 0.0115 * hk);
           const fo = Math.cos(phi * 1.3);
-          const L = 0.078 * hk * Math.max(0, fo) ** 0.6;
+          // (runs out to nothing into the dome at its ends: a blunt end stood off the cap as a notch)
+          const L = 0.078 * hk * (vform ? Math.max(0, Math.cos(phi * 1.309)) ** 0.5 * (Math.abs(phi) > 1.19 ? 0 : 1) : Math.max(0, fo) ** 0.6);
           // (arched across, dropping towards the front edge)
           const q: P3 = [p[0] * (1 + 0.03 * s) + Math.sin(phi) * 0.012 * hk * s, p[1] - 0.016 * hk * s * s - 0.007 * hk * (1 - fo * fo) * s, p[2] + L * s];
           b.setTint(1);
           r.push(b.v(q, 2, 0, s, phi));
           b.setTint(0.6);
-          r2.push(b.v([q[0], q[1] - 0.003, q[2]], 2, 0, s, phi));
+          r2.push(b.v([q[0], q[1] - (vform ? 0.0042 : 0.003), q[2]], 2, 0, s, phi));
         }
         rows.push(r);
         rows2.push(r2);
@@ -1872,6 +1909,12 @@ function buildHat(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
         for (let k = 0; k < phis.length - 1; k++) {
           b.quadDir(rows[i][k], rows[i][k + 1], rows[i + 1][k + 1], rows[i + 1][k], [0, 1, 0.2]);
           b.quadDir(rows2[i][k], rows2[i][k + 1], rows2[i + 1][k + 1], rows2[i + 1][k], [0, -1, 0]);
+        }
+      // the peak's edge
+      if (vform)
+        for (let k = 0; k < phis.length - 1; k++) {
+          const f = rows.length - 1;
+          b.quadDir(rows[f][k], rows[f][k + 1], rows2[f][k + 1], rows2[f][k], [Math.sin(phis[k]), 0, Math.cos(phis[k])]);
         }
       return;
     }

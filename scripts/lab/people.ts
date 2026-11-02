@@ -84,6 +84,15 @@ for (let i = 0; members.length < (onlyIdx ? onlyIdx.length : n); i++) {
   const FUR = [[0x8a5a33, 0x5a3b26], [0x2a2522, 0x151312], [0xefe6d8, 0xc9b8a0], [0xd2a35c, 0xa8783c], [0x8d8a86, 0x5e5b58], [0xf2efe9, 0x2a2522], [0xb5703a, 0xf2efe9]];
   look.dog = q.has('dog') ? { fur: FUR[members.length % 7][0], fur2: FUR[members.length % 7][1], collar: 0xc8323c, size: num('dogsize', 1) } : null;
   look.pram = null;
+  // &hat=<style 0-7> &hair=<HairStyle> &hairlen= &hc=<#rrggbb>: every figure in one hat or cut
+  if (look.style) {
+    if (q.has('hat')) look.style.hat = num('hat', 0);
+    if (q.has('hair')) look.style.hair = q.get('hair') as never;
+    if (q.has('hairlen')) look.style.hairLen = num('hairlen', 0);
+    if (q.has('hairvol')) look.style.hairVol = num('hairvol', 0);
+    if (q.has('fringe')) look.style.fringe = q.get('fringe') === '1';
+    if (q.has('hc')) look.hair = parseInt(q.get('hc')!, 16);
+  }
   const p = new Party(i, persona as never);
   const m = new Member(i, p, 0, look, rng.next());
   p.members.push(m);

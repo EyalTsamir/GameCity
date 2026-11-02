@@ -157,7 +157,7 @@ export function lookData(L: Look): LookCache {
     f |= bit(FB.HAT);
     if (s.hat === HAT_STYLES.SUNHAT || s.hat === HAT_STYLES.FEDORA || s.hat === HAT_STYLES.HARDHAT || s.hat === HAT_STYLES.BUCKET) f |= bit(FB.BRIM);
     if (s.hat === HAT_STYLES.CAP || s.hat === HAT_STYLES.FLATCAP) f |= bit(FB.VISOR);
-    if (s.hair === 'bun') f &= ~bit(FB.BUN);
+    if (s.hair === 'bun' || s.hair === 'manbun') f &= ~bit(FB.BUN);
   }
   if (fl & F.BACKPACK) f |= bit(FB.BACKPACK);
   if (fl & F.HANDBAG) f |= bit(FB.SHOULDERBAG);
