@@ -3,7 +3,7 @@
 Rules: `SWEEP.md`. Census: `sweep-census.md`. Known items: `sweep-known.md`.
 
 ## Resume here
-Census and `scripts/sweep.mjs` are written and committed. **The tool has never touched a browser**: the coordinator holds the lock for its A/B and asked for none yet. Only `--dry` and a syntax check of every expression have run. Next: wait for the coordinator's go, then the pilot.
+Pilot done; report in the shared notes folder, `city-sweep-pilot.md` (a copy of its findings is below). Waiting for the coordinator: the go for the full capture (only with the browser free), `--night-views 3` or not, and how to dispatch the judges (`claude -p` script or Agent tool). Sonnet is the chosen judge.
 
 Pilot command (port 5198 serves the merged production build):
 ```
@@ -11,6 +11,22 @@ node scripts/sweep.mjs --part objects --ids named-ice-cream,vendor-icecream,stad
 node scripts/sweep.mjs --part squares --box -40,50,-10,90 --types walk --limit 40 --out shots/sweep-pilot
 ```
 It has no dev server of its own; don't start one (about 700 MB).
+
+## Pilot so far (2026-11-02, b61a46c at port 5198)
+Go for the pilot came from the coordinator. Captures in `shots/sweep-pilot` (running city), `shots/sweep-frozen`, `shots/sweep-notaa` (A/B). Tool: 1.1–1.4 s per picture once the page is up, 0.30 MB per image, boot plus warm about 85 s. Probe (`--probe`, `shots/sweep-pilot/probe.json`): 265 of 291 finders found at noon, 0 errors; never found so far are listed by the probe file.
+
+Judges: Explore subagents with `model` override, brief in the scratchpad `judge-brief.md` (no suspects named), one subject each. Subagent tokens: 33k for 6 images, 44k for 10 on Sonnet and Opus; 54k and 71–75k on Haiku, which also takes 120–175 s against 22–46 s.
+| known flaw | Haiku | Sonnet | Opus |
+|---|---|---|---|
+| ice-cream scoops, puppet vendor | 3 | 5 | 5, 4 |
+| stadium spectators, player | 5, 5 | 5, 5 | not run |
+| warehouse blotched doors | 2 | 4 | 4 |
+| kiosk wall changes colour and material with distance | missed | partly, as a night shift | 5 |
+| doubled bus | 3 | 5 | 5 |
+| torn, ghosted people | missed | 4 | 4 |
+**Finding: temporal AA tears moving things.** Doubled bus front at `shots/sweep-pilot/squares/c0_-70/21h5_W.jpg`, torn people at `12_E.jpg`. On the same cell, `?notaa` running and TAA frozen both show solid people. Not watched at real speed by a person. `--freeze 1` (now the default) lets the city run between subjects and holds it still for the pictures, so the capture no longer shows this; the tremble check still runs on the moving city.
+
+Finders: all 512 run at their hours, 0 errors, 462 found at some hour, 50 never (`shots/sweep-pilot/probe.json`). Frozen capture 1.52 s per picture. Cells now prefer pavement to carriageway and wait up to 3 s for a car to leave the camera's spot, after a bonnet filled one picture. Neither of those last two changes has been run yet.
 
 ## Pieces
 - `scripts/sweep-census.mjs`: bundles the page's own plan, road network, occupancy, landscape and walk surface with rolldown, adds `scripts/sweep-kinds.json` (the code survey), writes `scripts/sweep-plan.json` and `sweep-census.md`. Hours per kind, stand-first points, waits and cells-only reasons are tables at its top.

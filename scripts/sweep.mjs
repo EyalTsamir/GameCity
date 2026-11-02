@@ -14,6 +14,8 @@
 //   --tremble cell    a three-frame read-back in one view per cell and hour; `view` every view, `off` none
 //   --limit n, --max-minutes m   stop cleanly and give the browser lock back; run again to go on
 //   --min-disk 5      stop under this many GB free   --min-battery 25   stop when discharging under this %
+//   --freeze 1        the city runs a moment between cells and kinds and holds still for the pictures; 0 keeps it running through them
+//   --probe           run every finder at its hours and shoot nothing: writes <out>/probe.json, resumes, keeps --max-minutes
 //   --q "noxxx"       extra URL parameters   --out shots/sweep   --width 1920 --height 1025   --quality 88
 //
 // Writes <out>/<part>/<kind or cell>/<hour>_<view>.jpg, an index.jsonl beside them (position, view, hour, draws, triangles),
@@ -54,6 +56,7 @@ const settle = parseInt(args.settle ?? '26', 10);
 const warm = parseFloat(args.warm ?? '30');
 const jpegQ = parseInt(args.quality ?? '88', 10);
 const trembleMode = args.tremble ?? 'cell';
+const freeze = (args.freeze ?? '1') !== '0';
 const nightViews = parseInt(args['night-views'] ?? '5', 10);
 const limit = parseInt(args.limit ?? '0', 10);
 const maxMinutes = parseFloat(args['max-minutes'] ?? '0');
@@ -216,8 +219,8 @@ const installInPage = () => {
   };
 };
 
-const EYE = 1.6;
 const placeCell = ([cell, view]) => {
+  const EYE = 1.6;
   const c = window.__city.ctx,
     s = c.__sweep;
   const floor = Math.max(s.ground(cell.x, cell.z), cell.floor ?? -1e9, -1.6);
@@ -242,6 +245,7 @@ const placeCell = ([cell, view]) => {
 
 // A thing seen from a distance measured from its surface, from the side it faces if a person could stand there.
 const placeObject = ([kind, d, picked, over]) => {
+  const EYE = 1.6;
   const c = window.__city.ctx,
     s = c.__sweep;
   const x = picked?.x ?? kind.x,
@@ -374,6 +378,27 @@ const openPage = async (browser) => {
 const shoot = async (page, job, near) => {
   let at;
   let frozen = false;
+  if (freeze) {
+    // people and traffic move on between subjects, then the temporal AA comes to rest on a still picture
+    if (near.subject !== job.dir) {
+      near.subject = job.dir;
+      await page.evaluate(() => window.__city.setSpeed(4));
+      await page.waitForTimeout(800);
+      // a car standing where the camera stands fills the picture with its bonnet: give it a few seconds to leave
+      if (job.cell) {
+        for (let k = 0; k < 8; k++) {
+          const inTheWay = await page.evaluate(
+            ([x, z]) => (window.__city.ctx.services.traffic?.vehicles?.() ?? []).some((V) => (V.x - x) ** 2 + (V.z - z) ** 2 < 25),
+            [job.cell.x, job.cell.z],
+          );
+          if (!inTheWay) break;
+          await page.waitForTimeout(400);
+        }
+      }
+    }
+    await page.evaluate(() => window.__city.setSpeed(0));
+    frozen = true;
+  }
   if (job.part === 'squares') {
     at = await page.evaluate(placeCell, [job.cell, job.view]);
   } else if (job.kind.poi) {
@@ -401,7 +426,7 @@ const shoot = async (page, job, near) => {
       if (near.absent.has(once)) return null;
       const waitMs = (kind.wait ?? parseFloat(args['find-wait'] ?? '6')) * 1000;
       const t = Date.now();
-      if (kind.wait) await page.evaluate(() => window.__city.setSpeed(4));
+      await page.evaluate((v) => window.__city.setSpeed(v), kind.wait ? 4 : 1);
       for (;;) {
         picked = await page.evaluate(findInPage, [job.kind.find, near.last ?? (job.kind.x !== undefined ? { x: job.kind.x, z: job.kind.z } : null)]);
         if (picked?.error) {
@@ -422,17 +447,26 @@ const shoot = async (page, job, near) => {
         // a moving thing holds still for its own picture
         await page.evaluate(() => window.__city.setSpeed(0));
         frozen = true;
-      }
+      } else if (freeze) await page.evaluate(() => window.__city.setSpeed(0));
     }
     at = await page.evaluate(placeObject, [job.kind, job.d, picked, job.over ?? null]);
   }
   const ran = await page.evaluate((n) => window.__city.ctx.__sweep.frames(n, 8000), settle);
-  const tremble = job.tremble ? await page.evaluate(() => window.__city.ctx.__sweep.tremble()) : null;
+  let tremble = null;
+  if (job.tremble) {
+    // (what a person standing there sees: the city running, the camera still)
+    if (freeze) await page.evaluate(() => window.__city.setSpeed(1));
+    tremble = await page.evaluate(() => window.__city.ctx.__sweep.tremble());
+    if (freeze) {
+      await page.evaluate(() => window.__city.setSpeed(0));
+      await page.evaluate((n) => window.__city.ctx.__sweep.frames(n, 8000), settle);
+    }
+  }
   const file = path.join(outDir, job.file);
   fs.mkdirSync(path.dirname(file), { recursive: true });
   const part = `${file}.part`;
   await page.screenshot({ path: part, type: 'jpeg', quality: jpegQ, timeout: 240000 });
-  if (frozen) await page.evaluate(() => window.__city.setSpeed(1));
+  if (frozen && !freeze) await page.evaluate(() => window.__city.setSpeed(1));
   const check = await page.evaluate(() => {
     const st = window.__city.stats();
     return { lost: window.__city.ctx.__sweep.lost, drawCalls: st.drawCalls, triangles: st.triangles };
@@ -448,10 +482,61 @@ const shoot = async (page, job, near) => {
   return line;
 };
 
+// Every finder, cheaply, before a long night: what isn't found gets no object shots, and it's better to know now.
+const runProbe = async (browser) => {
+  const file = path.join(outDir, 'probe.json');
+  const res = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : {};
+  const page = await openPage(browser);
+  const todoP = [];
+  for (const h of [...HOURS, ...specialHours])
+    for (const k of plan.kinds) if (k.find && matchId(k.id) && (k.hours ?? HOURS).includes(h) && !res[`${k.id}@${h}`]) todoP.push({ k, h });
+  let hourNow = null;
+  for (const { k, h } of todoP) {
+    if (maxMinutes && Date.now() - t0 > maxMinutes * 60000) break;
+    if (h !== hourNow) {
+      await page.evaluate((hh) => {
+        const city = window.__city;
+        city.ctx.clock.holdTime = false;
+        city.setHours(hh);
+        city.ctx.clock.holdTime = true;
+        city.setSpeed(4);
+      }, h);
+      await page.waitForTimeout(warm * 1000);
+      hourNow = h;
+    }
+    if (k.goto) {
+      await page.evaluate(placeCell, [{ x: k.goto[0], z: k.goto[1] }, 'N']);
+      await page.waitForTimeout(2500);
+    }
+    const seed = k.x !== undefined ? { x: k.x, z: k.z } : null;
+    let r = await page.evaluate(findInPage, [k.find, seed]);
+    const t = Date.now();
+    while (!r && k.wait && Date.now() - t < k.wait * 1000) {
+      await page.waitForTimeout(1500);
+      r = await page.evaluate(findInPage, [k.find, seed]);
+    }
+    res[`${k.id}@${h}`] = r?.error ? `error: ${r.error}` : r ? `ok ${r.x.toFixed(1)},${r.z.toFixed(1)}${r.yaw !== undefined ? ' yaw' : ''}${r.y !== undefined ? ' y' + r.y.toFixed(1) : ''}` : k.x !== undefined ? 'none, falls back on its position' : 'none';
+    fs.writeFileSync(file, JSON.stringify(res, null, 0).replace(/","/g, '",\n"'));
+  }
+  const v = Object.values(res);
+  console.log(JSON.stringify({ probed: v.length, left: todoP.length - todoP.filter((j) => res[`${j.k.id}@${j.h}`]).length, ok: v.filter((x) => x.startsWith('ok')).length, fallback: v.filter((x) => x.startsWith('none,')).length, none: v.filter((x) => x === 'none').length, errors: v.filter((x) => x.startsWith('error')).length }));
+};
 await acquireLock();
+if (args.probe) {
+  const { browser } = await launchBrowser();
+  try {
+    await runProbe(browser);
+  } finally {
+    await browser.close().catch(() => {});
+    releaseLock();
+  }
+  process.exit(0);
+}
 let exitCode = 0;
 let queue = todo.slice();
 let failStreak = 0;
+let shotMs = 0;
+let kbTotal = 0;
 const near = { last: null, kind: null, primed: new Set(), absent: new Set() };
 try {
   while (queue.length && !status.stop) {
@@ -477,11 +562,30 @@ try {
           near.kind = job.kind;
           near.last = null;
         }
-        const line = await shoot(page, job, near);
+        const t1 = Date.now();
+        let line = null;
+        try {
+          line = await shoot(page, job, near);
+        } catch (e) {
+          // a dead page takes a new browser (about a minute and a half); one picture that can't be taken doesn't
+          const msg = String(e?.message ?? e);
+          if (/context lost|closed|crash|Timeout/i.test(msg)) throw e;
+          status.failures.push({ at: new Date().toISOString(), job: job.file, error: msg.slice(0, 400) });
+          queue.shift();
+          if (++failStreak >= 12) {
+            status.stop = 'twelve pictures failed in a row';
+            exitCode = 1;
+            break;
+          }
+          continue;
+        }
         queue.shift();
         failStreak = 0;
         if (!line) continue;
         status.shot++;
+        shotMs += Date.now() - t1;
+        status.secondsPerShot = +(shotMs / 1000 / status.shot).toFixed(2);
+        status.mbPerImage = +(((kbTotal += line.kb) / 1024) / status.shot).toFixed(3);
         status.secondsPerImage = +((Date.now() - t0) / 1000 / status.shot).toFixed(2);
         if (status.shot % 25 === 0) {
           status.left = queue.length;
@@ -496,8 +600,8 @@ try {
       status.failures.push({ at: new Date().toISOString(), job: queue[0]?.file, error: String(e?.message ?? e).slice(0, 400) });
       // the same picture failing again and again is left for last, then given up: one bad view doesn't end a night's run
       if (failStreak >= 2 && queue.length > 1) queue.push(queue.shift());
-      if (failStreak >= 6) {
-        status.stop = 'six failures in a row';
+      if (failStreak >= 4) {
+        status.stop = 'four restarts in a row';
         exitCode = 1;
       }
     } finally {
@@ -511,5 +615,5 @@ try {
   if (!status.stop && !queue.length) status.stop = 'finished';
   writeStatus();
 }
-console.log(JSON.stringify({ stop: status.stop, shot: status.shot, left: status.left, secondsPerImage: status.secondsPerImage, restarts: status.restarts, notFound: status.notFound, failedModules: status.failedModules, consoleErrors: Object.keys(status.consoleErrors).length, frameErrors: status.frameErrors.length, freeGB: status.freeGB }, null, 1));
+console.log(JSON.stringify({ stop: status.stop, shot: status.shot, left: status.left, secondsPerImage: status.secondsPerImage, secondsPerShot: status.secondsPerShot, mbPerImage: status.mbPerImage, failures: status.failures.length, restarts: status.restarts, notFound: status.notFound, failedModules: status.failedModules, consoleErrors: Object.keys(status.consoleErrors).length, frameErrors: status.frameErrors.length, freeGB: status.freeGB }, null, 1));
 process.exit(exitCode);

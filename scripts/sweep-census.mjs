@@ -172,6 +172,10 @@ for (const [k, list] of grouped(plan.roadNodes, (n) => n.control)) {
 }
 for (const c of plan.rail.crossings) kindOf(`crossing-${c.id}`, 'roads', `level crossing ${c.id}`, 1, { x: round(c.x), z: round(plan.rail.z), yaw: 30, lookH: 1.2, r: 4 });
 
+// the close-up round's fixed ordinary viewpoints, whose flaws are known: what a judge must be able to catch
+for (const v of JSON.parse(fs.readFileSync(path.join(here, 'closeset-views.json'), 'utf8'))) {
+  if (!v.dyn) kindOf(`cs-${v.id}`, 'close set', `close-set view ${v.id}`, 1, { x: v.x, z: v.z, yaw: v.yaw, lookH: v.h ?? v.y ?? 0, r: 0 });
+}
 // the places the camera is sent to by name: what the eye-level cells never see, the city as a whole
 for (const p of plan.pois) kindOf(`poi-${slug(p.id)}`, 'named views', p.name, 1, { poi: p.id });
 
@@ -309,8 +313,11 @@ const standIn = (x0, z0, S) => {
       if (occ.get(x, z) & OCC.WATER) nWater++;
       if (isWalkable(x, z)) {
         nW++;
-        if (d < bdW) {
-          bdW = d;
+        // (the carriageway counts as walkable ground, but a pavement in the same cell is where a person stands)
+        const onRoad = occ.get(x, z) & OCC.ROAD;
+        const dw = onRoad ? d + 1e4 : d;
+        if (dw < bdW) {
+          bdW = dw;
           bestW = { x, z };
         }
       }
