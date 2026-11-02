@@ -3,7 +3,13 @@
 Rules: `SWEEP.md`. Census: `sweep-census.md`. Known items: `sweep-known.md`.
 
 ## Resume here
-Pilot done; report in the shared notes folder, `city-sweep-pilot.md` (a copy of its findings is below). Waiting for the coordinator: the go for the full capture (only with the browser free), `--night-views 3` or not, and how to dispatch the judges (`claude -p` script or Agent tool). Sonnet is the chosen judge.
+Full capture and judges are running under the coordinator's decisions of 2026-11-02 (pilot report: shared notes folder, `city-sweep-pilot.md`):
+- **Capture:** `bash scripts/sweep-capture-loop.sh` (background): `--night-views 3 --freeze 1`, from 5198, into `shots/sweep`. Chunks of `shots/sweep/chunk-minutes` minutes (default 10; **raise it, e.g. 60, once the coordinator says sweep-fix-d has finished**). Stop: touch `shots/sweep/STOP-CAPTURE`. Log `shots/sweep/capture.log`, state `status.json`, kinds not found `absent.json`. Rerun to resume.
+- **Judges:** `node scripts/sweep-judge.mjs [--max-images n] --jobs 3` (Sonnet, Read only, resumes). **Stop file: `shots/sweep/STOP-JUDGES`** (absolute: `C:\Projects\GameCity\.claude\worktrees\gifted-goldwasser-f1fa64\shots\sweep\STOP-JUDGES`). Totals `shots/sweep/judged/summary.json`.
+- **Order:** kinds at noon, walkable cells at noon, kinds at night, walkable cells at night, the rest.
+- **Budget:** judges may take weekly up to 60 % and 5-hour up to 85 % (then pause until reset; `get_usage`). Baseline before the first 200 images: 5-hour 46 % (resetting about 02:30 UTC), weekly 32 %. After the first 200 images, report to the coordinator what they did to both and what the whole set would cost. If it won't fit, thin by dropping night views of ordinary cells, not objects.
+- **Findings:** `node scripts/sweep-families.mjs` after each batch writes `docs/progress/sweep-findings.md` (coordinator wants it early, so fix sessions can start); `--consolidate` now and then; my eye checks, owners and costs go in `docs/progress/sweep-family-notes.json` by family id. Commit the findings as they grow. Top families must be checked by eye. Don't judge motion from these images: the TAA tearing is with sweep-fix-d.
+- Done means `sweep-findings.md` exists with its top families checked, and the last message ends with CLOSE-DONE. Reports go to the coordinator in English; a message is cut to 400 characters, so long ones go to the shared notes folder.
 
 Pilot command (port 5198 serves the merged production build):
 ```

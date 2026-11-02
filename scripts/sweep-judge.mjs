@@ -150,11 +150,7 @@ const take = () => {
   for (const s of subjects) {
     if (s.taken || fs.existsSync(resultOf(s))) continue;
     const images = ready(s, absent);
-    // (in order: a later subject never goes ahead of one the capture still owes, within its stage)
-    if (images === null) {
-      if (s.rank <= subjects.find((q) => !q.taken && !fs.existsSync(resultOf(q))).rank) continue;
-      continue;
-    }
+    if (images === null) continue;
     if (!images.length) {
       s.taken = true;
       continue;
