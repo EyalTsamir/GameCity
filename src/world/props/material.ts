@@ -8,7 +8,7 @@ import * as THREE from 'three';
 import type { GlobalUniforms } from '../../core/uniforms';
 import { LAMP_GLSL, lampUniforms } from '../../core/lampLight';
 import { roadNoise } from '../roads/materials';
-import { WIND_GLSL } from '../../core/wind';
+import { MOTION_KEEP_GLSL, WIND_GLSL } from '../../core/wind';
 
 // Weathering by material class (recognised from the per-vertex roughness / metalness of furniture.ts MAT):
 // stone / concrete — grime at the foot, rain streaks, lichen spots, green algae on the north side;
@@ -135,10 +135,10 @@ if (aSway.w > 0.0) {
   float sh = max(transformed.y - aSway.y, 0.0);
   float sph = aSway.x * 0.71 + aSway.z * 0.37;
   float sosc = 0.65 * sin(uTime * 1.25 + sph) + 0.35 * sin(uTime * 2.6 + sph * 1.9);
-  transformed.xz += sgw * (0.7 + 0.45 * sosc) * aSway.w * sh * sh;
+  transformed.xz += sgw * (0.7 + 0.45 * sosc * thMotionKeep(aSway.xyz, 0.45 * length(sgw) * aSway.w * sh * sh)) * aSway.w * sh * sh;
   float srr = length(transformed.xz - aSway.xz);
   transformed.y += sin(uTime * 6.3 + srr * 4.0 + sph * 3.0 + atan(transformed.z - aSway.z, transformed.x - aSway.x) * 3.0)
-    * 0.018 * min(srr, 1.6) * (0.25 + length(sgw)) * smoothstep(1.5, 2.0, sh);
+    * 0.018 * min(srr, 1.6) * (0.25 + length(sgw)) * smoothstep(1.5, 2.0, sh) * thMotionKeep(aSway.xyz, 0.02);
 }`;
 
 export function furnitureMaterial(u: GlobalUniforms, wear = true, sway = false): THREE.MeshStandardMaterial {
@@ -152,6 +152,8 @@ export function furnitureMaterial(u: GlobalUniforms, wear = true, sway = false):
     if (sway) {
       shader.uniforms.uTime = u.uTime;
       shader.uniforms.uWind = u.uWind;
+      shader.uniforms.uNearEye = u.uNearEye;
+      shader.uniforms.uNearLens = u.uNearLens;
     }
     shader.vertexShader = shader.vertexShader
       .replace(
@@ -163,7 +165,7 @@ uniform float uLights;
 varying vec2 vRM;
 varying vec3 vEmit;
 varying vec3 vPW;
-varying vec3 vPN;${sway ? `\nattribute vec4 aSway;\nuniform float uTime;\nuniform vec2 uWind;\n${WIND_GLSL}` : ''}`,
+varying vec3 vPN;${sway ? `\nattribute vec4 aSway;\nuniform float uTime;\nuniform vec2 uWind;\nuniform vec3 uNearEye;\nuniform float uNearLens;\n${WIND_GLSL}\n${MOTION_KEEP_GLSL}` : ''}`,
       )
       .replace(
         '#include <begin_vertex>',

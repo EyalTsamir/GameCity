@@ -13,7 +13,7 @@
 import * as THREE from 'three';
 import type { GlobalUniforms } from '../../core/uniforms';
 import { LAMP_GLSL, lampUniforms } from '../../core/lampLight';
-import { WIND_GLSL } from '../../core/wind';
+import { MOTION_KEEP_GLSL, WIND_GLSL } from '../../core/wind';
 import { Rng } from '../../core/rng';
 import type { Builder } from './mesh';
 import { SideGeom, sx, sz } from './gen';
@@ -551,7 +551,7 @@ export function createGreenMaterial(g: GlobalUniforms, tex: THREE.Texture): THRE
   const m = new THREE.MeshStandardMaterial({ map: tex, vertexColors: true, alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.78, metalness: 0 });
   m.name = 'buildings-green';
   m.onBeforeCompile = (shader) => {
-    Object.assign(shader.uniforms, { uTime: g.uTime, uWind: g.uWind, ...lampUniforms() });
+    Object.assign(shader.uniforms, { uTime: g.uTime, uWind: g.uWind, uNearEye: g.uNearEye, uNearLens: g.uNearLens, ...lampUniforms() });
     shader.vertexShader = shader.vertexShader
       .replace(
         '#include <common>',
@@ -561,7 +561,10 @@ uniform float uTime;
 uniform vec2 uWind;
 varying vec3 vGWPos;
 varying vec3 vGWNrm;
-${WIND_GLSL}`,
+uniform vec3 uNearEye;
+uniform float uNearLens;
+${WIND_GLSL}
+${MOTION_KEEP_GLSL}`,
       )
       .replace(
         '#include <begin_vertex>',
@@ -572,10 +575,10 @@ ${WIND_GLSL}`,
   if (gs > 0.0) {
     vec2 gw = thWindAt(transformed.xz);
     float osc = 0.6 * sin(uTime * 1.6 + aX.y) + 0.4 * sin(uTime * 2.9 + aX.y * 1.7);
-    vec2 push = gw * (0.75 + 0.45 * osc);
+    vec2 push = gw * (0.75 + 0.45 * osc * thMotionKeep(transformed, 0.45 * length(gw) * gs));
     transformed.xz += push * gs;
     transformed.y += length(push) * gs * 0.22;
-    float fl = 0.012 * aX.x * (0.4 + length(gw));
+    float fl = 0.012 * aX.x * (0.4 + length(gw)) * thMotionKeep(transformed, 0.012);
     transformed.xz += vec2(sin(uTime * 6.1 + aX.y * 5.0 + transformed.y * 3.0), cos(uTime * 5.3 + aX.y * 3.0 + transformed.x * 2.0)) * fl;
   }
 }`,
