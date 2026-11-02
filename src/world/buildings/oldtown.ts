@@ -3,6 +3,7 @@
 // gable / mansard / flat roofs with dormers and chimneys, ground-floor shops
 // with display windows, fascia signs, striped awnings and blade signs.
 
+import { matOn } from '../../core/sweepmat';
 import * as THREE from 'three';
 import {
   Gen, LRect, Side, FRONT, RIGHT, BACK, LEFT, SideGeom, Grid,
@@ -358,7 +359,10 @@ export function genTownhouse(g: Gen): void {
           const n = len > 4.6 ? 2 : 1;
           const gr = makeGrid(a, b, 0, gH, 1, { spacing: len / n, cols: n, winW: (len - 0.5) / n - 0.25, winH: fasciaY0 - 0.12 - 0.3, sill: 0.3, margin: 0.22 });
           wallGrid(g.shell, sg, a, b, 0, groundTop, gr, { ...look(PROF.SHOP, WIN.SHOP), color: shopC, pattern: WALLPAT.SMOOTH + 16 * shopT, frame: FRAME.DARK });
-          anchors.spot(sg, 'window', a + 0.42, b - 0.42, 0.34, fasciaY0 - 0.14, 0, { word: shopDef.name });
+          if (matOn('matsign') && gr.n > 1) {
+            const half = (gr.wx1 - gr.wx0) / 2;
+            for (let i = 0; i < gr.n; i++) anchors.spot(sg, 'window', gridU(gr, i) - half + 0.08, gridU(gr, i) + half - 0.08, 0.34, fasciaY0 - 0.14, 0, { word: shopDef.name });
+          } else anchors.spot(sg, 'window', a + 0.42, b - 0.42, 0.34, fasciaY0 - 0.14, 0, { word: shopDef.name });
           // ?noshopfront: a panelled stall riser under the display windows and a projecting sill on it
           if (MASS.shopfronts && gr.n > 0) {
             setCol(t, shade(shopC, 0.82));

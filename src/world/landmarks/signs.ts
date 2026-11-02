@@ -1,6 +1,7 @@
 // Lettering & signage for the landmarks: one canvas atlas (shelf-packed) drawn once at
 // init, mapped onto quads of a single mesh. Bright letters glow at night (per-quad glow).
 
+import { matOn } from '../../core/sweepmat';
 import * as THREE from 'three';
 import type { GlobalUniforms } from '../../core/uniforms';
 import { Kit, V3 } from './kit';
@@ -70,7 +71,9 @@ export class SignAtlas {
     this.g.beginPath();
     this.g.rect(0, 0, w, h);
     this.g.clip();
+    slotW = w;
     draw(this.g, w, h);
+    slotW = 0;
     this.g.restore();
     shelf.x += w + pad;
     const r = { u0: px / this.W, u1: (px + w) / this.W, v1: 1 - py / this.H, v0: 1 - (py + h) / this.H };
@@ -102,7 +105,29 @@ export function fitText(g: CanvasRenderingContext2D, text: string, font: (px: nu
 }
 
 /** Draw centred, optionally letter-spaced text. */
+/** the width of the atlas slot being drawn on */
+let slotW = 0;
+
 export function drawText(g: CanvasRenderingContext2D, text: string, cx: number, cy: number, font: string, color: string, spacingPx = 0): void {
+  // (`matsign`: the atlas slot's clip cut the ends off anything wider than the room either side of its centre: letters come in instead)
+  const room = slotW > 0 && matOn('matsign') ? 2 * Math.min(cx, slotW - cx) * 0.97 : 0;
+  if (room > 0) {
+    g.font = font;
+    const wide = g.measureText(text).width + spacingPx * (text.length - 1);
+    if (wide > room) {
+      const k = room / wide;
+      g.save();
+      g.translate(cx, cy);
+      g.scale(k, k);
+      plainText(g, text, 0, 0, font, color, spacingPx);
+      g.restore();
+      return;
+    }
+  }
+  plainText(g, text, cx, cy, font, color, spacingPx);
+}
+
+function plainText(g: CanvasRenderingContext2D, text: string, cx: number, cy: number, font: string, color: string, spacingPx: number): void {
   g.font = font;
   g.fillStyle = color;
   g.textBaseline = 'middle';

@@ -5,6 +5,7 @@
 // pavement lights. Local frame as in furniture.ts: origin on the ground, +Y up, +Z = the front (towards the walker).
 // `k` = fine cell, `kd` = near-only cell (the small parts), printed faces go to the Printer's own near mesh.
 
+import { matOn } from '../../core/sweepmat';
 import { hash01, type Rng } from '../../core/rng';
 import type { GreenKit } from '../buildings/green';
 import { GREEN } from '../buildings/green';
@@ -467,7 +468,7 @@ export function posterColumn(ks: Kit, k: Kit, kd: Kit, rng: Rng, printer: Printe
     const y0 = 0.46 + rng.range(0, 0.14),
       hh = rng.range(1.5, 1.95);
     for (const s of [0, 1] as const) {
-      const a = ((i + s) / F) * Math.PI * 2 + Math.PI / F;
+      const a = ((i + s) / F) * Math.PI * 2 + (matOn('matsign') ? 0 : Math.PI / F);
       sh.push().local(0, 0, 0, 0, a, 0);
       printer.quad(sh, `bill:${bill}:${s}`, 0, y0 + hh / 2, apo, facetW, hh, 56, 200, posterDraw(bill, s === 0 ? 1 : 2));
       markProp(sh, 'bill', 0, y0 + hh / 2, apo, facetW, hh, seed + i, s);

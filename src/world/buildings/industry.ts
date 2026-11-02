@@ -5,6 +5,7 @@
 // loading-dock canopies and bumpers, personnel doors, pilasters, clerestory
 // windows, rooftop vents and signage.
 
+import { matOn } from '../../core/sweepmat';
 import * as THREE from 'three';
 import {
   Gen, LRect, Side, FRONT, RIGHT, BACK, LEFT, Grid, WallLook, SideGeom,
@@ -1012,7 +1013,9 @@ export function genIndustrial(g: Gen): void {
     signOnSide(g, sgF, sgF.L * 0.5 - 9.5, sgF.L * 0.5 + 9.5, bo + 0.03, H - 2.55, H - 0.65, r);
   } else if (customs) {
     const r = g.atlas.add('customs', 900, 72, letterSign('OLD CUSTOMS WAREHOUSE', '#ece2c6', '#ffe1a8', 'Georgia, "Times New Roman", serif', 0.45));
-    signOnSide(g, sgF, sgF.L * 0.5 - 14, sgF.L * 0.5 + 14, INS + 0.06, H - 1.85, H - 0.55, r);
+    const signHalf = matOn('matsign') ? Math.min(14, sgF.L * 0.46) : 14;
+    const signH = matOn('matsign') ? Math.min(1.3, (signHalf * 2 * 72) / 900 + 0.2) : 1.3;
+    signOnSide(g, sgF, sgF.L * 0.5 - signHalf, sgF.L * 0.5 + signHalf, INS + 0.06, H - 0.55 - signH, H - 0.55, r);
   } else {
     const nm = depot ? 'TRANSIT DEPOT' : FIRMS[(lot.id * 7) % FIRMS.length];
     const r = g.atlas.add(`ind:${nm}`, 420, 64, boardSign(nm, { bg: '#f1ede4', fg: '#2c3a46', font: '"Arial Black", "Segoe UI", sans-serif', weight: '900', glow: 0.25, glowColor: '#ffffff', border: '#2c3a46' }));

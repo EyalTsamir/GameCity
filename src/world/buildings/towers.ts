@@ -5,11 +5,12 @@
 // aviation lights on the tall ones and night accent lighting. Haven Tower gets
 // its own asymmetric crown with a lantern, spire and helipad.
 
+import { matOn } from '../../core/sweepmat';
 import * as THREE from 'three';
 import { whiteOn } from '../../core/sweepwhite';
 import {
   Gen, LRect, Side, FRONT, RIGHT, BACK, LEFT, Grid, WallLook,
-  sideGeom, sideBox, sx, sz, makeGrid, wallGrid, wallPlain, wallSeg, setWallAttrs,
+  sideGeom, sideBox, sx, sz, makeGrid, gridU, wallGrid, wallPlain, wallSeg, setWallAttrs,
   flatRoof, roofLook, roofPoly, doorNiche, bandWithOpenings, railing, signOnSide,
   col, shade, setCol, lightBox, aviationLight,
 } from './gen';
@@ -518,7 +519,11 @@ export function genTower(g: Gen): void {
           const n = Math.max(1, Math.round(len / 2.6));
           const gr = makeGrid(a, b, 0, gH, 1, { spacing: len / n, cols: n, winW: len / n - 0.18, winH: gH - 0.9, sill: 0.12, margin: 0.06 });
           wallGrid(g.shell, sg, a, b, 0, gH, gr, lookL);
-          if (asShop) anchors.spot(sg, 'window', a + 0.25, b - 0.25, 0.3, gH - 0.9, 0, { word: s === FRONT && shopName ? shopName : SHOP_NAMES[(g.seed * 7 + s * 3 + 1) % SHOP_NAMES.length] });
+          if (asShop && matOn('matsign') && gr.n > 1) {
+            const half = (gr.wx1 - gr.wx0) / 2;
+            const word = s === FRONT && shopName ? shopName : SHOP_NAMES[(g.seed * 7 + s * 3 + 1) % SHOP_NAMES.length];
+            for (let i = 0; i < gr.n; i += 2) anchors.spot(sg, 'window', gridU(gr, i) - half + 0.08, gridU(gr, i) + half - 0.08, 0.3, gH - 0.9, 0, { word });
+          } else if (asShop) anchors.spot(sg, 'window', a + 0.25, b - 0.25, 0.3, gH - 0.9, 0, { word: s === FRONT && shopName ? shopName : SHOP_NAMES[(g.seed * 7 + s * 3 + 1) % SHOP_NAMES.length] });
           if (fit) groundFit(g, sg, a, b, gr, gH, sc.frame === FRAME.ALU ? '#7f868c' : sc.frame === FRAME.CREAM ? '#3f3a33' : '#24282c', masonry ? '#7d7668' : '#3f4245', !arcade);
         },
         (a, b, y0) => wallPlain(g.shell, sg, a, b, y0, gH, { color: shade(wallC, 0.7), pattern: WALLPAT.SMOOTH, seed: g.seed }),
