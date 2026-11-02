@@ -115,7 +115,7 @@ export const FB = {
 } as const;
 
 /** close level only, decided in the vertex shader from the person's hash (no bits left in the mask) */
-export const FX = { GLASSES: 29, EARRINGS: 30 } as const;
+export const FX = { GLASSES: 29, EARRINGS: 30, EARS: 31 } as const;
 
 /** 0 near (< 40 m), 1 lo, 2 tiny, 3 pin, 4 close (< ~15 m: sculpted face, fingers, fabric detail) */
 export type Lod = 0 | 1 | 2 | 3 | 4;
@@ -907,7 +907,8 @@ function buildCloseHead(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
         ly = Math.sin(a);
       const lobe = sstep(-0.35, -0.85, ly);
       const stand = (0.006 + 0.009 * Math.max(0, lz) + 0.0035 * Math.max(0, ly)) * k * (1 - 0.35 * lobe);
-      b.use(BONE.HEAD, REG.SKIN, -1, 0.97);
+      // (long hair covers them: they stood out through the sheet)
+      b.use(BONE.HEAD, REG.SKIN, sweepPeople('hairfall') ? FX.EARS : -1, 0.97);
       root.push(b.v(add(at(a, 0.74), mul(out, -0.004 * k)), 2, 0));
       b.setTint(1);
       rim.push(b.v(add(at(a, 1), mul(out, stand * 0.75)), 2, 0));
@@ -1435,13 +1436,14 @@ function buildHair(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
   if (cfg.close && HAIR_LOCKS && !closePeople('hairshell')) buildHairLocks(b, d, vol, hk);
 
   if (cfg.hairLong.length === 0) return;
+  const hairCurtain = cfg.close && sweepPeople('hairfall');
   // long hair sheet: hangs from the back / sides of the head behind the shoulders (aux1 = hang
   // depth below the cap edge; the shader lifts vertices deeper than the figure's hair length)
   b.use(BONE.HEAD, REG.HAIR, FB.HAIRLONG, 0.96);
   const cols: number[] = [];
   for (let k = 0; k < n; k++) {
     const phi = (k / n) * Math.PI * 2;
-    if (Math.abs(Math.atan2(Math.sin(phi), Math.cos(phi))) > (cfg.close ? 0.98 : 1.15)) cols.push(k);
+    if (Math.abs(Math.atan2(Math.sin(phi), Math.cos(phi))) > (cfg.close ? (hairCurtain ? 0.6 : 0.98) : 1.15)) cols.push(k);
   }
   // order the columns around the back: from the left side (+x) through the back to the right
   cols.sort((a, c) => {
@@ -1464,12 +1466,13 @@ function buildHair(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
   const sheet: number[][] = [];
   const depths = [0, ...cfg.hairLong];
   for (const k of cols) {
-    const phi = (k / n) * Math.PI * 2;
-    const y0 = chin + (crown - chin) * hairlineU(phi);
+    const phi0 = (k / n) * Math.PI * 2;
+    const y0 = chin + (crown - chin) * hairlineU(phi0);
+    const phi = phi0;
     // close: the sheet starts up on the cap (over it, a little proud) so the hair flows out of the cap
     // instead of hanging from a ledge at its edge
     const yS = cfg.close ? y0 + (crown - y0) * 0.3 : y0 + 0.012 * hk;
-    const edge = headSurface(d, phi, yS, cfg.close ? vol * 0.5 : vol * 0.9);
+    const edge = headSurface(d, phi, yS, hairCurtain ? vol * 0.85 + 0.003 : cfg.close ? vol * 0.5 : vol * 0.9);
     // widest outline of the head at this angle (hair falls from there)
     const wide = headSurface(d, phi, d.headRings[5].y, vol * 1.2);
     const col: number[] = [];
@@ -1482,12 +1485,30 @@ function buildHair(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
         let x = wide[0] * (1 - 0.18 * clamp(dep / 0.3, 0, 1));
         let z = Math.min(wide[2], edge[2]);
         if (cfg.close) {
+          // the front of the sheet: comes off the hairline high on the forehead and sweeps back across the temple to the jaw, framing the face
+          // (a curtain starting beside the cheek under the cap's edge was a bowl with two flaps)
+          const a0 = Math.abs(Math.atan2(Math.sin(phi), Math.cos(phi)));
+          const aE = hairCurtain && a0 < 0.98 ? a0 + (0.98 - a0) * sstep(0, 0.085, dep) : a0;
+          const phiE = Math.sin(phi) < 0 ? -aE : aE;
           // lying on the head down to the jaw, then falling free from there: a sheet hung from the widest outline stood off the cheek as a flap
-          const hug = headSurface(d, phi, Math.max(y, d.headRings[2].y), 0.003 + vol * 0.85 * sstep(0.98, 1.55, Math.abs(Math.atan2(Math.sin(phi), Math.cos(phi)))));
+          const hug = headSurface(d, phiE, Math.max(y, d.headRings[2].y), 0.003 + vol * 0.85 * sstep(0.98, 1.55, aE));
           x = hug[0] * (1 + 0.1 * clamp((d.headRings[2].y - y) / 0.1, 0, 1)) * (1 - 0.12 * clamp((dep - 0.2) / 0.2, 0, 1));
           z = hug[2];
+          if (hairCurtain && y < d.headRings[5].y) {
+            // round the back it falls from the back of the skull, not from the skull's narrowing to the nape (the cap stood out over it like a mushroom)
+            const kW = sstep(1.05, 1.85, aE);
+            const fall = 1 - 0.1 * clamp((dep - 0.12) / 0.3, 0, 1);
+            x += (wide[0] * fall - x) * kW;
+            z += (wide[2] * fall - z) * kW;
+          }
         }
-        if (y < shoulderY + 0.02 * hk) {
+        if (hairCurtain && y < shoulderY + 0.1 * hk) {
+          // behind the shoulders, gathering in over the last ten centimetres above them: all at once was a fold like a wing
+          const kB = sstep(shoulderY + 0.1 * hk, shoulderY + 0.005 * hk, y);
+          const bz = backZ(y) - 0.012 * hk;
+          x *= 1 - 0.28 * sideK * kB;
+          z = z + (Math.min(z, bz) - z) * kB;
+        } else if (!hairCurtain && y < shoulderY + 0.02 * hk) {
           // behind the shoulders: on the back surface
           const bz = backZ(y) - 0.012 * hk;
           z = Math.min(z, bz + (1 - sideK) * 0.0);

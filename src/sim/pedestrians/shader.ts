@@ -17,6 +17,8 @@ const HD = sweepPeople('hairdepth') ? 'pc = pedHairDepth(pc, vPedRest);' : '';
 const HEMC = sweepPeople('hairhem') ? 'true' : 'false';
 const CURLS = sweepPeople('curls');
 const SOFTLINE = sweepPeople('softline');
+const HF_LIFT = sweepPeople('hairfall') ? '1.0' : '0.0';
+const FE0 = sweepPeople('hairfall') ? '0.66' : '0.98';
 const HC = sweepPeople('hatcloth') ? 'true' : 'false';
 const VS_BRIM = sweepPeople('hatform') ? "{\n        // no hat brim is a flat disc: straw and cotton wander (every hat its own way), a fedora snaps down in front and rolls up at the sides, a hard hat's peak is at the front only\n        float wv = sin(phi * 2.0 + float(h3 & 63u) * 0.1) + 0.6 * sin(phi * 3.0 + float((h3 >> 6u) & 63u) * 0.1);\n        if (st == 3u || st == 7u) p.y += s * s * 0.007 * wv;\n        else if (st == 4u) p.y += s * s * (0.016 * sin(phi) * sin(phi) - 0.012 * cos(phi) + 0.004 * wv);\n        else if (st == 5u) p.xz -= rad * s * hb.x * 0.72 * (1.0 - smoothstep(0.1, 1.0, cos(phi)));\n      }" : '';
 const VS_CROWN = sweepPeople('hatform') ? "{\n        // the crown's own form: a fedora's pinch and dents, a hard hat's ridge, a beanie's turned-up cuff\n        float xn = p.x;\n        if (st == 4u) p.y -= top * top * (0.016 * exp(-xn * xn / 0.0006) + 0.006 * exp(-(abs(xn) - 0.04) * (abs(xn) - 0.04) / 0.0003) * smoothstep(-0.02, 0.05, p.z));\n        else if (st == 5u) p.y += 0.0035 * exp(-xn * xn / 0.00012) * smoothstep(0.1, 0.5, s);\n        else if (st == 6u) p.xz += rad * 0.0035 * (1.0 - smoothstep(0.26, 0.3, s));\n      }" : '';
@@ -327,6 +329,9 @@ bool pedVisible(uint d0) {
   if (feat == 0u) return true;
 //@if CL
   if (feat > ${FB.LOCKS + 1}u) {
+    bool hairOver = (iC2.z >> 29u) == 3u && ((iC1.y >> 24u) & 7u) == 0u;
+    if (feat == ${FX.EARS + 1}u) return !hairOver;
+    if (feat == ${FX.EARRINGS + 1}u && hairOver) return false;
     uint hx = ((iC0.x & 0xFFFFFFu) * 40503u) ^ ((iC1.x & 0xFFFFFFu) * 2654435761u) ^ ((iC0.w & 0xFFFFFFu) * 3266489917u);
     hx ^= hx >> 15u; hx *= 2246822519u; hx ^= hx >> 13u;
     if (feat == ${FX.GLASSES + 1}u) {
@@ -531,6 +536,10 @@ void pedPose(inout vec3 p, inout vec3 n) {
 //@endif
       float lift = max(0.0, aux.x - L2);
       p.y += lift;
+//@if CL
+      // (the paint's own height goes up with it: squeezed into the last row, its waves folded into chevrons all down a bob)
+      vPedRest.y += ${HF_LIFT} * lift;
+//@endif
       // rows lifted to the hem tuck in under it (into the hair / body) instead of rolling out as a shelf
       p.xz = mix(p.xz, vec2(0.0, -0.01), 0.3 * smoothstep(0.0, 0.03, lift));
       float dep = min(aux.x, L2);
@@ -1868,14 +1877,14 @@ const FRAG_COLOR = /* glsl */ `
       float clump = sqrt(tri) * 0.85 + fine * 0.3;
       // (the hem wanders in long curves as well, each clump a little past or short of it: one level line of tips is a saw)
       float hemL = ${HEMC} ? lr * lr * 0.018 + (0.5 + 0.5 * sin(hf.x * 7.0 + 1.3 * sin(hf.x * 3.1))) * 0.016 : lr * 0.012;
-      float tipK = 1.0 - smoothstep(0.0, 0.016, vPedFace.x - hemL);
+      float tipK = 1.0 - smoothstep(0.0, vPedFace.y > 2.5 ? 0.007 : 0.016, vPedFace.x - hemL);
 #else
       float clump = tri * 0.85 + fine * 0.3;
       float tipK = 1.0 - smoothstep(0.0, 0.06, vPedFace.x - lr * 0.03);
 #endif
       float edgeK = 1.0 - smoothstep(1.17, 1.45, vPedFace.y);
 #ifdef PED_CLOSE
-      float need = max(tipK, (1.0 - smoothstep(0.98, 1.14, vPedFace.y)) * 0.2) * (1.0 - far);
+      float need = max(tipK, (1.0 - smoothstep(${FE0}, ${FE0} + 0.16, vPedFace.y)) * 0.2) * (1.0 - far);
 #else
       float need = max(tipK, edgeK * 0.65) * (1.0 - far);
 #endif
@@ -1905,7 +1914,7 @@ const FRAG_COLOR = /* glsl */ `
           float cu = pedCurl(vec2(hfc.x * 21.0, hfc.y * 23.0));
           pc *= 0.8 + 0.34 * mix(0.5 + 0.5 * cu, 0.5, smoothstep(0.5, 1.2, fwidth(hfc.x * 21.0)));
         }
-        e += 0.07 * sin(a * 17.0 + 1.7 * sin(a * 5.0));
+        e += 0.035 * sin(a * 23.0 + 1.7 * sin(a * 5.0));
         ` : 'pc *= 0.86 + 0.32 * mix(pedN2(vec2(hfc.x * 15.0, hfc.y * 19.0)), 0.5, smoothstep(0.25, 0.6, fwidth(hfc.x * 15.0)));'}
       }
       float aA = abs(a);
@@ -1919,7 +1928,7 @@ const FRAG_COLOR = /* glsl */ `
       if (e < 0.012) discard;
       float cov = smoothstep(0.012, 0.09, e + (pedN1(a * 150.0) - 0.5) * 0.03 * (1.0 - smoothstep(0.3, 0.7, fwidth(a * 150.0))));
       pc *= 0.84 + 0.16 * smoothstep(0.03, 0.14, e);
-      vec3 skinSide = mix(vPedSkin * 0.78, pc, 0.14);
+      vec3 skinSide = mix(vPedSkin * 0.6, pc, 0.25);
       // short back and sides: the scalp shows through low down
       if (vPedFC.x == 0u || vPedFC.x == 4u) cov *= 1.0 - 0.8 * smoothstep(0.85, 1.3, aA) * (1.0 - smoothstep(0.04, 0.34, vPedFace.x));
       ` : `
@@ -1939,7 +1948,7 @@ const FRAG_COLOR = /* glsl */ `
         float wob = (pedN1(vPedRest.z * 240.0) - 0.5) * 0.0012;
         // (scalp in the hair's shade, soft-edged: skin in the sun read as a white thread on dark hair)
         float pW = max(fwidth(vPedRest.x), 1e-4);
-        pc = mix(pc, vPedSkin * 0.62 * (0.75 + 0.25 * vPedHairW.r), (1.0 - smoothstep(0.0004, 0.0009 + pW, abs(vPedRest.x - pX + wob))) * smoothstep(-0.02, -0.008, vPedRest.z) * 0.85);
+        pc = mix(pc, vPedSkin * 0.62 * (0.75 + 0.25 * vPedHairW.r), (1.0 - smoothstep(0.0004, 0.0009 + pW, abs(vPedRest.x - pX + wob))) * smoothstep(-0.02, -0.008, vPedRest.z) * 0.6);
       }
 #else
       float cov = smoothstep(0.0, 0.17, e);
@@ -2140,7 +2149,11 @@ void RE_Direct_Lambert( const in IncidentLight directLight, const in vec3 geomet
 #endif
   } else if ( vPedMat.y > 0.0 ) {
     float nh = saturate( dot( geometryNormal, normalize( directLight.direction + geometryViewDir ) ) );
-    reflectedLight.directDiffuse += directLight.color * vPedMat.y * pow( nh, 18.0 ) * saturate( dot( geometryNormal, directLight.direction ) * 4.0 );
+    float pedSm = vPedMat.y;
+#ifdef PED_CLOSE
+    if ( vPedFC.x == 2u && abs( vPedReg - ${R.HAIR}.0 ) < 0.5 && ${CURLS ? 'true' : 'false'} ) pedSm *= 0.12;
+#endif
+    reflectedLight.directDiffuse += directLight.color * pedSm * pow( nh, 18.0 ) * saturate( dot( geometryNormal, directLight.direction ) * 4.0 );
   }
 }
 void RE_IndirectDiffuse_Lambert( const in vec3 irradiance, const in vec3 geometryPosition, const in vec3 geometryNormal, const in vec3 geometryViewDir, const in vec3 geometryClearcoatNormal, const in LambertMaterial material, inout ReflectedLight reflectedLight ) {
