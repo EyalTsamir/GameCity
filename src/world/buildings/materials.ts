@@ -28,6 +28,7 @@
 import { handDoorsLive, handRoofsLive } from '../../core/closehand';
 import * as THREE from 'three';
 import { whiteOn } from '../../core/sweepwhite';
+import { SIDING_BH } from '../../core/sweepmat';
 import { FAR_BAKE_OUT, FAR_FRAG_MAIN, FAR_FRAG_PARS, FAR_VERT_MAIN, FAR_VERT_PARS, NEAR_VERT_MAIN, NEAR_VERT_PARS } from './farFacade';
 import type { GlobalUniforms } from '../../core/uniforms';
 import { LAMP_GLSL, lampUniforms } from '../../core/lampLight';
@@ -568,7 +569,7 @@ ${fg(`    res = vec3(0.93 * (0.9 + 0.2 * nm.g)); // aa = 1 from fq.x = 0.16 up
 ${fg('    }\n', '')}  } else if (pat < 3.5) { // timber siding: horizontal boards with shadow lines
 ${fg(`    res = vec3(0.93 * (0.91 + 0.18 * nm.g)); // aa = 1 from fq.y = 0.15 up
     if (fq.y < 0.16) {
-`, '')}    float bh = 0.3;
+`, '')}    float bh = ${SIDING_BH};
     float fy = fract(q.y / bh);
     float aa = clamp(fq.y / bh * 2.0, 0.0, 1.0);
     float board = mix(0.7, 1.0, smoothstep(0.0, 0.2, fy)) * (0.9 + 0.16 * bhHash12(vec2(floor(q.y / bh), floor(q.x / 3.7)) + seed));

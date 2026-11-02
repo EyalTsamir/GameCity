@@ -6,6 +6,8 @@
 // Fetches use textureGrad with derivatives taken up front: the early-out is a real branch, the seams of a per-brick window
 // don't pick a wrong mip.
 
+import { SIDING_BH } from '../../core/sweepmat';
+
 export const CM_VERT = /* glsl */ `
 varying vec3 vP;
 varying vec3 vN;
@@ -365,7 +367,7 @@ ${WALL_HEAD}
 void main() {
   ${WALL_MAIN}
   float pH = 0.3 + 0.32 * hp;
-  float bh = 0.3;
+  float bh = ${SIDING_BH};
   float row = floor(q.y / bh);
   float fy = fract(q.y / bh);
   float join = floor(q.x / 3.7 + cmHash(vec2(row, seed)));
@@ -373,9 +375,14 @@ void main() {
   // each board its own window; a tile runs 1.2 m along and 0.3 m across
   vec2 uv = vec2(q.x / 1.2 + rnd * 7.0, fy + rnd * 13.0);
   vec2 dgx = gx, dgy = gy;
-  vec4 f = textureGrad(tFibre, uv, dgx * vec2(0.833, 3.33), dgy * vec2(0.833, 3.33));
+  vec4 f = textureGrad(tFibre, uv, dgx * vec2(0.833, 1.0 / bh), dgy * vec2(0.833, 1.0 / bh));
   vec4 c = CMT(tCrack, q * 0.39 + so + rnd * 3.0, 0.39);
   float paint = step(0.3, fract(seed * 0.6113 + 0.3));
+#ifdef CM_MATCLASS
+  // bare timber is timber-coloured: a pale board with the grain on it read as brushed metal (linear: green under 0.72 of red)
+  paint = max(paint, step(col.r * 0.72, col.g));
+  paint = max(paint, step(0.42, dot(col, vec3(0.3, 0.59, 0.11))));
+#endif
   vec2 s = (f.rg - 0.5) * mix(0.38, 0.07, paint);
   float light = min(cmLight(N, normalize(N - T * s.x - U * s.y)), 1.12);
   vec3 ratio = vec3(light * (1.0 + (f.b - 0.5) * mix(0.24, 0.03, paint)) * (1.0 - mix(0.26, 0.03, paint) * f.a));
@@ -980,9 +987,16 @@ void main() {
 #endif
 #else
       // gloss paint on joinery: the grain and the brush show through; where it has chipped, the primer, then old wood
+#ifdef CM_MATCLASS
+      // (the fibre on a door five metres wide read as brushed steel)
+      vec2 s = (f.rg - 0.5) * 0.03 + (g.rg - 0.5) * 0.05;
+      ratio = vec3(min(cmLight(N, normalize(N - G * s.x - C * s.y)), 1.1));
+      ratio *= 1.0 + (f.b - 0.5) * 0.015;
+#else
       vec2 s = (f.rg - 0.5) * 0.1 + (g.rg - 0.5) * 0.05;
       ratio = vec3(min(cmLight(N, normalize(N - G * s.x - C * s.y)), 1.1));
       ratio *= 1.0 + (f.b - 0.5) * 0.04;
+#endif
       chip *= smoothstep(0.74, 0.8, fl);
       float dustK = smoothstep(0.3, 0.08, lum) * (0.05 + 0.14 * smoothstep(0.3, 0.8, c.b) + 0.16 * (1.0 - smoothstep(0.0, 1.4, vP.y))) * (0.6 + 0.8 * g.b);
       ratio = mix(ratio, vec3(0.24, 0.23, 0.215) / col, clamp(dustK, 0.0, 1.0));

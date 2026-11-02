@@ -4,6 +4,8 @@
 // cell, one program, nothing built or drawn from afar. Three rings: big names, paper and headings, fine print.
 // Switches (core/closetext.ts): ?nolettering, ?no<family> below, and ?no<layer> (letterBig, letterMid, letterFine).
 
+import { matFix } from '../core/sweepmat';
+import { addBoardBodies, type BoardBody } from './lettering/boardBody';
 import * as THREE from 'three';
 import type { CityContext, CityModule } from '../core/context';
 import { nearOf, NEAR_GLSL } from '../core/nearDetail';
@@ -569,6 +571,7 @@ export default function create(ctx: CityContext): CityModule {
     const terrain = ctx.services.terrain as { height?(x: number, z: number): number } | undefined;
     const groundAt = (x: number, z: number): number => terrain?.height?.(x, z) ?? ctx.plan.heightAt(x, z);
     const free = (x: number, z: number): boolean => !(occ.get(x, z) & (OCC.BUILDING | OCC.WATER | OCC.SOLID | OCC.ROAD | OCC.RAIL | OCC.SIDEWALK | OCC.PATH | OCC.PAVED));
+    const boardBodies: BoardBody[] = [];
     for (const lot of lots) {
       if (lot.kind !== 'house' || lot.doors.length === 0 || lot.seed % 4 !== 0) continue;
       const d = lot.doors[0];
@@ -587,6 +590,7 @@ export default function create(ctx: CityContext): CityModule {
       const fx = x,
         fz = z;
       put(1, fx, fz, (s) => paint.estateBoard(s, fx, y, fz, v.x, v.z, lot.seed));
+      boardBodies.push({ x: fx, y, z: fz, nx: v.x, nz: v.z, ...paint.ESTATE_BOARD });
       marks.push(['agent', fx, y + 1.7, fz, v.x, v.z]);
     }
     ctx.plan.benches.forEach((b, i) => {
@@ -602,8 +606,10 @@ export default function create(ctx: CityContext): CityModule {
       if (!water && !(occ.get(b.ax, b.az) & OCC.PATH)) return;
       const y = groundAt(x, z);
       for (const tier of [1, 2] as Tier[]) put(tier, x, z, (s) => paint.councilBoard(s, x, y, z, fx, fz, i, water, tier));
+      boardBodies.push({ x, y, z, nx: fx, nz: fz, ...paint.COUNCIL_BOARD });
       marks.push(['council', x, y + 1.3, z, fx, fz]);
     });
+    if (matFix(ctx.quality.level, 'matboard')) addBoardBodies(ctx.scene, boardBodies);
   }
 
   // ── street names: an enamel plate on the wall nearest each corner

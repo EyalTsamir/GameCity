@@ -654,6 +654,10 @@ function standing(s: LetterSink, x: number, y: number, z: number, nx: number, nz
   }
 }
 
+/** the sizes of the boards, for their solid part (lettering/boardBody.ts) */
+export const ESTATE_BOARD = { W: 0.72, H: 0.56, yb: 1.45 };
+export const COUNCIL_BOARD = { W: 0.62, H: 0.46, yb: 1.1 };
+
 /** an estate agent's board in a garden */
 export function estateBoard(s: LetterSink, x: number, y: number, z: number, nx: number, nz: number, seed: number): void {
   const b = agentBoard(seed);
