@@ -2,9 +2,12 @@
 // the order they are written (paper first, ink over it). A surface is a frame in the world: origin, right, up; x and y
 // in metres on it, z out of it. Nothing here touches a canvas: a cell of 2000 letters builds in well under a millisecond.
 
+import { matOn } from '../../core/sweepmat';
 import * as THREE from 'three';
 import { FACE, type Face, type GlyphAtlas } from './font';
 import { nearRadiusFor } from '../../core/nearDetail';
+
+const FOLD_LETTERS = matOn('matsign');
 
 export type Align = 'left' | 'center' | 'right';
 
@@ -284,7 +287,11 @@ export class LetterSink {
       const k = atlas.glyph(face, str.charCodeAt(i));
       const adv = atlas.advance(k) * size * sx;
       const xc = x + pen + adv / 2;
-      if (k >= 0 && str.charCodeAt(i) !== 32 && (!this.clipOn || (xc >= this.clipA && xc < this.clipB))) {
+      const halfQ = (q * sx) / 2;
+      // (`matsign`: cut at the fold of a bill and drawn on both sides; whole, on the side of its centre, it stuck out past the fold into the air)
+      const cut = this.clipOn && !slant && sr === 0 && FOLD_LETTERS;
+      const drawn = !this.clipOn || (cut ? xc + halfQ > this.clipA && xc - halfQ < this.clipB : xc >= this.clipA && xc < this.clipB);
+      if (k >= 0 && str.charCodeAt(i) !== 32 && drawn) {
         if ((this.nv + 4) * FLOATS > this.f.length || this.ni + 6 > this.idx.length) this.grow();
         const u0 = atlas.u0(k),
           v0 = atlas.v0(k);
@@ -297,10 +304,14 @@ export class LetterSink {
           this.vert(x + lx * cr - ly * sr, y + lx * sr + ly * cr, zz, u, v, nx, ny, nz, col, weight, glow, from, to);
         };
         // (the texture's rows run top down, flipY off)
-        corner(-1, -1, u0, v0 + cu);
-        corner(1, -1, u0 + cu, v0 + cu);
-        corner(1, 1, u0 + cu, v0);
-        corner(-1, 1, u0, v0);
+        const a0 = cut ? Math.max(-1, (this.clipA - xc) / halfQ) : -1,
+          a1 = cut ? Math.min(1, (this.clipB - xc) / halfQ) : 1;
+        const uA = u0 + (cu * (a0 + 1)) / 2,
+          uB = u0 + (cu * (a1 + 1)) / 2;
+        corner(a0, -1, uA, v0 + cu);
+        corner(a1, -1, uB, v0 + cu);
+        corner(a1, 1, uB, v0);
+        corner(a0, 1, uA, v0);
         this.quadIdx();
       }
       pen += adv + track * size * sx;

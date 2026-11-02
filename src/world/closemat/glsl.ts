@@ -948,7 +948,13 @@ void main() {
   vec4 c = CMT(tCrack, q * 0.39 + vGr.xz * 3.0, 0.39);
 #if !defined(CM_JOINERY) && !defined(CM_RUST)
   // planter soil (props/furniture.ts gives it away with blue just over green): crumbs and damp, and the brown it was meant to be
-  if (col.b > col.g && col.b < col.r * 0.85) {
+#ifdef CM_MATCLASS
+  // (a bright red has blue just over green too: post boxes, phone boxes and containers came out as crumbs of soil)
+  bool soil = col.b > col.g && col.b < col.r * 0.85 && sat < 0.8 && lum < 0.1 && abs(floor(vWhat + 0.5) - 2.0) > 0.5;
+#else
+  bool soil = col.b > col.g && col.b < col.r * 0.85;
+#endif
+  if (soil) {
     vec4 s0 = CMT(tStones, q * 3.1, 3.1);
     vec4 s2 = CMT(tStones, q.yx * 7.3 + 0.37, 7.3);
     float tone = mix(0.66, 0.76 + 0.56 * s0.g, smoothstep(0.02, 0.3, s0.a)) * mix(0.5, 0.74 + 0.6 * s2.g, smoothstep(0.05, 0.34, s2.r));

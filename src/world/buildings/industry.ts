@@ -134,7 +134,7 @@ export function genIndustrial(g: Gen): void {
     }, (a, b, y0) => wallPlain(s, sg, a, b, y0, lowTop, plain));
     // upper band: big industrial windows (brick) or clerestory ribbon (metal)
     if (brick) {
-      const gr = makeGrid(uA, uB, lowTop, H - lowTop, 1, { spacing: bayW, cols: nb, winW: Math.min(customs ? 1.9 : 3.4, bw - 1.2), winH: H - lowTop - 1.4, sill: 0.55, margin: 0 });
+      const gr = makeGrid(uA, uB, lowTop, H - lowTop, 1, { spacing: bayW, cols: nb, winW: Math.min(customs ? 1.9 : 3.4, bw - 1.2), winH: H - lowTop - (customs && matOn('matsign') ? 2.2 : 1.4), sill: 0.55, margin: 0 });
       wallGrid(s, sg, uA, uB, lowTop, H, gr, look(customs ? WIN.ARCHED : WIN.INDUSTRIAL));
     } else {
       const gr = makeGrid(uA, uB, lowTop, H - lowTop, 1, { spacing: 3.2, winW: 2.8, winH: Math.min(1.3, H - lowTop - 0.7), sill: H - lowTop - Math.min(1.3, H - lowTop - 0.7) - 0.45, margin: 0.6 });
@@ -1014,8 +1014,9 @@ export function genIndustrial(g: Gen): void {
   } else if (customs) {
     const r = g.atlas.add('customs', 900, 72, letterSign('OLD CUSTOMS WAREHOUSE', '#ece2c6', '#ffe1a8', 'Georgia, "Times New Roman", serif', 0.45));
     const signHalf = matOn('matsign') ? Math.min(14, sgF.L * 0.46) : 14;
-    const signH = matOn('matsign') ? Math.min(1.3, (signHalf * 2 * 72) / 900 + 0.2) : 1.3;
-    signOnSide(g, sgF, sgF.L * 0.5 - signHalf, sgF.L * 0.5 + signHalf, INS + 0.06, H - 0.55 - signH, H - 0.55, r);
+    const signH = matOn('matsign') ? Math.min(1.05, (signHalf * 2 * 72) / 900 + 0.2) : 1.3;
+    const signTop = matOn('matsign') ? H - 0.45 : H - 0.55;
+    signOnSide(g, sgF, sgF.L * 0.5 - signHalf, sgF.L * 0.5 + signHalf, INS + 0.06, signTop - signH, signTop, r);
   } else {
     const nm = depot ? 'TRANSIT DEPOT' : FIRMS[(lot.id * 7) % FIRMS.length];
     const r = g.atlas.add(`ind:${nm}`, 420, 64, boardSign(nm, { bg: '#f1ede4', fg: '#2c3a46', font: '"Arial Black", "Segoe UI", sans-serif', weight: '900', glow: 0.25, glowColor: '#ffffff', border: '#2c3a46' }));

@@ -5,6 +5,7 @@
 // Draw calls: water surfaces (1) + sprays/curtains (1) + droplets (1); stone goes to the
 // shared static mesh.
 
+import { matOn } from '../../core/sweepmat';
 import * as THREE from 'three';
 import type { Feature } from '../../core/plan';
 import type { GlobalUniforms } from '../../core/uniforms';
@@ -227,6 +228,7 @@ function curtain(cx: number, cz: number, prof: [number, number][], seg: number, 
   let total = 0;
   for (let i = 1; i < prof.length; i++) total += Math.hypot(prof[i][0] - prof[i - 1][0], prof[i][1] - prof[i - 1][1]);
   let acc = 0;
+  const wraps = Math.max(1, Math.round(Math.max(...prof.map((p) => p[0])) * 6));
   for (let i = 0; i < prof.length; i++) {
     if (i > 0) acc += Math.hypot(prof[i][0] - prof[i - 1][0], prof[i][1] - prof[i - 1][1]);
     const [r, y] = prof[i];
@@ -244,7 +246,8 @@ function curtain(cx: number, cz: number, prof: [number, number][], seg: number, 
         s = Math.sin(th);
       pos.push(cx + c * r, y, cz + s * r);
       nrm.push(c * nr, ny, s * nr);
-      sp.push(k / seg * Math.max(1, Math.round(r * 6)), acc / total);
+      // (`matcurtain`: one number of streaks all the way down; each ring had its own, so they sheared one way and back between rings: chevrons)
+      sp.push((k / seg) * (matOn('matcurtain') ? wraps : Math.max(1, Math.round(r * 6))), acc / total);
       len.push(total);
     }
   }

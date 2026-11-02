@@ -822,7 +822,7 @@ export function cardboard(k: Kit, rng: Rng): void {
     const w = rng.range(0.6, 0.85),
       d = rng.range(0.42, 0.62),
       t = rng.range(0.012, 0.03);
-    k.m(rng.pick(['#a9855a', '#b89668', '#9c7a50', '#c2a478']), 'wood');
+    k.m(rng.pick(['#a9855a', '#b89668', '#9c7a50', '#c2a478']), 'card');
     sh.push().local(rng.range(-0.04, 0.04), y + t / 2, rng.range(-0.03, 0.03), 0, rng.range(-0.1, 0.1), 0);
     sh.box(0, 0, 0, w, t, d, 1);
     sh.pop();

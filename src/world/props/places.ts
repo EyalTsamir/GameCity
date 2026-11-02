@@ -117,7 +117,7 @@ export function plasticCrate(k: Kit, rng: Rng, w = 0.6, h = 0.24, d = 0.4, col?:
 export function cardBox(k: Kit, rng: Rng, w = 0.5, h = 0.32, d = 0.36, open = false): void {
   const sh = k.sh;
   const c = rng.pick(['#b8925e', '#c49c66', '#a88452', '#c8a878']);
-  k.m(c, 'wood');
+  k.m(c, 'card');
   if (!open) {
     cbox(sh, 0, h / 2, 0, w, h, d, 0.006, 1);
     // tape strip over the top seam + printed logo
@@ -133,7 +133,7 @@ export function cardBox(k: Kit, rng: Rng, w = 0.5, h = 0.32, d = 0.36, open = fa
     sh.box(0, 0.003, 0, w, 0.006, d, 0);
     for (const sz of [-1, 1]) sh.push().local(0, h, (sz * d) / 2, sz * rng.range(0.5, 1.3)).box(0, 0, sz * d * 0.25, w - 0.01, 0.005, d * 0.5, 0).pop();
     for (const sx of [-1, 1]) sh.push().local((sx * w) / 2, h, 0, 0, 0, -sx * rng.range(0.4, 1.4)).box(sx * w * 0.15, 0, 0, w * 0.3, 0.005, d - 0.01, 0).pop();
-    k.m('#5a4630', 'wood');
+    k.m('#5a4630', 'card');
     sh.box(0, 0.008, 0, w - 0.02, 0.004, d - 0.02, 0);
   }
 }
@@ -143,7 +143,7 @@ export function flatCardboard(k: Kit, rng: Rng): void {
   const sh = k.sh;
   const n = rng.int(3, 6);
   for (let i = 0; i < n; i++) {
-    k.m(rng.pick(['#b8925e', '#c49c66', '#a88452', '#d0b080']), 'wood');
+    k.m(rng.pick(['#b8925e', '#c49c66', '#a88452', '#d0b080']), 'card');
     sh.push().local(rng.range(-0.05, 0.05), 0.006 + i * 0.009, rng.range(-0.04, 0.04), 0, rng.range(-0.15, 0.15));
     sh.box(0, 0, 0, rng.range(0.7, 0.95), 0.008, rng.range(0.45, 0.6), 0);
     sh.pop();

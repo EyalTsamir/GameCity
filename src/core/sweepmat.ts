@@ -9,6 +9,8 @@
 //   matcloth    no polka dots or prints on a suit or a coat
 //   matsticker  fewer stickers on painted metal: on a wall of steel they read as noise
 //   matsign     lettering stays on what it is written on: atlas labels, poster column, shop window panes, hazard stripes, a sign wider than its wall
+//   matcard     cardboard has no timber grain
+//   matcurtain  the fountain's water sheets have one number of streaks from top to bottom (chevrons on the tiers)
 //   matsiding   timber siding is boards 18 cm wide, not 30 (far and near shader)
 //   matboard    a board on a post has a body: an edge, and no AO from what stands behind it
 

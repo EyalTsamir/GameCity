@@ -554,7 +554,7 @@ export function genConstruction(env: Env, lot: Lot): CraneTargets {
     g.fillStyle = '#ffd21f';
     g.fillRect(0, 0, w, h);
     g.fillStyle = '#1d1d1d';
-    for (let i = 0; i < (matOn('matsign') ? 5 : 6); i++) {
+    for (let i = 0; i < (matOn('matsign') ? 4 : 6); i++) {
       g.beginPath();
       g.moveTo(i * 24, h);
       g.lineTo(i * 24 + 12, h);

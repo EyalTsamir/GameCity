@@ -693,7 +693,7 @@ function cartonNear(kd: Kit, x: number, y: number, z: number, w: number, h: numb
   const sh = kd.sh;
   sh.push().local(x, y, z);
   round4(kd, 0, w, d, (W, side) => {
-    kd.m('#8a6b45', 'wood');
+    kd.m('#8a6b45', 'card');
     sh.box(0, h - 0.002, 0.001, W, 0.004, 0.002, FRONT);
     if (side === 0) {
       kd.m('#c2a578', 'plastic');

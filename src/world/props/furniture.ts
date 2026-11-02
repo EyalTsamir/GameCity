@@ -5,6 +5,7 @@
 //
 // Extras on the sink: #0 aRM (roughness, metalness), #1 aEmit (rgb * strength, mode).
 
+import { matOn } from '../../core/sweepmat';
 import { shapeOn } from '../../core/sweepshape';
 import * as THREE from 'three';
 import { GeoSink, Shaper } from '../vegetation/geo';
@@ -19,6 +20,8 @@ export const MAT = {
   iron: [0.45, 0.4],
   steel: [0.32, 0.65],
   wood: [0.82, 0],
+  /** cardboard: matt, and no grain (`matcard`; 'wood' drew a stack of flattened boxes as planks) */
+  card: matOn('matcard') ? ([0.97, 0] as const) : ([0.82, 0] as const),
   stone: [0.88, 0],
   /** clay brick in stretcher bond with mortar joints (props/material.ts) */
   brick: [0.936, 0],
