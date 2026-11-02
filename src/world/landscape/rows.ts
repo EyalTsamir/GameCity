@@ -4,6 +4,7 @@
 // triangles are the cheap currency here (perf-deep.md), and the rows and their shadows are what the eye reads at 100–700 m.
 // Beyond ~1 km plant strips sink into the ground (the land shader's stripes carry the field from there).
 
+import { matOn } from '../../core/sweepmat';
 import * as THREE from 'three';
 import { MOTION_KEEP_GLSL, WIND_GLSL } from '../../core/wind';
 import { globalUniforms } from '../../core/uniforms';
@@ -618,7 +619,9 @@ export class RowSink {
     for (let i = 0; i < 4; i++) c.nrm.push(0, 1, 0);
     c.uv.push(su0, vBand(band, 0), su1, vBand(band, 0), su1, vBand(band, 1), su0, vBand(band, 1));
     for (let i = 0; i < 4; i++) c.col.push(r, g, bl);
-    c.hgt.push(h, h1, h1, h);
+    // (2000 up: `mattop`, see the vertex shader)
+    const flag = matOn('mattop') ? 2000 : 0;
+    c.hgt.push(h + flag, h1 + flag, h1 + flag, h + flag);
     c.idx.push(o, o + 1, o + 2, o, o + 2, o + 3);
     this.triangles += 2;
   }
@@ -691,6 +694,11 @@ ${MOTION_KEEP_GLSL}`,
 if (aH > 0.0) {
   float d = distance(position.xz, cameraPosition.xz);
   float ah = aH;
+  if (ah > 1500.0) {
+    // a strip made to be seen from above: from under it the heads and leaves on it stretch into slabs across the sky
+    ah -= 2000.0;
+    if (cameraPosition.y < position.y + 0.3) transformed.y -= 60.0;
+  }
   if (ah > 500.0) {
     ah -= 1000.0;
     ${closeNatureOn('closesprigs') ? 'transformed.y -= ah * 2.4 * (1.0 - smoothstep(6.5, 10.0, d));' : ''}

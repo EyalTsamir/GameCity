@@ -2,6 +2,9 @@
 // switch is absent; ?nosweepmat turns every one off (before/after).
 //   matclass    the close-up layer takes its material from what the mesh says it is, not from a guess at its colour (wood grain on sandstone and steel)
 //   matportal   the road tunnel's ring is separate stones with joints, its lamps are fittings
+//   matframe    the close-up layer's coordinate lies in the facet, so round things have no smeared seam and no multiplied texture
+//   mattop      a crop's top strip is not drawn from under it (flower heads as slabs across the sky)
+//   mathedge    a clipped hedge up close is leaves, not camouflage
 //   matsiding   timber siding is boards 18 cm wide, not 30 (far and near shader)
 //   matboard    a board on a post has a body: an edge, and no AO from what stands behind it
 

@@ -888,8 +888,19 @@ varying float vWhat;
 // a coordinate in the plane of the face: along the grain, across it
 void main() {
   vec3 N = normalize(vN);
+#ifdef CM_MATFRAME
+  // the coordinate lies in the facet, not along the smoothed normal: on anything round that normal turns across the facet, and P being
+  // hundreds of metres from the origin, the turn multiplied the texture many times over, with a mirrored seam where it stood still
+  vec3 Nf = cross(dFdx(vP), dFdy(vP));
+  float Nl = length(Nf);
+  Nf = Nl > 1e-12 ? Nf / Nl : N;
+  if (dot(Nf, N) < 0.0) Nf = -Nf;
+  vec3 G = normalize(vGr.xyz - Nf * dot(vGr.xyz, Nf) + vec3(1e-5));
+  vec3 C = cross(Nf, G);
+#else
   vec3 G = normalize(vGr.xyz - N * dot(vGr.xyz, N) + vec3(1e-5));
   vec3 C = cross(N, G);
+#endif
   vec2 q = vec2(dot(vP, G), dot(vP, C));
   gx = dFdx(q);
   gy = dFdy(q);

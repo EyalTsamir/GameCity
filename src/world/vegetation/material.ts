@@ -26,6 +26,7 @@
 //     the lit side of the crown is what the camera cannot see);
 //   • night street light (core/lampLight.ts) on trunks, foliage and canopy undersides.
 
+import { matOn } from '../../core/sweepmat';
 import { natureOn } from '../../core/nature';
 import * as THREE from 'three';
 import type { GlobalUniforms } from '../../core/uniforms';
@@ -180,7 +181,16 @@ const HEDGE_LEAF = natureOn('hedgeleaf')
       if ( f3 > 0.001 ) {
         vec4 n3 = thNoised( p * 3.1 + vec3( 3.1, 8.7, 1.3 ) );
         float lv = smoothstep( -0.2, 0.16, n3.x );
-        diffuseColor.rgb *= mix( vec3( 1.0 ), ( 0.12 + 0.3 * lv ) * vec3( 1.0 + 0.1 * n3.y, 1.0, 1.0 - 0.14 * n3.y ), f3 );
+${matOn('mathedge') ? `        // (one size of soft blob read as camouflage: leaves are smaller than that, and the gaps between them are what is dark)
+        float f4 = f3 * ( 1.0 - smoothstep( 0.012, 0.035, foot ) );
+        if ( f4 > 0.001 ) {
+          vec4 n4 = thNoised( p * 13.0 + vec3( 7.7, 1.9, 4.3 ) );
+          vec4 n5 = thNoised( p * 31.0 + vec3( 2.3, 5.1, 9.7 ) );
+          float lf = smoothstep( -0.18, 0.12, n4.x + 0.55 * n5.x );
+          lv = mix( lv, 0.4 + 0.6 * lv, f4 ) * mix( 1.0, 0.25 + 0.95 * lf, f4 );
+          g += ( n4.yzw + 0.5 * n5.yzw ) * ( 0.6 * f4 );
+        }
+` : ''}        diffuseColor.rgb *= mix( vec3( 1.0 ), ( 0.12 + 0.3 * lv ) * vec3( 1.0 + 0.1 * n3.y, 1.0, 1.0 - 0.14 * n3.y ), f3 );
         thAO *= mix( 1.0, 0.45 + 0.55 * lv, f3 );
         g += n3.yzw * ( 0.9 * f3 );
       }
