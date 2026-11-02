@@ -9,6 +9,7 @@ import { RIDE, RIDE_PILLION, type RideGeom } from '../traffic/models';
 import type { Vehicle } from '../traffic/sim';
 import { Member, Party } from './crowd';
 import { makeLook, type Persona } from './looks';
+import { sweepPeople } from '../../core/sweepPeople';
 import { HAT_STYLES } from './shader';
 import { F } from './figure';
 
@@ -113,7 +114,17 @@ export class Riders {
       // no long coats or skirts on the saddle
       if (st.tail === 3) st.tail = 0;
       if (sp.model !== 'bike' || sp.variant !== 2) {
-        if (st.tail === 1 || st.tail === 2) st.tail = 0;
+        if (st.tail === 1 || st.tail === 2) {
+          st.tail = 0;
+          // (without the skirt her legs were bare to the hip under a dress's top: a leotard. Trousers instead)
+          if (sweepPeople('riderlegs')) {
+            st.trouserEnd = 0.08;
+            st.trouserFit = 0.7;
+            st.legwear = 0;
+            st.bootTop = 0;
+            look.bottom = rng.pick([0x2b3a55, 0x1f2a24, 0x3a2a20, 0x34466a, 0x26272b, 0x6a5a3e]);
+          }
+        }
       }
     }
     const m = new Member(this.nextUid++, p, 0, look, rng.next());
