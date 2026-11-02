@@ -1,4 +1,4 @@
-> Frozen copy: the findings under the first brief, from 694 merged subjects, before answers carried tags. The live list is `sweep-findings.md`. Pictures of kinds and cells shot square-on moved to `shots/sweep-axis/`; the same path under `shots/sweep/` now shows the picture from 8° off.
+> Frozen copy: the findings under the first brief, from 694 merged subjects, before answers carried tags. The live list is `sweep-findings.md`. Pictures of kinds and cells shot square-on were deleted for disk space; the same path under `shots/sweep/` now shows the picture from 8° off.
 
 # Sweep findings
 

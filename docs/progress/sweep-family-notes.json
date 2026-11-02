@@ -1,5 +1,5 @@
 {
-  "_intro": "## Read this first\n\n**White wall fault, still open, smaller than I first said:** a wall turns white in hard-edged rectangles only when the camera is level within about 1° and the wall within about 1° of square-on. At 3° down, none of 12 shots shows it, and the walker starts 3° down, so walking with real keys didn't show it (207 m on both builds). A walker who tilts to level would. Contact sheet: `shots/sweep-check/white-pitch/kioskd-5198.png`. Reproduce: `__city.view({target:{x:-31,y:1.6,z:-136},distance:3,yaw:180,pitch:0})` at noon, or a level walk east along z = 108.25, where a facade flashes white for one frame at x ≈ −35 on 5198 and on 5197 (`shots/sweep-motion-level5197/motion/e00020.jpg`). Cause not found. So I no longer rank it first. The pictures judged here stand 8° off, which avoids it; 1,138 kind pictures and 381 cell pictures shot square-on moved to `shots/sweep-axis/` and are shot again. Paths in `sweep-findings-first-brief.md` for those kinds now show the 8° picture.\n\n**The `shape` list, checked by eye at its top:** `vendor-pretzel-cart` is a box on a plinth with two plain boxes on top, `prop-waterbutt` a 10-sided prism with a pie-slice lid, `veg-allotment-cabbage` hexagon slabs and cones with paper-strip beans. Exactly what the user means. Further down it's noisier: `feat-marketstall` ranks high for customers' hats, because the capture stands in the crowd, so read the \"what\" column before starting on a row.\n\n**Earlier eye checks are from the first brief,** in `sweep-findings-first-brief.md` (sky specks, pasted cracks, people close up, prop kits one by one). They haven't been redone on the lists below yet.\n",
+  "_intro": "## Ready for fix sessions, in this order (checked by eye, 2026-11-02, kinds at noon and the first walkable cells)\n\n1. **`shape` list below, one kit at a time.** The user's main ask. Checked at its top: `vendor-pretzel-cart` is a box on a plinth with two plain boxes on top, `prop-waterbutt` a 10-sided prism with a pie-slice lid, `veg-allotment-*` hexagon slabs, cones and paper-strip beans. Further down it's noisier: `feat-marketstall` ranks high for customers' hats, because the capture stands in the crowd. Read the \"what\" column before starting on a row.\n2. **`vehicle-roof-open-top`.** A plain bug and probably small: the roof of an estate car reads as see-through, you look through it into the cabin at a black silhouette of a driver, and the roof rails float (`objects/veh-estate/12_1m`). Checked on the estate only; judges name the sedan too.\n3. **`fittings-floating-unattached` and `thin-structures-unattached`.** Real, each a small fix, so work down the lines in `sweep-tag-bug.md`: the SEAVIEW HOTEL sign's poles run in front of the letters (`objects/named-seaview-hotel-59/12_roof`), lantern rods come in slanted from above the frame and stop in front of windows (`squares/c10_-130/12_N`), the DIRECTORY board hangs in the air inside a shop (`objects/cs-text-tenants/12_1m`).\n4. **`textures-smeared-stretched`.** Mixed, so split it. Wrong materials are the real part: wood grain on the stone arch ring of the road tunnel (`objects/feat-roadportal/12_3m`), whose lights are also plain slabs.\n5. **`decals-cracks-stains-pasted` and `sky-specks-dots`.** Checked under the first brief: black squiggle cracks on plaster and rock, white dots at noon.\n6. **`people-mannequin-stiff-blank`, `objects-interpenetrate-geometry`, `hands-miss-held-objects`.** Real, large. Close up, hair pokes through hats and arms are stiff (`objects/ped-hat-sunhat/12_1m`). The capture exaggerates it by standing in the crowd. Interpenetrate and hands: judges' lines, not opened.\n\n**Not opened by me:** `sign-lettering-clipped`, `objects-no-contact-shadow`, `vehicles-toy-like`, `architectural-details-crude`, `prop-count-misplaced`, and everything under `thought`.\n\n**Hold:** `shadow-bands-no-caster`, because the one I opened (`squares/c-30_-90/12_N`) looks like real shadows of the facade above. `lighting-inconsistent-noon`, because some of it is the capture in deep forest (`objects/rail-regional-cab-car-head/12_1m` is a view into dark trees, not the train). `glass-flat-no-depth`, `foliage-flat-cards`, `ground-surfaces-flat`: until more walkable cells are judged; only about a fifth are so far.\n\n**Not the city:** `camera-misses-subject` and `camera-clips-into-geometry` rank first and third, and are the capture tool framing badly. They mean those kinds weren't really seen.\n\n**White wall, open but lower:** it turns white in hard-edged rectangles only when the camera is level within about 1° and the wall within about 1° of square-on. At 3° down, none of 12 shots shows it, and the walker starts 3° down, so 207 m with real keys didn't show it on either build. A walker who tilts to level would. Sheet: `shots/sweep-check/white-pitch/kioskd-5197.png`. Reproduce: `__city.view({target:{x:-31,y:1.6,z:-136},distance:3,yaw:180,pitch:0})` at noon, or a level walk east along z = 108.25, where a facade flashes for one frame at x ≈ −35 (`shots/sweep-motion-level5197/motion/e00020.jpg`). Cause not found. The pictures judged here stand 8° off, which avoids it; the 1,519 shot square-on were deleted and shot again.\n",
   "wall-material-differs-by-distance": {
     "title": "Walls turn white when the camera is level and square-on, within about 1°",
     "checked": "Real, repeatable, but not seen at the 3° down the walker starts with. Still in the newest build. Stays with nonear, noclosemat, noclosewin, nofacbake, nowallrelief, nomassing",
@@ -26,8 +26,8 @@
     "owner": "window and room shaders. Judge again after the fault is fixed"
   },
   "lighting-inconsistent-noon": {
-    "checked": "HOLD. Partly the square-on fault. Sunlit views look right, but shaded walls do read dim and bluish at noon (bldback-townhouse at 3 m). Not exposure: the meter only changes it by up to 30 %",
-    "owner": "sky ambient level. Judge again after the fault is fixed"
+    "checked": "HOLD. Partly the capture in deep forest. Shaded walls do read dim and bluish at noon",
+    "owner": "sky ambient level; capture tool"
   },
   "blank-panels-missing-texture": {
     "checked": "HOLD. Not opened one by one; likely inflated by the square-on fault",
@@ -46,12 +46,36 @@
     "owner": "roofs. Wait for walkable cells"
   },
   "camera-misses-subject": {
-    "checked": "NOT THE CITY, mostly. Sampled lines: the capture misses the subject, or a wall blocks the view",
+    "checked": "NOT THE CITY. The capture misses the subject",
     "owner": "capture tool, scripts/sweep.mjs"
   },
   "camera-clips-into-geometry": {
     "checked": "NOT THE CITY, mostly. Sampled lines: the camera is against a wall or a passer-by's head. A few misfiled lines may be real (feat-footbridge)",
     "owner": "capture tool, scripts/sweep.mjs"
   },
-  "_tremble": "**Checked by eye, this ranks the wrong thing at the top:** the worst cells I opened (`c-170_-130`, `c100_-60`, `c0_-120`) have a person's head or a lorry right in front of the lens, and something that close moves far enough between frames to count. So don't read a high row as flicker. The real test is `sweep-motion.mjs --retremble` with the city stopped, after the capture. This build is also from before the temporal AA fix."
+  "_tremble": "**Checked by eye, this ranks the wrong thing at the top:** the worst cells I opened (`c-170_-130`, `c100_-60`, `c0_-120`) have a person's head or a lorry right in front of the lens, and something that close moves far enough between frames to count. So don't read a high row as flicker. The real test is `sweep-motion.mjs --retremble` with the city stopped, after the capture. This build is also from before the temporal AA fix.",
+  "vehicle-roof-open-top": {
+    "checked": "READY. Real on the estate at 1 m: roof reads as see-through, rails float, driver a black silhouette",
+    "owner": "not traced; vehicle glass or roof. Probably small"
+  },
+  "fittings-floating-unattached": {
+    "checked": "READY, line by line. Real: lantern rods in front of windows, directory board in the air",
+    "owner": "each its own kit. Small each"
+  },
+  "thin-structures-unattached": {
+    "checked": "READY, line by line. Real: SEAVIEW HOTEL sign poles in front of the letters",
+    "owner": "each its own kit. Small each"
+  },
+  "textures-smeared-stretched": {
+    "checked": "READY, but split it. Real: wood grain on the stone arch of the road tunnel. feat-breakwater at 1 m not opened",
+    "owner": "material choices per kit. Medium"
+  },
+  "objects-interpenetrate-geometry": {
+    "checked": "Judges' lines, not opened. Hair through the hat seen on ped-hat-sunhat",
+    "owner": "pedestrian models, placement. Large"
+  },
+  "shadow-bands-no-caster": {
+    "checked": "HOLD. The one opened looks like real shadows of the facade above",
+    "owner": ""
+  }
 }

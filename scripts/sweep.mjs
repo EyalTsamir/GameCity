@@ -41,6 +41,12 @@ for (let i = 2; i < process.argv.length; i++) {
   if (next === undefined || next.startsWith('--')) args[a.slice(2)] = '1';
   else args[a.slice(2)] = process.argv[++i];
 }
+// <out>/capture-overrides.json wins over the command line, so a running chunk loop picks up a change at its next chunk
+try {
+  Object.assign(args, JSON.parse(fs.readFileSync(path.resolve(root, args.out ?? 'shots/sweep', 'capture-overrides.json'), 'utf8')));
+} catch {
+  /* none */
+}
 const list = (s) => (s ?? '').split(',').map((x) => x.trim()).filter(Boolean);
 const plan = JSON.parse(fs.readFileSync(path.join(here, 'sweep-plan.json'), 'utf8'));
 const part = args.part ?? 'all';
@@ -55,6 +61,7 @@ const height = parseInt(args.height ?? '1025', 10);
 const settle = parseInt(args.settle ?? '26', 10);
 const warm = parseFloat(args.warm ?? '30');
 const jpegQ = parseInt(args.quality ?? '88', 10);
+const jpegQNight = parseInt(args['quality-night'] ?? args.quality ?? '88', 10);
 const trembleMode = args.tremble ?? 'cell';
 const freeze = (args.freeze ?? '1') !== '0';
 const nightViews = parseInt(args['night-views'] ?? '5', 10);
@@ -112,7 +119,8 @@ for (const h of [...HOURS, ...specialHours]) {
       if (plan.hoursOf[c.type] && !plan.hoursOf[c.type].includes(h) && !hours.length) continue;
       const all = c.type === 'water' ? [VIEW_ORDER[hash(c.id) % 4]] : VIEW_ORDER;
       // (thinning the night keeps the opposite directions and the ground first)
-      const views = h > 19 || h < 5 ? all.slice().sort((a, b) => NIGHT_ORDER.indexOf(a) - NIGHT_ORDER.indexOf(b)).slice(0, nightViews) : all;
+      // (one view per cell: which way it looks goes round by cell, or every night picture would look north)
+      const views = h > 19 || h < 5 ? (nightViews === 1 ? [all[hash(c.id) % Math.min(4, all.length)]] : all.slice().sort((a, b) => NIGHT_ORDER.indexOf(a) - NIGHT_ORDER.indexOf(b)).slice(0, nightViews)) : all;
       const trembleView = views[hash(c.id) % Math.min(4, views.length)];
       for (const v of views) jobs.push({ part: 'squares', dir: c.id, h, view: v, cell: c, tremble: trembleMode === 'view' || (trembleMode === 'cell' && v === trembleView), file: path.join('squares', c.id, `${hourTag(h)}_${v}.jpg`) });
     }
@@ -481,7 +489,7 @@ const shoot = async (page, job, near) => {
   const file = path.join(outDir, job.file);
   fs.mkdirSync(path.dirname(file), { recursive: true });
   const part = `${file}.part`;
-  await page.screenshot({ path: part, type: 'jpeg', quality: jpegQ, timeout: 240000 });
+  await page.screenshot({ path: part, type: 'jpeg', quality: job.h > 19 || job.h < 5 ? jpegQNight : jpegQ, timeout: 240000 });
   if (frozen && !freeze) await page.evaluate(() => window.__city.setSpeed(1));
   const check = await page.evaluate(() => {
     const st = window.__city.stats();

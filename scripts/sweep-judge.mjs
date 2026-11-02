@@ -35,7 +35,8 @@ const stopFile = path.join(outDir, 'STOP-JUDGES');
 const model = args.model ?? 'claude-sonnet-5-5';
 const maxJobs = parseInt(args.jobs ?? '3', 10);
 const maxImages = parseInt(args['max-images'] ?? '0', 10);
-const nightViews = parseInt(args['night-views'] ?? '3', 10);
+// (1: walkable cells at night get one view since 2026-11-02, for the disk and the weekly limit; it must match the capture)
+const nightViews = parseInt(args['night-views'] ?? '1', 10);
 const follow = (args.follow ?? '1') !== '0';
 const plan = JSON.parse(fs.readFileSync(path.join(here, 'sweep-plan.json'), 'utf8'));
 const brief = fs.readFileSync(path.join(here, 'sweep-judge-brief.md'), 'utf8');
@@ -72,7 +73,7 @@ for (const h of [...HOURS, ...specialHours]) {
     const hoursOf = plan.hoursOf[c.type];
     if (hoursOf && !hoursOf.includes(h)) continue;
     const all = c.type === 'water' ? [VIEW_ORDER[hash(c.id) % 4]] : VIEW_ORDER;
-    const views = h > 19 ? all.slice().sort((a, b) => NIGHT_ORDER.indexOf(a) - NIGHT_ORDER.indexOf(b)).slice(0, nightViews) : all;
+    const views = h > 19 ? (nightViews === 1 ? [all[hash(c.id) % Math.min(4, all.length)]] : all.slice().sort((a, b) => NIGHT_ORDER.indexOf(a) - NIGHT_ORDER.indexOf(b)).slice(0, nightViews)) : all;
     const walk = c.type === 'walk' || c.type === 'walk-edge';
     const rank = h === HOURS[0] ? (walk ? 1 : 5) : walk ? 3 : 6;
     const place = c.type === 'far' ? 'a place in the countryside beyond the town' : c.type === 'water' ? 'open water' : `one ${c.S} m square of the city`;
