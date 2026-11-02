@@ -6,6 +6,13 @@
 //            the dark of a closed cabin in thCabAO (ambient and lamp light only: real sun comes in by the shadow map)
 //   glass    drawn after everything, added over the cabin: what it reflects, a little dust, what it lets through in alpha
 
+import { bugOn } from '../../core/sweepbugs';
+
+// A closed car from outside (docs/progress/sweep-bugs.md): at eye level the roof is edge-on, so what says "closed" is the glass. A clear
+// pane over a bright cabin read as an open top, on every car. ?nocarglass: the old values.
+const PANE_T = bugOn('carglass') ? '0.5' : '0.8';
+const CAB_K = bugOn('carglass') ? '0.55' : '1.0';
+
 // paint from a metre away: stone chips where the road throws them, hairline scratches round the door handles, dried runs under
 // the window line, a fall of dust on what faces up. Read from the close-up tiles, each car its own window of them
 const WEAR = /* glsl */ `
@@ -154,7 +161,7 @@ export const CLOSE_FRAG_DETAIL = /* glsl */ `
     float ao = mix( 0.22, 0.62, hT * hT ) * ( 0.75 + 0.35 * on.y );
     ao += 0.18 * smoothstep( hw * 0.55, hw, abs( p.x ) ) * step( belt, p.y );
     if ( vDetB.w > 0.5 ) ao = ao * 1.5 + 0.1;
-    else if ( hw > 0.86 ) ao = ao * 1.4 + 0.06;
+    else ao = ( hw > 0.86 ? ao * 1.4 + 0.06 : ao ) * ${CAB_K};
     thCabAO = clamp( ao, 0.0, 1.0 );
     thCoatK = 0.0;
     // a saloon's strip lamps, on after dark while it runs
@@ -261,7 +268,7 @@ ${WEAR}
   float dirt = thH1( ph * 91.3 );
   dirt = 0.12 + 0.6 * dirt * dirt;
   thCabinK = 0.0;
-  thTrans = 0.8;
+  thTrans = ${PANE_T};
   vec4 blot = texture2D( tCrack, p.zy * 0.7 + p.x * 0.31 );
   vec4 gr = texture2D( tGrain, ( abs( on.x ) > 0.5 ? p.zy : p.xy + p.zz ) * 2.3 );
   float dust = dirt * ( 0.05 + 0.13 * blot.b + 0.02 * gr.b );

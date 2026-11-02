@@ -30,6 +30,7 @@ import { busCabin, carCabin, cabCabin, TRIM as CABIN_TRIM, flat as cabFlat, type
 import { closeVehOn } from '../../core/closeVehicles';
 import { endRing, endSurface, flankX, linerCar, loftCar, NOSE_BLUNT, NOSE_ROUND, NOSE_WEDGE, TAIL_SQUARE, topAt, topSurfaceY, type CarShape } from './carBody';
 import { detailPeople } from '../../core/detailPeople';
+import { bugOn } from '../../core/sweepbugs';
 
 /** number of detail levels buildModel() can produce */
 export const MODEL_LODS = 3;
@@ -2194,9 +2195,18 @@ function buildCab(b: Builder, cabin: Det, x: number, wsTop: number, nose?: EndFn
   cabCabin(add, dims, { wsTop, x, liner: (g, trim) => add(g, { color: '#ffffff', rough: 1, trim }) });
 }
 
-/** a roof box on two cross bars, carried by one vehicle in five (part 90, picked by the phase in the shader) */
-function roofBox(b: Builder, y: number, z: number, w: number): void {
-  for (const dz of [0.45, -0.45]) b.add(bx(w - 0.1, 0.04, 0.05, 0, y - 0.005, z + dz), { color: '#1d1f22', part: 90, rough: 1 });
+/** a roof box on two cross bars, carried by one vehicle in five (part 90, picked by the phase in the shader); on a roof without rails
+ *  (`bare`) the bars stand on feet: the roof falls away under their ends, where they hung in the air (?noroofcrown) */
+function roofBox(b: Builder, y: number, z: number, w: number, bare?: CarShape): void {
+  for (const dz of [0.45, -0.45]) {
+    b.add(bx(w - 0.1, 0.04, 0.05, 0, y - 0.005, z + dz), { color: '#1d1f22', part: 90, rough: 1 });
+    if (bare && bugOn('roofcrown'))
+      for (const sd of [1, -1]) {
+        const fx = sd * (w / 2 - 0.2),
+          y0 = topSurfaceY(bare, fx, z + dz) - 0.012;
+        b.add(bx(0.06, y - y0, 0.07, fx, y0, z + dz), { color: '#25282c', part: 90, rough: 1 });
+      }
+  }
   const g = rbox(0.82, 0.36, 1.75, 0.16, 0, y + 0.03, z - 0.1, 2);
   taper(g, y + 0.03, y + 0.39, z - 0.1, 0.12, 0.18, 0.08);
   b.add(g, { color: '#26292d', part: 90, rough: 0.5, finish: 'coat' });
@@ -2220,9 +2230,17 @@ function hatch(): THREE.BufferGeometry {
   const shape0: CarShape = { L, W, sill: 0.3, belt: 0.9, roof: 1.45, roofDrop: 0.06, noseH: 0.76, hoodH: 0.9, wsBase: 0.88, wsTop: 0.02, rwTop: -1.02, rwBase: -1.76, deckH: 0.98, tailH: 0.93, pillarB: -0.42, glassRear: -0.98, tumble: 0.17, axF: 1.22, axR: -1.33, wheelR: 0.31 };
   const shape = faced(shape0, { sill: 0.22, bumpTop: 0.57, noseH: 0.78, nose: NOSE_WEDGE });
   const c = loftBody(b, shape, true, false, 'paint');
-  // small roof spoiler over the rear window
-  b.add(rbox(c.topW - 0.12, 0.045, 0.2, 0.02, 0, topAt(shape, shape.rwTop + 0.06) - 0.025, shape.rwTop - 0.02), { color: '#ffffff', paint: true });
-  roofBox(b, c.topY, c.topZ, c.topW);
+  // small roof spoiler over the rear window, following the crown of the roof (flat, its ends stood in the air: ?noroofcrown)
+  const spY = topAt(shape, shape.rwTop + 0.06) - 0.025;
+  const sp = bugOn('roofcrown') ? new THREE.BoxGeometry(c.topW - 0.12, 0.045, 0.2, [12, 4, 2][LOD], 1, 1).translate(0, spY + 0.0225, shape.rwTop - 0.02) : rbox(c.topW - 0.12, 0.045, 0.2, 0.02, 0, spY, shape.rwTop - 0.02);
+  if (bugOn('roofcrown')) {
+    const pos = sp.getAttribute('position');
+    const y0 = topSurfaceY(shape, 0, shape.rwTop + 0.06);
+    for (let i = 0; i < pos.count; i++) pos.setY(i, pos.getY(i) + topSurfaceY(shape, pos.getX(i), shape.rwTop + 0.06) - y0);
+    sp.computeVertexNormals();
+  }
+  b.add(sp, { color: '#ffffff', paint: true });
+  roofBox(b, c.topY, c.topZ, c.topW, shape);
   carDetails(b, { style: 'hatch', face: { lh: 0.085, lw: 0.47, gh: 0.045, gx: 0.42, tlh: 0.1, tlw: 0.34 }, L, W, wheelR: 0.31, wheelW: 0.23, axF: 1.22, axR: -1.33, wheelX: W / 2 - 0.09, bodyY: 0.31, bodyH: 0.6, bodyR: 0.2, lightY: 0.68, bumper: 'paint', rim: '#6d737a' }, shape);
   return b.build();
 }
@@ -3588,7 +3606,9 @@ function bikes(): THREE.BufferGeometry {
     // stem + handlebar (Dutch: swept-back upright bar) + grips
     const by = dutch ? 1.06 : 1.0,
       bz = dutch ? 0.26 : 0.32;
-    b.add(tube(0, headTop[0], headTop[1], 0, by, bz + 0.06, 0.012), { color: CHROME, rough: 0.5, part });
+    // (a stem as thick as the head tube, and its clamp: thinner, the bar seemed to float over the frame. ?nobikestem)
+    b.add(tube(0, headTop[0], headTop[1], 0, by, bz + 0.06, bugOn('bikestem') ? 0.019 : 0.012), { color: CHROME, rough: 0.5, part });
+    if (bugOn('bikestem')) b.add(rbox(0.05, 0.04, 0.05, 0.008, 0, by - 0.02, bz + 0.05), { color: '#2a2c30', rough: 0.9, part });
     if (dutch) {
       for (const sd of [1, -1]) b.add(tube(0, by, bz + 0.06, sd * 0.29, by - 0.01, bz, 0.011), { color: CHROME, rough: 0.5, part });
     } else b.add(tube(0.28, by, bz + 0.03, -0.28, by, bz + 0.03, 0.012), { color: '#2a2c30', rough: 0.9, part });
@@ -3622,6 +3642,8 @@ function bikes(): THREE.BufferGeometry {
       b.add(bx(0.2, 0.025, 0.36, 0, R + 0.32, zr + 0.1), { color: '#2a2c30', rough: 0.8, part });
       // lamp on the basket
       b.add(rbox(0.07, 0.07, 0.05, 0.02, 0, 0.8, zf + 0.2), { color: HEAD, light: LIGHT_HEAD, rough: 0.4, part });
+      // on its bracket from the head tube (it hung in the air under the basket: ?nobikestem)
+      if (bugOn('bikestem')) b.add(tube(0, 0.83, zf + 0.18, 0, headBot[0], headBot[1], 0.01), { color: '#2a2c30', rough: 0.9, part });
     } else b.add(rbox(0.05, 0.05, 0.04, 0.015, 0, 0.9, 0.42), { color: HEAD, light: LIGHT_HEAD, rough: 0.4, part });
     b.add(rbox(0.05, 0.04, 0.025, 0.01, 0, dutch ? 0.62 : 0.66, zr - 0.08), { color: TAIL, light: LIGHT_TAIL, rough: 0.5, part });
   }

@@ -29,6 +29,7 @@ import { PLATE_CELLS } from './models';
 import { CLOSE_AO, CLOSE_FRAG_DETAIL, GLASS_FRAG_END, NEAR_FRAG_PARS } from './closeGlsl';
 import { makeCloseTiles } from '../../world/closemat/textures';
 import { closeVehOn } from '../../core/closeVehicles';
+import { bugOn } from '../../core/sweepbugs';
 
 const VERT_PARS = /* glsl */ `
 attribute vec4 aMeta;
@@ -607,7 +608,7 @@ export function createVehicleMaterial(
     #ifdef USE_CLEARCOAT
       // body paint (vCoat > 1.5) gets the street at more contrast: a lacquered panel mirrors it clearly
       #ifdef VEH_GLASSPASS
-      clearcoatRadiance *= vGain * 0.7 * thStreetRefl( geometryViewDir, geometryClearcoatNormal, 0.22 );
+      clearcoatRadiance *= vGain * ${bugOn('carglass') ? '1.6' : '0.7'} * thStreetRefl( geometryViewDir, geometryClearcoatNormal, 0.22 );
       #else
       clearcoatRadiance *= vGain * thStreetRefl( geometryViewDir, geometryClearcoatNormal, 0.0 ) * ( vCoat > 1.5 && uVehDetail.w > 0.5 ? thPaintGain( geometryViewDir, geometryClearcoatNormal ) : 1.0 );
       #endif
