@@ -67,4 +67,7 @@ Both inside +0.3 ms by this measure, and no cost can be told from zero. The othe
 
 - `npm run typecheck`: clean at `6b46702`.
 - `finalcheck` (overview at speed 4, high / medium / low / `?diorama`): no console errors, invariants `{}`, validate `[]`, no frame errors, no failed modules.
+- `npm run build`: passes.
+- `ui-test.mjs --q noidle`, in full: 74 passed, none failed.
+- `hitch.mjs` (its default, overview at 12 and 21.5): `prog+0` in every window, so no mid-run compiles. Street and market were not in that run.
 - Church: `shots/mat/v3/church_base.jpg` clean, `church_nomatcorner.jpg` for the patches, `churchfar_base.jpg` corners whole from 30 m.
