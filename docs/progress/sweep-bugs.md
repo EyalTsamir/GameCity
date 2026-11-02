@@ -18,8 +18,10 @@ Switches: `src/core/sweepbugs.ts`. `?nosweepbugs` turns every fix below off; eac
 | `doorposts` | `world/buildings/towers.ts` | intercom panel and directory board hung on the glass | run down to the floor as posts |
 | `revolvebar` | `world/buildings/lobby.ts` | revolving door's push bar stopped short of the post | centre post to edge |
 | `doorbars` | `world/handheight/doors.ts` | pull bars with hairline stand-offs | stand-offs 12 mm, a boss on the outer side |
-| `canopyties` | `world/landmarks/station.ts` | canopy props came in slanted across the windows and through the lanterns | tie rods up to the wall with a plate; the lanterns stay, they have nowhere else |
-| `hawserclear` | `world/harbor.ts` | the ship's hawser ran through the moored dinghies | bollards limited to those clear of the moorings |
+| `canopyties` | `world/landmarks/station.ts` | wing canopy props came in slanted across the windows and through the lanterns; the marquise's props over the arches landed on nothing, through the globe lamp and the departures board | wings: tie rods up to the wall with a plate, the lanterns stay, they have nowhere else. Marquise: props only where a pier takes them, the ties above hold the rest |
+| `hawserclear` | `world/harbor.ts` | the ship's hawser ran over the crabber and the tender | bollards limited to those clear of the fish quay |
+| `bowline` | `sim/boats/models.ts`, `world/harbor.ts` | the crabber's bow line to the next bollard ahead crossed the tender at the ladder from end to end (found with a ray through the pixel: `boats-big-4`) | back to the spring's bollard, the empty eye gone |
+| `bikepair` | `world/props/kit.ts` | two bikes 0.9 m apart in one plane, 1.7 m long: wheels through each other | the second leans on the first, a handlebar's width out |
 | `davitline` | `sim/boats/models.ts` | crabber's davit ended in the air | two lines down to the deck |
 | `billfacet` | `world/props/streetkit.ts` | poster bills centred on the column's corners, its ribs cut through them | centred on the facets |
 | `conifertips` | `world/vegetation/crowns.ts` | conifer branch wood ran on past its last spray: bare spokes | the wood stops at the last spray |
@@ -51,11 +53,33 @@ Rough counts of about 2 650 lines, from two triage passes and my own reading of 
 - `terr-ladders/12_3m`: the ladder does reach the water.
 - `bld-*`, red and white dots in the sky: `dayaviation`, `avmast` and the sky specks are already fixed (sweep-white). The capture is older than those merges, so other lines may also be stale, gutter litter strips (`gutterDrift`, `wearpave`) for one.
 - `c-130_-50/12_W` wheel stops read as stray planks, road signs from behind, `kerbStones` steps: all as designed.
+- `bld-house-plan-bay`, `bld-house-suburb-hip-plain`, "knob on the frame": a doorbell.
+- `bldback-townhall`, "sign pole in front of the door": the pole stands at the kerb, in line with the door only by perspective.
+- `prop-planter-steel/12_3m`, "in the lane": on the pavement. `cs-text-flag`, "red plank": the bus shelter's end.
+- `walk-park-deck/12_1m`: close under the deck, framing. `prop-lamp-plaza`, `lm-marketstall-goods-eggs`: people or lens blur.
+- `ped-hair-bun/12_10m`, `ponytail`, "red band across the view": not there in new or old, a ray through the pixel finds nothing. Stale or transient.
+
+## Evidence
+
+By eye, new against `?nosweepbugs` from the same pose: Seaview poles behind the letters; door panels on posts; revolving bar; fish quay without the hawser and the crabber's bow line (punt and bow views); forecourt without the props over the arches; delivery, lorry, bus, ice cream, bike, hatch, moto; SOLD board solid; A-board an A; pillar box; plaza step course; sunflower and vine slabs gone; column bills on facets; crossing; racks; stair; conifer; two bikes leaning apart.
+
+## Conservative choices
+
+- Station wing lanterns stay where they are; only the props that ran through them changed.
+- Bus saloons keep their own glass.
+- `boardblock` only inside 26 m, where AO and the lens show the fault.
+- Bug lines with a plausible cause in another session's area (wear, materials, people) stay with that session.
 
 ## Costs
 
-See the end of this log (measured last, on AC, after a rebake).
+Not measured when the 18:30 limit fell: the rebake behind the shared lock took until 18:20. Measured after it, see the last section.
 
 ## Left
 
-See the end of this log.
+- Not traced: `bld-townhouse-oldtown-hip-shop/12_1m` plank (an item in the room pages, `near-closeRooms`, at 79.1, 1.16, −3; in `buildingrooms/pages.ts`, not found which); `veh-lorry-crates/12_1m` hairline; shed stubs.
+- `prop-scatter-bikes/12_1m`, green bar in the air: a ray finds `terrain-railings` at 78.6, 1.8, −47.4. Traced, not changed.
+- Slab hairlines: may be wear cracks, already changed by `wearpave`; not rechecked.
+- Bus stop clamps' stone texture: a material, not this list.
+- `bikeLite`, the simplified bikes: not checked.
+- Severity 3 lines not worked through.
+- `plumegaps` at exponent −0.7 not seen against a plume in the last look: the pose showed no plume. The stronger −0.5 was seen and judged too dark.
