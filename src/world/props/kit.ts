@@ -1583,7 +1583,7 @@ export function pots(k: Kit, rng: Rng, kd?: Kit): void {
       k.m(net, 'rubber');
       for (let s = 1; s < 8; s++) {
         const [hx, hy] = arc((s / 8) * Math.PI);
-        sh.tube(hx, hy, -0.34, hx, hy, 0.34, 0.005, 0.005, 3);
+        sh.tube(hx, hy, -0.3, hx, hy, 0.3, 0.005, 0.005, 3);
       }
       if (kd) {
         const nk = kd.sh;
@@ -1645,9 +1645,9 @@ export function rope(k: Kit, rng: Rng, kd?: Kit): void {
         kd.sh.tube(Math.cos(a0) * R, y + w, Math.sin(a0) * R, Math.cos(a1) * R, y + Math.sin(a1 * 3 + R * 30) * 0.008, Math.sin(a1) * R, 0.021, 0.021, 5);
       }
     };
-    smoothLathe(sh, 0, 0, [[0.43, 0], [0.44, 0.05], [0.41, 0.11], [0.34, 0.17], [0.26, 0.2], [0.17, 0.2], [0.13, 0.16]], 20);
+    smoothLathe(sh, 0, 0, [[0.43, 0], [0.43, 0.02], [0.4, 0.05], [0.36, 0.085], [0.3, 0.12], [0.24, 0.145], [0.19, 0.15], [0.15, 0.13]], 20);
     k.m('#141516', 'rubber');
-    sh.disc(0, 0.16, 0, 0.14, 12, 1);
+    sh.disc(0, 0.13, 0, 0.155, 12, 1);
     if (kd) {
       kd.m(col, 'rubber');
       const lay = [
@@ -2136,24 +2136,13 @@ export function pipes(k: Kit, rng: Rng): void {
     }
   }
   if (shaped) {
-    // wedges so the bottom row can't roll, and a strap over the load
+    // wedges so the bottom row can't roll
     k.m('#8a6a48', 'wood');
     for (const x of [-1.0, 1.0])
       for (const f of [-1, 1]) {
         const z = f * (2.5 * r * 2.05 + 0.02);
         sh.box(x, 0.16, z, 0.11, 0.08, 0.12, 1);
       }
-    k.m('#d9702a', 'rubber');
-    const rows = 4;
-    const topY = 0.12 + 2 * r + (rows - 1) * r * 1.75;
-    const halfW = 2.5 * r * 2.05;
-    for (const x of [-0.7, 0.7]) {
-      sh.beam(x, 0.13, -halfW - 0.03, x, topY * 0.55, -halfW * 0.7, 0.05, 0.004);
-      sh.beam(x, topY * 0.55, -halfW * 0.7, x, topY + 0.004, -r * 0.6, 0.05, 0.004);
-      sh.beam(x, topY + 0.004, -r * 0.6, x, topY + 0.004, r * 0.6, 0.05, 0.004);
-      sh.beam(x, topY + 0.004, r * 0.6, x, topY * 0.55, halfW * 0.7, 0.05, 0.004);
-      sh.beam(x, topY * 0.55, halfW * 0.7, x, 0.13, halfW + 0.03, 0.05, 0.004);
-    }
   }
 }
 

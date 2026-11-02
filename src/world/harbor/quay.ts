@@ -166,9 +166,9 @@ function fishBoxStack(b: HB, x: number, y: number, z: number, n: number, yaw: nu
     const yt = (n - 1) * 0.255 + 0.2;
     b.color('#dbe6ea');
     b.box(0, yt, 0, 0.66, 0.04, 0.38, 0, 0);
-    for (let k = 0; k < 34; k++) {
+    for (let k = 0; k < 48; k++) {
       b.color(k % 3 === 0 ? '#f4f9fb' : k % 3 === 1 ? '#e6eff2' : '#cfdde3');
-      b.box((rng.next() - 0.5) * 0.62, yt + 0.022 + rng.next() * 0.008, (rng.next() - 0.5) * 0.34, 0.016 + rng.next() * 0.03, 0.012, 0.016 + rng.next() * 0.03, rng.next() * 3.14, 1);
+      b.box((rng.next() - 0.5) * 0.62, yt + 0.021 + rng.next() * 0.004, (rng.next() - 0.5) * 0.34, 0.01 + rng.next() * 0.018, 0.006, 0.01 + rng.next() * 0.018, rng.next() * 3.14, 1);
     }
     const prof: [number, number][] = [[-0.5, 0.02], [-0.38, 0.55], [-0.2, 0.95], [0, 1], [0.2, 0.78], [0.36, 0.4], [0.46, 0.1]];
     for (let k = 0; k < 6; k++) {
@@ -180,18 +180,18 @@ function fishBoxStack(b: HB, x: number, y: number, z: number, n: number, yaw: nu
       const back = k % 2 ? '#4f6470' : '#5d6f62';
       const P = (s: number, i: number): V3 => {
         const a = (i / 6) * Math.PI * 2;
-        return [Math.cos(a) * prof[s][1] * rad * 0.62, Math.sin(a) * prof[s][1] * rad, prof[s][0] * len];
+        return [Math.cos(a) * prof[s][1] * rad, Math.sin(a) * prof[s][1] * rad * 0.55, prof[s][0] * len];
       };
       for (let s = 0; s < prof.length - 1; s++)
         for (let i = 0; i < 6; i++) {
-          b.color(i === 1 || i === 0 && s % 2 ? back : i === 2 ? '#8e9ea4' : '#d3dbdd');
+          b.color(i === 0 || i === 5 ? back : i === 1 || i === 4 ? '#8e9ea4' : '#d3dbdd');
           b.quad(P(s, i), P(s, i + 1), P(s + 1, i + 1), P(s + 1, i));
         }
       b.color(back);
-      b.quad2([0, 0, 0.45 * len], [0, 0.03, 0.56 * len], [0, 0, 0.53 * len], [0, -0.03, 0.56 * len]);
-      b.quad2([0, rad, -0.1 * len], [0, rad + 0.016, 0], [0, rad + 0.012, 0.1 * len], [0, rad, 0.16 * len]);
+      b.quad2([0, 0, 0.45 * len], [0.03, 0, 0.56 * len], [0, 0, 0.53 * len], [-0.03, 0, 0.56 * len]);
+      b.quad2([rad * 0.9, 0, -0.1 * len], [rad + 0.016, 0, 0], [rad + 0.012, 0, 0.1 * len], [rad * 0.85, 0, 0.16 * len]);
       b.color('#0e1214');
-      for (const sd of [-1, 1]) b.sphere(sd * rad * 0.42, rad * 0.25, -0.36 * len, 0.0055, 5, 3, 1);
+      b.sphere(rad * 0.2, rad * 0.26, -0.36 * len, 0.0055, 5, 3, 1);
       b.pop();
     }
   } else if (fish) {
