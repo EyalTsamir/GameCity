@@ -11,6 +11,7 @@ import type { CityContext } from '../../core/context';
 import { lampLights } from '../../core/lampLight';
 import { gustAt, windAt } from '../../core/wind';
 import { Rng } from '../../core/rng';
+import { whiteOn } from '../../core/sweepwhite';
 
 interface TreeLike {
   x: number;
@@ -649,7 +650,8 @@ export class Drift {
     const sd = u.uSunDir.value as THREE.Vector3;
     this.su.uSunDir.value.copy(sd);
     const elev = sd.y;
-    const low = Math.max(0, Math.min(1, (elev + 0.02) / 0.08)) * (1 - Math.min(1, Math.max(0, (elev - 0.15) / 0.5)) * 0.75);
+    // (none under a high sun: looking up toward it they hung in the blue sky and across facades as white dots. ?nonoonmotes: the old 25 % at noon)
+    const low = Math.max(0, Math.min(1, (elev + 0.02) / 0.08)) * (whiteOn('noonmotes') ? 1 - Math.min(1, Math.max(0, (elev - 0.15) / 0.35)) : 1 - Math.min(1, Math.max(0, (elev - 0.15) / 0.5)) * 0.75);
     // (the scene is HDR: a glint has to compete with a sunlit street of luminance ~3–5)
     this.su.uMoteGain.value = this.motes ? 9 * low * u.uDaylight.value : 0;
     const sky = ctx.services.sky as { sun?: THREE.DirectionalLight } | undefined;

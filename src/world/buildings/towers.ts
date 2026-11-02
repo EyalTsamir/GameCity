@@ -6,6 +6,7 @@
 // its own asymmetric crown with a lantern, spire and helipad.
 
 import * as THREE from 'three';
+import { whiteOn } from '../../core/sweepwhite';
 import {
   Gen, LRect, Side, FRONT, RIGHT, BACK, LEFT, Grid, WallLook,
   sideGeom, sideBox, sx, sz, makeGrid, wallGrid, wallPlain, wallSeg, setWallAttrs,
@@ -393,7 +394,12 @@ export function genTower(g: Gen): void {
   if (H >= 60) {
     const top = sc.crown === 'screen' ? H + 5.2 : crownH > 0 ? H + 1.18 + crownH + 0.15 : H + 1.3;
     let k = 0;
-    for (const p of rectPoly(insetRect(shaft, 0.3), 0)) aviationLight(g, p.x, top, p.z, (k++ % 2) * 0.0);
+    // on the roof: inside a chamfer or a notch, where the old 30 cm inset stood in the air, and not over a sloped crown (slantTop has its own)
+    if (!whiteOn('avmast')) for (const p of rectPoly(insetRect(shaft, 0.3), 0)) aviationLight(g, p.x, top, p.z, (k++ % 2) * 0.0);
+    else if (sc.crown !== 'slant') {
+      const back = (notch > 0 ? notch : tiers[tiers.length - 1].c / 2) + 0.5;
+      for (const p of rectPoly(insetRect(shaft, back), 0)) aviationLight(g, p.x, top, p.z, (k++ % 2) * 0.0, H);
+    }
   }
 
   // ───────────────────────────────────────────────────── pieces ──
@@ -682,8 +688,8 @@ export function genTower(g: Gen): void {
       l.beam(r.x0, highY + 0.08, zb - 0.06, r.x1, highY + 0.08, zb - 0.06, 0.12, 0.12);
     }
     if (yTop >= 55) {
-      aviationLight(g, r.x0 + 0.3, highY + 0.4, zb + 0.3);
-      aviationLight(g, r.x1 - 0.3, highY + 0.4, zb + 0.3);
+      aviationLight(g, r.x0 + 0.3, highY + 0.4, zb + 0.3, 0, yAt(zb + 0.3));
+      aviationLight(g, r.x1 - 0.3, highY + 0.4, zb + 0.3, 0, yAt(zb + 0.3));
     }
   }
 
@@ -993,7 +999,7 @@ export function genTower(g: Gen): void {
     t.cone(r2.x0 + 0.8 + 0.6, r2.z0 + 0.8, 0.25, yB + 4.3, yB + 4.3, 6);
     t.beam(r2.x0 + 0.8, yB + 4.35, r2.z0 + 0.8, r2.x0 + 2.2, yB + 4.2, r2.z0 + 1.1, 0.35, 0.35);
     // aviation lights on the corners of the main roof
-    for (const p of rectPoly(insetRect(shaftR, 0.4), 0)) aviationLight(g, p.x, yA + 1.2, p.z, 0.25);
+    for (const p of rectPoly(insetRect(shaftR, 0.4), 0)) aviationLight(g, p.x, yA + 1.2, p.z, 0.25, yA);
     // name sign over the main entrance (south podium face)
     const nm = g.atlas.add('haven-tower', 512, 80, letterSign('HAVEN TOWER', '#e9eef2', '#dff4ff', undefined, 1, '#2d3740'));
     const sg = sideGeom(base, FRONT);
