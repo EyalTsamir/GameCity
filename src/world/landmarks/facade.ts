@@ -4,6 +4,7 @@
 // at z = 0, thickness towards -Z) and placed with (x, z, ry) in landmark-local space.
 
 import * as THREE from 'three';
+import { matOn } from '../../core/sweepmat';
 import { Mat, PAT, withM } from './builder';
 import { Kit, archPoints, pointedPoints, shapeGeoNorm } from './kit';
 
@@ -51,6 +52,29 @@ export interface WallSpec {
   openings: Opening[];
   /** optional custom outline (2D, wall-local, CCW, origin bottom-left) — e.g. gables */
   outline?: [number, number][];
+  /** (`matcorner`) another wall meets this one at both ends: no end faces, they would lie in the plane of the other wall's front and fight it */
+  meets?: boolean;
+}
+
+/** a copy of an extruded wall without the faces of its two ends */
+function withoutEnds(g: THREE.BufferGeometry, w: number): THREE.BufferGeometry {
+  const P = g.getAttribute('position');
+  const keep: number[] = [];
+  for (let t = 0; t + 2 < P.count; t += 3) {
+    const x0 = P.getX(t),
+      x1 = P.getX(t + 1),
+      x2 = P.getX(t + 2);
+    const at = (u: number) => Math.abs(x0 - u) < 1e-4 && Math.abs(x1 - u) < 1e-4 && Math.abs(x2 - u) < 1e-4;
+    if (!at(0) && !at(w)) keep.push(t, t + 1, t + 2);
+  }
+  const out = new THREE.BufferGeometry();
+  for (const name of Object.keys(g.attributes)) {
+    const a = g.getAttribute(name);
+    const d = new Float32Array(keep.length * a.itemSize);
+    for (let i = 0; i < keep.length; i++) for (let c = 0; c < a.itemSize; c++) d[i * a.itemSize + c] = a.getComponent(keep[i], c);
+    out.setAttribute(name, new THREE.BufferAttribute(d, a.itemSize));
+  }
+  return out;
 }
 
 const _m = new THREE.Matrix4();
@@ -108,7 +132,9 @@ export function wall(K: Kit, s: WallSpec): void {
   const g = new THREE.ExtrudeGeometry(shape, { depth, bevelEnabled: false, curveSegments: 4 });
   g.translate(0, 0, -depth);
   wallMatrix(s, _m);
-  K.geoM(s.mat, g, _m, 'box');
+  const body = s.meets && matOn('matcorner') ? withoutEnds(g, s.w) : g;
+  K.geoM(s.mat, body, _m, 'box');
+  if (body !== g) body.dispose();
   g.dispose();
   for (const o of s.openings) infill(K, s, o, depth);
 }

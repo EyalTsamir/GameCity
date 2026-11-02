@@ -69,9 +69,9 @@ export function genChurch(env: Env, lot: Lot): void {
     for (const dx of [-1.0, 1.0]) o.push({ x: c + dx, y: 19.4, w: 1.15, h: 3.6, arch: 0.95, pointed: true, fill: 'louvre', inset: 0.35, surround: trim, surroundW: 0.12 });
     return o;
   };
-  wall(K, { w: TW * 2, h: tTop, depth: 0.7, x: 0, y: 0, z: tz1, ry: 0, mat: stone, openings: towerOpen('front') });
-  wall(K, { w: TW * 2, h: tTop, depth: 0.7, x: 0, y: 0, z: tz0, ry: Math.PI, mat: stone, openings: towerOpen('back') });
-  for (const s of [-1, 1]) wall(K, { w: tD, h: tTop, depth: 0.7, x: s * TW, y: 0, z: tzc, ry: (s * Math.PI) / 2, mat: stone, openings: towerOpen('side') });
+  wall(K, { w: TW * 2, h: tTop, depth: 0.7, x: 0, y: 0, z: tz1, ry: 0, mat: stone, openings: towerOpen('front'), meets: true });
+  wall(K, { w: TW * 2, h: tTop, depth: 0.7, x: 0, y: 0, z: tz0, ry: Math.PI, mat: stone, openings: towerOpen('back'), meets: true });
+  for (const s of [-1, 1]) wall(K, { w: tD, h: tTop, depth: 0.7, x: s * TW, y: 0, z: tzc, ry: (s * Math.PI) / 2, mat: stone, openings: towerOpen('side'), meets: true });
   // floors inside the tower openings (hide the void behind the clock holes)
   if (hero) K.coreBox(dark, TW * 2 - 1.4, tTop - 1.0 - 4.4, tD - 1.4, 0, 4.9, tzc);
   else K.coreBox(dark, TW * 2 - 1.4, tTop - 1.0, tD - 1.4, 0, 0.5, tzc);
