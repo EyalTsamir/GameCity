@@ -32,7 +32,7 @@ export function castBollard(b: HB, x: number, y: number, z: number): void {
       [0.12, 0.6],
       [0.0, 0.61],
     ],
-    14,
+    shapeOn('shapereefer') ? 24 : 14,
     x,
     y,
     z,

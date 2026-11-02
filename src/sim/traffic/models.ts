@@ -3607,13 +3607,24 @@ function bikes(): THREE.BufferGeometry {
     const sy = dutch ? 0.92 : 0.93,
       sz = dutch ? -0.26 : -0.22;
     b.add(tube(0, seatC[0], seatC[1], 0, sy - 0.03, sz + 0.01, 0.011), { color: CHROME, rough: 0.5, part });
-    b.add(rbox(dutch ? 0.2 : 0.13, 0.05, dutch ? 0.24 : 0.27, 0.02, 0, sy - 0.05, sz), { color: dutch ? '#4a3426' : '#1d1f22', rough: 1.1, part });
+    if (LOD === 0 && shapeOn('shapebike')) {
+      // a saddle: wide at the back, down to a nose, sprung on the Dutch one
+      const w = dutch ? 1.35 : 1;
+      b.add(loftZ([[sz - 0.135, sy - 0.05, 0.05 * w, 0.012], [sz - 0.1, sy - 0.045, 0.078 * w, 0.024], [sz - 0.02, sy - 0.044, 0.062 * w, 0.022], [sz + 0.06, sy - 0.046, 0.03, 0.018], [sz + 0.14, sy - 0.05, 0.02, 0.012]], 2.2), { color: dutch ? '#4a3426' : '#1d1f22', rough: 1.1, part });
+      if (dutch) for (const sd of [1, -1]) b.add(tube(sd * 0.05, sy - 0.08, sz - 0.08, sd * 0.05, sy - 0.05, sz - 0.08, 0.012), { color: CHROME, rough: 0.5, part });
+    } else b.add(rbox(dutch ? 0.2 : 0.13, 0.05, dutch ? 0.24 : 0.27, 0.02, 0, sy - 0.05, sz), { color: dutch ? '#4a3426' : '#1d1f22', rough: 1.1, part });
     // stem + handlebar (Dutch: swept-back upright bar) + grips
     const by = dutch ? 1.06 : 1.0,
       bz = dutch ? 0.26 : 0.32;
     b.add(tube(0, headTop[0], headTop[1], 0, by, bz + 0.06, 0.012), { color: CHROME, rough: 0.5, part });
     if (dutch) {
       for (const sd of [1, -1]) b.add(tube(0, by, bz + 0.06, sd * 0.29, by - 0.01, bz, 0.011), { color: CHROME, rough: 0.5, part });
+    } else if (LOD === 0 && shapeOn('shapebike')) {
+      // a bar with a slight rise and backsweep, clamped in the stem
+      for (const sd of [1, -1]) {
+        b.add(tube(0, by, bz + 0.05, sd * 0.1, by, bz + 0.05, 0.012), { color: '#2a2c30', rough: 0.9, part });
+        b.add(tube(sd * 0.1, by, bz + 0.05, sd * 0.28, by, bz + 0.015, 0.012), { color: '#2a2c30', rough: 0.9, part });
+      }
     } else b.add(tube(0.28, by, bz + 0.03, -0.28, by, bz + 0.03, 0.012), { color: '#2a2c30', rough: 0.9, part });
     for (const sd of [1, -1]) b.add(tube(sd * 0.24, by, bz + (dutch ? 0.0 : 0.03), sd * 0.31, by, bz + (dutch ? 0.0 : 0.03), 0.017), { color: '#1d1f22', rough: 1.2, part });
     // mudguards
@@ -3645,6 +3656,11 @@ function bikes(): THREE.BufferGeometry {
       b.add(bx(0.2, 0.025, 0.36, 0, R + 0.32, zr + 0.1), { color: '#2a2c30', rough: 0.8, part });
       // lamp on the basket
       b.add(rbox(0.07, 0.07, 0.05, 0.02, 0, 0.8, zf + 0.2), { color: HEAD, light: LIGHT_HEAD, rough: 0.4, part });
+    } else if (LOD === 0 && shapeOn('shapebike')) {
+      // a round lamp in a black shell on a bracket
+      b.add(disc(0.03, 0.05, 0, 0.9, 0.41), { color: '#1d1f22', rough: 0.9, part });
+      b.add(disc(0.024, 0.006, 0, 0.9, 0.438), { color: HEAD, light: LIGHT_HEAD, rough: 0.4, part });
+      b.add(tube(0, 0.86, 0.38, 0, 0.89, 0.4, 0.006), { color: '#3c4046', rough: 0.6, part });
     } else b.add(rbox(0.05, 0.05, 0.04, 0.015, 0, 0.9, 0.42), { color: HEAD, light: LIGHT_HEAD, rough: 0.4, part });
     b.add(rbox(0.05, 0.04, 0.025, 0.01, 0, dutch ? 0.62 : 0.66, zr - 0.08), { color: TAIL, light: LIGHT_TAIL, rough: 0.5, part });
   }

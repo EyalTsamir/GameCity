@@ -343,8 +343,17 @@ export function bench(k: Kit, style: 'classic' | 'modern' | 'wood', rng: Rng, le
   const sh = k.sh;
   const L = 1.8;
   if (style === 'modern') {
+    const shapedFrame = shapeOn('shapebench');
     k.m('#7d868d', 'steel');
     for (const x of [-0.72, 0.72]) {
+      if (shapedFrame) {
+        // a welded frame in flat bar: two legs splayed onto the plate, a seat rail, an upright carrying the back; not a solid slab
+        sh.beam(x, -legDrop, 0.2, x, 0.4, 0.15, 0.05, 0.03);
+        sh.beam(x, -legDrop, -0.2, x, 0.4, -0.15, 0.05, 0.03);
+        sh.beam(x, 0.405, -0.25, x, 0.405, 0.23, 0.05, 0.03);
+        sh.beam(x, 0.4, -0.2, x, 0.86, -0.3, 0.05, 0.03);
+        continue;
+      }
       sh.box(x, 0.21 - legDrop / 2, 0.0, 0.08, 0.42 + legDrop, 0.46, 1);
       sh.beam(x, 0.42, -0.2, x, 0.86, -0.3, 0.07, 0.06);
     }
@@ -354,14 +363,19 @@ export function bench(k: Kit, style: 'classic' | 'modern' | 'wood', rng: Rng, le
       for (const sx of [-1, 1]) for (const sz of [-1, 1]) boltY(sh, x + sx * 0.055, 0.008 - legDrop, sz * 0.22, 0.011);
     }
     sh.box(0, 0.39, -0.03, 1.5, 0.04, 0.04, 1);
-    k.m(rng.chance(0.5) ? '#b07a4c' : '#9a6a43', 'wood');
+    const slat = rng.chance(0.5) ? '#b07a4c' : '#9a6a43';
+    k.m(slat, 'wood');
     for (let i = 0; i < 5; i++) cbox(sh, 0, 0.445, -0.2 + i * 0.105, L, 0.04, 0.085, 0.008, 0);
     // countersunk screws into the frame
     k.m('#55595c', 'steel');
     for (const x of [-0.72, 0.72]) for (let i = 0; i < 5; i++) sh.cyl(x, 0.485, -0.2 + i * 0.105, 0.007, 0.007, 0.002, 6, 2);
+    // (the back took the screws' colour: grey slats on every modern bench)
+    if (shapedFrame) k.m(slat, 'wood');
     for (let i = 0; i < 3; i++) {
       const t = i / 2;
-      sh.push().local(0, 0.6 + t * 0.22, -0.25 - t * 0.05, -0.2).box(0, 0, 0, L, 0.075, 0.03, 0);
+      sh.push().local(0, 0.6 + t * 0.22, -0.25 - t * 0.05, -0.2);
+      if (shapedFrame) cbox(sh, 0, 0, 0, L, 0.075, 0.03, 0.007, 0);
+      else sh.box(0, 0, 0, L, 0.075, 0.03, 0);
       if (i === 2 && rng.chance(0.35)) markProp(sh, 'plaque', 0, 0, 0.0155, 0.17, 0.055, rng.int(0, 1e6));
       sh.pop();
     }
@@ -768,6 +782,29 @@ export function phonebox(k: Kit, g?: Kit): void {
   cbox(sh, 0, 2.565, 0, 0.14, 0.02, 0.06, 0.005);
 }
 
+/** today's front page: masthead, a headline, a picture, columns of grey */
+function paperDraw(n: number): (g: CanvasRenderingContext2D, w: number, h: number) => void {
+  const names = ['THE HAVEN POST', 'Harbour Gazette', 'EVENING TIMES'],
+    heads = ['Ferry back on time', 'Market square reopens', 'Regatta sails Sunday'];
+  return (g, w, h) => {
+    g.fillStyle = '#ece8dc';
+    g.fillRect(0, 0, w, h);
+    g.fillStyle = '#1c1c1e';
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    g.font = '700 11px Georgia, serif';
+    g.fillText(names[n], w / 2, 8);
+    g.fillRect(4, 14, w - 8, 1);
+    g.font = '700 10px Arial, sans-serif';
+    g.fillText(heads[n], w / 2, 23);
+    g.fillStyle = ['#7c8f9d', '#a58c6a', '#6f8c74'][n];
+    g.fillRect(6, 31, 50, 34);
+    g.fillStyle = '#55554f';
+    for (let c = 0; c < 2; c++) for (let y = 32; y < h - 4; y += 3) g.fillRect(62 + c * 28, y, 24 - (y % 7 === 0 ? 7 : 0), 1);
+    for (let y = 69; y < h - 4; y += 3) g.fillRect(6, y, 50 - (y % 5 === 0 ? 9 : 0), 1);
+  };
+}
+
 /**
  * Newspaper kiosk (1.8 × 1.1 m, 2.6 m to the sign): plinth, panelled walls, a real front opening with
  * depth (counter with paper stacks, shelves of covers inside, the roll shutter coiled in its box above),
@@ -896,9 +933,26 @@ export function newsstand(k: Kit, rng: Rng): void {
   for (let i = 0; i < 4; i++) {
     const x = -0.6 + i * 0.36 + rng.range(-0.03, 0.03), h = rng.range(0.04, 0.12);
     k.m('#e4e0d6', 'plastic');
-    sh.push().local(x, 1.0 + h / 2, 0.45, 0, rng.range(-0.15, 0.15)).box(0, 0, 0, 0.3, h, 0.22, 1).pop();
-    k.m('#3b3b3b', 'plastic');
-    sh.push().local(x, 1.0 + h + 0.001, 0.45, 0, rng.range(-0.1, 0.1)).box(0, 0, 0.04, 0.22, 0.002, 0.04, 1).pop();
+    const yaw = rng.range(-0.15, 0.15);
+    sh.push().local(x, 1.0 + h / 2, 0.45, 0, yaw).box(0, 0, 0, 0.3, h, 0.22, 1).pop();
+    if (printer && shapeOn('shapepapers')) {
+      // the fold of each copy down the fore edge, the twine round the bundle, the day's front page on top
+      sh.push().local(x, 1.0, 0.45, 0, yaw);
+      k.m('#b9b4a6', 'plastic');
+      for (let n = 1; n * 0.012 < h; n++) sh.box(0, n * 0.012, 0.1105, 0.296, 0.0015, 0.001, 0);
+      k.m('#a58a5c', 'wood');
+      for (const dx of [-0.08, 0.08]) {
+        sh.box(dx, h + 0.0015, 0, 0.005, 0.0015, 0.222, 0);
+        sh.box(dx, h / 2, 0.1112, 0.005, h, 0.001, 0);
+      }
+      sh.push().local(0, h + 0.001, 0, -Math.PI / 2, 0, 0);
+      printer.quad(sh, 'paper:' + (i % 3), 0, 0, 0, 0.29, 0.21, 122, 88, paperDraw(i % 3));
+      sh.pop();
+      sh.pop();
+    } else {
+      k.m('#3b3b3b', 'plastic');
+      sh.push().local(x, 1.0 + h + 0.001, 0.45, 0, rng.range(-0.1, 0.1)).box(0, 0, 0.04, 0.22, 0.002, 0.04, 1).pop();
+    }
   }
   // roll shutter: housing box under the fascia, guide channels down the jambs, the curtain pulled
   // part-way down (slats in relief, bottom rail with a handle)

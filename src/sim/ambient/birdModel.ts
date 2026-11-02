@@ -8,6 +8,7 @@
 //   iAnim  (vec4)  x flap phase (rad), y flap amplitude (rad), z wing fold 0..1, w head pitch (rad, + = down)
 //   iShape (vec4)  x wingspan scale, y glide dihedral bias (rad), z gull "M" kink (rad), w kind (0 bird, 1 gull, 2 pigeon, 3 butterfly)
 
+import { shapeOn } from '../../core/sweepshape';
 import * as THREE from 'three';
 
 export const PART = { BODY: 0, WING_IN: 1, WING_OUT: 2, HEAD: 3, TAIL: 4, LEG: 5 } as const;
@@ -35,16 +36,28 @@ function quad(b: Builder, a: number[], c: number[], d: number[], e: number[], pa
 
 export function buildBirdGeometry(): THREE.BufferGeometry {
   const b: Builder = { pos: [], part: [], mat: [] };
-  // ── body: 6-sided rings along z
-  const rings: [number, number, number, number][] = [
-    // z, rx, ry, yc
-    [-0.31, 0.03, 0.025, 0.005],
-    [-0.16, 0.08, 0.07, 0.0],
-    [0.04, 0.1, 0.088, 0.008],
-    [0.2, 0.074, 0.072, 0.028],
-    [0.29, 0.046, 0.052, 0.05],
-  ];
-  const SIDES = 6;
+  const SHAPED = shapeOn('shapebirds');
+  // ── body: rings along z
+  const rings: [number, number, number, number][] = SHAPED
+    ? [
+        // z, rx, ry, yc
+        [-0.31, 0.026, 0.022, 0.006],
+        [-0.24, 0.056, 0.05, 0.002],
+        [-0.16, 0.08, 0.072, 0.0],
+        [-0.05, 0.095, 0.086, 0.002],
+        [0.05, 0.1, 0.09, 0.008],
+        [0.14, 0.09, 0.082, 0.018],
+        [0.22, 0.07, 0.07, 0.03],
+        [0.29, 0.048, 0.054, 0.05],
+      ]
+    : [
+        [-0.31, 0.03, 0.025, 0.005],
+        [-0.16, 0.08, 0.07, 0.0],
+        [0.04, 0.1, 0.088, 0.008],
+        [0.2, 0.074, 0.072, 0.028],
+        [0.29, 0.046, 0.052, 0.05],
+      ];
+  const SIDES = SHAPED ? 8 : 6;
   const ringPts = rings.map(([z, rx, ry, yc]) => {
     const pts: number[][] = [];
     for (let k = 0; k < SIDES; k++) {
@@ -75,15 +88,33 @@ export function buildBirdGeometry(): THREE.BufferGeometry {
   const top = hv(0, 1, 0),
     bot = hv(0, -1, 0);
   const eq: number[][] = [];
-  for (let k = 0; k < 6; k++) {
-    const a = (k / 6) * Math.PI * 2;
+  const HN = SHAPED ? 8 : 6;
+  for (let k = 0; k < HN; k++) {
+    const a = (k / HN) * Math.PI * 2;
     eq.push(hv(Math.cos(a), 0.05, Math.sin(a)));
   }
-  for (let k = 0; k < 6; k++) {
-    const k2 = (k + 1) % 6;
-    tri(b, top, eq[k2], eq[k], PART.HEAD, MAT.BODY);
-    tri(b, bot, eq[k], eq[k2], PART.HEAD, MAT.BELLY);
-  }
+  if (SHAPED) {
+    // two more rings, so the crown is a dome and not a pyramid
+    const up: number[][] = [],
+      dn: number[][] = [];
+    for (let k = 0; k < HN; k++) {
+      const a = (k / HN) * Math.PI * 2;
+      up.push(hv(Math.cos(a) * 0.72, 0.68, Math.sin(a) * 0.72));
+      dn.push(hv(Math.cos(a) * 0.72, -0.62, Math.sin(a) * 0.72));
+    }
+    for (let k = 0; k < HN; k++) {
+      const k2 = (k + 1) % HN;
+      tri(b, top, up[k2], up[k], PART.HEAD, MAT.BODY);
+      quad(b, up[k], up[k2], eq[k2], eq[k], PART.HEAD, MAT.BODY);
+      quad(b, eq[k], eq[k2], dn[k2], dn[k], PART.HEAD, MAT.BELLY);
+      tri(b, bot, dn[k], dn[k2], PART.HEAD, MAT.BELLY);
+    }
+  } else
+    for (let k = 0; k < HN; k++) {
+      const k2 = (k + 1) % HN;
+      tri(b, top, eq[k2], eq[k], PART.HEAD, MAT.BODY);
+      tri(b, bot, eq[k], eq[k2], PART.HEAD, MAT.BELLY);
+    }
   // neck: join the head to the last body ring
   const last = ringPts[rings.length - 1];
   const neckRing = last.map((p) => [p[0] * 0.8, p[1] + 0.02, p[2] + 0.04]);
@@ -123,7 +154,34 @@ export function buildBirdGeometry(): THREE.BufferGeometry {
     tri(b, [x, bot, 0.0], [x + 0.025, bot, 0.08], [x - 0.025, bot, 0.08], PART.LEG, MAT.LEG);
   }
   // ── wings (flat panels; DoubleSide material)
-  for (const s of [1, -1]) {
+  if (SHAPED)
+    for (const s of [1, -1]) {
+      const y = 0.045;
+      const P = (q: number[]) => [s * q[0], y, q[1]];
+      // inner wing: bowed leading edge, the secondaries' trailing edge; outer: swept to a point, the primaries fingered
+      const LI = [[0.05, 0.11], [0.2, 0.13], [0.34, 0.118], [0.44, 0.095]],
+        TI = [[0.05, -0.13], [0.2, -0.175], [0.34, -0.17], [0.44, -0.155]],
+        LO = [[0.44, 0.095], [0.58, 0.07], [0.72, 0.035], [0.86, -0.02], [0.98, -0.09]],
+        TO = [[0.44, -0.155], [0.56, -0.165], [0.68, -0.15], [0.8, -0.125], [0.98, -0.09]];
+      for (let i = 0; i < 3; i++) quad(b, P(LI[i]), P(LI[i + 1]), P(TI[i + 1]), P(TI[i]), PART.WING_IN, MAT.WING);
+      for (let i = 0; i < 4; i++) {
+        const m0 = i < 2 ? MAT.WING : MAT.TIP,
+          m1 = i < 1 ? MAT.WING : MAT.TIP;
+        quad(b, P(LO[i]), P(LO[i + 1]), P(TO[i + 1]), P(TO[i]), PART.WING_OUT, [m0, m1, m1, m0]);
+      }
+      // the scallops of the flight feathers
+      for (let i = 0; i < 3; i++) {
+        const a = TI[i],
+          c = TI[i + 1];
+        tri(b, P(a), P(c), P([(a[0] + c[0]) / 2, (a[1] + c[1]) / 2 - 0.018]), PART.WING_IN, MAT.WING);
+      }
+      for (let i = 0; i < 3; i++) {
+        const a = TO[i],
+          c = TO[i + 1];
+        tri(b, P(a), P(c), P([(a[0] * 0.3 + c[0] * 0.7), (a[1] * 0.3 + c[1] * 0.7) - 0.03]), PART.WING_OUT, i < 1 ? MAT.WING : MAT.TIP);
+      }
+    }
+  else for (const s of [1, -1]) {
     const y = 0.045;
     const rootL = [s * 0.05, y, 0.11],
       rootT = [s * 0.05, y, -0.13];
@@ -142,10 +200,34 @@ export function buildBirdGeometry(): THREE.BufferGeometry {
   g.setAttribute('aPart', new THREE.Float32BufferAttribute(b.part, 1));
   g.setAttribute('aMat', new THREE.Float32BufferAttribute(b.mat, 1));
   g.computeVertexNormals();
+  if (SHAPED) {
+    // soft body and head: one normal per position, so no facets (the beak, eyes, wings and legs stay as they are)
+    const nor = g.getAttribute('normal') as THREE.BufferAttribute,
+      sum = new Map<string, number[]>(),
+      key = (i: number) => `${b.part[i]}:${b.pos[i * 3].toFixed(4)},${b.pos[i * 3 + 1].toFixed(4)},${b.pos[i * 3 + 2].toFixed(4)}`,
+      soft = (i: number) => (b.part[i] === PART.BODY || b.part[i] === PART.HEAD) && b.mat[i] <= MAT.BELLY;
+    for (let i = 0; i < nor.count; i++) {
+      if (!soft(i)) continue;
+      const k = key(i),
+        v = sum.get(k) ?? [0, 0, 0];
+      v[0] += nor.getX(i);
+      v[1] += nor.getY(i);
+      v[2] += nor.getZ(i);
+      sum.set(k, v);
+    }
+    for (let i = 0; i < nor.count; i++) {
+      if (!soft(i)) continue;
+      const v = sum.get(key(i))!,
+        l = Math.hypot(v[0], v[1], v[2]) || 1;
+      nor.setXYZ(i, v[0] / l, v[1] / l, v[2] / l);
+    }
+  }
   g.computeBoundingSphere();
   return g;
 }
 
+// the elbow turns about the wing's own plane; about y = 0 it opened a gap the sky showed through
+const ELBOW = shapeOn('shapebirds') ? 0.045 : 0.0;
 const POSE_GLSL = /* glsl */ `
 attribute float aPart;
 attribute float aMat;
@@ -178,8 +260,8 @@ void birdPose(inout vec3 p, inout vec3 n) {
     if (aPart > 1.5) {
       // outer panel: extra whip + gull kink at the elbow
       float a2 = iAnim.y * 0.55 * sin(iAnim.x - 0.7) + iShape.z;
-      vec2 r = bRot(vec2(q.x - elbowX, q.y), a2);
-      q.xy = vec2(elbowX, 0.0) + r + vec2(0.0, q.y * 0.0);
+      vec2 r = bRot(vec2(q.x - elbowX, q.y - ${ELBOW.toFixed(3)}), a2);
+      q.xy = vec2(elbowX, ${ELBOW.toFixed(3)}) + r;
       nq.xy = bRot(nq.xy, a2);
     }
     vec2 rr = bRot(vec2(q.x - 0.05, q.y - 0.045), flap);
@@ -237,6 +319,6 @@ export function makeBirdMaterial(): THREE.MeshLambertMaterial {
       .replace('#include <common>', '#include <common>\nvarying vec3 vBirdCol;')
       .replace('#include <color_fragment>', '#include <color_fragment>\ndiffuseColor.rgb *= vBirdCol;');
   };
-  m.customProgramCacheKey = () => 'tinyhaven-ambient-bird-2';
+  m.customProgramCacheKey = () => 'tinyhaven-ambient-bird-3' + ELBOW;
   return m;
 }

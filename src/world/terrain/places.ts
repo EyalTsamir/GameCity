@@ -1122,10 +1122,17 @@ function closeStone(b: GeoBuilder, P: ClosePlace, hi: boolean, lights: GlowPoint
     // upright, leaning along its facing direction (the tilt keeps the beam's width along the row)
     const lx = nx * t.lean,
       lz = nz * t.lean;
-    const hb = t.shoulder ? t.h - 0.08 : t.h;
+    const shapedStone = hi && shapeOn('shapestones');
+    // most heads are shaped; the few flat ones get a chamfer from the coping pass below
+    const shoulder = t.shoulder || (shapedStone && ((t.tone * 17) % 1) > 0.3);
+    const hb = shoulder ? t.h - 0.08 : t.h;
     b.beam(t.x, y0 - 0.15, t.z, t.x + lx * (hb + 0.15), y0 + hb, t.z + lz * (hb + 0.15), t.w, t.t);
-    if (t.shoulder && hi) archHead(b, t, y0, hb);
-    else if (t.shoulder) b.beam(t.x + lx * (hb + 0.15), y0 + hb, t.z + lz * (hb + 0.15), t.x + lx * (hb + 0.27), y0 + hb + 0.12, t.z + lz * (hb + 0.27), t.w * 0.62, t.t);
+    if (shapedStone) {
+      stoneFace(b, t, y0, hb, sc === SLATE);
+      b.color(sc).set('aMas', KIND.plain, 0, 1, 0);
+    }
+    if (shoulder && hi) archHead(b, t, y0, hb);
+    else if (shoulder) b.beam(t.x + lx * (hb + 0.15), y0 + hb, t.z + lz * (hb + 0.15), t.x + lx * (hb + 0.27), y0 + hb + 0.12, t.z + lz * (hb + 0.27), t.w * 0.62, t.t);
     if (hi && t.kerb) {
       // kerbed plot in front of it
       b.color(COL.coping).set('aMas', KIND.coping, 0, 1, 0);
@@ -1315,6 +1322,52 @@ function yardGateWood(b: GeoBuilder, g: YardGate, model: TerrainModel): void {
 }
 
 /** the arched head of an upright (a half disc of the stone's width and thickness on top of its shaft at hb) */
+/** What the mason cut: a border, a roundel, lines of inscription broken into words, on the side facing the plot. */
+function stoneFace(b: GeoBuilder, t: CloseStone, y0: number, hb: number, slate: boolean): void {
+  const nx = Math.sin(t.yaw),
+    nz = Math.cos(t.yaw),
+    ux = Math.cos(t.yaw),
+    uz = -Math.sin(t.yaw);
+  const W = (u: number, y: number, d: number): V3 => {
+    const sh = t.lean * (y + 0.15) + d;
+    return [t.x + ux * u + nx * sh, y0 + y, t.z + uz * u + nz * sh];
+  };
+  const d = t.t / 2 + 0.002;
+  const cut = (u0: number, u1: number, y0_: number, y1: number, f = 1): void => b.quadFacing(W(u0, y0_, f * d), W(u1, y0_, f * d), W(u1, y1, f * d), W(u0, y1, f * d), nx * f, 0, nz * f);
+  const R = t.w / 2 - 0.045,
+    top = hb - 0.05,
+    low = Math.max(0.1, hb * 0.26);
+  b.color(C(slate ? '#8f9496' : '#5d5a50')).set('aMas', KIND.dark, 0, 1, 0);
+  for (const [u0, u1, a, c] of [
+    [-R, R, top - 0.007, top],
+    [-R, R, low, low + 0.007],
+    [-R, -R + 0.007, low, top],
+    [R - 0.007, R, low, top],
+  ]) cut(u0, u1, a, c);
+  // a roundel under the head, then the lines
+  const cy = top - 0.075;
+  for (let k = 0; k < 8; k++) {
+    const a0 = (k / 8) * Math.PI * 2,
+      a1 = ((k + 1) / 8) * Math.PI * 2;
+    b.quadFacing(W(Math.cos(a0) * 0.03, cy + Math.sin(a0) * 0.03, d), W(Math.cos(a1) * 0.03, cy + Math.sin(a1) * 0.03, d), W(Math.cos(a1) * 0.022, cy + Math.sin(a1) * 0.022, d), W(Math.cos(a0) * 0.022, cy + Math.sin(a0) * 0.022, d), nx, 0, nz);
+  }
+  let seed = t.tone * 977 + t.h * 113;
+  const rnd = () => {
+    seed = (seed * 16.13 + 0.37) % 1;
+    return seed;
+  };
+  for (let y = cy - 0.07, l = 0; y > low + 0.03 && l < 8; y -= l === 0 ? 0.06 : 0.042, l++) {
+    const h = l === 0 ? 0.024 : 0.013,
+      span = R * (0.55 + rnd() * 0.35);
+    let u = -span;
+    while (u < span - 0.02) {
+      const w = Math.min(0.02 + rnd() * 0.07, span - u);
+      cut(u, u + w, y, y + h);
+      u += w + 0.016;
+    }
+  }
+}
+
 function archHead(b: GeoBuilder, t: CloseStone, y0: number, hb: number): void {
   const nx = Math.sin(t.yaw),
     nz = Math.cos(t.yaw);

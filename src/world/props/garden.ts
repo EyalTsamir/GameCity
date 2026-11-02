@@ -341,6 +341,46 @@ export function bbq(k: Kit, rng: Rng): number {
     sh.box(0, 0.35, 0, 0.36, 0.015, 0.36, 0);
     return 0.86;
   }
+  if (shapeOn('shapegarden')) {
+    // a gas grill: a cabinet on castors with two doors, a control panel with knobs, a round hood with its handle and thermometer, shelves on brackets, the bottle's hose
+    k.m('#3a3f44', 'steel');
+    cbox(sh, 0, 0.45, 0, 0.92, 0.66, 0.48, 0.015);
+    k.m('#23262a', 'iron');
+    cbox(sh, 0, 0.84, 0.02, 0.96, 0.12, 0.54, 0.018, 0);
+    k.m('#141618', 'plastic');
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) sh.cyl(sx * 0.38, 0, sz * 0.18, 0.045, 0.045, 0.12, 8, 1);
+    k.m('#2a2d31', 'steel');
+    for (const sx of [-1, 1]) {
+      sh.box(sx * 0.225, 0.46, 0.243, 0.42, 0.58, 0.006, 0);
+      k.m('#a6adb1', 'steel');
+      sh.tube(sx * 0.05, 0.36, 0.265, sx * 0.05, 0.62, 0.265, 0.009, 0.009, 6);
+      k.m('#2a2d31', 'steel');
+    }
+    k.m('#b4babd', 'steel');
+    sh.box(0, 0.84, 0.293, 0.8, 0.07, 0.004, 0);
+    k.m('#111214', 'plastic');
+    for (let i = 0; i < 4; i++) {
+      sh.push().local(-0.27 + i * 0.18, 0.84, 0.296, Math.PI / 2, 0, 0);
+      sh.cyl(0, 0, 0, 0.022, 0.018, 0.025, 10, 2);
+      sh.pop();
+    }
+    // the hood: a half round across the width, ends closed by the cylinder's caps
+    k.m('#1f2225', 'iron');
+    sh.push().local(0, 0.9, 0.0, 0, 0, Math.PI / 2);
+    sh.cyl(0, -0.46, 0, 0.24, 0.24, 0.92, 20, 3, true);
+    sh.pop();
+    k.m('#8e9499', 'steel');
+    sh.tube(-0.3, 1.04, 0.25, 0.3, 1.04, 0.25, 0.012, 0.012, 8);
+    for (const sx of [-0.3, 0.3]) sh.tube(sx, 1.0, 0.2, sx, 1.04, 0.25, 0.008, 0.008, 6);
+    k.m('#d8d4c6', 'plastic');
+    sh.push().local(0, 1.08, 0.17, Math.PI / 3.4, 0, 0).cyl(0, 0, 0, 0.03, 0.03, 0.012, 12, 2).pop();
+    k.m('#9aa3a8', 'steel');
+    for (const sx of [-1, 1]) {
+      cbox(sh, sx * 0.66, 0.84, 0, 0.36, 0.024, 0.42, 0.006, 0);
+      sh.beam(sx * 0.48, 0.62, 0, sx * 0.72, 0.82, 0, 0.02, 0.012);
+    }
+    return 1.14;
+  }
   k.m('#3a3f44', 'steel');
   sh.box(0, 0.42, 0, 0.95, 0.84, 0.5, 1);
   k.m('#1f2225', 'iron');
@@ -404,7 +444,14 @@ export function gardenShed(k: Kit, rng: Rng, w: number, d: number): void {
   // water butt at a corner, some shed have a log store
   if (rng.chance(0.55)) {
     k.m(rng.chance(0.5) ? '#3f6e4a' : '#2f3a42', 'plastic');
-    sh.cyl(w / 2 + 0.32, 0, d / 2 - 0.35, 0.28, 0.3, 0.8, 8, 2);
+    if (shapeOn('shapegarden')) {
+      // moulded, hooped, a lid with a grip; the shed's downpipe would feed it
+      const bx = w / 2 + 0.32,
+        bz = d / 2 - 0.35;
+      lathe(sh, bx, bz, [[0, 0], [0.26, 0], [0.29, 0.05], [0.3, 0.2], [0.306, 0.22], [0.3, 0.26], [0.3, 0.46], [0.306, 0.48], [0.3, 0.52], [0.31, 0.76], [0.32, 0.8]], 20);
+      k.m('#2c2f2e', 'plastic');
+      lathe(sh, bx, bz, [[0.33, 0.79], [0.33, 0.83], [0.26, 0.86], [0.05, 0.875], [0, 0.875]], 20);
+    } else sh.cyl(w / 2 + 0.32, 0, d / 2 - 0.35, 0.28, 0.3, 0.8, 8, 2);
   }
 }
 
@@ -583,6 +630,27 @@ export function sandpit(k: Kit, rng: Rng, w: number): void {
   sh.box(s / 2 - 0.06, 0.12, 0, 0.12, 0.24, s - 0.24, 1);
   k.m('#e3cf98', 'stone');
   sh.box(0, 0.09, 0, s - 0.24, 0.18, s - 0.24, 1);
+  if (shapeOn('shapegarden')) {
+    // the sand heaped and dug, a castle turned out of the bucket; the bucket with its handle, the spade with a blade
+    k.m('#d9c58c', 'stone');
+    softBlob(sh, rng.range(-0.2, 0.2), 0.17, rng.range(-0.2, 0.2), s * 0.26, 0.09, s * 0.22, 0.6, 0.8, 0.02, rng.int(0, 99), 6, 14);
+    k.m('#d3bf84', 'stone');
+    const cx = rng.range(-0.3, 0.3),
+      cz = rng.range(-0.3, 0.3);
+    lathe(sh, cx, cz, [[0.1, 0.18], [0.072, 0.31], [0, 0.31]], 10);
+    k.m(rng.pick(PLAY), 'plastic');
+    const bx = rng.range(-0.3, 0.3),
+      bz = rng.range(-0.3, 0.3);
+    lathe(sh, bx, bz, [[0, 0.18], [0.075, 0.18], [0.1, 0.33], [0.106, 0.34], [0.09, 0.34], [0.07, 0.2]], 14);
+    sh.tube(bx - 0.1, 0.33, bz, bx, 0.42, bz, 0.005, 0.005, 4);
+    sh.tube(bx, 0.42, bz, bx + 0.1, 0.33, bz, 0.005, 0.005, 4);
+    k.m(rng.pick(PLAY), 'plastic');
+    sh.push().local(rng.range(-0.3, 0.3), 0.2, rng.range(-0.3, 0.3), 0, rng.range(0, 3));
+    sh.tube(-0.18, 0.01, 0, 0.1, 0.02, 0, 0.009, 0.009, 5);
+    cbox(sh, 0.15, 0.015, 0, 0.13, 0.012, 0.09, 0.004, 0);
+    sh.pop();
+    return;
+  }
   k.m(rng.pick(PLAY), 'plastic');
   sh.cyl(rng.range(-0.3, 0.3), 0.18, rng.range(-0.3, 0.3), 0.09, 0.11, 0.16, 6, 2);
   k.m(rng.pick(PLAY), 'plastic');
@@ -597,8 +665,17 @@ export function toys(k: Kit, rng: Rng): void {
   if (rng.chance(0.6)) {
     sh.push().local(rng.range(-0.2, 0.2), 0, rng.range(-0.2, 0.2), 0, rng.range(0, TAU));
     k.m(rng.pick(['#d9473f', '#e8c35a', '#2f7fb8']), 'plastic');
-    sh.box(0, 0.22, 0, 0.36, 0.2, 0.62, 1);
-    sh.box(0, 0.38, -0.06, 0.3, 0.14, 0.26, 0);
+    if (shapeOn('shapegarden')) {
+      // a moulded ride-on: a soft body, a roof on pillars, eyes for lamps
+      cbox(sh, 0, 0.22, 0, 0.36, 0.2, 0.62, 0.05);
+      for (const sx of [-1, 1]) for (const sz of [-1, 1]) sh.tube(sx * 0.14, 0.32, -0.06 + sz * 0.12, sx * 0.13, 0.48, -0.06 + sz * 0.1, 0.016, 0.016, 6);
+      cbox(sh, 0, 0.49, -0.06, 0.32, 0.035, 0.32, 0.015, 0);
+      k.m('#f4efe0', 'plastic');
+      for (const sx of [-1, 1]) sh.ellipsoid(sx * 0.11, 0.25, 0.31, 0.035, 0.035, 0.012, 0);
+    } else {
+      sh.box(0, 0.22, 0, 0.36, 0.2, 0.62, 1);
+      sh.box(0, 0.38, -0.06, 0.3, 0.14, 0.26, 0);
+    }
     k.m('#1d1f22', 'rubber');
     for (const x of [-0.19, 0.19]) for (const z of [-0.2, 0.2]) sh.push().local(x, 0.08, z, 0, 0, Math.PI / 2).cyl(0, -0.03, 0, 0.08, 0.08, 0.06, 6, 3, false).pop();
     sh.pop();
