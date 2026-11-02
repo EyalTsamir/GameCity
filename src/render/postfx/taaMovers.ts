@@ -3,7 +3,8 @@
 //
 // The simulations know where everything is, so no material has to change and no vehicle or person is drawn twice (the scene is vertex-bound):
 // one box per mover, a few thousand vertices. A pixel counts if the scene's depth there is about as far as the box.
-// Only what really moved in the last few frames: a standing vendor would take the whole stall around them along.
+// Only what really moved in the last few frames: a standing vendor would take the whole stall around them along. The rides and the
+// turbines go round for good, and their boxes stay. Calming (taa.ts) washes out what is small and moves: a pigeon, a horse's leg, a blade.
 
 import * as THREE from 'three';
 import type { CityContext } from '../../core/context';
@@ -35,10 +36,11 @@ void main() {
 }
 `;
 
-/** people, vehicles, train cars, boats */
+/** people, vehicles, train cars, boats, birds, cats, rides */
 const CAP = 1500;
 /** people further off than this are a few pixels, and they are most of the boxes */
 const PEOPLE_FAR2 = 300 * 300;
+const BIRDS_FAR2 = 150 * 150;
 const _clear = new THREE.Color();
 /** frames a thing that stopped stays masked */
 const HOLD = 4;
@@ -49,6 +51,9 @@ interface MoverServices {
   pedestrians?: { _crowd: { parties: readonly { members: readonly { present: boolean; x: number; y: number; z: number }[] }[] } };
   rail?: { sim: { trains: readonly { cars: readonly { visible: boolean; x: number; y: number; half: number }[] }[] } };
   boats?: { fleet: { boats: readonly { x: number; z: number }[] } };
+  ambientBirds?: readonly { x: number; y: number; z: number }[];
+  smalllife?: { birds: { birds: readonly { x: number; y: number; z: number }[] } | null; cats: { cats: readonly { x: number; y: number; z: number }[] } | null };
+  terrain?: { height(x: number, z: number): number };
 }
 
 export class MoverMask {
@@ -63,6 +68,8 @@ export class MoverMask {
   private n = 0;
   /** where each mover was last frame */
   private seen = new WeakMap<object, { x: number; z: number; hold: number }>();
+  /** x, y, z, yaw, half sizes */
+  private rides: number[][] | null = null;
 
   constructor(private ctx: CityContext) {
     this.target = new THREE.WebGLRenderTarget(4, 4, { depthBuffer: false, stencilBuffer: false, generateMipmaps: false, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter, format: THREE.RedFormat, type: THREE.UnsignedByteType });
@@ -108,9 +115,32 @@ export class MoverMask {
     this.b[i * 3 + 2] = hz;
   }
 
+  private ridesNow(s: MoverServices): number[][] {
+    if (this.rides) return this.rides;
+    this.rides = [];
+    for (const f of this.ctx.plan.features) {
+      const R = Number(f.params?.radius ?? 0);
+      if (f.kind === 'carousel') this.rides.push([f.x, 4, f.z, 0, R + 1, 4, R + 1]);
+      // (turns about z; its hub is given from the deck)
+      else if (f.kind === 'ferriswheel') this.rides.push([f.x, Number(f.params?.hub ?? 17.5), f.z, 0, R + 2, R + 2, 3]);
+      else if (f.kind === 'windturbine') {
+        const L = Number(f.params?.rotor ?? 13) + 1;
+        const g = s.terrain ? s.terrain.height(f.x, f.z) : this.ctx.plan.heightAt(f.x, f.z);
+        this.rides.push([f.x, g + Number(f.params?.height ?? 30) + 1, f.z, f.yaw, L, L, 4]);
+      }
+    }
+    return this.rides;
+  }
+
+  private addBirds(list: readonly { x: number; y: number; z: number }[] | null | undefined, eye: THREE.Vector3): void {
+    if (!list) return;
+    for (const b of list) if ((b.x - eye.x) ** 2 + (b.z - eye.z) ** 2 < BIRDS_FAR2 && this.moved(b, b.x, b.z)) this.add(b.x, b.y + 0.15, b.z, 0, 0.7, 0.6, 0.7);
+  }
+
   private collect(eye: THREE.Vector3): void {
     this.n = 0;
     const s = this.ctx.services as unknown as MoverServices;
+    for (const r of this.ridesNow(s)) this.add(r[0], r[1], r[2], r[3], r[4], r[5], r[6]);
     // (a little longer than the thing: last frame's place, mirrors, a rider's elbow)
     const vehicles = s.traffic?.vehicles();
     if (vehicles) for (const V of vehicles) if (this.moved(V, V.x, V.z)) this.add(V.x, 0, V.z, V.yaw, V.hw + 0.5, (V.spec?.height ?? 2) * 0.5 + 0.8, V.len * 0.5 + 0.8);
@@ -128,6 +158,9 @@ export class MoverMask {
     }
     const boats = s.boats?.fleet.boats;
     if (boats) for (const b of boats) if (this.moved(b, b.x, b.z)) this.add(b.x, 2, b.z, 0, 18, 9, 18);
+    this.addBirds(s.ambientBirds, eye);
+    this.addBirds(s.smalllife?.birds?.birds, eye);
+    this.addBirds(s.smalllife?.cats?.cats, eye);
   }
 
   setSize(w: number, h: number): void {

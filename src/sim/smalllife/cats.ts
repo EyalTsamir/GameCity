@@ -115,7 +115,7 @@ export class Cats {
   private readonly a2: THREE.InstancedBufferAttribute;
   private readonly a3: THREE.InstancedBufferAttribute;
   private readonly aB: THREE.InstancedBufferAttribute;
-  private readonly cats: Cat[] = [];
+  readonly cats: Cat[] = [];
   private readonly spots: Spot[] = [];
   private readonly walls = new Map<number, { ax: number; az: number; bx: number; bz: number }[]>();
   private readonly benches = new Map<number, { x: number; z: number; yaw: number }[]>();

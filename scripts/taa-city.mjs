@@ -40,7 +40,22 @@ const aim = async ([subject, D, lead]) => {
     cam.flyTo({ target: { x: k.x, y: 20, z: k.z }, distance: 70, yaw: 30, pitch: 5 }, 0);
     return { fixed: subject };
   }
+  if (subject === 'kite') {
+    const k = c.services.ambientDebug.locate('kite', 0);
+    cam.flyTo({ target: { x: k.x, y: k.y - 4, z: k.z }, distance: 22, yaw: 250, pitch: -8 }, 0);
+    return { fixed: subject };
+  }
+  if (subject === 'fireworks') {
+    c.events.emit('fireworks:launch', { duration: 30 });
+    cam.flyTo({ target: { x: 180, y: 30, z: -58 }, distance: 120, yaw: 280, pitch: -5 }, 0);
+    await new Promise((r) => setTimeout(r, 5000));
+    return { fixed: subject };
+  }
   const f = c.plan.features.find((q) => q.kind === subject);
+  if (f && subject === 'windturbine') {
+    cam.flyTo({ target: { x: f.x, y: 30, z: f.z }, distance: 70, yaw: 180 * f.yaw / Math.PI, pitch: 2 }, 0);
+    return { fixed: subject };
+  }
   if (f) {
     cam.flyTo({ target: { x: f.x, y: 3, z: f.z }, distance: 14, yaw: 20, pitch: 6 }, 0);
     return { fixed: subject };
@@ -87,6 +102,11 @@ const aim = async ([subject, D, lead]) => {
     if (best) break;
   }
   if (!best) return null;
+  if (subject === 'train') {
+    // (from above, over whatever grows along the line)
+    c.services.camera.flyTo({ target: { x: best.fx, y: 3, z: best.fz }, distance: 45, yaw: 180, pitch: 16 }, 0);
+    return best;
+  }
   const yr = (best.yaw * Math.PI) / 180;
   c.services.camera.flyTo({ target: { x: best.cx - Math.sin(yr) * D, y: best.cy, z: best.cz - Math.cos(yr) * D }, distance: D, yaw: best.yaw, pitch: 0 }, 0);
   return best;

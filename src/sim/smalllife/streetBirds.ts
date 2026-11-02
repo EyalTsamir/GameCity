@@ -146,7 +146,7 @@ const _p = new THREE.Vector3();
 const _s = new THREE.Vector3();
 
 export class StreetBirds {
-  private readonly birds: Bird[] = [];
+  readonly birds: Bird[] = [];
   private readonly groups: Group[] = [];
   private readonly mesh: THREE.InstancedMesh;
   private readonly blobs: THREE.InstancedMesh;
