@@ -2058,11 +2058,76 @@ function buildTail(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
 
 // ────────────────────────────────────────────────── collar / lapels / tie ──
 
-function buildUpperGarments(b: MeshBuilder, d: Dims): void {
+/** close level: a real lapel down each side of the opening (a roll, a notch where it meets the collar, its edge standing off the chest), and a shirt collar with two points */
+function buildCloseLapels(b: MeshBuilder, d: Dims): void {
   const hk = d.H / 1.76;
+  const T = d.torso.map((_, i) => closeTorsoRing(d, i));
+  const at = (h: number) => {
+    let i = 0;
+    while (i < T.length - 2 && TORSO_H[i + 1] <= h) i++;
+    const t = (h - TORSO_H[i]) / (TORSO_H[i + 1] - TORSO_H[i]);
+    const L = (a: number, c: number) => a + (c - a) * t;
+    return { r: { y: L(T[i].y, T[i + 1].y), hw: L(T[i].hw, T[i + 1].hw), f: L(T[i].f, T[i + 1].f), b: L(T[i].b, T[i + 1].b), cz: L(T[i].cz, T[i + 1].cz) } as BodyRing, bust: L(d.bust[i], d.bust[i + 1]), bone: TORSO_BONE[i + (t > 0.5 ? 1 : 0)][0], w: L(TORSO_BONE[i][1], TORSO_BONE[i + 1][1]) };
+  };
+  // the opening, as the shader cuts it on the torso (s of a jacket with lapels)
+  const open = (h: number) => (h - 0.5) * 0.77 + 23 * Math.max(0, h - 0.8) ** 2;
+  // up the opening: how wide the lapel is there. It widens to its point, steps in at the notch, and the collar's leaf goes on to the neck
+  const W: [number, number][] = [[0, 0.004], [0.12, 0.09], [0.3, 0.2], [0.5, 0.3], [0.62, 0.36], [0.625, 0.17], [0.72, 0.2], [0.86, 0.22], [1, 0.16]];
+  for (const side of [1, -1]) {
+    const rows: number[][] = [];
+    for (const [t, w] of W) {
+      const h = 0.5 + 0.43 * t;
+      const q = at(h);
+      const ph = Math.max(0, open(h) - 0.012);
+      const up = 0.003 * Math.max(0, h - 0.8) / 0.13;
+      b.use(q.bone, REG.OUTER, FB.LAPELS, 1.14);
+      const P = (phi: number, out: number) => torsoPoint({ ...q.r, hw: q.r.hw + out + up, f: q.r.f + out + up, b: q.r.b + out + up }, q.bust, phi * side);
+      const row = [b.v(P(ph, 0.0045), h, q.w), b.v(P(ph + w * 0.4, 0.0085), h, q.w), b.v(P(ph + w, 0.0062), h, q.w)];
+      // (under its edge the lapel's shadow on the chest)
+      b.setTint(0.62);
+      row.push(b.v(P(ph + w + 0.018, -0.001), h, q.w));
+      b.setTint(1.14);
+      rows.push(row);
+    }
+    for (let j = 0; j < rows.length - 1; j++) for (let k = 0; k < 3; k++) b.quadDir(rows[j][k], rows[j][k + 1], rows[j + 1][k + 1], rows[j + 1][k], [0, 0, 1]);
+  }
+  // shirt collar: a band round the neck's own outline, open at the throat, with two points lying on the chest
+  b.use(BONE.CHEST, REG.COLLAR, FB.COLLAR, 1);
+  const n0 = closeNeck(d, 0),
+    n1 = closeNeck(d, 1);
+  const r0 = { ...n0, y: n0.y + 0.006 * hk, hw: n0.hw + 0.008, f: n0.f + 0.01, b: n0.b + 0.008 };
+  const r1 = { ...n1, y: n1.y - 0.012 * hk, hw: n1.hw + 0.006, f: n1.f + 0.007, b: n1.b + 0.006 };
+  const n = 16;
+  const lo: number[] = [],
+    hi: number[] = [];
+  for (let k = 0; k < n; k++) {
+    const phi = ((k + 0.5) / n) * Math.PI * 2;
+    const c = Math.cos(phi);
+    const drop = 0.03 * hk * Math.max(0, (c - 0.6) / 0.4) ** 1.5;
+    lo.push(b.v(torsoPoint(r0, 0, phi, 2), 1.02, 0.6));
+    hi.push(b.v(torsoPoint({ ...r1, y: r1.y - drop }, 0, phi, 2), 1.08, 0.4));
+  }
+  for (let k = 0; k < n; k++) b.quadOut(lo[k], lo[(k + 1) % n], hi[(k + 1) % n], hi[k], [0, n0.y, n0.cz]);
+  for (const side of [1, -1]) {
+    const pt = (r: BodyRing, phi: number, out: number, dy = 0): P3 => {
+      const q = torsoPoint({ ...r, hw: r.hw + out, f: r.f + out, b: r.b + out }, 0, phi * side, 2);
+      return [q[0], q[1] + dy, q[2]];
+    };
+    const a = b.v(pt(r1, 0.42, 0.003, -0.012 * hk), 1.06, 0.4),
+      e = b.v(pt(r1, 1.5, 0.004), 1.06, 0.4),
+      f = b.v(pt(r0, 1.35, 0.008, -0.008 * hk), 1.02, 0.6),
+      tip = b.v(pt(r0, 0.42, 0.014, -0.03 * hk), 1.0, 0.6);
+    b.quadDir(a, e, f, tip, [0.3 * side, 0.2, 1]);
+  }
+}
+
+function buildUpperGarments(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
+  const hk = d.H / 1.76;
+  const closeLapels = cfg.close && sweepPeople('lapels');
+  if (closeLapels) buildCloseLapels(b, d);
   // shirt collar: a short band around the neck base
   b.use(BONE.CHEST, REG.COLLAR, FB.COLLAR, 1);
-  {
+  if (!closeLapels) {
     const n0 = d.neckRings[0],
       n1 = d.neckRings[1];
     const lo: number[] = [],
@@ -2080,7 +2145,7 @@ function buildUpperGarments(b: MeshBuilder, d: Dims): void {
   }
   // lapels: two thin flaps on the chest from the collar to the button point
   b.use(BONE.CHEST, REG.OUTER, FB.LAPELS, 0.82);
-  for (const side of [1, -1]) {
+  if (!closeLapels) for (const side of [1, -1]) {
     const r7 = d.torso[7],
       r9 = d.torso[9],
       r6 = d.torso[6];
@@ -2768,7 +2833,7 @@ function buildTarget(d: Dims, lod: Lod): MeshBuilder {
   buildHair(b, d, cfg);
   buildHat(b, d, cfg);
   buildTail(b, d, cfg);
-  if (cfg.details) buildUpperGarments(b, d);
+  if (cfg.details) buildUpperGarments(b, d, cfg);
   buildProps(b, d, cfg);
   return b;
 }

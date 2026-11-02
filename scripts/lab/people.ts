@@ -87,6 +87,7 @@ for (let i = 0; members.length < (onlyIdx ? onlyIdx.length : n); i++) {
   if (q.has('flag')) { look.flags &= ~(F.SHOPBAG | F.BRIEFCASE | F.HANDBAG | F.BACKPACK | F.CANE); for (const fl of q.get('flag')!.split(',')) look.flags |= (F as Record<string, number>)[fl] ?? 0; }
   // &hat=<style 0-7> &hair=<HairStyle> &hairlen= &hc=<#rrggbb>: every figure in one hat or cut
   if (look.style) {
+    if (q.has('suit')) { const st = look.style; st.outer = look.top; look.top = 0xe9e7e2; st.jacketHem = 0.1; st.collar = 1; st.tie = members.length % 3 !== 2; st.lapels = true; st.topHem = 0.3; st.sleeve = 0.02; st.tail = 0; }
     if (q.has('hat')) look.style.hat = num('hat', 0);
     if (q.has('hair')) look.style.hair = q.get('hair') as never;
     if (q.has('hairlen')) look.style.hairLen = num('hairlen', 0);

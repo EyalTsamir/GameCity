@@ -938,7 +938,12 @@ void pedPose(inout vec3 p, inout vec3 n) {
     // open front: the shirt shows in a V between the lapels. The V edge is the signed boundary s (|angle from
     // the front| − width), resolved per pixel — picking the colour per vertex drew a jagged white star / bib
     // (judge 3 #7); well above the hem only, so the hem boundary keeps its own s
-    if (jacket && h > bd + 0.12) { A = outer; Bc = top; s = aux.x - (h - 0.5) * 1.6; }
+    if (jacket && h > bd + 0.12) {
+      A = outer; Bc = top; s = aux.x - (h - 0.5) * 1.6;
+//@if CL
+      ${sweepPeople('lapels') ? `if ((iC2.z & ${1 << FB.LAPELS}u) != 0u) { float hq = max(h - 0.8, 0.0); s = aux.x - ((h - 0.5) * 0.77 + 23.0 * hq * hq); }` : ''}
+//@endif
+    }
     if ((iC2.z & ${1 << FB.VEST}u) != 0u) { A = pedRGB(iC2.x); pat = 1.0; }
   } else if (region == ${R.ARM}) {
     float sl = pedP8(iC0.x) * 1.275 - 0.1;
