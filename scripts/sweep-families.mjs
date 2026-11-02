@@ -3,7 +3,7 @@
 // so fix sessions can start on the top ones before the whole set is done. Text only, one headless `claude -p` per batch.
 //
 //   node scripts/sweep-families.mjs                    merge what's new, then write the findings
-//   ... --batch 40 --max-batches 5 --model claude-haiku-5-5 --min-sev 3
+//   ... --batch 40 --max-batches 5 --model claude-haiku-5-5 --min-sev 4
 //   ... --consolidate                                  one pass that merges families that turned out to be the same cause
 //   ... --render                                       only write the findings
 //
@@ -33,7 +33,8 @@ const stateFile = path.join(judgedDir, 'families.json');
 const model = args.model ?? 'claude-haiku-5-5';
 const batchSize = parseInt(args.batch ?? '40', 10);
 const maxBatches = parseInt(args['max-batches'] ?? '0', 10);
-const minSev = parseInt(args['min-sev'] ?? '3', 10);
+// (4: sorting every 3 cost $0.03-0.05 per subject, and the judges score harshly. Earlier 3s stay in the state, and the score ignores them)
+const minSev = parseInt(args['min-sev'] ?? '4', 10);
 const known = fs.readFileSync(path.join(root, 'docs/progress/sweep-known.md'), 'utf8');
 const state = fs.existsSync(stateFile) ? JSON.parse(fs.readFileSync(stateFile, 'utf8')) : { families: [], merged: {}, cost: 0, lines: 0 };
 const save = () => fs.writeFileSync(stateFile, JSON.stringify(state));
@@ -132,10 +133,11 @@ const render = () => {
   const scored = state.families.map((f) => {
     // reach times how badly it reads: each place counts once, at its worst
     const worst = new Map();
-    for (const i of f.instances) worst.set(i.id, Math.max(worst.get(i.id) ?? 0, i.sev));
+    const counted = f.instances.filter((i) => i.sev >= minSev);
+    for (const i of counted) worst.set(i.id, Math.max(worst.get(i.id) ?? 0, i.sev));
     const score = [...worst.values()].reduce((a, s) => a + s, 0);
-    const kinds = new Set(f.instances.filter((i) => i.part === 'objects').map((i) => i.id)).size;
-    const cells = new Set(f.instances.filter((i) => i.part === 'squares').map((i) => i.id)).size;
+    const kinds = new Set(counted.filter((i) => i.part === 'objects').map((i) => i.id)).size;
+    const cells = new Set(counted.filter((i) => i.part === 'squares').map((i) => i.id)).size;
     const mean = worst.size ? score / worst.size : 0;
     const ex = [];
     const seen = new Set();
