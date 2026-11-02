@@ -82,7 +82,8 @@ export function addContainer(b: HB, x: number, y: number, z: number, len: number
     b.colorObj(_d);
     b.quad([-ix, CH - 0.05, -iz], [-ix, CH - 0.05, iz], [ix, CH - 0.05, iz], [ix, CH - 0.05, -iz]);
   }
-  // frame: corner posts + top side rails (darker)
+  // frame: corner posts + top side rails (darker). (Steel: the second number tells the close-up layer, a brown one read as timber)
+  b.pat(PAT.NONE, 1);
   _d.copy(col).multiplyScalar(0.62);
   b.colorObj(_d);
   for (const sx of [-1, 1])
@@ -113,6 +114,7 @@ export function addContainer(b: HB, x: number, y: number, z: number, len: number
     b.color('#d9d4c8');
     b.box(0.55, 2.0, iz + 0.015, 0.26, 0.16, 0.01, 0, 1 | 4);
   }
+  b.pat(PAT.NONE);
   b.pop();
 }
 const _d = new THREE.Color();

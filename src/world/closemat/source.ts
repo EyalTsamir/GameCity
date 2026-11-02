@@ -9,6 +9,8 @@ export interface SourceAttr {
   size: number;
   /** its name in a built cell, if not the same */
   to?: string;
+  /** not a source attribute: worked out per vertex (size 1) */
+  fill?: (g: THREE.BufferGeometry, v: number) => number;
 }
 
 /** the vertices of triangles the bubble can ask for, one grid per class of surface */
@@ -179,6 +181,10 @@ export class TriGrid {
   private read(g: THREE.BufferGeometry, v: number, out: Float32Array, at: number): void {
     let o = at;
     for (const a of this.attrs) {
+      if (a.fill) {
+        out[o++] = a.fill(g, v);
+        continue;
+      }
       const src = g.getAttribute(a.name) as THREE.BufferAttribute | undefined;
       if (src && src.array instanceof Float32Array && (src as unknown as { isInterleavedBufferAttribute?: boolean }).isInterleavedBufferAttribute !== true) {
         const arr = src.array;

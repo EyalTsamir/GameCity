@@ -7,6 +7,7 @@ import * as THREE from 'three';
 import { mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { CityContext } from '../../core/context';
 import { wearOn, wearFix } from '../../core/sweepwear';
+import { matOn } from '../../core/sweepmat';
 import { PlaceStains } from './stains';
 import { RIVER, QUAY_X, SLAB, SIDEWALK_Y, WATER_LEVEL as WATER_LEVEL_M } from '../../core/constants';
 import { RIDGE_FOOT_Z } from '../../core/plan';
@@ -710,8 +711,12 @@ function buildPortal(b: GeoBuilder, veils: GeoBuilder, p: PortalDef, rng: Rng, b
     const pz = key ? 0.26 : 0.14;
     const poly: [number, number][] = [];
     const sub = 3;
-    for (let k = 0; k <= sub; k++) poly.push(archPoint(p, t0 + ((t1 - t0) * k) / sub, 0.01));
-    for (let k = sub; k >= 0; k--) poly.push(archPoint(p, t0 + ((t1 - t0) * k) / sub, ow));
+    // (a joint of about 2 cm between stones, open down to the wall behind: without it the ring is one band)
+    const gap = matOn('matportal') ? 0.01 / a : 0;
+    const ta = t0 - gap,
+      tb = t1 + gap;
+    for (let k = 0; k <= sub; k++) poly.push(archPoint(p, ta + ((tb - ta) * k) / sub, 0.01));
+    for (let k = sub; k >= 0; k--) poly.push(archPoint(p, ta + ((tb - ta) * k) / sub, ow));
     if (key) keyTop = Math.max(...poly.map((q) => q[1]));
     const c = (key ? COL.keystone : COL.voussoir).clone().multiplyScalar(0.92 + rng.next() * 0.14);
     b.color(c).set('aMas', KIND.plain, 0, Xx, Xz);
@@ -812,7 +817,20 @@ function buildPortal(b: GeoBuilder, veils: GeoBuilder, p: PortalDef, rng: Rng, b
   for (let z = -T - 0.9; z > -p.bore + 1.5; z -= step) {
     for (const sx of [-1, 1]) {
       const c = Lp(p, sx * (a - 0.1), lampY, z);
-      b.box(c[0], c[1], c[2], 0.08, 0.07, road ? 0.4 : 0.25, p.yaw, 0);
+      const lz = road ? 0.4 : 0.25;
+      if (matOn('matportal')) {
+        // a bulkhead fitting: a steel back with the lens set into it, and the two straps of its guard
+        b.color(C('#2c2f30')).set('aMas', KIND.plain, 0, Xx, Xz);
+        const h = Lp(p, sx * (a - 0.055), lampY, z);
+        b.box(h[0], h[1], h[2], 0.05, 0.095, lz + 0.05, p.yaw, 0);
+        for (const dz of [-lz * 0.5, lz * 0.5]) {
+          const st = Lp(p, sx * (a - 0.125), lampY, z + dz);
+          b.box(st[0], st[1], st[2], 0.04, 0.078, 0.012, p.yaw, 0);
+        }
+        b.color(COL.lamp).set('aMas', KIND.lamp, 0, Xx, Xz);
+        const l = Lp(p, sx * (a - 0.125), lampY, z);
+        b.box(l[0], l[1], l[2], 0.03, 0.065, lz, p.yaw, 0);
+      } else b.box(c[0], c[1], c[2], 0.08, 0.07, lz, p.yaw, 0);
       const g = Lp(p, sx * (a - 0.35), lampY - 0.05, z);
       lights.push({ x: g[0], y: g[1], z: g[2], size: road ? 0.55 : 0.45, kind: 'halo', color: '#ffc677', intensity: road ? 0.7 : 0.45, day: 0.3 });
     }

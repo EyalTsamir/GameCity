@@ -43,6 +43,10 @@ attribute vec3 aCol;
 attribute vec3 aGrain;
 varying vec3 vCol;
 varying vec3 vGr;
+#ifdef CM_MATCLASS
+attribute float aWhat;
+varying float vWhat;
+#endif
 #endif
 void main() {
   vP = position;
@@ -68,6 +72,9 @@ void main() {
 #ifdef CM_SOLID
   vCol = aCol;
   vGr = aGrain;
+#ifdef CM_MATCLASS
+  vWhat = aWhat;
+#endif
 #endif
   gl_Position = projectionMatrix * viewMatrix * vec4(position, 1.0);
 }
@@ -868,6 +875,9 @@ void main() {
 export const CM_SOLID = /* glsl */ `
 varying vec3 vCol;
 varying vec3 vGr;
+#ifdef CM_MATCLASS
+varying float vWhat;
+#endif
 // a coordinate in the plane of the face: along the grain, across it
 void main() {
   vec3 N = normalize(vN);
@@ -886,6 +896,19 @@ void main() {
   // warm mid-to-dark browns are timber; the rest is paint on metal when dark or saturated, mineral when pale and grey
   float wood = step(0.28, sat) * step(col.b, col.g) * step(col.g, col.r) * step(0.03, lum) * step(lum, 0.42) * step(col.g, col.r * 0.82);
   float paint = (1.0 - wood) * max(step(0.3, sat), step(lum, 0.12));
+  float smoothPiece = 0.0;
+#if defined(CM_MATCLASS) && !defined(CM_JOINERY) && !defined(CM_RUST)
+  // these colours are linear: sandstone reads as sat 0.46, green over red 0.8, and a paint red under 0.3 or an ochre over sat 0.9. The guess is for what can't say
+  float what = floor(vWhat + 0.5);
+  if (what < 0.5) {
+    wood = step(0.28, sat) * step(sat, 0.9) * step(col.b, col.g) * step(col.r * 0.3, col.g) * step(col.g, col.r * 0.72) * step(0.02, lum) * step(lum, 0.42);
+    paint = (1.0 - wood) * max(step(0.6, sat), step(lum, 0.12));
+  } else {
+    wood = 1.0 - step(0.5, abs(what - 1.0));
+    paint = 1.0 - step(0.5, abs(what - 2.0));
+    smoothPiece = step(3.5, what);
+  }
+#endif
 #ifdef CM_JOINERY
   wood *= step(lum, 0.06);
   paint = 1.0 - wood;
@@ -914,7 +937,12 @@ void main() {
     return;
   }
 #endif
-  if (wood > 0.5) {
+  if (smoothPiece > 0.5) {
+    // moulded, glazed: the odd scuff and nothing that belongs to a mineral or to paint
+    vec4 g = CMT(tGrain, q * 1.667, 1.667);
+    vec2 s = (g.rg - 0.5) * 0.05;
+    ratio = vec3(cmLight(N, normalize(N - G * s.x - C * s.y)) * (1.0 + (c.b - 0.5) * 0.05));
+  } else if (wood > 0.5) {
     vec2 fu = vec2(q.x / 1.2, q.y / 0.3);
     vec4 f = textureGrad(tFibre, fu, gx * vec2(0.833, 3.33), gy * vec2(0.833, 3.33));
     vec2 s = (f.rg - 0.5) * 0.7;

@@ -10,6 +10,10 @@ import * as THREE from 'three';
 import type { CityContext, CityModule } from '../core/context';
 import { closeMat } from '../core/closemat';
 import { wearFix, wearOn } from '../core/sweepwear';
+import { matFix } from '../core/sweepmat';
+import { KIND } from './terrain/kinds';
+import { PAT as HPAT } from './harbor/geo';
+import { PAT as LPAT } from './landmarks/builder';
 import { WATER_LEVEL } from '../core/constants';
 import { globalUniforms } from '../core/uniforms';
 import { nearOf } from '../core/nearDetail';
@@ -61,11 +65,84 @@ const PLAIN_ATTRS: SourceAttr[] = [
   { name: 'normal', size: 3 },
 ];
 
+/** which mesh a source geometry came from */
+const sourceName = new WeakMap<THREE.BufferGeometry, string>();
+
+/** the close-up material of a vertex, from what its mesh knows (`matclass`): 0 can't say, 1 timber, 2 metal under paint, 3 mineral, 4 moulded or glazed */
+function whatOf(g: THREE.BufferGeometry, v: number): number {
+  const rm = g.getAttribute('aRM');
+  if (rm) {
+    // (props/furniture.ts MAT)
+    const r = rm.getX(v),
+      m = rm.getY(v);
+    if (m > 0.05) return 2;
+    if (r > 0.78 && r < 0.84) return 1;
+    if (r > 0.84 && r < 0.9) return 3;
+    if (r > 0.928 && r < 0.945) return 3;
+    if (r > 0.45 && r < 0.55) return 2;
+    return 4;
+  }
+  const name = sourceName.get(g) ?? '';
+  if (name === 'terrain-masonry') {
+    const mas = g.getAttribute('aMas');
+    if (!mas) return 0;
+    const kind = Math.round(mas.getX(v));
+    if (kind === KIND.dark || kind === KIND.lamp) return 4;
+    return kind === KIND.plain ? 0 : 3;
+  }
+  if (name.startsWith('harbor')) {
+    const pat = g.getAttribute('aPat');
+    if (!pat) return 0;
+    const id = Math.round(pat.getX(v));
+    if (id === HPAT.NONE) return pat.getY(v) > 0.5 ? 2 : 0;
+    if (id === HPAT.CORRUGATED || id === HPAT.HULL || id === HPAT.RUST) return 2;
+    if (id === HPAT.PLANKS_X || id === HPAT.PLANKS_Z) return 1;
+    if (id === HPAT.GLASS || id === HPAT.NET) return 4;
+    return 3;
+  }
+  if (name.startsWith('landmarks')) {
+    // (landmarks/builder.ts: x = pattern, y = metal * 9 + roughness)
+    const mat = g.getAttribute('aMat');
+    if (!mat) return 0;
+    const id = Math.round(mat.getX(v));
+    if (id === LPAT.PLAIN && Math.floor(mat.getY(v)) >= 3) return 2;
+    switch (id) {
+      case LPAT.BRICK:
+      case LPAT.STONE:
+      case LPAT.TILES:
+      case LPAT.SLATE:
+      case LPAT.CONCRETE:
+      case LPAT.GRAVEL:
+        return 3;
+      case LPAT.PLANKS:
+        return 1;
+      case LPAT.SEAM:
+      case LPAT.CORRUGATED:
+      case LPAT.LATTICE:
+      case LPAT.SCAFFOLD:
+      case LPAT.MESH:
+      case LPAT.LOUVRE:
+      case LPAT.RAILING:
+      case LPAT.PANELS:
+      case LPAT.RUST:
+      case LPAT.SHUTTER:
+        return 2;
+      case LPAT.PLAIN:
+      case LPAT.DOOR:
+        return 0;
+      default:
+        return 4;
+    }
+  }
+  return 0;
+}
+
 const SOLID_ATTRS: SourceAttr[] = [
   { name: 'position', size: 3 },
   { name: 'normal', size: 3 },
   { name: 'color', size: 3, to: 'aCol' },
   { name: 'aGrain', size: 3 },
+  { name: 'aWhat', size: 1, fill: whatOf },
 ];
 
 export default function create(ctx: CityContext): CityModule {
@@ -87,7 +164,10 @@ export default function create(ctx: CityContext): CityModule {
   const byName = (test: (name: string) => boolean): THREE.BufferGeometry[] => {
     const out: THREE.BufferGeometry[] = [];
     ctx.scene.traverse((o) => {
-      if ((o as THREE.Mesh).isMesh && test(o.name)) out.push((o as THREE.Mesh).geometry);
+      if ((o as THREE.Mesh).isMesh && test(o.name)) {
+        out.push((o as THREE.Mesh).geometry);
+        sourceName.set((o as THREE.Mesh).geometry, o.name);
+      }
     });
     return out;
   };
@@ -106,6 +186,7 @@ export default function create(ctx: CityContext): CityModule {
   const wearDefs: Record<string, number> = {};
   if (wearOn('wearcrack')) wearDefs.CM_FISSURE = 1; // (with the switch off the tile holds the old network)
   if (wearFix(ctx.quality.level, 'wearrust')) wearDefs.CM_WEARRUST = 1;
+  if (matFix(ctx.quality.level, 'matclass')) wearDefs.CM_MATCLASS = 1;
   const material = (name: string, frag: string, define: string, radius: number, offset: number): THREE.ShaderMaterial =>
     new THREE.ShaderMaterial({
       name: `closemat-${name}`,
