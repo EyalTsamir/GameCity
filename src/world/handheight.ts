@@ -5,6 +5,7 @@
 // the stains: dirt where hands go, runs under vents, a multiply pass with no light of its own.
 // Switches (core/closehand.ts): ?nohand all; ?nohanddoors ?nohandlamps ?nohandpipes ?nohandwalls ?nohandstains; layers ?nohandBig ?nohandFine ?nohandStain.
 
+import { matOn } from '../core/sweepmat';
 import * as THREE from 'three';
 import type { CityContext, CityModule, QualityLevel } from '../core/context';
 import { closeHand } from '../core/closehand';
@@ -308,7 +309,7 @@ export default function create(ctx: CityContext): CityModule {
         if (!Number.isNaN(y)) {
           put(MID, cx, cz, (s) => K.sandBucket(on(s), ou, y, oo));
           mark('bucket', d, ou, y + 0.2);
-          sign(d, ou, 1.55, 0.002, 0.13, 0.09, 'NO|SMOKING', 3);
+          sign(d, ou, matOn('matsign') ? 1.86 : 1.55, 0.002, 0.13, 0.09, 'NO|SMOKING', 3); // (above the works plate by the door, not across it)
         }
       }
       if (closeHand(ctx, 'handstains')) {
